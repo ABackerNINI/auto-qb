@@ -621,7 +621,9 @@ def cmd_start(args: argparse.Namespace) -> int:
         _fail(f"{args.route} 状态为 {data['status']}, 仅 claimed 可 start")
     _require_branch(root)
     _require_ancestor(root, data["freeze"])
-    _require_clean(root)
+    # 放行 lane 目录内落盘(认领 JSON 可能尚未入库): 树净保的是「无混入的无关改动」,
+    # 跨 clone 重复认领防护靠认领 JSON 入库 develop, 与此检查无关(claim 输出已指引)。
+    _require_clean(root, allow_lane=True)
     snap = _snapshot_dir(root, args.snapshot)
     if args.dry_run:
         tmp = Path(tempfile.mkdtemp(prefix="lane-smoke-snap-"))
