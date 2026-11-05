@@ -31,9 +31,9 @@
     {
       "id": "R2-4",
       "title": "rules 全域: base/conditions/registry/checking_meta + expr + actions",
-      "status": "pending",
-      "done_at": null,
-      "findings": 0
+      "status": "done",
+      "done_at": "26-11-06-0619",
+      "findings": 11
     },
     {
       "id": "R2-5",

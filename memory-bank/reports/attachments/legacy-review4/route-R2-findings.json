@@ -160,5 +160,104 @@
   "claim": "docstring 称全局段删除 26 个废弃键, 但实际删除清单 _V3_DROP_GLOBAL_KEYS(line 90-111,注释自述「v2→v3 删除的全局段键」)实测只有 20 个键,26 疑为计划里 v2 旧键总数(含改名保留的 min_torrent_interval 与 sites 条目内废弃键)被误记到全局段名下",
   "relevance": "相关",
   "fix": "把该行改为「删除 20 个废弃键」或改为不带数字的表述(如「删除 §6.2 废弃键去向表所列全局键」),与 _V3_DROP_GLOBAL_KEYS 对齐"
+ },
+ {
+  "file": "src/auto_qb/rules/conditions.py",
+  "line": 171,
+  "quote": "return torrent.hr_managed()",
+  "severity": "major",
+  "claim": "HrCondition 未识别的 mode 值静默落入 condition-met 分支:config 层对 hr 取值无深度校验(schema.HR_MODES 仅是 UI 下拉源,registry 条目未声明 validator,validation/_SPEC_VALIDATOR_IMPLS 不含 hr),拼写错误如 'satified' 能过加载,且行为随站点是否配 HR 漂移(未配 HR 时 'satified' != 'condition-met' 恒真、配了 HR 时按 hr_managed 判),全程无任何诊断——违反黄金法则 4,且可能让规则按与用户意图相反的语义执行动作",
+  "relevance": "相关",
+  "fix": "在 __init__ 校验 self.mode ∈ HR_MODES,非法值立即抛异常(经 _build_condition_node 包装成 ConfigError 在规则构造期 fail-fast)"
+ },
+ {
+  "file": "src/auto_qb/rules/conditions.py",
+  "line": 186,
+  "quote": "if self.day_of_month and not _in_range(now.day, str(self.day_of_month)):",
+  "severity": "minor",
+  "claim": "DateTimeCondition 构造期不解析 spec(day_of_month/day_of_week/time 全部推迟到每轮 match 才解析),而 registry 未为 date_time 声明深度校验器,格式非法的区间串(如 '1,15'、'abc')能通过 config 校验,运行期 _in_range 每轮抛 ValueError 被兜成 verdict:error,规则永久失效只留节流 ERROR 日志——同文件 SizeCondition/FreespaceCondition 都在构造期解析报错,此处违反黄金法则 4 且口径不一致",
+  "relevance": "相关",
+  "fix": "把区间/时间串的解析移到 __init__(构造失败即 ConfigError),或给 date_time 注册深度校验器在 config 层拒绝非法区间格式"
+ },
+ {
+  "file": "src/auto_qb/rules/base.py",
+  "line": 20,
+  "quote": "# from ..qbmanager import QbManager",
+  "severity": "nit",
+  "claim": "注释掉的 import 是拆分残留死代码(A 类),且类型提示里 manager 已改用 Any,该行无复活可能",
+  "relevance": "相关",
+  "fix": "直接删除该注释行"
+ },
+ {
+  "file": "src/auto_qb/rules/registry.py",
+  "line": 181,
+  "quote": "全部从条目声明派生 —— 新增插件只注册本表一处即全链路可用(验收①)。",
+  "severity": "nit",
+  "claim": "注释里使用带圈数字 ①,违反代码禁非 ASCII 图形符号约束(检查清单明列 ①-⑬,箭头/全角标点已豁免,此项不在豁免内)",
+  "relevance": "相关",
+  "fix": "改为 '(验收1)' 或纯文字表述"
+ },
+ {
+  "file": "src/auto_qb/rules/expr/parser.py",
+  "line": 160,
+  "quote": "node = self._level()",
+  "severity": "minor",
+  "claim": "递归下降解析对括号/列表/函数参数嵌套无深度上限, 深嵌套输入(如 400 层括号)在配置校验与 WebUI 试算接口(POST /api/expr/eval)抛 RecursionError, 它不是 ExprError, 逃出两处 except ExprError, 配置加载绕过聚合 ConfigError 直接崩、试算接口 500 而非结构化错误",
+  "relevance": "相关",
+  "fix": "在 _Parser 里加实例级深度计数(如上限 64 层), 超限抛 ExprSyntaxError 即可纳入既有 except ExprError 路径"
+ },
+ {
+  "file": "src/auto_qb/rules/conditions.py",
+  "line": 1,
+  "quote": "内置条件插件: path, size, tags, category, trackers, state, hr, date_time, seedtime,",
+  "severity": "minor",
+  "claim": "模块 docstring 条件清单漏列 tracker_group(同文件已注册 TrackerGroupCondition, 共 13 个, README 也按 13 宣称), 第 2 行续列的 12 个里没有它",
+  "relevance": "相关",
+  "fix": "清单补上 tracker_group, 与 registry 实际注册数对齐"
+ },
+ {
+  "file": "src/auto_qb/rules/conditions.py",
+  "line": 226,
+  "quote": "求值出错抛 ExprError, 由 Rule.process 兜成「不匹配 + 停后续规则」(见 base.py)。",
+  "severity": "minor",
+  "claim": "ExprCondition docstring 宣称的「停后续规则」是已退役的死语义——base.py _process 明文修正为「本条规则本轮跳过, 其它规则照常」(W1 话术修正), 同文件 258 行 FreespaceCondition 注释同款旧话术",
+  "relevance": "相关",
+  "fix": "两处改为「本条规则本轮跳过, 不影响其它规则」"
+ },
+ {
+  "file": "src/auto_qb/rules/expr/errors.py",
+  "line": 7,
+  "quote": "兜住 -> 不匹配 + 中断后续规则(见计划第 05 节「出错即停规则」)。",
+  "severity": "minor",
+  "claim": "ExprError 契约 docstring 宣称「中断后续规则」, 与 base.py 现行语义(per-rule 任务模型, 本条跳过不影响其它规则)相悖",
+  "relevance": "相关",
+  "fix": "改为「本条规则本轮跳过, 不影响其它规则」, 删除对已退役「出错即停规则」话术的指引"
+ },
+ {
+  "file": "src/auto_qb/rules/expr/eval.py",
+  "line": 6,
+  "quote": "- **出错即抛 ExprError**: 由 Rule.process 的条件分支兜成「不匹配 + 停后续规则」;",
+  "severity": "minor",
+  "claim": "求值模块头注宣称旧「停后续规则」语义, 与 base.py W1 修正后的实际行为不符",
+  "relevance": "相关",
+  "fix": "头注话术改为「本条规则本轮跳过, 不影响其它规则」"
+ },
+ {
+  "file": "src/auto_qb/rules/expr/env.py",
+  "line": 220,
+  "quote": "ExprError 由 Rule.process 兜成「不匹配 + 停后续规则」。",
+  "severity": "minor",
+  "claim": "disk_usage_value docstring 宣称旧「停后续规则」语义; 同文件模块头注第 8 行「由『出错即停规则』兜住」同款旧话术",
+  "relevance": "相关",
+  "fix": "两处话术与 base.py 现行语义对齐(本条本轮跳过, 不影响其它规则)"
+ },
+ {
+  "file": "src/auto_qb/rules/actions/__init__.py",
+  "line": 12,
+  "quote": "test_actions.py::test_actions_registry_complete 锁定全部动作名清单。",
+  "severity": "minor",
+  "claim": "docstring 指向的守卫测试路径 tests/test_actions.py 不存在, 实际在 tests/test_actions_state.py::test_actions_registry_complete",
+  "relevance": "相关",
+  "fix": "docstring 更正为 tests/test_actions_state.py::test_actions_registry_complete"
  }
 ]
