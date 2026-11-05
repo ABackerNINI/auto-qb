@@ -32,13 +32,13 @@ _TRACE_MSG_MAX_CHARS = 200
 _TRACE_COND_MAX_ITEMS = 32
 
 
-def _trace_clip(text, limit: int = _TRACE_MSG_MAX_CHARS) -> str:
+def _trace_clip(text: Any, limit: int = _TRACE_MSG_MAX_CHARS) -> str:
     """trace 字段截断: 异常/消息串定长截断(排障留头即可)"""
     s = str(text)
     return s if len(s) <= limit else s[:limit - 3] + "..."
 
 
-def _trace_cond_name(payload) -> str:
+def _trace_cond_name(payload: Any) -> str:
     """trace 叶子条件名: 插件约定有 name 属性, 但内存直构的哑条件(测试桩)可能没有 ——
     求值明细是排障辅助, 不能因取名失败反过来弄错 verdict(缺 name 回退类名)"""
     return str(getattr(payload, "name", "") or type(payload).__name__)
@@ -72,7 +72,7 @@ class ActionResult:
     pending: 动作已提交等待异步完成(如 full-checking 校验), 规则执行中断待恢复;
     仅任务队列驱动时有效(规则任务记录断点 resume_index), 外部入口视为成功继续。
     """
-    def __init__(self, status: str = "success", message: str = ""):
+    def __init__(self, status: str = "success", message: str = "") -> None:
         self.status = status
         self.message = message
 
@@ -117,7 +117,7 @@ class BaseCondition(ABC):
 
     name: str = ""
 
-    def __init__(self, spec: Any):
+    def __init__(self, spec: Any) -> None:
         self.spec = spec
 
     @abstractmethod
@@ -130,7 +130,7 @@ class BaseAction(ABC):
 
     name: str = ""
 
-    def __init__(self, spec: Any):
+    def __init__(self, spec: Any) -> None:
         self.spec = spec
 
     @abstractmethod
@@ -190,7 +190,7 @@ class RuleContext:
 # ---------------------------------------------------------------------------
 
 
-def _build_condition_node(node, rule_name: str, depth: int = 1):
+def _build_condition_node(node: Any, rule_name: str, depth: int = 1) -> tuple:
     """构造期建树: 规范化节点 dict -> 内存节点; 名称/结构合法性由 config 校验保证
     (黄金法则 4), 此处只对「程序内直接构造 Rule 的内存 spec」做形状兜底(ConfigError)。
 
@@ -219,7 +219,7 @@ def _build_condition_node(node, rule_name: str, depth: int = 1):
         raise ConfigError(f"规则 {rule_name}: 条件 {node}: {e}") from e
 
 
-def _eval_condition_node(node, ctx: "RuleContext", trace=None, btag=None) -> bool:
+def _eval_condition_node(node: tuple, ctx: "RuleContext", trace: list | None = None, btag: int | None = None) -> bool:
     """组合树递归求值: all/any 生成器短路, not 取反, 叶子交插件 match(异常上抛)
 
     trace(W4): 传入 list 时逐叶子留求值明细({"c": 条件名, "r": 结果} / 出错 {"c":..., "e": 截断
@@ -237,13 +237,13 @@ def _eval_condition_node(node, ctx: "RuleContext", trace=None, btag=None) -> boo
         res = bool(payload.match(ctx))
     except Exception as e:
         if trace is not None:
-            rec = {"c": _trace_cond_name(payload), "e": _trace_clip(f"{type(e).__name__}: {e}")}
+            rec: Dict[str, Any] = {"c": _trace_cond_name(payload), "e": _trace_clip(f"{type(e).__name__}: {e}")}
             if btag is not None:
                 rec["b"] = btag
             trace.append(rec)
         raise
     if trace is not None:
-        rec = {"c": _trace_cond_name(payload), "r": res}
+        rec: Dict[str, Any] = {"c": _trace_cond_name(payload), "r": res}
         if btag is not None:
             rec["b"] = btag
         trace.append(rec)
@@ -267,7 +267,7 @@ class ChooseBranch:
 
     __slots__ = ("tree", "actions", "on_error")
 
-    def __init__(self, tree, actions: list, on_error: list):
+    def __init__(self, tree: Any, actions: list, on_error: list) -> None:
         self.tree = tree
         self.actions = actions
         self.on_error = on_error
@@ -278,7 +278,7 @@ class ChooseBlock:
 
     __slots__ = ("branches", "default_actions", "default_on_error")
 
-    def __init__(self, branches: list, default_actions: list, default_on_error: list):
+    def __init__(self, branches: list, default_actions: list, default_on_error: list) -> None:
         self.branches = branches
         self.default_actions = default_actions
         self.default_on_error = default_on_error
@@ -298,7 +298,7 @@ registry.register_block(
 )
 
 
-def _build_action_steps(entries, rule_name: str, allow_choose: bool = True) -> List[tuple]:
+def _build_action_steps(entries: Any, rule_name: str, allow_choose: bool = True) -> List[tuple]:
     """动作列表 -> 执行步列表(Rule 构造期, W3-B): ("action", 插件实例, on_error) / ("choose", ChooseBlock)
 
     - 每项过 normalize_action_entry 单点漏斗(幂等, 与载入链同源; choose 项内部归一到
@@ -349,7 +349,7 @@ def _build_choose_block(act: dict, rule_name: str) -> ChooseBlock:
 
 class Rule:
     """一条规则插件: 条件列表 + 动作列表 + 执行语义, 由 QbManager 统一加载与调度"""
-    def __init__(self, name: str, spec: dict, manager: Any):
+    def __init__(self, name: str, spec: dict, manager: Any) -> None:
         self.name = name
         self.spec = spec
         self.manager = manager
@@ -412,7 +412,7 @@ class Rule:
         if any(a.name == "reannounce" for a in all_plugins) and self.execute_once == "never" and self.cooldown <= 0:
             logger.error(f"规则[{self.name}] 含 reannounce 动作但未配置 execute_once/cooldown, 高频触发有封号风险")
 
-    def matches(self, ctx: RuleContext, trace=None) -> bool:
+    def matches(self, ctx: RuleContext, trace: list | None = None) -> bool:
         """组合树求值(W3-A): 无条件 = 直过; 有条件 = 树形递归(旧扁平列表 = 隐式 all, 语义不变)
 
         trace(W4): 传入 list 时逐叶子留求值明细(见 _eval_condition_node), 供 per-run trace。"""
@@ -631,14 +631,16 @@ class Rule:
         return VERDICT_EXECUTED if (executed or ok_action) else VERDICT_NO_OP
 
     @staticmethod
-    def _execute_action(action, ctx: "RuleContext") -> ActionResult:
+    def _execute_action(action: BaseAction, ctx: "RuleContext") -> ActionResult:
         """单动作执行: 插件内异常兜成 failed 结果(与失败同径走 on_error 三档分派, W2 语义)"""
         try:
             return action.execute(ctx)
         except Exception as e:
             return ActionResult.fail(f"异常: {e}")
 
-    def _dispatch_result(self, action, result: ActionResult, on_error: dict, ctx: "RuleContext", log_repr: str) -> str:
+    def _dispatch_result(
+        self, action: BaseAction, result: ActionResult, on_error: dict, ctx: "RuleContext", log_repr: str
+    ) -> str:
         """动作结果处置单点(W2 on_error 三档, plan G5; W3 起 choose 内外共用 —— 无第二语义分支)
 
         返回处置字: ok / skip / continue / stop / pending / retry。
@@ -679,7 +681,9 @@ class Rule:
         logger.debug(f"规则[{self.name}] {log_repr} | 动作[{action.name}] 跳过: {result.message}")
         return "skip"
 
-    def _pick_choose_branch(self, block: ChooseBlock, ctx: "RuleContext", log_repr: str, trace=None):
+    def _pick_choose_branch(
+        self, block: ChooseBlock, ctx: "RuleContext", log_repr: str, trace: list | None = None
+    ) -> tuple | None:
         """choose 分支选择(W3-B, plan G6/D3): 按序求 when, 首个命中执行其 then; 无命中且有
         default 执行 default; 无命中且无 default = 空操作(返回空动作表, 与空动作表同语义)。
 

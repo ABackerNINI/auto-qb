@@ -28,7 +28,7 @@ G13 拍板: 未用条目全部保留, registry 化只做派生收口不删条目
 """
 
 from dataclasses import dataclass
-from typing import Any, Dict, List, Tuple
+from typing import Any, Callable, Dict, List, Tuple
 
 CONDITIONS: dict = {}
 ACTIONS: dict = {}
@@ -59,7 +59,7 @@ class PluginEntry:
     watchable_field: str = ""  # 条件: 可监听字段声明(G10 watch_fields 取值域派生源)
     deleted_ok: bool = False  # 动作: on_torrent_deleted 下允许(G11 兼容声明)
 
-    def plugin(self):
+    def plugin(self) -> Any:
         """延迟访问器: 解析条目的 schema 声明(按名引用 config.schema; 自带 decl 直返)
 
         按名未命中 = registry 与 config.schema 声明表脱节 —— 直接 KeyError 显式炸出,
@@ -106,13 +106,17 @@ class BlockEntry:
         return tuple(getattr(compat, self.keys_ref))
 
 
-def register_condition(cls=None, *, validator: str = "", watchable_field: str = "", decl=None):
+def register_condition(cls: type | None = None,
+                       *,
+                       validator: str = "",
+                       watchable_field: str = "",
+                       decl: Any = None) -> Callable[[type], type] | type:
     """装饰器: 注册条件插件(类需有 name 属性和 match(ctx) 方法)
 
     可选声明: validator = 深度校验器名(分发派生源); watchable_field = 可监听字段(G10);
     decl = 自带 schema 声明(缺省按名引用 config.schema)。裸用 @register_condition 兼容。
     """
-    def wrap(c):
+    def wrap(c: Any) -> type:
         CONDITIONS[c.name] = c
         CONDITION_ENTRIES[c.name] = PluginEntry(
             name=c.name,
@@ -127,13 +131,20 @@ def register_condition(cls=None, *, validator: str = "", watchable_field: str = 
     return wrap(cls) if cls is not None else wrap
 
 
-def register_action(cls=None, *, validator: str = "", deleted_ok: bool = False, doc: str = "", decl=None):
+def register_action(
+    cls: type | None = None,
+    *,
+    validator: str = "",
+    deleted_ok: bool = False,
+    doc: str = "",
+    decl: Any = None
+) -> Callable[[type], type] | type:
     """装饰器: 注册动作插件(类需有 name 属性和 execute(ctx) 方法)
 
     可选声明: validator = 深度校验器名; deleted_ok = on_torrent_deleted 兼容声明(G11);
     doc/decl = 文档片段与自带声明(缺省按名引用 config.schema)。裸用 @register_action 兼容。
     """
-    def wrap(c):
+    def wrap(c: Any) -> type:
         ACTIONS[c.name] = c
         ACTION_ENTRIES[c.name] = PluginEntry(
             name=c.name,
@@ -149,18 +160,18 @@ def register_action(cls=None, *, validator: str = "", deleted_ok: bool = False, 
     return wrap(cls) if cls is not None else wrap
 
 
-def register_block(name: str, executor, doc: str = "", keys_ref: str = "") -> None:
+def register_block(name: str, executor: Any, doc: str = "", keys_ref: str = "") -> None:
     """注册编排块条目(choose 等, 由 rules.base 模块加载期调用 —— 执行形态类在 base 侧)"""
     BLOCK_ENTRIES[name] = BlockEntry(name=name, executor=executor, doc=doc, keys_ref=keys_ref)
 
 
-def create_condition(spec: dict):
+def create_condition(spec: dict) -> Any:
     """根据条件配置(单键dict)创建条件实例, 如 {'size': '>=100MiB'}"""
     name, value = next(iter(spec.items()))
     return CONDITIONS[name](value)
 
 
-def create_action(name: str, value):
+def create_action(name: str, value: Any) -> Any:
     """根据动作名与配置创建动作实例"""
     return ACTIONS[name](value)
 

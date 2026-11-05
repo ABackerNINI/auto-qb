@@ -6,6 +6,7 @@ plan 26-09-30-0109 P2'): full-checking 提交+轮询在 ctx.ops.recheck, 跳检�
 ctx.ops.skip_check; 组内串行化闸门(决策链 1.5)与失败推断闸门(1.6)留在 FullCheckingMixin。
 """
 import logging
+from typing import Any
 
 from ...infra import utils
 from ..base import ActionResult, BaseAction, RuleContext
@@ -54,7 +55,7 @@ class CheckAction(FullCheckingMixin, SkipCheckingMixin, BaseAction):
     """
     name = "checking"
 
-    def __init__(self, spec):
+    def __init__(self, spec: Any) -> None:
         super().__init__(spec)
         # spec 合法性(dict/已知键/basic_check/段结构/mode)由 config 校验阶段保证, 此处直接解析
         self.basic_check = str(spec["basic_check"])
@@ -62,7 +63,7 @@ class CheckAction(FullCheckingMixin, SkipCheckingMixin, BaseAction):
         self.with_reference = self._parse_section(spec, "with_reference")
         self.without_reference = self._parse_section(spec, "without_reference")
 
-    def _skip_tag(self, ctx) -> str:
+    def _skip_tag(self, ctx: RuleContext) -> str:
         """跳检成功标签名: 直接读全局 config.skip_checking_tag(全局统一, 不按规则覆盖)"""
         return ctx.manager.config.skip_checking_tag
 
@@ -78,7 +79,7 @@ class CheckAction(FullCheckingMixin, SkipCheckingMixin, BaseAction):
             "auto_start": utils.parse_bool(seg.get("auto_start", False)),
         }
 
-    def execute(self, ctx: RuleContext):
+    def execute(self, ctx: RuleContext) -> ActionResult:
         if ctx.dry_run:
             return ActionResult.ok("校验决策链(状态判定+组内下载判定+组内校验串行/失败推断+参考确定+分段执行)")
         manager = ctx.manager
@@ -157,7 +158,7 @@ class CheckAction(FullCheckingMixin, SkipCheckingMixin, BaseAction):
         """
         tag = self._skip_tag(ctx)
 
-        def _is_tagged(t) -> bool:
+        def _is_tagged(t: Any) -> bool:
             return bool(tag) and tag in t.tags_set
 
         # 候选即排除带标种子(避免 piecehashes 模式对其发无意义的 API 请求)
@@ -200,7 +201,7 @@ class CheckAction(FullCheckingMixin, SkipCheckingMixin, BaseAction):
         return result
 
     # TODO: 重新设计自定义校验流程
-    def _run_custom_check(self, ctx: RuleContext, candidate) -> bool:
+    def _run_custom_check(self, ctx: RuleContext, candidate: Any) -> bool:
         """运行自定义 basic_check 程序判定候选是否为参考种子, 参数: <候选hash> <候选保存路径>"""
         import subprocess
         try:

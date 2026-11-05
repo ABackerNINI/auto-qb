@@ -19,6 +19,7 @@ actions / core 任何模块, ops 层(core/modules/ops_mod)经它取常量不会�
 """
 from datetime import date
 from enum import Enum
+from typing import Any
 
 # full-checking 校验结果轮询间隔(秒): 与主循环 MAIN_TICK 对齐, 需求指定 2s
 CHECK_RESULT_INTERVAL = 2.0
@@ -99,7 +100,7 @@ def poll_verdict(
     return PollVerdict.WAITING  # 歧义 -> 继续等
 
 
-def recheck_fail_count(state, hash: str) -> int:
+def recheck_fail_count(state: Any, hash: str) -> int:
     """同一种子当日连续校验失败次数(按自然日重置)"""
     rec = state.data.get("recheck_fails", {}).get(hash)
     if rec and rec.get("date") == date.today().isoformat():
@@ -107,7 +108,7 @@ def recheck_fail_count(state, hash: str) -> int:
     return 0
 
 
-def bump_recheck_fail(state, hash: str) -> int:
+def bump_recheck_fail(state: Any, hash: str) -> int:
     """累加当日校验失败次数并返回当前次数"""
     fails = state.data.setdefault("recheck_fails", {})
     rec = fails.setdefault(hash, {"date": "", "count": 0})

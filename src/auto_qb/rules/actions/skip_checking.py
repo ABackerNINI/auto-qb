@@ -7,14 +7,14 @@ ops 模块(core/modules/ops_mod.OpsModule, rules → ops ← web, plan 26-09-30-
 """
 import logging
 
-from ..base import RuleContext
+from ..base import ActionResult, RuleContext
 
 logger = logging.getLogger(__name__)
 
 
 class SkipCheckingMixin:
     """skip-checking 委托入口: 由 CheckAction 组合, 执行体在 ctx.ops.skip_check(ops 层)"""
-    def _execute_skip_checking(self, ctx: RuleContext, segment: dict, has_reference: bool):
+    def _execute_skip_checking(self, ctx: RuleContext, segment: dict, has_reference: bool) -> ActionResult:
         """辅种跳检: ctx 字段 -> ops 异步入口, 一行委托(闸门/备份/重加等语义全部在 ops 层)
 
         has_reference 只用于规则侧「无参考跳检(高风险)」告警 —— 该告警是规则语义,

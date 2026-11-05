@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 class FullCheckingMixin:
     """full-checking 委托入口与组内校验串行化: 由 CheckAction 组合, 依赖 self 的
     basic_check/with_reference/without_reference(checking.py 解析)"""
-    def _execute_full_checking(self, ctx: RuleContext, segment: dict):
+    def _execute_full_checking(self, ctx: RuleContext, segment: dict) -> ActionResult:
         """full-checking 委托入口: ctx 字段 -> ops 参数, 执行体在 ctx.ops.recheck(ops 层)
 
         规则侧只保留自己的语义回调: on_success = 晋升 verified_references(仅内存, 不写
@@ -42,7 +42,7 @@ class FullCheckingMixin:
         manager = ctx.manager
         hash = ctx.hash
 
-        def on_success():
+        def on_success() -> None:
             manager.store.verified_references.add(hash)
 
         return manager.ctx.ops.recheck(
@@ -81,7 +81,7 @@ class FullCheckingMixin:
         # 等待预算只做时长测量: 单调钟语义走取时单点(S2 时钟注入收编), 不受调钟影响
         start = SYSTEM_CLOCK.monotonic()
 
-        def revive():
+        def revive() -> None:
             """恢复触发任务重走完整决策链(add_task 默认重置)"""
             tq.add_task(origin)
 

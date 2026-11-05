@@ -1,4 +1,6 @@
 """传输相关动作: move_to, reannounce, upload_speed_limit, download_speed_limit"""
+from typing import Any
+
 from ...infra import utils
 from ...infra.clock import SYSTEM_CLOCK
 from ..base import ActionResult, BaseAction, RuleContext
@@ -10,11 +12,11 @@ class MoveToAction(BaseAction):
     """移动种子到新路径"""
     name = "move_to"
 
-    def __init__(self, spec):
+    def __init__(self, spec: Any) -> None:
         super().__init__(spec)
         self.path = str(spec.get("path", "")) if isinstance(spec, dict) else str(spec)
 
-    def execute(self, ctx: RuleContext):
+    def execute(self, ctx: RuleContext) -> ActionResult:
         """移动种子到新路径
 
         整组迁移开时(计划 26-10-18-1604 P5)改走迁移闸门: 字节仍由 qB 搬, 但先过闸门
@@ -58,7 +60,7 @@ class ReannounceAction(BaseAction):
     name = "reannounce"
     MIN_INTERVAL = 600.0  # 同一种子两次 reannounce 的最小间隔(秒)
 
-    def execute(self, ctx: RuleContext):
+    def execute(self, ctx: RuleContext) -> ActionResult:
         if ctx.torrent.state_enum.is_stopped:
             return ActionResult.skip("种子已暂停, 无需汇报")
         history = ctx.manager.state.setdefault("reannounce_ts", {})
@@ -77,11 +79,11 @@ class _SpeedLimitAction(BaseAction):
     api_method = ""  # torrents_set_upload_limit / torrents_set_download_limit
     direction = ""  # 上传 / 下载
 
-    def __init__(self, spec):
+    def __init__(self, spec: Any) -> None:
         super().__init__(spec)
         self.value = utils.parse_speed(str(spec))
 
-    def execute(self, ctx: RuleContext):
+    def execute(self, ctx: RuleContext) -> ActionResult:
         if not ctx.dry_run:
             if "upload" in self.api_method:
                 current_limit = ctx.torrent.up_limit

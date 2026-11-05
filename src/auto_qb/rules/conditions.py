@@ -1,6 +1,7 @@
 """内置条件插件: path, size, tags, category, trackers, state, hr, date_time, seedtime,
 upload_ratio, freespace, expr(表达式)"""
 from datetime import datetime
+from typing import Any
 
 from ..infra import utils
 from .base import BaseCondition, RuleContext
@@ -23,10 +24,10 @@ class PathCondition(BaseCondition):
     """路径条件: 匹配 save_path/content_path 前缀, 支持 regex: 前缀, 列表为或关系"""
     name = "path"
 
-    def __init__(self, spec):
+    def __init__(self, spec: Any) -> None:
         self.patterns = spec if isinstance(spec, list) else [spec]
 
-    def match(self, ctx: RuleContext):
+    def match(self, ctx: RuleContext) -> bool:
         candidates = [ctx.torrent.save_path, ctx.torrent.content_path]
         for path in candidates:
             if utils.match_path_patterns(path, self.patterns):
@@ -39,10 +40,10 @@ class SizeCondition(BaseCondition):
     """种子总大小条件, 如 '>=100MiB'"""
     name = "size"
 
-    def __init__(self, spec):
+    def __init__(self, spec: Any) -> None:
         self.op, self.value = utils.parse_compare(str(spec), utils.parse_fsize)
 
-    def match(self, ctx: RuleContext):
+    def match(self, ctx: RuleContext) -> bool:
         return utils.compare(self.op, ctx.torrent.size, self.value)
 
 
@@ -51,11 +52,11 @@ class TagsCondition(BaseCondition):
     """标签条件: 每组内逗号分隔为与, 组间为或, 支持 regex:/:ignore_case 和 ${required_seeding_time}"""
     name = "tags"
 
-    def __init__(self, spec):
+    def __init__(self, spec: Any) -> None:
         spec = spec if isinstance(spec, list) else [spec]
         self.groups = [[p.strip() for p in g.split(",") if p.strip()] for g in spec]
 
-    def match(self, ctx: RuleContext):
+    def match(self, ctx: RuleContext) -> bool:
         current = ctx.torrent.tags_set
         for group in self.groups:
             ok = True
@@ -77,10 +78,10 @@ class CategoryCondition(BaseCondition):
     """分类条件: 列表为或关系, 支持 regex:/:ignore_case"""
     name = "category"
 
-    def __init__(self, spec):
+    def __init__(self, spec: Any) -> None:
         self.patterns = spec if isinstance(spec, list) else [spec]
 
-    def match(self, ctx: RuleContext):
+    def match(self, ctx: RuleContext) -> bool:
         category = (ctx.torrent.category or "").strip()
         return any(utils.match_value(category, [str(pat)]) for pat in self.patterns)
 
@@ -90,10 +91,10 @@ class TrackersCondition(BaseCondition):
     """tracker 条件: 匹配 tracker 配置名, 列表为或关系, 支持 regex:/:ignore_case"""
     name = "trackers"
 
-    def __init__(self, spec):
+    def __init__(self, spec: Any) -> None:
         self.patterns = spec if isinstance(spec, list) else [spec]
 
-    def match(self, ctx: RuleContext):
+    def match(self, ctx: RuleContext) -> bool:
         conf = ctx.torrent.tracker_conf
         names = [conf.name] if conf is not None else []
         return any(any(utils.match_value(n, [str(pat)]) for n in names) for pat in self.patterns)
@@ -108,10 +109,10 @@ class TrackerGroupCondition(BaseCondition):
     """
     name = "tracker_group"
 
-    def __init__(self, spec):
+    def __init__(self, spec: Any) -> None:
         self.patterns = spec if isinstance(spec, list) else [spec]
 
-    def match(self, ctx: RuleContext):
+    def match(self, ctx: RuleContext) -> bool:
         conf = ctx.torrent.tracker_conf
         groups = conf.groups if conf is not None else []
         return any(any(utils.match_value(g, [str(pat)]) for g in groups) for pat in self.patterns)
@@ -124,11 +125,11 @@ class StateCondition(BaseCondition):
     组间为或。spec 合法性由 config 校验阶段保证(仅 is_* 类别属性), 此处直接使用"""
     name = "state"
 
-    def __init__(self, spec):
+    def __init__(self, spec: Any) -> None:
         spec = spec if isinstance(spec, list) else [spec]
         self.groups = [str(g).split("&") for g in spec]
 
-    def match(self, ctx: RuleContext):
+    def match(self, ctx: RuleContext) -> bool:
         for group in self.groups:
             if all(getattr(ctx.torrent.state_enum, s) for s in group):
                 return True
@@ -145,10 +146,10 @@ class HrCondition(BaseCondition):
     """
     name = "hr"
 
-    def __init__(self, spec):
+    def __init__(self, spec: Any) -> None:
         self.mode = str(spec)
 
-    def match(self, ctx: RuleContext):
+    def match(self, ctx: RuleContext) -> bool:
         torrent = ctx.torrent
         conf = torrent.tracker_conf
         # 无 HR 可判定的两种情形**必须显式分支**: 直接读 conf.hr 会在 conf=None 时抛
@@ -175,12 +176,12 @@ class DateTimeCondition(BaseCondition):
     """日期时间条件: day_of_month / day_of_week / time"""
     name = "date_time"
 
-    def __init__(self, spec):
+    def __init__(self, spec: Any) -> None:
         self.day_of_month = spec.get("day_of_month")
         self.day_of_week = spec.get("day_of_week")
         self.time_range = spec.get("time")
 
-    def match(self, ctx: RuleContext):
+    def match(self, ctx: RuleContext) -> bool:
         now = datetime.now()
         if self.day_of_month and not _in_range(now.day, str(self.day_of_month)):
             return False
@@ -197,10 +198,10 @@ class SeedtimeCondition(BaseCondition):
     """做种时长条件, 如 '<24H'"""
     name = "seedtime"
 
-    def __init__(self, spec):
+    def __init__(self, spec: Any) -> None:
         self.op, self.value = utils.parse_compare(str(spec), utils.parse_time)
 
-    def match(self, ctx: RuleContext):
+    def match(self, ctx: RuleContext) -> bool:
         return utils.compare(self.op, ctx.torrent.seeding_time, self.value)
 
 
@@ -209,10 +210,10 @@ class UploadRatioCondition(BaseCondition):
     """上传比率条件, 如 '>1.5'"""
     name = "upload_ratio"
 
-    def __init__(self, spec):
+    def __init__(self, spec: Any) -> None:
         self.op, self.value = utils.parse_compare(str(spec), float)
 
-    def match(self, ctx: RuleContext):
+    def match(self, ctx: RuleContext) -> bool:
         return utils.compare(self.op, ctx.torrent.ratio, self.value)
 
 
@@ -226,12 +227,12 @@ class ExprCondition(BaseCondition):
     """
     name = "expr"
 
-    def __init__(self, spec):
+    def __init__(self, spec: Any) -> None:
         self.text = str(spec)
         self.expr = compile_expr(self.text)
         validate(self.expr.root)
 
-    def match(self, ctx: RuleContext):
+    def match(self, ctx: RuleContext) -> bool:
         value = evaluate(self.expr.root, ctx)
         if not isinstance(value, bool):  # 静态校验已挡, 运行期兜底(防止取值面类型与实际不一致)
             raise ExprError(f"条件表达式的结果必须是布尔, 得到 {type(value).__name__}: {self.text}")
@@ -246,11 +247,11 @@ class FreespaceCondition(BaseCondition):
     """磁盘可用空间条件: path + amount, 如 {path: 'R:\\', amount: '<100GiB'}"""
     name = "freespace"
 
-    def __init__(self, spec):
+    def __init__(self, spec: Any) -> None:
         self.path = str(spec.get("path", ""))
         self.op, self.value = utils.parse_compare(str(spec.get("amount", "")), utils.parse_fsize)
 
-    def match(self, ctx: RuleContext):
+    def match(self, ctx: RuleContext) -> bool:
         if not self.path:
             return False
         # 与 disk_* 表达式同口径(单点 disk_usage_value): 映射 miss / 盘不可读都显式报错,

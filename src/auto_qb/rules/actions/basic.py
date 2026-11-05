@@ -1,6 +1,6 @@
 """基础种子操作动作: add_tags, remove_tags, add_category, remove_category, start, stop, print_torrent_details"""
 import logging
-from typing import List
+from typing import Any, List
 
 from ...infra import utils
 from ..base import ActionResult, BaseAction, RuleContext
@@ -22,11 +22,11 @@ class AddTagsAction(BaseAction):
     """添加标签, 支持 ${required_seeding_time} 变量"""
     name = "add_tags"
 
-    def __init__(self, spec):
+    def __init__(self, spec: Any) -> None:
         super().__init__(spec)
         self.tags = list(spec) if isinstance(spec, list) else [spec]
 
-    def execute(self, ctx: RuleContext):
+    def execute(self, ctx: RuleContext) -> ActionResult:
         tracker_conf = ctx.torrent.tracker_conf
         tags = [utils.replace_vars(t, tracker_conf) for t in self.tags]
         current = ctx.torrent.tags_set
@@ -43,11 +43,11 @@ class RemoveTagsAction(BaseAction):
     """删除标签, 支持 regex: 和 ${required_seeding_time} 变量"""
     name = "remove_tags"
 
-    def __init__(self, spec):
+    def __init__(self, spec: Any) -> None:
         super().__init__(spec)
         self.patterns = list(spec) if isinstance(spec, list) else [spec]
 
-    def execute(self, ctx: RuleContext):
+    def execute(self, ctx: RuleContext) -> ActionResult:
         current_tags = ctx.torrent.tags_set
         expanded_patterns = self._expand_patterns(ctx)
         to_remove = [t for t in current_tags if utils.match_tag_patterns(t, expanded_patterns)]
@@ -58,7 +58,7 @@ class RemoveTagsAction(BaseAction):
             ctx.api.torrents_remove_tags(tags=list(to_remove), torrent_hashes=ctx.hash)
         return ActionResult.ok(f"{to_remove}")
 
-    def _expand_patterns(self, ctx) -> List[str]:
+    def _expand_patterns(self, ctx: RuleContext) -> List[str]:
         return [utils.replace_vars(pat, ctx.torrent.tracker_conf) for pat in self.patterns]
 
 
@@ -67,12 +67,12 @@ class AddCategoryAction(BaseAction):
     """添加分类, 支持 ${required_seeding_time} 变量和 overwrite 覆盖"""
     name = "add_category"
 
-    def __init__(self, spec):
+    def __init__(self, spec: Any) -> None:
         super().__init__(spec)
         self.format = str(spec.get("format", ""))
         self.overwrite = utils.parse_bool(spec.get("overwrite", False))
 
-    def execute(self, ctx: RuleContext):
+    def execute(self, ctx: RuleContext) -> ActionResult:
         category = utils.replace_vars(self.format, ctx.torrent.tracker_conf)
         old_category = ctx.torrent.category or ""
         if old_category == category:
@@ -81,7 +81,7 @@ class AddCategoryAction(BaseAction):
         auto_categories = ctx.manager.state.setdefault("auto_categories", {})
 
         # 定义一个内部函数可以利用if短路
-        def can_update_previous():
+        def can_update_previous() -> bool:
             previous_auto_category = auto_categories.get(ctx.hash)
             return old_category == previous_auto_category
 
@@ -104,7 +104,7 @@ class RemoveCategoryAction(BaseAction):
     """清空分类"""
     name = "remove_category"
 
-    def execute(self, ctx: RuleContext):
+    def execute(self, ctx: RuleContext) -> ActionResult:
         if not (ctx.torrent.category or "").strip():
             return ActionResult.skip("分类为空")
         if not ctx.dry_run:
@@ -117,7 +117,7 @@ class StartAction(BaseAction):
     """开始种子"""
     name = "start"
 
-    def execute(self, ctx: RuleContext):
+    def execute(self, ctx: RuleContext) -> ActionResult:
         if not ctx.torrent.state_enum.is_stopped:
             return ActionResult.skip("已开始")
         if not ctx.dry_run:
@@ -136,7 +136,7 @@ class StopAction(BaseAction):
     """暂停种子"""
     name = "stop"
 
-    def execute(self, ctx: RuleContext):
+    def execute(self, ctx: RuleContext) -> ActionResult:
         if ctx.torrent.state_enum.is_stopped:
             return ActionResult.skip("已停止")
         if not ctx.dry_run:
@@ -158,7 +158,7 @@ class PrintTorrentDetailsAction(BaseAction):
     """
     name = "print_torrent_details"
 
-    def execute(self, ctx: RuleContext):
+    def execute(self, ctx: RuleContext) -> ActionResult:
         tor = ctx.torrent
         if tor is None:
             return ActionResult.fail("种子不存在, 无法打印详情")
