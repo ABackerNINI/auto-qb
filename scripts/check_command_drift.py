@@ -58,11 +58,14 @@ EXEMPT = (
     ".commands/",
     "scripts/",  # 机检脚本自身
     ".workbuddy-ai/",
-    # —— 下面两条是**逐文件**豁免, 都得说得出理由 ——
+    # —— 下面几条是**逐文件**豁免, 都得说得出理由 ——
     "memory-bank/pitfalls/testing/tmpdir.md",  # 该条记的是 TMPDIR 陷阱本身: 哪几种写法不生效
     #   (POSIX 前缀 / 引号省略 / 换目录)**就是判据**, 把命令换成 task id 这条陷阱就没法读了
     "memory-bank/pitfalls/testing/patching.md",  # WSL 是另一条执行路径: 命令被 `wsl -- bash -c` 包裹
     #   且带 `-p 3.12/3.13` 变体, 不是本项目会话里"照着抄就能跑"的形态
+    "memory-bank/pitfalls/ops/venv-trampoline-clone-copy.md",  # 该条记的是 uv trampoline 损坏本身:
+    #   症状行(canonicalize 报错)与修复命令(--reinstall-package 定点重装)就是判别/处置本体,
+    #   且 env.sync 假自愈的对照必须点名 uv sync 原文 —— 换成 task id 这条坑就没法读了
 )
 
 # 已经写成"调 task"的写法 —— 这才是文档里该出现的形态
