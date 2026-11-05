@@ -10,6 +10,7 @@
 
 | 主题 | 一句话 | 触发词 |
 |---|---|---|
+| [activecontext-distilled.md](activecontext-distilled.md) | 2026-11-05 蒸馏轮的落点件 —— 97 条已完结切片逐字外迁到 5 份 attachments, 本篇按域给结论、指针与未决项; 保留 58 条(最后活动 2026-11-04/05)原样。 | 已归档切片, 切片蒸馏, activeContext 清理, 历史决议 |
 | [evolution.md](evolution.md) | 从 git log 提炼的演进脉络 —— 用来理解「为什么现在是这样」。 | 演进, 为什么是这样, 历史脉络, 设计由来 |
 | [implemented-core.md](implemented-core.md) | 后端主干与内置功能的落地记录 —— 客户端 / 主循环 / 数据层 / 任务队列 / 托盘 / 通知 / 标签 / HR / 分组。 | 做过没有, 主循环, 数据层, 任务队列, 托盘, 通知, 标签, HR, 分组, 单实例锁 |
 | [implemented-rules.md](implemented-rules.md) | 摘要: 规则引擎、checking 动作、限速(单种 + 全局曲线)、fail-fast 配置校验的落地记录。 | 做过没有, 规则, 条件, 动作, checking, 限速, 配置校验 |

@@ -5,7 +5,7 @@
 **Updated:** 2026-11-01
 **Summary:** 复发榜堆3四件机械化: e2e自检/doc-refs双向/写盘形态守卫/聚合内容映射
 **Topics:** memory-bank-recurrence-tooling
-**Refs:** memory-bank/issues/26-10-31-2226-feat-e2e-smoke-env-selfcheck.html, memory-bank/issues/26-10-31-2226-feat-kb-docrefs-bidirectional-automation.html, memory-bank/issues/26-10-31-2226-feat-repo-writeform-guard.html, memory-bank/issues/26-10-31-2226-feat-webui-agg-content-map.html, memory-bank/testing/baselines/26-11-01-0010-recurrence-tooling-closeout.md, memory-bank/activeContext/26-11-01-0010-memory-bank-recurrence-tooling.md
+**Refs:** memory-bank/issues/26-10-31-2226-feat-e2e-smoke-env-selfcheck.html, memory-bank/issues/26-10-31-2226-feat-kb-docrefs-bidirectional-automation.html, memory-bank/issues/26-10-31-2226-feat-repo-writeform-guard.html, memory-bank/issues/26-10-31-2226-feat-webui-agg-content-map.html, memory-bank/testing/baselines/26-11-01-0010-recurrence-tooling-closeout.md, memory-bank/progress/activecontext-distilled.md
 
 ## 原始请求
 

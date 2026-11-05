@@ -7,7 +7,7 @@
 <meta name="issue-stamp" content="26-11-01-0050">
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="mutation-audit">
-<meta name="doc-refs" content="memory-bank/tasks/26-10-08-test-mutation-audit.md, memory-bank/testing/baselines/26-11-02-0056-test-traffic-sample-livetail-interval-contract.md, memory-bank/activeContext/26-11-02-0056-test-traffic-sample-livetail-interval-contract.md">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-08-test-mutation-audit.md, memory-bank/testing/baselines/26-11-02-0056-test-traffic-sample-livetail-interval-contract.md, memory-bank/progress/activecontext-distilled.md">
 <meta name="issue-tier" content="standard">
 <meta name="issue-status" content="Done">
 <meta name="issue-title" content="无块 LiveTail 发布用陈旧旧块间隔: 改间隔复位窗口违反 LiveTail.interval_s 契约">
@@ -163,7 +163,7 @@
     <ul>
       <li>2026-11-01 00:50 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
       <li>2026-11-02 00:44 — 认领，状态 <strong>In Progress</strong>（用户指派：本会话直接认领修复）</li>
-      <li>2026-11-02 00:56 — 修复完成，状态 <strong>Done</strong>（认领链：<code>memory-bank/activeContext/26-11-02-0056-test-traffic-sample-livetail-interval-contract.md</code>）</li>
+      <li>2026-11-02 00:56 — 修复完成，状态 <strong>Done</strong>（认领链：<code>memory-bank/progress/activecontext-distilled.md</code>）</li>
     </ul>
     <h3>复验</h3>
     <p>复验：2026-11-02 00:44 仍复现 —— 按 §06 第 2 条先补契约守阵，新用例 <code>test_w5_live_tail_interval_change_reset_window_uses_effective</code> 对原码首跑红：复位窗口内 <code>LiveTail.interval_s</code> 断言 45.0 实得 30.0（陈旧旧块值），且 <code>v4_live_tail_slots</code> 槽位 dt_s 同为 30.0。</p>

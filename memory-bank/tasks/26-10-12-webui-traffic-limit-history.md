@@ -5,7 +5,7 @@
 **Updated:** 2026-10-15 05:29
 **Topics:** webui-traffic-limit-history
 **Summary:** 用户命题「流量图限速线显示当前限速值有误导性, 需保存限速更改体现当时的限速, 先写计划, 使用 grilling 技能」。grilling 一轮七问收敛: 记生效值不记曲线目标 / 采样点变化才记 / 前端分段画(各段各区间, 末段到 now, 可见性判据逐段化) / 缺记录不画不回填 / 三挂点与变体维持现状 / 悬停读数增补; D3 用户两轮裁定终值 = **分天保存**(`qb-traffic-v4/limits/<日期>.dat`, 00:00 硬切 + 新天基线 carry, 不淘汰与 day/month 全保留对齐, 无配置键)。追问「不分天吗 / 缺数据区怎么界定 / 保存几年怎么办」推动补强: 读侧 mtime+size 解析缓存、缺数据区界定规则(阶梯函数恒有值, 唯一缺区 = 记录起点前; 停机时刻误差 ≤ 停机时长)、病态翻转常量告警护栏。计划 26-10-12-0535 Open, W1 后端 / W2 前端 / W3 收尾待实施; 纯文档轮零代码, 数字见 `commands run kb.baseline`。**W1-W3 已于 08:15 实施完成, 数字见基线 [26-10-12-0815](../testing/baselines/attachments/26-10-12-0815-webui-traffic-limit-history-w1w3.md); 真机走查(改限速 → 看历史段)待用户; 26-10-15 用户确认完成, 计划与档案状态 Open→Done(实施核到代码)。**
-**Refs:** memory-bank/plans/26-10-12-0535-plan-webui-traffic-limit-history.html,memory-bank/testing/baselines/26-10-12-0815-webui-traffic-limit-history-w1w3.md,memory-bank/testing/baselines/26-10-12-1806-traffic-limits-warn-sentinel-ci-fix.md,memory-bank/activeContext/26-10-12-0815-webui-traffic-limit-history.md,memory-bank/pitfalls/testing/monotonic-warn-sentinel.md
+**Refs:** memory-bank/plans/26-10-12-0535-plan-webui-traffic-limit-history.html,memory-bank/testing/baselines/26-10-12-0815-webui-traffic-limit-history-w1w3.md,memory-bank/testing/baselines/26-10-12-1806-traffic-limits-warn-sentinel-ci-fix.md,memory-bank/progress/activecontext-distilled.md,memory-bank/pitfalls/testing/monotonic-warn-sentinel.md
 
 ## 原始请求
 

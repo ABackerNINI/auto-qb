@@ -17,7 +17,7 @@
 
 ## 思考过程与决策
 
-- **② 已实现核实**: `_QB_SCOPES.torrent` 的 `active` 判据 = `drawer.kind === "seed" && drawer.tab === "traffic"`, `drawer.html` 头部有 `v-if="qbTrafficOn"` 的「流量」页签按钮, 与全局/分组共用同一 `ref="qbChartHost"` 与同一 `drawerHeightPx` —— 三挂点 2026-10-04 已并入底部详情抽屉([activeContext 26-10-04-0405](../activeContext/26-10-04-0405-webui-qb-traffic-drawer-merge.md))。故本轮**零改动**, 只在报告里说明。
+- **② 已实现核实**: `_QB_SCOPES.torrent` 的 `active` 判据 = `drawer.kind === "seed" && drawer.tab === "traffic"`, `drawer.html` 头部有 `v-if="qbTrafficOn"` 的「流量」页签按钮, 与全局/分组共用同一 `ref="qbChartHost"` 与同一 `drawerHeightPx` —— 三挂点 2026-10-04 已并入底部详情抽屉([activeContext 26-10-04-0405](../progress/attachments/activecontext-archive-traffic-2026-11-05.md))。故本轮**零改动**, 只在报告里说明。
 - **档位清单单点**: 原先档位清单有三份潜在副本(模板 `v-for` 字面量 13 档 / `qbWindowLabel` 文案 map / 注释)。本轮新增两个消费者(前后切换 + 持久化校验), 若各写一份必与后端 `WINDOW_NAMES` 漂移(非法档 → 400)。故收成 `QB_WINDOW_NAMES` 单点(顺序即展示序 = 短窗→长窗), 模板改走 `qbWindowNames` computed, 后端清单在守阵里逐字断言。
 - **持久化粒度取舍(用户自定义)**: 全局图看"整机吞吐尺度", 种子/组图看"单对象活跃尺度", 习惯常不同故全局单独一份; 组与种子常被当作同类"单对象"视图对照着看, 故共用一份。键单点 `qbWinStoreKey(scope)`(`global` → Global 键, 其余 → Shared 键)。
 - **初值函数放哪**: `qbInitialWindow` 定义在 `qb_traffic_chart.js` 而非 app.js(其余 `initial*` 的位置)—— 三份 tpl-manifest 里本文件均排在 `state.js` 之前, 函数声明在 `data()` 调用时已可用; 档位域归流量图模块所有, 避免跨文件前向引用。该装载序由守阵逐皮肤断言(否则启动白屏)。

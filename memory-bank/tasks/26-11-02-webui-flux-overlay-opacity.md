@@ -5,7 +5,7 @@
 **Updated:** 2026-11-03
 **Summary:** flux 皮肤独有半透明表面令牌 + 无 blur 浮层 ⇒ 透出正文; 新增 --bg-pop 不透明兜底并覆盖 19 处浮层
 **Topics:** webui-flux-overlay-opacity
-**Refs:** memory-bank/activeContext/26-11-02-2033-webui-flux-overlay-opacity.md
+**Refs:** memory-bank/progress/activecontext-distilled.md
 
 ## 原始请求
 

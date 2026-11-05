@@ -4,7 +4,7 @@
 **Added:** 2026-10-09
 **Updated:** 2026-10-09
 **Summary:** 用户命题「WebUI⇄auto-qb 与 auto-qb⇄扩展两条通道均为明文 HTTP, 有安全风险; 初步设想用 token 加密数据、两端解密; 要求调研成熟方案、对比成本优劣、写详细报告」。产出可行性报告 `reports/26-10-09-1529-report-transport-encryption-feasibility.html`(威胁模型分层 T0-T4 + 五方案对比 + 分阶段落地路径)。**核心结论**: ①默认回环形态下明文残余风险有限(T0 同用户进程本就可读 token 文件, 传输加密无解), 加密边际收益小; ②通道一旦暴露到 LAN/跨机, 唯一正确且省事的答案是 **TLS(本地受信 CA / 反代 / VPN)**, 而非自研应用层加密; ③用户设想的「token 加密载荷」在回环下技术成立(回环是安全上下文, `crypto.subtle` 可用), 但**跨机 LAN 的 `http://<私网IP>` 页面不是安全上下文 ⇒ Web Crypto 不可用**, 恰在最需要它的场景失效; ④最该先做的是「暴露即提示/收口」而非默认上加密。**本轮零 `src/`/`tests/` 改动**; 落地需另立计划。
-**Refs:** memory-bank/reports/26-10-09-1529-report-transport-encryption-feasibility.html, memory-bank/activeContext/26-10-09-1529-transport-encryption.md
+**Refs:** memory-bank/reports/26-10-09-1529-report-transport-encryption-feasibility.html, memory-bank/progress/activecontext-distilled.md
 **Topics:** transport-encryption
 
 ## 原始请求

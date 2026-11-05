@@ -6,7 +6,7 @@
 **Summary:** 用户指令「认领并修复 memory-bank/issues/26-10-16-1523-bug-ship-commit-omitted-note.html」→ 修复后「提交」。子集提交旧提示「另有 N 个改动未纳入」把已暂存的未传改动读成「没进本笔」, 而 `git commit` 提交的是整个索引(入池实测: 10 个 `D ` 撤跟踪项被列成「未纳入」却全在同一笔里)。落盘 = issue §06 方向 A(措辞与语义对齐, 不动提交行为; 方向 B「真正路径限定提交」不做 —— 会推翻坑档 `git/ship-commit-staged-delete.md` 已依赖的「已暂存删除项随整索引落笔」便利): `commit.py` 新增 `omitted_note()` 按索引状态分组(已暂存/未暂存各给计数与示例, 空组不列)、`omitted` 去重(MM 文件不再翻倍); `test_commit.py` 新增 4 条守阵; 红绿双验 3 类突变逐类判红。提交阶段被快照守阵两条既有红挡下(与本次改动无关), 经用户裁决处置: ① 家目录空 `.git` 由机主移除; ② `test_snapshot.py` 两处存在性比较改为「用例私有临时根」内进行(子进程 `TMPDIR` 一并指向它), `-n 8` 跨 worker 假红消除(红绿双验 2 类突变)。测试数字唯一权威在基线切片(见 **Refs:**)。变更集 3 个源文件 ⇒ 命中立档阈值, 建本档。
 **Topics:** ship-commit-omitted-note
 
-**Refs:** memory-bank/issues/26-10-16-1523-bug-ship-commit-omitted-note.html,memory-bank/activeContext/26-10-16-1533-ship-commit-omitted-note.md
+**Refs:** memory-bank/issues/26-10-16-1523-bug-ship-commit-omitted-note.html,memory-bank/progress/activecontext-distilled.md
 
 ## 原始请求
 

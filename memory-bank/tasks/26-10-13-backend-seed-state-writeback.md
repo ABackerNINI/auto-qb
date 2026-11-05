@@ -10,7 +10,7 @@
   
 **Summary:** 终态：B 系（真值回写）被 qB 服务端节流取证（`RefreshInterval` 默认 1500ms，写后直查读到写前值）证否，B2 计划置 Superseded、报告 26-10-12-2148 抬 0441 修订；方向定 A3 = 删合成回写 + 局部 deferral，计划 `26-10-13-0540`（Done）。S0 前置（能力面可达性定 A3 / `state_changed` 消歧 / `FakeClient` 翻转 state）→ S1 值层（删 `_sync_paused_state` + `state=` 形参，快照语义收敛「严格 = 最近一次同步的应用结果」）→ S2 deferral（`own_writes` + TTL 兜底 + D-1/D-2/D-3 三闸门）→ S3 收尾（§8.3 七守阵 + A2 幂等复用 `own_writes` 不新增容器）全部落地并入库（提交 `5781294c` / `9d511823` / `e2249761` / `2f4e9633`），全量测试数字见 `kb.baseline`（S0–S3 四切片）。副产物「整组停种经同步回流的二次触发」另入池 `issues/26-10-13-0626`（独立待拍板项，不影响本档案收口）。
   
-**Refs:** memory-bank/reports/26-10-12-2148-report-seed-state-writeback-removal-feasibility.html,memory-bank/plans/26-10-13-0413-plan-seed-state-writeback-truth-emission.html,memory-bank/plans/26-10-13-0540-plan-seed-state-writeback-removal-local-deferral.html,memory-bank/activeContext/26-10-13-0538-seed-state-writeback.md,memory-bank/issues/26-10-13-0626-question-grouping-transition-reflow-retrigger.html
+**Refs:** memory-bank/reports/26-10-12-2148-report-seed-state-writeback-removal-feasibility.html,memory-bank/plans/26-10-13-0413-plan-seed-state-writeback-truth-emission.html,memory-bank/plans/26-10-13-0540-plan-seed-state-writeback-removal-local-deferral.html,memory-bank/progress/activecontext-distilled.md,memory-bank/issues/26-10-13-0626-question-grouping-transition-reflow-retrigger.html
 
 ## 原始请求
 
