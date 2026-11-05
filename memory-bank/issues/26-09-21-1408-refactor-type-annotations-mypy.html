@@ -8,7 +8,7 @@
 <meta name="issue-type" content="refactor">
 <meta name="doc-topic" content="type-annotations-mypy">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="In Progress">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="类型注解完整覆盖仅 43%, 无 mypy/pyright 配置">
 <meta name="issue-summary" content="749 个 def: 完整 43%/部分 41%/无 16%(AST 实测); 建议渐进接入, 先 torrents/config 后 mixins/web">
 <title>类型注解完整覆盖仅 43%, 无 mypy/pyright 配置 · refactor · 计划外问题（便签）</title>
@@ -56,7 +56,7 @@
   footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
   a { color: var(--accent-ink); }
 </style>
-<meta name="doc-refs" content="memory-bank/plans/26-11-05-0635-plan-type-annotations-mypy.html">
+<meta name="doc-refs" content="memory-bank/plans/26-11-05-0635-plan-type-annotations-mypy.html, memory-bank/testing/baselines/26-11-06-0243-type-annotations-mypy.md">
 </head>
 <body>
 <div class="sheet">
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-09-21-1408-refactor-type-annotations-mypy</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-09-21 14:08</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">In Progress</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -101,6 +101,7 @@
     <ul>
       <li>2026-09-21 14:08 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
       <li>2026-11-05 06:35 — 用户指派认领，状态 <strong>Open → In Progress</strong>；分步实施计划 <a href="../plans/26-11-05-0635-plan-type-annotations-mypy.html">26-11-05-0635-plan-type-annotations-mypy</a>（标准清偿口径：mypy 接入 + RUF013 债全清 + 优先模块补全 + allowlist 守阵，拍板 D1-D3 见计划 §06）</li>
+      <li>2026-11-06 02:43 — 计划 S1-S5 落地完毕，状态 <strong>In Progress → Done</strong>。Done 口径 = 计划 §01 五条：①mypy 接入跑通（[tool.mypy] + dev.typecheck 豁免面外全绿）②RUF013 隐式 Optional 债全库归零（含二评 C-02 点名处）③优先模块注解补全（config/core/torrents/rules 非 expr 面 AST 复测 100% full）④抵抗面进 per-module allowlist 且守阵 <code>tests/test_mypy_allowlist_guard.py</code> 冻结（只减不增）⑤本条置 Done。验证方式：test.full 全量绿（数字见 <a href="../testing/baselines/26-11-06-0243-type-annotations-mypy.md">kb.baseline 最新切片</a>）。<strong>剩余覆盖缺口递减去向</strong>：rules expr/ 闭包工厂（72 def）与 <code>tray.*</code> 在 ignore_errors 豁免面；webui 路由层注解覆盖（47.7%）与 manager 贯穿类型、routes 透传 helper 裸 <code>body: dict</code> 注解实收 None（torrent_cmds.py <code>_cmd_enable/_cmd_field/_cmd_str_list</code>，实现按 <code>(body or {})</code> 兜 None 而签名未诚实化）均为递减面 —— allowlist 守阵已冻结，后续从豁免侧向收紧侧迁移即推进；disable_error_code 豁免面（157 对）同理只减不增。实施期发现的计划外缺陷另行入池（traffic_sample_agg 注解契约漂移 / qbclient._session override 不兼容），不随本条关闭。</li>
     </ul>
   </section>
 

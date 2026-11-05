@@ -2,7 +2,7 @@
 
 > 摘要: agent 工具 shell 的沙箱按**白名单**放行写操作。工具若把自己的缓存写到白名单外(本仓实测: yapf 的语法缓存 `%LOCALAPPDATA%\Google\YAPF\Cache`), 而该目录**已存在**却写不进, 失败路径可能不是报错而是**紧循环**: CPython `tempfile._mkstemp_inner` 在 Windows 上把 `PermissionError` 当成"重名"继续换名重试 ⇒ 命令**挂住 + 100% 单核 + 持续写磁盘**, 且**全程没有任何报错**。姊妹形态(2026-10-16): 沙箱把 `LOCALAPPDATA` 裁成空串时, `uv python list` 之类的托管命令会把缓存目录解析成 **CWD 相对路径** —— 仓库根落 45MB 部分下载垃圾, 且该命令本身先挂住 120s。
 > 等级: L0
-> 触发: 沙箱, sandbox, 工具挂住, yapf 挂住, 高CPU, 一直写磁盘, 缓存目录, mkstemp, NamedTemporaryFile, 白名单, AppData, platformdirs, 提交闸门卡住, 闸门超时后仍在跑, LOCALAPPDATA 为空, uv python list 挂住, 仓库根 Python 目录, 缓存落 CWD, 部分下载垃圾
+> 触发: 沙箱, sandbox, 工具挂住, yapf 挂住, 高CPU, 一直写磁盘, 缓存目录, mkstemp, NamedTemporaryFile, 白名单, AppData, platformdirs, 提交闸门卡住, 闸门超时后仍在跑, LOCALAPPDATA 为空, uv python list 挂住, 仓库根 Python 目录, 缓存落 CWD, 部分下载垃圾, mypy, .mypy_cache, dev.typecheck
 
 ### 判别与处置
 
@@ -53,5 +53,21 @@
 - **判别**: `git status` 出现意料外的 `?? Python/`(或其它单段名目录); 目录 `CreationTime` 就在报错/超时命令的**同一分钟**; 内容 = `_cache` + `*.tmp/.job` 这类下载/托管缓存。`uv run <项目命令>` 本身**不中招**(venv 已存在, 不碰托管 python 目录) —— 中招的是 `uv python` 管理子命令, 以及任何以「已知文件夹」或 `$LOCALAPPDATA` 为根的工具。
 - **处置**: ①别在工具 shell 里跑 `uv python list/install` 这类托管命令(要看 python 直接读 `.venv\pyvenv.cfg` 与 `AppData\Local\Python\` 目录清单); ②中招后 `Remove-Item -Recurse -Force .\Python` 清掉即可(纯本会话垃圾, 不碰仓库内容); ③对照: 本机 `AppData\Local\Python\` 只有 `pythoncore-3.14-64` 一个版本、五个 clone 的 venv 全是 3.14.7 —— 「只装 3.14」的结论用**读目录**得出, 不需要 `uv python list`。
 - **复发**: 1(2026-10-16 首记)
+
+### mypy 缓存实测 (2026-11-06, 接入 dev.typecheck 时): 未复现 yapf 形态
+
+- **触发**: 接入 mypy(计划 26-11-05-0635 S1)时按本坑档预期「mypy 缓存目录与 yapf 同族沙箱风险」——
+  mypy 同样把自己的增量缓存写到工具自选目录, 若被沙箱拒写理论上可能踩同一挂死形态。
+- **实测结论**: `.mypy_cache/` 默认落**仓库根**(mypy 对 config 文件同目录的默认行为), 在沙箱
+  白名单内可写, 已 gitignore(不入库)。首跑冷缓存全库(194 文件)**6.6s** 跑完, 远不到超时;
+  agent 工具 shell 里多轮复跑均正常返回, **未复现 yapf 形态**(无挂死/紧循环/刷临时文件)。
+- **判别**: 若疑似中招, 按主条目四步走 —— ①进程烧 CPU 但无输出; ②faulthandler 栈取证;
+  ③关沙箱对照; ④看缓存目录是否落在沙箱白名单外(mypy 的缓存去向由
+  `MYPY_CACHE_DIR`/config 文件同目录默认规则决定, `ls <仓库根>/.mypy_cache` 即可定位)。
+- **处置**: ①不设白名单特例, 缓存落仓库根即天然安全; ②`dev.typecheck` task 仍按本坑档纪律
+  配 `timeout = 120` 兜底 + 引擎超时杀整棵进程树(`run.py::_kill_tree` 单点) —— "现在跑得通"
+  不构成撤掉兜底的理由(同坑档第 5 点: 挂死是间歇的); ③`.mypy_cache/` 若被手工改向仓库根
+  之外(如 `MYPY_CACHE_DIR`), 需重新按四步判别走一遍。
+- **复发**: 0(接入期预防性记录, 未实撞)
 
 **Refs:** memory-bank/tasks/26-10-08-deps-sandbox-yapf-hang.md

@@ -9,8 +9,8 @@
 <meta name="doc-topic" content="type-annotations-mypy">
 <meta name="doc-status" content="Open">
 <meta name="doc-added" content="26-11-05-0635">
-<meta name="doc-updated" content="26-11-05-0635">
-<meta name="doc-refs" content="memory-bank/issues/26-09-21-1408-refactor-type-annotations-mypy.html">
+<meta name="doc-updated" content="26-11-06-0249">
+<meta name="doc-refs" content="memory-bank/issues/26-09-21-1408-refactor-type-annotations-mypy.html, memory-bank/testing/baselines/26-11-06-0243-type-annotations-mypy.md">
 <style>
   :root {
     --bg: #10151a;
@@ -75,7 +75,7 @@
 <h1>类型注解标准清偿与 mypy 渐进接入分步计划</h1>
 <p class="lede">为 issue 26-09-21-1408 建立第一只静态类型防线: 接入 mypy(独立任务, 不进提交闸门), 全库清偿 RUF013 隐式 Optional 债, 优先模块补全注解, 抵抗面进 allowlist 且只减不增 —— 主轴是「分级覆盖 + allowlist 递减」, 而不是一次性全库强标。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-05-0635 · <b>doc-updated</b> 26-11-05-0635 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-11-05-0635 · <b>doc-updated</b> 26-11-06-0249 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 用户指令认领 issue 26-09-21-1408(2026-11-05 会话); 三项口径(清偿范围/工具/闸门接入)当轮 AskUserQuestion 拍板, 记 §06 D1-D3
 </div>
 
@@ -122,7 +122,7 @@
   <tr><td><strong>S4</strong></td><td>allowlist 分级 + 守阵 test_mypy_allowlist_guard</td><td>dev.typecheck 全绿(豁免面外); 守阵红验通过</td><td>S1-S3</td></tr>
   <tr><td><strong>S5</strong></td><td>实施轮验证与收尾</td><td>test.full 全量绿(数字见 kb.baseline); issue Done</td><td>S4</td></tr>
 </table>
-<p>拍板 D1-D3(范围/工具/闸门)见 §06; 已无待拍板项。</p>
+<p>拍板 D1-D3(范围/工具/闸门)见 §06; 已无待拍板项。<span class="tag">实施修正(2026-11-06)</span>: §02 的「RUF013 债 400+ 处」为多行签名宽口径预估, AST 扫描实测 <code>arg: T = None</code> 形态全库 <strong>55 处</strong>(第一批 core/config/infra 16 处 + 第二批 webui 39 处), S2 两批清零; §02 表内其余覆盖数字为 2026-11-05 取证快照, 复测终态见 kb.baseline 最新切片。</p>
 
 <h2><span class="no">§04</span>实施步骤</h2>
 
@@ -150,7 +150,7 @@
   <li><strong>config</strong>(模式重复度最高, 先做): loaders/validation 边界函数补 <code>spec: dict</code> 入参、<code>parse: Callable[..., T] | None = None</code> 类参数、<code>-&gt; XxxConfig</code> 返回。</li>
   <li><strong>core</strong>: qbapi.py 27 处 Facade 方法补返回注解(<code>**kwargs: Any</code> 转发面保持); qbmanager/module/state/taskqueue 机械补齐。</li>
   <li><strong>rules 插件 LSP 对齐</strong>: conditions.py 13 个插件类 <code>__init__(self, spec: ...)</code> 与 <code>match(...) -&gt; bool</code> 对齐基类签名; actions 同理对齐 <code>-&gt; ActionResult</code>。registry 的 <code>PluginEntry.decl: Any</code>/<code>executor: Any</code> 既有意逃逸口保持不动。expr/ 闭包工厂(<code>env.py</code>)高阶链噪音大, <span class="wr">不在此步强标</span>, 留 allowlist。</li>
-  <li><strong>torrents</strong>: 已 94% full, 查漏即可。</li>
+  <li><strong>torrents</strong>: 已 94% full, 查漏即可。<span class="tag">实施修正(2026-11-06)</span>: config 补全落点按 9 文件 78 处执行(writer/migrations 一并查漏, 不止 loaders/validation); torrents 查漏 4 处; core 批次 qbapi Facade 返回注解实补 37 处(上行原写 27 处为粗点数)。</li>
   <li>验收: AST 复测四个目标面 full 率(前后对照写进执行记录); 该四面子集上开 <code>disallow_untyped_defs</code> 可跑绿。</li>
 </ul>
 
@@ -197,7 +197,32 @@
 <h2><span class="no">§10</span>变更记录</h2>
 <ul>
   <li><span class="tag">R0 · 26-11-05-0635</span> 初版: 认领 issue 26-09-21-1408(用户指派, 2026-11-05 会话); 现状取证(AST 复测 + 工具链调查); 三项拍板 D1-D3; S1-S5 分期与验收判据定稿。本轮零代码改动。</li>
+  <li><span class="tag">R1 · 26-11-06-0249</span> S1-S5 全部落地, 计划收口: mypy 2.4.1 接入(dev.typecheck 退出码 0/194 文件) + RUF013 债全库归零 + config/torrents/core/rules 非 expr 面注解补全(AST 复测 100% full) + allowlist 分级与守阵冻结; test.full 全量绿(数字见 kb.baseline 最新切片 26-11-06-0243), issue 26-09-21-1408 置 Done; 实施期计划外缺陷入池 2 条, 坑档沉淀 4 处</li>
 </ul>
+
+<h2><span class="no">§11</span>执行记录</h2>
+<p><strong>首份全库 mypy 错误分级清单摘要</strong>(S1 首跑, 2026-11-05 实测; 冷缓存 6.6s / 194 文件 / 合计 1044 错, 与 dev.typecheck task note 一致)。源清单在 <code>%TEMP%\typing-mypy\mypy-first-run.txt</code> —— <span class="bad">临时文件, 易失</span>, 本表是唯一留档誊写(计划 S1 验收口径: 该清单只进本档案执行记录, 不散抄); 摘要为按 error 级行统计(note 行不计)。</p>
+<table>
+  <tr><th>错误代码</th><th>条数</th><th>错误代码</th><th>条数</th></tr>
+  <tr><td><code>attr-defined</code></td><td>561</td><td><code>var-annotated</code></td><td>13</td></tr>
+  <tr><td><code>union-attr</code></td><td>257</td><td><code>operator</code></td><td>12</td></tr>
+  <tr><td><code>assignment</code></td><td>93</td><td><code>misc</code></td><td>11</td></tr>
+  <tr><td><code>arg-type</code></td><td>53</td><td><code>return-value</code></td><td>9</td></tr>
+  <tr><td><code>has-type</code></td><td>21</td><td><code>call-overload</code></td><td>6</td></tr>
+  <tr><td colspan="2"><code>name-defined</code> 2 · <code>index</code> 2 · <code>no-redef</code> 1 · <code>truthy-function</code> 1 · <code>dict-item</code> 1 · <code>list-item</code> 1</td><td colspan="2">其余合计 8</td></tr>
+</table>
+<table>
+  <tr><th>模块面</th><th>条数</th><th>模块面</th><th>条数</th></tr>
+  <tr><td><code>core/modules</code></td><td>433</td><td><code>transfer/adapters</code></td><td>11</td></tr>
+  <tr><td><code>webui</code></td><td>286</td><td><code>infra</code></td><td>9</td></tr>
+  <tr><td><code>core</code>(顶层)</td><td>107</td><td><code>config</code></td><td>8</td></tr>
+  <tr><td><code>hr</code></td><td>74</td><td><code>webui/server</code></td><td>7</td></tr>
+  <tr><td><code>webui/server/routes</code></td><td>47</td><td><code>rules/expr</code></td><td>4</td></tr>
+  <tr><td><code>rules</code>(顶层)</td><td>20</td><td><code>config/validation</code></td><td>3</td></tr>
+  <tr><td><code>rules/actions</code></td><td>15</td><td><code>tray</code> / <code>config/schema</code> / <code>(root)</code> / <code>core/traffic_source</code></td><td>3 / 2 / 2 / 1</td></tr>
+  <tr><td><code>torrents</code></td><td>12</td><td colspan="2">S4 收紧后豁免面外归零(终态见 R1)</td></tr>
+</table>
+<p>AST full 率改前对照(§02 取证 2026-11-05)与复测终态、test.full 实测数字: 一律见 kb.baseline 最新切片, 不在此抄录。</p>
 
 </div>
 </body>
