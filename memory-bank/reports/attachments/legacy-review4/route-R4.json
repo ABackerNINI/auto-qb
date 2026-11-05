@@ -4,15 +4,15 @@
   "claimed_at": "26-11-06-0729",
   "freeze": "f088329291e64d0802637463e886f78842c1b34c",
   "freeze_note": "manifest 钉值 (生成时点 develop tip, D17)",
-  "snapshot": null,
-  "status": "claimed",
+  "snapshot": "D:\\Projects\\zcode\\auto-qb-review4-snap\\auto-qb-zcode-clone2",
+  "status": "in-progress",
   "batches": [
     {
       "id": "R4-1",
       "title": "webui commands 面: commands*/runtime_commands",
-      "status": "pending",
-      "done_at": null,
-      "findings": 0
+      "status": "done",
+      "done_at": "26-11-06-0750",
+      "findings": 13
     },
     {
       "id": "R4-2",
@@ -35,5 +35,6 @@
       "done_at": null,
       "findings": 0
     }
-  ]
+  ],
+  "started_at": "26-11-06-0730"
 }
