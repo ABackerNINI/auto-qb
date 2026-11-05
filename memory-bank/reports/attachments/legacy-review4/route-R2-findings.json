@@ -259,5 +259,59 @@
   "claim": "docstring 指向的守卫测试路径 tests/test_actions.py 不存在, 实际在 tests/test_actions_state.py::test_actions_registry_complete",
   "relevance": "相关",
   "fix": "docstring 更正为 tests/test_actions_state.py::test_actions_registry_complete"
+ },
+ {
+  "file": "src/auto_qb/infra/file_access.py",
+  "line": 212,
+  "quote": "with os.scandir(self._pref(lp)) as it:",
+  "severity": "major",
+  "claim": "LocalFileAccess.scandir 先经 _norm_logical 归一,而 utils_paths.path_normalize 的 re.sub(r'/{2,}', '/') 会把 UNC 双前导斜杠压掉(\\\\NAS\\share\\dl -> /NAS/share/dl),_pref 再把该串当相对路径 abspath 拼到进程 cwd 下 —— Windows 宿主直跑(Local)且 qB save_path/content_path 为 UNC 时,目录浏览(fs.py:161)与迁移扫描(relocate_plan.py:202)打开的是 C:\\<cwd>\\NAS\\share\\dl 这类错误路径,抛 FileNotFoundError;且返回的 entry.path 也是 '/NAS/share/dl/...' 畸形逻辑路径,违反本模块「逻辑路径进 -> 逻辑路径出」硬约束(exists/getsize 走原路径不受影响,仅 scandir 坏)。",
+  "relevance": "相关",
+  "fix": "归一压缩重复斜杠时豁免开头 '//'(UNC 边界,同 path_normalize 注释里保留协议头的思路),或 Local.scandir 直接用 _strip_win_prefix 后的原路径做 syscall、仅用归一串拼 entry.path 时保留 UNC 前缀。"
+ },
+ {
+  "file": "src/auto_qb/infra/file_access.py",
+  "line": 286,
+  "quote": "return None",
+  "severity": "minor",
+  "claim": "_match 命中表中第一条映射但过不了挂载根逃逸校验时直接 return None,不继续尝试后续条目 —— 重叠映射场景(如 src=/data -> /mnt/a 在前、src=/data/movies -> /mnt/b 在后)下,/data/movies/x 在 /mnt/a 侧撞上逃逸符号链接时被判 miss(存在性 UNDETERMINED/取值抛错),尽管更具体的 /mnt/b 条目本可安全命中。",
+  "relevance": "相关",
+  "fix": "逃逸时 continue 到下一条映射条目,全部条目穷尽后才 return None(未命中与「命中但全逃逸」统一按 miss 语义返回不变)。"
+ },
+ {
+  "file": "src/auto_qb/infra/alias_fs.py",
+  "line": 430,
+  "quote": "def volume_free(path: str) -> Optional[int]:",
+  "severity": "minor",
+  "claim": "alias_fs.volume_free 是死导出:src 全仓(除定义处)无任何调用方,同一职责(目标卷剩余字节、不可读返 None)已由 relocate_common._volume_free_resolved 在 file_access.disk_usage 之上实现且带「叶子不存在上溯最近存在祖先」的增强语义 —— 存量 A 类死代码 + 同一职责两套路径的平行机制。",
+  "relevance": "相关",
+  "fix": "删除 alias_fs.volume_free(若 docstring 所述界面用途仍是计划内需求,则改为让 relocate_common 复用本函数而非各自持有,二选一收敛到单点)。"
+ },
+ {
+  "file": "src/auto_qb/infra/file_access.py",
+  "line": 165,
+  "quote": "\"\"\"文件大小(字节); 不存在/不可判定抛 FileAccessError\"\"\"",
+  "severity": "minor",
+  "claim": "docstring 断言「不存在抛 FileAccessError」是假的: Local 与 Mapped 的 getsize 对真实缺失的路径都由 os.path.getsize 抛 FileNotFoundError(与 FileAccessError 是平行的 OSError 子类), FileAccessError 只覆盖映射 miss(不可判定); disk_usage(第170行)与 FileAccess 类 docstring「取值语义…失败抛 FileAccessError」(第139-140行)同病 —— 按此 docstring 新写 except FileAccessError 的取值方接不住真实 I/O 失败",
+  "relevance": "相关",
+  "fix": "把断言改为「映射 miss/不可判定抛 FileAccessError; 真实 I/O 失败抛原生 OSError(FileAccessError 兼容既有 except OSError 兜底)」, 三处同改"
+ },
+ {
+  "file": "src/auto_qb/infra/alias_fs.py",
+  "line": 732,
+  "quote": "return parent_st.st_dev != st.st_dev",
+  "severity": "minor",
+  "claim": "挂载点正向识别(_is_mount_point 父目录 st_dev 不同 → True → inspect_path 判 KIND_MOUNT)零测试覆盖: tests/test_webui_relocate_chain.py 只钉了两个 False 支(父目录不可读 :297、根目录 :367), 「目录被认成挂载点」这条重要行为完全无测试",
+  "relevance": "相关",
+  "fix": "补一条注入测试(monkeypatch os.lstat 使父目录 st_dev 与目标不同, 或直接对 _is_mount_point 传父/子不等 st_dev 的替身), 断言返回 True 且 inspect_path 落 KIND_MOUNT"
+ },
+ {
+  "file": "src/auto_qb/infra/file_access.py",
+  "line": 8,
+  "quote": "两条硬约束(报告 §04/§05, 违反即复刻历史事故):",
+  "severity": "minor",
+  "claim": "模块 docstring 说「两条硬约束」但实际列出三条(第16-19行追加了第 3 条 SEC-1 逃逸校验), 计数与内容自相矛盾",
+  "relevance": "相关",
+  "fix": "把「两条」改为「三条」(或「硬约束」不带计数)"
  }
 ]

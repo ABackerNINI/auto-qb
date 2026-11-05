@@ -10,7 +10,7 @@ owner: clone2-main · freeze: f088329291e6 · 快照: D:\Projects\zcode\auto-qb-
 | R2-2 | schema 与装载 ≈2.5K | 4 (minor 3 / nit 1) | done |
 | R2-3 | 写入与迁移 ≈1.9K | 4 (minor 4) | done |
 | R2-4 | rules 全域 ≈3.4K | 11 (major 1 / minor 8 / nit 2) | done |
-| R2-5 | infra 存储 ≈1.4K | - | pending |
+| R2-5 | infra 存储 ≈1.4K | 6 (major 1 / minor 5) | done |
 | R2-6 | infra 工具 ≈1.9K | - | pending |
 
 ## R2 复验结论

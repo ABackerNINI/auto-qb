@@ -38,9 +38,9 @@
     {
       "id": "R2-5",
       "title": "infra 存储: alias_fs/file_access",
-      "status": "pending",
-      "done_at": null,
-      "findings": 0
+      "status": "done",
+      "done_at": "26-11-06-0637",
+      "findings": 6
     },
     {
       "id": "R2-6",
