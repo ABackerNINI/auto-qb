@@ -4,9 +4,8 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (42)
+## Open (41)
 
-- [docs] [memory-bank 超 8K 文档摸排: 142 件需压缩蒸馏(本次只摸排)](../26-11-05-0855-docs-kb-doc-compress.html) — memory-bank 下超 8K 字符的 md 共 142 件(主线 115 件约 1.79M 字符 + attachments/_archive 生成物 27 件约 0.92M), 另根目录/包内 references/skill 主文件 40+ 件; 本 issue 只记录摸排清单, 压缩未开始
 - [feat] [recheck_fails 噪声收窄: FAILED/START_TIMEOUT 分记, 锐化失败证据信号](../26-11-05-0853-feat-recheck-fails-noise-narrowing.html) — recheck_fails 计数混记真数据证据(FAILED)与噪声(START_TIMEOUT 未开检), G8/G9/链1.6/冷却都消费这个混合信号; 收窄=分记并让防护闸只认真证据, 误拦面变小但动 state schema 与 bump 写点
 - [question] [跳检抽样校验是否值得做: 读盘换下载量的成本收益待拍板](../26-11-05-0514-question-skip-check-sampling-value.html) — 跳检防线之二的抽样校验(建议修法第1条)故意未做, 需讨论读盘成本/边界复杂度与残余风险是否值得投入; 主件 26-10-22-0308 已因保险丝落地收 Done
 - [bug] [整组迁移可对「账面完成但磁盘名错位(.!qB)」的组零搬移假成功](../26-11-05-0420-bug-relocate-zero-move.html) — 搬迁按声明名逐文件 stat,磁盘名带 .!qB 全 miss 被静默忽略,qB 报「成功移动」但零搬移;.!qB 闸门只扫内容根顶层漏拦,10min 后才由停滞看门狗判失败
@@ -49,8 +48,9 @@
 - [chore] [版本号双源矛盾: __init__.__version__ 0.2.0 vs pyproject 0.1.0](../26-09-21-1408-chore-version-dual-source.html) — WebUI 顶栏透出与打包元数据已差一个 minor; 建议 pyproject 单源 + 动态读取
 - [chore] [hatch-pet 调付费 OpenAI 图像 API 且无成本提示](../26-09-20-1427-chore-skill-hatch-pet-api-cost.html) — hatch-pet 生成图会直连 api.openai.com 计费接口, skill 未标注费用风险
 
-## In Progress (3)
+## In Progress (4)
 
+- [docs] [memory-bank 超 8K 文档摸排: 142 件需压缩蒸馏(本次只摸排)](../26-11-05-0855-docs-kb-doc-compress.html) — memory-bank 下超 8K 字符的 md 共 142 件(主线 115 件约 1.79M 字符 + attachments/_archive 生成物 27 件约 0.92M), 另根目录/包内 references/skill 主文件 40+ 件; 本 issue 只记录摸排清单, 压缩未开始
 - [question] [兼容 Transmission 可行性分析](../26-10-01-2212-question-transmission-compat-feasibility.html) — (需要可行性分析)支持 tr 作为后端之一的可行性(qB 耦合面盘点)
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 - [refactor] [类型注解完整覆盖仅 43%, 无 mypy/pyright 配置](../26-09-21-1408-refactor-type-annotations-mypy.html) — 749 个 def: 完整 43%/部分 41%/无 16%(AST 实测); 建议渐进接入, 先 torrents/config 后 mixins/web

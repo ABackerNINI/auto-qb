@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-11-05-0855">
 <meta name="issue-type" content="docs">
 <meta name="doc-topic" content="kb-doc-compress">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/plans/26-11-05-1049-plan-kb-doc-compress.html">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="In Progress">
 <meta name="issue-title" content="memory-bank 超 8K 文档摸排: 142 件需压缩蒸馏(本次只摸排)">
 <meta name="issue-summary" content="memory-bank 下超 8K 字符的 md 共 142 件(主线 115 件约 1.79M 字符 + attachments/_archive 生成物 27 件约 0.92M), 另根目录/包内 references/skill 主文件 40+ 件; 本 issue 只记录摸排清单, 压缩未开始">
 <title>memory-bank 超 8K 文档摸排: 142 件需压缩蒸馏(本次只摸排) · docs · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-11-05-0855-docs-kb-doc-compress</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-05 08:55</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">docs</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">In Progress</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -223,9 +223,12 @@ find memory-bank -name "*.md" -print0 | xargs -0 wc -m | sort -rn | awk '$1&gt;8
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-11-05 08:55 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-05 09:45 — 认领，状态 <strong>In Progress</strong>；认领计划 26-11-05-0937（本轮只出计划，不改压缩目标）</li>
+      <li>2026-11-05 11:07 — 用户重定口径，原 0937 计划作废并删除；按新口径（四类统一 8K、task 8K + 存量整类豁免、新增过期信息清理）重写为 <a href="../plans/26-11-05-1049-plan-kb-doc-compress.html">26-11-05-1049-plan-kb-doc-compress.html</a>；本轮仍只出计划，不压缩文档</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验：2026-11-05 09:45，HEAD <code>ced9a88a</code>，仍复现。按 <code>wc -m</code> 等价口径（Python <code>len()</code>）实测 <code>memory-bank</code> 下 1,846 个 md、6,516,883 字符；超 8K 共 <strong>141 件 / 2,681,768 字符</strong>（主线 107 件 1,644,936 + 生成索引 7 件 113,094 + 附件 27 件 923,738）。与 issue 原测 142 件差 1（阈值边界漂移），总量 2.677M→2.682M 基本持平；<strong>用户点名的 <code>testing/real-machine.md</code> 已消失</strong>（35,429→7,991，由提交 <code>c0b5605c</code> 瘦身至 8K 内），本 issue 后续无需再压该件。复测明细与批次建议见认领计划。</p>
+    <p>复验（新口径）：2026-11-05 11:07，HEAD <code>f66148b5</code>。scope 收敛为 <code>memory-bank/</code> 下 <code>*.md</code>、排除 <code>attachments/</code>：1,093 件 / 4,209,403 字符 / 52,227 行；超 8K 共 114 件（排除 tasks 后 53 件）。四类超 8K 共 <strong>49 件 / 压到 8K 净减 242,188</strong>；存量 tasks 按新口径整类豁免。以上与旧复验的差异来自 scope（旧口径含 attachments 与其它目录），以新计划 §02 的实测为准。</p>
     <h3>修复后补充</h3>
     <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
   </section>

@@ -138,16 +138,22 @@ KB 内**任何日期**只有一个来源: `commands run kb.time` —— UTC+8 �
 | 角色 | 上限 (字符) |
 |---|---|
 | `memory-bank/README.md`(手写) | 6,000 |
-| `*/_index.md`(自动生成, 含 tasks / issues / 各目录) | 25,200 |
-| `pitfalls/*` 条目集(「扫描找一条」比通读更贵) | 12,000 |
-| 常青主题(叙述型) | 20,000 |
+| `*/_index.md`(自动生成, 含 tasks / issues / 各目录) | 8,000 |
+| `pitfalls/*` 条目集(「扫描找一条」比通读更贵) | 8,000 |
+| 常青主题(叙述型) | 8,000 |
 | 参考速查(`config-reference/` · `rule-system/`) | 24,000 |
 | 易变层(`activeContext.md`; 目录化后原位只留 ≤2 KB 存根) | 24,000 |
 | `activeContext/` 会话切片(per-专题) | 12,000 |
 | `testing/baselines/` 基线切片(一次性快照) | 8,000 |
-| 任务档案(`tasks/*.md`, 「历史会话纪要」段 ≤16,000) | 48,000 |
-| append-only 历史流水(`*-history.md`) | 48,000 |
+| 任务档案(`tasks/*.md`, **仅新建**; 2026-11-05 前存量整类豁免) | 8,000 |
+| append-only 历史流水(`*-history.md`) | 8,000 |
 | `AGENTS.md`(**硬规定**: IDE 注入截断, 超限即拦; 由 `scripts/check_context_caps.py` 管) | 8,000 |
+
+> **2026-11-05 用户重定调**: 存量 tasks 一律不动(排障才读, 改造收益低), 由 `CAP_TASK_FREEZE`
+> 按文件名日期 `< 26-11-05` 整类豁免; 此后新建 task 与 `log` / `evergreen` / `pitfall` /
+> `index-auto` 四类统一 ≤ 8,000(存量清零)。这一轮只收紧上限, **不保留 2026-09-29 的 50% 收缩
+> 口径**——清债目标是刚好 ≤ 8,000。个案豁免**不设代码白名单**: 须在文档头写明理由, 由用户
+> 逐件确认; 整类豁免只认 `CAP_POLICY` / `CAP_TASK_FREEZE` 这一处。
 
 ## 结构 / 索引 / 脚本 → 见 references
 

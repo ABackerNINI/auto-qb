@@ -26,6 +26,7 @@ from _common import (  # noqa: E402
     ABOUT_NAME,
     CAP_MIN_WARN,
     CAP_POLICY,
+    CAP_TASK_FREEZE,
     EXCLUDED_DIRS,
     INDEX_NAME,
     PITFALL_CLASSES,
@@ -189,6 +190,15 @@ def trim_hint(role: str, cap: int) -> str:
             "外迁同目录 `attachments/` 并原位留一行指针")
 
 
+_TASK_STAMP_RE = re.compile(r"^(\d{2}-\d{2}-\d{2})-")
+
+
+def _is_stock_task(path: Path) -> bool:
+    """存量 task 整类豁免判据: 文件名日期前缀 < `CAP_TASK_FREEZE`。"""
+    m = _TASK_STAMP_RE.match(path.name)
+    return bool(m) and m.group(1) < CAP_TASK_FREEZE
+
+
 def check_caps(root: Path,
                mb: Path,
                roles: tuple[str, ...] = DEFAULT_ROLES,
@@ -213,6 +223,9 @@ def check_caps(root: Path,
             continue
         role = __import__("_common").role_of(rel)
         if role not in roles:
+            continue
+        if role == "task" and _is_stock_task(path):
+            # 2026-11-05 用户定调: 存量 tasks 整类豁免, 只在排障时读, 不参与 cap 检查。
             continue
         size = char_count(path)
         cap = CAP_POLICY[role]
