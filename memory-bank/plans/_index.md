@@ -24,13 +24,13 @@
 - [26-11-05-0808] [relocate 整组迁移重构: fastresume 改写收尾(journal+下线窗口)](26-11-05-0808-plan-relocate-fastresume-finalize.html) — `relocate-fastresume-finalize`
 - [26-11-05-0635] [类型注解标准清偿与 mypy 渐进接入分步计划](26-11-05-0635-plan-type-annotations-mypy.html) — `type-annotations-mypy`
 - [26-11-05-0247] [整组迁移回收机制改造: 单回收进程与未收尾再迁移](26-11-05-0247-plan-relocate-single-recycler.html) — `relocate-single-recycler`
-- [26-11-05-0118] [flaky 测试结构化治理: 时钟注入与抖动消除](26-11-05-0118-plan-flaky-test-governance.html) — `flaky-test-governance`
 - [26-11-03-2212] [整组迁移同盘证明误拒：根因与修复计划](26-11-03-2212-plan-relocate-same-fs-proof.html) — `relocate-same-fs-proof`
 
 ## Done
 
 - [26-11-06-0124] [提交信息自动审查: ship.commit 内联三态机检(BOM/乱码/骨架/残留)](26-11-06-0124-plan-commit-msg-review.html) — `commit-msg-review`
 - [26-11-05-0546] [relocate 零搬移修复方案压测(renameFolder 两步复位 + 三闸门)](26-11-05-0546-plan-relocate-zero-move-fix-stress.html) — `relocate-zero-move-fix-stress`
+- [26-11-05-0118] [flaky 测试结构化治理: 时钟注入与抖动消除](26-11-05-0118-plan-flaky-test-governance.html) — `flaky-test-governance`
 - [26-11-04-2357] [跳检 dedup 闸门遮蔽修复: 提到 G3 之前恢复 skip 语义与文案](26-11-04-2357-plan-skip-check-gates.html) — `skip-check-gates`
 - [26-11-04-1042] [待收尾迁移种子的 WebUI 可见性与路径链展示计划](26-11-04-1042-plan-webui-relocate-visibility.html) — `webui-relocate-visibility`
 - [26-11-04-0554] [收口 code review 制度化实施计划](26-11-04-0554-plan-memory-bank-code-review.html) — `memory-bank-code-review`
@@ -88,9 +88,8 @@
 - [26-10-21-2323] [命令后状态写入的边界收口 · 实施计划 — 计时副作用 + 移除提交前复核 + 字段边界 + 守阵扩容](26-10-21-2323-plan-command-writeback-boundary.html) — `post-command-state-writes`
 - [26-10-21-1857] [跳检机制重构 · 执行计划 — 上报驱动 + 主循环微步 + 批量并行](26-10-21-1857-plan-skip-check-async-refactor.html) — `skip-check-arch`
 - [26-10-21-0120] [gtm 工具侧覆盖率门槛实施计划 — 88% 起步 · 双平台同口径 · 阶梯到 96](26-10-21-0120-plan-gtm-coverage-gate.html) — `gtm-coverage-gate`
-- [26-10-20-2101] [测试覆盖率提升 · 第二轮 — 门槛清偿与 99% 冲刺 (97.66% → 99%)](26-10-20-2101-plan-test-coverage-uplift-2.html) — `test-coverage-uplift-2`
 
-> 更早的 **150** 条已出本索引 —— 制品仍在 `plans/` 目录(未搬动), 全量清单见 [attachments/_archive.md](attachments/_archive.md).
+> 更早的 **151** 条已出本索引 —— 制品仍在 `plans/` 目录(未搬动), 全量清单见 [attachments/_archive.md](attachments/_archive.md).
 
 ## Dropped
 

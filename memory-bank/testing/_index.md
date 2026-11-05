@@ -17,6 +17,7 @@
 | [guards.md](guards.md) | 全库**机械守阵**的汇总 —— 一条 = 守阵名 + 钉住的结论 + 怎么红验。新增守阵时登记到这里。 | 守阵, 静态守卫, 防回潮, 红验, 钉住, 加守卫, 守卫清单 |
 | [helpers.md](helpers.md) | 全 Fake 测试基座的四个替身 + 本地假 qB 服务 + 四个最常用的构造函数 —— 写测试前必读。 | 写测试, helpers, FakeClient, FakeTorrent, FakeQbServer, make_manager, make_ctx, seed_store, 替身 |
 | [real-machine.md](real-machine.md) | 第四条测试轨规程 —— 分工与准入、硬约束、环境守卫与假红陷阱、种子层 L0/L1/L2、切片与漂移治理、用例写法。状态与进度不在本文件, 在常驻锚 issue。 | 真机实测, 真机测试, 连真机, 实测排期, 测试 qB, 36595, 36596, 56589, 56590, 测试环境, QBT_REAL_ENV, 双环境, 假种子, 伪 tracker, 切片, 用例成熟度, 漂移判定, test… |
+| [root-cause-taxonomy.md](root-cause-taxonomy.md) | 每轮 flaky 冒头**先对表归因再修**的静态参照系 —— 十类根因 × 本仓库证据(坑档/实测) × 治理动作 × 治理阶段; 冒出无主类目先补类目再登记; tests-real 真时序轨的职责边界也在这里。 | flaky 归因, 根因类目, 覆盖表, 分类学, 十类, async-wait, 时序, 并发竞态, 顺序依赖, 平台差异, 随机数, 端口资源, 共享状态, 网络, UI randomness, 无主类目 |
 | [run.md](run.md) | 跑全量的完整命令、工具 shell 必须设的 `TMPDIR`、耗时画像、WSL 侧复现 —— 以及"别并发跑"这类环境纪律。 | 跑测试, 全量, pytest, uv sync, TMPDIR, 覆盖率, 耗时, 并发, WSL, 图形化配置编辑器 |
 | [sim-5000.md](sim-5000.md) | 独立 HTTP 仿真服务端 + 驱动器, 用于 5000 种子规模的安全 / 性能测试; 固化阈值与关键实测数字在此。 | 仿真, 5000 种子, sim_qb, sim_run, sim_baseline, 性能基线, 漂移, 首轮灌入, 任务吞吐 |
 | [smoke.md](smoke.md) | 前端渲染逻辑只能靠真浏览器验 —— `e2e/`(@playwright/test, 全量单点)的用法、断言清单、以及断言设计的全部已知坑。 | 冒烟, 浏览器, 前端改动, ui_harness, e2e, Playwright, agent-browser, 双 UI, 乐观 UI 断言, 红绿双验 |

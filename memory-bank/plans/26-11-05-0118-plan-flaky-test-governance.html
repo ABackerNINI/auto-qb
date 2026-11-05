@@ -7,10 +7,10 @@
 <title>flaky 测试结构化治理: 时钟注入与抖动消除</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="flaky-test-governance">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-11-05-0118">
-<meta name="doc-updated" content="26-11-05-0128">
-<meta name="doc-refs" content="memory-bank/testing/baselines/26-11-05-0458-flaky-governance-s3-fakeclock-unify.md, memory-bank/testing/baselines/26-11-05-0607-flaky-s3-monkeypatch-time-ops-domain.md">
+<meta name="doc-updated" content="26-11-06-0118">
+<meta name="doc-refs" content="memory-bank/testing/baselines/26-11-05-0458-flaky-governance-s3-fakeclock-unify.md, memory-bank/testing/baselines/26-11-05-0607-flaky-s3-monkeypatch-time-ops-domain.md, memory-bank/tasks/26-11-06-test-flaky-governance.md, memory-bank/pitfalls/testing/fakeclock-migration-missed-forms.md, memory-bank/testing/baselines/26-11-06-0302-flaky-governance-s6-baseline.md">
 <style>
   :root {
     --bg: #10151a;
@@ -72,7 +72,7 @@
 <h1>flaky 测试结构化治理: 时钟注入与抖动消除</h1>
 <p class="lede">把 tests/ / e2e/ 的时序抖动类 flaky 从「逐案打地鼠」升级为结构化消除: 生产代码全量时钟注入、测试侧统一假钟、消灭固定睡等, 并用守阵 + 随机序巡检防回归; 平台差异做机制化收敛, 不建隔离区、不放开 retry。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-05-0118 · <b>doc-updated</b> 26-11-05-0128 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-11-05-0118 · <b>doc-updated</b> 26-11-06-0118 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 会话 grilling(D1–D13, 用户逐项拍板) + 业界调研子代理(13 组检索: Google/Microsoft/Meta/Datadog/Trunk 等, 附录 §11)
 </div>
 

@@ -10,7 +10,7 @@
 - [26-10-10-2001] [计划 · WEBUI 选中 × 触发 一致性](../26-10-10-2001-plan-webui-selection-trigger-parity.html) — `webui-selection-trigger-parity`
 - [26-09-22-2318] [auto-qb 软件版本管理方案 v2 · 版本号 / Tag / CHANGELOG / 机械化发版](../26-09-22-2318-version-management-plan.html) — `deps-version-management`
 
-## Open (8)
+## Open (7)
 
 - [26-11-05-2335] [存量代码全库评审 R4·五路线并行体系化](../26-11-05-2335-plan-legacy-code-review-4.html) — `legacy-code-review-4`
 - [26-11-05-1049] [memory-bank 文档压缩与防回涨分步执行计划(8K 新口径)](../26-11-05-1049-plan-kb-doc-compress.html) — `kb-doc-compress`
@@ -18,13 +18,13 @@
 - [26-11-05-0808] [relocate 整组迁移重构: fastresume 改写收尾(journal+下线窗口)](../26-11-05-0808-plan-relocate-fastresume-finalize.html) — `relocate-fastresume-finalize`
 - [26-11-05-0635] [类型注解标准清偿与 mypy 渐进接入分步计划](../26-11-05-0635-plan-type-annotations-mypy.html) — `type-annotations-mypy`
 - [26-11-05-0247] [整组迁移回收机制改造: 单回收进程与未收尾再迁移](../26-11-05-0247-plan-relocate-single-recycler.html) — `relocate-single-recycler`
-- [26-11-05-0118] [flaky 测试结构化治理: 时钟注入与抖动消除](../26-11-05-0118-plan-flaky-test-governance.html) — `flaky-test-governance`
 - [26-11-03-2212] [整组迁移同盘证明误拒：根因与修复计划](../26-11-03-2212-plan-relocate-same-fs-proof.html) — `relocate-same-fs-proof`
 
-## Done (210)
+## Done (211)
 
 - [26-11-06-0124] [提交信息自动审查: ship.commit 内联三态机检(BOM/乱码/骨架/残留)](../26-11-06-0124-plan-commit-msg-review.html) — `commit-msg-review`
 - [26-11-05-0546] [relocate 零搬移修复方案压测(renameFolder 两步复位 + 三闸门)](../26-11-05-0546-plan-relocate-zero-move-fix-stress.html) — `relocate-zero-move-fix-stress`
+- [26-11-05-0118] [flaky 测试结构化治理: 时钟注入与抖动消除](../26-11-05-0118-plan-flaky-test-governance.html) — `flaky-test-governance`
 - [26-11-04-2357] [跳检 dedup 闸门遮蔽修复: 提到 G3 之前恢复 skip 语义与文案](../26-11-04-2357-plan-skip-check-gates.html) — `skip-check-gates`
 - [26-11-04-1042] [待收尾迁移种子的 WebUI 可见性与路径链展示计划](../26-11-04-1042-plan-webui-relocate-visibility.html) — `webui-relocate-visibility`
 - [26-11-04-0554] [收口 code review 制度化实施计划](../26-11-04-0554-plan-memory-bank-code-review.html) — `memory-bank-code-review`
