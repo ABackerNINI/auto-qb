@@ -38,6 +38,8 @@
 - test_plan_empty_files_reject
 - test_plan_hard_max_dir_kind_none_suffix
 - test_reconcile_table_rows
+- test_ensure_daemon_action_three_way: S3 新链对账判据三分(pending 空/daemon 健康/pending+stale
+  -> ensure_daemon)+ 新动作不在 reconcile 旧表(本期两链并存, 计划 26-11-05-0808 §3.2)
 - test_recover_exec_phase
 - test_resolve_physical_and_finalize_members
 - test_finalize_scope_candidate_prefilter
@@ -1145,3 +1147,37 @@ def test_within_empty_scope_guard_via_norm_empty(monkeypatch):
     assert ru._within("", "") is False
     assert ru._within("R:/scope", "R:/scope/a") is True
     assert ru._within("R:/scope", "R:/other") is False
+
+
+# ---------------------------------------------------------------- S3 新链对账(计划 26-11-05-0808 §3.2「对账与生命周期」行)
+
+
+def test_ensure_daemon_action_three_way():
+    """ACT_ENSURE_DAEMON 判据三分(死/活/心跳过期收口成 daemon_stale 一位):
+    pending 空 -> wait(无事不拉); daemon 健康 -> wait(至多一个 watcher, D12);
+    pending 非空 + stale -> ensure_daemon(重拉 recycle_daemon, 独立于 reconcile 旧表)"""
+    assert ru.ensure_daemon_action(pending=0, daemon_stale=True) == ru.ACT_WAIT
+    assert ru.ensure_daemon_action(pending=3, daemon_stale=False) == ru.ACT_WAIT
+    assert ru.ensure_daemon_action(pending=0, daemon_stale=False) == ru.ACT_WAIT
+    assert ru.ensure_daemon_action(pending=2, daemon_stale=True) == ru.ACT_ENSURE_DAEMON
+    # 旧动作表不含新动作: reconcile 旧表对同一现场仍只产旧动作(本期两链并存, 不混改)
+    job = _dir_job()
+    assert ru.reconcile(
+        job,
+        journal_phase=ru.PHASE_ARMED,
+        link_present=True,
+        qb_up=True,
+        seed_state="normal",
+        heartbeat_age=0.0,
+    ) == ru.ACT_WAIT
+    assert ru.ACT_ENSURE_DAEMON not in {
+        ru.ACT_WAIT,
+        ru.ACT_RESPAWN,
+        ru.ACT_REDELETE,
+        ru.ACT_REVERT_INTENT,
+        ru.ACT_REBUILD,
+        ru.ACT_FINALIZE,
+        ru.ACT_FAILED_GONE,
+        ru.ACT_FAILED_TIMEOUT,
+        ru.ACT_DONE_EXTERNAL,
+    }

@@ -84,6 +84,65 @@ def build_alias_index(snapshot: Optional[Mapping], torrent_hash: str) -> dict:
     return index
 
 
+def pick_job_for(snapshot: Optional[Mapping], torrent_hash: str) -> Optional[Mapping]:
+    """该 hash 的**当前** job 视图(收尾反馈面/按钮判据的取数单点)
+
+    与 build_alias_index 同一套选取序(job_rank: 非终态优先, 再 updated_at 新→旧),
+    但不限别名命中 —— 收尾窗口相位(removing/removed/finalizing)下别名可能已删,
+    job 登记仍在, 反馈面照常要能取到。无快照/无命中 ⇒ None。
+    """
+    if snapshot is None:
+        return None
+    jobs = [j for j in (getattr(snapshot, "jobs", ()) or ()) if torrent_hash in (j.get("hashes") or ())]
+    if not jobs:
+        return None
+    from ..core.modules.relocate_units import TERMINAL_PHASES, job_rank  # 局部导入: 选取序单点
+
+    jobs.sort(key=job_rank, reverse=True)
+    for job in jobs:
+        if str(job.get("phase") or "") not in TERMINAL_PHASES:
+            return job
+    return jobs[0]
+
+
+def finalize_face(job: Mapping, data_dir: str, host: str, port: int, *, now: Optional[float] = None) -> dict:
+    """收尾反馈面最小面(计划 26-11-05-0808 §3.2「失败反馈面」行)+ D14 按钮判据
+
+    输入 job = pick_job_for 的快照视图; 字段:
+    - window: 相位在 FINALIZE_WINDOW_PHASES(「立即收尾」按钮可见判据单点 —— 本期旧
+      相位集 {removing, removed, finalizing}; 下一任务重定义相位时随该单点走);
+    - pending: journal 待改写成员数(rj.pending_members 现读 spec+journal.rewrites);
+    - daemon_stale: 回收 daemon 死/心跳过期(rj.daemon_stale 判据单点)。
+    只对新链 spec(spec 带 bt_backup 字段)取证: 旧链 job 的收尾不走 fastresume 改写,
+    「重启 qB 即完成」对它不成立, pending 恒 0 防误导。journal 已终态 ⇒ pending 恒 0
+    (已收口/已取消, 反馈面不再悬)。本函数只读 spec/journal 文件(原子写读侧安全),
+    零主循环访问、零 state.json 触碰(D13 账本契约的读侧对称)。
+    """
+    from ..core.modules import relocate_units as ru  # 局部导入(与 build_alias_index 同款)
+    from ..infra import relocate_journal as rj
+
+    phase = str(job.get("phase") or "")
+    job_id = str(job.get("job_id") or "")
+    face = {
+        "job_id": job_id,
+        "phase": phase,
+        "window": phase in ru.FINALIZE_WINDOW_PHASES,
+        "pending": 0,
+        "daemon_stale": False,
+    }
+    spec = rj.read_spec(data_dir, job_id) if job_id else None
+    if not isinstance(spec, dict) or not str(spec.get("bt_backup") or "").strip():
+        return face
+    journal = rj.read_journal(data_dir, job_id) or {}
+    if str(journal.get("phase") or "") in rj.STOP_PHASES:
+        return face
+    rewrites = journal.get("rewrites") if isinstance(journal.get("rewrites"), dict) else {}
+    face["pending"] = len(rj.pending_members(spec, rewrites))
+    key = rj.instance_key(host, port)
+    face["daemon_stale"] = rj.daemon_stale(data_dir, key, max_age=ru.DAEMON_HEARTBEAT_MAX_AGE, now=now)
+    return face
+
+
 def _attribution(job: Optional[Mapping], node_status: str, torrent_hash: str) -> dict:
     """一跳的归属章: 命中 job 登记 -> auto-qb 设置(带来源/相位/收尾信息); 否则非 auto-qb 设置"""
     if not job:

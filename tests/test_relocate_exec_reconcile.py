@@ -34,6 +34,14 @@
 
 覆盖率第三轮 T2b 补测(26-11-05):
 - test_step_reconcile_same_journal_phase_no_remerge: journal 相位与 job 相位一致 -> 不重复落账, 对账照常走完(340->342)
+
+### S3 接线(计划 26-11-05-0808 §3.2/S3: spec 双字段 + ACT_ENSURE_DAEMON, 全替身不起真进程)
+- test_spawn_guardian_spec_bt_backup_and_members: 实例命中 bt_backup 表 -> spec 写 bt_backup +
+  members 双 hash(<hash>.torrent 现算 v2); 未命中 -> 不写 bt_backup(旧链 opt-in);
+  v2-only/缺 torrent 回落不猜命名
+- test_ensure_daemon_spawn_matrix: 死/缺位 -> 重拉 + rt 记账; RESPAWN_BACKOFF 内不重复拉;
+  daemon 健康在位 -> 不拉; 旧链 spec / 终态 job -> 不拉
+- test_step_reconcile_wires_ensure_daemon: 对账 tick 每拍顺带判新动作(旧表产出不变)
 """
 
 import os
@@ -41,6 +49,8 @@ import os
 import time
 
 import types
+
+from dataclasses import replace
 
 import pytest
 
@@ -450,3 +460,210 @@ def test_step_reconcile_same_journal_phase_no_remerge(tmp_path):
     job2 = _job("j1", phase=ru.PHASE_ARMED)
     mod2._step_reconcile(job2, {})
     assert "j1" in mod2._jobs and mod2._jobs["j1"].phase == ru.PHASE_REMOVING, "异相位照旧向前合并"
+
+
+# ---------------------------------------------------------------- S3 接线(计划 26-11-05-0808 §3.2/S3)
+# spec 双字段(bt_backup/members)与 ACT_ENSURE_DAEMON 处置; 全替身, 不起真进程。
+
+
+def _torrent_fixture(backup, tag: bytes, old_root: str):
+    """BT_backup 造一个真实 torrent(同 test_recycle_daemon 造法): 返回 (v1, v2)"""
+    from auto_qb.core import fastresume as frmod
+    from auto_qb.hr.bencode import compute_infohashes
+
+    info = {b"name": tag, b"piece length": 16384, b"pieces": b"\x00" * 20, b"length": 1}
+    torrent = frmod.bencode({b"announce": b"http://t/ann", b"info": info})
+    v1, v2, _ = compute_infohashes(torrent)
+    backup.mkdir(parents=True, exist_ok=True)
+    (backup / f"{v1}.torrent").write_bytes(torrent)
+    return v1, v2
+
+
+def _s3_mod(tmp_path, host="h1", port=1234, backup=None):
+    """S3 接线用裸模块: config 带 qbittorrent 身份 + bt_backup 表(替身属性全数据侧)"""
+    mod = _bare_mod(data_dir=str(tmp_path / "data"))
+    mod._ctx.config.qbittorrent = types.SimpleNamespace(host=host, port=port)
+    if backup is not None:
+        mod._ctx.config.bt_backup = {f"{host}:{port}": str(backup)}
+    return mod
+
+
+def test_spawn_guardian_spec_bt_backup_and_members(tmp_path):
+    """arm 侧 spec 双字段接线(单点 _spawn_guardian): 实例命中 bt_backup 表 -> 写字段 +
+    members 双 hash(<hash>.torrent 现算 v2); 未命中 -> 不写 bt_backup(旧链 opt-in 语义),
+    members 仍落(v1 派生, hash_v2 空); v2-only/缺 torrent 各回落不猜"""
+    backup = tmp_path / "BT_backup"
+    v1, v2 = _torrent_fixture(backup, b"m-ok", "R:/src")
+    mod = _s3_mod(tmp_path, backup=backup)
+    job = _job("j1", phase=ru.PHASE_ARMED, hashes=(v1, ))
+    seen = []
+    mod._spawn = lambda data_dir, job_id: seen.append(job_id)
+    assert mod._spawn_guardian(job) is True
+    spec = relocate_journal.read_spec(str(tmp_path / "data"), "j1")
+    assert spec["bt_backup"] == str(backup), spec
+    assert spec["members"] == [{"hash_v1": v1, "hash_v2": v2}], spec["members"]
+
+    # 未命中表: 不写 bt_backup 字段(daemon 不认领, 行为同旧链); members 仍派生
+    mod2 = _s3_mod(tmp_path)
+    job2 = _job("j2", phase=ru.PHASE_ARMED, hashes=(v1, "f" * 40))
+    mod2._spawn = lambda data_dir, job_id: seen.append(job_id)
+    assert mod2._spawn_guardian(job2) is True
+    spec2 = relocate_journal.read_spec(str(tmp_path / "data"), "j2")
+    assert "bt_backup" not in spec2, spec2
+    assert spec2["members"] == [
+        {
+            "hash_v1": v1,
+            "hash_v2": ""
+        },
+        {
+            "hash_v1": "f" * 40,
+            "hash_v2": ""
+        },
+    ], spec2["members"]
+
+    # v2-only(qB hash 即 v2 infohash): torrent 文件名按 v2 命名, 成员 hash_v1 位携带该 v2
+    backup3 = tmp_path / "BT3"
+    info = {b"name": b"v2only", b"piece length": 16384, b"pieces": b"\x00" * 20, b"length": 1}
+    from auto_qb.core import fastresume as frmod
+    from auto_qb.hr.bencode import compute_infohashes
+
+    torrent = frmod.bencode({b"announce": b"http://t/ann", b"info": info})
+    tv1, tv2, _ = compute_infohashes(torrent)
+    backup3.mkdir(parents=True, exist_ok=True)
+    (backup3 / f"{tv2}.torrent").write_bytes(torrent)
+    mod3 = _s3_mod(tmp_path, backup=backup3)
+    mod3._ctx.config.bt_backup = {f"h1:1234": str(backup3)}
+    job3 = _job("j3", phase=ru.PHASE_ARMED, hashes=(tv2, ))
+    mod3._spawn = lambda data_dir, job_id: seen.append(job_id)
+    assert mod3._spawn_guardian(job3) is True
+    spec3 = relocate_journal.read_spec(str(tmp_path / "data"), "j3")
+    assert spec3["members"] == [{"hash_v1": tv2, "hash_v2": ""}], spec3["members"]
+
+    # 缺 .torrent: hash_v2 留空不猜(消费侧 locate 兜底扫描仍可命中)
+    mod4 = _s3_mod(tmp_path, backup=backup)
+    job4 = _job("j4", phase=ru.PHASE_ARMED, hashes=("e" * 40, ))
+    mod4._spawn = lambda data_dir, job_id: seen.append(job_id)
+    assert mod4._spawn_guardian(job4) is True
+    spec4 = relocate_journal.read_spec(str(tmp_path / "data"), "j4")
+    assert spec4["members"] == [{"hash_v1": "e" * 40, "hash_v2": ""}], spec4["members"]
+
+
+def test_ensure_daemon_spawn_matrix(tmp_path):
+    """ACT_ENSURE_DAEMON 处置矩阵(判据独立于 reconcile 旧表): spec 带 bt_backup + pending
+    非空 + 无 daemon 账 -> 重拉; 健康在位 -> 不拉(至多一个 watcher); 旧链 spec / 终态
+    -> 不拉; 首拉后 RESPAWN_BACKOFF 内不重复拉(独立 rt 键)"""
+    data_dir = str(tmp_path / "data")
+    backup = tmp_path / "BT_backup"
+    v1, _v2 = _torrent_fixture(backup, b"m-ok", "R:/src")
+    mod = _s3_mod(tmp_path, backup=backup)
+    host, port = mod._qb_host(), mod._qb_port()
+    job = _job("j1", phase=ru.PHASE_ARMED, hashes=(v1, ))
+    relocate_journal.write_spec(
+        data_dir, "j1", {
+            "job_id": "j1",
+            "src": "R:/src",
+            "dst": "R:/dst",
+            "hashes": [v1],
+            "host": host,
+            "port": port,
+            "bt_backup": str(backup),
+            "members": [{
+                "hash_v1": v1,
+                "hash_v2": ""
+            }],
+        }
+    )
+    spawned = []
+    mod._spawn_daemon = lambda d, h, p: spawned.append((d, h, p))
+
+    # 死/缺位(daemon.json 无记录 => daemon_stale) -> 重拉 + rt 记账
+    rt = {}
+    mod._ensure_daemon(job, rt)
+    assert spawned == [(data_dir, host, port)], spawned
+    assert "ensure_daemon_ts" in rt, rt
+
+    # 退避窗口内不重复拉(每 tick 对账, 无节流就是每 tick 一个进程)
+    mod._ensure_daemon(job, rt)
+    assert len(spawned) == 1, spawned
+
+    # 健康在位(pid 活 + 心跳新鲜) -> 不拉(不重复拉起, D12)
+    spawned.clear()
+    key = relocate_journal.instance_key(host, port)
+    relocate_journal.write_daemon_state(data_dir, key, os.getpid(), host=host, port=port)
+    mod._ensure_daemon(job, {})
+    assert spawned == [], spawned
+
+    # 旧链 spec(无 bt_backup): daemon 不认领, 不白造进程
+    spawned.clear()
+    relocate_journal.release_daemon_state(data_dir, key, os.getpid())
+    relocate_journal.write_spec(
+        data_dir, "j1", {
+            "job_id": "j1",
+            "src": "R:/src",
+            "dst": "R:/dst",
+            "hashes": [v1],
+            "host": host,
+            "port": port,
+            "members": [{
+                "hash_v1": v1,
+                "hash_v2": ""
+            }],
+        }
+    )
+    mod._ensure_daemon(job, {})
+    assert spawned == [], spawned
+
+    # 终态 job: 无动作
+    relocate_journal.write_spec(
+        data_dir, "j1", {
+            "job_id": "j1",
+            "src": "R:/src",
+            "dst": "R:/dst",
+            "hashes": [v1],
+            "host": host,
+            "port": port,
+            "bt_backup": str(backup),
+            "members": [{
+                "hash_v1": v1,
+                "hash_v2": ""
+            }],
+        }
+    )
+    mod._ensure_daemon(replace(job, phase=ru.PHASE_DONE), {})
+    assert spawned == [], spawned
+
+
+def test_step_reconcile_wires_ensure_daemon(tmp_path):
+    """对账 tick 接线: _step_reconcile 每拍顺带判 ACT_ENSURE_DAEMON(新增动作不改旧表
+    产出 —— 本现场旧表判 WAIT, 新判据独立触发重拉)"""
+    data_dir = str(tmp_path / "data")
+    backup = tmp_path / "BT_backup"
+    v1, _v2 = _torrent_fixture(backup, b"m-ok", "R:/src")
+    mod = _s3_mod(tmp_path, backup=backup)
+    host, port = mod._qb_host(), mod._qb_port()
+    rec = types.SimpleNamespace(hash=v1, save_path="R:/src", state="pausedUP")
+    mod._ctx.store = types.SimpleNamespace(by_hash={v1: rec}, relocating_hashes=set())
+    relocate_journal.write_spec(
+        data_dir, "j1", {
+            "job_id": "j1",
+            "src": "R:/src",
+            "dst": "R:/dst",
+            "hashes": [v1],
+            "host": host,
+            "port": port,
+            "bt_backup": str(backup),
+            "members": [{
+                "hash_v1": v1,
+                "hash_v2": ""
+            }],
+        }
+    )
+    spawned = []
+    mod._spawn_daemon = lambda d, h, p: spawned.append((d, h, p))
+    job = _job("j1", phase=ru.PHASE_ARMED, hashes=(v1, ))
+    rt = {}
+    mod._step_reconcile(job, rt)
+    assert spawned == [(data_dir, host, port)], spawned
+    # 退避生效: 下一拍不再拉
+    mod._step_reconcile(job, rt)
+    assert len(spawned) == 1, spawned

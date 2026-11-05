@@ -241,6 +241,10 @@ const TRIGGER_DEFS = {
       "scope": "none", "why": "添加种子对话框建目录: 资源操作, 无选中/锚点语义"
     },
     {
+      "file": "relocate_chain.js", "fn": "data", "ep": "/api/relocate/finalize-now",
+      "scope": "none", "why": "D14 立即收尾(实际发起方法 relChainFinalizeNow): 目标 job 由路径链浮窗打开时的快照锚定, 无选中/锚点语义; 本文件是 IIFE 双层嵌套, 方法声明在 6 空格缩进 —— 守阵扫描器只认 4 空格声明, 归属上溯到 data"
+    },
+    {
       "file": "add_torrent.js", "fn": "submitAddTorrent", "ep": "/api/torrents/add",
       "scope": "none", "why": "新增种子: 新增对象不存在于任何选中集合"
     },

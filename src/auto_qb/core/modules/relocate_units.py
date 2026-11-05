@@ -1049,6 +1049,33 @@ REBUILD_MAX_ATTEMPTS = 3  # 重建链接的重试上限(超出 ⇒ failed 留现
 REBUILD_BACKOFF = 300.0  # 秒; 两次重建之间的最小间隔
 RESPAWN_BACKOFF = 60.0  # 秒; 两次 guardian 拉起之间的最小间隔(与心跳过期判据同档)
 
+# ---------------------------------------------------------------- S3 新链对账(计划 26-11-05-0808 §3.2「对账与生命周期」行)
+# ACT_ENSURE_DAEMON 是**新增**动作, 判据独立于上方 reconcile 旧表(本期旧相位模型不动,
+# RESPAWN/REDELETE 等旧动作与其退避的退役都在下一任务) —— 判据输入由执行体收集:
+# pending = relocate_journal.pending_members(spec, rewrites) 现读,
+# daemon_stale = relocate_journal.daemon_stale(...)(协议单点, S3a 已提供)。
+ACT_ENSURE_DAEMON = "ensure_daemon"  # pending 非空且回收 daemon 死/心跳过期 ⇒ 重拉 recycle_daemon
+
+#: 回收 daemon 心跳过期线(daemon 侧节拍常量在 tools/recycle_daemon.py HEARTBEAT_MAX_AGE,
+#: 两处同值是「daemon 写侧节拍 / 对账读侧判线」的配对 —— 不互相 import, 避免 core→tools 依赖;
+#: 下一任务 per-job 心跳退役时随段收拾)。
+DAEMON_HEARTBEAT_MAX_AGE = 60.0
+
+
+def ensure_daemon_action(*, pending: int, daemon_stale: bool) -> str:
+    """S3 新链对账判据(纯函数; 与 reconcile 旧表并列, 不混改旧动作)
+
+    - pending 集空 ⇒ wait: 没有待改写成员, daemon 自会宽限退出, 对账不拉
+      (拉了也只会空转一个宽限周期, 纯浪费);
+    - daemon 健康在位(pid 活且心跳未过期)⇒ wait: 至多一个 watcher(D12), 重复拉起
+      会被 pid 抢占退位, 无意义抖动;
+    - 两者同时成立(pending 非空 + daemon 死/心跳过期)⇒ ensure_daemon: 重拉
+      recycle_daemon(subprocess, 执行体侧处置, 绝不 taskkill)。
+    """
+    if pending <= 0 or not daemon_stale:
+        return ACT_WAIT
+    return ACT_ENSURE_DAEMON
+
 
 def reconcile(
     job: RelocateJob,

@@ -61,6 +61,9 @@ def _simulate_moved(mgr, dst, files, content, mover="HA"):
 
 def _spy_spawn(mod, calls):
     mod._spawn = lambda data_dir, job_id: calls.append(job_id)
+    # S3(计划 26-11-05-0808): 回收 daemon 拉起面同样不起真进程(与本文件 _simulate_moved
+    # 配套的武装环境已配 bt_backup 表, 对账每拍会判 ACT_ENSURE_DAEMON)
+    mod._spawn_daemon = lambda *a, **k: None
 
 
 def test_journal_roundtrip_and_heartbeat(tmp_path):

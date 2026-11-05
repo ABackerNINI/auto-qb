@@ -6,13 +6,55 @@ import os
 from dataclasses import replace
 from typing import Any, Iterable, List, Optional
 
+from ...config.models import bt_backup_path_of
 from ...infra import alias_fs, file_access, relocate_journal, utils
+from .. import fastresume
 from . import relocate_proof as rp
 from . import relocate_units as ru
 from .relocate_probe import probe_fingerprint, run_probe
 from ...torrents import TorrentRecord
 from .relocate_units import GroupFacts, RelocateJob, evaluate_group
 from .relocate_common import _LINK_CHUNK, _native, logger
+
+_DAEMON_MODULE = "auto_qb.tools.recycle_daemon"  # S3 回收 daemon 拉起目标(与 _spawn 同款 detached)
+
+
+def _torrent_v2_of(backup_dir: str, torrent_hash: str) -> str:
+    """BT_backup 侧 <hash>.torrent 现算成员 v2 infohash(S3a members 口径的半个单点)
+
+    按成员 hash 直取 <hash>.torrent(不扫目录), compute_infohashes 双算后**对账回落**:
+    - hash == v1(v1 种子 / hybrid 的 qB hash 形态)⇒ 返回 v2;
+    - hash == v2(v2-only 种子, qB >= 4.4 的 hash 字段即 v2 infohash)⇒ 返回 ""(成员保持
+      hash_v1 位携带该 v2 hash —— locate_fastresume 的 <h1>.fastresume 直查同样命中,
+      v2-only 的 fastresume/torrent 都以 v2 infohash 命名, N 系列实测);
+    - 文件缺失/坏 torrent/对不上号 ⇒ ""(不猜命名, daemon 侧 locate 兜底扫描仍可命中)。
+    """
+    h = str(torrent_hash or "").strip().lower()
+    path = os.path.join(backup_dir, f"{h}.torrent")
+    try:
+        with open(path, "rb") as f:
+            v1, v2, _info = fastresume.compute_infohashes(f.read())
+    except (OSError, ValueError):
+        return ""
+    if v1.lower() == h:
+        return v2
+    return ""
+
+
+def arm_members_of(hashes: Iterable[str], backup_dir: str) -> List[dict]:
+    """arm 侧 spec.members 成员清单(S3a 协议: 与 relocate_journal.spec_members 消费侧配对)
+
+    v1 可从 hashes 派生(spec_members 缺省口径), 但 hybrid/v2 需显式双 hash(pending 口径
+    docstring 钉死「不猜命名」)—— arm 是唯一同时知道组成员与 BT_backup 位置的单点, 在此
+    落账。backup_dir 为空(实例未启用 fastresume 收尾)或成员取证不到时 hash_v2 留 "",
+    消费侧逐字段兜底, 账形恒为 [{"hash_v1": <str>, "hash_v2": <str>}, ...]。
+    """
+    backup = str(backup_dir or "").strip()
+    out: List[dict] = []
+    for h in hashes or ():
+        h1 = str(h or "").strip()
+        out.append({"hash_v1": h1, "hash_v2": _torrent_v2_of(backup, h1) if backup and h1 else ""})
+    return out
 
 
 class ExecMixin:
@@ -409,6 +451,10 @@ class ExecMixin:
             elapsed=elapsed,
             finalize_timeout=float(getattr(conf, "finalize_timeout", 0) or 0),
         )
+        # S3 新增接线(计划 §3.2「对账与生命周期」行): ACT_ENSURE_DAEMON 判据独立于上方
+        # reconcile 旧表 —— pending 非空且回收 daemon 死/心跳过期 ⇒ 重拉; 旧动作照旧应用,
+        # 本期新旧两链并存(RESPAWN/REDELETE 退役在下一任务)
+        self._ensure_daemon(job, rt)
         self._apply_reconcile(job, rt, action)
 
     def _apply_reconcile(self, job: RelocateJob, rt: dict, action: str) -> None:
@@ -937,8 +983,17 @@ class ExecMixin:
         self._spawn_guardian(job)
 
     def _spawn_guardian(self, job: RelocateJob) -> bool:
-        """拉起 guardian 独立进程(不随 auto-qb 消亡; 规格经文件传, Unicode 路径不经命令行)"""
+        """拉起 guardian 独立进程(不随 auto-qb 消亡; 规格经文件传, Unicode 路径不经命令行)
+
+        S3a/S3 spec 接线(建账单点 —— 本方法是全仓唯一 write_spec 调用点):
+        - bt_backup: bt_backup_path_of(当前 qB 实例查表); 查不中 = 该实例 fastresume 收尾
+          功能未启用 ⇒ **不写字段**(recycle_daemon 扫描以该字段为 opt-in 标记, 旧链行为
+          逐字节不变);
+        - members: S3a 成员清单(arm_members_of, hash_v2 经 <hash>.torrent 现算, 取不到
+          留空)。旧链 guardian 不消费该字段(读侧容错), 新链 daemon 以此为 pending 账底。
+        """
         data_dir = self._data_dir()
+        backup = bt_backup_path_of(getattr(self._ctx, "config", None))
         try:
             spec = {
                 "job_id": job.job_id,
@@ -952,7 +1007,10 @@ class ExecMixin:
                 "files": [list(f) for f in self._plan_files(job)],
                 "host": self._qb_host(),
                 "port": self._qb_port(),
+                "members": arm_members_of(job.hashes, backup),
             }
+            if backup:
+                spec["bt_backup"] = backup
             relocate_journal.write_spec(data_dir, job.job_id, spec)
         except Exception as e:  # noqa: BLE001
             logger.warning(f"relocate | job {job.job_id}: guardian 规格落盘失败({e})")
@@ -966,10 +1024,37 @@ class ExecMixin:
 
     def _spawn(self, data_dir: str, job_id: str) -> None:
         """进程拉起单点(测试替换本方法; 生产 detached + 无窗口, 与 traffic_source.agent 同口径)"""
-        import subprocess
         import sys
 
         args = [sys.executable, "-m", "auto_qb.tools.finalize_watch", "--data-dir", data_dir, "--job", job_id]
+        self._popen_detached(args)
+
+    def _spawn_daemon(self, data_dir: str, host: str, port: int) -> None:
+        """回收 daemon 进程拉起(ACT_ENSURE_DAEMON 处置; 测试替换本方法)
+
+        形制与 _spawn 同一套 detached 单点(_popen_detached); 规格不经命令行传 --
+        daemon 自扫 <data_dir>/relocate/*.spec.json(S3a 发现面), 命令行只给实例身份。
+        """
+        import sys
+
+        args = [
+            sys.executable,
+            "-m",
+            _DAEMON_MODULE,
+            "--data-dir",
+            data_dir,
+            "--host",
+            str(host or ""),
+            "--port",
+            str(int(port or 0)),
+        ]
+        self._popen_detached(args)
+
+    @staticmethod
+    def _popen_detached(args: list) -> None:
+        """detached 拉起(kernel 单点; 绝不 taskkill —— 退位走 daemon 侧 pid 抢占自检自杀)"""
+        import subprocess
+
         kwargs = {
             "stdin": subprocess.DEVNULL,
             "stdout": subprocess.DEVNULL,
@@ -981,6 +1066,44 @@ class ExecMixin:
         else:
             kwargs["start_new_session"] = True
         subprocess.Popen(args, **kwargs)
+
+    def _ensure_daemon(self, job: RelocateJob, rt: dict) -> None:
+        """S3 新增对账动作 ACT_ENSURE_DAEMON 的处置(判据独立, 不进 reconcile 旧表)
+
+        判据三段(ensure_daemon_action 纯函数, 任一不成立即静默返回):
+        - job 非终态且 spec 带 bt_backup 字段(新链 opt-in; 旧链 spec daemon 不认领,
+          拉了也只会空转一个宽限周期 —— 不给旧链 job 白白造进程);
+        - pending 集非空(rj.pending_members 现读 spec+journal.rewrites);
+        - 回收 daemon 死/心跳过期(rj.daemon_stale 判据单点, 健康在位绝不重复拉起)。
+        处置 = _spawn_daemon 重拉 recycle_daemon(subprocess, D12 形制); 拉起节流复用
+        RESPAWN_BACKOFF 同档(独立 rt 键 ensure_daemon_ts, 不与旧链退避账共用) --
+        Popen 失败不留痕迹时, 没有节流就会每 tick 空拉一次进程。
+        """
+        if job.is_terminal:
+            return
+        data_dir = self._data_dir()
+        spec = relocate_journal.read_spec(data_dir, job.job_id)
+        if not isinstance(spec, dict) or not str(spec.get("bt_backup") or "").strip():
+            return
+        journal = relocate_journal.read_journal(data_dir, job.job_id) or {}
+        rewrites = journal.get("rewrites") if isinstance(journal.get("rewrites"), dict) else {}
+        pending = relocate_journal.pending_members(spec, rewrites)
+        host, port = self._qb_host(), self._qb_port()
+        key = relocate_journal.instance_key(host, port)
+        stale = relocate_journal.daemon_stale(data_dir, key, max_age=ru.DAEMON_HEARTBEAT_MAX_AGE)
+        if ru.ensure_daemon_action(pending=len(pending), daemon_stale=stale) != ru.ACT_ENSURE_DAEMON:
+            return
+        now = self._clock.monotonic()
+        ensure_ts = rt.get("ensure_daemon_ts")
+        if ensure_ts is not None and now - float(ensure_ts) < ru.RESPAWN_BACKOFF:
+            logger.debug(f"relocate | job {job.job_id}: 回收 daemon 重拉退避中, 本轮跳过")
+            return
+        rt["ensure_daemon_ts"] = now
+        logger.info(f"relocate | job {job.job_id}: 回收 daemon 缺位/心跳过期(pending {len(pending)}), 重拉")
+        try:
+            self._spawn_daemon(data_dir, host, port)
+        except Exception as e:  # noqa: BLE001 - 拉起失败只告警: 下轮 daemon_stale 仍会再判
+            logger.warning(f"relocate | job {job.job_id}: 回收 daemon 拉起失败({e})")
 
     def _qb_host(self) -> str:
         cfg = getattr(self._ctx, "config", None) if self._ctx is not None else None

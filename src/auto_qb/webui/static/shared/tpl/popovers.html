@@ -304,10 +304,18 @@
               <div v-if="i < relChain.data.nodes.length - 1" class="relc-arrow" aria-hidden="true">→</div>
             </div>
           </div>
+          <!-- S3 失败反馈面最小面(计划 §3.2): journal 有 pending 且 daemon 未在位 -->
+          <div v-if="relChainFinalizePending()" class="relc-note">
+            待收尾: 重启 qB 即完成(尚有 {{ relChain.data.finalize.pending }} 个成员待改写, 回收 daemon 未在位)。
+          </div>
           <div class="relc-foot">
             <span class="relc-probed">{{ relChainProbedText() }}</span>
             <button type="button" class="relc-btn" :disabled="relChain.loading" @click="relChainRefresh()">重新探测</button>
             <button type="button" class="relc-btn" @click="relChainCopyAll()">复制完整路径</button>
+            <!-- D14「立即收尾」(计划 26-11-05-0808): 可见性 = 后端 finalize.window
+                 (FINALIZE_WINDOW_PHASES 相位单点); 确认框与降级提示在 relChainFinalizeNow() -->
+            <button v-if="relChainFinalizeWindow()" type="button" class="relc-btn"
+                    :disabled="relChain.finalizing" @click="relChainFinalizeNow()">立即收尾</button>
           </div>
         </template>
       </div>

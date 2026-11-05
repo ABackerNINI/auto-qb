@@ -14,6 +14,14 @@
 - test_alias_helpers: `\\??\\` 前缀、相对链接、硬链接、挂载点识别;
 - test_chain_alias_index_prefers_active_job: 同路径多 job 优先活跃 job;
 - test_chain_frontend_static_and_node: 浮窗可达性/零渲染期探测/皮肤脚本与文案映射。
+
+### S3 收尾反馈面与「立即收尾」按钮(计划 26-11-05-0808 §3.2 失败反馈面行 / §06 D14)
+- test_finalize_now_route_contract: 403 门控 / 未确认只回现场说明 / 后端窗口复核 blocked /
+  确认 -> app_shutdown -> ok / shutdown 被拒 -> degraded 降级(不重试) / 断连 503
+- test_chain_finalize_face_in_response: 链响应 finalize 段(pending 现读/daemon_stale/
+  window 相位单点; 旧链 spec 与终态 journal 恒 pending=0)
+- test_finalize_button_and_hint_static: 前端静态守阵(按钮/提示挂浮窗, 确认框与降级文案,
+  渲染面零调用)
 """
 import json
 import os
@@ -474,3 +482,160 @@ process.stdout.write(JSON.stringify({
     assert out["phaseMoved"] == "待收尾"
     assert out["phaseRemoving"] == "待收尾"
     assert out["probed"].startswith("探测于 T")
+
+
+# ---------------------------------------------------------------- S3 收尾反馈面与「立即收尾」按钮(计划 26-11-05-0808)
+
+
+def test_finalize_now_route_contract(web_env, tmp_path):
+    """D14 端点契约: 403 门控 / 未确认只回现场说明(零动作) / 后端窗口复核(快照无
+    FINALIZE_WINDOW 相位 job -> blocked, 前端可见性不是授权) / 确认 -> app_shutdown ->
+    ok / shutdown 被拒 -> degraded 降级提示手动重启(不重试) / 断连 503(前端同降级)"""
+    from auto_qb.core.modules.relocate_units import FINALIZE_WINDOW_PHASES
+
+    mgr, client = web_env
+    # 403 门控(relocate 默认关, fail-closed)
+    assert client.post("/api/relocate/finalize-now", json={"confirm": True}, headers=_auth(mgr)).status_code == 403
+    mgr.config.relocate = SimpleNamespace(enabled=True)
+
+    # 未确认: 只回现场说明(cls=confirm, 数据零动作 —— 成本先行, 与 relocate_cancel 同口径)
+    r = client.post("/api/relocate/finalize-now", json={}, headers=_auth(mgr))
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["cls"] == "confirm" and "重启 qB" in body["note"], body
+
+    # 确认但快照无收尾窗口 job: blocked(保守默认, 误触防护的后端半)
+    r = client.post("/api/relocate/finalize-now", json={"confirm": True}, headers=_auth(mgr))
+    assert r.json()["cls"] == "blocked", r.json()
+
+    shutdown_calls = []
+    mgr.client = SimpleNamespace(app_shutdown=lambda: shutdown_calls.append("go"))
+    job = {"job_id": "j1", "phase": sorted(FINALIZE_WINDOW_PHASES)[0], "hashes": [HASH]}
+    mgr.ctx = SimpleNamespace(
+        relocate=SimpleNamespace(jobs_snapshot=lambda: SimpleNamespace(jobs=(job, ), generation=1))
+    )
+
+    # 确认 -> app_shutdown 下发 -> ok + 手动重启提示
+    r = client.post("/api/relocate/finalize-now", json={"confirm": True, "job_id": "j1"}, headers=_auth(mgr))
+    body = r.json()
+    assert body["cls"] == "ok" and shutdown_calls == ["go"], body
+    assert "手动重启" in body["note"], body
+
+    # job_id 不在窗口(已推进/不存在): 拒, 零下发
+    r = client.post("/api/relocate/finalize-now", json={"confirm": True, "job_id": "other"}, headers=_auth(mgr))
+    assert r.json()["cls"] == "blocked", r.json()
+    assert shutdown_calls == ["go"]
+
+    # app_shutdown 被拒: 降级 degraded + 手动重启提示(不重试、不自动重启)
+    def _boom():
+        raise RuntimeError("rejected")
+
+    mgr.client.app_shutdown = _boom
+    r = client.post("/api/relocate/finalize-now", json={"confirm": True, "job_id": "j1"}, headers=_auth(mgr))
+    body = r.json()
+    assert body["cls"] == "degraded" and "手动重启" in body["note"], body
+    assert shutdown_calls == ["go"], "降级路径不得重试"
+
+    # qB 断连: 503(require_client 既有语义; 前端 catch 到后同样降级提示)
+    mgr.client = None
+    r = client.post("/api/relocate/finalize-now", json={"confirm": True, "job_id": "j1"}, headers=_auth(mgr))
+    assert r.status_code == 503, r.text
+
+
+def test_chain_finalize_face_in_response(web_env, tmp_path):
+    """链响应附带 finalize 反馈面(不进缓存): pending 现读(rewrites 已收口出账) /
+    daemon_stale(无账=True, 健康在位=False) / window 相位单点(armed=False, removed=True);
+    旧链 spec(无 bt_backup)与 journal 终态恒 pending=0(「重启 qB 即完成」只对新链成立)"""
+    from auto_qb.infra import relocate_journal as rj
+
+    src = tmp_path / "src"
+    target = src / "t"
+    target.mkdir(parents=True)
+    link = src / "l"
+    _link(link, target)
+    job = {"job_id": "j1", "phase": "armed", "hashes": [HASH], "alias_paths": [str(link)], "mover": HASH}
+    mgr, client, _rec = _install(web_env, str(link), SimpleNamespace(jobs=(job, ), generation=1))
+    backup = tmp_path / "BT_backup"
+    backup.mkdir()
+    rj.write_spec(
+        str(tmp_path), "j1", {
+            "job_id": "j1",
+            "src": "R:/src",
+            "dst": "R:/dst",
+            "hashes": ["h1", "h2"],
+            "host": "127.0.0.1",
+            "port": 1,
+            "bt_backup": str(backup),
+            "members": [{
+                "hash_v1": "h1",
+                "hash_v2": ""
+            }, {
+                "hash_v1": "h2",
+                "hash_v2": ""
+            }],
+        }
+    )
+    rj.record_rewrites(str(tmp_path), "j1", {"h1": {"status": "rewritten"}}, ts=1.0)
+
+    data = client.get(f"/api/relocate/chain?hash={HASH}", headers=_auth(mgr)).json()
+    face = data["finalize"]
+    assert face["job_id"] == "j1" and face["phase"] == "armed", face
+    assert face["window"] is False and face["pending"] == 1 and face["daemon_stale"] is True, face
+
+    # 相位单点: removed 在收尾窗口集 -> window True
+    mgr.ctx.relocate.jobs_snapshot = lambda: SimpleNamespace(jobs=(dict(job, phase="removed"), ), generation=2)
+    data = client.get(f"/api/relocate/chain?hash={HASH}", headers=_auth(mgr)).json()
+    assert data["finalize"]["window"] is True, data["finalize"]
+
+    # daemon 健康在位(pid 活 + 心跳新鲜) -> daemon_stale False
+    rj.write_daemon_state(str(tmp_path), rj.instance_key("127.0.0.1", 1), os.getpid())
+    data = client.get(f"/api/relocate/chain?hash={HASH}", headers=_auth(mgr)).json()
+    assert data["finalize"]["daemon_stale"] is False, data["finalize"]
+    rj.release_daemon_state(str(tmp_path), rj.instance_key("127.0.0.1", 1), os.getpid())
+
+    # 旧链 spec(无 bt_backup): pending 恒 0(daemon 不认领, 提示不成立)
+    rj.write_spec(
+        str(tmp_path), "j1", {
+            "job_id": "j1",
+            "src": "R:/src",
+            "dst": "R:/dst",
+            "hashes": ["h1", "h2"],
+            "host": "127.0.0.1",
+            "port": 1,
+        }
+    )
+    data = client.get(f"/api/relocate/chain?hash={HASH}", headers=_auth(mgr)).json()
+    assert data["finalize"]["pending"] == 0, data["finalize"]
+
+    # journal 终态(已取消): pending 恒 0(反馈面不再悬)
+    rj.write_spec(
+        str(tmp_path), "j1", {
+            "job_id": "j1",
+            "src": "R:/src",
+            "dst": "R:/dst",
+            "hashes": ["h1", "h2"],
+            "host": "127.0.0.1",
+            "port": 1,
+            "bt_backup": str(backup),
+        }
+    )
+    rj.write_journal(str(tmp_path), "j1", {"phase": "cancelled"})
+    data = client.get(f"/api/relocate/chain?hash={HASH}", headers=_auth(mgr)).json()
+    assert data["finalize"]["pending"] == 0, data["finalize"]
+
+
+def test_finalize_button_and_hint_static():
+    """前端静态守阵(D14 按钮 + S3 提示): 浮窗模板挂按钮/提示, JS 有确认框与降级文案,
+    端点路径只出现在链模块(渲染面零调用)"""
+    pop = _static("shared/tpl/popovers.html")
+    for needle in (
+        "立即收尾", "relChainFinalizeNow()", "relChainFinalizeWindow()", "relChainFinalizePending()", "待收尾: 重启 qB 即完成"
+    ):
+        assert needle in pop, needle
+    js = _static("shared/relocate_chain.js")
+    for needle in ("/api/relocate/finalize-now", "confirmDialog(", "手动重启 qB", "finalizing", "danger: true"):
+        assert needle in js, needle
+    # 渲染面零调用: 徽标/行文件不得出现按钮或端点
+    for rel in ("shared/decorate.js", "shared/drawer_rows.js"):
+        assert "/api/relocate/finalize-now" not in _static(rel), rel
+        assert "relChainFinalizeNow" not in _static(rel), rel

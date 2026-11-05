@@ -63,6 +63,7 @@
           width: 460,
           subtitle: "",
           seq: 0,
+          finalizing: false,
         },
       };
     },
@@ -85,6 +86,7 @@
           width: Math.min(460, window.innerWidth - 16),
           subtitle: hash.slice(0, 12),
           seq: this.relChain.seq + 1,
+          finalizing: false,
         };
         this._relChainGlobals();
         this.relChainPlace(anchor);
@@ -209,6 +211,53 @@
         const nodes = (this.relChain.data && this.relChain.data.nodes) || [];
         const text = nodes.map((n) => n.path).filter(Boolean).join(" -> ");
         if (text) this.copyText(text, " 路径链");
+      },
+
+      /* ---------------- D14「立即收尾」+ S3 失败反馈面(计划 26-11-05-0808) ----------------
+       * 数据源 = 链结果的 finalize 段(后端 relocate_chain.finalize_face, 不进缓存现读);
+       * 可见性判据单点在后端(window = FINALIZE_WINDOW_PHASES), 前端只渲染不重判。
+       * 确认框带现场说明(关闭 qB / 改写 / 需手动重启, §07 按钮误触行); 调用失败
+       * (缺失/被拒/断连)降级为提示手动重启 qB —— 不重试、不自动重启(保守默认)。 */
+      relChainFinalizeFace() {
+        return (this.relChain.data && this.relChain.data.finalize) || null;
+      },
+
+      relChainFinalizeWindow() {
+        const face = this.relChainFinalizeFace();
+        return !!(face && face.window);
+      },
+
+      relChainFinalizePending() {
+        const face = this.relChainFinalizeFace();
+        return !!(face && face.pending > 0 && face.daemon_stale);
+      },
+
+      async relChainFinalizeNow() {
+        const face = this.relChainFinalizeFace();
+        if (!face || this.relChain.finalizing) return;
+        const ok = await this.confirmDialog("立即收尾",
+          "将向 qB 下达关闭指令: qB 退出后, 回收 daemon 会在下线窗口改写成员 fastresume 指向新位置; "
+          + "改写完成后需要你手动重启 qB。期间该组不可用。确认关闭 qB?",
+          { okText: "关闭 qB", danger: true });
+        if (!ok) return;
+        this.relChain.finalizing = true;
+        try {
+          const resp = await this.api("/api/relocate/finalize-now", {
+            method: "POST",
+            body: JSON.stringify({ confirm: true, job_id: face.job_id }),
+          });
+          this.relChain.finalizing = false;
+          if (resp && resp.cls === "ok") {
+            this.toast(resp.note || "已下达关闭指令, 待收尾改写完成后请手动重启 qB", "ok", 10000);
+          } else {
+            /* blocked(窗口已推进)/degraded(shutdown 缺失或被拒)统一降级提示 */
+            this.toast((resp && resp.note) || "立即收尾未执行, 请手动重启 qB 完成收尾", "warn", 10000);
+          }
+        } catch (e) {
+          this.relChain.finalizing = false;
+          const msg = (e && e.message) || "网络或服务端错误";
+          this.toast("立即收尾不可用: " + msg + ", 请手动重启 qB 完成收尾", "warn", 10000);
+        }
       },
     },
   };
