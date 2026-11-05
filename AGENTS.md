@@ -5,27 +5,22 @@
 
 ## 知识库路由(两层:本文件粗路由→`memory-bank/README.md`细路由)
 
-「按任务读哪份文档」的单点在`memory-bank/README.md`的细路由表——本文件不复述,免得两处各自演化。三条动作级提示:
-
-- **改代码前**:读`memory-bank/pitfalls/_index.md`——7类(git·web-ui·backend·testing·ops·kb·docs),按动作选类再进类索引。
-- **跑git命令前**:必读`memory-bank/pitfalls/git/_index.md`——ref静默丢弃等本机硬约束单点在里面(同步/推送核验已内联进ship脚本;旧rebase/merge/stash毁库禁令已随拦截层修复解除)。
-- **检索纪律**:先索引、后grep、**禁止整读**任一目录;不确定关键词时`grep -rn "<词>" memory-bank/`兜底。
+「按任务读哪份文档」的单点在`memory-bank/README.md`的细路由表(含改代码前/跑git前必读的索引、检索纪律「先索引、后grep、禁止整读」)——本文件不复述,免得两处各自演化。
 
 ## 会话协议
 
 完整规程(会话开始/收尾DoD/立档阈值4条/任务档案模板)见memory-bank skill(`.agents/skills/memory-bank/SKILL.md`);机械守卫`tests/test_memory_bank_*.py`(四分)。本节只留入口。
 
 - **开始**:①**先同步(硬性,无豁免——问答/只读分析轮次也必须先同步)**——`commands run my-commit-flow.sync`:自动fetch+快进/分叉自动rebase(保线性),结果行「已同步 <hash>」贴进回复,真改写HEAD的步骤(快进/rebase)按「旧hash→新hash」各留一行在它上面;失败一行含原因与步骤(树脏/冲突已自动回滚),照做后重跑,**禁止在落后的分支上工作——只读分析同样禁止**。**只读评审子代理豁免本步**(同步是主会话开工动作;其git状态不动,自检锚=任务提示给的head hash——派遣照抄code-review skill③的三件套);**可写子代理不豁免**(照常同步,或在任务提示里钉死基线)。②看会话滚动状态:`commands run kb.active`列`memory-bank/activeContext/`切片;该读哪份文档走上面的路由。③**只动当前这一个clone**——跨仓库操作**绝对禁止**,须用户显式说「授权」(见「🔴 跨仓库操作」节)。
-- **建件与改版**:新建计划/档案/报告/基线切片/坑档/进展件走`commands run kb.new <族>`(时间戳/命名/头部/SLOT/索引全派生,头部区零手写),翻转状态`kb.status`,改版落盘`kb.bump`,收尾机械面`kb.wrap`——一次逻辑动作=一条命令+一次填空,剩余人工只填SLOT;族清单与口径见`memory-bank/conventions/doc-forms.md`「创建/更新方式」。
-- **收尾**:任务收口先跑code-review skill(收口判定/豁免见其①,`review.pack`/`review.check`是机械面),然后按skill的DoD——机械面一条`commands run kb.wrap --topic <slug> --did ".."`(抬切片最后活动+R行/档案Updated+进度日志/重建索引;蒸馏与判断仍是agent的活:已完成条目**迁出**到progress、精修摘要自己来)/达阈值则立档(`commands run kb.new task`)/代码事实变更回写`memory-bank/`与根README/跑`commands run test.full`并新建基线切片记实测数字(`kb.new baseline --total ..`从实测输出誊写,体例见`testing/baseline.md`口径段)/**新坑按动作写进`pitfalls/<类>/<主题>.md`(`kb.new pitfall --class .. --triggers ..`)并重跑`commands run kb.index`**。若这轮踩到**已记的坑**,把该条`复发`+1,并在档案里写一句为什么没命中(路由没到/文件没读/读了没照做)。
+- **建件与改版**:一律命令化创建(`kb.new <族>` / `kb.status` / `kb.bump` / `kb.wrap`),派生面零手写;族清单与口径见`memory-bank/conventions/doc-forms.md`「创建/更新方式」。
+- **收尾**:任务收口先跑code-review skill(收口判定/豁免见其①,`review.pack`/`review.check`是机械面),然后按skill的DoD:切片`commands run kb.wrap`(机械面;蒸馏与判断仍是agent的活)→达阈值立档`commands run kb.new task`→代码事实变更回写`memory-bank/`与根README→`commands run test.full`并新建基线切片(`kb.new baseline --total ..`,数字从实测誊写)→**新坑按动作写进`pitfalls/<类>/<主题>.md`并重跑`commands run kb.index`**。若这轮踩到**已记的坑**,把该条`复发`+1,并在档案里写一句为什么没命中(路由没到/文件没读/读了没照做)。
 - **冲突裁决**:代码 > `memory-bank/` > 根`README.md` > `想法.md`;漂移以代码为准并回写。
 
 ## 产出口径
 
-- **计划文档**:用`delivery-artifact` skill,放`memory-bank/plans/`;**一律单文件HTML**(出现`.md`即违规)。
-- **报告**:审计/故障取证/可行性分析→`memory-bank/reports/`;四工位决策树与`doc-*`协议单点见`memory-bank/conventions/doc-forms.md`。
-- **HTML一律dark主题**:深色底+浅色字,样式里写`color-scheme:dark`;配色规格与文件命名见`memory-bank/conventions/webui.md`「HTML 文档一律 dark 主题」。
-- **测试基线数字只写一处**:`memory-bank/testing/baselines/` 新切片(一次全量一条,最新=事实源,`commands run kb.baseline`看);其余文档一律引用不手抄(正文写「见 kb.baseline」)。守阵`check_wording.py`扫裸数字,存量冻结只拦新增。口径见`memory-bank/testing/baseline.md`。
+- **计划 / 报告**:计划用`delivery-artifact` skill、放`memory-bank/plans/`且**一律单文件HTML**(出现`.md`即违规);报告(审计/故障取证/可行性分析)放`memory-bank/reports/`。四工位决策树与`doc-*`协议见`memory-bank/conventions/doc-forms.md`。
+- **HTML一律dark主题**:规格与文件命名见`memory-bank/conventions/webui.md`「HTML 文档一律 dark 主题」。
+- **测试基线数字只写一处**:权威在`memory-bank/testing/baselines/`最新切片,其余一律引用不手抄(`commands run kb.baseline`);口径与守卫见`memory-bank/testing/baseline.md`。
 
 ## 编码约束:非ASCII图形符号
 
@@ -52,7 +47,7 @@
 
 ## 命令
 
-**想跑测试/格式化/提交/推送/包内脚本第一步是找task id,不是拼裸命令**——等价物裸跑(`uv run pytest`/`git push`…)会丢掉包里单点定义的环境陷阱。`commands run <task>`的`<task>`是包里的一条命令(映射表在`.commands/`各包的`config.toml`,引擎是commands skill `.agents/skills/commands/SKILL.md`)。**先直接试跑**,报command not found才装一次wrapper(幂等,生成物已gitignore):`uv run python .agents/skills/commands/scripts/install_wrapper.py`(落仓库根+PATH目录,PATH那份跨clone共享,多数会话免装);没装时也可展开`uv run python .agents/skills/commands/scripts/run.py run <task>`。`<task>`用`list`里的id(子包可写`ship.commit`,也可写全`包/子包.<task>`);不知道调哪个就`list`(一次平铺全部包与命令,无需下钻)。遇到**反复要跑/难拼/有陷阱写法**的命令,按SKILL.md的收录协议自己`add`进包——命令集靠这个长大,不是靠人维护。
+**想跑测试/格式化/提交/推送/包内脚本,第一步是找task id,不是拼裸命令**——裸跑等价物会丢掉包里单点定义的环境陷阱。引擎用法(task id 写法 / 先试跑再装 wrapper / `list` / `show` / 收录协议)见commands skill `.agents/skills/commands/SKILL.md`;`<task>`映射表在`.commands/`各包的`config.toml`。常用命令:
 
 ```text
 commands run test.full # 全量测试(最新基线:commands run kb.baseline列最近3条;排障 --all)
@@ -63,7 +58,7 @@ commands run env.sync # 首次/依赖变更后同步依赖
 ```
 
 - 依赖统一走`uv`(`pyproject.toml`+`uv.lock`)。
-- ⚠测试TMPDIR由`tests/_tmp_bootstrap.py`自举探测(R→H→%TEMP%),**外部TMPDIR一律拒收(rc=4)**,别手工加前缀;要换根改`TMP_ROOT_CANDIDATES`单点;判据见`memory-bank/pitfalls/testing/tmpdir.md`。
+- ⚠测试TMPDIR由`tests/_tmp_bootstrap.py`自举探测,**外部TMPDIR一律拒收(rc=4)**,别手工加前缀;判据与换根单点见`memory-bank/pitfalls/testing/tmpdir.md`。
 - 新增测试必须同步该文件头部docstring的"## 测试计划"清单。
 
 ## 🔴进程安全:禁止一切taskkill
