@@ -225,6 +225,7 @@
   │ ③ release.bump：gitmoji 决策器按决策表算提案（v0.2.0..HEAD）
   │    → agent 改判窗（改判必留痕）→ bump-my-version 改 __version__
   │    单行 + CHANGELOG 草稿（只改文件，不自动 commit/tag）
+  │    → uv sync 刷打包元数据（bump 与 sync 之间 dist-info 烤旧号, --version/守阵会误报, 评审 R1-F4）
   │ ④ 🔖 发版提交（bump+CHANGELOG 同笔）走 ship.commit 闸门 → gitee develop
   │ ⑤ release.merge：--ff-only develop→master → push gitee master
   │    （master 分叉/冲突 → 停手要人）

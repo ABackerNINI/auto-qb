@@ -3,7 +3,7 @@
 
 决策表 = semantic-release 决策语义移植到 gitmoji 历史 (计划 26-09-22-2318 v2 §6.2):
     ✨ -> minor (Added)      🐛 -> patch (Fixed)      ⚡️ -> patch (Changed)
-    破坏性标记 (💥 前缀 / BREAKING 字样) -> minor + 警示 (0.x 语义; **永不自动跨 major**)
+    破坏性标记 (💥 前缀 / 严格大写 BREAKING 字样) -> minor + 警示 (0.x 语义; **永不自动跨 major**)
     其余 gitmoji -> 无 bump 不入册
 
 所有项目事实走参数 (通用性契约: 移植到另一项目本脚本零改动):
@@ -35,7 +35,9 @@ DECISION_TABLE: dict[str, tuple[str, str]] = {
     "⚡": ("patch", "Changed"),
 }
 BREAKING_EMOJI = "💥"
-BREAKING_PATTERN = re.compile(r"\bbreaking\b", re.IGNORECASE)
+# 严格大写形态才判破坏性: 小写 breaking 在 "non-breaking"/"breaking 兼容缺口" 等否定或常规
+# 表述里常见, 误报会把 patch 抬成 minor + 虚假警示(评审 R1-F1)。💥 前缀仍是主判定。
+BREAKING_PATTERN = re.compile(r"\bBREAKING\b")
 SEMVER_PATTERN = re.compile(r"^(\d+)\.(\d+)\.(\d+)$")
 
 # bump 档位优先级: minor > patch > none (永不含 major —— major 只走显式 --major 旗标)。
@@ -55,6 +57,8 @@ def run_git(args: list[str], repo: str) -> str:
 def load_version(path: Path, version_regex: str) -> str:
     """从版本文件按正则取当前版本 (正则须含恰好一个捕获组)。"""
     pattern = re.compile(version_regex)
+    if pattern.groups != 1:
+        raise RuntimeError(f"--version-regex 须恰好一个捕获组, 当前 {pattern.groups} 个: {version_regex}")
     text = path.read_text(encoding="utf-8")
     matches = pattern.findall(text)
     if len(matches) != 1:
@@ -67,7 +71,11 @@ def load_version(path: Path, version_regex: str) -> str:
 
 def default_from_ref(repo: str) -> str:
     """默认起算点 = 最近 v<数字> 形态 tag (无 tag 即报错, 让调用方显式给 --from-ref)。"""
-    out = run_git(["describe", "--tags", "--match", "v[0-9]*", "--abbrev=0"], repo).strip()
+    try:
+        out = run_git(["describe", "--tags", "--match", "v[0-9]*", "--abbrev=0"], repo).strip()
+    except RuntimeError as exc:
+        # describe 无匹配 tag 时 rc=128, 原始 git fatal 对调用方无指引价值(评审 R1-F2), 换设计好的停手指引。
+        raise RuntimeError("仓库无 v<数字> 形态 tag, 请用 --from-ref 显式给起算点") from exc
     if not out:
         raise RuntimeError("仓库无 v<数字> 形态 tag, 请用 --from-ref 显式给起算点")
     return out
@@ -122,7 +130,7 @@ def next_version(current: str, bump: str) -> str:
 def changelog_draft(sections: dict[str, list[str]]) -> str:
     """分段 -> Keep a Changelog markdown 段 (Breaking 段加粗警示)。"""
     order = ["Breaking", "Added", "Fixed", "Changed"]
-    headings = {"Breaking": "### ⚠️ **Breaking**", "Added": "### Added", "Fixed": "### Fixed", "Changed": "### Changed"}
+    headings = {"Breaking": "### **Breaking**", "Added": "### Added", "Fixed": "### Fixed", "Changed": "### Changed"}
     blocks = []
     for key in order:
         items = sections.get(key)
@@ -161,6 +169,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--emit-changelog", action="store_true", help="输出 CHANGELOG [Unreleased] markdown 段")
     ns = parser.parse_args(argv)
 
+    # stdout/stderr 锁 UTF-8: 分段预览与草稿含 gitmoji, cp936 管道直跑会 UnicodeEncodeError
+    # (评审 R1-F7; 经 commands 引擎调用时 _CHILD_ENV 已注入, reconfigure 幂等无害)。
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
+
     try:
         current = load_version(ns.version_file, ns.version_regex)
         from_ref = ns.from_ref or default_from_ref(ns.repo)
@@ -168,7 +182,8 @@ def main(argv: list[str] | None = None) -> int:
             line for line in run_git(["log", f"{from_ref}..HEAD", "--pretty=%s"], ns.repo).splitlines() if line.strip()
         ]
         verdict = decide(subjects)
-    except RuntimeError as exc:
+    except (RuntimeError, re.error, OSError) as exc:
+        # 单行错误契约: re.error(非法 --version-regex) / OSError(版本文件缺失、git 缺失)一并收口(评审 R1-F5)。
         print(f"[suggest_bump] {exc}", file=sys.stderr)
         return 1
 
@@ -190,7 +205,11 @@ def main(argv: list[str] | None = None) -> int:
         "range": f"{from_ref}..HEAD",
     }
 
+    if ns.emit_changelog:
+        result["changelog_draft"] = changelog_draft(verdict["sections"])
+
     if ns.as_json:
+        # --emit-changelog 同给时草稿并入 JSON 字段, 不静默丢(评审 R1-F3)。
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return 0
     print(f"提案: {result['bump']}" + (" (显式 --major)" if ns.major else ""))

@@ -7,15 +7,21 @@
 
 ## 测试计划
 
-- test_classify_subject_table: 决策表参数化 (✨/🐛/⚡️/⚡/♻️/📝/垃圾主题)
-- test_classify_breaking_variants: 💥 前缀 / BREAKING 字样 / breaking+emoji 组合 -> minor+Breaking
+- test_classify_subject_table: 决策表参数化 (✨/🐛/⚡️/⚡/♻️/📝/垃圾主题/前导空格)
+- test_classify_breaking_variants: 💥 前缀 / 严格大写 BREAKING -> minor+Breaking; 小写 breaking 与 non-breaking 不误报 (评审 R1-F1)
 - test_decide_bump_precedence: minor 压过 patch / 仅 patch -> patch / 全 none -> none
 - test_decide_counts_and_sections: 计数与分段归集 (breaking 同时计入 minor)
+- test_decide_empty_range: 空 subjects(空区间重入场景) -> bump=none 零分段 (评审 R1-13)
 - test_next_version_table: 0.2.0 -> 0.3.0 / 0.2.1 / none 原样
 - test_next_version_rejects_major_kind: next_version 不提供 major 档, 决策器主体对破坏性也只产 minor
 - test_next_version_rejects_non_semver: 当前版本混 local 段/垃圾串 -> RuntimeError
 - test_load_version_regex: 版本文件正则单捕获组提取; 多命中/非 SemVer 报错
-- test_changelog_draft_sections: 分段 markdown 草稿 (Breaking 加粗, 空段省略)
+- test_load_version_regex_group_count: 捕获组 0 个或 2+ 个显式报错 (评审 R1-F6)
+- test_changelog_draft_sections: 分段 markdown 草稿 (Breaking 加粗纯文本, 空段省略)
+- test_main_error_path_single_line: run_git 失败/非法正则 -> rc=1 且 stderr 单行 [suggest_bump] 前缀 (评审 R1-9/F5)
+- test_default_from_ref_guidance: 无 v-tag 时 describe rc=128 转带 --from-ref 指引的停手消息 (评审 R1-F2)
+- test_main_empty_range_and_changelog_flag: 空区间提案 none / --emit-changelog 透出草稿段 / 空区间无草稿 (评审 R1-F11/F13)
+- test_json_includes_changelog_draft: --json 与 --emit-changelog 同给时草稿并入 JSON 不静默丢 (评审 R1-F3)
 - test_major_only_via_explicit_flag: main 层 --major 才产 major, 无旗标时决策表永不给出
 """
 
@@ -57,6 +63,7 @@ def _mod():
         ("📝 (memory-bank) 重写 8K 口径文档", "none", None),
         ("🗑️ 弃置过期计划文档", "none", None),
         ("普通主题无 emoji", "none", None),
+        (" ✨ 前导空格照常命中", "minor", "Added"),
     ],
 )
 def test_classify_subject_table(subject, kind, section):
@@ -64,15 +71,17 @@ def test_classify_subject_table(subject, kind, section):
 
 
 @pytest.mark.parametrize(
-    "subject",
+    ("subject", "kind", "section"),
     [
-        "💥 (config) 移除旧版限速键",
-        "✨ (rules) 新增规则引擎 BREAKING: 旧字段弃用",
-        "🐛 (web) 修复 breaking 兼容缺口",
+        ("💥 (config) 移除旧版限速键", "minor", "Breaking"),
+        ("✨ (rules) 新增规则引擎 BREAKING: 旧字段弃用", "minor", "Breaking"),
+        # 小写 breaking 是常规表述: 不误报抬 minor(评审 R1-F1)。
+        ("🐛 (web) 修复 breaking 兼容缺口", "patch", "Fixed"),
+        ("🐛 修复 non-breaking 空格处理", "patch", "Fixed"),
     ],
 )
-def test_classify_breaking_variants(subject):
-    assert _mod().classify_subject(subject) == ("minor", "Breaking")
+def test_classify_breaking_variants(subject, kind, section):
+    assert _mod().classify_subject(subject) == (kind, section)
 
 
 # --------------------------------------------------------------- decide
@@ -140,6 +149,15 @@ def test_load_version_regex(tmp_path):
         mod.load_version(vf, r'__version__ = "([^"]+)"')
 
 
+@pytest.mark.parametrize("regex", [r"0\.2\.0", r'(__version__) = "([^"]+)"'])
+def test_load_version_regex_group_count(tmp_path, regex):
+    # 捕获组 0 个或 2+ 个显式报错, 不静默取组(评审 R1-F6)。
+    vf = tmp_path / "ver.py"
+    vf.write_text('__version__ = "0.2.0"\n', encoding="utf-8")
+    with pytest.raises(RuntimeError, match="恰好一个捕获组"):
+        _mod().load_version(vf, regex)
+
+
 # --------------------------------------------------------------- changelog_draft
 
 
@@ -150,7 +168,8 @@ def test_changelog_draft_sections():
         "Fixed": ["🐛 修复"],
     }
     draft = _mod().changelog_draft(sections)
-    assert draft.index("⚠️ **Breaking**") < draft.index("### Added") < draft.index("### Fixed")
+    # Breaking 段标题纯文本(code-style 非 ASCII 纪律, 评审 R1-F8); 段序 Breaking < Added < Fixed。
+    assert draft.index("### **Breaking**") < draft.index("### Added") < draft.index("### Fixed")
     assert "- **💥 移除旧键**" in draft
     assert "### Changed" not in draft  # 空段省略
 
@@ -184,3 +203,104 @@ def test_major_only_via_explicit_flag(tmp_path, monkeypatch, capsys):
     )
     out = capsys.readouterr().out
     assert "提案: major" in out and "0.2.0 -> 1.0.0" in out
+
+
+def test_decide_empty_range():
+    # 空区间(tag 后零提交的重入场景): bump=none 且零分段(评审 R1-F13)。
+    verdict = _mod().decide([])
+    assert verdict["bump"] == "none"
+    assert verdict["counts"] == {"minor": 0, "patch": 0, "none": 0, "breaking": 0}
+    assert verdict["sections"] == {}
+
+
+def test_main_error_path_single_line(tmp_path, monkeypatch, capsys):
+    # 错误契约: 任意失败路径 rc=1 且 stderr 单行 [suggest_bump] 前缀(评审 R1-9/F5)。
+    mod = _mod()
+    vf = tmp_path / "ver.py"
+    vf.write_text('__version__ = "0.2.0"\n', encoding="utf-8")
+
+    def boom(args, repo):
+        raise RuntimeError("git 炸了(注入)")
+
+    monkeypatch.setattr(mod, "run_git", boom)
+    rc = mod.main(["--repo", str(tmp_path), "--version-file", str(vf), "--version-regex", r'__version__ = "([^"]+)"'])
+    err = capsys.readouterr().err.strip()
+    assert rc == 1
+    assert err.startswith("[suggest_bump]") and "\n" not in err
+
+    # 非法正则(re.error)与缺失文件(OSError)同走单行出口, 不裸 traceback。
+    rc = mod.main(["--repo", str(tmp_path), "--version-file", str(vf), "--version-regex", "["])
+    err = capsys.readouterr().err.strip()
+    assert rc == 1 and err.startswith("[suggest_bump]") and "\n" not in err
+
+    rc = mod.main(["--repo", str(tmp_path), "--version-file", str(tmp_path / "nope.py"), "--version-regex", "x"])
+    err = capsys.readouterr().err.strip()
+    assert rc == 1 and err.startswith("[suggest_bump]") and "\n" not in err
+
+
+def test_default_from_ref_guidance(tmp_path, monkeypatch):
+    # 无 v-tag: describe 的 rc=128 转为带 --from-ref 指引的停手消息(评审 R1-F2)。
+    mod = _mod()
+
+    def no_tag(args, repo):
+        raise RuntimeError("git describe 失败 rc=128: fatal: No names found")
+
+    monkeypatch.setattr(mod, "run_git", no_tag)
+    with pytest.raises(RuntimeError, match="--from-ref"):
+        mod.default_from_ref(str(tmp_path))
+
+
+def test_main_empty_range_and_changelog_flag(tmp_path, monkeypatch, capsys):
+    # 空区间提案 none / --emit-changelog 有草稿时透出 / 空区间无草稿段(评审 R1-F11/F13)。
+    mod = _mod()
+    vf = tmp_path / "ver.py"
+    vf.write_text('__version__ = "0.2.0"\n', encoding="utf-8")
+    # 先打桩再调 main —— tmp 目录不是 git 仓, 不打桩会真起子进程(POPEN 越界)。
+    monkeypatch.setattr(mod, "run_git", lambda args, repo: "v0.2.0" if args[0] == "describe" else "")
+
+    rc = mod.main(
+        [
+            "--repo",
+            str(tmp_path), "--version-file",
+            str(vf), "--version-regex", r'__version__ = "([^"]+)"', "--emit-changelog"
+        ]
+    )
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "提案: none" in out and "0.2.0 -> 0.2.0" in out
+    assert "### Added" not in out  # 空区间无草稿
+
+    monkeypatch.setattr(mod, "run_git", lambda args, repo: "v0.2.0" if args[0] == "describe" else "✨ A\n🐛 B")
+    rc = mod.main(
+        [
+            "--repo",
+            str(tmp_path), "--version-file",
+            str(vf), "--version-regex", r'__version__ = "([^"]+)"', "--emit-changelog"
+        ]
+    )
+    out = capsys.readouterr().out
+    assert rc == 0 and "### Added" in out and "- ✨ A" in out and "### Fixed" in out
+
+
+def test_json_includes_changelog_draft(tmp_path, monkeypatch, capsys):
+    # --json 与 --emit-changelog 同给: 草稿并入 JSON 字段, 不静默丢(评审 R1-F3)。
+    mod = _mod()
+    vf = tmp_path / "ver.py"
+    vf.write_text('__version__ = "0.2.0"\n', encoding="utf-8")
+    monkeypatch.setattr(mod, "run_git", lambda args, repo: "v0.2.0" if args[0] == "describe" else "✨ A\n🐛 B")
+    rc = mod.main(
+        [
+            "--repo",
+            str(tmp_path),
+            "--version-file",
+            str(vf),
+            "--version-regex",
+            r'__version__ = "([^"]+)"',
+            "--json",
+            "--emit-changelog",
+        ]
+    )
+    assert rc == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["changelog_draft"].startswith("### Added")
+    assert payload["bump"] == "minor" and payload["next"] == "0.3.0"
