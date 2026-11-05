@@ -285,6 +285,36 @@ class LaneStateTest(unittest.TestCase):
         self._write_route(dict(self._read_route(), status="claimed"))
         self._expect_rc(self.lane.cmd_done, self._ns())
 
+    def test_require_clean_allow_lane(self):
+        """allow_lane 放行 lane 内未跟踪/修改; lane 外拒; 「lane 内 -> lane 外」重命名拒(评审实证绕过面)。
+
+        前置: lane 目录先提交 .keep 哨兵 —— 未跟踪目录在 porcelain 会折叠成「?? memory-bank/」,
+        真实 clone 里 lane 内有已跟踪的 manifest.json 故不折叠, 测试环境须同构。
+        """
+        subprocess.run(["git", "init", "-q"], cwd=self.root, check=True)
+        subprocess.run(["git", "config", "user.email", "t@example.test"], cwd=self.root, check=True)
+        subprocess.run(["git", "config", "user.name", "t"], cwd=self.root, check=True)
+        (self.root / "base.txt").write_text("base\n", encoding="utf-8")
+        subprocess.run(["git", "add", "base.txt"], cwd=self.root, check=True)
+        subprocess.run(["git", "commit", "-q", "-m", "base"], cwd=self.root, check=True)
+        rf = self.root / "memory-bank" / "reports" / "attachments" / "legacy-review4"
+        rf.mkdir(parents=True, exist_ok=True)
+        (rf / ".keep").write_text("\n", encoding="utf-8")
+        subprocess.run(["git", "add", ".keep"], cwd=str(rf), check=True)
+        subprocess.run(["git", "commit", "-q", "-m", "lane keep"], cwd=self.root, check=True)
+        # 仅 lane 内未跟踪: 放行
+        (rf / "route-R9.json").write_text("{}", encoding="utf-8")
+        self.lane._require_clean(self.root, allow_lane=True)
+        # lane 外未跟踪: 拒
+        (self.root / "outside.txt").write_text("x\n", encoding="utf-8")
+        self._expect_rc(self.lane._require_clean, self.root, True)
+        (self.root / "outside.txt").unlink()
+        # 已提交的 lane 文件 rename 到 lane 外: 拒(porcelain「old -> new」两侧都必须在 lane 内)
+        subprocess.run(["git", "add", "route-R9.json"], cwd=str(rf), check=True)
+        subprocess.run(["git", "commit", "-q", "-m", "route"], cwd=self.root, check=True)
+        subprocess.run(["git", "mv", str(rf / "route-R9.json"), "moved.txt"], cwd=self.root, check=True)
+        self._expect_rc(self.lane._require_clean, self.root, True)
+
     def test_script_exists(self):
         self.assertTrue(SCRIPT.is_file())
 

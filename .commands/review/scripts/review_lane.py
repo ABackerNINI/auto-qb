@@ -285,7 +285,7 @@ def _require_clean(root: Path, allow_lane: bool = False) -> None:
         def in_lane(p: str) -> bool:
             return p.strip('"').startswith(LANE_DIR + "/")
         bad = [p for st, p in rows
-               if not all(in_lane(q) for q in (p if " -> " not in p else p.split(" -> ")))]
+               if not all(in_lane(q) for q in ((p,) if " -> " not in p else p.split(" -> ")))]
         if not bad:
             return
         _fail("工作树在 legacy-review4/ 之外有未提交改动, 先处理再继续:\n  " + "\n  ".join(f"{st} {p}" for st, p in rows))
