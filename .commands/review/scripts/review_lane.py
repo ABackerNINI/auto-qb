@@ -355,6 +355,8 @@ def _load_route(root: Path, route: str) -> dict:
         _die(f"route JSON 解析失败: {exc}")
     # 最小 schema 校验: 状态单点被手工改坏时给清晰失败(而非 TypeError/StopIteration 裸 traceback)
     rel = path.relative_to(root).as_posix()
+    if not isinstance(data, dict):
+        _fail(f"route JSON 顶层必须是对象, 实为 {_flat(type(data).__name__)} ({rel}) —— 手工修复或删除后重新认领")
     for key in ("route", "owner", "claimed_at", "freeze", "status", "batches"):
         if key not in data:
             _fail(f"route JSON 缺字段 {key}: {rel} —— 手工修复或删除后重新认领")
@@ -365,7 +367,8 @@ def _load_route(root: Path, route: str) -> dict:
     if not isinstance(data["batches"], list) or not data["batches"]:
         _fail(f"route JSON batches 非非空列表 ({rel}) —— 手工修复或删除后重新认领")
     for b in data["batches"]:
-        if not isinstance(b, dict) or "id" not in b or b.get("status") not in ("pending", "done"):
+        if (not isinstance(b, dict) or "id" not in b or b.get("status") not in ("pending", "done")
+                or "findings" not in b or "done_at" not in b):
             _fail(f"route JSON 批次条目非法({rel}): {_flat(b)} —— 手工修复或删除后重新认领")
     return data
 
@@ -419,8 +422,12 @@ def _strip_tags(html: str) -> str:
 
 
 def _mentions(text: str, base: str) -> bool:
-    """basename 词边界命中: 裸子串会把 store.py 误配进 traffic_store.py 一类(评审实证)。"""
-    return re.search(r"(?<![\w./-])" + re.escape(base) + r"(?![\w.-])", text) is not None
+    """basename 词边界命中: 裸子串会把 store.py 误配进 traffic_store.py 一类(评审实证)。
+
+    前顾只拦 \\w 与 -: 路径形态提及(core/modules/x.py)的 basename 前导是 "/", 必须放行,
+    否则底册条目大面积漏配(增量评审实证 19->11); "_" 属 \\w, 原误配仍被挡。
+    """
+    return re.search(r"(?<![\w-])" + re.escape(base) + r"(?![\w.-])", text) is not None
 
 
 def _parse_r2(root: Path, all_files: list[dict]) -> list[dict]:
@@ -507,21 +514,27 @@ def cmd_manifest(args: argparse.Namespace) -> int:
     root = _resolve_root(args.root)
     if not (root / PLAN_REL).is_file():
         _die(f"计划文件不在盘: {PLAN_REL}")
-    # 1) 分层范围盘点
-    scoped = _scoped_files(root)
-    # 2) 按批次定义分配(互斥 + 全覆盖)
-    files_of: dict[str, list[dict]] = {b["id"]: [] for b in BATCH_DEFS}
-    overlap: list[str] = []
-    unassigned: list[str] = []
-    for rel in scoped:
-        hits = [b["id"] for b in BATCH_DEFS if rel in b["exact"] or any(fnmatch.fnmatchcase(rel, g) for g in b["globs"])]
-        if len(hits) > 1:
-            overlap.append(f"{rel} -> {','.join(hits)}")
-        elif not hits:
-            unassigned.append(rel)
-        else:
-            lines = _count_lines(root / rel)
-            files_of[hits[0]].append({"path": rel, "lines": lines})
+    # 1) 分层范围盘点 —— 在冻结树的临时解包上做: manifest 描述评审目标(冻结树),
+    #    与 develop 后续演进(其它 clone 合流的新文件)无关, 覆盖守卫不随树漂移误报
+    freeze = _resolve_freeze(root)
+    raw = _git_bytes(root, "archive", "--format=tar", freeze)
+    with tempfile.TemporaryDirectory(prefix="lane-manifest-tree-") as td:
+        tree = Path(td)
+        with tarfile.open(fileobj=io.BytesIO(raw), mode="r:") as tf:
+            tf.extractall(tree, filter="data")
+        scoped = _scoped_files(tree)
+        # 2) 按批次定义分配(互斥 + 全覆盖)
+        files_of: dict[str, list[dict]] = {b["id"]: [] for b in BATCH_DEFS}
+        overlap: list[str] = []
+        unassigned: list[str] = []
+        for rel in scoped:
+            hits = [b["id"] for b in BATCH_DEFS if rel in b["exact"] or any(fnmatch.fnmatchcase(rel, g) for g in b["globs"])]
+            if len(hits) > 1:
+                overlap.append(f"{rel} -> {','.join(hits)}")
+            elif not hits:
+                unassigned.append(rel)
+            else:
+                files_of[hits[0]].append({"path": rel, "lines": _count_lines(tree / rel)})
     if overlap or unassigned:
         if overlap:
             print(f"[FAIL] 批次定义重叠 {len(overlap)} 处:")
@@ -634,7 +647,10 @@ def _extract_snapshot(root: Path, freeze: str, snap: Path) -> int:
     _guard_snap_path(root, snap)
     raw = _git_bytes(root, "archive", "--format=tar", freeze)
     if snap.exists():
-        _die(f"快照目录已存在且标记不匹配: {snap} —— 确认后 --fresh 重建")
+        if not any(snap.iterdir()) and not (snap / ".snapshot-hash").is_file():
+            snap.rmdir()  # 上次中断留下的空壳目录(无标记无内容): 直接重建
+        else:
+            _die(f"快照目录已存在且标记不匹配: {snap} —— 确认后 --fresh 重建")
     snap.mkdir(parents=True)
     count = 0
     with tarfile.open(fileobj=io.BytesIO(raw), mode="r:") as tf:
@@ -756,9 +772,11 @@ def cmd_verify(args: argparse.Namespace) -> int:
     else:
         pending = [b for b in data["batches"] if b["status"] == "pending"]
         if not pending:
-            print("All batches checked off — run review.lane.done to wrap up")
+            print("全部批次已勾选 —— 跑 review.lane.done 收尾")
             return 0
         mb_sel = next((mb for mb in manifest["batches"] if mb["id"] == pending[0]["id"]), None)
+        if mb_sel is None:
+            _fail(f"批次 {pending[0]['id']} 不在 manifest(fail-closed, 与 --batch 分支同口径)")
     _print_triplet(root, data, manifest, mb_sel)
     return 0
 
@@ -846,6 +864,10 @@ def cmd_smoke(args: argparse.Namespace) -> int:
             if snap.exists():
                 print(f"[warn] smoke 快照子目录删除失败(可能被占用), 手工删: {snap}", flush=True)
                 return
+            try:
+                snap.parent.rmdir()  # 本 smoke 创建的父空壳随手带走; 父内有他路线快照时 rmdir 必败, 忽略
+            except OSError:
+                pass
         print(f"[smoke] 清理完成({tag}): route JSON / findings / 小结 / smoke 快照子目录已删", flush=True)
 
     # 预清理: 上次冒烟中途失败的残留(try/finally 的兜底只保本次, 修不掉上次)。真认领绝不触碰。
