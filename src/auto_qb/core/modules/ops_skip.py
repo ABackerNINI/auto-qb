@@ -5,7 +5,7 @@
 import os
 import time
 from datetime import date
-from typing import Optional
+from typing import Any, Optional, Tuple
 
 from ...infra import utils
 from ...rules.base import ActionResult
@@ -75,8 +75,8 @@ class SkipMixin:
         auto_start: bool = False,
         has_reference: bool = True,
         force: bool = False,
-        on_done=None,
-        origin=None,
+        on_done: Any = None,
+        origin: Any = None,
     ) -> ActionResult:
         """异步入口(批量 WEB): 只做前置与建 job, 相位推进交给主循环微步调度器
 
@@ -102,9 +102,9 @@ class SkipMixin:
         auto_start: bool,
         has_reference: bool,
         force: bool,
-        on_done=None,
-        origin=None,
-    ):
+        on_done: Any = None,
+        origin: Any = None,
+    ) -> Tuple[Optional[SkipJob], Optional[ActionResult]]:
         """跳检共同前置(同步/异步两个入口共用): 存在性 → 幂等 → 自有写 → 搬迁 → R2 → 闸门
 
         返回 `(job, None)` 表示已建 job; `(None, ActionResult)` 表示被拒/放弃(零副作用)。
@@ -151,8 +151,8 @@ class SkipMixin:
         source: str,
         auto_start: bool,
         has_reference: bool,
-        on_done=None,
-        origin=None
+        on_done: Any = None,
+        origin: Any = None
     ) -> SkipJob:
         """建 job 并入账(同 hash 在途即幂等覆盖: 调用方已先经 skip_job_active 拦过)
 
@@ -254,7 +254,7 @@ class SkipMixin:
             except Exception as e:  # 回调异常不得影响已落定的终态
                 logger.error(f"ops[{job.source}] {job.hash[:8]} | 跳检终态回调异常: {e}")
 
-    def skip_result(self, hash: str):
+    def skip_result(self, hash: str) -> Any:
         """该 hash 最近一次跳检的终态结果(异步入口用; 无记录 -> None)"""
         return self._skip_results.get(hash)
 
@@ -458,7 +458,7 @@ class SkipMixin:
         self._clear_backup(job.hash)
         job.phase = SKIP_PHASE_DONE
 
-    def _infer_content_layout(self, tor, client) -> Optional[str]:
+    def _infer_content_layout(self, tor: TorrentRecord, client: Any) -> Optional[str]:
         """推断原内容布局(qB 种子信息无直接字段): 重加后数据路径必须与现存文件一致,
         跳检状态下布局错位不会自愈(直接 missingFiles/空传)。无法推断返回 None(用 qB 默认)。
 

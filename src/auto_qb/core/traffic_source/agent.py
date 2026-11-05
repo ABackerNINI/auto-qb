@@ -29,7 +29,7 @@ import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import Any, Callable, Optional
 
 from ...infra.utils import is_windows
 
@@ -141,7 +141,7 @@ def read_pointer() -> Optional[dict]:
         return None
 
 
-def parse_pointer(payload) -> Optional[ToolEndpoint]:
+def parse_pointer(payload: Any) -> Optional[ToolEndpoint]:
     """指针载荷 -> 端点; schema 未知或关键字段缺失 -> None(只告警, 不猜字段, D6)"""
     if not isinstance(payload, dict):
         return None
@@ -229,7 +229,7 @@ def fetch_last_spike(timeout: float = SPIKE_TIMEOUT_S) -> tuple[bool, Optional[d
     return True, (spike if isinstance(spike, dict) else None)
 
 
-def resolve_launch_target(conf) -> Optional[LaunchTarget]:
+def resolve_launch_target(conf: Any) -> Optional[LaunchTarget]:
     """D10 拉起解析顺序 -> 目标或 None(未安装)
 
     ① `tool_exe` 非空且存在 -> 直接执行该可执行文件(显式覆盖 / 编译态逃生门);
@@ -300,7 +300,7 @@ class ClaimResult:
     output: str
 
 
-def resolve_claim_target(conf) -> Optional[ClaimTarget]:
+def resolve_claim_target(conf: Any) -> Optional[ClaimTarget]:
     """D4 claim 入口解析: 安装内第二启动器 claim.cmd / claim.sh(人工易主唯一通道)
 
     与 resolve_launch_target 同族(D10 解析顺序): tool_exe 显式优先(编译态, claim
@@ -325,7 +325,7 @@ def resolve_claim_target(conf) -> Optional[ClaimTarget]:
     return None
 
 
-def _run_foreground(args: list, *, cwd: Optional[str], timeout: float):
+def _run_foreground(args: list, *, cwd: Optional[str], timeout: float) -> subprocess.CompletedProcess:
     """有界前台执行单点(可注入, 测试替换本函数): 合并捕获 stdout/stderr, 超时即杀
 
     与 launch_tool 的分工: 拉起是 detached(不看退出码), claim 是**有界前台**(要拿
@@ -396,7 +396,7 @@ class TrafficSourceAgent:
     状态归属: `ensure_running()` 只在**订阅线程**里被调用(单写者); `status()` 只读、可由 UI
     线程随时调用 —— 读到的可能是上一轮的事实(探活是权威判据, 过期一瞬无妨)。
     """
-    def __init__(self, clock=time.monotonic) -> None:
+    def __init__(self, clock: Callable[[], float] = time.monotonic) -> None:
         self._clock = clock
         self._pending_until = 0.0  # 已拉起等探活的截止时刻(0 = 不在等)
         self._pending_window = 0.0  # 本次等待窗口(秒), 失败文案用
@@ -407,7 +407,7 @@ class TrafficSourceAgent:
 
     # ---------------- 订阅线程侧 ----------------
 
-    def ensure_running(self, conf, *, enabled: bool = True) -> Optional[ToolEndpoint]:
+    def ensure_running(self, conf: Any, *, enabled: bool = True) -> Optional[ToolEndpoint]:
         """保障可达: 可达 -> 端点; 不可达 -> 按 D10/D14 拉起并返回 None(下轮再探)
 
         探活成功即返回(含「别的实例已拉起」—— D14: 不重复拉、不通信, 直接订阅)。
@@ -469,7 +469,7 @@ class TrafficSourceAgent:
         self._retry_after = 0.0
         self._fail_reason = ""
 
-    def status(self, conf) -> dict:
+    def status(self, conf: Any) -> dict:
         """状态区五态(plan §05): ready / launching / launch_failed / not_running / not_installed"""
         ep = probe(PROBE_TIMEOUT_S)
         now = self._clock()

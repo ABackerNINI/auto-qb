@@ -20,7 +20,13 @@ store 为必传参数(QbManager 恒持有数据层): "无 store 则透明透传"
 import logging
 from typing import Any, List, Optional, Union
 
-from qbittorrentapi import Client
+from qbittorrentapi import (
+    Client,
+    SyncMainDataDictionary,
+    TorrentFilesList,
+    TorrentInfoList,
+    TorrentPieceInfoList,
+)
 
 from ..infra.utils import mask_tracker_entry
 from ..torrents import TorrentStore
@@ -33,7 +39,7 @@ HashType = Union[str, List[str]]
 
 class QbApi:
     """qB API Facade: 封装客户端调用 + store 快照同步"""
-    def __init__(self, client: Optional[Client], store: TorrentStore):
+    def __init__(self, client: Optional[Client], store: TorrentStore) -> None:
         self._client: Optional[Client] = client
         self.store: TorrentStore = store
 
@@ -61,7 +67,7 @@ class QbApi:
         tags: Optional[Union[str, List[str]]] = None,
         torrent_hashes: Optional[HashType] = None,
         **kwargs: Any,
-    ):
+    ) -> None:
         self._client.torrents_add_tags(tags=tags, torrent_hashes=torrent_hashes, **kwargs)
         self.store.update_torrent_fields(torrent_hashes, tags_add=self._to_list(tags))
         self.store.invalidate_tags()  # 新增标签定义可能未存在(全局标签列表缓存失效)
@@ -71,16 +77,16 @@ class QbApi:
         tags: Optional[Union[str, List[str]]] = None,
         torrent_hashes: Optional[HashType] = None,
         **kwargs: Any,
-    ):
+    ) -> None:
         self._client.torrents_remove_tags(tags=tags, torrent_hashes=torrent_hashes, **kwargs)
         self.store.update_torrent_fields(torrent_hashes, tags_remove=self._to_list(tags))
 
-    def torrents_delete_tags(self, tags: Optional[Union[str, List[str]]] = None, **kwargs: Any):
+    def torrents_delete_tags(self, tags: Optional[Union[str, List[str]]] = None, **kwargs: Any) -> None:
         self._client.torrents_delete_tags(tags=tags, **kwargs)
         self.store.apply_tag_removal(self._to_list(tags))
         self.store.invalidate_tags()
 
-    def torrents_create_category(self, name: Optional[str] = None, **kwargs: Any):
+    def torrents_create_category(self, name: Optional[str] = None, **kwargs: Any) -> None:
         self._client.torrents_create_category(name=name, **kwargs)
         self.store.invalidate_categories()
 
@@ -89,19 +95,19 @@ class QbApi:
         category: Optional[str] = None,
         torrent_hashes: Optional[HashType] = None,
         **kwargs: Any,
-    ):
+    ) -> None:
         self._client.torrents_set_category(category=category, torrent_hashes=torrent_hashes, **kwargs)
         self.store.update_torrent_fields(torrent_hashes, category=category)
 
-    def torrents_start(self, torrent_hashes: Optional[HashType] = None, **kwargs: Any):
+    def torrents_start(self, torrent_hashes: Optional[HashType] = None, **kwargs: Any) -> None:
         self._client.torrents_start(torrent_hashes=torrent_hashes, **kwargs)
         self.store.note_own_write(torrent_hashes)
 
-    def torrents_stop(self, torrent_hashes: Optional[HashType] = None, **kwargs: Any):
+    def torrents_stop(self, torrent_hashes: Optional[HashType] = None, **kwargs: Any) -> None:
         self._client.torrents_stop(torrent_hashes=torrent_hashes, **kwargs)
         self.store.note_own_write(torrent_hashes)
 
-    def torrents_pause(self, torrent_hashes: Optional[HashType] = None, **kwargs: Any):
+    def torrents_pause(self, torrent_hashes: Optional[HashType] = None, **kwargs: Any) -> None:
         """暂停(与 torrents_stop 同为暂停轴写操作, 纯透传)
 
         !不回写快照(A 系 26-10-13-0540 S1: 删除原 _sync_paused_state 合成回写)。state 是
@@ -118,7 +124,7 @@ class QbApi:
         self._client.torrents_pause(torrent_hashes=torrent_hashes, **kwargs)
         self.store.note_own_write(torrent_hashes)
 
-    def torrents_resume(self, torrent_hashes: Optional[HashType] = None, **kwargs: Any):
+    def torrents_resume(self, torrent_hashes: Optional[HashType] = None, **kwargs: Any) -> None:
         """恢复(与 torrents_pause 对称, 纯透传; 见 torrents_pause 注)"""
         self._client.torrents_resume(torrent_hashes=torrent_hashes, **kwargs)
         self.store.note_own_write(torrent_hashes)
@@ -128,7 +134,7 @@ class QbApi:
         torrent_hashes: Optional[HashType] = None,
         limit: Optional[int] = None,
         **kwargs: Any,
-    ):
+    ) -> None:
         self._client.torrents_set_upload_limit(torrent_hashes=torrent_hashes, limit=limit, **kwargs)
         self.store.update_torrent_fields(torrent_hashes, up_limit=limit)
 
@@ -137,7 +143,7 @@ class QbApi:
         torrent_hashes: Optional[HashType] = None,
         limit: Optional[int] = None,
         **kwargs: Any,
-    ):
+    ) -> None:
         self._client.torrents_set_download_limit(torrent_hashes=torrent_hashes, limit=limit, **kwargs)
         self.store.update_torrent_fields(torrent_hashes, dl_limit=limit)
 
@@ -146,7 +152,7 @@ class QbApi:
         torrent_hashes: Optional[HashType] = None,
         location: Optional[str] = None,
         **kwargs: Any,
-    ):
+    ) -> None:
         """移动保存路径(**不写快照**, 等 qB 上报)
 
         save_path 虽是「我们下发的值」, 但它同时是**分组键的输入**(`group_key_of` 的第一个分量),
@@ -161,7 +167,7 @@ class QbApi:
         delete_files: bool = False,
         keep_record: bool = False,
         **kwargs: Any,
-    ):
+    ) -> None:
         """删除种子(普通删除: 调 qB + 立即摘快照记录)
 
         keep_record=True 是**跳检专用**: 跳检随后会以 skip_checking 重加同一 hash, delete+add
@@ -177,21 +183,25 @@ class QbApi:
 
     # ---------- 写操作: 无快照变化(下轮 refresh 校准) ----------
 
-    def torrents_add(self, *args: Any, **kwargs: Any):
+    def torrents_add(self, *args: Any, **kwargs: Any) -> Union[str, dict]:
+        # 上游 qbittorrent-api 返回 str | TorrentsAddedMetadata(后者为 dict 子类, 未顶层
+        # 导出), 这里以诚实宽类型 Union[str, dict] 表达, 不引窄类型耦合。
         return self._client.torrents_add(*args, **kwargs)
 
-    def torrents_recheck(self, torrent_hashes: Optional[HashType] = None, **kwargs: Any):
+    def torrents_recheck(self, torrent_hashes: Optional[HashType] = None, **kwargs: Any) -> None:
         return self._client.torrents_recheck(torrent_hashes=torrent_hashes, **kwargs)
 
-    def torrents_reannounce(self, torrent_hashes: Optional[HashType] = None, **kwargs: Any):
+    def torrents_reannounce(self, torrent_hashes: Optional[HashType] = None, **kwargs: Any) -> None:
         return self._client.torrents_reannounce(torrent_hashes=torrent_hashes, **kwargs)
 
     def torrents_set_super_seeding(
         self, enable: bool = False, torrent_hashes: Optional[HashType] = None, **kwargs: Any
-    ):
+    ) -> None:
         return self._client.torrents_set_super_seeding(enable=enable, torrent_hashes=torrent_hashes, **kwargs)
 
-    def torrents_set_force_start(self, enable: bool = False, torrent_hashes: Optional[HashType] = None, **kwargs: Any):
+    def torrents_set_force_start(
+        self, enable: bool = False, torrent_hashes: Optional[HashType] = None, **kwargs: Any
+    ) -> None:
         return self._client.torrents_set_force_start(enable=enable, torrent_hashes=torrent_hashes, **kwargs)
 
     def torrents_set_share_limits(
@@ -203,7 +213,7 @@ class QbApi:
         share_limit_action: str = "Default",
         torrent_hashes: Optional[HashType] = None,
         **kwargs: Any,
-    ):
+    ) -> None:
         """设置分享限制(qB torrents/setShareLimits 端点, 库内同名方法透传)
 
         哨兵语义(与 qbittorrent-api 文档一致, 种子快照 ratio_limit 等字段同义):
@@ -232,27 +242,27 @@ class QbApi:
 
     def torrents_rename(
         self, torrent_hash: Optional[str] = None, new_torrent_name: Optional[str] = None, **kwargs: Any
-    ):
+    ) -> None:
         """重命名种子(仅改 qB 显示名, 不动磁盘文件名); 快照 name 由下轮 sync 自然更新"""
         return self._client.torrents_rename(torrent_hash=torrent_hash, new_torrent_name=new_torrent_name, **kwargs)
 
     def torrents_set_auto_management(
         self, enable: bool = False, torrent_hashes: Optional[HashType] = None, **kwargs: Any
-    ):
+    ) -> None:
         return self._client.torrents_set_auto_management(enable=enable, torrent_hashes=torrent_hashes, **kwargs)
 
     # ---------- 队列调整(单种/批量同形; torrent_hashes 列表即批量) ----------
 
-    def torrents_top_priority(self, torrent_hashes: Optional[HashType] = None, **kwargs: Any):
+    def torrents_top_priority(self, torrent_hashes: Optional[HashType] = None, **kwargs: Any) -> None:
         return self._client.torrents_top_priority(torrent_hashes=torrent_hashes, **kwargs)
 
-    def torrents_increase_priority(self, torrent_hashes: Optional[HashType] = None, **kwargs: Any):
+    def torrents_increase_priority(self, torrent_hashes: Optional[HashType] = None, **kwargs: Any) -> None:
         return self._client.torrents_increase_priority(torrent_hashes=torrent_hashes, **kwargs)
 
-    def torrents_decrease_priority(self, torrent_hashes: Optional[HashType] = None, **kwargs: Any):
+    def torrents_decrease_priority(self, torrent_hashes: Optional[HashType] = None, **kwargs: Any) -> None:
         return self._client.torrents_decrease_priority(torrent_hashes=torrent_hashes, **kwargs)
 
-    def torrents_bottom_priority(self, torrent_hashes: Optional[HashType] = None, **kwargs: Any):
+    def torrents_bottom_priority(self, torrent_hashes: Optional[HashType] = None, **kwargs: Any) -> None:
         return self._client.torrents_bottom_priority(torrent_hashes=torrent_hashes, **kwargs)
 
     # ---------- tracker/文件内容写操作 ----------
@@ -263,17 +273,31 @@ class QbApi:
         if rec is not None:
             rec.invalidate_trackers()
 
-    def torrents_add_trackers(self, torrent_hash: Optional[str] = None, urls=None, **kwargs: Any):
+    def torrents_add_trackers(
+        self,
+        torrent_hash: Optional[str] = None,
+        urls: Optional[Union[str, List[str]]] = None,
+        **kwargs: Any,
+    ) -> None:
         self._client.torrents_add_trackers(torrent_hash=torrent_hash, urls=urls, **kwargs)
         self._invalidate_torrent_trackers(torrent_hash)
 
-    def torrents_remove_trackers(self, torrent_hash: Optional[str] = None, urls=None, **kwargs: Any):
+    def torrents_remove_trackers(
+        self,
+        torrent_hash: Optional[str] = None,
+        urls: Optional[Union[str, List[str]]] = None,
+        **kwargs: Any,
+    ) -> None:
         self._client.torrents_remove_trackers(torrent_hash=torrent_hash, urls=urls, **kwargs)
         self._invalidate_torrent_trackers(torrent_hash)
 
     def torrents_file_priority(
-        self, torrent_hash: Optional[str] = None, file_ids=None, priority: Optional[int] = None, **kwargs: Any
-    ):
+        self,
+        torrent_hash: Optional[str] = None,
+        file_ids: Optional[Union[int, List[int]]] = None,
+        priority: Optional[int] = None,
+        **kwargs: Any,
+    ) -> None:
         return self._client.torrents_file_priority(
             torrent_hash=torrent_hash, file_ids=file_ids, priority=priority, **kwargs
         )
@@ -284,7 +308,7 @@ class QbApi:
         old_path: Optional[str] = None,
         new_path: Optional[str] = None,
         **kwargs: Any
-    ):
+    ) -> None:
         """重命名单文件(old_path/new_path 为 Web API v2.7+ 参数形态; qB 4.3.3+ 均支持)"""
         return self._client.torrents_rename_file(
             torrent_hash=torrent_hash, old_path=old_path, new_path=new_path, **kwargs
@@ -296,49 +320,51 @@ class QbApi:
         old_path: Optional[str] = None,
         new_path: Optional[str] = None,
         **kwargs: Any
-    ):
+    ) -> None:
         return self._client.torrents_rename_folder(
             torrent_hash=torrent_hash, old_path=old_path, new_path=new_path, **kwargs
         )
 
-    def torrents_edit_category(self, name: Optional[str] = None, save_path: Optional[str] = None, **kwargs: Any):
+    def torrents_edit_category(
+        self, name: Optional[str] = None, save_path: Optional[str] = None, **kwargs: Any
+    ) -> None:
         self._client.torrents_edit_category(name=name, save_path=save_path, **kwargs)
         self.store.invalidate_categories()
 
-    def torrents_remove_categories(self, categories=None, **kwargs: Any):
+    def torrents_remove_categories(self, categories: Optional[Union[str, List[str]]] = None, **kwargs: Any) -> None:
         self._client.torrents_remove_categories(categories=categories, **kwargs)
         self.store.invalidate_categories()
 
-    def torrents_create_tags(self, tags=None, **kwargs: Any):
+    def torrents_create_tags(self, tags: Optional[Union[str, List[str]]] = None, **kwargs: Any) -> None:
         self._client.torrents_create_tags(tags=tags, **kwargs)
         self.store.invalidate_tags()
 
     # ---------- 读操作: 优先 store 惰性缓存 ----------
 
-    def torrents_info(self, *args: Any, **kwargs: Any):
+    def torrents_info(self, *args: Any, **kwargs: Any) -> TorrentInfoList:
         return self._client.torrents_info(*args, **kwargs)
 
-    def sync_maindata(self, rid: int = 0, **kwargs: Any):
+    def sync_maindata(self, rid: int = 0, **kwargs: Any) -> SyncMainDataDictionary:
         """增量同步端点 /api/v2/sync/maindata: rid=0 取全量快照, 否则只回自该 rid 起的变化
 
         透传(无快照副作用): 快照更新由 TorrentSync 合并 + store.refresh 完成。
         """
         return self._client.sync_maindata(rid=rid, **kwargs)
 
-    def torrents_piece_hashes(self, torrent_hash: str, **kwargs: Any):
+    def torrents_piece_hashes(self, torrent_hash: str, **kwargs: Any) -> TorrentPieceInfoList:
         return self._client.torrents_piece_hashes(torrent_hash, **kwargs)
 
-    def torrents_export(self, torrent_hash: str, **kwargs: Any):
+    def torrents_export(self, torrent_hash: str, **kwargs: Any) -> bytes:
         return self._client.torrents_export(torrent_hash, **kwargs)
 
-    def torrents_trackers(self, torrent_hash, **kwargs):
+    def torrents_trackers(self, torrent_hash: Optional[str] = None, **kwargs: Any) -> List[dict]:
         torrent = self.store.get(torrent_hash)
         if torrent is not None:
             return torrent.trackers_info(self._client)
         # store 未命中直连同样过 mask(计划 26-10-07-0055 S1): 两条读路径口径一致, 原文不出 Facade
         return [mask_tracker_entry(t) for t in (self._client.torrents_trackers(torrent_hash, **kwargs) or [])]
 
-    def torrents_trackers_fresh(self, torrent_hash, **kwargs):
+    def torrents_trackers_fresh(self, torrent_hash: Optional[str] = None, **kwargs: Any) -> List[dict]:
         """旁路 store 惰性缓存的 tracker 直查(脱敏同口径)
 
         供低频扫描路径(缺失站点扫描/CLI 导出)用: 记录级缓存只被产品自身 tracker 写操作
@@ -347,7 +373,7 @@ class QbApi:
         """
         return [mask_tracker_entry(t) for t in (self._client.torrents_trackers(torrent_hash, **kwargs) or [])]
 
-    def torrents_files(self, torrent_hash, **kwargs):
+    def torrents_files(self, torrent_hash: Optional[str] = None, **kwargs: Any) -> TorrentFilesList:
         torrent = self.store.get(torrent_hash)
         if torrent is not None:
             return torrent.files(self._client)
@@ -361,7 +387,7 @@ class QbApi:
         """全部分类(读 store 缓存, 写操作时已失效重建)"""
         return dict(self.store.all_categories())
 
-    def auth_log_in(self, **kwargs: Any):
+    def auth_log_in(self, **kwargs: Any) -> None:
         return self._client.auth_log_in(**kwargs)
 
     # ---------- 全局速度限制(qB 5.0 transfer 端点; 单位 bytes/s, 0 = 不限速) ----------
@@ -379,7 +405,7 @@ class QbApi:
             "download_limit": curves.bytes_to_kib_floor(int(self._client.transfer_download_limit())),
         }
 
-    def set_global_speed_limits(self, upload_kib: int | None = None, download_kib: int | None = None):
+    def set_global_speed_limits(self, upload_kib: int | None = None, download_kib: int | None = None) -> None:
         """设置 qB 全局上传/下载速度限制(KiB/s); 0 = 不限速
 
         走 qB 5.0 transfer 端点(transfer_set_upload_limit/download_limit), 单位换算
@@ -407,7 +433,7 @@ class QbApi:
             "download_limit": curves.bytes_to_kib_floor(prefs.get("alt_dl_limit")),
         }
 
-    def set_alt_speed_limits(self, upload_kib: int | None = None, download_kib: int | None = None):
+    def set_alt_speed_limits(self, upload_kib: int | None = None, download_kib: int | None = None) -> None:
         """设置 qB 备用全局速度限制(KiB/s); 0 = 不限速
 
         app/setPreferences 是增量语义: 只传需要改的 alt_* 键, 其余偏好不动。
@@ -425,6 +451,6 @@ class QbApi:
         """当前速度模式: 0 = 主速度 / 1 = 备用速度(transfer/speedLimitsMode)"""
         return int(self._client.transfer_speed_limits_mode())
 
-    def toggle_speed_limits_mode(self):
+    def toggle_speed_limits_mode(self) -> None:
         """在主/备速度模式间切换(transfer/toggleSpeedLimitsMode; 切换后状态随主轮询回读)"""
         self._client.transfer_toggle_speed_limits_mode()

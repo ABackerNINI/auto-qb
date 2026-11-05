@@ -23,14 +23,17 @@
 """
 import logging
 from datetime import date
-from typing import Iterable, List, Optional, Sequence, Tuple
+from typing import TYPE_CHECKING, Any, Iterable, List, Optional, Sequence, Tuple
 
 from ...infra.clock import SYSTEM_CLOCK, Clock
 from .. import curves
-from ..module import AppContext, ApplyResult, BaseModule
+from ..module import AppContext, ApplyResult, BaseModule, PhaseEvent, PhaseRegistry
 from ..taskqueue import REQUEUE, Task
 from ..traffic_source import agent
 from ..traffic_source import paths as traffic_paths
+
+if TYPE_CHECKING:
+    from ...config import Config
 from ..traffic_source.reader import read_source_rows
 
 logger = logging.getLogger(__name__)
@@ -115,7 +118,12 @@ def _period_rows(rows: Sequence[curves.HistoryRow], today: date) -> List[dict]:
     return out
 
 
-def _limit_segment(target=None, actual=None, reasons: Iterable[dict] = (), state: str = LIMIT_OK) -> dict:
+def _limit_segment(
+    target: Optional[dict] = None,
+    actual: Optional[dict] = None,
+    reasons: Iterable[dict] = (),
+    state: str = LIMIT_OK
+) -> dict:
     """limit 段形状单点(方向键恒存在, 缺失方向为 None = 该方向不管理)"""
     return {
         "target": dict(target or {
@@ -159,14 +167,14 @@ class TrafficSnapshotModule(BaseModule):
         """
         self._register_global_task(ctx)
 
-    def subscribe(self, phases) -> None:
+    def subscribe(self, phases: PhaseRegistry) -> None:
         phases.on("queue_rebuilt", self._on_queue_rebuilt)
 
-    def _on_queue_rebuilt(self, event) -> None:
+    def _on_queue_rebuilt(self, event: PhaseEvent) -> None:
         """L2 热重载整体重建队列后重新入队(新 interval; 已在队列则幂等跳过)"""
         self._register_global_task(self._ctx)
 
-    def apply(self, old, new) -> ApplyResult:
+    def apply(self, old: "Config", new: "Config") -> ApplyResult:
         """热重载: 来源段一变就同步节奏(已在队列的任务**就地**改 interval, 不重复入队)
 
         为什么就地改而不是重新注册: 队列是按 next_run 排序的堆, 新增/删除任务要维护堆序;
@@ -190,7 +198,7 @@ class TrafficSnapshotModule(BaseModule):
         return queue.named(TASK_NAME) if queue is not None else None
 
     @staticmethod
-    def _interval_of(config) -> float:
+    def _interval_of(config: Any) -> float:
         """来源侧刷新节奏(A3): 缺键(桩配置/老调用方)回退 600s, 与 models 默认同值"""
         ts = getattr(config, "traffic_source", None)
         return float(getattr(ts, "refresh_interval", None) or 600.0)
@@ -252,7 +260,7 @@ class TrafficSnapshotModule(BaseModule):
             return
         self.publish_anomaly(spike)
 
-    def publish_event(self, day: str, up, down) -> bool:
+    def publish_event(self, day: str, up: Optional[int], down: Optional[int]) -> bool:
         """事件载荷补丁(26-10-21): **零读盘**, 只把当日累计写进 periods 的 day 行
 
         gtm 阈值事件六键自带当日权威累计(up_bytes/down_bytes; 工具推送前已强制落盘, dat 与
@@ -368,7 +376,7 @@ class TrafficSnapshotModule(BaseModule):
 
     # ---------- 内部 ----------
 
-    def _publish(self, **segments) -> None:
+    def _publish(self, **segments: Any) -> None:
         """段级写的唯一执行点: 读旧快照 -> 合并自有键 -> 派生 state -> 一次 set_traffic_view
 
         - 引用整体替换(Web 线程只读单引用, 无锁即自洽; 与 runtime.set_traffic_view 同一契约);

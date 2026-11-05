@@ -34,10 +34,12 @@ local_dir 是本机 syscall 路径(调用方经 file_access.map_to_container 既
 读 API + 本机 scandir/stat, 零写副作用。
 """
 import os
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
+from typing import Any, Optional, Tuple
 
 from ...infra import file_access, utils
+from ...infra.file_access import FileAccess
 from .relocate_common import logger
 
 # ---------- 常量单点 ----------
@@ -107,7 +109,7 @@ def _local_listing(local_dir: str) -> dict:
     return out
 
 
-def _sample(items, k: int) -> list:
+def _sample(items: Sequence[Any], k: int) -> list:
     """确定性均匀抽样(条目多时抽 k 个代表; k<=1 取首个; 覆盖首中尾, 比截前 k 个
     更不容易整段踩进同一种局部状态)"""
     n = len(items)
@@ -119,7 +121,7 @@ def _sample(items, k: int) -> list:
     return [items[round(i * step)] for i in range(k)]
 
 
-def _client_of(ctx):
+def _client_of(ctx: Any) -> Any:
     """ctx -> qB 原始客户端(缺失返回 None, 调用方按 unavailable 处理)"""
     api = getattr(ctx, "api", None)
     return getattr(api, "client", None) if api is not None else None
@@ -129,7 +131,7 @@ def _client_of(ctx):
 _SCALAR_SEQUENCES = (str, bytes, bytearray)
 
 
-def _is_entry_sequence(value) -> bool:
+def _is_entry_sequence(value: Any) -> bool:
     """qB 列目录响应的容器判据: 有序序列协议(不是 list/tuple 具体类型)
 
     真机实测(issue 26-11-04-0504): qbittorrentapi 的 `app_get_directory_content` 返回
@@ -146,7 +148,7 @@ def _unavailable(detail: str) -> Evidence:
     return Evidence(UNAVAILABLE, "", detail)
 
 
-def _int_of(v):
+def _int_of(v: Any) -> Optional[int]:
     """qB 数值字段兜底: int(float(x)); 不可数值化(None/畸形串/inf 等)返回 None
 
     qB 条目 last_modification_date 的形态跨版本不稳(数字/数字字符串/浮点/缺失 None),
@@ -163,7 +165,12 @@ def _int_of(v):
 
 
 def _d_evidence(
-    client, qb_dir: str, local_dir: str, visibility_only: bool, sample_k: int, name_filter=None
+    client: Any,
+    qb_dir: str,
+    local_dir: str,
+    visibility_only: bool,
+    sample_k: int,
+    name_filter: Optional[set] = None
 ) -> Evidence:
     """D 级证据: qB app/getDirectoryContent + withMetadata, 与本机 scandir 比对
 
@@ -214,7 +221,7 @@ def _d_evidence(
 # ---------- B′ 级: 种子元数据 size 比对(降级) ----------
 
 
-def _bprime_evidence(local_dir: str, files) -> Evidence:
+def _bprime_evidence(local_dir: str, files: Optional[Iterable[Tuple[str, int]]]) -> Evidence:
     """B′ 级证据: 成员种子元数据 size vs 本机同路径 stat(size 单项, 弱证据)
 
     files: (相对 local_dir 的路径, qB 元数据 size) 序列 —— 调用方从 torrents/files
@@ -242,10 +249,10 @@ def _bprime_evidence(local_dir: str, files) -> Evidence:
 
 
 def path_evidence(
-    ctx,
+    ctx: Any,
     qb_dir: str,
     local_dir: str,
-    files=(),
+    files: Iterable[Tuple[str, int]] = (),
     visibility_only: bool = False,
     sample_k: int = PROOF_SAMPLE_K
 ) -> Evidence:
@@ -272,7 +279,9 @@ def path_evidence(
     return Evidence(UNAVAILABLE, "", d_ev.detail + "(B′ 降级同样不可判定)")
 
 
-def link_follow_evidence(ctx, qb_dir: str, local_dir: str, names=(), sample_k: int = PROOF_SAMPLE_K) -> Evidence:
+def link_follow_evidence(
+    ctx: Any, qb_dir: str, local_dir: str, names: Iterable[str] = (), sample_k: int = PROOF_SAMPLE_K
+) -> Evidence:
     """链接跟随自检(运行时 F 兜底, 计划 26-11-04-0055 §04 P4 / §06 D4)
 
     链接建成后 qB 经 src 原路径读到的就是 dst 的数据 —— 列 src 内容根(qB 视角, 即
@@ -293,7 +302,7 @@ def link_follow_evidence(ctx, qb_dir: str, local_dir: str, names=(), sample_k: i
     return _d_evidence(client, qb_dir, local_dir, False, sample_k, name_filter=flt)
 
 
-def nearest_existing_ancestor(fa, path: str):
+def nearest_existing_ancestor(fa: FileAccess, path: str) -> Optional[str]:
     """最近存在祖先(逻辑路径): 与 relocate_common._volume_free_resolved 同一上溯机制
     (disk_usage 逐层试到第一个可用层), 但返回**路径本身**供 qB 侧列目录用。
 

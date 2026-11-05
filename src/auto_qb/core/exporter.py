@@ -6,10 +6,11 @@
 """
 import logging
 import re
+from typing import Any, List, Tuple
 
 import yaml
 
-from ..config import UNLIMITED_SPEED, _strip_none
+from ..config import UNLIMITED_SPEED, Config, _strip_none
 from ..infra.errors import TrackerScanBatchError
 from ..infra.utils import convert_bool_in_dict, extract_tracker_hostnames
 from ..infra.versioning import CURRENT_VERSIONS
@@ -17,7 +18,7 @@ from ..infra.versioning import CURRENT_VERSIONS
 logger = logging.getLogger(__name__)
 
 
-def collect_configured_domains(config) -> set:
+def collect_configured_domains(config: Config) -> set:
     """收集配置中所有 tracker 的域名"""
     configured = set()
     for tracker_conf in config.trackers.values():
@@ -25,7 +26,7 @@ def collect_configured_domains(config) -> set:
     return configured
 
 
-def collect_torrent_tracker_hostnames_with_failures(api) -> tuple:
+def collect_torrent_tracker_hostnames_with_failures(api: Any) -> Tuple[List[set], int]:
     """逐种子收集 tracker hostname, 返回 (torrent_sets, 失败数) 二元组
 
     单种查询失败 = 该种空集 + 失败数 +1(沿用现状静默容忍单种); 但批量失败(qB 断连/重启等
@@ -49,7 +50,7 @@ def collect_torrent_tracker_hostnames_with_failures(api) -> tuple:
     return torrent_sets, failed_count
 
 
-def collect_torrent_tracker_hostnames(api) -> list:
+def collect_torrent_tracker_hostnames(api: Any) -> List[set]:
     """逐种子收集 tracker hostname, 每颗种子一个集合(单种查询失败 = 空集, 沿用现状静默跳过)
 
     需要感知批量失败的调用方(WebUI /api/sites/missing 与 --export-yaml)走
@@ -68,7 +69,7 @@ def tracker_scan_batch_failed(failed_count: int, torrent_count: int) -> bool:
     return torrent_count > 0 and failed_count * 2 > torrent_count
 
 
-def collect_all_tracker_hostnames(api) -> set:
+def collect_all_tracker_hostnames(api: Any) -> set:
     """从所有种子中收集去重的 tracker hostname(api 为 QbApi Facade或兼容客户端)"""
     all_domains = set()
     for host_set in collect_torrent_tracker_hostnames(api):
@@ -87,7 +88,7 @@ def find_missing_domains(all_domains: set, configured_domains: set) -> set:
 
 def capitalize_special_tag(text: str) -> str:
     """将字符串中的 "hd"/"pt"(不区分大小写)及其后紧跟的一个字母转为大写"""
-    def repl(match):
+    def repl(match: re.Match[str]) -> str:
         prefix = match.group(1).upper()
         suffix = match.group(2)
         return prefix + (suffix.upper() if suffix else "")
@@ -145,7 +146,7 @@ def group_missing_domains(torrent_sets: list, missing: set) -> list:
     """
     parent = {domain: domain for domain in missing}
 
-    def find(x):
+    def find(x: str) -> str:
         while parent[x] != x:
             parent[x] = parent[parent[x]]  # 路径压缩
             x = parent[x]
@@ -179,14 +180,14 @@ def build_merged_entry(domains: list, taken: set) -> tuple:
 
 
 def export_yaml_template(
-    api,
-    config,
+    api: Any,
+    config: Config,
     config_path: str,
     output_path: str,
     dry_run: bool,
     only_missing: bool = False,
     split_trackers: bool = False,
-):
+) -> None:
     """
     生成 YAML 配置模板: 导出种子中未在配置里定义的 tracker 域名。
 

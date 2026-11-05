@@ -1,9 +1,10 @@
 """traffic_sample_mod 拆分件: 采样/块/刷新域 mixin(R5 move-only, 计划 26-11-02-2342 §07)。"""
 import logging
 import math
-from collections.abc import Mapping
-from typing import Optional
+from collections.abc import Iterable, Mapping
+from typing import Any, Callable, Optional
 
+from ...torrents import TorrentStore
 from ..traffic_store import TrafficV4Store, V4Sample, V4NullRun, V4ZeroRun, v4_block_slots
 
 from .traffic_sample_common import (
@@ -23,7 +24,7 @@ logger = logging.getLogger("auto_qb.core.modules.traffic_sample_mod")
 class _SampleBlocksMixin:
     # ---------- C1 生效与热重载联动(§3.5) ----------
 
-    def _apply_interval(self, conf) -> float:
+    def _apply_interval(self, conf: Any) -> float:
         """采样间隔现读与联动(C1, §3.5): 返回本轮生效间隔(失配向上取整到 main_tick 下一倍数
         + 告警一次(D5), 不拒采; 整数倍匹配的小数档(如 1.5s 配 main_tick=1.5s)原样生效不
         取整 —— 块头 interval_s 允许小数秒(2026-10-05 起; 修复 1.5/1.5 被整数秒口径静默
@@ -71,7 +72,7 @@ class _SampleBlocksMixin:
 
     # ---------- 两系列采样 ----------
 
-    def _sample_global(self, server_state, ts: float) -> None:
+    def _sample_global(self, server_state: Any, ts: float) -> None:
         """全局系列(恒采): server_state 直采; 缺失/空值走 n 游程不写 0(§03.5);
         零样本(速率 0,0)推进/开启 z 游程(v3 §3.2: 全局恒开, 无数据门)。"""
         getter = server_state.get if isinstance(server_state, Mapping) else (lambda name: None)
@@ -91,7 +92,7 @@ class _SampleBlocksMixin:
             return
         self.sample_series(GLOBAL_SERIES_KEY, ts, *readings)
 
-    def _sample_torrents(self, store, ts: float) -> None:
+    def _sample_torrents(self, store: TorrentStore, ts: float) -> None:
         """单种系列(活跃过滤): dlspeed>0 or upspeed>0 才产 r; 零速/缺字段进 z/n 游程(§3.2)
 
         零样本: 已开游程直接推进(无需重读 totals); 无游程经数据门(目录判定 + 进程内缓存)才读字段开游程(totals 缺失不开新游程), 无数据(从未传输)整体
@@ -144,7 +145,7 @@ class _SampleBlocksMixin:
         return has
 
     @staticmethod
-    def _read_fields(fields, getter) -> Optional[tuple]:
+    def _read_fields(fields: Iterable[str], getter: Callable[[str], Any]) -> Optional[tuple]:
         """按 fields 顺序经 getter 读六字段; 任一字段缺失/空值 => None(调用方走 null 点),
         绝不用 0 充数(§03.5)。getter 以字段名取值(dict.get / getattr 皆可)"""
         values = tuple(getter(name) for name in fields)
@@ -155,7 +156,8 @@ class _SampleBlocksMixin:
     # ---------- 产出缝(v4: buffer 记录) ----------
 
     def sample_series(
-        self, key: str, ts: float, dl_rate, up_rate, dl_total, up_total, dl_session, up_session
+        self, key: str, ts: float, dl_rate: Optional[int], up_rate: Optional[int], dl_total: Optional[int],
+        up_total: Optional[int], dl_session: Optional[int], up_session: Optional[int]
     ) -> TrafficSamplePoint:
         """单系列单轮非零采样点产出(plan §03.3「每系列每轮产出采样点」的单一出口)
 
@@ -265,7 +267,12 @@ class _SampleBlocksMixin:
         return self._v4store
 
     def _close_block_and_reopen(
-        self, key: str, rec, start_ts: float, end_ts: float, reset_log: Optional[str] = None
+        self,
+        key: str,
+        rec: V4Sample | V4ZeroRun | V4NullRun,
+        start_ts: float,
+        end_ts: float,
+        reset_log: Optional[str] = None
     ) -> None:
         """关块重开骨架单点(issue 26-10-11-0207 R10): 三个触发原因(00:00 硬切 / n-only
         前缀拆块 / 计数器重置)同构 —— _flush_series(close_block=True) 落盘旧块后本记录
@@ -331,7 +338,7 @@ class _SampleBlocksMixin:
         buf.last_dl_total = None
         buf.last_up_total = None
 
-    def _maybe_flush_all(self, conf, now: float) -> None:
+    def _maybe_flush_all(self, conf: Any, now: float) -> None:
         """flush 驱动(§3.3): handler 内计时, now - last_flush >= flush_interval -> 全系列
         批量 flush + 聚合封口 + 种子淘汰(§4.2/§4.5 时点)。进程首轮只记时不提前 flush
         (批量优先; 崩溃窗口 <= flush_interval 不变)。暂停期间 handler 不跑、缓冲滞留,

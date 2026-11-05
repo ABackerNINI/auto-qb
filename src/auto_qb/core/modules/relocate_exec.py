@@ -4,19 +4,21 @@
 """
 import os
 from dataclasses import replace
+from typing import Any, Iterable, List, Optional
 
 from ...infra import alias_fs, file_access, relocate_journal, utils
 from . import relocate_proof as rp
 from . import relocate_units as ru
 from .relocate_probe import probe_fingerprint, run_probe
-from .relocate_units import RelocateJob, evaluate_group
+from ...torrents import TorrentRecord
+from .relocate_units import GroupFacts, RelocateJob, evaluate_group
 from .relocate_common import _LINK_CHUNK, _native, logger
 
 
 class ExecMixin:
     # ---------- 搬: 轮询 / 停滞判据 / 长耗时转 watching ----------
 
-    def _recover(self, job: RelocateJob, rt: dict, mover) -> None:
+    def _recover(self, job: RelocateJob, rt: dict, mover: TorrentRecord) -> None:
         """重启/重载后 MOVING job 的现场判据(每 job 只判一次, 判完交常规轮询)
 
         账先落 state、setLocation 后下发(§3.5.1), 两步之间崩溃 ⇒ 重启后 qB 从未收到搬迁:
@@ -545,7 +547,9 @@ class ExecMixin:
 
     # ---------- P3 执行入口(三入口共用) ----------
 
-    def relocate_execute(self, hashes, location: str = "", confirm: bool = False, origin: str = "unknown") -> list:
+    def relocate_execute(
+        self, hashes: Iterable[str] | None, location: str = "", confirm: bool = False, origin: str = "unknown"
+    ) -> list:
         """整组迁移执行入口(三入口共用): 预检 -> 暂停 -> qB 搬 -> (后续相位由任务线推进)
 
         **只做零成本的前置动作**: 闸门不过 ⇒ 一条 blocked 回执, 零副作用; 通过 ⇒
@@ -628,7 +632,7 @@ class ExecMixin:
         logger.info(f"relocate | 迁移执行({len(req)} 个 hash -> {len(items)} 项): {self._summ(items)}")
         return items
 
-    def _ensure_probe(self, records, facts, verdict: dict):
+    def _ensure_probe(self, records: List[TorrentRecord], facts: GroupFacts, verdict: dict) -> Optional[dict]:
         """执行链一次性同机强探测闸(计划 26-11-04-0055 §04 P3 行后半 + §06 D1-D7)
 
         位置契约(D5): 必须在建账(_start_job)与任何 torrents_set_location 之前调用 ——
@@ -746,7 +750,15 @@ class ExecMixin:
         self._tag_next_try.pop(job_id, None)
         return replace(job, tag_on=True)
 
-    def _start_job(self, records, target: str, facts, verdict: dict, client, origin: str = "unknown") -> dict:
+    def _start_job(
+        self,
+        records: List[TorrentRecord],
+        target: str,
+        facts: GroupFacts,
+        verdict: dict,
+        client: Any,
+        origin: str = "unknown"
+    ) -> dict:
         """建账 + 暂停 + 下发搬迁(一步到位, 后续相位交任务线)"""
         mover = records[0]
         src = mover.save_path
@@ -890,7 +902,7 @@ class ExecMixin:
 
     # ---------- 链接删除与 guardian 拉起 ----------
 
-    def _remove_links(self, paths) -> int:
+    def _remove_links(self, paths: Iterable[str]) -> int:
         """逐条删链接(非递归, 幂等); 返回实际删除条数"""
         n = 0
         for p in list(paths or ()):
@@ -988,5 +1000,5 @@ class ExecMixin:
         return utils.path_normalize(path or "")
 
     @staticmethod
-    def _receipt(hashes, target: str, cls: str, gate: str, text: str) -> dict:
+    def _receipt(hashes: Iterable[str], target: str, cls: str, gate: str, text: str) -> dict:
         return {"hashes": list(hashes), "target": target, "cls": cls, "reasons": [{"gate": gate, "text": text}]}

@@ -100,7 +100,8 @@ def _migrate_state_2_3(data: dict) -> dict:
 # MIGRATIONS[kind][from_version] = fn(data: dict) -> dict | (dict, notes)
 # 纪律见模块 docstring; 首个破坏性结构变更出现时, 在对应表注册 migrate_<kind>_<n>_<n+1>。
 # 返回形态: 裸 dict(无明细)或 (dict, notes)(附带逐键人读变更明细, 见 migrate_with_notes)。
-MIGRATIONS: Dict[str, Dict[int, Callable[[dict], dict]]] = {
+MigrationFn = Callable[[dict], dict | Tuple[dict, List[str]]]
+MIGRATIONS: Dict[str, Dict[int, MigrationFn]] = {
     "state": {
         1: _migrate_state_1_2,
         2: _migrate_state_2_3,

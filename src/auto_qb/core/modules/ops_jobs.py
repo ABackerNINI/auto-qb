@@ -3,6 +3,7 @@
 拆分(R5)只搬位置: 方法体与 ops_mod.py 原文件逐字一致。
 """
 import os
+from typing import Any
 
 from ...infra import file_access, utils
 from ...torrents import TorrentRecord
@@ -61,7 +62,7 @@ class JobsMixin:
     # ---------- 文件完整性检查(checking 前置检查, 决策点 D2 并入 ops) ----------
 
     @staticmethod
-    def check_filelist(api, torrent: TorrentRecord) -> str:
+    def check_filelist(api: Any, torrent: TorrentRecord) -> str:
         """检查种子文件是否存在且大小一致(api 为 QbApi Facade或兼容客户端). 返回错误描述字符串, 全部通过返回 None"""
         logger.debug(f"{torrent.log_repr} | 检查文件完整性")
         try:

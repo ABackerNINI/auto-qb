@@ -4,11 +4,12 @@
 """
 import os
 import stat
-from typing import Optional
+from typing import Any, Iterable, List, Optional, Tuple
 
 from ...infra import alias_fs, file_access, utils
 from ...infra.alias_fs import KIND_SYMLINK
-from ...torrents import TorrentRecord
+from ...infra.file_access import FileAccess
+from ...torrents import TorrentRecord, TorrentStore
 from . import relocate_proof as rp
 from . import relocate_units as ru
 from .grouping_mod import group_key_of
@@ -34,7 +35,7 @@ from .relocate_common import (
 
 
 class PlanMixin:
-    def relocate_precheck(self, hashes, location: str = "") -> list:
+    def relocate_precheck(self, hashes: Iterable[str] | None, location: str = "") -> list:
         """整组迁移预检(只读 dry-run): 多选按组拆开逐组判定, 三分流供确认框摊开
 
         只读承诺(T20 同口径): 不写 state、不 pop、无任何 qB 写 API、种子零变动 ——
@@ -121,7 +122,7 @@ class PlanMixin:
         logger.info(f"relocate | 迁移预检({len(req)} 个 hash -> {len(items)} 项): {self._summ(items)}")
         return items
 
-    def _buckets(self, req):
+    def _buckets(self, req: List[str]) -> Tuple[List[dict], List[List[TorrentRecord]]]:
         """按组拆分(预检与执行共用): -> (gone 回执列表, 逐组 records 列表)
 
         组 key 经**物理位置解析**(§3.4): 已被 qB 搬到 T 的 mover 与仍指向 S 的其余成员
@@ -157,7 +158,7 @@ class PlanMixin:
     # ---------- 事实收集(只读) ----------
 
     @staticmethod
-    def _file_map(rec: TorrentRecord, client) -> dict:
+    def _file_map(rec: TorrentRecord, client: Any) -> dict:
         """种子的 {规范化相对路径: 大小}(files API 只读, 惰性缓存; 异常按空表保守处理)"""
         try:
             files = rec.files(client)
@@ -167,13 +168,13 @@ class PlanMixin:
         return {utils.path_normalize(f.name): f.size for f in files}
 
     @staticmethod
-    def _summ(items) -> str:
+    def _summ(items: List[dict]) -> str:
         counts = {"ok": 0, "confirm": 0, "blocked": 0}
         for it in items:
             counts[it.get("cls", "blocked")] = counts.get(it.get("cls", "blocked"), 0) + 1
         return f"ok {counts['ok']} / confirm {counts['confirm']} / blocked {counts['blocked']}"
 
-    def _group_facts(self, records, target: str, client) -> GroupFacts:
+    def _group_facts(self, records: List[TorrentRecord], target: str, client: Any) -> GroupFacts:
         """收集一个组的只读事实(内容根归属/目标冲突/空间/同卷证明/能力/链接识别)"""
         fa = file_access.get_file_access()
         store = self._ctx.store
@@ -365,7 +366,18 @@ class PlanMixin:
             third_party_dir_note=tp_dir_note,
         )
 
-    def _same_fs_proof(self, save_path, content_root, target, files, conf, fa, qb_free, src_free, target_free):
+    def _same_fs_proof(
+        self,
+        save_path: str,
+        content_root: str,
+        target: str,
+        files: Iterable[Tuple[str, int]],
+        conf: Any,
+        fa: FileAccess,
+        qb_free: Optional[int],
+        src_free: Optional[int],
+        target_free: Optional[int],
+    ) -> Tuple[bool, bool, str]:
         """同机判定(计划 26-11-04-0055 §03.1/§04 P3 前半): -> (proved, negative, note)
 
         判据链(优先级从高到低):
@@ -409,7 +421,7 @@ class PlanMixin:
         return False, False, f"路径级同机证据不可判定({src_ev.detail}){hint}"
 
     @staticmethod
-    def _cr_files(files, content_root, save_path):
+    def _cr_files(files: Iterable[Tuple[str, int]], content_root: str, save_path: str) -> List[Tuple[str, int]]:
         """成员文件表换算到内容根粒度((相对 content_root 的路径, size)), B′ 比对用
 
         files 是 save_path 相对路径(qB files API 口径); 内容根 = save_path 本身(flat)
@@ -426,7 +438,10 @@ class PlanMixin:
             if norm.startswith(prefix + "/")
         ]
 
-    def _classify_entries(self, rest, save_path, content_root, hashes, store, client):
+    def _classify_entries(
+        self, rest: List[Any], save_path: str, content_root: str, hashes: Iterable[str], store: TorrentStore,
+        client: Any
+    ) -> Tuple[List[Any], List[Any]]:
         """内容根多出的条目分类: (杂项, 组外种子文件)
 
         组外 = 同 save_path 的其它种子、且有文件落在该条目下(分集同目录场景, §8.1);

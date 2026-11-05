@@ -18,7 +18,7 @@ TYPE_CHECKING 下的类型标注。
 """
 import logging
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Callable, Optional, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Callable, Iterator, Optional, Protocol, runtime_checkable
 
 from .taskqueue import Task
 
@@ -69,7 +69,7 @@ class AppContext:
     - relocate(P2 起, 计划 26-10-18-1604)是模块句柄: WEB 命令经 ctx.relocate 调只读
       预检(迁移/添加种子/能力面板), 不绕过模块直碰决策层。
     """
-    def __init__(self, config) -> None:
+    def __init__(self, config: "Config") -> None:
         self._config = config
         self.store: Optional["TorrentStore"] = None
         self.api: Optional["QbApi"] = None
@@ -90,12 +90,12 @@ class AppContext:
         self.fuse: Optional["FuseModule"] = None
 
     @property
-    def config(self):
+    def config(self) -> "Config":
         """当前生效配置(热重载时被整体替换; 消费方每轮现读, 不缓存对象引用)"""
         return self._config
 
     @config.setter
-    def config(self, value) -> None:
+    def config(self, value: "Config") -> None:
         self._config = value
 
 
@@ -177,7 +177,12 @@ class BaseModule:
     # ---------- 契约样板单点(issue 26-10-11-0207 R05/R09) ----------
 
     def apply_section(
-        self, old: "Config", new: "Config", section: str, action, status: str = "remounted"
+        self,
+        old: "Config",
+        new: "Config",
+        section: str,
+        action: Callable[["Config"], Any],
+        status: str = "remounted"
     ) -> ApplyResult:
         """apply 的「段相等短路 + 重挂动作 + ApplyResult 构造」骨架单点
 
@@ -384,7 +389,7 @@ class ModuleHost:
 
     # ---------- loop hooks(可选, 按装配序) ----------
 
-    def _iter_hooks(self, hook_name: str):
+    def _iter_hooks(self, hook_name: str) -> Iterator[Callable[..., Any]]:
         """按装配序迭代提供了 hook_name 的模块 —— 「有则调用, 无则跳过」的 getattr
         探测单点(issue 26-10-11-0207 R05/R09), 三个 loop-hook 分发共用同一骨架。"""
         for m in self._modules:

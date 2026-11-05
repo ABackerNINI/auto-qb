@@ -4,9 +4,10 @@
 """
 import logging
 import os
-from typing import Optional
+from typing import Any, Iterable, Optional, Set, Tuple
 
 from ...infra import utils
+from ...infra.file_access import FileAccess
 
 logger = logging.getLogger("auto_qb.core.modules.relocate_mod")
 
@@ -27,7 +28,7 @@ def _native(path: str, rel: str) -> str:
     return os.path.join(path, *parts) if parts else path
 
 
-def _top_children(files) -> set:
+def _top_children(files: Iterable[Tuple[str, int]]) -> Set[str]:
     """组文件在内容根下的直接子级名集合(用于目录 listing 的归属分类)"""
     out = set()
     for name, _size in files:
@@ -39,7 +40,7 @@ def _top_children(files) -> set:
     return out
 
 
-def _volume_free_resolved(fa, target: str) -> Optional[int]:
+def _volume_free_resolved(fa: FileAccess, target: str) -> Optional[int]:
     """目标卷剩余(字节): 叶子目录未创建时上溯最近存在祖先(plan 26-11-02-0134 R1 方案A)
 
     shutil.disk_usage 要求路径已存在 —— 目标目录尚未创建是迁移的正常输入(qB 落地时
@@ -63,7 +64,7 @@ def _volume_free_resolved(fa, target: str) -> Optional[int]:
     return None
 
 
-def _same_volume_resolved(alias_fs_mod, sys_src: str, sys_target: str) -> Optional[bool]:
+def _same_volume_resolved(alias_fs_mod: Any, sys_src: str, sys_target: str) -> Optional[bool]:
     """同卷判定: 目标叶子未创建时上溯最近存在祖先比 st_dev(plan 26-11-02-0134 R1 方案A 同一机制)
 
     alias_fs.same_volume 用 os.stat 取 st_dev, 叶子不存在 => None => 按跨卷保守处理,

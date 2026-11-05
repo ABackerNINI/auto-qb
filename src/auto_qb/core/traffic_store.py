@@ -105,7 +105,7 @@ import time
 from collections import OrderedDict
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import NamedTuple, Optional
+from typing import Any, Callable, NamedTuple, Optional, Tuple
 
 from ..infra import clock
 
@@ -230,7 +230,7 @@ def _warn_bad_lines(source: str, bad_lines: int, data_lines: int, torn_tail: boo
     )
 
 
-def _read_parse(path: str, parser, empty):
+def _read_parse(path: str, parser: Callable[[str], Any], empty: Any) -> Any:
     """「读文件 -> 解析 -> 坏行超阈告警」缺省纪律单点(issue 26-10-11-0207 R07)
 
     缺失/空文件返回 empty(调用方声明空态: agg = 空解析结果, day = None), 其余整读后
@@ -261,7 +261,7 @@ def _ensure_file_prefix(key: str, path: str) -> str:
     return ""
 
 
-def _warn_bad_lines_path(path: str, parsed) -> None:
+def _warn_bad_lines_path(path: str, parsed: Any) -> None:
     """按文件路径取告警标识(系列目录名/文件名, 如 global/2026-10-06.dat)并转 _warn_bad_lines"""
     _warn_bad_lines(
         f"{os.path.basename(os.path.dirname(path))}/{os.path.basename(path)}",
@@ -326,7 +326,14 @@ class TrafficV4Store:
             return False
         return False
 
-    def append_records(self, key: str, date_str: str, header: Optional[tuple], records: tuple, block_base=None) -> None:
+    def append_records(
+        self,
+        key: str,
+        date_str: str,
+        header: Optional[tuple],
+        records: tuple,
+        block_base: Optional[Tuple[Optional[int], Optional[int]]] = None
+    ) -> None:
         """块化追加一批记录(§03.3 批量写; 批 2 本棒起 v4 行型 —— B 行携带块基线, r/z 行
         存相对基线 delta): 单次 open("a") + flush + fsync
 

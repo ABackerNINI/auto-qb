@@ -6,7 +6,7 @@ slot/block/天/agg 行 dataclass 与 format/parse 全在此; `_parse_v4_text` �
 """
 import math
 from dataclasses import dataclass
-from typing import NamedTuple, Optional
+from typing import Callable, List, NamedTuple, Optional
 
 from .traffic_store_common import (
     AGG_FIELDS,
@@ -65,7 +65,7 @@ class V4Slot:
     is_zero: bool  # True = z 游程槽(速率恒 0); n 槽为 False 且 obs = None
 
 
-def v4_block_slots(block) -> tuple:
+def v4_block_slots(block: "V4Block") -> tuple:
     """块内逐槽时间推算(游标 dt 链 + 均摊定位; §02.3 读侧规则, 纯函数)
 
     规则见文件头「纯函数区」头注释「dt 链定约」: t0 = B.start; 每消费一记录游标推进
@@ -151,7 +151,7 @@ def v4_z_totals_ramp(dl_open: int, up_open: int, dl_end: Optional[int], up_end: 
     return tuple((dl_open + (gd * k + half) // (n - 1), up_open + (gu * k + half) // (n - 1)) for k in range(n))
 
 
-def v4_block_agg_totals(block) -> tuple:
+def v4_block_agg_totals(block: "V4Block") -> tuple:
     """块内 z 游程的 agg 摊配逐槽序列(与 v4_block_slots 等长, 槽序一致; 离线侧消费者 =
     _agg_credit_day_file): z 槽 = v4_z_totals_ramp 的 (dl_total, up_total); r 槽 / n 槽 =
     None(agg 侧 r 用自身 obs、n 不贡献)。raw 车道(V4Slot.obs)不受本函数影响 —— 两者对
@@ -361,7 +361,7 @@ def format_agg_row(row: AggRow) -> str:
     )
 
 
-def _parse_v4_text(text: str, on_line) -> tuple:
+def _parse_v4_text(text: str, on_line: Callable[[List[str]], bool]) -> tuple:
     """v4 文本解析公共行循环驱动器(parse_v4_agg_text / parse_v4_day_text 纪律单点;
     issue 26-10-29-1304 R07-T06 收敛 —— 解析纪律骨架唯一实现, 行型判定留在 on_line)
 

@@ -37,10 +37,11 @@ from typing import List, Optional, Tuple
 from ...infra import utils
 from ...infra.clock import SYSTEM_CLOCK, Clock
 from .. import curves
-from ..module import AppContext, BaseModule
+from ..module import AppContext, BaseModule, PhaseEvent, PhaseRegistry
 from ..state import prune_day_keys
 from ..taskqueue import REQUEUE, Task
 from ..traffic_source import paths as traffic_paths
+from .traffic_snapshot_mod import TrafficSnapshotModule
 from ..traffic_source.reader import read_source_rows
 
 logger = logging.getLogger(__name__)
@@ -121,7 +122,7 @@ class SpeedCurveModule(BaseModule):
         # 原 _create_global_tasks 也不判 dry_run); 未配置 = 无操作
         self._register_global_task(ctx)
 
-    def _require_snapshot(self):
+    def _require_snapshot(self) -> TrafficSnapshotModule:
         """取快照模块句柄(段级写的唯一入口); 缺失 = 装配清单错, fail-fast(黄金法则 4)"""
         mod = self._ctx.traffic_snapshot
         if mod is None:
@@ -133,10 +134,10 @@ class SpeedCurveModule(BaseModule):
 
     # ---------- 相位订阅 ----------
 
-    def subscribe(self, phases) -> None:
+    def subscribe(self, phases: PhaseRegistry) -> None:
         phases.on("queue_rebuilt", self._on_queue_rebuilt)
 
-    def _on_queue_rebuilt(self, event) -> None:
+    def _on_queue_rebuilt(self, event: PhaseEvent) -> None:
         """L2 热重载整体重建队列后重新入队(新 interval/新配置; 已注册则幂等跳过)"""
         self._register_global_task(self._ctx)
 
@@ -282,7 +283,9 @@ class SpeedCurveModule(BaseModule):
         else:
             logger.debug(f"限速曲线 | {label}限速当前 {cur}KiB/s 为奇数, 疑似用户手动设置(同状态不重复记)")
 
-    def _record_curve_state(self, today: date, upload_kib: Optional[int], download_kib: Optional[int], dry_run: bool):
+    def _record_curve_state(
+        self, today: date, upload_kib: Optional[int], download_kib: Optional[int], dry_run: bool
+    ) -> None:
         """记录当日曲线计算结果到 state(供调试; 落盘走周期 save_state + 优雅退出)
 
         日键保 _CURVE_STATE_KEEP_DAYS 天(issue A-03: 每天新增一日键且从不清 -> state 缓慢

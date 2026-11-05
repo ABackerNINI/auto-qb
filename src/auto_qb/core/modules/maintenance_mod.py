@@ -13,14 +13,14 @@ TagsMixin 全部 + QbManager 本体的 _handle_maintenance + delete_tags 全局�
 !client 经 ctx.api.client **现取**(不缓存): 重连换客户端时 QbApi.bind 同步更新。
 """
 import logging
-from typing import List
+from typing import Callable, List
 
 from .. import episodes
 from ...infra import utils
 from ...hr.resolve import HrIdentity
 from ...hr.service import SEED_EXEMPT_RATIO
 from ...torrents import TorrentRecord
-from ..module import AppContext, BaseModule
+from ..module import AppContext, BaseModule, PhaseEvent, PhaseRegistry
 from ..taskqueue import FINISHED, REQUEUE, Task
 
 logger = logging.getLogger(__name__)
@@ -77,15 +77,15 @@ class MaintenanceModule(BaseModule):
 
     # ---------- 相位订阅 ----------
 
-    def subscribe(self, phases) -> None:
+    def subscribe(self, phases: PhaseRegistry) -> None:
         phases.on("queue_rebuilt", self._on_queue_rebuilt)
         phases.on("torrents_added", self._on_torrent_added)
 
-    def _on_queue_rebuilt(self, event) -> None:
+    def _on_queue_rebuilt(self, event: PhaseEvent) -> None:
         """L2 热重载整体重建队列后重新入队(delete_tags* 是 L2 级配置, 重建即按新值生效)"""
         self._register_global_tasks(self._ctx)
 
-    def _on_torrent_added(self, event) -> None:
+    def _on_torrent_added(self, event: PhaseEvent) -> None:
         """逐新增种子管线的「维护」与「集数」两步(plan §4.2; P5 收口前经内核委托调用):
         维护 tags 部分强制执行(添加路径: on_change 模式的"添加时收敛一次"), 集数标签
         仅种子添加时触发 —— 两者都属本模块, 单订阅内按原顺序连续执行"""
@@ -146,7 +146,7 @@ class MaintenanceModule(BaseModule):
         self,
         torrent: TorrentRecord,
         changed: List[str],
-        apply_changes,
+        apply_changes: Callable[[List[str]], None],
         log_text: str,
         dry_run: bool,
         log_level: int = logging.INFO
@@ -162,7 +162,7 @@ class MaintenanceModule(BaseModule):
         logger.log(log_level, log_text)
         return True
 
-    def add_tags(self, torrent: TorrentRecord, tags: List[str], dry_run: bool, log_level: int = logging.INFO):
+    def add_tags(self, torrent: TorrentRecord, tags: List[str], dry_run: bool, log_level: int = logging.INFO) -> bool:
         """为种子添加标签（若不存在）; log_level 控制日志级别(如分组流程整组宣告后传 DEBUG 避免逐成员重复)"""
         if not tags:
             return False
@@ -178,7 +178,7 @@ class MaintenanceModule(BaseModule):
             log_level,
         )
 
-    def remove_tags(self, torrent: TorrentRecord, patterns: List[str], dry_run: bool):
+    def remove_tags(self, torrent: TorrentRecord, patterns: List[str], dry_run: bool) -> bool:
         """为种子删除标签（若存在）."""
         if not patterns:
             return False
@@ -193,7 +193,7 @@ class MaintenanceModule(BaseModule):
             dry_run,
         )
 
-    def add_episode_tags(self, torrent: TorrentRecord, dry_run: bool):
+    def add_episode_tags(self, torrent: TorrentRecord, dry_run: bool) -> None:
         """种子添加时自动添加集数标签(如 zE1-5)
 
         仅种子添加时触发(added 管线调用, P5 收口前经内核委托), 非周期任务。
@@ -212,7 +212,7 @@ class MaintenanceModule(BaseModule):
             return  # 集数非连续(存在缺集/误提取), 放弃添加
         self.add_tags(torrent, [tag], dry_run)
 
-    def remove_similar_tags(self, torrent: TorrentRecord, tags: List[str], dry_run: bool):
+    def remove_similar_tags(self, torrent: TorrentRecord, tags: List[str], dry_run: bool) -> bool:
         """删除类似(单词相同大小写不同)的tag"""
         if not tags:
             return False
@@ -229,7 +229,7 @@ class MaintenanceModule(BaseModule):
             dry_run,
         )
 
-    def set_category(self, torrent: TorrentRecord, category: str, overwrite: bool, dry_run: bool):
+    def set_category(self, torrent: TorrentRecord, category: str, overwrite: bool, dry_run: bool) -> bool:
         """设置种子的分类"""
         old_category = torrent.category
 
@@ -239,7 +239,7 @@ class MaintenanceModule(BaseModule):
         auto_categories = self._ctx.state.data.setdefault("auto_categories", {})
 
         # 定义一个内部函数可以利用if短路
-        def can_update_previous():
+        def can_update_previous() -> bool:
             previous_auto_category = auto_categories.get(torrent.hash)
             return old_category == previous_auto_category
 
@@ -262,7 +262,7 @@ class MaintenanceModule(BaseModule):
             logger.debug(f"维护 {torrent.log_repr} | 跳过设置分类: 已有分类 '{old_category}' 且不覆盖")
             return True
 
-    def create_category_if_not_exists(self, category: str, dry_run: bool):
+    def create_category_if_not_exists(self, category: str, dry_run: bool) -> None:
         """如果分类不存在则创建分类(全部分类走 store 惰性缓存, 创建后失效) """
         current_categories = self._ctx.store.all_categories()
         if category not in current_categories:  # 分类不存在
@@ -272,7 +272,7 @@ class MaintenanceModule(BaseModule):
 
     # ---------- HR ----------
 
-    def add_hr_tag_or_category(self, torrent: TorrentRecord, dry_run: bool):
+    def add_hr_tag_or_category(self, torrent: TorrentRecord, dry_run: bool) -> bool:
         """添加HR标签或分类(基于站点合并后的 hr 设置)
 
         门禁三段(计划 26-09-30-0559 §4): 放行短路 -> 超额跳过 -> satisfied 分流。
@@ -320,7 +320,9 @@ class MaintenanceModule(BaseModule):
 
     # ---------- 全局标签清理(全局任务自注册, 见 start/queue_rebuilt) ----------
 
-    def _purge_matched_tags(self, patterns: List[str], select, log_text: str, dry_run: bool) -> int:
+    def _purge_matched_tags(
+        self, patterns: List[str], select: Callable[[List[str]], List[str]], log_text: str, dry_run: bool
+    ) -> int:
         """全局标签清理骨架单点(issue 26-10-11-0207 R10): handle_delete_tags /
         handle_delete_tags_if_has_no_torrents 两 handler 同构 —— 匹配全量标签定义
         (惰性缓存, 获取异常记 ERROR 本轮放弃), select(all_tags) 由调用方声明命中判据
@@ -342,7 +344,7 @@ class MaintenanceModule(BaseModule):
         logger.info(f"{log_text}: {matched}")
         return len(matched)
 
-    def handle_delete_tags(self, task, dry_run: bool) -> bool:
+    def handle_delete_tags(self, task: Task, dry_run: bool) -> bool:
         """全局任务: 彻底删除匹配格式的标签(支持正则, regex: 前缀)
 
         匹配所有现有标签定义(含无种子的), 调用 torrents_delete_tags 从所有种子移除并删除定义。
@@ -356,14 +358,14 @@ class MaintenanceModule(BaseModule):
         )
         return REQUEUE
 
-    def handle_delete_tags_if_has_no_torrents(self, task, dry_run: bool) -> bool:
+    def handle_delete_tags_if_has_no_torrents(self, task: Task, dry_run: bool) -> bool:
         """全局任务: 彻底删除无种子的标签(支持正则, regex: 前缀)
 
         仅当标签定义存在且没有任何种子使用(所有种子 tags 的并集之外)时才删除。
         """
         patterns = self._ctx.config.delete_tags_if_has_no_torrents or []
 
-        def select_unused(all_tags):
+        def select_unused(all_tags: List[str]) -> List[str]:
             # 从快照聚合标签使用情况(替代 torrents.info(tag=) 逐个查询), 使用数为 0 则删除
             used = self._ctx.store.tag_usage()
             return [tag for tag in all_tags if utils.match_tag_patterns(tag, patterns) and used.get(tag, 0) == 0]

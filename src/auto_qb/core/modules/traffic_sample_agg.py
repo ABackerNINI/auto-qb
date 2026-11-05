@@ -6,13 +6,16 @@
 """
 import logging
 import time
-from typing import Optional
+from typing import Any, Callable, List, Optional, Tuple
 
 from ..traffic_store import (
     HOUR_SECONDS,
     TrafficV4Store,
     V4HourSample,
+    V4NullRun,
+    V4ParsedDay,
     V4Sample,
+    V4Slot,
     V4ZeroRun,
     v4_block_agg_totals,
     v4_block_gap_continuous,
@@ -159,7 +162,10 @@ class _SampleAggMixin:
             agg = self._agg_states[key] = SeriesAgg()
         return agg
 
-    def _agg_feed(self, key: str, rec, anchor: float, cursor: float, block_head: bool, interval_s: float) -> None:
+    def _agg_feed(
+        self, key: str, rec: V4Sample | V4ZeroRun | V4NullRun, anchor: float, cursor: float, block_head: bool,
+        interval_s: float
+    ) -> None:
         """聚合累计器逐记录入账(§4.1): 前向记账 —— 本记录到达时结算上一非 null 槽的
         前向覆盖 [信用槽位, 本记录首槽), 再入账本记录内部的游程槽区间(z 恒 0/n 不记),
         信用移到本记录末槽。槽位序列与落盘 dt 链同一游标推进结果(严格同源)。
@@ -267,7 +273,13 @@ class _SampleAggMixin:
         return wrote
 
     @staticmethod
-    def _ingest_acc(row, cur_epoch, cur_rows, bucket_epoch_of, cascade) -> tuple:
+    def _ingest_acc(
+        row: V4HourSample,
+        cur_epoch: Optional[int],
+        cur_rows: List[V4HourSample],
+        bucket_epoch_of: Callable[[int], int],
+        cascade: Callable[[int, List[V4HourSample]], None],
+    ) -> tuple:
         """聚合累计器并入骨架单点(issue 26-10-11-0207 R10): hour/day 两级同构 —— 首桶开
         累计器 / 同桶追加(同 epoch 重封替换, 传入行已由 _agg_merge_prev 合流过) / 翻桶先
         级联封口(cascade)再开新累计器。返回 (new_epoch, new_rows); 本行落批
@@ -284,7 +296,12 @@ class _SampleAggMixin:
         return e, [row]
 
     @staticmethod
-    def _agg_merge_prev(row, cur_epoch, cur_rows, bucket_epoch_of):
+    def _agg_merge_prev(
+        row: V4HourSample,
+        cur_epoch: Optional[int],
+        cur_rows: List[V4HourSample],
+        bucket_epoch_of: Callable[[int], int],
+    ) -> V4HourSample:
         """同桶重封的入库行(§04.2): 该 epoch 已在累计器里(小时封口后被迟到的补记重建又再
         封一次)时, 返回与已封行的**合流行**(v4_merge_agg), 否则原样返回本行。落批的必须是
         这个返回值 —— 解析按「同 epoch 取最后一行」, 落残余行等于读侧也只看到残余
@@ -297,7 +314,7 @@ class _SampleAggMixin:
         return row
 
     @staticmethod
-    def _agg_ingest_hour(agg: SeriesAgg, row, rows_out: list) -> None:
+    def _agg_ingest_hour(agg: SeriesAgg, row: V4HourSample, rows_out: List[V4HourSample]) -> None:
         """完结 hour 行落批 + 并入 day 累计器(严格逐级): 入库行(首封或与已封行合流的重封行)
         随本批落盘(§4.2 完结整小时 append hour 行; 同 epoch 重封 = 追加**合流行**, 解析取
         最后一行 —— 落批必须是合流行, 否则读侧末行仍是残余); 同日追加; 同 epoch 重封与
@@ -310,7 +327,7 @@ class _SampleAggMixin:
         if agg.earliest_hour is None or row.epoch < agg.earliest_hour:
             agg.earliest_hour = row.epoch
 
-        def cascade(close_epoch, close_rows) -> None:
+        def cascade(close_epoch: int, close_rows: List[V4HourSample]) -> None:
             # 前一日随本行翻日封口(其末 hour 已过, 前一日必已完结)
             _SampleAggMixin._agg_ingest_day(agg, v4_rollup_agg("day", close_epoch, tuple(close_rows)), rows_out)
 
@@ -319,14 +336,14 @@ class _SampleAggMixin:
         )
 
     @staticmethod
-    def _agg_ingest_day(agg: SeriesAgg, row, rows_out: list) -> None:
+    def _agg_ingest_day(agg: SeriesAgg, row: V4HourSample, rows_out: List[V4HourSample]) -> None:
         """完结 day 行落批 + 并入 month 累计器(严格逐级): 入库行(首封, 或与已封行合流的
         重封行)随本批落盘(§4.2 完结本地日 append day 行; 同 epoch 重封 = 追加合流行); 同月
         追加 / 同 epoch 合流 / 翻月级联封前一月(语义同 _agg_ingest_hour)。"""
         stored = _SampleAggMixin._agg_merge_prev(row, agg.month_epoch, agg.month_days, v4_month_epoch)
         rows_out.append(stored)
 
-        def cascade(close_epoch, close_rows) -> None:
+        def cascade(close_epoch: int, close_rows: List[V4HourSample]) -> None:
             rows_out.append(v4_rollup_agg("month", close_epoch, tuple(close_rows)))
 
         agg.month_epoch, agg.month_days = _SampleAggMixin._ingest_acc(
@@ -365,7 +382,7 @@ class _SampleAggMixin:
         except OSError as e:
             logger.warning(f"流量采样 | {key} agg 裁剪失败(原文件完好, 下轮重试): {e}")
 
-    def _maybe_evict(self, conf, now: float) -> None:
+    def _maybe_evict(self, conf: Any, now: float) -> None:
         """种子按龄淘汰(§4.5, flush 时点): 扫描节流至多每 EVICT_CHECK_INTERVAL_S 一次
         (判据口径与触发频率解耦); 淘汰 = 删超龄系列目录, 返回键同步清理该系列全部内存
         缓存(数据门/累计器/基线/镜像/缓冲/游程 —— 防陈旧门缓存复活已删系列)。"""
@@ -391,7 +408,10 @@ class _SampleAggMixin:
             logger.info(f"流量采样 | 按龄淘汰超龄系列目录 {len(evicted)} 个(天文件 + agg.dat)")
 
     @staticmethod
-    def _catch_up_level(children: list, bucket_epoch_of, cur_bucket: int, watermark: Optional[int], kind: str) -> tuple:
+    def _catch_up_level(
+        children: List[V4HourSample], bucket_epoch_of: Callable[[int], int], cur_bucket: int, watermark: Optional[int],
+        kind: str
+    ) -> tuple:
         """catch-up 逐级补算骨架单点(issue 26-10-11-0207 R10): day/month 两级同构 ——
         子行(存量 + 新补)按桶分组成本级行, 未完结的当前桶重建累计器、水位前已有行不重算
         (前向水位 §4.4)、其余完结桶补算 rollup 行(返回作上一级输入)。累计器字段名两级
@@ -488,7 +508,7 @@ class _SampleAggMixin:
         }
 
     @staticmethod
-    def _slot_agg_obs(slot, agg_totals: Optional[tuple]) -> Optional[tuple]:
+    def _slot_agg_obs(slot: V4Slot, agg_totals: Optional[Tuple[int, int]]) -> Optional[Tuple[int, int]]:
         """单槽的 agg 入账观测(离线恢复用, 形态 D 单点): z 槽 = (0, 0, 摊配 dl, 摊配 up)
         (v4_block_agg_totals 的逐槽值 —— 无末端列/单槽游程时 = 开启快照, 与旧语义逐位一致);
         r 槽 = 原 obs(速率 + 冻结 totals); n 槽 = None(null 期不贡献)。"""
@@ -501,9 +521,9 @@ class _SampleAggMixin:
     @staticmethod
     def _agg_credit_day_file(
         hour_samples: dict,
-        parsed_day,
+        parsed_day: V4ParsedDay,
         prev_tail: Optional[tuple] = None,
-        slot_counter: Optional[list] = None
+        slot_counter: Optional[List[int]] = None
     ) -> Optional[tuple]:
         """单天文件逐槽前向记账(恢复离线侧): 逐块展开槽位(块内相邻槽区间 [slot_k,
         slot_k+1) 记 slot_k 的观测 —— r = 其速率 / z = 摊配值(v4_block_agg_totals) / n =

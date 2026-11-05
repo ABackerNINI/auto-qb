@@ -174,6 +174,7 @@ from typing import Optional
 
 from ...infra.clock import SYSTEM_CLOCK, Clock
 from ..module import AppContext, BaseModule
+from ..traffic_store import V4NullRun, V4Sample, V4ZeroRun
 from ..traffic_limits import SpeedLimitRecorder
 from ..traffic_store import (
     DRIFT_TOL_MS,
@@ -402,7 +403,9 @@ class TrafficSampleModule(_SampleAggMixin, _SampleBlocksMixin, BaseModule):
 
     # ---------- 开放游程(v3 §3.2) ----------
 
-    def _advance_run(self, key: str, ts: float, kind: str, dl_total=None, up_total=None) -> None:
+    def _advance_run(
+        self, key: str, ts: float, kind: str, dl_total: Optional[int] = None, up_total: Optional[int] = None
+    ) -> None:
         """零/null 样本推进/开启开放游程(§3.2): 零样本只动内存(不出记录/不动 baselines/
         latest), 封口判据 = 非 z 事件(换型/跨天, v4 §01「空闲封口」)与天级保险闸 (3)(4)
         (N4 —— 正常空闲段不应触闸); 已开游程只推进 last_seen 与 samples(无需重读 totals);
@@ -438,7 +441,7 @@ class TrafficSampleModule(_SampleAggMixin, _SampleBlocksMixin, BaseModule):
         if run.samples >= ZRUN_CAP_SAMPLES or ts - run.start >= ZRUN_FLUSH_S:
             self._seal_run(key, dl_total, up_total)
 
-    def _append_record(self, key: str, rec, start_ts: float, end_ts: float) -> None:
+    def _append_record(self, key: str, rec: V4Sample | V4ZeroRun | V4NullRun, start_ts: float, end_ts: float) -> None:
         """单条 v4 记录进缓冲(§3.1/§2.3 写侧核心 + v4 计划 §01 关块状态机): 块开启 /
         00:00 跨天切块 / n-only 前缀拆块 / 计数器重置关块重开 / 累积漂移触发 dt_ms /
         Q3 保险闸, 全部在此单点。
@@ -639,7 +642,7 @@ class TrafficSampleModule(_SampleAggMixin, _SampleBlocksMixin, BaseModule):
         self._flush_all_series()
 
     @staticmethod
-    def _delta(key: str, direction: str, cur, last) -> Optional[int]:
+    def _delta(key: str, direction: str, cur: Optional[int], last: Optional[int]) -> Optional[int]:
         """累计差分: delta = max(0, cur - last)(cur >= last 时天然非负);
         cur < last 判计数器重置: 该点增量记 null + INFO 记录(P6 真机验证重置语义靠它观察)。
         !「cur < last 判重置」口径的分层形态(issue 26-10-11-0207 R07/R10 登记, 保持分层

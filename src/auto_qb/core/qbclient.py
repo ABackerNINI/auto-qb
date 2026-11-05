@@ -5,6 +5,7 @@
 """
 from urllib.parse import urlparse
 
+import requests
 from qbittorrentapi import Client
 
 from ..config import QbittorrentConfig
@@ -43,7 +44,7 @@ class LocalQbClient(Client):
     仅本地地址使用本子类, 远程/域名连接保留 requests 默认行为(企业代理/~/.netrc 可能真实需要)。
     """
     @property
-    def _session(self):
+    def _session(self) -> requests.Session:
         session = super()._session
         session.trust_env = False
         return session

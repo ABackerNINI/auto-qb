@@ -52,7 +52,7 @@ import os
 import threading
 from collections import OrderedDict
 from collections.abc import Mapping
-from typing import Optional
+from typing import Any, Optional
 
 from ..infra.clock import SYSTEM_CLOCK, Clock
 from .traffic_store import DAT_SUFFIX, _validate_date, v4_epoch_date_str, v4_root_dir, v4_window_dates
@@ -150,7 +150,7 @@ class SpeedLimitRecorder:
         self._day_events = 0
         self._day_events_date: Optional[str] = None
 
-    def observe(self, server_state, ts: float, persistence_on: bool = True) -> None:
+    def observe(self, server_state: Any, ts: float, persistence_on: bool = True) -> None:
         """采样点观测(主循环线程): 读生效值 -> 跨天硬切/carry -> 变化才追加
 
         persistence_on=False(dry_run)整体跳过 —— 观测写盘属真实副作用(与采样器 dry_run
@@ -308,7 +308,7 @@ def limits_events_for_window(cache: LimitsCache, t0: float, t1: float) -> list:
     return out
 
 
-def _pick_limit(value) -> Optional[int]:
+def _pick_limit(value: Any) -> Optional[int]:
     """限速字段取值(None/缺失/空串 = 未知 -> None; 数值取整, 0 = 不限速合法):
     口径对齐前端 speedLimitBytes 的 pick(单点语义两端同源)"""
     if value is None or value == "":

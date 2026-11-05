@@ -31,14 +31,19 @@ RuleEngineMixin(状态持久化已于 P0 迁 core/state.py)整体迁入, 相位/
     (内核刷新轮把它收敛到 events_removed/events_added 两个相位)。
 """
 import logging
-from typing import List, Optional
+from typing import TYPE_CHECKING, Any, List, Optional, Set
 
 from ...config.compat import normalize_action_entry
 from ...infra.clock import SYSTEM_CLOCK, Clock
 from ...rules import Rule, RuleContext
 from ...rules.base import VERDICT_RETRY
-from ..module import AppContext, ApplyResult, BaseModule
+from ...torrents import TorrentRecord
+from ..module import AppContext, ApplyResult, BaseModule, PhaseEvent, PhaseRegistry
 from ..taskqueue import FINISHED, REQUEUE, Task, TaskQueue
+
+if TYPE_CHECKING:
+    from ...config import Config
+    from ..qbmanager import QbManager
 
 logger = logging.getLogger(__name__)
 
@@ -50,12 +55,12 @@ RETIRED_CONTROL_KEYS = ("stop_following_rules_if", "ignore_next_action_error")
 RETIRED_IGNORE_EQUIV = "on_error: {policy: continue}"
 
 
-def _is_retired_action(act) -> bool:
+def _is_retired_action(act: Any) -> bool:
     """动作项是否退役伪动作(经兼容层单点漏斗归一后判名, 规范形/旧扁平形都识别)"""
     return isinstance(act, dict) and normalize_action_entry(act).get("type") == "ignore_next_action_error"
 
 
-def _iter_retired_action_checks(actions):
+def _iter_retired_action_checks(actions: Any) -> bool:
     """actions 域(含 choose 分支 then 与块级 default)的退役伪动作检测, 返回是否命中
 
     choose 编排块(W3-B)是唯一合法的嵌套容器: 分支 then 与块级 default 里的动作项递归
@@ -79,7 +84,7 @@ def _iter_retired_action_checks(actions):
     return False
 
 
-def _strip_retired_actions(actions):
+def _strip_retired_actions(actions: Any) -> list:
     """actions 列表剔除退役伪动作项(顶层与 choose 分支 then/块级 default 递归同径)
 
     保留项原样透传不重排; choose 块浅拷贝改写(未命中的分支列表引用原样保留), 其余键零触碰。
@@ -108,7 +113,7 @@ def _strip_retired_actions(actions):
     return out
 
 
-def retired_control_keys_in(spec) -> tuple:
+def retired_control_keys_in(spec: Any) -> tuple:
     """规则 spec 里出现的已退役控制键(规则级 stop_following_rules_if + actions 域伪动作项)
 
     升级检测单点: 载入层(rules_mod.load_rules)与后续 webui 未启用徽标共用同一判定。
@@ -154,7 +159,7 @@ class RulesModule(BaseModule):
 
     name = "rules"
 
-    def __init__(self, manager, clock: Optional[Clock] = None) -> None:
+    def __init__(self, manager: "QbManager", clock: Optional[Clock] = None) -> None:
         # Rule/RuleContext 的宿主面(见模块 docstring): 规则动作仍按 QbManager 消费
         self._manager = manager
         # 取时注入(D8): 任务重入队 next_run 用挂钟; 缺省单点经模块属性现取(测试可换假钟)
@@ -173,14 +178,14 @@ class RulesModule(BaseModule):
 
     # ---------- 相位订阅(plan §4.2: events_removed / events_added / torrents_added) ----------
 
-    def subscribe(self, phases) -> None:
+    def subscribe(self, phases: PhaseRegistry) -> None:
         phases.on("full_round", self._on_full_round)
         phases.on("events_removed", self._on_events_removed)
         phases.on("events_added", self._on_events_added)
         phases.on("torrents_added", self._on_torrents_added)
         phases.on("rebuild_runtime", self._on_rebuild_runtime)
 
-    def _on_rebuild_runtime(self, event) -> None:
+    def _on_rebuild_runtime(self, event: PhaseEvent) -> None:
         """段认领兜底(plan P6): 未认领段变更的保守全量重建, 语义与 L2 apply 同一单点
 
         内核只报「有变更段无人认领」这个时机(广播 rebuild_runtime 相位), 重建知识在本模块
@@ -188,7 +193,7 @@ class RulesModule(BaseModule):
         """
         self.rebuild_runtime()
 
-    def _on_full_round(self, event) -> None:
+    def _on_full_round(self, event: PhaseEvent) -> None:
         """全量轮种子级任务补建(issue 26-10-01-2147): L2 重建后恢复存量种子的任务面
 
         rebuild_runtime 换新 TaskQueue 后只有全局任务被各模块自注册重入队, 种子级任务
@@ -211,7 +216,7 @@ class RulesModule(BaseModule):
         if n:
             logger.info(f"全量轮补建种子级任务 {n} 个(L2 重建后任务面恢复, issue 26-10-01-2147)")
 
-    def _on_events_removed(self, event) -> None:
+    def _on_events_removed(self, event: PhaseEvent) -> None:
         """删除种子事件分派(带删除前快照); state/field 变化分派由同一相位承担
         (原内核调用点固定传 state_changed=True/field_changed=True, 见 qbmanager 相位表)"""
         p = event.payload
@@ -224,18 +229,18 @@ class RulesModule(BaseModule):
             field_changed=True,
         )
 
-    def _on_events_added(self, event) -> None:
+    def _on_events_added(self, event: PhaseEvent) -> None:
         """新增种子(已匹配 tracker 配置)的事件规则分派"""
         p = event.payload
         self._dispatch_events(p.get("added") or [], [], p.get("dry_run", False))
 
-    def _on_torrents_added(self, event) -> None:
+    def _on_torrents_added(self, event: PhaseEvent) -> None:
         """逐新增种子管线的「建任务」一步(装配序在 maintenance/tracker/grouping 之后)"""
         self._create_torrent_tasks(event.payload["hash"])
 
     # ---------- 热重载(W3 合并点: L2 重建收进 apply; W4: 判据单点在本模块) ----------
 
-    def apply(self, old, new) -> ApplyResult:
+    def apply(self, old: "Config", new: "Config") -> ApplyResult:
         # 判定是复合谓词(_rebuild_needed, 非单段相等) —— 不套 BaseModule.apply_section
         # 骨架, 保持显式(issue 26-10-11-0207 R05/R09 登记)。
         if not self._rebuild_needed(old, new):
@@ -244,7 +249,7 @@ class RulesModule(BaseModule):
         self.rebuild_runtime()
         return ApplyResult(self.name, "rebuilt")
 
-    def _rebuild_needed(self, old, new) -> bool:
+    def _rebuild_needed(self, old: "Config", new: "Config") -> bool:
         """L2 重建判据(W4 表退役后唯一单点; 整段相等即短路, hot-reload-simplify §3.3 规则 1)
 
         判据 = 创建/绑定时固化的消费段(判据依据见模块 docstring); 其余段要么运行时
@@ -293,7 +298,7 @@ class RulesModule(BaseModule):
 
     # ---------- 规则: 加载(RuleEngineMixin 原样迁入, self.* 改 ctx/manager 现取) ----------
 
-    def load_rules(self):
+    def load_rules(self) -> None:
         """从 config 的 `*_rules` 段加载规则集(条件+动作插件); Rule 的 manager 即宿主
 
         幂等: 重复调用先清空(init 与 run 都会调用)。
@@ -328,7 +333,7 @@ class RulesModule(BaseModule):
 
     # ---------- 规则: 种子级任务 ----------
 
-    def _rules_for_torrent(self, torrent) -> list:
+    def _rules_for_torrent(self, torrent: TorrentRecord) -> List[Rule]:
         """该种子应绑定的规则集: 匹配 tracker 的 rules 引用(@rule_set)
 
         torrent_conf 在 _refresh_torrents 阶段已匹配完成, 这里直接读取。
@@ -359,7 +364,13 @@ class RulesModule(BaseModule):
             handler=lambda t, d, r=rule: self._handle_rule(r, t, d),
         )
 
-    def _make_ctx(self, hash: str, dry_run: bool, task: Optional[Task] = None, snapshot=None) -> RuleContext:
+    def _make_ctx(
+        self,
+        hash: str,
+        dry_run: bool,
+        task: Optional[Task] = None,
+        snapshot: Optional[TorrentRecord] = None
+    ) -> RuleContext:
         """RuleContext 构造单点(issue 26-10-11-0207 R10): 三条执行路径同参 —— manager/
         client/config 三件套由本模块持有, hash/dry_run/task/snapshot 由调用路径给。"""
         return RuleContext(
@@ -412,13 +423,13 @@ class RulesModule(BaseModule):
 
     def _dispatch_events(
         self,
-        added: list,
-        removed: list,
+        added: List[str],
+        removed: List[str],
         dry_run: bool,
-        removed_snapshots=None,
+        removed_snapshots: Optional[dict] = None,
         state_changed: bool = False,
         field_changed: bool = False,
-    ) -> list:
+    ) -> List[str]:
         """事件分派总入口: 同步执行各事件规则(即时, 不排队).
 
         各事件规则按种子的 tracker 引用(rules: @规则集)绑定, 与 interval 规则同语义 ——
@@ -489,7 +500,14 @@ class RulesModule(BaseModule):
         return triggered
 
     def _dispatch_trigger_rules(
-        self, tor, h: str, trigger: str, dry_run: bool, triggered: list, watch_fields=None, snapshot=None
+        self,
+        tor: TorrentRecord,
+        h: str,
+        trigger: str,
+        dry_run: bool,
+        triggered: List[str],
+        watch_fields: Optional[Set[str]] = None,
+        snapshot: Optional[TorrentRecord] = None,
     ) -> None:
         """事件分派内层单点(issue 26-10-11-0207 R10): 该种子指定 trigger 的规则逐个触发
         并登记 triggered; watch_fields 非空时按监听字段交集过滤(field_changed 路径专用);
@@ -501,11 +519,13 @@ class RulesModule(BaseModule):
             self._apply_event_rule(rule, h, dry_run=dry_run, snapshot=snapshot)
             triggered.append(h)
 
-    def _torrent_event_rules(self, tor, trigger: str) -> list:
+    def _torrent_event_rules(self, tor: TorrentRecord, trigger: str) -> List[Rule]:
         """该种子指定 trigger 的事件规则: 经 tracker 引用绑定的规则 ∩ 指定触发器(与 interval 同语义)"""
         return [r for r in self._rules_for_torrent(tor) if r.trigger == trigger]
 
-    def _apply_event_rule(self, rule: Rule, hash: str, dry_run: bool = False, snapshot=None) -> Task:
+    def _apply_event_rule(
+        self, rule: Rule, hash: str, dry_run: bool = False, snapshot: Optional[TorrentRecord] = None
+    ) -> Task:
         """为事件规则建 rule-event 一次性 Task 作 ctx.task, 同步执行 process(即时).
 
         rule-event 任务不进入 _fast 队列: 事件即时分派不排队。process 返回 pending 时该
@@ -531,7 +551,7 @@ class RulesModule(BaseModule):
             self._ctx.task_queue.add_task(task, now=self._clock.now() + task.retry_delay, keep_progress=True)
         return task
 
-    def _handle_event_rule(self, rule: Rule, task: Task, snapshot, dry_run: bool) -> bool:
+    def _handle_event_rule(self, rule: Rule, task: Task, snapshot: Optional[TorrentRecord], dry_run: bool) -> bool:
         """事件规则 rule-event 任务的断点续跑 handler(FINISHED 消亡; retry 档按 backoff requeue).
 
         种子已删除 -> 直接消亡(删除守卫); 否则重建 ctx(断点由轮询子任务

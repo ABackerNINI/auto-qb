@@ -22,12 +22,12 @@ group_key_of 纯函数随迁(scripts/qb_capture.py 语料抓取器 import 同一
 """
 import logging
 import os
-from collections.abc import Mapping
-from typing import Any, Dict
+from collections.abc import Iterable, Mapping
+from typing import Any, Dict, Tuple
 
 from ...infra import alias_fs, file_access, utils
 from ...torrents import TorrentRecord
-from ..module import AppContext, BaseModule
+from ..module import AppContext, BaseModule, PhaseEvent, PhaseRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +38,7 @@ logger = logging.getLogger(__name__)
 TRANSITIONAL_SKIP_LIMIT = 3
 
 
-def group_key_of(save_path: str, file_map: Mapping[str, int]):
+def group_key_of(save_path: str, file_map: Mapping[str, int]) -> Tuple[str, Tuple[str, ...]]:
     """归组 key 的单一事实源: (规范化 save_path, 排序后的文件相对路径元组)
 
     与 _assign_to_group 共用。抽成模块级纯函数是为了让 scripts/ 侧的语料抓取器
@@ -49,7 +49,7 @@ def group_key_of(save_path: str, file_map: Mapping[str, int]):
     return (utils.path_normalize(save_path), tuple(sorted(file_map.keys())))
 
 
-def _content_root_of(save_path: str, files) -> str:
+def _content_root_of(save_path: str, files: Iterable[str]) -> str:
     """内容根路径(目录别名的作用域; 平铺/多顶层段 = save_path 本身)
 
     与 relocate_units.content_root_of 同口径(那边是纯函数层给闸门用, 这里给归组用 ——
@@ -101,13 +101,13 @@ class GroupingModule(BaseModule):
 
     # ---------- 相位订阅(plan §4.2: transitions / torrents_added / removed_scan / post) ----------
 
-    def subscribe(self, phases) -> None:
+    def subscribe(self, phases: PhaseRegistry) -> None:
         phases.on("transitions", self._on_transitions)
         phases.on("torrents_added", self._on_torrents_added)
         phases.on("removed_scan", self._on_removed_scan)
         phases.on("post", self._on_post)
 
-    def _on_transitions(self, event) -> None:
+    def _on_transitions(self, event: PhaseEvent) -> None:
         # 去重集合清零必须在 enabled 判定之前: 与原 _refresh_torrents 每轮开头无条件
         # clear 同口径, 否则 enabled 翻转后残留 key 会吞掉首轮合法扫描
         self._missing_scanned_keys.clear()
@@ -115,17 +115,17 @@ class GroupingModule(BaseModule):
             return  # 启用开关模块自判(plan §3.1)
         self._handle_state_transitions(event.payload.get("dry_run", False))
 
-    def _on_torrents_added(self, event) -> None:
+    def _on_torrents_added(self, event: PhaseEvent) -> None:
         if not self._ctx.config.grouping.enabled:
             return
         self._assign_new_torrent(event.payload["hash"], event.payload.get("dry_run", False))
 
-    def _on_removed_scan(self, event) -> None:
+    def _on_removed_scan(self, event: PhaseEvent) -> None:
         if not self._ctx.config.grouping.enabled:
             return
         self._handle_removed_torrents(event.payload.get("hashes", []), event.payload.get("dry_run", False))
 
-    def _on_post(self, event) -> None:
+    def _on_post(self, event: PhaseEvent) -> None:
         if not self._ctx.config.grouping.enabled:
             return
         dry_run = event.payload.get("dry_run", False)
@@ -137,7 +137,7 @@ class GroupingModule(BaseModule):
 
     # ---------- 删除事件 ----------
 
-    def _handle_removed_torrents(self, removed_hashes: list[str], dry_run: bool):
+    def _handle_removed_torrents(self, removed_hashes: list[str], dry_run: bool) -> None:
         """删除事件处理: 组内种子被删除 -> 移出分组; 组内仍有剩余种子 -> 立即触发缺文件扫描(可能文件丢失) """
         if not self._ctx.config.grouping.check_missing_files:
             return  # 配置禁用缺文件检查
@@ -214,7 +214,9 @@ class GroupingModule(BaseModule):
             return sp
         return sp
 
-    def _mark_third_party_link(self, key, save_path: str, file_map: Dict[str, int]) -> None:
+    def _mark_third_party_link(
+        self, key: Tuple[str, Tuple[str, ...]], save_path: str, file_map: Dict[str, int]
+    ) -> None:
         """第 3 层识别(D11): 代表文件是第三方文件级链接 / 硬链接 ⇒ 打组标记(不并组、迁移拒迁)
 
         硬链接语义是「同一份数据的第二个名字」, 文件级 symlink 的目标通常是媒体库路径
@@ -234,7 +236,7 @@ class GroupingModule(BaseModule):
         else:
             reg.discard(key)
 
-    def regroup_scope(self, scope: str, src: str = "", hashes=()) -> int:
+    def regroup_scope(self, scope: str, src: str = "", hashes: Iterable[str] = ()) -> int:
         """建链后强制重归组(§3.4): 内容根落在 scope 内、或属于本 job 成员的种子重新归组
 
         链接不改变成员的 save_path(qB 侧仍记 S), 但物理数据已在 T —— 经解析器重算组键后,
@@ -266,7 +268,7 @@ class GroupingModule(BaseModule):
             logger.info(f"辅种组 | 别名作用域重归组 {n} 个种子(scope={scope})")
         return n
 
-    def _handle_save_path_changes(self, dry_run: bool):
+    def _handle_save_path_changes(self, dry_run: bool) -> None:
         """保存路径变化处理: 种子 save_path 变化 -> 移出原组按新路径重归组; 原组与新组触发缺文件扫描
 
         触发扫描(事件驱动, 同组只扫一次, 循环后统一处理):
@@ -307,7 +309,7 @@ class GroupingModule(BaseModule):
         # 缺文件检查
         self._scan_triggered_groups(triggered, dry_run)
 
-    def _handle_state_transitions(self, dry_run: bool):
+    def _handle_state_transitions(self, dry_run: bool) -> None:
         """
         状态变化处理: 组内种子发生缺文件关联的状态转移 -> 所属组立即触发缺文件扫描(同组只扫一次)
 
@@ -343,13 +345,13 @@ class GroupingModule(BaseModule):
 
     # ---------- 归组 ----------
 
-    def _assign_new_torrent(self, hash: str, dry_run: bool = False):
+    def _assign_new_torrent(self, hash: str, dry_run: bool = False) -> None:
         """新增种子增量归组: 仅拉取该种子的文件列表并入组(store O(1) 定位, 不做全量遍历) """
         torrent = self._ctx.store.get(hash)
         files = torrent.files(self._ctx.api.client)
         self._assign_to_group(torrent, {utils.path_normalize(f.name): f.size for f in files}, dry_run)
 
-    def _assign_to_group(self, torrent: TorrentRecord, file_map: Dict[str, int], dry_run: bool = False):
+    def _assign_to_group(self, torrent: TorrentRecord, file_map: Dict[str, int], dry_run: bool = False) -> None:
         """将种子按文件列表归入分组(幂等): 先移出旧组再加入新组; 维护成员索引; 归组后检查大小一致性"""
         if not file_map:
             return
@@ -367,7 +369,7 @@ class GroupingModule(BaseModule):
         # 文件大小一致性: 仅新增/重归组时检查(文件列表轻易不变, 无需每轮检查)
         self._check_size_consistency(key, dry_run)
 
-    def _check_size_consistency(self, key: str, dry_run: bool):
+    def _check_size_consistency(self, key: str, dry_run: bool) -> None:
         """新增种子归组时检查组内文件大小一致性: 组内 {路径: 大小} 不一致 -> 警告 + 整组暂停(不加标签) """
         store = self._ctx.store
         members = store.groups[key]
@@ -381,7 +383,7 @@ class GroupingModule(BaseModule):
         if not dry_run:
             self._ctx.api.torrents_stop(torrent_hashes=[t.hash for t in torrents])
 
-    def _leave_group(self, hash: str):
+    def _leave_group(self, hash: str) -> Tuple[str, Tuple[str, ...]] | None:
         """将种子移出所在分组(成员索引 O(1) 定位, 不做全量遍历); 组空则删除整组
 
         返回移除后组内仍有剩余成员的组 key(无则 None); 不触发缺文件扫描,
@@ -437,7 +439,7 @@ class GroupingModule(BaseModule):
 
     def _check_missing_files(
         self, members: list[TorrentRecord], sizes: Dict[str, Dict[str, int]], dry_run: bool, key: str
-    ):
+    ) -> None:
         """
         缺文件磁盘扫描(同组共享一次): 文件丢失 -> 整组暂停 + MISSING 标签
 
@@ -529,7 +531,7 @@ class GroupingModule(BaseModule):
 
     # ---------- 下载冲突检查(post 相位: 每轮收尾) ----------
 
-    def _check_download_conflicts(self, dry_run: bool):
+    def _check_download_conflicts(self, dry_run: bool) -> None:
         """下载冲突检查: 同组两个及以上种子同时下载 / 已完成与下载中并存 -> 警告 + 整组暂停
 
         设计(想法.md):
@@ -600,7 +602,7 @@ class GroupingModule(BaseModule):
 
     # ---------- 跨组文件交叉检测(post 相位: 消除 + 去重门 + 暂停涉事下载方, plan 26-10-04-0107) ----------
 
-    def _check_cross_group_file_conflicts(self, dry_run: bool):
+    def _check_cross_group_file_conflicts(self, dry_run: bool) -> None:
         """跨组文件交叉检测: 组边界不等于磁盘上不交叉, 交叉在场且下载中即警告并暂停涉事下载方
 
         场景(plan 26-10-04-0107 §01): (1)同 save_path 文件列表部分重叠; (2)文件名仅大小写不同

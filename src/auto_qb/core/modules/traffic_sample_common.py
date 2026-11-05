@@ -2,7 +2,9 @@
 from dataclasses import dataclass, field
 from typing import Optional
 
-from ..traffic_store import HOUR_SECONDS, V4Sample
+from typing import Any
+
+from ..traffic_store import HOUR_SECONDS, V4NullRun, V4Sample, V4ZeroRun
 
 #: 全局系列键(对应流量存储 global/ 目录的系列标识)
 GLOBAL_SERIES_KEY = "global"
@@ -35,7 +37,7 @@ V4_BUFFER_SLOT_CAP = 3600
 EVICT_CHECK_INTERVAL_S = 3600
 
 
-def _valid_counter(value) -> bool:
+def _valid_counter(value: Any) -> bool:
     """qB 计数字段合法性: 数值即合法(0 合法); None/缺失/布尔/非数值 = 空值(按 null 处理, 不写 0)"""
     return isinstance(value, (int, float)) and not isinstance(value, bool)
 
@@ -139,7 +141,7 @@ class SeriesAgg:
     earliest_hour: Optional[int] = None
 
 
-def _record_slots(rec, anchor: float, cursor: float, block_head: bool) -> tuple:
+def _record_slots(rec: V4Sample | V4ZeroRun | V4NullRun, anchor: float, cursor: float, block_head: bool) -> tuple:
     """单记录的槽位序列(绝对时刻浮点秒; 与块内槽位推算同一口径, 在线记账与恢复离线
     记账共用): r = [cursor]; z/n 游程非块首 = anchor + spacing*k (k=1..len, 末槽恰在
     cursor = 游程实测终点), 块首 = anchor + spacing*k (k=0..len-1, 首槽恰在

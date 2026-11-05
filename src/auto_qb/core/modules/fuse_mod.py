@@ -22,7 +22,7 @@ from collections import defaultdict
 from typing import Any, Dict, Iterable, List, Optional
 
 from ...infra.clock import SYSTEM_CLOCK, Clock
-from ..module import AppContext, BaseModule, PhaseEvent
+from ..module import AppContext, BaseModule, PhaseEvent, PhaseRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +72,7 @@ class FuseModule(BaseModule):
         """配置面单点: download_fuse 段(S1 曾临时登记在 impact.KERNEL_SECTIONS, S2 迁出)"""
         return ("download_fuse", )
 
-    def subscribe(self, phases) -> None:
+    def subscribe(self, phases: PhaseRegistry) -> None:
         # 刷新收尾相位: 每轮快照已应用, 此时扫描零额外 HTTP(§04 Q6)
         phases.on("post", self._on_post)
 

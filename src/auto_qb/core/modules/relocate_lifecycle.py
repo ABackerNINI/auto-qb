@@ -3,7 +3,7 @@
 拆分(R5)只搬位置: 方法体与 relocate_mod.py 原文件逐字一致。
 """
 from dataclasses import replace
-from typing import Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from ...infra import alias_fs
 from ..module import AppContext, ApplyResult
@@ -11,6 +11,9 @@ from . import relocate_units as ru
 from .relocate_units import RelocateJob
 from .relocate_common import logger
 from .relocate_probe import sweep_probe_residue
+
+if TYPE_CHECKING:
+    from ...config import Config
 
 # 标签镜像失败后的重试间隔(秒): qB 失联/超时/版本不支持时只告警, 不阻塞迁移主流程,
 # 也不每 tick 撞一次 qB。配置关闭时该常量不参与任何路径。
@@ -46,7 +49,7 @@ class LifecycleMixin:
             logger.debug("relocate | stop: state 补写跳过(上下文不可用)")
         return None
 
-    def apply(self, old, new) -> ApplyResult:
+    def apply(self, old: "Config", new: "Config") -> ApplyResult:
         """段相等短路; 段变化 = 换对象即生效(enabled 开时重探链接能力)"""
         if getattr(old, "relocate", None) == getattr(new, "relocate", None):
             return ApplyResult(self.name)
@@ -77,7 +80,7 @@ class LifecycleMixin:
         """WebUI 消费的只读 job 快照(主循环发布; 调用方不得遍历/改写)"""
         return self._snapshot
 
-    def get_job(self, job_id: str):
+    def get_job(self, job_id: str) -> Optional[RelocateJob]:
         return self._jobs.get(job_id)
 
     # ---------- 物理位置解析(§3.4 第 1 层; P4 组判定消费) ----------
@@ -269,7 +272,7 @@ class LifecycleMixin:
             return True
         return bool(getattr(self._ctx, "dry_run", False))
 
-    def _live_conf(self):
+    def _live_conf(self) -> Optional[Any]:
         """预检面现取生效配置(ctx 单一真相; _conf 缓存只供 P3 相位机, 预检不消费旧值)"""
         if self._ctx is not None:
             return getattr(self._ctx.config, "relocate", None)

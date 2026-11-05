@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Set, Tupl
 from ..infra.clock import SYSTEM_CLOCK, Clock
 
 if TYPE_CHECKING:
-    from ..torrents import TorrentStore
+    from ..torrents import TorrentRecord, TorrentStore
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +67,7 @@ class Task:
         payload: Any = None,
         handler: Handler | None = None,
         clock: Optional[Clock] = None,
-    ):
+    ) -> None:
         if clock is None:
             clock = SYSTEM_CLOCK  # 缺省系统时钟单点(经模块属性现取: 测试可换假钟, S3 收敛为显式注入)
         # uid 唯一性后缀: 原 time.monotonic_ns() 的等价注入形态(monotonic 单调秒 x 1e9 取整,
@@ -92,10 +92,10 @@ class Task:
         self.payload = payload  # 可选: 任务附带数据(自定义)
         self.handler = handler  # 主循环执行任务时调用: handler(task, dry_run) -> REQUEUE/FINISHED
 
-    def __lt__(self, other):
+    def __lt__(self, other: "Task") -> bool:
         return self.next_run < other.next_run
 
-    def reset(self):
+    def reset(self) -> None:
         """显式重置执行位置: 下次执行重走完整流程(规则任务=重走完整决策链)
 
         与 process() 的自然消费(正常完成后清零)并列的清除入口;
@@ -116,7 +116,7 @@ class Task:
         return f"{self.kind}:{self.name}{h}"
 
     @property
-    def torrent(self):
+    def torrent(self) -> "TorrentRecord | None":
         """从 store 查找种子(始终最新; 种子已删除返回 None)"""
         return self._store.get(self.hash) if self._store else None
 
@@ -135,7 +135,7 @@ class TaskQueue:
       在完成后按情况重新入队(keep_progress=True 断点续跑 / 默认重置重走)
     - 无锁: 仅主循环线程修改队列结构
     """
-    def __init__(self, clock: Optional[Clock] = None):
+    def __init__(self, clock: Optional[Clock] = None) -> None:
         # 取时注入(D8): 缺省系统时钟单点(经模块属性现取: 测试可换假钟, S3 收敛为显式注入)
         self._clock = SYSTEM_CLOCK if clock is None else clock
         self._fast: List[Task] = []  # heapq: 所有按时间调度的任务
@@ -175,7 +175,7 @@ class TaskQueue:
         heapq.heappush(self._fast, task)
         return True
 
-    def add_tasks(self, tasks: List[Task], now: float | None = None):
+    def add_tasks(self, tasks: List[Task], now: float | None = None) -> None:
         for t in tasks:
             self.add_task(t, now)
 
@@ -229,7 +229,13 @@ class TaskQueue:
 
     # ---------- 到期执行 + 收尾 ----------
 
-    def run_due(self, dry_run: bool = False, now: float | None = None, max_tasks: int = 0, defer_gate=None) -> int:
+    def run_due(
+        self,
+        dry_run: bool = False,
+        now: float | None = None,
+        max_tasks: int = 0,
+        defer_gate: Callable[[Task], Optional[str]] | None = None,
+    ) -> int:
         """执行所有到期任务并收尾(主循环 tick 的队列唯一入口)。返回**实际执行**的任务数。
 
         先快照到期任务再逐个执行: 执行中途新入队的任务(如轮询子任务重新入队的
@@ -259,7 +265,10 @@ class TaskQueue:
             heapq.heappush(self._fast, task)
         return len(due)
 
-    def _pop_due(self, now: float, max_tasks: int, defer_gate=None) -> Tuple[List[Task], List[Task]]:
+    def _pop_due(self,
+                 now: float,
+                 max_tasks: int,
+                 defer_gate: Callable[[Task], Optional[str]] | None = None) -> Tuple[List[Task], List[Task]]:
         """弹出到期任务(按 next_run 时间优先), 返回 (可执行批次, 让位批次)
 
         max_tasks 只约束**可执行**名额 —— 让位者不占预算(issue 26-10-30-0616): 组级
@@ -301,7 +310,7 @@ class TaskQueue:
             logger.error(f"任务[{task.log_tag}] | 执行异常: {e}", exc_info=True)
         return REQUEUE
 
-    def _requeue(self, task: Task, now: float):
+    def _requeue(self, task: Task, now: float) -> None:
         """周期任务收尾: 默认重置断点后按任务内置 interval 重新入队(下一轮从头执行)
 
         retry 策略例外(plan 26-11-01-0106 W2/R3): handler 已在 task.retry_delay 挂上推迟秒数

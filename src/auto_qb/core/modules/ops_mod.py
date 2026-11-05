@@ -34,7 +34,7 @@ plan 别名层处置 W1 起 manager 侧同样传 manager.ctx.state)。state / sa
 """
 import os
 import time
-from typing import Optional
+from typing import Callable, Optional
 
 from ...infra.clock import SYSTEM_CLOCK, Clock
 
@@ -130,8 +130,8 @@ class OpsModule(SkipMixin, VerdictMixin, JobsMixin, BaseModule):
         source: str = "rule",
         torrent: Optional[TorrentRecord] = None,
         auto_start: bool = False,
-        on_success=None,
-        origin=None,
+        on_success: Optional[Callable[[], None]] = None,
+        origin: Optional[Task] = None,
     ) -> ActionResult:
         """full-checking 操作: R1 提交点检查(在途 -> 快照 -> 冷却) -> 登记轮询子任务 ->
         发送 recheck -> 轮询结果
@@ -352,7 +352,7 @@ class OpsModule(SkipMixin, VerdictMixin, JobsMixin, BaseModule):
             return ActionResult.pending("full-checking 校验已提交")
         return ActionResult.ok("校验已提交")
 
-    def _backup_torrent(self, tor, data: bytes) -> str:
+    def _backup_torrent(self, tor: TorrentRecord, data: bytes) -> str:
         """删除前把 .torrent 落盘备份并记录元数据(便于手动恢复), 返回备份路径
 
         用删除前捕获的 tor 记录(删除后 store 记录已移除)。元数据立即落盘(非常规路径,

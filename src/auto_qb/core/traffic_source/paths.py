@@ -28,7 +28,7 @@
 from __future__ import annotations
 
 import os
-from typing import Optional
+from typing import Any, Optional
 
 from . import agent
 
@@ -36,12 +36,12 @@ from . import agent
 DAT_FILE_NAME = "history_traffic.dat"
 
 
-def _traffic_source(config) -> Optional[object]:
+def _traffic_source(config: Any) -> Optional[object]:
     """取 traffic_source 段; 缺段(桩配置/老调用方) -> None(按"未配置"处理, 不抛)"""
     return getattr(config, "traffic_source", None)
 
 
-def source_enabled(config) -> bool:
+def source_enabled(config: Any) -> bool:
     """数据来源总开关(计划 26-10-17-1737 S1/D1): 只有显式 false 算关闭
 
     恒等判据 `is not False`: 桩配置(MagicMock 属性等)不触发关闭 —— 同族问题见
@@ -51,7 +51,7 @@ def source_enabled(config) -> bool:
     return getattr(ts, "enabled", True) is not False
 
 
-def _provider(config) -> str:
+def _provider(config: Any) -> str:
     """当前生效来源; 段缺失/留空 -> traffic_monitor(与 loader/校验同口径)"""
     ts = _traffic_source(config)
     return str(getattr(ts, "provider", "") or "traffic_monitor").strip()
@@ -68,7 +68,7 @@ def tool_dat_path() -> str:
     return os.path.join(data_dir, DAT_FILE_NAME) if data_dir else ""
 
 
-def dat_path(config) -> str:
+def dat_path(config: Any) -> str:
     """当前生效来源的 dat 文件路径(空 = 取不到; 调用方决定报错口径) —— 取数唯一入口
 
     总开关关闭(S1/D1)优先于 provider 分支: 关源即停取数, 指针在不在都不读。
@@ -82,7 +82,7 @@ def dat_path(config) -> str:
     return str(getattr(tm, "dat_path", "") or "").strip()
 
 
-def source_signature(config) -> tuple:
+def source_signature(config: Any) -> tuple:
     """来源身份指纹 `(enabled, provider, traffic_monitor.dat_path)` —— 「切源即刷新」判定单点
 
     用途(计划 26-10-17-1737 S8): 热重载**前后各算一次**, 不等即说明「用户在换来源」, 立刻投递
@@ -97,7 +97,7 @@ def source_signature(config) -> tuple:
     return (source_enabled(config), _provider(config), str(getattr(tm, "dat_path", "") or "").strip())
 
 
-def unavailable_reason(config) -> str:
+def unavailable_reason(config: Any) -> str:
     """取不到路径时的人读原因(按 provider 分支) —— 让运行期报错直接指到该改哪里
 
     与 `dat_path` 同源判定: 文案里的分支必须和取数分支一致, 否则用户按文案改完还是不生效

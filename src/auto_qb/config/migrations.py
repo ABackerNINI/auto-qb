@@ -222,8 +222,7 @@ def _migrate_config_3_4(cfg: dict) -> dict | Tuple[dict, List[str]]:
     return cfg, notes
 
 
-# MIGRATIONS 声明 Callable[[dict], dict] 落后于其注释契约(dict | (dict, notes)); 声明放宽后摘除
-MIGRATIONS["config"][3] = _migrate_config_3_4  # type: ignore[assignment]
+MIGRATIONS["config"][3] = _migrate_config_3_4
 
 # ---- v4→v5: 数据源并入顶层 traffic_source 段(计划 26-10-17-0339 S15) ----
 
@@ -312,5 +311,4 @@ def _migrate_config_4_5(cfg: dict) -> dict | Tuple[dict, List[str]]:
     return cfg, notes
 
 
-# 同上: 注册表返回类型声明收窄, 声明放宽后摘除
-MIGRATIONS["config"][4] = _migrate_config_4_5  # type: ignore[assignment]
+MIGRATIONS["config"][4] = _migrate_config_4_5

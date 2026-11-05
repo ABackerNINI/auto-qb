@@ -21,7 +21,7 @@
 """
 import re
 from datetime import date, timedelta
-from typing import List, Optional, Tuple
+from typing import Any, List, Optional, Sequence, Tuple
 
 # dat 数值单位: KB, 按 1024 字节换算(与用户确认)
 KB = 1024
@@ -30,7 +30,7 @@ KB = 1024
 HistoryRow = Tuple[date, int, int]
 
 
-def normalize_period(value) -> str:
+def normalize_period(value: Any) -> str:
     """period 配置归一化: day/1D/D -> "day"; month -> "month"; ND(N>=1) -> "ND"。非法抛 ValueError"""
     s = str(value).strip().upper()
     if s in ("DAY", "D", "1D"):
@@ -92,7 +92,7 @@ def aggregate(rows: List[HistoryRow], period: str, today: date | None = None) ->
     return up, down
 
 
-def curve_speed(x_bytes: int, points) -> int:
+def curve_speed(x_bytes: int, points: Sequence[Any]) -> int:
     """全程分档覆盖(方案B): 累计量 x_bytes -> 档位限速(字节/秒, 0 = 不限速)
 
     points: 按阈值升序的档位序列, 每个元素需有 threshold_bytes / speed_bytes_per_s
@@ -136,7 +136,7 @@ def bytes_to_kib(v_bps: int) -> int:
     return int(v_bps / 1024 + 0.5)
 
 
-def bytes_to_kib_floor(v_bps) -> int:
+def bytes_to_kib_floor(v_bps: Optional[int]) -> int:
     """字节/秒 -> KiB/s(整除向下; 0/负数归 0)—— 读回 qB 现值用(展示/比较, 不放大)"""
     b = int(v_bps or 0)
     return b // 1024 if b > 0 else 0

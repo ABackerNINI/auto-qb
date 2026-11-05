@@ -5,10 +5,13 @@ apply_new_config 的 L1 分支迁入本模块 —— 每次热重载无条件 ap
 即短路返回(过度重启族的模块化防线: 改无关配置不再清掉在用 handler)。
 """
 import logging
-from typing import Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from ...infra.logging import setup_logging
 from ..module import AppContext, ApplyResult, BaseModule
+
+if TYPE_CHECKING:
+    from ...config import Config
 
 logger = logging.getLogger(__name__)
 
@@ -37,9 +40,9 @@ class LoggingModule(BaseModule):
     def stop(self) -> None:
         return None  # 日志随进程终灭, 无可停(现行退出路径也不拆 handler)
 
-    def apply(self, old, new) -> ApplyResult:
+    def apply(self, old: "Config", new: "Config") -> ApplyResult:
         return self.apply_section(old, new, "logging", self._configure)
 
-    def _configure(self, conf) -> None:
+    def _configure(self, conf: Any) -> None:
         setup_logging(conf.file, conf.level, conf.max_bytes, conf.format)
         self._configured = True

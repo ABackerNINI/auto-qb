@@ -24,7 +24,7 @@
 import os
 from dataclasses import dataclass, field
 from types import MappingProxyType
-from typing import Mapping, Optional, Sequence, Tuple
+from typing import Any, Mapping, Optional, Sequence, Tuple
 
 # ---------------------------------------------------------------- 常量
 
@@ -787,7 +787,7 @@ def job_to_dict(job: RelocateJob) -> dict:
     }
 
 
-def job_from_dict(d) -> Optional[RelocateJob]:
+def job_from_dict(d: Any) -> Optional[RelocateJob]:
     """state.json 条目 -> RelocateJob; 形状不符/缺 job_id 返回 None(坏条目跳过, 不炸)"""
     if not isinstance(d, dict) or not d.get("job_id"):
         return None

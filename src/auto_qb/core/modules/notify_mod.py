@@ -6,10 +6,13 @@ ctx.notify 调这里的公开方法, 不再直写 manager._notify_handler 私有
 外围绕过边界直写内核私有面清零)。
 """
 import logging
-from typing import Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from ...infra.notify import NotifyHandler, setup_notify
 from ..module import AppContext, ApplyResult, BaseModule
+
+if TYPE_CHECKING:
+    from ...config import Config
 
 logger = logging.getLogger(__name__)
 
@@ -37,8 +40,8 @@ class NotifyModule(BaseModule):
     def stop(self) -> None:
         return None  # 派发线程是 daemon 随进程退出; 现行退出路径也不摘 handler, 保持
 
-    def apply(self, old, new) -> ApplyResult:
-        def remount(conf) -> None:
+    def apply(self, old: "Config", new: "Config") -> ApplyResult:
+        def remount(conf: Any) -> None:
             # 重挂保留原 L1 分支语义: 先摘旧 handler, force=True 重挂(挂载即 enabled=True,
             # 与托盘会话开关同源 —— force 对配置未启用也挂, 会话级, 重启后回到配置状态)
             self._unmount()
@@ -70,7 +73,7 @@ class NotifyModule(BaseModule):
 
     # ---------- 内部 ----------
 
-    def _mount(self, config, force: bool) -> None:
+    def _mount(self, config: Any, force: bool) -> None:
         self._handler = setup_notify(config, force=force)
 
     def _unmount(self) -> None:

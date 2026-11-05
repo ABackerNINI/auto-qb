@@ -12,7 +12,7 @@ import json
 import logging
 import os
 from datetime import date, datetime, timedelta
-from typing import Optional, Tuple
+from typing import Any, Callable, Iterable, List, Optional, Tuple
 
 from ..infra import utils
 from ..infra.store_recovery import recover_corrupt_file
@@ -50,7 +50,10 @@ _TRACE_MAX_ENTRIES = 300
 _TRACE_ENTRY_MAX_BYTES = 2048
 
 
-def _evict_oldest(items, overflow: int, today_iso: str, keep_today: bool = True) -> list:
+def _evict_oldest(items: Iterable[Tuple[str, dict]],
+                  overflow: int,
+                  today_iso: str,
+                  keep_today: bool = True) -> List[Tuple[str, dict]]:
     """上限逐出的排序口径单点(exec_history 与 rule_traces 共用): 按 ts 升序挑最旧淘汰,
     非当日记录优先 —— 「当日活跃键不被误清」由 keep_today 声明: exec_history 的去重活跃键
     一律保留(当日全保); rule_traces 无去重语义, 当日也参与逐出以硬保证体积上界。
@@ -60,11 +63,11 @@ def _evict_oldest(items, overflow: int, today_iso: str, keep_today: bool = True)
     evict = ordered[:overflow]
     if not keep_today and len(evict) < overflow:
         todays = sorted((kv for kv in items if kv[1].get("date") == today_iso), key=lambda kv: kv[1].get("ts", 0))
-        evict = evict + todays[: overflow - len(evict)]
+        evict = evict + todays[:overflow - len(evict)]
     return evict
 
 
-def prune_day_keys(d: dict, today: date, keep_days: int, date_of) -> None:
+def prune_day_keys(d: dict, today: date, keep_days: int, date_of: Callable[[str, dict], str]) -> None:
     """state 日键按日期淘汰的单点(仅主循环线程调用; 幂等)
 
     同一「state dict 按日期淘汰日键」约定在此收敛(issue 26-10-11-0207 R10): 早于保留窗
@@ -144,7 +147,7 @@ class StateService:
             return bak, None
         return None, "没有备份文件" if bak is None else "备份内容不可用"
 
-    def _read_state_file(self, path: str):
+    def _read_state_file(self, path: str) -> Any:
         """读单个状态文件: dict(可用) / None(不存在) / _CORRUPT(存在但内容不是合法 dict)
 
         None 与 _CORRUPT 必须分开: 前者是首启(静默开始), 后者是损坏(要告警 + 回退备份),
@@ -334,7 +337,7 @@ class StateService:
         dim = traces.setdefault(f"{rule_name}:{hash}", [])
         dim.append(item)
         if len(dim) > _TRACE_KEEP_PER_DIM:
-            del dim[: len(dim) - _TRACE_KEEP_PER_DIM]
+            del dim[:len(dim) - _TRACE_KEEP_PER_DIM]
         self._prune_rule_traces(traces, now.date())
 
     def _prune_rule_traces(self, traces: dict, today: date) -> None:
@@ -349,12 +352,15 @@ class StateService:
         prune_day_keys(traces, today, _TRACE_KEEP_DAYS, lambda k, v: v[-1].get("date", "") if v else "")
         for dim in traces.values():
             if len(dim) > _TRACE_KEEP_PER_DIM:
-                del dim[: len(dim) - _TRACE_KEEP_PER_DIM]
+                del dim[:len(dim) - _TRACE_KEEP_PER_DIM]
         overflow = sum(len(v) for v in traces.values()) - _TRACE_MAX_ENTRIES
         if overflow > 0:
-            evict_ids = {id(e) for _, e in _evict_oldest(
-                [(k, e) for k, v in traces.items() for e in v], overflow, today.isoformat(), keep_today=False
-            )}
+            evict_ids = {
+                id(e)
+                for _, e in _evict_oldest(
+                    [(k, e) for k, v in traces.items() for e in v], overflow, today.isoformat(), keep_today=False
+                )
+            }
             for k in traces:
                 traces[k] = [e for e in traces[k] if id(e) not in evict_ids]
             for k in [k for k, v in traces.items() if not v]:

@@ -15,14 +15,17 @@
   full_round / L2 兑现); 重绑是纯内存 O(存量数), tracker_urls 走惰性缓存零 qB API 调用。
 """
 import logging
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from qbittorrentapi import Client
 
 from ...config import TrackerConfig
 from ...infra import utils
 from ...torrents import TorrentRecord
-from ..module import AppContext, ApplyResult, BaseModule
+from ..module import AppContext, ApplyResult, BaseModule, PhaseEvent, PhaseRegistry
+
+if TYPE_CHECKING:
+    from ...config import Config
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +43,7 @@ class TrackerModule(BaseModule):
 
     # ---------- 热重载(plan 26-10-03-0436 Step 1: trackers 段变化立即重绑存量记录) ----------
 
-    def apply(self, old, new) -> ApplyResult:
+    def apply(self, old: "Config", new: "Config") -> ApplyResult:
         # 短路原因有二(段相等 / qB 断开), 后者非段相等语义 —— 不套 BaseModule.apply_section
         # 骨架(该骨架只承载单一短路原因), 保持显式(issue 26-10-11-0207 R05/R09 登记)。
         if old.trackers == new.trackers:
@@ -56,18 +59,18 @@ class TrackerModule(BaseModule):
 
     # ---------- 相位订阅(plan §4.2 full_round + torrents_added) ----------
 
-    def subscribe(self, phases) -> None:
+    def subscribe(self, phases: PhaseRegistry) -> None:
         phases.on("full_round", self._on_full_round)
         phases.on("torrents_added", self._on_torrent_added)
 
-    def _on_full_round(self, event) -> None:
+    def _on_full_round(self, event: PhaseEvent) -> None:
         """全量轮重匹配: 热重载 L2 置空的 tracker_conf 在此兑现(存量记录不走 added 分支,
         事件分派/维护任务都依赖 conf 已就位) —— 原 _refresh_torrents 全量轮循环随迁"""
         for rec in self._ctx.store.by_hash.values():
             if rec.tracker_conf is None:
                 rec.tracker_conf = self.match(rec)
 
-    def _on_torrent_added(self, event) -> None:
+    def _on_torrent_added(self, event: PhaseEvent) -> None:
         """逐新增种子管线的「限速」一步(plan §4.2; P5 收口前经内核委托调用):
         tracker_conf 由内核 added 循环先行匹配, 这里只消费"""
         torrent = self._ctx.store.get(event.payload["hash"])
@@ -100,7 +103,7 @@ class TrackerModule(BaseModule):
             torrent, "torrents_set_download_limit", tracker_conf.download_speed_limit, dry_run
         )
 
-    def _apply_single_speed_limit(self, torrent: TorrentRecord, api_method: str, value: int, dry_run: bool):
+    def _apply_single_speed_limit(self, torrent: TorrentRecord, api_method: str, value: int, dry_run: bool) -> None:
         """应用单个速度限制"""
         if "upload" in api_method:
             current_limit = torrent.up_limit

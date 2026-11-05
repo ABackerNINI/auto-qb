@@ -36,7 +36,7 @@ rules 引用时该站点种子不绑定任何规则 —— 不会回退为"执�
 import logging
 import os
 import threading
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from qbittorrentapi import APIConnectionError, Client
 
@@ -66,7 +66,7 @@ from ..webui.commands import WebCommandsMixin
 from ..webui.views import WebviewMixin
 from .qbapi import QbApi
 from .qbclient import new_client
-from .taskqueue import TaskQueue
+from .taskqueue import Task, TaskQueue
 from ..webui import WebUIRuntime
 from ..webui.module import WebUIModule
 # HR 在线核实运行时门面(端点 + 取数线程 + 只读视图): 与 WebUIRuntime 同级, 见 __init__ 说明
@@ -140,7 +140,7 @@ class QbManager(
         config: Config | None = None,
         no_lock: bool = False,
         clock: Optional[Clock] = None,
-    ):
+    ) -> None:
         self.config_path = config_path
         # 取时注入(D8 构造期统一制): 缺省系统时钟单点(经模块属性现取 —— 旧测试按模块换
         # 假钟的寻址位, S3 收敛为显式 FakeClock 注入后可改回求值期默认)。时钟面经装配链
@@ -282,7 +282,7 @@ class QbManager(
         return self._client
 
     @client.setter
-    def client(self, value: Optional[Client]):
+    def client(self, value: Optional[Client]) -> None:
         self._client = value
         self.store.client = value
         self.api.bind(value, self.store)
@@ -453,7 +453,7 @@ class QbManager(
         dry_run: bool = False,
         stop_event: Optional[threading.Event] = None,
         pause_event: Optional[threading.Event] = None,
-    ):
+    ) -> None:
         """主循环(任务队列驱动): 每轮执行后经 _wait_next 等待到最近一条时间线到期
         - 弹出到期任务并执行(种子刷新/规则/种子级内置功能/校验结果轮询, 各任务有内置 interval)
         - stop_event: 置位后循环退出并落盘(UI/托盘托管模式必传; 传 None 时非托管,
@@ -828,7 +828,7 @@ class QbManager(
 
         self.host.run_task_line(force)
 
-    def _own_write_defer_gate(self, task) -> Optional[str]:
+    def _own_write_defer_gate(self, task: Task) -> Optional[str]:
         """D-1 队列级 deferral 闸门(A 系 26-10-13-0540 S2)
 
         判据: 任务目标 hash(或其所在组任一成员)刚被自有停/起、qB 快照尚未回流 ⇒ 返回原因码,
@@ -846,7 +846,7 @@ class QbManager(
             return f"自有停/起未回流({h[:8]})"
         return None
 
-    def _tick(self, dry_run: bool, force: bool = False):
+    def _tick(self, dry_run: bool, force: bool = False) -> None:
         """完整一轮 = 同步线 + 任务线(执行与收尾统一由 TaskQueue.run_due 管理)
 
         主循环按节拍**分别**调度两条线(见 run); 本方法保留"同步+任务"的完整语义,
@@ -857,7 +857,7 @@ class QbManager(
 
     # ---------- 全局任务 ----------
 
-    def _create_global_tasks(self):
+    def _create_global_tasks(self) -> None:
         """全局任务注册的内核触发口(plan P3 §7.2 兼容转发): 具体任务归各模块, 这里只广播相位
 
         delete_tags / speed_limit_curve 等任务的知识已迁 SpeedCurveModule / MaintenanceModule
@@ -870,7 +870,7 @@ class QbManager(
 
     # ---------- 种子级任务 ----------
 
-    def _validate_torrent_schema(self, sample) -> None:
+    def _validate_torrent_schema(self, sample: Any) -> None:
         """版本兼容 fail-fast: 首次拿到全量种子信息时校验必需字段(qB 版本漂移早暴露)。
 
         样本由 TorrentStore 在全量轮提供(`need_validate` 为真): sync 路径为 qB 原始字段
@@ -891,7 +891,7 @@ class QbManager(
     # _hr_anchors 已迁 HrRuntime._anchors(plan §05: 门面经 ctx/store 取锚点数据,
     # 不再 getattr 窥内核私有方法); 旧名测试兼容委托已随别名层处置 W3 删除(退役名单见分诊清单)。
 
-    def _refresh_torrents(self, dry_run: bool = False):
+    def _refresh_torrents(self, dry_run: bool = False) -> None:
         """种子列表刷新(P5 收口): 增量同步 -> 按 §4.2 相位表广播 -> 数据面收尾
 
         内核只报「何时」: 同步完成后按相位表(plan §4.2, 现 _refresh_torrents 历史调用顺序的
@@ -1019,7 +1019,7 @@ class QbManager(
         # 字段变化基线同步刷新(事件分派 on_torrent_field_changed 的跨轮对比口径, 计划 26-09-27-1438)
         self.store.update_field_snapshots()
 
-    def export_torrents_info(self, path):
+    def export_torrents_info(self, path: str) -> None:
         """导出种子信息, 用于debug"""
         torrents = self.client.torrents_info()
         # encoding 显式 utf-8: Windows 默认 cp936, 种子名含 GBK 外字符会中途崩

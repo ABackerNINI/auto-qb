@@ -32,6 +32,7 @@ import secrets
 import shutil
 import time
 from dataclasses import dataclass, field
+from typing import Any, Iterable
 
 from ...infra import clock
 from ...infra import file_access
@@ -70,7 +71,7 @@ class ProbeResult:
 # ---------- 指纹(拍板 D3: 失效指纹 = host+port+username+password/api_key 哈希) ----------
 
 
-def probe_fingerprint(qb_config) -> str:
+def probe_fingerprint(qb_config: Any) -> str:
     """qB 连接身份指纹: sha1("host|port|username|secret") 十六进制截短 16 位
 
     secret 取 password(登录凭据, 首选)或 api_key(5.x Bearer 直连, 备选), 两者有谁用谁,
@@ -87,7 +88,7 @@ def probe_fingerprint(qb_config) -> str:
 # ---------- 造种(报告 §11.1-1: 单文件 4KiB / piece 16KiB / 手工 bencode / 无 tracker / 非私有) ----------
 
 
-def _bencode(obj) -> bytes:
+def _bencode(obj: Any) -> bytes:
     """最小 bencode 编码(只够本模块造种用; 解码侧已有 hr/bencode.py, 不引第三方)"""
     if isinstance(obj, bool):
         raise TypeError("bencode 不接受 bool")
@@ -155,7 +156,7 @@ def _map_local(path: str) -> str:
         return path
 
 
-def _await_probe_torrent(api, deadline: float, evidence: dict):
+def _await_probe_torrent(api: Any, deadline: float, evidence: dict) -> Any:
     """轮询按 tag 列种子直到探针种子可见(报告实测 add 后 ~0.26s 可见); 超时/异常返回 None
 
     按 tag 而非 hash 定位: add 响应形态跨版本分裂(Web API 2.14.0 前后), 而 tag 是我们
@@ -174,7 +175,7 @@ def _await_probe_torrent(api, deadline: float, evidence: dict):
     return None
 
 
-def _read_progress_poll(api, torrent_hash: str, deadline: float, evidence: dict) -> str:
+def _read_progress_poll(api: Any, torrent_hash: str, deadline: float, evidence: dict) -> str:
     """轮询 recheck 进度; 返回 "ok" / "timeout"(FS 不可达方向) / "api_error"(环境性)"""
     while True:
         try:
@@ -220,7 +221,7 @@ def _write_proof_poll(dst_file: str, src_file: str, expect_sha: str, expect_size
         time.sleep(PROBE_POLL_INTERVAL_S)
 
 
-def _cleanup(api, torrent_hash, dirs, evidence: dict) -> None:
+def _cleanup(api: Any, torrent_hash: str, dirs: Iterable[str], evidence: dict) -> None:
     """尽力清理(finally 语义): deleteFiles 删种子 -> 轮询消失 -> rmtree 两侧临时目录
 
     失败不抛不改变探测结论: 进 evidence["cleanup"] 并 logger.warning(R2: 启动扫描/人工兜底)。
@@ -280,7 +281,7 @@ def _cleanup(api, torrent_hash, dirs, evidence: dict) -> None:
     evidence["cleanup"] = info
 
 
-def run_probe(ctx, src: str, dst: str) -> ProbeResult:
+def run_probe(ctx: Any, src: str, dst: str) -> ProbeResult:
     """E1 同机强探测: 造种 -> 落源 -> add -> 证读(recheck) -> 证写(setLocation) -> 清理
 
     ctx: AppContext 形态(消费 ctx.api; 无 api/客户端视为环境性失败)。src/dst 是待证明
@@ -376,7 +377,7 @@ def run_probe(ctx, src: str, dst: str) -> ProbeResult:
 # ---------- 启动残留扫描(R2: 崩溃在 add 之后 delete 之前会留探测种子+文件) ----------
 
 
-def sweep_probe_residue(ctx) -> int:
+def sweep_probe_residue(ctx: Any) -> int:
     """按 tag=TAG_PROBE 列种子, deleteFiles 删除并清理已知前缀的临时目录; 返回清理条数
 
     幂等(重复调用二次为 0), 异常一律吞掉只 logger.warning —— 扫描失败绝不能挡启动。
