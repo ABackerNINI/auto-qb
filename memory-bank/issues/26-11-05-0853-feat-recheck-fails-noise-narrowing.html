@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="recheck-fails-noise-narrowing">
+<meta name="issue-stamp" content="26-11-05-0853">
+<meta name="issue-type" content="feat">
+<meta name="doc-topic" content="recheck-fails-noise-narrowing">
+<meta name="doc-refs" content="memory-bank/plans/26-11-05-0848-plan-skip-check-self-fail-gate-g9.html">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="recheck_fails 噪声收窄: FAILED/START_TIMEOUT 分记, 锐化失败证据信号">
+<meta name="issue-summary" content="recheck_fails 计数混记真数据证据(FAILED)与噪声(START_TIMEOUT 未开检), G8/G9/链1.6/冷却都消费这个混合信号; 收窄=分记并让防护闸只认真证据, 误拦面变小但动 state schema 与 bump 写点">
+<title>recheck_fails 噪声收窄: FAILED/START_TIMEOUT 分记, 锐化失败证据信号 · feat · 计划外问题</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 38px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 78ch; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>现象与发现场景</a>
+    <a href="#s2"><span class="no">02</span>证据</a>
+    <a href="#s3"><span class="no">03</span>影响面</a>
+    <a href="#s4"><span class="no">04</span>定位锚点</a>
+    <a href="#s5"><span class="no">05</span>根因<span class="opt">（可选）</span></a>
+    <a href="#s6"><span class="no">06</span>建议修法<span class="opt">（可选）</span></a>
+    <a href="#s7"><span class="no">07</span>状态变更日志</a>
+    <div class="toc-foot">
+      类型 feat · 档位 standard<br>
+      入池不改码 · 规范见 create-issue skill
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">计划外问题（未修）· feat</div>
+    <h1>recheck_fails 噪声收窄: FAILED/START_TIMEOUT 分记, 锐化失败证据信号</h1>
+    <p class="lede">recheck_fails 计数混记真数据证据(FAILED)与噪声(START_TIMEOUT 未开检), G8/G9/链1.6/冷却都消费这个混合信号; 收窄=分记并让防护闸只认真证据, 误拦面变小但动 state schema 与 bump 写点</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-11-05-0853-feat-recheck-fails-noise-narrowing</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-11-05 08:53</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">feat</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">backend</div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象与发现场景</h2>
+    <p>2026-11-05 grilling 计划 <a href="../plans/26-11-05-0848-plan-skip-check-self-fail-gate-g9.html">26-11-05-0848(G9 自身失败闸)</a>拍板点 D6 时确认:G9 采用 case-2 force 的前提是「<code>recheck_fail_count &gt; 0</code> 不是确定性信号」—— 计数里混着<strong>真数据证据</strong>与<strong>噪声</strong>两类 bump,防护闸(G8/G9/决策链 1.6)与冷却都消费这个混合信号。用户拍板「沿用,挂个 issue 后续讨论收窄」。非缺陷,是既定接受面的锐化增强。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>证据</h2>
+    <p class="hint">贴原文（报错 / 日志 / 命令输出），不转述；附取证时间，让读者自己判断新鲜度。</p>
+<pre><code># bump 写点两处, 语义不同(取证 2026-11-05 08:53, HEAD 9841bfe4):
+# 1. FAILED = 校验真跑了且失败(progress 回落 = 坏块证据, checking_meta.py:95 状态位 delta 不作证据)
+fail_count = bump_recheck_fail(self._ctx.state, hash)          # ops_mod.py:258(FAILED 判定)
+# 2. START_TIMEOUT = 宽限耗尽仍未见开检 —— 校验根本没跑完, 数据未知非坏(纯噪声)
+fail_count = bump_recheck_fail(self._ctx.state, hash)          # ops_mod.py:303(宽限耗尽判定)
+
+# 消费方(全部吃混合信号, 无一区分两类):
+# - 决策链 1.6 / G8: others-only 推断, false positive 会毒化同映射整组(历史事故见
+#   checking_meta.py:26 注释: 竞态误判 progress=0.0 记当日失败毒化全组)
+# - G9(计划 26-11-05-0848 新增, case-2 force): 文案已声明「含未开检/异常的噪声可能」
+# - recheck 冷却(ops_mod.py:176): 噪声型失败也占 3 次/日额度</code></pre>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>影响面</h2>
+    <table>
+      <tr><th>维度</th><th>结论</th></tr>
+      <tr><td>触发条件</td><td>种子 recheck 宽限耗尽(慢盘/大种子/机器忙)被记入当日失败 —— 与真坏数据同表同权</td></tr>
+      <tr><td>影响范围</td><td>决策链 1.6 与 G8 的组内推断(误拦同映射整组)、G9(误拦自身跳检,case-2 可 force)、recheck 冷却(噪声占额度);全配置无开关</td></tr>
+      <tr><td>严重度</td><td>低 —— 误拦方向保守且有翻案路径(手动 recheck 通过即 pop/次日重置);属精度问题非正确性问题</td></tr>
+    </table>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>定位锚点</h2>
+    <p class="hint">写「符号名 + grep 关键词 + 当时的行号（标取证时间）」—— 代码会漂移，靠符号与 grep 重新定位，行号只是加速项。</p>
+    <ul class="todo">
+      <li><code>src/auto_qb/core/modules/ops_mod.py:258,303</code>(取证 2026-11-05 08:53)· bump_recheck_fail 两调用点 · grep <code>bump_recheck_fail</code></li>
+      <li><code>src/auto_qb/rules/checking_meta.py:110</code>(取证 2026-11-05 08:53)· bump_recheck_fail 定义 · grep <code>def bump_recheck_fail</code></li>
+      <li><code>src/auto_qb/core/modules/ops_verdict.py:288</code>(取证 2026-11-05 08:53)· G8 消费 · grep <code>recheck_fail_count</code></li>
+    </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
+    <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
+    <div class="callout">已核结论(非缺陷):两类 bump 语义本就不同(FAILED = 数据判决;START_TIMEOUT = 未获判决),混记是 26-09 冷却设计时为防 recheck 死循环的宽口径取舍 —— 当年只有冷却一个消费方,代价可接受;如今 G8/G9/推断闸都消费同一信号,宽口径的误拦面被放大,才值得讨论收窄。</div>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>建议修法<span class="opt">（可选）</span></h2>
+    <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
+    <p>候选 A(分记):<code>recheck_fails</code> 记录按 bump 来源分开记(如 <code>{"failed": N, "timeout": M}</code> 或双键),防护闸(1.6/G8/G9)只认 <code>failed</code>,冷却可继续吃总量或也只认 <code>failed</code>(待拍板)。代价:state schema 变更 + 迁移(旧记录视为哪类?) + bump 写点改造 + 既有测试口径更新。</p>
+    <p>候选 B(消费端折衷,零 schema 变更):维持混记,但 G8/1.6 的组内推断要求计数 ≥2 才外推(单次失败不毒化全组),G9 维持 case-2 不动。代价:真坏数据的组内保护晚一轮生效。</p>
+    <p>候选 C(不改, documenting):现状接受面已在计划 26-11-05-0848 §01 不变量 4 里写明,误拦有翻案路径 —— 讨论后若认为不值得动,本件走 Dropped 并回写结论。</p>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>状态变更日志</h2>
+    <ul>
+      <li>2026-11-05 08:53 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    </ul>
+    <h3>复验</h3>
+    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <h3>修复后补充</h3>
+    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  </section>
+
+  <footer>
+    26-11-05-0853-feat-recheck-fails-noise-narrowing.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>

@@ -24,12 +24,13 @@
 | docs | 1 |
 | test | 4 |
 | refactor | 1 |
-| feat | 18 |
+| feat | 19 |
 | chore | 2 |
 | question | 6 |
 
 ## Open
 
+- [feat] [recheck_fails 噪声收窄: FAILED/START_TIMEOUT 分记, 锐化失败证据信号](26-11-05-0853-feat-recheck-fails-noise-narrowing.html) — recheck_fail…
 - [question] [跳检抽样校验是否值得做: 读盘换下载量的成本收益待拍板](26-11-05-0514-question-skip-check-sampling-value.html) — 跳检防线之二的抽样校验(…
 - [bug] [整组迁移可对「账面完成但磁盘名错位(.!qB)」的组零搬移假成功](26-11-05-0420-bug-relocate-zero-move.html) — 搬迁按声明名逐文件 st…
 - [test] [qbmanager 补刷新闸用例断言窗口局限, 变异三型全存活](26-11-05-0200-test-qbmanager-refresh-gate-assertion-window.html) — P2 红验对 qbman…

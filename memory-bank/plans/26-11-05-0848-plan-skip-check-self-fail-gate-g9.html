@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>跳检自身失败闸门 G9: WEB case-2 强制 + 规则侧硬 skip 双点同谓词</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="skip-check-self-fail-gate-g9">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-05-0848">
+<meta name="doc-updated" content="26-11-05-0848">
+<meta name="doc-refs" content="memory-bank/issues/26-10-05-0402-bug-skip-check-self-fail-gate.html,memory-bank/issues/26-11-05-0853-feat-recheck-fails-noise-narrowing.html">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: skip-check-self-fail-gate-g9</div>
+<h1>跳检自身失败闸门 G9: WEB case-2 强制 + 规则侧硬 skip 双点同谓词</h1>
+<p class="lede">为 issue <a href="../issues/26-10-05-0402-bug-skip-check-self-fail-gate.html">26-10-05-0402</a>(候选种子自身当日校验失败后跳检无任何闸门,坏数据可被静默洗白)补一道 G9 闸:谓词单点、双落点 —— WEB 侧 case-2(WARNING+显式 force 逃生),规则侧硬 skip;full-checking 治疗路径不受影响。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-05-0848 · <b>doc-updated</b> 26-11-05-0848 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 会话 grilling(2026-11-05):复验 issue 26-10-05-0402(仍复现,锚点漂移已核)后用户发起「grilling 一个修复计划」,七项拍板一轮收敛(含用户以 26-10-05-0314 三分流哲学纠正 G9 分级)
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<h3>目标</h3>
+<p>消除「种子<strong>自身</strong>当日校验失败(<code>recheck_fail_count(state, hash) &gt; 0</code>)后仍可跳检」的静默洗白路径。做到什么程度算成:三条跳检路径 —— 规则侧 without_reference 段 mode=skip-checking、WEB 单发、WEB 批量 —— 在自身当日计数 &gt; 0 时<strong>均不再静默通过</strong>:WEB 侧预检确认框摊开 WARNING 且执行需显式 force(记审计),规则侧直接 skip(记 INFO);<code>test.full</code> 基线不回退。</p>
+<h3>设计底线(不变量)</h3>
+<ol>
+<li><strong>hash-keyed 自身只读</strong>:G9 只读自身 hash 的计数,禁止按组键放大。跨站辅种同一内容 = 不同 infohash = state 里两条独立记录,B 站失败不殃及 A 站(A 站若被拦,拦它的是既有 G8 的「文件映射一致」判定 —— 那是故意的、方向正确的共享物理数据防护,与本闸各司其职)。测试须有「B 失败、A 自身计数 0 → G9 不出判」断言钉死。</li>
+<li><strong>case-2 对齐</strong>(用户拍板 D2'):WEB 侧 <code>GATE_FORCE</code>(WARNING + force 逃生 + 审计),对齐 26-10-05-0314 三分流哲学「只拦<em>确定的</em>情形;不确定的给逃生通道」。计数含噪声(START_TIMEOUT 宽限耗尽未开检 = 数据未知非坏,ops_mod.py:303 与 FAILED 真数据证据 ops_mod.py:258 同样 bump),<code>&gt;0</code> 不是确定性信号,不配 blocked。</li>
+<li><strong>治疗路径保护</strong>(D4):full-checking 模式不被拦 —— 它是自身失败种子的唯一翻案路径(噪声型失败只能靠重跑 recheck 洗清),且已有 3 次/日冷却(ops_mod.py:176)限频。规则侧闸门必须 mode-scoped 到 skip-checking。</li>
+<li><strong>计数语义零改动</strong>(D6):沿用 <code>recheck_fails</code> 现接受面(与 G8/决策链 1.6 同宽,「继承既有假阳性面,不发明更锐利谓词」),state 零迁移、bump 写点不动。收窄(FAILED/START_TIMEOUT 分记)另入池:<a href="../issues/26-11-05-0853-feat-recheck-fails-noise-narrowing.html">26-11-05-0853-feat</a>。</li>
+<li><strong>前端零改动</strong>:case-2 渲染(force 逃生确认)G5/G7 已落地,预检 <code>skip_check_precheck</code> 自动摊开 G9,无新增前端工作。</li>
+</ol>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+<p><strong>复验结论(2026-11-05,HEAD 9841bfe4):仍复现。</strong>issue 锚点行号漂移如下,防护缺口原样:</p>
+<table>
+<tr><th>issue 锚点(入池时)</th><th>现状(2026-11-05)</th><th>核对结论</th></tr>
+<tr><td><code>full_checking.py:141</code> 决策链 1.6</td><td><code>full_checking.py:142</code></td><td><code>if h == hash or recheck_fail_count(...) &lt;= 0: continue</code> 未变,others-only</td></tr>
+<tr><td><code>ops_mod.py:167</code> 失败冷却</td><td><code>ops_mod.py:176</code></td><td>仍仅 <code>source == "rule"</code> 的 recheck 提交前消费</td></tr>
+<tr><td><code>ops_mod.py:452</code> <code>_skip_gates</code></td><td><code>ops_verdict.py:81/136</code></td><td>26-10-05-0314 R5 拆分迁移;闸门组扩为 dedup→G3-G8→partial→filelist,<strong>无自身失败闸</strong></td></tr>
+<tr><td><code>checking.py:88</code> 决策链 0</td><td><code>checking.py:109</code></td><td>谓词逐字未变,已完成种子永不复查</td></tr>
+</table>
+<p><strong>全仓 <code>recheck_fail_count</code> 消费点仅 3 处</strong>(grep 实证):定义(checking_meta.py:102)、规则侧 1.6 读他人(full_checking.py:142)、recheck 冷却(ops_mod.py:176)—— 没有任何一处把自身计数作为跳检闸门。</p>
+<p><strong>双落点的必要性证据</strong>:WEB 侧单点入口 <code>_skip_begin</code>(ops_skip.py:97)→ <code>_skip_gates</code>;规则侧 checking.py 决策链 0-4 <strong>不经</strong> ops 闸门(链 4 现仅「前置文件存在+大小检查」checking.py:140)。只堵一边 = 另一边留洞。G8(ops_verdict.py:288)是链 1.6 的逐字镜像,同样 <code>h == hash</code> 跳过自身 —— 26-10-05-0314 落地的新闸门组也没堵这个洞。</p>
+
+<h2><span class="no">§03</span>方案总览</h2>
+<h3>主线:谓词单点 + 双落点(拍板 D1)</h3>
+<p>镜像 <code>skip_checked_today</code> 的既有同源模式(checking_meta 谓词单点,ops 侧与规则侧各自消费,防两套谓词漂移):</p>
+<pre><code># checking_meta.py 新增(谓词单点, 与 recheck_fail_count 同文件同族):
+def self_recheck_failed_today(state, hash: str) -&gt; bool:
+    """该种子自身当日发生过校验失败(含 START_TIMEOUT 噪声, 接受面与 G8/链 1.6 同宽)。
+    hash-keyed 只读自身 —— 禁止按组键放大(跨站同内容不同 infohash, 互不殃及)。
+    消费方: ops_verdict G9(WEB, case-2 force)/ checking.py 链 4(规则侧, mode-scoped skip)。"""
+    return recheck_fail_count(state, hash) &gt; 0</code></pre>
+<h3>落点 1:WEB 侧 G9(case-2,拍板 D2'/D5)</h3>
+<p><code>ops_verdict._skip_gates_detail</code>,G8 之后、partial 之前插入(detail 现顺序 dedup→G3→G4→G5→G6→G7→G8→partial→filelist;G9 紧跟 G8,同属「校验失败已证伪/存疑」判定族)。注意 G9 判<strong>自身</strong>,与 G8 的循环(others)平行,不进 <code>for h in members</code> 循环:</p>
+<pre><code># G9 自身当日校验失败(case 2): self_recheck_failed_today 单点谓词, hash-keyed 只读自身。
+# 计数含 START_TIMEOUT 噪声(数据未知非坏)故不配 blocked —— 对齐三分流「只拦确定的情形」;
+# 与 G8(他人失败+同映射 = 确定性证伪)的分级差异是故意的, 两处注释互指。
+if self_recheck_failed_today(self._ctx.state, hash):
+    verdicts.append(GateVerdict(
+        "G9", GATE_FORCE,
+        f"该种子今日校验失败 {recheck_fail_count(self._ctx.state, hash)} 次: 数据完整性未证实"
+        f"(含未开检/异常的噪声可能), 跳检将把未验证数据标为有效并上传; 确知失败为噪声时方可强制; "
+        f"安全出路 = 先 full-checking(通过即自动解除)/次日计数重置"))</code></pre>
+<p>force 豁越走 <code>_skip_gates</code> 既有路径(ops_verdict.py:110 附近:WARNING +「force 审计」INFO),零新增机制;预检 <code>skip_check_precheck</code> 自动把 G9 归入 force 类(cls=force,确认框要求显式强制),前端零改动。</p>
+<h3>落点 2:规则侧链 4 内 mode-scoped 前置闸(拍板 D4)</h3>
+<p><code>checking.py</code> 决策链 4 内、前置文件检查之前;仅 <code>segment mode == "skip-checking"</code> 时判定,full-checking 模式零影响(治疗路径保护)。不加新链号(避免误导读者以为全模式生效):</p>
+<pre><code># 决策链 4(skip-checking 段): 自身当日校验失败 -> 不再跳检(规则侧自动化无 force 概念,
+# 保守硬 skip; WEB 侧同谓词为 case-2 可强制 —— 两边强度差异是拍板 D2' 的故意的)
+if segment.get("mode") == "skip-checking" and manager.ctx.ops.self_recheck_failed_today(ctx.hash):
+    return ActionResult.skip("该种子今日校验失败, 数据完整性未证实, 不再跳检; "
+                             "请改用 full-checking 修复(通过即解除, 次日计数重置)")</code></pre>
+<p class="aside">规则侧 <code>ops.self_recheck_failed_today</code> 经 ctx.ops 暴露(与 <code>ctx.ops.skip_checked_today</code> 同通道);若 ops mixin 暴露面不含新谓词,直接从 checking_meta import(规则侧已有 <code>from ..checking_meta import</code> 先例)。</p>
+<h3>不强加的面</h3>
+<ul>
+<li>决策链 1.6 / G8 的 others-only 语义<strong>不动</strong>(拍板 D4:1.6 是推断,新闸是自身直接证据,不同层不合并)。</li>
+<li>计数 bump 写点 / state schema / 冷却逻辑<strong>不动</strong>(D6)。</li>
+<li>full-checking 模式与 WEB recheck 路径<strong>不动</strong>(治疗与排障路径,冷却已限频)。</li>
+</ul>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+<p>认领 issue 26-10-05-0402 后一次实施(规模:约 +40 行代码 / +8~10 个测试用例,单批可完成):</p>
+<table>
+<tr><th>#</th><th>内容</th><th>验收判据</th></tr>
+<tr><td>S1</td><td>checking_meta.py 新增 <code>self_recheck_failed_today</code>(含 hash-keyed 只读自身的 docstring 警示)</td><td>谓词单测:计数 0 → False;≥1 → True;跨日(date 变更模拟)→ False</td></tr>
+<tr><td>S2</td><td>ops_verdict.py <code>_skip_gates_detail</code> 插 G9(G8 后 partial 前,注释与 G8 互指)</td><td>①自身计数&gt;0 → G9 出判且 cls=force;②<strong>跨站断言</strong>:同组 B 计数&gt;0、自身计数 0 → G9 不出判(G8 照常出判);③force=True 豁越走既有审计路径;④detail 顺序 G8→G9→partial;⑤预检 skip_check_precheck 对 G9 归类 force</td></tr>
+<tr><td>S3</td><td>checking.py 链 4 插 mode-scoped skip 闸</td><td>①mode=skip-checking + 自身计数&gt;0 → skip,文案含出路;②<strong>治疗路径断言</strong>:mode=full-checking + 自身计数&gt;0 → 照常走 full(不被拦);③自身计数 0 → 零影响</td></tr>
+<tr><td>S4</td><td>同步受影响测试文件的「## 测试计划」docstring;文档回写(checking 逐键参考若列闸门清单则补 G9 行)</td><td>守卫测试过;grep 文档无「跳检无自身失败闸」类过时表述</td></tr>
+<tr><td>S5</td><td>issue 26-10-05-0402 收尾:状态变更日志补「复验:2026-11-05 仍复现(锚点漂移表见本计划 §02)」+「修复后补充」段(实际修法/验证方式/测试数字),状态 Open→Done</td><td>issue HTML 与 _index 状态一致</td></tr>
+<tr><td>S6</td><td>收尾 DoD:<code>test.full</code> + 基线切片(kb.new baseline 誊写实测);code-review skill;若踩坑回写 pitfalls</td><td>基线切片为最新事实源,数字实测</td></tr>
+</table>
+<p class="aside">S5 的复验行在本计划获批后的实施轮才写入 —— 本轮(只出计划)不动 issue 0402 文件。认领(issue ④)与提交/推送(触发词「提交」)在实施轮仍需用户显式给出。</p>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p><span class="good">无</span> —— grilling 已一轮收敛全部七项(见 §06)。实施中若发现与预检 UI 契约或既有测试断言冲突,回到会话重新拍板,不自行改道。</p>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<p>2026-11-05 grilling,用户逐项拍板:</p>
+<table>
+<tr><th>D#</th><th>议题</th><th>结论</th><th>关键理由</th></tr>
+<tr><td>D1</td><td>放置点</td><td>双点同谓词(A)</td><td>规则侧不经 ops 闸门,只堵一边=另一边留洞;镜像 skip_checked_today 同源模式</td></tr>
+<tr><td>D2'</td><td>G9 分级</td><td><strong>case-2 GATE_FORCE</strong>(修订案 A)</td><td>用户以 26-10-05-0314 三分流哲学(「只拦确定的情形」)纠正原推荐 blocked:计数含 START_TIMEOUT 噪声 = 数据未知非坏,不是确定性信号,不配硬拒;洗白从「静默」变「知情显式 force+审计」即达成本修目标</td></tr>
+<tr><td>D3</td><td>触发阈值</td><td><code>&gt; 0</code></td><td>漏拦代价对外不可逆,误拦自愈便宜(手动 recheck 通过即 pop);与 G8/链 1.6 接受面同宽</td></tr>
+<tr><td>D4</td><td>mode 边界</td><td>仅拦 skip-checking,full-checking 放行;链 1.6/G8 不动</td><td>full recheck 是自身失败唯一治疗路径(噪声型只能靠重跑翻案),拦它方向性错误;1.6 是推断、新闸是直接证据,不同层不合并</td></tr>
+<tr><td>D5</td><td>命名与插序</td><td>G9,G8 之后 partial 之前;规则侧链 4 内 mode-scoped,不加链号</td><td>与 G8 同族连贯;链号会误导为全模式生效</td></tr>
+<tr><td>D6</td><td>噪声语义</td><td>沿用现接受面(A);收窄(FAILED/START_TIMEOUT 分记)<strong>另入池</strong>后续讨论</td><td>不绑车(范围守恒);收窄是独立增强,波及 bump 写点/state schema/冷却与既有口径</td></tr>
+<tr><td>D7</td><td>本轮范围</td><td>只出计划(B)</td><td>实施与认领另轮,触发词显式给</td></tr>
+</table>
+<p class="aside">另有一条会话中钉死的设计约束并入 D1:G9 严格 hash-keyed 只读自身计数 —— 源自用户「跨站同内容 B 失败是否会殃及 A」的追问(结论:不殃及;A 若同映射被拦是既有 G8 的正确行为),测试断言钉死(S2-②)。</p>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+<tr><th>R#</th><th>风险</th><th>触发条件</th><th>对策</th></tr>
+<tr><td>R1</td><td>用户 force 豁越真坏数据(FAILED 型)被洗白</td><td>用户在 WARNING 后仍显式强制</td><td>知情显式选择+审计日志(WARNING 文案 +「force 审计」INFO),与 G5/G7 同构;静默性已消除,属可接受残余面</td></tr>
+<tr><td>R2</td><td>噪声型失败误拦烦扰用户</td><td>START_TIMEOUT 误 bump 后用户想跳检</td><td>出路文案指向手动 recheck(通过即 pop 解除,WEB 不受冷却限)/次日重置;实际痛了走 D6 收窄 issue</td></tr>
+<tr><td>R3</td><td>链 4 插点误伤 full-checking 治疗路径</td><td>实现时 mode 判定遗漏或写错段</td><td>S3-② 治疗路径断言钉死;代码评审关注点</td></tr>
+<tr><td>R4</td><td>预检与执行之间计数变化(预检通过→执行时新失败)</td><td>预检后、确认前另一路径 bump</td><td>既有「预检与执行无信任传递」设计已覆盖(26-10-05-0314 D6/D9):执行闸门原样重跑,G9 按执行时点真值判定</td></tr>
+<tr><td>R5</td><td>G8 与 G9 同时出判时文案歧义</td><td>自身与组内他人当日都失败</td><td>detail 返回全部未过、执行取首个 —— G8 在前(他人失败+同映射 = 确定性证伪,blocked 优先于自身存疑 force),语义正确;预检两条都摊开,信息无损</td></tr>
+<tr><td>R6</td><td>规则侧经 ctx.ops 暴露谓词的通道不存在</td><td>ops mixin 公开面不含新方法</td><td>降级为 checking.py 直接 import checking_meta(规则侧已有同文件 import 先例);S3 实现时择一,不影响设计</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-05-0848</span> 初版:会话 grilling 产出。修复 issue 26-10-05-0402(复验仍复现);七项拍板一次收敛(D1-D7),G9 分级经用户以 26-10-05-0314 三分流哲学由 blocked 修正为 case-2 force;噪声收窄另入池 26-11-05-0853-feat。</li>
+</ul>
+
+</div>
+</body>
+</html>
