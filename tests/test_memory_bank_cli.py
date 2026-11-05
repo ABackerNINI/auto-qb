@@ -127,6 +127,7 @@ CLOSED_KEEP=60 索引出口 (计划 26-10-31-0534 R3/D5/D14, 2026-10-31 加; tas
 - test_closed_keep_never_trims_inflight_and_dropped_also_trims: 在办条数再多不裁(只治完结堆积); Dropped 同属完结区一并裁
 - test_closed_keep_archive_same_batch_wiring: rebuild_index(kb.status/kb.bump 落点)主索引与归档同批落盘; 归档落 `tasks/attachments/_archive.md` 且故意不叫 `_index.md`(不套 index-auto cap)
 - test_closed_keep_constants_match_issues: 跨 skill 常量等值钉住 —— memory-bank 侧 CLOSED_KEEP/ARCHIVE_REL/完结状态集与 create-issue 的 gen_issues_index 同值同语义(跨 skill 不 import, 防两套实现漂移)
+- test_issues_index_budget_matches_cap_policy: 跨 skill 预算等值钉住 —— create-issue 的 INDEX_BUDGET 与 `_common.CAP_POLICY["index-auto"]` 同值(抄件漂移即红)
 - test_issues_closed_keep_behavior_unchanged: issues/ 零行为变化回归 —— 61 件 Done issue 主索引留 60 + 提示、归档全量(把改造前行为钉下来)
 
 状态漂移守卫 (检查器 memory-bank skill 的 `scripts/check_status_drift.py`, 2026-10-31 加, **进程内
@@ -1515,6 +1516,23 @@ def test_closed_keep_constants_match_issues() -> None:
     assert _common.ARCHIVE_REL == issues_gen.ARCHIVE_REL == "attachments/_archive.md"
     # 完结状态同一语义: issues 的 CLOSED_STATUSES == 制品 5 词表的完结子集
     assert tuple(sorted(_common.TERMINAL_DOC_STATUSES)) == issues_gen.CLOSED_STATUSES
+
+
+def test_issues_index_budget_matches_cap_policy() -> None:
+    """跨 skill 预算等值钉住: create-issue 的 `INDEX_BUDGET` == `_common.CAP_POLICY["index-auto"]`。
+
+    cap 单点在 memory-bank `_common`; create-issue 侧不 import(跨 skill 隔离, 同 `CLOSED_KEEP` 纪律),
+    那份 `8000` 是抄件 —— 抄件漂移了索引就会与 cap 口径打架, 由本守阵拦住。
+    """
+    gen_all = _gen_all()
+    if str(SKILL_SCRIPTS) not in sys.path:
+        sys.path.insert(0, str(SKILL_SCRIPTS))
+    import _common
+
+    ci_scripts = gen_all.find_skill_dir("create-issue", ROOT) / "scripts"
+    assert ci_scripts.is_dir(), "定位不到 create-issue skill"
+    issues_gen = gen_all._load_isolated(ci_scripts / "gen_issues_index.py", "_gen_issues_index_budget")
+    assert issues_gen.INDEX_BUDGET == _common.CAP_POLICY["index-auto"], "issues 索引预算必须与 cap 单点同值"
 
 
 def test_issues_closed_keep_behavior_unchanged(tmp_path: Path) -> None:

@@ -106,8 +106,12 @@ def _mb_module(name: str):
 
 
 def _stale_volume_pages(mb: Path, outputs: dict[Path, str]) -> list[Path]:
-    """磁盘上残留、生成结果已不需要的分卷页 (`_index-<n>.md`) —— 主题变少/改名后的残留。"""
-    return [p for p in mb.rglob("_index-*.md") if p not in outputs]
+    """磁盘上残留、生成结果已不需要的分卷页 (`_index-<n>.md`) —— 主题变少/改名后的残留。
+
+    只认 `_index-<n>.md`(`_common.INDEX_VOLUME_RE`); 手写 `_index-notes.md` 之类不在删除范围。
+    """
+    vol_re = _mb_module("_common").INDEX_VOLUME_RE
+    return [p for p in mb.rglob("_index-*.md") if vol_re.search(p.name) and p not in outputs]
 
 
 def collect(root: Path, mb: Path) -> dict[Path, str]:

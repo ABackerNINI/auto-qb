@@ -22,7 +22,7 @@
 1. **生成器加保留数**: `gen_issues_index.CLOSED_KEEP = 60` —— 已关闭状态(Done/Dropped/Superseded)
    只渲染最近 60 条, 末尾留一行指针说明「更早的 N 条已出本索引, 报告仍在 `issues/` 目录」。
 2. **全量清单另落附件**: 同批生成 `issues/attachments/_archive.md`(全量、摘要不截断)。
-   ⚠ **名字别叫 `_index.md`** —— 那会被 `index-auto` 角色套上 25,200 的 cap, 全量清单必然超限;
+   ⚠ **名字别叫 `_index.md`** —— 那会被 `index-auto` 角色套上 8,000 的 cap, 全量清单必然超限;
    `attachments/` 在 `EXCLUDED_DIRS`, 不计 cap。
 3. **文件一个都不搬** ⇒ 零坏链、零认领链改动; 索引大小自此由常量钉住, 不再随入池线性涨。
    实测 31,196 → 16,960(余量 8,484)。

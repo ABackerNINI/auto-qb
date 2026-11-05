@@ -4,7 +4,7 @@
 > 触发: WEB UI, 详情面板, flux, fx, 乐观 UI, e2e 修复, 切片归档
 > 本文件为逐字归档(attachments 不计 cap); 蒸馏结论与指针写在各 progress 主题文件。
 > 归档说明: 原文中的相对链接已因换目录统一补一级 ../, 其余逐字未改。
-> 归档说明之二: 原文中的 Refs 声明行改题为「切片原文」以免被知识库认领链解析误读; 链接路径已补一级 ../; 其余逐字未改。
+> 归档说明之二: 仅**行首的 Refs 声明行**改题为「切片原文」以免被知识库认领链解析误读(正文中的 `doc-refs`/`Refs` 键名保持原样); 链接路径已补一级 ../; 其余逐字未改。
 
 ---
 
@@ -63,6 +63,8 @@
 > 最后活动: 2026-10-14 02:44
 
 **Refs（切片原文）:** memory-bank/tasks/26-10-14-webui-detail-classic-removal.md,memory-bank/testing/baselines/attachments/26-10-14-0244-webui-detail-classic-removal.md,memory-bank/activeContext/26-10-06-0751-webui-detail-panel-design.md
+
+> ⚠ 末项 `memory-bank/activeContext/26-10-06-0751-webui-detail-panel-design.md` 已于 2026-10-19 随 activeContext 清理删除(已归档), 原文见本归档对应小节; 未改指到不存在的文件。
 
 ## 下一步
 

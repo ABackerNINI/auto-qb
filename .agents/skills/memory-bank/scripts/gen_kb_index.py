@@ -31,6 +31,7 @@ from _common import (  # noqa: E402
     ABOUT_NAME,
     CAP_POLICY,
     INDEX_NAME,
+    INDEX_VOLUME_RE,
     find_root,
     gen_cmd,
     iter_indexed_dirs,
@@ -216,8 +217,13 @@ def build_all(root: Path, mb: Path) -> dict[Path, str]:
 
 
 def stale_volume_pages(mb: Path, expected: dict[Path, str]) -> list[Path]:
-    """磁盘上有、生成结果不再需要的卷页(主题变少/改名后残留) —— 由重建入口删除。"""
-    return [p for p in sorted(mb.rglob("_index-*.md")) if p not in expected]
+    """磁盘上有、生成结果不再需要的卷页(主题变少/改名后残留) —— 由重建入口删除。
+
+    只认 `_index-<n>.md`(INDEX_VOLUME_RE), 手写的 `_index-notes.md` 之类不在此列 —— 否则会被当残留删掉。
+    """
+    return [
+        p for p in sorted(mb.rglob("_index-*.md")) if INDEX_VOLUME_RE.search(p.name) and p not in expected
+    ]
 
 
 def main() -> int:

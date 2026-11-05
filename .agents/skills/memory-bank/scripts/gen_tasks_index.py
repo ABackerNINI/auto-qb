@@ -73,7 +73,7 @@ def build_header(root: Path) -> str:
 > 档案命名 `YY-MM-DD-<slug>.md`(见 [memory-bank skill](../../.agents/skills/memory-bank/SKILL.md)); 旧编号保留在各档案的 `**Legacy-ID:**` 字段, 供历史文档回溯。
 > 粒度为**专题**(一个功能线一个档案, 不逐会话建文件); 历史流水账原文归档在各档案的 `## 历史会话纪要 (原文归档)` 段, 超 48 KB 的档案把该段移入 `tasks/attachments/`(索引守卫按 `tasks/*.md` 扫描, 不递归)。
 > 本索引里摘要按 `SUMMARY_MAX` **截断**(全文在档案里): 这样索引大小由**档案数**决定, 不随摘要写得多长而膨胀 —— 否则迟早撞 `index-auto` cap, 而靠"外迁老档案"化解会打坏外部引用。
-> **已完结状态**(Done / Dropped)只列**最近若干条**(上限 `CLOSED_KEEP`, 装不进 8,000 字符预算就继续收紧; 更老的**档案原地不动**, 只是不出本索引): 全量清单见
+> **已完结状态**(Done / Dropped)只列**最近若干条**(上限 `CLOSED_KEEP`, 装不进 {INDEX_BUDGET:,} 字符预算就继续收紧; 更老的**档案原地不动**, 只是不出本索引): 全量清单见
 > [{archive_rel}]({archive_rel}), 该目录不计 cap。
 > 日常短周期工作只记 [../activeContext/](../activeContext/_about.md) 的会话切片; 完成项沉淀进 [../progress.md](../progress.md)。
 > 机械守卫: `tests/test_memory_bank.py`(索引 == 生成结果 / slug 唯一 / 命名规范 / 状态分区 / 必备章节)。
@@ -151,7 +151,7 @@ def build_archive(root: Path, mb: Path) -> str:
         "# Tasks 归档索引 (全量)",
         "",
         f"> **本文件是生成物, 不要手改** —— 由 `{gen_cmd(root, 'gen_tasks_index.py')}` 与 `_index.md` 同批生成;",
-        f"> 主索引的已完结区按 8,000 字符预算裁剪(上限 `CLOSED_KEEP` 条), **本文件是全量**(只列 slug 与标题; 摘要全文在档案里)。",
+        f"> 主索引的已完结区按 {INDEX_BUDGET:,} 字符预算裁剪(上限 `CLOSED_KEEP` 条), **本文件是全量**(只列 slug 与标题; 摘要全文在档案里)。",
         f"> 每条链接指回 `tasks/` 下的档案原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。",
         "",
     ]

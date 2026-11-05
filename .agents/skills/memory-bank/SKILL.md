@@ -11,7 +11,7 @@ user-invocable: true
 
 ## 会话开始 (5 步)
 
-1. **先同步分支(硬性, 无豁免 —— 问答/只读分析轮次也必须先同步)**: `commands run my-commit-flow.sync`。结果行形态、失败处置、Git 环境约束与子代理豁免(只读评审豁免 · 可写子代理不豁免)的单点在 `AGENTS.md`「会话协议 · 开始」①; 完整步骤见 [my-commit-flow 包](../../.commands/my-commit-flow/README.md)。**只读轮次遇同步失败不自作主张 stash**(那是写操作) —— 贴失败行并停下, 不在陈旧基线上作答。
+1. **先同步分支(硬性, 无豁免 —— 问答/只读分析轮次也必须先同步)**: `commands run my-commit-flow.sync`。结果行形态、失败处置与子代理豁免(只读评审豁免 · 可写子代理不豁免)的单点在 `AGENTS.md`「会话协议 · 开始」①; Git 环境约束(多 clone、rebase 解禁、ref 三处核对)的单点在 `AGENTS.md`「⚠环境硬约束:Git操作」; 完整步骤见 [my-commit-flow 包](../../.commands/my-commit-flow/README.md)。**只读轮次遇同步失败不自作主张 stash**(那是写操作) —— 贴失败行并停下, 不在陈旧基线上作答。
 2. 看会话滚动状态: `commands run kb.active` —— 扫 `memory-bank/activeContext/` 的时间戳切片, 按「最后活动」倒序输出一行摘要 + 陈旧标记。
    - ⚠ **activeContext 不含长青职能**: 「下一步」与定案口径都走 `memory-bank/README.md` 细路由, 别在这里找。
 3. 按任务深入主题文档 —— **路由单点是 `memory-bank/README.md` 细路由表**(根 `AGENTS.md` 只做粗路由); 动代码前必读 `pitfalls/_index.md` 与 `conventions/_index.md`。
@@ -110,7 +110,7 @@ KB 正文 (`tasks/` + `activeContext/`) 不写裸测试数字(`2772 passed` 这�
 ## cap 分级(`_common.CAP_POLICY` 是机器单点; 下表是它唯一的人读镜像)
 
 > 守卫 `test_skill_cap_table_matches_cap_policy` 钉住本表与 `CAP_POLICY` 的**数值集合与行数**一致(判不出「两行数值互换角色」—— 那种只能靠人读); **别在别处抄第三张表**。
-> **触顶处置 (2026-11-05 用户重定调)**: 目标**刚好 ≤ cap**, **禁止压文案**; 固定动作「外迁 `references/` → 删除死段 → 合并邻近件」; `log` 例外: append-only, 从最老一端轮转(细则见 [kb-structure.md](references/kb-structure.md))。
+> **触顶处置 (2026-11-05 用户重定调)**: 目标**刚好 ≤ cap**, **禁止压文案**; 固定动作「外迁 `attachments/` → 删除死段 → 合并邻近件」; `log` 例外: append-only, 从最老一端轮转(细则见 [kb-structure.md](references/kb-structure.md))。
 > **触顶后要不要当场改? (2026-09-30 债务制, 单点 [plan 26-09-30-2112](../../../memory-bank/plans/26-09-30-2112-plan-memory-bank-cap-debt.html))**: 除 `AGENTS.md` 外**一律不当场改** —— 尺寸是债务, 不是提交前置条件(违反只是读起来更贵, 事实源完好); 触顶总在任务后期, 当场返工成本远大于文件变长; 债务是**派生**的(`commands run doc.caps` 现算, 不设手写债务表)。**触发点 = 提交闸门输出**: 读到的人转告用户, 由用户**另开一场会话清理**, 收口 `commands run doc.caps -- --strict`。
 > ❗**`AGENTS.md` 是唯一例外**: 越过 8,000 发生的是 IDE 注入 `slice(0, 8000)` **截断**(尾部对模型真不可见), 不是「读起来贵」—— 所以超限即拦、**不进债务清单**; 削薄只需回到 ≤ 8,000(细节下沉, 原位留指针)。
 

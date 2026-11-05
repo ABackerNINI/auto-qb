@@ -4,7 +4,7 @@
 > 触发: 测试, 变异测试, mutation, TMPDIR, e2e 端口, 真机, 切片归档
 > 本文件为逐字归档(attachments 不计 cap); 蒸馏结论与指针写在各 progress 主题文件。
 > 归档说明: 原文中的相对链接已因换目录统一补一级 ../, 其余逐字未改。
-> 归档说明之二: 原文中的 Refs 声明行改题为「切片原文」以免被知识库认领链解析误读; 链接路径已补一级 ../; 其余逐字未改。
+> 归档说明之二: 仅**行首的 Refs 声明行**改题为「切片原文」以免被知识库认领链解析误读(正文中的 `doc-refs`/`Refs` 键名保持原样); 链接路径已补一级 ../; 其余逐字未改。
 
 ---
 
@@ -168,7 +168,7 @@
 
 - **余量**: config 包 555 条 S4 未逐条验证候选(按需另立轮); hr / rules / core 余量按各 issue 口径在池, 不另行排期(刻度见锚 §07)。
 - `infra/` · `webui/server/` 估值最低, 暂不做(锚 §03)。
-- 后续每轮新增计划/档案须同步常驻锚 issue 的 `doc-refs（切片原文）`(现认领链只有本任务档案一条)。
+- 后续每轮新增计划/档案须同步常驻锚 issue 的 `doc-refs`(现认领链只有本任务档案一条)。
 - 跑任一包一律走 task id(`mutants.run` / `mutants.report` / `mutants.verify`), 别再手工拼 S4。
 
 ## 资产指针
@@ -206,7 +206,7 @@
 
 **R13(2026-11-02 22:45):** curves W3 簇7/簇8 结清: normalize D 别名 / 坏行同分支累加 / merge_direction 1B/s 非零断言, 红验 4/4 KILLED, 零 src 改动
 
-**R14(2026-11-02 22:51):** W3 四件 test issue 收尾: 全量 test.full 后新建基线切片 26-11-02-2250 并回补四件 doc-refs（切片原文）
+**R14(2026-11-02 22:51):** W3 四件 test issue 收尾: 全量 test.full 后新建基线切片 26-11-02-2250 并回补四件 doc-refs
 
 **R15(2026-11-02 23:48):** W4 批次 2 issue 结清: extreme-low-residue(6 用例, 红验 17/17 KILLED) + observability-logs(4 用例, 红验 18/19 KILLED, _wblp_20 判等价), 各随件提交 5f63962e/da5f498a; 全量 4896 passed + 10 skipped, 基线切片 26-11-02-2348
 

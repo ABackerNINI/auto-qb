@@ -4,7 +4,7 @@
 > 触发: 知识库, memory-bank, kb, code-review, 文档漂移, 提交闸门, 依赖, dup-code, 切片归档
 > 本文件为逐字归档(attachments 不计 cap); 蒸馏结论与指针写在各 progress 主题文件。
 > 归档说明: 原文中的相对链接已因换目录统一补一级 ../, 其余逐字未改。
-> 归档说明之二: 原文中的 Refs 声明行改题为「切片原文」以免被知识库认领链解析误读; 链接路径已补一级 ../; 其余逐字未改。
+> 归档说明之二: 仅**行首的 Refs 声明行**改题为「切片原文」以免被知识库认领链解析误读(正文中的 `doc-refs`/`Refs` 键名保持原样); 链接路径已补一级 ../; 其余逐字未改。
 
 ---
 
@@ -103,7 +103,7 @@
 
 ## 状态
 
-- 已完成: 报告产出并入库(`reports/_index.md` 重建); 与 issue `26-10-09-0855`(HR 通道锁死回环)建立双向 `doc-refs（切片原文）` 认领链。
+- 已完成: 报告产出并入库(`reports/_index.md` 重建); 与 issue `26-10-09-0855`(HR 通道锁死回环)建立双向 `doc-refs` 认领链。
 - 未做: 无代码改动; 未拍板落地方案。
 - 下一步(待用户拍板): 是否立项「阶段 1 暴露即加密闸门 + 阶段 2 一键本地 CA」; 阶段 2 涉及新增 `cryptography`/`trustme` 依赖与 `web.tls.*` 配置键(须进 `validate_config` + `config/schema`)。
 
@@ -147,7 +147,7 @@
 
 ## 第二轮(2026-10-15 单会话收口 · 用户指派「认领并修复」第 4 条)
 
-- issue `26-10-11-0352-refactor-infra-platform-detect-bypass-dup`: 复验锚点均在(grep `sys.platform.startswith` = autostart.py 6 处 + tray/app.py:204; 单点口径 `"win"` 前缀, 旁路口径 `"win32"`)后置 `In Progress` → 修复完成置 `Done`, 状态变更日志逐条留痕(含实际修法/验证方式); 认领链双向(本切片 Refs ↔ issue doc-refs（切片原文）)。
+- issue `26-10-11-0352-refactor-infra-platform-detect-bypass-dup`: 复验锚点均在(grep `sys.platform.startswith` = autostart.py 6 处 + tray/app.py:204; 单点口径 `"win"` 前缀, 旁路口径 `"win32"`)后置 `In Progress` → 修复完成置 `Done`, 状态变更日志逐条留痕(含实际修法/验证方式); 认领链双向(本切片 Refs ↔ issue doc-refs)。
 - 修法(取 issue「建议」第一支, 零行为变化): `infra/autostart.py` 6 处(`is_enabled`/`enable`/`disable` 的 win/darwin 分支)经包内相对导入 `from .utils import is_mac, is_windows` 改调 `is_windows()`/`is_mac()` —— `is_windows` 匹配 `"win"` 前缀已覆盖 `"win32"`, 语义逐字等价; `sys` 导入保留(`sys.executable` 仍用)。`tray/app.py:204` 改调 `utils.is_windows()`(模块级已导入 utils), `import sys` 随之移除(该文件唯一用途)。未采纳「抽 `_platform()` 枚举」支: 调用点改函数调用即收口, 枚举是新抽象面, 保守口径不扩。
 - 新增静态守阵 `tests/test_utils.py::test_platform_detect_single_point_static_guard`: 扫 src/ 全部 .py 禁裸 `sys.platform.startswith`(单点自身豁免; notify.py 取平台字符串值作标识非 startswith 判据, 不拦); 红验 = 临时注入旁路判红后删除临时文件。
 - 改动面: `src/auto_qb/infra/autostart.py` + `src/auto_qb/tray/app.py` + `tests/test_utils.py`(守阵 + 测试计划清单同步) + 本 issue 状态流转; 全部过 `dev.fmt`。
@@ -167,7 +167,7 @@
 
 ## 正在进行
 
-- **修复已落地并收口**: issue 两处徽标 + meta 已置 Done, 状态日志含复验 / 实际修法 / 与建议改道原因 / 验证方式四段; 认领链双向闭合(issue.doc-refs（切片原文） → 本切片, 本切片 Refs → issue + 基线, 基线 Refs → 本切片)。
+- **修复已落地并收口**: issue 两处徽标 + meta 已置 Done, 状态日志含复验 / 实际修法 / 与建议改道原因 / 验证方式四段; 认领链双向闭合(issue.doc-refs → 本切片, 本切片 Refs → issue + 基线, 基线 Refs → 本切片)。
 
 ## 关键结论(供后续执行参考)
 
@@ -175,7 +175,7 @@
 - **ICON_PNG 的派生口径**: `os.path.dirname(ICON_ICO) + "icon.png"` —— 与 tray 原 ICON_PNG 字节同(运行期探针实证), 不引入第二个 dirname 口径。
 - **零行为变化验证**: 运行期断言 `tray.ICON_ICO == notify.ICON_ICO` 且 `os.path.isfile` 为真; notify 测试文件全量先跑绿; 全量见基线切片。
 - **退回成本**: 若将来 assets 目录需要参数化(如打包路径可配), 再升级为 `infra.assets_dir()` 函数单点(现无常驻配置入口, 提前抽函数属过度设计)。
-- **流程教训(已入坑档 `pitfalls/kb/refs-rename.md` 复发 6)**: 认领链必须**先建认领方件、后回填 doc-refs（切片原文）** —— 本轮先填 issue doc-refs（切片原文） 后写切片, 悬空窗口被同期 test.full 扫红 1 条, 复跑才绿。
+- **流程教训(已入坑档 `pitfalls/kb/refs-rename.md` 复发 6)**: 认领链必须**先建认领方件、后回填 doc-refs** —— 本轮先填 issue doc-refs 后写切片, 悬空窗口被同期 test.full 扫红 1 条, 复跑才绿。
 
 ---
 
@@ -216,7 +216,7 @@
 - `.commands/my-commit-flow/scripts/test_snapshot.py`(授权修, 为放行闸门): 两条存在性比较(`_snap_dirs`)改为在**本用例私有临时根**内进行 —— 新增 `_private_tmp()`(根 + 子进程 TMPDIR 一并指向它), `-n 8` 并行下不再因兄弟用例落进同一全局临时根而假红; 断言意图不变(import 不重入 / 不留临时副本)。红绿双验(泄漏 / import 重入两类突变判红, 还原 SHA256 一致)。
 - `memory-bank/pitfalls/git/ship-commit-staged-delete.md`: 变体二补一行「提示已按索引状态分组, 不再混称『未纳入』」(含与本变体实测的对照)。
 - `memory-bank/pitfalls/testing/tmpdir.md`: 新条目「约定盘缺席/不可见 → TMPDIR 静默回落」(识别口径 + 同日收口注)。
-- `memory-bank/issues/26-10-16-1523-bug-ship-commit-omitted-note.html`: Open → In Progress(15:33, 复验后)→ Done(15:51); 认领链双向(本切片/档案 Refs ↔ issue doc-refs（切片原文）)。
+- `memory-bank/issues/26-10-16-1523-bug-ship-commit-omitted-note.html`: Open → In Progress(15:33, 复验后)→ Done(15:51); 认领链双向(本切片/档案 Refs ↔ issue doc-refs)。
 - `memory-bank/testing/baselines/attachments/26-10-16-1551-ship-commit-omitted-note.md`: 本专题基线(test.full / 定向 / 红绿双验 / 既有失败记录)。
 
 ## 未做(有意, 范围守恒)
@@ -286,11 +286,11 @@
 
 # memory-bank-recurrence-tooling
 
-> 摘要: 堆3四件 issue 认领并实施完成: e2e自检/写盘守卫/doc-refs（切片原文）机械化/ui-map 全部落码实测; 基线切片 26-11-01-0010
+> 摘要: 堆3四件 issue 认领并实施完成: e2e自检/写盘守卫/doc-refs机械化/ui-map 全部落码实测; 基线切片 26-11-01-0010
 > 最后活动: 2026-11-01 00:10
 **Refs（切片原文）:** memory-bank/tasks/26-10-31-memory-bank-recurrence-tooling.md
 
-**R0(2026-11-01 00:10):** 堆3四件 issue 认领并实施完成: e2e自检/写盘守卫/doc-refs（切片原文）机械化/ui-map 全部落码实测; 基线切片 26-11-01-0010
+**R0(2026-11-01 00:10):** 堆3四件 issue 认领并实施完成: e2e自检/写盘守卫/doc-refs机械化/ui-map 全部落码实测; 基线切片 26-11-01-0010
 
 ---
 
@@ -458,13 +458,13 @@
   (基线切片 `testing/baselines/attachments/26-10-13-0914-memory-bank-cap-debt-cleanup.md`)。
 
 - **2026-10-19 清理轮(用户令「清理:切片总数 150 > 70」; 条数债务 90 片清偿, 150 → 60)**: 判据沿用 10-10 成例 + 机检判据细化三分(见速记 2026-10-19 补):
-  ①**删除集 = 90**: 档案 Done/Dropped 且 ≥12h 的 41 片(其中 24 片先摘除 tasks 档案 `**Refs（切片原文）:**` 里的切片 token、空则整行删 —— docmap 声明方强校验目标存在, 不清即闸门红) + 无档案且 ≥5 天的 49 片(**蒸馏复核全免蒸馏** —— 逐片语义关键词 grep `progress/`+`pitfalls/`+`tasks/`, 全部已有专属坑档或同专题档案/报告/计划归宿; slug 字面搜索漏报率极高, 不得用它判覆盖)。
-  ②**保留 60**: 冻结面钉住 16(基线 .md 真实 `](` 链接 ×2 / append-only 流水链接 ×4 / plans·reports·issues `doc-refs（切片原文）` ×10 —— 声明方冻结不可改, 切片必须留) + 活跃档案(In Progress/Open)22 + 近 5 天无档案温片 21 + 本专题片 1。
+  ①**删除集 = 90**: 档案 Done/Dropped 且 ≥12h 的 41 片(其中 24 片先摘除 tasks 档案 `**Refs:**` 里的切片 token、空则整行删 —— docmap 声明方强校验目标存在, 不清即闸门红) + 无档案且 ≥5 天的 49 片(**蒸馏复核全免蒸馏** —— 逐片语义关键词 grep `progress/`+`pitfalls/`+`tasks/`, 全部已有专属坑档或同专题档案/报告/计划归宿; slug 字面搜索漏报率极高, 不得用它判覆盖)。
+  ②**保留 60**: 冻结面钉住 16(基线 .md 真实 `](` 链接 ×2 / append-only 流水链接 ×4 / plans·reports·issues `doc-refs` ×10 —— 声明方冻结不可改, 切片必须留) + 活跃档案(In Progress/Open)22 + 近 5 天无档案温片 21 + 本专题片 1。
   ③收口 `kb.check`(主键 733 / 认领链双向闭环) / `doc.links` / `doc.caps` / `kb.active`(页脚 60 ≤ 70, 条数债务行消失) 全绿; test.full 数字见新基线切片。`SLICE_COUNT_LIMIT` 未动。两处超长切片(15-0728 19,375 / 16-0541 14,305)属字符债务, 随既有 4 项(doc.caps)另行清理。
 
 - **2026-11-02 清理轮(用户令「只清偿一条 kb.check 债务: 切片总数 162 > 70」; 条数债务 92 片清偿, 162 → 70)**: 判据沿用 10-19 成例三查 + 声明方二分(冻结件指向谁谁留 / 可编辑 Refs 摘 token 后可删 / 纯文本提及容忍):
   ①**删除集 = 92**: 档案 Done/Dropped 且 ≥12h 的 47 片 + 无档案且 ≥5 天的 12 片 + 已完结且有落点的温片按「最老优先」补退 33 片(开放决策片不参与 —— 正文引用 Open/In Progress 件或所属档案未收口的一律留)。
-  ②**保留 70**: 冻结声明方/链接钉住 26(plans·reports·issues `doc-refs（切片原文）` + 基线 `.md` 真实 `](` 链接 + append-only 流水链接, 含本专题片 1) + 活跃档案(In Progress/Open) 13 + 开放决策片(正文引用 Open/In Progress 件) 15 + 其余最新温片 24(三类重叠, 唯一保留 70)。
+  ②**保留 70**: 冻结声明方/链接钉住 26(plans·reports·issues `doc-refs` + 基线 `.md` 真实 `](` 链接 + append-only 流水链接, 含本专题片 1) + 活跃档案(In Progress/Open) 13 + 开放决策片(正文引用 Open/In Progress 件) 15 + 其余最新温片 24(三类重叠, 唯一保留 70)。
   ③**落点逐片核对, 本轮零 progress 新增**: 有档案 → 任务档案; 无档案 → Done issue/plan/report/baseline attachments/pitfall/skill(`testing/real-machine.md`、`deps-upgrade` skill 等); 纯代码修复 → 代码与守阵 + 对应坑档/基线切片。无「落点空白」片, 故不向已超 cap 的 `progress/` 追加。
   ④收口 `kb.check`(切片数 70 ≤ 70, 条数债务行消失) / 认领链 / docmap / 守卫测试见提交说明与基线切片。基线字符债务 `26-11-01-0722`(8,057 > 8,000)按用户边界**未动**。
 
@@ -474,9 +474,9 @@
 - 清理动作 = 蒸馏进 progress/任务档案后删除, **不是调 cap**; 一次清理要做到 `SLICE_COUNT_TARGET`(80 条)以内, 抬 `SLICE_COUNT_LIMIT` 等于把收口线推走, 属治理政策(2026-11-03 已由用户拍板), 各会话不自行调数。
 - 删前逐片三查: 档案状态 / 真实 md 入链(解析到目录, 别只匹配文件名 —— 同名基线切片是最大陷阱) / 是否开放决策片。
 - 2026-10-19 机检判据细化: 「真实 md 入链」只是机检面的一半, **声明方在不在 docmap 决定 Refs 是否强校验** ——
-  ①冻结声明方(plans/reports/issues HTML `doc-refs（切片原文）`、基线 .md 与 append-only 流水的 `](` 链接) ⇒ 指向谁谁就得留;
-  ②可编辑声明方(tasks 档案 `**Refs（切片原文）:**` —— gen_doc_map 只认首个 Refs 行 —— 与可编辑 md 的 `](` 内链) ⇒ 摘 token/改指后可删, 空 Refs 行整行删;
-  ③纯文本提及(基线 `**Refs（切片原文）:**`、坑档/progress/slices 的 Refs —— `doc.links` 与认领链都不扫) ⇒ 容忍不动。
+  ①冻结声明方(plans/reports/issues HTML `doc-refs`、基线 .md 与 append-only 流水的 `](` 链接) ⇒ 指向谁谁就得留;
+  ②可编辑声明方(tasks 档案 `**Refs:**` —— gen_doc_map 只认首个 Refs 行 —— 与可编辑 md 的 `](` 内链) ⇒ 摘 token/改指后可删, 空 Refs 行整行删;
+  ③纯文本提及(基线 `**Refs:**`、坑档/progress/slices 的 Refs —— `doc.links` 与认领链都不扫) ⇒ 容忍不动。
   逐片蒸馏复核用**语义关键词** grep progress/pitfalls/tasks/conventions —— slug 字面搜不准(用词不同漏报率极高, 本轮 49/49 免蒸馏全靠语义命中)。
 
 **R1(2026-10-19 23:00):** 条数债务清偿 150>70: 删 90 片留 60(16 冻结声明方/链接钉住 + 22 活跃档案 + 21 近5天温片 + 1 专题片), 49 片蒸馏复核全免蒸馏(坑档/同专题档案/报告/计划已覆盖), 29 档案 Refs 摘除死 token; 收口 kb.check/doc.links/kb.active 全绿, test.full 数字见新基线切片
@@ -577,9 +577,9 @@
 
 # docs-doc-drift-sweep
 
-> 摘要: 7 条文档漂移 issue 全部认领并处置: 0557 计划域表补 src/auto_qb/tools 行(合计 479)、基线改引 0534/S7 切片 1245、在途清单按终验复验更新、底册按 S0 实测 54/2/359/3/6(合计 424, test 5)与 18 池位回写; 0221/1036 清理 9 条 v.Nu error 并恢复与 0557 双向 doc-refs（切片原文）; minimal.yml 16585→8080, config-reference 与 sim 文档端口口径修正; 全量 test.full 零源码改动(数字见基线切片 26-11-03-2146)。
+> 摘要: 7 条文档漂移 issue 全部认领并处置: 0557 计划域表补 src/auto_qb/tools 行(合计 479)、基线改引 0534/S7 切片 1245、在途清单按终验复验更新、底册按 S0 实测 54/2/359/3/6(合计 424, test 5)与 18 池位回写; 0221/1036 清理 9 条 v.Nu error 并恢复与 0557 双向 doc-refs; minimal.yml 16585→8080, config-reference 与 sim 文档端口口径修正; 全量 test.full 零源码改动(数字见基线切片 26-11-03-2146)。
 > 最后活动: 2026-11-03 21:53
 **Refs（切片原文）:**
 
-**R0(2026-11-03 21:53):** 7 条文档漂移 issue 全部认领并处置: 0557 计划域表补 src/auto_qb/tools 行(合计 479)、基线改引 0534/S7 切片 1245、在途清单按终验复验更新、底册按 S0 实测 54/2/359/3/6(合计 424, test 5)与 18 池位回写; 0221/1036 清理 9 条 v.Nu error 并恢复与 0557 双向 doc-refs（切片原文）; minimal.yml 16585→8080, config-reference 与 sim 文档端口口径修正; 全量 test.full 零源码改动(数字见基线切片 26-11-03-2146)。
+**R0(2026-11-03 21:53):** 7 条文档漂移 issue 全部认领并处置: 0557 计划域表补 src/auto_qb/tools 行(合计 479)、基线改引 0534/S7 切片 1245、在途清单按终验复验更新、底册按 S0 实测 54/2/359/3/6(合计 424, test 5)与 18 池位回写; 0221/1036 清理 9 条 v.Nu error 并恢复与 0557 双向 doc-refs; minimal.yml 16585→8080, config-reference 与 sim 文档端口口径修正; 全量 test.full 零源码改动(数字见基线切片 26-11-03-2146)。
 

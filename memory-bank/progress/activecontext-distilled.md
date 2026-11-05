@@ -27,7 +27,7 @@
 - **flux 视觉批次**: 新增 `--bg-pop` 不透明浮层底(12+7 处); 消息弹窗统一 glass 语言并补 warn 档; 移除 hover 行左条与 `fx-row-flash`; 做种时间格 padding→线偏移; 状态色 `--st/--st-soft` 7 kind; 右键目标行改 outline。口径 [conventions/webui.md](../conventions/webui.md)。
 - **交互与同步**: 快捷键 6 条改开/关双态(另 4 有条件 + 49 不适合待定); 选中/触发一致性收敛 descriptor 单点 `_scopeResolve`; 乐观 UI(rename 补丁+速度预翻转) Done, 真机复测曾因测试实例不可达阻塞; rename 回滚双出口; add torrents 延迟根因=四跳异步管线, store 有界追平后零 1.5s 簇。
 - **e2e 既有红**: 右键菜单三条过时 spec、窗口引擎三处接线、`dtRowAfter` tab 契约、`filteredGroups` 双闸 —— 产品零改动或定点修复, 全绿。
-- **大文件列表性能**: 调研报告 26-11-02-0339 已落盘, 无实施。
+- **大文件列表性能**: 调研报告 26-11-02-0339 已落盘; W1-W5 与 W6a 已实施验收, W6b 已拍板 Dropped; D1/D2/D3 待拍板。
 
 ## 后端核心 / 规则 / 迁移（12 条）
 
@@ -42,7 +42,7 @@
 - **变异测试**: 可行性报告落成 skill+命令包+常驻锚; config/hr/rules/core 四包收官, core W1-W9b 全完成(同池复跑 78.51%); 工具链修 deselect 表同步与 verify 四形态。
 - **测试基座**: TMPDIR 自举+互斥锁五步; sidefx 临时根延迟求值; e2e/开发桩端口改 0 取号; CI 长尾用例钉钟; test_yamls 整目录移除; LiveTail `has_block` 守门; real-tag 多标签 `tag_set` 单点。
 - **大文件拆分**: R1 完成 10→36 个测试文件 + 12 个支撑模块, 906 个测试函数名与 1170 个界定逐字不变; 12 个仍超千行的桶留 R2。
-- **真机轨**: 双环境 `env_registry` 单点 + `real.env` + token 不落盘; RM08 官方 suite 7 passed/1 skipped; RM04 漂移计划 Done, L490 改显式入口待用户准备小容量卷。
+- **真机轨**: 双环境 `env_registry` 单点 + `real.env` + token 不落盘; RM08 官方 suite 7 passed/1 skipped; RM04 漂移计划 Done, L490 真机复验已跑通(六条断言, issue 26-11-02-1208 Done), 仅内存盘待用户卸载。
 
 ## 知识库 / 文档 / 依赖 / 重构（31 条）
 
@@ -60,6 +60,6 @@
 - 复合 Topics 键拆分待拍板(存量数据未动)。
 - 提交闸门 D2-D4 待拍板。
 - qB 5.3 P4/P5 待 stable。
-- RM04 L490 段待用户准备小容量卷后前置复验。
+- RM04 L490 真机复验已完成(R6), 仅测试内存盘待用户卸载。
 - 流量图 E2E5 真机人工验收未兑现。
-- 大文件列表性能报告待决定是否实施。
+- 大文件列表性能 D1/D2/D3 待拍板(W1-W5/W6a 已完成, W6b 已 Dropped)。

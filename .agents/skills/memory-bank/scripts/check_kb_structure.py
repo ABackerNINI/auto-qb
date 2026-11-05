@@ -97,7 +97,10 @@ def check_index_regenerated(root: Path, mb: Path) -> list[str]:
         if current != rendered:
             problems.append(f"{_mb_rel(root, index)} 与生成结果不一致 (跑 gen_kb_index.py 重建, 不要手改)")
     for stale in gen_kb_index.stale_volume_pages(mb, expected):
-        problems.append(f"{_mb_rel(root, stale)} 是过期分卷页(生成结果已不需要), 跑 gen_kb_index.py 重建")
+        problems.append(
+            f"{_mb_rel(root, stale)} 是过期分卷页(生成结果已不需要), 跑 `commands run kb.index` 重建"
+            " (gen_all.py 会删除残留卷页; gen_kb_index.py 单独跑不会删)"
+        )
     return problems
 
 
@@ -180,7 +183,7 @@ def trim_hint(role: str, cap: int) -> str:
     """超 cap 后的固定动作 —— 单行返回 (`doc.caps` 要把这些行排进一张表, 多行会打乱对齐)。
 
     2026-11-05 用户重定调: 清债目标是**刚好 ≤ cap**, 不是压到 50%; 处置**禁止压文案**
-    (压文案丢事实且每次触顶都返工), 只做三件事:「外迁 references/ → 删除死段 → 合并邻近件」。
+    (压文案丢事实且每次触顶都返工), 只做三件事:「外迁 attachments/ → 删除死段 → 合并邻近件」。
 
     `agents` 例外 (2026-09-30 用户拍板): AGENTS.md 是**硬规定**, 内容「外迁」等于把常驻可见的
     硬约束降为按需读 (设计回退), 所以只需回到 ≤ cap。
@@ -193,7 +196,7 @@ def trim_hint(role: str, cap: int) -> str:
         # ❌ 只搬"最老的一条": 最老条目大小不受控, 下次追加立刻又触顶。
         return (f"它是 append-only 流水, 按设计会一直长: 从**最老一端**轮转到 ≤ {cap:,} 字符, "
                 "外迁同目录 `attachments/` 并原位留一行指针 (禁止压文案)")
-    return (f"触顶固定动作: 外迁 `references/` → 删除死段 → 合并邻近件 (目标 ≤ {cap:,} 字符; "
+    return (f"触顶固定动作: 外迁 `attachments/` → 删除死段 → 合并邻近件 (目标 ≤ {cap:,} 字符; "
             "禁止压文案)")
 
 
@@ -283,6 +286,8 @@ def check_orphan_indexes(root: Path, mb: Path) -> list[str]:
         return [f"{_mb_rel(root, readme)} 缺失 (库内细路由单点)"]
     text = readme.read_text(encoding="utf-8")
     for index in iter_index_files(mb):
+        if index.name != INDEX_NAME:
+            continue  # 卷页由主索引引用, 不参与顶层孤儿判定
         rel_dir = index.parent.relative_to(mb)
         if len(rel_dir.parts) != 1:
             continue  # 只查顶层

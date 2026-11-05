@@ -82,7 +82,7 @@ def header(root: Path, kind: str) -> str:
     if kind in CLOSED_KINDS:
         closed_line = (
             f"> **已完结状态**(Done / Dropped / Superseded)只列**最近若干条**(上限 `CLOSED_KEEP`, "
-            f"装不进 8,000 字符预算就继续收紧; 更老的**制品原地不动**, 只是不出本索引): 全量清单见\n"
+            f"装不进 {INDEX_BUDGET:,} 字符预算就继续收紧; 更老的**制品原地不动**, 只是不出本索引): 全量清单见\n"
             f"> [{ARCHIVE_REL}]({ARCHIVE_REL}), 该目录不计 cap。\n"
         )
     return f"""# {KIND_CN[kind]} Index
@@ -135,7 +135,7 @@ def build_archive(root: Path, mb: Path, kind: str) -> str:
         f"# {KIND_CN[kind]} 归档索引 (全量)",
         "",
         f"> **本文件是生成物, 不要手改** —— 由 `{gen_cmd(root, 'gen_docs_index.py')}` 与 `_index.md` 同批生成;",
-        f"> 主索引的已完结区按 8,000 字符预算裁剪(上限 `CLOSED_KEEP` 条), **本文件是全量**。",
+        f"> 主索引的已完结区按 {INDEX_BUDGET:,} 字符预算裁剪(上限 `CLOSED_KEEP` 条), **本文件是全量**。",
         f"> 每条链接指回 `{kind}/` 下的制品原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。",
         "",
     ]

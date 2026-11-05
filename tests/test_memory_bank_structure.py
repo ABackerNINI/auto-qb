@@ -336,11 +336,11 @@ def test_kb_trim_hint_is_fixed_action_not_compress() -> None:
     """触顶处置口径 (2026-11-05 计划 26-11-05-1049 §07 P2): 严禁「压文案」, 只做三件固定动作。
 
     旧口径「精简/外迁到 50%」会诱导 agent 删事实换字数; 新口径清债目标=刚好 ≤ cap,
-    动作=外迁 references/ → 删除死段 → 合并邻近件。`log` 仍按 append-only 轮转。
+    动作=外迁 attachments/ → 删除死段 → 合并邻近件。`log` 仍按 append-only 轮转。
     """
     checker = _kb_checker()
     hint = checker.trim_hint("pitfall", 8_000)
-    assert "外迁 `references/`" in hint
+    assert "外迁 `attachments/`" in hint
     assert "删除死段" in hint and "合并邻近件" in hint
     assert "禁止压文案" in hint
     assert "≤ 8,000" in hint, "目标必须写明刚好 ≤ 当前 cap, 不是比例"

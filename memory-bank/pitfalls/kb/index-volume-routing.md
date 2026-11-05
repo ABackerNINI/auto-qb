@@ -14,7 +14,7 @@
 - **触发**: 在 `pitfalls/backend`、`pitfalls/testing`、`pitfalls/web-ui` 找某条坑; 或问「库里有没有这个坑」。
 - **判别**: 主索引 `_index.md` 顶部写「主题(分卷)」, 表头只有「卷 | 主题范围 | 条数」三列, 没有文件名/摘要 —— 这是分卷路由, 不是全量清单。只看主索引就下「没有」的结论即误判。
 - **处置**: ①先按主题范围选卷号, 打开 `_index-<n>.md`; ②卷页里才是逐条定位表(文件名 + 摘要), 再打开单篇; ③跨卷时用 `grep -rn "<关键词>" memory-bank/pitfalls/<类>/` 兜底, 而不是只 grep `_index.md`; ④主索引找不到时先看卷页, 再判断「确实没有」。
-- **守阵**: `commands run kb.check`(索引完整性/死链) + `commands run kb.index` 重建; 单篇坑档三行头元数据齐全。
+- **守阵**: `commands run kb.check`(索引完整性) + `commands run doc.links`(全库死链) + `commands run kb.index` 重建; 单篇坑档三行头元数据齐全。
 - **复发**: 0
 
 ### 完结档的 `CLOSED_KEEP` 是上限, 主索引可能不含老记录
