@@ -7,10 +7,11 @@
 <meta name="issue-stamp" content="26-09-30-0052">
 <meta name="issue-type" content="perf">
 <meta name="doc-topic" content="backend-partial-hr-verify">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-06-backend-hr-lastpage-fetch-skip.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Dropped">
 <meta name="issue-title" content="HR 计数：末页追翻省略（P3 缓做项）">
-<meta name="issue-summary" content="HR 计数启用站点翻页达末页终点后仍多做一次追翻请求；报告 26-09-29-1803 §5.1 定性为优化非简化（收益偶有、风险面新增），HR 计划 §7 P3 拍板缓做">
+<meta name="issue-summary" content="HR 计数启用站点翻页达末页终点后仍多做一次追翻请求；报告 26-09-29-1803 §5.1 定性为优化非简化（收益偶有、风险面新增），HR 计划 §7 P3 拍板缓做。2026-11-06 复验仍复现，收益风险对照后拍板 Dropped：「rows==claim 但标记未消失」窗口∝计数误差，计数精确且波内无增删时窗口不出现（无可省），能开窗三情形两异常一伪影，唯一纯收益的空末页伪影正常不出现 ⇒ 收益不足以支撑风险（理由见状态变更日志末条）">
 <title>HR 计数：末页追翻省略（P3 缓做项） · perf · 计划外问题</title>
 <style>
   :root {
@@ -96,12 +97,12 @@
   <header class="cover">
     <div class="kicker">auto-qb · 计划外问题（未修）· perf</div>
     <h1>HR 计数：末页追翻省略（P3 缓做项）</h1>
-    <p class="lede">HR 计数启用站点翻页达末页终点后仍多做一次追翻请求；报告 26-09-29-1803 §5.1 定性为优化非简化（收益偶有、风险面新增），HR 计划 §7 P3 拍板缓做</p>
+    <p class="lede">HR 计数启用站点翻页达末页终点后仍多做一次追翻请求；报告 26-09-29-1803 §5.1 定性为优化非简化（收益偶有、风险面新增），HR 计划 §7 P3 拍板缓做。2026-11-06 复验仍复现，收益风险对照后<strong>已拍板 Dropped</strong>（理由见 §07 状态变更日志末条）</p>
     <div class="meta-row">
       <div class="item"><div class="k">编号</div><div class="v">26-09-30-0052-perf-hr-lastpage-fetch-skip</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-09-30 00:52</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">perf</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Dropped</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -153,15 +154,18 @@ rows == claim 即语义全深度，不必追到「下一页」标记消失；
     <h2><span class="no">06</span>建议修法<span class="opt">（可选）</span></h2>
     <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
     <p>方向：翻页循环中当本波 <code>rows == counter_claims[lane]</code>（该档已有非 None 声明且对平）时允许提前停翻，不再等 <code>has_next</code> 为 False。代价与风险：①须证明提前停翻不改变 <code>full_depth</code> / 观察期 / 缺席证明等消费点结论（计数偶发偏小时会少抓末页，风险面是报告缓做的主要原因）；②与停翻条件①②③的叠加顺序需逐一对平。动手前须先过 D4 口径实证（计数 == 全深度翻页实抓行数），参照计划 M2 校准流程另立样张。</p>
+    <p><strong>已拍板（2026-11-06）：Dropped</strong> —— 理由见 §07 状态变更日志末条（收益不足支撑风险，唯一纯收益的空末页伪影正常形态不出现）；上文建议修法原文保留，重启前置照旧。</p>
   </section>
 
   <section id="s7">
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-09-30 00:52 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-05 23:49 — 复验（用户指派认领，锚点重跑）：仍复现 —— <code>service.py</code> 已拆分（service_wave / service_common / service_status），<code>full_depth</code> 两个赋值点现位于 <code>service_wave.py:316</code>（②到期段停翻）与 <code>:326</code>（末页），语义与入池一致；<code>has_next</code> 仍在 <code>base.py:28</code>。现象本体未变：翻页循环终点仍只有停翻条件①②③（<code>_stop_condition</code> <code>service_wave.py:380</code>，三条件均无 rows==claim 分支）与「下一页标记消失」（<code>:324</code>）；<code>counter_claims</code> 唯一消费点是波收尾对账的 <code>releases_enabled</code> 闸门（<code>:684</code>/<code>:709</code>），不参与翻页停翻决策 —— rows == claim 后仍会继续追翻到末页标记消失。§2.2 四消费点新位：<code>releases_enabled</code> <code>service_wave.py:709</code> / <code>_position_covered</code> <code>service_common.py:383</code> / <code>_absence_proven_all</code> <code>service_common.py:400</code> / 状态展示 <code>status.py:292</code>·<code>:300</code>，语义均未变。零代码改动。</li>
+      <li>2026-11-06 00:50 — 用户拍板走 <strong>Dropped</strong>（未动代码）。理由：收益不足以支撑风险 —— 逐项核对「rows == claim 但下一页标记未消失」窗口的出现条件后确认：计数精确且波内无增删时窗口根本不出现（rows 恰在真末页达成 claim，而该页自身 has_next 已 False，循环本来就在那里停，无可省）；能张开窗口的三情形中，①计数滞后（页头摘要与表格不同源渲染）与②行重现型 churn（页间重叠，rows 含重复提前涨到 claim）是异常——恰是现行超翻锻造 <code>count_match=False</code> 冻结+告警证据的时刻，早停反而把计数偏小变成自我确认；③空末页伪影（maxpage 虚高渲染幻影页）正常形态不出现 —— 唯一纯收益场景落空。收益（偶发省 1 次抓空页请求）撑不起风险（直击「不误放行」核心安全性质 + 削弱计数对账证据链，报告 26-09-29-1803 §4.3/§5.1 同判据先例：观察期 2 波→1 波已因此否决）。§06 建议修法保留原文；若未来请求配额真成约束，重启前置：D4 口径实证 + 修法改走页码标记佐证（<code>cur_mark == max_mark</code>）而非计数对平。</li>
     </ul>
     <h3>复验</h3>
-    <p>认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验：2026-11-05 仍复现 —— <code>service.py</code> 拆分后行号全漂移，锚点已重新定位（新位见下方状态日志），锚点语义与入池时一致；翻页循环终点仍是停翻条件①②③与「下一页标记消失」两类，<code>counter_claims</code> 不参与停翻决策，rows == claim 后仍会追翻到末页标记消失。状态保持 <strong>Open</strong>，修复与否待拍板。</p>
     <h3>修复后补充</h3>
     <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
   </section>
