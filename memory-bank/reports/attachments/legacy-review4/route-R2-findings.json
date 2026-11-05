@@ -88,5 +88,41 @@
   "claim": "docstring 断言「9 键」,但 KNOWN_RELOCATE_KEYS 实为 11 键(pending_tag 与 assume_shared 后续计划加入后计数未同步)",
   "relevance": "相关",
   "fix": "docstring 计数改为「11 键」或去掉具体数字只说「逐一键级校验」"
+ },
+ {
+  "file": "src/auto_qb/config/loaders.py",
+  "line": 729,
+  "quote": "elif pat.body and pat.body not in seen:",
+  "severity": "minor",
+  "claim": "_expand_tracker_tags_refs 去重判存用 pat.body、入集却用 pat.raw(seen.add(pat.raw)),两键面不一致导致去重结果依赖书写顺序:delete_tags [\"foo\", \"foo:ignore_case\"] 时后者被静默丢弃(大小写不敏感删除丢失,如标签 'BTS' 删了而 'bts' 删不掉),反序则两条都保留",
+  "relevance": "相关",
+  "fix": "统一键面:要么 seen.add(pat.body) 按 body 去重(首条胜出,两序一致),要么判存改 pat.raw not in seen 按原串去重;并修正 docstring 中自相矛盾的「查重用 body / 去重键用原始串」表述"
+ },
+ {
+  "file": "src/auto_qb/config/schema/__init__.py",
+  "line": 146,
+  "quote": "(演示测试验收①), 声明零复制。守卫测试钉住派生序 == 手写声明序。",
+  "severity": "minor",
+  "claim": "docstring 含带圈数字 ①,违反 code-style.md「带圈数字 ①–⑬ 禁令」(代码文件禁用,ASCII 替代 1.)",
+  "relevance": "相关",
+  "fix": "① 改为 (演示测试验收 1.)"
+ },
+ {
+  "file": "src/auto_qb/config/schema/__init__.py",
+  "line": 154,
+  "quote": "\"\"\"按插件名索引的元数据(供前端按名查 spec 结构); 未知 kind 落 action 兜底(既有契约)\"\"\"",
+  "severity": "minor",
+  "claim": "plugins_by_kind 生产调用图不可达(全 src 仅本文件定义与 __all__ 登记,消费全部在 tests/),docstring 宣称的「供前端按名查 spec 结构」不存在——前端经 schema_payload().plugins 拿全表,属存量 A 类 test-only 导出",
+  "relevance": "相关",
+  "fix": "删函数与 __all__ 项、测试改走 schema_payload/registry 派生面;或改 docstring 如实标注仅测试消费并留 TODO 合流"
+ },
+ {
+  "file": "src/auto_qb/config/schema/groups.py",
+  "line": 622,
+  "quote": "default=True,",
+  "severity": "nit",
+  "claim": "traffic_source.enabled 的 Field.default 用 Python 布尔 True,违反 Field docstring「default 为 YAML 空间标量字符串」契约,也是全 schema 唯一一个布尔型 default(其余 bool 字段均为 \"true\"/\"false\" 串)",
+  "relevance": "相关",
+  "fix": "改为 default=\"true\"(前端 cfgScalar/cfgTruthy 当前兼容布尔,但契约口径应统一,防后续消费方按字符串处理时踩坑)"
  }
 ]

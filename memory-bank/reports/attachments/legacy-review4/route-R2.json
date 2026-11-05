@@ -17,9 +17,9 @@
     {
       "id": "R2-2",
       "title": "schema 与装载: schema 全部 + loaders + models",
-      "status": "pending",
-      "done_at": null,
-      "findings": 0
+      "status": "done",
+      "done_at": "26-11-06-0545",
+      "findings": 4
     },
     {
       "id": "R2-3",
