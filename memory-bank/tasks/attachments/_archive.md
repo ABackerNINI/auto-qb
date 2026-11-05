@@ -6,6 +6,7 @@
 
 ## In Progress (28)
 
+- [26-09-22-deps-version-management](../26-09-22-deps-version-management.md) 软件版本管理方案（版本号 / Tag / CHANGELOG / 发版流程）
 - [26-11-06-backend-hr-lastpage-fetch-skip](../26-11-06-backend-hr-lastpage-fetch-skip.md) issue 26-09-30-0052 末页追翻省略复验与拍板
 - [26-10-08-webui-perf-issues-closing](../26-10-08-webui-perf-issues-closing.md) 三条 perf issue 定案 / 重归因（含 e2e 与仿真复测）
 - [26-11-05-backend-relocate-fastresume-finalize](../26-11-05-backend-relocate-fastresume-finalize.md) relocate 收尾重构: fastresume 改写方案验证与计划入库
@@ -33,7 +34,6 @@
 - [26-10-02-config-eol-unify-lf](../26-10-02-config-eol-unify-lf.md) 行尾统一 LF(仓库设防 + 全局 input)
 - [26-10-02-memory-bank-issue-clearance-roadmap](../26-10-02-memory-bank-issue-clearance-roadmap.md) Issue 全量清偿路线图(滚动执行)
 - [26-10-01-backend-transmission-compat](../26-10-01-backend-transmission-compat.md) 兼容 Transmission 可行性分析
-- [26-09-22-deps-version-management](../26-09-22-deps-version-management.md) 软件版本管理方案（版本号 / Tag / CHANGELOG / 发版流程）
 
 ## Open (2)
 

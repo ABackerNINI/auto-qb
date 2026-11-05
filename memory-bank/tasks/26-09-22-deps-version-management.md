@@ -2,8 +2,8 @@
 
 **Status:** In Progress
 **Added:** 2026-09-22
-**Updated:** 2026-09-22
-**Summary:** 「版本管理」立项：git VCS 健在（develop @ 49eacb8 与 gitee 齐平），空白在软件版本/发布层 —— 本地与 gitee 0 tag、无 CHANGELOG、无发版流程、版本号双源已漂移（pyproject "0.1.0" vs `__init__.__version__` "0.2.0"）。方案已出待拍板：0.x 语义化 + `__init__` 单源（hatchling regex 动态接线）+ 手工三步发版 + Keep a Changelog + 打 v0.2.0 基线 tag；3 个决策点待用户拍板，批准后阶段 0（不涉码）先行。
+**Updated:** 2026-11-06
+**Summary:** 「版本管理」立项：git VCS 健在，空白在软件版本/发布层。v1 方案（0.x 语义化 + `__init__` 单源 + 手工三步发版 + Keep a Changelog）经六轮 grilling（2026-11-05–11-06）改版为 **v2 机械化发版管线**：minor/patch 机器算+agent 执行、major 人工三判据；hash 尾双路径（源码运行时派生/wheel 构建期注入）；develop=工作主线/master=发布线双分支（ff-only，tag/Release 锚 master）；本地全测门（test.full+dev.e2e+real.suite，变异测试不进门）+ GitHub CI 全绿门；三层载体（release skill 规程+脚本本体 / .commands 薄引用 / conventions 口径）。16 项拍板见计划 v2 §09，待实施（阶段 1 八步）。
 **Topics:** deps-version-management
 
 ## 原始请求
@@ -30,13 +30,15 @@
 | 子任务 | 状态 |
 |---|---|
 | 现状取证与三层方案对比 | 已完成（2026-09-22） |
-| 方案文档产出（26-09-22-2318） | 已完成（2026-09-22） |
-| 决策点 ①基线 tag 时机 ②版本载体 ③CHANGELOG 档位 | 待用户拍板 |
-| 阶段 0（CHANGELOG + 基线 tag + 约定回写） | 待拍板后 |
-| 阶段 1（hatch 接线 + 守阵 + --version，单独立项） | 待拍板后 |
-| 阶段 2（脚本化 / git-cliff / Release 页） | 未排期 |
+| 方案文档产出（26-09-22-2318） | 已完成（2026-09-22）；v2 改版（2026-11-06） |
+| v1 决策点 ①基线 tag 时机 ②版本载体 ③CHANGELOG 档位 | 已完成/并入 v2（tag 已打 2026-09-23/25；载体与 CHANGELOG 档位由 v2 拍板覆盖） |
+| grilling 六轮 16 项拍板（v2 机械化改版：触发词/分工/hash 双路径/双分支/CI 门/全测门/三层载体） | 已完成（2026-11-06） |
+| 阶段 1 八步（单源接线+issue 1408 清偿 / CHANGELOG 骨架 / 决策器+守阵 / bump-my-version / release skill+commands / 管线首跑补发 0.3.0 / 口径回写） | 待认领实施 |
+| 阶段 2（Release 页 token / exe 立项 / git-cliff 评估 / 1.0 里程碑） | 未排期 |
 
 ## 进度日志
 
 - 2026-09-22 23:18 会话：立项取证（git 健康度 / tag / 双远端 / 双源漂移）+ 三层方案对比 + 方案文档产出 + 本档案建立。全量测试实测 **1189 passed + 1 skipped in 29.66s**（TMPDIR=R:/Temp/auto-qb/tests，exit 0，基线不变；本轮未动任何代码，数字为环境基线确认）。等待决策点 ①②③ 拍板。
 - 2026-09-22 23:47 会话（用户令「提交」）：预检发现主线领先 9 提交（另一 clone 的 src 布局归拢 W1–W4b + W5 回写），按 [pitfalls/git/history-integration.md](../pitfalls/git/history-integration.md)「先同步远端、后提交」流程合流（备份 .git 至 R:/Temp/auto-qb/git-backup-20260922-2343 → 移出 2 个改动文件 → ff-only 至 d4dea8b → 施回），全程零 merge/rebase 提交；方案内路径引用按新布局校正（ui.py→tray/app.py、web/→webui/server/、__init__ 行号 14→18），漂移事实复验不变（pyproject "0.1.0" vs __version__ "0.2.0" @ :18，tag 仍 0）。合流后树全量复测 **1189 passed + 1 skipped in 27.63s**（--no-cov，exit 0）。
+
+- 2026-11-06 01:23 认领 issue 26-09-21-1408(Open→In Progress 双向链) + 计划 v2 定稿: 六轮 grilling 16 项拍板(机械化发版管线八步/三层载体 skill scripts+commands 薄引用/hash尾双路径/双分支 develop工作线-master发布线/本地全测门变异不进门/CI门 master run 全绿+发版轮镜像例外); 阶段1 八步待实施, 本轮零代码改动

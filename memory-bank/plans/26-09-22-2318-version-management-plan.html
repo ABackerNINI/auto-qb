@@ -3,12 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>auto-qb 软件版本管理方案 · 版本号 / Tag / CHANGELOG / 发版流程</title>
+<title>auto-qb 软件版本管理方案 v2 · 版本号 / Tag / CHANGELOG / 机械化发版</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="deps-version-management">
+<meta name="doc-refs" content="memory-bank/issues/26-09-21-1408-chore-version-dual-source.html">
 <meta name="doc-status" content="In Progress">
 <meta name="doc-added" content="26-09-22-2318">
-<meta name="doc-updated" content="26-09-22-2318">
+<meta name="doc-updated" content="26-11-06-0116">
 <style>
   :root {
     --bg: #10151a;
@@ -82,292 +83,253 @@
   <nav class="toc">
     <div class="toc-label">目录</div>
     <a href="#s1"><span class="no">01</span>背景与结论</a>
-    <a href="#s2"><span class="no">02</span>现状盘点（已核实）</a>
+    <a href="#s2"><span class="no">02</span>现状盘点（2026-11 复核）</a>
     <a href="#s3"><span class="no">03</span>目标与约束</a>
-    <a href="#s4"><span class="no">04</span>版本号方案对比</a>
-    <a href="#s5"><span class="no">05</span>版本号载体对比</a>
-    <a href="#s6"><span class="no">06</span>发版流程与 CHANGELOG</a>
-    <a href="#s7"><span class="no">07</span>落地路线（三阶段）</a>
+    <a href="#s4"><span class="no">04</span>版本号方案与 hash 尾</a>
+    <a href="#s5"><span class="no">05</span>版本号载体（已拍板）</a>
+    <a href="#s6"><span class="no">06</span>机械化发版执行</a>
+    <a href="#s7"><span class="no">07</span>落地路线</a>
     <a href="#s8"><span class="no">08</span>风险与对策</a>
-    <a href="#s9"><span class="no">09</span>待拍板决策点</a>
+    <a href="#s9"><span class="no">09</span>已拍板决策清单（16 项）</a>
+    <a href="#s10"><span class="no">10</span>变更记录</a>
     <div class="toc-foot">
       触发来源：<a href="https://gitee.com/ABacker/auto-qb/blob/develop/想法.md">想法.md</a> L281「版本管理」<br>
+      关联 issue：<a href="../issues/26-09-21-1408-chore-version-dual-source.html">26-09-21-1408-chore-version-dual-source</a>（双向认领链）<br>
       立档：<a href="../../memory-bank/tasks/26-09-22-deps-version-management.md">26-09-22-deps-version-management</a><br>
-      状态：方案待拍板，未动代码
+      状态：v2 已拍板（16 项），待实施
     </div>
   </nav>
 
   <header class="cover">
-    <div class="kicker">选型方案 · 版本管理 · memory-bank/plans/</div>
-    <h1>auto-qb 软件版本管理方案<br>—— 版本号 · Tag · CHANGELOG · 发版流程</h1>
-    <p class="lede">「当前项目没有版本管理」经逐项核实，指的不是 git（版本控制本体健在且健康），而是<strong>软件版本号与发布管理</strong>这一层：零 tag、零 CHANGELOG、零发版流程，且版本号双源（pyproject vs 包内 <code>__version__</code>）已经漂移。本文档对比四类候选方案，给出推荐组合与分阶段落地路线。</p>
+    <div class="kicker">选型方案 v2 · 版本管理 · memory-bank/plans/</div>
+    <h1>auto-qb 软件版本管理方案 v2<br>—— 版本号 · Tag · CHANGELOG · 机械化发版</h1>
+    <p class="lede">v1（2026-09-22）的「手工三步发版」经六轮 grilling（2026-11-05–11-06）改版为 <strong>机械化发版管线</strong>：小版本号（minor/patch）机器算 + agent 执行，大版本号（major）人工拍板；hash 尾双路径全自动；develop=工作主线 / master=发布线双分支模型；本地全测门 + GitHub CI 全绿门。16 项决策全部拍板（§09），方案定稿、待实施。</p>
     <div class="meta-row">
-      <div class="item"><div class="k">方案编号</div><div class="v">26-09-22-2318</div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge open">待拍板 · 未动代码</span></div></div>
-      <div class="item"><div class="k">代码基线</div><div class="v">develop @ d4dea8b（已合流主线 9 提交）</div></div>
-      <div class="item"><div class="k">取证时间</div><div class="v">2026-09-22 23:10–23:47（命令取）</div></div>
-      <div class="item"><div class="k">涉及范围</div><div class="v">pyproject.toml · src/auto_qb/__init__.py · CHANGELOG.md（新）· git tag</div></div>
+      <div class="item"><div class="k">方案编号</div><div class="v">26-09-22-2318 (v2)</div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">已拍板 16 项 · 待实施</span></div></div>
+      <div class="item"><div class="k">代码基线</div><div class="v">develop @ c0b6290f（2026-11-05 已同步）</div></div>
+      <div class="item"><div class="k">取证时间</div><div class="v">2026-11-05 23:10 – 11-06（命令实测）</div></div>
+      <div class="item"><div class="k">涉及范围</div><div class="v">pyproject · __init__.py · CHANGELOG.md(新) · release skill+commands · git tag/分支 · Release 页</div></div>
     </div>
   </header>
 
   <section id="s1">
     <h2><span class="no">01</span>背景与结论</h2>
-    <p><strong>前提核实</strong>（2026-09-22 23:10 实测）：git 仓库健在——develop @ <code>d4dea8b</code> 与 gitee/develop 齐平（<code>preflight.py --check-started</code> PASS；本轮内自 49eacb8 快进合流主线 9 提交，含 src 布局归拢）、工作区干净、双远端齐全（gitee 主 + github 镜像）、多 clone 协作模式 2026-09-20 已定案运行。因此「没有版本管理」在本项目语境下的准确含义是 <code>想法.md</code> L281 待办「版本管理」所指的<strong>软件版本号与发布管理</strong>，不是版本控制工具本身。</p>
+    <p><strong>前提</strong>（v1 已核实）：git 版本控制本体健在，空白在<strong>软件版本号与发布管理</strong>层。v2 复核确认空白仍在且已产生实际代价：双源矛盾持续（pyproject 0.1.0 vs <code>__version__</code> 0.2.0，issue <a href="../issues/26-09-21-1408-chore-version-dual-source.html">26-09-21-1408</a> 认领中）；v0.2.0 tag 之后 develop 积压 <strong>1720 提交（269 ✨ / 354 🐛）零 bump</strong>——v1 §08 预警的「bump 被忘记」风险已大规模兑现，这是机械化诉求的直接实证。</p>
     <div class="callout">
-      <strong>核心结论</strong>：推荐组合 = <strong>0.x 语义化版本</strong>（0.2.0 → 0.3.0 功能批次 / 0.2.1 修复）+ <strong><code>__init__.py</code> 单源</strong>（pyproject 走 hatchling regex 动态接线，消灭双源）+ <strong>手工三步发版</strong>（bump → commit → tag + 双远端 push，判定只看 ls-remote）+ <strong>Keep a Changelog</strong>（条目按既有 gitmoji 提交归类）+ <strong>立即打 <code>v0.2.0</code> 基线 tag</strong>。三个待拍板决策点见 §09；阶段 0 全程不涉码。
+      <strong>核心结论（v2）</strong>：0.x 语义化版本 + <code>__init__.py</code> 单源（hatchling regex 接线，清偿双源 issue）+ <strong>机械化发版管线</strong>（触发词「发版」→ 本地全测门 → gitmoji 决策器算号 → bump-my-version 改文件 → 🔖 发版提交 → ff-only 合并 master → GitHub CI 全绿 → tag 锚 master → wheel 构建 + gitee Release 页）+ Keep a Changelog（gitmoji 映射）+ hash 尾双路径（源码运行时派生 / wheel 构建期注入）。三层载体：release skill（规程+脚本本体）+ .commands 薄引用（机械面）+ conventions 口径文档。16 项拍板见 §09。
     </div>
     <table>
-      <tr><th>层</th><th>推荐</th><th>一句话理由</th></tr>
-      <tr><td>版本号格式</td><td class="verdict-yes">0.x 语义化</td><td>Beta 阶段惯例：0.x 即「不稳定但可用」，破坏性变更升 minor，语义对使用者诚实</td></tr>
-      <tr><td>版本号权威出处</td><td class="verdict-yes">src/auto_qb/__init__.py 单源</td><td>显示路径（托盘 / WEB UI）零改动，运行时零新增依赖，构建元数据自动跟随</td></tr>
-      <tr><td>发版动作</td><td class="verdict-yes">手工三步 + ls-remote 判定</td><td>与既有提交推送纪律同构，零新依赖；脚本化留作演进</td></tr>
-      <tr><td>变更记录</td><td class="verdict-yes">Keep a Changelog + gitmoji 映射</td><td>不改提交规范的前提下，把已有 gitmoji 历史低成本转成用户可读的变更记录</td></tr>
+      <tr><th>层</th><th>拍板</th><th>一句话理由</th></tr>
+      <tr><td>版本号格式</td><td class="verdict-yes">0.x 语义化</td><td>Beta 阶段惯例，破坏性升 minor，1.0 留里程碑（三判据）</td></tr>
+      <tr><td>版本号权威出处</td><td class="verdict-yes"><code>__init__.py</code> 单源</td><td>显示路径零改动，双源结构性消失；构建后端已是 hatchling，接线约 3 行</td></tr>
+      <tr><td>hash 尾</td><td class="verdict-yes">双路径全自动</td><td>提交无法含自身 hash（鸡生蛋），业内解法=取数时刻后移：运行时/构建期派生</td></tr>
+      <tr><td>bump 决策</td><td class="verdict-yes">机器提案 + agent 改判</td><td>gitmoji 决策表（semantic-release 语义移植）出提案，agent 可改判但留痕，永不跨 major</td></tr>
+      <tr><td>发版执行</td><td class="verdict-yes">agent 全程 + 触发词</td><td>「发版」进显式触发词清单，执行零人工；平时不自主发版（请求边界不破）</td></tr>
+      <tr><td>分支模型</td><td class="verdict-yes">develop 工作线 / master 发布线</td><td>用户拍板双分支；tag/Release 页锚 master，ff-only 线性合并，多 clone 纪律不变</td></tr>
+      <tr><td>发布形态</td><td class="verdict-yes">wheel + gitee Release 页</td><td>Python 业内标准形态；exe 留阶段 2 单独立项</td></tr>
     </table>
-    <p class="hint">若本方案的原意确为「版本控制工具选型」：§02 现状盘点即答案——git 已是唯一合理解（托管、AI 工具链、多 clone 工作流全部锁定其上），不存在重选问题；本文档余下部分全部针对软件版本/发布层。</p>
   </section>
 
   <section id="s2">
-    <h2><span class="no">02</span>现状盘点（已核实）</h2>
-    <h3>2.1 健全面：版本控制本体</h3>
-    <table>
-      <tr><th>事实</th><th>现值（取证 2026-09-22 23:10–23:18）</th></tr>
-      <tr><td>分支状态</td><td>develop @ <code>49eacb8</code>，与 gitee/develop 齐平（preflight <code>--check-started</code> PASS），工作区净</td></tr>
-      <tr><td>远端</td><td><code>gitee</code> = 主线（判定口径）；<code>github</code> = 镜像（允许滞后）；<code>origin</code> = gitee 别名</td></tr>
-      <tr><td>仓库本体</td><td>.git 239 文件 / 16.5 MB，多 clone 工作流（auto-qb 主 + clone1 + clone2 + long-seeding）运行中</td></tr>
-    </table>
-    <h3>2.2 空白面：软件版本 / 发布层</h3>
+    <h2><span class="no">02</span>现状盘点（2026-11 复核）</h2>
+    <h3>2.1 版本/发布层事实（2026-11-05 23:10–23:46 实测）</h3>
     <table>
       <tr><th>事实</th><th>现值</th><th>影响</th></tr>
-      <tr><td>git tag</td><td>本地 <strong>0 个</strong>；gitee 远端 <strong>0 个</strong>（<code>ls-remote --tags</code> 空）；github 代理拒连未核（报告一次不重试）</td><td>没有可回溯的发布点，回滚只能靠记 SHA</td></tr>
-      <tr><td>pyproject 版本</td><td><code>version = "0.1.0"</code>（静态）</td><td>自 uv 现代化后未随功能演进</td></tr>
-      <tr><td>包内版本</td><td><code>__version__ = "0.2.0"</code>（<code>src/auto_qb/__init__.py:18</code>）</td><td><strong>与 pyproject 已漂移</strong>：界面显示 0.2.0，安装元数据是 0.1.0</td></tr>
-      <tr><td>版本消费点</td><td><code>tray/app.py:236</code> 托盘标题显示 <code>v{__version__}</code>；<code>webui/server/common.py:31</code> 懒加载读取（注释写明顶层导入会在包初始化期炸 ImportError）</td><td>显示路径已经存在且工作正常，方案必须保住它</td></tr>
-      <tr><td>CHANGELOG</td><td>无</td><td>「这次更新了什么」只能翻 git log</td></tr>
-      <tr><td>发版流程 / bump 约定</td><td>无</td><td>版本号改动无触发时机、无核对步骤</td></tr>
-      <tr><td>README 版本提及</td><td>无（grep 0.1.0 / 版本号 = 0 命中）</td><td>使用者无从得知当前运行的是哪一版</td></tr>
-      <tr><td>成熟度自述</td><td>classifiers = <code>Development Status :: 4 - Beta</code>；README 功能标注 🚧 alpha</td><td>版本号方案需与「不稳定但可用」的阶段语义匹配</td></tr>
+      <tr><td>双源矛盾</td><td>pyproject <code>0.1.0</code>（静态）vs <code>src/auto_qb/__init__.py:18</code> <code>0.2.0</code>；uv.lock 同 0.1.0</td><td>issue 26-09-21-1408 认领中（In Progress），现象未消失</td></tr>
+      <tr><td>git tag</td><td>v0.1.0（2026-09-23 → 217b1937）/ v0.2.0（2026-09-25 → ce92ca2c），gitee 已核；github 未核（历史代理拒连，报告一次不重试）</td><td>v1 阶段 0 的 tag 步已完成；发版点锚已有先例</td></tr>
+      <tr><td><strong>版本积压</strong></td><td><code>v0.2.0..HEAD</code> = <strong>1720 提交：269 ✨ / 354 🐛</strong>，零 bump</td><td>机械化的直接动机；补发号按 delta 算 = 0.3.0（§09-8）</td></tr>
+      <tr><td>CHANGELOG</td><td>无 CHANGELOG.md</td><td>「这版更新了什么」只能翻 git log</td></tr>
+      <tr><td>构建后端</td><td>hatchling 已就位；<code>[tool.hatch.build.targets.wheel]</code> 已配<strong>从未构建过</strong></td><td>单源接线约 3 行；wheel 管线需先构建冒烟</td></tr>
+      <tr><td>CI（github）</td><td>ci.yml（py3.12/3.13 × ubuntu/windows + coverage 产物）+ playwright.yml；push/PR 触发 develop/master/main；<strong>无 tag 触发、无发版 job、不构建 wheel</strong></td><td>发版 CI 门可复用现有 run；master 推送本来就触发 CI</td></tr>
+      <tr><td>分支</td><td>本地仅 develop；gitee 默认分支 = master（gitee/HEAD→master）但工作流从不提交它（死触发面）；feature_rules 旧分支遗留；<strong>2026-11-06 双远端 ls-remote 拒连</strong>（报告一次不重试）</td><td>master↔develop 关系（落后/分叉）留实施首步核验；分叉即停手要人</td></tr>
+      <tr><td>版本消费点</td><td><code>tray/app.py:220,234</code> 托盘 <code>v{__version__}</code>；<code>webui/server/common.py:33</code> 懒加载（包初始化次序坑注释）</td><td>显示路径已工作，方案必须保住（hash 拼接在这层做）</td></tr>
     </table>
-    <p class="hint">注：主线于本轮内合入 src 布局归拢（<code>d4dea8b</code>：ui.py→tray/app.py、web/→webui/server/、web_runtime.py→webui/runtime.py 等，零行为变更），本节与全文路径已按新布局标注。</p>
+    <h3>2.2 本地全测门底座（task id 实测清点）</h3>
+    <table>
+      <tr><th>族</th><th>task</th><th>发版门角色</th></tr>
+      <tr><td>pytest</td><td><code>test.full</code>（带覆盖率）/ <code>test.quick</code>（闸门）</td><td>常规门必跑</td></tr>
+      <tr><td>e2e</td><td><code>dev.e2e</code>（playwright 真浏览器全量集，webServer 自动起桩）</td><td>常规门必跑</td></tr>
+      <tr><td>真机</td><td><code>real.suite</code>（一轮实测；<code>real.guard</code> 前置 + <code>real.up</code> 起实例）</td><td>常规门必跑（实例在位为外部前置）</td></tr>
+      <tr><td>Linux 复现</td><td><code>test.linux</code>（容器跑全量）</td><td>视本轮是否动平台相关代码</td></tr>
+      <tr><td>变异测试</td><td><code>mutants.*</code>（WSL mutmut，按包/模块定期审计）</td><td><strong>不进发版门</strong>（全量=小时级）；发版时 <code>mutants.status</code> 核验上轮无未处置真洞（§09-11）</td></tr>
+    </table>
   </section>
 
   <section id="s3">
     <h2><span class="no">03</span>目标与约束</h2>
     <ol>
-      <li><strong>单点事实源</strong>：版本号只允许一个权威出处——与 config/schema 单点、testing.md 基线单点同款项目哲学；双源漂移已经实际发生过（§2.2），不再是理论风险。</li>
-      <li><strong>兼容 gitmoji + 中文提交规范</strong>：任何自动化不得以改成 conventional commits 为前提。</li>
-      <li><strong>兼容双远端纪律</strong>：Gitee 为主线、判定只看 <code>ls-remote</code>；GitHub 镜像允许滞后，失败只报告一次不重试。</li>
-      <li><strong>兼容工具 shell git 禁令</strong>：发版流程禁用 merge / rebase / stash；每一步都能被 <code>ls-remote</code> / <code>show-ref</code> 当场核验（本 shell 有 ref 静默丢弃先例）。</li>
-      <li><strong>多 clone 感知</strong>：<code>git fetch &lt;remote&gt; &lt;分支&gt;</code> 不带 tag，四个 clone 的 tag 同步需要显式 <code>fetch --tags</code> 约定。</li>
-      <li><strong>阶段语义</strong>：Beta + README 🚧 alpha 功能——版本号要能表达「不稳定但可用」，且给未来 1.0 留出里程碑语义。</li>
-      <li><strong>最小改动</strong>：不引入构建期 git 依赖（无 tag 时构建失败的面）、不新增常驻工具、不改运行时代码路径。</li>
+      <li><strong>单点事实源</strong>：版本号唯一权威出处；双源漂移已实证（§2.1）。</li>
+      <li><strong>兼容 gitmoji + 中文提交规范</strong>：任何自动化不得以改提交格式为前提（否决 semantic-release/PSR/Release Please 的默认形态；其决策表语义照搬）。</li>
+      <li><strong>兼容双远端纪律</strong>：gitee 主线判定看 <code>ls-remote</code>；github 镜像允许滞后、失败报告一次不重试——<strong>唯一例外：发版轮 github 推送必须成功且非静默</strong>（CI 门的依赖，§09-12）。</li>
+      <li><strong>全程 agent 执行 + 触发词</strong>：执行零人工；发起留触发词「发版」，与「提交/入库/推上去」同列显式清单，平时不自主发版（请求边界黄金规则不破）。</li>
+      <li><strong>大版本人工</strong>：major 永不由机器/管线跨越，三判据全中人工拍板 + <code>--major</code> 旗标放行。</li>
+      <li><strong>双分支模型</strong>：develop=工作主线（多 clone 同步/提交/判定纪律全不变），master=发布线（仅发版时 <code>--ff-only</code> 前进）；分叉/冲突停手要人。</li>
+      <li><strong>CI 全绿门</strong>：tag 前必须 GitHub CI（master run）全绿；本地前置全测门（test.full + dev.e2e + real.suite，变异测试不进门）。</li>
+      <li><strong>幂等重入</strong>：管线每步独立 rc、可重入，已完成步校验后跳过（黄金法则 1）。</li>
+      <li><strong>skill 通用性</strong>：脚本本体零项目事实（分支/远端/路径全走参数与配置），移植改动面 = bump-my-version 配置 + commands 包 config + 口径文档三处。</li>
+      <li><strong>最小依赖</strong>：uv 生态纯 Python（bump-my-version）；git-cliff（Rust 二进制）留阶段 2 评估。</li>
     </ol>
   </section>
 
   <section id="s4">
-    <h2><span class="no">04</span>版本号方案对比</h2>
+    <h2><span class="no">04</span>版本号方案与 hash 尾</h2>
+    <h3>4.1 格式：0.x 语义化（拍板维持）</h3>
     <table>
-      <tr><th>方案</th><th>形态示例</th><th>变更时机</th><th>优点</th><th>缺点</th><th>判定</th></tr>
-      <tr>
-        <td>A. 0.x 语义化</td>
-        <td><code>0.2.0</code> → <code>0.3.0</code>（功能批次）/ <code>0.2.1</code>（修复）</td>
-        <td>人为判定</td>
-        <td>0.x = 「不稳定但可用」是社区惯例，与 Beta 自述一致；兼容 SemVer 工具链与依赖判断；单人可判</td>
-        <td>需要记得 bump——靠发版流程（§06）兜住</td>
-        <td class="verdict-yes">★ 推荐</td>
-      </tr>
-      <tr>
-        <td>B. 正式 SemVer（1.x 起步）</td>
-        <td><code>1.0.0</code></td>
-        <td>同上</td>
-        <td>兼容承诺明确，用户可放心自动升级</td>
-        <td>Beta 期破坏性变更频繁会持续刷大版本；1.0 语义被透支</td>
-        <td>1.0 留作里程碑</td>
-      </tr>
-      <tr>
-        <td>C. CalVer</td>
-        <td><code>2026.9.0</code></td>
-        <td>日期驱动</td>
-        <td>新旧一目了然；零决策成本</td>
-        <td>对「能不能安全升级」零表达；单人工具的发布间隔不规律，日期语义弱</td>
-        <td>备选（保留）</td>
-      </tr>
-      <tr>
-        <td>D. 短哈希滚动</td>
-        <td><code>0.2.0+49eacb8</code></td>
-        <td>每次构建</td>
-        <td>零维护；溯源精确到提交</td>
-        <td>无里程碑语义、不可比较、不能当对外版本</td>
-        <td>仅作本地构建后缀</td>
-      </tr>
+      <tr><th>变更</th><th>动作</th><th>示例</th></tr>
+      <tr><td>功能批次（✨ 存在）</td><td>minor +1</td><td>0.2.0 → 0.3.0</td></tr>
+      <tr><td>仅修复/性能（🐛/⚡️）</td><td>patch +1</td><td>0.3.0 → 0.3.1</td></tr>
+      <tr><td>破坏性变更</td><td>minor +1 + CHANGELOG「Breaking」加粗警示（0.x 语义）</td><td>0.3.1 → 0.4.0</td></tr>
+      <tr><td>里程碑（三判据全中）</td><td>major +1，人工拍板 + <code>--major</code> 旗标</td><td>0.x → 1.0.0</td></tr>
     </table>
-    <p><strong>推荐 A</strong>，并为 1.0 设可判定的触发条件（三条全中再提 1.0）：① README 🚧 项清空；② 生产连续 2–4 周无数据风险事故；③ 配置 schema 冻结走完一个周期。在此之前 minor = 功能批次、patch = 修复，破坏性变更也走 minor（0.x 语义允许）。</p>
+    <p class="hint">1.0 三判据：① README 🚧 项清空；② 生产连续 2–4 周无数据风险事故；③ 配置 schema 冻结走完一个周期。版本号是兼容性契约不是进度条——补发 1720 提交仍按 delta 算 0.3.0，积压量由 CHANGELOG 承载。</p>
+    <h3>4.2 hash 尾双路径（拍板）</h3>
+    <p><strong>结构性事实</strong>：提交内容无法包含该提交自身的 hash（鸡生蛋），「存储式」<code>0.2.0+hash</code> 只能是上一个发布提交的号且 uv.lock 每次提交漂移——直接排除。业内解法（setuptools-scm / hatch-vcs / git describe）一致：<strong>hash 不存储，取数时刻后移</strong>。</p>
+    <table>
+      <tr><th>运行形态</th><th>hash 来源</th><th>显示</th></tr>
+      <tr><td>源码运行（日常多 clone）</td><td>显示层运行时 <code>git rev-parse --short HEAD</code>（+<code>--dirty</code> 标脏）；git 不可用退纯版本</td><td><code>0.3.0+49eacb8</code>，逐时刻精确到 clone 的树</td></tr>
+      <tr><td>发布件（wheel）</td><td>hatchling build hook 构建期注入包元数据</td><td>装到别处经 <code>importlib.metadata</code> 显示 <code>0.3.0+49eacb8</code></td></tr>
+    </table>
+    <p class="hint">存储 <code>__version__</code> 恒为纯 SemVer（守阵正则 <code>^\d+\.\d+\.\d+$</code> 不放宽）；tag 名恒 <code>v0.3.0</code> 不带 hash（带 hash 破坏 ls-remote 判定与 fetch --tags 约定）；溯源链 = tag 锚发布点 + 显示层 hash 定位树。备选 hatch-vcs 全盘接管已否决（推翻 bump-my-version 拍板、dev 显示噪、构建期 git 依赖）。</p>
   </section>
 
   <section id="s5">
-    <h2><span class="no">05</span>版本号载体对比</h2>
+    <h2><span class="no">05</span>版本号载体（已拍板）</h2>
     <table>
-      <tr><th>方案</th><th>机制</th><th>优点</th><th>缺点</th><th>判定</th></tr>
-      <tr>
-        <td>V1. pyproject 静态 + 运行时读元数据</td>
-        <td>版本写 pyproject；代码 <code>importlib.metadata.version("auto-qb")</code></td>
-        <td>惯例位置；打包元数据单源</td>
-        <td>运行时依赖「项目已安装」；直接 <code>python src/auto-qb.py</code> 场景要兜底；包初始化次序曾有坑（<code>web/common.py:31</code> 注释实证）</td>
-        <td>可行</td>
-      </tr>
-      <tr>
-        <td>V2. <code>__init__</code> 单源 + hatchling 动态</td>
-        <td>pyproject 声明 <code>dynamic = ["version"]</code>，构建时用 regex 从 <code>src/auto_qb/__init__.py</code> 提取</td>
-        <td>显示路径零改动（ui.py / web 照旧 import）；运行时零新增依赖；bump = 改一行；构建元数据自动一致，双源<strong>结构性消失</strong></td>
-        <td>pyproject 不再静态可读版本（构建时推导）；接线后需 <code>uv sync</code> 刷新 uv.lock 内记录</td>
-        <td class="verdict-yes">★ 推荐</td>
-      </tr>
-      <tr>
-        <td>V3. tag 驱动（setuptools-scm / hatch-vcs）</td>
-        <td>构建期从 git tag 推导，开发构建自动 <code>.devN</code></td>
-        <td>零手改；溯源最精确</td>
-        <td>构建期需要 git 仓库与 tag 纪律；无 tag 构建即失败；与本 shell 的 git 怪癖叠加后排查链最长</td>
-        <td>未来选项</td>
-      </tr>
-      <tr>
-        <td>V4. 双写（现状）</td>
-        <td>pyproject 与 <code>__init__</code> 各写一份</td>
-        <td>—</td>
-        <td><strong>漂移已实证</strong>：0.1.0 vs 0.2.0；违反单点事实源</td>
-        <td class="verdict-no">✗ 否决</td>
-      </tr>
+      <tr><th>方案</th><th>机制</th><th>判定</th></tr>
+      <tr><td>V2. <code>__init__</code> 单源 + hatchling 动态</td><td>pyproject <code>dynamic=["version"]</code> + <code>[tool.hatch.version]</code> regex 指向 <code>src/auto_qb/__init__.py</code>；接线后 <code>uv sync</code> 刷 uv.lock</td><td class="verdict-yes">★ 拍板（2026-11-05）——显示路径零改动、运行时零新增依赖、双源结构性消失；清偿 issue 26-09-21-1408</td></tr>
+      <tr><td>V1. pyproject 静态 + importlib 运行时读</td><td>—</td><td>否决：直接脚本运行场景要兜底、包初始化次序有已知坑</td></tr>
+      <tr><td>V3. tag 驱动（setuptools-scm / hatch-vcs）</td><td>—</td><td>未来选项：hash 双路径已用自建 hook 覆盖；全盘 tag 驱动与 bump-my-version 拍板冲突</td></tr>
+      <tr><td>V4. 双写（现状）</td><td>—</td><td class="verdict-no">✗ 漂移已实证，接线后消灭</td></tr>
     </table>
-    <h3>5.1 V2 接线示意（阶段 1 实施，本方案不动代码）</h3>
-<pre><code>[project]
-name = "auto-qb"
-dynamic = ["version"]              # 移除静态 version = "0.1.0"
-...
-[tool.hatch.version]
-source = "regex"
-path = "src/auto_qb/__init__.py"   # __version__ = "0.2.0" 成为唯一权威出处</code></pre>
-    <p class="hint">配套守阵（阶段 1 一并落）：测试断言 <code>auto_qb.__version__</code> 匹配 SemVer 正则（<code>^\d+\.\d+\.\d+$</code>）；可选加一条 uv.lock 内记录与 <code>__version__</code> 一致性校验。</p>
+    <p class="hint">守阵：<code>auto_qb.__version__</code> 匹配 <code>^\d+\.\d+\.\d+$</code>；可选 uv.lock 记录一致性校验；守阵先红验后合入。<code>cli.py</code> 补 <code>--version</code> 输出（importlib.metadata 优先、<code>__version__</code> 兜底）。</p>
   </section>
 
   <section id="s6">
-    <h2><span class="no">06</span>发版流程与 CHANGELOG</h2>
-    <h3>6.1 发版流程对比</h3>
+    <h2><span class="no">06</span>机械化发版执行</h2>
+    <h3>6.1 三层载体与通用性契约</h3>
     <table>
-      <tr><th>方案</th><th>流程</th><th>与既有约束的咬合</th><th>判定</th></tr>
-      <tr>
-        <td>T1. 手工三步</td>
-        <td>① bump <code>__version__</code> + 写 CHANGELOG 段 → ② gitmoji commit → ③ tag + 双远端 push + ls-remote 核对</td>
-        <td>与现有「提交即推送、判定只看 ls-remote」纪律完全同构；零新依赖</td>
-        <td class="verdict-yes">★ 起步推荐</td>
-      </tr>
-      <tr>
-        <td>T2. release 脚本</td>
-        <td><code>scripts/release.py</code>：前置校验（工作区净 / 测试绿 / 与远端齐平）→ bump → changelog 草稿 → tag → push + 核对</td>
-        <td>把 T1 的四条纪律固化成机检，防呆</td>
-        <td>演进方向（阶段 2）</td>
-      </tr>
-      <tr>
-        <td>T3. 自动定版（python-semantic-release 等）</td>
-        <td>解析 conventional commits 自动决定版本号</td>
-        <td><strong>要求改提交格式</strong>，与 gitmoji + 中文提交规范冲突</td>
-        <td class="verdict-no">✗ 否决</td>
-      </tr>
-      <tr>
-        <td>T4. git-cliff 配套</td>
-        <td>git log → CHANGELOG 草稿；regex 自定义解析器可按 gitmoji 归类（git-cliff.org，2026-09-22 检索确认在维护）</td>
-        <td>不要求改提交规范，只消费既有历史；多一个 CLI 工具</td>
-        <td>可选（阶段 2）</td>
-      </tr>
+      <tr><th>层</th><th>载体</th><th>装什么</th><th>项目专属度</th></tr>
+      <tr><td>规程面</td><td><code>.agents/skills/release/</code>（SKILL.md + <strong>scripts/</strong>）</td><td>执行规程（顺序/判断点/停手规则/降级路径/留痕要求）+ 脚本本体（决策器 / merge / tag / page）</td><td><strong>低</strong>——脚本零项目事实，分支/远端/路径全走参数与配置</td></tr>
+      <tr><td>机械面</td><td><code>.commands/release/</code> 包 task id 族</td><td>管线每步一条命令，<strong>薄引用</strong> skill 脚本（先例：kb.bump → memory-bank/scripts/bump_doc.py）</td><td>高——项目事实集中在包 config</td></tr>
+      <tr><td>口径面</td><td><code>memory-bank/conventions/release.md</code>（新）</td><td>版本语义/触发词/major 判据/双分支模型/hash 口径</td><td>高——项目口径单点；AGENTS.md 只留指针（8K 上限）</td></tr>
     </table>
-    <h3>6.2 T1 的发版三步（命令级）</h3>
-<pre><code># ① bump：src/auto_qb/__init__.py 的 __version__ 改一行 + CHANGELOG.md 补本版段
-# ② commit（gitmoji 规范），随主提交走 my-commit-flow 预检
-git tag -a v0.3.0 -m "auto-qb v0.3.0"
-git tag -l v0* ; git show-ref --tags          # 本 shell ref 写入有静默丢弃先例, 当场核对
-# ③ 推送与判定
-git push gitee develop v0.3.0                 # 显式 ref, 与分支推送同纪律
-git ls-remote --tags gitee                    # 「推没推上」只看这里
-git push github develop v0.3.0                # 镜像; 失败只报告一次, 不重试</code></pre>
+    <div class="callout">
+      <strong>通用性契约（用户拍板）</strong>：脚本本体放 skill 根 <code>/scripts/</code>，commands 只引用；移植到另一项目的改动面 = bump-my-version 配置 + commands 包 config + 口径文档三处，SKILL.md 与脚本零改动。决策表（gitmoji 标准）与 Keep a Changelog 规范本身就是通用的。
+    </div>
+    <h3>6.2 发版管线（八步，触发词起跑）</h3>
+<pre><code>develop（工作主线：多 clone 同步/提交/判定纪律全不变）
+  │ ① 触发词「发版」→ my-commit-flow.sync（同步，硬步骤）
+  │ ② 本地全测门：test.full + dev.e2e + real.suite(real.guard 前置)
+  │    + test.linux（视平台改动）；mutants.status 核验（不进门）
+  │ ③ release.bump：gitmoji 决策器按决策表算提案（v0.2.0..HEAD）
+  │    → agent 改判窗（改判必留痕）→ bump-my-version 改 __version__
+  │    单行 + CHANGELOG 草稿（只改文件，不自动 commit/tag）
+  │ ④ 🔖 发版提交（bump+CHANGELOG 同笔）走 ship.commit 闸门 → gitee develop
+  │ ⑤ release.merge：--ff-only develop→master → push gitee master
+  │    （master 分叉/冲突 → 停手要人）
+  │ ⑥ push github（发版轮必须成功、非静默——唯一镜像例外）
+  │    → gh 等 master run 全绿（ci.yml + playwright.yml）
+  │    （红 → 停在 tag 前，修复后重走，已完成的步校验跳过）
+  │ ⑦ release.tag：tag v0.3.0 锚 master 发版提交 → 显式 ref 推
+  │    gitee+github → ls-remote --tags 核验
+  │ ⑧ release.page：hatchling 构建 wheel（build hook 注 hash 尾）
+  │    → gitee Release 页（notes=CHANGELOG 该版段；token 未配降级过渡）
+  │    → github 镜像 Release 尝试一次不重试
+  ▼
+master（发布线：仅发版时前进，tag/Release 页全锚这里）</code></pre>
+    <table>
+      <tr><th>提交里的 gitmoji</th><th>bump 提案</th><th>CHANGELOG 段</th></tr>
+      <tr><td>✨</td><td>minor</td><td>Added</td></tr>
+      <tr><td>🐛</td><td>patch</td><td>Fixed</td></tr>
+      <tr><td>⚡️</td><td>patch</td><td>Changed</td></tr>
+      <tr><td>♻️</td><td>无（可感知行为差异时 agent 并入 Changed）</td><td>默认省略</td></tr>
+      <tr><td>📝 ✅ 🔧 🎨 💚 🗑️ 等</td><td>无</td><td>默认不入册</td></tr>
+    </table>
+    <p class="hint"><strong>分工规则（拍板）</strong>：机器出提案，agent 可改判（如琐屑 ✨ 降 patch）但必须留痕——CHANGELOG 注记 + commit body 一句原因；机器提案与最终号的差异全程可审计。<strong>幂等重入</strong>：tag 已存在则校验指向而非重建，Release 页已建则更新，重跑不重复（黄金法则 1）。</p>
     <h3>6.3 CHANGELOG 规范</h3>
     <ul>
-      <li>格式：Keep a Changelog；文件 <code>CHANGELOG.md</code>；顶部 <code>## [Unreleased]</code> 滚动段，发版时改名 <code>## [X.Y.Z] - 日期</code>。</li>
-      <li>分类沿用既有 gitmoji 提交映射（内容引用，不是装饰）：</li>
+      <li>格式：Keep a Changelog；<code>CHANGELOG.md</code> 顶部 <code>## [Unreleased]</code> 滚动段，发版时改名 <code>## [X.Y.Z] - 日期</code>；草稿由决策器按上表自动生成，agent 精修。</li>
+      <li>全程 agent 执行形态下<strong>无人审门</strong>（拍板；tag 可回滚兜底）；历史无 tag 区间用提交哈希区间代替。</li>
     </ul>
-    <table>
-      <tr><th>提交里的 gitmoji</th><th>CHANGELOG 段</th><th>默认</th></tr>
-      <tr><td>✨</td><td>Added（新功能）</td><td>入册</td></tr>
-      <tr><td>🐛</td><td>Fixed（修复）</td><td>入册</td></tr>
-      <tr><td>⚡️</td><td>Changed（性能 / 行为变化）</td><td>入册</td></tr>
-      <tr><td>♻️</td><td>并入 Changed（仅当有可感知行为差异）</td><td>默认省略</td></tr>
-      <tr><td>📝 ✅ 🔧 🎨 💚 等</td><td>文档 / 测试 / 内部杂务</td><td>默认不入册</td></tr>
-    </table>
-    <p class="hint">草稿低成本取法：<code>git log v上一版..HEAD --oneline</code> 按 emoji 归类后再人工润色；历史无 tag 区间用提交哈希区间代替。</p>
   </section>
 
   <section id="s7">
-    <h2><span class="no">07</span>落地路线（三阶段）</h2>
-    <h3>阶段 0 —— 不涉码，拍板后即可做</h3>
+    <h2><span class="no">07</span>落地路线</h2>
+    <h3>阶段 0 处置（v1 阶段 0 部分完成）</h3>
+    <p>tag v0.1.0/v0.2.0 已打已推（✓）；CHANGELOG.md 与发版约定回写未做——并入阶段 1（步骤 3 与 8），阶段 0 不再单列。</p>
+    <h3>阶段 1 —— 涉码实施（拍板后按序）</h3>
     <ol class="steps">
-      <li>建 <code>CHANGELOG.md</code>：Unreleased 空段 + <code>[0.2.0] - 2026-09-22</code> 一句基线说明（「首个版本基线；此前为开发期，历史见 git log」）。</li>
-      <li>打基线 tag：<code>git tag -a v0.2.0</code> @ <code>49eacb8</code>（当前工作区净且与远端齐平，是干净基线点）；打完 <code>show-ref --tags</code> 当场核对。</li>
-      <li>推送与判定：<code>git push gitee develop v0.2.0</code> → <code>git ls-remote --tags gitee</code> 核对；github 镜像尝试一次，失败只报告一次。</li>
-      <li>约定回写：发版三步 + <code>fetch --tags</code> 多 clone 约定写入 <code>conventions/collaboration.md</code>（AGENTS.md 只留指针，注意 8000 字符上限）。</li>
-    </ol>
-    <h3>阶段 1 —— 涉码，单独立项走认领流程</h3>
-    <ol class="steps" start="5">
-      <li>pyproject 改 <code>dynamic = ["version"]</code> + <code>[tool.hatch.version]</code> regex 接线（§5.1）；接线后 <code>uv sync</code> 刷新 uv.lock。</li>
-      <li>版本守阵：SemVer 正则断言 + （可选）lock 一致性校验；守阵先红验后合入。</li>
-      <li><code>cli.py</code> 增加 <code>--version</code> 输出（<code>importlib.metadata</code> 优先、<code>__version__</code> 兜底）。</li>
+      <li>单源接线：pyproject <code>dynamic=["version"]</code> + <code>[tool.hatch.version]</code> regex；<code>uv sync</code> 刷 lock；SemVer 守阵红验后合入——<strong>issue 26-09-21-1408 清偿点</strong>。实施首步先核 gitee master↔develop 关系（远端拒连未核，分叉即停手）。</li>
+      <li><code>cli.py</code> 补 <code>--version</code>（importlib.metadata 优先、<code>__version__</code> 兜底）。</li>
+      <li>建 <code>CHANGELOG.md</code>：Unreleased 段 + <code>[0.2.0] - 2026-09-25</code> 基线段（「首个版本基线；此前历史见 git log」）。</li>
+      <li>gitmoji 决策器脚本（skill scripts/，≈30 行，语义=semantic-release 决策表移植）+ 决策表守阵（红验后合入）。</li>
+      <li>bump-my-version 接线：配置只改 <code>__version__</code> 单行，关闭其自动 commit/tag（闸门纪律单点不破）。</li>
+      <li>release skill（SKILL.md + scripts：bump/merge/tag/page + wheel build hook 注 hash）+ <code>.commands/release</code> 包收录；hatch build 首次冒烟（wheel target 从未构建过）。</li>
+      <li><strong>管线首跑：补发 v0.3.0</strong>（1720 提交进 CHANGELOG 首段；全程按 §6.2 八步走，即对管线的首次端到端验收）。</li>
+      <li>口径回写：conventions/release.md 新立 + collaboration.md 双分支模型节 + AGENTS.md 指针（8K 上限内，只加一行路由）。</li>
     </ol>
     <h3>阶段 2 —— 按需演进（不排期）</h3>
-    <ol class="steps" start="8">
-      <li><code>scripts/release.py</code>：前置校验 + bump + 草稿 + tag + push 一条龙。</li>
-      <li>git-cliff 半自动 changelog；Gitee / GitHub Release 页面发布。</li>
+    <ol class="steps" start="9">
+      <li>gitee Release API token 配置与 Release 页自动化补建；exe/PyInstaller 发布立项（独立工程）。</li>
+      <li>git-cliff 评估：发版频率上来后评估决策器/changelog 换现成工具（regex 自定义解析 gitmoji，v2.2.0+ bump 规则已确认）。</li>
+      <li>1.0 里程碑：三判据核验 → <code>release.bump --major</code> 人工拍板执行。</li>
     </ol>
-    <p class="hint">阶段划分的意义：阶段 0 四步只动文档与 git ref，无回归面，拍板即做；阶段 1 触碰打包配置与 CLI，按仓库惯例走 issue 认领 + 红绿验证；阶段 2 纯增益，等发版频率上来再投入。</p>
   </section>
 
   <section id="s8">
     <h2><span class="no">08</span>风险与对策</h2>
     <table>
       <tr><th>风险</th><th>判据</th><th>对策</th></tr>
-      <tr><td>tag 推了本地、没推上远端</td><td><code>ls-remote --tags gitee</code> 为空</td><td>push 一律显式 ref + 推后必核（与分支推送同一判定口径）</td></tr>
-      <tr><td>版本号双源再次漂移</td><td>守阵红（正则 / 一致性）</td><td>阶段 1 的 V2 单源让漂移<strong>结构性消失</strong>；接线前的过渡期靠发版三步纪律</td></tr>
-      <tr><td>其它 clone 看不到新 tag</td><td>别的 clone <code>git tag -l</code> 查无</td><td><code>git fetch gitee --tags</code> 显式同步约定，写入 collaboration.md（<code>fetch &lt;remote&gt; &lt;分支&gt;</code> 不带 tag）</td></tr>
-      <tr><td>0.x 被当稳定版误用</td><td>—</td><td>CHANGELOG 首行写明 0.x 语义；classifiers Beta 不动；1.0 判据明确（§04）</td></tr>
-      <tr><td>github 镜像 tag 滞后</td><td>github <code>ls-remote</code> 失败 / 落后</td><td>沿用「GitHub 允许滞后」既有口径；失败只报告一次</td></tr>
-      <tr><td>bump 被忘记、Unreleased 长期空</td><td>Unreleased 段跨越多个功能批次</td><td>功能批次合流的收尾检查里加一句「需要 bump / 发版吗」；阶段 2 脚本化后由机检兜底</td></tr>
+      <tr><td>master↔develop 关系未知（远端拒连未核）</td><td>实施首步 <code>ls-remote</code> 核验</td><td>分叉（master 含 develop 没有的提交）→ 停手要人，不自动 merge/rewind（§09-10）</td></tr>
+      <tr><td>gitee Release API token 未配</td><td>步骤 ⑧ 调 API 失败</td><td>降级过渡：「tag + CHANGELOG 即发布口径」，当轮报告；token 配好后补建页面</td></tr>
+      <tr><td>gh CLI 认证未核</td><td>步骤 ⑥ 查 run 失败</td><td>API 轮询兜底（公开仓 60 req/h）或停手报告；<strong>不静默跳过 CI 门</strong></td></tr>
+      <tr><td>CI 双跑冗余（同 SHA 在 develop+master 各触发）</td><td>—</td><td>门只看 master run（语义直白），develop run 作早期信号，不等两遍</td></tr>
+      <tr><td>镜像滞后与 CI 门冲突</td><td>发版轮 github 推送失败</td><td>发版轮例外：必须成功、非静默（唯一镜像例外）；普通推送纪律不变</td></tr>
+      <tr><td>bump 遗忘（v1 主风险）</td><td>—</td><td>结构性消失：触发词+机器提案+决策器维护 Unreleased 段</td></tr>
+      <tr><td>uv.lock 漂移</td><td>lock 内版本变动</td><td>hash 不进存储版本（双路径口径）；单源接线后 uv sync 一次到位</td></tr>
+      <tr><td>wheel 构建从未执行过</td><td>hatch build 失败</td><td>阶段 1 步骤 6 先构建冒烟，再入管线</td></tr>
+      <tr><td>0.x 被当稳定版误用</td><td>—</td><td>CHANGELOG 首行写明 0.x 语义；classifiers Beta 不动；1.0 三判据（§04）</td></tr>
     </table>
   </section>
 
   <section id="s9">
-    <h2><span class="no">09</span>待拍板决策点</h2>
+    <h2><span class="no">09</span>已拍板决策清单（16 项，六轮 grilling 2026-11-05–11-06）</h2>
     <table>
-      <tr><th>#</th><th>决策</th><th>选项</th><th>推荐与理由</th></tr>
-      <tr>
-        <td>①</td>
-        <td>基线 tag 时机</td>
-        <td>a. 现在打 <code>v0.2.0</code>；b. 等阶段 1 接线后一起</td>
-        <td><strong>a</strong>——当前工作区净且与远端齐平，是干净的基线点；tag 只标 ref，不受后续接线影响</td>
-      </tr>
-      <tr>
-        <td>②</td>
-        <td>版本号权威出处</td>
-        <td>a. V2 <code>__init__</code> 单源（hatch regex）；b. V1 pyproject 静态 + importlib</td>
-        <td><strong>a</strong>——显示路径零改动、运行时零依赖、双源结构性消失；V1 在直接脚本运行与包初始化次序上有已知坑</td>
-      </tr>
-      <tr>
-        <td>③</td>
-        <td>CHANGELOG 档位</td>
-        <td>a. 手工（git log 草稿 + 归类）；b. git-cliff 半自动</td>
-        <td><strong>a</strong> 起步——单人项目发版频率低，手工成本可控；b 留作阶段 2</td>
-      </tr>
+      <tr><th>#</th><th>决策</th><th>拍板内容</th></tr>
+      <tr><td>1</td><td>语义分工</td><td>minor/patch=例行数字机器算；major=里程碑人工</td></tr>
+      <tr><td>2</td><td>格式</td><td>0.x 语义化维持；破坏性 minor+警示；1.0 三判据才动</td></tr>
+      <tr><td>3</td><td>触发</td><td>「发版」进显式触发词清单；一次触发 agent 全程跑完；平时不自主发版</td></tr>
+      <tr><td>4</td><td>分工规则</td><td>机器 gitmoji 决策表提案；agent 可改判+留痕；永不跨 major</td></tr>
+      <tr><td>5</td><td>工具</td><td>bump-my-version + 自建决策器（≈30 行，task 化）+ CHANGELOG 草稿同脚本；git-cliff 阶段 2 备选</td></tr>
+      <tr><td>6</td><td>单源</td><td>pyproject dynamic + hatch regex → <code>__init__.py</code>（清偿 issue 1408），阶段 1 第一步</td></tr>
+      <tr><td>7</td><td>hash 尾</td><td>双路径（源码运行时派生 / wheel 构建期注入）；存储纯 SemVer；tag 不带 hash；hatch-vcs 全盘接管否决</td></tr>
+      <tr><td>8</td><td>补发号</td><td>v0.2.0 → 0.3.0 机械按 delta 算，积压量由 CHANGELOG 承载</td></tr>
+      <tr><td>9</td><td>major 判据</td><td>三判据全中人工拍板 + <code>--major</code> 旗标放行</td></tr>
+      <tr><td>10</td><td>分支模型</td><td>develop 工作主线 / master 发布线（仅发版 ff 前进）；tag/Release 锚 master；ff-only 分叉停手；同步/交付判定口径不变（gitee develop）；默认分支切换可选</td></tr>
+      <tr><td>11</td><td>本地全测门</td><td>test.full + dev.e2e + real.suite（real.guard 前置）+ test.linux（视平台改动）；<strong>变异测试不进门</strong>（mutants.status 核验上轮）</td></tr>
+      <tr><td>12</td><td>CI 门</td><td>gh 等 master run 全绿才 tag；发版轮 github 推送必须成功非静默（唯一镜像例外）；红停 tag 前可重入</td></tr>
+      <tr><td>13</td><td>提交形态</td><td>🔖 专用发版提交（bump+CHANGELOG 同笔）走 ship.commit 闸门；tag 显式 ref + ls-remote 核验</td></tr>
+      <tr><td>14</td><td>发布形态</td><td>wheel/sdist 进管线 + gitee Release 页阶段 1 自动建（token 未配降级过渡）+ github 镜像尝试一次；exe 阶段 2 单独立项</td></tr>
+      <tr><td>15</td><td>载体架构</td><td>skill（SKILL.md + scripts/ 脚本本体，尽量通用）+ .commands 薄引用 + conventions 口径 + AGENTS.md 指针；移植改动面最小化（bump 配置/commands config/口径文档三处）</td></tr>
+      <tr><td>16</td><td>CHANGELOG</td><td>Keep a Changelog + gitmoji 映射；Unreleased 滚动段；无人审门（tag 回滚兜底）</td></tr>
     </table>
     <div class="callout warn">
-      <strong>拍板后动作</strong>：三项确认 → 阶段 0 四步（不涉码，随下一笔「提交」走 my-commit-flow）→ 阶段 1 入池 issue 认领实施。本文档全程未改任何代码与生产文件。
+      <strong>实施注意</strong>：阶段 1 涉码与建件（skill/commands/conventions 均属新建）走认领流程逐项实施；本文档只定方案不动代码。
     </div>
   </section>
 
+  <section id="s10">
+    <h2><span class="no">10</span>变更记录</h2>
+    <ul>
+    
+  <li><span class="tag">R1 · 26-11-05-2347</span> 用户指派认领: 双向认领链挂 issue 26-09-21-1408; 启动改版方向 - 小版本自动抬升机械化+大版本少人工, 业内方案参照与 grilling 进行中</li>
+  <li><span class="tag">R2 · 26-11-06-0116</span> v2 定稿: 六轮 grilling 16 项拍板 - 机械化发版管线(八步/三层载体/通用性契约)+hash尾双路径+双分支模型(develop工作线/master发布线)+本地全测门(变异测试不进门)+CI门(master run全绿, 发版轮镜像例外); 阶段1 八步待实施</li>
+</ul>
+  </section>
+
   <footer>
-    方案编号 26-09-22-2318 · 基线 develop @ d4dea8b · 取证 2026-09-22 23:10–23:47（命令实测）· 立档 <a href="../../memory-bank/tasks/26-09-22-deps-version-management.md">memory-bank/tasks/26-09-22-deps-version-management.md</a>
+    方案编号 26-09-22-2318 (v2) · 基线 develop @ c0b6290f · 取证 2026-11-05 23:10 – 11-06（命令实测）· 六轮 grilling 16 项拍板 · 立档 <a href="../../memory-bank/tasks/26-09-22-deps-version-management.md">memory-bank/tasks/26-09-22-deps-version-management.md</a>
   </footer>
 
 </div>
