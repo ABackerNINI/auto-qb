@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-11-06-0306">
 <meta name="issue-type" content="test">
 <meta name="doc-topic" content="hr-behavior-core-test-refs">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/pitfalls/backend/behavior-core.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="behavior-core 坑档两条 judge_record 守阵引用无同名测试">
 <meta name="issue-summary" content="引用名在现行 tests/ 不存在, 可能文档引用过期或覆盖缺口待核">
 <title>behavior-core 坑档两条 judge_record 守阵引用无同名测试 · test · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-11-06-0306-test-hr-behavior-core-test-refs</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-06 03:06</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -100,6 +100,13 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-11-06 03:06 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-06 — 已修并验证，状态 <strong>Done</strong>。实际修法：走建议①（引用过期）——
+        <code>behavior-core.md</code> HR 那条按判定表 v3 改写：守阵换为
+        <code>test_none_when_view_missing</code> / <code>::test_none_when_listing_none</code> /
+        <code>::test_row4_no_evidence</code> / feeder <code>test_judge_without_published_view_falls_back</code>（四个名字均可在 tests/ 解析）；
+        字段描述同步现行代码：<code>has_lookup_keys</code> → <code>has_evidence</code>，
+        <code>mode: all/off</code> 分叉 → <code>listing="none"</code>，删 <code>unknown_policy</code> 措辞（已随判定表 v3 删除）。
+        验证方式：四守阵名 grep 解析通过；全量测试 <code>commands run test.quick</code> 实测 5459 passed, 10 skipped（45.72s）。原建议修法（补缺失用例）未走：现行已有等价断言，无需新增测试。</li>
     </ul>
   </section>
 

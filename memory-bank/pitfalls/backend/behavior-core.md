@@ -4,6 +4,8 @@
 > 等级: L0
 > 触发: 改规则, 改主循环, 改归组, 改缺文件扫描, 改限速, 改状态持久化, 改 web 服务生命周期
 
+**Refs:** memory-bank/issues/26-11-06-0306-test-hr-behavior-core-test-refs.html
+
 ### 奇数限速保护 (`(limit/1024)%2==1` 跳过) 是特性不是 bug
 
 - **触发**: 看到限速没被覆盖 / 写限速断言。
@@ -106,21 +108,22 @@
 - **处置**: 一律经 `_wait_next`, run() 内不得裸 sleep; ⚠ **托管模式会掩盖该 bug** ⇒ 回归测试必须用**非托管**模式。
   另: 首连失败重试循环里 `stop_event is None or stop_event.wait(...)` 是**有意语义**, 不要一并改。
 
-### HR: 站点侧「没有可依据的数据」⇒ 回落本地, **不是**「未核实」(2026-09-25)
+### HR: 站点侧「没有可依据的数据」⇒ 回落本地, **不是**管束打标(2026-09-25; 判定表 v3 后 2026-11-06 更新引用)
 
 - **触发**: 改 `TorrentRecord.hr_judgement()` / `hr/resolve.py::judge_record` 的返回语义, 或"顺手"把
-  「站点未接入 / `mode=off` / 站点还没发布过视图」统一当成「未核实」按 `unknown_policy` 处理。
-- **判别**: 「未核实」是**有数据但说不清**(刷新不完备 / 放行过期 / 身份缺位 / 新鲜度闸门), 按 policy 保守处理;
-  而「本站点侧压根没有可依据的数据」返回 `None` = **本模块不适用** ⇒ 调用方走**既有本地字段逻辑**。
-  两者的用户可见差别是巨大的: 按「未核实 + policy=hr」算, `mode: all` 站点会在**启动窗口**(取数线程还没发布
+  「站点未接入 / 总开关关 / 全站型 / 还没发布过视图」当成站点侧结论参与判定。
+- **判别**: 站点侧没有明确结论走**两个出口**, 都回落**既有本地字段逻辑**:
+  ① `None` = **本模块不适用**(未配/未启用 `hr_check` / `listing="none"` 全站型不取数 /
+     启动窗口还没发布过视图 —— feeder `judge` 同样返回 None);
+  ② `NO_EVIDENCE`(行 4)= 已接入但**无有效站点证据**(空视图 / infohash 缺位 / 锚点漂移作废 /
+     新鲜度闸门), `is_hr` 恒 False, 调用方按本地判据兜底(旧「无可查键」一类已并入此行)。
+  用户可见差别是巨大的: 若把这两个出口当「站点说未达标」处理, 站点会在**启动窗口**(取数线程还没发布
   第一版视图)里让**整站种子集体触发打标** —— 千级标签风暴; 按「回落本地」算只是短暂少保护一会儿。
-- **处置**: 保持 `None` 语义; 两个方向都别"优化"(返回 False 会让未接入站点静默变成不触发 HR)。
-  **同类第二例(2026-09-25)**: 站点**已接入但一个可查键都没有**(索引里 0 个 infohash、0 条放行)时,
-  `judge_record` 同样返回 None(回落本地) —— 否则该站全部种子落「未核实」, 按 `unknown_policy=hr`
-  **整站集体打标**。判据是 `HrSiteView.has_lookup_keys`;**`mode: all` 不受此闸门影响**(用户显式要全站受管束)。
-  守阵: `tests/test_hr_resolve.py::test_judge_record_without_any_lookup_key_falls_back`。
-  守阵: `tests/test_hr_resolve.py::test_judge_record_not_applicable_when_site_off` /
-  `tests/test_hr_runtime_feeder.py::test_judge_without_published_view_falls_back`。
+- **处置**: 两个出口的语义都别"优化"(在 judge 层给出管束结论会让未接入站点静默触发 HR)。
+  空视图判据是 `HrSiteView.has_evidence`(lane_a / lane_terminal / verified 全空 ⇒ 行 4);
+  全站型由 `listing="none"` 表达; 旧 `mode` 分叉与 `unknown_policy` 已删(见 `resolve.py` 模块头)。
+  守阵: `tests/test_hr_resolve.py::test_none_when_view_missing` / `::test_none_when_listing_none` /
+  `::test_row4_no_evidence` / `tests/test_hr_runtime_feeder.py::test_judge_without_published_view_falls_back`。
 
 ### HR: 站点行**缺达标字段 ≠ 站点说未达标**(2026-09-25)
 
