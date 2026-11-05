@@ -1,0 +1,61 @@
+{
+  "route": "R1",
+  "owner": "clone1-main",
+  "claimed_at": "26-11-06-0506",
+  "freeze": "f088329291e64d0802637463e886f78842c1b34c",
+  "freeze_note": "manifest 钉值 (生成时点 develop tip, D17)",
+  "snapshot": "C:\\Users\\11059\\Desktop\\Projects\\zcode\\auto-qb-review4-snap\\auto-qb-zcode-clone1",
+  "status": "in-progress",
+  "batches": [
+    {
+      "id": "R1-1",
+      "title": "内核执行面: qbmanager/taskqueue/module/qbapi/state + core 根杂件",
+      "status": "pending",
+      "done_at": null,
+      "findings": 0
+    },
+    {
+      "id": "R1-2",
+      "title": "迁移执行: relocate_units/relocate_exec/relocate_common",
+      "status": "pending",
+      "done_at": null,
+      "findings": 0
+    },
+    {
+      "id": "R1-3",
+      "title": "迁移规划与生命期: relocate_mod/plan/probe/proof/lifecycle",
+      "status": "pending",
+      "done_at": null,
+      "findings": 0
+    },
+    {
+      "id": "R1-4",
+      "title": "traffic 存取: store/agg/codec/common/paths/grid/limits/curves",
+      "status": "pending",
+      "done_at": null,
+      "findings": 0
+    },
+    {
+      "id": "R1-5",
+      "title": "traffic 采样: sample_mod/agg/blocks/common/snapshot + traffic_source",
+      "status": "pending",
+      "done_at": null,
+      "findings": 0
+    },
+    {
+      "id": "R1-6",
+      "title": "分组与规则模块: grouping_mod/rules_mod/tvshows",
+      "status": "pending",
+      "done_at": null,
+      "findings": 0
+    },
+    {
+      "id": "R1-7",
+      "title": "ops 与维护面: ops_*/maintenance/fuse/speed_curve/logging/notify/tracker",
+      "status": "pending",
+      "done_at": null,
+      "findings": 0
+    }
+  ],
+  "started_at": "26-11-06-0507"
+}
