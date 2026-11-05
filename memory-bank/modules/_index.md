@@ -16,4 +16,4 @@
 | [mixins.md](mixins.md) | `QbManager` mixin 时代的职责拆分**历史快照** —— 现类体仅剩 2 个表现层 mixin 组合入口, 业务能力已在 `core/modules/` 功能模块。 | mixins, 职责拆分, 组合, QbManager |
 | [overview.md](overview.md) | 包入口在哪、要改某功能该动哪个文件 —— 进本目录前先读这一份。 | 包入口, 在哪里改, 改哪个文件, 入口, src 布局 |
 | [rules-and-deps.md](rules-and-deps.md) | 规则插件框架、测试对应关系与单向依赖图。 | rules, 插件框架, tests, 依赖方向, 单向, 无环 |
-| [webui-static-contract.md](webui-static-contract.md) | 前端资产(模板 / 逻辑层 / 样式 / 图标)的契约与目录约定。 | 前端契约, static, 模板, shared, atlas, prism, 图标 |
+| [webui-static-contract.md](webui-static-contract.md) | 前端资产(模板 / 逻辑层 / 样式 / 图标)的契约与目录约定。长契约条目已分批外迁到 `attachments/webui-static-contract-details.md` 与 `attachments/webui-static-contract-details-2.m… | 前端契约, static, 模板, shared, atlas, prism, 图标 |

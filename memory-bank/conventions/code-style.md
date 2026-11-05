@@ -15,7 +15,7 @@
 - **覆盖文件**: `.py` `.js` `.cjs` `.ts` `.yml` `.yaml` `.html` `.css` `.json` `.toml` `.ini` `.cfg` `.sh` 等源码与配置; 含注释、字符串字面量、日志模板、CSS 内容。
 - **ASCII 替代参考**: ❗→`!` ｜ ⚠→`WARN:` ｜ ✅→`[OK]` ｜ 🔴→`[!]` ｜ ❌→`[X]` ｜ ★→`*` ｜ ✓→`[x]` ｜ ⬜→`[ ]` ｜ ①→`1.` ｜ 🚧→`[WIP]` ｜ 📌→`*`。
 - **文档放行**: `.md` 与交付用 `*.html` (计划 / 报告 / issue) 是富文本展示层, 不在终端渲染, **可自由使用这些符号**; 本项目 AGENTS.md / memory-bank 即如此。
-- **例外**: 数据 / 测试夹具 (`.pyc` 字节码) 与已 gitignore 的运行数据按内容需要保留; 生产 `config.yml` 按既有红线不动。
+- **例外**: 数据 / 测试夹具 (`.pyc` 字节码) 与已 gitignore 的运行数据按内容需要保留。
 
 ## 函数设计原则 (用户明示)
 
@@ -80,17 +80,14 @@
 - **ActionResult.message = 纯详情** (不含动词与 log_repr, 例: `['HHan', 'seed-3D']`), 动作名由管线日志统一携带
 - **等级** (2026-09-27 收窄, 单点口径): DEBUG=例行检查 + skipped 动作; INFO=动作成功/状态变化 + **用户操作审计/生命周期告知**; WARNING=**纯排障** (可自愈降级/重试中/保护性动作/性能细节 —— 值得 grep 不值得弹窗); ERROR=**真正危险** (数据丢失/状态写盘失败/任务停摆需人工/认证失败/未预期异常 —— `exc_info=True` 保留, 运行期 bug 需要堆栈; 配置错误走 ConfigError 无堆栈)。判别口诀「弹窗测试」: 这条出现时用户需立刻放下手头的事 → ERROR; 只是排查问题时想 grep 到 → WARNING; 事后审计想留痕 → INFO。定级单点: `memory-bank/plans/26-09-27-1126-plan-log-level-notify-error.html` 表 A–D。
 - **全中文**; 默认 `log.format` 含 `%(name)s` (来源模块): `%(asctime)s [%(levelname)s] %(name)s: %(message)s`
-- **凭据脱敏 = 越界即脱敏** (2026-09-22, issue 26-09-21-1408; 2026-10-07 升级, plan 26-10-07-0055): 任何**可能内嵌凭据的 URL**(首当其冲是 tracker announce URL)**一旦越出进程内使用边界——API 响应体/前端 DOM/日志/落盘——必须先脱敏**; 进程内(内存比对/基线 key)不脱敏。两个越界面各有一个单点函数:
-  - **日志**进日志前过 `utils.sanitize_tracker_url()`, 只留主地址 `scheme://host[:port]`, path/query/fragment 整段丢弃 —— 日志会落盘(含轮转备份)、可经 `/api/log` 读回, 且经通知联动(下条)直推系统通知, 泄露面远不止"读一次"。
-  - **外发(响应体/前端 DOM)**过 `utils.mask_tracker_url()` / `mask_tracker_entry()`: 保留 `scheme://host` + path 端点名 + query 参数名(站点/端点仍可辨, 站点匹配/域名告警无感), 只把"值"换成确定性 hash16(不加盐, 两次逐字节一致, 删除改道靠它当场比对重取原文); mask 规格单点 R1–R9 在 `infra/utils.py` 与 plan 26-10-07-0055。
-  - **铁律 R1**: 虚拟条目(`**`/`[DHT]`/`[PeX]`/`[LSD]`)原样透传, 不过 mask —— 它们不是 announce URL, 没有凭据。
-  - **铁律 R6**: **不按参数名挑, query 全值 hash** —— 私站凭据参数名是任意的(passkey 只是最常见的一种, 还有 authkey/token/uid 等), 按名挑每漏一个名字就漏一个站; 旧日志口径因此整段丢弃, mask 口径因此全值 hash。
-  - 守阵: `tests/test_web_seed_center.py` 守阵①~⑤(API 外发/删除改道/编辑下线/基线 key 原文/canary)钉住, 打回旧实现 CI 立刻红; 红验方式见各守阵 docstring。
+
+> 已外迁: 凭据脱敏(越界即脱敏 · 日志/外发两个单点 · R1/R6 铁律 · 守阵①~⑤) → [attachments/code-style-examples.md](attachments/code-style-examples.md)
+
 - **通知联动** (2026-09-12; 2026-09-27 默认改 ERROR): `notify.enabled` 时 NotifyHandler 挂在 `auto_qb` logger 上, 达到 `notify.min_level` 的日志自动推送平台原生通知 —— 因此**日志级别/骨架即通知语义**, 新增 ERROR 日志点无需单独接入通知; **min_level 默认 ERROR**, 即默认只有真正危险才弹窗, WARNING 仅排障 (想看时把 min_level 调低); 免打扰时段与节流在 notify.py 过滤, 消息内容直接复用日志消息(遵守本骨架); `--tray` 模式下 UiLogHandler 同样直挂 `auto_qb` logger, 窗口日志视图实时跟随本骨架输出
 
 ## 格式化 (yapf, .style.yapf)
 - based_on_style=facebook, indent=4, column_limit=**120**, spaces_before_comment=2, split_before_logical_operator=false, allow_split_before_default_or_named_assigns=false
-- 提交前对改动文件跑 `commands run dev.fmt -- <file>` (git 历史有独立的"格式化代码"提交)
+- 提交前对改动文件跑 `commands run dev.fmt -- <file>`
 
 ## dataclass / 架构模式约定
 

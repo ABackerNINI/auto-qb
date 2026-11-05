@@ -29,25 +29,7 @@
 
 ## 引擎自身的 stdout 同理 —— "部分终端乱码"的另一半(2026-09-30 补)
 
-- **触发**: 用户报「部分终端跑 `commands run kb.active` 中文是乱码, 另一些正常」—— 子进程方向 2026-09-24 已修,
-  这轮发现**引擎自己 print 的中文**(协议行 `[ok]`、包摘要 `何时用`、透传的子进程正文)还有同族漏网。
-- **判别**: 分界线 = 引擎的 stdout 是不是**真控制台**。真控制台走 `WriteConsoleW`(Unicode, 与码页无关)永不乱;
-  stdout 一旦是**管道**(mintty/Git Bash、AI 工具捕获、`| tee`、CI 日志), Python 自身 stdio 就按本地码页 cp936
-  **编码**输出 —— 实测剥离 `PYTHONUTF8`/`PYTHONIOENCODING` 后 `show kb.active` 的首段中文是 GBK 字节
-  (`\xba\xce\xca\xb1` 开头 = "何时"), 按 UTF-8 解的对端即乱, 退出码照旧 0。会话工具 shell 里的 UTF-8 变量是
-  **会话级注入**(注册表 HKCU/HKLM 均无) —— 用户自己的终端裸奔在码页回退里, 所以"部分终端"。
-- **处置**: 引擎入口锁自身 stdio —— `run.py` 的 `_utf8_self_stdio()`(stdout+stderr
-  `reconfigure(encoding="utf-8", errors="replace")`), `main()` 第一行调用(先于任何 print/argparse 输出)。
-  真控制台不受影响(本来就是 Unicode); 管道对端从 GBK 变 UTF-8 —— 会乱的对端本来就按 UTF-8 解, 只修不破。
-  与子进程侧(上面两条)合起来才是闭环: 引擎对内(收)对外(发)都显式 UTF-8, 永不依赖 locale。
-- **守阵**: `test_engine.py` +2 —— ①单测: cp936 文本层经 `_utf8_self_stdio` 重配后中文按 UTF-8 出(全平台确定);
-  ②端到端: 子进程剥全局 UTF-8 变量 + 管道跑 `show no-such.task`, stderr strict UTF-8 解码必须过
-  (系统码页本就是 UTF-8 的机器上失去分辨力, 与 `_local_codepage` 口径一致, 不假红)。
-- **为什么 9-24 那轮没修到**: 本档案当时的「同族旧账, 别只修一处」只点名了崩打印层与写盘方向两族,
-  没把"引擎自身 stdout"列为待查向 —— 用户 6 天后从"部分终端"打进来的正是这一向。
-- **复发**: 1 —— 2026-10-01 用户再报「代码已同步的仓库中仍乱码」: 引擎侧修复本身有效(管道字节实测已
-  是 UTF-8), 乱码源在**解码侧消费端** —— 上轮「管道对端本来就按 UTF-8 解, 只修不破」的假设漏掉了
-  按控制台码页解管道的消费端(PowerShell 捕获类 / AI 工具外壳), 见下节。
+判据、修复、守阵与复发记录见 [attachments/console-encoding-engine-stdout.md](attachments/console-encoding-engine-stdout.md)。
 
 ## 解码侧: PS 捕获类按 GBK 解 UTF-8, 运行中 chcp 救不了(2026-10-01 补)
 
@@ -76,10 +58,7 @@
 
 ## 解码侧变体: 工具壳大输出落盘预览按「截断完整性」选码(2026-10-02 补)
 
-- **触发**: AI 工具壳跑输出超大的命令(本仓实测 `commands run kb.active` ≈ 51KB) —— ZCode Bash 工具内联上限 **30,000 字节**(`outputLimit.maxInlineBytes` 硬编码 3e4), 超限即全量落盘 + 只回前 2000 字符预览; 若内联前缀在分块边界截断时**切进多字节 UTF-8 字符中间**, 预览整段变 `鍒涘缓` 形乱码且稳定复现。与终端无关 —— 纯 ASCII 超大输出预览不乱。
-- **判别**: ①落盘日志逐字节完好(`iconv -f UTF-8 -t UTF-8` 整文件校验通过) ⇒ 数据无损, 坏的只是预览解码; ②同会话对照探针: 正文连续 ASCII(截断点必落单字节)预览完好, 含中文且截断点切进汉字(kb.active 在 30,000 字节附近「的」= e7 9a ae 横跨截断区)预览全乱; ③工具源码定案: 解码函数 kme 对「干净且完整 UTF-8」按 UTF-8 解, 否则整段按 legacy(本机 GBK)重解 —— 截断留下的不完整序列尾巴就是触发器。注意显示口径: 工具报的 KB 数按 1024 进制, 30,343 字节显示 29.7KB 仍会落盘, 判定只认字节。
-- **处置**: ①预览乱不丢数据 —— 直接 Read 落盘的 `*-stdout.log` 即原文; ②要内联可读就把输出压到 30,000 字节以内(≈9,900 汉字); ③天然大输出的命令(kb.active 类)加截断/精简, 或接受落盘读文件; ④引擎/工具侧无可修也不许回退(同上节口径); 后台任务 persistOutput=always 与大小无关必落盘。
-  ③已落地(2026-10-02 当日): `gen_active_recent.py`(kb.active)默认按 20,000 字节预算取最近 K 条, 总数/待归档/省略数进页脚, `--all` / `-n N` 逃生 —— 守阵 `tests/test_memory_bank_structure.py::test_kb_active_render_respects_byte_budget`。同族大输出命令若再中招, 照此模式办。
+判据、处置与守阵见 [attachments/console-encoding-shell-preview.md](attachments/console-encoding-shell-preview.md)。
 
 ## 重定向变体: PowerShell 5.1 `>` 落盘 = UTF-16LE, UTF-8 读方直接当二进制拒收(2026-10-19 补)
 
@@ -96,27 +75,8 @@
 
 ## 测量探针变体: 表头被本地化 + 解析器按英文字面匹配 ⇒ 读数静默为 0(2026-10-15 补)
 
-- **触发**: 探针脚本解析 Windows 原生命令输出做**测量**(实测: `netstat -e` 的字节计数行、`netstat -ano` 的连接表),
-  Python 侧 `subprocess.run(..., capture_output=True, text=True)`。
-- **判别**: 两个方向都中, 且都可**不报错**:
-  ① 按 UTF-8 收 GBK 字节 → `UnicodeDecodeError` 抛在 `subprocess._readerthread` 后台线程(本族旧例,
-    实测连带表现为 `AttributeError: 'NoneType' object has no attribute 'splitlines'`, 因为 stdout 是 None);
-  ② **更阴的一层**: 解码侥幸通过, 但解析器写的是 `p[0] == 'Bytes'` / `'Interface'` 这类**英文字面**,
-    中文 Windows 的表头是「字节」「接口统计」⇒ 匹配失败 → 计数器初值保持 0 → **两次采样相减得 0 B/s,
-    看上去就是「这个接口没有流量」**。2026-10-15 的 qB 流量取证中, 这条一度支撑出「alltime 在涨而网卡零流量
-    ⇒ 纯记账幻觉」的错误中间结论; 改成按「行内两个 6 位以上整数」取值后, 真相是该机 rx 227 KB/s / tx 271 KB/s
-    真实存在(= 结论被反转)。
-- **处置**: ① 收外部命令输出**显式指定码页**(`encoding="gbk", errors="replace"`), 不靠 locale 也不假定 UTF-8;
-  ② 解析**不按表头文字定位** —— 按结构(字段数 / 纯数字列), 或直接换结构化来源(`Get-NetAdapterStatistics`、
-  `Get-NetTCPConnection` 返回对象, 与码页无关; 若走 PowerShell 工具而非从 Bash 里 spawn);
-  ③ **测量脚本必须做零值/量级自检**: 某计数器连续两次为 0, 或与预期量级差 3 个数量级 ⇒ 先当**解析失败**查,
-  不得当结论用; ④ 结论若是否定命题(「没有 X 流量」), 至少两条独立路径交叉(netstat + 进程连接表 + 应用日志)。
-- **守阵**: 属探针/环境侧, 常规守阵无可挂; 复验方式 = 同一命令同时跑「结构化来源」与「解析文本」两路, 数字应吻合。
+详细判据、处置与守阵见 [attachments/console-encoding-measure-probe.md](attachments/console-encoding-measure-probe.md)。
 
-
-
-- **崩在打印层**: [../git/message.md](../git/message.md)「流水线脚本在 GBK 控制台打印 emoji 直接崩」—— 那类是 `UnicodeEncodeError` **抛出来**, 反而容易被发现; 本条是**静默**的那种。
-- **写盘方向**: [../git/editing-traps.md](../git/editing-traps.md)「合并冲突处理不要把 UTF-8 当 GBK 写入」—— 那类会**不可逆**地写坏文件, 检测要按 `U+FFFD` 计数, 别用 Git Bash 管道下结论。
 ## 缓冲侧: 管道下 stdout 块缓冲, 常驻服务的启动行「永远出不来」(2026-10-04 补)
 
 - **触发**: 长跑/常驻脚本(本仓: `nav_server.py`, 经 `commands run kb.nav` 起服务)明明 `print` 了启动行,
@@ -138,7 +98,7 @@
 - **判别**: 与「引擎自身的 stdout」同指纹 —— 真控制台正常, 被管道接住就崩; 本机一行复现:
   `PYTHONIOENCODING=cp1252 PYTHONUTF8=0 python -m gtm`。注意方向: 这**不是**子进程收输出
   (上面两条), 是本进程往外写。
-- **处置**: CLI 入口第一行 `_utf8_stdio()`(gtm `src/gtm/__main__.py`): 对 `io.TextIOWrapper`
+- **处置**: CLI 入口第一行 `_utf8_stdio()`(gtm `	ools/global-traffic-monitor/src/gtm/__main__.py`): 对 `io.TextIOWrapper`
   且 `encoding` 非 utf-8 的 stdout/stderr 做 `reconfigure(encoding="utf-8", errors="replace")`。
   只换编码, 不动缓冲 / `-u` / 重定向语义; 中文都在 UTF-8 码表内, `replace` 只兜孤立代理项
   ⇒ 原文不丢; 退出码仍由业务 `return` 决定, 不因编码改变。真控制台本来就是 utf-8

@@ -1,197 +1,30 @@
 # WEB UI 产出口径与令牌
 
-> 摘要: 菜单/入口分层、令牌分工、按钮体系、悬浮提示、选中摘要口径、fx 动效库与 flux 皮肤、HTML dark 主题 —— 前端产出口径的唯一出处。
+> 摘要: 菜单/入口分层、令牌分工、按钮体系、悬浮提示、选中摘要口径、fx 动效库与 flux 皮肤、HTML dark 主题 —— 前端产出口径的唯一出处。各主题已外迁到 `attachments/webui-*.md`, 见下方主题地图。
 > 触发: WEB UI 约定, 菜单分层, 令牌, 主题, dark, HTML 产出, tooltip, 悬浮提示, 选中摘要, occ_key, 实际占用, fx, 动效, data-fx, flux, 皮肤, preset, reduced-motion
 **Refs:** memory-bank/issues/26-10-20-2231-refactor-fe-css-rule-family-dup.html, memory-bank/plans/26-10-31-2316-plan-webui-fx-skin.html
 
-## WEB UI 菜单/入口分层原则 (2026-09-17 用户明确要求记入)
+## 写 WebUI 前必读(硬规则)
 
-右键菜单(及同类动作入口)按**使用频率**分两层, 不是按功能族平铺:
+- **菜单项是数据不是模板**: 项集注册在 `shared/ctx_menu.js` 的 `CTX_ITEM_DEFS` / `CTX_SUB_ITEM_DEFS`, 模板只 `v-for` 消费; 支名由 `menu.js::ctxMenuKind()` 单点给出; 一级只允许一个次级菜单入口; 多选与单组两条入口的项集必须一致。
+- **动作文案 = 动词 + 灰色种子数 N**: N = 实际受作用的种子总数, 计数单点 `selection.js::_seedCountOf`; scope 词(批量/该种子/整组/整剧/整集)不进可见文案。
+- **令牌纪律**: 同名语义只允许一个令牌族; 令牌名集三皮肤必须相等; 新增令牌 = 三皮肤同轮补名; 新增弹窗只选 `--modal-w-*` 档位, 不写新数字。
+- **按钮与弹窗**: 动作按钮一律 `.bt` 族, `<button>` 显式 `color`; 弹窗按后果等级染色走 `_openModal` 派生 tone, 新对话框不要自己判 danger。
+- **busy 骨架**: 只走 `shared/dialogs.js` 的 `_mgrRun` / `_panelLoad` / `_postWaitCmd`, 不手抄; 禁止裸 `toast(..., {sticky: true})` 或用 `_finishToast` 原位改字顶掉进行中条。
+- **悬浮提示**: 新元素继续写原生 `title`, 由 `.aq-tip` 委托层接管; 不新造浮层。
+- **共用规则族**: 三皮肤逐字节相同的规则族进 `shared/console_hub.css` 尾段单点; 皮肤内保留真差异, 不许顺手抹平。
+- **动效隔离**: 走 `data-fx` / `data-fx-preset` + `window.AQB_FX` 单挂载器; 每个 `@keyframes` 配 `prefers-reduced-motion` 降级; atlas/prism/console 对 `shared/fx/` 零引用。
+- **HTML 产出**: 一律 dark 主题(深色底 + 浅色字), 样式里必须写 `color-scheme: dark`。
 
-- **一级 = PT 日常高频动作**: 启动 / 停止 / 强制汇报 / 详细信息 / 限速 / 移动 / 重命名 / 重新校验 / 导出 .torrent / 打开目标文件夹 / 删除。(「开始 / 暂停」是 2026-10-05 退役的浮动操作栏术语, 已随 2026-10-10 `webui-wording-unify` 全面对齐 qB 的 启动/停止, 不再使用。)
-- **次级菜单(flyout) = qB 通用低频能力**: 队列(置顶·上移·下移·置底) · 自动种子管理 · 超级做种 · 强制开始 · 分享率限制 · 复制(名称/哈希/magnet) → 全部进「**更多操作**」(R10-14 由「高级能力」改名: 这些是 qB **常规**种子控制, 文案不该评价能力高低; 「更多操作」只表达层级, 后续增删子项也不会失准)。
-  - ⚠ **一级只允许有一个次级菜单入口**(CTX-06, 2026-09-24): 复制族曾单列第二个子面板, 用户得先选"该进哪个" —— 已并入「更多操作」末尾。低频动作归堆, 不新开入口。
-  - ⚠ **同一批动作的菜单分支项集必须一致**(2026-10-09): 多选批量(`menu.multi`)与单组(`ctxMenuKind()` 兜底返回的 `group`)是**同一批动作的两条入口** —— 给一支加动作项必须同步补另一支(组菜单独有的 打开文件夹/流量图 除外), 否则用户在某条路径上「找不到该动作」(2026-10-09 用户报「单组右键菜单缺选项」)。组级入口**复用多选链路**(目标 = 该组全部成员, 走 `_groupTargets`), 不另开旁路。守阵 `test_ctx_menu_template_consumes_registry` + T4 动作族奇偶(读注册表定义序); 机理见 pitfalls/web-ui/ctx-menu-branch-parity.md。
-- **菜单项是数据, 不是模板**(2026-10-20, 计划 26-10-20-0024): 四支的项集收敛到 `shared/ctx_menu.js` 的**注册表单点**(`CTX_ITEM_DEFS` / `CTX_SUB_ITEM_DEFS`), `ctx-menus.html` 只 `v-for` 消费 `ctxItems(ctxMenuKind())` / `ctxSubItems(ctxMenuKind())` 并 `ctxRun(it)` 分派 —— 模板里**不许再出现逐项 `@click="actTorrent(...)"` 这类直写**(守阵拦截回潮, 回潮 = 四支人肉奇偶复发)。加项 = 注册表加一行(含 `label`/`icon`/`act`/`gate`/`danger`; `label` 是函数时**必须**给 `labelText` 静态名, 定制面板求不出动态文案); 加支 = `CTX_BRANCHES` + `menu.js::ctxMenuKind()` + `triggers.js` variant 三处同步。
-  - **渲染骨架也只有一条**(2026-10-22, issue `26-10-20-2231-refactor-fe-tpl-ctx-item-branch-dup`): 四支曾各写一份 `.ctx-item` 骨架(5 份, 其中 4 份逐字同) —— 给项加属性漏改一支就是同族缺陷。现模板里 `.ctx-item` 骨架恰 **2 份**(一级项 + 次级面板项), 支名由 `menu.js::ctxMenuKind()` 单点给出(容器 `:data-kind` 与 `v-for` 同读它), 模板**不许出现 `ctxItems('multi')` 这类支名字面量** —— 字面量要分四支, 分四支就要四份骨架(守阵 `test_ctx_menu_template_consumes_registry` 拦)。
-  - 用户布局存在 `config.web.ctx_menu`(`{支: {order, hidden, sub: {order, hidden}}}`), 经 `/api/webui/flags` 下发; 解析语义(补尾 / 隐藏留槽位 / 跨层认领 / 分隔线一等公民 / 次级为空不显示入口)全在 `ctx_menu.js` 的纯函数里, **运行时与设置页定制块共用同一份**(`REG.ctxMergeLayout`) —— 不要在别处再写第二套合并逻辑。
-  - 设置页「WebUI」卡(`shared/ctx_menu_custom.js` + `settings-detail.html` 的 `hub.view === 'webui'` 分支)是这条数据的编辑面: 编辑**直接写配置树**(整对象替换), 脏标记/保存/放弃走全局 actbar, 面板不另存草稿。
-- **动作文案口径 = 动词 + 灰色种子数**(2026-10-20, 计划 26-10-20-0145): 四支菜单的 启动/停止/删除 一律 `label = 动词`(或「删除…」保留省略号), 后面跟行内灰色 `N 个种子`(`.ctx-note`, 规格同 `.strip-note`; 标签与后缀由 `.ctx-text` 圈成同一个 flex 项, 否则会被 `gap` 拉开)。
-  - **scope 词(批量 / 该种子 / 整组 / 整剧 / 整集)一律不进文案** —— 右键位置已经说明作用范围, 作用对象终究是 N 个种子; 需要区分分支的地方(测试、触发器口径)挂 `data-kind` / `data-count`, 不挂可见文案。
-  - **N = 实际受作用的种子总数**(组/剧/批量选择全部展开), 不是"目标条目数" —— 组 key 算 1 个目标但可能是 47 个种子。计数单点 `selection.js::_seedCountOf`(类型展开走 `_scopeResolve` 的 C1 描述符), 菜单后缀(`menu.js::ctxSeedCount`)、删除确认框构成式(`delete_flow.js::bulkCountText`)、动作回执 toast(`commands.js::_actCore`)三处同源。
-  - 回执 toast 同形: `已执行: 启动(42 个种子)` / `启动失败: <原因>` —— 不再有「整组/该种子/整剧(N 个种子)/(N 个目标)」四种形态, `_actCore` 也不收 `what`/`countSuffix` 参数(收 = 给"同动作不同叫法"留门)。
-  - 不在口径内: 需逐目标现值/状态开关的项(强制启动/超级做种/自动种子管理)、无 scope 变体的动作(强制重新汇报/重新检查/限速/移动/导出)、快捷键面板的通用词。
-- **判据**: 该动作是否"每天都要点" —— 不是则下沉。菜单项数增长时**先问能否归入既有次级菜单**, 不要直接往一级追加。
-- 实现: `.ctx-item.has-sub` + `.ctx-sub`(锚在父项右缘, 靠右时 `.flip-x` 向左翻); hover 与点击都能展开; 状态的唯一权威是 `app.js` 的 `subMenu`(随 `menu.visible` 关闭一并复位); 移出**父项**后延迟 ~180ms 收起(见 pitfalls/web-ui/overlays.md「flyout 次级菜单」—— 延迟只为跨过 4px 缝隙, 且收起只能挂父项)。
+## 主题地图(每节一行, 权威在附件)
 
-## WEB UI 令牌分工 (2026-09-17 第十轮)
-
-同名语义只允许有一个令牌族, 新增值先找族再考虑加令牌:
-
-- **令牌名集三皮肤必须相等**(issue 26-10-20-2231, 守阵 `test_frontend_skin_css_token_parity`): 取值按各自设计语言各写各的
-  (如 `--font-display` 星图 = 单一无衬线族、控制台/棱镜 = Bahnschrift), 但**名字一个都不能少** —— 少声明一个,
-  该皮肤下 `var(--x)` 的那条声明会在计算值阶段**整条作废且无任何报错**(星图此前少 3 个字体令牌, 自己 4 处
-  `var(--font-mono)` 裸引用全程失效、共用层只能按"该皮肤没有令牌"各写兜底链)。新增令牌 = 三皮肤同轮补名。
-- **浮层底色 `--bg-pop` 与玻璃化**(2026-11-02 立, 2026-11-04 反转, 见下): flux 是唯一把
-  `--bg-card: rgba(...,.82)` / `--bg-elev: rgba(...,.92)` 写成半透明的皮肤(另三皮肤两 token 均为不透明 hex)。
-  `--bg-pop` = `--bg-elev(.92)` 覆在页底 `--bg` 上的**不透明等效色**(flux `#1c2a3f`), **只给无毛玻璃的浮层**,
-  另三皮肤 `--bg-pop: var(--bg-elev)` 惰性别名(名集守阵要求)。
-  **2026-11-04 口径反转(全浮层玻璃化, 用户报「添加种子/右键菜单等弹窗毛玻璃近乎没有」)**: 26-11-02
-  「透正文」的根因是半透明底**无 blur**; 挂上 blur 后半透明即毛玻璃, 不再透可读正文。故 flux 菜单/浮层族
-  (下拉/右键菜单/次级菜单/悬停卡/限速浮层/拖放落点/HR 全屏面板/图表与历史 tip/共用层覆盖组含
-  `.relc-pop`)一律 `--bg-card` 半透明底 + backdrop-filter, 预算 4→16(见 flux 段); **`--bg-pop` 消费面收窄到
-  `.col-ghost` 一处**(列头拖动虚影 —— 每帧移动的 fixed 元素挂 blur = 逐帧回读采样, 唯一不玻璃化的浮层)。
-  ⚠ **挂 blur 的浮层不能吃近不透明底**(2026-11-03 回归): `.modal` 的底必须走 `--msg-base: var(--bg-card)`
-  (alpha .82), 换成 `--bg-elev`(.92)/`--bg-pop` 会把 blur 只剩 8% 透视, 肉眼读作「毛玻璃被透明修复弄丢了」。
-  ⚠ **玻璃可见度 = 面板底 alpha × 遮罩 alpha 的叠乘**(2026-11-04 第二根因): `.modal-mask` 遮罩 alpha
-  ≤ .6(现 .5) —— 11-03 轮只修了弹窗底(.92→.82), .72 遮罩仍把实际透视压到 ~5%, blur 依旧不可见。
-  判据与双向钉 = 守阵 `_scan_flux_modal_frost`(含遮罩浓度钉、玻璃化浮层族钉、.col-ghost 反向钉)。
-  shared 层浮层(`console_hub.css` 的 `.hb-pop`/`.hb-tr-drop`/`.search-help-pop`/`.aq-tip`/`.err-panel`、
-  `row_lang.css` 的 `.rowlang-menu`/`.relc-pop`)本体**不动**(shared 基线仍不透明 --bg-pop, 三旧皮肤无毛玻璃),
-  只在 flux 侧用 `html[data-fx-preset]` 前缀覆盖为半透明底+blur(见 flux 段)。
-- **CSS 分层三皮肤同构**(2026-10-21): 星图/控制台 = `style.css → css/components → css/views → css/dialogs`;
-  棱镜 = `css/tokens → css/themes/*(五主题) → css/base → css/components → css/views → css/dialogs`;
-  三皮肤最后都接共用层 `shared/console_hub.css` + `shared/dt_table.css`。**弹窗层恒排最后**(抽屉/确认框/对话框/
-  全屏覆盖层/悬停弹窗/抽屉内表), 排在页面级规则之前会被反压 —— 棱镜此前正是这种变形结构(issue 26-10-20-2231)。
-  链接序由 `test_frontend_template_split_wiring` 钉死, 别按"就近贴语义最近的文件"改。
-- **状态色族**(`--green/--blue/--error/--warn` + `--paused-*`): 表达**种子/行状态**。只染有语义的状态; 0 值/
-  "—"占位不染; 芯片(站点/标签/分类)保持自身语义色不跟随行色(决策 D6-A —— 芯片表达**成员级**语义, 跟随行色会抹平这层信息)。
-  `--paused` 是唯一"无色相"的成员, 取值 = `--fg-muted`(中性中间调), 配 `--paused-soft: transparent` + `--paused-line: var(--border-strong)`
-  —— **暂停/其它一律"不铺底 + 中性描边"**, 不许落回 `--surface-2`(暗底 = 白 6%, 读作"太白/没颜色")。该族**各套 UI 各声明一处**(atlas/prism/console/flux)
-  (星图 `:root` / 棱镜 `themes/*.css` 五主题), 改值必须全处同改。
-- **状态色 → kind 映射与 `--st` 单点**(2026-11-02): 七个 kind 各绑一支令牌 —— 做种 `--green` / 下载 `--blue` /
-  **校验 `--warn`(琥珀)** / **移动中 `--violet`(紫, 与 `views.py::state_kind` docstring 的原口径对齐)** /
-  错误 `--error` / 暂停与其它 `--paused`。消费面不再各写令牌值: 行元素(`.k-*` 图例项 / `.site-chip.<kind>` /
-  `.group-row.s-<kind>` / `.member-row.<kind>`)声明 `--st`(前景) 与 `--st-soft`(柔和底) 一次, 图例色、芯片底、
-  行文字(名称/数值/state-text/.val)、**进度条填充**统一读变量。声明在**行元素**上靠继承下发 ——
-  内层成员行自带 kind 类即覆盖, 不用后代选择器给子行连带染组行色。校验与下载原先同 `--blue` 肉眼分不出
-  (用户报障原症状), 拆开后由 `test_frontend_static_bundle_health` 第 19 项钉死值。
-- **选中态族**(`--sel-bg/--sel-line/--sel-bar`, 五主题均取**非绿**的靖蓝族): 只用于"用户选中"语义; **不得**再引用
-  `--accent`/`--accent-soft` —— 品牌主题(orbit)下 `--accent` 与做种 `--green` 同族且明度接近, 用户分不出"选中"与"做种"。
-- **流量方向色族**(`--today-up/--today-down`, 星图 `:root` 一处 + 棱镜五主题各一处, 改值必须全处同改):
-  表达**上下行流量方向**, 消费面 = 历史流量图 SVG / qB 流量图(uPlot 经 `_qbChartTokens()` 现读令牌;
-  2026-10-08 起同源还喂**画布注解层**: 限速虚线随方向取 `up/down`, 缺口斜纹取 `grid` 令牌) /
-  状态栏今日统计(`.sb-item.sb-today .v-up/.v-down`) / 状态栏速度组方向图标(`.sb-spd .ico-up/.ico-down`) /
-  i-traffic 组图标(内联 `var(--today-*)`) / **设置页限速曲线预览图**(`.ce-chart-up`/`.ce-chart-down`
-  五处: 曲线线色 / 面积填充 / 悬停标记点 / 图例方向标 `.ce-lg-dir` / 档位组方向条 `.ce-dir-dot`;
-  2026-10-11 归族, 此前误借状态色族 `--warn`/`--blue`)。取值 **上行 = `--indigo`(紫) / 下行 = `--teal`(蓝绿)**
-  (2026-10-04 用户拍板交换)。⚠ 该族是**间接令牌**(指向 `--indigo`/`--teal`), 需要"同色软底"时**不能**借
-  `--indigo-soft`/`--teal-soft`(主题换指向即脱族) —— 用 `color-mix(in srgb, var(--today-up) 16%, transparent)`
-  从同一令牌现算, 或照直方图 `.hist-area.up|down` 的 `fill: var(--today-*)` + `opacity` 写法。
-  ⚠ 速度组图标**不要**改全局 `.ico-up/.ico-down`(绿/蓝, 还喂顶栏「种子」等
-  非流量位置), 只能按 `.sb-spd` 作用域覆盖。状态栏限速值(`.sb-spd .lim`)是**参考值**, 用中性灰 `--fg-dim`
-  (与做种要求值 `.m-pair .req` 同款), 不随方向染色。
-- **画布注解层限速线(plan 26-10-12-0535)**: qB 流量图的限速虚线自 2026-10-12 起按**当时值分段**——
-  后端主循环采样点把 qB 全局限速生效值(上/下行分开, 0 = 不限速)按「有变化才记」落
-  `<data_dir>/qb-traffic-v4/limits/<日期>.dat`(分天, 00:00 硬切 + 新天首行基线 carry, 不淘汰对齐
-  day/month 全保留; 记录器在 `core/traffic_limits.py`, 挂点 `traffic_sample_mod._sample_global`),
-  三端点 payload 统一附 `limits: [[ts,up,down],...]`(首元素 = 窗口起点合成事件, 记录起点前无值);
-  前端 `_qbDrawLimits` 从图记录 `u._qbLimits` 走 `_qbLimitSegs` 纯函数构段(每段画各自区间, 末段到
-  图右沿; 逐段可见性 0 < v < ymax; 快路 setData 同步换 limits), 悬停 tooltip 增补「当时限速」行
-  (`_qbLimitAt` 二分, 记录起点前不给)。变体 13 无注解层照旧不显示; 14/15 走共享钩子自动生效。
-- **表面/底色族**: 状态栏用专用 `--statusbar-bg`(与页底形成可见层级); **不要改 `--glass`** —— 它同时管顶栏,
-  改它会连带改顶栏。
-- **尺寸族**: 弹窗宽度取 `--modal-w-narrow/base/form/add`/`--modal-wide-w`(各套 UI 同值同族); 新增弹窗只选档,
-  不写新数字(这正是此前"第 N 次调大"的成因)。
-- **单点口径原则(通用)**: 同一数据/口径在两个以上地方出现时, 收成 computed/method 单点(如 `speedLimitBytes`
-  限速取数、`cellSeedingTime/cellRatio/cellPeers/cellAvailability/cellTime` 单元格口径、`_deleteDetails` 删除详情行、`selSizeSummaryOf` 选中摘要大小、`colAlignCss` 列对齐),
-  模板里只引用不重算。新增展示口径时先问"它是否已被别处实现"。
-
-## WEB UI 按钮体系 .bt (2026-09-26 第十一轮)
-
-全部动作按钮收敛一族 `.bt`, 各套 UI 同一套语义类名、外观各按其设计语言(方案定案与全状态陈列见 `plans/26-09-26-0538-plan-webui-button-3-proposals.html`):
-
-- **语义变体**: `.bt`(次钮, 默认) / `.bt.primary`(主) / `.bt.ghost`(幽灵) / `.bt.danger`(危险·描边) / `.bt.danger-solid`(危险·实心, 用于确认框的危险确认) / `.bt.icon`(图标钮) / `.bt.sm`(小档 28px)。标准档: 星图/棱镜均 34px。
-- **两套配方**: 星图 B(胶囊 999px, 主钮=品牌渐变+inset 高光, hover 泛 accent 柔光) / 棱镜 C(圆角 5px 强声明, 主钮=实心 accent+深色字, 按下 scale(.98))。
-- **状态纪律**: hover 换 accent-line 描边 / 按下反馈 / `:focus-visible` ring / 禁用 .45 / 加载中 `.spin` 图标; `<button>` 一律显式 `color`(UA 默认色坑见 pitfalls/web-ui/layout-css.md)。
-- **双色令牌族**(`--on-accent/--on-accent-ink/--on-error`): 实心 accent/error 底上的前景色, 星图 `:root` 一处 + 棱镜五主题各一处成对声明(亮色主题翻转为白字), 改值必须全处同改 —— 与状态色族同纪律。
-- **存量家族归属**: ce-btn/ce-icon 已退役(守阵 `test_frontend_button_system_paired` 钉零残留); bulk-btn 随批量控制条退役(2026-10-05, 守阵 `test_frontend_bulk_bar_retired` 钉模板/三套 CSS/JS 助手零残留); row-btn/prio-btn 保持紧凑尺寸只并入配色与状态语言; 登录页与页签/筛选 chip 不入族(各自视觉语言), 设置页 hb-*(Ash Thorp)保留其形。
-
-## WEB UI 弹窗语义配色分级 (2026-10-19, 计划 26-10-19-2341)
-
-通用确认框(`shared/tpl/popovers.html` 的单例 modal)按**动作后果等级**染色, 不再只有"危险/不危险"一个布尔维度:
-
-- **框级 `modal.tone`**: `error`(不可逆, 如删除) / `warn`(有代价可重来, 如跳检)。**派生单点在 `_openModal`** —— 显式 `cfg.tone` 优先, 缺省 `danger→error`、否则 `warn`; 两种推导都与历史着色一致, 故既有调用点零变化。**新对话框不要自己判 danger**, 显式传 tone。
-- **标题区警示条 `modal.strip`**: 缺省 `false` = 外观零变化, 只有**带行式明细清单**的框才开启(落地时仅删除确认框与跳检预检框)。`-soft` 底 + `box-shadow: inset 3px 0 0 <line>` 左侧色条 —— 走 inset 而非 `border-left`, 不占布局宽度, 避开 `.modal-title` 的 flex 排列与弹窗 `overflow-y:auto` 下的溢出。
-- **行级 `row.tone`**: `details` / `verdict` 行对象挂 `tone` → `.is-error` / `.is-warn` / `.is-ok`, **只染 `.ico` + `.d-label`**, value 保持 `--fg-soft` 中性(长句可读性)。**不要改全局 `.modal-detail-row .ico` 的灰** —— 它是共用同一行式范式的中性基线(限速/移动/重命名/分享率都走它); 此前正是这条规则把 `#i-warn` 与「禁止」一并抹平。
-- **未标 tone 的行在 strip 框内继承框级 tone**(2026-10-20 追加): 写在选择器 `:where(.modal.strip.tone-error|warn)` 里 —— `:where()` 把特异性压到 0-2-0, 与基础置灰规则同级、靠**源序**胜出; 行级 `.is-*`(0-3-0)作为例外值因此仍能盖过它。用来消掉「整框已是危险语境、下面一整片明细行图标全灰」的割裂(删除框的 目标/成员/站点/保存路径/总大小、跳检框的 busy 行都属此列)。**无 strip 的框完全不生效**, 故其它弹窗依旧零变化 —— 这是它比"直接放宽基础规则"更适合做兜底的原因。
-- **`is-error` 行额外加淡底 + 左侧 2px 色条**: 上一条的兜底铺开后, error 行与周围同色, 颜色本身已拉不开层级 —— 靠这个让 HR 风险点名 / 跳检「禁止」行仍能跳出来(与 error 文字色同源令牌)。
-- **三级层次由此为: 默认继承(框 tone) < 行自报(`.is-*`) < 强调加底(`.is-error` 独有)**, 越往后越醒目; 新增 popped-out 强调力度时按这个台阶往上加, 别直接全书对/加新色值。
-- **颜色一律引状态色令牌**(`--error/--warn/--green` 及其 `-soft/-line`), 三套 UI + 棱镜五主题均已声明, 不新增色值。
-- **按钮不参与本族**: `.bt.danger-solid` 保持实心红 —— 按钮表达「这个动作有后果」, 标题 tone 表达「整框语境等级」, 两层语义不合并(e2e `menus.spec.mjs` 依赖该类名)。
-- **CSS 落点**(2026-10-21 改): 本族**整组**(框级 tone / strip 标题条 / 行级 `.is-*` / 框级兜底 / 强调行)在 `shared/console_hub.css` 的「三皮肤共用规则族单点」段 —— 三皮肤逐字节同 ⇒ 单点一份(issue 26-10-20-2231)。本皮肤只留弹窗**基础语言**(`.modal-title` / `.modal.danger .modal-title .ico`), 那部分三皮肤本就不同。⚠ **atlas `css/components.css` 已满 700 行**, 单 CSS 体量守阵(`test_frontend_template_split_wiring`)卡 ≤700, 追加前先量行数。
-
-## WEB UI 三皮肤共用规则族 (2026-10-21, issue 26-10-20-2231)
-
-三份皮肤 CSS(prism / atlas / console)历史上互相克隆, 同一组件写三遍且逐字节相同 —— 这类**规则族**收敛到共用层单点:
-
-- **判据**: 同一族规则在三皮肤里**逐字节相同** ⇒ 搬进 `shared/console_hub.css` 尾段「三皮肤共用规则族单点」(A/B/C/D 四段)。三皮肤 `index.html` 都挂该文件且排在各自 CSS **之后** ⇒ 级联序天然就是收敛点, **不需要 `!important`**; 改共用层 = 三皮肤同改。
-- **已收敛**: `.qb-tabs` 组件本体(容器/按钮/激活态) · `.drawer-tabs` 容器与按钮底形 · 弹窗语义配色分级 ①②③④ · HR 表① 件(表头过滤栏 · 档位徽章 · 失踪行弱化 · 排序头 · 名称列限宽)。
-- **留皮肤内的是真差异, 不许顺手抹平**(守阵反向钉): `.drawer-tabs button.active` 令牌(atlas/console `--accent` vs prism `--accent-hi/--accent-line`) / `.hr-vsrc`·`.hr-pres` 描边(prism `--border-soft` vs 另两皮肤 `--border`) / `.hr-sub` 字体(prism `--font-mono` vs 字面等宽栈)。`test_frontend_hr_detail_table_wiring` 断言这三条**必须在各皮肤自己的 CSS 里**。
-- **守阵量程**: 判「三皮肤成对」用 `_ui_css_effective(ui)`(= 皮肤聚合 + shell 挂的 shared CSS, link 序), **不是** `_ui_css_aggregate(ui)`(只含本皮肤) —— 后者在规则搬走后恒红。判据原理见 `pitfalls/testing/assertions.md`「守阵的量程」条。
-- **新族入共用层的顺序**: 先搬逐字同的(最安全), 差异多的最后; 一族一改一回归, 不整文件对拷。
-- **共用层不止 `console_hub.css`**: 按主题独立成文件的共用层同样成立 —— 现有 `shared/row_lang.css`(行语言)与 `shared/hscroll.css`(主表横滚: 原生横条隐藏 + 底部指示条)。挂载位置同样是各皮肤 `views.css` **之后**(link 序即级联序), 皮肤自有 CSS 内**不得**写第二份同类规则(副本 = 日后各自漂移, 静态守阵反向钉住)。
-- 新增此类文件的门槛与判据、以及 `.group-table` 横条几何 / 两条隐藏声明 / 指示条契约与三个静默故障, 见 `pitfalls/web-ui/hscroll-indicator.md`(本文件不复述)。
-
-## WEB UI busy 骨架单点 (2026-10-21, issue 26-10-20-2231)
-
-「置 busy → try 请求 → 失败反馈 → finally 复位」的前端骨架收敛为 `shared/dialogs.js` 三个单点(config_hub.js 经同一根实例混入调用), **新面板/对话框代码一律走单点, 不许再手抄骨架**(漏 finally = 面板永久转圈, 见 pitfalls/web-ui/inflight-flag-no-timeout):
-
-- **`_mgrRun(fn, okMsg, errMsg)`**: 管理对话框写操作(成功 toast → 重拉列表; 失败 toast, auth 静默)。
-- **`_panelLoad(obj, fn, opts)`**: 面板加载与槽回执(loading 位可选; 失败走错误槽 `err` 或 toast 通道 `errToast`; `authGated: false` = tm 族失败恒上屏; `keepErr` = 不预清旧错; `onOk/onErr/onFinally` 承接成功收尾/失败回滚/完成置位)。
-- **`_postWaitCmd(busyObj, busyKey, url, body, opts)`**: POST+waitCmd **三态 toast 判据单点**(ok / 命令回执失败 cmdFail / 发送失败 sendFail); POST 调用点唯一 ⇒ triggers.js 的 TRIGGER_DEFS.calls 只登记它一行(scope = 调用方并集 sel|anchor|none)。
-- **刻意不收编**: tmShutdownTool(保存失败回滚内存态)骨架形状不同, 保持手写; 各调用点差异(槽名/文案/时长/成功收尾)以参数与回调留在调用点。
-- **守阵**: `test_frontend_busy_skeleton_single_point`(三单点在册 + 19 处接线数对账 + finally 保底 + 裸 busy 置位反向断言) · `test_trigger_registry_call_sites_exact`(POST 出口登记双向相等)。
-
-## WEB UI 悬浮提示 .aq-tip (2026-09-28)
-
-全局 tooltip 收敛为自绘单例, **新元素一律继续写原生 `title` 属性**(模板侧零成本接入), 不许再自造浮层:
-
-- **触发面**: 一切带 `title` 的元素(含 Vue `:title` 绑定); 调度单点在 `shared/ui_feedback.js` 尾部的纯 DOM 委托层(不进 mixin)。机制(2026-10-04 二轮定稿, **原生 tooltip 断供式**): MutationObserver 盯全文档, title 属性在任何时刻出现(模板渲染 / Vue `:title` 写回 / 新插入节点)即刻迁进 `data-aq-tip` 并删掉原属性 —— DOM 里不存在 title, 原生气泡无从弹出; 浮层触发 = document 级委托 mouseover / focusin 命中 `[data-aq-tip]`, 350ms 后弹 `.aq-tip`, 文案 show() 时现读最新值。前两轮的「hover 时摘 + 离开还原 + 悬浮期补摘」被废弃 —— Vue 轮询把指针下节点整个换掉时指针不动、mouseover 不触发, 新节点带 title 还魂叠出双 tooltip(见 pitfalls/web-ui/aq-tip-nested-title-double.md)。代价: title 不再还原(原生悬浮语义由 `.aq-tip` 承接)。点击 / 滚动 / 窗口失焦立即收起。
-- **定位**(2026-10-04 修): 上方优先 → 上方放不下转下方 → 两侧都放不下才允许溢出视口; **任何分支都不越过锚点**。旧版末尾无条件把浮层夹回视口内, 状态栏这类底缘锚点一旦走「转下方」分支就会被拉回状态栏上, 正好盖住它自己描述的元素。锚点在 350ms 延时窗口内被 Vue 整个换掉时已脱离文档(rect 全 0), 按记录的指针坐标 `elementFromPoint` 重解析当前锚点, 解析不到就收起(否则浮层落到视口左上角)。
-- **样式单点**: `shared/console_hub.css` 的 `.aq-tip` 段(三皮肤同载)。视觉复刻设置页发光按钮配方: 描边 `--accent-line` + 负 spread 微光 `0 0 16px -8px`(同 `.hb-card` 静息 `--glow-soft`), 底 `--bg-elev` 字 `--fg`, 圆角随 `--radius-sm`(控制台自动方角)。⚠ 发光要在 `.aq-tip` 本层用 `--accent` 现算 —— `.hb-*` 的 `--glow-soft` 只声明在 hub 控件上, body 级单例继承不到(console_hub.css 文件头硬知识③)。
-- **例外**: 需要富内容(仪表/表格/交互)的悬浮走既有专用浮层(hr-pop / hb-pop / search-help-pop), 不挤 `title` 通道。
-
-## WEB UI 选中摘要口径 (2026-10-18, 计划 26-10-18-2013)
-
-选中种子时筛选行显示「已选 N 个种子 · 合计 X · 实际占用 Y」——**纯展示**(零按钮, 清除走 Esc; 批量动作仍归右键菜单, 不复活 2026-10-05 退役的控制条):
-
-- **位置与样式**: `shared/tpl/topbar.html` 的 `.sel-summary`(退役控制条原槽位), `v-if="selectedCount"`; 整行复用 `.strip-note` 既有规则(三套皮肤逐字同款) —— **零新 CSS**, `.sel-summary` 仅作 e2e 选择器钩子。
-- **三个量的口径**: N = `selectedCount`(`selHashSet` 去重成员数, 选 1 组 = 全组成员); X = Σ 选中成员 `size`(每个种子各算一份, 与删除框既有「总大小」行同口径); Y = 按 `occ_key` 内容单元去重、**单元取选中成员最大 size**(最完整副本, 与后端 progress=max/availability=max 同族)。Y 仅在 `Y < X` 时显示(⇔ 选中了同一单元的 ≥2 个副本)。
-- **occ_key 载荷契约**(后端 `views.py::_member_view`): 归组种子带其辅种组 key(`encode_group_key`, 与组行 `key` **同键空间** —— 守阵不变量), 未归组为 `null`(字段恒在、null = 不适用, 与 `availability` 同族契约; 前端按 `m.occ_key || ("self:"+m.hash)` 兜成自单元)。种子页平铺行经 `_seed_view` 的 `{**_member_view(r), ...}` 继承; 追剧页成员经 `memberByHash` 解析, 三视图同源。语义根: 组内成员指向**同一份文件**, 磁盘只占一份(组行 `size`/`total_size` 双口径的选中版)。
-- **不去重的两层**: 跨组文件交叉(`cross_group_conflict`)不再去重(后端另有风险标记); 追剧页同集多版本不额外去重(「同一份文件」判据是 save_path = 组, 不是集; 不同版本是不同字节)。
-- **算法单点**: `selection.js::selSizeSummaryOf(members)` —— 筛选行(`selectedSize` computed, 无选中早退)与删除确认框(`delete_flow.js::_deleteDetails` 的条件行)共用, 不另写求和。删除框那行仅 `Y < X` 时追加, 口径说明走 `d.hint`(popovers 详情行 `:title` 吃 `d.hint || String(d.value)`; 原生 title 由 .aq-tip 层迁移成 `data-aq-tip`)。
-- **守阵**: `tests/test_web_backend_misc_views.py::test_member_view_occ_key`(契约三条) · `tests/test_webui_static_dom_page_layout.py::test_frontend_selection_size_summary_wiring`(模板/JS/删除行三层接线) · `e2e/multiselect-shows.spec.mjs`「选中摘要」两条(双皮肤)。
-
-## WEB UI fx 动效库与 flux 皮肤 (2026-11-01, 计划 26-10-31-2316)
-
-第四套皮肤 flux(fork console、只 dark、主 preset glass)+ 零依赖动效库。本节是 fx 相关问题的路由单点; 15 项拍板与逐轮实录见计划档案 §06, 本节不复述。
-
-- **挂载口(不写第二套)**: 属性驱动 —— 组件层 `data-fx="<效果名...>"`(多值空格组合) + `data-fx-variant="subtle|bold|spring"`(强度维); 风格层 `<html data-fx-preset="glass">`(整套令牌配方一键切换, neon/crisp 留库可切回)。单挂载器 = `window.AQB_FX`(fx.js): `scan()` 幂等(boot.js 模板异步注入后消费方再调即可), `audit()` 对账(unknown/unmounted 即问题), 效果名录单点 `REGISTRY.effects`(逐名对 fx.css 规则, 守阵钉); 程序化触发走 `AQB_FX.ripple/dir/viewTransition` 等导出。
-- **库落点与消费纪律**: `static/shared/fx/` 三件单点(fx.css 基线规则+降级块 / fx-presets.css preset 配方 / fx.js 挂载器)。皮肤消费只走三档落点: ① flux 专属 `flux/css/fx-mount.css`(每条规则带 `html[data-fx-preset]` 作用域前缀, 其它皮肤无该属性恒不命中)+ `flux/fx-mount.js`(`window.AQB_FX_MOUNT`, 状态驱动程序化 stamp 属性); ② 共享 JS 的 ui 门控钩子(`this.ui === "flux" && window.AQB_FX_MOUNT` 双保险, 其它皮肤两条件恒假); ③ 登录段等 shell parity 面(HTML 逐字相等守阵)不给加属性, 全靠运行时程序化 stamp。共享模板不加属性、不改类名、不写第二份效果规则。
-- **四皮肤隔离**: atlas/prism/console 对 shared/fx/ 与 fx-mount 零引用(不挂库也无 data-fx-preset), 守阵 `test_frontend_fx_wiring` 反向钉(三旧皮肤零引用 + flux 挂行恰三件 + 级联序); fx.js 走 flux shell 静态 script 而非 tpl-manifest(四套清单守阵钉逐项相等, 进清单 = 四皮肤同挂破隔离)。flux 与 console 后续演进互不带动, 同步需求走 issue/另立计划。
-- **降级哲学(D5 单点)**: Chrome/Edge 全特性; Firefox/Safari/旧内核 = 降到**无动效终态**, 不为旧浏览器保动效 —— 「动效没生效」先查浏览器再查代码。硬惯例: 每个 @keyframes 配 `prefers-reduced-motion` 降级块, 动画类原语收进 no-preference 媒体; flux 皮肤存量动效(如 modal-in)的 RM 行为不属 fx 降级面。
-- **已知硬约束/坑路由**:
-  - transform 祖先改 fixed 包含块 → [pitfalls/web-ui/clip-path-clips-fixed.md](../pitfalls/web-ui/clip-path-clips-fixed.md)(R1 实复发: push 载体改 relative-top; 新动效载体选型先对 fixed 后代跑祖先链判据);
-  - `@starting-style` 对「插入后才程序化补属性」的节点不触发(起始式窗口在首次样式计算即关闭) —— 程序化 stamp 的入场用确定性 @keyframes, 不用 starting-style 族;
-  - blur 面积成本: 常驻小面 blur 空闲/滚动无衰减, 大面板(盖住视口大半)开启期掉帧; 本机 Playwright Chromium 是 SwiftShader 软渲染, 帧率数字不可当真机预期。flux 毛玻璃走显式预算守阵 `_FLUX_BACKDROP_BUDGET = 16`(test_webui_static_skins::`_scan_backdrop_filter`, 加/摘 = 显式改预算 + 红绿双验; modal-mask 恒禁) —— 2026-11-04 由 4 抬到 16(全浮层玻璃化, 用户报「添加种子/右键菜单等弹窗毛玻璃近乎没有」; 新增 12 处 = .col-menu/.pop-menu/.ctx-menu/.ctx-sub/.ce-chart-tip/.hist-tip/.hr-full-modal/.add-drop-box/.speed-pop/.hr-pop/.hp-arrow/共用层覆盖组, 全部 `--bg-card` 半透明底 + blur, blur 取值大面 14px / 小 tip 与共用层 10-12px);
-    **未挂 blur 的浮层只剩 `.col-ghost`**(列头拖动虚影, 每帧移动挂 blur = 逐帧回读, 保留不透明 `--bg-pop`) —— 26-11-02「无 blur 浮层一律 --bg-pop」口径就此收窄(见令牌分工段);
-  - 高密度行(torrent 表)禁全行 stagger(设计指南硬条); 行内实时数据(速度列)不挂数字补间(高频补间 = 高负载, 只挂状态栏级低频面)。
-- **消息面(message surface)统一(2026-11-02, 用户报「强制汇报投递与确认框样式不一致」)**: 用户操作引起的消息浮层(右下角提示条 / 站内确认框)**材质同源、形态各守其位** —— 位置与交互语义不变(提示条非阻塞、确认框居中阻断), 只把材质与语义档语法收成一份。三件: ① 表面读同一 `--msg-surface`(高光渐变单点 + 角色底 `--msg-base`, 单点声明在 `flux/css/components.css` 的 `.toast-wrap, .modal-mask` 一条规则; `--msg-base` 只在 `.modal-mask` 作用域声明 = `var(--bg-card)`, 提示条走兜底 `--bg-elev` —— **提示条不挂 blur 故用近不透明底; 弹窗挂 blur 故必须半透明底**, R2 精修只给常驻大面开毛玻璃且预算钉死); ② 语义档 `--msg-tone`(图标)/`--msg-line`(描边)由 kind/tone 一档一声明: ok→green / warn·timeout→warn / error→error / busy→accent / **info = 中性基线**(不单列规则); ③ 弹窗侧 `.modal.tone-warn|error` 同读 `--msg-line` —— 两处都靠「描边 + 图标」表达等级, 不再一边染边框一边中性。**形状不统一(用户二轮口径「消息通知不要切角」)**: 切角(`--hb-cut`, 弹窗 14px / 限速浮层)只属**弹窗级大面浮层**; 提示条是过路小条, 方角(radius 令牌本就 0), 切角在小面积上读作装饰缺口且会啃掉底部倒计时条右端 —— 初版曾把它也统一成切角, 被用户退回, 现由守阵**反向钉**死在 `.toast` 上(`clip-path` 出现即红)。**新增 toast kind 必须登记语义档**(未登记 = 静默落成与 info 同貌; warn 档 21 处调用点就这么整档丢了样式), 守阵 `tests/test_webui_static_skins_skin.py::test_frontend_static_bundle_health` 的第 20 项 `_scan_message_surface_parity` 扫「模板图标映射 + JS 调用点」两侧求 kind 全集。范围: 只统一 flux, atlas/prism/console 仍是 fork 前的平面方角配方(范围守恒, 未动)。**形状最终档待用户从挑选台选定**: `/fx/showcase.html` D9 区(方角纯描边 = 现生产基线 / 左侧 3px 色条 / 顶部 2px 通栏 / 色条+淡底 / 微圆角 2px / 切角对照), 选定后落 `.toast` 一条规则并同步本条。
-- **消息面图标: 圈内字形族(2026-11-02 三轮, 用户「图标需要统一一下, showcase 中 toast/通知 的例子不错, 直接复用」)**: 参考物 = `fx/showcase.html` D6 的 `.tst-ico` —— **18px、圆环 + 圈内单一字形、stroke 2、round cap**, 一档一形(对勾 ok / 感叹 warn / 叉 error / 旋转箭头 busy / 时针 timeout / i info)。此前生产是裸 13px sprite 字形(stroke 1.7), 六档字形粗细与含圈与否各不相同。**实现落点 = 渲染层换漆, 不动图标源**: toast 模板(`tpl/overlays.html` 的 kind→`<use href>` 映射)与各皮肤 sprite 段是**四皮肤共享且逐字相等**的守阵面, 换 glyph 会连带改三套旧皮肤且旧皮肤没有 18px 档 —— 故 flux 用 `mask` 把「圆环 + 圈内字形」当形状、`background-color: var(--msg-tone)` 上色(语义档单点复用, 不另开配色表), `color: transparent` 让旧 sprite 字形失效; 全部收在 `flux/css/views.css` 的 `@supports (mask-image)` 块内。**降级 = 能力降级不是信息丢失**: 不支持 mask 的浏览器不进该块, 保留 sprite 字形(放大到 18px / stroke 2), 只是不画圆环。⚠ mask 缺失(某档漏写 `--msg-ico`)的后果比"没图标"更糟 —— background-color 会把 18px 方框铺成实心色块, 故守阵对**每档**都钉 `--msg-ico`(与 `--msg-tone` 同一张 kind 表)。**新增 kind = 三张表都要登记**(语义色 `--msg-tone` / 描边 `--msg-line` / 图标 `--msg-ico`)。形状定档: **暂定 D9-1(方角 · 纯描边)** = 现生产形态, 其余五个候选留在挑选台待随时改判。
-- **消息面文字排版: 标题行 + 明细行(2026-11-02 四轮, 用户「文字内容排版样式也使用 showcase 中 toast/通知 的 D6-2 倒计时进度条例子中的样式」)**: 参考物 = `fx/showcase.html` D6 的 `.tst` 文字块 —— **13px/600 标题行 + 12px/`--fg-muted`(400) 明细行, 两行块级堆叠, 图标 `align-items: flex-start` 顶对齐(`margin-top: 1px`)**。旧生产是单行 400 字重、图标垂直居中, 长 `err.message` 折行时图标被压在垂直中线、与行块不齐。**落点三段**: ① `flux/css/components.css` 的 `.toast` 基座(`align-items: flex-start` + `font-weight: 600` + `width: 340px`(屏幕窄时 `calc(100vw - 40px)` 兜底) + `padding: 10px 12px`); ② `.toast-txt/.toast-t/.toast-s` 三条落在 `flux/css/views.css`(components.css 卡 700 行体量上限, 见 pitfalls/web-ui/css-file-line-cap) —— `.toast-txt` 必须 `min-width: 0` 否则长串折不了行; ③ **拆段在挂载层**: 共享模板只有一条 `<span>{{ t.text }}</span>`(四皮肤共用, 不动模板), 由 `flux/fx-mount.js::shapeToastText` 每次 `toastSync` 按**纯结构规则**拆 —— 首个 `:`/`：`/`,`/`，` 之前的动作短语(≤14 字、不含括号)作主标题, 其后的剩余作说明(门槛只留 **≥2 字** —— 六轮文案统一后说明常是一个名字/计数, 如「已执行: 重命名」; **分隔符集含逗号**: 生产里「状态, 补充」句式占大头, 只认冒号会让这批条停在单行)。拆不开只剩两种情况: 文案没有分隔符(已由六轮文案统一消灭, 守阵第 21 项钉住), 或说明侧是运行时错误串且短于 2 字(数据现实, 单行条靠基座 600 字重读作标题行)。判重按 DOM 现状(`.toast-t` 是否存在), 不靠标记位 —— Vue 在 `.text` 变更时会覆写 span 子节点, 标记位会骗人; 文本一律 `textContent`, 不拼 innerHTML(`err.message` 可以是任意字符)。守阵第 20 项连这三段一起钉(含「toastSync 必须调 shapeToastText(n)」—— JS 缺席时全部退回单行, 光看 CSS 守阵发现不了)。
-- **toast 文案 = 「主标题: 说明」(2026-11-02 六轮, 用户「改文案」)**: 排版改成两行后, "文案没有说明"成了新的分家来源 —— 生产里 58 处回执原本是一句话(「已导出 .torrent」「文件已在列表中」「未作修改」), 永远只能显示成一行加粗标题, 与选定形态不一致。故统一口径: **每条提示条文案都写成 `主标题: 说明`** —— 主标题 ≤14 字且不含括号(err.message 之类不进标题), 其后用 `: ` 或 `, ` 接说明(≥2 字)。改动面 = 14 个 `shared/*.js` 的 58 处文案(例: 「已导出 .torrent」→「已导出: .torrent 文件已保存」; 「未作修改」→「未作修改: 输入与当前值一致」; 「限速需为非负数字(KiB/s)」→「限速值无效: 需为非负数字(KiB/s)」; 「正在向 tracker 汇报 N 个目标, 等待确认…」→「强制汇报进行中: N 个目标, 等待 tracker 确认…」)。**文案四皮肤共享** —— 改文案会同时改掉 atlas/prism/console 的提示条文字(它们没做两行排版, 但文案一致是好事, 不违范围守恒: 改的是文案不是样式); 测试面同步: `tests/test_web_shortcuts_*.py` 两条源码断言(「功能未启用: qB 口径流量图」)。守阵 = `tests/test_webui_static_skins_skin.py::test_frontend_static_bundle_health` 第 21 项 `_scan_toast_copy_two_part`: 正则定位 `toast(` 与 `_finishToast(` 两个入口(**终态文案在后者第 3 参**, 只扫 toast 会漏掉「等待中→成功/超时」那一批), 再按顶层逗号切实参; 注释行与注释里的提及跳过; 只判文案首段是字面量/模板的调用(首段是 `${head}` 或三元的, 标题由运行时拼接, 静态判不了), 用与 `TOAST_SPLIT` 同一条规则判「主标题: 说明」形态 —— 新文案漏写说明即红。
-- **提示条队列: 状态栏之上 + 两条事件消息 + 推入不叠画(2026-11-02 八/九轮)**: ① **位置**: `.toast-wrap` 的 `bottom` 必须是 `calc(var(--statusbar-h, 34px) + 12px)`, 不许写死 20px —— 状态栏是常驻仪表盘(速率/连接数), 提示条压上去等于把它盖住; 与 `.err-panel`(+8)同族。② **强制汇报 = 两条消息, 不是一条的两个状态**(九轮改正): 「已投递」与「回执」是两个事件 —— 投递条 `busy` 起步, 回执到来时**归档成中性 info「已投递」并留在队列里**(TTL 4s), 回执**另起一条** `toast()`; 靠 `_actCore` 的 `reToast` 句柄 + `_settleDeliveredToast()` 收口(含 900ms 最短展示: 桩服务回执 ~500ms 就回, 不兜则投递条一闪而过)。⚠ 八轮曾把回执做成**同一条原位改字**(`_finishToast` 改 kind/text) —— 实测投递条只活 531ms 就被换了内容, 用户读作「第一个窗口被第二个顶掉」, 队列里从头到尾只有一条, 自然没有重排。投递条文案因此**必须归档后仍成立**(不写「等待中」)。③ **队列重排 FLIP**: `flux/fx-mount.js::flipStack` 在 `toastSync`(插入/结算)与 `toastDrop`(退场)各调一次, 用**视口坐标**测位置。⚠ 底部锚定栈不能用 `offsetTop`(容器整体上移, 子项 offsetTop 恒 0, 动画静默不播) —— 见 pitfalls/web-ui/flip-bottom-anchored-stack.md。④ **推入必须从下方一整格起步**(九轮): 光有 FLIP 反而制造重叠 —— 新条走原地 `rise`(只下移 10px)时, 旧条还没让开就同帧叠画(实测 5 帧重叠、最大 49px)。栈内新条由 fx-mount.js 盖 `data-fx-queue`, 走 `fx-toast-queue-in`(`translateY(100% + 8px)` 起步 + 90ms 延迟 + `backwards`), 与旧条上移同速, 间距恒为 8 ⇒ 全程零重叠。见 pitfalls/web-ui/toast-queue-pushin-overlap.md。⑤ **倒计时条按 id 精确挂载**(十一轮修正): `.toast` 模板带 `:data-id`, **两个入口都传本条 id** —— `toast(text, kind, ms)` → `toastSync(ttl, id)`、`_finishToast(id, …)` → `toastSync(wait, id)`; `fx-mount.js::toastSync` 内先算 `own = data-id === id`(缺 id 时退化为栈尾), **stamp 分支与补挂分支都只给 own 挂 `data-fx-cd`**。⚠ 十一轮报障「强制重新汇报失败的窗口时间指示条到了但没消失」就是 stamp 分支用了**整栈共用**的 ttl: `_settleRunningToast` 同一 tick 先给归档条发 4000、再推结果条 12000, 两份 `$nextTick` 按注册序执行 ⇒ 4000 落到结果条上(进度条 4s 走完, 条按 12s 才移除, 中间 8s 干挂; 实测 anim finished t=5106ms / 节点消失 t=13013ms)。见 pitfalls/web-ui/toast-countdown-ttl-misattributed.md。⑥ 守阵 = tests/test_webui_static_skins_*.py 第 20 项(钉状态栏令牌 / `flipStack();` 两处 / 推入关键帧与 `[data-fx-queue]` 盖章 / sticky 只能由统一工厂建 / 归档文案不写进行时 / `_settleRunningToast` 调用点下限 / 倒计时 own 守卫 + `data-fx-cd` 单点 + 两处 `toastSync` 都带 id)。
-- **进行中 → 结果 = 统一两段式(2026-11-02 十轮「统一收」)**: 所有**常驻等待条**(`sticky: true`)一律经 `commands.js::_runningToast(text)` 建、经 `_settleRunningToast(ref, kind, text, ms)` 结算 —— 结算 = 把进行中条**归档成中性 info 留在队列**(TTL 4s, 含 900ms 最短展示保护), 结果**另起一条**推入; 两条并存, 新条推入时归档条被 flipStack 顶上一格。**禁止**再写 `this.toast(…, { sticky: true })` 或用 `_finishToast` 原位改字顶掉进行中条 —— 手搓 sticky 绕开了最短展示与归档口径, 守阵直接红。
-  两条硬口径: ① **归档条文案必须归档后仍成立** —— 写「已投递 / 已开始 / 已提交」, 不写「进行中 / 正在 / 等待… / 确认中」(它会在队列里活 4s 与结果条并存, 进行时态当场打脸); ② 例外——**投递本身抛错**(网络/400)时**不拆**: 没有「已投递」可归档, 进行中条自身即终态, 直接 `_finishToast(id, 'error', …)` 原位落失败。
-  当前覆盖 5 条链路: 强制汇报(commands.js::_actCore)、删除前置汇报(delete_flow.js::_reannounceAll)、导出(commands.js::_exportHashes)、批量跳检(drawer.js)、转移(transfer_flow.js::_transferExec)。删除流会连出三条(已投递 → 汇报完成·开始删除 → 已删除), 属预期队列 —— 实测峰值 3 条、逐帧零重叠。
-- **后续扩展接口**: 新 preset(retro 等)/存量动效收编/动效指南硬化 → 计划档案 §05 后续任务(配方接口已在两层变体模型预留); 单组件换装 = 从 showcase 落选候选按卡面标注启用, 不新造第二实现。
-
-## HTML 文档一律 dark 主题 (2026-09-20 用户指定)
-
-- **适用**: 所有产出的单文件 HTML —— 计划文档 / issue 报告 / 交付物 / 演示页。**一律深色底 + 浅色字, 禁止浅底黑字**。
-- **配色口径**: `--bg` / `--paper` 亮度 ≈ `#0f…`~`#18…`, `--ink` 亮度 ≥ `#d8…`; 样式里**必须**写 `color-scheme: dark` —— 缺这条, 浏览器原生滚动条与表单控件不会跟着变深。
-- **制品模板正文区**(2026-10-17): skill `templates/{plan,report}.html` 的 `.sheet` = `max-width: 1280px; padding: 48px clamp(18px, 3.2vw, 44px) 80px` —— **版面自适应**: sheet 随视口流动、侧距随宽度伸缩, 正文/列表/表格/代码块同宽 (prose 不设 ch 上限, 右缘对齐); 窄视口 (≤1180px) 表格内代码允许断行防页面横向溢出。规格单点在模板自身(带注释); 存量自带内联 CSS 的件按冻结线(2026-10-17 模板正文区定型日)豁免, 不逐一计数 —— 存量数字随产出持续漂移, 以冻结线日期为界。
-- **存量**: `memory-bank/plans/`、`memory-bank/issues/`、`memory-bank/reports/` 的全部主题件已全量核查为深色(最近一次全量实测 2026-10-31, 此后不再回填计数 —— 计数随产出漂移, 违规与否只看「新产出是不是深色」); 新产出若不是深色即为违规。
-- **例外**: `resources/`(ui-component-libraries 设计观摩稿 + settings-page-templates 候选稿)**不套用** —— 那批白底极简(kenya-hara / pentagram / muller-brockmann)是设计本体。⚠ 遇到"统一主题"类要求, 先分清**交付物 vs 参考素材**, 别一把梭。
-- **命名**: 放 `memory-bank/plans/` 时命名 `YY-MM-DD-HHMM-<slug>.html`, 日期时间**用 `commands run kb.time stamp` 取当前值**, 不靠记忆。
+- 菜单/入口分层原则 → [attachments/webui-menu-components.md](attachments/webui-menu-components.md) 「WEB UI 菜单/入口分层原则」
+- 令牌分工 → [attachments/webui-theme-tokens.md](attachments/webui-theme-tokens.md) 「WEB UI 令牌分工」
+- 按钮体系 .bt → [attachments/webui-menu-components.md](attachments/webui-menu-components.md) 「WEB UI 按钮体系 .bt」
+- 弹窗语义配色分级 → [attachments/webui-menu-components.md](attachments/webui-menu-components.md) 「WEB UI 弹窗语义配色分级」
+- 三皮肤共用规则族 → [attachments/webui-menu-components.md](attachments/webui-menu-components.md) 「WEB UI 三皮肤共用规则族」
+- busy 骨架单点 → [attachments/webui-menu-components.md](attachments/webui-menu-components.md) 「WEB UI busy 骨架单点」
+- 悬浮提示 .aq-tip → [attachments/webui-interaction.md](attachments/webui-interaction.md) 「WEB UI 悬浮提示 .aq-tip」
+- 选中摘要口径 → [attachments/webui-interaction.md](attachments/webui-interaction.md) 「WEB UI 选中摘要口径」
+- fx 动效库与 flux 皮肤 → [attachments/webui-fx.md](attachments/webui-fx.md) 「WEB UI fx 动效库与 flux 皮肤」
+- HTML 文档 dark 主题 → [attachments/webui-theme-tokens.md](attachments/webui-theme-tokens.md) 「HTML 文档一律 dark 主题」

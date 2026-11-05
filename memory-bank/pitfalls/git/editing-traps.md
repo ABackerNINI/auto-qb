@@ -6,44 +6,18 @@
 
 ### 2026-10-02 起仓库统一 LF: 行尾类条目适用范围收窄
 
-- **变更**: 仓库根新增 `.gitattributes`(`* text=auto eol=lf`)+ 全局 `core.autocrlf` 改 `input` —— blob 侧提交必归一 LF, 新检出文件为 LF; 此后「编辑导致整文件行尾归一、diff 爆炸」不再可能(git 侧看不到行尾差异)。
-- **仍适用(层3未完成)**: 存量工作区文件磁盘上仍是 CRLF(一次性转 LF 暂缓), 各 clone 跑完工作区转换前, 下文「edit 工具 oldText CRLF 匹配」「Python 文本模式 `\r\r\n`」「heredoc 终止符」等条目照旧适用。
+- **触发**: 仓库根新增 `.gitattributes`(`* text=auto eol=lf`)+ 全局 `core.autocrlf` 改 `input` —— blob 侧提交必归一 LF, 新检出文件为 LF; 此后「编辑导致整文件行尾归一、diff 爆炸」不再可能(git 侧看不到行尾差异)。
+- **判别**: 存量工作区文件磁盘上仍是 CRLF(一次性转 LF 暂缓), 各 clone 跑完工作区转换前, 下文「edit 工具 oldText CRLF 匹配」「Python 文本模式 `\r\r\n`」「heredoc 终止符」等条目照旧适用。
 - **长期适用**: `.cmd` 生成物必须 CRLF(cmd 对 LF 拆错行)与 Python 写模式陷阱, 与仓库行尾统一无关。
-- **写盘形态守阵 (2026-10-31, issue 26-10-31-2226-feat-repo-writeform-guard)**: `tests/test_kb_writeform.py`
+- **处置**: 写盘形态守阵 (2026-10-31, issue 26-10-31-2226-feat-repo-writeform-guard): `tests/test_kb_writeform.py`
   进 test.full 闸门三查 —— 裸 CR / 同文件 CRLF+LF 混排 / 逐字符一行(行数≥300 且 bytes-per-line<8);
   存量冻结 1 件(逐字符一行实证件, 无法无损复原), 新增形态当场红, 不再靠人读本文档才发现。
 
 ### 统一 LF 后 `kb.index` 在 Windows 把生成物写成 CRLF: 一批无内容差异的 modified
 
 - **触发**: 跑 `commands run kb.index`(或任何用 Python 文本模式写 `.md` 的生成器)后看 `git status`。
-- **判别**: 一批 `_index.md` 被标记 modified, 但 `git diff` **返回 0**(clean filter 把两侧都归一成 LF ⇒ 无内容差异);
-  `git ls-files --eol` 显 `i/lf w/crlf`, 而工作区其余文件是 `w/lf`(2026-10-02 起 `.gitattributes` `eol=lf`)。
-  实测 2026-10-03: `kb.index` 后 9 个 `_index.md` 变 `w/crlf`。**这不是索引内容漂移** —— 别据此判断生成物变了。
-  2026-10-04 根治后 `kb.index` 不再复现(处置①); 本条保留给存量**手写**文件与其它未登记的文本模式写盘点。
-- **处置**: ①**根治已落地 (2026-10-04)**: 5 处生成器写盘点(`gen_all.py` / `gen_kb_index.py` / `gen_tasks_index.py` /
-  `gen_docs_index.py` / create-issue 的 `gen_issues_index.py`)一律显式 `write_text(..., newline="\n")` —— 原先吃
-  `newline=None` 的默认值, 落盘时按 `os.linesep` 翻换行, Windows 上就是 CRLF。守阵
-  `tests/test_memory_bank_structure.py::test_generated_indexes_are_lf_only`(逐字节断言生成物无 CR; `--check` 用 `read_text`
-  会把 CRLF 折成 LF, 对行尾不敏感, 所以这条缺陷此前能一路绿灯)。
-  ②存量工作区(层3 未做)里**手写**文件仍可能是 CRLF, 归一只需 `git checkout -- <那批文件>`(内容零差异, 安全);
-  提交侧 clean filter 本就会归一, 不归也**不进 commit**(blob 不变)。
-  ③⚠ 生成物由 CRLF 改写成 LF 后, 若索引 stat 缓存还记着旧(CRLF)尺寸, `git status` 会报一批**幽灵 M** ——
-  `git diff` / `git diff-files` 内容比对均为 0, `git update-index --refresh` 也刷不掉; 跑一次
-  `git add -- <那批文件>` 刷新 stat 即净(内容与索引恒等 ⇒ 不产生任何暂存条目)。
-- **复发 +1 (2026-10-05)**: 处置①修的是生成器, **其它 clone 盘上的旧 CRLF 生成物不会被自动清理** —— 本 clone
-  首次跑 test.quick 即被守阵 `test_generated_indexes_are_lf_only` 抓到 11 个 `_index.md` 残留(`eol=lf` 归一化下
-  git status 不可见); `kb.index` 重建即绿。没翻到本条的原因: 本轮任务是纯文档编辑, 未走 git 前置路由;
-  守阵报错自带处置配方, 拦截闭环成立。
-- **复发 +2 (2026-10-07)**: 同一根因换了个入口 —— **一次性清洗脚本**用 `Path.write_text(text, encoding="utf-8")`
-  写回 64 个**手写** `memory-bank/*.md`, 默认 `newline=None` 在 Windows 上按 `os.linesep` 把 LF 翻成 CRLF,
-  整批文件变 `w/crlf`; `.gitattributes` 归一化下 `git diff` **只显示改动行**(内容差异 84 行), 肉眼完全看不出来。
-  **暴露它的是 git 的警告行**「CRLF will be replaced by LF the next time Git touches it」—— 不是任何守阵
-  (守阵 `test_generated_indexes_are_lf_only` 只覆盖**生成物**, 手写文件没有对应守卫)。处置: 就地
-  `p.write_text(p.read_text(), encoding="utf-8", newline="\n")` 重写, 复核 `b"\r" in p.read_bytes()` 归零。
-  **为什么没命中**: 本条处置①的措辞是「**生成器**写盘点一律显式 `newline="\n"`」, 读起来像"只约束生成器";
-  而这次是**一次性脚本写手写文档**, 不在那句话的射程内 —— 判据其实是「**任何** `write_text` 都要显式
-  `newline="\n"`」, 与是不是生成器无关。**建议**: 写 md 类文件时 `newline="\n"` 当默认肌肉记忆, 别等守阵
-  (手写文件那条路没有守阵兜底)。
+- **判别**: 一批 `_index.md` 被标记 modified, 但 `git diff` **返回 0**; `git ls-files --eol` 显 `i/lf w/crlf` —— **这不是索引内容漂移**。
+- **处置**: 生成器已显式 `newline="\n"` 根治(2026-10-04); 存量手写文件归一只需 `git checkout -- <那批文件>`; 幽灵 M 用 `git add -- <那批文件>` 刷 stat。完整现场、守阵与两次复发见 [attachments/kbindex-crlf-index-history.md](attachments/kbindex-crlf-index-history.md)。
 
 ### 工具 shell 里 `git rebase --continue` / `commit --amend` / `merge` 一律带 `GIT_EDITOR=true`
 
@@ -101,47 +75,7 @@
   ②非用 sed 不可时, 改完**立刻按字节归一**
   (`p.write_bytes(p.read_bytes().replace(b"\r\n", b"\n"))`), 并核对 `git diff --stat` 的变更行数
   确实等于你真正改的行数; ③复核别用 `grep -c $'\r'`(会给假结果), 用 `b.count(b"\r\n")`。
-- **复发 +1 (2026-10-07)**: 触发换成 **Edit 工具** —— 一次普通插入把
-  `.commands/my-commit-flow/references/config.md` 整份从 `LF=69 / CRLF=0` 写成 `CRLF=81 / LF=0`,
-  而 `git diff --numstat` 仍是干净的 `12 0`(clean filter 归一了), **只有 `git status` 末尾那行
-  `warning: … CRLF will be replaced by LF` 露了马脚**。为什么没命中: 本条旧文案把 Edit 写成
-  "保留原行尾"的安全选项, 于是改完没做按字节复核 —— 判据必须落在**改完必查**上, 不能落在"用哪个工具"上。
-  定式(已并入处置): 改完 md / 交付件后跑一次 `git status`, 见到 CRLF 警告就按字节归一。
-- **复发 +1 (2026-10-07, 第二次)**: 这次落在 KB 交付面 —— S4b 用 Edit 工具改
-  `memory-bank/conventions/code-style.md`, 整份 `LF=… / CRLF=0` 写成全 CRLF(git diff 依旧只显示
-  改动行)。为什么没命中: 委派实施时未把本坑档列入子智能体必读清单, 编辑前没读、改完也没跑
-  「git status 看 CRLF 警告」定式。处置照旧: 按字节归一回 LF
-  (`write_bytes(read_bytes().replace(b"\r\n", b"\n"))`)。
-
-- **复发 +1 (2026-10-11)**: 触发又换成 **Edit 工具改前端 JS** —— 一次普通方法体替换把
-  `shared/sort.js` 整份从 `LF=77 / CRLF=0` 写成 `CRLF=77 / LF=0`(同一批改动的 `app.js` /
-  `columns.js` 仍是 LF ⇒ **"哪个文件会被写坏"不可预测**, 不能按文件挑)。暴露方式与上次同款:
-  `git status` 末尾的 `warning: … CRLF will be replaced by LF`。为什么没命中: 本轮是前端重构,
-  路由只读了 `pitfalls/web-ui/`, 行尾类条目在 `pitfalls/git/` 没被翻到 —— 定式应固化为
-  **"改完任何文本文件就跑一次 `git status` 扫 CRLF 警告"**, 与改的是哪个目录无关。处置照旧按字节归一回 LF
-  (`write_bytes(read_bytes().replace(b"\r\n", b"\n"))`)。
-
-- **复发 +1 (2026-10-16)**: 触发换成 **Edit 工具改 KB 文档** —— 计划 26-10-15-2357 S3/S4 收尾时用 Edit
-  往 `pitfalls/testing/node-guards-silent-skip.md` 追加一节, 整份从 `LF=28 / CRLF=0` 写成
-  `CRLF=44 / LF=0`(同轮用 Edit 改的 `options.js` / `options.html` / 两份 activeContext / 档案 / 新基线切片
-  都仍是 LF ⇒ 又一次印证"哪个文件会被写坏不可预测")。暴露方式与前几次同款: `git status` / `git diff`
-  末尾的 `warning: … CRLF will be replaced by LF`。
-  **为什么没命中**: ①路由只走到**顶层** `pitfalls/_index.md` —— 它的「主题」表是空的(`(暂无)`), 没有指向
-  `git/editing-traps.md` 的细路由; 而 git 类行的判据被读成「**跑 git 命令前**必读」, 本轮动作是"编辑文档"
-  不在该判据内, 于是没进 `pitfalls/git/_index.md`(触发词「行尾」就明写在顶层 git 行里, 没被识别成
-  "编辑纯文本也适用"); ②更直接的是**警告行看到了却当成无害噪声** —— 定式要求的是"见到即按字节归一",
-  本轮只做到"见到", 直到收尾才发现。处置照旧按字节归一回 LF
-  (`write_bytes(read_bytes().replace(b"\r\n", b"\n"))`), 并逐文件核 CRLF/LF 计数。
-  **定式强化**: 改完任何文本文件, 收尾必跑一次
-  `python -c "…count(b'\r\n')…"` 逐文件复核(不靠肉眼扫 git 警告), 见到警告行**立即**归一, 不推迟到收尾。
-
-### 整文件行尾归一让单文件 diff 爆炸(历史形态, 现行配置已基本杜绝)
-
-- **触发**: 旧观察的前提是 `core.autocrlf=true`; **实测本机为 `input`**, 且仓库 `.gitattributes`
-  (`* text=auto eol=lf`, 2026-10-02 起)压过全局配置 —— blob 侧提交必归一 LF, 与首节结论一致:
-  「编辑导致整文件行尾归一、diff 爆炸」在现行环境下已基本不可能。
-- **判别**: 单文件 diff 行数暴涨(实测 23 行变 1431 行)但逐词比对无内容变化 —— **不是损坏**, 是行尾归一。
-- **处置**: 提交信息里写明"行尾归一"; 想避免就用上面的按字节读写。
+- **复发记录**: 四次复发(Edit 工具改配置/KB/前端 JS/追加文档)的现场与"为什么没命中"见 [attachments/sed-i-recurrence-history.md](attachments/sed-i-recurrence-history.md)。
 
 ### 合并冲突处理不要把 UTF-8 当 GBK 写入
 
@@ -162,6 +96,12 @@
 
 ### 同一文件在一条消息里多次 Edit 会互相覆盖
 
+- **触发**: 一条消息里对同一文件发多个 Edit。
+- **判别**: 工具逐个报成功, 实际**只有一部分落盘**。
+- **处置**: 改同一文件时**逐条改、改完 grep 复核**。
+  ⚠ 删 junction 用 Python `os.rmdir()` —— 别用 `cmd /c rmdir`: 本会话 Git Bash 里 `cmd //c` 会被路径转换坑掉
+  且**可能静默不执行**。
+
 ### Markdown 表格会被"自动格式化器"改坏
 
 - **触发**: 改文档后 `git diff` 比预期**大一个量级**(2026-09-21 实测 `docs/sim-client-test-howto.md`)。
@@ -178,20 +118,7 @@
 - **判别**: 写 `\n` 进文件, 落盘可能变成 `/n` 或 `//n`, 生成物里就出现**字面量** `\n`(本工具环境实测)。
 - **处置**: **规避: 多行内容用三引号 + 真实换行**(`f"""..."""`), 完全不用转义序列;
   或用编辑工具逐行改, **别走 heredoc**。
-- **同族(2026-09-25 实测, 更隐蔽)**: 把 **Windows 路径**写进 Python 字符串字面量 ⇒ `\a` / `\t` / `\n`
-  被当转义**吃掉**, 落盘成**控制字符**。现场: `tmpdir.md` 里的
-  `R:\Temp\auto-qb\tests` 变成 `R:` + BEL(0x07) + `uto-qb` + TAB(0x09) + `ests` ——
-  **肉眼看着像对的**(控制字符在编辑器里几乎不可见), `grep` 也命中, 只有 `repr()` 才露馅;
-  且 cap 计数会**少算**这几行。⇒ 写路径一律用**正斜杠**; 怀疑某行被吃字符时先 `repr(行)` 看一眼。
-- **复发(2026-09-29)**: `cat >> 文件 << 'EOF'` 追加多行测试代码 ⇒ 结束符未被识别(体内容经 shell 进来带
-  CRLF), **追加内容被截断**且落成混合行尾, 追加完没核对尾部就继续往下走 —— 到复跑测试才暴露。
-  处置照旧: **别走 heredoc**, 多行内容一律用编辑工具 / Python 脚本落盘, 落完必查行数与文件尾部。
-
-- **触发**: 一条消息里对同一文件发多个 Edit。
-- **判别**: 工具逐个报成功, 实际**只有一部分落盘**。
-- **处置**: 改同一文件时**逐条改、改完 grep 复核**。
-  ⚠ 删 junction 用 Python `os.rmdir()` —— 别用 `cmd /c rmdir`: 本会话 Git Bash 里 `cmd //c` 会被路径转换坑掉
-  且**可能静默不执行**。
+- **同族与复发细节**: 见 [attachments/heredoc-escape-details.md](attachments/heredoc-escape-details.md)。
 
 ### edit 工具的 oldText 在 CRLF 文件上匹配失败, 且报错与落盘可能不一致
 

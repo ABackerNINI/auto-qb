@@ -6,19 +6,10 @@
 > 触发: 浏览器冒烟, e2e, Playwright, Edge, 白屏, 前端改完, 时序复现, 聚合行状态色, Cannot find module playwright, 修饰键点击, Ctrl+click, 多选失败, site-chip, 点击落点, 落点验证 5 拍未过, 最后拦截者 (null), elementFromPoint, scrollIntoView, 行高于视口, sticky-head 拦截面, 3000 种子, 规模轮, 用例超时, 冒烟整体执行, stash 对照, 归因, 回归, 验错对象, 旧进程, 旧页签, 桩服务死了, 皮肤差异, prism 正常 atlas 异常, 服务端发出的字节, BASE_URL, does not provide an export named, 收集期 SyntaxError, 新增 spec 回潮
 **Refs:** memory-bank/testing/baselines/26-10-29-0348-webui-move-dialog-pick-geometry.md, memory-bank/testing/baselines/26-11-03-1053-ci-e2e-base-url-fix.md
 
-### 能力与定位
+## 规程单点(能力 / 门禁 / 启动)
 
-- **触发**: 改任何前端渲染逻辑。
-- **判别**: 能力 = `scripts/ui_harness.py`(真 create_app+QbManager+FakeClient+合成种子+命令泵,
-  由 `playwright.config.mjs` 的 webServer 托管) + `e2e/` 42 个 spec(@playwright/test, 双皮肤,
-  按断言块拆分)。前端渲染**pytest 覆盖不到** ⇒ **改前端必跑 `npm run test:e2e:fast`(@fast 门禁);
-  触碰乐观 UI/菜单/列设置加跑对应 spec; 全量矩阵轮收尾/排障串行人跑**。
-- **处置**: 模式矩阵 env 参数化(计划 26-10-06-0708 §3.2)—— `E2E_CMD_RESULT=ok|error|hang` /
-  `E2E_SKIP_CHECK=on|off` / `E2E_HR_SCENE=on|empty|off` / `E2E_TORRENTS=N`, 每轮独立起桩
-  (六行命令见 `.commands/dev/config.toml` 的 `dev.e2e` note)。
-  开机自检 (2026-10-31 机械化, issue 26-10-31-2226-feat-e2e-smoke-env-selfcheck): `dev.e2e` 首条已挂
-  `scripts/e2e_selfcheck.py` —— node_modules/@playwright/test 缺失、e2e 端口占用(含占用进程身份/clone 归属)
-  当场给 NEXT 修复动作, 不过不进 spec; 单跑 `commands run dev.e2e-check`。
+- 能力定位、`npm run test:e2e:fast` 门禁、模式矩阵 env、桩服务用法与断言清单 → [../../testing/smoke.md](../../testing/smoke.md); 浏览器安装与版本对齐 → [../../testing/browser-env.md](../../testing/browser-env.md)。
+- 旧「能力与定位」节(含 `scripts/e2e_selfcheck.py` 挂 `dev.e2e` 首条、单跑 `dev.e2e-check` 的开机自检)原文外迁: [attachments/smoke-capability-selfcheck.md](attachments/smoke-capability-selfcheck.md) —— 自检不过不进 spec 仍是现状。
 
 ### Playwright 从哪来: 优先仓库内 `node_modules`, 没有才挂 `NODE_PATH`
 
@@ -26,21 +17,7 @@
 - **判别**: 按优先级找包 —— ①**仓库内** `node_modules/playwright-core`(`require` 从 `scripts/` 向上解析先命中);
   ②没有 `node_modules` 的 clone(`node_modules/` **已 gitignore**, 不会跟着 clone 走)⇒ `NODE_PATH` 指仓库外一份;
   ③npx 缓存 `%LOCALAPPDATA%\npm-cache\_npx\<hash>\node_modules`(可能已空)。
-- **处置**: ①仓库内 `node_modules` 在(clone 后 `npm ci` / `npm i` 一次)⇒ `commands run dev.e2e` 直接可用,
-  什么都不用设(`package.json` 列了 `@playwright/test@1.63` 作 devDependency, npm 解析不认 `NODE_PATH`);
-  ②没有 node_modules 的 clone ⇒ `npm ci`(有 lock)或 `npm i`, **别走旧轨的 `NODE_PATH` 挂载**
-  (❗ESM 的 `import` 不认 `NODE_PATH` —— 旧单页脚本是 CJS 才用得了它, e2e 轨道一律走 npm 解析);
-  版本对齐 `@playwright/test@1.63` ↔ `chromium-1243`;
-  换不到退回 `chromium.launch({channel:"msedge"})`(**Edge 恒可用**)。
-  复发: 2 —— **新 clone 从未 npm i** 时跑 `commands run dev.e2e` 直接红: 报头先是一行无害的
-  `npm warn exec The following package was not found and will be installed: playwright@1.64.1`,
-  跟着 `Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@playwright/test' imported from
-  playwright.config.mjs` —— **npx 自作主张装的是 `playwright` 包, 不是配置要的 `@playwright/test`**,
-  于是报错对象与真实病因(本 clone 没 node_modules)差了一层, 按报错去查依赖会查错方向。
-  处置: 按 browser-env.md 的对齐口径 `npm i --no-save @playwright/test@1.63.0`(10s 内装完;
-  `--no-save` 免改 `package.json`, 浏览器二进制复用 cache 里的 chromium-1243, 不必再 install)。
-  判据: **新 clone / 换 clone 首次跑 e2e 前先 `ls node_modules | wc -l`, 0 即先 npm i** ——
-  多 clone 工作区下 `node_modules/` gitignore, 跨 clone 同步走 Gitee 不会带上它, 每个 clone 各装一次。
+- **处置**: 详细装法、`npm i --no-save` 补救与新 clone 报错错位的现场见 [attachments/smoke-playwright-install.md](attachments/smoke-playwright-install.md)。
 
 ### 桩服务没起来 / 起来的是**旧进程** ⇒ 冒烟整轮"整体执行超时", 看着像前端白屏
 
@@ -52,22 +29,7 @@
   而**旧进程仍在服务旧代码**(页面可能 `Not Found` 但 `curl /api/...` 仍 200 ⇒ 像"服务是好的");
   ②**后台进程随 shell 调用结束被杀** —— 用 `(cmd &)` 起的服务在本次 Bash 调用返回后就没了,
   下一轮冒烟 `ERR_CONNECTION_REFUSED`(而 `curl` 在**同一次调用内**是通的, 误以为服务活着)。
-- **处置**: ①起桩服务用**常驻后台任务**(`run_in_background`)—— `ui_harness.py` **长驻**(uvicorn.run 阻塞),
-  别指望 `dev.harness` 会返回; 不要 `(cmd &)`;
-  ②起完**立刻看 harness 日志首行**(打印实绑地址与种子/组数), 显式指定口时若被占就换端口;
-  ③怀疑服务不对先 `curl <base>/prism/` 必须 200(只 `curl /api/...` 会被旧进程蒙过去)。
-  复发: 4 —— 多 clone 下 8099/8137 反复被**别会话 / 别 clone 的残留 harness** 占用(uvicorn 起不来只打
-  `[Errno 10048]` 一行, 后台起桩任务全 failed 但无一行有效日志), 换 `E2E_PORT` 复跑即过, 勿杀占用进程;
-  直接**复用**残留服务做交互探针, 改完代码验证"全 PASS"其实验的是**别的 clone 的旧代码**
-  (残留 harness serve 的是它自己 clone 的静态目录; 12 项探针在旧代码上照样大半通过, 假信心比超时更危险)。
-  判据: 怀疑服务归属时 `page.evaluate` fetch 静态 JS 比对特征串(如刚加的方法名), 不在 ⇒ 服务不是本 clone 的。
-  处置: 改代码验证类冒烟**一律自己起桩**(后台任务 + 新端口), 残留服务只读不验。
-  代理变体: 本环境有 HTTP_PROXY 透明代理, `curl` 直连被占端口拿到的是代理的 502「upstream connect failed」,
-  而 node/Playwright 直连却 200 —— **curl 通不通不能当判据**, 以
-  `Get-NetTCPConnection -LocalPort N -State Listen` 现查归属为准。
-  *现状(2026-11-03, 计划 26-11-03-0316): e2e 端口已改为由脚本取号(`ui_harness --port 0` +
-  Playwright `webServer.wait` 捕获回传), `E2E_PORT` 已取消(设置即报错); 残留桩归属按实绑端口 +
-  命令行里的 clone 路径判。以上复发记录保留为当时的现场。*
+- **处置**: 常驻后台起桩、日志首行核对、`curl <base>/prism/` 判活、残留桩归属与端口取号现状见 [attachments/smoke-stub-service.md](attachments/smoke-stub-service.md)。
 
 ### 新增 spec 从 harness import `BASE_URL` ⇒ 收集期 SyntaxError, 一条 spec 拖垮全量收集
 
@@ -95,21 +57,6 @@
   (`_config.load_tree().tasks['dev.e2e'].timeout`) + 跑一次 `commands run dev.e2e -- --list` 证 task 可启动。
   套件再涨就该拆轮/与 CI 分工, 别再靠调数字顶。
 
-### 「冒烟整体执行 — elementHandle.click: Timeout」≠ 桩没起来 —— 归因先做 HEAD stash 对照
-
-- **触发**: 双皮肤冒烟在同一用例位置报 `冒烟整体执行 — elementHandle.click: Timeout 30000ms exceeded`
-  (2026-10-03 实测: 追剧集行 Ctrl+click 块, position {8,8} 落点被 `sticky-head`/`header.topbar`/`html`
-  交替拦截, Playwright 重试 30s 耗尽; 3 轮双皮肤 + HEAD 对照 4/4 复现)。
-- **判别**: 与上一条「桩没起来」**同名词不同因** —— 上一条卡在首条 waitForFunction(页面根本没渲染,
-  症状像白屏); 本条页面全程活着、断言一路 PASS 到超时点(看最后一条 PASS 在哪即知中断位置)。
-  是否存量: 把自己的脚本改动 `git stash push -- <脚本>` → 跑一轮 → `git stash pop`,
-  HEAD 同位置同报错即与本轮改动无关(实测 stash 前后失败点逐字一致)。
-- **处置**: ①先跑对照再动代码 —— 命中存量 flaky 不顺手修, 记录位置与签名即可;
-  ②超时中断该皮肤后续断言(含末尾 console.error 总检), 汇报写"中断点之前全部通过"而不是"冒烟全绿"。
-  本条暂无守阵(点击拦截面随布局漂移, 静态判不出)。
-  复发: 1 —— HR 历史表③ 同位置同签名 3/3 复现, 按本条目做 HEAD 档案对照 4/4 实锤存量;
-  按既有处置口径①绕行未修(命中存量不顺手修, 只记位置与签名)。
-
 ### 页面 hidden 态(VS Code 内置页 / 未 bringToFront)
 
 - **触发**: 在隐藏页面上跑交互。
@@ -135,30 +82,6 @@
 - **判别**: 它是**空 CSSRuleList**(真值)。
 - **处置**: 必须按 `rule.type` 判定(MEDIA=4 / SUPPORTS=12)。
 
-### 其它环境坑(一批)
-
-- **触发**: 冒烟环境相关的怪现象。
-- **判别 / 处置**:
-  · `--window-size` 在 Windows 被**最小窗口宽度钳制**(要验真窄屏就外层包 **iframe**);
-  · `file://...#anchor` 截中间区块得到**空白图**(注入 `display:none` 把目标顶到首屏);
-  · 整页截图 + PIL 自动裁剪在有**平铺底纹 / 渐变**的页面上失效;
-  · `--dump-dom` 里顶层 DOM 是**整整一行**(按行 grep 全落空);
-  · `--headless=new` 在本环境曾**挂起**(回落 legacy);
-  · **注入路由必须插到 `app.router.routes` 最前**(否则被 `StaticFiles` 挂载遮蔽返回 404);
-  · 注入脚本必须放 `<head>`(在 app.js 读 localStorage **之前**)。
-
-### Edge 同 `user-data-dir` 会单例移交
-
-- **触发**: 反复起冒烟服务。
-- **判别**: 新进程**立即退出**, `/json/list` 拿到**旧实例的旧页面**;
-  且**残留页面的轮询会在新服务起来后自动重连并继续执行"幽灵操作"**(实测把新环境里同名组删了)。
-- **处置**: 每轮**独立 profile**; 起服务前按命令行过滤清 smoke edge
-  (`CommandLine -match "edge-smoke"`, **不能全杀 msedge**), 并确认端口无监听
-  (kill 后端口释放有延迟, 立即重启必 **10048**)。
-  收尾用 **PowerShell** 关端口(`Get-NetTCPConnection -LocalPort N` → `Stop-Process`):
-  `uv run python` 是**父子进程**, 按 netstat 的 PID 杀经常**杀不掉父进程** ⇒
-  新桩服务 bind 失败而旧服务继续应答 ⇒ **你以为换了参数, 实际还在用旧服务**。
-
 ### Vue 3.5.13 取根实例
 
 - **触发**: 想从控制台拿 Vue 实例。
@@ -174,52 +97,6 @@
   `programmatic btn.click()` **不触发 form submit**(要 `dispatchEvent(new Event("submit"))`);
   断言即时色值可能取到 **transition 中间值** ⇒ 用**语义断言**。
 
-### 行内可交互后代会吞修饰键点击, 冒烟点行必须避开交互后代落点
-
-- **触发**: 冒烟用例对行做 Ctrl+click 多选(或任何要点到"行本体"的动作), 落点用行几何中心(2026-10-01 实测, issue 26-09-30-0602 清偿)。
-- **判别**: 行中部被行内可交互后代占据 —— 追剧集/辅种组行都有 `.site-chip`(`@click.stop="filterFromChip(...)"`, tpl/shows.html / tpl/groups.html), 点击落在芯片上时事件被 `.stop` 吞掉, 行 handler(selection.js `_toggleUnit`/`toggleGroupSel`)**根本不触发**, 症状是"修饰键点击不生效/选中 0 项", 极易误判成轮询重渲染竞态或真实 UI 缺陷。定案用仪器化探针: document **捕获级**记录 mousedown/mouseup/click 落点 + 覆写行 vm 方法看是否被调 + 行 DOM expando 查脱挂 —— 落点全在芯片、行 handler 未被调、节点未脱挂 ⇒ 是落点被吞, 不是竞态也不是产品缺陷。**间歇性**的来源: 芯片布局随前序冒烟步骤(状态文案/筛选态)漂移, 行几何中心有时被盖住有时不被 ⇒ 同一用例忽红忽绿。
-- **处置**: 修饰键点击落点避开交互后代 —— `position: { x: 8, y: 8 }` 落**行左缘名称列**(`.g-name`/`.g-name-text` 无任何 `.stop` 后代); 右键不受影响(chip 无 `contextmenu.stop`, 事件冒泡到行)。修法已随 0602 清偿落码(旧冒烟脚本 commit `59725443`, 现由 `e2e/multiselect-shows.spec.mjs` 承载); 新写用例点行时照此选落点, 别默认几何中心安全。
-- **不止 Ctrl+click: 普通点击与双击同样被吞, `force: true` 也救不了(2026-10-09 实测)**: 展开行用的
-  普通 `click()`、开详情面板用的 `dblclick()` 落几何中心时一样打在 `.site-chip` 上 —— `force` 只跳过
-  actionability 检查(可见/稳定/可点), **不改变落点坐标**, 事件照旧被 `.stop` 吞掉 ⇒ 表现为「行没展开 /
-  后续 `.member-row` 找不到」, 极易误判成"该功能没实现"。第二处反直觉点: **集行**的名称格类名是
-  `.ep-name`(不是 `.g-name`), 追剧页两层展开(剧→集→成员)各自的名称格不同名。
-- **最省事的写法**: 直接点**名称格元素**而不是算坐标 —— `row.locator('.g-name').click({ force: true })`
-  / `epRow.locator('.ep-name').click({ force: true })`; 成员行(`.member-row`)无名称列, 只能点它自身
-  —— 但**几何中心与行左缘 8,8 不是一回事**(2026-10-19 实测, 见下条)。
-- **成员行的第一格就是 `.m-site` 筛选格 —— clickRow 行左缘 8,8 必踩(2026-10-19 实测)**: 辅种页
-  成员行是 `display:grid` 且**从行盒 0 起排**(不像组行有名称格占首列), 首格即 `tpl-aq-member-cells`
-  的 `site` 列(`@click.stop="filterFromChip('site', ...)"`) ⇒ `clickRow` 默认落点 `{x:8,y:8}` 落在
-  `.m-site` 上 ⇒ 事件被 `.stop` 吞、`onMemberClick` 不触发, 且 `filterFromChip` 把列表过滤成别的
-  形态 ⇒ 症状是**点击后 `.member-row` 归零**(极易误判成"组被收起/功能没实现")。此前本节"成员行点
-  它自身即可"的说法只对**几何中心**成立, 对 clickRow 的 8,8 是错的。修法 = `e2e/lib/gestures.mjs`
-  `clickRow` 加 `opts.point`(相对行盒偏移, 默认 8,8 不变), 成员行调用方传**第二格**(`.m-state`,
-  无交互后代)偏移, 且偏移从 DOM 现算(`el.children[1]`), 不硬编码列宽。用例:
-  `e2e/shift-select-anchor.spec.mjs` 的 `memberPoint`。
-- **复发**: 4 —— 后三次都是判据盲点复发: 「知道要点名称列, 但没意识到 force 不改落点 + 集行名称格
-  叫 .ep-name」; 最后一次是**纪律本身的漏洞**——"成员行点自身即可"没区分几何中心与行左缘, 而 clickRow
-  恰恰用后者(三条判据已在上文两条实测里)。
-
-### 行高于视口时 scrollIntoView(center) 把落点推出视口: elementFromPoint 恒回 (null), 5 拍空转
-
-- **触发**: e2e 的 `clickRow` 报 `落点验证 5 拍未过(行左缘 8,8 被拦截, 最后拦截者 (null))`, 且
-  **只在大规模档必现**(300 种子全绿 / `E2E_TORRENTS=3000` 恒红), 双皮肤 × 2 条(追剧集行)。
-- **判别**: `(null)` 与上一条「被 `sticky-head`/`html` 拦截」**不是一回事** —— 后者有拦截者元素名,
-  前者是**落点在视口之外**(elementFromPoint 只在坐标落在视口内时才有元素可回)。真身: 大库下
-  聚合行会被行内 chip 撑爆 —— 3000 种子实测整库塌成 **1 剧 × 24 集**, 每集 ~142 个版本 ⇒ 集行的
-  `.g-sites` 格堆了 142 个 site-chip, **行高 1220px > 900px 视口**; 而 clickRow 的对冲一律
-  `scrollIntoView({block:'center'})` ⇒ 行居中后**行顶落到 -160px** ⇒ 落点 `y = top+8 = -152`(负
-  值) ⇒ 恒 null, 5 拍量到的都是同一个负坐标, 重排无效 ⇒ 确定性红(不是时序抖动)。
-- **处置**(测试侧 arrange, 不碰产品): ①拦截面取**所有** `.sticky-head` 下沿的**最大值** —— 文档里
-  不止一个(顶栏条 + 表头各一), 只取 `querySelector` 的头一个会**低估**拦截面, 落点被表头吃掉而
-  5 拍都不自愈; ②行高 > 可用视口(`vh - guard - 16`)时改 `block:'start'`(行顶贴滚动口顶), 不居中;
-  ③落点钳进「行盒 ∩ (视口 − 拦截面)」: `lo = max(top+8, guard+8)`、`hi = min(bottom-8, vh-8)`,
-  `lo > hi` 即本拍作废交给下一拍重排。取证仪器: 元素几何探针(行高 / 容器滚动态 / elementFromPoint
-  多落点), 一眼看出"行比视口还高" —— 别靠读代码推。
-- **产品侧另案**: 一集 142 个版本 chip 把行撑到 1220px 属渲染与信息密度问题, 不在测试基建修复范围
-  (issue 26-10-18-2226 里已备注, 未入池)。
-- **复发**: 0
-
 ### 整页白屏 = **包级失败**; 骨架在但某块空 = **模板表达式错误**
 
 - **触发**: 页面白屏 / 某区域空。
@@ -229,67 +106,11 @@
   `window.addEventListener('error', ...)` 拿 `filename:lineno`。
   静态扫描守阵见 `test_frontend_static_bundle_health`。
 
-### 验证手法(可复用, 比静态阅读快)
+## 已外迁的条目(原文见附件)
 
-- **触发**: 怀疑"某个键在某个视图下缺了"。
-- **判别**: 起桩服务(`--torrents 300 --port <空闲端口>`, 合成种子自带非零 `dlspeed`/`upspeed`),
-  再 `curl "…/api/state?view=<X>"` **逐视图比对响应键与合计** ⇒ 一眼看出哪个键缺了。
-
-### 时序型缺陷可以在浏览器里"逐步喂时序"复现, 不必等真机
-
-- **触发**: 竞态 / 时序类缺陷(2026-09-21 实测, 首次用它抓到"灰→绿→灰")。
-- **判别**: 把缺陷拆成几个**有序时刻**, 每步直调一次前端方法并当场读结果
-  (`vm.applyOptimistic(h, "pause")` → `vm.resolveOptimistic(h, true)` → `vm.onTruthEvent({truth})`),
-  需要"服务端那一版数据"时用 `page.route("**/api/state*")` 拦截改成**我要的那一版**
-  (如把成员 `kind` 改回命令前 + `rid` 前进), 再调 `vm.refresh()`。
-  好处: 真机上要碰运气等的竞态(直查比快照新 ≤1.5s)在这里是**确定性的**, 且改前/改后的对照能跑成 1 秒一次的回归。
-  ⚠ 两个坑: ①`page.route` 的回调是 **Node 侧**代码, 别在里面写 `${...}` 模板插值;
-  ②`rid` 门控下服务端可能**不回数组**(`updated:false`), 拦截到空载荷时要**先补一次不带 `rid` 的全量请求**再改。
-- **处置**: 按上述逐步喂时序。
-
-### 在真浏览器里验"聚合行状态色"必须让注入的合成组落在**渲染窗口内**
-
-- **触发**: 想验组 / 集行的状态色(2026-09-21 实测)。
-- **判别**: 组 / 集表是**窗口化 + 客户端排序**的(只渲染视口附近 ~26 行, 默认按 `added_on` 降序)⇒
-  把合成组 `prepend` 进 `vm.groups` 只会让它排在**窗口外**,
-  `document.querySelector('[data-key=…]')` 拿到 `null`(第一轮就踩了, 差点把"没渲染"读成"没生效")。
-- **处置**: 给注入组一个**极大 `added_on`**(如 `4102444800`)即可置顶。
-  取色用 `getComputedStyle(el.querySelector('.g-name-text')).color` ——
-  **组行没有 `.state-text` 列**, 整行靠 `.group-row.s-<kind> .g-name-text` 那条规则着色
-  (做种绿 `rgb(23,138,92)` / 暂停灰 `rgb(82,112,140)`)。
-
-### 真实手势的前置条件: 拖拽收尾会吞掉紧随的 click / 浮层离场动画期间仍拦截点击
-
-- **触发**: 在真浏览器里连做多个手势的用例(如"拖拽重排 → 右键 → 菜单里点一项"; "右键开菜单 →
-  Escape → 拖宽"), 计划 26-10-11-1722 P1/P2 的表头四项交互取证实测。
-- **判别**: 两个**假红**形态, 症状都像"改造把功能弄坏了":
-  ① **拖拽收尾的 swallow**: `columns.js::startColDrag`/`startResize` 的 `up` 里会装一个
-     **capture 阶段** `click` 监听(`swallow`)吃掉紧随的一次 click(防"调列宽/拖重排顺手触发排序",
-     既有设计)。它只吃**一次**, 但会吃掉**下一个动作**的那次 click ⇒ 表现为"右键菜单点了没反应 /
-     表头点了不排序", 而产品完全正常。
-  ② **离场动画期的拦截**: 浮层是 `<transition name="pop">` 包裹的, `v-if` 置假后元素**要等离场动画
-     结束才摘除** —— 期间它仍在文档流上盖住底下的表头。实测 `document.elementFromPoint(表头坐标)`
-     返回 `DIV.ctx-menu pop-leave-active`: 此时按表头坐标 `mouse.down()` 落在**菜单**上, 拖宽静默
-     不生效(`colW.show` 恒空), 不报错。
-- **处置**: ①含拖拽的用例把**拖拽放到最后**, 或在拖拽后先做一次无关 click 把 swallow 消费掉;
-  ②Escape 关浮层后**等元素真的摘除**再对底下元素做手势 —— `await expect.poll(() => page.locator('.ctx-menu').count()).toBe(0)`,
-  别只等 `vm.headMenu.visible === false`(状态已假、DOM 还在)。排障时 `elementFromPoint` 是首选仪器:
-  一眼看出"落点被谁接走了"。
-- **复发**: 0
-
-### 「回归」的第一嫌疑是验错对象: 旧桩进程 / 旧页签跑的是旧资源
-
-- **触发**: 报「某个已修缺陷回归了」, 且带皮肤/页面差异(如「prism 正常, atlas 异常」)。2026-10-29 七修
-  排查现场就是这一形态: 六修已全绿, 用户侧却稳定复现「无焦点点下拉即弹回」。
-- **判别**: 先核对**服务端现在发的是什么字节**与**进程是否还活着**, 再谈代码 ——
-  ① `curl -s --noproxy '*' -o /dev/null -w "%{http_code}" http://127.0.0.1:<启动行实端口>/atlas/` 返回 `000`
-     (连接被拒)⇒ 那份桩早就死了, 用户测的不是它(旧进程 / 别的 clone / 旧页签);
-  ② `curl -s .../shared/tpl/combo-input.html | grep -c "@mousedown.prevent"`、`.../atlas/css/dialogs.css |
-     grep -c ":has(.add-pop)"` ⇒ 直接证明"服务端发的是不是当前代码", 比问「你刷新了吗」有效得多;
-  ③ SPA 的模板与 JS 以**页面加载时刻**为准(boot.js fetch 注入), 页签长开不刷新 = 永远跑旧资源; 按皮肤
-     分页签时极易只刷了一个(prism 刷了 / atlas 没刷)⇒ 看起来像**皮肤差异**, 实际是**页签代际差异**。
-- **处置**: 复现与验收固定三步 —— 起**新**桩(并用 `run_in_background` 常驻, 不要 `&` 脱离: shell 退出
-  进程就被回收, 上一份桩就是这么静默死掉的) → 核对发出的字节 → **两个皮肤都 Ctrl+F5**。同一份代码在
-  12 条交互序列 × 5 种视口 × headless/headed 下全绿而用户侧稳定复现 ⇒ 先怀疑对象, 别先改代码。
-- **复发**: 1(2026-10-29: 上一轮 8099 桩进程已死, 用户对着它测出「回归」; 换新进程 + 强刷后不复现)
-
+- 冒烟整体执行 `elementHandle.click: Timeout` ≠ 桩没起来: HEAD stash 对照归因 — [attachments/smoke-attribution-and-gestures.md](attachments/smoke-attribution-and-gestures.md)
+- 行内可交互后代会吞修饰键点击 / 行高于视口时 `scrollIntoView(center)` 把落点推出视口 — [attachments/smoke-click-and-geometry.md](attachments/smoke-click-and-geometry.md)
+- 可复用的验证手法: 逐视图比对响应键、逐步喂时序复现竞态、聚合行状态色取色 — [attachments/smoke-verification-techniques.md](attachments/smoke-verification-techniques.md)
+- 真实手势的前置条件: 拖拽收尾吞 click / 浮层离场动画拦截; 回归第一嫌疑是验错对象(旧桩/旧页签) — [attachments/smoke-attribution-and-gestures.md](attachments/smoke-attribution-and-gestures.md)
+- Edge 同 `user-data-dir` 会单例移交(残留页面继续"幽灵操作") — [attachments/smoke-edge-singleton.md](attachments/smoke-edge-singleton.md)
+- 一批环境怪象(`--window-size` 钳制 / `file://#anchor` 空白图 / 截图裁剪 / `--dump-dom` 单行 / `--headless=new` 挂起 / 注入路由被遮蔽) — [attachments/smoke-env-misc.md](attachments/smoke-env-misc.md)

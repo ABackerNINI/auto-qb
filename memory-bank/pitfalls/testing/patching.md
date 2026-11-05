@@ -33,27 +33,7 @@
   **处置**: ① `ctypes.windll`/`WINFUNCTYPE` 用 `_shim_posix_ctypes`(POSIX 补门面, Windows 不装走真门面);
   ② `winreg` 用 `setitem(sys.modules, "winreg", 替身)`(替身要给 `setattr` 覆盖的入口留占位, 否则撞
   "属性必须已存在"); ③ Windows 路径语义用显式 `ntpath`; ④ 真值改用 `tmp_path` 这类跨平台真实存在的路径。
-  **判据**: 改完必须在 **Linux 容器**里跑全量(见下节), 与 Windows 侧**两侧都绿**才算完。
-
-### ❗本工具 shell 注入 `PYTHONUTF8=1` —— "本地码页回退"假红(**2026-09-25 已修: 一半是环境, 一半真缺陷**)
-
-- **触发**: 测试断言依赖 `locale.getpreferredencoding()` / 本地码页(GBK·cp936), 或跑 `commands run test.*` 时红。
-- **判别**: 本工具会话的环境里注入了 **`PYTHONUTF8=1` + `PYTHONIOENCODING=utf-8`**(还有 `LANG`/`LC_ALL=C.UTF-8`)
-  ⇒ `locale.getpreferredencoding(False)` 返回 **`utf-8`**、`sys.flags.utf8_mode == 1`, 而真机(未注入时)是 **`cp936`**。
-  症状: `tests/test_commands_engine.py` 的 GBK 回退两条在本 shell **恒红**
-  (`'������ 16 ������' != '已生成 16 个索引'`)。
-  ⚠ **2026-09-25 修正旧结论**: "不是代码坏了"只对一半 —— `PYTHONUTF8` 只影响 **Python 解释器**,
-  **原生(非 Python)子进程照样按系统 ANSI 码页输出**, 所以 UTF-8 模式下引擎的 GBK 回退是**真失效**
-  (回退链 `("utf-8", locale)` 退化为 `("utf-8", "utf-8")`, 静默落 replace 变 U+FFFD)。
-  守阵抓的是真缺陷, 不是纯环境差异 —— 环境只是让它现形。
-- **处置(2026-09-25 已修, 全绿)**:
-  ① 引擎 `run.py::_local_codepage` 在 win32 直接问系统要 ANSI 码页(`ctypes GetACP`), 不吃 UTF-8 模式;
-  ② 两条守阵码页钉在 `_local_codepage` 接缝(monkeypatch → cp936), 任何机器/CI 确定性通过
-  (GBK 字节在 cp1252 下也能"解成功"成乱码);
-  ③ 防回潮守阵 `test_local_codepage_ignores_utf8_mode`(仅 win32 + UTF-8 模式有判据): 打回旧写法立即红。
-  判这类红仍先看 `env | grep -iE "python|lang|lc_"`; `PYTHONUTF8=0` 复现真机形态。
-  泛化: **"回退本地环境"的代码, 环境被工具 shell 改写时既可能是假红也可能是真缺陷 ——
-  先问"被回退的真实对象吃不吃这个环境变量"再定性**。
+  **判据**: 改完必须在 **Linux 容器**里跑全量(见 [attachments/patching-local-linux-repro.md](attachments/patching-local-linux-repro.md)), 与 Windows 侧**两侧都绿**才算完。
 
 ### 判别法: 五类"本机绿不算绿"
 
@@ -64,18 +44,8 @@
   纯 Windows 行为(长路径 `\\?\` 前缀)直接断言在 Linux CI 上**必失败**。
 - **处置**: 按四类分别用 `monkeypatch.setitem(sys.modules, …)` / 补 `dir_fd` 绝对路径 / patch 真实名字。
 
-### ④ 平台相关的路径 API: `os.path.normcase` 在 Linux 是恒等函数
-
-- **触发**: 用 `os.path.*` 做大小写 / 分隔符归一(2026-09-22 Linux CI 红了 `test_fsmock_long_path_prefix_and_case`)。
-- **判别**: `os.path` 在 Windows 是 `ntpath`、在 Linux 是 `posixpath`, 而 **`posixpath.normcase` 是恒等函数**
-  (POSIX 本来就区分大小写)⇒ `scripts/sim_fsmock.py::_key` 用 `os.path.normcase` 做大小写折叠,
-  在 Linux 上**静默退化成大小写敏感** ⇒ 把存在的文件报成缺失 ⇒ **D4 判据全假**(判据绿得发亮却什么都没测到)。
-  **修法: 该 mock 模拟的是 NTFS 语义(语料抓自 Windows 真机), 归一必须固定 ⇒ 显式 `ntpath.normcase`**
-  (纯字符串模块, 两平台同语义)。
-  **泛化: 用 `os.path.*` 时凡涉及"大小写 / 分隔符"语义, 都要先问一句"我到底在模拟哪个文件系统"。**
-- **处置**: ⚠ 同类**未修**: `scripts/sim_qb.py::_norm`(B2 路径逃逸判定)仍是 `os.path.normcase` ——
-  它在 Linux 上**更严格**(只误拒、不会放过逃逸), 且 `is_within` 目前**无测试覆盖**,
-  故按范围守恒未动(已补守阵, 见下条)。
+**形态④ 平台相关的路径 API(`os.path.normcase` 在 Linux 是恒等函数)**: 触发/判别/处置(含
+`sim_fsmock._key` 修法与 `sim_qb._norm` 同类未修现状)原文见 [attachments/patching-form-path-api.md](attachments/patching-form-path-api.md)。
 
 ### ❗⑤ 归错类比不修更危险 —— 判断"该不该跟随平台"前, 必须先看路径是**怎么来的**
 
@@ -129,38 +99,7 @@
   **泛化: 任何"按路径存在性判绿"的检查(链接 / 找文件 / 白名单比对)在本机都是上界**;
   收口时补一次 `commands run test.linux` 或等 CI, 别拿本机绿当结论。
 
-### 本机复现 CI 的平台差异(比推上去等 CI 快得多)
+## 已外迁(原文见附件)
 
-- **触发**: 怀疑平台差异, 想在本机验证。
-- **判别**: WSL 里 `wsl -- bash -c '...'` 复制一份仓库(排除 `.venv` / `.git`)、`uv sync`、
-  `uv run pytest tests -q` 即可(加 `-p 3.12` / `-p 3.13` 还能对上 CI 矩阵版本)。
-  ❗**WSL 可能被安全策略拦在黑名单里**(2026-09-22 实测: `wsl.exe` 命中 Program Blacklist 被拒, **不可绕过**)。
-- **Docker 等价复现 (2026-10-04 实测可用, 替代 WSL)**: 已收录为 task —— **`commands run test.linux`**
-  (脚本 `.commands/test/scripts/linux_ci.py`; 传参可换镜像, 如 `python3.13-bookworm-slim`)。
-  命令本体不再抄在这里(手抄即第 N 处副本, 判据见 commands skill「收录协议」)。
-  ❗**三个必踩点**(脚本已内建, 手写时必踩): ① **不要删容器内 `/work/.git`** —— `test_commands_engine`
-  的 `find_root()` 靠向上找 `.git`, 删了会多出 5 条假红; ② `cp -a` 会连宿主的 Windows `.venv` 一起拷进来,
-  必须先 `rm -rf` 再由 `uv sync` 重建(否则 Linux 上拿到 Windows 二进制); ③ 宿主**同时**在跑 pytest 时
-  仓库根的 `.coverage` 会被反复写/删, `cp -a` 可能撞 `cannot stat`。
-  **为什么是脚本而不是一行 `run`**: 命令里全是 `&&` / `;` / `|` 与多层引号, 而引擎在 Windows 上走
-  `cmd.exe`(`shell=True`)—— 引号地狱必踩。
-  容器内 `ctypes.wintypes` **可导入**, 只有 `ctypes.windll` / `ctypes.WINFUNCTYPE` / `winreg` 缺失。
-- **❗两条容器网络坑 (2026-10-11 实测, 各烧掉一轮 10 分钟)**: ①**容器内 `uv` 直连 PyPI 被墙**
-  (`Failed to resolve … hatchling` / `tls handshake eof`) —— 宿主是走代理的, 而容器里
-  `127.0.0.1:4085` 指向容器自己 ⇒ `uv sync` 起不来; 出口选宿主代理
-  `-e http_proxy=… -e https_proxy=http://host.docker.internal:4085`(需 `--add-host=host.docker.internal:host-gateway`;
-  实测宿主代理通、清华镜像 `pypi.tuna` 也通、**直连 pypi 不通**)。②**注了代理就必须同时排除回环**:
-  `urllib` 会把 `127.0.0.1` 的请求也交给代理 ⇒ `tests/test_hr_server.py` 那批监听回环的端点测试
-  **6 failed + 2 errors 假红**(环境造假红, 与 PYTHONUTF8 那条同族)——
-  补 `-e no_proxy=127.0.0.1,localhost,::1` 后同一命令 **3128 passed + 6 skipped / 0 failed**。
-  ⚠ **已内建 (2026-10-11)**: `linux_ci.py` 现在自动透传代理 —— 回环主机改写成 `host.docker.internal`
-  (+`--add-host`), `no_proxy` 恒并入回环; 守阵 `.commands/test/scripts/test_linux_ci.py`(红验: 拆掉任一改写点即红)。
-  脚本在, 别再手拼容器命令。
-- **处置**: 退而求其次的**等价论证** —— 用
-  `monkeypatch.setattr(模块, "os", types.SimpleNamespace(path=posixpath))` 再跑判据 ——
-  这**精确等价**于"该代码跑在 Linux", 于是**在 Windows 上就能复现 Linux 的失败**。
-  写成守阵即成防回潮(见 `tests/test_sim_corpus.py::test_fsmock_case_folding_does_not_follow_platform`:
-  还原成旧写法时它在本机**立刻红**, 而原有那条 `test_fsmock_long_path_prefix_and_case` **仍然绿** ——
-  后者正是"只在 Linux 现形"的原因)。
-  ❗守阵判据**别用文本扫描**: `os.path.normcase` 这串字就写在 `_key` 的 docstring 里当反例,
-  扫描会被注释骗过(与冒烟 `_scan_filter_facets` 必须先剥 JS 注释同一个坑)。
+- 本机复现 CI 的平台差异(`test.linux` / Docker / WSL / 容器代理 / canon 等价论证): [attachments/patching-local-linux-repro.md](attachments/patching-local-linux-repro.md)
+- 工具 shell 注入 `PYTHONUTF8=1` 造的「本地码页回退」假红(含 2026-09-25 真缺陷修正与守阵): [attachments/patching-pythonutf8.md](attachments/patching-pythonutf8.md)

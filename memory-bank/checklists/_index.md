@@ -10,4 +10,4 @@
 
 | 主题 | 一句话 | 触发词 |
 |---|---|---|
-| [manual-walkthrough.md](manual-walkthrough.md) | 代码/测试都已完、只差真实 qB 数据下目视确认的项 —— 做真机走查时逐条勾。 | 真机走查, 走查清单, 目视确认, 观感, 待确认, 上线前过一遍 |
+| [manual-walkthrough.md](manual-walkthrough.md) | 代码/测试都已完、只差真实 qB 数据下目视确认的项 —— 做真机走查时逐条勾。已完成轮次与修复历史已外迁到 `attachments/manual-walkthrough-history.md`。 | 真机走查, 走查清单, 目视确认, 观感, 待确认, 上线前过一遍 |

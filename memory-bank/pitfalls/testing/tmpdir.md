@@ -60,14 +60,9 @@
 - **处置**: 写法 `COVERAGE_FILE=H:/Temp/aqb.coverage uv run pytest tests -q --basetemp=H:/Temp/<全新目录>`
   (**须在 `tempfile.gettempdir()` 之下**)。
 
-### 速度画像: 直接跑全量, 不必挑子集
+## 规程单点
 
-- **触发**: 想"只跑相关文件"省时间。
-- **判别**: 空载全量 **19~20s**(2026-09-23 末态, 排除项调好之后; 同日更早分别是 54~81s 与 62~114s)——
-  **当前基线数字一律以 `testing/baselines/` 最新切片为准**(`commands run kb.baseline`), 此处不复述;
-  并发污染下的"某文件 300 秒"是**假数字**(本机放大得特别狠, 见 [perf-measurement.md](perf-measurement.md))。
-- **处置**: 直接跑全量。
-  ⚠ **别用 `| tail -N` 接 pytest** —— 会缓冲到进程结束才出任何输出, 容易**误判成卡死**。
+- 「直接跑全量 / 不比挑子集」、`| tail -N` 禁用口径的单点在 [../../testing/run.md](../../testing/run.md)「环境纪律」; 并发假耗时见 [perf-measurement.md](perf-measurement.md)。
 
 ### 全量 pytest 报 `PermissionError: … pytest-current` 是临时目录被污染, **不是测试红**
 

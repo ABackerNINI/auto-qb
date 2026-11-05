@@ -9,16 +9,13 @@
 - **触发**: 表格出现"列没溢出却常驻一条横滚动条"。
 - **判别**: 缺 `min-width: 0` 时单元格的自动最小尺寸(= 文本全长)会把行的 min-content 顶到容器之上。
   **判别口诀: 底色跟内容、滚动条看容器**, 两者同时满足才算对。
-- **处置**: 行/表头一律 `fit-content; min-width: 100%`(**底色跟内容**), 行内单元格 `min-width: 0`。
-  ⚠ 曾用"行定宽 100%"治假滚动条, 会让**溢出段没有底色**(用户实测"滚动后右边无背景条"), **已回退**。
+- **处置**: 详细步骤与实测证据见 [attachments/layout-css-details.md](attachments/layout-css-details.md)
 
 ### 表头吸顶: `.group-head` 必须移出 `.group-table`
 
 - **触发**: 做 / 改表头吸顶。
 - **判别**: `overflow-x:auto` 会把 `.group-table` 变成**双轴滚动容器** ⇒ sticky 上下文失效。
-- **处置**: 挂到 `.content`; 横向靠 JS `transform: translateX` 跟随(**不用 scrollLeft** 避免回环、**不加 transition**);
-  `.content { overflow-x: clip }` —— **clip 不创建滚动容器**(用 hidden 会让 sticky 立刻失效)且阻止表头把整页撑出第二条横滚条;
-  `.detail` **不得**再写 `overflow-x: auto`。
+- **处置**: 详细步骤与实测证据见 [attachments/layout-css-details.md](attachments/layout-css-details.md)
 
 ### 生成式列对齐(`colAlignCss` 注入 `:nth-child`)的三个要点
 
@@ -26,21 +23,20 @@
 - **判别**: ①**left 列也必须生成规则**(数值列的 `.g-stat`/`.m-stat` 会盖掉默认左对齐);
   ②选择器必须用 `:where()` 压到 0,1,0 —— 高于 `.g-stat` 才能覆盖, 又必须**低于** `.g-stat.zero` 以保留"0 值居中";
   ③必须**同时**写 `text-align` 与 `justify-content`(值单元格有的是 flex)。
-- **处置**: 行 / 表头容器必须带 `data-table="<page>"`。
+- **处置**: 详细步骤与实测证据见 [attachments/layout-css-details.md](attachments/layout-css-details.md)
 
 ### sticky 偏移与最大高度不能写死
 
 - **触发**: 改吸顶条高度 / 偏移。
 - **判别**: 写死会在字号 / 内容变化时错位。
-- **处置**: `--head-h` / `--bulk-h` 由 JS 量测写入 `:root`(值未变直接返回), 元素用 `calc()` 引用;
-  ⚠ `--bulk-h` **只记吸顶条自身高度**, 流内 margin **不计入**(否则吸顶态恒定多一条缝)。
+- **处置**: 详细步骤与实测证据见 [attachments/layout-css-details.md](attachments/layout-css-details.md)
 
 ### 两个吸顶条各有 `backdrop-filter` ⇒ 各自建立层叠上下文
 
 - **触发**: 浮层被另一个 sticky 条遮挡。
 - **判别**: 子元素的 z-index **跨不出去**。判别法: 先看遮挡方是否**也有** `backdrop-filter` / `transform` / `filter`,
   **不要一味加大 z-index**。
-- **处置**: 两者都设 `position:relative` 并拉开次序 —— **只加之一无效**。
+- **处置**: 详细步骤与实测证据见 [attachments/layout-css-details.md](attachments/layout-css-details.md)
 
 ### 两个独立表格要「逐栏对齐」: 列定义单点 + `table-layout: fixed` + `scrollbar-gutter: stable`
 
@@ -48,18 +44,13 @@
 - **判别**: ①auto 布局下两表各按**自身内容**算列宽, 内容不同就永远对不齐 —— "两处照抄同一份 `width`"也无效;
   ②更隐蔽的是**滚动条**: 主表有竖滚动条而专区没有时, 两表内容宽度差一个滚动条宽(本壳 9px), 整表栏位平移;
   ③滚动容器上的横向 `padding` 与 `border` 同样改内容宽度 —— 差几 px 就错位。
-- **处置**: ①`table-layout: fixed`(列宽只认首行 `thead th` 的 `width`, 不随内容伸缩, 弹性列吃剩余);
-  ②**列定义单点** —— 专区渲染时**克隆主表 thead**(`thead.outerHTML`), 不在第二处再写列头(两处各写一份必然漂移);
-  ③两表滚动容器都写 `scrollbar-gutter: stable`(无滚动条时也预留等宽槽); ④专区容器横向 `padding: 0`、左侧 accent
-  用 `box-shadow: inset` 而非 `border`(inset 阴影不占栏宽); ⑤窗口过窄时给表 `min-width` 兜底, 免得固定列把弹性列压没。
-- **机检**: headless Chromium 量两表 `th`/`td` 的 `getBoundingClientRect()`, 四组 `left:width` 必须逐栏相等
-  (kb.nav 在 760/1100/1600/1900 四档宽度下实测全等)。守阵 `test_pin_zone_reuses_ledger_columns` 钉「全壳仅一处表头」。
+- **处置**: 详细步骤与实测证据见 [attachments/layout-css-details.md](attachments/layout-css-details.md)
 
 ### `:focus-within` 在带 `tabindex` 的行上, 鼠标点击也会画 outline
 
 - **触发**: 行可聚焦。
 - **判别**: 鼠标点击也触发 `:focus-within`。
-- **处置**: 改用 `:focus-visible`(保留键盘可达性)。
+- **处置**: 详细步骤与实测证据见 [attachments/layout-css-details.md](attachments/layout-css-details.md)
 
 ### `flex: 0 1 <px>` 跨方向串味: column 容器里它变成**高度**
 
@@ -70,9 +61,7 @@
   而 `flex-basis` 落在**主轴**上 —— row 容器里是宽度, column 容器里就是高度, 且容器高度 auto 时不会缩回去。
   判别法: 量 `getBoundingClientRect().height` 是否**等于那个 flex-basis 值**(正常下拉约 37px)。
   ⚠ 静态检查全过(语法 / 花括号 / 类名配对 / JS 语法都查不出来), **只有真浏览器量 computed 值才暴露**。
-- **处置**: 二选一 —— ①选择器收成**直接子级**(`.hb-ct > .hb-select`);
-  ②给被复用的那个方向显式复位(`.hb-list > .hb-select { flex: none; }`)。
-  本次取 ②: 只复位 column 那一支, 不动原规则 —— 原规则还服务横向排布的 enum / unit 下拉, 改它会连带改宽。
+- **处置**: 详细步骤与实测证据见 [attachments/layout-css-details.md](attachments/layout-css-details.md)
 
 ### flex 工具条「文本贴顶 vs 图例/按钮居中」= 父级缺 `align-items`(默认 stretch)
 
@@ -85,39 +74,32 @@
   判别法: 真浏览器量每个子项的 `Range` 矩形 y(**文字墨迹盒**), 而不是元素盒 —— 元素盒会全部相等
   (实测都是 h=26), 看起来"没问题", 差的只有文字。⚠ **静态守阵(类名 / CSS 文本 / 模板结构)全绿**,
   只有真浏览器量布局才现形, 与「控件变形过高」「两态底色相近」同族。
-- **处置**: 父级显式 `align-items: center` —— 文本项自动收缩为内容高, 与图例 / 按钮组同中线, 三族文字
-  一次归位。**不要**改用 `align-items: baseline` 兜: 档位 / 纵轴按钮组是**带边框胶囊**, 基线对齐会把整组
-  按钮框顶上去(按钮文字对齐了、框错位了), 只是把一种错位换成另一种。
-- **机检**: headless 逐子项量 `Range.getBoundingClientRect().y` —— 同族文字必须同值(本仓实测
-  prism/atlas 835.7 · console 838, 按钮组同线); 守阵 `tests/test_webui_static_dom_panel_*.py`
-  「CSS 三皮肤成对」段钉 `.hist-summary` 必含 `align-items: center`(只改一处判红)。
-  ⚠ 三挂点(全局/分组/单种)共用同一段模板, 所以**一处规则全覆盖**, 不要按挂点分别改。
+- **处置**: 详细步骤与实测证据见 [attachments/layout-css-details.md](attachments/layout-css-details.md)
 
 ### flex 行里"输入框缩成一截 + 按钮文字竖排" = 父容器缺增长因子
 
 - **触发**: 改 flex 行布局。
 - **判别**: `input` 的 `flex-basis:auto` 在自动宽度父级里**回退成内容宽**。
   判别法: 容器宽 / 输入框宽 / 按钮宽三者加起来**远小于**容器宽 = 父级没涨。
-- **处置**: 给**直接父级**加 `flex:1 1 auto`, 并把同行按钮锁成 `flex:0 0 auto; white-space:nowrap`。
+- **处置**: 详细步骤与实测证据见 [attachments/layout-css-details.md](attachments/layout-css-details.md)
 
 ### flex / grid 子元素里 ellipsis 不生效 = 被省略的是**裸文本节点**
 
 - **触发**: 省略号不出现。
 - **判别**: 匿名文本节点**不可压缩**。
-- **处置**: 必须包一层 `<span>`(`min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap`),
-  容器给 `title` 看全文。
+- **处置**: 详细步骤与实测证据见 [attachments/layout-css-details.md](attachments/layout-css-details.md)
 
 ### `min-height` 是含边框的
 
 - **触发**: 想让"有/无某段内容"行高一致。
 - **判别**: `box-sizing: border-box` 下 `min-height` 含边框 ⇒ 必须把 `border-bottom` 算进去。
-- **处置**: **断言前先在浏览器里量**, 别按 CSS 数值推算。
+- **处置**: 详细步骤与实测证据见 [attachments/layout-css-details.md](attachments/layout-css-details.md)
 
 ### 入场动效不要给含 sticky 子元素的容器加 `fill-mode: forwards`
 
 - **触发**: 给容器加入场动画。
 - **判别**: transform 常驻会**创建层叠上下文**, 影响内部 fixed / 浮层定位。
-- **处置**: 改动画或把 sticky 子元素移出该容器。
+- **处置**: 详细步骤与实测证据见 [attachments/layout-css-details.md](attachments/layout-css-details.md)
 
 ### 「例外色」规则别靠书写顺序赢: 同特异性时**后者压前者**
 
@@ -125,14 +107,7 @@
 - **判别**: 状态栏今日流量的 `.sb-today .v-down` 与后面的 `.sb-item .val` 特异性同为 (0,2,0), **谁写在后面谁生效** ——
   棱镜 views.css 里前者在前 ⇒ 数值与数值里的箭头图标掉回白色; 星图 style.css 里前者在后 ⇒ 碰巧正确
   (**同一份改动只坏一边**, 极易误判成"棱镜主题缺令牌")。
-- **处置**: 给例外规则**抬特异性**(`.sb-item.sb-today .v-down`, (0,3,0)), 与书写顺序**解耦**;
-  两套 UI 各写一份 CSS 时**务必两边同步改**。
-- **复发**: 1 —— 2026-10-05 (kb.nav 状态 chip 文字色)。壳里 `.chip { color: var(--dim) }` 写在
-  `.st-Open { color: var(--cyan) }` **之后**, 同特异性 (0,1,0) ⇒ 后者被盖掉, 五个状态 chip 的文字
-  全成 `--dim` 灰, 状态色白给 —— 连"底色"也因此丢了最主要的区分通道 (见下一条)。**为什么没命中**:
-  本条原例全在棱镜 `views.css` / 星图 `style.css`, kb.nav 是另一套单文件壳, 读到 `pitfalls/web-ui/`
-  时按主题挑文件, 没扫到这条。处置照旧无需改: 已在 `.chip.st-*` 上直接写 `color` (抬到 (0,2,0)),
-  并落守阵。
+- **处置**: 详细步骤与实测证据见 [attachments/layout-css-details.md](attachments/layout-css-details.md)
 
 ### `<button>` 的文字色**不继承 body**: UA 默认色跟随系统配色(暗色主题下黑字)
 
@@ -141,20 +116,19 @@
   它跟随**系统/浏览器 color-scheme** 而非页面主题令牌; 页面又未声明 `color-scheme` ⇒
   系统浅色时按钮内未显式着色的文字恒为纯黑。同卡片里的描述、徽章都有显式 `color`
   所以只有标题出事, 极易误判成"主题缺令牌"。
-- **处置**: `<button>` 一律显式声明 `color`(与 `font: inherit` 并列写); 实例: `console_hub.css` 的
-  `.hb-card` / `.hb-row-hit`。深浅双主题都要过一遍; 例外色注意别靠书写顺序赢(见上条)。
+- **处置**: 详细步骤与实测证据见 [attachments/layout-css-details.md](attachments/layout-css-details.md)
 
 ### 既有窄屏媒体查询会吞掉新加的信息
 
 - **触发**: 加 pill / 加状态槽位。
 - **判别**: 某个 `@media` 段里已经把该区域隐藏 / 改版。
-- **处置**: **加之前先搜一遍 `@media`**; 删除某个槽位后其规则与媒体查询会变成**死代码**(收尾 grep 一遍类名)。
+- **处置**: 详细步骤与实测证据见 [attachments/layout-css-details.md](attachments/layout-css-details.md)
 
 ### 同一语义不要用两种视觉重复表达
 
 - **触发**: 加状态提示。
 - **判别**: "组内不一致"是**提示性**信息, 不该占用强对比资源。
-- **处置**: 对比色资源留给需要**立刻行动**的信号(HR 未达标 / 错误)。
+- **处置**: 详细步骤与实测证据见 [attachments/layout-css-details.md](attachments/layout-css-details.md)
 
 ### 状态徽章「两态底色相近」= 同亮度令牌 + 同透明度, 换色相救不了
 
@@ -164,64 +138,9 @@
   `#16272b` / `#1b2624` —— 差 (R+5, G−1, B−7), 肉眼不可分。根因不是色相写错, 而是 cyan `#56c8d7`
   与 green `#7fc79a` 的**相对亮度几乎相同**(≈177 / ≈180): 低透明度叠在暗底上时色相差异被压没,
   只剩亮度差 —— 而亮度差本来就是 0。这也解释为什么"明明换了青/绿两个很不一样的色却还是分不出"。
-- **处置**: 三件事一起做, 缺一条就还剩一对分不出 ——
-  ①**拉开明度(改 alpha)而不是只换色相**: 语义上"待关注"实、"已收口"虚, 层级天然一致;
-  ②**底 / 边 / 字三条通道同时区分**, 别只靠底色(文字色最省事也最有效, 但注意上一条的覆盖坑);
-  ③**同一套值复用到所有视图**: kb.nav 台账 `.chip.st-*` 与控制台 `.rs.st-*` 共用同一个透明度阶梯,
-    只改一处会得到"台账分得出、控制台分不出"。
-  ⚠ 别把"已收口"压得和无底的出局态 (Dropped / Superseded) 一样暗 —— 那是把一对分不出换成另一对;
-  出局态靠"**有底 vs 无底**"与它分开, 不靠再压一档透明度。
-- **守阵**: `tests/test_kb_nav_shell.py::test_status_badge_colors_distinguishable`(Open / Done 底色 alpha 必须
-  不同且 Open 更实 + 控制台与台账逐档对齐 + 出局态无底)。判别法可复用: headless 截图取徽章内侧填充
-  像素, **同视图内**两两算 RGB 距离, <20 即判"分不出"。
+- **处置**: 详细步骤与实测证据见 [attachments/layout-css-details.md](attachments/layout-css-details.md)
 
-### 顶栏 / 表头 / 状态栏底色与相邻面「同色」= 复用同一枚令牌, 换色相救不了
-
-- **触发**: 收到"标题栏 / 顶栏 / 表头 / 状态栏颜色与其余部分难区分", 或新加一条横向 chrome 条 (2026-10-05 kb.nav 实测)。
-- **判别**: 三步, 顺序别换 ——
-  ① **先把用户的口语名钉到唯一元素上**: 同一页里"标题栏"至少有两个候选 —— 顶栏 (`.topbar`, 品牌 +
-  视图切换) 与**表格列标题行** (`thead`, 时间戳 / 形态 / 状态 / 标题 …)。2026-10-05 就按前者理解动手,
-  用户澄清"是 title 栏, 不是上方的导航栏" —— **两种候选都量一遍再动手**, 或把候选截图回问用户圈一个,
-  别挑一个就改 (两个都坏时白赚一轮, 只坏一个时白改一处)。
-  ② **先量, 别按色相推断**: headless 截元素图取**众数填充色**(⚠ 不要只采一个点: 顶栏里有搜索框 /
-  分段钮, 采到控件上会得到假数字, 首测就踩过), 同视图内两两算 RGB 最大通道差, <20 即判"分不出"。
-  kb.nav 两个实例, 根因同一个: **共用令牌 + 明度差不足** (低透明度/近色相下色相差异会被压没,
-  只剩亮度差作数) —— 顶栏 vs 台账左侧栏 / 工具栏逐通道差 **0**(三处共用 `--paper`), vs 表格区 `--bg`
-  只差 **7**; 列标题行 vs 数据行逐通道差 **0**(两处共用 `--bg`), vs 工具栏只差 **7**。
-  ③ **把每个相邻面都列出来**: 列标题行上面是 `.toolbar`、下面是数据行, 两面都要过线 (见处置);
-  置顶专区的表头还要跟**置顶行**过 (那一面是合成色, 见处置末条)。
-  ④ **分清"要修的那处"和"顺带发现的那处"**: 顶栏同款缺陷是排查途中实测出来的, 但用户报的是列头 ——
-  用户明确撤销了顶栏改动。**顺带发现 ≠ 顺带修**, 报给用户由他定 (范围守恒)。
-- **处置**: ①**给这条 chrome 面开专用令牌**, 别借面板色 —— `--paper` / `--paper-2` 同时管侧栏 / 工具栏 /
-  控制台面板, `--bg` 是数据行本身, 借了必然同色; ②**抬明度**到与相邻面最大通道差 ≥24(判据 20 之上留余量),
-  而不是只换色相; ③下缘边界带 accent 色相(cyan 缝), 中性白 hairline 叠在亮一档的栏上读不出"这里是边界"。
-  ⚠ **相邻面可能不止一个, 要逐面过**: 列标题行上面是 `.toolbar`(`--paper`)、下面是数据行(`--bg`) ——
-  `--paper-3` 只过了一条轴(与数据行 26), 与工具栏只有 **19**(<20) ⇒ 表头会读成"工具栏的延伸", 变成
-  "几乎一样但不是"的观感, 比明显不同更难忍。选值前把**每条相邻边**都算一遍。
-  ⚠ **抬底色会连带改文字与控件的可读性**, 一起过: 顶栏副标题用 `--faint` 时对比度 3.92:1 → 2.97:1
-  (**跌破 3:1**), 抬到 `--dim`(5.36:1); 列标题行同款 —— `--faint` 在新底色上 2.97:1, 抬到 `--dim` 5.36:1;
-  栏内原本"靠比栏亮表示可点"的控件会反转成内凹槽(段选钮选中态 .12 叠在亮栏上只比栏亮 19), 要单独抬一档透明度。
-  ⚠ **克隆出来的同款元素必须跟着改**: 置顶专区的表头是克隆主表 `thead` 来的, 壳里另有一条
-  `.pinzone thead th { background }` 覆盖 —— 只改主表会让两个**同款表头长得不一样**, 比两个都不明显更糟。
-  改一处底色前先 grep 有没有第二处覆盖。
-  ⚠ **相邻面是"强调过的行"时, 可用明度空间会被两头挤住**: 置顶专区的置顶行 = 淡 cyan 叠在专区底
-  (`--paper-2`) 上, 本身就比专区底亮 9 —— 表头既要比专区底亮, 又必须比置顶行再亮 ≥24, 于是同一个
-  `--chrome` 在主表够用(#232e3b: 与数据行 39 / 与工具栏 32), 到专区里只剩 **14**。
-  解 = **把令牌整体抬一档**(#232e3b → #2b3947: 与置顶行 26 / 与数据行 51 / 与工具栏 44, 三面全过),
-  而不是给专区单开一个更亮的令牌 —— 后者会让两个同款表头又长得不一样。
-  遇到"某处怎么也过不了线", 先看是不是**别处的强调色**吃掉了明度空间。
-  ⚠ **合成色要真算, 不能拿令牌比**: 置顶行不是令牌而是 `rgba(86,200,215,.05)` over `--paper-2`,
-  守阵里按 alpha 合成一遍再比 (本仓已有 `_contrast` / `_max_channel_diff` helper 可用)。
-  ⚠ sticky 底色必须**不透明**(数据行从它下面滚过), 别换成带 alpha 的值。
-- **先例**: 主 UI 侧同款问题已解过 —— prism `views.css` R10-02「暗主题下 `--glass` 与页底 `--bg` 明度差
-  不足 2%, 状态栏『与背景色一致』看不出来」, 修法同样是**开专用令牌** `--statusbar-bg`, 并刻意**不**改
-  `--glass`(因为它同时管顶栏, 改它会把顶栏一起带偏)。遇到同类反馈先去翻这段再动手。
-- **现状留痕 (别重新"发现"再动手)**: kb.nav 顶栏与侧栏 / 工具栏的逐通道差仍是 **0** —— 用户 2026-10-05
-  知情后明确**保持原样**(撤销了那一版改动)。要动先问用户。
-- **守阵**: `tests/test_kb_nav_shell.py::test_ledger_thead_surface_distinguishable`(列标题行不得借回
-  `--bg` / `--paper` / `--paper-2` + 与数据行和工具栏**两面**都要 ≥24 + 文字对比度 ≥4.5:1 +
-  专区表头与主表表头同一枚令牌 + 专区表头与置顶行**合成色** ≥24) ·
-  `::test_topbar_surface_is_left_at_paper`(**反向守**: 顶栏底色一旦不再是 `--paper` 就报错, 提示先问用户)。
+- 顶栏 / 表头 / 状态栏底色与相邻面「同色」= 复用同一枚令牌, 换色相救不了: 详见 [attachments/layout-css-details.md](attachments/layout-css-details.md)
 
 ### 平行两态「同色相只差明度」= 必混淆, 要专用色相族分家 (不是拉 alpha)
 
@@ -231,8 +150,4 @@
 - **判别**: 两态是**层级关系**(如 待办实 / 完结虚) → 拉明度(上一条状态徽章口径); 两态是**平行关系**
   (单击预览 vs 批量选中, 语义无主次) → 明度差只会让用户猜"更亮的是不是更重要", 必须换专用色相族。
   auto-qb views.css R10-07 同款定案: 选中态专用 `--sel-*` 靛蓝族, 与品牌 accent/状态色彻底分家。
-- **处置**: 新态取**页面里未占用语义的色相**做一族三件(底 tint / 线 / 满亮左条), 相关 UI(计数 chip)
-  跟同一族 —— kb.nav 落 `--msel-bar: #97a3f5 / --msel-bg / --msel-line`(真值取 auto-qb galaxy 主题
-  `--sel-*`), 单击预览保持原 cyan; 两态同框时左条让给批量目标态(预览对象由抽屉表明)。
-- **守阵**: `tests/test_kb_nav_interaction.py::test_multiselect_renders_in_both_zones`(msel 规则必须用
-  `var(--msel-bar)`, 且规则体内不得回用 cyan 的 rgba —— 防改回"只差明度")。
+- **处置**: 详细步骤与实测证据见 [attachments/layout-css-details.md](attachments/layout-css-details.md)

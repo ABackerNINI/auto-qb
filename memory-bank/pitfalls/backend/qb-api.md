@@ -92,13 +92,7 @@
   种子加成功了, WEB UI 照样弹"添加种子失败"(2026-09-24 实测 qB 5.2.3)。
   `pending_count > 0`(magnet 元数据未就绪 / 走 search 插件下载)是**已受理**而非失败;
   全部失败走 HTTP 409(`Conflict409Error`, 库直接抛, 不经返回值)。
-- **处置**: 判定统一走 `webui/commands.py::_add_outcome`(两形态都认, 且把计数写进回执详情);
-  别在别处再写一遍子串判定。⚠ 它返回的是**三值受理态**(`ok`/`partial`/`fail`, 2026-10-18
-  由布尔扩为三值): `failure_count>0 ∧ success+pending>0` = `partial`(qB 整批里挑着拒) ——
-  由 `_cmd_add_torrents` 跨文件/链接两次调用聚合成三态回执(部分受理 = `warn`, 前端据此
-  **关窗**; 全拒才 `error` **留窗**)。把 partial 当布尔 False 压回 error, 「部分成功」就与
-  「全部失败」混为一谈 —— 用户报障形态 = 部分种子添加失败(已存在)时添加窗口不消失
-  (2026-10-18, 见 pitfalls/web-ui/add-partial-receipt.md)。
+- **处置**: 判定走 `webui/commands_common.py::_add_outcome` 的三值受理态, 跨调用聚合与前端关窗/留窗口径见 [attachments/qb-api-long-evidence.md](attachments/qb-api-long-evidence.md)。
 
 ### 添加选项: `std::optional` 的字段**省略 ≠ false** —— 缺省会回落 qB 会话/全局默认
 
@@ -117,12 +111,7 @@
   ⚠ **第二层坑(只对停止位)**: qbittorrent-api 的 `is_stopped = is_paused or is_stopped` 会把
   **`is_paused=False` 折成 `None`** ⇒ 只能用 `is_stopped=` 传。实测 `is_paused=False` 的请求体是
   **空字符串**, `is_stopped=False` 才发出 `paused=false&stopped=false`。
-- **处置**: 本项目暴露的两个 optional 选项**恒显式下发** ——
-  `kwargs["is_stopped"] = bool(paused)`、`kwargs["use_auto_torrent_management"] = bool(auto_tmm)`
-  (且不能被"False 就不传"的过滤器吞掉, 它们要写在过滤器**之后**)。
-  qB 自家 WebUI 同此口径: `addtorrent.js` 恒传 `stopped=true/false`,
-  `autoTMM` 是 `<select name="autoTMM">`(Manual=false 默认 / Automatic=true)随表单恒提交。
-  守阵: `tests/test_web_admin.py::test_add_torrent_receipt_and_optional_flags`(两个方向都钉)。
+- **处置**: 两个 optional 选项恒显式下发的写法与守阵见 [attachments/qb-api-long-evidence.md](attachments/qb-api-long-evidence.md)。
 
 ### `yaml.BaseLoader`: 配置全是字符串, 不要假设已给原生类型
 
@@ -138,7 +127,7 @@
   ⚠ **4xx 不是一种东西**: 401(`Unauthorized401Error`)是凭据/环境故障(需人工介入, 弹窗测试 -> ERROR),
   其余 4xx 才是"用户这次操作被 qB 拒绝"; 二者在库里的**共同基类是 `HTTP4XXError`**
   (401 也是它的子类, **必须显式排除**)。
-- **处置**: 判据与文案单点在 `webui/commands.py::qb_reject_text`(4xx 且非 401 -> 可读文案 + 已知场景
+- **处置**: 判据与文案单点在 `webui/commands_common.py::qb_reject_text`(4xx 且非 401 -> 可读文案 + 已知场景
   行动建议, `QB_REJECT_HINTS` 按 qB 文案子串匹配; qB 文案随其界面语言变, 匹配不到只给通用前缀, 不猜),
   分发层只分流: 命中 -> **WARNING 无堆栈**, 未命中(网络/鉴权/代码 bug) -> ERROR + `exc_info=True`。
   守阵 `tests/test_web_commands_bulk.py::test_qb_reject_text_classification` 与
@@ -152,15 +141,7 @@
   `KEY_PEER_DOWN_SPEED`/`KEY_PEER_UP_SPEED`)用 `dl_speed` / `up_speed`。对端里 `downloaded` /
   `uploaded` / `flags` / `progress` / `relevance` 恰与列表侧**同名** ⇒ 拿 `dlspeed`/`upspeed` 取
   对端时会**只坏「上下行」两列**(前端 `x.dlspeed || 0` → 0), 其余列正常 —— 这个「只坏两列」是本坑指纹。
-- **处置**: 在**落袋单点**做一次键名适配(2026-10-10 落地: `webui/static/shared/drawer.js::_drawerNormPeers`
-  在 `_fetchDrawerPeers` 落袋处补 `dlspeed`/`upspeed`, peers 为 dict/数组双形态同归一), 全部消费点
-  (经典表经 `drawerPeerRows`、变体 07/08/09 各自的 `peerList` 直读原始对端对象)**一处修好**;
-  别在各消费点各写一遍。**配套**: 桩服务 / 合成数据必须用**真 qB 键名**(`dl_speed`/`up_speed`) ——
-  本 bug 正是因 `scripts/ui_harness.py` 自造数据用了 `dlspeed`/`upspeed`, 冒烟「看得见速度」而真机恒 0,
-  一路逃过全部 e2e(见 [../testing/stubs-sim.md](../testing/stubs-sim.md) 同名复发条)。
-- **守阵**: `tests/test_webui_static_dom_panel_drawer.py::test_drawer_peers_speed_keys_normalized`(适配单点在 +
-  落袋走单点 + 桩键名与真 qB 同形); e2e `e2e/drawer-peers.spec.mjs`「上下行至少一格含数字」守卫。
-
+- **处置**: 在落袋单点做一次键名适配, 消费点与桩数据要求见 [attachments/qb-api-long-evidence.md](attachments/qb-api-long-evidence.md)。
 
 ### 库透传参数的键名与 None 语义: 未知 kwargs 直并 data / None 值键丢弃 / RE_ADD_FIELDS 是 fail-fast 白名单
 
@@ -173,14 +154,4 @@
   描述曾写反); ③`RE_ADD_FIELDS` 同时喂 `REQUIRED_TORRENT_FIELDS`(qbmanager 启动期对 qB torrent
   info fail-fast), 加 5.3-only 字段会让 5.2 启动即报 `QbCompatError` —— 版本可选字段进
   `_EXTENSION_FIELDS`。
-- **处置**: 透传新参数一律 camelCase 直发 kwarg(两版库同 wire, 见 ops_mod `_skip_add_call` 的
-  `shareLimitsMode=` 用法)并配请求体级守阵; 版本可选的 qB 新字段进 `_EXTENSION_FIELDS`
-  (+ record slot, 缺省 None = 不发), 不动 `RE_ADD_FIELDS`。
-- **setShareLimits 双必填参**(issue 26-11-01-2102, 2026-11-02 修): qB 5.0/Web API 2.10.4 起
-  该端点还必填 `shareLimitAction`(库具名参缺省 None 被丢弃 → 请求体缺参恒 400), facade 与
-  `shareLimitsMode` 同一手法缺省显式 `"Default"`(到限执行 qB 全局默认动作; 5.2 无该参数,
-  忽略未知参无副作用); 守阵含 **facade 出口** wire 用例 —— 直调裸库传显式参的用例钉不住
-  facade 漏参形态。
-- **守阵**: `tests/test_qbapi_wire.py`(真库 + 真 requests 栈经 FakeQbServer 按线上原文断言三件事;
-  含 facade(QbApi)出口双必填参守阵); `tests/test_torrents_*.py` 的 _SNAPSHOT_FIELDS↔record slots 同步守卫。
-- **复发**: 0 (复踩时在此行追加「+N (日期): 为什么没命中」, 无复发可删本行)
+- **处置**: 透传键名、None 语义、`_EXTENSION_FIELDS` 与 setShareLimits 双必填参见 [attachments/qb-api-long-evidence.md](attachments/qb-api-long-evidence.md)。

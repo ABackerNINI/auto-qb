@@ -7,10 +7,7 @@
 
 - **前端渲染逻辑无法靠 pytest 覆盖**: 模板表达式错误(computed 当函数调用等)会让页面整块空白而**测试全绿** ⇒
   改前端必须做浏览器冒烟(假 qB + 临时 data_dir, 完事清理)。
-- **半个例外**: "整包 JS 语法损坏"(合并冲突残留、注释孤儿续行)与"模板引用缺失静态资源"属**纯静态可判定**,
-  已由 `test_frontend_static_bundle_health` 守阵(2026-09-17 白屏故障的防回归);
-  **模板 / 表达式层面的错误仍只能靠真机页面看**。
-- ✅ **2026-09-19 起已脚本化**, 不再"只能人工点"。
+- **半个例外**: 整包 JS 语法损坏 / 模板引用缺失静态资源属**纯静态可判定**, 已由 `test_frontend_static_bundle_health` 守阵; 模板 / 表达式错误仍只能真机看 —— 白屏判别归坑档, 见 [pitfalls/testing/smoke.md](../pitfalls/testing/smoke.md)「整页白屏」条。
 
 ## 断言轨道(环境与安装见 [browser-env.md](browser-env.md))
 
@@ -85,9 +82,7 @@
   ❗该值**随库规模浮动**(refresh 越慢退化值越大), 3000 种子是定阈值口径。
 - **红绿双验**: ①注入"回执即 `delete pendingOps`" ⇒ 20ms < 80 ⇒ 双 UI 变红;
   ②注释掉 `op.grey = false` ⇒ 384/376ms > 250 ⇒ 双 UI 变红; 两条撤回后全绿。
-- ⚠ 顺带发现: 单改 `_optimisticSettled` 恒真(2026-09-19 那条"拿自己的补丁当真值比对"的回归形态)
-  **打不红①** —— 桩里值覆盖的释放被 refresh 时刻门槛住(真值 120ms 时才到, 首个 refresh 已在 378ms),
-  两种实现都落在同一刻 ⇒ 那条形态实际由「真值事件后不被陈旧快照打回」守着(红验中它确实变红)。
+
 
 ## 桩服务的行为(会真的改状态)
 
@@ -136,10 +131,7 @@
 
 ## 跑之前的两个环境硬要求
 
-- ⚠ 跑测用仓外 `--basetemp` 时, **该目录必须不存在**: 已存在则 pytest 开跑前会删它,
-  而本机沙箱的删除拦截层会拉起回收站助手进程, 被 `tests/sidefx.py` 记成越界 `POPEN` ⇒
-  全绿也会在某个用例的 teardown 报 ERROR(实测复用旧目录得 `1052 passed + 1 error`, 换全新路径即干净)。
-- ⚠ `COVERAGE_FILE` 同理要指到仓外(仓内 `.coverage` 会让覆盖率在启动时删仓内文件而中止)。
+- ⚠ `--basetemp` 必须仓外且**不存在**, `COVERAGE_FILE` 必须仓外 —— 四条机制与处置见 [../pitfalls/testing/tmpdir.md](../pitfalls/testing/tmpdir.md)「测试基线的临时目录与覆盖率文件必须落在仓库外」。
 - **写 e2e 用例的硬约束**: ①依赖走 `package.json` devDependency(`@playwright/test`), spec 用 ESM `.mjs`
   显式扩展名(根 `type: commonjs` 不改 —— 会连带把 `extensions/*.js` 按 ESM 解析, 见任务档案
   26-10-06-test-playwright-e2e 的决策表); ②Vue 根实例走 `#app._vnode.component.proxy`

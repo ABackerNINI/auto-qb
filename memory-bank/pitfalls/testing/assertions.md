@@ -28,10 +28,11 @@
 - **处置**: 断言**语义集合**而不是长度: `{e.tid for e in view.by_infohash.values()} == {TID_A}` ——
   既盖住"两个键都收"又盖住"空键不描"。
 
-### A/B 结束后读到的基线是"改动后"的值 ⇒ 断言退化成自比
-- **触发**: 写 A/B 对比断言。
-- **判别**: A/B 函数收尾会把开关还原。
-- **处置**: 在**同一段** `page.evaluate` 里**来回切开关各读一次**并等两帧。
+### A/B 基线自比与 computed 依赖链
+
+- **触发**: 写 A/B 对比断言; 或怀疑"机制没工作"却只读了调用点。
+- **判别**: ①A/B 函数收尾会把开关还原 ⇒ 基线读到的是改动后; ②"机制没工作"与"没绑 class"在源码里长得一样。
+- **处置**: 详见 [attachments/assertions-ab-and-computed.md](attachments/assertions-ab-and-computed.md)。
 
 ### 冒烟断言别用"固定睡 N 毫秒再采样"
 
@@ -61,13 +62,6 @@
 - **处置**: 断言必须**人为造慢**才有意义(`page.route` 注入 800ms, 再断言点击 → `.is-pending` < 400ms)。
   两坑: Playwright 新版路由谓词收到的是 **URL 对象**(先 `String(u)`);
   点击时刻取**菜单项的 click 事件**(捕获阶段)—— `h.click()` 含鼠标开销, 实测**虚高 ~250ms**。
-
-### 只读调用点就断言"机制不生效" ⇒ 先看 computed 依赖链
-
-- **触发**: 怀疑"机制没工作"。
-- **判别**: 组行状态色取自 `decoratedGroups.status.primary`(是 `_aggStatus` 的 computed),
-  上游成员的 `kind` 一变它就会变 —— **"机制没工作"与"没绑 class"在源码里长得一样**。
-- **处置**: 先问 ①值是不是 computed 派生 ②模板有没有绑这个 class ③**真跑一次看 DOM**(hang 桩 + 150ms 即可)。
 
 ### 「A 必须先于 B」这种**顺序**断言, 必须在 **B 发生的那一刻**取证
 
@@ -119,11 +113,8 @@
 ### `test_run_loop_throttles_without_stop_event` 偶发翻红
 
 - **触发**: 全量跑出 1 条红。
-- **判别**: 同一份代码全量跑两次: 一次 `1097 passed + 1 failed`, 一次 `1098 passed` ——
-  它是**墙钟时序**断言(主循环节流间隔), 在覆盖率开启 + 全量负载下偶发超时;
-  单跑 `tests/test_qbmanager_*.py` **43 passed 恒绿**。
-- **处置**: 全量跑出 1 条红时**先换全新临时根重跑一次再判回归**, 别急着改代码 ——
-  **真回归会稳定复现**。
+- **判别**: 墙钟时序断言在覆盖率开启 + 全量负载下偶发超时; 单跑 `test_qbmanager_*` 恒绿、同代码重复全量时红时绿。
+- **处置**: 先换全新临时根重跑再判回归 —— 详细数字与实况见 [attachments/assertions-run-loop-throttle-flaky.md](attachments/assertions-run-loop-throttle-flaky.md)。
 
 ### 守阵的"取值锚点"必须落在**目标块自身**, 且要自带"必须扫到东西"的反恒真断言 (2026-09-25)
 
@@ -172,10 +163,4 @@
     样式面」。规则搬进 `shared/console_hub.css` 后该聚合里**永远找不到**它 ⇒ 恒红; 若图省事改成「共用层里有就算过」,
     又变成**任何皮肤漏改都放过**(判据脱离具体皮肤)。问一句: 断言里的「CSS」是「某几个文件」还是「浏览器最终
     生效的那张表」? 存在共用层时二者不等价。
-- **处置**: ① 断言末尾带**规则边界**(`{` 或 `:`), 别让更长的同类选择器替你满足它; ② 判「三皮肤成对」改用
-  `_ui_css_effective(ui)` = 皮肤聚合 + shell 里挂的 shared CSS(link 序) —— 判据落在**该皮肤实际吃到的级联面**上;
-  ③ 收敛类改动的等价性别靠人眼: 对改前/改后各现算一次「最终生效规则表」(按 link 序拼接后取每个 selector 的最后
-  一条声明), 逐条比 selector→body, 再查生效表内有无重复声明 —— 三者全等才算「搬了位置、没改结果」。
-- **守阵**: `tests/test_webui_static_skins_table.py::test_frontend_hr_detail_table_wiring`(反向断言: 徽章底形族必须在各
-  皮肤自己的 CSS 里) / `tests/webui_helpers.py::_ui_css_effective`。
-- **复发**: 0
+- **处置**: 规则边界、`_ui_css_effective` 与等价性三步的原文见 [attachments/assertions-css-guard-range.md](attachments/assertions-css-guard-range.md)。
