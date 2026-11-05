@@ -4,8 +4,12 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (38)
+## Open (42)
 
+- [test] [gtm-alert 双皮肤日期炸弹: 硬编码日期超 24h TTL 必红](../26-11-06-0330-test-e2e-gtm-alert-date-bomb.html) — e2e/gtm-alert.spec.mjs 硬编码 T1/T2/T3=2026-11-03, 超过 dialogs.js gtmAlert computed 的 24h TTL 后横幅被判空, 双皮肤 prism/atlas 各 1 条必红
+- [test] [views 种子页筛选器有数据恒红: relocate kind 在 e2e 桩下恒空](../26-11-06-0330-test-e2e-views-relocate-kind-empty.html) — filters.js 无条件注册 relocate kind 但 ui_harness 桩不注入任何 relocate 态, 断言空筛选器 kinds=[] 必红; 修桩还是修产品待裁决
+- [test] [test_start_all_busy_returns_false_and_retries 偶发 WinError 10013](../26-11-06-0330-test-hr-discovery-busy-retry-flake.html) — 随机序巡检第 1 轮触发 127.0.0.1:3166 真绑定 PermissionError, 归因端口/资源类(排除端口段), 非时序
+- [test] [test_hr_discovery 在 -n 8 下偶发端口碰撞红](../26-11-06-0330-test-hr-discovery-port-collision.html) — test_runtime_builds_and_starts_discovery 断言 bound_port==base, xdist 8 worker 并行时偶发碰撞(坑档 fixed-port-test-collision 同类), 单跑恒绿
 - [feat] [recheck_fails 噪声收窄: FAILED/START_TIMEOUT 分记, 锐化失败证据信号](../26-11-05-0853-feat-recheck-fails-noise-narrowing.html) — recheck_fails 计数混记真数据证据(FAILED)与噪声(START_TIMEOUT 未开检), G8/G9/链1.6/冷却都消费这个混合信号; 收窄=分记并让防护闸只认真证据, 误拦面变小但动 state schema 与 bump 写点
 - [question] [跳检抽样校验是否值得做: 读盘换下载量的成本收益待拍板](../26-11-05-0514-question-skip-check-sampling-value.html) — 跳检防线之二的抽样校验(建议修法第1条)故意未做, 需讨论读盘成本/边界复杂度与残余风险是否值得投入; 主件 26-10-22-0308 已因保险丝落地收 Done
 - [bug] [整组迁移可对「账面完成但磁盘名错位(.!qB)」的组零搬移假成功](../26-11-05-0420-bug-relocate-zero-move.html) — 搬迁按声明名逐文件 stat,磁盘名带 .!qB 全 miss 被静默忽略,qB 报「成功移动」但零搬移;.!qB 闸门只扫内容根顶层漏拦,10min 后才由停滞看门狗判失败
