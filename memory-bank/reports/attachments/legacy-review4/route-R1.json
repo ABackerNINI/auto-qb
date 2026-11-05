@@ -24,9 +24,9 @@
     {
       "id": "R1-3",
       "title": "迁移规划与生命期: relocate_mod/plan/probe/proof/lifecycle",
-      "status": "pending",
-      "done_at": null,
-      "findings": 0
+      "status": "done",
+      "done_at": "26-11-06-0649",
+      "findings": 18
     },
     {
       "id": "R1-4",

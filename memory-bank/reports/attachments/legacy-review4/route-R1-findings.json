@@ -304,5 +304,167 @@
   "claim": "pitfall 代码锚点漂移: _spawn 经 R5 拆分已迁至 relocate_exec.py:967, relocate_mod.py 内已无该函数",
   "relevance": "相关",
   "fix": "把锚点更新为 relocate_exec.ExecMixin._spawn"
+ },
+ {
+  "file": "src/auto_qb/core/modules/relocate_plan.py",
+  "line": 412,
+  "quote": "if rp.POSITIVE in (src_ev.status, dst_ev.status):",
+  "severity": "major",
+  "claim": "B′ 级 positive(本机文件 size 与种子元数据相等,完全不经过 qB,本机有独立完整副本即命中)与 dst 侧 visibility_only positive(qB 能列出目标祖先目录,不证明与 auto-qb 共享同一命名空间)都被当成与 D 级同权的同机证明返回 proved=True,而执行链(relocate_exec.py:663 `if facts.same_fs_proved: return None`)据此跳过 E1 强探测——远程 qB(qB<5.0 无列目录端点走 B′,或 qB≥5.0 且 src 侧不可判定而目标祖先同名存在)会误判同机,多成员组走链接路线建出 qB 不跟随的别名",
+  "relevance": "相关",
+  "fix": "只有 D 级(目录元数据比对)positive 才跳过 E1;B′ 与 visibility_only 的 positive 降级为 note 并照常执行 E1 强探测(一次性、有缓存,成本有界)"
+ },
+ {
+  "file": "src/auto_qb/core/modules/relocate_lifecycle.py",
+  "line": 47,
+  "quote": "self._persist()",
+  "severity": "major",
+  "claim": "stop() 无条件 _persist: enabled=false 时 start() 跳过 _load_jobs, 内存 _jobs 为空, 优雅退出把 state 里历史在途 job 账整段清空(stop_all 后紧跟 ctx.state.save() 落盘), 未收尾 job 永久失账(别名链接无人收口、未收尾拦截失明)",
+  "relevance": "相关",
+  "fix": "stop() 仅在本会话加载过 job(或 enabled=true)时才 _persist, 或 _persist 前 box 非空且本会话未 load 时跳过 clear"
+ },
+ {
+  "file": "src/auto_qb/core/modules/relocate_probe.py",
+  "line": 167,
+  "quote": "api.torrents_info(tag=TAG_PROBE) or []",
+  "severity": "major",
+  "claim": "_await_probe_torrent 仅按固定 tag=aqb-probe 定位探针种子、不校验种子名前缀: 用户恰打了同名 tag 的种子会被当作探针执行 recheck 与 setLocation(数据被搬到 dst 临时目录), 最终被 _cleanup 以 delete_files=True 连文件删除",
+  "relevance": "相关",
+  "fix": "认领前校验 tor.name 以 PROBE_DIR_PREFIX 开头(与 sweep_probe_residue 的 ours 双条件同款), 不匹配则按不可见处理"
+ },
+ {
+  "file": "src/auto_qb/core/modules/relocate_probe.py",
+  "line": 242,
+  "quote": "torrents_delete(torrent_hashes=[h], delete_files=True)",
+  "severity": "major",
+  "claim": "_cleanup 按 tag 补删对全部 tag=aqb-probe 的种子 delete_files=True, 同文件 sweep_probe_residue 已对『用户自己打了同名 tag 的种子』守卫为只删记录不删文件, 此处缺失该守卫",
+  "relevance": "相关",
+  "fix": "补删同样要求种子名或 save_path 带 aqb-probe 前缀才 delete_files=True, 否则只删记录或跳过"
+ },
+ {
+  "file": "src/auto_qb/core/modules/relocate_probe.py",
+  "line": 174,
+  "quote": "time.sleep(PROBE_POLL_INTERVAL_S)",
+  "severity": "major",
+  "claim": "run_probe 的证读/证写/清理轮询用 time.sleep 同步阻塞, 且经 relocate_exec._ensure_probe(relocate_exec.py:707, 规则自动迁移共用)在主循环线程执行: FS 不可达时单次探测阻塞主循环约 25s+(10s 证读+10s 证写+5s 清理, 另加各 qB HTTP 超时), 整库监控与其它模块任务线同期停滞, 与 on_task_line 自述「单步零阻塞」纪律矛盾(面1/面2 同报合并)",
+  "relevance": "相关",
+  "fix": "把探测改为跨 tick 分步推进的相位状态机, 或移到独立线程执行并经主循环消费结论(保持单一写线程约束)"
+ },
+ {
+  "file": "src/auto_qb/core/modules/relocate_lifecycle.py",
+  "line": 56,
+  "quote": "self._conf = getattr(new, \"relocate\", None)",
+  "severity": "minor",
+  "claim": "热重载 apply 在 relocate.enabled 由 false 变 true 时只换配置对象并重探能力,不调 _load_jobs:以 enabled=false 启动(state 里有崩溃残留的在途 job)后再热启用,这些 job 永久休眠不推进,且 _sync_relocating 不重建 relocating_hashes,未收尾拦截闸门对这批成员失效",
+  "relevance": "相关",
+  "fix": "apply 检测 enabled 从假变真时补一次 _load_jobs(与 start 的启用分支同口径)"
+ },
+ {
+  "file": "src/auto_qb/core/modules/relocate_probe.py",
+  "line": 404,
+  "quote": "delete_files=ours",
+  "severity": "minor",
+  "claim": "启动扫描对 tag 命中但不带探针前缀的种子仍删除种子记录(delete_files=False), 用户同 tag 种子会被静默移出 qB(做种中断需重新添加); 且其 save_path 恰以 aqb-probe- 开头时还会 rmtree 该目录",
+  "relevance": "相关",
+  "fix": "未通过前缀认领的条目只 logger.warning 不动手, 保留种子记录与目录"
+ },
+ {
+  "file": "src/auto_qb/core/modules/relocate_probe.py",
+  "line": 85,
+  "quote": "hashlib.sha1(raw.encode(\"utf-8\")).hexdigest()[:16]",
+  "severity": "minor",
+  "claim": "指纹是对 host|port|username|password/api_key 的无盐单轮 SHA1 截短, 落 state.json 且被 relocate_exec 打进日志: 泄露场景(日志贴 issue/备份外流)下可对弱 qB 口令离线爆破",
+  "relevance": "相关",
+  "fix": "改 HMAC-SHA256 加随机盐, 盐与指纹同存 state(换盐即缓存失效, 语义不变)"
+ },
+ {
+  "file": "src/auto_qb/core/modules/relocate_mod.py",
+  "line": 35,
+  "quote": "_LINK_CHUNK,",
+  "severity": "minor",
+  "claim": "拆分残留:relocate_mod 从 relocate_common 导入的 7 个符号(_DISABLED_GATE/_LINK_CHUNK/_QB_TEMP_SUFFIX/_native/_same_volume_resolved/_top_children/_volume_free_resolved)在本文件正文全部未使用",
+  "relevance": "相关",
+  "fix": "删除这组未用 import(实际消费方已随拆分落到 plan/exec/lifecycle 各叶)"
+ },
+ {
+  "file": "src/auto_qb/core/modules/relocate_plan.py",
+  "line": 21,
+  "quote": "RelocateJob,",
+  "severity": "nit",
+  "claim": "RelocateJob 在 relocate_plan.py 内无任何使用,拆分遗留的未用 import",
+  "relevance": "相关",
+  "fix": "从 relocate_units 导入清单中删除 RelocateJob"
+ },
+ {
+  "file": "src/auto_qb/core/modules/relocate_proof.py",
+  "line": 43,
+  "quote": "from .relocate_common import logger",
+  "severity": "nit",
+  "claim": "logger 导入后全文件未使用(本模块按设计不打日志,把失败装进 evidence/detail)",
+  "relevance": "相关",
+  "fix": "删除该未用 import"
+ },
+ {
+  "file": "src/auto_qb/core/modules/relocate_mod.py",
+  "line": 108,
+  "quote": "返回条目深副本(调用方改不动缓存真身)",
+  "severity": "nit",
+  "claim": "probe_get 注释承诺「深副本」,实现是 dict(evidence) 浅拷贝:evidence 内嵌套结构(如 run_probe 写入的 cleanup 嵌套 dict)在缓存真身与返回副本间共享,注释的隔离保证对嵌套层不成立(当前调用方只读,未实际触发)",
+  "relevance": "相关",
+  "fix": "改用 copy.deepcopy(evidence) 或把注释改为「顶层副本」"
+ },
+ {
+  "file": "src/auto_qb/core/modules/relocate_lifecycle.py",
+  "line": 89,
+  "quote": "命中活跃 job 作用域 ⇒ dst",
+  "severity": "nit",
+  "claim": "代码注释含非 ASCII 图形符号(本行 ⇒, 另 101 行 ⇔, 32 行带圈数字⑥), 违反 code-style『代码一律 ASCII』禁令",
+  "relevance": "相关",
+  "fix": "⇒/⇔ 改 ASCII(->/=), ⑥ 改 P2-6"
+ },
+ {
+  "file": "src/auto_qb/core/modules/relocate_plan.py",
+  "line": 289,
+  "quote": "①以管理员身份运行",
+  "severity": "nit",
+  "claim": "字符串字面量含带圈数字①②③④(289-290 行, 该文案作为 reason 进确认框/blocked 回执), 违反 code-style 禁令(明示覆盖字符串字面量)",
+  "relevance": "相关",
+  "fix": "改『1./2./3./4.』编号"
+ },
+ {
+  "file": "src/auto_qb/core/modules/relocate_probe.py",
+  "line": 41,
+  "quote": "P2-⑤",
+  "severity": "nit",
+  "claim": "注释含带圈数字⑤, 违反 code-style『带圈数字 ①-⑬ 禁用』",
+  "relevance": "相关",
+  "fix": "改 P2-5"
+ },
+ {
+  "file": "src/auto_qb/core/modules/relocate_proof.py",
+  "line": 12,
+  "quote": "WebAPI 2.11 ≈ qB 5.0",
+  "severity": "nit",
+  "claim": "模块 docstring 含 ≈(12 行)与 →(13 行)等图形符号, 违反 code-style『代码一律 ASCII』禁令",
+  "relevance": "相关",
+  "fix": "≈ 改 ~=, → 改 ->"
+ },
+ {
+  "file": "src/auto_qb/core/modules/relocate_mod.py",
+  "line": 52,
+  "quote": "P2 只读预检引擎(执行体随 P3)",
+  "severity": "nit",
+  "claim": "类 docstring 与文件头「P2(本文件当前形态): 别名单元+闸门(只读)/执行体随 P3」已过期: R5 拆分后本文件是挂 ExecMixin/PlanMixin/LifecycleMixin 的完整执行体组合根(相位机/probe 缓存/job 账/快照发布都在), 文档描述滞后于现实",
+  "relevance": "相关",
+  "fix": "更新 relocate_mod.py 文件头与类 docstring 为现役结构描述(组合根 + 各叶职责与拆分去向)"
+ },
+ {
+  "file": "src/auto_qb/core/modules/relocate_mod.py",
+  "line": 71,
+  "quote": "干跑不落盘不建链, 与全局口径一致",
+  "severity": "nit",
+  "claim": "该注释承诺 dry-run 不落盘, 但 dry-run 下 relocate_execute→_start_job 在 dry-run 早退前已建账并 _persist 写 state.relocate.jobs(relocate_exec.py:832-834), 且 test_exec_dry_run_no_side_effects 把「有 job 账」断言为预期 —— 注释与已钉面的行为相矛盾",
+  "relevance": "相关",
+  "fix": "改注释为实际口径(dry-run 下发/暂停/建链被闸, 但预演建账会落 state 并在后续真实启动经 _recover 补发执行)"
  }
 ]
