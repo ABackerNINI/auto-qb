@@ -122,7 +122,14 @@ def run_hr_once(config: Config, html_dir: Optional[str] = None, out=None) -> int
         round_wait_max=0.0,
     )
 
-    print(f"HR 在线核实走查(只读, 不写盘) 共 {len(enabled)} 个站点: {', '.join(enabled)}", file=out)
+    # 走查头部按取数口径(fetchable)计数, 与下方 refresh_all 的过滤一致(issue 26-10-05-0922):
+    # enabled 只是门控口径 —— 启用的站点可能全部是全站型(listing=none), 那样没有可走查内容
+    fetch_sites = service.fetchable_sites()
+    if not fetch_sites:
+        print(f"启用的站点({', '.join(enabled)})全部是全站型(listing=none)或未绑定: 无可走查内容。", file=out)
+        return 1
+
+    print(f"HR 在线核实走查(只读, 不写盘) 共 {len(fetch_sites)} 个站点: {', '.join(fetch_sites)}", file=out)
     print(f"站点文件目录: {service.dir}(单次等待上限 {DIAGNOSTIC_MAX_WAIT:.0f}s)", file=out)
     _print_channel(config, service, out)
     print("-" * 92, file=out)

@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-05-0922">
 <meta name="issue-type" content="refactor">
 <meta name="doc-topic" content="hr-steady-throttle">
-<meta name="doc-refs" content="">
+    <meta name="doc-refs" content="memory-bank/tasks/26-11-05-backend-hr-fetch-gating.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+    <meta name="issue-status" content="Done">
 <meta name="issue-title" content="SiteHrCheckConfig.fetchable 全仓零消费方, listing=none 不取数未被取数侧强制">
 <meta name="issue-summary" content="fetchable 字段零消费方, 全站型不取数仅判定侧尊重; 当前无 preset 定义 listing=none 属潜在缺口">
 <title>SiteHrCheckConfig.fetchable 全仓零消费方, listing=none 不取数未被取数侧强制 · refactor · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-05-0922-refactor-hr-fetchable-dead-config</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-05 09:22</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -77,6 +77,7 @@
   <section id="s1">
     <h2><span class="no">01</span>现象</h2>
     <p><code>SiteHrCheckConfig.fetchable</code> 字段在 src 全仓零消费方 —— 「全站型(listing=none)不取数」的设计意图未被取数侧强制: service/worker 按 <code>enabled_sites()</code> 刷新, 仅判定侧 resolve.py 尊重 listing=none。当前无 preset 定义 <code>listing="none"</code>, 属潜在缺口而非现行缺陷。</p>
+    <p class="hint">复验 2026-11-05: 仍复现 —— 字段已改为 property(models.py, src 消费方仍零), enabled_sites()/worker.run_once/refresh_all 仍只按 enabled 取数; preset 仍无 listing="none"。</p>
   </section>
 
   <section id="s2">
@@ -96,6 +97,7 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-05 09:22 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-05 — 用户指派认领并拍板「接上取数侧强制」。实际修法: 新增 <code>HrRefreshService.fetchable_sites()</code>(取数集合单点), refresh_all / worker.run_once / worker.request_refresh 三处取数入口改用它; 展示/状态口径(enabled_sites / build_views)保持不动, 全站型照样出状态、判定照常走 resolve 的 listing=none 恒行4分支。验证: <code>commands run test.quick</code> 5343 passed / 10 skipped(含新增 service+worker 过滤回归两条)。</li>
     </ul>
   </section>
 

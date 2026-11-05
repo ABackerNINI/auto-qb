@@ -185,7 +185,9 @@ class SiteHrCheckConfig:
 
     @property
     def fetchable(self) -> bool:
-        """本站是否参与取数(清单型才翻页; 全站型不取数)"""
+        """本站是否参与取数(清单型才翻页; 全站型不取数) —— 取数侧集合单点在
+        HrRefreshService.fetchable_sites(worker.run_once / refresh_all / request_refresh 消费,
+        issue 26-10-05-0922); 判定侧不看我(resolve 按 view.listing 自行挡); 展示/状态口径用 enabled"""
         return self.enabled and self.listing == "list"
 
 

@@ -376,7 +376,15 @@ class HrRuntime:
         if worker is None or not worker.started:
             return {"requested": [], "note": "取数线程未启动"}
         requested = worker.request_refresh(sites)
-        return {"requested": requested, "note": "已受理, 取数由取数线程执行"}
+        # 点名站点可能 enabled 而不可取数(全站型 listing=none / 未绑定) —— 被拒时如实说明,
+        # 不然 WebUI 路由把 409 的 detail 拿去展示, 用户看到「已受理」却什么都没发生
+        if requested:
+            note = "已受理, 取数由取数线程执行"
+        elif sites is None:
+            note = "没有可取数站点(启用的站点全部是全站型或未绑定)"
+        else:
+            note = "点名站点不在可取数集合(enabled 且清单型才受理)"
+        return {"requested": requested, "note": note}
 
     def _site_origins(self) -> list:
         """需要授权的站点清单(扩展选项页「勾选站点 → 一键申请权限」的数据源)。

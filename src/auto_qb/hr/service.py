@@ -198,6 +198,11 @@ class HrRefreshService(StatusMixin, WaveMixin):
     def enabled_sites(self) -> Tuple[str, ...]:
         return tuple(sorted(s for s, c in self.site_confs.items() if c.enabled))
 
+    def fetchable_sites(self) -> Tuple[str, ...]:
+        """取数集合(清单型才翻页, issue 26-10-05-0922): 全站型(listing=none)不取数 —— 判定恒走
+        行 4 本地兜底, 翻页只会白烧配额。展示/状态口径仍用 enabled_sites(全站型照样出状态)"""
+        return tuple(sorted(s for s, c in self.site_confs.items() if c.fetchable))
+
     def limits_for(self, site: str) -> HrLimits:
         return HrLimits.merge(self.global_conf, self.site_confs.get(site))
 
@@ -264,10 +269,11 @@ class HrRefreshService(StatusMixin, WaveMixin):
     ) -> List[HrRefreshResult]:
         # 三态与 worker.run_once 同款(计划 26-10-05-0555 §2.5): 顶层 None = 采集失败/未知 →
         # 各站 None(稳态不生效); 映射缺某站键 = 确认该站零锚点 → {}。
+        # 站点集合走 fetchable(非 enabled): 全站型(listing=none)不取数, issue 26-10-05-0922。
         return [
             self.refresh_site(
                 site, anchors_by_site.get(site, {}) if anchors_by_site is not None else None, force=force
-            ) for site in self.enabled_sites()
+            ) for site in self.fetchable_sites()
         ]
 
     # ---------- 锁内主流程 ----------

@@ -38,6 +38,9 @@
 - test_loop_round_exception_logs_traceback
 - test_loop_startup_publish_failure_logs_traceback
 - test_loop_survives_startup_publish_failure
+
+### 取数侧强制 fetchable(issue 26-10-05-0922)
+- test_fetchable_filter_run_once_and_request_refresh: 全站型(listing=none) run_once 不出波、request_refresh 不受理; 视图照常发布
 - test_loop_waits_for_poll_interval
 - test_record_status_warns_on_partial_and_error
 - test_request_refresh_consumed_once_and_not_left_behind
@@ -715,3 +718,23 @@ def test_loop_waits_for_poll_interval(tmp_path):
         assert worker.rounds == 1, "poll_interval=60s, 0.4s 内不该再跑"
     finally:
         worker.stop(timeout=5.0)
+
+
+def test_fetchable_filter_run_once_and_request_refresh(tmp_path):
+    """取数侧强制(issue 26-10-05-0922): 全站型(listing=none)站点 run_once 不出波、
+    request_refresh 不受理(None 全集与点名都挡); 视图照常发布(判定侧恒行 4 本地兜底)"""
+    service = _service(
+        tmp_path,
+        FakeFetcher(pages=_pages(TID_A), blobs=_blobs(TID_A)),
+        confs={
+            "pt.example.com": site_conf(),
+            "pt2.example.com": site_conf(listing="none")
+        },
+    )
+    publisher = HrViewPublisher()
+    worker = HrWorker(service=service, publisher=publisher, poll_interval=60.0)
+    assert worker.request_refresh(None) == ["pt.example.com"], "受理集合只含可取数站点"
+    results = worker.run_once()
+    assert [r.site for r in results] == ["pt.example.com"], "全站型不出波次"
+    assert set(publisher.latest().views) == {"pt.example.com", "pt2.example.com"}, "视图照常含全站型"
+    assert worker.request_refresh(["pt2.example.com"]) == [], "点名全站型也不受理"

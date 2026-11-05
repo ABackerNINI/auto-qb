@@ -29,6 +29,9 @@
 - test_build_objects_skips_hr_excluded_anchor: excluded 锚点不进对象集; 未排除锚点照常进(零静默变更)
 - test_hr_excluded_anchor_does_not_break_idle: 站点只剩被排除种子 ⇒ 对象集空 ⇒ 稳态降频照常生效(实施前的回归钉)
 
+### 取数侧强制 fetchable(issue 26-10-05-0922)
+- test_fetchable_filter_skips_none_listing_site: 全站型(listing=none)不进取数集合(refresh_all 零波次); 展示口径(enabled_sites/build_views)照常含它
+
 ### HR 排除种子终态行身份下载短路(计划 26-10-09-1057 / issue 26-10-08-1304)
 
 ### P1 覆盖率提升轮(T1.1 错误路径系统补齐)
@@ -1541,3 +1544,21 @@ def test_page_fetch_failure_escalates_after_streak(tmp_path, caplog):
     data, _ = service.store(SITE).read_unlocked()
     assert data.wave.lanes["A"].fail_streak == 3
     assert "已连续 3 波失效" in caplog.text, "页面层取数失败也必须能升到 ERROR"
+
+
+def test_fetchable_filter_skips_none_listing_site(tmp_path):
+    """取数侧强制(issue 26-10-05-0922): 全站型(listing=none)站点不进取数集合 —— refresh_all
+    不给它出波次; 展示口径不受影响(enabled_sites / build_views 照常含它, 判定侧恒行 4)"""
+    clock = Clock()
+    fetcher = FakeFetcher(pages=standard_pages([row(11, "OTHER 11")]))
+    service = make_service(
+        tmp_path, fetcher, clock=clock, confs={
+            SITE: site_conf(),
+            "fullsite": site_conf(listing="none")
+        }
+    )
+    assert service.fetchable_sites() == (SITE, ), "取数集合只含清单型"
+    assert service.enabled_sites() == (SITE, "fullsite"), "展示口径不变: 全站型仍在启用集合"
+    results = service.refresh_all(force=True)
+    assert [r.site for r in results] == [SITE], "全站型不出波次"
+    assert set(service.build_views()) == {SITE, "fullsite"}, "视图照常含全站型(判定走 listing=none 分支)"

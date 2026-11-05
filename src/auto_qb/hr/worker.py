@@ -222,13 +222,13 @@ class HrWorker:
     def request_refresh(self, sites: Optional[Iterable[str]] = None) -> List[str]:
         """登记一次「立即拉取」并唤醒取数线程(计划 26-09-30-0240)
 
-        sites=None 表示全部启用站点; 指定站点则逐个受理。旗标一次性: 下一轮 run_once
+        sites=None 表示全部可取数站点; 指定站点则逐个受理。旗标一次性: 下一轮 run_once
         消费后即清, 不残留。线程安全(self._cond 保护); 无持久化 —— 重启丢失无副作用(幂等)。
-        返回实际受理的站点清单(只含已启用的站点)。
+        返回实际受理的站点清单(只含可取数站点, fetchable = enabled + 清单型, issue 26-10-05-0922)。
         """
-        enabled = set(self.service.enabled_sites())
+        fetchable = set(self.service.fetchable_sites())
         with self._cond:
-            want = enabled if sites is None else (enabled & {str(s) for s in sites})
+            want = fetchable if sites is None else (fetchable & {str(s) for s in sites})
             if self._force is None:
                 self._force = set()
             self._force |= want
@@ -294,7 +294,9 @@ class HrWorker:
             force_sites = self._force
             self._force = None
         results: List[HrRefreshResult] = []
-        for site in self.service.enabled_sites():
+        # 取数集合走 fetchable(非 enabled): 全站型(listing=none)不取数, issue 26-10-05-0922;
+        # 视图不受影响 —— _build_views 以 build_views()(全部启用站点读盘)打底, 判定侧照常拿得到。
+        for site in self.service.fetchable_sites():
             force = force_sites is not None and site in force_sites
             # 锚点三态交接(计划 26-10-05-0555 §2.5): 采集失败(None)原样直通 = 稳态不生效;
             # 采集成功而该站键缺失 → {} = 确认该站零锚点(可降频, S1 场景主路径)。
@@ -418,7 +420,9 @@ class HrWorker:
         hr_log.emit(
             logger,
             logging.WARNING if visible else logging.INFO,
-            events.channel_silent(silent / 3600, where, self.service.enabled_sites(), evidence=evidence),
+            # 受影响站点 = 通道静默真正打不着取数的站(取数口径); 全站型(listing=none)本就不取数,
+            # 不因通道静默受影响(issue 26-10-05-0922)
+            events.channel_silent(silent / 3600, where, self.service.fetchable_sites(), evidence=evidence),
             event=events.EVENT_SILENCE,
             silent=not visible,
         )

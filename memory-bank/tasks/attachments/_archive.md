@@ -39,12 +39,13 @@
 - [26-10-14-webui-qb-traffic-agg-live-tail](../26-10-14-webui-qb-traffic-agg-live-tail.md) qB 流量图 agg 段活尾合流(S7): 3d+ 视图图尾真空修复
 - [26-10-09-backend-transport-encryption](../26-10-09-backend-transport-encryption.md) 本地通道传输安全调研(WebUI + HR 取数通道)
 
-## Done (292)
+## Done (293)
 
 - [26-09-26-webui-sites-import](../26-09-26-webui-sites-import.md) WEB UI 一键导入缺失站点（对齐 CLI --export-yaml --only-missing）
 - [26-10-07-webui-delta-sync-feasibility](../26-10-07-webui-delta-sync-feasibility.md) webui 增量同步(qB rid 式)可行性分析
 - [26-11-04-test-coverage-uplift-3](../26-11-04-test-coverage-uplift-3.md) 覆盖率提升第三轮实施 — 新欠账清偿与出生即绿 (99% / 319 单位 → ≤100)
 - [26-11-04-webui-flux-glass-popups](../26-11-04-webui-flux-glass-popups.md) flux全浮层玻璃化: 预算4→16+遮罩浓度修复
+- [26-11-05-backend-hr-fetch-gating](../26-11-05-backend-hr-fetch-gating.md) HR 取数侧强制 fetchable: 全站型(listing=none)不取数清偿 issue 26-10-05-0922
 - [26-11-05-backend-rule-skipcheck-dedup](../26-11-05-backend-rule-skipcheck-dedup.md) 规则侧链0遮蔽跳检dedup修复(26-11-05-0019)
 - [26-11-05-test-split-inrange-review](../26-11-05-test-split-inrange-review.md) 拆分承载区间改动归属与逐行评审(认领 26-11-03-0704)
 - [26-11-05-webui-delta-sync](../26-11-05-webui-delta-sync.md) store 增量 removed 同轮 pop 隐患: 真机复测 + 防御修(issue 26-10-11-2045)

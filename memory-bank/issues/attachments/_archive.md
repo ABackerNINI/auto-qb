@@ -24,7 +24,6 @@
 - [feat] [09 变体 peer 悬停封禁钮(需后端端点, P-04 备选)](../26-10-07-0149-feat-webui-peer-ban-action.html) — 09 peers 变体悬停封禁钮: 后端现无 peer 封禁端点(routes 0 命中), 需新增端点 + qB 版本核查, 独立需求
 - [feat] [14 变体解读栏与图悬停联动(P-05 备选)](../26-10-07-0149-feat-webui-traffic-interpret-hover-link.html) — 14 traffic 变体静态解读栏升级为与图悬停联动: hover 事件通知变体重渲染, 权衡高频 setState 开销
 - [feat] [C3: 30 天静默淘汰淘汰前无预告 (方向 A: 日志预告)](../26-10-05-0922-feat-hr-prune-notice.html) — _prune_index 淘汰 active=false 行时整行消失无痕迹无预警, 建议淘汰前 <3 天 WARNING 一次 (计划 26-10-05-0555 §04 方向 A)
-- [refactor] [SiteHrCheckConfig.fetchable 全仓零消费方, listing=none 不取数未被取数侧强制](../26-10-05-0922-refactor-hr-fetchable-dead-config.html) — fetchable 字段零消费方, 全站型不取数仅判定侧尊重; 当前无 preset 定义 listing=none 属潜在缺口
 - [bug] [跳检无闸门拦截候选种子自身当日校验失败, 已证实坏数据可被洗白成已校验](../26-10-05-0402-bug-skip-check-self-fail-gate.html) — 候选种子自身当日校验失败(recheck_fails[hash]>0)后跳检无任何闸门: 决策链 1.6 仅查其它成员, 失败冷却只限 recheck —— 规则侧 without_reference 段与 WEB 路径都能把已证实的坏数据洗白成已校验(zSkipChecked), 且 chain 0 永不回头复查
 - [question] [配置切分(每站点一份)是否做(存疑)](../26-10-01-2212-question-config-split-per-site.html) — (存疑)把站点配置拆为每站点一份文件, 涉及加载/热重载/校验面, 待拍板
 - [question] [基于搜索的辅种方式可行性(存疑)](../26-10-01-2212-question-search-based-recheck-feasibility.html) — (可行性存疑)用站点搜索发现可辅种资源的思路, 待可行性结论
@@ -54,7 +53,7 @@
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 - [refactor] [类型注解完整覆盖仅 43%, 无 mypy/pyright 配置](../26-09-21-1408-refactor-type-annotations-mypy.html) — 749 个 def: 完整 43%/部分 41%/无 16%(AST 实测); 建议渐进接入, 先 torrents/config 后 mixins/web
 
-## Done (420)
+## Done (421)
 
 - [test] [test_qbmanager_tasks 两处缺 assert 的元组表达式(伪断言)](../26-11-05-0344-test-qbmanager-tasks-missing-assert.html) — run_sync_line/run_task_line 的 assert_called_once_with(False), "..." 是表达式语句非 assert 语句, 校验仍生效但失败消息丢失
 - [test] [test_rule_compat_mapping 相邻逐字重复断言, 注释语义无断言承载](../26-11-05-0344-test-rule-compat-mapping-dup-assert.html) — test_normalize_idempotent :111/:113 同一断言出现两次, 第二条死断言; 注释宣称「不新建 actions 列表项」未被检验
@@ -383,6 +382,7 @@
 - [feat] [agg 段窗活尾合流: 未完结小时/日/月桶在 3d+/1y/all 图恒缺](../26-10-05-1015-feat-qb-traffic-agg-live-buckets.html) — agg 段窗(3d/7d/30d/6mo/1y/all)仍纯磁盘取数, 未完结小时/日/月桶随封口才落盘 —— 当前小时不出 3d 图 / 当日不出 1y 图 / 当月不出 all 图, 图右缘恒空洞; S6 已修 raw 段窗, agg 段合流为候选 S7
 - [chore] [覆盖率闸使 test.one 部分运行绿测试仍 FAIL 退出](../26-10-05-0922-chore-pytest-cov-gate-test-one.html) — pytest.ini --cov-fail-under=98 对 test.one 部分文件运行同样生效, 用例全绿仍以覆盖率 FAIL 退出, 排障须手工 --no-cov
 - [docs] [测试文件头部「## 测试计划」清单与实际函数漂移(tests/ 全量: 11 文件 21 条幽灵条目)](../26-10-05-0922-docs-config-schema-docstring-drift.html) — 起点是 test_config_schema.py 头部清单列出已删用例; 扩面扫描 79 份带清单的测试文件后共 11 文件 21 条条目指向全仓不存在的函数, 违反新增测试同步清单硬约束
+- [refactor] [SiteHrCheckConfig.fetchable 全仓零消费方, listing=none 不取数未被取数侧强制](../26-10-05-0922-refactor-hr-fetchable-dead-config.html) — fetchable 字段零消费方, 全站型不取数仅判定侧尊重; 当前无 preset 定义 listing=none 属潜在缺口
 - [feat] [WEBUI 重新校验需确认框: 鼠标路径无兜底(仅键盘路径有)](../26-10-05-0254-feat-webui-recheck-confirm.html) — 右键菜单/批量条的重新校验点下即执行, 无任何确认; 键盘路径 shortcuts.js:814 已有 confirmDialog —— 两路径防护不对称, 鼠标路径需补确认框
 - [feat] [WEBUI 跳检缺前置条件: 已完成种子仍可跳检, 前置清单待分析](../26-10-05-0254-feat-webui-skip-check-preconditions.html) — WEB 右键/批量跳检直连 ops.skip_check, 只过『部分下载禁止+同日去重』两道闸门(ops_mod.py:349), 未过规则侧决策链『仅暂停中未完成』(checking.py:88) —— 已完成(progress=1)种子仍会被删种重加; 完整前置条件清单需专项分析
 - [test] [QbManager 测试组合下 pytest caplog 恒空: setup_logging 清根 handlers 连 caplog handler 一起摘](../26-10-04-2311-test-caplog-qbm-setup-logging.html) — QbManager 测试组合下 pytest caplog 恒空: 模块装配 LoggingModule 调 setup_logging 清根 handlers, caplog 挂在根上的 handler 被一并摘除; test_ops.py 已有 capture_ops_logs 自挂模块 logger 的绕过范式

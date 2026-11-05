@@ -85,6 +85,9 @@ def make_config(
                     tracker="pt.example.com",
                     hr_page_url="https://pt.example.com/myhr.php",
                     required_seeding_time=2 * 86400.0,
+                    # 生产里 enabled 站点的 listing 必由档案派生填充(loaders._resolve_hr_site_bindings);
+                    # 手工构造贴近生产形态 —— 空 listing = 未绑定, 取数侧 fetchable 不收(issue 26-10-05-0922)
+                    listing="list",
                 ),
             )
     }
@@ -102,7 +105,10 @@ def _two_site_config(tmp_path, **kwargs):
         name="pt2.example.com",
         domains=["pt2.example.com"],
         hr_check=SiteHrCheckConfig(
-            enabled=True, tracker="pt2.example.com", hr_page_url="https://pt2.example.com/myhr.php"
+            enabled=True,
+            tracker="pt2.example.com",
+            hr_page_url="https://pt2.example.com/myhr.php",
+            listing="list",  # 同上: 手工构造贴近生产形态(档案派生), 空 = 未绑定不取数
         ),
     )
     return config
