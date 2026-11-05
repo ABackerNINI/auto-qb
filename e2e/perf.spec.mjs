@@ -360,7 +360,7 @@ for (const skin of SKINS) {
 
     test('W5 同屏交叉: 抽屉滚动/折叠不扰动主表窗口 + 不放大主表轮询节拍', async ({ page }) => {
       test.skip(TORRENTS <= 500, `同屏交叉断言仅种子数 >500 有判别力; 当前 E2E_TORRENTS=${TORRENTS}(默认档 300)`);
-      test.setTimeout(90_000);
+      test.setTimeout(90_000); // 5000 种子档多轮轮询量测, 30s 默认太紧(时间预算, 非睡等)
       collectRuntimeErrors(page);
       await page.route('**/api/torrents/*/files', (route) =>
         route.fulfill({ contentType: 'application/json', body: JSON.stringify(makeFilesK()) }));

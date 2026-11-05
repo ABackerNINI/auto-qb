@@ -13,6 +13,7 @@
 | [baseline.md](baseline.md) | 测试基线数字**一条基线一个切片**存放在 `baselines/`, 最新一条 = 单点事实源, `commands run kb.baseline` 列最近 3 条; | 基线, 测试数字, passed, skipped, 覆盖率, 耗时, 改了测试, 记基线, 数字对不上 |
 | [browser-env.md](browser-env.md) | 浏览器断言走哪条轨道、浏览器装在哪、版本怎么对齐、换机器怎么一条命令自检 —— 环境侧的全部事实。 | 浏览器, 冒烟环境, agent-browser, Playwright, e2e, chromium, npm ci, 浏览器版本, 换机器自检 |
 | [file-conventions.md](file-conventions.md) | 十条逐条约定 —— 从 docstring 清单、命名、平台固定, 到"不得产生真实系统副作用"与"不得依赖宿主环境能力"。 | 写测试, 加测试文件, 测试命名, 平台相关测试, monkeypatch, 副作用, 环境能力, 测试计划清单 |
+| [flaky-ledger.md](flaky-ledger.md) | flaky / 恒红测试候选的**登记单点** —— 用例名 / 根因类目 / 状态 / 处置 / 日期; 每轮冒头先对表归因再修, retry 不是修复。 | flaky, 台账, 恒红, 日期炸弹, 端口碰撞, timing flake, 登记候选, 归因, 巡检, skip 清单, retries, 探测器 |
 | [guards.md](guards.md) | 全库**机械守阵**的汇总 —— 一条 = 守阵名 + 钉住的结论 + 怎么红验。新增守阵时登记到这里。 | 守阵, 静态守卫, 防回潮, 红验, 钉住, 加守卫, 守卫清单 |
 | [helpers.md](helpers.md) | 全 Fake 测试基座的四个替身 + 本地假 qB 服务 + 四个最常用的构造函数 —— 写测试前必读。 | 写测试, helpers, FakeClient, FakeTorrent, FakeQbServer, make_manager, make_ctx, seed_store, 替身 |
 | [real-machine.md](real-machine.md) | 第四条测试轨规程 —— 分工与准入、硬约束、环境守卫与假红陷阱、种子层 L0/L1/L2、切片与漂移治理、用例写法。状态与进度不在本文件, 在常驻锚 issue。 | 真机实测, 真机测试, 连真机, 实测排期, 测试 qB, 36595, 36596, 56589, 56590, 测试环境, QBT_REAL_ENV, 双环境, 假种子, 伪 tracker, 切片, 用例成熟度, 漂移判定, test… |

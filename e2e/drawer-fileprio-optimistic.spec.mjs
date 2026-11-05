@@ -153,11 +153,13 @@ async function stubPriority(page, filesState, { receipt, delayMs = 0 }) {
     await route.fulfill({ json: { queued: true, cmd_id: id } });
   });
   await page.route(`**/api/cmd/${CMD_OK}`, async (route) => {
+    // delayMs = 桩注入的回执延迟, 是被测业务延迟本身(乐观写 vs 旧路径的计量对照对象), 非睡等;
+    // 走 Node 侧 setTimeout 不占页面时钟(e2e setTimeout 审计口径: 业务延迟语义, 保留并注释)。
     if (delayMs) await new Promise((r) => setTimeout(r, delayMs));
     await route.fulfill({ json: { status: 'ok' } });
   });
   await page.route(`**/api/cmd/${CMD_FAIL}`, async (route) => {
-    if (delayMs) await new Promise((r) => setTimeout(r, delayMs));
+    if (delayMs) await new Promise((r) => setTimeout(r, delayMs)); // 同上: 桩注入的业务延迟, 非睡等
     await route.fulfill({ json: { status: 'error', error: '桩服务注入的失败(qB 拒绝)' } });
   });
   await page.route(`**/api/cmd/${CMD_TIMEOUT}`, (route) => route.fulfill({ json: { status: 'pending' } }));
@@ -168,7 +170,7 @@ for (const skin of SKINS) {
   test.describe(`W6a 抽屉文件优先级乐观写 ${skin}`, () => {
 
     test(`成功路径: 乐观写先于 POST, 可见延迟对照旧路径显著缩短 @fast (${skin})`, async ({ page }) => {
-      test.setTimeout(90_000);
+      test.setTimeout(90_000); // 千行桩开页 + 双路径量具 + 对照 poll, 30s 默认太紧(时间预算, 非睡等)
       collectRuntimeErrors(page);
       const filesState = makeFilesK();
       await stubPriority(page, filesState, { receipt: 'ok', delayMs: 100 });
@@ -196,7 +198,7 @@ for (const skin of SKINS) {
     });
 
     test(`失败回滚: 乐观值出现 -> 回执 error 回滚到原值且与服务端真值一致 @fast (${skin})`, async ({ page }) => {
-      test.setTimeout(60_000);
+      test.setTimeout(60_000); // 千行桩开页 + 300ms 回执延迟 + 回滚量具, 30s 默认太紧(时间预算, 非睡等)
       collectRuntimeErrors(page);
       const filesState = makeFilesK();
       await stubPriority(page, filesState, { receipt: 'fail', delayMs: 300 });
@@ -211,7 +213,7 @@ for (const skin of SKINS) {
     });
 
     test(`超时回滚: 10s 无回执 -> 回滚到原值(不把假值留在界面上) (${skin})`, async ({ page }) => {
-      test.setTimeout(60_000);
+      test.setTimeout(60_000); // 千行桩开页 + 10s 无回执超时窗 + 回滚量具, 30s 默认太紧(时间预算, 非睡等)
       collectRuntimeErrors(page);
       const filesState = makeFilesK();
       await stubPriority(page, filesState, { receipt: 'timeout' });

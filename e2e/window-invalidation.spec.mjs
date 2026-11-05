@@ -62,7 +62,7 @@ for (const skin of SKINS3) {
 
     test('切页往返不重置行窗(签名不含 viewMode)', async ({ page }) => {
       test.skip(TORRENTS <= 500, `切页行窗断言仅种子数 >500 有判别力; 当前 E2E_TORRENTS=${TORRENTS}(默认档 300)`);
-      test.setTimeout(120_000);
+      test.setTimeout(120_000); // 5000 种子档整页加载 + settle poll + 观察窗, 30s 默认太紧(时间预算, 非睡等)
       collectRuntimeErrors(page);
       await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
       await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 20_000 });
@@ -101,7 +101,7 @@ for (const skin of SKINS3) {
 
     test('关抽屉不假 bump 宽度代(general 与 content 两轮)', async ({ page }) => {
       test.skip(TORRENTS <= 500, `关抽屉行窗断言仅种子数 >500 有判别力; 当前 E2E_TORRENTS=${TORRENTS}(默认档 300)`);
-      test.setTimeout(120_000);
+      test.setTimeout(120_000); // 5000 种子档整页加载 + 两抽屉轮量测, 30s 默认太紧(时间预算, 非睡等)
       collectRuntimeErrors(page);
       await page.route('**/api/torrents/*/files', (route) => route.fulfill({
         contentType: 'application/json',

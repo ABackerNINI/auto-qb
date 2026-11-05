@@ -30,6 +30,9 @@ export default defineConfig({
 
   /* 源码里留了 test.only 就别让 CI 静默少跑 */
   forbidOnly: !!process.env.CI,
+  /* retry 探测口径(计划 26-11-05-0118 §06 D9): CI retries=1 保留为**探测器**, 不是修复 ——
+   * Playwright 报 flaky(retry 后绿)的用例当场记进台账(memory-bank/testing/flaky-ledger.md)并当场修;
+   * pytest 主套件 reruns 恒 0(不养隔离区)。本地恒 0, 失败立即红。 */
   retries: process.env.CI ? 1 : 0,
 
   reporter: [['list'], ['html', { open: 'never' }]],

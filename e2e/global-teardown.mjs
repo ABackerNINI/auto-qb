@@ -37,6 +37,7 @@ async function listeningPids(port) {
   return [...new Set([...stdout.matchAll(listeningRe(port))].map((m) => m[1]))];
 }
 
+/** 端口释放轮询的步进节拍(见下方 deadline 条件循环, 每步探测后即退出), 非固定睡等。 */
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export default async function globalTeardown() {

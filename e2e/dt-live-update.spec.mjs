@@ -426,7 +426,7 @@ for (const skin of SKINS) {
     });
 
     test(`#11 千文件数据回路: 补拉一文件变值预算内 + 未变行身份/徽章不抖 @fast (${skin})`, async ({ page }) => {
-      test.setTimeout(60_000);
+      test.setTimeout(60_000); // 千行桩首渲 + 补拉回路, 30s 默认太紧(时间预算, 非睡等)
       collectRuntimeErrors(page);
       await page.setViewportSize(WIDE);
       let posted = false;
@@ -497,7 +497,7 @@ for (const skin of SKINS) {
      *   ③ 键盘 ↓ 跨窗: 焦点移出已渲染块端沿时先滚动后回焦(dtWinKbd 前缀和换算), 焦点行在
      *      DOM 且可见 —— 回焦目标必须在重渲后的窗内(kbd-cursor-collapse-dangling 家族)。 */
     test(`#12 千文件窗口化: 常驻 DOM 行数 << 数据行数 + 滚到底不塌陷 + 键盘跨窗回焦 @fast (${skin})`, async ({ page }) => {
-      test.setTimeout(60_000);
+      test.setTimeout(60_000); // 千行桩首渲 + 滚动/键盘遍历, 30s 默认太紧(时间预算, 非睡等)
       collectRuntimeErrors(page);
       await page.setViewportSize(WIDE);
       await page.route('**/api/torrents/*/files', (route) =>

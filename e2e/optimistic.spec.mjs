@@ -297,6 +297,7 @@ for (const skin of SKINS) {
         const DELAY = 800;
         const BUDGET = 400; // 远小于注入的 800ms、又远高于本地正常的 ~10ms(阈值逐字保留)
         await page.route(CMD_URL, async (route) => {
+          // DELAY = 桩注入的慢投递延迟, 是被测业务延迟本身(补丁先于 POST 的对照条件), 非睡等
           await new Promise((r) => setTimeout(r, DELAY));
           await route.continue();
         });

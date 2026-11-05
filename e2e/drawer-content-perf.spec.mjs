@@ -96,7 +96,7 @@ for (const skin of SKINS) {
       }
 
       test(`K1 千文件首渲窗口化: 常驻 DOM 行数 << 数据行数 + rowsFn 直测耗时 @fast (${skin} dt${v.id})`, async ({ page }) => {
-        test.setTimeout(60_000);
+        test.setTimeout(60_000); // 千行桩首渲 + rowsFn 20 次采样, 30s 默认太紧(时间预算, 非睡等)
         collectRuntimeErrors(page);
         const { anchor } = await openK(page);
 
@@ -127,7 +127,7 @@ for (const skin of SKINS) {
       });
 
       test(`K2 千文件折叠/展开窗口重测: 折叠长任务预算 + 占位塌缩 + 滚动丢帧粗界 @fast (${skin} dt${v.id})`, async ({ page }) => {
-        test.setTimeout(60_000);
+        test.setTimeout(60_000); // 千行折叠长任务 + 滚动量测, 30s 默认太紧(时间预算, 非睡等)
         collectRuntimeErrors(page);
         const { drawer, anchor } = await openK(page);
         const padH0 = await padHeight(page, v.table);
