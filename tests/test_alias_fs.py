@@ -88,7 +88,7 @@ from auto_qb.infra.alias_fs import (
     probe_symlink,
 )
 
-_WIN_ONLY = pytest.mark.skipif(not utils.is_windows(), reason="junction 仅 Windows")
+_WIN_ONLY = pytest.mark.skipif(not utils.is_windows(), reason="junction 仅 Windows")  # owner: abacker
 
 
 def _probe_symlink_capability() -> bool:
@@ -120,7 +120,7 @@ _SYMLINK_REQUIRED = pytest.mark.skipif(
     not _probe_symlink_capability(),
     reason="本进程建不出符号链接(如 Windows 非特权缺 SeCreateSymbolicLinkPrivilege, os.symlink 报 WinError 1314): "
     "真实建链覆盖需以管理员身份运行或开开发者模式; 注入替身覆盖不受影响",
-)
+)  # owner: abacker
 
 
 def _win_error(code: int, message: str = "denied") -> OSError:

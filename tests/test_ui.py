@@ -223,7 +223,7 @@ def test_notify_handler_enabled_toggle():
         handler.close()
 
 
-@pytest.mark.skipif(not sys.platform.startswith("win32"), reason="Windows 注册表专属(真注册表, 专属键名, 测试后清理)")
+@pytest.mark.skipif(not sys.platform.startswith("win32"), reason="Windows 注册表专属(真注册表, 专属键名, 测试后清理)")  # owner: abacker
 def test_autostart_windows_registry():
     """Windows: HKCU Run 键注册/查询/注销"""
     autostart.enable("config.yml")

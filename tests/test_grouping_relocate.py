@@ -113,7 +113,7 @@ def test_cross_group_conflict_still_blocks(tmp_path):
     assert any(c[0] in ("stop", "pause") for c in client.calls), client.calls
 
 
-@pytest.mark.skipif(not utils.is_windows(), reason="junction 仅 Windows")
+@pytest.mark.skipif(not utils.is_windows(), reason="junction 仅 Windows")  # owner: abacker
 def test_third_party_junction_joins_group(tmp_path, monkeypatch):
     """⑤ 第三方目录 junction: 按 realpath 解析后的物理目录并组"""
     mgr, client, src, dst, content, _ = relocate_env(tmp_path, assign=False)

@@ -43,6 +43,7 @@ from auto_qb.core.taskqueue import FINISHED, PENDING, REQUEUE, Task, TaskQueue
 import pytest
 
 from clock import FakeClock
+from platform_tolerance import SLEEP_LOWER_MARGIN_S
 
 from qbittorrentapi import APIConnectionError, Client
 
@@ -149,13 +150,14 @@ def test_throttle_sleeps_without_stop_event():
 
     阻塞语义用真实经过时间验证(S3 monkeypatch 收敛: 不再经 stdlib time 名 patch 观测
     sleep 调用), 与 test_run_loop_throttles_without_stop_event 同口径下界余量。档位 50ms:
-    Windows 等待按 15.6ms 定时器刻度取整可提前约 3 刻度(46.8ms), 下界留 20ms 余量不损失
-    判别力 —— 阻塞被退化成空转(微秒级)当场红。
+    Windows 等待按 15.6ms 定时器刻度取整可提前(实测 46.8ms), 下界余量用平台刻度容差单点
+    SLEEP_LOWER_MARGIN_S(>=2 tick, tests/platform_tolerance.py) —— 阻塞被退化成空转
+    (微秒级)当场红, 余量依据与判别法见 pitfalls/testing/timing-tolerance.md。
     """
     tick = 0.05
     start = time.monotonic()
     assert _throttle(None, tick) is False
-    assert time.monotonic() - start >= tick - 0.02
+    assert time.monotonic() - start >= tick - SLEEP_LOWER_MARGIN_S
 
 
 def test_throttle_waits_stop_event():
@@ -188,9 +190,10 @@ def test_run_loop_throttles_without_stop_event():
         mgr.run(dry_run=False)
         elapsed = time.monotonic() - start
         assert mgr._tick.call_count == 2
-        # 下界 -20ms 余量: Windows 等待粒度按 15.6ms 定时器刻度取整, 50ms 等待可提前到
-        # 46.8ms(3 刻度, 2026-09-22 实测假红) —— 空转是微秒级, 余量不损失判别力
-        assert elapsed >= main_tick - 0.02, f"每轮循环后应阻塞到下一条时间线, 实际 {elapsed:.3f}s —— 主循环在空转"
+        # 下界余量 = 平台刻度容差单点 SLEEP_LOWER_MARGIN_S(>=2 tick, tests/platform_tolerance.py):
+        # Windows 等待粒度按 15.6ms 定时器刻度取整, 50ms 等待可提前到 46.8ms(2026-09-22 实测假红)
+        # —— 空转是微秒级, 余量不损失判别力
+        assert elapsed >= main_tick - SLEEP_LOWER_MARGIN_S, f"每轮循环后应阻塞到下一条时间线, 实际 {elapsed:.3f}s —— 主循环在空转"
 
 
 def test_run_connect_failure():

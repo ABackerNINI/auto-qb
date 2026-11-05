@@ -33,7 +33,7 @@ except ImportError:  # pragma: no cover
     TorrentState = None
     ALL_STATES = []
 
-pytestmark = pytest.mark.skipif(TorrentState is None, reason="qbittorrentapi 未安装")
+pytestmark = pytest.mark.skipif(TorrentState is None, reason="qbittorrentapi 未安装")  # owner: abacker
 
 
 def _dl_expected(state):

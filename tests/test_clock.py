@@ -27,6 +27,7 @@ from auto_qb.infra.clock import SYSTEM_CLOCK, Clock
 
 import clock as clock_mod  # noqa: F401  (单点可导入性: 与 helpers 同层的裸名导入口径)
 from clock import DEFAULT_CLOCK_START, FakeClock, wait_until
+from platform_tolerance import SLEEP_LOWER_MARGIN_S
 
 
 def test_fake_clock_satisfies_clock_protocol():
@@ -102,7 +103,7 @@ def test_wait_until_times_out_without_oversleep():
     t0 = time.perf_counter()
     assert wait_until(lambda: False, timeout=0.1, interval=0.02) is False
     elapsed = time.perf_counter() - t0
-    assert elapsed >= 0.1 - 0.02, "至少等满预算(留定时器刻度余量)"
+    assert elapsed >= 0.1 - SLEEP_LOWER_MARGIN_S, "至少等满预算(下界余量 = 平台刻度容差单点, >=2 tick)"
     assert elapsed <= 0.1 + 0.02 + 0.3, "超时后一拍内收线(旧实现语义: 最多多睡一个 interval)"
 
 

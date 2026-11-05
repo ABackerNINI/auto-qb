@@ -79,6 +79,7 @@ from auto_qb.infra.logging import DOMAIN_ATTR
 from helpers import capture_logs
 
 from clock import wait_until
+from platform_tolerance import SLEEP_LOWER_MARGIN_S
 
 from hr_helpers import EMPTY_TABLE_PAGE, REVISED_PAGE, FakeFetcher, global_conf, make_service, myhr_page, row, \
     site_conf, torrent_blob
@@ -722,7 +723,7 @@ def test_loop_waits_for_poll_interval(tmp_path):
         window_start = time.monotonic()
         settle.wait(0.4)
         elapsed = time.monotonic() - window_start
-        assert elapsed >= 0.4 - 0.02, f"观察窗要真睡满(15.6ms 刻度余量): 实测 {elapsed:.3f}s"
+        assert elapsed >= 0.4 - SLEEP_LOWER_MARGIN_S, f"观察窗要真睡满(下界余量 = 平台刻度容差单点, >=2 tick): 实测 {elapsed:.3f}s"
         assert worker.rounds == 1, "poll_interval=60s, 观察窗内不该再跑"
     finally:
         worker.stop(timeout=5.0)

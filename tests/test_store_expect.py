@@ -12,6 +12,7 @@
 import time
 
 from auto_qb.torrents.store import _EXPECT_MAX_RETRIES, _EXPECT_RETRY_INTERVAL, TorrentStore
+from platform_tolerance import SLEEP_LOWER_MARGIN_S
 
 
 def _land(store: TorrentStore, *hashes: str) -> None:
@@ -42,7 +43,7 @@ def test_expect_due_is_shortly_in_the_future():
     store.expect_hashes(["H1"])
     due = store.expect_due_at()
     assert due > before, "到期时刻必须是未来 —— 过去值会让主循环算出 0 超时空转"
-    assert before + _EXPECT_RETRY_INTERVAL - 0.02 <= due <= before + _EXPECT_RETRY_INTERVAL + 0.2
+    assert before + _EXPECT_RETRY_INTERVAL - SLEEP_LOWER_MARGIN_S <= due <= before + _EXPECT_RETRY_INTERVAL + 0.2
 
 
 def test_settle_clears_when_all_landed():

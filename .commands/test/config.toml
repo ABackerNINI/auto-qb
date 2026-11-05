@@ -65,3 +65,13 @@ timeout = 600
 when    = "改了 tools/global-traffic-monitor 或主仓 webui/tool_client.py(跨进程契约两端)—— 一条命令出 TOTAL 与门槛判定"
 note    = "门槛(88)写在工具 pyproject.toml 的 addopts 里, 本命令不重复传参; 跑单个测试档用 `uv run --directory tools/global-traffic-monitor pytest tests/test_x.py --no-cov`。CI 的 test-gtm job 跑同一份 addopts, 双 OS 各一次。silent_success: 成功只出结论行"
 silent_success = true
+
+# 随机序周巡检(flaky 治理计划 26-11-05-0118 S6/D10/D13): pytest-randomly 是 dev 依赖,
+# 但主套件默认**整体禁用**(pytest.ini addopts 的 -p no:randomly, 顺序必须不动);
+# 本 task 是唯一显式随机序入口, 用脚本而非一行 run: `-o addopts=` 替换值含空格,
+# 引擎在 Windows 走 cmd.exe 引号地狱必踩(cmdline 组装单点在脚本 build_cmd, 有单测)。
+[tasks."test.random-order"]
+script  = "random_order.py"
+timeout = 1800
+when    = "pytest-randomly 随机序周巡检(顺序依赖采样): 红先固定 seed 复现归因再走 flaky 台账; 主套件默认顺序不受本任务影响"
+note    = "缺省 1 轮随机 seed; `-- --samples 3` 多轮统计采样, `-- --seed 42` 固定 seed 复现红灯, `--` 后其余参数透传 pytest。每轮头部打印 `--randomly-seed=<N>`(可复现); 任一轮红退出非零并打印复现命令 —— **不用 rerun 插件**(D9: reruns 不是修复), 红灯归因走 memory-bank/testing/flaky-ledger.md「巡检约定」节。实现: pytest.ini addopts 被 -o addopts=-n 8 整体替换(去掉 -p no:randomly 与覆盖率旗标, 插件才加载); 脚本纯函数有单测(test_random_order.py, 随 test.pkg 跑)"

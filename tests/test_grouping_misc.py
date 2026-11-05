@@ -216,7 +216,7 @@ def test_cross_group_partial_overlap_warns():
         assert client.calls.count(("stop", None)) == 1, f"S3 处置应暂停涉事下载方: {client.calls}"
 
 
-@pytest.mark.skipif(os.name == "nt", reason="normcase 在 Windows 折叠大小写, 该不误报断言仅在 POSIX 成立")
+@pytest.mark.skipif(os.name == "nt", reason="normcase 在 Windows 折叠大小写, 该不误报断言仅在 POSIX 成立")  # owner: abacker
 def test_cross_group_case_only_posix_no_false_positive():
     """场景②POSIX 不误报: 两组文件名仅大小写不同(normcase 恒等 = 两个物理文件) -> 无警告"""
     with tempfile.TemporaryDirectory() as td:
@@ -227,7 +227,7 @@ def test_cross_group_case_only_posix_no_false_positive():
         assert not any("跨组文件交叉" in m for m in cap.messages), f"POSIX 大小写敏感不应误报: {cap.messages}"
 
 
-@pytest.mark.skipif(os.name != "nt", reason="大小写折叠仅在 Windows 生效")
+@pytest.mark.skipif(os.name != "nt", reason="大小写折叠仅在 Windows 生效")  # owner: abacker
 def test_cross_group_case_only_windows_detected():
     """场景②Windows 真检出: 同样大小写数据, normcase 折叠为同一物理文件 -> 警告(与 POSIX 用例分开断言, 不按平台分支期望)"""
     with tempfile.TemporaryDirectory() as td:
@@ -239,7 +239,7 @@ def test_cross_group_case_only_windows_detected():
         assert client.calls.count(("stop", None)) == 1, f"S3 处置应暂停涉事下载方: {client.calls}"
 
 
-@pytest.mark.skipif(os.name != "nt", reason="junction 仅 Windows(目录 symlink 需开发者模式, 不测)")
+@pytest.mark.skipif(os.name != "nt", reason="junction 仅 Windows(目录 symlink 需开发者模式, 不测)")  # owner: abacker
 def test_cross_group_junction_alias_detected():
     """场景③junction 别名: 两组 save_path 分别指向真身与 junction, realpath_lexical 归同 -> 警告"""
     import _winapi  # CPython 标准库内部 API(测试套同款), 无需管理员权限; 平台用例体内导入, POSIX 收集不触

@@ -22,6 +22,11 @@
 
 ## 巡检约定(S6 周巡检 job 引用)
 
+**巡检入口单点**: `commands run test.random-order`(pytest-randomly 随机序采样; 主套件默认顺序
+不受影响 —— 插件在 pytest.ini addopts 以 `-p no:randomly` 整体禁用, 只在该入口经 `-o addopts=`
+替换加载)。每轮头部打印 `--randomly-seed=<N>` 可复现; 红灯固定 seed 复现归因后登记本台账,
+reruns 不是修复(`-- --samples N` 多轮统计采样)。
+
 周巡检(pytest-randomly 随机序采样)除随机序本身外, **顺带过两遍清单**, 偏离即红/登记:
 
 1. **skip 清单**: 全库 `skip` 必须**带 reason + issue**(入池链接); 裸 skip(无 reason 或无 issue)按

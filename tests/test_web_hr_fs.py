@@ -264,7 +264,7 @@ def test_api_fs_dirs_endpoint(web_env, tmp_path):
     assert mgr.web.commands.empty()
 
 
-@pytest.mark.skipif(not sys.platform.startswith("linux"), reason="只有大小写敏感的 FS(ext4)上两个名字才是两个目录; NTFS 上是同一个, 断言无意义")
+@pytest.mark.skipif(not sys.platform.startswith("linux"), reason="只有大小写敏感的 FS(ext4)上两个名字才是两个目录; NTFS 上是同一个, 断言无意义")  # owner: abacker
 def test_api_fs_dirs_case_sibling_is_outside_whitelist(web_env, tmp_path):
     """**大小写兄弟目录必须判为越界** —— `web._fs_real` 不得做 NTFS 式大小写折叠
 

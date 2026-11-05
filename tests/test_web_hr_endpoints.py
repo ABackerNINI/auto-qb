@@ -55,6 +55,8 @@ from unittest import mock
 
 import pytest
 
+from platform_tolerance import SLEEP_LOWER_MARGIN_S
+
 from auto_qb.infra import file_access
 
 from auto_qb.infra.utils import encode_group_key
@@ -443,7 +445,7 @@ def test_api_events_sse_stream_lifecycle(web_env, monkeypatch):
         # keepalive: 队列空 -> Empty 分支 -> 心跳注释帧(必须 < WEB_VIEW_TTL, 自锁防线)
         t0 = _time.monotonic()
         assert await frames.__anext__() == ": keepalive\n\n"
-        assert _time.monotonic() - t0 >= 0.05 - 0.02
+        assert _time.monotonic() - t0 >= 0.05 - SLEEP_LOWER_MARGIN_S
         assert len(touches) == 2
         # 心跳后循环继续(continue): 再广播一条, 事件帧照常送达
         assert mgr.web.notify("view_changed", {"ver": 2}) == 1

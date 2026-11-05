@@ -12,7 +12,8 @@
   (其它进程 timeBeginPeriod / Win11 timer coalescing 改变取整方向: 3 刻度=46.8ms 红, 4 刻度=62.4ms 绿)。
   同日 regime 微基准可直接量化: `Event.wait(0.05)` 3000 次 min=59.1ms(过冲 regime, 0 假红)。
 - **处置**: 下界留余量, 余量按"被守回归的量级"定, 不按"抖动实测"定 —— throttle 守阵取
-  `elapsed >= main_tick - 0.02`(空转是微秒级, 20ms 余量不损失判别力; 而 0.9 倍下界=45ms 距 46.8ms 假红值仅
+  `elapsed >= main_tick - SLEEP_LOWER_MARGIN_S`(余量单点 tests/platform_tolerance.py, 2026-11-06
+  S6 收敛: 由各点手写 0.02 抬升为 >=2 tick=31.2ms; 空转是微秒级, 余量不损失判别力; 而 0.9 倍下界=45ms 距 46.8ms 假红值仅
   1.8ms 仍会抖)。**不要**为对称加挂钟上界: 负载合法拉长等待, 上界会制造新的假红模式。相关: 同根双 issue
   [26-09-20-0952](../../issues/26-09-20-0952-test-mainloop-tick-timing-flaky.html) /
   [26-09-22-2052](../../issues/26-09-22-2052-test-throttle-test-sleep-tolerance.html)(2026-09-28 修复关闭)。

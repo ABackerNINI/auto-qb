@@ -100,6 +100,18 @@
 
 > 本守阵由变异审计 core/ W1(R25 S5)补入, 对应 issue `26-10-31-0449-bug-taskqueue-dry-run-chain`。
 
+## flaky 治理批次守阵 (26-11-06, S6 收口)
+
+| 守阵 | 钉住的结论 | 红验 |
+|---|---|---|
+| `test_platform_tolerance_guards.py::test_repo_skipif_all_have_reason_and_owner` | tests/ 全部 `pytest.mark.skipif` 必须带 `reason=`(平台/环境语义依据)与 `# owner: <名>`(装饰器行范围内) —— 规范单点 `tests/platform_tolerance.py` | 删任一 owner 注释 ⇒ 红(2026-11-06 实测: `test_grouping_relocate.py:116` 注入后红在「缺负责人」); 合成源红验内建(缺 reason/缺 owner/双全三形态) |
+| `test_platform_tolerance_guards.py::test_platform_tolerance_constants_sane` | 容差常量自洽: 下界余量 >= 2 tick(31.2ms)且 >= 历史最小充分余量 20ms, 刻度常量 15.6ms 不被无意改小 | 改 `WIN_TIMER_TICK_S`/`SLEEP_LOWER_MARGIN_S` 破坏不等式 ⇒ 红 |
+
+> 规范正文: [file-conventions.md](file-conventions.md)「跨平台断言规范」节; 计时余量的判别与实证
+> 见 [../pitfalls/testing/timing-tolerance.md](../pitfalls/testing/timing-tolerance.md)。
+> 随机序周巡检(pytest-randomly)不是守阵而是巡检入口: `commands run test.random-order`,
+> 约定见 [flaky-ledger.md](flaky-ledger.md)「巡检约定」节。
+
 ## 通用纪律
 
 - **红验优先用运行时 monkeypatch 还原旧实现**(不碰工作区), `lru_cache` 记得先 `cache_clear()`。

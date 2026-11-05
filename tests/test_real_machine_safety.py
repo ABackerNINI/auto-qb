@@ -34,7 +34,7 @@ def _load_small_target():
     return mod
 
 
-@pytest.mark.skipif(sys.platform != "win32", reason="Windows 盘符/卷标/属性语义")
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows 盘符/卷标/属性语义")  # owner: abacker
 def test_tests_real_source_has_no_hidden_volume_access():
     forbidden = (
         "FindFirstVolumeW",
@@ -54,7 +54,7 @@ def test_tests_real_source_has_no_hidden_volume_access():
     assert not hits, "真机轨源码出现隐藏卷枚举/挂接路径(已废弃并禁止):\n" + "\n".join(hits)
 
 
-@pytest.mark.skipif(sys.platform != "win32", reason="Windows 盘符/卷标/属性语义")
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows 盘符/卷标/属性语义")  # owner: abacker
 def test_small_target_guard_rejects_unsafe_paths(tmp_path, monkeypatch):
     mod = _load_small_target()
     with pytest.raises(AssertionError, match="UNC"):

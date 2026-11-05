@@ -55,6 +55,26 @@
   `monkeypatch.setattr(sys, "platform", "win32")` 模拟 Windows。
   修法与判别法见 [../pitfalls/testing/patching.md](../pitfalls/testing/patching.md); 本机复现 Linux 的办法同见该文。
 
+### 跨平台断言规范(平台容差单点, flaky 治理计划 26-11-05-0118 S6/D6)
+
+- **触发**: 写计时断言 / 平台分支测试 / 平台相关 skipif。
+- **常量单点**: 平台相关容差一律 import `tests/platform_tolerance.py`, 禁手写刻度魔数 ——
+  `WIN_TIMER_TICK_S`(Windows 等待原语按 15.6ms 定时器刻度取整)与
+  `SLEEP_LOWER_MARGIN_S`(挂钟**下界**断言余量, >= 2 tick = 31.2ms)。
+  用法: `assert elapsed >= nominal - SLEEP_LOWER_MARGIN_S`。
+- **下界留余量、上界不加对称余量**: 下界假红来自刻度取整(50ms 等待实测提前到 46.8ms);
+  上界假红来自负载/CI 抢占, 加余量治不了 —— 性能上界优先 `time.process_time`
+  (CPU 时间), 挂钟上界放宽到不可撞线。判别与实证:
+  [../pitfalls/testing/timing-tolerance.md](../pitfalls/testing/timing-tolerance.md)。
+- **平台相关 skipif 强制带理由 + 负责人**: reason 写明"该断言依赖的语义在另一侧为何不成立",
+  装饰器行范围内加 `# owner: <名>`; skip 的处置(issue 入池)按
+  [flaky-ledger.md](flaky-ledger.md)「巡检约定」节。守阵:
+  `tests/test_platform_tolerance_guards.py::test_repo_skipif_all_have_reason_and_owner`
+  (缺任一即红, 合成源红验内建)。
+- **禁写死仅一侧成立的形状**: 前缀切片长度 / 路径分隔符 / 大小写折叠语义 / 仅一侧存在的
+  模块常量 —— 按平台分支分别断言, 不写"两侧共用的单一期望值"
+  (实证: [../pitfalls/testing/ci-only-guard.md](../pitfalls/testing/ci-only-guard.md))。
+
 ### `test_web_*.py` 不只测 FastAPI 路由
 
 - **触发**: 找 WEB 功能的测试 / 加 WEB 功能。

@@ -84,6 +84,8 @@ from datetime import datetime
 
 import pytest
 
+from platform_tolerance import SLEEP_LOWER_MARGIN_S
+
 import auto_qb.core.traffic_store as traffic_store_module
 
 from auto_qb.config import QbTraffic
@@ -616,8 +618,8 @@ def test_v4_write_text_payload_permission_backoff_real_sleep(tmp_path, monkeypat
     start = time.monotonic()
     assert traffic_store_module._write_text_payload(str(target), "new\n") is False
     elapsed = time.monotonic() - start
-    # 首试失败后真退避 3 次: 总耗时 >= 3 x REWRITE_BACKOFF_S(下界含刻度余量; 空转退避当场红)
-    assert elapsed >= REWRITE_RETRIES * REWRITE_BACKOFF_S - 0.02, elapsed
+    # 首试失败后真退避 3 次: 总耗时 >= 3 x REWRITE_BACKOFF_S(下界余量 = 平台刻度容差单点; 空转退避当场红)
+    assert elapsed >= REWRITE_RETRIES * REWRITE_BACKOFF_S - SLEEP_LOWER_MARGIN_S, elapsed
     assert target.read_text(encoding="utf-8") == "old\n"
 
 
