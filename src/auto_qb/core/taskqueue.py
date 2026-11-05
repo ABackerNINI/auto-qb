@@ -65,7 +65,7 @@ class Task:
         next_run: float = 0.0,
         interval: float = 0.0,
         payload: Any = None,
-        handler: Handler = None,
+        handler: Handler | None = None,
         clock: Optional[Clock] = None,
     ):
         if clock is None:
@@ -151,7 +151,7 @@ class TaskQueue:
         """interval<=0 归一化为 1s(每 tick 级别): 每个任务都有内置 interval"""
         return max(1.0, float(interval))
 
-    def add_task(self, task: Task, now: float = None, keep_progress: bool = False) -> bool:
+    def add_task(self, task: Task, now: float | None = None, keep_progress: bool = False) -> bool:
         """入队; 新任务立即到期(next_run=now, 下一次 run_due 执行)。返回是否入队成功。
 
         kind=="check" 自动登记在途(_active_checks): 同一种子已有在途校验时丢弃并返回
@@ -175,7 +175,7 @@ class TaskQueue:
         heapq.heappush(self._fast, task)
         return True
 
-    def add_tasks(self, tasks: List[Task], now: float = None):
+    def add_tasks(self, tasks: List[Task], now: float | None = None):
         for t in tasks:
             self.add_task(t, now)
 
@@ -229,7 +229,7 @@ class TaskQueue:
 
     # ---------- 到期执行 + 收尾 ----------
 
-    def run_due(self, dry_run: bool = False, now: float = None, max_tasks: int = 0, defer_gate=None) -> int:
+    def run_due(self, dry_run: bool = False, now: float | None = None, max_tasks: int = 0, defer_gate=None) -> int:
         """执行所有到期任务并收尾(主循环 tick 的队列唯一入口)。返回**实际执行**的任务数。
 
         先快照到期任务再逐个执行: 执行中途新入队的任务(如轮询子任务重新入队的

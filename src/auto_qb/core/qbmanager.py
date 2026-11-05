@@ -137,7 +137,7 @@ class QbManager(
     def __init__(
         self,
         config_path: str,
-        config: Config = None,
+        config: Config | None = None,
         no_lock: bool = False,
         clock: Optional[Clock] = None,
     ):

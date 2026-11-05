@@ -133,7 +133,7 @@ def build_probe_torrent(content: bytes, name: str) -> bytes:
 # ---------- 探测主函数 ----------
 
 
-def _failed(evidence: dict, reason: str, env: bool, extra: dict = None) -> ProbeResult:
+def _failed(evidence: dict, reason: str, env: bool, extra: dict | None = None) -> ProbeResult:
     """失败结论统一出口: 附加重写 evidence 后返回(保持各失败路径形状一致)"""
     if extra:
         evidence.update(extra)

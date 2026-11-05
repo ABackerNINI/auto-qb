@@ -1096,7 +1096,7 @@ def _validate_notify(spec, errors: List[str]) -> None:
                     errors.append(f"config.notify.channels[{i}]: 未知渠道 '{name}', 可用: {sorted(NOTIFY_CHANNELS)}")
 
 
-def _validate_qb_traffic(spec, errors: List[str], main_tick: float = None) -> None:
+def _validate_qb_traffic(spec, errors: List[str], main_tick: float | None = None) -> None:
     """校验 config.qb_traffic 段(qB 口径流量采样, plan 26-10-03-0946 方案C §06); 未配置(None)合法 = 不启用
 
     边界依据(§06 表; v3 计划 26-10-04-1957 §06.1 修订): sample_interval 下限 = main_tick(硬校验,

@@ -172,7 +172,12 @@ def _fmt_s(v: float) -> str:
 
 
 def _try_time(
-    value, where: str, errors: List[str], positive: bool = False, min_s: float = None, max_s: float = None
+    value,
+    where: str,
+    errors: List[str],
+    positive: bool = False,
+    min_s: float | None = None,
+    max_s: float | None = None
 ) -> None:
     """时间格式校验; positive=True 时要求 > 0(如 main_tick, 防止 0 忙循环);
     min_s/max_s 为含端点的秒数区间(与 positive 独立, 拦 0/过小高频与过大失效值)"""

@@ -91,7 +91,7 @@ class PlatformChannel:
 
     TIMEOUT_S = 10.0
 
-    def __init__(self, platform: str = None):
+    def __init__(self, platform: str | None = None):
         # platform 运行时求值(默认参数在导入时绑定 sys.platform, 会固化到模块导入场景)
         self.platform = platform if platform is not None else sys.platform
         if self.platform.startswith("win32"):
@@ -213,7 +213,7 @@ class NotifyHandler(logging.Handler):
 
     DEDUP_PREFIX_LEN = 80
 
-    def __init__(self, config: NotifyConfig, channel: PlatformChannel, now: Callable[[], datetime] = None):
+    def __init__(self, config: NotifyConfig, channel: PlatformChannel, now: Callable[[], datetime] | None = None):
         super().__init__(level=getattr(logging, config.min_level, logging.ERROR))
         self.channel = channel
         self.enabled = True  # 运行时热开关(UI Switch/托盘勾选共用; bool 赋值原子, 无需锁)

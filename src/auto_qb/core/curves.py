@@ -73,7 +73,7 @@ def parse_history_dat(text: str, scale: int = KB) -> Tuple[List[HistoryRow], int
     return [(d, up, down) for d, (up, down) in sorted(rows_by_date.items())], bad
 
 
-def aggregate(rows: List[HistoryRow], period: str, today: date = None) -> Tuple[int, int]:
+def aggregate(rows: List[HistoryRow], period: str, today: date | None = None) -> Tuple[int, int]:
     """按 period 聚合历史行 -> (上传字节, 下载字节)
 
     today 可注入(测试); 窗口内缺失日期视为 0(不贡献流量)。

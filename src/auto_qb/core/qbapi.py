@@ -379,7 +379,7 @@ class QbApi:
             "download_limit": curves.bytes_to_kib_floor(int(self._client.transfer_download_limit())),
         }
 
-    def set_global_speed_limits(self, upload_kib: int = None, download_kib: int = None):
+    def set_global_speed_limits(self, upload_kib: int | None = None, download_kib: int | None = None):
         """设置 qB 全局上传/下载速度限制(KiB/s); 0 = 不限速
 
         走 qB 5.0 transfer 端点(transfer_set_upload_limit/download_limit), 单位换算
@@ -407,7 +407,7 @@ class QbApi:
             "download_limit": curves.bytes_to_kib_floor(prefs.get("alt_dl_limit")),
         }
 
-    def set_alt_speed_limits(self, upload_kib: int = None, download_kib: int = None):
+    def set_alt_speed_limits(self, upload_kib: int | None = None, download_kib: int | None = None):
         """设置 qB 备用全局速度限制(KiB/s); 0 = 不限速
 
         app/setPreferences 是增量语义: 只传需要改的 alt_* 键, 其余偏好不动。
