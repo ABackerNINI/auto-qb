@@ -65,10 +65,12 @@ def _git(root: Path, *args: str) -> str:
     return proc.stdout
 
 
-def _resolve_root(explicit: str | None) -> Path:
+def _resolve_root(explicit: str | None, require_git: bool = True) -> Path:
+    # require_git=False: check 支持 --root 指向 git archive 导出的快照(非 git 只读树),
+    # 引文校验只按 root/file 读文件, 不需要 git; pack 要做 diff 归因, 保持强校验。
     if explicit:
         root = Path(explicit).resolve()
-        if not (root / ".git").exists():
+        if require_git and not (root / ".git").exists():
             _die(f"--root {root} 不是 git 仓库(缺 .git)")
         return root
     proc = None
@@ -258,7 +260,7 @@ def _verify(finding: dict, root: Path, window: int) -> tuple[bool, str]:
 
 
 def cmd_check(args: argparse.Namespace) -> int:
-    root = _resolve_root(args.root)
+    root = _resolve_root(args.root, require_git=False)  # --root 允许指向快照目录(非 git 树), 见 _resolve_root 注释
     if args.findings == "-":
         try:
             sys.stdin.reconfigure(encoding="utf-8", errors="replace")  # 裸 python 可能按 locale(cp936)解码
