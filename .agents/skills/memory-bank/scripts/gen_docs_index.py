@@ -1,6 +1,6 @@
 """生成 `memory-bank/plans/_index.md` 与 `memory-bank/reports/_index.md`(都是生成物, 不要手改)。
 
-plans 另落归档索引 `plans/attachments/_archive.md`(CLOSED_KEEP 出口, 2026-10-31; reports 不动):
+plans / reports 各落归档索引 `<dir>/attachments/_archive.md`(CLOSED_KEEP 出口; reports 自 2026-11-05 B4 起同档):
 主索引的已完结区(Done / Dropped / Superseded)只列最近 `CLOSED_KEEP` 条, 全量清单进归档 ——
 与 `_index.md` 同批生成/校验, 缺了它 `gen_all --check` 恒红。
 

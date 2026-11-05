@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="config-models-hr-check-comment">
+<meta name="issue-stamp" content="26-11-06-0306">
+<meta name="issue-type" content="docs">
+<meta name="doc-topic" content="config-models-hr-check-comment">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="light">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="models.py 注释称旧 hr_check 键仍兼容接受, 实际校验层已报错">
+<meta name="issue-summary" content="旧键兼容注释与现行校验行为矛盾, 读注释会误判兼容层仍在">
+<title>models.py 注释称旧 hr_check 键仍兼容接受, 实际校验层已报错 · docs · 计划外问题（便签）</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 860px; margin: 0 auto; padding: 48px 40px 72px; }
+  header.cover { margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 16px; }
+  h1 { font-family: var(--display); font-size: 27px; font-weight: 600; letter-spacing: -0.015em; line-height: 1.22; margin-bottom: 12px; }
+  .lede { font-size: 15px; color: var(--dim); max-width: 62ch; margin-bottom: 20px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 26px; padding: 14px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 13.5px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { margin-top: 30px; }
+  h2 { font-family: var(--display); font-size: 17px; font-weight: 600; letter-spacing: -0.005em; margin-bottom: 10px; padding-bottom: 7px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 11.5px; color: var(--faint); margin-right: 9px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  p { margin-bottom: 11px; max-width: 74ch; }
+  ul, ol { margin: 0 0 11px 22px; max-width: 74ch; }
+  li { margin-bottom: 5px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 74ch; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <header class="cover">
+    <div class="kicker">计划外问题（便签）· docs</div>
+    <h1>models.py 注释称旧 hr_check 键仍兼容接受, 实际校验层已报错</h1>
+    <p class="lede">旧键兼容注释与现行校验行为矛盾, 读注释会误判兼容层仍在</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-11-06-0306-docs-config-models-hr-check-comment</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-11-06 03:06</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">docs</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象</h2>
+    <p><code>models.py</code> 的 <code>hr_check</code> 字段注释仍称旧 YAML 键「兼容接受并等价迁移」，但现行校验层对 <code>trackers.&lt;站点&gt;.hr_check</code> 直接报错。读注释会误判兼容入口仍在。</p>
+    <p class="hint">发现来源：本轮文档压缩的 code review（B2 收尾，2026-11-06 核对注释与校验行为）。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>位置与证据</h2>
+    <ul>
+      <li><code>src/auto_qb/config/models.py:203-205</code>（取证 2026-11-06 03:06）· grep <code>旧 YAML 键 trackers</code>。原文：<code>旧 YAML 键 trackers.&lt;站点&gt;.hr_check 兼容接受并等价迁移(计划 26-09-27-1318 §3.4), 不再是配置入口</code></li>
+      <li><code>src/auto_qb/config/validation/sections.py:802-811</code> · grep <code>该键已于 schema v2 废除</code>。现行行为：命中 <code>hr_check</code> 键即 <code>errors.append(...)</code>，报「该键已于 schema v2 废除 —— 存量配置应由迁移链自动改写」。</li>
+      <li>复现：<code>grep -n "旧 YAML 键 trackers" src/auto_qb/config/models.py</code> · <code>grep -n "schema v2 废除" src/auto_qb/config/validation/sections.py</code></li>
+    </ul>
+    <p>影响：注释描述的「兼容接受」在配置校验阶段不存在，只有迁移链会改写存量文件；按注释判断兼容行为会误判。</p>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>建议<span class="opt">（可选）</span></h2>
+    <p>只改注释，不改行为与校验：把「兼容接受并等价迁移」改为「历史键已废除，仅迁移链改写；校验层出现即报错」。验收：注释表述与 <code>sections.py</code> 报错口径一致，现行迁移/校验测试不变。</p>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>状态变更日志</h2>
+    <ul>
+      <li>2026-11-06 03:06 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    </ul>
+  </section>
+
+  <footer>
+    26-11-06-0306-docs-config-models-hr-check-comment.html · 便签档（light）· 由 create-issue skill 入池；入池不等于已修，改动状态在上面的「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>

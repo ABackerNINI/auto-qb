@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="kb-cleanup-tiers">
 <meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-10-31-0534">
-<meta name="doc-updated" content="26-10-31-2208">
+<meta name="doc-updated" content="26-11-06-0306">
 <meta name="doc-refs" content="memory-bank/testing/baselines/26-10-31-0934-kb-cleanup-tiers.md, memory-bank/testing/baselines/26-10-31-1029-kb-cleanup-tiers-r1.md, memory-bank/testing/baselines/26-10-31-1216-kb-cleanup-tiers-r2.md, memory-bank/testing/baselines/26-10-31-2145-kb-cleanup-tiers.md">
 <style>
   :root {
@@ -237,7 +237,7 @@
 <h3>R3 · 体积轮：索引与目录</h3>
 <ul>
   <li><b><code>tasks/</code> 与 <code>plans/</code> 补 <code>CLOSED_KEEP=60</code></b>（与 <code>issues/</code> 同值、同一套常量语义），全量清单另落 <code>attachments/_archive.md</code>。粗算 <code>tasks/</code> 保留 82 条（60 完结 + 22 在办）后索引约 8.7k 字符，安全落回 25,200 cap 内。</li>
-  <li><b><code>reports/</code> 不动</b>：cap 才 39%，且 69 份是审计 / 决策依据 —— 藏起来比占索引更糟。</li>
+  <li><b><code>reports/</code> 不动</b>：cap 才 39%，且 69 份是审计 / 决策依据 —— 藏起来比占索引更糟。<span class="tag">Superseded · 2026-11-05 B4</span> 现行口径：<code>reports/</code> 与 <code>plans/</code> / <code>tasks/</code> / <code>issues/</code> 同档 —— <code>CLOSED_KEEP</code> 是上限（默认 60，装不进 8,000 字符预算就继续收紧），被隐藏的只是主索引一行，全量清单在 <code>reports/attachments/_archive.md</code>（提交 <code>e591d6c1</code>）。</li>
   <li><code>testing/baselines/</code>：老切片外迁（口径已明说「最新一条 = 事实源，老的是不可变快照」，信息损失最小，收益/风险比最高）。</li>
   <li><code>activeContext/</code>：配<b>蒸馏节奏</b>而非一次性清理 —— 完结专题沉淀进 <code>progress/</code> 后删切片。</li>
   <li>验收：<code>test.full</code>（含新增 CLOSED_KEEP 守阵）+ <code>doc.caps</code>（验证索引回落）+ <code>kb.check</code>。</li>
@@ -274,7 +274,7 @@
   <tr><td>D11</td><td>每轮验收</td><td>R1 试点跑 <code>test.full</code>；R2 每批 <code>test.quick</code> + <code>doc.caps</code> + <code>doc.links</code>，轮末再 <code>test.full</code></td><td>2026-10-31</td></tr>
   <tr><td>D12</td><td>计划文档</td><td><b>授权新建</b>本文件</td><td>2026-10-31</td></tr>
   <tr><td>D13</td><td>执行顺序</td><td><b>插 R0 工具轮在最前</b>：先建 <code>kb.tier</code> 再试点，否则 R1/R2 得手工打 250 个标</td><td>2026-10-31</td></tr>
-  <tr><td>D14</td><td>CLOSED_KEEP 覆盖范围</td><td><code>tasks/</code> 与 <code>plans/</code> 各 <b>60</b>；<code>reports/</code> 不动（39% 且是决策依据）</td><td>2026-10-31</td></tr>
+  <tr><td>D14</td><td>CLOSED_KEEP 覆盖范围</td><td><span class="tag">Superseded · 2026-11-05</span> <code>tasks/</code> 与 <code>plans/</code> 各 <b>60</b>；<code>reports/</code> 不动（39% 且是决策依据）。<br><b>取代于 B4</b>（提交 <code>e591d6c1</code>）：现行 <code>reports/</code> 与 <code>plans/</code> / <code>tasks/</code> / <code>issues/</code> 同档 —— <code>CLOSED_KEEP</code> 是上限（默认 60，装不进 8,000 字符预算就继续收紧），全量清单在 <code>reports/attachments/_archive.md</code>。</td><td>2026-10-31<br>取代: 2026-11-05</td></tr>
   <tr><td>D15</td><td><code>kb.tier</code> 能力</td><td><b>四动作、高危默认 dry-run、<code>purge</code> 强制 <code>--apply</code></b></td><td>2026-10-31</td></tr>
   <tr><td>D16</td><td>观察轮次的机器判据</td><td><b>B：机器判两条（守阵 + 反向引用），人判一条（跨 2 轮零复发）</b> —— 轮次不是机器可读状态，为它建模成本远超收益</td><td>2026-10-31</td></tr>
 </table>
@@ -298,6 +298,7 @@
   <li><span class="tag">R0 · 26-10-31-0534</span> 初版。来源：用户 2026-10-31「清理过时信息 + 分级 + 复发榜」指令 → grilling 三轮拍板（D1–D16）→ 全库只读勘查（三个 Explore 并行，覆盖 pitfalls / conventions / 其余 7 个目录）。要点：①冗余主形态是「结论已收口但叙事没删」（B 类 31%）而非「坑本身过时」；②根因是缺「按价值分级」这第三条防线；③R0 工具轮必须最先做；④本计划内零删除。</li>
   <li><span class="tag">R1 · 26-10-31-0538</span> 补 §2.6 机器实测债务清单(7+3 项)与「复发叙事是 cap 主要来源」的交叉印证</li>
   <li><span class="tag">R2 · 26-10-31-2208</span> 执行实录：五轮(R0-R4)全部完成——R0 kb.tier 四动作上线(list/set/migrate/purge, purge 三闸门全或无), 修 2 个实现真 bug(purge 部分删除、migrate 非幂等/指针缺前缀), test.full 4299→4309(净增守阵); R1 试点(git 15+ops 9): L0×16/L1×6/L2×2, 试点面 −16.6% 字符, 修 3 处过时约束(history-integration/editing-traps/sync-pull)+prod-files 口吻; R2 铺开(226 件): 全库 250 主题件打标 L0×230/L1×17/L2×3/L3×0, 零删除, pitfalls 主题层 −3.9% 字符, redverify cap 债清偿(7→6), 数字漂移修正 5 处; R3 体积: CLOSED_KEEP=60 出口(tasks/_index 28,868→10,062、plans/_index 23,678→10,574 落回 cap 内, 各建 _archive.md), baselines 713 条外迁 attachments(保留最新 3), activeContext 蒸馏删 11 件切片(130→119); R4 三堆分类报告 reports/26-10-31-2157-report-kb-recurrence-three-piles.html(堆1×1/堆2×3/堆3×4, 已收口 3 件不入堆), conventions/rule-system 过时计数修正(17→13 种条件等)。遗留: doc.caps 6 项存量债务(smoke/frontend-split/frozen-column/progress×2/tasks 大档案); activeContext 119&gt;70 按节奏留后续拍; L3 purge 能力就位但 0 件适用(观察期未过)。数字均为此前各轮汇报实测。</li>
+  <li><span class="tag">R3 · 26-11-06</span> 标注 D14 为 Superseded：B4（提交 <code>e591d6c1</code>）把 <code>reports/_index.md</code> 改为与 <code>plans/</code> / <code>tasks/</code> / <code>issues/</code> 同档的完结窗口轮转，并新增 <code>reports/attachments/_archive.md</code>；原决策文字保留作历史记录，正文 R3 与 §06 决策表各加取代标注。</li>
 </ul>
 
 </div>
