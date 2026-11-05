@@ -4,8 +4,9 @@
 > 主索引的已关闭区按 8,000 字符预算裁剪(上限 `CLOSED_KEEP` 条), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (42)
+## Open (43)
 
+- [bug] [review.check --root 快照目录被 .git 存在性检查误拒](../26-11-06-0711-bug-review-check-snapshot-root.html) — 存量评审 R4 的既定用法 review.check --root <快照目录> 被 _resolve_root 的 .git 检查拒收,与命令自身 help 文档矛盾;_verify 实际与 git 无关
 - [chore] [pyproject.toml 存量带圈数字注释与 code-style 非 ASCII 图形符号禁令冲突](../26-11-06-0624-chore-pyproject-circled-number-comments.html) — 配置注释 22 行含带圈数字编号(1)-(18), 禁令要求代码/配置一律 ASCII; 本轮新增注释已用 ASCII, 存量待清
 - [test] [mypy 豁免守阵冻结清单仍留 qbclient/override 条目, 回加豁免不会被拦](../26-11-06-0624-test-mypy-allowlist-stale-frozen-entry.html) — 豁免块 5 已摘除但冻结清单保留该对, 递减不红设计下重新加回同一豁免也不红, 递减成果未闭环
 - [bug] [real.down 实现用 Stop-Process -Force 强杀 qB, 触进程安全红线](../26-11-06-0448-bug-real-down-force-kill.html) — tests-real/runner.py cmd_down 以 PowerShell Stop-Process -Force 强杀 qB 进程(按镜像+路径匹配), 违反 AGENTS.md 禁止一切 taskkill/强杀红线; 替代=WebAPI app/shutdown 优雅退出(实验轮实测 HTTP 200)

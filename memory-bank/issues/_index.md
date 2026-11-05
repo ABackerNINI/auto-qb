@@ -19,7 +19,7 @@
 
 | 类型 | 条数 |
 |---|---|
-| bug | 6 |
+| bug | 7 |
 | perf | 2 |
 | docs | 1 |
 | test | 6 |
@@ -30,6 +30,7 @@
 
 ## Open
 
+- [bug] [review.check --root 快照目录被 .git 存在性检查误拒](26-11-06-0711-bug-review-check-snapshot-root.html) — 存量评审 R4 的既定用…
 - [chore] [pyproject.toml 存量带圈数字注释与 code-style 非 ASCII 图形符号禁令冲突](26-11-06-0624-chore-pyproject-circled-number-comments.html) — 配置注释 22 行含带圈…
 - [test] [mypy 豁免守阵冻结清单仍留 qbclient/override 条目, 回加豁免不会被拦](26-11-06-0624-test-mypy-allowlist-stale-frozen-entry.html) — 豁免块 5 已摘除但冻结…
 - [bug] [real.down 实现用 Stop-Process -Force 强杀 qB, 触进程安全红线](26-11-06-0448-bug-real-down-force-kill.html) — tests-real/r…
