@@ -48,6 +48,15 @@
                                           v7 起说明行默认静默, 仅 COMMAND_FLOW_DEBUG=1 可见
 - test_check_refs_branch_rollback_routes_to_rollback_entry
                                           分支指针真被回退/丢失 → 仍送「分支 ref 被回退」条目
+- test_msg_check_*                        提交消息机检纯函数面(计划 26-11-06-0124): BOM 剥离/非 UTF-8(a2)/
+                                          乱码签名(a3)/gitmoji 三态(b1 缺/b2 非标准/VS16 通过)/首行无中文(b4)/
+                                          标签口径(c2 硬拦/a5 全角警告/c5 实测无数字)/占位符(d1 强/d1w 词面)/
+                                          traceback+diff+空(d2/d3/d7)/自动修(承接空格归一+补空行)/
+                                          不可见字符与 # 行警告(a4w/d5)/白名单放行
+- test_msg_allow_unknown_id_stops         msg_check_allow 未知 id → config STOP; 合法 id 不停(拍板 D5)
+- test_message_review_blocks_commit       接线: 全英文消息 → 机检失败行+明细, 无新提交, 文件保留
+- test_message_review_autofix_commits     接线: BOM+NBSP 承接位自动修后正常落库, HEAD 消息已归一, 修正留痕
+- test_message_allow_escape               接线: msg_check_allow 放行 b4 → 全英文消息照常提交且零机检输出
 """
 
 from __future__ import annotations
@@ -62,10 +71,12 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import commit as commit_mod  # noqa: E402
+import msg_check as msg_check_mod  # noqa: E402
 import push as push_mod  # noqa: E402
 import sync as sync_mod  # noqa: E402
 import verify_ref as verify_ref_mod  # noqa: E402
 from _pipeline import run_capture  # noqa: E402
+from _ship_config import config_problems  # noqa: E402
 
 PKG = Path(__file__).resolve().parent.parent
 RED = ["config.yml", "auto-qb-data/"]
@@ -132,7 +143,7 @@ def _patch_ok_flow(monkeypatch):
     monkeypatch.setattr(push_mod, "run_push", lambda steps=None: (True, "推送成功 abcdef01"))
 
 
-def _write_msg(repo: Path, text: str = "✨ test") -> Path:
+def _write_msg(repo: Path, text: str = "✨ 测试") -> Path:  # 默认消息必须过机检(b4 首行要中文)
     msg = repo / ".git" / "COMMIT_MSG_AI.txt"
     msg.write_text(text, encoding="utf-8")
     return msg
@@ -193,6 +204,169 @@ def test_stage_plan_nothing_to_commit():
 
 def test_message_default_path(tmp_path):
     assert commit_mod.default_message_path(tmp_path) == tmp_path / ".git" / "COMMIT_MSG_AI.txt"
+
+
+# ------------------------------------------------------------------ 提交消息机检(msg_check, 计划 26-11-06-0124)
+
+
+def test_msg_check_bom_stripped_and_reported():
+    r = msg_check_mod.review_text("\ufeff✨ 测试")  # 实测: git -F 不剥 BOM, 必须自己剥
+    assert not r.violations and r.fixed and "BOM" in r.fixed[0]
+    assert r.text == "✨ 测试"
+
+
+def test_msg_check_non_utf8_reports_a2(tmp_path):
+    p = tmp_path / "m.txt"
+    p.write_bytes("中文".encode("gbk"))  # cmd echo 写出的形态; UTF-16LE 同样在 strict 解码处炸
+    r = msg_check_mod.check_message_file(p)
+    assert [vid for vid, _ in r.violations] == ["a2"] and r.text == ""
+
+
+def test_msg_check_mojibake_signature_reports_a3():
+    r = msg_check_mod.review_text("✨ 修复锟斤拷问题\n\n动机: 文本已损伤")
+    assert any(vid == "a3" for vid, _ in r.violations)
+
+
+def test_msg_check_gitmoji_missing_unknown_and_vs16():
+    assert any(vid == "b1" for vid, _ in msg_check_mod.review_text("update stuff").violations)  # 纯文本开头
+    assert any(vid == "b2" for vid, _ in msg_check_mod.review_text("🎯 中文概述").violations)  # 自造 emoji
+    assert not [
+        v for v in msg_check_mod.review_text("🗑️ 弃置过期文件").violations if v[0] in ("b1", "b2")
+    ]  # 带 VS16 的 🗑️ 必须在标准集内通过
+
+
+def test_msg_check_subject_no_cjk_reports_b4():
+    assert any(vid == "b4" for vid, _ in msg_check_mod.review_text("✨ all english subject").violations)
+    # 技术 token 混排不受影响: 有中文即过
+    assert not any(vid == "b4" for vid, _ in msg_check_mod.review_text("✨ 同机证明 ship.commit 三层证据").violations)
+
+
+def test_msg_check_body_labels_required_c2():
+    bad = msg_check_mod.review_text("✨ 中文概述\n\n这一段没有标签直接开写")  # 拍板 D3(a): 裸段落判红
+    assert any(vid == "c2" for vid, _ in bad.violations)
+    assert not msg_check_mod.review_text("✨ 中文概述\n\n动机: 说明缘由\n\n影响面: 一处").violations
+    assert not msg_check_mod.review_text("✨ 单行小改").violations  # 无正文 → 无标签义务
+
+
+def test_msg_check_fullwidth_colon_label_warns_a5():
+    r = msg_check_mod.review_text("✨ 中文概述\n\n动机：全角冒号说明")  # 拍板 D4: 标点不代改, 只警告
+    assert not r.violations and any("全角冒号" in w for w in r.warnings)
+
+
+def test_msg_check_placeholder_strong_blocks_todo_warns():
+    strong = msg_check_mod.review_text("✨ 中文概述\n\n动机: <动机>")
+    assert any(vid == "d1" for vid, _ in strong.violations)
+    soft = msg_check_mod.review_text("✨ 清掉 TODO 注释\n\n动机: 收尾")  # 词面撞合法引用 → 只警告
+    assert not soft.violations and any("TODO" in w for w in soft.warnings)
+
+
+def test_msg_check_traceback_diff_empty_blocked():
+    # 正文同段续行: d2/d3 单独命中, 不连坐 c2(段落首行仍带标签)
+    assert any(
+        vid == "d2"
+        for vid, _ in msg_check_mod.review_text("✨ 中文概述\n\n动机: x\nTraceback (most recent call last):").violations
+    )
+    assert any(vid == "d3" for vid, _ in msg_check_mod.review_text("✨ 中文概述\n\n动机: x\ndiff --git a/b c/b").violations)
+    assert [vid for vid, _ in msg_check_mod.review_text("   \n  \n").violations] == ["d7"]
+
+
+def test_msg_check_joint_space_and_blank_line_autofix():
+    assert msg_check_mod.review_text("✨  中文概述").text == "✨ 中文概述"  # 双空格归一
+    assert msg_check_mod.review_text("✨中文概述").text == "✨ 中文概述"  # 缺空格补一
+    r3 = msg_check_mod.review_text("✨ 中文概述\n动机: 首行后无空行")  # C1: 补空行
+    assert r3.fixed and r3.text == "✨ 中文概述\n\n动机: 首行后无空行"
+    assert not msg_check_mod.review_text("✨ 中文概述").fixed  # 单个空格/单行消息是正常形态
+
+
+def test_msg_check_invisible_and_template_residue_warn():
+    r = msg_check_mod.review_text("✨ 中文概述\n\n动机: 里有\u200b零宽空格")  # 拍板 D4: 正文零代改只报
+    assert not r.violations and any("ZWSP" in w for w in r.warnings)
+    r2 = msg_check_mod.review_text("✨ 中文概述\n\n动机: 团队 🧑‍💻 协作面")  # ZWJ 是 emoji 合法连接符
+    assert not [w for w in r2.warnings if "ZWJ" in w]
+    r3 = msg_check_mod.review_text("✨ 中文概述\n\n动机: x\n# 手滑的注释行")  # 实测: -F 下 # 行原样入库
+    assert not r3.violations and any("#" in w for w in r3.warnings)
+
+
+def test_msg_check_measure_section_without_digits_warns_c5():
+    r = msg_check_mod.review_text("✨ 中文概述\n\n实测(26-11-06): 全绿无数字描述")  # 标签日期不算数字
+    assert not r.violations and any("没有任何数字" in w for w in r.warnings)
+    ok = msg_check_mod.review_text("✨ 中文概述\n\n实测(26-11-06): 41 passed")
+    assert not [w for w in ok.warnings if "没有任何数字" in w]
+
+
+def test_msg_check_allow_skips_violation():
+    r = msg_check_mod.review_text("✨ all english subject", allow=frozenset({"b4"}))  # 拍板 D5
+    assert not r.violations
+
+
+def test_msg_allow_unknown_id_stops(tmp_path):
+    none = tmp_path / "none.toml"  # 不存在 → 跳过原文回读, 只验传入 cfg
+    stops = [m for lvl, m in config_problems({"msg_check_allow": ["zz"]}, none) if lvl == "STOP"]
+    assert any("msg_check_allow 含未知条目 id" in m for m in stops)
+    cfg = {
+        "msg_check_allow": ["b4"],
+        "auto_resolve_generated": True,
+        "generated_list_cmd": "x",
+        "generated_regen_cmd": "x"
+    }
+    assert not [m for lvl, m in config_problems(cfg, none) if lvl == "STOP"]
+
+
+# 接线面: 机检在 commit.py 主流程的位置与输出契约(在闸门前拦; 违规不产生提交; 自动修写回留痕)
+
+_CFG_ALLOW = {
+    "confirmed": True,
+    "branch": "",
+    "main_host_mark": "",
+    "main_candidates": ["origin"],
+    "mirror_host_mark": "",
+    "mirror": "",
+    "red_lines": RED,
+    "warn_lines": [],
+    "gates": [],
+    "platform_hints": [],
+    "staged_panic": 200,
+    "pitfalls_index": "",
+    "each_limit": 99,
+    "auto_resolve_generated": True,
+    "generated_list_cmd": "x",
+    "generated_regen_cmd": "x",
+    "msg_check_allow": ["b4"],
+}
+
+
+def test_message_review_blocks_commit(repo, capsys):
+    (repo / "x.txt").write_text("x\n", encoding="utf-8")
+    msg = _write_msg(repo, "update stuff only")  # 无 gitmoji(b1) + 全英文(b4)
+    rc = commit_mod.main([])
+    out = capsys.readouterr().out
+    assert rc == 1
+    assert "提交信息机检 2 项未过" in out and "[b1]" in out and "[b4]" in out
+    assert "msg_check_allow" in out  # 失败行自带逃生提示
+    assert msg.exists()  # 文件保留: 修好重跑还能用
+    assert "\n" not in _git(repo, "log", "--oneline")  # 无新提交(fixture 只有 base 一笔)
+
+
+def test_message_review_autofix_commits(repo, monkeypatch, capsys):
+    _patch_ok_flow(monkeypatch)
+    (repo / "x.txt").write_text("x\n", encoding="utf-8")
+    msg = _write_msg(repo, "\ufeff✨\u00a0测试")  # BOM + 承接位 NBSP: 两处骨架位自动修
+    rc = commit_mod.main([])
+    out = capsys.readouterr().out
+    assert rc == 0 and "提交成功" in out
+    assert out.count("已自动修正") == 2  # 修必留痕
+    assert not msg.exists()  # 照常消费即删
+    assert _git(repo, "log", "-1", "--format=%B") == "✨ 测试"  # HEAD 消息已归一
+
+
+def test_message_allow_escape(repo, monkeypatch, capsys):
+    _patch_ok_flow(monkeypatch)
+    (repo / "x.txt").write_text("x\n", encoding="utf-8")
+    _write_msg(repo, "✨ all english via allow")  # b4 在白名单里 → 放行
+    monkeypatch.setattr(commit_mod, "load_config", lambda: (dict(_CFG_ALLOW), PKG / ".my-commit-flow.toml"))
+    rc = commit_mod.main([])
+    out = capsys.readouterr().out
+    assert rc == 0 and "提交成功" in out and "机检" not in out  # 放行 = 静默, 配置文件本身就是记录
 
 
 # ------------------------------------------------------------------ 真实仓库路径
@@ -350,7 +524,7 @@ def test_remote_conflict_reports_partial(repo, tmp_path, monkeypatch, capsys):
     assert not msg.exists()  # ref 核对已过 → 消息已消费
     assert not (repo / ".git" / "rebase-merge").exists()  # 回滚无残留
     assert not (repo / ".git" / "rebase-apply").exists()
-    assert _git(repo, "log", "--format=%s", "-1") == "✨ test"  # HEAD 仍是本地提交(rebase 已回滚)
+    assert _git(repo, "log", "--format=%s", "-1") == "✨ 测试"  # HEAD 仍是本地提交(rebase 已回滚)
 
 
 def test_post_rebase_gates_rerun_on_diverge(repo, tmp_path, monkeypatch, capsys):
@@ -525,8 +699,16 @@ def test_message_kept_on_commit_fail(repo, monkeypatch, capsys):
     _patch_ok_flow(monkeypatch)
     msg = _write_msg(repo)
     (repo / "x.txt").write_text("x\n", encoding="utf-8")
-    # 让 commit 必败: 消息指向已被删除的路径之外 —— 用空消息文件让 git 拒绝(无换行的空消息)
-    msg.write_text("", encoding="utf-8")
+    # 让 commit 必败: 替身拦 git commit 命令本身(计划 26-11-06-0124 起空消息在机检 d7 就被拦,
+    # 到不了 git commit —— 旧的"写空消息文件逼 git 拒绝"手法不再到达目标路径)
+    real_run = commit_mod.git_run
+
+    def _commit_fails(*args):
+        if args and args[0] == "commit":
+            return CompletedProcess(args, 1, "", "hook declined")
+        return real_run(*args)
+
+    monkeypatch.setattr(commit_mod, "git_run", _commit_fails)
     rc = commit_mod.main([])
     out = capsys.readouterr().out
     assert rc == 1
@@ -583,7 +765,7 @@ def test_stale_message_residue_swept_at_entry(repo, capsys):
 
 def test_message_kept_when_nothing_to_commit(repo, capsys):
     """树净且消息与 HEAD 不匹配 = 正常待提交消息(不是残骸) → 照旧拒绝, 文件保留等改动就绪。"""
-    msg = _write_msg(repo)  # "✨ test" != HEAD 消息 "base"
+    msg = _write_msg(repo)  # "✨ 测试" != HEAD 消息 "base"
     rc = commit_mod.main([])
     out = capsys.readouterr().out
     assert rc == 1

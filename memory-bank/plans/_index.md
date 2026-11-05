@@ -29,6 +29,7 @@
 
 ## Done
 
+- [26-11-06-0124] [提交信息自动审查: ship.commit 内联三态机检(BOM/乱码/骨架/残留)](26-11-06-0124-plan-commit-msg-review.html) — `commit-msg-review`
 - [26-11-05-0546] [relocate 零搬移修复方案压测(renameFolder 两步复位 + 三闸门)](26-11-05-0546-plan-relocate-zero-move-fix-stress.html) — `relocate-zero-move-fix-stress`
 - [26-11-04-2357] [跳检 dedup 闸门遮蔽修复: 提到 G3 之前恢复 skip 语义与文案](26-11-04-2357-plan-skip-check-gates.html) — `skip-check-gates`
 - [26-11-04-1042] [待收尾迁移种子的 WebUI 可见性与路径链展示计划](26-11-04-1042-plan-webui-relocate-visibility.html) — `webui-relocate-visibility`
@@ -88,9 +89,8 @@
 - [26-10-21-1857] [跳检机制重构 · 执行计划 — 上报驱动 + 主循环微步 + 批量并行](26-10-21-1857-plan-skip-check-async-refactor.html) — `skip-check-arch`
 - [26-10-21-0120] [gtm 工具侧覆盖率门槛实施计划 — 88% 起步 · 双平台同口径 · 阶梯到 96](26-10-21-0120-plan-gtm-coverage-gate.html) — `gtm-coverage-gate`
 - [26-10-20-2101] [测试覆盖率提升 · 第二轮 — 门槛清偿与 99% 冲刺 (97.66% → 99%)](26-10-20-2101-plan-test-coverage-uplift-2.html) — `test-coverage-uplift-2`
-- [26-10-20-1316] [global-traffic-monitor 正主注册与让位代拉设计](26-10-20-1316-plan-gtm-primary-registration.html) — `gtm-primary-registration`
 
-> 更早的 **149** 条已出本索引 —— 制品仍在 `plans/` 目录(未搬动), 全量清单见 [attachments/_archive.md](attachments/_archive.md).
+> 更早的 **150** 条已出本索引 —— 制品仍在 `plans/` 目录(未搬动), 全量清单见 [attachments/_archive.md](attachments/_archive.md).
 
 ## Dropped
 

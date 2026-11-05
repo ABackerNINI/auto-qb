@@ -69,6 +69,10 @@ KEY_DEFAULTS: dict = {
     "auto_resolve_generated": True,
     "generated_list_cmd": "python <skill-dir:memory-bank>/scripts/gen_all.py --list",
     "generated_regen_cmd": "python <skill-dir:memory-bank>/scripts/gen_all.py",
+    # 提交消息机检白名单(计划 26-11-06-0124): 放行硬拦档条目 id 的逃生通道(拍板 D5)。
+    # 只放行硬拦(警告无 suppress 需求、自动修不会误伤);合法 id 词表在 msg_check.VIOLATION_IDS,
+    # 未知 id 由 config_problems 报 STOP。缺省 [] = 全部硬拦条目生效。
+    "msg_check_allow": [],
 }
 
 # 生成物自动化解三键的期望类型 —— 写错会让自动化解静默失效(或按错类型动作), 与 timeout 同级 STOP。
@@ -505,4 +509,20 @@ def config_problems(cfg: dict, path: Path | None = None) -> list[tuple[str, str]
             bad = not isinstance(value, str)
         if bad:
             problems.append(("STOP", f"{key} 类型非法: {value!r}(应为 {want.__name__})"))
+
+    # 提交消息机检白名单(计划 26-11-06-0124, 拍板 D5): 未知 id = STOP 而不是静默忽略 ——
+    # 拼错 id 会让人以为某条已放行而它照拦(撞硬拦才知道), 与顶层未知键同级停手。
+    # 惰性 import: msg_check 不依赖本模块, 延后到真正体检时才加载, 保持本模块轻。
+    from msg_check import VIOLATION_IDS  # noqa: E402  (本地 import: 避免 import 链变重)
+
+    allow = cfg.get("msg_check_allow", [])
+    if not isinstance(allow, list) or not all(isinstance(x, str) for x in allow):
+        problems.append(("STOP", f"msg_check_allow 类型非法: {allow!r}(应为字符串列表, 硬拦条目 id)"))
+    else:
+        unknown = sorted(set(allow) - VIOLATION_IDS)
+        if unknown:
+            problems.append(
+                ("STOP", f"msg_check_allow 含未知条目 id: {', '.join(unknown)}"
+                 f"(允许: {', '.join(sorted(VIOLATION_IDS))})")
+            )
     return problems

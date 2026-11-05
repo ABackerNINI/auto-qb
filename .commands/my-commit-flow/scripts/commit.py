@@ -18,6 +18,8 @@
 
 流程(2026-10-04 起**提交先行** —— 提交后树必然干净, 分叉 rebase 恒可自动, stash 解锁舞蹈自提交路径退役;
 全部静默, 检查项一个不删 —— 保全清单见计划 §04):
+  0. 提交信息机检(msg_check.py: 硬拦/自动修/警告三态, 计划 26-11-06-0124) —— 在闸门前拦: 消息修复是
+     秒级动作; 自动修仅骨架位(BOM/承接空格/空行)且逐行留痕, 正文零代改; 逃生走 msg_check_allow
   1. 闸门(auto = true 真跑, 全过即静默; 失败给闸门名 + 末 20 行) —— 按本地改动清单
   2. 暂存计划: 缺省 = changed_files() 全量; 红线拦; 拒 -A / . / *(逐路径纪律)
   3. 逐路径 add —— 工作区已不存在的路径: 在索引里走 `rm --cached`, 都不在(已暂存的删除)则无事可做
@@ -75,6 +77,7 @@ from _ship_config import (  # noqa: E402
     resolve_main_remote,
 )
 from verify_ref import check_refs  # noqa: E402
+from msg_check import check_message_file  # noqa: E402  (提交消息机检, 计划 26-11-06-0124)
 
 BULK = {"-A", "--all", ".", "*", "-u", "--update"}
 DEFAULT_MESSAGE_REL = Path(".git") / "COMMIT_MSG_AI.txt"
@@ -280,6 +283,25 @@ def main(argv: list[str] | None = None) -> int:
         emit(steps, f"提交失败: 提交消息文件不存在 {msg_file} —— 把消息(中文首行 + 空行 + 动机/取舍/影响面/实测数字)"
              f"写入后重跑; 约定文件消费即删, 每次提交前都要重写")
         return 1
+
+    # 0 提交信息机检(计划 26-11-06-0124): 在闸门前拦 —— 消息修复是秒级动作, 别让它排在一轮贵闸门后面;
+    #   闸门复跑阶段的 amend --no-edit 复用已审消息, 不复检。自动修(仅骨架位)写回后逐行留痕 ——
+    #   脚本改了 agent 写的文件, 沉默即成功只属于零修正的绿。违规不产生提交, 消息文件保留。
+    report = check_message_file(msg_file, allow=frozenset(cfg.get("msg_check_allow", [])))
+    if report.fixed:
+        msg_file.write_text(report.text, encoding="utf-8", newline="\n")
+        for line in report.fixed:
+            print(f"已自动修正: {line}")
+    for line in report.warnings:
+        print(f"⚠ 提交信息: {line}")
+    if report.violations:
+        for vid, detail in report.violations:
+            print(f"  ✗ [{vid}] {detail}")
+        emit(
+            steps, f"提交失败: 提交信息机检 {len(report.violations)} 项未过 —— 重写消息文件后重跑"
+            f"(明细见上; 确认是误报时逃生: .my-commit-flow.toml 的 msg_check_allow 加对应条目 id)"
+        )
+        return 1  # 消息文件保留(自动修的部分一并保留): 修好后重跑用的是修后文本
 
     # 1 闸门(在暂存前: fmt 类闸门会改文件)。按本地改动清单跑; 合流后的树在步骤 6 复跑。
     changed = staged + unstaged

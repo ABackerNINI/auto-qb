@@ -4,10 +4,11 @@
 > 主索引的已完结区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**(只列 slug 与标题; 摘要全文在档案里)。
 > 每条链接指回 `tasks/` 下的档案原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## In Progress (28)
+## In Progress (29)
 
 - [26-09-22-deps-version-management](../26-09-22-deps-version-management.md) 软件版本管理方案（版本号 / Tag / CHANGELOG / 发版流程）
 - [26-11-06-backend-hr-lastpage-fetch-skip](../26-11-06-backend-hr-lastpage-fetch-skip.md) issue 26-09-30-0052 末页追翻省略复验与拍板
+- [26-11-06-rule-commit-msg-review](../26-11-06-rule-commit-msg-review.md) 提交信息自动审查: ship.commit 内联三态机检落地
 - [26-10-08-webui-perf-issues-closing](../26-10-08-webui-perf-issues-closing.md) 三条 perf issue 定案 / 重归因（含 e2e 与仿真复测）
 - [26-11-05-backend-relocate-fastresume-finalize](../26-11-05-backend-relocate-fastresume-finalize.md) relocate 收尾重构: fastresume 改写方案验证与计划入库
 - [26-11-05-backend-skip-check-gates](../26-11-05-backend-skip-check-gates.md) 跳检 dedup 闸门遮蔽修复(26-10-11-2045)

@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>提交信息自动审查: ship.commit 内联三态机检(BOM/乱码/骨架/残留)</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="commit-msg-review">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-11-06-0124">
+<meta name="doc-updated" content="26-11-06-0148">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-06-rule-commit-msg-review.md">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: commit-msg-review</div>
+<h1>提交信息自动审查: ship.commit 内联三态机检(BOM/乱码/骨架/残留)</h1>
+<p class="lede">在 <code>ship.commit</code> 的 <code>git commit -F</code> 之前内联一道提交消息机检:三态(硬拦 / 自动修 / 警告)覆盖编码损伤、gitmoji 骨架、正文标签结构与 AI 写作残骸;检查器独立纯函数模块,逃生走配置白名单,正文零代改。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-06-0124 · <b>doc-updated</b> 26-11-06-0148 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> grilling 会话(2026-11-06,六问全拍板) · 用户指令「提交信息自动审查」
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<p><b>为什么做</b>:AGENTS.md 对提交消息有成文口径(首行 <code>&lt;gitmoji&gt; &lt;中文一句话概述&gt;</code> + 空行 + 动机/取舍/影响面/实测),但这条口径只有 agent 纪律在守,没有任何机检消费——消息文件写坏了(BOM、GBK、全英文、丢骨架)会原样落进历史。检测点选在 <code>ship.commit</code> 内联(不做成 [[gates]] 闸门):消息不是「改动文件」,闸门的 <code>&lt;changed:&gt;</code> 语义接不上它;且检查必须在 <code>git commit -F</code> <b>之前</b>,闸门复跑阶段的 <code>amend --no-edit</code> 复用的已审消息无需再查。</p>
+<p><b>做到什么程度算成</b>:①目录内十类硬拦条目全部能在提交前拦下并给出条目 id + 原文引用;②骨架位自动修(BOM / gitmoji 承接空格 / 首行后空行)修后留痕、正常落库;③全绿零修正时输出完全静默(包哲学「沉默即成功」);④逃生白名单 <code>msg_check_allow</code> 生效且未知 id 触发配置 STOP;⑤<code>test.pkg.scoped</code> 全绿。</p>
+<p><b>设计底线 / 不变量</b>:</p>
+<ul>
+  <li><b>正文零代改</b>(拍板 D4):自动修只发生在骨架位——文件头 BOM、gitmoji 承接空隙、首行后空行;正文与首行中后部的任何字符都不代改,最多警告。</li>
+  <li><b>修正必留痕</b>:脚本改写了 agent 写的消息文件,每处修正打印一行;绝对静默只属于「零修正的绿」。</li>
+  <li><b>fail-fast</b>:白名单里的未知 id = 配置错误 STOP(与未知顶层键同级),不做静默忽略。</li>
+  <li><b>检查器纯函数</b>:核心逻辑进独立模块 <code>msg_check.py</code>,输入文本输出报告,不碰 git、不碰全局状态——<code>commit.py</code> 只做文件读写与输出接线,快照语义下天然无副作用。</li>
+</ul>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+<p><code>commit.py</code> 今天对消息只有两道检查:<b>存在性</b>(<code>commit.py:279</code>)与<b>残留扫描</b>(内容 == HEAD 消息即拒跑,<code>commit.py:257-263</code>);消息内容本身零审查。四条实测证据(2026-11-06,临时仓库真跑 <code>git commit -F</code>):</p>
+<ul>
+  <li><b>BOM 不被 git 剥离</b>:<code>EF BB BF</code> 原样进入 <code>%B</code>——Windows 上 PowerShell <code>&gt;</code> 重定向写 UTF-16LE、cmd <code>echo</code> 写 GBK,字节直落历史;</li>
+  <li><b>CRLF / 行尾空白会被 <code>cleanup=whitespace</code> 自动剥离</b>——这两条不需要查(拒收存档的依据);</li>
+  <li><b><code>#</code> 开头行在 <code>-F</code> 下原样保留</b>(注释剥离只发生在编辑器流程)——粘贴编辑器模板会污染消息;</li>
+  <li><b>反引号是既有用法</b>:近 200 笔语料 21 行含反引号,<code>-F</code> 路径无 bash 替换风险——拿它当事故信号会批量误伤(拒收存档的依据)。</li>
+</ul>
+<p>历史事故单点 <code>memory-bank/pitfalls/git/message.md</code> 记录的「反引号被 bash 当命令替换」「<code>-F -</code> heredoc 吞 push」均发生在手拼命令路径;本计划把「消息质量」这一层也接到机检上,补齐 <code>ship.commit</code> 唯一没有机检消费的成文口径。</p>
+
+<h2><span class="no">§03</span>方案总览</h2>
+<p>主线:新增 <code>.commands/my-commit-flow/scripts/msg_check.py</code>(纯函数 + 文件层入口),<code>commit.py</code> 在 <code>msg_file.exists()</code> 之后、闸门之前调用;新配置键 <code>msg_check_allow</code> 进 <code>KEY_DEFAULTS</code>,白名单校验挂 <code>config_problems</code> STOP 级。</p>
+<h3>三态矩阵(定稿 v2,拍板 D2/D4)</h3>
+<table>
+<tr><th>档位</th><th>条目(id)</th><th>检测 / 处理</th></tr>
+<tr><td class="bad">🔴 硬拦<br><span class="cm">不可自动修,失败行逐条列 id + 原文引用</span></td>
+<td><code>a2</code> 非 UTF-8 编码 · <code>a3</code> 乱码签名 · <code>b1</code> 缺 gitmoji · <code>b2</code> 非标准集 emoji · <code>b4</code> 首行无 CJK · <code>c2</code> 正文段落缺标签 · <code>d1</code> 强模板占位符 · <code>d2</code> traceback 粘贴 · <code>d3</code> diff 粘贴 · <code>d7</code> 空消息</td>
+<td><code>a2</code>=strict UTF-8 解码失败(文件层);<code>a3</code>=U+FFFD /「锟斤拷」/「â€」/「Ã©」等保守双字签名;<code>b1/b2</code>=首字形归一(去 VS16)对 gitmoji 全集(75 个,源自 gitmoji-reference.md);<code>b4</code>=subject 无 <code>\u4e00-\u9fff</code>;<code>c2</code>=正文存在⇒每段首行须以 动机/取舍/影响面/实测 标签词开头;<code>d1</code>=<code>待填</code>/<code>SLOT</code>/<code>&lt;动机&gt;</code>/<code>&lt;hash&gt;</code> 类尖括号模板;<code>d7</code>=strip 后为空。</td></tr>
+<tr><td class="good">🟢 自动修<br><span class="cm">仅骨架位,修完逐行打印「已自动修正:」</span></td>
+<td><code>A1</code> BOM 剥离 · <code>B3</code> gitmoji 承接空格归一 · <code>C1</code> 首行后缺空行</td>
+<td>承接位 = emoji 与后文之间:缺失→补一格、多空格/NBSP/全角空格→归一为单个半角空格;<code>C1</code> 仅当正文存在时插入一个空行。单行消息、单个空格属正常形态,不动。</td></tr>
+<tr><td class="wr">🟡 警告<br><span class="cm">打印不拦</span></td>
+<td><code>a4w</code> 正文不可见字符 · <code>a5</code> 标签全角冒号 · <code>c5</code> 实测段无数字 · <code>d1w</code> TODO/XXX 词面 · <code>d5</code> <code>#</code> 开头行 · <code>d6</code> scissors 残留</td>
+<td><code>a4w</code>=ZWSP/ZWJ/U+2060/NBSP 在正文(拍板 D4:不代改只报位置);<code>a5</code>=标签词对但冒号全角(D4 降档);<code>c5</code>=「实测」段内无任何数字(弱信号);<code>d1w</code>=TODO/XXX 词面易撞合法引用(如「清掉 TODO」),降警告;<code>d6</code>=「&gt;8」剪裁线。</td></tr>
+</table>
+<h3>拒收存档(有意不查)</h3>
+<table>
+<tr><th>条目</th><th>理由</th></tr>
+<tr><td>CRLF / 行尾空白</td><td>实测 <code>cleanup=whitespace</code> 自动剥离</td></tr>
+<tr><td>反引号</td><td>语料 21/200 行在用;<code>-F</code> 无 bash 替换风险</td></tr>
+<tr><td>首行超长 / 句号结尾</td><td>语料本就长句,无事故史</td></tr>
+<tr><td>Merge 消息</td><td>rebase 线性,merge 不走消息文件路径</td></tr>
+<tr><td>语义质量(消息与改动不符 / 数字未实测 / 消息空洞)</td><td>不可机检;gitmoji skill 与 agent 纪律的领域</td></tr>
+</table>
+<h3>逃生与接线(拍板 D5/D6)</h3>
+<ul>
+  <li><b>逃生白名单</b>:<code>msg_check_allow = ["b4", …]</code>(KEY_DEFAULTS 兜底 <code>[]</code>)只放行硬拦档——警告无 suppress 需求、自动修不会误伤;未知 id 在 <code>config_problems</code> 报 STOP。失败行自带出路:「误报逃生: .my-commit-flow.toml 加 <code>msg_check_allow</code>」——与包内「失败行给下一步」风格一致,不留后门旗标。</li>
+  <li><b>检查顺序</b>:读文件(strict UTF-8;<code>a2</code>)→ 空判(<code>d7</code>)→ A1 → B3 → C1 → 硬拦清单 → 警告清单(全部基于修后文本判定,顺序即修先于检)。</li>
+  <li><b>输出契约</b>:修正行/警告行/违规明细 <code>print</code> 在上,失败走 <code>emit()</code> 单点一行「提交失败: 提交信息机检 N 项未过 —— 重写消息文件后重跑」;消息文件保留(与 git commit 失败同款:修好重跑还能用同一份,但用修后文本)。</li>
+  <li><b>不做</b>独立命令入口;显式 <code>--message-file</code> 同受检同自动修;<code>amend --no-edit</code> 不复检。</li>
+</ul>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+<table>
+<tr><th>#</th><th>内容</th><th>验收判据</th></tr>
+<tr><td>S1</td><td><code>msg_check.py</code>:gitmoji 全集常量(去 VS16 归一)+ <code>review_text(text, allow)</code> 纯函数 + <code>check_message_file(path, allow)</code> 文件层入口,返回修正/警告/违规三清单</td><td>纯函数无 IO 副作用(文件层除外);十类硬拦逐条有单测</td></tr>
+<tr><td>S2</td><td><code>_ship_config.py</code>:<code>KEY_DEFAULTS</code> 加 <code>msg_check_allow</code>;<code>config_problems</code> 校验白名单 id(未知 → STOP,列合法 id)</td><td>写错 id 的 toml → <code>config_stops</code> 非空</td></tr>
+<tr><td>S3</td><td><code>commit.py</code> 接线:存在性检查之后、闸门之前调用;修正写回 + 打印;警告打印;违规 <code>emit</code> 失败行(附逃生提示)</td><td>全绿零修正 = 输出与现状完全一致;违规不产生提交、文件保留</td></tr>
+<tr><td>S4</td><td><code>test_commit.py</code> 新增:纯函数面(逐条目正反例)+ 接线面(全英文被拦 / BOM 自动修后落库 / 白名单放行)+ docstring「测试计划」同步</td><td><code>test.pkg.scoped</code> 全绿;新用例名称进 docstring 清单</td></tr>
+</table>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p class="cm">(空——grilling 六问已全部拍板,结论迁 §06。)</p>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+<tr><th>#</th><th>议题</th><th>结论</th></tr>
+<tr><td>D1</td><td>分档框架与静默纪律</td><td>三态(硬拦 / 自动修 / 警告);修正必留痕,绝对静默只属于零修正的绿(2026-11-06,按推荐)</td></tr>
+<tr><td>D2</td><td>错误条目矩阵</td><td>按矩阵执行无增删;拒收四条存档(CRLF / 反引号 / 首行长度 / Merge),实测与语料依据见 §02-§03(2026-11-06)</td></tr>
+<tr><td>D3</td><td>正文标签强制口径</td><td>(a) 正文存在⇒所有段落必须带已知标签(动机/取舍/影响面/实测);取舍不强制出现(2026-11-06,选 a)</td></tr>
+<tr><td>D4</td><td>改写类自动修边界</td><td>标点不代改(全角冒号降警告);空格归一仅限骨架承接处(gitmoji 后);正文一律不代改,不可见字符降警告(2026-11-06,用户裁决)</td></tr>
+<tr><td>D5</td><td>逃生通道</td><td>配置白名单 <code>msg_check_allow</code>(只放行硬拦档,未知 id = STOP);不给一次性环境变量、不给一键跳过旗标(2026-11-06,选 b)</td></tr>
+<tr><td>D6</td><td>接线细节</td><td>检查点在存在性检查后、闸门前;显式 --message-file 同受检;amend --no-edit 不复检;独立模块 + 测试进 test_commit.py;失败行走 emit();不做独立命令入口(2026-11-06,按推荐)</td></tr>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+<tr><th>风险</th><th>触发条件</th><th>对策</th></tr>
+<tr><td>检查器误伤合法消息</td><td>语料冒出撞签名的形态(如正文合法引用 TODO 已降警告;c2 口径遇「一句话裸正文」)</td><td>失败行引原文可判 + 白名单按 id 放行;误报属检查器缺陷,修完随本次提交入库</td></tr>
+<tr><td>VS16 / 多码点 emoji 拆分误判</td><td>🗑️/♻️/⚡️ 等带 VS16 的 gitmoji 被当非标准集</td><td>比对前统一去 VS16 归一;语料高频 emoji 逐个进单测</td></tr>
+<tr><td>自动修写回与残留扫描相互作用</td><td>BOM 版消息恰与 HEAD 消息「相等」</td><td>Python <code>str.strip()</code> 不剥 U+FEFF,残留扫描(先跑)不会误判;review 在其后,写回的是修后文本,自愈语义不变</td></tr>
+<tr><td>快照语义下的文件写回</td><td>包脚本跑在仓库外副本,消息文件路径解析错位</td><td>msg_check 只收 <code>Path</code>;路径由 commit.py 的 root 解析(与既有 msg_file 同一来源),无新增路径逻辑</td></tr>
+<tr><td>GBK 控制台打印 emoji 崩(历史事故)</td><td>失败行/修正行含 emoji 或中文</td><td>commit.py 入口已 reconfigure utf-8(pitfalls/git/message.md 处置),新打印全部走该入口之后</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-06-0124</span> 初版:grilling 六问全拍板后落盘;含三态矩阵定稿(v2,含 D4 修正)、拒收存档表、S1-S4 实施步骤与风险对策。grilling 期间的关键实测:BOM 过 <code>-F</code> 不剥、CRLF 自剥、<code>#</code> 行保留、反引号语料 21/200。</li>
+</ul>
+
+</div>
+</body>
+</html>

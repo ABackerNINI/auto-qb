@@ -87,7 +87,7 @@ commands run env.sync # 首次/依赖变更后同步依赖
 
 ## 提交/PR
 
-**步骤与机检一律走task id**(不是文档):收到"提交"→①收尾回写文档(DoD)→②消息写进`.git/COMMIT_MSG_AI.txt`(提交后脚本自动删除)后`commands run ship.commit`:闸门+暂存+提交+内部同步(**提交先行**——树净rebase恒可自动,stash舞蹈自提交路径退役)+核ref+推Gitee全自动;同步冲突/断网才需agent介入(失败行自带下一步),结果行「提交成功 <hash>」(上面各留本次真改写HEAD的步骤行,带 旧hash→新hash),推送未完成不改退出码(补`ship.push`)。独立`my-commit-flow.sync`只剩会话开工用途。**本节只留口径**;原理与完整判据在包内`references/pipeline.md`(排障才读)。
+**步骤与机检一律走task id**(不是文档):收到"提交"→①收尾回写文档(DoD)→②消息写进`.git/COMMIT_MSG_AI.txt`(提交后脚本自动删除)后`commands run ship.commit`:消息机检(BOM/乱码/骨架/残留,被拦按失败行处置,误报逃生=msg_check_allow)+闸门+暂存+提交+内部同步(**提交先行**——树净rebase恒可自动,stash舞蹈自提交路径退役)+核ref+推Gitee全自动;同步冲突/断网才需agent介入(失败行自带下一步),结果行「提交成功 <hash>」(上面各留本次真改写HEAD的步骤行,带 旧hash→新hash),推送未完成不改退出码(补`ship.push`)。独立`my-commit-flow.sync`只剩会话开工用途。**本节只留口径**;原理与完整判据在包内`references/pipeline.md`(排障才读)。
 
 - **协作主线**:日常在`develop`,以**Gitee的`develop`**为准;**交付与否只看Gitee**。GitHub只作镜像、**允许滞后**——别用GitHub状态判断进度。
 - **用户说"提交"=commit+push**,一次走完;**触发词只认"提交/入库/推上去"这类显式指令**,"继续/接着做/ok/你看着办"一律不算。**本条是提交口径的单点定义**,优先于`memory-bank/`里的历史表述。
