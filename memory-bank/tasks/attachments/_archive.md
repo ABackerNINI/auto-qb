@@ -4,7 +4,7 @@
 > 主索引的已完结区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**(只列 slug 与标题; 摘要全文在档案里)。
 > 每条链接指回 `tasks/` 下的档案原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## In Progress (29)
+## In Progress (30)
 
 - [26-09-22-deps-version-management](../26-09-22-deps-version-management.md) 软件版本管理方案（版本号 / Tag / CHANGELOG / 发版流程）
 - [26-11-06-backend-hr-badge-total-crosscheck](../26-11-06-backend-hr-badge-total-crosscheck.md) issue 26-09-30-0052 上限徽章总数轴互证复验、前提纠错与拍板
