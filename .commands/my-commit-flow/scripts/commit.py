@@ -330,7 +330,7 @@ def main(argv: list[str] | None = None) -> int:
     #   同步拿 HEAD 当真值, ref 丢了会把旧 tip 当成本地提交推出去
     ok, detail = check_refs()
     for line in detail:
-        print(line)  # ok 也可能带信息行(v5: packed 陈旧自动修复记录); 干净通过时为空
+        print(line)  # 自愈失败说明行仅在 COMMAND_FLOW_DEBUG=1 时返回; 正常路径/成功自愈时为空
     if not ok:
         if message_matches_head(msg_file):
             # HEAD 消息与文件一致 → 分支 ref 已指向本次提交, 核对红只是 packed-refs 滞后一类
@@ -420,7 +420,7 @@ def main(argv: list[str] | None = None) -> int:
             step(steps, f"闸门复跑: 合流后闸门改了 {len(dirty_r)} 个文件 → amend {before[:8]}→{head_now[:8]}")
             ok, detail = check_refs()  # amend 又是一次 ref 写入 —— 复核
             for line in detail:
-                print(line)  # ok 也可能带信息行(v5: packed 陈旧自动修复记录); 干净通过时为空
+                print(line)  # 自愈失败说明行仅在 COMMAND_FLOW_DEBUG=1 时返回; 正常路径/成功自愈时为空
             if not ok:
                 emit(steps, "提交失败: ref 三处不一致(amend 后) —— 提交可能没落稳; 确认无他人操作 .git 后按下方步骤处置")
                 return 1

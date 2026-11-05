@@ -41,9 +41,11 @@
 - test_check_refs_pass_on_fresh_repo      ref 三处核对在干净仓库通过
 - test_classify_form_pure                 停手形态分流纯函数: packed 落后 vs 分支指针被回退
 - test_check_refs_packed_stale_autoheals  v5(2026-10-31): HEAD==refs/heads==loose、仅 packed 落后
-                                          → 自动 git pack-refs --all 刷新并放行(ok=True, 附修复记录)
+                                          → 自动 git pack-refs --all 刷新并放行(ok=True);
+                                          v7(2026-11-05)起成功自愈静默(无信息行)
 - test_check_refs_packed_stale_passes_when_heal_fails
-                                          v5 B 判据: pack-refs 刷不动也放行(loose==HEAD 为准, 附说明)
+                                          v5 B 判据: pack-refs 刷不动也放行(loose==HEAD 为准);
+                                          v7 起说明行默认静默, 仅 COMMAND_FLOW_DEBUG=1 可见
 - test_check_refs_branch_rollback_routes_to_rollback_entry
                                           分支指针真被回退/丢失 → 仍送「分支 ref 被回退」条目
 """
@@ -636,15 +638,13 @@ def test_classify_form_pure():
 
 def test_check_refs_packed_stale_autoheals(repo, monkeypatch):
     """v5(2026-10-31): HEAD==refs/heads==loose、仅 packed-refs 落后 → 自动 git pack-refs --all
-    并放行(ok=True), 附一行修复记录 —— 手工照配方处置已复发 7 次, 收进脚本(不再停手)。"""
+    并放行(ok=True); v7(2026-11-05)起成功自愈静默(无信息行, 排障开关开着也不输出)。"""
     _git(repo, "pack-refs", "--all")  # develop 进 packed-refs(loose 文件被删)
     _commit_file(repo, "new.txt", "new\n", "new")  # 提交只写 loose → packed 落后
+    monkeypatch.setenv(verify_ref_mod.DEBUG_ENV, "1")  # 排障开关不影响成功路径的静默
     ok, detail = verify_ref_mod.check_refs()
-    text = "\n".join(detail)
     assert ok
-    assert "自动修复" in text
-    assert "git pack-refs --all" in text
-    assert "[STOP]" not in text  # 该形态不再停手
+    assert detail == []  # 成功自愈静默: 不向用户输出提醒行
     # 修复真实生效: packed 已刷新到 HEAD —— 再核一遍直接干净通过(无信息行)
     assert verify_ref_mod.packed_ref("develop") == _git(repo, "rev-parse", "HEAD")
     ok2, detail2 = verify_ref_mod.check_refs()
@@ -653,15 +653,20 @@ def test_check_refs_packed_stale_autoheals(repo, monkeypatch):
 
 def test_check_refs_packed_stale_passes_when_heal_fails(repo, monkeypatch):
     """v5 B 判据: pack-refs --all 刷不动(非 0)也放行 —— git 解析 ref 时 loose 优先于 packed,
-    HEAD==refs/heads==loose 三处一致即落稳, packed 落后仅是噪音; 只附一行说明, 不失败。"""
+    HEAD==refs/heads==loose 三处一致即落稳, packed 落后仅是噪音; v7(2026-11-05)起说明行
+    默认静默, 仅 COMMAND_FLOW_DEBUG=1 时可见(排障出口), 两种模式都不失败。"""
     _git(repo, "pack-refs", "--all")
     _commit_file(repo, "new.txt", "new\n", "new")
     monkeypatch.setattr(
         verify_ref_mod, "git_run", lambda *a, **k: CompletedProcess(["git", "pack-refs", "--all"], 1, "", "boom")
     )
+    monkeypatch.delenv(verify_ref_mod.DEBUG_ENV, raising=False)  # 宿主 shell 可能留着排障开关
     ok, detail = verify_ref_mod.check_refs()
-    text = "\n".join(detail)
-    assert ok
+    assert ok and detail == []  # 正常路径: 放行且不暴露 ref 细节
+    monkeypatch.setenv(verify_ref_mod.DEBUG_ENV, "1")
+    ok_d, detail_d = verify_ref_mod.check_refs()
+    text = "\n".join(detail_d)
+    assert ok_d
     assert "未生效" in text and "放行" in text
     assert "[STOP]" not in text
 

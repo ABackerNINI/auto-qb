@@ -1,14 +1,15 @@
 # Git ref 核对
 
-> 摘要: ref 核对已内联进 `ship.commit`(静默通过; 只看 commit 输出会被骗, 由脚本兜住; packed-refs 陈旧形态 v5 起自动修复+放行); 本 shell 里 `refs/remotes/*` 的写入会被静默丢弃 —— sync/push 脚本判据因此只认 ls-remote 现查真值。
+> 摘要: ref 核对已内联进 `ship.commit`(静默通过; 只看 commit 输出会被骗, 由脚本兜住; packed-refs 陈旧形态 v5 起自动修复+放行, v7 起自愈静默 —— 失败说明仅 COMMAND_FLOW_DEBUG=1 可见); 本 shell 里 `refs/remotes/*` 的写入会被静默丢弃 —— sync/push 脚本判据因此只认 ls-remote 现查真值。
 > 等级: L1
 > 触发: 提交后核对, ref, packed-refs, 分支被回退, staged 暴增, 上游未设置, 领先落后算不出
 
-### ref 三处核对已内联进 ship.commit: `HEAD` == `refs/heads/<branch>` == packed-refs
+### ref 三处核对已内联进 ship.commit: `HEAD` == `refs/heads/<branch>` == loose ref(packed-refs 仅排障参照)
 
 - **触发**: 每次提交之后(脚本自动做, 静默通过)。
 - **判别**: **只看 `git commit` 的输出会被骗** —— ref 更新可能被拦截层静默丢弃; 脚本核对不一致会给失败行。
-- **处置**: 排障 / 手工复核用 `commands run my-commit-flow.verify-ref`; 不一致按它打印的步骤修。
+- **对外口径**: 成功时只给 commit hash 结论; **ref 与 hash 不同是内部记账差异, 不是交付事实** —— agent 不主动提 ref, 只在脚本报失败 / 无法核实时才介入。
+- **处置**: 排障 / 手工复核用 `commands run my-commit-flow.verify-ref`; 不一致按它打印的步骤修; 自愈失败细节用 `COMMAND_FLOW_DEBUG=1` 重跑该命令查看。
 
 ### 「分支 ref 被回退」的判别法: 提交后突然冒出成百上千 staged
 
@@ -24,10 +25,12 @@
 - **触发**: `verify_ref.py` 报 packed-refs 与 HEAD 不一致。
 - **判别**: 被 pack 过的分支更新时只写 **loose ref**(优先级更高), packed-refs 保留旧值直到下次 pack。
   先看 `HEAD` 与 `refs/heads/<branch>` 是否一致 —— **一致即落稳**。
-- **处置**: ✅ **已根治进脚本**(2026-10-31, `verify_ref.py` 输出契约 v5): 「HEAD==refs/heads==loose、
-  仅 packed 落后」这一形态 `check_refs` **自动跑 `git pack-refs --all` 刷新并放行**(B 判据: git 解析
-  ref 时 loose 优先于 packed, packed 旧值读不到, 三处本地真值一致即落稳; 刷不动也放行, 附一行说明)
-  —— 不再停手要人照配方。分支指针真被回退/丢失(HEAD 与 refs/heads/loose 不一致)仍停手送被回退条目。
+- **处置**: ✅ **已根治进脚本**(2026-10-31, `verify_ref.py` 输出契约 v5; v7 2026-11-05 起自愈静默):
+  「HEAD==refs/heads==loose、仅 packed 落后」这一形态 `check_refs` **自动跑 `git pack-refs --all`
+  刷新并放行**(B 判据: git 解析 ref 时 loose 优先于 packed, packed 旧值读不到, 三处本地真值一致即落稳;
+  **刷成功即静默**; 刷不动也静默放行, 说明行仅 `COMMAND_FLOW_DEBUG=1` 时输出 —— 正常路径不向
+  agent / 用户暴露 ref 细节) —— 不再停手要人照配方。分支指针真被回退/丢失(HEAD 与 refs/heads/loose
+  不一致)仍停手送被回退条目。
   ⚠ 不要靠 `update-ref` —— 它只写 loose, 治不了 packed-refs。
 - **复发 7 次(2026-10-07~10-31)后根治**: 曾长期靠停手指引误路由到「分支 ref 被回退」; 2026-10-31 起
   `check_refs` 判出该形态即自动 `pack-refs --all` 并放行(v5, 每笔提交自愈, 手工处置路径退役),
