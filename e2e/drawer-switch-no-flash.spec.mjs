@@ -82,7 +82,10 @@ for (const skin of SKINS) {
         }, t.empty);
 
         await page.dblclick('.torrent-row >> nth=1', { force: true });   // 软切换换目标
-        await page.waitForTimeout(1200);
+        // 旧 1200ms 睡等 = 页内 rAF 逐帧采样器的量具窗(切换全程的帧序列是断言本体:
+        // busy 帧 0 / 空态帧 == 总帧; 窗长也是「空响应不得触发重拉」的暴露窗) ——
+        // 走 Node 侧 setTimeout 不占页面时钟, 采样器照常在页内跑(观察/量具语义, 保留并注释)
+        await new Promise((resolve) => setTimeout(resolve, 1200));
         const f = await page.evaluate(() => {
           /** @type {any} */ (window).__stop();
           return /** @type {any} */ (window).__f;

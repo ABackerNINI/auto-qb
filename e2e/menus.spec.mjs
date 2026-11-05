@@ -125,12 +125,22 @@ import { armClick, armPending, readPending } from './lib/probes.mjs';
  *    断言读自定义属性的解析结果, 不读裸 computed 背景); ③W2 的 armPending+armClick 按
  *    旧 W2 用法原样移植(第②类时序探针; 旧脚本本段只钉 t0 不消费 —— 限速走 bulk 合单
  *    无乐观贴片, 保持同口径不新增断言)。
- *  · 阈值/语义性 sleep 逐字保留: CTX-05 移出后等 450ms 再看(收起延迟 ~180ms, 等待即断言);
+ *  · 阈值/语义性等待的**时长**逐字保留、机制 S4 后半显式化(S4 计划 26-11-05-0118): CTX-05
+ *    移出后 450ms 内必须收起(收起延迟 ~180ms, 时长收紧即断言, toHaveCount 上限同值);
  *    W2/W4 toast 轮询上限 5s(旧 deadline 同值); W3 取消后 600ms 零 POST 观察窗(旧 400ms
  *    同款语义, 略放余量)、确认后 poll 到 1 再加 500ms 观察窗看"无误发"(旧 1200ms 等回执
- *    同语义); W5-off flags 轮询 10s(旧 waitForFunction 同值)。
+ *    同语义)、块E 两条负条件观察窗(700/700ms, 旧 700/1200ms 拆正负两半)均走 Node 侧
+ *    observeWindow; W5-off flags 轮询 10s(旧 waitForFunction 同值)。
  *  · 每 test 独立 context ⇒ 旧脚本跨块 settle sleep(等 3s 兜底窗口过/清选择/关弹层)不再需要。
  */
+
+/**
+ * 负条件观察窗(观察程序参数, 非条件等待): 「点了不该发的请求」没法用 expect.poll 表达 ——
+ * poll 首拍即中会提前通过, 观察窗必须真实流逝才给「坏情况发生」留出暴露时长, 窗后读计数断言。
+ * 走 Node 侧 setTimeout(不占页面时钟); e2e setTimeout 审计口径: 观察/业务延迟语义, 保留并注释。
+ * @param {number} ms
+ */
+const observeWindow = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /** /export 请求计数(W4 逐个导出口径, 旧 onReq 同款)。 */
 const exportTap = (/** @type {import('@playwright/test').Page} */ page) => {
@@ -205,7 +215,7 @@ for (const skin of SKINS) {
         await inputs.nth(0).fill('1024'); // 上传 1024 KiB/s; 下载留空 = 不提交该项(D3)
         await page.locator('.modal-actions .bt.primary').click();
         await expect.poll(() => hits.n, { message: '批量限速应发出恰好 1 条 bulk POST', timeout: 8_000 }).toBe(1);
-        await page.waitForTimeout(500); // 观察窗: 确认没有第二条(旧 W3 同款"恰好 1 条"语义)
+        await observeWindow(500); // 观察窗: 确认没有第二条(旧 W3 同款"恰好 1 条"语义) —— 负条件观察窗, 见 observeWindow 注
         off();
         expect(hits.n, `选中 ${N} 个 → bulk ${hits.n} 条`).toBe(1);
         const posted = JSON.parse(/** @type {string} */ (hits.body));
@@ -260,7 +270,7 @@ for (const skin of SKINS) {
         await expect(page.locator('.modal')).toBeVisible({ timeout: 5_000 });
         await expect(page.locator('.modal-title')).toContainText('批量跳检');
         await page.locator('.modal-actions .bt.ghost').click(); // 取消
-        await page.waitForTimeout(600); // 旧 400ms 同款观察窗: 取消后不该有 POST
+        await observeWindow(600); // 旧 400ms 同款观察窗: 取消后不该有 POST —— 负条件观察窗, 见 observeWindow 注
         expect(hits.n, `取消后 bulk POST ${hits.n} 条`).toBe(0);
         // 选择未清(取消不提交也不清选) —— 旧脚本按 selMembers 现找锚点的同款自证
         expect(await readInst(page, 'vm.selMembers.length'), '取消后选择保持').toBe(N);
@@ -270,7 +280,7 @@ for (const skin of SKINS) {
         await expect(page.locator('.modal')).toBeVisible({ timeout: 5_000 });
         await page.locator('.modal-actions .bt.danger-solid').click();
         await expect.poll(() => hits.n, { message: '确认后应恰好 1 条 bulk POST', timeout: 8_000 }).toBe(1);
-        await page.waitForTimeout(500); // 观察窗: 确认没有误发第二条(旧 1200ms 等回执同语义)
+        await observeWindow(500); // 观察窗: 确认没有误发第二条(旧 1200ms 等回执同语义) —— 负条件观察窗, 见 observeWindow 注
         off();
         expect(hits.n, `确认后 bulk POST ${hits.n} 条`).toBe(1);
         const posted = JSON.parse(/** @type {string} */ (hits.body));
@@ -532,8 +542,9 @@ for (const skin of SKINS) {
         // CTX-05: 只有 mouseenter 展开、没有任何收起 ⇒ 子面板会一直挂在屏幕上(修前形态)。
         // hover 到另一个一级项 → 450ms 后 .ctx-sub 必须为 0(收起延迟 ~180ms, 等 450ms 是断言语义)
         await page.locator('.ctx-menu > .ctx-item').first().hover();
-        await page.waitForTimeout(450);
-        await expect(page.locator('.ctx-sub')).toHaveCount(0);
+        // 旧 450ms 睡等「收起延迟 ~180ms, 等 450ms 是断言语义」→ DOM 条件自动轮询且上限同值:
+        // 收起必须发生在 450ms 内(不是"5s 内收就行" —— 时长收紧本身就是断言的一部分)
+        await expect(page.locator('.ctx-sub')).toHaveCount(0, { timeout: 450 });
         await page.keyboard.press('Escape'); // 收尾关菜单
         await expect(page.locator('.ctx-menu')).toHaveCount(0);
       });
@@ -660,7 +671,7 @@ for (const skin of SKINS) {
         expect(tip, '置灰项提示应给出原因(data-aq-tip)').toMatch(/无法强制重新汇报/);
         const { hits, off } = reannounceTap(page);
         await item.click();          // 置灰项仍可被点(样式拦显示), 行为层必须拦住
-        await page.waitForTimeout(700); // 观察窗: 越过点击 -> 投递的短窗
+        await observeWindow(700); // 观察窗: 越过点击 -> 投递的短窗 —— 负条件观察窗, 见 observeWindow 注
         off();
         expect(hits.n, '非活跃种子点击强制汇报不得发出任何 reannounce 请求').toBe(0);
         await expect.poll(async () => {
@@ -708,7 +719,11 @@ for (const skin of SKINS) {
 
         const { hits, off } = reannounceTap(page);
         await item.click();
-        await page.waitForTimeout(1200); // 观察窗: 越过点击 -> 投递的短窗
+        // 旧 1200ms 睡等拆两半: 正半「活跃目标已投递」是赌完成 -> expect.poll; 负半「非活跃
+        // 目标不得补发」是负条件观察窗(见 observeWindow 注), 窗长与单选置灰用例的 700ms 同口径
+        await expect.poll(() => hits.targets, { message: '活跃目标必须被投递', timeout: 8_000 })
+          .toContain(activeHash);
+        await observeWindow(700);
         off();
         expect(hits.targets, '活跃目标必须被投递').toContain(activeHash);
         expect(hits.targets, '非活跃目标不得被投递(混选时必须收敛掉)').not.toContain(pausedHash);

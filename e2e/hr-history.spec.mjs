@@ -64,7 +64,7 @@ import { collectRuntimeErrors, installRuntimeErrorGuard } from './lib/errors.mjs
  *    同一 toggle 的关向); 复原后行数回 5 的确认并入行展开 test 的前置 expect。
  *  · 阈值/桩文案逐字保留: 五形态行齐 = 5 行、五档徽章 ok|warn|dim|err|blue 各一、仅看异常后
  *    2 行、明细子行文案「A 考察中」「3 页 / 96 行」—— 桩数据契约, 改了就是桩或渲染变了。
- *  · 无保留 sleep: 旧块的 waitForTimeout(250/200/800) 全是等本地过滤/弹层渲染的装饰性等待,
+ *  · 无保留 sleep: 旧块的固定睡等(250/200/800ms)全是等本地过滤/弹层渲染的装饰性等待,
  *    expect 自动等待 / toHaveCount 覆盖同语义。
  */
 

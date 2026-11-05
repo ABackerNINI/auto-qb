@@ -99,7 +99,20 @@ for (const skin of SKINS) {
       const emptyTip = catPop.locator('.pop-empty');
       await expect(emptyTip).toBeVisible({ timeout: 5_000 });
       await emptyTip.click();
-      await page.waitForTimeout(300);  // > 40ms 合帧窗, 定时器该响的都响完了
+      // 旧 300ms 睡等「> 40ms 合帧窗, 定时器该响的都响完了」→ 逐帧采样危险窗内面板恒在
+      // (move-dialog-fit 同款: 合帧收层是「闪没」形态, 窗后一次断言抓不到中间帧)
+      const frames = await page.evaluate((dur) => new Promise((res) => {
+        const sampled = [];
+        const t0 = performance.now();
+        const tick = () => {
+          sampled.push(!!document.querySelector('.add-dialog-field:has(#ad-category) .pop-menu.add-pop'));
+          if (performance.now() - t0 < dur) requestAnimationFrame(tick);
+          else res(sampled);
+        };
+        requestAnimationFrame(tick);
+      }), 300);
+      expect(frames.length, '观察窗采样帧数 >0(采样器没挂上?)').toBeGreaterThan(0);
+      expect(frames.every(Boolean), '点空态文案: 合帧收层危险窗(40ms 定时器)内面板恒在').toBe(true);
       await expect(catPop, '点空态文案不得收起面板(面板内非交互区抢焦点 = 同一类缺陷)').toBeVisible();
     });
   });

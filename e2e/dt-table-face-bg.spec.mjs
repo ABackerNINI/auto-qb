@@ -271,12 +271,14 @@ for (const skin of SKINS) {
          * 由专用用例断「带宽在、行仍摘底」, 不走 equality。 */
         if (!def.hoverBand) {
           await page.locator(`${def.list} ${PLAIN_ROW}`).first().hover();
-          await page.waitForTimeout(150);
-          const hov = await probeFirstVsRow(page, def.list, PLAIN_ROW);
-          expect(hov.error, `面 ${faceId} 悬停行探针`).toBeUndefined();
-          expect(hov.firstVisible, `面 ${faceId} 悬停: 首格可见底 != 行板`
-            + ` —— 首格 ${hov.firstVisible} vs 行板 ${hov.rowVisible}`)
-            .toBe(hov.rowVisible);
+          // 旧 150ms 睡等「等悬停态落定」→ poll 等首格/行板可见底等式成立: 行板 hover tint 有
+          // transition: background(--dur 160ms), 首格同规则同步过渡, 等式在过渡每一拍与终态都
+          // 成立; 修前首格无悬停规则(竖带形态)时等式恒不成立 —— 红在本 poll, 不再赌 150ms 够过渡
+          await expect.poll(async () => {
+            const hov = await probeFirstVsRow(page, def.list, PLAIN_ROW);
+            return hov.error ? null : hov.firstVisible === hov.rowVisible;
+          }, { message: `面 ${faceId} 悬停: 首格可见底 != 行板(修前首格无悬停规则, 悬停即现竖带)`, timeout: 5_000 })
+            .toBe(true);
         }
       });
     }
@@ -300,6 +302,11 @@ for (const skin of SKINS) {
         collectRuntimeErrors(page);
         const def = await openDrawerFace(page, faceId);
         const rowLoc = page.locator(`${def.list} ${cs.sel}`).first();
+        /* 常态基线(状态 tint 的「落上了」信号 = 可见底离开它): 旧 500ms 睡等
+         * 「等 transition: background 走完(旧值/中间值不算)」换成两段 poll —— 先等 tint 落上
+         * (可见底 != 常态基线; 中间值一直在变不会提前判稳), 再量首格/行板等式。prep 为 null
+         * 的面(err/bad 行随桩数据出生, 无过渡)首拍即中, 行为不变。 */
+        const plainVisible = (await probeFirstVsRow(page, def.list, PLAIN_ROW)).rowVisible;
         if (cs.prep === 'check') {
           /* 11: 点名字格首的勾选框 ⇒ 行落 is-chk */
           await page.locator(`${def.list} .dt11-ck`).first().click();
@@ -308,7 +315,18 @@ for (const skin of SKINS) {
           await page.locator(`${def.list} .group-row`).first().click();
         }
         await expect(rowLoc, `面 ${faceId} 状态行 ${cs.sel} 未出现(桩数据/交互未触发?)`).toHaveCount(1, { timeout: 5000 });
-        await page.waitForTimeout(500); /* 等 transition: background 走完(旧值/中间值不算) */
+        /* 等 tint 落上**且**过渡走完: 可见底离开常态基线 + 连续三拍(拍距 300ms, 静默 >= 600ms)
+         * 全等 —— 单"变了"判据会在过渡刚起步时就放行, 紧跟的量具读到中间值(实测 sel 行
+         * 首格 40,47,74 vs 行板 39,46,72 差 1, 即坑档 frozen-column 的量测陷阱形态)。 */
+        const seq = [];
+        await expect.poll(async () => {
+          const st = await probeFirstVsRow(page, def.list, cs.sel);
+          seq.push(st.error ? null : st.rowVisible);
+          if (seq.length > 3) seq.shift();
+          return seq.length === 3 && seq[0] !== null && seq[0] !== plainVisible &&
+            seq[0] === seq[1] && seq[1] === seq[2];
+        }, { message: `面 ${faceId} 状态行 tint 未落稳(可见底仍 == 常态基线或过渡未走完, 交互未生效?)`,
+          timeout: 5_000, intervals: [300] }).toBe(true);
         const st = await probeFirstVsRow(page, def.list, cs.sel);
         expect(st.error, `面 ${faceId} 状态行探针`).toBeUndefined();
         expect(st.firstVisible, `面 ${faceId} 状态行 ${cs.sel}: 首格可见底 != 行板`
@@ -338,10 +356,14 @@ for (const skin of SKINS) {
       expect(fail.rowBg, `面 05 失败行行板须保持摘底(${fail.rowBg})`).toBe('rgba(0, 0, 0, 0)');
       /* 悬停: 带宽落在内容根上(不透明), 行板仍透明 —— 单内容根无兄弟列, 带宽即整行观感 */
       await page.locator(`${def.list} ${PLAIN_ROW}`).first().hover();
-      await page.waitForTimeout(150);
+      // 旧 150ms 睡等「等悬停带画上内容根」→ poll 等首格底色离开透明(带宽落上的显式信号)
+      await expect.poll(async () => {
+        const hov = await probeFirstVsRow(page, def.list, PLAIN_ROW);
+        return hov.error ? null : hov.firstBg;
+      }, { message: '面 05 悬停带宽未落在内容根上(首格底仍透明)', timeout: 5_000 })
+        .not.toBe('rgba(0, 0, 0, 0)');
       const hov = await probeFirstVsRow(page, def.list, PLAIN_ROW);
       expect(hov.error, '面 05 悬停行探针').toBeUndefined();
-      expect(hov.firstBg, `面 05 悬停带宽未落在内容根上(${hov.firstBg})`).not.toBe('rgba(0, 0, 0, 0)');
       expect(hov.rowBg, `面 05 悬停行板被误涂(${hov.rowBg})`).toBe('rgba(0, 0, 0, 0)');
     });
   });

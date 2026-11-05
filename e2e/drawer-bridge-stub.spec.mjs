@@ -26,6 +26,15 @@ const WIDE = { width: 2560, height: 1200 };
 const STUB_ITEM = '.ctx-item:has-text("桥验证")';
 const ANCHOR = '[data-dt-table-anchor="drawerStubV0"]';
 
+/**
+ * 负条件观察窗(观察程序参数, 非条件等待): 软切换的重拉走 skipUnchanged, 「桥该稳定存活而不
+ * 重挂」没有可轮询的 DOM 终点(数据不变时页面无可见变化) —— 窗必须真实流逝才给「重挂/换内容」
+ * 这个坏情况留出暴露时长, 窗后读锚内 DOM 断言。走 Node 侧 setTimeout(不占页面时钟);
+ * e2e setTimeout 审计口径: 观察/业务延迟语义, 保留并注释。
+ * @param {number} ms
+ */
+const observeWindow = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 async function openTorrentDrawer(page) {
   await page.click('nav.tabs [data-view="torrents"]');
   await expect(page.locator('.torrent-row').first()).toBeVisible({ timeout: 15_000 });
@@ -156,7 +165,7 @@ for (const skin of SKINS) {
       // 换目标: 抽屉开着双击另一行(软切换 —— _loadDrawerTab 重拉四域, _dtNotify 走 skipUnchanged)
       await page.dblclick('.torrent-row >> nth=1', { force: true });
       await expect(drawer).toBeVisible();
-      await page.waitForTimeout(800);
+      await observeWindow(800); // 软切换重拉余波窗(负条件观察窗, 见 observeWindow 注)
       const anchor2 = drawer.locator(ANCHOR);
       await expect(anchor2.locator('.group-head[data-table="drawerStubV0"]'), '软切换后桥稳定存活(不重挂)').toBeVisible({ timeout: 10_000 });
       await expect(anchor2.locator('.group-row[data-table="drawerStubV0"]').first()).toBeVisible();

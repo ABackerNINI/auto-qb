@@ -30,6 +30,17 @@ const NARROW = { width: 1280, height: 800 };
 
 const MERGE_ITEM = '.ctx-item:has-text("合并页签")';
 
+/**
+ * 抽屉入场过渡跑完的显式化(.drawer-enter-active: transform .2s + opacity .18s) —— 旧 300ms
+ * 睡等「赌过渡跑完, 再去点正文/量几何」的 getAnimations 化。过滤 iterations=Infinity 的常驻
+ * 动画(pending 徽标脉冲等永不 finished, 不滤会挂死)。
+ * @param {import('@playwright/test').Locator} loc
+ */
+const settleDrawerAnim = (loc) => loc.evaluate((el) => Promise.all(
+  el.getAnimations({ subtree: true })
+    .filter((a) => a.effect && a.effect.getComputedTiming().iterations !== Infinity)
+    .map((a) => a.finished.catch(() => {}))));
+
 async function openTorrentDrawer(page) {
   await page.click('nav.tabs [data-view="torrents"]');
   await expect(page.locator('.torrent-row').first()).toBeVisible({ timeout: 15_000 });
@@ -50,7 +61,7 @@ for (const skin of SKINS) {
       await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 15_000 });
       await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
       const drawer = await openTorrentDrawer(page);
-      await page.waitForTimeout(300);
+      await settleDrawerAnim(drawer); // 旧 300ms 睡等: 抽屉入场过渡(200ms)跑完的显式化
 
       // 默认四页签(合并关闭): Tracker 单页签在
       await expect(drawer.locator('.drawer-tabs button', { hasText: /^Tracker$/ })).toBeVisible();
@@ -177,7 +188,7 @@ for (const skin of SKINS) {
       await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 15_000 });
       await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
       const drawer = await openTorrentDrawer(page);
-      await page.waitForTimeout(300);
+      await settleDrawerAnim(drawer); // 旧 300ms 睡等: 抽屉入场过渡(200ms)跑完的显式化
 
       // 开合并: 右键单开关 -> 页签栏收敛, 默认双列 = gc
       await drawer.locator('.drawer-body').click({ button: 'right' });
@@ -212,7 +223,7 @@ for (const skin of SKINS) {
       await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 15_000 });
       await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
       const drawer = await openTorrentDrawer(page);
-      await page.waitForTimeout(300);
+      await settleDrawerAnim(drawer); // 旧 300ms 睡等: 抽屉入场过渡(200ms)跑完的显式化
 
       const menu = page.locator('.ctx-menu');
       const noErr = (where) => expect(collectRuntimeErrors(page),
@@ -311,7 +322,11 @@ for (const skin of SKINS) {
       await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 15_000 });
       await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
       const drawer = await openTorrentDrawer(page);
-      await page.waitForTimeout(300);
+      await settleDrawerAnim(drawer); // 旧 300ms 睡等: 抽屉入场过渡(200ms)跑完的显式化
+      // 场景锚: 缺省变体宿主已挂载(.dt-tpl) —— expectNoDeadClass 扫全文档, 宿主没挂上时变体
+      // 侧的 class 根本不在场, 死类检查会空过(旧 300ms 睡等隐含赌的就是这个挂载)
+      await expect(drawer.locator('.dt-host[data-dt-host="general"]'))
+        .toHaveClass(/dt-tpl/, { timeout: 5_000 });
       // 死类守阵(坑档 esc-attr-quote-dead-class): 变体(dtHtml 字符串 DOM)态全文档零「类名含引号」
       await expectNoDeadClass(page, '合并前缺省变体态');
 

@@ -79,17 +79,20 @@ const readPageState = (page) =>
     };
   });
 
-/** 等滚动落定(翻页是 nextTick 里发的滚动 + 窗口化重渲染, 不等待会把中间态读数当结果)。 */
-const settleScroll = async (page) => {
-  let prev = '';
-  for (let i = 0; i < 40; i++) {
-    const sig = await page.evaluate(
+/**
+ * 等滚动落定(翻页是 nextTick 里发的滚动 + 窗口化重渲染, 不等待会把中间态读数当结果):
+ * 滚动位 + 光标行顶连续三拍采样(拍距 200ms, 静默 >= 400ms)全等 —— 旧 for 循环 + 50ms 睡等
+ * 节拍的 expect.poll 化; 两拍口径会在滚动尚未开始时提前通过, 三拍 + 静默窗按守阵判据收紧。
+ */
+const settleScroll = async (page, timeout = 10_000) => {
+  const seq = [];
+  await expect.poll(async () => {
+    seq.push(await page.evaluate(
       () => `${Math.round(window.scrollY)}:${Math.round(document.querySelector('.kb-cursor')?.getBoundingClientRect().top ?? -1)}`,
-    );
-    if (sig === prev) return;
-    prev = sig;
-    await page.waitForTimeout(50);
-  }
+    ));
+    if (seq.length > 3) seq.shift();
+    return seq.length === 3 && seq[0] === seq[1] && seq[1] === seq[2];
+  }, { timeout, intervals: [200] }).toBe(true);
 };
 
 for (const skin of SKINS) {
@@ -228,7 +231,15 @@ for (const skin of SKINS) {
       await settleScroll(page);
       await page.dblclick('.torrent-row >> nth=0', { force: true }); // force: 整表 2s 重渲染抢点击(smoke.md)
       await expect(page.locator('.drawer-dock > .drawer')).toBeVisible({ timeout: 5_000 });
-      await page.waitForTimeout(800); // 面板长到自然高后可见带才落定
+      // 旧 800ms 睡等「面板长到自然高后可见带才落定」→ poll 等可见带三拍稳态(拍距 300ms,
+      // 静默 >= 600ms): 面板内容异步挂载长高期间 band/visible 一直在变, 不会提前判稳
+      const bandSeq = [];
+      await expect.poll(async () => {
+        const s = await readPageState(page);
+        bandSeq.push(`${s.band}:${s.visible}`);
+        if (bandSeq.length > 3) bandSeq.shift();
+        return bandSeq.length === 3 && bandSeq[0] === bandSeq[1] && bandSeq[1] === bandSeq[2];
+      }, { timeout: 10_000, intervals: [300], message: '面板开: 可见带未落定(面板未长到自然高?)' }).toBe(true);
       const p2 = await pageTurn();
       expect(
         p2.advance,
@@ -295,7 +306,7 @@ for (const skin of SKINS) {
         await withVm(page, `vm.kbCursor = null; return true;`);
         const { maxScroll } = await readRows();
         await page.evaluate((y) => window.scrollTo(0, y), Math.round(maxScroll * 0.7));
-        await page.waitForTimeout(250); // 等滚动 + 窗口化重渲染落定(本视图非窗口化, 只等滚动)
+        await settleScroll(page); // 旧 250ms 睡等「等滚动落定(本视图非窗口化)」→ poll 滚动位三拍稳态
         const before = await readRows();
         const visibleBefore = before.rows
           .filter((r) => r.bottom > before.hb && r.top < before.sbt)

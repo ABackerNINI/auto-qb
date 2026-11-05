@@ -129,6 +129,15 @@ const ROW_POINT = { x: 8, y: 8 };
 const ctxItem = (page, text) => page.locator('.ctx-item', { hasText: text });
 
 /**
+ * 负条件观察窗(观察程序参数, 非条件等待): 「bulk 之后不该有逐目标误发」没法用 expect.poll
+ * 表达 —— poll 首拍即中会提前通过, 窗必须真实流逝才给「坏情况发生」留出暴露时长, 窗后读
+ * 计数断言。走 Node 侧 setTimeout(不占页面时钟); e2e setTimeout 审计口径: 观察/业务延迟
+ * 语义, 保留并注释。
+ * @param {number} ms
+ */
+const observeWindow = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
  * 行点击统一入口: 真实鼠标手势 + 落点可验(机理与取舍见文件头「存量 flaky 的 trace 归因」)。
  *
  * @param {import('@playwright/test').Page} page
@@ -262,9 +271,10 @@ for (const skin of SKINS) {
       await armPending(page, '.torrent-row.is-pending, .group-row.is-pending'); // 点击**之前**装好
       await armClick(page, await item.elementHandle());
       await item.click();
-      // 回执是异步流: 先等 bulk 到 1, 再给一个确定的观察窗看"逐目标误发"(旧脚本同位 1500ms)
+      // 回执是异步流: 先等 bulk 到 1, 再给一个确定的观察窗看"逐目标误发"(旧脚本同位 1500ms;
+      // 负条件观察窗, 见 observeWindow 注)
       await expect.poll(() => hits.bulk, { message: '批量暂停应恰好 1 条 bulk POST' }).toBe(1);
-      await page.waitForTimeout(1500);
+      await observeWindow(1500);
       page.off('request', onReq);
       expect(hits.single, `bulk ${hits.bulk} 条之后的逐目标 pause 数`).toBe(0);
 

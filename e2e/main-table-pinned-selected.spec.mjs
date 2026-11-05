@@ -114,12 +114,15 @@ async function expandUnselectedRow(page, table) {
     row.scrollIntoView({ block: 'center', behavior: 'instant' });
     (row.querySelector('.g-name') || row.children[0]).click();
   }, { sel: ROW_SEL(table), idx });
-  await page.waitForTimeout(400);
-  const ok = await page.evaluate(
-    ({ sel, idx }) => document.querySelectorAll(sel)[idx]?.classList.contains('expanded') === true,
-    { sel: ROW_SEL(table), idx },
-  );
-  return ok ? idx : null;
+  // 旧 400ms 睡等「赌展开类落上」→ poll 等 expanded 类(DOM 条件自动轮询)
+  await expect.poll(
+    () => page.evaluate(
+      ({ sel, idx }) => document.querySelectorAll(sel)[idx]?.classList.contains('expanded') === true,
+      { sel: ROW_SEL(table), idx },
+    ),
+    { timeout: 5_000, message: `${table} 行展开点击未落上(expanded 类 5s 未出现 —— 渲染链变了?)` },
+  ).toBe(true);
+  return idx;
 }
 
 /** 行板与首格的计算背景(颜色层 + image 层)。 */
@@ -139,6 +142,21 @@ function readBgs(page, table, idx) {
 const alphaOf = (color) => {
   const nums = String(color).match(/[\d.]+/g) || [];
   return nums.length >= 4 ? Number(nums[3]) : 1;
+};
+
+/**
+ * 等行板/首格计算背景稳态(连续三拍、拍距 200ms, 静默 >= 400ms) —— 悬停 tint 有
+ * transition: background(--dur 160ms), 旧 300ms 睡等「赌过渡走完再量底」的显式化
+ * (坑档 frozen-column 量测陷阱: 过渡期 getComputedStyle 拿到的是旧值/中间值)。
+ */
+const awaitBgsStable = async (page, table, idx, timeout = 5_000) => {
+  const seq = [];
+  await expect.poll(async () => {
+    const b = await readBgs(page, table, idx);
+    seq.push(b ? `${b.row.color}|${b.row.image}|${b.cell.color}|${b.cell.image}` : 'null');
+    if (seq.length > 3) seq.shift();
+    return seq.length === 3 && seq[0] !== 'null' && seq[0] === seq[1] && seq[1] === seq[2];
+  }, { timeout, intervals: [200] }).toBe(true);
 };
 
 for (const skin of SKINS) {
@@ -170,7 +188,7 @@ for (const skin of SKINS) {
         // C. 悬停面: 选中行被压住时仍同底
         const over = await hoverRowIdx(page, v.table, hit.idx);
         expect(over, `${v.label} 指针未能落在选中行内(吸顶表头/状态栏遮挡?) —— 悬停面不可判`).not.toBeNull();
-        await page.waitForTimeout(300);
+        await awaitBgsStable(page, v.table, hit.idx); // 旧 300ms 睡等: 悬停过渡落定再量底
         const hov = await readBgs(page, v.table, hit.idx);
         expect(hov.row.color, `${v.label} 悬停选中行: 行板 ${hov.row.color} != 首格 ${hov.cell.color}`)
           .toBe(hov.cell.color);
@@ -201,7 +219,7 @@ for (const skin of SKINS) {
 
         const over = await hoverRowIdx(page, v.table, idx);
         expect(over, `${v.label} 指针未能落在展开行内(吸顶表头/状态栏遮挡?) —— 悬停面不可判`).not.toBeNull();
-        await page.waitForTimeout(300);
+        await awaitBgsStable(page, v.table, idx); // 旧 300ms 睡等: 悬停过渡落定再量底
         const hov = await readBgs(page, v.table, idx);
         expect(hov.row.color, `${v.label} 悬停展开行: 行板 ${hov.row.color} != 首格 ${hov.cell.color}`)
           .toBe(hov.cell.color);

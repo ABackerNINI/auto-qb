@@ -14,9 +14,10 @@ S2/S3/S4 清理时逐条删除收紧。**新增违例不经本表直接红**; �
 
 各文件条目上方注释 = 该文件存量的清理归属与理由; 条目数 = 实测存量
 (tests 裸 sleep **已清零**[S1 实测 27 处/15 文件 -> T3b 清 2 文件 8 处 -> S3 收口清 12 文件 18 处,
-仅剩 clock.py 合法等待单点本体 1 处带理由保留] · e2e waitForTimeout 41 处/15 文件
-[S4 前半 2026-11-05: move-dialog-fit/dt-live-update/perf/window-invalidation/column-prefs
-5 文件 50 处已替换为 expect 系/expect.poll 清零, 条目删净] · src 裸取时 **已全部清零**
+仅剩 clock.py 合法等待单点本体 1 处带理由保留] · e2e waitForTimeout **已全部清零**
+[S1 实测 91 处/20 文件 -> S4 前半 2026-11-05 清 move-dialog-fit/dt-live-update/perf/
+window-invalidation/column-prefs 5 文件 50 处 -> S4 后半 2026-11-05 清其余 15 文件 41 处,
+替换为 expect 系/expect.poll/Node 侧观察窗后条目删净, S4 判据①达成] · src 裸取时 **已全部清零**
 [core 90 处/16 文件、hr 12 处/5 文件、webui/traffic 35 处/11 文件、其余叶子 24 处/11 文件
 已随 S2 各域提交清零, 本表 src 组只剩完成注释]
 · bind 位固定端口 0 处), 与守阵扫描逐条对得上。
@@ -51,91 +52,11 @@ ALLOW_TIME_SRC: dict[str, dict[str, int]] = {
 
 # ---------- ALLOW_WAIT_TIMEOUT_E2E: e2e/*.mjs 的 page.waitForTimeout(...) 固定睡等(含注释里的历史提及, 行文本全等口径) ----------
 ALLOW_WAIT_TIMEOUT_E2E: dict[str, dict[str, int]] = {
-    # S4 e2e 清理: 替换为 expect(locator).toHaveXxx() / expect.poll / toPass() 后删除(1 处)
-    "e2e/add-options-recent-order.spec.mjs": {
-        "await page.waitForTimeout(300);  // > 40ms 合帧窗, 定时器该响的都响完了": 1
-    },
-    # S4 e2e 清理: 替换为 expect(locator).toHaveXxx() / expect.poll / toPass() 后删除(1 处)
-    "e2e/drawer-bridge-stub.spec.mjs": {
-        "await page.waitForTimeout(800);": 1
-    },
-    # S4 e2e 清理: 替换为 expect(locator).toHaveXxx() / expect.poll / toPass() 后删除(2 处)
-    "e2e/drawer-content-perf.spec.mjs":
-        {
-            "await page.waitForTimeout(500);": 1,
-            "await page.waitForTimeout(500); // 交互 + 窗口重算余波落进观察窗": 1
-        },
-    # S4 e2e 清理: 替换为 expect(locator).toHaveXxx() / expect.poll / toPass() 后删除(1 处)
-    "e2e/drawer-fileprio-optimistic.spec.mjs": {
-        "await page.waitForTimeout(400); // 等旧路径重拉落定, 再量候选组": 1
-    },
-    # S4 e2e 清理: 替换为 expect(locator).toHaveXxx() / expect.poll / toPass() 后删除(4 处)
-    "e2e/drawer-merge.spec.mjs": {
-        "await page.waitForTimeout(300);": 4
-    },
-    # S4 e2e 清理: 替换为 expect(locator).toHaveXxx() / expect.poll / toPass() 后删除(1 处)
-    "e2e/drawer-switch-no-flash.spec.mjs": {
-        "await page.waitForTimeout(1200);": 1
-    },
-    # S4 e2e 清理: 替换为 expect(locator).toHaveXxx() / expect.poll / toPass() 后删除(3 处)
-    "e2e/dt-table-face-bg.spec.mjs":
-        {
-            "await page.waitForTimeout(150);": 2,
-            "await page.waitForTimeout(500); /* 等 transition: background 走完(旧值/中间值不算) */": 1
-        },
-    # S4 e2e 清理: 替换为 expect(locator).toHaveXxx() / expect.poll / toPass() 后删除(1 处)
-    "e2e/hr-history.spec.mjs": {
-        "*  · 无保留 sleep: 旧块的 waitForTimeout(250/200/800) 全是等本地过滤/弹层渲染的装饰性等待,": 1
-    },
-    # S4 e2e 清理: 替换为 expect(locator).toHaveXxx() / expect.poll / toPass() 后删除(5 处)
-    "e2e/hscroll-indicator.spec.mjs": {
-        "await page.waitForTimeout(300);": 3,
-        "await page.waitForTimeout(350);": 2
-    },
-    # S4 e2e 清理: 替换为 expect(locator).toHaveXxx() / expect.poll / toPass() 后删除(3 处)
-    "e2e/kbd-scroll-band.spec.mjs":
-        {
-            "await page.waitForTimeout(250); // 等滚动 + 窗口化重渲染落定(本视图非窗口化, 只等滚动)": 1,
-            "await page.waitForTimeout(50);": 1,
-            "await page.waitForTimeout(800); // 面板长到自然高后可见带才落定": 1
-        },
-    # S4 e2e 清理: 替换为 expect(locator).toHaveXxx() / expect.poll / toPass() 后删除(3 处)
-    "e2e/main-table-pinned-selected.spec.mjs":
-        {
-            "await page.waitForTimeout(300);": 2,
-            "await page.waitForTimeout(400);": 1
-        },
-    # S4 e2e 清理: 替换为 expect(locator).toHaveXxx() / expect.poll / toPass() 后删除(6 处)
-    "e2e/menus.spec.mjs":
-        {
-            "await page.waitForTimeout(1200); // 观察窗: 越过点击 -> 投递的短窗": 1,
-            "await page.waitForTimeout(450);": 1,
-            "await page.waitForTimeout(500); // 观察窗: 确认没有第二条(旧 W3 同款\"恰好 1 条\"语义)": 1,
-            "await page.waitForTimeout(500); // 观察窗: 确认没有误发第二条(旧 1200ms 等回执同语义)": 1,
-            "await page.waitForTimeout(600); // 旧 400ms 同款观察窗: 取消后不该有 POST": 1,
-            "await page.waitForTimeout(700); // 观察窗: 越过点击 -> 投递的短窗": 1
-        },
-    # S4 e2e 清理: 替换为 expect(locator).toHaveXxx() / expect.poll / toPass() 后删除(1 处)
-    "e2e/multiselect-shows.spec.mjs": {
-        "await page.waitForTimeout(1500);": 1
-    },
-    # S4 e2e 清理: 替换为 expect(locator).toHaveXxx() / expect.poll / toPass() 后删除(6 处)
-    "e2e/optimistic.spec.mjs":
-        {
-            "await page.waitForTimeout(1500);": 1,
-            "await page.waitForTimeout(400); // 旧同值: 等 ver 去抖 + DOM 落地": 1,
-            "await page.waitForTimeout(400); // 旧同值: 让记录器把瞬时起落采完再读": 1,
-            "await page.waitForTimeout(6500);": 1,
-            "await page.waitForTimeout(900); // 旧同值: 等首轮轮询/渲染尘埃落定再装采样器": 1,
-            "await page.waitForTimeout(900); // 旧同值: 让记录器把组行 pending 起落采完": 1
-        },
-    # S4 e2e 清理: 替换为 expect(locator).toHaveXxx() / expect.poll / toPass() 后删除(3 处)
-    "e2e/views.spec.mjs":
-        {
-            "*  · 装饰性 waitForTimeout(400/700/300/150…) 全部换成 expect 自动等待 / expect.poll;": 1,
-            "await page.waitForTimeout(2000);": 1,
-            "await page.waitForTimeout(300); /* 等列对齐规则注入 + 首帧布局稳定 */": 1
-        },
+    # S4 后半收口(2026-11-05): 15 文件 41 处已全部清零, 条目删净 —— 机制去向四类:
+    # DOM 条件 -> expect(locator) 自动轮询(时长即断言的挂同值 timeout); 赌完成 -> expect.poll
+    # (稳态类三拍口径, 拍距 >= 300ms 保静默跨度 >= 350ms); 负条件观察窗(「不该发生的」poll 首拍
+    # 即中会提前通过)与页内采样器量具窗 -> Node 侧 setTimeout observeWindow/measureWindow
+    # (时长逐字保留并注释); 合帧收层危险窗 -> rAF 逐帧采样恒真断言(move-dialog-fit 同款)。
 }
 
 # ---------- ALLOW_BIND_PORT: bind 调用位的字面固定端口(配置值位不拦) ----------

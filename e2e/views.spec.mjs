@@ -47,8 +47,9 @@ import { readInst } from './lib/vm.mjs';
  *  · evaluate 保留处均为 vm 内部字段读数(expandedKey / viewMode / filteredTorrents / renderMs /
  *    totalDl / tagOptions / currentPollMs)—— 这些埋点与视图态没有 DOM 之外的取径, 属 D4 允许的
  *    第②类; 各处注释标明。
- *  · 装饰性 waitForTimeout(400/700/300/150…) 全部换成 expect 自动等待 / expect.poll;
- *    唯一保留的 sleep 是渲染健康里「跨一个轮询周期再看错误」的 2000ms —— 那是断言语义本身。
+ *  · 装饰性睡等(400/700/300/150…)已全部换成 expect 自动等待 / expect.poll(S4 后半收口,
+ *    计划 26-11-05-0118): 渲染健康「跨一个轮询周期再看错误」的 2000ms 是断言语义本身, 走
+ *    Node 侧 observeWindow; 几何守卫的 300ms → poll 等对齐量具测空。
  *  · 阈值/超时数字逐字保留: 15_000(v-cloak/种子行)/30_000(首屏行)/5_000(.detail/弹层)、
  *    轮询分档 1500/2000/3000、300 种子档轮询 2s。
  *  · 整表 2s 重渲染抢点击的坑仍在(smoke.md): 行点击沿用 force:true + 注释, 与旧脚本同款。
@@ -56,6 +57,14 @@ import { readInst } from './lib/vm.mjs';
 
 /** 导航页签定位器(模板: tpl/topbar.html `nav.tabs [data-view]`, 三个视图三态同页)。 */
 const tab = (page, view) => page.locator(`nav.tabs [data-view="${view}"]`);
+
+/**
+ * 负条件观察窗(观察程序参数, 非条件等待): 「跑过一个轮询周期后仍无错」没法用 expect.poll
+ * 表达 —— poll 首拍即中会提前通过, 窗必须真实流逝才让「每轮重渲染才抛」的错误现形。
+ * 走 Node 侧 setTimeout(不占页面时钟); e2e setTimeout 审计口径: 观察/业务延迟语义, 保留并注释。
+ * @param {number} ms
+ */
+const observeWindow = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 for (const skin of SKINS) {
   test.describe(`皮肤 ${skin}(块A: 视图与渲染健康)`, () => {
@@ -79,8 +88,8 @@ for (const skin of SKINS) {
       expect(await gRows.count(), '分组视图渲染行数').toBeGreaterThan(0);
 
       /* 跨过一个轮询周期再看错误: "每轮重渲染才抛"的那类错只有等一轮才现形(轮询 1.5~3s 分档,
-       * 300 种子的档位取 2s)。这里必须等, 不是可省的 sleep。 */
-      await page.waitForTimeout(2000);
+       * 300 种子的档位取 2s)。这里必须等, 不是可省的 sleep —— 负条件观察窗, 见 observeWindow 注。 */
+      await observeWindow(2000);
 
       expect(errors, `运行期错误:\n${errors.join('\n')}`).toEqual([]);
     });
@@ -378,9 +387,10 @@ test.describe('几何守卫(右对齐列表头)', () => {
     test(`[${skin}] 几何: 右对齐列表头与值右缘对齐(±1px), 且值格不居中`, async ({ page }) => {
       await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
       await page.waitForSelector('.group-row', { timeout: 30_000 });
-      await page.waitForTimeout(300); /* 等列对齐规则注入 + 首帧布局稳定 */
 
-      const bad = await page.evaluate(() => {
+      /* 旧 300ms 睡等「等列对齐规则注入 + 首帧布局稳定」→ poll 等对齐量具测空: 规则注入/
+       * 字体晚到引起的暂时错位会在后续拍清掉, 真缺陷(盒模型偏 11px 形态)恒不测空。 */
+      await expect.poll(() => page.evaluate(() => {
         /* 内容盒右缘 = 盒右缘 − 右内边距 */
         const cRight = (el) => el.getBoundingClientRect().right - parseFloat(getComputedStyle(el).paddingRight);
         const out = [];
@@ -404,9 +414,10 @@ test.describe('几何守卫(右对齐列表头)', () => {
           });
         }
         return out;
-      });
-
-      expect(bad, `右对齐列错位 / 0 值居中: ${JSON.stringify(bad)}`).toEqual([]);
+      }), {
+        message: '右对齐列错位 / 0 值居中(列对齐规则注入 + 首帧布局稳定后仍不测空; received = 错位数组)',
+        timeout: 5_000,
+      }).toEqual([]);
     });
   }
 });

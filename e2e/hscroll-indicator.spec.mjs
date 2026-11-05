@@ -57,6 +57,15 @@ const WIDE = { width: 2400, height: 900 };
 const TABLE = '.group-table';
 const headSel = (table) => `.group-head[data-table="${table}"]`;
 
+/**
+ * 负条件观察窗(观察程序参数, 非条件等待): 「危险触发已给到(热区 mousemove / ResizeObserver
+ * 回调)但不该有痕迹」没法用 expect.poll 表达 —— 首拍即中会提前通过, 窗必须真实流逝才给
+ * 「RO 回调 / 淡出过渡 / 定时器抖动」留出暴露时长, 窗后读胶囊状态断言。走 Node 侧 setTimeout
+ * (不占页面时钟); e2e setTimeout 审计口径: 观察/业务延迟语义, 保留并注释。
+ * @param {number} ms
+ */
+const observeWindow = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 /** 打开某个主表页签并等首行出来(与 main-table-pinned-hover.spec.mjs 同一范式)。 */
 async function openView(page, skin, view) {
   await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
@@ -263,7 +272,8 @@ for (const skin of SKINS) {
         '负例有效性: 热区 mousemove 没到过 document, 本用例是空过').toBeGreaterThan(0);
 
       // ResizeObserver 回调与淡出都是异步的, 给一个合帧 + 过渡窗口再断言"没有痕迹"
-      await page.waitForTimeout(300);
+      // (负条件观察窗, 见 observeWindow 注)
+      await observeWindow(300);
       const st = await pillState(page);
       expect(st.on, `宽窗热区内胶囊被点亮了(无横向余量却给"可横滚"提示, D10)`).toBe(false);
       expect(st.opacity, `宽窗热区内胶囊 opacity=${st.opacity}(应为 0)`).toBe(0);
@@ -294,18 +304,18 @@ for (const skin of SKINS) {
 
       // 基线: 指针在内容区中部 -> 不出现(证明下面的"不出现"不是因为它压根没亮过)
       await page.mouse.move(hot.x, midY);
-      await page.waitForTimeout(300);
+      await observeWindow(300); // 负条件观察窗, 见 observeWindow 注
       expect((await pillState(page)).on, '前置: 指针在内容区中部却亮了胶囊').toBe(false);
 
       // a. 状态栏本身不召唤
       await page.mouse.move(hot.x, sbCenterY);
-      await page.waitForTimeout(350);
+      await observeWindow(350); // 负条件观察窗, 见 observeWindow 注
       expect((await pillState(page)).on,
         `指针在状态栏(y=${sbCenterY})却亮了胶囊 —— 热区带把状态栏也算进去了(应只到状态栏上缘为止)`).toBe(false);
 
       // b. 带内但横向远离胶囊(视口左缘)也不召唤
       await page.mouse.move(20, hot.y);
-      await page.waitForTimeout(350);
+      await observeWindow(350); // 负条件观察窗, 见 observeWindow 注
       expect((await pillState(page)).on,
         `指针在热区带内但 x=20(远离居中的胶囊)却亮了胶囊 —— 横向判据退化成全屏宽`).toBe(false);
 
@@ -318,8 +328,11 @@ for (const skin of SKINS) {
 
       // c. Shift+滚轮: 先把指针移出热区(否则 hot 会一直兜着), 再横滚
       await page.mouse.move(hot.x, midY);
-      await page.waitForTimeout(300);
-      expect((await pillState(page)).on, '前置: 指针已移出热区却仍亮着').toBe(false);
+      // 旧 300ms 睡等「移出热区后该落」→ poll 等 .on 摘除, 上限同值(300ms 内必须落, 收紧即断言;
+      // 移出前它是亮着的, poll 不会首拍提前通过)
+      await expect.poll(async () => (await pillState(page)).on, {
+        message: '前置: 指针已移出热区却仍亮着(300ms 内未落)', timeout: 300,
+      }).toBe(false);
 
       await page.keyboard.down('Shift');
       await page.mouse.wheel(0, 200);   // Shift+纵向滚轮 = 浏览器原生横滚

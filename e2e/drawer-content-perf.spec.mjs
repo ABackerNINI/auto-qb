@@ -25,6 +25,15 @@ import { INST } from './lib/vm.mjs';
 
 const WIDE = { width: 2560, height: 1200 };
 
+/**
+ * 量具观察窗(测量程序参数, 非条件等待): 折叠交互后的 longtask/MutationObserver 计数预算
+ * (≤1 个 / ≤64 条)是按「交互 + 窗口重算余波落进 ~500ms 观察窗」量得值标定的 —— 窗后读数,
+ * 窗长即测量口径的一部分, 不能换成条件等待(等更久会让后台状态轮的 DOM 变更灌进计数)。
+ * 走 Node 侧 setTimeout(不占页面时钟); e2e setTimeout 审计口径: 量具延迟语义, 保留并注释。
+ * @param {number} ms
+ */
+const measureWindow = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 /* 千文件树桩: 单层目录 D 下 1000 个文件 —— 与 dt-live-update.spec.mjs makeFilesK 同构
  * (file0 priority 6 备用; 折叠判据只需要 path 前缀树)。 */
 function makeFilesK(n = 1000) {
@@ -141,7 +150,7 @@ for (const skin of SKINS) {
 
         const tgl = anchor.locator('.group-row.dir [data-act="fold"]').first();
         await tgl.click();
-        await page.waitForTimeout(500); // 交互 + 窗口重算余波落进观察窗
+        await measureWindow(500); // 交互 + 窗口重算余波落进观察窗(量具窗, 见 measureWindow 注)
 
         // 折叠后: 千行子树真收拢 —— 行数塌到目录行 + 窗口余量, 占位总高按新窗重测塌缩
         const foldRows = await anchor.locator(`.group-row[data-table="${v.table}"]`).count();
@@ -158,7 +167,13 @@ for (const skin of SKINS) {
 
         // 展开还原: 再点一次, 窗口必须重测回千行态(不是停在折叠窗也不塌成全量)
         await tgl.click();
-        await page.waitForTimeout(500);
+        // 旧 500ms 睡等「交互 + 窗口重算余波落定」→ poll 等展开态落定(行数回常驻窗 + 占位还原)
+        await expect.poll(async () => {
+          const rows = await anchor.locator(`.group-row[data-table="${v.table}"]`).count();
+          const pad = await padHeight(page, v.table);
+          return rows < 300 && pad > padH0 * 0.9;
+        }, { timeout: 10_000, message: `展开后窗口重测未回千行态(行数回常驻窗且占位总高还原, 首渲 ${padH0}px)` })
+          .toBe(true);
         const unfoldRows = await anchor.locator(`.group-row[data-table="${v.table}"]`).count();
         expect(unfoldRows, `展开后窗口重测回常驻窗(实测 ${unfoldRows}, 仍 << 1001)`).toBeLessThan(300);
         const padH2 = await padHeight(page, v.table);

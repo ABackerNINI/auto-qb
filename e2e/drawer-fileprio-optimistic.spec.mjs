@@ -177,7 +177,12 @@ for (const skin of SKINS) {
       // 对照组(旧路径 _editPost: 等回执 + 静默重拉): idx 0
       const control = await measureVisible(page, { mode: 'control', idx: 0 });
       expect(control, `对照组可见延迟应可测(实测 ${control}ms)`).toBeGreaterThan(0);
-      await page.waitForTimeout(400); // 等旧路径重拉落定, 再量候选组
+      // 旧 400ms 睡等「等旧路径重拉落定, 再量候选组」→ poll 等重拉终点读数: 对照组的徽章
+      // 换上「最高」就是重拉落进 DOM 的可见终点(measureVisible 的 rAF 轮询恰好停在这一拍,
+      // 此处显式化防"测量内部已等过、外面再赌一段"的双重计时)
+      await expect.poll(() => badgeText(page, 0), {
+        message: '旧路径重拉落定(对照组徽章 == 最高)', timeout: 5_000,
+      }).toBe('最高');
 
       // 候选组(W6a 乐观写): idx 1
       const candidate = await measureVisible(page, { mode: 'optimistic', idx: 1 });

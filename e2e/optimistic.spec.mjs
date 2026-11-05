@@ -88,8 +88,10 @@ import { armClick, armPending, readPending } from './lib/probes.mjs';
  *  · 桩命令泵瞬时回执 ⇒ 压暗窗口只有几十 ms, expect.poll 会整段错过 —— 乐观出现类断言一律
  *    用 armPending 记录器判"曾经出现过"(probes.mjs 的存在理由, S2 同口径)。
  *  · 每 test 独立 context ⇒ 旧脚本跨块的 settle sleep(等 3s 兜底窗口过等)不再需要;
- *    保留的 sleep 均有注释: T1 400ms/T5 900ms(让记录器把瞬时起落采完再读, 旧同值)、
- *    T3 400ms(真值预对齐后的 ver 去抖, 旧同值)、T4/hang 观察窗(断言语义)。
+ *    S4 后半(计划 26-11-05-0118)waitForTimeout 已清零, 机制去向: T1/T5 的 400/900ms
+ *    「让记录器采完再读」→ poll 等记录器 appear 就位再 readPending(停采样器的读法不再赌);
+ *    T3 400ms 与 hang 900ms 的 settle → awaitRowClassesSettled 三拍行色稳态; T4 1500ms
+ *    零逐目标误发与 hang 6.5s 采样量具窗 → Node 侧 observeWindow(时长逐字保留)。
  */
 
 /** 导航页签定位器(tpl/topbar.html `nav.tabs [data-view]`)。 */
@@ -107,6 +109,32 @@ const CMD_URL = (u) => {
 
 /** 行状态色类(s-paused / s-seeding …), 旧 hangChecks/整组回滚同款。 */
 const sCls = (c) => (c || '').split(' ').find((x) => x.startsWith('s-')) || '';
+
+/**
+ * 等行色签名稳态(连续三拍、拍距 300ms 全等 = 静默 >= 600ms) —— vm.refresh() 的赋值在 withVm
+ * await 里已完成, 余下的是 ver 去抖(60ms 合并窗)+ Vue 异步重渲, 没有单一 DOM 终点; 旧
+ * 400/900ms 睡等「赌 settle 跑完」的显式化(挑行/装采样器前的前置, 读的是 settle 后的行色
+ * 不变量)。三拍口径防「重渲尚未开始就判稳」的提前通过。
+ * @param {import('@playwright/test').Page} page
+ */
+const awaitRowClassesSettled = async (page, timeout = 10_000) => {
+  const seq = [];
+  await expect.poll(async () => {
+    seq.push(await page.evaluate(() =>
+      Array.from(document.querySelectorAll('.torrent-row')).map((r) => r.className).join('|')));
+    if (seq.length > 3) seq.shift();
+    return seq.length === 3 && seq[0] === seq[1] && seq[1] === seq[2];
+  }, { timeout, intervals: [300] }).toBe(true);
+};
+
+/**
+ * 负条件观察窗 / 页内采样量具窗(观察程序参数, 非条件等待): 「不该发生的」没法用 expect.poll
+ * 表达 —— poll 首拍即中会提前通过, 窗必须真实流逝才给坏情况留出暴露时长; 页内 setInterval
+ * 采样器的量具窗 likewise 要真实走满才采得全起落。窗后读数断言。走 Node 侧 setTimeout
+ * (不占页面时钟); e2e setTimeout 审计口径: 观察/量具延迟语义, 保留并注释。
+ * @param {number} ms
+ */
+const observeWindow = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
  * 行点击统一入口: 真实鼠标手势 + 落点可验(对冲写法沿用 multiselect-shows.spec, 机理见其文件头:
@@ -246,7 +274,11 @@ for (const skin of SKINS) {
         await item.click();
 
         if (CMD_RESULT === 'ok') {
-          await page.waitForTimeout(400); // 旧同值: 让记录器把瞬时起落采完再读
+          // 旧 400ms 睡等「让记录器把瞬时起落采完再读」→ poll 等记录器采到 appear 再读:
+          // readPending 一读就停采样器, 读早了 appear 还没落下会假 null; poll 到位再读无此赌
+          await expect.poll(() => page.evaluate('window.__p ? window.__p.appear : null'), {
+            message: '点击 → 记录器采到 is-pending 出现(瞬时窗口)', timeout: 8_000,
+          }).not.toBe(null);
           const p = await readPending(page);
           // 判"曾经出现过"而不是"此刻还有" —— 真值对齐修好后 pending 只活 100~300ms
           expect(p.appear, `点击 → 出现 ${p.appear === null ? '从未出现' : p.appear + 'ms'}`).not.toBeNull();
@@ -316,7 +348,7 @@ for (const skin of SKINS) {
         // 轮询才在 DOM 反映 —— 不对齐会挑到"服务端已 paused"的行 ⇒ pending 瞬间清, 断言恒绿
         // 却什么都没测到。vm.refresh 属注入/复原桩态类 evaluate(D4 第①类)。
         await withVm(page, 'return vm.refresh && vm.refresh();');
-        await page.waitForTimeout(400); // 旧同值: 等 ver 去抖 + DOM 落地
+        await awaitRowClassesSettled(page); // 旧 400ms 睡等「等 ver 去抖 + DOM 落地」→ poll 等行色稳态
         const target = await pausableRow(page, '.torrent-row');
         expect(target, '找到未暂停的行').toBeTruthy();
         // 以 data-hash 锚定目标行: 2s 整表重渲染会换掉行节点, nth 定位可能漂到别的行
@@ -416,9 +448,10 @@ for (const skin of SKINS) {
         await armPending(page, '.torrent-row.is-pending, .group-row.is-pending'); // 点击之前装好
         await armClick(page, await item.elementHandle());
         await item.click();
-        // 回执是异步流: 先等 bulk 到 1, 再给一个确定的观察窗看"逐目标误发"(旧 1500ms 同值)
+        // 回执是异步流: 先等 bulk 到 1, 再给一个确定的观察窗看"逐目标误发"(旧 1500ms 同值
+        // —— 负条件观察窗, 见 observeWindow 注)
         await expect.poll(() => hits.bulk, { message: '批量暂停应恰好 1 条 bulk POST' }).toBe(1);
-        await page.waitForTimeout(1500);
+        await observeWindow(1500);
         page.off('request', onReq);
         expect(hits.bulk, `选中 ${picked} 个 → bulk ${hits.bulk} 次`).toBe(1);
         expect(hits.single, `bulk 之后的逐目标 pause ${hits.single} 次`).toBe(0);
@@ -461,7 +494,11 @@ for (const skin of SKINS) {
           expect(after, `${before} -> ${after}`).not.toContain('is-pending');
           expect(sCls(after), '回滚后状态色落回点击前(状态色取自 g.status.primary)').toBe(sCls(before));
         } else {
-          await page.waitForTimeout(900); // 旧同值: 让记录器把组行 pending 起落采完
+          // 旧 900ms 睡等「让记录器把组行 pending 起落采完」→ poll 等记录器采到 appear 再读
+          // (同单行暂停用例: readPending 一读就停采样器, poll 到位再读无"读早了假 null"的赌)
+          await expect.poll(() => page.evaluate('window.__p ? window.__p.appear : null'), {
+            message: '点击 → 记录器采到组行 is-pending 出现(瞬时窗口)', timeout: 8_000,
+          }).not.toBe(null);
           const p = await readPending(page);
           // 判"组行**曾经**出现过 pending"(记录器) —— 组行 pending 只活 100~300ms,
           // 点完再数一次必然是 0(不是回归, 是度量方式失效)
@@ -553,7 +590,7 @@ for (const skin of SKINS) {
         await openApp(page, skin);
         await tab(page, 'torrents').click();
         await expect(page.locator('.torrent-row').first()).toBeVisible({ timeout: 15_000 });
-        await page.waitForTimeout(900); // 旧同值: 等首轮轮询/渲染尘埃落定再装采样器
+        await awaitRowClassesSettled(page); // 旧 900ms 睡等「等首轮轮询/渲染尘埃落定再装采样器」→ poll 等行色稳态
         const row = await pausableRow(page, '.torrent-row');
         expect(row, '找到可暂停的行(且恢复失败)').toBeTruthy();
         const rowLoc = /** @type {import('@playwright/test').Locator} */ (row);
@@ -584,8 +621,8 @@ for (const skin of SKINS) {
         }, { capture: true, once: true }));
         await item.click();
         // 兜底 3s + 轮询周期 ⇒ 最长约 5s; 留到 6.5s 保证采到"消失"那一帧(旧同值 —— 这是
-        // 采样窗口断言的一部分, 不是可省的等待)
-        await page.waitForTimeout(6500);
+        // 页内 10ms 采样器的量具窗, 断言语义的一部分, 不是可省的等待; 见 observeWindow 注)
+        await observeWindow(6500);
         const rows = await page.evaluate('(() => { clearInterval(window.__hi); return window.__h.rows; })()');
         const i0 = rows.findIndex((/** @type {{pend: boolean|null}} */ r) => r.pend);
         const appear = i0 >= 0 ? rows[i0].t : null;
