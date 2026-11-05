@@ -60,6 +60,10 @@ dev = [
     # 系统 yapf, 版本/缓存位置都不可控(2026-10-08 排查"yapf 挂住"时的直接诱因之一)。
     # 0.43.0 是当前最新版(PyPI 实查); 版本一升, 它的语法缓存文件名里的版本号也会变。
     "yapf==0.43.0",
+    # 静态类型检查: [tool.mypy] 配置 + dev.typecheck task(计划 26-11-05-0635 S1; 独立任务,
+    # 不进提交闸门, 见该计划 D3)。2.4.1 是当前最新稳定版(PyPI 实查 2026-11-05, 2026-10-28 发布;
+    # 要求 Python >=3.10, 覆盖本仓 requires-python >=3.12)。
+    "mypy==2.4.1",
 ]
 
 [build-system]
@@ -90,3 +94,15 @@ replace = '__version__ = "{new_version}"'
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/auto_qb"]
+
+# mypy 静态类型检查(计划 26-11-05-0635 §04 S1): 跑法 `commands run dev.typecheck`。
+# 全局起步宽松, 不开 strict —— S2 清 RUF013 债、S3 优先模块补全、S4 才逐步收紧(见该计划 §03 分期)。
+[tool.mypy]
+python_version = "3.12"  # 与 requires-python = ">=3.12" 单点对齐
+files = ["src/auto_qb"]  # 全库面 = 包内代码; src/auto-qb.py 是 10 行兼容薄壳且含连字符非合法模块名, 不查
+# 缺 stub 的三方库(qbittorrent-api / customtkinter / pystray 等)全局放宽; S2-S4 需要收窄时再下沉 per-module
+ignore_missing_imports = true
+# no_implicit_optional 是 mypy 默认开启项, 不显式写 —— 该语义恰覆盖 RUF013 隐式 Optional 债, S2 清完后此面应零错
+# S2-S4 分级结构预留: [[tool.mypy.overrides]] per-module —— S3 给已注解面(config/torrents/core 选定面)加
+# disallow_untyped_defs 收紧; S4 给抵抗面(tray.* / rules.expr.env / webui 裸 dict 重灾区)加豁免, 并由
+# tests/test_mypy_allowlist_guard.py 冻结豁免清单(只减不增, 计划 §04 S4)

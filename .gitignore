@@ -7,6 +7,9 @@ test.py
 # Python虚拟环境
 .venv/
 
+# mypy 增量缓存(dev.typecheck, 默认落仓库根 .mypy_cache/; 不入库)
+.mypy_cache/
+
 # 运行时数据目录(2026-09-09: 状态/单实例锁/日志/跳检备份集中到 auto-qb-data/)
 auto-qb-data/
 

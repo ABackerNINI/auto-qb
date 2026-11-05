@@ -28,6 +28,13 @@ when    = "格式化改过的 py 文件（.style.yapf: facebook 风格, 列宽 1
 note    = "用**项目内** yapf(pyproject dev 依赖组, 0.43.0), 不再用 PATH 上的系统 yapf。⚠ 沙箱约束: yapf 把语法 pickle 缓存在 `%LOCALAPPDATA%\\Google\\YAPF\\Cache`(platformdirs 的 Win32 已知文件夹 API 决定, **环境变量改不动**), 该目录不在工具 shell 沙箱白名单 ⇒ 每次跑都刷一批被拒的临时文件; 实测**多数时候仍 <1s 正常跑完**, 但 2026-10-08 观察到过挂死(100% 单核 + 持续写磁盘) ⇒ timeout 60s + 引擎超时杀整棵树兜底。彻底消除: 把该缓存目录加进沙箱白名单。根因见 memory-bank/pitfalls/testing/sandbox-tool-cache.md"
 doc     = "../../memory-bank/pitfalls/testing/sandbox-tool-cache.md"
 
+[tasks."dev.typecheck"]
+run     = ["uv run mypy <args>"]
+timeout = 120
+when    = "静态类型检查（mypy）: 全库错误分级清单；清债/补注解/收紧配置后复查"
+note    = "配置单点在 pyproject [tool.mypy]（计划 26-11-05-0635 S1 接入; **独立任务不进提交闸门**, 该计划 D3）。无 <args> 时按配置 files=[src/auto_qb] 全库跑, 也可 `-- <文件>` 定向。增量缓存落仓库根 .mypy_cache/(已 gitignore)。⚠ 沙箱约束与 yapf 同族(会写自己的缓存目录) ⇒ timeout 120s + 引擎超时杀整棵树兜底(参照 memory-bank/pitfalls/testing/sandbox-tool-cache.md); 本仓实测缓存落仓库根(沙箱可写), 冷跑 6.6s / 1044 错 / 194 文件, 远不到超时。S1 接入期错误数不限(rc=1 属预期, 引擎会标 FAILED 但不影响任何闸门), S4 豁免面外清零后自然归绿"
+doc     = "../../memory-bank/pitfalls/testing/sandbox-tool-cache.md"
+
 [tasks."dev.harness"]
 run     = ["uv run python scripts/ui_harness.py <args>"]
 timeout = 900
