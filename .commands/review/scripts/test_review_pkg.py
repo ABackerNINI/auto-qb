@@ -9,9 +9,10 @@
   一旦加载, 会把这里的 git 子进程记成越界 POPEN, 整卷红(那是执行方式错, 不是代码缺陷)。
 
 ## 测试计划
-- ConfigTomlTest      config.toml 可解析 + [pack].name == "review" + 九 task(review.pack/check + review.lane 七子命令)必备键 + run 指向包内脚本(pack/lane)且带 <args>
-- LaneManifestTest    提交在库的 manifest.json 结构守阵: coverage.ok=true + 批次 id 唯一且前缀==route + routes 映射一致 + 文件跨批不重 + 批内不重 + 全部路径在分层范围内(src 代码文件/scripts py, 无 vendor) + registry 键齐
+- ConfigTomlTest      config.toml 可解析 + [pack].name == "review" + 九 task(review.pack/check + review.lane 七子命令)必备键 + run 指向对应包内脚本且 lane 系含子命令 token + 带 <args>
+- LaneManifestTest    提交在库的 manifest.json 结构守阵: coverage.ok=true + 批次 id 唯一且前缀==route + routes 映射一致 + 文件跨批不重 + 批内不重 + 全部路径在分层范围内(src 代码文件/scripts py, 无 vendor/test_*) + registry 键齐
 - LaneScriptTest      review_lane.py 无参 rc=2(无参无动作) + --help rc=0
+- LaneStateTest       状态机直驱单测: batch 转换与原子写(无 .tmp 残留)/坏批次 id 拒/重复勾选拒/done 批次未齐拒/产出缺失拒/合法终态/schema 校验(status 枚举/批次条目/缺文件)
 - PackTest            敏感 fixture: 基线/HEAD 后缀; 敏感面 -> 分面档; 文件清单精确行(重命名只列新路径/[已删除] 同行); 红线命中行含"出现即停"; 警告清单; 敏感面按元素归因(新增行/已跟踪路径标记/未跟踪内容/未跟踪路径/+++ 头归因, 且无幻影键); 仅删除计数; 尾斜杠目录规则; +++ 头不算内容; 空文件 0 行; 默认 root; 大 diff 用独立无敏感仓库证明分面来自行数
 - BenignPackTest      无敏感内容的小 diff -> 全能档(纯行数路径); 红线/警告清单仍命中
 - CleanPackTest      干净树 -> +0/-0 且全能; 缺/坏闸门配置 -> 可见降级 + 红线预警"无"; 坏 --base / 非 git --root / 非仓库 cwd -> rc=2; 提交后 HEAD!=base 无后缀且已提交改动仍在范围内
@@ -20,6 +21,8 @@
 
 from __future__ import annotations
 
+import argparse
+import fnmatch
 import json
 import shutil
 import subprocess
@@ -27,11 +30,13 @@ import sys
 import tempfile
 import tomllib
 import unittest
+import importlib.util
 from pathlib import Path
 
 PKG = Path(__file__).resolve().parents[1]  # .commands/review/scripts/ -> .commands/review/
 ROOT = PKG.parents[1]  # -> 仓库根
 SCRIPT = Path(__file__).with_name("review_pack.py")
+LANE_SCRIPT = Path(__file__).with_name("review_lane.py")
 
 APP_V1 = "line one\nline two\nline three\n"
 
@@ -127,10 +132,12 @@ class ConfigTomlTest(unittest.TestCase):
             for key in ("run", "timeout", "when", "note"):
                 self.assertIn(key, task, f"{tid} 缺 {key}")
             run_cmd = task["run"][0]
-            self.assertTrue(
-                "review_pack.py" in run_cmd or "review_lane.py" in run_cmd,
-                f"{tid} 未指向包内脚本: {run_cmd}",
-            )
+            if tid.startswith("review.lane."):
+                self.assertIn("review_lane.py", run_cmd, f"{tid} 应指向 review_lane.py: {run_cmd}")
+                seg = tid.rsplit(".", 1)[-1]
+                self.assertIn(seg, run_cmd.split(), f"{tid} 的 run 应含子命令 {seg}: {run_cmd}")
+            else:
+                self.assertIn("review_pack.py", run_cmd, f"{tid} 应指向 review_pack.py: {run_cmd}")
             self.assertIn("<args>", run_cmd)  # 引擎要求占位符才接参
 
 
@@ -174,7 +181,7 @@ class LaneManifestTest(unittest.TestCase):
                 seen.add(p)
                 self.assertTrue(p.startswith("src/") or p.startswith("scripts/"), f"{p} 越出分层范围")
                 self.assertNotIn("vendor/", p, f"{p} vendor 第三方库不应进范围")
-                self.assertFalse(p.endswith(("test_*.py",)), p)
+                self.assertFalse(fnmatch.fnmatchcase(p.rsplit("/", 1)[-1], "test_*.py"), p)
 
 
 class LaneScriptTest(unittest.TestCase):
@@ -195,6 +202,88 @@ class LaneScriptTest(unittest.TestCase):
         )
         self.assertEqual(proc.returncode, 0)
         self.assertIn("smoke", proc.stdout + proc.stderr)
+
+
+class LaneStateTest(unittest.TestCase):
+    """review_lane 状态机单测: 临时目录直驱 cmd_batch/cmd_done/_load_route(不依赖 git 网络面)。
+
+    claim/start/verify 需真仓+远端(ls-remote/sync), 归 smoke 全环管; 这里把 route JSON 的
+    状态转换与守卫语义(非法跳转/产出缺失/schema 校验/原子写)钉进守阵。
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        spec = importlib.util.spec_from_file_location("review_lane_under_test", LANE_SCRIPT)
+        cls.lane = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cls.lane)
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        (self.root / ".git").mkdir()  # _resolve_root 只验 .git 存在
+        self.lane_dir = self.root / "memory-bank" / "reports" / "attachments" / "legacy-review4"
+        self.lane_dir.mkdir(parents=True)
+        self._write_route({
+            "route": "R9", "owner": "t", "claimed_at": "26-11-06-0000", "freeze": "f" * 40,
+            "snapshot": str(self.root / "snap"), "status": "in-progress",
+            "batches": [
+                {"id": "R9-1", "title": "批1", "status": "pending", "done_at": None, "findings": 0},
+                {"id": "R9-2", "title": "批2", "status": "pending", "done_at": None, "findings": 0},
+            ],
+        })
+
+    def _write_route(self, data):
+        (self.lane_dir / "route-R9.json").write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+
+    def _read_route(self):
+        return json.loads((self.lane_dir / "route-R9.json").read_text(encoding="utf-8"))
+
+    def _ns(self, **kw):
+        base = {"root": str(self.root), "route": "R9"}
+        base.update(kw)
+        return argparse.Namespace(**base)
+
+    def _expect_rc(self, fn, *args, code=1):
+        with self.assertRaises(SystemExit) as cm:
+            fn(*args)
+        self.assertEqual(cm.exception.code, code)
+
+    def test_batch_transitions_and_atomic_write(self):
+        self.lane.cmd_batch(self._ns(id="R9-1", findings=3))
+        data = self._read_route()
+        self.assertEqual(data["batches"][0]["status"], "done")
+        self.assertEqual(data["batches"][0]["findings"], 3)
+        self.assertEqual(data["batches"][1]["status"], "pending")
+        self.assertFalse(list(self.lane_dir.glob("*.tmp")), "原子写不应残留临时文件")
+
+    def test_batch_rejects_bad_id_and_double_done(self):
+        self._expect_rc(self.lane.cmd_batch, self._ns(id="R9-X", findings=0))
+        self.lane.cmd_batch(self._ns(id="R9-1", findings=0))
+        self._expect_rc(self.lane.cmd_batch, self._ns(id="R9-1", findings=0))
+
+    def test_done_blocked_until_all_batches_and_outputs(self):
+        self._expect_rc(self.lane.cmd_done, self._ns())  # 批次未齐
+        for b in ("R9-1", "R9-2"):
+            self.lane.cmd_batch(self._ns(id=b, findings=0))
+        self._expect_rc(self.lane.cmd_done, self._ns())  # findings/notes 缺失
+        (self.lane_dir / "route-R9-findings.json").write_text("[]", encoding="utf-8")
+        (self.lane_dir / "route-R9-notes.md").write_text("# t\n", encoding="utf-8")
+        self.lane.cmd_done(self._ns())
+        self.assertEqual(self._read_route()["status"], "done")
+
+    def test_load_route_schema_guards(self):
+        good = self._read_route()
+        self._write_route(dict(good, status="weird"))
+        self._expect_rc(self.lane._load_route, self.root, "R9")
+        self._write_route(dict(good, batches=[{"id": "R9-1", "status": "half"}]))
+        self._expect_rc(self.lane._load_route, self.root, "R9")
+        (self.lane_dir / "route-R9.json").unlink()
+        self._expect_rc(self.lane._load_route, self.root, "R9")
+
+    def test_done_requires_in_progress(self):
+        self._write_route(dict(self._read_route(), status="claimed"))
+        self._expect_rc(self.lane.cmd_done, self._ns())
 
     def test_script_exists(self):
         self.assertTrue(SCRIPT.is_file())

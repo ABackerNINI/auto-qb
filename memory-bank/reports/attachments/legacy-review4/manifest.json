@@ -1,7 +1,7 @@
 {
   "campaign": "legacy-code-review-4",
   "plan_file": "memory-bank/plans/26-11-05-2335-plan-legacy-code-review-4.html",
-  "generated_at": "26-11-05-2352",
+  "generated_at": "26-11-06-0339",
   "note": "机器事实源(计划 §04/D14); freeze 由 review.lane.claim 时机械解析, 不存于此",
   "routes": {
     "R1": [
@@ -112,16 +112,102 @@
       ],
       "registry": {
         "r2_ids": [
-          "A-06",
-          "T-04",
           "T-05"
         ],
         "r2_index": {
-          "A-06": "A R9(R2) P2 core/taskqueue.py:224-234 run_due (defer 命中仍占 due 批次) / :241 _pop_due ; core/qbmanager.py:781 _own_write_defer_gate deferral 让位任务重入堆但仍计入本轮 max_tasks",
-          "T-04": "T R10 P3 gtm/__init__.py:8-10 进度注; README 通知机制段; 对照 notifier.py:9-12 与 26-10-16-0541 档案 包级门面文档双重漂移: 进度注停在 S5(实际 S0-S9 落地)、通知链路仍写「重读历史文件」(26-10-21 起为零读盘直达补丁)",
           "T-05": "T general P3 gtm/server.py:56(F401 Config ) / __main__.py:96(F841 uninstall ) / config.py:313(RUF059 errors ) 工具侧死码三处, 行为零差异"
         },
-        "issues": []
+        "issues": [
+          {
+            "issue": "memory-bank/issues/26-09-27-1248-feat-stats-redesign-torrent-traffic.html",
+            "id": "1248-feat-stats-redesign-torrent-traffic",
+            "type": "feat",
+            "title": "重新设计单种周期上传/下载量统计 (upload_size 四条件 + begin_round 底座已移除)",
+            "status": "Open",
+            "files": [
+              "src/auto_qb/core/qbmanager.py"
+            ]
+          },
+          {
+            "issue": "memory-bank/issues/26-10-08-0642-test-mutation-audit-standing.html",
+            "id": "0642-test-mutation-audit-standing",
+            "type": "test",
+            "title": "变异测试定期审计(常驻排期锚)",
+            "status": "Open",
+            "files": [
+              "src/auto_qb/config/validation/curves.py",
+              "src/auto_qb/core/curves.py",
+              "src/auto_qb/core/episodes.py",
+              "src/auto_qb/core/state.py",
+              "src/auto_qb/core/taskqueue.py",
+              "src/auto_qb/core/traffic_grid.py",
+              "src/auto_qb/core/traffic_limits.py",
+              "src/auto_qb/core/traffic_store.py",
+              "src/auto_qb/core/tvshows.py",
+              "src/auto_qb/hr/service.py",
+              "src/auto_qb/webui/server/routes/state.py"
+            ]
+          },
+          {
+            "issue": "memory-bank/issues/26-10-31-0641-test-real-machine-test-standing.html",
+            "id": "0641-test-real-machine-test-standing",
+            "type": "test",
+            "title": "真机实测定期排期(常驻排期锚)",
+            "status": "Open",
+            "files": [
+              "src/auto_qb/__init__.py",
+              "src/auto_qb/cli.py",
+              "src/auto_qb/config/__init__.py",
+              "src/auto_qb/config/schema/__init__.py",
+              "src/auto_qb/config/site_presets.py",
+              "src/auto_qb/config/validation/__init__.py",
+              "src/auto_qb/core/__init__.py",
+              "src/auto_qb/core/exporter.py",
+              "src/auto_qb/core/modules/__init__.py",
+              "src/auto_qb/core/modules/grouping_mod.py",
+              "src/auto_qb/core/modules/maintenance_mod.py",
+              "src/auto_qb/core/modules/relocate_mod.py",
+              "src/auto_qb/core/modules/relocate_units.py",
+              "src/auto_qb/core/modules/rules_mod.py",
+              "src/auto_qb/core/modules/tracker_mod.py",
+              "src/auto_qb/core/traffic_source/__init__.py",
+              "src/auto_qb/hr/__init__.py",
+              "src/auto_qb/hr/adapters/__init__.py",
+              "src/auto_qb/hr/events.py",
+              "src/auto_qb/hr/fetcher.py",
+              "src/auto_qb/hr/runtime.py",
+              "src/auto_qb/infra/__init__.py",
+              "src/auto_qb/rules/__init__.py",
+              "src/auto_qb/rules/actions/__init__.py",
+              "src/auto_qb/rules/expr/__init__.py",
+              "src/auto_qb/tools/__init__.py",
+              "src/auto_qb/torrents/__init__.py",
+              "src/auto_qb/transfer/__init__.py",
+              "src/auto_qb/transfer/adapters/__init__.py",
+              "src/auto_qb/tray/__init__.py",
+              "src/auto_qb/tray/app.py",
+              "src/auto_qb/webui/__init__.py",
+              "src/auto_qb/webui/commands.py",
+              "src/auto_qb/webui/runtime.py",
+              "src/auto_qb/webui/server/__init__.py",
+              "src/auto_qb/webui/server/auth.py",
+              "src/auto_qb/webui/server/routes/__init__.py",
+              "src/auto_qb/webui/server/routes/events.py",
+              "src/auto_qb/webui/server/routes/sites.py",
+              "src/auto_qb/webui/static/shared/config_hub_tracker.js"
+            ]
+          },
+          {
+            "issue": "memory-bank/issues/26-11-05-0200-test-qbmanager-refresh-gate-assertion-window.html",
+            "id": "0200-test-qbmanager-refresh-gate-assertion-window",
+            "type": "test",
+            "title": "qbmanager 补刷新闸用例断言窗口局限, 变异三型全存活",
+            "status": "Open",
+            "files": [
+              "src/auto_qb/core/qbmanager.py"
+            ]
+          }
+        ]
       }
     },
     {
@@ -153,7 +239,68 @@
           "A-03": "A R6 P2 relocate_mod.py:441-453 _build_links 失败 / :597-608 _apply_reconcile REBUILD; relocate_units.py:870 reconcile (:904 qb_up⇒REBUILD) 建链失败进 REMOVED→REBUILD→",
           "A-04": "A R1(R9) P2 relocate_mod.py:825→:833 _start_job (先 _persist 后 setLocation) / :196-204 _load_jobs (恢复一律 issue=False); relocate_units.py:842 recover_exec_phase (全"
         },
-        "issues": []
+        "issues": [
+          {
+            "issue": "memory-bank/issues/26-10-31-0641-test-real-machine-test-standing.html",
+            "id": "0641-test-real-machine-test-standing",
+            "type": "test",
+            "title": "真机实测定期排期(常驻排期锚)",
+            "status": "Open",
+            "files": [
+              "src/auto_qb/__init__.py",
+              "src/auto_qb/cli.py",
+              "src/auto_qb/config/__init__.py",
+              "src/auto_qb/config/schema/__init__.py",
+              "src/auto_qb/config/site_presets.py",
+              "src/auto_qb/config/validation/__init__.py",
+              "src/auto_qb/core/__init__.py",
+              "src/auto_qb/core/exporter.py",
+              "src/auto_qb/core/modules/__init__.py",
+              "src/auto_qb/core/modules/grouping_mod.py",
+              "src/auto_qb/core/modules/maintenance_mod.py",
+              "src/auto_qb/core/modules/relocate_mod.py",
+              "src/auto_qb/core/modules/relocate_units.py",
+              "src/auto_qb/core/modules/rules_mod.py",
+              "src/auto_qb/core/modules/tracker_mod.py",
+              "src/auto_qb/core/traffic_source/__init__.py",
+              "src/auto_qb/hr/__init__.py",
+              "src/auto_qb/hr/adapters/__init__.py",
+              "src/auto_qb/hr/events.py",
+              "src/auto_qb/hr/fetcher.py",
+              "src/auto_qb/hr/runtime.py",
+              "src/auto_qb/infra/__init__.py",
+              "src/auto_qb/rules/__init__.py",
+              "src/auto_qb/rules/actions/__init__.py",
+              "src/auto_qb/rules/expr/__init__.py",
+              "src/auto_qb/tools/__init__.py",
+              "src/auto_qb/torrents/__init__.py",
+              "src/auto_qb/transfer/__init__.py",
+              "src/auto_qb/transfer/adapters/__init__.py",
+              "src/auto_qb/tray/__init__.py",
+              "src/auto_qb/tray/app.py",
+              "src/auto_qb/webui/__init__.py",
+              "src/auto_qb/webui/commands.py",
+              "src/auto_qb/webui/runtime.py",
+              "src/auto_qb/webui/server/__init__.py",
+              "src/auto_qb/webui/server/auth.py",
+              "src/auto_qb/webui/server/routes/__init__.py",
+              "src/auto_qb/webui/server/routes/events.py",
+              "src/auto_qb/webui/server/routes/sites.py",
+              "src/auto_qb/webui/static/shared/config_hub_tracker.js"
+            ]
+          },
+          {
+            "issue": "memory-bank/issues/26-11-05-0420-bug-relocate-zero-move.html",
+            "id": "0420-bug-relocate-zero-move",
+            "type": "bug",
+            "title": "整组迁移可对「账面完成但磁盘名错位(.!qB)」的组零搬移假成功",
+            "status": "Open",
+            "files": [
+              "src/auto_qb/core/modules/relocate_exec.py",
+              "src/auto_qb/core/modules/relocate_units.py"
+            ]
+          }
+        ]
       }
     },
     {
@@ -186,7 +333,6 @@
       ],
       "registry": {
         "r2_ids": [
-          "A-01",
           "A-02",
           "A-03",
           "A-04",
@@ -194,14 +340,63 @@
           "GH-01"
         ],
         "r2_index": {
-          "A-01": "A R2 P2 core/modules/relocate_mod.py:233 on_task_line / :279 _step_move setLocation / :406 _build_links / :852 relocate_cancel relocate 相位机与撤销路径全程无 dry_run 闸(唯一",
           "A-02": "A R6 P2 relocate_mod.py:795 _start_job 暂停成员 / :271-319 _step_move / :874 relocate_cancel ; 消费点 :482/:500/:879 迁移失败路径(move_rejected/stalled、internal_error、cancel",
           "A-03": "A R6 P2 relocate_mod.py:441-453 _build_links 失败 / :597-608 _apply_reconcile REBUILD; relocate_units.py:870 reconcile (:904 qb_up⇒REBUILD) 建链失败进 REMOVED→REBUILD→",
           "A-04": "A R1(R9) P2 relocate_mod.py:825→:833 _start_job (先 _persist 后 setLocation) / :196-204 _load_jobs (恢复一律 issue=False); relocate_units.py:842 recover_exec_phase (全",
           "A-05": "A R9 P2 relocate_mod.py:643-651 _finalize_members ; torrents/record.py:287 files (惰性缓存首见即一次 HTTP) ACT_FINALIZE 收尾集合对全库每条种子先发 files API 再过滤, 大库下单 tick 串行 N 次 HTT",
           "GH-01": "GH R11(R9) P3 tools/finalize_watch.py:185-190 run (读后心跳无条件整包覆盖) / :238(max_wait 缺省 0); infra/relocate_journal.py:1-14 头注「唯一写者」; 对照 relocate_mod.py:593/:605/:639"
         },
-        "issues": []
+        "issues": [
+          {
+            "issue": "memory-bank/issues/26-10-31-0641-test-real-machine-test-standing.html",
+            "id": "0641-test-real-machine-test-standing",
+            "type": "test",
+            "title": "真机实测定期排期(常驻排期锚)",
+            "status": "Open",
+            "files": [
+              "src/auto_qb/__init__.py",
+              "src/auto_qb/cli.py",
+              "src/auto_qb/config/__init__.py",
+              "src/auto_qb/config/schema/__init__.py",
+              "src/auto_qb/config/site_presets.py",
+              "src/auto_qb/config/validation/__init__.py",
+              "src/auto_qb/core/__init__.py",
+              "src/auto_qb/core/exporter.py",
+              "src/auto_qb/core/modules/__init__.py",
+              "src/auto_qb/core/modules/grouping_mod.py",
+              "src/auto_qb/core/modules/maintenance_mod.py",
+              "src/auto_qb/core/modules/relocate_mod.py",
+              "src/auto_qb/core/modules/relocate_units.py",
+              "src/auto_qb/core/modules/rules_mod.py",
+              "src/auto_qb/core/modules/tracker_mod.py",
+              "src/auto_qb/core/traffic_source/__init__.py",
+              "src/auto_qb/hr/__init__.py",
+              "src/auto_qb/hr/adapters/__init__.py",
+              "src/auto_qb/hr/events.py",
+              "src/auto_qb/hr/fetcher.py",
+              "src/auto_qb/hr/runtime.py",
+              "src/auto_qb/infra/__init__.py",
+              "src/auto_qb/rules/__init__.py",
+              "src/auto_qb/rules/actions/__init__.py",
+              "src/auto_qb/rules/expr/__init__.py",
+              "src/auto_qb/tools/__init__.py",
+              "src/auto_qb/torrents/__init__.py",
+              "src/auto_qb/transfer/__init__.py",
+              "src/auto_qb/transfer/adapters/__init__.py",
+              "src/auto_qb/tray/__init__.py",
+              "src/auto_qb/tray/app.py",
+              "src/auto_qb/webui/__init__.py",
+              "src/auto_qb/webui/commands.py",
+              "src/auto_qb/webui/runtime.py",
+              "src/auto_qb/webui/server/__init__.py",
+              "src/auto_qb/webui/server/auth.py",
+              "src/auto_qb/webui/server/routes/__init__.py",
+              "src/auto_qb/webui/server/routes/events.py",
+              "src/auto_qb/webui/server/routes/sites.py",
+              "src/auto_qb/webui/static/shared/config_hub_tracker.js"
+            ]
+          }
+        ]
       }
     },
     {
@@ -245,15 +440,42 @@
         }
       ],
       "registry": {
-        "r2_ids": [
-          "C-01",
-          "C-02"
-        ],
-        "r2_index": {
-          "C-01": "C R11(R6) P3 core/traffic_store.py:821 parse_v4_agg_text (cov_s 无下限) / :1207-1209 v4_rollup_agg / :1244 v4_merge_agg ; traffic_sample_mod.py:1427 _recover_aggre",
-          "C-02": "C general P3 core/curves.py:76 aggregate ( today: date = None , RUF013) 隐式 Optional 注解漂移, 注解与 docstring/调用方契约不符, 行为零差异"
-        },
-        "issues": []
+        "r2_ids": [],
+        "r2_index": {},
+        "issues": [
+          {
+            "issue": "memory-bank/issues/26-10-08-0642-test-mutation-audit-standing.html",
+            "id": "0642-test-mutation-audit-standing",
+            "type": "test",
+            "title": "变异测试定期审计(常驻排期锚)",
+            "status": "Open",
+            "files": [
+              "src/auto_qb/config/validation/curves.py",
+              "src/auto_qb/core/curves.py",
+              "src/auto_qb/core/episodes.py",
+              "src/auto_qb/core/state.py",
+              "src/auto_qb/core/taskqueue.py",
+              "src/auto_qb/core/traffic_grid.py",
+              "src/auto_qb/core/traffic_limits.py",
+              "src/auto_qb/core/traffic_store.py",
+              "src/auto_qb/core/tvshows.py",
+              "src/auto_qb/hr/service.py",
+              "src/auto_qb/webui/server/routes/state.py"
+            ]
+          },
+          {
+            "issue": "memory-bank/issues/26-10-16-0020-question-agg-rate-lane-invisible-bytes.html",
+            "id": "0020-question-agg-rate-lane-invisible-bytes",
+            "type": "question",
+            "title": "agg 速率 lane 是否应包含 z 游程内的隐形字节",
+            "status": "Open",
+            "files": [
+              "src/auto_qb/core/modules/traffic_sample_mod.py",
+              "src/auto_qb/core/traffic_grid.py",
+              "src/auto_qb/core/traffic_store.py"
+            ]
+          }
+        ]
       }
     },
     {
@@ -302,16 +524,74 @@
       ],
       "registry": {
         "r2_ids": [
-          "A-07",
-          "C-01",
-          "T-04"
+          "C-01"
         ],
         "r2_index": {
-          "A-07": "A general P3 core/traffic_source/agent.py:382 ensure_running ( enabled is not True ) 启用判据与自家契约(paths.source_enabled 的 is not False)方向相反, 真 bool 下等价、mock/非 bool ",
-          "C-01": "C R11(R6) P3 core/traffic_store.py:821 parse_v4_agg_text (cov_s 无下限) / :1207-1209 v4_rollup_agg / :1244 v4_merge_agg ; traffic_sample_mod.py:1427 _recover_aggre",
-          "T-04": "T R10 P3 gtm/__init__.py:8-10 进度注; README 通知机制段; 对照 notifier.py:9-12 与 26-10-16-0541 档案 包级门面文档双重漂移: 进度注停在 S5(实际 S0-S9 落地)、通知链路仍写「重读历史文件」(26-10-21 起为零读盘直达补丁)"
+          "C-01": "C R11(R6) P3 core/traffic_store.py:821 parse_v4_agg_text (cov_s 无下限) / :1207-1209 v4_rollup_agg / :1244 v4_merge_agg ; traffic_sample_mod.py:1427 _recover_aggre"
         },
-        "issues": []
+        "issues": [
+          {
+            "issue": "memory-bank/issues/26-10-16-0020-question-agg-rate-lane-invisible-bytes.html",
+            "id": "0020-question-agg-rate-lane-invisible-bytes",
+            "type": "question",
+            "title": "agg 速率 lane 是否应包含 z 游程内的隐形字节",
+            "status": "Open",
+            "files": [
+              "src/auto_qb/core/modules/traffic_sample_mod.py",
+              "src/auto_qb/core/traffic_grid.py",
+              "src/auto_qb/core/traffic_store.py"
+            ]
+          },
+          {
+            "issue": "memory-bank/issues/26-10-31-0641-test-real-machine-test-standing.html",
+            "id": "0641-test-real-machine-test-standing",
+            "type": "test",
+            "title": "真机实测定期排期(常驻排期锚)",
+            "status": "Open",
+            "files": [
+              "src/auto_qb/__init__.py",
+              "src/auto_qb/cli.py",
+              "src/auto_qb/config/__init__.py",
+              "src/auto_qb/config/schema/__init__.py",
+              "src/auto_qb/config/site_presets.py",
+              "src/auto_qb/config/validation/__init__.py",
+              "src/auto_qb/core/__init__.py",
+              "src/auto_qb/core/exporter.py",
+              "src/auto_qb/core/modules/__init__.py",
+              "src/auto_qb/core/modules/grouping_mod.py",
+              "src/auto_qb/core/modules/maintenance_mod.py",
+              "src/auto_qb/core/modules/relocate_mod.py",
+              "src/auto_qb/core/modules/relocate_units.py",
+              "src/auto_qb/core/modules/rules_mod.py",
+              "src/auto_qb/core/modules/tracker_mod.py",
+              "src/auto_qb/core/traffic_source/__init__.py",
+              "src/auto_qb/hr/__init__.py",
+              "src/auto_qb/hr/adapters/__init__.py",
+              "src/auto_qb/hr/events.py",
+              "src/auto_qb/hr/fetcher.py",
+              "src/auto_qb/hr/runtime.py",
+              "src/auto_qb/infra/__init__.py",
+              "src/auto_qb/rules/__init__.py",
+              "src/auto_qb/rules/actions/__init__.py",
+              "src/auto_qb/rules/expr/__init__.py",
+              "src/auto_qb/tools/__init__.py",
+              "src/auto_qb/torrents/__init__.py",
+              "src/auto_qb/transfer/__init__.py",
+              "src/auto_qb/transfer/adapters/__init__.py",
+              "src/auto_qb/tray/__init__.py",
+              "src/auto_qb/tray/app.py",
+              "src/auto_qb/webui/__init__.py",
+              "src/auto_qb/webui/commands.py",
+              "src/auto_qb/webui/runtime.py",
+              "src/auto_qb/webui/server/__init__.py",
+              "src/auto_qb/webui/server/auth.py",
+              "src/auto_qb/webui/server/routes/__init__.py",
+              "src/auto_qb/webui/server/routes/events.py",
+              "src/auto_qb/webui/server/routes/sites.py",
+              "src/auto_qb/webui/static/shared/config_hub_tracker.js"
+            ]
+          }
+        ]
       }
     },
     {
@@ -337,7 +617,87 @@
       "registry": {
         "r2_ids": [],
         "r2_index": {},
-        "issues": []
+        "issues": [
+          {
+            "issue": "memory-bank/issues/26-10-08-0642-test-mutation-audit-standing.html",
+            "id": "0642-test-mutation-audit-standing",
+            "type": "test",
+            "title": "变异测试定期审计(常驻排期锚)",
+            "status": "Open",
+            "files": [
+              "src/auto_qb/config/validation/curves.py",
+              "src/auto_qb/core/curves.py",
+              "src/auto_qb/core/episodes.py",
+              "src/auto_qb/core/state.py",
+              "src/auto_qb/core/taskqueue.py",
+              "src/auto_qb/core/traffic_grid.py",
+              "src/auto_qb/core/traffic_limits.py",
+              "src/auto_qb/core/traffic_store.py",
+              "src/auto_qb/core/tvshows.py",
+              "src/auto_qb/hr/service.py",
+              "src/auto_qb/webui/server/routes/state.py"
+            ]
+          },
+          {
+            "issue": "memory-bank/issues/26-10-13-0626-question-grouping-transition-reflow-retrigger.html",
+            "id": "0626-question-grouping-transition-reflow-retrigger",
+            "type": "question",
+            "title": "A系删回写后整组停种经同步回流: 被停成员再次满足「上传转暂停」谓词, 追加一次缺文件扫描(幂等, 一轮收敛)",
+            "status": "Open",
+            "files": [
+              "src/auto_qb/core/modules/grouping_mod.py"
+            ]
+          },
+          {
+            "issue": "memory-bank/issues/26-10-31-0641-test-real-machine-test-standing.html",
+            "id": "0641-test-real-machine-test-standing",
+            "type": "test",
+            "title": "真机实测定期排期(常驻排期锚)",
+            "status": "Open",
+            "files": [
+              "src/auto_qb/__init__.py",
+              "src/auto_qb/cli.py",
+              "src/auto_qb/config/__init__.py",
+              "src/auto_qb/config/schema/__init__.py",
+              "src/auto_qb/config/site_presets.py",
+              "src/auto_qb/config/validation/__init__.py",
+              "src/auto_qb/core/__init__.py",
+              "src/auto_qb/core/exporter.py",
+              "src/auto_qb/core/modules/__init__.py",
+              "src/auto_qb/core/modules/grouping_mod.py",
+              "src/auto_qb/core/modules/maintenance_mod.py",
+              "src/auto_qb/core/modules/relocate_mod.py",
+              "src/auto_qb/core/modules/relocate_units.py",
+              "src/auto_qb/core/modules/rules_mod.py",
+              "src/auto_qb/core/modules/tracker_mod.py",
+              "src/auto_qb/core/traffic_source/__init__.py",
+              "src/auto_qb/hr/__init__.py",
+              "src/auto_qb/hr/adapters/__init__.py",
+              "src/auto_qb/hr/events.py",
+              "src/auto_qb/hr/fetcher.py",
+              "src/auto_qb/hr/runtime.py",
+              "src/auto_qb/infra/__init__.py",
+              "src/auto_qb/rules/__init__.py",
+              "src/auto_qb/rules/actions/__init__.py",
+              "src/auto_qb/rules/expr/__init__.py",
+              "src/auto_qb/tools/__init__.py",
+              "src/auto_qb/torrents/__init__.py",
+              "src/auto_qb/transfer/__init__.py",
+              "src/auto_qb/transfer/adapters/__init__.py",
+              "src/auto_qb/tray/__init__.py",
+              "src/auto_qb/tray/app.py",
+              "src/auto_qb/webui/__init__.py",
+              "src/auto_qb/webui/commands.py",
+              "src/auto_qb/webui/runtime.py",
+              "src/auto_qb/webui/server/__init__.py",
+              "src/auto_qb/webui/server/auth.py",
+              "src/auto_qb/webui/server/routes/__init__.py",
+              "src/auto_qb/webui/server/routes/events.py",
+              "src/auto_qb/webui/server/routes/sites.py",
+              "src/auto_qb/webui/static/shared/config_hub_tracker.js"
+            ]
+          }
+        ]
       }
     },
     {
@@ -397,15 +757,82 @@
         }
       ],
       "registry": {
-        "r2_ids": [
-          "A-08",
-          "T-04"
-        ],
-        "r2_index": {
-          "A-08": "A general P3 core/modules/ops_mod.py:465 skip_submit (RUF059) / :487 _skip_begin (F841) 两处死绑定(job 解包未消费 / prefix 拼接未使用), 行为零差异",
-          "T-04": "T R10 P3 gtm/__init__.py:8-10 进度注; README 通知机制段; 对照 notifier.py:9-12 与 26-10-16-0541 档案 包级门面文档双重漂移: 进度注停在 S5(实际 S0-S9 落地)、通知链路仍写「重读历史文件」(26-10-21 起为零读盘直达补丁)"
-        },
-        "issues": []
+        "r2_ids": [],
+        "r2_index": {},
+        "issues": [
+          {
+            "issue": "memory-bank/issues/26-10-05-0402-bug-skip-check-self-fail-gate.html",
+            "id": "0402-bug-skip-check-self-fail-gate",
+            "type": "bug",
+            "title": "跳检无闸门拦截候选种子自身当日校验失败, 已证实坏数据可被洗白成已校验",
+            "status": "Open",
+            "files": [
+              "src/auto_qb/core/modules/ops_mod.py",
+              "src/auto_qb/rules/actions/checking.py",
+              "src/auto_qb/rules/actions/full_checking.py"
+            ]
+          },
+          {
+            "issue": "memory-bank/issues/26-10-31-0641-test-real-machine-test-standing.html",
+            "id": "0641-test-real-machine-test-standing",
+            "type": "test",
+            "title": "真机实测定期排期(常驻排期锚)",
+            "status": "Open",
+            "files": [
+              "src/auto_qb/__init__.py",
+              "src/auto_qb/cli.py",
+              "src/auto_qb/config/__init__.py",
+              "src/auto_qb/config/schema/__init__.py",
+              "src/auto_qb/config/site_presets.py",
+              "src/auto_qb/config/validation/__init__.py",
+              "src/auto_qb/core/__init__.py",
+              "src/auto_qb/core/exporter.py",
+              "src/auto_qb/core/modules/__init__.py",
+              "src/auto_qb/core/modules/grouping_mod.py",
+              "src/auto_qb/core/modules/maintenance_mod.py",
+              "src/auto_qb/core/modules/relocate_mod.py",
+              "src/auto_qb/core/modules/relocate_units.py",
+              "src/auto_qb/core/modules/rules_mod.py",
+              "src/auto_qb/core/modules/tracker_mod.py",
+              "src/auto_qb/core/traffic_source/__init__.py",
+              "src/auto_qb/hr/__init__.py",
+              "src/auto_qb/hr/adapters/__init__.py",
+              "src/auto_qb/hr/events.py",
+              "src/auto_qb/hr/fetcher.py",
+              "src/auto_qb/hr/runtime.py",
+              "src/auto_qb/infra/__init__.py",
+              "src/auto_qb/rules/__init__.py",
+              "src/auto_qb/rules/actions/__init__.py",
+              "src/auto_qb/rules/expr/__init__.py",
+              "src/auto_qb/tools/__init__.py",
+              "src/auto_qb/torrents/__init__.py",
+              "src/auto_qb/transfer/__init__.py",
+              "src/auto_qb/transfer/adapters/__init__.py",
+              "src/auto_qb/tray/__init__.py",
+              "src/auto_qb/tray/app.py",
+              "src/auto_qb/webui/__init__.py",
+              "src/auto_qb/webui/commands.py",
+              "src/auto_qb/webui/runtime.py",
+              "src/auto_qb/webui/server/__init__.py",
+              "src/auto_qb/webui/server/auth.py",
+              "src/auto_qb/webui/server/routes/__init__.py",
+              "src/auto_qb/webui/server/routes/events.py",
+              "src/auto_qb/webui/server/routes/sites.py",
+              "src/auto_qb/webui/static/shared/config_hub_tracker.js"
+            ]
+          },
+          {
+            "issue": "memory-bank/issues/26-11-05-0853-feat-recheck-fails-noise-narrowing.html",
+            "id": "0853-feat-recheck-fails-noise-narrowing",
+            "type": "feat",
+            "title": "recheck_fails 噪声收窄: FAILED/START_TIMEOUT 分记, 锐化失败证据信号",
+            "status": "Open",
+            "files": [
+              "src/auto_qb/core/modules/ops_mod.py",
+              "src/auto_qb/rules/checking_meta.py"
+            ]
+          }
+        ]
       }
     },
     {
@@ -437,17 +864,79 @@
         }
       ],
       "registry": {
-        "r2_ids": [
-          "C-02",
-          "D-01",
-          "T-04"
-        ],
-        "r2_index": {
-          "C-02": "C general P3 core/curves.py:76 aggregate ( today: date = None , RUF013) 隐式 Optional 注解漂移, 注解与 docstring/调用方契约不符, 行为零差异",
-          "D-01": "D R4 P3 config/validation/sections.py:217 _validate_qbittorrent (三 str 键无类型检查), 对照 :820 _validate_web token 先例; loaders.py:86 load_qbittorrent_config qbittorren",
-          "T-04": "T R10 P3 gtm/__init__.py:8-10 进度注; README 通知机制段; 对照 notifier.py:9-12 与 26-10-16-0541 档案 包级门面文档双重漂移: 进度注停在 S5(实际 S0-S9 落地)、通知链路仍写「重读历史文件」(26-10-21 起为零读盘直达补丁)"
-        },
-        "issues": []
+        "r2_ids": [],
+        "r2_index": {},
+        "issues": [
+          {
+            "issue": "memory-bank/issues/26-10-08-0642-test-mutation-audit-standing.html",
+            "id": "0642-test-mutation-audit-standing",
+            "type": "test",
+            "title": "变异测试定期审计(常驻排期锚)",
+            "status": "Open",
+            "files": [
+              "src/auto_qb/config/validation/curves.py",
+              "src/auto_qb/core/curves.py",
+              "src/auto_qb/core/episodes.py",
+              "src/auto_qb/core/state.py",
+              "src/auto_qb/core/taskqueue.py",
+              "src/auto_qb/core/traffic_grid.py",
+              "src/auto_qb/core/traffic_limits.py",
+              "src/auto_qb/core/traffic_store.py",
+              "src/auto_qb/core/tvshows.py",
+              "src/auto_qb/hr/service.py",
+              "src/auto_qb/webui/server/routes/state.py"
+            ]
+          },
+          {
+            "issue": "memory-bank/issues/26-10-31-0641-test-real-machine-test-standing.html",
+            "id": "0641-test-real-machine-test-standing",
+            "type": "test",
+            "title": "真机实测定期排期(常驻排期锚)",
+            "status": "Open",
+            "files": [
+              "src/auto_qb/__init__.py",
+              "src/auto_qb/cli.py",
+              "src/auto_qb/config/__init__.py",
+              "src/auto_qb/config/schema/__init__.py",
+              "src/auto_qb/config/site_presets.py",
+              "src/auto_qb/config/validation/__init__.py",
+              "src/auto_qb/core/__init__.py",
+              "src/auto_qb/core/exporter.py",
+              "src/auto_qb/core/modules/__init__.py",
+              "src/auto_qb/core/modules/grouping_mod.py",
+              "src/auto_qb/core/modules/maintenance_mod.py",
+              "src/auto_qb/core/modules/relocate_mod.py",
+              "src/auto_qb/core/modules/relocate_units.py",
+              "src/auto_qb/core/modules/rules_mod.py",
+              "src/auto_qb/core/modules/tracker_mod.py",
+              "src/auto_qb/core/traffic_source/__init__.py",
+              "src/auto_qb/hr/__init__.py",
+              "src/auto_qb/hr/adapters/__init__.py",
+              "src/auto_qb/hr/events.py",
+              "src/auto_qb/hr/fetcher.py",
+              "src/auto_qb/hr/runtime.py",
+              "src/auto_qb/infra/__init__.py",
+              "src/auto_qb/rules/__init__.py",
+              "src/auto_qb/rules/actions/__init__.py",
+              "src/auto_qb/rules/expr/__init__.py",
+              "src/auto_qb/tools/__init__.py",
+              "src/auto_qb/torrents/__init__.py",
+              "src/auto_qb/transfer/__init__.py",
+              "src/auto_qb/transfer/adapters/__init__.py",
+              "src/auto_qb/tray/__init__.py",
+              "src/auto_qb/tray/app.py",
+              "src/auto_qb/webui/__init__.py",
+              "src/auto_qb/webui/commands.py",
+              "src/auto_qb/webui/runtime.py",
+              "src/auto_qb/webui/server/__init__.py",
+              "src/auto_qb/webui/server/auth.py",
+              "src/auto_qb/webui/server/routes/__init__.py",
+              "src/auto_qb/webui/server/routes/events.py",
+              "src/auto_qb/webui/server/routes/sites.py",
+              "src/auto_qb/webui/static/shared/config_hub_tracker.js"
+            ]
+          }
+        ]
       }
     },
     {
@@ -492,14 +981,62 @@
       ],
       "registry": {
         "r2_ids": [
-          "D-01",
-          "T-04"
+          "D-01"
         ],
         "r2_index": {
-          "D-01": "D R4 P3 config/validation/sections.py:217 _validate_qbittorrent (三 str 键无类型检查), 对照 :820 _validate_web token 先例; loaders.py:86 load_qbittorrent_config qbittorren",
-          "T-04": "T R10 P3 gtm/__init__.py:8-10 进度注; README 通知机制段; 对照 notifier.py:9-12 与 26-10-16-0541 档案 包级门面文档双重漂移: 进度注停在 S5(实际 S0-S9 落地)、通知链路仍写「重读历史文件」(26-10-21 起为零读盘直达补丁)"
+          "D-01": "D R4 P3 config/validation/sections.py:217 _validate_qbittorrent (三 str 键无类型检查), 对照 :820 _validate_web token 先例; loaders.py:86 load_qbittorrent_config qbittorren"
         },
-        "issues": []
+        "issues": [
+          {
+            "issue": "memory-bank/issues/26-10-31-0641-test-real-machine-test-standing.html",
+            "id": "0641-test-real-machine-test-standing",
+            "type": "test",
+            "title": "真机实测定期排期(常驻排期锚)",
+            "status": "Open",
+            "files": [
+              "src/auto_qb/__init__.py",
+              "src/auto_qb/cli.py",
+              "src/auto_qb/config/__init__.py",
+              "src/auto_qb/config/schema/__init__.py",
+              "src/auto_qb/config/site_presets.py",
+              "src/auto_qb/config/validation/__init__.py",
+              "src/auto_qb/core/__init__.py",
+              "src/auto_qb/core/exporter.py",
+              "src/auto_qb/core/modules/__init__.py",
+              "src/auto_qb/core/modules/grouping_mod.py",
+              "src/auto_qb/core/modules/maintenance_mod.py",
+              "src/auto_qb/core/modules/relocate_mod.py",
+              "src/auto_qb/core/modules/relocate_units.py",
+              "src/auto_qb/core/modules/rules_mod.py",
+              "src/auto_qb/core/modules/tracker_mod.py",
+              "src/auto_qb/core/traffic_source/__init__.py",
+              "src/auto_qb/hr/__init__.py",
+              "src/auto_qb/hr/adapters/__init__.py",
+              "src/auto_qb/hr/events.py",
+              "src/auto_qb/hr/fetcher.py",
+              "src/auto_qb/hr/runtime.py",
+              "src/auto_qb/infra/__init__.py",
+              "src/auto_qb/rules/__init__.py",
+              "src/auto_qb/rules/actions/__init__.py",
+              "src/auto_qb/rules/expr/__init__.py",
+              "src/auto_qb/tools/__init__.py",
+              "src/auto_qb/torrents/__init__.py",
+              "src/auto_qb/transfer/__init__.py",
+              "src/auto_qb/transfer/adapters/__init__.py",
+              "src/auto_qb/tray/__init__.py",
+              "src/auto_qb/tray/app.py",
+              "src/auto_qb/webui/__init__.py",
+              "src/auto_qb/webui/commands.py",
+              "src/auto_qb/webui/runtime.py",
+              "src/auto_qb/webui/server/__init__.py",
+              "src/auto_qb/webui/server/auth.py",
+              "src/auto_qb/webui/server/routes/__init__.py",
+              "src/auto_qb/webui/server/routes/events.py",
+              "src/auto_qb/webui/server/routes/sites.py",
+              "src/auto_qb/webui/static/shared/config_hub_tracker.js"
+            ]
+          }
+        ]
       }
     },
     {
@@ -539,13 +1076,59 @@
         }
       ],
       "registry": {
-        "r2_ids": [
-          "T-04"
-        ],
-        "r2_index": {
-          "T-04": "T R10 P3 gtm/__init__.py:8-10 进度注; README 通知机制段; 对照 notifier.py:9-12 与 26-10-16-0541 档案 包级门面文档双重漂移: 进度注停在 S5(实际 S0-S9 落地)、通知链路仍写「重读历史文件」(26-10-21 起为零读盘直达补丁)"
-        },
-        "issues": []
+        "r2_ids": [],
+        "r2_index": {},
+        "issues": [
+          {
+            "issue": "memory-bank/issues/26-10-31-0641-test-real-machine-test-standing.html",
+            "id": "0641-test-real-machine-test-standing",
+            "type": "test",
+            "title": "真机实测定期排期(常驻排期锚)",
+            "status": "Open",
+            "files": [
+              "src/auto_qb/__init__.py",
+              "src/auto_qb/cli.py",
+              "src/auto_qb/config/__init__.py",
+              "src/auto_qb/config/schema/__init__.py",
+              "src/auto_qb/config/site_presets.py",
+              "src/auto_qb/config/validation/__init__.py",
+              "src/auto_qb/core/__init__.py",
+              "src/auto_qb/core/exporter.py",
+              "src/auto_qb/core/modules/__init__.py",
+              "src/auto_qb/core/modules/grouping_mod.py",
+              "src/auto_qb/core/modules/maintenance_mod.py",
+              "src/auto_qb/core/modules/relocate_mod.py",
+              "src/auto_qb/core/modules/relocate_units.py",
+              "src/auto_qb/core/modules/rules_mod.py",
+              "src/auto_qb/core/modules/tracker_mod.py",
+              "src/auto_qb/core/traffic_source/__init__.py",
+              "src/auto_qb/hr/__init__.py",
+              "src/auto_qb/hr/adapters/__init__.py",
+              "src/auto_qb/hr/events.py",
+              "src/auto_qb/hr/fetcher.py",
+              "src/auto_qb/hr/runtime.py",
+              "src/auto_qb/infra/__init__.py",
+              "src/auto_qb/rules/__init__.py",
+              "src/auto_qb/rules/actions/__init__.py",
+              "src/auto_qb/rules/expr/__init__.py",
+              "src/auto_qb/tools/__init__.py",
+              "src/auto_qb/torrents/__init__.py",
+              "src/auto_qb/transfer/__init__.py",
+              "src/auto_qb/transfer/adapters/__init__.py",
+              "src/auto_qb/tray/__init__.py",
+              "src/auto_qb/tray/app.py",
+              "src/auto_qb/webui/__init__.py",
+              "src/auto_qb/webui/commands.py",
+              "src/auto_qb/webui/runtime.py",
+              "src/auto_qb/webui/server/__init__.py",
+              "src/auto_qb/webui/server/auth.py",
+              "src/auto_qb/webui/server/routes/__init__.py",
+              "src/auto_qb/webui/server/routes/events.py",
+              "src/auto_qb/webui/server/routes/sites.py",
+              "src/auto_qb/webui/static/shared/config_hub_tracker.js"
+            ]
+          }
+        ]
       }
     },
     {
@@ -629,13 +1212,82 @@
         }
       ],
       "registry": {
-        "r2_ids": [
-          "T-04"
-        ],
-        "r2_index": {
-          "T-04": "T R10 P3 gtm/__init__.py:8-10 进度注; README 通知机制段; 对照 notifier.py:9-12 与 26-10-16-0541 档案 包级门面文档双重漂移: 进度注停在 S5(实际 S0-S9 落地)、通知链路仍写「重读历史文件」(26-10-21 起为零读盘直达补丁)"
-        },
-        "issues": []
+        "r2_ids": [],
+        "r2_index": {},
+        "issues": [
+          {
+            "issue": "memory-bank/issues/26-10-05-0402-bug-skip-check-self-fail-gate.html",
+            "id": "0402-bug-skip-check-self-fail-gate",
+            "type": "bug",
+            "title": "跳检无闸门拦截候选种子自身当日校验失败, 已证实坏数据可被洗白成已校验",
+            "status": "Open",
+            "files": [
+              "src/auto_qb/core/modules/ops_mod.py",
+              "src/auto_qb/rules/actions/checking.py",
+              "src/auto_qb/rules/actions/full_checking.py"
+            ]
+          },
+          {
+            "issue": "memory-bank/issues/26-10-31-0641-test-real-machine-test-standing.html",
+            "id": "0641-test-real-machine-test-standing",
+            "type": "test",
+            "title": "真机实测定期排期(常驻排期锚)",
+            "status": "Open",
+            "files": [
+              "src/auto_qb/__init__.py",
+              "src/auto_qb/cli.py",
+              "src/auto_qb/config/__init__.py",
+              "src/auto_qb/config/schema/__init__.py",
+              "src/auto_qb/config/site_presets.py",
+              "src/auto_qb/config/validation/__init__.py",
+              "src/auto_qb/core/__init__.py",
+              "src/auto_qb/core/exporter.py",
+              "src/auto_qb/core/modules/__init__.py",
+              "src/auto_qb/core/modules/grouping_mod.py",
+              "src/auto_qb/core/modules/maintenance_mod.py",
+              "src/auto_qb/core/modules/relocate_mod.py",
+              "src/auto_qb/core/modules/relocate_units.py",
+              "src/auto_qb/core/modules/rules_mod.py",
+              "src/auto_qb/core/modules/tracker_mod.py",
+              "src/auto_qb/core/traffic_source/__init__.py",
+              "src/auto_qb/hr/__init__.py",
+              "src/auto_qb/hr/adapters/__init__.py",
+              "src/auto_qb/hr/events.py",
+              "src/auto_qb/hr/fetcher.py",
+              "src/auto_qb/hr/runtime.py",
+              "src/auto_qb/infra/__init__.py",
+              "src/auto_qb/rules/__init__.py",
+              "src/auto_qb/rules/actions/__init__.py",
+              "src/auto_qb/rules/expr/__init__.py",
+              "src/auto_qb/tools/__init__.py",
+              "src/auto_qb/torrents/__init__.py",
+              "src/auto_qb/transfer/__init__.py",
+              "src/auto_qb/transfer/adapters/__init__.py",
+              "src/auto_qb/tray/__init__.py",
+              "src/auto_qb/tray/app.py",
+              "src/auto_qb/webui/__init__.py",
+              "src/auto_qb/webui/commands.py",
+              "src/auto_qb/webui/runtime.py",
+              "src/auto_qb/webui/server/__init__.py",
+              "src/auto_qb/webui/server/auth.py",
+              "src/auto_qb/webui/server/routes/__init__.py",
+              "src/auto_qb/webui/server/routes/events.py",
+              "src/auto_qb/webui/server/routes/sites.py",
+              "src/auto_qb/webui/static/shared/config_hub_tracker.js"
+            ]
+          },
+          {
+            "issue": "memory-bank/issues/26-11-05-0853-feat-recheck-fails-noise-narrowing.html",
+            "id": "0853-feat-recheck-fails-noise-narrowing",
+            "type": "feat",
+            "title": "recheck_fails 噪声收窄: FAILED/START_TIMEOUT 分记, 锐化失败证据信号",
+            "status": "Open",
+            "files": [
+              "src/auto_qb/core/modules/ops_mod.py",
+              "src/auto_qb/rules/checking_meta.py"
+            ]
+          }
+        ]
       }
     },
     {
@@ -721,15 +1373,59 @@
         }
       ],
       "registry": {
-        "r2_ids": [
-          "GH-01",
-          "T-04"
-        ],
-        "r2_index": {
-          "GH-01": "GH R11(R9) P3 tools/finalize_watch.py:185-190 run (读后心跳无条件整包覆盖) / :238(max_wait 缺省 0); infra/relocate_journal.py:1-14 头注「唯一写者」; 对照 relocate_mod.py:593/:605/:639",
-          "T-04": "T R10 P3 gtm/__init__.py:8-10 进度注; README 通知机制段; 对照 notifier.py:9-12 与 26-10-16-0541 档案 包级门面文档双重漂移: 进度注停在 S5(实际 S0-S9 落地)、通知链路仍写「重读历史文件」(26-10-21 起为零读盘直达补丁)"
-        },
-        "issues": []
+        "r2_ids": [],
+        "r2_index": {},
+        "issues": [
+          {
+            "issue": "memory-bank/issues/26-10-31-0641-test-real-machine-test-standing.html",
+            "id": "0641-test-real-machine-test-standing",
+            "type": "test",
+            "title": "真机实测定期排期(常驻排期锚)",
+            "status": "Open",
+            "files": [
+              "src/auto_qb/__init__.py",
+              "src/auto_qb/cli.py",
+              "src/auto_qb/config/__init__.py",
+              "src/auto_qb/config/schema/__init__.py",
+              "src/auto_qb/config/site_presets.py",
+              "src/auto_qb/config/validation/__init__.py",
+              "src/auto_qb/core/__init__.py",
+              "src/auto_qb/core/exporter.py",
+              "src/auto_qb/core/modules/__init__.py",
+              "src/auto_qb/core/modules/grouping_mod.py",
+              "src/auto_qb/core/modules/maintenance_mod.py",
+              "src/auto_qb/core/modules/relocate_mod.py",
+              "src/auto_qb/core/modules/relocate_units.py",
+              "src/auto_qb/core/modules/rules_mod.py",
+              "src/auto_qb/core/modules/tracker_mod.py",
+              "src/auto_qb/core/traffic_source/__init__.py",
+              "src/auto_qb/hr/__init__.py",
+              "src/auto_qb/hr/adapters/__init__.py",
+              "src/auto_qb/hr/events.py",
+              "src/auto_qb/hr/fetcher.py",
+              "src/auto_qb/hr/runtime.py",
+              "src/auto_qb/infra/__init__.py",
+              "src/auto_qb/rules/__init__.py",
+              "src/auto_qb/rules/actions/__init__.py",
+              "src/auto_qb/rules/expr/__init__.py",
+              "src/auto_qb/tools/__init__.py",
+              "src/auto_qb/torrents/__init__.py",
+              "src/auto_qb/transfer/__init__.py",
+              "src/auto_qb/transfer/adapters/__init__.py",
+              "src/auto_qb/tray/__init__.py",
+              "src/auto_qb/tray/app.py",
+              "src/auto_qb/webui/__init__.py",
+              "src/auto_qb/webui/commands.py",
+              "src/auto_qb/webui/runtime.py",
+              "src/auto_qb/webui/server/__init__.py",
+              "src/auto_qb/webui/server/auth.py",
+              "src/auto_qb/webui/server/routes/__init__.py",
+              "src/auto_qb/webui/server/routes/events.py",
+              "src/auto_qb/webui/server/routes/sites.py",
+              "src/auto_qb/webui/static/shared/config_hub_tracker.js"
+            ]
+          }
+        ]
       }
     },
     {
@@ -769,15 +1465,59 @@
         }
       ],
       "registry": {
-        "r2_ids": [
-          "C-01",
-          "T-04"
-        ],
-        "r2_index": {
-          "C-01": "C R11(R6) P3 core/traffic_store.py:821 parse_v4_agg_text (cov_s 无下限) / :1207-1209 v4_rollup_agg / :1244 v4_merge_agg ; traffic_sample_mod.py:1427 _recover_aggre",
-          "T-04": "T R10 P3 gtm/__init__.py:8-10 进度注; README 通知机制段; 对照 notifier.py:9-12 与 26-10-16-0541 档案 包级门面文档双重漂移: 进度注停在 S5(实际 S0-S9 落地)、通知链路仍写「重读历史文件」(26-10-21 起为零读盘直达补丁)"
-        },
-        "issues": []
+        "r2_ids": [],
+        "r2_index": {},
+        "issues": [
+          {
+            "issue": "memory-bank/issues/26-10-31-0641-test-real-machine-test-standing.html",
+            "id": "0641-test-real-machine-test-standing",
+            "type": "test",
+            "title": "真机实测定期排期(常驻排期锚)",
+            "status": "Open",
+            "files": [
+              "src/auto_qb/__init__.py",
+              "src/auto_qb/cli.py",
+              "src/auto_qb/config/__init__.py",
+              "src/auto_qb/config/schema/__init__.py",
+              "src/auto_qb/config/site_presets.py",
+              "src/auto_qb/config/validation/__init__.py",
+              "src/auto_qb/core/__init__.py",
+              "src/auto_qb/core/exporter.py",
+              "src/auto_qb/core/modules/__init__.py",
+              "src/auto_qb/core/modules/grouping_mod.py",
+              "src/auto_qb/core/modules/maintenance_mod.py",
+              "src/auto_qb/core/modules/relocate_mod.py",
+              "src/auto_qb/core/modules/relocate_units.py",
+              "src/auto_qb/core/modules/rules_mod.py",
+              "src/auto_qb/core/modules/tracker_mod.py",
+              "src/auto_qb/core/traffic_source/__init__.py",
+              "src/auto_qb/hr/__init__.py",
+              "src/auto_qb/hr/adapters/__init__.py",
+              "src/auto_qb/hr/events.py",
+              "src/auto_qb/hr/fetcher.py",
+              "src/auto_qb/hr/runtime.py",
+              "src/auto_qb/infra/__init__.py",
+              "src/auto_qb/rules/__init__.py",
+              "src/auto_qb/rules/actions/__init__.py",
+              "src/auto_qb/rules/expr/__init__.py",
+              "src/auto_qb/tools/__init__.py",
+              "src/auto_qb/torrents/__init__.py",
+              "src/auto_qb/transfer/__init__.py",
+              "src/auto_qb/transfer/adapters/__init__.py",
+              "src/auto_qb/tray/__init__.py",
+              "src/auto_qb/tray/app.py",
+              "src/auto_qb/webui/__init__.py",
+              "src/auto_qb/webui/commands.py",
+              "src/auto_qb/webui/runtime.py",
+              "src/auto_qb/webui/server/__init__.py",
+              "src/auto_qb/webui/server/auth.py",
+              "src/auto_qb/webui/server/routes/__init__.py",
+              "src/auto_qb/webui/server/routes/events.py",
+              "src/auto_qb/webui/server/routes/sites.py",
+              "src/auto_qb/webui/static/shared/config_hub_tracker.js"
+            ]
+          }
+        ]
       }
     },
     {
@@ -821,17 +1561,59 @@
         }
       ],
       "registry": {
-        "r2_ids": [
-          "A-05",
-          "GH-01",
-          "T-04"
-        ],
-        "r2_index": {
-          "A-05": "A R9 P2 relocate_mod.py:643-651 _finalize_members ; torrents/record.py:287 files (惰性缓存首见即一次 HTTP) ACT_FINALIZE 收尾集合对全库每条种子先发 files API 再过滤, 大库下单 tick 串行 N 次 HTT",
-          "GH-01": "GH R11(R9) P3 tools/finalize_watch.py:185-190 run (读后心跳无条件整包覆盖) / :238(max_wait 缺省 0); infra/relocate_journal.py:1-14 头注「唯一写者」; 对照 relocate_mod.py:593/:605/:639",
-          "T-04": "T R10 P3 gtm/__init__.py:8-10 进度注; README 通知机制段; 对照 notifier.py:9-12 与 26-10-16-0541 档案 包级门面文档双重漂移: 进度注停在 S5(实际 S0-S9 落地)、通知链路仍写「重读历史文件」(26-10-21 起为零读盘直达补丁)"
-        },
-        "issues": []
+        "r2_ids": [],
+        "r2_index": {},
+        "issues": [
+          {
+            "issue": "memory-bank/issues/26-10-31-0641-test-real-machine-test-standing.html",
+            "id": "0641-test-real-machine-test-standing",
+            "type": "test",
+            "title": "真机实测定期排期(常驻排期锚)",
+            "status": "Open",
+            "files": [
+              "src/auto_qb/__init__.py",
+              "src/auto_qb/cli.py",
+              "src/auto_qb/config/__init__.py",
+              "src/auto_qb/config/schema/__init__.py",
+              "src/auto_qb/config/site_presets.py",
+              "src/auto_qb/config/validation/__init__.py",
+              "src/auto_qb/core/__init__.py",
+              "src/auto_qb/core/exporter.py",
+              "src/auto_qb/core/modules/__init__.py",
+              "src/auto_qb/core/modules/grouping_mod.py",
+              "src/auto_qb/core/modules/maintenance_mod.py",
+              "src/auto_qb/core/modules/relocate_mod.py",
+              "src/auto_qb/core/modules/relocate_units.py",
+              "src/auto_qb/core/modules/rules_mod.py",
+              "src/auto_qb/core/modules/tracker_mod.py",
+              "src/auto_qb/core/traffic_source/__init__.py",
+              "src/auto_qb/hr/__init__.py",
+              "src/auto_qb/hr/adapters/__init__.py",
+              "src/auto_qb/hr/events.py",
+              "src/auto_qb/hr/fetcher.py",
+              "src/auto_qb/hr/runtime.py",
+              "src/auto_qb/infra/__init__.py",
+              "src/auto_qb/rules/__init__.py",
+              "src/auto_qb/rules/actions/__init__.py",
+              "src/auto_qb/rules/expr/__init__.py",
+              "src/auto_qb/tools/__init__.py",
+              "src/auto_qb/torrents/__init__.py",
+              "src/auto_qb/transfer/__init__.py",
+              "src/auto_qb/transfer/adapters/__init__.py",
+              "src/auto_qb/tray/__init__.py",
+              "src/auto_qb/tray/app.py",
+              "src/auto_qb/webui/__init__.py",
+              "src/auto_qb/webui/commands.py",
+              "src/auto_qb/webui/runtime.py",
+              "src/auto_qb/webui/server/__init__.py",
+              "src/auto_qb/webui/server/auth.py",
+              "src/auto_qb/webui/server/routes/__init__.py",
+              "src/auto_qb/webui/server/routes/events.py",
+              "src/auto_qb/webui/server/routes/sites.py",
+              "src/auto_qb/webui/static/shared/config_hub_tracker.js"
+            ]
+          }
+        ]
       }
     },
     {
@@ -863,13 +1645,51 @@
         }
       ],
       "registry": {
-        "r2_ids": [
-          "B-01"
-        ],
-        "r2_index": {
-          "B-01": "B R5(R2) P1 hr/service.py:1329 _freeze_terminal / :1729 _position_covered / :1753 _absence_proven_all ; 语义锚 model.py:332; 支点 adapters/nexusphp.py:57 cutoff_done"
-        },
-        "issues": []
+        "r2_ids": [],
+        "r2_index": {},
+        "issues": [
+          {
+            "issue": "memory-bank/issues/26-09-30-0052-perf-hr-lastpage-fetch-skip.html",
+            "id": "0052-perf-hr-lastpage-fetch-skip",
+            "type": "perf",
+            "title": "HR 计数：末页追翻省略（P3 缓做项）",
+            "status": "Open",
+            "files": [
+              "src/auto_qb/hr/service.py"
+            ]
+          },
+          {
+            "issue": "memory-bank/issues/26-10-05-0922-feat-hr-prune-notice.html",
+            "id": "0922-feat-hr-prune-notice",
+            "type": "feat",
+            "title": "C3: 30 天静默淘汰淘汰前无预告 (方向 A: 日志预告)",
+            "status": "Open",
+            "files": [
+              "src/auto_qb/hr/service.py",
+              "src/auto_qb/hr/status.py"
+            ]
+          },
+          {
+            "issue": "memory-bank/issues/26-10-08-0642-test-mutation-audit-standing.html",
+            "id": "0642-test-mutation-audit-standing",
+            "type": "test",
+            "title": "变异测试定期审计(常驻排期锚)",
+            "status": "Open",
+            "files": [
+              "src/auto_qb/config/validation/curves.py",
+              "src/auto_qb/core/curves.py",
+              "src/auto_qb/core/episodes.py",
+              "src/auto_qb/core/state.py",
+              "src/auto_qb/core/taskqueue.py",
+              "src/auto_qb/core/traffic_grid.py",
+              "src/auto_qb/core/traffic_limits.py",
+              "src/auto_qb/core/traffic_store.py",
+              "src/auto_qb/core/tvshows.py",
+              "src/auto_qb/hr/service.py",
+              "src/auto_qb/webui/server/routes/state.py"
+            ]
+          }
+        ]
       }
     },
     {
@@ -899,7 +1719,19 @@
         "r2_index": {
           "B-01": "B R5(R2) P1 hr/service.py:1329 _freeze_terminal / :1729 _position_covered / :1753 _absence_proven_all ; 语义锚 model.py:332; 支点 adapters/nexusphp.py:57 cutoff_done"
         },
-        "issues": []
+        "issues": [
+          {
+            "issue": "memory-bank/issues/26-10-05-0922-feat-hr-prune-notice.html",
+            "id": "0922-feat-hr-prune-notice",
+            "type": "feat",
+            "title": "C3: 30 天静默淘汰淘汰前无预告 (方向 A: 日志预告)",
+            "status": "Open",
+            "files": [
+              "src/auto_qb/hr/service.py",
+              "src/auto_qb/hr/status.py"
+            ]
+          }
+        ]
       }
     },
     {
@@ -940,18 +1772,88 @@
       ],
       "registry": {
         "r2_ids": [
-          "A-06",
-          "T-01",
-          "T-02",
-          "T-05"
+          "T-02"
         ],
         "r2_index": {
-          "A-06": "A R9(R2) P2 core/taskqueue.py:224-234 run_due (defer 命中仍占 due 批次) / :241 _pop_due ; core/qbmanager.py:781 _own_write_defer_gate deferral 让位任务重入堆但仍计入本轮 max_tasks",
-          "T-01": "T R9(R3) P3 gtm/server.py:444-446 _autostart (读-改-写无锁) / :339-343 _put_config ; 对照 storage.py:489 _state_lock (state 路径已串行化) config.yml 双 HTTP 线程写点无锁, /autostar",
-          "T-02": "T R8 P3 gtm/config.py:163-167 _check_str (只验非空); server.py:192/:277; storage.py:22-23 docstring「强制绑定 127.0.0.1」 http_host 可配且无回环约束, PUT 0.0.0.0 重启后控制面对局域网暴露(tok",
-          "T-05": "T general P3 gtm/server.py:56(F401 Config ) / __main__.py:96(F841 uninstall ) / config.py:313(RUF059 errors ) 工具侧死码三处, 行为零差异"
+          "T-02": "T R8 P3 gtm/config.py:163-167 _check_str (只验非空); server.py:192/:277; storage.py:22-23 docstring「强制绑定 127.0.0.1」 http_host 可配且无回环约束, PUT 0.0.0.0 重启后控制面对局域网暴露(tok"
         },
-        "issues": []
+        "issues": [
+          {
+            "issue": "memory-bank/issues/26-10-07-1420-perf-webui-group-row-hash-ref.html",
+            "id": "1420-perf-webui-group-row-hash-ref",
+            "type": "perf",
+            "title": "组行 hash 引用式响应体二次演进: 组视图增量粒度从「组行」降到「成员」级",
+            "status": "Open",
+            "files": [
+              "src/auto_qb/hr/runtime.py",
+              "src/auto_qb/webui/runtime.py",
+              "src/auto_qb/webui/static/shared/decorate.js",
+              "src/auto_qb/webui/views.py"
+            ]
+          },
+          {
+            "issue": "memory-bank/issues/26-10-08-0411-perf-webui-api-state-pagination.html",
+            "id": "0411-perf-webui-api-state-pagination",
+            "type": "perf",
+            "title": "/api/state 分页/按需字段未做: 冷启动与降级轮仍回整表全量(5000 种子首屏峰值残留)",
+            "status": "Open",
+            "files": [
+              "src/auto_qb/hr/runtime.py",
+              "src/auto_qb/webui/runtime.py",
+              "src/auto_qb/webui/static/shared/auth.js",
+              "src/auto_qb/webui/static/shared/lifecycle.js"
+            ]
+          },
+          {
+            "issue": "memory-bank/issues/26-10-31-0641-test-real-machine-test-standing.html",
+            "id": "0641-test-real-machine-test-standing",
+            "type": "test",
+            "title": "真机实测定期排期(常驻排期锚)",
+            "status": "Open",
+            "files": [
+              "src/auto_qb/__init__.py",
+              "src/auto_qb/cli.py",
+              "src/auto_qb/config/__init__.py",
+              "src/auto_qb/config/schema/__init__.py",
+              "src/auto_qb/config/site_presets.py",
+              "src/auto_qb/config/validation/__init__.py",
+              "src/auto_qb/core/__init__.py",
+              "src/auto_qb/core/exporter.py",
+              "src/auto_qb/core/modules/__init__.py",
+              "src/auto_qb/core/modules/grouping_mod.py",
+              "src/auto_qb/core/modules/maintenance_mod.py",
+              "src/auto_qb/core/modules/relocate_mod.py",
+              "src/auto_qb/core/modules/relocate_units.py",
+              "src/auto_qb/core/modules/rules_mod.py",
+              "src/auto_qb/core/modules/tracker_mod.py",
+              "src/auto_qb/core/traffic_source/__init__.py",
+              "src/auto_qb/hr/__init__.py",
+              "src/auto_qb/hr/adapters/__init__.py",
+              "src/auto_qb/hr/events.py",
+              "src/auto_qb/hr/fetcher.py",
+              "src/auto_qb/hr/runtime.py",
+              "src/auto_qb/infra/__init__.py",
+              "src/auto_qb/rules/__init__.py",
+              "src/auto_qb/rules/actions/__init__.py",
+              "src/auto_qb/rules/expr/__init__.py",
+              "src/auto_qb/tools/__init__.py",
+              "src/auto_qb/torrents/__init__.py",
+              "src/auto_qb/transfer/__init__.py",
+              "src/auto_qb/transfer/adapters/__init__.py",
+              "src/auto_qb/tray/__init__.py",
+              "src/auto_qb/tray/app.py",
+              "src/auto_qb/webui/__init__.py",
+              "src/auto_qb/webui/commands.py",
+              "src/auto_qb/webui/runtime.py",
+              "src/auto_qb/webui/server/__init__.py",
+              "src/auto_qb/webui/server/auth.py",
+              "src/auto_qb/webui/server/routes/__init__.py",
+              "src/auto_qb/webui/server/routes/events.py",
+              "src/auto_qb/webui/server/routes/sites.py",
+              "src/auto_qb/webui/static/shared/config_hub_tracker.js"
+            ]
+          }
+        ]
       }
     },
     {
@@ -1019,19 +1921,59 @@
         }
       ],
       "registry": {
-        "r2_ids": [
-          "B-01",
-          "B-02",
-          "C-01",
-          "T-04"
-        ],
-        "r2_index": {
-          "B-01": "B R5(R2) P1 hr/service.py:1329 _freeze_terminal / :1729 _position_covered / :1753 _absence_proven_all ; 语义锚 model.py:332; 支点 adapters/nexusphp.py:57 cutoff_done",
-          "B-02": "B general P3 hr/discovery.py:27 is_loopback_host / :33 _content_length (F401 ×2) 新文件两处死导入, 行为零差异",
-          "C-01": "C R11(R6) P3 core/traffic_store.py:821 parse_v4_agg_text (cov_s 无下限) / :1207-1209 v4_rollup_agg / :1244 v4_merge_agg ; traffic_sample_mod.py:1427 _recover_aggre",
-          "T-04": "T R10 P3 gtm/__init__.py:8-10 进度注; README 通知机制段; 对照 notifier.py:9-12 与 26-10-16-0541 档案 包级门面文档双重漂移: 进度注停在 S5(实际 S0-S9 落地)、通知链路仍写「重读历史文件」(26-10-21 起为零读盘直达补丁)"
-        },
-        "issues": []
+        "r2_ids": [],
+        "r2_index": {},
+        "issues": [
+          {
+            "issue": "memory-bank/issues/26-10-31-0641-test-real-machine-test-standing.html",
+            "id": "0641-test-real-machine-test-standing",
+            "type": "test",
+            "title": "真机实测定期排期(常驻排期锚)",
+            "status": "Open",
+            "files": [
+              "src/auto_qb/__init__.py",
+              "src/auto_qb/cli.py",
+              "src/auto_qb/config/__init__.py",
+              "src/auto_qb/config/schema/__init__.py",
+              "src/auto_qb/config/site_presets.py",
+              "src/auto_qb/config/validation/__init__.py",
+              "src/auto_qb/core/__init__.py",
+              "src/auto_qb/core/exporter.py",
+              "src/auto_qb/core/modules/__init__.py",
+              "src/auto_qb/core/modules/grouping_mod.py",
+              "src/auto_qb/core/modules/maintenance_mod.py",
+              "src/auto_qb/core/modules/relocate_mod.py",
+              "src/auto_qb/core/modules/relocate_units.py",
+              "src/auto_qb/core/modules/rules_mod.py",
+              "src/auto_qb/core/modules/tracker_mod.py",
+              "src/auto_qb/core/traffic_source/__init__.py",
+              "src/auto_qb/hr/__init__.py",
+              "src/auto_qb/hr/adapters/__init__.py",
+              "src/auto_qb/hr/events.py",
+              "src/auto_qb/hr/fetcher.py",
+              "src/auto_qb/hr/runtime.py",
+              "src/auto_qb/infra/__init__.py",
+              "src/auto_qb/rules/__init__.py",
+              "src/auto_qb/rules/actions/__init__.py",
+              "src/auto_qb/rules/expr/__init__.py",
+              "src/auto_qb/tools/__init__.py",
+              "src/auto_qb/torrents/__init__.py",
+              "src/auto_qb/transfer/__init__.py",
+              "src/auto_qb/transfer/adapters/__init__.py",
+              "src/auto_qb/tray/__init__.py",
+              "src/auto_qb/tray/app.py",
+              "src/auto_qb/webui/__init__.py",
+              "src/auto_qb/webui/commands.py",
+              "src/auto_qb/webui/runtime.py",
+              "src/auto_qb/webui/server/__init__.py",
+              "src/auto_qb/webui/server/auth.py",
+              "src/auto_qb/webui/server/routes/__init__.py",
+              "src/auto_qb/webui/server/routes/events.py",
+              "src/auto_qb/webui/server/routes/sites.py",
+              "src/auto_qb/webui/static/shared/config_hub_tracker.js"
+            ]
+          }
+        ]
       }
     },
     {
@@ -1073,7 +2015,57 @@
       "registry": {
         "r2_ids": [],
         "r2_index": {},
-        "issues": []
+        "issues": [
+          {
+            "issue": "memory-bank/issues/26-10-31-0641-test-real-machine-test-standing.html",
+            "id": "0641-test-real-machine-test-standing",
+            "type": "test",
+            "title": "真机实测定期排期(常驻排期锚)",
+            "status": "Open",
+            "files": [
+              "src/auto_qb/__init__.py",
+              "src/auto_qb/cli.py",
+              "src/auto_qb/config/__init__.py",
+              "src/auto_qb/config/schema/__init__.py",
+              "src/auto_qb/config/site_presets.py",
+              "src/auto_qb/config/validation/__init__.py",
+              "src/auto_qb/core/__init__.py",
+              "src/auto_qb/core/exporter.py",
+              "src/auto_qb/core/modules/__init__.py",
+              "src/auto_qb/core/modules/grouping_mod.py",
+              "src/auto_qb/core/modules/maintenance_mod.py",
+              "src/auto_qb/core/modules/relocate_mod.py",
+              "src/auto_qb/core/modules/relocate_units.py",
+              "src/auto_qb/core/modules/rules_mod.py",
+              "src/auto_qb/core/modules/tracker_mod.py",
+              "src/auto_qb/core/traffic_source/__init__.py",
+              "src/auto_qb/hr/__init__.py",
+              "src/auto_qb/hr/adapters/__init__.py",
+              "src/auto_qb/hr/events.py",
+              "src/auto_qb/hr/fetcher.py",
+              "src/auto_qb/hr/runtime.py",
+              "src/auto_qb/infra/__init__.py",
+              "src/auto_qb/rules/__init__.py",
+              "src/auto_qb/rules/actions/__init__.py",
+              "src/auto_qb/rules/expr/__init__.py",
+              "src/auto_qb/tools/__init__.py",
+              "src/auto_qb/torrents/__init__.py",
+              "src/auto_qb/transfer/__init__.py",
+              "src/auto_qb/transfer/adapters/__init__.py",
+              "src/auto_qb/tray/__init__.py",
+              "src/auto_qb/tray/app.py",
+              "src/auto_qb/webui/__init__.py",
+              "src/auto_qb/webui/commands.py",
+              "src/auto_qb/webui/runtime.py",
+              "src/auto_qb/webui/server/__init__.py",
+              "src/auto_qb/webui/server/auth.py",
+              "src/auto_qb/webui/server/routes/__init__.py",
+              "src/auto_qb/webui/server/routes/events.py",
+              "src/auto_qb/webui/server/routes/sites.py",
+              "src/auto_qb/webui/static/shared/config_hub_tracker.js"
+            ]
+          }
+        ]
       }
     },
     {
@@ -1145,13 +2137,85 @@
         }
       ],
       "registry": {
-        "r2_ids": [
-          "T-04"
-        ],
-        "r2_index": {
-          "T-04": "T R10 P3 gtm/__init__.py:8-10 进度注; README 通知机制段; 对照 notifier.py:9-12 与 26-10-16-0541 档案 包级门面文档双重漂移: 进度注停在 S5(实际 S0-S9 落地)、通知链路仍写「重读历史文件」(26-10-21 起为零读盘直达补丁)"
-        },
-        "issues": []
+        "r2_ids": [],
+        "r2_index": {},
+        "issues": [
+          {
+            "issue": "memory-bank/issues/26-10-07-1420-perf-webui-group-row-hash-ref.html",
+            "id": "1420-perf-webui-group-row-hash-ref",
+            "type": "perf",
+            "title": "组行 hash 引用式响应体二次演进: 组视图增量粒度从「组行」降到「成员」级",
+            "status": "Open",
+            "files": [
+              "src/auto_qb/hr/runtime.py",
+              "src/auto_qb/webui/runtime.py",
+              "src/auto_qb/webui/static/shared/decorate.js",
+              "src/auto_qb/webui/views.py"
+            ]
+          },
+          {
+            "issue": "memory-bank/issues/26-10-08-0411-perf-webui-api-state-pagination.html",
+            "id": "0411-perf-webui-api-state-pagination",
+            "type": "perf",
+            "title": "/api/state 分页/按需字段未做: 冷启动与降级轮仍回整表全量(5000 种子首屏峰值残留)",
+            "status": "Open",
+            "files": [
+              "src/auto_qb/hr/runtime.py",
+              "src/auto_qb/webui/runtime.py",
+              "src/auto_qb/webui/static/shared/auth.js",
+              "src/auto_qb/webui/static/shared/lifecycle.js"
+            ]
+          },
+          {
+            "issue": "memory-bank/issues/26-10-31-0641-test-real-machine-test-standing.html",
+            "id": "0641-test-real-machine-test-standing",
+            "type": "test",
+            "title": "真机实测定期排期(常驻排期锚)",
+            "status": "Open",
+            "files": [
+              "src/auto_qb/__init__.py",
+              "src/auto_qb/cli.py",
+              "src/auto_qb/config/__init__.py",
+              "src/auto_qb/config/schema/__init__.py",
+              "src/auto_qb/config/site_presets.py",
+              "src/auto_qb/config/validation/__init__.py",
+              "src/auto_qb/core/__init__.py",
+              "src/auto_qb/core/exporter.py",
+              "src/auto_qb/core/modules/__init__.py",
+              "src/auto_qb/core/modules/grouping_mod.py",
+              "src/auto_qb/core/modules/maintenance_mod.py",
+              "src/auto_qb/core/modules/relocate_mod.py",
+              "src/auto_qb/core/modules/relocate_units.py",
+              "src/auto_qb/core/modules/rules_mod.py",
+              "src/auto_qb/core/modules/tracker_mod.py",
+              "src/auto_qb/core/traffic_source/__init__.py",
+              "src/auto_qb/hr/__init__.py",
+              "src/auto_qb/hr/adapters/__init__.py",
+              "src/auto_qb/hr/events.py",
+              "src/auto_qb/hr/fetcher.py",
+              "src/auto_qb/hr/runtime.py",
+              "src/auto_qb/infra/__init__.py",
+              "src/auto_qb/rules/__init__.py",
+              "src/auto_qb/rules/actions/__init__.py",
+              "src/auto_qb/rules/expr/__init__.py",
+              "src/auto_qb/tools/__init__.py",
+              "src/auto_qb/torrents/__init__.py",
+              "src/auto_qb/transfer/__init__.py",
+              "src/auto_qb/transfer/adapters/__init__.py",
+              "src/auto_qb/tray/__init__.py",
+              "src/auto_qb/tray/app.py",
+              "src/auto_qb/webui/__init__.py",
+              "src/auto_qb/webui/commands.py",
+              "src/auto_qb/webui/runtime.py",
+              "src/auto_qb/webui/server/__init__.py",
+              "src/auto_qb/webui/server/auth.py",
+              "src/auto_qb/webui/server/routes/__init__.py",
+              "src/auto_qb/webui/server/routes/events.py",
+              "src/auto_qb/webui/server/routes/sites.py",
+              "src/auto_qb/webui/static/shared/config_hub_tracker.js"
+            ]
+          }
+        ]
       }
     },
     {
@@ -1257,17 +2321,83 @@
       "registry": {
         "r2_ids": [
           "E-01",
-          "T-02",
-          "T-04",
           "T-05"
         ],
         "r2_index": {
           "E-01": "E R8 P3 webui/server/routes/torrent_cmds.py:210/:212/:221-225/:263-264/:319/:325 裸 int()/float(); torrent_detail.py:120-121 同族 数值型请求体字段无形状防护, 直调 API 传字符串 ValueE",
-          "T-02": "T R8 P3 gtm/config.py:163-167 _check_str (只验非空); server.py:192/:277; storage.py:22-23 docstring「强制绑定 127.0.0.1」 http_host 可配且无回环约束, PUT 0.0.0.0 重启后控制面对局域网暴露(tok",
-          "T-04": "T R10 P3 gtm/__init__.py:8-10 进度注; README 通知机制段; 对照 notifier.py:9-12 与 26-10-16-0541 档案 包级门面文档双重漂移: 进度注停在 S5(实际 S0-S9 落地)、通知链路仍写「重读历史文件」(26-10-21 起为零读盘直达补丁)",
           "T-05": "T general P3 gtm/server.py:56(F401 Config ) / __main__.py:96(F841 uninstall ) / config.py:313(RUF059 errors ) 工具侧死码三处, 行为零差异"
         },
-        "issues": []
+        "issues": [
+          {
+            "issue": "memory-bank/issues/26-10-08-0642-test-mutation-audit-standing.html",
+            "id": "0642-test-mutation-audit-standing",
+            "type": "test",
+            "title": "变异测试定期审计(常驻排期锚)",
+            "status": "Open",
+            "files": [
+              "src/auto_qb/config/validation/curves.py",
+              "src/auto_qb/core/curves.py",
+              "src/auto_qb/core/episodes.py",
+              "src/auto_qb/core/state.py",
+              "src/auto_qb/core/taskqueue.py",
+              "src/auto_qb/core/traffic_grid.py",
+              "src/auto_qb/core/traffic_limits.py",
+              "src/auto_qb/core/traffic_store.py",
+              "src/auto_qb/core/tvshows.py",
+              "src/auto_qb/hr/service.py",
+              "src/auto_qb/webui/server/routes/state.py"
+            ]
+          },
+          {
+            "issue": "memory-bank/issues/26-10-31-0641-test-real-machine-test-standing.html",
+            "id": "0641-test-real-machine-test-standing",
+            "type": "test",
+            "title": "真机实测定期排期(常驻排期锚)",
+            "status": "Open",
+            "files": [
+              "src/auto_qb/__init__.py",
+              "src/auto_qb/cli.py",
+              "src/auto_qb/config/__init__.py",
+              "src/auto_qb/config/schema/__init__.py",
+              "src/auto_qb/config/site_presets.py",
+              "src/auto_qb/config/validation/__init__.py",
+              "src/auto_qb/core/__init__.py",
+              "src/auto_qb/core/exporter.py",
+              "src/auto_qb/core/modules/__init__.py",
+              "src/auto_qb/core/modules/grouping_mod.py",
+              "src/auto_qb/core/modules/maintenance_mod.py",
+              "src/auto_qb/core/modules/relocate_mod.py",
+              "src/auto_qb/core/modules/relocate_units.py",
+              "src/auto_qb/core/modules/rules_mod.py",
+              "src/auto_qb/core/modules/tracker_mod.py",
+              "src/auto_qb/core/traffic_source/__init__.py",
+              "src/auto_qb/hr/__init__.py",
+              "src/auto_qb/hr/adapters/__init__.py",
+              "src/auto_qb/hr/events.py",
+              "src/auto_qb/hr/fetcher.py",
+              "src/auto_qb/hr/runtime.py",
+              "src/auto_qb/infra/__init__.py",
+              "src/auto_qb/rules/__init__.py",
+              "src/auto_qb/rules/actions/__init__.py",
+              "src/auto_qb/rules/expr/__init__.py",
+              "src/auto_qb/tools/__init__.py",
+              "src/auto_qb/torrents/__init__.py",
+              "src/auto_qb/transfer/__init__.py",
+              "src/auto_qb/transfer/adapters/__init__.py",
+              "src/auto_qb/tray/__init__.py",
+              "src/auto_qb/tray/app.py",
+              "src/auto_qb/webui/__init__.py",
+              "src/auto_qb/webui/commands.py",
+              "src/auto_qb/webui/runtime.py",
+              "src/auto_qb/webui/server/__init__.py",
+              "src/auto_qb/webui/server/auth.py",
+              "src/auto_qb/webui/server/routes/__init__.py",
+              "src/auto_qb/webui/server/routes/events.py",
+              "src/auto_qb/webui/server/routes/sites.py",
+              "src/auto_qb/webui/static/shared/config_hub_tracker.js"
+            ]
+          }
+        ]
       }
     },
     {
@@ -1537,7 +2667,22 @@
       "registry": {
         "r2_ids": [],
         "r2_index": {},
-        "issues": []
+        "issues": [
+          {
+            "issue": "memory-bank/issues/26-09-22-2002-bug-webui-config-health-warning.html",
+            "id": "2002-bug-webui-config-health-warning",
+            "type": "bug",
+            "title": "设置页警示条是伪警示: 只复述 schema 风险文案, 不反映配置健康; 升级失效键无任何提示",
+            "status": "Open",
+            "files": [
+              "src/auto_qb/webui/static/atlas/index.html",
+              "src/auto_qb/webui/static/console/index.html",
+              "src/auto_qb/webui/static/flux/index.html",
+              "src/auto_qb/webui/static/prism/index.html",
+              "src/auto_qb/webui/static/shared/config_hub.js"
+            ]
+          }
+        ]
       }
     },
     {
@@ -1581,13 +2726,34 @@
         }
       ],
       "registry": {
-        "r2_ids": [
-          "GH-01"
-        ],
-        "r2_index": {
-          "GH-01": "GH R11(R9) P3 tools/finalize_watch.py:185-190 run (读后心跳无条件整包覆盖) / :238(max_wait 缺省 0); infra/relocate_journal.py:1-14 头注「唯一写者」; 对照 relocate_mod.py:593/:605/:639"
-        },
-        "issues": []
+        "r2_ids": [],
+        "r2_index": {},
+        "issues": [
+          {
+            "issue": "memory-bank/issues/26-10-07-0149-feat-webui-drawer-open-state-restore.html",
+            "id": "0149-feat-webui-drawer-open-state-restore",
+            "type": "feat",
+            "title": "抽屉开合态持久化回读(补强一, 与 D1 拍板冲突待翻案)",
+            "status": "Open",
+            "files": [
+              "src/auto_qb/webui/static/shared/drawer.js",
+              "src/auto_qb/webui/static/shared/state.js"
+            ]
+          },
+          {
+            "issue": "memory-bank/issues/26-10-08-0411-perf-webui-api-state-pagination.html",
+            "id": "0411-perf-webui-api-state-pagination",
+            "type": "perf",
+            "title": "/api/state 分页/按需字段未做: 冷启动与降级轮仍回整表全量(5000 种子首屏峰值残留)",
+            "status": "Open",
+            "files": [
+              "src/auto_qb/hr/runtime.py",
+              "src/auto_qb/webui/runtime.py",
+              "src/auto_qb/webui/static/shared/auth.js",
+              "src/auto_qb/webui/static/shared/lifecycle.js"
+            ]
+          }
+        ]
       }
     },
     {
@@ -1723,7 +2889,21 @@
       "registry": {
         "r2_ids": [],
         "r2_index": {},
-        "issues": []
+        "issues": [
+          {
+            "issue": "memory-bank/issues/26-10-07-1420-perf-webui-group-row-hash-ref.html",
+            "id": "1420-perf-webui-group-row-hash-ref",
+            "type": "perf",
+            "title": "组行 hash 引用式响应体二次演进: 组视图增量粒度从「组行」降到「成员」级",
+            "status": "Open",
+            "files": [
+              "src/auto_qb/hr/runtime.py",
+              "src/auto_qb/webui/runtime.py",
+              "src/auto_qb/webui/static/shared/decorate.js",
+              "src/auto_qb/webui/views.py"
+            ]
+          }
+        ]
       }
     },
     {
@@ -1765,7 +2945,19 @@
       "registry": {
         "r2_ids": [],
         "r2_index": {},
-        "issues": []
+        "issues": [
+          {
+            "issue": "memory-bank/issues/26-10-07-0149-feat-webui-drawer-open-state-restore.html",
+            "id": "0149-feat-webui-drawer-open-state-restore",
+            "type": "feat",
+            "title": "抽屉开合态持久化回读(补强一, 与 D1 拍板冲突待翻案)",
+            "status": "Open",
+            "files": [
+              "src/auto_qb/webui/static/shared/drawer.js",
+              "src/auto_qb/webui/static/shared/state.js"
+            ]
+          }
+        ]
       }
     },
     {
@@ -1891,7 +3083,18 @@
       "registry": {
         "r2_ids": [],
         "r2_index": {},
-        "issues": []
+        "issues": [
+          {
+            "issue": "memory-bank/issues/26-10-01-2120-refactor-webui-tag-category-dialog.html",
+            "id": "2120-refactor-webui-tag-category-dialog",
+            "type": "refactor",
+            "title": "管理标签/分类窗口重构",
+            "status": "Open",
+            "files": [
+              "src/auto_qb/webui/static/shared/dialogs.js"
+            ]
+          }
+        ]
       }
     },
     {
@@ -1941,7 +3144,71 @@
       "registry": {
         "r2_ids": [],
         "r2_index": {},
-        "issues": []
+        "issues": [
+          {
+            "issue": "memory-bank/issues/26-09-22-2002-bug-webui-config-health-warning.html",
+            "id": "2002-bug-webui-config-health-warning",
+            "type": "bug",
+            "title": "设置页警示条是伪警示: 只复述 schema 风险文案, 不反映配置健康; 升级失效键无任何提示",
+            "status": "Open",
+            "files": [
+              "src/auto_qb/webui/static/atlas/index.html",
+              "src/auto_qb/webui/static/console/index.html",
+              "src/auto_qb/webui/static/flux/index.html",
+              "src/auto_qb/webui/static/prism/index.html",
+              "src/auto_qb/webui/static/shared/config_hub.js"
+            ]
+          },
+          {
+            "issue": "memory-bank/issues/26-10-31-0641-test-real-machine-test-standing.html",
+            "id": "0641-test-real-machine-test-standing",
+            "type": "test",
+            "title": "真机实测定期排期(常驻排期锚)",
+            "status": "Open",
+            "files": [
+              "src/auto_qb/__init__.py",
+              "src/auto_qb/cli.py",
+              "src/auto_qb/config/__init__.py",
+              "src/auto_qb/config/schema/__init__.py",
+              "src/auto_qb/config/site_presets.py",
+              "src/auto_qb/config/validation/__init__.py",
+              "src/auto_qb/core/__init__.py",
+              "src/auto_qb/core/exporter.py",
+              "src/auto_qb/core/modules/__init__.py",
+              "src/auto_qb/core/modules/grouping_mod.py",
+              "src/auto_qb/core/modules/maintenance_mod.py",
+              "src/auto_qb/core/modules/relocate_mod.py",
+              "src/auto_qb/core/modules/relocate_units.py",
+              "src/auto_qb/core/modules/rules_mod.py",
+              "src/auto_qb/core/modules/tracker_mod.py",
+              "src/auto_qb/core/traffic_source/__init__.py",
+              "src/auto_qb/hr/__init__.py",
+              "src/auto_qb/hr/adapters/__init__.py",
+              "src/auto_qb/hr/events.py",
+              "src/auto_qb/hr/fetcher.py",
+              "src/auto_qb/hr/runtime.py",
+              "src/auto_qb/infra/__init__.py",
+              "src/auto_qb/rules/__init__.py",
+              "src/auto_qb/rules/actions/__init__.py",
+              "src/auto_qb/rules/expr/__init__.py",
+              "src/auto_qb/tools/__init__.py",
+              "src/auto_qb/torrents/__init__.py",
+              "src/auto_qb/transfer/__init__.py",
+              "src/auto_qb/transfer/adapters/__init__.py",
+              "src/auto_qb/tray/__init__.py",
+              "src/auto_qb/tray/app.py",
+              "src/auto_qb/webui/__init__.py",
+              "src/auto_qb/webui/commands.py",
+              "src/auto_qb/webui/runtime.py",
+              "src/auto_qb/webui/server/__init__.py",
+              "src/auto_qb/webui/server/auth.py",
+              "src/auto_qb/webui/server/routes/__init__.py",
+              "src/auto_qb/webui/server/routes/events.py",
+              "src/auto_qb/webui/server/routes/sites.py",
+              "src/auto_qb/webui/static/shared/config_hub_tracker.js"
+            ]
+          }
+        ]
       }
     },
     {
@@ -1991,7 +3258,18 @@
       "registry": {
         "r2_ids": [],
         "r2_index": {},
-        "issues": []
+        "issues": [
+          {
+            "issue": "memory-bank/issues/26-10-07-0149-feat-webui-traffic-interpret-hover-link.html",
+            "id": "0149-feat-webui-traffic-interpret-hover-link",
+            "type": "feat",
+            "title": "14 变体解读栏与图悬停联动(P-05 备选)",
+            "status": "Open",
+            "files": [
+              "src/auto_qb/webui/static/shared/qb_traffic_chart.js"
+            ]
+          }
+        ]
       }
     },
     {
@@ -2049,7 +3327,7 @@
       "route": "R5",
       "title": "scripts 快扫: qb_capture*/ui_harness/检查与实验散件",
       "depth": "scan",
-      "total_lines": 5553,
+      "total_lines": 5556,
       "files": [
         {
           "path": "scripts/bench_expr.py",
@@ -2057,7 +3335,7 @@
         },
         {
           "path": "scripts/check_command_drift.py",
-          "lines": 187
+          "lines": 190
         },
         {
           "path": "scripts/check_context_caps.py",
@@ -2123,14 +3401,20 @@
       }
     }
   ],
+  "fingerprint": {
+    "defs": "b3e151020d95cff3",
+    "batches": 34,
+    "files": 365,
+    "total_lines": 115643
+  },
   "coverage": {
     "ok": true,
     "scoped_files": 365,
     "assigned_files": 365,
-    "total_lines": 115640,
+    "total_lines": 115643,
     "registry": {
       "r2_findings": 21,
-      "open_issues_matched": 32
+      "open_issues_matched": 17
     }
   }
 }

@@ -24,8 +24,10 @@ from __future__ import annotations
 
 import argparse
 import fnmatch
+import hashlib
 import io
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -62,7 +64,7 @@ def _is_scoped(rel: str) -> bool:
 # --------------------------------------------------------------------------- 批次定义
 # exact = 精确路径(posix); globs = fnmatch(posix, 大小写敏感)。定义必须互斥且覆盖全范围,
 # manifest 生成时守卫断言(重叠/漏配 -> rc=1 列出清单)。depth: full=逐文件精评 /
-# contract=py↔js 契约与机制 / mechanism=机制红线抽查(不逐行) / scan=快扫。
+# contract=py<->js 契约与机制 / mechanism=机制红线抽查(不逐行) / scan=快扫。
 
 
 def _B(bid: str, route: str, title: str, depth: str, exact: tuple[str, ...] = (), globs: tuple[str, ...] = ()) -> dict:
@@ -271,12 +273,19 @@ def _porcelain(root: Path) -> list[str]:
 
 
 def _require_clean(root: Path, allow_lane: bool = False) -> None:
-    """树净守卫。allow_lane=True 时仅放行 legacy-review4/ 下的路径(路线期间 findings/状态单点的正常落盘)。"""
+    """树净守卫。allow_lane=True 时仅放行 legacy-review4/ 下的路径(路线期间 findings/状态单点的正常落盘)。
+
+    rename/copy 条目的 porcelain 路径形态是「old -> new」: 必须拆开两侧分别校验,
+    否则旧路径在 lane 内的「lane 内 -> lane 外」重命名会整段命中前缀被放行。
+    """
     rows = _porcelain(root)
     if not rows:
         return
     if allow_lane:
-        bad = [p for st, p in rows if not p.startswith(LANE_DIR + "/")]
+        def in_lane(p: str) -> bool:
+            return p.strip('"').startswith(LANE_DIR + "/")
+        bad = [p for st, p in rows
+               if not all(in_lane(q) for q in (p if " -> " not in p else p.split(" -> ")))]
         if not bad:
             return
         _fail("工作树在 legacy-review4/ 之外有未提交改动, 先处理再继续:\n  " + "\n  ".join(f"{st} {p}" for st, p in rows))
@@ -341,21 +350,51 @@ def _load_route(root: Path, route: str) -> dict:
     if not path.is_file():
         _fail(f"路线未认领: {LANE_DIR}/route-{route}.json 不存在 —— 先 review.lane.claim")
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        data = json.loads(path.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, UnicodeDecodeError, OSError) as exc:
         _die(f"route JSON 解析失败: {exc}")
+    # 最小 schema 校验: 状态单点被手工改坏时给清晰失败(而非 TypeError/StopIteration 裸 traceback)
+    rel = path.relative_to(root).as_posix()
+    for key in ("route", "owner", "claimed_at", "freeze", "status", "batches"):
+        if key not in data:
+            _fail(f"route JSON 缺字段 {key}: {rel} —— 手工修复或删除后重新认领")
+    if data["status"] not in ("claimed", "in-progress", "done"):
+        _fail(f"route JSON status 非法: {data['status']!r} ({rel}) —— 手工修复或删除后重新认领")
+    if data["status"] == "in-progress" and (not isinstance(data.get("snapshot"), str) or not data["snapshot"]):
+        _fail(f"route JSON in-progress 但 snapshot 非非空 str ({rel}) —— 手工把 status 回退 claimed 后重跑 start")
+    if not isinstance(data["batches"], list) or not data["batches"]:
+        _fail(f"route JSON batches 非非空列表 ({rel}) —— 手工修复或删除后重新认领")
+    for b in data["batches"]:
+        if not isinstance(b, dict) or "id" not in b or b.get("status") not in ("pending", "done"):
+            _fail(f"route JSON 批次条目非法({rel}): {_flat(b)} —— 手工修复或删除后重新认领")
+    return data
 
 
 def _save_route(root: Path, route: str, data: dict) -> None:
     path = root / LANE_DIR / f"route-{route}.json"
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    # 原子写: 状态单点不允许留半截 JSON(崩溃窗口内旧版或完整新版二选一)
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    os.replace(tmp, path)
 
 
 def _snapshot_dir(root: Path, explicit: str | None) -> Path:
     if explicit:
         return Path(explicit).resolve()
     return (root.parent / SNAP_ROOT_NAME / root.name).resolve()
+
+
+def _guard_snap_path(root: Path, snap: Path) -> None:
+    """快照目录容器守卫: 与仓库根重合/互含一律拒绝; 删除类操作另要求标记或专用目录名。"""
+    root_r = root.resolve()
+    snap_r = Path(snap).resolve()
+    if snap_r == root_r or snap_r.is_relative_to(root_r) or root_r.is_relative_to(snap_r):
+        _die(f"快照目录与仓库根重合或互含, 拒绝: {snap_r}")
+    has_marker = (snap_r / ".snapshot-hash").is_file()
+    in_snap_root = SNAP_ROOT_NAME in snap_r.parts
+    if not has_marker and not in_snap_root:
+        _die(f"快照目录既无 .snapshot-hash 标记也不在 {SNAP_ROOT_NAME}/ 专用目录下, 拒绝操作: {snap_r}")
 
 
 def _batches_of(manifest: dict, route: str) -> list[dict]:
@@ -379,6 +418,11 @@ def _strip_tags(html: str) -> str:
     return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", html)).strip()
 
 
+def _mentions(text: str, base: str) -> bool:
+    """basename 词边界命中: 裸子串会把 store.py 误配进 traffic_store.py 一类(评审实证)。"""
+    return re.search(r"(?<![\w./-])" + re.escape(base) + r"(?![\w.-])", text) is not None
+
+
 def _parse_r2(root: Path, all_files: list[dict]) -> list[dict]:
     """R2 终表切片: ID -> 命中的 basename 集合 + 一句话。找不到终表节则返回空(不静默, 打警告)。"""
     path = root / R2_REPORT
@@ -397,7 +441,7 @@ def _parse_r2(root: Path, all_files: list[dict]) -> list[dict]:
     entries = []
     for fid, rest in rows:
         rowtext = _strip_tags(rest)
-        hits = sorted({p for p, b in base_of.items() if b in rowtext})
+        hits = sorted({p for p, b in base_of.items() if _mentions(rowtext, b)})
         entries.append({"id": fid, "files": hits, "gist": rowtext[:160]})
     return entries
 
@@ -422,7 +466,8 @@ def _parse_issues(root: Path, all_files: list[dict]) -> list[dict]:
         if status not in ("Open", "In Progress"):
             continue
         text = _strip_tags(raw)
-        hits = sorted({b for b in set(base_of.values()) if b in text})
+        # files 存全路径(与 _parse_r2 同构): issue_by_file 按全路径键查, basename 键永远 miss
+        hits = sorted({p for p, b in base_of.items() if _mentions(text, b)})
         if not hits:
             continue
         entries.append({
@@ -436,19 +481,34 @@ def _parse_issues(root: Path, all_files: list[dict]) -> list[dict]:
     return entries
 
 
+def _scoped_files(root: Path) -> list[str]:
+    out: list[str] = []
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = [d for d in dirnames if d != "__pycache__"]
+        for name in filenames:
+            rel = Path(dirpath, name).resolve().relative_to(root).as_posix()
+            if _is_scoped(rel):
+                out.append(rel)
+    out.sort()
+    return out
+
+
+def _defs_fingerprint() -> str:
+    """BATCH_DEFS 定义的指纹: manifest 是否由当前脚本版本生成, 与树无关 ——
+    manifest 描述的是冻结树, 树在 campaign 期间照常演进, 拿树当指纹会让后认领的路线永远对不上。"""
+    defs = json.dumps(
+        [[b["id"], b["route"], b["depth"], b["exact"], b["globs"]] for b in BATCH_DEFS],
+        ensure_ascii=False, separators=(",", ":"),
+    )
+    return hashlib.sha256(defs.encode("utf-8")).hexdigest()[:16]
+
+
 def cmd_manifest(args: argparse.Namespace) -> int:
     root = _resolve_root(args.root)
     if not (root / PLAN_REL).is_file():
         _die(f"计划文件不在盘: {PLAN_REL}")
     # 1) 分层范围盘点
-    scoped: list[str] = []
-    for dirpath, dirnames, filenames in __import__("os").walk(root):
-        dirnames[:] = [d for d in dirnames if d != "__pycache__"]
-        for name in filenames:
-            rel = Path(dirpath, name).resolve().relative_to(root).as_posix()
-            if _is_scoped(rel):
-                scoped.append(rel)
-    scoped.sort()
+    scoped = _scoped_files(root)
     # 2) 按批次定义分配(互斥 + 全覆盖)
     files_of: dict[str, list[dict]] = {b["id"]: [] for b in BATCH_DEFS}
     overlap: list[str] = []
@@ -503,6 +563,8 @@ def cmd_manifest(args: argparse.Namespace) -> int:
         "note": "机器事实源(计划 §04/D14); freeze 由 review.lane.claim 时机械解析, 不存于此",
         "routes": {r: [b["id"] for b in batches if b["route"] == r] for r in ROUTES},
         "batches": batches,
+        "fingerprint": {"defs": _defs_fingerprint(), "batches": len(BATCH_DEFS),
+                        "files": len(all_files), "total_lines": sum(b["total_lines"] for b in batches)},
         "coverage": {
             "ok": True,
             "scoped_files": len(scoped),
@@ -532,6 +594,13 @@ def cmd_manifest(args: argparse.Namespace) -> int:
 def cmd_claim(args: argparse.Namespace) -> int:
     root = _resolve_root(args.root)
     manifest = _load_manifest(root)
+    owner = _flat(args.owner).strip()
+    if not owner:
+        _die("--owner 不能为空(认领记录是跨 clone 判责的协调身份)")
+    fp = manifest.get("fingerprint")
+    if not fp or fp.get("defs") != _defs_fingerprint() or fp.get("batches") != len(BATCH_DEFS):
+        _fail(f"manifest 与当前脚本批次定义不符(defs={fp.get('defs') if fp else '缺失'} vs {_defs_fingerprint()})"
+              " —— 重跑 review.lane.manifest 并入库后再认领")
     route = args.route
     if route not in manifest["routes"]:
         _fail(f"未知路线 {route} (合法: {'/'.join(manifest['routes'])})")
@@ -547,12 +616,12 @@ def cmd_claim(args: argparse.Namespace) -> int:
     batches = [{"id": b["id"], "title": b["title"], "status": "pending", "done_at": None, "findings": 0}
                for b in _batches_of(manifest, route)]
     data = {
-        "route": route, "owner": _flat(args.owner), "claimed_at": _now(),
+        "route": route, "owner": owner, "claimed_at": _now(),
         "freeze": freeze, "freeze_note": "计划文件首个 commit (diff-filter=A 机械解析)",
         "snapshot": None, "status": "claimed", "batches": batches,
     }
     if args.dry_run:
-        print(f"[dry-run] 将写 {rpath.relative_to(root)}: owner={data['owner']} freeze={freeze[:12]} 批次 {len(batches)} 个")
+        print(f"[dry-run] 将写 {rpath.relative_to(root)}: owner={owner} freeze={freeze[:12]} 批次 {len(batches)} 个")
         return 0
     _save_route(root, route, data)
     print(f"认领成功: {route} owner={data['owner']} freeze={freeze[:12]} (共 {len(batches)} 批)")
@@ -562,16 +631,16 @@ def cmd_claim(args: argparse.Namespace) -> int:
 
 
 def _extract_snapshot(root: Path, freeze: str, snap: Path) -> int:
+    _guard_snap_path(root, snap)
     raw = _git_bytes(root, "archive", "--format=tar", freeze)
     if snap.exists():
         _die(f"快照目录已存在且标记不匹配: {snap} —— 确认后 --fresh 重建")
     snap.mkdir(parents=True)
     count = 0
     with tarfile.open(fileobj=io.BytesIO(raw), mode="r:") as tf:
-        try:
-            tf.extractall(snap, filter="data")  # 3.12+: 拒绝绝对路径/.. 穿越/特殊成员
-        except TypeError:
-            tf.extractall(snap)  # 旧版回退(git archive 成员本就仓库相对, 无穿越面)
+        # requires-python>=3.12: filter="data" 恒可用, 拒绝绝对路径/.. 穿越/链接逃逸;
+        # git 树可存 symlink blob, 不能无 filter 解包
+        tf.extractall(snap, filter="data")
         count = len(tf.getnames())
     (snap / ".snapshot-hash").write_text(freeze + "\n", encoding="utf-8")
     (snap / ".snapshot-info.json").write_text(
@@ -584,10 +653,12 @@ def _check_snapshot(root: Path, data: dict) -> Path:
     snap = Path(data["snapshot"])
     marker = snap / ".snapshot-hash"
     if not snap.is_dir() or not marker.is_file():
-        _fail(f"快照目录/标记缺失: {snap} —— 重跑 review.lane.start --route {data['route']} 重建")
+        _fail(f"快照目录/标记缺失: {snap} —— start 仅放行 claimed: 手工把 route JSON 的 status 回退 claimed 后"
+              f"重跑 review.lane.start --route {data['route']} 重建")
     got = marker.read_text(encoding="utf-8").strip()
     if got != data["freeze"]:
-        _fail(f"快照标记 {got[:12]} != 路线钉值 {data['freeze'][:12]} —— 重跑 review.lane.start --route {data['route']} --fresh")
+        _fail(f"快照标记 {got[:12]} != 路线钉值 {data['freeze'][:12]} —— 手工把 route JSON 的 status 回退 claimed 后"
+              f"重跑 review.lane.start --route {data['route']} --fresh")
     return snap
 
 
@@ -625,6 +696,7 @@ def cmd_start(args: argparse.Namespace) -> int:
     # 跨 clone 重复认领防护靠认领 JSON 入库 develop, 与此检查无关(claim 输出已指引)。
     _require_clean(root, allow_lane=True)
     snap = _snapshot_dir(root, args.snapshot)
+    _guard_snap_path(root, snap)  # --snapshot 任意路径 + --fresh 整删的组合必须先过容器守卫
     if args.dry_run:
         tmp = Path(tempfile.mkdtemp(prefix="lane-smoke-snap-"))
         try:
@@ -669,17 +741,25 @@ def cmd_verify(args: argparse.Namespace) -> int:
     snap = _check_snapshot(root, data)
     _require_clean(root, allow_lane=True)
     done = sum(1 for b in data["batches"] if b["status"] == "done")
-    print(f"复核通过: 快照 {snap} 标记吻合, 树净(legacy-review4/ 内 {sum(1 for st, p in _porcelain(root) if p.startswith(LANE_DIR))} 处在盘), 进度 {done}/{len(data['batches'])}")
+    print(f"Review passed: snapshot {snap} marker matches, tree clean (in legacy-review4/ {sum(1 for st, p in _porcelain(root) if p.startswith(LANE_DIR))} entries on disk), progress {done}/{len(data['batches'])}")
+    mb_sel = None
     if args.batch:
-        mb = next((b for b in manifest["batches"] if b["id"] == args.batch), None)
-        if not mb or mb["route"] != args.route:
-            _fail(f"批次 {args.batch} 不属于路线 {args.route}")
-    pending = [b for b in data["batches"] if b["status"] == "pending"]
-    if not pending:
-        print("全部批次已勾选 —— 跑 review.lane.done 收尾")
-        return 0
-    nxt = next((mb for mb in manifest["batches"] if mb["id"] == pending[0]["id"]), None)
-    _print_triplet(root, data, manifest, nxt)
+        row = next((b for b in data["batches"] if b["id"] == args.batch), None)
+        if not row:
+            _fail(f"Batch {args.batch} does not belong to route {args.route}")
+        if row["status"] != "pending":
+            print(f"Batch {args.batch} status {row['status']}, not pending, no dispatch materials output")
+            return 0
+        mb_sel = next((mb for mb in manifest["batches"] if mb["id"] == args.batch), None)
+        if mb_sel is None:
+            _fail(f"Batch {args.batch} is not in the manifest (fail-closed)")
+    else:
+        pending = [b for b in data["batches"] if b["status"] == "pending"]
+        if not pending:
+            print("All batches checked off — run review.lane.done to wrap up")
+            return 0
+        mb_sel = next((mb for mb in manifest["batches"] if mb["id"] == pending[0]["id"]), None)
+    _print_triplet(root, data, manifest, mb_sel)
     return 0
 
 
@@ -738,11 +818,19 @@ def cmd_done(args: argparse.Namespace) -> int:
 
 
 def cmd_smoke(args: argparse.Namespace) -> int:
-    """全环真冒烟: 真实 claim/start/verify/batch/done(含两个负例断言), 结束清理全部痕迹。"""
+    """全环真冒烟: 真实 claim/start/verify/batch/done(含两个负例断言), 结束清理全部痕迹。
+
+    与真路线的隔离: 快照用专用子目录 _smoke-<route>, cleanup 只删它, 不碰进行中路线的
+    共享快照; 预清理只动 owner=smoke 的残留认领, 真实认领一律拒绝运行。
+    负例断言: rejected 标志在 except 内置位, cleanup+_fail 全部落在 try 之外 ——
+    守卫真失效时 _fail 不会再被自己的 except 吞掉(评审实证的自吞缺陷)。
+    """
     root = _resolve_root(args.root)
     ns = argparse.Namespace
     route = args.route
-    snap = _snapshot_dir(root, None)
+    snap = _snapshot_dir(root, None) / f"_smoke-{route}"
+    lane = root / LANE_DIR
+    rpath = lane / f"route-{route}.json"
 
     def step(msg: str) -> None:
         # 负例步骤走 stderr(无缓冲), stdout 是块缓冲 —— 每步即时 flush 才不产生乱序伪影
@@ -750,52 +838,72 @@ def cmd_smoke(args: argparse.Namespace) -> int:
         sys.stdout.flush()
 
     def cleanup(tag: str) -> None:
-        lane = root / LANE_DIR
-        for p in (lane / f"route-{route}.json", lane / f"route-{route}-findings.json",
-                  lane / f"route-{route}-notes.md"):
+        for p in (rpath, lane / f"route-{route}-findings.json", lane / f"route-{route}-notes.md"):
             if p.is_file():
                 p.unlink()
-        if snap.is_dir():
+        if snap.exists():
             shutil.rmtree(snap, ignore_errors=True)
-        print(f"[smoke] 清理完成({tag}): route JSON / findings / 小结 / 快照目录已删", flush=True)
+            if snap.exists():
+                print(f"[warn] smoke 快照子目录删除失败(可能被占用), 手工删: {snap}", flush=True)
+                return
+        print(f"[smoke] 清理完成({tag}): route JSON / findings / 小结 / smoke 快照子目录已删", flush=True)
 
-    step(f"[smoke 1/7] claim {route} (真实写入)")
-    cmd_claim(ns(route=route, owner="smoke", remote=args.remote, root=str(root), dry_run=False))
-    step("[smoke 2/7] claim 重复认领负例(必须失败)")
+    # 预清理: 上次冒烟中途失败的残留(try/finally 的兜底只保本次, 修不掉上次)。真认领绝不触碰。
+    if rpath.is_file():
+        try:
+            old = json.loads(rpath.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, UnicodeDecodeError, OSError):
+            old = {}
+        if old.get("owner") == "smoke":
+            cleanup("预清理上次冒烟残留")
+        else:
+            _fail(f"{route} 已被真实认领(owner={old.get('owner')}) —— smoke 拒绝在真实认领上运行, 换 --route")
+
+    ok = False
     try:
+        step(f"[smoke 1/7] claim {route} (真实写入)")
         cmd_claim(ns(route=route, owner="smoke", remote=args.remote, root=str(root), dry_run=False))
-        cleanup("负例失败, 未通过")
-        _fail("重复认领未被拒绝 —— claim 守卫失效")
-    except SystemExit as exc:
-        if exc.code != 1:
-            cleanup(f"负例异常 rc={exc.code}")
-            raise
+        step("[smoke 2/7] claim 重复认领负例(必须失败)")
+        rejected = False
+        try:
+            cmd_claim(ns(route=route, owner="smoke", remote=args.remote, root=str(root), dry_run=False))
+        except SystemExit as exc:
+            if exc.code != 1:
+                raise
+            rejected = True
+        if not rejected:
+            _fail("重复认领未被拒绝 —— claim 守卫失效")
         print("[smoke] 重复认领按预期拒绝 (rc=1)", flush=True)
-    step("[smoke 3/7] start (真实导出快照)")
-    cmd_start(ns(route=route, snapshot=None, fresh=False, root=str(root), dry_run=False))
-    step("[smoke 4/7] verify (必须通过)")
-    cmd_verify(ns(route=route, batch=None, root=str(root)))
-    step("[smoke 5/7] done 负例(批次未齐, 必须失败)")
-    try:
-        cmd_done(ns(route=route, root=str(root)))
-        cleanup("负例失败, 未通过")
-        _fail("批次未齐时 done 未被拒绝 —— 完成判据守卫失效")
-    except SystemExit as exc:
-        if exc.code != 1:
-            cleanup(f"负例异常 rc={exc.code}")
-            raise
+        step("[smoke 3/7] start (真实导出快照, smoke 专用子目录)")
+        cmd_start(ns(route=route, snapshot=str(snap), fresh=False, root=str(root), dry_run=False))
+        step("[smoke 4/7] verify (必须通过)")
+        cmd_verify(ns(route=route, batch=None, root=str(root)))
+        step("[smoke 5/7] done 负例(批次未齐, 必须失败)")
+        rejected = False
+        try:
+            cmd_done(ns(route=route, root=str(root)))
+        except SystemExit as exc:
+            if exc.code != 1:
+                raise
+            rejected = True
+        if not rejected:
+            _fail("批次未齐时 done 未被拒绝 —— 完成判据守卫失效")
         print("[smoke] 批次未齐按预期拒绝 (rc=1)", flush=True)
-    step("[smoke 6/7] 逐批勾选后 done (真实终态)")
-    manifest = _load_manifest(root)
-    data = _load_route(root, route)
-    findings = root / LANE_DIR / f"route-{route}-findings.json"
-    notes = root / LANE_DIR / f"route-{route}-notes.md"
-    findings.write_text("[]\n", encoding="utf-8")
-    notes.write_text(f"# smoke\n\n{route} 冒烟小结(测试痕迹, 可删)。\n", encoding="utf-8")
-    for b in data["batches"]:
-        cmd_batch(ns(route=route, id=b["id"], findings=0, root=str(root)))
-    cmd_done(ns(route=route, root=str(root)))
-    step("[smoke 7/7] 清理全部痕迹")
+        step("[smoke 6/7] 逐批勾选后 done (真实终态)")
+        manifest = _load_manifest(root)
+        data = _load_route(root, route)
+        findings = lane / f"route-{route}-findings.json"
+        notes = lane / f"route-{route}-notes.md"
+        findings.write_text("[]\n", encoding="utf-8")
+        notes.write_text(f"# smoke\n\n{route} 冒烟小结(测试痕迹, 可删)。\n", encoding="utf-8")
+        for b in data["batches"]:
+            cmd_batch(ns(route=route, id=b["id"], findings=0, root=str(root)))
+        cmd_done(ns(route=route, root=str(root)))
+        step("[smoke 7/7] 清理全部痕迹")
+        ok = True
+    finally:
+        if not ok:
+            cleanup("中途失败, 兜底清理")
     cleanup("全环通过")
     print("[smoke] 全环通过: claim/重复认领负例/start/verify/done 负例/逐批勾选/done/清理 全部符合预期", flush=True)
     return 0
