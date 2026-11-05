@@ -48,10 +48,11 @@
 | `remove_tags` | | 删除标签格式 (正则) |
 | `upload_speed_limit` / `download_speed_limit` | `"0KiB/s"` | 单种限速, 0=不限; 种子添加时应用; 奇数保护 |
 | `hr` | | `{required_seeding_time(必填), required_share_ratio(0), extra_seeding_time("0H"), condition("80%"或"10MiB")}` + 覆盖全局的输出字段 + 排除表 `exclude_tags`/`exclude_categories`(与全局并集, 26-09-28-1805)。**v4 起输出字段 4 个 str 键(`add_tag`/`add_category`/`add_tag_for_satisfied`/`add_category_for_satisfied`)显式空串 = 「覆盖为空」**(如全局配了 `add_tag`, 本站写空串 = 本站不打标; 升级时存量的 `''` 由 v3→v4 迁移移除并打 WARNING, 需要该语义须重新显式配置), 整键删除 = 跟随全局; bool/list 键不在此列(`overwrite_*` 显式 false 本可表达覆盖, `exclude_*` 保持并集) |
-| `hr_check` | | **旧键(已废除, 26-09-27-1930 起)**: 站点级在线核实的唯一入口是 `hr_check.sites.<档案 id>`。本键不再被任何代码接受 —— config v1→v2 迁移曾把它改写到新位置; **v3(config v2→v3)起出现即直接删除**(不再提供旧位置兼容)。站点接入键集见下节 |
 | `rules` | | `["@规则集", "@规则集.规则"]`。**留空 = 该站点不执行任何规则**(无任何隐式回退; `_rules_for_torrent` 直接返回空列表) |
 | `groups` | | 站点分组列表 (可多个, 自由命名无需预定义); 配置层声明不写种子; 供规则 `tracker_group` 条件按分组筛选 (2026-09-15) |
 | `remove_similar_tags` | | 覆盖全局(站点显式 `false` = 本站关闭; 空串视为未配置走全局) |
+
+> 旧键 `trackers.<站点>.hr_check` 已废除(出现即校验报错); 原文见 [attachments/legacy-keys.md](attachments/legacy-keys.md)。
 
 ## hr_check.sites 站点接入(26-09-27-1318 REV2 上收; v3 收敛 + 26-10-05-0555 增稳态降频键)
 
@@ -183,7 +184,7 @@ traffic_source:
 
 取数单点 = `core.traffic_source.paths.dat_path(config)`(实现单点 `src/auto_qb/core/traffic_source/paths.py`, R2/D20): provider=`traffic_monitor` → `traffic_monitor.dat_path`(去空白); provider=`global_traffic_monitor` → 读工具发现指针 `endpoint.json` 的 `data_dir` + 契约文件名 `history_traffic.dat`(指针缺失 = 无数据源, **不回退 TM 文件**)。两来源**严格互斥**(同一次取数只走一支)。**为什么路径不进配置**: 数据目录是工具自己的事实, 配置里存副本会与真值漂移(26-10-17 实测: 迁移后配置空、状态区却显示指针里的真目录, 曲线读 `''` 恒失败)。工具 = 独立进程的整机流量历史记录器(TrafficMonitor 替代), 本实例是其「配置方 + 消费者之一」; 工具自有配置(采样间隔/通知阈值/控制面地址/适配器过滤等)在工具数据目录的 config.yml, 由 WebUI 设置页经工具控制面代理读写。
 
-**v4→v5 迁移**(计划 26-10-17-0339 S15): 曲线段内联 `traffic_source[].traffic_monitor.dat_path` 迁到本段 `traffic_monitor.dat_path`(曲线段内的 `traffic_source` 键删除); 旧顶层 `global_traffic_monitor` 段仅 `notify_cooldown_s` 保留到本段 `global_traffic_monitor.notify_cooldown_s`, 其余键(`enabled`/`tool_url`/`tool_token_path`/`subscribe`/`autostart`)与整段一并删除(逐键打 WARNING)。`provider` 按「旧 gtm 段非空 -> `global_traffic_monitor`, 否则 `traffic_monitor`」推导。并存期 TrafficMonitor 仅作对照读, **不得与工具同写一文件**(工具是历史文件的唯一写者)。
+v4→v5 迁移明细(删除的旧键逐项)见 [attachments/legacy-keys.md](attachments/legacy-keys.md)。
 
 ## 规则集段 (`*_rules`)
 
