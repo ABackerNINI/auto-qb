@@ -11,11 +11,10 @@ user-invocable: true
 
 ## 会话开始 (5 步)
 
-1. **先同步分支(硬性, 无豁免 —— 问答/只读分析轮次也必须先同步)**: `commands run my-commit-flow.sync` —— 自动 fetch + 快进 / 分叉自动 rebase(保线性, 2026-09-28 拍板), 成功一行「已同步 / 同步成功 <hash>」贴进回复; 失败一行含原因与步骤(树脏 / 冲突已自动回滚), 照做后重跑。**禁止在落后的分支上工作(含只读分析)**; 只读轮次遇同步失败**不自作主张 stash**(那是写操作) —— 把失败行贴进回复并停下, 不在陈旧基线上作答。见 `AGENTS.md`「⚠️ 环境硬约束: Git 操作」。**只读评审子代理豁免本步**(同步是主会话的开工动作; 其 git 状态不动, **自检锚**取任务提示给的 head, 派遣时照抄 code-review skill ③ 的开工自检三件套 —— 子代理跑 sync 会漂移评审基线/改写被评审代码); **可写子代理不豁免**。
-   - 完整步骤见 [my-commit-flow 包](../../.commands/my-commit-flow/README.md)。
+1. **先同步分支(硬性, 无豁免 —— 问答/只读分析轮次也必须先同步)**: `commands run my-commit-flow.sync`。结果行形态、失败处置、Git 环境约束与子代理豁免(只读评审豁免 · 可写子代理不豁免)的单点在 `AGENTS.md`「会话协议 · 开始」①; 完整步骤见 [my-commit-flow 包](../../.commands/my-commit-flow/README.md)。**只读轮次遇同步失败不自作主张 stash**(那是写操作) —— 贴失败行并停下, 不在陈旧基线上作答。
 2. 看会话滚动状态: `commands run kb.active` —— 扫 `memory-bank/activeContext/` 的时间戳切片, 按「最后活动」倒序输出一行摘要 + 陈旧标记。
-   - ⚠ **activeContext 不含长青职能**: 「下一步」看 `想法.md` + `progress/roadmap.md`, 定案口径看 `AGENTS.md`/`conventions/`/`pitfalls/` —— 走 `memory-bank/README.md` 细路由。
-3. 按任务深入主题文档 —— **读哪份看根 `AGENTS.md`「知识库路由」表(路由单点)**; 动代码前必读 `pitfalls.md` 与 `conventions.md`。
+   - ⚠ **activeContext 不含长青职能**: 「下一步」与定案口径都走 `memory-bank/README.md` 细路由, 别在这里找。
+3. 按任务深入主题文档 —— **路由单点是 `memory-bank/README.md` 细路由表**(根 `AGENTS.md` 只做粗路由); 动代码前必读 `pitfalls/_index.md` 与 `conventions/_index.md`。
 4. 判断任务是否**已有 tasks/ 档案**: 有 → 读该档案续作并按"子任务状态表"推进; 无 → 按下方阈值决定是否立档。
 5. **建件前先取时**: 任何带日期的文件 (切片 / 档案 / 计划 / 报告 / issue) 的时间戳一律取自 `commands run kb.time`, **禁用上下文里的日期与手工推算** —— 见下方「时间口径与取时」。(走 `kb.new` / `kb.wrap` 的件时间戳由命令经 timekit 单点派生, 本步针对手写件。)
 
@@ -34,9 +33,7 @@ KB 内**任何日期**只有一个来源: `commands run kb.time` —— UTC+8 �
 | HTML `doc-added` / `doc-updated` | `YY-MM-DD-HHMM` | `commands run kb.time stamp` |
 | 正文日期 | `YYYY-MM-DD` / `YYYY-MM-DD HH:MM` | `commands run kb.time date` / `time` |
 
-- **守卫**: `commands run kb.time -- check` (已挂 `kb.check` 与提交闸门) —— 拦未来日期 + 坏体例
-  (斜杠 / 不补零 / 中文 / 紧凑 8 位 / ISO-T); 正文规范 token **不查未来** (可合法引用未来日程);
-  确有需要的机器数据用行内 `<!-- time:allow -->` 豁免。
+- **守卫**: `commands run kb.time -- check`(挂 `kb.check` 与提交闸门); 违规族、正文不查未来、`<!-- time:allow -->` 豁免等判据见 [timekit.py](scripts/timekit.py) docstring。
 
 ## 立档阈值 (可判定: 满足任一条**必须**立档)
 
@@ -58,16 +55,16 @@ KB 内**任何日期**只有一个来源: `commands run kb.time` —— UTC+8 �
 
 0. **收口评审 (仅收口任务)**: 本次收尾若是某个命中立档阈值的任务的**最后一次**(收口判定与豁免表见 [code-review skill](../code-review/SKILL.md) ①), 先按该 skill 走完评审与裁决 —— 派**只读**子代理(派遣三件套照抄其 ③)→ 发现过 `commands run review.check` 引文校验 → **blocker 必修完**才可走下面各步; 相关发现当场修, 不相关按 create-issue 入池, 结论进进度日志(其 ⑥)。中途「提交」/阈值不命中的小修/纯文档任务不触发; 修复 diff > 100 行追加一轮。
 
-1. **activeContext 切片 (机械面走命令)**: `commands run kb.wrap --topic <slug> --did "一句话"` —— 抬「最后活动」+ 追加 R 行(编号 = 现有最大 + 1); 同专题档案抬 `**Updated:**` + 进度日志追加带日期行(裁定 A5: 日期属派生面, 轮内不逐行写); 动了档案即重建 `tasks/_index.md`。**只做机械面 (D6)** —— 蒸馏与判断仍是 agent 的活: **同一专题跨会话沿用同一个 slug**、已完成条目沉淀到 `progress/` 或主题文档后**从切片删除**、超 14 天没动 → 蒸馏后删除、摘要与档案 `Summary` 精编。切片不存在时 kb.wrap 按模板建(零 SLOT 即合规, 裁定 A6)。伞形档案与派生计划各持不同 key 时加 `--archive <档案 Topics 键>` 单独锚定档案(切片仍按 `--topic` 落; 不传则沿用 `--topic` 匹配, 行为不变), 别为此改档案 Topics。体例 (`# 标题`/`> 摘要:`/`> 最后活动: YYYY-MM-DD HH:MM`) 与四条约定见 [references/kb-structure.md](references/kb-structure.md); 文件名与「最后活动」的时刻由 kb.wrap 经 timekit 单点派生。
-2. **tasks/**: 命中阈值 → `commands run kb.new task --title ".." --topic <领域>-<专题>` 建档(命名/头部字段/SLOT 清单/查重全派生 —— 查重含跨 clone, 同专题已存在即拒绝并给路径; 建后填「原始请求」等 SLOT), 续作既有档案直接编辑(**进度日志的日期行由 kb.wrap 追加**, 追加进度时精修 `Summary`, 裁定 A1), 然后 `commands run kb.index` 重建索引 —— **不要手改 `tasks/_index.md`**。建/更新件的体例与必备章节见下方「任务档案规范」。
-3. **事实回写**: 代码事实变更 → 回写对应 `memory-bank/` 主题文档与根 `README.md`; 测试基线数字**只写** `testing/baselines/` 下的新切片(一条基线一个文件, 最新一条 = 单点事实源, 其它文档一律引用不手抄 —— 命名与体例见 `testing/baseline.md` 口径段)。**切片正文只写自己的 TOTAL**: 「相对上基线的逐位对比」不写(要看差值 `commands run kb.baseline -n 2` 现列) —— 卫兵 `check_wording.py` 判据族 B 扫 `tasks/`+`activeContext/` 的裸测试数字, 存量已冻结、只拦新增。
-4. **闸门**: 跑 `commands run test.full`, 新建基线切片记录实测数字(`testing/baselines/` 下, `kb.new baseline --total ..` 从实测输出誊写)。**裸数字只进切片这一处** —— 回复里可报数字, 但写进档案/切片的任何段落(结论/验证/进度/Summary)一律「全绿(见 kb.baseline)」这类引用措辞, **不抄数字**(守阵判据族 B 只拦新增, 判红了就是本轮抄了); 建档任务的切片补一行 `**Refs:** <档案路径>` 反向声明(认领链, 见「任务档案规范」)。
+1. **activeContext 切片 (机械面走命令)**: `commands run kb.wrap --topic <slug> --did "一句话"` —— 抬「最后活动」+ 追加 R 行(编号 = 现有最大 + 1); 同专题档案抬 `**Updated:**` + 进度日志追加带日期行(裁定 A5); 动了档案即重建 `tasks/_index.md`。**只做机械面 (D6)** —— 蒸馏与判断仍是 agent 的活(slug 复用 / 沉淀后删除 / 超 14 天蒸馏, 四条约定与体例见 [references/kb-structure.md](references/kb-structure.md) 与 [collaboration.md](../../../memory-bank/conventions/collaboration.md))。切片不存在时 kb.wrap 按模板建(零 SLOT 即合规, 裁定 A6)。伞形档案与派生计划各持不同 key 时加 `--archive <档案 Topics 键>` 单独锚定档案(切片仍按 `--topic` 落; 不传则沿用 `--topic` 匹配, 行为不变), 别为此改档案 Topics。文件名与「最后活动」的时刻由 kb.wrap 经 timekit 单点派生。
+2. **tasks/**: 命中阈值 → `commands run kb.new task --title ".." --topic <领域>-<专题>` 建档(命名/头部/SLOT/查重全派生, 查重含跨 clone; 建后只填 SLOT), 续作既有档案直接编辑(进度日志日期行由 kb.wrap 追加, 追加时精修 `Summary`, 裁定 A1), 然后 `commands run kb.index` 重建索引 —— **不要手改 `tasks/_index.md`**。体例与必备章节见下方「任务档案规范」。
+3. **事实回写**: 代码事实变更 → 回写对应 `memory-bank/` 主题文档与根 `README.md`; 测试基线数字**只写** `testing/baselines/` 下的新切片(最新一条 = 单点事实源), 命名/体例/逐位对比与守卫口径全在 [testing/baseline.md](../../../memory-bank/testing/baseline.md)。
+4. **闸门**: 跑 `commands run test.full`, 新建基线切片记录实测数字(`kb.new baseline --total ..` 从实测输出誊写)。**裸数字只进切片这一处** —— 回复里可报数字, 写进档案/切片的段落一律「全绿(见 kb.baseline)」这类引用措辞; 建档任务的切片补一行 `**Refs:** <档案路径>`(认领链, 见「任务档案规范」)。
    - **真机自检 (2026-11-04 起)**: 完工功能落入真机轨两类准入(qB 真执行才成立 / 必须碰真文件系统·进程·注册表; 桩数据失真足以改变结论的观感面按失真理由) ⇒ **当轮 agent 自跑真机验收**(`real.guard` → `real.run` / `dev.webui` + 浏览器自动化 / `dev.run` 指向测试 qB —— 四实例本机免token, 无需用户提供任何凭据; 判据与两种触发形态见 `testing/real-machine.md` §00/§06), 没做的须在档案/切片明示理由(环境不可用 / 纯桩可验 / 记 BLOCKED)。真机仍**不挂自动闸门**。
 5. **收录命令**: 遇到**反复要跑/难拼/有"看起来正常但不生效"写法**的命令 → 自己 `add` 进 `.commands/` 的对应包, 别在文档里抄(手抄会被 `commands run doc.drift` 判红)。判据见 [commands skill](../commands/SKILL.md)「收录协议」。
 6. **新坑**: 非显然的失败/陷阱 → **按动作选类, 写进 `pitfalls/<类>/<主题>.md`**: 补三行头(`# 标题`/`> 摘要:`/`> 触发:`; 建档任务再补一行 `**Refs:** <档案路径>` 反向声明), 条目写 `触发`/`判别`/`处置` **三必填**(`守阵`/`复发` 选填); 没有合适的类**先扩枚举**; 写完 `commands run kb.index`。
    - **复发闭环**: 踩到**已记的坑** → 该条 `复发` **+1**, 并在档案里写一句**为什么没命中**(路由没到/文件没读/读了没照做)。反复重踩于是变成**可排序的数字**, 也是「下沉为守阵」的优先级依据。
-   - **拆文档也算入库动作**: 写进 `memory-bank` 前先看目标文件的 cap(`_common.CAP_POLICY`, 人读镜像见下方 cap 表); 超了按触顶固定动作处置: 外迁 `references/` → 删除死段 → 合并邻近件(**禁止压文案**; 口径见 cap 表注)。
-7. **cap 债务转告**: 提交输出出现 `[债务]` 行 → **在回复里提醒用户「文档数字已超标, 需另开新会话清理」**, 并**不在本会话动手改**(agent 开不了新会话, 在同一场里改 = 把返工留在原处)。债务清单不用转抄 —— 用户开清理会话时跑 `commands run doc.caps` 现算即可。`AGENTS.md` 不适用这条: 它是硬规定, 超限当场拦下就地削薄。
+   - **拆文档也算入库动作**: 写进 `memory-bank` 前先看目标文件的 cap(见下方 cap 表); 超了按触顶固定动作处置(**禁止压文案**)。
+7. **cap 债务转告**: 提交输出出现 `[债务]` 行 → **在回复里提醒用户「文档数字已超标, 需另开新会话清理」**, 并**不在本会话动手改**(返工留在原处; 债务清单现算不转抄); `AGENTS.md` 例外(硬规定, 超限当场削薄)。口径见下方 cap 分级的债务制。
 
 ## 回写措辞: 禁时点相对的状态断言 (2026-10-07)
 
@@ -94,14 +91,7 @@ KB 内**任何日期**只有一个来源: `commands run kb.time` —— UTC+8 �
 
 ## 手抄测试数字: 只留切片一处 (2026-10-08 方案 C)
 
-同一族守卫 (`check_wording.py`) 的**判据族 B**: KB 正文 (`tasks/` + `activeContext/`) 不写裸测试
-数字 (`2772 passed` 这类) —— 它必然与切片分叉, 而数字的唯一权威是 `testing/baselines/` 最新切片。
-
-- **写什么**: 正文写「见 `commands run kb.baseline`」或量级/持平表述; **切片正文也只写自己的
-  TOTAL**, 不写「相对上基线逐位对比」(要看差值 `kb.baseline -n 2` 现列)。
-- **存量冻结 (债务制)**: 已有手抄一行不改 (是不可变历史), 只保证**不再新增** —— 命中数 ≤ 冻结
-  常数 (`FROZEN_TEST_NUM_COUNT`) 放行, 超出即判红。现算 `--count-numbers`, 全量清单 `--list-numbers`。
-- **豁免**: 带日期前缀的行 (历史流水) · 代码/围栏 (可引述) · `<!-- wording:allow -->`。
+KB 正文 (`tasks/` + `activeContext/`) 不写裸测试数字(`2772 passed` 这类) —— 数字的唯一权威是 `testing/baselines/` 最新切片; 切片正文也只写自己的 TOTAL。口径、存量冻结(只拦新增)与机检(`check_wording.py` 判据族 B)见 [testing/baseline.md](../../../memory-bank/testing/baseline.md); 现算 `--count-numbers`, 全量清单 `--list-numbers`; 豁免 = 带日期前缀的行 · 代码/围栏 · `<!-- wording:allow -->`。
 
 ## 任务档案规范
 
@@ -119,26 +109,15 @@ KB 内**任何日期**只有一个来源: `commands run kb.time` —— UTC+8 �
 
 ## cap 分级(`_common.CAP_POLICY` 是机器单点; 下表是它唯一的人读镜像)
 
-> 守卫 `test_skill_cap_table_matches_cap_policy` 钉住本表与 `CAP_POLICY` 的**数值集合与行数**一致 —— 改了源忘了改表会红;
-> ⚠ 判不出「两行数值互换角色」, 那种改动只能靠人读表。**别在别处抄第三张表**。
-> **触顶处置 (2026-11-05 用户重定调)**: 目标**刚好 ≤ cap**, **禁止压文案**; 固定动作
-> 「外迁 `references/` → 删除死段 → 合并邻近件」。`log` 例外: append-only, 从最老一端轮转。
->
-> **触顶后要不要当场改? (2026-09-30 债务制, 计划 `plans/26-09-30-2112-plan-memory-bank-cap-debt.html`)**
-> 除 `AGENTS.md` 外**一律不当场改** —— 尺寸是**债务**, 不是提交前置条件:
-> ①违反它只是「读起来更贵」, 事实源完好, 没有截断; ②触顶总发生在任务后期, 那时压字数要带着
-> 满载会话历史反复返工, token 成本远大于文件变长(债务记了也还不上 —— 记于 09-27 的 AGENTS.md
-> 削薄, 到 09-30 仍是 7,975); ③债务是**派生**的: `commands run doc.caps` 每次从真实尺寸现算,
-> 不设手写债务表(手记会陈旧、会与事实分叉)。**触发点 = 提交时**(闸门输出), 读到的人转告用户,
-> **由用户另开一场会话清理**, 收口 `commands run doc.caps -- --strict`(债务非空即 rc=1)。
-> ❗**`AGENTS.md` 是唯一例外**: 越过 8,000 发生的是 IDE 注入 `slice(0, 8000)` **截断**(尾部对
-> 模型真不可见), 不是「读起来贵」—— 所以它超限即拦、**不套 50% 收缩**、**不进债务清单**;
-> 削薄只需回到 ≤ 8,000(路由手术: 细节下沉 `README.md` / `conventions/` / `pitfalls/`, 原位留指针)。
+> 守卫 `test_skill_cap_table_matches_cap_policy` 钉住本表与 `CAP_POLICY` 的**数值集合与行数**一致(判不出「两行数值互换角色」—— 那种只能靠人读); **别在别处抄第三张表**。
+> **触顶处置 (2026-11-05 用户重定调)**: 目标**刚好 ≤ cap**, **禁止压文案**; 固定动作「外迁 `references/` → 删除死段 → 合并邻近件」; `log` 例外: append-only, 从最老一端轮转(细则见 [kb-structure.md](references/kb-structure.md))。
+> **触顶后要不要当场改? (2026-09-30 债务制, 单点 [plan 26-09-30-2112](../../../memory-bank/plans/26-09-30-2112-plan-memory-bank-cap-debt.html))**: 除 `AGENTS.md` 外**一律不当场改** —— 尺寸是债务, 不是提交前置条件(违反只是读起来更贵, 事实源完好); 触顶总在任务后期, 当场返工成本远大于文件变长; 债务是**派生**的(`commands run doc.caps` 现算, 不设手写债务表)。**触发点 = 提交闸门输出**: 读到的人转告用户, 由用户**另开一场会话清理**, 收口 `commands run doc.caps -- --strict`。
+> ❗**`AGENTS.md` 是唯一例外**: 越过 8,000 发生的是 IDE 注入 `slice(0, 8000)` **截断**(尾部对模型真不可见), 不是「读起来贵」—— 所以超限即拦、**不进债务清单**; 削薄只需回到 ≤ 8,000(细节下沉, 原位留指针)。
 
 | 角色 | 上限 (字符) |
 |---|---|
 | `memory-bank/README.md`(手写) | 6,000 |
-| `*/_index*.md`(自动生成, 含 tasks / issues / 各目录 / 分卷页) | 8,000 |
+| `*/_index*.md`(自动生成: tasks / issues / 各目录 / 分卷页 `_index-<n>.md`; 已完结区 `CLOSED_KEEP` 是上限) | 8,000 |
 | `pitfalls/*` 条目集(「扫描找一条」比通读更贵) | 8,000 |
 | 常青主题(叙述型) | 8,000 |
 | 参考速查(`config-reference/` · `rule-system/`) | 24,000 |
@@ -149,11 +128,7 @@ KB 内**任何日期**只有一个来源: `commands run kb.time` —— UTC+8 �
 | append-only 历史流水(`*-history.md`) | 8,000 |
 | `AGENTS.md`(**硬规定**: IDE 注入截断, 超限即拦; 由 `scripts/check_context_caps.py` 管) | 8,000 |
 
-> **2026-11-05 用户重定调**: 存量 tasks 一律不动(排障才读, 改造收益低), 由 `CAP_TASK_FREEZE`
-> 按文件名日期 `< 26-11-05` 整类豁免; 此后新建 task 与 `log` / `evergreen` / `pitfall` /
-> `index-auto` 四类统一 ≤ 8,000(存量清零)。这一轮只收紧上限, **不保留 2026-09-29 的 50% 收缩
-> 口径**——清债目标是刚好 ≤ 8,000。个案豁免**不设代码白名单**: 须在文档头写明理由, 由用户
-> 逐件确认; 整类豁免只认 `CAP_POLICY` / `CAP_TASK_FREEZE` 这一处。
+> **2026-11-05 用户重定调**: 存量 tasks 整类豁免(排障才读, 改造收益低 —— `CAP_TASK_FREEZE` 按文件名日期 `< 26-11-05` 判), 此后新建 task 与 `log` / `evergreen` / `pitfall` / `index-auto` 四类统一 ≤ 8,000(存量清零); 目标**刚好 ≤ 8,000**, 旧 50% 收缩口径作废。个案豁免须在文档头写明理由、由用户逐件确认; 整类豁免只认 `CAP_POLICY` / `CAP_TASK_FREEZE`。
 
 ## 结构 / 索引 / 脚本 → 见 references
 
@@ -165,7 +140,7 @@ KB 内**任何日期**只有一个来源: `commands run kb.time` —— UTC+8 �
 
 - ❌ 在 activeContext(单文件或切片)里追加长纪要 → 膨胀成流水账, 跨会话定位不到"任务档案在哪"。
 - ❌ 规则写成"跨会话的**大**任务要立档"这类不可判定措辞 → 无阈值 = 不执行。
-- ❌ 基线数字手抄到 README/AGENTS/progress/档案 → 必然漂移; 只写 `testing/baselines/` 下的基线切片, 正文改「见 kb.baseline」。**已有守卫**(`check_wording.py` 判据族 B, 存量冻结只拦新增)。
+- ❌ 基线数字手抄到 README/AGENTS/progress/档案 → 必然漂移; 只写切片, 正文写「见 kb.baseline」(守卫判据族 B)。
 - ❌ 用"全局单调序号"当档案主键(TASKnnn) → 并行 clone 各自发号必然撞号(2026-09-18 实测); 同理不要用"精确到分"的时间戳(每次续作都算出新文件名, 且会让"忽略日期前缀的 slug 唯一性"守卫失效)。
   ⚠ **此条只针对 tasks/ 档案主键** —— `activeContext/` 切片恰恰**故意**带时分(用它避撞名), 两者意图相反, 所以必须分目录。
 - 结构类反模式(切片截断 / `_recent.md` 缓存 / clone 标记 / 长青内容 / instructions 错位 / 手改索引)见 [references/kb-structure.md](references/kb-structure.md)。
