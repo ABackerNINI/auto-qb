@@ -35,7 +35,7 @@ import queue
 import secrets
 import threading
 from collections import deque
-from typing import Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
 
 from ..infra.clock import SYSTEM_CLOCK, Clock
 from ..infra.logging import is_record_suppressed
@@ -74,6 +74,9 @@ from .runtime_common import (
 )
 from .runtime_stream import StreamMixin
 from .runtime_views import ViewsMixin
+
+if TYPE_CHECKING:
+    from .server.lifecycle import WebServerHandle
 
 
 class WebUIRuntime(ViewsMixin, CommandsMixin, StreamMixin):
@@ -199,7 +202,9 @@ class WebUIRuntime(ViewsMixin, CommandsMixin, StreamMixin):
         self._pending_show_migrations: dict = {"upsert": set(), "removed": set()}
         # 访问密钥 / 服务器句柄(启用时确定)
         self.token: str = ""
-        self.handle = None
+        # 显式 Optional 注解: StreamMixin.start_server 侧赋值 start_web_server() -> WebServerHandle,
+        # 本处初值 None —— 不标注会被 mypy 按赋值推断成 WebServerHandle 而报 assignment
+        self.handle: "WebServerHandle | None" = None
         # 限速/流量只读快照(traffic_snapshot 模块整体替换, Web 线程只读); 未启用曲线时 state="disabled"
         # 三段契约(计划 26-10-18-0813 A2/D8/D10): source(来源态) / periods+history(来源数据) /
         # limit(曲线态); 顶层 state 是 derive_state 的派生值。!种子值刻意用 source=ok: "off" 是

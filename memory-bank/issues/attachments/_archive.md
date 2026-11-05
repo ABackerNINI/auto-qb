@@ -4,12 +4,14 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (42)
+## Open (44)
 
 - [test] [gtm-alert 双皮肤日期炸弹: 硬编码日期超 24h TTL 必红](../26-11-06-0330-test-e2e-gtm-alert-date-bomb.html) — e2e/gtm-alert.spec.mjs 硬编码 T1/T2/T3=2026-11-03, 超过 dialogs.js gtmAlert computed 的 24h TTL 后横幅被判空, 双皮肤 prism/atlas 各 1 条必红
 - [test] [views 种子页筛选器有数据恒红: relocate kind 在 e2e 桩下恒空](../26-11-06-0330-test-e2e-views-relocate-kind-empty.html) — filters.js 无条件注册 relocate kind 但 ui_harness 桩不注入任何 relocate 态, 断言空筛选器 kinds=[] 必红; 修桩还是修产品待裁决
 - [test] [test_start_all_busy_returns_false_and_retries 偶发 WinError 10013](../26-11-06-0330-test-hr-discovery-busy-retry-flake.html) — 随机序巡检第 1 轮触发 127.0.0.1:3166 真绑定 PermissionError, 归因端口/资源类(排除端口段), 非时序
 - [test] [test_hr_discovery 在 -n 8 下偶发端口碰撞红](../26-11-06-0330-test-hr-discovery-port-collision.html) — test_runtime_builds_and_starts_discovery 断言 bound_port==base, xdist 8 worker 并行时偶发碰撞(坑档 fixed-port-test-collision 同类), 单跑恒绿
+- [refactor] [LocalQbClient._session 覆盖签名与三方基类不兼容(override 错误码进豁免面)](../26-11-06-0247-refactor-qbclient-session-override.html) — core/qbclient.py 覆盖 _session property 返回 requests.Session, 基类 qbittorrentapi 返回 QbittorrentSession(子类) —— 返回类型收宽违反 LSP, mypy override 报错被 [tool.mypy] disable_error_code 豁免; 注解改 QbittorrentSession 即可摘除豁免
+- [refactor] [_slot_agg_obs 注解 2 元组与实际 4 元组契约漂移, mypy call-arg 被豁免面吞掉](../26-11-06-0247-refactor-slot-agg-obs-tuple-drift.html) — traffic_sample_agg._slot_agg_obs 注解 Optional[Tuple[int,int]] 实际恒返 4 元组, 连累 :561 调用 mypy call-arg 报缺 3 实参(现被 disable_error_code 豁免掩盖); 运行期无恙, 属注解契约漂移
 - [feat] [recheck_fails 噪声收窄: FAILED/START_TIMEOUT 分记, 锐化失败证据信号](../26-11-05-0853-feat-recheck-fails-noise-narrowing.html) — recheck_fails 计数混记真数据证据(FAILED)与噪声(START_TIMEOUT 未开检), G8/G9/链1.6/冷却都消费这个混合信号; 收窄=分记并让防护闸只认真证据, 误拦面变小但动 state schema 与 bump 写点
 - [question] [跳检抽样校验是否值得做: 读盘换下载量的成本收益待拍板](../26-11-05-0514-question-skip-check-sampling-value.html) — 跳检防线之二的抽样校验(建议修法第1条)故意未做, 需讨论读盘成本/边界复杂度与残余风险是否值得投入; 主件 26-10-22-0308 已因保险丝落地收 Done
 - [bug] [整组迁移可对「账面完成但磁盘名错位(.!qB)」的组零搬移假成功](../26-11-05-0420-bug-relocate-zero-move.html) — 搬迁按声明名逐文件 stat,磁盘名带 .!qB 全 miss 被静默忽略,qB 报「成功移动」但零搬移;.!qB 闸门只扫内容根顶层漏拦,10min 后才由停滞看门狗判失败
@@ -49,15 +51,14 @@
 - [bug] [设置页警示条是伪警示: 只复述 schema 风险文案, 不反映配置健康; 升级失效键无任何提示](../26-09-22-2002-bug-webui-config-health-warning.html) — 首页警示条由『已配置且 schema 带 risk 文案』驱动, 恒亮、静态、与配置健康无关; 且 load_config 对 schema 外键静默忽略, 版本升级后配置项失效无任何提示
 - [chore] [hatch-pet 调付费 OpenAI 图像 API 且无成本提示](../26-09-20-1427-chore-skill-hatch-pet-api-cost.html) — hatch-pet 生成图会直连 api.openai.com 计费接口, skill 未标注费用风险
 
-## In Progress (5)
+## In Progress (4)
 
 - [docs] [memory-bank 超 8K 文档摸排: 142 件需压缩蒸馏(本次只摸排)](../26-11-05-0855-docs-kb-doc-compress.html) — memory-bank 下超 8K 字符的 md 共 142 件(主线 115 件约 1.79M 字符 + attachments/_archive 生成物 27 件约 0.92M), 另根目录/包内 references/skill 主文件 40+ 件; 本 issue 只记录摸排清单, 压缩未开始
 - [question] [兼容 Transmission 可行性分析](../26-10-01-2212-question-transmission-compat-feasibility.html) — (需要可行性分析)支持 tr 作为后端之一的可行性(qB 耦合面盘点)
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 - [chore] [版本号双源矛盾: __init__.__version__ 0.2.0 vs pyproject 0.1.0](../26-09-21-1408-chore-version-dual-source.html) — WebUI 顶栏透出与打包元数据已差一个 minor; 建议 pyproject 单源 + 动态读取
-- [refactor] [类型注解完整覆盖仅 43%, 无 mypy/pyright 配置](../26-09-21-1408-refactor-type-annotations-mypy.html) — 749 个 def: 完整 43%/部分 41%/无 16%(AST 实测); 建议渐进接入, 先 torrents/config 后 mixins/web
 
-## Done (421)
+## Done (422)
 
 - [test] [test_qbmanager_tasks 两处缺 assert 的元组表达式(伪断言)](../26-11-05-0344-test-qbmanager-tasks-missing-assert.html) — run_sync_line/run_task_line 的 assert_called_once_with(False), "..." 是表达式语句非 assert 语句, 校验仍生效但失败消息丢失
 - [test] [test_rule_compat_mapping 相邻逐字重复断言, 注释语义无断言承载](../26-11-05-0344-test-rule-compat-mapping-dup-assert.html) — test_normalize_idempotent :111/:113 同一断言出现两次, 第二条死断言; 注释宣称「不新建 actions 列表项」未被检验
@@ -455,6 +456,7 @@
 - [chore] [CI 仅 ubuntu-latest, 主力平台 Windows 不在矩阵](../26-09-21-1408-chore-ci-no-windows-runner.html) — pitfalls 已载平台差异史; 托盘/注册表自启/WinRT 通知等 Windows 专属路径只有手动跑测试才被执行
 - [docs] [文档漂移: README 称 995 用例(实测 1098), modules.md 行数快照多文件 +34%~+201%](../26-09-21-1408-docs-docs-readme-modules-drift.html) — 知识库守卫不覆盖数字类事实, 漂移静默累积; 易腐数字建议守阵化或从文档退场
 - [perf] [大库下四视图全量重建是单轮成本大头, 追剧视图聚合最重](../26-09-21-1408-perf-webui-shows-view-full-rebuild.html) — P2: 5000 种子单轮 ~550ms(项目实测); 轮询分档已缓解, 剩余痛点在 shows 全量聚合与前端全量重算
+- [refactor] [类型注解完整覆盖仅 43%, 无 mypy/pyright 配置](../26-09-21-1408-refactor-type-annotations-mypy.html) — 749 个 def: 完整 43%/部分 41%/无 16%(AST 实测); 建议渐进接入, 先 torrents/config 后 mixins/web
 - [refactor] [web.py create_app 单函数 926 行, 鉴权与全部端点挤在一个工厂函数](../26-09-21-1408-refactor-web-create-app-monolith.html) — P1: 全项目最大函数坐在唯一对外暴露面里, 本次审计三条安全发现同出一文件; 建议按域拆 Router
 - [refactor] [WebUIRuntime 经 self._host 回调 QbManager 私有方法, 无 Protocol 约束](../26-09-21-1408-refactor-web-runtime-host-protocol.html) — web_runtime.py:312/317/479 调 _build_search_index/_state_kind 等; 建议 HostCapabilities Protocol + 单写者假设注释
 - [bug] [热重载 L2 分支重读磁盘 state, 运行期内存态被回滚到上次退出版本](../26-09-21-1347-bug-backend-hot-reload-l2-state-rollback.html) — apply_new_config L2 分支 self.state=_load_state() 用磁盘旧版覆盖内存态, Web UI 改规则保存即确定性触发

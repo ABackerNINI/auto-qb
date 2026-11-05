@@ -5,7 +5,7 @@ move-only 自 runtime.py 切出(计划 26-11-02-2342 §07 R5), 未改语义; 由
 import logging
 import queue
 import secrets
-from typing import List, Tuple
+from typing import TYPE_CHECKING, List, Tuple
 
 from .runtime_common import (
     EVENT_QUEUE_MAX,
@@ -15,6 +15,9 @@ from .runtime_common import (
     WebErrLogHandler,
     logger,
 )
+
+if TYPE_CHECKING:
+    from .server.lifecycle import WebServerHandle
 
 
 class StreamMixin:
@@ -208,7 +211,8 @@ class StreamMixin:
 
         self.ensure_token()
         self.attach_err_log_handler()
-        self.handle = start_web_server(self._host)
+        # 显式 Optional 注解: WebUIRuntime.__init__ 侧初值 None, 两侧类型须一致(单一声明点)
+        self.handle: "WebServerHandle | None" = start_web_server(self._host)
 
     def stop_server(self) -> None:
         """请求服务器退出(进程关停路径): 只置退出位**不等**线程

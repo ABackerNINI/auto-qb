@@ -1549,7 +1549,7 @@ def test_page_fetch_failure_escalates_after_streak(tmp_path, caplog):
 def test_fetchable_filter_skips_none_listing_site(tmp_path):
     """取数侧强制(issue 26-10-05-0922): 全站型(listing=none)站点不进取数集合 —— refresh_all
     不给它出波次; 展示口径不受影响(enabled_sites / build_views 照常含它, 判定侧恒行 4)"""
-    clock = Clock()
+    clock = FakeClock()
     fetcher = FakeFetcher(pages=standard_pages([row(11, "OTHER 11")]))
     service = make_service(
         tmp_path, fetcher, clock=clock, confs={
