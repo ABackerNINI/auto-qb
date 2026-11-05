@@ -7,6 +7,7 @@
 ## In Progress (29)
 
 - [26-09-22-deps-version-management](../26-09-22-deps-version-management.md) 软件版本管理方案（版本号 / Tag / CHANGELOG / 发版流程）
+- [26-11-06-backend-hr-badge-total-crosscheck](../26-11-06-backend-hr-badge-total-crosscheck.md) issue 26-09-30-0052 上限徽章总数轴互证复验、前提纠错与拍板
 - [26-11-06-backend-hr-lastpage-fetch-skip](../26-11-06-backend-hr-lastpage-fetch-skip.md) issue 26-09-30-0052 末页追翻省略复验与拍板
 - [26-11-06-rule-commit-msg-review](../26-11-06-rule-commit-msg-review.md) 提交信息自动审查: ship.commit 内联三态机检落地
 - [26-10-08-webui-perf-issues-closing](../26-10-08-webui-perf-issues-closing.md) 三条 perf issue 定案 / 重归因（含 e2e 与仿真复测）

@@ -7,10 +7,11 @@
 <meta name="issue-stamp" content="26-09-30-0052">
 <meta name="issue-type" content="feat">
 <meta name="doc-topic" content="backend-partial-hr-verify">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-06-backend-hr-badge-total-crosscheck.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Dropped">
 <meta name="issue-title" content="HR 计数：上限徽章总数轴互证（P3 缓做项）">
-<meta name="issue-summary" content="HR 上限徽章的 Σ分档 == 总数 == 实抓 三者两两互证（HR 计划 §4 备选项 / §7 P3），依赖 D4 计数口径实证，缓做">
+<meta name="issue-summary" content="HR 上限徽章的 Σ分档 == 总数 == 实抓 三者两两互证（HR 计划 §4 备选项 / §7 P3），依赖 D4 计数口径实证，缓做。2026-11-06 复验 + 前提核对：上限是处罚阈值（达到即受罚）非分档总数——报告 26-09-29-1803 §8.3 原假设是条件式的「x/50 徽章当前值位」，现有两站点（CarPT 3 数 / BTSchool 2 数）页头均无当前值位，三方互证前提不成立，退化的 Σ分档 vs 实抓 两方互证为弱增量；已拍板 Dropped（理由见状态变更日志末条）">
 <title>HR 计数：上限徽章总数轴互证（P3 缓做项） · feat · 计划外问题</title>
 <style>
   :root {
@@ -96,12 +97,12 @@
   <header class="cover">
     <div class="kicker">auto-qb · 计划外问题（未修）· feat</div>
     <h1>HR 计数：上限徽章总数轴互证（P3 缓做项）</h1>
-    <p class="lede">HR 上限徽章的 Σ分档 == 总数 == 实抓 三者两两互证（HR 计划 §4 备选项 / §7 P3），依赖 D4 计数口径实证，缓做</p>
+    <p class="lede">HR 上限徽章的 Σ分档 == 总数 == 实抓 三者两两互证（HR 计划 §4 备选项 / §7 P3），依赖 D4 计数口径实证，缓做。2026-11-06 复验 + 前提核对后<strong>已拍板 Dropped</strong>（上限是处罚阈值非总数，中间项在现有站点无载体；理由见 §07 状态变更日志末条）</p>
     <div class="meta-row">
       <div class="item"><div class="k">编号</div><div class="v">26-09-30-0052-feat-hr-badge-total-crosscheck</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-09-30 00:52</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">feat</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Dropped</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -152,15 +153,19 @@
     <h2><span class="no">06</span>建议修法<span class="opt">（可选）</span></h2>
     <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
     <p>方向：波完成后取「Σ各档行数、上限徽章总数（若该站点计数口径可采）、各档实抓行数」三方值做两两比对，不一致按 parse/对平类告警分级（warn / 连续升级沿用现有告警通道）。动手前须先闭 D4 口径实证与上限位采集口径，参照计划 M2 校准流程另立样张；实现建议挂在 releases_enabled 同层而非新增子系统（报告 §5.2 定性：校验和轴，非清单替代品）。</p>
+    <p><strong>已拍板（2026-11-06）：Dropped</strong> —— 理由见 §07 状态变更日志末两条（前提误读：上限=处罚阈值非总数，现有站点页头无当前值位载体；残余两方互证弱增量）。上文建议修法原文保留作历史；若未来出现渲染 x/50 当前值徽章的计数站点，按报告 §8.3 条件式假设另立新件。</p>
   </section>
 
   <section id="s7">
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-09-30 00:52 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-06 01:29 — 复验（用户指派，锚点重跑，HEAD 8b775513）：仍复现（增强建议仍成立）—— 总数轴互证仍未实现（全 hr/webui 无 Σ分档/总数/两两互证代码），现状仍只有单档 rows==claim 一轴（<code>count_match</code> <code>service_wave.py:686</code>、<code>releases_enabled</code> :709，自 <code>service.py:954</code> 漂移，语义未变）；<code>parse_counters</code> 仍在 <code>base.py:57</code>。锚点形态变化：M3 落点的 <code>hrsLaneBadge</code> 符号已不存在，「各档波次」徽章演进为对平列 <code>hrsWaveCount</code>（<code>settings-detail.html:399</code>，渲染 声称/命中）+ 配色 <code>hrsLaneClass</code>（<code>hr_status.js:509</code>）；且现行 UI 无「上限徽章」渲染物（webui HR 区无「上限」字样）—— §05 前置未变（CarPT <code>COUNTER_ARITY=3</code> 上限位解析但不采 / BTSchool <code>=2</code> 无上限，B 档无声明不猜）：三方比对的中间项「总数」暂无数据源，当下可做的只有 Σ分档 vs 实抓 两方互证，「== 总数」一腿仍卡上限位采集口径与 D4 实证。零代码改动。（注：本条末句沿用入池误读框架，以下一条为准更正。）</li>
+      <li>2026-11-06 01:48 — 前提核对（用户指认「上限徽章总数可能理解错了」）：确认误读 —— <strong>上限是处罚阈值（达到即受罚/封号）非分档总数</strong>。链路：报告 26-09-29-1803 §8.3 原假设是条件式的「<code>x/50</code> 徽章<strong>当前值位</strong>若实证等于现行总量」（D4 未闭）；计划 §4 压成无条件口号丢掉条件与载体；入池落地（§05）把「上限位」当总数候选源 —— 该位采下来也是阈值，解决采集救不了总数轴。M2 样张与代码无此误（<code>carpt.py</code> docstring：「上限是处罚阈值不是档位行数不采」，且 <code>nums[2]</code> 无消费点；两站第 2 位「未达标」亦与用户口径一致）。现有两站点页头（CarPT [考察中/未达标/上限] / BTSchool [考察中/未达标]）均无当前值位 ⇒ 三方互证前提不成立，退化为 Σ分档 vs 实抓 两方（单档各自对平时 Σ 恒等式自动成立，跨档互补性偏差属守恒轴辖区，报告 §5.2）—— 弱增量。两站第 2 位未做行数级实证（docstring 自认），复验顺带记录：待账号出现未达标行时对一眼「页头第 2 位 == C 档实抓行数」即可闭。</li>
+      <li>2026-11-06 01:48 — 用户拍板走 <strong>Dropped</strong>（未动代码）。理由：①入池前提误读——中间项「上限徽章总数」把处罚阈值当分档总数（报告原假设的条件与载体在口号压缩中丢失）；②现有两站点页头无当前值位，总数轴无载体；③残余 Σ分档 vs 实抓 两方互证为弱增量，不抵实施成本（D4 实证 + 新告警面）。报告 §8.3 条件式假设对「未来真渲染 x/50 当前值徽章」的计数站点仍可复活，届时另立新件（本件前提已塌，与上单「重启前置保留」不同，本件不保留重启前置）。</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验：2026-11-06 重跑锚点（总数轴未实现，现状仍只有单档 rows==claim 一轴）+ 前提核对修正：<strong>上限是处罚阈值（达到即受罚/封号）非分档总数</strong>，总数轴中间项在现有两站点无载体，入池前提（三方互证）不成立——结论与拍板见状态变更日志末两条；状态 <strong>Dropped</strong>。</p>
     <h3>修复后补充</h3>
     <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
   </section>
