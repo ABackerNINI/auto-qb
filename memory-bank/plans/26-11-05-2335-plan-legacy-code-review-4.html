@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>存量代码全库评审 R4·五路线并行体系化</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="legacy-code-review-4">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-05-2335">
+<meta name="doc-updated" content="26-11-05-2335">
+<meta name="doc-refs" content="memory-bank/reports/26-10-30-0237-report-full-code-review-2.html">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: legacy-code-review-4</div>
+<h1>存量代码全库评审 R4·五路线并行体系化</h1>
+<p class="lede">对当前全库生产代码做第 4 轮存量评审——参照 code-review skill 的评审包/引文校验/分级处置方法论做存量适配，切成 5 条可认领并行的路线 × 30 批，全局单冻结 hash 快照评审，纯盘点零代码改动，发现聚合入池。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-05-2335 · <b>doc-updated</b> 26-11-05-2335 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 会话 26-11-05 grilling 三轮 16 问拍板收敛（用户改判 3 处：多路并行 / 全局单 hash / 脚本定死基线）；方法论基座 = code-review skill
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<p><b>为什么做</b>：code-review skill 制度化于 26-11-04，此前的代码只经过不成体系的评审轮（R2 十批制 26-10-30、GTM 专项、测试增量轮），均未走现行方法（16 条 checklist、<code>review.check</code> 引文逐字校验、分级处置 schema）；且 R2 之后 127 个 commit 已把 core/webui 大半改写。全库当前状态从未被现行方法完整评过。</p>
+<p><b>完成判据</b>（存量语境铁律，取代 skill 的「收口前 blocker 清零」）：</p>
+<ul>
+  <li>批次全覆盖无断号——manifest 守卫断言全部 src 生产文件被且仅被一个批次认领；</li>
+  <li>每条采信发现都过 <code>review.check</code> 引文校验（refute 即弃，不复核）；</li>
+  <li>全部发现处置完毕：P0 呈报拍板 / major·minor 聚合入池 / nit 记录；</li>
+  <li>终报告（单文件 HTML dark）入库，批次地图实测回填。</li>
+</ul>
+<p><b>不变量</b>：本轮零代码改动（纯盘点）；不触碰 <code>config.yml</code> / <code>auto-qb-data/</code>；路线对 develop 的唯一写入 = 认领 / findings / 状态三类 <code>ship.commit</code>；路线 clone 不切分支不动 HEAD，不拦 develop 上任何其他工作。</p>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+<table>
+<tr><th>事实</th><th>数字（26-11-05 实测）</th><th>含义</th></tr>
+<tr><td>生产 Python</td><td>54,562 行 / 11 模块</td><td>精评主对象</td></tr>
+<tr><td>WebUI static</td><td>51,826 行（js/html/css）</td><td>契约面精评 + CSS 机制抽查</td></tr>
+<tr><td>tests/</td><td>144,494 行</td><td>不进本轮（D2）</td></tr>
+<tr><td>根 scripts/</td><td>9,253 行</td><td>快扫（D6）</td></tr>
+<tr><td>R2 全库评审</td><td>26-10-30 十批制，26 条发现</td><td>旧方法 + 覆盖的行大半已改写</td></tr>
+<tr><td>R2→now 改动</td><td>127 commit：core +7,145/-4,461、webui +22,904/-10,175、hr ±1,698、transfer +939 全新</td><td>R2 结论过时面</td></tr>
+<tr><td>系统评审起点</td><td>skill 制度化 26-11-04</td><td>此后改动全走收口评审，非缺口</td></tr>
+<tr><td>撞车底册</td><td>Open issues 41 条 + R2 终表 26 条 + 坑档 7 类索引</td><td>重复发现不得再报</td></tr>
+</table>
+
+<h2><span class="no">§03</span>方案总览</h2>
+<h3>范围分层</h3>
+<table>
+<tr><th>层</th><th>对象</th><th>深度</th></tr>
+<tr><td>全量精评</td><td><code>src/auto_qb/</code> 全部 .py（54.5K）</td><td>逐文件按 §04 checklist</td></tr>
+<tr><td>契约精评</td><td>static/shared js 逻辑件（11.2K）</td><td>py↔js 数据契约 / SSE 事件 / state 同步 / 错误路径</td></tr>
+<tr><td>机制抽查</td><td>三皮肤 CSS + 模板 HTML（R4-4）</td><td>只查机制红线：加载序 / 特异性冲突 / 守阵清单对齐 / 双皮肤一致；不逐行</td></tr>
+<tr><td>快扫</td><td>根 <code>scripts/</code>（R5-6/7）</td><td>入口 / 危险操作（删文件·进程·端口）/ 红线引用 / 明显缺陷</td></tr>
+<tr><td class="bad">不进</td><td>tests/ 144.5K</td><td>交变异审计轨 + 测试增量评审轨；生产批内只核对「行为有无测试」缺口面</td></tr>
+<tr><td class="bad">不进</td><td><code>.commands/</code> 包脚本</td><td>元循环，另立档阈值不命中</td></tr>
+</table>
+
+<h3>路线 × 批次矩阵（30 批；精确文件清单以 S0 manifest 为准，此处为定义级）</h3>
+<table>
+<tr><th>路线</th><th>批</th><th>内容（主要文件）</th><th>行数估</th></tr>
+<tr><td rowspan="7"><b>R1 core</b><br>17.4K</td><td>R1-1</td><td>内核执行面：qbmanager / taskqueue / module / qbapi / state + core 根杂件</td><td>≈2.9K</td></tr>
+<tr><td>R1-2</td><td>迁移执行：relocate_units + relocate_exec</td><td>≈2.0K</td></tr>
+<tr><td>R1-3</td><td>迁移规划与生命期：relocate_plan / probe / proof / lifecycle</td><td>≈1.6K</td></tr>
+<tr><td>R1-4</td><td>traffic 存取：traffic_store / _codec / traffic_grid / traffic_limits</td><td>≈2.5K</td></tr>
+<tr><td>R1-5</td><td>traffic 采样：traffic_sample_mod / _agg / _blocks / traffic_snapshot_mod / traffic_source/agent</td><td>≈2.5K</td></tr>
+<tr><td>R1-6</td><td>分组与规则模块：grouping_mod / rules_mod / tvshows</td><td>≈1.9K</td></tr>
+<tr><td>R1-7</td><td>ops 与维护面：ops_skip / ops_mod / ops_verdict / maintenance_mod / fuse_mod / speed_curve_mod</td><td>≈2.3K</td></tr>
+<tr><td rowspan="6"><b>R2 config·rules·infra</b><br>14.8K</td><td>R2-1</td><td>校验面：config/validation/ 全部（sections 1,144 + rules 620 + core 364）</td><td>≈2.2K</td></tr>
+<tr><td>R2-2</td><td>schema 与装载：schema/groups 770 + schema/rules 317 + loaders 732 + models 636</td><td>≈2.5K</td></tr>
+<tr><td>R2-3</td><td>写入与迁移：writer 552 + migrations 314 + config 根杂件</td><td>≈1.9K</td></tr>
+<tr><td>R2-4</td><td>rules 全域：base 742 + expr/env 477 + conditions 259 + rules 杂件</td><td>≈3.4K</td></tr>
+<tr><td>R2-5</td><td>infra 存储：alias_fs 1,042 + file_access 394</td><td>≈1.4K</td></tr>
+<tr><td>R2-6</td><td>infra 工具：utils 878 + utils_paths 361 + utils_parse 304 + notify 310 + infra 杂件</td><td>≈1.9K</td></tr>
+<tr><td rowspan="6"><b>R3 hr·新代码</b><br>11.9K</td><td>R3-1</td><td class="wr">transfer 全域 939（全新模块）+ torrents/store 875</td><td>≈1.8K</td></tr>
+<tr><td>R3-2</td><td>torrents/record 484 + tray/app 592 + cli 278 + tools/ 291</td><td>≈1.6K</td></tr>
+<tr><td>R3-3</td><td>hr service 族：service_wave 945 + service 417 + service_common 446</td><td>≈1.8K</td></tr>
+<tr><td>R3-4</td><td>hr 模型状态：model 680 + status 673 + resolve 462</td><td>≈1.8K</td></tr>
+<tr><td>R3-5</td><td>hr 运行时：runtime 553 + server 538 + channel 442 + worker 431</td><td>≈2.0K</td></tr>
+<tr><td>R3-6</td><td>hr 取数解析：discovery 557 + report 391 + parse 340 + fetcher 268 + store 311</td><td>≈1.9K</td></tr>
+<tr><td rowspan="4"><b>R4 webui-py·CSS 机制</b><br>9.5K</td><td>R4-1</td><td>commands 面：commands_torrents 820 + runtime_commands 442 + commands_common 311</td><td>≈1.6K</td></tr>
+<tr><td>R4-2</td><td>视图面：runtime_views 760 + views 452 + tool_client 437 + webui 根杂件</td><td>≈1.7K</td></tr>
+<tr><td>R4-3</td><td>server 路由：routes/traffic_monitor 401 + torrent_cmds 378 + fs 318 + traffic_qb 369 + server 杂件</td><td>≈2.0K</td></tr>
+<tr><td>R4-4</td><td>CSS 机制面 + 模板 HTML（减配档，见 §03 分层表）</td><td>抽查</td></tr>
+<tr><td rowspan="7"><b>R5 static 契约·scripts</b><br>17.9K</td><td>R5-1</td><td>shared 核心：app 1,008 + state 697 + view 224 + ui_feedback 636</td><td>≈2.6K</td></tr>
+<tr><td>R5-2</td><td>drawer 族：drawer 1,029 + drawer_templates 1,184</td><td>≈2.2K</td></tr>
+<tr><td>R5-3</td><td>dialogs 与加种：dialogs 800 + add_torrent 839</td><td>≈1.6K</td></tr>
+<tr><td>R5-4</td><td>config 族：config_rules 778 + config_editor 758 + config_hub 625</td><td>≈2.2K</td></tr>
+<tr><td>R5-5</td><td>图表·hr·快捷键：qb_traffic_chart 1,157 + hr_status 680 + shortcuts_engine 804</td><td>≈2.6K</td></tr>
+<tr><td>R5-6</td><td>scripts 快扫：sim_* 全族（≈3.3K）</td><td>快扫</td></tr>
+<tr><td>R5-7</td><td>scripts 快扫：qb_capture* + ui_harness + 检查/实验散件（≈3.4K）</td><td>快扫</td></tr>
+</table>
+
+<h3>执行模型</h3>
+<ul>
+  <li><b>并行</b>：5 条路线文件互斥，可被 5 个不同 clone 的 agent 会话各自认领同时执行（认领协议 §04）；路线数即并行度，认领任意子集任意顺序。</li>
+  <li><b>串行</b>：路线内批次串行派遣只读 reviewer 子代理（宿主并发上限，<code>pitfalls/kb/kb-subagent-concurrency.md</code>）；分面拓扑照 skill ③（单批 ≤400 行全能 / 超过或触安全敏感面拆 正确性/安全/测试缺口）。</li>
+  <li><b>全局单冻结 hash</b>：全部路线评同一快照（D12）；路线 clone 不动 HEAD，用 <code>git archive</code> 导出快照评审，develop 零扰动。</li>
+  <li><b>状态单点</b>：认领 / 钉值 / 批次进度全在机器 JSON（D14）；本计划 HTML 静态不因执行改版。</li>
+</ul>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+<table>
+<tr><th>步</th><th>内容</th><th>验收判据</th><th>执行者</th></tr>
+<tr><td>S0</td><td>实现 <code>review.lane</code> 命令（规格见下）并收录 <code>.commands/review/config.toml</code>；生成 manifest JSON（批次→文件精确清单 + 每批撞车底册切片 + 覆盖守卫）；<code>--dry-run</code> 冒烟 claim/start/verify/done 全环</td><td>覆盖守卫断言全部 src .py 恰被一批认领；冒烟四子命令过；收录后 <code>commands list review</code> 可见</td><td>本会话（入库后第一顺位）</td></tr>
+<tr><td>S1-S5</td><td>R1-R5 路线执行（§04 执行协议）</td><td>每批：verify→派遣→check→复核→勾选；路线终态 = findings JSON + 小结入库 + <code>done</code> 翻状态</td><td>待认领（任意 clone）</td></tr>
+<tr><td>S6</td><td>聚合：跨路线去重 + R2 复发汇总 + P0 汇总呈报拍板 + 按模块主题聚合入池 + 终报告 HTML</td><td>报告含批次地图实测回填 / P0 专项 / 复发表；issue 索引重建</td><td>本会话</td></tr>
+<tr><td>S7</td><td>收口：报告入库 / progress·切片回写 / 立档判定 / <code>kb.wrap</code></td><td>会话协议收尾 DoD 全过</td><td>本会话</td></tr>
+</table>
+<p class="cm">认领与进度状态单点 = <code>memory-bank/reports/attachments/legacy-review4/route-&lt;R&gt;.json</code>（S0 建）；本表不承载动态状态。</p>
+
+<h3>review.lane 命令规格（S0 实现，D13/D15）</h3>
+<table>
+<tr><th>子命令</th><th>行为</th><th>失败即停（可见错误）</th></tr>
+<tr><td><code>claim --route X --owner &lt;id&gt;</code></td><td>route JSON 不存在才建：写入 owner / status=claimed / freeze hash（自动解析：本计划文件的首个 commit，机械取得非手抄）</td><td>已认领 / 树脏 / freeze 不可达（非 HEAD 祖先）</td></tr>
+<tr><td><code>start --route X</code></td><td>校验树净 → <code>git archive &lt;freeze&gt;</code> 导出快照到 repo 外目录（默认 <code>&lt;repo&gt;/../auto-qb-review4-snap/</code>，可 <code>--snapshot</code> 覆盖）+ 写入 hash 标记文件 → route JSON 记钉值与快照路径 → 打印三件套与本批文件清单</td><td>未 claim / archive 失败 / 快照标记写不齐</td></tr>
+<tr><td><code>verify --route X</code></td><td>每批派遣前与交回后复核：树净 / 快照存在且标记吻合 / route JSON 状态一致；通过则打印当前批三件套</td><td>任一不满足</td></tr>
+<tr><td><code>done --route X</code></td><td>校验 findings JSON 与小结已落盘 → 翻 status=done → 提示 ship.commit</td><td>findings 缺失 / 状态不是 in-progress</td></tr>
+</table>
+
+<h3>派遣三件套（存量适配，照抄派遣不临场发挥）</h3>
+<ol>
+  <li><b>只读契约</b>（照抄 skill ③ 原文）：禁止一切写操作——git 状态变更 / 写任何文件 / 跑 kb 等写类 task id 一律禁止，只允许读命令；AGENTS.md 开工同步对本任务豁免，主会话已完成同步。</li>
+  <li><b>评审目标钉死</b>：读 <b>快照目录</b>（冻结 hash <code>&lt;freeze&gt;</code> 的 git archive 导出，非 git 仓库，纯只读树）；发现里的行号与引文一律以快照内容为准。</li>
+  <li><b>开工自检</b>：快照根存在且 <code>.snapshot-hash</code> 标记 == 路线钉值，否则停手报告不评审；收尾复核：verify 通过才采信发现。</li>
+</ol>
+
+<h3>findings 与引文校验</h3>
+<ul>
+  <li>schema 与 skill ④ 完全一致（七字段，不增字段；lane/batch/钉值由文件名与 route JSON 承载）：</li>
+</ul>
+<pre><code>[{"file":"src/auto_qb/core/state.py","line":42,"quote":"单行内连续片段",
+  "severity":"blocker|major|minor|nit","claim":"问题一句话",
+  "relevance":"相关|不相关","fix":"修法一句话"}]</code></pre>
+<ul>
+  <li>校验：<code>commands run review.check --findings &lt;json&gt; --root &lt;快照目录&gt;</code>——引文与快照逐字比对（±3 行），refute 直接弃不复核。<b>校验发生在路线会话</b>（其快照即权威），聚合会话只抽查不重跑。</li>
+  <li><b>不报清单</b>（照抄 skill ④）：理论风险说不出具体失败场景 / 风格偏好 / 库推荐 / 已在撞车底册的条目，一律不报。</li>
+</ul>
+
+<h3>checklist 存量版（skill ⑤ 适配）</h3>
+<p>删 #1 Goal、#13 范围守恒（diff 语义对存量无意义），增三条存量面；其余 14 条原样照用（黄金法则 1-5 / 红线 / 非 ASCII / 测试基建 / 真机准入——纯代码事实，与 diff 无关）：</p>
+<table>
+<tr><th>编</th><th>条目</th><th>锚点</th></tr>
+<tr><td>A</td><td>死代码 / 拆分残留：不可达分支、未用导出、拆分后遗留的孤儿件</td><td>qb-capture-cli-dead-main 先例</td></tr>
+<tr><td>B</td><td>平行机制 / 重复实现：同一职责两套路径</td><td>R2 撞车底册口径</td></tr>
+<tr><td>C</td><td>文档漂移：代码事实与 memory-bank / 根 README 断言矛盾 → docs 类发现（不改文档，只报）</td><td>docs-sync 口径</td></tr>
+</table>
+
+<h3>撞车底册与 R2 复验</h3>
+<ul>
+  <li>每批派发随附该批的底册切片（S0 从 R2 终表按文件映射 + Open issues 按文件 grep 生成）：底册已有条目不重报。</li>
+  <li>R2 已报且未见对应修复 commit 的条目，由该批复验「是否仍在」：仍在 → 标记<b>复发</b>（不新报）；已消失 → 记「已消失」；聚合会话汇总复发表。</li>
+</ul>
+
+<h3>处置分级（存量语境，D3/D4）</h3>
+<table>
+<tr><th>severity</th><th>处置</th></tr>
+<tr><td>blocker</td><td>升格 <b>P0</b>：真缺陷且高风险（数据损坏路径 / 黄金法则违反 / 红线风险）→ S6 汇总呈报用户拍板，<b>本轮不修</b>，拍板后另开任务走完整收口</td></tr>
+<tr><td>major / minor</td><td>S6 按模块主题<b>聚合入池</b>（一条 issue 含 findings 明细表，不逐条开）</td></tr>
+<tr><td>nit</td><td>终报告记录，不入池</td></tr>
+</table>
+
+<h3>产出物</h3>
+<pre><code>memory-bank/reports/attachments/legacy-review4/
+  manifest.json            # 批次→文件矩阵 + 底册切片 + 覆盖守卫（S0 生成，机器事实源）
+  route-R&lt;N&gt;.json          # owner / freeze / 快照路径 / 批次勾选 / status（脚本维护）
+  route-R&lt;N&gt;-findings.json # 过 review.check 的发现（路线会话产出）
+  route-R&lt;N&gt;-notes.md      # 路线小结：批次勾选表 / R2 复验结论 / 自弃发现记录
+memory-bank/reports/&lt;ts&gt;-report-legacy-code-review-4.html   # 终报告（S6，聚合会话）</code></pre>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p>无——grilling 三轮 16 问全部收敛（结论见 §06），frontier 已清空。</p>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+<tr><th>D</th><th>结论</th><th>日期</th></tr>
+<tr><td>D1</td><td>全库重评（非窗口补评）；R2 终表作撞车底册去重</td><td>26-11-05</td></tr>
+<tr><td>D2</td><td>tests/ 不进本轮，交变异审计轨 + 增量评审轨；生产批内只核对测试缺口面</td><td>26-11-05</td></tr>
+<tr><td>D3</td><td>纯盘点零代码改动；P0 呈报拍板后另开任务</td><td>26-11-05</td></tr>
+<tr><td>D4</td><td>入池按模块主题聚合，不逐条开</td><td>26-11-05</td></tr>
+<tr><td>D5</td><td>static 只评契约面 + 机制面；CSS 视觉不评</td><td>26-11-05</td></tr>
+<tr><td>D6</td><td>scripts/ 快扫；<code>.commands/</code> 不进</td><td>26-11-05</td></tr>
+<tr><td>D7</td><td class="wr">多路并行、单路内串行、工作树冻结（用户改案，取代单会话串行）</td><td>26-11-05</td></tr>
+<tr><td>D8</td><td>路线划分按文件行数实切：5 路线 30 批（grilling 中 4 路线 17-19 批为粗估，实切修正）</td><td>26-11-05</td></tr>
+<tr><td>D9</td><td>本会话 = 聚合会话，不认领路线；不足时补位</td><td>26-11-05</td></tr>
+<tr><td>D10</td><td>认领走机器状态 JSON（取代 HTML 槽位改写）</td><td>26-11-05</td></tr>
+<tr><td>D11</td><td>路线产出 findings JSON + 小结；终报告由聚合会话单件生成</td><td>26-11-05</td></tr>
+<tr><td>D12</td><td class="wr">全局单冻结 hash（用户改判，取代按路线各自钉值）；机制 = git archive 快照导出，不扰动其它 clone 在 develop 的工作</td><td>26-11-05</td></tr>
+<tr><td>D13</td><td class="wr">脚本机制定死 commit 防错评：开工 sync 一次后立即机械锁定（用户指令）</td><td>26-11-05</td></tr>
+<tr><td>D14</td><td>状态与矩阵单点全在 JSON；计划 HTML 静态零手改</td><td>26-11-05</td></tr>
+<tr><td>D15</td><td>新增 <code>review.lane</code>（claim/start/verify/done）收录 <code>.commands/review/</code></td><td>26-11-05</td></tr>
+<tr><td>D16</td><td class="wr">计划文档只写状态不写流水（用户指令）</td><td>26-11-05</td></tr>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+<tr><th>风险</th><th>触发条件</th><th>处置</th></tr>
+<tr><td>底册切片映射错漏（R2 条目漏映射到批）</td><td>S0 生成切片时文件映射不全</td><td>S0 后抽查 5 条；S6 聚合期二次撞车终验兜底</td></tr>
+<tr><td>快照与真实冻结树不一致</td><td>archive 失败 / 部分导出 / 快照被污染</td><td>start 校验标记文件；verify 每批复核；快照在 repo 外且 reviewer 只读契约</td></tr>
+<tr><td>freeze hash 失去可达性</td><td>历史被改写（现闸门已禁 force push，应不发生）</td><td>claim 校验「HEAD 祖先」不满足即停，人工介入</td></tr>
+<tr><td>路线认领后停滞</td><td>claim 后 7 天无批次勾选</td><td>route JSON 带认领日期；聚合会话跟踪，可翻状态改派</td></tr>
+<tr><td>减配批漏真问题</td><td>CSS 机制 / scripts 快扫深度不足</td><td>减配口径已在 §03 明示，终报告按批标注覆盖深度，不冒充精评</td></tr>
+<tr><td>reviewer 幻觉引文</td><td>LLM 评审头号失效模式</td><td><code>review.check --root 快照</code> 逐条校验，refute 即弃（skill 铁律）</td></tr>
+<tr><td>跨路线跨界发现撞车</td><td>共享工具被两条路线同时报</td><td>路线文件互斥降大头；S6 按 file+quote 去重</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-05-2335</span> 初版：grilling 三轮 16 问拍板定稿（用户改判 3 处：D7 多路并行 / D12 全局单 hash / D13 脚本定死）；五路线 30 批矩阵；S0-S7 步骤槽；执行协议全套（快照导出 / 三件套适配 / findings schema / checklist 存量版 / 处置分级）。</li>
+</ul>
+
+</div>
+</body>
+</html>

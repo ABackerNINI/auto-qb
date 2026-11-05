@@ -18,6 +18,7 @@
 
 ## Open
 
+- [26-11-05-2335] [存量代码全库评审 R4·五路线并行体系化](26-11-05-2335-plan-legacy-code-review-4.html) — `legacy-code-review-4`
 - [26-11-05-1049] [memory-bank 文档压缩与防回涨分步执行计划(8K 新口径)](26-11-05-1049-plan-kb-doc-compress.html) — `kb-doc-compress`
 - [26-11-05-0848] [跳检自身失败闸门 G9: WEB case-2 强制 + 规则侧硬 skip 双点同谓词](26-11-05-0848-plan-skip-check-self-fail-gate-g9.html) — `skip-check-self-fail-gate-g9`
 - [26-11-05-0808] [relocate 整组迁移重构: fastresume 改写收尾(journal+下线窗口)](26-11-05-0808-plan-relocate-fastresume-finalize.html) — `relocate-fastresume-finalize`
