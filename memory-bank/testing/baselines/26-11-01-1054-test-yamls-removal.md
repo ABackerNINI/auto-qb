@@ -13,7 +13,8 @@ TOTAL                                                22482    179   7708    151 
 4461 passed, 2 skipped in 150.31s (0:02:30)
 ```
 
-口径: 全量 pytest 含覆盖率报表; 相对上基线逐位对比不写, 看差值 `commands run kb.baseline -n 2`。
+- 口径见 [baseline.md](../baseline.md)。
+
 注记: 首跑(179.5s)撞一次性测量竞态 —— 覆盖率闸门报 98.87% FAIL, 稳定树复跑未复现, 本条数字取稳定树复跑; 同跑还有 issues 索引漂移 1 条(issue 状态改后未重建), `kb.index` 重建后消除。skipped 2 与上基线 10 的差异是环境口径(node 等平台性跳过在本 clone 可用), 非本改动影响。
 
 ## 本改动面

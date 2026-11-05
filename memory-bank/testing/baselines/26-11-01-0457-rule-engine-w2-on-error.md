@@ -13,7 +13,8 @@ TOTAL                                                21977    167   7468    133 
 4378 passed, 10 skipped in 149.58s (0:02:29)
 ```
 
-口径: 全量 pytest 含覆盖率报表; 相对上基线逐位对比不写, 看差值 `commands run kb.baseline -n 2`。
+- 口径见 [baseline.md](../baseline.md)。
+
 W2 期基线(plan 26-11-01-0106): 错误策略一等化(on_error 三档) + retry=任务级 requeue + 条件异常 per-step 语义断言 + webui on_error 控件 + normalize 注入缺省 on_error(金标准快照重锚定)。skipped 与上条切片同环境口径(node/平台性跳过)。
 
 ## 本改动面

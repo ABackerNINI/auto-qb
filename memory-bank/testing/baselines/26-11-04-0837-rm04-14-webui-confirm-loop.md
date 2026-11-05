@@ -14,8 +14,8 @@
 | TOTAL | 23946 语句 / 226 未覆盖 / 8188 分支 / 168 partial |
 | 覆盖率 | 99% |
 
-口径注记: 单次采样快照(耗时区间/中位口径见 [baseline.md](../baseline.md)); 相对上基线的逐位对比不写
-(看差值 `commands run kb.baseline -n 2`)。
+口径注记: 单次采样快照(耗时区间/中位口径见 [baseline.md](../baseline.md))。
+
 口径注记(范围外抖动, 本轮不修): 三次全量中的第二次出现 1 条既有假红
 `tests/test_qb_capture.py::test_sanitize_all_rewrites_fs_delta_with_same_derivation` —— 夹具用非 hex
 假 hash `H1`,`Sanitizer.infohash` 在约 1/16 的随机盐下把 `H1` 映射回自身, 令末行 `"H1" not in stream`

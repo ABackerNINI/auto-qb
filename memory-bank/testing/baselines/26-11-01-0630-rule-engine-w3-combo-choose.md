@@ -13,7 +13,8 @@ TOTAL                                                22222    188   7622    149 
 4398 passed, 10 skipped in 165.75s (0:02:45)
 ```
 
-口径: 全量 pytest 含覆盖率报表; 相对上基线逐位对比不写, 看差值 `commands run kb.baseline -n 2`。
+- 口径见 [baseline.md](../baseline.md)。
+
 W3 期基线(plan 26-11-01-0106): 组合树(W3-A)收口 + choose 编排块(W3-B, D3 转正) + webui 条件组合树/choose 编辑器(D2/D8) + 生产 5 条规则快照零差异(金标准不回退)。skipped 与上条切片同环境口径(node/平台性跳过)。
 
 ## 本改动面

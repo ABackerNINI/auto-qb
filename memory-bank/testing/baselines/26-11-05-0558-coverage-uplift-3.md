@@ -8,7 +8,9 @@
 
 - TOTAL: 24463 stmts / 69 miss / 8390 branch / 38 partial → 99%
 - 汇总: 5339 passed, 10 skipped (0 failed), 149.23s
-- 口径注记: `commands run test.full` 实测; 与上基线对比看 `commands run kb.baseline -n 2`
+- 口径注记: `commands run test.full` 实测。
+
+- 口径见 [baseline.md](../baseline.md)。
 
 ## 本改动面
 

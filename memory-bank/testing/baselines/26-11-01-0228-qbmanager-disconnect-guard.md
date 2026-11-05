@@ -12,7 +12,8 @@ TOTAL                                                21823    145   7398    122 
 4353 passed, 2 skipped in 226.43s (0:03:46)
 ```
 
-口径: 全量 pytest 含覆盖率报表; 相对上基线逐位对比不写, 看差值 `commands run kb.baseline -n 2`。
+- 口径见 [baseline.md](../baseline.md)。
+
 skipped 与上条切片同环境口径(node/平台性跳过, 本轮 2 条)。
 
 ## 本改动面

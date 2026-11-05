@@ -13,7 +13,8 @@ TOTAL                                                22420    197   7688    155 
 4444 passed, 10 skipped in 165.09s (0:02:45)
 ```
 
-口径: 全量 pytest 含覆盖率报表; 相对上基线逐位对比不写, 看差值 `commands run kb.baseline -n 2`。
+- 口径见 [baseline.md](../baseline.md)。
+
 `tests-real/` 不在 testpaths, 本轮全部改动对基线数字零扰动(src/ 零改动); TOTAL 行数差来自同期远端提交。首轮曾 2 failed(`test_memory_bank` 索引守卫: 改 memory-bank 文件后未跑 `kb.index`), 重建索引后全绿 —— 守卫按设计命中。
 
 真机面(环境2 首轮): `real.up` 拉起 56589/56590 + `real.guard` 双端口全绿(均 `firewalled`, v5.2.3); `real.env` 探测正确(缺省→环境2, `QBT_REAL_ENV=1`→环境1)。

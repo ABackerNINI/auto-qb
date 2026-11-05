@@ -14,7 +14,9 @@
   4958 passed, 10 skipped, 3 warnings in 144.90s (0:02:24)
 ```
 
-Windows 本机单次采样; Linux(WSL) 侧未重测。与上基线的逐位差值看 `commands run kb.baseline -n 2`, 本文不手抄对比。
+Windows 本机单次采样; Linux(WSL) 侧未重测。
+
+- 口径见 [baseline.md](../baseline.md)。
 
 ## 本改动面
 

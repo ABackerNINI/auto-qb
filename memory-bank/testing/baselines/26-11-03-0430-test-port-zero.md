@@ -13,7 +13,9 @@ TOTAL                                                22543    134   7736    128 
 4932 passed, 2 skipped, 3 warnings in 195.17s (0:03:15)
 ```
 
-口径: 根目录全量(`pytest.ini` 默认并行 + 覆盖率); 与上基线的逐位差值看 `commands run kb.baseline -n 2`, 本文不手抄对比。
+口径: 根目录全量(`pytest.ini` 默认并行 + 覆盖率)。
+
+- 口径见 [baseline.md](../baseline.md)。
 
 ## 本改动面
 
@@ -26,4 +28,3 @@ TOTAL                                                22543    134   7736    128 
 - `scripts/dev_webui.py`: `--web-port` 默认 `0`, 删除 `8177` 与 `+1…+20` 顺延链; 0 就地 `bind(0)` 取具体口后落盘。
 - `tests-real/lib/app.py`: `free_port()` 探空后立即回绑自验, 失败换候选, `RETRIES=3` 耗尽抛 `RuntimeError` (唯一 helper 改动)。
 - `tests/test_port_zero_guards.py`: 新增纯文本守阵 9 条(固定口不回归 / 无第三份取号 / tests-real 含回绑自验 / E2E_PORT 设置即报错)。
-

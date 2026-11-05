@@ -13,8 +13,10 @@ TOTAL                                                22531    134   7732    128 
 4914 passed, 2 skipped, 3 warnings in 172.17s (0:02:52)
 ```
 
-口径: 根目录全量(Windows 并行 `-n 8` + 覆盖率), Total coverage 99.11%; 与上基线的逐位差值看 `commands run kb.baseline -n 2`, 本文不手抄对比。
+口径: 根目录全量(Windows 并行 `-n 8` + 覆盖率), Total coverage 99.11%。
 首次全量(01:12, rebase 前)为 4907 passed; rebase 并入 `73949f10`(大文件拆分 R1)后 +7 个测试。先前两次同命令分别在 HR discovery 端口用例上撞 `WinError 10013`(`test_start_all_busy_returns_false_and_retries` / `test_runtime_discovery_bind_failure_keeps_data_endpoint`), 单跑均转绿 —— 并行 `_free_port` 抢端口的环境 flake, 与本轮 CSS 改动无关(已入池 issue 26-11-03-0115)。
+
+- 口径见 [baseline.md](../baseline.md)。
 
 ## 本改动面
 

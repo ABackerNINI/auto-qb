@@ -13,7 +13,8 @@ TOTAL                                                22420    197   7688    156 
 4444 passed, 10 skipped in 197.91s (0:03:17)
 ```
 
-口径: 全量 pytest 含覆盖率报表; 相对上基线逐位对比不写, 看差值 `commands run kb.baseline -n 2`。
+- 口径见 [baseline.md](../baseline.md)。
+
 注记: 首跑全量撞上「跑动期间回写 KB」竞态(2 条回写守卫读到中间态判红, 覆盖率 FAIL 在稳定树复跑未复现), 本条数字取稳定树复跑; 真机按新闸门命令形态对 skill 骨架样例跑 `--vnu --strict` 命中存量 error(空 `<title>`), 扩面行为实证。
 
 ## 本改动面

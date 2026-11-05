@@ -13,7 +13,8 @@ TOTAL                                                21823    163   7398    127 
 
 - 口径: `commands run test.full`（uv run pytest tests -q，带覆盖率；pytest.ini 默认 -n 4），2026-11-01 05:41 本机实测。
 - 同日 test.quick（-n 8, --no-cov）：4355 passed, 10 skipped in 153.88s；test.pkg（.commands + 引擎）：206 passed in 112.18s。
-- 相对上基线的逐位对比不写（看 `commands run kb.baseline -n 2`）。
+
+- 口径见 [baseline.md](../baseline.md)。
 
 ## 本改动面
 

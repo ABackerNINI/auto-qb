@@ -14,7 +14,9 @@
   5010 passed, 10 skipped in 138.01s (0:02:18)
 ```
 
-口径: 根目录全量(`pytest.ini` 默认并行 + 覆盖率); wrapper 外层耗时 140.1s; 覆盖率闸 Windows 99.0(`tests/conftest.py` 单点)。与上基线的逐位差值看 `commands run kb.baseline -n 2`, 本文不手抄对比。
+口径: 根目录全量(`pytest.ini` 默认并行 + 覆盖率); wrapper 外层耗时 140.1s; 覆盖率闸 Windows 99.0(`tests/conftest.py` 单点)。
+
+- 口径见 [baseline.md](../baseline.md)。
 
 ## 本改动面
 

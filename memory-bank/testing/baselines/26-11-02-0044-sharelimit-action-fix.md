@@ -10,7 +10,9 @@
 - TOTAL 表: `TOTAL  22482  164  7708  135  99%` (语句 / 未覆盖 / 分支 / partial / 覆盖率)
 - 汇总行: `4804 passed, 2 skipped in 188.08s (0:03:08)`
 - 前置: `commands run test.quick` 同树 `4804 passed, 2 skipped in 73.63s`(与全量同数, 无覆盖率报表)
-- 口径注记: 全部通过, 无既有失败; `dev.fmt` 已跑(6 个改动 .py)。相对上基线逐位对比不写(看 `commands run kb.baseline -n 2`)。
+- 口径注记: 全部通过, 无既有失败; `dev.fmt` 已跑(6 个改动 .py)。
+
+- 口径见 [baseline.md](../baseline.md)。
 
 ## 本改动面
 

@@ -12,7 +12,8 @@
   - TOTAL 表: `TOTAL  22482  164  7708  134  99%`(stmts / miss / branch / partial / 覆盖率)
   - 覆盖率闸: Windows 阈值 99, 达标
 - **环境 / 工具**: Windows 本机(win32 10.0.26300 x64 · 32 逻辑核)· Python 3.13.14 · pytest 9.2.0 · pytest-xdist 3.8.0 · `addopts = -n 8 --cov=src --cov-report=term-missing --cov-branch`; `TMPDIR` 由 `test.full` 包内内置(不手工加前缀)
-- **口径注记**: 全量 pytest 含覆盖率报表; 相对上基线的逐位对比不写, 看差值 `commands run kb.baseline -n 2`。
+
+- 口径见 [baseline.md](../baseline.md)。
 
 ## 本改动面
 

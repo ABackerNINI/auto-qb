@@ -13,7 +13,9 @@ TOTAL                                                22531    152   7732    134 
 4908 passed, 10 skipped, 3 warnings in 297.58s (0:04:57)
 ```
 
-口径: 根目录全量(Windows 并行 + 覆盖率), TOTAL 表与汇总行逐字誊写。10 skipped 与上一基线同源(环境能力型: 符号链接 / POSIX-only / ext4 大小写语义), 与本轮 e2e 皮肤覆盖改动无关。与上基线的逐位差值看 `commands run kb.baseline -n 2`, 本文不手抄对比。
+口径: 根目录全量(Windows 并行 + 覆盖率), TOTAL 表与汇总行逐字誊写。10 skipped 与上一基线同源(环境能力型: 符号链接 / POSIX-only / ext4 大小写语义), 与本轮 e2e 皮肤覆盖改动无关。
+
+- 口径见 [baseline.md](../baseline.md)。
 
 ## 本改动面
 

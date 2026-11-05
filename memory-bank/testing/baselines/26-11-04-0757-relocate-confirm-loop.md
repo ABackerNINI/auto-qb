@@ -14,8 +14,7 @@
 | TOTAL | 23943 语句 / 226 未覆盖 / 8186 分支 / 168 partial |
 | 覆盖率 | 99% |
 
-口径注记: 单次采样快照(耗时区间/中位口径见 [baseline.md](../baseline.md)); 相对上基线的逐位对比不写
-(看差值 `commands run kb.baseline -n 2`)。
+口径注记: 单次采样快照(耗时区间/中位口径见 [baseline.md](../baseline.md))。
 
 ## 本改动面
 

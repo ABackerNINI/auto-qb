@@ -13,7 +13,9 @@
   - 覆盖率闸: Windows 阈值 99, 达标
 - 包内脚本测试: `commands run test.pkg.scoped -- .commands/my-commit-flow` **153 passed**(基线 151 + 本轮新增 2 条守阵; 另做红验: 还原旧暂存逻辑 → 新复现用例红, 恢复后转绿)
 - **环境 / 工具**: Windows 本机(win32)· Python 3.13 · pytest-xdist 8 workers · `TMPDIR` 由 `test.full` 包内内置(不手工加前缀)
-- **口径注记**: 全量 pytest 含覆盖率报表; 相对上基线逐位对比不写, 看差值 `commands run kb.baseline -n 2`。注: 本轮首次全量跑(修复落盘但 `kb.index` 未重建的中间态)曾出现 2 条索引守阵红 + 覆盖率 98.97% 差门槛, `kb.index` 重建后复跑即全绿 —— 属测量时序问题, 非代码面缺陷。
+- **口径注记**: 全量 pytest 含覆盖率报表; 注: 本轮首次全量跑(修复落盘但 `kb.index` 未重建的中间态)曾出现 2 条索引守阵红 + 覆盖率 98.97% 差门槛, `kb.index` 重建后复跑即全绿 —— 属测量时序问题, 非代码面缺陷。
+
+- 口径见 [baseline.md](../baseline.md)。
 
 ## 本改动面
 

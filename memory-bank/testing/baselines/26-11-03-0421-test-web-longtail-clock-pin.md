@@ -16,8 +16,7 @@ TOTAL                                                22543    152    7736    134
 定向: `commands run test.one -- tests/test_web_longtail_traffic.py` = 6 passed in 4.27s
 (副作用台账 40 条/越界 0); 七个相关 web/traffic 文件同批 = 168 passed。
 
-口径: 根目录全量(`pytest.ini` 默认并行 + 覆盖率); 相对上基线的逐位差值看
-`commands run kb.baseline -n 2`, 本文不手抄对比。
+- 口径见 [baseline.md](../baseline.md)。
 
 ## 本改动面
 

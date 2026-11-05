@@ -13,7 +13,9 @@ TOTAL                                                22531    152    7732    134
 4906 passed, 10 skipped, 3 warnings in 349.90s (0:05:49)
 ```
 
-口径: 根目录全量(Windows 并行 + 覆盖率), TOTAL 表与汇总行逐字誊写。10 skipped 全是环境能力型用例(6 条 `test_alias_fs.py` 建不出符号链接、3 条目录符号链接/POSIX-only 断言、1 条 ext4 大小写语义), 已用 `-rs` 逐条复核; 与本轮 CSS 改动无关。与上基线的逐位差值看 `commands run kb.baseline -n 2`, 本文不手抄对比。
+口径: 根目录全量(Windows 并行 + 覆盖率), TOTAL 表与汇总行逐字誊写。10 skipped 全是环境能力型用例(6 条 `test_alias_fs.py` 建不出符号链接、3 条目录符号链接/POSIX-only 断言、1 条 ext4 大小写语义), 已用 `-rs` 逐条复核; 与本轮 CSS 改动无关。
+
+- 口径见 [baseline.md](../baseline.md)。
 
 ## 本改动面
 

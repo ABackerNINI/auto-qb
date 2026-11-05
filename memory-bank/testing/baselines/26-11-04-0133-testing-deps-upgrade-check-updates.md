@@ -14,9 +14,11 @@
   5038 passed, 2 skipped in 163.30s (0:02:43)
 ```
 
-口径: 根目录全量(`pytest.ini` 默认并行 + 覆盖率); wrapper 外层耗时 165.4s; 覆盖率闸 Windows 99.0(`tests/conftest.py` 单点)。与上基线的逐位差值看 `commands run kb.baseline -n 2`, 本文不手抄对比。上基线(gtm-day-total-inflation, 26-11-03 23:52)同为 99% 闸过, TOTAL 表行 23328→23325 的 3 语句差来自两次基线间入库的他人提交, 非本轮改动。
+口径: 根目录全量(`pytest.ini` 默认并行 + 覆盖率); wrapper 外层耗时 165.4s; 覆盖率闸 Windows 99.0(`tests/conftest.py` 单点)。上基线(gtm-day-total-inflation, 26-11-03 23:52)同为 99% 闸过, TOTAL 表行 23328→23325 的 3 语句差来自两次基线间入库的他人提交, 非本轮改动。
 
 同轮旁证: 本轮首跑全量曾因 activeContext 切片 R 行手抄裸 passed 数字触发 2 条 KB 措辞/数字守卫红, 修正措辞后复跑全绿 —— 同一覆盖率数据行(TOTAL 表逐位相同)下, 闸门结果随是否存在失败用例翻转(失败轮报 Total coverage 98.94%, 全绿轮过 99.0 闸), 排障时先看有没有失败用例再怀疑覆盖率面。
+
+- 口径见 [baseline.md](../baseline.md)。
 
 ## 本改动面
 

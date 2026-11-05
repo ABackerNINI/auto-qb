@@ -14,7 +14,9 @@
 - 包内脚本测试: `commands run test.pkg.scoped -- .commands/mutants` → `[ok] test.pkg.scoped (4.9s)`, 包内 `24 passed in 3.77s`(基线 18 + 本轮新增 6 条: 4 条 `set_conf` 渲染 / 2 条结果头账本)
 - 形态级探针(issue 2 复验, WSL mutmut 3.8.0 镜像): 4 条 TypeError 变异 × 2 池 = **8/8 `rc=124` @120s 硬超时**; 两池基线均绿(W6 池 `257 passed in 24.31s`(墙 25.13s) / WIDE 池 `506 passed, 1 skipped in 51.51s`(墙 52.47s))
 - **环境 / 工具**: Windows 本机(win32)· Python 3.13 · `TMPDIR` 由 `test.full` 包内内置; 探针在 WSL Ubuntu-26.04 + mutmut 3.8.0
-- **口径注记**: 全量 pytest 含覆盖率报表; 相对上基线逐位对比不写, 看差值 `commands run kb.baseline -n 2`。本轮**未重跑 W6 整轮变异**(只做形态级探针), 故本切片不含新的轮次杀死率。
+- **口径注记**: 全量 pytest 含覆盖率报表; 本轮**未重跑 W6 整轮变异**(只做形态级探针), 故本切片不含新的轮次杀死率。
+
+- 口径见 [baseline.md](../baseline.md)。
 
 ## 本改动面
 

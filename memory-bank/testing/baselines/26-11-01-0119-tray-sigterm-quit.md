@@ -13,7 +13,8 @@ TOTAL                                                21814    163   7394    127 
 4344 passed, 10 skipped in 199.48s (0:03:19)
 ```
 
-口径: 全量 pytest 含覆盖率报表; 相对上基线逐位对比不写, 看差值 `commands run kb.baseline -n 2`。
+- 口径见 [baseline.md](../baseline.md)。
+
 真机面(独立轨, 不进本数字): graceful 跑壳(进程内 raise_signal)SIGTERM@25s 对 `--tray` 进程 3/3 于 27.0s 退出 rc=0, 无「主循环未在 10s 退出预算内收尾」WARNING, ui.port 清理, stderr 无堆栈; 修复前同法 3/3 观测 70s 不退(issue 26-10-31-1030 复验一致)。skipped 与上条切片同环境口径(node/平台性跳过)。
 
 ## 本改动面

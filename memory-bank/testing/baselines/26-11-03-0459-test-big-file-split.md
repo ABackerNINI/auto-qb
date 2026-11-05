@@ -13,7 +13,9 @@ TOTAL                                                22543    134   7736    128 
 4924 passed, 2 skipped, 3 warnings in 194.03s (0:03:14)
 ```
 
-口径: 根目录全量(`pytest.ini` 默认并行 + 覆盖率); 与上基线的逐位差值看 `commands run kb.baseline -n 2`, 本文不手抄对比。
+口径: 根目录全量(`pytest.ini` 默认并行 + 覆盖率)。
+
+- 口径见 [baseline.md](../baseline.md)。
 
 ## 本改动面
 

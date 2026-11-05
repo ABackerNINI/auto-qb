@@ -13,7 +13,8 @@
 coverage: 99% (21840 stmts / 144 miss)
 ```
 
-口径: 全量 pytest 含覆盖率报表; 相对上基线逐位对比不写, 看差值 `commands run kb.baseline -n 2`。
+- 口径见 [baseline.md](../baseline.md)。
+
 skipped 为环境口径跳过(本轮 2 条, 与近期切片同环境)。
 
 ## 本改动面

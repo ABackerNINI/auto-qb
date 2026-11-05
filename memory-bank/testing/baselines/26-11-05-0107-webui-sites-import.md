@@ -14,7 +14,8 @@ TOTAL                                                24457    227   8386    167 
 ```
 
 - TOTAL 行口径: 语句 24457 / 未覆盖 227 / 分支 8386 / 分支 partial 167, 覆盖率 99%。
-- 相对上基线差值: `commands run kb.baseline -n 2`。
+
+- 口径见 [baseline.md](../baseline.md)。
 
 ## 本改动面
 

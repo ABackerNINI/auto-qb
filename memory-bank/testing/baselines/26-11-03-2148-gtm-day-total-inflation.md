@@ -14,7 +14,7 @@
   5012 passed, 2 skipped, 3 warnings in 216.82s (0:03:36)
 ```
 
-口径: 根目录全量(`pytest.ini` 默认并行 + 覆盖率); wrapper 外层耗时 222.6s; 覆盖率闸 Windows 99.0(`tests/conftest.py` 单点)。与上基线的逐位差值看 `commands run kb.baseline -n 2`, 本文不手抄对比。
+口径: 根目录全量(`pytest.ini` 默认并行 + 覆盖率); wrapper 外层耗时 222.6s; 覆盖率闸 Windows 99.0(`tests/conftest.py` 单点)。
 
 工具包 `tools/global-traffic-monitor` 为独立口径(自带 `pyproject.toml` 门槛 88, 覆盖率分母只含 gtm 包), **不与主仓合算**; 本次另跑 `commands run test.gtm` 实测:
 
@@ -23,6 +23,8 @@
   TOTAL                   2585     23    684     14    99%
   547 passed, 2 skipped in 95.31s (0:01:35)
 ```
+
+- 口径见 [baseline.md](../baseline.md)。
 
 ## 本改动面
 
@@ -33,4 +35,3 @@
 - `memory-bank/plans/26-11-03-1102-plan-gtm-day-total-inflation.html`: 实施阶段标完成并附各步 commit; 告警可见面注明确认状态栏常驻横幅为主告知、设置页非唯一入口。
 - `memory-bank/tasks/26-11-03-backend-gtm-day-total-inflation.md`(新增): 本专题档案(原始请求/决策/子任务状态/进度日志)。
 - `memory-bank/pitfalls/backend/gtm-total-baseline.md`(新增): 「过滤后合计基线被过滤集收缩污染」坑档。
-

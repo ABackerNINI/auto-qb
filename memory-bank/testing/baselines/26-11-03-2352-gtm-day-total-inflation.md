@@ -14,7 +14,7 @@
   5014 passed, 2 skipped in 137.41s (0:02:17)
 ```
 
-口径: 根目录全量(`pytest.ini` 默认并行 + 覆盖率); wrapper 外层耗时 139.2s; 覆盖率闸 Windows 99.0(`tests/conftest.py` 单点)。与上基线的逐位差值看 `commands run kb.baseline -n 2`, 本文不手抄对比。
+口径: 根目录全量(`pytest.ini` 默认并行 + 覆盖率); wrapper 外层耗时 139.2s; 覆盖率闸 Windows 99.0(`tests/conftest.py` 单点)。
 
 工具包 `tools/global-traffic-monitor` 为独立口径(自带 `pyproject.toml` 门槛 88, 覆盖率分母只含 gtm 包), **不与主仓合算**; 本次另跑 `commands run test.gtm` 实测:
 
@@ -23,6 +23,8 @@
   TOTAL                   2600     25    694     16    99%
   550 passed, 2 skipped in 64.04s (0:01:04)
 ```
+
+- 口径见 [baseline.md](../baseline.md)。
 
 ## 本改动面
 

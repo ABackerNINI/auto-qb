@@ -13,7 +13,8 @@ TOTAL                                                21828    164   7394    127 
 4347 passed, 10 skipped in 174.42s (0:02:54)
 ```
 
-口径: 全量 pytest 含覆盖率报表; 相对上基线逐位对比不写, 看差值 `commands run kb.baseline -n 2`。
+- 口径见 [baseline.md](../baseline.md)。
+
 W1 期基线(plan 26-11-01-0106): 本期新增守阵 1 条(退役键升级提示面, 见下), 上基线其余增量来自 W1-A 前半段改写与同步。skipped 与上条切片同环境口径(node/平台性跳过)。
 
 ## 本改动面

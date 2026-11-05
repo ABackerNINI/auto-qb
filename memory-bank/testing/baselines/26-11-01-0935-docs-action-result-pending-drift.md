@@ -12,7 +12,8 @@ TOTAL                                                22482    179   7708    151 
 ```
 
 - 口径: `commands run test.full`（uv run pytest tests -q，带覆盖率；pytest.ini 默认 -n 4），2026-11-01 09:33 本机实测。
-- 相对上基线的逐位对比不写（看 `commands run kb.baseline -n 2`）。
+
+- 口径见 [baseline.md](../baseline.md)。
 
 ## 本改动面
 

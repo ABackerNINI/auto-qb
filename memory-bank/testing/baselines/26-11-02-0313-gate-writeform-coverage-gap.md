@@ -15,7 +15,8 @@
 - **两处闸门红根因与修法**:
   - ① `test_md_no_mixed_line_endings`: 10 个 2026-09 旧 task `.md` 在工作树内 `CRLF xN + LF x1` 混排(HEAD blob 为纯 LF、`git diff` 为空); 按仓库 `.gitattributes` 的 `eol=lf` 口径做字节级归一 `read_bytes().replace(b"\r\n", b"\n")`, 零内容改动; 修后 4 条写盘形态守卫全过。
   - ② 覆盖率 98.96% → 99.08%: 真实缺口在 `src/auto_qb/transfer/adapters/qb.py` 的 orchestrator 扩展点(`find_torrent` / `pause_torrent`, 此前完全无测试)与六条错误分支; 在 `tests/test_transfer_adapters.py` 新增 11 条守阵(每条在文件头「测试计划」登记), 非凑数断言。既非统计口径失真也非生成物导致, 不删测试。
-- 相对上基线逐位对比不写, 看差值 `commands run kb.baseline -n 2`
+
+- 口径见 [baseline.md](../baseline.md)。
 
 ## 本改动面
 

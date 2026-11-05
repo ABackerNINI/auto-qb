@@ -16,8 +16,9 @@ TOTAL                                                22521    134   7726    128 
 定向单文件 `tests/test_relocate_units.py`: 45 passed。
 
 注记: 首跑曾因 gitignored 的 `tmp-analysis/w2b-save` 旧全量仓库副本被 `test_free_port_single_source` 的
-`rglob` 扫到而红(环境残留, 非代码缺陷); 把该旧副本移出仓库后复跑本条数字。相对上基线逐位对比不写,
-看差值 `commands run kb.baseline -n 2`。
+`rglob` 扫到而红(环境残留, 非代码缺陷); 把该旧副本移出仓库后复跑本条数字。
+
+- 口径见 [baseline.md](../baseline.md)。
 
 ## 本改动面
 

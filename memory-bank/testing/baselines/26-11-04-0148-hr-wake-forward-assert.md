@@ -14,9 +14,11 @@
   5038 passed, 2 skipped in 153.97s (0:02:33)
 ```
 
-口径: 根目录全量(`pytest.ini` 默认并行 + 覆盖率); wrapper 外层耗时 156.5s; 覆盖率闸 Windows 99.0(`tests/conftest.py` 单点)。与上基线的逐位差值看 `commands run kb.baseline -n 2`, 本文不手抄对比。上基线(deps-upgrade, 26-11-04 01:33)TOTAL 表逐位相同 —— 本轮纯测试内改动, 源码零变化。
+口径: 根目录全量(`pytest.ini` 默认并行 + 覆盖率); wrapper 外层耗时 156.5s; 覆盖率闸 Windows 99.0(`tests/conftest.py` 单点)。上基线(deps-upgrade, 26-11-04 01:33)TOTAL 表逐位相同 —— 本轮纯测试内改动, 源码零变化。
 
 定向旁证: `commands run test.one -- tests/test_hr_runtime_feeder.py` 全文件 26 passed; 红验时掐掉 `runtime.wake` 转发后新断言在 `tests/test_hr_runtime_feeder.py:286` 必红, 还原实现后复绿(实现零残留, git diff 只含测试与 KB 件)。
+
+- 口径见 [baseline.md](../baseline.md)。
 
 ## 本改动面
 

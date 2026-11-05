@@ -13,7 +13,9 @@ TOTAL                                                22523    152   7728    134 
 4886 passed, 10 skipped, 3 warnings in 189.43s (0:03:09)
 ```
 
-口径: 根目录全量(Windows 并行 `-n 8` + 覆盖率); 与上基线的逐位差值看 `commands run kb.baseline -n 2`, 本文不手抄对比。
+口径: 根目录全量(Windows 并行 `-n 8` + 覆盖率)。
+
+- 口径见 [baseline.md](../baseline.md)。
 
 ## 本改动面
 
@@ -21,4 +23,3 @@ TOTAL                                                22523    152   7728    134 
 - `tests/test_episodes.py`: 新增参数化 `test_episode_path_directory_stripped`(目录段不参与集数解析, 4 种路径形态)
 - `tests/test_speed_curve.py`: `test_normalize_period_aliases` 补 `normalize_period("D")`; `test_parse_history_dat_bad_lines` 改为两条格式坏行 + 两条非法日期行(`bad == 4`); `test_merge_direction_and_bytes_to_kib` 补 `merge_direction([0, 1]) == 1`
 - 零 src 改动; 4 件 W3 `test` issue 结清, 对应存活变异内存红验全杀
-

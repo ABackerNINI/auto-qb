@@ -197,7 +197,7 @@ def _print_remaining(family: str, slots: list[str]) -> None:
             "report": "报告出厂即 Done (快照完成即终态); 改版直接编辑正文 —— "
                       "kb.bump 对无变更记录段的件 fail-fast 指路",
             "baseline": "--total 已由 test.full 实测誊写 (裁定 A4, 命令不编造数字); "
-                        "裸数字只写基线切片这一处 (相对上基线逐位对比不写, 看 kb.baseline -n 2)",
+                        "裸数字只写基线切片这一处 (口径与差值口径见 testing/baseline.md, 不重复口径样板)",
             "progress": "迁出蒸馏的落点件; 分节与详略自定, 骨架段可裁可增",
         }
         print("剩余人工 1 项(判断 1 · 条件 0 · 机械 0)")

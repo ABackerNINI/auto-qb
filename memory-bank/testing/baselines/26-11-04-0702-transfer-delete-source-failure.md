@@ -8,7 +8,9 @@
 
 - 汇总行: `5146 passed, 2 skipped in 197.01s (0:03:17)`(2026-11-04 本机 Windows 实测, `commands run test.full` 一次性绿)
 - 覆盖率 TOTAL: `23943 stmts / 210 miss / 8186 branch / 164 partial / 99%`(终端默认整数精度)
-- 口径注记: 等价 test.full 展开(`-n 8 --cov=src --cov-report=term-missing --cov-branch`); 相对上基线逐位对比看 `commands run kb.baseline -n 2`
+- 口径注记: 等价 test.full 展开(`-n 8 --cov=src --cov-report=term-missing --cov-branch`)。
+
+- 口径见 [baseline.md](../baseline.md)。
 
 ## 本改动面
 

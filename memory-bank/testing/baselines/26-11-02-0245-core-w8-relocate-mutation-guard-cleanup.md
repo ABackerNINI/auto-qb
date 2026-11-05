@@ -14,7 +14,9 @@
 - 红验(本轮守阵): Issue A `tmp-analysis/w8fix/redverify_tag.py` **4/4 RED** + 还原 GREEN; Issue B `…/redverify_issueb.py` **8/8 RED** + 还原 GF/SJ 双 GREEN
 - 变异池复跑(WSL 镜像 `~/auto-qb-mut-w8fix`, mutmut 3.8.1, `--no-refresh --no-sync`): relocate_mod.py **3006 变异 / 杀 2503 / 存活 503 / 超时 0 / no tests 0**; 存活集对差 518→503 = **新杀 15 / 新增存活 0**
 - **环境 / 工具**: Windows 本机(win32)· Python 3.13 · pytest-xdist 8 workers · `TMPDIR` 由 `test.full` 包内内置(不手工加前缀)
-- **口径注记(两条红 gate 均为既有、与本轮无关, 范围外不修)**: ①`test_md_no_mixed_line_endings` 报 10 个 2026-09 旧 task `.md` 工作树内 `CRLF xN + LF x1` 混排(HEAD blob 为纯 LF、`git status` 不显, 非本轮文件); ②覆盖率 98.97% 差 99.0% 门槛 —— 本轮 `src/` 零改动, 且上一片 `26-11-02-0059` 在相同 TOTAL 曾判达标, 属测量/并行抖动。相对上基线逐位对比不写, 看差值 `commands run kb.baseline -n 2`。
+- **口径注记(两条红 gate 均为既有、与本轮无关, 范围外不修)**: ①`test_md_no_mixed_line_endings` 报 10 个 2026-09 旧 task `.md` 工作树内 `CRLF xN + LF x1` 混排(HEAD blob 为纯 LF、`git status` 不显, 非本轮文件); ②覆盖率 98.97% 差 99.0% 门槛 —— 本轮 `src/` 零改动, 且上一片 `26-11-02-0059` 在相同 TOTAL 曾判达标, 属测量/并行抖动。
+
+- 口径见 [baseline.md](../baseline.md)。
 
 ## 本改动面
 
