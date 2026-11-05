@@ -52,7 +52,9 @@ def _gate_env(monkeypatch, *, host="127.0.0.1", port=8080):
     R:/ 桩路径本机不可 stat => B' 不可判定; client=object() 无列目录端点 => D 不可判定;
     于是 same_fs_proved=False, 执行闸必然消费探测缓存/触发 run_probe(替身)。
     """
-    _fake_fs(monkeypatch, free=1 << 40)
+    # 0808 S1 源侧三态起: 桩路径下声明的源文件按「在」呈现(exists_true_prefixes),
+    # 否则三态判「缺失」抢在探测闸前拒绝 —— 本文件验证的是探测闸, 不是三态
+    _fake_fs(monkeypatch, free=1 << 40, exists_true_prefixes=("R:/src", ))
     _stub_cap(monkeypatch, file_kind="hardlink")
     recs = {}
     for h in ("HA", "HB"):

@@ -19,7 +19,7 @@ P1 只做配置面: RelocateConfig + loader + KNOWN_RELOCATE_KEYS 校验 + schem
 - test_relocate_load_config_explicit_values: 显式 YAML 值按 parse_* 语义进入 Config(含时间/大小)
 - test_relocate_section_absent_uses_defaults: 配置里没有 relocate 段时走字段默认
 - test_relocate_non_dict_section_rejected: 段形状守卫 —— 缺省(None)静默走默认; 非字典报「必须是字典」并停在该层(不跑逐键校验)
-- test_relocate_module_claims_section: RelocateModule.sections() == ("relocate",)(段认领完备守阵的模块侧)
+- test_relocate_module_claims_section: RelocateModule.sections() == ("relocate", "bt_backup")(段认领完备守阵的模块侧; bt_backup 计划 26-11-05-0808 S1)
 - test_relocate_module_apply_short_circuits: apply 段相等短路(零回执); 段变化换对象即生效
 - test_relocate_module_start_stop_no_side_effect: 即使 enabled=true, P1 start/stop 也无任务无链接
 - test_relocate_module_registered_in_host
@@ -209,10 +209,11 @@ def test_relocate_non_dict_section_rejected():
 
 
 def test_relocate_module_claims_section():
-    """RelocateModule.sections() 认领 relocate 段(段认领完备守阵的模块侧前提)"""
+    """RelocateModule.sections() 认领 relocate + bt_backup 段(段认领完备守阵的模块侧前提;
+    bt_backup 计划 26-11-05-0808 S1 由预检部署闸消费)"""
     from auto_qb.core.modules.relocate_mod import RelocateModule
 
-    assert RelocateModule().sections() == ("relocate", )
+    assert RelocateModule().sections() == ("relocate", "bt_backup")
 
 
 def test_relocate_module_apply_short_circuits():

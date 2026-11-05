@@ -146,6 +146,7 @@ def _fake_fs(
     monkeypatch,
     *,
     exists=False,
+    exists_true_prefixes=(),
     scandir=None,
     scandir_boom=False,
     free=1 << 40,
@@ -154,10 +155,21 @@ def _fake_fs(
     sizes=None,
     boom_sizes=()
 ):
-    """可控文件系统替身: 只覆盖 relocate_mod 消费的五个面(exists/scandir/disk_usage/realpath/getsize)"""
+    """可控文件系统替身: 只覆盖 relocate_mod 消费的五个面(exists/scandir/disk_usage/realpath/getsize)
+
+    exists_true_prefixes(0808 S1 源侧三态起): 命中前缀的路径 exists 判 True —— 桩路径
+    (R:/src 等)下声明的源文件按「在」呈现, 其余路径仍按 exists 基值; 不给 = 行为与旧版
+    逐字节一致。三态检查要求声明文件在盘, 桩环境用本参数声明源侧存在性。
+    """
+    prefixes = tuple(exists_true_prefixes or ())
+
     class _FA:
         def exists(self, path):
-            return False if path is None else exists
+            if path is None:
+                return False
+            if prefixes and str(path).startswith(prefixes):
+                return True
+            return exists
 
         def scandir(self, path):
             if scandir_boom:

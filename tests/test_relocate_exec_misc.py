@@ -32,6 +32,7 @@
 - test_recover_dispatch_faces: 恢复四分派(moving/补发/不补发/RESUME)
 - test_misc_low_contract_faces: on_task_line 守卫/异常账面/_fail 文案/武装与收口实参/纵深单层
 - test_precheck_receipt_contract_and_add_param: 预检拒收回执契约 + 添加预检空参
+  (26-11-05-0808 S1 起 happy-path 前须配置可达 bt_backup, 见用例内注)
 
 覆盖率第三轮 T2b 补测(26-11-05):
 - test_arm_and_finish_direct_without_grouping_ctx: ctx 无 grouping 模块 -> 重归组段整段跳过, 落账/guardian/恢复照旧(260->266/278->283)
@@ -514,7 +515,10 @@ def test_precheck_receipt_contract_and_add_param(tmp_path, monkeypatch):
 
     # 正常预检: 文件表必须进事实(读空 = 形态判定失真) + 汇总审计;
     # 换对 None client 真抛的记录 —— FakeTorrent 惰性缓存会让 client=None 变异不可区分(rp_108)
+    # (计划 26-11-05-0808 S1 起, 预检前置部署闸: bt_backup 须指到真实目录才放行;
+    # FakeClient 偏好无 resume_data_storage_type = SQLite 选项出现前的 qB, 按 Legacy 放行)
     _stub_cap(monkeypatch, file_kind="hardlink")
+    mgr.config.bt_backup[f"{mgr.config.qbittorrent.host}:{mgr.config.qbittorrent.port}"] = str(tmp_path)
     for h in ("HA", "HB"):
         mgr.store.by_hash[h] = types.SimpleNamespace(
             hash=h,

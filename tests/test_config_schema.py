@@ -142,7 +142,7 @@ def test_notify_channels_hidden_from_ui_but_kept_in_contract():
     仍提示有改动未保存"), 又被校验层以「必须是非空列表」拒绝保存。处置 = 打 Field.hidden
     (不进 UI 渲染), **不是**从 schema 摘字段。
 
-    四面(少一条就会以另一种方式复发):
+    四面(少一条就会以另一种方式复发; hidden 声明面后来扩到五处, 见下方断言文案):
     1. schema 的 notify 子字段里**仍有** channels 且 hidden=True —— 键面守卫
        (test_config_key_surface)以 schema 为键面单点, 直接摘字段会被判成"删键"(破坏性变更:
        抬版本 + 注册迁移), 而本次根本没有改配置契约;
@@ -172,11 +172,13 @@ def test_notify_channels_hidden_from_ui_but_kept_in_contract():
                 walk(f.fields or ())
 
         walk((top, ))
-    assert sorted(hidden) == ["channels", "ctx_menu", "skip_check_menu", "transfer"], (
-        f"hidden 声明面变了({sorted(hidden)}) —— 合法隐藏键只有四处: "
+    assert sorted(hidden) == ["bt_backup", "channels", "ctx_menu", "skip_check_menu", "transfer"], (
+        f"hidden 声明面变了({sorted(hidden)}) —— 合法隐藏键只有五处: "
         "channels(UI 表达不出差异, 见报障 2026-10-10) / web.ctx_menu(设置页新卡「WebUI」客户端块编辑, 计划 26-10-20-0024) / "
         "web.skip_check_menu(同卡迁入的跳检开关, W4 D6) / web.transfer(种子转移 targets 列表结构, "
-        "设置页「WebUI」卡目标编辑器承担, 计划 26-10-31-0306 W1)"
+        "设置页「WebUI」卡目标编辑器承担, 计划 26-10-31-0306 W1) / "
+        "bt_backup(各 qB 实例 BT_backup 路径表, 键为用户自定 host:port 的动态映射, 通用编辑树表达不了, "
+        "计划 26-11-05-0808 S1)"
     )
 
     assert "channels" in KNOWN_NOTIFY_KEYS, "KNOWN_NOTIFY_KEYS 丢了 channels —— 存量配置里的该键会变成'未知键'"

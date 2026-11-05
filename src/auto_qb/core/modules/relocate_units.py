@@ -24,7 +24,7 @@
 import os
 from dataclasses import dataclass, field
 from types import MappingProxyType
-from typing import Any, Mapping, Optional, Sequence, Tuple
+from typing import Any, Iterable, Mapping, Optional, Sequence, Tuple
 
 # ---------------------------------------------------------------- 常量
 
@@ -55,6 +55,13 @@ GATE_PLATFORM = "platform"  # §3.3 能力矩阵不支持(跨 OS 容器 / 无链
 GATE_HARDLINK = "hardlink"  # 组文件是第三方硬链接(st_nlink > 1, D11 拒迁)
 GATE_THIRD_PARTY_LINK = "third_party_link"  # 组文件是第三方文件级链接(D11 拒迁)
 GATE_FORM = "form"  # 形态分流本身的拒绝/需确认(plan() 产出)
+# fastresume 收尾链(计划 26-11-05-0808 S1)五闸(§3.1 预检行; 嵌套/三态继承 0546 机制判定):
+GATE_AUTO_TMM = "auto_tmm"  # 组内有 AutoTMM 成员(fastresume 无 qBt-savePath 键, N8 实测, 改写不生效)
+GATE_BACKEND = "backend"  # qB fastresume 存储后端非 Legacy(部署矩阵 E 格: SQLite 无 fastresume 文件, D2/D4 fail-fast 禁用)
+GATE_BT_BACKUP = "bt_backup"  # BT_backup 路径未配置/不可达不可写(部署矩阵 D 格)
+GATE_NESTED = "nested"  # 嵌套目标: target 位于成员声明源或活跃 job 声明源/目标之下(0546 机制③, 成分级 E2.3)
+GATE_SOURCE_MISSING = "source_missing"  # 源侧三态之缺失: 声明文件原名与 .!qB 孪生都不在(0546 机制①/E2.2 零搬移假成功)
+GATE_SOURCE_UNKNOWN = "source_unknown"  # 源侧三态之不可判定: exists 探测判不了(容器映射 miss, 保守拒同 target_unknown 口径)
 
 # job 相位机(§3.5; 主干单向推进, 旁支 terminal)
 PHASE_MOVING = "moving"
@@ -422,10 +429,54 @@ class GroupFacts:
     third_party_link_files: Tuple[str, ...] = ()
     hardlink_files: Tuple[str, ...] = ()
     third_party_dir_note: str = ""
+    # 组内 AutoTMM 成员 hash(计划 26-11-05-0808 S1): auto_tmm=true 的成员 fastresume 无
+    # qBt-savePath 键(N8 实测), 改写收尾对它不生效 => 有即整组拒迁(evaluate_group 闸门)
+    auto_tmm_hashes: Tuple[str, ...] = ()
+    # 全成员声明源(0546 机制③「全成员覆盖」; 空 = 回落 mover 的 save_path, 兼容既有构造)
+    member_save_paths: Tuple[str, ...] = ()
+    # 源侧三态检查(0808 S1 继承 0546 机制①, 逐声明文件、深层天然覆盖): 只收「缺失」与
+    # 「不可判定」两态; .!qB 孪生态并入 qb_temp_entries(复用既有 GATE_QB_TEMP, 不另造闸)
+    source_missing_files: Tuple[str, ...] = ()  # 原名与 .!qB 孪生都不在(数据藏走 -> 零搬移假成功, E2.2)
+    source_unknown_files: Tuple[str, ...] = ()  # exists 不可判定(容器映射 miss, D2 按 target_unknown 同款保守拒)
 
 
 def _reason(gate: str, cls: str, text: str) -> dict:
     return {"gate": gate, "cls": cls, "text": text}
+
+
+def nested_target_on(target: str, save_paths: Iterable[str], jobs: Sequence["RelocateJob"]) -> str:
+    """嵌套目标判定(计划 26-11-05-0808 S1 继承 0546 机制③; E2.3 成分级判据 8/8): 命中返回拒绝文案, "" = 放行
+
+    target 位于下列任一路径**之下**即嵌套(成分级比较: _within 以分隔符为界 —— 兄弟目录
+    (待删2)/前缀同串(待删除)/尾斜杠不误伤, 父目录方向不判, 大小写按 _norm 平台口径折叠):
+    - 任一成员的声明源 save_path(0546「全成员覆盖」; 目标嵌进自己源树 = qB 把数据搬进
+      原目录内部, 别名与收尾语义全破);
+    - 任一**非终态** job 的声明源 src(别名作用域: 落点写入穿别名重定向进旧 job 目标)或
+      声明目标 dst(旧 job 后续收尾/再迁会连带这片目录; 恰等于 dst 不算嵌套 —— 两组落
+      同一根各放各的内容, 不是嵌套形态)。
+    等于成员源自身 = 幂等迁移, 已由 evaluate_group 幂等分支先行返回, 本函数不特判。
+    """
+    t = _norm(target)
+    if not t:
+        return ""
+    for sp in save_paths or ():
+        if _within(sp, target):
+            return (
+                f"目标位于组成员声明源之下({target} ⊆ {sp}): 目标嵌在迁移源内部, qB 会把数据搬进自己"
+                "原来的目录树, 别名与收尾语义全破 —— 请选源之外的独立目录(0546 E2.3 成分级判据)"
+            )
+    for job in jobs or ():
+        if job.is_terminal:
+            continue
+        if _within(job.src, target):
+            return (
+                f"目标位于在途迁移 job {job.job_id} 的声明源之下({target} ⊆ {job.src}): 该目录现在是活动"
+                "别名的作用域, 落进去的写入会被重定向进旧 job 的目标 —— 请等旧迁移收尾或换目标"
+            )
+        if _norm(target) != _norm(job.dst) and _within(job.dst, target):
+            return (f"目标位于在途迁移 job {job.job_id} 的声明目标之下({target} ⊆ {job.dst}): 旧 job 后续收尾"
+                    "或再迁移会连带这片目录 —— 请换独立目标")
+    return ""
 
 
 def evaluate_group(facts: GroupFacts) -> dict:
@@ -483,6 +534,37 @@ def evaluate_group(facts: GroupFacts) -> dict:
             "target_free": facts.target_free,
             "same_volume": facts.same_volume,
         }
+
+    # ---- AutoTMM 成员闸门(计划 26-11-05-0808 S1, §2.2「AutoTMM 成员」行) ----
+    # auto_tmm=true 的成员 fastresume 不落 qBt-savePath 键(N8 实测 55 vs 57 键), 双键改写
+    # 对它无从生效 —— 有即整组拒迁; 全组成员手动管理是收尾链的硬前提(部署无关, 组级闸门)。
+    if facts.auto_tmm_hashes:
+        _block(
+            GATE_AUTO_TMM, "成员由 qB 自动管理(AutoTMM: " + ", ".join(h[:8] for h in facts.auto_tmm_hashes[:3]) +
+            "): 其 fastresume 无 qBt-savePath 键, 改写收尾不生效 —— 请先在 qB 里改为手动管理或把它移出该组"
+        )
+
+    # ---- 嵌套目标闸门(0546 机制③, 成分级; 全成员 + 活跃 job 源/目标, 0808 S1 继承) ----
+    nested = nested_target_on(facts.target, facts.member_save_paths or (facts.save_path, ), facts.jobs)
+    if nested:
+        _block(GATE_NESTED, nested)
+
+    # ---- 源侧三态之缺失/不可判定(0546 机制①; .!qB 孪生态已并入 qb_temp_entries 走上方既有闸) ----
+    # 缺失 = 数据已不在这两个名字下(qB 搬迁对 stat 不到的源文件忽略并算成功, storage_utils.cpp:151,
+    # E2.2 实证零搬移假成功); 不可判定 = 容器映射 miss, 按 target_unknown 同款保守拒(D2)。
+    if facts.source_missing_files:
+        names = facts.source_missing_files
+        shown = ", ".join(names[:3]) + (f" 等共 {len(names)} 个" if len(names) > 3 else "")
+        _block(
+            GATE_SOURCE_MISSING, f"源文件缺失({shown}): 声明文件在源盘既不在原名也不在 .!qB 孪生名下 —— "
+            "qB 搬迁对读不到的源文件会忽略并算成功, 迁移只会零搬移假成功; 请先核对数据现场(找回或重种)后再迁"
+        )
+    if facts.source_unknown_files:
+        _block(
+            GATE_SOURCE_UNKNOWN, "源侧存在性不可判定(" + ", ".join(facts.source_unknown_files[:3]) +
+            "): 容器映射未覆盖或探测失败 —— 不可判定一律拒绝(与目标侧 target_unknown 同口径), "
+            "请检查 fs.path_map 是否覆盖源位置"
+        )
 
     # ---- 完成度 / qB 搬迁态 ----
     for h, p in zip(facts.hashes, facts.progresses):

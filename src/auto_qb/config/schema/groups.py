@@ -48,6 +48,21 @@ GROUPS: Tuple[Group, ...] = (
                     ),
                 )
             ),
+            # bt_backup(各 qB 实例 BT_backup 路径表, 计划 26-11-05-0808 S1): 与 qbittorrent 连接段
+            # 同级的顶层键。qB 的 WebAPI 不暴露 BT_backup 路径, 只能按实例在 YAML 声明; 键 = qB 连接
+            # 身份 "host:port"(与 qbittorrent 段的 host/port 一致), 值 = 该实例 BT_backup 目录路径。
+            # 打 hidden 而不是渲染成通用表单: 键是用户自定的动态映射(与 trackers 站点段同性质),
+            # 通用编辑树表达不了 —— 键仍在配置契约里(校验接受 / loader 读取), 摘掉会被键面守卫判成"删键"。
+            Field(
+                "bt_backup",
+                "BT_backup 路径表",
+                "object",
+                hidden=True,
+                help="各 qB 实例的 BT_backup 目录(fastresume 收尾用): 在 YAML 里按 "
+                "{\"host:port\": \"<该实例的 BT_backup 目录>\"} 声明(键 = qbittorrent 连接配置的身份, "
+                "值 = qB profile 下 data/BT_backup 的本机路径); 当前连接实例查不到条目 = fastresume "
+                "收尾功能整体不启用(迁移预检给结构化拒绝, 其余功能不受影响)",
+            ),
             Field(
                 "main_tick",
                 "主循环间隔",

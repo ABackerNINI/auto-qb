@@ -733,6 +733,32 @@ def _validate_relocate_pending_tag(raw: Any, errors: List[str]) -> None:
         errors.append(f"config.relocate.pending_tag: 不能含逗号(qB 标签分隔符): '{raw}'")
 
 
+def _validate_bt_backup(spec: Any, errors: List[str]) -> None:
+    """校验 config.bt_backup(各 qB 实例 BT_backup 路径表, 计划 26-11-05-0808 S1)
+
+    形状: {"host:port": "该 qB 实例的 BT_backup 目录路径"}。键 = qB 连接身份(预检按
+    qbittorrent 连接配置的 host:port 查表, 命不中 = 该实例功能未启用), 值 = 非空路径
+    字符串。动态映射段(键由用户按实例自定), 无固定子键集 —— 逐条把关: 键须含 host 与
+    port 两段且端口在 1-65535(永不可能命中的死键在配置期拦下, fail-fast), 值须为非空
+    字符串。整段缺省合法 = fastresume 收尾功能整体未启用(预检给结构化拒绝, 不在启动期
+    报错 —— 黄金法则 2 保守默认); 显式留空的键/值已被 _strip_none 剥除(= 未配置)。
+    """
+    if spec is None:
+        return
+    if not isinstance(spec, dict):
+        errors.append("config.bt_backup: 必须是字典(键 = qB 连接身份 host:port, 值 = 该实例的 BT_backup 目录路径)")
+        return
+    for key, value in spec.items():
+        where = f"config.bt_backup[{key!r}]"
+        host, _, port = str(key).strip().rpartition(":")
+        if not host or not port:
+            errors.append(f"{where}: 键须为 'host:port'(与 qbittorrent 连接配置的 host/port 一致)")
+        else:
+            _try_port(port, f"{where} 端口", errors)
+        if not isinstance(value, str) or not value.strip():
+            errors.append(f"{where}: 值必须是非空路径字符串")
+
+
 def _validate_tag_lists(cfg: dict, errors: List[str]) -> None:
     """delete_tags / delete_tags_if_has_no_torrents: 字符串列表 + regex: 前缀可编译"""
     for key in ("delete_tags", "delete_tags_if_has_no_torrents"):

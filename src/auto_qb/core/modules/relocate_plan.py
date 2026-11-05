@@ -6,6 +6,7 @@ import os
 import stat
 from typing import Any, Iterable, List, Optional, Tuple
 
+from ...config.models import bt_backup_path_of
 from ...infra import alias_fs, file_access, utils
 from ...infra.alias_fs import KIND_SYMLINK
 from ...infra.file_access import FileAccess
@@ -34,6 +35,91 @@ from .relocate_common import (
 )
 
 
+def is_legacy_resume_storage(raw: Any) -> bool:
+    """qB resume_data_storage_type 是否 Legacy 文件后端(计划 26-11-05-0808 S1, D2 运行时检测)
+
+    WebAPI app/preferences 直读: qB 4.6+ 返回整数(0 = Legacy 文件, 1 = SQLite); 容错接受
+    "legacy" 字样。键缺失/空 = SQLite 选项出现之前的 qB, 只有文件后端, 按 Legacy 放行
+    (后端检测拦的是「存在但非 Legacy」, 不是「读不到版本特征」; 读不到偏好整体属连接
+    故障, 由调用方 fail-closed 另行拒绝)。
+    """
+    if raw is None:
+        return True
+    text = str(raw).strip().lower()
+    if not text:
+        return True
+    return text in ("0", "legacy")
+
+
+def probe_bt_backup_reject(path: str) -> str:
+    """BT_backup 目录可达可写探测(计划 26-11-05-0808 S1, 部署矩阵 D 格): 返回拒绝文案, "" = 通过
+
+    最保守探测方案(任务拍板): 只做存在性(os.path.isdir)+ 权限位(os.access R_OK|W_OK),
+    **不往目录里写探测文件** —— BT_backup 是 qB 私有账本目录, 运行期零写入是 N1 实测
+    (0.5s 覆盖)换来的铁律, 预检的只读承诺(T20)也不含任何写入。已知局限按保守方向接受:
+    Windows os.access 只查只读属性不验 ACL —— 误报拒(目录被打只读属性/ACL 收紧)会给出
+    明确文案由用户核实; 漏报放(探测通过但真实写入失败)由 S2 编辑器原子写失败兜底告警,
+    不会静默半效。Windows 长路径经 add_long_path_prefix_for_win 前缀(与本叶既有探测同款)。
+    """
+    p = str(path or "").strip()
+    if not p:
+        return "BT_backup 路径为空(config.bt_backup 配了空值)"
+    full = utils.add_long_path_prefix_for_win(p)
+    if not os.path.isdir(full):
+        return (
+            f"BT_backup 目录不存在({p}): 请核对 qB profile 下 data/BT_backup 的实际位置"
+            "(--profile 便携实例路径不同; 部署矩阵 D 格 fail-fast 禁用)"
+        )
+    if not os.access(full, os.R_OK | os.W_OK):
+        return (f"BT_backup 目录不可读写({p}): auto-qb 运行身份需要读写权限"
+                "(docker qB 需卷映射 + uid 对齐; 部署矩阵 D 格 fail-fast 禁用)")
+    return ""
+
+
+def _source_three_states(save_path: str, names: Iterable[str], unwanted: Any,
+                         fa: FileAccess) -> Tuple[List[str], List[str], List[str]]:
+    """源侧三态逐声明文件判定(计划 26-11-05-0808 S1 继承 0546 机制①/D2; E2.1/E2.2 实证判据)
+
+    对每个声明名(按 files API 声明路径逐文件 stat, 深层路径天然覆盖 —— 现行 GATE_QB_TEMP
+    的内容根**顶层**扫描漏深层孪生, E2.1 漏拦面即此): -> (缺失, 不可判定, .!qB 孪生)
+    - exists(声明名) True = 「在」(放行);
+    - False 且 exists(声明名 + .!qB 孪生) True = 「.!qB 态」(未落定, 孪生名归入第三表 ——
+      收集侧并入 GroupFacts.qb_temp_entries, 复用既有 GATE_QB_TEMP 闸, 不另造 gate id);
+    - 两个名字都不在 = 「缺失」(GATE_SOURCE_MISSING; qB 搬迁对 stat 不到的源文件忽略并算
+      成功, storage_utils.cpp:151 —— 数据已不在这两个名字下, 迁移只会零搬移假成功, E2.2);
+    - 任一 exists 不可判定(容器映射 miss) = 「不可判定」(GATE_SOURCE_UNKNOWN; D2 按现行
+      target_unknown 同款保守拒, 声明名判不了即不继续查孪生)。
+    unwanted(priority=0, 未勾选)文件不参与: 它们本就不落盘, 不是缺失形态(误报防线)。
+    """
+    missing: List[str] = []
+    unknown: List[str] = []
+    twins: List[str] = []
+    for n in names:
+        if n in unwanted:
+            continue
+        declared = _native(save_path, n)
+        try:
+            hit = fa.exists(declared)
+        except Exception:  # noqa: BLE001 - 单文件探测异常按不可判定(保守默认, 不猜)
+            hit = file_access.UNDETERMINED
+        if hit is file_access.UNDETERMINED:
+            unknown.append(n)
+            continue
+        if hit:
+            continue
+        try:
+            twin = fa.exists(_native(save_path, n + _QB_TEMP_SUFFIX))
+        except Exception:  # noqa: BLE001
+            twin = file_access.UNDETERMINED
+        if twin is file_access.UNDETERMINED:
+            unknown.append(n)
+        elif twin:
+            twins.append(n + _QB_TEMP_SUFFIX)
+        else:
+            missing.append(n)
+    return missing, unknown, twins
+
+
 class PlanMixin:
     def relocate_precheck(self, hashes: Iterable[str] | None, location: str = "") -> list:
         """整组迁移预检(只读 dry-run): 多选按组拆开逐组判定, 三分流供确认框摊开
@@ -46,6 +132,11 @@ class PlanMixin:
         返回 list[dict]: 逐组一条 + gone 种子逐条; 字段形状与跳检预检对齐
         (hashes/mover/name/save_path/target/form/cls/reasons/notes ...), summary 由
         WEB 命令层聚合(ok/confirm/blocked)。
+
+        部署维闸门(计划 26-11-05-0808 S1, 先于分组判定): 后端非 Legacy(E 格)/BT_backup
+        未配置或不可达(D 格) => 整个请求一条 blocked 回执(fail-fast, 不做降级双轨 D4)。
+        组级五闸(§3.1 预检行, evaluate_group): AutoTMM/嵌套目标(0546 机制③)/源侧三态
+        (0546 机制①, .!qB 态复用 GATE_QB_TEMP)+ 既有闸门照跑。
         """
         req = [str(h) for h in (hashes or []) if h]
         target = str(location or "").strip()
@@ -113,6 +204,9 @@ class PlanMixin:
                     }],
                 }
             ]
+        deployment_gate = self._deployment_gate(client, req)
+        if deployment_gate is not None:
+            return [deployment_gate]
 
         gone, groups = self._buckets(req)
         items.extend(gone)
@@ -121,6 +215,50 @@ class PlanMixin:
             items.append(evaluate_group(facts))
         logger.info(f"relocate | 迁移预检({len(req)} 个 hash -> {len(items)} 项): {self._summ(items)}")
         return items
+
+    def _deployment_gate(self, client: Any, hashes: List[str]) -> Optional[dict]:
+        """部署维闸门(计划 26-11-05-0808 S1, 部署矩阵 D/E 格): 后端 Legacy + BT_backup 可达
+
+        两道闸任一不过 = fastresume 收尾整链对该 qB 实例不可用 => 整个请求一条 blocked
+        回执(gate/text 与组级闸门同形, 结构化拒绝), 不做降级双轨(D4: 旧链已证伪, 无双轨可退)。
+        只读承诺不变: 后端经 app/preferences 直读, BT_backup 只做存在性 + os.access 探测, 零写入。
+        """
+        # ---- E 格: 存储后端必须 Legacy(D2: app/preferences 直读 resume_data_storage_type) ----
+        try:
+            prefs = client.app_preferences() or {}
+        except Exception as e:  # noqa: BLE001 - 读不到偏好无法确认后端: fail-closed(保守默认)
+            return self._deployment_block(
+                hashes, ru.GATE_BACKEND, f"无法读取 qB 偏好(app/preferences 失败: {e}): 无法确认 fastresume 存储后端 —— "
+                "收尾链要求 Legacy 文件后端, 按不可用拒绝(fail-closed)"
+            )
+        raw = prefs.get("resume_data_storage_type")
+        if not is_legacy_resume_storage(raw):
+            return self._deployment_block(
+                hashes, ru.GATE_BACKEND, f"qB fastresume 存储后端不是 Legacy(resume_data_storage_type={raw!r}): SQLite 后端没有 "
+                "BT_backup fastresume 文件, 改写收尾链整体不可用 —— 请在 qB 设置里把「恢复数据存储」切回 "
+                "Legacy 后重试(部署矩阵 E 格 fail-fast 禁用, 不做降级双轨)"
+            )
+        # ---- D 格: BT_backup 目录可达可写(路径表按当前 qB 实例查, 查表口径单点 bt_backup_path_of) ----
+        conf_root = getattr(self._ctx, "config", None)
+        path = bt_backup_path_of(conf_root) if conf_root is not None else ""
+        if not path:
+            qb = getattr(conf_root, "qbittorrent", None) if conf_root is not None else None
+            host = getattr(qb, "host", "?") if qb is not None else "?"
+            port = getattr(qb, "port", "?") if qb is not None else "?"
+            return self._deployment_block(
+                hashes, ru.GATE_BT_BACKUP, f"当前 qB 实例({host}:{port})未在配置键 config.bt_backup 声明 BT_backup 路径: fastresume "
+                f"收尾功能未启用 —— 请在配置文件 bt_backup 段按 {{\"{host}:{port}\": \"<BT_backup 目录>\"}} "
+                "声明后重试(整键缺省 = 功能不启用, 不影响其它功能)"
+            )
+        reject = probe_bt_backup_reject(path)
+        if reject:
+            return self._deployment_block(hashes, ru.GATE_BT_BACKUP, reject)
+        return None
+
+    @staticmethod
+    def _deployment_block(hashes: List[str], gate: str, text: str) -> dict:
+        """部署闸拒绝回执(与预检既有 early-return 同形: hashes/cls/reasons)"""
+        return {"hashes": list(hashes), "cls": CLS_BLOCKED, "reasons": [{"gate": gate, "text": text}]}
 
     def _buckets(self, req: List[str]) -> Tuple[List[dict], List[List[TorrentRecord]]]:
         """按组拆分(预检与执行共用): -> (gone 回执列表, 逐组 records 列表)
@@ -186,13 +324,28 @@ class PlanMixin:
         names = [n for n, _s in files]
         needed = sum(s for _n, s in files)
         hashes = tuple(r.hash for r in records)
+        member_save_paths = tuple(dict.fromkeys(str(r.save_path) for r in records))  # 全成员声明源(保序去重)
+
+        # ---- 源侧三态检查(0808 S1 继承 0546 机制①: 在/.!qB 孪生/缺失/不可判定, 逐声明文件) ----
+        # 未勾选(priority=0)文件不参与 —— 它们本就不落盘, 不构成缺失形态(误报防线);
+        # 文件表读不到时与 _file_map 同口径空转(缓存热, 二次调用零请求)。
+        qb_temp: List[Any] = []  # .!qB 未落定收集面(顶层扫描 + 深层孪生双源; 归属分类见下方 listing 块)
+        try:
+            unwanted = {
+                utils.path_normalize(str(f.name))
+                for f in mover.files(client) if getattr(f, "priority", 1) == 0
+            }
+        except Exception:  # noqa: BLE001 - 文件表读不到: 三态检查空转(与 _file_map 同保守口径)
+            unwanted = set()
+        source_missing, source_unknown, qb_temp_twins = _source_three_states(save_path, names, unwanted, fa)
+        qb_temp.extend(qb_temp_twins)  # 孪生态并入既有 qb_temp 收集面(复用 GATE_QB_TEMP, 深层补漏 E2.1)
 
         # ---- 内容根 listing(归属分类; 读不到 = 不可判定 = 不专属) ----
         exclusive: Optional[bool] = None
         # (三行拆开写只为逐个补注解; _classify_entries 回 List[Any], 故元素口径同 Any)
         misc: List[Any] = []
         external: List[Any] = []
-        qb_temp: List[Any] = []
+        # qb_temp 已在三态检查块初始化并先收了深层孪生(本 listing 块继续收顶层命中)
         if len(names) == 1 and "/" not in names[0]:
             content_root = save_path  # 单文件平铺: 内容根 = save_path
         else:
@@ -213,8 +366,9 @@ class PlanMixin:
             # 才进 qb_temp 硬拦面 —— 这是 GATE_INCOMPLETE 之外的磁盘态竞态兜底。
             qb_ext = [n for n in ext if n.endswith(_QB_TEMP_SUFFIX)]
             rest = [n for n in ext if not n.endswith(_QB_TEMP_SUFFIX)]
-            qb_temp = [n for n in qb_ext if n[:-len(_QB_TEMP_SUFFIX)] in own]
-            qb_stripped = [n[:-len(_QB_TEMP_SUFFIX)] for n in qb_ext if n not in qb_temp]
+            # extend 而非重绑: qb_temp 已先收了三态检查的深层孪生(0808 S1), 两源合并
+            qb_temp.extend(n for n in qb_ext if n[:-len(_QB_TEMP_SUFFIX)] in own)
+            qb_stripped = [n[:-len(_QB_TEMP_SUFFIX)] for n in qb_ext if n[:-len(_QB_TEMP_SUFFIX)] not in own]
             # belongs 单次扫描: rest 与剥后缀名一并送分类, 结果按名回流到带后缀原名
             misc, external = self._classify_entries(rest + qb_stripped, save_path, content_root, hashes, store, client)
             ext_set, misc_set = set(external), set(misc)
@@ -367,6 +521,10 @@ class PlanMixin:
             third_party_link_files=tp_files,
             hardlink_files=hl_files,
             third_party_dir_note=tp_dir_note,
+            auto_tmm_hashes=tuple(r.hash for r in records if bool(getattr(r, "auto_tmm", False))),
+            member_save_paths=member_save_paths,
+            source_missing_files=tuple(source_missing),
+            source_unknown_files=tuple(source_unknown),
         )
 
     def _same_fs_proof(

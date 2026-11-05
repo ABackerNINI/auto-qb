@@ -510,13 +510,27 @@ def test_relocate_module_same_fs_p3_semantics(tmp_path, monkeypatch):
     text2 = r2["text"]
     assert "fs.path_map" in text2 and "assume_shared" in text2
 
-    # 3. 不可判定(D 端点不可用 + 本机文件读不到)-> 多成员不再硬拦, note 转执行链强探测
+    # 3. 不可判定(D 端点不可用 + B′ 读不到)-> 多成员不再硬拦, note 转执行链强探测
+    # !0808 S1 源侧三态起(E2.2): 「声明文件不在盘」会以 source_missing 抢拦 —— 本场景的
+    # ghost 落盘成真文件(size 与声明一致, 三态判「在」), B′ 不可判定面改由 stat 桩承载
+    # (仅源路径炸; 真实部署对应 stat 成功面之外的权限/IO 边缘形态)。
     mgr3, client3, src3, dst3, content3, _ = relocate_env(tmp_path / "c", file_count=2, data_dir=False)
     ghost = [_fake_file("Show/ghost.mkv", 100)]
     client3.files_map["HA"] = list(ghost)
     client3.files_map["HB"] = list(ghost)
     for t in (mgr3.store.by_hash["HA"], mgr3.store.by_hash["HB"]):
         t._files = None
+    with open(os.path.join(src3, "Show", "ghost.mkv"), "wb") as f:
+        f.write(b"x" * 100)
+    _real_stat = os.stat
+
+    def _stat_boom(p, *a, **kw):
+        # 路径可能带 Windows 长路径前缀(\?\)(B′ 走 _prefixed), 用包含而非前缀匹配
+        if str(src3) in str(p):
+            raise OSError("stat 桩: B′ 不可判定形态")
+        return _real_stat(p, *a, **kw)
+
+    monkeypatch.setattr(os, "stat", _stat_boom)
     item3 = mgr3.host.get("relocate").relocate_precheck(["HA", "HB"], dst3)[0]
     assert item3["cls"] == "ok" and "same_fs" not in [r["gate"] for r in item3["reasons"]]
     assert any("一次性强探测" in n for n in item3["notes"]), item3["notes"]
@@ -536,12 +550,27 @@ def test_relocate_module_same_fs_p3_semantics(tmp_path, monkeypatch):
 def test_relocate_module_precheck_scandir_and_lstat_degraded(tmp_path, monkeypatch):
     """内容根 listing 失败 -> 不专属(目录别名不可用); 代表文件不可读 -> 识别降级 note"""
     mgr, client, src, dst, content, _ = relocate_env(tmp_path, file_count=2, data_dir=False)
-    # 文件表与磁盘不一致: 记录里的文件不在盘上 -> scandir 失败 + lstat 失败
+    # 文件表与磁盘不一致: 记录里的文件(ghost)不在盘上 -> scandir 只见别组/杂项 + lstat 失败
+    # !0808 S1 源侧三态起(E2.2): 「声明文件不在盘」会以 source_missing 抢拦 —— ghost 落盘
+    # 成真文件(size 与声明一致, 三态判「在」), 代表文件不可读面改由 lstat 桩承载(仅源路径炸),
+    # B′ 不可判定面同前例由 stat 桩承载。
     ghost = [_fake_file("Show/ghost.mkv", 100)]
     client.files_map["HA"] = list(ghost)
     client.files_map["HB"] = list(ghost)
     for t in (mgr.store.by_hash["HA"], mgr.store.by_hash["HB"]):
         t._files = None  # 失效惰性缓存, 重拉
+    with open(os.path.join(content, "ghost.mkv"), "wb") as f:
+        f.write(b"x" * 100)
+    _real_stat, _real_lstat = os.stat, os.lstat
+    # 路径可能带 Windows 长路径前缀(\?\)(_prefixed), 桩用包含而非前缀匹配
+    monkeypatch.setattr(
+        os, "stat", lambda p, *a, **kw: (_ for _ in ()).throw(OSError("stat 桩"))
+        if str(src) in str(p) else _real_stat(p, *a, **kw)
+    )
+    monkeypatch.setattr(
+        os, "lstat", lambda p, *a, **kw: (_ for _ in ()).throw(OSError("lstat 桩"))
+        if str(src) in str(p) else _real_lstat(p, *a, **kw)
+    )
     item = mgr.host.get("relocate").relocate_precheck(["HA", "HB"], dst)[0]
     # P3 同机闸门重排: 未证明(此处 B′ 也不可判定 —— ghost 文件 stat 不到)不再硬拦多成员组
     assert item["cls"] == "ok" and item["form"] == "file_links"  # 不专属 -> 逐文件

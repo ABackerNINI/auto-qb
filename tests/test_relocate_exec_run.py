@@ -820,8 +820,12 @@ def test_execute_branches_never_break_multi_group(tmp_path, monkeypatch):
 def test_execute_idempotent_faces_and_skip_contract(tmp_path, monkeypatch):
     """幂等三面与 skip 回执契约(re_99/108/115~138/141/143/145~166/197/199/201/208~211)"""
     pin_disk_usage(monkeypatch)
+    from auto_qb.infra import file_access as _fa_mod
+
+    _real_get_file_access = _fa_mod.get_file_access  # 桩前原件(下半段真盘环境恢复用)
     # client 丢失 = 「文件列表为空」全组误拒面: 正常路径必须 started(rec.files 不得吃缓存, re_99/171)
-    _fake_fs(monkeypatch, free=1 << 40)
+    # (0808 S1 源侧三态起: 桩路径下声明的源文件按「在」呈现, 免三态「缺失」抢拦 —— 见 probe_gate 同注)
+    _fake_fs(monkeypatch, free=1 << 40, exists_true_prefixes=("R:/src", ))
     _stub_cap(monkeypatch, file_kind="hardlink")
     recs9 = {}
     for h in ("HA", "HB"):
@@ -859,6 +863,10 @@ def test_execute_idempotent_faces_and_skip_contract(tmp_path, monkeypatch):
     # 探测替身直通(闸门自身的决策表已由 test_relocate_exec_probe_gate.py 覆盖)
     monkeypatch.setattr(rex, "run_probe", lambda ctx, src, dst: ProbeResult("passed", "ok", False, {}))
     assert mod9.relocate_execute(["HA", "HB"], "R:/dst")[0]["cls"] == "started"
+
+    # 下半段换真盘环境(relocate_env 真实文件): 摘掉上半段的桩 FS —— 三态检查按真 exists
+    # 判「在」(0808 S1); 桩 exists=False 对真路径会把声明文件全判缺失抢拦
+    monkeypatch.setattr(_fa_mod, "get_file_access", _real_get_file_access)
 
     mgr, client, src, dst, content, files = relocate_env(tmp_path / "idm", state="pausedUP")
     mod = mgr.host.get("relocate")

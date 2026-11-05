@@ -26,6 +26,7 @@
 | `download_fuse` | 默认关闭 | 已完成种子下载保险丝(计划 26-11-03-0456): `{enabled(false), download_limit("13KiB/s"), confirm_ticks(3), fuse_tag("zFusePaused")}`; 见下 |
 | `fs` | | 容器部署路径映射: `{path_map: [{from, to}]}`; 留空 = 现状, 改后需重启 |
 | `relocate` | 默认关闭 | 整组迁移(辅种组保存位置迁移, 计划 26-10-18-1604 §3.7), 见下; 热重载即生效(非 R 级) |
+| `bt_backup` | 默认空 = 不启用 | 各 qB 实例的 BT_backup 目录表(计划 26-11-05-0808 S1, fastresume 收尾): `{"<host>:<port>": "<该实例 BT_backup 目录路径>"}`; 键 = `qbittorrent` 连接配置的身份(host/port 与连接段一致), 值 = qB profile 下 `data/BT_backup` 的本机路径(qB WebAPI 不暴露该路径, 只能按实例声明)。当前连接实例查不到条目 = fastresume 收尾功能整体未启用(迁移预检给结构化拒绝, 其余功能不受影响); 校验: 键须为 `host:port` 且端口 1-65535, 值须为非空字符串, 聚合报错。设置页暂不图形化(hidden), 直接编辑 YAML |
 | `delete_tags` | [] | 彻底删除的标签格式 (支持 `regex:`, `:ignore_case`, `@tracker_tags` 引用) |
 | `delete_tags_if_has_no_torrents` | [] | 仅无种子使用时删除 |
 | `hr` | | 全局 HR 输出设置 (`add_tag`/`add_category`/`overwrite_category`/`add_tag_for_satisfied`/`add_category_for_satisfied`/`overwrite_category_for_satisfied`) + 排除表 `exclude_tags`/`exclude_categories`: 命中种子不纳入 HR 体系(不打标/不核实/规则按未触发, 压过 mode=all 等一切管束), 判定时现算, 不回撤存量, 与站点段并集(26-09-28-1805); **取数/对账侧同源(26-10-08-1249 方案 B, 2026-10-08 落地): 命中种子不进对账对象集 —— 不再阻碍 idle 稳态降频生效, 但仍参与命中识别(仍是该站的本地命中, 不因排除而多下 .torrent)**; 默认分类格式 `!!HR${required_seeding_time}!!` / `--HR${required_seeding_time}--`。站点覆盖链: 站点 `hr` 段对应键优先, 未配置回退本段; v4 起站点段 4 个 str 键(`add_tag`/`add_category`/`add_tag_for_satisfied`/`add_category_for_satisfied`)显式空串 = 「覆盖为空」(如本站不打标), 整键删除 = 跟随全局; **本段(全局)同名键的空串语义仍是「使用默认值」**(加载时剥掉) |

@@ -67,6 +67,7 @@ add_episode_tags
 add_episode_tags.add_tag_multi
 add_episode_tags.add_tag_single
 add_episode_tags.enabled
+bt_backup
 data_dir
 delete_tags
 delete_tags_if_has_no_torrents

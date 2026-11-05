@@ -50,9 +50,18 @@ class LifecycleMixin:
         return None
 
     def apply(self, old: "Config", new: "Config") -> ApplyResult:
-        """段相等短路; 段变化 = 换对象即生效(enabled 开时重探链接能力)"""
-        if getattr(old, "relocate", None) == getattr(new, "relocate", None):
+        """段相等短路; 段变化 = 换对象即生效(enabled 开时重探链接能力)
+
+        认领面含 bt_backup(计划 26-11-05-0808 S1): 预检部署闸经 bt_backup_path_of 现读
+        ctx.config(L0, 无缓存), 段变化换对象即生效 —— 这里只做「变化可感知」的回执,
+        不换缓存。relocate 与 bt_backup 两段独立比较, 任一变化即 reloaded。
+        """
+        relocate_changed = getattr(old, "relocate", None) != getattr(new, "relocate", None)
+        bt_backup_changed = getattr(old, "bt_backup", None) != getattr(new, "bt_backup", None)
+        if not relocate_changed and not bt_backup_changed:
             return ApplyResult(self.name)
+        if bt_backup_changed and not relocate_changed:
+            return ApplyResult(self.name, "reloaded", "bt_backup 路径表已更新(部署闸现读, 下轮预检即生效)")
         self._conf = getattr(new, "relocate", None)
         enabled = bool(getattr(self._conf, "enabled", False))
         if enabled:

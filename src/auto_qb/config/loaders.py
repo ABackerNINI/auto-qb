@@ -514,6 +514,18 @@ def load_relocate_config(spec: Any) -> RelocateConfig:
     )
 
 
+def load_bt_backup_config(spec: Any) -> Dict[str, str]:
+    """解析 config.bt_backup(各 qB 实例 BT_backup 路径表, 计划 26-11-05-0808 S1)
+
+    键 = qB 连接身份 "host:port", 值 = 该实例的 BT_backup 目录路径。仅转换(键值剥首尾
+    空白), 合法性由 validate_config._validate_bt_backup 保证; 段缺省 = 空表 = 当前实例
+    fastresume 收尾功能未启用(bt_backup_path_of 查表返回 "")。
+    """
+    if not isinstance(spec, dict):
+        return {}
+    return {str(k).strip(): str(v).strip() for k, v in spec.items() if str(k).strip()}
+
+
 def load_traffic_source_config(spec: Any) -> TrafficSourceConfig:
     """解析 config.traffic_source 段(全局流量来源, 计划 26-10-17-0339 S15; 26-10-17-1737 S1 增 enabled)
 
@@ -702,6 +714,7 @@ def load_config(config_path: str) -> Config:
         web=load_web_config(_get(cfg, "web", {})),
         hr_check=hr_check,
         qbittorrent=load_qbittorrent_config(_get(cfg, "qbittorrent", {})),
+        bt_backup=load_bt_backup_config(_get(cfg, "bt_backup", {})),
         trackers=trackers,
         global_speed_limit_curve=load_global_speed_limit_curve(cfg.get("global_speed_limit_curve")),
         qb_traffic=load_qb_traffic(cfg.get("qb_traffic")),
