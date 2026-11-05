@@ -53,6 +53,7 @@
 - 端口被残留占用 → `dev.port-kill`(**只传当前环境白名单端口**, `real.env` 可查), 它按端口查真 PID, 不会误杀包装进程。
 - 两个实例都是 **portable 模式**(各自带 `profile/`), 配置与 `qBittorrent-data` 互不影响; 需要"干净环境"时换 `profile` 目录而不是删 `%APPDATA%`。
 - **多平行 clone 注意**: 本机常有多个平行 clone, 但物理测试实例(端口/进程)全机只有一套 —— 真机轨**同一时刻只允许一个 clone 在跑 `real.*`**; 开跑前若 `real.guard` 报端口被占/种子状态异常, 先确认是不是另一个 clone 正在测。
+- 🔴 **进程安全红线(2026-11-05 事故, AGENTS.md 同款)**: **禁止一切 `taskkill` 操作**(任何形态/任何目标) —— 本机生产 qB(26586)与测试实例**同名映像** `qbittorrent.exe`, `/IM` 按映像名全杀 = 静默误杀生产(E1.6 实际发生, 26586 连带死亡 ~2h); bash 裸跑还有 MSYS 路径改写(`/F`→`F:/`)假失败层, 诱人换 python `subprocess` 绕过 —— subprocess 一样禁。杀/起实例**一律 `real.down`/`real.up`**(端口白名单+镜像路径核验); 其它进程按端口查真 PID 走 `dev.port-kill`。事故档案: `pitfalls/ops/taskkill-image-name-ban.md`
 
 ### 2.3 RM00 之前的手工版(三条, 缺一不开跑)
 

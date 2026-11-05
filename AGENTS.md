@@ -66,6 +66,8 @@ commands run env.sync # 首次/依赖变更后同步依赖
 - ⚠测试TMPDIR由`tests/_tmp_bootstrap.py`自举探测(R→H→%TEMP%),**外部TMPDIR一律拒收(rc=4)**,别手工加前缀;要换根改`TMP_ROOT_CANDIDATES`单点;判据见`memory-bank/pitfalls/testing/tmpdir.md`。
 - 新增测试必须同步该文件头部docstring的"## 测试计划"清单。
 
+## 🔴进程安全:禁止一切taskkill
+
 ## ⚠环境硬约束:Git操作(AI工具shell特有)
 
 **工作区模式:多clone并行**:每个AI实例用**一份独立克隆**,跨clone同步一律走Gitee `develop`。细则见`memory-bank/conventions/collaboration.md`「协作约定」;完整判据与事故档案单点在`memory-bank/pitfalls/git/_index.md`。本节只留最容易致命的几条:
