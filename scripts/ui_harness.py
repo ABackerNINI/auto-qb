@@ -44,7 +44,8 @@
 ----
 * 仅开发期使用, 不参与打包; 数据全在内存 + 临时 state 文件, 关闭即弃。
 * 合成数据面(种子之外): peers / trackers 响应、HR 站点与拉取历史、**添加种子窗口的分类/标签候选**
-  (`_inject_add_options`) —— 都是"默认桩恒空 ⇒ 某条渲染路径永远测不到"那一类, 按需补灌;
+  (`_inject_add_options`)、**迁移状态 job 快照**(`_inject_relocate_jobs`, issue 26-11-06-0330)
+  —— 都是"默认桩恒空 ⇒ 某条渲染路径永远测不到"那一类, 按需补灌;
   合成种子的 `save_path` 按组对取同一条, 组键 = 真机口径 `(save_path, ())`。
 * 鉴权走 `skip_local_verify`(本机免密钥), 浏览器不需要带 token。
   !正因如此 `--host` **只接受回环地址**(127.0.0.0/8 / ::1 / localhost) —— 绑 0.0.0.0
@@ -106,6 +107,65 @@ def _inject_add_options(mgr, torrents) -> None:
     mgr.client.categories = cats
     mgr.client.tags = tags
     print(f"[harness] 添加种子候选已注入: 分类={len(cats)} 标签={len(tags)}", flush=True)
+
+
+class _FakeRelocateJobs:
+    """relocate 模块句柄的最小替身: 只暴露 WebUI 构建期消费的 jobs_snapshot()
+    (views.py::_relocate_snapshot 只 getattr 这一个方法; 命令面方法桩上不可达, 不造)"""
+    def __init__(self, snap):
+        self._snap = snap
+
+    def jobs_snapshot(self):
+        return self._snap
+
+
+def _inject_relocate_jobs(mgr, torrents) -> None:
+    """迁移状态标注(issue 26-11-06-0330)的数据面 —— relocate 徽标/筛选的取数源是
+    **relocate 模块的 job 快照**(views.py::_relocate_snapshot: config.relocate.enabled 门 +
+    ctx.relocate.jobs_snapshot()), 与 qB 种子字段无关 ⇒ 桩不装配该模块时投影恒 None,
+    前端 relocateOptions 恒空, 「种子页筛选器有数据」的 relocate kind 空筛选器组恒红。
+
+    与 _inject_add_options 同病同治: 默认桩恒空 ⇒ 那条渲染路径(迁移徽标/迁移筛选)永远测不到。
+    灌 4 个 job 覆盖筛选桶全部取值分支(moving / pending_finalize(armed) / failed /
+    done=只进「有过迁移」); 前两个落同一组对(i=0,1)让组级聚合出真实的跨状态多 job 形态。
+    """
+    from auto_qb.core.modules.relocate_units import (
+        PHASE_ARMED,
+        PHASE_DONE,
+        PHASE_FAILED,
+        PHASE_MOVING,
+        RelocateSnapshot,
+    )
+    # 守卫(评审 minor): 本注入按 torrents[0..3] 索引, --torrents<4 会 IndexError 崩在启动行打印前
+    # (e2e/harness.mjs 只校验正整数, E2E_TORRENTS=1..3 会过校验然后 webServer 捕获超时)。
+    # 同文件 _inject_site_alerts 有 len<2 守卫惯例; 少于 4 条时跳过注入(降级为恒空 relocate, 不崩)。
+    if len(torrents) < 4:
+        print(f"[harness] 迁移状态跳过注入: 种子数 {len(torrents)} < 4(索引面不足)", flush=True)
+        return
+    now = time.time()
+
+    def _job(h, phase, job_id, **kw):
+        return {
+            "phase": phase,
+            "job_id": job_id,
+            "mover": h,
+            "src": "R:\\Downloads\\Set000",
+            "dst": "R:\\Downloads\\Relocated",
+            "created_at": now - 600.0,
+            "updated_at": now,
+            "origin": "web",
+            **kw,
+        }
+
+    by_hash = {
+        torrents[0].hash: _job(torrents[0].hash, PHASE_MOVING, "job-harness-0"),
+        torrents[1].hash: _job(torrents[1].hash, PHASE_ARMED, "job-harness-1", armed_at=now),
+        torrents[2].hash: _job(torrents[2].hash, PHASE_FAILED, "job-harness-2", reason="目标卷空间不足"),
+        torrents[3].hash: _job(torrents[3].hash, PHASE_DONE, "job-harness-3"),
+    }
+    mgr.config.relocate.enabled = True
+    mgr.ctx.relocate = _FakeRelocateJobs(RelocateSnapshot(generation=1, by_hash=by_hash))
+    print(f"[harness] 迁移状态已注入: job={len(by_hash)} (moving/armed/failed/done)", flush=True)
 
 
 def _install_search_refresh_probe(app, mgr, site_conf) -> None:
@@ -1088,6 +1148,8 @@ def main() -> int:
         # 推不出组行键(组桶恒空), 且"归组成员被判未归组"会触发 singles 防御检查整代转 full,
         # 分组视图的增量链路在冒烟里完全测不到。
         mgr.store.member_to_key = {h: k for k, hs in groups.items() for h in hs}
+    # relocate 投影的数据面(issue 26-11-06-0330): job 快照在 rebuild_views 前挂上, 首轮视图即带标注
+    _inject_relocate_jobs(mgr, torrents)
     mgr.web.rebuild_views()
     _start_command_pump(mgr, args.cmd_result, args.state_revert_ms, args.cmd_wait_ms)
 

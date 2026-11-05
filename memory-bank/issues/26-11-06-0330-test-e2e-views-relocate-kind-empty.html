@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="flaky-governance">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="views 种子页筛选器有数据恒红: relocate kind 在 e2e 桩下恒空">
 <meta name="issue-summary" content="filters.js 无条件注册 relocate kind 但 ui_harness 桩不注入任何 relocate 态, 断言空筛选器 kinds=[] 必红; 修桩还是修产品待裁决">
 <title>views 种子页筛选器有数据恒红: relocate kind 在 e2e 桩下恒空 · test · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-11-06-0330-test-e2e-views-relocate-kind-empty</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-06 03:30</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -144,7 +144,8 @@
   <section id="s5">
     <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
     <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
-    <div class="callout">待查(已排除: flaky 治理计划改动引入——stash 对照 HEAD 同红; 桩不注入 relocate 态是事实, 但「恒空 kind 是否属产品缺陷」未裁决)。</div>
+      <div class="callout"><p><strong>根因（已裁决）</strong>：relocate 标注不是 qB 种子字段，而是<strong>后端 relocate 模块 job 快照的投影</strong>（<code>views.py::_relocate_snapshot</code>：<code>config.relocate.enabled</code> 门 + <code>ctx.relocate.jobs_snapshot()</code>）。ui_harness 桩不装配 relocate 模块（enabled=False、ctx.relocate=None）⇒ 每行投影恒 <code>None</code> ⇒ 前端 <code>relocateOptions</code> 恒空。</p>
+      <p><strong>产品面裁决：非产品缺陷</strong>——空筛选器组弹「暂无数据」走 <code>topbar.html:226-249</code> 同一份 <code>filterDefs</code> 渲染模板，tag/category/site/path 等数据派生筛选器在真机无数据时行为完全相同；relocate 与它们同构，不构成特有缺陷。按建议修法①走桩侧补数据（修桩不掩盖产品问题——裁决依据已核实为「与既有筛选器一致」）。</p></div>
   </section>
 
   <section id="s6">
@@ -157,11 +158,15 @@
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-11-06 03:30 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-06 04:45 — 认领（用户指派），状态 <strong>Open → In Progress</strong>；复验仍复现（见「复验」节）</li>
+      <li>2026-11-06 05:15 — 桩侧修复（建议修法①），状态 <strong>In Progress → Done</strong>；实际修法 / 验证 / 数字见「修复后补充」节</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验：2026-11-06 04:30 仍复现 —— <code>npx playwright test e2e/views.spec.mjs</code> 双皮肤恒红：<code>空筛选器 kinds=[relocate](取数面 groups=150/torrents=300)</code>，与入池证据一致。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><strong>实际修法</strong>（= 建议修法①，裁决后执行）：ui_harness 桩补灌 relocate 态 —— <code>_inject_relocate_jobs</code> 挂模块句柄最小替身 <code>_FakeRelocateJobs</code>（只暴露 WebUI 投影消费的 <code>jobs_snapshot()</code>），返回 <code>RelocateSnapshot</code> 灌 4 个 job 覆盖筛选桶全部取值分支（moving / armed→待收尾 / failed / done→只进「有过迁移」），前两个落同一组对让组级聚合出跨状态多 job 形态；同时 <code>config.relocate.enabled=True</code>。</p>
+    <p><strong>验证方式</strong>：复跑锚点 <code>npx playwright test e2e/views.spec.mjs</code>；全量回归 <code>commands run dev.e2e</code> + <code>commands run test.full</code>。</p>
+    <p><strong>测试数字</strong>：views.spec.mjs <strong>36 passed</strong>（双皮肤，含原恒红用例）；全量 e2e 430 passed / 2 failed / 18 skipped（2 failed = gtm-alert 存量恒红，stash 对照 HEAD 同红，与本修复无关）；pytest 全量全绿（数字见 kb.baseline 最新切片）。坑档同族第 4 例已记 <code>pitfalls/testing/stubs-sim.md</code>。</p>
   </section>
 
   <footer>

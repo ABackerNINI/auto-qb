@@ -2,7 +2,7 @@
 
 > 摘要: 测试替身"长得像"不等于"够用"; 仿真端最容易变成"自以为在测"的测假陷阱。
 > 等级: L0
-> 触发: 写替身, FakeClient, FakeTorrent, FakeQbServer, sim_qb, 仿真, 判据空壳, 反向对照, 回执判定, FakeConfig, 假配置, 新配置键, 替身漂移, 枚举成员, dev 脚本, ui_harness, 字段名, dl_speed, up_speed, peers, 对端速度
+> 触发: 写替身, FakeClient, FakeTorrent, FakeQbServer, sim_qb, 仿真, 判据空壳, 反向对照, 回执判定, FakeConfig, 假配置, 新配置键, 替身漂移, 枚举成员, dev 脚本, ui_harness, 字段名, dl_speed, up_speed, peers, 对端速度, relocate, 迁移状态, 桩恒空, 合成数据面, 数据依赖
 
 **Refs:** memory-bank/tasks/26-10-10-webui-peers-speed-field.md
 
@@ -51,6 +51,21 @@
   **回弹必须是"真值被 `/api/state` 取走之后"再等 N ms, 不能是盲定时**
   (定时回弹会跑到前端观测之前把真值改回去)。
 - **处置**: 判"已被取走"用 `_web_pending_ver` 被清空; 回弹记**最初**值(不是上次命令后的值)。
+
+### 桩的合成数据面与新功能的数据依赖不同步 ⇒ 该渲染路径永远测不到(或既有断言恒红)
+
+- **触发**: 新增产品功能引入**新的数据依赖**时动 e2e / 冒烟 —— 尤其是数据不来自 qB 种子字段、
+  而来自**后端模块内部状态的投影**(relocate job 快照 / HR 拉取历史 / peers / trackers 响应)。
+- **判别**: 桩下某筛选器 / 徽标 / 页签恒空而真机有数据; 或既有「有数据」形态断言因新 kind 加入
+  而恒红(issue 26-11-06-0330: `filterDefs` 无条件注册 relocate kind, 桩不装配 relocate 模块 ⇒
+  `relocateOptions` 恒空, views.spec「种子页筛选器有数据」双皮肤恒红)。
+  先裁决「恒空是否属产品缺陷」再动: 空筛选器组弹「暂无数据」与 tag/category 等数据派生筛选器
+  同模板同行为(topbar.html 共用一份 `filterDefs` 渲染), 是一致的产品形态 ⇒ 修桩补数据, 不是修产品。
+- **处置**: 桩按**真机同源路径**补灌(本例: `config.relocate.enabled=True` + 模块句柄最小替身
+  `_FakeRelocateJobs.jobs_snapshot() -> RelocateSnapshot.by_hash`, views.py 的投影门只 getattr
+  这一个方法)。判数据源时先问「这个字段从哪来」—— 后端模块投影**不走 qB stub 面**,
+  灌 FakeTorrent 字段没用, 要替身模块句柄。本类的既有先例(同病同治):
+  peers 速度键名(2026-10-07)、trackers per-tracker 汇报(P-02)、添加种子分类/标签候选(2026-10-09)。
 
 ### 仿真端"自以为在测"的测假陷阱(写 `sim_qb.py` / `sim_run.py` 时实测, 通用)
 
