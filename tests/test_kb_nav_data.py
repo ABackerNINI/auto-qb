@@ -40,6 +40,7 @@ gen_doc_map.collect() 本体的键集合 —— 它是闸门/守阵消费单点 
 - test_collect_nav_shape: collect_nav() 对桩目录返回 {stamp, items, topics, counts} 完整; topics 含 live / forms; counts 覆盖四形态
 - test_collect_nav_issue_enrich_fields: issue 条目带 issue-type / issue-tier / issue-summary; 全形态带 doc-updated (缺省回落 stamp)
 - test_collect_nav_stamp_from_data_not_clock: stamp == 桩数据 doc-updated 最大值, 与当前时钟无关
+- test_collect_nav_stale_hint_respects_frozen_forms: doc-age-days / doc-stale 只提示不拦截; plan/report 冻结不审, 其余按 90 天 (2026-11-05 计划 §07 P4)
 - test_doc_map_collect_keys_unchanged: gen_doc_map.collect() 输出键集合不变 (enrich 不动本体)
 - test_titles_and_meta_unescaped_in_data_layer: HTML 源里的实体 (issue-title / issue-summary / <title>) 在数据层反转义, 前端 esc 只转义一次 (否则 nav 显示 "-&gt;", 2026-10-31 用户报)
 """
@@ -59,6 +60,8 @@ import subprocess
 import sys
 
 import threading
+
+from datetime import datetime
 
 from pathlib import Path
 
@@ -142,6 +145,25 @@ def test_collect_nav_stamp_from_data_not_clock(tmp_path: Path) -> None:
     合并里制造"假新"戳, 这里用固定桩数据钉死期望值 (若实现取了当前时钟, 等值断言必红)。"""
     data = nav_data.collect_nav(_stub_mb(tmp_path))
     assert data["stamp"] == "26-10-04-0800", f"stamp 应取数据自带的最大 doc-updated: {data['stamp']!r}"
+
+
+def test_collect_nav_stale_hint_respects_frozen_forms(tmp_path: Path) -> None:
+    """陈旧度软提示 (2026-11-05 计划 26-11-05-1049 §07 P4): 只加字段、只提示。
+
+    阈值: plan/report 出厂冻结不审; 其余 90 天 (`_common.STALE_DAYS_REFERENCE`)。
+    `now` 由调用方注入 —— 测试用固定远期时钟, 不靠真墙钟。
+    """
+    data = nav_data.collect_nav(_stub_mb(tmp_path), now=datetime(2027, 6, 5))
+    by_link = {i["link"]: i for i in data["items"]}
+
+    old_issue = by_link["issues/i1.html"]
+    assert old_issue["doc-age-days"] > 90
+    assert old_issue["doc-stale"] is True, "超过 90 天的非冻结件必须给陈旧提示"
+
+    for link in ("plans/p1.html", "reports/r1.html"):
+        frozen = by_link[link]
+        assert frozen["doc-age-days"] > 90, "年龄仍要如实显示 (提示依据不藏)"
+        assert frozen["doc-stale"] is False, f"plan/report 冻结不审, 不得报陈旧: {link}"
 
 
 def test_doc_map_collect_keys_unchanged(tmp_path: Path) -> None:

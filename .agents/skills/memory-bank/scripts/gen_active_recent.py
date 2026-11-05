@@ -48,6 +48,7 @@ from _common import (  # noqa: E402
     SLICE_COUNT_TARGET,
     SLICE_DIR,
     SLICE_FILE_RE,
+    STALE_DAYS_VOLATILE,
     SUMMARY_RE,
     TITLE_RE,
     cap_of,
@@ -56,7 +57,9 @@ from _common import (  # noqa: E402
     resolve_mb_dir,
 )
 
-DEFAULT_STALE_DAYS = 14
+# activeContext 切片属 volatile 层 —— 陈旧阈值 = 会话级 (`_common.STALE_DAYS_VOLATILE`)。
+# 其它层的阈值 (reference 90 天 / plan·report 不审) 由 nav_data.py 消费同名单点。
+DEFAULT_STALE_DAYS = STALE_DAYS_VOLATILE
 
 # 默认字节预算 (按 UTF-8 编码后计): AI 工具壳 (ZCode Bash) 内联上限 30,000 字节, 超限全量落盘 +
 # 只回 2,000 字符预览, 截断点切进多字节字符时预览整段乱码 (pitfalls/ops/console-encoding.md

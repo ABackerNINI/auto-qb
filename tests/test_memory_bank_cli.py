@@ -45,6 +45,8 @@ memory-bank skill 的 `scripts/new_doc.py` / `wrap_session.py` / `check_doc_temp
   修复后圈面 = 文件名 stamp 前缀, 与文件招供无关)
 - test_family_registry_matches_templates: 模板烤进去的出厂值与 `_common.FAMILIES` 同源
   (设计底线: 不造第二套词表/命名规则)
+- test_new_doc_templates_lead_with_only_answer_slot: 五个文档族模板的第一个 SLOT 必须是
+  「本篇只回答」+ 预算/触顶固定动作 (2026-11-05 计划 §07 P1/P2 的写前判定)
 - test_doc_templates_checker_is_wired: 检查器挂在 kb.check 与提交闸门两侧 (不接线 = 没人跑;
   与 test_commit_gate_covers_kb_check 同旨)
 
@@ -641,6 +643,30 @@ def test_family_registry_matches_templates() -> None:
         head = checker._head_region((templates / spec.template).read_text(encoding="utf-8"))
         head_slots = re.findall(r"<!--\s*SLOT:", head)
         assert not head_slots, f"{name} 模板头部区不得有 SLOT 标记 (机器字段必须由命令填): {len(head_slots)} 处"
+
+
+def test_new_doc_templates_lead_with_only_answer_slot() -> None:
+    """模板的第一个 SLOT 必须是「本篇只回答」, 并带上预算 + 触顶固定动作。
+
+    写前判定靠模板落地 (2026-11-05 计划 26-11-05-1049 §07 P1/P2): 第一格先问「这篇只回答什么」,
+    跨问题就拆件; 预算与「禁止压文案」写进同一句, 免得建件后才发现该拆。
+    """
+    if str(SKILL_SCRIPTS) not in sys.path:
+        sys.path.insert(0, str(SKILL_SCRIPTS))
+    import _common
+
+    fams = _common.FAMILIES
+    templates = SKILL_SCRIPTS.parent / "templates"
+    for fam in ("plan", "task", "report", "pitfall", "progress"):
+        text = (templates / fams[fam].template).read_text(encoding="utf-8")
+        slots = re.findall(r"<!--\s*SLOT:.*?-->", text, re.S)
+        assert slots, f"{fam} 模板不得零 SLOT"
+        assert "本篇只回答" in text, f"{fam} 模板缺「本篇只回答」"
+        assert "只回答" in slots[0], f"{fam} 模板的第一个 SLOT 必须问「只回答什么」: {slots[0][:80]}"
+        if fam == "report":
+            assert "快照冻结, 不设 cap" in text, "report 冻结件不设 cap"
+        else:
+            assert "预算" in text and "禁止压文案" in text, f"{fam} 模板须写明预算与触顶固定动作"
 
 
 def test_doc_templates_checker_is_wired() -> None:

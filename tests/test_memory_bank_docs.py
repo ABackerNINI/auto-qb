@@ -21,6 +21,7 @@ warn 而不是 problem —— 守住"降级后的严重度仍然正确", 而不�
 
 - test_kb_files_respect_caps: 原「## 测试计划」条目见 test_memory_bank_naming.py(跨分文件共用同一用例条目, 文案未改)
 - test_kb_pitfall_entries_have_required_fields: pitfalls 条目含 触发 / 判别 / 处置
+- test_doc_forms_decision_tree_declares_form_axis: 决策树带「形态判定 (Form)」列, 三值齐且写明与四工位正交 (2026-11-05 计划 §07 P3)
 - test_kb_active_context_within_cap: `activeContext.md` 是 ≤2 KB 合法存根 (2026-09-23 起滚动状态已迁 `activeContext/`)
 - test_kb_cap_debt_is_discoverable_not_blocking: 造超限文件 → 必须报成 warn(债务) 而不是 problem
 - test_agents_md_cap_is_hard_not_debt: AGENTS.md 超 8,000 仍是 problem(硬规定), 且不出现在债务清单里
@@ -160,6 +161,19 @@ def test_kb_pitfall_entries_have_required_fields() -> None:
     """pitfalls 条目含 触发 / 判别 / 处置 三必填字段 (`- **触发**: …`)。"""
     problems = _kb_checker().check_pitfall_entries(ROOT, MB)
     assert not problems, "\n".join(problems)
+
+
+def test_doc_forms_decision_tree_declares_form_axis() -> None:
+    """决策树必须带「形态判定 (Form)」列 —— 写前先判 reference / how-to / explanation。
+
+    2026-11-05 计划 26-11-05-1049 §07 P3: 只做判定列, **不引入**四象限目录、也不改四工位命名;
+    Form 切内容形态, 与制品用途/寿命正交。
+    """
+    text = (MB / "conventions" / "doc-forms.md").read_text(encoding="utf-8")
+    assert "形态判定 (Form)" in text, "决策树缺形态判定列"
+    for word in ("`reference`", "`how-to`", "`explanation`"):
+        assert word in text, f"Form 三值缺 {word}"
+    assert "正交" in text, "必须写明 Form 与四工位正交 (否则会被误读成第二套目录体系)"
 
 
 def test_kb_active_context_within_cap() -> None:

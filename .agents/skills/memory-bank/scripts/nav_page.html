@@ -1279,7 +1279,7 @@ function renderDrawer(link) {
       <div class="kv">
         <span class="k">专题</span><span class="v mono">${esc(i.topic || NO_KEY)}</span>
         <span class="k">时间戳</span><span class="v mono">${esc(i.stamp)}</span>
-        ${i["doc-updated"] ? '<span class="k">更新</span><span class="v mono">' + esc(i["doc-updated"]) + "</span>" : ""}
+        ${i["doc-updated"] ? '<span class="k">更新</span><span class="v mono">' + esc(i["doc-updated"]) + (i["doc-stale"] ? ' (陈旧 ' + i["doc-age-days"] + ' 天)' : "") + "</span>" : ""}
         ${i["issue-summary"] ? '<span class="k">摘要</span><span class="v" style="line-height:1.6">' + esc(i["issue-summary"]) + "</span>" : ""}
       </div>
     </div>
@@ -1469,7 +1469,7 @@ function renderScope() {
         <span class="rchain ${(i.refs && i.refs.length) ? "has" : ""}">${(i.refs && i.refs.length) ? "#" + i.refs.length : ""}</span>
       </div>
       <div class="row-body">
-        <div class="rmeta"><span>TOPIC ${esc(i.topic || NO_KEY)}</span><span>${i["doc-updated"] ? "UPD " + esc(i["doc-updated"]) : ""}</span>${i["issue-type"] ? "<span>TYPE " + esc(i["issue-type"]) + "</span>" : ""}${i["issue-tier"] ? "<span>" + esc(i["issue-tier"]) + "</span>" : ""}</div>
+        <div class="rmeta"><span>TOPIC ${esc(i.topic || NO_KEY)}</span><span>${i["doc-updated"] ? "UPD " + esc(i["doc-updated"]) + (i["doc-stale"] ? " STALE " + i["doc-age-days"] + "d" : "") : ""}</span>${i["issue-type"] ? "<span>TYPE " + esc(i["issue-type"]) + "</span>" : ""}${i["issue-tier"] ? "<span>" + esc(i["issue-tier"]) + "</span>" : ""}</div>
         ${i["issue-summary"] ? '<div class="rsummary">' + esc(i["issue-summary"]) + "</div>" : ""}
         ${refLines(i)}
         <a class="openlink" href="${MB}${esc(i.link)}" target="_blank">OPEN -&gt; ${esc(i.link)}</a>

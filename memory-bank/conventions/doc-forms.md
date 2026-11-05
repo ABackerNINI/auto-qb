@@ -17,14 +17,18 @@
 
 ## 决策树: 要记一件事 → 放哪儿
 
-| 这一轮做的事 | 放 |
-|---|---|
-| 撞见计划外的问题, 暂不修 | `issues/<stamp>-<type>-<slug>.html` (create-issue skill) |
-| 要改动, 需方案与拍板 | `plans/<stamp>-plan-<topic>.html` |
-| 审计 / 故障取证 / 可行性分析 | `reports/<stamp>-report-<topic>.html` |
-| 跨会话推进的专题 (≥2 会话 / ≥5 轮指令 / 出现波次表述) | `tasks/YY-MM-DD-<领域>-<专题>.md` (memory-bank skill) |
-| 本次会话做到哪 | `activeContext/<stamp>-<topic>.md` |
-| 长期结论 / 已实现事实 | `progress/` 与主题文档 |
+写前先做两问(只做自检, 不建四象限目录): 读者是在**做事**还是**理解**? 在**获取技能**还是**应用技能**?
+答案落成 **Form**: `reference`(事实/清单/参数) · `how-to`(按步骤完成任务) · `explanation`(为什么这样设计)。
+Form 切**内容形态**, 与四工位(制品用途/寿命)**正交**, 四工位不改名。
+
+| 这一轮做的事 | 放 | 形态判定 (Form) |
+|---|---|---|
+| 撞见计划外的问题, 暂不修 | `issues/<stamp>-<type>-<slug>.html` (create-issue skill) | `how-to`(复现) + `reference`(事实) |
+| 要改动, 需方案与拍板 | `plans/<stamp>-plan-<topic>.html` | `explanation` |
+| 审计 / 故障取证 / 可行性分析 | `reports/<stamp>-report-<topic>.html` | `explanation` |
+| 跨会话推进的专题 (≥2 会话 / ≥5 轮指令 / 出现波次表述) | `tasks/YY-MM-DD-<领域>-<专题>.md` (memory-bank skill) | `explanation` |
+| 本次会话做到哪 | `activeContext/<stamp>-<topic>.md` | `reference` |
+| 长期结论 / 已实现事实 | `progress/` 与主题文档 | `explanation`(结论) / `reference`(事实表) |
 
 ## 命名 (新件强制; 存量豁免)
 

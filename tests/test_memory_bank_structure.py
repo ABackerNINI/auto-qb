@@ -30,6 +30,7 @@ warn 而不是 problem —— 守住"降级后的严重度仍然正确", 而不�
 - test_kb_no_orphan_index_dirs / test_kb_stubs_are_valid: 顶层索引都被 README 引用; 被拆文档留合法存根
 - test_kb_active_context_slices_are_valid: 切片命名定宽 / 三行头齐 (结构); 尺寸与条数是**债务**, 不判红
 - test_kb_debt_count_excludes_min_size_hints: CLI 汇总行的「cap 债务 N 项」只数带 `DEBT_MARK` 的行, 「文件过小」提示不计入
+- test_kb_trim_hint_is_fixed_action_not_compress: 触顶口径 = 刚好 ≤ cap + 固定动作(外迁/删死段/合并邻近件), 禁止「压文案」与 50% 收缩 (2026-11-05 计划 §07 P2)
 - test_kb_active_render_respects_byte_budget: kb.active 默认字节预算截取(30KB 内联上限), 页脚留总数, --all / -n N 逃生
 
 文档族注册表与 kb.new / kb.wrap (2026-10-17 P1, 计划 26-10-17-0527; 实现与检查器在
@@ -329,6 +330,28 @@ def test_kb_debt_count_excludes_min_size_hints(tmp_path: Path, monkeypatch, caps
     (evergreen / "big.md").write_text("# 大\n> 摘要: x\n> 触发: y\n" + "x" * 30_000, encoding="utf-8")
     with_debt = run()
     assert "cap 债务 1 项" in with_debt, f"真实超限必须计成 1 项债务: {with_debt}"
+
+
+def test_kb_trim_hint_is_fixed_action_not_compress() -> None:
+    """触顶处置口径 (2026-11-05 计划 26-11-05-1049 §07 P2): 严禁「压文案」, 只做三件固定动作。
+
+    旧口径「精简/外迁到 50%」会诱导 agent 删事实换字数; 新口径清债目标=刚好 ≤ cap,
+    动作=外迁 references/ → 删除死段 → 合并邻近件。`log` 仍按 append-only 轮转。
+    """
+    checker = _kb_checker()
+    hint = checker.trim_hint("pitfall", 8_000)
+    assert "外迁 `references/`" in hint
+    assert "删除死段" in hint and "合并邻近件" in hint
+    assert "禁止压文案" in hint
+    assert "≤ 8,000" in hint, "目标必须写明刚好 ≤ 当前 cap, 不是比例"
+    assert "50%" not in hint and "精简" not in hint, f"旧收缩口径不得回潮: {hint}"
+
+    log_hint = checker.trim_hint("log", 8_000)
+    assert "最老一端" in log_hint and "轮转" in log_hint
+    assert "禁止压文案" in log_hint
+
+    agents_hint = checker.trim_hint("agents", 8_000)
+    assert "硬规定" in agents_hint and "≤ 8,000" in agents_hint
 
 
 def test_kb_scripts_import_cleanly() -> None:

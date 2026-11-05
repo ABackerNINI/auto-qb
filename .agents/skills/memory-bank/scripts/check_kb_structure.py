@@ -35,7 +35,6 @@ from _common import (  # noqa: E402
     STUB_CAP,
     STUB_MARK,
     TOPIC_FILE_RE,
-    TRIM_KEEP,
     char_count,
     find_root,
     is_topic_file,
@@ -170,24 +169,24 @@ def _cap_candidates(root: Path, mb: Path, roles: tuple[str, ...]) -> list[Path]:
 
 
 def trim_hint(role: str, cap: int) -> str:
-    """超 cap 后的收缩口径 —— 单行返回 (`doc.caps` 要把这些行排进一张表, 多行会打乱对齐)。
+    """超 cap 后的固定动作 —— 单行返回 (`doc.caps` 要把这些行排进一张表, 多行会打乱对齐)。
 
-    `agents` 例外 (2026-09-30 用户拍板): AGENTS.md 是**硬规定**, **不套** 50% 收缩 ——
-    它的内容「外迁」等于把常驻可见的硬约束降为按需读 (设计回退), 所以只需回到 ≤ cap。
+    2026-11-05 用户重定调: 清债目标是**刚好 ≤ cap**, 不是压到 50%; 处置**禁止压文案**
+    (压文案丢事实且每次触顶都返工), 只做三件事:「外迁 references/ → 删除死段 → 合并邻近件」。
+
+    `agents` 例外 (2026-09-30 用户拍板): AGENTS.md 是**硬规定**, 内容「外迁」等于把常驻可见的
+    硬约束降为按需读 (设计回退), 所以只需回到 ≤ cap。
     """
     if role in HARD_CAP_ROLES:
-        return f"硬规定: 必须回到 ≤ {cap:,} 字符 (不套 50% 收缩, 也不挂账 —— 它是 IDE 注入入口, 超了尾部被截断)"
-    target = f"{int(cap * TRIM_KEEP):,}"
+        return (f"硬规定: 必须回到 ≤ {cap:,} 字符 (不做 50% 收缩, 也不挂账 —— "
+                "它是 IDE 注入入口, 超了尾部被截断)")
     if role == "log":
         # `log` 是 append-only, 超了不是"该删", 而是"该轮转" —— 把切到哪、搬到哪写进消息。
         # ❌ 只搬"最老的一条": 最老条目大小不受控, 下次追加立刻又触顶。
-        return (
-            f"它是 append-only 流水, 按设计会一直长: 从**最老一端**切到 ≤ {target} 字符 "
-            f"(收缩到 ~{TRIM_KEEP:.0%}), 外迁同目录 `attachments/` 并原位留一行指针"
-        )
-    # 削到贴线等于下次追加立刻再触顶 —— 一次留足半桶
-    return (f"触顶处置: 精简/外迁到 ≤ {target} 字符 (最大值的 ~{TRIM_KEEP:.0%}), "
-            "外迁同目录 `attachments/` 并原位留一行指针")
+        return (f"它是 append-only 流水, 按设计会一直长: 从**最老一端**轮转到 ≤ {cap:,} 字符, "
+                "外迁同目录 `attachments/` 并原位留一行指针 (禁止压文案)")
+    return (f"触顶固定动作: 外迁 `references/` → 删除死段 → 合并邻近件 (目标 ≤ {cap:,} 字符; "
+            "禁止压文案)")
 
 
 _TASK_STAMP_RE = re.compile(r"^(\d{2}-\d{2}-\d{2})-")
