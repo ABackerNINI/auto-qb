@@ -4,7 +4,7 @@
 默认值单一来源 = models 中的 dataclass 字段默认。
 """
 import logging
-from typing import Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 import yaml
 
@@ -54,7 +54,7 @@ def _under(data_dir: str, *parts: str) -> str:
     return "/".join([base, *parts])
 
 
-def _get(spec: dict, key: str, default, parse=None):
+def _get(spec: dict, key: str, default: Any, parse: Callable[[Any], Any] | None = None) -> Any:
     """段内键读取统一入口: 键存在 → parse(原始串); 键缺失 → 字段默认(解析后空间, 不再 parse)"""
     if key not in spec:
         return default
@@ -62,7 +62,7 @@ def _get(spec: dict, key: str, default, parse=None):
     return parse(value) if parse else value
 
 
-def _get_episode_tags(spec) -> "AddEpisodeTagsConfig":
+def _get_episode_tags(spec: Any) -> "AddEpisodeTagsConfig":
     """解析 config.add_episode_tags 段 -> AddEpisodeTagsConfig 实例(已校验, 这里仅转换)"""
     d = AddEpisodeTagsConfig()
     if not isinstance(spec, dict):
@@ -155,7 +155,7 @@ def _load_transfer_target(spec: dict) -> TransferTargetConfig:
     )
 
 
-def _load_transfer_config(spec) -> TransferConfig:
+def _load_transfer_config(spec: Any) -> TransferConfig:
     """解析 web.transfer 段(计划 26-10-31-0306 W1): targets 列表逐项转换; 空/缺省 = 未配置"""
     if not isinstance(spec, dict):
         return TransferConfig()
@@ -200,7 +200,7 @@ def load_notify_config(spec: dict) -> NotifyConfig:
     )
 
 
-def load_hr_check_config(spec) -> HrCheckConfig:
+def load_hr_check_config(spec: Any) -> HrCheckConfig:
     """解析 config.hr_check 段(v3 15 键口径: 功能开关 + 单频控三键 + 本地取数通道 + 站点接入)
 
     整段缺省 = 空字典 => 全部走字段默认(功能关闭, 保守默认)。
@@ -248,7 +248,7 @@ def load_hr_check_config(spec) -> HrCheckConfig:
     )
 
 
-def load_site_hr_check_config(spec) -> SiteHrCheckConfig:
+def load_site_hr_check_config(spec: Any) -> SiteHrCheckConfig:
     """解析站点级在线核实条目 hr_check.sites.<档案 id>(enabled + tracker + refresh_interval
     + idle_refresh_interval); 缺省 = 不启用。
 
@@ -266,7 +266,7 @@ def load_site_hr_check_config(spec) -> SiteHrCheckConfig:
     )
 
 
-def load_fs_config(spec) -> FsConfig:
+def load_fs_config(spec: Any) -> FsConfig:
     """解析 config.fs 段(仅转换, 结构与值合法性由 validate_config._validate_fs 保证)
 
     path_map: list[{from: 宿主路径前缀, to: 容器挂载点}] -> tuple[PathMapEntry, ...]
@@ -382,10 +382,10 @@ def load_tracker_hr(spec: dict, global_hr: dict) -> HRRule:
     # 输出设置回退链: 站点 spec -> 全局 hr 段 -> HRRule 字段默认。
     # 按键存在性取值(不是按真假): 站点键存在且值为 ''(tri_state 三态, v4 起 _strip_none 不剥)
     # 时返回 '' 作为合并生效值 = 「覆盖为空」; 消费端(maintenance_mod)对空串按不打标/不设置处理。
-    def out(key: str):
+    def out(key: str) -> Any:
         return spec.get(key, global_hr.get(key, getattr(d, key)))
 
-    def out_bool(key: str):
+    def out_bool(key: str) -> bool:
         return parse_bool(spec.get(key, global_hr.get(key, getattr(d, key))))
 
     def out_union(key: str) -> List[str]:
@@ -413,7 +413,7 @@ def load_tracker_hr(spec: dict, global_hr: dict) -> HRRule:
     )
 
 
-def load_global_speed_limit_curve(spec) -> Optional[GlobalSpeedLimitCurve]:
+def load_global_speed_limit_curve(spec: dict | None) -> Optional[GlobalSpeedLimitCurve]:
     """解析 config.global_speed_limit_curve 段(spec 为 None/缺省 -> None, 不启用)
 
     先验证再解析: 结构/键/数值合法性由 validation._validate_global_speed_limit_curve 在
@@ -462,7 +462,7 @@ def load_global_speed_limit_curve(spec) -> Optional[GlobalSpeedLimitCurve]:
     )
 
 
-def load_qb_traffic(spec) -> Optional[QbTraffic]:
+def load_qb_traffic(spec: dict | None) -> Optional[QbTraffic]:
     """解析 config.qb_traffic 段(spec 为 None/缺省 -> None, 不启用)
 
     先验证再解析: 结构/键/数值合法性由 validation._validate_qb_traffic 在 fail-fast 校验
@@ -489,7 +489,7 @@ def load_qb_traffic(spec) -> Optional[QbTraffic]:
     )
 
 
-def load_relocate_config(spec) -> RelocateConfig:
+def load_relocate_config(spec: Any) -> RelocateConfig:
     """解析 config.relocate 段(整组迁移, 计划 26-10-18-1604 §3.7)
 
     仅转换, 合法性由 validate_config._validate_relocate 保证(段缺省 = 全默认, 功能关)。
@@ -514,7 +514,7 @@ def load_relocate_config(spec) -> RelocateConfig:
     )
 
 
-def load_traffic_source_config(spec) -> TrafficSourceConfig:
+def load_traffic_source_config(spec: Any) -> TrafficSourceConfig:
     """解析 config.traffic_source 段(全局流量来源, 计划 26-10-17-0339 S15; 26-10-17-1737 S1 增 enabled)
 
     仅转换, 合法性由 validate_config._validate_traffic_source 保证。段缺省 = 全默认
@@ -536,7 +536,7 @@ def load_traffic_source_config(spec) -> TrafficSourceConfig:
     tool_spec = spec.get("global_traffic_monitor")
     tool_d = GlobalTrafficMonitorSourceConfig()
 
-    def _tool(key: str, parse=None):
+    def _tool(key: str, parse: Callable[[Any], Any] | None = None) -> Any:
         if not isinstance(tool_spec, dict):
             return getattr(tool_d, key)
         return _get(tool_spec, key, getattr(tool_d, key), parse)
@@ -557,7 +557,7 @@ def load_traffic_source_config(spec) -> TrafficSourceConfig:
     )
 
 
-def _parse_curve_points(raw_list, direction_key: str) -> List[CurvePoint]:
+def _parse_curve_points(raw_list: list[dict], direction_key: str) -> List[CurvePoint]:
     """解析 upload_curve/download_curve 列表 -> CurvePoint 列表(仅转换, 合法性由校验阶段保证)
 
     每元素为单项映射: 阈值大小(parse_fsize) -> {<direction_key>: 速度(parse_speed)};

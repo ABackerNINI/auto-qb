@@ -1,6 +1,6 @@
 """规则集 spec 校验: 键/取值域/conditions-actions 结构 + 插件 spec 深度校验分发"""
 from dataclasses import dataclass
-from typing import List
+from typing import Any, List
 
 from qbittorrentapi import TorrentState
 
@@ -93,7 +93,7 @@ class _ExprGate:
     traffic_configured: bool = False
 
 
-def _expr_gate(data) -> _ExprGate:
+def _expr_gate(data: Any) -> _ExprGate:
     """从原始配置判断数据源是否可用(顶层 traffic_source 段当前生效来源)
 
     WARN: 本函数跑在**traffic_source 段校验之前**(validate_config 里规则段在前), 所以必须容忍
@@ -123,7 +123,7 @@ def _expr_gate(data) -> _ExprGate:
     return _ExprGate(traffic_configured=bool(dat_path))
 
 
-def _validate_rules(rules_config: dict, errors: List[str], data=None) -> None:
+def _validate_rules(rules_config: dict, errors: List[str], data: Any = None) -> None:
     """规则集 spec 校验: 键/取值域/conditions-actions 结构; 条件与动作名称经 registry 延迟导入校验
 
     已注册插件的 spec 深度校验也在此进行(分发表 _plugin_spec_validators 从 registry 条目
@@ -215,7 +215,7 @@ def _validate_watch_fields(spec: dict, where: str, errors: List[str]) -> None:
         errors.append(f"{where}: watch_fields 必须是非空列表, 取值限: {'/'.join(allowed)}")
 
 
-def _validate_state_condition_spec(value, where: str, errors: List[str], gate=None) -> None:
+def _validate_state_condition_spec(value: Any, where: str, errors: List[str], gate: _ExprGate | None = None) -> None:
     """state 条件 spec 深度校验: 每组仅接受 TorrentState 的 is_* 类别属性
 
     gate: expr 专属的数据源门控上下文, 本校验器不消费(派生分发统一签名, W5)。
@@ -229,7 +229,7 @@ def _validate_state_condition_spec(value, where: str, errors: List[str], gate=No
                 errors.append(f"{where}: 非法状态属性 '{s}', 可选: {'/'.join(STATE_ATTRS)}")
 
 
-def _validate_checking_action_spec(value, where: str, errors: List[str], gate=None) -> None:
+def _validate_checking_action_spec(value: Any, where: str, errors: List[str], gate: _ExprGate | None = None) -> None:
     """checking 动作 spec 深度校验: dict/已知键/basic_check/段结构/mode
 
     gate: expr 专属的数据源门控上下文, 本校验器不消费(派生分发统一签名, W5)。
@@ -260,7 +260,7 @@ def _validate_checking_action_spec(value, where: str, errors: List[str], gate=No
             errors.append(f"{where}.{seg}.mode 取值非法: '{sub.get('mode', '')}', 可选: {list(CHECKING_MODES)}")
 
 
-def _validate_tags_condition_spec(value, where: str, errors: List[str], gate=None) -> None:
+def _validate_tags_condition_spec(value: Any, where: str, errors: List[str], gate: _ExprGate | None = None) -> None:
     """tags 条件 spec 正则校验: 列表(组间或)的每组成员内逗号分隔模式, regex: 主体须可编译
     (非字符串等类型错误由 Rule 构造时的自然异常暴露, 此处仅查正则, 与 _check_regex_patterns 同风格;
     gate = expr 专属的门控上下文, 本校验器不消费, 派生分发统一签名 W5)"""
@@ -270,7 +270,7 @@ def _validate_tags_condition_spec(value, where: str, errors: List[str], gate=Non
             _check_regex_patterns([p.strip() for p in g.split(",")], where, errors)
 
 
-def _validate_expr_condition_spec(value, where: str, errors: List[str], gate=None) -> None:
+def _validate_expr_condition_spec(value: Any, where: str, errors: List[str], gate: _ExprGate | None = None) -> None:
     """expr 条件 spec 深度校验: 非空字符串 + **配置期**完成解析与语义校验
 
     - 名字拼错 / 函数写错 / 类型不匹配 / 结果不是布尔, 全部在 load_config 阶段报出来 ——
@@ -301,7 +301,7 @@ def _validate_expr_condition_spec(value, where: str, errors: List[str], gate=Non
             )
 
 
-def _validate_pattern_list_spec(value, where: str, errors: List[str], gate=None) -> None:
+def _validate_pattern_list_spec(value: Any, where: str, errors: List[str], gate: _ExprGate | None = None) -> None:
     """category/trackers 条件与 remove_tags 动作 spec 正则校验: 列表或单值, 每项 regex: 主体须可编译
 
     gate: expr 专属的数据源门控上下文, 本校验器不消费(派生分发统一签名, W5)。
@@ -354,7 +354,9 @@ def _plugin_spec_validators() -> dict:
     return {e.name: _SPEC_VALIDATOR_IMPLS[e.validator] for e in registry.iter_entries() if e.validator}
 
 
-def _validate_condition_tree(node, where: str, errors: List[str], gate=None, depth: int = 1, top: bool = True) -> None:
+def _validate_condition_tree(
+    node: Any, where: str, errors: List[str], gate: _ExprGate | None = None, depth: int = 1, top: bool = True
+) -> None:
     """conditions 组合树节点校验(W3-A, plan 26-11-01-0106 §3.2/G4): 只认规范化树形
 
     节点 = 单键 dict: 组合键 all/any(值为节点列表) / not(值为单个节点) / 条件名(叶子, 须已注册)。
@@ -394,7 +396,9 @@ def _validate_condition_tree(node, where: str, errors: List[str], gate=None, dep
         _validate_condition_leaf(key, node[key], where, errors, gate)
 
 
-def _validate_condition_leaf(name: str, value, where: str, errors: List[str], gate=None) -> None:
+def _validate_condition_leaf(
+    name: str, value: Any, where: str, errors: List[str], gate: _ExprGate | None = None
+) -> None:
     """条件叶子校验: 名称已注册(未注册 = 未知条件, fail-fast) + spec 深度校验分发
 
     gate: 表达式取值的数据源门控上下文(仅 expr 条件用, 需要看配置里数据源是否配置)
@@ -415,7 +419,13 @@ def _validate_condition_leaf(name: str, value, where: str, errors: List[str], ga
 
 
 def _validate_action_entry(
-    entry, where: str, ordinal: int, known: dict, errors: List[str], gate=None, allow_choose: bool = True
+    entry: Any,
+    where: str,
+    ordinal: int,
+    known: dict,
+    errors: List[str],
+    gate: _ExprGate | None = None,
+    allow_choose: bool = True
 ) -> None:
     """actions 列表项校验: 只认规范化后形态 {type, params, on_error}(plan 26-11-01-0106 §3.2/W2-A/W2-B)
 
@@ -468,7 +478,9 @@ def _validate_action_entry(
         deep(norm["params"], f"{where}.{name}", errors)
 
 
-def _validate_choose_block(entry: dict, where: str, known: dict, errors: List[str], gate=None) -> None:
+def _validate_choose_block(
+    entry: dict, where: str, known: dict, errors: List[str], gate: _ExprGate | None = None
+) -> None:
     """choose 编排块校验(W3-B, plan 26-11-01-0106 G6/D3): 键面/分支结构/when 条件树/then+default 动作项
 
     - 键面 {choose, default}(compat.CHOOSE_KNOWN_KEYS 单点), 未知键 fail-fast;
@@ -520,7 +532,7 @@ def _validate_choose_block(entry: dict, where: str, known: dict, errors: List[st
                 _validate_action_entry(a, f"{where}.default[{j}]", j + 1, known, errors, gate=gate, allow_choose=False)
 
 
-def _validate_on_error(value, where: str, errors: List[str]) -> None:
+def _validate_on_error(value: Any, where: str, errors: List[str]) -> None:
     """动作级错误策略 on_error 校验(plan 26-11-01-0106 W2/G5): dict/已知键/三档/retries/backoff 边界
 
     fail-fast 聚合报错(黄金法则 4): 逐键收集全部错误而非遇错即返, 一次保存看全所有笔误。
@@ -609,7 +621,7 @@ def _validate_trigger_action_compat(spec: dict, where: str, errors: List[str]) -
             )
 
 
-def _deleted_trigger_check_action(a, allowed, where: str, errors: List[str]) -> None:
+def _deleted_trigger_check_action(a: Any, allowed: tuple, where: str, errors: List[str]) -> None:
     """on_torrent_deleted 白名单单项核对(choose 块内动作用, W3-B): 结构残缺交 _validate_action_entry 报"""
     if not isinstance(a, dict):
         return

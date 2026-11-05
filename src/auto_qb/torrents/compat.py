@@ -11,7 +11,7 @@ record/store 之外的独立关注点 —— 版本漂移检查(REQUIRED_TORRENT
                              老版本 qB / 端点差异不炸; qB 新版本的未声明字段自动落 _raw(数据不丢)。
 """
 from collections.abc import Mapping
-from typing import List
+from typing import Any, List
 
 from ..infra.errors import AutoQbError
 
@@ -125,7 +125,7 @@ class QbCompatError(AutoQbError):
     """qBittorrent torrent info 字段与预期不符(版本不兼容), 首次拉到种子信息时 fail-fast"""
 
 
-def missing_torrent_fields(tor) -> List[str]:
+def missing_torrent_fields(tor: Any) -> List[str]:
     """返回 tor 上缺失的必需字段列表(空列表 = 版本兼容)
 
     支持两类来源: **字段映射**(qB sync 原始 JSON / 测试注入的 dict -> 按键判定)

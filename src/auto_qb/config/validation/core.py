@@ -1,7 +1,7 @@
 """validation 核心: 通用校验助手 + validate_config 入口(各段校验器延迟导入防环)"""
 import math
 import re
-from typing import List
+from typing import Any, Callable, List
 
 from ...infra.utils import MatchPattern, parse_bool, parse_hm, parse_time
 from ..schema.trackers import HR_OUTPUT_FIELDS
@@ -43,7 +43,7 @@ KNOWN_CONFIG_KEYS = {
 MAINTENANCE_TAG_MODES = ("interval", "on_change")
 
 
-def _try_port(value, where: str, errors: List[str]) -> None:
+def _try_port(value: Any, where: str, errors: List[str]) -> None:
     """端口校验单点(issue 26-10-11-0032): 可解析为整数 + 1..65535(qbittorrent/web 共用)"""
     try:
         port = int(value)
@@ -54,7 +54,7 @@ def _try_port(value, where: str, errors: List[str]) -> None:
         errors.append(f"{where}: 超出范围 1-65535: {port}")
 
 
-def _try_port_or_zero(value, where: str, errors: List[str]) -> None:
+def _try_port_or_zero(value: Any, where: str, errors: List[str]) -> None:
     """hr_check.channel 端口校验(计划 26-10-14-1241 S1): {0} ∪ [1,65535]
 
     0 是合法值(语义 = 交 OS 随机 / 关闭发现), 与 _try_port(qbittorrent/web 的 1..65535)
@@ -69,7 +69,7 @@ def _try_port_or_zero(value, where: str, errors: List[str]) -> None:
         errors.append(f"{where}: 超出范围 0-65535(0 = 随机/关闭): {port}")
 
 
-def _try_time_window(value, where: str, errors: List[str]) -> None:
+def _try_time_window(value: Any, where: str, errors: List[str]) -> None:
     """时间窗 "HH:MM-HH:MM" 校验单点(issue 26-10-11-0032): hr_check.allow_window 与 notify.quiet_hours 共用
 
     空值 = 未配置放行; 支持跨午夜; 时刻合法性复用 parse_hm 单一事实来源。
@@ -86,7 +86,7 @@ def _try_time_window(value, where: str, errors: List[str]) -> None:
         errors.append(f"{where}: 须为 'HH:MM-HH:MM'(可跨午夜): {e}")
 
 
-def _is_tri_state_site_leaf(path: tuple, key, value) -> bool:
+def _is_tri_state_site_leaf(path: tuple[str, ...], key: str, value: Any) -> bool:
     """该键是否为站点段 tri_state 叶(路径 config.trackers.<名>.hr.<键>, 值为非 None 空串)
 
     path 是当前 dict 在整树中的键路径(不含本 key)。仅站点段豁免: 全局段 config.hr.<键> 的
@@ -104,7 +104,7 @@ def _is_tri_state_site_leaf(path: tuple, key, value) -> bool:
 _TRI_STATE_SITE_KEYS = frozenset(f.key for f in HR_OUTPUT_FIELDS if f.tri_state)
 
 
-def _strip_none(value, _path=()):
+def _strip_none(value: Any, _path: tuple[str, ...] = ()) -> Any:
     """递归剔除空值(None/空串): 显式留空的键/列表项视为未配置(走默认值)
 
     yaml.BaseLoader 将 `key:` 留空解析为 ''(而非 None), 与显式 "" 无法区分, 统一视为未配置;
@@ -135,7 +135,7 @@ def _check_unknown_keys(spec: dict, known: set, where: str, errors: List[str]) -
         errors.append(f"{where}: 未知键 {sorted(unknown)}, 可用键: {sorted(known)}")
 
 
-def _try(parse_fn, value, where: str, errors: List[str]):
+def _try(parse_fn: Callable[[Any], Any], value: Any, where: str, errors: List[str]) -> Any:
     """用解析函数校验值格式(复用 utils.parse_* 单一事实来源), 失败记录错误;
     成功时返回解析值, 供调用方续做范围检查(如 log.max_bytes 的轮转区间)"""
     try:
@@ -145,7 +145,15 @@ def _try(parse_fn, value, where: str, errors: List[str]):
         return None
 
 
-def _try_number(value, where: str, errors: List[str], *, integer: bool = False, min=None, max=None) -> None:
+def _try_number(
+    value: Any,
+    where: str,
+    errors: List[str],
+    *,
+    integer: bool = False,
+    min: float | None = None,
+    max: float | None = None
+) -> None:
     """数值校验: 可解析(可选整数) + 有限(拦 nan/inf) + 可选闭区间 [min, max]
 
     float('nan')/'inf' 能通过 float() 解析, 但作为阈值比较恒 False/恒 True ——
@@ -172,7 +180,7 @@ def _fmt_s(v: float) -> str:
 
 
 def _try_time(
-    value,
+    value: Any,
     where: str,
     errors: List[str],
     positive: bool = False,
@@ -200,7 +208,7 @@ def _try_time(
 STATE_SAVE_INTERVAL_MIN = 30.0
 
 
-def _validate_state_save_interval(value, errors: List[str]) -> None:
+def _validate_state_save_interval(value: Any, errors: List[str]) -> None:
     """state_save_interval: 合法时间格式, 且为 0(=关闭)或 >= 30s(防误配置写放大)"""
     where = "config.state_save_interval"
     try:
@@ -212,7 +220,7 @@ def _validate_state_save_interval(value, errors: List[str]) -> None:
         errors.append(f"{where}: 须为 0(关闭)或 >= {STATE_SAVE_INTERVAL_MIN:g}S(防误配置写放大): {value}")
 
 
-def _check_str_list(value, where: str, errors: List[str]) -> bool:
+def _check_str_list(value: Any, where: str, errors: List[str]) -> bool:
     """值必须是字符串列表(空列表合法); 返回是否通过"""
     if not isinstance(value, list):
         errors.append(f"{where}: 必须是列表")
@@ -235,7 +243,7 @@ def _check_regex_patterns(patterns: list, where: str, errors: List[str]) -> None
                 errors.append(f"{where}[{i}]: 非法正则: {e}")
 
 
-def _current_main_tick(cfg: dict):
+def _current_main_tick(cfg: dict) -> float | None:
     """从同一份 config 现取 main_tick 秒值(qb_traffic.sample_interval 下限硬校验用, 计划 26-10-04-1957 §06.1)
 
     缺省走 models.Config.main_tick 的默认值(延迟导入防环); main_tick 自身写坏时返回 None,
@@ -251,7 +259,7 @@ def _current_main_tick(cfg: dict):
         return None
 
 
-def validate_config(data) -> List[str]:
+def validate_config(data: Any) -> List[str]:
     """全量校验配置(结构/未知键/必填项/值格式), 返回错误列表(空 = 通过)
 
     - 顶层仅允许 config 键; 各段未知键一律报错(含 tracker/HR/规则 spec)

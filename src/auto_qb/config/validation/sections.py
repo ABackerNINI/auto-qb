@@ -3,7 +3,7 @@ import ipaddress
 import logging
 import re
 import sys
-from typing import List, Tuple
+from typing import Any, List, Tuple
 from urllib.parse import urlsplit
 
 from ...infra.utils import is_loopback_host, parse_bool, parse_fsize, parse_hr_condition, parse_speed, parse_time
@@ -137,7 +137,7 @@ def _channel_ephemeral_port_range() -> Tuple[int, int]:
 _is_loopback_host = is_loopback_host
 
 
-def _validate_channel_host(value, where: str, errors: List[str]) -> None:
+def _validate_channel_host(value: Any, where: str, errors: List[str]) -> None:
     """channel.host 校验(S1 ①): 非空且为合法 IPv4/IPv6 字面量或 localhost
 
     不支持主机名: 扩展侧 normalize 按字面量判私网段, 主机名无法分类(计划 §01 派生口径);
@@ -214,7 +214,7 @@ KNOWN_TRACKER_HR_KEYS = {
 }
 
 
-def _validate_add_episode_tags(spec, errors: List[str]) -> None:
+def _validate_add_episode_tags(spec: Any, errors: List[str]) -> None:
     """校验 config.add_episode_tags 段(布尔 enabled + 单集/多集模板字符串)"""
     if not isinstance(spec, dict):
         errors.append("config.add_episode_tags: 必须是字典")
@@ -226,7 +226,7 @@ def _validate_add_episode_tags(spec, errors: List[str]) -> None:
             errors.append(f"config.add_episode_tags.{key}: 必须是非空字符串")
 
 
-def _validate_log(spec, errors: List[str]) -> None:
+def _validate_log(spec: dict | None, errors: List[str]) -> None:
     if spec is None:
         return
     if not isinstance(spec, dict):
@@ -245,7 +245,7 @@ def _validate_log(spec, errors: List[str]) -> None:
             errors.append(f"config.log.max_bytes: 须在 1MiB-1GiB 范围内: {spec['max_bytes']}")
 
 
-def _validate_qbittorrent(spec, errors: List[str]) -> None:
+def _validate_qbittorrent(spec: dict | None, errors: List[str]) -> None:
     if spec is None:
         return
     if not isinstance(spec, dict):
@@ -262,7 +262,7 @@ def _validate_qbittorrent(spec, errors: List[str]) -> None:
             errors.append(f"config.qbittorrent.{key}: 必须是字符串")
 
 
-def _validate_global_hr(spec, errors: List[str]) -> None:
+def _validate_global_hr(spec: dict | None, errors: List[str]) -> None:
     if spec is None:
         return
     if not isinstance(spec, dict):
@@ -277,7 +277,7 @@ def _validate_global_hr(spec, errors: List[str]) -> None:
             _check_regex_patterns(spec[key], f"config.hr.{key}", errors)
 
 
-def _validate_hr_check(spec, errors: List[str]) -> None:
+def _validate_hr_check(spec: dict | None, errors: List[str]) -> None:
     """校验 config.hr_check 段(HR 在线核实: 功能开关 + 频控 + 本地取数通道)
 
     整段缺省合法(走默认值 = 功能关闭); 保守默认, 故不配就什么都不发生。
@@ -349,7 +349,7 @@ def _validate_hr_check(spec, errors: List[str]) -> None:
 
             # ---- 交叉规则(S1 ③⑤⑥): 各键自身格式已由上面各自己报, 这里只在两侧解析成功时比较 ----
 
-            def _chan_int(key: str, default: int):
+            def _chan_int(key: str, default: int) -> int | None:
                 if key not in channel:
                     return default
                 try:
@@ -480,7 +480,7 @@ def _validate_hr_site_bindings(cfg: dict, errors: List[str]) -> None:
                           " —— 请在「站点」分区的 HR 规则里补齐, 否则该站保护会静默失效")
 
 
-def _validate_hr_site_entry(spec, where: str, errors: List[str]) -> None:
+def _validate_hr_site_entry(spec: Any, where: str, errors: List[str]) -> None:
     """校验 hr_check.sites.<档案 id> 条目(enabled + tracker 显式映射 + refresh_interval
     + idle_refresh_interval; v3)
 
@@ -513,7 +513,7 @@ def _validate_hr_site_entry(spec, where: str, errors: List[str]) -> None:
     # 覆盖「refresh 配得比默认 idle(24H)还长而未配 idle」的场景(只看显式键会漏掉它)。
     # 某侧键存在但格式非法时其错误已由 _try_time 报过, 该侧返回 None 使交叉校验整体跳过
     # (不拿默认值顶替参与比较, 避免与用户原意无关的叠加文案)。
-    def _effective_s(side_key: str, default_s: float):
+    def _effective_s(side_key: str, default_s: float) -> float | None:
         """条目时间键的有效秒值: 缺省按 default_s 补齐; 存在但格式非法返回 None"""
         if side_key not in spec:
             return default_s
@@ -534,7 +534,7 @@ def _validate_hr_site_entry(spec, where: str, errors: List[str]) -> None:
         )
 
 
-def _validate_download_fuse(spec, errors: List[str]) -> None:
+def _validate_download_fuse(spec: dict | None, errors: List[str]) -> None:
     """校验 config.download_fuse 段(已完成种子下载保险丝)
 
     download_limit 四重口径: >0(qB 语义 0 = 不限速)、整数 KiB、KiB 数为奇数、<=1024KiB。
@@ -577,7 +577,7 @@ def _validate_download_fuse(spec, errors: List[str]) -> None:
             errors.append(f"config.download_fuse.fuse_tag: 首尾不得含空白(qB 会裁剪): {tag!r}")
 
 
-def _validate_grouping(spec, errors: List[str]) -> None:
+def _validate_grouping(spec: dict | None, errors: List[str]) -> None:
     if spec is None:
         return
     if not isinstance(spec, dict):
@@ -596,7 +596,7 @@ def _norm_prefix(p: str) -> str:
     return path_normalize(p).rstrip("/")
 
 
-def _validate_fs(spec, errors: List[str]) -> None:
+def _validate_fs(spec: dict | None, errors: List[str]) -> None:
     """fs 段(文件访问, plan 26-09-27-1407): path_map 映射表
 
     条目 from/to 须为非空字符串; from 必须是绝对路径(带盘符 / UNC / 以 / 开头);
@@ -677,7 +677,7 @@ def _validate_fs(spec, errors: List[str]) -> None:
                 break
 
 
-def _validate_relocate(spec, errors: List[str]) -> None:
+def _validate_relocate(spec: dict | None, errors: List[str]) -> None:
     """relocate 段(整组迁移, 计划 26-10-18-1604 §3.7): 9 键逐一键级校验
 
     阈值分流细节(alias_file_threshold 的 7/8/9 边界、hard_max_links 与目录别名的取舍)
@@ -713,7 +713,7 @@ def _validate_relocate(spec, errors: List[str]) -> None:
         _validate_relocate_pending_tag(spec["pending_tag"], errors)
 
 
-def _validate_relocate_pending_tag(raw, errors: List[str]) -> None:
+def _validate_relocate_pending_tag(raw: Any, errors: List[str]) -> None:
     """pending_tag 形状守卫(计划 26-11-04-1042 P3): 空/None = 关闭; 非空须落在保留命名空间
 
     保留前缀(RELOCATE_TAG_NS)是防污染约束: 标签只写不读, 但若允许任意名字, 用户的
@@ -743,7 +743,7 @@ def _validate_tag_lists(cfg: dict, errors: List[str]) -> None:
             _check_regex_patterns(cfg[key], where, errors)
 
 
-def _validate_tracker_hr(spec, where: str, errors: List[str]) -> None:
+def _validate_tracker_hr(spec: Any, where: str, errors: List[str]) -> None:
     if not isinstance(spec, dict):
         errors.append(f"{where}: 必须是字典")
         return
@@ -767,7 +767,7 @@ def _validate_tracker_hr(spec, where: str, errors: List[str]) -> None:
             _check_regex_patterns(spec[key], f"{where}.{key}", errors)
 
 
-def _validate_trackers(spec, rules_config: dict, errors: List[str]) -> None:
+def _validate_trackers(spec: dict | None, rules_config: dict, errors: List[str]) -> None:
     if spec is None:
         return
     if not isinstance(spec, dict):
@@ -811,7 +811,7 @@ def _validate_trackers(spec, rules_config: dict, errors: List[str]) -> None:
             )
 
 
-def _validate_traffic_source(spec, errors: List[str]) -> None:
+def _validate_traffic_source(spec: dict | None, errors: List[str]) -> None:
     """校验 config.traffic_source 段(全局流量来源, 计划 26-10-17-0339 S15/D1)
 
     未配置(None)合法 = 走默认值(provider=traffic_monitor)。两来源参数可并存, 但只有 provider
@@ -897,7 +897,7 @@ def _validate_ctx_menu_layer(layer: dict, where: str, errors: List[str], legal_k
                     errors.append(f"{where}.order[{i}]: 分隔线 token 须以 'sep:' 开头: '{token}'")
 
 
-def _validate_ctx_menu(spec, where: str, errors: List[str]) -> None:
+def _validate_ctx_menu(spec: Any, where: str, errors: List[str]) -> None:
     """web.ctx_menu(右键菜单用户布局, 计划 26-10-20-0024): 支名字典 -> 每支一层布局 + 可选次级
 
     宽松口径: 未知支名不报错(前端只读四支, 多余的忽略); 坏形状(非字典 / 非数组 / 未知层键 /
@@ -920,7 +920,7 @@ def _validate_ctx_menu(spec, where: str, errors: List[str]) -> None:
                 _validate_ctx_menu_layer(sub, f"{b_where}.sub", errors, _CTX_LAYER_KEYS)
 
 
-def _check_transfer_base_url(value, where: str, errors: List[str]) -> None:
+def _check_transfer_base_url(value: str, where: str, errors: List[str]) -> None:
     """base_url URL 形状校验(计划 26-10-31-0306 W1): 须为 http(s)://host[:port] 形状"""
     try:
         parsed = urlsplit(value)
@@ -931,7 +931,7 @@ def _check_transfer_base_url(value, where: str, errors: List[str]) -> None:
         errors.append(f"{where}: 须为 http(s) URL(如 http://127.0.0.1:8080): {value}")
 
 
-def _validate_transfer_fields(spec, where: str, errors: List[str]) -> None:
+def _validate_transfer_fields(spec: Any, where: str, errors: List[str]) -> None:
     """per-target 字段集校验: 键闭合(TRANSFER_FIELD_KEYS 之外报错) + 值须为布尔 +
     save_path 锁死必开(显式 false = 破坏同机硬约束[不变量: 目标侧数据必须可达], 配置期拒绝)"""
     if not isinstance(spec, dict):
@@ -946,7 +946,7 @@ def _validate_transfer_fields(spec, where: str, errors: List[str]) -> None:
             errors.append(f"{where}.save_path: 保存路径锁死必开(同机硬约束: 关掉 = 目标侧数据不可达, 违反转移底线)")
 
 
-def _validate_transfer_path_map(spec, where: str, errors: List[str]) -> None:
+def _validate_transfer_path_map(spec: Any, where: str, errors: List[str]) -> None:
     """路径映射规则表校验(计划 §03): 列表条目 {from, to} 两侧须为非空字符串; 键闭合复用 fs 的
     KNOWN_PATH_MAP_ENTRY_KEYS(from/to 同名同义); 不查重复/前缀歧义 —— 有序前缀替换
     首条命中生效是既定语义, 表序即优先级, 不算歧义"""
@@ -971,7 +971,7 @@ def _validate_transfer_path_map(spec, where: str, errors: List[str]) -> None:
                 errors.append(f"{w}.{side}: 不能为空")
 
 
-def _validate_transfer(spec, errors: List[str]) -> None:
+def _validate_transfer(spec: dict | None, errors: List[str]) -> None:
     """校验 config.web.transfer(种子转移, 计划 26-10-31-0306 W1): targets 列表逐项聚合校验
 
     名称非空且全表唯一; type 枚举(qb/tr); base_url 非空时须为 http(s) URL 形状、enabled=true
@@ -1027,7 +1027,7 @@ def _validate_transfer(spec, errors: List[str]) -> None:
             _validate_transfer_path_map(item["path_map"], f"{w}.path_map", errors)
 
 
-def _validate_web(spec, errors: List[str]) -> None:
+def _validate_web(spec: dict | None, errors: List[str]) -> None:
     """校验 config.web 段(仅本机默认; token 留空 = 随机生成)"""
     if spec is None:
         return
@@ -1054,7 +1054,7 @@ def _validate_web(spec, errors: List[str]) -> None:
         _validate_transfer(spec["transfer"], errors)
 
 
-def _validate_notify(spec, errors: List[str]) -> None:
+def _validate_notify(spec: dict | None, errors: List[str]) -> None:
     """校验 config.notify 段(主动通知); 未配置(None)合法, 走默认值"""
     if spec is None:
         return
@@ -1096,7 +1096,7 @@ def _validate_notify(spec, errors: List[str]) -> None:
                     errors.append(f"config.notify.channels[{i}]: 未知渠道 '{name}', 可用: {sorted(NOTIFY_CHANNELS)}")
 
 
-def _validate_qb_traffic(spec, errors: List[str], main_tick: float | None = None) -> None:
+def _validate_qb_traffic(spec: dict | None, errors: List[str], main_tick: float | None = None) -> None:
     """校验 config.qb_traffic 段(qB 口径流量采样, plan 26-10-03-0946 方案C §06); 未配置(None)合法 = 不启用
 
     边界依据(§06 表; v3 计划 26-10-04-1957 §06.1 修订): sample_interval 下限 = main_tick(硬校验,

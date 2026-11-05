@@ -1,12 +1,12 @@
 """全局限速曲线段校验(curves/interval/enabled + 阶梯点)"""
-from typing import List
+from typing import Any, List
 
 from ...core import curves
 from ...infra.utils import parse_bool, parse_fsize, parse_speed
 from .core import _try, _try_time
 
 
-def _validate_global_speed_limit_curve(spec, errors: List[str]) -> None:
+def _validate_global_speed_limit_curve(spec: Any, errors: List[str]) -> None:
     """校验 config.global_speed_limit_curve 段(结构/键/数值), 错误聚合到 errors(带完整路径)
 
     配置样式见 loaders.load_global_speed_limit_curve; 解析假定已通过本校验。
@@ -66,7 +66,7 @@ def _validate_global_speed_limit_curve(spec, errors: List[str]) -> None:
                 _validate_curve_points(curve_spec[key], f"{cwhere}.{key}", direction, errors)
 
 
-def _validate_curve_points(raw_list, where: str, direction_key: str, errors: List[str]) -> None:
+def _validate_curve_points(raw_list: Any, where: str, direction_key: str, errors: List[str]) -> None:
     """校验 upload_curve/download_curve 列表: 非空单项映射, 阈值 > 0 且严格递增, 速度仅含方向键"""
     if not isinstance(raw_list, list) or not raw_list:
         errors.append(f"{where}: 必须是非空列表")

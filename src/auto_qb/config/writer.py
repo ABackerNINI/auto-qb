@@ -24,7 +24,7 @@ import re
 import tempfile
 from dataclasses import dataclass
 from io import StringIO
-from typing import Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 import yaml
 
@@ -33,7 +33,13 @@ from ..infra.versioning import CURRENT_VERSIONS, VERSION_KEY, detect_version
 from .errors import ConfigError
 from .impact import RESTART_SECTIONS, ConfigChange, diff_config_impacts, restart_required_paths
 from .loaders import load_config, migrate_config_schema, normalize_schema_version
+from .models import Config
 from .schema import readonly_config_paths
+
+if TYPE_CHECKING:
+    # ruamel 仅在函数内延迟导入(写盘路径才用); 返回注解经 TYPE_CHECKING 块导入
+    # (import-all 守卫对 TYPE_CHECKING 名豁免, 见 pitfalls/testing/annotations-lazy-eval.md)
+    from ruamel.yaml import YAML
 
 # 树根键(与 validate_config 的"根节点仅允许 config"一致)
 ROOT_KEY = "config"
@@ -213,7 +219,7 @@ def _stamp_schema_version(tree: Dict[str, Any]) -> None:
         cfg["schema_version"] = CURRENT_VERSIONS["config"]
 
 
-def write_tree(config_path: str, tree: Dict[str, Any], old_config, backup_path: str) -> WriteResult:
+def write_tree(config_path: str, tree: Dict[str, Any], old_config: Config, backup_path: str) -> WriteResult:
     """校验并写回配置树
 
     流程: 结构自检 -> 临时文件校验(load_config) -> R 级字段回退旧值 -> 备份 -> round-trip 写盘。
@@ -228,7 +234,7 @@ def write_tree(config_path: str, tree: Dict[str, Any], old_config, backup_path: 
     return WriteResult(changes=changes, restart_required=restart_required)
 
 
-def preview_tree(config_path: str, tree: Dict[str, Any], old_config) -> str:
+def preview_tree(config_path: str, tree: Dict[str, Any], old_config: Config) -> str:
     """生成"即将写入"的 YAML 文本(含 R 级字段回退), 不落盘 —— 供 UI 只读预览
 
     与 write_tree 共用校验与 round-trip 逻辑, 因此预览内容与写入内容一致(除注释形态);
@@ -305,7 +311,7 @@ def backup_versioned(config_path: str, backup_dir: str, from_version: int) -> st
     return backup_path
 
 
-def _prepare(config_path: str, tree: Dict[str, Any], old_config) -> Tuple[List[ConfigChange], List[str]]:
+def _prepare(config_path: str, tree: Dict[str, Any], old_config: Config) -> Tuple[List[ConfigChange], List[str]]:
     """写盘/预览的公共前置: 结构自检 -> 版本闸门 -> 校验 -> R 级字段回退(就地修改 tree)"""
     if not isinstance(tree, dict) or not isinstance(tree.get(ROOT_KEY), dict):
         raise ValueError(f"配置树必须是含 {ROOT_KEY} 段的对象")
@@ -398,7 +404,7 @@ def _fallback_readonly_fields(tree: dict, old_tree: dict) -> None:
             _set_path(tree, parts, old_value)
 
 
-def _get_path(tree: Any, parts: List[str]):
+def _get_path(tree: Any, parts: List[str]) -> Any:
     node = tree
     for p in parts:
         if not isinstance(node, dict) or p not in node:
@@ -407,7 +413,7 @@ def _get_path(tree: Any, parts: List[str]):
     return node
 
 
-def _set_path(tree: dict, parts: List[str], value) -> None:
+def _set_path(tree: dict, parts: List[str], value: Any) -> None:
     node = tree
     for p in parts[:-1]:
         nxt = node.get(p)
@@ -439,7 +445,7 @@ def _backup(config_path: str, backup_path: str) -> None:
     _atomic_copy(config_path, backup_path)
 
 
-def _build_yaml():
+def _build_yaml() -> "YAML":
     """ruamel 实例工厂: 与原 config.yml 的 4 空格缩进风格一致, 保留引号形态"""
     from ruamel.yaml import YAML
 
@@ -449,7 +455,7 @@ def _build_yaml():
     return ry
 
 
-def _build_doc(config_path: str, tree: Dict[str, Any]):
+def _build_doc(config_path: str, tree: Dict[str, Any]) -> dict:
     """读现有文件为 CommentedMap(保留注释)并把树同步进去, 返回待 dump 的文档对象"""
     ry = _build_yaml()
     doc = None

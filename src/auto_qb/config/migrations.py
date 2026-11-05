@@ -25,7 +25,7 @@ v3→v4(report 26-10-03-0504 方案 B 阶段 1, 「删除类似标签」全局/�
 v4→v5(计划 26-10-17-0339 S15, 全局流量来源合并): 曲线段内联数据源 + 顶层 global_traffic_monitor
 段合并为顶层 traffic_source 段; 每键迁移/删除产出一条 note(见 _migrate_config_4_5)。
 """
-from typing import Dict, List, Tuple
+from typing import Any, Dict, List, Tuple
 from urllib.parse import urlparse
 
 from ..infra.versioning import MIGRATIONS
@@ -38,7 +38,7 @@ _MIGRATE_TUNING_KEYS = (
 )
 
 
-def _url_host(url) -> str:
+def _url_host(url: Any) -> str:
     """取 URL 的 host(小写); 缺失/非串/解析失败返回空串(定位不到档案, 旧键原地保留)"""
     if not isinstance(url, str):
         return ""
@@ -204,7 +204,7 @@ def _delete_config_path(cfg: dict, path: str) -> None:
     del node[parts[-1]]
 
 
-def _migrate_config_3_4(cfg: dict):
+def _migrate_config_3_4(cfg: dict) -> dict | Tuple[dict, List[str]]:
     """v3→v4: 移除 9 键作用域内的显式置空值(站点级「覆盖为空」三态的语义翻转保护)
 
     v4 起 config.trackers.<名>.hr.<4 个 tri_state str 键> 的 '' = 覆盖为空; 存量(v3 及更早)的 ''
@@ -222,12 +222,13 @@ def _migrate_config_3_4(cfg: dict):
     return cfg, notes
 
 
-MIGRATIONS["config"][3] = _migrate_config_3_4
+# MIGRATIONS 声明 Callable[[dict], dict] 落后于其注释契约(dict | (dict, notes)); 声明放宽后摘除
+MIGRATIONS["config"][3] = _migrate_config_3_4  # type: ignore[assignment]
 
 # ---- v4→v5: 数据源并入顶层 traffic_source 段(计划 26-10-17-0339 S15) ----
 
 
-def _migrate_config_4_5(cfg: dict):
+def _migrate_config_4_5(cfg: dict) -> dict | Tuple[dict, List[str]]:
     """v4→v5: 把「顶层 global_traffic_monitor 段 + 曲线段内联 traffic_source」合并为顶层 traffic_source 段
 
     - 旧曲线段内联数据源 global_speed_limit_curve.traffic_source[].traffic_monitor.dat_path ->
@@ -311,4 +312,5 @@ def _migrate_config_4_5(cfg: dict):
     return cfg, notes
 
 
-MIGRATIONS["config"][4] = _migrate_config_4_5
+# 同上: 注册表返回类型声明收窄, 声明放宽后摘除
+MIGRATIONS["config"][4] = _migrate_config_4_5  # type: ignore[assignment]

@@ -1,5 +1,5 @@
 """TorrentStore: 主索引 + 增量同步态 + 分组索引 + 全局标签/分类缓存 + 确定性字段写后同步"""
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from typing import TYPE_CHECKING, Any, Dict, FrozenSet, List, Optional, Set, Tuple, Union
 
 import logging
@@ -82,7 +82,7 @@ class TorrentStore:
     参考种子集合(仅内存): verified_references
     全局缓存: all_tags() / all_categories()(写操作后 invalidate)
     """
-    def __init__(self, client: Any = None, clock: Optional[Clock] = None):
+    def __init__(self, client: Any = None, clock: Optional[Clock] = None) -> None:
         self.client: Any = client
         # 取时注入(D8): 缺省系统时钟单点(经构造期现取: 测试可换假钟, S3 收敛为显式注入)。
         # 挂钟侧(expect 调度时刻 / state_since)与主循环 now 同侧相减; 单调侧(own_writes TTL)纯内存时长。
@@ -199,7 +199,7 @@ class TorrentStore:
 
     # ---------- 期望落地(命令写入 -> 快照可见 之间的有界追平) ----------
 
-    def expect_hashes(self, hashes) -> None:
+    def expect_hashes(self, hashes: Iterable[str]) -> None:
         """登记「这批 hash 应该很快出现在快照里, 但现在还没有」(issue 26-10-30-0626 候选 A)
 
         为什么需要: qB 的 `POST /torrents/add` 返回 200 只代表**受理**, torrent 还要过四跳
@@ -630,7 +630,7 @@ class TorrentStore:
             return sorted(rec.tags_set)
         return rec.category or ""
 
-    def set_watch_fields(self, fields) -> None:
+    def set_watch_fields(self, fields: Iterable[str]) -> None:
         """注入监听字段并集(由 load_rules 从规则 watch_fields ∪ maintenance on_change 推导)
 
         空 = 检测关闭: 不建基线、零对比开销(黄金法则: 无消费不付费)。
