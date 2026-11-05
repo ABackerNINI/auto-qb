@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="kb-doc-compress">
+<meta name="issue-stamp" content="26-11-05-0855">
+<meta name="issue-type" content="docs">
+<meta name="doc-topic" content="kb-doc-compress">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="memory-bank 超 8K 文档摸排: 142 件需压缩蒸馏(本次只摸排)">
+<meta name="issue-summary" content="memory-bank 下超 8K 字符的 md 共 142 件(主线 115 件约 1.79M 字符 + attachments/_archive 生成物 27 件约 0.92M), 另根目录/包内 references/skill 主文件 40+ 件; 本 issue 只记录摸排清单, 压缩未开始">
+<title>memory-bank 超 8K 文档摸排: 142 件需压缩蒸馏(本次只摸排) · docs · 计划外问题</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 38px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 78ch; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>现象与发现场景</a>
+    <a href="#s2"><span class="no">02</span>证据</a>
+    <a href="#s3"><span class="no">03</span>影响面</a>
+    <a href="#s4"><span class="no">04</span>定位锚点</a>
+    <a href="#s5"><span class="no">05</span>根因<span class="opt">（可选）</span></a>
+    <a href="#s6"><span class="no">06</span>建议修法<span class="opt">（可选）</span></a>
+    <a href="#s7"><span class="no">07</span>状态变更日志</a>
+    <div class="toc-foot">
+      类型 docs · 档位 standard<br>
+      入池不改码 · 规范见 create-issue skill
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">计划外问题（未修）· docs</div>
+    <h1>memory-bank 超 8K 文档摸排: 142 件需压缩蒸馏(本次只摸排)</h1>
+    <p class="lede">memory-bank 下超 8K 字符的 md 共 142 件(主线 115 件约 1.79M 字符 + attachments/_archive 生成物 27 件约 0.92M), 另根目录/包内 references/skill 主文件 40+ 件; 本 issue 只记录摸排清单, 压缩未开始</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-11-05-0855-docs-kb-doc-compress</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-11-05 08:55</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">docs</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象与发现场景</h2>
+    <p>用户点名 <code>memory-bank/testing/real-machine.md</code>（实测 35,429 字符）要求摸排全库大尺寸文档，判定<strong>所有超 8K 字符的文档都可能需要压缩蒸馏</strong>。8K 阈值取自 AGENTS.md 自身的 8000 字符硬上限口径——该上限的立论是「超出部分 IDE 注入时被静默截断，尾部内容模型看不到」；同样的问题目前只对 AGENTS.md 有守卫（<code>doc.caps</code>），其余文档超限无任何拦截。</p>
+    <p>本次轮次边界：<strong>只摸排记录，不做压缩</strong>。压缩对象、优先级与蒸馏口径待另行拍板后认领。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>证据</h2>
+    <p class="hint">贴原文（报错 / 日志 / 命令输出），不转述；附取证时间，让读者自己判断新鲜度。</p>
+<pre><code># 统计口径(取证 2026-11-05 08:55, HEAD 5bcc9831):
+#   字符数 = wc -m(与 AGENTS.md 的 8000 字符上限同口径); 阈值 &gt; 8000 字符
+#   范围 = memory-bank/**.md(排除 auto-qb-data/.git); 根目录 .md; .commands; .agents/skills
+find memory-bank -name "*.md" -print0 | xargs -0 wc -m | sort -rn | awk '$1&gt;8000 &amp;&amp; $2!="total"'</code></pre>
+
+<h3>A. memory-bank 全量: 1844 个 md, 超 8K 共 142 件</h3>
+<p>主线手写文档 <strong>115 件 / 约 1,793,489 字符</strong>, 按目录分布:</p>
+<table>
+  <tr><th>目录</th><th>件数</th><th>字符合计</th><th>说明</th></tr>
+  <tr><td><code>tasks/</code></td><td>62</td><td>1,079,851</td><td>历史任务档案为主体; 最大 3 件见下表</td></tr>
+  <tr><td><code>pitfalls/</code></td><td>21</td><td>264,286</td><td>含 <code>web-ui/_index.md</code> 26,615 与 <code>testing/_index.md</code> 25,791 两个类索引——索引本身超 8K, 「先索引后整读」的检索经济性已破</td></tr>
+  <tr><td><code>progress/</code></td><td>7</td><td>136,412</td><td><code>implemented-webui-history.md</code> 48,169 为全库第二</td></tr>
+  <tr><td><code>testing/</code></td><td>9</td><td>107,655</td><td><code>real-machine.md</code> 35,429(用户点名件)</td></tr>
+  <tr><td><code>conventions/</code></td><td>2</td><td>36,458</td><td><code>webui.md</code> 27,657</td></tr>
+  <tr><td><code>modules/</code></td><td>3</td><td>33,250</td><td><code>webui-static-contract.md</code> 15,063</td></tr>
+  <tr><td><code>systemPatterns/</code></td><td>3</td><td>33,177</td><td><code>web-runtime.md</code> 14,200</td></tr>
+  <tr><td><code>rule-system/</code></td><td>2</td><td>22,526</td><td><code>conditions-and-actions.md</code> 12,904</td></tr>
+  <tr><td><code>config-reference/</code></td><td>1</td><td>24,300</td><td><code>keys.md</code>——配置单点文档, 压缩需谨慎</td></tr>
+  <tr><td><code>issues/_index.md</code></td><td>1</td><td>15,332</td><td>生成物(生成器产出, 不手压)</td></tr>
+  <tr><td><code>reports/_index.md</code></td><td>1</td><td>11,172</td><td>生成物</td></tr>
+  <tr><td><code>plans/_index.md</code></td><td>1</td><td>10,386</td><td>生成物</td></tr>
+  <tr><td><code>checklists/</code></td><td>1</td><td>10,125</td><td><code>manual-walkthrough.md</code></td></tr>
+  <tr><td><code>activeContext/</code></td><td>1</td><td>8,559</td><td>滚动切片, 随收尾机制自清, 或无需处理</td></tr>
+</table>
+
+<h3>B. 主线 top 15(压缩候选优先级直观参考)</h3>
+<table>
+  <tr><th>字符</th><th>文件</th></tr>
+  <tr><td>127,903</td><td><code>tasks/26-10-20-frontend-dup-code-audit.md</code></td></tr>
+  <tr><td>84,998</td><td><code>tasks/26-10-08-test-mutation-audit.md</code></td></tr>
+  <tr><td>53,292</td><td><code>tasks/26-11-03-memory-bank-code-review-3-s1.md</code></td></tr>
+  <tr><td>48,169</td><td><code>progress/implemented-webui-history.md</code></td></tr>
+  <tr><td>35,429</td><td><code>testing/real-machine.md</code></td></tr>
+  <tr><td>31,621</td><td><code>tasks/26-10-10-backend-dup-code-audit.md</code></td></tr>
+  <tr><td>28,886</td><td><code>tasks/26-10-16-backend-global-traffic-monitor.md</code></td></tr>
+  <tr><td>27,657</td><td><code>conventions/webui.md</code></td></tr>
+  <tr><td>26,615</td><td><code>pitfalls/web-ui/_index.md</code></td></tr>
+  <tr><td>25,791</td><td><code>pitfalls/testing/_index.md</code></td></tr>
+  <tr><td>25,766</td><td><code>tasks/26-09-22-backend-partial-hr-verify.md</code></td></tr>
+  <tr><td>25,676</td><td><code>tasks/26-10-17-backend-global-traffic-source-integration.md</code></td></tr>
+  <tr><td>24,530</td><td><code>tasks/26-10-13-backend-seed-state-writeback.md</code></td></tr>
+  <tr><td>24,300</td><td><code>config-reference/keys.md</code></td></tr>
+  <tr><td>23,092</td><td><code>tasks/26-09-30-backend-kernel-module-refactor.md</code></td></tr>
+</table>
+
+<h3>C. memory-bank 内的生成物/数据件(27 件, 约 923,111 字符)</h3>
+<ul>
+  <li><code>testing/baselines/attachments/_archive.md</code> 177,748 · <code>issues/attachments/_archive.md</code> 99,474 · <code>tasks/attachments/_archive.md</code> 36,718 · <code>plans/attachments/_archive.md</code> 29,735 —— 均为生成器产出的归档索引, <strong>不宜手压</strong>, 压缩=改生成器归档策略(分卷/截断), 单列决策。</li>
+  <li><code>tasks/attachments/</code> 下的数据切片 19 件(rules 分类 name/function 表、verify log 等, 40K~61K 级)——原始取证数据, 是否纳入压缩按「整读价值」单独裁。</li>
+</ul>
+
+<h3>D. memory-bank 之外</h3>
+<table>
+  <tr><th>范围</th><th>件数</th><th>最大件</th><th>说明</th></tr>
+  <tr><td>根目录</td><td>2</td><td><code>TODO.md</code> 25,043; <code>README.md</code> 9,634</td><td>README 与 AGENTS.md 冲突裁决链上位, 压缩影响路由</td></tr>
+  <tr><td><code>.commands/</code> references</td><td>2</td><td><code>my-commit-flow/references/pipeline.md</code> 12,451; <code>mutants/references/why.md</code> 11,339</td><td>口径为「排障才读」, 可容忍度较高</td></tr>
+  <tr><td><code>.agents/skills/*/SKILL.md</code> (项目自有)</td><td>12</td><td><code>frontend-page-design</code> 92,163; <code>mutation-testing</code> 18,579; <code>skill-creator</code> 18,057; <code>memory-bank</code> 11,865 等</td><td>skill 每次触发整份注入上下文, 单次代价最高的一类</td></tr>
+  <tr><td><code>.agents/skills/</code> references 等</td><td>约 30</td><td><code>delivery-artifact/guizang-ppt/layouts-swiss.md</code> 37,340</td><td>按需加载型, 优先级低</td></tr>
+  <tr><td>第三方素材库(autoclaw-design-capability 等)</td><td>数千</td><td>—</td><td><strong>建议排除在压缩范围外</strong>(外部素材, 随上游, 多为按需加载的设计骨架)</td></tr>
+</table>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>影响面</h2>
+    <table>
+      <tr><th>维度</th><th>结论</th></tr>
+      <tr><td>触发条件</td><td>每次按路由读知识库文档、或触发 skill 时; tasks 历史档案 62 件超限意味着检索「历史结论」的成本持续上升</td></tr>
+      <tr><td>影响范围</td><td>会话上下文成本(memory-bank 主线约 180 万字符存量); pitfalls 两个类索引本身超 8K, 与 AGENTS.md「禁止整读」的检索纪律矛盾; 超 8K 无守卫, 新增大件不会被拦</td></tr>
+      <tr><td>严重度</td><td>中——不损正确性, 但长期吃上下文预算与检索纪律; 生成物归档索引(92 万字符)增长速度最快</td></tr>
+    </table>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>定位锚点</h2>
+    <p class="hint">写「符号名 + grep 关键词 + 当时的行号（标取证时间）」—— 代码会漂移，靠符号与 grep 重新定位，行号只是加速项。</p>
+    <ul>
+      <li>测量命令(可随时复跑): <code>find memory-bank -name "*.md" -print0 | xargs -0 wc -m | sort -rn | awk '$1&gt;8000 &amp;&amp; $2!="total"'</code>(取证 2026-11-05 08:55, HEAD 5bcc9831)</li>
+      <li>阈值立论单点: <code>AGENTS.md</code>「⚠本文件有8000字符硬上限」段; 守卫 <code>commands run doc.caps</code>(目前只查 AGENTS.md 一件)</li>
+      <li>用户点名件: <code>memory-bank/testing/real-machine.md</code>(35,429 字符)</li>
+      <li>pitfalls 路由入口: <code>memory-bank/README.md</code> 细路由表——压缩蒸馏改动后须同步该表与各 <code>_index.md</code></li>
+    </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
+    <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
+    <div class="callout">待查（已排除：TODO）</div>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>建议修法<span class="opt">（可选）</span></h2>
+    <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
+    <p>方向(均待拍板, 本件不实施):</p>
+    <ul>
+      <li><strong>① 主线手写文档蒸馏</strong>: pitfalls 类索引(<code>web-ui/_index.md</code> 26K、<code>testing/_index.md</code> 25K)与 <code>conventions/webui.md</code>、<code>progress/implemented-*</code> 优先——它们是被路由整读频率最高的一层。蒸馏口径需定义: 保留结论与锚点, 过程叙事迁 tasks 附件。</li>
+      <li><strong>② tasks 历史档案</strong>: 62 件约 108 万字符。候选方案: (a)老档案压缩成「结论卡」+ 原文归档; (b)按状态 Done 的档案批量降密度。量大, 建议立 tasks 档案分批做而非一次性。</li>
+      <li><strong>③ 生成物</strong>: <code>attachments/_archive.md</code> ×4(92 万字符)不手压——改生成器归档策略(如分卷), 或确认其永不被整读后降级。</li>
+      <li><strong>④ skill 主文件</strong>: 12 件超 8K, 尤其 <code>frontend-page-design/SKILL.md</code> 92K(触发即注入)。项目自有的可裁; 第三方素材库排除在外。</li>
+      <li><strong>⑤ 守卫</strong>: 参照 AGENTS.md 的 <code>doc.caps</code>, 把 8000 字符上限扩成全库 md 守卫(存量冻结只拦新增, 同测试基线口径), 否则压完还会长回来。</li>
+    </ul>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>状态变更日志</h2>
+    <ul>
+      <li>2026-11-05 08:55 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    </ul>
+    <h3>复验</h3>
+    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <h3>修复后补充</h3>
+    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  </section>
+
+  <footer>
+    26-11-05-0855-docs-kb-doc-compress.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>
