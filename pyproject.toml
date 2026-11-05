@@ -150,10 +150,8 @@ module = [
 ]
 disable_error_code = ["union-attr", "return-value", "arg-type", "assignment", "operator", "call-overload"]  # 2026-11-06, 现场裁量
 
-# ⑤ qbclient._session 与三方基类 qbittorrent-api Request 的签名不兼容, 对齐需改转发逻辑(留给递减)。
-[[tool.mypy.overrides]]
-module = ["auto_qb.core.qbclient"]
-disable_error_code = ["override"]  # 2026-11-06, 现场裁量
+# 豁免块 5 已递减(2026-11-06, issue 26-11-06-0247): _session 返回注解对齐三方基类
+# QbittorrentSession, override 豁免整块摘除; 编号占位保留, 便于与守阵冻结清单逐条对账。
 
 # ⑥ hr 杂型面(现场裁量): store/model/server 的 Optional 收窄(arg-type/operator/assignment)。
 [[tool.mypy.overrides]]

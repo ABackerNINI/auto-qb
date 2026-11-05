@@ -5,8 +5,8 @@
 """
 from urllib.parse import urlparse
 
-import requests
 from qbittorrentapi import Client
+from qbittorrentapi.request import QbittorrentSession
 
 from ..config import QbittorrentConfig
 
@@ -44,7 +44,10 @@ class LocalQbClient(Client):
     仅本地地址使用本子类, 远程/域名连接保留 requests 默认行为(企业代理/~/.netrc 可能真实需要)。
     """
     @property
-    def _session(self) -> requests.Session:
+    def _session(self) -> QbittorrentSession:
+        # 返回注解须与三方基类 Request._session 一致: QbittorrentSession 是 requests.Session 的子类,
+        # 收宽成 requests.Session 会触发 mypy [override](违反 LSP), 曾靠 disable_error_code 豁免
+        # (issue 26-11-06-0247)。运行期返回值不变 —— super()._session 构造的就是 QbittorrentSession。
         session = super()._session
         session.trust_env = False
         return session

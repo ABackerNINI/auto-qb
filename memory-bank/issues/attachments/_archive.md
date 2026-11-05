@@ -4,11 +4,12 @@
 > 主索引的已关闭区按 8,000 字符预算裁剪(上限 `CLOSED_KEEP` 条), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (41)
+## Open (42)
 
+- [chore] [pyproject.toml 存量带圈数字注释与 code-style 非 ASCII 图形符号禁令冲突](../26-11-06-0624-chore-pyproject-circled-number-comments.html) — 配置注释 22 行含带圈数字编号(1)-(18), 禁令要求代码/配置一律 ASCII; 本轮新增注释已用 ASCII, 存量待清
+- [test] [mypy 豁免守阵冻结清单仍留 qbclient/override 条目, 回加豁免不会被拦](../26-11-06-0624-test-mypy-allowlist-stale-frozen-entry.html) — 豁免块 5 已摘除但冻结清单保留该对, 递减不红设计下重新加回同一豁免也不红, 递减成果未闭环
 - [bug] [real.down 实现用 Stop-Process -Force 强杀 qB, 触进程安全红线](../26-11-06-0448-bug-real-down-force-kill.html) — tests-real/runner.py cmd_down 以 PowerShell Stop-Process -Force 强杀 qB 进程(按镜像+路径匹配), 违反 AGENTS.md 禁止一切 taskkill/强杀红线; 替代=WebAPI app/shutdown 优雅退出(实验轮实测 HTTP 200)
 - [test] [Windows CI 连续红: Test Windows (Py3.12/3.13) 自 ced9a88a 起 failure, 本地 Windows 全量绿](../26-11-06-0321-test-ci-windows-failure.html) — GitHub Actions Windows 两个测试 job 连续红(早于版本管理本轮全部涉码), 本地 Windows test.quick/test.full 全绿——CI 环境特有; 日志 API 需鉴权, 待 gh 配 token 后定位
-- [refactor] [LocalQbClient._session 覆盖签名与三方基类不兼容(override 错误码进豁免面)](../26-11-06-0247-refactor-qbclient-session-override.html) — core/qbclient.py 覆盖 _session property 返回 requests.Session, 基类 qbittorrentapi 返回 QbittorrentSession(子类) —— 返回类型收宽违反 LSP, mypy override 报错被 [tool.mypy] disable_error_code 豁免; 注解改 QbittorrentSession 即可摘除豁免
 - [feat] [recheck_fails 噪声收窄: FAILED/START_TIMEOUT 分记, 锐化失败证据信号](../26-11-05-0853-feat-recheck-fails-noise-narrowing.html) — recheck_fails 计数混记真数据证据(FAILED)与噪声(START_TIMEOUT 未开检), G8/G9/链1.6/冷却都消费这个混合信号; 收窄=分记并让防护闸只认真证据, 误拦面变小但动 state schema 与 bump 写点
 - [question] [跳检抽样校验是否值得做: 读盘换下载量的成本收益待拍板](../26-11-05-0514-question-skip-check-sampling-value.html) — 跳检防线之二的抽样校验(建议修法第1条)故意未做, 需讨论读盘成本/边界复杂度与残余风险是否值得投入; 主件 26-10-22-0308 已因保险丝落地收 Done
 - [bug] [整组迁移可对「账面完成但磁盘名错位(.!qB)」的组零搬移假成功](../26-11-05-0420-bug-relocate-zero-move.html) — 搬迁按声明名逐文件 stat,磁盘名带 .!qB 全 miss 被静默忽略,qB 报「成功移动」但零搬移;.!qB 闸门只扫内容根顶层漏拦,10min 后才由停滞看门狗判失败
@@ -55,7 +56,7 @@
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 - [chore] [版本号双源矛盾: __init__.__version__ 0.2.0 vs pyproject 0.1.0](../26-09-21-1408-chore-version-dual-source.html) — WebUI 顶栏透出与打包元数据已差一个 minor; 建议 pyproject 单源 + 动态读取
 
-## Done (430)
+## Done (431)
 
 - [bug] [TASK_REFS_RE 空行跨行捕获: 空 **Refs:** 行把下一行标题吞成 ref, 认领链守阵误红](../26-11-06-0415-bug-kb-refs-regex-blank-line.html) — md 档案留空 **Refs:** 行时 TASK_REFS_RE 的 \s* 跨行吞掉下一行标题当 ref, test_claim_chain_is_bidirectional 误红; kb.new 模板默认留空行, 新档案踩坑
 - [test] [gtm-alert 双皮肤日期炸弹: 硬编码日期超 24h TTL 必红](../26-11-06-0330-test-e2e-gtm-alert-date-bomb.html) — e2e/gtm-alert.spec.mjs 硬编码 T1/T2/T3=2026-11-03, 超过 dialogs.js gtmAlert computed 的 24h TTL 后横幅被判空, 双皮肤 prism/atlas 各 1 条必红
@@ -64,6 +65,7 @@
 - [test] [test_hr_discovery 在 -n 8 下偶发端口碰撞红](../26-11-06-0330-test-hr-discovery-port-collision.html) — test_runtime_builds_and_starts_discovery 断言 bound_port==base, xdist 8 worker 并行时偶发碰撞(坑档 fixed-port-test-collision 同类), 单跑恒绿
 - [docs] [models.py 注释称旧 hr_check 键仍兼容接受, 实际校验层已报错](../26-11-06-0306-docs-config-models-hr-check-comment.html) — 旧键兼容注释与现行校验行为矛盾, 读注释会误判兼容层仍在
 - [test] [behavior-core 坑档两条 judge_record 守阵引用无同名测试](../26-11-06-0306-test-hr-behavior-core-test-refs.html) — 引用名在现行 tests/ 不存在, 可能文档引用过期或覆盖缺口待核
+- [refactor] [LocalQbClient._session 覆盖签名与三方基类不兼容(override 错误码进豁免面)](../26-11-06-0247-refactor-qbclient-session-override.html) — core/qbclient.py 覆盖 _session property 返回 requests.Session, 基类 qbittorrentapi 返回 QbittorrentSession(子类) —— 返回类型收宽违反 LSP, mypy override 报错被 [tool.mypy] disable_error_code 豁免; 注解改 QbittorrentSession 即可摘除豁免
 - [refactor] [_slot_agg_obs 注解 2 元组与实际 4 元组契约漂移, mypy call-arg 被豁免面吞掉](../26-11-06-0247-refactor-slot-agg-obs-tuple-drift.html) — traffic_sample_agg._slot_agg_obs 注解 Optional[Tuple[int,int]] 实际恒返 4 元组, 连累 :561 调用 mypy call-arg 报缺 3 实参(现被 disable_error_code 豁免掩盖); 运行期无恙, 属注解契约漂移
 - [test] [test_qbmanager_tasks 两处缺 assert 的元组表达式(伪断言)](../26-11-05-0344-test-qbmanager-tasks-missing-assert.html) — run_sync_line/run_task_line 的 assert_called_once_with(False), "..." 是表达式语句非 assert 语句, 校验仍生效但失败消息丢失
 - [test] [test_rule_compat_mapping 相邻逐字重复断言, 注释语义无断言承载](../26-11-05-0344-test-rule-compat-mapping-dup-assert.html) — test_normalize_idempotent :111/:113 同一断言出现两次, 第二条死断言; 注释宣称「不新建 actions 列表项」未被检验
