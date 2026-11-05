@@ -23,6 +23,8 @@
 - test_main_empty_range_and_changelog_flag: 空区间提案 none / --emit-changelog 透出草稿段 / 空区间无草稿 (评审 R1-F11/F13)
 - test_json_includes_changelog_draft: --json 与 --emit-changelog 同给时草稿并入 JSON 不静默丢 (评审 R1-F3)
 - test_major_only_via_explicit_flag: main 层 --major 才产 major, 无旗标时决策表永不给出
+- test_default_version_file: [tool.hatch.version].path 读取(有键返回/无键报错) (R2-F3-1)
+- test_main_uses_smart_defaults: 不传 --version-file/--version-regex 时走默认链出提案 (R2-F3-1)
 """
 
 from __future__ import annotations
@@ -304,3 +306,31 @@ def test_json_includes_changelog_draft(tmp_path, monkeypatch, capsys):
     payload = json.loads(capsys.readouterr().out)
     assert payload["changelog_draft"].startswith("### Added")
     assert payload["bump"] == "minor" and payload["next"] == "0.3.0"
+
+
+# --------------------------------------------------------------- 智能默认链 (R2-F3-1)
+
+
+def test_default_version_file(tmp_path):
+    mod = _mod()
+    (tmp_path / "ver.py").write_text('__version__ = "0.2.0"\n', encoding="utf-8")
+    (tmp_path /
+     "pyproject.toml").write_text('[tool.hatch.version]\nsource = "regex"\npath = "ver.py"\n', encoding="utf-8")
+    assert mod.default_version_file(str(tmp_path)) == tmp_path / "ver.py"
+
+    (tmp_path / "pyproject.toml").write_text('[project]\nname = "x"\n', encoding="utf-8")
+    with pytest.raises(RuntimeError, match="--version-file"):
+        mod.default_version_file(str(tmp_path))
+
+
+def test_main_uses_smart_defaults(tmp_path, monkeypatch, capsys):
+    # 不传 --version-file/--version-regex: 默认链 = [tool.hatch.version].path + dunder 正则。
+    mod = _mod()
+    (tmp_path / "ver.py").write_text('__version__ = "0.2.0"\n', encoding="utf-8")
+    (tmp_path /
+     "pyproject.toml").write_text('[tool.hatch.version]\nsource = "regex"\npath = "ver.py"\n', encoding="utf-8")
+    monkeypatch.setattr(mod, "run_git", lambda args, repo: "v0.2.0" if args[0] == "describe" else "✨ A\n🐛 B")
+    rc = mod.main(["--repo", str(tmp_path)])
+    cap = capsys.readouterr()
+    assert rc == 0
+    assert "提案: minor" in cap.out and "0.2.0 -> 0.3.0" in cap.out

@@ -16,6 +16,7 @@ METADATA 由版本源先定), hash 尾经 extra_metadata 侧车文件携带 —�
 
 from __future__ import annotations
 
+import atexit
 import shutil
 import subprocess
 import tempfile
@@ -61,6 +62,8 @@ class BuildHook(BuildHookInterface):
         tmp_dir = Path(tempfile.mkdtemp(prefix="auto-qb-build-id-"))
         (tmp_dir / "BUILD_ID").write_text(build_id + "\n", encoding="utf-8")
         self._build_id_tmp_dir = tmp_dir
+        # hatchling 钩子无 try/finally: 构建中途失败不调 finalize, atexit 兜底防 %TEMP% 累积(评审 R2-F5)。
+        atexit.register(shutil.rmtree, tmp_dir, ignore_errors=True)
         # 映射方向 = {源: 目标相对路径}(与 force-include 同构), 落点 .dist-info/extra_metadata/BUILD_ID。
         build_data["extra_metadata"] = {str(tmp_dir / "BUILD_ID"): "BUILD_ID"}
 

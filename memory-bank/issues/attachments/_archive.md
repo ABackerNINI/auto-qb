@@ -4,12 +4,13 @@
 > 主索引的已关闭区按 8,000 字符预算裁剪(上限 `CLOSED_KEEP` 条), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (46)
+## Open (47)
 
 - [test] [gtm-alert 双皮肤日期炸弹: 硬编码日期超 24h TTL 必红](../26-11-06-0330-test-e2e-gtm-alert-date-bomb.html) — e2e/gtm-alert.spec.mjs 硬编码 T1/T2/T3=2026-11-03, 超过 dialogs.js gtmAlert computed 的 24h TTL 后横幅被判空, 双皮肤 prism/atlas 各 1 条必红
 - [test] [views 种子页筛选器有数据恒红: relocate kind 在 e2e 桩下恒空](../26-11-06-0330-test-e2e-views-relocate-kind-empty.html) — filters.js 无条件注册 relocate kind 但 ui_harness 桩不注入任何 relocate 态, 断言空筛选器 kinds=[] 必红; 修桩还是修产品待裁决
 - [test] [test_start_all_busy_returns_false_and_retries 偶发 WinError 10013](../26-11-06-0330-test-hr-discovery-busy-retry-flake.html) — 随机序巡检第 1 轮触发 127.0.0.1:3166 真绑定 PermissionError, 归因端口/资源类(排除端口段), 非时序
 - [test] [test_hr_discovery 在 -n 8 下偶发端口碰撞红](../26-11-06-0330-test-hr-discovery-port-collision.html) — test_runtime_builds_and_starts_discovery 断言 bound_port==base, xdist 8 worker 并行时偶发碰撞(坑档 fixed-port-test-collision 同类), 单跑恒绿
+- [test] [Windows CI 连续红: Test Windows (Py3.12/3.13) 自 ced9a88a 起 failure, 本地 Windows 全量绿](../26-11-06-0321-test-ci-windows-failure.html) — GitHub Actions Windows 两个测试 job 连续红(早于版本管理本轮全部涉码), 本地 Windows test.quick/test.full 全绿——CI 环境特有; 日志 API 需鉴权, 待 gh 配 token 后定位
 - [docs] [models.py 注释称旧 hr_check 键仍兼容接受, 实际校验层已报错](../26-11-06-0306-docs-config-models-hr-check-comment.html) — 旧键兼容注释与现行校验行为矛盾, 读注释会误判兼容层仍在
 - [test] [behavior-core 坑档两条 judge_record 守阵引用无同名测试](../26-11-06-0306-test-hr-behavior-core-test-refs.html) — 引用名在现行 tests/ 不存在, 可能文档引用过期或覆盖缺口待核
 - [refactor] [LocalQbClient._session 覆盖签名与三方基类不兼容(override 错误码进豁免面)](../26-11-06-0247-refactor-qbclient-session-override.html) — core/qbclient.py 覆盖 _session property 返回 requests.Session, 基类 qbittorrentapi 返回 QbittorrentSession(子类) —— 返回类型收宽违反 LSP, mypy override 报错被 [tool.mypy] disable_error_code 豁免; 注解改 QbittorrentSession 即可摘除豁免

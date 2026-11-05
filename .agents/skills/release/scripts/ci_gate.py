@@ -13,7 +13,7 @@
 用法:
     python ci_gate.py --gh-repo <owner/name> [--sha <sha>] [--branch <branch>]
                       [--timeout-min 20] [--interval-sec 30]
-退出码: 0 全绿 / 1 CI 红 / 2 超时或环境失败 / 3 参数或 API 不可用。
+退出码: 0 全绿 / 1 CI 红 / 2 超时未收敛(argparse 用法错误同为 2, 停手看 stderr 首行区分) / 3 API 不可用。
 """
 
 from __future__ import annotations
@@ -37,13 +37,14 @@ def fetch_check_runs(sha: str, repo: str) -> list[dict] | None:
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:
             payload = json.loads(resp.read().decode("utf-8"))
+        return payload.get("check_runs", [])
     except urllib.error.HTTPError as exc:
         print(f"[ci_gate] check-runs API HTTP {exc.code}(403=限额/私有仓), 停手报告", file=sys.stderr)
         return None
-    except (urllib.error.URLError, TimeoutError, OSError) as exc:
-        print(f"[ci_gate] check-runs API 不可达: {exc}", file=sys.stderr)
+    except (urllib.error.URLError, TimeoutError, OSError, json.JSONDecodeError, AttributeError, ValueError) as exc:
+        # 代理注入 HTML/5xx 异常体等解析失败按「API 不可用」契约走 None(rc3), 不误诊成 CI 红(R2-F2-4)。
+        print(f"[ci_gate] check-runs 响应不可解析, 按 API 不可用停手: {exc}", file=sys.stderr)
         return None
-    return payload.get("check_runs", [])
 
 
 def judge(runs: list[dict]) -> tuple[str, list[str]]:

@@ -27,6 +27,12 @@ monkeypatch 单点注入 —— 零真实网络、零子进程、零仓库外副
 - test_release_page_gitee_failure_rc1: token 在手但建页失败 -> rc1 (主线失败要停)
 - test_release_page_reentrant_and_created: 已存在重入 / 201 创建
 - test_release_page_github_missing_gh: gh 缺席 -> 镜像失败只报告 rc0
+- test_tag_release_lightweight_tag_parsing: 轻量 tag(裸 ref 行)解析与推送 (R2-F3-6)
+- test_ci_gate_sha_default_paths: --sha 缺省走 git rev-parse HEAD; git 不可用 rc3 (R2-F3-7)
+- test_release_page_github_fail_paths: gh 在场但失败=镜像报告不重试; already exists=重入 (R2-F3-8)
+- test_release_page_notes_missing: --notes-file 缺失 rc1 (R2-F3-10)
+- test_apply_bump_read_current_version_direct: current_version 解析与非 SemVer 报错 (R2-F3-9)
+- test_apply_bump_skip_sync_contract: --skip-sync 时 synced=False 且不调 uv sync (R2-F3-12)
 """
 
 from __future__ import annotations
@@ -40,6 +46,9 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / ".agents" / "skills" / "release" / "scripts"
+
+NL = chr(10)
+TAB = chr(9)
 
 
 def _load(name: str):
@@ -130,7 +139,7 @@ def _ff_base_mapping(remote_tip, head):
     return _gitmap(
         {
             ("status", "--porcelain"): "",
-            ("rev-parse", "HEAD"): head,
+            ("rev-parse", "HEAD^{commit}"): head,
             ("ls-remote", "gitee", "refs/heads/master"): f"{remote_tip}\trefs/heads/master\n" if remote_tip else "",
             ("fetch", "--quiet", "gitee", "master"): "",
             ("merge-base", "--is-ancestor", remote_tip or "x", head): "" if remote_tip else None,
@@ -144,7 +153,7 @@ def test_ff_merge_non_ff_stops(tmp_path, monkeypatch, capsys):
     git = _gitmap(
         {
             ("status", "--porcelain"): "",
-            ("rev-parse", "HEAD"): "bbb2222",
+            ("rev-parse", "HEAD^{commit}"): "bbb2222",
             ("ls-remote", "gitee", "refs/heads/master"): "aaa1111\trefs/heads/master\n",
             ("fetch", "--quiet", "gitee", "master"): "",
             ("merge-base", "--is-ancestor", "aaa1111", "bbb2222"): None,  # rc!=0 -> 非祖先
@@ -175,7 +184,7 @@ def test_ff_merge_happy_path(tmp_path, monkeypatch, capsys):
         calls.append(key)
         if key[:2] == ("status", "--porcelain"):
             return ""
-        if key[:2] == ("rev-parse", "HEAD"):
+        if key[:2] == ("rev-parse", "HEAD^{commit}"):
             return head
         if key[:1] == ("fetch", ):
             return ""
@@ -394,7 +403,7 @@ def test_release_page_gitee_failure_rc1(tmp_path, monkeypatch, capsys):
     notes = tmp_path / "notes.md"
     notes.write_text("x", encoding="utf-8")
     monkeypatch.setattr(mod.os, "environ", {"GITEE_TOKEN": "tok"})
-    monkeypatch.setattr(mod, "http_json", lambda url, payload, method="POST": (422, "validation failed"))
+    monkeypatch.setattr(mod, "http_json", lambda url, payload, method="POST", token=None: (422, "validation failed"))
     rc = mod.main(["--tag", "v0.3.0", "--notes-file", str(notes), "--gitee-repo", "o/n"])
     err = capsys.readouterr().err.strip()
     assert rc == 1 and "gitee 建页失败" in err
@@ -408,7 +417,7 @@ def test_release_page_reentrant_and_created(tmp_path, monkeypatch, capsys):
     # GET 探测 200 -> reentrant; POST 201 -> created
     responses = {("GET", "releases/tags/v0.3.0"): (200, "{}"), ("POST", "releases"): (201, "{}")}
 
-    def http(url, payload, method="POST"):
+    def http(url, payload, method="POST", token=None):
         for (m, frag), (status, body) in responses.items():
             if method == m and frag in url:
                 return status, body
@@ -423,7 +432,7 @@ def test_release_page_reentrant_and_created(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(
         mod,
         "http_json",
-        lambda url, payload, method="POST": next(
+        lambda url, payload, method="POST", token=None: next(
             (v for (m, frag), v in responses2.items() if method == m and frag in url), (500, "boom")
         )
     )
@@ -440,3 +449,134 @@ def test_release_page_github_missing_gh(tmp_path, monkeypatch, capsys):
     rc = mod.main(["--tag", "v0.3.0", "--notes-file", str(notes), "--github-repo", "o/n"])
     payload = json.loads(capsys.readouterr().out)
     assert rc == 0 and "gh 不在 PATH" in payload["results"]["github"] and "允许滞后" in payload["results"]["github"]
+
+
+# --------------------------------------------------------------- R2-F3 补测: 轻量 tag / 缺省路径 / 镜像失败 / 契约细项
+
+
+def test_tag_release_lightweight_tag_parsing(tmp_path, monkeypatch, capsys):
+    # light-weight tag: ls-remote 只有裸 ref 行(无 peeled)也按指向处理(R2-F3-6)。
+    mod = _load("tag_release")
+    sha = "head3333"
+    state = {"tagged": False, "pushed": False}
+
+    def git(args, repo):
+        key = tuple(args)
+        if key[:2] == ("rev-parse", "HEAD"):
+            return (0, sha + NL)
+        if key[:1] == ("tag", ):
+            state["tagged"] = True
+            return (0, "")
+        if key[:3] == ("rev-parse", "--verify", "--quiet"):
+            return (0, sha + NL) if state["tagged"] else (1, "")
+        if key[:1] == ("ls-remote", ):
+            # 轻量 tag 形态: 只有一行, sha 即提交
+            return (0, sha + TAB + "refs/tags/v0.4.0" + NL) if state["pushed"] else (0, "")
+        if key[:1] == ("push", ):
+            state["pushed"] = True
+            return (0, "")
+        raise RuntimeError(f"unexpected: {key}")
+
+    monkeypatch.setattr(mod, "run_git", git)
+    rc = mod.main(["--repo", str(tmp_path), "--tag", "v0.4.0", "--remotes", "gitee"])
+    cap = capsys.readouterr()
+    payload = json.loads(cap.out)
+    assert rc == 0 and payload["remotes"] == {"gitee": "pushed"} and payload["sha"] == sha
+
+
+def test_ci_gate_sha_default_paths(tmp_path, monkeypatch, capsys):
+    # --sha 缺省走 git rev-parse HEAD(R2-F3-7): 解析成功按该 sha 轮询; git 不可用 rc3。
+    mod = _load("ci_gate")
+    seen = []
+    monkeypatch.setattr(
+        mod, "fetch_check_runs",
+        lambda sha, repo: seen.append(sha) or [{
+            "name": "t",
+            "status": "completed",
+            "conclusion": "success"
+        }]
+    )
+
+    class P:
+        returncode = 0
+        stdout = "fedcba98" + NL
+
+    monkeypatch.setattr(mod.subprocess, "run", lambda args, **kw: P())
+    rc = mod.main(["--gh-repo", "o/r", "--interval-sec", "0"])
+    cap = capsys.readouterr()
+    assert rc == 0 and seen == ["fedcba98"]  # 缺省路径按 HEAD sha 轮询
+
+    def git_boom(args, **kw):
+        raise OSError("no git")
+
+    monkeypatch.setattr(mod.subprocess, "run", git_boom)
+    rc = mod.main(["--gh-repo", "o/r", "--interval-sec", "0"])
+    err = capsys.readouterr().err.strip()
+    assert rc == 3 and "无法解析发版提交" in err
+
+
+def test_release_page_github_fail_paths(tmp_path, monkeypatch, capsys):
+    # gh 在场但失败: 镜像失败只报告不重试, 主线 rc 不受影响(R2-F3-8); already exists 按重入。
+    mod = _load("release_page")
+    notes = tmp_path / "notes.md"
+    notes.write_text("x", encoding="utf-8")
+
+    class P:
+        returncode = 1
+        stderr = "remote: page not found"
+        stdout = ""
+
+    monkeypatch.setattr(mod.shutil, "which", lambda name: "gh.exe")
+    monkeypatch.setattr(mod.subprocess, "run", lambda args, **kw: P())
+    rc = mod.main(["--tag", "v0.3.0", "--notes-file", str(notes), "--github-repo", "o/n"])
+    cap = capsys.readouterr()
+    payload = json.loads(cap.out)
+    assert rc == 0 and "gh rc=1" in payload["results"]["github"] and "允许滞后" in payload["results"]["github"]
+
+    P.stderr = "release already exists"
+    rc = mod.main(["--tag", "v0.3.0", "--notes-file", str(notes), "--github-repo", "o/n"])
+    payload = json.loads(capsys.readouterr().out)
+    assert rc == 0 and payload["results"]["github"] == "reentrant"
+
+
+def test_release_page_notes_missing(tmp_path, capsys):
+    # --notes-file 缺失 -> rc1 契约(R2-F3-10)。
+    mod = _load("release_page")
+    rc = mod.main(["--tag", "v0.3.0", "--notes-file", str(tmp_path / "nope.md")])
+    err = capsys.readouterr().err.strip()
+    assert rc == 1 and "发行说明文件不存在" in err
+
+
+def test_apply_bump_read_current_version_direct(tmp_path):
+    # read_current_version 真实体: 合法解析 / 缺失或非 SemVer 报错(R2-F3-9)。
+    mod = _load("apply_bump")
+    Q = chr(34)
+    (tmp_path / "pyproject.toml"
+    ).write_text("[tool.bumpversion]" + NL + "current_version = " + Q + "0.2.1" + Q + NL, encoding="utf-8")
+    assert mod.read_current_version(str(tmp_path)) == "0.2.1"
+    bad = "[tool.bumpversion]" + NL + "current_version = " + Q + "0.2.0+dev" + Q + NL
+    (tmp_path / "pyproject.toml").write_text(bad, encoding="utf-8")
+    with pytest.raises(RuntimeError, match="非 SemVer"):
+        mod.read_current_version(str(tmp_path))
+
+
+def test_apply_bump_skip_sync_contract(tmp_path, monkeypatch, capsys):
+    # --skip-sync: synced=False 且不调 uv sync(R2-F3-12)。
+    mod = _load("apply_bump")
+    calls = []
+    versions = ["0.2.0", "0.2.1"]
+
+    def run_stub(args, repo):
+        calls.append(args)
+        if args[0] == "git" and args[1] == "status":
+            return 0, ""
+        return 0, ""
+
+    monkeypatch.setattr(mod, "run_cmd", run_stub)
+    monkeypatch.setattr(mod, "read_current_version", lambda repo: versions.pop(0))
+    monkeypatch.setattr(mod.shutil, "which", lambda name: "bm.exe")
+    rc = mod.main(["--repo", str(tmp_path), "--kind", "patch", "--skip-sync"])
+    cap = capsys.readouterr()
+    payload = json.loads(cap.out)
+    assert rc == 0 and payload["synced"] is False
+    assert not any(args[0] == "uv" and args[1] == "sync" for args in calls)

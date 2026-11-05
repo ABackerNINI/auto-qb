@@ -76,7 +76,10 @@ def main(argv: list[str] | None = None) -> int:
         if not ns.skip_sync:
             rc, out = run_cmd(["uv", "sync"], ns.repo)
             if rc != 0:
-                raise RuntimeError(f"uv sync 刷新元数据失败 rc={rc}: {out.strip()[:300]}")
+                raise RuntimeError(
+                    f"uv sync 刷新元数据失败 rc={rc}: {out.strip()[:300]}" +
+                    " —— 版本文件已 bump 且树脏, 恢复: 手动跑 uv sync 续跑, 或回退 bump 文件后重跑"
+                )
         print(
             json.dumps(
                 {

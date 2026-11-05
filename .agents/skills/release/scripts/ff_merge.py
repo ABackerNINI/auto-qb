@@ -60,7 +60,8 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         check_clean_tree(ns.repo, run_git)
-        from_tip = run_git(["rev-parse", ns.from_ref], ns.repo).strip()
+        from_tip = run_git(["rev-parse", f"{ns.from_ref}^{{commit}}"],
+                           ns.repo).strip()  # 剥 annotation: annotated tag 直给会拿到 tag 对象 sha, push 被服务端拒收
         if not from_tip:
             raise RuntimeError(f"from-ref {ns.from_ref!r} 解析为空")
         remote_tip = remote_tip_of(run_git, ns.repo, ns.remote, ns.to_branch)

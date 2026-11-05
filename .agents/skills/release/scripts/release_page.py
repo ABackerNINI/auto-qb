@@ -18,6 +18,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -26,16 +27,20 @@ import urllib.request
 from pathlib import Path
 
 GITEE_API = "https://gitee.com/api/v5"
+TAG_PATTERN = re.compile(r"^v(\d+)\.(\d+)\.(\d+)$")
 
 
-def http_json(url: str, payload: dict, method: str = "POST") -> tuple[int, str]:
-    """HTTP JSON 调用单点(测试经 monkeypatch 注入)。"""
+def http_json(url: str, payload: dict, method: str = "POST", token: str | None = None) -> tuple[int, str]:
+    """HTTP JSON 调用单点(测试经 monkeypatch 注入)。token 走 Authorization 头不进 URL(R2-F2-1)。"""
     data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    headers = {"Content-Type": "application/json", "User-Agent": "release-skill"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
     req = urllib.request.Request(
-        url, data=data, method=method, headers={
-            "Content-Type": "application/json",
-            "User-Agent": "release-skill"
-        }
+        url,
+        data=data,
+        method=method,
+        headers=headers,
     )
     try:
         with urllib.request.urlopen(req, timeout=60) as resp:
@@ -47,7 +52,7 @@ def http_json(url: str, payload: dict, method: str = "POST") -> tuple[int, str]:
 
 
 def gitee_release_exists(http, repo: str, token: str, tag: str) -> bool:
-    status, body = http(f"{GITEE_API}/repos/{repo}/releases/tags/{tag}?access_token={token}", {}, method="GET")
+    status, body = http(f"{GITEE_API}/repos/{repo}/releases/tags/{tag}", {}, method="GET", token=token)
     return status == 200
 
 
@@ -57,16 +62,18 @@ def gitee_create(http, repo: str, token: str, tag: str, notes: str) -> tuple[boo
     status, body = http(
         f"{GITEE_API}/repos/{repo}/releases",
         {
-            "access_token": token,
             "tag_name": tag,
             "name": tag,
             "body": notes,
-            "prerelease": tag.startswith("v0.")
+            "prerelease": tag.startswith("v0."),
         },
+        token=token,
     )
     if status in (200, 201):
         return True, "created"
-    if status in (400, 409, 422) and "已存在" in body or "already" in body.lower():
+    # 重入判定: 状态码与响应体双限定 —— and 先于 or 的裸写法会让任意失败体含 already
+    # 就吞掉主线失败(R2-F1-3, 违反停手清单#5 方向)。
+    if status in (400, 409, 422) and ("已存在" in body or "already" in body.lower()):
         return True, "reentrant"
     return False, f"HTTP {status}: {body.strip()[:300]}"
 
@@ -106,6 +113,10 @@ def main(argv: list[str] | None = None) -> int:
         if hasattr(stream, "reconfigure"):
             stream.reconfigure(encoding="utf-8", errors="replace")
 
+    # tag 形态校验: 带 ?/#/空格的 tag 会打错 gitee 端点或被 gh 解析成旗标(R2-F2-3)。
+    if not TAG_PATTERN.match(ns.tag):
+        print(f"[release_page] tag {ns.tag!r} 不符合 v<major>.<minor>.<patch> 形态", file=sys.stderr)
+        return 1
     if not ns.notes_file.exists():
         print(f"[release_page] 发行说明文件不存在: {ns.notes_file}", file=sys.stderr)
         return 1

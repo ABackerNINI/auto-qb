@@ -3,13 +3,16 @@
 test.pkg.scoped 对改动包跑 `pytest .commands/<包>`, 包内零 test_*.py 时收集为空 →
 退出码 5 → 闸门 FAIL(fail-closed)。本文件是 release 包的最小守阵: 不跑任何任务动作
 (不 bump / 不 merge / 不建页), 只静态核 config.toml 结构、task 引用的脚本存在、
-以及两条拍板口径的机械面版本(build 必须 --wheel, bump-my-version 配置 commit/tag=false)。
+项目事实参数(远端/分支/仓库名)、以及两条拍板口径的机械面版本(build 必须 --wheel,
+bump-my-version 配置 commit/tag=false)。
 
 ## 测试计划
-- ConfigTomlTest     config.toml 可解析 + [pack].name == "release" + 任务必备键 + <args> 占位纪律
+- ConfigTomlTest     config.toml 可解析 + [pack].name == "release" + 任务必备键 + <args> 占位纪律(when+note 双扫)
+- TaskSetTest        7 条 task id 集合完整 + 项目事实值钉死(gitee/master/双 gh-repo/双远端 tag)
 - ScriptRefsTest     每条 run 引用的 skill 脚本文件真实存在
+- FlagConsistencyTest config.toml 手写旗标 ⊆ 对应脚本 argparse 的 add_argument 集合(改旗标即红)
 - BuildTaskTest      release.build 用 `uv build --wheel`(源根构建)而非全量 uv build(sdist 两段式丢 git 上下文)
-- BumpWiringTest     pyproject [tool.bumpversion] commit/tag 均 false(闸门纪律), 与 test_version_guard 互为备份
+- BumpWiringTest     pyproject [tool.bumpversion] commit/tag 均 false + [tool.hatch.build.hooks.custom] 接线在位
 """
 
 from __future__ import annotations
@@ -25,6 +28,17 @@ ROOT = PKG.parents[1]  # → 仓库根
 
 def _load_cfg() -> dict:
     return tomllib.loads((PKG / "config.toml").read_text(encoding="utf-8"))
+
+
+def _pyproject() -> dict:
+    with (ROOT / "pyproject.toml").open("rb") as fh:
+        return tomllib.load(fh)
+
+
+def _argparse_flags(script_rel: str) -> set[str]:
+    """扫被引脚本源码的 add_argument("--x") 旗标集(静态正则, 不 import 不执行)。"""
+    src = (ROOT / script_rel).read_text(encoding="utf-8")
+    return set(re.findall(r'add_argument\(\s*"(--[\w\-]+)"', src))
 
 
 class ConfigTomlTest(unittest.TestCase):
@@ -45,12 +59,40 @@ class ConfigTomlTest(unittest.TestCase):
                 self.assertIsInstance(cmd, str, f"{tid}.run 元素应是命令串(引擎语义: 元素=整条 shell 命令)")
 
     def test_args_taking_tasks_have_placeholder(self):
-        # note 声明"agent 追加参数"的 task 必须带 <args> 占位符, 否则追加参数会被引擎 STOP。
+        # when+note 任一声明的"追加参数"的 task 必须带 <args> 占位符(R2-F1-8: 只扫 note 会漏 when 侧)。
         for tid, spec in self.cfg["tasks"].items():
-            needs_args = any(word in spec.get("note", "") for word in ("agent 追加", "<args>"))
+            declared = spec.get("note", "") + spec.get("when", "")
+            needs_args = ("agent 追加" in declared) or ("<args>" in declared)
             has_placeholder = any("<args>" in cmd for cmd in spec["run"])
             if needs_args:
-                self.assertTrue(has_placeholder, f"{tid} note 声明追加参数但 run 缺 <args> 占位符")
+                self.assertTrue(has_placeholder, f"{tid} when/note 声明追加参数但 run 缺 <args> 占位符")
+
+
+class TaskSetTest(unittest.TestCase):
+    def test_seven_tasks_complete(self):
+        # 删整条 task(如 release.ci-gate)必须红(R2-F3-3)。
+        self.assertEqual(
+            set(_load_cfg()["tasks"]),
+            {
+                "release.suggest",
+                "release.bump",
+                "release.build",
+                "release.merge",
+                "release.ci-gate",
+                "release.tag",
+                "release.page",
+            },
+        )
+
+    def test_project_facts_pinned(self):
+        # 项目事实值改动即红: 发布分支/主线远端/双 gh-repo/tag 双远端。
+        tasks = _load_cfg()["tasks"]
+        self.assertIn("--remote <args>", tasks["release.merge"]["run"][0], "merge 的远端必须是 <args> 二跑位")
+        self.assertIn("--to-branch master", tasks["release.merge"]["run"][0])
+        self.assertIn("--gh-repo ABackerNINI/auto-qb", tasks["release.ci-gate"]["run"][0])
+        self.assertIn("--remotes gitee,github", tasks["release.tag"]["run"][0])
+        self.assertIn("--gitee-repo ABacker/auto-qb", tasks["release.page"]["run"][0])
+        self.assertIn("--github-repo ABackerNINI/auto-qb", tasks["release.page"]["run"][0])
 
 
 class ScriptRefsTest(unittest.TestCase):
@@ -60,6 +102,21 @@ class ScriptRefsTest(unittest.TestCase):
                 for m in re.finditer(r"\.agents/skills/[\w\-/]+\.py", cmd):
                     path = ROOT / m.group(0)
                     self.assertTrue(path.is_file(), f"{tid} 引用的脚本不存在: {m.group(0)}")
+
+
+class FlagConsistencyTest(unittest.TestCase):
+    def test_config_flags_subset_of_argparse(self):
+        # config 侧手写旗标必须落在脚本 argparse 集合内(R2-F3-5): 旗标改名/拼错当轮红, 不等发版当场炸。
+        for tid, spec in _load_cfg()["tasks"].items():
+            for cmd in spec["run"]:
+                m = re.search(r"\.agents/skills/release/scripts/([\w\-]+\.py)", cmd)
+                if not m:
+                    continue
+                flags = _argparse_flags(f".agents/skills/release/scripts/{m.group(1)}")
+                for flag in re.findall(r"(--[\w\-]+)", cmd):
+                    if flag == "--args":  # <args> 占位符不是旗标
+                        continue
+                    self.assertIn(flag, flags, f"{tid} 的旗标 {flag} 不在 {m.group(1)} 的 argparse 集合内")
 
 
 class BuildTaskTest(unittest.TestCase):
@@ -72,10 +129,14 @@ class BuildTaskTest(unittest.TestCase):
 
 class BumpWiringTest(unittest.TestCase):
     def test_bumpversion_gates_off(self):
-        with (ROOT / "pyproject.toml").open("rb") as fh:
-            bump = tomllib.load(fh)["tool"]["bumpversion"]
+        bump = _pyproject()["tool"]["bumpversion"]
         self.assertIs(bump["commit"], False, "自动 commit 会绕开 ship.commit 闸门")
         self.assertIs(bump["tag"], False, "自动 tag 会绕开 release.tag 的 ls-remote 核验")
+
+    def test_custom_build_hook_wired(self):
+        # BUILD_ID 侧车接线被移除时构建静默丢溯源 —— 钉死钩子段存在(R2-F3-4)。
+        hatch = _pyproject()["tool"]["hatch"]
+        self.assertIn("custom", hatch.get("build", {}).get("hooks", {}), "[tool.hatch.build.hooks.custom] 缺失")
 
 
 if __name__ == "__main__":

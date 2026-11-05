@@ -51,7 +51,12 @@ _KIND_ORDER = {"none": 0, "patch": 1, "minor": 2}
 def run_git(args: list[str], repo: str) -> str:
     """git 只读调用单点 (测试经 monkeypatch 本函数注入历史, 不起真子进程)。"""
     proc = subprocess.run(
-        ["git", "-C", repo, *args], capture_output=True, text=True, encoding="utf-8", errors="replace"
+        ["git", "-C", repo, *args],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=120,
     )
     if proc.returncode != 0:
         raise RuntimeError(f"git {' '.join(args)} 失败 rc={proc.returncode}: {proc.stderr.strip()}")

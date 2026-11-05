@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="ci-windows-failure">
+<meta name="issue-stamp" content="26-11-06-0321">
+<meta name="issue-type" content="test">
+<meta name="doc-topic" content="deps-version-management">
+<meta name="doc-refs" content="memory-bank/plans/26-09-22-2318-version-management-plan.html">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="Windows CI 连续红: Test Windows (Py3.12/3.13) 自 ced9a88a 起 failure, 本地 Windows 全量绿">
+<meta name="issue-summary" content="GitHub Actions Windows 两个测试 job 连续红(早于版本管理本轮全部涉码), 本地 Windows test.quick/test.full 全绿——CI 环境特有; 日志 API 需鉴权, 待 gh 配 token 后定位">
+<title>Windows CI 连续红: Test Windows (Py3.12/3.13) 自 ced9a88a 起 failure, 本地 Windows 全量绿 · test · 计划外问题</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 38px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 78ch; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>现象与发现场景</a>
+    <a href="#s2"><span class="no">02</span>证据</a>
+    <a href="#s3"><span class="no">03</span>影响面</a>
+    <a href="#s4"><span class="no">04</span>定位锚点</a>
+    <a href="#s5"><span class="no">05</span>根因<span class="opt">（可选）</span></a>
+    <a href="#s6"><span class="no">06</span>建议修法<span class="opt">（可选）</span></a>
+    <a href="#s7"><span class="no">07</span>状态变更日志</a>
+    <div class="toc-foot">
+      类型 test · 档位 standard<br>
+      入池不改码 · 规范见 create-issue skill
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">计划外问题（未修）· test</div>
+    <h1>Windows CI 连续红: Test Windows (Py3.12/3.13) 自 ced9a88a 起 failure, 本地 Windows 全量绿</h1>
+    <p class="lede">GitHub Actions Windows 两个测试 job 连续红(早于版本管理本轮全部涉码), 本地 Windows test.quick/test.full 全绿——CI 环境特有; 日志 API 需鉴权, 待 gh 配 token 后定位</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-11-06-0321-test-ci-windows-failure</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-11-06 03:21</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象与发现场景</h2>
+    <p>GitHub Actions（github 镜像）的 <code>Test Windows (Python 3.12)</code> 与 <code>Test Windows (Python 3.13)</code> 两个 job <strong>连续 failure</strong>，且起点远早于版本管理本轮全部涉码改动。发现场景：机械化发版管线 S6 落地后真机冒烟 <code>commands run release.ci-gate</code>（check-runs API 轮询），对发版提交 <code>a3ccf82e</code> 按设计停手报告 CI 红——顺藤查证后确认是<strong>存量红</strong>，非本轮引入。</p>
+    <p class="hint">本地（Windows 10 真机）test.quick / test.full 均全绿（5412 / 5392 passed），失败为 CI 环境特有。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>证据</h2>
+    <p>check-runs API（无鉴权）逐提交结论，取证 2026-11-06 03:1X：</p>
+<pre><code>ced9a88a  runs=7  BAD: [WEB UI smoke:cancelled, Test Windows(3.12):failure, Test Windows(3.13):failure, Test(3.13):failure]
+f66148b5  runs=7  BAD: [Test Windows(3.12):failure, Test Windows(3.13):failure, Test gtm tool(windows-latest):failure, WEB UI smoke:cancelled]
+c0b6290f  runs=0  （CI 未跑，时序缺口）
+8b775513  runs=7  BAD: [Test Windows(3.12):failure, Test Windows(3.13):failure, WEB UI smoke:cancelled]
+937a9528  runs=7  BAD: [Test Windows(3.12):failure, Test Windows(3.13):failure, WEB UI smoke:cancelled]   ← 非 clone1 提交
+f31c4082  runs=7  BAD: [Test Windows(3.12):failure, Test Windows(3.13):failure, WEB UI smoke:cancelled]   ← clone1 首笔涉码
+c9a190d2  runs=7  BAD: [Test Windows(3.12):failure, Test Windows(3.13):failure]   （PENDING: WEB UI smoke）
+a3ccf82e  runs=7  BAD: [Test Windows(3.12):failure, Test Windows(3.13):failure]</code></pre>
+    <p class="hint">key 判据：<code>ced9a88a</code>（2026-11-03，早于本轮全部涉码）已红 → 存量非新引入；更早提交连 ubuntu <code>Test (3.13)</code> 也红过，近期收敛为仅 Windows。job annotations 只给「Process completed with exit code 1」无细节；job logs API 无鉴权 403（<code>/repos/…/actions/jobs/&lt;id&gt;/logs</code>），需 gh + token 才能取失败行。</p>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>影响面</h2>
+    <table>
+      <tr><th>维度</th><th>结论</th></tr>
+      <tr><td>触发条件</td><td>CI 环境（windows-latest × py3.12/3.13）push 即现；本地 Windows 复测不复现</td></tr>
+      <tr><td>影响范围</td><td>① 发版管线 CI 全绿门（<code>release.ci-gate</code>）被存量红拦死，S7 补发 v0.3.0 无法过门；② 对外 CI 信号失真（真回归会淹没在存量红里）；③ 交付判定不受影响（判定口径 = ls-remote + 本地闸门）</td></tr>
+      <tr><td>严重度</td><td>中（不损数据、不拦日常交付，但拦发版且腐蚀 CI 信号价值）</td></tr>
+    </table>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>定位锚点</h2>
+    <ul>
+      <li><code>.github/workflows/ci.yml</code> · job <code>test-windows</code>（grep <code>test-windows</code>，取证 2026-11-06 03:21 时 job 名为 "Test Windows (Python 3.12/3.13)"，matrix py3.12/3.13）</li>
+      <li>失败 job 实例（run 42086804240）：job id <code>127454005068</code>（py3.12）/ <code>127454004767</code>（py3.13），logs 接口 <code>/repos/ABackerNINI/auto-qb/actions/jobs/&lt;id&gt;/logs</code> 需鉴权</li>
+      <li>复现命令（有 token 后）：<code>gh run view 42086804240 --log-failed</code> 或 <code>gh api repos/ABackerNINI/auto-qb/actions/jobs/127454005068/logs</code></li>
+    </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
+    <div class="callout">待查（已排除：本地 Windows 可复现的一般性回归——本地全量两套均绿；已排除：版本管理本轮涉码引入——起点早于其 3 天）。候选方向（未验证）：覆盖率闸 Windows 99.0 边界在 CI 采集面的漂移 / TMPDIR 自举在 CI 环境的候选序差异（<code>tests/_tmp_bootstrap.py</code> R→H→%TEMP%）/ 平台差异用例（<code>test.linux</code> 口径外的路径行为）/ 依赖安装面差异。</div>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>建议修法<span class="opt">（可选）</span></h2>
+    <p>① 配 gh token 后 <code>gh run view &lt;run&gt; --log-failed</code> 取失败行定位（第一步，无此不动手）；② 按失败行对症修复；③ 修复验证 = 修复提交 push 后 check-runs 全绿（Windows 两 job + ubuntu + smoke）且本地全量不回归。注意：发版管线（S7）依赖本件清偿——CI 全绿门在存量红下会停手，属预期行为不绕过。</p>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>状态变更日志</h2>
+    <ul>
+      <li>2026-11-06 03:21 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    </ul>
+    <h3>复验</h3>
+    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <h3>修复后补充</h3>
+    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  </section>
+
+  <footer>
+    26-11-06-0321-test-ci-windows-failure.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>

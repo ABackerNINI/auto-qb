@@ -22,13 +22,13 @@ user-invocable: true
 | 步 | task id | 机械面 | agent 判断点 |
 |---|---|---|---|
 | ① | `my-commit-flow.sync` | 同步(硬步骤) | — |
-| ② | `test.full` + `dev.e2e` + `real.suite`(`real.guard` 前置) | 本地全测门;`mutants.status` 只核验不进门 | 门红即停, 修完重走 |
+| ② | `test.full` + `dev.e2e` + `real.suite`(`real.guard` 前置)+ `test.linux`(视平台改动) | 本地全测门;`mutants.status` 只核验不进门 | 门红即停, 修完重走 |
 | ③ | `release.suggest` → 改判 → `release.bump` → (改 CHANGELOG 草稿) | 机器提案 + bump-my-version 改文件 + 刷元数据 | **改判窗**:可改档, 必留痕(CHANGELOG 注记 + commit body 一句原因);补发首版等特例在此定 |
 | ④ | `ship.commit`(🔖 专用发版提交, bump+CHANGELOG 同笔) | 闸门 + 提交 + 同步 + 推送 | 提交信息带 gitmoji 与动机/实测 |
-| ⑤ | `release.merge` | ff-only 显式 ref 推发布分支 + ls-remote 核验 | 分叉/非快进 → **停手要人**, 不自动 merge/rewind |
+| ⑤ | `release.merge` ×2(先 `--remote gitee` 后 `--remote github`) | ff-only 显式 ref 推发布分支 + ls-remote 核验 | 分叉/非快进 → **停手要人**, 不自动 merge/rewind;github 这跑是发版轮唯一非静默推送(CI 门依赖它, ship.push 的镜像推送只推 develop 且尽力而为不保证), 失败即停 |
 | ⑥ | `release.ci-gate` | GitHub check-runs 轮询至全绿 | 红 → 停 tag 前, 修复提交后重走(可重入);超时/零 run → 停手报告 |
 | ⑦ | `release.tag` | tag 锚发版提交 + 显式 ref 双远端推送 + 核验 | tag 名 `vX.Y.Z` 不带 hash;已存在 → 校验指向而非重建 |
-| ⑧ | `release.build` + `release.page` | wheel 构建(BUILD_ID 侧车)+ gitee 主线/github 镜像 Release 页 | gitee token 未配 → 降级过渡(WARN 不失败, 口径=tag+CHANGELOG 即发布);镜像失败只报告一次 |
+| ⑧ | `release.build` + `release.page` | wheel 构建(BUILD_ID 侧车)+ gitee 主线/github 镜像 Release 页(纯注记) | gitee token 未配 → 降级过渡(WARN 不失败, 口径=tag+CHANGELOG 即发布);镜像失败只报告一次;发布件停在 dist/ 由用户取用, 附件上传(API 面待核)留阶段 2 |
 
 收尾:切最后一刀 `kb.wrap` + 结果行回执(版本号/新 tag/页地址)。
 
@@ -44,7 +44,7 @@ user-invocable: true
 
 - **gitee token 未配**:Release 页降级过渡, WARN 记入当轮报告;token 配好后补建(重跑 `release.page` 即可, 幂等);
 - **GitHub API 限额/不可达**(`ci_gate` rc=3):停手报告, 不换代理不重试;
-- **github 镜像 push/Release 失败**:只报告一次, 不重试不回滚主线(唯一例外口径:发版轮 develop/master 推送必须成功, `ship.push` 已保证)。
+- **github 镜像 push/Release 失败**:只报告一次, 不重试不回滚主线(唯一例外口径:发版轮 develop/master 推送必须成功 —— develop 由 `ship.push` 保证, **master 的 github 推送由步骤 ⑤ 的第二跑保证**, 二者失败都即停)。
 
 ## 幂等重入(黄金法则 1)
 
