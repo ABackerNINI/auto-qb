@@ -201,7 +201,8 @@ class TrackerConfig:
     download_speed_limit: int = 0  # 字节/秒, 0 = 不限速
     hr: Optional[HRRule] = None  # HR 规则(已合并全局默认输出设置), None = 无 HR 配置
     # HR 在线核实的**绑定结果视图**: 配置源在 hr_check.sites.<档案 id>, loaders 按域名交集派生填充;
-    # 旧 YAML 键 trackers.<站点>.hr_check 兼容接受并等价迁移(计划 26-09-27-1318 §3.4), 不再是配置入口
+    # 旧 YAML 键 trackers.<站点>.hr_check 已随 schema v2 废除(计划 26-09-27-1930 §3.4), 不再是配置入口:
+    # 仅迁移链一次性改写存量配置, 校验层 sections.py 命中该键即报错, 程序内不设常驻兼容层
     hr_check: Optional[SiteHrCheckConfig] = None
     rules: List[str] = field(default_factory=list)  # 规则引用列表, 如 ["@rule_set", "@rule_set.rule1"]
     groups: List[str] = field(default_factory=list)  # 站点分组(配置层声明, 不写种子); tracker_group 条件的匹配来源

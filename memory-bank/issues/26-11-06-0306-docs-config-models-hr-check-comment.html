@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="config-models-hr-check-comment">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="models.py 注释称旧 hr_check 键仍兼容接受, 实际校验层已报错">
 <meta name="issue-summary" content="旧键兼容注释与现行校验行为矛盾, 读注释会误判兼容层仍在">
 <title>models.py 注释称旧 hr_check 键仍兼容接受, 实际校验层已报错 · docs · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-11-06-0306-docs-config-models-hr-check-comment</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-06 03:06</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">docs</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -78,6 +78,7 @@
     <h2><span class="no">01</span>现象</h2>
     <p><code>models.py</code> 的 <code>hr_check</code> 字段注释仍称旧 YAML 键「兼容接受并等价迁移」，但现行校验层对 <code>trackers.&lt;站点&gt;.hr_check</code> 直接报错。读注释会误判兼容入口仍在。</p>
     <p class="hint">发现来源：本轮文档压缩的 code review（B2 收尾，2026-11-06 核对注释与校验行为）。</p>
+    <p><strong>复验 2026-11-06 04:48：仍复现。</strong>锚点重跑：<code>models.py:204</code> 仍写「兼容接受并等价迁移」；<code>sections.py:802-811</code> 命中 <code>hr_check</code> 仍 <code>errors.append(...)</code> 报「该键已于 schema v2 废除」；<code>config/migrations.py</code> 的 v1→v2 只是版本链上的一次性改写，<code>loaders.py:319-320</code> 明确「程序内不存在常驻兼容层」。</p>
   </section>
 
   <section id="s2">
@@ -93,12 +94,19 @@
   <section id="s3">
     <h2><span class="no">03</span>建议<span class="opt">（可选）</span></h2>
     <p>只改注释，不改行为与校验：把「兼容接受并等价迁移」改为「历史键已废除，仅迁移链改写；校验层出现即报错」。验收：注释表述与 <code>sections.py</code> 报错口径一致，现行迁移/校验测试不变。</p>
+    <h3>修复后补充（2026-11-06 04:55）</h3>
+    <p><strong>实际修法：</strong>照建议修法走 —— 只改 <code>src/auto_qb/config/models.py:204-205</code> 两行注释：旧键表述由「兼容接受并等价迁移(计划 26-09-27-1318 §3.4)」改为「已随 schema v2 废除(计划 26-09-27-1930 §3.4), 不再是配置入口: 仅迁移链一次性改写存量配置, 校验层 sections.py 命中该键即报错, 程序内不设常驻兼容层」。与建议措辞略有出入：保留「不再是配置入口」并补上迁移链与校验层的真实行为口径，理由是让注释与 <code>sections.py:802-811</code> 报错原文、<code>config/migrations.py</code> 的一次性改写、<code>loaders.py:319-320</code>「无常驻兼容层」三处事实逐字对齐。行为、校验、schema、测试均未改。</p>
+    <p><strong>验证方式：</strong>①锚点重查，旧表述在 <code>src/</code> 无残留，无测试依赖该注释文本；②<code>uv run python -m yapf -d</code> 无格式差异，<code>commands run dev.fmt</code> 通过；③全量 <code>commands run test.full</code> 全绿，现行迁移/校验用例不变。</p>
+    <p><strong>测试数字（2026-11-06 实测）：</strong><code>5456 passed, 10 skipped, 1 warning in 154.20s</code>；覆盖率 <code>TOTAL 24538 stmts / 74 miss / 8396 branch / 41 partial / 99%</code>。基线切片见 <code>kb.baseline</code>（26-11-06-0454）。</p>
+    <p class="hint">收尾环境面：本 clone 的 <code>pytest.exe</code> / <code>yapf.exe</code> 入口壳失效命中已记坑档 <code>pitfalls/ops/uv-trampoline-broken.md</code>，按处置删壳定点重装后恢复，复发已 +1 留痕；与本 issue 的注释内容无关。</p>
   </section>
 
   <section id="s4">
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-11-06 03:06 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-06 04:48 — 认领（用户指派），状态 <strong>In Progress</strong>；复验仍复现，见 01 节「复验」行</li>
+      <li>2026-11-06 04:55 — 修复并验证：只改注释、行为与校验零改动，全量 test.full 全绿（详见 03 节「修复后补充」），状态 <strong>Done</strong></li>
     </ul>
   </section>
 
