@@ -377,7 +377,7 @@ def test_gen_all_declares_exactly_all_indexes() -> None:
 
     `EXTRA_GENERATED`(2026-10-11 加入): 不叫 `_index.md` 的**生成物**。issues 归档索引是第一个 ——
     它落在 `attachments/`(该目录不计 cap)才敢放全量清单, 而名字不叫 `_index.md` 正是为了
-    **不**被 `index-auto` 角色套上 25,200 的 cap。新增同类生成物必须**显式登记在这里** ——
+    **不**被 `index-auto` 角色套上 8,000 的 cap。新增同类生成物必须**显式登记在这里** ——
     否则本守阵会在它出现的那一刻红, 逼你确认它确实是生成物而不是手写件。
     """
     gen_all = _gen_all()

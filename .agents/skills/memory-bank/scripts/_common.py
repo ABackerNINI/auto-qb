@@ -131,7 +131,7 @@ class StatusVocabularyError(ValueError):
 # test_closed_keep_constants_match_issues 等值钉住, 不许漂移。
 CLOSED_KEEP = 60
 
-# 归档清单文件名: 故意**不叫 `_index.md`** —— 那会被 role_of 套成 index-auto(25,200 cap),
+# 归档清单文件名: 故意**不叫 `_index.md`** —— 那会被 role_of 套成 index-auto(8,000 cap),
 # 全量清单必然超(计划 §07 风险表); `_archive.md` 不在任何 cap 扫描面。
 ARCHIVE_NAME = "_archive.md"
 

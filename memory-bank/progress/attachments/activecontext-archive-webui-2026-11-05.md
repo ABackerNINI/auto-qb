@@ -64,7 +64,7 @@
 
 **Refs（切片原文）:** memory-bank/tasks/26-10-14-webui-detail-classic-removal.md,memory-bank/testing/baselines/attachments/26-10-14-0244-webui-detail-classic-removal.md,memory-bank/activeContext/26-10-06-0751-webui-detail-panel-design.md
 
-> ⚠ 末项 `memory-bank/activeContext/26-10-06-0751-webui-detail-panel-design.md` 已于 2026-10-19 随 activeContext 清理删除(已归档), 原文见本归档对应小节; 未改指到不存在的文件。
+> ⚠ 末项 `memory-bank/activeContext/26-10-06-0751-webui-detail-panel-design.md` 已于 2026-10-19 随 activeContext 清理删除(未收入本归档); 同主题现存档案见 `memory-bank/tasks/26-10-06-webui-detail-panel.md`。未改指到不存在的文件。
 
 ## 下一步
 

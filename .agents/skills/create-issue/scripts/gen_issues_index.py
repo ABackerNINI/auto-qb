@@ -224,7 +224,7 @@ def build(root: Path, issues_dir: Path) -> str:
     if len(text) > INDEX_BUDGET:
         sys.stderr.write(
             f"警告: 已关闭窗口收紧到 0 条后索引仍 {len(text):,} 字符 > 预算 {INDEX_BUDGET:,} —— "
-            "病根在在办(Open)区条数本身, 需人工处置(别条件反射抬 cap)\n"
+            "病根在 在办(Open)区条数本身, 需人工处置(别条件反射抬 cap)\n"
         )
     return text
 

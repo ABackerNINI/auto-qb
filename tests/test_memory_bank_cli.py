@@ -1492,7 +1492,7 @@ def test_closed_keep_archive_same_batch_wiring(tmp_path: Path) -> None:
     archive = mb / "tasks" / "attachments" / "_archive.md"
     assert archive.is_file(), "归档清单落 `tasks/attachments/`"
     assert archive.read_text(encoding="utf-8") == gen.build_archive(root, mb)
-    # 命名与落点(计划 §07): 故意不叫 `_index.md` —— 那会被 role_of 套 index-auto 的 25,200 cap
+    # 命名与落点(计划 §07): 故意不叫 `_index.md` —— 那会被 role_of 套 index-auto 的 8,000 cap
     assert _common.ARCHIVE_NAME == "_archive.md" and not _common.ARCHIVE_NAME.endswith("_index.md")
     assert _common.ARCHIVE_REL == "attachments/_archive.md"
     assert gen.ARCHIVE_REL is _common.ARCHIVE_REL, "生成器用 `_common` 单点, 不另抄一份"
