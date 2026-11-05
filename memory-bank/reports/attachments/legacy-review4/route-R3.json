@@ -4,15 +4,15 @@
   "claimed_at": "26-11-06-0630",
   "freeze": "f088329291e64d0802637463e886f78842c1b34c",
   "freeze_note": "manifest 钉值 (生成时点 develop tip, D17)",
-  "snapshot": null,
-  "status": "claimed",
+  "snapshot": "C:\\Users\\11059\\Desktop\\Projects\\zcode\\auto-qb-review4-snap\\auto-qb-zcode-clone2",
+  "status": "in-progress",
   "batches": [
     {
       "id": "R3-1",
       "title": "transfer 全域(新模块) + torrents/store",
-      "status": "pending",
-      "done_at": null,
-      "findings": 0
+      "status": "done",
+      "done_at": "26-11-06-0700",
+      "findings": 4
     },
     {
       "id": "R3-2",
@@ -49,5 +49,6 @@
       "done_at": null,
       "findings": 0
     }
-  ]
+  ],
+  "started_at": "26-11-06-0633"
 }

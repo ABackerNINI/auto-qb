@@ -1,0 +1,38 @@
+[
+  {
+    "file": "src/auto_qb/torrents/store.py",
+    "line": 812,
+    "quote": "# 限速(up_limit/dl_limit)不参与视图, 不置脏",
+    "severity": "major",
+    "claim": "限速写不置 view_changed 与视图契约矛盾: view.py 的 _VIEW_EXCLUDED_FIELDS 不含 up_limit/dl_limit(派生口径=快照全表-排除集, 即二者是视图展示字段), 且 WebUI 种子列表实际渲染上传/下载限制列(webui/static/shared/app.js:105-106,170-171); 命令写路径先由 update_torrent_fields 把记录改为新值, 下一轮 qB 增量补丁同值被 apply_delta 的 cur==v 短路(torrents/record.py:201-202), view_changed 永不置位, 已发布视图(runtime_views._publish_locked 仅脏时重建, /api/state 经 ensure_view 读发布物)静库上限速列无限期显示旧值",
+    "relevance": "相关",
+    "fix": "限速写路径与 save_path/tags/category 同款置 self.view_changed = True(或把 up_limit/dl_limit 加进 _VIEW_EXCLUDED_FIELDS 并同步前端列, 二选一, 使置脏口径与视图消费口径单点一致)"
+  },
+  {
+    "file": "src/auto_qb/transfer/orchestrator.py",
+    "line": 357,
+    "quote": "TorrentTransferResult(hash_, failure.status, _join_notes(failure.reason, \"源已保留\"), failure.code)",
+    "severity": "minor",
+    "claim": "验证失败路径丢弃此前拼好的 add 回执 reason(含\"目标已受理(成功 x/失败 y/待定 z)\"与\"未完成, 已自动改为校验添加\"降级注明): 该种子实际已添加到目标, 但回执只说\"验证超时...源已保留\", 用户无从知道目标侧已有该种子(重试虽会安全落 DUPLICATE 跳过, 但信息面误导)",
+    "relevance": "相关",
+    "fix": "验证失败结果改为 _join_notes(reason, failure.reason, \"源已保留\"), 保留添加受理详情与降级注明"
+  },
+  {
+    "file": "src/auto_qb/torrents/store.py",
+    "line": 164,
+    "quote": "① 同步应用到该 hash 新 state 时逐出; ② 种子删除时清理; ③ TTL 兜底",
+    "severity": "minor",
+    "claim": "注释使用带圈数字 U+2460-2462(①②③), 违反 code-style 非 ASCII 图形符号禁令(2026-09-30 用户明示; 覆盖 .py 含注释, 禁用类明列\"带圈数字 ①-⑬\"); 全仓约 20+ 个 .py 同病, 本批 7 文件仅此一处(transfer 新模块全部干净)",
+    "relevance": "相关",
+    "fix": "改为 \"1. ... 2. ... 3. ...\" ASCII 序号; 全仓清理宜另题批量做"
+  },
+  {
+    "file": "src/auto_qb/torrents/store.py",
+    "line": 806,
+    "quote": "见 `:237-244`)。快照语义收敛为",
+    "severity": "nit",
+    "claim": "docstring 行内锚 `:237-244` 已陈旧: 现指向 expect_due_at 尾部/clear_expect(expect 落地块 26-10-30 插入后整体下移), 而所称 _apply 的 state_changed/dirty_groups/view_changed 三条通路实际在 406-509 行",
+    "relevance": "相关",
+    "fix": "锚改为 _apply 现行行段(或改为不带行号的方法名引用, 免随插入再次漂移)"
+  }
+]
