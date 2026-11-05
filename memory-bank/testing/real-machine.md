@@ -1,423 +1,135 @@
 # 真机实测(连真实 qBittorrent 的实测轨)
 
-> 摘要: 第四条测试轨的**全部规程** —— 定位与准入判据(功能完工即触发)、硬约束与环境守卫、种子层 L0/L1/L2、切片表与切片更新规则、一轮的标准动作、两次排期之间的漂移判定、用例成熟度 L0–L3 与用例写法。状态与进度**不在本文件**, 在常驻锚 issue。
+> 摘要: 第四条测试轨规程 —— 分工与准入、硬约束、环境守卫与假红陷阱、种子层 L0/L1/L2、切片与漂移治理、用例写法。状态与进度不在本文件, 在常驻锚 issue。
 > 触发: 真机实测, 真机测试, 连真机, 实测排期, 测试 qB, 36595, 36596, 56589, 56590, 测试环境, QBT_REAL_ENV, 双环境, 假种子, 伪 tracker, 切片, 用例成熟度, 漂移判定, tests-real, real 包, 不走闸门, 免token, 免鉴权, 跳过本地验证, 功能完工, 常用验收
-**Refs:** memory-bank/plans/26-11-01-2033-plan-real-machine-rm04-drift-plan.html, memory-bank/plans/26-11-01-2123-plan-real-rm08-drift.html, memory-bank/plans/26-11-04-0140-plan-real-rm08-addendum-missing-merge.html
+**Refs:** memory-bank/plans/26-11-01-2033-plan-real-machine-rm04-drift-plan.html, memory-bank/plans/26-11-01-2123-plan-real-rm08-drift.html, memory-bank/plans/26-11-04-0140-plan-real-rm08-addendum-missing-merge.html, memory-bank/issues/26-10-31-0641-test-real-machine-test-standing.html
 
 ## 00 定位: 四条测试轨的分工
 
-| 轨 | 载体 | 代价 | 覆盖什么 | 挂闸门 |
-|---|---|---|---|---|
-| 单测 | `tests/`(全 Fake) | 全量 ~8s | 纯逻辑 / 判据 / 状态机 | ✅ `test.quick` 在 `ship.commit` 链上 |
-| 浏览器 | `e2e/` + 桩服务 | 全量 ~11min | 前端渲染 / 交互 / 乐观 UI | ✅ 改前端时的门禁 |
-| 语料回放 | `scripts/qb_capture.py` → `sim_qb.py --source=corpus` | 分钟级 | 真机**数据面形态**(字段/分布/时间轴) | ❌ |
-| **真机** | `tests-real/` + 测试 qB 实例(双环境各一对) | **半天 / 片** | **写侧真作用 / qB 真行为 / 文件系统 / 进程生命周期** | ❌ **永不** |
+| 轨 | 载体 | 挂闸门 |
+|---|---|---|
+| 单测 | `tests/`(全 Fake) | ✅ `test.quick` 在 ship 链上 |
+| 浏览器 | `e2e/` + 桩服务 | ✅ 改前端门禁 |
+| 语料回放 | `sim_qb.py --source=corpus` | ❌ |
+| **真机** | `tests-real/` + 测试 qB 双环境 | ❌ **永不** |
 
-**准入判据(反膨胀)**: 能用桩或语料验的, **不进真机轨**。真机轨只收两类 ——
-① 必须由 qB 真执行才成立(命令回执、种子真状态变化、限速真下发);
-② 必须碰真文件系统 / 真进程 / 真注册表(移动、硬链接、重启、托盘、开机自启)。
+**准入判据(反膨胀)**: 能用桩/语料验的**不进真机**。只收: ① qB 真执行才成立(命令回执/真状态变化/限速真下发); ② 必须碰真文件系统/进程/注册表。观感交互归 e2e 轨, 仅「桩数据失真足以改变结论」才进, agent 自跑(`dev.webui`+浏览器自动化)。
 
-**观感/交互类归桩轨, 不设"人眼"准入类**(2026-11-04 起): 布局、文案、配色、跟手性这些, `e2e/` 轨(真浏览器 + 桩服务 + 截图断言)已经覆盖且 agent 全自动。只有「**桩数据失真足以改变结论**」的场景(大库真实渲染、真机延迟下的交互反馈 —— 桩恒空/恒快测不出, 见 pitfalls/testing/stubs-sim)才按**失真理由**进真机轨, 且**由 agent 自跑**(`dev.webui` + 浏览器自动化 + 截图判定), 用户只在环境故障/结论存疑时被叫 —— 这些机制写给 agent, 不预设人工参与。
-
-**触发时机(2026-11-04 起, 本轨从"定期排期驱动"转"功能完工驱动")**: 真机实测是**常用验收手段** —— 功能完工收尾时, 若该功能落入上述两类(或数据失真观感面), **当轮 agent 自跑真机验收**(§06 两种触发形态), 不等定期排期; 没做的必须在档案/切片明示理由或记 `BLOCKED`。仍**不挂自动闸门**(§01 约束 5); 常驻排期锚降格为**兜底巡检**(功能验收覆盖不到的漂移判定与回归)。
-
-同一件事在三条轨都测 = 维护三份会各自漂移的断言 —— 选一条, 其余只引用。
+**触发时机(2026-11-04 起)**: 本轨转**功能完工驱动** —— 落入上述两类即当轮自跑验收(§06); 没做必须明示理由或记 `BLOCKED`。仍不挂自动闸门; 排期锚降为兜底巡检。同一件事三条轨都测 = 三份断言各自漂移, 选一条其余引用。
 
 ## 01 硬约束(违反即事故, 没有"这次特殊")
 
-| # | 约束 | 谁执行 | 怎么机检 |
-|---|---|---|---|
-| 1 | **只碰白名单实例**: 当前环境的主/副端口(环境1 = `127.0.0.1:36595`/`36596` + `D:\Programs\qBittorrent-testing` 前缀; 环境2 = `127.0.0.1:56589`/`56590` + `C:\Programs\qBittorrent-testing` 前缀; 单点 = `tests-real/lib/env_registry.py`, `real.env` 可查) | `real.guard` 静态核验 | 端口或镜像路径不在白名单 → **退出码非 0, 无 `--force`** |
-| 2 | **真实种子全程非活跃**(2026-11-04 起测试 qB 已**清退全部真实种子**, 此约束常态为空集成立; 守卫保留作回归防线 —— 测试实例只允许 `real-fake` 假种子, 真实 PT 种子禁入) | guard 前置 `pause-all` + 运行期看门狗 | 每 2s 轮询目标 qB, 任一**真实**种子进入 `uploading`/`downloading` → 立即暂停并记违规; 违规 ≥3 次中止本轮 |
-| 3 | **生产配置零触碰**: 只用 `tests-real/config/*.yml` 派生配置 | guard 校验配置路径 | 配置路径 == 仓库根 `config.yml` → 拒跑(红线文件, 见 pitfalls/ops/prod-files) |
-| 4 | **不动其它 qB**: 杀进程/重启前先核镜像路径 | `real.up` / `real.down` | guard 记录运行前全部 qB 进程 (PID+镜像路径), 收尾比对; 出现新增/消失即报告 |
-| 5 | **不挂闸门** | 人 | `.commands/my-commit-flow` 或 `ship.*` 里出现 `real.*` 调用 = 缺陷, 立即回滚 |
+| # | 约束 | 机检 |
+|---|---|---|
+| 1 | **只碰白名单实例**: 双环境主/副端口+镜像路径前缀(单点 `tests-real/lib/env_registry.py`, `real.env` 可查) | `real.guard` 越界退出码非 0, 无 `--force` |
+| 2 | **只允许 `real-fake` 假种子, 真实 PT 种子禁入**(2026-11-04 已清退真实种子, 不得代造) | guard 前置 pause-all + 2s 看门狗, 违规≥3 中止本轮 |
+| 3 | **生产配置零触碰**: 只用 `tests-real/config/*.yml` 派生配置 | guard 撞仓库根 `config.yml` 拒跑 |
+| 4 | **不动其它 qB**: 杀/起前核镜像路径 | guard 前后进程比对, 新增/消失即报告 |
+| 5 | **不挂闸门**: `ship.*` 链上出现 `real.*` 即缺陷, 立即回滚 | 人 |
 
-> 约束 2 与功能测试天然冲突(要测"做种/上传"就得让种子活跃)。处置: 该条用例在计划里标 **`[需活跃种子]`** 并写解锁条件, 本轮跳过并记账 —— **不允许**为了跑通用例临时放宽约束。L1/L2 解锁后(§03), 假种子不受此约束, 冲突面大幅收窄。
+> 约束 2 与"测做种"冲突: 该用例标 `[需活跃种子]` 本轮跳过并记账, **不允许**临时放宽; L1/L2 假种子不受此限。
 
 ## 02 环境与守卫
 
-### 2.1 守卫(全在 `tests-real/guard.py`, 入口 `real.guard`; 任何用例先过它)
+### 2.1 守卫(`tests-real/guard.py`, 任何用例先过)
 
-1. **静态白名单** —— 端口 ∈ 当前环境的主/副端口(env_registry 派生); 进程镜像路径前缀匹配; 配置路径不是 `config.yml`。
-2. **在线核验** —— `connection_status` 必须不是 `disconnected`(`connected` / `firewalled` 都算通过)。
-   见 §2.5: 掉线时 qB 一个 announce 都不发, 而种子状态看起来完全正常 —— 不拦在门口, 整片结论都是假的。
-3. **前置快照 + 归零** —— 记录当时所有 qB 进程与目标实例的种子清单; 对目标实例 `pause` 全部种子, 校验 `start_paused_enabled`。
-4. **运行期看门狗** —— 后台线程按 2s 轮询目标实例; 违规即暂停 + 记账; 超阈值中止并让本轮结论记 `ABORTED`(不是 PASS)。
+静态白名单(端口/镜像路径/配置路径) → 在线核验(`connection_status` 非 `disconnected`) → 前置快照+归零(记进程与种子, pause 全部) → 运行期看门狗(2s 轮询, 违规暂停+记账) → 收尾恢复快照、删净自造物、重跑进程比对。
 
-收尾:**恢复快照**(把本轮 pause 过的种子恢复原状态; 本轮自造的种子/标签/分类**删干净**), 并重跑一次进程比对。
+### 2.2 起停与进程红线
 
-### 2.2 启动 / 重启
+- 起/停一律 `real.up`/`real.down`(白名单内), **不手工双击 exe**; 端口残留占用走 `dev.port-kill`(只传白名单端口)。
+- 🔴 **禁止一切 `taskkill`**(任何形态/目标, python subprocess 同禁): 生产 qB(26586)与测试实例同名映像, `/IM` 全杀=误杀生产(实际发生)。详见 pitfalls/ops/taskkill-image-name-ban。
+- 双实例均 portable(自带 `profile/`), 干净环境换 profile 不删 `%APPDATA%`。
+- **多 clone 单实例**: 测试实例全机一套, 同一时刻只允许一个 clone 跑 `real.*`; guard 报端口占用先确认是否别的 clone 在测。
 
-- 一律走 `real.up` / `real.down`(白名单内), **不要手工双击 exe** —— 手工启动的进程 guard 认不出归属。
-- 端口被残留占用 → `dev.port-kill`(**只传当前环境白名单端口**, `real.env` 可查), 它按端口查真 PID, 不会误杀包装进程。
-- 两个实例都是 **portable 模式**(各自带 `profile/`), 配置与 `qBittorrent-data` 互不影响; 需要"干净环境"时换 `profile` 目录而不是删 `%APPDATA%`。
-- **多平行 clone 注意**: 本机常有多个平行 clone, 但物理测试实例(端口/进程)全机只有一套 —— 真机轨**同一时刻只允许一个 clone 在跑 `real.*`**; 开跑前若 `real.guard` 报端口被占/种子状态异常, 先确认是不是另一个 clone 正在测。
-- 🔴 **进程安全红线(2026-11-05 事故, AGENTS.md 同款)**: **禁止一切 `taskkill` 操作**(任何形态/任何目标) —— 本机生产 qB(26586)与测试实例**同名映像** `qbittorrent.exe`, `/IM` 按映像名全杀 = 静默误杀生产(E1.6 实际发生, 26586 连带死亡 ~2h); bash 裸跑还有 MSYS 路径改写(`/F`→`F:/`)假失败层, 诱人换 python `subprocess` 绕过 —— subprocess 一样禁。杀/起实例**一律 `real.down`/`real.up`**(端口白名单+镜像路径核验); 其它进程按端口查真 PID 走 `dev.port-kill`。事故档案: `pitfalls/ops/taskkill-image-name-ban.md`
+### 2.3 环境·鉴权·读侧
 
-### 2.3 RM00 之前的手工版(三条, 缺一不开跑)
+- 选环境: `QBT_REAL_ENV=1|2`, 缺省按 EXE 存在性探测; `real.env` 打印当前环境。环境1 = `36595/36596` + `D:\Programs\qBittorrent-testing`; 环境2 = `56589/56590` + `C:\Programs\qBittorrent-testing`(BT 监听端口单点 = `env_registry.py`)。
+- **四实例一律免鉴权**(WebUI 已勾「跳过本地验证」, **永不需要 token**, 旧机制已退役)。**收 401/403 = 设置被重置, fail-closed 修环境**: 去 qB WebUI 重勾后重跑, 不加绕行(绕行触发 IP 封禁 3600s 连环假红)。
+- 读侧切片首选 `dev.webui`(关掉自动任务连真机); 它**仍会真写**, 约束 1/2 照适用。
 
-`real` 包由 RM00 建立; 在那之前守卫是手工 checklist —— 跑 `dev.webui` / `dev.run` 前逐条核(先 `real.env` 确认当前环境):
+### 2.4 环境级假红陷阱(每片开工先核)
 
-1. 目标端口是当前环境的主/副端口(环境1 = `36595`/`36596` + `D:\Programs\qBittorrent-testing*`; 环境2 = `56589`/`56590` + `C:\Programs\qBittorrent-testing*`), 且该端口对应的进程镜像路径在对应前缀下(用端口反查 PID 再核路径, 别只看端口);
-2. 目标实例**全部种子处于 `paused`**(`GET /api/v2/torrents/info` 逐条看 `state`), 有活跃的先暂停;
-3. 要跑的配置是 `tests-real/config/*.yml` 派生的那份, **不是**仓库根 `config.yml`。
-
-三条核完在回复里贴一行"guard 手工: 端口 ok / 种子 paused ok / 配置 ok" —— 事后追责靠这一行。
-
-### 2.4 安全模式: 读侧切片优先用 `dev.webui`
-
-`dev.webui` 起一份**关掉全部自动任务**的最小配置(只留同步快照 + WEB UI, 数据目录独立), 连真机 qB 看界面/试交互 —— 读侧切片(RM08)首选它, 不必跑完整主循环。注意它**仍会真写**: WebUI 上点"暂停"就是真暂停(这是测乐观 UI 的前提), 所以约束 1/2 一样适用。
-
-### 2.5 实例的硬事实(实测得出; 环境有变先改这里。分环境记账, 单点 = `tests-real/lib/env_registry.py`)
-
-**环境怎么选**: 环境变量 `QBT_REAL_ENV=1|2` 显式指定(两套 exe 都在同一台机器上时必须用); 缺省按 EXE 存在性自动探测(1→2 序); `real.env` 打印当前环境与免鉴权口径。**四实例本机一律免鉴权**(2026-11-04 起): 主副实例均已开 WebUI「跳过本地验证」(bypass_local_auth), 直连零凭据, **用户永不需要提供 token** —— 历史机制 `QBT_TEST_<端口>` 环境变量注入与 `instances.local.json` 已退役删除(单点 = `lib/instances.py`)。若收到 401/403 = qB 升级/重装把设置重置了, **fail-closed 修环境**: 去 qB WebUI 重新勾选「跳过本地验证」后重跑 —— 不加任何绕行(`lib/qb.py` 报错信息直指此步)。
-
-#### 2.5.1 环境1(D盘机): WebUI 36595/36596
-
-**两个测试实例的 BT 监听端口**: 36595 = `26803`, 36596 = `60539`, 都绑在局域网 IP `192.168.1.122` 上。
-
-> 🔴 **(环境1 实测)36596 原本配的是 60537, 而生产实例 `D:\Programs\qBittorrent-2` 占着 60537**。撞车后果不是"慢", 是**该实例一个 announce 都不发**: 抢不到监听 socket ⇒ `/api/v2/transfer/info` 的 `connection_status` 变成 `disconnected` ⇒ libtorrent 认定自己离线, 连 tracker 都不联系, 所有种子永远停在 `stalledUP`/`stalledDL` 且 `status=1`(未联系)。**这条教训全环境通用**。
-> **所以 `real.up` 之后必须核一句 `connection_status`**: 只接受 `connected` / `firewalled`; 见到 `disconnected` 立刻换端口(`set_prefs(listen_port=...)`, 用 `socket.bind` 先探空), 不要往下测 —— 否则整片结论全是假红。
-
-**其它会让人白跑半小时的实测事实**:
-
-| 事实 | 影响 | 处置 |
-|---|---|---|
-| 两实例 `dl_limit = 1024`(1 KiB/s) | L2 互传 2MB 要半小时 | 用 `transfer_limits` fixture 临时钉 256 KiB/s, 结束还原 |
-| `/torrents/trackers` 会返回 `** [DHT] **` / `** [PeX] **` / `** [LSD] **` 伪条目 | 直接 `is_local_url` 会误报"非本机地址" | 断言前按 `url` 以 `http` 开头过滤 |
-| 种子是 private 时, 上述三条的 `msg` = 「这是私有 torrent」 | 正常现象, 不是错误 | 不要断言它们 status==0 |
-| `uploaded` 计数比 `progress` 慢一拍(实测差 ~20KB) | 临界断言会假红 | 用 `_wait` 等它追平, 或断言 `>= payload` 前先轮询 |
-| 四实例 WebUI 均已开「跳过本地验证」(2026-11-04 起, 历史上仅副实例出厂免鉴权) | 直连零凭据; "带 token 反而 403"的鉴权降级已随 token 机制退役删除 | 收 401/403 = 设置被重置, 去 qB WebUI 重新勾选后重跑(`lib/qb.py` fail-closed 报错直指此步), 不要给客户端加鉴权 |
-| qB 5.2 字段名 | `upspeed`/`dlspeed`(不是 `up_speed`); 暂停用 `/torrents/stop` 与 `/torrents/start`; `/torrents/add` 返回 JSON 收据 | 已在 `lib/qb.py` 封装 |
-| 工具 shell 里 `Start-Process` / `cmd start` 起的 GUI 进程会随命令结束被杀 | 实例"启动成功"后消失 | 一律经 `explorer.exe`(`real.up` 已这么做) |
-| `--portable` **不是**合法命令行参数(传了会 0xc0000005 崩) | 实例崩溃, 看着像环境坏了 | 无参启动即可: 目录里有 `profile/` 就是 portable |
-
-**诊断入口(卡住时先跑它们, 别靠猜)**: `uv run python tests-real/tools/diag_l2.py [秒]`(双实例互传全过程: announce 计数 / tracker 视图 / TCP 连接表) 与 `tests-real/tools/diag_log.py <port> [行数]`(qB 日志尾部)。
-
-#### 2.5.2 环境2(C盘机): WebUI 56589/56590
-
-2026-11-01 新配置并完成首轮基建实测(guard 全绿), 硬事实如下(口径同 2.5.1; 单点代码侧 = `env_registry.py`):
-
-| 事实 | 影响 | 处置 |
-|---|---|---|
-| 🔴 **profile 抄自环境1 机器, 残留其网卡标识 `ethernet_32769`** | 本机网卡(Intel 82574L)对不上 ⇒ libtorrent 绑不出监听 socket ⇒ `connection_status=disconnected`, 与 §2.5.1 端口撞车同款假红 | 2026-11-01 已 `set_prefs(current_network_interface="")`(任意接口)修复, 双实例转 `firewalled`。**换机抄 profile 后必查这条** |
-| BT 监听端口: 56589 = `27049`, 56590 = `32719` | 用例的禁用端口黑名单 | 已回填 `env_registry.bt_listen` |
-| 局域网 IP = `192.168.110.130`(动态取) | announce 地址 | `lib/net.py: local_host()` 动态解析, 无需回填 |
-| transfer 限速原值: up = `1048576`B(1 MiB), down = `5242880`B(5 MiB)(两实例对称); prefs `dl_limit=11535360` / `up_limit=5243904` | 与环境1 的 1024B 奇数坑不同, 这里**全是偶数**, 曲线用例的手动保护误报风险低; 但 up 1 MiB 会压 L2 互传速率 | 曲线类用例照旧开工预置/收尾还原快照(§2.13 口径), 不硬编码原值 |
-| **测试 qB 已清退全部真实种子**(2026-11-04 用户拍板, 双环境生效; 此前环境1 有 8 枚/环境2 0 枚) | 依赖真实种子的用例前提**永久不成立**(RM08-05 腿A 的原腿已死, 恒走 D1 私有假种子替身) | 一律改用 L1/L2 假种子(§03); 用例侧不得代造"真实"种子, 也不要等真实种子回场 —— 口径是测试实例**只允许** `real-fake` 假种子 |
-| **L2 互传环境2 已实证成立**(2026-11-01 RM08 轮 S1 探针: 56589 做种 → 56590 下载, 2MB 经本机伪 tracker 13.0s 完成, 双端 announce) | 此前 L1/L2 解锁实证仅在环境1(RM00), 依赖互传的用例(RM08-06 类)在环境2 曾属未探明 | 已可直接跑; 若复发连不上/零字节, 仍按 §2.5.1 端口撞车与上表 current_network_interface 两条先排查 |
-| R: 盘**不存在** | `real.seed` ≥32M 自动退回 `.work` **真写盘** | 大种子优先 `--no-data`; 收尾记得 `real.seed.clean` |
-| gtm 默认发现端口 18788 探测不可达 | 「未安装」前提大概率成立(与环境1 相反) | RM07 状态端点用例仍按实况双分支断言, 不提前固化 |
-| 56590 localhost 免鉴权(2026-11-01 拍板 `bypass_local_auth=True`; **2026-11-04 起口径升级为四实例全免**, 见 §2.5) | 此前 False 时产品进程空凭据连 56590 必 401×5 → qB WebUI IP 封禁 3600s, 整片连环假红 | 产品进程空凭据(各片 CONFIG_TEMPLATE 口径)可直连全部实例; RM03 轮 401 封禁连环事故与临时 bypass 配方(历史)见切片 26-11-01-1214 §04-1; 若再撞 401 连环假红, 先核该键是否被还原成 False(fail-closed 修环境, 不加绕行) |
-
-### 2.6 手工探索: 假种子命令(`real.seed*`)
-
-需要"随手造个种子看看界面 / 状态 / 标签 / 限速"时用它, 不必先写一条用例:
-
-| 命令 | 干什么 |
+| 陷阱 | 处置 |
 |---|---|
-| `real.seed` | 造数据 + 造 `.torrent` + 加入实例(`add`) |
-| `real.seed.list` | 列出自造种子(hash / 名字 / 大小 / 进度 / 状态 / 落点) |
-| `real.seed.rm` | 删自造种子(`--all` / `--name` / `--hash` 前缀; 默认连数据) |
-| `real.seed.clean` | 清 `tests-real/.work/` 与 `R:/qbt-fake/` 下的残留(不碰 qB 里的条目) |
+| **`connection_status=disconnected`**(端口撞车/网卡残留 ⇒ libtorrent 离线, 整片假红) | `real.up` 后必核, 只接受 `connected`/`firewalled`; disconnected 换端口或清网卡(`set_prefs(current_network_interface="")`, 换机抄 profile 必查, 见 pitfalls/testing/qb-profile-nic) |
+| 限速原值 1 KiB/s(环境1)奇数; `/torrents/trackers` 带 `**[DHT]**` 等伪条目 | 曲线用例预置偶数 KiB 收尾还原; trackers 断言按 url 以 `http` 开头过滤(private 种子 msg=「私有 torrent」非错误) |
+| `uploaded` 计数与 store 快照滞后(慢 1-2 拍) | 临界断言先 `_wait`/`wait_in_store_state` 追平, 只等 hash 存在不够 |
 
-参数: `--size 256K|8M|1.5G|512k`(**默认 256K**, KB 级就够看状态) · `--pattern random|zeros|text` ·
-`--dir <落点>`(只认 `tests-real/.work/` 与 `R:/qbt-fake/`) · `--from <现成文件>`(大小自动取文件, 不动原文件) ·
-`--no-data` · `--paused` · `--piece-len` · `--port <当前环境白名单端口>`(缺省副实例, 空库当草稿本) ·
-`--allow-huge --reason "<原因>"`(> 2G 才用得上) · `--yes`(不加就只打印计划)。
+qB 5.2 API 差异已封装在 `lib/qb.py`; 诊断入口 `tests-real/tools/diag_l2.py` / `diag_log.py <port>`, 卡住先跑别靠猜。
 
-五条口径:
+### 2.5 假种子 CLI(`real.seed*`; 参数见 `--help`)
 
-- **默认 KB 级, 不要造大种子**: 造种子的目的是"看状态/走分支", 256K 已经够(16 个 piece, 校验瞬完)。
-  真正需要大小时(测进度条、测分块、测限速曲线)再显式给 `--size`。
-- **> 2G 原则上不造**: 命令会**停下来等授权** —— 必须 `--allow-huge --reason "<原因>"` 双写才放行,
-  只给 `--allow-huge` 会被拒(授权要留痕, 否则等于默认允许), 放行后打印 `[warn]` 留痕。理由是三个代价叠加:
-  占盘/占内存盘、qB 校验要**读满一遍**、清理最容易漏(尤其落到真磁盘的)。想清楚了再分两条路走:
-  只要"大尺寸"这个属性看状态 ⇒ `--no-data`(不落盘, 零代价, 不受限); 要真数据 ⇒ 先问自己 1G 行不行。
-  `--from <现成文件>` 不创建文件、只造种子, 源文件超 2G 只告警不拦。
-- **≥ 32M 自动落 `R:/qbt-fake/`**(R 盘是**环境1 机器**的内存盘, 约 52 GB 可用; **环境2 无 R: 时自动退回 `.work` 真写盘** —— 大种子优先 `--no-data`), 写多少都不心疼; 但**重启即清空**,
-  所以大种子只当次会话有效。要长期留着就显式 `--dir` 指到磁盘(仍在允许的落点内)。R: 不可用时自动退回 `.work` 并提示会真写盘。
-- **默认不带 announce** ⇒ 纯本地做种(`stalledUP`、progress 100%、零外连)。要 announce 请在用例里用
-  `FakeTracker` —— CLI 是短命进程, 起不了活到你看完的 tracker。
-- **自造种子一律打 `real-fake` 标签** ⇒ list / rm / clean 只认这个标签, 碰不到真实种子; 守卫的归零
-  (`guard.snapshot(skip_tags=("real-fake",))`)也会跳过它们 —— 否则"刚加的假种子怎么变成 `stoppedUP` 了"
-  会变成日常困惑。
+- 默认 256K 够看状态; **>2G 停下等授权**(`--allow-huge --reason` 双写), 只要"大"用 `--no-data`(零落盘; 停 `stalledDL` 不进 `missingFiles`, 测"文件被删"要真删)。
+- ≥32M 落 `R:/qbt-fake/`(重启即清; 环境2 无 R: 退回 `.work` 真写盘); 默认无 announce=纯本地做种, 要 announce 用例里用 `FakeTracker`; 自造种子一律打 **`real-fake`** 标签, list/rm/clean 与守卫只认它; 收尾 `real.seed.clean`。
 
-`clean` 默认把 `tests-real/.work/` 与 `R:/qbt-fake/` **两处都扫**(含空目录壳子), 越界拒跑。
+### 2.6 产品进程(`tests-real/lib/app.py`)
 
-> ⚠️ **`--no-data` 不是"缺文件态"**: 实测 qB 停在 `stalledDL` / progress 0, 不会进 `missingFiles`(`recheck` 也不进)。
-> 要测"文件被删"这条路径, 请在用例里加完种子再删文件。
+- `--dry-run` **不启 WEB**(WEB 类用例不带 dry-run); Windows 外部 SIGTERM=强杀, 优雅退出只能进程内 `signal.raise_signal` 或 `start(graceful_after=N)`; 配置必写 `schema_version: 5`(否则走迁移改写配置); 断言真 pid 用 `real_pid()`, 杀产品进程照 §2.2。
+- GUI 依赖解释器带 Tk(`tkinter` 不在 `uv.lock`, `env.sync` 全绿≠能跑界面): 判据 `python -c "import customtkinter"`。
 
-### 2.7 产品进程的硬事实(`tests-real/lib/app.py`, RM01 实测)
+### 2.7 分片陷阱速查(造法细节看用例 docstring 与切片计划)
 
-要测产品自身(而不是 qB)时, 起停一律走 `lib/app.py`。四条语义与直觉不同, 不记住会白烧一轮:
+- **RM02**: 托管模式首条 ERROR 要 20-40s(等待窗放宽); 断连退避**按簇计数**(probe 数 ≠ 重连尝试数); 直跑 pytest 会互抢端口, 用 `real.suite`(`-n 0`)。
+- **RM03**: 断言咬规则**全名** `@规则集.规则名`(裸名不进日志); 规则 `interval` **留空**才是每轮; dry-run 照常分派规则、动作跳写 = 零副作用观测窗; 去重断言走 `exec_history` 落盘账。
+- **RM04**: 无 announce 假种子**跳过整条 torrents_added 管线**(归组/维护/限速全不发生)⇒ 必须带 announce(`http://<本机IP>:1/announce` 死端口零外连); 重复 infohash 回 **409 ⇒ 删旧重加, 绝不收养**; **删 junction 绝不递归**(purge 用 os.walk 遇 reparse 点 `os.rmdir` 剪枝); 多标签「, 」连接必 strip(pitfalls/testing/qb-tags-multi-split-strip)。
+- **RM05**: 标签**定义**独立于种子存活, 清场必须显式删定义层; 多匹配「第一个」= 配置书写序(`write_cfg` 必须 `sort_keys=False`)。
+- **RM06**: 产品从不后端直连(唯一路径 ChannelFetcher→本地端点, 零外连有结构保障), 用例以 HTTP 桩扮演扩展; 三态分档咬专属日志文案。
+- **RM07**: 全局限速权威面=transfer 端点(`app/preferences` 旧键静默失效); gtm 状态端点按实况双分支断言, **写端点对就绪工具一律不发**(跨 clone 红线)。
+- **RM09**: 命令回执 POST 200 只代表入队, 轮询 `GET /api/cmd/{cmd_id}` 到 status≠pending; reannounce 确认=消解等待模型(`updating` 恒非成功证据, 两态用 `FakeTracker` 承载)。
+- **跨卷小容量前置**(L490): 唯一方式=管理员挂 ImDisk: `imdisk -a -s 96M -t vm -o fix -m Y: -p "/fs:ntfs /q /y"` + 设 `QBT_REAL_SMALL_TARGET=Y:\small_target`; **绝不碰 Recovery/System/EFI 卷**; 前置缺失=断言失败给指引不静默 skip(`lib/small_target.py`); 用完卸载(`imdisk -d -m Y:`, 用户主导)。
 
-| 事实 | 现场表现 | 正确做法 |
-|---|---|---|
-| **`--dry-run` 不启 WEB 服务** | `webui/module.py:66` 是 `if dry_run or not web.enabled: return` —— 等 40s 也不会有"WEB UI 已启动" | WEB 类用例(启动日志/端口/token)**不带** dry-run; 只验进程边界才带 |
-| **Windows 上外部 SIGTERM 等于强杀** | `Popen.send_signal(SIGTERM)` 走 `TerminateProcess`: 退出码 1、`finally` 一行不跑、日志无收尾。`CTRL_C_EVENT` 也投递不到(子进程无控制台) | 优雅退出只能**进程内** `signal.raise_signal(SIGTERM)` 触发(`start(graceful_after=N)`); 或到 Linux 上从外部发 |
-| **配置必须写 `schema_version: 5`** | 否则每次启动走 v1→v5 迁移; 非 dry-run 时还会**改写**配置文件并留备份, 把临时目录搅浑 | `write_config()` 已带; 手写配置时别忘 |
-| **`Popen.pid` ≠ 进程实际 pid** | uv 给 venv 的 `Scripts/python.exe` 是 47KB **启动器**(基解释器 91KB), 真解释器是它的子进程 ⇒ 锁 meta / 日志里的 pid 与 `Popen.pid` 对不上 | 按 pid 断言用 `real_pid()`(读锁 meta); 杀进程用 `taskkill /F /T` —— 不带 `/T` 只杀启动器, 孤儿进程继续持锁, 用例就"测了个寂寞" |
+## 03 种子层: L0/L1/L2
 
-**GUI 栈依赖解释器带 Tk**(RM01 实测, 一次踩透): `tkinter` 是 CPython 标准库的一部分(Tcl/Tk 编译产物), **不是 PyPI 包, 不可能出现在 `uv.lock` 里** —— 所以 `env.sync` 全绿也不代表能跑界面。`customtkinter` / `pystray` 装得上, 但前者在 `__init__.py:6` 就 `from tkinter import ...`。
-判据一句话: `python -c "import customtkinter"` 过不了 ⇒ 这个 venv 的 GUI 面整体不可用, 任何"界面看起来对"的结论都只来自单测打桩。
-本机曾因此踩坑: `.venv` 建在宿主自带的裁剪版 Python(`H:\Programs\AutoClaw\resources\python`, 无 `_tkinter.pyd`/`tcl/`)上, 已改为 uv 管理的 CPython 3.13.15(带 Tk 8.6)重建。换机器/重建 venv 时先跑这一句。
+| 层 | 怎么造 | 种子状态 | 能测什么 |
+|---|---|---|---|
+| L0 | `real.seed` 假种子, 无 announce | paused/stalledUP | 只读数据面 |
+| L1 | 构造种子+伪 tracker announce(零 peer) | 零外网流量 | 标签/限速/规则/HR 数据面 |
+| L2 | 主做种+副下载, 伪 tracker 回对端 | 真上传下载 | 速率/进度/完成事件 |
 
-两个探针口径(踩过才写的):
-
-- **`port_free()` 不许用 `SO_REUSEADDR`**: Windows 上它的语义是"允许抢占别人正在监听的端口", `bind` 成功 ≠ 端口空闲。实测因此谎报"已释放", 紧接着重启撞 `Errno 10048`。裸 `bind` 才是可信探针。
-- **端口别复用**: 上一条用例刚停的进程, 监听套接字要过一小会儿才真正消失 —— 整片连跑时后一条抢到前一条刚释放的端口就 10048, 单跑不复现。`free_port()` 记会话内已用端口, 段(39000–39999)够大, 比 sleep 等它可靠。该段 39099 常被 WorkBuddy 自己的 `editor_sdk.exe` 占着, 探空会自动跳过。
-
-### 2.8 进程间网络与断连事实(RM02 实测, 2026-10-31)
-
-| 事实 | 现场表现 | 处置 |
-|---|---|---|
-| qB WebUI 校验 Host 头 | 经本地代理转发时保留原 Host(`127.0.0.1:<代理端口>`) → `/auth/login` 401(直连同 body 204) | `lib/proxy.py` 统一把 Host 改写成实例的 host:port 再转发 |
-| 本机 loopback 连接失败单次 ~2s | 连无监听端口的 connect 不是瞬时 RST; 托管模式首个 connect() 周期(detect_scheme http/https + login 三连)约 20-40s 才落第一条 ERROR | 断连类用例的等待窗按此放宽; 慢不是挂死 |
-| 热重载命令线 = `PUT /api/config` | 回执带 `changes`(顶层段名)与 `restart_required`; R 级段(data_dir/state_file/fs)提交即被回退旧值并报 restart_required | 触发 L2 重建的最小改动 = 改 `interval`(rules 模块认领段) |
-| 托盘模式 SIGTERM 无效(已修) | ~~graceful 跑壳对 `--tray` 3/3 不退出~~ 根因修正: 非「Tk 吞 KeyboardInterrupt」—— 异常跳出 mainloop 后 TrayUi.run 收尾被整段跳过, 进程退出挂在 pystray 非 daemon 线程的 threading._shutdown(见坑档 backend/tray-sigterm-teardown) | 已修(2026-11-01, issue 26-10-31-1030 置 Done): SIGTERM 换装投递 quit 事件与菜单「退出」合流 + run() 收尾挂 finally; 真机复验 3/3 优雅退出 rc=0(数字见 kb.baseline); 托盘用例现在可验优雅退出 |
-| 断连后不自动重连(缺陷在池) | 运行期 qB 断开一次后, 每 main_tick 一条「主循环异常」ERROR(75s 内 39-45 条)且恢复后不回连 —— issue 26-10-31-1029 | ~~RM02-07 记 FAIL; 修复后须真机回归~~ 已修(e820d2bb)且 2026-11-01 环境2 真机回归绿(RM02-07): 断开窗转换 ERROR 恰 1 条 + 退避 2/4/8/16/30 踩点 + 恢复自动回连 |
-| 一次 connect() 周期在「accept 即关」代理下开 ~10-22 条 TCP 连接(RM02 复测实测, 2026-11-01) | qbittorrent-api `_request_manager` 每请求**至少重试 1 次**(HTTP→HTTPS 切换兜底, 轮间 session 重建+0.6s sleep, 实测隔 ~1.7s)+ session 级 urllib3 Retry —— proxy probe 计的是连接 accept 数, **probe 数 ≠ 重连尝试数**(实际尝试数 = probe 按 >2.5s 间隙聚簇) | 断连退避断言(如 RM02-07)按簇计数: 尝试数/簇跨度/簇间距, 不许直接断言 probe 总数(首轮按总数 ≤8 断过假红) |
-| `.bak` 只在写盘前已有旧文件时生成 | fresh 目录首次优雅退出只有 state.json, 没有 `.bak`(atomic_write keep_backup 语义) | 要造 `.bak` 需先正常起停**两次** |
-
-> 并行陷阱: `pytest.ini` 的 addopts 是 `-n 8`, 默认 `--dist load` 下 `xdist_group` **不生效**。官方入口 `real.suite` 传 `-n 0` 没问题, 直跑 `pytest tests-real/...` 会互相抢端口 —— `rm01_startup/conftest.py` 用一把文件锁兜住, 后续片照抄。
-
-### 2.9 归组/迁移面与假种子进管线的事实(RM04 实测, 2026-10-31)
-
-| 事实 | 现场表现 | 处置 |
-|---|---|---|
-| **「未匹配 tracker 配置」的种子跳过整条 torrents_added 管线** | 无 announce 的假种子不进 `matched_added`(qbmanager 实况: tracker_conf 匹配失败即 `continue`) ⇒ **归组/维护/限速全不发生**, groups 视图恒空 | 假种子必须带 announce 且测试配置 trackers 段有对应 domains 条目。announce 用 `http://<本机IP>:1/announce`(本机死端口, 连接即 RST 零外连); 别用假域名 —— 那要走 DNS 出外网 |
-| **qB 5.2 `/torrents/add` 对重复 infohash 返回 409 Conflict** | 复跑同 infohash 的用例收到 409 | 409 时删旧副本重加, **绝不收养** —— 收养会把上轮的预打标/预暂停状态带进本跑, 触发源(上传转暂停/新增)永不触发, 假 FAIL 自续(RM04 实测毒化两轮) |
-| **产品 store 快照滞后 qB 实际进度 1-2 个同步拍** | qB 侧 progress 已 1.0, 立刻触发 relocate 会被 GATE_INCOMPLETE 拒 | 等 groups 视图成员 progress==1.0 再触发(视图随进度置脏重建, 单向前进无回退竞态) |
-| **qB 多标签以「, 」(逗号+空格)连接** | 产品打上 MISSING 后 tags = `MISSING, real-fake` | 标签成员判断必须 strip(`{x.strip() for x in tags.split(",")}`); 裸 split 对双标签失明 —— 已入池 26-10-31-1215(seed.py/guard.py), 用例侧各自防御 |
-| **relocate 目标目录不存在 ⇒ GATE_SPACE 不可判定拒绝** | disk_usage 打不存在的路径 → fail-closed blocked | 用例预建 dst 即可, 合法闸门非缺陷 |
-| **单成员组恒走 FORM_DIRECT(qB 自搬, 无别名无 journal)** | ×1 假种子的 relocate 不产生别名/ journal, 锚点是「迁移发起」非「已下发 qB 搬迁」(后者只在重启补发路径出现) | 要验目录别名主链: 多成员组(≥2 枚同表种子, 同内容异 piece_len 区分 infohash)+ 子目录布局 + `alias_file_threshold: 1` + 命令线 POST body `confirm: true` |
-| **armed job 可不经 qB 退出收口** | 对账表 `link_present + qb_up + 全员 at_dst → ACT_DONE_EXTERNAL`: phase=done(reason=external) + journal phase=done | 用例可用 qB 原生 setLocation 让其余成员跟进 dst 即时收口; guardian「qB 退出删链接」路径归 RM10 |
-| **搬迁窗口基本抓不住 state 30S 落盘周期** | 64M 跨卷搬迁数秒, 强杀后 state.json 常无在途 job(「恢复在途 job 0 条」≠ 恢复面失效) | journal 注入退路(RM04 计划 §03 批准): 停机态按 job_to_dict 形造 phase=moving/move_issued=true 账 + journal/spec, 重启走 `_recover` RESUME 分支; 另注意产品日志是**追加式**, 断言「最后一次启动」的日志行要等新行出现再取 |
-| **删 junction 绝不递归(重申 §08)** | `rm -r`/`shutil.rmtree` 对 junction 的行为按平台而异, 穿透即删真实数据 | 用 `os.walk(topdown)` 遇 reparse 点 `os.rmdir` 剪枝的 purge 形态(RM04 用例 `purge_tree` 可照抄) |
-| **qB `free_space_on_disk` 报的是它默认 save_path 那块卷(relocate 同卷证明的隐藏前提, RM04 漂移轮实测)** | 默认路径所在盘缺席时(环境2 的 56590 指幽灵 R: 盘)恒 **-1** ⇒ `same_volume_proof` 必败 ⇒ 多成员组 relocate 被 GATE_SAME_FS 拒 —— 目录别名主链在环境2 直接不可达 | 用例临时把副实例 `save_path` 改指实存盘现存目录(qB 立即报出真值, 与本地 `disk_usage` 零漂移), 测毕逐字还原并断言(RM04-05 造法); 环境1 默认路径实存, 天然免疫 |
-| **「跨卷 + target_free < needed」前置只认显式入口(issue 26-11-02-1208 复验)** | 测试**不自动枚举、不自动挂接**任何卷; 必须由用户准备小容量目标并经环境变量 `QBT_REAL_SMALL_TARGET` 指定绝对路径(带盘符、已存在、非系统卷、卷标不得为 Recovery/System/EFI、路径无 hidden/system/reparse point)。**唯一指定方式 = 手动挂载 ImDisk 内存盘(需管理员, 配方见下)**; 不设其它备选 | 前置缺失或剩余不小于 `needed` 时 `require_small_target` **显式断言失败并给准备指引**(不静默 skip); 守卫见 `tests-real/lib/small_target.py`, 复发守卫见 `tests/test_real_machine_safety.py`(扫源码禁 `FindFirstVolumeW/FindNextVolumeW`/卷 GUID/旧构造函数)。**曾用「隐藏 Recovery 卷 + `mklink /J`」, 已废弃并彻底移除** |
-
-**安全构造配方(L490 跨卷空间不足前置, 2026-11-02 复验口径)**:
-
-- **绝不使用 Recovery/System/EFI 卷**: 这些是系统恢复/引导分区, 除读空闲外任何操作都不许可; 用 junction 指向它们同样不许可。旧做法(隐藏卷 + `mklink /J`)已废弃并移除, 仅在 issue 26-11-02-1208 与真机基线留历史证据链。
-- **唯一指定方式 = 手动挂载 ImDisk 内存盘(需管理员, 非破坏性, 重启即清空)**: 以管理员身份运行 `imdisk -a -s 96M -t vm -o fix -m Y: -p "/fs:ntfs /q /y"` —— `96M` = 96×1,048,576 = 100,663,296 字节(格式化后实测 Size 100,659,200), 严格小于 `needed` 134,217,728; `-t vm` = 系统虚拟内存承载, `-o fix` = 固定介质(默认, 与 `-o rem` 相反); **不要加 `-P`**(会把虚拟盘写进注册表并尝试开机自建)。随后 `New-Item -ItemType Directory Y:\small_target`, 设 `QBT_REAL_SMALL_TARGET=Y:\small_target`。**缺少前置时代码显式断言失败并给准备指引, 不静默 skip**; 不提供小 VHD/小 U 盘/小分区等替代路径。卸载由用户主导: `imdisk -d -m Y:`(失败再 `-D` 强制), 复核 `imdisk -l` 输出 `No virtual disks.` 且 `Test-Path Y:\` 为 `False`。**容量按需最小化(≤128MiB), 用完必须卸载**。`-t vm` 可能被页面文件换出; `-o awe` 才保证常驻物理内存, 但需要 AWEAlloc 驱动(本机 `sc query AWEAlloc` 为 STOPPED), 因此不选。官方依据: ImDisk CLI 2.1.1 内置帮助、GitHub 官方 FAQ(示例 `imdisk -a -s 400M -m R: -p "/fs:ntfs /q /y"`)与 AWE 常驻说明。
-- **2026-11-03 实跑实测(96M 盘)**: `imdisk -l` → `\Device\ImDisk0`; `Win32_LogicalDisk`: `Y:` Size 100,659,200 / FreeSpace 84,054,016(80.16MiB, < needed 134,217,728, 差 50,163,712 字节); 卷标为空; `st_dev` Y=2787372261218981617 / D=3628948922281332713 / R=5401726539199518481(三者互异 ⇒ 真跨卷); `assert_safe_target` 与 `require_small_target` 均放行。内存占用 ≈96MiB 系统虚拟内存(`-t vm`)。
-- **预计占用上限**: RAM 落点 128MiB(2×64MiB 只写一份, 缺 R: 时退回 `.work` 真写盘) + D: dst 搬迁 128MiB + 日志/元数据约 4KB; **目标小卷 0 写入**; 峰值 ≤ 约 270MiB。
-- **清理**: 用例 `finally` 清 `.work/rm04` 与 `R:/qbt-fake/rm04`; 闸门失守意外建叶子时只删唯一 pid 叶子; **内存盘由用户主导卸载**(`imdisk -d -m Y:`, 失败再 `-D`)。
-- **守卫**: `assert_safe_target` 硬拒 UNC/卷 GUID、无盘符、非绝对、非已存在目录、系统卷、Recovery/System/EFI 类卷标、路径各级 hidden/system 或 reparse point、`st_dev` 与盘符根不一致; 前置缺失/剩余 ≥ needed 时断言失败并给准备指引, 不跳过。
-
-### 2.10 规则引擎面的事实(RM03 实测, 2026-10-31)
-
-| 事实 | 现场表现 | 处置 |
-|---|---|---|
-| **规则绑定名 = `@规则集.规则名` 全名** | 日志行「规则[rm03_rules.xxx]」与 state.json 的 `exec_history` 键、去重记账全部用**带规则集前缀的全名**, 裸规则名不出现 | 咬规则日志/记账的断言按全名写锚点(RM03 首轮 7 条假红全挂在这) |
-| **规则 `interval` 键留空才是每轮语义** | `interval: 0S` 被配置校验拒绝(「必须为正时间」); 留空 = 每 tick 级别(队列归一化 1s) | 每轮检查的规则**省略 interval 键**, 不要写 0S |
-| **`execute_once` 合法枚举 = never/once/daily/hourly** | 「always」不是合法值, 校验即拒 | 「窗口内只执行一次」落 `once` |
-| **dry-run 管线照常分派规则** | --dry-run 下种子同步照常执行、interval/事件规则照常命中(日志有「规则[…] 动作[…] 成功」行), 动作经 ctx.dry_run 跳过 qB 写, 实测 ≥10 节拍零 qB 写(tags/category/限速全等) | dry-run 可作规则面的**零副作用观测窗**(RM03-09 实测); 注意它仍会读 qB 并跑完整主循环 |
-| **规则层去重的权威账在 state.json `exec_history`** | `record_execution` 只写内存, 优雅退出/周期落盘(≥30S)才刷盘; 动作级幂等(add_tags skip)是 DEBUG 级, INFO 日志不可见 —— 只数成功行分不出"去重失效" | 去重断言走 exec_history 的 ts(用 `graceful_after` 起产品拿落盘账), 不咬动作日志 |
-| **stop_following_rules_if 当前不生效(缺陷在池 26-10-31-1304)** | `Rule.process` 的 (handled, stop) 在唯一调用点被丢弃; 条件出错日志「停止后续规则」的措辞与实际行为不符 | 规则链止损语义别当已验事实引用; 修复后须真机回归 RM03-05 |
-| **hr 配置不牵动假种子(RM03-04 实测)** | tracker 条目带 `hr: {required_seeding_time: 3D}` 时, 假种子(零下载量)不触发 HR 在线核实/打标(触发条件是下载比例), `${required_seeding_time}` 变量替换照常工作 | RM03-04 口径可复用: 变量替换面用 hr 段驱动, 不需要 hr_check 站点接入 |
-| **skip_checking 加种实测语义(qB 5.2.3, RM03 漂移轮探针)** | `/torrents/add` 带 skip_checking: +有数据 → 视为已完成(stoppedUP progress=1, 不校验); +无数据 → missingFiles —— 两形态都造不出「暂停中未完成」 | 「暂停中未完成」造法 = **paused + 数据在场 + 不带 skip_checking** → stoppedDL progress=0(暂停加种只查 resume data 不做全量校验); stalledDL 活跃下载族 = 不暂停 + 无数据 + 不带 skip_checking |
-| **full-checking 证据窗有数据量下限(RM03-15 实测)** | 证据闩(store 快照 sync_interval 同步 + CHECK_RESULT_INTERVAL 2S 轮询)要求校验窗口 ≥3s: 512MB 毫秒级不可捕(连状态迁移都不出现), 2GB 实测 checkingDL ~3s(0.43s→3.46s) | checking 全量段用例的目标种子数据量按 ~2GB 造(.work 真写盘, 收尾 clean); KB 级种子只够跳检段(无证据窗); 窗口不足表现为 START_TIMEOUT/「校验成功」行缺失假红 |
-| **跳检重加后种子视为已完成(RM03-17 实测)** | SkipJob 重加(is_skip_checking+is_stopped)+数据在场 → progress=1 ⇒ 成功跳检后的种子被决策链 0 拦住, **同日去重闸不可达** | 去重红验前置 = 首跳完成后删掉重加回「暂停中未完成」态(同 hash, paused+数据在场), 二次触发才能穿透链 0 到闸门 |
-| **环境2 副实例 56590 已拍板免鉴权(2026-11-01 = 环境2 标准配置, 与环境1 对齐)** | ~~`bypass_local_auth=False` 时产品进程空凭据必 401×5 → WebUI IP 封禁(3600s)连环假红~~ 已永久落实例: `bypass_local_auth=True`, 空凭据直连可达(见 §2.5.2) | RM03 轮 401 封禁连环事故与临时 bypass 配方(历史)见切片 26-11-01-1214 §04-1; 若再撞 401 连环假红先核 §2.5.2 该键未被还原 |
-
-### 2.11 tracker·标签面的事实(RM05 实测, 2026-10-31)
-
-| 事实 | 现场表现 | 处置 |
-|---|---|---|
-| **qB 全局标签定义独立于种子存活** | 种子删除/逐种子摘标都不带走定义; `GET /torrents/tags` 列定义, `createTags`/`deleteTags` 表单逗号分隔多值可用(v5.2.3) | 清场必须显式删定义层; RM05-06 前提「add→remove 后定义残留」实测成立, 可作无种子对照的造法 |
-| **delete_tags 与站点标签「互相打架」是同节拍振荡** | 种子级维护每 interval 重打 tracker tags(qB addTags **隐式重建已删定义**), 与全局删除成对发生(先删后打), 干净窗亚秒级, 外部轮询采样不可稳定观测 —— schema delete_tags 的 risk 文案明载此预期, 非缺陷 | 这类组合的断言走: 删除日志命中集 == 展开期望 + **不被重打的孤儿标签永久消失**(定义级删除的存在性证明) + 对照标签全采样恒在; 不做「任意时刻定义不在」的快照断言 |
-| **多匹配「第一个」= 配置书写序** | `match_tracker_confs` 按 config dict 顺序返回 `confs[0]`(不排序), WARNING「种子匹配到多个 tracker 配置, 使用第一个」一行同时点出全部命中条目名 | 要防「按名字序假绿」, 条目键故意让字母序与书写序相反(RM05-01 的 zz/aa 手法); `write_cfg` 必须 `sort_keys=False` |
-| **热重载 trackers 段实测(RM05-02)** | PUT /api/config 回执 applied 且**无 restart_required**; 日志「rebound N」; 新 tags 下一维护节拍兑现; 旧标签不回撤(重绑只换 conf 不摘旧标) | 断言「rebound」+ 新标签兑现即可, 别咬「旧标被清」; tags 变更经树编辑 `tree["config"]["trackers"]["<条目>"]["tags"]` |
-| **hr_check.enabled=false 下站点派生零取数** | 站点条目 `hr_check.sites.<id>.enabled: true` 只走装载期派生, HR 线程不启动, 正向启动日志零「在线核实」痕迹 | 站点派生面可零外连实测(在线核实面归 RM06); 绑定校验要求被绑条目带 `hr` 段, 否则「已绑定站点…未配置 hr 段」ConfigError; 负向(绑0/绑2/未登记 id)走 `run_cli --dry-run` 退出码 + 「配置错误」文案(RM03-05 同款观测法) |
-
-### 2.12 HR 取数通道面的事实(RM06 实测, 2026-10-31)
-
-| 事实 | 现场表现 | 处置 |
-|---|---|---|
-| **产品侧 HR 取数唯一路径 = ChannelFetcher 经本地端点, 从不后端直连** | `build_channel_fetcher`(fetcher.py:252)唯一分支点: `channel.enabled=false` → NullFetcher(日志「本实例未启用取数通道」); 任务 URL 指向真实站点域但产品自己**从不外连** —— 本地桩替身在结构上覆盖全部数据面 | 零外连红线有结构性保障; 用例以 HTTP 扮演扩展即可, 真浏览器扩展归 L2(需授权) |
-| **扩展契约 = GET /api/hr/tasks + POST /api/hr/result, 回传过两道关** | 任务 id 确实派发过 + 域名一致; 鉴权无/错 token 401 且状态零写入, 非扩展 origin 403(拒绝进 RejectThrottle, 持续期间节流日志每 6h 提醒一次) | 桩回传前先 GET tasks 拿任务原文, 别自造 id; 回传内容直接用 `tests/hr_helpers.py` 的 myhr_page/LOGIN_PAGE 造, 行名粗配按「标题重合 ≥12 字符」设计命中/不命中对照 |
-| **假种子(downloaded=0)照进 HR 对象集, 打标全量纳入** | `runtime._anchors`(:456)对绑定了已启用站点条目的种子**无触发门**; `add_hr_tag_or_category`「其余全量纳入」含零下载转移种(maintenance_mod)—— RM03-04 的「零下载不触发」实为那次配置没配 add_tag 的观测 | 不用为「假种子进不了对象集」绕路; 用例直接配 `add_tag` 观察打标(qB API 回读, strip 口径) |
-| **三态分档各有专属日志文案** | 登录页回传 → ERROR「[HR 登录失效]…请在该浏览器里登录后无需其它操作」+ 波次 `error` 分档; 超时不回传 → WARNING「[HR 通道不可用]…等待浏览器扩展取数超时(Ns)」+ 波次 `no-channel`「保守回落本地兜底」且**锁正常释放**; 未命中 → INFO「本波签发『未列出』放行 N 条(覆盖范围内未命中)」; 日额耗尽 → 「档位 C 配额/间隔受限(日配额: 还差 Ns)」 | 咬文案断言分档, 别咬内部枚举; 超时路径配小 request_timeout(默认 180s)且断言「下一波照常收任务」(锁释放) |
-| **发现端点端口候选顺延 + 回环 pairing 默认关** | 显式 discovery_port 被占时按候选表顺延(默认 18788 起 +0/+1/+2 先绑先得), 启动日志「HR 发现端点已启动…(候选 …/…, 实绑 …)」; 回环 host 时 pairing 默认不强制 | 测试配置显式给独立发现端口防撞车; 端口探空裸 bind(§2.7) |
-| **波次加速: POST /api/hr/refresh force 旗标** | 「立即拉取已受理 N 个站点(取数线程将跳过复用窗与拉取间隔, 频控仍生效)」; 取数线程每 60s 自唤醒, 干等节拍会白烧时间 | 用例用 refresh 加速, 频控类断言(min_interval/日额)仍可测 —— force 不绕频控 |
-
-### 2.13 限速·流量面的事实(RM07 实测, 2026-10-31)
-
-| 事实 | 现场表现 | 处置 |
-|---|---|---|
-| **qB 5.2 全局限速权威面 = transfer 端点** | `app/preferences` 的 upload/download_limit 旧键已失效(静默无效); 产品 qbapi 读回走 `GET /transfer/{upload,download}Limit`(bytes/s, 整除向下 KiB), 写走 set 端点 | 用例预置/断言全局限速一律走 transfer 端点(qbapi 同路径), 不用 setPrefs |
-| **两实例 transfer 下载限速原值 = 1024B = 1 KiB(奇数)** | 曲线视角天然命中手动保护(奇数 KiB = 疑似手动)—— 想验曲线真下发必须先显式预置偶数现场 | 曲线类用例开工先 `setDownloadLimit` 偶数 KiB; 收尾按快照还原(§2.5 的 1024 是坑也是原值) |
-| **off 快照复位 limit 段, derive 优先级定顶层** | 来源 off → `publish_off` 把 limit 段复位 disabled; 曲线未配时无发布者再动它, 之后 ok 轮顶层 state 停在 `disabled` 而非 `ok` | 三态判据咬段级 `source.state`; 顶层 disabled 是 derive_state 设计语义非缺陷 |
-| **零传输种子不进采样集** | `_sample_torrents` 数据门 = 采样目录存在才采; 零传输假种子整体跳过不产目录; 「暂停态种子进 null run」(:831)是活跃但缺字段分支, 健康 qB 到不了 | 单种系列/重启首窗 null 的真数据面归 L2 互传; L1 只验全局系列 |
-| **纯空闲系列的开放 z 游程从不形成盘上旧块** | 记录只在封口时 append(`_append_record` 才开块)→ 切 interval 时「无开放块的开放游程不封」, 盘上恰一个新 interval 块、z 游程无缝横跨 | L1 断「新块带新 interval + 文件干净」; 「旧块封口」面需块内有 r 行(L2) |
-| **gtm 工具可能已在本机运行**(环境1 机器事实; 环境2 待核, 见 §2.5.2) | 发现指针指向机器级安装(RM07 实测: 指向另一 clone `D:\Projects\auto-qb`, state=ready, autostart 已注册)—— 「未安装 → not_installed」前提不一定成立 | 状态端点用例按实况双分支断言(ready 验就绪载荷 / 不可达验五态+error); **写端点(PUT /config 等)对就绪工具会真写用户安装, 跨 clone 红线, 一律不发**; provider=traffic_monitor 缺省下产品不订阅工具, 只读探测 |
-
-### 2.14 WebUI 写侧面的事实(RM09 实测, 2026-10-31)
-
-| 事实 | 现场表现 | 处置 |
-|---|---|---|
-| **命令回执通道: POST 200 只代表入队** | 端点回 `{queued, cmd_id}`(runtime.post_command), 结果轮询 `GET /api/cmd/{cmd_id}`; 回执 status 三桶 ok/warn/error, 文案前缀常量单点 commands.py(RC_FAIL/RC_DEFERRED/RC_UNCONFIRMED_PREFIX) | 用例 `_wait` 轮询到 status != "pending", 不 sleep 死等; 断言咬 status 桶 + 前缀, 不咬内部枚举 |
-| **「写序号单调」外部不可观测** | `write_seq` 只进读缓存键(server/context.py RoCache), 不出现在任何端点载荷 | 命令线消费时序的可观测代理 = 回执 `ts` 单调 + `wait_ms/exec_ms` 埋点齐全 |
-| **GET /api/config 树根 = 整份 YAML 文档** | 段在 `tree["config"]` 之下, PUT 回执 `changes` 收顶层段名, 非 R 级键无 restart_required(RM02-04 口径一致) | 改树走 `tree["config"]["<段>"]`(RM05-02 同款配方); 断言落盘用 yaml 解析, 不咬字符串 |
-| **reannounce 确认跟踪 = 消解等待模型(26-10-31-1740 已修, plan 26-10-31-2354)** | updating 恒不构成成功证据(发出前置位, 对成败零信息量); 成功 = working 转换/epoch 前跳(真机 ok 回执已验), 失败 = status 4/5/6+msg(死端口 RST 即落 error 回执); min_announce 发送时即赋值、无响应不改写 → 从未成功过的行 min 恒在过去, 「窗内推迟」分支(min_e 在未来)对死端口不可达 | ok/推迟两态用伪 tracker 承载(`FakeTracker(interval=1800)`, 响应显式带 `min_interval`); 死端口行窗内二次汇报的诚实结果 = error(再次被拒, RM09-04 首跑实测); RM09-04 四态全验 |
-| **组命令对空组显式 error(已修, 原 26-10-31-1740)** | 形状合法但 store 查无此组的 key → `_group_action`/`_cmd_delete_group` 走 `_group_empty_receipt` 兜底: WARNING 日志 + error 回执「组不存在或已被解散」; 成员已删光档文案「组内种子不存在或已被删除」; 畸形 key 仍 400(「分组标识无效」) | 未知 key 负向断言可期望 error 回执(回执在 handler 写, drain 靠 `cmd_id not in results` 不覆盖); reannounce 空组分支收编进同一兜底单点(commands.py `_group_empty_receipt`) |
-| **`/api/torrents/add` 的 save_path 逐条给** | 一条 add 命令一个 save_path(多文件一次入列共享落点); 独立落点拆多条 add 命令 | 文件经 base64 `files_b64` 随 JSON 提交; 回执由 handler 依 qB 收据写 ok/partial/fail |
-| **rename-fs 的 old_path 相对 save_path 且含内容根** | 多文件种子传 `包名/文件名`(非裸文件名); `/torrents/files` 回读 name = 完整相对路径 | 断言锚点 = files 名单 + 磁盘文件双验; location 移动后路径基准随 save_path 走 |
-| **产品快照状态滞后 qB 1-2 拍(写侧闸门版)** | reannounce 非活跃闸读快照 state —— 只等 hash 进 flat 视图就发命令, 会读到 checkingUP(∈ REANNOUNCE_BLOCKED_STATES)而误落「非活跃忽略」 | 活跃态前置命令先 `wait_in_store_state`(等快照 state==stalledUP); 仅等 hash 存在不够(§2.9 的进度滞后同族) |
-
-## 03 种子层: L0 / L1 / L2
-
-
-| 层 | 怎么造 | 种子状态 | 能测什么 | 风险 | 现状 |
-|---|---|---|---|---|---|
-| **L0** | `real.seed` 造的假种子(默认不带 announce, 纯本地做种) | 全程 `paused` / `stalledUP` | 只读数据面、配置读写 | 零(纯本地假数据) | ✅ 现在可用 |
-| **L1** | 构造种子, announce 指向本地伪 tracker(bencode, **零 peer**) | `stalledUP` / `paused`, **零外网流量** | 标签/分类/状态/限速下发/规则命中/HR 判定数据面 | 零(流量不出本机) | ✅ RM00 已验证 |
-| **L2** | 主实例做种 + 副实例下载, 伪 tracker 回对端地址 | 真 `uploading`/`downloading` | 真实速率/进度/完成事件/做种时间/汇报 | 零(两端都打本地 tracker) | ✅ RM00 已验证(环境1) |
-
-> **L0 重定义(2026-11-04)**: 原定义「用实例里现成的真实种子」随真实种子清退退役(§01 约束 2, §2.5.2)—— 测试实例现在**只允许** `real-fake` 假种子。L0 与 L1 的分界: L0 不带 tracker 交互(纯本地状态/数据面), L1 带伪 tracker announce(规则/HR 数据面)。大库量级与真实数据形态的观测归**语料回放轨**(`sim_qb.py --source=corpus`), 不在真机轨重建。
-
-**L1 设计要点**: 伪 tracker 只需实现 `GET /announce` 返回 `d8:intervali1800e5:peers0:e`(零 peer)即够; 种子用 bencode 现造(`announce` = `http://<本机局域网IP>:<port>/announce`), 不要拿真实种子的 infohash 改 announce —— 那会让真实 tracker 仍被联系。
-**L2 设计要点**: 伪 tracker 对副实例的 announce 返回主实例的 peer(`ip` + `port` 取自 qB 的监听端口), 两端都在本机 ⇒ 流量不出网卡。
-
-> ⚠️ **announce 不能写 `127.0.0.1`**: qB 的出站 socket 绑在以太网接口上(`current_network_interface`), 打 127.0.0.1 会 `WSAEADDRNOTAVAIL`, tracker 状态 4「该请求的地址无效」。一律用 `lib/net.py: local_host()` 取的局域网 IP —— 仍是本机, 流量仍不出网卡。
-> ⚠️ **伪 tracker 回包必须排除请求者自己**: 两实例同 IP 只差端口, 若把"自己"也回给它, 种子会去连自己, 而 qB 默认 `enable_multi_connections_from_same_ip=false`(同一 IP 只允许一条连接), 真正的 leech 会被挤掉 —— 现场表现是 `connections_count` 1→0 且零字节, 极易误判成加密/防火墙问题。`lib/tracker.py` 已按 announce 里的 `port` 排除。
-
-**RM00 验收三条**(全绿才解锁 L1/L2, 之后各片才允许引用):
-
-1. **L1 正向** —— 构造种子加入主实例后, `GET /api/v2/torrents/info` 里该种子 `upspeed == 0 && dlspeed == 0` 持续 ≥60s, 且伪 tracker 收到 ≥1 次 announce。
-2. **L1 反向** —— 关掉伪 tracker 后种子进入 `error`/`stalledUP`, 且**无任何外网连接**(用连接表或域名黑名单断言), 证明流量物理上出不去。
-3. **L2** —— 副实例从主实例拉取同一构造种子, `progress` 单调升至 1.0, 期间 `upspeed > 0` 持续 ≥10s, 完成后主实例侧 `seeding_time` 增长; 全程两端 announce 只打本地伪 tracker。
-
-**退路(必须写进 RM00 计划)**: 若 qB 拒绝自定义 announce / 拒绝非标准端口 / 双实例拒绝互连 ⇒ L1 降级为"假种子 + 全局暂停 + 只读断言"(即 L0 形态), L2 直接置 `Dropped` 并写明原因 —— 不允许"再试试"把 RM00 撑成三次排期。
+L1/L2 已验证解锁(环境1 RM00; 环境2 2026-11-01 实证), 各片直接引用; 大库量级归**语料回放轨**。写 L1/L2 两条铁律: ① announce 用局域网 IP(`lib/net.py: local_host()`), 写 `127.0.0.1` → `WSAEADDRNOTAVAIL`(qB 出站 socket 绑物理网卡); ② 伪 tracker 回包必须排除请求者自己(同 IP 单连接限制会挤掉真 leech; `lib/tracker.py` 已按 port 排除)。
 
 ## 04 切片表
 
-**切片的定义不是"文件清单", 是"一个能独立排期、独立验收的验证面"**。片表本身在常驻锚 issue 的 §03(唯一权威), 本节只给切分口径与更新规则。
+片表唯一权威 = 常驻锚 issue §03(RM00-RM10: 基建/启动/主循环/规则/归组迁移/tracker标签/HR/限速/WebUI 读写/通知), 排期序 RM00→01→02→04→03→05→06→07→09→08→10。更新规则见 §05。
 
-| 片 | 名称 | 主要验证面 | 预算 |
-|---|---|---|---|
-| RM00 | 基建: guard / 伪 tracker / 双实例互传 | 基建(解锁 L1/L2) | 1 次 |
-| RM01 | 连接·认证·启动 | 副作用 + 观感(启停/注册表/托盘/token) | 0.5 次 |
-| RM02 | 主循环·调度·持久化 | 副作用(节拍/落盘/热重载/优雅退出) | 0.5 次 |
-| RM03 | 规则引擎 | 副作用(动作真作用于 qB) | 1 次 |
-| RM04 | 辅种与分组 | 副作用(文件系统: 归组/移动/journal) | 1 次 |
-| RM05 | tracker·标签与分类清理 | 副作用(批量打标/删标/站点档案) | 0.5 次 |
-| RM06 | HR 在线核实 | 数据面 + 副作用(取数通道/三态/频控) | 1 次 |
-| RM07 | 限速·流量曲线·全局流量 | 副作用 + 数据面(限速下发/采样/流量源) | 1 次 |
-| RM08 | WebUI 读侧 | 数据面 + 观感(轮询/增量/大库/抽屉) | 0.5 次 |
-| RM09 | WebUI 写侧 | 副作用(命令/批量/乐观 UI/移动重命名) | 1 次 |
-| RM10 | 通知·外部集成 | 观感 + 副作用(通知通道/导出/扩展) | 0.5 次 |
+## 05 切片更新规则(切/并/拆/下线)
 
-**排期顺序**(按"风险 × 副作用"): `RM00 → RM01 → RM02 → RM04 → RM03 → RM05 → RM06 → RM07 → RM09 → RM08 → RM10`。
-
-## 05 切片更新规则(后续 agent 按这套切/并/拆/下线)
-
-功能会变, 片表必须跟着变 —— 但**不能每轮重排**, 否则"上次测过哪片"失去意义。规则:
-
-1. **归属优先**: 新功能先看路径是否落在既有片 glob 内。落得进去 ⇒ **并入该片**(更新 issue §03 该行 glob), **不开新片**。
-2. **开新片的门槛(三条同时满足)**: ① 有独立的副作用面或独立的前置状态; ② 并进既有片会让那片单轮超过半天; ③ 有明确的"这片做完了"判据。缺一条就并入。
-3. **编号不复用**: 新片取当前最大号 +1; 下线的片号永久留空, 不许回收。
-4. **拆片阈值**: 一片内出现 ≥3 个互不依赖的副作用面, 或单轮新增用例 >12 条 ⇒ 拆。
-5. **并片阈值**: 连续两轮只跑回归、零新增用例、glob 命中文件 <3 个 ⇒ 并入相邻片。
-6. **下线**: 功能被删或被取代 ⇒ 片置 `Dropped`, 行保留(划掉 + 指向取代者), 不删行。
-7. **改片表必须记账**: issue §08 记一行 + §07 对应行同步(新片插一行, 状态 `待做`)。
-8. **glob 自检(每轮开工必做)**: 跑一次该片 glob 的命中文件清单, 与"该片应覆盖的功能面"人工对一眼。**命中 0 文件 = 片已失效**, 按规则 6 处理; 命中里出现**明显不属于该片的大件** = 片边界糊了, 按规则 4 拆。
-9. **存量清单随片迁出**: `checklists/manual-walkthrough.md` 处于**冻结**状态(不批量迁移)。每片第一次排期时, 把属于该片的条目迁进该片用例集, 原文件对应行标 `已迁出 → RMxx`; 全部迁完再把那份清单置 `Superseded` 并指向常驻锚。理由: 片表还在长, 现在迁完还得返工; 而两份清单长期并存, 结局一定是"哪份都不全"。
-
-> 规则 8 是防"假阴性"的唯一手段: 功能搬了目录而 glob 没跟上时, 漂移体检(§07)会报"零命中", 于是"没变、不用测"—— 而事实是"测不到"。
+1. 新功能先看是否落既有片 glob: 落得进**并入**, 不开新片。
+2. 开新片三门槛**同时满足**: 独立副作用面/前置 + 并入单轮超半天 + 有完成判据。
+3. 编号不复用(新片=最大号+1); 功能删除/被取代 ⇒ 片置 `Dropped`, 行保留指向取代者。
+4. 拆片: ≥3 个互不依赖副作用面, 或单轮新增用例 >12 条。并片: 连续两轮纯回归且 glob 命中 <3 文件。
+5. 改片表必须记账(issue §08 + §07)。
+6. **每轮开工 glob 自检**: 命中 0 文件=片已失效(下线); 命中出现不属于该片的大件=边界糊了(拆)。
 
 ## 06 一轮的标准动作
 
-**两种触发形态(2026-11-04 起)**:
+**功能完工触发(常用)**: 收尾自检功能落入 §00 两类 ⇒ 当轮自跑: `real.guard` 自检 → 能写成断言的补 `tests-real` 用例走 `real.run --yes`; 观感走 `dev.webui`+浏览器自动化; 主程序走 `dev.run`(派生配置)。结论记 `testing/real-baselines/` 与档案一行验收结论。**没做必须明示理由(环境不可用/纯桩可验/BLOCKED), 不写理由=收尾未完成**。
 
-- **功能完工触发(常用)**: 收尾自检 —— 完工功能落入 §00 两类(或数据失真观感面)⇒ **当轮 agent 自跑真机验收**: `real.guard` 自检 → 能写成断言的补 `tests-real` 用例走 `real.run`(带 `--yes`); 观感/交互走 `dev.webui` + 浏览器自动化; 主程序行为走 `dev.run` 指向测试 qB(派生配置, 非 `config.yml`)。验收结论与数字记 `testing/real-baselines/`(口径同下), 档案里记一行"真机验收: 条目/PASS-FAIL"。预算按功能条目小时级, 不必凑半天片。**没做的必须明示理由**(环境不可用/该功能纯桩可验/记 BLOCKED)—— 不写理由 = 收尾未完成。
-- **定期排期触发(兜底)**: 漂移判定与回归巡检仍走常驻排期锚。排期指令的形态是固定的一句:
+**定期排期触发(兜底)**: 收到「对〈片名〉做真机实测, 先写分步实施计划」后按序, 不许跳步:
+1. 定片(映射不到先按 §05 处置); 2. 漂移体检(§07, 结论进计划开头); 3. 环境自检 `real.guard`; 4. 写分步计划(`plans/` HTML: 用例清单+档位+期望值 / 本轮哪条升档(§08) / `[需活跃种子]` 跳过项+解锁条件 / 验收判据); 5. 执行: 每条 `PASS`/`FAIL`(⇒ scope-guard 入池 bug)/`BLOCKED`(写明原因), **当轮不修缺陷**; 6. 记录: `testing/real-baselines/<stamp>-real-<片>.md`(三态/基线 commit/环境指纹)+更新锚 issue §07; 7. 收尾: 用例代码 `ship.commit`, **不立 task 档案**(常驻锚即档案)。
 
-```text
-对「<片名>」做真机实测, 先写分步实施计划, 参考 memory-bank/issues/<常驻锚>.html 与 memory-bank/testing/real-machine.md
-```
+## 07 漂移处理(判据机械, 不是印象)
 
-收到后按序执行, **不许跳步**:
+每片在锚 issue §07 记**基线 commit**; 开工第一步 `git log <base>..HEAD -- <globs>`: **零命中** ⇒ 只跑回归档(L2/L3 全跑), 不重做人工目视; **有命中** ⇒ 逐条读 diff: 判据变⇒降一档重测, 路径/接口变⇒改锚点重测, 纯重构⇒仍跑标「重构后复验」; **glob 命中 0** ⇒ §05 规则 6; **无人认领新目录** ⇒ §05 规则 1。纪律: 重构不算零命中(行为等价是假设); 基线 commit 必须是真 HEAD, 写不出就从「首轮」重来。
 
-1. **定片**: 把 `<片名>` 映射到片号。映射不到 ⇒ 先按 §05 规则 1/2 处置(改片表 + 记 §08), 再开工。
-2. **漂移体检**: 按 §07 用 `git log <基线commit>..HEAD -- <globs>` 分类, 结论写进计划开头。**没有基线 commit 的首轮写"首轮, 无漂移面"**。
-3. **环境自检**: `real.guard`(P0 之前手工核: 端口、进程镜像路径、种子是否全 paused、配置不是 `config.yml`)。
-4. **写分步计划**(`plans/` HTML, 拍板后冻结), 必须含四块: ① 本片用例清单(逐条 id + 当前档位 + 期望值); ② **本轮哪条要从 L(n) 升到 L(n+1)**(§08 硬要求); ③ 受约束 2 影响标 `[需活跃种子]` 而跳过的条目 + 解锁条件; ④ 验收判据(什么算这片做完)。
-5. **执行**: 逐条跑; 每条结果三态 —— `PASS` / `FAIL`(⇒ 按 scope-guard 入池 `bug` issue) / `BLOCKED`(环境或约束所致, 写明原因与解锁条件)。**当轮不修**缺陷(一律入池, 下轮再修)。
-6. **记录**: 新建 `testing/real-baselines/<stamp>-real-<片>.md`(用例数 / 各档分布 / PASS-FAIL-BLOCKED / 基线 commit / 环境指纹); 更新 issue §07 该行。
-7. **收尾**: 用例代码照常 `ship.commit`(可复用性靠这个); 缺陷已入池; **不立 `task` 档案**(常驻锚 issue 即档案); 改过片表则 §08 已记。
+## 08 用例成熟度 L0–L3
 
-## 07 漂移处理: 两次排期之间功能变了怎么办
-
-**判据是机械的, 不是印象。** 每片在 issue §07 记一个**基线 commit**(实测时刻的 HEAD)。下次开工第一步:
-
-| `git log <base>..HEAD -- <globs>` | 含义 | 处置 |
+| 档 | 判据 | 谁判 |
 |---|---|---|
-| **零命中** | 该片代码没动过 | 只跑**回归档**: 已 L2/L3 的用例全跑一遍; 结论写"无漂移回归"; **不重做人工目视** |
-| **有命中** | 动过 | 逐条读 diff 分类: ①判据变(期望值/阈值/分支)⇒ 该条**降一档重测**; ②路径/接口变 ⇒ 改用例锚点后重测; ③纯重构(行为等价)⇒ 仍跑, 但结论标"重构后复验" |
-| **glob 命中 0 文件** | 片可能失效或 glob 落后 | 按 §05 规则 8 处置 |
-| **出现无人认领的新目录** | 新功能没归属 | 按 §05 规则 1/2 提名并入或开新片 |
+| L0 | 人工目视(**过渡形态非终态**) | 人 |
+| L1 | 脚本采集+人判读 | 半自动 |
+| L2 | 脚本自动断言 | 机器 |
+| L3 | L2+负向对照(故意造错必须红) | 机器 |
 
-三条纪律:
-
-- **"上次测过"不等于"这次不用测"** —— 零命中才免人工目视, 有命中一律重测。
-- **重构不算零命中**: 纯重构也要跑一遍(行为等价是假设, 不是事实)。
-- **基线 commit 必须是真的 HEAD**, 不许写"大概上周"; 写不出 commit 的片, 下一轮从"首轮"重来。
-
-## 08 用例成熟度 L0–L3(未更改部分怎么加强)
-
-| 档 | 判据 | 谁判 | 例 |
-|---|---|---|---|
-| **L0** | 人工目视, 只写"看到了什么" | 人 | 五主题下输入框有没有过曝 |
-| **L1** | 脚本采集 + 人判读(输出结构化快照, 人看数字) | 半自动 | 脚本打印 `up_speed` 序列, 人判断曲线是否合理 |
-| **L2** | 脚本自动断言(有期望值, 不满足即红) | 机器 | 断言 `up_speed > 0` 持续 ≥10s |
-| **L3** | L2 + **负向对照**(故意造错/造边界, 断言必须红) | 机器 | 摘掉限速下发 → 断言必须失败(红绿双验) |
-
-**硬要求: 每轮至少把 1 条用例升一档, 并写进该轮计划的验收条件。** 做不到就在计划里明写"本轮纯回归, 不加强" + 原因 —— 否则"加强"永远排在"测完"后面, 永远不发生。
-
-- **观感类判据同样爬档, 且不依赖用户肉眼**(2026-11-04 起): agent 侧用浏览器自动化 + 截图判定; 「人工目视」只是 L0 过渡形态, 不是终态 —— 目标是升到 L2(脚本断言)/L3(红绿双验)。
-
-- **降级规则**: 用例对应的判据被改过(§07 "判据变") ⇒ 该条**降一档**, 下轮重新爬。
-- **记录**: issue §07 每片记 `L0/L1/L2/L3 = 4/6/2/0` 这种分布, 一眼看出"这片还有多少靠人眼"。
-- **为什么必须有这条**: 没有它, 每轮排期都是"把上次的人工目视再做一遍", 工作量恒定、覆盖不增 —— 这正是 `manual-walkthrough.md` 那 15 条挂了两个月的机制。
+**硬要求: 每轮至少 1 条升一档, 写进计划验收条件**(做不到明写「本轮纯回归」+原因); 判据被改过 ⇒ 降一档下轮重爬; 锚 issue 记各片 L0-L3 分布。观感类同爬档(agent 截图判定)。
 
 ## 09 用例怎么写
 
-- **位置**: `tests-real/<rmNN>_<slug>/`, 用例 id `RM06-01`(写在 docstring 首行 `[RM06-01] <一句话>`, `real.list` 从这里抽)。
-- **兼容 pytest**: 可以 `uv run pytest tests-real/... --no-cov` 单跑, 但 `pytest.ini` 的 `testpaths` **不改** —— `test.full` 永远看不到这个目录, 基线数字零扰动。
-- **每条必写四行**: `前置`(需要 L0/L1/L2 哪层 + 哪些种子) / `副作用`(会改什么) / `回滚`(怎么恢复) / `失败判据`。
-- **只断言外部可观测事实**: qB API 返回、文件系统、进程表、HTTP 响应。内部实现细节归单测, 不在这里断言(否则一次重构让整片变红)。
-- **幂等**: 用例必须能重跑 —— 开跑先清自己造的种子/标签/分类, 收尾删干净。
-- **禁止**: 连非白名单端口; 读仓库根 `config.yml`; 依赖人工点击(除非明确标 L0); `try/except: pass` 吞异常。
-- **L3 的红验**: 与单测同口径 —— 故意破坏后必须看到红, 否则这条不算 L3。
+- 位置 `tests-real/<rmNN>_<slug>/`, id 写 docstring 首行 `[RMxx-nn] <一句话>`; 可 pytest 单跑但 **pytest.ini testpaths 不改**(基线零扰动)。
+- 每条必写四行: 前置 / 副作用 / 回滚 / 失败判据; 只断言外部可观测事实(内部实现归单测); 幂等(开跑清场收尾删净); L3 红验与单测同口径。
+- 禁止: 非白名单端口、读仓库根 `config.yml`、依赖人工点击(除非标 L0)、`try/except: pass` 吞异常。
 
 ## 10 产物落位
 
-| 产物 | 落点 | 权威 |
-|---|---|---|
-| 规程(怎么做) | 本文件 | 硬约束 / 守卫 / 切片规则 / 漂移 / 成熟度 |
-| 排期锚 + 片表 + 进度 | `issues/<stamp>-test-real-machine-test-standing.html` | 要不要做 / 什么时候做 / 覆盖到哪 |
-| 每轮计划 | `plans/<stamp>-plan-real-<片>.html` | 这一轮怎么测、为什么这么测(拍板即冻结) |
-| 每轮实测数字 | `testing/real-baselines/<stamp>-real-<片>.md` | 用例数 / 档位分布 / PASS-FAIL-BLOCKED / 基线 commit |
-| 用例 | `tests-real/` | 可复用的断言本体 |
-| 产品进程起停 | `tests-real/lib/app.py` | 临时配置生成 / 起停 / 抓日志 / 端口探空 / 注册表备份还原(见 §2.7) |
-| 手工造种子 | `tests-real/seed.py`(`real.seed*`) | 造/加/看/删假种子, 只服务手工探索, 不参与验收 |
-| 诊断工具(非用例) | `tests-real/tools/` | 卡住时的现场采集, 不参与验收 |
-| 命令 | `.commands/real/` | 守卫与运行入口 |
-| 缺陷 | 各自的 `bug` / `perf` issue | 每条独立排期 |
-
-## 11 反模式
-
-- ❌ 为了跑通用例临时放宽"种子非活跃" —— 一次放宽, 之后所有结论都不可信。
-- ❌ 把真机用例塞进 `tests/` 或挂上闸门 —— 需要活 qB 的断言会让提交变成运气。
-- ❌ 用印象代替 `git log` 判漂移 —— 结论不可复核, 且必然漏掉"重构后行为变了"。
-- ❌ 每轮都从 L0 重做人工目视 —— 工作量恒定, 覆盖不增。
-- ❌ 一片撑成三次排期 —— 超预算就按 §05 规则 4 拆, 别硬扛。
-- ❌ 把实测发现的缺陷当轮顺手修 —— 会把"测一片"变成"修一片", 下轮排期重新估。
-- ❌ 手工双击 exe 起 qB —— 进程归属不明, guard 无法保证"不动其它 qB"。
-- ❌ 把 401/403 当用例失败或给客户端加鉴权绕行 —— 测试实例本该免鉴权, 那是「跳过本地验证」被重置, fail-closed 修环境(§2.5)。
-- ❌ 等用户给 token/凭据再跑真机 —— 免token口径下不存在这一步(§2.5); 等真实种子回场同理(已清退, §03)。
+规程=本文件; 排期锚+片表+进度=常驻锚 issue; 每轮计划=`plans/<stamp>-plan-real-<片>.html`(拍板即冻结); 实测数字=`testing/real-baselines/`(全量基线单点见 kb.baseline); 用例=`tests-real/`; 诊断工具=`tests-real/tools/`; 命令=`.commands/real/`(`real.guard/run/env/up/down/seed*/list/suite`); 缺陷=各自 bug/perf issue。
