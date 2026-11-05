@@ -21,6 +21,7 @@
 from __future__ import annotations
 
 import argparse
+import math
 import sys
 from pathlib import Path
 
@@ -28,6 +29,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from _common import (  # noqa: E402
     ABOUT_NAME,
+    CAP_POLICY,
     INDEX_NAME,
     find_root,
     gen_cmd,
@@ -37,6 +39,12 @@ from _common import (  # noqa: E402
     rel_link,
     resolve_mb_dir,
 )
+
+# 单份索引的字符预算 = `index-auto` 的 cap(单点: `_common.CAP_POLICY`)。
+# 主题多到一份装不下时按文件名**分卷**(`_index-1.md` …), 主索引退化为分卷路由 ——
+# 2026-11-05 B4: 缩摘要救不回 96 个主题(`web-ui` 26,615), 但每行都要保留「一句话/触发词」,
+# 所以选择「一处只回答一件事」: 主索引给路由, 卷内给定位。
+INDEX_BUDGET = CAP_POLICY["index-auto"]
 
 
 def _cell(text: str) -> str:
@@ -62,12 +70,14 @@ def _clip(text: str, limit: int) -> str:
     return text
 
 
-def render_dir(directory: Path, root: Path, mb: Path) -> str:
-    """渲染一个目录的 `_index.md`。"""
+TOPIC_TABLE = ["", "## 主题", "", "| 主题 | 一句话 | 触发词 |", "|---|---|---|"]
+
+
+def _header(directory: Path, root: Path, mb: Path) -> list[str]:
+    """目录级头部(不含类表/主题表) —— 主索引与卷页共用, 保证「谁生成的」只有一个说法。"""
     about = read_meta(directory / ABOUT_NAME)
     title = about.title or directory.name
     readme_link = rel_link(directory, mb / "README.md")
-
     lines = [
         f"# {title}",
         "",
@@ -80,35 +90,134 @@ def render_dir(directory: Path, root: Path, mb: Path) -> str:
         lines.append(f"> **摘要**: {about.summary}")
     if about.triggers:
         lines.append(f"> **触发**: {about.triggers}")
+    return lines
 
+
+def _class_rows(directory: Path) -> list[str]:
+    """子目录类表 (pitfalls/ 的两级指针); 无子目录返回空表。"""
     subdirs = [d for d in sorted(directory.iterdir()) if d.is_dir() and (d / ABOUT_NAME).is_file()]
-    if subdirs:
-        lines += ["", "## 类", "", "| 类 | 一句话 | 触发 |", "|---|---|---|"]
-        for sub in subdirs:
-            meta = read_meta(sub / ABOUT_NAME)
-            lines.append(
-                f"| [{sub.name}]({rel_link(directory, sub / INDEX_NAME)}) "
-                f"| {_cell(_clip(meta.summary or '', SUMMARY_MAX))} "
-                f"| {_cell(_clip(meta.triggers or '', TRIGGER_MAX))} |"
-            )
+    if not subdirs:
+        return []
+    lines = ["", "## 类", "", "| 类 | 一句话 | 触发 |", "|---|---|---|"]
+    for sub in subdirs:
+        meta = read_meta(sub / ABOUT_NAME)
+        lines.append(
+            f"| [{sub.name}]({rel_link(directory, sub / INDEX_NAME)}) "
+            f"| {_cell(_clip(meta.summary or '', SUMMARY_MAX))} "
+            f"| {_cell(_clip(meta.triggers or '', TRIGGER_MAX))} |"
+        )
+    return lines
 
-    topics = iter_topic_files(directory)
-    lines += ["", "## 主题", "", "| 主题 | 一句话 | 触发词 |", "|---|---|---|"]
-    if topics:
-        for path in topics:
-            meta = read_meta(path)
-            summary = _clip(meta.summary or "", SUMMARY_MAX)
-            triggers = _clip(meta.triggers or "", TRIGGER_MAX)
-            lines.append(f"| [{path.name}]({path.name}) | {_cell(summary)} | {_cell(triggers)} |")
-    else:
-        lines.append("| (暂无) |  |  |")
 
+def _topic_row(path: Path) -> str:
+    meta = read_meta(path)
+    return (
+        f"| [{path.name}]({path.name}) | {_cell(_clip(meta.summary or '', SUMMARY_MAX))} "
+        f"| {_cell(_clip(meta.triggers or '', TRIGGER_MAX))} |"
+    )
+
+
+def _title(directory: Path) -> str:
+    return read_meta(directory / ABOUT_NAME).title or directory.name
+
+
+def _single_page(directory: Path, root: Path, mb: Path, rows: list[str]) -> str:
+    lines = _header(directory, root, mb) + _class_rows(directory) + TOPIC_TABLE
+    lines += rows or ["| (暂无) |  |  |"]
     return "\n".join(lines) + "\n"
 
 
+def _volume_page(directory: Path, root: Path, mb: Path, n: int, total: int, rows: list[str], names: list[str]) -> str:
+    """卷页(只含主题表) —— 主索引给路由, 卷内给定位, 每卷一问。"""
+    lines = [
+        f"# {_title(directory)} · 卷 {n}/{total}",
+        "",
+        f"> **本文件是生成物, 不要手改** —— 由 `{gen_cmd(root, 'gen_kb_index.py')}` 生成; "
+        f"主索引 [_index.md]({INDEX_NAME}) 是分卷路由。",
+        f"> 本卷主题: `{names[0]}` … `{names[-1]}`(共 {len(names)} 条); "
+        f"主题越多时索引按文件名分卷, 每卷 ≤ {INDEX_BUDGET:,} 字符。",
+        "> **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。",
+        *TOPIC_TABLE,
+        *rows,
+    ]
+    return "\n".join(lines) + "\n"
+
+
+def _router_page(directory: Path, root: Path, mb: Path, names: list[str], chunks: list[tuple[int, list]]) -> str:
+    lines = _header(directory, root, mb) + _class_rows(directory) + [
+        "",
+        "## 主题(分卷)",
+        "",
+        f"> 主题较多, 按文件名分卷存放(每卷 ≤ {INDEX_BUDGET:,} 字符): 先按「主题范围」选卷, 再进卷内定位。",
+        "",
+        "| 卷 | 主题范围 | 条数 |",
+        "|---|---|---|",
+    ]
+    for n, (start, chunk) in enumerate(chunks, 1):
+        lines.append(
+            f"| [{n}]({volume_name(n)}) | `{names[start]}` … `{names[start + len(chunk) - 1]}` "
+            f"| {len(chunk)} |"
+        )
+    return "\n".join(lines) + "\n"
+
+
+def volume_name(n: int) -> str:
+    return f"_index-{n}.md"
+
+
+def _chunks(seq: list, parts: int) -> list[tuple[int, list]]:
+    """均匀切片 (按条数, 不按字符) —— 卷数确定后各卷长度尽量一致, 便于「范围」浏览。
+    返回 `(起始下标, 切片)`。"""
+    size = math.ceil(len(seq) / parts)
+    return [(i, seq[i:i + size]) for i in range(0, len(seq), size)]
+
+
+def render_pages(directory: Path, root: Path, mb: Path) -> dict[Path, str]:
+    """一个索引目录的全部页面: {主索引或卷页路径: 内容}。
+
+    单份装得下就是一份(`_index.md`); 装不下按文件名分卷, 主索引退化为路由。
+    卷数从 2 递增试算, 第一个「每卷都 ≤ `INDEX_BUDGET`」的方案即采用 —— 确定性, 无随机。
+    """
+    topics = iter_topic_files(directory)
+    rows = [_topic_row(p) for p in topics]
+    names = [p.name for p in topics]
+    single = _single_page(directory, root, mb, rows)
+    if len(single) <= INDEX_BUDGET:
+        return {directory / INDEX_NAME: single}
+    for parts in range(2, len(rows) + 1):
+        name_chunks = _chunks(names, parts)
+        pages: dict[Path, str] = {}
+        for n, (start, name_chunk) in enumerate(name_chunks, 1):
+            text = _volume_page(
+                directory, root, mb, n, len(name_chunks), rows[start:start + len(name_chunk)], name_chunk
+            )
+            if len(text) > INDEX_BUDGET:
+                pages = {}
+                break
+            pages[directory / volume_name(n)] = text
+        if pages:
+            pages[directory / INDEX_NAME] = _router_page(directory, root, mb, names, name_chunks)
+            return pages
+    # 单条都装不下(极端): 退回单页, 让 `doc.caps` 照实报债 —— 不静默丢内容
+    return {directory / INDEX_NAME: single}
+
+
+def render_dir(directory: Path, root: Path, mb: Path) -> str:
+    """渲染一个目录的 `_index.md`(分卷时为主索引/路由页)。"""
+    return render_pages(directory, root, mb)[directory / INDEX_NAME]
+
+
 def build_all(root: Path, mb: Path) -> dict[Path, str]:
-    """全库 `_index.md` 的目标内容: {索引路径: 应写内容}。"""
-    return {directory / INDEX_NAME: render_dir(directory, root, mb) for directory in iter_indexed_dirs(mb)}
+    """全库索引的目标内容: {索引/卷页路径: 应写内容}。"""
+    out: dict[Path, str] = {}
+    for directory in iter_indexed_dirs(mb):
+        out.update(render_pages(directory, root, mb))
+    return out
+
+
+def stale_volume_pages(mb: Path, expected: dict[Path, str]) -> list[Path]:
+    """磁盘上有、生成结果不再需要的卷页(主题变少/改名后残留) —— 由重建入口删除。"""
+    return [p for p in sorted(mb.rglob("_index-*.md")) if p not in expected]
 
 
 def main() -> int:

@@ -1,0 +1,34 @@
+# testing — 测试 / 冒烟 / 仿真纪律 · 卷 2/4
+
+> **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
+> 本卷主题: `group-relocate-restart-free.md` … `mutmut-survived-verdict.md`(共 24 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
+
+## 主题
+
+| 主题 | 一句话 | 触发词 |
+|---|---|---|
+| [group-relocate-restart-free.md](group-relocate-restart-free.md) | 写迁移执行体测试时两处「看起来对、其实恒真/恒假」的断言形态 —— `ActionResult.ok` 是 classmethod 不是属性; 同卷硬链接下删目标路径不会造出悬空链接。 | ActionResult,is_ok,硬链接,悬空,迁移执行体,jar |
+| [guard-dead-branch.md](guard-dead-branch.md) | 扫描型守阵的「没扫到」与「扫了没有违规」输出完全一样 —— 正则后来为 `\1` 回引用补了捕获组, 消费处组号没跟着挪, 整个分支从此恒扫引号字符, 检出能力归零而 pytest 照样全绿(issue 26-10-11-2030 实证: 保留前缀守阵的指令表达式分支死了很久,… | 守阵, 死分支, 捕获组, group(1), group(2), 正则改形, 回引用, 假绿, 红绿双验, 活性探针, 扫描型守阵, 静态守卫, 检出能力, docstring 宣称, 白名单回退 |
+| [guard-literal-comment-trip.md](guard-literal-comment-trip.md) | 「X 已移除/退役, 不得回潮」类守阵按 `assert "标识符" not in 源码` 扫描**整份源文本**(含注释与 docstring) —— 在同一份源码里写退役说明注释时把标识符原文写进去, 守阵立刻判红, 且报错信息极具迷惑性(明明只是注释)。写退役说明要么换措辞… | 移除功能, 反回潮守阵, 退役注释, assert not in, 判红, 注释, 文档字符串, 源码扫描 |
+| [gz-plaintext-assertion.md](gz-plaintext-assertion.md) | 对 .gz 原始字节做子串断言恒真, 必须解压后扫文本再验内容 | gz,压缩产物,脱敏断言,假绿,no_credentials |
+| [harness-is-stub-server.md](harness-is-stub-server.md) | `dev.harness` 只起一个 **uvicorn 常驻服务**(脚本末尾 `uvicorn.run(...)` 阻塞, 包内 timeout 900s), **不跑任何断言**; 它的 `when` 曾写「浏览器冒烟（真浏览器跑前端断言合集）」, 与命令实际形态不符 ——… | 跑前端冒烟; dev.harness 卡住不退出; 后台任务无输出; "断言合集"跑哪条命令; 桩服务突然打不开; 15 分钟就死; 验收时服务没了 |
+| [harness-save-flow.md](harness-save-flow.md) | ui_harness 桩的 /api/config GET 读**磁盘树**, PUT 过**版本闸门**(writer._reject_stale_version 对缺 config.schema_version 的提交树一律拒绝) —— 桩不物化配置文件时 GET 树缺章 ⇒… | 桩/e2e 上测「保存并应用」; 桩 PUT 恒 400 缺 schema_version; 杀桩后端口仍被占 |
+| [headless-prefers-light-theme-gate.md](headless-prefers-light-theme-gate.md) | 无头浏览器跟随系统亮色会误触亮主题排除前缀, 让暗主题规则整体假性失效 | 无头, Playwright, 亮主题, prefers-color-scheme, 诊断假象, theme 排除 |
+| [heredoc-cjk-punct-js-syntax.md](heredoc-cjk-punct-js-syntax.md) | 对 drawer_tpl/*.js 这类「字符串数组拼 CSS/JS」的变体文件做批量编辑(heredoc 重写、切片替换、python 正则改写)时, 两个高频翻车点: ①heredoc 内容里的**中文标点**(「」（）等)或行尾引号被 shell/编码吃掉, 产生残行(如孤… | 批量编辑变体, heredoc 改 js, 切片替换, 残行, 语法错误, node --check, drawer_tpl, 字符串数组, 中文标点, 引号错位, 编辑后没检查语法 |
+| [hot-reload-mock-sections.md](hot-reload-mock-sections.md) | apply_new_config 的守阵惯用 `mock.MagicMock()` 当新配置(替身区只钉住自己关心的段)。内核化 | 改 apply_new_config / 新增模块 apply / 热重载守阵, 见到 MagicMock 配置 + 新模块段短路判据 |
+| [hot-reload-section-choice-side-effects.md](hot-reload-section-choice-side-effects.md) | 驱动 apply_new_config 的测试(段认领兜底/回执/级别语义类)如果改的是 notify 这类「apply 有 | 写热重载/兜底类测试选驱动段时; 见「单跑绿全量红」且红在 logging 全局面断言 |
+| [hr-registry-pollution.md](hr-registry-pollution.md) | 测试期 `hr.runtime` 的注册表路径必须被 conftest 重定向到临时目录 —— 用例的 `data_dir` 是每例唯一的 `tmp_path`, 不隔离就是**每个用例往用户真实 `%LOCALAPPDATA%/auto-qb-hr/instances.json… | 加 hr runtime 测试, 发现端点测试, 扩展发现列表出现无关实例, 主实例连不上 Failed to fetch, instances.json 无界增长, 写 app-data, 注册表条目堆积, 测试污染用户数据 |
+| [iab-click-rerender-flake.md](iab-click-rerender-flake.md) | 用 IAB 浏览器 (Playwright surface) 对 kb.nav 这类「动作即整段重渲染 innerHTML」的单文件页做冒烟时, 多个 locator 动作挤在一个 cell 里连打 (间隔 ≤150ms), 后继动作可能报 `Timeout waiting fo… | 冒烟中 locator click 超时; 想断定「功能有 bug」之前; 冒烟脚本连续动作 (右键菜单 → 开关按钮 → 专区内按钮) 后继点击超时。 |
+| [importlib-sys-modules-dataclass.md](importlib-sys-modules-dataclass.md) | importlib 就地加载 future-annotations dataclass 模块, 不先注册 sys.modules 会在 3.13 上炸 NoneType | importlib, spec_from_file_location, exec_module, sys.modules, dataclass, NoneType, 3.13, 就地加载, 守阵加载引擎, find_skill_dir |
+| [log-capture.md](log-capture.md) | caplog 与全局日志状态是跨测试共享的 —— 断言日志要挂模块 logger 自建 handler + 显式 setLevel, 不碰 caplog。 | caplog, 日志断言, 日志级别, root handlers, root level, xdist, 偶发, CI 红, setup_logging, make_manager |
+| [manager-builder-single-point.md](manager-builder-single-point.md) | 测试构造单点参数面不足导致内联旁路 | 内联构造, make_manager, 单点旁路, 装配样板, FakeConfig, QbManager, 段覆盖, 测试构造器, builder |
+| [manager-connect-stub.md](manager-connect-stub.md) | QbManager.run() 主循环用例里把 `connect` mock 成 `return True` 却不给 `mgr.client` 落值, 在断连稳态守卫(26-10-31-1029)生效后会让请求线被整段静默跳过 —— 用例不报错, 断言以「线没跑」的形态假红/假绿… | 写或改 run() 主循环测试, mock/替换 connect; 或改断连守卫判据后跑主循环用例 |
+| [monotonic-warn-sentinel.md](monotonic-warn-sentinel.md) | `time.monotonic()` 的 0 点是**机器开机时刻**(Linux `CLOCK_MONOTONIC` / Windows `GetTickCount64`), 不是"很久以前" —— 拿 `0.0` 当「从未告警」哨兵时, 节流判据 `now - 0.0 >=… | CI 红, 本机绿, 平台无关的 CI 红, caplog 断言 False, 告警没打出来, 首次告警被吞, 节流, throttle, 哨兵, sentinel, time.monotonic, uptime, 全新 VM, 日志断言,… |
+| [mutants-mirror-dirty-worktree.md](mutants-mirror-dirty-worktree.md) | `mutants.run` / `mutants.verify` 是**就地改源码**的(`mutmut apply` 把变异体写进镜像 `src/`), 正常路径跑完会还原。但上一轮被**中断**(超时被杀 / `TaskStop` / 崩)时, 变异体可能**留在镜像工作树里… | 变异测试, mutmut, 镜像残留, 工作树脏, apply 未还原, 中断, TaskStop, 超时被杀, --no-refresh, git status 判净, stat 缓存, 同长度替换, git diff 看不出, git… |
+| [mutants-shared-mirror.md](mutants-shared-mirror.md) | 变异测试镜像默认是 `~/auto-qb-mut`, **多会话共用**; 而 `mutants.run` 每次都 `rm -rf mutants mutmut-cache.db`。并行会话一开跑, 就会把你**正在跑**的 `mutants/<pkg>/*.meta` 一起删掉… | 多 clone 并行, 共享镜像, 并行会话, rm -rf mutants, FileNotFoundError, .meta 被删, mutmut 崩, only_mutate 被改, 专用镜像, --mirror, --childre… |
+| [mutants-wsl-shell.md](mutants-wsl-shell.md) | 本机 WSL(`Ubuntu-26.04`, 登录壳实为 zsh 5.9)里 `cd X && cmd` 会真的在 X 下执行, 但 **`$PWD` 与 `$(...)` 命令替换仍报 WSL 的启动目录**(即调用方的 Windows cwd 映射成的 `/mnt/d/...… | WSL, wsl.exe, bash -lc, zsh, 命令替换, $(), $PWD, cd 不生效, 相对路径读错, mutants.status, mutmut=no, 镜像目录, 路径漂移 |
+| [mutation-pool-artifact.md](mutation-pool-artifact.md) | 窄池跑出来的存活清单, 相当一部分是「相关测试不在池里」的**假存活** —— 同一目标同一套变异, 只把池从 1 个测试文件换到 5 个, 存活数 97 → 70(−27%); 一个被判成 SURVIVED 的变异, 拿**全套件**手工改一次其实是被杀死的。判一个存活变异是不… | 变异测试, mutmut, pytest-gremlins, 存活变异, 杀死率, 选择池, 假存活, 等价变异, 真洞, 机器提名手工确认, 变异审计 |
+| [mutation-revert-git-checkout.md](mutation-revert-git-checkout.md) | 红绿双验做突变时, 用 `git checkout -- <file>` 还原文件会把**本轮尚未提交的全部改动**一起冲掉 —— 突变注入的 sed 与手头未提交的实现在同一个工作区文件里, checkout 不区分。防御: 精确反向 Edit 重放突变(或 `git stas… | 红绿双验, 变异测试, 突变, 判红, git checkout 还原, 冲掉未提交, 工作区回退, sed 注入 |
+| [mutmut-mtime-race-stale-trampoline.md](mutmut-mtime-race-stale-trampoline.md) | mutmut 3.8 跨轮增量 + 预置 src 的 mtime 竞态: 跳过 trampoline 生成致 forced-fail 假轮与 dump 全部无法重放(两形态) | mutmut run 换目标, cp src 进镜像, 镜像 mutants 旧副本, Unable to force test failures, 全 no tests 假判定, dump 重放失败, source_mtime, 无 tr… |
+| [mutmut-survived-verdict.md](mutmut-survived-verdict.md) | mutmut 报 `survived` 的变异, 把那条 diff **手工 apply 回去、跑一遍定向池**, 池会直接变红 —— 也就是说它其实**早就被杀死了**。rules 首轮实测: 1364 条存活/超时里 **404 条是伪存活(29.6%)**, 名义杀死率 5… | 变异测试, mutmut, 存活不可信, 假存活, survived 误报, verify 恒 KILLED, 基线常红, 全杀等于没杀, 表类变异不生效, import 期函数, process_isolation, 杀死率虚低, app… |

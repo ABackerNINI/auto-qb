@@ -33,6 +33,7 @@
 ## 生成物 (冲突时**重跑脚本**, 不要手改)
 
 - 各目录的 `_index.md` —— `commands run kb.index` 扫主题文件的三行头元数据生成
+- 分卷页 `_index-<n>.md` —— 主题多到一份 `_index.md` 装不进 8,000 字符时同批生成, 此时主索引退化为分卷路由(见 [pitfalls/web-ui/_index.md](pitfalls/web-ui/_index.md)); 同批重建、同批清残留, 一样不要手改
 - [tasks/_index.md](tasks/_index.md) —— `commands run kb.index` 扫档案 `Status` / `Summary` 生成
 - [issues/_index.md](issues/_index.md) —— create-issue skill 的生成器重建
 - [plans/_index.md](plans/_index.md) / [reports/_index.md](reports/_index.md) —— `gen_docs_index.py`; 专题视图 `kb.docmap` 查询现算不落盘(_doc-map.md 已退役)

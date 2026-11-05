@@ -1,0 +1,34 @@
+# web-ui — 前端 / WEB UI 纪律 · 卷 4/4
+
+> **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
+> 本卷主题: `search-views.md` … `wording-audit-surface.md`(共 24 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
+
+## 主题
+
+| 主题 | 一句话 | 触发词 |
+|---|---|---|
+| [search-views.md](search-views.md) | 搜索不是虚拟分组、负词种子级排除、脏标记是共享状态、鉴权不能靠"凭证串非空"、配置写盘按 BaseLoader 语义。 | 改搜索, 改视图脏标记, 改鉴权, 改登录, 改设置页, 改配置写盘, rid 门控 |
+| [show-if-residual-key.md](show-if-residual-key.md) | schema 字段的 show_if 只控制「这一行渲染不渲染」; 用户把触发键从命中值切走后, 该字段先前写进树的值**仍留在配置树里**(show_if 不删键), 行又已隐藏 ⇒ 用户看不见也改不了, 保存时后端校验对残留键报错(如 watch_fields 仅在 trig… | 给规则/段字段配 show_if; 切走关联键后保存报"该键非法"; 字段在某取值下才合法 |
+| [sortable-gate-source-split.md](sortable-gate-source-split.md) | 能力判据源分裂: 视觉侧硬编码 + 行为侧门控 = 「看着能点、点了没反应」的静默全灭 | 补门控, a11y 补课, headActivate, col.sortable, sortable, thead, 表头排序失效, 点了没反应, 视觉与行为分叉, 判据同源, 唯一调用方 |
+| [stale-predicate-inverted.md](stale-predicate-inverted.md) | 同一对象上成对出现的 `active`(本图此刻该不该显示/拉)与 `stale`(在途响应是否**已过期**→丢弃)是**互为反义**的两个谓词; 机械改名/整行重写时把 `stale` 的 `!(...)` 敲成 `!!(...)`, 语义整个翻面 —— 恰在「本图正在被看」… | 改 stale 谓词, 机械改名, 双重取反, 图加载不出来, 一直显示正在加载, loading 不复位, 谓词极性, _qbLoad, _QB_SCOPES, active 与 stale |
+| [sticky-scrollpad-inset.md](sticky-scrollpad-inset.md) | sticky 的视矩形被**滚动容器自身的 padding 内缩** —— top:0 实际停在 padding-top 之下、bottom:0 实际停在 padding-bottom 之上, 中途滚动时数据行文字从这两条缝里漏出来; 行级 grid 表格的吸顶列头与吸底汇总条会… | 吸顶, 吸底, sticky, 滚动容器 padding, drawer-body, 表头吸顶, 统计条吸底, 漏出文字, 行文字漏出, 顶部漏字, 底部漏字, 中途滚动, 未到顶, 没到底, dt11, 树表批量, drawer_tpl,… |
+| [surface-color-family-single-point.md](surface-color-family-single-point.md) | 同一个视觉区域(面板 / 表区)的各层表面(列头底、行板底、悬停、落影)若被多处各写一遍——表头 `--bg-card`、行板 skin 卡底 `--bg-row`、行板透明露面板、页面级吸顶列头的 `--shadow-1` 落影——就会在主题切换时露出肉眼可见的色带 / 横条,… | 表头异色, 异色背景, 色带, 横条, 表头下方颜色不一样, 背景不一致, 主题下表头发白, 抽屉表格底色, --bg-card, --bg-row, box-shadow 落影, 吸顶列头阴影, 三皮肤观感分叉 |
+| [svg-chart-mapping.md](svg-chart-mapping.md) | 内联 SVG 图表(viewBox + aspect-ratio)的鼠标坐标换算若假设"SVG 铺满容器", 一旦 CSS 把高度压扁(preserveAspectRatio 居中 letterbox)映射整体错位; 共享 CSS 里残留的固定 height 会以特异性压过主题的… | 改图表悬停, 改 SVG 尺寸, 改图表 CSS, 图表 tooltip 不跟手, 十字线偏移, 图看起来偏窄, letterbox |
+| [table-resizer-handle.md](table-resizer-handle.md) | 报「各表 / 各列的列宽拖拽把手粗细不一致」(如种子页『分类』明显更细)时, 根因**不在某一列的代码** —— 三皮肤(prism/atlas/console)的 `.h-cell .resizer` 规则逐字一致, 粗细差来自**非整数缩放下的亚像素相位**: 可见线只有 2… | 把手粗细不一致, 有的细有的粗, 列宽拖拽把手, resizer, h-cell, hover 不高亮, 某些列 hover 没反应, 首列 hover, 表头悬停无底色, 把手压住文字, 把手离文字太近, 表头文字被盖, 右对齐列, 12… |
+| [tbl-pad-x-single-point.md](tbl-pad-x-single-point.md) | 引擎表格「列头与值格同缘」靠变量单点: 三皮肤 `.group-head` 与 `.group-row` 的横向内距都读 `--tbl-pad-x`(默认 14px)。变体只改行的内距、不在行容器作用域声明变量 ⇒ 列头留在皮肤默认 14px, 首格与行内容根整体错位(2026-… | 改变体表格 CSS, 改行内距, 列头没对齐, 列头与值格错位, 列头比行右移, 表头左边多一截, --tbl-pad-x, --tbl-gap, dt05, 05 健康分组, drawer_tpl 变体, 几何守阵, dt-table-l… |
+| [teleport-target-missing-patch-abort.md](teleport-target-missing-patch-abort.md) | 把 `<teleport :to="<选择器>">` 挂到**目标元素不在文档**的时刻, Vue 生产版会**静默跳过子节点挂载**(无任何警告, 只有 dev 版打 `Invalid Teleport target`), 之后卸载这个 teleport 时 `Teleport… | teleport 目标缺失, Invalid Teleport target, 生产版静默, patch 中断, 内容消失, 半渲染态, 合并态切换, 门跨越, v-if 换代, 锚离场, 桥锚, aq-dt-bridge, dtBridg… |
+| [template-render.md](template-render.md) | 模板与 CSS 的静默失效(挂件类名错配、规则被吞、变体被覆盖、注入落点找不到)与"两套 UI 必须成对改"的纪律; 另收 Vue 过渡钩子的接线与几何登记、详情面板变体的通知驱动渲染。 | 改模板, 改 CSS, 加挂件类, 改主题, 两套 UI, 白屏, 静默失效, 缓存, 过渡, 过渡动画, 过渡钩子, transition, before-enter, 组件变体, 删死代码, 死类判定, 混合选择器, 动态类名, 删模板… |
+| [toast-countdown-ttl-misattributed.md](toast-countdown-ttl-misattributed.md) | 同一条提示条的进度条时长与退场定时器不同源 —— stamp 时用的是"整栈共用"的 ttl, 同一 tick 里先发出的归档条(4000)把 TTL 贴到了后推入的结果条(12000)上 | 进度条到了不消失, 倒计时条走完窗口还在, 时间指示条停在末尾, 强制重新汇报失败窗口不消失, --fx-life, data-fx-cd, toastSync ttl, 归档条 TTL 串条 |
+| [toast-kind-unstyled.md](toast-kind-unstyled.md) | toast 新 kind 不登记样式 = 与 info 同貌 | toast, kind, 提示条, warn 档, 消息弹窗, 样式没生效, 与 info 一样, toast 颜色, 语义档, msg-tone, msg-line |
+| [toast-queue-pushin-overlap.md](toast-queue-pushin-overlap.md) | 给底部锚定的提示条栈补了 FLIP 之后, 新条仍走「原地淡入」, 于是旧条还没让开、新条已经落在同一块地方 —— 重叠是入场形态的锅, 不是 FLIP 的锅 | toast 重叠, 队列重排, FLIP, 叠画, 新条入场, 顶掉, 提示条重叠, 强制汇报两个窗口, 队列推入, data-fx-queue |
+| [tpl-comment-split-orphan.md](tpl-comment-split-orphan.md) | 把单文件模板切成 `shared/tpl/*.html` 时, 若一条 `<!-- ... -->` 的开头半被切走/丢弃, 分片里只剩 结尾的 `-->`, 聚合(boot.js 把清单里同目标分片拼成一条 HTML 串再注入)里就成了**孤儿 `-->`** —— 被当**文… | 页面出现不该有的中文注释文字, 页面上出现 `-->`, 模板分片, tpl-manifest, 聚合, 注释没闭合 |
+| [ui-location-persist.md](ui-location-persist.md) | "刷新后回到别的页"这类报障的固定判据 —— 位置属于**用户意图**该落盘, 但只改初值不够(按需加载的页面必须在启动路径补一次加载), 且恢复的值必须对 schema 校验, 采用时要复用既有跳转方法。 | 刷新回种子页, 设置页刷新, 刷新掉回首页, 页面位置, 停在哪一页, page 持久化, hub.view, F5 丢位置, 记住上次在哪, 展开态被收起, 切视图, expandedKey, 分组展开, 追剧展开 |
+| [unsaved-guard-reload-keys.md](unsaved-guard-reload-keys.md) | 做「有未保存改动时刷新要提醒」这类守卫时, 三处最容易踩: ① 别被 `shortcuts.js` 的 `KB_BLACKLIST`(把 `F5` 列为"浏览器不可拦组合")误导 —— 那条黑名单管的是"业务动作不许绑到这些键", 而**拦截浏览器默认刷新**是另一回事, 桌面端… | 未保存改动, 刷新守卫, beforeunload, F5 拦截, Ctrl+R, 弹确认框, 防丢改动, 脏标记, bfcache |
+| [variant-singleton-shadow.md](variant-singleton-shadow.md) | 详情面板变体文件头把核心层三件套收进模块级单点(`const T = reg.dtHtml` / `const R = reg.dtRaw` / `const H = reg.helpers`), 变体函数内再声明同名局部即遮蔽 —— dt12「空间树图」的 layoutMap… | 改 drawer_tpl 变体, 写变体局部变量, 空间树图不显示, 选模板无显示, 换种子回到经典, 模板选择被重置, H.rowFocusKey is not a function, TypeError, 遮蔽, shadowing,… |
+| [vif-host-node-stale.md](vif-host-node-stale.md) | 详情面板 aside 被 v-if 拆掉重建后, 变体宿主换了新节点, 而核心层模块级缓存 `_dtMounted` 仍持**旧节点**引用 —— 挂载函数看到"已挂"直接返回, 变体渲染进新宿主无人接管, 页签整幅空白; general/content 页签无独立通知源(不像… | 切设置页返回详情面板空白, v-if 重建, 宿主节点失效, _dtMounted, 变体宿主, detached 引用, $nextTick 重挂, watch drawerVisible, 种子支路, 页签空白, 永不自愈, isCon… |
+| [vue-reactivity.md](vue-reactivity.md) | Vue Options API 的四类静默白屏(computed 当函数 / 带参 computed / 三者同名 / methods 里裸调用跨模块 methods)与 SVG 属性大小写 —— 都**没有运行时提示**。 | 改前端模板, 改 computed, 改 methods, 改 SVG, 加图标, 白屏, 整块不渲染, 裸调用, 漏 this |
+| [webui-css-block-move.md](webui-css-block-move.md) | 跨 CSS 文件搬规则段(分层归位): 等价性怎么证 + 三处必同步的守阵 | 搬 CSS 段, 跨文件搬规则, CSS 分层归位, prism dialogs.css, 级联序, 守阵假红, 单文件路径硬编码, 文件前段式断言, shell 行数上限, 令牌名集, 皮肤少令牌, var font-mono 失效 |
+| [webui-optimistic-rollback-symmetry.md](webui-optimistic-rollback-symmetry.md) | 给乐观补丁加第二个覆盖面(如抽屉 detail)时, 失败/超时回滚若只还原行, 新覆盖面就停留假状态 —— 贴与回滚必须经同一单点对称, 且「行采不到 prev」的场景要有独立回滚锚 | 乐观 UI, 乐观补丁, 回滚, 覆盖面, 对称, 抽屉 detail, drawer.detail, applyOptimisticPatch, applyOptimistic, 贴补丁, 失败回滚, 兜底回滚 |
+| [webui-settings-jump-async-restore.md](webui-settings-jump-async-restore.md) | 程序化跳进设置页时同步设置的分区视图态, 会被 `cfgLoad` 完成后 `hubRestore -> hubGo` 的「进分区复位」路径冲掉 —— 跳转链必须 `.then` 在 `openSettings()` 之后 | openSettings, hubRestore, hubGo, 程序化跳转, 跳转后状态被复位, 覆盖层没打开, 自动展开失效, cfgLoad, kbGoSettings, transfer_flow |
+| [wording-audit-surface.md](wording-audit-surface.md) | 「全量文案排查/统一」若只清点主数据链(列模型 + 经典详情行), 会漏掉抽屉变体(drawer_tpl 15 个)、页插件(drawer_pages 4 个)与模板分片(tpl/)里的同词 —— 用户复查实证(26-10-10-2237 报告 §11): 一轮改了 ~470 处… | 文案统一, 术语对齐, 排查报告, 全量替换, 清点面, 变体, 页插件, drawer_tpl, drawer_pages, label 过滤, 报告遗漏, 用户复查 |

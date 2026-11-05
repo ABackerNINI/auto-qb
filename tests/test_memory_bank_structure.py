@@ -369,7 +369,8 @@ def test_kb_scripts_import_cleanly() -> None:
 
 
 def test_gen_all_declares_exactly_all_indexes() -> None:
-    """生成物集合单点: gen_all 的产出 == 库内**全部** `_index.md` + `EXTRA_GENERATED` —— 一个不多, 一个不少。
+    """生成物集合单点: gen_all 的产出 == 库内**全部**索引页面(`_index.md` + 分卷页 `_index-<n>.md`)
+    + `EXTRA_GENERATED` —— 一个不多, 一个不少。
 
     这是 sync 自动化解白名单的安全底线: 白名单里多一个其实不是生成物的路径, sync 就会
     在冲突时静默丢弃手写内容(第 3 步自证也救不回来); 少一个则冲突化解不了。
@@ -381,7 +382,7 @@ def test_gen_all_declares_exactly_all_indexes() -> None:
     """
     gen_all = _gen_all()
     outputs = gen_all.collect(ROOT, MB)
-    on_disk = set(MB.rglob("_index.md")) | {ROOT / rel for rel in EXTRA_GENERATED}
+    on_disk = set(MB.rglob("_index*.md")) | {ROOT / rel for rel in EXTRA_GENERATED}
     assert set(outputs) == on_disk, (
         f"gen_all 产出与库内 _index.md 不一致: 多 {sorted(set(outputs) - on_disk)} / "
         f"少 {sorted(on_disk - set(outputs))}"

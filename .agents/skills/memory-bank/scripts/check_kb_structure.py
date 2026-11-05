@@ -89,18 +89,27 @@ def _mb_rel(root: Path, path: Path) -> str:
 
 
 def check_index_regenerated(root: Path, mb: Path) -> list[str]:
-    """每个索引目录的 `_index.md` == 生成结果 (索引是生成物, 漂移由重跑解决, 不手改)。"""
+    """每个索引目录的全部页面 (`_index.md` + 分卷页) == 生成结果; 残留卷页也算漂移。"""
     problems: list[str] = []
-    for directory in iter_indexed_dirs(mb):
-        index = directory / INDEX_NAME
-        rendered = gen_kb_index.render_dir(directory, root, mb)
+    expected = gen_kb_index.build_all(root, mb)
+    for index, rendered in expected.items():
         current = index.read_text(encoding="utf-8") if index.exists() else ""
         if current != rendered:
             problems.append(f"{_mb_rel(root, index)} 与生成结果不一致 (跑 gen_kb_index.py 重建, 不要手改)")
+    for stale in gen_kb_index.stale_volume_pages(mb, expected):
+        problems.append(f"{_mb_rel(root, stale)} 是过期分卷页(生成结果已不需要), 跑 gen_kb_index.py 重建")
     return problems
 
 
 # --------------------------------------------------------------------------- 2 双向一致
+
+
+def _index_targets(directory: Path) -> set[str]:
+    """目录内主索引 + 分卷页登记的链接 (分卷时主题表在卷页里)。"""
+    targets: set[str] = set()
+    for page in sorted(directory.glob("_index*.md")):
+        targets |= set(LINK_RE.findall(page.read_text(encoding="utf-8")))
+    return targets
 
 
 def check_bijection(root: Path, mb: Path) -> list[str]:
@@ -111,11 +120,10 @@ def check_bijection(root: Path, mb: Path) -> list[str]:
         if not index.exists():
             problems.append(f"{_mb_rel(root, index)} 缺失")
             continue
-        text = index.read_text(encoding="utf-8")
-        targets = LINK_RE.findall(text)
+        targets = _index_targets(directory)
 
-        # 同目录主题文件 (链接里不带 `/`)
-        referenced = {t for t in targets if "/" not in t and t.endswith(".md")}
+        # 同目录主题文件 (链接里不带 `/`) —— `_` 开头的是生成物(分卷路由), 不是主题
+        referenced = {t for t in targets if "/" not in t and t.endswith(".md") and not t.startswith("_")}
         on_disk = {p.name for p in iter_topic_files(directory)}
         for name in sorted(on_disk - referenced):
             problems.append(f"{_mb_rel(root, index)} 未登记主题文件 {name}")

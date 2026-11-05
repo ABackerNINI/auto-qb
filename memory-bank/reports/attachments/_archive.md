@@ -1,0 +1,102 @@
+# 报告 归档索引 (全量)
+
+> **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 与 `_index.md` 同批生成;
+> 主索引的已完结区按 8,000 字符预算裁剪(上限 `CLOSED_KEEP` 条), **本文件是全量**。
+> 每条链接指回 `reports/` 下的制品原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
+
+## In Progress (0)
+
+(暂无)
+
+## Open (0)
+
+(暂无)
+
+## Done (78)
+
+- [26-11-05-0417] [整组迁移零搬移假成功事故取证(relocate 零搬移)](../26-11-05-0417-report-relocate-zero-move.html) — `relocate-zero-move`
+- [26-11-03-2346] [GTM 当日总量虚高修复 Code Review](../26-11-03-2346-report-gtm-day-total-inflation-review.html) — `gtm-day-total-inflation-review`
+- [26-11-03-2306] [整组迁移同机证明：推翻与最小改的可行性对比](../26-11-03-2306-report-relocate-same-fs-proof-options.html) — `relocate-same-fs-proof-options`
+- [26-11-03-0636] [第三次全量代码评审报告（终版）](../26-11-03-0636-report-memory-bank-full-code-review-3.html) — `memory-bank-full-code-review-3`
+- [26-11-02-0339] [WebUI 单种子千级文件列表性能调研](../26-11-02-0339-report-webui-large-filelist-perf.html) — `webui-large-filelist-perf`
+- [26-11-01-0057] [规则引擎重设计调研报告](../26-11-01-0057-report-rule-engine-redesign.html) — `rule-engine-redesign`
+- [26-10-31-2340] [WEBUI 动效桌面调研报告(fx 库与 flux 皮肤输入)](../26-10-31-2340-report-webui-fx-skin.html) — `webui-fx-skin`
+- [26-10-31-2157] [复发榜三堆分类表(R4 根治轮)](../26-10-31-2157-report-kb-recurrence-three-piles.html) — `kb-recurrence-three-piles`
+- [26-10-31-0548] [qBittorrent 5.2.3→5.3.x 上游变更与 libtorrent RC_2_1 影响分析](../26-10-31-0548-report-qb-5-3-upgrade-impact.html) — `qb-5-3-upgrade-impact`
+- [26-10-31-0104] [WEBUI 限速浮层 Esc 需按三次: Vimium C 扩展吞键取证](../26-10-31-0104-report-webui-speed-esc-vimium.html) — `webui-speed-esc-vimium`
+- [26-10-30-0237] [全项目第二次全面 Code Review（只读取证）](../26-10-30-0237-report-full-code-review-2.html) — `full-code-review-2`
+- [26-10-22-0234] [qB/libtorrent 跳检机制源码核查 — seed_mode 语义、惰性哈希校验与标记可替代性](../26-10-22-0234-report-skip-check-arch.html) — `skip-check-arch`
+- [26-10-20-0307] [右键菜单自定义布局 改版报告](../26-10-20-0307-report-webui-ctx-menu-custom-layout.html) — `webui-ctx-menu-custom-layout`
+- [26-10-18-1300] [免重启整组迁移 A/C 路线实测验证](../26-10-18-1300-report-group-relocate-restart-free-verified.html) — `group-relocate-restart-free-verified`
+- [26-10-18-0826] [文件丢失+设定位置恢复机制验证](../26-10-18-0826-report-missing-files-setlocation-recovery.html) — `missing-files-setlocation-recovery`
+- [26-10-18-0818] [免重启整组迁移方案研究](../26-10-18-0818-report-group-relocate-restart-free.html) — `group-relocate-restart-free`
+- [26-10-15-0728] [WEBUI 流量图重启后异常峰值与无采样区 — 故障取证报告](../26-10-15-0728-report-qb-traffic-restart-spike-gap.html) — `qb-traffic-restart-spike-gap`
+- [26-10-14-1135] [HR 取数通道 · 去端口路线 × 跨机计划 联合适配分析](../26-10-14-1135-report-hr-channel-portless-remote-fit.html) — `hr-channel-portless-remote-fit`
+- [26-10-14-1110] [HR 取数通道「去端口配置 + 后端主动注册」可行性分析 — 背景报告](../26-10-14-1110-report-hr-channel-portless-registration.html) — `hr-channel-portless-registration`
+- [26-10-14-0136] [详情表格重构(26-10-13-0811)实施与复查经过 — 背景报告](../26-10-14-0136-report-webui-detail-table-rebuild-review.html) — `webui-detail-table-rebuild`
+- [26-10-13-1034] [全局流量数据源信息滞后 — 成熟方案调研与自写独立监视小工具可行性分析](../26-10-13-1034-report-global-traffic-source-lag.html) — `global-traffic-source`
+- [26-10-12-2148] [种子状态双写通道调查 — 移除 auto-qb 直接回写的可行性与影响分析](../26-10-12-2148-report-seed-state-writeback-removal-feasibility.html) — `seed-state-writeback`
+- [26-10-12-1923] [启动后 WEB UI 需数秒才正常 · 启动死区根因取证报告](../26-10-12-1923-report-webui-startup-latency.html) — `webui-startup-latency`
+- [26-10-12-1854] [WEBUI「列」选择器信息架构重设计 · 方案调研与对比报告 (26-10-12-1854)](../26-10-12-1854-report-webui-column-picker-redesign.html) — `webui-column-picker`
+- [26-10-12-0455] [WEBUI 表格统一 · 双计划联合偏差审计报告 (26-10-11-1722 + 26-10-11-2106)](../26-10-12-0455-report-webui-drawer-table-unification-audit.html) — `webui-drawer-table-unification`
+- [26-10-11-2017] [批量跳检后批量开始 · UI 与 qB 状态脱节 · 原因分析报告](../26-10-11-2017-report-webui-bulk-skipcheck-start-desync.html) — `webui-optimistic-ui`
+- [26-10-11-0033] [全仓重复代码审查 · 滚动报告 (轮 00–26: 后端 + 前端 + 测试与横切 + 全局汇总, Phase 0–4 全部完成)](../26-10-11-0033-report-dup-code-audit.html) — `dup-code-audit`
+- [26-10-10-2237] [WEBUI 全量文案对齐 qB · 排查报告 · auto-qb](../26-10-10-2237-report-webui-wording-unify.html) — `webui-wording-unify`
+- [26-10-09-2136] [WEBUI 弹窗键盘操作调研 · 焦点管理的成熟方案与适配路线 · auto-qb](../26-10-09-2136-report-webui-dialog-keyboard-accessibility.html) — `webui-dialog-keyboard-accessibility`
+- [26-10-09-1731] [WEBUI 快捷键「改为切换语义」适配性分析 · 哪些适合按一下开/再按一下关 · auto-qb](../26-10-09-1731-report-webui-shortcuts-toggle-suitability.html) — `webui-keyboard-shortcuts`
+- [26-10-09-1725] [HR 稳态期跳过 B/C 档取数可行性分析 · auto-qb](../26-10-09-1725-report-hr-steady-lane-skip.html) — `hr-steady-throttle`
+- [26-10-09-1529] [本地通道传输安全调研: WebUI 与 HR 取数通道的加密方案对比 · auto-qb](../26-10-09-1529-report-transport-encryption-feasibility.html) — `transport-encryption`
+- [26-10-08-1235] [HR 排除未落到取数侧 · 稳态降频失效取证 · auto-qb](../26-10-08-1235-report-hr-exclude-steady.html) — `hr-steady-throttle`
+- [26-10-08-0231] [变异测试框架调研与适配性报告 · Python + WEB UI 语言面 · auto-qb](../26-10-08-0231-report-mutation-testing-feasibility.html) — `mutation-testing-feasibility`
+- [26-10-07-2031] [流量图曲线过陡的口径调研: 瞬时速度 · 区间平均 · 移动平均](../26-10-07-2031-report-qb-traffic-rate-basis.html) — `qb-traffic-rate-basis`
+- [26-10-07-0542] [WEBUI 详情面板 15 变体摸排 · 问题清单汇总报告](../26-10-07-0542-report-webui-detail-panel-variants-audit.html) — `webui-detail-panel-redesign`
+- [26-10-07-0208] [my-commit-flow 自我改写版本撕裂 · 临时目录快照自举可行性分析 · auto-qb](../26-10-07-0208-report-my-commit-flow-self-snapshot.html) — `my-commit-flow-self-snapshot`
+- [26-10-07-0204] [可行性报告 · auto-qb ↔ auto-qb.webui 采用 qB rid 式增量同步 · auto-qb](../26-10-07-0204-report-webui-delta-sync-feasibility.html) — `webui-delta-sync`
+- [26-10-07-0054] [复验报告 · 两条 WebUI perf issue 在内核化重构后是否仍成立 · auto-qb](../26-10-07-0054-report-webui-perf-issues-recheck.html) — `webui-perf-issues-recheck`
+- [26-10-06-0945] [WEBUI 表头 / 数值列对齐缺陷取证 · auto-qb](../26-10-06-0945-report-webui-column-alignment.html) — `webui-column-alignment`
+- [26-10-06-0723] [种子详情面板重构 · 设计模板轮 — 汇总报告](../26-10-06-0723-report-webui-detail-panel-redesign.html) — `webui-detail-panel-redesign`
+- [26-10-06-0620] [修复汇总报告 · 全项目 Code Review 分批修复(六批 28 issue) · auto-qb](../26-10-06-0620-report-full-code-review-remediation.html) — `full-code-review-remediation`
+- [26-10-05-1946] [块头基线 + Delta 行编码与按落盘切块 · 可行性分析](../26-10-05-1946-report-qb-traffic-v4-delta.html) — `qb-traffic-v4-delta`
+- [26-10-05-1036] [审计报告: 全项目全面 Code Review — 分批评审发现与分流(终版) · auto-qb](../26-10-05-1036-report-full-code-review.html) — `full-code-review`
+- [26-10-05-0854] [调研报告: 强制汇报确认机制与 qB 汇报状态接口](../26-10-05-0854-report-reannounce-confirm-api.html) — `reannounce-confirm-api`
+- [26-10-04-1730] [qB 流量历史 dat v3 设计报告 · auto-qb](../26-10-04-1730-report-qb-traffic-storage-v3.html) — `qb-traffic-storage-v3`
+- [26-10-04-1639] [WEBUI qB 流量图折线断裂取证报告 · auto-qb](../26-10-04-1639-report-webui-qb-traffic-line-breaks.html) — `qb-traffic-line-breaks`
+- [26-10-04-0815] [WEBUI tooltip 全量清点与去留判定 · auto-qb](../26-10-04-0815-report-webui-tooltip-declutter.html) — `webui-tooltip-declutter`
+- [26-10-04-0636] [qB 流量历史存储压缩与「速度 0 vs 断线」语义调研报告 · auto-qb](../26-10-04-0636-report-qb-traffic-storage.html) — `torrent-traffic-stats`
+- [26-10-04-0128] [WebUI 弹窗滚轮穿透背景滚动 · 分析报告](../26-10-04-0128-report-webui-modal-scroll-chaining.html) — `webui-modal-scroll-chaining`
+- [26-10-03-1505] [HR 波次引擎四现象故障取证 · 一直在拉取 / 核实「未核实」/ 失踪 0 波 · auto-qb](../26-10-03-1505-report-hr-fetch-verify-forensics.html) — `backend-partial-hr-verify`
+- [26-10-03-0759] [WEBUI 种子详情抽屉重设计 · 调研报告](../26-10-03-0759-report-webui-drawer-redesign.html) — `webui-drawer-redesign`
+- [26-10-03-0757] [WebUI 新增 qB 口径流量图可行性分析 · 全局/单种/分组三图 · auto-qb](../26-10-03-0757-report-qb-traffic-charts.html) — `torrent-traffic-stats`
+- [26-10-03-0504] [「删除类似标签」全局/站点作用域混淆: 三层根因取证与方案选型 · auto-qb](../26-10-03-0504-report-webui-site-scope-confusion.html) — `webui-delete-tag-scope-confusion`
+- [26-10-02-0508] [设置页未保存改动防护: 成熟方案调研与「刷新弹框 + 刷新后清零」对比 · auto-qb](../26-10-02-0508-report-webui-unsaved-changes-guard.html) — `webui-settings-unsaved-changes`
+- [26-10-01-2347] [兼容 Transmission 可行性分析 · qB 耦合面盘点 · auto-qb](../26-10-01-2347-report-transmission-compat-feasibility.html) — `transmission-compat-feasibility`
+- [26-10-01-2125] [memory-bank 生成物实时化与四工位专题目录化 · 可行性分析](../26-10-01-2125-report-kb-artifacts-realtime-and-layout.html) — `memory-bank-dir-refactor`
+- [26-10-01-0918] [审计报告 · QbManager 内核化重构实施评估](../26-10-01-0918-report-kernel-module-refactor-audit.html) — `kernel-module-refactor`
+- [26-09-30-1806] [WEBUI 列表键鼠交互割裂 · 业界成熟方案调研与推荐 · auto-qb](../26-09-30-1806-report-webui-keymouse-cohesion.html) — `webui-keyboard-shortcuts`
+- [26-09-29-1803] [HR 计数: 数据完整性的校验和 — 可行性分析](../26-09-29-1803-report-hr-counter-verify.html) — `backend-partial-hr-verify`
+- [26-09-29-0404] [HR 在线核实 v3 · 重构后全面复审(安全/稳定性/缺陷) · 审查报告 · auto-qb](../26-09-29-0404-report-hr-verify-v3-audit.html) — `backend-partial-hr-verify`
+- [26-09-28-2345] [WEBUI 表格列对齐审计 · auto-qb](../26-09-28-2345-report-webui-column-alignment.html) — `webui-column-alignment`
+- [26-09-28-0030] [HR 在线核实 v2 · 实施核对 + 安全/稳定性审计 · 审查报告 · auto-qb](../26-09-28-0030-report-hr-verify-v2-impl-audit.html) — `backend-partial-hr-verify`
+- [26-09-27-1547] [报告 · plans / reports 实施状态清点与漂移审计 — auto-qb](../26-09-27-1547-report-docs-implementation-audit.html) — `docs-implementation-audit`
+- [26-09-27-1352] [报告 · 「文件访问层包装 + 下载目录只读挂载 + 路径映射」可行性验证](../26-09-27-1352-report-docker-fs-wrapper-pathmap.html) — `docker-deploy`
+- [26-09-27-1143] [报告 · 双模板逐片差异评估(W3) — 单一语义模板收敛可行性](../26-09-27-1143-report-webui-template-diff.html) — `webui-frontend-file-split`
+- [26-09-27-0047] [规则系统可行性实验 · 「禁止 IYUU辅种 分类的种子开始下载」 · auto-qb](../26-09-27-0047-report-rule-iyuu-stop-guard.html) — `rule-iyuu-stop-guard`
+- [26-09-26-1918] [WEBUI 搜索强化 · 查询语法调研(成熟方案对比与推荐设计) · auto-qb](../26-09-26-1918-report-webui-search-query-syntax.html) — `webui-search-query-syntax`
+- [26-09-26-1628] [HR 在线核实 · 触发模型 / 访问节奏 / 安全可靠性 · 设计审查报告 · auto-qb](../26-09-26-1628-report-hr-online-verify-audit.html) — `backend-partial-hr-verify`
+- [26-09-25-0853] [full-checking 误报「校验未通过」与批量不触发 · 故障取证分析 · auto-qb](../26-09-25-0853-report-full-checking-verdict-poison.html) — `full-checking-verdict`
+- [26-09-21-1329] [后端崩溃安全性调查报告 · auto-qb](../26-09-21-1329-backend-crash-safety-report.html) — `backend-state-persistence`
+- [26-09-21-1248] [列设置重置 · 历次修复复盘与失败原因分析](../26-09-21-1248-column-prefs-fix-failure-analysis.html) — `webui-column-prefs`
+- [26-09-21-1158] [auto-qb 项目审计调查报告 · 2026-09-21](../26-09-21-1158-auto-qb-project-audit.html) — `auto-qb-project`
+- [26-09-21-0408] [辅种组状态 → 种子状态 对应表 · auto-qb](../26-09-21-0408-seed-group-status-mapping.html) — `seed-group-status`
+- [26-09-20-2131] [乐观 UI 撤下改为事件驱动 · 可行性报告 · auto-qb](../26-09-20-2131-optimistic-ui-event-driven-feasibility.html) — `webui-optimistic-ui`
+- [26-09-20-1806] [乐观 UI「撤下」修复只覆盖了一半入口 · auto-qb 调查报告](../26-09-20-1806-optimistic-ui-half-fix-report.html) — `webui-optimistic-ui`
+- [26-09-20-1429] [skill-vetter 全量审查报告 · .agents/skills（26 个技能）](../26-09-20-1429-skill-vetter-audit.html) — `skill-vetter`
+- [26-09-15-1150] [依赖版本调研与锁定建议 — 报告](../26-09-15-1150-report-dependency-lock.html) — `deps-env-modernization`
+
+## Dropped (0)
+
+(暂无)
+
+## Superseded (0)
+
+(暂无)

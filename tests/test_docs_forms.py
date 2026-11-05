@@ -27,11 +27,12 @@
 - test_claim_chain_is_bidirectional: 声明了 `doc-refs` / `**Refs:**` 的件, 目标必须存在且反向声明
 - test_claim_chain_missing_target_hints_separator: ref 含视觉分隔符报「目标不存在」时, 报错自带英文逗号分隔提示 (issue 26-10-03-0746)
 
-CLOSED_KEEP=60 索引出口 (计划 26-10-31-0534 R3/D14, 2026-10-31 加; plans 主索引的已完结区只留最近
-60 条, 全量清单另落 `plans/attachments/_archive.md`; tasks 侧守阵在 test_memory_bank.py):
+CLOSED_KEEP=60 索引出口 (计划 26-10-31-0534 R3/D14, 2026-10-31 加, 2026-11-05 B4 扩到 reports;
+plans/reports 主索引的已完结区只留最近 60 条且装不进 8,000 预算还会继续收紧, 全量清单另落
+`<dir>/attachments/_archive.md`; tasks 侧守阵在 test_memory_bank.py):
 
-- test_docs_closed_keep_trims_plans_and_archives: plans Done 61 件 -> 主索引留最近 60 + 隐藏提示; 归档全量、只 plans 有、链接带 ../ 指回制品原文; 在办分区不受影响
-- test_docs_closed_keep_reports_unaffected: reports 不动(D14) —— Done 61 件照旧全量出索引、无提示、无归档
+- test_docs_closed_keep_trims_plans_and_archives: plans Done 61 件 -> 主索引留最近 60 + 隐藏提示; 归档全量、链接带 ../ 指回制品原文; 在办分区不受影响
+- test_docs_closed_keep_reports_same_as_plans: reports 与 plans 同档(B4) —— Done 61 件同样裁到 60 + 隐藏提示, 全量落自己的归档
 """
 
 from __future__ import annotations
@@ -297,9 +298,9 @@ def test_status_vocabulary_is_single_point() -> None:
 
 
 # --------------------------------------------------------------------------- CLOSED_KEEP 出口
-# (计划 26-10-31-0534 R3/D14, 2026-10-31 加: plans 主索引的已完结区只留最近 `CLOSED_KEEP` 条,
-# 全量清单另落 `plans/attachments/_archive.md`; **reports 不动**。tasks 侧守阵在
-# tests/test_memory_bank.py; 阈值/在办不裁等语义的细粒度红验在那边, 这里守制品目录自己的面。)
+# (计划 26-10-31-0534 R3/D14 加, 2026-11-05 B4 扩到 reports: plans/reports 主索引的已完结区只留
+# 最近 `CLOSED_KEEP` 条(装不进 8,000 预算还会继续收紧), 全量清单另落 `<dir>/attachments/_archive.md`。
+# tasks 侧守阵在 tests/test_memory_bank.py; 阈值/在办不裁等语义的细粒度红验在那边, 这里守制品目录自己的面。)
 
 
 def _closed_keep_docs_fixture(tmp_path: Path, kind: str, done: int, inflight: int = 0) -> tuple[Path, Path]:
@@ -348,22 +349,24 @@ def test_docs_closed_keep_trims_plans_and_archives(tmp_path: Path) -> None:
     assert "closed-keep-062" in inflight_section and "closed-keep-063" in inflight_section, "在办不受影响"
 
     archives = gen.build_archives(root, mb)
-    assert set(archives) == {mb / "plans" / "attachments" / "_archive.md"}, "只 plans 有归档(reports 不动, D14)"
+    assert mb / "plans" / "attachments" / "_archive.md" in archives, "plans 归档同批产出"
     archive = archives[mb / "plans" / "attachments" / "_archive.md"]
     assert "closed-keep-001" in archive and "closed-keep-061" in archive, "归档是全量"
     assert "](../26-01-01-0001-plan-closed-keep-001.html)" in archive, "归档链接带 ../ 指回制品原文"
 
 
-def test_docs_closed_keep_reports_unaffected(tmp_path: Path) -> None:
-    """reports 不动(D14): Done 61 件照旧全量出索引、无隐藏提示、无归档 —— 出口对它零行为变化。"""
+def test_docs_closed_keep_reports_same_as_plans(tmp_path: Path) -> None:
+    """reports 与 plans 同档(2026-11-05 B4): Done 61 件 -> 主索引只留最近 60 条 + 隐藏提示, 全量进归档。"""
     gen = _load_generator("gen_docs_index")
     root, mb = _closed_keep_docs_fixture(tmp_path, "report", done=61)
 
     rendered = gen.build(root, mb)["reports"]
     done_section = _docs_index_section(rendered, "Done")
     entries = [line for line in done_section.splitlines() if line.startswith("- ")]
-    assert len(entries) == 61, "reports 全量出索引"
-    assert "更早的" not in rendered, "无隐藏提示"
-    assert "> **已完结状态**" not in rendered, "reports 头部不出 CLOSED_KEEP 说明行"
-    assert set(gen.build_archives(root, mb)) == {mb / "plans" / "attachments" / "_archive.md"}, \
-        "归档集合里只有 plans( reports 不动, D14)"
+    assert len(entries) == 60, "Done 区只保留最近 60 条"
+    assert "closed-keep-061" in done_section and "closed-keep-001" not in done_section
+    assert "> 更早的 **1** 条已出本索引" in done_section
+    assert "> **已完结状态**" in rendered, "头部要说明已完结区被裁剪"
+    archives = gen.build_archives(root, mb)
+    assert mb / "reports" / "attachments" / "_archive.md" in archives, "reports 全量清单落自己的归档"
+    assert "closed-keep-001" in archives[mb / "reports" / "attachments" / "_archive.md"], "归档是全量"

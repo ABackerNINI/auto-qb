@@ -349,6 +349,8 @@ DOC_KIND_CN = {DOC_KIND_PLAN: "计划/报告", DOC_KIND_TASK: "任务档案", DO
 
 # 索引/元数据文件名: `_` 开头, 不参与「主题文件」计数
 INDEX_NAME = "_index.md"
+# 分卷页 (`_index-1.md` …): 主索引装不下主题表时的同族生成物, 与主索引同档 cap/同套守卫
+INDEX_VOLUME_RE = re.compile(r"_index-\d+\.md$")
 ABOUT_NAME = "_about.md"
 
 # 三行头元数据 —— 条目型与叙述型共用同一套 (这是「全库一套机制」的关键)
@@ -542,10 +544,14 @@ def rebuild_index(root: Path, mb: Path, script: str) -> list[Path]:
         archive.write_text(module.build_archive(root, mb), encoding="utf-8", newline="\n")
         written.append(archive)
     elif script == "gen_kb_index":
-        for path, text in module.build_all(root, mb).items():
+        targets = module.build_all(root, mb)
+        for path, text in targets.items():
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(text, encoding="utf-8", newline="\n")
             written.append(path)
+        # 分卷页是生成物: 主题变少/改名后不再需要的卷页同批删除 (否则 --check 恒红)。
+        for stale in module.stale_volume_pages(mb, targets):
+            stale.unlink()
     return written
 
 
@@ -727,7 +733,7 @@ def role_of(rel: str) -> str:
     # 目录级 _index.md 全部是生成物(check_index_regenerated 逐目录守卫"索引 == 生成结果"),
     # 行数随主题文档数增长且一行一条已是极简 —— 与 tasks/issues 同性质, 同属 index-auto。
     # (2026-09-27 校准: pitfalls/testing/_index 3,147 字符在 3,000 档常红, 15 个主题无收缩路径)
-    if rel.endswith(INDEX_NAME):
+    if rel.endswith(INDEX_NAME) or INDEX_VOLUME_RE.search(rel.rsplit("/", 1)[-1]):
         return "index-auto"
     if rel == "memory-bank/activeContext.md":
         return "volatile"
@@ -781,8 +787,8 @@ def iter_indexed_dirs(mb: Path) -> list[Path]:
 
 
 def iter_index_files(mb: Path) -> list[Path]:
-    """全部 `_index.md` (含 tasks/ issues/ —— 它们也要被 README 引用, 否则是孤儿)。"""
-    return sorted(mb.rglob(INDEX_NAME))
+    """全部生成索引 (`_index.md` + 分卷页 `_index-<n>.md`; 含 tasks/ issues/ —— 它们也要被 README 引用)。"""
+    return sorted(mb.rglob("_index*.md"))
 
 
 def split_pitfall_entries(text: str) -> list[tuple[str, str]]:

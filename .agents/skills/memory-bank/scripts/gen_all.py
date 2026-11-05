@@ -105,6 +105,11 @@ def _mb_module(name: str):
     return __import__(name)
 
 
+def _stale_volume_pages(mb: Path, outputs: dict[Path, str]) -> list[Path]:
+    """磁盘上残留、生成结果已不需要的分卷页 (`_index-<n>.md`) —— 主题变少/改名后的残留。"""
+    return [p for p in mb.rglob("_index-*.md") if p not in outputs]
+
+
 def collect(root: Path, mb: Path) -> dict[Path, str]:
     """{生成物绝对路径: 应写内容} —— 重建 / `--list` / `--check` 三条路径**共用同一实现**。
 
@@ -175,9 +180,12 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.check:
         drifted = [p for p, want in outputs.items() if (p.read_text(encoding="utf-8") if p.exists() else "") != want]
-        if drifted:
+        stale = _stale_volume_pages(mb, outputs)
+        if drifted or stale:
             for path in sorted(drifted, key=lambda p: rel_posix(p, root)):
                 sys.stderr.write(f"{rel_posix(path, root)} 与生成结果不一致\n")
+            for path in sorted(stale, key=lambda p: rel_posix(p, root)):
+                sys.stderr.write(f"{rel_posix(path, root)} 是过期分卷页 (生成结果已不需要)\n")
             sys.stderr.write(f"请运行 {gen_cmd(root, 'gen_all.py')} 重建\n")
             return 1
         return 0
@@ -188,6 +196,9 @@ def main(argv: list[str] | None = None) -> int:
     for path, want in outputs.items():
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(want, encoding="utf-8", newline="\n")
+    # 分卷页是生成物: 主题表缩回一份后, 旧卷页不该留在库里 (否则 --check 恒红)。
+    for stale in _stale_volume_pages(mb, outputs):
+        stale.unlink()
     print(f"已生成 {len(outputs)} 个生成物")
     return 0
 

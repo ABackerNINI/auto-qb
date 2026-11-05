@@ -26,7 +26,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from _common import (  # noqa: E402
-    ARCHIVE_REL, CLOSED_KEEP, DOC_STATUSES, TERMINAL_DOC_STATUSES, StatusVocabularyError,
+    ARCHIVE_REL, CAP_POLICY, CLOSED_KEEP, DOC_STATUSES, TERMINAL_DOC_STATUSES, StatusVocabularyError,
     closed_hidden_note, find_root, gen_cmd, keep_closed_window, resolve_mb_dir,
 )
 
@@ -35,10 +35,14 @@ TITLE_RE = re.compile(r"<title>(.*?)</title>", re.MULTILINE | re.DOTALL)
 META_RE = re.compile(r'<meta name="(doc-[a-z]+)" content="([^"]*)">')
 STAMP_RE = re.compile(r"^(\d\d-\d\d-\d\d)-(\d{4})-")
 
-# CLOSED_KEEP 出口只覆盖的制品目录 (计划 26-10-31-0534 D14): plans 补齐(177 件、95% 完结,
-# 索引 23,678 已贴 cap 92%); **reports 不动** —— cap 才 39%, 且报告是审计/决策依据,
-# 藏起来比占索引更糟; 报告出厂即 Done(全目录恒为完结态), 出口对它没有意义。
-CLOSED_KINDS = ("plans", )
+# 主索引字符预算 = `index-auto` cap (单点: `_common.CAP_POLICY`)。
+# 2026-11-05 B4: `CLOSED_KEEP` 是上限而非定值 —— 装不下就继续收紧(最坏 0 条), 索引恒 ≤ 预算。
+INDEX_BUDGET = CAP_POLICY["index-auto"]
+
+# 已完结窗口出口覆盖的制品目录: plans / reports 都在 8,000 预算内装不下全量
+# (2026-11-05 B4 实测 reports 80 件 11,172) —— 两个目录都保留「最近若干条」+ 全量归档。
+# 报告仍是审计/决策依据: 归档索引是**全量**且不计 cap, 藏起来的只是主索引这一行。
+CLOSED_KINDS = ("plans", "reports")
 
 EMPTY_HINT = {
     "In Progress": "(暂无)",
@@ -77,8 +81,8 @@ def header(root: Path, kind: str) -> str:
     closed_line = ""
     if kind in CLOSED_KINDS:
         closed_line = (
-            f"> **已完结状态**(Done / Dropped / Superseded)只列**最近** `CLOSED_KEEP` 条(更老的**制品原地不动**, 只是不出本索引):\n"
-            f"> 条数涨到 172 时索引 23,678 已贴 cap(25,200) 92%, 全量清单见\n"
+            f"> **已完结状态**(Done / Dropped / Superseded)只列**最近若干条**(上限 `CLOSED_KEEP`, "
+            f"装不进 8,000 字符预算就继续收紧; 更老的**制品原地不动**, 只是不出本索引): 全量清单见\n"
             f"> [{ARCHIVE_REL}]({ARCHIVE_REL}), 该目录不计 cap。\n"
         )
     return f"""# {KIND_CN[kind]} Index
@@ -92,11 +96,10 @@ def header(root: Path, kind: str) -> str:
 """
 
 
-def render(items: list[dict], head: str, kind: str = "plans") -> str:
-    """主索引: 已完结状态只留最近 `CLOSED_KEEP` 条(制品原地不动, 只是不出索引)。
+def render(items: list[dict], head: str, kind: str = "plans", keep: int = CLOSED_KEEP) -> str:
+    """主索引: 已完结状态只留最近 `keep` 条(制品原地不动, 只是不出索引)。
 
-    仅 `CLOSED_KINDS` 里的目录生效(2026-10-31 起 plans; reports 不动, D14) ——
-    其余目录传进来的 `kind` 不在集合里, 裁剪窗口为空集, 行为零变化。
+    仅 `CLOSED_KINDS` 里的目录生效; 其余目录传进来的 `kind` 不在集合里, 裁剪窗口为空集, 行为零变化。
     """
     terminal = TERMINAL_DOC_STATUSES if kind in CLOSED_KINDS else frozenset()
     out = [head]
@@ -107,7 +110,9 @@ def render(items: list[dict], head: str, kind: str = "plans") -> str:
             out.append(EMPTY_HINT.get(status, "(暂无)"))
             out.append("")
             continue
-        ordered, hidden = keep_closed_window(sorted(group, key=lambda i: i["stamp"], reverse=True), status, terminal)
+        ordered, hidden = keep_closed_window(
+            sorted(group, key=lambda i: i["stamp"], reverse=True), status, terminal, keep
+        )
         for item in ordered:
             line = f"- [{item['stamp']}] [{item['title']}]({item['file']})"
             if item["topic"]:
@@ -130,7 +135,7 @@ def build_archive(root: Path, mb: Path, kind: str) -> str:
         f"# {KIND_CN[kind]} 归档索引 (全量)",
         "",
         f"> **本文件是生成物, 不要手改** —— 由 `{gen_cmd(root, 'gen_docs_index.py')}` 与 `_index.md` 同批生成;",
-        f"> 主索引的已完结区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**。",
+        f"> 主索引的已完结区按 8,000 字符预算裁剪(上限 `CLOSED_KEEP` 条), **本文件是全量**。",
         f"> 每条链接指回 `{kind}/` 下的制品原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。",
         "",
     ]
@@ -177,7 +182,13 @@ def build(root: Path, mb: Path) -> dict[str, str]:
     for kind in KINDS:
         items = collect(mb / kind)
         bad += [f"{kind}/{i['file']}: doc-status={i['status']!r}" for i in items if i["status"] not in DOC_STATUSES]
-        rendered[kind] = render(items, header(root, kind), kind)
+        head = header(root, kind)
+        text = render(items, head, kind)
+        keep = CLOSED_KEEP
+        while len(text) > INDEX_BUDGET and keep > 0:
+            keep -= 1
+            text = render(items, head, kind, keep)
+        rendered[kind] = text
     if bad:
         raise StatusVocabularyError(_vocab_error(bad))
     return rendered

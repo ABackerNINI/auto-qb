@@ -1,0 +1,34 @@
+# web-ui — 前端 / WEB UI 纪律 · 卷 1/4
+
+> **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
+> 本卷主题: `add-partial-receipt.md` … `derived-snapshot-render.md`(共 24 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
+
+## 主题
+
+| 主题 | 一句话 | 触发词 |
+|---|---|---|
+| [add-partial-receipt.md](add-partial-receipt.md) | 部分受理被回执成 error: 按回执二态驱动 UI 行为必然错一头 | 部分成功, 部分受理, 添加种子回执, 命令回执三态, warn 回执, 添加窗口不消失, 关窗判据, 批量添加 |
+| [aq-tip-nested-title-double.md](aq-tip-nested-title-double.md) | 全局自绘 tooltip(.aq-tip, 调度单点 shared/ui_feedback.js)若靠「hover 时摘掉 title 属性 + 离开还原」压制原生气泡, 摘除时机永远追不上 title 的出现时机: ①模板**嵌套带 title 结构**(statusbar.h… | 双 tooltip, 两个 tooltip, 状态栏 tooltip, aq-tip, 嵌套 title, 祖先 title, 原生气泡还魂, Vue 重写 title, 轮询 title 变值, 节点替换 title, statusbar… |
+| [aq-tip-position-clamp.md](aq-tip-position-clamp.md) | 全局自绘 tooltip(.aq-tip, 调度单点 `shared/ui_feedback.js`)的定位缺陷, 都表现为「位置错误 / 浮层盖住它描述的元素」: ①(首轮)`show()` 的 350ms 延时窗口内锚点被 Vue 轮询整个换掉 → 拿到已脱离文档的节点, `… | tooltip 位置错误, tooltip 挡住元素, tooltip 跑到左上角, aq-tip, ui_feedback, show 定位, getBoundingClientRect 全 0, 脱离文档, detached, 节点替换… |
+| [bucket-granularity-boundary.md](bucket-granularity-boundary.md) | 判据的可分精度不可能高于它读取的数据粒度 —— 数据只有「桶」(时间栅格槽)时, 「事件(如进程重启)在链末之前还是之后」这类判定天然存在一条**一桶宽的不可分带**, 按桶覆盖端一刀切会把整条带判给「链已接续」而静默漏判; 修法 = 端点重定义为「链末桶前一桶起点」并写明端点含… | 桶粒度, 判据边界, 不可分带, 链末桶, 接缝判据, 时间比较, 覆盖端, server_started_at, 首采入账, 重启缝, 聚合槽 |
+| [canvas-hatch-token.md](canvas-hatch-token.md) | canvas 图面(流量图注解层)里的**面积底纹**若复用装饰性 1px 发丝线令牌(`--hairline`, alpha 仅 0.05~0.08), 再叠一层 `globalAlpha` 折半, 有效不透明度只剩约 3%, 深色底与亮色底上**都**等于没画(用户报「颜色几… | canvas 注解层配色, 缺口斜纹, 斜纹看不见, 断线区域标注, 颜色几乎不可分辨, --hairline, 发丝线令牌, globalAlpha 折半, 有效不透明度, 白纹铺白底, 亮主题斜纹不可见, --qb-gap-hatch,… |
+| [cell-frame-vs-text-width.md](cell-frame-vs-text-width.md) | 表格行是 grid, 值单元格 div 被拉满整列宽 —— 把强调框(`.f-cell.f-on` 的 inset box-shadow)或整格线挂在这个 div 上, 框随**列宽**而非文字宽。修法 = 包一层贴文字的内联块包裹层(`.m-dur` 的 `.dur-body`… | 筛选强调框, f-on, f-cell, 强调框宽度错误, 框随列宽, 不贴文字, g-save-path, sp-body, dur-body, 保存路径, 路径筛选, 整格线, hr-line, grid 单元格, 拉满列宽, inse… |
+| [cjk-regex-norm.md](cjk-regex-norm.md) | 把 Python 的 `[\W_]+ → 空格` 归一化直译成 JS `s.replace(/[\W_]+/g,' ')` 会静默废掉中文搜索 —— Python `\W` 是 Unicode 语义(CJK 算词字符), JS `\W` 是 ASCII 语义(整个中文词全是"非词… | 写前端搜索/过滤, 前端照抄服务端归一化语义, 中文词搜不到, \W, \p{L}, unicode 归一化 |
+| [classic-row-fit-content-grid.md](classic-row-fit-content-grid.md) | 三皮肤经典表对引擎行容器 `.group-row` 写了 `width:fit-content; min-width:100%`(经典 flex 列容器里靠 min-width 兜底成整行宽, 内容超宽才横滚)。变体把 `.group-table` 覆盖成 **grid** 并用… | width:fit-content, min-width, justify-self stretch, group-row, 卡片不填满, 栅格空隙, 两列中间大洞, 长空隙, 卡片宽度不一致, 虚拟卡后方空白, dt04, 状态卡片栅格,… |
+| [classic-script-top-level-const-collision.md](classic-script-top-level-const-collision.md) | classic script(非 module 的 `<script>`)的顶层 `let/const` 不进 `window` 而是进**全局词法环境**, 所有 `<script>` 标签共享这一个环境 —— 两个文件各自写 `const FIT = ...`, 后装载的那个… | 顶层 const 撞名, classic script 全局词法环境, SyntaxError, mixin 未注册, 白屏, AQB_OVERLAY_FIT, 静态守阵看不见, 多 js 文件同名常量, 顶层 let, let/const… |
+| [clip-path-clips-fixed.md](clip-path-clips-fixed.md) | 祖先带 `clip-path`(console/atlas 皮肤的 `.hb-cut` 切角)或 `transform` 时, 其内 `position: fixed` 后代的「相对视口」语义被改写成「相对该祖先」—— `clip-path` 表现为**绘制裁剪**(全屏层只剩与… | fixed 全屏不显示, 覆盖层只显示一部分, 弹窗被裁剪, 全屏遮罩点不到, clip-path, 切角, hb-cut, z-index 调不动, fixed 后代, 设置页覆盖层, 全屏层错位, 底部动作条先出现在中间再下移, 状态栏… |
+| [color-mix-alpha-weight.md](color-mix-alpha-weight.md) | color-mix 混入带 alpha 的颜色且不写权重会产出半透明色 | color-mix, 半透明合成, tint 合成, 不透明基色, 吸左首格 |
+| [columns-persist.md](columns-persist.md) | 列偏好"时不时被重置"的全部已知机制 —— 双轨模型是当前定案(前四轮修复都栽在把意图与派生混在一个字段里); 另有一条**应用之外**的通道: 浏览器站点级"关闭窗口时清除 Cookie 和站点数据"。 | 改列设置, 列宽被重置, localStorage, 列隐藏, 列序, 拖列宽, colHidden, colOrder, colWidths, 浏览器重启, 偏好全回默认, 关闭窗口时清除站点数据, SESSION_ONLY |
+| [combobox-focusout-close.md](combobox-focusout-close.md) | 自绘下拉(combobox)收层判据 —— @focusout 合帧 + label/清空钮/面板根/组件根的 @click.stop 与 @mousedown.prevent、焦点纪律按区域设、净空限高与容器预留、落点归属; 完整多轮取证与教训见 [attachments/co… | 自绘下拉收起, combobox, focusout, blur 收层, label 转发激活, for 属性回焦, 下拉闪烁重现, 点窗口其它位置不收, 下拉撑变形, 浮层限高, add-pop, 转发 click, 合帧守卫, 开层撤销… |
+| [component-ref-ownership.md](component-ref-ownership.md) | 把带 DOM ref 的模板块从根模板抽成子组件时(combobox 五处收敛 issue 26-10-20-2230), 模板里的字符串 `ref="x"` 会注册到**子组件实例**的 `$refs`, 而量测/滚动方法是**根方法**、读的是根实例 `$refs` —— 两… | 组件 ref, $refs, 字符串 ref, 方法函数 ref, 跨组件 ref, 根实例 $refs, 拆组件收敛, combobox 组件, aq-combo-input, _fitAddPop, _hiScroll, 限高失效, 滚… |
+| [config-field-unexpressable-in-ui.md](config-field-unexpressable-in-ui.md) | 值域只有一档且**等于缺省值**的配置字段(如 v1 的 notify.channels: 渠道只有 platform, loader 缺省即 ["platform"])做成勾选框后, 两个方向都表达不出有效差异 —— 勾选只是写一条与缺省等价的键, 取消则写出**空列表**,… | 设置页勾选框表达不出差异, 勾了再取消仍有未保存改动, 保存报"必须是非空列表", 想暂时隐藏某个设置项, keyed_list 清空, schema 摘字段被键面守卫判删键 |
+| [contract-api.md](contract-api.md) | 前端不只是后端的镜像 —— 判"字段不一致"前必须沿派生链追到消费点; 跨视图裁剪与真值时序是两条反复出事的线。 | 字段不一致, 前后端契约, 视图回传, rid, 真值, 乐观 UI, 状态色, 占位符, HR 标签, 空值转有值, 上游修复后的展示回归 |
+| [css-comment-terminator.md](css-comment-terminator.md) | CSS 注释以第一个 `*/` 结束 —— 注释文字里再出现 `*/`(如 `s-*/member-row`)会把注释提前砍断, 尾巴落成代码态垃圾, 浏览器按错误恢复把**紧跟的那条规则整条静默丢弃**, 无任何报错。 | 写 CSS 注释, 注释里出现 星号斜杠, 进度条不显示, 样式规则不生效, display 没生效, 控制台皮肤, m-progress |
+| [css-file-line-cap.md](css-file-line-cap.md) | 单 CSS 文件 700 行体量上限(atlas components.css 已卡满) | 追加 CSS 规则, 三套皮肤成对改, test_frontend_template_split_wiring 红, Get-Content 少计行数, 行数测量假余量, 702 行 |
+| [css-perf-parity.md](css-perf-parity.md) | 「星图卡、棱镜不卡」这类单边性能问题的定位路径 —— 差异只在 CSS(JS 是共享层), 且两套 CSS 里唯一有实质差异的昂贵属性是 backdrop-filter; 嵌套毛玻璃的成本与摘法。 | 卡顿, 掉帧, 不跟手, 两套 UI 性能差, 一边卡一边不卡, 毛玻璃, backdrop-filter, 弹层卡, 改 CSS 后变慢, 星图卡 |
+| [css-var-substitution-level.md](css-var-substitution-level.md) | 把「配方颜色」当供给槽在 :root/preset 层算死(如 `--fx-glow-c: color-mix(... var(--accent-ink) ...)` 写在 html 的 preset 块), 再指望组件层重挂原料令牌(`.bt.danger { --fx-glo… | 主题换色, 按变体换色, danger 换红, 皮肤令牌, preset 配方, 重挂令牌, ink 钩子, getComputedStyle 不一致, 计算值不更新, color-mix 变量, --fx-glow, fx-presets… |
+| [ctx-menu-branch-parity.md](ctx-menu-branch-parity.md) | `shared/tpl/ctx-menus.html` 的右键菜单按上下文分四支, 其中 `menu.multi`(多选批量)与 `v-else`(单组)是**同一批动作的两条入口** —— 给一支加动作项时漏了另一支, 两条路径项集就静默分叉, 用户在某条路径上「找不到该动作」… | 加右键菜单项, 改 ctx-menus.html, 单组菜单缺选项, 多选批量菜单, 项集不一致, 菜单缺项 |
+| [ctx-menu-edge-clamp.md](ctx-menu-edge-clamp.md) | 视口钳位 e2e: 锚点不贴缘的断言恒真; 左缘 clamp 真实手势结构不可达 | 视口钳位, 左缘, 右缘, ctx-menu, EDGE, e2e 断言, 恒真, 顺带断言, 红验, clientX, 滚动容器左缘 |
+| [density-tier-single-point.md](density-tier-single-point.md) | 移除「经典 / 变体」两档制的一方时(删经典档或删变体档), 真正危险的不是删组件, 而是**档制判据散落在四五处**: 菜单候选集(`[{id:"classic"}].concat(options(tab))`)、缺省读侧(`readSel` 的 out 初始化)、各消费方(`… | 档制单档化, 删经典档, 删变体档, defaultSel, CLASSIC_TABS, hasClassic, choices, 缺省档, 渲染失败兜底, 补落经典, 菜单只有一个项, 菜单候选集, 兜底失真, readSel, dtPe… |
+| [derived-snapshot-render.md](derived-snapshot-render.md) | 派生状态(如"未归组命中")在事件落袋时被存成**快照**, 渲染期却按**当前**数据无条件消费 —— 快照与真值分叉后同一实体画两遍; 修法是渲染期用当前源现算判据 + 双条件闸, 而非在快照里打补丁 | 搜索, 虚拟行, 未归组, 重复行, u- 行, searchUncovered, 派生快照, 渲染期判据, filteredGroups, 跨视图, 归组关系变化, search_rev 不变, 同一 hash 两行 |

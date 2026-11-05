@@ -1466,13 +1466,15 @@ def test_closed_keep_never_trims_inflight_and_dropped_also_trims(tmp_path: Path)
     root, mb = _closed_keep_fixture(tmp_path, done=61, dropped=61, inflight=65)
 
     rendered = gen.build(root, mb)
+    assert len(rendered) <= gen.INDEX_BUDGET, "主索引恒 ≤ 8,000 字符预算"
     inflight = _index_section(rendered, "In Progress")
     assert len(_entry_lines(inflight)) == 65, "在办条目不受 CLOSED_KEEP 影响"
     assert "更早的" not in inflight, "在办区不得出现隐藏提示"
     for status in ("Done", "Dropped"):
         section = _index_section(rendered, status)
-        assert len(_entry_lines(section)) == 60, f"{status} 区裁到 60"
-        assert "> 更早的 **1** 条已出本索引" in section
+        n = len(_entry_lines(section))
+        assert 0 < n < 60, f"{status} 区按 8,000 预算收紧(`CLOSED_KEEP` 只是上限)"
+        assert f"> 更早的 **{61 - n}** 条已出本索引" in section
 
 
 def test_closed_keep_archive_same_batch_wiring(tmp_path: Path) -> None:

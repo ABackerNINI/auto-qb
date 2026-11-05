@@ -1,7 +1,7 @@
 # Issues 归档索引 (全量)
 
 > **本文件是生成物, 不要手改** —— 由 `gen_issues_index.py` 与 `_index.md` 同批生成;
-> 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
+> 主索引的已关闭区按 8,000 字符预算裁剪(上限 `CLOSED_KEEP` 条), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
 ## Open (44)

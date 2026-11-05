@@ -138,7 +138,7 @@ KB 内**任何日期**只有一个来源: `commands run kb.time` —— UTC+8 �
 | 角色 | 上限 (字符) |
 |---|---|
 | `memory-bank/README.md`(手写) | 6,000 |
-| `*/_index.md`(自动生成, 含 tasks / issues / 各目录) | 8,000 |
+| `*/_index*.md`(自动生成, 含 tasks / issues / 各目录 / 分卷页) | 8,000 |
 | `pitfalls/*` 条目集(「扫描找一条」比通读更贵) | 8,000 |
 | 常青主题(叙述型) | 8,000 |
 | 参考速查(`config-reference/` · `rule-system/`) | 24,000 |

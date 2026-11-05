@@ -66,6 +66,11 @@ CLOSED_KEEP = 60
 CLOSED_STATUSES = ("Done", "Dropped", "Superseded")
 ARCHIVE_REL = "attachments/_archive.md"
 
+# 主索引字符预算 —— 与 memory-bank `_common.CAP_POLICY["index-auto"]` 同值(cap 单点仍在那边;
+# 跨 skill 不 import, 由守卫 `test_issues_index_budget_matches_cap_policy` 等值钉住)。
+# 2026-11-05 B4: `CLOSED_KEEP` 从"定值"降为"上限" —— 装不下就逐级收紧(最坏 0 条), 索引恒 ≤ 预算。
+INDEX_BUDGET = 8000
+
 
 def header(issues_dir: Path, root: Path) -> str:
     skill_rel = rel_skill(issues_dir)
@@ -84,8 +89,8 @@ def header(issues_dir: Path, root: Path) -> str:
 > 文件名 = `<YY-MM-DD-HHMM>-<type>-<slug>.html`, type 取值: {" / ".join(TYPES)}。
 > 本索引里摘要按 `SUMMARY_MAX` **截断**(全文在报告里): 这样索引大小由**条数**决定, 不随摘要写得多长而膨胀
 > —— 否则迟早撞 `index-auto` cap, 而靠"外迁老条目"化解会打坏外部引用。
-> **已关闭状态**({closed})只列**最近** `CLOSED_KEEP` 条(更老的**报告原地不动**, 只是不出本索引):
-> 条数涨到 243 时无摘要口径已达 cap 108%, 砍摘要救不回来; 搬文件又会牵动 `**Refs:**` 认领链。
+> **已关闭状态**({closed})只列**最近若干条**(上限 `CLOSED_KEEP`, 装不进 8,000 字符预算就继续收紧;
+> 更老的**报告原地不动**, 只是不出本索引):
 > 全量清单见 [{archive}]({archive}), 该目录不计 cap。
 > **入池规则**: 计划外问题一律不改码, 只入池 —— 见 create-issue skill {skill_link}
 > (该不该现在修, 见 scope-guard skill)。
@@ -151,8 +156,8 @@ def entry_line(item: dict, summary_max: int | None, prefix: str = "") -> str:
     return line
 
 
-def render(items: list[dict], issues_dir: Path, root: Path) -> str:
-    """主索引: 已关闭状态只留最近 `CLOSED_KEEP` 条(报告原地不动, 只是不出索引)。"""
+def render(items: list[dict], issues_dir: Path, root: Path, keep: int = CLOSED_KEEP) -> str:
+    """主索引: 已关闭状态只留最近 `keep` 条(报告原地不动, 只是不出索引)。"""
     out = [header(issues_dir, root)]
     out.extend(count_table(items))
     for status in STATUSES:
@@ -164,9 +169,9 @@ def render(items: list[dict], issues_dir: Path, root: Path) -> str:
             continue
         ordered = sorted(group, key=lambda i: i["stamp"], reverse=True)
         hidden = 0
-        if status in CLOSED_STATUSES and len(ordered) > CLOSED_KEEP:
-            hidden = len(ordered) - CLOSED_KEEP
-            ordered = ordered[:CLOSED_KEEP]
+        if status in CLOSED_STATUSES and len(ordered) > keep:
+            hidden = len(ordered) - keep
+            ordered = ordered[:keep]
         for item in ordered:
             out.append(entry_line(item, SUMMARY_MAX))
         if hidden:
@@ -186,7 +191,7 @@ def render_archive(items: list[dict], issues_dir: Path, root: Path) -> str:
         "# Issues 归档索引 (全量)",
         "",
         "> **本文件是生成物, 不要手改** —— 由 `gen_issues_index.py` 与 `_index.md` 同批生成;",
-        "> 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。",
+        "> 主索引的已关闭区按 8,000 字符预算裁剪(上限 `CLOSED_KEEP` 条), **本文件是全量**, 摘要不截断。",
         f"> 每条链接指回 `{dir_name}/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。",
         "",
     ]
@@ -204,7 +209,14 @@ def render_archive(items: list[dict], issues_dir: Path, root: Path) -> str:
 
 
 def build(root: Path, issues_dir: Path) -> str:
-    return render(collect(issues_dir), issues_dir, root)
+    """一步出全文 (守卫与 --check 共用): 已关闭窗口从 `CLOSED_KEEP` 起收紧, 直到 ≤ 预算。"""
+    items = collect(issues_dir)
+    text = render(items, issues_dir, root)
+    keep = CLOSED_KEEP
+    while len(text) > INDEX_BUDGET and keep > 0:
+        keep -= 1
+        text = render(items, issues_dir, root, keep)
+    return text
 
 
 def build_archive(root: Path, issues_dir: Path) -> str:

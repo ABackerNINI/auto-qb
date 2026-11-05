@@ -1,7 +1,7 @@
 # Tasks 归档索引 (全量)
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 与 `_index.md` 同批生成;
-> 主索引的已完结区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**(只列 slug 与标题; 摘要全文在档案里)。
+> 主索引的已完结区按 8,000 字符预算裁剪(上限 `CLOSED_KEEP` 条), **本文件是全量**(只列 slug 与标题; 摘要全文在档案里)。
 > 每条链接指回 `tasks/` 下的档案原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
 ## In Progress (30)

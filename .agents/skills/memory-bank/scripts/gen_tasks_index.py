@@ -26,9 +26,13 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from _common import (  # noqa: E402
-    ARCHIVE_REL, CLOSED_KEEP, TASK_STATUSES as STATUSES, TERMINAL_TASK_STATUSES,
+    ARCHIVE_REL, CAP_POLICY, CLOSED_KEEP, TASK_STATUSES as STATUSES, TERMINAL_TASK_STATUSES,
     closed_hidden_note, find_root, gen_cmd, keep_closed_window, resolve_mb_dir,
 )
+
+# 主索引字符预算 = `index-auto` cap (单点: `_common.CAP_POLICY`)。
+# 2026-11-05 B4: `CLOSED_KEEP` 是上限而非定值 —— 装不下就按下限收紧(最坏 0 条), 索引恒 ≤ 预算。
+INDEX_BUDGET = CAP_POLICY["index-auto"]
 
 # 4 词表单点 = `_common.TASK_STATUSES` (2026-10-17 P1 收敛: 原先本地定义, `kb.new` / 检查器
 # 要同源校验档案状态行, 两处定义必然漂移)。
@@ -69,8 +73,7 @@ def build_header(root: Path) -> str:
 > 档案命名 `YY-MM-DD-<slug>.md`(见 [memory-bank skill](../../.agents/skills/memory-bank/SKILL.md)); 旧编号保留在各档案的 `**Legacy-ID:**` 字段, 供历史文档回溯。
 > 粒度为**专题**(一个功能线一个档案, 不逐会话建文件); 历史流水账原文归档在各档案的 `## 历史会话纪要 (原文归档)` 段, 超 48 KB 的档案把该段移入 `tasks/attachments/`(索引守卫按 `tasks/*.md` 扫描, 不递归)。
 > 本索引里摘要按 `SUMMARY_MAX` **截断**(全文在档案里): 这样索引大小由**档案数**决定, 不随摘要写得多长而膨胀 —— 否则迟早撞 `index-auto` cap, 而靠"外迁老档案"化解会打坏外部引用。
-> **已完结状态**(Done / Dropped)只列**最近** `CLOSED_KEEP` 条(更老的**档案原地不动**, 只是不出本索引):
-> 条数涨到 250 时索引 28,868 已越 cap(25,200), 压摘要救不回来; 全量清单见
+> **已完结状态**(Done / Dropped)只列**最近若干条**(上限 `CLOSED_KEEP`, 装不进 8,000 字符预算就继续收紧; 更老的**档案原地不动**, 只是不出本索引): 全量清单见
 > [{archive_rel}]({archive_rel}), 该目录不计 cap。
 > 日常短周期工作只记 [../activeContext/](../activeContext/_about.md) 的会话切片; 完成项沉淀进 [../progress.md](../progress.md)。
 > 机械守卫: `tests/test_memory_bank.py`(索引 == 生成结果 / slug 唯一 / 命名规范 / 状态分区 / 必备章节)。
@@ -107,8 +110,8 @@ def collect(tasks_dir: Path) -> list[dict]:
     return items
 
 
-def render(items: list[dict], header: str) -> str:
-    """主索引: 已完结状态(Done / Dropped)只留最近 `CLOSED_KEEP` 条(档案原地不动, 只是不出索引)。"""
+def render(items: list[dict], header: str, keep: int = CLOSED_KEEP) -> str:
+    """主索引: 已完结状态(Done / Dropped)只留最近 `keep` 条(档案原地不动, 只是不出索引)。"""
     out = [header]
     for status in STATUSES:
         group = [i for i in items if i["status"] == status]
@@ -117,7 +120,9 @@ def render(items: list[dict], header: str) -> str:
             out.append(EMPTY_HINT.get(status, "(暂无)"))
             out.append("")
             continue
-        ordered, hidden = keep_closed_window(sorted(group, key=_sort_key, reverse=True), status, TERMINAL_TASK_STATUSES)
+        ordered, hidden = keep_closed_window(
+            sorted(group, key=_sort_key, reverse=True), status, TERMINAL_TASK_STATUSES, keep
+        )
         for item in ordered:
             line = f"- [{item['slug']}] {item['title']}"
             if item["summary"]:
@@ -146,7 +151,7 @@ def build_archive(root: Path, mb: Path) -> str:
         "# Tasks 归档索引 (全量)",
         "",
         f"> **本文件是生成物, 不要手改** —— 由 `{gen_cmd(root, 'gen_tasks_index.py')}` 与 `_index.md` 同批生成;",
-        f"> 主索引的已完结区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**(只列 slug 与标题; 摘要全文在档案里)。",
+        f"> 主索引的已完结区按 8,000 字符预算裁剪(上限 `CLOSED_KEEP` 条), **本文件是全量**(只列 slug 与标题; 摘要全文在档案里)。",
         f"> 每条链接指回 `tasks/` 下的档案原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。",
         "",
     ]
@@ -164,8 +169,19 @@ def build_archive(root: Path, mb: Path) -> str:
 
 
 def build(root: Path, mb: Path) -> str:
-    """一步出全文 (守卫与 --check 共用, 保证两条路径同一实现)。"""
-    return render(collect(mb / "tasks"), build_header(root))
+    """一步出全文 (守卫与 --check 共用, 保证两条路径同一实现)。
+
+    已完结窗口从 `CLOSED_KEEP` 起逐级收紧, 直到整份 ≤ `INDEX_BUDGET` —— cap 是硬约束,
+    `CLOSED_KEEP` 只是"优先保留多少"的默认值。
+    """
+    items = collect(mb / "tasks")
+    header = build_header(root)
+    text = render(items, header)
+    keep = CLOSED_KEEP
+    while len(text) > INDEX_BUDGET and keep > 0:
+        keep -= 1
+        text = render(items, header, keep)
+    return text
 
 
 def main() -> int:

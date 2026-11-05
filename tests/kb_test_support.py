@@ -27,10 +27,12 @@ STATUSES = ("In Progress", "Open", "Done", "Dropped")
 REQUIRED_SECTIONS = ("## 原始请求", "## 思考过程与决策", "## 实现计划", "## 子任务状态表", "## 进度日志")
 
 # 非 `_index.md` 的生成物 —— 新增一个必须显式登记(详见 test_gen_all_declares_exactly_all_indexes)
+# 分卷页(`_index-<n>.md`)不在此列: 它们按 `_index*.md` 通配, 与主索引同批产出。
 EXTRA_GENERATED = (
     "memory-bank/issues/attachments/_archive.md",
     "memory-bank/tasks/attachments/_archive.md",
     "memory-bank/plans/attachments/_archive.md",
+    "memory-bank/reports/attachments/_archive.md",
 )
 
 DATE_PREFIX_RE = re.compile(r"^\d{2}-\d{2}-\d{2}-")
