@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-11-06-0330">
 <meta name="issue-type" content="test">
 <meta name="doc-topic" content="flaky-governance">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/testing/baselines/26-11-06-0453-consecutive-port-run.md, memory-bank/activeContext/26-11-06-0453-consecutive-port-run.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="test_start_all_busy_returns_false_and_retries 偶发 WinError 10013">
 <meta name="issue-summary" content="随机序巡检第 1 轮触发 127.0.0.1:3166 真绑定 PermissionError, 归因端口/资源类(排除端口段), 非时序">
 <title>test_start_all_busy_returns_false_and_retries 偶发 WinError 10013 · test · 计划外问题</title>
@@ -95,14 +95,14 @@
   </nav>
 
   <header class="cover">
-    <div class="kicker">计划外问题（未修）· test</div>
+    <div class="kicker">计划外问题（已修）· test</div>
     <h1>test_start_all_busy_returns_false_and_retries 偶发 WinError 10013</h1>
     <p class="lede">随机序巡检第 1 轮触发 127.0.0.1:3166 真绑定 PermissionError, 归因端口/资源类(排除端口段), 非时序</p>
     <div class="meta-row">
       <div class="item"><div class="k">编号</div><div class="v">26-11-06-0330-test-hr-discovery-busy-retry-flake</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-06 03:30</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -143,6 +143,13 @@ PermissionError: [WinError 10013] 以一种访问权限不允许的方式做了�
     <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
     <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
     <div class="callout">10013 = 权限/排除端口段拒绝, 非时序竞态(已排除: async-wait/时序——台账原假设, 经证据修正; 类目改「端口/资源」)。</div>
+    <h3>修复时定位到的确切位置(2026-11-06 04:40)</h3>
+    <p>抛点不在产品代码, 在测试夹具 <code>_hold_ports()</code>: 用例先用 <code>_free_port()</code> 取基址 ——
+      该单点只对<strong>基址</strong>做「bind(0) + 回绑自验」—— 再把 <code>discovery_candidates(base)</code> 的
+      base/base+1/base+2 <strong>逐个显式 bind</strong>。后两位从未被验证过: 只要落进 Windows 动态排除段
+      (<code>netsh interface ipv4 show excludedportrange protocol=tcp</code>, Hyper-V/WSL 开机预留,
+      <strong>每次开机不同</strong>), 显式 bind 就抛 10013 ⇒ 假红。产品侧
+      <code>HrDiscoveryServer._try_bind()</code> 本就逐候选吞 <code>OSError</code> 顺延, 故无产品影响。</p>
   </section>
 
   <section id="s6">
@@ -154,12 +161,44 @@ PermissionError: [WinError 10013] 以一种访问权限不允许的方式做了�
   <section id="s7">
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
+      <li>2026-11-06 04:55 — <strong>In Progress → Done</strong>（端口单点新增 <code>hold_run</code> 整段自验；见下「修复后补充」）</li>
+      <li>2026-11-06 04:44 — <strong>Open → In Progress</strong>（用户指派认领）</li>
+      <li>2026-11-06 04:40 — <strong>复验：仍复现（确定性）</strong>。把 <code>_free_port</code> 钉在 5356（其后一位
+        5357 在本机排除段）后跑锚点用例 ⇒ <code>_hold_ports(candidates)</code> 抛
+        <code>PermissionError [WinError 10013]</code>，与入池证据同形；随机基址下恒绿 ⇒ 机制在、只差触发条件</li>
       <li>2026-11-06 03:30 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
-    <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p>2026-11-06 04:40 — 仍复现：探针先证明本机 5357 属排除段（<code>PermissionError winerror=10013</code>，
+      5356/5358 正常可绑），再把 <code>_free_port</code> 钉到 5356 跑锚点用例，红在同一行
+      <code>holds = _hold_ports(candidates)</code>。随机基址的单跑/整文件复跑恒绿，故此前两轮巡检一红一绿。</p>
+    <h3>修复后补充（2026-11-06 04:55）</h3>
+    <h4>① 实际修法</h4>
+    <ul>
+      <li><code>tests/_test_ports.py</code> 新增 <code>hold_run(count=3)</code>：取号后<strong>整段逐个真绑并持有</strong>，
+        任一位失败（排除段 10013 / 独占 10048）就整段关掉换新基址，连抢 <code>RETRIES</code> 次才
+        <code>RuntimeError</code> 响亮失败；返回 <code>(base, socks)</code>，没有 TOCTOU 窗口。</li>
+      <li><code>tests/test_hr_discovery.py::test_start_all_busy_returns_false_and_retries</code> 改用
+        <code>_hold_run(3)</code>，并断言占住的三位正是 <code>discovery_candidates(base)</code>（连号语义显式钉住）。</li>
+      <li><strong>与建议修法的关系</strong>：走了建议第一条（端口单点），<strong>未采纳</strong>「对 10013 加有限重试」——
+        重试只是遮症状，整段自验把触发面消掉；固定候选端口语义因此完全保留（仍是 base/+1/+2）。</li>
+      <li>守阵 +2：<code>tests/test_free_port.py::test_hold_run_returns_bindable_run</code>（连号三位、持有期间真占住、
+        放掉后仍可绑）、<code>::test_hold_run_discards_run_whose_offset_is_refused</code>（整段有一位被拒 10013 ⇒ 整段丢弃换基址，不交坏段）。</li>
+    </ul>
+    <h4>② 验证方式与数字</h4>
+    <ul>
+      <li>确定性红验（修复前）：5356 探针 → <code>_hold_ports</code> 抛 <code>WinError 10013</code>（同形证据）。</li>
+      <li>确定性绿验（修复后）：让首次取号谎报 5356 ⇒ <code>hold_run(3)</code> 整段丢弃换基址
+        （实得 base=5911），坏段不落到调用方。</li>
+      <li>用例：<code>test.one tests/test_free_port.py tests/test_hr_discovery.py</code> → <strong>43 passed</strong>。</li>
+      <li>全量：见本次基线切片（<code>commands run kb.baseline</code>），锚点用例在随机序 seed=1932420092 下转绿。</li>
+    </ul>
+    <h4>③ 同形（当日后续轮一并修完）</h4>
+    <p>同文件 <code>test_start_binds_first_free_candidate</code>（断言顺延到 base+1）、
+      <code>test_runtime_builds_and_starts_discovery</code>（断言实绑 base）、
+      <code>test_runtime_discovery_bind_failure_keeps_data_endpoint</code>（占位 base/+1/+2）三处同形，
+      已按用户指派在 2026-11-06 05:10 一并修完：断言改「落在候选表」+ 占位收敛到 <code>hold_run</code>，
+      记录见 <a href="26-11-06-0330-test-hr-discovery-port-collision.html">26-11-06-0330-test-hr-discovery-port-collision</a>。</p>
   </section>
 
   <footer>

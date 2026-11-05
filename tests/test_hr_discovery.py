@@ -91,6 +91,7 @@ TK = "t" * 48  # 测试用数据端点密钥(字面量本身无意义, 只验聚
 SC = "s" * 48  # 测试用配对密钥(同上; 真生成路径由 runtime 用例走 resolve_pairing_secret)
 
 from _test_ports import free_port as _free_port  # noqa: E402  端口单点(防散落守卫: tests/test_free_port.py)
+from _test_ports import hold_run as _hold_run  # noqa: E402  连号候选段单点(整段自验, 见 issue 26-11-06-0330)
 from clock import wait_until  # noqa: E402  条件轮询单点(禁裸 time.sleep 睡等: tests/clock.py)
 
 
@@ -118,16 +119,6 @@ def _simulate_read_denial(monkeypatch, path, *, times=None):
 
     monkeypatch.setattr(builtins, "open", denied)
     return denials
-
-
-def _hold_ports(ports):
-    """占住一组端口(测试占位 socket); 返回句柄列表, 由调用方负责释放"""
-    socks = []
-    for p in ports:
-        s = socket.socket()
-        s.bind(("127.0.0.1", p))
-        socks.append(s)
-    return socks
 
 
 def make_discovery(**overrides):
@@ -386,12 +377,18 @@ def test_wildcard_host_uses_request_host(tmp_path):
 
 
 def test_start_binds_first_free_candidate():
-    base = _free_port()
-    holds = _hold_ports([base])
+    # 整段三位先自验(避开 Windows 排除段), 再放回后两位、只留首位占住: 服务必然顺延到次位。
+    # 只 hold 首位(base)不够 —— 基址恰好紧邻一段排除区时 base+1/base+2 会同时不可绑, start()
+    # 直接返回 False, 那是换了个断言点重演同一假红(评审 major, 2026-11-06)。
+    base, holds = _hold_run(3)
+    for s in holds[1:]:
+        s.close()
     srv = make_discovery(port=base)
     try:
         assert srv.start() is True
-        assert srv.bound_port == base + 1, "首位被占 ⇒ 顺延次位(候选表先绑先得)"
+        # 不钉死 == base+1: 放回次位到服务真绑之间若被别的 worker 抢走, 顺延到第三位同样是
+        # 正确行为(issue 26-11-06-0330 同族)。断言落在「候选表非首位」这个语义上, 而不是具体端口号。
+        assert srv.bound_port in discovery_candidates(base)[1:], f"顺延到候选表非首位, 实绑 {srv.bound_port}"
         assert srv.started
     finally:
         srv.stop()
@@ -413,9 +410,9 @@ def test_startup_log_separates_endpoint_url(caplog):
 
 
 def test_start_all_busy_returns_false_and_retries():
-    base = _free_port()
+    base, holds = _hold_run(3)  # 连号三位一起占住: 单点整段自验, base+1/+2 落排除段/被独占都不进这段
     candidates = discovery_candidates(base)
-    holds = _hold_ports(candidates)
+    assert candidates == [base, base + 1, base + 2], "占住的正是候选表三位(连号语义)"
     srv = make_discovery(port=base)
     srv.retry_min_s = 0.05
     srv.retry_max_s = 0.1
@@ -575,15 +572,21 @@ def _isolate_registry(monkeypatch, tmp_path) -> None:
 
 def test_runtime_builds_and_starts_discovery(tmp_path, monkeypatch):
     _isolate_registry(monkeypatch, tmp_path)
-    base = _free_port()
+    # 整段三位自验后立即放回: 「候选段可绑」成为前置条件, 防「base 被抢 + 后两位全落排除段 ⇒
+    # 发现端点起不来」的残窗(评审 minor, 2026-11-06); 断言侧再容忍单次抢号的顺延。
+    base, holds = _hold_run(3)
+    for s in holds:
+        s.close()
     cfg = make_config(tmp_path, enabled=True, channel=True)
     cfg.hr_check.channel.discovery_port = base
     runtime = HrRuntime(_FakeManager(cfg))
     assert runtime.start() is True
     try:
         assert runtime.discovery is not None and runtime.discovery.started
-        assert runtime.discovery.bound_port == base, "空闲基底 ⇒ 实绑首位"
-        assert runtime.discovery.bound_port in runtime.discovery.candidates
+        # 实绑落在候选表内即可: 基底是"取号那一刻"的空闲端口, 高机载/并行下可能被别的 worker
+        # 抢先绑走 ⇒ 顺延 base+1 是**正确行为**(issue 26-11-06-0330 同族); 钉死 == base 才是假红源。
+        assert runtime.discovery.bound_port in discovery_candidates(base), \
+            f"实绑落在候选表内, 实得 {runtime.discovery.bound_port}(基底 {base})"
         st = runtime.status()
         assert re.fullmatch(r"发现 \d+ · 配对 关 · 数据 \d+", st.channel.note), st.channel.note
         assert str(runtime.discovery.bound_port) in st.channel.note, "note 携带发现实绑端口(C6)"
@@ -655,8 +658,7 @@ def test_runtime_non_loopback_pairing_full_flow(tmp_path, caplog, monkeypatch):
 
 def test_runtime_discovery_bind_failure_keeps_data_endpoint(tmp_path, caplog, monkeypatch):
     _isolate_registry(monkeypatch, tmp_path)
-    base = _free_port()
-    holds = _hold_ports(discovery_candidates(base))
+    base, holds = _hold_run(3)  # 连号三位整段占住(单点自验, base+1/+2 落排除段不进这段)
     cfg = make_config(tmp_path, enabled=True, channel=True)
     cfg.hr_check.channel.discovery_port = base
     runtime = HrRuntime(_FakeManager(cfg))

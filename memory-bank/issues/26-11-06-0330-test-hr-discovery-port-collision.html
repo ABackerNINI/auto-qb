@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="flaky-governance">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="test_hr_discovery 在 -n 8 下偶发端口碰撞红">
 <meta name="issue-summary" content="test_runtime_builds_and_starts_discovery 断言 bound_port==base, xdist 8 worker 并行时偶发碰撞(坑档 fixed-port-test-collision 同类), 单跑恒绿">
 <title>test_hr_discovery 在 -n 8 下偶发端口碰撞红 · test · 计划外问题</title>
@@ -95,14 +95,14 @@
   </nav>
 
   <header class="cover">
-    <div class="kicker">计划外问题（未修）· test</div>
+    <div class="kicker">计划外问题（已修）· test</div>
     <h1>test_hr_discovery 在 -n 8 下偶发端口碰撞红</h1>
     <p class="lede">test_runtime_builds_and_starts_discovery 断言 bound_port==base, xdist 8 worker 并行时偶发碰撞(坑档 fixed-port-test-collision 同类), 单跑恒绿</p>
     <div class="meta-row">
       <div class="item"><div class="k">编号</div><div class="v">26-11-06-0330-test-hr-discovery-port-collision</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-06 03:30</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -142,6 +142,14 @@
     <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
     <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
     <div class="callout">待查(已排除: flaky 治理计划引入——S3 仅改该文件 sleep 形态, 断言面未动; 形态属既有并行端口碰撞类)。</div>
+    <h3>修复时定位到的两条假红源(2026-11-06 05:03)</h3>
+    <p>① <strong>TOCTOU 窗口</strong>: <code>_free_port()</code> 取号(含回绑自验)后到服务真正 bind 之间,
+      端口可能被并行 worker 抢走 ⇒ 服务顺延 base+1。这是<strong>正确行为</strong>, 钉死
+      <code>bound_port == base</code> 才是假红源。<br>
+      ② <strong>断言钉死具体端口号</strong>: 同族还有 <code>== base + 1</code> 的写法 —— base+1/base+2
+      可能落进 Windows 动态排除段(<code>netsh … excludedportrange</code>, 每次开机不同), 那时顺延到 base+2
+      同样正确。断言该落在「候选表语义」上, 不是某个具体号(同族实证见
+      <a href="26-11-06-0330-test-hr-discovery-busy-retry-flake.html">26-11-06-0330-test-hr-discovery-busy-retry-flake</a>)。</p>
   </section>
 
   <section id="s6">
@@ -153,12 +161,53 @@
   <section id="s7">
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
+      <li>2026-11-06 05:20 — <strong>收口评审修复</strong>（全能档，major 1 / minor 1 / nit 2 全修，见 ③）</li>
+      <li>2026-11-06 05:10 — <strong>In Progress → Done</strong>（三条同形一起修；见下「修复后补充」）</li>
+      <li>2026-11-06 05:04 — <strong>Open → In Progress</strong>（用户指派：「修复同形」）</li>
+      <li>2026-11-06 05:03 — <strong>复验：仍复现（确定性注入）</strong>。该红无固定 seed（TOCTOU/断言形态），
+        改用注入复现：<code>_free_port</code> 返回 5356 且该位被占（5357 落本机排除段）⇒ 实绑 5358，
+        旧断言 <code>== base</code> 必红</li>
       <li>2026-11-06 03:30 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
-    <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p>2026-11-06 05:03 — 仍复现（确定性注入）：并行抢号无法用固定 seed 复现，故改为注入「取号得 5356、
+      该位已被抢、5357 在排除段」，服务实绑 5358 —— 旧断言 <code>bound_port == base</code> 当场红，
+      说明失败与产品行为无关，纯是断言形态。</p>
+    <h3>修复后补充（2026-11-06 05:10）</h3>
+    <h4>① 实际修法（三条同形一起）</h4>
+    <ul>
+      <li><code>test_runtime_builds_and_starts_discovery</code>：<code>_hold_run(3)</code> 整段自验后立即全部放回
+        （让「候选段可绑」成为前置条件），断言由 <code>== base</code> 改为
+        <code>bound_port in discovery_candidates(base)</code> —— 基底被抢时顺延属正确行为。</li>
+      <li><code>test_start_binds_first_free_candidate</code>：先用 <code>_hold_run(3)</code> 整段自验、再放回后两位
+        只留首位占住；断言由 <code>== base + 1</code> 改为 <code>in discovery_candidates(base)[1:]</code>
+        （次位落排除段、或放回后被别的 worker 抢走时，顺延到第三位同样正确）。</li>
+      <li><code>test_runtime_discovery_bind_failure_keeps_data_endpoint</code>：占位改 <code>_hold_run(3)</code>
+        （整段自验），消除 <code>_hold_ports(discovery_candidates(base))</code> 在 base+1 落排除段时的 10013 假红；
+        同时删掉本地 <code>_hold_ports</code> 复制实现，端口占位单点收敛到 <code>tests/_test_ports.py</code>。</li>
+      <li><strong>与建议修法的关系</strong>：采纳「断言放宽为落在候选表端口段」；<strong>未</strong>改
+        <code>_free_port()</code> 语义 —— 它仍是「取一个空闲端口」的正确单点，TOCTOU 只压不消，
+        该用例已不再依赖「取到即绑定」。</li>
+    </ul>
+    <h4>② 验证方式与数字</h4>
+    <ul>
+      <li>确定性绿验：注入「取号得 5356、该位被占、5357 落排除段」⇒ 两条用例均实绑 5358 通过
+        （旧断言在同注入下必红）。</li>
+      <li>用例：<code>test.one tests/test_hr_discovery.py tests/test_free_port.py</code> → <strong>43 passed</strong>。</li>
+      <li>全量：见本次基线切片（<code>commands run kb.baseline</code>）。</li>
+    </ul>
+    <h4>③ 收口评审（2026-11-06 05:2x · 全能档 1 子代理，4 条发现全过引文校验）</h4>
+    <ul>
+      <li><strong>major</strong>：只 hold 首位时 base+1/base+2 仍可能同时不可绑（基址紧邻排除区）⇒
+        <code>start()</code> 返回 False，等于换个断言点重演同一假红 ⇒ 改成 <code>_hold_run(3)</code> 整段自验。</li>
+      <li><strong>minor</strong>：runtime 用例的基底仍是「未持有的取号结果」⇒ 若被抢且后两位全不可绑，
+        发现端点起不来 ⇒ 补 <code>_hold_run(3)</code> 前置。</li>
+      <li><strong>nit ×2</strong>：注释「取号与持有同一把 socket / 无 TOCTOU 窗口」与实现不符（已改）；
+        <code>_Proxy</code> 注入点注释的「第一位/第二位」口径与 docstring 冲突（已改）。</li>
+      <li>顺带实测纠偏（已写进坑档）：<code>netsh</code> 里带 <code>*</code> 的「管理排除」段
+        （本机 50000-50059）<strong>仍可 bind</strong>，真正抛 10013 的是不带 <code>*</code> 的 5357 ⇒
+        判别以实测 bind 为准。</li>
+    </ul>
   </section>
 
   <footer>
