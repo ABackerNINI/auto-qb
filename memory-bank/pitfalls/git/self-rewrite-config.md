@@ -7,4 +7,4 @@
 **Refs:** memory-bank/tasks/26-10-06-ship-rerun-stale-config.md
 
 > 已外迁: 叙事整段迁至 [self-rewrite-config-migrated-26-10-31-0952.md](attachments/self-rewrite-config-migrated-26-10-31-0952.md) (kb.tier migrate 26-10-31-0952; 判据单点见上方摘要)
-> 现行处置(快照自举, 2026-10-07 起): 入口启动时把整包复制到**仓库之外**的临时目录再从副本重入(`scripts/_snapshot.py`) ⇒ 一次调用 = 一个版本, 中途 rebase 换掉工作区配置也不换规则; 上游改动本包时 `ship.commit` 登记「快照: 上游改动了本包 → 本次仍按启动版本运行, 重跑以采用新版本」(不静默)。同族判据一句话: 「我这个进程运行期, 磁盘上我自己那份源码/配置会不会变?」。守阵 `scripts/test_snapshot.py` + `test_commit.py::test_post_rebase_pack_changed_leaves_hint`。
+> 现行处置(快照自举, 2026-10-07 起): 入口启动时把整包复制到**仓库之外**的临时目录再从副本重入(`scripts/_snapshot.py`) ⇒ 一次调用 = 一个版本, 中途 rebase 换掉工作区配置也不换规则; 上游改动本包时 `ship.commit` 登记「快照: 上游改动了本包 → 本次仍按启动版本运行, 重跑以采用新版本」(不静默)。同族判据一句话: 「我这个进程运行期, 磁盘上我自己那份源码/配置会不会变?」。守阵 `scripts/test_snapshot.py` + `.commands/my-commit-flow/scripts/test_commit.py::test_post_rebase_pack_changed_leaves_hint`。

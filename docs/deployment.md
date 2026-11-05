@@ -72,7 +72,7 @@ docker exec auto-qb cat /data/web.token
 | `notify.enabled` | `false` | 容器无桌面会话, 平台原生通知预期不可用 |
 | `grouping.check_missing_files` | `false` | ❗缺文件扫描读宿主磁盘, 容器里恒判"文件缺失" ⇒ 误暂停整组 + 打 MISSING 标签(真实写 qB)。详见 §11.3; 想保留该功能见 §11.5 |
 
-> 这五处由 `tests/test_config.py::test_example_docker_config_yml_passes_fail_fast` 钉住 —— 示例文件没有守阵会静默漂移。
+> 这五处由 `tests/test_config_load.py::test_example_docker_config_yml_passes_fail_fast` 钉住 —— 示例文件没有守阵会静默漂移。
 
 ### qB 地址怎么填(三案)
 

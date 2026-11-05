@@ -34,7 +34,7 @@
   ⚠ 不要靠 `update-ref` —— 它只写 loose, 治不了 packed-refs。
 - **复发 7 次(2026-10-07~10-31)后根治**: 曾长期靠停手指引误路由到「分支 ref 被回退」; 2026-10-31 起
   `check_refs` 判出该形态即自动 `pack-refs --all` 并放行(v5, 每笔提交自愈, 手工处置路径退役),
-  守卫测试两条钉住(test_commit.py)。**本条不再新增复发记录** —— 再见到该形态的 [STOP] 即为 v5 回退,
+  守卫测试两条钉住(`.commands/my-commit-flow/scripts/test_commit.py`)。**本条不再新增复发记录** —— 再见到该形态的 [STOP] 即为 v5 回退,
   查 verify_ref.py 是否被改动。
 
 ### 本工具 shell 里 `refs/remotes/<远端>/*` 的写入会被静默丢弃

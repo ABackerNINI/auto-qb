@@ -31,8 +31,8 @@
 ### 文件名与被测模块对应
 
 - **触发**: 新建测试文件。
-- **判别**: 约定是 `test_actions.py` ↔ `rules/actions.py`。
-- **处置**: 一个模块可以有多个文件(如 `test_rules_core` / `test_rule_base` / `test_rule_engine` 拆分)。
+- **判别**: 约定是 `test_actions_*.py` ↔ `rules/actions/`。
+- **处置**: 一个模块可以有多个文件(如 `test_rules_core` / `test_rule_base_*` / `test_rule_engine` 拆分)。
   超大测试文件的拆分实操见下方「大测试文件的 move-only 拆分」。
 
 ### 粒度小而多, 名字用中文 / 英文短语描述场景
@@ -51,7 +51,7 @@
   ③`connect()` 真实连 `127.0.0.1:16585`, 是否抛异常取决于机器环境。
 - **处置**: 测试主体行为的是"**平台逻辑**"而非"当前真实平台", 一律**显式 monkeypatch**, 不要依赖运行环境。
   纯 Windows 行为(如长路径 `\\?\` 前缀)若直接断言, 在 Linux CI 上**必失败**(实测 3 例):
-  `test_utils.py` 的 `test_add_long_path_prefix_for_win/unc/already_prefixed` 用
+  `test_utils_path.py` 的 `test_add_long_path_prefix_for_win/unc/already_prefixed` 用
   `monkeypatch.setattr(sys, "platform", "win32")` 模拟 Windows。
   修法与判别法见 [../pitfalls/testing/patching.md](../pitfalls/testing/patching.md); 本机复现 Linux 的办法同见该文。
 
@@ -91,7 +91,7 @@
   **装了 node 时跑 `node --check` 真语法校验**、CSS 规则块漏闭合、`<transition>` 吞弹窗、
   模板引用的静态资源是否存在 —— 这类问题会让整页只剩背景色或整块功能静默失效)。
 - **处置**: **找 WEB 功能的测试先看这个文件**。
-  `test_speed_curve.py` 另覆盖 **`_traffic_view` 只读快照**的各分支
+  `test_speed_curve_traffic.py` 另覆盖 **`_traffic_view` 只读快照**的各分支
   (disabled / ok 含 periods 与 target+actual / dry_run 无 actual / manual 原因 / stale 的两种原因码)。
 
 ### `test_sync.py` 专测增量同步层
@@ -111,7 +111,7 @@
 - **处置**: **必须同步此文件** —— 新增顶层段必须落到「某模块 `sections()` 认领 or `KERNEL_SECTIONS` or
   `RESTART_SECTIONS`」之一(守阵 `test_modules_p6`), 段变了之后做什么由认领模块 apply 自判。
 
-### `test_memory_bank.py` 守知识库结构(不覆盖 src)
+### `tests/test_memory_bank_*.py` 守知识库结构(不覆盖 src)
 
 - **触发**: 改 `memory-bank/` 结构或会话协议。
 - **判别**: 它守 —— `_index.md` 登记项 ↔ `tasks/*.md` **双向一致** /
@@ -123,7 +123,7 @@
   另有 2026-09-22 起的一组**知识库目录化守卫**(索引 == 生成结果 / 索引↔目录双向一致 / 三行头元数据 / cap 策略 /
   类名与文件名 / 无孤儿索引 / 存根合法 / pitfalls 条目三字段 / skill 脚本可 import), 检查器在
   `.agents/skills/memory-bank/scripts/check_kb_structure.py`, **进程内 import**(本项目测试禁止起子进程)。
-- **处置**: 改结构**必须同步此文件**(红绿验证过: 幽灵任务与纪要回流两类违例都会失败)。
+- **处置**: 改结构**必须同步这组文件**(红绿验证过: 幽灵任务与纪要回流两类违例都会失败)。
 
 ### 测试期禁止真实系统副作用(会话级守卫 + 常驻 sidefx)
 

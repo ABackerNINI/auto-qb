@@ -6,7 +6,7 @@
 
 ### 12 GiB VM 里, 变异池的并发上限由「单 worker 体积」定, 降并发救不了
 
-- **触发**: 在 WSL 侧跑中池目标(`only_mutate = ["**/core/modules/traffic_sample_mod.py"]`, 池 = `tests/test_traffic_sample_*.py` / `test_traffic_limits.py` / `test_traffic_store.py`, `timeout_multiplier = 15`), 并按核数直觉只把 `--max-children` 从 3 降到 2。
+- **触发**: 在 WSL 侧跑中池目标(`only_mutate = ["**/core/modules/traffic_sample_mod.py"]`, 池 = `tests/test_traffic_sample_*.py` / `test_traffic_limits.py` / `test_traffic_store_*.py`, `timeout_multiplier = 15`), 并按核数直觉只把 `--max-children` 从 3 降到 2。
 - **判别**: ①三轮 2 路实测(2026-11-02 06:45 / 07:01 / 07:16, 三种不同启动方式)**全部停在第 80/1804 条**, 每轮只活 52–58 秒;
   ②采样峰值 `used` 10,587–11,468 MB(MemTotal 11,961 MB)、`avail` 最低 **493 MB**; 单进程 mutmut 峰值 **5,207–5,842 MB**, 进程和 9,050–9,999 MB;
   ③内存耗尽时**内核不一定留 OOM 记录**: 这几轮 kern.log 只有 `warn_alloc`, 07:19:04 的 Mem-Info 是 `inactive_anon 2,909,454 页 ≈ 11.1 GiB`、`free 19,264 页 ≈ 75 MB`、`Node 0 Normal free 30,296 kB < min 30,540 kB`、`all_unreclaimable? no`、`Free swap=0`; `wsl.exe` 会话本身先以 **rc=1** 断连(guest 控制面失联), 进程树随之消失;

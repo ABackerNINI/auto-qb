@@ -55,4 +55,4 @@
 
 **阶段 4 收尾**: 无参考 → warning (高风险); **跳检成功打标签** (标签名运行时经 ctx 读全局 `config.skip_checking_tag` (`_skip_tag`), 默认 zSkipChecked, 全局统一不按规则覆盖; `tag not in torrent.tags_set` 时经 Facade `torrents_add_tags` 打标并同步 store; 打标失败 try/except 仅 warning, 不影响跳检成功结论; 标签为空则跳过打标); `auto_start` → `torrents_start`。标签持久化在种子上 (跨重启), 后续 `_find_reference` 据此排除跳检种子作参考。
 
-**风险须知** (写文档/日志时要传达): 跳检保留标签/分类/限速/路径, 但**丢失下载量/上传量/做种时长/分享率**; 文件内容错误会上传垃圾数据。另注意: 删除种子 → `store.remove_torrent` 立即从快照移除, 该种子后续动作/任务需容错 (这正是 commit e5ea9e7 修的 bug, 测试 test_checking.py 有覆盖)。 跳检重加成功后 `_execute_skip_checking` 会 `store.restore_torrent` 恢复删除前记录 (跳检流程内部); 其它路径下 `tracker_conf=None` 时 `tracker_name` 返回 "Unknown" (不回退 tor.client, 生产 TorrentDictionary 无此属性)。
+**风险须知** (写文档/日志时要传达): 跳检保留标签/分类/限速/路径, 但**丢失下载量/上传量/做种时长/分享率**; 文件内容错误会上传垃圾数据。另注意: 删除种子 → `store.remove_torrent` 立即从快照移除, 该种子后续动作/任务需容错 (这正是 commit e5ea9e7 修的 bug, `tests/test_checking_*.py` 有覆盖)。 跳检重加成功后 `_execute_skip_checking` 会 `store.restore_torrent` 恢复删除前记录 (跳检流程内部); 其它路径下 `tracker_conf=None` 时 `tracker_name` 返回 "Unknown" (不回退 tor.client, 生产 TorrentDictionary 无此属性)。

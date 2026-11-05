@@ -256,7 +256,7 @@ commands run env.sync                              # 同步依赖(含开发/测�
 
 commands run test.full                             # 全量测试
 commands run test.quick                            # 快速迭代时跳过覆盖率报表
-commands run test.one -- tests/test_grouping.py    # 只跑单个测试文件
+commands run test.one -- tests/test_grouping_scan.py    # 只跑单个测试文件
 ```
 
 ## 免责声明与许可证

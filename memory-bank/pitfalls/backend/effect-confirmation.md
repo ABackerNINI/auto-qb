@@ -19,7 +19,7 @@
      (`checking_meta.is_piece_checking` 只认 {checkingDL, checkingUP}, 排除 checkingResumeData)。
      判定提为**纯函数**(`checking_meta.poll_verdict(seen_checking, progress, baseline_progress, elapsed,
      giveup)`), 成功签名要求 seen_checking=True —— 「无证据成功」在签名层面不可表达, 配全叉积穷举测试
-     钉死(test_checking.py 160 组合)。
+     钉死(`tests/test_checking_*.py` 160 组合)。
   2. **决定性时刻直查真值, 不回落快照**: 影响结论落定的时刻(提交点 R1 复核 / 宽限耗尽仲裁)对 qB 单
      hash 直查核实, 事件驱动一次性(生命周期至多 1 次), 不构成周期轮询; 直查异常 fail-closed 判败,
      直查不可得不为「成功」背书。

@@ -68,7 +68,7 @@
 - **触发**: 改 web 配置后重启服务。
 - **判别**: uvicorn 的 `stop()` 只是**请求退出**(主循环每 0.1s 才读 `should_exit`), 毫秒级内重新 bind 必
   `Errno 10048`; 且**非主线程的 `SystemExit` 会被 `threading` 静默吞掉**, 日志里只看到一行不带时间戳的 uvicorn ERROR。
-- **处置**: 现由 `WebServerHandle.stop()/wait()` + `_apply_web_config`(只在 enabled/host/port 变化时重启)处理。
+- **处置**: 现由 `WebServerHandle.stop()/wait()` + `WebUIModule.apply()`(只在 enabled/host/port 变化时重启)处理。
 
 ### `state_file` 落盘时机: 优雅退出立即 + 运行期周期 (2026-09-22 起)
 
@@ -120,7 +120,7 @@
   **整站集体打标**。判据是 `HrSiteView.has_lookup_keys`;**`mode: all` 不受此闸门影响**(用户显式要全站受管束)。
   守阵: `tests/test_hr_resolve.py::test_judge_record_without_any_lookup_key_falls_back`。
   守阵: `tests/test_hr_resolve.py::test_judge_record_not_applicable_when_site_off` /
-  `tests/test_hr_runtime.py::test_judge_without_published_view_falls_back`。
+  `tests/test_hr_runtime_feeder.py::test_judge_without_published_view_falls_back`。
 
 ### HR: 站点行**缺达标字段 ≠ 站点说未达标**(2026-09-25)
 

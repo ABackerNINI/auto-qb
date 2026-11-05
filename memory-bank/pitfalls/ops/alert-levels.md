@@ -33,11 +33,11 @@
 
 - **生命周期**: 端点已启动 / 在线核实已启动 / 已关闭 / 热重载重挂 —— 全是程序按配置做的动作。
   用 WARNING 的后果是**每次重启先吃三条通知**(2026-09-24 用户实报的「一开就弹 warning」)。
-  守阵 `tests/test_hr_runtime.py::test_start_stop_messages_are_info_not_warning`。
+  守阵 `tests/test_hr_runtime_lifecycle.py::test_start_stop_messages_are_info_not_warning`。
 - **被叫停 ≠ 没通道**: 关停 / 热重挂时取数线程可能正阻塞等扩展回传, 取消后抛出的异常**必须能与
   「本实例没通道」区分**(专用子类 `HrChannelStopped`) —— 混成一个异常的直接后果是**每次关停都告警一条
   「无可用取数通道」**, 还会误推进失败计数/熔断。守阵 `test_cancelled_queue_reports_channel_unavailable`
-  与 `test_cancelled_fetch_is_not_a_failure_nor_an_alert`。
+  与 `test_cancel_after_dispatch_reports_stopped`。
 
 ## 坏文件/异常记录: 告警之外还要「留现场」
 
@@ -58,7 +58,7 @@
   `interval: 10M` 下每天上百条且永远不停)。处置: 抽 `_log_manual_skip`, 进入状态/手动值变化记一条
   INFO + 每 1h 提醒一次, 其余轮次降 DEBUG; 退出手动保护清记忆。**去重不丢信号** —— Web UI 的
   `reasons`(`code=manual`)照旧逐轮带, 前端锁图标不受影响。守阵
-  `tests/test_speed_curve.py::test_speed_curve_manual_log_*`(三条: 同状态不刷屏 / 周期与值变化 /
+  `tests/test_speed_curve_dispatch.py::test_speed_curve_manual_log_*`(三条: 同状态不刷屏 / 周期与值变化 /
   释放后重置)。⚠ 同族反例: 同一保护的 `tracker.py` 分支是**完全静默**的 —— 若哪天要统一,
   别把「静默」当模板(持续状态该留周期提醒)。
   **复发**: 1 —— 判据②④ 2026-09-24 就写下了, 但 2026-09-26 仍从 `speed_curve.py` 实报出同形刷屏

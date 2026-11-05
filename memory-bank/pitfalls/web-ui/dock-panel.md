@@ -122,7 +122,7 @@
   走 `columns.js::_syncHeadHeight` 既有单点, **不写死** —— 顶栏随媒体查询/状态条/窄屏折行变高)。
   内容列恒撑满则面板自然落点恒在视口底, sticky 恒生效, 锚点与列表长短无关。三皮肤成对改
   (atlas/console 的 components.css + prism 的 views.css)。
-- **守阵**: `test_webui_static_skins.py::test_frontend_search_pending_no_collapse`(三皮肤 .layout min-height 锚)+
+- **守阵**: `tests/test_webui_static_skins_widget.py::test_frontend_search_pending_no_collapse`(三皮肤 .layout min-height 锚)+
   `e2e/drawer-dock-stability.spec.mjs`(行为: 搜索全程面板 top 偏差 ≤2px)。配套根因(待响应期
   塌列表)见 search-pending-collapse。
 - **取证(2026-10-07)**: 修复前短列表态面板 top 416 vs 钉住态 430; 修复后三皮肤逐帧采样零变化。
@@ -139,4 +139,4 @@
   没有则回落 42vh = 与 CSS 默认上限同值), 高度因此也与种子详情**共用同一 drawerHeightPx**;
   建图侧 `_qbChartBuild` 量 `host.clientHeight` 当图高, ResizeObserver 宽高**双观察**才能跟着拖拽实时长。
 - **守阵**: `tests/test_webui_static_dom_panel_traffic.py::test_frontend_qb_traffic_chart_wiring`(三皮肤 `.drawer-body.is-traffic`
-  撑满段成对 + RO 宽高双观察) + `test_web_shortcuts.py::test_drawer_height_collapse_w3`(面板高度单点)。
+  撑满段成对 + RO 宽高双观察) + `tests/test_web_shortcuts_drawer.py::test_drawer_height_w3`(面板高度单点)。

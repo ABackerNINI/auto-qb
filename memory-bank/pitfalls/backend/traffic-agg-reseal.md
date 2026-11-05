@@ -24,10 +24,10 @@
   合流, 否则重复计)。配套: 小时行 `cov_s` 下限 1 —— 亚秒残余桶经 `int(round())` 会折成 0,
   该行成为日里唯一子行时 `Σcov_s = 0`, day 封口直接抛「逐级聚合无有效覆盖」(真机崩点)。
   注意历史坏行不回补: 已写进 agg.dat 的残余行是既成事实, 真值仍在未过裁剪窗的 raw 天文件里。
-- **守阵**: `test_traffic_store.py::test_v4_merge_agg_same_epoch_reseal_keeps_coverage` ·
-  `test_traffic_sample.py::test_agg_reseal_merges_late_credit_keeps_full_coverage` ·
-  `test_traffic_store.py::test_v4_hour_agg_subsecond_coverage_floors_cov_to_one` ·
-  `test_traffic_sample.py::test_agg_flush_subsecond_hour_rolls_up_without_raise`
+- **守阵**: `test_traffic_store_agg.py::test_v4_merge_agg_same_epoch_reseal_keeps_coverage` ·
+  `test_traffic_sample_store.py::test_agg_reseal_merges_late_credit_keeps_full_coverage` ·
+  `test_traffic_store_agg.py::test_v4_hour_agg_subsecond_coverage_floors_cov_to_one` ·
+  `test_traffic_sample_store.py::test_agg_flush_subsecond_hour_rolls_up_without_raise`
   (红验: 还原替换语义 / 摘掉 cov_s 下限即红, 见 `testing/guards.md` 流量聚合封口批次)
 
 ### 逐系列批处理循环里的单点异常会放大成全局停写
@@ -42,5 +42,5 @@
   一次(免刷屏), 并**重置该系列累计器** —— 不重置就会每轮重抛同一错; 重置后后续小时照常封口,
   缺口由下次重启 catch-up 从天文件重算补回(告警行写明出处, 不猜不静默)。留一眼恢复健康路径:
   成功时清掉告警记忆, 下次再错重新告警一次。
-- **守阵**: `test_traffic_sample.py::test_agg_flush_all_isolates_series_error_and_resets`
+- **守阵**: `test_traffic_sample_store.py::test_agg_flush_all_isolates_series_error_and_resets`
   (红验: 去掉 try/except, 注入异常直接上抛即红)

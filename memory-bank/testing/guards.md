@@ -15,7 +15,7 @@
 
 ## 知识库结构(`tests/test_memory_bank_*.py`, 检查器在 skill 的 `check_kb_structure.py`)
 
-> 守卫清单与逐条结论由测试本身维护, 此处只留指针: 见 `tests/test_memory_bank_*.py`(四分)与 [file-conventions.md「test_memory_bank.py 守知识库结构」](file-conventions.md); 逐条「钉住的结论 + 红验」表见 [attachments/guards-batches-archive.md](attachments/guards-batches-archive.md)「知识库结构守卫」; 检查器在 `.agents/skills/memory-bank/scripts/check_kb_structure.py`。
+> 守卫清单与逐条结论由测试本身维护, 此处只留指针: 见 `tests/test_memory_bank_*.py`(四分)与 [file-conventions.md「`tests/test_memory_bank_*.py` 守知识库结构」](file-conventions.md); 逐条「钉住的结论 + 红验」表见 [attachments/guards-batches-archive.md](attachments/guards-batches-archive.md)「知识库结构守卫」; 检查器在 `.agents/skills/memory-bank/scripts/check_kb_structure.py`。
 
 ## 前端 / WEB UI
 

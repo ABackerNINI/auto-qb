@@ -14,7 +14,7 @@
   **根修已落**（issue 26-09-28-0128, 随 my-commit-flow v3 commit 4ba6cb7f, 2026-09-28）:
   commit.py 暂存循环按文件存在性三分流 —— 工作区存在 → `git add`; 工作区无而索引有(` D`)→
   `git rm --cached` 登记删除; 都不在(`D `)→ 跳过(删除已在暂存区), 逐路径 add 不再撞 pathspec 落空。
-  守阵: `test_commit.py::test_staged_delete_skips_add` + `test_unstaged_delete_uses_rm_cached`。
+  守阵: `.commands/my-commit-flow/scripts/test_commit.py::test_staged_delete_skips_add` + `test_unstaged_delete_uses_rm_cached`。
 
 ## 变体: 撤文件出版本库时「补 .gitignore」与「git add」互相打架(2026-09-29 实测)
 

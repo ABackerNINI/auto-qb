@@ -23,7 +23,7 @@
 
 ## 可选机检 (推荐全挂)
 
-- **pytest 薄壳**: 照抄 `tests/test_memory_bank.py` 的**进程内 import** 模式 —— 它 import skill 的
+- **pytest 薄壳**: 照抄 `tests/test_memory_bank_*.py` 的**进程内 import** 模式 —— 它 import skill 的
   `check_kb_structure` / `gen_*` / `gen_active_recent` / `check_doc_links` / `timekit`, 不起子进程。
   项目专属的断言(AGENTS.md 8,000 硬上限等)留在项目侧测试里。
 - **命令包**: 建 `.commands/kb/config.toml`(task id: `kb.index` / `kb.check` / `kb.active` /

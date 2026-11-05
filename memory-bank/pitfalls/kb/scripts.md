@@ -10,9 +10,9 @@
 - **判别**: 那行只在**冷门分支**上走(如"没找到镜像远端"才走), 主线路径会先把流程带过去 ⇒
   `NameError` 一直潜伏到真机碰上那个分支才暴露。**跑一遍抓不到**(正常路径不经过)。
   实测案例: `push.py` 把 `MIRROR_URL_NOW` 写成从未定义的 `MIRROR_URL`。
-- **处置**: 只能**静态查** —— `my-commit-flow` 的 `scripts/test_preflight.py` 有 `undefined_names()`
+- **处置**: 只能**静态查** —— `my-commit-flow` 的 `scripts/test_pipeline.py` 有 `undefined_names()`
   (ast 扫 5 个脚本的 Load/Store 名, 闭包可见性也算对), 附带两个自证用例(能抓到 `MIRROR_URL`、不被闭包变量误报)。
-  改 skill 脚本后跑一次 `python <skill-dir>/scripts/test_preflight.py`。
+  改 skill 脚本后跑一次 `python <skill-dir>/scripts/test_pipeline.py`。
   ⚠ 该静态检查目前**只覆盖 `my-commit-flow` 自己的 5 个脚本**, memory-bank skill 的脚本尚未纳入 —— 记在 W8 候选。
 
 ### 预检 / 检查表型脚本的 STOP 级别要按阶段区分

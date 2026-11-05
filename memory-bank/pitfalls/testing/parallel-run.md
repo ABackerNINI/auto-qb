@@ -24,7 +24,7 @@
   统一入口 —— 真正的 `Popen + communicate` 放在**看门狗线程**里, 主线程只等到 deadline;
   到点用 `taskkill /F /T` 杀**整棵进程树** + 关掉本端管道(不 join), 返回 `rc=-1`。
   把"提交无声冻死"变成**快速可判定的失败**。`git` / `git_rc` / `git_run` / 闸门 `run_gates` /
-  `_safe_files` 探针**全部**改走它; `test_sync.py` / `test_commit.py` 的 `_git` 也改走它。
+  `_safe_files` 探针**全部**改走它; `test_sync.py` / `.commands/my-commit-flow/scripts/test_commit.py` 的 `_git` 也改走它。
   - ⚠ **超时/非 0 的中间态要显式判**: `run_capture` 把超时收成 `rc=-1`(**不抛**), 而原实现
     靠 `except subprocess.SubprocessError` / `TimeoutExpired` 接超时 —— 例如 `_safe_files` 探针
     必须显式看 `rc != 0` 才摘脚本, 漏判会**静默放行**真动作脚本

@@ -74,6 +74,6 @@ commands run test.one -- tests/test_checking_*.py -k skip  # 按关键词
 
 - `test_config_schema.py` —— UI 元数据与配置键 / 插件的**一致性守卫**(20 项): 顶层键 vs `KNOWN_CONFIG_KEYS`、
   各段子键 vs `KNOWN_*_KEYS`、插件表 vs `registry`、kind / optional / enum 形态自检。
-- `test_config_writer.py` —— 结构化写回: 读取语义 / 校验拒绝不碰磁盘 / 注释与标量风格保留 / 增删键 /
+- `test_config_writer_*.py` —— 结构化写回: 读取语义 / 校验拒绝不碰磁盘 / 注释与标量风格保留 / 增删键 /
   R 级回退 / 预览不落盘 / 有损数字串不被规范化。
 - ❗**新增配置键或插件时必须同步 `config/schema.py`**, 否则守卫测试**直接失败**。

@@ -23,5 +23,5 @@
 - **触发**: `memory-bank/issues/_index.md`、`attachments/_archive.md` 这类「本文件是生成物」的件参与冲突(两侧的 Open/Done 计数与条目各不相同)。
 - **判别**: 文件头写着「本文件是生成物, 不要手改」; 冲突块两侧都是整段索引内容。
 - **处置**: `git checkout --ours <生成物>` 取任一侧 → `commands run kb.index` 重新生成 → `git add -A` → `GIT_EDITOR=true git rebase --continue`。**别在这里手工合并索引条目**(改完下次重跑又回来)。手写件(`tasks/`、`activeContext/`、`pitfalls/`)才需要上面的逐条判断。
-- **守阵**: `commands run kb.index` 幂等重跑 + `commands run kb.check`(含新增面/回写/日期三道守卫); rebase 后跑 `test.full` 会连带跑 `test_memory_bank.py` 那一组。
+- **守阵**: `commands run kb.index` 幂等重跑 + `commands run kb.check`(含新增面/回写/日期三道守卫); rebase 后跑 `test.full` 会连带跑 `tests/test_memory_bank_*.py` 那一组。
 - **复发**: 0 (复踩时在此行追加「+N (日期): 为什么没命中」, 无复发可删本行)
