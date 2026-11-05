@@ -10,7 +10,7 @@
 - [26-10-10-2001] [计划 · WEBUI 选中 × 触发 一致性](../26-10-10-2001-plan-webui-selection-trigger-parity.html) — `webui-selection-trigger-parity`
 - [26-09-22-2318] [auto-qb 软件版本管理方案 · 版本号 / Tag / CHANGELOG / 发版流程](../26-09-22-2318-version-management-plan.html) — `deps-version-management`
 
-## Open (8)
+## Open (7)
 
 - [26-11-05-1049] [memory-bank 文档压缩与防回涨分步执行计划(8K 新口径)](../26-11-05-1049-plan-kb-doc-compress.html) — `kb-doc-compress`
 - [26-11-05-0848] [跳检自身失败闸门 G9: WEB case-2 强制 + 规则侧硬 skip 双点同谓词](../26-11-05-0848-plan-skip-check-self-fail-gate-g9.html) — `skip-check-self-fail-gate-g9`
@@ -19,7 +19,6 @@
 - [26-11-05-0247] [整组迁移回收机制改造: 单回收进程与未收尾再迁移](../26-11-05-0247-plan-relocate-single-recycler.html) — `relocate-single-recycler`
 - [26-11-05-0118] [flaky 测试结构化治理: 时钟注入与抖动消除](../26-11-05-0118-plan-flaky-test-governance.html) — `flaky-test-governance`
 - [26-11-03-2212] [整组迁移同盘证明误拒：根因与修复计划](../26-11-03-2212-plan-relocate-same-fs-proof.html) — `relocate-same-fs-proof`
-- [26-10-01-1758] [Issue 全量清偿路线图 — 摸排 · 分波 · 执行顺序](../26-10-01-1758-plan-issue-clearance-roadmap.html) — `issue-clearance-roadmap`
 
 ## Done (209)
 
@@ -233,9 +232,9 @@
 - [26-09-15-1042] [WEB UI 优化计划 · 第八轮 (旧 UI) — 诊断定案 · 吸顶贴合 · 确认框补全 · 视图扩展](../26-09-15-1042-webui-optimization-plan-v3.html) — `webui-optimization`
 - [26-09-15-0956] [auto-qb · 新一代 WEB UI 实施计划](../26-09-15-0956-webui-redesign-plan.html) — `webui-redesign`
 
-## Dropped (0)
+## Dropped (1)
 
-(暂无)
+- [26-10-01-1758] [Issue 全量清偿路线图 — 摸排 · 分波 · 执行顺序](../26-10-01-1758-plan-issue-clearance-roadmap.html) — `issue-clearance-roadmap`
 
 ## Superseded (8)
 
