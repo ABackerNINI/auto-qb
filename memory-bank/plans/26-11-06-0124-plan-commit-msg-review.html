@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="commit-msg-review">
 <meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-11-06-0124">
-<meta name="doc-updated" content="26-11-06-0148">
+<meta name="doc-updated" content="26-11-06-0244">
 <meta name="doc-refs" content="memory-bank/tasks/26-11-06-rule-commit-msg-review.md">
 <style>
   :root {
@@ -75,7 +75,7 @@
 <h1>提交信息自动审查: ship.commit 内联三态机检(BOM/乱码/骨架/残留)</h1>
 <p class="lede">在 <code>ship.commit</code> 的 <code>git commit -F</code> 之前内联一道提交消息机检:三态(硬拦 / 自动修 / 警告)覆盖编码损伤、gitmoji 骨架、正文标签结构与 AI 写作残骸;检查器独立纯函数模块,逃生走配置白名单,正文零代改。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-06-0124 · <b>doc-updated</b> 26-11-06-0148 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-11-06-0124 · <b>doc-updated</b> 26-11-06-0244 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> grilling 会话(2026-11-06,六问全拍板) · 用户指令「提交信息自动审查」
 </div>
 
@@ -106,14 +106,14 @@
 <table>
 <tr><th>档位</th><th>条目(id)</th><th>检测 / 处理</th></tr>
 <tr><td class="bad">🔴 硬拦<br><span class="cm">不可自动修,失败行逐条列 id + 原文引用</span></td>
-<td><code>a2</code> 非 UTF-8 编码 · <code>a3</code> 乱码签名 · <code>b1</code> 缺 gitmoji · <code>b2</code> 非标准集 emoji · <code>b4</code> 首行无 CJK · <code>c2</code> 正文段落缺标签 · <code>d1</code> 强模板占位符 · <code>d2</code> traceback 粘贴 · <code>d3</code> diff 粘贴 · <code>d7</code> 空消息</td>
-<td><code>a2</code>=strict UTF-8 解码失败(文件层);<code>a3</code>=U+FFFD /「锟斤拷」/「â€」/「Ã©」等保守双字签名;<code>b1/b2</code>=首字形归一(去 VS16)对 gitmoji 全集(75 个,源自 gitmoji-reference.md);<code>b4</code>=subject 无 <code>\u4e00-\u9fff</code>;<code>c2</code>=正文存在⇒每段首行须以 动机/取舍/影响面/实测 标签词开头;<code>d1</code>=<code>待填</code>/<code>SLOT</code>/<code>&lt;动机&gt;</code>/<code>&lt;hash&gt;</code> 类尖括号模板;<code>d7</code>=strip 后为空。</td></tr>
+<td><code>a2</code> 非 UTF-8 编码 · <code>a3</code> 乱码签名 · <code>b1</code> 缺 gitmoji · <code>b2</code> 非标准集 emoji · <code>b4</code> 首行无 CJK · <code>d1</code> 强模板占位符 · <code>d2</code> traceback 粘贴 · <code>d3</code> diff 粘贴 · <code>d7</code> 空消息</td>
+<td><code>a2</code>=strict UTF-8 解码失败(文件层);<code>a3</code>=U+FFFD /「锟斤拷」/「â€」/「Ã©」等保守双字签名;<code>b1/b2</code>=首字形归一(去 VS16)对 gitmoji 全集(75 个,源自 gitmoji-reference.md);<code>b4</code>=subject 无 <code>\u4e00-\u9fff</code>;<code>d1</code>=<code>待填</code>/<code>SLOT</code>(行首锚定)/<code>&lt;动机&gt;</code> 类尖括号模板;<code>d7</code>=strip 后为空。</td></tr>
 <tr><td class="good">🟢 自动修<br><span class="cm">仅骨架位,修完逐行打印「已自动修正:」</span></td>
 <td><code>A1</code> BOM 剥离 · <code>B3</code> gitmoji 承接空格归一 · <code>C1</code> 首行后缺空行</td>
-<td>承接位 = emoji 与后文之间:缺失→补一格、多空格/NBSP/全角空格→归一为单个半角空格;<code>C1</code> 仅当正文存在时插入一个空行。单行消息、单个空格属正常形态,不动。</td></tr>
+<td><b>B3 仅对归一后命中标准集的已知 gitmoji 生效</b>(收口评审 major:旗类 RI 对曾被拆坏写回)——未知 emoji 一律不动文本,走 <code>b2</code> 重写。承接位 = emoji 与后文之间:缺失→补一格、多空格/NBSP/全角空格→归一为单个半角空格;<code>C1</code> 仅当正文存在时插入一个空行。单行消息、单个空格属正常形态,不动。</td></tr>
 <tr><td class="wr">🟡 警告<br><span class="cm">打印不拦</span></td>
-<td><code>a4w</code> 正文不可见字符 · <code>a5</code> 标签全角冒号 · <code>c5</code> 实测段无数字 · <code>d1w</code> TODO/XXX 词面 · <code>d5</code> <code>#</code> 开头行 · <code>d6</code> scissors 残留</td>
-<td><code>a4w</code>=ZWSP/ZWJ/U+2060/NBSP 在正文(拍板 D4:不代改只报位置);<code>a5</code>=标签词对但冒号全角(D4 降档);<code>c5</code>=「实测」段内无任何数字(弱信号);<code>d1w</code>=TODO/XXX 词面易撞合法引用(如「清掉 TODO」),降警告;<code>d6</code>=「&gt;8」剪裁线。</td></tr>
+<td><code>c2</code> 正文段落缺标签词 · <code>a4w</code> 正文不可见字符 · <code>a5</code> 标签全角冒号 · <code>c5</code> 实测段无数字 · <code>d1w</code> TODO/XXX 词面 · <code>d5</code> <code>#</code> 开头行 · <code>d6</code> scissors 残留</td>
+<td><code>c2</code>=段落首行不以 动机/取舍/影响面/实测 <b>标签词</b>开头(词前缀,复合标签头都认;语料回测证伪硬拦前提后由 D3 修正降档,见 §06);<code>a4w</code>=ZWSP/ZWJ/U+2060/NBSP 在正文(拍板 D4:不代改只报位置);<code>a5</code>=标签词对但冒号全角(D4 降档);<code>c5</code>=「实测」段剥标签后无任何数字;<code>d1w</code>=TODO/XXX 词面易撞合法引用,降警告;<code>d6</code>=行内含「&gt;8」+「----」(标准剪裁线以 # 开头,不锚行首)。</td></tr>
 </table>
 <h3>拒收存档(有意不查)</h3>
 <table>
@@ -149,7 +149,7 @@
 <tr><th>#</th><th>议题</th><th>结论</th></tr>
 <tr><td>D1</td><td>分档框架与静默纪律</td><td>三态(硬拦 / 自动修 / 警告);修正必留痕,绝对静默只属于零修正的绿(2026-11-06,按推荐)</td></tr>
 <tr><td>D2</td><td>错误条目矩阵</td><td>按矩阵执行无增删;拒收四条存档(CRLF / 反引号 / 首行长度 / Merge),实测与语料依据见 §02-§03(2026-11-06)</td></tr>
-<tr><td>D3</td><td>正文标签强制口径</td><td>(a) 正文存在⇒所有段落必须带已知标签(动机/取舍/影响面/实测);取舍不强制出现(2026-11-06,选 a)</td></tr>
+<tr><td>D3</td><td>正文标签强制口径</td><td>初拍 (a) 硬拦(2026-11-06,<b>前提「语料 100% 合规」有误——当时仅抽查 3 笔</b>);收口评审 200 笔语料回测证伪(严格 120/200、词前缀 103/200、近 20 笔 7/20;误伤形态=项目符号子项/叙述段/复合子标签)后<b>改拍:降为警告,口径=词前缀</b>(2026-11-06,用户裁决)</td></tr>
 <tr><td>D4</td><td>改写类自动修边界</td><td>标点不代改(全角冒号降警告);空格归一仅限骨架承接处(gitmoji 后);正文一律不代改,不可见字符降警告(2026-11-06,用户裁决)</td></tr>
 <tr><td>D5</td><td>逃生通道</td><td>配置白名单 <code>msg_check_allow</code>(只放行硬拦档,未知 id = STOP);不给一次性环境变量、不给一键跳过旗标(2026-11-06,选 b)</td></tr>
 <tr><td>D6</td><td>接线细节</td><td>检查点在存在性检查后、闸门前;显式 --message-file 同受检;amend --no-edit 不复检;独立模块 + 测试进 test_commit.py;失败行走 emit();不做独立命令入口(2026-11-06,按推荐)</td></tr>
@@ -168,6 +168,7 @@
 <h2><span class="no">§10</span>变更记录</h2>
 <ul>
   <li><span class="tag">R0 · 26-11-06-0124</span> 初版:grilling 六问全拍板后落盘;含三态矩阵定稿(v2,含 D4 修正)、拒收存档表、S1-S4 实施步骤与风险对策。grilling 期间的关键实测:BOM 过 <code>-F</code> 不剥、CRLF 自剥、<code>#</code> 行保留、反引号语料 21/200。</li>
+  <li><span class="tag">R1 · 26-11-06-0244</span> 收口评审轮(分面 3 子代理, 17 条发现全过引文校验): c2 依 200 笔语料回测降警告(D3 修正, 词前缀口径)、B3 收敛到已知 gitmoji 集(旗类 RI 误修 major)、SLOT 行首锚定+hash 尖括号形态移出强表(语料 5 笔合法命中)、d6 放宽行内特征、a3 注释如实化+单字签名换双字、假名/谚文/CJK-A 起首走 b1、b4 明细截断、读写两侧补瞬时锁重试、叉号打印前缀换 ASCII、测试 +6 例与闸门金丝雀; 修复后语料终测硬拦 4/200(全为真违反), 自动修零触发</li>
 </ul>
 
 </div>

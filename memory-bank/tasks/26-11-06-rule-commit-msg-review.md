@@ -40,3 +40,10 @@ S1 msg_check.py 纯函数模块(gitmoji 全集 75 个去 VS16 归一 + review_te
 - grilling 六问拍板后出计划、实现 S1-S4 一次走完: 包测试与 test.quick 全绿(见 kb.baseline)。
 - 环境插曲: 本 clone 的 pytest/yapf console-script trampoline 全坏(坑档 venv-trampoline-clone-copy), 坑档路由命中, `uv sync --reinstall-package <pkg>` 定点重装两包即愈。
 - 实现细节修正: c5 实测段数字检测剥掉标签本体再查(标签自带日期, 整段扫会永远命中)——已落代码注释与单测。
+
+### R1 · 收口评审 (2026-11-06)
+
+- review: blocker 清零, 修 16+留痕 1, 入池 0, 分面(3 子代理串行: 正确性/安全/测试缺口; 17 条发现全过 review.check 引文校验, 零 refute)。
+- 关键修复: c2 依 200 笔语料回测降警告(初拍 D3a 前提「语料 100% 合规」系抽查 3 笔的错误断言, 用户改拍); B3 收敛到已知 gitmoji 集(旗类 RI 对曾被拆坏写回, major); SLOT 行首锚定+hash 尖括号形态移出强表; 读写两侧补瞬时锁重试; 叉号打印前缀换 ASCII; 测试 +6 例与「机检先于闸门」金丝雀。修复后语料终测硬拦 4/200(全为真违反), 自动修零触发。
+- 计划文档 kb.bump 至 R1(§03 矩阵/§06 D3 修正/变更记录同步)。
+- 范围说明: 本轮触碰过无关任务切片 26-11-04-1047-webui-relocate-visibility 的 R3 行一处(裸数字改「见 kb.baseline」)——非计划内清扫, 是措辞守卫判红挡住提交后的最小解锁修复(7d603fb1 先例同款), 已随 771b8d8e 入库并在提交信息与收尾报告披露。

@@ -48,13 +48,17 @@
                                           v7 起说明行默认静默, 仅 COMMAND_FLOW_DEBUG=1 可见
 - test_check_refs_branch_rollback_routes_to_rollback_entry
                                           分支指针真被回退/丢失 → 仍送「分支 ref 被回退」条目
-- test_msg_check_*                        提交消息机检纯函数面(计划 26-11-06-0124): BOM 剥离/非 UTF-8(a2)/
-                                          乱码签名(a3)/gitmoji 三态(b1 缺/b2 非标准/VS16 通过)/首行无中文(b4)/
-                                          标签口径(c2 硬拦/a5 全角警告/c5 实测无数字)/占位符(d1 强/d1w 词面)/
-                                          traceback+diff+空(d2/d3/d7)/自动修(承接空格归一+补空行)/
-                                          不可见字符与 # 行警告(a4w/d5)/白名单放行
-- test_msg_allow_unknown_id_stops         msg_check_allow 未知 id → config STOP; 合法 id 不停(拍板 D5)
-- test_message_review_blocks_commit       接线: 全英文消息 → 机检失败行+明细, 无新提交, 文件保留
+- test_msg_check_*                        提交消息机检纯函数面(计划 26-11-06-0124; 收口评审轮补 200 笔语料回测):
+                                          BOM 剥离/非 UTF-8(a2)/乱码签名(a3)/gitmoji 三态(b1 缺/b2 非标准/
+                                          VS16 通过/假名谚文走 b1)/旗类不被自动修拆坏/首行无中文(b4+明细截断)/
+                                          标签口径(c2 警告+词前缀+第二段/a5 全角警告/c5 实测无数字)/
+                                          占位符(d1 强+行首 SLOT/句中引用放行/d1w 词面)/
+                                          traceback+diff+空(d2/d3/d7)/d6 剪裁线/自动修(承接空格归一+补空行)/
+                                          前导空行按入库形态/不可见字符与 # 行警告(a4w/d5)/白名单放行
+- test_msg_allow_unknown_id_stops         msg_check_allow 未知 id/类型非法 → config STOP; 合法 id 不停(拍板 D5)
+- test_message_review_blocks_commit       接线: 全英文消息 → 机检失败行+明细, 无新提交, 文件保留; 金丝雀钉检查点先于闸门
+- test_message_review_explicit_file_also_checked
+                                          接线: 显式 --message-file 同受检(拍板 D6), 自定义路径不删
 - test_message_review_autofix_commits     接线: BOM+NBSP 承接位自动修后正常落库, HEAD 消息已归一, 修正留痕
 - test_message_allow_escape               接线: msg_check_allow 放行 b4 → 全英文消息照常提交且零机检输出
 """
@@ -233,6 +237,15 @@ def test_msg_check_gitmoji_missing_unknown_and_vs16():
     assert not [
         v for v in msg_check_mod.review_text("🗑️ 弃置过期文件").violations if v[0] in ("b1", "b2")
     ]  # 带 VS16 的 🗑️ 必须在标准集内通过
+    # 假名/谚文/CJK 扩展 A 起首走 b1(补 gitmoji), 不给「不在标准集」的误导性 b2(收口评审 nit)
+    assert [v[0] for v in msg_check_mod.review_text("テスト件名の確認").violations if v[0] in ("b1", "b2")] == ["b1"]
+
+
+def test_msg_check_flag_emoji_not_autofixed():
+    # 收口评审 major 回归锚: RI 旗对曾被 B3 拆成「🇨 🇳」写回文件 —— B3 只对已知 gitmoji 生效
+    r = msg_check_mod.review_text("🇨🇳 中文概述")
+    assert r.fixed == [] and r.text == "🇨🇳 中文概述"
+    assert any(vid == "b2" for vid, _ in r.violations)  # 未知 emoji 走 b2 硬拦重写, 不代改
 
 
 def test_msg_check_subject_no_cjk_reports_b4():
@@ -241,11 +254,28 @@ def test_msg_check_subject_no_cjk_reports_b4():
     assert not any(vid == "b4" for vid, _ in msg_check_mod.review_text("✨ 同机证明 ship.commit 三层证据").violations)
 
 
-def test_msg_check_body_labels_required_c2():
-    bad = msg_check_mod.review_text("✨ 中文概述\n\n这一段没有标签直接开写")  # 拍板 D3(a): 裸段落判红
-    assert any(vid == "c2" for vid, _ in bad.violations)
-    assert not msg_check_mod.review_text("✨ 中文概述\n\n动机: 说明缘由\n\n影响面: 一处").violations
+def test_msg_check_b4_detail_truncated():
+    r = msg_check_mod.review_text("✨ " + "x" * 5000)  # 收口评审实测 5MB 单行回显 —— 明细必须有界
+    detail = next(d for vid, d in r.violations if vid == "b4")
+    assert len(detail) < 200 and "…" in detail
+
+
+def test_msg_check_body_labels_warn_c2():
+    # 拍板 D3 修正(2026-11-06 语料回测证伪硬拦前提): c2 降为警告 —— 裸段落提醒不拦
+    w = msg_check_mod.review_text("✨ 中文概述\n\n这一段没有标签直接开写")
+    assert not w.violations and any("c2" in x for x in w.warnings)
+    # 词前缀口径(矩阵原义): 复合标签头(实测数字: 类)都认, 不出 c2
+    ok = msg_check_mod.review_text("✨ 中文概述\n\n动机: 说明缘由\n\n实测数字(取证 2026-11-05): 全绿")
+    assert not ok.violations and not [x for x in ok.warnings if "c2" in x]
+    # 循环退化防护: 第二段起同样要查(收口评审 minor)
+    w2 = msg_check_mod.review_text("✨ 中文概述\n\n动机: ok\n\n裸段落没标签")
+    assert sum("c2" in x for x in w2.warnings) == 1
     assert not msg_check_mod.review_text("✨ 单行小改").violations  # 无正文 → 无标签义务
+
+
+def test_msg_check_leading_blank_lines_are_git_normalized():
+    r = msg_check_mod.review_text("\n\n✨ 中文概述")  # git cleanup 剥前导空行: 按 will-be-committed 形态判定
+    assert not r.violations and not r.fixed  # 收口评审 minor: 反例钉住首非空行才是 subject
 
 
 def test_msg_check_fullwidth_colon_label_warns_a5():
@@ -256,6 +286,11 @@ def test_msg_check_fullwidth_colon_label_warns_a5():
 def test_msg_check_placeholder_strong_blocks_todo_warns():
     strong = msg_check_mod.review_text("✨ 中文概述\n\n动机: <动机>")
     assert any(vid == "d1" for vid, _ in strong.violations)
+    slot = msg_check_mod.review_text("✨ 中文概述\n\n动机: x\nSLOT: 待填的内容")  # 行首模板槽仍拦
+    assert any(vid == "d1" for vid, _ in slot.violations)
+    # 句中引用放行(语料实证: 「SLOT 注释」3 笔、「提交成功 <hash>」2 笔均为合法行文)
+    quoted = msg_check_mod.review_text("✨ 清理基线切片残留 SLOT 注释\n\n动机: 结果行「提交成功 <hash>」口径")
+    assert not quoted.violations
     soft = msg_check_mod.review_text("✨ 清掉 TODO 注释\n\n动机: 收尾")  # 词面撞合法引用 → 只警告
     assert not soft.violations and any("TODO" in w for w in soft.warnings)
 
@@ -285,6 +320,9 @@ def test_msg_check_invisible_and_template_residue_warn():
     assert not [w for w in r2.warnings if "ZWJ" in w]
     r3 = msg_check_mod.review_text("✨ 中文概述\n\n动机: x\n# 手滑的注释行")  # 实测: -F 下 # 行原样入库
     assert not r3.violations and any("#" in w for w in r3.warnings)
+    # d6 正例(收口评审 minor: 此前零测试, 删掉分支整套件照绿); 标准剪裁线以 #/-- 开头, 不锚行首
+    r4 = msg_check_mod.review_text("✨ 中文概述\n\n动机: x\n------------------------ >8 ------------------------")
+    assert any("scissors" in w for w in r4.warnings) and not r4.violations
 
 
 def test_msg_check_measure_section_without_digits_warns_c5():
@@ -303,6 +341,19 @@ def test_msg_allow_unknown_id_stops(tmp_path):
     none = tmp_path / "none.toml"  # 不存在 → 跳过原文回读, 只验传入 cfg
     stops = [m for lvl, m in config_problems({"msg_check_allow": ["zz"]}, none) if lvl == "STOP"]
     assert any("msg_check_allow 含未知条目 id" in m for m in stops)
+    # 类型非法分支(收口评审 nit): 退化后会在 set() 上裸栈而非干净 STOP
+    for bad in ("b4", ["b4", 42]):
+        stops_t = [
+            m for lvl, m in config_problems(
+                {
+                    "msg_check_allow": bad,
+                    "auto_resolve_generated": True,
+                    "generated_list_cmd": "x",
+                    "generated_regen_cmd": "x"
+                }, none
+            ) if lvl == "STOP"
+        ]
+        assert any("类型非法" in m for m in stops_t)
     cfg = {
         "msg_check_allow": ["b4"],
         "auto_resolve_generated": True,
@@ -335,7 +386,12 @@ _CFG_ALLOW = {
 }
 
 
-def test_message_review_blocks_commit(repo, capsys):
+def test_message_review_blocks_commit(repo, monkeypatch, capsys):
+    # 金丝雀(收口评审 minor): 机检必须先于闸门 —— run_gates 被调用即说明检查点被挪到了闸门后
+    def _no_gates(*args, **kwargs):
+        raise AssertionError("机检应先于闸门拦下, 不该轮到 run_gates")
+
+    monkeypatch.setattr(commit_mod, "run_gates", _no_gates)
     (repo / "x.txt").write_text("x\n", encoding="utf-8")
     msg = _write_msg(repo, "update stuff only")  # 无 gitmoji(b1) + 全英文(b4)
     rc = commit_mod.main([])
@@ -345,6 +401,18 @@ def test_message_review_blocks_commit(repo, capsys):
     assert "msg_check_allow" in out  # 失败行自带逃生提示
     assert msg.exists()  # 文件保留: 修好重跑还能用
     assert "\n" not in _git(repo, "log", "--oneline")  # 无新提交(fixture 只有 base 一笔)
+
+
+def test_message_review_explicit_file_also_checked(repo, capsys):
+    # 拍板 D6: 显式 --message-file 同受检(收口评审 minor: 此前零测试, 加 `if args.message_file
+    # is None` 守卫这类自然重构会让自定义路径整体绕过机检而套件照绿)
+    (repo / "x.txt").write_text("x\n", encoding="utf-8")
+    custom = repo / "custom-msg.txt"
+    custom.write_text("update stuff", encoding="utf-8")
+    rc = commit_mod.main(["--message-file", str(custom)])
+    out = capsys.readouterr().out
+    assert rc == 1 and "提交信息机检" in out
+    assert custom.exists()  # 自定义路径不删(消费即删只对约定路径)
 
 
 def test_message_review_autofix_commits(repo, monkeypatch, capsys):

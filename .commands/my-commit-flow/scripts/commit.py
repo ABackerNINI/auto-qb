@@ -289,14 +289,31 @@ def main(argv: list[str] | None = None) -> int:
     #   脚本改了 agent 写的文件, 沉默即成功只属于零修正的绿。违规不产生提交, 消息文件保留。
     report = check_message_file(msg_file, allow=frozenset(cfg.get("msg_check_allow", [])))
     if report.fixed:
-        msg_file.write_text(report.text, encoding="utf-8", newline="\n")
+        # 写回与 consume_message_file 同款小步重试 —— Windows 瞬时占锁(编辑器/杀软, 在库实证)
+        # 不能变成裸 traceback(违反「失败=一行带原因与下一步」输出契约)。
+        written = False
+        last_exc: OSError | None = None
+        for attempt in range(3):
+            try:
+                msg_file.write_text(report.text, encoding="utf-8", newline="\n")
+                written = True
+                break
+            except OSError as exc:
+                last_exc = exc
+                time.sleep(0.2 * (attempt + 1))
+        if not written:
+            emit(steps, f"提交失败: 自动修正写回失败({last_exc}) —— 瞬时占锁时稍后重跑, "
+                 f"或按下方修正说明手动改 {msg_file}")
+            for line in report.fixed:
+                print(f"已自动修正(未写回): {line}")
+            return 1
         for line in report.fixed:
             print(f"已自动修正: {line}")
     for line in report.warnings:
         print(f"⚠ 提交信息: {line}")
     if report.violations:
         for vid, detail in report.violations:
-            print(f"  ✗ [{vid}] {detail}")
+            print(f"  - [{vid}] {detail}")  # ASCII 前缀: 代码打印面禁图形符号(code-style 约束)
         emit(
             steps, f"提交失败: 提交信息机检 {len(report.violations)} 项未过 —— 重写消息文件后重跑"
             f"(明细见上; 确认是误报时逃生: .my-commit-flow.toml 的 msg_check_allow 加对应条目 id)"
