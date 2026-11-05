@@ -17,9 +17,9 @@
     {
       "id": "R3-2",
       "title": "torrents 杂件 + tray + cli + tools",
-      "status": "pending",
-      "done_at": null,
-      "findings": 0
+      "status": "done",
+      "done_at": "26-11-06-0724",
+      "findings": 2
     },
     {
       "id": "R3-3",

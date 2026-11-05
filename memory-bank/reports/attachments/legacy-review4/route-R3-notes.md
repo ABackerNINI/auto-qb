@@ -7,7 +7,7 @@ owner: clone2-main · freeze: f088329291e6 · 快照: C:\Users\11059\Desktop\Pro
 | 批 | 内容 | findings 过检 | 状态 |
 |---|---|---|---|
 | R3-1 | transfer 全域(新模块) + torrents/store | 4 (major 1 / minor 2 / nit 1) | done |
-| R3-2 | torrents 杂件 + tray + cli + tools | - | pending |
+| R3-2 | torrents 杂件 + tray + cli + tools | 2 (major 1 / nit 1) | done |
 | R3-3 | hr service 族: service_wave/service/service_common/service_status/module | - | pending |
 | R3-4 | hr 模型状态: model/status/resolve | - | pending |
 | R3-5 | hr 运行时: runtime/server/channel/worker/threadlifecycle/queue/events | - | pending |
@@ -16,10 +16,14 @@ owner: clone2-main · freeze: f088329291e6 · 快照: C:\Users\11059\Desktop\Pro
 ## R2 复验结论
 
 - **T-04 已消失**: gtm/__init__.py:8-11 进度注已更新到 S0-S9 落地+S10 待授权;「重读历史文件」措辞在 gtm README 全文件 grep 零命中,现为「零读盘直达」口径;根 README:62 的「读历史文件」指 TrafficMonitor 传统来源语义准确非漂移。
+- **A-05 已消失**: relocate_exec.py:494-518 _finalize_members 已改先按 finalize_scope_candidate 零成本过滤再取文件表(26-10-30-0616 修复实证)。
+- **GH-01 部分复发**: ①读后心跳整包覆盖已消失——write_journal 前向合并拒非终态覆盖终态(finaalize_watch.py:193-194 + relocate_journal.py:80-84);③journal 头注「唯一写者」已消失——现明写两个写者+前向合并保序;②max_wait 缺省 0 **仍在**(finalize_watch.py:165/:249/:270),但 docstring/CLI help 已明示「0=不限,auto-qb 侧 finalize_timeout 才是最终兜底」,定级交聚合会话。
 
 ## 自弃发现记录
 
 reviewer 自弃 7 条(run_batch 外层 create_adapter 防御性 raise 生产不可达 / TrDownloaderStub.add_torrent 有意设计失败安全 / all_categories 不拷贝但调用方全只读 / 两个 __init__ docstring「单点导入」措辞与实际分叉导入不符无功能影响 / _verify 内部结果 hash 字段被重包丢弃 / _AUTH_FAILURE_NEEDLE 文案耦合纯理论 / _verify 空 state 按成功无可观察场景);本批 review.check 被弃条目:0 条(4/4 全过)。
+
+R3-2 批自弃 6 条(_hr_guard 族 None 全调用方有守卫 / tray _poll 未包 try 举不出触发场景 / finalize_watch 端口探测双发冗余无害 / state_enum 恒真防御分支 / __all__ 未含包根直取项有实测依赖 / qB tags 数组疑点有真机坑档实证读回口径);本批 review.check 被弃条目:0 条(2/2 全过)。
 
 ## 执行备注
 

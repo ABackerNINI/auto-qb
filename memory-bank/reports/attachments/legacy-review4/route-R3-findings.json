@@ -34,5 +34,23 @@
     "claim": "docstring 行内锚 `:237-244` 已陈旧: 现指向 expect_due_at 尾部/clear_expect(expect 落地块 26-10-30 插入后整体下移), 而所称 _apply 的 state_changed/dirty_groups/view_changed 三条通路实际在 406-509 行",
     "relevance": "相关",
     "fix": "锚改为 _apply 现行行段(或改为不带行号的方法名引用, 免随插入再次漂移)"
+  },
+  {
+    "file": "src/auto_qb/tools/finalize_watch.py",
+    "line": 208,
+    "quote": "\"reason\": \"verify_mismatch\",",
+    "severity": "major",
+    "claim": "guardian 收尾校验失败写下的 journal 相位 failed 不在 STOP_PHASES、且唯一读者 relocate_exec._step_reconcile 的对账表对它无任何处置(ACT_* 无 failed 分支,FAILED_TIMEOUT 只覆盖 removing/removed+链接不在),guardian 退出后心跳一过期即被 ACT_RESPAWN 重拉;重拉的新 guardian 先写 armed 心跳整包覆盖 failed 证据再重走三证/校验,目标侧持续不齐时形成约 90s 周期(60s 重拉退避+30s 稳定窗)的无限重拉循环,失败证据自毁且 job 永不收敛到 failed 终态",
+    "relevance": "相关",
+    "fix": "对账表消费 journal failed 相位(转 job failed 终态落 state.json 并写终相位 journal 让 guardian 退休),或 guardian 侧给 failed 加重试上限后升级为对账可识别的停止相位"
+  },
+  {
+    "file": "src/auto_qb/torrents/view.py",
+    "line": 11,
+    "quote": "派derive 而非手抄(issue 26-10-11-0352 修复)",
+    "severity": "nit",
+    "claim": "注释字面为「派derive 而非手抄」,是「派生」改写为「derive」时的编辑残留,语义需读者脑补",
+    "relevance": "相关",
+    "fix": "改为「派生(derive)而非手抄」或径写「derive 而非手抄」"
   }
 ]
