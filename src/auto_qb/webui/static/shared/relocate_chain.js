@@ -34,16 +34,14 @@
     limit: "链路过长",
   };
 
-  // job phase -> 用户状态词(与 P1 状态词表同口径): watching 归「迁移中」,
-  // moved/armed/removing/removed/finalizing 归「待收尾」(计划 P1 表「用户状态」行)
+  // job phase -> 用户状态词(与 P1 状态词表同口径; S4 相位模型): watching 归「迁移中」,
+  // moved/armed/rewritten 归「待收尾」(旧收尾窗三相位已退役, 旧账在加载侧已映射)
   const REL_CHAIN_PHASE_TEXT = {
     moving: "迁移中",
     watching: "迁移中",
     moved: "待收尾",
     armed: "待收尾",
-    removing: "待收尾",
-    removed: "待收尾",
-    finalizing: "待收尾",
+    rewritten: "待收尾",
     failed: "迁移失败",
     done: "已完成",
     cancelled: "已取消",

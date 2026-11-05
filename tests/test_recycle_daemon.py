@@ -81,7 +81,6 @@ import pytest
 from auto_qb.core import fastresume as frmod
 from auto_qb.hr.bencode import compute_infohashes
 from auto_qb.infra import relocate_journal as rj
-from auto_qb.tools import finalize_watch as fw
 from auto_qb.tools import recycle_daemon as rd
 
 HOST = "127.0.0.1"
@@ -151,15 +150,15 @@ def _write_job(
 
 
 def _stub_qb(monkeypatch, state):
-    """三证桩: 端口证桩在 socket.create_connection(连得上=在/拒连=不在, fw 与 rd 共用同一
-    socket 模块对象, 一处桩两头生效); 进程名册恒含 qbittorrent(端口拒连时 _proc_absent 按
+    """三证桩: 端口证桩在 socket.create_connection(连得上=在/拒连=不在, rd 内三证判据
+    消费同一 socket 模块对象); 进程名册恒含 qbittorrent(端口拒连时 _proc_absent 按
     实例级判定短路, 名册内容不参与判定)。state["up"]=True 即「qB 在」。"""
     def _connect(addr, timeout=None):
         if state["up"]:
             return mock.MagicMock()
         raise OSError(10061, "refused")
 
-    monkeypatch.setattr(fw.socket, "create_connection", _connect)
+    monkeypatch.setattr(rd.socket, "create_connection", _connect)
     monkeypatch.setattr(rd, "_qb_process_names", lambda: ("qbittorrent.exe", ))
 
 

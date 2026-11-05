@@ -456,7 +456,7 @@ process.stdout.write(JSON.stringify({
   phase:call('relChainPhaseText','armed'),
   phaseWatching:call('relChainPhaseText','watching'),
   phaseMoved:call('relChainPhaseText','moved'),
-  phaseRemoving:call('relChainPhaseText','removing'),
+  phaseRewritten:call('relChainPhaseText','rewritten'),
   probed:Object.assign(M,{fmtTs:()=>'T'})['relChainProbedText'].call(
     Object.assign({},M,{fmtTs:()=>'T',relChain:{data:{probed_at:1,cached:false}}}))
 }));
@@ -480,7 +480,7 @@ process.stdout.write(JSON.stringify({
     # 十个相位都必须落在用户状态词表(P1): 落空会显示「未知状态」
     assert out["phaseWatching"] == "迁移中"
     assert out["phaseMoved"] == "待收尾"
-    assert out["phaseRemoving"] == "待收尾"
+    assert out["phaseRewritten"] == "待收尾"
     assert out["probed"].startswith("探测于 T")
 
 
@@ -544,8 +544,9 @@ def test_finalize_now_route_contract(web_env, tmp_path):
 
 def test_chain_finalize_face_in_response(web_env, tmp_path):
     """链响应附带 finalize 反馈面(不进缓存): pending 现读(rewrites 已收口出账) /
-    daemon_stale(无账=True, 健康在位=False) / window 相位单点(armed=False, removed=True);
-    旧链 spec(无 bt_backup)与 journal 终态恒 pending=0(「重启 qB 即完成」只对新链成立)"""
+    daemon_stale(无账=True, 健康在位=False) / window 相位单点(armed=True, rewritten=True,
+    S4 新相位集; 前段 moved=False); 旧链 spec(无 bt_backup)与 journal 终态恒 pending=0
+    (「重启 qB 即完成」只对新链成立)"""
     from auto_qb.infra import relocate_journal as rj
 
     src = tmp_path / "src"
@@ -580,12 +581,15 @@ def test_chain_finalize_face_in_response(web_env, tmp_path):
     data = client.get(f"/api/relocate/chain?hash={HASH}", headers=_auth(mgr)).json()
     face = data["finalize"]
     assert face["job_id"] == "j1" and face["phase"] == "armed", face
-    assert face["window"] is False and face["pending"] == 1 and face["daemon_stale"] is True, face
+    assert face["window"] is True and face["pending"] == 1 and face["daemon_stale"] is True, face
 
-    # 相位单点: removed 在收尾窗口集 -> window True
-    mgr.ctx.relocate.jobs_snapshot = lambda: SimpleNamespace(jobs=(dict(job, phase="removed"), ), generation=2)
+    # 相位单点: rewritten 也在收尾窗口集 -> window True; 前段 moved -> False
+    mgr.ctx.relocate.jobs_snapshot = lambda: SimpleNamespace(jobs=(dict(job, phase="rewritten"), ), generation=2)
     data = client.get(f"/api/relocate/chain?hash={HASH}", headers=_auth(mgr)).json()
     assert data["finalize"]["window"] is True, data["finalize"]
+    mgr.ctx.relocate.jobs_snapshot = lambda: SimpleNamespace(jobs=(dict(job, phase="moved"), ), generation=3)
+    data = client.get(f"/api/relocate/chain?hash={HASH}", headers=_auth(mgr)).json()
+    assert data["finalize"]["window"] is False, data["finalize"]
 
     # daemon 健康在位(pid 活 + 心跳新鲜) -> daemon_stale False
     rj.write_daemon_state(str(tmp_path), rj.instance_key("127.0.0.1", 1), os.getpid())

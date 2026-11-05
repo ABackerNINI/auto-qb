@@ -40,8 +40,9 @@ class LifecycleMixin:
     def stop(self) -> None:
         """优雅退出: job 账已在每次推进时落 state(周期落盘由 state 服务兜底), 此处只补一次
 
-        guardian 是独立进程, 不随 auto-qb 消亡(§3.5: 它要在 auto-qb 不在时也能收尾) ——
-        故 stop() 不杀 guardian, 也不删链接(qB 可能还在跑, 删链接会造假种)。
+        回收 daemon 是独立进程, 不随 auto-qb 消亡(D10 收敛公理: 它要在 auto-qb 不在时
+        也能捕窗改写) —— 故 stop() 不碰 daemon(退位走 pid 抢占自检自杀, 绝不 taskkill),
+        也不删别名(qB 可能还在跑, 删链接会造假种)。
         """
         try:
             self._persist()
@@ -263,16 +264,14 @@ class LifecycleMixin:
         self._reconcile_pending_tags()
 
     def _advance(self, job: RelocateJob) -> None:
-        """按相位分派一步"""
+        """按相位分派一步(S4 相位模型: 前段 moving/watching/moved + 收尾窗 armed/rewritten)"""
         rt = self._rt.setdefault(job.job_id, {})
         phase = job.phase
         if phase in (ru.PHASE_MOVING, ru.PHASE_WATCHING):
             self._step_move(job, rt)
         elif phase == ru.PHASE_MOVED:
             self._step_moved(job, rt)
-        elif phase == ru.PHASE_FINALIZING:
-            self._step_finalize(job, rt)
-        elif phase in (ru.PHASE_ARMED, ru.PHASE_REMOVING, ru.PHASE_REMOVED):
+        elif phase in ru.FINALIZE_WINDOW_PHASES:
             self._step_reconcile(job, rt)
 
     def _dry_run(self) -> bool:

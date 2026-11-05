@@ -88,7 +88,7 @@ def pick_job_for(snapshot: Optional[Mapping], torrent_hash: str) -> Optional[Map
     """该 hash 的**当前** job 视图(收尾反馈面/按钮判据的取数单点)
 
     与 build_alias_index 同一套选取序(job_rank: 非终态优先, 再 updated_at 新→旧),
-    但不限别名命中 —— 收尾窗口相位(removing/removed/finalizing)下别名可能已删,
+    但不限别名命中 —— 收尾窗口相位(armed/rewritten)下别名状态各异,
     job 登记仍在, 反馈面照常要能取到。无快照/无命中 ⇒ None。
     """
     if snapshot is None:
@@ -109,12 +109,12 @@ def finalize_face(job: Mapping, data_dir: str, host: str, port: int, *, now: Opt
     """收尾反馈面最小面(计划 26-11-05-0808 §3.2「失败反馈面」行)+ D14 按钮判据
 
     输入 job = pick_job_for 的快照视图; 字段:
-    - window: 相位在 FINALIZE_WINDOW_PHASES(「立即收尾」按钮可见判据单点 —— 本期旧
-      相位集 {removing, removed, finalizing}; 下一任务重定义相位时随该单点走);
+    - window: 相位在 FINALIZE_WINDOW_PHASES(「立即收尾」按钮可见判据单点 —— S4 相位
+      模型重定义后为 {armed, rewritten}, 随该单点自动跟随);
     - pending: journal 待改写成员数(rj.pending_members 现读 spec+journal.rewrites);
     - daemon_stale: 回收 daemon 死/心跳过期(rj.daemon_stale 判据单点)。
-    只对新链 spec(spec 带 bt_backup 字段)取证: 旧链 job 的收尾不走 fastresume 改写,
-    「重启 qB 即完成」对它不成立, pending 恒 0 防误导。journal 已终态 ⇒ pending 恒 0
+    只对新链 spec(spec 带 bt_backup 字段)取证: 无 bt_backup 的 job 不走 fastresume 改写
+    (S1 五闸应已拦下), pending 恒 0 防误导。journal 已终态 ⇒ pending 恒 0
     (已收口/已取消, 反馈面不再悬)。本函数只读 spec/journal 文件(原子写读侧安全),
     零主循环访问、零 state.json 触碰(D13 账本契约的读侧对称)。
     """

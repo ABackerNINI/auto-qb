@@ -6,9 +6,9 @@ taskkill(进程红线)/窗口外任何 fastresume 落盘(N1 铁律: qB 运行期
 
 形制(D12 简化): 每 qB 实例至多一个 watcher;触发只有「qB 下线」一个事件 —— 无 TCP
 nudge/无端口文件/无兜底扫;窗口开头现读 pending 集(supersede/取消即时生效, 窗口内逐拍
-现读续保);进窗判据照搬 guardian 三证(进程不在 + 端口拒连 + 稳定 STABLE_WINDOW, 判据
-函数原样复用 finalize_watch —— 其整文件退役后由本模块继承);退位 = pid 抢占 + 旧 daemon
-自检自杀, 绝不 taskkill;心跳 = daemon.json(pid/ts)每 HEARTBEAT_INTERVAL touch。
+现读续保);进窗判据 = 三证(进程不在 + 端口拒连 + 稳定 STABLE_WINDOW) —— 判据函数已随
+finalize_watch.py 整文件退役原样随迁进本模块(本文件是其唯一 home, S4);退位 = pid 抢占 +
+旧 daemon 自检自杀, 绝不 taskkill;心跳 = daemon.json(pid/ts)每 HEARTBEAT_INTERVAL touch。
 
 账本(D13/D8): 只写 job journal(rewrites 成员账 + rewritten 相位), 绝不碰 state.json;
 每个下线窗口限一轮会话, 窗口内失败重试至成功或 qB 回升, 失败计数(fails)进账;qB 抢先
@@ -16,8 +16,8 @@ nudge/无端口文件/无兜底扫;窗口开头现读 pending 集(supersede/取�
 半途崩溃/退位/回升都留下一致账态(逐成员即改即记账, 原子写), 下一窗口按账重放。
 
 发现面: 扫 <data_dir>/relocate/*.spec.json 中属于本实例(host/port 字面相等, 与
-bt_backup_path_of 同口径)且带 bt_backup 字段(**新链 opt-in 标记** —— 旧链 spec 无此
-字段, 仍归旧链管辖, 本模块不碰)的 job;pending 口径单点在
+bt_backup_path_of 同口径)且带 bt_backup 字段(新链 spec 必带 —— S1 五闸保证 armed 前
+bt_backup 已配置)的 job;pending 口径单点在
 relocate_journal.pending_members = 已记账(spec 成员清单)且 journal.rewrites 未收口
 (REWRITE_SETTLED 之外)的成员。
 
@@ -30,23 +30,102 @@ setLocation/取消/再迁移只在 qB 在线时可达;两侧写不同文件(job 
 """
 import argparse
 import os
+import socket
+import subprocess
 import sys
 import time
 from typing import Optional
 
 from ..core import fastresume
 from ..infra import relocate_journal as rj
-from .finalize_watch import (  # 三证判据原样复用(finalize_watch 退役后由本模块继承)
-    STABLE_WINDOW,
-    _port_refused,
-    _proc_absent,
-    _qb_process_names,
-)
 
 HEARTBEAT_INTERVAL = 10.0  # daemon.json 心跳周期(D12: 每 10s touch)
 HEARTBEAT_MAX_AGE = 60.0  # 心跳过期线(对账判挂死/重拉的口径, 与旧 guardian 判过期同量级)
 POLL_INTERVAL = 5.0  # 主循环节拍(也是窗口内失败重试的节拍, D8)
 GRACE_EXIT = 60.0  # pending 集空后的宽限退出时长(D12)
+
+# ---------------------------------------------------------------- 三证判据(随 finalize_watch.py 整文件退役原样随迁, S4)
+# 「qB 下线」进窗判据的三证: 进程不在(证一) + 端口拒连(证二) + 该状态稳定 STABLE_WINDOW
+# 秒(证三)。严于 WebUI 探测 —— 这是 N1 铁律(qB 运行期秒级重写 fastresume)的守门粒度。
+
+
+def _port_refused(host: str, port: int, timeout: float = 1.0) -> bool:
+    """证二: 端口连不上 ⇒ 拒连(超时同按连不上处理: 我们要的是「qB 不在」, 不是诊断网络)"""
+    if not port:
+        return True  # 无端口可判 ⇒ 视为连不上(配合进程证一起才算三证)
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return False
+    except OSError:
+        return True
+
+
+def _names_from_tasklist() -> tuple:
+    """Windows: tasklist CSV 首列(引号内的映像名)"""
+    out = subprocess.run(
+        ["tasklist", "/NH", "/FO", "CSV"],
+        capture_output=True,
+        text=True,
+        timeout=10,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+    )
+    names = []
+    for line in (out.stdout or "").splitlines():
+        if line.startswith('"'):
+            names.append(line.split('"')[1].lower())
+    return tuple(names)
+
+
+def _names_from_proc() -> tuple:
+    """Linux: /proc/<pid>/comm(容器里普遍可用, 零子进程)"""
+    names = []
+    for pid in os.listdir("/proc"):
+        if not pid.isdigit():
+            continue
+        try:
+            with open(f"/proc/{pid}/comm", "r", encoding="utf-8") as f:
+                names.append(f.read().strip().lower())
+        except OSError:
+            continue
+    return tuple(names)
+
+
+def _names_from_ps() -> tuple:
+    """其它 POSIX: ps -eo comm="""
+    out = subprocess.run(["ps", "-eo", "comm="], capture_output=True, text=True, timeout=10)
+    return tuple(n.strip().lower() for n in (out.stdout or "").splitlines())
+
+
+def _qb_process_names() -> tuple:
+    """进程名清单(跨平台尽力而为: 判不出返回空, 调用方按「未能证明进程不存在」处理)"""
+    try:
+        if os.name == "nt":
+            return _names_from_tasklist()
+        if os.path.isdir("/proc"):
+            return _names_from_proc()
+        return _names_from_ps()
+    except Exception:  # noqa: BLE001 - 判不出进程表: 保守(不算「已退出」)
+        return ()
+
+
+def _proc_absent(names: tuple, host: str = "", port: int = 0) -> bool:
+    """证一: 该端点的 qB 进程不存在; 进程表读不到且无端口证据 ⇒ False(未证明)
+
+    !实例级判定(不再只按全机进程名): 同机可能同时跑着**别的** qB 实例(日常库/测试库),
+    全机名册只要有一个 qbittorrent.exe 就恒「在」, 收尾永不触发(P7 真机实测: 日常实例
+    在跑 ⇒ daemon 永远等不到窗口)。口径:
+    - 端点已拒连 ⇒ 该实例没有进程在服务(同机其它 qB 与此无关) ⇒ 证一成立;
+    - 端点仍可连 ⇒ 该实例在服务 ⇒ 证一不成立(此时证二也不成立, 双证同向);
+    - 无端口可判(port=0) ⇒ 退回全机名册(旧行为, 兼容无端口场景)。
+    """
+    if port and _port_refused(host or "127.0.0.1", port):
+        return True
+    if not names:
+        return False
+    return not any("qbittorrent" in n for n in names)
+
+
+STABLE_WINDOW = 30.0  # 证三: 连续判定「qB 不在」这么久才算下线窗口开启
 
 
 def _window_open(host: str, port: int) -> bool:

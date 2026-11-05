@@ -9,20 +9,16 @@ from typing import Optional, Sequence
 
 from ..core.modules import relocate_units as ru
 
-# 相位 -> 展示状态归并(plan 数据契约):
-#   moving / watching                         -> moving(进行中)
-#   moved / armed / removing / removed / finalizing -> pending_finalize(待收尾, armed)
-#   done / failed / cancelled                 -> 同名终态
+# 相位 -> 展示状态归并(plan 数据契约; S4 相位模型: 收尾窗 = {armed, rewritten}):
+#   moving / watching                    -> moving(进行中)
+#   moved / armed / rewritten            -> pending_finalize(待收尾, fastresume 改写账在途)
+#   done / failed / cancelled            -> 同名终态
 MOVING_PHASES = frozenset({ru.PHASE_MOVING, ru.PHASE_WATCHING})
-PENDING_PHASES = frozenset(
-    {
-        ru.PHASE_MOVED,
-        ru.PHASE_ARMED,
-        ru.PHASE_REMOVING,
-        ru.PHASE_REMOVED,
-        ru.PHASE_FINALIZING,
-    }
-)
+PENDING_PHASES = frozenset({
+    ru.PHASE_MOVED,
+    ru.PHASE_ARMED,
+    ru.PHASE_REWRITTEN,
+})
 _ACTIVE_STATES = frozenset({"moving", "pending_finalize"})
 # 组级优先序: failed > moving > pending_finalize > done。cancelled 不进组级标注
 # (已撤销 = 无迁移在进行, 不挂徽标)。

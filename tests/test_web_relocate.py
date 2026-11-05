@@ -145,7 +145,8 @@ def test_relocate_module_precheck_target_conflict_gate(tmp_path, monkeypatch):
 
 
 def test_relocate_module_precheck_unfinished_job_gate(tmp_path, monkeypatch):
-    """非终态 job 碰本组 -> blocked(unfinished): 链接套链接会让旧迁移收尾失效(S10)"""
+    """搬迁在途 job 碰本组 -> blocked(unfinished): 叠加 setLocation 互相覆盖(S10; D15 收窄后
+    前段相位仍拦, 收尾窗 armed/rewritten 放行 —— 放行面单测在 test_relocate_units)"""
     pin_disk_usage(monkeypatch)
     mgr, client, src, dst, content, _ = relocate_env(tmp_path, data_dir=False)
     mod = mgr.host.get("relocate")
@@ -158,7 +159,7 @@ def test_relocate_module_precheck_unfinished_job_gate(tmp_path, monkeypatch):
             dst=dst,
             scope=content,
             alias_kind="file",
-            phase="armed",
+            phase="moving",
         )
     )
     item = mod.relocate_precheck(["HA", "HB"], dst)[0]
@@ -769,9 +770,9 @@ def test_relocate_module_precheck_add(tmp_path):
         )
     )
     r = mod.precheck_add(src, "Show")
-    assert r["cls"] == "confirm" and r["reasons"][0]["gate"] == "alias_scope"
+    assert r["cls"] == "confirm" and r["reasons"][0]["gate"] == "finalize_window", r
     assert _fwd(r["actual_path"]) == _fwd(os.path.join(dst, "Show")) and r["volume_free"] is not None
-    # 收尾窗口: confirm 警示重复落盘
+    # 收尾窗口(rewritten): confirm 警示删链门永久依赖(D16)
     mod.register_job(
         RelocateJob(
             job_id="j2",
@@ -781,16 +782,17 @@ def test_relocate_module_precheck_add(tmp_path):
             dst=dst,
             scope=content,
             alias_kind="dir",
-            phase="removed"
+            phase="rewritten"
         )
     )
     r = mod.precheck_add(src, "Late.Show")
     assert r["cls"] == "confirm" and r["reasons"][0]["gate"] == "finalize_window"
-    # 同名链接覆盖: 落点是真硬链接 -> confirm alias_file
+    # 同名链接覆盖(前段相位 moved): 落点是真硬链接 -> confirm alias_file
+    # (收尾窗相位下同名落点由分支 1 finalize_window 先行拦截 —— D16 判据只看 save_path==src)
     mod._jobs.clear()
     mod.register_job(
         RelocateJob(
-            job_id="j3", hashes=("HA", ), mover="HA", src=src, dst=dst, scope=content, alias_kind="file", phase="armed"
+            job_id="j3", hashes=("HA", ), mover="HA", src=src, dst=dst, scope=content, alias_kind="file", phase="moved"
         )
     )
     landing = os.path.join(content, "S01E01.mkv")

@@ -34,15 +34,17 @@
 - test_evaluate_group_cross_volume_note
 - test_evaluate_group_form_reject_gate
 - test_job_dict_roundtrip: job 落账 roundtrip(含 move_issued 往返 + 老账缺位按未下发)
-- test_job_from_dict_type_error_and_reconcile_fallthrough
+- test_job_from_dict_type_error_and_legacy_phase_map: 旧账相位前向映射(S4)+ 新对账兜底
 - test_plan_empty_files_reject
 - test_plan_hard_max_dir_kind_none_suffix
 - test_reconcile_table_rows
+- test_finalize_window_phase_set_redefined: S4 相位集 {armed, rewritten}+ 旧三相位退役
+- test_blocks_relocation_finalize_window_release: D15 收窄直测(收尾窗放行/前段仍拦)
 - test_ensure_daemon_action_three_way: S3 新链对账判据三分(pending 空/daemon 健康/pending+stale
   -> ensure_daemon)+ 新动作不在 reconcile 旧表(本期两链并存, 计划 26-11-05-0808 §3.2)
 - test_recover_exec_phase
-- test_resolve_physical_and_finalize_members
-- test_finalize_scope_candidate_prefilter
+- test_resolve_physical_layer1
+- test_job_from_dict_type_error_and_legacy_phase_map
 - test_scope_hit_flat_does_not_cover_subdirs
 - test_stall_verdict_boundaries
 - test_within_empty_scope_never_matches
@@ -54,7 +56,6 @@ W8(R32) S5a 守阵追加(变异测试 classify-units 真洞簇钉面):
 - test_same_volume_proof_tolerance_band: 同卷证明容差带(1GiB 绝对带不翻倍 + 恰等边界)
 - test_job_dict_full_roundtrip_values: 落账往返保值(非默认字段全量)+ 坏 plan 形状拒收
 - test_scope_hit_src_guard_and_resolve_order: src 守卫 + 解析序(终态跳过不中断)+ 收尾去重 + 历史账兜底链
-- test_reconcile_timeout_boundaries_and_tail_wait: 对账超时判据(未超时恒等/恰等不算超/心跳 60s 边界)
 - test_stall_verdict_grow_and_late_warn_branches: 停滞 WARN 侧支(增长/末支/moving 恰等边界)
 - test_plan_layout_filter_and_last_mile_contract: 空名过滤 + 末段 link_kind + 缺省实参契约
 - test_plan_dir_link_error_long_path_text: 目录错误前段拼进长路径拒绝文案(不炸/不丢/不伪空格)
@@ -278,8 +279,13 @@ def test_evaluate_group_idempotent_skip():
 
 
 def test_evaluate_group_unfinished_job_blocks():
-    """非终态 job 碰本组 -> blocked(unfinished); 终态 job 不拦(§3.6 第 14 行 / S10)"""
-    job = ru.RelocateJob(
+    """搬迁在途 job 碰本组 -> blocked(unfinished); 终态不拦; 收尾窗放行(D15 收窄)
+
+    S4(D15): blocks_relocation 的同组拦截收窄到前段相位(moving/watching/moved) ——
+    armed/rewritten 放行同组再迁(未收尾再迁移支线, supersede 重定向本体在 S5);
+    终态 job 照旧不拦。
+    """
+    moving = ru.RelocateJob(
         job_id="j1",
         hashes=("HA", "HB"),
         mover="HA",
@@ -287,17 +293,31 @@ def test_evaluate_group_unfinished_job_blocks():
         dst=T,
         scope=os.path.join(S, "Show"),
         alias_kind="dir",
-        phase=ru.PHASE_ARMED,
+        phase=ru.PHASE_MOVING,
     )
-    item = ru.evaluate_group(_ok_facts(jobs=(job, )))
+    item = ru.evaluate_group(_ok_facts(jobs=(moving, )))
     assert item["cls"] == ru.CLS_BLOCKED and "unfinished" in _gates(item)
     done = ru.RelocateJob(
         job_id="j2", hashes=("HA", ), mover="HA", src=S, dst=T, scope=os.path.join(S, "Show"), phase=ru.PHASE_DONE
     )
     item2 = ru.evaluate_group(_ok_facts(jobs=(done, )))
     assert item2["cls"] == ru.CLS_OK and "unfinished" not in _gates(item2)
-    # hash 不相交但作用域覆盖内容根 -> 同样拦(别名是作用域不是快照, D7) —— 仅目录别名:
-    # 目录链接会把落入作用域的写入重定向到 T, 别组再迁会穿链接搬进旧 job 目标
+    # 收尾窗(armed/rewritten)放行同组再迁: D15 放行集(S5 supersede 的闸门前提)
+    for ph in (ru.PHASE_ARMED, ru.PHASE_REWRITTEN):
+        fin = ru.RelocateJob(
+            job_id="jf",
+            hashes=("HA", "HB"),
+            mover="HA",
+            src=S,
+            dst=T,
+            scope=os.path.join(S, "Show"),
+            alias_kind="dir",
+            phase=ph,
+        )
+        itemf = ru.evaluate_group(_ok_facts(jobs=(fin, )))
+        assert itemf["cls"] == ru.CLS_OK and "unfinished" not in _gates(itemf), ph
+    # hash 不相交但作用域覆盖内容根 -> 同样拦(别名是作用域不是快照, D7) —— 仅目录别名,
+    # 且**全部非终态相位保留**(armed/rewritten 期间别名在位, 别组写入照样穿链接进旧 job 目标)
     other = ru.RelocateJob(
         job_id="j3",
         hashes=("HZ", ),
@@ -305,7 +325,7 @@ def test_evaluate_group_unfinished_job_blocks():
         src=S,
         dst=T,
         scope=os.path.join(S, "Show"),
-        phase=ru.PHASE_MOVING,
+        phase=ru.PHASE_ARMED,
         plan={"form": ru.FORM_DIR_ALIAS},
     )
     item3 = ru.evaluate_group(_ok_facts(jobs=(other, )))
@@ -325,7 +345,7 @@ def test_evaluate_group_unfinished_job_blocks():
     )
     item4 = ru.evaluate_group(_ok_facts(jobs=(flat, )))
     assert item4["cls"] == ru.CLS_OK and "unfinished" not in _gates(item4)
-    # 同组(hash 相交)仍拦: 逐文件链接组自己的成员再迁照旧 blocked
+    # 同组(hash 相交)在前段相位仍拦: 搬迁在途叠加 setLocation 会互相覆盖
     same_member = ru.RelocateJob(
         job_id="j5",
         hashes=("HA", ),
@@ -511,21 +531,25 @@ def _file_job(phase=ru.PHASE_ARMED, paths=("Show/S01E01.mkv", )):
 
 
 def test_evaluate_add_rows():
-    """§3.6 第 1/3/8/15 行 + 第三方链接落点(无 job 登记)"""
-    # 行 15: 目录别名作用域命中 -> confirm + 实际落点(在 dst 下) + 卷剩余
+    """§3.6 第 1/3/8/15 行(S4/D16 重排: 收尾窗分支先行且承重) + 第三方链接落点(无 job 登记)"""
+    # 行 1': 收尾窗 + 目录别名(D16 变更承重) -> confirm(finite_window) + 实际落点(在 dst 下) + 卷剩余
     r = ru.evaluate_add(ru.AddFacts(save_path=S, name="Show", jobs=(_dir_job(), ), target_free=5000))
     assert r["cls"] == ru.CLS_CONFIRM
     assert r["actual_path"] and r["actual_path"].replace("\\", "/").startswith(T)
-    assert r["volume_free"] == 5000 and r["reasons"][0]["gate"] == "alias_scope"
-    # 行 1: 逐文件链接作用域 + 异名落点 -> 原盘真实目录, 无影响
-    r = ru.evaluate_add(ru.AddFacts(save_path=S, name="Show", jobs=(_file_job(), )))
+    assert r["volume_free"] == 5000 and r["reasons"][0]["gate"] == "finalize_window"
+    assert any("删链门" in r["reasons"][0]["text"] for _ in (0, ))
+    # 行 1: 前段相位(moved)+ 逐文件链接作用域 + 异名落点 -> 原盘真实目录, 无影响
+    r = ru.evaluate_add(ru.AddFacts(save_path=S, name="Show", jobs=(_file_job(phase=ru.PHASE_MOVED), )))
     assert r["cls"] == ru.CLS_OK and r["reasons"] == []
-    # 行 3: 逐文件链接作用域 + 落点本身是链接(同名) -> confirm + 覆盖警示
+    # 行 1'': 收尾窗 + 逐文件链接 + 异名落点(D16): 账面记旧根 -> 删链门永久依赖 -> confirm
+    r = ru.evaluate_add(ru.AddFacts(save_path=S, name="Show", jobs=(_file_job(), )))
+    assert r["cls"] == ru.CLS_CONFIRM and r["reasons"][0]["gate"] == "finalize_window"
+    # 行 3: 前段相位 + 落点本身是链接(同名) -> confirm + 覆盖警示
     r = ru.evaluate_add(
         ru.AddFacts(
             save_path=S,
             name="Show",
-            jobs=(_file_job(), ),
+            jobs=(_file_job(phase=ru.PHASE_MOVED), ),
             landing_is_link=True,
             landing_link_kind="hardlink",
             landing_link_target="H:/reloc/S01E01.mkv",
@@ -533,8 +557,8 @@ def test_evaluate_add_rows():
     )
     assert r["cls"] == ru.CLS_CONFIRM and r["reasons"][0]["gate"] == "alias_file"
     assert r["actual_path"] == "H:/reloc/S01E01.mkv" and "覆盖" in r["reasons"][0]["text"]
-    # 行 8: 收尾窗口(链接已删未 finalize) -> confirm 警示重复落盘
-    r = ru.evaluate_add(ru.AddFacts(save_path=S, name="Whatever", jobs=(_dir_job(phase=ru.PHASE_REMOVED), )))
+    # 行 8: 收尾窗口(armed/rewritten, D16 变更承重) -> confirm 警示删链门永久依赖
+    r = ru.evaluate_add(ru.AddFacts(save_path=S, name="Whatever", jobs=(_dir_job(phase=ru.PHASE_REWRITTEN), )))
     assert r["cls"] == ru.CLS_CONFIRM and r["reasons"][0]["gate"] == "finalize_window"
     # 无 job + 落点是第三方链接 -> confirm 警示
     r = ru.evaluate_add(
@@ -636,7 +660,8 @@ def test_evaluate_add_skips_terminal_and_unmatched_jobs():
     )
     hit = _dir_job()
     r = ru.evaluate_add(ru.AddFacts(save_path=S, name="Show", jobs=(done, other, hit), target_free=7))
-    assert r["cls"] == ru.CLS_CONFIRM and r["reasons"][0]["gate"] == "alias_scope"
+    assert r["cls"] == ru.CLS_CONFIRM and r["reasons"][0]["gate"] == "finalize_window", r
+    assert r["actual_path"] and r["actual_path"].replace("\\", "/").startswith(T)
 
 
 # ---------------------------------------------------------------- P3/P6 纯判定(P3 执行期, P6 对账)
@@ -659,38 +684,42 @@ def _job(**kw):
 
 
 def test_reconcile_table_rows():
-    """§3.5 对账表逐行: 8 行 + 超时兜底(每行一条断言, 行号与文档表一致)"""
+    """S4 新对账表逐行(判据面): 全员到 dst -> verify / 别名丢失+qB 在 -> rebuild / 其余 wait"""
     job = _job()
-    # 1 armed + 链接在 + 心跳正常 -> wait
-    assert ru.reconcile(job, journal_phase=ru.PHASE_ARMED, link_present=True, heartbeat_age=5) == ru.ACT_WAIT
-    # 1' armed + 链接在 + 心跳过期 -> 重拉 guardian
-    assert ru.reconcile(job, journal_phase=ru.PHASE_ARMED, link_present=True, heartbeat_age=999) == ru.ACT_RESPAWN
-    # 2 removing + 链接在 + qB 不在 -> guardian 重删
-    assert ru.reconcile(job, journal_phase=ru.PHASE_REMOVING, link_present=True, qb_up=False) == ru.ACT_REDELETE
-    # 3 removing + 链接在 + qB 回来了 -> 撤销删除意图
-    assert ru.reconcile(job, journal_phase=ru.PHASE_REMOVING, link_present=True, qb_up=True) == ru.ACT_REVERT_INTENT
-    # 4 removing/removed + 链接无 + qB 在 + 种子正常 -> 重建链接
-    assert ru.reconcile(job, journal_phase=ru.PHASE_REMOVED, link_present=False, qb_up=True) == ru.ACT_REBUILD
-    # 5 同前 + 种子 missingFiles -> 收尾
-    assert ru.reconcile(
-        job, journal_phase=ru.PHASE_REMOVED, link_present=False, qb_up=True, seed_state="missingFiles"
-    ) == ru.ACT_FINALIZE
-    # 6 removed + 链接无 + qB 不在 -> 等(超时 -> failed)
-    assert ru.reconcile(job, journal_phase=ru.PHASE_REMOVED, link_present=False, qb_up=False) == ru.ACT_WAIT
-    assert ru.reconcile(
-        job,
-        journal_phase=ru.PHASE_REMOVED,
-        link_present=False,
-        qb_up=False,
-        elapsed=99999,
-        finalize_timeout=3600,
-    ) == ru.ACT_FAILED_TIMEOUT
-    # 7 种子已不存在(任意相位) -> failed, 保留现场
-    assert ru.reconcile(job, journal_phase=ru.PHASE_REMOVED, seed_state="gone") == ru.ACT_FAILED_GONE
-    # 8 链接在 + qB 在 + 全组已在 dst -> 已被外部完成
-    assert ru.reconcile(
-        job, journal_phase=ru.PHASE_ARMED, link_present=True, save_path_at_dst=True
-    ) == ru.ACT_DONE_EXTERNAL
+    # armed 做种中(别名在, 未全员到 dst) -> wait
+    assert ru.reconcile(job, alias_present=True, qb_up=True, all_at_dst=False) == ru.ACT_WAIT
+    # qB 不在(等下线窗口/等重启加载) -> wait(journal 悬挂是良性态, D10)
+    assert ru.reconcile(job, alias_present=True, qb_up=False, all_at_dst=False) == ru.ACT_WAIT
+    assert ru.reconcile(job, alias_present=False, qb_up=False, all_at_dst=False) == ru.ACT_WAIT
+    # 别名丢失 + qB 在 -> rebuild(rebuild-from-journal 判据面)
+    assert ru.reconcile(job, alias_present=False, qb_up=True, all_at_dst=False) == ru.ACT_REBUILD
+    # 全员已在目标位置(qB 在) -> verify(核验+删链推进单点; 别名在否不影响判据)
+    assert ru.reconcile(job, alias_present=True, qb_up=True, all_at_dst=True) == ru.ACT_VERIFY
+    assert ru.reconcile(job, alias_present=False, qb_up=True, all_at_dst=True) == ru.ACT_VERIFY
+    # qB 不在即使已到 dst -> wait(qB 回来核验; 下线窗口是 daemon 现场)
+    assert ru.reconcile(job, alias_present=True, qb_up=False, all_at_dst=True) == ru.ACT_WAIT
+
+
+def test_finalize_window_phase_set_redefined():
+    """S4 相位模型: FINALIZE_WINDOW_PHASES == {armed, rewritten}(D16 变更承重);
+    旧收尾窗三相位常量退役; PENDING_TAG_PHASES 与收尾窗同集(标签镜像窗口自动跟随);
+    rewritten 非终态(终态集不变)"""
+    assert ru.FINALIZE_WINDOW_PHASES == frozenset({ru.PHASE_ARMED, ru.PHASE_REWRITTEN})
+    assert ru.PENDING_TAG_PHASES == ru.FINALIZE_WINDOW_PHASES
+    assert ru.PHASE_REWRITTEN == "rewritten"
+    assert not hasattr(ru, "PHASE_REMOVING") and not hasattr(ru,
+                                                             "PHASE_REMOVED") and not hasattr(ru, "PHASE_FINALIZING")
+    assert ru.PHASE_REWRITTEN not in ru.TERMINAL_PHASES
+
+
+def test_blocks_relocation_finalize_window_release():
+    """D15 收窄直测: 收尾窗(armed/rewritten)同组不拦; 前段(moving/watching/moved)仍拦"""
+    for ph, expect in (
+        (ru.PHASE_ARMED, False), (ru.PHASE_REWRITTEN, False), (ru.PHASE_MOVING, True), (ru.PHASE_WATCHING, True),
+        (ru.PHASE_MOVED, True)
+    ):
+        job = _job(phase=ph)
+        assert job.blocks_relocation(("HA", ), os.path.join(S, "Show")) is expect, ph
 
 
 def test_stall_verdict_boundaries():
@@ -710,44 +739,14 @@ def test_recover_exec_phase():
     assert ru.recover_exec_phase(False, False, False) == ru.RECOVER_STALLED
 
 
-def test_resolve_physical_and_finalize_members():
-    """物理位置解析(第 1 层) + 动态收尾集合(D7 作用域不是快照)"""
+def test_resolve_physical_layer1():
+    """物理位置解析(第 1 层): 作用域命中 -> dst; 未命中原样; 终态不解析"""
     job = _job(phase=ru.PHASE_ARMED)
     root = os.path.join(S, "Show")
     assert ru.resolve_physical(S, root, (job, )) == T  # 作用域命中 -> dst
     assert ru.resolve_physical(S, os.path.join(S, "Other"), (job, )) == S  # 未命中 -> 原样
     assert ru.resolve_physical(S, root, (_job(phase=ru.PHASE_DONE), )) == S  # 终态不解析
-    # D7 作用域覆盖只对目录别名成立: 目录别名期间新加的同内容辅种自动纳入收尾集合
-    dir_job = _job(phase=ru.PHASE_ARMED, plan={"form": ru.FORM_DIR_ALIAS})
-    members = [
-        ("HA", T, os.path.join(T, "Show")),  # mover 已在 dst
-        ("HB", S, root),  # 创建时成员
-        ("HC", S, root),  # 别名期间新加的同内容辅种(作用域内)
-        ("HX", S, os.path.join(S, "Other")),  # 作用域外
-    ]
-    assert ru.finalize_members(dir_job, members) == ("HB", "HC")
-    # P7 回归: 逐文件链接/直搬的 scope 是平铺 save_path —— 覆盖整目录会把同目录别组
-    # 一并 setLocation 到 T(真机实测: 误纳别组), 这类 job 只收自己的成员
-    flat_job = _job(phase=ru.PHASE_ARMED, scope=S, plan={"form": ru.FORM_FILE_LINKS})
-    flat_members = [
-        ("HA", T, S),  # mover
-        ("HB", S, S),  # 本组另一成员(内容根 == scope)
-        ("HC", S, os.path.join(S, "Show")),  # 同 save_path 下的别组(子目录)
-    ]
-    assert ru.finalize_members(flat_job, flat_members) == ("HB", )
-
-
-def test_finalize_scope_candidate_prefilter():
-    """收尾预过滤单点(26-10-30-0616): 只对目录别名且 save_path==src 的候选取文件表
-
-    finalize_members 覆盖分支条件的前半段抽成单点, 供 _finalize_members 预过滤复用 ——
-    两处条件漂移会让预筛漏掉该收的成员(或白取文件表)。
-    """
-    dir_job = _job(phase=ru.PHASE_ARMED, plan={"form": ru.FORM_DIR_ALIAS})
-    assert ru.finalize_scope_candidate(dir_job, S) is True  # 目录别名 + save_path==src
-    assert ru.finalize_scope_candidate(dir_job, os.path.join(S, "Other")) is False  # save_path 不在 src
-    flat_job = _job(phase=ru.PHASE_ARMED, plan={"form": ru.FORM_FILE_LINKS})
-    assert ru.finalize_scope_candidate(flat_job, S) is False  # 非目录别名: 覆盖语义不成立
+    assert ru.resolve_physical(S, root, (_job(phase=ru.PHASE_REWRITTEN), )) == T  # 收尾窗两相位都解析
 
 
 def test_scope_hit_flat_does_not_cover_subdirs():
@@ -785,13 +784,22 @@ def test_job_dict_roundtrip():
     assert ru.job_id_for("HA", T, S) != ru.job_id_for("HB", T, S)
 
 
-def test_job_from_dict_type_error_and_reconcile_fallthrough():
-    """落账坏类型 -> None; 对账无 journal 意图时的兜底三支(重建/收尾/超时)"""
+def test_job_from_dict_type_error_and_legacy_phase_map():
+    """落账坏类型 -> None; 旧账相位前向映射(S4 迁移口径): removing/removed/finalizing ->
+    armed(非终态不丢现场); 终态/新相位/未知值原样; 未知值不炸(推进分派静默跳过)"""
     assert ru.job_from_dict({"job_id": "x", "hashes": 5}) is None
+    for legacy, expect in (("removing", "armed"), ("removed", "armed"), ("finalizing", "armed")):
+        assert ru.job_from_dict({"job_id": "x", "phase": legacy}).phase == expect, legacy
+    assert ru.job_from_dict({"job_id": "x", "phase": "done"}).phase == "done"
+    assert ru.job_from_dict({"job_id": "x", "phase": "armed"}).phase == "armed"
+    assert ru.job_from_dict({"job_id": "x", "phase": "rewritten"}).phase == "rewritten"
+    assert ru.job_from_dict({"job_id": "x", "phase": "moving"}).phase == "moving"
+    assert ru.job_from_dict({"job_id": "x", "phase": "whatever-unknown"}).phase == "whatever-unknown"
+    assert ru.job_from_dict({"job_id": "x"}).phase == ru.PHASE_MOVING  # 缺相位按 moving
+    # 新对账兜底: 别名丢失 + qB 在 -> rebuild(与 seed_state/finalize_timeout 解耦, 旧输入已退役)
     job = _job()
-    assert ru.reconcile(job, link_present=False, qb_up=True) == ru.ACT_REBUILD
-    assert ru.reconcile(job, link_present=False, qb_up=True, seed_state="missingFiles") == ru.ACT_FINALIZE
-    assert ru.reconcile(job, link_present=False, qb_up=False, elapsed=10, finalize_timeout=1) == ru.ACT_FAILED_TIMEOUT
+    assert ru.reconcile(job, alias_present=False, qb_up=True) == ru.ACT_REBUILD
+    assert ru.reconcile(job, alias_present=True, qb_up=False) == ru.ACT_WAIT
 
 
 # ---------------------------------------------------------------- W8(R32) S5a 守阵追加
@@ -893,9 +901,6 @@ def test_scope_hit_src_guard_and_resolve_order():
     active = _job(job_id="a", phase=ru.PHASE_ARMED, dst="T:/two")
     root = os.path.join(S, "Show")
     assert ru.resolve_physical(S, root, (done, active)) == "T:/two"
-    # 收尾集合去重: 重复成员只收一次
-    dir_active = _job(plan={"form": ru.FORM_DIR_ALIAS})
-    assert ru.finalize_members(dir_active, [("HB", S, root), ("HB", S, root)]) == ("HB", )
     # 历史账(无 alias_kind)靠 plan.form 兜底链解析形态
     legacy_dir = ru.RelocateJob(
         job_id="lg",
@@ -919,23 +924,6 @@ def test_scope_hit_src_guard_and_resolve_order():
         plan={"form": ru.FORM_FILE_LINKS}
     )
     assert legacy_file.scope_hit(S, root) is True  # 逐文件: landing 恰等于 scope
-
-
-def test_reconcile_timeout_boundaries_and_tail_wait():
-    """对账超时判据: 未超时恒等(qB 暂离不得判死), 恰等不算超(>), 心跳恰 60s 未过期"""
-    job = _job()
-    # removing/removed 支
-    assert ru.reconcile(
-        job, journal_phase=ru.PHASE_REMOVED, link_present=False, qb_up=False, elapsed=100, finalize_timeout=3600
-    ) == ru.ACT_WAIT
-    assert ru.reconcile(
-        job, journal_phase=ru.PHASE_REMOVED, link_present=False, qb_up=False, elapsed=3600, finalize_timeout=3600
-    ) == ru.ACT_WAIT
-    # 尾支(链接不在且无 journal 意图, qB down): 同判据
-    assert ru.reconcile(job, link_present=False, qb_up=False, elapsed=100, finalize_timeout=3600) == ru.ACT_WAIT
-    assert ru.reconcile(job, link_present=False, qb_up=False, elapsed=3600, finalize_timeout=3600) == ru.ACT_WAIT
-    # 心跳恰 60s: 未过期(>)
-    assert ru.reconcile(job, journal_phase=ru.PHASE_ARMED, link_present=True, heartbeat_age=60.0) == ru.ACT_WAIT
 
 
 def test_stall_verdict_grow_and_late_warn_branches():
@@ -1054,11 +1042,13 @@ def test_evaluate_group_receipt_contract_keys():
     assert item["save_path"] == S and item["target"] == T
     assert any("目标卷剩余 1234 字节" in n for n in item["notes"])
     # 添加预检: 基座键随分支透传
-    r = ru.evaluate_add(ru.AddFacts(save_path=S, name="Show", jobs=(_dir_job(), ), target_free=5000))
-    assert r["save_path"] == S and r["name"] == "Show" and r["volume_free"] == 5000
-    assert r["notes"] == ["目标卷剩余 5000 字节"]
-    r = ru.evaluate_add(ru.AddFacts(save_path=S, name="Whatever", jobs=(_dir_job(phase=ru.PHASE_REMOVED), )))
-    assert r["actual_path"] is None and r["volume_free"] is None  # 收尾窗分支不伪造落点/卷剩余
+    r = ru.evaluate_add(
+        ru.AddFacts(save_path=S, name="Show", jobs=(_file_job(phase=ru.PHASE_MOVED), ), target_free=5000)
+    )
+    assert r["save_path"] == S and r["name"] == "Show" and r["volume_free"] is None  # 非 dir 分支不透卷剩余
+    assert r["notes"] == ["落在原盘真实目录, 与别名作用域无交叉"]
+    r = ru.evaluate_add(ru.AddFacts(save_path=S, name="Whatever", jobs=(_dir_job(phase=ru.PHASE_REWRITTEN), )))
+    assert r["actual_path"] and r["actual_path"].replace("\\", "/").startswith(T)  # 收尾窗 dir 分支给实际落点
     r = ru.evaluate_add(
         ru.AddFacts(
             save_path=S,
@@ -1109,11 +1099,13 @@ def test_evaluate_group_text_faces_representatives():
 def test_evaluate_add_flow_faces():
     """添加预检流面: 终态在前不中断收尾窗检查; 作用域外落点不进分支; rel 切片各形态(尾斜杠/反斜杠/尾x/名首x/空名)"""
     done = _dir_job(phase=ru.PHASE_DONE)
-    removing = _dir_job(phase=ru.PHASE_REMOVING)
-    r = ru.evaluate_add(ru.AddFacts(save_path=S, name="Show", jobs=(done, removing)))
+    rewritten = _dir_job(phase=ru.PHASE_REWRITTEN)
+    r = ru.evaluate_add(ru.AddFacts(save_path=S, name="Show", jobs=(done, rewritten)))
     assert r["reasons"][0]["gate"] == "finalize_window"
     r = ru.evaluate_add(ru.AddFacts(save_path=S, name="Other", jobs=(_dir_job(), )))
-    assert r["cls"] == ru.CLS_OK  # 同 src 但落点不在作用域内 -> 不进分支
+    assert r["cls"] == ru.CLS_CONFIRM and r["reasons"][0]["gate"] == "finalize_window"  # D16: 账面记旧根即依赖
+    r = ru.evaluate_add(ru.AddFacts(save_path=S, name="Other", jobs=(_dir_job(phase=ru.PHASE_MOVED), )))
+    assert r["cls"] == ru.CLS_OK  # 前段相位 + 落点不在作用域内 -> 不进分支
     for sp in (S + "/", "R:\\Download\\Testing"):
         r = ru.evaluate_add(ru.AddFacts(save_path=sp, name="Show", jobs=(_dir_job(), ), target_free=5000))
         assert r["cls"] == ru.CLS_CONFIRM and r["actual_path"] == T + "/Show", (sp, r["actual_path"])
@@ -1160,24 +1152,7 @@ def test_ensure_daemon_action_three_way():
     assert ru.ensure_daemon_action(pending=3, daemon_stale=False) == ru.ACT_WAIT
     assert ru.ensure_daemon_action(pending=0, daemon_stale=False) == ru.ACT_WAIT
     assert ru.ensure_daemon_action(pending=2, daemon_stale=True) == ru.ACT_ENSURE_DAEMON
-    # 旧动作表不含新动作: reconcile 旧表对同一现场仍只产旧动作(本期两链并存, 不混改)
+    # 新动作集: reconcile 新表(wait/rebuild/verify)不含 ensure_daemon —— 判据独立成单点
     job = _dir_job()
-    assert ru.reconcile(
-        job,
-        journal_phase=ru.PHASE_ARMED,
-        link_present=True,
-        qb_up=True,
-        seed_state="normal",
-        heartbeat_age=0.0,
-    ) == ru.ACT_WAIT
-    assert ru.ACT_ENSURE_DAEMON not in {
-        ru.ACT_WAIT,
-        ru.ACT_RESPAWN,
-        ru.ACT_REDELETE,
-        ru.ACT_REVERT_INTENT,
-        ru.ACT_REBUILD,
-        ru.ACT_FINALIZE,
-        ru.ACT_FAILED_GONE,
-        ru.ACT_FAILED_TIMEOUT,
-        ru.ACT_DONE_EXTERNAL,
-    }
+    assert ru.reconcile(job, alias_present=True, qb_up=True, all_at_dst=False) == ru.ACT_WAIT
+    assert ru.ACT_ENSURE_DAEMON not in {ru.ACT_WAIT, ru.ACT_REBUILD, ru.ACT_VERIFY}

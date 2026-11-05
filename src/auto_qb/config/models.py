@@ -534,8 +534,8 @@ class RelocateConfig:
     move_stall_timeout: 停滞判据 —— dst 体积不增长且 qB 不在 moving 超过该时长 ⇒ 判失败
         (失败零成本收尾: 只删已建链接, 不自动搬回)
     move_warn_after: 超过该时长仍在搬 ⇒ 只提示「已超预期」, 不判失败
-    finalize_timeout: 收尾(qB 重启后经旧路径 setLocation)等待上限; 超过 ⇒ failed,
-        链接已删, 由用户处理
+    finalize_timeout: (S4 起已无消费者 —— 旧链「超时判 failed」随 ACT_FINALIZE/
+        ACT_FAILED_TIMEOUT 退役; 键保留仅为配置面兼容, 改动它无任何行为效果)
     low_space_warn: 别名目标卷低空间告警阈值(只告警, 不暂停); 0 = 不告警
     assume_shared: 显式声明 qB 与 auto-qb 已共享文件系统(计划 26-11-04-0055 §03.2):
         true = 跳过一次性同机强探测(E1), 回执显著标注「未经 auto-qb 验证, 由用户承担」;

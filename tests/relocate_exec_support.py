@@ -46,10 +46,14 @@ def _simulate_moved(mgr, dst, files, content, mover="HA"):
 
 
 def _spy_spawn(mod, calls):
-    mod._spawn = lambda data_dir, job_id: calls.append(job_id)
-    # S3(计划 26-11-05-0808): 回收 daemon 拉起面同样不起真进程 —— 武装环境经 relocate_env
-    # 已配 bt_backup 表, 对账每拍会判 ACT_ENSURE_DAEMON; 不桩住就是每用例弹一个真 daemon
-    mod._spawn_daemon = lambda *a, **k: None
+    """不起真进程: 回收 daemon 拉起面(_spawn_daemon)替身并记录调用。
+
+    S4(计划 26-11-05-0808): 旧 guardian 的 per-job _spawn 已随 finalize_watch.py 整文件
+    退役 —— 拉起面只剩实例级 _spawn_daemon(data_dir, host, port), 武装与环境对账每拍
+    都可能判 ACT_ENSURE_DAEMON; 不桩住就是每用例弹一个真 daemon。calls 记
+    ("daemon", data_dir, host, port)。
+    """
+    mod._spawn_daemon = lambda *a, **k: calls.append(("daemon", ) + tuple(a))
 
 
 def _run_ticks(mod, n=6):

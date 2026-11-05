@@ -114,7 +114,7 @@ def build_router(ctx: WebContext) -> APIRouter:
 
         保守默认: 不重试、不自动重启; app/shutdown 缺失/被拒/断连一律降级(cls=degraded,
         提示手动重启 qB), HTTP 恒 200 —— 降级是成功的交互结果, 不是服务端错误。
-        窗口判据单点 = relocate_units.FINALIZE_WINDOW_PHASES(本期旧相位集); 服务端按快照
+        窗口判据单点 = relocate_units.FINALIZE_WINDOW_PHASES(S4 新相位集 {armed, rewritten}); 服务端按快照
         复核非空才动手, 前端可见性不是授权(与预检-执行无信任传递同口径)。body
         {confirm: bool, job_id?: "..."}; 未确认只回现场说明(cls=confirm, 数据零动作,
         与 relocate_cancel 的成本先行同口径)。

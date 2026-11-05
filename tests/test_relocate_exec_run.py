@@ -1,11 +1,12 @@
-"""test_relocate_exec_run 测试计划: 整组迁移执行体 / 对账 / 收尾 guardian / 三入口接线
-(计划 26-10-18-1604 §04 P3/P5/P6)
+"""test_relocate_exec_run 测试计划: 整组迁移执行体 / 对账 / 三入口接线
+(计划 26-10-18-1604 §04 P3/P5/P6; S4 相位模型重定义 26-11-05-0808 —— 收尾窗 {armed, rewritten},
+旧 guardian/finalize 轮询随整链退役)
 
 验收判据(plan §04):
 - P3: Fake qB 集成覆盖五场景 —— 正常、停滞判失败(不搬回)、长耗时转 watching(不判失败)、
   第 3 条链接失败 ⇒ 删已建链接 + 转收尾、qB 中途断连(不重复下发); 主循环零阻塞(单步 < 50ms)。
 - P5: 关闭时调用序列与今日一致(守阵); 开启时三入口(单件/批量/规则)都产生 job。
-- P6: 对账表 8 行逐行(纯函数层在 test_relocate_units)、撤销回滚、guardian 三证后删链接。
+- P6: 对账表(wait/rebuild/verify + ensure_daemon, 纯函数层在 test_relocate_units)、撤销回滚。
 - 真机 qB 验证留待他人在有 qB 的环境执行(本轮 Fake qB 全替身)。
 
 ## 测试计划(每个测试函数一条)
@@ -13,7 +14,7 @@
   重归组/武装/恢复运行态; 链接真实存在且指向目标数据
 - test_exec_stalled_fails_without_moving_back: 停滞判失败, 零搬回(qB setLocation 只下发过一次)
 - test_exec_long_running_turns_watching: moving 超 warn_after 转 watching 且不判失败
-- test_exec_link_failure_rolls_back_and_finalizes: 第 3 条链接失败 ⇒ 删已建 2 条 + 转收尾
+- test_exec_link_failure_rolls_back_and_finalizes: 第 3 条链接失败 ⇒ 删已建 2 条 + 回 armed 交对账重建(S4)
 - test_exec_qb_disconnect_does_not_reissue: qB 断连(moving 态消失前)不重复下发 setLocation
 - test_exec_direct_single_member_skips_alias: 单成员组 direct: 无别名、直接 done
 - test_exec_dry_run_no_side_effects: dry-run 不落盘不建链(回执标 dry-run)
@@ -24,11 +25,8 @@
 - test_step_move_first_stagnant_sample_starts_stall_clock: 既没搬也没长大且无 stall_since -> 记起点
 - test_dst_size_and_ready_probe_failures_are_conservative: 采样异常静默计 0 / 齐备判定一律 False
 - test_step_moved_verify_mismatch_fails: 目标侧文件表不符 -> failed(verify_mismatch), 不建链接
-- test_arm_survives_regroup_failure: 重归组失败只告警, 武装落账与 guardian 照旧
+- test_arm_survives_regroup_failure: 重归组失败只告警, 武装落账与回收 daemon ensure 照旧
 - test_finish_direct_survives_regroup_and_resume_failure: 单成员收口重归组+恢复都失败也 done
-- test_finalize_members_prefilters_file_table: 收尾预过滤(26-10-30-0616) —— files API 只发给
-  覆盖分支候选, job.hashes/mover/save_path 不在 src 的成员全免文件表
-- test_step_finalize_skips_gone_member_and_pending_progress: 收尾轮询跳过已消失成员 / progress 未回 1 等窗口
 - test_entry_rule_move_to_confirm_and_empty_reasons
 - test_exec_defer_until_pause_snapshot
 - test_exec_move_rejected
@@ -49,14 +47,12 @@
   (桩 FS 未证明面踩 P3b 强探测闸 —— run_probe 替身直通, 闸门决策表单点在 test_relocate_exec_probe_gate.py)
 - test_execute_receipts_and_ctx_guard: 三张拒收回执逐字契约 + ctx 守卫 or 链
   + 补发 setLocation 入参(只发 mover) + 发起 rt 初值(stall_since/last_size/sample_ts)
-- test_step_finalize_targets_and_journal: 收尾集合(rt 优先回落 hashes)与 DONE journal
-- test_step_finalize_gone_member_and_zero_progress: 消失成员跳过不断后续 + progress=0 不算完成
 - test_build_links_faces: 目录别名首建/分块断点/attempts 累计
 - test_scope_rel_faces: 内容根相对段(反斜杠归一/平铺/尾斜杠/段首)
 - test_buckets_group_key_faces: 组键文件分量/物理分量 + gone 回执
 - test_summ_counts_contract: 汇总计数逐值契约
 - test_dst_size_sums_all_files: 采样求和与异常跳过
-- test_native_syscall_and_finalize_members_faces: _native 空格名/syscall 映射/收尾集合两分量
+- test_native_syscall_faces: _native 空格名/syscall 容器映射/文件表失败告警
 ### P4 F 运行时兜底(计划 26-11-04-0055 §04 P4 / §06 D4)
 - test_exec_qb_side_check_passes_and_arms: qB 侧元数据一致 -> 自检通过照常武装(列目录入参钉住:
   qB 视角内容根 + with_metadata="true")
@@ -141,7 +137,7 @@ def test_exec_normal_flow_links_and_arm(tmp_path, monkeypatch):
     assert len(job.alias_paths) == 2
     for p in job.alias_paths:
         assert os.path.exists(p), p  # 经链接读得到目标数据
-    assert job_id in spawned, f"武装后应拉起 guardian: {spawned}"
+    assert spawned, f"武装后应确保回收 daemon 在位(S4 新链): {spawned}"
     assert any(c[0] == "resume" for c in client.calls), "武装后应恢复运行态"
     # 重归组: 两个成员仍在同一组(组键首元 = 目标目录, 不裂组)
     key = mgr.store.member_to_key.get("HA")
@@ -189,7 +185,11 @@ def test_exec_long_running_turns_watching(tmp_path, monkeypatch):
 
 
 def test_exec_link_failure_rolls_back_and_finalizes(tmp_path, monkeypatch):
-    """第 3 条链接失败 ⇒ 已建的 2 条被删 + 转 removed(收尾路径), 不搬回"""
+    """第 3 条链接失败 ⇒ 已建的 2 条被删 + 回 armed(alias_partial) 交对账重建, 不搬回(S4)
+
+    建链失败不再落 removed(旧链收尾相位退役): 落 armed(alias_partial, attempts+1), 对账
+    REBUILD 首次重建再失败(attempts 2)后落 REBUILD_BACKOFF 退避, 相位停在 armed。
+    """
     pin_disk_usage(monkeypatch)
     mgr, client, src, dst, content, files = relocate_env(tmp_path, file_count=5, state="uploading")
     mod = mgr.host.get("relocate")
@@ -204,15 +204,16 @@ def test_exec_link_failure_rolls_back_and_finalizes(tmp_path, monkeypatch):
 
     def _fail_third(link, target, kind):
         state["n"] += 1
-        if state["n"] == 3:
+        if state["n"] >= 3:
             raise OSError("模拟第 3 条链接失败(权限不足)")
         return real(link, target, kind)
 
     monkeypatch.setattr(alias_fs, "create_file_alias", _fail_third)
-    _run_ticks(mod, 3)  # 1: moved / 2: verify->link / 3: 建链失败 -> 回滚转收尾
+    _run_ticks(mod, 5)  # 1: moved / 2: verify->link / 3: 建链失败 -> 回 armed / 4: 重建再失败 / 5: 退避
 
     job = mod.get_job(job_id)
-    assert job.phase == ru.PHASE_REMOVED and job.reason == "alias_partial", (job.phase, job.reason)
+    assert job.phase == ru.PHASE_ARMED and job.reason == "alias_partial", (job.phase, job.reason)
+    assert job.attempts == 2, job.attempts
     assert list(job.alias_paths) == [], "失败回滚必须清空已建链接账"
     leftovers = [
         os.path.join(content, f"e0{i}.mkv") for i in range(5) if os.path.exists(os.path.join(content, f"e0{i}.mkv"))
@@ -256,7 +257,7 @@ def test_exec_direct_single_member_skips_alias(tmp_path, monkeypatch):
     job = _only_job(mod)
     assert job["phase"] == ru.PHASE_DONE, job
     assert job["alias_paths"] == []
-    assert spawned == [], "direct 无别名 ⇒ 不需要 guardian"
+    assert spawned == [], "direct 无别名 ⇒ 不需要回收 daemon(S4)"
 
 
 def test_exec_dry_run_no_side_effects(tmp_path, monkeypatch):
@@ -499,14 +500,15 @@ def test_step_moved_verify_mismatch_fails(tmp_path):
 
 
 def test_arm_survives_regroup_failure(monkeypatch):
-    """重归组失败只告警: 落账照旧 armed + guardian 照拉(下轮 save_path 变化还会再归)"""
-    spawned = []
+    """重归组失败只告警: 落账照旧 armed + arm spec/ensure daemon 照走(下轮 save_path 变化还会再归)"""
     mod = _bare_mod()
     mod._ctx.grouping = types.SimpleNamespace(regroup_scope=lambda *a: (_ for _ in ()).throw(RuntimeError("归组炸了")))
-    monkeypatch.setattr(mod, "_spawn_guardian", lambda job: spawned.append(job.job_id) or True)
+    wrote, ensured = [], []
+    monkeypatch.setattr(mod, "_write_arm_spec", lambda job: wrote.append(job.job_id) or True)
+    monkeypatch.setattr(mod, "_ensure_daemon", lambda job, rt: ensured.append(job.job_id))
     mod._arm(_job(), {})
     assert mod._jobs["j1"].phase == ru.PHASE_ARMED, "重归组失败不得阻断武装落账"
-    assert spawned == ["j1"], "guardian 照拉"
+    assert wrote == ["j1"] and ensured == ["j1"], "arm spec 与 ensure daemon 照走"
 
 
 def test_finish_direct_survives_regroup_and_resume_failure():
@@ -520,60 +522,6 @@ def test_finish_direct_survives_regroup_and_resume_failure():
     )
     mod._finish_direct(job)
     assert mod._jobs["j1"].phase == ru.PHASE_DONE and mod._jobs["j1"].reason == "direct"
-
-
-def test_finalize_members_prefilters_file_table(tmp_path):
-    """收尾集合预过滤(26-10-30-0616): files API 只发给覆盖分支候选
-
-    旧实现全库逐条先 rec.files(一次 HTTP)再按 save_path 过滤, qB 重启后走标准收尾
-    路径时单 tick 串行 N 次 HTTP, 大库主循环停摆分钟级; 判定实际只有目录别名的
-    覆盖分支(save_path==src)读内容根, job.hashes/mover 全短路免文件表。
-    """
-    calls = []
-
-    def _rec(h, save_path):
-        return types.SimpleNamespace(
-            save_path=save_path,
-            hash=h,
-            files=lambda client, _h=h: calls.append(_h) or [types.SimpleNamespace(name="a.mkv", size=1)],
-        )
-
-    store = types.SimpleNamespace(
-        by_hash={
-            "HA": _rec("HA", "R:/dst"),  # mover: 判定短路, 免文件表
-            "HB": _rec("HB", "R:/src"),  # 创建时成员: 判定短路, 免文件表
-            "HC": _rec("HC", "R:/src"),  # 覆盖分支候选: 唯一该取文件表的
-            "HX": _rec("HX", "R:/else"),  # save_path 不在 src: 免文件表
-        }
-    )
-    mod = _bare_mod(store=store, api=types.SimpleNamespace(client=object()))
-    job = _job(phase=ru.PHASE_ARMED, plan={"form": ru.FORM_DIR_ALIAS}, hashes=("HA", "HB"))
-    assert mod._finalize_members(job) == ("HB", "HC")
-    assert calls == ["HC"], f"只有覆盖分支候选才发 files API, 实际 {calls}"
-
-    calls.clear()
-    flat = _job(phase=ru.PHASE_ARMED, plan={"form": ru.FORM_FILE_LINKS}, hashes=("HA", "HB"))
-    assert mod._finalize_members(flat) == ("HB", )
-    assert calls == [], "逐文件链接 job 覆盖语义不成立, 全程零 files API"
-
-
-def test_step_finalize_skips_gone_member_and_pending_progress(tmp_path):
-    """收尾轮询: 成员已消失 -> 跳过(不判未完成); progress<1 且非校验中 -> 未完成(等窗口)"""
-    store = types.SimpleNamespace(
-        by_hash={
-            "HA": types.SimpleNamespace(save_path="R:/dst", progress=1.0, state="pausedUP"),
-            "HB": types.SimpleNamespace(save_path="R:/dst", progress=0.4, state="pausedUP"),
-        }
-    )
-    mod = _bare_mod(store=store, data_dir=str(tmp_path))
-    job = _job(phase=ru.PHASE_FINALIZING, hashes=("HA", "GONE"))
-    mod._step_finalize(job, {"finalize": ["HA", "GONE"]})
-    assert mod._jobs["j1"].phase == ru.PHASE_DONE, "消失成员跳过, 其余到齐即完成"
-
-    # progress 未回 1: 不完成, 且窗口未到不判失败
-    job2 = _job("j2", phase=ru.PHASE_FINALIZING, hashes=("HB", ))
-    mod._step_finalize(job2, {"finalize": ["HB"], "finalize_ts": time.time()})
-    assert mod._jobs.get("j2") is None, "窗口内未完成不得判失败"
 
 
 def test_entry_rule_move_to_confirm_and_empty_reasons(tmp_path, monkeypatch):
@@ -671,7 +619,7 @@ def test_build_links_failure_bumps_attempts(tmp_path, monkeypatch):
     )
     assert mod._build_links(job, {"links": [], "link_pos": 0}) is False
     saved = mod._jobs["j1"]
-    assert saved.phase == ru.PHASE_REMOVED and saved.reason == "alias_partial", (saved.phase, saved.reason)
+    assert saved.phase == ru.PHASE_ARMED and saved.reason == "alias_partial", (saved.phase, saved.reason)
     assert saved.attempts == 1, saved.attempts
 
 
@@ -960,59 +908,6 @@ def test_execute_receipts_and_ctx_guard(tmp_path):
     assert it["reasons"][0]["text"] == "模块上下文或 qB 客户端不可用", it["reasons"][0]
 
 
-def test_step_finalize_targets_and_journal(tmp_path):
-    """收尾集合: rt 优先于 job.hashes(sf_2~6), DONE 落 journal(sf_82~95)"""
-    store = types.SimpleNamespace(
-        by_hash={
-            "HA": types.SimpleNamespace(save_path="R:/src", progress=1.0, state="pausedUP"),
-            "HB": types.SimpleNamespace(save_path="R:/dst", progress=1.0, state="pausedUP"),
-            "HC": types.SimpleNamespace(save_path="R:/dst", progress=1.0, state="pausedUP"),
-        }
-    )
-    mod = _bare_mod(store=store, data_dir=str(tmp_path))
-    mod._step_finalize(
-        _job("j1", phase=ru.PHASE_FINALIZING, hashes=("HA", "HB")), {
-            "finalize": ["HC"],
-            "finalize_ts": time.time()
-        }
-    )
-    saved = mod._jobs["j1"]
-    assert saved.phase == ru.PHASE_DONE and saved.reason == "finalized", (saved.phase, saved.reason)
-    j = relocate_journal.read_journal(str(tmp_path), "j1")
-    assert j is not None and j["phase"] == ru.PHASE_DONE, j
-
-    # rt 集合缺席(重启窗): 回落 job.hashes 也算齐(list(None) = 崩溃面)
-    mod._step_finalize(_job("j2", phase=ru.PHASE_FINALIZING, hashes=("HC", )), {"finalize_ts": time.time()})
-    assert mod._jobs["j2"].phase == ru.PHASE_DONE, mod._jobs["j2"]
-
-
-def test_step_finalize_gone_member_and_zero_progress(tmp_path):
-    """消失成员跳过但不得断后续检查(sf_13); progress=0.0 不算完成(sf_31)"""
-    store = types.SimpleNamespace(
-        by_hash={"HB": types.SimpleNamespace(save_path="R:/src", progress=1.0, state="pausedUP")}
-    )
-    mod = _bare_mod(store=store, data_dir=str(tmp_path))
-    mod._step_finalize(
-        _job("j1", phase=ru.PHASE_FINALIZING, hashes=("HA", )), {
-            "finalize": ["GONE", "HB"],
-            "finalize_ts": time.time()
-        }
-    )
-    assert mod._jobs.get("j1") is None, "消失成员之后的未到成员必须继续拦收尾(不得过早 DONE)"
-
-    store2 = types.SimpleNamespace(
-        by_hash={"HB": types.SimpleNamespace(save_path="R:/dst", progress=0.0, state="pausedUP")}
-    )
-    mod2 = _bare_mod(store=store2, data_dir=str(tmp_path))
-    mod2._step_finalize(
-        _job("j2", phase=ru.PHASE_FINALIZING, hashes=("HB", )), {
-            "finalize": ["HB"],
-            "finalize_ts": time.time()
-        }
-    )
-    assert mod2._jobs.get("j2") is None, "progress=0.0 不得被判完成"
-
-
 def test_build_links_faces(tmp_path, monkeypatch):
     """建链面: 目录别名首建(bl_32)/分块断点(bl_93 + bl_50~53)/attempts 累计(bl_114)"""
     dir_calls = []
@@ -1146,8 +1041,8 @@ def test_dst_size_sums_all_files(monkeypatch):
     assert mod._dst_size(job) == 20, "采样异常只跳过当件"
 
 
-def test_native_syscall_and_finalize_members_faces(monkeypatch):
-    """_native 空格名(nt_2)/syscall 容器映射(sl_1/2/3)/收尾集合两分量(fm_14/19)/文件表失败告警(flm_3)"""
+def test_native_syscall_faces(monkeypatch):
+    """_native 空格名(nt_2)/syscall 容器映射(sl_1/2/3)/文件表失败告警(flm_3)"""
     assert _mod_native("R:/src", "Show/a b/c.mkv") == os.path.join("R:/src", "Show", "a b", "c.mkv")
 
     class _FA:
@@ -1159,28 +1054,8 @@ def test_native_syscall_and_finalize_members_faces(monkeypatch):
     mod._ctx = types.SimpleNamespace(config=types.SimpleNamespace(data_dir=""))
     assert mod._syscall("R:/x/a.mkv") == "/mnt/qbR:/x/a.mkv", mod._syscall("R:/x/a.mkv")
 
-    def _srec(h, sp, flist):
-        def _files(client, _f=flist):  # 对 None client 真抛: 否则 api.client=None 化不可区分(fm_19)
-            if client is None:
-                raise RuntimeError("no client")
-            return list(_f)
-
-        return types.SimpleNamespace(save_path=sp, hash=h, log_repr=h, files=_files)
-
-    store = types.SimpleNamespace(
-        by_hash={
-            "HX": _srec("HX", "R:/else", []),
-            "HA": _srec("HA", "R:/dst", []),
-            "HB": _srec("HB", "R:/src", []),
-            "HC": _srec("HC", "R:/src", [_fake_file("ShowA/a.mkv", 1)]),
-        }
-    )
-    mod2 = _bare_mod(store=store, api=types.SimpleNamespace(client=object()))
-    job = _job("j9", phase=ru.PHASE_ARMED, hashes=("HA", "HB"), scope="R:/src/ShowA", plan={"form": ru.FORM_DIR_ALIAS})
-    assert mod2._finalize_members(job) == ("HB", "HC"), mod2._finalize_members(job)
-
     with capture_logs("auto_qb.core.modules.relocate_mod") as cap:
-        assert RelocateModule._file_map(_srec("HZ", "x", None), object()) == {}
+        assert RelocateModule._file_map(types.SimpleNamespace(files=None, log_repr="HZ"), object()) == {}
     assert any("读取文件列表失败" in m for m in cap.messages), cap.messages
 
 

@@ -5,7 +5,7 @@
 - P3: Fake qB 集成覆盖五场景 —— 正常、停滞判失败(不搬回)、长耗时转 watching(不判失败)、
   第 3 条链接失败 ⇒ 删已建链接 + 转收尾、qB 中途断连(不重复下发); 主循环零阻塞(单步 < 50ms)。
 - P5: 关闭时调用序列与今日一致(守阵); 开启时三入口(单件/批量/规则)都产生 job。
-- P6: 对账表 8 行逐行(纯函数层在 test_relocate_units)、撤销回滚、guardian 三证后删链接。
+- P6: 对账表(wait/rebuild/verify + ensure_daemon, 纯函数层在 test_relocate_units)、撤销回滚。
 - 真机 qB 验证留待他人在有 qB 的环境执行(本轮 Fake qB 全替身)。
 
 ## 测试计划(每个测试函数一条)
@@ -28,14 +28,14 @@
 ### W8(R32) S5 补测(变异审计真洞守阵, 分类: tmp-analysis/w8-r32/classify-mod-{a,b}.md)
   + 同卷硬链接兜底(same_volume 实参丢失 ⇒ capability_ok 翻假)
   + 补发 setLocation 入参(只发 mover) + 发起 rt 初值(stall_since/last_size/sample_ts)
-- test_spawn_args_pinned: guardian 进程拉起参数(--job/平台支/stdio)
+- test_spawn_args_pinned: daemon 进程拉起参数(--port/平台支/stdio, S4: 旧 guardian spawn 退役)
 - test_recover_dispatch_faces: 恢复四分派(moving/补发/不补发/RESUME)
 - test_misc_low_contract_faces: on_task_line 守卫/异常账面/_fail 文案/武装与收口实参/纵深单层
 - test_precheck_receipt_contract_and_add_param: 预检拒收回执契约 + 添加预检空参
   (26-11-05-0808 S1 起 happy-path 前须配置可达 bt_backup, 见用例内注)
 
 覆盖率第三轮 T2b 补测(26-11-05):
-- test_arm_and_finish_direct_without_grouping_ctx: ctx 无 grouping 模块 -> 重归组段整段跳过, 落账/guardian/恢复照旧(260->266/278->283)
+- test_arm_and_finish_direct_without_grouping_ctx: ctx 无 grouping 模块 -> 重归组段整段跳过, 落账/spec+daemon/恢复照旧(260->266/278->283)
 - test_remove_links_skips_non_alias_paths: 非别名/空条目跳过不删不计(709->705)
 """
 
@@ -285,26 +285,26 @@ def test_fail_path_resume_rejected_still_fails_and_names_paused():
 
 
 def test_spawn_args_pinned(monkeypatch):
-    """guardian 进程拉起参数: --job 逐字(sp_8/9)/平台支(sp_20/24/26/32~35)/stdio 与 close_fds(sp_13~19)"""
+    """daemon 进程拉起参数(S4 新链单点 _spawn_daemon): --host/--port 逐字/平台支/stdio 与 close_fds"""
     import subprocess
 
     seen = []
     monkeypatch.setattr(subprocess, "Popen", lambda *a, **k: seen.append((a, k)))
     mod = RelocateModule()
     monkeypatch.setattr(infra_utils, "is_windows", lambda: True)
-    mod._spawn("D:/dd", "jr-x")
+    mod._spawn_daemon("D:/dd", "h1", 8123)
     argv, kwargs = seen[-1][0][0], seen[-1][1]
-    assert "--job" in argv and argv[-1] == "jr-x", argv
+    assert "--host" in argv and "--port" in argv and argv[-1] == "8123", argv
     # CREATE_NO_WINDOW 只在 Windows 侧存在; 用例强制走 Windows 分支时按实现同款兜底取常量
     assert kwargs["creationflags"] == getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000), kwargs
     assert kwargs["stdout"] == subprocess.DEVNULL and kwargs["stderr"] == subprocess.DEVNULL, kwargs
     assert kwargs["close_fds"] is True, kwargs
 
     monkeypatch.setattr(infra_utils, "is_windows", lambda: False)
-    mod._spawn("D:/dd", "jr-y")
+    mod._spawn_daemon("D:/dd", "h2", 8124)
     argv, kwargs = seen[-1][0][0], seen[-1][1]
-    assert "--job" in argv and argv[-1] == "jr-y", argv
-    assert kwargs["start_new_session"] is True, kwargs  # guardian 不随 auto-qb 进程组消亡
+    assert argv[-1] == "8124", argv
+    assert kwargs["start_new_session"] is True, kwargs  # daemon 不随 auto-qb 进程组消亡
 
 
 def test_recover_dispatch_faces(tmp_path):
@@ -415,7 +415,8 @@ def test_misc_low_contract_faces(monkeypatch):
     rg_args = []
     mod7 = _bare_mod()
     mod7._ctx.grouping = types.SimpleNamespace(regroup_scope=lambda *a: rg_args.append(a))
-    monkeypatch.setattr(mod7, "_spawn_guardian", lambda job: True)
+    monkeypatch.setattr(mod7, "_write_arm_spec", lambda job: True)
+    monkeypatch.setattr(mod7, "_ensure_daemon", lambda job, rt: None)
     job7 = _job("j7", phase=ru.PHASE_MOVED, alias_kind="")  # direct 形态: or 分支才可达(am_34/35/36)
     with capture_logs("auto_qb.core.modules.relocate_mod") as cap:
         mod7._arm(job7, {})
@@ -445,7 +446,8 @@ def test_misc_low_contract_faces(monkeypatch):
 
     mod7b = _bare_mod()
     mod7b._ctx.grouping = types.SimpleNamespace(regroup_scope=_rg_boom)
-    monkeypatch.setattr(mod7b, "_spawn_guardian", lambda job: True)
+    monkeypatch.setattr(mod7b, "_write_arm_spec", lambda job: True)
+    monkeypatch.setattr(mod7b, "_ensure_daemon", lambda job, rt: None)
     with capture_logs("auto_qb.core.modules.relocate_mod") as cap7b:
         mod7b._arm(_job("j7b", phase=ru.PHASE_MOVED), {})
     assert mod7b._jobs["j7b"].phase == ru.PHASE_ARMED, mod7b._jobs["j7b"]
@@ -550,12 +552,13 @@ def test_precheck_receipt_contract_and_add_param(tmp_path, monkeypatch):
 def test_arm_and_finish_direct_without_grouping_ctx(monkeypatch):
     """(T2b)ctx 没挂 grouping 模块(装配裁剪/裸替身) -> 重归组段整段跳过(260->266/278->283),
     落账/guardian/恢复成员照旧 —— grouping 是可选协作方, 不是硬依赖"""
-    spawned = []
     mod = _bare_mod(api=types.SimpleNamespace(client=None, torrents_resume=lambda **kw: None))
-    monkeypatch.setattr(mod, "_spawn_guardian", lambda job: spawned.append(job.job_id) or True)
+    wrote, ensured = [], []
+    monkeypatch.setattr(mod, "_write_arm_spec", lambda job: wrote.append(job.job_id) or True)
+    monkeypatch.setattr(mod, "_ensure_daemon", lambda job, rt: ensured.append(job.job_id))
     mod._arm(_job("j1", phase=ru.PHASE_MOVED), {})
     assert mod._jobs["j1"].phase == ru.PHASE_ARMED and mod._jobs["j1"].attempts == 0, mod._jobs["j1"]
-    assert spawned == ["j1"], "guardian 照拉"
+    assert wrote == ["j1"] and ensured == ["j1"], "arm spec 落盘与 ensure daemon 照走"
 
     mod2 = _bare_mod(api=types.SimpleNamespace(client=None, torrents_resume=lambda **kw: None))
     mod2._finish_direct(_job("j2", src="R:/src2"))

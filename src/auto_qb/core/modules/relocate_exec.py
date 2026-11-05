@@ -280,14 +280,14 @@ class ExecMixin:
                 if rt["link_pos"] < len(files):
                     self._set_job(replace(job, alias_paths=tuple(links)))  # 逐条落账(崩溃可回滚)
                     return False
-        except Exception as e:  # noqa: BLE001 - 链接失败: 零成本回滚 + 转收尾路径
-            logger.warning(f"relocate | job {job.job_id}: 建链接失败({e}) —— 删已建 {len(links)} 条链接, 转收尾路径(不搬回)")
+        except Exception as e:  # noqa: BLE001 - 链接失败: 零成本回滚 + 交对账重建
+            logger.warning(f"relocate | job {job.job_id}: 建链接失败({e}) —— 删已建 {len(links)} 条链接, 交对账重建(不搬回)")
             self._remove_links(links)
             self._set_job(
                 replace(
                     job,
                     alias_paths=(),
-                    phase=ru.PHASE_REMOVED,
+                    phase=ru.PHASE_ARMED,
                     reason="alias_partial",
                     last_error=str(e),
                     # 记账: 重建配额由对账侧消费(建链必失败的环境不能无限重建, 见 REBUILD_MAX_ATTEMPTS)
@@ -346,7 +346,12 @@ class ExecMixin:
         return tuple(name for name, _size in self._cr_files(self._plan_files(job), job.scope, job.src))
 
     def _arm(self, job: RelocateJob, rt: dict) -> None:
-        """重归组 + 落账(armed) + 拉起 guardian + 恢复运行态"""
+        """重归组 + 落账(armed) + 落 arm spec + 确保回收 daemon 在位 + 恢复运行态(S4 新链)
+
+        收尾链(S3a/S3b): arm spec(members 双 hash + bt_backup)落盘 -> _ensure_daemon
+        判回收 daemon 缺位即重拉(pending 非空 + daemon 缺位/心跳过期) —— 旧 guardian
+        spawn 已随 finalize_watch.py 整文件退役。
+        """
         grouping = getattr(self._ctx, "grouping", None)
         if grouping is not None:
             try:
@@ -356,11 +361,12 @@ class ExecMixin:
         # attempts 归零: 重建链接成功即本轮重试周期结束, 上次的历史失败不该占着下次的配额
         armed = replace(job, phase=ru.PHASE_ARMED, armed_at=self._clock.now(), reason="", attempts=0)
         self._set_job(armed)
-        self._spawn_guardian(armed)
+        self._write_arm_spec(armed)
+        self._ensure_daemon(armed, rt)
         self._resume_members(armed)
         logger.info(
             f"relocate | job {armed.job_id}: 已武装收尾(别名 {len(armed.alias_paths)} 条, "
-            f"形态 {armed.alias_kind or 'direct'}) —— 下次 qB 退出时自动收尾"
+            f"形态 {armed.alias_kind or 'direct'}) —— 回收 daemon 将在 qB 下线窗口改写 fastresume"
         )
 
     def _finish_direct(self, job: RelocateJob) -> None:
@@ -400,20 +406,8 @@ class ExecMixin:
         self._qb_up_cache = (now, up)
         return up
 
-    def _seed_state(self, job: RelocateJob) -> str:
-        """种子态三值: gone(全部不在) / missingFiles(任一成员缺文件) / normal"""
-        store = self._ctx.store
-        recs = [store.by_hash.get(h) for h in job.hashes]
-        live = [r for r in recs if r is not None]
-        if not live:
-            return "gone"
-        for r in live:
-            if "missingfiles" in str(getattr(r, "state", "") or "").lower():
-                return "missingFiles"
-        return "normal"
-
     def _all_at_dst(self, job: RelocateJob) -> bool:
-        """全组成员是否都已在目标位置(外部完成判据)"""
+        """全组成员是否都已在目标位置(核验的充分证据; 改写生效+qB 重启加载后成立)"""
         for h in job.hashes:
             rec = self._ctx.store.by_hash.get(h)
             if rec is None or utils.path_normalize(rec.save_path) != utils.path_normalize(job.dst):
@@ -421,66 +415,43 @@ class ExecMixin:
         return True
 
     def _step_reconcile(self, job: RelocateJob, rt: dict) -> None:
-        """对账一步: 读 journal -> 查链接/qB/种子现场 -> 按 §3.5 对账表处置"""
+        """收尾窗(armed/rewritten)对账一步(S4 新链): journal 镜像合并 -> 查现场 -> 对账表处置
+
+        - journal rewritten 相位向前合并(S3a 协议: daemon 翻账, state.json 镜像由主循环
+          合并 —— D13): journal.phase == rewritten 且 job 还在 armed ⇒ 镜像跟进 rewritten
+          (只前进不后退; 终态合并不在此 —— active_jobs 已滤终态, 终态写权在主循环);
+        - 现场三输入(别名在? qB 在? 全员已到目标?)交 ru.reconcile 新表判 WAIT/REBUILD/
+          VERIFY; ACT_ENSURE_DAEMON 判据独立(pending + daemon_stale), 每拍顺带判;
+        - 旧链输入(seed_state/心跳/finalize_timeout)已随对账表重定义退役。
+        """
         journal = relocate_journal.read_journal(self._data_dir(), job.job_id) or {}
         j_phase = str(journal.get("phase") or "")
-        # journal 只能**向前**合并: removing/removed 是收尾意图, 只覆盖 armed/removing ——
-        # 不覆盖 moved(那是「重建链接」把我们拉回执行期), 否则重建好的 job 会被旧 journal 再降级
-        if j_phase in (ru.PHASE_REMOVING,
-                       ru.PHASE_REMOVED) and job.phase in (ru.PHASE_ARMED, ru.PHASE_REMOVING, ru.PHASE_REMOVED):
-            if j_phase != job.phase:
-                job = self._set_job(replace(job, phase=j_phase))
-        link_present = bool(job.alias_paths) and any(alias_fs.alias_kind_of(p) for p in job.alias_paths)
+        if j_phase == ru.PHASE_REWRITTEN and job.phase == ru.PHASE_ARMED:
+            job = self._set_job(replace(job, phase=ru.PHASE_REWRITTEN))
+        alias_present = bool(job.alias_paths) and any(alias_fs.alias_kind_of(p) for p in job.alias_paths)
         qb_up = self._qb_up()
-        seed_state = self._seed_state(job)
-        # 「已被外部完成」判据 = **全组成员**都已到目标位置(不是只看 mover: mover 本就是本 job
-        # 搬过去的, 用它会把自己刚武装的 job 立刻判成 done)
         at_dst = self._all_at_dst(job)
-        hb = journal.get("ts")
-        heartbeat_age = max(0.0, self._clock.now() - float(hb)) if hb else float("inf")
-        elapsed = self._clock.now() - float(job.armed_at or job.updated_at or self._clock.now())
-        conf = self._live_conf()
-        action = ru.reconcile(
-            job,
-            journal_phase=j_phase,
-            link_present=link_present,
-            qb_up=qb_up,
-            seed_state=seed_state,
-            save_path_at_dst=at_dst,
-            heartbeat_age=heartbeat_age,
-            elapsed=elapsed,
-            finalize_timeout=float(getattr(conf, "finalize_timeout", 0) or 0),
-        )
-        # S3 新增接线(计划 §3.2「对账与生命周期」行): ACT_ENSURE_DAEMON 判据独立于上方
-        # reconcile 旧表 —— pending 非空且回收 daemon 死/心跳过期 ⇒ 重拉; 旧动作照旧应用,
-        # 本期新旧两链并存(RESPAWN/REDELETE 退役在下一任务)
+        action = ru.reconcile(job, alias_present=alias_present, qb_up=qb_up, all_at_dst=at_dst)
         self._ensure_daemon(job, rt)
         self._apply_reconcile(job, rt, action)
 
     def _apply_reconcile(self, job: RelocateJob, rt: dict, action: str) -> None:
+        """对账动作处置(S4 新链三动作; ACT_ENSURE_DAEMON 的处置在 _ensure_daemon 独立走)"""
         if action == ru.ACT_WAIT:
             return
-        if action == ru.ACT_RESPAWN or action == ru.ACT_REDELETE:
-            logger.info(f"relocate | job {job.job_id}: guardian 心跳过期/未在工作, 重拉({action})")
-            self._respawn_guardian(job, rt)
-            return
-        if action == ru.ACT_REVERT_INTENT:
-            logger.info(f"relocate | job {job.job_id}: 删别名期间 qB 回来了 —— 撤销删除意图, 回 armed")
-            relocate_journal.write_journal(
-                self._data_dir(), job.job_id, {
-                    "phase": ru.PHASE_ARMED,
-                    "ts": self._clock.now()
-                }
-            )
-            self._set_job(replace(job, phase=ru.PHASE_ARMED))
-            self._respawn_guardian(job, rt)
+        if action == ru.ACT_VERIFY:
+            # 核验+删链推进单点(S4 后半落地: 全员 save_path 等值核验已由判据面给出,
+            # 这里做删链门依赖扫描 + 在线删别名 + 终态)。本期挂起: job 停在 rewritten
+            # 不推进 —— 可接受中间态, 别名维持、成员经别名可读, journal 是事实源。
+            logger.debug(f"relocate | job {job.job_id}: 核验+删链推进待 S4 后半落地(暂挂起, 维持现场)")
+            self._step_verify(job, rt)
             return
         if action == ru.ACT_REBUILD:
             if int(job.attempts or 0) >= ru.REBUILD_MAX_ATTEMPTS:
                 self._fail(
                     job,
                     "rebuild_exhausted",
-                    f"重建链接已失败 {int(job.attempts or 0)} 次(上限 {ru.REBUILD_MAX_ATTEMPTS}) —— "
+                    f"重建别名已失败 {int(job.attempts or 0)} 次(上限 {ru.REBUILD_MAX_ATTEMPTS}) —— "
                     f"保留现场交人处理: 通常是权限不足, 修好后重新发起即可",
                 )
                 return
@@ -488,16 +459,16 @@ class ExecMixin:
             # (monotonic 0 点是开机时刻, 见 pitfalls/testing/monotonic-warn-sentinel.md, issue 26-10-31-0932)
             rebuild_ts = rt.get("rebuild_ts")
             if rebuild_ts is not None and self._clock.monotonic() - float(rebuild_ts) < ru.REBUILD_BACKOFF:
-                logger.debug(f"relocate | job {job.job_id}: 重建链接退避中(距上次 < {ru.REBUILD_BACKOFF}s), 本轮跳过")
+                logger.debug(f"relocate | job {job.job_id}: 重建别名退避中(距上次 < {ru.REBUILD_BACKOFF}s), 本轮跳过")
                 return
             rt["rebuild_ts"] = self._clock.monotonic()
-            logger.warning(f"relocate | job {job.job_id}: 链接不在而 qB 在线(删的时候 qB 其实在跑) —— 重建链接")
+            logger.warning(f"relocate | job {job.job_id}: 别名不在而 qB 在线 —— 从 job 账重建别名")
             rt["stage"] = "link"
             rt["link_pos"] = 0
             rt["links"] = []
             job = replace(job, phase=ru.PHASE_MOVED, alias_paths=(), reason="")
             self._set_job(job)
-            # 意图回滚: journal 也退回 armed —— 否则旧「removed」会反复把 job 拉回收尾判定
+            # journal 同步回 armed(重建要重走 MOVED 执行段; 拒写只可能因已终态, 不炸)
             relocate_journal.write_journal(
                 self._data_dir(), job.job_id, {
                     "phase": ru.PHASE_ARMED,
@@ -507,89 +478,17 @@ class ExecMixin:
             if self._build_links(job, rt):
                 rt["stage"] = "penetrate"
             return
-        if action == ru.ACT_FINALIZE:
-            members = self._finalize_members(job)
-            if not members:
-                self._set_job(replace(job, phase=ru.PHASE_DONE, reason="finalized"))
-                return
-            try:
-                self._ctx.api.torrents_set_location(torrent_hashes=list(members), location=job.dst)
-            except Exception as e:  # noqa: BLE001
-                self._fail(job, "finalize_rejected", str(e))
-                return
-            rt["finalize"] = list(members)
-            rt["finalize_ts"] = self._clock.now()
-            self._set_job(replace(job, phase=ru.PHASE_FINALIZING))
-            return
-        if action == ru.ACT_FAILED_GONE:
-            self._fail(job, "torrent_gone", "收尾前种子已被删除")
-            return
-        if action == ru.ACT_FAILED_TIMEOUT:
-            self._fail(
-                job,
-                "finalize_timeout",
-                "数据已在目标位置, qB 仍指向原路径 —— 已超收尾等待上限, 请手动 setLocation",
-            )
-            return
-        if action == ru.ACT_DONE_EXTERNAL:
-            self._set_job(replace(job, phase=ru.PHASE_DONE, reason="external"))
-            # 通知 guardian 退休: 否则已终结 job 的守护进程会永远每 10s 写心跳
-            relocate_journal.write_journal(
-                self._data_dir(), job.job_id, {
-                    "phase": ru.PHASE_DONE,
-                    "ts": self._clock.now()
-                }
-            )
-            return
         logger.debug(f"relocate | job {job.job_id}: 对账动作 {action} 无处置")
 
-    def _finalize_members(self, job: RelocateJob) -> tuple:
-        """动态收尾集合(§3.5 / D7): 创建时成员 ∪ 当前落在该作用域的成员, mover 跳过
+    def _step_verify(self, job: RelocateJob, rt: dict) -> None:
+        """核验+删链推进(单点挂名, 体在 S4 后半落地)
 
-        取数顺序(26-10-30-0616): 先零成本过滤再取文件表 —— 创建时成员与 mover 的
-        判定不看内容根, 新增候选先按 save_path==src 筛(单点 ru.finalize_scope_candidate),
-        只对筛剩者发 files API 算内容根; 全库逐条先取文件表会让大库主循环单 tick
-        串行 N 次 HTTP 停摆分钟级。判定单点仍在 ru.finalize_members(这里只是预筛)。
+        全员 save_path 等值核验通过(判据面 ru.reconcile -> ACT_VERIFY 已给)之后:
+        删链门「save_path == 旧根 或 位于旧根之下」等值 OR 前缀双判据 + 组外依赖扫描
+        (N5 教训), 命中 0 => 主循环在线删别名 -> 终态; 命中 >0 => 维持别名等依赖消失。
+        本期(S4 前半)只挂钩子不动现场 —— rewritten 后暂不推进, 是已声明的可接受中间态。
         """
-        store = self._ctx.store
-        api = self._ctx.api
-        members = []
-        for h, rec in store.by_hash.items():
-            if h == job.mover or h in job.hashes:
-                # 判定对这两类短路不看内容根 —— root 以 save_path 占位, 免文件表
-                members.append((h, rec.save_path, rec.save_path))
-                continue
-            if not ru.finalize_scope_candidate(job, rec.save_path):
-                continue
-            fmap = self._file_map(rec, api.client) if api is not None else {}
-            root = ru.content_root_of(rec.save_path, list(fmap.keys()))
-            members.append((h, rec.save_path, root))
-        return ru.finalize_members(job, members)
-
-    def _step_finalize(self, job: RelocateJob, rt: dict) -> None:
-        """收尾轮询: 成员 save_path 到 dst 且 progress 回 1 ⇒ done(零校验)"""
-        targets = rt.get("finalize") or list(job.hashes)
-        store = self._ctx.store
-        ok = True
-        for h in targets:
-            rec = store.by_hash.get(h)
-            if rec is None:
-                continue
-            if utils.path_normalize(rec.save_path) != utils.path_normalize(job.dst):
-                ok = False
-            elif float(getattr(rec, "progress", 0.0) or 0.0
-                      ) < 1.0 and "checking" not in str(getattr(rec, "state", "") or "").lower():
-                ok = False
-        if not ok:
-            conf = self._live_conf()
-            if self._clock.now() - float(rt.get("finalize_ts") or self._clock.now()) > float(
-                getattr(conf, "finalize_timeout", 0) or 0
-            ):
-                self._fail(job, "finalize_timeout")
-            return
-        self._set_job(replace(job, phase=ru.PHASE_DONE, reason="finalized"))
-        relocate_journal.write_journal(self._data_dir(), job.job_id, {"phase": ru.PHASE_DONE, "ts": self._clock.now()})
-        logger.info(f"relocate | job {job.job_id}: 收尾完成({len(targets)} 个成员已到目标位置)")
+        return None
 
     # ---------- P3 执行入口(三入口共用) ----------
 
@@ -966,31 +865,16 @@ class ExecMixin:
         cfg = getattr(self._ctx, "config", None) if self._ctx is not None else None
         return str(getattr(cfg, "data_dir", "") or "auto-qb-data")
 
-    def _respawn_guardian(self, job: RelocateJob, rt: dict) -> None:
-        """对账驱动的重拉(带退避): 心跳一过期就每 tick 拉一次进程是纯浪费
+    def _write_arm_spec(self, job: RelocateJob) -> bool:
+        """arm 侧规格落盘(S3a/S3 spec 接线, 全仓唯一 write_spec 调用点; S4: guardian spawn
+        已随 finalize_watch.py 退役, daemon 拉起走 _ensure_daemon)
 
-        退避窗口内跳过 —— 判断依据(心跳/链接/qB)没变, 下一轮还会判到同一个动作;
-        首次拉起(rt 无记录)不受退避影响, 与「刚武装」时的 _spawn_guardian 直调同口径。
-        """
-        now = self._clock.monotonic()
-        # None = 首拉不受退避(方法 docstring 口径); 旧写法 or 0.0 会把开机后前 RESPAWN_BACKOFF 秒全算成退避窗口
-        # (monotonic 0 点是开机时刻, 见 pitfalls/testing/monotonic-warn-sentinel.md, issue 26-10-31-0932)
-        respawn_ts = rt.get("respawn_ts")
-        if respawn_ts is not None and now - float(respawn_ts) < ru.RESPAWN_BACKOFF:
-            logger.debug(f"relocate | job {job.job_id}: guardian 重拉退避中(距上次 < {ru.RESPAWN_BACKOFF}s), 本轮跳过")
-            return
-        rt["respawn_ts"] = now
-        self._spawn_guardian(job)
-
-    def _spawn_guardian(self, job: RelocateJob) -> bool:
-        """拉起 guardian 独立进程(不随 auto-qb 消亡; 规格经文件传, Unicode 路径不经命令行)
-
-        S3a/S3 spec 接线(建账单点 —— 本方法是全仓唯一 write_spec 调用点):
+        规格经文件传(Unicode 路径不经命令行):
         - bt_backup: bt_backup_path_of(当前 qB 实例查表); 查不中 = 该实例 fastresume 收尾
-          功能未启用 ⇒ **不写字段**(recycle_daemon 扫描以该字段为 opt-in 标记, 旧链行为
-          逐字节不变);
+          功能未启用 ⇒ **不写字段**(S1 五闸本应拦下该形态 —— 这里防御性降级并告警,
+          job 停在 armed 等人工, 绝不静默丢收尾);
         - members: S3a 成员清单(arm_members_of, hash_v2 经 <hash>.torrent 现算, 取不到
-          留空)。旧链 guardian 不消费该字段(读侧容错), 新链 daemon 以此为 pending 账底。
+          留空)。新链 daemon 以此为 pending 账底。
         """
         data_dir = self._data_dir()
         backup = bt_backup_path_of(getattr(self._ctx, "config", None))
@@ -1013,26 +897,19 @@ class ExecMixin:
                 spec["bt_backup"] = backup
             relocate_journal.write_spec(data_dir, job.job_id, spec)
         except Exception as e:  # noqa: BLE001
-            logger.warning(f"relocate | job {job.job_id}: guardian 规格落盘失败({e})")
+            logger.warning(f"relocate | job {job.job_id}: arm 规格落盘失败({e})")
             return False
-        try:
-            self._spawn(data_dir, job.job_id)
-        except Exception as e:  # noqa: BLE001 - 拉起失败只告警: 下轮心跳巡检会重拉
-            logger.warning(f"relocate | job {job.job_id}: guardian 拉起失败({e})")
-            return False
+        if not backup:
+            logger.warning(
+                f"relocate | job {job.job_id}: bt_backup 未配置, fastresume 改写收尾不会发生 —— "
+                "job 停在 armed(别名维持、成员经别名可读), 请检查 bt_backup 配置"
+            )
         return True
-
-    def _spawn(self, data_dir: str, job_id: str) -> None:
-        """进程拉起单点(测试替换本方法; 生产 detached + 无窗口, 与 traffic_source.agent 同口径)"""
-        import sys
-
-        args = [sys.executable, "-m", "auto_qb.tools.finalize_watch", "--data-dir", data_dir, "--job", job_id]
-        self._popen_detached(args)
 
     def _spawn_daemon(self, data_dir: str, host: str, port: int) -> None:
         """回收 daemon 进程拉起(ACT_ENSURE_DAEMON 处置; 测试替换本方法)
 
-        形制与 _spawn 同一套 detached 单点(_popen_detached); 规格不经命令行传 --
+        生产 detached + 无窗口(_popen_detached 单点); 规格不经命令行传 --
         daemon 自扫 <data_dir>/relocate/*.spec.json(S3a 发现面), 命令行只给实例身份。
         """
         import sys
@@ -1075,8 +952,8 @@ class ExecMixin:
           拉了也只会空转一个宽限周期 —— 不给旧链 job 白白造进程);
         - pending 集非空(rj.pending_members 现读 spec+journal.rewrites);
         - 回收 daemon 死/心跳过期(rj.daemon_stale 判据单点, 健康在位绝不重复拉起)。
-        处置 = _spawn_daemon 重拉 recycle_daemon(subprocess, D12 形制); 拉起节流复用
-        RESPAWN_BACKOFF 同档(独立 rt 键 ensure_daemon_ts, 不与旧链退避账共用) --
+        处置 = _spawn_daemon 重拉 recycle_daemon(subprocess, D12 形制); 拉起节流走
+        DAEMON_RESPAWN_BACKOFF(独立 rt 键 ensure_daemon_ts) --
         Popen 失败不留痕迹时, 没有节流就会每 tick 空拉一次进程。
         """
         if job.is_terminal:
@@ -1095,7 +972,7 @@ class ExecMixin:
             return
         now = self._clock.monotonic()
         ensure_ts = rt.get("ensure_daemon_ts")
-        if ensure_ts is not None and now - float(ensure_ts) < ru.RESPAWN_BACKOFF:
+        if ensure_ts is not None and now - float(ensure_ts) < ru.DAEMON_RESPAWN_BACKOFF:
             logger.debug(f"relocate | job {job.job_id}: 回收 daemon 重拉退避中, 本轮跳过")
             return
         rt["ensure_daemon_ts"] = now

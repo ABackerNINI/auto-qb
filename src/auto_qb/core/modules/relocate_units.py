@@ -63,24 +63,41 @@ GATE_NESTED = "nested"  # 嵌套目标: target 位于成员声明源或活跃 jo
 GATE_SOURCE_MISSING = "source_missing"  # 源侧三态之缺失: 声明文件原名与 .!qB 孪生都不在(0546 机制①/E2.2 零搬移假成功)
 GATE_SOURCE_UNKNOWN = "source_unknown"  # 源侧三态之不可判定: exists 探测判不了(容器映射 miss, 保守拒同 target_unknown 口径)
 
-# job 相位机(§3.5; 主干单向推进, 旁支 terminal)
+# job 相位机(计划 26-11-05-0808 S4 相位模型重定义; 主干单向推进, 旁支 terminal):
+# 前段(搬迁+建链)三相位保留 —— 新链流程结构不变(setLocation 搬迁 -> 目标校验 -> 建别名
+# -> 武装), 武装后进入收尾窗 {armed, rewritten}: armed = 别名在位、成员经别名做种、
+# journal 改写账 pending(等 qB 下线窗口); rewritten = 回收 daemon 已把全体成员 fastresume
+# 双键改写落盘(journal 相位翻 rewritten), 等 qB 重启加载新路径后由主循环核验+删链推进。
+# 旧收尾窗三相位 removing/removed/finalizing(删别名 -> missingFiles -> ACT_FINALIZE 归位)
+# 整链退役(0420 证伪); 旧账里的这三个值由 job_from_dict 前向映射到 armed(非终态不丢现场)。
 PHASE_MOVING = "moving"
 PHASE_WATCHING = "watching"  # moving 的长耗时变体: 仍在搬, 只降频提示, 不判失败
 PHASE_MOVED = "moved"
 PHASE_ARMED = "armed"
-PHASE_REMOVING = "removing"
-PHASE_REMOVED = "removed"
-PHASE_FINALIZING = "finalizing"
+# 与 relocate_journal.PHASE_REWRITTEN 同值配对(协议 owner 在 journal 侧, daemon 写;
+# 本侧是相位机判定用镜像 —— 不互相 import, 避免 core/modules <-> infra 反向依赖)
+PHASE_REWRITTEN = "rewritten"
 PHASE_DONE = "done"
 PHASE_FAILED = "failed"
 PHASE_CANCELLED = "cancelled"
 TERMINAL_PHASES = frozenset({PHASE_DONE, PHASE_FAILED, PHASE_CANCELLED})
-# 收尾窗口(链接已删、qB 重启后 setLocation 之前): 此窗口内往原路径加种子会落原盘,
-# 可能与已迁到新位置的数据重复(§3.6 第 8 行)
-FINALIZE_WINDOW_PHASES = frozenset({PHASE_REMOVING, PHASE_REMOVED, PHASE_FINALIZING})
-# qB 待收尾标签镜像窗口(计划 26-11-04-1042 P3): 数据已搬走、qB 尚未收尾期间都算「待收尾」,
-# 标签在 armed 时加上、进入终态时摘除; 标签只写不读, 迁移状态判定仍只认 state。
-PENDING_TAG_PHASES = frozenset({PHASE_ARMED}) | FINALIZE_WINDOW_PHASES
+# 收尾窗口(D16 变更承重): armed/rewritten 期间数据已在新位置、成员经别名做种 —— 此窗口内
+# 往旧根添加非本组种子, 其 save_path 记在旧根, 会成为删链门(等值 OR 前缀)的永久依赖,
+# 别名将永不删; evaluate_add 的 confirm 是唯一预防面(§3.6 第 8 行 / D16)。
+FINALIZE_WINDOW_PHASES = frozenset({PHASE_ARMED, PHASE_REWRITTEN})
+# qB 待收尾标签镜像窗口(计划 26-11-04-1042 P3): 收尾窗全程算「待收尾」, 标签在 armed 时
+# 加上、进入终态时摘除; 标签只写不读, 迁移状态判定仍只认 state。(与 FINALIZE_WINDOW_PHASES
+# 同集: 收尾窗相位机重定义后标签窗口自动跟随, 保留独立名字以维持镜像语义的可读性。)
+PENDING_TAG_PHASES = frozenset(FINALIZE_WINDOW_PHASES)
+# 旧账相位前向映射(S4 迁移口径: 运行中的旧 job 遇新代码按终态/非终态映射):
+# removing/removed/finalizing 都是旧链收尾窗非终态 -> 统一映射回 armed —— 别名在的照常
+# 对账, 已删的由对账 ACT_REBUILD 重建(重建路径幂等), 改写账 pending 交回收 daemon 接管;
+# 终态(done/failed/cancelled)与前段(moving/watching/moved)原样保留。
+LEGACY_PHASE_MAP = {
+    "removing": PHASE_ARMED,
+    "removed": PHASE_ARMED,
+    "finalizing": PHASE_ARMED,
+}
 
 # ---------------------------------------------------------------- 路径纯函数
 
@@ -346,20 +363,24 @@ class RelocateJob:
         return False
 
     def blocks_relocation(self, hashes: Sequence[str], content_root: str) -> bool:
-        """本 job 是否挡住对(这些 hash 组成的)组的再次迁移(§3.6 第 14 行 / S10)
+        """本 job 是否挡住对(这些 hash 组成的)组的再次迁移(§3.6 第 14 行 / S10; D15 收窄)
 
-        非终态且成员相交 ⇒ 挡(同组再迁, 链接套链接让旧 job 收尾失效, 必须先收尾或先撤销)。
-        作用域覆盖分支**只对目录别名成立**: 目录别名是一条挂在内容根的 junction/symlink,
-        落入该目录的写入会被整体重定向到 T —— 同目录别组此刻再迁, 数据会穿链接搬进旧
-        job 的目标、与收尾语义冲突(P7 真机 S14b 实测: 逐文件链接组③ 的 scope = save_path
-        (平铺内容根), 旧实现把同 save_path 下的无关组 C 一并挡下, 与 §08「多选按组拆开
-        各迁各的」相悖)。逐文件链接只挂在组内文件上、不改变目录形态, 无重定向 hazard,
-        故不适用本分支; direct 单成员组同理(无别名即无链接可套)。
+        D15 放行集 = 收尾窗 {armed, rewritten}: 同组再迁不再一刀切拦截(S5 未收尾再迁移的
+        supersede 支线按此放行; 本期 S4 前半先收窄闸门, supersede 重定向本体在 S5 落地)。
+        前段相位(moving/watching/moved)仍拦: 搬迁/建链在途时叠加第二次 setLocation 会互相
+        覆盖, 链接套链接让旧 job 失效。
+
+        作用域覆盖分支**只对目录别名成立**, 且对全部非终态相位(含 armed/rewritten)保留:
+        目录别名是一条挂在内容根的 junction/symlink, 落入该目录的写入会被整体重定向到
+        job 的目标 —— 别名建链在新链仍是第 3 步, dir_alias 形态字段就是别名形态记录, armed/
+        rewritten 期间别名在位, 别组此刻再迁, 数据会穿链接搬进旧 job 的目标、混进旧 job 的
+        删链门依赖集(P7 真机 S14b 实测依据不变)。逐文件链接只挂在组内文件上、不改变目录
+        形态, 无重定向 hazard, 故不适用本分支; direct 单成员组同理(无别名即无链接可套)。
         """
         if self.is_terminal:
             return False
         if self.touches(hashes):
-            return True
+            return self.phase not in FINALIZE_WINDOW_PHASES
         if (self.plan or {}).get("form") == FORM_DIR_ALIAS:
             return _within(self.scope, content_root)
         return False
@@ -505,12 +526,12 @@ def evaluate_group(facts: GroupFacts) -> dict:
         if cls != CLS_BLOCKED:
             cls = CLS_CONFIRM
 
-    # ---- 未收尾拦截(先于一切: §3.6 第 14 行 / S10) ----
+    # ---- 未收尾拦截(先于一切: §3.6 第 14 行 / S10; D15 收窄: 收尾窗放行) ----
     for job in facts.jobs:
         if job.blocks_relocation(facts.hashes, content_root):
             _block(
-                GATE_UNFINISHED, f"该组有未收尾的迁移(job {job.job_id} 相位 {job.phase}): 收尾完成或撤销后才能再次迁移, "
-                "否则链接套链接会让旧迁移的收尾失效"
+                GATE_UNFINISHED, f"该组有搬迁在途的迁移(job {job.job_id} 相位 {job.phase}): 等搬迁完成建好别名后"
+                "才能再次迁移, 否则叠加的 setLocation 会互相覆盖、链接套链接让旧迁移失效"
             )
             break
 
@@ -708,11 +729,15 @@ class AddFacts:
 def evaluate_add(facts: AddFacts) -> dict:
     """往别名作用域添加种子的三分流(ok=无影响 / confirm=弹「请求路径→实际落点→卷剩余」二次确认)
 
-    落点 = save_path/内容根(种子名)。判定顺序(§3.6 行号):
-    1. 收尾窗口(链接已删、qB 未起/未 finalize): 新种子落原盘, 可能与 T 侧旧数据重复 ⇒ confirm;
-    2. 目录别名作用域命中: 一切落点被重定向到 T ⇒ confirm(展示实际落点与目标卷剩余);
+    落点 = save_path/内容根(种子名)。判定顺序(§3.6 行号; D16 收尾窗重定义到 {armed,
+    rewritten} 且**变更承重**):
+    1. 收尾窗口(armed/rewritten: 数据已在新位置、成员经别名做种): 落点账面 save_path 记
+       在旧根的任何添加都会成为删链门(等值 OR 前缀)的**永久依赖** —— 别名将永不删,
+       confirm 是唯一预防面; 目录别名形态补充「实际落点」展示(gate 仍 finalize_window);
+    2. 目录别名作用域命中(前段相位 moved): 一切落点被重定向到 T ⇒ confirm(展示实际落点
+       与目标卷剩余);
     3. 逐文件链接: 只有落点**本身就是链接**(同名)才 confirm(写入将覆盖 T 侧数据);
-       异名落原盘真实目录, 无影响(row 1) ⇒ ok;
+       异名落原盘真实目录, 无影响 ⇒ ok;
     4. 落点是链接但无 job 登记(第三方): confirm 警示;
     5. 其余 ok。
     """
@@ -725,11 +750,34 @@ def evaluate_add(facts: AddFacts) -> dict:
         "volume_free": None,
     }
 
-    # ---- 1. 收尾窗口 ----
+    # ---- 1. 收尾窗口(armed/rewritten; D16 变更承重) ----
+    # 判据只看「落点账面 save_path == job 声明源」: 收尾窗内任何往旧根添加的种子, 其
+    # save_path 记在旧根, 会成为删链门(等值 OR 前缀)的永久依赖 —— 别名将永不删, confirm
+    # 是唯一预防面。目录别名形态补充「实际落点」展示(写入经别名落到新位置, 但账面仍记旧根)。
     for job in facts.jobs:
         if job.is_terminal:
             continue
         if job.phase in FINALIZE_WINDOW_PHASES and _norm(facts.save_path) == _norm(job.src):
+            if job.alias_kind == "dir":
+                sp = facts.save_path.replace("\\", "/").rstrip("/")
+                rel = landing[len(sp):].lstrip("/") if landing.startswith(sp + "/") else ""
+                actual = _join(job.dst, rel)
+                return {
+                    **base,
+                    "cls": CLS_CONFIRM,
+                    "actual_path": actual,
+                    "volume_free": facts.target_free,
+                    "reasons":
+                        [
+                            _reason(
+                                "finalize_window", CLS_CONFIRM,
+                                f"该目录的迁移待收尾(job {job.job_id} 相位 {job.phase}, 数据已迁到 {job.dst}): "
+                                f"新种子将经别名落到 {actual}, 但账面会记在旧路径 —— 成为删链门的永久依赖"
+                                "(旧路径别名将永不删除) —— 请等 qB 重启收尾完成后再添加, 或确认接受依赖后继续"
+                            )
+                        ],
+                    "notes": [f"目标卷剩余 {facts.target_free} 字节" if facts.target_free is not None else "目标卷剩余不可判定"],
+                }
             return {
                 **base,
                 "cls": CLS_CONFIRM,
@@ -737,8 +785,9 @@ def evaluate_add(facts: AddFacts) -> dict:
                     [
                         _reason(
                             "finalize_window", CLS_CONFIRM,
-                            f"该目录的迁移正在收尾(job {job.job_id} 相位 {job.phase}, 旧链接已删): 现在添加会落在"
-                            "原盘, 可能与已迁到新位置的数据重复 —— 等 qB 重启完成收尾, 或确认重复后继续"
+                            f"该目录的迁移待收尾(job {job.job_id} 相位 {job.phase}, 数据已迁到 {job.dst}, "
+                            "成员经别名做种): 现在添加的种子账面会记在旧路径, 成为删链门的永久依赖"
+                            "(旧路径别名将永不删除) —— 请等 qB 重启收尾完成后再添加, 或确认接受依赖后继续"
                         )
                     ],
                 "notes": [],
@@ -883,7 +932,10 @@ def job_from_dict(d: Any) -> Optional[RelocateJob]:
             scope=str(d.get("scope") or ""),
             alias_kind=str(d.get("alias_kind") or ""),
             alias_paths=tuple(d.get("alias_paths") or ()),
-            phase=str(d.get("phase") or PHASE_MOVING),
+            # 旧账相位前向映射(S4 迁移口径): removing/removed/finalizing -> armed(非终态
+            # 不丢现场); 终态与新相位原样。未知值原样透传(旧 reader 不炸原则: 非终态且
+            # 不在任何相位分支里 = 推进分派静默跳过, 不炸不误判终态)。
+            phase=LEGACY_PHASE_MAP.get(str(d.get("phase") or ""), str(d.get("phase") or PHASE_MOVING)),
             reason=str(d.get("reason") or ""),
             created_at=float(d.get("created_at") or 0.0),
             armed_at=float(d.get("armed_at") or 0.0),
@@ -947,39 +999,10 @@ def resolve_physical(save_path: str, content_root: str, jobs: Sequence[RelocateJ
     return save_path
 
 
-def finalize_scope_candidate(job: RelocateJob, save_path: str) -> bool:
-    """收尾覆盖分支的零成本候选判定(save_path 维度, 免文件表)
-
-    finalize_members 覆盖分支条件的前半段(目录别名 job 且 save_path 已在 src),
-    也是 RelocateModule._finalize_members 预过滤的**单点**: 只有候选才值得发
-    files API 算内容根 —— 全库逐条先取文件表再过滤会让大库主循环单 tick 串行
-    N 次 HTTP 停摆分钟级(26-10-30-0616)。
-    """
-    return job.scope_covers_dir and _norm(save_path) == _norm(job.src)
-
-
-def finalize_members(job: RelocateJob, members: Sequence[Tuple[str, str, str]]) -> Tuple[str, ...]:
-    """动态收尾集合(§3.5 / D7: 别名是作用域不是快照)
-
-    members = [(hash, save_path, content_root), ...]; 集合 = 创建时 hashes ∪
-    「当前 save_path == src 且内容根落在 scope 内」的所有成员, mover 已在 dst 故跳过。
-    别名期间新加的同内容辅种因此自动纳入 —— 不会留「收尾后新成员留在原地、
-    链接已删 ⇒ 缺文件」的坑。
-
-    作用域覆盖分支只对**目录别名**成立(scope_covers_dir): 逐文件链接/直搬的 scope 是
-    平铺 save_path, 覆盖整目录会把同目录别组一并 setLocation 到 T(P7 真机实测, 见
-    scope_covers_dir) —— 那类 job 只收自己的成员(创建时 hashes)。
-    """
-    out = []
-    seen = set()
-    for h, sp, root in members:
-        if h == job.mover or h in seen:
-            continue
-        if h in job.hashes or (finalize_scope_candidate(job, sp) and _within(job.scope, root)):
-            seen.add(h)
-            out.append(h)
-    return tuple(out)
-
+# (S4 退役注记) 旧链的 finalize_scope_candidate/finalize_members「动态收尾集合」随
+# ACT_FINALIZE 归位链整体退役(0420 证伪): 新链收尾 = qB 重启后全员 save_path 等值核验
+# + 删链门依赖扫描(核验+删链推进单点在 relocate_exec._step_verify, S4 后半落地),
+# 不再需要「把落进作用域的新成员一并 setLocation」的账面恢复链。
 
 # ---------------------------------------------------------------- 停滞判据与执行期恢复(P3)
 
@@ -1024,46 +1047,42 @@ def recover_exec_phase(qb_moving: bool, save_path_at_dst: bool, dst_has_data: bo
     return RECOVER_STALLED
 
 
-# ---------------------------------------------------------------- 对账表(P6, §3.5)
+# ---------------------------------------------------------------- 对账表(S4 新链, 计划 26-11-05-0808 §3.2「对账与生命周期」行)
+# 旧表 9 动作(S4 退役注记):
+# - ACT_RESPAWN/ACT_REDELETE -> ACT_ENSURE_DAEMON 合并替代(回收 daemon 重拉, per-job
+#   pid 锁/心跳/RESPAWN_BACKOFF 退避一并退役, D12);
+# - ACT_REVERT_INTENT -> 随「先删别名再归位」意图链退役(新链无删别名意图相位);
+# - ACT_FINALIZE -> 随 missingFiles 预期输入/setLocation 归位链退役(0420 证伪);
+# - ACT_DONE_EXTERNAL -> 并入核验+删链推进(ACT_VERIFY: 全员 save_path==dst 就是核验
+#   通过的充分证据, 后续删链在 _step_verify 单点);
+# - ACT_FAILED_TIMEOUT -> 退役(D10 收敛公理: journal 悬挂是良性态, 反馈面提示「重启 qB
+#   即完成」, 不判 failed —— 失败态必须收敛到「别名在/成员可读/journal 待重放」);
+# - ACT_FAILED_GONE -> 退役(种子被删的现场处置并入 S4 后半核验面的依赖扫描口径,
+#   悬挂态单项良性, 不再在判据层抢判 failed)。
 
-ACT_WAIT = "wait"  # 等(含 guardian 心跳正常 / qB 未起)
-ACT_RESPAWN = "respawn_guardian"  # guardian 心跳过期 ⇒ 重拉
-ACT_REDELETE = "reguardian_delete"  # removing + 链接在 + qB 不在 ⇒ guardian 重删(不在则重拉)
-ACT_REVERT_INTENT = "revert_intent"  # removing + 链接在 + qB 回来了 ⇒ 撤销删除意图回 armed
-ACT_REBUILD = "rebuild_links"  # 链接不在 + qB 在 + 种子正常 ⇒ 重建链接回 armed
-ACT_FINALIZE = "finalize"  # 链接不在 + qB 在 + missingFiles ⇒ setLocation 收尾
-ACT_FAILED_GONE = "failed_gone"  # 种子已不存在(用户删了): failed, 保留链接现场交人
-ACT_FAILED_TIMEOUT = "failed_timeout"  # 超过 finalize_timeout 仍未收尾: failed
-ACT_DONE_EXTERNAL = "done_external"  # 已被外部完成(save_path==dst): done
-
-GUARDIAN_HEARTBEAT_MAX_AGE = 60.0  # guardian 心跳过期判据(§3.5 对账表第 1 行)
-
-# 重试退避与上限(防无界重试): 建链必失败的环境(权限不足 / 未开 Windows 开发者模式且
-# allow_uac 关 —— 预检文案自己点名的常见环境)里, 「REMOVED(alias_partial) → 对账
-# REBUILD → 置 MOVED 重建 → 再失败」会每 1-2 个 tick 一轮 create-fail-delete 且永不终态
-# (WARNING 约 4s 一条刷屏); guardian 心跳一过期就每 tick 重拉一次进程同理。这类失败不是
-# 抖动, 靠退避拉开间隔 + 达到上限转 failed 留现场才能收敛。
-# 取常量而非配置键: 这是执行体的内部节拍(与 GUARDIAN_HEARTBEAT_MAX_AGE 同档), 不是用户
-# 该调的策略面 —— 重试次数由 job.attempts 记账(落 state, 重启不丢)。
-REBUILD_MAX_ATTEMPTS = 3  # 重建链接的重试上限(超出 ⇒ failed 留现场交人)
-REBUILD_BACKOFF = 300.0  # 秒; 两次重建之间的最小间隔
-RESPAWN_BACKOFF = 60.0  # 秒; 两次 guardian 拉起之间的最小间隔(与心跳过期判据同档)
-
-# ---------------------------------------------------------------- S3 新链对账(计划 26-11-05-0808 §3.2「对账与生命周期」行)
-# ACT_ENSURE_DAEMON 是**新增**动作, 判据独立于上方 reconcile 旧表(本期旧相位模型不动,
-# RESPAWN/REDELETE 等旧动作与其退避的退役都在下一任务) —— 判据输入由执行体收集:
-# pending = relocate_journal.pending_members(spec, rewrites) 现读,
-# daemon_stale = relocate_journal.daemon_stale(...)(协议单点, S3a 已提供)。
+ACT_WAIT = "wait"  # 等(armed 做种中 / qB 不在等下线窗口 / pending 由 daemon 处理)
+ACT_REBUILD = "rebuild_links"  # 别名丢失 + qB 在 ⇒ 从 job 账重建别名回 armed(rebuild-from-journal 判据侧)
+ACT_VERIFY = "verify_chain"  # 全员 save_path 已在目标位置 ⇒ 核验+删链推进(体在 S4 后半落地, 单点 _step_verify)
 ACT_ENSURE_DAEMON = "ensure_daemon"  # pending 非空且回收 daemon 死/心跳过期 ⇒ 重拉 recycle_daemon
 
+# 重试退避与上限(防无界重试): 建链必失败的环境(权限不足 / 未开 Windows 开发者模式且
+# allow_uac 关 —— 预检文案自己点名的常见环境)里, 「别名丢失 → 对账 REBUILD → 置 MOVED
+# 重建 → 再失败」会每 1-2 个 tick 一轮 create-fail-delete 且永不终态(WARNING 刷屏)。
+# 这类失败不是抖动, 靠退避拉开间隔 + 达到上限转 failed 留现场才能收敛。
+# 取常量而非配置键: 这是执行体的内部节拍, 不是用户该调的策略面 —— 重试次数由
+# job.attempts 记账(落 state, 重启不丢)。
+REBUILD_MAX_ATTEMPTS = 3  # 重建别名的重试上限(超出 ⇒ failed 留现场交人)
+REBUILD_BACKOFF = 300.0  # 秒; 两次重建之间的最小间隔
+DAEMON_RESPAWN_BACKOFF = 60.0  # 秒; 回收 daemon 两次重拉之间的最小间隔(ACT_ENSURE_DAEMON 节流;
+# 旧 RESPAWN_BACKOFF 随 per-job guardian 退役, 本常量承接其「防 Popen 每 tick 空拉」职责)
+
 #: 回收 daemon 心跳过期线(daemon 侧节拍常量在 tools/recycle_daemon.py HEARTBEAT_MAX_AGE,
-#: 两处同值是「daemon 写侧节拍 / 对账读侧判线」的配对 —— 不互相 import, 避免 core→tools 依赖;
-#: 下一任务 per-job 心跳退役时随段收拾)。
+#: 两处同值是「daemon 写侧节拍 / 对账读侧判线」的配对 —— 不互相 import, 避免 core→tools 依赖)。
 DAEMON_HEARTBEAT_MAX_AGE = 60.0
 
 
 def ensure_daemon_action(*, pending: int, daemon_stale: bool) -> str:
-    """S3 新链对账判据(纯函数; 与 reconcile 旧表并列, 不混改旧动作)
+    """新链对账判据(纯函数)
 
     - pending 集空 ⇒ wait: 没有待改写成员, daemon 自会宽限退出, 对账不拉
       (拉了也只会空转一个宽限周期, 纯浪费);
@@ -1077,39 +1096,22 @@ def ensure_daemon_action(*, pending: int, daemon_stale: bool) -> str:
     return ACT_ENSURE_DAEMON
 
 
-def reconcile(
-    job: RelocateJob,
-    *,
-    journal_phase: str = "",
-    link_present: bool = True,
-    qb_up: bool = True,
-    seed_state: str = "normal",
-    save_path_at_dst: bool = False,
-    heartbeat_age: float = 0.0,
-    elapsed: float = 0.0,
-    finalize_timeout: float = 0.0,
-) -> str:
-    """§3.5 对账表: (journal 相位, 链接在?, qB 在?, 种子态) -> 处置动作(纯函数)
+def reconcile(job: RelocateJob, *, alias_present: bool = True, qb_up: bool = True, all_at_dst: bool = False) -> str:
+    """收尾窗(armed/rewritten)对账表: (别名在?, qB 在?, 全员已到目标?) -> 处置动作(纯函数)
 
-    收尾的充分条件是**证据**而非事件 —— 不检测「qB 是否重启过」, qB 在线 + 种子
-    missingFiles + save_path==src + 链接不在 即充分。seed_state 取值:
-    "normal" / "missingFiles" / "gone"。
+    新链判据只认**证据**而非意图相位 —— 收尾窗没有「先删别名再归位」的意图账, 三个
+    输入把现场分干净:
+    - 全员已在目标位置(改写生效/qB 重启加载完成或外部归位)⇒ ACT_VERIFY: 核验+删链
+      推进(删链门依赖扫描与删别名在 _step_verify 单点, S4 后半落地; 本期判据先行,
+      处置暂为挂起 —— job 停在 rewritten 不推进, 报告已注明中间态);
+    - 别名丢失而 qB 在线 ⇒ ACT_REBUILD: 从 job 账(alias_paths/plan)重建别名回 armed
+      (journal 条目重建别名 = rebuild-from-journal 的判据面; qB 不在时不重建 —— 下线
+      窗口是 daemon 的改写现场, 重建动作等 qB 回来);
+    - 其余(armed 做种中 / qB 不在)⇒ ACT_WAIT。pending 集与 daemon 存活的对账不进本表
+      —— ACT_ENSURE_DAEMON 判据独立(ensure_daemon_action), 由执行体每拍顺带判。
     """
-    if seed_state == "gone":
-        return ACT_FAILED_GONE
-    if link_present and qb_up and save_path_at_dst:
-        return ACT_DONE_EXTERNAL
-    if journal_phase in (PHASE_REMOVING, PHASE_REMOVED) and not link_present:
-        if not qb_up:
-            return ACT_FAILED_TIMEOUT if (finalize_timeout and elapsed > finalize_timeout) else ACT_WAIT
-        return ACT_FINALIZE if seed_state == "missingFiles" else ACT_REBUILD
-    if journal_phase == PHASE_REMOVING and link_present:
-        return ACT_REVERT_INTENT if qb_up else ACT_REDELETE
-    if link_present:
-        return ACT_RESPAWN if heartbeat_age > GUARDIAN_HEARTBEAT_MAX_AGE else ACT_WAIT
-    # 链接不在且无 removing/removed 意图: 现场已变(qB 在且种子正常 ⇒ 重建; 否则等)
-    if qb_up and seed_state == "missingFiles":
-        return ACT_FINALIZE
-    if qb_up:
+    if all_at_dst and qb_up:
+        return ACT_VERIFY
+    if not alias_present and qb_up:
         return ACT_REBUILD
-    return ACT_FAILED_TIMEOUT if (finalize_timeout and elapsed > finalize_timeout) else ACT_WAIT
+    return ACT_WAIT
