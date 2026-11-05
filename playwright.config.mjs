@@ -3,6 +3,21 @@ import { defineConfig, devices } from '@playwright/test';
 import { HARNESS_CMD, WAIT_STDOUT } from './e2e/harness.mjs';
 
 /**
+ * S5 e2e 并行化(计划 26-11-05-0118 §04 S5 / §06 D14): 并行的正确形态是 **shard 多进程**
+ * (`npm run test:e2e:fast:shard -- --index x --total N`, 包装器 e2e/shard-run.mjs), 不是
+ * workers —— 每个 shard 进程各自拉起**独立 webServer**(桩恒 `--port 0` 由 OS 分配, 互不冲突;
+ * `reuseExistingServer:false` 纵深不受影响), shard 内仍 workers:1(单共享桩的确定性口径不变)。
+ *
+ * CPU 敏感量具 spec(perf.spec.mjs 量具节拍/CPU 时间断言; drawer-content-perf.spec.mjs mut
+ * 预算按 ~500ms 观察窗标定)在多 shard 并发下数字会漂 —— **不进 shard 轮转**: 包装器置
+ * `E2E_SHARD_TOTAL` 时 testIgnore 生效将其排除, 由 `npm run test:e2e:perf-serial` 串行补跑
+ * (门控档 E2E_TORRENTS=600)。手跑 `npx playwright test` 不设该 env, 串行全量口径不变。
+ * 模式矩阵轮(env 组合决定桩形态)仍**轮间串行人跑**, 提速落在每轮内部 —— 见 e2e/harness.mjs。
+ */
+const SHARDED = !!process.env.E2E_SHARD_TOTAL;
+const CPU_SENSITIVE_SPECS = ['**/perf.spec.mjs', '**/drawer-content-perf.spec.mjs'];
+
+/**
  * WEB UI 真浏览器冒烟 —— 本仓库"静态守阵之外"的那一层门禁。
  *
  * 定位(S7 终态, 2026-10-06): 旧单页冒烟脚本已退役, 本文件 + e2e/ 是 WEB UI 浏览器断言的
@@ -18,6 +33,9 @@ import { HARNESS_CMD, WAIT_STDOUT } from './e2e/harness.mjs';
  */
 export default defineConfig({
   testDir: './e2e',
+
+  /* 仅 shard 会话(e2e/shard-run.mjs 置 E2E_SHARD_TOTAL)排除 CPU 敏感量具 spec —— 见文件头注释 */
+  testIgnore: SHARDED ? CPU_SENSITIVE_SPECS : undefined,
 
   /* Windows 上给 webServer 收尾兜底 —— 不兜的话用例全 PASS 但命令永不退出(根因与实测见该文件
    * 顶部注释)。非 Windows 是 no-op, CI 不受影响。 */

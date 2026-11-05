@@ -10,6 +10,8 @@
   "scripts": {
     "test:e2e": "playwright test",
     "test:e2e:fast": "playwright test --grep @fast",
+    "test:e2e:fast:shard": "node e2e/shard-run.mjs --grep @fast",
+    "test:e2e:perf-serial": "node e2e/perf-serial.mjs",
     "test:e2e:headed": "playwright test --headed",
     "report:e2e": "playwright show-report"
   },
