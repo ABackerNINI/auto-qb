@@ -10,9 +10,9 @@
     {
       "id": "R1-1",
       "title": "内核执行面: qbmanager/taskqueue/module/qbapi/state + core 根杂件",
-      "status": "pending",
-      "done_at": null,
-      "findings": 0
+      "status": "done",
+      "done_at": "26-11-06-0546",
+      "findings": 21
     },
     {
       "id": "R1-2",
