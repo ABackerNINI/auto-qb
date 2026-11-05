@@ -17,9 +17,9 @@
     {
       "id": "R1-2",
       "title": "迁移执行: relocate_units/relocate_exec/relocate_common",
-      "status": "pending",
-      "done_at": null,
-      "findings": 0
+      "status": "done",
+      "done_at": "26-11-06-0620",
+      "findings": 13
     },
     {
       "id": "R1-3",

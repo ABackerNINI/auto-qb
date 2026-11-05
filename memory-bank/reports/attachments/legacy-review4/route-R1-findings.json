@@ -1,23 +1,308 @@
 [
-  {"file":"src/auto_qb/core/episodes.py","line":91,"quote":"仅当文件名中恰好只有一个候选数字","severity":"minor","claim":"_episodes_from_names 的 docstring 仍宣称 bare-number 提取生效(如 '01.mkv' -> 1),但对应代码块已在 111-122 行整体注释禁用,文档与行为相反","relevance":"相关","fix":"把 docstring 该条改为「无标记文件不提取集数(bare-number 已禁用, 见行内注释)」并同步函数头说明"},
-  {"file":"src/auto_qb/core/exporter.py","line":200,"quote":"torrents = api.torrents_info()","severity":"minor","claim":"export_yaml_template 先自取一次全量 torrents_info 只用于日志计数,而 collect_torrent_tracker_hostnames_with_failures 内部(43 行)再取一次 —— 每次导出/扫描双份全量请求,且两次抓取间种子集可变化导致日志计数与实际扫描集不一致(webui sites.py:57 同款模式)","relevance":"相关","fix":"给 collect_torrent_tracker_hostnames_with_failures 增加 torrents 入参复用第一次抓取结果,或删掉首取改用 len(torrent_sets) 记日志"},
-  {"file":"src/auto_qb/core/exporter.py","line":72,"quote":"def collect_all_tracker_hostnames(api: Any) -> set:","severity":"nit","claim":"collect_all_tracker_hostnames 及其唯一依赖 collect_torrent_tracker_hostnames(非 failures 变体)在 src/ 已无生产调用方(仅测试引用),生产聚合循环在 210-212 行与 webui sites.py 各自内联重写,形成同职责两套路径","relevance":"相关","fix":"生产路径改调 collect_all_tracker_hostnames(或将其退役只留 with_failures 变体),测试随迁"},
-  {"file":"src/auto_qb/core/episodes.py","line":37,"quote":"_BARE_NUMBER_RE = re.compile","severity":"nit","claim":"_BARE_NUMBER_RE 仅被 111-122 行注释掉的代码块引用,本体是不可达死符号(RESOLUTION_EXCLUDE 仍被 tvshows 使用,不在其列)","relevance":"相关","fix":"随 bare-number 禁用决策一并删除正则,或注明「仅存量禁用代码引用」"},
-  {"file":"src/auto_qb/core/episodes.py","line":64,"quote":"def name_has_episode_marker(name: str) -> bool:","severity":"nit","claim":"name_has_episode_marker 全仓无生产调用方(仅 tests/test_episodes.py 引用),属未用导出","relevance":"相关","fix":"删除或降级为 tvshows 侧真实需要的接口;保留则注明测试专用"},
-  {"file":"src/auto_qb/core/taskqueue.py","line":75,"quote":"self.uid = f\"{kind}:{name}","severity":"nit","claim":"Task.uid 与 Task.created_at(91 行)全仓(src+tests)只写不读,是纯死字段;clock 参数现仅剩喂这两个死字段与 created_at 的用途","relevance":"相关","fix":"删除 uid/created_at 字段(连带评估 Task 的 clock 参数是否仍需保留)"},
-  {"file":"src/auto_qb/core/episodes.py","line":127,"quote":"single_template.format(1)='zE1'","severity":"nit","claim":"format_episode_tag 的 docstring 用 str.format(1) 示例描述模板契约,而实现是替换 ${episode_first}/${episode_last} 占位符(config 默认模板亦为后者),示例 API 与实现不符(面1/面3 同报,合并)","relevance":"相关","fix":"docstring 示例改为 'zE${episode_first}' -> 'zE1' 口径,与 config/models.py 的占位符文档对齐"},
-  {"file":"src/auto_qb/core/state.py","line":131,"quote":"self._write_back_recovered(bak)","severity":"major","claim":"load() 的损坏恢复写回在持锁之前执行(QbManager.__init__ 的 _reload_state 先于 SingleInstanceLock.acquire),且 --export-yaml 等 no_lock 只读模式同样会触发,实际向 state_file 写盘,违背「未持锁不写盘」的单一写线程判据(与 materialize_migration/cleanup_orphan_tmp 自述口径矛盾),可与正常运行实例并发写同一状态文件","relevance":"相关","fix":"恢复写回改为挂待写标志延迟到持锁后物化(仿 materialize_migration),no_lock 模式跳过写回只留日志"},
-  {"file":"src/auto_qb/core/exporter.py","line":250,"quote":"with open(output_path, \"w\", encoding=\"utf-8\") as f:","severity":"minor","claim":"--export-yaml 对 output_path 无守卫,传 config.yml 自身即对生产配置做 yaml.dump 重排重写(注释全部丢失、格式重排),且该模式 no_lock 不持锁、可与运行实例并发,踩「重排 config.yml」红线","relevance":"相关","fix":"output_path 与 config_path 相同(或命中生产配置路径)时 parser.error 拒绝导出"},
-  {"file":"src/auto_qb/core/qbmanager.py","line":1029,"quote":"f.write(f\"{tor}\\n\\n\")","severity":"minor","claim":"--export-torrents_info 把种子原始字典原样写进明文 torrents.txt,其中 tracker 字段是完整 tracker URL(私站含 passkey),绕过项目自身的 mask_tracker_entry 脱敏口径","relevance":"相关","fix":"写出前对 tracker URL 做与 Facade 同款脱敏,或在该调试文件头部注明含密钥、限制文件权限"},
-  {"file":"src/auto_qb/core/exporter.py","line":259,"quote":"已导出 YAML 模板","severity":"nit","claim":"dry_run=True 时实际未写文件,仍输出「已导出 YAML 模板」INFO 日志,与 dry-run 口径矛盾误导排障","relevance":"相关","fix":"dry_run 分支改记「dry-run: 未写出, 目标路径: ...」"},
-  {"file":"src/auto_qb/core/qbmanager.py","line":264,"quote":"main_tick → 2× → 4×","severity":"nit","claim":"注释含非 ASCII 图形符号 →(全批注释普遍存在 →/≈/≤/· 等),按任务口径(注释里也不该有)与 code-style.md「覆盖含注释」字面要求记 nit","relevance":"相关","fix":"注释内箭头/数学符号改 ASCII(->、~、<=);若项目口径认定中文文档符号豁免则维持现状"},
-  {"file":"src/auto_qb/cli.py","line":76,"quote":"if released == 0 and not release_all:","severity":"minor","claim":"fuse_release 的 --all 零条目合法清点返回 True 分支无任何测试(现有测试只覆盖显式列表零命中→False 与 dry-run),回归翻转该条件会让 --fuse-release-all 清残留场景误报退出码 1","relevance":"相关","fix":"补一条 CLI 级测试: fuse.release 返回 0 + release_all=True -> 返回 True/退出码 0"},
-  {"file":"memory-bank/systemPatterns/taskqueue.md","line":24,"quote":"run_due(dry_run, now, max_tasks)","severity":"minor","claim":"run_due 签名漂移: 代码已加 defer_gate 参数且让位者不占 max_tasks 预算(issue 26-10-30-0616),文档仍写旧签名且整段缺 D-1 队列级让位语义","relevance":"相关","fix":"按快照 taskqueue.py:232-302 回写 defer_gate 参数、让位不占预算与扫描面封顶三件事"},
-  {"file":"memory-bank/systemPatterns/taskqueue.md","line":11,"quote":"`hash`, `tracker_conf`","severity":"minor","claim":"Task 字段清单漂移: 仍列已不存在的 tracker_conf 字段, 缺 _store/attempt/retry_delay/created_at(快照 __slots__)","relevance":"相关","fix":"按 taskqueue.py:41-57 __slots__ 重写字段清单"},
-  {"file":"memory-bank/systemPatterns/main-loop.md","line":52,"quote":"task_queue.run_due(dry_run, now, max_tasks)","severity":"minor","claim":"任务线 run_due 调用签名缺 defer_gate 实参(实际传 self._own_write_defer_gate), 行号注 (:817) 已失效(实际 qbmanager.py:822)","relevance":"相关","fix":"回写为 run_due(dry_run, now, max_tasks, defer_gate=self._own_write_defer_gate) 并更正行号"},
-  {"file":"memory-bank/systemPatterns/main-loop.md","line":63,"quote":"断点续跑只经子任务 `add_task(origin, keep_progress=True)` 路径","severity":"minor","claim":"REQUEUE 收尾描述漏 retry_delay 分支: _requeue 在 handler 挂 retry_delay 时推迟到期且保留断点(taskqueue.py:321-327, plan 26-11-01-0106), 断点续跑不再是只经子任务一条路","relevance":"相关","fix":"补记 retry backoff 保留断点的队列内续跑路径"},
-  {"file":"memory-bank/systemPatterns/main-loop.md","line":23,"quote":"_load_rules()","severity":"nit","claim":"规则加载方法名漂移: 文档写 host.get(\"rules\")._load_rules(), 代码实际是 load_rules()(qbmanager.py:515, rules_mod.py:301)","relevance":"相关","fix":"改为 load_rules()"},
-  {"file":"README.md","line":188,"quote":"`--export-torrents_info`","severity":"nit","claim":"命令行参数表缺 --fuse-release/--fuse-release-all, 全 docs/ 亦无保险丝放行文档 —— 恢复限速的写操作入口只存在于 --help","relevance":"相关","fix":"参数表补两行或在部署/排障文档补保险丝放行小节"},
-  {"file":"src/auto_qb/core/taskqueue.py","line":38,"quote":"kind: refresh(种子列表刷新) / rule(规则扫描)","severity":"nit","claim":"Task docstring 列的 refresh/torrent 两种 kind 全库无实例化点(实际 kind 只有 rule/rule-event/internal/check/check-wait, 种子级内置也用 internal)","relevance":"相关","fix":"docstring 删去 refresh/torrent 或注明已退役"},
-  {"file":"src/auto_qb/core/__init__.py","line":19,"quote":"YAML 配置模板导出","severity":"nit","claim":"core 包 docstring 的模块清单漏 traffic_* 八件(traffic_grid/limits/source/traffic_store*), 枚举与实际目录漂移","relevance":"相关","fix":"清单补 traffic 家族条目"}
+ {
+  "file": "src/auto_qb/core/episodes.py",
+  "line": 91,
+  "quote": "仅当文件名中恰好只有一个候选数字",
+  "severity": "minor",
+  "claim": "_episodes_from_names 的 docstring 仍宣称 bare-number 提取生效(如 '01.mkv' -> 1),但对应代码块已在 111-122 行整体注释禁用,文档与行为相反",
+  "relevance": "相关",
+  "fix": "把 docstring 该条改为「无标记文件不提取集数(bare-number 已禁用, 见行内注释)」并同步函数头说明"
+ },
+ {
+  "file": "src/auto_qb/core/exporter.py",
+  "line": 200,
+  "quote": "torrents = api.torrents_info()",
+  "severity": "minor",
+  "claim": "export_yaml_template 先自取一次全量 torrents_info 只用于日志计数,而 collect_torrent_tracker_hostnames_with_failures 内部(43 行)再取一次 —— 每次导出/扫描双份全量请求,且两次抓取间种子集可变化导致日志计数与实际扫描集不一致(webui sites.py:57 同款模式)",
+  "relevance": "相关",
+  "fix": "给 collect_torrent_tracker_hostnames_with_failures 增加 torrents 入参复用第一次抓取结果,或删掉首取改用 len(torrent_sets) 记日志"
+ },
+ {
+  "file": "src/auto_qb/core/exporter.py",
+  "line": 72,
+  "quote": "def collect_all_tracker_hostnames(api: Any) -> set:",
+  "severity": "nit",
+  "claim": "collect_all_tracker_hostnames 及其唯一依赖 collect_torrent_tracker_hostnames(非 failures 变体)在 src/ 已无生产调用方(仅测试引用),生产聚合循环在 210-212 行与 webui sites.py 各自内联重写,形成同职责两套路径",
+  "relevance": "相关",
+  "fix": "生产路径改调 collect_all_tracker_hostnames(或将其退役只留 with_failures 变体),测试随迁"
+ },
+ {
+  "file": "src/auto_qb/core/episodes.py",
+  "line": 37,
+  "quote": "_BARE_NUMBER_RE = re.compile",
+  "severity": "nit",
+  "claim": "_BARE_NUMBER_RE 仅被 111-122 行注释掉的代码块引用,本体是不可达死符号(RESOLUTION_EXCLUDE 仍被 tvshows 使用,不在其列)",
+  "relevance": "相关",
+  "fix": "随 bare-number 禁用决策一并删除正则,或注明「仅存量禁用代码引用」"
+ },
+ {
+  "file": "src/auto_qb/core/episodes.py",
+  "line": 64,
+  "quote": "def name_has_episode_marker(name: str) -> bool:",
+  "severity": "nit",
+  "claim": "name_has_episode_marker 全仓无生产调用方(仅 tests/test_episodes.py 引用),属未用导出",
+  "relevance": "相关",
+  "fix": "删除或降级为 tvshows 侧真实需要的接口;保留则注明测试专用"
+ },
+ {
+  "file": "src/auto_qb/core/taskqueue.py",
+  "line": 75,
+  "quote": "self.uid = f\"{kind}:{name}",
+  "severity": "nit",
+  "claim": "Task.uid 与 Task.created_at(91 行)全仓(src+tests)只写不读,是纯死字段;clock 参数现仅剩喂这两个死字段与 created_at 的用途",
+  "relevance": "相关",
+  "fix": "删除 uid/created_at 字段(连带评估 Task 的 clock 参数是否仍需保留)"
+ },
+ {
+  "file": "src/auto_qb/core/episodes.py",
+  "line": 127,
+  "quote": "single_template.format(1)='zE1'",
+  "severity": "nit",
+  "claim": "format_episode_tag 的 docstring 用 str.format(1) 示例描述模板契约,而实现是替换 ${episode_first}/${episode_last} 占位符(config 默认模板亦为后者),示例 API 与实现不符(面1/面3 同报,合并)",
+  "relevance": "相关",
+  "fix": "docstring 示例改为 'zE${episode_first}' -> 'zE1' 口径,与 config/models.py 的占位符文档对齐"
+ },
+ {
+  "file": "src/auto_qb/core/state.py",
+  "line": 131,
+  "quote": "self._write_back_recovered(bak)",
+  "severity": "major",
+  "claim": "load() 的损坏恢复写回在持锁之前执行(QbManager.__init__ 的 _reload_state 先于 SingleInstanceLock.acquire),且 --export-yaml 等 no_lock 只读模式同样会触发,实际向 state_file 写盘,违背「未持锁不写盘」的单一写线程判据(与 materialize_migration/cleanup_orphan_tmp 自述口径矛盾),可与正常运行实例并发写同一状态文件",
+  "relevance": "相关",
+  "fix": "恢复写回改为挂待写标志延迟到持锁后物化(仿 materialize_migration),no_lock 模式跳过写回只留日志"
+ },
+ {
+  "file": "src/auto_qb/core/exporter.py",
+  "line": 250,
+  "quote": "with open(output_path, \"w\", encoding=\"utf-8\") as f:",
+  "severity": "minor",
+  "claim": "--export-yaml 对 output_path 无守卫,传 config.yml 自身即对生产配置做 yaml.dump 重排重写(注释全部丢失、格式重排),且该模式 no_lock 不持锁、可与运行实例并发,踩「重排 config.yml」红线",
+  "relevance": "相关",
+  "fix": "output_path 与 config_path 相同(或命中生产配置路径)时 parser.error 拒绝导出"
+ },
+ {
+  "file": "src/auto_qb/core/qbmanager.py",
+  "line": 1029,
+  "quote": "f.write(f\"{tor}\\n\\n\")",
+  "severity": "minor",
+  "claim": "--export-torrents_info 把种子原始字典原样写进明文 torrents.txt,其中 tracker 字段是完整 tracker URL(私站含 passkey),绕过项目自身的 mask_tracker_entry 脱敏口径",
+  "relevance": "相关",
+  "fix": "写出前对 tracker URL 做与 Facade 同款脱敏,或在该调试文件头部注明含密钥、限制文件权限"
+ },
+ {
+  "file": "src/auto_qb/core/exporter.py",
+  "line": 259,
+  "quote": "已导出 YAML 模板",
+  "severity": "nit",
+  "claim": "dry_run=True 时实际未写文件,仍输出「已导出 YAML 模板」INFO 日志,与 dry-run 口径矛盾误导排障",
+  "relevance": "相关",
+  "fix": "dry_run 分支改记「dry-run: 未写出, 目标路径: ...」"
+ },
+ {
+  "file": "src/auto_qb/core/qbmanager.py",
+  "line": 264,
+  "quote": "main_tick → 2× → 4×",
+  "severity": "nit",
+  "claim": "注释含非 ASCII 图形符号 →(全批注释普遍存在 →/≈/≤/· 等),按任务口径(注释里也不该有)与 code-style.md「覆盖含注释」字面要求记 nit",
+  "relevance": "相关",
+  "fix": "注释内箭头/数学符号改 ASCII(->、~、<=);若项目口径认定中文文档符号豁免则维持现状"
+ },
+ {
+  "file": "src/auto_qb/cli.py",
+  "line": 76,
+  "quote": "if released == 0 and not release_all:",
+  "severity": "minor",
+  "claim": "fuse_release 的 --all 零条目合法清点返回 True 分支无任何测试(现有测试只覆盖显式列表零命中→False 与 dry-run),回归翻转该条件会让 --fuse-release-all 清残留场景误报退出码 1",
+  "relevance": "相关",
+  "fix": "补一条 CLI 级测试: fuse.release 返回 0 + release_all=True -> 返回 True/退出码 0"
+ },
+ {
+  "file": "memory-bank/systemPatterns/taskqueue.md",
+  "line": 24,
+  "quote": "run_due(dry_run, now, max_tasks)",
+  "severity": "minor",
+  "claim": "run_due 签名漂移: 代码已加 defer_gate 参数且让位者不占 max_tasks 预算(issue 26-10-30-0616),文档仍写旧签名且整段缺 D-1 队列级让位语义",
+  "relevance": "相关",
+  "fix": "按快照 taskqueue.py:232-302 回写 defer_gate 参数、让位不占预算与扫描面封顶三件事"
+ },
+ {
+  "file": "memory-bank/systemPatterns/taskqueue.md",
+  "line": 11,
+  "quote": "`hash`, `tracker_conf`",
+  "severity": "minor",
+  "claim": "Task 字段清单漂移: 仍列已不存在的 tracker_conf 字段, 缺 _store/attempt/retry_delay/created_at(快照 __slots__)",
+  "relevance": "相关",
+  "fix": "按 taskqueue.py:41-57 __slots__ 重写字段清单"
+ },
+ {
+  "file": "memory-bank/systemPatterns/main-loop.md",
+  "line": 52,
+  "quote": "task_queue.run_due(dry_run, now, max_tasks)",
+  "severity": "minor",
+  "claim": "任务线 run_due 调用签名缺 defer_gate 实参(实际传 self._own_write_defer_gate), 行号注 (:817) 已失效(实际 qbmanager.py:822)",
+  "relevance": "相关",
+  "fix": "回写为 run_due(dry_run, now, max_tasks, defer_gate=self._own_write_defer_gate) 并更正行号"
+ },
+ {
+  "file": "memory-bank/systemPatterns/main-loop.md",
+  "line": 63,
+  "quote": "断点续跑只经子任务 `add_task(origin, keep_progress=True)` 路径",
+  "severity": "minor",
+  "claim": "REQUEUE 收尾描述漏 retry_delay 分支: _requeue 在 handler 挂 retry_delay 时推迟到期且保留断点(taskqueue.py:321-327, plan 26-11-01-0106), 断点续跑不再是只经子任务一条路",
+  "relevance": "相关",
+  "fix": "补记 retry backoff 保留断点的队列内续跑路径"
+ },
+ {
+  "file": "memory-bank/systemPatterns/main-loop.md",
+  "line": 23,
+  "quote": "_load_rules()",
+  "severity": "nit",
+  "claim": "规则加载方法名漂移: 文档写 host.get(\"rules\")._load_rules(), 代码实际是 load_rules()(qbmanager.py:515, rules_mod.py:301)",
+  "relevance": "相关",
+  "fix": "改为 load_rules()"
+ },
+ {
+  "file": "README.md",
+  "line": 188,
+  "quote": "`--export-torrents_info`",
+  "severity": "nit",
+  "claim": "命令行参数表缺 --fuse-release/--fuse-release-all, 全 docs/ 亦无保险丝放行文档 —— 恢复限速的写操作入口只存在于 --help",
+  "relevance": "相关",
+  "fix": "参数表补两行或在部署/排障文档补保险丝放行小节"
+ },
+ {
+  "file": "src/auto_qb/core/taskqueue.py",
+  "line": 38,
+  "quote": "kind: refresh(种子列表刷新) / rule(规则扫描)",
+  "severity": "nit",
+  "claim": "Task docstring 列的 refresh/torrent 两种 kind 全库无实例化点(实际 kind 只有 rule/rule-event/internal/check/check-wait, 种子级内置也用 internal)",
+  "relevance": "相关",
+  "fix": "docstring 删去 refresh/torrent 或注明已退役"
+ },
+ {
+  "file": "src/auto_qb/core/__init__.py",
+  "line": 19,
+  "quote": "YAML 配置模板导出",
+  "severity": "nit",
+  "claim": "core 包 docstring 的模块清单漏 traffic_* 八件(traffic_grid/limits/source/traffic_store*), 枚举与实际目录漂移",
+  "relevance": "相关",
+  "fix": "清单补 traffic 家族条目"
+ },
+ {
+  "file": "src/auto_qb/core/modules/relocate_exec.py",
+  "line": 235,
+  "quote": "alias_fs.create_file_alias(link, target, kind)",
+  "severity": "major",
+  "claim": "_build_links 建链与落账之间存在崩溃窗口(落账粒度 chunk/200 条,目录别名整条不落账): create_file_alias/create_dir_alias(alias_fs.py:619/629, os.link/os.symlink)对已存在路径抛 FileExistsError,重启后按已落账 link_pos 续建必撞盘上孤儿链接,而失败回滚 _remove_links 只删 job.alias_paths 已落账条目,孤儿留在盘上且永不入账,此后每轮 ACT_REBUILD 都在同一孤儿处失败,attempts 耗尽后 rebuild_exhausted 永久失败需手工清现场(面1/面2 同根因合并;与底册 A-03 根因不同: A-03 是能力性失败,本条是崩溃窗口非幂等重建+回滚范围缺口)(黄金法则#1)",
+  "relevance": "相关",
+  "fix": "建链改幂等: 创建前探测(alias_kind_of 命中且指向 target 则跳过),或落账粒度缩到单条,或失败回滚按 plan 文件表全量清理而非只删已落账链接"
+ },
+ {
+  "file": "src/auto_qb/core/modules/relocate_exec.py",
+  "line": 891,
+  "quote": "self._remove_links(list(job.alias_paths))",
+  "severity": "major",
+  "claim": "relocate_cancel 忽略 _remove_links 的实际删除数,未核实链接已删净就下发 setLocation(src) 搬回: 目录别名删失败残留时搬回路径穿过 junction 指回 dst,libtorrent rename 失败走 copy+delete 回退时构成 copy-onto-self,且残留链接从此脱离 job 账失管",
+  "relevance": "相关",
+  "fix": "搬回前校验 _remove_links 返回值等于 len(alias_paths),有残留则 blocked 留现场提示人工处理"
+ },
+ {
+  "file": "src/auto_qb/core/modules/relocate_exec.py",
+  "line": 893,
+  "quote": "torrents_set_location(torrent_hashes=[job.mover], location=job.src)",
+  "severity": "minor",
+  "claim": "relocate_cancel 无相位守卫: MOVING/WATCHING 期取消会对 qB 仍在执行的迁往 dst 的在途搬迁再发回搬 setLocation,同时立即落 CANCELLED 终态并 _resume_members,回搬过程脱离 job 跟踪;成员被恢复时共享数据正被 qB 搬动,可见短暂 missingFiles,回搬中断则数据分居 src/dst 无账可对",
+  "relevance": "相关",
+  "fix": "MOVING/WATCHING 相位拒绝取消(提示等搬迁结束),或先记录回搬意图并走对账轮询确认 qB 回到 src 后再终态"
+ },
+ {
+  "file": "src/auto_qb/core/modules/relocate_units.py",
+  "line": 43,
+  "quote": "GATE_GONE = \"gone\"",
+  "severity": "minor",
+  "claim": "GATE_GONE/GATE_DISABLED 两个闸门常量全树零消费(调用侧 relocate_cancel:871/relocate_execute:566 用字面量 \"gone\"/\"disabled\",relocate_plan.py:64 又在用 _DISABLED_GATE),同一职责常量与字面量两套并存,改文案/id 时易漏改(存量面 A+B)",
+  "relevance": "相关",
+  "fix": "删除死常量,或让 relocate_cancel 与 relocate_execute 的 blocked 回执统一引用常量"
+ },
+ {
+  "file": "src/auto_qb/core/modules/relocate_units.py",
+  "line": 147,
+  "quote": "fallback: str  # 用户拒绝确认后的回落形态",
+  "severity": "minor",
+  "claim": "RelocateUnitPlan.fallback 字段(src 内无任何读取方)从未被消费,且其「用户拒绝确认后的回落形态 file_links」语义与实际行为(确认拒绝即不发起迁移、无回落)不符,误导维护者(存量面 A)",
+  "relevance": "相关",
+  "fix": "删除 fallback 字段,或按注释语义真正实现拒绝确认后的 file_links 回落路径"
+ },
+ {
+  "file": "src/auto_qb/core/modules/relocate_units.py",
+  "line": 228,
+  "quote": "if count < threshold:",
+  "severity": "minor",
+  "claim": "plan() 阈值分支先于 hard_max 检查,而配置校验(sections.py:697)对 alias_file_threshold 与 hard_max_links 只各自查 >=1、无交叉校验:配置 threshold > hard_max 时 count < threshold 的组绕过逐文件链接硬上限,「链接爆炸防护」静默失效",
+  "relevance": "相关",
+  "fix": "validate_config 增加 alias_file_threshold <= hard_max_links 交叉校验,或 plan() 在阈值分支前统一检查 count > hard_max"
+ },
+ {
+  "file": "src/auto_qb/core/modules/relocate_exec.py",
+  "line": 824,
+  "quote": "self._jobs[job_id] = job",
+  "severity": "nit",
+  "claim": "_start_job 在建账/_persist/_publish 之后才判 dry-run(line 835): dry-run 分支一旦可达会把 phase=moving、move_issued=False 的 job 持久化进 state,下次正常启动经 _recover 判 RECOVER_STALLED 且未下发而补发真 setLocation;当前规则入口(transfer.py:32)有守卫、web 在 dry-run 不启动(webui/module.py:139)故实际不可达,但该防御分支与其回执「dry-run: 未下发搬迁」的零副作用承诺矛盾",
+  "relevance": "相关",
+  "fix": "把 dry-run 判定前置到建账/持久化之前,或 dry-run 下不写 state 只回执"
+ },
+ {
+  "file": "src/auto_qb/core/modules/relocate_exec.py",
+  "line": 624,
+  "quote": "self._norm(target) == self._norm(records[0].save_path)",
+  "severity": "nit",
+  "claim": "幂等判定三处并存且口径不一(relocate_execute:602 查全组成员 / evaluate_group units:467 查 facts.save_path=mover / 此处仅查 mover),行 624 实质是对 evaluate_group 幂等早退产物 cls=ok 的事后改写为 skip,三处分散易在调整口径时漏改",
+  "relevance": "相关",
+  "fix": "收敛为单点: 保留 602 的零成本预筛与 evaluate_group 的幂等早退,624 的 mover-only 分支并入同一判定或删除"
+ },
+ {
+  "file": "src/auto_qb/core/modules/relocate_exec.py",
+  "line": 24,
+  "quote": "两步之间崩溃 ⇒ 重启后 qB 从未收到搬迁",
+  "severity": "nit",
+  "claim": "代码注释含图形符号 ⇒(同文件还有 →、D7①/D7② 等圈号),违反编码约束「代码禁图形符号, ASCII 替代」",
+  "relevance": "相关",
+  "fix": "注释中 ⇒/→/①② 改为 ASCII 的 =>/->/(1)(2)"
+ },
+ {
+  "file": "src/auto_qb/core/modules/relocate_units.py",
+  "line": 8,
+  "quote": "F < threshold ⇒ 逐文件链接",
+  "severity": "nit",
+  "claim": "代码注释含图形符号 ⇒(同文件还有 →、组③/组②/组① 圈号),违反编码约束「代码禁图形符号, ASCII 替代」",
+  "relevance": "相关",
+  "fix": "注释中 ⇒/→/①②③ 改为 ASCII 的 =>/->/(1)(2)(3)"
+ },
+ {
+  "file": "src/auto_qb/core/modules/relocate_exec.py",
+  "line": 290,
+  "quote": "自检自身意外炸了按跳过(保守默认: 不挡武装)",
+  "severity": "nit",
+  "claim": "_qb_side_check 的自身异常兜底分支(rp.link_follow_evidence 抛错按 skipped)无任何测试覆盖——现有 skipped 断言全部经 ev.status==UNAVAILABLE 内部路径, 无用例让该调用真抛异常",
+  "relevance": "相关",
+  "fix": "补一例 monkeypatch rp.link_follow_evidence 抛 RuntimeError, 断言返回 skipped、rt 记 qb_side_check、照常武装"
+ },
+ {
+  "file": "memory-bank/pitfalls/backend/platform-fs.md",
+  "line": 112,
+  "quote": "relocate_mod._group_facts",
+  "severity": "nit",
+  "claim": "pitfall 代码锚点漂移: _group_facts 经 R5 拆分已迁至 relocate_plan.py:177, relocate_mod.py 内已无该函数, 按锚点 grep 会落空",
+  "relevance": "相关",
+  "fix": "把锚点更新为 relocate_plan._group_facts(保留原事故日期叙述)"
+ },
+ {
+  "file": "memory-bank/pitfalls/testing/ci-only-guard.md",
+  "line": 29,
+  "quote": "relocate_mod._spawn",
+  "severity": "nit",
+  "claim": "pitfall 代码锚点漂移: _spawn 经 R5 拆分已迁至 relocate_exec.py:967, relocate_mod.py 内已无该函数",
+  "relevance": "相关",
+  "fix": "把锚点更新为 relocate_exec.ExecMixin._spawn"
+ }
 ]
