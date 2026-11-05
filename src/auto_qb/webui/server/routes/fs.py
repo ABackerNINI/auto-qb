@@ -177,7 +177,7 @@ def build_router(ctx: WebContext) -> APIRouter:
         }
 
     @router.post("/api/fs/mkdir")
-    def api_fs_mkdir(body: dict = None):
+    def api_fs_mkdir(body: dict | None = None):
         """在允许根内的目录下新建文件夹(目录浏览器的"新建"按钮)。
 
         安全边界与 /api/fs/dirs 同源, 另加: 1. name 必须是**单层名字**(不含分隔符、不为 . / ..),
@@ -220,7 +220,7 @@ def build_router(ctx: WebContext) -> APIRouter:
         return {"created": path_normalize(target), "existed": False}
 
     @router.post("/api/open-path")
-    def api_open_path(body: dict = None):
+    def api_open_path(body: dict | None = None):
         """用系统默认方式打开辅种组/种子的目标文件夹(FX-14)。
 
         **安全红线**: 绝不接受客户端传入任意路径 —— os.startfile / open / xdg-open 会用系统

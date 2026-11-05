@@ -216,7 +216,7 @@ def build_router(ctx: WebContext) -> APIRouter:
         return _source_status(manager)
 
     @router.put("/api/traffic/monitor/config")
-    def api_tm_put_config(body: dict = None):
+    def api_tm_put_config(body: dict | None = None):
         """工具 /config 代理(写端点): 载荷 = {"config": {...全量...}}
 
         `PUT /config` 是**全量覆盖**(last-writer-wins): 前端必须「读后写」(先取 /status 的
@@ -238,7 +238,7 @@ def build_router(ctx: WebContext) -> APIRouter:
         raise HTTPException(status_code=502, detail=f"工具返回 {code}: {_error_text(resp, code)}")
 
     @router.post("/api/traffic/monitor/autostart")
-    def api_tm_autostart(body: dict = None):
+    def api_tm_autostart(body: dict | None = None):
         """工具 /autostart 代理(写端点): 载荷 = {"action": "install"|"uninstall"}
 
         幂等注册/卸载开机自启; 退出码语义由工具侧承载(200 达成期望态含 no-op /

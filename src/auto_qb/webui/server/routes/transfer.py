@@ -41,7 +41,7 @@ def build_router(ctx: WebContext) -> APIRouter:
     router = APIRouter()
 
     @router.post("/api/transfer/run")
-    def api_transfer_run(body: dict = None):
+    def api_transfer_run(body: dict | None = None):
         """执行一次转移批次(计划 26-10-31-0306 W3): body {target_id, hashes[], keep_source?}
 
         校验在路由层 400 拒收不入队(同 skip-check 预检先例, 前端即时可见): target_id 空 /
@@ -72,7 +72,7 @@ def build_router(ctx: WebContext) -> APIRouter:
         return _enqueue("transfer_run", payload)
 
     @router.post("/api/transfer/test")
-    def api_transfer_test(body: dict = None):
+    def api_transfer_test(body: dict | None = None):
         """测试目标下载器连通(计划 W3): body {target_id}; 只读探测, 不改任何状态
 
         目标只需**存在**(不要求启用 —— 设置页对未启用目标先行测连通, 见模块 docstring

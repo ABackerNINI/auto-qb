@@ -86,7 +86,7 @@ def build_router(ctx: WebContext) -> APIRouter:
         return _cmd_hash("reannounce_torrent", hash)
 
     @router.post("/api/torrents/{hash}/delete")
-    def api_t_delete(hash: str, body: dict = None):
+    def api_t_delete(hash: str, body: dict | None = None):
         delete_files = bool((body or {}).get("delete_files", False))
         result = _enqueue("delete_torrent", {"hash": hash, "delete_files": delete_files})
         result["delete_files"] = delete_files
@@ -101,7 +101,7 @@ def build_router(ctx: WebContext) -> APIRouter:
         return _cmd_hash("recheck_torrent", hash)
 
     @router.post("/api/torrents/{hash}/skip-check")
-    def api_t_skip_check(hash: str, body: dict = None):
+    def api_t_skip_check(hash: str, body: dict | None = None):
         """右键跳检(高风险): 删除并以跳过校验方式重加, 清空本地统计 —— 前端另有危险确认框
 
         R2 gate(计划 26-10-02-1955 W1, D2=是 · fail-closed): 菜单隐藏只是 UX, 直调 API
@@ -120,7 +120,7 @@ def build_router(ctx: WebContext) -> APIRouter:
         return _enqueue("skip_check_torrent", payload)
 
     @router.post("/api/torrents/skip-check/precheck")
-    def api_t_skip_check_precheck(body: dict = None):
+    def api_t_skip_check_precheck(body: dict | None = None):
         """跳检预检(只读 dry-run, 计划 26-10-05-0314 S2): 批量给出三分流判定, 供确认框在用户
         确认之前摊开「该不该跳检、赌什么」—— 执行路径闸门原样全跑, 预检-执行无信任传递
 
@@ -141,7 +141,7 @@ def build_router(ctx: WebContext) -> APIRouter:
     # ---- 整组迁移预检(计划 26-10-18-1604 §3.6/P2, 只读) ----
 
     @router.post("/api/torrents/relocate/precheck")
-    def api_relocate_precheck(body: dict = None):
+    def api_relocate_precheck(body: dict | None = None):
         """整组迁移预检(只读 dry-run): 多选按组拆开逐组判定, 三分流(ok/confirm/blocked)
         供迁移确认框在用户确认前摊开「怎么迁、要确认什么、为什么拒」—— 执行路径(P3)
         闸门原样全跑, 预检-执行无信任传递
@@ -163,7 +163,7 @@ def build_router(ctx: WebContext) -> APIRouter:
         return _enqueue("relocate_precheck", {"hashes": hashes, "location": location})
 
     @router.post("/api/relocate/precheck-add")
-    def api_relocate_precheck_add(body: dict = None):
+    def api_relocate_precheck_add(body: dict | None = None):
         """添加种子落点预检(计划 26-10-18-1604 §3.6.1, 只读): 落点命中别名作用域时返回
         「请求路径 -> 实际落点 -> 目标卷剩余」供添加对话框二次确认; 无影响时静默放行
 
@@ -178,7 +178,7 @@ def build_router(ctx: WebContext) -> APIRouter:
         return _enqueue("relocate_precheck_add", {"save_path": save_path, "name": name})
 
     @router.post("/api/relocate/cancel")
-    def api_relocate_cancel(body: dict = None):
+    def api_relocate_cancel(body: dict | None = None):
         """撤销迁移(计划 26-10-18-1604 §3.5.1): 删链接 + qB 搬回 —— 两步同口径,
         **不确认不动数据**(成本提示是模块内建契约, 不是前端自觉)
 
@@ -195,15 +195,15 @@ def build_router(ctx: WebContext) -> APIRouter:
         return _enqueue("relocate_cancel", {"job_id": job_id, "confirm": bool((body or {}).get("confirm"))})
 
     @router.post("/api/torrents/{hash}/super-seeding")
-    def api_t_super_seeding(hash: str, body: dict = None):
+    def api_t_super_seeding(hash: str, body: dict | None = None):
         return _cmd_enable("super_seeding", hash, body)
 
     @router.post("/api/torrents/{hash}/force-start")
-    def api_t_force_start(hash: str, body: dict = None):
+    def api_t_force_start(hash: str, body: dict | None = None):
         return _cmd_enable("force_start", hash, body)
 
     @router.post("/api/torrents/{hash}/limits")
-    def api_t_limits(hash: str, body: dict = None):
+    def api_t_limits(hash: str, body: dict | None = None):
         """种子传输限速(bytes/s, 0=不限); 两方向均可缺省(缺省的方向不下发)"""
         b = body or {}
         payload = {"hash": hash}
@@ -214,7 +214,7 @@ def build_router(ctx: WebContext) -> APIRouter:
         return _enqueue("set_torrent_limits", payload)
 
     @router.post("/api/torrents/{hash}/share-limits")
-    def api_t_share_limits(hash: str, body: dict = None):
+    def api_t_share_limits(hash: str, body: dict | None = None):
         """分享限制: -1=不限制, -2=用全局; 前端应从详情回填三值后整组提交"""
         b = body or {}
         payload = {"hash": hash}
@@ -227,7 +227,7 @@ def build_router(ctx: WebContext) -> APIRouter:
         return _enqueue("set_share_limits", payload)
 
     @router.post("/api/torrents/{hash}/location")
-    def api_t_location(hash: str, body: dict = None):
+    def api_t_location(hash: str, body: dict | None = None):
         """移动保存位置(整组迁移开时走闸门 + 别名执行体, 计划 26-10-18-1604 P5)
 
         confirm(目录别名的显式确认)按「提供才透传」入载荷 —— 缺省时队列形态与历史
@@ -236,28 +236,28 @@ def build_router(ctx: WebContext) -> APIRouter:
         return _cmd_field("set_torrent_location", hash, body, "location", confirm=True)
 
     @router.post("/api/torrents/{hash}/rename")
-    def api_t_rename(hash: str, body: dict = None):
+    def api_t_rename(hash: str, body: dict | None = None):
         return _cmd_field("rename_torrent", hash, body, "name")
 
     @router.post("/api/torrents/{hash}/queue")
-    def api_t_queue(hash: str, body: dict = None):
+    def api_t_queue(hash: str, body: dict | None = None):
         return _cmd_field("queue_torrent", hash, body, "action")
 
     @router.post("/api/torrents/{hash}/auto-tmm")
-    def api_t_auto_tmm(hash: str, body: dict = None):
+    def api_t_auto_tmm(hash: str, body: dict | None = None):
         return _cmd_enable("set_auto_tmm", hash, body)
 
     @router.post("/api/torrents/{hash}/trackers/add")
-    def api_t_trackers_add(hash: str, body: dict = None):
+    def api_t_trackers_add(hash: str, body: dict | None = None):
         return _cmd_str_list("add_trackers", hash, body, "urls")
 
     @router.post("/api/torrents/{hash}/trackers/remove")
-    def api_t_trackers_remove(hash: str, body: dict = None):
+    def api_t_trackers_remove(hash: str, body: dict | None = None):
         # url = 前端所持 mask 值(详情 API 只回 mask); 后端 _cmd_remove_tracker 当场重取原文比对
         return _cmd_field("remove_tracker", hash, body, "url")
 
     @router.post("/api/torrents/{hash}/files/priority")
-    def api_t_file_priority(hash: str, body: dict = None):
+    def api_t_file_priority(hash: str, body: dict | None = None):
         b = body or {}
         payload = {
             "hash": hash,
@@ -267,7 +267,7 @@ def build_router(ctx: WebContext) -> APIRouter:
         return _enqueue("set_file_priority", payload)
 
     @router.post("/api/torrents/{hash}/rename-fs")
-    def api_t_rename_fs(hash: str, body: dict = None):
+    def api_t_rename_fs(hash: str, body: dict | None = None):
         b = body or {}
         payload = {
             "hash": hash,
@@ -278,7 +278,7 @@ def build_router(ctx: WebContext) -> APIRouter:
         return _enqueue("rename_fs", payload)
 
     @router.post("/api/torrents/bulk")
-    def api_t_bulk(body: dict = None):
+    def api_t_bulk(body: dict | None = None):
         """批量操作(平铺视图多选): 单命令批量, 主循环侧一次 API 调用传全部目标
 
         两种模式(DLG-02): hashes=种子 hash 列表; keys=分组 key 列表(URL 编码态, 与
@@ -342,7 +342,7 @@ def build_router(ctx: WebContext) -> APIRouter:
         return _enqueue("bulk_torrents", payload)
 
     @router.post("/api/torrents/add")
-    def api_torrents_add(body: dict = None):
+    def api_torrents_add(body: dict | None = None):
         """添加种子(JSON): .torrent 文件由前端 FileReader 读取为 base64 随 JSON 提交,
         后端解码后经命令队列内存直传 qB(qbittorrent-api 原生支持 bytes) ——
         零临时文件、零额外依赖(multipart 需要 python-multipart, 不引入); 布尔字段为真布尔"""

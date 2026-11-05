@@ -30,7 +30,7 @@ class RoCache:
         self._lock = threading.Lock()
         self.ttl = 2.0  # 秒; peers 更"活", 调用方以 ttl 参数单独用更短的窗口
 
-    def get(self, key: str, fn, ttl: float = None):
+    def get(self, key: str, fn, ttl: float | None = None):
         """带写失效的短缓存: 键里带上写序号, 任何写命令后自动换键(= 缓存失效)"""
         if ttl is None:
             ttl = self.ttl
@@ -57,7 +57,7 @@ class WebContext:
 
     # ---- 原 create_app 闭包件逐字平移(仅 manager → self.manager) ----
 
-    def cached_read(self, key: str, fn, ttl: float = None):
+    def cached_read(self, key: str, fn, ttl: float | None = None):
         """带写失效的短缓存(RoCache.get 转发; 原 create_app._cached_read)"""
         return self.ro_cache.get(key, fn, ttl)
 

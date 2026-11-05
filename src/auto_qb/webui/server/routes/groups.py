@@ -50,7 +50,7 @@ def build_router(ctx: WebContext) -> APIRouter:
         return _cmd_key("reannounce_group", key)
 
     @router.post("/api/groups/{key}/delete")
-    def api_delete(key: str, body: dict = None):
+    def api_delete(key: str, body: dict | None = None):
         delete_files = bool((body or {}).get("delete_files", False))
         result = _enqueue("delete_group", {"key": _group_key_param(key), "delete_files": delete_files})
         result["delete_files"] = delete_files

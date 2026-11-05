@@ -84,7 +84,7 @@ def build_router(ctx: WebContext) -> APIRouter:
     router = APIRouter()
 
     @router.post("/api/hr/confirm-empty")
-    def api_hr_confirm_empty(body: dict = None):
+    def api_hr_confirm_empty(body: dict | None = None):
         """人工对账戳(§5.3): 确认站点账号 HR 清单确实为空(零行波恢复签发放行, 非零行自动失效)
 
         复用 CLI `--hr-confirm-empty` 的实现(run_hr_confirm_empty, 单点): 锁内写站点文件的
@@ -105,7 +105,7 @@ def build_router(ctx: WebContext) -> APIRouter:
         return {"ok": True, "site": site}
 
     @router.post("/api/hr/refresh")
-    def api_hr_refresh(body: dict = None):
+    def api_hr_refresh(body: dict | None = None):
         """立即拉取(计划 26-09-30-0240): 请求后端跳过复用窗与拉取间隔立即开波(频控仍生效)
 
         body 可带 site 单站触发; 缺省 = 全部启用站点。与插件端点同一实现

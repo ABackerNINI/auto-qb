@@ -151,26 +151,26 @@ def build_router(ctx: WebContext) -> APIRouter:
         return {"tags": tags}
 
     @router.post("/api/categories")
-    def api_category_create(body: dict = None):
+    def api_category_create(body: dict | None = None):
         return _cmd_category("create_category", body)
 
     @router.post("/api/categories/edit")
-    def api_category_edit(body: dict = None):
+    def api_category_edit(body: dict | None = None):
         return _cmd_category("edit_category", body)
 
     @router.post("/api/categories/remove")
-    def api_category_remove(body: dict = None):
+    def api_category_remove(body: dict | None = None):
         names = [str(n).strip() for n in ((body or {}).get("names") or []) if str(n).strip()]
         if not names:
             raise HTTPException(status_code=400, detail="未提供要删除的分类")
         return _enqueue("remove_categories", {"names": names})
 
     @router.post("/api/tags")
-    def api_tags_create(body: dict = None):
+    def api_tags_create(body: dict | None = None):
         return _cmd_tags("create_tags", body, "未提供要新建的标签")
 
     @router.post("/api/tags/remove")
-    def api_tags_remove(body: dict = None):
+    def api_tags_remove(body: dict | None = None):
         return _cmd_tags("delete_tags", body, "未提供要删除的标签")
 
     @router.get("/api/speed/mode")
@@ -212,12 +212,12 @@ def build_router(ctx: WebContext) -> APIRouter:
         }
 
     @router.post("/api/speed/override")
-    def api_speed_override(body: dict = None):
+    def api_speed_override(body: dict | None = None):
         """全局限速手动覆盖(D2 语义): 曲线启用时为临时覆盖(下一档位切换恢复), 停用即常态设置"""
         return _cmd_speed_limits("speed_override", body)
 
     @router.post("/api/speed/alt")
-    def api_speed_alt(body: dict = None):
+    def api_speed_alt(body: dict | None = None):
         """备用速度限制设置(ALT-01): app/setPreferences(alt_dl_limit/alt_up_limit), 两方向都必填, 0 = 不限"""
         return _cmd_speed_limits("speed_alt_set", body)
 

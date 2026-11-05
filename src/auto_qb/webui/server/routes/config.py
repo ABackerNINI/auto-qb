@@ -54,7 +54,7 @@ def build_router(ctx: WebContext) -> APIRouter:
         }
 
     @router.post("/api/expr/eval")
-    def api_expr_eval(body: dict = None):
+    def api_expr_eval(body: dict | None = None):
         """表达式**试算**(配置编辑器的「试算」按钮)
 
         - 不给 hash: 只做编译 + 语义校验, 返回用到的取值名 —— 语法/名字拼写错的即时反馈
