@@ -45,9 +45,9 @@
     {
       "id": "R2-6",
       "title": "infra 工具: utils*/clock/notify/locking/logging/journal/recovery 等",
-      "status": "pending",
-      "done_at": null,
-      "findings": 0
+      "status": "done",
+      "done_at": "26-11-06-0653",
+      "findings": 12
     }
   ],
   "started_at": "26-11-06-0513"

@@ -313,5 +313,113 @@
   "claim": "模块 docstring 说「两条硬约束」但实际列出三条(第16-19行追加了第 3 条 SEC-1 逃逸校验), 计数与内容自相矛盾",
   "relevance": "相关",
   "fix": "把「两条」改为「三条」(或「硬约束」不带计数)"
+ },
+ {
+  "file": "src/auto_qb/infra/notify.py",
+  "line": 81,
+  "quote": "self._dedup_at[key] = now",
+  "severity": "minor",
+  "claim": "dedup_window=0(config.models 明示「0 = 不去重」,YAML 写 0S 可通过校验)时键仍被无条件写入,而清理分支被 dedup_window>0 守卫挡住,去重表永不清理——长跑进程无界增长,正是上方注释自述要防的「唯一无界内存增长点」",
+  "relevance": "相关",
+  "fix": "键记录也收进 dedup_window>0 分支(或对 _dedup_at 无条件按窗口/3600s 淘汰)"
+ },
+ {
+  "file": "src/auto_qb/infra/notify.py",
+  "line": 265,
+  "quote": "\"\"\"logging.shutdown 钩子: 唤醒派发线程优雅退出(队列积压不保证送达)\"\"\"",
+  "severity": "minor",
+  "claim": "派发线程唯一退出通道是 close(),且只挂在 logging.shutdown;notify_mod 热重载 apply→remount 走 _unmount 只 removeHandler 不调 close,每次改 notify 配置泄漏一个永久阻塞在 queue.get() 的 daemon 线程与队列",
+  "relevance": "相关",
+  "fix": "_unmount 摘 handler 前调 handler.close() 唤醒线程退出(或 handler 提供显式 stop)"
+ },
+ {
+  "file": "src/auto_qb/infra/utils.py",
+  "line": 267,
+  "quote": "DISPLAY_LOOPBACK_HOSTS = frozenset({\"127.0.0.1\", \"::1\", \"::ffff:127.0.0.1\", \"0:0:0:0:0:0:0:1\"})",
+  "severity": "minor",
+  "claim": "回环判定两套口径(存量 B 类):display_host 只认 4 个字面量,与 utils_parse.is_loopback_host(localhost+127/8+::1)不一致;web.host=127.0.0.2 这类合法回环绑定不会被改写为 localhost,docstring「回环地址一律写成 localhost」落空,其要解决的浏览器 origin 分裂/localStorage 双份问题在该配置下复发",
+  "relevance": "相关",
+  "fix": "display_host 改用 is_loopback_host 判定,展示仍统一写 localhost"
+ },
+ {
+  "file": "src/auto_qb/infra/__init__.py",
+  "line": 15,
+  "quote": "依赖纪律: infra 只被依赖 —— 不 import core / 表现层 / config（见计划 §04 依赖方向表）。",
+  "severity": "minor",
+  "claim": "包级声明的依赖不变量与实际矛盾:notify.py:29 from ..config import NotifyConfig(仅类型标注用)违反「不 import config」;按该纪律做的后续裁剪/守卫会漏掉这条真实反向依赖",
+  "relevance": "相关",
+  "fix": "notify.py 改 TYPE_CHECKING 导入 + 字符串注解,或修订 __init__ 的依赖纪律表述以承认该例外"
+ },
+ {
+  "file": "src/auto_qb/infra/utils_paths.py",
+  "line": 10,
+  "quote": "import ipaddress",
+  "severity": "nit",
+  "claim": "R5 拆分残留的未用导入:ipaddress/math/hashlib/secrets/subprocess/sys/threading 及 typing 的 Callable/Tuple 在本文件均无使用点",
+  "relevance": "相关",
+  "fix": "删除未用导入"
+ },
+ {
+  "file": "src/auto_qb/infra/utils_parse.py",
+  "line": 7,
+  "quote": "import base64",
+  "severity": "nit",
+  "claim": "R5 拆分残留的未用导入:base64/json/shutil/tempfile/hashlib/secrets/subprocess/threading/time/logging/dataclass 及 typing 的 List/Tuple 在本文件均无使用点",
+  "relevance": "相关",
+  "fix": "删除未用导入"
+ },
+ {
+  "file": "src/auto_qb/infra/utils.py",
+  "line": 755,
+  "quote": "两条策略**每轮都试**(命中就停): ①快照差集 = 本次新建的 Explorer 窗口(最常见);",
+  "severity": "nit",
+  "claim": "docstring 使用带圈数字 ①②(755-757 行),违反编码约束「代码禁图形符号」",
+  "relevance": "相关",
+  "fix": "改为 (1)/(2) 的 ASCII 写法"
+ },
+ {
+  "file": "src/auto_qb/infra/utils.py",
+  "line": 547,
+  "quote": "⚠ `sigs_of` 是签名清单的**工厂(可调用)**, 不是现成元组 —— 别\"顺手\"改成直接传",
+  "severity": "nit",
+  "claim": "注释使用图形符号 ⚠(547/574/588 三处),违反编码约束「代码禁图形符号」",
+  "relevance": "相关",
+  "fix": "改为 ASCII「WARN:」"
+ },
+ {
+  "file": "src/auto_qb/infra/utils_parse.py",
+  "line": 64,
+  "quote": "config 校验(S1 ⑤ 危险组合)与 hr 配对门(pairing=auto 的生效逻辑)共用 —— 单点在此,",
+  "severity": "nit",
+  "claim": "注释使用带圈数字 ⑤,违反编码约束「代码禁图形符号」",
+  "relevance": "相关",
+  "fix": "改为 (5)"
+ },
+ {
+  "file": "src/auto_qb/infra/relocate_journal.py",
+  "line": 119,
+  "quote": "进程判定用 os.kill(pid, 0)(POSIX); Windows 无信号 0, 退化为「文件存在即认为在跑」",
+  "severity": "minor",
+  "claim": "acquire_pid 的 docstring 断言 Windows 上退化为「文件存在即认为在跑(残留锁文件让收尾推迟)」,但同模块 _alive (141-153 行) 在 Windows 已改为 OpenProcess+GetExitCodeProcess 真存活探测(死 pid 返回 False、可接管),docstring 描述的是 P7 修复前的旧行为,与实现及其测试(tests/test_relocate_paths.py:578-582「进程已死 -> 接管」)矛盾",
+  "relevance": "相关",
+  "fix": "把 acquire_pid docstring 的 Windows 分支描述改为与 _alive 一致(OpenProcess 零副作用探测,死进程/无效 pid 直接接管)"
+ },
+ {
+  "file": "src/auto_qb/infra/versioning.py",
+  "line": 31,
+  "quote": "v2 = HR 波次模型 v3(迁移在 config/migrations.py, 依赖纪律)",
+  "severity": "minor",
+  "claim": "CURRENT_VERSIONS 注释断言 hr_site 的迁移在 config/migrations.py,实际 hr_site v1→v2 迁移函数 _migrate_hr_site_1_2 定义并注册在本文件 MIGRATIONS[\"hr_site\"](38/109-111 行),config/migrations.py 中无任何 hr_site 条目(注释疑为从 config 行复制)",
+  "relevance": "相关",
+  "fix": "修正该行注释为「迁移在本模块 _migrate_hr_site_1_2」(或按真实分工重新表述依赖纪律)"
+ },
+ {
+  "file": "memory-bank/modules/core-runtime.md",
+  "line": 24,
+  "quote": "三平台查监听进程(Windows netstat+tasklist / Linux ss / macOS lsof)",
+  "severity": "minor",
+  "claim": "modules 文档断言 port_owner 的 Windows 探测用 netstat+tasklist,现行实现(src/auto_qb/infra/port_owner.py::_windows_script)是单次 PowerShell 合并 Get-NetTCPConnection + Get-CimInstance,netstat/tasklist 已不存在于实现中",
+  "relevance": "相关",
+  "fix": "把该行 Windows 路径描述改为「Windows 单次 PowerShell(Get-NetTCPConnection+Get-CimInstance)」"
  }
 ]

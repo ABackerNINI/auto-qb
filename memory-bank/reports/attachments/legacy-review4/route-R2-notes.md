@@ -11,11 +11,12 @@ owner: clone2-main · freeze: f088329291e6 · 快照: D:\Projects\zcode\auto-qb-
 | R2-3 | 写入与迁移 ≈1.9K | 4 (minor 4) | done |
 | R2-4 | rules 全域 ≈3.4K | 11 (major 1 / minor 8 / nit 2) | done |
 | R2-5 | infra 存储 ≈1.4K | 6 (major 1 / minor 5) | done |
-| R2-6 | infra 工具 ≈1.9K | - | pending |
+| R2-6 | infra 工具 ≈1.9K | 12 (minor 8 / nit 4) | done |
 
 ## R2 复验结论
 
 - **D-01 已消失**: sections.py `_validate_qbittorrent` 已补三 str 键类型检查(260-262 行,与 web.token 同形态,注释自证 26-10 修复)。
+- **GH-01 已消失**: relocate_journal.py 头注已改口径明说「两个写者」且都走 write_journal 前向合并;relocate_mod.py 写点已不存在(收敛至 relocate_exec.py 与 tools/finalize_watch.py),头注与实际一致。
 - **D-01 loaders 侧已消失**: loaders.py:93-101 load_qbittorrent_config 现为纯字段透传,无日志/回显。
 - **C-02 已消失**: 底册锚实为 src/auto_qb/core/curves.py:76(非 config/validation/curves.py),签名已显式 Optional,RUF013 不再成立。
 
