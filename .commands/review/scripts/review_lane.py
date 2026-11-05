@@ -519,7 +519,7 @@ def cmd_manifest(args: argparse.Namespace) -> int:
     freeze = _resolve_freeze(root)
     raw = _git_bytes(root, "archive", "--format=tar", freeze)
     with tempfile.TemporaryDirectory(prefix="lane-manifest-tree-") as td:
-        tree = Path(td)
+        tree = Path(td).resolve()  # 与子路径 resolve 同基准: TEMP 含符号链接/8.3 短名时纯词法 relative_to 不炸
         with tarfile.open(fileobj=io.BytesIO(raw), mode="r:") as tf:
             tf.extractall(tree, filter="data")
         scoped = _scoped_files(tree)
@@ -647,8 +647,11 @@ def _extract_snapshot(root: Path, freeze: str, snap: Path) -> int:
     _guard_snap_path(root, snap)
     raw = _git_bytes(root, "archive", "--format=tar", freeze)
     if snap.exists():
-        if not any(snap.iterdir()) and not (snap / ".snapshot-hash").is_file():
-            snap.rmdir()  # 上次中断留下的空壳目录(无标记无内容): 直接重建
+        if snap.is_dir() and not any(snap.iterdir()) and not (snap / ".snapshot-hash").is_file():
+            try:
+                snap.rmdir()  # 上次中断留下的空壳目录(无标记无内容): 直接重建
+            except OSError as exc:
+                _die(f"空壳快照目录重建失败: {snap} ({exc}) —— 手工删除后重试")
         else:
             _die(f"快照目录已存在且标记不匹配: {snap} —— 确认后 --fresh 重建")
     snap.mkdir(parents=True)
@@ -866,6 +869,7 @@ def cmd_smoke(args: argparse.Namespace) -> int:
                 return
             try:
                 snap.parent.rmdir()  # 本 smoke 创建的父空壳随手带走; 父内有他路线快照时 rmdir 必败, 忽略
+                snap.parent.parent.rmdir()  # 顶层容器 auto-qb-review4-snap/ 同理(仅空时可移除)
             except OSError:
                 pass
         print(f"[smoke] 清理完成({tag}): route JSON / findings / 小结 / smoke 快照子目录已删", flush=True)
