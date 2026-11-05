@@ -24,9 +24,9 @@
     {
       "id": "R3-3",
       "title": "hr service 族: service_wave/service/service_common/service_status/module",
-      "status": "pending",
-      "done_at": null,
-      "findings": 0
+      "status": "done",
+      "done_at": "26-11-06-0749",
+      "findings": 6
     },
     {
       "id": "R3-4",

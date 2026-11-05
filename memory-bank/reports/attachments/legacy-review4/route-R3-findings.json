@@ -52,5 +52,59 @@
     "claim": "注释字面为「派derive 而非手抄」,是「派生」改写为「derive」时的编辑残留,语义需读者脑补",
     "relevance": "相关",
     "fix": "改为「派生(derive)而非手抄」或径写「derive 而非手抄」"
+  },
+  {
+    "file": "src/auto_qb/hr/service_wave.py",
+    "line": 542,
+    "quote": "self._note_dl_fail(data, tid, self._now())",
+    "severity": "major",
+    "claim": "非 Retry-After 的取数失败不调 budget.mark():页面级失败(_run_pages:250 分支)与 .torrent 下载失败(本行)都不前进 last_fetch_ts,间隔基准停留在上一次成功请求 —— 与同文件 Retry-After 分支(:200 注释「失败的请求也是真实请求」)和登录分支(:187-189)自立的口径相悖;一批 pending 下载全 404 时,同波内 budget.take 逐个即时放行,零间隔连发真实站点请求,绕过被设计明文承诺「统一适用」的 min_interval 账号安全线(日额仍兜总量,但节奏闸失守)",
+    "relevance": "相关",
+    "fix": "两处非 Retry-After 的 HrFetchError 消化分支在计失败前补 budget.mark(),与 Retry-After/登录分支同口径"
+  },
+  {
+    "file": "src/auto_qb/hr/service_wave.py",
+    "line": 724,
+    "quote": "data.wave = replace(",
+    "severity": "minor",
+    "claim": "HrLoginExpired 分支(:191)经 _finish_wave 走到此处,用本波全新 lane_states(未跑完的档为 IDLE,cutoff_done/full_depth 全零)整体替换 data.wave.lanes —— 上一波已挣得的档位覆盖证据被抹掉一个刷新间隔;且 fetched_at 也被推进,与 fetcher.HrLoginExpired docstring「不碰 fetched_at / 覆盖证明 / 新鲜度基准,证据链不会被动」的承诺直接矛盾,并与 quota/无通道路径(_abort_wave 不动 wave.lanes,证据保留)不一致;方向保守(healthy_ts 保留、批量签发被闸住,不误放行)",
+    "relevance": "相关",
+    "fix": "登录分支改走不动 data.wave 的让位收尾(与 _abort_wave 同口径),或给 _finish_wave 加「保留既有 lanes」模式"
+  },
+  {
+    "file": "src/auto_qb/hr/service_wave.py",
+    "line": 631,
+    "quote": "verified=result.verified_count if result is not None else 0,",
+    "severity": "minor",
+    "claim": "拉取历史 verified 字段的口径是「本波签发放行数」(model.py:513 注释;前端 hrsHistVerified 以「+N」徽章展示),实际传的是 result.verified_count = len(data.verified)(站点文件放行记录**存量总数**)—— 累积几百条后每一波的历史行都显示同一个大数,本波真实签发数(result.releases_signed,report.py:383 单独打印的那个)在历史表里不可见",
+    "relevance": "相关",
+    "fix": "本字段改传 result.releases_signed(纯观测字段,不参与判定)"
+  },
+  {
+    "file": "memory-bank/pitfalls/backend/high-risk-ops.md",
+    "line": 80,
+    "quote": "改 `hr/service.py::_Budget` / `_refresh_locked` / `_do_fetch` 的请求顺序",
+    "severity": "minor",
+    "claim": "文档漂移(C 面,拆分直接引入):本批把 _Budget/_lane_covers_done/_release_record 迁到 service_common.py、_freeze_terminal 迁到 service_wave.py、channel_state 迁到 service_status.py、_do_fetch 已不存在 —— 5 份按动作读的 pitfalls(sentinel-epoch-arith.md:22、high-risk-ops.md:80、release-record-baseline.md:18、unreached-branch-guard.md:30-31、fuzzy-match-noise.md:29)仍以 `hr/service.py::<符号>` 指路,排障按文档定位会找错文件或扑空",
+    "relevance": "相关",
+    "fix": "拆分收尾统一把 pitfalls 中的符号路径改写为现位置(docs 类,只报不改)"
+  },
+  {
+    "file": "src/auto_qb/hr/service_wave.py",
+    "line": 207,
+    "quote": "wave.notes.append(f\"页面取数失败: {e}\")",
+    "severity": "nit",
+    "claim": "_do_wave 的 HrFetchError 处理中 retry_after<=0 的后半段(had_error/notes/_mark_fetch_failed_lane,本行起 3 行)不可达:_run_pages 与 _run_downloads 对 HrFetchError 只在 retry_after>0 时原样上抛,非 retry 失败全部在档位内消化 —— 属拆分前遗留的防御死代码(A 面)",
+    "relevance": "相关",
+    "fix": "删除,或留一行注释说明该分支为何按「恒 retry_after>0」收敛"
+  },
+  {
+    "file": "src/auto_qb/hr/service_wave.py",
+    "line": 773,
+    "quote": "result.reason = \" ; \".join(notes)",
+    "severity": "nit",
+    "claim": "refresh_site 先填入的 session.read_error(坏文件隔离/备份恢复事实)在波正常跑完后被此处整体覆盖,最终 result 与拉取历史事件的 reason 都看不到「数据来自备份恢复」这一事实(仅 store 当时的 WARNING 有痕);同文件 version_mismatch 分支(service.py:249)用的是拼接保留写法,两处口径不一",
+    "relevance": "相关",
+    "fix": "finish 时把已有 result.reason 拼接保留(与 version_mismatch 分支同式)"
   }
 ]
