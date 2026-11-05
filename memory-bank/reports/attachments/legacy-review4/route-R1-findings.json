@@ -466,5 +466,95 @@
   "claim": "该注释承诺 dry-run 不落盘, 但 dry-run 下 relocate_execute→_start_job 在 dry-run 早退前已建账并 _persist 写 state.relocate.jobs(relocate_exec.py:832-834), 且 test_exec_dry_run_no_side_effects 把「有 job 账」断言为预期 —— 注释与已钉面的行为相矛盾",
   "relevance": "相关",
   "fix": "改注释为实际口径(dry-run 下发/暂停/建链被闸, 但预演建账会落 state 并在后续真实启动经 _recover 补发执行)"
+ },
+ {
+  "file": "src/auto_qb/core/traffic_store.py",
+  "line": 20,
+  "quote": "z,<run_len>,<dl_delta>,<up_delta>[,<dt_ms>]",
+  "severity": "minor",
+  "claim": "自称「格式 v4 契约主题事实单点」的模块 docstring 里 z 行规格仍是形态 D 之前的 4/5 列旧形, 缺末端对 6/7 列形态, 与 traffic_store_codec 的实际实现及其区头注释(z,<run_len>,<dl>,<up>,<dl_endd>,<up_endd>[,<dt_ms>])漂移, 单点契约失真",
+  "relevance": "相关",
+  "fix": "把该行更新为 6/7 列形态并补一句末端对语义(或改为指向 codec 区头注释, 消除双规格)"
+ },
+ {
+  "file": "src/auto_qb/core/traffic_limits.py",
+  "line": 100,
+  "quote": "写侧下轮追加前已补换行",
+  "severity": "minor",
+  "claim": "注释声称撕裂尾由写侧下轮追加前补换行, 但 SpeedLimitRecorder._append 直接 open(\"a\") 追加、无尾字节查补(对照 traffic_store._ensure_file_prefix), 撕裂残片会与下一条事件行并成一行, 解析按坏行整行丢弃 —— 每次撕裂实际丢两条事件而非一条, 文档与写侧行为不符",
+  "relevance": "相关",
+  "fix": "_append 前做尾字节查补(缺尾则先补 \\n, 照 _ensure_file_prefix 先例), 或改注释为如实描述并在文档标注该丢失形态"
+ },
+ {
+  "file": "src/auto_qb/core/traffic_limits.py",
+  "line": 175,
+  "quote": "self._append(date_str, ts, self._last)",
+  "severity": "nit",
+  "claim": "跨天硬切轮 carry 追加失败(OSError)且同轮 cur 值变化事件写成功时, _last_date 被值变化分支推进, 该新天文件将永久缺基线 carry 首行, 违反模块 docstring「新天首行 = 基线 carry 无条件写入, 单看一个天文件自洽可读」的承诺(读侧跨天回看可兜住图面, 实害趋零)",
+  "relevance": "相关",
+  "fix": "carry 追加失败时本轮直接 return(跳过值变化追加), 保住 carry 先于事件的行序, 下轮重试"
+ },
+ {
+  "file": "src/auto_qb/core/curves.py",
+  "line": 5,
+  "quote": "×1024 转字节",
+  "severity": "nit",
+  "claim": "注释含非ASCII图形符号 ×(第 54 行还有一处「× scale 转字节」), 违反代码禁图形符号约定",
+  "relevance": "相关",
+  "fix": "替换为 ASCII 写法(如 x1024 / 乘 1024)"
+ },
+ {
+  "file": "src/auto_qb/core/traffic_grid.py",
+  "line": 546,
+  "quote": "速率字段双零 ⟺ z 槽",
+  "severity": "nit",
+  "claim": "注释/docstring 含多处非ASCII数学符号(⟺ 546、Σ 34/269/560/600/633/674、≈ 101/552、∈ 352、÷ 630、ε 378、②③ 269/307/388), 违反代码禁图形符号约定",
+  "relevance": "相关",
+  "fix": "逐处替换为 ASCII 等价写法(<=>、sum、约、属于、除以、epsilon、(2)/(3))"
+ },
+ {
+  "file": "src/auto_qb/core/traffic_limits.py",
+  "line": 1,
+  "quote": "§3-D3′/D3″",
+  "severity": "nit",
+  "claim": "docstring 含非ASCII符号 ′ ″(第 1/37/276 行), 违反代码禁图形符号约定",
+  "relevance": "相关",
+  "fix": "替换为 ASCII 写法(D3'/D3\" 或 D3-1/D3-2)"
+ },
+ {
+  "file": "src/auto_qb/core/traffic_store.py",
+  "line": 491,
+  "quote": "天文件 ≈2MB 文本/天",
+  "severity": "nit",
+  "claim": "注释含非ASCII数学符号 ≈(第 376/491/498 行共 5 处), 违反代码禁图形符号约定",
+  "relevance": "相关",
+  "fix": "替换为 ASCII 写法(约/~)"
+ },
+ {
+  "file": "src/auto_qb/core/traffic_store_agg.py",
+  "line": 8,
+  "quote": "round(Σ(rate_i x dt_i) / cov_s)",
+  "severity": "nit",
+  "claim": "docstring 含非ASCII数学符号 Σ(第 8/9/12/18/44/45/46/47 行)与 ±(第 21 行), 违反代码禁图形符号约定",
+  "relevance": "相关",
+  "fix": "Σ 替换为 sum/求和, ± 替换为 +/-"
+ },
+ {
+  "file": "src/auto_qb/core/traffic_store_codec.py",
+  "line": 76,
+  "quote": "测试钉住 d̄>0 序列无累积误差",
+  "severity": "nit",
+  "claim": "docstring 含非ASCII符号 d̄(U+0304 组合宏音符, 第 76 行)与 ∈(第 645/646 行), 违反代码禁图形符号约定",
+  "relevance": "相关",
+  "fix": "d̄ 改写为 d̄ 的 ASCII 表述(如 平均漂移 d), ∈ 替换为 属于/ in"
+ },
+ {
+  "file": "memory-bank/modules/core-domain.md",
+  "line": 21,
+  "quote": "124 (26-10-03 实测不变)",
+  "severity": "nit",
+  "claim": "curves.py 行数断言 124 与快照实测 142 不符,且关键内容列已含 26-10-11 换算单点的 bytes_to_kib 却漏列同批新增的 kib_to_bytes/bytes_to_kib_floor(curves.py:127-142),属半更新漂移",
+  "relevance": "相关",
+  "fix": "重测行数并把 kib_to_bytes/bytes_to_kib_floor 补进 curves.py 行的关键内容清单"
  }
 ]

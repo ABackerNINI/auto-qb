@@ -31,9 +31,9 @@
     {
       "id": "R1-4",
       "title": "traffic 存取: store/agg/codec/common/paths/grid/limits/curves",
-      "status": "pending",
-      "done_at": null,
-      "findings": 0
+      "status": "done",
+      "done_at": "26-11-06-0724",
+      "findings": 10
     },
     {
       "id": "R1-5",
