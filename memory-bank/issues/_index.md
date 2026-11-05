@@ -19,7 +19,7 @@
 
 | 类型 | 条数 |
 |---|---|
-| bug | 5 |
+| bug | 6 |
 | perf | 2 |
 | docs | 2 |
 | test | 10 |
@@ -30,6 +30,7 @@
 
 ## Open
 
+- [bug] [TASK_REFS_RE 空行跨行捕获: 空 **Refs:** 行把下一行标题吞成 ref, 认领链守阵误红](26-11-06-0415-bug-kb-refs-regex-blank-line.html) — md 档案留空 **Re…
 - [test] [gtm-alert 双皮肤日期炸弹: 硬编码日期超 24h TTL 必红](26-11-06-0330-test-e2e-gtm-alert-date-bomb.html) — e2e/gtm-aler…
 - [test] [views 种子页筛选器有数据恒红: relocate kind 在 e2e 桩下恒空](26-11-06-0330-test-e2e-views-relocate-kind-empty.html) — filters.js 无…
 - [test] [test_start_all_busy_returns_false_and_retries 偶发 WinError 10013](26-11-06-0330-test-hr-discovery-busy-retry-flake.html) — 随机序巡检第 1 轮触发…

@@ -6,6 +6,7 @@
 
 ## Open (47)
 
+- [bug] [TASK_REFS_RE 空行跨行捕获: 空 **Refs:** 行把下一行标题吞成 ref, 认领链守阵误红](../26-11-06-0415-bug-kb-refs-regex-blank-line.html) — md 档案留空 **Refs:** 行时 TASK_REFS_RE 的 \s* 跨行吞掉下一行标题当 ref, test_claim_chain_is_bidirectional 误红; kb.new 模板默认留空行, 新档案踩坑
 - [test] [gtm-alert 双皮肤日期炸弹: 硬编码日期超 24h TTL 必红](../26-11-06-0330-test-e2e-gtm-alert-date-bomb.html) — e2e/gtm-alert.spec.mjs 硬编码 T1/T2/T3=2026-11-03, 超过 dialogs.js gtmAlert computed 的 24h TTL 后横幅被判空, 双皮肤 prism/atlas 各 1 条必红
 - [test] [views 种子页筛选器有数据恒红: relocate kind 在 e2e 桩下恒空](../26-11-06-0330-test-e2e-views-relocate-kind-empty.html) — filters.js 无条件注册 relocate kind 但 ui_harness 桩不注入任何 relocate 态, 断言空筛选器 kinds=[] 必红; 修桩还是修产品待裁决
 - [test] [test_start_all_busy_returns_false_and_retries 偶发 WinError 10013](../26-11-06-0330-test-hr-discovery-busy-retry-flake.html) — 随机序巡检第 1 轮触发 127.0.0.1:3166 真绑定 PermissionError, 归因端口/资源类(排除端口段), 非时序

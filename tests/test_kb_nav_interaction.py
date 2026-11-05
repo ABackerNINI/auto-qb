@@ -44,6 +44,8 @@ gen_doc_map.collect() 本体的键集合 —— 它是闸门/守阵消费单点 
 - test_gsearch_clear_button: 全局搜索清词按钮在位 (内联 SVG / [hidden] 兜底 / syncGclear 单点同步 / 清词还焦点), placeholder 无 (Esc 清空)
 - test_slash_focuses_search: "/" 快捷键聚焦搜索框 (slashFocus 命名函数 / 输入态与 IME 不劫 / 挡默认行为), 注册点不混 Esc 关键词
 - test_search_matches_file_name_and_relative_path: 全局搜索按 basename / mb 内相对路径 / memory-bank/ 仓库根相对路径都能命中 (2026-11-03 用户复现); 原 title/topic/issue-summary 行为不变 + 大小写/反斜杠归一 + 三处过滤共用 navSearchText 单点 (正文不入索引)
+- test_search_excluded_matches_hint_computed: 搜索被排除匹配项提示的计算口径 (task 26-11-06, grilling 拍板): 部分即命中 + 去重总数锚定/按原因分计可跨组重复 + 隐藏独占桶 + 维度按活动视图 (台账三维/卡片墙两维/控制台只显隐藏) + 空词与无排除不提示 (node 回放真实 JS)
+- test_search_excluded_hint_ui_wiring: 提示行 UI 接线单点: #ghint 在 .gsearch 内 [hidden] 兜底 + CSS 悬浮省略不设 display + renderGhint 挂满三视图 render + wire 点击委托勾回走 saveFilters+重渲染链 + 文案锚点 (另匹配/另有 N 项隐藏/title 分计口径)
 - test_multiselect_renders_in_both_zones: 主表与置顶专区渲染都挂 msel (双区同亮) + CSS tr.msel 与 sel.msel 组合样式在位
 - test_ctx_menu_batch_upgrade: 右键批量升级单点 ctxTargets (集合>1 且行∈选区) + openCtx 冻结 links 快照 + 批量文案带 N + 分发走批量链
 - test_batch_actions_idempotent: 批量 pin/hide 幂等 (every 动态方向 / 过滤已达态 / 落盘链不绕开) + 批量隐藏剪出选区
@@ -77,6 +79,7 @@ from kb_nav_support import (
     SHELL,
     _rule,
     _shell_css,
+    _shell_fn,
 )
 
 
@@ -250,6 +253,196 @@ def test_search_matches_file_name_and_relative_path(tmp_path) -> None:
     for key in ("basename", "mb_rel", "repo_rel", "upper", "backslash", "title", "topic", "summary"):
         assert got.get(key) == "1", f"{key} 未命中 ({queries[key]}): {got}"
     assert got.get("miss") == "0", "无关词不应命中"
+
+
+def test_search_excluded_matches_hint_computed(tmp_path) -> None:
+    """搜索被排除匹配项提示的计算口径 (task 26-11-06-memory-bank-kb-nav-search-ghint, grilling
+    两轮拍板)。真实痛点: issues/26-09-30-0052-feat-hr-login-counter-attest 状态 Dropped,
+    取消勾选后按完整名搜索 0 结果且无任何提示 —— 勾选过滤在搜索之前 AND, 匹配项被静默吞掉。
+    钉: ①部分 slug (stamp / slug 片段) 与完整名同样命中 (索引本就含 basename, 缺的是可见性);
+    ②总数 = 去重非隐藏被排除匹配数, 括号按原因分计、同件可跨组重复 (Q3b+w1); ③隐藏件独占一桶,
+    不进原因组与总数 (Q10a: 点组名唤不回隐藏件); ④维度按活动视图: 台账三维 / 卡片墙两维 /
+    控制台只显隐藏 (Q8a, 频道搜索不做形态/状态过滤); ⑤空词或无排除无隐藏 → null 不提示。
+    场景数据按真实 26-09-30-0052 三兄弟 (2 Dropped + 1 Open) 仿造。node 回放真实 JS。"""
+    text = SHELL.read_text(encoding="utf-8")
+    dims = _shell_fn(text, "ghintExclDims")
+    data = _shell_fn(text, "ghintData")
+    idx = _shell_fn(text, "navSearchText")
+    qry = _shell_fn(text, "navSearchQuery")
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node 不在 PATH (与仓库其余 JS 守阵同口径)")
+    probe = tmp_path / "ghint_probe.js"
+    probe.write_text(
+        "const FORM_ORD = ['issue','plan','report','task'];\n"
+        "const FORM_CN = { issue:'问题', plan:'计划', report:'报告', task:'档案' };\n"
+        "const KNOWN_ST = ['Open','In Progress','Done','Dropped','Superseded'];\n"
+        "const TYPES = ['bug','perf','docs','test','refactor','feat','chore','question'];\n"
+        "const NO_ST = '(无状态)';\n"
+        "let statusList = KNOWN_ST.slice();\n"
+        "const S = { view:'ledger', q:'', aForms:new Set(FORM_ORD), aStatuses:new Set(KNOWN_ST),\n"
+        "  aTypes:new Set(TYPES), cForms:new Set(FORM_ORD), cStatuses:new Set(KNOWN_ST), hidden:[] };\n"
+        "const stOf = i => i.status || NO_ST;\n"
+        "const isHidden = link => S.hidden.includes(link);\n"
+        "let DATA = { items: [] };\n"
+        "function navSearchText(i) {" + idx + "\n}\n"
+        "function navSearchQuery(q) {" + qry + "\n}\n"
+        "function ghintExclDims(i) {" + dims + "\n}\n"
+        "function ghintData() {" + data + "\n}\n"
+        "DATA.items = [\n"
+        "  { title:'HR 计数 looks_like_login 补计数文本佐证', topic:'backend-partial-hr-verify',\n"
+        "    'issue-summary':'s1', link:'issues/26-09-30-0052-feat-hr-login-counter-attest.html',\n"
+        "    form:'issue', status:'Dropped', 'issue-type':'feat' },\n"
+        "  { title:'HR 计数 上限徽章总数轴互证', topic:'backend-partial-hr-verify',\n"
+        "    'issue-summary':'s2', link:'issues/26-09-30-0052-feat-hr-badge-total-crosscheck.html',\n"
+        "    form:'issue', status:'Dropped', 'issue-type':'perf' },\n"
+        "  { title:'HR 计数 末页追翻省略', topic:'backend-partial-hr-verify',\n"
+        "    'issue-summary':'s3', link:'issues/26-09-30-0052-perf-hr-lastpage-fetch-skip.html',\n"
+        "    form:'issue', status:'Open', 'issue-type':'perf' },\n"
+        "  { title:'Z 与搜索词无关的隐藏件', topic:'zzz-unrelated',\n"
+        "    'issue-summary':'s4', link:'tasks/26-10-01-0000-unrelated.md',\n"
+        "    form:'task', status:'Open' },\n"
+        "];\n"
+        "/* 常驻隐藏件: 不匹配任何场景搜索词 —— isHidden 判定若被挪到搜索过滤之前 (退化成全量\n"
+        "   隐藏数), 各场景 h 会虚增, 本探针即红 (拍板 Q10b: 隐藏计数=搜索相关非全量) */\n"
+        "S.hidden = ['tasks/26-10-01-0000-unrelated.md'];\n"
+        "const liveOf = () => false; /* 开关边界场景用: 全部专题视为非活跃 */\n"
+        "const run = tag => {\n"
+        "  const d = ghintData();\n"
+        "  console.log(tag + '=' + JSON.stringify(d ? { t:d.total, h:d.hidden,\n"
+        "    g:d.groups.map(x => x.dim + ':' + x.val + ':' + x.n) } : null));\n"
+        "};\n"
+        "S.view = 'ledger';\n"
+        "S.aStatuses = new Set(['Open','In Progress','Done','Superseded']);\n"
+        "S.q = '26-09-30-0052-feat-hr-login-counter-attest'; run('full_dropped');\n"
+        "S.q = '26-09-30-0052'; run('partial_stamp');\n"
+        "S.q = 'feat-hr-login-counter'; run('partial_slug');\n"
+        "S.hidden = ['issues/26-09-30-0052-feat-hr-login-counter-attest.html', 'tasks/26-10-01-0000-unrelated.md'];\n"
+        "S.q = '26-09-30-0052'; run('hidden_exclusive');\n"
+        "S.aForms = new Set(['plan','report','task']);\n"
+        "run('overlap');\n"
+        "S.view = 'cards';\n"
+        "S.cStatuses = new Set(['Open','In Progress','Done','Superseded']); S.cForms = new Set(FORM_ORD);\n"
+        "S.q = '26-09-30-0052'; run('cards_dims');\n"
+        "S.view = 'console';\n"
+        "run('console_hidden_only');\n"
+        "S.hidden = [];\n"
+        "run('console_no_excl_no_hid');\n"
+        "S.q = ''; run('empty_q');\n"
+        "S.view = 'ledger';\n"
+        "S.aStatuses = new Set(KNOWN_ST); S.aForms = new Set(FORM_ORD);\n"
+        "S.aTypes = new Set(TYPES.filter(t => t !== 'feat'));\n"
+        "S.q = 'feat-hr-login-counter'; run('type_dim');\n"
+        "/* 开关边界 (拍板 Q6③): live/chain/cLive 造成的排除不进提示 —— ghintData 不消费开关;\n"
+        "   若有人给 ghintExclDims 加 live 维, 本场景 (唯一匹配件仅被活跃性挡住) 会给出 total=1 而红 */\n"
+        "S.aStatuses = new Set(KNOWN_ST); S.aForms = new Set(FORM_ORD); S.aTypes = new Set(TYPES);\n"
+        "S.aLive = true;\n"
+        "S.q = 'perf-hr-lastpage-fetch-skip'; run('switch_live_excluded');\n",
+        encoding="utf-8",
+    )
+    out = subprocess.run([node, str(probe)], capture_output=True, text=True, encoding="utf-8", timeout=30)
+    assert out.returncode == 0, out.stderr
+    got = dict(line.split("=", 1) for line in out.stdout.strip().splitlines())
+    expected = {
+        "full_dropped": {
+            "t": 1,
+            "h": 0,
+            "g": ["status:Dropped:1"]
+        },
+        "partial_stamp": {
+            "t": 2,
+            "h": 0,
+            "g": ["status:Dropped:2"]
+        },
+        "partial_slug": {
+            "t": 1,
+            "h": 0,
+            "g": ["status:Dropped:1"]
+        },
+        "hidden_exclusive": {
+            "t": 1,
+            "h": 1,
+            "g": ["status:Dropped:1"]
+        },
+        "overlap": {
+            "t": 2,
+            "h": 1,
+            "g": ["form:issue:2", "status:Dropped:1"]
+        },
+        "cards_dims": {
+            "t": 1,
+            "h": 1,
+            "g": ["status:Dropped:1"]
+        },
+        "console_hidden_only": {
+            "t": 0,
+            "h": 1,
+            "g": []
+        },
+        "console_no_excl_no_hid": None,
+        "empty_q": None,
+        "type_dim": {
+            "t": 1,
+            "h": 0,
+            "g": ["type:feat:1"]
+        },
+        "switch_live_excluded": None,
+    }
+    for tag, want in expected.items():
+        assert got.get(tag) == json.dumps(want, ensure_ascii=False,
+                                          separators=(",", ":")), (f"{tag} 口径漂移: 期望 {want}, 实得 {got.get(tag)}")
+
+
+def test_search_excluded_hint_ui_wiring() -> None:
+    """提示行的 UI 接线单点 (task 26-11-06-memory-bank-kb-nav-search-ghint):
+    ①#ghint 落在 .gsearch 内、视图切换器之前 (搜索框正下方, 不进视图容器), [hidden] 兜底,
+      CSS 悬浮 (absolute) + 单行省略 (ellipsis), 且 .ghint 不得设 display (会盖掉 [hidden]
+      的 UA 兜底, 同 #gclear 口径); ②renderGhint 挂满三个视图 render 末尾 —— 过滤切换不经
+      renderCurrent (buildFilterRows onToggle 直呼视图 render), 少挂一处 = 该视图切换过滤后
+      提示不刷新; ③wire() 点击委托 = 勾上对应值并走各视图 saveFilters+重渲染既有链 (拍板
+      Q4a), 五个勾选集都要接; ④计算口径结构: 搜索空即 null、隐藏独占 (isHidden 判定先于维度
+      归组)、维度按活动视图; ⑤文案锚点 (拍板 Q9 w1): 总数锚定 + 按原因分计 + 「N项隐藏」+
+      title 注明分计口径。"""
+    text = SHELL.read_text(encoding="utf-8")
+    css = _shell_css()
+    at_gsearch = text.index('<div class="gsearch">')
+    at_ghint = text.index('<div class="ghint" id="ghint" hidden></div>')
+    at_seg = text.index('<div class="seg"')
+    assert at_gsearch < at_ghint < at_seg, "#ghint 必须在搜索框内、视图切换器之前 (搜索框正下方)"
+    rule = _rule(css, ".ghint")
+    assert "position: absolute" in rule and "text-overflow: ellipsis" in rule, "提示行要悬浮于搜索框下方 + 单行省略"
+    assert "display" not in rule, ".ghint 不得设 display (盖掉 [hidden] UA 兜底, 同 #gclear 口径)"
+    gtag = _rule(css, ".ghint .gtag")
+    assert "cursor: pointer" in gtag, "组名可点 (拍板 Q4a)"
+    for fn in ("renderLedger", "renderConsole", "renderCards"):
+        assert "renderGhint()" in _shell_fn(text, fn), f"{fn} 末尾缺 renderGhint 挂载 (该视图过滤切换后提示不刷新)"
+    wire = _shell_fn(text, "wire")
+    assert '$("ghint").addEventListener("click"' in wire, "缺提示行点击委托"
+    # 断言只看 ghint 委托片 (从注册点起、到本块闭合止): 基线 wire() 其余处理器本就含
+    # saveFilters()/renderLedger()/renderCards(), 整函数断言恒真 (review R2-1)
+    at_hint = wire.index('$("ghint").addEventListener("click"')
+    ghint_wire = wire[at_hint:wire.index("\n  });", at_hint)]
+    assert 'closest(".gtag")' in ghint_wire and "dataset.gdim" in ghint_wire and "dataset.gval" in ghint_wire, (
+        "委托按组维值分发"
+    )
+    assert 'S.view === "ledger"' in ghint_wire and 'S.view === "cards"' in ghint_wire, ("视图分支名钉死 (写错分支 = 勾回无声失效)")
+    for add in (
+        "S.aStatuses.add(val)", "S.aForms.add(val)", "S.aTypes.add(val)", "S.cStatuses.add(val)", "S.cForms.add(val)"
+    ):
+        assert add in ghint_wire, f"缺 {add} (dim→集合映射钉死, 勾回必须落到对应视图的勾选集)"
+    assert "saveFilters()" in ghint_wire and "renderLedger()" in ghint_wire and "renderCards()" in ghint_wire, (
+        "勾回走既有 toggle 链 (落盘+重渲染)"
+    )
+    data = _shell_fn(text, "ghintData")
+    assert "if (!S.q) return null" in data, "搜索为空永不提示 (拍板 Q6②)"
+    assert data.index("isHidden(i.link)") < data.index("ghintExclDims(i)"), "隐藏独占桶: isHidden 判定须先于维度归组 (拍板 Q10a)"
+    dims = _shell_fn(text, "ghintExclDims")
+    assert 'S.view === "ledger"' in dims and 'S.view === "cards"' in dims and "return []" in dims, (
+        "维度按活动视图: 台账三维 / 卡片墙两维 / 控制台只显隐藏 (拍板 Q8a)"
+    )
+    assert "另匹配 <b>" in text and "</b> 项 (" in text, "文案锚点: 另匹配 N 项 (…)"
+    assert "项隐藏</span>" in text, "文案锚点: 另有 N 项隐藏 (独占桶)"
+    assert "按排除原因分计, 同件可跨组重复" in text, "行 title 须注明分计口径 (拍板 Q3b 措辞)"
 
 
 def test_multiselect_renders_in_both_zones() -> None:

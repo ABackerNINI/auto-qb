@@ -36,6 +36,23 @@ def _rule(css: str, sel: str) -> str:
     return m.group(1)
 
 
+def _shell_fn(text: str, name: str) -> str:
+    """按花括号配平抽取壳内 `function <name>(...) {` 的函数体 (嵌套体安全) ——
+    `function X\\(\\) \\{(.*?)\\n\\}` 一类非贪婪写法只配得上无嵌套体的函数。"""
+    sig = f"function {name}("
+    at = text.index(sig)
+    open_at = text.index("{", at)
+    depth = 0
+    for pos in range(open_at, len(text)):
+        if text[pos] == "{":
+            depth += 1
+        elif text[pos] == "}":
+            depth -= 1
+            if depth == 0:
+                return text[open_at + 1:pos]
+    raise AssertionError(f"function {name} 未闭合? 改版要同步本守阵")
+
+
 PLAN_HTML = """<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="UTF-8">
 <meta name="doc-type" content="plan">

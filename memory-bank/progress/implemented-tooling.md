@@ -38,6 +38,19 @@
   原先默认 `tmp_path` 在非系统卷且祖先目录不带 hidden 属性, 本机 TMP=C:/AppData 下必然误红; 桩化
   `SystemDrive` 与非 `hid` 路径属性后与运行环境解耦), 详情见对应基线切片的「首跑红及处置」。
 
+- **kb.nav 搜索被排除匹配项提示行 (2026-11-06, 专题 kb-nav-search-ghint)**: 用户痛点「取消勾选
+  Dropped 后按完整名搜 `26-09-30-0052-feat-hr-login-counter-attest` 零结果且无任何提示」—— 病根
+  不是搜不到 (部分 slug 本就命中, 索引含 basename), 是勾选过滤在搜索之前 AND, 匹配项被静默吞掉。
+  修法 (grilling 两轮拍板): 搜索词非空且存在被勾选/隐藏挡住的匹配项时, 搜索框正下方浮现 `#ghint`
+  一行 —— 去重总数锚定 + 按原因分计 (同件可跨组重复, title 注明口径)「另匹配 4 项 (Dropped 2 ·
+  档案 3) · 另有 3 项隐藏」; 组名可点 = 勾上对应值 (复用各视图 toggle 链), 「N项隐藏」不可点
+  (恢复走台账隐藏区); 隐藏件独占一桶不进原因组与总数; 维度按活动视图: 台账 aSets 三维 / 卡片墙
+  cSets 两维 / 控制台只显隐藏 (频道搜索本就不做形态/状态过滤); 「仅活跃/有认领链/cLive」开关排除
+  与每卡片内部提示不做 (拍板边界)。壳内 `ghintExclDims`/`ghintData`/`renderGhint` 单点, 三视图
+  render 末尾挂载 (过滤切换不经 renderCurrent), `wire()` 委托点击。守阵 +2 (node 回放十场景含
+  真实 26-09-30-0052 三兄弟仿造数据 / 接线单点), 真机验证: 静态导出真实 DATA(1113 件)回放 +
+  Playwright 渲染冒烟 (提示浮现/文案/点组名勾回/主表回行), 数字见 kb.baseline。
+
 - **kb.nav 置顶区折叠 + 置顶条目单击对齐主区 (2026-11-03, 专题 kb-nav-pin-zone)**: 两处交互改动都在壳
   `nav_page.html`(数据层/服务层零改动)。①置顶专区标题行加**折叠按钮** `#pzToggle`: 原生 `button`
   (回车/空格即触发, 不另写键位), `aria-expanded` + `aria-controls="pzBody"` + `aria-label`, 折叠箭头

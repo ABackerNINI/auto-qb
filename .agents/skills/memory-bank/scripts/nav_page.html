@@ -16,6 +16,8 @@
   置顶区交互 (2026-11-03): 标题行内置折叠按钮 #pzToggle (原生 button, aria-expanded / aria-controls,
   箭头方向反映状态), 折叠态落 mb-nav-pin-collapsed 且只藏表格主体 pzBody —— 标题行与展开入口始终可见;
   置顶条目单击与主表**共用** openRowDetail() 单点 (同一 renderDrawer, 双区同 link 同亮), 不再单开原文。
+  搜索被排除匹配提示 (2026-11-06): 搜索词非空且存在被勾选/隐藏挡住的匹配项时, 搜索框下浮现
+  #ghint 一行 (总数锚定 + 按原因分计, 组名可点勾回; 隐藏件独占一桶); 口径按活动视图, 见 ghintData()。
 -->
 <style>
   :root {
@@ -98,6 +100,24 @@
     background: transparent; border: none; border-radius: 4px; color: var(--faint); cursor: pointer;
   }
   .gclear:hover { color: var(--ink); background: var(--paper); }
+  /* 搜索被排除匹配项提示行 (task 26-11-06-memory-bank-kb-nav-search-ghint): 悬浮在搜索框正下方
+     (与搜索高度绑定, 不推挤下方内容), 单行溢出省略 + title 全文; 组名 .gtag 可点勾回,
+     「N项隐藏」(.ghid) 不可点 (恢复走台账隐藏区)。不设 display → [hidden] UA 兜底不被盖
+     (同 #gclear 口径)。z 序: .topbar 自带 z-20 上下文, 浮层压过下方视图内容。 */
+  .ghint {
+    position: absolute; top: calc(100% + 5px); left: 0; max-width: 100%;
+    background: var(--paper-3); border: 1px solid var(--hair-2); border-radius: 6px;
+    padding: 3px 9px; font-size: 11px; line-height: 1.6; color: var(--dim);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; z-index: 25;
+  }
+  .ghint b { color: var(--ink); }
+  .ghint .gsep { color: var(--faint); margin: 0 4px; }
+  .ghint .gtag {
+    background: transparent; border: none; padding: 0; font: inherit; cursor: pointer;
+    color: var(--cyan); text-decoration: underline dotted; text-underline-offset: 2px;
+  }
+  .ghint .gtag:hover { color: var(--ink); }
+  .ghint .ghid { color: var(--faint); }
   .gclear[hidden] { display: none; }
   .gclear svg { width: 10px; height: 10px; display: block; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
   .seg { display: flex; border: 1px solid var(--hair-2); border-radius: 6px; overflow: hidden; flex: none; }
@@ -613,6 +633,9 @@
     <button class="gclear" id="gclear" hidden title="清空搜索词" aria-label="清空搜索词">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5l14 14M19 5L5 19"/></svg>
     </button>
+    <!-- 搜索被排除匹配项提示 (task 26-11-06-memory-bank-kb-nav-search-ghint):
+         有被勾选/隐藏挡住的匹配项才现算浮现, renderGhint 单点渲染 -->
+    <div class="ghint" id="ghint" hidden></div>
   </div>
   <div class="seg" id="seg">
     <button data-view="ledger" class="on">台账</button>
@@ -1121,6 +1144,86 @@ function navSearchQuery(q) {
   return q.toLowerCase().replace(/\\/g, "/");
 }
 
+/* 搜索被排除匹配项提示 (2026-11-06, task 26-11-06-memory-bank-kb-nav-search-ghint):
+   搜索词非空且存在「匹配搜索但被勾选/隐藏挡住」的条目时, 搜索框下现算一行提示。口径
+   (grilling 两轮拍板, 全文见任务档案):
+   - 总数 = 去重的非隐藏被排除匹配数; 括号内按排除原因分计, 同件可跨组重复 (≥2 维被取消
+     勾选才发生重叠, 行 title 注明口径);
+   - 隐藏件独占一桶: 隐藏∧匹配只进「N项隐藏」不进原因组 —— 点组名也唤不回隐藏件, 数字
+     不互污; 计数是搜索相关的隐藏件非全量 (aCount「已隐藏 N」仍是全量口径, 两处不合并);
+   - 维度按活动视图: 台账 aSets 三维 (状态/形态/issue类型) / 卡片墙 cSets 两维 (无类型过滤) /
+     控制台无勾选过滤 → 只显隐藏桶; 「仅活跃/有认领链/cLive」开关造成的排除不进提示;
+   - 组名可点 = 勾上对应值 (wire() 委托); 已知边角: 同件被两维排除需两次点击。 */
+function ghintExclDims(i) {
+  if (S.view === "ledger") {
+    return [
+      ["status", stOf(i), !S.aStatuses.has(stOf(i))],
+      ["form", i.form, !S.aForms.has(i.form)],
+      ["type", i["issue-type"] || "", !!(i["issue-type"]) && !S.aTypes.has(i["issue-type"])],
+    ].filter(d => d[2]);
+  }
+  if (S.view === "cards") {
+    return [
+      ["status", stOf(i), !S.cStatuses.has(stOf(i))],
+      ["form", i.form, !S.cForms.has(i.form)],
+    ].filter(d => d[2]);
+  }
+  return []; /* 控制台: 频道搜索不做形态/状态过滤 (renderChannels), 只剩隐藏桶可报 */
+}
+
+function ghintData() {
+  if (!S.q) return null; /* 搜索为空永不提示 (面板计数本来就在) */
+  const q = navSearchQuery(S.q);
+  const excl = new Set(), hid = new Set(), byKey = new Map(), groups = [];
+  for (const i of DATA.items) {
+    if (!navSearchText(i).includes(q)) continue;
+    if (isHidden(i.link)) { hid.add(i.link); continue; } /* 独占桶: 隐藏件不进原因组 */
+    let any = false;
+    for (const [dim, val] of ghintExclDims(i)) {
+      any = true;
+      const key = dim + "\u0000" + val;
+      let g = byKey.get(key);
+      if (!g) { g = { dim, val, n: 0 }; byKey.set(key, g); groups.push(g); }
+      g.n++;
+    }
+    if (any) excl.add(i.link);
+  }
+  if (!excl.size && !hid.size) return null;
+  /* 组序 = 面板固定序(形态→状态→类型, 与侧栏 fgForm/fgStatus/fgType 及卡片 pills 的 DOM 序一致);
+     数据派生的未知状态值 indexOf 为 -1, 排在已知值之前, 无碍 */
+  const ord = { form: 0, status: 1, type: 2 };
+  groups.sort((a, b) => ord[a.dim] - ord[b.dim] ||
+    (a.dim === "status" ? statusList.indexOf(a.val) - statusList.indexOf(b.val) :
+     a.dim === "form" ? FORM_ORD.indexOf(a.val) - FORM_ORD.indexOf(b.val) :
+     TYPES.indexOf(a.val) - TYPES.indexOf(b.val)));
+  return { total: excl.size, groups, hidden: hid.size };
+}
+
+/* 提示行渲染单点: 三个视图 render 末尾各挂一次 (过滤切换不经 renderCurrent), q 输入 / 切视图 /
+   30s 轮询 / 勾回点击全部汇到这条链。用词与面板一致 (状态英文原文 / 形态中文)。 */
+const ghintLabel = g => (g.dim === "form" ? FORM_CN[g.val] : g.val);
+function renderGhint() {
+  const el = $("ghint");
+  if (!el) return;
+  const d = DATA && ghintData();
+  if (!d) { el.hidden = true; el.innerHTML = ""; return; }
+  const parts = [], plain = [];
+  if (d.total) {
+    parts.push("另匹配 <b>" + d.total + "</b> 项 (" + d.groups.map(g =>
+      '<button class="gtag" type="button" data-gdim="' + g.dim + '" data-gval="' + esc(g.val) +
+      '" title="勾上「' + esc(ghintLabel(g)) + '」即可看到这些匹配">' + esc(ghintLabel(g)) + " " + g.n + "</button>"
+    ).join('<span class="gsep">·</span>') + ")");
+    plain.push("另匹配 " + d.total + " 项 (" + d.groups.map(g => ghintLabel(g) + " " + g.n).join(" · ") + ")");
+  }
+  if (d.hidden) {
+    parts.push('<span class="ghid" title="被你隐藏的匹配件 (台账隐藏区可逐件恢复)">另有 ' + d.hidden + " 项隐藏</span>");
+    plain.push("另有 " + d.hidden + " 项隐藏");
+  }
+  el.innerHTML = parts.join('<span class="gsep">·</span>');
+  el.title = plain.join(" · ") + " —— 按排除原因分计, 同件可跨组重复";
+  el.hidden = false;
+}
+
 function aFiltered() {
   let list = DATA.items.filter(i =>
     !isHidden(i.link) &&
@@ -1199,6 +1302,7 @@ function renderLedger() {
   $("aRows").innerHTML = list.map((i, n) => `<tr data-link="${esc(i.link)}"${rowCls(i) ? ' class="' + rowCls(i) + '"' : ""}>${ledgerCells(i, n)}</tr>`).join("");
 
   if (S.sel) { if (byLink.has(S.sel)) renderDrawer(S.sel); else closeDrawer(); }
+  renderGhint();
 }
 
 /* 置顶专区: 与主表**同栏**的详细列表 (列宽/列序克隆主表 thead, 行单元格复用 ledgerCells),
@@ -1403,6 +1507,7 @@ function renderConsole() {
 
   renderChannels();
   renderScope();
+  renderGhint();
 }
 
 function renderChannels() {
@@ -1538,6 +1643,7 @@ function renderCards() {
       </div>
     </div>`;
   }).join("") || '<div class="empty-wall">没有匹配的专题 —— 试试放宽过滤条件或清空搜索</div>';
+  renderGhint();
 }
 
 /* ============================================================
@@ -1557,6 +1663,24 @@ function wire() {
   $("gq").addEventListener("input", e => { S.q = e.target.value.trim(); saveFilters(); renderCurrent(); syncGclear(); });
   $("gq").addEventListener("keydown", e => {
     if (e.key === "Escape") { e.target.value = ""; S.q = ""; saveFilters(); renderCurrent(); syncGclear(); }
+  });
+  /* 提示组名点击 = 勾上对应值 (拍板 Q4a): 复用各视图既有 toggle 链 (add + saveFilters + 重渲染,
+     渲染末尾的 renderGhint 重算提示, 该组随即消失 = 可见的操作反馈); 控制台无勾选维度,
+     组名在该视图不出现, 委托自然空转。已知边角: 同件被两维排除需两次点击。 */
+  $("ghint").addEventListener("click", e => {
+    const b = e.target.closest(".gtag");
+    if (!b) return;
+    const dim = b.dataset.gdim, val = b.dataset.gval;
+    if (S.view === "ledger") {
+      if (dim === "status") S.aStatuses.add(val);
+      else if (dim === "form") S.aForms.add(val);
+      else S.aTypes.add(val);
+      saveFilters(); renderLedger();
+    } else if (S.view === "cards") {
+      if (dim === "status") S.cStatuses.add(val);
+      else S.cForms.add(val);
+      saveFilters(); renderCards();
+    }
   });
   /* 清词按钮: 清词后焦点还给输入框 (连续改词免再点); 只清搜索词, 不动筛选器与选择态 */
   $("gclear").addEventListener("click", () => {
