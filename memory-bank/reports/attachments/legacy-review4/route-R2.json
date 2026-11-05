@@ -1,0 +1,53 @@
+{
+  "route": "R2",
+  "owner": "clone2-main",
+  "claimed_at": "26-11-06-0512",
+  "freeze": "f088329291e64d0802637463e886f78842c1b34c",
+  "freeze_note": "manifest 钉值 (生成时点 develop tip, D17)",
+  "snapshot": null,
+  "status": "claimed",
+  "batches": [
+    {
+      "id": "R2-1",
+      "title": "校验面: config/validation 全部",
+      "status": "pending",
+      "done_at": null,
+      "findings": 0
+    },
+    {
+      "id": "R2-2",
+      "title": "schema 与装载: schema 全部 + loaders + models",
+      "status": "pending",
+      "done_at": null,
+      "findings": 0
+    },
+    {
+      "id": "R2-3",
+      "title": "写入与迁移: writer/migrations/compat/errors/impact/site_presets",
+      "status": "pending",
+      "done_at": null,
+      "findings": 0
+    },
+    {
+      "id": "R2-4",
+      "title": "rules 全域: base/conditions/registry/checking_meta + expr + actions",
+      "status": "pending",
+      "done_at": null,
+      "findings": 0
+    },
+    {
+      "id": "R2-5",
+      "title": "infra 存储: alias_fs/file_access",
+      "status": "pending",
+      "done_at": null,
+      "findings": 0
+    },
+    {
+      "id": "R2-6",
+      "title": "infra 工具: utils*/clock/notify/locking/logging/journal/recovery 等",
+      "status": "pending",
+      "done_at": null,
+      "findings": 0
+    }
+  ]
+}
