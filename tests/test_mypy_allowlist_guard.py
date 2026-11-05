@@ -100,11 +100,13 @@ def parse_pyproject(toml_text: str) -> tuple[set[str], set[tuple[str, str]]]:
 
 _FROZEN_DISABLE_GROUPS: list[tuple[list[str], list[str]]] = [
     # ③ core/modules + hr service mixin 组合面(attr-defined/has-type)与 Optional 次生噪音
+    #    call-arg 已随 issue 26-11-06-0247 修正注解而摘除(allowlist 递减), 从冻结面一并撤下 ——
+    #    再往这一面加回 call-arg 会当场红。
     (
         ["auto_qb.core.modules.*", "auto_qb.hr.service_wave", "auto_qb.hr.service_status"],
         [
             "attr-defined", "has-type", "union-attr", "arg-type", "assignment", "operator", "misc", "return-value",
-            "call-arg", "call-overload"
+            "call-overload"
         ],
     ),
     # ④ qbapi 三方 Facade 转发 + qbmanager/state/codec/tvshows/grid Optional 收窄

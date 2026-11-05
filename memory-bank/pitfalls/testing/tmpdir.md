@@ -37,6 +37,10 @@
   `commands run test.full` 1.3s 内 rc=4(拒收), 前缀 `TMPDIR= commands run test.full` 即过。
   为什么没命中: 又是在收尾"顺手跑个全量"时忘了 env 随 shell 走 —— 与上两轮同款,
   开工/收尾两次跑测试前都应先过一次 testing 类索引。
+- **复发**: 4(2026-11-06)—— issue 26-11-06-0247 收尾: 自己的 `test.full` / `test.one` 都加了
+  `env -u TMPDIR`, 但 `commands run ship.commit` **内部的闸门** `test.quick` 是同 env 子进程,
+  于是提交被闸门拦下(rc=4)。为什么没命中: 把「跑测试要清 TMPDIR」记成了「我的 test.* 调用要清」,
+  漏了闸门/流水线里的间接调用 —— 处置: **提交也走 `env -u TMPDIR commands run ship.commit`**。
 
 ### `--basetemp` 换了目录会让 4 条 sidefx 用例**假红**
 

@@ -508,7 +508,7 @@ class _SampleAggMixin:
         }
 
     @staticmethod
-    def _slot_agg_obs(slot: V4Slot, agg_totals: Optional[Tuple[int, int]]) -> Optional[Tuple[int, int]]:
+    def _slot_agg_obs(slot: V4Slot, agg_totals: Optional[Tuple[int, int]]) -> Optional[Tuple[int, int, int, int]]:
         """单槽的 agg 入账观测(离线恢复用, 形态 D 单点): z 槽 = (0, 0, 摊配 dl, 摊配 up)
         (v4_block_agg_totals 的逐槽值 —— 无末端列/单槽游程时 = 开启快照, 与旧语义逐位一致);
         r 槽 = 原 obs(速率 + 冻结 totals); n 槽 = None(null 期不贡献)。"""

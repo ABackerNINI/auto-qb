@@ -130,11 +130,14 @@ ignore_errors = true  # 2026-11-06, 计划钉死
 #    均由多个 Mixin 运行期拼装, 属性/方法定义在兄弟 Mixin 上(attr-defined/has-type 的根因);
 #    store/api 等 Optional 成员收窄(union-attr)与伴生 arg-type/operator/assignment 是同一
 #    架构形态的次生噪音。静态修复需 Protocol 基类改造 = 架构级, 属抵抗面。
+#    allowlist 递减 1 格(2026-11-06): call-arg 摘除 —— 该码在本面唯一残留是
+#    _slot_agg_obs 注解漂移(issue 26-11-06-0247), 注解改 Optional[Tuple[int,int,int,int]]
+#    后全库 call-arg 零报错。
 [[tool.mypy.overrides]]
 module = ["auto_qb.core.modules.*", "auto_qb.hr.service_wave", "auto_qb.hr.service_status"]
 disable_error_code = [
   "attr-defined", "has-type",  # mixin 组合
-  "union-attr", "arg-type", "assignment", "operator", "misc", "return-value", "call-arg", "call-overload",  # Optional 收窄 + lambda/nonlocal/Popen 等次生噪音
+  "union-attr", "arg-type", "assignment", "operator", "misc", "return-value", "call-overload",  # Optional 收窄 + lambda/nonlocal/Popen 等次生噪音
 ]  # 2026-11-06, 现场裁量
 
 # ④ core 非 modules 面(现场裁量): qbapi 是 qbittorrent-api 无 stub 动态库的透传 Facade

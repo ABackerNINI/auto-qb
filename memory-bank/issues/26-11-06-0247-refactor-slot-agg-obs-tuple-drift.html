@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-11-06-0247">
 <meta name="issue-type" content="refactor">
 <meta name="doc-topic" content="type-annotations-mypy">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/testing/baselines/26-11-06-0615-type-annotations-mypy.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="_slot_agg_obs 注解 2 元组与实际 4 元组契约漂移, mypy call-arg 被豁免面吞掉">
 <meta name="issue-summary" content="traffic_sample_agg._slot_agg_obs 注解 Optional[Tuple[int,int]] 实际恒返 4 元组, 连累 :561 调用 mypy call-arg 报缺 3 实参(现被 disable_error_code 豁免掩盖); 运行期无恙, 属注解契约漂移">
 <title>_slot_agg_obs 注解 2 元组与实际 4 元组契约漂移, mypy call-arg 被豁免面吞掉 · refactor · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-11-06-0247-refactor-slot-agg-obs-tuple-drift</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-06 02:47</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -77,6 +77,7 @@
   <section id="s1">
     <h2><span class="no">01</span>现象</h2>
     <p>mypy 接入期(计划 <a href="../plans/26-11-05-0635-plan-type-annotations-mypy.html">26-11-05-0635-plan-type-annotations-mypy</a>)首跑清单里 <code>core/modules/traffic_sample_agg.py:561</code> 报 call-arg「<code>_agg_credit_hours</code> 调用缺 3 个位置实参」: 调用形如 <code>_agg_credit_hours(hour_samples, cur.ts, nxt.ts, *obs)</code>, 需要 4 个尾部实参(dl/up/dl_total/up_total), 而 mypy 按 <code>obs</code> 的注解只能推出 2 元组。核查结论: <strong>运行期无恙</strong> —— <code>V4Slot.obs</code> 的文档契约就是 4 元组(r 槽 <code>(dl_rate, up_rate, dl_total, up_total)</code>; z 槽 <code>(0, 0, dlt, upt)</code>, 见 traffic_store_codec.py <code>class V4Slot</code> docstring), <code>_slot_agg_obs</code> 两条返回路径(<code>slot.obs</code> 与字面量 <code>(0, 0, agg_totals[0], agg_totals[1])</code>)实际都产 4 元组。真问题在<strong>注解契约漂移</strong>: 返回注解写成 <code>Optional[Tuple[int, int]]</code>, 与实际 4 元组不符 —— 该 call-arg 报错现被 <code>[tool.mypy]</code> 对 <code>core.modules.*</code> 的 disable_error_code 豁免掩盖。</p>
+    <p><strong>复验 2026-11-06 06:05：仍复现。</strong>用剔除 <code>core.modules.*</code> 豁免块的临时 mypy 配置重跑 <code>src/auto_qb/core/modules/traffic_sample_agg.py</code>，两条同源报错并存：<code>:561 Missing positional arguments "up", "dl_total", "up_total" ... [call-arg]</code> 与 <code>:519 Incompatible return value type (got "tuple[int, int, int, int]", expected "tuple[int, int] | None") [return-value]</code> —— 后者正是注解漂移的直接自证（实际返回 4 元组，注解写 2 元组），此前被 return-value 豁免一并吞掉。另核 <code>v4_block_agg_totals</code> / <code>v4_z_totals_ramp</code>：逐槽摊配值确为 <code>(dl_total, up_total)</code> 2 元组，故 <code>agg_totals</code> 形参注解 <code>Optional[Tuple[int, int]]</code> <strong>无漂移</strong>，不必改。</p>
   </section>
 
   <section id="s2">
@@ -91,12 +92,19 @@
   <section id="s3">
     <h2><span class="no">03</span>建议<span class="opt">（可选）</span></h2>
     <p>返回注解改 <code>Optional[Tuple[int, int, int, int]]</code>(顺带给 <code>agg_totals</code> 形参核对 <code>Optional[Tuple[int, int]]</code> 是否同样漂移 —— <code>v4_block_agg_totals</code> 返回面需一并核对); 修后 mypy 对该调用点的 call-arg 自然消失, <code>core.modules.*</code> 豁免块里的 call-arg 条目可随之摘除(allowlist 递减一格)。修复时先复验: 重跑 <code>commands run dev.typecheck -- src/auto_qb/core/modules/traffic_sample_agg.py</code> 确认现象仍在。</p>
+    <h3>修复后补充（2026-11-06 06:20）</h3>
+    <p><strong>实际修法：</strong>照建议修法走，落三处：①<code>traffic_sample_agg.py:511</code> 返回注解 <code>Optional[Tuple[int, int]]</code> → <code>Optional[Tuple[int, int, int, int]]</code>（唯一实质改动；<code>agg_totals</code> 形参经复验确认无漂移，保持不动）；②<code>pyproject.toml</code> 的 ③ 号 override（<code>core.modules.*</code> + hr service 两模块）从 <code>disable_error_code</code> 摘掉 <code>call-arg</code> —— allowlist 递减一格，注释里写明摘除理由与本 issue 编号；③<code>tests/test_mypy_allowlist_guard.py</code> 冻结清单同步撤下该码（冻结面不撤则「加回 call-arg」不再触发摩擦，递减就白做了）。</p>
+    <p><strong>为什么敢摘豁免：</strong>摘除前先用临时 mypy 配置（其余 override 原样保留、仅 ③ 号块去掉 call-arg）全库跑一遍：<strong>全仓 call-arg 只剩本 issue 这一条</strong>（<code>traffic_sample_agg.py:561</code>），即该码在本面是「单点债」而非「架构噪音」。注解修正后该条自然消失，豁免面才允许净减。运行期行为零改动 —— 两条返回路径本来产的就是 4 元组，改的只是注解。</p>
+    <p><strong>验证方式：</strong>①摘豁免后 <code>commands run dev.typecheck</code> 全库 <code>Success: no issues found</code>（195 文件，退出码 0）—— 证明递减无新增漏网错误；②守阵 <code>tests/test_mypy_allowlist_guard.py</code> 全绿（10 passed），冻结面与 pyproject 逐条对账通过；③相关面定向用例（<code>test_traffic_store_agg</code> / <code>test_traffic_store_codec</code> / <code>test_traffic_store_slots</code> / <code>test_traffic_grid_seam</code> / <code>test_traffic_grid_agg</code>）76 passed；④全量 <code>commands run test.full</code> 全绿。</p>
+    <p><strong>测试数字（2026-11-06 实测）：</strong><code>5467 passed, 2 skipped, 1 warning in 180.90s</code>；覆盖率 <code>TOTAL 24538 stmts / 57 miss / 8396 branch / 36 partial / 99%</code>（闸 99.5% 已达）。mypy 面：<code>Success: no issues found in 195 source files</code>；豁免面 <code>disable_error_code</code> 由 55 条 / 157 对降为 <strong>54 条 / 154 对</strong>（16 个 override 块不变）。基线切片见 <code>kb.baseline</code>（26-11-06-0615）。</p>
   </section>
 
   <section id="s4">
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-11-06 02:47 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-06 06:05 — 认领（用户指派「修复本 issue」），状态 <strong>In Progress</strong>；复验仍复现，见 01 节「复验」行</li>
+      <li>2026-11-06 06:20 — 修复并验证：注解改 4 元组 + <code>call-arg</code> 豁免摘除（allowlist 递减一格，冻结面同步）+ 全库 typecheck 退出码 0，全量 test.full 全绿（详见 03 节「修复后补充」），状态 <strong>Done</strong></li>
     </ul>
   </section>
 
