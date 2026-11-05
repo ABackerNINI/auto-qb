@@ -124,5 +124,41 @@
   "claim": "traffic_source.enabled 的 Field.default 用 Python 布尔 True,违反 Field docstring「default 为 YAML 空间标量字符串」契约,也是全 schema 唯一一个布尔型 default(其余 bool 字段均为 \"true\"/\"false\" 串)",
   "relevance": "相关",
   "fix": "改为 default=\"true\"(前端 cfgScalar/cfgTruthy 当前兼容布尔,但契约口径应统一,防后续消费方按字符串处理时踩坑)"
+ },
+ {
+  "file": "src/auto_qb/config/compat.py",
+  "line": 11,
+  "quote": "R1① 错误定位回映射: 校验器报错话术须把归一形坐标翻回用户写的扁平坐标",
+  "severity": "minor",
+  "claim": "py 文件内使用禁令字符: 带圈数字 ①②(行 11/15/203/238)与警告符号 ⚠(行 17), 违反 code-style.md「代码一律 ASCII, 禁 emoji 与图形符号、带圈数字 ①-⑬」(覆盖含 docstring/注释)",
+  "relevance": "相关",
+  "fix": "按 code-style.md 替代表改写: ①→「R1-1.」、②→「R1-2.」、⚠→「WARN:」"
+ },
+ {
+  "file": "src/auto_qb/config/writer.py",
+  "line": 222,
+  "quote": "def write_tree(config_path: str, tree: Dict[str, Any], old_config: Config, backup_path: str) -> WriteResult:",
+  "severity": "minor",
+  "claim": "写盘链(_prepare/_backup/_dump_roundtrip)无任何锁, 而 webui 的 PUT /api/config 是同步 def handler(FastAPI 线程池并发执行), 两个并发保存会交错执行: 后提交方的 .bak 可能读到前者已写入的新内容而非保存前状态(备份恢复资产退化), 且后完成的 _dump_roundtrip 整体覆盖前者, 先保存方的全部改动被静默丢弃",
+  "relevance": "相关",
+  "fix": "write_tree/preview_tree/materialize_schema_migration 共用一把模块级 threading.Lock 串行化(或由 webui 层对保存请求串行)"
+ },
+ {
+  "file": "src/auto_qb/config/writer.py",
+  "line": 194,
+  "quote": "if len(pending) == len(rest_old):",
+  "severity": "minor",
+  "claim": "targets 第二轮按下标配对在「两个以上条目同时改名且相对顺序被调换」时会把 A 的旧密码回填进 B: 如旧 [T1(a),T2(b)], 提交 [X(原T2改名c,哨兵), Y(原T1改名d,哨兵)] 顺序对调, 数量相等即 zip 配对, X(T2 的 base_url)拿到 T1 的 password, 凭据静默写串",
+  "relevance": "相关",
+  "fix": "第二轮加非敏感键(type/base_url)一致性核对后再回填, 不一致则不猜、哨兵原样留下(与「数量不等不猜」同口径)"
+ },
+ {
+  "file": "src/auto_qb/config/migrations.py",
+  "line": 117,
+  "quote": "全局段: 删除 26 个废弃键",
+  "severity": "minor",
+  "claim": "docstring 称全局段删除 26 个废弃键, 但实际删除清单 _V3_DROP_GLOBAL_KEYS(line 90-111,注释自述「v2→v3 删除的全局段键」)实测只有 20 个键,26 疑为计划里 v2 旧键总数(含改名保留的 min_torrent_interval 与 sites 条目内废弃键)被误记到全局段名下",
+  "relevance": "相关",
+  "fix": "把该行改为「删除 20 个废弃键」或改为不带数字的表述(如「删除 §6.2 废弃键去向表所列全局键」),与 _V3_DROP_GLOBAL_KEYS 对齐"
  }
 ]

@@ -24,9 +24,9 @@
     {
       "id": "R2-3",
       "title": "写入与迁移: writer/migrations/compat/errors/impact/site_presets",
-      "status": "pending",
-      "done_at": null,
-      "findings": 0
+      "status": "done",
+      "done_at": "26-11-06-0607",
+      "findings": 4
     },
     {
       "id": "R2-4",
