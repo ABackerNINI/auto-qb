@@ -1,0 +1,2136 @@
+{
+  "campaign": "legacy-code-review-4",
+  "plan_file": "memory-bank/plans/26-11-05-2335-plan-legacy-code-review-4.html",
+  "generated_at": "26-11-05-2352",
+  "note": "机器事实源(计划 §04/D14); freeze 由 review.lane.claim 时机械解析, 不存于此",
+  "routes": {
+    "R1": [
+      "R1-1",
+      "R1-2",
+      "R1-3",
+      "R1-4",
+      "R1-5",
+      "R1-6",
+      "R1-7"
+    ],
+    "R2": [
+      "R2-1",
+      "R2-2",
+      "R2-3",
+      "R2-4",
+      "R2-5",
+      "R2-6"
+    ],
+    "R3": [
+      "R3-1",
+      "R3-2",
+      "R3-3",
+      "R3-4",
+      "R3-5",
+      "R3-6"
+    ],
+    "R4": [
+      "R4-1",
+      "R4-2",
+      "R4-3",
+      "R4-4"
+    ],
+    "R5": [
+      "R5-1",
+      "R5-2",
+      "R5-3",
+      "R5-4",
+      "R5-5",
+      "R5-11",
+      "R5-6",
+      "R5-7",
+      "R5-8",
+      "R5-9",
+      "R5-10"
+    ]
+  },
+  "batches": [
+    {
+      "id": "R1-1",
+      "route": "R1",
+      "title": "内核执行面: qbmanager/taskqueue/module/qbapi/state + core 根杂件",
+      "depth": "full",
+      "total_lines": 3405,
+      "files": [
+        {
+          "path": "src/auto-qb.py",
+          "lines": 10
+        },
+        {
+          "path": "src/auto_qb/__init__.py",
+          "lines": 28
+        },
+        {
+          "path": "src/auto_qb/__main__.py",
+          "lines": 7
+        },
+        {
+          "path": "src/auto_qb/cli.py",
+          "lines": 278
+        },
+        {
+          "path": "src/auto_qb/core/__init__.py",
+          "lines": 23
+        },
+        {
+          "path": "src/auto_qb/core/episodes.py",
+          "lines": 137
+        },
+        {
+          "path": "src/auto_qb/core/exporter.py",
+          "lines": 258
+        },
+        {
+          "path": "src/auto_qb/core/module.py",
+          "lines": 443
+        },
+        {
+          "path": "src/auto_qb/core/qbapi.py",
+          "lines": 430
+        },
+        {
+          "path": "src/auto_qb/core/qbclient.py",
+          "lines": 68
+        },
+        {
+          "path": "src/auto_qb/core/qbmanager.py",
+          "lines": 1036
+        },
+        {
+          "path": "src/auto_qb/core/state.py",
+          "lines": 374
+        },
+        {
+          "path": "src/auto_qb/core/taskqueue.py",
+          "lines": 313
+        }
+      ],
+      "registry": {
+        "r2_ids": [
+          "A-06",
+          "T-04",
+          "T-05"
+        ],
+        "r2_index": {
+          "A-06": "A R9(R2) P2 core/taskqueue.py:224-234 run_due (defer 命中仍占 due 批次) / :241 _pop_due ; core/qbmanager.py:781 _own_write_defer_gate deferral 让位任务重入堆但仍计入本轮 max_tasks",
+          "T-04": "T R10 P3 gtm/__init__.py:8-10 进度注; README 通知机制段; 对照 notifier.py:9-12 与 26-10-16-0541 档案 包级门面文档双重漂移: 进度注停在 S5(实际 S0-S9 落地)、通知链路仍写「重读历史文件」(26-10-21 起为零读盘直达补丁)",
+          "T-05": "T general P3 gtm/server.py:56(F401 Config ) / __main__.py:96(F841 uninstall ) / config.py:313(RUF059 errors ) 工具侧死码三处, 行为零差异"
+        },
+        "issues": []
+      }
+    },
+    {
+      "id": "R1-2",
+      "route": "R1",
+      "title": "迁移执行: relocate_units/relocate_exec/relocate_common",
+      "depth": "full",
+      "total_lines": 2069,
+      "files": [
+        {
+          "path": "src/auto_qb/core/modules/relocate_common.py",
+          "lines": 85
+        },
+        {
+          "path": "src/auto_qb/core/modules/relocate_exec.py",
+          "lines": 978
+        },
+        {
+          "path": "src/auto_qb/core/modules/relocate_units.py",
+          "lines": 1006
+        }
+      ],
+      "registry": {
+        "r2_ids": [
+          "A-03",
+          "A-04"
+        ],
+        "r2_index": {
+          "A-03": "A R6 P2 relocate_mod.py:441-453 _build_links 失败 / :597-608 _apply_reconcile REBUILD; relocate_units.py:870 reconcile (:904 qb_up⇒REBUILD) 建链失败进 REMOVED→REBUILD→",
+          "A-04": "A R1(R9) P2 relocate_mod.py:825→:833 _start_job (先 _persist 后 setLocation) / :196-204 _load_jobs (恢复一律 issue=False); relocate_units.py:842 recover_exec_phase (全"
+        },
+        "issues": []
+      }
+    },
+    {
+      "id": "R1-3",
+      "route": "R1",
+      "title": "迁移规划与生命期: relocate_mod/plan/probe/proof/lifecycle",
+      "depth": "full",
+      "total_lines": 1768,
+      "files": [
+        {
+          "path": "src/auto_qb/core/modules/relocate_lifecycle.py",
+          "lines": 277
+        },
+        {
+          "path": "src/auto_qb/core/modules/relocate_mod.py",
+          "lines": 231
+        },
+        {
+          "path": "src/auto_qb/core/modules/relocate_plan.py",
+          "lines": 529
+        },
+        {
+          "path": "src/auto_qb/core/modules/relocate_probe.py",
+          "lines": 412
+        },
+        {
+          "path": "src/auto_qb/core/modules/relocate_proof.py",
+          "lines": 319
+        }
+      ],
+      "registry": {
+        "r2_ids": [
+          "A-01",
+          "A-02",
+          "A-03",
+          "A-04",
+          "A-05",
+          "GH-01"
+        ],
+        "r2_index": {
+          "A-01": "A R2 P2 core/modules/relocate_mod.py:233 on_task_line / :279 _step_move setLocation / :406 _build_links / :852 relocate_cancel relocate 相位机与撤销路径全程无 dry_run 闸(唯一",
+          "A-02": "A R6 P2 relocate_mod.py:795 _start_job 暂停成员 / :271-319 _step_move / :874 relocate_cancel ; 消费点 :482/:500/:879 迁移失败路径(move_rejected/stalled、internal_error、cancel",
+          "A-03": "A R6 P2 relocate_mod.py:441-453 _build_links 失败 / :597-608 _apply_reconcile REBUILD; relocate_units.py:870 reconcile (:904 qb_up⇒REBUILD) 建链失败进 REMOVED→REBUILD→",
+          "A-04": "A R1(R9) P2 relocate_mod.py:825→:833 _start_job (先 _persist 后 setLocation) / :196-204 _load_jobs (恢复一律 issue=False); relocate_units.py:842 recover_exec_phase (全",
+          "A-05": "A R9 P2 relocate_mod.py:643-651 _finalize_members ; torrents/record.py:287 files (惰性缓存首见即一次 HTTP) ACT_FINALIZE 收尾集合对全库每条种子先发 files API 再过滤, 大库下单 tick 串行 N 次 HTT",
+          "GH-01": "GH R11(R9) P3 tools/finalize_watch.py:185-190 run (读后心跳无条件整包覆盖) / :238(max_wait 缺省 0); infra/relocate_journal.py:1-14 头注「唯一写者」; 对照 relocate_mod.py:593/:605/:639"
+        },
+        "issues": []
+      }
+    },
+    {
+      "id": "R1-4",
+      "route": "R1",
+      "title": "traffic 存取: store/agg/codec/common/paths/grid/limits/curves",
+      "depth": "full",
+      "total_lines": 3006,
+      "files": [
+        {
+          "path": "src/auto_qb/core/curves.py",
+          "lines": 142
+        },
+        {
+          "path": "src/auto_qb/core/traffic_grid.py",
+          "lines": 791
+        },
+        {
+          "path": "src/auto_qb/core/traffic_limits.py",
+          "lines": 317
+        },
+        {
+          "path": "src/auto_qb/core/traffic_store.py",
+          "lines": 613
+        },
+        {
+          "path": "src/auto_qb/core/traffic_store_agg.py",
+          "lines": 130
+        },
+        {
+          "path": "src/auto_qb/core/traffic_store_codec.py",
+          "lines": 744
+        },
+        {
+          "path": "src/auto_qb/core/traffic_store_common.py",
+          "lines": 140
+        },
+        {
+          "path": "src/auto_qb/core/traffic_store_paths.py",
+          "lines": 129
+        }
+      ],
+      "registry": {
+        "r2_ids": [
+          "C-01",
+          "C-02"
+        ],
+        "r2_index": {
+          "C-01": "C R11(R6) P3 core/traffic_store.py:821 parse_v4_agg_text (cov_s 无下限) / :1207-1209 v4_rollup_agg / :1244 v4_merge_agg ; traffic_sample_mod.py:1427 _recover_aggre",
+          "C-02": "C general P3 core/curves.py:76 aggregate ( today: date = None , RUF013) 隐式 Optional 注解漂移, 注解与 docstring/调用方契约不符, 行为零差异"
+        },
+        "issues": []
+      }
+    },
+    {
+      "id": "R1-5",
+      "route": "R1",
+      "title": "traffic 采样: sample_mod/agg/blocks/common/snapshot + traffic_source",
+      "depth": "full",
+      "total_lines": 2793,
+      "files": [
+        {
+          "path": "src/auto_qb/core/modules/traffic_sample_agg.py",
+          "lines": 543
+        },
+        {
+          "path": "src/auto_qb/core/modules/traffic_sample_blocks.py",
+          "lines": 346
+        },
+        {
+          "path": "src/auto_qb/core/modules/traffic_sample_common.py",
+          "lines": 171
+        },
+        {
+          "path": "src/auto_qb/core/modules/traffic_sample_mod.py",
+          "lines": 649
+        },
+        {
+          "path": "src/auto_qb/core/modules/traffic_snapshot_mod.py",
+          "lines": 400
+        },
+        {
+          "path": "src/auto_qb/core/traffic_source/__init__.py",
+          "lines": 7
+        },
+        {
+          "path": "src/auto_qb/core/traffic_source/agent.py",
+          "lines": 512
+        },
+        {
+          "path": "src/auto_qb/core/traffic_source/paths.py",
+          "lines": 115
+        },
+        {
+          "path": "src/auto_qb/core/traffic_source/reader.py",
+          "lines": 50
+        }
+      ],
+      "registry": {
+        "r2_ids": [
+          "A-07",
+          "C-01",
+          "T-04"
+        ],
+        "r2_index": {
+          "A-07": "A general P3 core/traffic_source/agent.py:382 ensure_running ( enabled is not True ) 启用判据与自家契约(paths.source_enabled 的 is not False)方向相反, 真 bool 下等价、mock/非 bool ",
+          "C-01": "C R11(R6) P3 core/traffic_store.py:821 parse_v4_agg_text (cov_s 无下限) / :1207-1209 v4_rollup_agg / :1244 v4_merge_agg ; traffic_sample_mod.py:1427 _recover_aggre",
+          "T-04": "T R10 P3 gtm/__init__.py:8-10 进度注; README 通知机制段; 对照 notifier.py:9-12 与 26-10-16-0541 档案 包级门面文档双重漂移: 进度注停在 S5(实际 S0-S9 落地)、通知链路仍写「重读历史文件」(26-10-21 起为零读盘直达补丁)"
+        },
+        "issues": []
+      }
+    },
+    {
+      "id": "R1-6",
+      "route": "R1",
+      "title": "分组与规则模块: grouping_mod/rules_mod/tvshows",
+      "depth": "full",
+      "total_lines": 1903,
+      "files": [
+        {
+          "path": "src/auto_qb/core/modules/grouping_mod.py",
+          "lines": 770
+        },
+        {
+          "path": "src/auto_qb/core/modules/rules_mod.py",
+          "lines": 613
+        },
+        {
+          "path": "src/auto_qb/core/tvshows.py",
+          "lines": 520
+        }
+      ],
+      "registry": {
+        "r2_ids": [],
+        "r2_index": {},
+        "issues": []
+      }
+    },
+    {
+      "id": "R1-7",
+      "route": "R1",
+      "title": "ops 与维护面: ops_*/maintenance/fuse/speed_curve/logging/notify/tracker",
+      "depth": "full",
+      "total_lines": 2751,
+      "files": [
+        {
+          "path": "src/auto_qb/core/modules/__init__.py",
+          "lines": 38
+        },
+        {
+          "path": "src/auto_qb/core/modules/fuse_mod.py",
+          "lines": 399
+        },
+        {
+          "path": "src/auto_qb/core/modules/logging_mod.py",
+          "lines": 45
+        },
+        {
+          "path": "src/auto_qb/core/modules/maintenance_mod.py",
+          "lines": 372
+        },
+        {
+          "path": "src/auto_qb/core/modules/notify_mod.py",
+          "lines": 79
+        },
+        {
+          "path": "src/auto_qb/core/modules/ops_common.py",
+          "lines": 86
+        },
+        {
+          "path": "src/auto_qb/core/modules/ops_jobs.py",
+          "lines": 91
+        },
+        {
+          "path": "src/auto_qb/core/modules/ops_mod.py",
+          "lines": 375
+        },
+        {
+          "path": "src/auto_qb/core/modules/ops_skip.py",
+          "lines": 501
+        },
+        {
+          "path": "src/auto_qb/core/modules/ops_verdict.py",
+          "lines": 319
+        },
+        {
+          "path": "src/auto_qb/core/modules/speed_curve_mod.py",
+          "lines": 324
+        },
+        {
+          "path": "src/auto_qb/core/modules/tracker_mod.py",
+          "lines": 122
+        }
+      ],
+      "registry": {
+        "r2_ids": [
+          "A-08",
+          "T-04"
+        ],
+        "r2_index": {
+          "A-08": "A general P3 core/modules/ops_mod.py:465 skip_submit (RUF059) / :487 _skip_begin (F841) 两处死绑定(job 解包未消费 / prefix 拼接未使用), 行为零差异",
+          "T-04": "T R10 P3 gtm/__init__.py:8-10 进度注; README 通知机制段; 对照 notifier.py:9-12 与 26-10-16-0541 档案 包级门面文档双重漂移: 进度注停在 S5(实际 S0-S9 落地)、通知链路仍写「重读历史文件」(26-10-21 起为零读盘直达补丁)"
+        },
+        "issues": []
+      }
+    },
+    {
+      "id": "R2-1",
+      "route": "R2",
+      "title": "校验面: config/validation 全部",
+      "depth": "full",
+      "total_lines": 2320,
+      "files": [
+        {
+          "path": "src/auto_qb/config/validation/__init__.py",
+          "lines": 93
+        },
+        {
+          "path": "src/auto_qb/config/validation/core.py",
+          "lines": 364
+        },
+        {
+          "path": "src/auto_qb/config/validation/curves.py",
+          "lines": 99
+        },
+        {
+          "path": "src/auto_qb/config/validation/rules.py",
+          "lines": 620
+        },
+        {
+          "path": "src/auto_qb/config/validation/sections.py",
+          "lines": 1144
+        }
+      ],
+      "registry": {
+        "r2_ids": [
+          "C-02",
+          "D-01",
+          "T-04"
+        ],
+        "r2_index": {
+          "C-02": "C general P3 core/curves.py:76 aggregate ( today: date = None , RUF013) 隐式 Optional 注解漂移, 注解与 docstring/调用方契约不符, 行为零差异",
+          "D-01": "D R4 P3 config/validation/sections.py:217 _validate_qbittorrent (三 str 键无类型检查), 对照 :820 _validate_web token 先例; loaders.py:86 load_qbittorrent_config qbittorren",
+          "T-04": "T R10 P3 gtm/__init__.py:8-10 进度注; README 通知机制段; 对照 notifier.py:9-12 与 26-10-16-0541 档案 包级门面文档双重漂移: 进度注停在 S5(实际 S0-S9 落地)、通知链路仍写「重读历史文件」(26-10-21 起为零读盘直达补丁)"
+        },
+        "issues": []
+      }
+    },
+    {
+      "id": "R2-2",
+      "route": "R2",
+      "title": "schema 与装载: schema 全部 + loaders + models",
+      "depth": "full",
+      "total_lines": 3291,
+      "files": [
+        {
+          "path": "src/auto_qb/config/loaders.py",
+          "lines": 732
+        },
+        {
+          "path": "src/auto_qb/config/models.py",
+          "lines": 636
+        },
+        {
+          "path": "src/auto_qb/config/schema/__init__.py",
+          "lines": 216
+        },
+        {
+          "path": "src/auto_qb/config/schema/fields.py",
+          "lines": 234
+        },
+        {
+          "path": "src/auto_qb/config/schema/groups.py",
+          "lines": 770
+        },
+        {
+          "path": "src/auto_qb/config/schema/hr.py",
+          "lines": 209
+        },
+        {
+          "path": "src/auto_qb/config/schema/rules.py",
+          "lines": 317
+        },
+        {
+          "path": "src/auto_qb/config/schema/trackers.py",
+          "lines": 177
+        }
+      ],
+      "registry": {
+        "r2_ids": [
+          "D-01",
+          "T-04"
+        ],
+        "r2_index": {
+          "D-01": "D R4 P3 config/validation/sections.py:217 _validate_qbittorrent (三 str 键无类型检查), 对照 :820 _validate_web token 先例; loaders.py:86 load_qbittorrent_config qbittorren",
+          "T-04": "T R10 P3 gtm/__init__.py:8-10 进度注; README 通知机制段; 对照 notifier.py:9-12 与 26-10-16-0541 档案 包级门面文档双重漂移: 进度注停在 S5(实际 S0-S9 落地)、通知链路仍写「重读历史文件」(26-10-21 起为零读盘直达补丁)"
+        },
+        "issues": []
+      }
+    },
+    {
+      "id": "R2-3",
+      "route": "R2",
+      "title": "写入与迁移: writer/migrations/compat/errors/impact/site_presets",
+      "depth": "full",
+      "total_lines": 1406,
+      "files": [
+        {
+          "path": "src/auto_qb/config/__init__.py",
+          "lines": 99
+        },
+        {
+          "path": "src/auto_qb/config/compat.py",
+          "lines": 250
+        },
+        {
+          "path": "src/auto_qb/config/errors.py",
+          "lines": 11
+        },
+        {
+          "path": "src/auto_qb/config/impact.py",
+          "lines": 69
+        },
+        {
+          "path": "src/auto_qb/config/migrations.py",
+          "lines": 314
+        },
+        {
+          "path": "src/auto_qb/config/site_presets.py",
+          "lines": 111
+        },
+        {
+          "path": "src/auto_qb/config/writer.py",
+          "lines": 552
+        }
+      ],
+      "registry": {
+        "r2_ids": [
+          "T-04"
+        ],
+        "r2_index": {
+          "T-04": "T R10 P3 gtm/__init__.py:8-10 进度注; README 通知机制段; 对照 notifier.py:9-12 与 26-10-16-0541 档案 包级门面文档双重漂移: 进度注停在 S5(实际 S0-S9 落地)、通知链路仍写「重读历史文件」(26-10-21 起为零读盘直达补丁)"
+        },
+        "issues": []
+      }
+    },
+    {
+      "id": "R2-4",
+      "route": "R2",
+      "title": "rules 全域: base/conditions/registry/checking_meta + expr + actions",
+      "depth": "full",
+      "total_lines": 3350,
+      "files": [
+        {
+          "path": "src/auto_qb/rules/__init__.py",
+          "lines": 8
+        },
+        {
+          "path": "src/auto_qb/rules/actions/__init__.py",
+          "lines": 43
+        },
+        {
+          "path": "src/auto_qb/rules/actions/basic.py",
+          "lines": 183
+        },
+        {
+          "path": "src/auto_qb/rules/actions/checking.py",
+          "lines": 219
+        },
+        {
+          "path": "src/auto_qb/rules/actions/full_checking.py",
+          "lines": 157
+        },
+        {
+          "path": "src/auto_qb/rules/actions/skip_checking.py",
+          "lines": 33
+        },
+        {
+          "path": "src/auto_qb/rules/actions/transfer.py",
+          "lines": 113
+        },
+        {
+          "path": "src/auto_qb/rules/base.py",
+          "lines": 742
+        },
+        {
+          "path": "src/auto_qb/rules/checking_meta.py",
+          "lines": 120
+        },
+        {
+          "path": "src/auto_qb/rules/conditions.py",
+          "lines": 259
+        },
+        {
+          "path": "src/auto_qb/rules/expr/__init__.py",
+          "lines": 46
+        },
+        {
+          "path": "src/auto_qb/rules/expr/env.py",
+          "lines": 477
+        },
+        {
+          "path": "src/auto_qb/rules/expr/errors.py",
+          "lines": 22
+        },
+        {
+          "path": "src/auto_qb/rules/expr/eval.py",
+          "lines": 203
+        },
+        {
+          "path": "src/auto_qb/rules/expr/lexer.py",
+          "lines": 170
+        },
+        {
+          "path": "src/auto_qb/rules/expr/parser.py",
+          "lines": 252
+        },
+        {
+          "path": "src/auto_qb/rules/expr/types.py",
+          "lines": 107
+        },
+        {
+          "path": "src/auto_qb/rules/registry.py",
+          "lines": 196
+        }
+      ],
+      "registry": {
+        "r2_ids": [
+          "T-04"
+        ],
+        "r2_index": {
+          "T-04": "T R10 P3 gtm/__init__.py:8-10 进度注; README 通知机制段; 对照 notifier.py:9-12 与 26-10-16-0541 档案 包级门面文档双重漂移: 进度注停在 S5(实际 S0-S9 落地)、通知链路仍写「重读历史文件」(26-10-21 起为零读盘直达补丁)"
+        },
+        "issues": []
+      }
+    },
+    {
+      "id": "R2-5",
+      "route": "R2",
+      "title": "infra 存储: alias_fs/file_access",
+      "depth": "full",
+      "total_lines": 1436,
+      "files": [
+        {
+          "path": "src/auto_qb/infra/alias_fs.py",
+          "lines": 1042
+        },
+        {
+          "path": "src/auto_qb/infra/file_access.py",
+          "lines": 394
+        }
+      ],
+      "registry": {
+        "r2_ids": [],
+        "r2_index": {},
+        "issues": []
+      }
+    },
+    {
+      "id": "R2-6",
+      "route": "R2",
+      "title": "infra 工具: utils*/notify/locking/logging/journal/recovery 等",
+      "depth": "full",
+      "total_lines": 2952,
+      "files": [
+        {
+          "path": "src/auto_qb/infra/__init__.py",
+          "lines": 15
+        },
+        {
+          "path": "src/auto_qb/infra/autostart.py",
+          "lines": 98
+        },
+        {
+          "path": "src/auto_qb/infra/errors.py",
+          "lines": 32
+        },
+        {
+          "path": "src/auto_qb/infra/locking.py",
+          "lines": 140
+        },
+        {
+          "path": "src/auto_qb/infra/logging.py",
+          "lines": 151
+        },
+        {
+          "path": "src/auto_qb/infra/notify.py",
+          "lines": 310
+        },
+        {
+          "path": "src/auto_qb/infra/port_owner.py",
+          "lines": 228
+        },
+        {
+          "path": "src/auto_qb/infra/relocate_journal.py",
+          "lines": 164
+        },
+        {
+          "path": "src/auto_qb/infra/store_recovery.py",
+          "lines": 85
+        },
+        {
+          "path": "src/auto_qb/infra/utils.py",
+          "lines": 878
+        },
+        {
+          "path": "src/auto_qb/infra/utils_parse.py",
+          "lines": 304
+        },
+        {
+          "path": "src/auto_qb/infra/utils_paths.py",
+          "lines": 361
+        },
+        {
+          "path": "src/auto_qb/infra/versioning.py",
+          "lines": 186
+        }
+      ],
+      "registry": {
+        "r2_ids": [
+          "GH-01",
+          "T-04"
+        ],
+        "r2_index": {
+          "GH-01": "GH R11(R9) P3 tools/finalize_watch.py:185-190 run (读后心跳无条件整包覆盖) / :238(max_wait 缺省 0); infra/relocate_journal.py:1-14 头注「唯一写者」; 对照 relocate_mod.py:593/:605/:639",
+          "T-04": "T R10 P3 gtm/__init__.py:8-10 进度注; README 通知机制段; 对照 notifier.py:9-12 与 26-10-16-0541 档案 包级门面文档双重漂移: 进度注停在 S5(实际 S0-S9 落地)、通知链路仍写「重读历史文件」(26-10-21 起为零读盘直达补丁)"
+        },
+        "issues": []
+      }
+    },
+    {
+      "id": "R3-1",
+      "route": "R3",
+      "title": "transfer 全域(新模块) + torrents/store",
+      "depth": "full",
+      "total_lines": 1814,
+      "files": [
+        {
+          "path": "src/auto_qb/torrents/store.py",
+          "lines": 875
+        },
+        {
+          "path": "src/auto_qb/transfer/__init__.py",
+          "lines": 26
+        },
+        {
+          "path": "src/auto_qb/transfer/adapters/__init__.py",
+          "lines": 27
+        },
+        {
+          "path": "src/auto_qb/transfer/adapters/base.py",
+          "lines": 124
+        },
+        {
+          "path": "src/auto_qb/transfer/adapters/qb.py",
+          "lines": 279
+        },
+        {
+          "path": "src/auto_qb/transfer/adapters/tr.py",
+          "lines": 27
+        },
+        {
+          "path": "src/auto_qb/transfer/orchestrator.py",
+          "lines": 456
+        }
+      ],
+      "registry": {
+        "r2_ids": [
+          "C-01",
+          "T-04"
+        ],
+        "r2_index": {
+          "C-01": "C R11(R6) P3 core/traffic_store.py:821 parse_v4_agg_text (cov_s 无下限) / :1207-1209 v4_rollup_agg / :1244 v4_merge_agg ; traffic_sample_mod.py:1427 _recover_aggre",
+          "T-04": "T R10 P3 gtm/__init__.py:8-10 进度注; README 通知机制段; 对照 notifier.py:9-12 与 26-10-16-0541 档案 包级门面文档双重漂移: 进度注停在 S5(实际 S0-S9 落地)、通知链路仍写「重读历史文件」(26-10-21 起为零读盘直达补丁)"
+        },
+        "issues": []
+      }
+    },
+    {
+      "id": "R3-2",
+      "route": "R3",
+      "title": "torrents 杂件 + tray + cli + tools",
+      "depth": "full",
+      "total_lines": 1619,
+      "files": [
+        {
+          "path": "src/auto_qb/tools/__init__.py",
+          "lines": 6
+        },
+        {
+          "path": "src/auto_qb/tools/finalize_watch.py",
+          "lines": 285
+        },
+        {
+          "path": "src/auto_qb/torrents/__init__.py",
+          "lines": 51
+        },
+        {
+          "path": "src/auto_qb/torrents/compat.py",
+          "lines": 137
+        },
+        {
+          "path": "src/auto_qb/torrents/record.py",
+          "lines": 484
+        },
+        {
+          "path": "src/auto_qb/torrents/view.py",
+          "lines": 64
+        },
+        {
+          "path": "src/auto_qb/tray/__init__.py",
+          "lines": 27
+        },
+        {
+          "path": "src/auto_qb/tray/app.py",
+          "lines": 565
+        }
+      ],
+      "registry": {
+        "r2_ids": [
+          "A-05",
+          "GH-01",
+          "T-04"
+        ],
+        "r2_index": {
+          "A-05": "A R9 P2 relocate_mod.py:643-651 _finalize_members ; torrents/record.py:287 files (惰性缓存首见即一次 HTTP) ACT_FINALIZE 收尾集合对全库每条种子先发 files API 再过滤, 大库下单 tick 串行 N 次 HTT",
+          "GH-01": "GH R11(R9) P3 tools/finalize_watch.py:185-190 run (读后心跳无条件整包覆盖) / :238(max_wait 缺省 0); infra/relocate_journal.py:1-14 头注「唯一写者」; 对照 relocate_mod.py:593/:605/:639",
+          "T-04": "T R10 P3 gtm/__init__.py:8-10 进度注; README 通知机制段; 对照 notifier.py:9-12 与 26-10-16-0541 档案 包级门面文档双重漂移: 进度注停在 S5(实际 S0-S9 落地)、通知链路仍写「重读历史文件」(26-10-21 起为零读盘直达补丁)"
+        },
+        "issues": []
+      }
+    },
+    {
+      "id": "R3-3",
+      "route": "R3",
+      "title": "hr service 族: service_wave/service/service_common/service_status/module",
+      "depth": "full",
+      "total_lines": 2054,
+      "files": [
+        {
+          "path": "src/auto_qb/hr/module.py",
+          "lines": 41
+        },
+        {
+          "path": "src/auto_qb/hr/service.py",
+          "lines": 417
+        },
+        {
+          "path": "src/auto_qb/hr/service_common.py",
+          "lines": 446
+        },
+        {
+          "path": "src/auto_qb/hr/service_status.py",
+          "lines": 205
+        },
+        {
+          "path": "src/auto_qb/hr/service_wave.py",
+          "lines": 945
+        }
+      ],
+      "registry": {
+        "r2_ids": [
+          "B-01"
+        ],
+        "r2_index": {
+          "B-01": "B R5(R2) P1 hr/service.py:1329 _freeze_terminal / :1729 _position_covered / :1753 _absence_proven_all ; 语义锚 model.py:332; 支点 adapters/nexusphp.py:57 cutoff_done"
+        },
+        "issues": []
+      }
+    },
+    {
+      "id": "R3-4",
+      "route": "R3",
+      "title": "hr 模型状态: model/status/resolve",
+      "depth": "full",
+      "total_lines": 1815,
+      "files": [
+        {
+          "path": "src/auto_qb/hr/model.py",
+          "lines": 680
+        },
+        {
+          "path": "src/auto_qb/hr/resolve.py",
+          "lines": 462
+        },
+        {
+          "path": "src/auto_qb/hr/status.py",
+          "lines": 673
+        }
+      ],
+      "registry": {
+        "r2_ids": [
+          "B-01"
+        ],
+        "r2_index": {
+          "B-01": "B R5(R2) P1 hr/service.py:1329 _freeze_terminal / :1729 _position_covered / :1753 _absence_proven_all ; 语义锚 model.py:332; 支点 adapters/nexusphp.py:57 cutoff_done"
+        },
+        "issues": []
+      }
+    },
+    {
+      "id": "R3-5",
+      "route": "R3",
+      "title": "hr 运行时: runtime/server/channel/worker/threadlifecycle/queue/events",
+      "depth": "full",
+      "total_lines": 2439,
+      "files": [
+        {
+          "path": "src/auto_qb/hr/channel.py",
+          "lines": 442
+        },
+        {
+          "path": "src/auto_qb/hr/events.py",
+          "lines": 228
+        },
+        {
+          "path": "src/auto_qb/hr/queue.py",
+          "lines": 182
+        },
+        {
+          "path": "src/auto_qb/hr/runtime.py",
+          "lines": 553
+        },
+        {
+          "path": "src/auto_qb/hr/server.py",
+          "lines": 538
+        },
+        {
+          "path": "src/auto_qb/hr/threadlifecycle.py",
+          "lines": 65
+        },
+        {
+          "path": "src/auto_qb/hr/worker.py",
+          "lines": 431
+        }
+      ],
+      "registry": {
+        "r2_ids": [
+          "A-06",
+          "T-01",
+          "T-02",
+          "T-05"
+        ],
+        "r2_index": {
+          "A-06": "A R9(R2) P2 core/taskqueue.py:224-234 run_due (defer 命中仍占 due 批次) / :241 _pop_due ; core/qbmanager.py:781 _own_write_defer_gate deferral 让位任务重入堆但仍计入本轮 max_tasks",
+          "T-01": "T R9(R3) P3 gtm/server.py:444-446 _autostart (读-改-写无锁) / :339-343 _put_config ; 对照 storage.py:489 _state_lock (state 路径已串行化) config.yml 双 HTTP 线程写点无锁, /autostar",
+          "T-02": "T R8 P3 gtm/config.py:163-167 _check_str (只验非空); server.py:192/:277; storage.py:22-23 docstring「强制绑定 127.0.0.1」 http_host 可配且无回环约束, PUT 0.0.0.0 重启后控制面对局域网暴露(tok",
+          "T-05": "T general P3 gtm/server.py:56(F401 Config ) / __main__.py:96(F841 uninstall ) / config.py:313(RUF059 errors ) 工具侧死码三处, 行为零差异"
+        },
+        "issues": []
+      }
+    },
+    {
+      "id": "R3-6",
+      "route": "R3",
+      "title": "hr 取数解析: discovery/report/parse/fetcher/store/bencode/log/ratelimit + adapters",
+      "depth": "full",
+      "total_lines": 2906,
+      "files": [
+        {
+          "path": "src/auto_qb/hr/__init__.py",
+          "lines": 226
+        },
+        {
+          "path": "src/auto_qb/hr/adapters/__init__.py",
+          "lines": 79
+        },
+        {
+          "path": "src/auto_qb/hr/adapters/base.py",
+          "lines": 83
+        },
+        {
+          "path": "src/auto_qb/hr/adapters/btschool.py",
+          "lines": 36
+        },
+        {
+          "path": "src/auto_qb/hr/adapters/carpt.py",
+          "lines": 72
+        },
+        {
+          "path": "src/auto_qb/hr/adapters/nexusphp.py",
+          "lines": 222
+        },
+        {
+          "path": "src/auto_qb/hr/bencode.py",
+          "lines": 161
+        },
+        {
+          "path": "src/auto_qb/hr/discovery.py",
+          "lines": 557
+        },
+        {
+          "path": "src/auto_qb/hr/fetcher.py",
+          "lines": 268
+        },
+        {
+          "path": "src/auto_qb/hr/log.py",
+          "lines": 33
+        },
+        {
+          "path": "src/auto_qb/hr/parse.py",
+          "lines": 340
+        },
+        {
+          "path": "src/auto_qb/hr/ratelimit.py",
+          "lines": 127
+        },
+        {
+          "path": "src/auto_qb/hr/report.py",
+          "lines": 391
+        },
+        {
+          "path": "src/auto_qb/hr/store.py",
+          "lines": 311
+        }
+      ],
+      "registry": {
+        "r2_ids": [
+          "B-01",
+          "B-02",
+          "C-01",
+          "T-04"
+        ],
+        "r2_index": {
+          "B-01": "B R5(R2) P1 hr/service.py:1329 _freeze_terminal / :1729 _position_covered / :1753 _absence_proven_all ; 语义锚 model.py:332; 支点 adapters/nexusphp.py:57 cutoff_done",
+          "B-02": "B general P3 hr/discovery.py:27 is_loopback_host / :33 _content_length (F401 ×2) 新文件两处死导入, 行为零差异",
+          "C-01": "C R11(R6) P3 core/traffic_store.py:821 parse_v4_agg_text (cov_s 无下限) / :1207-1209 v4_rollup_agg / :1244 v4_merge_agg ; traffic_sample_mod.py:1427 _recover_aggre",
+          "T-04": "T R10 P3 gtm/__init__.py:8-10 进度注; README 通知机制段; 对照 notifier.py:9-12 与 26-10-16-0541 档案 包级门面文档双重漂移: 进度注停在 S5(实际 S0-S9 落地)、通知链路仍写「重读历史文件」(26-10-21 起为零读盘直达补丁)"
+        },
+        "issues": []
+      }
+    },
+    {
+      "id": "R4-1",
+      "route": "R4",
+      "title": "webui commands 面: commands*/runtime_commands",
+      "depth": "full",
+      "total_lines": 2125,
+      "files": [
+        {
+          "path": "src/auto_qb/webui/commands.py",
+          "lines": 241
+        },
+        {
+          "path": "src/auto_qb/webui/commands_common.py",
+          "lines": 311
+        },
+        {
+          "path": "src/auto_qb/webui/commands_config.py",
+          "lines": 225
+        },
+        {
+          "path": "src/auto_qb/webui/commands_limit.py",
+          "lines": 70
+        },
+        {
+          "path": "src/auto_qb/webui/commands_logs.py",
+          "lines": 16
+        },
+        {
+          "path": "src/auto_qb/webui/commands_torrents.py",
+          "lines": 820
+        },
+        {
+          "path": "src/auto_qb/webui/runtime_commands.py",
+          "lines": 442
+        }
+      ],
+      "registry": {
+        "r2_ids": [],
+        "r2_index": {},
+        "issues": []
+      }
+    },
+    {
+      "id": "R4-2",
+      "route": "R4",
+      "title": "webui 视图与运行时: runtime*/views*/tool_client/module/relocate_chain",
+      "depth": "full",
+      "total_lines": 3667,
+      "files": [
+        {
+          "path": "src/auto_qb/webui/__init__.py",
+          "lines": 41
+        },
+        {
+          "path": "src/auto_qb/webui/module.py",
+          "lines": 229
+        },
+        {
+          "path": "src/auto_qb/webui/relocate_chain.py",
+          "lines": 229
+        },
+        {
+          "path": "src/auto_qb/webui/runtime.py",
+          "lines": 251
+        },
+        {
+          "path": "src/auto_qb/webui/runtime_common.py",
+          "lines": 128
+        },
+        {
+          "path": "src/auto_qb/webui/runtime_stream.py",
+          "lines": 222
+        },
+        {
+          "path": "src/auto_qb/webui/runtime_views.py",
+          "lines": 760
+        },
+        {
+          "path": "src/auto_qb/webui/tool_client.py",
+          "lines": 437
+        },
+        {
+          "path": "src/auto_qb/webui/views.py",
+          "lines": 452
+        },
+        {
+          "path": "src/auto_qb/webui/views_common.py",
+          "lines": 157
+        },
+        {
+          "path": "src/auto_qb/webui/views_episodes.py",
+          "lines": 248
+        },
+        {
+          "path": "src/auto_qb/webui/views_group.py",
+          "lines": 136
+        },
+        {
+          "path": "src/auto_qb/webui/views_relocate.py",
+          "lines": 99
+        },
+        {
+          "path": "src/auto_qb/webui/views_row.py",
+          "lines": 173
+        },
+        {
+          "path": "src/auto_qb/webui/views_search.py",
+          "lines": 105
+        }
+      ],
+      "registry": {
+        "r2_ids": [
+          "T-04"
+        ],
+        "r2_index": {
+          "T-04": "T R10 P3 gtm/__init__.py:8-10 进度注; README 通知机制段; 对照 notifier.py:9-12 与 26-10-16-0541 档案 包级门面文档双重漂移: 进度注停在 S5(实际 S0-S9 落地)、通知链路仍写「重读历史文件」(26-10-21 起为零读盘直达补丁)"
+        },
+        "issues": []
+      }
+    },
+    {
+      "id": "R4-3",
+      "route": "R4",
+      "title": "webui server 全域: factory/auth/context/routes/traffic_qb",
+      "depth": "full",
+      "total_lines": 3683,
+      "files": [
+        {
+          "path": "src/auto_qb/webui/server/__init__.py",
+          "lines": 38
+        },
+        {
+          "path": "src/auto_qb/webui/server/auth.py",
+          "lines": 187
+        },
+        {
+          "path": "src/auto_qb/webui/server/common.py",
+          "lines": 130
+        },
+        {
+          "path": "src/auto_qb/webui/server/context.py",
+          "lines": 77
+        },
+        {
+          "path": "src/auto_qb/webui/server/factory.py",
+          "lines": 33
+        },
+        {
+          "path": "src/auto_qb/webui/server/lifecycle.py",
+          "lines": 243
+        },
+        {
+          "path": "src/auto_qb/webui/server/routes/__init__.py",
+          "lines": 23
+        },
+        {
+          "path": "src/auto_qb/webui/server/routes/config.py",
+          "lines": 181
+        },
+        {
+          "path": "src/auto_qb/webui/server/routes/events.py",
+          "lines": 81
+        },
+        {
+          "path": "src/auto_qb/webui/server/routes/fs.py",
+          "lines": 318
+        },
+        {
+          "path": "src/auto_qb/webui/server/routes/groups.py",
+          "lines": 59
+        },
+        {
+          "path": "src/auto_qb/webui/server/routes/hr.py",
+          "lines": 245
+        },
+        {
+          "path": "src/auto_qb/webui/server/routes/keys.py",
+          "lines": 123
+        },
+        {
+          "path": "src/auto_qb/webui/server/routes/relocate_chain.py",
+          "lines": 89
+        },
+        {
+          "path": "src/auto_qb/webui/server/routes/sites.py",
+          "lines": 92
+        },
+        {
+          "path": "src/auto_qb/webui/server/routes/state.py",
+          "lines": 157
+        },
+        {
+          "path": "src/auto_qb/webui/server/routes/system.py",
+          "lines": 66
+        },
+        {
+          "path": "src/auto_qb/webui/server/routes/torrent_cmds.py",
+          "lines": 378
+        },
+        {
+          "path": "src/auto_qb/webui/server/routes/torrent_detail.py",
+          "lines": 242
+        },
+        {
+          "path": "src/auto_qb/webui/server/routes/traffic_monitor.py",
+          "lines": 401
+        },
+        {
+          "path": "src/auto_qb/webui/server/routes/transfer.py",
+          "lines": 92
+        },
+        {
+          "path": "src/auto_qb/webui/server/static_ui.py",
+          "lines": 59
+        },
+        {
+          "path": "src/auto_qb/webui/server/traffic_qb.py",
+          "lines": 369
+        }
+      ],
+      "registry": {
+        "r2_ids": [
+          "E-01",
+          "T-02",
+          "T-04",
+          "T-05"
+        ],
+        "r2_index": {
+          "E-01": "E R8 P3 webui/server/routes/torrent_cmds.py:210/:212/:221-225/:263-264/:319/:325 裸 int()/float(); torrent_detail.py:120-121 同族 数值型请求体字段无形状防护, 直调 API 传字符串 ValueE",
+          "T-02": "T R8 P3 gtm/config.py:163-167 _check_str (只验非空); server.py:192/:277; storage.py:22-23 docstring「强制绑定 127.0.0.1」 http_host 可配且无回环约束, PUT 0.0.0.0 重启后控制面对局域网暴露(tok",
+          "T-04": "T R10 P3 gtm/__init__.py:8-10 进度注; README 通知机制段; 对照 notifier.py:9-12 与 26-10-16-0541 档案 包级门面文档双重漂移: 进度注停在 S5(实际 S0-S9 落地)、通知链路仍写「重读历史文件」(26-10-21 起为零读盘直达补丁)",
+          "T-05": "T general P3 gtm/server.py:56(F401 Config ) / __main__.py:96(F841 uninstall ) / config.py:313(RUF059 errors ) 工具侧死码三处, 行为零差异"
+        },
+        "issues": []
+      }
+    },
+    {
+      "id": "R4-4",
+      "route": "R4",
+      "title": "CSS 机制面 + 模板 HTML(减配: 加载序/特异性冲突/守阵对齐/双皮肤一致)",
+      "depth": "mechanism",
+      "total_lines": 20809,
+      "files": [
+        {
+          "path": "src/auto_qb/webui/static/atlas/css/components.css",
+          "lines": 700
+        },
+        {
+          "path": "src/auto_qb/webui/static/atlas/css/dialogs.css",
+          "lines": 642
+        },
+        {
+          "path": "src/auto_qb/webui/static/atlas/css/views.css",
+          "lines": 636
+        },
+        {
+          "path": "src/auto_qb/webui/static/atlas/index.html",
+          "lines": 239
+        },
+        {
+          "path": "src/auto_qb/webui/static/atlas/style.css",
+          "lines": 220
+        },
+        {
+          "path": "src/auto_qb/webui/static/console/css/components.css",
+          "lines": 685
+        },
+        {
+          "path": "src/auto_qb/webui/static/console/css/dialogs.css",
+          "lines": 568
+        },
+        {
+          "path": "src/auto_qb/webui/static/console/css/views.css",
+          "lines": 453
+        },
+        {
+          "path": "src/auto_qb/webui/static/console/index.html",
+          "lines": 243
+        },
+        {
+          "path": "src/auto_qb/webui/static/console/style.css",
+          "lines": 197
+        },
+        {
+          "path": "src/auto_qb/webui/static/flux/css/components.css",
+          "lines": 700
+        },
+        {
+          "path": "src/auto_qb/webui/static/flux/css/dialogs.css",
+          "lines": 596
+        },
+        {
+          "path": "src/auto_qb/webui/static/flux/css/fx-mount.css",
+          "lines": 391
+        },
+        {
+          "path": "src/auto_qb/webui/static/flux/css/views.css",
+          "lines": 499
+        },
+        {
+          "path": "src/auto_qb/webui/static/flux/index.html",
+          "lines": 256
+        },
+        {
+          "path": "src/auto_qb/webui/static/flux/style.css",
+          "lines": 205
+        },
+        {
+          "path": "src/auto_qb/webui/static/fx/showcase-modern.css",
+          "lines": 27
+        },
+        {
+          "path": "src/auto_qb/webui/static/fx/showcase.html",
+          "lines": 3049
+        },
+        {
+          "path": "src/auto_qb/webui/static/prism/css/base.css",
+          "lines": 79
+        },
+        {
+          "path": "src/auto_qb/webui/static/prism/css/components.css",
+          "lines": 405
+        },
+        {
+          "path": "src/auto_qb/webui/static/prism/css/dialogs.css",
+          "lines": 636
+        },
+        {
+          "path": "src/auto_qb/webui/static/prism/css/themes/frost.css",
+          "lines": 101
+        },
+        {
+          "path": "src/auto_qb/webui/static/prism/css/themes/galaxy.css",
+          "lines": 95
+        },
+        {
+          "path": "src/auto_qb/webui/static/prism/css/themes/golden.css",
+          "lines": 103
+        },
+        {
+          "path": "src/auto_qb/webui/static/prism/css/themes/ocean.css",
+          "lines": 104
+        },
+        {
+          "path": "src/auto_qb/webui/static/prism/css/themes/orbit.css",
+          "lines": 98
+        },
+        {
+          "path": "src/auto_qb/webui/static/prism/css/tokens.css",
+          "lines": 44
+        },
+        {
+          "path": "src/auto_qb/webui/static/prism/css/views.css",
+          "lines": 818
+        },
+        {
+          "path": "src/auto_qb/webui/static/prism/index.html",
+          "lines": 244
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/console_hub.css",
+          "lines": 301
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/console_hub_controls.css",
+          "lines": 542
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/console_hub_layout.css",
+          "lines": 315
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/console_hub_panels.css",
+          "lines": 465
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/dt_table.css",
+          "lines": 175
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/fx/fx-presets.css",
+          "lines": 253
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/fx/fx.css",
+          "lines": 545
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/hscroll.css",
+          "lines": 73
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/row_lang.css",
+          "lines": 633
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/tpl/combo-input.html",
+          "lines": 107
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/tpl/ctl-bits.html",
+          "lines": 69
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/tpl/ctx-menus.html",
+          "lines": 154
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/tpl/dialog-shell.html",
+          "lines": 39
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/tpl/dialogs-mgr.html",
+          "lines": 179
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/tpl/dialogs.html",
+          "lines": 121
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/tpl/dock.html",
+          "lines": 10
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/tpl/drawer-head.html",
+          "lines": 60
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/tpl/drawer.html",
+          "lines": 227
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/tpl/groups.html",
+          "lines": 61
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/tpl/list-shell.html",
+          "lines": 48
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/tpl/move-dialog.html",
+          "lines": 51
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/tpl/overlays.html",
+          "lines": 52
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/tpl/popovers.html",
+          "lines": 381
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/tpl/rule-tree.html",
+          "lines": 183
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/tpl/settings-detail.html",
+          "lines": 559
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/tpl/settings.html",
+          "lines": 346
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/tpl/shows.html",
+          "lines": 84
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/tpl/statusbar.html",
+          "lines": 94
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/tpl/topbar.html",
+          "lines": 268
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/tpl/torrents.html",
+          "lines": 28
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/tpl/traffic-card.html",
+          "lines": 297
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/tpl/transfer-targets.html",
+          "lines": 152
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/tpl/xtpl-cells-dt.html",
+          "lines": 192
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/tpl/xtpl-cells.html",
+          "lines": 329
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/tpl/xtpl.html",
+          "lines": 383
+        }
+      ],
+      "registry": {
+        "r2_ids": [],
+        "r2_index": {},
+        "issues": []
+      }
+    },
+    {
+      "id": "R5-1",
+      "route": "R5",
+      "title": "shared 启动与状态: app/state/boot/lifecycle/auth/polling/fetch_low/ui_feedback",
+      "depth": "contract",
+      "total_lines": 3581,
+      "files": [
+        {
+          "path": "src/auto_qb/webui/static/shared/app.js",
+          "lines": 1008
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/auth.js",
+          "lines": 208
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/boot.js",
+          "lines": 133
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/fetch_low.js",
+          "lines": 53
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/lifecycle.js",
+          "lines": 408
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/polling.js",
+          "lines": 438
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/state.js",
+          "lines": 697
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/ui_feedback.js",
+          "lines": 636
+        }
+      ],
+      "registry": {
+        "r2_ids": [
+          "GH-01"
+        ],
+        "r2_index": {
+          "GH-01": "GH R11(R9) P3 tools/finalize_watch.py:185-190 run (读后心跳无条件整包覆盖) / :238(max_wait 缺省 0); infra/relocate_journal.py:1-14 头注「唯一写者」; 对照 relocate_mod.py:593/:605/:639"
+        },
+        "issues": []
+      }
+    },
+    {
+      "id": "R5-2",
+      "route": "R5",
+      "title": "shared 菜单·触发·命令链: menu/triggers/commands*/ctx_menu*/view/overlay_fit/ctl_bits/scope_audit/shortcuts(+panel)",
+      "depth": "contract",
+      "total_lines": 3637,
+      "files": [
+        {
+          "path": "src/auto_qb/webui/static/shared/commands.js",
+          "lines": 435
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/commands_optimistic.js",
+          "lines": 224
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/commands_send.js",
+          "lines": 432
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/ctl_bits.js",
+          "lines": 89
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/ctx_menu.js",
+          "lines": 370
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/ctx_menu_custom.js",
+          "lines": 331
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/menu.js",
+          "lines": 386
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/overlay_fit.js",
+          "lines": 73
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/scope_audit.js",
+          "lines": 58
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/shortcuts.js",
+          "lines": 441
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/shortcuts_panel.js",
+          "lines": 245
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/triggers.js",
+          "lines": 329
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/view.js",
+          "lines": 224
+        }
+      ],
+      "registry": {
+        "r2_ids": [],
+        "r2_index": {},
+        "issues": []
+      }
+    },
+    {
+      "id": "R5-3",
+      "route": "R5",
+      "title": "shared 表格与列: table/dt_table/columns*/sort/filters/selection/format/rowlang/decorate",
+      "depth": "contract",
+      "total_lines": 3928,
+      "files": [
+        {
+          "path": "src/auto_qb/webui/static/shared/columns.js",
+          "lines": 133
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/columns_computed.js",
+          "lines": 191
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/columns_drag.js",
+          "lines": 119
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/columns_grid.js",
+          "lines": 537
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/columns_menu.js",
+          "lines": 333
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/columns_persist.js",
+          "lines": 218
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/decorate.js",
+          "lines": 462
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/dt_table.js",
+          "lines": 128
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/filters.js",
+          "lines": 329
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/format.js",
+          "lines": 185
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/rowlang.js",
+          "lines": 202
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/selection.js",
+          "lines": 590
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/sort.js",
+          "lines": 172
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/table.js",
+          "lines": 329
+        }
+      ],
+      "registry": {
+        "r2_ids": [],
+        "r2_index": {},
+        "issues": []
+      }
+    },
+    {
+      "id": "R5-4",
+      "route": "R5",
+      "title": "shared drawer 族: drawer/drawer_templates/drawer_store/drawer_{general,rows,files,head}",
+      "depth": "contract",
+      "total_lines": 3445,
+      "files": [
+        {
+          "path": "src/auto_qb/webui/static/shared/drawer.js",
+          "lines": 1029
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/drawer_files.js",
+          "lines": 152
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/drawer_general.js",
+          "lines": 348
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/drawer_head.js",
+          "lines": 35
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/drawer_rows.js",
+          "lines": 235
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/drawer_store.js",
+          "lines": 462
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/drawer_templates.js",
+          "lines": 1184
+        }
+      ],
+      "registry": {
+        "r2_ids": [],
+        "r2_index": {},
+        "issues": []
+      }
+    },
+    {
+      "id": "R5-5",
+      "route": "R5",
+      "title": "shared drawer 模板·general 与 trackers(01-09 号)",
+      "depth": "contract",
+      "total_lines": 3556,
+      "files": [
+        {
+          "path": "src/auto_qb/webui/static/shared/drawer_tpl/01-general-hero-tall.js",
+          "lines": 367
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/drawer_tpl/02-general-cards-low.js",
+          "lines": 369
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/drawer_tpl/03-general-dossier-collapsed.js",
+          "lines": 433
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/drawer_tpl/04-trackers-status-cards-tall.js",
+          "lines": 385
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/drawer_tpl/05-trackers-health-groups-low.js",
+          "lines": 471
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/drawer_tpl/06-trackers-table-collapsed.js",
+          "lines": 353
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/drawer_tpl/07-peers-dashboard-tall.js",
+          "lines": 468
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/drawer_tpl/08-peers-groups-low.js",
+          "lines": 428
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/drawer_tpl/09-peers-density-collapsed.js",
+          "lines": 282
+        }
+      ],
+      "registry": {
+        "r2_ids": [],
+        "r2_index": {},
+        "issues": []
+      }
+    },
+    {
+      "id": "R5-11",
+      "route": "R5",
+      "title": "shared drawer 模板·content 与 peers(10-12/90 号)",
+      "depth": "contract",
+      "total_lines": 1720,
+      "files": [
+        {
+          "path": "src/auto_qb/webui/static/shared/drawer_tpl/10-content-tree-detail-tall.js",
+          "lines": 545
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/drawer_tpl/11-content-treegrid-batch-low.js",
+          "lines": 646
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/drawer_tpl/12-content-space-treemap-collapsed.js",
+          "lines": 475
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/drawer_tpl/90-peers-stub-bridge.js",
+          "lines": 54
+        }
+      ],
+      "registry": {
+        "r2_ids": [],
+        "r2_index": {},
+        "issues": []
+      }
+    },
+    {
+      "id": "R5-6",
+      "route": "R5",
+      "title": "shared 对话框与流转: dialogs/add_torrent/dialogs_{meta,history}/delete_flow/transfer_{flow,targets}/relocate_chain",
+      "depth": "contract",
+      "total_lines": 3257,
+      "files": [
+        {
+          "path": "src/auto_qb/webui/static/shared/add_torrent.js",
+          "lines": 839
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/delete_flow.js",
+          "lines": 357
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/dialogs.js",
+          "lines": 800
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/dialogs_history.js",
+          "lines": 40
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/dialogs_meta.js",
+          "lines": 273
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/relocate_chain.js",
+          "lines": 215
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/transfer_flow.js",
+          "lines": 419
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/transfer_targets.js",
+          "lines": 314
+        }
+      ],
+      "registry": {
+        "r2_ids": [],
+        "r2_index": {},
+        "issues": []
+      }
+    },
+    {
+      "id": "R5-7",
+      "route": "R5",
+      "title": "shared config 族: config_rules/config_editor{,_curve,_form,_tree}/config_hub{,_tm,_tracker,_hr}",
+      "depth": "contract",
+      "total_lines": 3850,
+      "files": [
+        {
+          "path": "src/auto_qb/webui/static/shared/config_editor.js",
+          "lines": 758
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/config_editor_curve.js",
+          "lines": 308
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/config_editor_form.js",
+          "lines": 185
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/config_editor_tree.js",
+          "lines": 242
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/config_hub.js",
+          "lines": 625
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/config_hub_hr.js",
+          "lines": 187
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/config_hub_tm.js",
+          "lines": 454
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/config_hub_tracker.js",
+          "lines": 313
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/config_rules.js",
+          "lines": 778
+        }
+      ],
+      "registry": {
+        "r2_ids": [],
+        "r2_index": {},
+        "issues": []
+      }
+    },
+    {
+      "id": "R5-8",
+      "route": "R5",
+      "title": "图表·hr 面板·快捷键引擎·fx: qb_traffic_chart/hr_status/hr/shows/traffic_card/shortcuts_engine + fx/皮肤 js",
+      "depth": "contract",
+      "total_lines": 4032,
+      "files": [
+        {
+          "path": "src/auto_qb/webui/static/flux/fx-mount.js",
+          "lines": 448
+        },
+        {
+          "path": "src/auto_qb/webui/static/prism/js/theme.js",
+          "lines": 109
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/fx/fx.js",
+          "lines": 255
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/hr.js",
+          "lines": 372
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/hr_status.js",
+          "lines": 680
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/qb_traffic_chart.js",
+          "lines": 1157
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/shortcuts_engine.js",
+          "lines": 804
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/shows.js",
+          "lines": 187
+        },
+        {
+          "path": "src/auto_qb/webui/static/shared/traffic_card.js",
+          "lines": 20
+        }
+      ],
+      "registry": {
+        "r2_ids": [],
+        "r2_index": {},
+        "issues": []
+      }
+    },
+    {
+      "id": "R5-9",
+      "route": "R5",
+      "title": "scripts 快扫: sim_* 全族",
+      "depth": "scan",
+      "total_lines": 3700,
+      "files": [
+        {
+          "path": "scripts/sim_autoqb.py",
+          "lines": 56
+        },
+        {
+          "path": "scripts/sim_baseline.py",
+          "lines": 326
+        },
+        {
+          "path": "scripts/sim_fsmock.py",
+          "lines": 230
+        },
+        {
+          "path": "scripts/sim_qb.py",
+          "lines": 164
+        },
+        {
+          "path": "scripts/sim_qb_cli.py",
+          "lines": 365
+        },
+        {
+          "path": "scripts/sim_qb_core.py",
+          "lines": 419
+        },
+        {
+          "path": "scripts/sim_qb_model.py",
+          "lines": 894
+        },
+        {
+          "path": "scripts/sim_qb_server.py",
+          "lines": 296
+        },
+        {
+          "path": "scripts/sim_run.py",
+          "lines": 950
+        }
+      ],
+      "registry": {
+        "r2_ids": [],
+        "r2_index": {},
+        "issues": []
+      }
+    },
+    {
+      "id": "R5-10",
+      "route": "R5",
+      "title": "scripts 快扫: qb_capture*/ui_harness/检查与实验散件",
+      "depth": "scan",
+      "total_lines": 5553,
+      "files": [
+        {
+          "path": "scripts/bench_expr.py",
+          "lines": 258
+        },
+        {
+          "path": "scripts/check_command_drift.py",
+          "lines": 187
+        },
+        {
+          "path": "scripts/check_context_caps.py",
+          "lines": 291
+        },
+        {
+          "path": "scripts/dev_webui.py",
+          "lines": 187
+        },
+        {
+          "path": "scripts/e2e_selfcheck.py",
+          "lines": 158
+        },
+        {
+          "path": "scripts/gen_ext_icons.py",
+          "lines": 107
+        },
+        {
+          "path": "scripts/hr_ext_stub.py",
+          "lines": 248
+        },
+        {
+          "path": "scripts/hr_fetch_experiment.py",
+          "lines": 863
+        },
+        {
+          "path": "scripts/port_kill.py",
+          "lines": 44
+        },
+        {
+          "path": "scripts/qb_capture.py",
+          "lines": 1005
+        },
+        {
+          "path": "scripts/qb_capture_cli.py",
+          "lines": 101
+        },
+        {
+          "path": "scripts/qb_capture_core.py",
+          "lines": 540
+        },
+        {
+          "path": "scripts/sync_agent_skills.py",
+          "lines": 185
+        },
+        {
+          "path": "scripts/ui_content_map.py",
+          "lines": 210
+        },
+        {
+          "path": "scripts/ui_harness.py",
+          "lines": 1113
+        },
+        {
+          "path": "scripts/update_config_key_surface.py",
+          "lines": 56
+        }
+      ],
+      "registry": {
+        "r2_ids": [],
+        "r2_index": {},
+        "issues": []
+      }
+    }
+  ],
+  "coverage": {
+    "ok": true,
+    "scoped_files": 365,
+    "assigned_files": 365,
+    "total_lines": 115640,
+    "registry": {
+      "r2_findings": 21,
+      "open_issues_matched": 32
+    }
+  }
+}

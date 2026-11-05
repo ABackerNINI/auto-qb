@@ -13,4 +13,46 @@ note    = "--base <rev> 必填（任务起点：任务第一个 commit 的 paren
 run     = ["uv run python .commands/review/scripts/review_pack.py check <args>"]
 timeout = 120
 when    = "code-review skill ④ 产出裁决：reviewer 交回 findings JSON 后、采信任何一条之前"
-note    = "--findings <json文件|-> 必填（- 指 stdin），--root 可指定仓库根（默认 cwd）。逐条校验：字段齐全（file/line/quote/severity/claim/relevance/fix）、severity/relevance 枚举合法、quote 与源码逐字比对（单行内连续片段 ≥4 字符，行号允许 ±3 邻近，--window 可调）。REFUTE 的发现直接弃、不复核；rc=0 全部通过 / rc=1 存在被弃条目 / rc=2 用法或环境错误"
+note    = "--findings <json文件|-> 必填（- 指 stdin），--root 可指定仓库根（默认 cwd）。逐条校验：字段齐全（file/line/quote/severity/claim/relevance/fix）、severity/relevance 枚举合法、quote 与源码逐字比对（单行内连续片段 ≥4 字符，行号允许 ±3 邻近，--window 可调）。REFUTE 的发现直接弃、不复核；rc=0 全部通过 / rc=1 存在被弃条目 / rc=2 用法或环境错误。存量评审 R4 用法：--root <快照目录>（路线会话的 review.lane.start 产物），引文对快照逐字比对"
+
+[tasks."review.lane.manifest"]
+run     = ["uv run python .commands/review/scripts/review_lane.py manifest <args>"]
+timeout = 300
+when    = "存量评审 R4（计划 26-11-05-2335）：S0 生成/重生成 manifest（批次矩阵+底册切片+覆盖守卫）"
+note    = "机器事实源生成器（D14）：批次定义内嵌脚本 BATCH_DEFS，互斥+全覆盖守卫（重叠/漏配 rc=1 列清单）。产出 memory-bank/reports/attachments/legacy-review4/manifest.json（365 文件/115,640 行/34 批）。--dry-run 只演算"
+
+[tasks."review.lane.claim"]
+run     = ["uv run python .commands/review/scripts/review_lane.py claim <args>"]
+timeout = 120
+when    = "存量评审 R4：路线会话认领路线（claim → ship.commit → start）"
+note    = "--route R1..R5 --owner <标识> 必填。freeze 机械解析=计划文件首个 commit（非手抄），校验为其 HEAD 祖先 + 本地 HEAD==远端 tip（ls-remote 现查，未 sync 即拒）+ 树净 + develop 分支。写 route-<R>.json（认领单点，重复认领拒）。认领后必须 ship.commit 入库再 start"
+
+[tasks."review.lane.start"]
+run     = ["uv run python .commands/review/scripts/review_lane.py start <args>"]
+timeout = 300
+when    = "存量评审 R4：认领入库后导出冻结快照（repo 外，不切分支不动 HEAD）并打印三件套"
+note    = "--route 必填；--fresh 重建快照；--snapshot 覆盖默认 <repo>/../auto-qb-review4-snap/<repo名>。git archive <freeze> 导出 + .snapshot-hash 标记；快照存在且标记吻合则复用（幂等）。打印存量适配三件套与首批文件。--dry-run 在临时目录真实解包后删除（验证 archive 链路不落盘）"
+
+[tasks."review.lane.verify"]
+run     = ["uv run python .commands/review/scripts/review_lane.py verify <args>"]
+timeout = 120
+when    = "存量评审 R4：每批 reviewer 派遣前与交回后的开工自检/收尾复核（三件套第 3 条）"
+note    = "--route 必填。复核：快照在盘且标记==钉值 / develop 分支 / freeze 仍为祖先 / 树净（仅 legacy-review4/ 内允许落盘）。通过即打印下一批的文件清单+底册切片+三件套（可直接粘贴进派遣提示）"
+
+[tasks."review.lane.batch"]
+run     = ["uv run python .commands/review/scripts/review_lane.py batch <args>"]
+timeout = 120
+when    = "存量评审 R4：单批评审完成（引文校验过后）勾选进度"
+note    = "--route --id <批次> 必填，--findings N 记该批通过 review.check 的发现数。进度单点在 route JSON（D10/D14）。批次未过 review.check 不得勾选"
+
+[tasks."review.lane.done"]
+run     = ["uv run python .commands/review/scripts/review_lane.py done <args>"]
+timeout = 120
+when    = "存量评审 R4：路线全部批次完成后翻终态"
+note    = "--route 必填。校验：无 pending 批次（完成判据=批次全覆盖无断号）+ route-<R>-findings.json 与 route-<R>-notes.md 在盘且 findings 是合法 JSON。翻 done 后 ship.commit 入库，S6 聚合会话接手"
+
+[tasks."review.lane.smoke"]
+run     = ["uv run python .commands/review/scripts/review_lane.py smoke <args>"]
+timeout = 300
+when    = "存量评审 R4：S0 验收/环境变更后重验 —— 全环真冒烟（含重复认领与批次未齐两个负例断言）"
+note    = "真实跑 claim/负例/start/verify/done 负例/逐批勾选/done 全环，结束删除 route JSON、findings、小结、快照目录（树恢复干净）。需树净+网络（ls-remote）"

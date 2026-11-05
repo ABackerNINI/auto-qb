@@ -9,7 +9,9 @@
   一旦加载, 会把这里的 git 子进程记成越界 POPEN, 整卷红(那是执行方式错, 不是代码缺陷)。
 
 ## 测试计划
-- ConfigTomlTest      config.toml 可解析 + [pack].name == "review" + 两 task 必备键 + run 指向脚本且带 <args>
+- ConfigTomlTest      config.toml 可解析 + [pack].name == "review" + 九 task(review.pack/check + review.lane 七子命令)必备键 + run 指向包内脚本(pack/lane)且带 <args>
+- LaneManifestTest    提交在库的 manifest.json 结构守阵: coverage.ok=true + 批次 id 唯一且前缀==route + routes 映射一致 + 文件跨批不重 + 批内不重 + 全部路径在分层范围内(src 代码文件/scripts py, 无 vendor) + registry 键齐
+- LaneScriptTest      review_lane.py 无参 rc=2(无参无动作) + --help rc=0
 - PackTest            敏感 fixture: 基线/HEAD 后缀; 敏感面 -> 分面档; 文件清单精确行(重命名只列新路径/[已删除] 同行); 红线命中行含"出现即停"; 警告清单; 敏感面按元素归因(新增行/已跟踪路径标记/未跟踪内容/未跟踪路径/+++ 头归因, 且无幻影键); 仅删除计数; 尾斜杠目录规则; +++ 头不算内容; 空文件 0 行; 默认 root; 大 diff 用独立无敏感仓库证明分面来自行数
 - BenignPackTest      无敏感内容的小 diff -> 全能档(纯行数路径); 红线/警告清单仍命中
 - CleanPackTest      干净树 -> +0/-0 且全能; 缺/坏闸门配置 -> 可见降级 + 红线预警"无"; 坏 --base / 非 git --root / 非仓库 cwd -> rc=2; 提交后 HEAD!=base 无后缀且已提交改动仍在范围内
@@ -116,12 +118,83 @@ class ConfigTomlTest(unittest.TestCase):
         self.assertTrue(self.cfg["pack"]["confirmed"])
 
     def test_tasks_have_required_keys(self):
-        self.assertEqual(set(self.cfg["tasks"]), {"review.pack", "review.check"})
+        self.assertEqual(set(self.cfg["tasks"]), {
+            "review.pack", "review.check",
+            "review.lane.manifest", "review.lane.claim", "review.lane.start",
+            "review.lane.verify", "review.lane.batch", "review.lane.done", "review.lane.smoke",
+        })
         for tid, task in self.cfg["tasks"].items():
             for key in ("run", "timeout", "when", "note"):
                 self.assertIn(key, task, f"{tid} 缺 {key}")
-            self.assertIn("review_pack.py", task["run"][0])
-            self.assertIn("<args>", task["run"][0])  # 引擎要求占位符才接参
+            run_cmd = task["run"][0]
+            self.assertTrue(
+                "review_pack.py" in run_cmd or "review_lane.py" in run_cmd,
+                f"{tid} 未指向包内脚本: {run_cmd}",
+            )
+            self.assertIn("<args>", run_cmd)  # 引擎要求占位符才接参
+
+
+class LaneManifestTest(unittest.TestCase):
+    """提交在库的 manifest.json 结构守阵(数据不变式, 不碰工作树/不依赖树漂移)。"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.manifest = json.loads(
+            (ROOT / "memory-bank" / "reports" / "attachments" / "legacy-review4" / "manifest.json")
+            .read_text(encoding="utf-8")
+        )
+
+    def test_coverage_ok(self):
+        self.assertTrue(self.manifest["coverage"]["ok"], "manifest 覆盖守卫未通过, claim 会被拒")
+
+    def test_batches_shape(self):
+        batches = self.manifest["batches"]
+        self.assertEqual(len(batches), 34)
+        ids = [b["id"] for b in batches]
+        self.assertEqual(len(ids), len(set(ids)), "批次 id 重复")
+        for b in batches:
+            self.assertEqual(b["id"].split("-")[0], b["route"], f"{b['id']} 前缀与 route 不一致")
+            self.assertGreater(len(b["files"]), 0, f"{b['id']} 无文件")
+            self.assertIn(b["depth"], ("full", "contract", "mechanism", "scan"))
+            for key in ("r2_ids", "r2_index", "issues"):
+                self.assertIn(key, b["registry"], f"{b['id']} registry 缺 {key}")
+
+    def test_routes_mapping(self):
+        for route, ids in self.manifest["routes"].items():
+            self.assertEqual(route, ids[0].split("-")[0], f"{route} 映射里混入别的路线批次")
+        mapped = [i for ids in self.manifest["routes"].values() for i in ids]
+        self.assertEqual(sorted(mapped), sorted(b["id"] for b in self.manifest["batches"]))
+
+    def test_files_disjoint_and_in_scope(self):
+        seen: set[str] = set()
+        for b in self.manifest["batches"]:
+            for f in b["files"]:
+                p = f["path"]
+                self.assertNotIn(p, seen, f"{p} 同时出现在多个批次(重叠守卫失效)")
+                seen.add(p)
+                self.assertTrue(p.startswith("src/") or p.startswith("scripts/"), f"{p} 越出分层范围")
+                self.assertNotIn("vendor/", p, f"{p} vendor 第三方库不应进范围")
+                self.assertFalse(p.endswith(("test_*.py",)), p)
+
+
+class LaneScriptTest(unittest.TestCase):
+    """review_lane.py 的无参安全面: 无参必须 rc=2 纯用法错误(无参无动作)。"""
+
+    def test_no_args_is_usage_error(self):
+        proc = subprocess.run(
+            [sys.executable, str(Path(__file__).with_name("review_lane.py"))],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+        )
+        self.assertEqual(proc.returncode, 2, "无参应退出 2(argparse 用法错误), 不得执行任何真动作")
+        self.assertEqual(proc.stdout, "", "无参不得有 stdout 输出")
+
+    def test_help_ok(self):
+        proc = subprocess.run(
+            [sys.executable, str(Path(__file__).with_name("review_lane.py")), "--help"],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+        )
+        self.assertEqual(proc.returncode, 0)
+        self.assertIn("smoke", proc.stdout + proc.stderr)
 
     def test_script_exists(self):
         self.assertTrue(SCRIPT.is_file())
