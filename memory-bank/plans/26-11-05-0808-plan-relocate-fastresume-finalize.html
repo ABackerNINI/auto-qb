@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>relocate 整组迁移重构: fastresume 改写收尾(journal+下线窗口)</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="relocate-fastresume-finalize">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-05-0808">
+<meta name="doc-updated" content="26-11-05-0808">
+<meta name="doc-refs" content="memory-bank/issues/26-11-05-0420-bug-relocate-zero-move.html">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: relocate-fastresume-finalize</div>
+<h1>relocate 整组迁移重构: fastresume 改写收尾(journal+下线窗口)</h1>
+<p class="lede">整组迁移收尾弃用「guardian 删 junction → missingFiles → ACT_FINALIZE 归位」整条链,改为 <b>fastresume 双键改写</b>:mover 落位当场只记 journal,qB 下线窗口落盘改写,重启后成员原生加载新路径,API 核验通过才删链接 —— 用户原案「当场改文件」经源码核对与 N1 实测证伪(0.5s 被覆盖),修正案经测试 qB 全链路 N2-N8 实测成立。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-05-0808 · <b>doc-updated</b> 26-11-05-0808 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 2026-11-05 用户提出 fastresume 改写重构方向并触发 grilling;源码核对(qB 8182ae071 / libtorrent 53acefea9 只读)+ 测试 qB(36596, v5.2.3 Legacy)N0-N8 全量实测;继承 <a href="../issues/26-11-05-0420-bug-relocate-zero-move.html">issue 26-11-05-0420</a> 根因链与 <a href="../plans/26-11-05-0546-plan-relocate-zero-move-fix-stress.html">压测计划 26-11-05-0546</a> 机制表(两份均为重构输入)
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<h3>1.1 背景</h3>
+<p>dir_alias 收尾设计(guardian 在 qB 关闭期间删 junction → qB 重启 → 成员 fastresume 找不到文件(missingFiles,设计预期输入)→ reconcile 的 ACT_FINALIZE setLocation 归位)在生产触发 <a href="../issues/26-11-05-0420-bug-relocate-zero-move.html">26-11-05-0420</a> 零搬移灾难:归位把共享物理文件改名挂 <code>.!qB</code>,下次搬迁按声明名 stat 全 miss,qB 报「成功移动」而数据未动。压测(0546)证明形态 F(完成位 false)下 API 层无修复通路,<b>整案不采纳,relocate 整组迁移待完全重构</b>。本计划 = 重构:用 fastresume 改写让成员在 qB 重启时<b>原生</b>加载新位置,missingFiles/ACT_FINALIZE/seed_mode 账面恢复链整体消失。</p>
+<h3>1.2 目标与「算成」标准</h3>
+<ul>
+  <li>整组迁移收尾后:所有成员经一次 qB 重启加载到新路径,账面 progress=1.00 不动,零拒绝载入、零重校验、零 re-add。</li>
+  <li>失败态永远收敛到「链接还在、成员可读、journal 待重放」,不存在需要 API 修复通路才能解开的冻结态(0420 灾难的结构性根源)。</li>
+  <li>真机验收 = 本计划 §03.4 的 N 系列断言在实现后的代码路径上复跑全绿 + 0546 继承项回归。</li>
+</ul>
+<h3>1.3 设计底线 / 不变量</h3>
+<ul>
+  <li><b>数据安全第一</b>:fastresume 是 qB 的私有账本,任何写入必须「校验通过才落盘 + 落盘前有备份」;坏文件 = 种子被静默丢弃(N6 实测,仅 INFO 级日志)。</li>
+  <li><b>三项设计约束继承</b>(0546 §1.3):不删种 / 不 skip_check 重加 / 不读盘(哈希)校验。本方案天然满足:改写只动路径键,加载核对由 libtorrent 的尺寸级 file_stat 完成(本版 <code>verify_resume_data</code> 只比大小不比 mtime,storage_utils.cpp:560-580)。</li>
+  <li><b>黄金法则</b>:journal 等跨轮次状态进 state_file(法则 3);预检 fail-fast 聚合报错(法则 4);单主循环线程执行改写与删链(法则 5);重复执行无副作用 —— 改写幂等(已是目标值则跳过)、删链幂等(门不满足就不删)。</li>
+  <li><b>qB 是 fastresume 的唯一写方</b>:auto-qb 只在「qB 进程确认下线」的窗口写入,运行期零写入 —— 这是 N1(0.5s 覆盖)换来的铁律。</li>
+</ul>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+<h3>2.1 现架构与它的死穴</h3>
+<table>
+  <tr><th>环节</th><th>现状</th><th>痛点</th></tr>
+  <tr><td>搬迁</td><td>mover 经 <code>torrents/setLocation</code> 让 qB 真搬共享内容根</td><td>继承(0546 §8.3:信号核验须 moving 态判据,dst_size 因预分配不可作进度证据,零搬移 30s 快败)</td></tr>
+  <tr><td>别名</td><td>旧路径建 junction,成员经别名继续做种</td><td>继承;junction 存续期新增一条纪律:<b>指向旧路径的删种必须拦截</b>(N5 实测 deleteFiles=true 会穿 junction 误删新位置共享数据)</td></tr>
+  <tr><td>收尾</td><td>guardian 关 qB 删 junction → missingFiles(设计预期)→ ACT_FINALIZE setLocation 归位</td><td class="bad">整链证伪:归位触发 forceAppendExt/recheck 把共享文件挂 .!qB 冻结(0420 根因链);形态 F 下 API 层无修复通路(0546 §8.2)</td></tr>
+</table>
+<h3>2.2 qB/libtorrent 源码机制表(2026-11-05 核对,qB 8182ae071)</h3>
+<table>
+  <tr><th>机制</th><th>位置</th><th>事实</th><th>对设计</th></tr>
+  <tr><td>fastresume 读取</td><td><code>sessionimpl.cpp:1527/1596/1616</code></td><td>仅启动装载期 <code>loadAll()/load()</code>,运行期无重读点</td><td>重启是唯一生效时机(用户原判正确)</td></tr>
+  <tr><td>运行期重写</td><td><code>torrentimpl.cpp:460-2128</code> ~20 处 <code>deferredRequestResumeData</code> → <code>sessionimpl.cpp:5690</code></td><td>pause/start/标签/分类/改名等任一操作即秒级重写;另有 60min 周期(<code>:589</code>,仅脏种子)与退出必写(<code>:777</code>)</td><td class="bad">「当场改」必被覆盖(N1 实测 0.5s);写入只能发生在 qB 下线窗口</td></tr>
+  <tr><td>save path 双键</td><td><code>bencoderesumedatastorage.cpp:261/479</code>,<code>sessionimpl.cpp:317/1714</code></td><td>qB 账面=<code>qBt-savePath</code>(空=AutoTMM),libtorrent 实际=<code>save_path</code>;加载各取各键</td><td class="bad">必须双键同改,只改其一 = 半效编辑(账面/实际劈叉,核验被 API 假象骗过)</td></tr>
+  <tr><td>键分隔符风味</td><td>N1 实测字节</td><td>lt 键反斜杠、qBt 键正斜杠,两键不一致</td><td>逐键在原串上做前缀替换,禁止重推导路径串</td></tr>
+  <tr><td>存储后端</td><td><code>sessionimpl.cpp:627/1470-1483</code>,<code>appcontroller.cpp:400</code></td><td>Legacy(BT_backup 文件,默认)/ SQLite(<code>DBResumeDataStorage</code>,无文件);<code>app/preferences</code> 的 <code>resume_data_storage_type</code> 可直读</td><td>SQLite = 方案不可用 → 运行时检测 + fail-fast 禁用</td></tr>
+  <tr><td>AutoTMM 成员</td><td><code>bencoderesumedatastorage.cpp:477</code></td><td>仅 manual 落盘 qBt-savePath;AutoTMM 无此键(N8 实测 55 vs 57 键)</td><td>AutoTMM 成员闸门排除(API <code>auto_tmm</code> 检出)</td></tr>
+  <tr><td>加载核对</td><td>libtorrent <code>storage_utils.cpp:560-580</code></td><td><code>verify_resume_data</code> 对 seed 只比文件大小,不比 mtime</td><td>mover 跨卷复制无需保 mtime;尺寸对得上即无 recheck(版本耦合注意项,升 libtorrent 需复核)</td></tr>
+  <tr><td>写盘原子性</td><td><code>io.cpp:131</code>(QSaveFile)</td><td>qB 侧临时文件+commit 原子写,Worker 线程异步</td><td>auto-qb 编辑器同规格:tmp+replace+fsync</td></tr>
+  <tr><td>BT_backup 路径</td><td><code>sessionimpl.cpp:1476-1482</code></td><td><code>SpecialFolder::Data/BT_backup</code>,WebAPI 不暴露;portable 实例在 <code>&lt;exe&gt;\profile\qBittorrent\data\BT_backup</code></td><td>新增配置键(每 qB 实例),进 validate_config + schema(法则 4)</td></tr>
+  <tr><td>拒载形态</td><td>N6 实测</td><td>坏 bencode → 仅一行 INFO「无法解析恢复数据」,种子整条消失(API 无痕),<code>.torrent</code> 对保留;与 0420 的 rejected→missingFiles 链是两个等级</td><td class="bad">编辑器必须 bdecode 往返自校验 + 落盘前备份,这不是健壮性而是保命</td></tr>
+  <tr><td>启动期回写</td><td>N2/N7 实测</td><td>装载后 qB 把 fastresume 按内存态重写一次(内容=改写后值)</td><td>无害;journal 消费判定不能依赖文件 mtime,以核验通过为准</td></tr>
+  <tr><td>fastresume 文件名</td><td>N 系列实测</td><td>v1 种子 = <code>&lt;infohash_v1&gt;.fastresume</code>,与 <code>.torrent</code> 成对</td><td>hybrid/v2 形态用 <code>.torrent</code> 对现算 infohash 匹配,不猜命名规则</td></tr>
+</table>
+<h3>2.3 N 系列实测背书(2026-11-05,测试 qB 36596/36595 + R 盘,real-fake 假种子,全程未触碰生产 26586/16585)</h3>
+<table>
+  <tr><th>#</th><th>实验</th><th>结果</th><th>关键数字</th></tr>
+  <tr><td>N1</td><td>证伪「当场改」</td><td class="bad">覆盖</td><td>双键编辑生效 → <code>/torrents/start</code> 后 <b>0.5s</b> 被整体重写回旧路径;优雅退出后仍旧路径;重启终局=旧路径(端到端零效果)</td></tr>
+  <tr><td>N2</td><td>下线窗口改写→重启</td><td class="good">成立</td><td>双键改写 57 键往返无损 → 重启 <code>save_path</code> 直达新路径,stalledUP 无 recheck,prog=1.00,日志零拒载</td></tr>
+  <tr><td>N4</td><td>重启抢先竞态</td><td class="good">自愈</td><td>journal 已记未改写 + qB 先重启 → 成员经 junction 正常加载,warning 零条,journal 待重放</td></tr>
+  <tr><td>N5</td><td>删链门</td><td class="good">成立</td><td>门外共享者被等值判据拦下(纯前缀判据漏拦 save_path 恰等于根的情形 —— 判据修正直接进设计);依赖清零删链后成员直读新位置无损</td></tr>
+  <tr><td>N6</td><td>坏 bencode + 回滚</td><td class="wr">形态钉死</td><td>垃圾字节 → 重启种子静默消失(见 §2.2 拒载形态);备份回滚 → 重启全愈 prog=1.00</td></tr>
+  <tr><td>N7</td><td>全链路(3 成员共享根+门外者)</td><td class="good">全绿</td><td>setLocation 搬根→junction→全员恢复→竞态步→下线改写→核验→删链,全程账面 1.00 / 零拒载 / 零重校验 / 磁盘原名</td></tr>
+  <tr><td>N8</td><td>AutoTMM 形态</td><td class="good">闸门依据</td><td>AutoTMM 成员无 qBt-savePath 键,API <code>auto_tmm=true</code> 可检出</td></tr>
+</table>
+<p class="aside">实验脚本与逐条输出:<code>tests-real/.work/nseries/</code>(gitignore 区,fr.py 脚手架 + n1-n8 驱动);清理已按 P4 纪律完成(种子删净/R 盘清空/BT_backup 复原/36595 回落/36596 空库)。</p>
+
+<h2><span class="no">§03</span>方案总览</h2>
+<h3>3.1 主线时序</h3>
+<pre><code>预检(全部 fail-fast, 任一不过即拒迁并给文案)
+  后端=Legacy(app/preferences 直读) · BT_backup 可达可写 · 成员无 AutoTMM
+  · 嵌套目标闸门(成分级, 继承 0546) · 源侧三态检查(在/.!qB/缺失, 继承 0546)
+     │
+     ▼
+搬迁 mover(setLocation) ── 信号核验: moving 态出现或 dst ready, 30s 无信号快败(继承 0546 §8.3)
+     │
+     ▼
+建 junction(旧路径→新位置), 全员恢复做种(经 junction)
+     │
+     ▼
+当场: journal 记账 → state_file(黄金法则3): {hash, old_root, new_root, 时间}
+     │                    (auto-qb 自身重启/崩溃后仍可重放)
+     ▼
+qB 下线窗口(主循环 2s tick 探测 WebUI 失联):
+  逐成员改写 fastresume —— 双键前缀替换(保串风味) → bdecode 往返自校验
+  → 备份 .bak → 原子落盘(tmp+replace) → journal 消费
+  窗口内任一步失败: 留 journal 下窗口重试; qB 抢先重启 = 本轮放弃(无害, N4 实证自愈)
+     │
+     ▼
+qB 重启 → 核验: API 全员 save_path == 新路径(逐成员, 等值比较)
+     ├─ 通过 → 删链门: 扫「save_path == 旧根 或 位于旧根之下」(等值 OR 前缀, N5 教训)
+     │         命中=0(含组外共享者) → 删 junction → 终态
+     │         命中&gt;0 → 维持 junction, 等依赖消失后下轮再判
+     └─ 未通过(改写被错过/失败) → journal 悬挂, junction 维持, 等下一窗口重放</code></pre>
+<h3>3.2 组件与落点</h3>
+<table>
+  <tr><th>组件</th><th>内容</th><th>落点(建议)</th></tr>
+  <tr><td>配置与预检</td><td>新配置键: 各 qB 实例的 <code>bt_backup</code> 路径;启动时 validate_config 校验(法则 4)+ schema 同步;后端/可达性/AutoTMM/嵌套/三态五类闸门</td><td><code>config/schema/</code> + <code>config.validate_config</code> + <code>relocate_plan.py</code> 闸门段</td></tr>
+  <tr><td>fastresume 编辑器</td><td>bencode 读改写:双键(<code>save_path</code>/<code>qBt-savePath</code>,含 <code>qBt-downloadPath</code> 在场时)逐键前缀替换保风味;bdecode 往返自校验;原子写;`.bak` 备份;hybrid/v2 用 <code>.torrent</code> 对现算 infohash 定位文件</td><td>新模块 <code>core/fastresume.py</code>(单一职责,可独立单测)</td></tr>
+  <tr><td>journal</td><td>state_file 内独立账区:待改写成员表(old/new/时间戳/尝试次数);写入=搬迁成功时;消费=落盘改写成功;重放=每个下线窗口幂等执行</td><td><code>state_file</code> 结构 + 主循环</td></tr>
+  <tr><td>下线窗口执行器</td><td>2s tick 探测 WebUI 失联 → 快速执行改写(窗口竞速);qB 回升后触发核验</td><td>主循环(法则 5:单线程,不引入旁路写线程)</td></tr>
+  <tr><td>核验与删链门</td><td>重启后全员 save_path 等值核验;删链门=等值 OR 前缀双判据+组外依赖扫描;junction 存续期内拦截「指向旧路径的删种」(含 deleteFiles 面)</td><td><code>relocate_lifecycle.py</code> / <code>relocate_units.py</code> 重写段</td></tr>
+  <tr><td>失败反馈面</td><td>迁移失败原因(闸门拒/快败/journal 悬挂/核验未过)显式透出 WebUI(继承 0420 修法④)</td><td>WebUI 报告段</td></tr>
+  <tr><td>移除项</td><td>missingFiles 预期输入 / ACT_FINALIZE 归位 / seed_mode 账面恢复 / guardian 关机删链窗口</td><td><code>relocate_units.py:952,976-1030</code> 等整段退役</td></tr>
+</table>
+<h3>3.3 部署矩阵(功能可用性 = 预检的部署维)</h3>
+<table>
+  <tr><th>#</th><th>qB 形态</th><th>auto-qb 位置</th><th>BT_backup 可达</th><th>判定</th></tr>
+  <tr><td>A</td><td>Windows 原生(生产 26586/16585、电脑配置扩展)</td><td>同机</td><td>直连 profile 下 BT_backup(配置键给路径)</td><td class="good">可行(主场景)</td></tr>
+  <tr><td>B</td><td>Linux 原生(NAS 裸装)</td><td>同机</td><td>直连(受 <code>--profile</code> 影响,由配置键声明)</td><td class="good">可行</td></tr>
+  <tr><td>C</td><td>docker qB(NAS 等)</td><td>同机原生/另一容器</td><td>需卷映射+写权限(uid 对齐);save_path 串用 qB 侧命名空间(relocate 目标本就以 qB 侧路径配置,无碍)</td><td class="good">可行(前提卷映射)</td></tr>
+  <tr><td>D</td><td>docker qB</td><td>无卷映射/异机 SMB·NFS</td><td>不可达</td><td class="bad">禁用(fail-fast)</td></tr>
+  <tr><td>E</td><td>任意</td><td>任意</td><td>后端=SQLite(无文件)</td><td class="bad">禁用(fail-fast)</td></tr>
+</table>
+<p>HR 在线核实插件既有场景(NAS 部署 qB、电脑配置扩展)按本矩阵覆盖:NAS 落 B/C 行(取决于裸装或 docker+卷映射),电脑落 A 行;D/E 行明确禁用并给文案,不做双轨(旧链已证伪,无双轨可退)。</p>
+<h3>3.4 分期</h3>
+<table>
+  <tr><th>期</th><th>内容</th><th>出口判据</th></tr>
+  <tr><td>S1 配置与预检</td><td>bt_backup 配置键+schema+validate;五类闸门(后端/可达/AutoTMM/嵌套/三态)</td><td>单测过;守卫测试(新键进 validate_config)过;真机对 D/E 形态拒绝路径可演示</td></tr>
+  <tr><td>S2 编辑器</td><td><code>core/fastresume.py</code>:双键替换/往返自校验/原子写/备份/hybrid 定位</td><td>单测(真实 fastresume 样本+构造形态)全过;测试实例手工改写一次成功加载</td></tr>
+  <tr><td>S3 journal 与下线窗口</td><td>state_file 账区;tick 失联探测;窗口改写;幂等重放</td><td>单测覆盖竞态矩阵(抢先重启/改写半途崩溃/重复重放);真机复跑 N2/N4 断言</td></tr>
+  <tr><td>S4 核验与删链门</td><td>全员核验;等值 OR 前缀门;删种拦截;失败反馈面;ACT_FINALIZE 链退役</td><td>真机复跑 N5/N7 断言;0420 配方(冻结态构造)不再可达</td></tr>
+  <tr><td>S5 全量验收</td><td>N0-N8 全量在实现后代码路径复跑 + 0546 继承项(moving 态信号/三态/嵌套)回归;test.full 基线切片</td><td>N 系列全绿 + 基线切片入档(kb.baseline 可查)</td></tr>
+</table>
+
+<h2><span class="no">§04</span>实施步骤(细化到验收)</h2>
+<ol>
+  <li><b>S1</b>:加 <code>bt_backup</code> 配置键(多实例结构,与现有 qB 连接配置同级)→ <code>validate_config</code> 聚合校验 + <code>src/auto_qb/config/schema/</code> 同步(守卫测试会查)→ 预检闸门实现进 relocate 计划段,拒绝路径返回结构化原因。<b>验收</b>:单测 + 真机对 SQLite/不可达形态各演示一次拒迁文案。</li>
+  <li><b>S2</b>:编辑器模块按 §3.2 规格;先拿测试实例真实 fastresume 建样本 fixtures(v1/v2/hybrid/AutoTMM/含 qBt-downloadPath),改写器对样本做「替换→往返→逐键比对」断言。<b>验收</b>:单测全过 + 测试实例真改一次重启加载成功(对齐 N2)。</li>
+  <li><b>S3</b>:journal 进 state_file(结构变更走既有 state 迁移惯例);主循环 tick 检测 qB 失联 → 执行改写;幂等(已是目标值跳过/失败保留/计数递增)。<b>验收</b>:竞态矩阵单测 + 真机 N2/N4 复跑。</li>
+  <li><b>S4</b>:核验与删链门实现;ACT_FINALIZE/missingFiles 依赖段退役;WebUI 反馈面。<b>验收</b>:真机 N5/N7 复跑 + 0420 冻结配方不可达确认。</li>
+  <li><b>S5</b>:全量验收与收尾(code-review skill → DoD → 基线切片)。<b>验收</b>:N0-N8 全绿 + <code>commands run test.full</code> 新基线切片(数字从实测誊写)。</li>
+</ol>
+<p class="aside">测试纪律:新增测试同步文件头「## 测试计划」清单(仓库惯例);真机实验全程 36595/36596 白名单 + real-fake 标签 + guard 开工留痕(0546 §1.3 同款),生产 26586/16585 与 <code>I:\PT\</code> 零触碰。</p>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<table>
+  <tr><th>#</th><th>决策</th><th>默认(推荐)</th><th>备选</th></tr>
+  <tr><td>D6</td><td>编辑器备份文件命名与位置</td><td>同目录 <code>&lt;hash&gt;.fastresume.bak</code>(qB 扫描只认 <code>*.fastresume</code> 后缀,<code>.bak</code> 天然被忽略;回滚=覆盖回原名)</td><td>独立备份目录(多一层 IO 与清理面,收益不明)</td></tr>
+  <tr><td>D7</td><td>journal 重放节奏</td><td>每个失联 tick 即执行(2s 粒度,窗口竞速优先);每窗口限一轮,失败计数进账</td><td>事件驱动(qB 进程事件不可得,WebUI-only 下无更优)</td></tr>
+  <tr><td>D8</td><td>生产 26586 修复现场(465 文件摘 .!qB → save_path 改回 → recheck)归属</td><td>独立任务先行,不并入本次重构(重构不依赖它;混入会扩大爆炸半径)</td><td>并入重构轮顺带处理</td></tr>
+</table>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+  <tr><th>#</th><th>结论</th><th>日期</th></tr>
+  <tr><td>D0</td><td>用户提出 fastresume 改写方向:当场改文件指向新路径,qB 重启无感,收尾仅删链;先用测试 qB 验证 + grilling。</td><td>2026-11-05</td></tr>
+  <tr><td>D1</td><td>改写时机:接受修正案 —— 当场记 journal(state_file)+ qB 下线窗口落盘;「当场改文件」因 qB 运行期秒级重写(N1 实测 0.5s)被否。</td><td>2026-11-05</td></tr>
+  <tr><td>D2</td><td>存储后端:三实例(生产 26586/16585、测试 36596)均为 Legacy;不保证所有用户 → 增加 <code>resume_data_storage_type</code> 运行时检测(app/preferences 直读),非 Legacy fail-fast 禁用。</td><td>2026-11-05</td></tr>
+  <tr><td>D3</td><td>删链时机:重启+API 核验后在线删;「下线窗口同删」保留为功能稳定后的后续可选做项。</td><td>2026-11-05</td></tr>
+  <tr><td>D4</td><td>部署矩阵 D/E 格(fastresume 不可达/SQLite):功能 fail-fast 禁用,不保留双轨(旧链已证伪,无双轨可退)。</td><td>2026-11-05</td></tr>
+  <tr><td>D5</td><td>HR 在线核实插件场景仅作覆盖考量,本机使用场景不代表其它用户;部署矩阵按通用拓扑铺(A-E),检测手段一律运行时化。</td><td>2026-11-05</td></tr>
+  <tr><td>D6</td><td>实验结论:修正案(journal+下线窗口)在测试 qB 全链路成立(N2-N8 全绿),原案「当场改」证伪(N1);设计树 frontier 收敛,无未决假设。</td><td>2026-11-05</td></tr>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+  <tr><th>风险</th><th>触发条件</th><th>对策</th></tr>
+  <tr><td>fastresume 写坏 → 种子静默消失</td><td>编辑器缺陷/写盘中断(N6 形态,仅 INFO 日志)</td><td>bdecode 往返自校验后才原子落盘;落盘前 .bak;journal 悬挂可重放;核验不过即告警,不删链</td></tr>
+  <tr><td>误删链 → 成员断粮</td><td>删链门判据漏(纯前缀漏等值形态,N5 实测)</td><td>等值 OR 前缀双判据 + 全员 API 核验前置;门外依赖未清零永不删</td></tr>
+  <tr><td>删种穿 junction 伤新位置数据</td><td>junction 存续期内对旧路径种子 deleteFiles=true(N5 实测通路)</td><td>auto-qb 删种流程对「save_path 位于活动 junction 之下」的种子拒绝带文件删除,强制先解链或去文件化</td></tr>
+  <tr><td>下线窗口竞速失败</td><td>qB 秒级重启抢先于改写(N4)</td><td>无害自愈:成员经 junction 正常加载,journal 悬挂,下窗口重放;失败计数上限后转人工告警</td></tr>
+  <tr><td>qB/libtorrent 版本漂移</td><td>升级改变双键语义/后端默认/核对逻辑</td><td>机制表(§2.2)逐条附行号,升级时按 deps-upgrade skill 复核;关键行为(双键/尺寸-only/拒载形态)在真机验收里各有断言</td></tr>
+  <tr><td>用户切 SQLite / 卷映射缺失</td><td>部署漂移(D/E 格)</td><td>启动期 + 流程期双重检测,fail-fast + 文案;不做降级双轨</td></tr>
+  <tr><td>误伤生产</td><td>实验/验收端口路径写错</td><td>全程 36595/36596 白名单 + real-fake 标签 + guard 三条留痕;生产只读探测需明示;收尾进程比对</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-05-0808</span> 初版:用户提出 fastresume 改写重构方向(替代 0420 证伪的 dir_alias 收尾链)并触发 grilling;源码核对钉死读/写时机与双键机制(§2.2,11 行机制表),N1 实测 0.5s 覆盖证伪「当场改」;拍板 D1-D5 修正为 journal+下线窗口+核验删链;N2-N8 测试 qB 全链路实测全绿(§2.3);产出主线时序/组件落点/部署矩阵 A-E/分期 S1-S5,待拍板 D6-D8(编辑器备份命名/重放节奏/生产修复现场归属)。</li>
+</ul>
+
+</div>
+</body>
+</html>
