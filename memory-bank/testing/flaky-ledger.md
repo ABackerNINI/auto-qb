@@ -13,7 +13,7 @@
 
 | 用例 | 根因类目 | 状态 | 处置 | 登记日期 |
 |---|---|---|---|---|
-| `e2e/gtm-alert.spec.mjs` gtm 弹窗双皮肤组 —— 硬编码日期 2026-11-03, 桩 TTL 24h 已过, **恒红**(非概率 flaky) | time(边界/粒度) | Open | 已入池 [26-11-06-0330](../issues/26-11-06-0330-test-e2e-gtm-alert-date-bomb.html) | 2026-11-05 |
+| `e2e/gtm-alert.spec.mjs` gtm 弹窗双皮肤组 —— 硬编码日期 2026-11-03, 桩 TTL 24h 已过, **恒红**(非概率 flaky) | time(边界/粒度) | Done | [26-11-06-0330](../issues/26-11-06-0330-test-e2e-gtm-alert-date-bomb.html): T1-T4 改相对当前时刻生成 + 补「超 TTL 判空」负向断言(2026-11-06 修, e2e fast 双皮肤绿) | 2026-11-05 |
 | `e2e/views.spec.mjs` 「种子页筛选器有数据」双皮肤**恒红** —— relocate kind 恒空(桩数据缺该类目), 不进 fast | 共享状态(桩数据缺口) | Open | 已入池 [26-11-06-0330](../issues/26-11-06-0330-test-e2e-views-relocate-kind-empty.html) | 2026-11-05 |
 | `tests/test_hr_discovery.py` 生命周期层真绑定用例 —— `-n 8` 全量并行下偶发端口碰撞 | 端口/资源 | Open | 已入池 [26-11-06-0330](../issues/26-11-06-0330-test-hr-discovery-port-collision.html) | 2026-11-05 |
 | `tests/test_hr_discovery.py::test_start_all_busy_returns_false_and_retries` —— ~~疑似 timing flake~~ 经随机序巡检证据修正为端口/资源(10013 排除段拒绝) | 端口/资源 | Open | 已入池 [26-11-06-0330](../issues/26-11-06-0330-test-hr-discovery-busy-retry-flake.html) | 2026-11-05 |

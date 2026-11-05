@@ -4,10 +4,9 @@
 > 主索引的已关闭区按 8,000 字符预算裁剪(上限 `CLOSED_KEEP` 条), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (48)
+## Open (47)
 
 - [bug] [real.down 实现用 Stop-Process -Force 强杀 qB, 触进程安全红线](../26-11-06-0448-bug-real-down-force-kill.html) — tests-real/runner.py cmd_down 以 PowerShell Stop-Process -Force 强杀 qB 进程(按镜像+路径匹配), 违反 AGENTS.md 禁止一切 taskkill/强杀红线; 替代=WebAPI app/shutdown 优雅退出(实验轮实测 HTTP 200)
-- [test] [gtm-alert 双皮肤日期炸弹: 硬编码日期超 24h TTL 必红](../26-11-06-0330-test-e2e-gtm-alert-date-bomb.html) — e2e/gtm-alert.spec.mjs 硬编码 T1/T2/T3=2026-11-03, 超过 dialogs.js gtmAlert computed 的 24h TTL 后横幅被判空, 双皮肤 prism/atlas 各 1 条必红
 - [test] [views 种子页筛选器有数据恒红: relocate kind 在 e2e 桩下恒空](../26-11-06-0330-test-e2e-views-relocate-kind-empty.html) — filters.js 无条件注册 relocate kind 但 ui_harness 桩不注入任何 relocate 态, 断言空筛选器 kinds=[] 必红; 修桩还是修产品待裁决
 - [test] [test_start_all_busy_returns_false_and_retries 偶发 WinError 10013](../26-11-06-0330-test-hr-discovery-busy-retry-flake.html) — 随机序巡检第 1 轮触发 127.0.0.1:3166 真绑定 PermissionError, 归因端口/资源类(排除端口段), 非时序
 - [test] [test_hr_discovery 在 -n 8 下偶发端口碰撞红](../26-11-06-0330-test-hr-discovery-port-collision.html) — test_runtime_builds_and_starts_discovery 断言 bound_port==base, xdist 8 worker 并行时偶发碰撞(坑档 fixed-port-test-collision 同类), 单跑恒绿
@@ -62,9 +61,10 @@
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 - [chore] [版本号双源矛盾: __init__.__version__ 0.2.0 vs pyproject 0.1.0](../26-09-21-1408-chore-version-dual-source.html) — WebUI 顶栏透出与打包元数据已差一个 minor; 建议 pyproject 单源 + 动态读取
 
-## Done (423)
+## Done (424)
 
 - [bug] [TASK_REFS_RE 空行跨行捕获: 空 **Refs:** 行把下一行标题吞成 ref, 认领链守阵误红](../26-11-06-0415-bug-kb-refs-regex-blank-line.html) — md 档案留空 **Refs:** 行时 TASK_REFS_RE 的 \s* 跨行吞掉下一行标题当 ref, test_claim_chain_is_bidirectional 误红; kb.new 模板默认留空行, 新档案踩坑
+- [test] [gtm-alert 双皮肤日期炸弹: 硬编码日期超 24h TTL 必红](../26-11-06-0330-test-e2e-gtm-alert-date-bomb.html) — e2e/gtm-alert.spec.mjs 硬编码 T1/T2/T3=2026-11-03, 超过 dialogs.js gtmAlert computed 的 24h TTL 后横幅被判空, 双皮肤 prism/atlas 各 1 条必红
 - [test] [test_qbmanager_tasks 两处缺 assert 的元组表达式(伪断言)](../26-11-05-0344-test-qbmanager-tasks-missing-assert.html) — run_sync_line/run_task_line 的 assert_called_once_with(False), "..." 是表达式语句非 assert 语句, 校验仍生效但失败消息丢失
 - [test] [test_rule_compat_mapping 相邻逐字重复断言, 注释语义无断言承载](../26-11-05-0344-test-rule-compat-mapping-dup-assert.html) — test_normalize_idempotent :111/:113 同一断言出现两次, 第二条死断言; 注释宣称「不新建 actions 列表项」未被检验
 - [test] [test_ops_skip rec_start 定义后从未使用, 实际生效的是紧随其后的 lambda 替身](../26-11-05-0343-test-ops-skip-rec-start-dead-code.html) — test_guard_skip_finish_start_scope 里 rec_start 闭包从未赋给 client.torrents_start, 死代码误导读者以为两层包装

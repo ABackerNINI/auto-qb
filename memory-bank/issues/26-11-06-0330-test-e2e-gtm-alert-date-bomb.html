@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-11-06-0330">
 <meta name="issue-type" content="test">
 <meta name="doc-topic" content="flaky-governance">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/testing/baselines/26-11-06-0449-gtm-alert-date-bomb.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="gtm-alert 双皮肤日期炸弹: 硬编码日期超 24h TTL 必红">
 <meta name="issue-summary" content="e2e/gtm-alert.spec.mjs 硬编码 T1/T2/T3=2026-11-03, 超过 dialogs.js gtmAlert computed 的 24h TTL 后横幅被判空, 双皮肤 prism/atlas 各 1 条必红">
 <title>gtm-alert 双皮肤日期炸弹: 硬编码日期超 24h TTL 必红 · test · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-11-06-0330-test-e2e-gtm-alert-date-bomb</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-06 03:30</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -162,11 +162,27 @@ src/auto_qb/webui/static/shared/dialogs.js:507 「超过 24h -> null」</code></
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-11-06 03:30 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-06 04:27 — 用户指派认领，状态 <strong>In Progress</strong>（复验见下）</li>
+      <li>2026-11-06 04:45 — 修复并验证（e2e 目标 spec 红→绿 + 全量 e2e fast 零失败），状态 <strong>Done</strong></li>
+      <li>2026-11-06 04:59 — 收口评审（code-review 全能档 1 子代理，diff 100 行）：blocker 0 / major 0 / minor 2 / nit 3，引文 5/5 通过 <code>review.check</code>（0 refute），5 条全修（判据表头计数、用例标题补「超 TTL 判空」、坑档复发改逐条 bullet、复验措辞纠正、删 e2e fast 手抄数字）</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验：2026-11-06 04:33 <strong>仍复现</strong> —— <code>npx playwright test e2e/gtm-alert.spec.mjs</code> 2 failed（prism/atlas 各 1 条），均卡在 ① 的 <code>.sb-gtm-alert</code> 取不到（<code>v-if="gtmAlert"</code> 判 null ⇒ 元素根本没渲染进 DOM，<code>toBeVisible</code> 报的是"元素不存在"而非 CSS 隐藏）。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><strong>实际修法（按建议方向，未改道；只动测试，不动产品代码）：</strong></p>
+    <ul>
+      <li>时间口径改成<strong>相对当前时刻</strong>：spec 顶部 <code>NOW_MS = Date.now()</code> + <code>ago(ms)</code> 生成 ISO 串，T1=1h 前（窗内必显）/ T2=30min 前（更近的一次异常→重显）/ T3=2h 前（降级面）/ T4=25h 前（超 TTL）；三行硬编码 <code>2026-11-03T…+08:00</code> 删除。</li>
+      <li>补第 <strong>④</strong> 条负向判据：T4（items 非空）注入后断言横幅 <code>count=0</code> —— 原用例只有"窗内必显"的正向面，<code>GTM_ALERT_TTL_MS</code> 的"超 24h 判 null"分支<strong>零覆盖</strong>；原降级面顺延为 ⑤。正负两侧断言力都在。</li>
+      <li>不改 <code>dialogs.js</code> 的 24h TTL —— 那是设计口径（服务端只留最近一轮，防陈年异常长期占位），坏的只是测试的时间来源。</li>
+      <li>没用 <code>page.clock</code> 假钟（建议修法的备选）：本用例验的是"轮询把载荷送到 vm 后横幅的呈现"，时钟一冻结 <code>setInterval</code> 轮询节拍同步停摆、还得额外驱动 tick；相对时刻是更薄的一层。理由已写进 spec 头部注释。</li>
+    </ul>
+    <p><strong>验证方式：</strong></p>
+    <ul>
+      <li>复验红→修后绿：<code>npx playwright test e2e/gtm-alert.spec.mjs</code> 2 failed → <strong>2 passed (20.7s)</strong>。</li>
+      <li>新断言非空跑（mutation check）：把 T4 临时改成 <code>ago(45min)</code>（窗内且 ≠ 已被 ack 的 T1）→ 双皮肤<strong>在新增的第 ④ 条判红</strong>（Expected 0 / Received 1），改回即绿 —— 证明这条断言真的在守 TTL 分支。</li>
+      <li>全量 e2e fast（<code>npm run test:e2e:fast</code>）：修前是 2 条日期炸弹红（prism/atlas），修后<strong>零失败</strong>、总数不变、无新增失败；数字见 <code>commands run kb.baseline</code>（本报告不手抄）。</li>
+      <li>全量 pytest（<code>commands run test.full</code>）：数字见 <code>commands run kb.baseline</code>（本报告不手抄）。</li>
+    </ul>
   </section>
 
   <footer>

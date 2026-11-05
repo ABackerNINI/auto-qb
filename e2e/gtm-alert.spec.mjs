@@ -11,18 +11,28 @@ import { readInst } from './lib/vm.mjs';
  * `status.traffic.gtm_anomaly` 一个可选键 —— 其余字段(行数据/统计/限速)保持生产形状,
  * 断言只落在横幅本身, 不受桩数据差异干扰。
  *
- * T32 三条判据(逐条对应计划 §11 测试矩阵):
+ * T32 五条判据(逐条对应计划 §11 测试矩阵):
  *   ① T1 注入 -> 横幅常驻可见(短版含 nic/dir/人类可读速率);
  *   ② 点 ×(本机 ack)-> 立即隐藏, localStorage["gtm.spike.ack"] = T1;
  *   ③ 刷新页面 -> 仍隐藏(T1 已被 ack); 换成 T2 -> 自动重显(短版多方向追加 +N);
- *   ④ 降级面: items 为空 -> 整段不渲染, 且速度组/通知入口等既有状态栏元素不受影响。
+ *   ④ 超 TTL 的 ts(T4=25h 前)-> 判空隐藏(守 GTM_ALERT_TTL_MS 的负向面);
+ *   ⑤ 降级面: items 为空 -> 整段不渲染, 且速度组/通知入口等既有状态栏元素不受影响。
  *
  * 皮肤口径: 与既有冒烟轨一致, SKINS = prism|atlas(模板与 CSS 都是 shared 单点,
  * 双皮肤覆盖即验"三皮肤/四皮肤共享同一来源"的运行时表现)。
  */
-const T1 = '2026-11-03T10:47:28+08:00';
-const T2 = '2026-11-03T11:02:15+08:00';
-const T3 = '2026-11-03T11:10:00+08:00';
+/* 时间口径(issue 26-11-06-0330 · 日期炸弹): T1-T4 一律**相对当前时刻**生成, 不写死挂钟日期 ——
+ * 前端 gtmAlert 按 GTM_ALERT_TTL_MS(24h, dialogs.js)判空, 硬编码的过去时刻一旦超过 TTL,
+ * 横幅就恒判 null, 用例变"日期炸弹"(2026-11-04 起双皮肤恒红)。
+ * 不换假钟(page.clock)的理由: 本 spec 验的是"轮询把载荷送到 vm 后横幅的呈现", 时钟一冻结,
+ * 轮询/setInterval 节拍全部停摆, 反而要额外驱动 tick —— 相对时刻是这里最薄的一层。 */
+const HOUR_MS = 3600 * 1000;
+const NOW_MS = Date.now();
+const ago = (ms) => new Date(NOW_MS - ms).toISOString();
+const T1 = ago(1 * HOUR_MS);          // 1h 前: 落在 24h 展示窗内
+const T2 = ago(30 * 60 * 1000);       // 30min 前: 更近的一次异常 => 自动重显
+const T3 = ago(2 * HOUR_MS);          // 2h 前: 窗内, 但 items 为空(降级面)
+const T4 = ago(25 * HOUR_MS);         // 25h 前: 超 TTL => 判空
 
 /** 与用户提供的真实 gtm_anomaly 形状逐字一致(字段名/量纲不改)。 */
 const ITEM_UP = { nic: '以太网', dir: 'up', cur: 1115700, last: 800, delta: 273400, rate_bps: 58720255996 };
@@ -70,7 +80,7 @@ for (const skin of SKINS) {
   test.describe(`皮肤 ${skin}(GTM 告警横幅)`, () => {
     installRuntimeErrorGuard(test);
 
-    test(`GTM 告警: 常驻可见 / ack 隐藏 / 刷新保持 / 新 ts 重显 / 空 items 降级 @fast (${skin})`, async ({ page }) => {
+    test(`GTM 告警: 常驻可见 / ack 隐藏 / 刷新保持 / 新 ts 重显 / 超 TTL 判空 / 空 items 降级 @fast (${skin})`, async ({ page }) => {
       test.setTimeout(120_000);   // 两次整页加载 + 多轮轮询等待, 放宽默认 30s
       let anomaly = spike(T1, [ITEM_UP]);
       await injectAnomaly(page, () => anomaly);
@@ -101,7 +111,12 @@ for (const skin of SKINS) {
       await expect(banner).toBeVisible();
       await expect(shortText).toContainText('+1');
 
-      /* ④ 降级: items 为空 = 无异常 -> 整段不渲染; 其它状态栏元素照常 */
+      /* ④ 超 TTL(25h 前)的异常 -> 判空隐藏: 负向面, 与 ① 的"窗内必显"互为对照 */
+      anomaly = spike(T4, [ITEM_UP]);
+      await seenTs(page).toBe(T4);
+      await expect(banner).toHaveCount(0);
+
+      /* ⑤ 降级: items 为空 = 无异常 -> 整段不渲染; 其它状态栏元素照常 */
       anomaly = spike(T3, []);
       await seenTs(page).toBe(T3);
       await expect(banner).toHaveCount(0);

@@ -33,6 +33,10 @@
 - **复发**: 2(2026-11-04)—— 同日不同 clone 再踩同形: `commands run test.quick` 直跑 rc=4,
   `unset TMPDIR` 后过。为什么没命中: 跑测试前没进 testing 类索引(路由没到);
   失败行自带清理配方, 照做即过, 零排查成本。
+- **复发**: 3(2026-11-06)—— issue 26-11-06-0330 收尾跑全量: 本 shell 自带 `TMPDIR=H:\Temp`,
+  `commands run test.full` 1.3s 内 rc=4(拒收), 前缀 `TMPDIR= commands run test.full` 即过。
+  为什么没命中: 又是在收尾"顺手跑个全量"时忘了 env 随 shell 走 —— 与上两轮同款,
+  开工/收尾两次跑测试前都应先过一次 testing 类索引。
 
 ### `--basetemp` 换了目录会让 4 条 sidefx 用例**假红**
 
