@@ -1,0 +1,53 @@
+{
+  "route": "R3",
+  "owner": "clone2-main",
+  "claimed_at": "26-11-06-0630",
+  "freeze": "f088329291e64d0802637463e886f78842c1b34c",
+  "freeze_note": "manifest 钉值 (生成时点 develop tip, D17)",
+  "snapshot": null,
+  "status": "claimed",
+  "batches": [
+    {
+      "id": "R3-1",
+      "title": "transfer 全域(新模块) + torrents/store",
+      "status": "pending",
+      "done_at": null,
+      "findings": 0
+    },
+    {
+      "id": "R3-2",
+      "title": "torrents 杂件 + tray + cli + tools",
+      "status": "pending",
+      "done_at": null,
+      "findings": 0
+    },
+    {
+      "id": "R3-3",
+      "title": "hr service 族: service_wave/service/service_common/service_status/module",
+      "status": "pending",
+      "done_at": null,
+      "findings": 0
+    },
+    {
+      "id": "R3-4",
+      "title": "hr 模型状态: model/status/resolve",
+      "status": "pending",
+      "done_at": null,
+      "findings": 0
+    },
+    {
+      "id": "R3-5",
+      "title": "hr 运行时: runtime/server/channel/worker/threadlifecycle/queue/events",
+      "status": "pending",
+      "done_at": null,
+      "findings": 0
+    },
+    {
+      "id": "R3-6",
+      "title": "hr 取数解析: discovery/report/parse/fetcher/store/bencode/log/ratelimit + adapters",
+      "status": "pending",
+      "done_at": null,
+      "findings": 0
+    }
+  ]
+}
