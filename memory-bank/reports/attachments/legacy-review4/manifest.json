@@ -1,8 +1,9 @@
 {
   "campaign": "legacy-code-review-4",
   "plan_file": "memory-bank/plans/26-11-05-2335-plan-legacy-code-review-4.html",
-  "generated_at": "26-11-06-0407",
-  "note": "机器事实源(计划 §04/D14); freeze 由 review.lane.claim 时机械解析, 不存于此",
+  "generated_at": "26-11-06-0441",
+  "freeze": "f088329291e64d0802637463e886f78842c1b34c",
+  "note": "机器事实源(计划 §04/D17): freeze = 生成时点经 ls-remote 核验的 develop tip; 有路线认领后本命令拒绝重生成(冻结基线一经引用不可移动)",
   "routes": {
     "R1": [
       "R1-1",
@@ -55,7 +56,7 @@
       "route": "R1",
       "title": "内核执行面: qbmanager/taskqueue/module/qbapi/state + core 根杂件",
       "depth": "full",
-      "total_lines": 3405,
+      "total_lines": 3476,
       "files": [
         {
           "path": "src/auto-qb.py",
@@ -71,7 +72,7 @@
         },
         {
           "path": "src/auto_qb/cli.py",
-          "lines": 278
+          "lines": 300
         },
         {
           "path": "src/auto_qb/core/__init__.py",
@@ -83,31 +84,31 @@
         },
         {
           "path": "src/auto_qb/core/exporter.py",
-          "lines": 258
+          "lines": 259
         },
         {
           "path": "src/auto_qb/core/module.py",
-          "lines": 443
+          "lines": 448
         },
         {
           "path": "src/auto_qb/core/qbapi.py",
-          "lines": 430
+          "lines": 456
         },
         {
           "path": "src/auto_qb/core/qbclient.py",
-          "lines": 68
+          "lines": 69
         },
         {
           "path": "src/auto_qb/core/qbmanager.py",
-          "lines": 1036
+          "lines": 1029
         },
         {
           "path": "src/auto_qb/core/state.py",
-          "lines": 374
+          "lines": 380
         },
         {
           "path": "src/auto_qb/core/taskqueue.py",
-          "lines": 313
+          "lines": 330
         }
       ],
       "registry": {
@@ -367,6 +368,16 @@
               "src/auto_qb/core/modules/relocate_units.py",
               "src/auto_qb/core/qbapi.py"
             ]
+          },
+          {
+            "issue": "memory-bank/issues/26-11-06-0247-refactor-qbclient-session-override.html",
+            "id": "0247-refactor-qbclient-session-override",
+            "type": "refactor",
+            "title": "LocalQbClient._session 覆盖签名与三方基类不兼容(override 错误码进豁免面)",
+            "status": "Open",
+            "files": [
+              "src/auto_qb/core/qbclient.py"
+            ]
           }
         ]
       }
@@ -376,15 +387,15 @@
       "route": "R1",
       "title": "迁移执行: relocate_units/relocate_exec/relocate_common",
       "depth": "full",
-      "total_lines": 2069,
+      "total_lines": 2096,
       "files": [
         {
           "path": "src/auto_qb/core/modules/relocate_common.py",
-          "lines": 85
+          "lines": 86
         },
         {
           "path": "src/auto_qb/core/modules/relocate_exec.py",
-          "lines": 978
+          "lines": 1004
         },
         {
           "path": "src/auto_qb/core/modules/relocate_units.py",
@@ -514,27 +525,27 @@
       "route": "R1",
       "title": "迁移规划与生命期: relocate_mod/plan/probe/proof/lifecycle",
       "depth": "full",
-      "total_lines": 1768,
+      "total_lines": 1804,
       "files": [
         {
           "path": "src/auto_qb/core/modules/relocate_lifecycle.py",
-          "lines": 277
+          "lines": 279
         },
         {
           "path": "src/auto_qb/core/modules/relocate_mod.py",
-          "lines": 231
+          "lines": 233
         },
         {
           "path": "src/auto_qb/core/modules/relocate_plan.py",
-          "lines": 529
+          "lines": 547
         },
         {
           "path": "src/auto_qb/core/modules/relocate_probe.py",
-          "lines": 412
+          "lines": 417
         },
         {
           "path": "src/auto_qb/core/modules/relocate_proof.py",
-          "lines": 319
+          "lines": 328
         }
       ],
       "registry": {
@@ -681,7 +692,7 @@
       "route": "R1",
       "title": "traffic 存取: store/agg/codec/common/paths/grid/limits/curves",
       "depth": "full",
-      "total_lines": 3006,
+      "total_lines": 3017,
       "files": [
         {
           "path": "src/auto_qb/core/curves.py",
@@ -693,11 +704,11 @@
         },
         {
           "path": "src/auto_qb/core/traffic_limits.py",
-          "lines": 317
+          "lines": 319
         },
         {
           "path": "src/auto_qb/core/traffic_store.py",
-          "lines": 613
+          "lines": 622
         },
         {
           "path": "src/auto_qb/core/traffic_store_agg.py",
@@ -851,6 +862,17 @@
               "src/auto_qb/webui/static/shared/config_hub_tracker.js",
               "src/auto_qb/webui/views.py"
             ]
+          },
+          {
+            "issue": "memory-bank/issues/26-11-06-0247-refactor-slot-agg-obs-tuple-drift.html",
+            "id": "0247-refactor-slot-agg-obs-tuple-drift",
+            "type": "refactor",
+            "title": "_slot_agg_obs 注解 2 元组与实际 4 元组契约漂移, mypy call-arg 被豁免面吞掉",
+            "status": "Open",
+            "files": [
+              "src/auto_qb/core/modules/traffic_sample_agg.py",
+              "src/auto_qb/core/traffic_store_codec.py"
+            ]
           }
         ]
       }
@@ -860,27 +882,27 @@
       "route": "R1",
       "title": "traffic 采样: sample_mod/agg/blocks/common/snapshot + traffic_source",
       "depth": "full",
-      "total_lines": 2793,
+      "total_lines": 2838,
       "files": [
         {
           "path": "src/auto_qb/core/modules/traffic_sample_agg.py",
-          "lines": 543
+          "lines": 563
         },
         {
           "path": "src/auto_qb/core/modules/traffic_sample_blocks.py",
-          "lines": 346
+          "lines": 353
         },
         {
           "path": "src/auto_qb/core/modules/traffic_sample_common.py",
-          "lines": 171
+          "lines": 173
         },
         {
           "path": "src/auto_qb/core/modules/traffic_sample_mod.py",
-          "lines": 649
+          "lines": 655
         },
         {
           "path": "src/auto_qb/core/modules/traffic_snapshot_mod.py",
-          "lines": 400
+          "lines": 410
         },
         {
           "path": "src/auto_qb/core/traffic_source/__init__.py",
@@ -1066,6 +1088,17 @@
               "src/auto_qb/webui/static/shared/config_hub_tracker.js",
               "src/auto_qb/webui/views.py"
             ]
+          },
+          {
+            "issue": "memory-bank/issues/26-11-06-0247-refactor-slot-agg-obs-tuple-drift.html",
+            "id": "0247-refactor-slot-agg-obs-tuple-drift",
+            "type": "refactor",
+            "title": "_slot_agg_obs 注解 2 元组与实际 4 元组契约漂移, mypy call-arg 被豁免面吞掉",
+            "status": "Open",
+            "files": [
+              "src/auto_qb/core/modules/traffic_sample_agg.py",
+              "src/auto_qb/core/traffic_store_codec.py"
+            ]
           }
         ]
       }
@@ -1075,15 +1108,15 @@
       "route": "R1",
       "title": "分组与规则模块: grouping_mod/rules_mod/tvshows",
       "depth": "full",
-      "total_lines": 1903,
+      "total_lines": 1927,
       "files": [
         {
           "path": "src/auto_qb/core/modules/grouping_mod.py",
-          "lines": 770
+          "lines": 772
         },
         {
           "path": "src/auto_qb/core/modules/rules_mod.py",
-          "lines": 613
+          "lines": 635
         },
         {
           "path": "src/auto_qb/core/tvshows.py",
@@ -1227,7 +1260,7 @@
       "route": "R1",
       "title": "ops 与维护面: ops_*/maintenance/fuse/speed_curve/logging/notify/tracker",
       "depth": "full",
-      "total_lines": 2751,
+      "total_lines": 2775,
       "files": [
         {
           "path": "src/auto_qb/core/modules/__init__.py",
@@ -1235,19 +1268,19 @@
         },
         {
           "path": "src/auto_qb/core/modules/fuse_mod.py",
-          "lines": 399
+          "lines": 401
         },
         {
           "path": "src/auto_qb/core/modules/logging_mod.py",
-          "lines": 45
+          "lines": 48
         },
         {
           "path": "src/auto_qb/core/modules/maintenance_mod.py",
-          "lines": 372
+          "lines": 374
         },
         {
           "path": "src/auto_qb/core/modules/notify_mod.py",
-          "lines": 79
+          "lines": 82
         },
         {
           "path": "src/auto_qb/core/modules/ops_common.py",
@@ -1255,11 +1288,11 @@
         },
         {
           "path": "src/auto_qb/core/modules/ops_jobs.py",
-          "lines": 91
+          "lines": 92
         },
         {
           "path": "src/auto_qb/core/modules/ops_mod.py",
-          "lines": 375
+          "lines": 379
         },
         {
           "path": "src/auto_qb/core/modules/ops_skip.py",
@@ -1271,11 +1304,11 @@
         },
         {
           "path": "src/auto_qb/core/modules/speed_curve_mod.py",
-          "lines": 324
+          "lines": 330
         },
         {
           "path": "src/auto_qb/core/modules/tracker_mod.py",
-          "lines": 122
+          "lines": 125
         }
       ],
       "registry": {
@@ -1441,7 +1474,7 @@
       "route": "R2",
       "title": "校验面: config/validation 全部",
       "depth": "full",
-      "total_lines": 2320,
+      "total_lines": 2345,
       "files": [
         {
           "path": "src/auto_qb/config/validation/__init__.py",
@@ -1449,7 +1482,7 @@
         },
         {
           "path": "src/auto_qb/config/validation/core.py",
-          "lines": 364
+          "lines": 377
         },
         {
           "path": "src/auto_qb/config/validation/curves.py",
@@ -1457,7 +1490,7 @@
         },
         {
           "path": "src/auto_qb/config/validation/rules.py",
-          "lines": 620
+          "lines": 632
         },
         {
           "path": "src/auto_qb/config/validation/sections.py",
@@ -1633,6 +1666,17 @@
               "src/auto_qb/webui/server/routes/transfer.py",
               "src/auto_qb/webui/static/shared/config_hub_tracker.js",
               "src/auto_qb/webui/views.py"
+            ]
+          },
+          {
+            "issue": "memory-bank/issues/26-11-06-0306-docs-config-models-hr-check-comment.html",
+            "id": "0306-docs-config-models-hr-check-comment",
+            "type": "docs",
+            "title": "models.py 注释称旧 hr_check 键仍兼容接受, 实际校验层已报错",
+            "status": "Open",
+            "files": [
+              "src/auto_qb/config/models.py",
+              "src/auto_qb/config/validation/sections.py"
             ]
           }
         ]
@@ -1840,6 +1884,17 @@
               "src/auto_qb/webui/static/shared/config_hub_tracker.js",
               "src/auto_qb/webui/views.py"
             ]
+          },
+          {
+            "issue": "memory-bank/issues/26-11-06-0306-docs-config-models-hr-check-comment.html",
+            "id": "0306-docs-config-models-hr-check-comment",
+            "type": "docs",
+            "title": "models.py 注释称旧 hr_check 键仍兼容接受, 实际校验层已报错",
+            "status": "Open",
+            "files": [
+              "src/auto_qb/config/models.py",
+              "src/auto_qb/config/validation/sections.py"
+            ]
           }
         ]
       }
@@ -1849,7 +1904,7 @@
       "route": "R2",
       "title": "写入与迁移: writer/migrations/compat/errors/impact/site_presets",
       "depth": "full",
-      "total_lines": 1406,
+      "total_lines": 1412,
       "files": [
         {
           "path": "src/auto_qb/config/__init__.py",
@@ -1877,7 +1932,7 @@
         },
         {
           "path": "src/auto_qb/config/writer.py",
-          "lines": 552
+          "lines": 558
         }
       ],
       "registry": {
@@ -2044,7 +2099,7 @@
       "route": "R2",
       "title": "rules 全域: base/conditions/registry/checking_meta + expr + actions",
       "depth": "full",
-      "total_lines": 3350,
+      "total_lines": 3372,
       "files": [
         {
           "path": "src/auto_qb/rules/__init__.py",
@@ -2060,11 +2115,11 @@
         },
         {
           "path": "src/auto_qb/rules/actions/checking.py",
-          "lines": 219
+          "lines": 220
         },
         {
           "path": "src/auto_qb/rules/actions/full_checking.py",
-          "lines": 157
+          "lines": 158
         },
         {
           "path": "src/auto_qb/rules/actions/skip_checking.py",
@@ -2072,19 +2127,19 @@
         },
         {
           "path": "src/auto_qb/rules/actions/transfer.py",
-          "lines": 113
+          "lines": 115
         },
         {
           "path": "src/auto_qb/rules/base.py",
-          "lines": 742
+          "lines": 747
         },
         {
           "path": "src/auto_qb/rules/checking_meta.py",
-          "lines": 120
+          "lines": 121
         },
         {
           "path": "src/auto_qb/rules/conditions.py",
-          "lines": 259
+          "lines": 260
         },
         {
           "path": "src/auto_qb/rules/expr/__init__.py",
@@ -2116,7 +2171,7 @@
         },
         {
           "path": "src/auto_qb/rules/registry.py",
-          "lines": 196
+          "lines": 207
         }
       ],
       "registry": {
@@ -2417,17 +2472,21 @@
     {
       "id": "R2-6",
       "route": "R2",
-      "title": "infra 工具: utils*/notify/locking/logging/journal/recovery 等",
+      "title": "infra 工具: utils*/clock/notify/locking/logging/journal/recovery 等",
       "depth": "full",
-      "total_lines": 2952,
+      "total_lines": 3020,
       "files": [
         {
           "path": "src/auto_qb/infra/__init__.py",
-          "lines": 15
+          "lines": 17
         },
         {
           "path": "src/auto_qb/infra/autostart.py",
           "lines": 98
+        },
+        {
+          "path": "src/auto_qb/infra/clock.py",
+          "lines": 59
         },
         {
           "path": "src/auto_qb/infra/errors.py",
@@ -2447,19 +2506,19 @@
         },
         {
           "path": "src/auto_qb/infra/port_owner.py",
-          "lines": 228
+          "lines": 229
         },
         {
           "path": "src/auto_qb/infra/relocate_journal.py",
-          "lines": 164
+          "lines": 165
         },
         {
           "path": "src/auto_qb/infra/store_recovery.py",
-          "lines": 85
+          "lines": 86
         },
         {
           "path": "src/auto_qb/infra/utils.py",
-          "lines": 878
+          "lines": 881
         },
         {
           "path": "src/auto_qb/infra/utils_parse.py",
@@ -2471,7 +2530,7 @@
         },
         {
           "path": "src/auto_qb/infra/versioning.py",
-          "lines": 186
+          "lines": 187
         }
       ],
       "registry": {
@@ -2651,11 +2710,11 @@
       "route": "R3",
       "title": "transfer 全域(新模块) + torrents/store",
       "depth": "full",
-      "total_lines": 1814,
+      "total_lines": 1817,
       "files": [
         {
           "path": "src/auto_qb/torrents/store.py",
-          "lines": 875
+          "lines": 878
         },
         {
           "path": "src/auto_qb/transfer/__init__.py",
@@ -3228,6 +3287,16 @@
               "src/auto_qb/hr/service.py",
               "src/auto_qb/hr/status.py"
             ]
+          },
+          {
+            "issue": "memory-bank/issues/26-11-06-0306-test-hr-behavior-core-test-refs.html",
+            "id": "0306-test-hr-behavior-core-test-refs",
+            "type": "test",
+            "title": "behavior-core 坑档两条 judge_record 守阵引用无同名测试",
+            "status": "Open",
+            "files": [
+              "src/auto_qb/hr/resolve.py"
+            ]
           }
         ]
       }
@@ -3237,11 +3306,11 @@
       "route": "R3",
       "title": "hr 运行时: runtime/server/channel/worker/threadlifecycle/queue/events",
       "depth": "full",
-      "total_lines": 2439,
+      "total_lines": 2445,
       "files": [
         {
           "path": "src/auto_qb/hr/channel.py",
-          "lines": 442
+          "lines": 443
         },
         {
           "path": "src/auto_qb/hr/events.py",
@@ -3249,11 +3318,11 @@
         },
         {
           "path": "src/auto_qb/hr/queue.py",
-          "lines": 182
+          "lines": 184
         },
         {
           "path": "src/auto_qb/hr/runtime.py",
-          "lines": 553
+          "lines": 556
         },
         {
           "path": "src/auto_qb/hr/server.py",
@@ -3432,7 +3501,7 @@
       "route": "R3",
       "title": "hr 取数解析: discovery/report/parse/fetcher/store/bencode/log/ratelimit + adapters",
       "depth": "full",
-      "total_lines": 2906,
+      "total_lines": 2907,
       "files": [
         {
           "path": "src/auto_qb/hr/__init__.py",
@@ -3484,7 +3553,7 @@
         },
         {
           "path": "src/auto_qb/hr/report.py",
-          "lines": 391
+          "lines": 392
         },
         {
           "path": "src/auto_qb/hr/store.py",
@@ -3656,7 +3725,7 @@
       "route": "R4",
       "title": "webui commands 面: commands*/runtime_commands",
       "depth": "full",
-      "total_lines": 2125,
+      "total_lines": 2129,
       "files": [
         {
           "path": "src/auto_qb/webui/commands.py",
@@ -3664,7 +3733,7 @@
         },
         {
           "path": "src/auto_qb/webui/commands_common.py",
-          "lines": 311
+          "lines": 316
         },
         {
           "path": "src/auto_qb/webui/commands_config.py",
@@ -3684,7 +3753,7 @@
         },
         {
           "path": "src/auto_qb/webui/runtime_commands.py",
-          "lines": 442
+          "lines": 441
         }
       ],
       "registry": {
@@ -3806,7 +3875,7 @@
       "route": "R4",
       "title": "webui 视图与运行时: runtime*/views*/tool_client/module/relocate_chain",
       "depth": "full",
-      "total_lines": 3667,
+      "total_lines": 3685,
       "files": [
         {
           "path": "src/auto_qb/webui/__init__.py",
@@ -3818,11 +3887,11 @@
         },
         {
           "path": "src/auto_qb/webui/relocate_chain.py",
-          "lines": 229
+          "lines": 237
         },
         {
           "path": "src/auto_qb/webui/runtime.py",
-          "lines": 251
+          "lines": 259
         },
         {
           "path": "src/auto_qb/webui/runtime_common.py",
@@ -3830,7 +3899,7 @@
         },
         {
           "path": "src/auto_qb/webui/runtime_stream.py",
-          "lines": 222
+          "lines": 225
         },
         {
           "path": "src/auto_qb/webui/runtime_views.py",
@@ -3842,7 +3911,7 @@
         },
         {
           "path": "src/auto_qb/webui/views.py",
-          "lines": 452
+          "lines": 451
         },
         {
           "path": "src/auto_qb/webui/views_common.py",
@@ -4070,7 +4139,7 @@
       "route": "R4",
       "title": "webui server 全域: factory/auth/context/routes/traffic_qb",
       "depth": "full",
-      "total_lines": 3683,
+      "total_lines": 3690,
       "files": [
         {
           "path": "src/auto_qb/webui/server/__init__.py",
@@ -4086,7 +4155,7 @@
         },
         {
           "path": "src/auto_qb/webui/server/context.py",
-          "lines": 77
+          "lines": 83
         },
         {
           "path": "src/auto_qb/webui/server/factory.py",
@@ -4094,7 +4163,7 @@
         },
         {
           "path": "src/auto_qb/webui/server/lifecycle.py",
-          "lines": 243
+          "lines": 245
         },
         {
           "path": "src/auto_qb/webui/server/routes/__init__.py",
@@ -4162,7 +4231,7 @@
         },
         {
           "path": "src/auto_qb/webui/server/traffic_qb.py",
-          "lines": 369
+          "lines": 368
         }
       ],
       "registry": {
@@ -5422,7 +5491,7 @@
       "route": "R5",
       "title": "scripts 快扫: qb_capture*/ui_harness/检查与实验散件",
       "depth": "scan",
-      "total_lines": 5553,
+      "total_lines": 5559,
       "files": [
         {
           "path": "scripts/bench_expr.py",
@@ -5430,7 +5499,7 @@
         },
         {
           "path": "scripts/check_command_drift.py",
-          "lines": 187
+          "lines": 190
         },
         {
           "path": "scripts/check_context_caps.py",
@@ -5482,7 +5551,7 @@
         },
         {
           "path": "scripts/ui_harness.py",
-          "lines": 1113
+          "lines": 1116
         },
         {
           "path": "scripts/update_config_key_surface.py",
@@ -5530,19 +5599,19 @@
     }
   ],
   "fingerprint": {
-    "defs": "b3e151020d95cff3",
+    "defs": "b576f4f8ead1d7d6",
     "batches": 34,
-    "files": 365,
-    "total_lines": 115640
+    "files": 366,
+    "total_lines": 116044
   },
   "coverage": {
     "ok": true,
-    "scoped_files": 365,
-    "assigned_files": 365,
-    "total_lines": 115640,
+    "scoped_files": 366,
+    "assigned_files": 366,
+    "total_lines": 116044,
     "registry": {
       "r2_findings": 21,
-      "open_issues_matched": 30
+      "open_issues_matched": 34
     }
   }
 }

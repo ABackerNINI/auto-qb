@@ -66,6 +66,14 @@ EXEMPT = (
     "memory-bank/pitfalls/ops/venv-trampoline-clone-copy.md",  # 该条记的是 uv trampoline 损坏本身:
     #   症状行(canonicalize 报错)与修复命令(--reinstall-package 定点重装)就是判别/处置本体,
     #   且 env.sync 假自愈的对照必须点名 uv sync 原文 —— 换成 task id 这条坑就没法读了
+    "memory-bank/pitfalls/testing/attachments/",  # 坑档附件 = 历史复现记录快照(同 reports/ 口径):
+    #   记的是"当时怎么跑的", 原样命令就是内容本体(patching-local-linux-repro 等属此)
+    "memory-bank/pitfalls/testing/mypy-config-cwd.md",  # 该条记的是 mypy cwd 陷阱本身:
+    #   命令形态(uv run mypy --config-file 换 cwd)就是判据, 同 tmpdir.md 先例
+    "memory-bank/pitfalls/testing/sandbox-venv-in-workspace.md",  # 修复命令(--reinstall)是处置本体,
+    #   同 venv-trampoline-clone-copy 先例(另一战役 S5/S6 所立, 同族不同症)
+    "memory-bank/pitfalls/ops/uv-trampoline-broken.md",  # 同上一族: 另一战役对同症状的坑档,
+    #   修复命令(rm pytest.exe + 定点重装)就是处置本体
 )
 
 # 已经写成"调 task"的写法 —— 这才是文档里该出现的形态
@@ -134,6 +142,9 @@ def scan(only: set[str] | None = None) -> list[tuple[str, int, str, str]]:
             continue
         # 包内 README 不享受 `.commands/` 的豁免: 豁免保护的是"定义", 不是"包内散文"
         if path.name != "README.md" and any(rel.startswith(e) for e in EXEMPT):
+            continue
+        # 生成物索引(_index.md)的行文镜像源件标题: 漂移治理在源件, 索引重复计账只会噪声化
+        if path.name == "_index.md":
             continue
         try:
             lines = path.read_text(encoding="utf-8", errors="replace").splitlines()

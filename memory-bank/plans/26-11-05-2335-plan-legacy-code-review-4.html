@@ -168,7 +168,7 @@
 <h3>review.lane 命令规格（S0 实现，D13/D15）</h3>
 <table>
 <tr><th>子命令</th><th>行为</th><th>失败即停（可见错误）</th></tr>
-<tr><td><code>claim --route X --owner &lt;id&gt;</code></td><td>route JSON 不存在才建：写入 owner / status=claimed / freeze hash（自动解析：本计划文件的首个 commit，机械取得非手抄）</td><td>已认领 / 树脏 / freeze 不可达（非 HEAD 祖先）</td></tr>
+<tr><td><code>claim --route X --owner &lt;id&gt;</code></td><td>route JSON 不存在才建：写入 owner / status=claimed / freeze hash（取 manifest 钉值：生成时点 ls-remote 核验的 develop tip，D17）</td><td>已认领 / 树脏 / freeze 不可达（非 HEAD 祖先）</td></tr>
 <tr><td><code>start --route X</code></td><td>校验树净 → <code>git archive &lt;freeze&gt;</code> 导出快照到 repo 外目录（默认 <code>&lt;repo&gt;/../auto-qb-review4-snap/</code>，可 <code>--snapshot</code> 覆盖）+ 写入 hash 标记文件 → route JSON 记钉值与快照路径 → 打印三件套与本批文件清单</td><td>未 claim / archive 失败 / 快照标记写不齐</td></tr>
 <tr><td><code>verify --route X</code></td><td>每批派遣前与交回后复核：树净 / 快照存在且标记吻合 / route JSON 状态一致；通过则打印当前批三件套</td><td>任一不满足</td></tr>
 <tr><td><code>done --route X</code></td><td>校验 findings JSON 与小结已落盘 → 翻 status=done → 提示 ship.commit</td><td>findings 缺失 / 状态不是 in-progress</td></tr>
@@ -246,6 +246,7 @@ memory-bank/reports/&lt;ts&gt;-report-legacy-code-review-4.html   # 终报告（
 <tr><td>D14</td><td>状态与矩阵单点全在 JSON；计划 HTML 静态零手改</td><td>26-11-05</td></tr>
 <tr><td>D15</td><td>新增 <code>review.lane</code>（claim/start/verify/done）收录 <code>.commands/review/</code></td><td>26-11-05</td></tr>
 <tr><td>D16</td><td class="wr">计划文档只写状态不写流水（用户指令）</td><td>26-11-05</td></tr>
+<tr><td>D17</td><td class="wr">冻结基线改钉 manifest 生成时点的 develop tip（ls-remote 现查核验）；重钉 = 重生成 manifest，任何路线认领后即拒 —— 26-11-06 用户指令（改 D12 取值定义，git archive 快照机制不变；S0 三轮评审完帧行）</td><td>26-11-06</td></tr>
 </table>
 
 <h2><span class="no">§07</span>风险与对策</h2>

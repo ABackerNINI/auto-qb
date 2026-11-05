@@ -19,13 +19,13 @@ note    = "--findings <json文件|-> 必填（- 指 stdin），--root 可指定�
 run     = ["uv run python .commands/review/scripts/review_lane.py manifest <args>"]
 timeout = 300
 when    = "存量评审 R4（计划 26-11-05-2335）：S0 生成/重生成 manifest（批次矩阵+底册切片+覆盖守卫）"
-note    = "机器事实源生成器（D14）：批次定义内嵌脚本 BATCH_DEFS，互斥+全覆盖守卫（重叠/漏配 rc=1 列清单）。产出 memory-bank/reports/attachments/legacy-review4/manifest.json（365 文件/115,640 行/34 批）。--dry-run 只演算"
+note    = "机器事实源生成器（D14/D17）：freeze 钉定=生成时点 develop tip（ls-remote 现查核验，未 sync 即拒；任何路线认领后拒绝重生成——冻结基线一经引用不可移动）+ 批次矩阵在冻结树临时解包上盘点（互斥+全覆盖守卫，重叠/漏配 rc=1 列清单）。产出 memory-bank/reports/attachments/legacy-review4/manifest.json。--dry-run 只演算"
 
 [tasks."review.lane.claim"]
 run     = ["uv run python .commands/review/scripts/review_lane.py claim <args>"]
 timeout = 120
 when    = "存量评审 R4：路线会话认领路线（claim -> ship.commit -> start）"
-note    = "--route R1..R5 --owner <标识> 必填。freeze 机械解析=计划文件首个 commit（非手抄），校验为其 HEAD 祖先 + 本地 HEAD==远端 tip（ls-remote 现查，未 sync 即拒）+ 树净 + develop 分支。写 route-<R>.json（认领单点，重复认领拒）。认领后尽快 ship.commit 入库(防跨 clone 重复认领), 再 start"
+note    = "--route R1..R5 --owner <标识> 必填。freeze 取 manifest 钉值（生成时点 ls-remote 核验的 develop tip，D17），校验为其 HEAD 祖先 + 本地 HEAD==远端 tip（ls-remote 现查，未 sync 即拒）+ 树净 + develop 分支。写 route-<R>.json（认领单点，重复认领拒）。认领后尽快 ship.commit 入库(防跨 clone 重复认领), 再 start"
 
 [tasks."review.lane.start"]
 run     = ["uv run python .commands/review/scripts/review_lane.py start <args>"]

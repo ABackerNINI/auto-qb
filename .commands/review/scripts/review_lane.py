@@ -1,9 +1,10 @@
 """存量评审 R4 的路线机械面: review.lane —— 认领/快照/复核/勾选/终态 + manifest 生成。
 
 计划 26-11-05-2335 (legacy-code-review-4) 的配套脚本 (拍板 D13/D15):
-- manifest: 生成 manifest.json —— 批次到文件精确矩阵 + 每批撞车底册切片(R2 终表 + Open issues
-            按文件 basename 映射) + 覆盖守卫(全部分层范围内文件恰被一批认领, 重叠/漏配即失败)。
-- claim:    认领路线。freeze 机械解析 = 计划文件首个 commit(diff-filter=A), 校验为其祖先且
+- manifest: 生成 manifest.json —— 冻结基线钉定(生成时点 develop tip, ls-remote 核验; 有路线
+            认领后拒绝重生成) + 批次到文件精确矩阵 + 每批撞车底册切片(R2 终表 + Open issues
+            按文件词边界映射) + 覆盖守卫(全部分层范围内文件恰被一批认领, 重叠/漏配即失败)。
+- claim:    认领路线。freeze 取 manifest 钉值(D17), 校验为其祖先且
             本地 HEAD == 远端 tip(ls-remote 现查, 防在落后/分叉基线上认领); 写 route JSON。
 - start:    git archive <freeze> 导出评审快照到 repo 外目录(不切分支不动 HEAD, 不扰动
             develop), 写 .snapshot-hash 标记, 打印存量适配三件套与首批文件。
@@ -116,9 +117,9 @@ BATCH_DEFS: list[dict] = [
        globs=(P + "rules/*.py", P + "rules/expr/*.py", P + "rules/actions/*.py")),
     _B("R2-5", "R2", "infra 存储: alias_fs/file_access", "full",
        exact=(P + "infra/alias_fs.py", P + "infra/file_access.py")),
-    _B("R2-6", "R2", "infra 工具: utils*/notify/locking/logging/journal/recovery 等", "full",
+    _B("R2-6", "R2", "infra 工具: utils*/clock/notify/locking/logging/journal/recovery 等", "full",
        exact=tuple(P + "infra/" + n for n in (
-           "__init__.py", "autostart.py", "errors.py", "locking.py", "logging.py", "notify.py",
+           "__init__.py", "autostart.py", "clock.py", "errors.py", "locking.py", "logging.py", "notify.py",
            "port_owner.py", "relocate_journal.py", "store_recovery.py", "utils.py",
            "utils_parse.py", "utils_paths.py", "versioning.py"))),
     # ---- R3 hr · 新代码 ----
@@ -299,16 +300,6 @@ def _require_branch(root: Path) -> str:
     return branch
 
 
-def _resolve_freeze(root: Path) -> str:
-    plan = root / PLAN_REL
-    if not plan.is_file():
-        _die(f"计划文件不在盘: {PLAN_REL}")
-    out = _git(root, "log", "--diff-filter=A", "--format=%H", "--", PLAN_REL).stdout.split()
-    if not out:
-        _die(f"解析不到计划文件的首个 commit({PLAN_REL} 未被任何 commit 添加?)")
-    return out[-1]  # 最早一次添加(防未来异常重加)
-
-
 def _require_ancestor(root: Path, freeze: str) -> None:
     proc = _git(root, "merge-base", "--is-ancestor", freeze, "HEAD", check=False)
     if proc.returncode != 0:
@@ -342,6 +333,9 @@ def _load_manifest(root: Path) -> dict:
         _die(f"manifest 解析失败: {exc}")
     if not data.get("coverage", {}).get("ok"):
         _fail("manifest 覆盖守卫未通过(coverage.ok != true), 禁止认领 —— 重跑 review.lane.manifest")
+    freeze = data.get("freeze")
+    if not isinstance(freeze, str) or len(freeze) != 40:
+        _fail("manifest 缺合法 freeze 钉值(40 位 hash) —— 重跑 review.lane.manifest")
     return data
 
 
@@ -514,9 +508,15 @@ def cmd_manifest(args: argparse.Namespace) -> int:
     root = _resolve_root(args.root)
     if not (root / PLAN_REL).is_file():
         _die(f"计划文件不在盘: {PLAN_REL}")
+    # 0) 冻结基线钉定(D17): manifest 生成时点的 develop tip, ls-remote 现查核验(未 sync 即拒)。
+    #    任何路线认领后禁止重生成 —— 冻结基线一经 route JSON 引用即不可移动。
+    _require_tip(root, args.remote)
+    freeze = _git(root, "rev-parse", "HEAD").stdout.strip()
+    claimed = [r for r in ROUTES if (root / LANE_DIR / f"route-{r}.json").is_file()]
+    if claimed:
+        _fail(f"已有路线认领状态({','.join(claimed)}) —— 冻结基线一经引用不可移动, 重钉须先清理全部路线状态")
     # 1) 分层范围盘点 —— 在冻结树的临时解包上做: manifest 描述评审目标(冻结树),
     #    与 develop 后续演进(其它 clone 合流的新文件)无关, 覆盖守卫不随树漂移误报
-    freeze = _resolve_freeze(root)
     raw = _git_bytes(root, "archive", "--format=tar", freeze)
     with tempfile.TemporaryDirectory(prefix="lane-manifest-tree-") as td:
         tree = Path(td).resolve()  # 与子路径 resolve 同基准: TEMP 含符号链接/8.3 短名时纯词法 relative_to 不炸
@@ -573,7 +573,9 @@ def cmd_manifest(args: argparse.Namespace) -> int:
         "campaign": "legacy-code-review-4",
         "plan_file": PLAN_REL,
         "generated_at": _now(),
-        "note": "机器事实源(计划 §04/D14); freeze 由 review.lane.claim 时机械解析, 不存于此",
+        "freeze": freeze,
+        "note": "机器事实源(计划 §04/D17): freeze = 生成时点经 ls-remote 核验的 develop tip; "
+                "有路线认领后本命令拒绝重生成(冻结基线一经引用不可移动)",
         "routes": {r: [b["id"] for b in batches if b["route"] == r] for r in ROUTES},
         "batches": batches,
         "fingerprint": {"defs": _defs_fingerprint(), "batches": len(BATCH_DEFS),
@@ -592,6 +594,7 @@ def cmd_manifest(args: argparse.Namespace) -> int:
     else:
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    print(f"冻结基线: {freeze[:12]} (生成时点 develop tip, ls-remote 已核验; 有认领后重生成即拒)")
     print(f"覆盖守卫: 通过 —— 范围内 {len(scoped)} 文件恰被 {len(BATCH_DEFS)} 批认领, 共 {manifest['coverage']['total_lines']} 行")
     print(f"底册切片: R2 终表 {len(r2)} 条 / Open·In-Progress issues 命中 {len(issues)} 条")
     for route in ROUTES:
@@ -624,13 +627,13 @@ def cmd_claim(args: argparse.Namespace) -> int:
     _require_branch(root)
     _require_tip(root, args.remote)
     _require_clean(root)
-    freeze = _resolve_freeze(root)
+    freeze = manifest["freeze"]  # 钉值来自 manifest(生成时点 ls-remote 核验的 tip, D17), 非 claim 时点解析
     _require_ancestor(root, freeze)
     batches = [{"id": b["id"], "title": b["title"], "status": "pending", "done_at": None, "findings": 0}
                for b in _batches_of(manifest, route)]
     data = {
         "route": route, "owner": owner, "claimed_at": _now(),
-        "freeze": freeze, "freeze_note": "计划文件首个 commit (diff-filter=A 机械解析)",
+        "freeze": freeze, "freeze_note": "manifest 钉值 (生成时点 develop tip, D17)",
         "snapshot": None, "status": "claimed", "batches": batches,
     }
     if args.dry_run:
@@ -947,7 +950,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="存量评审 R4 路线机械面: manifest/claim/start/verify/batch/done/smoke")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
-    p = sub.add_parser("manifest", help="生成 manifest.json(批次矩阵+底册切片+覆盖守卫)")
+    p = sub.add_parser("manifest", help="生成 manifest.json(freeze 钉定+批次矩阵+底册切片+覆盖守卫)")
+    p.add_argument("--remote", default="origin", help="钉定 freeze 时的远端核验目标(默认 origin)")
     p.add_argument("--root")
     p.add_argument("--dry-run", action="store_true")
 
