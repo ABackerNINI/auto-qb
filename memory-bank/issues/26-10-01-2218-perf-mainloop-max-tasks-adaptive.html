@@ -8,10 +8,10 @@
 <meta name="issue-type" content="perf">
 <meta name="doc-topic" content="sim-client-5000">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
-<meta name="issue-title" content="渐进灌入期主循环掉拍: 每拍新增种子管线请求预算(复测漂移 1.22→0.801s; 原「max_tasks_per_tick 自适应」经查非有效旋钮)">
+<meta name="issue-status" content="Dropped">
+<meta name="issue-title" content="渐进灌入期主循环掉拍: 每拍新增种子管线请求预算(复测漂移回升 1.54–2.70s 但环境口径已破; 原「max_tasks_per_tick 自适应」经查非有效旋钮)">
 <meta name="doc-refs" content="memory-bank/tasks/26-10-08-webui-perf-issues-closing.md">
-<meta name="issue-summary" content="2026-10-08 复测 P2: 稳态 2.139s / 漂移 0.801s(原 2.87 / 1.22), 已进 1.0s 稳态门限内; 成本在 _refresh_torrents 逐种子内联请求而非任务队列 ⇒ 原方案无效, 待拍板是否 Dropped">
+<meta name="issue-summary" content="2026-11-05 复测 P2: 漂移回升(两次 1.54s / 2.70s, 2026-10-08 为 0.801s)但环境口径已破(R盘不可用回退C盘临时目录), 灌入后真稳态干净(1.52s); 成本在 _refresh_torrents 逐种子内联请求而非任务队列 ⇒ 原方案无效; 已拍板 Dropped(不修, 理由见状态变更日志)">
 <title>渐进灌入期主循环掉拍: max_tasks_per_tick 自适应 · perf · 计划外问题</title>
 <style>
   :root {
@@ -96,13 +96,13 @@
 
   <header class="cover">
     <div class="kicker">计划外问题（未修）· perf</div>
-    <h1>渐进灌入期主循环掉拍: 每拍新增种子管线请求预算（复测漂移 1.22→0.801s；原「max_tasks_per_tick 自适应」经查非有效旋钮）</h1>
-    <p class="lede">2026-10-08 复测 P2: 稳态 2.139s / 漂移 0.801s（原 2.87 / 1.22），已进 1.0s 稳态门限内; 成本在 <code>_refresh_torrents</code> 的逐种子内联请求而非任务队列 ⇒ 原方案理论上无效，待拍板是否 Dropped</p>
+    <h1>渐进灌入期主循环掉拍: 每拍新增种子管线请求预算（复测漂移回升 1.54–2.70s 但环境口径已破；原「max_tasks_per_tick 自适应」经查非有效旋钮）</h1>
+    <p class="lede">2026-11-05 复测 P2: 灌入期漂移回升（两次采样 1.54s / 2.70s，2026-10-08 为 0.801s），但<strong>环境口径已破</strong>（R 盘不可用，回退 C 盘临时目录），与历史数字不可直接对比；逐轮拆解显示漂移全部集中在灌入窗口内，灌入后真稳态干净（1.52s ≈ sync_interval）。成本在 <code>_refresh_torrents</code> 的逐种子内联请求而非任务队列 ⇒ 原方案理论上无效；<strong>已拍板 Dropped</strong>（2026-11-05，理由见 §07 状态变更日志末条）</p>
     <div class="meta-row">
       <div class="item"><div class="k">编号</div><div class="v">26-10-01-2218-perf-mainloop-max-tasks-adaptive</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-01 22:18</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">perf</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Dropped</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -128,10 +128,10 @@ scenario: P2 n=5000 beat=1.5 active=0.1 mode=churn seed=7
 elapsed: 51.0s  autoqb_rc: 0
 
 checks:
-  BASELINE SYNC.avg_interval_s          value=2.139 <= —
-  BASELINE P2.drift_max_s               value=0.801 <= —
-  PASS     P1.first_round_s             value=2.174 <= 22.68
-  PASS     S3.write_rate_per_min        value=4299.6 <= 6210.49
+  BASELINE SYNC.avg_interval_s          value=2.139 &lt;= —
+  BASELINE P2.drift_max_s               value=0.801 &lt;= —
+  PASS     P1.first_round_s             value=2.174 &lt;= 22.68
+  PASS     S3.write_rate_per_min        value=4299.6 &lt;= 6210.49
   PASS     D1.snapshot_final_match      value=True == True
 
 sync: rounds=24 full=1 avg_interval=2.139s drift_max=0.801s avg_bytes=487202
@@ -186,10 +186,18 @@ log: lines=5027 tracebacks=0 critical=0 error=0</code></pre>
     <ul>
       <li>2026-10-01 22:18 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
       <li>2026-10-08 04:19 — <strong>重归因 + 复测</strong>（未动代码，状态仍 <strong>Open</strong>）：同场景重跑 P2 取到新数字（稳态 2.139 s / 漂移 0.801 s，原 2.87 / 1.22，已进 1.0 s 稳态门限内）；同时认定原建议「<code>max_tasks_per_tick</code> 自适应」指向的旋钮不承载该成本（灌入期每新种子的 2 次内联请求跑在同步线 <code>_refresh_torrents</code>，不受任务线配额约束），故本条标题 / 摘要 / 建议修法一并改道为「灌入期每拍请求预算」。是否走 <strong>Dropped</strong> 待用户拍板（理由与判断见 §06）。</li>
+      <li>2026-11-05 — <strong>复测</strong>（develop @ 5c18a8e9，P2 场景同参数两次采样，未动代码，状态仍 <strong>Open</strong>）：漂移回升（1.54 s / 2.70 s）但<strong>环境口径已破</strong>——R 盘不可用（<code>ROOT_FALLBACK</code> 回退 C 盘临时目录），与历史（R 盘 / 回环）不可直接对比，详见复验。</li>
+      <li>2026-11-05 — 用户拍板走 <strong>Dropped</strong>（未动代码）。理由：①原方案「<code>max_tasks_per_tick</code> 自适应」经查非有效旋钮（成本在同步线 <code>_refresh_torrents</code> 逐种子内联请求，不经任务队列，见 §05）；②症状为一次性灌入期代价——逐轮拆解证漂移全部集中在灌入窗口（≈37.5 s）内，灌入后真稳态 1.52 s ≈ sync_interval 零漂移（2026-11-05 复测进一步佐证）；③灌入完成后更快这一收益投入产出比低，且每加速率类旋钮多一处语义耦合。注：「已进 1.0 s 稳态门限」论据因 2026-11-05 环境口径已破（漂移回升 1.54–2.70 s）不再作为依据，Dropped 不依赖它。</li>
     </ul>
     <h3>复验</h3>
     <p>2026-10-08 04:19 — 复验（develop @ 0a46b58d，P2 场景同参数重跑，未动代码）：现象<strong>仍存在但已大幅收敛</strong> —— 稳态间隔 2.87→<strong>2.139 s</strong>、最大漂移 1.22→<strong>0.801 s</strong>（已进 <code>SYNC.drift_max_s ≤ 1.0</code> 门限内）；<code>max_tasks_per_tick</code> 仍为静态配置、无自适应逻辑（<strong>未实施</strong>，且经查不是有效旋钮，见 §05）。产物目录 <code>R:\auto-qb-sim\runs\20261008-041959-P2</code>。</p>
-    <p class="todo">待拍板：按 §06 的判断，倾向走 <strong>Dropped</strong>（复测已进稳态门限 + 原方案无效 + 症状为一次性代价）。状态变更需用户显式拍板后由 agent 执行（改徽标 + meta + 追加本日志 + <code>commands run kb.index</code>）。</p>
+    <p>2026-11-05 — 复验（develop @ 5c18a8e9，P2 场景同参数两次采样，未动代码）：<code>uv run python scripts/sim_run.py --scenario P2 --n 5000 --duration 50 --ramp 200 --web-port 18201</code>，两次 verdict 均 OK、门内检查全 PASS，但 <strong>ROOT_FALLBACK</strong>：R 盘不可创建（[WinError 3]），回退 C 盘临时目录 —— 与历史「R 盘 / 回环」<strong>不同口径</strong>，数字不可直接对比。观测值（全轮平均口径不变）：</p>
+    <ul>
+      <li>run1：SYNC.avg_interval_s <strong>2.734 s</strong> / P2.drift_max_s <strong>1.54 s</strong>（首拍后 round 2 达峰），产物 <code>C:\Users\11059\AppData\Local\Temp\auto-qb-sim\runs\20261105-073659-P2</code></li>
+      <li>run2：SYNC.avg_interval_s <strong>3.373 s</strong> / P2.drift_max_s <strong>2.702 s</strong>，产物 <code>C:\Users\11059\AppData\Local\Temp\auto-qb-sim\runs\20261105-073910-P2</code>；两次漂移方差大（1.54→2.70），回退环境单次采样噪声显著，区间口径下应记 1.54–2.70 s</li>
+      <li>逐轮拆解（两轮同形态）：漂移<strong>全部集中在灌入窗口</strong>（≈37.5 s，5000/200 拍 × 1.5 s）；灌入结束后间隔回落 <strong>1.52–1.54 s</strong> ≈ sync_interval 1.5 s，<strong>无漂移</strong> —— 灌入后真稳态干净，掉的拍只在灌入期</li>
+    </ul>
+    <p><strong>已拍板（2026-11-05）：Dropped</strong>。理由见上方状态变更日志末条；原「待拍板」段落所列 ①②③ 论据权衡按拍板结论收口——Dropped 不依赖「已进稳态门限」（该论据因环境口径已破失效），落在「原方案无效 + 一次性代价」两条上。</p>
     <h3>修复后补充</h3>
     <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
   </section>

@@ -4,7 +4,7 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (42)
+## Open (41)
 
 - [question] [跳检抽样校验是否值得做: 读盘换下载量的成本收益待拍板](../26-11-05-0514-question-skip-check-sampling-value.html) — 跳检防线之二的抽样校验(建议修法第1条)故意未做, 需讨论读盘成本/边界复杂度与残余风险是否值得投入; 主件 26-10-22-0308 已因保险丝落地收 Done
 - [bug] [整组迁移可对「账面完成但磁盘名错位(.!qB)」的组零搬移假成功](../26-11-05-0420-bug-relocate-zero-move.html) — 搬迁按声明名逐文件 stat,磁盘名带 .!qB 全 miss 被静默忽略,qB 报「成功移动」但零搬移;.!qB 闸门只扫内容根顶层漏拦,10min 后才由停滞看门狗判失败
@@ -26,7 +26,6 @@
 - [feat] [C3: 30 天静默淘汰淘汰前无预告 (方向 A: 日志预告)](../26-10-05-0922-feat-hr-prune-notice.html) — _prune_index 淘汰 active=false 行时整行消失无痕迹无预警, 建议淘汰前 <3 天 WARNING 一次 (计划 26-10-05-0555 §04 方向 A)
 - [refactor] [SiteHrCheckConfig.fetchable 全仓零消费方, listing=none 不取数未被取数侧强制](../26-10-05-0922-refactor-hr-fetchable-dead-config.html) — fetchable 字段零消费方, 全站型不取数仅判定侧尊重; 当前无 preset 定义 listing=none 属潜在缺口
 - [bug] [跳检无闸门拦截候选种子自身当日校验失败, 已证实坏数据可被洗白成已校验](../26-10-05-0402-bug-skip-check-self-fail-gate.html) — 候选种子自身当日校验失败(recheck_fails[hash]>0)后跳检无任何闸门: 决策链 1.6 仅查其它成员, 失败冷却只限 recheck —— 规则侧 without_reference 段与 WEB 路径都能把已证实的坏数据洗白成已校验(zSkipChecked), 且 chain 0 永不回头复查
-- [perf] [渐进灌入期主循环掉拍: 每拍新增种子管线请求预算(复测漂移 1.22→0.801s; 原「max_tasks_per_tick 自适应」经查非有效旋钮)](../26-10-01-2218-perf-mainloop-max-tasks-adaptive.html) — 2026-10-08 复测 P2: 稳态 2.139s / 漂移 0.801s(原 2.87 / 1.22), 已进 1.0s 稳态门限内; 成本在 _refresh_torrents 逐种子内联请求而非任务队列 ⇒ 原方案无效, 待拍板是否 Dropped
 - [question] [配置切分(每站点一份)是否做(存疑)](../26-10-01-2212-question-config-split-per-site.html) — (存疑)把站点配置拆为每站点一份文件, 涉及加载/热重载/校验面, 待拍板
 - [question] [基于搜索的辅种方式可行性(存疑)](../26-10-01-2212-question-search-based-recheck-feasibility.html) — (可行性存疑)用站点搜索发现可辅种资源的思路, 待可行性结论
 - [bug] [--tray 模式下 Ctrl+C 无法关闭程序](../26-10-01-2203-bug-tray-ctrl-c-not-exit.html) — (未计划)托盘模式下 Ctrl+C 信号不退出进程, Windows 控制台信号处理与托盘生命周期冲突
@@ -478,11 +477,12 @@
 - [bug] [sync_interval 与前端分档轮询错配: >3000 种子时约一半视图重建无人消费](../26-09-19-1900-bug-webui-poll-cadence-mismatch.html) — 服务端固定 1.5s 重建四视图, 前端 >3000 种子时 3s 才取一次 ⇒ 约一半 rebuild_views 无人消费; 需先拍板方向
 - [perf] [/api/search 等热端点仍返回裸 dict: 服务端白跑 jsonable_encoder(实测 82.6 ms)](../26-09-19-1900-perf-webui-hot-endpoints-jsonable-encoder.html) — /api/state 与 /api/groups 已改 JSONResponse 直返(189→23.5ms), /api/search(1.46MB/82.6ms)与详情族未改
 
-## Dropped (7)
+## Dropped (8)
 
 - [docs] [activeContext 切片 26-10-22-0102 的 3990 属冻结存量(误判入池, 已撤销)](../26-10-22-1247-docs-midnight-window-slice-handwritten-baseline-number.html) — 误判: 守卫只报扫描序末 N 条, 0102 的命中其实是 HEAD 里已有的冻结存量; 本轮真正新增的手抄是本会话 R12 回写行, 已改「数字见 kb.baseline」
 - [refactor] [pending_ver 发布未消费门控冗余评估: 增量下保护对象已缩水为一次键集追加](../26-10-07-1420-refactor-webui-pending-ver-gate-redundancy.html) — 增量同步落地后 pending_ver 门控的保护对象从「全量重建成本」缩水成「一次键集追加成本」, 已按计划 P-03 定案保留(黄金法则 2); 若未来实测确认纯冗余可另立小步移除, 但移除会改变现有节拍行为, 须单独拍板
 - [bug] [hr/service._do_wave 的 except HrFetchError 尾段不可达, 兜底分支永不触发](../26-10-02-0441-bug-hr-do-wave-hrfetcherror-dead-tail.html) — _do_wave 末段 except HrFetchError 兜底(约 582-585)不可达: _run_pages 内层已就地截断无 Retry-After 的页面失败, 能上抛的只有 retry_after>0; 与已修的 last_seen 死分支同族
+- [perf] [渐进灌入期主循环掉拍: 每拍新增种子管线请求预算(复测漂移回升 1.54–2.70s 但环境口径已破; 原「max_tasks_per_tick 自适应」经查非有效旋钮)](../26-10-01-2218-perf-mainloop-max-tasks-adaptive.html) — 2026-11-05 复测 P2: 漂移回升(两次 1.54s / 2.70s, 2026-10-08 为 0.801s)但环境口径已破(R盘不可用回退C盘临时目录), 灌入后真稳态干净(1.52s); 成本在 _refresh_torrents 逐种子内联请求而非任务队列 ⇒ 原方案无效; 已拍板 Dropped(不修, 理由见状态变更日志)
 - [question] [同组中无已完成种子时拒绝跳检](../26-10-01-2147-question-skipcheck-no-completed-in-group.html) — [?]规则想法: 组内没有任何已完成成员时拒绝跳检(防误跳), 待拍板
 - [question] [WEBUI 流量历史图做不做(待取舍)](../26-10-01-2138-question-webui-traffic-history-chart.html) — [待取舍] 是否为 WEBUI 增加流量历史图, 与单种/全局统计重设计同族
 - [bug] [WEBUI 批量操作引发 WARNING 桌面通知](../26-10-01-2129-bug-webui-batch-warning-notify.html) — 批量操作(多选动作)似乎都会触发 WARNING 级桌面通知, 需定位并收敛通知级别
