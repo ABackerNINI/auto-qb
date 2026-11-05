@@ -1,0 +1,39 @@
+{
+  "route": "R4",
+  "owner": "clone2-main",
+  "claimed_at": "26-11-06-0729",
+  "freeze": "f088329291e64d0802637463e886f78842c1b34c",
+  "freeze_note": "manifest 钉值 (生成时点 develop tip, D17)",
+  "snapshot": null,
+  "status": "claimed",
+  "batches": [
+    {
+      "id": "R4-1",
+      "title": "webui commands 面: commands*/runtime_commands",
+      "status": "pending",
+      "done_at": null,
+      "findings": 0
+    },
+    {
+      "id": "R4-2",
+      "title": "webui 视图与运行时: runtime*/views*/tool_client/module/relocate_chain",
+      "status": "pending",
+      "done_at": null,
+      "findings": 0
+    },
+    {
+      "id": "R4-3",
+      "title": "webui server 全域: factory/auth/context/routes/traffic_qb",
+      "status": "pending",
+      "done_at": null,
+      "findings": 0
+    },
+    {
+      "id": "R4-4",
+      "title": "CSS 机制面 + 模板 HTML(减配: 加载序/特异性冲突/守阵对齐/双皮肤一致)",
+      "status": "pending",
+      "done_at": null,
+      "findings": 0
+    }
+  ]
+}
