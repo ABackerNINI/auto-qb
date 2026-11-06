@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="type-annotations-mypy">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="pyproject.toml 存量带圈数字注释与 code-style 非 ASCII 图形符号禁令冲突">
 <meta name="issue-summary" content="配置注释 22 行含带圈数字编号(1)-(18), 禁令要求代码/配置一律 ASCII; 本轮新增注释已用 ASCII, 存量待清">
 <title>pyproject.toml 存量带圈数字注释与 code-style 非 ASCII 图形符号禁令冲突 · chore · 计划外问题（便签）</title>
@@ -48,6 +48,7 @@
   h2 { font-family: var(--display); font-size: 17px; font-weight: 600; letter-spacing: -0.005em; margin-bottom: 10px; padding-bottom: 7px; border-bottom: 1px solid var(--hair-soft); }
   h2 .no { font-family: var(--mono); font-size: 11.5px; color: var(--faint); margin-right: 9px; }
   h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-family: var(--display); font-size: 14px; font-weight: 600; margin: 18px 0 8px; color: var(--accent-ink); }
   p { margin-bottom: 11px; max-width: 74ch; }
   ul, ol { margin: 0 0 11px 22px; max-width: 74ch; }
   li { margin-bottom: 5px; }
@@ -69,7 +70,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-11-06-0624-chore-pyproject-circled-number-comments</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-06 06:24</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">chore</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -77,6 +78,7 @@
   <section id="s1">
     <h2><span class="no">01</span>现象</h2>
     <p><code>pyproject.toml</code> 存量注释仍用带圈数字做豁免块编号(<code>①</code>-<code>⑱</code>, 另有「步骤③」和 <code>⑯⑰ 已照此办</code> 一类行内引用), 与 <code>memory-bank/conventions/code-style.md</code>「代码 / 配置一律 ASCII 表达, 禁止 emoji 与图形符号」冲突。本轮修复 issue 26-11-06-0247 时新增的递减说明已改用 ASCII「豁免块 5」, 存量 22 行未动。</p>
+    <p><strong>复验 2026-11-06 06:53：仍复现。</strong>开工按 02 节锚点重扫，<code>pyproject.toml</code> 带圈数字命中 22 行（48/82 的「步骤③」、115 的「⑯⑰ 已照此办」、117-227 的块编号 1-18；5 号位已是 ASCII 递减说明），<code>tests/test_mypy_allowlist_guard.py</code> 冻结清单注释仍有含 <code># ⑤</code> 在内的 17 处同套编号 —— 现象与入池时一致。</p>
     <p class="hint">发现来源: 2026-11-06 06:14 修复 0247 后核对新增注释风格时的计划外观察, 当场未修(超出本轮范围)。禁令字面枚举 <code>①–⑬ / ⓪</code>; <code>⑭–⑱</code> 同属带圈数字类, 是否一体清理留待认领时定。</p>
   </section>
 
@@ -92,12 +94,20 @@
   <section id="s3">
     <h2><span class="no">03</span>建议<span class="opt">（可选）</span></h2>
     <p>把存量带圈编号统一换成 ASCII 序号(<code>1.</code> / <code>块 5</code>), 行内引用 <code>⑯⑰ 已照此办</code> 与守阵冻结清单注释里的 <code># ⑤</code> 一起对齐; 纯注释改动, 不动任何 mypy 选项与豁免面。验收: 复现命令零命中, <code>commands run dev.typecheck</code> 与 <code>commands run test.quick</code> 同数全绿。范围是否含 <code>⑭–⑱</code> 与计划文档里的「步骤③」由认领方拍板。</p>
+
+    <h3>修复后补充（2026-11-06 07:02）</h3>
+    <p><strong>范围拍板（认领方）：</strong>(1) <code>⑭–⑱</code> 与 <code>①–⑬</code> 同属带圈数字字符类，禁令的「字符类」语义已覆盖，一体清理；<code>code-style.md</code> 的字面枚举不扩写（规范表述修订属另一轮，本轮只清存量注释）。(2) 计划 HTML 里的「步骤③」按「文档放行」保留，只把 <code>pyproject.toml</code> 对它的引用改成 ASCII「步骤 3」。(3) <code>tests/test_mypy_allowlist_guard.py</code> 冻结清单注释与 pyproject 豁免块是<strong>同一套编号、逐条对应</strong>，按建议一并对齐（含 <code># ⑤</code>），否则两侧编号体系割裂、对账失效；其余 <code>tests/</code>、<code>tools/</code>、<code>extensions/</code> 里独立的 ①②③ 编号与本套无关，按范围守恒不动、不入池。</p>
+    <p><strong>实际修法：</strong>纯注释改动、零运行期行为变化，共两个文件 39 行。<code>pyproject.toml</code> 22 行 —— 18 个块标题统一为 <code># N.</code>（1.-18.，5 号位仍留既有 ASCII「豁免块 5 已递减」占位），行内引用改 <code>块 16/17</code> / <code>块 15</code> / <code>同块 3</code>，两处「步骤③」改「步骤 3」；<code>tests/test_mypy_allowlist_guard.py</code> 17 行 —— 冻结清单注释编号 3.-18. 与 1./2. 引用同步为 <code>N.</code> / <code>块 15</code>。两文件行数不变（241 / 466），<code>[tool.mypy.overrides]</code> 19 条、冻结清单条目（含 <code>qbclient/override</code>）与所有 mypy 选项一字未动；同批 issue <code>26-11-06-0624-test-mypy-allowlist-stale-frozen-entry</code> 的改动面（冻结条目存废）未被触碰。</p>
+    <p><strong>验证方式：</strong>①改造脚本带自证：TOML 解析成功、overrides 条数 19→19、两文件行数不变、冻结条目仍在、两文件带圈数字零残留；②复现命令口径扫描 <code>pyproject.toml</code> 与守阵文件，<code>[①-⑱⓪]</code> 均零命中；③<code>commands run dev.typecheck</code> 全库 <code>Success: no issues found in 195 source files</code>；④<code>commands run dev.fmt -- tests/test_mypy_allowlist_guard.py</code> 通过且无额外格式漂移；⑤<code>commands run test.quick</code> 与 <code>commands run test.full</code> 全绿，mypy allowlist 守阵随全量通过；⑥<code>commands run kb.check</code> 索引 / 时间守卫自洽。</p>
+    <p><strong>测试数字：</strong>本轮全量实测数字按单点口径只写进 <code>testing/baselines/</code> 新建切片（见 <code>kb.baseline</code> 最新一条），此处不手抄；覆盖率与 passed/skipped 以该切片为准。</p>
   </section>
 
   <section id="s4">
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-11-06 06:24 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-06 06:53 — 认领（用户指派），状态 <strong>In Progress</strong>；复验仍复现，见 01 节「复验」行</li>
+      <li>2026-11-06 07:02 — 修复并验证：两文件注释编号统一 ASCII（22 + 17 行），零命中 / mypy 零错 / 全量全绿（详见 03 节「修复后补充」），状态 <strong>Done</strong></li>
     </ul>
   </section>
 

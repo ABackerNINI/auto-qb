@@ -30,8 +30,8 @@ note    = "经 explorer.exe 拉起: 工具 shell 里 Start-Process / cmd start �
 [tasks."real.down"]
 run     = ["uv run python tests-real/runner.py down <args>"]
 timeout = 120
-when    = "关掉测试实例(按镜像路径精确匹配, 不碰生产 qB)"
-note    = "<args> 传 --port <当前环境白名单端口>; 默认真关, 想先看传 --dry-run"
+when    = "经 WebAPI app/shutdown 优雅关闭测试实例(只认白名单端口 + 测试镜像路径)"
+note    = "<args> 传 --port <当前环境白名单端口>; 默认真关, 想先看传 --dry-run。实现只让 qB 自己优雅退出, 禁止任何外部进程强杀; 端口没起打印 skip, 镜像路径核验不过 / API 失败 / 60s 未释放端口一律 rc=1 报红留人工核查, 不降级强杀(红线单点 pitfalls/ops/taskkill-image-name-ban)"
 
 [tasks."real.pause-all"]
 run     = ["uv run python tests-real/runner.py pause-all <args>"]

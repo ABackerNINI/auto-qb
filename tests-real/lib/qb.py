@@ -44,8 +44,12 @@ class Qb:
 
     # ---- 底层 ----
     def _open(self, path: str, body: bytes | None, headers: dict[str, str]):
+        # body=None → GET; body=b"" → POST 空体(app/shutdown 这类无参写端点)。
+        # 不能按 `if body` 判: 空体写端点会被静默降成 GET, 退出指令根本发不出去。
         req = urllib.request.Request(
-            f"http://127.0.0.1:{self.port}/api/v2{path}", data=body, method="POST" if body else "GET"
+            f"http://127.0.0.1:{self.port}/api/v2{path}",
+            data=body,
+            method="POST" if body is not None else "GET",
         )
         for k, v in headers.items():
             req.add_header(k, v)
@@ -80,6 +84,15 @@ class Qb:
         """改偏好。注意 qB 要的是表单字段 `json=<urlencoded>`, 直接发 JSON body 会 400。"""
         body = urllib.parse.urlencode({"json": json.dumps(changes)}).encode()
         self._call("/app/setPreferences", body, "application/x-www-form-urlencoded")
+
+    def shutdown(self) -> None:
+        """让 qB 自己优雅退出: POST /api/v2/app/shutdown(空体), 由它写回 fastresume/state。
+
+        关停测试实例只走这里 —— 任何从外部强制终止进程的形态都禁止(AGENTS.md 进程安全
+        红线, 事故档案见 memory-bank/pitfalls/ops/taskkill-image-name-ban.md)。
+        N9 实验轮在 qB 5.2.3 上实测该端点返回 HTTP 200。
+        """
+        self._call("/app/shutdown", b"")
 
     def connection_status(self) -> str:
         """connected / firewalled / disconnected —— disconnected 说明没有可用监听 socket,

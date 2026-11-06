@@ -45,7 +45,7 @@ auto-qb = "auto_qb.cli:main"
 # 开发/测试依赖 (PEP 735 依赖组, 取代 .github/workflows/requirements-dev.txt 的 dev 部分)
 [dependency-groups]
 dev = [
-    # 机械化 bump 执行器(计划 26-09-22-2318 v2 §6.2 步骤③): 1.8.1 为实装时最新(PyPI 实查 2026-11-06)。
+    # 机械化 bump 执行器(计划 26-09-22-2318 v2 §6.2 步骤 3): 1.8.1 为实装时最新(PyPI 实查 2026-11-06)。
     "bump-my-version==1.8.1",
     "pytest==9.2.0",
     "pytest-cov==7.1.0",
@@ -79,7 +79,7 @@ path = "src/auto_qb/__init__.py"
 # —— Version 本体保持纯 SemVer, hash 经侧车溯源(计划 v2 §4.2 双路径)。
 [tool.hatch.build.hooks.custom]
 
-# 机械化 bump 接线(计划 26-09-22-2318 v2 §6.2 步骤③): bump-my-version 只负责改版本文件
+# 机械化 bump 接线(计划 26-09-22-2318 v2 §6.2 步骤 3): bump-my-version 只负责改版本文件
 # —— commit/tag 一律 false, 提交走 ship.commit 闸门、tag 走 release.tag(显式 ref + ls-remote 核验)。
 # current_version 由 release.bump 流程维护; 档位由 gitmoji 决策器(suggest_bump.py)提案、agent 改判留痕。
 [tool.bumpversion]
@@ -112,21 +112,21 @@ ignore_missing_imports = true
 # disable_error_code 条目)守阵当场红, 减少(递减)不红。基线: 2026-11-06 S4 首跑 1087 错,
 # 纯注解级小修 -29 后 1058, 按下表豁免收敛到退出码 0。
 # 注意: 同一模块匹配多条 overrides 时, 每个选项按「最后一条匹配」取值 —— 对同一模块
-# 写多条条目时, 后条必须整表重复前条的同名选项(⑯⑰ 已照此办)。
+# 写多条条目时, 后条必须整表重复前条的同名选项(块 16/17 已照此办)。
 
-# ① 计划钉死豁免(§04 S4 明文): tray 是 GUI 三方回调面(customtkinter/pystray, 无 stub),
+# 1. 计划钉死豁免(§04 S4 明文): tray 是 GUI 三方回调面(customtkinter/pystray, 无 stub),
 #    回调签名由三方定义, 修面无意义 —— ignore_errors 起步。
 [[tool.mypy.overrides]]
 module = ["auto_qb.tray.*"]
 ignore_errors = true  # 2026-11-06, 计划钉死
 
-# ② 计划钉死豁免(§04 S3 明文「不在此步强标, 留 allowlist」): expr/env.py 闭包工厂高阶链,
+# 2. 计划钉死豁免(§04 S3 明文「不在此步强标, 留 allowlist」): expr/env.py 闭包工厂高阶链,
 #    37 def 的闭包生成器链类型噪音大, 收益低。
 [[tool.mypy.overrides]]
 module = ["auto_qb.rules.expr.env"]
 ignore_errors = true  # 2026-11-06, 计划钉死
 
-# ③ mixin 动态组合面(现场裁量): core/modules 各 TrafficModule、webui 各 Runtime、hr service
+# 3. mixin 动态组合面(现场裁量): core/modules 各 TrafficModule、webui 各 Runtime、hr service
 #    均由多个 Mixin 运行期拼装, 属性/方法定义在兄弟 Mixin 上(attr-defined/has-type 的根因);
 #    store/api 等 Optional 成员收窄(union-attr)与伴生 arg-type/operator/assignment 是同一
 #    架构形态的次生噪音。静态修复需 Protocol 基类改造 = 架构级, 属抵抗面。
@@ -140,7 +140,7 @@ disable_error_code = [
   "union-attr", "arg-type", "assignment", "operator", "misc", "return-value", "call-overload",  # Optional 收窄 + lambda/nonlocal/Popen 等次生噪音
 ]  # 2026-11-06, 现场裁量
 
-# ④ core 非 modules 面(现场裁量): qbapi 是 qbittorrent-api 无 stub 动态库的透传 Facade
+# 4. core 非 modules 面(现场裁量): qbapi 是 qbittorrent-api 无 stub 动态库的透传 Facade
 #    (union-attr=Client|None 收窄 + return-value=三方无签名 + arg-type=Literal 字面量差),
 #    qbmanager/state/traffic_store_codec/tvshows/traffic_grid 是 Optional 收窄与三方重载噪音。
 [[tool.mypy.overrides]]
@@ -153,70 +153,70 @@ disable_error_code = ["union-attr", "return-value", "arg-type", "assignment", "o
 # 豁免块 5 已递减(2026-11-06, issue 26-11-06-0247): _session 返回注解对齐三方基类
 # QbittorrentSession, override 豁免整块摘除; 编号占位保留, 便于与守阵冻结清单逐条对账。
 
-# ⑥ hr 杂型面(现场裁量): store/model/server 的 Optional 收窄(arg-type/operator/assignment)。
+# 6. hr 杂型面(现场裁量): store/model/server 的 Optional 收窄(arg-type/operator/assignment)。
 [[tool.mypy.overrides]]
 module = ["auto_qb.hr.store", "auto_qb.hr.model", "auto_qb.hr.server"]
 disable_error_code = ["arg-type", "operator", "assignment"]  # 2026-11-06, 现场裁量
 
-# ⑦ hr/bencode 字节级解析器(现场裁量): 两段式初始化变量(no-redef)与 bytes 键 list 写入
+# 7. hr/bencode 字节级解析器(现场裁量): 两段式初始化变量(no-redef)与 bytes 键 list 写入
 #    (call-overload), 修面要改逻辑。
 [[tool.mypy.overrides]]
 module = ["auto_qb.hr.bencode"]
 disable_error_code = ["no-redef", "call-overload"]  # 2026-11-06, 现场裁量
 
-# ⑧ rules 插件层(现场裁量): conditions/actions 的 rec/store Optional 收窄, S3 已 100% 注解。
+# 8. rules 插件层(现场裁量): conditions/actions 的 rec/store Optional 收窄, S3 已 100% 注解。
 [[tool.mypy.overrides]]
 module = ["auto_qb.rules.conditions", "auto_qb.rules.actions.*"]
 disable_error_code = ["union-attr"]  # 2026-11-06, 现场裁量
 
-# ⑨ rules/base(现场裁量): union-attr + rec 两段赋值(no-redef) + int < None(operator)。
+# 9. rules/base(现场裁量): union-attr + rec 两段赋值(no-redef) + int < None(operator)。
 [[tool.mypy.overrides]]
 module = ["auto_qb.rules.base"]
 disable_error_code = ["union-attr", "operator", "no-redef"]  # 2026-11-06, 现场裁量
 
-# ⑩ torrents(现场裁量): qbittorrent-api JsonValueT 动态返回面(store)与 Optional 收窄
+# 10. torrents(现场裁量): qbittorrent-api JsonValueT 动态返回面(store)与 Optional 收窄
 #    (record), S3 已 100% 注解。
 [[tool.mypy.overrides]]
 module = ["auto_qb.torrents.store", "auto_qb.torrents.record"]
 disable_error_code = ["arg-type", "assignment", "union-attr", "index", "operator", "misc"]  # 2026-11-06, 现场裁量
 
-# ⑪ config 边界面(现场裁量): 100% 注解但既有数据形状债(loaders float→int、migrations/
+# 11. config 边界面(现场裁量): 100% 注解但既有数据形状债(loaders float→int、migrations/
 #    fields/writer 的 Optional 与元组形状), 收紧面内的递减目标。
 [[tool.mypy.overrides]]
 module = ["auto_qb.config.migrations", "auto_qb.config.loaders", "auto_qb.config.schema.fields", "auto_qb.config.writer"]
 disable_error_code = ["union-attr", "operator", "arg-type", "assignment"]  # 2026-11-06, 现场裁量
 
-# ⑫ infra(现场裁量): port_owner Optional 收窄 + file_access 的 shutil.disk_usage 返回
+# 12. infra(现场裁量): port_owner Optional 收窄 + file_access 的 shutil.disk_usage 返回
 #    namedtuple 与 DiskUsage 协议的结构差(修面需包一层构造 = 逻辑改动)。
 [[tool.mypy.overrides]]
 module = ["auto_qb.infra.port_owner", "auto_qb.infra.file_access"]
 disable_error_code = ["union-attr", "return-value"]  # 2026-11-06, 现场裁量
 
-# ⑬ 三方重载不命中(现场裁量): alias_fs Array 切片+bytes 写入、agent Popen 形参字典类型。
+# 13. 三方重载不命中(现场裁量): alias_fs Array 切片+bytes 写入、agent Popen 形参字典类型。
 [[tool.mypy.overrides]]
 module = ["auto_qb.infra.alias_fs", "auto_qb.core.traffic_source.agent"]
 disable_error_code = ["call-overload"]  # 2026-11-06, 现场裁量
 
-# ⑭ transfer adapter(现场裁量): torrents_add 的 **dict 动态 kwargs 与三方 Literal 形参差,
+# 14. transfer adapter(现场裁量): torrents_add 的 **dict 动态 kwargs 与三方 Literal 形参差,
 #    dict[str, object] → 精确 kwarg 类型是收窄目标。
 [[tool.mypy.overrides]]
 module = ["auto_qb.transfer.adapters.qb"]
 disable_error_code = ["arg-type", "list-item"]  # 2026-11-06, 现场裁量
 
-# ⑮ webui mixin 面(现场裁量, 先于⑯⑰): webui 顶层 13 个 Mixin 文件动态组合形态(同③)。
-#    server 子模块无 mixin, 这两码对其不出现(空转); ⑯⑰ 因同选项整表替换而重复此两码。
+# 15. webui mixin 面(现场裁量, 先于块 16/17): webui 顶层 13 个 Mixin 文件动态组合形态(同块 3)。
+#    server 子模块无 mixin, 这两码对其不出现(空转); 块 16/17 因同选项整表替换而重复此两码。
 [[tool.mypy.overrides]]
 module = ["auto_qb.webui.*"]
 disable_error_code = ["attr-defined", "has-type"]  # 2026-11-06, 现场裁量
 
-# ⑯ webui server routes 裸 dict payload 面(现场裁量, 最后匹配): FastAPI routes 手写表单
+# 16. webui server routes 裸 dict payload 面(现场裁量, 最后匹配): FastAPI routes 手写表单
 #    解析 dict[str, str] 复写多类型 + body dict|None 收窄。
 [[tool.mypy.overrides]]
 module = ["auto_qb.webui.server.*"]
 disable_error_code = ["attr-defined", "has-type", "arg-type", "assignment", "union-attr"]  # 2026-11-06, 现场裁量
 
-# ⑰ webui 零散残余(现场裁量, 最后匹配): 5 个 mixin 文件里的 Optional 收窄/None 不可调用/
-#    any() item 类型等少量杂码; 两 mixin 码为⑮同选项整表替换的必要重复。
+# 17. webui 零散残余(现场裁量, 最后匹配): 5 个 mixin 文件里的 Optional 收窄/None 不可调用/
+#    any() item 类型等少量杂码; 两 mixin 码为块 15 同选项整表替换的必要重复。
 [[tool.mypy.overrides]]
 module = [
   "auto_qb.webui.commands_torrents", "auto_qb.webui.views_relocate", "auto_qb.webui.runtime_views",
@@ -224,7 +224,7 @@ module = [
 ]
 disable_error_code = ["attr-defined", "has-type", "union-attr", "index", "misc", "arg-type"]  # 2026-11-06, 现场裁量
 
-# ⑱ cli(现场裁量): 模块级单例 Optional 收窄。
+# 18. cli(现场裁量): 模块级单例 Optional 收窄。
 [[tool.mypy.overrides]]
 module = ["auto_qb.cli"]
 disable_error_code = ["union-attr"]  # 2026-11-06, 现场裁量

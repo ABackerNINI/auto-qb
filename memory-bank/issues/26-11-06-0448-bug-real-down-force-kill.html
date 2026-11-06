@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="relocate-fastresume-finalize">
 <meta name="doc-refs" content="memory-bank/tasks/26-11-05-backend-relocate-fastresume-finalize.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="real.down 实现用 Stop-Process -Force 强杀 qB, 触进程安全红线">
 <meta name="issue-summary" content="tests-real/runner.py cmd_down 以 PowerShell Stop-Process -Force 强杀 qB 进程(按镜像+路径匹配), 违反 AGENTS.md 禁止一切 taskkill/强杀红线; 替代=WebAPI app/shutdown 优雅退出(实验轮实测 HTTP 200)">
 <title>real.down 实现用 Stop-Process -Force 强杀 qB, 触进程安全红线 · bug · 计划外问题</title>
@@ -95,14 +95,14 @@
   </nav>
 
   <header class="cover">
-    <div class="kicker">计划外问题（未修）· bug</div>
+    <div class="kicker">计划外问题（已清偿并验证）· bug</div>
     <h1>real.down 实现用 Stop-Process -Force 强杀 qB, 触进程安全红线</h1>
     <p class="lede">tests-real/runner.py cmd_down 以 PowerShell Stop-Process -Force 强杀 qB 进程(按镜像+路径匹配), 违反 AGENTS.md 禁止一切 taskkill/强杀红线; 替代=WebAPI app/shutdown 优雅退出(实验轮实测 HTTP 200)</p>
     <div class="meta-row">
       <div class="item"><div class="k">编号</div><div class="v">26-11-06-0448-bug-real-down-force-kill</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-06 04:48</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">tests-real</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -161,11 +161,16 @@
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-11-06 04:48 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-06 06:05 — 用户指派认领，状态 <strong>In Progress</strong>；双向认领链已在位（本件 <code>doc-refs</code> ↔ 任务档案 <code>Refs</code>）</li>
+      <li>2026-11-06 06:18 — 修复完成并验证，状态 <strong>Done</strong>；实际修法 / 验证方式见下</li>
+      <li>2026-11-06 06:39 — 用户指派补做真机关停实测，验证方式补第 ⑥ 条并作废「未做真机实测」旧结论，状态保持 <strong>Done</strong></li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
-    <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p>2026-11-06 06:05 重跑锚点：<strong>仍复现</strong>。<code>tests-real/runner.py:114</code> 的 <code>cmd_down</code> 与 <code>:122</code> 的 <code>Stop-Process -Id $_.Id -Force</code> 与入池时逐字一致；<code>.commands/real/config.toml:30</code> 的 <code>[tasks."real.down"]</code> 仍在。</p>
+    <h3>实际修法</h3>
+    <p>与第 06 节建议修法一致，<strong>无改道</strong>：<code>cmd_down</code> 整段移除 PowerShell 强杀，改走「端口探测 → <code>guard.check_port</code> 镜像路径核验 → <code>Qb.shutdown()</code> 发 WebAPI <code>app/shutdown</code> → 等端口释放」；<code>--dry-run</code> 语义与端口白名单定位保留。<code>tests-real/lib/qb.py</code> 新增 <code>shutdown()</code>（空体 POST），并把 <code>_open</code> 的 GET/POST 判据由 <code>if body</code> 改为 <code>body is not None</code>，既有读端点仍走 GET。相对建议额外补两道防线：①把旧实现里「按镜像路径精确匹配」这道防线前移到发退出指令之前，核不出来即拒发，避免对非测试实例发 shutdown；②API 失败 / 60s 未释放端口一律 rc=1 报红留人工核查，不提供任何强杀降级。命令说明（<code>.commands/real/config.toml</code>）、真机规程 §2.2 与红线坑档处置口径同步回写。</p>
+    <h3>验证方式</h3>
+    <p>①<strong>红验</strong>：旧实现下新增守阵 8 failed（副作用台账越界 0 —— 隔离加载时已把 runner 自身的 <code>subprocess</code> 换成拦截器）；②<strong>绿验</strong>：<code>commands run test.one -- tests/test_real_machine_safety.py</code> 13 passed；③<strong>全量</strong>：<code>commands run test.full</code> 绿，数字见 <code>commands run kb.baseline</code> 最新切片（不在此手抄）；④<code>commands run real.down -- --port all --dry-run</code> 输出改为「经 WebAPI app/shutdown 优雅关闭」且零副作用；⑤本地假 HTTP server 真实往返确认 <code>POST /api/v2/app/shutdown</code> 空体（Content-Length: 0）、<code>/app/version</code> 仍 GET。⑥<strong>真机关停实测（2026-11-06 06:37-06:39 补做，用户指派）</strong>：环境2（C盘机）qB 5.2.3 两实例全量过 <code>real.guard</code>，造 1 枚 <code>real-fake</code> 假种子作恢复数据载体后，<code>real.down -- --port 56590</code> 与 <code>--port all</code> 两形态真跑 rc=0；外部观测 <strong>6/6 PASS</strong> —— 目标端口释放 / 目标 pid 消失 / 对照实例 56589 全程未动（负向对照零误伤）/ <code>.fastresume</code> 在 shutdown 窗口内 mtime 与字节双更新（<strong>优雅写回硬证据</strong>，外部强制终止不会有）/ 重启后假种子 infohash·state·progress·save_path 逐字一致（恢复数据真读回）；收尾删净自造物并关停两实例，进程与端口回到开工前基线。逐字证据与三态见 <code>memory-bank/testing/real-baselines/26-11-06-0639-real-RM00.md</code>。<strong>上一版所写「未做真机关停实测」已作废</strong>：其理由（测试实例全机共享会打断并行 clone）在本轮开工探查下前提不成立 —— 当时全机无 qB 进程、无其它 clone 在跑 <code>real.*</code>；端点可用性由「R2 实验轮 N9 背书」升级为本轮真机端到端实证。</p>
   </section>
 
   <footer>

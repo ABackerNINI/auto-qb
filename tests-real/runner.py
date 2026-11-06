@@ -36,17 +36,31 @@ def _ports(value: str) -> list[int]:
     return [port]
 
 
-def _wait_port(port: int, timeout: float = 40.0) -> bool:
+def _port_open(port: int) -> bool:
     import socket
 
+    with socket.socket() as s:
+        s.settimeout(0.5)
+        return s.connect_ex(("127.0.0.1", port)) == 0
+
+
+def _wait_port(port: int, timeout: float = 40.0) -> bool:
     deadline = time.time() + timeout
     while time.time() < deadline:
-        with socket.socket() as s:
-            s.settimeout(0.5)
-            if s.connect_ex(("127.0.0.1", port)) == 0:
-                return True
+        if _port_open(port):
+            return True
         time.sleep(0.5)
     return False
+
+
+def _wait_port_gone(port: int, timeout: float = 60.0) -> bool:
+    """等实例优雅退出把端口释放; 超时如实报, 不做任何外部强制终止。"""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if not _port_open(port):
+            return True
+        time.sleep(0.5)
+    return not _port_open(port)
 
 
 def cmd_guard(args) -> int:
@@ -112,21 +126,39 @@ def cmd_up(args) -> int:
 
 
 def cmd_down(args) -> int:
+    """优雅关闭白名单实例 —— 只经 qB 自己的 WebAPI 退出, 不许从外部强制终止进程。
+
+    qB 非优雅退出会跳过 fastresume/state 写回(与 relocate 下线窗口机制相抵触), 且外部
+    强制终止本身触 AGENTS.md 进程安全红线(见 pitfalls/ops 进程红线坑档)。因此 API 失败 /
+    退出超时一律 fail-closed 报红留给人核查, 不提供「关不掉就强杀」的降级。
+    """
+    rc = 0
     for port in _ports(args.port):
         if args.dry_run:
-            print(f"[dry-run] 将关闭 {port} 的实例({guard.EXE[port]})")
+            print(f"[dry-run] 将经 WebAPI app/shutdown 优雅关闭 {port} 的实例({guard.EXE[port]})")
             continue
-        ps = (
-            "Get-Process qbittorrent -ErrorAction SilentlyContinue | "
-            f"Where-Object {{ $_.Path -eq '{guard.EXE[port]}' }} | "
-            "ForEach-Object { Stop-Process -Id $_.Id -Force; $_.Id }"
-        )
-        r = subprocess.run(
-            ["powershell", "-NoProfile", "-NonInteractive", "-Command", ps], capture_output=True, text=True, timeout=60
-        )
-        killed = [x for x in (r.stdout or "").split() if x.strip().isdigit()]
-        print(f"[{'ok' if killed else 'skip'}] {port} 关闭 pid={killed or '无(未在跑)'}")
-    return 0
+        if not _wait_port(port, timeout=0.5):
+            print(f"[skip] {port} 未在跑(端口未监听)")
+            continue
+        try:
+            # 先确认占着该白名单端口的确实是测试实例: 核不出来就绝不发退出指令
+            rep = guard.check_port(port)
+        except guard.GuardError as exc:
+            rc = 1
+            print(f"[FAIL] {port}: {exc} —— 已拒发 app/shutdown")
+            continue
+        try:
+            _qb(port).shutdown()
+        except Exception as exc:
+            rc = 1
+            print(f"[FAIL] {port}: WebAPI app/shutdown 失败 —— {exc}")
+            continue
+        ok = _wait_port_gone(port)
+        note = "" if ok else " 超时(60s), 请人工核查, 未强杀"
+        print(f"[{'ok' if ok else 'FAIL'}] {port} 优雅退出 pid={rep['pid']}{note}")
+        if not ok:
+            rc = 1
+    return rc
 
 
 def _cases() -> list[tuple[str, str, str]]:

@@ -103,7 +103,7 @@ def parse_pyproject(toml_text: str) -> tuple[set[str], set[tuple[str, str]]]:
 # 须同步删掉对应条目 —— 留着即等于给回加留后门(见 test_frozen_rejects_re_add_of_reduced_exemption)。
 
 _FROZEN_DISABLE_GROUPS: list[tuple[list[str], list[str]]] = [
-    # ③ core/modules + hr service mixin 组合面(attr-defined/has-type)与 Optional 次生噪音
+    # 3. core/modules + hr service mixin 组合面(attr-defined/has-type)与 Optional 次生噪音
     #    call-arg 已随 issue 26-11-06-0247 修正注解而摘除(allowlist 递减), 从冻结面一并撤下 ——
     #    再往这一面加回 call-arg 会当场红。
     (
@@ -113,7 +113,7 @@ _FROZEN_DISABLE_GROUPS: list[tuple[list[str], list[str]]] = [
             "call-overload"
         ],
     ),
-    # ④ qbapi 三方 Facade 转发 + qbmanager/state/codec/tvshows/grid Optional 收窄
+    # 4. qbapi 三方 Facade 转发 + qbmanager/state/codec/tvshows/grid Optional 收窄
     (
         [
             "auto_qb.core.qbapi",
@@ -125,23 +125,23 @@ _FROZEN_DISABLE_GROUPS: list[tuple[list[str], list[str]]] = [
         ],
         ["union-attr", "return-value", "arg-type", "assignment", "operator", "call-overload"],
     ),
-    # ⑤ qbclient._session override 豁免已随 issue 26-11-06-0247 整块摘除(allowlist 递减), 冻结面
+    # 5. qbclient._session override 豁免已随 issue 26-11-06-0247 整块摘除(allowlist 递减), 冻结面
     #    同步撤下 —— 再往 auto_qb.core.qbclient 加回 override 当场红(红验见
     #    test_frozen_rejects_re_add_of_reduced_exemption), 递减不可逆。
-    # ⑥ hr store/model/server Optional 收窄
+    # 6. hr store/model/server Optional 收窄
     (["auto_qb.hr.store", "auto_qb.hr.model", "auto_qb.hr.server"], ["arg-type", "operator", "assignment"]),
-    # ⑦ hr/bencode 字节级解析器两段初始化与 bytes 键写入
+    # 7. hr/bencode 字节级解析器两段初始化与 bytes 键写入
     (["auto_qb.hr.bencode"], ["no-redef", "call-overload"]),
-    # ⑧ rules 插件层 rec/store Optional 收窄
+    # 8. rules 插件层 rec/store Optional 收窄
     (["auto_qb.rules.conditions", "auto_qb.rules.actions.*"], ["union-attr"]),
-    # ⑨ rules/base union-attr + no-redef + operator
+    # 9. rules/base union-attr + no-redef + operator
     (["auto_qb.rules.base"], ["union-attr", "operator", "no-redef"]),
-    # ⑩ torrents qbittorrent-api JsonValueT 动态返回面
+    # 10. torrents qbittorrent-api JsonValueT 动态返回面
     (
         ["auto_qb.torrents.store", "auto_qb.torrents.record"],
         ["arg-type", "assignment", "union-attr", "index", "operator", "misc"],
     ),
-    # ⑪ config 边界面既有数据形状债(收紧面内的递减目标)
+    # 11. config 边界面既有数据形状债(收紧面内的递减目标)
     (
         [
             "auto_qb.config.migrations", "auto_qb.config.loaders", "auto_qb.config.schema.fields",
@@ -149,17 +149,17 @@ _FROZEN_DISABLE_GROUPS: list[tuple[list[str], list[str]]] = [
         ],
         ["union-attr", "operator", "arg-type", "assignment"],
     ),
-    # ⑫ infra port_owner Optional + file_access shutil.disk_usage 结构差
+    # 12. infra port_owner Optional + file_access shutil.disk_usage 结构差
     (["auto_qb.infra.port_owner", "auto_qb.infra.file_access"], ["union-attr", "return-value"]),
-    # ⑬ alias_fs Array / agent Popen 三方重载不命中
+    # 13. alias_fs Array / agent Popen 三方重载不命中
     (["auto_qb.infra.alias_fs", "auto_qb.core.traffic_source.agent"], ["call-overload"]),
-    # ⑭ transfer adapter torrents_add 动态 kwargs 面
+    # 14. transfer adapter torrents_add 动态 kwargs 面
     (["auto_qb.transfer.adapters.qb"], ["arg-type", "list-item"]),
-    # ⑮ webui 顶层 mixin 面(server 子模块无 mixin, 对其空转)
+    # 15. webui 顶层 mixin 面(server 子模块无 mixin, 对其空转)
     (["auto_qb.webui.*"], ["attr-defined", "has-type"]),
-    # ⑯ webui server routes 裸 dict payload 面(最后匹配, 整表替换⑮)
+    # 16. webui server routes 裸 dict payload 面(最后匹配, 整表替换块 15)
     (["auto_qb.webui.server.*"], ["attr-defined", "has-type", "arg-type", "assignment", "union-attr"]),
-    # ⑰ webui 零散残余(最后匹配, mixin 两码为整表替换的必要重复)
+    # 17. webui 零散残余(最后匹配, mixin 两码为整表替换的必要重复)
     (
         [
             "auto_qb.webui.commands_torrents",
@@ -170,11 +170,11 @@ _FROZEN_DISABLE_GROUPS: list[tuple[list[str], list[str]]] = [
         ],
         ["attr-defined", "has-type", "union-attr", "index", "misc", "arg-type"],
     ),
-    # ⑱ cli 模块级单例 Optional 收窄
+    # 18. cli 模块级单例 Optional 收窄
     (["auto_qb.cli"], ["union-attr"]),
 ]
 
-# ignore_errors 整模块豁免(计划钉死: ① tray GUI 三方回调, ② rules.expr.env 闭包工厂)
+# ignore_errors 整模块豁免(计划钉死: 1. tray GUI 三方回调, 2. rules.expr.env 闭包工厂)
 FROZEN_IGNORE_MODULES: frozenset[str] = frozenset({"auto_qb.tray.*", "auto_qb.rules.expr.env"})
 
 # disable_error_code 豁免对(模块模式, 错误码)

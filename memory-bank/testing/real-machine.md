@@ -38,7 +38,8 @@
 ### 2.2 起停与进程红线
 
 - 起/停一律 `real.up`/`real.down`(白名单内), **不手工双击 exe**; 端口残留占用走 `dev.port-kill`(只传白名单端口)。
-- 🔴 **禁止一切 `taskkill`**(任何形态/目标, python subprocess 同禁): 生产 qB(26586)与测试实例同名映像, `/IM` 全杀=误杀生产(实际发生)。详见 pitfalls/ops/taskkill-image-name-ban。
+- `real.down` 走 WebAPI `app/shutdown` **优雅退出**(2026-11-06 issue 26-11-06-0448 修复): qB 自己写回 fastresume/state 再退, 退出前等端口释放(60s); 端口没起打印 skip, 镜像路径核验不过 / API 失败 / 超时一律 rc=1 报红留人工核查, **不降级强杀**。非优雅退出会跳过 fastresume 写回, 与 relocate 下线窗口机制相抵触。**2026-11-06 06:37-06:39 真机实测背书(环境2 / qB 5.2.3)**: 6/6 PASS —— 端口释放 / 目标 pid 消失 / 对照实例 56589 全程未动 / `.fastresume` 在 shutdown 窗口内被重写(优雅写回硬证据) / 重启后假种子状态逐字读回; 逐字证据与三态见 `testing/real-baselines/26-11-06-0639-real-RM00.md`。
+- 🔴 **禁止一切 `taskkill` 及任何形态的外部进程强制终止**(任何形态/目标, python subprocess 同禁): 生产 qB(26586)与测试实例同名映像, `/IM` 全杀=误杀生产(实际发生)。详见 pitfalls/ops/taskkill-image-name-ban。
 - 双实例均 portable(自带 `profile/`), 干净环境换 profile 不删 `%APPDATA%`。
 - **多 clone 单实例**: 测试实例全机一套, 同一时刻只允许一个 clone 跑 `real.*`; guard 报端口占用先确认是否别的 clone 在测。
 
