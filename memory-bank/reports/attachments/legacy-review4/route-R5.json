@@ -1,0 +1,88 @@
+{
+  "route": "R5",
+  "owner": "clone3-main",
+  "claimed_at": "26-11-06-2339",
+  "freeze": "f088329291e64d0802637463e886f78842c1b34c",
+  "freeze_note": "manifest 钉值 (生成时点 develop tip, D17)",
+  "snapshot": null,
+  "status": "claimed",
+  "batches": [
+    {
+      "id": "R5-1",
+      "title": "shared 启动与状态: app/state/boot/lifecycle/auth/polling/fetch_low/ui_feedback",
+      "status": "pending",
+      "done_at": null,
+      "findings": 0
+    },
+    {
+      "id": "R5-2",
+      "title": "shared 菜单·触发·命令链: menu/triggers/commands*/ctx_menu*/view/overlay_fit/ctl_bits/scope_audit/shortcuts(+panel)",
+      "status": "pending",
+      "done_at": null,
+      "findings": 0
+    },
+    {
+      "id": "R5-3",
+      "title": "shared 表格与列: table/dt_table/columns*/sort/filters/selection/format/rowlang/decorate",
+      "status": "pending",
+      "done_at": null,
+      "findings": 0
+    },
+    {
+      "id": "R5-4",
+      "title": "shared drawer 族: drawer/drawer_templates/drawer_store/drawer_{general,rows,files,head}",
+      "status": "pending",
+      "done_at": null,
+      "findings": 0
+    },
+    {
+      "id": "R5-5",
+      "title": "shared drawer 模板·general 与 trackers(01-09 号)",
+      "status": "pending",
+      "done_at": null,
+      "findings": 0
+    },
+    {
+      "id": "R5-11",
+      "title": "shared drawer 模板·content 与 peers(10-12/90 号)",
+      "status": "pending",
+      "done_at": null,
+      "findings": 0
+    },
+    {
+      "id": "R5-6",
+      "title": "shared 对话框与流转: dialogs/add_torrent/dialogs_{meta,history}/delete_flow/transfer_{flow,targets}/relocate_chain",
+      "status": "pending",
+      "done_at": null,
+      "findings": 0
+    },
+    {
+      "id": "R5-7",
+      "title": "shared config 族: config_rules/config_editor{,_curve,_form,_tree}/config_hub{,_tm,_tracker,_hr}",
+      "status": "pending",
+      "done_at": null,
+      "findings": 0
+    },
+    {
+      "id": "R5-8",
+      "title": "图表·hr 面板·快捷键引擎·fx: qb_traffic_chart/hr_status/hr/shows/traffic_card/shortcuts_engine + fx/皮肤 js",
+      "status": "pending",
+      "done_at": null,
+      "findings": 0
+    },
+    {
+      "id": "R5-9",
+      "title": "scripts 快扫: sim_* 全族",
+      "status": "pending",
+      "done_at": null,
+      "findings": 0
+    },
+    {
+      "id": "R5-10",
+      "title": "scripts 快扫: qb_capture*/ui_harness/检查与实验散件",
+      "status": "pending",
+      "done_at": null,
+      "findings": 0
+    }
+  ]
+}
