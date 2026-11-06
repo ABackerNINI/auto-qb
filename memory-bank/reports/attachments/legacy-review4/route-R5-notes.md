@@ -10,6 +10,7 @@ owner: clone3-main · freeze: f088329291e6 · 快照: C:\Users\11059\Desktop\Pro
 | R5-1 | shared 启动与状态: app/state/boot/lifecycle/auth/polling/fetch_low/ui_feedback (3581行) | 24 (major 1 / minor 11 / nit 12) | done |
 | R5-2 | shared 菜单·触发·命令链: menu/triggers/commands*/ctx_menu*/view/overlay_fit/ctl_bits/scope_audit/shortcuts(+panel) (3637行) | 10 (minor 7 / nit 3) | done |
 | R5-3 | shared 表格与列: table/dt_table/columns*/sort/filters/selection/format/rowlang/decorate (3928行) | 25 (major 3 / minor 12 / nit 10) | done |
+| R5-4 | shared drawer 族: drawer/drawer_templates/drawer_store/drawer_{general,rows,files,head} (3445行) | 16 (major 1 / minor 11 / nit 4) | done |
 
 ## R5-1 批记录(2 面精评: 正确性+安全 / 测试缺口+文档漂移)
 
@@ -48,6 +49,18 @@ owner: clone3-main · freeze: f088329291e6 · 快照: C:\Users\11059\Desktop\Pro
 
 面1(10):_rowPre 残留有长度闸兜底 / 换容器 unbind 旧元素随 GC / _decoFpBuild 防御不对称非可达缺陷 / document 级 mousemove 单实例同寿命不可达 / O(n²) 扫描无具体失败规模 / showSelState 全量重算规模小 / WIN_SRC_DOC.bindScroll 系描述符契约非残留 / dtSortCell 懒建 Vue 常规 / fmtDuration 负秒无生产者 / relocateTitle 有前置判空。
 面2(7):「域名.方法」类注释系拆分后仓库惯例不算漂移 / _facetPick 其余 kind 系同函数薄分支 / filteredTorrents 与底册 0330 同域避撞车 / rowlang 全 DOM 耦合提不出具体失败 / 横滚胶囊手势行为回归只能 e2e 承接 / 窗口化金值断言属加严 / webui*.md+README 逐条核对一致无漂移。
+
+## R5-4 批记录(2 面精评: 正确性+安全 / 测试缺口+文档漂移)
+
+- **major 1 条**:drawer.js:690 分享率限制对话框哨兵契约与后端相反——前端 -1=恢复全局默认,后端(commands_limit.py)钉死 -1=不限制、-2=用全局;用户按提示输 -1 实际写入「永不限制」,意图完全相反(py↔js 契约错位的实锤,S6 定级重点)。
+- minor 11 条:drawerDel 收抽屉判据竞态(读回调时刻 hash+轮询未落) / emptyHost 死变量+注释声称的换代守卫不存在 / 非ASCII 带圈数字 5 文件(drawer.js/drawer_general/drawer_store/drawer_templates/字符串字面量含 → 的 drawer_rows) / _drawerClampHeight 边界分支零执行 / _relocateConfirmRows+confirm 回路零执行 / drawer_templates「三份 manifest」实为四份 / drawer_head 守卫引用不存在的 e2e spec。
+- nit 4 条:头注指错文件名(kb_→qb_) / 令牌白名单「三皮肤」漏 flux / 装载序指向已删除的 drawer_tabs.js / 「三皮肤 views.css」实为四套。
+- 底册复验:R2 终表零命中本批;Open issues 0149/0521 仍 Open 未重报。
+
+### 自弃发现(10 条留痕)
+
+面1(10):precheck 回执恒带 hash 不可达 TypeError / 超时态文案正则漂移仅措辞级 / dtBridgeTo seg 固定枚举动态键不可达(留作变体扩展保底) / delTorrent 主路径内吞错误 / dtToggleMerge 二次点击需重开菜单不可达 / copyTorrentInfo 字段恒有值 / 切走 content 页签孤儿窗口自愈(已有 issue 注释覆盖) / dtWinRows [] 回落无实证行为后果 / 箭头类符号 py 侧 68 文件同用属既成风格,建议仓库级裁决后统一清(带圈数字系点名类故已报) / 预填失败有「未作修改」兜底。
+面2(8):_skipPrecheck 分支链有逐语句等值断言守阵 / _drawerWaitSources 有 e2e 值守 / 锚对账有 bridge-stub spec A-D / drawerGeneralSections 等经 e2e 变体用例真实执行 / _dtMergeRows 有 node 电池间接真跑 / drawer_head 历史类比非操作性声明 / MOVE_POP_SETTLE_MS 守阵确实存在 / conventions+README 抽查无矛盾。
 
 ## 执行备注(路线级)
 

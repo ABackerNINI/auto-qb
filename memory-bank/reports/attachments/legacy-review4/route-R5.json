@@ -31,9 +31,9 @@
     {
       "id": "R5-4",
       "title": "shared drawer 族: drawer/drawer_templates/drawer_store/drawer_{general,rows,files,head}",
-      "status": "pending",
-      "done_at": null,
-      "findings": 0
+      "status": "done",
+      "done_at": "26-11-07-0157",
+      "findings": 16
     },
     {
       "id": "R5-5",

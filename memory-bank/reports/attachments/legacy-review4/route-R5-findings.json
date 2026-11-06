@@ -529,5 +529,149 @@
   "claim": "注释契约不符: 注释称逐 token 严格校验 ^\\d+px$,实现(L59)是 /^\\d+(\\.\\d+)?px$/ 放行小数 px;照注释口径复刻校验会把 getComputedStyle 的小数宽度判成不合法→「数量不符→null」,与 2026-10-18 修复意图相反",
   "relevance": "相关",
   "fix": "注释同步为放行小数 px 的正则(拒绝 fr/minmax 才是要点)"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/drawer.js",
+  "line": 690,
+  "quote": "填 -1 = 恢复全局默认",
+  "severity": "major",
+  "claim": "分享率限制对话框的哨兵契约与后端相反: 前端把 -1 当「恢复全局默认」(文案/校验 n!==-1/透传 body[key]=n===-1?-1:..., 见 690/692/703/712/715),而后端 commands_limit.py::_cmd_set_share_limits 与 torrent_cmds.py 路由 docstring 均钉死 -2=用全局、-1=不限制 —— 用户按对话框提示输入 -1,实际写入「永不限制」(种子永不停做),与用户意图完全相反",
+  "relevance": "相关",
+  "fix": "三处(-1 文案、校验、透传)统一改用 -2 哨兵,或前端不发哨兵值改由后端归一,与 commands_limit.py 的 -1/-2 语义对齐"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/drawer_rows.js",
+  "line": 15,
+  "quote": "!this.memberByHash.get(this.drawer.hash)) this.closeDrawer()",
+  "severity": "minor",
+  "claim": "drawerDel「删除成功自动收抽屉」判据是竞态: then 回调在删除回执返回后立即读 memberByHash,但成员移除要等下一轮主轮询(1.5~3s)才落到本地,快速成功路径几乎必然判「成员还在」不收抽屉;且回调读的是回调时刻的 this.drawer.hash 而非被删目标 hash,期间换过目标时判据对象就错了",
+  "relevance": "相关",
+  "fix": "调用点捕获被删 hash,按删除回执 ok 收口(或下一轮轮询后延迟复查该 hash),不读回调时刻的 this.drawer.hash"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/drawer_templates.js",
+  "line": 663,
+  "quote": "var emptyHost = true;",
+  "severity": "minor",
+  "claim": "死变量(存量面 A): emptyHost 赋值后从未被读;上方 665-670 注释明言「宿主从无记账(old 空)⇒必须换代让桥重挂」,但下方循环只实现了「同 seg 锚元素被换」分支,注释声称的换代守卫实际不存在——当前靠所有换宿主路径都先经 _dtUnmountOne 摘桥兜住,一旦出现绕过该路径的宿主重建即复现注释描述的「Teleport 悬游离旧锚、新锚恒空」",
+  "relevance": "相关",
+  "fix": "删除 emptyHost 死变量,或补上注释声称的判断使代码与 2026-10-14 注释一致"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/drawer.js",
+  "line": 174,
+  "quote": "① resize 防抖回写 dtWinW",
+  "severity": "minor",
+  "claim": "非ASCII图形符号: 带圈数字 ①②(174/175 行,全文同类 →/⇒ 另约 12 处)——code-style.md 点名禁用类「带圈数字」,覆盖 .js 含注释与字符串",
+  "relevance": "相关",
+  "fix": "按替代表改写,本文件统一清一遍"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/drawer_general.js",
+  "line": 38,
+  "quote": "plan 26-10-03-0946 §07 表②",
+  "severity": "minor",
+  "claim": "非ASCII图形符号: 带圈数字 ②(38 行,另 7 行注释有 →)——code-style.md 点名禁用类",
+  "relevance": "相关",
+  "fix": "表②→表2,→ 改 ASCII 箭头"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/drawer_store.js",
+  "line": 232,
+  "quote": "① 前置门 -> try{api} -> ② stale 守卫 -> ③ 归一",
+  "severity": "minor",
+  "claim": "非ASCII图形符号: 带圈数字 ①②③(232/236/243/253/254 行,全文 →/⇒ 另约 17 处)——code-style.md 点名禁用类",
+  "relevance": "相关",
+  "fix": "带圈数字改 ASCII 编号,箭头统一 ->"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/drawer_templates.js",
+  "line": 12,
+  "quote": "① 合并机械住 drawer.js",
+  "severity": "minor",
+  "claim": "非ASCII图形符号: 带圈数字 ①②③(12/13/15/51 行,全文 →/⇒ 另约 25 处)——code-style.md 点名禁用类;本文件全批密度最高",
+  "relevance": "相关",
+  "fix": "带圈数字改 ASCII,箭头改 ->"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/drawer_rows.js",
+  "line": 127,
+  "quote": "text: \"查看 A → B → C\"",
+  "severity": "minor",
+  "claim": "非ASCII图形符号: 箭头 → 位于字符串字面量(会渲染进抽屉 UI,126 行注释同类,53 行 sum 模板串另有 ↓↑)——code-style.md 覆盖 .js 字符串字面量",
+  "relevance": "相关",
+  "fix": "UI 文案改 ASCII 或改走文档层措辞;sum 里 ↓↑ 改 ASCII"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/drawer_general.js",
+  "line": 164,
+  "quote": "_drawerClampHeight(px, viewportH)",
+  "severity": "minor",
+  "claim": "夹取纯函数(含极小视口 70vh<240 时 min/max 互换的边界分支)全仓零执行: test_drawer_height_w3(tests/test_web_shortcuts_drawer.py:320-324)只做子串锚检查(断言含 0.7/240/Math.min(Math.max(px)),e2e 无 grip 拖拽用例,边界行为从未真跑验证",
+  "relevance": "相关",
+  "fix": "node 电池真跑: 钉 240 下界/70vh 上界/极小视口三组断言"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/drawer.js",
+  "line": 561,
+  "quote": "_relocateConfirmRows(r)",
+  "severity": "minor",
+  "claim": "确认框行表纯函数(目录别名「未来种子」分支/#n 多项前缀/reasons 拼接)零执行,submitMoveDialog 的 confirm 回路(收框→确认→confirm=true 重发→取消/再 confirm 重开)也只有 test_web_relocate.py:935-976 字符串锚,无 node/e2e 行为测试",
+  "relevance": "相关",
+  "fix": "补 node 电池真跑 _relocateConfirmRows/_relocateConfirmCount,回路重开/二发分支用桩驱动"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/drawer_store.js",
+  "line": 25,
+  "quote": "kb_traffic_chart.js",
+  "severity": "nit",
+  "claim": "头注把流量源跨模块成对纪律指到不存在的「kb_traffic_chart.js」(实际为 qb_traffic_chart.js),且下一行写的回执形态 _drawerDone(\"traffic\", hash, 0) 与实际调用(qb_traffic_chart.js:768 为 (\"traffic\", ctx, 0))不符",
+  "relevance": "相关",
+  "fix": "头注改 qb_traffic_chart.js 并把参数样例改成 (\"traffic\", ctx, 0)"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/drawer_templates.js",
+  "line": 25,
+  "quote": "三份 index.html 的 tpl-manifest",
+  "severity": "minor",
+  "claim": "装载序硬约束注与第 23 行删除操作指引都写「三份 manifest」,快照实况是四份(atlas/console/flux/prism 各 13 条 drawer_tpl 登记,tests/webui_helpers.py _UI_ALL 也迭代四套)——按头注执行「三份 manifest 各去 1 行」会漏两份留下死脚本标签",
+  "relevance": "相关",
+  "fix": "两处「三份」改「四份」(与 drawer_files.js/drawer_rows.js 头注「四套皮肤」对齐)"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/drawer_templates.js",
+  "line": 52,
+  "quote": "已对 atlas / console / prism 三皮肤逐一核实",
+  "severity": "nit",
+  "claim": "CSS 令牌白名单核实范围写「三皮肤」,flux(第四套)现已存在且令牌在 flux/style.css 齐——「各皮肤求交」白名单口径按三套陈述,变体作者会误以为 flux 不受此口径覆盖",
+  "relevance": "相关",
+  "fix": "白名单头注把 flux 补进核实清单"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/drawer_head.js",
+  "line": 7,
+  "quote": "排在 drawer_tabs.js 之后",
+  "severity": "nit",
+  "claim": "装载序约束指向已删除的 drawer_tabs.js(经典渲染链 2026-10-14 整体移除,drawer_templates.js 头注与 app.js:481 均可证),四份 manifest 里该文件已不存在",
+  "relevance": "相关",
+  "fix": "删去该半句,装载序只保留「app.js 之前」这一仍成立的约束"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/drawer_head.js",
+  "line": 11,
+  "quote": "e2e/drawer-traffic.spec.mjs 按直接子元素钉",
+  "severity": "minor",
+  "claim": "「<aq-qb-ctl> 不能包 wrapper 破了是静默布局塌陷」的守卫被注指到 e2e/drawer-traffic.spec.mjs,该 spec 在快照 e2e/ 目录不存在;实际钉「直接子元素」的是 tests/test_webui_static_dom_panel_traffic.py:53",
+  "relevance": "相关",
+  "fix": "引用改为 tests/test_webui_static_dom_panel_traffic.py(或补回同名 e2e spec)"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/drawer.js",
+  "line": 43,
+  "quote": "在三皮肤 views.css 的合并布局段",
+  "severity": "nit",
+  "claim": "合并布局段封顶 2400 的落点写「三皮肤 views.css」,快照四套皮肤(atlas/console/flux/prism)的 views.css 均含该段(flux/css/views.css:412)",
+  "relevance": "相关",
+  "fix": "「三皮肤」改「四皮肤」或去掉计数"
  }
 ]
