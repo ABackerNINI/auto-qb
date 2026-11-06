@@ -69,6 +69,22 @@ S5 重定向原语簇(计划 26-11-05-0808 S5, D15: 0247 S6③ 设想从零实�
   Windows 文件型链接被无共享删除句柄占用时检出、释放/带共享删除放行、junction 持句柄放行
   (现代 Windows 链接本体删除对读句柄稳健, 实测口径)/ 路径缺失放行; POSIX 恒 None
 
+覆盖率缺口清偿(26-11-07, test.full 99.31% -> 99.5% 闸):
+- test_inspect_path_junction_kind: inspect_path 对 junction 报 KIND_JUNCTION(重解析标签先判)
+- test_alias_points_to_hardlink_stat_failure_is_false: 硬链接比对 stat 炸 => False 不猜
+- test_alias_points_to_unreadable_link_target_is_false: readlink 判不了 => False 走重建
+- test_probe_alias_rebuild_busy_posix_is_none: 非 Windows 恒 None
+- test_probe_alias_rebuild_busy_isdir_oserror_is_none: 存在性判不了(isdir 炸)=> None 不拦
+- test_probe_alias_rebuild_busy_unclassifiable_error_is_none: 其它 CreateFileW 错误(非法路径字符)
+  => None 不拦
+- test_retarget_alias_infers_kind_when_link_and_kind_absent: 无链接无 kind 防御支(目录/文件目标
+  两路推断)
+- test_retarget_alias_consumes_empty_real_dir_at_link_position: 空真目录占位 -> 挪掉照常重建
+- test_retarget_alias_unsupported_form_raises_valueerror: 形态不支持 => ValueError
+- test_retarget_alias_dir_penetration_failure_leaves_error: 目录别名建后不可穿透 => RuntimeError
+  带旧指诊断
+- test_retarget_alias_file_penetration_failures: 文件别名穿透双闸(isfile 为假/尺寸不符)
+
 ## 环境能力 skip(2026-10-18, issue 26-10-18-2030)
 
 真实建符号链接类用例依赖**宿主建链能力**: Windows 非特权进程(非管理员且未开开发者模式)缺
@@ -978,3 +994,149 @@ def test_probe_alias_rebuild_busy(tmp_path):
         k32.CloseHandle(hold)
     # 路径缺失: 无占用可言
     assert alias_fs.probe_alias_rebuild_busy(os.path.join(root, "gone")) is None
+
+
+# ---------------------------------------------------------------------------
+# 覆盖率缺口清偿(26-11-07): 重定向失败支与平台遗留面
+# ---------------------------------------------------------------------------
+
+
+@_WIN_ONLY
+def test_inspect_path_junction_kind(tmp_path):
+    """inspect_path 对 junction 报 KIND_JUNCTION(重解析点标签先于 S_ISLNK 判定)"""
+    target = tmp_path / "real"
+    target.mkdir()
+    link = str(tmp_path / "jalias")
+    alias_fs.create_dir_alias(link, str(target), alias_fs.KIND_JUNCTION)
+    info = alias_fs.inspect_path(link)
+    assert info.status == "ok" and info.kind == alias_fs.KIND_JUNCTION
+    assert alias_fs.strip_device_prefix(info.target).lower().endswith("real")
+
+
+def test_alias_points_to_hardlink_stat_failure_is_false(tmp_path, monkeypatch):
+    """硬链接比对两侧 stat 任一炸 => False(不猜指向)"""
+    def _boom(path, *a, **kw):
+        raise OSError("stat denied")
+
+    monkeypatch.setattr(alias_fs.os, "stat", _boom)
+    fb = _mk_file(os.path.join(str(tmp_path), "b.bin"), b"x")
+    link = os.path.join(str(tmp_path), "l.bin")
+    alias_fs.create_file_alias(link, fb, alias_fs.KIND_HARDLINK)
+    assert alias_fs.alias_kind_of(link) == alias_fs.KIND_HARDLINK
+    assert alias_fs.alias_points_to(link, fb) is False
+
+
+def test_alias_points_to_unreadable_link_target_is_false(tmp_path, monkeypatch):
+    """junction/symlink readlink 失败(alias_target 判不了) => False, 走重建/报错路"""
+    target = tmp_path / "real"
+    target.mkdir()
+    link = os.path.join(str(tmp_path), "jalias")
+    kind = alias_fs.KIND_JUNCTION if _win() else alias_fs.KIND_SYMLINK
+    alias_fs.create_dir_alias(link, str(target), kind)
+    assert alias_fs.alias_points_to(link, str(target)) is True  # 前置: 可读时命中
+
+    def _boom(path, *a, **kw):
+        raise OSError("readlink denied")
+
+    monkeypatch.setattr(alias_fs.os, "readlink", _boom)
+    assert alias_fs.alias_points_to(link, str(target)) is False
+
+
+def test_probe_alias_rebuild_busy_posix_is_none(monkeypatch, tmp_path):
+    """非 Windows 恒 None(POSIX 删链接无句柄占用失败形态)"""
+    monkeypatch.setattr(alias_fs.utils, "is_windows", lambda: False)
+    assert alias_fs.probe_alias_rebuild_busy(str(tmp_path / "whatever")) is None
+
+
+@_WIN_ONLY
+def test_probe_alias_rebuild_busy_isdir_oserror_is_none(tmp_path, monkeypatch):
+    """存在性判不了(isdir 炸) => None 不拦(保守默认)"""
+    def _boom(path, *a, **kw):
+        raise OSError("isdir denied")
+
+    monkeypatch.setattr(alias_fs.os.path, "isdir", _boom)
+    assert alias_fs.probe_alias_rebuild_busy(str(tmp_path / "x.bin")) is None
+
+
+@_WIN_ONLY
+def test_probe_alias_rebuild_busy_unclassifiable_error_is_none(tmp_path):
+    """CreateFileW 其它错误(非法路径字符 -> ERROR_INVALID_NAME)判不了占用 => None 不拦"""
+    assert alias_fs.probe_alias_rebuild_busy(str(tmp_path / "bad<>name.bin")) is None
+
+
+def test_retarget_alias_infers_kind_when_link_and_kind_absent(tmp_path):
+    """防御支: 无现存链接也无 kind(旧账/直调) -> 目录目标推断 junction(POSIX 目录 symlink),
+    文件目标推断文件 symlink —— 重建即恢复服务"""
+    root = str(tmp_path)
+    # 目录目标: 推断目录别名(Windows junction 免提权 / POSIX 目录 symlink)
+    b = os.path.join(root, "b")
+    _mk_file(os.path.join(b, "e00.mkv"))
+    link = os.path.join(root, "alias-none")
+    assert alias_fs.retarget_alias(link, b) == "rebuilt"
+    assert alias_fs.alias_kind_of(link) == (alias_fs.KIND_JUNCTION if _win() else alias_fs.KIND_SYMLINK)
+    # 文件目标: 推断文件 symlink
+    fc = _mk_file(os.path.join(root, "c.bin"), b"C")
+    flink = os.path.join(root, "falias-none")
+    assert alias_fs.retarget_alias(flink, fc) == "rebuilt"
+    assert alias_fs.alias_kind_of(flink) == alias_fs.KIND_SYMLINK
+    with open(flink, "rb") as f:
+        assert f.read() == b"C"
+
+
+def test_retarget_alias_consumes_empty_real_dir_at_link_position(tmp_path):
+    """链接位置被**空**真目录占据(qB 搬走文件后的残留): 挪掉空目录照常重建(非空支已另测)"""
+    root = str(tmp_path)
+    b = os.path.join(root, "b")
+    _mk_file(os.path.join(b, "e00.mkv"))
+    link = os.path.join(root, "alias-empty")
+    os.makedirs(link)  # 空真目录占位
+    kind = alias_fs.KIND_JUNCTION if _win() else alias_fs.KIND_SYMLINK
+    assert alias_fs.retarget_alias(link, b, kind) == "rebuilt"
+    assert not os.path.islink(link) or alias_fs.alias_kind_of(link) == kind  # 位置已由别名接管
+    assert alias_fs.alias_kind_of(link) == kind
+
+
+def test_retarget_alias_unsupported_form_raises_valueerror(tmp_path):
+    """形态不支持(既非 junction/symlink 也非 hardlink) => ValueError(直调防御面)"""
+    fc = _mk_file(os.path.join(str(tmp_path), "c.bin"), b"C")
+    with pytest.raises(ValueError, match="不支持形态"):
+        alias_fs.retarget_alias(os.path.join(str(tmp_path), "l.bin"), fc, "bogus-kind")
+
+
+def test_retarget_alias_dir_penetration_failure_leaves_error(tmp_path, monkeypatch):
+    """目录别名建后不可穿透(建链替身什么都没建) => RuntimeError 包旧指诊断"""
+    root = str(tmp_path)
+    b = os.path.join(root, "b")
+    _mk_file(os.path.join(b, "e00.mkv"), b"B")
+    c2 = os.path.join(root, "c2")  # 新目标必须存在(目标存在性前置闸先行)
+    _mk_file(os.path.join(c2, "e00.mkv"), b"C2")
+    link = os.path.join(root, "alias")
+    kind = alias_fs.KIND_JUNCTION if _win() else alias_fs.KIND_SYMLINK
+    alias_fs.create_dir_alias(link, b, kind)
+    monkeypatch.setattr(alias_fs, "create_dir_alias", lambda *a, **kw: None)  # 建链替身: 假成功
+    with pytest.raises(RuntimeError, match="穿透校验失败") as ei:
+        alias_fs.retarget_alias(link, c2, kind)
+    assert "旧指" in str(ei.value)  # 诊断带旧目标
+
+
+def test_retarget_alias_file_penetration_failures(tmp_path, monkeypatch):
+    """文件别名穿透双闸: isfile 为假 / 尺寸与目标不一致 => RuntimeError(建失败不留半截指向)"""
+    root = str(tmp_path)
+    fb = _mk_file(os.path.join(root, "b.bin"), b"x" * 32)
+    fc = _mk_file(os.path.join(root, "c.bin"), b"y" * 32)
+    link = os.path.join(root, "l.bin")
+    alias_fs.create_file_alias(link, fb, alias_fs.KIND_HARDLINK)
+    # 1) 建链替身什么都没建 -> isfile 为假
+    monkeypatch.setattr(alias_fs, "create_file_alias", lambda *a, **kw: None)
+    with pytest.raises(RuntimeError, match="穿透校验失败"):
+        alias_fs.retarget_alias(link, fc, alias_fs.KIND_HARDLINK)
+    # 2) 建链替身建了个内容更长的副本 -> 尺寸不一致
+    def _copy_with_extra(link_path, target_path, kind):
+        with open(target_path, "rb") as f:
+            data = f.read()
+        with open(link_path, "wb") as f:
+            f.write(data + b"extra")
+
+    monkeypatch.setattr(alias_fs, "create_file_alias", _copy_with_extra)
+    with pytest.raises(RuntimeError, match="尺寸与目标不一致"):
+        alias_fs.retarget_alias(link, fc, alias_fs.KIND_HARDLINK)

@@ -27,6 +27,11 @@ verify 三动作, 判据面 ru.reconcile 纯函数层在 test_relocate_units)与
 - test_qb_host_port_and_arm_spec_pinned: qB host/port 读配置 + arm spec 关键键值
 ### 武装接线(_arm)
 - test_arm_writes_spec_and_ensures_daemon: arm -> spec 落盘 + ensure_daemon 重拉 + 恢复运行态
+
+覆盖率缺口清偿(26-11-07, test.full 99.31% -> 99.5% 闸):
+- test_tag_name_without_config_is_empty: relocate 配置段缺席 -> 待收尾标签名空串
+- test_ensure_daemon_spawn_failure_warns_and_still_throttles: 拉起失败只告警 + 退避账键照记
+- test_penetrate_stage_without_aliases_goes_straight_to_arm: penetrate 无别名直进武装
 """
 
 import os
@@ -439,3 +444,65 @@ def test_qb_host_port_and_arm_spec_pinned(tmp_path, monkeypatch):
     assert spec["dst"] == job.dst, spec
     assert spec["alias_paths"] == ["R:/src/a.mkv"], spec
     assert spec["files"] == [["a.mkv", 10]], spec
+
+
+# ---------------------------------------------------------------------------
+# 覆盖率缺口清偿(26-11-07): daemon 拉起失败 / penetrate 无别名直进武装
+# ---------------------------------------------------------------------------
+
+
+def test_ensure_daemon_spawn_failure_warns_and_still_throttles(tmp_path):
+    """拉起失败(Popen 炸)只告警不炸对账; 退避账键照记(防失败形态每 tick 空拉)"""
+    data_dir = str(tmp_path / "data")
+    backup = tmp_path / "BT_backup"
+    v1, _v2 = _torrent_fixture(backup, b"m-ok", "R:/src")
+    mod = _s3_mod(tmp_path, backup=backup)
+    host, port = mod._qb_host(), mod._qb_port()
+    job = _job("j1", phase=ru.PHASE_ARMED, hashes=(v1, ))
+    _write_new_chain_spec(data_dir, "j1", host, port, backup, v1)
+
+    def _boom(d, h, p):
+        raise OSError("spawn denied")
+
+    mod._spawn_daemon = _boom
+    rt = {}
+    with capture_logs("auto_qb.core.modules.relocate_mod") as cap:
+        mod._ensure_daemon(job, rt)
+    assert any("回收 daemon 拉起失败" in m for m in cap.messages), cap.messages
+    assert "ensure_daemon_ts" in rt, "失败也吃退避账(Popen 不留痕迹时没有节流就是每 tick 空拉)"
+
+
+def test_penetrate_stage_without_aliases_goes_straight_to_arm(tmp_path):
+    """penetrate stage 而别名集为空(链上无链接可穿透的形态): 直进武装(233->248 支)"""
+    mod = _bare_mod(data_dir=str(tmp_path / "data"))
+    job = _job(
+        "j1",
+        phase=ru.PHASE_MOVED,
+        plan={
+            "form": ru.FORM_FILE_LINKS,
+            "link_kind": "hardlink",
+            "files": []
+        },
+        alias_paths=(),
+    )
+    rt = {"stage": "penetrate"}
+    mod._step_moved(job, rt)
+    assert rt["stage"] == "arm", rt
+    mod._step_moved(job, rt)  # 下一拍: arm 收口(每 tick 一 stage)
+    assert mod.get_job("j1") is not None and mod.get_job("j1").phase == ru.PHASE_ARMED
+
+
+# ---------------------------------------------------------------------------
+# 覆盖率缺口清偿(26-11-07): 标签名配置缺省 / 路径证据客户端缺位 / 祖先上溯深度耗尽
+# ---------------------------------------------------------------------------
+
+
+def test_tag_name_without_config_is_empty(tmp_path):
+    """relocate 配置整段缺省(conf None) -> 待收尾标签名空串(标签镜像静默关闭)"""
+    import types as _types
+
+    from relocate_exec_support import _bare_mod
+
+    mod = _bare_mod(data_dir=str(tmp_path / "data"))
+    mod._ctx.config = _types.SimpleNamespace(relocate=None)  # relocate 段缺席
+    assert mod._tag_name() == ""

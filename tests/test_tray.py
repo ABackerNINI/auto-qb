@@ -54,6 +54,8 @@ ctx.notify 用四公开口替身 (enabled_state/is_enabled/set_enabled) —— �
 - test_run_normal_exit_teardowns_and_installs_sigterm_quit: mainloop 正常返回 -> handler 已换装 + 收尾依序全跑 + manager 线程收干净
 - test_run_mainloop_exception_still_teardowns: mainloop 抛 KeyboardInterrupt -> 收尾照跑且异常上抛 (收尾不得被异常跳过)
 - test_run_tray_wraps_generic_init_failure: 初始化任意异常 -> 包成 AutoQbError ("托盘 UI 初始化失败")
+- test_ipc_stop_swallows_close_oserror: IPC stop 句柄 close 抛 OSError 吞掉继续删端口文件
+- test_run_tray_success_returns_run_rc: 初始化成功 -> run() 返回值原样上抛
 - test_run_tray_reraises_autoqb_error: AutoQbError 原样重抛 (不二次包装)
 - test_trayui_init_sets_appid_before_first_window: TrayUi.__init__ 里 AUMID 设置先于 _build_window (时序钉死, issue 26-10-02-0727)
 - test_set_windows_appid_success_no_readback: (Win32 替身) hr=0 -> 留「已设置」debug, 无读回动作 (读回判据已删, issue 26-10-02-0441)
@@ -1032,3 +1034,39 @@ def test_set_windows_appid_setter_raises_is_swallowed(monkeypatch):
     with _capture_on_module_logger(probe, level=logging.DEBUG):
         tray_app._set_windows_appid()  # 异常被吞, 进程静默继续
     assert probe.messages == ["AppUserModelID 设置失败"], "只走 logger.debug (与 hr!=0 的 warning 文案区分)"
+
+
+# ---------------------------------------------------------------------------
+# 覆盖率缺口清偿(26-11-07): IPC 关停容错 / run_tray 正常返回
+# ---------------------------------------------------------------------------
+
+
+def test_ipc_stop_swallows_close_oserror(tmp_path):
+    """stop: 句柄 close 抛 OSError(已关闭形态) -> 吞掉继续删端口文件, 不炸收尾"""
+    srv = ShowIpcServer(str(tmp_path / UI_PORT_FILE_NAME), on_show=lambda: None)
+
+    class _Sock:
+        def close(self):
+            raise OSError("already closed")
+
+    srv._sock = _Sock()
+    srv.stop()  # 不抛
+    assert not os.path.exists(str(tmp_path / UI_PORT_FILE_NAME))
+
+
+def test_run_tray_success_returns_run_rc(monkeypatch, tmp_path):
+    """初始化成功 -> run() 返回值原样上抛(托盘模式进程退出码)"""
+    mgr = make_manager(str(tmp_path / "state.json"))
+
+    class _Ui:
+        def __init__(self, manager, dry_run=False):
+            self.inited = (manager, dry_run)
+
+        def run(self):
+            return 7
+
+    monkeypatch.setattr(tray_app, "TrayUi", _Ui)
+    try:
+        assert run_tray(mgr, dry_run=True) == 7
+    finally:
+        _cleanup_tray_handlers()

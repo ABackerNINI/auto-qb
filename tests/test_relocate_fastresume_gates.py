@@ -52,6 +52,11 @@
 - test_source_unknown_blocks_group: fa.exists 全程不可判定 -> gate=source_unknown(保守拒)
 - test_unwanted_files_exempt_from_missing: priority=0 的缺文件不构成缺失(误报防线);
   同一文件 wanted(priority 缺省)则照拦(对照面)
+
+覆盖率缺口清偿(26-11-07, test.full 99.31% -> 99.5% 闸):
+- test_source_three_states_twin_unknown_and_missing: 源侧三态(在/缺失/!.!qB 孪生/探测异常按不可判定)
+- test_own_alias_hardlink_scan_tolerates_dead_alias_paths: 自有别名硬链接判定容忍悬空别名路径
+- test_load_bt_backup_config_non_dict_is_empty: bt_backup 段非字典 => 空表
 """
 import os
 import types
@@ -530,3 +535,70 @@ def test_unwanted_files_exempt_from_missing(tmp_path, monkeypatch):
     ]
     it = mod.relocate_precheck(["HA"], dst)[0]
     assert any(r["gate"] == "source_missing" for r in it["reasons"]), it
+
+
+# ---------------------------------------------------------------------------
+# 覆盖率缺口清偿(26-11-07): 源侧三态孪生探测异常支 / 自有别名硬链接判定
+# ---------------------------------------------------------------------------
+
+
+class _FaTable:
+    """FileAccess.exists 替身: 按表驱动, 可对指定路径注入异常"""
+    def __init__(self, table, error_on=()):
+        self.table = dict(table)
+        self.error_on = set(error_on)
+
+    def exists(self, path):
+        if path in self.error_on:
+            raise RuntimeError("probe broke")
+        return self.table.get(path, False)
+
+
+def test_source_three_states_twin_unknown_and_missing(tmp_path):
+    """源侧三态: 在/缺失/!.!qB 孪生/探测异常按不可判定(unwanted 不参与)"""
+    from auto_qb.core.modules.relocate_common import _native
+    from auto_qb.core.modules.relocate_plan import _source_three_states
+
+    save_path = str(tmp_path / "src")
+    os.makedirs(save_path)
+    (tmp_path / "src" / "a.mkv").write_bytes(b"x")  # declared 在
+    # b: 缺失且无孪生; c: 孪生在场; d: 孪生探测异常; e: 声明名探测异常
+    table = {
+        _native(save_path, "a.mkv"): True,
+        _native(save_path, "c.mkv"): False,
+        _native(save_path, "c.mkv" + ".!qB"): True,
+        _native(save_path, "d.mkv"): False,
+        _native(save_path, "e.mkv"): False,
+    }
+    fa = _FaTable(table, error_on={_native(save_path, "d.mkv" + ".!qB"), _native(save_path, "e.mkv")})
+    missing, unknown, twins = _source_three_states(
+        save_path, ["a.mkv", "b.mkv", "c.mkv", "d.mkv", "e.mkv"], {"z.mkv"}, fa
+    )
+    assert missing == ["b.mkv"] and twins == ["c.mkv.!qB"]
+    assert sorted(unknown) == ["d.mkv", "e.mkv"], "探测异常按不可判定(保守默认, 不猜)"
+
+
+def test_own_alias_hardlink_scan_tolerates_dead_alias_paths(tmp_path):
+    """自有别名硬链接判定: 别名路径 stat 不到(被搬走/悬空) -> 跳过该路径不抛(545-546 支)"""
+    from relocate_exec_support import _bare_mod, _job
+
+    mod = _bare_mod(data_dir=str(tmp_path / "data"))
+    real = tmp_path / "e00.mkv"
+    real.write_bytes(b"x")
+    dead = _job("j1", phase=ru.PHASE_ARMED, alias_paths=(r"R:\nowhere\gone\e00.mkv", ))
+    mod._jobs["j1"] = dead
+    assert mod._own_alias_hardlink(os.stat(str(real))) is False  # 全部路径判不了 => 非自有别名
+
+
+# ---------------------------------------------------------------------------
+# 覆盖率缺口清偿(26-11-07): bt_backup 解析非字典输入
+# ---------------------------------------------------------------------------
+
+
+def test_load_bt_backup_config_non_dict_is_empty():
+    """bt_backup 段非字典(字符串/列表) => 空表(启动期校验另拦, 解析面只转换不炸)"""
+    from auto_qb.config.loaders import load_bt_backup_config
+
+    assert load_bt_backup_config(None) == {}
+    assert load_bt_backup_config("not-a-dict") == {}
+    assert load_bt_backup_config(["a", "b"]) == {}

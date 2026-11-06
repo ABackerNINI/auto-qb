@@ -44,6 +44,10 @@ app_get_directory_content(响应形状按报告 26-11-03-2306 §8.1 实测: with
 - test_d_plain_userlist_same_shape: 非 qbittorrentapi 类的 UserList 同形也放行(判据是序列协议不是类名)
 - test_d_container_shape_still_rejected: 反误放对照: 裸 str/bytes/dict/None 响应仍 unavailable(形态异常)
 - test_link_follow_real_directory_content_list: F 级同函数同源路径: DirectoryContentList 一致 -> positive(级 D)
+
+覆盖率缺口清偿(26-11-07, test.full 99.31% -> 99.5% 闸):
+- test_path_evidence_without_client_falls_back_to_bprime: 客户端缺位 D 级 unavailable -> 照走 B′ 降级
+- test_nearest_existing_ancestor_depth_exhausted: 深链上溯深度预算耗尽 => None(循环出口支)
 """
 
 import os
@@ -455,3 +459,29 @@ def test_link_follow_real_directory_content_list(tmp_path):
     entries = DirectoryContentList([_entry("a.txt", 100, MT)])
     ev = rp.link_follow_evidence(_ctx(_RawDirClient(entries)), "qbsrc", str(tmp_path), names=["a.txt"])
     assert ev.status == rp.POSITIVE and ev.level == rp.LEVEL_D, ev
+
+
+# ---------------------------------------------------------------------------
+# 覆盖率缺口清偿(26-11-07): 客户端缺位降级 B′ / 上溯深度耗尽
+# ---------------------------------------------------------------------------
+
+
+def test_path_evidence_without_client_falls_back_to_bprime(tmp_path):
+    """客户端缺位 => D 级 unavailable -> 照走 B′ 降级(files 是调用方已取回的元数据):
+    本机内容比对得正 => 返回 B′ 正证据"""
+    local_dir = tmp_path / "Show"
+    local_dir.mkdir()
+    (local_dir / "e00.mkv").write_bytes(b"x" * 64)
+    ev = rp.path_evidence(types.SimpleNamespace(api=None), "R:/qb/Show", str(local_dir), [("e00.mkv", 64)])
+    assert ev.status == rp.POSITIVE, ev
+
+
+def test_nearest_existing_ancestor_depth_exhausted(monkeypatch):
+    """全链不可用且根判定始终可再上溯(深路径 + 深度预算耗尽) => None(循环出口支)"""
+    monkeypatch.setattr(rp, "_ANCESTOR_MAX_DEPTH", 2)
+
+    class _NoDisk:
+        def disk_usage(self, p):
+            raise OSError("no disk")
+
+    assert rp.nearest_existing_ancestor(_NoDisk(), "X:/a/b/c/d/e/f") is None

@@ -28,12 +28,31 @@
   => 只删种子记录, delete_files=False(绝不误删用户数据); 目录侧保留现状
 - test_start_hook_sweeps_residue: relocate 启动钩子: enabled 时清残留并在日志提及; disabled/dry_run 不动手
 - test_lifecycle_mixin_wires_sweep: LifecycleMixin.start 源码里确实调用 sweep_probe_residue(钩子挂接不回退)
+
+覆盖率缺口清偿(26-11-07, test.full 99.31% -> 99.5% 闸):
+- test_probe_bencode_type_gates: _bencode 类型闸(bool 拒 / list 编码 / float 拒)
+- test_probe_api_unavailable_env: ctx 无 api => 环境性失败 api_unavailable
+- test_probe_tag_list_api_error_during_await: 可见性轮询期 API 异常 => api_error + env=True
+- test_probe_recheck_poll_api_error_env: 读证轮询期 API 异常 => api_error + env=True
+- test_probe_awaits_past_hashless_tag_entries: 轮询撞无 hash 条目跳过继续等
+- test_probe_set_location_rejected_env: setLocation 被拒 => env=True
+- test_probe_write_proof_copy_without_move_mismatch: dst 一致而 src 未消失 => 等到超时定 mismatch
+- test_file_matches_oserror_is_false: 本机文件比对 OSError => 不一致不抛
+- test_cleanup_tag_delete_matrix: 无 hash 清理四支(跳过/补删/补删炸/定位炸)
+- test_cleanup_gone_poll_error_records_and_continues: 消失轮询炸留证继续目录清理
+- test_cleanup_rmtree_failure_and_leftover: 目录清理失败 residue 留证
+- test_sweep_probe_residue_list_error_returns_zero: 扫描列种子炸返回 0 不挡启动
+- test_sweep_probe_residue_delete_failure_and_hashless: 残留删除失败继续/无 hash 条目不发删除
+- test_sweep_probe_residue_dir_cleanup_failure_warns: 残留目录清理失败只告警
 """
 
 import hashlib
 import logging
 import os
 import shutil
+import types
+from types import SimpleNamespace
+from unittest import mock
 
 import pytest
 
@@ -440,3 +459,237 @@ def test_lifecycle_mixin_wires_sweep():
     import inspect
     src_text = inspect.getsource(LifecycleMixin.start)
     assert "sweep_probe_residue" in src_text
+
+
+# ---------------------------------------------------------------------------
+# 覆盖率缺口清偿(26-11-07): 错误分支与轮询边角
+# ---------------------------------------------------------------------------
+
+
+class _TagListErrorClient(FakeClient):
+    """按 tag 列种子恒炸: add 受理后可见性轮询期 API 异常(环境性)"""
+    def torrents_info(self, torrent_hashes=None, **kw):
+        if kw.get("tag") == rp.TAG_PROBE:
+            raise RuntimeError("tag list broke")
+        return super().torrents_info(torrent_hashes=torrent_hashes, **kw)
+
+
+class _RecheckPollErrorClient(_SameFsClient):
+    """recheck 后按 hash 轮询进度恒炸: 读证轮询期 API 异常(环境性)"""
+    def torrents_info(self, torrent_hashes=None, **kw):
+        if torrent_hashes:
+            raise RuntimeError("progress poll broke")
+        return super().torrents_info(torrent_hashes=torrent_hashes, **kw)
+
+
+class _HashlessFirstClient(_SameFsClient):
+    """首次 tag 列表回一个无 hash 条目: 可见性轮询的「无 hash 跳过」支"""
+    def __init__(self):
+        super().__init__()
+        self._tag_calls = 0
+
+    def torrents_info(self, torrent_hashes=None, **kw):
+        res = super().torrents_info(torrent_hashes=torrent_hashes, **kw)
+        if kw.get("tag") == rp.TAG_PROBE:
+            self._tag_calls += 1
+            if self._tag_calls == 1:
+                return [FakeTorrent(hash="", name="ghost", tags=rp.TAG_PROBE)]
+        return res
+
+
+class _RejectSetLocationClient(_SameFsClient):
+    """setLocation 被 qB 拒(环境性)"""
+    def torrents_set_location(self, torrent_hashes=None, location=None):
+        raise RuntimeError("location rejected")
+
+
+class _CopyNoMoveClient(_SameFsClient):
+    """setLocation 只复制不搬走: dst 出现一致内容而 src 恒在场(证写超时的「仅复制」形态)"""
+    def torrents_set_location(self, torrent_hashes=None, location=None):
+        FakeClient.torrents_set_location(self, torrent_hashes=torrent_hashes, location=location)  # 只记台账
+        for h in (torrent_hashes if isinstance(torrent_hashes, (list, tuple)) else [torrent_hashes]):
+            tor = self.torrents.get(h)
+            if tor is None or not os.path.isdir(tor.save_path):
+                continue
+            src_dir = tor.save_path
+            os.makedirs(location, exist_ok=True)
+            for fn in os.listdir(src_dir):
+                with open(os.path.join(src_dir, fn), "rb") as f:
+                    data = f.read()
+                with open(os.path.join(location, fn), "wb") as f:
+                    f.write(data)  # 内容一致但源不消失
+            tor.save_path = location  # qB 账面照常翻到新位置(物理侧只是复制)
+
+
+def test_probe_bencode_type_gates():
+    """_bencode 类型闸: bool 拒 / list 编码 / 域外类型(float)拒"""
+    with pytest.raises(TypeError, match="bool"):
+        rp._bencode(True)
+    assert rp._bencode([1, b"2"]) == b"li1e1:2e"
+    with pytest.raises(TypeError, match="不支持的类型"):
+        rp._bencode(3.5)
+
+
+def test_probe_api_unavailable_env(tmp_path):
+    """ctx 无 api / api 无客户端 => 环境性失败 api_unavailable(不进任何探测动作)"""
+    result = rp.run_probe(types.SimpleNamespace(), str(tmp_path / "src"), str(tmp_path / "dst"))
+    assert result.status == "failed" and result.reason == "api_unavailable" and result.env is True
+
+
+def test_probe_tag_list_api_error_during_await(tmp_path, fast_timeouts):
+    """可见性轮询期按 tag 列种子炸 => api_error + env=True(与种子不可见同出口, 带错误证据)"""
+    ctx, client, src, dst = _env(tmp_path, client=_TagListErrorClient())
+    result = rp.run_probe(ctx, src, dst)
+    assert result.status == "failed" and result.reason == "api_error" and result.env is True
+    assert "tag list broke" in result.evidence["error"]
+
+
+def test_probe_recheck_poll_api_error_env(tmp_path, fast_timeouts):
+    """读证轮询期按 hash 列进度炸 => api_error + env=True(recheck 本身已受理)"""
+    ctx, client, src, dst = _env(tmp_path, client=_RecheckPollErrorClient())
+    result = rp.run_probe(ctx, src, dst)
+    assert result.status == "failed" and result.reason == "api_error" and result.env is True
+    assert "progress poll broke" in result.evidence["error"]
+
+
+def test_probe_awaits_past_hashless_tag_entries(tmp_path, fast_timeouts):
+    """可见性轮询撞无 hash 条目: 跳过继续等, 下拍命中真种子全生命通过"""
+    ctx, client, src, dst = _env(tmp_path, client=_HashlessFirstClient())
+    result = rp.run_probe(ctx, src, dst)
+    assert result.status == "passed" and result.reason == "ok"
+    assert client._tag_calls >= 2  # 无 hash 条目没让轮询提前退
+
+
+def test_probe_set_location_rejected_env(tmp_path, fast_timeouts):
+    """setLocation 被拒 => set_location_rejected + env=True(不缓存方向)"""
+    ctx, client, src, dst = _env(tmp_path, client=_RejectSetLocationClient())
+    result = rp.run_probe(ctx, src, dst)
+    assert result.status == "failed" and result.reason == "set_location_rejected" and result.env is True
+    assert "location rejected" in result.evidence["error"]
+
+
+def test_probe_write_proof_copy_without_move_mismatch(tmp_path, fast_timeouts):
+    """dst 已出现一致内容而 src 未消失: 继续等到超时定性 mismatch(不只看 dst 在场)"""
+    ctx, client, src, dst = _env(tmp_path, client=_CopyNoMoveClient())
+    result = rp.run_probe(ctx, src, dst)
+    assert result.status == "failed" and result.reason == "write_mismatch" and result.env is False
+    assert result.evidence.get("dst_seen") is True and result.evidence.get("src_present") is True
+
+
+def test_file_matches_oserror_is_false(tmp_path):
+    """本机文件比对读不了(size/开文件 OSError) => 不一致(不抛)"""
+    missing = str(tmp_path / "gone.bin")
+    assert rp._file_matches(missing, "0" * 40, 4) is False
+
+
+class _CleanupApi:
+    """_cleanup 直测替身: tag 列表/删除/消失轮询三面可注入故障"""
+    def __init__(self, tag_rows=(), tag_error=None, delete_error=None, gone_poll_error=None):
+        self.tag_rows = list(tag_rows)
+        self.tag_error = tag_error
+        self.delete_error = delete_error
+        self.gone_poll_error = gone_poll_error
+        self.deleted = []
+
+    def torrents_info(self, torrent_hashes=None, **kw):
+        if self.tag_error is not None and kw.get("tag"):
+            raise self.tag_error
+        if self.gone_poll_error is not None and torrent_hashes:
+            raise self.gone_poll_error
+        if kw.get("tag"):
+            return list(self.tag_rows)
+        return []  # 消失轮询: 默认已消失
+
+    def torrents_delete(self, torrent_hashes=None, delete_files=False):
+        if self.delete_error is not None:
+            raise self.delete_error
+        self.deleted.append((tuple(torrent_hashes or ()), delete_files))
+
+
+def test_cleanup_tag_delete_matrix(tmp_path):
+    """无 hash 的清理: 无 hash 条目跳过 / 正常补删 / 补删炸留证 / 定位炸留证, 均不抛"""
+    ev: dict = {}
+    api = _CleanupApi(tag_rows=[SimpleNamespace(hash=""), SimpleNamespace(hash="T1")])
+    rp._cleanup(api, "", (str(tmp_path / "a"), str(tmp_path / "b")), ev)
+    assert ev["cleanup"]["torrent_deleted"] is True and api.deleted == [(("T1", ), True)]
+
+    ev2: dict = {}
+    api2 = _CleanupApi(tag_rows=[SimpleNamespace(hash="T1")], delete_error=RuntimeError("delete refused"))
+    rp._cleanup(api2, "", (), ev2)
+    assert "tag_delete_error" in ev2["cleanup"] and ev2["cleanup"]["torrent_deleted"] is False
+
+    ev3: dict = {}
+    api3 = _CleanupApi(tag_error=RuntimeError("locate broke"))
+    rp._cleanup(api3, "", (), ev3)
+    assert "tag_locate_error" in ev3["cleanup"]
+
+
+def test_cleanup_gone_poll_error_records_and_continues(tmp_path):
+    """删除后的消失轮询炸: gone_error 留证并直接进目录清理(不抛不改结论)"""
+    ev: dict = {}
+    d = tmp_path / "a"
+    d.mkdir()
+    api = _CleanupApi(gone_poll_error=RuntimeError("poll broke"))
+    rp._cleanup(api, "HASH1", (str(d), ), ev)
+    info = ev["cleanup"]
+    assert info["torrent_deleted"] is True and "gone_error" in info and info["torrent_gone"] is False
+    assert info["dirs_removed"] == [str(d)]
+
+
+def test_cleanup_rmtree_failure_and_leftover(tmp_path, monkeypatch):
+    """目录清理失败: residue 留证 + 清理后仍存在则并入 leftover(启动扫描兜底文案)"""
+    d1, d2 = tmp_path / "a", tmp_path / "b"
+    d1.mkdir()
+    d2.mkdir()
+
+    def _boom(path, *a, **kw):
+        raise PermissionError(13, "locked")
+
+    monkeypatch.setattr(shutil, "rmtree", _boom)
+    ev: dict = {}
+    rp._cleanup(_CleanupApi(), "H", (str(d1), str(d2)), ev)
+    info = ev["cleanup"]
+    assert info["residue"] == [str(d1), str(d2)] and info["dirs_removed"] == []
+    assert os.path.exists(d1) and os.path.exists(d2)  # leftover 面成立
+
+
+def test_sweep_probe_residue_list_error_returns_zero(tmp_path):
+    """启动扫描列种子炸: 吞掉记 warning 返回 0(绝不挡启动); 无 api 同样 0"""
+    ctx, client, src, dst = _env(tmp_path)
+
+    def _boom(**kw):
+        raise RuntimeError("list broke")
+
+    client.torrents_info = _boom  # 直接替换: sweep 只走这一个入口
+    assert rp.sweep_probe_residue(ctx) == 0
+    assert rp.sweep_probe_residue(types.SimpleNamespace()) == 0  # ctx 无 api/client: 零动作
+
+
+def test_sweep_probe_residue_delete_failure_and_hashless(tmp_path):
+    """残留删除失败: 单条告警继续其余条目; 无 hash 条目跳过删除仍计数"""
+    ctx, client, src, dst = _env(tmp_path)
+    client.torrents["R1"] = FakeTorrent(hash="", name="aqb-probe-x.bin", save_path=src, tags=rp.TAG_PROBE)
+
+    calls = {"n": 0}
+
+    def _boom(*a, **kw):
+        calls["n"] += 1
+        raise RuntimeError("delete broke")
+
+    client.torrents["R2"] = FakeTorrent(hash="R2", name="aqb-probe-y.bin", save_path=src, tags=rp.TAG_PROBE)
+    with mock.patch.object(client, "torrents_delete", side_effect=_boom):
+        assert rp.sweep_probe_residue(ctx) == 1  # 无 hash 条目计 cleaned; 删除失败条目不计
+    assert calls["n"] == 1  # 无 hash 条目没发起删除
+
+
+def test_sweep_probe_residue_dir_cleanup_failure_warns(tmp_path, monkeypatch):
+    """残留目录清理失败: 只告警不抛(人工/启动扫描兜底)"""
+    ctx, client, src, dst = _env(tmp_path)
+    save_path = _inject_residue(ctx, client, src)
+
+    def _boom(path, *a, **kw):
+        raise PermissionError(13, "locked")
+
+    monkeypatch.setattr(shutil, "rmtree", _boom)
+    assert rp.sweep_probe_residue(ctx) == 1
+    assert os.path.exists(save_path)  # 目录清理失败: 保守保留现场

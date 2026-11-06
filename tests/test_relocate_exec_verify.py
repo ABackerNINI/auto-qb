@@ -29,6 +29,12 @@
 ### WebUI 删除命令面(第二条路径, 经命令队列全链)
 - test_webui_delete_blocked_receipt_single_and_group: delete_torrent / delete_group 撞拦截 →
   error 回执带解法文案 + qB 客户端未收到 delete; 纯删除照常发
+
+覆盖率缺口清偿(26-11-07, test.full 99.31% -> 99.5% 闸):
+- test_webui_delete_blocked_receipt_bulk_and_no_cmd_id: 批量删除拦截 error 回执 + 单发/组发无
+  cmd_id 静默回执(拦截不依赖结果页)
+- test_verify_hang_unchanged_state_is_debug_only: 悬挂同参重放只落 DEBUG(不重复清账/刷警告)
+- test_qb_side_check_self_failure_is_skipped: qB 侧自检自身炸 => skipped 不挡武装
 """
 
 import types
@@ -313,3 +319,75 @@ def test_webui_delete_blocked_receipt_single_and_group(tmp_path):
     mgr.web.consume_commands()
     assert mgr.web.results["d3"]["status"] == "ok", mgr.web.results["d3"]
     assert ("delete", False) in client.calls
+
+
+# ---------------------------------------------------------------------------
+# 覆盖率缺口清偿(26-11-07): 核验悬挂同参重放 / qB 侧自检异常
+# ---------------------------------------------------------------------------
+
+
+def test_verify_hang_unchanged_state_is_debug_only(tmp_path):
+    """重放一轮后仍不过且反馈面无变化: 只落 DEBUG(不重复清账/不重复刷警告, 防每拍刷屏)"""
+    import logging
+
+    mod = _bare_mod(data_dir=str(tmp_path / "data"))
+    rj.write_journal(mod._data_dir(), "j1", {"verify_replays": 1})
+    bad = [("a" * 40, "已不在客户端")]
+    detail = "; ".join(f"{h[:8]} {state}" for h, state in bad[:3])
+    text = f"核验未过: {detail}(别名维持, 成员经别名可读)"
+    job = _job("j1", phase=ru.PHASE_REWRITTEN, reason=ru.REASON_VERIFY_FAILED, last_error=text)
+    with capture_logs("auto_qb.core.modules.relocate_mod", level=logging.DEBUG) as cap:
+        mod._verify_hang(job, bad)
+    assert any("悬挂维持" in m for m in cap.messages), cap.messages
+    assert rj.verify_replays_of(mod._data_dir(), "j1") == 1, "同参重放不再清账"
+
+
+def test_qb_side_check_self_failure_is_skipped(tmp_path, monkeypatch):
+    """qB 侧自检自身炸 => skipped(保守默认不挡武装), rt 记异常供排查"""
+    from auto_qb.core.modules import relocate_proof as rp_mod
+
+    mod = _bare_mod(data_dir=str(tmp_path / "data"))
+    job = _job("j1", phase=ru.PHASE_MOVED)
+
+    def _boom(*a, **kw):
+        raise RuntimeError("evidence broke")
+
+    monkeypatch.setattr(rp_mod, "link_follow_evidence", _boom)
+    rt = {}
+    assert mod._qb_side_check(job, rt) == "skipped"
+    assert "自检异常" in rt["qb_side_check"] and "RuntimeError" in rt["qb_side_check"]
+
+
+# ---------------------------------------------------------------------------
+# 覆盖率缺口清偿(26-11-07): 批量删除拦截回执 / 无 cmd_id 的拦截静默回执
+# ---------------------------------------------------------------------------
+
+
+def test_webui_delete_blocked_receipt_bulk_and_no_cmd_id(tmp_path):
+    """D16 拦截回执全路径: 批量 delete 撞拦截 -> error 回执; 单发/组发无 cmd_id -> 静默回执
+    (不炸不写结果页, qB 未收到 delete)"""
+    from webui_helpers import _make_grouped_manager
+
+    mgr, client, key = _make_grouped_manager(str(tmp_path))
+    mgr.store.relocating_alias_roots = {r"R:\Downloads": "j1"}
+    # 批量路径(cmd_id 在场): 整批不发 qB, error 回执
+    mgr.web.commands.put(
+        ("bulk_torrents", {
+            "hashes": ["HA", "HB"],
+            "action": "delete",
+            "delete_files": True,
+            "cmd_id": "d-bulk",
+        })
+    )
+    mgr.web.consume_commands()
+    r1 = mgr.web.results["d-bulk"]
+    assert r1["status"] == "error" and "仅删除种子" in r1["error"], r1
+    assert not any(c[0] == "delete" for c in client.calls)
+    # 单发无 cmd_id: 拦截仍生效, 静默返回(无结果页可写)
+    mgr.web.commands.put(("delete_torrent", {"hash": "HA", "delete_files": True}))
+    mgr.web.consume_commands()
+    assert not any(c[0] == "delete" for c in client.calls), "无 cmd_id 也必须拦(防误删)"
+    # 组发无 cmd_id: 同上
+    mgr.web.commands.put(("delete_group", {"key": key, "delete_files": True}))
+    mgr.web.consume_commands()
+    assert not any(c[0] == "delete" for c in client.calls), "无 cmd_id 组发同样拦"

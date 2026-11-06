@@ -34,6 +34,8 @@
 - test_judge_site_view_lane_a_managed
 - test_request_refresh_delegates_to_worker_and_accepts
 - test_request_refresh_without_worker_reports_note
+- test_request_refresh_notes_when_no_fetchable_sites: 线程在跑但无可取数站点 => 「没有可取数站点」
+- test_request_refresh_notes_when_named_site_not_fetchable: 点名不在可取数集合 => 如实文案
 - test_sleeper_interrupt_during_wait_message_is_precise
   不绑共享固定端口 18788-18790 —— 防「并行占满 ⇒ 发现 WARNING 污染 INFO 断言」复发
 """
@@ -498,3 +500,31 @@ def test_site_origins_skips_without_stopping(tmp_path):
             ),
     }
     assert runtime._site_origins() == [("pt.example.com", "https://pt.example.com/*")]
+
+
+# ---------------------------------------------------------------------------
+# 覆盖率缺口清偿(26-11-07): 点名取数两支拒绝文案(全站型空集 / 点名不在集合)
+# ---------------------------------------------------------------------------
+
+
+def test_request_refresh_notes_when_no_fetchable_sites(tmp_path):
+    """线程在跑但无可取数站点(全站型/未绑定)且未点名 => 「没有可取数站点」文案"""
+    runtime = make_runtime(tmp_path, enabled=True, channel=False)
+    runtime.config.trackers["pt.example.com"].hr_check.listing = ""  # 空 = 未绑定, fetchable 不收
+    runtime.start()
+    try:
+        outcome = runtime.request_refresh()
+        assert outcome["requested"] == [] and "没有可取数站点" in outcome["note"], outcome
+    finally:
+        runtime.stop()
+
+
+def test_request_refresh_notes_when_named_site_not_fetchable(tmp_path):
+    """点名站点不在可取数集合 => 「点名站点不在可取数集合」文案(不虚报已受理)"""
+    runtime = make_runtime(tmp_path, enabled=True, channel=False)
+    runtime.start()
+    try:
+        outcome = runtime.request_refresh(["nosuch.example.com"])
+        assert outcome["requested"] == [] and "不在可取数集合" in outcome["note"], outcome
+    finally:
+        runtime.stop()

@@ -51,7 +51,15 @@
   双键新值 + .bak 在场); 同参重放 unchanged 且文件字节/mtime 零变化(黄金法则 1)
 - test_retarget_not_found_and_malformed_propagation: 身份不符 -> not_found 不抛;
   坏 bencode 样本 -> FastresumeError 上抛且原文件/无 .bak 零触碰
+
+覆盖率缺口清偿(26-11-07, test.full 99.31% -> 99.5% 闸):
+- test_locate_skips_corrupt_torrent_in_fallback_scan: 兜底扫描撞坏 .torrent -> 跳过不挡匹配
+- test_rewrite_pairs_dedupes_when_old_has_no_separator: 旧根无分隔符 -> 变体去重支
+- test_fsync_dir_success_and_failure_paths: 目录 fsync 成功/失败双路都不抛
+- test_write_bytes_durable_cleans_tmp_on_replace_failure: os.replace 失败清临时文件再上抛
+- test_assert_roundtrip_guard_branches: 往返自校验 尾部残留/键集不一致/键值不一致 三道闸
 """
+import os
 from pathlib import Path
 
 import pytest
@@ -406,3 +414,67 @@ def test_retarget_not_found_and_malformed_propagation(tmp_path):
         frmod.retarget(d, v1, v2, OLD, NEW)  # 坏样本上抛
     assert p.read_bytes() == before  # 原文件零触碰
     assert list(d.glob("*.bak")) == [] and list(d.glob("*.aqtmp")) == []  # 无备份无残留
+
+
+# ---------------------------------------------------------------------------
+# 覆盖率缺口清偿(26-11-07): 错误分支与平台遗留面
+# ---------------------------------------------------------------------------
+
+
+def test_locate_skips_corrupt_torrent_in_fallback_scan(tmp_path):
+    """兜底扫描撞坏 .torrent: 跳过不挡匹配(OSError/ValueError 都算「非目标种子」)"""
+    d = tmp_path / "BT_backup"
+    d.mkdir()
+    # "-" 前缀保证 sorted 扫描先踩坏样本再命中配对项
+    (d / "-broken.torrent").write_bytes(b"\x00not-a-torrent")  # bdecode 直接失败
+    tb = _torrent_bytes()
+    v1, v2, _ = compute_infohashes(tb)
+    (d / f"{v1}.torrent").write_bytes(tb)
+    (d / f"{v1}.fastresume").write_bytes(frmod.bencode(_manual_dict()))
+
+    # 直查(<v2>.fastresume)未命中, 兜底扫描先踩坏样本再按 .torrent 现算 infohash 命中
+    assert frmod.locate_fastresume(d, "", v2) == d / f"{v1}.fastresume"
+
+
+def test_rewrite_pairs_dedupes_when_old_has_no_separator():
+    """旧根无分隔符(单分量名): 两个变体同串 -> seen 去重支, 只出一对"""
+    out, outcome = frmod.rewrite_save_paths({b"save_path": b"samedir/member"}, "samedir", r"T:\pt")
+    assert out[b"save_path"] == b"T:/pt/member"  # 无分隔符旧变体按正斜杠风味转写新根
+    assert outcome.rewritten == ("save_path", )
+
+
+def test_fsync_dir_success_and_failure_paths(tmp_path, monkeypatch):
+    """目录 fsync 双路: 打得开句柄时 fsync 成功/失败都不抛(POSIX 持久化尽力语义)"""
+    target = tmp_path / "d"
+    target.mkdir()
+    real_open, real_fsync = os.open, os.fsync
+    monkeypatch.setattr(frmod.os, "open", lambda p, flags: real_open(str(tmp_path / "f"), flags))  # 目录句柄换成真文件
+    (tmp_path / "f").write_bytes(b"x")
+    frmod._fsync_dir(target)  # fsync 成功路(248 + finally close)
+    monkeypatch.setattr(frmod.os, "fsync", lambda fd: (_ for _ in ()).throw(OSError("no fsync")))
+    frmod._fsync_dir(target)  # fsync 失败路: 吞掉(OSError -> pass)
+
+
+def test_write_bytes_durable_cleans_tmp_on_replace_failure(tmp_path, monkeypatch):
+    """os.replace 失败: 临时文件清掉再上抛(不半截落盘)"""
+    p = tmp_path / "h.fastresume"
+    p.write_bytes(b"old")
+    monkeypatch.setattr(frmod.os, "replace", lambda a, b: (_ for _ in ()).throw(OSError("replace denied")))
+
+    with pytest.raises(OSError, match="replace denied"):
+        frmod._write_bytes_durable(p, b"new")
+
+    assert p.read_bytes() == b"old" and list(tmp_path.glob("*.aqtmp")) == []
+
+
+def test_assert_roundtrip_guard_branches():
+    """往返自校验三道闸逐支: 尾部残留 / 键集不一致 / 键值不一致(直调内部闸, 均拒收)"""
+    # 尾部残留: 解码后 pos != len(payload)(278)
+    with pytest.raises(frmod.FastresumeError, match="尾部残留"):
+        frmod._assert_roundtrip({}, b"de" + b"x")
+    # 键集不一致: 重编码产物与入参不是同一键集(281)
+    with pytest.raises(frmod.FastresumeError, match="键集不一致"):
+        frmod._assert_roundtrip({b"a": 1}, frmod.bencode({b"b": 1}))
+    # 键值不一致: tuple 编码后解码成 list(tuple != list)(284)
+    with pytest.raises(frmod.FastresumeError, match="值不一致"):
+        frmod._assert_roundtrip({b"a": (b"x", )}, frmod.bencode({b"a": (b"x", )}))

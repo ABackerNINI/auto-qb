@@ -31,6 +31,9 @@
 - test_evaluate_add_rows: §3.6 第 1/3/8/15 行 + 第三方链接落点(无 job 登记)
 - test_same_volume_proof_table: 相等 True / 任一侧 None False / 不等 False(§2.4 硬证据口径)
 - test_evaluate_add_skips_terminal_and_unmatched_jobs
+- test_evaluate_add_second_pass_skips_terminal_job: 第二段作用域环的终态跳过 -> 落点无交叉判 OK
+- test_evaluate_add_dir_alias_redirects_landing_in_moved_phase: 行 2 目录别名改道(moved 相位)
+  -> confirm 带实际落点与卷剩余
 - test_evaluate_group_confirm_not_downgraded_by_later_block
 - test_evaluate_group_cross_volume_note
 - test_evaluate_group_form_reject_gate
@@ -1161,3 +1164,25 @@ def test_ensure_daemon_action_three_way():
     job = _dir_job()
     assert ru.reconcile(job, alias_present=True, qb_up=True, all_at_dst=False) == ru.ACT_WAIT
     assert ru.ACT_ENSURE_DAEMON not in {ru.ACT_WAIT, ru.ACT_REBUILD, ru.ACT_VERIFY}
+
+
+# ---------------------------------------------------------------------------
+# 覆盖率缺口清偿(26-11-07): evaluate_add 第二段作用域环的终态跳过与目录别名改道
+# ---------------------------------------------------------------------------
+
+
+def test_evaluate_add_second_pass_skips_terminal_job():
+    """收尾窗未命中落到第二段作用域环: 终态 job 在环内被跳过(816 支), 落点无交叉判 OK"""
+    done = _dir_job(phase=ru.PHASE_DONE)
+    r = ru.evaluate_add(ru.AddFacts(save_path=S, name="Show", jobs=(done, )))
+    assert r["cls"] == ru.CLS_OK and r["reasons"] == [], r
+
+
+def test_evaluate_add_dir_alias_redirects_landing_in_moved_phase():
+    """行 2(目录别名作用域, 前段相位 moved): 落点被改道到 T -> confirm 带实际落点与卷剩余"""
+    r = ru.evaluate_add(
+        ru.AddFacts(save_path=S, name="Show", jobs=(_dir_job(phase=ru.PHASE_MOVED), ), target_free=1234)
+    )
+    assert r["cls"] == ru.CLS_CONFIRM and r["reasons"][0]["gate"] == "alias_scope", r
+    assert r["actual_path"].replace("\\", "/").startswith(T), r
+    assert r["volume_free"] == 1234

@@ -14,6 +14,7 @@
 - test_confirm_empty_readonly_and_lock_busy: 只读退化与锁占用各自的提示 + 非 0
 - test_confirm_empty_records_history_event: 对账动作入拉取历史(计划 26-10-04-0312 §3.3)——
   恰一条 confirm_empty 事件(trigger=confirm / action=confirm-empty)随既有 commit 落盘
+- test_run_hr_once_hints_when_no_fetchable_site: 启用站点全部全站型 => 无可走查提示 + rc 1
 - test_print_channel_lists_shared_dir_when_configured: 配了共享目录时明示
 
 ### R20 展示导出变异守阵(issue 26-10-10-1108-test-hr-mutation-display, 排序口径/宽字符对齐/人话回落)
@@ -410,3 +411,18 @@ def test_run_hr_confirm_empty_blank_notes(tmp_path):
     assert run_hr_confirm_empty(cfg, [SITE], out=io.StringIO()) == 0
     data, _ = store.read_unlocked()
     assert data.wave.notes.startswith("人工对账: 确认账号 HR 清单为空"), "空 notes 时新备注即全部(无占位前缀)"
+
+
+# ---------------------------------------------------------------------------
+# 覆盖率缺口清偿(26-11-07): 走查全站型提示 / 点名取数拒绝文案
+# ---------------------------------------------------------------------------
+
+
+def test_run_hr_once_hints_when_no_fetchable_site(tmp_path):
+    """启用的站点全部是全站型(listing=none) => 无可走查内容提示 + 退出码 1"""
+    cfg = _config(tmp_path)
+    cfg.trackers[SITE].hr_check.listing = "none"  # enabled 但全站型: fetchable 不收
+    buf = io.StringIO()
+    code = run_hr_once(cfg, out=buf)
+    assert code == 1
+    assert "全部是全站型(listing=none)或未绑定" in buf.getvalue()

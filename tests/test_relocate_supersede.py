@@ -33,6 +33,16 @@ D19 旧 mover 通用补条目、搬前别名重建可行性预检(alias_busy)、
 ### 撤销护栏(S5 改道态的新暴露面)
 - test_supersede_cancel_guard_blocks_codestination: 存在改道到同一目标的在途前任时撤销新 job
   = 拒绝(cancel_chain)且零 qB 写(撤销会把共享数据搬回源, 掏空已改道前任的成员服务)
+
+覆盖率缺口清偿(26-11-07, test.full 99.31% -> 99.5% 闸):
+- test_supersede_stage_tick_failure_keeps_retrying_without_link: 重定向失败落在 supersede stage
+  拍(verify 拍已失败过) -> 停 moved 不建链, 注入解除后幂等续跑收敛
+- test_retarget_predecessor_journal_refused_and_stray_alias: journal 拒记 retarget(诊断面不承重,
+  只 DEBUG)/ 别名不在声明源下跳过重定向只计数
+- test_rel_under_equivalence_and_outside: _rel_under 三支(等值/根下/根外 None)
+- test_supersede_cover_movers_idempotent_replay: D19 补条目(前任成员+被搬离根命中成员)与幂等重放早退
+- test_build_links_skips_twin_links_already_pointing_at_target: 链式孪生(已指向目标的硬链接)
+  建链幂等跳过不重建
 """
 
 import os
@@ -49,7 +59,7 @@ from auto_qb.infra import relocate_journal as rj
 
 from helpers import FakeTorrent, pin_disk_usage
 
-from relocate_exec_support import _armed_env, _run_ticks
+from relocate_exec_support import _armed_env, _bare_mod, _job, _run_ticks
 
 
 def _c_root(tmp_path):
@@ -307,3 +317,127 @@ def test_supersede_cancel_guard_blocks_codestination(tmp_path, monkeypatch):
     out2 = mod.relocate_cancel(j2, cost_confirmed=True)
     assert out2["cls"] == "ok", out2
     assert mod.get_job(j2).phase == ru.PHASE_CANCELLED
+
+
+# ---------------------------------------------------------------------------
+# 覆盖率缺口清偿(26-11-07): supersede stage 拍的重试支 / 账面单点边角
+# ---------------------------------------------------------------------------
+
+
+def test_supersede_stage_tick_failure_keeps_retrying_without_link(tmp_path, monkeypatch):
+    """重定向失败落在 supersede stage 拍(verify 拍已失败过一次): 停 moved 不建链, 注入解除后续跑收敛"""
+    pin_disk_usage(monkeypatch)
+    mgr, client, mod, j1, spawned, src, dst, content = _armed_env(tmp_path, monkeypatch)
+    files = client.files_map["HA"]
+    dst_c = _c_root(tmp_path)
+    real = afs.retarget_alias
+    calls = {"n": 0}
+
+    def flaky(link, target, kind=None):
+        calls["n"] += 1
+        if calls["n"] <= 2:  # verify 拍 + supersede 拍各失败一次
+            raise RuntimeError("占用注入(WinError 32)")
+        return real(link, target, kind)
+
+    monkeypatch.setattr(afs, "retarget_alias", flaky)
+    items = mod.relocate_execute(["HA"], dst_c)
+    j2 = items[0]["job_id"]
+    _simulate(mgr, dst_c, files, os.path.join(dst, "Show"))
+    mod.on_task_line()  # moving -> moved(verify 拍: 首链失败, stage 翻 supersede)
+    mod.on_task_line()  # supersede 拍: 再失败 -> 不进建链 stage(下一拍重试)
+    mod.on_task_line()  # 仍停在 supersede(注入第二链生效于本拍)
+    job2 = mod.get_job(j2)
+    assert job2.phase == ru.PHASE_MOVED, job2.phase
+    assert mod.get_job(j1).alias_paths, "前任别名维持(重试至收敛, 不回滚)"
+    assert calls["n"] == 2
+    _run_ticks(mod, 8)  # 注入只挡前两链: 幂等续跑收敛
+    assert mod.get_job(j2).phase == ru.PHASE_ARMED
+    _points_at_c(mod, mod.get_job(j1), src, dst_c)
+
+
+def test_retarget_predecessor_journal_refused_and_stray_alias(tmp_path, monkeypatch):
+    """账面单点双边角: journal 拒记 retarget(诊断面不承重, 只 DEBUG 不回滚)/ 别名不在声明源下
+    (跳过重定向计数, 不猜测不动); spec 缺失同拍回落(retarget_spec False)"""
+    import types as _types
+
+    from helpers import FakeTorrent
+
+    mod = _bare_mod(data_dir=str(tmp_path / "data"))
+    pred = _job("j1", phase=ru.PHASE_ARMED, src="R:/src", dst="R:/dstB", alias_paths=("R:/elsewhere/l.bin", ))
+    job = _job("j2", phase=ru.PHASE_MOVED, src="R:/dstB", dst="R:/dstC", hashes=("HZ", ))
+    mod._ctx.store = _types.SimpleNamespace(
+        by_hash={"HZ": FakeTorrent(hash="HZ", save_path="R:/dstC/e00.mkv")}, relocating_hashes=set()
+    )
+    monkeypatch.setattr(rj, "mark_journal_retarget", lambda *a, **kw: False)  # 拒写注入
+    rt = {}
+    assert mod._retarget_predecessor(pred, job, rt) is True
+    assert rt["supersede"]["j1"]["pos"] == 1, "不在声明源下的别名: 跳过重定向只计数(账不自洽留痕)"
+    # 账面改道仍已提交(spec 缺失回落 + pred.dst 翻新值): journal 拒记不承重
+    assert mod.get_job("j1").dst == job.dst or mod._norm(mod.get_job("j1").dst) == mod._norm("R:/dstC")
+
+
+def test_rel_under_equivalence_and_outside(tmp_path):
+    """_rel_under 三支: 等值(空段)/ 根下(相对段)/ 根外(None, 账不自洽)"""
+    mod = _bare_mod(data_dir=str(tmp_path / "data"))
+    assert mod._rel_under("R:/src", "R:/src") == ""
+    assert mod._rel_under("R:/src", "R:/src/Sub/e00.mkv") == "Sub/e00.mkv"
+    assert mod._rel_under("R:/src", "R:/other/e00.mkv") is None
+
+
+def test_supersede_cover_movers_idempotent_replay(tmp_path):
+    """D19 补条目: 前任成员并入 + 被搬离根上的命中成员并入(不在本 job 核验集);
+    幂等重放并入集与现值相同 => 早退(不重复落账不刷日志)"""
+    import types as _types
+
+    from helpers import FakeTorrent
+
+    mod = _bare_mod(data_dir=str(tmp_path / "data"))
+    mod._ctx.store = _types.SimpleNamespace(
+        by_hash={
+            "HX": FakeTorrent(hash="HX", save_path="R:/dstB/sub/e00.mkv"),  # 前任成员, 账面已落被搬离根
+            "HA": FakeTorrent(hash="HA", save_path="R:/dstC/e00.mkv"),
+        },
+        relocating_hashes=set(),
+    )
+    pred = _job("j1", hashes=("H1", "HX"), src="R:/src", dst="R:/dstB")
+    job = _job("j2", hashes=("HZ", ), src="R:/dstB", dst="R:/dstC")
+    mod._supersede_cover_movers(pred, job, "R:/dstB")
+    first = mod.get_job("j2").plan["extra_members"]
+    assert first == ["H1", "HX"], first  # 前任成员 + 命中被搬离根的组成员(HZ 本 job 已有, 不进)
+    mod._supersede_cover_movers(pred, mod.get_job("j2"), "R:/dstB")  # 幂等重放: 早退支
+    assert mod.get_job("j2").plan["extra_members"] == first
+
+
+def test_build_links_skips_twin_links_already_pointing_at_target(tmp_path):
+    """链式再迁移孪生: src 位已是指向目标的硬链接(经前任别名搬迁的形态) -> 幂等跳过不重建"""
+    import types as _types
+
+    from helpers import FakeTorrent
+
+    mod = _bare_mod(data_dir=str(tmp_path / "data"))
+    src = tmp_path / "src"
+    dstc = tmp_path / "dstC"
+    (dstc / "Show").mkdir(parents=True)
+    target = dstc / "Show" / "e00.mkv"
+    target.write_bytes(b"x" * 64)
+    src_show = src / "Show"
+    src_show.mkdir(parents=True)
+    link = src_show / "e00.mkv"
+    afs.create_file_alias(str(link), str(target), afs.KIND_HARDLINK)  # 孪生(同 inode)
+    assert afs.alias_points_to(str(link), str(target))
+    job = _job(
+        "j2",
+        phase=ru.PHASE_MOVED,
+        src=str(src),
+        dst=str(dstc),
+        plan={
+            "form": ru.FORM_FILE_LINKS,
+            "link_kind": "hardlink",
+            "files": [["Show/e00.mkv", 64]]
+        },
+    )
+    mod._ctx.store = _types.SimpleNamespace(by_hash={}, relocating_hashes=set())
+    rt = {"links": [], "link_pos": 0}
+    assert mod._build_links(job, rt) is True
+    assert rt["links"] == [str(link)], "孪生直接入账(不重建不报错)"
+    assert mod.get_job("j2").alias_paths == (str(link), )

@@ -24,6 +24,11 @@
   note 透传 last_error; 无 spec 的 job 字段照常给出(前端照显不重判)
 - test_finalize_button_and_hint_static: 前端静态守阵(按钮/提示挂浮窗, 确认框与降级文案,
   渲染面零调用; S4b 全量口径 note 段)
+
+覆盖率缺口清偿(26-11-07, test.full 99.31% -> 99.5% 闸):
+- test_pick_job_for_hash_without_jobs_returns_none: pick_job_for 无快照/无命中 => None
+- test_chain_start_remote_candidate_short_circuits_without_stat: 远端候选判 remote 后直接取用不做本机 lstat
+- test_chain_endpoint_finalize_bad_port_falls_back_to_zero: qB 端口坏形 => finalize 段以 port=0 继续出
 """
 import json
 import os
@@ -676,3 +681,39 @@ def test_finalize_button_and_hint_static():
     for rel in ("shared/decorate.js", "shared/drawer_rows.js"):
         assert "/api/relocate/finalize-now" not in _static(rel), rel
         assert "relChainFinalizeNow" not in _static(rel), rel
+
+
+# ---------------------------------------------------------------------------
+# 覆盖率缺口清偿(26-11-07): pick_job_for 无命中 / 起点派生远端短路 / finalize 端口坏形
+# ---------------------------------------------------------------------------
+
+
+def test_pick_job_for_hash_without_jobs_returns_none():
+    """无快照 / 快照无该 hash 的 job => None(反馈面取不到)"""
+    assert relocate_chain.pick_job_for(None, HASH) is None
+    snapshot = SimpleNamespace(jobs=({"hashes": ["b" * 40], "phase": "armed"}, ), generation=1)
+    assert relocate_chain.pick_job_for(snapshot, HASH) is None
+
+
+def test_chain_start_remote_candidate_short_circuits_without_stat():
+    """远端候选(UNC): 判 remote 后直接取用, 不在本机 lstat(共享不可达会阻塞线程池)"""
+    from auto_qb.webui.server.routes import relocate_chain as routes_mod
+
+    rec = SimpleNamespace(root_path="//server/share/data", content_path="", save_path="")
+    assert routes_mod._start_path(rec, ["//server/share"], mapped=False) == "//server/share/data"
+
+
+def test_chain_endpoint_finalize_bad_port_falls_back_to_zero(web_env, tmp_path):
+    """qB 端口配置坏形(不可 int) => finalize 段以 port=0 继续出反馈面(不炸响应)"""
+    src = tmp_path / "src"
+    src.mkdir(parents=True)
+    job = {"job_id": "j1", "phase": "armed", "hashes": [HASH], "alias_paths": [], "mover": HASH}
+    mgr, client, _rec = _install(web_env, str(src), SimpleNamespace(jobs=(job, ), generation=1))
+    qbt = mgr.config.qbittorrent
+    mgr.config.qbittorrent = SimpleNamespace(
+        host=qbt.host, port="not-a-port", username=qbt.username, password=qbt.password
+    )
+    resp = client.get(f"/api/relocate/chain?hash={HASH}", headers=_auth(mgr))
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["finalize"]["job_id"] == "j1", data.get("finalize")

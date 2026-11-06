@@ -67,6 +67,7 @@
 - test_startup_log_non_loopback_branch: 非回环监听日志分支(is_loopback_host 打桩, 不真绑私网)——
   「已暴露到内网」文案 + discovery_port 在场补「发现端口」段/缺省不带
 - test_status_note_survives_discovery_bound_fn_error: 发现读取器抛异常 -> note 回落「发现 关」不打死 status
+- test_hr_thread_handle_start_refuses_when_alive: 线程句柄幂等启动的「已在跑」支 => False 不再起线程
 """
 import json
 import logging
@@ -940,3 +941,15 @@ def test_status_note_survives_discovery_bound_fn_error():
         assert "配对 关" in st.note and "数据" in st.note, "其余段照常组合"
     finally:
         server.stop()
+
+
+# ---------------------------------------------------------------------------
+# 覆盖率缺口清偿(26-11-07): 线程句柄幂等启动的「已在跑」支
+# ---------------------------------------------------------------------------
+
+
+def test_hr_thread_handle_start_refuses_when_alive():
+    """线程已在跑 => start 返回 False(调用方跳过启动日志), 不再起新线程"""
+    h = HrThreadHandle()
+    h._thread = SimpleNamespace(is_alive=lambda: True)
+    assert h.start(lambda: None, "test-thread") is False

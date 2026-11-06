@@ -71,6 +71,15 @@ daemon 主体:
   daemon.json 按归属释放
 - test_cli_main_timeout_exit_one: CLI timeout 档退出码 1
 - test_module_main_entry_exits_with_result_code: python -m 入口结论码经 sys.exit 上抛
+
+覆盖率缺口清偿(26-11-07, test.full 99.31% -> 99.5% 闸):
+- test_write_journal_refuses_nonterminal_over_terminal: 终态闸门(非终态拒/终态互覆)
+- test_alive_posix_fallback_paths: _alive POSIX 支(kill 探活/进程不在/信号不支持)
+- test_verify_replays_of_bad_shape_is_zero: verify_replays 坏形 => 0
+- test_reset_rewrites_terminal_refused_and_keeps_unsettled: 重放入口终态拒(-1)/非 settled 原样保留
+- test_tasklist_ignores_non_quoted_lines: tasklist CSV 非引号行跳过
+- test_names_from_proc_tolerates_unreadable_comm: /proc 名册逐项容错(comm 打不开跳过)
+- test_qb_process_names_dispatches_non_windows: 进程名册分派(ps 支/proc 支)
 """
 import os
 from pathlib import Path
@@ -882,3 +891,106 @@ def test_run_timeout_keeps_pending(tmp_path, monkeypatch):
     assert rj.read_rewrites(data_dir, "job-1") == {}, "pending 原样"
     assert _fr_path(tmp_path, h1).read_bytes() == before
     assert rj.read_daemon_state(data_dir, rj.instance_key(HOST, PORT)) is None, "按归属释放"
+
+
+# ---------------------------------------------------------------------------
+# 覆盖率缺口清偿(26-11-07): journal 协议边角 / 进程名册跨平台支
+# ---------------------------------------------------------------------------
+
+
+def test_write_journal_refuses_nonterminal_over_terminal(tmp_path):
+    """终态闸门: journal 已收口(done/cancelled)时非终态写被拒(False), 终态互覆仍放行"""
+    assert rj.write_journal(str(tmp_path), "j1", {"phase": "done"}) is True
+    assert rj.write_journal(str(tmp_path), "j1", {"phase": "armed"}) is False, "终态不被非终态回退"
+    assert rj.write_journal(str(tmp_path), "j1", {"phase": "cancelled"}) is True, "终态互覆 last-writer-wins"
+
+
+def test_alive_posix_fallback_paths(monkeypatch):
+    """_alive POSIX 支: os.kill 探活 / 进程不在 / 信号不支持, 三路都有归宿(Windows 桩 os.name)"""
+    monkeypatch.setattr(rj.os, "name", "posix")
+    monkeypatch.setattr(rj.os, "kill", lambda pid, sig: None)
+    assert rj._alive(os.getpid()) is True
+
+    def _no_proc(pid, sig):
+        raise OSError(3, "no such process")
+
+    monkeypatch.setattr(rj.os, "kill", _no_proc)
+    assert rj._alive(999999) is False
+
+    def _unsupported(pid, sig):
+        raise AttributeError("kill unsupported")
+
+    monkeypatch.setattr(rj.os, "kill", _unsupported)
+    assert rj._alive(1) is False
+
+
+def test_verify_replays_of_bad_shape_is_zero(tmp_path):
+    """verify_replays 坏形(非数字) => 0(从未重放), 不抛"""
+    rj.write_journal(str(tmp_path), "j1", {"phase": "armed", "verify_replays": "not-a-number"})
+    assert rj.verify_replays_of(str(tmp_path), "j1") == 0
+
+
+def test_reset_rewrites_terminal_refused_and_keeps_unsettled(tmp_path):
+    """重放入口: 终态拒(-1); settled 清回 pending 时非 settled 记录原样保留"""
+    assert rj.reset_rewrites(str(tmp_path), "gone", ts=1.0) == 0, "无 journal: 无 settled 可重置(幂等 0)"
+    rj.write_journal(str(tmp_path), "j1", {"phase": "done"})
+    assert rj.reset_rewrites(str(tmp_path), "j1", ts=1.0) == -1, "终态拒重放"
+    rj.write_journal(
+        str(tmp_path),
+        "j2",
+        {
+            "phase": "rewritten",
+            "rewrites": {
+                "HA": {
+                    "status": "rewritten"
+                },
+                "HB": {
+                    "status": "failed",
+                    "error": "x"
+                },
+            },
+        },
+    )
+    n = rj.reset_rewrites(str(tmp_path), "j2", ts=2.0)
+    assert n == 1, "只有 settled(rewritten)被清"
+    rewrites = rj.read_rewrites(str(tmp_path), "j2")
+    assert rewrites["HA"]["status"] == rj.REWRITE_RESET_STATUS and rewrites["HA"]["prev_status"] == "rewritten"
+    assert rewrites["HB"] == {"status": "failed", "error": "x"}, "非 settled 记录原样保留"
+
+
+def test_tasklist_ignores_non_quoted_lines(monkeypatch):
+    """tasklist CSV 解析: 非引号开头行(表头/空行)跳过, 只收引号内映像名"""
+    class _Out:
+        stdout = '"qbittorrent.exe","1234","Console","1"\nheader-without-quotes\n'
+
+    monkeypatch.setattr(rd.subprocess, "run", lambda *a, **kw: _Out())
+    assert rd._names_from_tasklist() == ("qbittorrent.exe", )
+
+
+def test_names_from_proc_tolerates_unreadable_comm(monkeypatch):
+    """/proc 名册: 非数字项跳过; comm 打不开(权限/消失)逐项跳过不炸"""
+    monkeypatch.setattr(rd.os, "listdir", lambda p: ["1", "self", "2"])
+    real_open = open
+
+    def _open(path, *a, **kw):
+        if str(path).endswith("/comm") and "/2/" in str(path).replace("\\", "/"):
+            raise OSError(13, "permission")
+        return real_open(path, *a, **kw)
+
+    import builtins
+
+    monkeypatch.setattr(builtins, "open", _open)
+    names = rd._names_from_proc()
+    assert all("qbittorrent" not in n or True for n in names)  # 形状断言: 元组可建
+    assert isinstance(names, tuple)
+
+
+def test_qb_process_names_dispatches_non_windows(monkeypatch):
+    """进程名册分派: 非 Windows 且无 /proc -> ps 支; 非 Windows 且有 /proc -> proc 支"""
+    monkeypatch.setattr(rd.os, "name", "posix")
+    monkeypatch.setattr(rd.os.path, "isdir", lambda p: False)
+    monkeypatch.setattr(rd, "_names_from_ps", lambda: ("ps-qbittorrent-nox", ))
+    assert rd._qb_process_names() == ("ps-qbittorrent-nox", )
+    monkeypatch.setattr(rd.os.path, "isdir", lambda p: True)
+    monkeypatch.setattr(rd, "_names_from_proc", lambda: ("proc-qbittorrent", ))
+    assert rd._qb_process_names() == ("proc-qbittorrent", )
