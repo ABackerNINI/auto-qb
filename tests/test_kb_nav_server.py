@@ -49,6 +49,8 @@ gen_doc_map.collect() 本体的键集合 —— 它是闸门/守阵消费单点 
 - test_pull_endpoint_requires_action_header: 缺 / 错 X-Nav-Action 头 → 403 (CSRF 护栏)
 - test_pull_endpoint_rejects_non_pull_routes: GET /api/pull 与 POST 未知路径 → 404
 - test_pull_endpoint_reports_result: 带头 → 200 + {ok, message} 原样回传
+- test_graph_route_serves_component: GET /nav_graph.js 200 + javascript (关系图组件 2026-11-07 拆分后按路由发货)
+- test_gen_static_inlines_graph_and_prefix: --gen-static 落地件是**单文件** (组件内联、无 src 引用) 且链接前缀按 out_dir 实际深度现算
 """
 
 from __future__ import annotations
@@ -56,6 +58,8 @@ from __future__ import annotations
 import http.client
 
 import json
+
+import os
 
 import re
 
@@ -100,7 +104,7 @@ def test_static_map_serves_file_and_api(nav_port: int) -> None:
     code, body = _get(nav_port, "/api/data")
     assert code == 200
     data = json.loads(body.decode("utf-8"))
-    assert set(data) == {"stamp", "items", "topics", "counts"}, "/api/data 契约与 collect_nav 顶层键必须一致"
+    assert set(data) == {"stamp", "items", "topics", "counts", "ext"}, "/api/data 契约与 collect_nav 顶层键必须一致"
 
     code, body = _get(nav_port, "/memory-bank/tasks/26-10-01-0000-t1.md")
     assert code == 200 and "Topics" in body.decode("utf-8"), "静态映射应能取到四工位原文"
@@ -275,3 +279,25 @@ def test_pull_endpoint_reports_result(nav_port: int, monkeypatch) -> None:
     monkeypatch.setattr(nav_server, "pull_ff_only", lambda root: (True, "已快进到 deadbeef"))
     code, body = _post(nav_port, "/api/pull", {nav_server.PULL_HEADER: "pull"})
     assert code == 200 and json.loads(body.decode("utf-8")) == {"ok": True, "message": "已快进到 deadbeef"}
+
+
+def test_graph_route_serves_component(nav_port: int) -> None:
+    """关系图组件从壳里拆出来 (2026-11-07) 后按路由发货: 服务模式必须能拿到它, 否则抽屉里那块永远空白。"""
+    status, body = _get(nav_port, "/nav_graph.js")
+    assert status == 200, f"GET /nav_graph.js 应为 200: {status}"
+    assert b"MBGraph" in body, "返回的不是关系图组件"
+    assert b"<script" not in body[:200], "路由吐回了壳? 组件请求必须拿 js"
+
+
+def test_gen_static_inlines_graph_and_prefix(tmp_path: Path) -> None:
+    """静态导出件必须仍是**单文件** (组件内联, 无 src 引用), 且链接前缀按输出目录实际深度现算 ——
+    前缀写死 "../../memory-bank/" 时只有导出到仓库根下两级才碰巧对, 换个目录所有链接都算到仓库外。"""
+    mb = _stub_mb(tmp_path)
+    out = tmp_path / "x" / "y" / "z"
+    assert nav_server.gen_static(mb, SHELL, out) == 0
+    html = (out / "nav_page.html").read_text(encoding="utf-8")
+    assert 'src="nav_graph.js"' not in html, "静态件仍是两文件: file:// 打开时组件拉不到, 抽屉图直接空白"
+    assert "window.MBGraph = { mount" in html, "组件没内联进静态件 (壳里也有 window.MBGraph 的判断, 拿它断言恒真)"
+    prefix = os.path.relpath(mb, out).replace(os.sep, "/").rstrip("/") + "/"
+    assert ('"%s"' % prefix) in html, f"链接前缀没按输出目录深度现算 (期望 {prefix})"
+    assert '"../../memory-bank/"' not in html, "默认前缀还写死在产物里 —— 换目录导出会让所有链接算到仓库外"

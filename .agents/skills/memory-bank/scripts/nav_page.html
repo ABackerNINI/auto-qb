@@ -618,6 +618,53 @@
     .chan { max-height: 300px; }
     .strip { grid-template-columns: repeat(2, 1fr); }
   }
+  /* ============ 关系图 (组件在 nav_graph.js; 这里只放外观) ============
+     零依赖手写 SVG: 壳的守阵禁一切 http(s) 资源引用, 静态导出件还要 file:// 能用 —— 引图形库两条一起破。
+     配色不走 CSS 令牌而是组件内的 hex: SVG presentation attribute 不认 var() (只能写 inline style),
+     逐个属性写 style 反而更难读, 所以颜色单点在 nav_graph.js 顶部。 */
+  .mg { font-size: 11.5px; }
+  .mgbar { display: flex; align-items: center; gap: 5px; margin-bottom: 6px; flex-wrap: wrap; }
+  .mgscope, .mgact {
+    background: var(--paper-3); color: var(--dim); border: 1px solid var(--hair-2); border-radius: 5px;
+    padding: 2px 8px; font-size: 11px; cursor: pointer; font-family: var(--sans);
+  }
+  .mgscope:hover, .mgact:hover { border-color: var(--cyan); color: var(--cyan); }
+  .mgscope.on, .mgact.on { border-color: var(--cyan); color: var(--cyan); background: var(--cyan-soft); }
+  .mghint { color: var(--faint); font-size: 10.5px; margin-left: 2px; }
+  .mgcanvas {
+    background: radial-gradient(65% 65% at 50% 45%, #141a21, var(--bg));
+    border: 1px solid var(--hair); border-radius: 6px; overflow: hidden;
+  }
+  .mgcanvas svg { display: block; margin: 0 auto; }
+  .mglegend { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 6px; color: var(--faint); font-size: 10px; font-family: var(--mono); }
+  .mglegend span { display: inline-flex; align-items: center; gap: 4px; }
+  .mglegend i { width: 8px; height: 8px; border-radius: 50%; display: block; }
+  .mglegend i.hollow { background: none; border: 1px dashed var(--faint); }
+  .mglegend i.line { width: 16px; height: 0; border-radius: 0; border-top: 2px solid var(--cyan); }
+  .mglegend i.line.dash { border-top-style: dashed; border-color: var(--amber); }
+  .mgtip {
+    position: fixed; z-index: 60; pointer-events: none; background: #0b0e11; border: 1px solid var(--hair-2);
+    border-radius: 7px; padding: 6px 9px; max-width: 300px; opacity: 0; transition: opacity .1s;
+    box-shadow: 0 10px 26px rgba(0,0,0,.55); font-family: var(--sans);
+  }
+  .mgtip b { display: block; font-size: 11.5px; font-weight: 600; margin-bottom: 1px; }
+  .mgtip .p { font-family: var(--mono); font-size: 10px; color: var(--faint); word-break: break-all; }
+  .mgtip .m { font-size: 10.5px; color: var(--dim); margin-top: 2px; }
+  /* 全屏层: 抽屉只有 420px, 全库泳道在那里没法读 —— 展开后同一组件换大画布渲染 */
+  .gstage { position: fixed; inset: 0; z-index: 70; background: rgba(8,10,12,.86); display: flex; align-items: center; justify-content: center; }
+  .gstage[hidden] { display: none; }
+  .gsbox {
+    width: min(1440px, 94vw); height: min(920px, 90vh); background: var(--paper);
+    border: 1px solid var(--hair-2); border-radius: 10px; display: flex; flex-direction: column;
+    box-shadow: 0 30px 80px rgba(0,0,0,.6);
+  }
+  .gshead { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--hair-2); }
+  .gshead b { font-family: var(--disp); font-size: 13px; }
+  .gshead .t { color: var(--dim); font-size: 12px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .gshead button { background: var(--paper-3); color: var(--ink); border: 1px solid var(--hair-2); border-radius: 6px; padding: 4px 12px; font-size: 12px; cursor: pointer; }
+  .gshead button:hover { border-color: var(--cyan); color: var(--cyan); }
+  .gsbody { flex: 1; overflow: auto; padding: 12px 16px 20px; }
+
   @media (prefers-reduced-motion: reduce) {
     * { transition: none !important; animation: none !important; }
   }
@@ -761,9 +808,24 @@
 <!-- 右键菜单 (台账行): 跟随光标, 点空白 / Esc / 滚动 / 切视图即收 -->
 <div class="ctxmenu" id="ctxMenu" hidden></div>
 
+<!-- 全屏关系图层: 抽屉 420px 放不下全库泳道, 展开后同一组件换大画布 (Esc / 关闭按钮退出) -->
+<div class="gstage" id="gStage" hidden>
+  <div class="gsbox">
+    <div class="gshead">
+      <b>RELATION GRAPH</b><span class="t" id="gsTitle"></span>
+      <button id="gsClose" type="button" title="关闭 (Esc)">关闭</button>
+    </div>
+    <div class="gsbody" id="gsHost"></div>
+  </div>
+</div>
+
 <!-- 数据注入位: --gen-static 把下方唯一的占位字面量替换为 JSON (application/json 块不执行,
      http 模式壳里是占位符原样, 静态件里是可 JSON.parse 的数据) -->
 <script id="nav-data" type="application/json">__DATA__</script>
+
+<!-- 关系图组件 (2026-11-07 拆分): 服务模式由 /nav_graph.js 路由发货; --gen-static 时这一行被
+     gen_static 替换成该文件的内联内容 —— 静态导出件必须仍是单文件, file:// 拉不到同级 js。 -->
+<script src="nav_graph.js"></script>
 
 <script>
 "use strict";
@@ -826,6 +888,9 @@ const S = {
      各视图之外) 绝不写, 否则 30s 轮询会洗掉用户的隐藏 (坑见 pitfalls/web-ui/poll-reseed-filter.md)。
      showHidden = 隐藏区展开开关, 会话态不落盘 (需求口径: 点按钮才能查看)。 */
   hidden: [], showHidden: false,
+  /* 关系图档位 (纯会话态, 不落 localStorage —— 同 sel/multi 口径): 抽屉每 30s 轮询都会重挂组件,
+     状态存在组件闭包里必然被洗回默认, 所以提到壳侧回填 (坑型同 pitfalls/web-ui/poll-reseed-filter.md) */
+  graph: { scope: "local", steps: 1, showFrag: false },
   /* B 控制台 */
   selTopic: null, cq: "", openRows: new Set(),
   /* C 卡片墙 */
@@ -1364,13 +1429,33 @@ function renderDrawer(link) {
   const i = byLink.get(link);
   if (!i) return;
   const sameTopic = DATA.items.filter(x => (x.topic || NO_KEY) === (i.topic || NO_KEY) && x.link !== link);
-  const fwd = (i.refs || []).map(r => byLink.get(refKey(r))).filter(Boolean);
-  const fwdDead = (i.refs || []).filter(r => !byLink.has(refKey(r)));
-  const rev = DATA.items.filter(x => x.link !== link && (x.refs || []).some(r => refKey(r) === link));
+  /* 认领链改用解析后的 targets (nav_data 四态): 原来的 fwd/fwdDead 只会把 578 条"目标其实存在"
+     的引用渲染成灰字「(未入库)」—— 其中 325 条是坑档 / 基线等库外件、253 条是被归档搬走的基线。 */
+  const targets = i.targets || (i.refs || []).map(r => ({ t: refKey(r), st: "ok", raw: r }));
+  const fwd = targets.filter(t => t.st === "ok").map(t => byLink.get(t.t)).filter(Boolean);
+  const fwdOut = targets.filter(t => t.st !== "ok");
+  const rev = DATA.items.filter(x => x.link !== link && (x.targets || []).some(t => t.st === "ok" && t.t === link));
+  const revExt = Object.keys(DATA.ext || {}).filter(p => (DATA.ext[p] || []).indexOf(link) >= 0);
+  /* 库内但不在 memory-bank/ 下的目标 (repo 态): 导航页静态路由不代理, 不给可点链接 */
+  repoHrefs = new Set();
+  DATA.items.forEach(it => (it.targets || []).forEach(tg => { if (tg.st === "repo") repoHrefs.add(tg.t); }));
   const one = (x, cls) => `
     <a class="rel ${cls}" href="${MB}${esc(x.link)}" target="_blank">
       <span class="r1"><span class="fbadge fc-${x.form}" style="width:auto;padding:1px 6px;">${FORM_CN[x.form]}</span><span class="rt">${esc(x.title)}</span></span>
       <span class="r2">${esc(x.stamp)} · ${esc(stOf(x))}</span></a>`;
+  /* 库外件行: 目标文件在库里 (坑档 / 基线 / 切片), 只是不进台账四类件 —— 给链接 + 角标, 不当死链 */
+  const extRow = (path, st, cls, note) => {
+    const badge = { dead: "失效", basename: "归档回退", repo: "仓库根", ext: "库外件" }[st] || "库外件";
+    const body = '<span class="r1"><span class="chip">' + badge + '</span>' +
+      '<span class="rt mono" style="font-size:11px">' + esc(String(path).split("/").pop()) + "</span></span>" +
+      '<span class="r2">' + esc(note || path) + "</span>";
+    /* dead / repo 态不可点: 前者真找不到, 后者文件在库内但不在 memory-bank/ 下 —— 导航页的静态
+       路由只映射 memory-bank/, 给个 404 链接比老实标成不可点更糟 */
+    return (st === "dead" || st === "repo")
+      ? '<div class="rel ' + cls + '" style="color:var(--faint);border-left-color:var(--faint)"' +
+        (st === "repo" ? ' title="文件在仓库根下, 导航页不代理原文"' : ' title="目标不存在"') + ">" + body + "</div>"
+      : '<a class="rel ' + cls + '" href="' + MB + esc(path) + '" target="_blank">' + body + "</a>";
+  };
 
   $("dFormLine").innerHTML =
     '<span class="fbadge fc-' + i.form + '" style="width:auto;padding:1px 8px;">' + FORM_CN[i.form] + "</span>" +
@@ -1387,14 +1472,16 @@ function renderDrawer(link) {
         ${i["issue-summary"] ? '<span class="k">摘要</span><span class="v" style="line-height:1.6">' + esc(i["issue-summary"]) + "</span>" : ""}
       </div>
     </div>
-    <div class="dsec"><div class="dlabel">认领链 · 声明的引用 (${fwd.length}${fwdDead.length ? " + " + fwdDead.length + " 失效" : ""})</div>
-      ${(fwd.length || fwdDead.length)
-        ? fwd.map(x => one(x, "fwd")).join("") +
-          fwdDead.map(r => '<div class="rel fwd" style="color:var(--faint)"><span class="rt mono" style="font-size:11px">' + esc(r) + " (未入库)</span></div>").join("")
+    <div class="dsec"><div class="dlabel">关系图 · 点节点下钻 · 库外件空心</div><div id="dGraph"></div></div>
+    <div class="dsec"><div class="dlabel">认领链 · 声明的引用 (${targets.length})</div>
+      ${targets.length
+        ? fwd.map(x => one(x, "fwd")).join("") + fwdOut.map(t2 => extRow(t2.t, t2.st, "fwd", t2.raw)).join("")
         : '<div class="none">无 doc-refs 声明</div>'}
     </div>
-    <div class="dsec"><div class="dlabel">反向引用 · 谁声明了本件 (${rev.length})</div>
-      ${rev.length ? rev.map(x => one(x, "rev")).join("") : '<div class="none">无反向引用</div>'}
+    <div class="dsec"><div class="dlabel">反向引用 · 谁声明了本件 (${rev.length + revExt.length})</div>
+      ${(rev.length || revExt.length)
+        ? rev.map(x => one(x, "rev")).join("") + revExt.map(p2 => extRow(p2, "ext", "rev", p2)).join("")
+        : '<div class="none">无反向引用</div>'}
     </div>
     <div class="dsec"><div class="dlabel">同专题件 (${sameTopic.length}) · ${esc(i.topic || NO_KEY)}</div>
       ${sameTopic.length
@@ -1404,8 +1491,62 @@ function renderDrawer(link) {
     </div>
     <a class="openbtn" href="${MB}${esc(i.link)}" target="_blank">打开原文 -&gt;</a>`;
   $("drawer").classList.add("open");
+  mountDrawerGraph(link);
 }
 function closeDrawer() { $("drawer").classList.remove("open"); }
+
+/* ---- 关系图 (组件在 nav_graph.js, 壳只负责挂载与跳转接线) ----
+   拖屉里是 compact (局部 / 关联两档); 全库泳道要 900px 以上才读得出来, 走全屏层。
+   节点点击 = 抽屉内下钻 (S.sel 换人, 不跳出页面) —— 这正是"看到关联却只能自己找"的那一步。 */
+let drawerGraph = null;
+let stageGraph = null;
+function mountDrawerGraph(link) {
+  const host = $("dGraph");
+  if (!host) return;
+  if (drawerGraph) { drawerGraph.destroy(); drawerGraph = null; }
+  if (!window.MBGraph) { host.innerHTML = '<div class="none">关系图组件未加载 (nav_graph.js)</div>'; return; }
+  drawerGraph = window.MBGraph.mount(host, {
+    data: DATA, byLink: byLink, focus: link, compact: true,
+    scope: S.graph.scope, steps: S.graph.steps, showFrag: S.graph.showFrag,
+    hrefFor: graphHref,
+    onState: st => { S.graph.scope = st.scope; S.graph.steps = st.steps; S.graph.showFrag = st.showFrag; },
+    onOpen: l => openRowDetail(l),
+    onExpand: () => openGraphStage(link, S.graph.scope),
+  });
+}
+let stageFocus = null;
+function openGraphStage(link, scope) {
+  const host = $("gsHost");
+  $("gStage").hidden = false;
+  stageFocus = link;
+  $("gsTitle").textContent = (byLink.get(link) || {}).title || link;
+  if (stageGraph) { stageGraph.destroy(); stageGraph = null; }
+  if (!window.MBGraph) { host.innerHTML = '<div class="none">关系图组件未加载 (nav_graph.js)</div>'; return; }
+  stageGraph = window.MBGraph.mount(host, {
+    data: DATA, byLink: byLink, focus: link, compact: false,
+    scope: scope === "local" ? "local" : scope === "all" ? "all" : "atlas",
+    hrefFor: graphHref,
+    onState: st => { S.graph.scope = st.scope; S.graph.steps = st.steps; S.graph.showFrag = st.showFrag; },
+    onOpen: l => {
+      openRowDetail(l);
+      stageFocus = l;
+      $("gsTitle").textContent = (byLink.get(l) || {}).title || l;
+      if (stageGraph) stageGraph.setFocus(l);
+    },
+  });
+}
+/* 库内但不在 memory-bank/ 下的目标 (repo 态, 如 resources/*.html): 导航页的静态路由只映射
+   memory-bank/, 给个 404 链接不如老实标成不可点。空串 = 调用方不许生成链接。 */
+let repoHrefs = new Set();
+function graphHref(path) {
+  return repoHrefs.has(path) ? "" : MB + path;
+}
+function closeGraphStage() {
+  const box = $("gStage");
+  if (!box || box.hidden) return;
+  box.hidden = true;
+  if (stageGraph) { stageGraph.destroy(); stageGraph = null; }
+}
 
 /* ---- 右键菜单 (台账行): 无子菜单; 关闭 = 点空白 / Esc / 滚动 / 切视图 ----
    批量升级 (计划 26-10-31-0143, 拍板 D4): 被点的行 ∈ 当前选中集合且集合 > 1 行 → 菜单作用于
@@ -1777,6 +1918,8 @@ function wire() {
   const escRetreat = (e) => {
     if (e.key !== "Escape") return;
     if (e.isComposing || e.keyCode === 229) return;   // IME 组合期: 不劫浮层 / 搜索词
+    const gs = $("gStage");
+    if (gs && !gs.hidden) { closeGraphStage(); return; }   // z-70 全屏关系图层: 全壳最高档
     const ov = $("overlay");
     if (ov && !ov.hidden) { hideError(); return; }    // z-50 遮罩最上档: 收遮罩即恢复页面操作
     const m = $("ctxMenu");
@@ -1828,6 +1971,7 @@ function wire() {
   window.addEventListener("scroll", closeCtx, true);
   $("sort").addEventListener("change", e => { S.sort = e.target.value; saveFilters(); renderLedger(); });
   $("dclose").onclick = () => { S.sel = null; closeDrawer(); };
+  $("gsClose").onclick = closeGraphStage;
 
   /* B */
   $("chlist").addEventListener("click", e => {
@@ -1888,6 +2032,14 @@ function applyData(d) {
   updateTopbar();
   hideError();
   renderCurrent();
+  /* 全屏层只在打开时挂一次: 不跟着新数据重挂, 轮询/拉取后看到的还是上一轮快照与旧 byLink */
+  if (!$("gStage").hidden && stageGraph) {
+    const st = stageGraph.getState();
+    /* 焦点件可能已被外部改动删掉 (拉取 / 别处提交): 不判在库就重挂, layoutRing 会拿到 undefined
+       中心节点直接抛, 页面表现是「图没了」而没有任何提示 */
+    if (byLink.has(st.center)) { stageFocus = st.center; openGraphStage(st.center, st.scope); }
+    else closeGraphStage();
+  }
 }
 
 async function refresh(silent) {

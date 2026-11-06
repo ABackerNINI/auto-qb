@@ -1,8 +1,8 @@
 """test_kb_nav_data 测试计划: kb.nav 导航页守阵 (计划 memory-bank/plans/26-10-04-0952-plan-kb-nav-page.html §06)。
 
 守什么: nav 数据层 / 服务层 / 页面壳的三条红线 --
-1. **数据形状稳定**: collect_nav() 输出 {stamp, items, topics, counts} 是壳的三视图与未来视图
-   共同的数据契约, 字段一漂移前端全线静默空白; stamp 必须取数据自带的 doc-updated 最大值,
+1. **数据形状稳定**: collect_nav() 输出 {stamp, items, topics, counts, ext} 是壳的三视图、关系图
+   与未来视图共同的数据契约, 字段一漂移前端全线静默空白; stamp 必须取数据自带的 doc-updated 最大值,
    一旦混进当前时钟, 静态导出件与多 clone 合并都会出现"假新"戳 (纪律同 gen_doc_map)。
 2. **静态映射防穿越**: 「打开原文」路由 resolve 后必须严格落在 memory-bank/ 内 —— ../ 与
    %2e%2e / ..%2f / 反斜杠等变体一律 403/404, 绝不能把仓库根之外 (config.yml / auto-qb-data/)
@@ -28,6 +28,11 @@
    (改前实测五个状态 chip 文字全是 --dim 灰); ②cyan / green 两个令牌亮度几乎相同, 同透明度时底色
    实测 #16272b vs #1b2624 肉眼不可分 —— 光换色相没用, 必须靠**明度 (alpha)** 拉开。
 
+1'. **认领链可跳 (2026-11-07 关联图)**: 每条 ref 必须解析成五态 (ok / ext / repo / basename / dead) ——
+   实测 1811 条 ref 里 578 条目标"看起来不存在", 其中 323 条其实是库内非台账件、253 条被归档搬进
+   testing/baselines/attachments/、2 条在仓库根下, 真失效 0 条。解析只在导航层做, 不扩 collect() 扫描面
+   (那是 kb.docmap / kb.check / 索引生成的共同消费单点)。
+
 另守一条**单点不回归**: nav_data 只许在 collect() 条目上做加法 enrich, 不许改
 gen_doc_map.collect() 本体的键集合 —— 它是闸门/守阵消费单点 (计划 §01 拍板: 消费方零变动)。
 
@@ -37,7 +42,10 @@ gen_doc_map.collect() 本体的键集合 —— 它是闸门/守阵消费单点 
 
 ## 测试计划
 
-- test_collect_nav_shape: collect_nav() 对桩目录返回 {stamp, items, topics, counts} 完整; topics 含 live / forms; counts 覆盖四形态
+- test_collect_nav_shape: collect_nav() 对桩目录返回 {stamp, items, topics, counts, ext} 完整; topics 含 live / forms; counts 覆盖四形态
+- test_collect_nav_targets_four_states: 每条 ref 解析成 ok / ext / basename / dead (另有 repo 态), 归档回退命中 attachments 真实路径且只对 baselines 开头的 ref 生效
+- test_collect_nav_target_guardrails: 归档回退只对 baselines 前缀生效 + 穿越路径 (memory-bank/../config.yml) 判死, 不得生成可点链接
+- test_collect_nav_ext_backrefs: 库外件 (坑档) 的 Ref 反向边只收"被台账件引用到的"那批
 - test_collect_nav_issue_enrich_fields: issue 条目带 issue-type / issue-tier / issue-summary; 全形态带 doc-updated (缺省回落 stamp)
 - test_collect_nav_stamp_from_data_not_clock: stamp == 桩数据 doc-updated 最大值, 与当前时钟无关
 - test_collect_nav_stale_hint_respects_frozen_forms: doc-age-days / doc-stale 只提示不拦截; plan/report 冻结不审, 其余按 90 天 (2026-11-05 计划 §07 P4)
@@ -80,7 +88,7 @@ from kb_nav_support import (
 def test_collect_nav_shape(tmp_path: Path) -> None:
     data = nav_data.collect_nav(_stub_mb(tmp_path))
 
-    assert set(data) == {"stamp", "items", "topics", "counts"}, f"顶层键漂移: {sorted(data)}"
+    assert set(data) == {"stamp", "items", "topics", "counts", "ext"}, f"顶层键漂移: {sorted(data)}"
     assert len(data["items"]) == 5, "桩目录应有 5 件 (1 plan + 2 report + 1 issue + 1 task)"
 
     by_topic = {t["topic"]: t for t in data["topics"]}
@@ -95,6 +103,100 @@ def test_collect_nav_shape(tmp_path: Path) -> None:
     assert data["counts"]["report"] == {"Done": 2}
     assert data["counts"]["issue"] == {"Open": 1}
     assert data["counts"]["task"] == {"In Progress": 1}
+
+
+def test_collect_nav_targets_four_states(tmp_path: Path) -> None:
+    """认领链解析 (2026-11-07 关联图的前置): 不解析就画图, 578 条边会悬空。
+
+    四条 ref 各打一态:
+      ok       = 目标在台账四类件里 (可下钻)
+      ext      = 文件存在但不在台账扫描面 (坑档 / 基线 / 切片)
+      basename = 声明路径失效, 按 basename 在 testing/baselines/attachments/ 找回
+      dead     = 真找不到
+    (第五态 repo = 文件在仓库根下但不在 memory-bank/, 导航页不代理; 桩里不造, 由真库实测覆盖)
+    """
+    nl = chr(10)
+    mb = _stub_mb(tmp_path)
+    (mb / "pitfalls" / "kb").mkdir(parents=True)
+    (mb / "pitfalls" / "kb" / "note.md").write_text(nl.join(["# note", "> 摘要: 桩坑档", ""]), encoding="utf-8")
+    (mb / "testing" / "baselines" / "attachments").mkdir(parents=True)
+    (mb / "testing" / "baselines" / "attachments" /
+     "26-10-01-0000-b1.md").write_text(nl.join(["# 26-10-01-0000 —— 归档基线", ""]), encoding="utf-8")
+    refs = ", ".join(
+        [
+            "memory-bank/tasks/26-10-01-0000-t1.md",
+            "memory-bank/pitfalls/kb/note.md",
+            "memory-bank/testing/baselines/26-10-01-0000-b1.md",
+            "memory-bank/reports/nope.html",
+        ]
+    )
+    (mb / "plans" / "p2.html").write_text(
+        PLAN_HTML.format(topic="t-refs", status="Open", added="26-10-06-1000", updated="26-10-06-1000").replace(
+            '<meta name="doc-refs" content="">', '<meta name="doc-refs" content="%s">' % refs
+        ),
+        encoding="utf-8",
+    )
+
+    items = {i["link"]: i for i in nav_data.collect_nav(mb)["items"]}
+    targets = items["plans/p2.html"]["targets"]
+    assert [x["st"] for x in targets] == ["ok", "ext", "basename", "dead"], f"四态解析漂移: {targets}"
+    assert targets[0]["t"] == "tasks/26-10-01-0000-t1.md", "ok 态必须落到台账 link (memory-bank/ 前缀已剥)"
+    assert targets[0]["raw"].startswith("memory-bank/"), "raw 保留声明原值 (悬停要看它写得对不对)"
+    assert targets[2]["t"] == "testing/baselines/attachments/26-10-01-0000-b1.md", "归档回退要给出真实路径"
+
+
+def test_collect_nav_target_guardrails(tmp_path: Path) -> None:
+    """两条围栏, 缺任一条都会把"不该能点"的东西说成能点:
+
+    ① 归档回退只对 `memory-bank/testing/baselines/` 开头的 ref 生效 —— 否则台账件被删、attachments
+       里恰好有同名切片时, 真死链会被标成「归档回退」并链到一份不相干的基线 (守卫仍判红, 页面却绿)。
+    ② 穿越路径 (`memory-bank/../config.yml`) 必须判死, 不能算 `ext` 并生成可点链接 —— 那等于在
+       静态导出件里给红线文件开了一扇门。
+    """
+    nl = chr(10)
+    mb = _stub_mb(tmp_path)
+    (mb / "testing" / "baselines" / "attachments").mkdir(parents=True)
+    (mb / "testing" / "baselines" / "attachments" /
+     "26-10-01-0000-b1.md").write_text(nl.join(["# 26-10-01-0000 —— 归档基线", ""]), encoding="utf-8")
+    (tmp_path / "config.yml").write_text("redline: true" + nl, encoding="utf-8")
+    refs = ", ".join([
+        "memory-bank/reports/26-10-01-0000-b1.md",
+        "memory-bank/../config.yml",
+    ])
+    (mb / "plans" / "p4.html").write_text(
+        PLAN_HTML.format(topic="t-gate", status="Open", added="26-10-08-1000", updated="26-10-08-1000").replace(
+            '<meta name="doc-refs" content="">', '<meta name="doc-refs" content="%s">' % refs
+        ),
+        encoding="utf-8",
+    )
+
+    targets = {i["link"]: i for i in nav_data.collect_nav(mb)["items"]}["plans/p4.html"]["targets"]
+    assert [x["st"] for x in targets] == ["dead", "dead"], (f"围栏失效 —— 非 baselines 前缀不得回退、红线路径不得算仓库根件: {targets}")
+
+
+def test_collect_nav_ext_backrefs(tmp_path: Path) -> None:
+    """库外件的反向边: 坑档声明了某件, 那个件就多一条「谁认领我」。
+
+    没有这一步, 库外件的反向引用永远是空的 —— 它们不进 DATA.items, 壳的反查只扫台账件。
+    扫描面只限"已被台账件引用到的"库外件 (有界), 不扩 collect() 的全族扫描。
+    """
+    nl = chr(10)
+    mb = _stub_mb(tmp_path)
+    (mb / "pitfalls" / "kb").mkdir(parents=True)
+    (mb / "pitfalls" / "kb" / "note.md").write_text(
+        nl.join(["# note", "> 摘要: 桩坑档", "", "**Refs:** memory-bank/tasks/26-10-01-0000-t1.md", ""]),
+        encoding="utf-8",
+    )
+    (mb / "plans" / "p3.html").write_text(
+        PLAN_HTML.format(topic="t-ext", status="Open", added="26-10-07-1000", updated="26-10-07-1000").replace(
+            '<meta name="doc-refs" content="">',
+            '<meta name="doc-refs" content="memory-bank/pitfalls/kb/note.md">',
+        ),
+        encoding="utf-8",
+    )
+
+    data = nav_data.collect_nav(mb)
+    assert data["ext"] == {"pitfalls/kb/note.md": ["tasks/26-10-01-0000-t1.md"]}, (f"库外件反向边丢了: {data['ext']}")
 
 
 def test_collect_nav_issue_enrich_fields(tmp_path: Path) -> None:

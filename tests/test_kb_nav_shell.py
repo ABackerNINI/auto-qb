@@ -60,6 +60,9 @@ gen_doc_map.collect() 本体的键集合 —— 它是闸门/守阵消费单点 
 - test_hidden_zone_reuses_ledger_columns_and_inline_svg: 隐藏区克隆主表 thead + 复用 ledgerCells (hidMark); 恢复按钮为内联 SVG
 - test_log_filters_polling: 精简 log —— /api/data 轮询与壳加载成功不上屏; 错误与静态映射请求留痕
 - test_shell_has_pull_button: 壳含拉取按钮 + POST /api/pull + CSRF 自定义头 + 静态/file 模式隐藏; doPull 成功刷新 / 失败提示
+- test_shell_has_graph_component: 抽屉关系图挂载点 #dGraph + 全屏层 #gStage/#gsHost + 组件本地引用 + renderDrawer 调用挂载 + Esc 链最高档先收全屏层
+- test_graph_state_survives_poll_remount: 图档位 (scope/steps/showFrag) 提到壳侧 S.graph, 挂载回填 + onState 回存 + applyData 重挂全屏层 (轮询不得洗掉用户选的档位)
+- test_graph_component_is_dependency_free: nav_graph.js 零依赖 (无 import/require/fetch、无 http(s) 资源、只暴露 window.MBGraph)
 - test_shell_has_multiselect_state_and_gestures: 多选会话态 (S.multi/multiAnchor 不进持久化 / derive 不碰) + 主表与置顶区 Ctrl/Shift 手势排在改 S.sel 之前 + 普通单击不清多选
 """
 
@@ -91,6 +94,7 @@ from kb_nav_support import (
     _get,
     _rule,
     _shell_css,
+    _shell_fn,
     _stub_mb,
     nav_port,
     nav_server,
@@ -570,3 +574,53 @@ def test_shell_has_pull_button() -> None:
     assert 'method: "POST"' in body, "拉取必须用 POST (GET 会被跨站 <img> 直接触发)"
     assert "refresh(" in body, "同步成功后必须刷新数据"
     assert "showError(" in body, "同步失败必须提示 (仅快进失败要让人看见原因)"
+
+
+def test_shell_has_graph_component() -> None:
+    """抽屉关系图 (2026-11-07): 挂载点 / 全屏层 / 本地引用 / 挂载接线 / Esc 档位 —— 缺一处即退化。
+
+    用户原话: 台账里只能看到认领链, 却"无法跳转查看这些文档的关联, 只能自己查找"。修法两层:
+    ① 认领链改四态解析 (数据层), ② 关系图给一条不离开页面的下钻路径 (这里守)。
+    """
+    text = SHELL.read_text(encoding="utf-8")
+    assert 'id="dGraph"' in text, "抽屉缺关系图挂载点 #dGraph"
+    assert 'id="gStage"' in text and 'id="gsHost"' in text, "缺全屏关系图层 (抽屉 420px 放不下全库泳道)"
+    assert '<script src="nav_graph.js"></script>' in text, "缺组件引用 (本地相对路径; 外链会被 test_shell_no_external_resources 拦)"
+    assert "MBGraph.mount" in text, "没调组件挂载单点"
+
+    drawer = _shell_fn(text, "renderDrawer")
+    assert "mountDrawerGraph(" in drawer, "renderDrawer 没挂图: 抽屉里那块永远是空的"
+    assert text.index("closeGraphStage(); return;"
+                     ) < text.index("hideError(); return;"), ("Esc 链里全屏层必须排在遮罩之前 (z-70 是全壳最高档, 否则 Esc 先收遮罩、图还盖在上面)")
+
+
+def test_graph_component_is_dependency_free() -> None:
+    """组件必须零依赖零请求 (守 test_shell_no_external_resources 的同一件事, 只是扩大到拆分后的文件):
+    壳的静态导出件要 file:// 单文件可用, 引任何图形库 / 发任何请求都会同时破掉离线与守卫。"""
+    js = (SHELL.parent / "nav_graph.js").read_text(encoding="utf-8")
+    assert "window.MBGraph" in js, "组件没暴露挂载单点 window.MBGraph"
+    for bad in ("http://", "https://"):
+        assert bad not in js, f"组件里出现网络地址: {bad}"
+    for bad in ("import ", "require(", "fetch(", "XMLHttpRequest"):
+        assert bad not in js, f"组件必须零依赖零请求: 出现 {bad}"
+
+
+def test_graph_state_survives_poll_remount() -> None:
+    """抽屉每 30s 轮询都会重挂组件 (renderLedger → renderDrawer), 档位若只活在组件闭包里必然
+    被洗回「局部 + 1 跳」—— 与 pitfalls/web-ui/poll-reseed-filter.md 同族坑, 而且肉眼极难发现
+    (切一下档位, 半分钟后自己回去了)。守三处接缝: S.graph 落点 / 挂载时回填 / onState 回存。"""
+    text = SHELL.read_text(encoding="utf-8")
+    start = text.index("const S = {")
+    body = text[start:text.index(chr(10) + "};", start)]
+    assert "graph: { scope: " in body, "S 缺关系图档位落点 (轮询会洗掉用户选的档位)"
+    for frag in ("scope", "steps", "showFrag"):
+        assert frag in body, f"S.graph 缺字段: {frag}"
+
+    mount = _shell_fn(text, "mountDrawerGraph")
+    for frag in ("scope: S.graph.scope", "steps: S.graph.steps", "showFrag: S.graph.showFrag", "onState:"):
+        assert frag in mount, f"抽屉挂载没回填 / 回存档位: {frag}"
+    assert "S.graph.showFrag = st.showFrag" in mount, "showFrag 没回存 (碎片链开关会被轮询复位)"
+
+    apply_ = _shell_fn(text, "applyData")
+    assert "stageGraph.getState()" in apply_, "轮询后没重挂全屏层 (看到的还是上一轮快照)"
+    assert "byLink.has(" in apply_, "重挂前没判焦点件还在不在 (被外部删掉会直接抛)"

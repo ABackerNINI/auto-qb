@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 import threading
@@ -46,11 +47,18 @@ from _common import find_root, resolve_mb_dir  # noqa: E402
 import nav_data  # noqa: E402
 
 SHELL_NAME = "nav_page.html"
+# 关系图组件 (2026-11-07 拆分): 独立文件, 服务模式按路由发货, --gen-static 时**内联**回壳里 ——
+# 静态导出件必须仍是单文件 (file:// 打开时同目录没有 .js 可拉)。
+GRAPH_NAME = "nav_graph.js"
+GRAPH_TAG = '<script src="%s"></script>' % GRAPH_NAME
 BIND_HOST = "127.0.0.1"  # 监听只绑回环 (sidefx 放行), 不对外暴露
 OPEN_HOST = "localhost"  # 浏览器打开的地址一律用 localhost: 127.0.0.1 这个 origin 有历史遗留
 # (旧缓存 / 残留服务), 换成 localhost 拿一个干净 origin
 DEFAULT_STATIC_DIR = "tmp-analysis/nav"  # 相对仓库根; 目录已 gitignored, 静态导出件不入库
 STATIC_LINK_PREFIX = "../../memory-bank/"  # 静态件指向 memory-bank 原文的相对链接前缀 (壳按 file: 协议取用)
+# 壳里该前缀写成带引号的 JS 字符串字面量; gen_static 按**实际输出目录深度**换掉它 ——
+# 写死时只有输出到仓库根下两级 (默认 tmp-analysis/nav/) 才对, --gen-static out/ 会让链接全部算到仓库外。
+STATIC_LINK_JS = '"%s"' % STATIC_LINK_PREFIX
 DATA_TOKEN = "__DATA__"  # 壳内数据注入位 (S2 的壳以同款 token 预留)
 
 # ---- 仅快进拉取 (前端顶栏「拉取」按钮 → POST /api/pull) ----
@@ -237,7 +245,7 @@ class NavHandler(BaseHTTPRequestHandler):
         # 精简 log: /api/data 是页面 30s 轮询、/ 是壳加载 —— 成功时不上屏; 只留错误与其余请求。
         path = self.requestline.split(" ")[1] if self.requestline else ""
         status = code if isinstance(code, int) else 200
-        if status < 400 and (path == "/api/data" or path in ("/", "/index.html")):
+        if status < 400 and (path == "/api/data" or path in ("/", "/index.html", "/" + GRAPH_NAME)):
             return
         sys.stderr.write("[nav] %s %s\n" % (status, self.requestline))
 
@@ -245,6 +253,8 @@ class NavHandler(BaseHTTPRequestHandler):
         path = urlsplit(self.path).path
         if path in ("/", "/index.html"):
             self._send_shell()
+        elif path == "/" + GRAPH_NAME:
+            self._send_graph()
         elif path == "/api/data":
             self._send_api()
         elif path == "/memory-bank" or path.startswith("/memory-bank/"):
@@ -307,6 +317,15 @@ class NavHandler(BaseHTTPRequestHandler):
             return
         self._send_bytes(200, body.encode("utf-8"), "text/html; charset=utf-8")
 
+    def _send_graph(self) -> None:
+        """关系图组件 (壳里以 `<script src="nav_graph.js">` 引用; 静态导出时这个引用被内联替换)。"""
+        try:
+            body = (self.shell_path.parent / GRAPH_NAME).read_bytes()
+        except OSError:
+            self._send_text(404, "not found: %s" % GRAPH_NAME)
+            return
+        self._send_bytes(200, body, _CONTENT_TYPES[".js"])
+
     def _send_api(self) -> None:
         try:
             data = nav_data.collect_nav(self.mb)
@@ -354,18 +373,43 @@ def _read_shell(shell_path: Path) -> tuple[str, bool]:
 
 
 def gen_static(mb: Path, shell_path: Path, out_dir: Path) -> int:
-    """壳 + 注入数据落盘单文件 (不开服务); 链接前缀由壳自行按 file: 协议取 STATIC_LINK_PREFIX。"""
+    """壳 + 注入数据落盘单文件 (不开服务)。
+
+    两处按实际落点改写, 写死任何一处都会让静态件在非默认目录下全体失效:
+    1. 数据 token -> 现算 JSON;
+    2. `../../memory-bank/` -> 按 out_dir 与 mb 的相对关系现算的前缀 (默认目录恰好两级深才对);
+    3. `<script src="nav_graph.js">` -> 该文件的**内联内容** (静态件必须单文件, file:// 拉不到同级 js)。
+    """
     html, is_real = _read_shell(shell_path)
     payload = json.dumps(nav_data.collect_nav(mb), ensure_ascii=False)
     if DATA_TOKEN not in html:
         sys.stderr.write("[nav] shell has no %s token, data not injected\n" % DATA_TOKEN)
         return 1
     html = html.replace(DATA_TOKEN, payload)
+
+    graph_path = shell_path.parent / GRAPH_NAME
+    try:
+        graph = graph_path.read_text(encoding="utf-8")
+    except OSError:
+        graph = ""
+    if GRAPH_TAG in html and graph:
+        html = html.replace(GRAPH_TAG, "<script>\n%s\n</script>" % graph)
+    elif GRAPH_TAG in html:
+        sys.stderr.write("[nav] %s missing next to shell, graph component not inlined\n" % GRAPH_NAME)
+
+    try:
+        prefix = os.path.relpath(mb, out_dir).replace(os.sep, "/").rstrip("/") + "/"
+    except ValueError:
+        # Windows 跨盘 (D: 盘导出到 C: 盘仓库): 相对路径算不出来 —— 退绝对 file:// 前缀, 链接仍然能开
+        prefix = mb.resolve().as_uri().rstrip("/") + "/"
+    if STATIC_LINK_JS in html:
+        html = html.replace(STATIC_LINK_JS, json.dumps(prefix))
+
     out_dir.mkdir(parents=True, exist_ok=True)
     out = out_dir / "nav_page.html"
     out.write_text(html, encoding="utf-8")
     kind = "shell" if is_real else "placeholder shell (nav_page.html pending, S2)"
-    print("[nav] static export: %s (%d bytes, %s)" % (out, out.stat().st_size, kind))
+    print("[nav] static export: %s (%d bytes, %s, link prefix %s)" % (out, out.stat().st_size, kind, prefix))
     return 0
 
 

@@ -23,6 +23,7 @@
 | [index-volume-routing.md](index-volume-routing.md) | `pitfalls/{backend,testing,web-ui}` 主索引是分卷路由(只有卷号/主题范围/条数), 定位表在 `_index-<n>.md`; 主索引查不到不等于没有这个坑。 | 分卷索引,卷页,主索引找不到,多一跳,pitfalls 索引,卷号定位,CLOSED_KEEP,归档索引,全量清单 |
 | [kb-baseline-title-double-prefix.md](kb-baseline-title-double-prefix.md) | kb.new baseline 的 --total 会自动拼进标题, title 里再带一份就双前缀 | kb.new, baseline, 标题双前缀, --total, 基线切片, new_doc.py, 誊写 |
 | [kb-subagent-concurrency.md](kb-subagent-concurrency.md) | 同一轮并发派遣多个子代理(或后台代理未收割时再派)会被宿主并发上限拒收, 失败形态是 `user concurrency limit exceeded` —— 逐个重派即恢复, 不是派遣机制坏了 | 派子代理, 并发派遣, review 分面, user concurrency limit exceeded, 后台代理, 调研代理 |
+| [nav-ref-guard-mismatch.md](nav-ref-guard-mismatch.md) | 认领链「未入库」多半不是丢件: 导航层判据必须与 kb.check 对齐 | 未入库,认领链死链,关系图悬空,ref 判据不一致,归档回退,仓库根相对 |
 | [rebase-conflict-resolve.md](rebase-conflict-resolve.md) | 与远端分叉后 `git rebase origin/develop`, 冲突几乎全落在「双方各追加一行」的档案进度日志、切片 R 行与生成物索引上 —— 追加行要**两边都留**(不是二选一), 撞号的 R 要**顺延**, 生成物**取一侧 + 重跑生成器**, 而用字符串替换… | rebase 冲突, 解冲突, R 编号撞车, 同号 R12, 最后活动 格式坏, 冲突标记残留, 追加行冲突, 生成物取一侧, 提交主题残留在行尾, git rebase --continue |
 | [refs-rename.md](refs-rename.md) | 改文件名或移动文档后必须全仓查引用(坏链不会让任何测试失败); 生成型脚本写路径有两个必踩的坑; 认领链 `doc-refs` 是仓库根相对口径, 且双向是**对等义务**(报告/计划不进 doc-refs, 但基线切片/坑档/档案会被扫); 认领方件必须先落盘再回填 doc-r… | 改名, 移动文档, 重命名, 生成索引, 写链接, 新写切片, 新写基线切片, 相对深度, relative_to, relpath, 认领链, doc-refs, Refs, 单向链, 双向闭环 |
 | [request-boundary.md](request-boundary.md) | 开工先判这一轮是"问答 / 只读"还是"执行任务" —— 把问答当执行任务去做, 是本仓库的**红线**。 | 用户提问, 想延伸排查, 想顺手入池 issue, 想顺手立档, 想 commit |
