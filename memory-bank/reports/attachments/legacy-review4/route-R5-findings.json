@@ -1816,5 +1816,140 @@
   "claim": "README 称 HR 逐种子详情表「默认只看做种中的行」,与 2026-10-03 用户二次驳回后的现行口径矛盾: 实际默认过滤是 local_present(本地仍在列,含暂停,与做种状态无关),可见文案已统一为「显示已删除种子/只看本地仍在列」且 hr_status.js 有旧措辞零残留断言——README 是残留的最后一句旧措辞",
   "relevance": "相关",
   "fix": "README 该句改为「默认只看本地仍在列的行」"
+ },
+ {
+  "file": "scripts/sim_qb_server.py",
+  "line": 258,
+  "quote": "exc = sys.exc_info()[1]",
+  "severity": "major",
+  "claim": "handle_error 使用 sys 但本文件未 import sys(sim_qb_core 星号导入也不含 sys),任何 Handler 线程异常(含每次停机时必然出现的 ConnectionResetError)都会在 handle_error 内抛 NameError,既定的「连接重置静默过滤」完全失效",
+  "relevance": "相关",
+  "fix": "顶部补 import sys"
+ },
+ {
+  "file": "scripts/sim_fsmock.py",
+  "line": 71,
+  "quote": "elif s.startswith(\"\\\\\\\\?\\\\UNC\\\\\")",
+  "severity": "minor",
+  "claim": "_key() 里 UNC 分支是死代码: 任何以 \\\\?\\UNC\\ 开头的字符串必先命中上一行的 \\\\?\\ 前缀分支被剥成 UNC\\...,UNC→\\\\ 映射永不执行,UNC 语料路径的 mock 匹配会失配",
+  "relevance": "相关",
+  "fix": "把 UNC 判断挪到 \\\\?\\ 判断之前(先长前缀特例、后一般前缀)"
+ },
+ {
+  "file": "scripts/sim_run.py",
+  "line": 409,
+  "quote": "THRESH.get(\"SYNC.drift_max_s\", 1.0)",
+  "severity": "minor",
+  "claim": "语料档下 SYNC.drift_max_s 直接读合成档裸 id 阈值(默认还兜底 1.0),与本文件 352-355 行自述的「语料档只查 corpus. 前缀、不回落合成档裸 id,否则假红假绿」不变量相矛盾",
+  "relevance": "相关",
+  "fix": "该处不显式传阈值,交给 add() 走 corpus_mode 的 corpus. 前缀路由"
+ },
+ {
+  "file": "scripts/sim_qb_model.py",
+  "line": 799,
+  "quote": "self.safe_delete_files(self.file_paths_of(t), 1)",
+  "severity": "minor",
+  "claim": "WEB 端 torrents/delete(deleteFiles=true) 对单个多种子按文件数触发 B3: declared=1 时 >2 个文件的种子必被拒(403),D3 判据对多文件语料会假红;同文件 delete_torrents 路径传的是 len(paths),两处语义不一致",
+  "relevance": "相关",
+  "fix": "该调用点传 declared=len(paths)(按「一次命令」核账)或与 delete_torrents 口径统一"
+ },
+ {
+  "file": "scripts/sim_qb_model.py",
+  "line": 673,
+  "quote": "getattr(self, \"replay_cursor\", 0)",
+  "severity": "nit",
+  "claim": "replay_cursor 属性全仓无人赋值(只有 replay_pos/replay_cursor_ms),fsmock_state 的 t_seq 恒为 0,时间源字段名存实亡",
+  "relevance": "相关",
+  "fix": "改为真实游标或删掉该字段"
+ },
+ {
+  "file": "scripts/sim_run.py",
+  "line": 650,
+  "quote": "x[\"result\"] == \"WARN\"",
+  "severity": "nit",
+  "claim": "verdict_of 处理 result==\"WARN\",但 add() 只可能产出 PASS/FAIL/BASELINE,WARN 分支是死代码",
+  "relevance": "相关",
+  "fix": "删掉 WARN 分支或让 add() 真能产出 WARN"
+ },
+ {
+  "file": "scripts/sim_qb_cli.py",
+  "line": 27,
+  "quote": "(int(parts[0]), int(parts[1])",
+  "severity": "nit",
+  "claim": "parse_spec 对非数字段(如 --delete-torrents a:b)直接 int() 抛裸 ValueError 栈,只有段数不足才有友好 SystemExit",
+  "relevance": "相关",
+  "fix": "int() 包 try/except 或 argparse type 校验,转成带提示的 SystemExit"
+ },
+ {
+  "file": "scripts/sim_baseline.py",
+  "line": 4,
+  "quote": "实测值 × 余量系数",
+  "severity": "minor",
+  "claim": "非ASCII图形符号违规: 本文件 4 处 ×(行 4/105×2/308)",
+  "relevance": "相关",
+  "fix": "按 code-style.md 换 ASCII(x 或 *)"
+ },
+ {
+  "file": "scripts/sim_fsmock.py",
+  "line": 59,
+  "quote": "同一份代码在 Linux 上退化成**大小写敏感**匹配 ⇒",
+  "severity": "minor",
+  "claim": "非ASCII图形符号违规: 本文件 ⇒×5、·(行 9)、…(行 16)",
+  "relevance": "相关",
+  "fix": "换 ASCII(=>、->、...)"
+ },
+ {
+  "file": "scripts/sim_qb.py",
+  "line": 156,
+  "quote": "CI 从不执行 ⇒ 交给 pytest 验",
+  "severity": "minor",
+  "claim": "非ASCII图形符号违规: 本文件 ⇒×3(行 150/155/156)",
+  "relevance": "相关",
+  "fix": "换 ASCII(=>)"
+ },
+ {
+  "file": "scripts/sim_qb_cli.py",
+  "line": 210,
+  "quote": "解析不出来 ⇒ 依赖站点的规则与日志全是空转",
+  "severity": "minor",
+  "claim": "非ASCII图形符号违规: 本文件 ⇒×5、→(行 213)、↔(行 218)",
+  "relevance": "相关",
+  "fix": "换 ASCII(=>、->、<->)"
+ },
+ {
+  "file": "scripts/sim_qb_core.py",
+  "line": 225,
+  "quote": "同组成员会互不相等 ⇒ 严格模式判据**恒假**",
+  "severity": "minor",
+  "claim": "非ASCII图形符号违规: 本文件 ⇒×2(行 208/225)、·×4(行 251-254 列表符)",
+  "relevance": "相关",
+  "fix": "换 ASCII(=>、-)"
+ },
+ {
+  "file": "scripts/sim_qb_model.py",
+  "line": 610,
+  "quote": "先合并窗口(§08) → **再**按滞后规则叠 overlay",
+  "severity": "minor",
+  "claim": "非ASCII图形符号违规: 本文件 →×3(行 177/610/615)、⇒(行 337)、××2(行 119/158)",
+  "relevance": "相关",
+  "fix": "换 ASCII(->、=>、x)"
+ },
+ {
+  "file": "scripts/sim_qb_server.py",
+  "line": 102,
+  "quote": "主循环永远不饱和 ⇒",
+  "severity": "minor",
+  "claim": "非ASCII图形符号违规: 本文件 ⇒×4(行 101/102×2/103)",
+  "relevance": "相关",
+  "fix": "换 ASCII(=>)"
+ },
+ {
+  "file": "scripts/sim_run.py",
+  "line": 574,
+  "quote": "这回事 ⇒ 只在录播档判",
+  "severity": "minor",
+  "claim": "非ASCII图形符号违规: 本文件 ⇒(行 574)、××4(行 585/586/593/594)",
+  "relevance": "相关",
+  "fix": "换 ASCII(=>、x)"
  }
 ]

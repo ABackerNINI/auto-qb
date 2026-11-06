@@ -73,9 +73,9 @@
     {
       "id": "R5-9",
       "title": "scripts 快扫: sim_* 全族",
-      "status": "pending",
-      "done_at": null,
-      "findings": 0
+      "status": "done",
+      "done_at": "26-11-07-0440",
+      "findings": 16
     },
     {
       "id": "R5-10",

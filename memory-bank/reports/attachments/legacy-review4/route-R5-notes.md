@@ -16,6 +16,21 @@ owner: clone3-main · freeze: f088329291e6 · 快照: C:\Users\11059\Desktop\Pro
 | R5-6 | shared 对话框与流转: dialogs/add_torrent/delete_flow/transfer_*/relocate_chain (3257行) | 23 (major 3 / minor 11 / nit 9) | done |
 | R5-7 | shared config 族: config_rules/config_editor{,_curve,_form,_tree}/config_hub{,_tm,_tracker,_hr} (3850行) | 26 (major 6 / minor 10 / nit 10) | done |
 | R5-8 | 图表·hr 面板·快捷键引擎·fx: qb_traffic_chart/hr_status/hr/shows/traffic_card/shortcuts_engine + fx/theme (4032行) | 24 (major 1 / minor 17 / nit 6) | done |
+| R5-9 | scripts 快扫: sim_* 全族 (3700行, 快扫档单面) | 16 (major 1 / minor 8 / nit 7) | done |
+
+## R5-9 批记录(快扫档: 入口/危险操作/红线引用/明显缺陷/非ASCII,不逐行精评)
+
+- **major 1 条**:sim_qb_server.py:258 handle_error 用 sys 但未 import sys——任何 Handler 线程异常(含每次停机必现的 ConnectionResetError)在 handle_error 内抛 NameError,「连接重置静默过滤」完全失效。
+- minor 8 条:sim_fsmock UNC 分支死代码(长前缀被一般前缀截走) / sim_run 语料档阈值读合成档裸 id 违自述不变量 / sim_qb_model WEB 删除 declared=1 多文件必 403 与 delete_torrents 口径不一 / 非 ASCII 符号 6 文件。
+- nit 7 条:replay_cursor 无赋值点 / WARN 死分支 / --tick 字面替换 / parse_spec 裸 ValueError。
+- 引文校验 refute 1 条(sim_run.py:723 --tick 字面替换,幻觉引文直接弃,未复核);本批净入 16 条。
+- 危险操作面:rmtree/unlink/杀进程/端口均在模拟根与回环内,DEFAULT_ROOT 写仓外真实盘系设计且有 B1/B2/B4 三道边界,不触 config.yml/auto-qb-data 红线。
+- 底册复验:R2 终表与 Open issues 零命中本批。
+
+### 自弃发现(7 条留痕)
+
+open(...) 未接句柄 CPython 引用计数即关 / DEFAULT_ROOT 仓外真实盘系设计有三道边界 / fsmock 全局替换 os.path 系设计意图(前缀限定) / subprocess 超时裸栈开发工具可见 / Content-Length 畸形头测试专用不出现实场景 / 疑似搬迁残留无用 import 系风格 / --fs-mode real 语料档无物化路径意图不明。
+
 
 ## R5-8 批记录(2 面精评: 正确性+安全 / 测试缺口+文档漂移)
 
