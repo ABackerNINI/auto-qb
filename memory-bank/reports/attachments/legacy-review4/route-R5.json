@@ -66,9 +66,9 @@
     {
       "id": "R5-8",
       "title": "图表·hr 面板·快捷键引擎·fx: qb_traffic_chart/hr_status/hr/shows/traffic_card/shortcuts_engine + fx/皮肤 js",
-      "status": "pending",
-      "done_at": null,
-      "findings": 0
+      "status": "done",
+      "done_at": "26-11-07-0432",
+      "findings": 24
     },
     {
       "id": "R5-9",

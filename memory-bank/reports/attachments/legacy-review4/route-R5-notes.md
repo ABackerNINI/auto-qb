@@ -15,6 +15,21 @@ owner: clone3-main · freeze: f088329291e6 · 快照: C:\Users\11059\Desktop\Pro
 | R5-11 | shared drawer 模板·content 与 peers(10-12/90 号) (1720行) | 21 (major 4 / minor 12 / nit 5) | done |
 | R5-6 | shared 对话框与流转: dialogs/add_torrent/delete_flow/transfer_*/relocate_chain (3257行) | 23 (major 3 / minor 11 / nit 9) | done |
 | R5-7 | shared config 族: config_rules/config_editor{,_curve,_form,_tree}/config_hub{,_tm,_tracker,_hr} (3850行) | 26 (major 6 / minor 10 / nit 10) | done |
+| R5-8 | 图表·hr 面板·快捷键引擎·fx: qb_traffic_chart/hr_status/hr/shows/traffic_card/shortcuts_engine + fx/theme (4032行) | 24 (major 1 / minor 17 / nit 6) | done |
+
+## R5-8 批记录(2 面精评: 正确性+安全 / 测试缺口+文档漂移)
+
+- **major 1 条**:fx-mount.js:102 armSettle 全仓库零调用——dock(true) 承诺的兜底定时器从未武装,过渡事件丢失场景下落定回执永不执行,fx-glide 恒驻留违反「只罩开门窗口」口径。
+- minor 17 条:OS 切明暗流量图 canvas 残旧主题色(theme.js 不派事件) / themechange 监听只挂不摘 / loadQbHistory 死代码 / 快捷键字符串字面量 ↑↓ / 键位匹配引擎零行为执行(改键→重载→触发链任何测试不跑) / hrPopData 零执行 / _qbTickLabel+_qbIsolatedIdxs 零执行(同文件其余纯函数均有电池) / fx 挂载层零行为测试零 e2e / theme.js 全文件零测试(事件契约无成对锚) / hr.js 头注与自身修正注释矛盾 / data-fx-pushed 活约定已退役(照表消费即被守阵打红) / 「十档」vs 13 档 / Alt+5 when 条件描述不符 / README:90「默认只看做种中」残留旧口径。
+- nit 6 条:非 ASCII 符号 6 文件(hr_status 带圈数字 26 处密度最高) / epLabel 零执行 / fx 计数 18 实为 17 / webui.md 悬空引用。
+- 安全面:9 文件无 innerHTML sink(tooltip/状态文本均走 Vue 插值与 textContent)。
+- 底册复验:R2 终表零命中本批;Open issue 0149(图悬停联动)仍 Open 未重报。
+
+### 自弃发现(15 条留痕)
+
+面1(8):_qbLoad stale 不复位 loading 有双路自愈 / hrPopData 判据依赖违约数据归理论 / 键位撞号静默跳过系最后防线且有注释 / 24h 回退字面量重复无行为差 / spawnGhost 定位由 CSS 决定无法证实 / hrsHistKey 同秒撞键说不出场景 / _kbViewportRow 全 document 扫未核实不报 / openDrawerTraffic 后 hover 有越界守卫。
+面2(7):traffic_card 引用系家族命名惯用 / ⊕ 疑笔误语义可读 / hr.js 五档系历史陈述 / PANEL_ENTER_MS 与 CSS 实测一致 / webui-fx.md 不在本面文档范围 / _kbIsolatedIdxs 并入刻度条目 / KB_MERGE_TAB_REMAP 有锚+e2e 不重复报。
+
 
 ## R5-7 批记录(2 面精评: 正确性+安全 / 测试缺口+文档漂移)
 

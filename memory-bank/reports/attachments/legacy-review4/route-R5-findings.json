@@ -1600,5 +1600,221 @@
   "claim": "cfg.collapsedRules 及其注释「规则卡折叠态」是死状态: 全前端零读零写,规则卡折叠实际走 openRuleMeta(键格式为路径点分)——注释描述的状态机不存在,且 cfgReset 也从未清它",
   "relevance": "相关",
   "fix": "删除 collapsedRules 死状态,或注释改指 openRuleMeta 并说明键格式差异"
+ },
+ {
+  "file": "src/auto_qb/webui/static/flux/fx-mount.js",
+  "line": 102,
+  "quote": "function armSettle() {",
+  "severity": "major",
+  "claim": "armSettle 全仓库零调用: dock(true) 只置 settleArmed 挂 fx-glide,注释承诺的兜底定时器(入场时长+100ms,防 RM 过渡归零不派 transitionend/过渡被打断/后台标签页丢事件)从未被武装——这些场景下 fireSettle 永不执行,落定回执丢失,且 html.fx-glide 在面板开着期间恒驻留(键盘 End/Home/翻页一直走平滑,违反「只罩开门窗口」口径);dock(false) 里的 settleTimer 清理也随之恒为死代码",
+  "relevance": "相关",
+  "fix": "dock(true) 分支在 settleArmed = true 后调用 armSettle(),兜底定时器与 transitionend 双路并存(单发守卫已具备)"
+ },
+ {
+  "file": "src/auto_qb/webui/static/prism/js/theme.js",
+  "line": 48,
+  "quote": "var onSys = function () { apply(resolve()); };",
+  "severity": "minor",
+  "claim": "系统明暗实时跟随路径只 apply 不派发 autoqb:themechange(qb_traffic_chart.js:43 依赖该事件整图重建烘焙令牌色的 canvas),用户未手动选主题时 OS 切换明暗,CSS 侧换肤而流量图 canvas 系列色/网格/斜纹仍停在旧主题,直到下次整图重建",
+  "relevance": "相关",
+  "fix": "onSys 里检测 data-theme 实际变化后同样 dispatchEvent(new CustomEvent(\"autoqb:themechange\"))"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/qb_traffic_chart.js",
+  "line": 1112,
+  "quote": "document.documentElement.addEventListener(\"autoqb:themechange\", this._qbOnThemeChange);",
+  "severity": "minor",
+  "claim": "themechange 监听只挂不摘: _qbThemeBound 置位后 beforeUnmount(558 行)只清 _qbLimitUnwatch,不摘本监听——根实例卸载/重挂(HMR、auth 重建)后监听仍驻留并引用已卸载实例的闭包",
+  "relevance": "相关",
+  "fix": "beforeUnmount 里对称 removeEventListener 并复位 _qbThemeBound"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/qb_traffic_chart.js",
+  "line": 638,
+  "quote": "loadQbHistory() {",
+  "severity": "minor",
+  "claim": "loadQbHistory 是零调用死代码: 全快照 grep 仅此定义一处,注释自称「P5a 公开名」的兼容别名已无任何调用方(入口全走 openQbHistory/openDrawerTraffic)",
+  "relevance": "相关",
+  "fix": "删除该方法与「兼容别名」注释(存量面 A 拆分残留)"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/shortcuts_engine.js",
+  "line": 454,
+  "quote": "或用 ↑↓ / Home / End 定位目标",
+  "severity": "minor",
+  "claim": "字符串字面量含图形符号 ↑↓(U+2191/U+2193): code-style.md 非 ASCII 禁令明确覆盖字符串字面量,不止注释",
+  "relevance": "相关",
+  "fix": "文案改为「或用 上下方向键 / Home / End 定位目标」等 ASCII 表述"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/hr_status.js",
+  "line": 365,
+  "quote": "⚠ 切勿改成",
+  "severity": "nit",
+  "claim": "注释含 ⚠(U+26A0,禁令明列且给了 WARN: 替代);该文件同类还有 →⇒⇄≤ 共 19 处、带圈数字 ①-⑤ 共 26 处,全在注释",
+  "relevance": "相关",
+  "fix": "⚠→WARN:, ①→1., 其余按替代表改 ASCII"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/shortcuts_engine.js",
+  "line": 8,
+  "quote": "模板基准 ⊕ overrides",
+  "severity": "nit",
+  "claim": "注释含 ⊕(U+2295)及 →←↑↓⇒①② 共 33 处,全在注释,违反代码非 ASCII 图形符号禁令",
+  "relevance": "相关",
+  "fix": "⊕→'+', 箭头族→ASCII, 带圈数字→'1.'/'2.'"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/qb_traffic_chart.js",
+  "line": 12,
+  "quote": "单一描述源): ① global 全局",
+  "severity": "nit",
+  "claim": "注释含带圈数字 ①②③ 与 ⇒∈ 共 11 处,违反代码非 ASCII 图形符号禁令",
+  "relevance": "相关",
+  "fix": "①②③→'1./2./3.', ⇒→'=>', ∈→'属于'"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/hr.js",
+  "line": 152,
+  "quote": "为零 → 视为悬停目标已消失",
+  "severity": "nit",
+  "claim": "注释含 →←⇒≠ 共 12 处,违反代码非 ASCII 图形符号禁令",
+  "relevance": "相关",
+  "fix": "ASCII 替代"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/shows.js",
+  "line": 130,
+  "quote": "(≈ 整剧命中)",
+  "severity": "nit",
+  "claim": "注释含 →⇒≈ 共 4 处,违反代码非 ASCII 图形符号禁令",
+  "relevance": "相关",
+  "fix": "≈→'约等于', 箭头按替代表改 ASCII"
+ },
+ {
+  "file": "src/auto_qb/webui/static/flux/fx-mount.js",
+  "line": 72,
+  "quote": "动效职责: ①面板入场动效本体",
+  "severity": "nit",
+  "claim": "注释含带圈数字 ①② 共 7 处、≤ 1 处,违反代码非 ASCII 图形符号禁令",
+  "relevance": "相关",
+  "fix": "①②→'1./2.', ≤→'<='"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/shortcuts_engine.js",
+  "line": 50,
+  "quote": "this._kbTable().get(kbSerializeEvent(e))",
+  "severity": "minor",
+  "claim": "键位匹配引擎核心(_kbTable 的 overrides/黑名单/冲突去重派生、_kbOnKeyDown 的 IME/defaultPrevented/浮层分流)零行为级执行: tests 侧对 shortcuts 域全是源码正则字符串锚,无 node 电池;e2e 只真按了默认键少数组合,自定义键位链(改键→/api/keys→重载→按键触发)与黑名单/重复跳过分支任何测试都不跑,漂移只会静默",
+  "relevance": "相关",
+  "fix": "仿 _QB_SCOPES 探针用 new Function 取出 _kbTable/_kbOnKeyDown 做 node 电池,或补 e2e: 面板录制约定键→重载→按新键断言动作触发"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/hr.js",
+  "line": 192,
+  "quote": "hrPopData(m) {",
+  "severity": "minor",
+  "claim": "HR 悬停弹窗的数据组装 hrPopData(excluded 分支/badge 与 gauge 互斥/站点轨 pct 夹取/lag 判定)与定位几何 _hrPopPlace 从未被行为级执行: 测试只有挂点字符串锚,e2e 全目录无 hrPop 引用,组装分支写错只表现为人话/配色错",
+  "relevance": "相关",
+  "fix": "hrPopData 是纯映射,比照 hrsCompareRows 先例抽 node 电池跑分支矩阵;或补 e2e hover 断言弹窗 lane/verdict"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/qb_traffic_chart.js",
+  "line": 1118,
+  "quote": "_qbTickLabel(ts, scope) {",
+  "severity": "minor",
+  "claim": "x 轴刻度计算 _qbTickLabel 的四族分支与孤点索引 _qbIsolatedIdxs 从未被任何测试执行——同文件其余纯函数(_qbPointsToData/_qbYRange/_qbGapRuns/_qbChainBounds/_qbSeamHint/_qbLimitSegs/_qbLimitAt)均有 node 电池,唯独这两处标着纯函数却没有;刻度族与 QB_WINDOW_NAMES 对应写错只会在图上静默错档",
+  "relevance": "相关",
+  "fix": "并入既有 node 探针,对 13 档各断言一条刻度输出与 _qbIsolatedIdxs 三态"
+ },
+ {
+  "file": "src/auto_qb/webui/static/flux/fx-mount.js",
+  "line": 225,
+  "quote": "var TOAST_SPLIT = /^([^:：,，()（）\\n]{1,14})",
+  "severity": "minor",
+  "claim": "fx 挂载层全部状态驱动逻辑零行为级测试且零 e2e: e2e 目录对 data-fx/AQB_FX 零引用,tests 侧只有字符串锚,TOAST_SPLIT 拆段正则、rows 行差分与幽灵退场、tabDir 方向判定、flipStack FLIP、numRoll 补间均从未跑过——正则或差分写错只有 flux 皮肤观感退化,pytest 全绿",
+  "relevance": "相关",
+  "fix": "至少给 TOAST_SPLIT 与 rows 差分补 node 电池;toast 塑形可加一条 e2e 断言两段落地"
+ },
+ {
+  "file": "src/auto_qb/webui/static/prism/js/theme.js",
+  "line": 63,
+  "quote": "new CustomEvent(\"autoqb:themechange\"",
+  "severity": "minor",
+  "claim": "theme.js 全文件零测试: tests/e2e 无任何 AutoQbTheme/theme-menu/data-theme 断言(唯一引用是一条路由重定向),而它派发的 autoqb:themechange 是 qb_traffic_chart.js 换肤重建图的事件契约——事件名/派发点被改名或删除,流量图 canvas 换肤残旧色且无任何测试变红",
+  "relevance": "相关",
+  "fix": "在接线守阵里补一条静态锚: theme.js 须派发 autoqb:themechange 且 qb_traffic_chart.js 须监听同名事件(成对)"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/shows.js",
+  "line": 32,
+  "quote": "epLabel(key) {",
+  "severity": "nit",
+  "claim": "集键展示纯函数 epLabel 的四形态分支(ep/range/date/整季包)从未被任何测试执行;memberHashesOf 有静态守阵、decoratedShows 有 e2e 间接覆盖,epLabel 只有模板引用",
+  "relevance": "相关",
+  "fix": "纯函数,并入任一 node 探针断言四形态输出"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/hr.js",
+  "line": 16,
+  "quote": "danger 与 failed 同属「不能删」桶。",
+  "severity": "minor",
+  "claim": "文件头注释声称 failed 与 danger 同属「不能删」桶,与 3 行之后自己的修正注释(line 19-20「叫『不能删』不符合实际,独立成『考核未通过』桶」)及实际映射 HR_SAFETY_BUCKETS = { failed: \"考核未通过\" } 直接矛盾,读者按头部理解会写错筛选/点名逻辑",
+  "relevance": "相关",
+  "fix": "头部句改为「danger 进『不能删』桶, failed 独立成『考核未通过』桶」与 line 19-20 对齐"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/fx/fx.js",
+  "line": 21,
+  "quote": "S6 提升原语 18 个(showcase S4 选定入库)",
+  "severity": "nit",
+  "claim": "注释称 S6 提升原语 18 个,但 REGISTRY.effects 实为基线 9 + S6 17 = 26 名(row-flash 于 2026-11-03 退役后未回写计数,守阵 docstring 亦自称「注册表 26 名」)",
+  "relevance": "相关",
+  "fix": "注释改为「基线 9 个(S2) + S6 提升原语 17 个」或去掉具体个数只指 REGISTRY.effects 单点"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/fx/fx.js",
+  "line": 28,
+  "quote": "data-fx-pushed                             push 让位态标记(S6, 消费方写)",
+  "severity": "minor",
+  "claim": "属性约定表仍登记 data-fx-pushed(及 line 32 的 --fx-push-y)为「消费方写」的活约定,但 F7e 已全面弃用 push 位移本体: fx-mount.js 不再 stamp、fx-mount.css 载体段删除、test_frontend_fx_wiring 反向钉「零 push 载体/--fx-push-y 规则」——照本表消费即被守阵打红",
+  "relevance": "相关",
+  "fix": "从属性约定表删除两行,或加注「F7e 已退役,push 原语仅 fx.css 库面保留不消费」"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/qb_traffic_chart.js",
+  "line": 632,
+  "quote": "1m-30d 十档",
+  "severity": "minor",
+  "claim": "qbSetWindow 上方注释称「窗口切换(1m-30d 十档)」,与同文件单点 QB_WINDOW_NAMES 的 13 档(含 6mo/1y/all,文件头 line 45 亦自称「十三档清单」)矛盾,属旧 10 档时代残留",
+  "relevance": "相关",
+  "fix": "注释改为「窗口切换(十三档, 单点 QB_WINDOW_NAMES)」"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/qb_traffic_chart.js",
+  "line": 54,
+  "quote": "窗口前后切换 [ ](后两条走 when 条件绑定",
+  "severity": "minor",
+  "claim": "「快捷键三入口」注释称后两条(Alt+5 与 [ ])走 when 条件绑定、仅流量图可见时消费键位,但注册表里 drawer-tab-traffic(Alt+Digit5)并无 when 条件、面板关着时也消费,仅 traffic-win-prev/next 两条是 when 绑定——括号描述与 shortcuts.js 注册表现状不符",
+  "relevance": "相关",
+  "fix": "括号改为「([ ] 两条走 when 条件绑定, 仅流量形态可见时消费; Alt+5 无条件, 未启用时提示后忽略)」"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/qb_traffic_chart.js",
+  "line": 466,
+  "quote": "webui.md「同一口径收成 computed 单点」",
+  "severity": "nit",
+  "claim": "注释引用 webui.md 的「同一口径收成 computed 单点」口径,但快照 memory-bank/conventions/webui.md 及其 attachments 全族均无该表述(全 memory-bank 库仅一份 issue HTML 含此短语),属悬空文档引用",
+  "relevance": "相关",
+  "fix": "引用改为实际承载该口径的文件,或删去书名号引用只留口径本身"
+ },
+ {
+  "file": "README.md",
+  "line": 90,
+  "quote": "默认只看做种中的行",
+  "severity": "minor",
+  "claim": "README 称 HR 逐种子详情表「默认只看做种中的行」,与 2026-10-03 用户二次驳回后的现行口径矛盾: 实际默认过滤是 local_present(本地仍在列,含暂停,与做种状态无关),可见文案已统一为「显示已删除种子/只看本地仍在列」且 hr_status.js 有旧措辞零残留断言——README 是残留的最后一句旧措辞",
+  "relevance": "相关",
+  "fix": "README 该句改为「默认只看本地仍在列的行」"
  }
 ]
