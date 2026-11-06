@@ -250,5 +250,68 @@
     "claim": "TASK_KINDS 在 src 与 tests 均无消费点(TASK_PAGE/TASK_TORRENT 各自被 fetcher 使用, 聚合元组无人用) —— 未用导出(发现类 A)",
     "relevance": "相关",
     "fix": "删除常量与 __all__ 项; 若留作文档性口径, 在消费点(如 from_json 校验 kind)真正引用"
+  },
+  {
+    "file": "src/auto_qb/hr/store.py",
+    "line": 290,
+    "quote": "self.read_error += f\"; 备份不可用({rec.backup_reason}), 本轮按空数据处理(保守回落未核实)\"",
+    "severity": "minor",
+    "claim": "站点文件损坏且 .bak 也不可用时,恢复路径不重置写者心跳基线,本进程此后每轮读到的 revision=0 恒小于 _last_write_rev,站点永久退化为只读(不再刷新),只能重启恢复",
+    "relevance": "相关",
+    "fix": "备份不可用( quarantine 后按空数据重建)路径同样调 rebaseline_after_recovery,或在会话里记录本轮 quarantine 事实,允许下一轮从 revision 0 合法重建"
+  },
+  {
+    "file": "src/auto_qb/hr/report.py",
+    "line": 211,
+    "quote": "with service.store(site).hold() as session:",
+    "severity": "minor",
+    "claim": "run_hr_confirm_empty 对传入站点名不做任何校验(cli.py 只做逗号切分),拼错站点名会凭空创建 <typo>.json/.lock 并打印「已写入人工对账戳」的假成功",
+    "relevance": "相关",
+    "fix": "写入前校验站点名在 config.hr_site_confs() 内,不在则报错退出"
+  },
+  {
+    "file": "src/auto_qb/hr/ratelimit.py",
+    "line": 8,
+    "quote": "页面与 .torrent 下载统一适用; 抖动只向上",
+    "severity": "minor",
+    "claim": "「相邻请求最小间隔统一适用」的不变量在失败路径不成立:budget.mark()(间隔基准前进)只在成功路径与登录页/Retry-After 两类特判调用,普通页面失败与 .torrent 下载失败(service_wave.py 两处 except HrFetchError)都不前进基准,快速失败场景下波内请求以零间隔连发,只剩日额 240 兜底",
+    "relevance": "相关",
+    "fix": "在页面级与种子级失败路径同样调用 budget.mark()(失败请求也是真实请求,与 Retry-After 路径注释里的同一原则)"
+  },
+  {
+    "file": "src/auto_qb/hr/report.py",
+    "line": 215,
+    "quote": "data.wave.notes = ((data.wave.notes or \"\") + note).strip(\"; \")",
+    "severity": "nit",
+    "claim": "重复执行 --hr-confirm-empty 会在 wave.notes 无去重地叠加同一条确认文案(违反黄金法则 1 幂等精神,人工 CLI 动作影响有限)",
+    "relevance": "相关",
+    "fix": "追加前检查 notes 是否已含该确认串,含则跳过"
+  },
+  {
+    "file": "src/auto_qb/hr/fetcher.py",
+    "line": 259,
+    "quote": "request_timeout=getattr(channel_conf, \"request_timeout\", 180.0),",
+    "severity": "nit",
+    "claim": "对已过 fail-fast 校验、恒有该属性的配置对象用 getattr 带默认,违反项目「禁用防御性掩盖:恒有值属性的 getattr」明文规则(键被改名时静默落回 180)",
+    "relevance": "相关",
+    "fix": "直接访问 channel_conf.request_timeout"
+  },
+  {
+    "file": "src/auto_qb/hr/parse.py",
+    "line": 242,
+    "quote": "def page_bounds(html: str) -> Optional[Tuple[int, int]]:",
+    "severity": "nit",
+    "claim": "page_bounds 在生产代码零调用(仅测试引用),docstring 却称「仅作报告用」,属拆分残留的死导出",
+    "relevance": "相关",
+    "fix": "删除函数与对应测试,或改 docstring 如实标注保留原因"
+  },
+  {
+    "file": "src/auto_qb/hr/ratelimit.py",
+    "line": 125,
+    "quote": "def now_ts() -> float:",
+    "severity": "nit",
+    "claim": "now_ts 生产代码零调用(仅 test_hr_ratelimit 引用),是只为测试存在的取时通道,违反「不能为测试专门留通道」约定(docstring 所称「叶子走取时单点」并未接线)",
+    "relevance": "相关",
+    "fix": "删除,测试改走 SYSTEM_CLOCK 注入或其它生产时钟"
   }
 ]

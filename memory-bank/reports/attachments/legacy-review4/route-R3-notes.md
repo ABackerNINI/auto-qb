@@ -11,7 +11,7 @@ owner: clone2-main · freeze: f088329291e6 · 快照: C:\Users\11059\Desktop\Pro
 | R3-3 | hr service 族: service_wave/service/service_common/service_status/module | 6 (major 1 / minor 3 / nit 2) | done |
 | R3-4 | hr 模型状态: model/status/resolve | 8 (minor 4 / nit 4) | done |
 | R3-5 | hr 运行时: runtime/server/channel/worker/threadlifecycle/queue/events | 8 (major 1 / minor 5 / nit 2) | done |
-| R3-6 | hr 取数解析: discovery/report/parse/fetcher/store/bencode/log/ratelimit + adapters | - | pending |
+| R3-6 | hr 取数解析: discovery/report/parse/fetcher/store/bencode/log/ratelimit + adapters 14 文件 | 7 (minor 3 / nit 4) | done |
 
 ## R2 复验结论
 
@@ -23,6 +23,7 @@ owner: clone2-main · freeze: f088329291e6 · 快照: C:\Users\11059\Desktop\Pro
 - **B-01 沿用 R3-3 结论(已消失)**:本批 3 文件(model/status/resolve)未发现同语义新独立问题。
 
 - **gtm 底册 T-01/T-02/T-05 全部已消失**(R3-5 批复验): T-01 _autostart/_put_config 已整段持 _config_write_lock(26-10-30-0624); T-02 新增 _check_http_host 回环约束 fail-fast(config.py:199-216); T-05 三处死码均已清(F401 import 收紧/uninstall 路由化/errors 全消费)。
+- **B-02 已消失**(R3-6 批复验): discovery.py 中 is_loopback_host/_content_length grep 零命中,现 import 全部有使用点。B-01/T-04 沿用已消失(见上)。
 
 ## 自弃发现记录
 
@@ -36,7 +37,10 @@ R3-4 批自弃 8 条(has_anchor_snapshot 全零边界方向保守 / done_epoch �
 
 R3-5 批自弃 10 条(RejectThrottle 警告键锁外读写仅日志重复 / stop 超时并存线程有文件锁兜底 / queue TTL<request_timeout 等效超时语义 / assert -O 剥离运行面不用 / _anchors O(n) 无正确性影响 / UrlPolicy 端口 userinfo 无攻击者输入路径 / OPTIONS 免 token 设计内 / build_views 跨实例写侧不在本批 / _note 状态变化才记 / ⇒·—— 不在禁用类);本批 review.check 被弃条目:0 条(8/8 全过)。
 
+R3-6 批自弃 8 条(discovery stop/retry 竞态窗口实际闭合 / bencode 拒非规范编码理论风险 / parse_page 零行有设计门槛 / fetcher 注释措辞张力 / report 调私有方法风格面 / _pair_fail_times 无界无可达失败 / 退避熔断措辞非事实错误 / _replace_url_host IPv6 无端口仅响应文本);本批 review.check 被弃条目:0 条(7/7 全过)。
+
 ## 执行备注
 
 - review.check --root 快照 在快照根建空 .git 目录绕过 _resolve_root 存在性误拒(R2 用 diff 等价通路,本路线改用更直接 workaround,零代码改动)。
 - 本批含 1 条 docs 类发现(5 份 pitfalls 的 hr/service.py::<符号> 指路因拆分漂移),按口径只报不改,交 S6 聚合。
+- R3-6 批 #3(ratelimit.py:8 失败路径绕过最小间隔)与 R3-3 批 major(service_wave.py:542 budget.mark 漏调)为同根双报,交 S6 聚合按 file+quote 去重合并。

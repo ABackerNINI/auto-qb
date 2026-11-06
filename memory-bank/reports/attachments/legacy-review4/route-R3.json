@@ -45,9 +45,9 @@
     {
       "id": "R3-6",
       "title": "hr 取数解析: discovery/report/parse/fetcher/store/bencode/log/ratelimit + adapters",
-      "status": "pending",
-      "done_at": null,
-      "findings": 0
+      "status": "done",
+      "done_at": "26-11-06-0844",
+      "findings": 7
     }
   ],
   "started_at": "26-11-06-0633"
