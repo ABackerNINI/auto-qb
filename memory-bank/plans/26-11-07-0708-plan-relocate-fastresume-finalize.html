@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>WebUI 设置页接线收口: bt_backup 上页、描述换新与退役键移除</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="relocate-fastresume-finalize">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-07-0708">
+<meta name="doc-updated" content="26-11-07-0708">
+<meta name="doc-refs" content="">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: relocate-fastresume-finalize</div>
+<h1>WebUI 设置页接线收口: bt_backup 上页、描述换新与退役键移除</h1>
+<p class="lede">本篇只回答: <strong>怎么收整组迁移 fastresume 收尾功能的 WebUI 设置页缺口</strong> —— bt_backup 动态映射上页(嵌「整组迁移」组)、relocate 组 help 换新口径、退役键 <code>finalize_timeout</code> 移除, 并补 e2e settings spec 防复发。前一件计划 <code>26-11-05-0808</code> 的 WebUI 范围只有反馈面与「立即收尾」按钮(已接线), 设置页是它计划外的缝 —— 本篇是那道缝的收口, 不改 26-11-05-0808 本体。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-07-0708 · <b>doc-updated</b> 26-11-07-0708 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 2026-11-07 grilling 会话(用户逐项拍板 Q1–Q12)+ 只读探查回报(HEAD <code>9f69075a</code>)
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<p><strong>为什么做</strong>: 用户在设置页无法配置 <code>bt_backup</code>(键被 <code>hidden=True</code> 藏掉, 只能手编 YAML), 且设置页迁移相关描述仍是旧链口径——收尾机制与再迁闸门两处与已实现行为相反。用户定性 <strong>blocker</strong>: 设置页是配置的主要入口, 入口缺失等于功能没交付完。</p>
+<p><strong>做到什么程度算成</strong>:</p>
+<ul>
+  <li>设置页能完整配置 <code>bt_backup</code>(host:port → 路径 的增/删/改 + 保存回读), 组件落在「整组迁移」组语境里;</li>
+  <li>设置页受影响文案与新实现口径一致, 不再有「重启后自动 setLocation 收尾 / 未收尾拒绝再迁」的旧话;</li>
+  <li>退役键 <code>finalize_timeout</code> 从 schema 与设置页消失, 旧配置残留不炸加载;</li>
+  <li>e2e settings spec 落地 —— 设置页不再零浏览器级断言。</li>
+</ul>
+<p><strong>设计底线/不变量</strong>:</p>
+<ul>
+  <li>法则 4 镜像面: <strong>移除</strong>配置键同样要同步 <code>validate_config</code> + schema + 键面守阵, 不能只删一处;</li>
+  <li>help 文案 schema 单点(<code>groups.py</code>)透传到设置页(<code>config_editor_tree.js:66</code>)—— 只改单点, 不在前端复写文案;</li>
+  <li>hidden 机制坑(<code>pitfalls/web-ui/config-field-unexpressable-in-ui.md</code>)不被破坏: bt_backup 上页走<strong>专用组件</strong>, 不是把动态映射塞进通用编辑树(那正是它当初 hidden 的成因);</li>
+  <li><code>config.yml</code> 红线不动 —— 接线完成后由用户自行在 UI 配置。</li>
+</ul>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+<p><strong>键全链在, UI 是被主动藏掉的</strong>: <code>config.bt_backup</code>(<code>{"host:port": 路径}</code>, 缺省空表 = 功能不启用)schema/models/loaders/validate 全链在(<code>schema/groups.py:56-65</code> · <code>models.py:616-618</code> · <code>loaders.py:517,717</code> · <code>validation/core.py:363</code> + <code>sections.py:736-752</code>)。但 <code>groups.py:60</code> 打了 <code>hidden=True</code>(注释: 动态映射「与 trackers 站点段同性质, 通用编辑树表达不了」)→ <code>config_editor_tree.js:32-34</code> 跳过 → <code>webui/static/</code> 下 <code>bt_backup</code> 零命中、无 trackers 式专用卡, 只能手编 YAML(<code>keys.md:29</code> 明说)。生产 <code>config.yml</code> 也未配 —— <strong>功能当前整体未启用</strong>。</p>
+<p><strong>旧描述两处, 一处与实现相反</strong>:</p>
+<ul>
+  <li><code>groups.py:435-437</code> relocate 组 help: 「qB 下次重启后自动 setLocation 收尾; <strong>有未收尾迁移的组会被拒绝再迁</strong>」—— 收尾机制已换成 fastresume 双键改写 + 回收 daemon; 且 armed/rewritten 的组<strong>已放行</strong>再迁(<code>keys.md:153</code>)。两处口径均与实现相反;</li>
+  <li><code>groups.py:502-510</code> <code>finalize_timeout</code>: <strong>已退役无消费者</strong>(<code>models.py:537</code> 注释 · <code>keys.md:148</code>), 仍按旧链文案渲染在设置页。</li>
+</ul>
+<p><strong>结构性空档</strong>: e2e 30+ spec 无任何 config/settings 专项 —— 设置页回归只靠 schema 静态守阵, 没有浏览器级断言。这是本次「代码全绿但入口没人看过」能发生的根因之一。</p>
+<p class="aside">留痕(拍板 D6 不修不入池): 计划/任务档案引用的提交链(<code>c84049d4..4f70190f</code>)与仓库实际链(<code>113d02c7..1c66a7b9</code>)全体不一致, 疑似先记档后 rebase 改史所致。追溯时不能按档案哈希对账。</p>
+
+<h2><span class="no">§03</span>方案总览</h2>
+<p>主线四件 + 防复发一件, 对应拍板 D1–D7(§06):</p>
+<table>
+  <tr><th>#</th><th>件</th><th>落点</th><th>要点</th></tr>
+  <tr><td>1</td><td>bt_backup 上页</td><td>新自定义组件, <strong>嵌「整组迁移」组区块内</strong>(D3)</td><td>动态映射(host:port → 路径)增/删/改; 保存走既有 config 保存链; 机制上必然是自定义前端(通用树表达不了映射, hidden 成因), 「独立卡 vs 嵌组」只是落位 —— 按拍板归位迁移组</td></tr>
+  <tr><td>2</td><td>描述换新</td><td><code>schema/groups.py:435-437</code></td><td>schema help 单点透传, 改一处全局生效; 新文案草案见 §04/S3</td></tr>
+  <tr><td>3</td><td>退役键移除</td><td><code>groups.py:502-510</code> + <code>models.py:537</code> + 守阵 + keys.md</td><td>配置升级路线(D4): 移除键本体, 旧配置残留按 S1② 结论决定是否加清洗</td></tr>
+  <tr><td>4</td><td>e2e settings spec</td><td><code>e2e/</code>(harness 桩轨)</td><td>bt_backup 组件渲染 + 保存回读 + 新描述关键词断言(D7)</td></tr>
+</table>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+<table>
+  <tr><th>步</th><th>内容</th><th>验收判据</th></tr>
+  <tr><td>S1 前置查证<br>(只读)</td><td>① 组区块自定义渲染钩子可行性: <code>config_editor_tree.js</code>/<code>config_editor_form.js</code> 的组渲染路径、hidden 跳过单点的拦截与注入点; ② <code>finalize_timeout</code> 摘除的加载容忍性: loaders/validation 对「模型已删字段但 YAML 残留」的行为, 决定 S4 是否加 normalize 清洗</td><td>两项结论可执行(能直接开写 S2/S4), 结论补进 §10 变更记录 R1</td></tr>
+  <tr><td>S2 bt_backup 组件</td><td>嵌入迁移组的自定义映射组件: 增/删/改行、host:port 格式提示、空表 = 「功能未启用」文案; <code>hidden</code> 语义迁移为「组件接管渲染」(键仍在契约); 同轮更新受影响守阵(hidden-skip / dom layout / parity)</td><td>单测过 + 键面/schema 守阵同步 + 组件增删改保存回读断言(由 S5 spec 承载); <code>test.quick</code> 绿</td></tr>
+  <tr><td>S3 描述换新</td><td><code>groups.py:435-437</code> 新文案草案: 「搬迁落位只记账; 由回收 daemon 在 qB 下线窗口批量改写 fastresume 收尾, qB 重启后成员原生加载新路径; 收尾窗(armed/rewritten)的组可直接再迁」(终稿实施时对代码实际行为校准); 实施 grep 旧链关键词(setLocation 收尾 / 拒绝再迁 / finalize)兜底第三处遗漏</td><td>设置页目检渲染正确; 文案与 <code>keys.md</code>/任务档案口径一致</td></tr>
+  <tr><td>S4 退役键移除</td><td><code>groups.py:502-510</code> Field、<code>models.py:537</code> 字段与注释、loaders 残留(若有)、键面守阵(<code>fixtures/config_key_surface.txt</code> + <code>test_config_key_surface.py</code>)、<code>keys.md:148</code> 条目改口径; S1② 判定残留会炸则加 normalize 清洗(升级路线)</td><td>含 <code>finalize_timeout</code> 的旧配置样例加载不炸; <code>test.full</code> 全绿</td></tr>
+  <tr><td>S5 e2e spec</td><td><code>e2e/</code> 新 settings spec(harness 桩自动起): 断言 bt_backup 组件在迁移组内渲染、增行填 host:port + 路径、保存回读、描述含新口径关键词</td><td><code>commands run dev.e2e</code> 过</td></tr>
+  <tr><td>S6 真机验收 + 基线</td><td>① 浏览器实测(D8): <code>scripts/ui_harness.py</code> 桩(无 qB 依赖)或 <code>dev_webui.py</code> 连真机 —— 实点组件增删改 + 保存回读 + 两处描述目检; ② <code>commands run test.full</code> 新基线切片(<code>kb.new baseline --total</code> 实测誊写)</td><td>基线数字 ≥ 旧基线; 实测记录进切片</td></tr>
+</table>
+<p><strong>收尾(DoD, 不占 S 编号)</strong>: code-review skill 批次评审 → pitfall 新坑一条(<code>kb.new pitfall</code>, 双因定性见 D5, 引 T8b 前例)+ 重跑 <code>kb.index</code> → 文档回写 <code>keys.md:29</code>(「设置页暂不图形化(hidden), 直接编辑 YAML」→ 组件接管的新口径)→ 立档阈值: 特征任务档案已存在(<code>tasks/26-11-05-backend-relocate-fastresume-finalize.md</code>), <strong>优先在其进度日志补记而非新建档案</strong>(kb.new 的条件项, 收尾时终判)。</p>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p>空 —— 全部决策已在 grilling 轮逐项拍板(2026-11-07), 结论迁 §06。</p>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+  <tr><th>D</th><th>结论</th><th>来源</th></tr>
+  <tr><td>D1</td><td>接线缺失定性 blocker; 范围 = 全量接线(全部新键上页 + 描述换新)</td><td>Q2/Q3</td></tr>
+  <tr><td>D2</td><td>新立本计划再修; 原计划 26-11-05-0808 HTML 不动</td><td>Q4</td></tr>
+  <tr><td>D3</td><td>bt_backup 组件<strong>嵌入「整组迁移」组区块内</strong>(非独立 hub 卡); S1 验证渲染钩子, 不可行降级紧邻迁移组渲染</td><td>Q8'</td></tr>
+  <tr><td>D4</td><td><code>finalize_timeout</code> 走配置升级路线移除; 若加载不容忍 YAML 残留, 加清洗步兜底</td><td>Q9</td></tr>
+  <tr><td>D5</td><td>新坑一条、双因定性: ①影响用户入口的取舍(hidden + YAML 手编)被当实现细节自行拍板未上报(主); ②收口验收无「设置页过一遍」动作(e2e 对设置页零断言)(副); 引 T8b(闸门漏执行入口)为同类前例</td><td>Q5/Q10</td></tr>
+  <tr><td>D6</td><td>提交哈希漂移: 不修、不入池(§02 仅留痕)</td><td>Q11</td></tr>
+  <tr><td>D7</td><td>计划内加 e2e settings spec(堵「设置页零浏览器级断言」空档)</td><td>Q12</td></tr>
+  <tr><td>D8</td><td>验收含一次浏览器实测设置页(webui 可本地起已证实: <code>dev_webui.py</code> / <code>ui_harness.py</code> + e2e 轨)</td><td>Q7</td></tr>
+  <tr><td>D9</td><td>流程: 本计划经用户过目点头后, 同会话进入实施; 开工前四类动作(新建文件/入池/认领/提交)逐项显式确认</td><td>Q1/Q6</td></tr>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+  <tr><th>风险</th><th>触发条件</th><th>处置</th></tr>
+  <tr><td>组区块注入不可行</td><td>S1① 发现渲染链无钩子且改造成本超一个组件</td><td>降级「紧邻迁移组渲染」(D3 预授权), 在 §10 记 R1 行</td></tr>
+  <tr><td>旧配置残留炸加载</td><td>S1② 发现 strict 校验不容忍已删字段</td><td>S4 加 normalize 清洗步(D4 预案)</td></tr>
+  <tr><td>与既有守阵冲突</td><td>hidden-skip 守阵 / dom layout 守阵 / parity 测试被 S2 改红</td><td>守阵随 S2 同轮更新, 语义演进(「hidden 跳过」→「组件接管」), 不绕过不删断言</td></tr>
+  <tr><td>e2e 环境抖动</td><td><code>dev.e2e</code> 偶发红</td><td>沿用既有 e2e 轨重试/隔离口径, 不为本 spec 造新机制</td></tr>
+  <tr><td>第三处旧口径漏网</td><td>实施 grep 旧链关键词再命中 §02 之外的位置</td><td>一并换新, 命中点记入 §10 变更记录(超出本表清单的按范围守恒原则仅限同主题文案)</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-07-0708</span> 初版。来源: 2026-11-07 grilling 会话(用户拍板 Q1–Q12, 见 §06 D1–D9)+ 只读探查回报(HEAD <code>9f69075a</code>)。要点: bt_backup 组件嵌迁移组、relocate 组 help 换新、<code>finalize_timeout</code> 升级路线移除、e2e settings spec、双因坑档、浏览器实测验收。</li>
+</ul>
+
+</div>
+</body>
+</html>
