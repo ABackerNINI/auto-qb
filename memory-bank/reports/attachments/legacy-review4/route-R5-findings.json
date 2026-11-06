@@ -304,5 +304,230 @@
   "claim": "登记表口径说 variant 与模板四支一一对应,但模板自 2026-10-22 起已无四支段(单条 ctxItems(ctxMenuKind()) v-for),文档模板形态描述过期",
   "relevance": "相关",
   "fix": "改为「与 menu.js::ctxMenuKind() 的四个返回值一一对应」"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/columns_grid.js",
+  "line": 534,
+  "quote": "const w = this.memberWin(list);",
+  "severity": "major",
+  "claim": "winMembers 的窗口切片/占位与渲染数组不同源: memberWin 按未排序 list 算前缀和(_rowPre.member 同序),却对 sortedMembers(list) 的排序结果做 slice;明细列排序激活且展开组成员>=200 时切片行错位、padTop/padBottom 错排列计高,shortcuts_engine 的 _kbRows 走排序序与 _rowPre 同长不同序,键盘视口回落/滚动跟随取错行(group/torrent 两窗口同数组自洽,仅 member 岔开)",
+  "relevance": "相关",
+  "fix": "窗口与前缀和改按渲染同一序: winMembers 里先 rows=this.sortedMembers(list) 再 memberWin(rows),padTop/Bottom 调用点同步传排序后数组"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/filters.js",
+  "line": 216,
+  "quote": "this.pathFilter.includes(g.save_path)",
+  "severity": "minor",
+  "claim": "路径筛选口径组视图两侧不一致: _facetPick(L44)按每个成员的 save_path 枚举选项并计数,过滤谓词只比对组级 save_path(=首成员路径)——组内成员路径不一时,选中非首成员路径选项,计数里存在的组被静默滤出;tag/category/site 都是成员级谓词,唯 path 岔开",
+  "relevance": "相关",
+  "fix": "组视图 path 谓词改 g.members.some(m=>this.pathFilter.includes(m.save_path||\"\")),或 _facetPick 对组行只取 row.save_path"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/columns_persist.js",
+  "line": 180,
+  "quote": "const intent = { ...(this.colW[page] || {}), ...widths, ...(lastWidths || {}) };",
+  "severity": "minor",
+  "claim": "意图升格不设 dragged 门槛: 纯点击拖宽把手(零位移)也把起始渲染快照 merge 进 colW 并落盘,该页自此从「全自动」静默转「固化」,窗口缩放不再自适应;dragged 在本函数只用于拦 click(L184),未覆盖升格分支",
+  "relevance": "相关",
+  "fix": "up() 里 dragged 为假时先 return,或仅在 dragged 时执行意图 merge"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/columns_drag.js",
+  "line": 92,
+  "quote": "document.addEventListener(\"click\", swallow, true);",
+  "severity": "minor",
+  "claim": "拖拽尾的 capture 拦截 click 只能被「下一次 click」注销: 真拖后 mouseup 落在窗口外/不产生 click 的位置(拖出浏览器边界松手常见),swallow 常驻 capture 层,把用户页面任意位置的下次点击整个吞掉(菜单按钮/排序各哑一次);columns_persist.js startResize L191 同款复制",
+  "relevance": "相关",
+  "fix": "mouseup 后下一拍自清(setTimeout removeEventListener),或拦截限定在表壳范围内"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/dt_table.js",
+  "line": 117,
+  "quote": "window.DT_TABLE = {",
+  "severity": "minor",
+  "claim": "整模块生产路径零调用: 四套 index.html 均加载 dt_table.js,但 DT_TABLE.layout/assertLayout/checkLabels 等在 src/ 生产代码内零引用(仅 node 电池自测),实际几何仍由 columns_grid._gridTemplate/colAlignCss 与桥模板平行计算——自称「几何单一出口」未接线,存量面 A(未用导出)+B(平行机制)",
+  "relevance": "相关",
+  "fix": "几何出口真正接到 DT.layout 并让 assertLayout 进渲染自查,或整体退役该模块与其守阵"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/decorate.js",
+  "line": 149,
+  "quote": "${rel.src} → ${rel.dst}",
+  "severity": "minor",
+  "claim": "运行期字符串字面量含禁用图形符号「→」(code-style.md 非 ASCII 禁令覆盖 .js 字符串字面量),该文案经 relocateTitle 拼进徽标 title 面向用户渲染",
+  "relevance": "相关",
+  "fix": "改为 \"->\""
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/columns.js",
+  "line": 13,
+  "quote": "① 指针伸进内容区底部 24px 带内",
+  "severity": "nit",
+  "claim": "注释含禁用非ASCII图形符号(①②),本文件共 2 行命中",
+  "relevance": "相关",
+  "fix": "①→\"1.\""
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/columns_drag.js",
+  "line": 107,
+  "quote": "拿到的是对象而不是函数 →",
+  "severity": "nit",
+  "claim": "注释含禁用箭头符号「→」,本文件共 1 行命中",
+  "relevance": "相关",
+  "fix": "改为\"->\""
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/columns_grid.js",
+  "line": 32,
+  "quote": "dtTplRows → rowsFn",
+  "severity": "nit",
+  "claim": "注释含禁用箭头/推导符号(→ ⇒),本文件共 6 行命中",
+  "relevance": "相关",
+  "fix": "逐处替换 ASCII"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/columns_menu.js",
+  "line": 52,
+  "quote": "①表头位移 = 容器 scrollLeft 反向; ②",
+  "severity": "nit",
+  "claim": "注释含禁用带圈数字(①②③④),本文件共 10 行命中",
+  "relevance": "相关",
+  "fix": "改 ASCII 编号"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/columns_persist.js",
+  "line": 29,
+  "quote": "测试用全新浏览器上下文 ⇒",
+  "severity": "nit",
+  "claim": "注释含禁用符号(⇒ ↔ →),本文件共 4 行命中(含 L54 用户提示文案源串里的「↔」)",
+  "relevance": "相关",
+  "fix": "ASCII 替换"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/decorate.js",
+  "line": 13,
+  "quote": "①组行自身字段",
+  "severity": "nit",
+  "claim": "注释含禁用带圈数字与推导符号(①② ⇒),本文件注释共 6 行命中(另有 L149 字符串已单列)",
+  "relevance": "相关",
+  "fix": "ASCII 替换"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/filters.js",
+  "line": 136,
+  "quote": "只遍历 groups ⇒ 四个筛选器恒空",
+  "severity": "nit",
+  "claim": "注释含禁用符号(⇒ ·),本文件共 3 行命中",
+  "relevance": "相关",
+  "fix": "ASCII 替换"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/format.js",
+  "line": 80,
+  "quote": "-1/0 = 从未传输 → 空白",
+  "severity": "nit",
+  "claim": "注释含禁用箭头/推导符号(→ ⇒),本文件共 7 行命中",
+  "relevance": "相关",
+  "fix": "ASCII 替换"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/selection.js",
+  "line": 266,
+  "quote": "决策点③",
+  "severity": "nit",
+  "claim": "注释含禁用带圈数字与推导符号(①②③ ⇒),本文件共 4 行命中",
+  "relevance": "相关",
+  "fix": "ASCII 替换"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/table.js",
+  "line": 41,
+  "quote": "① 描述符(TABLE_DEFS",
+  "severity": "nit",
+  "claim": "注释含禁用带圈数字与箭头(①~⑥ →),本文件共 20 行命中,为 14 文件中密度最高",
+  "relevance": "相关",
+  "fix": "ASCII 替换"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/selection.js",
+  "line": 100,
+  "quote": "_selSyncGroups() {",
+  "severity": "major",
+  "claim": "选择集与组的双向联动状态机(_selSyncGroups 回扫/补选、种子页降级分支、_selAnchor 兜底链、selSizeSummaryOf 的 occ_key 取 max 去重)全是纯逻辑却零执行测试——tests/ 只做字符串锚,无 node 电池加载 AQB_SELECTION;注释自述「种子页撤选残留组 key 卷进批量载荷」正是不执行就拦不住的回归",
+  "relevance": "相关",
+  "fix": "仿 _NODE_FILTER_PROBE 范式加 node 电池真跑 _selSyncGroups/_selAnchor/selSizeSummaryOf 四态"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/columns_persist.js",
+  "line": 151,
+  "quote": "startResize(event, page, key) {",
+  "severity": "major",
+  "claim": "列持久化「意图升格」纯逻辑({colW 旧值 ∪ 渲染快照 ∪ 终值} 三层 merge,注释自述旧实现整段替换正是「隐藏列宽度被抹」根因)零执行测试——tests 只钉 persistPage 形态字符串锚,merge 保隐藏列 px 的行为无回归保护",
+  "relevance": "相关",
+  "fix": "为意图升格 merge 提纯或加 node 探针:断言拖拽/双击自适应后既有隐藏列 px 仍在、可见列被终值覆盖"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/columns_drag.js",
+  "line": 22,
+  "quote": "applyColOrder(page, key, dropIdx) {",
+  "severity": "minor",
+  "claim": "可视列空间→全序列的落点折算算术(移除自身后 at=dropIdx-1、跳隐藏列计 seen、末尾边界兜底 push)是典型 off-by-one 高危纯逻辑,零执行测试",
+  "relevance": "相关",
+  "fix": "node 电池真跑 applyColOrder 四类边界"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/sort.js",
+  "line": 124,
+  "quote": "_dtStrCompare(a, b) {",
+  "severity": "minor",
+  "claim": "AQB_SORT 域全部零执行: 三态排序状态机、sortedDrawer 空值恒末位双向不反转、_dtStrCompare 的 IPv4 逐段数值序(注释自述报障修法)都只有形态守阵",
+  "relevance": "相关",
+  "fix": "node 电池真跑 setSort 三态循环与 _dtStrCompare(IPv4 带端口/非 IP 回落/空值两方向恒末位)"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/format.js",
+  "line": 22,
+  "quote": "_fmtLadder(v, kind, digits, roundFallback, top) {",
+  "severity": "minor",
+  "claim": "单位梯/时长/ETA 纯函数族(_fmtLadder 梯顶回落、fmtEta 8640000 哨兵、fmtDuration 三段进位、fmtPeersQb 缺省只显已连接)零执行,tests 只有与后端 _ETA_SENTINEL 的字符串互锚,显示口径回归测不出",
+  "relevance": "相关",
+  "fix": "node 电池断言各 fmt 档位边界值"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/decorate.js",
+  "line": 74,
+  "quote": "function _decoFpHit(g, fp) {",
+  "severity": "minor",
+  "claim": "组行装饰记忆化的指纹对(_decoFpBuild 槽清单 与 _decoFpHit 逐槽比对)零执行测试,只有字符串锚;文件头自述 S7 初版漏成员槽导致「乐观值不传导到组行状态色」静默陈旧缓存,正是零执行拦不住的形态",
+  "relevance": "相关",
+  "fix": "node 电池真跑 build→hit 往返:改任一槽必失配、未脏行必命中"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/columns_computed.js",
+  "line": 98,
+  "quote": "groupWin() {",
+  "severity": "minor",
+  "claim": "分组页窗口化与展开面板的退避联动(「当前真的有面板」判据)零执行——node 电池直接调 _rowWindow 绕过该判据,展开态跨视图带回后误退避/漏退避无回归保护",
+  "relevance": "相关",
+  "fix": "退避分支纳入现有窗口化电池: expandedKey 命中在场组→off 全量,原组被筛掉→active 窗口"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/columns_menu.js",
+  "line": 312,
+  "quote": "照 _ensureHeadObserver 的范式(本文件 L186 一带)",
+  "severity": "minor",
+  "claim": "注释契约不符: 「本文件 L186」指向的 _ensureHeadObserver 在 R4 大文件拆分后已位于 columns_grid.js L127,本文件 L186 是 _hscrollWheel 一带,按注释找范式会找错文件",
+  "relevance": "相关",
+  "fix": "改为「照 columns_grid.js::_ensureHeadObserver 的范式」并去掉行号"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/columns_grid.js",
+  "line": 52,
+  "quote": "^\\d+px$ —— display:none 的表头",
+  "severity": "minor",
+  "claim": "注释契约不符: 注释称逐 token 严格校验 ^\\d+px$,实现(L59)是 /^\\d+(\\.\\d+)?px$/ 放行小数 px;照注释口径复刻校验会把 getComputedStyle 的小数宽度判成不合法→「数量不符→null」,与 2026-10-18 修复意图相反",
+  "relevance": "相关",
+  "fix": "注释同步为放行小数 px 的正则(拒绝 fr/minmax 才是要点)"
  }
 ]

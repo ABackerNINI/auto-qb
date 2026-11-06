@@ -24,9 +24,9 @@
     {
       "id": "R5-3",
       "title": "shared 表格与列: table/dt_table/columns*/sort/filters/selection/format/rowlang/decorate",
-      "status": "pending",
-      "done_at": null,
-      "findings": 0
+      "status": "done",
+      "done_at": "26-11-07-0122",
+      "findings": 25
     },
     {
       "id": "R5-4",
