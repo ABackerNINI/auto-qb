@@ -1,19 +1,280 @@
 name: Playwright (WEB UI 冒烟)
 
-# 与 ci.yml 保持同一套触发分支 —— 本仓库主线是 develop, 只写 [main, master] 会让本 workflow
-# 在日常分支上永不触发(scaffold 默认值的直接后果)。加 workflow_dispatch 便于手动补跑。
+# 分层门禁(计划 26-11-07-0452 节03):
+#   - 日常(push / PR)只跑 @fast 282 例, 3 片矩阵 + CPU 敏感量具 20 例并行补跑;
+#   - 全量 450 例(5 片 + 补跑)挂 workflow_dispatch, 由 gate job 按「距上次全量 >=24h 或白名单
+#     累计 >=1000 行」节流触发, 也可手动 dispatch。
+#   改造前是 40 分钟 job + 裸 npx playwright test(450 例单 worker, CI 约 6.4s/例 约 48 分钟),
+#   结构性超时: 近 100 次运行 93 cancelled / 0 success(计划 节02)。
+#
+# 为什么节流判定放在 gate job 里而不是 workflow 级的 on.push.paths:
+#   workflow 级 paths 过滤会让纯文档 push 连判定都不启动, 于是「距上次全量多久」这个时间维度
+#   永远没机会生效(近 20 笔提交里 0 笔触及前端白名单, 靠 paths 就再也跑不了全量轮)。放到 job
+#   里, 每次 push 都花几秒跑一个无 checkout、无依赖安装的 gate, 换时间阈值可用。
+#
+# 为什么全量轮只由 workflow_dispatch 触发:
+#   锚点纯净性。gate 用「最近一次 completed 且 run-name 以 full-smoke 开头的 dispatch run」作为
+#   时间基准; 若全量也响应 push, 那些「判定为不跑」的 push run 同样会留下 completed 记录, 下次
+#   查最近一次就会被错误刷新, 24h 阈值永远达不到。run-name 的 full-smoke 前缀是判据的一部分,
+#   不能改名。
+#
+# master 必须与 develop 同版才能 dispatch:
+#   workflow_dispatch 的注册与 inputs 校验读的是**默认分支**(master)上的 workflow 版本, 在
+#   develop 上新增 input 而 master 未跟会得到 422。改造落地后需把 master 一次性快进到 develop。
+#
+# 与 ci.yml 保持同一套触发分支 -- 本仓库主线是 develop, 只写 [main, master] 会让本 workflow
+# 在日常分支上永不触发(scaffold 默认值的直接后果)。
+
 on:
   push:
     branches: [develop, master, main]
   pull_request:
     branches: [develop, master, main]
   workflow_dispatch:
+    inputs:
+      scope:
+        description: 'full = 跑全量 450 例（默认，也是唯一用途）'
+        type: choice
+        options: [full]
+        default: full
+
+run-name: ${{ github.event_name == 'workflow_dispatch' && 'full-smoke' || 'daily' }} / ${{ github.ref_name }}
+
+# 前端白名单单点。gate 用它判定「这次改动值不值得跑日常门禁」, 也用它累计全量轮的行数阈值。
+# 新增前端路径时同步补这里 -- 漏列会导致假绿(改了影响前端的文件却不跑门禁)。
+env:
+  WL_PATHS: |
+    src/auto_qb/webui/
+    e2e/
+    scripts/ui_harness.py
+    playwright.config.mjs
+    package.json
+    package-lock.json
+    uv.lock
+    pyproject.toml
+    .github/workflows/
 
 jobs:
-  smoke:
-    name: WEB UI smoke (chromium)
-    timeout-minutes: 40
+  # 节流判定: 只读 GitHub API, 不 checkout、不装依赖, 秒级完成。
+  # 任何一步 API 失败都 fail-open(两个布尔都置 true) -- 宁可多跑一轮, 也不静默跳过门禁。
+  gate:
+    name: gate (节流判定)
+    if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # 仓库默认 workflow 权限是 read; 只有 gate 需要提权(gh workflow run 要 actions: write)。
+    permissions:
+      actions: write
+      contents: read
+    # 兜底: decide step 若中途崩掉没写 outputs, 这里一律按 true(fail-open), 不让
+    # 下游因空串而全部 skipped 却把 aggregate 判绿。
+    outputs:
+      run_fast: ${{ steps.decide.outputs.run_fast || 'true' }}
+      run_full: ${{ steps.decide.outputs.run_full || 'true' }}
+    steps:
+      - name: Decide scope
+        id: decide
+        # 该 step 永不 fail job: 判定逻辑已内置 fail-open, 这里再加一层 -- 否则 step 崩溃
+        # 会让 job failed, 下游 needs 被默认规则跳过, 输出兜底根本没机会生效。
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # gate 不 checkout(无 .git), gh 无法从 remote 推断仓库; 不给 GH_REPO 会报
+          # "fatal: not a git repository", dispatch 永远失败且被 else 吞成一句 warning。
+          GH_REPO: ${{ github.repository }}
+          REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ github.sha }}
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_PUSH: ${{ github.event.before }}
+          BASE_PR: ${{ github.event.pull_request.base.sha }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -uo pipefail
+
+          # 默认 fail-open: 后续任何一步异常都按「要跑」处理。
+          run_fast=true
+          run_full=true
+          note=""
+
+          in_whitelist() {
+            local f="$1" p
+            while IFS= read -r p; do
+              [ -z "$p" ] && continue
+              case "$f" in "$p"*) return 0 ;; esac
+            done <<< "$WL_PATHS"
+            return 1
+          }
+
+          # ---- 1. 算 base sha ----
+          base=""
+          case "$EVENT_NAME" in
+            push)
+              base="${BASE_PUSH:-}"
+              # 全 0 表示新分支, 没有可比对的父提交
+              case "$base" in
+                0000000000000000000000000000000000000000) base="" ;;
+              esac
+              ;;
+            pull_request)
+              base="${BASE_PR:-}"
+              ;;
+          esac
+
+          # ---- 2. run_fast: 改动是否命中白名单 ----
+          hits=""
+          if [ -z "$base" ]; then
+            run_fast=true
+            note="无 base(新分支或首次推送), 直接跑日常门禁"
+          elif files=$(gh api "repos/$REPO/compare/$base...$HEAD_SHA" --jq '.files[].filename' 2>&1); then
+            nfiles=$(printf '%s' "$files" | grep -c . || true)
+            if [ "${nfiles:-0}" -ge 300 ]; then
+              # compare 单次最多 300 文件, 截断时白名单文件可能整个落在窗口外 -> 假阴性。
+              echo "::warning::compare 结果达到 300 文件上限, 无法判定是否命中白名单, fail-open"
+              run_fast=true
+              note="compare 截断, fail-open"
+            fi
+            while IFS= read -r f; do
+              [ -z "$f" ] && continue
+              if in_whitelist "$f"; then hits="${hits}${f}"$'\n'; fi
+            done <<< "$files"
+            if [ "${nfiles:-0}" -ge 300 ]; then
+              run_fast=true
+            elif [ -n "$hits" ]; then run_fast=true; else run_fast=false; fi
+          else
+            echo "::warning::compare API 失败(base=$base), fail-open 跑日常门禁"
+            run_fast=true
+            note="compare 失败, fail-open"
+          fi
+
+          # ---- 3. 找全量轮锚点 ----
+          # 只认 event=workflow_dispatch 且 display_title 以 full-smoke 开头、状态 completed 的最新一条。
+          # 注意 compare API 单次最多返回 300 个文件; 白名单路径的改动量远小于此, 但极端的大改
+          # (如整目录迁移)可能被截断, 此时行数会偏小 -- 时间维度仍在兜底。
+          anchor_state="ok"
+          anchor_created=""
+          anchor_sha=""
+          runs_json=""
+          if runs_json=$(gh api "repos/$REPO/actions/workflows/playwright.yml/runs?event=workflow_dispatch&per_page=30" 2>&1); then
+            anchor=$(printf '%s' "$runs_json" | jq -r '
+              [ .workflow_runs[]
+                | select(.status == "completed")
+                | select(.conclusion != "cancelled")
+                | select((.display_title // "") | startswith("full-smoke")) ]
+              | sort_by(.created_at) | last
+              | if . == null then "-" else "\(.created_at)\t\(.head_sha)" end' 2>/dev/null)
+            if [ -z "$anchor" ] || [ "$anchor" = "-" ]; then
+              anchor_state="none"
+            else
+              IFS=$'\t' read -r anchor_created anchor_sha <<< "$anchor"
+            fi
+          else
+            echo "::warning::读 workflow run 历史失败, fail-open 跑全量轮"
+            anchor_state="error"
+          fi
+
+          # ---- 4/5. run_full: 时间 OR 行数 ----
+          lines=0
+          age_hours="-"
+          if [ "$anchor_state" = "none" ]; then
+            run_full=true
+            note="$note | 无全量轮锚点, 本次立即跑一次建立基线"
+            echo "::notice::无全量轮锚点，本次立即跑一次建立基线"
+          elif [ "$anchor_state" = "error" ]; then
+            run_full=true
+            note="$note | run 历史不可读, fail-open"
+          else
+            run_full=false
+            anchor_epoch=$(date -u -d "$anchor_created" +%s 2>/dev/null || true)
+            now_epoch=$(date -u +%s)
+            if [ -z "$anchor_epoch" ]; then
+              run_full=true
+              note="$note | 锚点时间解析失败, fail-open"
+            else
+              age_hours=$(( (now_epoch - anchor_epoch) / 3600 ))
+              if [ -n "$base" ] && [ -n "$anchor_sha" ]; then
+                if cmp=$(gh api "repos/$REPO/compare/$anchor_sha...$HEAD_SHA" --jq '.files[] | "\(.filename)\t\(.changes)"' 2>&1); then
+                  while IFS=$'\t' read -r f c; do
+                    [ -z "$f" ] && continue
+                    if in_whitelist "$f"; then lines=$(( lines + ${c:-0} )); fi
+                  done <<< "$cmp"
+                else
+                  echo "::warning::锚点 compare 失败, fail-open 跑全量轮"
+                  run_full=true
+                  note="$note | 锚点 compare 失败, fail-open"
+                fi
+              fi
+              if [ "$run_full" != "true" ]; then
+                if [ "$age_hours" -ge 24 ] || [ "$lines" -ge 1000 ]; then
+                  run_full=true
+                else
+                  run_full=false
+                fi
+              fi
+            fi
+          fi
+
+          # ---- 6. 去重: 已有在跑/排队中的全量轮就不重复拉起 ----
+          if [ -n "$runs_json" ] && [ "$run_full" = "true" ]; then
+            active=$(printf '%s' "$runs_json" | jq -r '[ .workflow_runs[] | select(.status == "in_progress" or .status == "queued") ] | length' 2>/dev/null || true)
+            if [ "${active:-0}" -gt 0 ] 2>/dev/null; then
+              run_full=false
+              note="$note | 已有在跑或排队中的全量轮, 本次不重复拉起"
+            fi
+          fi
+
+          # ---- 7. 只在 push 上 dispatch(PR 不替别人的分支起全量轮) ----
+          if [ "$EVENT_NAME" = "push" ] && [ "$run_full" = "true" ]; then
+            if gh workflow run playwright.yml --ref "$REF_NAME" -f scope=full; then
+              note="$note | 已 dispatch 全量轮(ref=$REF_NAME)"
+            else
+              echo "::warning::dispatch 全量轮失败(master 未与 develop 同版时 inputs 校验会 422), 不影响本次结论"
+              note="$note | dispatch 失败"
+            fi
+          fi
+
+          # ---- 8. 输出 + 判定明细 ----
+          {
+            echo "run_fast=$run_fast"
+            echo "run_full=$run_full"
+          } >> "$GITHUB_OUTPUT"
+
+          hit_list=$(printf '%s' "$hits" | tr '\n' ' ')
+          {
+            echo "### CI 门禁判定"
+            echo ""
+            echo "| 项 | 值 |"
+            echo "|---|---|"
+            echo "| 事件 | \`$EVENT_NAME\` |"
+            echo "| base | \`${base:-(无)}\` |"
+            echo "| head | \`$HEAD_SHA\` |"
+            echo "| 白名单命中 | ${hit_list:-（无）} |"
+            echo "| 锚点 | \`${anchor_sha:-（无）}\` @ \`${anchor_created:-（无）}\` |"
+            echo "| 距锚点(小时) | $age_hours |"
+            echo "| 锚点后白名单改动行数 | $lines |"
+            echo "| run_fast | **$run_fast** |"
+            echo "| run_full | **$run_full** (仅 push 生效, PR 不 dispatch) |"
+            if [ -n "$note" ]; then
+              echo ""
+              echo "备注: $note"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # 日常门禁: @fast 282 例分 3 片。每片独立进程、各自拉起独立 webServer(桩 --port 0)。
+  smoke:
+    name: smoke (@fast) shard ${{ matrix.shard }}/3
+    needs: gate
+    if: needs.gate.outputs.run_fast == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    # 同一 ref 的同一分片只留最新一次 -- push 密集时掐掉旧的, 不排队堆积。
+    concurrency:
+      group: smoke-${{ github.ref }}-${{ matrix.shard }}
+      # D2: 只在 PR 上掐旧; push 保留完整运行(否则每次 push 都留下 cancelled 的假红)
+      cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
     steps:
       - uses: actions/checkout@v6
 
@@ -38,12 +299,12 @@ jobs:
       - name: Install Python dependencies
         run: uv sync
 
-      # npm ci 强依赖已入库的 package-lock.json —— 缺了只会报一句很难懂的 EUSAGE。
+      # npm ci 强依赖已入库的 package-lock.json -- 缺了只会报一句很难懂的 EUSAGE。
       # 前置判一次, 报错直接指向原因。
       - name: Check lockfile is committed
         run: |
           if [ ! -f package-lock.json ]; then
-            echo "::error::package-lock.json 未入库 —— npm ci 需要它; 请先提交 package.json + package-lock.json"
+            echo "::error::package-lock.json 未入库 -- npm ci 需要它; 请先提交 package.json + package-lock.json"
             exit 1
           fi
 
@@ -55,13 +316,338 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       # 桩服务由 playwright.config.mjs 的 webServer 自动拉起(真 create_app + 合成种子), 无需手工起。
-      - name: Run WEB UI smoke
-        run: npx playwright test
+      # shard-run.mjs 会置 E2E_SHARD_TOTAL 把 CPU 敏感量具 spec 排除, 由 perf-serial job 补跑。
+      - name: Run WEB UI smoke shard
+        run: node e2e/shard-run.mjs --grep @fast --index ${{ matrix.shard }} --total 3
 
-      - uses: actions/upload-artifact@v6
-        if: ${{ !cancelled() }}
+      # 取消/超时也要留证据 -- 改造前是 !cancelled(), 恰好在最需要排障的时候跳过上传。
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v6
         with:
-          name: playwright-report
-          path: playwright-report/
+          name: playwright-report-smoke-${{ matrix.shard }}
+          overwrite: true
+          path: |
+            playwright-report/
+            test-results/
           retention-days: 30
           if-no-files-found: ignore
+
+  # CPU 敏感量具 20 例: 并发下数字会漂, 必须串行; 与 smoke 分片并行跑。
+  perf-serial:
+    name: perf-serial (CPU 敏感 20 例)
+    needs: gate
+    if: needs.gate.outputs.run_fast == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    concurrency:
+      group: perf-${{ github.ref }}
+      cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+
+      - name: Install Python dependencies
+        run: uv sync
+
+      - name: Check lockfile is committed
+        run: |
+          if [ ! -f package-lock.json ]; then
+            echo "::error::package-lock.json 未入库 -- npm ci 需要它; 请先提交 package.json + package-lock.json"
+            exit 1
+          fi
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Run CPU-sensitive perf specs
+        run: node e2e/perf-serial.mjs
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: playwright-report-perf
+          overwrite: true
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 30
+          if-no-files-found: ignore
+
+  # 占住固定 check 名 WEB UI smoke (chromium)。always() 是必需的: 纯文档 push 时 smoke /
+  # perf-serial 都是 skipped, 聚合 job 仍要给出绿 -- 否则将来开分支保护会永久 Pending。
+  aggregate:
+    name: WEB UI smoke (chromium)
+    needs: [gate, smoke, perf-serial]
+    # 排除 dispatch: 全量轮的 smoke / perf-serial 都是 skipped, 若不排除会冒出一个名为
+    # WEB UI smoke (chromium) 的假绿 check, 掩盖 full / full-perf 的真实结论。
+    if: always() && github.event_name != 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Summarize
+        env:
+          GATE: ${{ needs.gate.result }}
+          SMOKE: ${{ needs.smoke.result }}
+          PERF: ${{ needs.perf-serial.result }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -uo pipefail
+          {
+            echo "### WEB UI smoke 聚合"
+            echo ""
+            echo "| job | 结论 |"
+            echo "|---|---|"
+            echo "| gate | $GATE |"
+            echo "| smoke | $SMOKE |"
+            echo "| perf-serial | $PERF |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          rc=0
+          # gate 未判定成功(失败/取消)也算红: 判定没跑成就等于门禁没生效。
+          case "$GATE" in
+            success|skipped) ;;
+            *) rc=1 ;;
+          esac
+          for r in "$SMOKE" "$PERF"; do
+            case "$r" in
+              success|skipped) ;;
+              # PR 上 cancel-in-progress 掐掉的旧 job 是「被更新的提交取代」, 不是测试失败;
+              # push 上 cancel-in-progress 为 false, 此时 cancelled 一定是异常, 照常判红。
+              cancelled) [ "$EVENT_NAME" = "pull_request" ] || rc=1 ;;
+              *) rc=1 ;;
+            esac
+          done
+          if [ "$rc" -ne 0 ]; then
+            echo "::error::分片未全部通过(smoke=$SMOKE, perf-serial=$PERF)"
+          fi
+          exit "$rc"
+
+  # 全量轮: 430 例分 5 片(最重约 92 例) + 20 例量具补跑。只由 workflow_dispatch 触发(锚点纯净性)。
+  full:
+    name: full smoke shard ${{ matrix.shard }}/5
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # 组名带 shard: GitHub 的同组 job 是串行的, 5 片共用 full-smoke 会退化成串行并撞 30 分钟护栏。
+    # cancel-in-progress: false 保证新 dispatch 排队等旧轮跑完, 而不是掐掉正在跑的。
+    concurrency:
+      group: full-smoke-${{ github.ref }}-${{ matrix.shard }}
+      cancel-in-progress: false
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5]
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+
+      - name: Install Python dependencies
+        run: uv sync
+
+      - name: Check lockfile is committed
+        run: |
+          if [ ! -f package-lock.json ]; then
+            echo "::error::package-lock.json 未入库 -- npm ci 需要它; 请先提交 package.json + package-lock.json"
+            exit 1
+          fi
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      # --reporter 覆盖只加在本步(不改 config): json 产物落到 test-results/ 供失败清单解析。
+      - name: Run full smoke shard
+        env:
+          PLAYWRIGHT_JSON_OUTPUT_NAME: test-results/pw-shard-${{ matrix.shard }}.json
+        run: node e2e/shard-run.mjs --index ${{ matrix.shard }} --total 5 --add-reporter=json
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: playwright-report-full-${{ matrix.shard }}
+          overwrite: true
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 30
+          if-no-files-found: ignore
+
+      # 既有红只展示不修(计划 节06 D7): 清单进 summary, 结论仍由上面测试步骤决定, 本步恒退出 0。
+      - name: Failure list (existing red)
+        if: always()
+        run: |
+          python3 - <<'PY' || true
+          import glob
+          import json
+          import os
+
+          LINK = "memory-bank/issues/26-11-07-0326-test-ci-smoke-existing-red-backlog.html"
+          bad = []
+          for path in sorted(glob.glob("test-results/**/*.json", recursive=True)):
+              try:
+                  with open(path, encoding="utf-8") as fh:
+                      data = json.load(fh)
+              except Exception:
+                  continue
+              stack = list(data.get("suites", []))
+              while stack:
+                  suite = stack.pop()
+                  stack.extend(suite.get("suites", []))
+                  for spec in suite.get("specs", []):
+                      final = []
+                      for test in spec.get("tests", []):
+                          results = test.get("results", [])
+                          if results:
+                              final.append(results[-1].get("status"))
+                      if final and any(s not in ("passed", "skipped") for s in final):
+                          # file 在 JSON 报告里可能挂在 suite 上而不是 spec 上, 两级都兜一下
+                          bad.append((spec.get("file") or suite.get("file") or "?", spec.get("title", "?")))
+
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as out:
+              if not bad:
+                  out.write("\n### 全量轮失败清单\n\n本片未解析到失败用例(或无 JSON 产物)。\n")
+              else:
+                  out.write("\n### 全量轮失败清单(既有红, 只展示不修)\n\n")
+                  for f, t in sorted(set(bad)):
+                      out.write("- `%s` :: %s\n" % (f, t))
+              out.write("\n既有红台账: [%s](%s)\n" % (LINK, LINK))
+          PY
+
+  full-perf:
+    name: full perf-serial (CPU 敏感 20 例)
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # 单 job, 与 full 的 5 片并行; 同组串行保证两次 dispatch 不叠着跑。
+    concurrency:
+      group: full-smoke-${{ github.ref }}-perf
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+
+      - name: Install Python dependencies
+        run: uv sync
+
+      - name: Check lockfile is committed
+        run: |
+          if [ ! -f package-lock.json ]; then
+            echo "::error::package-lock.json 未入库 -- npm ci 需要它; 请先提交 package.json + package-lock.json"
+            exit 1
+          fi
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Run CPU-sensitive perf specs
+        env:
+          PLAYWRIGHT_JSON_OUTPUT_NAME: test-results/pw-full-perf.json
+        run: node e2e/perf-serial.mjs --add-reporter=json
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: playwright-report-full-perf
+          overwrite: true
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 30
+          if-no-files-found: ignore
+
+      - name: Failure list (existing red)
+        if: always()
+        run: |
+          python3 - <<'PY' || true
+          import glob
+          import json
+          import os
+
+          LINK = "memory-bank/issues/26-11-07-0326-test-ci-smoke-existing-red-backlog.html"
+          bad = []
+          for path in sorted(glob.glob("test-results/**/*.json", recursive=True)):
+              try:
+                  with open(path, encoding="utf-8") as fh:
+                      data = json.load(fh)
+              except Exception:
+                  continue
+              stack = list(data.get("suites", []))
+              while stack:
+                  suite = stack.pop()
+                  stack.extend(suite.get("suites", []))
+                  for spec in suite.get("specs", []):
+                      final = []
+                      for test in spec.get("tests", []):
+                          results = test.get("results", [])
+                          if results:
+                              final.append(results[-1].get("status"))
+                      if final and any(s not in ("passed", "skipped") for s in final):
+                          # file 在 JSON 报告里可能挂在 suite 上而不是 spec 上, 两级都兜一下
+                          bad.append((spec.get("file") or suite.get("file") or "?", spec.get("title", "?")))
+
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as out:
+              if not bad:
+                  out.write("\n### 全量轮失败清单(量具)\n\n未解析到失败用例(或无 JSON 产物)。\n")
+              else:
+                  out.write("\n### 全量轮失败清单(量具, 既有红只展示不修)\n\n")
+                  for f, t in sorted(set(bad)):
+                      out.write("- `%s` :: %s\n" % (f, t))
+              out.write("\n既有红台账: [%s](%s)\n" % (LINK, LINK))
+          PY

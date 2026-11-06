@@ -22,7 +22,7 @@
 | bug | 6 |
 | perf | 2 |
 | docs | 1 |
-| test | 6 |
+| test | 7 |
 | refactor | 2 |
 | feat | 18 |
 | chore | 1 |
@@ -30,6 +30,7 @@
 
 ## Open
 
+- [test] [GitHub CI WEB UI smoke 全量轮既有红清单待排期清理](26-11-07-0326-test-ci-smoke-existing-red-backlog.html) — CI 全量 450 例串…
 - [refactor] [全库代码/配置残留非 ASCII 图形符号，与 code-style ASCII 禁令冲突](26-11-06-0756-refactor-ascii-graph-symbol-backlog.html) — 全库扫描命中 395 文…
 - [bug] [review.check --root 快照目录被 .git 存在性检查误拒](26-11-06-0711-bug-review-check-snapshot-root.html) — 存量评审 R4 的既定用…
 - [test] [test.pkg 4 条既有红：mutants DEFAULT_DESELECT 指向已拆分消失的测试文件](26-11-06-0635-test-mutants-deselect-table-drift.html) — commands run…

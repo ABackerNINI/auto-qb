@@ -10,8 +10,9 @@
 - [26-10-10-2001] [计划 · WEBUI 选中 × 触发 一致性](../26-10-10-2001-plan-webui-selection-trigger-parity.html) — `webui-selection-trigger-parity`
 - [26-09-22-2318] [auto-qb 软件版本管理方案 v2 · 版本号 / Tag / CHANGELOG / 机械化发版](../26-09-22-2318-version-management-plan.html) — `deps-version-management`
 
-## Open (6)
+## Open (7)
 
+- [26-11-07-0452] [GitHub CI WEB UI smoke 门禁改造: 超时根因、分片接线与 push 节流全量轮](../26-11-07-0452-plan-github-ci-smoke-gate.html) — `github-ci-smoke-gate`
 - [26-11-07-0441] [code-review 留痕面修补: 派发次数与引文校验进闸门](../26-11-07-0441-plan-review-trace-fields.html) — `review-trace-fields`
 - [26-11-05-2335] [存量代码全库评审 R4·五路线并行体系化](../26-11-05-2335-plan-legacy-code-review-4.html) — `legacy-code-review-4`
 - [26-11-05-1049] [memory-bank 文档压缩与防回涨分步执行计划(8K 新口径)](../26-11-05-1049-plan-kb-doc-compress.html) — `kb-doc-compress`

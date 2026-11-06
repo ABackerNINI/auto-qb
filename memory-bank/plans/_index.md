@@ -17,6 +17,7 @@
 
 ## Open
 
+- [26-11-07-0452] [GitHub CI WEB UI smoke 门禁改造: 超时根因、分片接线与 push 节流全量轮](26-11-07-0452-plan-github-ci-smoke-gate.html) — `github-ci-smoke-gate`
 - [26-11-07-0441] [code-review 留痕面修补: 派发次数与引文校验进闸门](26-11-07-0441-plan-review-trace-fields.html) — `review-trace-fields`
 - [26-11-05-2335] [存量代码全库评审 R4·五路线并行体系化](26-11-05-2335-plan-legacy-code-review-4.html) — `legacy-code-review-4`
 - [26-11-05-1049] [memory-bank 文档压缩与防回涨分步执行计划(8K 新口径)](26-11-05-1049-plan-kb-doc-compress.html) — `kb-doc-compress`
@@ -63,9 +64,8 @@
 - [26-10-31-2316] [WEBUI 动效皮肤 flux 分步实施计划](26-10-31-2316-plan-webui-fx-skin.html) — `webui-fx-skin`
 - [26-10-31-1922] [RM10 通知·外部集成 · 真机实测分步计划](26-10-31-1922-plan-real-rm10.html) — `real-machine-rm10-plan`
 - [26-10-31-1754] [RM08 WebUI 读侧 · 真机实测分步计划](26-10-31-1754-plan-real-rm08.html) — `real-machine-rm08-plan`
-- [26-10-31-1710] [RM09 WebUI 写侧 · 真机实测分步计划](26-10-31-1710-plan-real-rm09.html) — `real-machine-rm09-plan`
 
-> 更早的 **176** 条已出本索引 —— 制品仍在 `plans/` 目录(未搬动), 全量清单见 [attachments/_archive.md](attachments/_archive.md).
+> 更早的 **177** 条已出本索引 —— 制品仍在 `plans/` 目录(未搬动), 全量清单见 [attachments/_archive.md](attachments/_archive.md).
 
 ## Dropped
 

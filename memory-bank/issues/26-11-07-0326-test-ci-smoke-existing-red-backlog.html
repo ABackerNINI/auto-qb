@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="ci-smoke-existing-red-backlog">
+<meta name="issue-stamp" content="26-11-07-0326">
+<meta name="issue-type" content="test">
+<meta name="doc-topic" content="github-ci-smoke-gate">
+<meta name="doc-refs" content="memory-bank/plans/26-11-07-0452-plan-github-ci-smoke-gate.html">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="GitHub CI WEB UI smoke 全量轮既有红清单待排期清理">
+<meta name="issue-summary" content="CI 全量 450 例串行下 gtm-alert 双皮肤 4 条失败等既有红; 门禁改造只展示不修, 等排期">
+<title>GitHub CI WEB UI smoke 全量轮既有红清单待排期清理 · test · 计划外问题</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 38px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 78ch; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>现象与发现场景</a>
+    <a href="#s2"><span class="no">02</span>证据</a>
+    <a href="#s3"><span class="no">03</span>影响面</a>
+    <a href="#s4"><span class="no">04</span>定位锚点</a>
+    <a href="#s5"><span class="no">05</span>根因<span class="opt">（可选）</span></a>
+    <a href="#s6"><span class="no">06</span>建议修法<span class="opt">（可选）</span></a>
+    <a href="#s7"><span class="no">07</span>状态变更日志</a>
+    <div class="toc-foot">
+      类型 test · 档位 standard<br>
+      入池不改码 · 规范见 create-issue skill
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">计划外问题（未修）· test</div>
+    <h1>GitHub CI WEB UI smoke 全量轮既有红清单待排期清理</h1>
+    <p class="lede">CI 全量 450 例串行下 gtm-alert 双皮肤 4 条失败等既有红; 门禁改造只展示不修, 等排期</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-11-07-0326-test-ci-smoke-existing-red-backlog</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-11-07 03:26</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象与发现场景</h2>
+    <p>2026-11-07 排查 GitHub Actions workflow <code>Playwright (WEB UI 冒烟)</code> 的 job <code>WEB UI smoke (chromium)</code> 连续被取消时，顺带核对全量轮里已存在的失败用例。该 job 用裸 <code>npx playwright test</code> 以单 worker 跑全量 450 例；2026-11-06 17:24 UTC 的 run <code>42261344757</code>（head_sha <code>cabad24b</code>，17:24 -> 18:04 UTC）在 40 分钟预算到点被砍，日志跑到第 374 例前仍出现 <code>gtm-alert</code> 双皮肤 4 条失败（2 条用例各带一次 retry #1）。</p>
+    <p>本轮 CI 门禁改造（分层 + shard）经会话拍板：<strong>既有红只展示、不解决、不掩盖</strong>（不加 <code>continue-on-error</code>、不 <code>test.skip</code>、不 <code>--grep</code> 排除），故入池等排期。本报告只登记现象与证据，不含修法实施。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>证据</h2>
+    <p class="hint">以下原文取证时间 2026-11-07 03:26 +0800（UTC 2026-11-06 19:26）。日志取自 <code>gh run view 42261344757 --repo ABackerNINI/auto-qb --log</code>。</p>
+<pre><code># 1) GitHub Actions run 42261344757（cabad24b, develop, 2026-11-06T17:24:26Z -> 18:04:44Z）
+WEB UI smoke (chromium)  Run WEB UI smoke  2026-11-06T17:25:01.3920999Z Running 450 tests using 1 worker
+WEB UI smoke (chromium)  Run WEB UI smoke  2026-11-06T17:46:05.7887880Z   ✘  189 [chromium] › e2e/gtm-alert.spec.mjs:83:5 › 皮肤 prism(GTM 告警横幅) › GTM 告警: 常驻可见 / ack 隐藏 / 刷新保持 / 新 ts 重显 / 超 TTL 判空 / 空 items 降级 @fast (prism) (11.7s)
+WEB UI smoke (chromium)  Run WEB UI smoke  2026-11-06T17:46:18.5578444Z   ✘  190 [chromium] › e2e/gtm-alert.spec.mjs:83:5 › ... (prism) (retry #1) (12.2s)
+WEB UI smoke (chromium)  Run WEB UI smoke  2026-11-06T17:46:31.0676644Z   ✘  191 [chromium] › e2e/gtm-alert.spec.mjs:83:5 › ... (atlas) (12.1s)
+WEB UI smoke (chromium)  Run WEB UI smoke  2026-11-06T17:46:43.7406198Z   ✘  192 [chromium] › e2e/gtm-alert.spec.mjs:83:5 › ... (atlas) (retry #1) (12.1s)
+WEB UI smoke (chromium)  Run WEB UI smoke  2026-11-06T18:04:41.7819897Z ##[error]The operation was canceled.
+
+# 2) 同一 spec 本地隔离实跑（HEAD 789609a3, 2026-11-07）
+$ npx playwright test e2e/gtm-alert.spec.mjs --reporter=line
+Running 2 tests using 1 worker
+  2 passed (20.1s)
+
+# 3) 日期炸弹修复是否在该 run 的提交里
+$ git merge-base --is-ancestor 33b43d0d cabad24b && echo 'yes: cabad24b 含修复'
+yes: cabad24b 含修复
+
+# 4) 三条相关历史件均为 Done（避免重复入池）
+26-11-03-1135-test-e2e-site-alerts-order-pollution.html -> issue-status = Done
+26-11-06-0330-test-e2e-views-relocate-kind-empty.html   -> issue-status = Done
+26-11-06-0330-test-e2e-gtm-alert-date-bomb.html         -> issue-status = Done
+
+# 5) 该 workflow 近 100 次运行结论（gh api workflow runs, 2026-11-07）
+cancelled 93 / failure 7 / success 0; 最后一次 success 2026-10-30T20:29Z -> 20:44:43Z</code></pre>
+    <p>补充事实：<code>e2e/gtm-alert.spec.mjs:83</code> 的两条用例带 <code>@fast</code> 标记，落在日常门禁的 <code>@fast</code> 子集内（<code>npx playwright test --grep @fast --list</code> = 290 例；shard 口径 282 例）。同一 run 里 <code>site-alerts.spec.mjs</code> 的 4 条 <code>@fast</code> 用例（第 373/374 例等）是 <code>✓</code> 通过，顺序污染未在该 run 复现。</p>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>影响面</h2>
+    <table>
+      <tr><th>维度</th><th>结论</th></tr>
+      <tr><td>触发条件</td><td>CI 全量 450 例串行（<code>workers: 1</code>、<code>CI=true</code> 故 <code>retries: 1</code>）下观察到；本地隔离单跑同 spec 为 2 passed，未复现。是否属全量顺序污染或 CI 环境差异，待复验。</td></tr>
+      <tr><td>影响范围</td><td>手动全量轮（<code>workflow_dispatch</code>）的红绿结论；且因这 2 条带 <code>@fast</code>，改造后的日常分片门禁也可能受影响，是落地实跑的头号验证点。其余已知既有红：<code>site-alerts</code> 全量顺序污染（旧件 Done）、<code>views</code> relocate kind 恒红（旧件 Done，不进 fast）。</td></tr>
+      <tr><td>严重度</td><td>中 —— 不阻塞本轮超时根因（40m 预算不敷 450 例串行）的修复，但会让「零失败绿」的验收判据取不到；按本轮共识改以「失败集合不比改动前基线扩大」判定，失败项必须显式可见。</td></tr>
+    </table>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>定位锚点</h2>
+    <p class="hint">写「符号名 + grep 关键词 + 当时的行号（标取证时间）」—— 代码会漂移，靠符号与 grep 重新定位，行号只是加速项。以下行号均取证 2026-11-07 03:26 +0800。</p>
+    <ul>
+      <li><code>.github/workflows/playwright.yml:15</code>（<code>timeout-minutes: 40</code>）、<code>:59</code>（裸 <code>npx playwright test</code>）· grep <code>timeout-minutes|npx playwright test</code></li>
+      <li><code>playwright.config.mjs:47</code> <code>workers: 1</code>、<code>:54</code> <code>retries: process.env.CI ? 1 : 0</code>、<code>:38</code> <code>testIgnore</code> · grep <code>fullyParallel|retries|SHARDED</code></li>
+      <li><code>e2e/gtm-alert.spec.mjs:83</code> 双皮肤参数化用例 · grep <code>超 TTL 判空|gtm-alert.spec.mjs:83</code>；<code>:30-35</code> <code>NOW_MS</code>/<code>ago()</code>/<code>T4</code> 相对时刻生成</li>
+      <li><code>e2e/shard-run.mjs</code>、<code>e2e/perf-serial.mjs</code> · grep <code>E2E_SHARD_TOTAL|--shard=</code></li>
+      <li><code>memory-bank/testing/flaky-ledger.md</code> 台账 · grep <code>gtm-alert|relocate|site-alerts</code>；三条历史件见「证据」第 4 段</li>
+    </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
+    <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
+    <div class="callout">待查。已排除：① 日期炸弹修复未进该 run —— <code>33b43d0d</code> 是 <code>cabad24b</code> 的祖先；② 本地隔离也恒红 —— 同 spec 本地 2 passed。未排除：全量顺序状态污染、CI 环境（时区/时钟/TTL 窗口）差异。按台账口径，retry 不是修复。</div>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>建议修法<span class="opt">（可选）</span></h2>
+    <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
+    <p>待定，等排期。方向：认领后先按防过期原则复验（分片日常门禁与手动全量轮各跑一次，记录失败集合），区分「全量顺序污染」与「CI 环境差异」；再按 <code>flaky-ledger.md</code> 的十类归因框架登记并修。代价：全量轮单跑约 40 分钟量级，需先由改造后的 shard 口径压到 10-12 分钟/片才有可接受的复验成本。<strong>不采用</strong> <code>skip</code> / <code>continue-on-error</code> / <code>--grep</code> 排除 / 放宽 retry 等掩盖式处置。本报告不含实施。</p>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>状态变更日志</h2>
+    <ul>
+      <li>2026-11-07 03:26 — 入池，状态 <strong>Open</strong>（计划外，未修，等排期）。来源：本轮 CI 门禁改造会话拍板「既有红这轮展示不解决，挂一个 issue 等排期」；本轮不改这些用例、不认领、不置 In Progress。</li>
+    </ul>
+    <h3>复验</h3>
+    <p>认领后先重跑「定位锚点」并重取日志，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」，再决定归因方向。</p>
+    <h3>修复后补充</h3>
+    <p>修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因，同时把 <code>flaky-ledger.md</code> 对应条目翻状态留去向。</p>
+  </section>
+
+  <footer>
+    26-11-07-0326-test-ci-smoke-existing-red-backlog.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>

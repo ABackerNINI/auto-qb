@@ -4,8 +4,9 @@
 > 主索引的已关闭区按 8,000 字符预算裁剪(上限 `CLOSED_KEEP` 条), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (42)
+## Open (43)
 
+- [test] [GitHub CI WEB UI smoke 全量轮既有红清单待排期清理](../26-11-07-0326-test-ci-smoke-existing-red-backlog.html) — CI 全量 450 例串行下 gtm-alert 双皮肤 4 条失败等既有红; 门禁改造只展示不修, 等排期
 - [refactor] [全库代码/配置残留非 ASCII 图形符号，与 code-style ASCII 禁令冲突](../26-11-06-0756-refactor-ascii-graph-symbol-backlog.html) — 全库扫描命中 395 文件/2358 行禁用图形符号; 剔除功能性数据与第三方示例后项目自身 300 文件/1868 行待分批清偿, 本轮按用户拍板只入池不修
 - [bug] [review.check --root 快照目录被 .git 存在性检查误拒](../26-11-06-0711-bug-review-check-snapshot-root.html) — 存量评审 R4 的既定用法 review.check --root <快照目录> 被 _resolve_root 的 .git 检查拒收,与命令自身 help 文档矛盾;_verify 实际与 git 无关
 - [test] [test.pkg 4 条既有红：mutants DEFAULT_DESELECT 指向已拆分消失的测试文件](../26-11-06-0635-test-mutants-deselect-table-drift.html) — commands run test.pkg 恒有 4 条 subtest 红 —— DEFAULT_DESELECT 里 4 个 node id 指向已拆分消失的 tests/test_traffic_store.py / test_qbmanager.py / test_relocate_exec.py；按包收窄闸门不受影响，未修

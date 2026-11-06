@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>GitHub CI WEB UI smoke 门禁改造: 超时根因、分片接线与 push 节流全量轮</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="github-ci-smoke-gate">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-07-0452">
+<meta name="doc-updated" content="26-11-07-0452">
+<meta name="doc-refs" content="memory-bank/issues/26-11-07-0326-test-ci-smoke-existing-red-backlog.html">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: github-ci-smoke-gate</div>
+<h1>GitHub CI WEB UI smoke 门禁改造: 超时根因、分片接线与 push 节流全量轮</h1>
+<p class="lede">本篇只回答一件事: 怎么让 GitHub 上的 <code>WEB UI smoke (chromium)</code> 从「每次跑满 40 分钟被强杀」变成「日常门禁 10 分钟内出真结论 + 低频全量轮兜底」, 且不靠调大超时、不靠少跑用例、不掩盖既有红。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-07-0452 · <b>doc-updated</b> 26-11-07-0452 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 会话 grilling 40 轮拍板(2026-11-07 02:00-04:52) + GitHub 侧运行记录取证 + 本仓实测
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+
+<h3>目标</h3>
+<ul>
+  <li>日常 push / PR 的浏览器门禁在 <strong>10-12 分钟</strong>内给出可信红绿, 不再被 job 级 timeout 强杀。</li>
+  <li>全量 450 例改为<strong>低频自动触发</strong>(push 节流), 保留按需手动入口, 覆盖不缩水。</li>
+  <li>超时/取消时<strong>留下可排障的证据</strong>(report + trace), 而不是像现在这样一条不留。</li>
+</ul>
+
+<h3>设计底线(违反即推翻方案)</h3>
+<ol>
+  <li><strong>不靠放宽预算</strong>: 不把 <code>timeout-minutes</code> 当解法; 改造后按实测 ×2 收紧为护栏。</li>
+  <li><strong>不靠少跑用例</strong>: 日常门禁跑 <code>@fast</code> 是仓库既定口径(<code>playwright.config.mjs</code> 文件头已写明), 不是为绕超时临时缩水; 全量轮覆盖 430 + 20 = 450 例, 一个不少。</li>
+  <li><strong>不掩盖既有红</strong>: 不加 <code>continue-on-error</code>、不 <code>test.skip</code>、不用 <code>--grep</code> 排除; 失败清单机读展示并链已入池 issue, run 结论保持真实红。</li>
+  <li><strong>不改产品代码</strong>: 只动 <code>.github/workflows/playwright.yml</code>; 不动 <code>src/</code>、<code>config.yml</code>、<code>auto-qb-data/</code>。</li>
+  <li><strong>不改默认分支</strong>: 保持 <code>master</code> 为默认分支, 通过一次性快进让它不再陈旧, 而不是切换默认分支。</li>
+</ol>
+
+<h3>不变量</h3>
+<ul>
+  <li><code>@fast</code> 282 例(分片口径) + CPU 敏感量具 20 例 = 日常门禁覆盖面。</li>
+  <li>全量 430 例(分片口径) + 20 例补跑 = 450 例, 与改造前一致。</li>
+  <li>工作区多 clone 并行、<code>reuseExistingServer: false</code>、桩服务 <code>--port 0</code> 由 OS 分配 —— 这些既有设计一律不动。</li>
+</ul>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+
+<h3>根因: 40 分钟预算对 48 分钟的实际需求</h3>
+<p><code>.github/workflows/playwright.yml:15</code> 是 job 级 <code>timeout-minutes: 40</code>; 第 59 行是裸 <code>npx playwright test</code>, 即以 <code>workers: 1</code>(<code>playwright.config.mjs:47</code>)串行跑全量。GitHub 侧实测:</p>
+<pre><code><span class="cm"># run 42261344757 (head_sha cabad24b, 2026-11-06 17:24 -&gt; 18:04 UTC)</span>
+Running 450 tests using 1 worker
+  ✓  374  ...  18:04:38Z   <span class="cm"># 跑到第 374 例</span>
+##[error]The operation was canceled.   <span class="cm"># 18:04:41Z, 恰好 40m14s</span></code></pre>
+<p>按 374 例 / 39m41s 折算约 <strong>6.4s/例</strong>, 450 例需 <strong>≈48 分钟</strong> —— 40 分钟预算结构性不够, 不是偶发。</p>
+
+<h3>不是偶发, 是慢性失守</h3>
+<table>
+  <tr><th>指标</th><th>实测值(2026-11-07 取证)</th></tr>
+  <tr><td>该 workflow 近 100 次运行结论</td><td><span class="bad">93 cancelled / 7 failure / 0 success</span></td></tr>
+  <tr><td>最后一次 success</td><td>2026-10-30 20:29 -&gt; 20:44 UTC(15m45s)</td></tr>
+  <tr><td>11-06 单日 push 次数</td><td>77 次, 每次 push 都起一个 40 分钟 job</td></tr>
+  <tr><td>近 20 笔提交中触及前端白名单的</td><td><strong>0 / 20</strong>(全是 memory-bank 文档)</td></tr>
+  <tr><td>取消时 artifact 是否留存</td><td><span class="bad">否</span> —— <code>if: ${{ !cancelled() }}</code> 在取消时直接跳过上传</td></tr>
+</table>
+
+<h3>三个叠加缺陷</h3>
+<ol>
+  <li><strong>预算算错</strong>: 上一轮把 20m 抬到 40m 的依据是「本机 440 例 21.9m + retry 余量」(<code>88c1d3f5</code>), 但 CI 比本机慢约 2.6 倍, 外推不成立。</li>
+  <li><strong>触发面过宽</strong>: <code>on.push</code> 无 <code>paths</code> 过滤, 纯文档提交也跑浏览器套件 —— 这是 93 次 cancelled 的主要来源。</li>
+  <li><strong>证据不留</strong>: 取消即跳过 artifact, 且没有 <code>test-results/</code>(trace)上传, 排障只能靠猜。</li>
+</ol>
+
+<h3>既有能力已就绪但没接线</h3>
+<p><code>f8043824</code> 已落地 shard 多进程隔离桩并实测 <strong>690s -&gt; 366s -&gt; 263s</strong>(shard=1/2/3, 2.62x 提速), 同时提供 <code>e2e/shard-run.mjs</code> 与 <code>e2e/perf-serial.mjs</code> 两个入口。但 CI 第 59 行仍是裸 <code>npx playwright test</code> —— <strong>能力在仓库里, 只是没接</strong>。这是本方案成本低的根本原因。</p>
+
+<h2><span class="no">§03</span>方案总览</h2>
+
+<h3>结构: 一个文件、三类 job</h3>
+<p>只改 <code>.github/workflows/playwright.yml</code>。不新建 workflow 文件 —— 因为 <code>workflow_dispatch</code> 的注册与 <code>inputs</code> 校验读的是<strong>默认分支</strong>上的版本, 新建文件在 <code>develop</code> 上会 404; 并进已有文件可完全绕开这个约束。</p>
+<table>
+  <tr><th>job</th><th>触发条件</th><th>内容</th><th>timeout</th></tr>
+  <tr><td><code>gate</code></td><td><code>event != workflow_dispatch</code></td><td>只读 run 历史 + compare API 算白名单行数, 输出两个布尔; 达标则 <code>gh workflow run</code> 触发全量轮</td><td>5m</td></tr>
+  <tr><td><code>smoke</code></td><td><code>needs.gate.outputs.run_fast == 'true'</code></td><td><code>@fast</code> 282 例分 3 片矩阵, 每片独立 webServer</td><td>25m</td></tr>
+  <tr><td><code>perf-serial</code></td><td>同 <code>smoke</code></td><td>CPU 敏感量具 20 例串行补跑(与分片并行)</td><td>25m</td></tr>
+  <tr><td><code>aggregate</code></td><td><code>always()</code></td><td>汇总各分片结论, 占住固定 check 名 <code>WEB UI smoke (chromium)</code></td><td>5m</td></tr>
+  <tr><td><code>full</code></td><td><code>event == workflow_dispatch</code></td><td>全量 430 例分 5 片矩阵</td><td>30m</td></tr>
+  <tr><td><code>full-perf</code></td><td><code>event == workflow_dispatch</code></td><td>CPU 敏感量具 20 例串行补跑(与 5 片并行)</td><td>30m</td></tr>
+</table>
+<p>六个 job 而非五个: <code>full</code> 的分片矩阵与量具补跑必须拆开 —— 量具在并发下数字会漂, 且 5 片的 <code>--total</code> 口径已把量具 spec 排除, 混在一个 job 里会让补跑被矩阵展开成 5 份。</p>
+
+<h3>触发与节流</h3>
+<pre><code>on:
+  push:
+    branches: [develop, master, main]
+  pull_request:
+    branches: [develop, master, main]
+  workflow_dispatch:
+    inputs:
+      scope:
+        type: choice
+        options: [full]
+        default: full
+
+run-name: ${{ github.event_name == 'workflow_dispatch' &amp;&amp; 'full-smoke' || 'daily' }} / ${{ github.ref_name }}</code></pre>
+<p>节流判定放在 <code>gate</code> job 内(不是 workflow 级 <code>paths</code>), 因为 workflow 级过滤会让纯文档 push 连判定都不启动, 时间阈值永远没机会生效。</p>
+<table>
+  <tr><th>判定项</th><th>取值</th><th>数据来源</th></tr>
+  <tr><td>距上次全量轮时间</td><td><strong>≥ 1 天</strong></td><td>最近一次 <code>event=workflow_dispatch</code> 且 <code>displayTitle</code> 以 <code>full-smoke</code> 开头的 completed run 的 <code>created_at</code></td></tr>
+  <tr><td>白名单累计改动行数</td><td><strong>≥ 1000 行</strong></td><td><code>gh api repos/{repo}/compare/{锚点sha}...{head}</code> 的 <code>files[].changes</code>, 按白名单路径过滤求和</td></tr>
+  <tr><td>组合关系</td><td>OR</td><td>任一达标即跑; 时间维度兜住低流速期, 行数维度让代码密集期提前触发</td></tr>
+</table>
+<p>白名单路径(与 <code>on.push.paths</code> 同一份, 单点写在 <code>env</code>): <code>src/auto_qb/webui/</code>、<code>e2e/</code>、<code>scripts/ui_harness.py</code>、<code>playwright.config.mjs</code>、<code>package.json</code>、<code>package-lock.json</code>、<code>uv.lock</code>、<code>pyproject.toml</code>、<code>.github/workflows/</code>。</p>
+
+<h3>锚点为什么必须纯净</h3>
+<p>若 <code>full</code> 也响应 push, 「判定为不跑」的那次同样会留下一条 completed run, 下次查「最近一次」就会错误刷新锚点, 时间阈值永远达不到。因此 <code>full</code> 只由 <code>workflow_dispatch</code> 触发, 并用 <code>event</code> + <code>run-name</code> 双重校验。锚点取<strong>实际跑的 <code>github.sha</code></strong>, 不是触发它的那个 commit(dispatch 只能指定分支, 会有一两笔偏差)。</p>
+
+<h3>证据留存与失败呈现</h3>
+<ul>
+  <li><code>upload-artifact</code> 改 <code>always()</code>, 纳入 <code>playwright-report/</code> + <code>test-results/</code>(trace), 按分片编号命名。</li>
+  <li>全量轮加 <code>--reporter=json</code>(叠加在 <code>list</code> 之上, 不改现有 reporter 配置), 由 summary 步骤把失败用例名写进 <code>$GITHUB_STEP_SUMMARY</code> 并链 issue <code>26-11-07-0326</code>。</li>
+  <li><strong>不据此改 run 结论</strong>: 红就是红; 「无新增失败」由人对比 issue 里的既有红清单判定, 不建第二份机读基线。</li>
+</ul>
+
+<h3>权限</h3>
+<p>仓库默认 workflow 权限是 <code>read</code>。仅 <code>gate</code> job 提权到 <code>actions: write</code>(为 <code>gh workflow run</code>), 其余 job 保持只读。gate 调 API 失败(限流/网络)时 <strong>fail-open</strong>: 跑一次全量轮并打 warning, 不静默跳过。</p>
+
+<h3>master 处理</h3>
+<p><code>workflow_dispatch</code> 的注册与 <code>inputs</code> 校验读默认分支版本; 当前 <code>master</code> 落后 <code>develop</code> 312 笔且是旧版 workflow。改造提交推 <code>develop</code> 后, 一次性把 <code>master</code> 快进到 <code>develop</code>(Gitee 与 GitHub 各一次, 按既有推送顺序核 ref)。快进是<strong>纯 fast-forward</strong>: 两个远端 master 都是 develop 的祖先, 无分叉。</p>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+
+<table>
+  <tr><th>步</th><th>内容</th><th>验收判据</th></tr>
+  <tr><td>S1</td><td>改 <code>.github/workflows/playwright.yml</code>: 加 <code>gate</code> / <code>perf-serial</code> / <code>aggregate</code> / <code>full</code> 四个 job; <code>smoke</code> 改 3 片矩阵; artifact 改 <code>always()</code>; 加 <code>permissions</code> / <code>concurrency</code> / <code>run-name</code></td><td>YAML 可解析(<code>python -c "import yaml,sys;yaml.safe_load(open(...))"</code>); 四个 job 的 <code>if</code> 互斥无重叠</td></tr>
+  <tr><td>S2</td><td>本地验证分片入口可用: <code>commands run dev.e2e-fast-shard -- --index 1 --total 3</code>; 核对三片例数与 <code>--list</code> 一致</td><td>三片合计 282 例; 至少一片跑完绿; <code>perf-serial</code> 20 例可独立跑</td></tr>
+  <tr><td>S3</td><td><code>commands run ship.commit</code> 提交并推 Gitee <code>develop</code>(提交信息写进 <code>.git/COMMIT_MSG_AI.txt</code>)</td><td>结果行「提交成功 &lt;hash&gt;」; 远端 ref 核对通过</td></tr>
+  <tr><td>S4</td><td>快进 master: <code>git push gitee develop:master</code> → 核 Gitee master ref == develop tip → <code>git push github develop:master</code></td><td>两远端 master 的 sha 都等于 develop tip</td></tr>
+  <tr><td>S5</td><td>手动 dispatch 验证: <code>gh workflow run playwright.yml --ref develop -f scope=full</code></td><td>run 成功启动(不 422); 跑完留下耗时数字与失败清单</td></tr>
+  <tr><td>S6</td><td>回写知识库: 坑档补「CI 预算陷阱」条; 更新 <code>memory-bank/pitfalls/testing/smoke.md</code> 的预算段; issue <code>26-11-07-0326</code> 补 master 首跑结果</td><td><code>commands run kb.check</code> 全绿</td></tr>
+</table>
+
+<div class="aside">
+  <strong>验收口径(Q27)</strong>: 「实跑一次完整全量轮 + 耗时数字留痕 + 失败清单与既有红基线一致(无新增失败)」。绿色取不到(既有红不修), 因此这条只作「CI 修复已生效」的证据, 不作代码交付真伪判据 —— 交付口径仍以 Gitee <code>develop</code> 为准。
+</div>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<table>
+  <tr><th>编号</th><th>事项</th><th>默认(推荐)</th><th>备选</th></tr>
+  <tr><td>P1</td><td>落地授权范围</td><td>S1-S6 全做</td><td>先做 S1+S2(改文件 + 本地验证), S3 起再议</td></tr>
+  <tr><td>P2</td><td><code>actions: write</code> 提权</td><td>仅 <code>gate</code> job 提权, 其余只读</td><td>用 PAT/secret(需新增凭据, 不推荐)</td></tr>
+  <tr><td>P3</td><td>master 快进时机</td><td>S3 之后立即做</td><td>等全量轮验证绿了再做(会推迟 dispatch 可用)</td></tr>
+  <tr><td>P4</td><td>阈值复核</td><td>1 天 / 1000 行, 功能稳定后再调长</td><td>先按 1 天 / 1000 行跑两周, 按实测触发频次回调</td></tr>
+</table>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+  <tr><th>编号</th><th>结论</th></tr>
+  <tr><td>D1</td><td>门禁分层: push/PR 跑 <code>@fast</code>, 全量挂 dispatch; 不靠 <code>--grep</code> 少跑止血</td></tr>
+  <tr><td>D2</td><td>触发面: 白名单过滤<strong>下沉到 job 级</strong>(不放 workflow 级), 否则时间阈值无法生效; <code>concurrency</code> 只对 PR 掐旧</td></tr>
+  <tr><td>D3</td><td>证据留存: artifact 改 <code>always()</code> + 纳入 trace + 按分片命名</td></tr>
+  <tr><td>D4</td><td>预算护栏: 按实测 ×2 收紧(日常 25m / 全量 30m), 不保留 40m</td></tr>
+  <tr><td>D5</td><td>聚合 job 占固定 check 名 <code>WEB UI smoke (chromium)</code>; 当前无分支保护, 价值在 UI 单一红绿与将来开保护</td></tr>
+  <tr><td>D6</td><td>量具 20 例放独立并行 job, 不挂分片尾步</td></tr>
+  <tr><td>D7</td><td>既有红只展示不修, 入池 issue <code>26-11-07-0326</code>(test/standard/Open)</td></tr>
+  <tr><td>D8</td><td>不改默认分支; 用 push 触发而非 <code>schedule</code>(后者受默认分支限制, 会跑陈旧代码)</td></tr>
+  <tr><td>D9</td><td>状态源用<strong>只读 run 历史</strong>(<code>event=workflow_dispatch</code> + <code>run-name</code> 双校验), 不建 state 文件 / 不用 repository variable(无 <code>variables</code> 权限)</td></tr>
+  <tr><td>D10</td><td>阈值: 时间 <strong>1 天</strong> OR 白名单累计 <strong>1000 行</strong>(用户拍板, 稳定后再调长)</td></tr>
+  <tr><td>D11</td><td>全量轮并入现有 <code>playwright.yml</code>, 不新建 workflow 文件(规避 dispatch 默认分支注册限制)</td></tr>
+  <tr><td>D12</td><td>锚点纯净: <code>full</code> 只由 dispatch 触发; 锚点取实际跑的 <code>github.sha</code></td></tr>
+  <tr><td>D13</td><td>权限: 仅 <code>gate</code> 提 <code>actions: write</code>; gate 异常 fail-open</td></tr>
+  <tr><td>D14</td><td>master 一次性快进到 develop(Gitee → GitHub), 解决 dispatch 注册与 inputs 校验</td></tr>
+  <tr><td>D15</td><td>分片: 日常 3 片(最重 102 例), 全量 5 片(最重 92 例)</td></tr>
+  <tr><td>D16</td><td>验收改为「跑完 + 耗时 + 无新增失败」, 不作交付判据</td></tr>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+  <tr><th>风险</th><th>触发条件</th><th>处置</th></tr>
+  <tr><td>dispatch 422</td><td>master 未同步, 或日后在 develop 上新增 input 而 master 未跟</td><td>S4 紧随 S3; 新增 input 时同轮快进 master; gate 捕获 422 后打 warning 并按 fail-open 处理</td></tr>
+  <tr><td>全量轮仍超时</td><td>5 片最重 92 例, 若 CI 比 6.4s/例更慢</td><td>30m 护栏先兜; 首次实跑后按实测 ×2 重定; 必要时改 6 片</td></tr>
+  <tr><td>既有红长期常红</td><td><code>gtm-alert</code> 双皮肤在 CI 全量顺序下仍红</td><td>按 D7 只展示不修; summary 列清单 + 链 issue; 不据此判失败新增</td></tr>
+  <tr><td>纯文档 push 仍起 run</td><td>白名单下沉后, 每次 push 都会跑 gate(几秒)</td><td>已接受: 几秒成本换时间阈值可用; gate 无 checkout、无依赖安装</td></tr>
+  <tr><td>白名单漏列导致假绿</td><td>改了影响前端的路径但不在白名单</td><td>白名单含 <code>src/auto_qb/webui/</code> 整包 + <code>scripts/ui_harness.py</code>(桩服务依赖真 <code>create_app</code>); 新增前端路径时同步补</td></tr>
+  <tr><td>gate 读 API 限流</td><td>公共 runner 共享 IP</td><td>fail-open + warning; 单次只读 1-2 个 API 调用, 量极小</td></tr>
+  <tr><td>master 首跑红</td><td><code>ci.yml</code> 近 5 次全 failure, <code>playwright.yml</code> 有既有红</td><td>按既有红记账, 补记到 <code>26-11-07-0326</code>; 不新建 issue、不认领</td></tr>
+  <tr><td>分支保护未开</td><td>当前 <code>develop</code> protection 404、rulesets 为空</td><td>聚合 job 先占名; 将来开保护时需补 <code>always()</code> 兜底 job, 否则纯文档 PR 会因跳过而永久 Pending</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-07-0452</span> 初版: 会话 grilling 40 轮拍板(D1-D16) + GitHub run 历史取证 + 本仓分片规模实测。要点: 单文件改造、gate 级节流(1 天 / 1000 行)、全量 5 片、master 一次性快进、既有红入池不修。</li>
+</ul>
+
+</div>
+</body>
+</html>
