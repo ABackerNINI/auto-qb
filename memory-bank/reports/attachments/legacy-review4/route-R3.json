@@ -31,9 +31,9 @@
     {
       "id": "R3-4",
       "title": "hr 模型状态: model/status/resolve",
-      "status": "pending",
-      "done_at": null,
-      "findings": 0
+      "status": "done",
+      "done_at": "26-11-06-0802",
+      "findings": 8
     },
     {
       "id": "R3-5",

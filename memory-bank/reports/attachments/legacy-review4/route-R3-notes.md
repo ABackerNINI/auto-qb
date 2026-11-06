@@ -9,7 +9,7 @@ owner: clone2-main · freeze: f088329291e6 · 快照: C:\Users\11059\Desktop\Pro
 | R3-1 | transfer 全域(新模块) + torrents/store | 4 (major 1 / minor 2 / nit 1) | done |
 | R3-2 | torrents 杂件 + tray + cli + tools | 2 (major 1 / nit 1) | done |
 | R3-3 | hr service 族: service_wave/service/service_common/service_status/module | 6 (major 1 / minor 3 / nit 2) | done |
-| R3-4 | hr 模型状态: model/status/resolve | - | pending |
+| R3-4 | hr 模型状态: model/status/resolve | 8 (minor 4 / nit 4) | done |
 | R3-5 | hr 运行时: runtime/server/channel/worker/threadlifecycle/queue/events | - | pending |
 | R3-6 | hr 取数解析: discovery/report/parse/fetcher/store/bencode/log/ratelimit + adapters | - | pending |
 
@@ -20,6 +20,7 @@ owner: clone2-main · freeze: f088329291e6 · 快照: C:\Users\11059\Desktop\Pro
 - **GH-01 部分复发**: ①读后心跳整包覆盖已消失——write_journal 前向合并拒非终态覆盖终态(finaalize_watch.py:193-194 + relocate_journal.py:80-84);③journal 头注「唯一写者」已消失——现明写两个写者+前向合并保序;②max_wait 缺省 0 **仍在**(finalize_watch.py:165/:249/:270),但 docstring/CLI help 已明示「0=不限,auto-qb 侧 finalize_timeout 才是最终兜底」,定级交聚合会话。
 
 - **B-01 已消失**: 三处判据收敛到单点谓词 _lane_covers_done(service_common.py:360-380,cutoff_done<=0 显式判死),调用点 _freeze_terminal(service_wave.py:813)/_position_covered(service_common.py:395)/_absence_proven_all(service_common.py:415)无一绕开;锚点随拆分重定位。
+- **B-01 沿用 R3-3 结论(已消失)**:本批 3 文件(model/status/resolve)未发现同语义新独立问题。
 
 ## 自弃发现记录
 
@@ -28,6 +29,8 @@ reviewer 自弃 7 条(run_batch 外层 create_adapter 防御性 raise 生产不�
 R3-2 批自弃 6 条(_hr_guard 族 None 全调用方有守卫 / tray _poll 未包 try 举不出触发场景 / finalize_watch 端口探测双发冗余无害 / state_enum 恒真防御分支 / __all__ 未含包根直取项有实测依赖 / qB tags 数组疑点有真机坑档实证读回口径);本批 review.check 被弃条目:0 条(2/2 全过)。
 
 R3-3 批自弃 6 条(→/⇒ 箭头全仓统一风格 / ① 全仓 106 处存量一致 / 防御性 getattr 属可留例外 / ACTION_LOCKED 展示边缘 / quota 让位路径 fetched_at 有 expires_at=0 兜底 / _mark_fetch_failed_lane 早退守卫无害);本批 review.check 被弃条目:0 条(6/6 全过)。
+
+R3-4 批自弃 8 条(has_anchor_snapshot 全零边界方向保守 / done_epoch 超大年份纯理论 / site_conf_interval getattr 属可留类 / blocking_reason 625 重复实现谓词属风格 / resolve_identity 等现在形参 docstring 明示预留 / _as_int 折 0 手改坏极端边界 / →⇒ 箭头全库惯例非禁用类 / bool("false") 同范式手改坏噪音);本批 review.check 被弃条目:0 条(8/8 全过)。
 
 ## 执行备注
 

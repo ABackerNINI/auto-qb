@@ -106,5 +106,77 @@
     "claim": "refresh_site 先填入的 session.read_error(坏文件隔离/备份恢复事实)在波正常跑完后被此处整体覆盖,最终 result 与拉取历史事件的 reason 都看不到「数据来自备份恢复」这一事实(仅 store 当时的 WARNING 有痕);同文件 version_mismatch 分支(service.py:249)用的是拼接保留写法,两处口径不一",
     "relevance": "相关",
     "fix": "finish 时把已有 result.reason 拼接保留(与 version_mismatch 分支同式)"
+  },
+  {
+    "file": "src/auto_qb/hr/model.py",
+    "line": 662,
+    "quote": "history=[HrHistoryEvent.from_json(item) for item in (raw.get(\"history\") or [])],",
+    "severity": "minor",
+    "claim": "HrSiteData.from_json 对 list 字段的元素形状零守卫:history(及 index/downloaded/fails/verified/wave/rate)元素若因手改坏/外部损坏成为非 dict(如 history 为字符串),from_json 内 raw.get 抛 AttributeError,而 store._parse 的坏文件兜底只捕 TypeError/ValueError/KeyError(store.py:138),异常穿透整个读路径,违背 model.py:663-665 自家注释「缺键/非 dict(旧文件或手改坏)……不该让整站读盘失败」的意图与 build_site_statuses「站点文件读坏时不抛」契约(status.py:638-640)。",
+    "relevance": "相关",
+    "fix": "list/dict 字段照 lanes/channel_last_error 既有先例加 isinstance 守卫跳过非预期形状元素,或给 store._parse 的 except 元组补 AttributeError;至少给 history 项加 isinstance(item, dict) 过滤(同 HrHistoryEvent.from_json 对 lanes 的既有写法)。"
+  },
+  {
+    "file": "src/auto_qb/hr/status.py",
+    "line": 543,
+    "quote": "pages=int(item.get(\"pages\") or 0),",
+    "severity": "minor",
+    "claim": "_history_lanes 用 int() 直转 pages/rows,值若为非数字字符串(手改坏的站点文件经 HrHistoryEvent.from_json 的 lanes 原样 dict 透传进这里)抛 ValueError,与本函数 docstring(status.py:530)「脏键按缺省兜住不抛」直接矛盾,失败场景=WebUI 表③ history_rows 整体抛错。",
+    "relevance": "相关",
+    "fix": "改用 model 层 _as_int 同款容错(try int except 回 0)或 str->数字校验后再转。"
+  },
+  {
+    "file": "src/auto_qb/hr/status.py",
+    "line": 626,
+    "quote": "return \"索引里还没有任何可判数据(先让浏览器扩展跑一轮取数)\"",
+    "severity": "minor",
+    "claim": "blocking_reason 分支序缺陷:「零行未确认」引导支(line 627)排在「无可判数据」支之后,而 zero_rows=True 时 lane_a/lane_terminal 恒为空,故站点从未有过放行记录(verified 空)时——恰是最常见的零行站点形态——恒落 625 支,给「先让浏览器扩展跑一轮取数」的循环误导(波已在跑且确证 0 行,真正出路是 --hr-confirm-empty/计数自证);这正违反本函数 618-621 行自述的 W3 设计原则「把人引向错的动作」。",
+    "relevance": "相关",
+    "fix": "把 zero_rows/确认戳分支提到「无可判数据」分支之前(或给 625 支加 not data.wave.zero_rows 条件)。"
+  },
+  {
+    "file": "src/auto_qb/hr/model.py",
+    "line": 615,
+    "quote": "def index_by_infohash(self) -> Dict[str, int]:",
+    "severity": "minor",
+    "claim": "生产死代码:全仓 grep 仅 tests 引用(test_hr_status_entry.py 两例 + test_hr_store.py 一例),src/ 内零调用方;docstring 断言的用途「反查表在读取时现建」在生产调用图不存在,属孤儿件且背 2 个专职测试的维护面(存量面 A:拆分残留)。",
+    "relevance": "相关",
+    "fix": "删除方法与对应测试,或在 docstring 标明保留理由;若确属预留 API 应迁出生产模型类。"
+  },
+  {
+    "file": "src/auto_qb/hr/model.py",
+    "line": 40,
+    "quote": "def lane_is_satisfied(lane: str) -> bool:",
+    "severity": "nit",
+    "claim": "lane_is_satisfied/lane_is_exempt 生产代码零消费者(仅 __init__ 再导出与 test_hr_status_entry 测试),ALL_LANES 同样只有再导出;与已被 service/service_wave 使用的 lane_is_terminal 同族但三者均无生产调用(存量面 A)。",
+    "relevance": "相关",
+    "fix": "随下轮清理一并删除或明确标注为包公共 API 预留。"
+  },
+  {
+    "file": "src/auto_qb/hr/status.py",
+    "line": 613,
+    "quote": "def blocking_reason(view: HrSiteView, data: HrSiteData, stale: bool, site: str = \"\", next_wave_at: float = 0.0) -> str:",
+    "severity": "nit",
+    "claim": "blocking_reason 的 site 形参全函数体未使用(调用方 status.py:392 还在传),死参数。",
+    "relevance": "相关",
+    "fix": "删形参与调用点实参。"
+  },
+  {
+    "file": "src/auto_qb/hr/status.py",
+    "line": 266,
+    "quote": "def _lane_statuses(data: HrSiteData, now: float) -> Tuple[List[LaneStatus], str]:",
+    "severity": "nit",
+    "claim": "_lane_statuses 的 now 形参全函数体未使用(调用点 line 323 传了 now),死参数。",
+    "relevance": "相关",
+    "fix": "删形参与调用点实参。"
+  },
+  {
+    "file": "src/auto_qb/hr/status.py",
+    "line": 327,
+    "quote": "day=data.rate.day_count if data.rate.day_window == dk else 0,",
+    "severity": "nit",
+    "claim": "quota.day 的窗口键公式与 ratelimit._day_count(ratelimit.py:57-58)是同一语义的两份实现(存量面 B 平行机制):窗口键语义若变,展示 day 与 quota_left(走单点)会分叉。",
+    "relevance": "相关",
+    "fix": "ratelimit 把 _day_count 提为公开 view 函数(如 day_count_used)供 status.py 复用。"
   }
 ]
