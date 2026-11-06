@@ -12,6 +12,21 @@ owner: clone3-main · freeze: f088329291e6 · 快照: C:\Users\11059\Desktop\Pro
 | R5-3 | shared 表格与列: table/dt_table/columns*/sort/filters/selection/format/rowlang/decorate (3928行) | 25 (major 3 / minor 12 / nit 10) | done |
 | R5-4 | shared drawer 族: drawer/drawer_templates/drawer_store/drawer_{general,rows,files,head} (3445行) | 16 (major 1 / minor 11 / nit 4) | done |
 | R5-5 | shared drawer 模板·general 与 trackers(01-09 号) (3556行) | 33 (major 4 / minor 20 / nit 9) | done |
+| R5-11 | shared drawer 模板·content 与 peers(10-12/90 号) (1720行) | 21 (major 4 / minor 12 / nit 5) | done |
+
+## R5-11 批记录(2 面精评: 正确性+安全 / 测试缺口+文档漂移;lane 批序在 R5-5 之后 R5-6 之前)
+
+- **major 4 条(全在测试缺口/文档面)**:12 号变体全部交互零 e2e 真渲染(grep dt12 仅 perf spec 一句注释)/ 10 号右详情优先级分段(S5 批量通道唯一入口)零测试 / 11 号主勾选框三态切换零 e2e / 11 号 omitEmpty 头注描述已退役行为(与 app.js:307 及 e2e 用例名矛盾)。
+- minor 12 条:「未完成」筛选舍入口径与计数不同源(0.995≤p<1 文件计入计数但筛不出) / 10 号空态幽灵行无样式兜底 / focusKey 死代码 2 条(10/11 号,anchTouch W5 退役后无写入点) / 12 号仍 JSON.stringify 全量序列化(W1 指纹止血未跟上) / 11 号字符串字面量 → / dt11 行级键盘零 e2e / 10 号全局折叠钮零 e2e / omitEmpty 漂移第二处(av 字段注释) / 10 号 anchTouch 注释漂移 / 「三份 index.html」实为四份(4 文件重复) / 吸顶补偿三皮肤清单漏 flux。
+- nit 5 条:负边距 -16px 只合 prism / 箭头注释 3 文件 / 90 号带圈数字④。
+- XSS 面专项:四文件所有插值均走 dtHtml 转义,未发现未转义外部数据进 innerHTML 的路径。
+- 底册复验:R2 终表零命中本批;Open issue 0521(重命名入口)仍 Open 未重报,且 filesSig 不含 name 的改名场景因 0521 无入口暂不可达(自弃留痕)。
+
+### 自弃发现(16 条留痕)
+
+面1(8):filesSig 不含 name 因 0521 无入口暂不可达 / 10 号优先级乐观写 stale 窗口一次往返自愈 / 90 号 gate 子串匹配系构造性测试桩 / 90 号裸 innerHTML 内容恒定静态 / 90 号缺 destroy 系框架无条件清宿主 / 吸底负边距耦合模式头注已声明只报实例 / 12 号 cssEsc 与核心重复系收编候选非缺陷 / filesSig 32 位碰撞理论风险。
+面2(8):app.js U4 段 anchTouch 漂移锚不在本批 / 守阵 docstring 漂移锚在测试文件 / e2e spec 头注自相矛盾锚在 spec / 12 号 JSON.stringify 系 perf spec 已标计划外池 / rowMem 不含 miss 系确定性函数 / 90 号静默退出无独立失败场景 / legacy p===4 分支不可达 / 勾选重置仅字符串锚边际价值低。
+
 
 ## R5-1 批记录(2 面精评: 正确性+安全 / 测试缺口+文档漂移)
 

@@ -970,5 +970,194 @@
   "claim": "注释(38/305/338 三处)声称回填走「paintTick」,该符号全仓不存在(实际机制是 skip 分支内 querySelector+classList/textContent/innerHTML 直写;兄弟变体用的 H.paintHtml 本变体也未调用)——注释引用不存在的符号名",
   "relevance": "相关",
   "fix": "注释改为「skip 分支内联原地直写」或统一改走 H.paintHtml 并同步措辞"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/drawer_tpl/11-content-treegrid-batch-low.js",
+  "line": 374,
+  "quote": "ui.filter === \"miss\" ? r.progress < 100",
+  "severity": "minor",
+  "claim": "「未完成」筛选判据用整数舍入的 r.progress(drawerFileRows 的 Math.round(progress*100)),而同屏 chip 计数在 derive 用原始值 prog<1:raw progress ∈ [0.995,1) 的文件被计入「未完成 N」计数却在筛选列表中被隐藏,目录行同理(dirMatch 用 s.missCnt 原始值);变体 10 同数据用一位小数判据会显示,构成同语义槽位跨变体漂移",
+  "relevance": "相关",
+  "fix": "文件行筛选改用与计数同源的原始值(如 files[r.index].progress < 1),或两处统一舍入口径"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/drawer_tpl/10-content-tree-detail-tall.js",
+  "line": 295,
+  "quote": "if (!rows.length) rows.push({ k: \"__empty\", kind: \"empty\", _cls: \"empty-row\" });",
+  "severity": "minor",
+  "claim": "筛选无命中时合成的 __empty 空态行在本变体无任何样式兜底: .dt10-blank 无 CSS 定义、.group-row.empty-row 未豁免(engine dt_table.css 只对 .dt11-list 做了透明化),结果渲染成一条 29px 带底边框/hover 的空幽灵行;11 号同槽位有「该筛选下没有文件」文案 + empty-row 透明样式,跨变体漂移",
+  "relevance": "相关",
+  "fix": "补 .dt10-list .group-row.empty-row 透明样式,并让 dt10-cells 的 empty 分支出提示文案(或空态时不出占位行)"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/drawer_tpl/10-content-tree-detail-tall.js",
+  "line": 431,
+  "quote": "H.rowRestore(el, \"data-dt-key\", ui.focusKey);",
+  "severity": "minor",
+  "claim": "focusKey 死代码(W5 拆分残留): ui.focusKey 全文件无写入点(头注声明的记账方 anchTouch 已于 W5 退役),rowRestore 恒收到空串永不回焦,锚换代重挂后的键盘焦点恢复机制实际失效;12 号已改用局部 rowFocusKey 记账,10/11 残留只读不写的空转机制",
+  "relevance": "相关",
+  "fix": "补回写入点(对齐 12 号口径)或删除 focusKey 字段与 rowRestore 调用"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/drawer_tpl/11-content-treegrid-batch-low.js",
+  "line": 507,
+  "quote": "H.rowRestore(el, \"data-dt-key\", ui.focusKey);",
+  "severity": "minor",
+  "claim": "同 10 号: focusKey 声明后全文件无写入点(45 行头注自认「平时无人写它」,但数据帧换代路径同样无人写),rowRestore 恒空转,锚换代回焦机制为死代码",
+  "relevance": "相关",
+  "fix": "同 10 号: 补回写入点或整体删除 focusKey/rowRestore 残留"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/drawer_tpl/12-content-space-treemap-collapsed.js",
+  "line": 323,
+  "quote": "const sig = JSON.stringify(files) + \"|\" + String(!!loading) + \"|\" + err;",
+  "severity": "minor",
+  "claim": "平行机制漂移: 10/11 已按 W1 止血换成 O(F) 数值滚动指纹(filesSig,注释明言「不再 JSON.stringify 全量序列化(千级文件每拍白付)」),12 号仍每次整帧重建(每次点选块/行/筛选,lastSig 置空)对全量 files 做 JSON.stringify,大树点击白付全量序列化",
+  "relevance": "相关",
+  "fix": "与 10/11 同式换 filesSig 滚动指纹(或抽到 reg 单点三件共用,消除第三份复制)"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/drawer_tpl/11-content-treegrid-batch-low.js",
+  "line": 339,
+  "quote": "\" — 点击循环 不下载→正常→高→最高\"",
+  "severity": "minor",
+  "claim": "字符串字面量含箭头图形符号「→」(×3,用户可见的徽章 title 提示文案),违反 code-style.md 非 ASCII 图形符号禁令对 .js 字符串字面量的覆盖(同文件 346 行注释已有同文案)",
+  "relevance": "相关",
+  "fix": "改为 ASCII 替代(如「不下载->正常->高->最高」或顿号列举)"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/drawer_tpl/11-content-treegrid-batch-low.js",
+  "line": 158,
+  "quote": "margin:8px -16px -20px; padding:7px 16px 9px;",
+  "severity": "nit",
+  "claim": "吸底批量条水平负边距 -16px 只与 prism 的 .drawer-body 水平 padding(16px)吻合;atlas/console/flux 均为 18px(dialogs.css 实测),批量条两侧各短 2px 不贴边,且同文件 100 行头注自己列明「atlas|console: 14px 18px 20px」,代码与自列数据不一致",
+  "relevance": "相关",
+  "fix": "负边距用 CSS 变量或按皮肤对齐,或改用 inset 覆盖方案摆脱皮肤 padding 像素假设"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/drawer_tpl/10-content-tree-detail-tall.js",
+  "line": 9,
+  "quote": "右侧详情优先级分段 → setFilePriority(p, indices)(S5 批量通道,",
+  "severity": "nit",
+  "claim": "注释含箭头图形符号「→」(本文件 7 处)与「←」(271 行),违反 code-style.md 非 ASCII 图形符号禁令对注释的覆盖;shared 层此类箭头系存量惯性(61 个文件命中),建议入池批量清理",
+  "relevance": "相关",
+  "fix": "注释箭头改 ASCII,并入存量批量清理"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/drawer_tpl/11-content-treegrid-batch-low.js",
+  "line": 10,
+  "quote": "勾选批量优先级 → setFilePriority(p, indices)(S5 批量通道, indices",
+  "severity": "nit",
+  "claim": "注释含箭头图形符号「→」(本文件注释 8 处,另有 339 行字符串字面量单列一条),同 code-style.md 禁令对注释的覆盖",
+  "relevance": "相关",
+  "fix": "ASCII 替代并入存量批量清理"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/drawer_tpl/90-peers-stub-bridge.js",
+  "line": 8,
+  "quote": "「对外契约(P6)」④",
+  "severity": "nit",
+  "claim": "注释含带圈数字「④」(U+2463),属 code-style.md 明列禁用类「带圈数字 ①-⑬」",
+  "relevance": "相关",
+  "fix": "改为「第 4 点」或「4)」"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/drawer_tpl/90-peers-stub-bridge.js",
+  "line": 6,
+  "quote": "锚 → Teleport 渲染引擎表壳 + 行渲染器 → 引擎手势全通",
+  "severity": "nit",
+  "claim": "注释含箭头图形符号「→」(本文件 3 处: 6/13/35 行),同 code-style.md 禁令对注释的覆盖",
+  "relevance": "相关",
+  "fix": "ASCII 替代(->)"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/drawer_tpl/12-content-space-treemap-collapsed.js",
+  "line": 8,
+  "quote": "悬停互联(纯前端) —— 树图块与体积榜行互加高亮",
+  "severity": "major",
+  "claim": "变体 12 的全部交互(悬停互联/组头折叠/仅看未完成/选中信息条/squarify 布局/ResizeObserver 重建/键盘)在 e2e/ 内零真渲染测试——grep 'dt12' 在 e2e/ 仅命中 perf spec 的一句注释;唯一覆盖是字符串锚守阵,文本摘除才红,行为回归不红",
+  "relevance": "相关",
+  "fix": "补一条 dt12 真手势 e2e(照 drawer-content-variant-tables 手法),至少覆盖悬停互联/组头折叠/点选联动信息条与键盘选中"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/drawer_tpl/10-content-tree-detail-tall.js",
+  "line": 320,
+  "quote": "data-setp=\"${p}\"",
+  "severity": "major",
+  "claim": "右详情优先级分段(点击 → setFilePriority(p, subtreeIndices(sel)) 真实 POST,目录 = 整棵子树收集)从未被任何测试执行: e2e/ 内 grep 'data-setp|dt10-seg' 零命中,tests/ 静态守阵也不查该接入点——这是 S5 批量通道在本变体的唯一入口",
+  "relevance": "相关",
+  "fix": "在 drawer-content-variant-tables 的 dt10 用例里补: 选目录 → 点 .dt10-seg → 断言 POST 载荷 { priority, indices: [整棵子树 index] }"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/drawer_tpl/11-content-treegrid-batch-low.js",
+  "line": 472,
+  "quote": "data-ckmaster",
+  "severity": "major",
+  "claim": "主勾选框三态切换(onChange data-ckmaster 分支 → toggleSet 全量文件路径)无 e2e 执行——e2e 只测点行勾选与行内勾选,grep 'ckmaster' 在 e2e/ 零命中;全选后点批量条即真实 POST,这条批量入口未验证",
+  "relevance": "相关",
+  "fix": "补 e2e: 点主勾选框 → 断言全部文件行 is-chk + 批量条计数 + POST indices 覆盖全部文件,再点一次全不选回落"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/drawer_tpl/11-content-treegrid-batch-low.js",
+  "line": 19,
+  "quote": "方向键移焦 + Enter/Space 勾选",
+  "severity": "minor",
+  "claim": "dt11 行级键盘(头注声称 issue 26-10-07-0846 同口径)无 e2e: variant-tables 只给 dt10 测了 roving,dt11 的 Enter/Space → toggleRow 与方向键移焦从未真机执行,静态守阵只查字符串在场",
+  "relevance": "相关",
+  "fix": "在 dt11 e2e 用例尾部照 dt10 键盘段补: focus → ArrowDown → Enter,断言对应文件行翻成 is-chk"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/drawer_tpl/10-content-tree-detail-tall.js",
+  "line": 395,
+  "quote": "data-fold=\"open\"",
+  "severity": "minor",
+  "claim": "工具条「展开/折叠」全局钮(onClick data-fold 分支,折叠 = 全目录集入账)无 e2e: e2e 只点行内逐行折叠,11 的同名分支同样未测",
+  "relevance": "相关",
+  "fix": "各补两步手势: 点「折叠」断言只剩目录行,再点「展开」断言行数还原"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/drawer_tpl/11-content-treegrid-batch-low.js",
+  "line": 13,
+  "quote": "无则整列省略不占位(U4: 引擎 omitEmpty",
+  "severity": "major",
+  "claim": "文档漂移: 头注声称 availability「无则整列省略不占位(U4: 引擎 omitEmpty 通用机制接管)」,但 omitEmpty 对本表已删(app.js:307 明示 26-10-13-0811 删 omitEmpty、列常驻 + — 占位,DRAWER_CONTENT_V11_COLUMNS.av 无 omitEmpty 声明),e2e 用例名即「可用性列常驻」断言无数据时 4 列全在——注释描述的是已退役行为",
+  "relevance": "相关",
+  "fix": "头注改为「availability 无值列常驻出 — 占位(26-10-13-0811 删 omitEmpty)」"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/drawer_tpl/11-content-treegrid-batch-low.js",
+  "line": 255,
+  "quote": "av 字段(有 availability 才非空串)供 omitEmpty",
+  "severity": "minor",
+  "claim": "同一漂移的第二处: 行装配注释称 av 字段「供 omitEmpty 整列判据」且「有 availability 才非空串」——实际该列判据已删且代码产出 undefined(fileRowOf: av: avNum ? avN.toFixed(2) : undefined),不是空串",
+  "relevance": "相关",
+  "fix": "注释改为「av 供渲染器判 — 占位, omitEmpty 已删(26-10-13-0811)」"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/drawer_tpl/10-content-tree-detail-tall.js",
+  "line": 44,
+  "quote": "记账在 anchTouch 前, 恢复在 rowAfterFn",
+  "severity": "minor",
+  "claim": "文档漂移: 注释声称 focusKey「记账在 anchTouch 前」——但 W5 起本变体已退役 anchTouch(同文件 45-46 行自述),且 focusKey 无任何写入点,声称的「记账 → 回焦」链路永不发生(rowRestore 恒收到空串)",
+  "relevance": "相关",
+  "fix": "改注为「focusKey 预留真换代(数据帧)回焦, W5 起交互不换代、当前无写入点(同 11 号口径)」"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/drawer_tpl/10-content-tree-detail-tall.js",
+  "line": 27,
+  "quote": "三份 index.html 各去 1 行 manifest",
+  "severity": "minor",
+  "claim": "文档漂移: 「三份 index.html」实际是四份——atlas/console/flux/prism 四个 index.html 均含 drawer_tpl/10..90 装载行,按注释退役会漏一个皮肤;同一句在 11(L29)/12(L17)/90(L15)重复",
+  "relevance": "相关",
+  "fix": "四文件统一改「四份 index.html」(或改为「各皮肤 index.html 各去 1 行」免再漂移)"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/drawer_tpl/11-content-treegrid-batch-low.js",
+  "line": 100,
+  "quote": "14px = 三皮肤 .drawer-body 的 padding-top",
+  "severity": "minor",
+  "claim": "文档漂移: 吸顶补偿注释盘点「三皮肤」padding 并要求「改皮肤 padding 必须连这里一起核」,但第四皮肤 flux 的 .drawer-body padding: 14px 18px 20px(flux/css/dialogs.css:66)未入清单——清单不完整,皮肤耦合假设核对面缺一个",
+  "relevance": "相关",
+  "fix": "清单补 flux: 14px 18px 20px,「三皮肤」改「四皮肤」"
  }
 ]
