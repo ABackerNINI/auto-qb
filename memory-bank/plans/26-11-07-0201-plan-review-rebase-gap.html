@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>code-review 跨 clone rebase 组合缺口修补</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="review-rebase-gap">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-07-0201">
+<meta name="doc-updated" content="26-11-07-0201">
+<meta name="doc-refs" content="">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: review-rebase-gap</div>
+<h1>code-review 跨 clone rebase 组合缺口修补</h1>
+<p class="lede">本篇只回答一个问题: 跨 clone 并行开发下, 两批各自评过、rebase 组合后的树无人评的组合缺口, 怎么在评审时点闭合、在提交时点兜底、在 trailer 留痕。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-07-0201 · <b>doc-updated</b> 26-11-07-0201 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> grilling 会话 2026-11-07 · 设计树五轮走查 · D1–D7 逐项拍板(结论表见 §06)
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<p><b>背景。</b>code-review 的批次锚点法(「最近一条 <code>Review:</code> trailer → 工作树」)与提交管线(「提交先行 → 内部 rebase → 推送」)各自成立, 但并行 clone 交错时存在<b>组合缺口</b>: clone A 与 B 各评各的批, <code>ship.commit</code> 把 A 的提交 rebase 进 B 的历史后, 组合树没有任何 reviewer 看过; 且 6b 复跑轮的 <code>review.trace</code> 被 POST_MARKER 显式跳过(<code>check_review_trace.py:267</code>), 组合树只有 <code>test.quick</code> 兜底、没有评审兜底。缺口发生时无任何信号, 事后也无法审计评审是否在齐平态进行。</p>
+<p><b>目标(做到什么算成)。</b></p>
+<ol>
+  <li><b>评审时点闭合</b>: 评审批次的上下文保证含远端全部最新代码(齐平), B 的 reviewer 看到的周边代码就是合流后的真实周边;</li>
+  <li><b>提交时点可见</b>: rebase 真合入远端提交时, 「组合树评审未覆盖」从静默变为一行可见痕迹;</li>
+  <li><b>事后可审计</b>: 齐平态进 trailer, 任何一笔提交都能查出它评审时是否齐平。</li>
+</ol>
+<p><b>设计底线(不变量)。</b></p>
+<ul>
+  <li>「评审固定发生在提交之前」(skill ①)不动, <b>不新增提交后补评时点</b>;</li>
+  <li>锚点法「不留免评节点」不动 —— 齐平协议必须与锚点现算兼容(实测兼容, 见 §03);</li>
+  <li>pack 保持纯本地瞬时(<b>零网络依赖</b>), 机械强制落在 reviewer 开工自检这个已有停手机制上;</li>
+  <li>判断与机械分离: 齐平是 agent 动作(sync), 齐平判定是脚本/自检(ls-remote + rev-list 现查)。</li>
+</ul>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+<h3>现状机制(证据)</h3>
+<ul>
+  <li>批次锚点 = 最近一条 <code>Review:</code>/<code>Review-Skip:</code> 提交, 全量 log 现算、不设扫描窗口 —— <code>check_review_trace.py:194</code>;</li>
+  <li>提交管线: 闸门 → 提交 → 内部同步(分叉自动 rebase) → <b>6b 复跑闸门</b>(「合并后的树才算数」) → 推送 —— <code>commit.py:19,416</code>;</li>
+  <li>6b 复跑轮 <code>review.trace</code> 经 POST_MARKER 跳过, 原因: 锚点法会把 rebase 进来的远端提交算进本批 → 假红 —— <code>check_review_trace.py:267</code>;</li>
+  <li>远端真相机制: fetch 拉对象 + ls-remote 现查, refs/remotes/* 写入本环境静默丢弃、不可信 —— <code>sync.py:36</code>;</li>
+  <li>开工同步硬性(任何轮次第一个动作), 但只覆盖「会话开始」一个时点。</li>
+</ul>
+<h3>痛点(缺口的四层)</h3>
+<ol>
+  <li><b>组合缺口</b>: B 的评审批次范围 = B 本地锚点 → B 工作树(不含 A 的改动), A 对称地同样不看 B; rebase 组合后的树无人评。语义相交(A 改接口 / B 改调用方)在文本上不相交, rebase 静默合入。</li>
+  <li><b>静默</b>: 缺口发生时无任何信号 —— 6b 只跑测试, review.trace 被跳过, 输出无一行提示。</li>
+  <li><b>不可审计</b>: 评审是否在齐平态进行, 提交后无从查证(trailer 无此字段)。</li>
+  <li><b>已知非洞(澄清)</b>: 「无 trailer 提交被 B 的 trailer 掩埋、连坐机制扫不到」不成立 —— ≥50 行无 trailer 会被提交闸门拦下(<code>check_review_trace.py:253</code>), 能进历史的只有 Review-Skip(可审计)与低于下限豁免(设计内)两类合法态。</li>
+</ol>
+<p><b>窗口大小。</b>触发条件 = A 恰在 B 的开工 sync 之后、ship.commit 之前推送 + 语义相交 + 文本不相交 + 测试盲区, 四条同时成立才真漏。概率低但非零 —— 存量评审 R2/R3 各批都是跨日推进的, 窗口真实存在。</p>
+
+<h2><span class="no">§03</span>方案总览</h2>
+<p>三个落点, 决策编号对应 §06。</p>
+<h3>落点 1 —— 齐平协议 + 三钉自检 (D1/D4/D5)</h3>
+<ul>
+  <li><b>协议面</b>(skill ④): 派遣前主会话跑 <code>commands run my-commit-flow.sync</code>, 结果行贴进评审记录; sync 失败按失败行自带出路解决(树脏重叠 → stash 配方), 确实解决不了(离线)才允许声明未齐平态派遣。</li>
+  <li><b>机械面</b>(三钉): 派遣三件套第 2 条「双 hash 钉死」扩为三钉 —— 批次 base / 自检锚 HEAD / 远端 tip。reviewer 开工自检加一条: <code>git ls-remote</code> 现查远端 tip → <code>git rev-list --count HEAD..&lt;tip&gt;</code>:
+    落后 &gt;0 → <b>停手报告</b>(评审上下文缺远端 N 笔, 主会话 sync 后重派); 落后 =0(含本地领先, 上一批推送失败的合法态) → 放行; tip 取不到(离线) → 打「无法核实」行继续评(「无法核实 ≠ 不一致」, <code>sync.py:78</code> 同款哲学)。</li>
+  <li><b>收尾复核</b>: 主会话加同款远端核对; 发现评审期间远端推进 → <b>不作废</b>已交发现(评审对象 diff 未变), 但修复/收尾前必须重新 sync; 修复增量若触发复评(&gt;100 行), 以齐平后上下文评。</li>
+  <li><b>pack 零改动</b>; sync.py / review_pack.py 均不动。</li>
+</ul>
+<div class="aside"><b>锚点法兼容性(方案成立的关键)</b>: sync 后锚点现算自动跳到远端最新一条 trailer —— 评审包 diff 恰好仍只含本批改动, 且以 A 的代码为上下文。齐平协议不需要改任何锚点逻辑, 这正是锚点法「从历史现算」的红利。</div>
+<h3>落点 2 —— 复跑轮评审边界提示行 (D2/D3)</h3>
+<ul>
+  <li><code>commit.py</code> 步骤 6 分支(rebase 真合入远端提交)加一行步骤行: <code>评审边界: 组合树仅过测试闸门, 评审未覆盖远端 N 笔 · 路径 &lt;前5条&gt; · 与本批相交 M 处</code>。</li>
+  <li><b>不打条件</b>: 远端改动路径全部落在记账类/生成物(口径与 <code>check_review_trace.py:56</code> 的 BOOKKEEPING_PREFIXES + <code>gen_all.py --list</code> 同源, 抄用 + 同源注释 —— 先例 SENSITIVE_PATH_MARKERS 双处同源)。</li>
+  <li><b>相交标注</b> = 远端改动路径 ∩ 本批清单(commit.py 步骤 1 现成的本地改动清单); 判「远端改动路径」用 <code>git diff --name-only &lt;merge-base(旧HEAD, rsha)&gt; rsha</code>(只取远端侧, 不含本地侧)。</li>
+</ul>
+<h3>落点 3 —— trailer 齐平字段 (D6)</h3>
+<ul>
+  <li>skill ⑦ 格式扩为 <code>Review: &lt;范围&gt; · &lt;N&gt; 行 · blocker &lt;N&gt; · 修 &lt;N&gt; · 入池 &lt;N&gt;[ · 分面][ · 齐平 &lt;远端tip前8位&gt;]</code>。</li>
+  <li><b>弱校验</b>: <code>check_review_trace.py</code> 对齐平字段只查格式(<code>· 齐平 [0-9a-f]{8}</code>), 不强制存在、不验 hash 真值; 格式异常打一行 warn 但 rc=0 放行。v3「全过即静默」约定让步一步: 警告仅在字段被写坏时出现。</li>
+  <li>齐平 hash 的值 = 派遣自检核对的远端 tip 前 8 位, 与评审记录交叉可验。</li>
+</ul>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+<table>
+  <tr><th>#</th><th>内容</th><th>验收判据</th></tr>
+  <tr><td>1</td><td><code>commit.py</code> 步骤 6 加评审边界提示行(判据/输出按落点 2; docstring 流程段同步一行)</td><td>包测试新增 3 例: 含手写文件打行 / 全记账类不打 / 相交标注 M —— 全绿</td></tr>
+  <tr><td>2</td><td><code>check_review_trace.py</code> 齐平字段弱校验(按落点 3)</td><td>包测试新增 3 例: 缺字段静默 pass / 格式合法静默 pass / 格式异常 warn + rc0 —— 全绿</td></tr>
+  <tr><td>3</td><td>code-review skill 文本: ②加齐平时点 / ③加 pack 前置 / ④三钉 + 停手细化 + 收尾复核 / ⑦trailer 格式 / 反模式 +1 条 / 设计主轴 + 残余窗口声明</td><td>文档自查(事实/口径/可执行); 与落点 1/2 机制逐条对得上, 无第二口径</td></tr>
+  <tr><td>4</td><td>收尾 DoD: 本批改动自身过 code-review(预计 ≥50 行); <code>test.full</code>; 新建基线切片(数字实测誊写); <code>kb.wrap</code>; 立档阈值命中则 <code>kb.new task</code></td><td>test.full 与最新基线持平或更优; 切片/档案数字来自实测</td></tr>
+</table>
+<p class="aside">步骤 1/2/3 是同一任务的三步, 收口一次提交(拆不拆批按累计行数现算); commit/push 等用户显式指令。</p>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p>无 —— 七项决策已于 2026-11-07 grilling 会话逐项拍板(结论表见 §06)。仅剩两个实现级细节授权执行者按本计划口径定, 不另拍板: (a) 提示行的具体措辞; (b) reviewer ls-remote 的重试档位(先用默认档, 理由见 §07 R1)。</p>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+  <tr><th>编号</th><th>决策点</th><th>结论(否决项)</th><th>日期</th></tr>
+  <tr><td>D1</td><td>评审时点缺口处置</td><td>C: 齐平协议 + 兜底提示(否决: 不修只入档 / 仅可见性 / pack 硬拦)</td><td>2026-11-07</td></tr>
+  <tr><td>D2</td><td>提交时点残余窗口</td><td>B: 复跑轮加一行可见步骤(否决: 接受现状 / 触发组合树补评审)</td><td>2026-11-07</td></tr>
+  <tr><td>D3</td><td>提示行判据</td><td>C: 含手写文件就打, 全记账类/生成物不打, 相交标注(否决: 任何合入都打 / 相交才打)</td><td>2026-11-07</td></tr>
+  <tr><td>D4</td><td>齐平机械挂点</td><td>B: 派遣三件套扩三钉(否决: pack 自查带网络 / 纯协议留痕)</td><td>2026-11-07</td></tr>
+  <tr><td>D5</td><td>三钉停手判据</td><td>A: 落后&gt;0 才停手, 领先放行, 无法核实提示继续(否决: 严格相等才放行)</td><td>2026-11-07</td></tr>
+  <tr><td>D6</td><td>trailer 与回写面</td><td>加 <code>· 齐平 &lt;hash&gt;</code> 字段 + 弱校验(格式警告不拦); 回写面 = skill 单点 + commit.py + 测试, AGENTS.md 不动, 不入 pitfalls</td><td>2026-11-07</td></tr>
+  <tr><td>D7</td><td>产出形态</td><td>A: 先出计划 HTML(本篇)再实现</td><td>2026-11-07</td></tr>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+  <tr><th>风险</th><th>触发条件</th><th>处置</th></tr>
+  <tr><td>R1 reviewer 离线 ls-remote 等待久(默认重试 3×20s)</td><td>离线派遣实测 &gt;2 分钟</td><td>判据先用默认档(与 sync 判据同款); 实测成痛点再收紧 attempts=1, 记入变更记录</td></tr>
+  <tr><td>R2 记账类判据第三处同源漂移</td><td>BOOKKEEPING_PREFIXES / 生成物清单日后改动</td><td>抄用 + 同源注释(先例 SENSITIVE_PATH_MARKERS); 统一 import 单点超出本轮范围, 不顺手做</td></tr>
+  <tr><td>R3 评审期间远端推进</td><td>收尾复核远端核对发现落后</td><td>不作废发现; 修复前强制 sync; 复评轮以齐平后上下文评; 落点 2 提示行兜底</td></tr>
+  <tr><td>R4 齐平字段被误当强校验</td><td>字段写坏 / 缺位被误拦</td><td>gate 仅格式警告(rc=0); skill ⑦ 写明弱字段地位, 与「行数 ±0 强校验」区分</td></tr>
+  <tr><td>R5 高频推送期三钉反复停手</td><td>停手 → sync → 重派循环</td><td>停手原因行自带出路; 停手是未齐平的正确代价, 不设豁免通道</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-07-0201</span> 初版: grilling 会话产出 —— 确认跨 clone rebase 组合缺口(trailer 锚点不会被覆盖, 但组合树无人评且静默), 三落点修补: 齐平协议+三钉自检(评审时点闭合) / 复跑轮评审边界提示行(提交时点可见) / trailer 齐平字段(事后可审计); D1–D7 拍板齐, 待拍板清空。</li>
+</ul>
+
+</div>
+</body>
+</html>
