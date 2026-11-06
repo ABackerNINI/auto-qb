@@ -265,7 +265,9 @@ jobs:
     needs: gate
     if: needs.gate.outputs.run_fast == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    # 35m 是护栏不是预算: 正常 12-14m 跑完, 但实测见过某分片 setup(npm ci -> Running tests)
+    # 独占 12m23s(runner 侧依赖安装慢), 测试本身再 12m31s -> 25m 会被腰斩。留 10m 余量。
+    timeout-minutes: 35
     # 同一 ref 的同一分片只留最新一次 -- push 密集时掐掉旧的, 不排队堆积。
     concurrency:
       group: smoke-${{ github.ref }}-${{ matrix.shard }}
@@ -339,7 +341,7 @@ jobs:
     needs: gate
     if: needs.gate.outputs.run_fast == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 35
     concurrency:
       group: perf-${{ github.ref }}
       cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -447,7 +449,8 @@ jobs:
     name: full smoke shard ${{ matrix.shard }}/5
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # 同 smoke: 实测某片 setup 9m30s + 测试 11m12s = 21m, 30m 余量偏紧, 抬到 40m。
+    timeout-minutes: 40
     # 组名带 shard: GitHub 的同组 job 是串行的, 5 片共用 full-smoke 会退化成串行并撞 30 分钟护栏。
     # cancel-in-progress: false 保证新 dispatch 排队等旧轮跑完, 而不是掐掉正在跑的。
     concurrency:
@@ -555,7 +558,7 @@ jobs:
     name: full perf-serial (CPU 敏感 20 例)
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     # 单 job, 与 full 的 5 片并行; 同组串行保证两次 dispatch 不叠着跑。
     concurrency:
       group: full-smoke-${{ github.ref }}-perf
