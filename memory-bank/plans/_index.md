@@ -24,6 +24,7 @@
 
 ## Done
 
+- [26-11-07-0608] [kb.nav 关联文档交互: 抽屉内关系图三档 + 认领链五态解析](26-11-07-0608-plan-memory-bank-nav-relation-graph.html) — `memory-bank-nav-relation-graph`
 - [26-11-07-0452] [GitHub CI WEB UI smoke 门禁改造: 超时根因、分片接线与 push 节流全量轮](26-11-07-0452-plan-github-ci-smoke-gate.html) — `github-ci-smoke-gate`
 - [26-11-07-0201] [code-review 跨 clone rebase 组合缺口修补](26-11-07-0201-plan-review-rebase-gap.html) — `review-rebase-gap`
 - [26-11-06-0759] [分批评审: 从「收口一次评」到「一批一评 + 强制留痕」](26-11-06-0759-plan-review-batch-policy.html) — `review-batch-policy`
@@ -62,10 +63,8 @@
 - [26-11-01-0106] [规则引擎重设计方案](26-11-01-0106-plan-rule-engine-redesign.html) — `rule-engine-redesign`
 - [26-10-31-2354] [reannounce 确认跟踪改消解等待模型:废除在途直证,成功凭 working/前跳正证据](26-10-31-2354-plan-webui-write-side.html) — `webui-write-side`
 - [26-10-31-2316] [WEBUI 动效皮肤 flux 分步实施计划](26-10-31-2316-plan-webui-fx-skin.html) — `webui-fx-skin`
-- [26-10-31-1922] [RM10 通知·外部集成 · 真机实测分步计划](26-10-31-1922-plan-real-rm10.html) — `real-machine-rm10-plan`
-- [26-10-31-1754] [RM08 WebUI 读侧 · 真机实测分步计划](26-10-31-1754-plan-real-rm08.html) — `real-machine-rm08-plan`
 
-> 更早的 **177** 条已出本索引 —— 制品仍在 `plans/` 目录(未搬动), 全量清单见 [attachments/_archive.md](attachments/_archive.md).
+> 更早的 **179** 条已出本索引 —— 制品仍在 `plans/` 目录(未搬动), 全量清单见 [attachments/_archive.md](attachments/_archive.md).
 
 ## Dropped
 

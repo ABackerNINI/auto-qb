@@ -5,7 +5,7 @@
 **Updated:** 2026-11-07
 **Summary:** kb.nav 台账抽屉内嵌关系图 (局部同心环 / 关联泳道 / 全库三档, 节点可下钻) + 认领链改五态解析 (ok/ext/repo/basename/dead, 578 条"未入库"里真死链 0)
 **Topics:** memory-bank-nav-relation-graph
-**Refs:** memory-bank/pitfalls/kb/nav-ref-guard-mismatch.md
+**Refs:** memory-bank/pitfalls/kb/nav-ref-guard-mismatch.md, memory-bank/plans/26-11-07-0608-plan-memory-bank-nav-relation-graph.html
 
 ## 本篇只回答
 

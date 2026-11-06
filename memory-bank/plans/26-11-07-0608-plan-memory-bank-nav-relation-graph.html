@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>kb.nav 关联文档交互: 抽屉内关系图三档 + 认领链五态解析</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="memory-bank-nav-relation-graph">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-11-07-0608">
+<meta name="doc-updated" content="26-11-07-0608">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-07-memory-bank-nav-relation-graph.md">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: memory-bank-nav-relation-graph</div>
+<h1>kb.nav 关联文档交互: 抽屉内关系图三档 + 认领链五态解析</h1>
+<p class="lede">本篇只回答: 台账页「看到关联却只能自己查找」怎么在不离开页面的前提下走通, 以及为什么画图之前必须先把每条 <code>ref</code> 判成五态 —— 否则一半的边是悬空的。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-07-0608 · <b>doc-updated</b> 26-11-07-0608 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> grilling 三轮(2026-11-07) + 两版真实数据布局演示 → 落地提交 <code>630a9b9f</code> · <b>补记</b>: 实施先于本文成文, 本文按档案 <code>tasks/26-11-07-memory-bank-nav-relation-graph.md</code> 与提交内容回填<br>
+  <b>认领</b> 档案 <a href="../tasks/26-11-07-memory-bank-nav-relation-graph.md">26-11-07-memory-bank-nav-relation-graph</a> · 坑档 <a href="../pitfalls/kb/nav-ref-guard-mismatch.md">nav-ref-guard-mismatch</a>
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<p><b>原始请求。</b>「kb.nav 关联文档交互展示优化: 当前台账页中只能看到文档的认领链/反向引用/同专题件等, 且无法跳转查看这些文档的关联, 只能自己查找。初步想法是增加跳转功能, 增加关联文档拓扑图展示方式, grilling」。后续两条修正:「Q4 A/C 先各做一个简单的演示」(先看真实数据原型再定布局)、「C 能否增加限制在当前正在查看的文档与其所有关联文档上, 全库能力也保留。Q7 拆」。</p>
+<p><b>目标(做到什么算成)。</b></p>
+<ol>
+  <li><b>关联可下钻</b>: 从一件出发, 点它的关联件不再甩去原文丢上下文, 而是在抽屉内切件(带返回栈), 原文降级为次级按钮;</li>
+  <li><b>关系可看</b>: 三个不同问题各有自己的视图 —— 「这一件连着谁」(局部环) / 「这件事散在哪几个族」(关联泳道) / 「全库谁孤立、哪个专题是巨团」(全库团级图);</li>
+  <li><b>每条边都可解释</b>: 页面上的每条引用要么能点开, 要么标出为什么不可点(库外件 / 归档回退 / 仓库根 / 真失效), 不再出现笼统的「(未入库)」。</li>
+</ol>
+<p><b>设计底线(不变量)。</b></p>
+<ul>
+  <li><b>不动数据源口径</b>: <code>gen_doc_map.collect()</code> 是 <code>kb.docmap</code> / <code>kb.check</code> / 索引生成的共同单点, 解析只加在导航层 <code>nav_data</code>, 不扩扫描面、不改「台账件」定义;</li>
+  <li><b>壳即全部</b>: 单文件、零 CDN、离线可开(<code>file://</code>); <code>tests/test_kb_nav_shell.py</code> 禁一切 <code>http(s)://</code> 外链, 所以图形不准引任何库, 手写 SVG;</li>
+  <li><b>守卫口径对齐</b>: 归档回退只在 <code>memory-bank/testing/baselines/</code> 前缀的 ref 上生效(与 <code>check_claim_chain</code> 同款闸门), 否则台账件被删而同名切片还在时, 真死链会被说成可点;</li>
+  <li><b>红线不进导航</b>: <code>config.yml</code> / <code>auto-qb-data/</code> / <code>.git</code> / <code>.env</code> 及一切 <code>..</code> 穿越路径一律判死, 不给可点链接;</li>
+  <li><b>跨轮次的 UI 取舍不留在组件闭包</b>: 档位必须能在轮询重挂后存活。</li>
+</ul>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+<h3>事实先于方案(原型实测)</h3>
+<p>抽屉里的关联件其实<b>一直有 href</b>(<code>nav_page.html</code> 的 <code>&lt;a class="rel" href="/memory-bank/…"&gt;</code>), 真正点不动的是 <b>1812 条 ref 里的 579 条</b>:</p>
+<table>
+  <thead><tr><th>情况</th><th>条数</th><th>现状</th></tr></thead>
+  <tbody>
+    <tr><td>目标文件存在, 但不在 <code>collect()</code> 扫描面(<code>pitfalls/</code> <code>testing/</code> <code>progress/</code> <code>activeContext/</code> <code>conventions/</code>)</td><td>324</td><td>渲染成灰字「(未入库)」, 无 href</td></tr>
+    <tr><td>声明路径失效, 实际躺在 <code>testing/baselines/attachments/</code>(按 basename 可找回)</td><td>253</td><td>同上</td></tr>
+    <tr><td>文件在仓库根下(<code>resources/*.html</code>), 导航页静态路由不代理</td><td>2</td><td>同上</td></tr>
+    <tr><td>真失效</td><td><b>0</b></td><td>——</td></tr>
+  </tbody>
+</table>
+<h3>痛点四条</h3>
+<ol>
+  <li><b>守卫绿 ≠ 页面可点</b>: <code>gen_doc_map</code> 给 <code>kb.check</code> 做了归档回退, 所以认领链守卫是绿的; 但 <code>nav_data.collect()</code> 与前端 <code>byLink</code> 都没有这条回退 —— 页面说死链, 守卫说没事。</li>
+  <li><b>能点 ≠ 能看关联</b>: <code>target="_blank"</code> 直接甩到原文, 跳出去就丢了台账上下文, 回不到「这件的上下游」。用户感受到的「只能自己查找」本质是<b>没有下钻</b>, 不是没有链接。</li>
+  <li><b>全库一键铺平没有可读性</b>: 第一版把 774 个「形态 × 专题」团全部铺开, 其中 676 个只有一件 —— 画出来是一面对称的方块墙, 结构信息归零。这是「族泳道 + 专题聚簇」直接实现的实测反例。</li>
+  <li><b>静态导出的链接前缀写死</b>: <code>STATIC_LINK_PREFIX = "../../memory-bank/"</code> 只有输出到仓库根下两级才碰巧对, <code>--gen-static out/</code> 或绝对路径导出会让所有链接算到仓库外。</li>
+</ol>
+
+<h2><span class="no">§03</span>方案总览</h2>
+<p>四个落点, 决策编号对应 §06。</p>
+
+<h3>落点 1 —— 认领链五态解析 (D2)</h3>
+<ul>
+  <li><code>nav_data.collect()</code> 之后做加法 enrich: 每条 ref 解析成 <code>{t, st, raw}</code>, <code>st ∈ ok / ext / repo / basename / dead</code> —— <code>ok</code> 落在台账四类件(可下钻)、<code>ext</code> 库内但不在扫描面(可打开)、<code>repo</code> 仓库根下(存在但导航页不代理, 只标示)、<code>basename</code> 归档回退命中、<code>dead</code> 真失效;</li>
+  <li>判据对齐 <code>check_claim_chain</code>: ref 是<b>仓库根相对</b>; 归档回退只对 <code>memory-bank/testing/baselines/</code> 开头生效; <code>_inside()</code> 做 resolve 后围栏, <code>_denied()</code> 按真实落点拒红线;</li>
+  <li>顶层新增 <code>data.ext</code>: 库外件的<b>反向边</b>(只扫「已被台账件引用到的」库外件, 有界), 否则坑档/基线的「谁认领我」永远看不见。</li>
+</ul>
+
+<h3>落点 2 —— 三档关系图 (D1/D3/D5)</h3>
+<ul>
+  <li><b>局部环</b>(抽屉内嵌, compact): 本件居中, 环深 = 跳数; 边三态 —— 双向闭环实线 / 单向虚线带箭头 / 库外或失效点线。抽屉 380px 下折叠到 18 个节点(缩半径 0.74), 其余给「另 N 个已折叠」提示;</li>
+  <li><b>关联泳道</b>(全屏): 只画<b>本件 + 它全部一度关联</b>所在的团, 按族分层; 这里<b>保留单件专题</b> —— 用户要的就是「本件 + 全部关联」, 折进碎片等于没画;</li>
+  <li><b>全库团级图</b>(全屏): 只画成员 ≥ 2 的 98 个团 + 每族一个「碎片」节点(承接 676 个单件), 碎片链<b>默认不画</b>(它承接数百条 ref, 画出来是假枢纽), 保留节点角标计数。</li>
+</ul>
+
+<h3>落点 3 —— 组件拆文件 + 静态前缀现算 (D7)</h3>
+<ul>
+  <li><code>nav_graph.js</code>(577 行)承载图组件, 只暴露 <code>window.MBGraph</code>, 零依赖零请求;</li>
+  <li>服务模式走 <code>GET /nav_graph.js</code> 路由; <code>--gen-static</code> 时<b>内联回单文件</b>, 静态件仍 <code>file://</code> 可开;</li>
+  <li>链接前缀按 <code>out_dir</code> 相对仓库根 <code>relpath</code> 现算, 跨盘(<code>D:\</code> 导出到 <code>C:\</code> 仓库)退 <code>file:</code> 绝对前缀。</li>
+</ul>
+
+<h3>落点 4 —— 壳接线与档位存活 (D4)</h3>
+<ul>
+  <li>抽屉内嵌图(<code>#dGraph</code>) + 全屏层(<code>#gStage</code> 三档); 节点点击走 <code>openRowDetail</code> 抽屉内下钻, Ctrl/中键仍开新标签, Esc 逐级退(全屏层排在遮罩之前);</li>
+  <li>档位 <code>{scope, steps, showFrag}</code> 提到壳侧会话态 <code>S.graph</code>: 抽屉每 30s 轮询都会 <code>destroy()</code> + 重挂组件, 状态留闭包必被洗回默认; <code>applyData</code> 后用新数据重挂全屏层并保留 center(先判中心件还在库)。</li>
+</ul>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+<table>
+  <thead><tr><th>步</th><th>内容</th><th>文件</th><th>验收判据</th></tr></thead>
+  <tbody>
+    <tr><td><b>1</b></td><td><b>数据层</b> · 五态解析 + <code>data.ext</code> 反向边 + 围栏</td><td><code>nav_data.py</code></td><td>四态用例 + 围栏用例(非 baselines 前缀不回退 / 穿越路径判死)</td></tr>
+    <tr><td><b>2</b></td><td><b>组件与服务</b> · 拆 <code>nav_graph.js</code> · <code>/nav_graph.js</code> 路由 · 静态内联与前缀现算</td><td><code>nav_graph.js</code> <code>nav_server.py</code></td><td>路由 200 + 组件零依赖 + 静态件单文件且前缀随目录变</td></tr>
+    <tr><td><b>3</b></td><td><b>壳接线</b> · 抽屉挂载 / 全屏三档 / 下钻 / 五态列表</td><td><code>nav_page.html</code></td><td>图区块渲染 + 节点点击数<code>openRowDetail</code> + 库外件带角标可点</td></tr>
+    <tr><td><b>4</b></td><td><b>守卫</b> · data 6 / shell 4 / server 2</td><td><code>tests/test_kb_nav_*.py</code></td><td>档位不被轮询洗 + 组件零外链 + 五态解析不漂</td></tr>
+    <tr><td><b>5</b></td><td><b>回写与基线</b> · <code>README.md</code> / <code>conventions/doc-forms.md</code> / 基线切片</td><td>memory-bank</td><td><code>kb.check</code> + <code>doc.links</code> 绿; 全量绿</td></tr>
+  </tbody>
+</table>
+<p><b>实测(落地时)</b>: 1138 件 / 1812 条 ref → <code>ok</code> 1233 · <code>ext</code> 324 · <code>basename</code> 253 · <code>repo</code> 2 · <code>dead</code> <b>0</b>(解析前「未入库」579 条); 数据层 0.87s / payload 982KB; 全库图 98 团 + 4 碎片节点、团间链从 433 收敛到 126; 提交 <code>630a9b9f</code> 共 1229 行 / 17 文件; 全量 5479 passed / 10 skipped, 覆盖率 99%。</p>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p><b>本计划无待拍板</b> —— Q1–Q7 已在 grilling 全部拍定(§06)。遗留项如下, 均不阻塞:</p>
+<ol>
+  <li><b>全库图的规模上限未实测</b>: 当前 1138 件 / 98 团画得动; 件数翻倍后碎片节点会重新变成"墙", 需要在真到那一步前重估是否改分层聚合;</li>
+  <li><b>非四类件的反向引用只做一度</b>: <code>data.ext</code> 只收「被台账件引用到的」库外件, 二度以上不追 —— 有界性是刻意的, 但用户在坑档页面上仍看不到完整上下游;</li>
+  <li><b><code>nav_server</code> 无鉴权</b>: 只绑回环 + 只读 memory-bank, 但静态路由之外的路径面每次加新端点都要重判一次(本次新增 <code>/nav_graph.js</code> 已核)。</li>
+</ol>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+  <thead><tr><th>编号</th><th>结论</th><th>日期</th></tr></thead>
+  <tbody>
+    <tr><td>D1</td><td>主场景「单件上下游」与「全库结构」都要, 但<b>同一套组件两种范围</b>: 抽屉内嵌局部/关联, 点「展开」升全屏层加第三档全库</td><td>2026-11-07</td></tr>
+    <tr><td>D2</td><td>死链本轮就修, 但修法是<b>「可跳目标」≠「台账件」</b>: 台账口径不动, 只在导航层加解析器; 保留「真不存在」第三态, 不让解析失败与丢件混为一谈</td><td>2026-11-07</td></tr>
+    <tr><td>D3</td><td>跳转语义 = 抽屉内切件(返回栈 + Esc 逐级), 「打开原文」降为次级按钮; Ctrl/中键仍开新标签 —— 理由: 直接跳原文正是「只能自己查找」的成因(跳出去就丢了台账上下文与返回栈), 所以默认动作换成切件, 真跳走留给显式手势</td><td>2026-11-07</td></tr>
+    <tr><td>D4</td><td>布局: 局部用同心环(确定性/可读/无抖动), 全库用族泳道 + 专题聚簇; 放弃力导向(1136 节点慢且每次形状不同, 无法复现"上次那个团在哪")</td><td>2026-11-07</td></tr>
+    <tr><td>D5</td><td>同专题<b>不画边</b>(559 专题会成团块遮挡), 用亮度分组表达; 碎片节点保留为可点节点, 但默认关掉指向它的边</td><td>2026-11-07</td></tr>
+    <tr><td>D6</td><td>库外件的反向引用要做(<code>data.ext</code>), 但只在一度关系里显示, 不进台账表格与统计</td><td>2026-11-07</td></tr>
+    <tr><td>D7</td><td>组件<b>拆文件</b>(原推荐单文件继续长, 用户改判): 守卫/静态导出/离线三件事改由内联构建承接</td><td>2026-11-07</td></tr>
+  </tbody>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+  <thead><tr><th>风险</th><th>触发条件</th><th>处置</th></tr></thead>
+  <tbody>
+    <tr><td><b>解析判据与守卫分叉</b></td><td>导航层与 <code>check_claim_chain</code> 各写一套"文件在不在"</td><td>判据单点在 <code>nav_data._resolve_targets</code>, 逐条对齐守卫; 坑档 <code>pitfalls/kb/nav-ref-guard-mismatch.md</code> 记触发条件与判据</td></tr>
+    <tr><td><b>档位被轮询洗掉</b></td><td>抽屉 30s 重挂组件, 状态留闭包</td><td>提到壳侧 <code>S.graph</code> + 挂载回填 + <code>onState</code> 回存; 守阵 <code>test_graph_state_survives_poll_remount</code></td></tr>
+    <tr><td><b>图在窄宿主糊成一团</b></td><td>抽屉 380px 塞 90+ 节点</td><td>compact 折叠到 18 节点 + 半径缩 0.74; 全屏才展开</td></tr>
+    <tr><td><b>静态件与离线破功</b></td><td>拆文件后组件没内联 / 引用外链</td><td><code>--gen-static</code> 内联 + 守阵禁 <code>http(s)://</code> 与 <code>import/require/fetch</code></td></tr>
+    <tr><td><b>红线文件被链出去</b></td><td>ref 写 <code>memory-bank/../config.yml</code></td><td><code>_inside()</code> 判 resolve 后落点 + <code>_denied()</code> 拒红线; 静态件里也不生成链接</td></tr>
+  </tbody>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-07-0608</span> 补记: 实施已随 <code>630a9b9f</code> 落地, 本文按档案与提交回填当时的 Q1–Q7 拍板、四个落点与实测数字; 非实施前设计稿。</li>
+</ul>
+
+</div>
+</body>
+</html>
