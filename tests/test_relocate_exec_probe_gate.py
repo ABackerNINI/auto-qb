@@ -23,9 +23,12 @@
 - test_fingerprint_change_reprobes: qB 配置 host/port 变更 => 指纹变化 => 重新探测(D3)
 - test_missing_qb_config_blocks_without_caching: qbittorrent 连接配置缺失 => 按环境性失败
   短路 blocked(gate same_fs, 文案「qB 连接配置缺失, 无法执行同机探测」), 不触发探测、不写缓存
+  (经 _ensure_probe 直测 —— 无 qbittorrent 段的 config 在执行体现在先被部署闸 D 格拦下,
+  S1 部署闸在前是正确顺序, 本用例聚焦探测闸自身分支)
 """
 
 import types
+from pathlib import Path
 
 from auto_qb.config.models import RelocateConfig
 
@@ -80,10 +83,17 @@ def _gate_env(monkeypatch, *, host="127.0.0.1", port=8080):
     mod = RelocateModule()
     mod._ctx = types.SimpleNamespace(
         store=store,
-        api=types.SimpleNamespace(client=object(), torrents_set_location=lambda **kw: locs.append(kw)),
+        # 部署闸放行面替身(S1 执行体同拦): 偏好无 resume_data_storage_type 键 = Legacy;
+        # 其余端点照旧缺省(裸 object 的「无端点=不可判定」语义不变)
+        api=types.SimpleNamespace(
+            client=types.SimpleNamespace(app_preferences=lambda **kw: {}),
+            torrents_set_location=lambda **kw: locs.append(kw)
+        ),
         config=types.SimpleNamespace(
             relocate=RelocateConfig(enabled=True),
             qbittorrent=types.SimpleNamespace(host=host, port=port, username="", password="", api_key=""),
+            # 部署闸 D 格放行面(S1 执行体同拦): bt_backup 指向真实存在目录(本文件所在 tests/)
+            bt_backup={f"{host}:{port}": str(Path(__file__).resolve().parent)},
         ),
         state=types.SimpleNamespace(data={}),
     )
@@ -256,17 +266,23 @@ def test_single_member_assume_shared_and_dry_run_skip_probe(monkeypatch):
 
 
 def test_missing_qb_config_blocks_without_caching(monkeypatch):
-    """qbittorrent 连接配置缺失 => 环境性失败短路: blocked(gate same_fs)、零探测、零缓存写入"""
-    mod, locs = _gate_env(monkeypatch)
+    """qbittorrent 连接配置缺失 => 环境性失败短路: blocked(gate same_fs)、零探测、零缓存写入
+
+    经 _ensure_probe 直测: 无 qbittorrent 段的 config 在执行体现在先被部署闸 D 格拦下
+    (bt_backup 查表需要 qbittorrent 身份) —— 部署闸在前是 S1 fail-fast 的正确顺序,
+    本用例聚焦探测闸自身的 qb_conf=None 分支, 不再经 relocate_execute 全链。
+    """
+    mod, _locs = _gate_env(monkeypatch)
     calls = _stub_run_probe(monkeypatch, [_passed()])
     mod._ctx.config = types.SimpleNamespace(relocate=RelocateConfig(enabled=True))  # 无 qbittorrent 段
-    items = mod.relocate_execute(["HA"], "R:/dst")
-    it = items[0]
-    assert it["cls"] == "blocked", it
-    assert it["reasons"][-1]["gate"] == "same_fs" and it["reasons"][-1]["cls"] == "blocked", it["reasons"]
-    assert "qB 连接配置缺失, 无法执行同机探测" in it["reasons"][-1]["text"], it["reasons"]
-    assert calls == [] and locs == [], "配置缺失不得触发探测/建账"
-    assert not mod.active_jobs(), "配置缺失不得建账"
+    records = [types.SimpleNamespace(hash="HA"), types.SimpleNamespace(hash="HB")]
+    facts = types.SimpleNamespace(same_fs_proved=False)
+    verdict = {"cls": "ok", "reasons": [], "notes": []}
+    gate = mod._ensure_probe(records, facts, verdict)
+    assert gate is not None and gate["cls"] == "blocked", gate
+    assert gate["reasons"][-1]["gate"] == "same_fs" and gate["reasons"][-1]["cls"] == "blocked", gate["reasons"]
+    assert "qB 连接配置缺失, 无法执行同机探测" in gate["reasons"][-1]["text"], gate["reasons"]
+    assert calls == [], "配置缺失不得触发探测"
     assert mod._ctx.state.data == {}, "环境性失败不得写探测缓存"
 
 
@@ -280,6 +296,8 @@ def test_fingerprint_change_reprobes(monkeypatch):
     mod._ctx.config.qbittorrent = types.SimpleNamespace(
         host="127.0.0.1", port=8081, username="", password="", api_key=""
     )
+    # 指纹换实例的同时 bt_backup 表也要跟上新实例身份(S1 部署闸按 host:port 查表)
+    mod._ctx.config.bt_backup["127.0.0.1:8081"] = mod._ctx.config.bt_backup["127.0.0.1:8080"]
     assert mod.relocate_execute(["HA"], "R:/dst2")[0]["cls"] == "started"
     assert len(calls) == 2, "指纹变更必须重新探测"
     # 同配置二次: 指纹未变, 命中 passed 缓存, 不再探

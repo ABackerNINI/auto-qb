@@ -72,6 +72,7 @@ import os
 import time
 
 import types
+from pathlib import Path
 
 import pytest
 
@@ -799,11 +800,16 @@ def test_execute_idempotent_faces_and_skip_contract(tmp_path, monkeypatch):
     mod9 = RelocateModule()
     mod9._ctx = types.SimpleNamespace(
         store=store9,
-        api=types.SimpleNamespace(client=object(), torrents_set_location=lambda **kw: None),
+        # 部署闸放行面替身(S1 执行体同拦): 偏好无 resume_data_storage_type 键 = Legacy
+        api=types.SimpleNamespace(
+            client=types.SimpleNamespace(app_preferences=lambda **kw: {}), torrents_set_location=lambda **kw: None
+        ),
         config=types.SimpleNamespace(
             relocate=RelocateConfig(enabled=True),
             # 探测闸消费指纹(qb_conf=None 会按环境性失败短路) —— 本用例只聚焦幂等面
             qbittorrent=types.SimpleNamespace(host="127.0.0.1", port=8080, username="", password="", api_key=""),
+            # 部署闸 D 格放行面(S1 执行体同拦): bt_backup 指向真实存在目录
+            bt_backup={"127.0.0.1:8080": str(Path(__file__).resolve().parent)},
         ),
         state=types.SimpleNamespace(data={}),
     )

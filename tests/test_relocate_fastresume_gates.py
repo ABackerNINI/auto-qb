@@ -4,7 +4,8 @@
 覆盖面(全部替身, 不依赖真机 qB; D/E 形态真机演示按计划留 S6 复跑):
 - 配置面: config.bt_backup 各 qB 实例路径表({host:port: 路径})的缺省/校验/loader/查表单点
   (bt_backup_path_of, 鸭子类型 —— 真实 Config 与测试替身同口径)。
-- 部署维闸门(relocate_precheck 前置, 整请求一条 blocked 回执):
+- 部署维闸门(relocate_precheck 前置 + relocate_execute 执行体同拦, S6 真机复跑发现执行
+  路径漏拦已补 —— 预检不是唯一入口, web 按钮/规则 move_to 都经执行体):
   E 格 = 存储后端非 Legacy(app/preferences 直读 resume_data_storage_type, D2 fail-fast);
   D 格 = BT_backup 未配置/不可达不可写(存在性 + os.access 探测, 运行期零写入)。
 - 组级闸门(evaluate_group, 预检与规则执行共用): AutoTMM 成员(fastresume 无 qBt-savePath
@@ -30,6 +31,11 @@
   (E 格先于 D 格, 单回执短路面)
 - test_deployment_gate_before_group_verdicts: 部署闸拒绝时分组判定不执行(store 无成员也
   拒同文) —— 部署维先于组维
+- test_backend_gate_blocks_execute_sqlite: 执行体同拦 E 格(relocate_execute 于 SQLite ->
+  blocked gate=backend, 零建账)
+- test_bt_backup_gate_blocks_execute_unreachable: 执行体同拦 D 格(坏路径 -> gate=bt_backup)
+- test_execute_deployment_gate_after_idempotent_skips: 部署闸不遮幂等(T3)—— 全组已在
+  目标位置时即便 SQLite 后端也照旧 skip, 闸只拦新发起
 - test_auto_tmm_member_blocks_group: 全链预检(替身环境)组内 HA auto_tmm=true ->
   blocked + gate=auto_tmm; 双成员手动 -> 无 auto_tmm 理由(对照面)
 - test_auto_tmm_gate_pure: evaluate_group 纯函数面: auto_tmm_hashes 非空即 block, 文案点名
@@ -192,14 +198,15 @@ def test_probe_bt_backup_reject(tmp_path, monkeypatch):
 # ---------- 部署维闸门(relocate_precheck 前置) ----------
 
 
-def _gate_env(tmp_path, monkeypatch):
+def _gate_env(tmp_path, monkeypatch, data_dir=False):
     """闸门用替身环境: relocate 开 + 真实成员组 + 部署闸全放行的默认面(用例按需改坏)
 
     能力探测一并替身(hermetic: 组级判定面不依赖真机链接探测; 纯部署闸用例它根本跑不到)。
+    data_dir=True 时 relocate_env 设 mgr.config.data_dir(执行体建账落盘位置)。
     """
     pin_disk_usage(monkeypatch)
     _stub_cap(monkeypatch, file_kind="hardlink")
-    mgr, client, src, dst, content, files = relocate_env(tmp_path, state="pausedUP", data_dir=False)
+    mgr, client, src, dst, content, files = relocate_env(tmp_path, state="pausedUP", data_dir=data_dir)
     mgr.config.relocate.enabled = True
     mgr.config.bt_backup["127.0.0.1:16585"] = str(tmp_path)
     return mgr, client, dst, tmp_path
@@ -284,6 +291,44 @@ def test_deployment_gate_before_group_verdicts(tmp_path, monkeypatch):
     it = mod.relocate_precheck(["GHOST"], dst)[0]
     assert it["cls"] == "blocked" and it["reasons"][0]["gate"] == "bt_backup", it
     assert it["hashes"] == ["GHOST"], it
+
+
+# ---------- 部署维闸门 · 执行路径(计划 26-11-05-0808 S1/D2: fail-fast 不限预检) ----------
+
+
+def test_backend_gate_blocks_execute_sqlite(tmp_path, monkeypatch):
+    """执行体同拦 E 格: relocate_execute(web 按钮/规则 move_to 共用入口)于 SQLite 后端 ->
+    blocked gate=backend, 且零建账(relocate 目录无 spec/journal, 零副作用)"""
+    mgr, client, dst, td = _gate_env(tmp_path, monkeypatch, data_dir=True)
+    client.app_preferences = lambda **kw: {"resume_data_storage_type": 1}
+    mod = mgr.host.get("relocate")
+    it = mod.relocate_execute(["HA"], dst)[0]
+    assert it["cls"] == "blocked" and it["reasons"][0]["gate"] == "backend", it
+    assert "Legacy" in it["reasons"][0]["text"] and "E 格" in it["reasons"][0]["text"], it
+    assert not (td / "data" / "relocate").exists() or not list((td / "data" / "relocate").glob("*")), "零建账被破"
+
+
+def test_bt_backup_gate_blocks_execute_unreachable(tmp_path, monkeypatch):
+    """执行体同拦 D 格: bt_backup 指向不存在目录 -> relocate_execute blocked gate=bt_backup"""
+    mgr, client, dst, _td = _gate_env(tmp_path, monkeypatch, data_dir=True)
+    mgr.config.bt_backup["127.0.0.1:16585"] = os.path.join(str(tmp_path), "missing-bt")
+    mod = mgr.host.get("relocate")
+    it = mod.relocate_execute(["HA"], dst)[0]
+    assert it["cls"] == "blocked" and it["reasons"][0]["gate"] == "bt_backup", it
+    assert "missing-bt" in it["reasons"][0]["text"], it
+
+
+def test_execute_deployment_gate_after_idempotent_skips(tmp_path, monkeypatch):
+    """部署闸不遮幂等(T3 降噪): 全组已在目标位置时即便 SQLite 后端也照旧 skip;
+    部署闸只拦「会产生新收尾工作」的发起"""
+    mgr, client, dst, _td = _gate_env(tmp_path, monkeypatch, data_dir=True)
+    client.app_preferences = lambda **kw: {"resume_data_storage_type": 1}
+    mod = mgr.host.get("relocate")
+    for rec in ("HA", "HB"):
+        mgr.store.by_hash[rec].save_path = dst
+    it = mod.relocate_execute(["HA"], dst)[0]
+    assert it["cls"] == "skip" and it["reasons"] == [], it
+    assert "已在目标位置" in (it["notes"] or [""])[0], it
 
 
 # ---------- AutoTMM 组级闸门 ----------

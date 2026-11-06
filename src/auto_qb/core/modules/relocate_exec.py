@@ -837,6 +837,14 @@ class ExecMixin:
                     }
                 )
                 continue
+            # 部署维闸门(S1 D/E 格)在执行路径同样 fail-fast: 预检(relocate_precheck)不是
+            # 唯一入口, web 按钮/规则 move_to 都经本执行体 —— SQLite 后端/bt_backup 不可达
+            # 时收尾链整体不可用(D2), 新发起必须拒绝, 不得只靠用户先跑预检。
+            # 放在幂等 skip 之后: 同目标在途 job 照旧 skip(T3 降噪), 部署闸不产生假失败。
+            deployment = self._deployment_gate(client, hashes)
+            if deployment is not None:
+                items.append(deployment)
+                continue
             facts = self._group_facts(records, target, client)
             verdict = evaluate_group(facts)
             if verdict["cls"] == ru.CLS_BLOCKED:
