@@ -433,7 +433,8 @@ GROUPS: Tuple[Group, ...] = (
                 "整组迁移",
                 "object",
                 help="把辅种组整体搬到新目录(如腾挪盘位), 搬完用文件链接/目录别名让旧路径继续可读, "
-                "qB 下次重启后自动 setLocation 收尾; 有未收尾迁移的组会被拒绝再迁。"
+                "搬迁落位只记账, 由回收 daemon 在 qB 下线窗口批量改写 fastresume 收尾, qB 重启后成员原生加载新路径; "
+                "收尾窗(armed/rewritten)的组可直接再迁; fastresume 收尾依赖顶层 bt_backup 键(未配置 = 迁移预检拒绝)。"
                 "本段热重载即生效, 不需要重启进程; **推荐以管理员身份运行 auto-qb**, 可免去每次迁移的 UAC 确认。"
                 "整段缺省 = 功能未启用(默认关闭, 三个入口逐字节保持现状)",
                 fields=(
@@ -498,15 +499,6 @@ GROUPS: Tuple[Group, ...] = (
                         unit_default="H",
                         grey_if=("enabled", "true"),
                         help="超过该时长仍在搬 ⇒ 只提示「已超预期」, 不判失败",
-                    ),
-                    Field(
-                        "finalize_timeout",
-                        "收尾等待上限",
-                        "time",
-                        default="30D",
-                        unit_default="D",
-                        grey_if=("enabled", "true"),
-                        help="qB 重启后经旧路径自动 setLocation 收尾的最长等待; 超过 ⇒ failed(链接已删, 由用户处理)",
                     ),
                     Field(
                         "low_space_warn",

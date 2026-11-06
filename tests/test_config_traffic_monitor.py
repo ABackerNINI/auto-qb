@@ -229,7 +229,7 @@ def test_loader_blank_provider_falls_back():
 
 
 def test_round_trip_through_load_config(tmp_path):
-    """新段经 load_config 真链路回读一致(显式 schema_version=5, 不走迁移)"""
+    """新段经 load_config 真链路回读一致(显式 schema_version=5; v5→v6 迁移只清退役键 relocate.finalize_timeout, 本段断言不受影响)"""
     from auto_qb.config import load_config
 
     probe = {

@@ -126,7 +126,6 @@ config:
     #     allow_uac: true            # 允许弹 UAC 提权建 symlink; false = 直接拒绝
     #     move_stall_timeout: 10m    # 停滞判据: dst 不增长且 qB 不在 moving 超过该时长 => 失败
     #     move_warn_after: 2h        # 超过该时长仍在搬 => 只提示"已超预期", 不判失败
-    #     finalize_timeout: 30d      # 收尾(qB 重启后经旧路径 setLocation)等待上限
     #     low_space_warn: 10GiB      # 别名目标卷低空间告警阈值(只告警, 不暂停)
     #     assume_shared: false       # 显式声明 qB 与 auto-qb 已共享文件系统: 跳过同机探测(回执标注未经验证)
 
@@ -671,7 +670,7 @@ config:
 
 ## 整组迁移（relocate）
 
-把辅种组整体搬到新目录（腾挪盘位、集中存储）：搬完在旧目录用**文件链接 / 目录别名**让原路径继续可读，qB 下次重启后经旧路径自动 `setLocation` 收尾（不需要手动逐种改位置）。有未收尾迁移的组会被拒绝再迁（先收尾或先撤销）。默认关闭 —— `enabled: false`（缺省）时三个入口（WebUI「移动位置」/规则 `move_to`/添加对话框）逐字节保持现状。
+把辅种组整体搬到新目录（腾挪盘位、集中存储）：搬完在旧目录用**文件链接 / 目录别名**让原路径继续可读；搬迁落位只记账，由回收 daemon 在 qB 下线窗口批量改写 fastresume 收尾（fastresume 收尾依赖顶层 `bt_backup` 键，未配置 = 迁移预检拒绝），qB 重启后成员原生加载新路径，不需要手动逐种改位置。收尾窗（armed/rewritten）的组可直接再迁；仍拦截的是同组前段相位（moving/watching/moved）。默认关闭 —— `enabled: false`（缺省）时三个入口（WebUI「移动位置」/规则 `move_to`/添加对话框）逐字节保持现状。
 
 **推荐以管理员身份运行 auto-qb** —— Windows 上未开开发者模式时创建符号链接需要提权，以管理员身份运行可免去每次迁移的 UAC 确认（`allow_uac: false` 则直接拒绝、不弹窗）。
 
@@ -685,7 +684,6 @@ config:
         allow_uac: true            # 允许弹 UAC 提权建 symlink；false = 直接拒绝
         move_stall_timeout: 10m    # 停滞判据：dst 不增长且 qB 不在 moving 超过该时长 → 失败（不搬回）
         move_warn_after: 2h        # 超过该时长仍在搬 → 只提示"已超预期"，不判失败
-        finalize_timeout: 30d      # 收尾（qB 重启后经旧路径 setLocation）等待上限；超过 → failed
         low_space_warn: 10GiB      # 别名目标卷低空间告警阈值（只告警，不暂停）；0 = 不告警
         assume_shared: false       # 显式声明 qB 与 auto-qb 已共享文件系统：跳过同机探测（回执标注未经验证）
 ```

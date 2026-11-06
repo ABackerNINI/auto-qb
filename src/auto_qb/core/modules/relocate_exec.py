@@ -597,7 +597,7 @@ class ExecMixin:
           (只前进不后退; 终态合并不在此 —— active_jobs 已滤终态, 终态写权在主循环);
         - 现场三输入(别名在? qB 在? 全员已到目标?)交 ru.reconcile 新表判 WAIT/REBUILD/
           VERIFY; ACT_ENSURE_DAEMON 判据独立(pending + daemon_stale), 每拍顺带判;
-        - 旧链输入(seed_state/心跳/finalize_timeout)已随对账表重定义退役。
+        - 旧链输入(seed_state/心跳)已随对账表重定义退役。
         """
         journal = relocate_journal.read_journal(self._data_dir(), job.job_id) or {}
         j_phase = str(journal.get("phase") or "")

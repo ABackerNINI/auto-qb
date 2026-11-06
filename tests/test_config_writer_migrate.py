@@ -14,8 +14,8 @@
 - test_backup_versioned_relative_backup_dir: 备份目录为空串(相对裸文件名) -> 跳过建目录, 直写 CWD
 - test_migrate_config_3_4_removes_explicit_empty: v3→v4 迁移单测 —— 9 键作用域内显式置空移除 + 逐键 notes(非空值/无关站点不误杀)
 - test_migrate_config_3_4_idempotent: v3→v4 迁移幂等 —— 移除后重放无变更无 notes(崩溃重放安全)
-- test_materialize_v3_removes_explicit_empty_with_warning: v3 文件物化 —— 作用域 '' 移除落盘当前版本(v3→v5) + 每键 WARNING(caplog)
-- test_materialize_v4_site_empty_untouched: v4 文件站点 '' = 覆盖为空(v4 起的合法语义), v4→v5 迁移不误杀
+- test_materialize_v3_removes_explicit_empty_with_warning: v3 文件物化 —— 作用域 '' 移除落盘当前版本(v3→v6) + 每键 WARNING(caplog)
+- test_materialize_v4_site_empty_untouched: v4 文件站点 '' = 覆盖为空(v4 起的合法语义), v4→v6 迁移不误杀
 - test_materialize_passes_config_path_to_migration: 物化调迁移函数传真实 config_path(不是 None) —— spy 卡实参
 - test_backup_versioned_creates_parent_and_relative_forms: backup_versioned 按 dirname 建父目录(exist_ok=True 幂等), 嵌套目录不存在也落盘
 - test_reject_stale_version_guards_non_dict_cfg: 版本闸门对非映射 config 段走「版本缺失」拒绝, 不崩在属性访问上
@@ -53,12 +53,12 @@ def test_materialize_migrates_and_backups(tmp_path):
 
     desc, backup = materialize_schema_migration(path, str(data_dir))
 
-    assert desc == "v1→v5"
+    assert desc == "v1→v6"
     assert backup == str(data_dir / "config.yml.v1.bak")
     with open(backup, encoding="utf-8") as f:
         assert f.read() == LEGACY_V1, "备份 = 迁移前原样(字节级)"
     text = _text(path)
-    assert "schema_version: 5" in text, "磁盘落当前版本章"
+    assert "schema_version: 6" in text, "磁盘落当前版本章"
     assert "hr_page_url" not in text, "旧键随迁移消失"
     cfg = load_config(path)  # 物化后的磁盘必须能原样通过加载
     assert cfg.trackers["BTSchool"].hr_check is not None
@@ -71,7 +71,7 @@ def test_materialize_idempotent_and_noop(tmp_path):
     data_dir = tmp_path / "data"
     path = _make(tmp_path, LEGACY_V1)
     desc, _ = materialize_schema_migration(path, str(data_dir))
-    assert desc == "v1→v5"
+    assert desc == "v1→v6"
     text_after = _text(path)
 
     desc2, backup2 = materialize_schema_migration(path, str(data_dir))
@@ -93,7 +93,7 @@ def test_materialize_unknown_host_old_key_dropped(tmp_path):
 
     desc, backup = materialize_schema_migration(path, str(data_dir))
 
-    assert desc == "v1→v5"
+    assert desc == "v1→v6"
     text = _text(path)
     assert "hr_check" not in text, "陌生 host 的旧键随 v3 迁移删除"
     cfg = load_config(path)
@@ -107,7 +107,7 @@ def test_materialize_dry_run_probe(tmp_path):
 
     desc, backup = materialize_schema_migration(path, str(data_dir), write=False)
 
-    assert desc == "v1→v5" and backup == ""
+    assert desc == "v1→v6" and backup == ""
     assert _text(path) == LEGACY_V1, "dry-run 不落盘"
     assert not data_dir.exists()
 
@@ -133,7 +133,7 @@ def test_reject_stale_version_non_integer_shape_passes_gate():
 def test_materialize_bad_version_wraps_config_error(tmp_path):
     """磁盘 schema_version 形状非法 -> SchemaVersionError 包装为 ConfigError(报清文件与原因)"""
     data_dir = tmp_path / "data"
-    path = _make(tmp_path, BASE.replace("schema_version: 5", "schema_version: abc"))
+    path = _make(tmp_path, BASE.replace("schema_version: 6", "schema_version: abc"))
     with pytest.raises(ConfigError, match="schema 版本问题"):
         materialize_schema_migration(path, str(data_dir))
     assert not data_dir.exists(), "探测阶段失败不应产生备份目录"
@@ -368,7 +368,7 @@ def test_migrate_config_3_4_idempotent():
 
 
 def test_materialize_v3_removes_explicit_empty_with_warning(tmp_path, caplog):
-    """v3 文件物化: 作用域内 '' 移除并落盘当前版本(v3→v4→v5), 每个被移除键一条 WARNING(用户拍板: 日志必须可见)"""
+    """v3 文件物化: 作用域内 '' 移除并落盘当前版本(v3→v4→v5→v6), 每个被移除键一条 WARNING(用户拍板: 日志必须可见)"""
     import logging
 
     data_dir = tmp_path / "data"
@@ -377,10 +377,10 @@ def test_materialize_v3_removes_explicit_empty_with_warning(tmp_path, caplog):
     with caplog.at_level(logging.WARNING, logger="auto_qb.config.loaders"):
         desc, backup = materialize_schema_migration(path, str(data_dir))
 
-    assert desc == "v3→v5"
+    assert desc == "v3→v6"
     assert backup == str(data_dir / "config.yml.v3.bak")
     text = _text(path)
-    assert "schema_version: 5" in text
+    assert "schema_version: 6" in text
     assert "add_tag: ''" not in text and "remove_similar_tags: ''" not in text \
         and "overwrite_category: ''" not in text, "作用域内的 '' 全部移除"
     assert "add_tag: zB" in text, "非空值不误杀"
@@ -393,14 +393,14 @@ def test_materialize_v3_removes_explicit_empty_with_warning(tmp_path, caplog):
 
 
 def test_materialize_v4_site_empty_untouched(tmp_path):
-    """v4 文件的站点 '' = 覆盖为空(v4 起的合法语义): v4→v5 迁移不得误杀, 站点 '' 原样保留, 加载后生效值 = ''"""
+    """v4 文件的站点 '' = 覆盖为空(v4 起的合法语义): v4→v6 迁移不得误杀, 站点 '' 原样保留, 加载后生效值 = ''"""
     data_dir = tmp_path / "data"
     path = _make(tmp_path, V4_SITE_EMPTY)
 
     desc, backup = materialize_schema_migration(path, str(data_dir))
-    assert desc == "v4→v5" and backup == str(data_dir / "config.yml.v4.bak")
+    assert desc == "v4→v6" and backup == str(data_dir / "config.yml.v4.bak")
     text = _text(path)
-    assert "schema_version: 5" in text
+    assert "schema_version: 6" in text
     assert "add_tag: ''" in text, "v4 的站点 '' 不得被迁移移除"
     cfg = load_config(path)
     assert cfg.trackers["A"].hr.add_tag == "", "覆盖为空生效(不回退全局 zGlobal)"
@@ -426,7 +426,7 @@ def test_materialize_passes_config_path_to_migration(tmp_path, monkeypatch):
 
     monkeypatch.setattr(writer_mod, "migrate_config_schema", spy)
     desc, _ = writer_mod.materialize_schema_migration(path, str(data_dir))
-    assert desc == "v1→v5"
+    assert desc == "v1→v6"
     assert seen == [path], "迁移函数必须收到真实 config_path(传 None 会让迁移无法定位文件)"
 
 

@@ -103,7 +103,7 @@ def test_config_tree_restart_field_fallback(web_env):
     mgr, client = web_env
     auth = {"Authorization": f"Bearer {mgr.web.token}"}
     with open(mgr.config_path, "w", encoding="utf-8") as f:
-        f.write("config:\n  schema_version: 5\n  data_dir: old-dir\n  qbittorrent:\n    host: h\n")
+        f.write("config:\n  schema_version: 6\n  data_dir: old-dir\n  qbittorrent:\n    host: h\n")
 
     tree = client.get("/api/config", headers=auth).json()["tree"]
     tree["config"]["data_dir"] = "new-dir"
@@ -121,7 +121,7 @@ def test_config_tree_preserves_comments(web_env):
     mgr, client = web_env
     auth = {"Authorization": f"Bearer {mgr.web.token}"}
     with open(mgr.config_path, "w", encoding="utf-8") as f:
-        f.write("config:\n  schema_version: 5\n  # 保留我\n  main_tick: 2s\n  qbittorrent:\n    host: h\n")
+        f.write("config:\n  schema_version: 6\n  # 保留我\n  main_tick: 2s\n  qbittorrent:\n    host: h\n")
 
     tree = client.get("/api/config", headers=auth).json()["tree"]
     tree["config"]["main_tick"] = "3s"
@@ -154,7 +154,7 @@ def test_config_tree_masks_secrets(web_env):
 
 _TRANSFER_CONFIG_TEXT = (
     "config:\n"
-    "  schema_version: 5\n"
+    "  schema_version: 6\n"
     "  qbittorrent:\n"
     "    host: h\n"
     "    port: 1\n"

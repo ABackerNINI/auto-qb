@@ -804,7 +804,7 @@ def test_job_from_dict_type_error_and_legacy_phase_map():
     assert ru.job_from_dict({"job_id": "x", "phase": "moving"}).phase == "moving"
     assert ru.job_from_dict({"job_id": "x", "phase": "whatever-unknown"}).phase == "whatever-unknown"
     assert ru.job_from_dict({"job_id": "x"}).phase == ru.PHASE_MOVING  # 缺相位按 moving
-    # 新对账兜底: 别名丢失 + qB 在 -> rebuild(与 seed_state/finalize_timeout 解耦, 旧输入已退役)
+    # 新对账兜底: 别名丢失 + qB 在 -> rebuild(与旧链输入 seed_state/心跳解耦, 旧输入已退役)
     job = _job()
     assert ru.reconcile(job, alias_present=False, qb_up=True) == ru.ACT_REBUILD
     assert ru.reconcile(job, alias_present=True, qb_up=False) == ru.ACT_WAIT

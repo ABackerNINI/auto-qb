@@ -534,8 +534,6 @@ class RelocateConfig:
     move_stall_timeout: 停滞判据 —— dst 体积不增长且 qB 不在 moving 超过该时长 ⇒ 判失败
         (失败零成本收尾: 只删已建链接, 不自动搬回)
     move_warn_after: 超过该时长仍在搬 ⇒ 只提示「已超预期」, 不判失败
-    finalize_timeout: (S4 起已无消费者 —— 旧链「超时判 failed」随 ACT_FINALIZE/
-        ACT_FAILED_TIMEOUT 退役; 键保留仅为配置面兼容, 改动它无任何行为效果)
     low_space_warn: 别名目标卷低空间告警阈值(只告警, 不暂停); 0 = 不告警
     assume_shared: 显式声明 qB 与 auto-qb 已共享文件系统(计划 26-11-04-0055 §03.2):
         true = 跳过一次性同机强探测(E1), 回执显著标注「未经 auto-qb 验证, 由用户承担」;
@@ -549,7 +547,6 @@ class RelocateConfig:
     allow_uac: bool = True
     move_stall_timeout: float = 600.0  # 秒; YAML 原始缺省 "10m"
     move_warn_after: float = 2 * 3600.0  # 秒; YAML 原始缺省 "2h"
-    finalize_timeout: float = 30 * 86400.0  # 秒; YAML 原始缺省 "30d"
     low_space_warn: int = 10 * 1024**3  # 字节; YAML 原始写法 "10GiB"
     assume_shared: bool = False
     pending_tag: str = ""  # qB 待收尾镜像标签: 空(默认)= 关闭, 零 qB 写; 非空须落在 zRelocate 前缀下

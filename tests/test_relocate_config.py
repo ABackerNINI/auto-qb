@@ -10,7 +10,7 @@ P1 只做配置面: RelocateConfig + loader + KNOWN_RELOCATE_KEYS 校验 + schem
 - test_relocate_non_bool_aggregates: enabled/allow_uac 非 bool 进聚合, 不打断其它键
 - test_relocate_verify_enum: verify 只接受 size/sample(大小写不敏感), 非法值聚合报错
 - test_relocate_int_bounds: alias_file_threshold/hard_max_links 非整数或 < 1 报错
-- test_relocate_time_keys_positive: 三个时间键必须可解析且 > 0
+- test_relocate_time_keys_positive: 两个时间键必须可解析且 > 0
 - test_relocate_low_space_warn_units: low_space_warn 走 parse_fsize(二进制单位; 10G 这种写法拒收)
 - test_relocate_assume_shared_bool: assume_shared(计划 26-11-04-0055 §03.2)缺省 False(保守默认)/
   显式 true 经 loader 进 Config / 非法类型走 parse_bool 聚合报错(不打断其它键)
@@ -23,15 +23,22 @@ P1 只做配置面: RelocateConfig + loader + KNOWN_RELOCATE_KEYS 校验 + schem
 - test_relocate_module_apply_short_circuits: apply 段相等短路(零回执); 段变化换对象即生效
 - test_relocate_module_start_stop_no_side_effect: 即使 enabled=true, P1 start/stop 也无任务无链接
 - test_relocate_module_registered_in_host
+- test_migrate_v5_removes_retired_finalize_timeout: v5→v6 迁移 —— relocate.finalize_timeout 残留键被 pop,
+  其余 relocate 键原样, 逐键产出 note(计划 26-11-07-0708 S4)
+- test_migrate_v5_finalize_timeout_idempotent: v5→v6 迁移幂等 —— 无该键(relocate 缺席/非字典/已是 v6 形状)零副作用零 note
+- test_migrate_v5_residual_through_load_config: v5 旧配置带 finalize_timeout 残留经 load_config 全链路不炸,
+  键被迁移清洗, 其余 relocate 配置照常生效(验收判据)
 """
 import os
 import tempfile
+from pathlib import Path
 
 import yaml
 
 from auto_qb.config import load_config
 from auto_qb.config.models import Config, RelocateConfig
 from auto_qb.config.validation import validate_config
+from auto_qb.infra.versioning import MIGRATIONS
 from helpers import make_manager
 
 
@@ -49,7 +56,6 @@ def test_relocate_defaults_are_conservative():
     assert d.allow_uac is True
     assert d.move_stall_timeout == 600.0
     assert d.move_warn_after == 7200.0
-    assert d.finalize_timeout == 30 * 86400.0
     assert d.low_space_warn == 10 * 1024**3
     assert d.pending_tag == ""  # qB 标签镜像默认关闭(零额外 qB 写)
     assert Config().relocate == d
@@ -90,9 +96,9 @@ def test_relocate_int_bounds():
 
 
 def test_relocate_time_keys_positive():
-    """三个时间键: 合法时间串通过; 0(带单位) / 非法格式报错 —— parse_time 单点口径"""
-    assert _validate({"move_stall_timeout": "1m", "move_warn_after": "1h", "finalize_timeout": "1d"}) == []
-    for key in ("move_stall_timeout", "move_warn_after", "finalize_timeout"):
+    """两个时间键: 合法时间串通过; 0(带单位) / 非法格式报错 —— parse_time 单点口径"""
+    assert _validate({"move_stall_timeout": "1m", "move_warn_after": "1h"}) == []
+    for key in ("move_stall_timeout", "move_warn_after"):
         errors = _validate({key: "0S"})
         assert any(f"config.relocate.{key}" in e and "正时间" in e for e in errors), errors
         errors = _validate({key: "10x"})
@@ -168,7 +174,6 @@ def test_relocate_load_config_explicit_values():
                         "allow_uac": "false",
                         "move_stall_timeout": "25M",
                         "move_warn_after": "3H",
-                        "finalize_timeout": "45D",
                         "low_space_warn": "20GiB",
                     }
             }
@@ -185,7 +190,6 @@ def test_relocate_load_config_explicit_values():
     assert cfg.relocate.allow_uac is False
     assert cfg.relocate.move_stall_timeout == 1500.0
     assert cfg.relocate.move_warn_after == 10800.0
-    assert cfg.relocate.finalize_timeout == 45 * 86400.0
     assert cfg.relocate.low_space_warn == 20 * 1024**3
 
 
@@ -198,6 +202,62 @@ def test_relocate_section_absent_uses_defaults():
         cfg = load_config(path)
     assert cfg.relocate == RelocateConfig()
     assert cfg.relocate.enabled is False
+
+
+# ---- v5→v6 迁移(计划 26-11-07-0708 S4): 退役键 relocate.finalize_timeout 清洗 ----
+
+#: v5→v6 迁移函数(注册表取用 = 被测的是真注册项, 不是同名的旁路实现)
+_migrate_v5_to_v6 = MIGRATIONS["config"][5]
+
+
+def test_migrate_v5_removes_retired_finalize_timeout():
+    """v5→v6 迁移: relocate.finalize_timeout 残留键被 pop, 其余 relocate 键原样, 逐键产出一条 note"""
+    cfg = {"relocate": {"enabled": "true", "finalize_timeout": "30d", "move_stall_timeout": "10m"}}
+    out, notes = _migrate_v5_to_v6(cfg)
+    assert "finalize_timeout" not in out["relocate"]
+    assert out["relocate"] == {"enabled": "true", "move_stall_timeout": "10m"}
+    assert len(notes) == 1, notes
+    assert "config.relocate.finalize_timeout" in notes[0] and "已移除" in notes[0]
+
+
+def test_migrate_v5_finalize_timeout_idempotent():
+    """v5→v6 迁移幂等: 无该键(relocate 缺席/非字典/已是 v6 形状)零副作用, 返回裸 dict(无 note)"""
+    import copy
+
+    for cfg in ({"relocate": {"enabled": "true"}}, {}, {"relocate": "junk"}):
+        snapshot = copy.deepcopy(cfg)
+        out = _migrate_v5_to_v6(cfg)
+        assert out == snapshot, cfg  # 结构不变(零副作用)
+        assert out is cfg  # 原地变换、裸 dict 形态(无 note)
+
+
+def test_migrate_v5_residual_through_load_config(tmp_path):
+    """验收判据: v5 旧配置带 finalize_timeout 残留 -> load_config 全链路不炸(迁移先清键再校验),
+    其余 relocate 配置照常生效; 已清洗的树再过一遍版本迁移 = 已是 v6, 零迁移(幂等)"""
+    probe = {
+        "config":
+            {
+                "schema_version": 5,
+                "relocate": {
+                    "enabled": "true",
+                    "finalize_timeout": "45d",
+                    "move_stall_timeout": "25M",
+                },
+            }
+    }
+    path = Path(tmp_path) / "cfg.yml"
+    path.write_text(yaml.safe_dump(probe, allow_unicode=True), encoding="utf-8")
+    cfg = load_config(str(path))
+    assert cfg.relocate == RelocateConfig(enabled=True, move_stall_timeout=1500.0)  # 残留键清洗, 其余生效
+    # 迁移函数直跑复核: 残留键被清洗且产出 note(不依赖 load 内部日志)
+    out, notes = _migrate_v5_to_v6({"relocate": {"finalize_timeout": "45d"}})
+    assert out == {"relocate": {}} and len(notes) == 1
+    # 已清洗(已是 v6 形状)再迁移: 幂等零 desc
+    from auto_qb.infra.versioning import migrate
+
+    cleaned = {"schema_version": 6, "relocate": {"enabled": "true"}}
+    data, desc = migrate("config", cleaned)
+    assert desc == "" and "finalize_timeout" not in data["relocate"]
 
 
 def test_relocate_non_dict_section_rejected():

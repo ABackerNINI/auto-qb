@@ -134,7 +134,7 @@ def test_unmask_tree_guards_and_sentinel_old_value():
 
 _TRANSFER_YAML = (
     "config:\n"
-    "  schema_version: 5\n"
+    "  schema_version: 6\n"
     "  qbittorrent:\n"
     "    host: h\n"
     "    port: 1\n"

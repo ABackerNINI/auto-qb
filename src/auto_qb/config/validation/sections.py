@@ -60,7 +60,6 @@ KNOWN_RELOCATE_KEYS = {
     "allow_uac",
     "move_stall_timeout",
     "move_warn_after",
-    "finalize_timeout",
     "low_space_warn",
     "assume_shared",
     "pending_tag",
@@ -678,11 +677,11 @@ def _validate_fs(spec: dict | None, errors: List[str]) -> None:
 
 
 def _validate_relocate(spec: dict | None, errors: List[str]) -> None:
-    """relocate 段(整组迁移, 计划 26-10-18-1604 §3.7): 9 键逐一键级校验
+    """relocate 段(整组迁移, 计划 26-10-18-1604 §3.7): 10 键逐一键级校验
 
     阈值分流细节(alias_file_threshold 的 7/8/9 边界、hard_max_links 与目录别名的取舍)
     由 P2 引擎纯函数表驱动测试覆盖, 本处只做形状与粗范围: 两个 int >= 1; verify 取值域
-    单点(RELOCATE_VERIFY_MODES, schema.fields 同源); 三个时间键 > 0; low_space_warn 走
+    单点(RELOCATE_VERIFY_MODES, schema.fields 同源); 两个时间键 > 0; low_space_warn 走
     parse_fsize(二进制单位, YAML 写 10GiB; 0 = 不告警)。
     """
     if spec is None:
@@ -704,7 +703,7 @@ def _validate_relocate(spec: dict | None, errors: List[str]) -> None:
         mode = str(spec["verify"]).strip().lower()
         if mode not in RELOCATE_VERIFY_MODES:
             errors.append(f"config.relocate.verify: 取值非法: '{spec['verify']}', 可选: {'/'.join(RELOCATE_VERIFY_MODES)}")
-    for key in ("move_stall_timeout", "move_warn_after", "finalize_timeout"):
+    for key in ("move_stall_timeout", "move_warn_after"):
         if key in spec:
             _try_time(spec[key], f"config.relocate.{key}", errors, positive=True)
     if "low_space_warn" in spec:

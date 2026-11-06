@@ -434,7 +434,6 @@ _LOADER_PROBES = {
     "relocate.allow_uac": ("false", False),
     "relocate.move_stall_timeout": ("25M", 1500.0),
     "relocate.move_warn_after": ("3H", 10800.0),
-    "relocate.finalize_timeout": ("45D", 45 * 86400.0),
     "relocate.low_space_warn": ("20GiB", 20 * 1024**3),
     # assume_shared(计划 26-11-04-0055 §03.2): 默认 false, 探针用 true(防与默认同值空转)
     "relocate.assume_shared": ("true", True),

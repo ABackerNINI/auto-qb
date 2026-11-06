@@ -494,7 +494,7 @@ def load_relocate_config(spec: Any) -> RelocateConfig:
 
     仅转换, 合法性由 validate_config._validate_relocate 保证(段缺省 = 全默认, 功能关)。
     verify/allow_uac 等布尔与枚举直接按 models 默认取 _get 回退; 时间键走 parse_time
-    ("10m"/"2h"/"30d"), 空间键走 parse_fsize("10GiB" —— 本仓 parse_fsize 只认二进制单位)。
+    ("10m"/"2h"), 空间键走 parse_fsize("10GiB" —— 本仓 parse_fsize 只认二进制单位)。
     """
     d = RelocateConfig()
     if not isinstance(spec, dict):
@@ -507,7 +507,6 @@ def load_relocate_config(spec: Any) -> RelocateConfig:
         allow_uac=_get(spec, "allow_uac", d.allow_uac, parse_bool),
         move_stall_timeout=_get(spec, "move_stall_timeout", d.move_stall_timeout, parse_time),
         move_warn_after=_get(spec, "move_warn_after", d.move_warn_after, parse_time),
-        finalize_timeout=_get(spec, "finalize_timeout", d.finalize_timeout, parse_time),
         low_space_warn=_get(spec, "low_space_warn", d.low_space_warn, parse_fsize),
         assume_shared=_get(spec, "assume_shared", d.assume_shared, parse_bool),
         pending_tag=_get(spec, "pending_tag", d.pending_tag, lambda v: str(v or "").strip()),

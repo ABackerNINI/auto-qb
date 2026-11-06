@@ -24,6 +24,10 @@ v3→v4(report 26-10-03-0504 方案 B 阶段 1, 「删除类似标签」全局/�
 
 v4→v5(计划 26-10-17-0339 S15, 全局流量来源合并): 曲线段内联数据源 + 顶层 global_traffic_monitor
 段合并为顶层 traffic_source 段; 每键迁移/删除产出一条 note(见 _migrate_config_4_5)。
+
+v5→v6(计划 26-11-07-0708 S4, 退役键清洗): relocate.finalize_timeout 随旧「setLocation 收尾,
+超时判 failed」链退役后已无任何消费者 —— loaders 只读显式键, 残留本无害, 但校验层对未知键
+fail-fast, 迁移先把残留键清洗掉(幂等), 逐键产出一条 note 经 migrate_with_notes 落成 WARNING。
 """
 from typing import Any, Dict, List, Tuple
 from urllib.parse import urlparse
@@ -312,3 +316,23 @@ def _migrate_config_4_5(cfg: dict) -> dict | Tuple[dict, List[str]]:
 
 
 MIGRATIONS["config"][4] = _migrate_config_4_5
+
+# ---- v5→v6: 退役键 relocate.finalize_timeout 清洗(计划 26-11-07-0708 S4) ----
+
+
+def _migrate_config_5_6(cfg: dict) -> dict | Tuple[dict, List[str]]:
+    """v5→v6: 移除退役键 relocate.finalize_timeout(收尾已改走 fastresume 改写链, 键无任何消费者)
+
+    loaders 只读显式键, 残留本无害; 但 validation._check_unknown_keys 对未知键 fail-fast ——
+    迁移(load 在 validate 之前)先把残留清洗掉再进校验。幂等: 无该键(relocate 缺席/非字典/
+    已是 v6 形状)时零副作用, 返回裸 dict(框架两种返回形态都接受); 有该键时产出一条人读
+    note(经 migrate_with_notes 落成 WARNING), 让用户知道配置面少了一键且其本无行为效果。
+    """
+    relocate = cfg.get("relocate")
+    if isinstance(relocate, dict) and "finalize_timeout" in relocate:
+        del relocate["finalize_timeout"]
+        return cfg, ["config.relocate.finalize_timeout: 已移除(退役键无消费者, 改动它本无任何行为效果; 收尾现走 fastresume 改写链)"]
+    return cfg
+
+
+MIGRATIONS["config"][5] = _migrate_config_5_6
