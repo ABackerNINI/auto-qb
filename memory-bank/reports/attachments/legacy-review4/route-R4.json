@@ -17,9 +17,9 @@
     {
       "id": "R4-2",
       "title": "webui 视图与运行时: runtime*/views*/tool_client/module/relocate_chain",
-      "status": "pending",
-      "done_at": null,
-      "findings": 0
+      "status": "done",
+      "done_at": "26-11-06-2327",
+      "findings": 15
     },
     {
       "id": "R4-3",
