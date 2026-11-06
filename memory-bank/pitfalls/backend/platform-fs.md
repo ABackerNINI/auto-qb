@@ -117,7 +117,7 @@
 
 ### 跨平台分派函数别按「本机那支」写用例
 
-- **触发**: 被测函数内部按 `os.name` / `/proc` 分派(如 `finalize_watch._qb_process_names`: `nt` → tasklist,
+- **触发**: 被测函数内部按 `os.name` / `/proc` 分派(如 `tools/recycle_daemon._qb_process_names`(原 `finalize_watch`, 该文件已删): `nt` → tasklist,
   `/proc` → comm, 其它 POSIX → `ps`), 用例只 mock 其中一支的外部调用。
 - **判别**: 在 Linux CI 上那个 mock 根本不生效, 断言拿到的是**真机结果**(2026-10-19: `test_guardian_process_names_parsing`
   Linux 恒红、本机绿)。

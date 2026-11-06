@@ -7,7 +7,7 @@
 ### `os.kill(pid, 0)` 在 Windows 会**杀掉**被探测进程 —— 进程存活探测自噬循环
 
 - **触发**: 任何「探测 pid 是否还活着」的代码在 Windows 上用 `os.kill(pid, 0)`（POSIX 惯例写法）。Windows 上 `os.kill` 对非 `CTRL_*` 信号一律走 `TerminateProcess(handle, sig)` —— sig=0 就是「以退出码 0 结束」。
-- **判别**: 被探测的长驻进程（如 relocate guardian）反复消失、日志周期性出现「心跳过期/重拉」、状态机永远停在 armed；`tasklist` 里该进程的 pid 一直在换。
+- **判别**: 被探测的长驻进程（现役 `tools/recycle_daemon` 的 qB 存活探测; 旧 relocate guardian 已随 ACT_FINALIZE 链退役）反复消失、日志周期性出现「心跳过期/重拉」、状态机永远停在 armed；`tasklist` 里该进程的 pid 一直在换。
 - **处置**: 纯探测走 `OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION)` + `GetExitCodeProcess`（==259 STILL_ACTIVE），`CloseHandle` 收尾；POSIX 分支保留 `os.kill(pid, 0)`。单点实现在 `infra/relocate_journal._alive`。
 - **守阵**: `tests/test_relocate_paths.py` 的 `_alive(os.getpid()) is True`（旧实现会当场终止测试进程）。
 
@@ -35,7 +35,7 @@
 ### 守护进程「qB 不在」的证明按全机进程名册判 —— 同机多实例时永远凑不齐
 
 - **触发**: 机器上同时跑着多个 qB（日常库 + 测试库，或容器内外），`_proc_absent` 用 `tasklist` 全机名册判「有没有 qbittorrent 进程」⇒ 恒「在」。
-- **判别**: guardian 心跳正常但 journal 永远 `armed`；端口 36595 已无监听，`tasklist` 里仍有另一个 qbittorrent.exe。
+- **判别**: daemon 心跳正常（现 `daemon.json`；旧 guardian 心跳同理）但 journal 永远 `armed`；端口 36595 已无监听，`tasklist` 里仍有另一个 qbittorrent.exe。
 - **处置**: 实例级判定 —— 端点（host:port）拒连即「该实例已退出」（同机别的 qB 与此无关）；无端口可判时才退回全机名册。
 - **守阵**: `tests/test_relocate_paths.py::test_guardian_helpers`（`_proc_absent(("qbittorrent.exe",), "127.0.0.1", 1) is True`）。
 

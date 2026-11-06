@@ -7,10 +7,10 @@
 <title>relocate 整组迁移重构: fastresume 改写收尾(回收 daemon 下线窗口)+ 未收尾再迁移</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="relocate-fastresume-finalize">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-11-05-0808">
-<meta name="doc-updated" content="26-11-06-0453">
-<meta name="doc-refs" content="memory-bank/issues/26-11-05-0420-bug-relocate-zero-move.html, memory-bank/plans/26-11-05-0247-plan-relocate-single-recycler.html">
+<meta name="doc-updated" content="26-11-07-0518">
+<meta name="doc-refs" content="memory-bank/issues/26-11-05-0420-bug-relocate-zero-move.html, memory-bank/plans/26-11-05-0247-plan-relocate-single-recycler.html, memory-bank/tasks/26-11-05-backend-relocate-fastresume-finalize.md">
 <style>
   :root {
     --bg: #10151a;
@@ -75,7 +75,7 @@
 <h1>relocate 整组迁移重构: fastresume 改写收尾(回收 daemon 下线窗口)+ 未收尾再迁移</h1>
 <p class="lede">整组迁移收尾弃用「guardian 删别名 → missingFiles → ACT_FINALIZE 归位」整条链,改为 <b>fastresume 双键改写</b>:搬迁落位只记账,由<b>单个回收 daemon</b> 在 qB 下线窗口批量改写(收敛不依赖退出顺序与 auto-qb 存活),重启后成员原生加载新路径,主循环 API 核验通过才<b>在线</b>删链。原「当场改文件」案经源码核对与 N1 实测证伪(0.5s 被覆盖),修正案经测试 qB 全链路 N2-N8 实测成立。本版 R1 = <b>删除重写</b>(防增量漂移),并入已 Superseded 的 <a href="26-11-05-0247-plan-relocate-single-recycler.html">26-11-05-0247</a>:daemon 复活且职权换位、未收尾再迁移(supersede)整块并入。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-05-0808 · <b>doc-updated</b> 26-11-06-0453 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-11-05-0808 · <b>doc-updated</b> 26-11-07-0518 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> R0(2026-11-05):用户提出 fastresume 改写重构方向并触发 grilling;源码核对(qB 8182ae071 / libtorrent 53acefea9 只读)+ 测试 qB(36596, v5.2.3 Legacy)N0-N8 全量实测;继承 <a href="../issues/26-11-05-0420-bug-relocate-zero-move.html">issue 26-11-05-0420</a> 根因链与压测计划 26-11-05-0546 机制表(两份均为重构输入)。<br>
   <b>来源 R1</b>(2026-11-06):用户判定 0247 基于重构前机制设定、须重新考量后并入;grilling 两轮(D10-D18)收敛 —— 收敛公理拍板(daemon 复活职权换位)、再迁移并入、D7-D9 空票拍定;0808 删除重写防增量漂移、0247 翻 Superseded(用户拍板 D18);代码现状由只读探查代理给出 file:line 引文(§2.4)。
 </div>
@@ -287,6 +287,7 @@ qB 重启 → 主循环核验: API 全员 save_path == 新路径(逐成员, 等�
   <li><span class="tag">R0 · 26-11-05-0808</span> 初版:用户提出 fastresume 改写重构方向(替代 0420 证伪的 dir_alias 收尾链)并触发 grilling;源码核对钉死读/写时机与双键机制(§2.2,11 行机制表),N1 实测 0.5s 覆盖证伪「当场改」;拍板 D1-D5 修正为 journal+下线窗口+核验删链;N2-N8 测试 qB 全链路实测全绿(§2.3);产出主线时序/组件落点/部署矩阵 A-E/分期 S1-S5,待拍板 D6-D8(编辑器备份命名/重放节奏/生产修复现场归属)。</li>
   <li><span class="tag">R1 · 26-11-06-0401</span> R1 全量重写(删除重写防增量漂移, D18): 并入 0247(Superseded)—— 收敛公理 D10(收尾收敛不依赖退出顺序与 auto-qb 存活, 主循环捕窗在 auto-qb 关闭态/关机风暴/开机竞速上系统性漏窗, journal 永久悬挂不可接受)→ 回收 daemon 复活职权换位 D11(下线窗口改写 fastresume;核验删链留主循环在线, 破坏性步骤必须被监督)+ 简化形制 D12(无 nudge/端口文件/兜底扫, 三证+30s 照搬 guardian, 窗口开头现读 pending, pid 抢占退位绝不 taskkill)+ 账本契约 D13(job journal 文件协议, daemon 绝不碰 state.json, 法则5 修订注记)+ 立即收尾按钮 D14(app/shutdown, 自动重启不做)+ 再迁移并入 D15(armed/rewritten 放行, rewritten 态链式独立双门 + armed 态 supersede 重定向, 失败整体拒绝回滚)+ 闸门拦截面 D16(FINALIZE_WINDOW 重定义新相位变更承重/删种拦截覆盖文件级 symlink/改写入口=daemon 三证)+ N9-N12 实验前置 D17(S5 细则后置定稿, 分期 S1-S6 重排)+ D7-D9 挂起票拍定; 代码现状探查 file:line 入 §2.4</li>
   <li><span class="tag">R2 · 26-11-06-0453</span> R2 实验轮全绿定稿: N9-N12 全绿(关闭态 37.6s 收敛/app/shutdown HTTP 200/经 junction 搬移 moving 信号仍现/双门独立/指纹级回滚), 详录 tests-real/.work/nseries(results-n9-n12.md)结论蒸馏进任务档案; S5 细则按 D19(旧 mover 通用补条目规则)/D20(失败分段: 搬前整体拒绝回滚+搬后重试至收敛+搬前预检加项)写死进 §3.2/§3.4/§04; 编辑器增相对路径纪律(N10 实测: 跨卷 setLocation 可能把 lt save_path 写成 CWD 相对路径, 不匹配即跳过, 绝不重推导绝对路径)</li>
+  <li><span class="tag">R3 · 26-11-07-0518 · 完成</span> 实施轮 S1-S6 全程完成(9 子任务串行派遣, commit 链 c84049d4..4f70190f 共 10 个): S1 五闸门(16e7c7b7)/S2 编辑器(5954dd69)/S3 journal+daemon+接线+按钮(5cd27795+c65bd368)/S4 相位切换拆旧(dir_alias 收尾链整链退役含 finalize_watch.py 删除, 净 -1353, d3a70275)+核验删链门与删种拦截(2fe6ca61)/S5 supersede 再迁移(de774ad5)/S6 验收(803c4039 修复部署维闸门漏执行入口+b5115eb6 覆盖率补测)。验收: N0-N12 实现路径复跑全绿 + 0546 继承项回归全 PASS(详录 tests-real/.work/nseries, gitignored 区); 收口评审 blocker 清零(主评 8 条全修+复查 5 条次修, 入池 0, 修复 4f70190f); 全量测试全绿(数字见 kb.baseline 切片 26-11-07-0440-code-review-fix-baseline)。事实回写与坑档见任务档案 26-11-05-backend-relocate-fastresume-finalize.md(双向链)。</li>
 </ul>
 
 </div>

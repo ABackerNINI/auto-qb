@@ -12,7 +12,7 @@
 
 | 卷 | 主题范围 | 条数 |
 |---|---|---|
-| [1](_index-1.md) | `annotations-lazy-eval.md` … `ghost-pkg-residue.md` | 25 |
-| [2](_index-2.md) | `group-relocate-restart-free.md` … `mypy-config-cwd.md` | 25 |
-| [3](_index-3.md) | `nested-pytest-config.md` … `sidefx-diagnostic-probe.md` | 25 |
-| [4](_index-4.md) | `sidefx-import-time-temp-roots.md` … `xdist-worker-global-snapshot.md` | 22 |
+| [1](_index-1.md) | `annotations-lazy-eval.md` … `gate-probe-must-not-run-action.md` | 24 |
+| [2](_index-2.md) | `ghost-pkg-residue.md` … `mutmut-mtime-race-stale-trampoline.md` | 24 |
+| [3](_index-3.md) | `mutmut-survived-verdict.md` … `sandbox-venv-in-workspace.md` | 24 |
+| [4](_index-4.md) | `side-effects.md` … `xdist-worker-global-snapshot.md` | 24 |
