@@ -10,17 +10,17 @@
 - [26-10-10-2001] [计划 · WEBUI 选中 × 触发 一致性](../26-10-10-2001-plan-webui-selection-trigger-parity.html) — `webui-selection-trigger-parity`
 - [26-09-22-2318] [auto-qb 软件版本管理方案 v2 · 版本号 / Tag / CHANGELOG / 机械化发版](../26-09-22-2318-version-management-plan.html) — `deps-version-management`
 
-## Open (4)
+## Open (3)
 
-- [26-11-07-0441] [code-review 留痕面修补: 派发次数与引文校验进闸门](../26-11-07-0441-plan-review-trace-fields.html) — `review-trace-fields`
 - [26-11-05-1049] [memory-bank 文档压缩与防回涨分步执行计划(8K 新口径)](../26-11-05-1049-plan-kb-doc-compress.html) — `kb-doc-compress`
 - [26-11-05-0848] [跳检自身失败闸门 G9: WEB case-2 强制 + 规则侧硬 skip 双点同谓词](../26-11-05-0848-plan-skip-check-self-fail-gate-g9.html) — `skip-check-self-fail-gate-g9`
 - [26-11-03-2212] [整组迁移同盘证明误拒：根因与修复计划](../26-11-03-2212-plan-relocate-same-fs-proof.html) — `relocate-same-fs-proof`
 
-## Done (218)
+## Done (219)
 
 - [26-11-07-0608] [kb.nav 关联文档交互: 抽屉内关系图三档 + 认领链五态解析](../26-11-07-0608-plan-memory-bank-nav-relation-graph.html) — `memory-bank-nav-relation-graph`
 - [26-11-07-0452] [GitHub CI WEB UI smoke 门禁改造: 超时根因、分片接线与 push 节流全量轮](../26-11-07-0452-plan-github-ci-smoke-gate.html) — `github-ci-smoke-gate`
+- [26-11-07-0441] [code-review 留痕面修补: 派发次数与引文校验进闸门](../26-11-07-0441-plan-review-trace-fields.html) — `review-trace-fields`
 - [26-11-07-0201] [code-review 跨 clone rebase 组合缺口修补](../26-11-07-0201-plan-review-rebase-gap.html) — `review-rebase-gap`
 - [26-11-06-0759] [分批评审: 从「收口一次评」到「一批一评 + 强制留痕」](../26-11-06-0759-plan-review-batch-policy.html) — `review-batch-policy`
 - [26-11-06-0124] [提交信息自动审查: ship.commit 内联三态机检(BOM/乱码/骨架/残留)](../26-11-06-0124-plan-commit-msg-review.html) — `commit-msg-review`

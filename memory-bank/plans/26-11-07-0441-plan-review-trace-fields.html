@@ -7,9 +7,9 @@
 <title>code-review 留痕面修补: 派发次数与引文校验进闸门</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="review-trace-fields">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-11-07-0441">
-<meta name="doc-updated" content="26-11-07-0655">
+<meta name="doc-updated" content="26-11-07-0750">
 <meta name="doc-refs" content="">
 <style>
   :root {
@@ -75,7 +75,7 @@
 <h1>code-review 留痕面修补: 派发次数与引文校验进闸门</h1>
 <p class="lede">本篇只回答: 提交闸门验的是「声明与实算一致」, 那怎么让这条链也算上「真派了几次」与「引文校验过没过」—— 而不只是让 agent 多写一个词。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-07-0441 · <b>doc-updated</b> 26-11-07-0655 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-11-07-0441 · <b>doc-updated</b> 26-11-07-0750 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 用户指令「code review 闸门刚上线不久, 结合此次经验判定流程是否合理」→ 判定结论四条 → 用户指令「出一个修复计划」→ grilling 两轮 11 项拍板(2026-11-07, D1 改写见 §06)<br>
   <b>前序</b> 计划 <a href="26-11-06-0759-plan-review-batch-policy.html">26-11-06-0759</a>(批 + 强制留痕) · <a href="26-11-07-0201-plan-review-rebase-gap.html">26-11-07-0201</a>(齐平弱字段)
 </div>
@@ -233,6 +233,7 @@
 <ul>
   <li><span class="tag">R0 · 26-11-07-0441</span> 初版(提交前经一轮文档面评审: 13 条全过引文校验, 含 1 blocker = 机检点行号漂移, 已逐条修): 依据 2026-11-07 首笔真实批次(630a9b9f, 1229 行)的闸门实测与流程判定四条, 给出四个落点 + 三批实施 + 三条待拍板 + 五条决策。</li>
   <li><span class="tag">R1 · 26-11-07-0655</span> grilling 两轮 11 项拍板回填: 只读评审发现 Q2 原推荐(保留分面等价声明)的兼容理由不成立 —— 闸门不追溯历史提交, 老 trailer 本就不重判, skill ④ 分面档(≤400+敏感面)走不到 &gt;400 分支 —— <b>D1 改写为只认 <code>派发 ≥2</code></b>, 分面降级纯信息字段(D8); 新增 D6(检 0/0 合法)/D7(实现级授权)/D9(审计措辞照实收窄)/D10(两 nit); §05 清空、§06 落日期、判定矩阵 10→11 例(例 1 翻红、oversize 断言例改写(现例 11)、补 0/0 正例)、§07 grep 锚定 <code>· 派发</code>、P4 补瞬态测量注。</li>
+  <li><span class="tag">R2 · 26-11-07-0750</span> 三批全部落地于本地分支 <code>review-trace-fields</code>(未推送): 批A+B(commit <code>a5a2f470</code>: 新字段解析与判据/骨架/记账前缀扩容, 测试 84 用例全绿)+批C(本批: skill ②⑤⑦ 与反模式两条按 D1/D2 改写, commit.py 记账前缀抄本补 <code>legacy-review4/</code> 同步); §06 回填已由 R1 完成; <b>实战样本待跑</b>: 本计划落地后的下一笔真实功能提交为验收样本(&gt;400 行看无派发是否被拦 / ≤400 行看检缺失是否被拦), 到时用 git log 出一行统计留档(§04)。</li>
 </ul>
 
 </div>
