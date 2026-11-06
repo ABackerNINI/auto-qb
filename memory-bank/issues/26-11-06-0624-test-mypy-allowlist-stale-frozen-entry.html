@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="type-annotations-mypy">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="mypy 豁免守阵冻结清单仍留 qbclient/override 条目, 回加豁免不会被拦">
 <meta name="issue-summary" content="豁免块 5 已摘除但冻结清单保留该对, 递减不红设计下重新加回同一豁免也不红, 递减成果未闭环">
 <title>mypy 豁免守阵冻结清单仍留 qbclient/override 条目, 回加豁免不会被拦 · test · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-11-06-0624-test-mypy-allowlist-stale-frozen-entry</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-06 06:24</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -78,6 +78,7 @@
     <h2><span class="no">01</span>现象</h2>
     <p>issue 26-11-06-0247 已把 <code>pyproject.toml</code> 的 qbclient <code>disable_error_code = ["override"]</code> 豁免整块摘除, 但 <code>tests/test_mypy_allowlist_guard.py</code> 的冻结清单仍保留 <code>(["auto_qb.core.qbclient"], ["override"])</code> 这一对。守阵按「新增豁免红、递减不红」设计, 于是把同一个豁免加回去仍落在冻结清单内、不会判红 —— 递减成果没有闭环。</p>
     <p class="hint">发现来源: 2026-11-06 06:14 修复 0247 后的计划外观察; 本轮未动守阵(会引入第 3 个代码文件, 超出本轮范围)。冻结清单定位究竟是「历史 S4 基线」还是「现行白名单」未拍板, 见 03 节。</p>
+    <p><strong>复验 2026-11-06 06:53：仍复现。</strong>锚点重跑：<code>tests/test_mypy_allowlist_guard.py:125</code> 冻结条目 <code>(["auto_qb.core.qbclient"], ["override"])</code> 仍在；<code>pyproject.toml:153-154</code> 原位只有递减说明、无 <code>[[tool.mypy.overrides]]</code> 块。实测把该豁免对写回合成 TOML 后喂 <code>parse_overrides</code> + <code>check_allowlist</code>（缺省真仓冻结清单）：<code>("auto_qb.core.qbclient", "override") in FROZEN_DISABLE_PAIRS</code> 为 <code>True</code>、<code>findings</code> 为 <code>[]</code> —— 回加不红，递减成果确未闭环。</p>
   </section>
 
   <section id="s2">
@@ -92,12 +93,19 @@
   <section id="s3">
     <h2><span class="no">03</span>建议<span class="opt">（可选）</span></h2>
     <p>先定冻结清单口径: 若它是「历史 S4 基线」(允许回加), 把这一点写进守阵 docstring / 计划 §04 S4, 本条降为 docs; 若它是「现行豁免白名单」, 删掉 <code>qbclient/override</code> 这一对并补一条针对性红验(合成 TOML 里重新加回该对 -> finding 指名新增项), 让「递减后不可回加」成为守阵能力。改动只落 <code>tests/test_mypy_allowlist_guard.py</code>, 验收 <code>commands run test.quick</code> 与 <code>commands run dev.typecheck</code> 全绿。</p>
+    <h3>修复后补充（2026-11-06 07:05）</h3>
+    <p><strong>口径拍板：</strong>冻结清单定性为「现行豁免白名单」，不是「历史 S4 基线」，故走上方第二条路、不降为 docs。依据链：①计划 <a href="../plans/26-11-05-0635-plan-type-annotations-mypy.html">26-11-05-0635</a> §01 主轴「allowlist 只减不增」、§04 S4 守阵定义「静态扫描 pyproject overrides 清单 vs 冻结清单，出现新增豁免即红」；②同轮 0247 递减 ③ 组 <code>call-arg</code> 时，守阵注释已写明「从冻结面一并撤下 —— 再往这一面加回 call-arg 会当场红」，即「递减同步撤下」是既定做法；③0247 修复留痕把 ⑤ 保留为「S4 基线」与 ② 自相矛盾，且给「只减不增」留下回加后门，判为遗漏而非有意区分。</p>
+    <p><strong>实际修法：</strong>改动只落 <code>tests/test_mypy_allowlist_guard.py</code> 一个文件，产品代码与 <code>pyproject.toml</code> 零改动。①<code>_FROZEN_DISABLE_GROUPS</code> 删掉 ⑤ 的 <code>(["auto_qb.core.qbclient"], ["override"])</code> 数据条目，原位留编号占位注释（与 pyproject 第 153-154 行的编号占位呼应），冻结面随递减撤下；②新增合成样本 <code>TOML_RE_ADD_REDUCED</code> 与红验 <code>test_frozen_rejects_re_add_of_reduced_exemption</code>：把该豁免写回合成 TOML、用真仓冻结清单（缺省参数）对账，断言 <code>findings</code> 指名 <code>auto_qb.core.qbclient[override]</code> —— 「递减后不可回加」成为守阵能力；③模块 docstring 设计不变量段补「递减须同步撤下、撤下后回加即红、递减不可逆」，冻结清单标题由「S4 基线」改「现行豁免白名单」，并同步「## 测试计划」清单（机械守阵要求）。</p>
+    <p><strong>验证方式：</strong>①修复前红验（冻结清单未动时单跑新用例）<code>1 failed</code>、<code>findings</code> 为空 —— 现象复现且红验有效；②修复后守阵单文件 <code>11 passed</code>；③一次性对账实证：<code>FROZEN_DISABLE_PAIRS</code> 已不含该对、回加 <code>findings</code> 指名 <code>auto_qb.core.qbclient[override]</code>、真仓 pyproject 三张清单对账 <code>[]</code>（现状不红）；④<code>commands run dev.fmt</code> 通过；⑤<code>commands run test.quick</code> / <code>commands run dev.typecheck</code>（<code>Success: no issues found in 195 source files</code>）/ <code>commands run test.full</code> 全绿。</p>
+    <p><strong>测试数字（2026-11-06 实测）：</strong><code>5460 passed, 10 skipped, 1 warning in 203.59s</code>；覆盖率 <code>TOTAL 24538 stmts / 74 miss / 8396 branch / 41 partial / 99%</code>（较上基线 +1 条用例，即新增红验）。逐位数字与基线切片见 <code>commands run kb.baseline</code>。</p>
   </section>
 
   <section id="s4">
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-11-06 06:24 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-06 06:53 — 认领（用户指派「修复」），状态 <strong>In Progress</strong>；复验仍复现，见 01 节「复验」行</li>
+      <li>2026-11-06 07:05 — 修复并验证：冻结清单按「现行白名单」口径撤下 ⑤ + 补递减后回加红验，红验修复前红 / 修复后绿 → 全量与 mypy 全绿（详见 03 节「修复后补充」），状态 <strong>Done</strong></li>
     </ul>
   </section>
 

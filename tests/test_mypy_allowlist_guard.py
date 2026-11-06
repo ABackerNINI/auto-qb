@@ -2,7 +2,9 @@
 
 设计不变量(计划 §01): 豁免清单冻结进守阵, 新增豁免必须显式改本文件的冻结清单 ——
 摩擦是有意的, 摩擦逼着每一条新豁免都留下理由。递减(移除豁免/收紧错误码)不红: 那是
-「allowlist 递减」主轴的正向推进。
+「allowlist 递减」主轴的正向推进。但递减须同步从冻结清单撤下对应条目 —— 本清单是
+现行豁免白名单而非历史基线, 撤下后回加同一豁免当场判红, 递减不可逆(2026-11-06
+issue 26-11-06-0624 收口: qbclient/override 与同轮 call-arg 递减按同一口径处理)。
 
 三张对账面(收口评审后):
 - ignore_errors = true 的模块模式集合(整模块豁免, 最粗粒度): 新增红 / 递减不红;
@@ -17,7 +19,7 @@ ignore_missing_imports 等)不在报警面, 只对这两个键报警。
 (`commands run dev.typecheck`), 豁免面外全绿由它验收。
 
 检出能力由合成 TOML 红验内建: 解析形态(list/单字符串/缺键)、新增豁免变红、递减不红、
-顶层全局豁免变红、收紧面回撤变红/新增不红各有断言, 解析或对账逻辑退化即红。
+递减后回加变红、顶层全局豁免变红、收紧面回撤变红/新增不红各有断言, 解析或对账逻辑退化即红。
 
 ## 测试计划(每个测试函数一条)
 
@@ -27,6 +29,7 @@ ignore_missing_imports 等)不在报警面, 只对这两个键报警。
 - test_parse_top_level_offenders_and_tightened_modules: 顶层豁免键探测(overrides 内同键不误报)与收紧面模块集合解析正确
 - test_frozen_rejects_new_exemption: 合成 pyproject 出现冻结外的新 ignore 模块或新 (模块, 码) 对 -> finding 指名新增项(红验内建)
 - test_frozen_allows_reduction_and_equality: 合成 pyproject 豁免等于或少于冻结清单 -> 零 finding(递减不红)
+- test_frozen_rejects_re_add_of_reduced_exemption: 合成 TOML 回加已递减的 qbclient/override 对 -> 真仓冻结清单判新增豁免红(递减不可逆, 红验内建)
 - test_top_level_global_exemption_red: [tool.mypy] 顶层出现 disable_error_code / ignore_errors -> finding 指名键名(红验内建)
 - test_top_level_legal_keys_not_red: 顶层只出现 python_version / files / ignore_missing_imports 等合法键 -> 零 finding(不误红)
 - test_tightening_shrink_red_growth_ok: 收紧面模块回撤(变小) -> finding 指名被回撤模式; 相等/新增收紧 -> 零 finding(红验内建)
@@ -95,8 +98,9 @@ def parse_pyproject(toml_text: str) -> tuple[set[str], set[tuple[str, str]]]:
     return parse_overrides(tomllib.loads(toml_text))
 
 
-# ---- 冻结清单(2026-11-06 S4 基线, 与 pyproject 注释逐条对应) -------------------------------------------
-# 每条 (模块模式列表, 码列表); 新增豁免必须在此同步登记并写理由, 守阵才放行。
+# ---- 冻结清单(现行豁免白名单, 2026-11-06 S4 首版; 与 pyproject 注释逐条对应) --------------------------
+# 每条 (模块模式列表, 码列表); 新增豁免必须在此同步登记并写理由, 守阵才放行; 递减摘除豁免时
+# 须同步删掉对应条目 —— 留着即等于给回加留后门(见 test_frozen_rejects_re_add_of_reduced_exemption)。
 
 _FROZEN_DISABLE_GROUPS: list[tuple[list[str], list[str]]] = [
     # ③ core/modules + hr service mixin 组合面(attr-defined/has-type)与 Optional 次生噪音
@@ -121,8 +125,9 @@ _FROZEN_DISABLE_GROUPS: list[tuple[list[str], list[str]]] = [
         ],
         ["union-attr", "return-value", "arg-type", "assignment", "operator", "call-overload"],
     ),
-    # ⑤ qbclient._session 对三方基类签名不兼容
-    (["auto_qb.core.qbclient"], ["override"]),
+    # ⑤ qbclient._session override 豁免已随 issue 26-11-06-0247 整块摘除(allowlist 递减), 冻结面
+    #    同步撤下 —— 再往 auto_qb.core.qbclient 加回 override 当场红(红验见
+    #    test_frozen_rejects_re_add_of_reduced_exemption), 递减不可逆。
     # ⑥ hr store/model/server Optional 收窄
     (["auto_qb.hr.store", "auto_qb.hr.model", "auto_qb.hr.server"], ["arg-type", "operator", "assignment"]),
     # ⑦ hr/bencode 字节级解析器两段初始化与 bytes 键写入
@@ -275,6 +280,17 @@ module = ["pkg.alpha"]
 disable_error_code = ["union-attr"]
 """
 
+# 递减后回加(红验): qbclient/override 豁免已随 issue 26-11-06-0247 整块摘除,
+# 冻结面须同步撤下 —— 把同一豁免写回并按真仓冻结清单对账, 应判「新增豁免」红(递减不可逆)。
+TOML_RE_ADD_REDUCED = """\
+[tool.mypy]
+python_version = "3.12"
+
+[[tool.mypy.overrides]]
+module = ["auto_qb.core.qbclient"]
+disable_error_code = ["override"]
+"""
+
 # 裸字符串形态: disable_error_code 不用数组直接给单字符串(解析形态面)
 TOML_BARE_CODE = """\
 [[tool.mypy.overrides]]
@@ -403,6 +419,15 @@ def test_frozen_allows_reduction_and_equality():
     assert check_allowlist(ignore, pairs, base_ignore, base_pairs) == []
     # 完全空配置(极端递减)同样不红
     assert check_allowlist(set(), set(), base_ignore, base_pairs) == []
+
+
+def test_frozen_rejects_re_add_of_reduced_exemption():
+    # 用真仓冻结清单(缺省参数): 递减后回加已摘除的 qbclient/override -> finding 指名新增项
+    ignore, pairs = parse_pyproject(TOML_RE_ADD_REDUCED)
+    findings = check_allowlist(ignore, pairs)
+    assert len(findings) == 1 and "auto_qb.core.qbclient[override]" in findings[0], (
+        "递减后回加同一豁免必须判红 —— 冻结清单须随递减同步撤下该对(allowlist 只减不增); 实际 findings: " + "; ".join(findings)
+    )
 
 
 def test_top_level_global_exemption_red():

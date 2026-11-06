@@ -6,9 +6,9 @@
 
 ## Open (43)
 
+- [docs] [guards.md 未登记 test_mypy_allowlist_guard 守阵](../26-11-06-0744-docs-guards-mypy-allowlist-unregistered.html) — 守阵清单缺一行: tests/test_mypy_allowlist_guard.py 从未登记进 guards.md, 违反该文件新增守阵须登记的口径
 - [bug] [review.check --root 快照目录被 .git 存在性检查误拒](../26-11-06-0711-bug-review-check-snapshot-root.html) — 存量评审 R4 的既定用法 review.check --root <快照目录> 被 _resolve_root 的 .git 检查拒收,与命令自身 help 文档矛盾;_verify 实际与 git 无关
 - [chore] [pyproject.toml 存量带圈数字注释与 code-style 非 ASCII 图形符号禁令冲突](../26-11-06-0624-chore-pyproject-circled-number-comments.html) — 配置注释 22 行含带圈数字编号(1)-(18), 禁令要求代码/配置一律 ASCII; 本轮新增注释已用 ASCII, 存量待清
-- [test] [mypy 豁免守阵冻结清单仍留 qbclient/override 条目, 回加豁免不会被拦](../26-11-06-0624-test-mypy-allowlist-stale-frozen-entry.html) — 豁免块 5 已摘除但冻结清单保留该对, 递减不红设计下重新加回同一豁免也不红, 递减成果未闭环
 - [bug] [real.down 实现用 Stop-Process -Force 强杀 qB, 触进程安全红线](../26-11-06-0448-bug-real-down-force-kill.html) — tests-real/runner.py cmd_down 以 PowerShell Stop-Process -Force 强杀 qB 进程(按镜像+路径匹配), 违反 AGENTS.md 禁止一切 taskkill/强杀红线; 替代=WebAPI app/shutdown 优雅退出(实验轮实测 HTTP 200)
 - [test] [Windows CI 连续红: Test Windows (Py3.12/3.13) 自 ced9a88a 起 failure, 本地 Windows 全量绿](../26-11-06-0321-test-ci-windows-failure.html) — GitHub Actions Windows 两个测试 job 连续红(早于版本管理本轮全部涉码), 本地 Windows test.quick/test.full 全绿——CI 环境特有; 日志 API 需鉴权, 待 gh 配 token 后定位
 - [feat] [recheck_fails 噪声收窄: FAILED/START_TIMEOUT 分记, 锐化失败证据信号](../26-11-05-0853-feat-recheck-fails-noise-narrowing.html) — recheck_fails 计数混记真数据证据(FAILED)与噪声(START_TIMEOUT 未开检), G8/G9/链1.6/冷却都消费这个混合信号; 收窄=分记并让防护闸只认真证据, 误拦面变小但动 state schema 与 bump 写点
@@ -57,8 +57,9 @@
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 - [chore] [版本号双源矛盾: __init__.__version__ 0.2.0 vs pyproject 0.1.0](../26-09-21-1408-chore-version-dual-source.html) — WebUI 顶栏透出与打包元数据已差一个 minor; 建议 pyproject 单源 + 动态读取
 
-## Done (431)
+## Done (432)
 
+- [test] [mypy 豁免守阵冻结清单仍留 qbclient/override 条目, 回加豁免不会被拦](../26-11-06-0624-test-mypy-allowlist-stale-frozen-entry.html) — 豁免块 5 已摘除但冻结清单保留该对, 递减不红设计下重新加回同一豁免也不红, 递减成果未闭环
 - [bug] [TASK_REFS_RE 空行跨行捕获: 空 **Refs:** 行把下一行标题吞成 ref, 认领链守阵误红](../26-11-06-0415-bug-kb-refs-regex-blank-line.html) — md 档案留空 **Refs:** 行时 TASK_REFS_RE 的 \s* 跨行吞掉下一行标题当 ref, test_claim_chain_is_bidirectional 误红; kb.new 模板默认留空行, 新档案踩坑
 - [test] [gtm-alert 双皮肤日期炸弹: 硬编码日期超 24h TTL 必红](../26-11-06-0330-test-e2e-gtm-alert-date-bomb.html) — e2e/gtm-alert.spec.mjs 硬编码 T1/T2/T3=2026-11-03, 超过 dialogs.js gtmAlert computed 的 24h TTL 后横幅被判空, 双皮肤 prism/atlas 各 1 条必红
 - [test] [views 种子页筛选器有数据恒红: relocate kind 在 e2e 桩下恒空](../26-11-06-0330-test-e2e-views-relocate-kind-empty.html) — filters.js 无条件注册 relocate kind 但 ui_harness 桩不注入任何 relocate 态, 断言空筛选器 kinds=[] 必红; 修桩还是修产品待裁决
