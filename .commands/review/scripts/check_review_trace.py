@@ -59,8 +59,9 @@ SENSITIVE_PATH_MARKERS = ("state", "credential", "auth", "token", "secret", "pas
 
 GATE_CONFIG_REL = ".commands/my-commit-flow/.my-commit-flow.toml"
 
-# commit.py 注入的闸门阶段标记: "post" = 提交后的合流复跑(跳过本检查)。见 main() 里的理由。
-PHASE_ENV = "COMMIT_FLOW_GATE_PHASE"
+# commit.py 在**合流复跑**那一次之前写下的标记(内容 = 当时的目标 sha, 只作凭据不作判据);
+# 本脚本读到即跳过, 并顺手消费掉(一次性)。见 main() 里为什么不能用环境变量。
+POST_MARKER = ".git/review_trace_post"
 
 
 def _git(root: Path, *args: str) -> subprocess.CompletedProcess:
@@ -253,10 +254,14 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     root = find_root(args.root)
-    # 提交后的合流复跑(commit.py 步骤 6b 显式注入): 那次验的是"合并后的树", 消息已落库、行数已对过,
-    # 再算一遍只会把 rebase 进来的远端提交算成本批 → 假红。**用显式阶段标记, 不用"消息文件在不在"**:
-    # `--message-file` 指向的文件不会被消费, 按存在性判会把复跑误认成提交前(2026-11-06 评审实测)。
-    if os.environ.get(PHASE_ENV) == "post":
+    # 合流复跑(commit.py 步骤 6b)跳过: 那次验的是"合并后的树", 消息已落库、行数已对过, 再算一遍
+    # 只会把 rebase 进来的远端提交算成本批 → 假红。
+    # ❗**用文件标记, 不用环境变量**: 闸门里会跑 pytest, 子进程继承 env —— 实测 `COMMIT_FLOW_GATE_PHASE`
+    #   传下去后, 包测试里"跑闸门脚本并断言它判红"的用例全部拿到 0, 3 条自测在复跑轮齐红(2026-11-06)。
+    #   标记由 commit.py 在复跑前写下、跑完 finally 删; 这里读到即消费(一次性), 残留最多漏检一次。
+    marker = root / POST_MARKER
+    if marker.exists():
+        marker.unlink(missing_ok=True)
         return 0
 
     msg = message_text(root, args.message_file)

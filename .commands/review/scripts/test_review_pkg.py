@@ -19,7 +19,7 @@
 - CheckTest           PASS(rc=0); 幻觉引文/超窗/缺字段/坏枚举/过短引文/非字符串字段/缺文件 REFUTE(rc=1); 窗口边界与 --window; stdin; 根外与穿越 REFUTE; 非 UTF-8 兜底; 行注入单行化; 非 JSON/非数组/非 UTF-8 输入 rc=2; 空数组 rc=0; 元素非对象 rc=1
 - TraceDecideTest     评审留痕纯判定: 无待评/低于下限放行; 超限无 trailer 拦; trailer 行数不符/缺字段/缺行数拦; >400 行须拆批或记分面; Review-Skip 理由过短拦; 触安全敏感面小改仍要评; Review 优先于 Skip; 记账类/生成物不计入
 - TraceDecideTest(续) 低于下限时正文里的畸形 Review 段不硬拦
-- TraceGateTest       端到端(临时仓库真跑脚本): 复跑阶段标记跳过; 低于下限静默; 超限无 trailer rc=1; trailer 行数相符 rc=0 / 不符 rc=1; 锚点推进(漏评提交被下一批连坐); 评过的提交推进锚点; 提交后复跑不重对行数
+- TraceGateTest       端到端(临时仓库真跑脚本): 复跑标记跳过且用后即删; 低于下限静默; 超限无 trailer rc=1; trailer 行数相符 rc=0 / 不符 rc=1; 锚点推进(漏评提交被下一批连坐); 评过的提交推进锚点; 提交后复跑不重对行数
 """
 
 from __future__ import annotations
@@ -27,7 +27,6 @@ from __future__ import annotations
 import argparse
 import fnmatch
 import json
-import os
 import shutil
 import subprocess
 import sys
@@ -823,16 +822,18 @@ class TraceGateTest(unittest.TestCase):
         proc = _run_trace(self.tmp, self._msg("小补\n"))
         self.assertEqual(proc.returncode, 0, proc.stdout)
 
-    def test_post_phase_env_skips_recheck(self):
-        """合流复跑(commit.py 注入 COMMIT_FLOW_GATE_PHASE=post)不再对行数。
+    def test_post_marker_skips_recheck_and_is_consumed(self):
+        """合流复跑(commit.py 写的 `.git/review_trace_post`)不再对行数, 且标记用后即删。
 
-        不跳过的话, rebase 进来的远端提交会被算进本批 → 假红「未留痕」。
+        ❗这个标记**不能走环境变量**: 闸门里会跑 pytest, 子进程继承 env, 会把"跑闸门脚本并断言它
+        判红"的自测全部变成 0(2026-11-06 提交复跑轮真实撞到, 三条自测齐红)。
         """
         self._append(200)
-        env = dict(os.environ, COMMIT_FLOW_GATE_PHASE="post")
-        proc = subprocess.run([sys.executable, str(TRACE_SCRIPT), "--root", str(self.tmp)],
-                              capture_output=True, text=True, encoding="utf-8", env=env)
+        marker = self.tmp / ".git" / "review_trace_post"
+        marker.write_text("deadbeef", encoding="utf-8")
+        proc = _run_trace(self.tmp)
         self.assertEqual(proc.returncode, 0, proc.stdout)
+        self.assertFalse(marker.exists(), "标记应被消费掉, 否则下一次提交会静默跳过检查")
 
     def test_post_commit_rerun_does_not_recheck(self):
         self._append(60)

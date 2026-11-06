@@ -425,9 +425,15 @@ def main(argv: list[str] | None = None) -> int:
         # 6b 复跑闸门: 规则仍是**启动版本那份** cfg —— 快照语义下不重取配置(那正是撕裂的来源);
         #    复跑要验的只是"合并后的树", 改动清单也不变(仍是本次提交的那批)。
         #    ❗阶段标记: 评审留痕闸门(review.trace)按"锚点→工作树"算行数, 复跑时 rebase 进来的远端
-        #    提交会被算进本批 → 假红。显式告诉它"这是复跑", 别让闸门去猜(猜法在 2026-11-06 评审里被证伪)。
-        os.environ["COMMIT_FLOW_GATE_PHASE"] = "post"
-        failures_r, _manual_r, _ran_r = run_gates(gates_for(present, cfg["gates"]), ctx)
+        #    提交会被算进本批 → 假红。**用文件标记, 不用环境变量**: 闸门里会跑 pytest, 子进程继承
+        #    env —— 实测 `COMMIT_FLOW_GATE_PHASE` 传下去后, 包里"跑闸门脚本并断言它判红"的自测全部
+        #    拿到 0(齐红)。标记在 finally 删; 进程被杀导致残留时, 闸门脚本读到即消费(最多漏检一次)。
+        post_marker = root / ".git" / "review_trace_post"
+        post_marker.write_text(sha_full, encoding="utf-8")
+        try:
+            failures_r, _manual_r, _ran_r = run_gates(gates_for(present, cfg["gates"]), ctx)
+        finally:
+            post_marker.unlink(missing_ok=True)
         if failures_r:
             note, cmd, rc, secs, tail = failures_r[0]
             emit(steps, f"提交成功 {head_now[:8]}(未推送)")
