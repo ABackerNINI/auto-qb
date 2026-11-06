@@ -11,8 +11,18 @@
 - **判别**: 抛的是 `UnicodeDecodeError: 'gbk' codec can't decode byte 0xaf ...`(不是 mojibake), 而且**抛出点很怪** ——
   堆栈落在 `subprocess._readerthread` 的后台线程里, 以 `PytestUnhandledThreadExceptionWarning` 的形式出现;
   不看警告就会误以为是“断言写错”。
-- **处置**: 子进程收输出一律**显式指定** `encoding="utf-8"`(+ `errors="replace"`); 两边工具都写 UTF-8 时, 写死比“让 locale 猜”安全。
+- **处置**: 子进程收输出一律**显式指定** `encoding="utf-8"` **且** `errors="replace"`(两项都必填, 不是可选项);
+  两边工具都写 UTF-8 时, 写死比“让 locale 猜”安全。
   与上一条合起来的口径: **要么收字节自己走兑底链解, 要么显式声明 UTF-8 —— 永远不要依赖 locale。**
+- **判别补**: 只写 `encoding="utf-8"` 而漏 `errors` 同样会炸 —— stderr 混入码页字节时严格解码把
+  `_readerthread` 打死, 管道再没人读, 子进程卡在写管道上 → `TimeoutExpired`; stdout 侧则是
+  `proc.stdout is None` → `json.loads(None)` 报 `NoneType` / `.strip()` 报 `AttributeError`,
+  表象离根因很远, 别当成 JS 探针死循环去调超时。
+- **复发**: +1 (2026-11-06, CI `windows-latest` cp1252 一次红 6 条 node 探针): 为什么没命中 ——
+  坑档早就写了, 但 `处置` 把 `errors="replace"` 写成括号里的“可加”, 全仓 12 处 `text=True` 漏声明、
+  另 4 处只声明 `encoding`, 也没有机检 ⇒ 新用例照抄旧写法。此处把口径收成**两项必填**, 并落
+  `tests/test_platform_tolerance_guards.py::test_repo_text_subprocess_calls_pin_utf8` 全仓 AST 对账
+  (带合成源活性探针)。本机复现: `PYTHONUTF8=0` 把 preferred encoding 压回 cp936。
 
 ## 打印外部输出时不要假定它是 UTF-8
 

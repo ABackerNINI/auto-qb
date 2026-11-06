@@ -86,7 +86,13 @@ def _scan_js_syntax_with_node(js_files, problems):
     paths = [path for path, _rel in js_files]
     if not paths:
         return
-    proc = subprocess.run([node, "-e", _NODE_SYNTAX_CHECK, *paths], capture_output=True, text=True)
+    proc = subprocess.run(
+        [node, "-e", _NODE_SYNTAX_CHECK, *paths],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
     if proc.returncode == 0:
         return
     rel_of = {os.path.normcase(path): rel for path, rel in js_files}

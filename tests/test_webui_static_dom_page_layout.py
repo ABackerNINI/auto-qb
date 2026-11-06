@@ -802,6 +802,8 @@ def test_frontend_config_default_ladder_single_point():
             ],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
         )
         assert proc.returncode == 0, f"默认值梯 node 探针跑挂了: {(proc.stderr or '').strip()[:400]}"
         res = json.loads(proc.stdout.strip())
@@ -903,6 +905,8 @@ def test_frontend_rule_tree_and_choose_editor():
             ],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
         )
         assert proc.returncode == 0, f"规则树 node 探针跑挂了: {(proc.stderr or '').strip()[:400]}"
         res = json.loads(proc.stdout.strip())
@@ -922,6 +926,8 @@ def test_frontend_rule_tree_and_choose_editor():
             ],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
         )
         assert proc2.returncode == 0, f"活性探针 node 运行挂了: {(proc2.stderr or '').strip()[:400]}"
         res2 = json.loads(proc2.stdout.strip())
@@ -975,6 +981,8 @@ def test_frontend_action_on_error_control():
             ],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
         )
         assert proc.returncode == 0, f"on_error node 探针跑挂了: {(proc.stderr or '').strip()[:400]}"
         res = json.loads(proc.stdout.strip())
@@ -1044,6 +1052,8 @@ def test_frontend_retired_rule_keys_upgrade_surface():
             ],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
         )
         assert proc.returncode == 0, f"退役键 node 探针跑挂了: {(proc.stderr or '').strip()[:400]}"
         res = json.loads(proc.stdout.strip())
@@ -1152,6 +1162,8 @@ def test_frontend_list_row_pad_and_empty_single_point():
             [node, "-e", _NODE_LIST_EMPTY_PROBE, os.path.join(shared, "filters.js")],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
         )
         assert proc.returncode == 0, f"列表空态文案 node 探针跑挂了: {(proc.stderr or '').strip()[:400]}"
         res = json.loads(proc.stdout.strip())
@@ -1343,6 +1355,8 @@ def test_frontend_window_source_kind_descriptor_parameterized():
             [node, "-e", _NODE_WIN_SRC_PROBE, bundle_file("columns.js")],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
         )
         assert proc.returncode == 0, f"窗口源描述符 node 探针跑挂了: {(proc.stderr or '').strip()[:400]}"
         res = json.loads(proc.stdout.strip())

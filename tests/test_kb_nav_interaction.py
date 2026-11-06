@@ -82,6 +82,12 @@ from kb_nav_support import (
     _shell_fn,
 )
 
+# node 探针的捕获口径(坑档 pitfalls/ops/console-encoding.md + pitfalls/testing/ci-only-guard.md):
+# GitHub windows-latest 是 cp1252 而 node 写 UTF-8, text=True 让 locale 猜会把解码异常抛在
+# subprocess._readerthread 里(proc.stdout 变 None); errors=strict 遇到混入码页字节的 stderr
+# 同样让读线程退出、子进程卡在写管道上直到超时。显式 UTF-8 + replace + 60s(与其余 node 电池同口径)。
+NODE_PROBE_TIMEOUT = 60
+
 
 def test_esc_retreat_chain_single_point() -> None:
     """Esc 管制单点 (计划 §05): 全壳只许**一处** document-level Escape 链 (escRetreat), 且它退
@@ -247,7 +253,14 @@ def test_search_matches_file_name_and_relative_path(tmp_path) -> None:
         "console.log(k + '=' + (navSearchText(item).includes(navSearchQuery(q)) ? '1' : '0'));\n",
         encoding="utf-8",
     )
-    out = subprocess.run([node, str(probe)], capture_output=True, text=True, encoding="utf-8", timeout=30)
+    out = subprocess.run(
+        [node, str(probe)],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=NODE_PROBE_TIMEOUT
+    )
     assert out.returncode == 0, out.stderr
     got = dict(line.split("=", 1) for line in out.stdout.strip().splitlines())
     for key in ("basename", "mb_rel", "repo_rel", "upper", "backslash", "title", "topic", "summary"):
@@ -340,7 +353,14 @@ def test_search_excluded_matches_hint_computed(tmp_path) -> None:
         "S.q = 'perf-hr-lastpage-fetch-skip'; run('switch_live_excluded');\n",
         encoding="utf-8",
     )
-    out = subprocess.run([node, str(probe)], capture_output=True, text=True, encoding="utf-8", timeout=30)
+    out = subprocess.run(
+        [node, str(probe)],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=NODE_PROBE_TIMEOUT
+    )
     assert out.returncode == 0, out.stderr
     got = dict(line.split("=", 1) for line in out.stdout.strip().splitlines())
     expected = {
@@ -637,7 +657,14 @@ def test_pin_zone_collapse_toggle(tmp_path) -> None:
         "console.log('after2=' + snap());\n",
         encoding="utf-8",
     )
-    out = subprocess.run([node, str(probe)], capture_output=True, text=True, encoding="utf-8", timeout=30)
+    out = subprocess.run(
+        [node, str(probe)],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=NODE_PROBE_TIMEOUT
+    )
     assert out.returncode == 0, out.stderr
     got = dict(line.split("=", 1) for line in out.stdout.strip().splitlines())
     assert got.get("init") == "false,true,false,undefined", f"初始应为展开态: {got}"
@@ -684,7 +711,14 @@ def test_pin_row_click_opens_drawer_via_shared_path(tmp_path) -> None:
         "console.log('b=' + rows[1].classList.contains('sel'));\n",
         encoding="utf-8",
     )
-    out = subprocess.run([node, str(probe)], capture_output=True, text=True, encoding="utf-8", timeout=30)
+    out = subprocess.run(
+        [node, str(probe)],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=NODE_PROBE_TIMEOUT
+    )
     assert out.returncode == 0, out.stderr
     got = dict(line.split("=", 1) for line in out.stdout.strip().splitlines())
     assert got.get("sel") == "b.md", f"S.sel 未指向被点条目: {got}"

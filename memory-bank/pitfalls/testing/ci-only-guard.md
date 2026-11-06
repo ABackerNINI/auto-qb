@@ -1,8 +1,8 @@
 # CI 另一侧才现形的守阵: 写死平台前缀长度 / 活性阈值绑机器速度
 
-> 摘要: 多类守阵/用例**只在与开发机不同的那一侧 CI job 上现形**, 本机单平台绿不构成"守阵成立"的证据 —— ①跨平台断言把**前缀切片长度写死**(`args[:2]`), nt 侧凑巧成立而 POSIX 侧恒红; ②并发守阵的**活性阈值绑机器速度**("写者写满 300 次…读者必读 >50 次"), 写耗时跨平台差一个量级 ⇒ 快机器上读者根本没读几轮就撞活性断言; ③断言引用**仅一侧存在的模块常量**(POSIX 无 `subprocess.CREATE_NO_WINDOW`); ④测试自起子进程 `print` 中文, **中文 Windows 本机 cp936 绿 / 英文 runner cp1252 红**(`UnicodeEncodeError` 把子进程退出码变成 1)。四条都不是被测行为破了, 是**守阵/用例自身的平台/速度/码页依赖**。2026-10-22 gtm 子项目 (`tools/global-traffic-monitor`) 双平台 job 实证。
+> 摘要: 多类守阵/用例**只在与开发机不同的那一侧 CI job 上现形**, 本机单平台绿不构成"守阵成立"的证据 —— ①跨平台断言把**前缀切片长度写死**(`args[:2]`), nt 侧凑巧成立而 POSIX 侧恒红; ②并发守阵的**活性阈值绑机器速度**("写者写满 300 次…读者必读 >50 次"), 写耗时跨平台差一个量级 ⇒ 快机器上读者根本没读几轮就撞活性断言; ③断言引用**仅一侧存在的模块常量**(POSIX 无 `subprocess.CREATE_NO_WINDOW`); ④测试自起子进程 `print` 中文, **中文 Windows 本机 cp936 绿 / 英文 runner cp1252 红**(`UnicodeEncodeError` 把子进程退出码变成 1); ⑤收 node 探针输出时 `text=True` 让 cp1252 猜 UTF-8 字节(`UnicodeDecodeError` 打死 `_readerthread`, 见 [../ops/console-encoding.md])。五条都不是被测行为破了, 是**守阵/用例自身的平台/速度/码页依赖**。2026-10-22 gtm 子项目 (`tools/global-traffic-monitor`) 双平台 job 实证。
 > 等级: L0
-> 触发: CI 红本机绿, 跨平台断言, os.name, sys.platform, 写死切片长度, 前缀长度, 仅一侧存在的模块常量, CREATE_NO_WINDOW, 活性阈值, 并发守阵, 读次数, flaky, gtm, atomic_write, 双平台 job, cp1252, cp936, 码页, PYTHONIOENCODING, 子进程 print 中文, UnicodeEncodeError, charmap, 英文 Windows runner
+> 触发: CI 红本机绿, 跨平台断言, os.name, sys.platform, 写死切片长度, 前缀长度, 仅一侧存在的模块常量, CREATE_NO_WINDOW, 活性阈值, 并发守阵, 读次数, flaky, gtm, atomic_write, 双平台 job, cp1252, cp936, 码页, PYTHONIOENCODING, 子进程 print 中文, UnicodeEncodeError, UnicodeDecodeError, charmap, 英文 Windows runner, PytestUnhandledThreadExceptionWarning, proc.stdout None, json.loads NoneType, TimeoutExpired, node 探针, text=True, errors=replace, PYTHONUTF8=0
 
 ### 跨平台断言写死切片长度: nt 侧凑巧成立, POSIX 侧恒红
 
@@ -49,3 +49,21 @@
 - **守阵**: `tools/global-traffic-monitor/tests/test_storage.py::test_single_instance_lock_blocks_second_process`
   及同文件另一条子进程用例 (子脚本异常文案也含中文); 本机复现 = 父进程注入 `PYTHONIOENCODING=cp1252`
   再跑用例 —— 实测改前红 (退出码 1 + `charmap` 报错), 改后绿。
+
+### 2026-11-06 实证: 同族第 ⑤ 变体 —— 收端解码(不是发端编码), 一次红 6 条 node 探针
+
+- **触发**: `tests/` 里 `subprocess.run([node, ...], capture_output=True, text=True)` 收 JS 探针输出;
+  中文开发机 (cp936 + `PYTHONUTF8=1`) 绿, GitHub `windows-latest` (cp1252) 一次红 6 条。
+- **判别**: 与上面 ④ **方向相反** —— ④ 是子进程往外 `print` 中文 `UnicodeEncodeError`,
+  本变体是父进程按 locale 解 UTF-8 字节 `UnicodeDecodeError: 'charmap' codec can't decode byte`
+  (警告落在 `subprocess._readerthread`); 症状是 `proc.stdout is None` → `json.loads` 报 `NoneType`、
+  `.strip()` 报 `AttributeError`, 以及严格解码打死读线程后的 `TimeoutExpired`。**别**当成 JS 死循环去调超时。
+- **处置**: 收端 `encoding="utf-8", errors="replace"` 两项都写(口径单点见 [../ops/console-encoding.md]
+  「反向」节, 本变体的 `复发 +1` 记在那条); node 电池超时统一 60s。
+- **守阵**: `tests/test_platform_tolerance_guards.py` 新增全仓 AST 对账 + 合成源活性探针,
+  12 处漏声明与 4 处漏 `errors` 一次收口; 本机复现 = `env -u TMPDIR PYTHONUTF8=0` 跑用例
+  (改前 5 failed 1 passed → 改后 6 passed; 全量 `test.quick` 5479 passed)。
+- **反面证据 / 复现局限**: 本机 `PYTHONUTF8=0` 压回的是 cp936, **不是** runner 的 cp1252 ——
+  两种码页对同一串 UTF-8 字节的失败点不同, 6 红里本机只复现出 5 红; 超时那条
+  (`test_search_excluded_matches_hint_computed`) 改前本机就绿, 它的修复依据只有 CI 日志。
+  别把本机全绿当成等价验证, 最终判据仍是 `windows-latest` 实跑。

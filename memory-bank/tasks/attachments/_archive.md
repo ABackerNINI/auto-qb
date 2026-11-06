@@ -42,12 +42,13 @@
 - [26-10-14-webui-qb-traffic-agg-live-tail](../26-10-14-webui-qb-traffic-agg-live-tail.md) qB 流量图 agg 段活尾合流(S7): 3d+ 视图图尾真空修复
 - [26-10-09-backend-transport-encryption](../26-10-09-backend-transport-encryption.md) 本地通道传输安全调研(WebUI + HR 取数通道)
 
-## Done (298)
+## Done (299)
 
 - [26-11-06-memory-bank-kb-nav-search-ghint](../26-11-06-memory-bank-kb-nav-search-ghint.md) kb.nav 搜索被排除匹配项提示行
 - [26-11-06-memory-bank-task-refs-regex](../26-11-06-memory-bank-task-refs-regex.md) TASK_REFS_RE 空行跨行捕获修复
 - [26-11-06-rule-review-batch-policy](../26-11-06-rule-review-batch-policy.md) 分批评审: 一批一评 + 提交闸门强制留痕
 - [26-11-06-test-flaky-governance](../26-11-06-test-flaky-governance.md) flaky 测试结构化治理: 时钟注入与抖动消除 (S1-S6 收口)
+- [26-11-06-test-windows-codepage-ci](../26-11-06-test-windows-codepage-ci.md) 修复 GitHub CI Windows 码页六红: 文本子进程显式 UTF-8 收端 + 全仓 AST 守阵
 - [26-09-26-webui-sites-import](../26-09-26-webui-sites-import.md) WEB UI 一键导入缺失站点（对齐 CLI --export-yaml --only-missing）
 - [26-10-07-webui-delta-sync-feasibility](../26-10-07-webui-delta-sync-feasibility.md) webui 增量同步(qB rid 式)可行性分析
 - [26-11-04-test-coverage-uplift-3](../26-11-04-test-coverage-uplift-3.md) 覆盖率提升第三轮实施 — 新欠账清偿与出生即绿 (99% / 319 单位 → ≤100)

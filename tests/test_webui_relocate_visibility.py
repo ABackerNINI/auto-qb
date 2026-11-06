@@ -286,7 +286,13 @@ def test_p1_badge_state_mapping_node():
     from pathlib import Path
 
     js = Path(__file__).resolve().parents[1] / "src/auto_qb/webui/static/shared/decorate.js"
-    proc = subprocess.run([node, "-e", _NODE_BADGE_PROBE, str(js)], capture_output=True, text=True)
+    proc = subprocess.run(
+        [node, "-e", _NODE_BADGE_PROBE, str(js)],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
     assert proc.returncode == 0, proc.stderr
     out = json.loads(proc.stdout)
 
@@ -367,7 +373,9 @@ def test_p1_filter_behavior_node():
          str(shared / "decorate.js"),
          str(shared / "filters.js")],
         capture_output=True,
-        text=True
+        text=True,
+        encoding="utf-8",
+        errors="replace"
     )
     assert proc.returncode == 0, proc.stderr
     out = json.loads(proc.stdout)

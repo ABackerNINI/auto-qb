@@ -91,6 +91,8 @@ def test_js_python_parity():
         ],
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
     )
     assert proc.returncode == 0, f"node 对拍电池跑挂了: {(proc.stderr or '').strip()[:400]}"
     js_out = json.loads(proc.stdout.strip() or "{}")

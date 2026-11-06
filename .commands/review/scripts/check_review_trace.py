@@ -47,8 +47,9 @@ CEILING = 400  # 建议上限: 超过要拆批, 或分面档并在 trailer 记 `
 REVIEW_LINE_RE = re.compile(r"^Review:\s*(.+)$", re.M)
 SKIP_LINE_RE = re.compile(r"^Review-Skip:\s*(.+)$", re.M)
 LINES_RE = re.compile(r"(\d+)\s*行")
-COUNT_FIELDS = (("blocker", re.compile(r"blocker\s*(\d+)")), ("修", re.compile(r"修\s*(\d+)")),
-                ("入池", re.compile(r"入池\s*(\d+)")))
+COUNT_FIELDS = (
+    ("blocker", re.compile(r"blocker\s*(\d+)")), ("修", re.compile(r"修\s*(\d+)")), ("入池", re.compile(r"入池\s*(\d+)"))
+)
 
 # 记账类: 结构由 check_doc_templates / check_status_drift / gen_active_recent 三道守卫管,
 # 它们的内容不进评审面(否则每笔收尾都会被自己的记账逼出一轮评审)。
@@ -65,8 +66,9 @@ POST_MARKER = ".git/review_trace_post"
 
 
 def _git(root: Path, *args: str) -> subprocess.CompletedProcess:
-    return subprocess.run(["git", *args], cwd=str(root), capture_output=True, text=True, encoding="utf-8",
-                          errors="replace")
+    return subprocess.run(
+        ["git", *args], cwd=str(root), capture_output=True, text=True, encoding="utf-8", errors="replace"
+    )
 
 
 def find_root(explicit: str | None) -> Path:
@@ -82,8 +84,14 @@ def generated_paths(root: Path) -> set[str]:
     """生成物权威清单(`gen_all.py --list`); 取不到时退回 `_index` 兜底, 不静默失效成"索引重排也算改动"。"""
     script = root / ".agents/skills/memory-bank/scripts/gen_all.py"
     if script.exists():
-        proc = subprocess.run([sys.executable, str(script), "--list"], cwd=str(root), capture_output=True, text=True,
-                              encoding="utf-8", errors="replace")
+        proc = subprocess.run(
+            [sys.executable, str(script), "--list"],
+            cwd=str(root),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace"
+        )
         if proc.returncode == 0:
             return {line.strip().replace("\\", "/") for line in proc.stdout.splitlines() if line.strip()}
     return set()  # 兜底由 _is_generated 的 _index 规则承担
@@ -242,9 +250,11 @@ def decide(count: int, sensitive: list[str], message: str) -> tuple[bool, str]:
             return False, "`Review-Skip:` 的理由为空或过短 —— 写清为什么这批不用评(≥4 字), 理由会进 git log"
         return True, f"豁免: {reason}"
 
-    return False, (f"本批累计 {count} 行待评未留痕 —— 先跑 code-review skill(批次 base = 最近一条 `Review:` 提交), "
-                   "再在提交信息里写 `Review: <范围> · <N> 行 · blocker N · 修 N · 入池 N`; "
-                   "确属免评写 `Review-Skip: <理由>`")
+    return False, (
+        f"本批累计 {count} 行待评未留痕 —— 先跑 code-review skill(批次 base = 最近一条 `Review:` 提交), "
+        "再在提交信息里写 `Review: <范围> · <N> 行 · blocker N · 修 N · 入池 N`; "
+        "确属免评写 `Review-Skip: <理由>`"
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -256,7 +266,7 @@ def main(argv: list[str] | None = None) -> int:
     root = find_root(args.root)
     # 合流复跑(commit.py 步骤 6b)跳过: 那次验的是"合并后的树", 消息已落库、行数已对过, 再算一遍
     # 只会把 rebase 进来的远端提交算成本批 → 假红。
-    # ❗**用文件标记, 不用环境变量**: 闸门里会跑 pytest, 子进程继承 env —— 实测 `COMMIT_FLOW_GATE_PHASE`
+    # ! **用文件标记, 不用环境变量**: 闸门里会跑 pytest, 子进程继承 env —— 实测 `COMMIT_FLOW_GATE_PHASE`
     #   传下去后, 包测试里"跑闸门脚本并断言它判红"的用例全部拿到 0, 3 条自测在复跑轮齐红(2026-11-06)。
     #   标记由 commit.py 在复跑前写下、跑完 finally 删; 这里读到即消费(一次性), 残留最多漏检一次。
     marker = root / POST_MARKER

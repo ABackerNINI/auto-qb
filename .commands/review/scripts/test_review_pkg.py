@@ -126,11 +126,20 @@ class ConfigTomlTest(unittest.TestCase):
         self.assertTrue(self.cfg["pack"]["confirmed"])
 
     def test_tasks_have_required_keys(self):
-        self.assertEqual(set(self.cfg["tasks"]), {
-            "review.pack", "review.check", "review.trace",
-            "review.lane.manifest", "review.lane.claim", "review.lane.start",
-            "review.lane.verify", "review.lane.batch", "review.lane.done", "review.lane.smoke",
-        })
+        self.assertEqual(
+            set(self.cfg["tasks"]), {
+                "review.pack",
+                "review.check",
+                "review.trace",
+                "review.lane.manifest",
+                "review.lane.claim",
+                "review.lane.start",
+                "review.lane.verify",
+                "review.lane.batch",
+                "review.lane.done",
+                "review.lane.smoke",
+            }
+        )
         for tid, task in self.cfg["tasks"].items():
             for key in ("run", "timeout", "when", "note"):
                 self.assertIn(key, task, f"{tid} 缺 {key}")
@@ -150,12 +159,11 @@ class ConfigTomlTest(unittest.TestCase):
 
 class LaneManifestTest(unittest.TestCase):
     """提交在库的 manifest.json 结构守阵(数据不变式, 不碰工作树/不依赖树漂移)。"""
-
     @classmethod
     def setUpClass(cls):
         cls.manifest = json.loads(
-            (ROOT / "memory-bank" / "reports" / "attachments" / "legacy-review4" / "manifest.json")
-            .read_text(encoding="utf-8")
+            (ROOT / "memory-bank" / "reports" / "attachments" / "legacy-review4" /
+             "manifest.json").read_text(encoding="utf-8")
         )
 
     def test_coverage_ok(self):
@@ -193,11 +201,13 @@ class LaneManifestTest(unittest.TestCase):
 
 class LaneScriptTest(unittest.TestCase):
     """review_lane.py 的无参安全面: 无参必须 rc=2 纯用法错误(无参无动作)。"""
-
     def test_no_args_is_usage_error(self):
         proc = subprocess.run(
             [sys.executable, str(Path(__file__).with_name("review_lane.py"))],
-            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
         )
         self.assertEqual(proc.returncode, 2, "无参应退出 2(argparse 用法错误), 不得执行任何真动作")
         self.assertEqual(proc.stdout, "", "无参不得有 stdout 输出")
@@ -205,7 +215,10 @@ class LaneScriptTest(unittest.TestCase):
     def test_help_ok(self):
         proc = subprocess.run(
             [sys.executable, str(Path(__file__).with_name("review_lane.py")), "--help"],
-            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
         )
         self.assertEqual(proc.returncode, 0)
         self.assertIn("smoke", proc.stdout + proc.stderr)
@@ -217,7 +230,6 @@ class LaneStateTest(unittest.TestCase):
     claim/start/verify 需真仓+远端(ls-remote/sync), 归 smoke 全环管; 这里把 route JSON 的
     状态转换与守卫语义(非法跳转/产出缺失/schema 校验/原子写)钉进守阵。
     """
-
     @classmethod
     def setUpClass(cls):
         spec = importlib.util.spec_from_file_location("review_lane_under_test", LANE_SCRIPT)
@@ -231,14 +243,39 @@ class LaneStateTest(unittest.TestCase):
         (self.root / ".git").mkdir()  # _resolve_root 只验 .git 存在
         self.lane_dir = self.root / "memory-bank" / "reports" / "attachments" / "legacy-review4"
         self.lane_dir.mkdir(parents=True)
-        self._write_route({
-            "route": "R9", "owner": "t", "claimed_at": "26-11-06-0000", "freeze": "f" * 40,
-            "snapshot": str(self.root / "snap"), "status": "in-progress",
-            "batches": [
-                {"id": "R9-1", "title": "批1", "status": "pending", "done_at": None, "findings": 0},
-                {"id": "R9-2", "title": "批2", "status": "pending", "done_at": None, "findings": 0},
-            ],
-        })
+        self._write_route(
+            {
+                "route":
+                    "R9",
+                "owner":
+                    "t",
+                "claimed_at":
+                    "26-11-06-0000",
+                "freeze":
+                    "f" * 40,
+                "snapshot":
+                    str(self.root / "snap"),
+                "status":
+                    "in-progress",
+                "batches":
+                    [
+                        {
+                            "id": "R9-1",
+                            "title": "批1",
+                            "status": "pending",
+                            "done_at": None,
+                            "findings": 0
+                        },
+                        {
+                            "id": "R9-2",
+                            "title": "批2",
+                            "status": "pending",
+                            "done_at": None,
+                            "findings": 0
+                        },
+                    ],
+            }
+        )
 
     def _write_route(self, data):
         (self.lane_dir / "route-R9.json").write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
@@ -656,7 +693,6 @@ def _run_trace(root: Path, msg_file: Path | None = None) -> subprocess.Completed
 
 class TraceDecideTest(unittest.TestCase):
     """评审留痕的纯判定面 —— 判据顺序即优先级(见 check_review_trace 模块头)。"""
-
     @classmethod
     def setUpClass(cls):
         cls.mod = _load_trace()
@@ -737,7 +773,6 @@ class TraceDecideTest(unittest.TestCase):
 
 class TraceGateTest(unittest.TestCase):
     """端到端: 临时仓库里真跑脚本 —— 验锚点推进(漏评的提交滚进下一批)与退出码。"""
-
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="trace_gate_"))
         self.addCleanup(shutil.rmtree, self.tmp, True)
@@ -825,7 +860,7 @@ class TraceGateTest(unittest.TestCase):
     def test_post_marker_skips_recheck_and_is_consumed(self):
         """合流复跑(commit.py 写的 `.git/review_trace_post`)不再对行数, 且标记用后即删。
 
-        ❗这个标记**不能走环境变量**: 闸门里会跑 pytest, 子进程继承 env, 会把"跑闸门脚本并断言它
+        ! 这个标记**不能走环境变量**: 闸门里会跑 pytest, 子进程继承 env, 会把"跑闸门脚本并断言它
         判红"的自测全部变成 0(2026-11-06 提交复跑轮真实撞到, 三条自测齐红)。
         """
         self._append(200)

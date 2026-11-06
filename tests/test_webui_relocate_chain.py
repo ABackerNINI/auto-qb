@@ -456,7 +456,9 @@ process.stdout.write(JSON.stringify({
     proc = subprocess.run(
         [node, "-e", probe, str(ROOT / "src/auto_qb/webui/static/shared/relocate_chain.js")],
         capture_output=True,
-        text=True
+        text=True,
+        encoding="utf-8",
+        errors="replace"
     )
     assert proc.returncode == 0, proc.stderr
     out = json.loads(proc.stdout)
