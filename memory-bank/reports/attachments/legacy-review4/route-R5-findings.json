@@ -1951,5 +1951,131 @@
   "claim": "非ASCII图形符号违规: 本文件 ⇒(行 574)、××4(行 585/586/593/594)",
   "relevance": "相关",
   "fix": "换 ASCII(=>、x)"
+ },
+ {
+  "file": "scripts/port_kill.py",
+  "line": 36,
+  "quote": "subprocess.run([\"taskkill\", \"/F\", \"/PID\", str(pid)]",
+  "severity": "minor",
+  "claim": "实现通道是 taskkill /F,与 AGENTS.md「🔴进程安全:禁止一切taskkill」红线字面冲突(脚本 docstring 有立项理由但红线侧无显式豁免记载)",
+  "relevance": "相关",
+  "fix": "在 AGENTS.md 红线条目为 dev.port-kill 写明豁免依据,或改走 PowerShell Stop-Process / psutil 等非 taskkill 通道"
+ },
+ {
+  "file": "scripts/port_kill.py",
+  "line": 31,
+  "quote": "pids = listening_pids(port)",
+  "severity": "minor",
+  "claim": "杀前不核验进程名也不打印归属,传入错端口(如 qB WebUI 或其它应用监听口)会对任意进程直接 /F 强杀",
+  "relevance": "相关",
+  "fix": "taskkill 前先取 Win32_Process 报出进程名/命令行,非 python 类监听者要求显式 --yes 或直接拒杀"
+ },
+ {
+  "file": "scripts/hr_fetch_experiment.py",
+  "line": 546,
+  "quote": "subprocess.run([\"taskkill\", \"/T\", \"/F\", \"/PID\", pid]",
+  "severity": "minor",
+  "claim": "按 profile 路径子串匹配后用 taskkill /T /F 击杀整进程树,同样落在 AGENTS.md「禁止一切taskkill」红线字面内(cmdline 过滤已收窄误杀面)",
+  "relevance": "相关",
+  "fix": "与 port_kill.py 同口径处理: 红线侧写明豁免或换非 taskkill 终止通道"
+ },
+ {
+  "file": "scripts/qb_capture.py",
+  "line": 813,
+  "quote": "self.handshake()",
+  "severity": "minor",
+  "claim": "--dry 的 help 写「不发请求」(L58),但 run_capture 在判 dry 之前已先握手,实际发出 version/webapiVersion/preferences/maindata 共 4 个真实请求,与文案矛盾",
+  "relevance": "相关",
+  "fix": "把 dry 判定提前到 handshake 之前(计数请求也一并跳过),或把 help 改成「不发抓取请求」"
+ },
+ {
+  "file": "scripts/ui_harness.py",
+  "line": 195,
+  "quote": "a, b = torrents[-4], torrents[-3]",
+  "severity": "minor",
+  "claim": "守卫只判 len(torrents) < 2(L189),--torrents 2 或 3 时 torrents[-4] 直接 IndexError 崩桩(默认 --site-alert on 必触发)",
+  "relevance": "相关",
+  "fix": "守卫改成 len(torrents) < 4"
+ },
+ {
+  "file": "scripts/e2e_selfcheck.py",
+  "line": 124,
+  "quote": "blocking_raw = args[i + 1]",
+  "severity": "minor",
+  "claim": "手工参数解析对 --blocking/--warn 不校验是否有后续值,写成最后一个参数时 args[i+1] 直接 IndexError 抛栈而不是走 usage 提示(L127 同病)",
+  "relevance": "相关",
+  "fix": "取值前判 i + 1 < len(args),缺失时打印用法并 return 2"
+ },
+ {
+  "file": "scripts/check_context_caps.py",
+  "line": 119,
+  "quote": "out.add(line[3:].strip())",
+  "severity": "minor",
+  "claim": "git status --porcelain 的重命名行(R  old -> new)被整串塞进改动集,新旧真实路径都不在集合里——AGENTS.md 若被 git mv,「改动命中」判定会静默漏检(与本文件 L108-111 自述的静默漏检同类)",
+  "relevance": "相关",
+  "fix": "解析 porcelain 时按状态位分流,rename 行拆 ' -> ' 两侧路径都计入改动集"
+ },
+ {
+  "file": "scripts/check_context_caps.py",
+  "line": 84,
+  "quote": "→ 提交照常: 债务不拦提交",
+  "severity": "minor",
+  "claim": "运行时打印字符串含图形符号 →(全文件 11 处 →/⇒/①,含 L14 带圈数字①、L186 help 文案),违反 code-style.md 代码禁令且这些串会在提交闸门终端输出",
+  "relevance": "相关",
+  "fix": "→/⇒ 换 ASCII,① 换 1."
+ },
+ {
+  "file": "scripts/check_command_drift.py",
+  "line": 184,
+  "quote": "→ commands run {tid}",
+  "severity": "minor",
+  "claim": "判红输出行含图形符号 →(全文件 4 处: L1/15/79 注释、L184 运行时输出),违反 code-style.md 代码禁令且该行正是闸门终端输出",
+  "relevance": "相关",
+  "fix": "L184 输出与注释里的 → 换 ASCII ->"
+ },
+ {
+  "file": "scripts/dev_webui.py",
+  "line": 119,
+  "quote": "2. 设置 → Web UI → 已勾选",
+  "severity": "minor",
+  "claim": "运行时 print 含图形符号 →(L119;L56 注释另有 ⇒,共 2 处),违反 code-style.md 代码禁令且是启动失败时的排查提示输出",
+  "relevance": "相关",
+  "fix": "→ 换 ASCII ->"
+ },
+ {
+  "file": "scripts/hr_ext_stub.py",
+  "line": 229,
+  "quote": "选项页「① 连接后端」",
+  "severity": "minor",
+  "claim": "运行时 print 含带圈数字 ①(code-style.md 明列禁用类;L5 docstring 同串,共 2 处)",
+  "relevance": "相关",
+  "fix": "① 换 1."
+ },
+ {
+  "file": "scripts/ui_harness.py",
+  "line": 1030,
+  "quote": "拉取历史表③已注入",
+  "severity": "minor",
+  "claim": "运行时 print 含带圈数字 ③(全文件 16 处 →/⇒/①②③: docstring 大量 ⇒、L763 ②、L965 运行时输出也有),违反 code-style.md 代码禁令",
+  "relevance": "相关",
+  "fix": "带圈数字换 1./2./3.,→/⇒ 换 ASCII ->"
+ },
+ {
+  "file": "scripts/qb_capture.py",
+  "line": 494,
+  "quote": "tracker 规则按真域名写 ⇒ 站点匹配全落空",
+  "severity": "nit",
+  "claim": "docstring 含图形符号 ⇒/↔(全文件 9 处,全部在注释与 docstring),违反 code-style.md 代码禁令(不含运行时输出,降为 nit)",
+  "relevance": "相关",
+  "fix": "⇒ 换 ->或'即',↔ 换 '<->'"
+ },
+ {
+  "file": "scripts/qb_capture_core.py",
+  "line": 143,
+  "quote": "跨种子 / 跨字段一致 ⇒ 同组共享路径仍共享",
+  "severity": "nit",
+  "claim": "docstring 含图形符号 ⇒(全文件 1 处),违反 code-style.md 代码禁令(仅注释,降为 nit)",
+  "relevance": "相关",
+  "fix": "⇒ 换 ->"
  }
 ]

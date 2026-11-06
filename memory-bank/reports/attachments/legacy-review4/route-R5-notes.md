@@ -17,6 +17,21 @@ owner: clone3-main · freeze: f088329291e6 · 快照: C:\Users\11059\Desktop\Pro
 | R5-7 | shared config 族: config_rules/config_editor{,_curve,_form,_tree}/config_hub{,_tm,_tracker,_hr} (3850行) | 26 (major 6 / minor 10 / nit 10) | done |
 | R5-8 | 图表·hr 面板·快捷键引擎·fx: qb_traffic_chart/hr_status/hr/shows/traffic_card/shortcuts_engine + fx/theme (4032行) | 24 (major 1 / minor 17 / nit 6) | done |
 | R5-9 | scripts 快扫: sim_* 全族 (3700行, 快扫档单面) | 16 (major 1 / minor 8 / nit 7) | done |
+| R5-10 | scripts 快扫: qb_capture*/ui_harness/检查与实验散件 (5559行, 快扫档单面) | 14 (minor 9 / nit 5) | done |
+
+## R5-10 批记录(快扫档: 入口/危险操作/红线引用/明显缺陷/非ASCII,不逐行精评)
+
+- major 0。
+- minor 9 条:port_kill.py 与 hr_fetch_experiment.py 的 taskkill 通道与 AGENTS.md「禁止一切taskkill」红线字面冲突(脚本有立项理由但红线侧无豁免记载——口径裁决题,交 S6)/ port_kill 杀前不核验进程名 / qb_capture --dry 实际发 4 个真实请求与 help 文案矛盾 / ui_harness --torrents 2/3 崩桩 / e2e_selfcheck 参数缺值裸栈 / check_context_caps 漏 git rename 行 / 运行时输出非 ASCII 5 文件(check_context_caps/check_command_drift 的闸门终端输出在列)。
+- nit 5 条:qb_capture/qb_capture_core docstring 非 ASCII。
+- 危险操作面:rmtree/杀进程/端口均在开发工具语义内;未发现写生产 config.yml 或格式化 auto-qb-data 的路径。
+- qb-capture-cli-dead-main 先例复验:qb_capture_cli.py docstring 明示 main 已迁 qb_capture.py 且实际如此,无同类回归。
+- 底册复验:0315(HR 发现端点多 clone 混串)脚本侧只见 18788 占用响亮退出,未见新增混串点,不重报;1427/0330 不涉本批文件。
+
+### 自弃发现(9 条留痕)
+
+--from-config 覆盖显式凭据系 docstring 明示设计 / dev_webui 端口字符串有 loaders int 强转 / Popen 不 wait 理论回收 / _sanitize_mapping open 未显式关系风格 / sync_agent_skills --prune 只摘 junction 系有意保护 / check_command_drift 优先级读起来险但语义即注释口径 / µs 系单位符号不在禁用类 / …· 系 CJK 标点不在明列禁用类 / 0315 复验不重报。
+
 
 ## R5-9 批记录(快扫档: 入口/危险操作/红线引用/明显缺陷/非ASCII,不逐行精评)
 
