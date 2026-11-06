@@ -700,5 +700,140 @@
   "claim": "文档引用不存在的 API: src/ 无 active_dat_path, 真实取数单点是 core.traffic_source.paths.dat_path(config)(speed_curve_mod.py:175 实调), 且同文件 :185 自述正确形成内部矛盾",
   "relevance": "相关",
   "fix": "keys.md:88 改写为 paths.dat_path(config) 与 :185 单点口径对齐"
+ },
+ {
+  "file": "src/auto_qb/core/tvshows.py",
+  "line": 199,
+  "quote": "r\"\\d{3,4}[pPiI]?",
+  "severity": "major",
+  "claim": "_DIR_SEASON_SUFFIX_RE 灾难性回溯: \\d{3,4} 以 3/4 两种长度平铺长数字串, fullmatch 失败时按平铺方式指数回溯(实测 72 位数字 246ms, 每 6 位约 3.4 倍增长; 目录段可达 255 字符即分钟~小时级挂起); 触发形态: 季标记命中的目录段其余部分为长纯数字串且尾随一个非白名单字符(如 'S01 ' + 90+ 位数字 + 'x'), parse_files 无缓存且在视图构建路径对每个种子每目录段执行(webui/views_episodes.py:68、webui/runtime.py:186 每 tick 调用), 可被恶意/异常种子名打挂主循环",
+  "relevance": "相关",
+  "fix": "把 \\d{3,4} 改为原子组/占有量符 (?>\\d{3,4}) 或 \\d{3,4}++(Python 3.11+ 支持, 消除 token 内 3/4 重试), 或对段长设上限并在匹配前预检纯数字串长度"
+ },
+ {
+  "file": "src/auto_qb/core/modules/grouping_mod.py",
+  "line": 143,
+  "quote": "return  # 配置禁用缺文件检查",
+  "severity": "minor",
+  "claim": "删除事件的分组簿记(_leave_group 摘除 groups/group_sizes/member_to_key)被 check_missing_files 闸门整体拦下: 该开关关闭时已删种子永久残留为幽灵成员(store._apply 只标 dirty 不摘成员, 全量轮不重建分组索引), 索引随删除量无限增长; 同时开启 cross_group_conflict_check 时幽灵成员的文件路径仍参与跨组物理路径展开, 可与现役组构成假交叉事件误暂停下载方",
+  "relevance": "相关",
+  "fix": "把 _leave_group 簿记移出 check_missing_files 闸门(仅 _scan_triggered_groups 缺文件扫描受闸门), 或在 store 删除链路兜底清理三个分组索引"
+ },
+ {
+  "file": "src/auto_qb/core/modules/grouping_mod.py",
+  "line": 507,
+  "quote": "n = skips.get(key, 0) + 1",
+  "severity": "minor",
+  "claim": "_leave_group 组空解散时不清理 store.transitional_missing_skips[key]: 同内容删除重加(组键相同)后继承旧计数, 新一轮第一次过渡态命中即达 TRANSITIONAL_SKIP_LIMIT 被按真实缺失整组暂停+打 MISSING 标签, 绕过「连续 3 次独立事件」的容忍设计",
+  "relevance": "相关",
+  "fix": "_leave_group 在组空解散分支同步 skips.pop(key, None)"
+ },
+ {
+  "file": "src/auto_qb/core/modules/grouping_mod.py",
+  "line": 507,
+  "quote": "n = skips.get(key, 0) + 1",
+  "severity": "minor",
+  "claim": "过渡态连续计数 transitional_missing_skips 只存内存不落盘(line 458 注释自认), 违反黄金法则 #3 跨轮次状态统一进 state_file; 失败场景: 重启落在 qB 改名窗口附近后计数清零, 真实缺失组要多容忍最多 TRANSITIONAL_SKIP_LIMIT 次触发才被暂停+打 MISSING 标签",
+  "relevance": "相关",
+  "fix": "将该计数并入 state_file 持久化, 或在黄金法则 #3 的豁免登记/文档中显式记录该偏离及理由"
+ },
+ {
+  "file": "src/auto_qb/core/tvshows.py",
+  "line": 439,
+  "quote": "按第 1 季归档",
+  "severity": "minor",
+  "claim": "名称侧「带集数无季标记兜底 season=1」未置 season_inferred=True, 而 refine_with_files(line 504)对 KIND_EPISODE 早退不再补标, 与字段注释(line 60)声明的「无信息兜底 1」口径及 refine docstring「默认 1 不允许无声发生」矛盾——最常见路径的兜底 S1 无法与显式 S01 区分",
+  "relevance": "相关",
+  "fix": "parse_release 该分支返回时置 season_inferred=True, 或修订字段注释把该口径排除"
+ },
+ {
+  "file": "src/auto_qb/core/tvshows.py",
+  "line": 469,
+  "quote": "if season is not None:",
+  "severity": "minor",
+  "claim": "parse_files 对跨目录的多季合包无守卫: 季号取第一个命中目录即 break, 集数来自全部文件(episodes 解析忽略目录路径), S01+S02 完结合包会被 refine_with_files 并成单季 range(如 S1 E1-24), 误并进真实 S1——违反模块「宁可误拆, 不可误并」取向(_dir_season 只防单目录段内的多季标记)",
+  "relevance": "相关",
+  "fix": "parse_files 收集全部目录段的季号, 出现多个不同季号时返回 None 让整包保持未识别/不展开"
+ },
+ {
+  "file": "src/auto_qb/core/modules/grouping_mod.py",
+  "line": 481,
+  "quote": "if exists is file_access.UNDETERMINED:",
+  "severity": "major",
+  "claim": "缺文件扫描的 UNDETERMINED 三态闸门(路径不可判定即跳过整组、不暂停不打标, docstring 自称『报告 §05 红线』)与孪生探测『非 True 一律按无孪生』子分支在 tests/ 全无覆盖——grouping 各测试均未伪造 fa.exists 返回 UNDETERMINED, 该防误暂停守门属完全无测试的高风险行为",
+  "relevance": "相关",
+  "fix": "在 test_grouping_state.py 补一例: 伪造 file_access.exists 返回 UNDETERMINED 断言整组早退(零暂停/零打标/不计过渡态计数), 对照孪生路径返回 UNDETERMINED 时按无孪生继续判缺失"
+ },
+ {
+  "file": "memory-bank/config-reference/keys.md",
+  "line": 191,
+  "quote": "actions`/`stop_following_rules_if",
+  "severity": "minor",
+  "claim": "config-reference 把 stop_following_rules_if 列为规则级键且无退役标注(loading-and-write.md:51 仍写『stop_following_rules_if 六值』), 与代码事实矛盾: 含键规则载入即转未启用+warning(rules_mod.py RETIRED_CONTROL_KEYS/载入分支), 本文档对其它退役键(如 notify_cooldown_s)均有『已退役』标注",
+  "relevance": "相关",
+  "fix": "keys.md 规则集段与 loading-and-write.md 校验面按 rule-system/rules-and-triggers.md:68-73 同步补两键退役说明(含键规则转未启用+等价写法提示)"
+ },
+ {
+  "file": "src/auto_qb/core/modules/grouping_mod.py",
+  "line": 441,
+  "quote": "dry_run: bool, key: str",
+  "severity": "nit",
+  "claim": "_check_missing_files 与 _check_size_consistency(line 372)的 key 形参标注为 str, 实际传入的是组键元组 (path, files)(_scan_triggered_groups/_assign_to_group 调用点), 错误标注误导维护者",
+  "relevance": "相关",
+  "fix": "形参标注改为 Tuple[str, Tuple[str, ...]], 与 _leave_group 返回类型一致"
+ },
+ {
+  "file": "src/auto_qb/core/tvshows.py",
+  "line": 330,
+  "quote": "\"dts hd\", \"dts hd ma\"",
+  "severity": "nit",
+  "claim": "_EXTRA_NOISE_BIGRAMS 里的 \"dts hd ma\" 是三 token 词组, 而 _normalize_key 的匹配只拼接相邻两 token, 该条目永远匹配不上(且 _NOISE_RE 的 dts(?:[ ._-]?h?d?(?:[ ._-]?ma)?)? 已先行剥除该形态), 死条目",
+  "relevance": "相关",
+  "fix": "删去 \"dts hd ma\" 条目(或匹配逻辑支持三连 token)"
+ },
+ {
+  "file": "src/auto_qb/core/tvshows.py",
+  "line": 459,
+  "quote": "from . import episodes as _episodes",
+  "severity": "nit",
+  "claim": "模块顶部(line 35)已 import episodes 且已使用(line 209), parse_files 内的局部再导入冗余, 属拆分/演进而来的残留",
+  "relevance": "相关",
+  "fix": "删去局部导入, 直接使用模块级 episodes"
+ },
+ {
+  "file": "src/auto_qb/core/tvshows.py",
+  "line": 22,
+  "quote": "见 docs/webui-shows-view-plan.html",
+  "severity": "nit",
+  "claim": "docstring 已知限制指向 docs/webui-shows-view-plan.html, 快照树内该文件不存在(实际为 memory-bank/plans/26-09-15-1534-webui-shows-view-plan.html), 代码内文档指针失效",
+  "relevance": "相关",
+  "fix": "docstring 指针改为 memory-bank/plans/26-09-15-1534-webui-shows-view-plan.html 或去掉具体路径只留计划名"
+ },
+ {
+  "file": "src/auto_qb/core/modules/grouping_mod.py",
+  "line": 160,
+  "quote": "里 ⇒ 整组跳过本次扫描",
+  "severity": "nit",
+  "claim": "注释含非 ASCII 图形符号 ⇒(U+21D2, 另 line 220 同款); code-style.md 禁用类未明列 ⇒/§ 且全库 58 个 .py 含 ⇒、129 个含 §, 属约定层待澄清而非本批特有缺陷",
+  "relevance": "相关",
+  "fix": "若裁定 ⇒ 在禁用列, 在 code-style.md 补充明示并做全库一次性替换为 ASCII(如 '->' 或 '即')"
+ },
+ {
+  "file": "src/auto_qb/core/modules/rules_mod.py",
+  "line": 29,
+  "quote": "rid 失效 → 下轮全量",
+  "severity": "nit",
+  "claim": "注释含非 ASCII 箭头 →(U+2192; line 286 同款); code-style.md 禁用类(emoji/几何符号/带圈数字)未明列 →, 且全库注释普遍使用, 属约定层待澄清",
+  "relevance": "相关",
+  "fix": "若裁定 → 在禁用列, 在 code-style.md 补充明示并全库统一替换为 '->'"
+ },
+ {
+  "file": "src/auto_qb/core/tvshows.py",
+  "line": 12,
+  "quote": "归一化) → 展示名",
+  "severity": "nit",
+  "claim": "docstring 含非 ASCII 箭头 →(U+2192, 全文件 7 处); 同上, code-style.md 禁用类未明列且全库普遍, 属约定层待澄清",
+  "relevance": "相关",
+  "fix": "若裁定 → 在禁用列, 在 code-style.md 补充明示并全库统一替换为 '->'"
  }
 ]

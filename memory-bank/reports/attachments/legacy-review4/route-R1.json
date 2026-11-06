@@ -45,9 +45,9 @@
     {
       "id": "R1-6",
       "title": "分组与规则模块: grouping_mod/rules_mod/tvshows",
-      "status": "pending",
-      "done_at": null,
-      "findings": 0
+      "status": "done",
+      "done_at": "26-11-06-0838",
+      "findings": 15
     },
     {
       "id": "R1-7",
