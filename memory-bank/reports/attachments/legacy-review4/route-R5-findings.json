@@ -1159,5 +1159,212 @@
   "claim": "文档漂移: 吸顶补偿注释盘点「三皮肤」padding 并要求「改皮肤 padding 必须连这里一起核」,但第四皮肤 flux 的 .drawer-body padding: 14px 18px 20px(flux/css/dialogs.css:66)未入清单——清单不完整,皮肤耦合假设核对面缺一个",
   "relevance": "相关",
   "fix": "清单补 flux: 14px 18px 20px,「三皮肤」改「四皮肤」"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/add_torrent.js",
+  "line": 695,
+  "quote": "this.addSubmitting = true;",
+  "severity": "major",
+  "claim": "addSubmitting 在「落点预检网络往返(_relocateAddGate 内 POST+waitCmd 最长 20s)+ 逐文件 FileReader」两段 await 之后才置位,此窗口内 addCanSubmit 仍为真,双击/连点提交按钮会并发两次 POST /api/torrents/add,同一批文件/链接重复入 qB —— 违反黄金法则幂等性(重复提交有重复副作用)",
+  "relevance": "相关",
+  "fix": "进入 submitAddTorrent 时先置提交闸(独立 in-flight 标志或直接 addSubmitting=true),预检取消/读文件失败等各提前返回路径复位"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/add_torrent.js",
+  "line": 398,
+  "quote": "await this.loadDir(r.path || this.dirBrowse.path)",
+  "severity": "minor",
+  "claim": "后端 /api/fs/mkdir 回执只有 {created, existed}(fs.py 两处 return 均无 path 键),r.path 恒 undefined —— 新建文件夹后不会跳进新目录,表达式恒走兜底分支,契约错位兼死代码",
+  "relevance": "相关",
+  "fix": "改用 await this.loadDir(r.created || this.dirBrowse.path)(r.created 正是新目录归一化路径)"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/dialogs_meta.js",
+  "line": 62,
+  "quote": "enterFallback: () => this.metaCatInput,  // 无高亮项时回车提交输入框文本(含清空 = 无分类)",
+  "severity": "minor",
+  "claim": "comboKeydown(add_torrent.js:334)对回退值有 v !== \"\" 过滤,清空输入框后回车的回退值是空串被丢弃 —— 注释宣称的「含清空 = 无分类」回车路径实际不可达,注释与行为矛盾",
+  "relevance": "相关",
+  "fix": "comboKeydown 对带 onEnter 的 ctx 放行空串回退;或改掉注释并只留预置行清分类入口"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/dialogs_meta.js",
+  "line": 7,
+  "quote": "async metaSetCategory(name) {",
+  "severity": "minor",
+  "claim": "入口缺 if (this.metaBusy) return; 闸(同文件 metaToggleTag/metaAddNewTags 都有): 双击候选行/回车与点选竞态可并发两条 set_category bulk 命令,且先完成的一方把 metaBusy 提前复位,closeMeta 的误关保护对仍在途的另一方失效",
+  "relevance": "相关",
+  "fix": "函数入口补 if (this.metaBusy) return; 与两个兄弟方法同口径"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/delete_flow.js",
+  "line": 353,
+  "quote": "label: m.name || hash.slice(0, 12),",
+  "severity": "nit",
+  "claim": "回退标签取的是参数 hash 而非解析出的 target: 右键菜单路径 ctx_menu.js:115 以无参调用 delTorrent(),hash=\"\",name 缺失时 _reannounceAll 回执文案的 label 退化为空引号(应为 target.slice(0,12))",
+  "relevance": "相关",
+  "fix": "改为 m.name || target.slice(0, 12)"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/add_torrent.js",
+  "line": 429,
+  "quote": "⚠ 不能在 focusout 里同步收",
+  "severity": "nit",
+  "claim": "注释含 code-style.md 明列禁用的非 ASCII 图形符号(⚠×4 行、带圈数字①②③×3 行、→×7 行、⇒×2 行),违反 AGENTS.md「代码禁图形符号」硬约束",
+  "relevance": "相关",
+  "fix": "按 code-style.md ASCII 替代(⚠→WARN:, ①→1., →/⇒→->)"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/delete_flow.js",
+  "line": 299,
+  "quote": "删除不可逆 → error 档 + 标题区警示条",
+  "severity": "nit",
+  "claim": "注释含图形符号 →(299)与 ⇒(180/257),违反代码禁图形符号约束",
+  "relevance": "相关",
+  "fix": "ASCII 化为 -> 或 =>"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/dialogs.js",
+  "line": 157,
+  "quote": "①ok 回执 → okMsg(okMs 缺省 2500; 传函数 =",
+  "severity": "nit",
+  "claim": "注释含明列禁用的带圈数字①②③(157-159)与大量 →/⇒(→×13 行、⇒×3 行),违反代码禁图形符号约束",
+  "relevance": "相关",
+  "fix": "全文件 ASCII 化"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/transfer_flow.js",
+  "line": 12,
+  "quote": "① 登录后预拉一次(lifecycle.js / auth.js 的 loadWebFlags 调用点旁边);",
+  "severity": "nit",
+  "claim": "文件头注释含带圈数字①②③(12-14),明列禁用类",
+  "relevance": "相关",
+  "fix": "改为 1. / 2. / 3."
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/add_torrent.js",
+  "line": 628,
+  "quote": "async _relocateAddGate() {",
+  "severity": "major",
+  "claim": "加种落点预检的关键分支(后端 cls===\"confirm\" → 落点确认弹窗 → 取消不提交/确认放行、auth 分支、volume_free 行)零执行——test_web_relocate.py:917-925 只有字符串锚,无 node 电池无 e2e",
+  "relevance": "相关",
+  "fix": "照 test_tf_open_flow_vm_probe 范式补 node vm 电池: 桩 api/waitCmd/_openModal 喂 confirm/非 confirm/抛 auth 三路,断言取消零提交与确认后载荷"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/dialogs.js",
+  "line": 374,
+  "quote": "async metaToggleTag(tag) {",
+  "severity": "major",
+  "claim": "meta 标签/分类编辑对话框的行为面全部零执行(_metaCommonTags 交集、toggle 方向=有则删无则加、metaSetCategory 先建后设链、loadMetaOptions 候选并回 metaCommonTags): test_frontend_meta_dialog_paired 只钉 token 存在性,四套皮肤 e2e 无一渲染 metaOpen",
+  "relevance": "相关",
+  "fix": "补 node vm 电池真跑 openMetaDialog→metaToggleTag/metaSetCategory 全链,断言交集方向与投递载荷"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/add_torrent.js",
+  "line": 162,
+  "quote": "escAddTorrent() {",
+  "severity": "minor",
+  "claim": "添加对话框 Esc 逐层退栈(FIX-07: 目录浏览器→分类/标签下拉→路径面板→关窗)在 tests/ 与 e2e/ 零引用,退栈顺序回归无测试会红",
+  "relevance": "相关",
+  "fix": "补 e2e 真渲染用例(逐层按 Escape 断言当前层收起)或 node 电池按层桩断言"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/add_torrent.js",
+  "line": 583,
+  "quote": "_addIngestFiles(fileList) {",
+  "severity": "minor",
+  "claim": "DND 进料分支行为(同名同大小去重、非 .torrent 忽略计数 toast、uri-list 注释行过滤与追加不覆盖、未开窗先开窗再填)零执行——test_frontend_add_torrent_drag_drop_wiring 只钉静态接线,两套皮肤 e2e 无拖拽用例",
+  "relevance": "相关",
+  "fix": "补 node 电池桩 FileList/DataTransfer 喂 _addIngestFiles/_addIngestLinks 断言去重与忽略分支"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/add_torrent.js",
+  "line": 312,
+  "quote": "comboKeydown(ctx, ev) {",
+  "severity": "minor",
+  "claim": "五个自绘下拉共用的键盘导航本体(↑↓ 取模环绕、Enter 选中/enterFallback、Esc 只收面板、IME 组词守卫 isComposing)零行为执行——全仓唯一引用是静态字符串锚,e2e add/move 用例也只点选不按键",
+  "relevance": "相关",
+  "fix": "补 node 电池喂合成 KeyboardEvent 断言环绕/Esc/IME 守卫三支"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/dialogs.js",
+  "line": 235,
+  "quote": "async submitMgrTags() {",
+  "severity": "minor",
+  "claim": "管理对话框 CRUD 行为零执行(submitMgrTags 中英文逗号批量拆分、submitMgrCategory 保存路径可空、loadMgr 字典序/字典展开、openMgr 清态),只有外壳接线锚;_mgrRun/_panelLoad 骨架另有电池但校验分支没跑",
+  "relevance": "相关",
+  "fix": "补 node 电池跑 submitMgrTags/submitMgrCategory/loadMgr,断言拆分结果与投递载荷"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/delete_flow.js",
+  "line": 109,
+  "quote": "_hrRiskOf(members) {",
+  "severity": "minor",
+  "claim": "删除确认框的 HR 风险点名行与 _deleteDetails 集合摘要行(站点/路径去重、实际占用条件行、名字截 3/more 后缀、HR_NO_DELETE 只认 danger)零行为测试——闸门与 _reannounceAll 有 node 电池、e2e 删除用例只喂非活跃档种子,danger 档种子的确认框从未渲染",
+  "relevance": "相关",
+  "fix": "node 电池跑 _hrRiskOf/_deleteDetails 断言行拼装 + e2e 补 danger 档种子断言风险行出现"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/dialogs_meta.js",
+  "line": 124,
+  "quote": "async openSpeedAt(ev, dir) {",
+  "severity": "minor",
+  "claim": "限速浮层编排零行为测试: openSpeedAt 定位/预聚焦、submitSpeedDialog「主速成功但备用失败留窗重试并重取回填」、closeSpeedDialog 均无 node 电池无 e2e(submitAltLimits/toggleAltSpeed 已有电池,主速与浮层层没有)",
+  "relevance": "相关",
+  "fix": "补 node 电池跑 submitSpeedDialog 双分支(okMain&&!okAlt 留窗回填 / 双成功关窗)"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/dialogs.js",
+  "line": 632,
+  "quote": "historyBuckets() {",
+  "severity": "minor",
+  "claim": "历史流量弹层的聚合数学零执行: 月档 slice(-12)/年档按年汇总/天档近30、historySummary、histMove/histLeave 悬停索引换算、_histArea 路径——tests/ 与 e2e/ 对其零引用(openHistory 只有入口字符串锚)",
+  "relevance": "相关",
+  "fix": "补 node 电池喂 historyData 断言三档桶标签/条数/峰值均值"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/relocate_chain.js",
+  "line": 126,
+  "quote": "async _relChainFetch(hash, refresh) {",
+  "severity": "minor",
+  "claim": "迁移路径链浮窗行为只有字符串锚: node 段只真跑 type/status/phase 文案映射,relChainOpen 开/关翻转、_relChainFetch 的 seq 代际守卫(快速换 hash 旧响应丢弃)、relChainPlace 上下翻转定位、scroll 即关等零执行",
+  "relevance": "相关",
+  "fix": "node vm 桩跑 relChainOpen(A)→relChainOpen(B)→A 慢响应落袋序列,断言 data 不被旧响应覆写"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/add_torrent.js",
+  "line": 782,
+  "quote": "模板在 tpl/xtpl.html#tpl-combo-input",
+  "severity": "nit",
+  "claim": "注释指 <aq-combo-input> 模板在 tpl/xtpl.html,实际快照中该模板在 shared/tpl/combo-input.html(xtpl.html 内 grep tpl-combo-input 为 0)",
+  "relevance": "相关",
+  "fix": "注释改指 tpl/combo-input.html"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/dialogs.js",
+  "line": 542,
+  "quote": "见 mixins/web_view.py 的种子限速列",
+  "severity": "nit",
+  "claim": "注释引用的 mixins/web_view.py 在快照中不存在(无 mixins/ 目录),单种子 dl_limit 列实际装配在 src/auto_qb/webui/views_row.py:58",
+  "relevance": "相关",
+  "fix": "注释改指 webui/views_row.py"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/transfer_flow.js",
+  "line": 44,
+  "quote": "!装载序: 三份 index.html 清单里本文件排在 transfer_targets.js 之后",
+  "severity": "nit",
+  "claim": "「三份 index.html 清单」已漂移: 快照有四套皮肤(atlas/prism/console/flux)且守阵 test_tf_wiring_static 按 _UI_ALL 四份断言装载序",
+  "relevance": "相关",
+  "fix": "改「四份」"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/transfer_targets.js",
+  "line": 33,
+  "quote": "!装载序: 三份 index.html 清单里本文件排在 ctx_menu_custom.js 之后",
+  "severity": "nit",
+  "claim": "同上「三份」漂移(四套皮肤清单均含本文件,守阵按 _UI_ALL 四份断言);相邻 test_tt_editor_wiring:283 注释同款旧表述",
+  "relevance": "相关",
+  "fix": "改「四份」"
  }
 ]

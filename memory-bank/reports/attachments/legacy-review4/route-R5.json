@@ -52,9 +52,9 @@
     {
       "id": "R5-6",
       "title": "shared 对话框与流转: dialogs/add_torrent/dialogs_{meta,history}/delete_flow/transfer_{flow,targets}/relocate_chain",
-      "status": "pending",
-      "done_at": null,
-      "findings": 0
+      "status": "done",
+      "done_at": "26-11-07-0316",
+      "findings": 23
     },
     {
       "id": "R5-7",

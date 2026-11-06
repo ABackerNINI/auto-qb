@@ -13,6 +13,21 @@ owner: clone3-main · freeze: f088329291e6 · 快照: C:\Users\11059\Desktop\Pro
 | R5-4 | shared drawer 族: drawer/drawer_templates/drawer_store/drawer_{general,rows,files,head} (3445行) | 16 (major 1 / minor 11 / nit 4) | done |
 | R5-5 | shared drawer 模板·general 与 trackers(01-09 号) (3556行) | 33 (major 4 / minor 20 / nit 9) | done |
 | R5-11 | shared drawer 模板·content 与 peers(10-12/90 号) (1720行) | 21 (major 4 / minor 12 / nit 5) | done |
+| R5-6 | shared 对话框与流转: dialogs/add_torrent/delete_flow/transfer_*/relocate_chain (3257行) | 23 (major 3 / minor 11 / nit 9) | done |
+
+## R5-6 批记录(2 面精评: 正确性+安全 / 测试缺口+文档漂移)
+
+- **major 3 条**:add_torrent.js:695 加种提交闸在 20s 落点预检+FileReader 之后才置位,窗口内双击并发重复 POST 加种(幂等性违例,本路线最重的一条)/ _relocateAddGate confirm 分支零执行 / meta 标签分类对话框行为面全部零执行。
+- minor 11 条:mkdir 回执 r.path 恒 undefined(契约错位兼死代码) / enterFallback「含清空=无分类」不可达(注释矛盾) / metaSetCategory 缺 metaBusy 闸 / Esc 退栈/DND 进料/combo 键盘导航/管理对话框 CRUD/HR 风险点名行/限速浮层编排/历史聚合数学/路径链 seq 守卫零测试 / 「三份 index.html」漂移×2。
+- nit 9 条:回退标签取参数 hash / 非 ASCII 符号 4 文件 / 注释指错模板与 py 文件位置 2 条。
+- 同根双报 1 组已去重:dialogs_meta.js:62 enterFallback 清空回车(面1 面2 同锚同口径),保留 1 条。
+- 底册复验:R2 终表零命中本批;Open issues 2120(标签分类对话框重构)/0330(gtm 日期炸弹)仍 Open 未重报。
+
+### 自弃发现(16 条留痕)
+
+面1(8):代际守卫只查布尔开合但数据同源无可见危害 / 删除失败仍 clearSelection 系既有取舍 / _metaExpandHashes 求值两次纯重复 / ttMapMove j 越界给不出可达路径 / relChainGlobals 监听单例常驻非泄漏 / 拖入链接不去重可编辑无静默副作用 / _transferRunning 非响应式系既有约定双闸覆盖 / relChainCopyAll 前导空格系约定。
+面2(8):gtmAlert 有 e2e 真渲染且涉底册 / 删除闸门+reannounce 桶有 node 电池 / 遮罩关窗有真手势 spec / toggleAltSpeed 族有四态电池 / transfer 四段式主链覆盖充分仅边角未钉 / 纯展示小函数零测理论风险 / webui*.md+README 逐条一致 / 底册两条未重报。
+
 
 ## R5-11 批记录(2 面精评: 正确性+安全 / 测试缺口+文档漂移;lane 批序在 R5-5 之后 R5-6 之前)
 
