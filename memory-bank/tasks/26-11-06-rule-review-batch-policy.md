@@ -60,8 +60,9 @@ code review 什么时候评、一次评多少、评过没有怎么被机器强�
 ### R1 · 分批评审 (2026-11-06)
 
 - review: blocker 0, 修 10(4 major + 6 minor), 入池 0, 分面(3 子代理串行: 正确性 / 安全 / 测试缺口), 10 条发现全过 `review.check` 引文校验(零 refute)。
-- 四条 major 全是**这条闸门自己的洞**, 也正好证明分面评审值得: ①合流复跑按「消息文件在不在」判, `--message-file` 的文件不被消费 → 假红, 改由 commit.py 注入 `COMMIT_FLOW_GATE_PHASE=post`; ②同一判据在「本笔无 trailer」时反过来漏判, 把 rebase 进来的远端提交算成本批; ③`match=[""]` 的闸门在**纯删除提交**上根本不跑(commit.py 传的是 `present`, 空清单)→ `gates_for` 改成空串恒命中, 否则删 500 行可零评审入库; ④锚点只扫最近 200 笔, 第 201 笔有 trailer 时静默退回 HEAD, 与「漏评提交滚进下一批」的连坐机制正相反 → 去掉窗口。
+- 四条 major 全是**这条闸门自己的洞**, 也正好证明分面评审值得: ①合流复跑按「消息文件在不在」判, `--message-file` 的文件不被消费 → 假红, 改成 commit.py 写 `.git/review_trace_post` 文件标记(闸门读到即消费); ②同一判据在「本笔无 trailer」时反过来漏判, 把 rebase 进来的远端提交算成本批; ③`match=[""]` 的闸门在**纯删除提交**上根本不跑(commit.py 传的是 `present`, 空清单)→ `gates_for` 改成空串恒命中, 否则删 500 行可零评审入库; ④锚点只扫最近 200 笔, 第 201 笔有 trailer 时静默退回 HEAD, 与「漏评提交滚进下一批」的连坐机制正相反 → 去掉窗口。
 - 六条 minor: Review 段应在下限之后判(5 行小改不该被硬拦)、`core.quotepath=off`(非 ASCII 路径会被转义成不存在的路径)、未跟踪二进制按 0 行计、`--no-renames`(numstat 的 `a/{b => c}/d` 合成串绕开排除)、`review/config.toml` 与 `AGENTS.md` 的 skill 节号漂移(③→④、②→③、④→⑤)。
 - 收尾期另修一处认领链单向(计划/报告/档案三件未互指), `test_docs_forms` 判红后补齐 `doc-refs`。
+- 提交时又踩到一条, 已随 `bcf0d3aa` 修掉: 复跑标记最初走环境变量 `COMMIT_FLOW_GATE_PHASE`, 而闸门里会跑 pytest —— 子进程继承 env 后, 包里「跑闸门脚本并断言它判红」的三条自测全部拿到 rc=0, 提交落地但推送被挡。**教训: 闸门自己会跑测试时, 任何"给闸门看的标记"都不能走进程级环境**; 改文件标记(`.git/review_trace_post`, 读到即消费)后两包 246 passed。
 
 - 2026-11-06 08:10 分批评审落地: 闸门 review.trace + skill 重写 + 报告/计划; 分面评审 10 条(4 major/6 minor)全修; 两包测试与 test.full 全绿(见 kb.baseline)
