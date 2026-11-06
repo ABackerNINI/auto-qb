@@ -19,8 +19,9 @@
 - [26-11-05-0635] [类型注解标准清偿与 mypy 渐进接入分步计划](../26-11-05-0635-plan-type-annotations-mypy.html) — `type-annotations-mypy`
 - [26-11-03-2212] [整组迁移同盘证明误拒：根因与修复计划](../26-11-03-2212-plan-relocate-same-fs-proof.html) — `relocate-same-fs-proof`
 
-## Done (211)
+## Done (212)
 
+- [26-11-06-0759] [分批评审: 从「收口一次评」到「一批一评 + 强制留痕」](../26-11-06-0759-plan-review-batch-policy.html) — `review-batch-policy`
 - [26-11-06-0124] [提交信息自动审查: ship.commit 内联三态机检(BOM/乱码/骨架/残留)](../26-11-06-0124-plan-commit-msg-review.html) — `commit-msg-review`
 - [26-11-05-0546] [relocate 零搬移修复方案压测(renameFolder 两步复位 + 三闸门)](../26-11-05-0546-plan-relocate-zero-move-fix-stress.html) — `relocate-zero-move-fix-stress`
 - [26-11-05-0118] [flaky 测试结构化治理: 时钟注入与抖动消除](../26-11-05-0118-plan-flaky-test-governance.html) — `flaky-test-governance`

@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>分批评审: 从「收口一次评」到「一批一评 + 强制留痕」</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="review-batch-policy">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-11-06-0759">
+<meta name="doc-updated" content="26-11-06-0759">
+<meta name="doc-refs" content="memory-bank/reports/26-11-06-0723-report-review-capacity-experiment.html, memory-bank/tasks/26-11-06-rule-review-batch-policy.md">
+<style>
+  :root {
+    --bg: #10151a; --ink: #e4eaef; --dim: #a2b0bd; --faint: #6f7d8a;
+    --hair: #26313a; --hair-soft: #1c252d; --accent: #6db3c9; --accent-ink: #8fd0e0;
+    --warn: #e2a86e; --ok: #8fc98f; --no: #d98a8a; --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  .sheet { max-width: 1080px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 30px; line-height: 1.2; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; margin: 50px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16px; font-weight: 600; margin: 26px 0 6px; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; }
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  .good { color: var(--ok); } .bad { color: var(--no); } .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+  .strike { color: var(--faint); text-decoration: line-through; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: review-batch-policy</div>
+<h1>分批评审: 从「收口一次评」到「一批一评 + 强制留痕」</h1>
+<p class="lede">把 code review 的评审单元从「任务」改成「批」, 并用提交闸门强制留痕。起因是实测发现一半会话根本没触发评审; 设计依据是一场对照实验(10 次派发 / 56 条发现), 它把「400 行」从容量红线改判为产出密度的经济学选择。<b>本计划为补记</b>——拍板发生在 grilling 的四轮对话里, 实现先于本文成文。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-06-0759 · <b>doc-updated</b> 26-11-06-0759 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 用户指令「code review 机制讨论 / 重新 grilling / 先跑实验 / 按 1·2·3 做 / 补一个计划文档」<br>
+  <b>实验报告</b> <a href="../reports/26-11-06-0723-report-review-capacity-experiment.html">26-11-06-0723</a> · <b>验证</b> 全绿(见 <code>commands run kb.baseline</code>)
+</div>
+
+<h2><span class="no">§01</span>目标与背景</h2>
+<p>用户的原始问题: <b>「code review 环节在一半会话中没有被正确触发」</b>。查下来不是 agent 疏忽, 是<b>结构性逃逸</b>:</p>
+<ul>
+  <li>豁免判据是「立档阈值 4 条不命中」——四条全是判断题(≥5 轮 / ≥3 源文件 / ≥2 会话 / 有计划文档)。</li>
+  <li>再叠加「中途提交不触发」。于是只要 agent 从不宣布「收口」, 就可以连续几天、每次改一两个文件, 全程不立档、不评审。</li>
+  <li>实测: skill 2026-11-04 落地后新建 20 份档案, <b>8 份零提及评审</b>(其中 4 份已 Done); 62 份切片 95 条 R 行, 只有 23 条含评审。</li>
+</ul>
+<p>第二个问题在 grilling 中被挖出来: <b>「全部做完再评一次」对大计划结构性失效</b>。实测 mpy 计划收口 1495 行、假钟计划收口 3357 行, 分别是 400 行容量线的 3.7 倍与 8.4 倍; 而现有「分面 2–3 子代理」只按面切, 切完每面仍约 1100 行。</p>
+
+<h2><span class="no">§02</span>方案的三个支点</h2>
+<h3>支点一: 评审单元是「批」, 不是「任务」</h3>
+<p>批次范围 = <b>最近一条带 <code>Review:</code>(或 <code>Review-Skip:</code>)的提交 → 当前工作树</b>。锚点从 git 历史现算, agent 不用填 hash。这条规则同时解决两件事: 触发不再依赖 agent 自我判定「是不是收口」; 漏评的提交会自动滚进下一批(<b>连坐</b>), 于是「不留免评节点」不是口号而是机制。</p>
+<h3>支点二: 触发按「累计改动面」, 不按任务类型</h3>
+<p>累计 ≥50 行(代码 + 事实性文档), 或触碰安全敏感面/红线(不论行数) → 必须评。有没有档案、是不是「小修」都不再影响判断 —— 档案是记账需要, 评审是风险需要, 两件事被绑在一起正是逃逸的根。</p>
+<h3>支点三: 提交信息 trailer 是唯一闸门键</h3>
+<pre><code>Review: &lt;范围&gt; · &lt;N&gt; 行 · blocker &lt;N&gt; · 修 &lt;N&gt; · 入池 &lt;N&gt;[ · 分面]</code></pre>
+<p>闸门校验三件: 声明行数 == 实算(±0)、三个计数齐、超 400 行必须带 <code>· 分面</code>(否则应先拆批)。选提交信息而不是档案 R 行, 是因为它随提交走、跨 clone 一致、<code>git log --grep</code> 可统计; 档案 R 行继续写叙事, 但不当闸门键(两处必然漂移)。</p>
+
+<h2><span class="no">§03</span>实验结论(设计依据)</h2>
+<p>为回答「agent 一次能评多少行」, 做了对照实验: 同一份 diff 按 4 批 / 2 批 / 1 批三种粒度各评一遍, 共 10 次派发、56 条发现。三条结论(详见 <a href="../reports/26-11-06-0723-report-review-capacity-experiment.html">报告</a>):</p>
+<ul>
+  <li><b>发现数 ≈ 派发次数 × 5.6</b>, 与批次大小无关(26/4=6.5、8/2=4.0、5/1=5.0、12/2=6.0、5/1=5.0)。</li>
+  <li><b>幻觉率不随批次变大而上升</b>: 56 条全部通过引文校验, 0 条被弃, 含 1313 行单块。<span class="wr">这条推翻了事前假设</span>。</li>
+  <li><b>大块不是少找几条, 是换了地方找</b>: 有真值的 diff 上, 2 批召回已知修正点 7/8, 1 批召回 0/8。</li>
+</ul>
+<p class="aside">方法论修正: 原 <code>TIER_LIMIT = 400</code> 注明来源是 SmartBear/Cisco 的<b>人类注意力</b>研究(200–400 行 / 60–90 分钟)。agent 没有这个生理约束, 把人类数字当默认值是错的。400 行保留, 但理由换成「产出密度与切分合理性的折中」。</p>
+
+<h2><span class="no">§04</span>拍板记录</h2>
+<p>四轮 grilling 的全部决策, 含<b>被推翻</b>与<b>被取代</b>的条目 —— 后两条是这份文档最该留下的部分: 它们记录了「为什么不是另一个方案」。</p>
+<table>
+  <tr><th>#</th><th>议题</th><th>拍板</th><th>状态</th></tr>
+  <tr><td>D1</td><td>评审时机</td><td>每批评(步 = 子任务状态表一行), 相邻小步可合并(合计 ≤400 行); 收口只做接缝终审</td><td class="good">生效</td></tr>
+  <tr><td>D2</td><td>收口终审</td><td>保留, 但改职责为「接缝终审」≤200 行: 只看跨批接口漂移/重复机制/测试面遗漏/偏离计划, <b>不重评已评过的代码</b></td><td class="good">生效</td></tr>
+  <tr><td>D3</td><td>小修豁免</td><td>取消「按任务类型/立档阈值」豁免, 改按改动面: 累计 ≥50 行或触安全敏感面/红线 → 必评</td><td class="good">生效</td></tr>
+  <tr><td>D4</td><td>防规避</td><td>原拟「累计 ≥400 行仍未评 → 下批必评」; 实测锚点法下 range 本身就是累计量, ≥50 已覆盖, 不设独立阈值</td><td class="good">生效(简化)</td></tr>
+  <tr><td>D5</td><td>留痕载体</td><td>提交信息 trailer 为唯一闸门键; 档案 R 行只叙事</td><td class="good">生效</td></tr>
+  <tr><td>D6</td><td>msg_check 整合</td><td><code>Review</code> / <code>Review-Skip</code> 加进合法段落标签集, 数字约束与 c5 同口径(只提醒不拦)</td><td class="good">生效</td></tr>
+  <tr><td>D7</td><td>严格度与逃生</td><td>硬拦 + <code>Review-Skip: &lt;理由&gt;</code>(理由 ≥4 字); 不做配置白名单(避免「永久豁免」变成默认路径)</td><td class="good">生效</td></tr>
+  <tr><td>D8</td><td>实现落点</td><td>闸门脚本放 review 包(<code>review.trace</code>), 闸门配置只引用; <code>msg_check</code> 保持纯文本函数, 不塞仓库上下文</td><td class="good">生效</td></tr>
+  <tr><td>D9</td><td>存量迁移</td><td>立即生效, 不回填 —— 闸门只对「有待评改动的提交」生效, 零迁移成本</td><td class="good">生效</td></tr>
+  <tr><td>D10</td><td>锚点</td><td>最近一条带 trailer 的提交 → 工作树; 冷启动(历史无锚点)退化为只算工作树。<span class="strike">原拟配置 <code>review_anchor</code></span></td><td class="good">生效(取代)</td></tr>
+  <tr><td>D11</td><td>验证深度</td><td>只验「声明存在」不够(一行就能伪造); 验到「锚点范围自洽 + 声明行数 == 实算」</td><td class="good">生效</td></tr>
+  <tr><td>D12</td><td>行数口径</td><td class="strike">只计代码面(src/tests/scripts/.commands/.agents/skills), 文档不计</td><td class="bad">被 D15 推翻</td></tr>
+  <tr><td>D13</td><td>容量线</td><td>400 行保留为<b>建议上限</b>(理由改为产出密度); 超 400 必须拆批, 分面档只保留给「批内触安全敏感面」</td><td class="good">生效(改性质)</td></tr>
+  <tr><td>D14</td><td>定线方式</td><td>先做实验再定, 不照搬人类数字(用户指出: skill 是给 agent 读的, 参考人类数据是错的)</td><td class="good">生效(已完成)</td></tr>
+  <tr><td>D15</td><td>文档也评</td><td>推翻 D12: 全部非生成物计入; 但只评<b>事实性文档</b>(计划/报告/约定/坑档/README/AGENTS.md), 档案与切片免(记账, 已有三道守卫); checklist 增文档面 4 条</td><td class="good">生效</td></tr>
+  <tr><td>D16</td><td>闸门守卫</td><td>pytest 断言: 条目在 + <code>auto=true</code> + <code>match=[""]</code> —— 防「闸门被删/被注释」的静默失效</td><td class="good">生效</td></tr>
+  <tr><td class="bad">—</td><td class="bad">被否方案 A</td><td class="bad">以「档案 Status 翻 Done」作为收口信号(第一轮推荐) —— 被 D1 推翻: 它只能识别收口, 识别不了「中途大改」, 且拖着不翻 Done 就能绕开</td><td class="bad">否</td></tr>
+  <tr><td class="bad">—</td><td class="bad">被否方案 B</td><td class="bad">只警告不拦(现状 + 提示) —— 本仓库历史战绩已证明「靠自觉」的漏检率约一半</td><td class="bad">否</td></tr>
+  <tr><td class="bad">—</td><td class="bad">被否方案 C</td><td class="bad">按任务类型豁免(纯文档/小修) —— 判据是判断题, 且「小修」可以无限累加</td><td class="bad">否</td></tr>
+</table>
+
+<h2><span class="no">§05</span>落地清单</h2>
+<table>
+  <tr><th>文件</th><th>改了什么</th></tr>
+  <tr><td><code>.agents/skills/code-review/SKILL.md</code></td><td>整篇重写: ①触发(每批评/取消类型豁免) ②新增「批次与容量」节 ④派遣分档(拆批 vs 分面) ⑥checklist 16→20(文档面 4 条) ⑦留痕改 trailer ⑧反模式重写; description 同步</td></tr>
+  <tr><td><code>.commands/review/scripts/check_review_trace.py</code></td><td>新件: 锚点法批次计算 + 行数口径 + 判据链 + 一行失败原因</td></tr>
+  <tr><td><code>.commands/review/config.toml</code></td><td>新增 <code>review.trace</code> task(裸 python, 不走 uv —— trampoline 先例)</td></tr>
+  <tr><td><code>.commands/my-commit-flow/.my-commit-flow.toml</code></td><td>新增闸门条目: <code>match=[""]</code>(每次提交跑, 判据是累计量而非路径)</td></tr>
+  <tr><td><code>.commands/my-commit-flow/scripts/commit.py</code></td><td>闸门前注入 <code>COMMIT_FLOW_MSG_FILE</code>(闸门是子进程, 拿不到 <code>--message-file</code>)</td></tr>
+  <tr><td><code>.commands/my-commit-flow/scripts/msg_check.py</code></td><td>D6: <code>Review</code>/<code>Review-Skip</code> 进标签词表 + Review 段数字提醒</td></tr>
+  <tr><td><code>AGENTS.md</code> · <code>memory-bank/SKILL.md</code></td><td>收尾行与 DoD 第 0 步改为「每批收尾先跑 / 分批评审」—— 不改这两处会与新 skill 自相矛盾</td></tr>
+  <tr><td>测试</td><td><code>test_review_pkg.py</code> 新增 20 条(12 纯判定 + 8 临时仓库端到端); <code>test_commit.py</code> 新增闸门守卫 + msg_check 标签用例</td></tr>
+  <tr><td>报告</td><td><a href="../reports/26-11-06-0723-report-review-capacity-experiment.html">26-11-06-0723</a> 实验报告(设计依据)</td></tr>
+</table>
+
+<h2><span class="no">§06</span>未做与已知边界</h2>
+<ul>
+  <li><b>50 行下限未实测</b>: 实验只覆盖 328–1313 行, 低于 50 行「不值得单独派发」仍是推断。</li>
+  <li><b>跨块问题未测</b>: 实验没有构造「只有看全才能发现」的缺陷, 因此「切太细会丢跨块问题」来自推理; 接缝终审(D2)是它的对冲。</li>
+  <li><b>冷启动窗口</b>: 历史里一条 trailer 都没有时, 锚点退化为 HEAD, 只算工作树 —— 落地后第一笔带 trailer 的提交即建立锚点。这个窗口内「连续小提交累加」仍可绕过, 已接受(一次性, 且 rollout 当场关闭)。</li>
+  <li><b>终态提醒未加</b>: 原拟在 <code>kb.status</code> 翻 Done 时补一句「先评审」, 未做 —— 时机模型已改为按批, 该提醒的落点需重新设计, 留给后续。</li>
+  <li><b>实验局限</b>: n=1 diff × 单次运行、单一模型, 幅度待复测(方向可靠)。</li>
+</ul>
+
+<h2><span class="no">§07</span>验证</h2>
+<ul>
+  <li>包测试: <code>review</code> + <code>my-commit-flow</code> 全绿(数字见最新基线切片, 不在此手抄)。</li>
+  <li>全量: <code>commands run test.full</code> 全绿(同上)。</li>
+  <li>闸门自验: 本批 746 行无 trailer 时判红、声明行数不符时判红、带正确 trailer 时静默 —— 在真实仓库里跑过三条路径。</li>
+</ul>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-06-0759</span> 建档(补记): 四轮 grilling 的 16 条拍板 + 3 条被否方案; 落地清单; 6 条已知边界</li>
+</ul>
+
+</div>
+</body>
+</html>

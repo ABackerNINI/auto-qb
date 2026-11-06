@@ -343,8 +343,13 @@ def hit(files: list[str], patterns) -> list[str]:
 
 
 def gates_for(files: list[str], gates: list[dict]) -> list[dict]:
-    """命中的闸门 —— 返回完整 dict(auto / timeout 在里头, 后面要靠它们决定"跑不跑")。"""
-    return [g for g in gates if hit(files, g.get("match", []))]
+    """命中的闸门 —— 返回完整 dict(auto / timeout 在里头, 后面要靠它们决定"跑不跑")。
+
+    ❗`match` 里含空串 = **每次提交都命中**, 哪怕本次改动清单为空。`hit()` 靠 startswith 匹配,
+    空清单上恒为 False —— 于是"每次提交跑"的闸门在**纯删除提交**上静默不跑(commit.py 传给它的
+    `present` 只收工作区仍存在的路径): 删 500 行可零评审入库(2026-11-06 评审实测)。
+    """
+    return [g for g in gates if "" in g.get("match", []) or hit(files, g.get("match", []))]
 
 
 # ------------------------------------------------------------------ 占位符展开

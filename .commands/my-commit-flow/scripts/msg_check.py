@@ -75,9 +75,12 @@ PLACEHOLDER_SOFT = ("TODO", "XXX", "FIXME")
 # 正文标签(c2 警告/a5): 拍板 D3 于 2026-11-06 依语料回测改拍降为警告(见 VIOLATION_IDS 注)。
 # 口径 = 词前缀(矩阵原义, 不要求冒号紧邻): 复合标签头(实测数字:/取舍与要点:/动机/取舍:)都认,
 # 项目符号子项(「- 复验:」)与叙述段只提醒不拦。冒号形态: 全角冒号 = a5 警告(拍板 D4: 标点不代改)。
-_LABEL_HEAD_RE = re.compile(r"^(动机|取舍|影响面|实测)")
-_LABEL_RE = re.compile(r"^(动机|取舍|影响面|实测)(?:\([^)]*\))?:\s?")
-_LABEL_FULLWIDTH_RE = re.compile(r"^(动机|取舍|影响面|实测)(?:[（(][^）)]*[）)])?：")
+# 2026-11-06 加 Review / Review-Skip: 分批评审的 trailer 是**合法段落**, 不认它就会让每笔合规提交
+# 都带一条 c2 噪音(计划 26-11-06-0759 D6)。Review-Skip 必须排在 Review 前面, 否则被前缀吃掉。
+_LABEL_WORDS = r"(动机|取舍|影响面|实测|Review-Skip|Review)"
+_LABEL_HEAD_RE = re.compile(rf"^{_LABEL_WORDS}")
+_LABEL_RE = re.compile(rf"^{_LABEL_WORDS}(?:\([^)]*\))?:\s?")
+_LABEL_FULLWIDTH_RE = re.compile(rf"^{_LABEL_WORDS}(?:[（(][^）)]*[）)])?：")
 
 # 不可见字符(a4w): 拍板 D4 = 正文零代改, 只报位置。ZWJ 在 emoji 组合(🧑‍💻)里是合法连接符,
 # 邻位是 emoji 时跳过;NBSP 在 gitmoji 承接位由 B3 归一(骨架位例外), 其余位置只报。
@@ -229,7 +232,7 @@ def review_text(text: str, allow: frozenset[str] = frozenset()) -> MsgReport:
                 warnings.append(f"第 {idx} 段标签用了全角冒号: {head[:14]!r} —— 语料口径是半角(a5, 标点不代改)")
         else:
             warnings.append(
-                f"第 {idx} 段不以已知标签词(动机/取舍/影响面/实测)开头: {head[:20]!r} —— "
+                f"第 {idx} 段不以已知标签词(动机/取舍/影响面/实测/Review)开头: {head[:20]!r} —— "
                 "建议正文段落带标签(c2, 警告不拦 —— 语料回测后降档, 见计划 §06)"
             )
         if head.startswith("实测"):
@@ -237,6 +240,11 @@ def review_text(text: str, allow: frozenset[str] = frozenset()) -> MsgReport:
             rest = "\n".join([_LABEL_RE.sub("", head)] + para[1:])
             if not re.search(r"\d", rest):
                 warnings.append(f"实测段(第 {idx} 段)没有任何数字 —— 规模数字要提交那一刻实测(c5)")
+        elif head.startswith("Review:"):
+            # Review trailer 的三个计数(blocker/修/入池)必须是实测的 —— 与 c5 同口径, 只提醒不拦
+            rest = "\n".join([_LABEL_RE.sub("", head)] + para[1:])
+            if not re.search(r"\d", rest):
+                warnings.append(f"Review 段(第 {idx} 段)没有任何数字 —— blocker/修/入池 三个计数要实测(c5)")
 
     # ---- d1/d1w 占位符 ----
     for ph in PLACEHOLDER_STRONG:

@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>评审容量实验: 批次大小对发现数与幻觉率的影响</title>
+<meta name="doc-type" content="report">
+<meta name="doc-topic" content="review-capacity-experiment">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-11-06-0723">
+<meta name="doc-updated" content="26-11-06-0723">
+<meta name="doc-refs" content="memory-bank/plans/26-11-06-0759-plan-review-batch-policy.html, memory-bank/tasks/26-11-06-rule-review-batch-policy.md">
+<style>
+  :root {
+    --bg: #10151a; --ink: #e4eaef; --dim: #a2b0bd; --faint: #6f7d8a;
+    --hair: #26313a; --hair-soft: #1c252d; --accent: #6db3c9; --accent-ink: #8fd0e0;
+    --warn: #e2a86e; --ok: #8fc98f; --no: #d98a8a; --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  .sheet { max-width: 1080px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 31px; line-height: 1.18; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; margin: 50px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 26px 0 6px; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; }
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  .good { color: var(--ok); } .bad { color: var(--no); } .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">REPORT · memory-bank · doc-topic: review-capacity-experiment</div>
+<h1>评审容量实验: 批次大小对发现数与幻觉率的影响</h1>
+<p class="lede">为回答「agent 一次能评审多少行」而做的对照实验: 同一份 diff 按 4 批 / 2 批 / 1 批三种粒度各评审一遍, 共 <b>10 次派发、56 条发现</b>。结论: <b>发现数约等于派发次数乘以固定值, 与批次大小无关</b>; 幻觉率不随批次变大而上升; 大块的真正代价是<b>换了地方找</b>——对已知缺陷的召回从 7/8 掉到 0/8。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-06-0723 · <b>doc-updated</b> 26-11-06-0723 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 用户指令「先跑实验」(26-11-06 会话); 实验是 code-review 机制重设计的一环, 用于替换从人类研究搬运来的 400 行阈值<br>
+  <b>实验件</b> <code>test-results/review-exp/</code>(gitignored, 未入版本库): 10 份 diff + 10 份 findings JSON + 2 份只读快照
+</div>
+
+<h2><span class="no">§01</span>结论</h2>
+<p><b>① 发现数 ≈ 派发次数 × 5.6, 与批次大小无关。</b> 两轮独立数据都落在同一区间: 26/4=6.5、8/2=4.0、5/1=5.0、12/2=6.0、5/1=5.0, 合计 56 条 / 10 次 = 5.6 条每次。评审者的产出不是被"读得动多少"决定, 而是被"派发了几次"决定——每次派发是一次独立的注意力分配。</p>
+<p><b>② 幻觉率不随批次变大而上升(负面结论, 推翻了事前假设)。</b> 56 条发现全部通过 <code>review.check</code> 逐字引文校验, <b>0 条被弃</b>, 包括 1313 行的单块评审。事前假设是"块越大越会编引文", 数据不支持。因此容量不是安全约束, 只是经济约束。</p>
+<p><b>③ 大块不是"少找几条", 而是"换了地方找"。</b> 在有真值的 D2 上: 2 批召回已知修正点的 <b>7/8</b>; 1 批召回 <b>0/8</b>——它报出的 5 条全是另一批问题。这条最锋利, 也解释了为什么"收口一次评"看起来一直在干活、却总漏掉该漏的。</p>
+<p class="aside">三条结论合起来, 把"400 行"的性质改了: 它不再是<b>容量上限</b>(agent 读得动 1300 行, 且不编造), 而是<b>产出密度的经济学选择</b>——切得细, 派发次数多, 发现就多, 且近似线性(4 倍派发 ≈ 5 倍发现), 未观察到收益递减拐点。</p>
+
+<h2><span class="no">§02</span>方法与实验设计</h2>
+<p><b>控制变量</b>: 同一份 diff 的总改动量恒定, 只改<b>切分粒度</b>; 评审提示逐字相同(同一套 14 条清单、同一份不报清单、同一份输出 schema、同一份只读契约); 评审者同为 Explore 子代理; 每批独立派发, 批内不共享上下文。</p>
+<p><b>变量</b>: 每批的平均改动行数(328 / 657 / 1313 / 388 / 775)。</p>
+<p><b>指标</b>: ①发现数(以及 blocker/major 占比); ②<code>review.check</code> 引文通过率(幻觉率, 机械可测); ③对有真值 diff 的绝对召回。</p>
+<p><b>两个数据集</b>:</p>
+<ul>
+  <li><b>D1</b> = <code>2a58021f</code>(release 管线: 5 个脚本 + 测试 + SKILL.md + 配置), <b>14 文件 / +1308 −5 = 1313 行</b>。分 4 批(~328)、2 批(~657)、1 批(1313)三档。</li>
+  <li><b>D2</b> = <code>771b8d8e</code>(提交消息机检), <b>15 文件 / +762 −13 = 775 行</b>。分 2 批(~388)、1 批(775)两档。选它是因为它有<b>已知真值</b>: 原始收口评审用 3 个分面代理评过同一份 diff, 修复提交 <code>60f030e5</code> 逐项记录了 8 处修正点。</li>
+</ul>
+<p><b>评审者看到的材料</b>: 该提交的只读快照(<code>git archive</code> 导出到仓库外) + 本批的 diff 文件。允许读快照内任意文件判断调用面, 但发现只收 diff 范围内。快照根加了一个空的 <code>.git</code> 目录, 只为通过 <code>review.check --root</code> 的仓库校验, 未执行任何 git 写操作。</p>
+
+<h2><span class="no">§03</span>数据</h2>
+<table>
+  <tr><th>数据集</th><th>批次</th><th>每批行数</th><th>发现</th><th>blocker</th><th>major</th><th>minor</th><th>nit</th><th>引文被弃</th><th>发现/千行</th></tr>
+  <tr><td>D1 (1313 行)</td><td>4</td><td>~328</td><td><b>26</b></td><td>1</td><td>7</td><td>16</td><td>2</td><td class="good">0</td><td>19.8</td></tr>
+  <tr><td>D1</td><td>2</td><td>~657</td><td><b>8</b></td><td>0</td><td>3</td><td>5</td><td>0</td><td class="good">0</td><td>6.1</td></tr>
+  <tr><td>D1</td><td>1</td><td>1313</td><td><b>5</b></td><td>0</td><td>2</td><td>3</td><td>0</td><td class="good">0</td><td>3.8</td></tr>
+  <tr><td>D2 (775 行)</td><td>2</td><td>~388</td><td><b>12</b></td><td>0</td><td>3</td><td>9</td><td>0</td><td class="good">0</td><td>15.5</td></tr>
+  <tr><td>D2</td><td>1</td><td>775</td><td><b>5</b></td><td>0</td><td>1</td><td>3</td><td>1</td><td class="good">0</td><td>6.5</td></tr>
+</table>
+<p class="cm">「发现/千行」= 该档全部发现 ÷ 该 diff 总改动行数。合计 56 条 / 10 次派发 = <b>5.6 条每次</b>, 极差 4.0–6.5, 与批次行数(328–1313)无关。</p>
+<p><b>单批产出的稳定性</b>是本次最强的信号: 6.5 / 4.0 / 5.0 / 6.0 / 5.0——批次大小差 4 倍, 每次派发的产出只差 1.6 倍, 且没有随行数单调变化的趋势。</p>
+
+<h2><span class="no">§04</span>真值锚: 已知缺陷的召回</h2>
+<p>D2 的修复提交 <code>60f030e5</code> 逐项记录了原始 17 条发现的处置, 可归并为 <b>8 处修正点</b>: c2 降警告 / B3 收敛到已知 gitmoji / SLOT 行首锚定 + hash 移出强表 / 读写两侧补瞬时锁重试 / d6 scissors 判据 / a3 单字签名 / emoji 排除区 / b4 截断。</p>
+<table>
+  <tr><th>档位</th><th>派发</th><th>发现</th><th>命中已知修正点</th><th>召回</th></tr>
+  <tr><td>2 批 (~388)</td><td>2</td><td>12</td><td>c2 / B3 / SLOT+hash / 写回重试 / d6 / a3 / b4</td><td class="good"><b>7/8 = 88%</b></td></tr>
+  <tr><td>1 批 (775)</td><td>1</td><td>5</td><td>无(5 条全部是原始评审未覆盖的另一些问题)</td><td class="bad"><b>0/8</b></td></tr>
+</table>
+<p>这一档还顺带证明了两件事: ①<b>2 个全能代理已经超过原始 3 个分面代理的召回</b>(7/8 已知 + 3 条新发现: 计划文档行号失效、基线切片 "+16 例" 少数、a2 白名单绕过); ②大块评审<b>不是变懒, 是换靶</b>——它认真报了 5 条, 只是没有一条落在已知缺陷上。</p>
+<p class="wr">⚠ 该档 n=1(每档只跑一次), 0/8 有可能部分来自单次运行方差; 但方向与 D1 的 26→8→5 一致, 故按"方向可靠、幅度待复测"采信。</p>
+
+<h2><span class="no">§05</span>对评审模型的修正</h2>
+<p><b>原设计的问题不是数字错, 是理由错。</b> code-review skill 的 <code>TIER_LIMIT = 400</code> 注明来源是「SmartBear/Cisco 检出率衰减点」——那是<b>人类注意力</b>的实证(200–400 行 / 60–90 分钟 / 70–90% 检出), 其约束是生理性的。agent 没有这个约束: 1300 行照读, 引文零幻觉。把人类数字当默认值, 是方法论错误。</p>
+<p><b>修正后的三条口径</b>:</p>
+<ul>
+  <li><b>批次上限 400 行保留, 但改称"建议上限"</b>——理由从"容量红线"改为"产出密度与切分合理性的折中": 切得更细发现更多, 但每次派发有成本, 且切到低于"一个自包含变更"时, 跨块问题(接口漂移、重复机制)开始被切断。</li>
+  <li><b>触发条件与批次大小脱钩</b>: 要不要评, 由"累计未评改动量"决定(下限 50 行, 或触碰安全敏感面/红线); 一次能评多少, 由批次切分决定。</li>
+  <li><b>大块不再靠"分面"救</b>: 分面只是换问法, 每个子代理仍要读整块; 超限应<b>拆批</b>(按可独立编译/测试的文件组), 分面只保留给"批内触安全敏感面"的情形。</li>
+</ul>
+
+<h2><span class="no">§06</span>局限</h2>
+<ul>
+  <li><b>n=1 × 单次运行</b>: 每个档位只跑一次, 无法把"批次大小效应"与"单次运行方差"分开。D1 的三档呈单调关系、D2 两档同向, 故认为方向可靠; 精确幅度需重复实验。</li>
+  <li><b>单一模型 / 单一代理类型</b>(Explore), 换模型后 5.6 条/次这个常数会变, 但"产出∝派发次数"的结构性结论不依赖具体常数。</li>
+  <li><b>发现数不等于真缺陷数</b>: 本次只机械校验引文(防幻觉), 未对每条 claim 做正确性裁决; D2 有真值锚, D1 没有。</li>
+  <li><b>未测下限 50 行</b>: 实验只覆盖 328–1313 行, 小于 50 行的批次未验证——"低于 50 行不值得单独派发"仍是推断, 不是实测。</li>
+  <li><b>未测跨块问题</b>: 实验没有构造"只有看全才能发现"的缺陷(接口漂移/重复机制), 因此"切太细会丢跨块问题"这一条来自推理, 不是数据。</li>
+</ul>
+
+<h2><span class="no">§07</span>复现方式</h2>
+<pre><code># 实验件(仓库内, gitignored)
+test-results/review-exp/
+  d1/  a400-{1..4}.diff  a800-{1,2}.diff  a1600-1.diff
+  d2/  b400-{1,2}.diff  b775-1.diff
+  findings/  a400-*.json a800-*.json a1600-*.json b400-*.json b775-*.json
+
+# 只读快照放**仓库外**(&lt;repo&gt;/../_review-exp-snap/): 快照里有 tests/_test_ports.py 与
+# tests/_tmp_bootstrap.py 的副本, 放在树内会让 test_free_port / test_tmp_bootstrap 的
+# "单点定义"守卫把副本判成散落实现, test.full 直接红两条(实测踩到)。
+&lt;repo&gt;/../_review-exp-snap/snap-2a58021f/  snap-771b8d8e/
+
+# 生成快照
+git archive &lt;sha&gt; | tar -x -C &lt;snap-dir&gt;
+# 校验引文(幻觉率)
+uv run python .commands/review/scripts/review_pack.py check --findings &lt;json&gt; --root &lt;snap-dir&gt;
+</code></pre>
+
+<h2><span class="no">§08</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-06-0723</span> 建档: 10 次派发、56 条发现、0 引文被弃; 三条结论与对 400 行阈值的性质修正; 真值锚 7/8 vs 0/8</li>
+</ul>
+
+</div>
+</body>
+</html>

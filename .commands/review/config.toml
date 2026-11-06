@@ -6,14 +6,20 @@ confirmed = true
 [tasks."review.pack"]
 run     = ["uv run python .commands/review/scripts/review_pack.py pack <args>"]
 timeout = 120
-when    = "code-review skill ② 评审包：任务收口、派遣评审子代理之前"
+when    = "code-review skill ③ 评审包：每批收尾、派遣评审子代理之前"
 note    = "--base <rev> 必填（任务起点：任务第一个 commit 的 parent / 多会话任务=上次收口 commit，拿不准问用户）。输出基线与 HEAD hash、diff 统计与 400 行分档提示、文件清单、红线/安全敏感面预警 —— 红线清单与 my-commit-flow 闸门同源（读 .commands/my-commit-flow/.my-commit-flow.toml 的 red_lines/warn_lines，缺文件给可见警告不静默降级）。分档与预警是提示不是闸门，拦截仍归提交闸门"
 
 [tasks."review.check"]
 run     = ["uv run python .commands/review/scripts/review_pack.py check <args>"]
 timeout = 120
-when    = "code-review skill ④ 产出裁决：reviewer 交回 findings JSON 后、采信任何一条之前"
+when    = "code-review skill ⑤ 产出裁决：reviewer 交回 findings JSON 后、采信任何一条之前"
 note    = "--findings <json文件|-> 必填（- 指 stdin），--root 可指定仓库根（默认 cwd）。逐条校验：字段齐全（file/line/quote/severity/claim/relevance/fix）、severity/relevance 枚举合法、quote 与源码逐字比对（单行内连续片段 ≥4 字符，行号允许 ±3 邻近，--window 可调）。REFUTE 的发现直接弃、不复核；rc=0 全部通过 / rc=1 存在被弃条目 / rc=2 用法或环境错误。存量评审 R4 用法：--root <快照目录>（路线会话的 review.lane.start 产物），引文对快照逐字比对"
+
+[tasks."review.trace"]
+run     = ["python .commands/review/scripts/check_review_trace.py <args>"]
+timeout = 60
+when    = "提交闸门(每次提交跑): 批内累计改动是否需要评审、`Review:` trailer 声明与实算是否一致"
+note    = "批次 = 最近一条带 Review:/Review-Skip: 的提交 → 当前工作树(锚点现算, 不用填 hash); 判据顺序: 无待评改动 → Review 行校验(声明行数必须 == 实算, >400 行须带 `· 分面`) → Review-Skip 豁免(理由≥4 字) → 低于 50 行且未触安全面 → 其余拦下。安全敏感面 = red_lines ∪ 路径标记词(与 review_pack 同源)。stdout 静默即通过; 红给一行原因 + 下一步。⚠ 用裸 python 不用 uv run: 脚本纯 stdlib, 而 uv/console-script 在本仓有 trampoline 坏掉的先例(pitfalls/ops/venv-trampoline-clone-copy.md), 提交闸门不能押在它上面"
 
 [tasks."review.lane.manifest"]
 run     = ["uv run python .commands/review/scripts/review_lane.py manifest <args>"]

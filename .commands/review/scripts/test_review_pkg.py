@@ -17,6 +17,9 @@
 - BenignPackTest      无敏感内容的小 diff -> 全能档(纯行数路径); 红线/警告清单仍命中
 - CleanPackTest      干净树 -> +0/-0 且全能; 缺/坏闸门配置 -> 可见降级 + 红线预警"无"; 坏 --base / 非 git --root / 非仓库 cwd -> rc=2; 提交后 HEAD!=base 无后缀且已提交改动仍在范围内
 - CheckTest           PASS(rc=0); 幻觉引文/超窗/缺字段/坏枚举/过短引文/非字符串字段/缺文件 REFUTE(rc=1); 窗口边界与 --window; stdin; 根外与穿越 REFUTE; 非 UTF-8 兜底; 行注入单行化; 非 JSON/非数组/非 UTF-8 输入 rc=2; 空数组 rc=0; 元素非对象 rc=1
+- TraceDecideTest     评审留痕纯判定: 无待评/低于下限放行; 超限无 trailer 拦; trailer 行数不符/缺字段/缺行数拦; >400 行须拆批或记分面; Review-Skip 理由过短拦; 触安全敏感面小改仍要评; Review 优先于 Skip; 记账类/生成物不计入
+- TraceDecideTest(续) 低于下限时正文里的畸形 Review 段不硬拦
+- TraceGateTest       端到端(临时仓库真跑脚本): 复跑阶段标记跳过; 低于下限静默; 超限无 trailer rc=1; trailer 行数相符 rc=0 / 不符 rc=1; 锚点推进(漏评提交被下一批连坐); 评过的提交推进锚点; 提交后复跑不重对行数
 """
 
 from __future__ import annotations
@@ -24,6 +27,7 @@ from __future__ import annotations
 import argparse
 import fnmatch
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -124,7 +128,7 @@ class ConfigTomlTest(unittest.TestCase):
 
     def test_tasks_have_required_keys(self):
         self.assertEqual(set(self.cfg["tasks"]), {
-            "review.pack", "review.check",
+            "review.pack", "review.check", "review.trace",
             "review.lane.manifest", "review.lane.claim", "review.lane.start",
             "review.lane.verify", "review.lane.batch", "review.lane.done", "review.lane.smoke",
         })
@@ -136,6 +140,10 @@ class ConfigTomlTest(unittest.TestCase):
                 self.assertIn("review_lane.py", run_cmd, f"{tid} 应指向 review_lane.py: {run_cmd}")
                 seg = tid.rsplit(".", 1)[-1]
                 self.assertIn(seg, run_cmd.split(), f"{tid} 的 run 应含子命令 {seg}: {run_cmd}")
+            elif tid == "review.trace":
+                # 提交闸门上的命令: 纯 stdlib, 必须用裸 python(uv/console-script 有 trampoline 坏掉的先例)
+                self.assertIn("check_review_trace.py", run_cmd, f"{tid} 应指向 check_review_trace.py: {run_cmd}")
+                self.assertTrue(run_cmd.startswith("python "), f"{tid} 应用裸 python: {run_cmd}")
             else:
                 self.assertIn("review_pack.py", run_cmd, f"{tid} 应指向 review_pack.py: {run_cmd}")
             self.assertIn("<args>", run_cmd)  # 引擎要求占位符才接参
@@ -628,6 +636,209 @@ class CheckTest(unittest.TestCase):
         proc = self._check(["not a dict"])  # 元素非对象 -> REFUTE rc=1
         self.assertEqual(proc.returncode, 1)
         self.assertIn("不是 JSON 对象", proc.stdout)
+
+
+TRACE_SCRIPT = Path(__file__).with_name("check_review_trace.py")
+
+
+def _load_trace():
+    spec = importlib.util.spec_from_file_location("check_review_trace", TRACE_SCRIPT)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def _run_trace(root: Path, msg_file: Path | None = None) -> subprocess.CompletedProcess:
+    args = [sys.executable, str(TRACE_SCRIPT), "--root", str(root)]
+    if msg_file is not None:
+        args += ["--message-file", str(msg_file)]
+    return subprocess.run(args, capture_output=True, text=True, encoding="utf-8", errors="replace")
+
+
+class TraceDecideTest(unittest.TestCase):
+    """评审留痕的纯判定面 —— 判据顺序即优先级(见 check_review_trace 模块头)。"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.mod = _load_trace()
+
+    def _decide(self, count: int, msg: str, sensitive=()):
+        return self.mod.decide(count, list(sensitive), msg)
+
+    def test_no_pending_change_passes(self):
+        self.assertTrue(self._decide(0, "")[0])
+
+    def test_below_floor_passes(self):
+        ok, why = self._decide(49, "")
+        self.assertTrue(ok)
+        self.assertIn("低于下限", why)
+
+    def test_above_floor_without_trailer_fails(self):
+        ok, why = self._decide(50, "✨ 改了点东西\n")
+        self.assertFalse(ok)
+        self.assertIn("未留痕", why)
+
+    def test_trailer_matching_lines_passes(self):
+        ok, _ = self._decide(120, "Review: S3 增量 · 120 行 · blocker 0 · 修 3 · 入池 1\n")
+        self.assertTrue(ok)
+
+    def test_trailer_line_mismatch_fails(self):
+        ok, why = self._decide(120, "Review: S3 · 100 行 · blocker 0 · 修 3 · 入池 1\n")
+        self.assertFalse(ok)
+        self.assertIn("≠ 实算 120 行", why)
+
+    def test_trailer_missing_fields_fails(self):
+        ok, why = self._decide(120, "Review: S3 · 120 行 · blocker 0\n")
+        self.assertFalse(ok)
+        self.assertIn("缺字段", why)
+
+    def test_trailer_without_line_count_fails(self):
+        ok, why = self._decide(120, "Review: S3 · blocker 0 · 修 3 · 入池 1\n")
+        self.assertFalse(ok)
+        self.assertIn("缺 `<N> 行`", why)
+
+    def test_oversize_needs_split_or_facet(self):
+        body = "Review: S3 · 800 行 · blocker 0 · 修 3 · 入池 1\n"
+        ok, why = self._decide(800, body)
+        self.assertFalse(ok)
+        self.assertIn("拆批", why)
+        self.assertTrue(self._decide(800, body.replace("入池 1", "入池 1 · 分面"))[0])
+
+    def test_below_floor_ignores_malformed_trailer(self):
+        """低于下限的批没有 trailer 义务 —— 正文里随手写一句「Review: 见报告」不该被硬拦。"""
+        ok, _ = self._decide(5, "动机: 小改\n\nReview: 见报告\n")
+        self.assertTrue(ok)
+
+    def test_skip_needs_real_reason(self):
+        self.assertFalse(self._decide(120, "Review-Skip: 改\n")[0])
+        ok, why = self._decide(120, "Review-Skip: 只改了一处文档措辞, 无行为变化\n")
+        self.assertTrue(ok)
+        self.assertIn("豁免", why)
+
+    def test_sensitive_small_change_still_needs_review(self):
+        ok, why = self._decide(12, "", sensitive=["src/auto_qb/auth_token.py"])
+        self.assertFalse(ok)
+        self.assertIn("安全敏感面", why)
+
+    def test_review_wins_over_skip(self):
+        msg = "Review: S3 · 120 行 · blocker 0 · 修 1 · 入池 0\nReview-Skip: 随便写写\n"
+        self.assertTrue(self._decide(120, msg)[0])  # 有真 trailer 时按 trailer 校验, 不被 skip 短路
+
+    def test_generated_and_bookkeeping_are_not_counted(self):
+        self.assertFalse(self._counted("memory-bank/pitfalls/_index.md", set()))
+        self.assertFalse(self._counted("memory-bank/tasks/26-11-06-x.md", set()))
+        self.assertFalse(self._counted("memory-bank/activeContext/26-11-06-0000-x.md", set()))
+        self.assertFalse(self._counted("memory-bank/testing/baselines/26-11-06-0000-x.md", set()))
+        self.assertTrue(self._counted("memory-bank/conventions/collaboration.md", set()))
+        self.assertTrue(self._counted("src/auto_qb/core/rules.py", set()))
+
+    def _counted(self, path: str, gen: set[str]) -> bool:
+        return self.mod._counted(path, gen)
+
+
+class TraceGateTest(unittest.TestCase):
+    """端到端: 临时仓库里真跑脚本 —— 验锚点推进(漏评的提交滚进下一批)与退出码。"""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp(prefix="trace_gate_"))
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self._git("init")
+        self._git("config", "user.email", "t@example.test")
+        self._git("config", "user.name", "t")
+        (self.tmp / "app.py").write_text("A = 1\n", encoding="utf-8")
+        self._commit("base")
+
+    def _git(self, *args: str) -> str:
+        proc = subprocess.run(["git", *args], cwd=self.tmp, capture_output=True, text=True, encoding="utf-8")
+        assert proc.returncode == 0, f"git {args}: {proc.stderr}"
+        return proc.stdout.strip()
+
+    def _commit(self, msg: str) -> None:
+        self._git("add", "-A")
+        self._git("commit", "-m", msg)
+
+    def _msg(self, text: str) -> Path:
+        """消息文件放 `.git/` 下 —— 与真实约定路径同款(git 不把 .git 内容算进改动清单)。"""
+        path = self.tmp / ".git" / "MSG.txt"
+        path.write_text(text, encoding="utf-8")
+        return path
+
+    def _append(self, lines: int) -> None:
+        """增量追加(不是重写): 重写会让"本批"变成删+增, 把行数算成两倍。"""
+        path = self.tmp / "app.py"
+        start = getattr(self, "_n", 0)
+        add = "".join(f"X{start + i} = {i}\n" for i in range(lines))
+        path.write_text(path.read_text(encoding="utf-8") + add, encoding="utf-8")
+        self._n = start + lines
+
+    def test_below_floor_is_silent(self):
+        self._append(10)
+        proc = _run_trace(self.tmp, self._msg("小改\n"))
+        self.assertEqual(proc.returncode, 0, proc.stdout)
+        self.assertEqual(proc.stdout.strip(), "")  # v3 契约: 通过即静默
+
+    def test_above_floor_without_trailer_blocks(self):
+        self._append(60)
+        proc = _run_trace(self.tmp, self._msg("改了一堆\n"))
+        self.assertEqual(proc.returncode, 1)
+        self.assertIn("未留痕", proc.stdout)
+
+    def test_trailer_with_matching_count_passes(self):
+        self._append(60)
+        proc = _run_trace(self.tmp, self._msg("✨ 改\n\nReview: 本批 · 60 行 · blocker 0 · 修 0 · 入池 0\n"))
+        self.assertEqual(proc.returncode, 0, proc.stdout)
+
+    def test_trailer_with_wrong_count_blocks(self):
+        self._append(60)
+        proc = _run_trace(self.tmp, self._msg("✨ 改\n\nReview: 本批 · 30 行 · blocker 0 · 修 0 · 入池 0\n"))
+        self.assertEqual(proc.returncode, 1)
+        self.assertIn("≠ 实算", proc.stdout)
+
+    def test_anchor_advances_so_skipped_commits_roll_forward(self):
+        self._append(30)
+        self._commit("✨ 第一批\n\nReview: 第一批 · 30 行 · blocker 0 · 修 0 · 入池 0\n")
+        self._append(20)
+        self._commit("漏评的一笔\n")  # 20 行, 没写 trailer: 锚点停在第一批
+        self._append(40)
+        proc = _run_trace(self.tmp, self._msg("第三笔\n"))
+        self.assertEqual(proc.returncode, 1)
+        self.assertIn("60 行", proc.stdout)  # 20 + 40: 漏评的那笔被下一批连坐
+
+    def test_cold_start_counts_worktree_only(self):
+        """冷启动(历史里一条 Review: 都没有)时锚点退化为 HEAD —— 只算工作树, 不追溯全历史。
+
+        这是有意接受的边界: 追溯全历史会让"第一次提交"要求评审整棵仓库。落地后第一笔带 trailer
+        的提交即建立锚点, 此后一律按锚点滚进。
+        """
+        self._append(30)
+        self._commit("冷启动前的一笔\n")
+        self._append(20)
+        proc = _run_trace(self.tmp, self._msg("冷启动后的一笔\n"))
+        self.assertEqual(proc.returncode, 0, proc.stdout)  # 只算 20 行, 未把前一笔 30 行算进来
+
+    def test_reviewed_commit_moves_the_anchor(self):
+        self._append(60)
+        self._commit("✨ 第一批\n\nReview: 第一批 · 60 行 · blocker 0 · 修 0 · 入池 0\n")
+        self._append(5)  # 新一批只有 5 行 —— 锚点已前进, 不该被上一批的行数拖累
+        proc = _run_trace(self.tmp, self._msg("小补\n"))
+        self.assertEqual(proc.returncode, 0, proc.stdout)
+
+    def test_post_phase_env_skips_recheck(self):
+        """合流复跑(commit.py 注入 COMMIT_FLOW_GATE_PHASE=post)不再对行数。
+
+        不跳过的话, rebase 进来的远端提交会被算进本批 → 假红「未留痕」。
+        """
+        self._append(200)
+        env = dict(os.environ, COMMIT_FLOW_GATE_PHASE="post")
+        proc = subprocess.run([sys.executable, str(TRACE_SCRIPT), "--root", str(self.tmp)],
+                              capture_output=True, text=True, encoding="utf-8", env=env)
+        self.assertEqual(proc.returncode, 0, proc.stdout)
+
+    def test_post_commit_rerun_does_not_recheck(self):
+        self._append(60)
+        self._commit("✨ 第一批\n\nReview: 第一批 · 60 行 · blocker 0 · 修 0 · 入池 0\n")
+        proc = _run_trace(self.tmp)  # 无 --message-file → 退到 HEAD 消息 = 提交后复跑
+        self.assertEqual(proc.returncode, 0, proc.stdout)
 
 
 if __name__ == "__main__":

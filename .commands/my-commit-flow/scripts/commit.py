@@ -47,6 +47,7 @@ ref, 修好重跑还能用同一份)。核对失败但 HEAD 消息与文件一�
 
 from __future__ import annotations
 
+import os
 import sys
 import time
 from pathlib import Path
@@ -321,6 +322,10 @@ def main(argv: list[str] | None = None) -> int:
         return 1  # 消息文件保留(自动修的部分一并保留): 修好后重跑用的是修后文本
 
     # 1 闸门(在暂存前: fmt 类闸门会改文件)。按本地改动清单跑; 合流后的树在步骤 6 复跑。
+    #   评审留痕闸门(review.trace)要读提交信息: 闸门是 shell 子进程, 拿不到 args.message_file,
+    #   所以把生效路径经环境变量递下去(约定路径与 --message-file 都覆盖)。不设它, 闸门只会去读
+    #   .git/COMMIT_MSG_AI.txt —— --message-file 指向别处时就会读到旧文件, 判成"没写 trailer"(假红)。
+    os.environ["COMMIT_FLOW_MSG_FILE"] = str(msg_file)
     changed = staged + unstaged
     present = [p for p in changed if (root / p).exists()]
     ctx = {"root": root, "changed": present, "each_limit": cfg.get("each_limit", 99)}
@@ -419,6 +424,9 @@ def main(argv: list[str] | None = None) -> int:
             step(steps, "快照: 上游改动了本包 → 本次仍按启动版本运行, 重跑以采用新版本")
         # 6b 复跑闸门: 规则仍是**启动版本那份** cfg —— 快照语义下不重取配置(那正是撕裂的来源);
         #    复跑要验的只是"合并后的树", 改动清单也不变(仍是本次提交的那批)。
+        #    ❗阶段标记: 评审留痕闸门(review.trace)按"锚点→工作树"算行数, 复跑时 rebase 进来的远端
+        #    提交会被算进本批 → 假红。显式告诉它"这是复跑", 别让闸门去猜(猜法在 2026-11-06 评审里被证伪)。
+        os.environ["COMMIT_FLOW_GATE_PHASE"] = "post"
         failures_r, _manual_r, _ran_r = run_gates(gates_for(present, cfg["gates"]), ctx)
         if failures_r:
             note, cmd, rc, secs, tail = failures_r[0]

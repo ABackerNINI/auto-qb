@@ -11,9 +11,9 @@
 
 完整规程(会话开始/收尾DoD/立档阈值4条/任务档案模板)见memory-bank skill(`.agents/skills/memory-bank/SKILL.md`);机械守卫`tests/test_memory_bank_*.py`(四分)。本节只留入口。
 
-- **开始**:①**先同步(硬性,无豁免——问答/只读分析轮次也必须先同步)**——`commands run my-commit-flow.sync`:自动fetch+快进/分叉自动rebase(保线性),结果行「已同步 <hash>」贴进回复,真改写HEAD的步骤(快进/rebase)按「旧hash→新hash」各留一行在它上面;失败一行含原因与步骤(树脏/冲突已自动回滚),照做后重跑,**禁止在落后的分支上工作——只读分析同样禁止**。**只读评审子代理豁免本步**(同步是主会话开工动作;其git状态不动,自检锚=任务提示给的head hash——派遣照抄code-review skill③的三件套);**可写子代理不豁免**(照常同步,或在任务提示里钉死基线)。②看会话滚动状态:`commands run kb.active`列`memory-bank/activeContext/`切片;该读哪份文档走上面的路由。③**只动当前这一个clone**——跨仓库操作**绝对禁止**,须用户显式说「授权」(见「🔴 跨仓库操作」节)。
+- **开始**:①**先同步(硬性,无豁免——问答/只读分析轮次也必须先同步)**——`commands run my-commit-flow.sync`:自动fetch+快进/分叉自动rebase(保线性),结果行「已同步 <hash>」贴进回复,真改写HEAD的步骤(快进/rebase)按「旧hash→新hash」各留一行在它上面;失败一行含原因与步骤(树脏/冲突已自动回滚),照做后重跑,**禁止在落后的分支上工作——只读分析同样禁止**。**只读评审子代理豁免本步**(同步是主会话开工动作;其git状态不动,自检锚=任务提示给的head hash——派遣照抄code-review skill④的三件套);**可写子代理不豁免**(照常同步,或在任务提示里钉死基线)。②看会话滚动状态:`commands run kb.active`列`memory-bank/activeContext/`切片;该读哪份文档走上面的路由。③**只动当前这一个clone**——跨仓库操作**绝对禁止**,须用户显式说「授权」(见「🔴 跨仓库操作」节)。
 - **建件与改版**:一律命令化创建(`kb.new <族>` / `kb.status` / `kb.bump` / `kb.wrap`),派生面零手写;族清单与口径见`memory-bank/conventions/doc-forms.md`「创建/更新方式」。
-- **收尾**:任务收口先跑code-review skill(收口判定/豁免见其①,`review.pack`/`review.check`是机械面),然后按skill的DoD:切片`commands run kb.wrap`(机械面;蒸馏与判断仍是agent的活)→达阈值立档`commands run kb.new task`→代码事实变更回写`memory-bank/`与根README→`commands run test.full`并新建基线切片(`kb.new baseline --total ..`,数字从实测誊写)→**新坑按动作写进`pitfalls/<类>/<主题>.md`并重跑`commands run kb.index`**。若这轮踩到**已记的坑**,把该条`复发`+1,并在档案里写一句为什么没命中(路由没到/文件没读/读了没照做)。
+- **收尾**:每批收尾先跑code-review skill(批次判定见其①,`review.pack`/`review.check`是机械面; 提交闸门强制 `Review:` trailer),然后按skill的DoD:切片`commands run kb.wrap`(机械面;蒸馏与判断仍是agent的活)→达阈值立档`commands run kb.new task`→代码事实变更回写`memory-bank/`与根README→`commands run test.full`并新建基线切片(`kb.new baseline --total ..`,数字从实测誊写)→**新坑按动作写进`pitfalls/<类>/<主题>.md`并重跑`commands run kb.index`**。若这轮踩到**已记的坑**,把该条`复发`+1,并在档案里写一句为什么没命中(路由没到/文件没读/读了没照做)。
 - **冲突裁决**:代码 > `memory-bank/` > 根`README.md` > `想法.md`;漂移以代码为准并回写。
 
 ## 产出口径

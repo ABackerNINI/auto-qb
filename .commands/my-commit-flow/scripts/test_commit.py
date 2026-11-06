@@ -273,6 +273,20 @@ def test_msg_check_body_labels_warn_c2():
     assert not msg_check_mod.review_text("✨ 单行小改").violations  # 无正文 → 无标签义务
 
 
+def test_msg_check_review_trailer_is_a_known_label():
+    """`Review:` / `Review-Skip:` 是合法段落(计划 26-11-06-0759 D6)。
+
+    不认它, 每笔合规的分批评审提交都会带一条 c2 噪音 —— 而噪音一多, 真警告就没人看了。
+    数字约束与 c5 同口径: 只提醒不拦(Review-Skip 是自由文本, 不要求数字)。
+    """
+    r = msg_check_mod.review_text("✨ 中文概述\n\n动机: 说明\n\nReview: 本批 · 366 行 · blocker 0 · 修 3 · 入池 1")
+    assert not r.violations and not [x for x in r.warnings if "c2" in x]
+    skip = msg_check_mod.review_text("✨ 中文概述\n\n动机: 说明\n\nReview-Skip: 只改了文档措辞, 无行为变化")
+    assert not skip.violations and not [x for x in skip.warnings if "c2" in x]
+    bare = msg_check_mod.review_text("✨ 中文概述\n\n动机: 说明\n\nReview: 本批评过了")
+    assert not bare.violations and any("Review 段" in w for w in bare.warnings)
+
+
 def test_msg_check_leading_blank_lines_are_git_normalized():
     r = msg_check_mod.review_text("\n\n✨ 中文概述")  # git cleanup 剥前导空行: 按 will-be-committed 形态判定
     assert not r.violations and not r.fixed  # 收口评审 minor: 反例钉住首非空行才是 subject
@@ -932,3 +946,38 @@ def test_check_refs_branch_rollback_routes_to_rollback_entry(repo, monkeypatch):
     assert "分支 ref 被回退" in text
     assert "update-ref refs/heads/develop" in text
     assert "git pack-refs --all" not in text
+
+
+def test_review_trace_gate_wired():
+    """评审留痕闸门必须挂在提交路径上(2026-11-06 分批评审, report 26-11-06-0723)。
+
+    守的是「闸门被删/被注释掉」这种静默失效 —— 2026-10-11 的静默红教训: 能判红却不在闸门里,
+    等于没有。三条一起查: 条目在 + auto=true + 每次提交都跑(触发条件是按累计行数, 不是按路径)。
+    """
+    import tomllib
+
+    root = Path(__file__).resolve().parents[3]
+    cfg = tomllib.loads((root / ".commands/my-commit-flow/.my-commit-flow.toml").read_text(encoding="utf-8"))
+    hits = [g for g in cfg.get("gates", []) if any("review.trace" in cmd for cmd in g.get("run", []))]
+    assert hits, "提交闸门里没有 review.trace —— 评审留痕的强制面被拆掉了"
+    gate = hits[0]
+    assert gate.get("auto") is True, "review.trace 必须 auto=true(只打印等于没挂)"
+    assert gate.get("match") == [""], "review.trace 必须每次提交都跑(判据是累计行数, 按路径匹配永远命中不了)"
+    assert (root / ".commands/review/scripts/check_review_trace.py").exists(), "闸门脚本不在盘上"
+
+    rcfg = tomllib.loads((root / ".commands/review/config.toml").read_text(encoding="utf-8"))
+    assert "review.trace" in rcfg["tasks"], "review.trace 没登记进 review 包(命令单点)"
+    assert "<args>" in rcfg["tasks"]["review.trace"]["run"][0], "引擎要求 <args> 占位符才接参"
+
+
+def test_always_gate_hits_even_on_empty_change_list():
+    """`match=[""]` = 每次提交都跑 —— 纯删除提交时改动清单为空也必须命中。
+
+    2026-11-06 分批评审实测: commit.py 传给闸门的是 `present`(工作区仍存在的路径), 纯删除提交
+    它是空的, 于是 `match=[""]` 的评审留痕闸门**根本不跑**, 删 500 行可零评审入库。
+    """
+    from _pipeline import gates_for
+
+    gates = [{"match": [""], "run": ["x"], "note": "always"}, {"match": ["src/"], "run": ["y"], "note": "src"}]
+    assert [g["note"] for g in gates_for([], gates)] == ["always"]
+    assert [g["note"] for g in gates_for(["src/a.py"], gates)] == ["always", "src"]

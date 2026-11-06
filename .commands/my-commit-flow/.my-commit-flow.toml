@@ -161,6 +161,20 @@ timeout = 300
 note  = "脚本冒烟: 改了哪个跑哪个(<each:> 把一条 run 复制成多条); |--with-safety 摘掉「无参即真动作」脚本(否则 --help 会真的同步/推送)"
 
 [[gates]]
+# 评审留痕(2026-11-06, 计划/report 26-11-06-0723): 分批评审的强制面。
+# 为什么 match 是空串(每次提交都跑): 触发条件不是"改了哪些文件", 而是**批内累计未评改动量** ——
+#   锚点从 git 历史现算(最近一条带 Review:/Review-Skip: 的提交), 谁漏评谁的提交滚进下一批。
+#   按路径匹配永远命中不了"这一笔把累计量推过 50 行"这种事。
+# ❗不在这里抄命令 —— 走 commands 引擎的 review.trace(单点定义在 .commands/review/config.toml)。
+#   该 task 用裸 python 而非 uv run: 脚本纯 stdlib, 而 uv/console-script 在本仓有 trampoline 坏掉的先例
+#   (pitfalls/ops/venv-trampoline-clone-copy.md), 提交闸门不能押在它上面。
+match = [""]
+run   = ["python <skill-dir:commands>/scripts/run.py run review.trace"]
+auto  = true
+timeout = 60
+note  = "评审留痕: 批内累计 ≥50 行(代码+事实性文档)或触安全敏感面时必须写 `Review:` trailer, 声明行数要与实算一致; 免评走 `Review-Skip: <理由>`; 无待评改动静默"
+
+[[gates]]
 # 空串 = 每次提交都命中 (hit 用 startswith/子串匹配, 空串匹配一切路径)。
 # 为什么需要"每次"而不是只匹配 .agents/skills/: 从远端 pull 进来的 skill 改动在
 # 本地不产生 diff (HEAD 已经跟着往前走了), 按路径匹配永远命中不了 —— 只能靠每次
