@@ -19,7 +19,7 @@
 - CheckTest           PASS(rc=0); 幻觉引文/超窗/缺字段/坏枚举/过短引文/非字符串字段/缺文件 REFUTE(rc=1); 窗口边界与 --window; stdin; 根外与穿越 REFUTE; 非 UTF-8 兜底; 行注入单行化; 非 JSON/非数组/非 UTF-8 输入 rc=2; 空数组 rc=0; 元素非对象 rc=1
 - TraceDecideTest     评审留痕纯判定: 无待评/低于下限放行; 超限无 trailer 拦; trailer 行数不符/缺字段/缺行数拦; >400 行须拆批或记分面; Review-Skip 理由过短拦; 触安全敏感面小改仍要评; Review 优先于 Skip; 记账类/生成物不计入
 - TraceDecideTest(续) 低于下限时正文里的畸形 Review 段不硬拦
-- TraceGateTest       端到端(临时仓库真跑脚本): 复跑标记跳过且用后即删; 低于下限静默; 超限无 trailer rc=1; trailer 行数相符 rc=0 / 不符 rc=1; 锚点推进(漏评提交被下一批连坐); 评过的提交推进锚点; 提交后复跑不重对行数
+- TraceGateTest       端到端(临时仓库真跑脚本): 复跑标记跳过且用后即删; 低于下限静默; 超限无 trailer rc=1; trailer 行数相符 rc=0 / 不符 rc=1; 锚点推进(漏评提交被下一批连坐); 评过的提交推进锚点; 提交后复跑不重对行数; 齐平字段弱校验(计划 26-11-07-0201 落点 3): 缺字段/合法 8hex 静默 rc0, 格式异常打 [warn] 一行但 rc0
 """
 
 from __future__ import annotations
@@ -875,6 +875,41 @@ class TraceGateTest(unittest.TestCase):
         self._commit("✨ 第一批\n\nReview: 第一批 · 60 行 · blocker 0 · 修 0 · 入池 0\n")
         proc = _run_trace(self.tmp)  # 无 --message-file → 退到 HEAD 消息 = 提交后复跑
         self.assertEqual(proc.returncode, 0, proc.stdout)
+
+    # ---- 齐平字段弱校验(计划 26-11-07-0201 落点 3): 不强制存在、不验真值, 只查格式; 异常仅 [warn] 不判红
+
+    def test_trailer_without_flush_field_passes_silently(self):
+        """缺齐平字段 → 完全静默通过(rc=0 无输出), 现行为不变。"""
+        self._append(60)
+        proc = _run_trace(self.tmp, self._msg("✨ 改\n\nReview: 本批 · 60 行 · blocker 0 · 修 0 · 入池 0\n"))
+        self.assertEqual(proc.returncode, 0, proc.stdout)
+        self.assertEqual(proc.stdout.strip(), "")
+
+    def test_trailer_flush_field_valid_passes_silently(self):
+        """`· 齐平 <8hex>` 格式合法 → 静默通过(rc=0 无输出); 与 `· 分面` 并存时行数/字段解析不被后缀破坏。"""
+        self._append(60)
+        msg = "✨ 改\n\nReview: 本批 · 60 行 · blocker 0 · 修 0 · 入池 0 · 齐平 a7fb3db7\n"
+        proc = _run_trace(self.tmp, self._msg(msg))
+        self.assertEqual(proc.returncode, 0, proc.stdout)
+        self.assertEqual(proc.stdout.strip(), "")
+        self._append(350)  # 凑到 410 行: 超上限必须带分面 —— 分面+齐平同现仍按原解析放行
+        big = "✨ 改\n\nReview: 本批 · 410 行 · blocker 0 · 修 0 · 入池 0 · 分面 · 齐平 0123abcd\n"
+        proc = _run_trace(self.tmp, self._msg(big))
+        self.assertEqual(proc.returncode, 0, proc.stdout)
+        self.assertEqual(proc.stdout.strip(), "")
+
+    def test_trailer_flush_field_invalid_warns_but_passes(self):
+        """格式异常(非 8 位 hex) → 打一行 [warn] 但 rc=0 放行; 绝不因齐平字段判红。"""
+        self._append(60)
+        proc = _run_trace(self.tmp, self._msg("✨ 改\n\nReview: 本批 · 60 行 · blocker 0 · 修 0 · 入池 0 · 齐平 xyz\n"))
+        self.assertEqual(proc.returncode, 0, proc.stdout)
+        self.assertIn("[warn]", proc.stdout)
+        self.assertIn("8位", proc.stdout)
+        self.assertNotIn("评审留痕: ", proc.stdout)  # 判红失败行的形状, 不该出现
+        # 另一形态: 出现了字段但 hash 缺失/超长, 同样只 warn
+        proc = _run_trace(self.tmp, self._msg("✨ 改\n\nReview: 本批 · 60 行 · blocker 0 · 修 0 · 入池 0 · 齐平 a7fb3db71\n"))
+        self.assertEqual(proc.returncode, 0, proc.stdout)
+        self.assertIn("[warn]", proc.stdout)
 
 
 if __name__ == "__main__":

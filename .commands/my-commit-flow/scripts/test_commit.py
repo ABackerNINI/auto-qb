@@ -16,7 +16,7 @@
 - test_head_rewrite_trace_ends_at_result_hash  步骤链不变量: 链尾 == 结果行 hash · 相邻两步首尾相接 · 顺序在结果行上面
 - test_remote_conflict_reports_partial    真仓: 同文件冲突 → rebase 自动回滚 → 提交成功(未推送) + 冲突模板
 - test_post_rebase_gates_rerun_on_diverge 真仓: rebase 合入远端 → 闸门复跑一轮(共两轮, 同一清单)
-- test_post_rebase_gate_red_blocks_push   真仓: 复跑红 → 推送未完成 + 修复指引, 不推送
+- test_post_rebase_gate_red_blocks_push   真仓: 复跑红 → 推送未完成 + 修复指引, 不推送, 登记评审边界行(未过措辞)
 - test_post_rebase_gate_dirty_amends      真仓: 复跑的 fmt 类闸门又改文件 → amend 折进未推送 tip
 - test_post_rebase_pack_changed_leaves_hint 真仓: 合流改动了本包 → 登记一行「仍按启动版本运行, 重跑以采用新版本」
 - test_gate_failure_blocks_commit         闸门红 → 提交失败 + 闸门名 + 失败输出, 不产生提交
@@ -61,6 +61,14 @@
                                           接线: 显式 --message-file 同受检(拍板 D6), 自定义路径不删
 - test_message_review_autofix_commits     接线: BOM+NBSP 承接位自动修后正常落库, HEAD 消息已归一, 修正留痕
 - test_message_allow_escape               接线: msg_check_allow 放行 b4 → 全英文消息照常提交且零机检输出
+- test_review_boundary_printed_for_handwritten_remote
+                                          落点 2(计划 26-11-07-0201): rebase 真合入远端且含手写文件
+                                          → 登记一行评审边界(远端 N 笔 / 路径 / 相交 M 数值正确)
+- test_review_boundary_silent_when_remote_all_bookkeeping
+                                          D3 不打条件: 远端改动全在记账类/生成物(gen_all --list 桩
+                                          先入 base + tasks/ 前缀) → 不打提示行
+- test_review_boundary_intersection_marked 落点 2 相交标注: 远端两笔、其中 x.txt 与本批同一文件
+                                          → N=2 且 M=1, 两条路径都在提示行
 """
 
 from __future__ import annotations
@@ -649,6 +657,7 @@ def test_post_rebase_gate_red_blocks_push(repo, tmp_path, monkeypatch, capsys):
     assert rc == 0
     assert "提交成功" in out and "未推送" in out
     assert "推送未完成: 闸门「测试闸门」未过(合并远端后复跑" in out
+    assert "评审边界: 组合树测试闸门未过, 评审未覆盖远端 1 笔 · 路径 b.txt · 与本批相交 0 处" in out
     assert "重跑 commands run ship.commit" in out and "boom" in out
     assert runs["n"] == 2
 
@@ -718,6 +727,69 @@ def test_head_rewrite_trace_ends_at_result_hash(repo, tmp_path, monkeypatch, cap
     assert pairs[-1][1] in res, f"结果行的 hash 必须与最后一步箭头右侧一致: {lines}"
     assert [p[1] for p in pairs[:-1]] == [p[0] for p in pairs[1:]], f"步骤链必须首尾相接: {lines}"
     assert lines[0].startswith("同步: ")  # 步骤行按发生顺序排在结果行上面
+
+
+# ------------------------------------------------------------------ 评审边界提示行(计划 26-11-07-0201 落点 2)
+
+
+def test_review_boundary_printed_for_handwritten_remote(repo, tmp_path, monkeypatch, capsys):
+    """rebase 真合入远端提交且含手写文件 → 登记一行评审边界提示, 让「组合树只过了测试闸门、
+    评审未覆盖远端改动」从静默变可见; 远端笔数 N 与路径如实呈现, 相交 M=0(与本批无交集)。"""
+    monkeypatch.setattr(commit_mod, "run_gates", lambda hits, ctx: ([], [], 0))
+    monkeypatch.setattr(push_mod, "run_push", lambda steps=None: (True, "推送成功 abcdef01"))
+    _write_msg(repo)
+    (repo / "x.txt").write_text("x\n", encoding="utf-8")
+    _push_remote_commit(repo, tmp_path, "src/remote_new.py", "upstream\n")
+    assert commit_mod.main([]) == 0
+    out = capsys.readouterr().out
+    m = re.search(r"评审边界: 组合树仅过测试闸门, 评审未覆盖远端 (\d+) 笔 · 路径 (.+) · 与本批相交 (\d+) 处", out)
+    assert m, f"缺评审边界行: {out}"
+    assert m.group(1) == "1"  # 远端合入 1 笔
+    assert m.group(2) == "src/remote_new.py"  # 手写路径进提示行
+    assert m.group(3) == "0"  # 与本批(x.txt)无交集
+
+
+def test_review_boundary_silent_when_remote_all_bookkeeping(repo, tmp_path, monkeypatch, capsys):
+    """D3 不打条件: 远端改动全部落在记账类/生成物 → 不打提示行。
+    生成物清单走 gen_all.py --list 桩(先入 base —— 桩本体不能留在远端改动集里, 否则成手写件)。"""
+    gen_script = repo / ".agents" / "skills" / "memory-bank" / "scripts" / "gen_all.py"
+    gen_script.parent.mkdir(parents=True)
+    gen_script.write_text("print('gen/out.md')\n", encoding="utf-8")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-m", "stub gen_all")
+    _git(repo, "push", "origin", "develop")
+    monkeypatch.setattr(commit_mod, "run_gates", lambda hits, ctx: ([], [], 0))
+    monkeypatch.setattr(push_mod, "run_push", lambda steps=None: (True, "推送成功 abcdef01"))
+    _write_msg(repo)
+    (repo / "x.txt").write_text("x\n", encoding="utf-8")
+    _push_remote_commit(repo, tmp_path, "gen/out.md", "generated\n")
+    _push_remote_commit(repo, tmp_path, "memory-bank/tasks/26-11-07-x.md", "note\n")
+    assert commit_mod.main([]) == 0
+    out = capsys.readouterr().out
+    assert _result(out).startswith("提交成功 ")
+    assert "评审边界" not in out, out
+
+
+def test_review_boundary_intersection_marked(repo, tmp_path, monkeypatch, capsys):
+    """相交标注(D3): 远端改动路径 ∩ 本批清单 → M 标注点亮「远端改了本批同一批文件」; N 数远端笔数。
+    本批与远端改 x.txt 的不同行 → rebase 自动合并, 相交在无冲突下也必须标出来。"""
+    (repo / "x.txt").write_text("l1\nl2\nl3\n", encoding="utf-8")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-m", "base x")
+    _git(repo, "push", "origin", "develop")  # x.txt 先进远端, 别的 clone 才改得到同一批文件
+    monkeypatch.setattr(commit_mod, "run_gates", lambda hits, ctx: ([], [], 0))
+    monkeypatch.setattr(push_mod, "run_push", lambda steps=None: (True, "推送成功 abcdef01"))
+    (repo / "x.txt").write_text("L1-local\nl2\nl3\n", encoding="utf-8")  # 本批改 line1
+    _write_msg(repo)
+    _push_remote_commit(repo, tmp_path, "x.txt", "l1\nl2\nL3-remote\n", msg="remote x")  # 远端改 line3
+    _push_remote_commit(repo, tmp_path, "other.txt", "o\n", msg="remote other")
+    assert commit_mod.main([]) == 0
+    out = capsys.readouterr().out
+    m = re.search(r"评审边界: 组合树仅过测试闸门, 评审未覆盖远端 (\d+) 笔 · 路径 (.+) · 与本批相交 (\d+) 处", out)
+    assert m, f"缺评审边界行: {out}"
+    assert m.group(1) == "2"  # 两笔远端提交
+    assert m.group(3) == "1"  # x.txt 与本批相交
+    assert "x.txt" in m.group(2) and "other.txt" in m.group(2)  # 两条路径都在
 
 
 # ------------------------------------------------------------------ 失败与例外路径

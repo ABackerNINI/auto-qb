@@ -42,8 +42,9 @@
 - [26-10-14-webui-qb-traffic-agg-live-tail](../26-10-14-webui-qb-traffic-agg-live-tail.md) qB 流量图 agg 段活尾合流(S7): 3d+ 视图图尾真空修复
 - [26-10-09-backend-transport-encryption](../26-10-09-backend-transport-encryption.md) 本地通道传输安全调研(WebUI + HR 取数通道)
 
-## Done (299)
+## Done (300)
 
+- [26-11-07-memory-bank-review-rebase-gap](../26-11-07-memory-bank-review-rebase-gap.md) 跨 clone rebase 组合缺口修补实施
 - [26-11-06-memory-bank-kb-nav-search-ghint](../26-11-06-memory-bank-kb-nav-search-ghint.md) kb.nav 搜索被排除匹配项提示行
 - [26-11-06-memory-bank-task-refs-regex](../26-11-06-memory-bank-task-refs-regex.md) TASK_REFS_RE 空行跨行捕获修复
 - [26-11-06-rule-review-batch-policy](../26-11-06-rule-review-batch-policy.md) 分批评审: 一批一评 + 提交闸门强制留痕

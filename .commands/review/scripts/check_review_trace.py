@@ -16,6 +16,8 @@ agent 不用填 hash(填错就是假账), 且天然"连坐": 谁漏评, 那笔�
    实算 > 400 行时必须带 `· 分面`(否则应先拆批)
 5. 提交信息有 `Review-Skip: <理由>`(理由 ≥4 字) → 通过(豁免进 git log, 可审计)
 6. 其余 → 失败, 一行原因 + 下一步
+7. 旁路(不判红): `Review:` 行的 `· 齐平 <8hex>` 字段只查格式(计划 26-11-07-0201 落点 3) —— 缺失不问、
+   真值不验; 格式异常打一行 `[warn]` 但 rc=0 放行(R4: 弱字段, 与「行数 ±0」的强校验刻意区分)
 
 > 下限排在 trailer 校验之前: 5 行的小改正文里写一句「Review: 见报告」不该被硬拦「缺 `<N> 行` 声明」
 > —— 低于下限的批本来就没有 trailer 义务(2026-11-06 评审实测)。
@@ -63,6 +65,12 @@ GATE_CONFIG_REL = ".commands/my-commit-flow/.my-commit-flow.toml"
 # commit.py 在**合流复跑**那一次之前写下的标记(内容 = 当时的目标 sha, 只作凭据不作判据);
 # 本脚本读到即跳过, 并顺手消费掉(一次性)。见 main() 里为什么不能用环境变量。
 POST_MARKER = ".git/review_trace_post"
+
+# 齐平字段(计划 26-11-07-0201 落点 3, D6): trailer 末尾可选的 `· 齐平 <8hex>`(评审时点的远端 tip
+# 前 8 位, 与评审记录交叉可验)。弱校验(R4): 不强制存在、不验 hash 真值 —— 只查格式, 异常打一行
+# [warn] 但 rc=0 放行, 绝不因它判红; 与「行数 ±0」的强校验刻意区分。
+FLUSH_PRESENT_RE = re.compile(r"·\s*齐平")
+FLUSH_RE = re.compile(r"·\s*齐平\s+([0-9a-f]{8})(?![0-9a-f])")
 
 
 def _git(root: Path, *args: str) -> subprocess.CompletedProcess:
@@ -257,6 +265,24 @@ def decide(count: int, sensitive: list[str], message: str) -> tuple[bool, str]:
     )
 
 
+def flush_field_warn(message: str) -> str | None:
+    """齐平字段的弱校验(计划 26-11-07-0201 落点 3) —— 返回 warn 文案或 None(静默)。
+
+    与 decide() 分开成纯函数: 齐平不参与判红(R4), warn 是 v3「全过即静默」的唯一让步, 只在字段被
+    写坏时出现。判定面: `Review:` 行里出现 `· 齐平` 才查; 带合法 8 位小写 hex → None; 出现了但格式
+    不符(缺 hash / 非 8 位 / 大写 / 缺空格)→ 一行 warn。范围文本里撞到「齐平」二字但前面不是 · 的
+    不算字段, 不误报。
+    """
+    for body in REVIEW_LINE_RE.findall(message):
+        if not FLUSH_PRESENT_RE.search(body):
+            continue
+        if FLUSH_RE.search(body):
+            continue
+        return ("[warn] `Review:` 行齐平字段格式异常 —— 应为 `· 齐平 <8位hex>`"
+                "(远端 tip 前 8 位; 弱校验仅提示不拦提交)")
+    return None
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--root", default=None, help="仓库根(缺省由 git 探测)")
@@ -289,8 +315,12 @@ def main(argv: list[str] | None = None) -> int:
     sensitive = sensitive_hit(files, red_lines(root))
 
     ok, why = decide(count, sensitive, msg)
+    warn = flush_field_warn(msg)
+    if warn:
+        # 弱校验的让步输出(计划 26-11-07-0201 落点 3): 不改判定, 只提醒字段写坏了 —— 判定仍由 decide 独立给
+        print(warn)
     if ok:
-        return 0  # v3 契约: 全过即静默(仅记账/生成物这类"本来就没批"的情形也静默)
+        return 0  # v3 契约: 全过即静默(仅记账/生成物这类"本来就没批"的情形也静默; warn 是唯一让步)
     print(f"评审留痕: {why}")
     return 1
 

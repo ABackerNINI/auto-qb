@@ -33,7 +33,8 @@
      「推送未完成」停下要人
   7. rebase 真合入了远端提交(HEAD 改写) → 按**同一份清单**复跑一轮(合并后的树才算数); fmt 类闸门若又
      改了文件 → 逐路径 add + commit --amend 折进未推送的 tip(与 sync.py 生成物收尾同款)。规则仍是
-     **启动版本那份** —— 快照语义下不重取配置(那正是撕裂的来源); 合流若改动了本包, 登记一行提示重跑
+     **启动版本那份** —— 快照语义下不重取配置(那正是撕裂的来源); 合流若改动了本包, 登记一行提示重跑;
+     复跑过后再登记一行「评审边界」—— 组合树只过了测试闸门, 评审未覆盖远端合入(计划 26-11-07-0201)
   8. 内联推送(run_push): 自带同步核对(竞态窗口兜底) / 推主线 20s×3 次(见 `_pipeline.run_git`) / 镜像 attempts=1 全程静默
 消息文件不删的时机: commit 失败, 或 ref 核对失败**且** HEAD 消息与文件不一致(提交真没落到
 ref, 修好重跑还能用同一份)。核对失败但 HEAD 消息与文件一致 = 提交已落稳(packed-refs 滞后类
@@ -63,9 +64,11 @@ from _pipeline import (  # noqa: E402
     config_stops,
     emit_steps,
     gates_for,
+    git,
     git_run,
     hit,
     pack_touched,
+    run_capture,
     run_gates,
     staged_overflow,
     step,
@@ -82,6 +85,10 @@ from msg_check import check_message_file  # noqa: E402  (提交消息机检, 计
 
 BULK = {"-A", "--all", ".", "*", "-u", "--update"}
 DEFAULT_MESSAGE_REL = Path(".git") / "COMMIT_MSG_AI.txt"
+# 记账类前缀 —— 同源抄自 .commands/review/scripts/check_review_trace.py(跨包不 import, 双处抄用 +
+# 注释互指是既有先例: check_review_trace 的 SENSITIVE_PATH_MARKERS 也与 review_pack.py 同源双抄;
+# 统一 import 单点超出本轮范围, 计划 26-11-07-0201 R2)。漂移后果: 评审边界提示行多打或少打一行, 不判红。
+BOOKKEEPING_PREFIXES = ("memory-bank/tasks/", "memory-bank/activeContext/", "memory-bank/testing/baselines/")
 
 
 def emit(steps: list[str], line: str) -> None:
@@ -231,6 +238,139 @@ def omitted_note(omitted: list[str], staged: list[str]) -> str:
     if out_commit:
         parts.append(f"未暂存 {len(out_commit)} 个(不会进本笔: {_sample(out_commit)})")
     return f"…(子集提交: 另有 {len(omitted)} 个改动未参与 add —— {'; '.join(parts)} —— 确认这是有意的)"
+
+
+def _generated_paths(root: Path) -> set[str] | None:
+    """生成物权威清单(`gen_all.py --list` 子进程; 写法照 .commands/review/scripts/check_review_trace.generated_paths)。
+
+    与那边的差别: 取不到时返回 **None** 而不是空集 —— 调用方把生成物豁免收窄为 `_index*` 兜底并
+    照常判, 不静默视为全记账(计划 26-11-07-0201 落点 2: 宁可多打一行, 不可静默漏打)。子进程走
+    run_capture(看门狗超时)而非裸 subprocess.run —— Windows 挂死陷阱的根因与处置见其注释。
+    """
+    script = root / ".agents/skills/memory-bank/scripts/gen_all.py"
+    if not script.exists():
+        return None
+    proc = run_capture([sys.executable, str(script), "--list"], cwd=str(root))
+    if proc.returncode != 0:
+        return None
+    paths = {line.strip().replace("\\", "/") for line in (proc.stdout or "").splitlines() if line.strip()}
+    return paths or None
+
+
+def _exempt_as_generated(path: str, gen: set[str] | None) -> bool:
+    """生成物豁免(判据与 check_review_trace._is_generated 同源): 清单命中, 或 `_index*.md` 兜底。
+
+    `gen is None`(清单取不到)时豁免收窄为 `_index*` 兜底 —— 权威清单缺席不得扩大成全豁免
+    (计划 26-11-07-0201 落点 2)。
+    """
+    if gen is not None and path in gen:
+        return True
+    name = path.rsplit("/", 1)[-1]
+    return name.startswith("_index") and name.endswith(".md")
+
+
+def _count_and_paths(base: str, tip: str) -> tuple[int, list[str]] | None:
+    """`base..tip` 的远端笔数与改动路径(计划 26-11-07-0201 落点 2 的判据公式: merge-base(旧HEAD,
+    rsha)..rsha 只取远端侧); 空 / 非 0 笔都按推导失败返回 None。diff 带 core.quotepath=off ——
+    非 ASCII 路径被八进制转义后会对不上本批清单(与 changed_files / check_review_trace._numstat 同款坑)。
+    """
+    n_raw = git("rev-list", "--count", f"{base}..{tip}", check=False)
+    if not n_raw.isdigit() or int(n_raw) <= 0:
+        return None
+    paths = [
+        line.strip()
+        for line in git("-c", "core.quotepath=off", "diff", "--name-only", base, tip, check=False).splitlines()
+        if line.strip()
+    ]
+    return int(n_raw), paths
+
+
+def _remote_side(old_head: str, new_head: str) -> tuple[int, list[str]] | None:
+    """本地推导 rebase 合入的远端侧(笔数, 路径), 零网络; 推导不可靠返回 None(调用方走旁证)。
+
+    rsha 为什么这样取(计划 26-11-07-0201 落点 2 授权自定, 不按「先 ls-remote」走): rebase 刚把本地
+    提交重放到远端 tip(rsha)上 —— new_head 历史 = 本地重放 M 笔 + rsha 及其祖先, 其中
+    M = merge-base(old_head, new_head)..old_head 的笔数, 于是 rev-list 第 M+1 笔就是 rsha。好处:
+    ①零网络 —— ship.commit 的网络时刻刚在 sync 过完, 提交热路径不再添一次 ls-remote 等待;
+    ②免疫竞态 —— sync 与查询之间别的 clone 又推了一笔时, ls-remote 拿到的新 tip 对象还没 fetch,
+    merge-base 直接失败; 本地推导只用已落对象库的历史。
+    可靠性钉一道校验: 重放提交的 subject 序列必须与重放前逐条一致 —— rebase 会丢弃与远端 patch
+    全同 / 合并后变空的本地提交, 那时第 M+1 笔会数偏, 校验不过就退回 ls-remote 旁证。
+    """
+    base = git("merge-base", old_head, new_head, check=False)
+    if not base:
+        return None
+    m_raw = git("rev-list", "--count", f"{base}..{old_head}", check=False)
+    if not m_raw.isdigit():
+        return None
+    m = int(m_raw)
+    rsha = git("rev-list", f"--skip={m}", "--max-count=1", new_head, check=False)
+    if not rsha:
+        return None
+    if git_run("merge-base", "--is-ancestor", rsha, new_head).returncode != 0:
+        return None
+    if git_run("merge-base", "--is-ancestor", rsha, old_head).returncode == 0:
+        return None  # 候选是旧 HEAD 的祖先 —— 数偏了, 不猜
+    if m > 0:
+        mine = git("log", "--format=%s", f"{base}..{old_head}", check=False).splitlines()
+        replayed = git("log", "-n", str(m), "--format=%s", new_head, check=False).splitlines()
+        if mine != replayed:
+            return None
+    return _count_and_paths(base, rsha)
+
+
+def _remote_side_via_remote_tip(cfg: dict, old_head: str) -> tuple[int, list[str]] | None:
+    """ls-remote 旁证(attempts=1 —— 先例 sync.remote_sha 的注释: 旁证路径不值得等满退避, 与
+    clean_tree_route 同款)。旁证失效(离线 / 竞态 tip 对象未 fetch)返回 None, 交降级文案。"""
+    from sync import remote_sha  # noqa: E402  (延后 import: 与 run_sync 同款, 测试替身可覆盖)
+
+    main, _url = resolve_main_remote(cfg)
+    tip = remote_sha(main, resolve_branch(cfg), attempts=1) if main else ""
+    if not tip or tip == old_head:
+        return None
+    base = git("merge-base", old_head, tip, check=False)
+    if not base:
+        return None  # 竞态: 同步之后远端又推进, 新 tip 的对象还没 fetch —— 旁证失效
+    return _count_and_paths(base, tip)
+
+
+def review_boundary_line(
+    cfg: dict,
+    root: Path,
+    old_head: str,
+    new_head: str,
+    batch: list[str],
+    head_clause: str = "组合树仅过测试闸门"
+) -> str | None:
+    """评审边界提示行(计划 26-11-07-0201 落点 2, 拍板 D2/D3) —— rebase 真合入远端提交时登记一行:
+    评审未覆盖远端侧。远端改动**全部**落在记账类/生成物才不打(D3: 含手写文件就打)。返回行文案,
+    None = 不打。`batch` = 本批改动清单(commit.py 步骤 1 的 staged+unstaged, 含删除的全集 ——
+    删除相交在 rebase 会撞冲突到不了成功路径, 集合仍取全集保守计)。
+    `head_clause` 按登记时点取真值: 复跑成功后的出口用默认「组合树仅过测试闸门」; 复跑判红的出口
+    传「组合树测试闸门未过」—— 边界行在 rebase 合入后的**每个**出口都留痕(2026-11-07 收口评审:
+    复跑红一次、修好再补推的组合树, 若只在成功尾部登记就漏了痕迹), 而「仅过」只在复跑真过后为真。
+    """
+    derived = _remote_side(old_head, new_head)
+    if derived is None:
+        derived = _remote_side_via_remote_tip(cfg, old_head)
+    if derived is None:
+        # 两条推导都取不到 → 「全记账类/生成物」的豁免无法核实, 不静默(宁可多打一行不可漏打): 降级成无数值的可见行
+        return (f"评审边界: {head_clause}, 评审未覆盖远端合入的提交"
+                "(笔数与路径无法核实 —— 本地推导与 ls-remote 旁证都取不到)")
+    n, remote_paths = derived
+    if not remote_paths:
+        return None
+    gen = _generated_paths(root)
+    handwritten = [
+        p for p in remote_paths if not any(p.startswith(prefix)
+                                           for prefix in BOOKKEEPING_PREFIXES) and not _exempt_as_generated(p, gen)
+    ]
+    if not handwritten:
+        return None  # D3: 全在记账类/生成物 → 不打
+    m = len(set(remote_paths) & set(batch))
+    shown = handwritten[:5]
+    paths_txt = "、".join(shown) + (f" 等 {len(handwritten)} 条" if len(handwritten) > 5 else "")
+    return f"评审边界: {head_clause}, 评审未覆盖远端 {n} 笔 · 路径 {paths_txt} · 与本批相交 {m} 处"
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -417,6 +557,14 @@ def main(argv: list[str] | None = None) -> int:
     #   fmt 类闸门若又改了文件, 逐路径 add 后折进未推送的 tip(rebase 后 tip 未推送, amend 安全)
     head_now = git_run("rev-parse", "HEAD").stdout.strip()
     if head_now != sha_full:
+
+        def _boundary(clause: str = "组合树仅过测试闸门") -> None:
+            # 评审边界行(6c)在合入后的每个出口统一登记(2026-11-07 收口评审补): 复跑红/机械失败/
+            # 成功尾部各自留痕, 措辞按出口取真值 —— 「仅过测试闸门」只有在复跑真过后才为真。
+            line = review_boundary_line(cfg, root, sha_full, head_now, changed, head_clause=clause)
+            if line:
+                step(steps, line)
+
         # 6a 快照语义(一次调用 = 一个版本): 本进程从启动起就跑在**仓库之外的副本**上(`_snapshot`),
         #    内部同步的 rebase 把远端新版**本包**写进工作区, 对本进程不可见 —— 新版本从下一次调用生效。
         #    这里只把"上游改过本包"如实登记一行: 静默会让人以为已经用上新版本(这正是撕裂要换来的东西)。
@@ -436,6 +584,7 @@ def main(argv: list[str] | None = None) -> int:
             post_marker.unlink(missing_ok=True)
         if failures_r:
             note, cmd, rc, secs, tail = failures_r[0]
+            _boundary("组合树测试闸门未过")
             emit(steps, f"提交成功 {head_now[:8]}(未推送)")
             print(
                 f"推送未完成: 闸门「{note}」未过(合并远端后复跑, rc={rc}, {secs:.1f}s) —— "
@@ -453,6 +602,7 @@ def main(argv: list[str] | None = None) -> int:
             proc = git_run("add", "--", path)
             if proc.returncode != 0:
                 err = (proc.stderr or "").strip().splitlines()
+                _boundary()
                 emit(steps, f"提交成功 {head_now[:8]}(未推送)")
                 print(f"推送未完成: git add 失败 {path} —— {err[-1] if err else 'git 非 0'} —— 补推: commands run ship.push")
                 if warn_files:
@@ -463,6 +613,7 @@ def main(argv: list[str] | None = None) -> int:
             amend = git_run("commit", "--amend", "--no-edit")
             if amend.returncode != 0:
                 detail = [l.strip() for l in ((amend.stdout or "") + (amend.stderr or "")).splitlines() if l.strip()]
+                _boundary()
                 emit(steps, f"提交成功 {head_now[:8]}(未推送)")
                 print(f"推送未完成: 闸门改动 amend 失败 —— {detail[-1] if detail else 'git 非 0'} —— 补推: commands run ship.push")
                 if warn_files:
@@ -475,8 +626,12 @@ def main(argv: list[str] | None = None) -> int:
             for line in detail:
                 print(line)  # 自愈失败说明行仅在 COMMAND_FLOW_DEBUG=1 时返回; 正常路径/成功自愈时为空
             if not ok:
+                _boundary()
                 emit(steps, "提交失败: ref 三处不一致(amend 后) —— 提交可能没落稳; 确认无他人操作 .git 后按下方步骤处置")
                 return 1
+        # 6c 评审边界成功尾部(计划 26-11-07-0201 落点 2): 复跑真过 → 「仅过测试闸门」此刻才为真;
+        #    其余出口的登记见上方 _boundary(2026-11-07 收口评审补齐, 措辞随出口)。
+        _boundary()
     sha = head_now[:8]
 
     # 7 内联推送(run_push 内含同步核对 / 推主线 20s×3 重试 / attempts=1 静默镜像); 推送未完成 ≠ 提交失败
