@@ -31,10 +31,28 @@ from qbittorrentapi import (
 from ..infra.utils import mask_tracker_entry
 from ..torrents import TorrentStore
 from . import curves
+from .modules.relocate_units import under_alias_root
 
 logger = logging.getLogger(__name__)
 
 HashType = Union[str, List[str]]
+
+
+class DeleteBlockedError(RuntimeError):
+    """D16 删种拦截的拒绝异常(带文件删除会经活动别名删到已迁移数据, N5 实测)
+
+    blocked = [(hash, 命中根, job_id), ...]; 文案面向用户可直接回显(WebUI 删除命令
+    据此写 error 回执), 并给出可行动出路(仅删种子 / 等收尾完成)。
+    """
+    def __init__(self, blocked: List[tuple]) -> None:
+        self.blocked = list(blocked or [])
+        first = self.blocked[0] if self.blocked else ("", "", "")
+        text = (
+            f"{len(self.blocked)} 个种子位于迁移收尾窗口的活动别名之下({first[1]}): "
+            "带文件删除会经别名删到已迁往新位置的数据 —— 请改用「仅删除种子(不含文件)」, "
+            "或等迁移收尾完成后重试"
+        )
+        super().__init__(text)
 
 
 class QbApi:
@@ -174,12 +192,46 @@ class QbApi:
         常落在同一上报间隔内 —— qB 视角里种子从未离开, 增量 diff 只会给变化字段; 此时若本地
         摘了记录, apply_sync 会拿残缺 patch 新建记录(缺 name/save_path 等必填字段)。窗口内记录
         由下一轮上报原地校正, 状态一个字不写(计划 26-10-21-1857 §5)。
+
+        D16 删种拦截(计划 26-11-05-0808 §3.2「删种拦截」行): delete_files=True 时,
+        save_path 位于**活动别名作用域**下的种子一律拒绝(抛 DeleteBlockedError, 整批不发
+        qB)—— 别名存续期 deleteFiles 会穿目录 junction(误删新位置共享数据)或跟随文件级
+        symlink 直删(N5 实测), 两条删除路径(WebUI 删除命令与内部删种流程)都经本入口,
+        判据单点 = relocate_units.under_alias_root(等值 OR 前缀); 活动别名根集来自
+        relocate 模块维护的 store.relocating_alias_roots(非终态且确有别名记录的 job)。
+        delete_files=False 不拦: 纯删除不触盘, 正是 D16 要求的「去文件化」出口。
         """
+        hashes = self._to_list(torrent_hashes)
+        if delete_files and hashes:
+            blocked = self._relocate_delete_blocked(hashes)
+            if blocked:
+                raise DeleteBlockedError(blocked)
         self._client.torrents_delete(torrent_hashes=torrent_hashes, delete_files=delete_files, **kwargs)
         if keep_record:
             return
-        for h in self._to_list(torrent_hashes):
+        for h in hashes:
             self.store.remove_torrent(h)
+
+    def _relocate_delete_blocked(self, hashes: List[str]) -> List[tuple]:
+        """D16 拦截判定: 待删种子里 save_path 位于活动别名根(等值或之下)的明细
+
+        无登记(store 无 relocating_alias_roots)/种子不在快照(save_path 不可判, 快照是
+        qB 镜像)一律放行 —— 判据只对「能判的事实」生效, 不猜。命中返回 (hash, 命中根
+        原值, job_id) —— 根以登记原值回显(判据内部的归一形不进文案)。"""
+        roots = getattr(self.store, "relocating_alias_roots", None)
+        if not roots:
+            return []
+        blocked = []
+        for h in hashes:
+            rec = self.store.get(h)
+            sp = str(getattr(rec, "save_path", "") or "") if rec is not None else ""
+            if not sp:
+                continue
+            for raw_root, job_id in roots.items():
+                if under_alias_root(sp, (raw_root, )) is not None:
+                    blocked.append((h, str(raw_root), str(job_id or "")))
+                    break
+        return blocked
 
     # ---------- 写操作: 无快照变化(下轮 refresh 校准) ----------
 

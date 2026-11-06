@@ -20,8 +20,10 @@
   确认 -> app_shutdown -> ok / shutdown 被拒 -> degraded 降级(不重试) / 断连 503
 - test_chain_finalize_face_in_response: 链响应 finalize 段(pending 现读/daemon_stale/
   window 相位单点; 旧链 spec 与终态 journal 恒 pending=0)
+- test_finalize_face_reason_fields: S4b 全量字段 —— job reason 分流 verify_failed/chain_deps,
+  note 透传 last_error; 无 spec 的 job 字段照常给出(前端照显不重判)
 - test_finalize_button_and_hint_static: 前端静态守阵(按钮/提示挂浮窗, 确认框与降级文案,
-  渲染面零调用)
+  渲染面零调用; S4b 全量口径 note 段)
 """
 import json
 import os
@@ -626,6 +628,37 @@ def test_chain_finalize_face_in_response(web_env, tmp_path):
     rj.write_journal(str(tmp_path), "j1", {"phase": "cancelled"})
     data = client.get(f"/api/relocate/chain?hash={HASH}", headers=_auth(mgr)).json()
     assert data["finalize"]["pending"] == 0, data["finalize"]
+
+
+def test_finalize_face_reason_fields(web_env):
+    """S4b 全量字段: job reason 分流 verify_failed/chain_deps, note 透传 last_error
+
+    字段在 spec 检查之前给出(核验未过/删链门依赖是 job 账事实, 不依赖 spec 现读);
+    无 reason 的 armed job 三字段恒 False/""(前端照显不重判)。"""
+    from auto_qb.core.modules.relocate_units import REASON_CHAIN_DEPS, REASON_VERIFY_FAILED
+
+    job = {"job_id": "j1", "phase": "rewritten", "hashes": [HASH], "mover": HASH}
+    mgr, client, _rec = _install(web_env, "R:/src/l", SimpleNamespace(jobs=(job, ), generation=1))
+
+    def _face(mod_job):
+        mgr.ctx.relocate.jobs_snapshot = lambda: SimpleNamespace(jobs=(mod_job, ), generation=9)
+        data = client.get(f"/api/relocate/chain?hash={HASH}", headers=_auth(mgr)).json()
+        return data["finalize"]
+
+    face = _face(dict(job))
+    assert face["verify_failed"] is False and face["chain_deps"] is False and face["note"] == "", face
+
+    face = _face(dict(job, reason=REASON_VERIFY_FAILED, last_error="核验未过: HB 已不在客户端"))
+    assert face["verify_failed"] is True and face["chain_deps"] is False, face
+    assert "HB" in face["note"], face
+
+    face = _face(dict(job, reason=REASON_CHAIN_DEPS, last_error="仍有 2 个种子位于旧根"))
+    assert face["chain_deps"] is True and face["verify_failed"] is False, face
+    assert "2 个种子" in face["note"], face
+
+    # 终态/前段相位: window False, note 照 reason 规则(终态 job reason 已被收口码覆盖)
+    face = _face(dict(job, phase="done", reason="finalized", last_error=""))
+    assert face["window"] is False and face["verify_failed"] is False and face["note"] == "", face
 
 
 def test_finalize_button_and_hint_static():

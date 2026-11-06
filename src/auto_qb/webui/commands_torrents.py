@@ -5,6 +5,7 @@ move-only 自 commands.py 切出(计划 26-11-02-2342 §07 R5), 未改语义。
 import time
 from typing import List, Tuple
 
+from ..core.qbapi import DeleteBlockedError
 from ..infra.utils import VIRTUAL_TRACKER_PREFIXES, mask_tracker_url, sanitize_tracker_url
 
 from .commands_common import (
@@ -168,7 +169,14 @@ class TorrentsMixin:
     def _cmd_delete_group(self, key: tuple, delete_files: bool = False, cmd_id: str = ""):
         hashes = self._group_hashes(key)
         if hashes:
-            self.api.torrents_delete(torrent_hashes=hashes, delete_files=delete_files)
+            try:
+                self.api.torrents_delete(torrent_hashes=hashes, delete_files=delete_files)
+            except DeleteBlockedError as e:
+                # D16 删种拦截: 活动别名作用域下的种子拒绝带文件删除(qbapi 单点判, 这里只回执)
+                logger.warning(f"WEB UI | 删除整组被拦截: {e}")
+                if cmd_id:
+                    self._set_web_result(cmd_id, "error", str(e))
+                return
             logger.info(f"WEB UI | 删除整组({len(hashes)}个种子, delete_files={delete_files})")
         else:
             self._group_empty_receipt(cmd_id, key, "删除")
@@ -270,9 +278,16 @@ class TorrentsMixin:
                     logger.warning(f"WEB UI | 汇报后台核实队列已满({REANNOUNCE_BACKGROUND_MAX}), 丢弃最旧: {oldest[:8]}")
                 bg[h] = ent
 
-    def _cmd_delete_torrent(self, hash: str, delete_files: bool = False):
+    def _cmd_delete_torrent(self, hash: str, delete_files: bool = False, cmd_id: str = ""):
         if self.store.get(hash) is not None:
-            self.api.torrents_delete(torrent_hashes=[hash], delete_files=delete_files)
+            try:
+                self.api.torrents_delete(torrent_hashes=[hash], delete_files=delete_files)
+            except DeleteBlockedError as e:
+                # D16 删种拦截: 活动别名作用域下的种子拒绝带文件删除(qbapi 单点判, 这里只回执)
+                logger.warning(f"WEB UI | 删除种子被拦截: {e}")
+                if cmd_id:
+                    self._set_web_result(cmd_id, "error", str(e))
+                return
             logger.info(f"WEB UI | 删除种子 {hash[:8]}(delete_files={delete_files})")
 
     def _cmd_recheck_torrent(self, hash: str, cmd_id: str = ""):
@@ -668,7 +683,14 @@ class TorrentsMixin:
             self._bulk_skip_check_via_ops(known, cmd_id, missing, len(req), missing_groups, len(keys), force=force)
             return
         if known:
-            fn(self.api, known, delete_files, extra)
+            try:
+                fn(self.api, known, delete_files, extra)
+            except DeleteBlockedError as e:
+                # D16 删种拦截: delete 动作撞上活动别名作用域(qbapi 单点判), 整批不发 qB
+                logger.warning(f"WEB UI | 批量 {action} 被拦截: {e}")
+                if cmd_id:
+                    self._set_web_result(cmd_id, "error", str(e))
+                return
         msgs = []
         if missing:
             msgs.append(f"{missing}/{len(req)} 个种子不存在或已被删除")

@@ -12,7 +12,7 @@ verify 三动作, 判据面 ru.reconcile 纯函数层在 test_relocate_units)与
 - test_rebuild_capped_then_failed_keeps_scene: 重建达上限 ⇒ failed 留现场(不再永不终态)
 - test_apply_reconcile_rebuild_faces: 重建退避账/stage 值/journal 回滚 armed/rebuild_exhausted 文案
 - test_rebuild_first_attempt_not_backoff_on_fresh_boot: 开机窗口 —— monotonic < REBUILD_BACKOFF 时首次重建不得被 0.0 哨兵退避吞掉(issue 26-10-31-0932)
-- test_apply_reconcile_verify_is_suspended: ACT_VERIFY 挂起 —— rewritten 不推进不判终态(S4 前半可接受中间态)
+- test_apply_reconcile_verify_hangs_benign: ACT_VERIFY 接线 —— 核验不过 = 良性悬挂, rewritten 不推进不判 failed(S4a 退役 FAILED_TIMEOUT), 账留 verify_failed 供反馈面
 ### journal 镜像合并(_step_reconcile)
 - test_step_reconcile_merges_rewritten_forward: armed + journal rewritten -> 跟进 rewritten; rewritten + 旧 journal 相位 -> 不回退
 - test_step_reconcile_same_journal_phase_no_remerge: 相位一致 -> 不重复落账, 对账照常走完
@@ -153,13 +153,17 @@ def test_rebuild_first_attempt_not_backoff_on_fresh_boot(tmp_path, monkeypatch):
         assert os.path.exists(p), p
 
 
-def test_apply_reconcile_verify_is_suspended(tmp_path):
-    """ACT_VERIFY 挂起(S4 前半): 核验+删链推进未落地 —— rewritten 不推进不判终态, 零副作用"""
+def test_apply_reconcile_verify_hangs_benign(tmp_path):
+    """ACT_VERIFY 接线(_step_verify 单点): 核验不过 = 良性悬挂 —— rewritten 不推进不判
+    failed(S4a 退役 FAILED_TIMEOUT), 账上留 verify_failed 供反馈面(全量核验/删链面在
+    test_relocate_exec_verify)"""
     mod = _bare_mod(data_dir=str(tmp_path))
-    job = _job(phase=ru.PHASE_REWRITTEN)
+    job = _job(phase=ru.PHASE_REWRITTEN, alias_paths=("R:/src/l", ))
+    mod.register_job(job)
     mod._apply_reconcile(job, {}, ru.ACT_VERIFY)
     saved = mod._jobs.get("j1")
-    assert saved is None or (saved.phase == ru.PHASE_REWRITTEN and not saved.is_terminal), saved
+    assert saved is not None and not saved.is_terminal, saved
+    assert saved.reason == ru.REASON_VERIFY_FAILED, saved.reason
 
 
 # ---------------------------------------------------------------- journal 镜像合并(_step_reconcile)

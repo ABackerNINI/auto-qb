@@ -211,11 +211,11 @@
         if (text) this.copyText(text, " 路径链");
       },
 
-      /* ---------------- D14「立即收尾」+ S3 失败反馈面(计划 26-11-05-0808) ----------------
+      /* ---------------- D14「立即收尾」+ S3/S4b 失败反馈面(计划 26-11-05-0808) ----------------
        * 数据源 = 链结果的 finalize 段(后端 relocate_chain.finalize_face, 不进缓存现读);
-       * 可见性判据单点在后端(window = FINALIZE_WINDOW_PHASES), 前端只渲染不重判。
-       * 确认框带现场说明(关闭 qB / 改写 / 需手动重启, §07 按钮误触行); 调用失败
-       * (缺失/被拒/断连)降级为提示手动重启 qB —— 不重试、不自动重启(保守默认)。 */
+       * 可见性判据单点在后端(window = FINALIZE_WINDOW_PHASES, note 按 job reason 分流),
+       * 前端只渲染不重判。确认框带现场说明(关闭 qB / 改写 / 需手动重启, §07 按钮误触行);
+       * 调用失败(缺失/被拒/断连)降级为提示手动重启 qB —— 不重试、不自动重启(保守默认)。 */
       relChainFinalizeFace() {
         return (this.relChain.data && this.relChain.data.finalize) || null;
       },
@@ -227,7 +227,12 @@
 
       relChainFinalizePending() {
         const face = this.relChainFinalizeFace();
-        return !!(face && face.pending > 0 && face.daemon_stale);
+        return !!(face && face.pending > 0);
+      },
+
+      relChainFinalizeDaemonStale() {
+        const face = this.relChainFinalizeFace();
+        return !!(face && face.daemon_stale);
       },
 
       async relChainFinalizeNow() {

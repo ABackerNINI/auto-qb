@@ -1062,7 +1062,7 @@ def recover_exec_phase(qb_moving: bool, save_path_at_dst: bool, dst_has_data: bo
 
 ACT_WAIT = "wait"  # 等(armed 做种中 / qB 不在等下线窗口 / pending 由 daemon 处理)
 ACT_REBUILD = "rebuild_links"  # 别名丢失 + qB 在 ⇒ 从 job 账重建别名回 armed(rebuild-from-journal 判据侧)
-ACT_VERIFY = "verify_chain"  # 全员 save_path 已在目标位置 ⇒ 核验+删链推进(体在 S4 后半落地, 单点 _step_verify)
+ACT_VERIFY = "verify_chain"  # 全员 save_path 已在目标位置 ⇒ 核验+删链推进(体在 relocate_exec._step_verify)
 ACT_ENSURE_DAEMON = "ensure_daemon"  # pending 非空且回收 daemon 死/心跳过期 ⇒ 重拉 recycle_daemon
 
 # 重试退避与上限(防无界重试): 建链必失败的环境(权限不足 / 未开 Windows 开发者模式且
@@ -1102,8 +1102,7 @@ def reconcile(job: RelocateJob, *, alias_present: bool = True, qb_up: bool = Tru
     新链判据只认**证据**而非意图相位 —— 收尾窗没有「先删别名再归位」的意图账, 三个
     输入把现场分干净:
     - 全员已在目标位置(改写生效/qB 重启加载完成或外部归位)⇒ ACT_VERIFY: 核验+删链
-      推进(删链门依赖扫描与删别名在 _step_verify 单点, S4 后半落地; 本期判据先行,
-      处置暂为挂起 —— job 停在 rewritten 不推进, 报告已注明中间态);
+      推进(全员逐成员等值核验、删链门依赖扫描与删别名在 _step_verify 单点);
     - 别名丢失而 qB 在线 ⇒ ACT_REBUILD: 从 job 账(alias_paths/plan)重建别名回 armed
       (journal 条目重建别名 = rebuild-from-journal 的判据面; qB 不在时不重建 —— 下线
       窗口是 daemon 的改写现场, 重建动作等 qB 回来);
@@ -1115,3 +1114,59 @@ def reconcile(job: RelocateJob, *, alias_present: bool = True, qb_up: bool = Tru
     if not alias_present and qb_up:
         return ACT_REBUILD
     return ACT_WAIT
+
+
+# ---------------------------------------------------------------- 核验与删链门(S4 后半)
+
+# 非终态 job 的 reason 码(收尾窗推进/悬挂语义; job_to_dict/job_from_dict 原样透传,
+# WebUI 反馈面 finalize_face 按 reason 分流提示):
+REASON_VERIFY_FAILED = "verify_failed"  # 核验未过: 成员 save_path 未到目标(journal 悬挂, 良性态)
+REASON_CHAIN_DEPS = "chain_deps"  # 删链门依赖未清: 仍有种子 save_path 位于旧根(等值或前缀)
+REASON_FINALIZED = "finalized"  # 收尾完成(核验通过 + 删链门依赖清零, 已在线删别名)
+
+
+def under_alias_root(path: str, roots: Iterable[str]) -> Optional[str]:
+    """path 是否落在任一根**之上**(等值)或**之内**(前缀); 命中返回该根的归一形, 未命中 None
+
+    删链门与删种拦截**共用的判据单点**(计划 26-11-05-0808 §2.3 N5 教训): 纯前缀判据
+    (p.startswith(root + "/"))会漏拦 save_path **恰等于**根的形态(N5 实测: 门外共享者
+    的 save_path 与组根同值) —— 必须等值 OR 前缀双判据。比较走 _norm(斜杠统一 +
+    normcase 平台折叠); 前缀以分隔符为界(前缀同串的兄弟目录不误伤)。
+    """
+    p = _norm(path)
+    if not p:
+        return None
+    for root in roots or ():
+        r = _norm(root)
+        if r and (p == r or p.startswith(r + "/")):
+            return r
+    return None
+
+
+def alias_roots_of(jobs: Iterable[RelocateJob]) -> tuple:
+    """活动别名根集(删种拦截 D16 的数据源; 纯函数): [(src, job_id), ...]
+
+    只有**确实建过别名**的非终态 job 才拦: alias_kind 非空(direct 单成员组无别名不拦)
+    且 alias_paths 非空(账上有链接记录 —— moving 相位别名尚未建, 不拦; 链接随 moved
+    建成后进入拦截, 直到终态随 _sync_relocating 退出登记)。
+    """
+    out = []
+    for job in jobs or ():
+        if job.is_terminal or not job.alias_kind or not job.alias_paths:
+            continue
+        out.append((job.src, job.job_id))
+    return tuple(out)
+
+
+def chain_gate_hits(save_paths: Iterable[str], root: str) -> tuple:
+    """删链门依赖扫描(纯函数): 旧根上/内的 save_path 集合(N5 双判据, 判据单点 under_alias_root)
+
+    save_paths = qB 全量种子的 save_path(不限于本组 —— 门外共享者/落进旧根的组外种子
+    都算依赖, §07 风险表「pending 期组外种子落旧根」行); root = job.src(旧根)。
+    返回命中的 save_path 原值元组(保持输入侧大小写/斜杠原样, 供文案展示)。
+    """
+    out = []
+    for sp in save_paths or ():
+        if sp and under_alias_root(sp, (root, )) is not None:
+            out.append(sp)
+    return tuple(out)

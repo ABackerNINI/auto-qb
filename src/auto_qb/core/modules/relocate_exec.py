@@ -440,10 +440,8 @@ class ExecMixin:
         if action == ru.ACT_WAIT:
             return
         if action == ru.ACT_VERIFY:
-            # 核验+删链推进单点(S4 后半落地: 全员 save_path 等值核验已由判据面给出,
-            # 这里做删链门依赖扫描 + 在线删别名 + 终态)。本期挂起: job 停在 rewritten
-            # 不推进 —— 可接受中间态, 别名维持、成员经别名可读, journal 是事实源。
-            logger.debug(f"relocate | job {job.job_id}: 核验+删链推进待 S4 后半落地(暂挂起, 维持现场)")
+            # 核验+删链推进单点(S4 后半): 全员逐成员等值核验 -> 删链门依赖扫描 ->
+            # 在线删别名 + 终态; 核验不过 = journal 悬挂(良性态), 走重放入口/告警。
             self._step_verify(job, rt)
             return
         if action == ru.ACT_REBUILD:
@@ -481,14 +479,102 @@ class ExecMixin:
         logger.debug(f"relocate | job {job.job_id}: 对账动作 {action} 无处置")
 
     def _step_verify(self, job: RelocateJob, rt: dict) -> None:
-        """核验+删链推进(单点挂名, 体在 S4 后半落地)
+        """核验+删链推进(S4 后半单点; 计划 26-11-05-0808 §3.1「qB 重启 → 主循环核验」段)
 
-        全员 save_path 等值核验通过(判据面 ru.reconcile -> ACT_VERIFY 已给)之后:
-        删链门「save_path == 旧根 或 位于旧根之下」等值 OR 前缀双判据 + 组外依赖扫描
-        (N5 教训), 命中 0 => 主循环在线删别名 -> 终态; 命中 >0 => 维持别名等依赖消失。
-        本期(S4 前半)只挂钩子不动现场 —— rewritten 后暂不推进, 是已声明的可接受中间态。
+        - 逐成员核验: API 全员 save_path == dst(等值比较, store 为 qB 镜像)。全部通过
+          → 进删链门; 任一不过(未到目标/成员已不在客户端)→ journal 悬挂维持(别名保持,
+          daemon 等下一窗口重放), 不判 failed(S4a 已退役 FAILED_TIMEOUT, 悬挂是良性态)。
+          首次不过经重放入口(rj.reset_rewrites 清 settled 使重回 pending)请求重放一轮;
+          重放一次后仍不过则维持悬挂+告警(防无限改写循环, 保守节奏)。
+        - 删链门(N5 教训): 扫 qB 全量种子的 save_path(不限于本组)——「save_path == 旧根
+          (等值)或位于旧根之下(前缀)」双判据(判据单点 ru.under_alias_root), 命中=0(含
+          组外共享者零依赖)→ 主循环在线删别名(alias_fs.remove_alias 非递归绝不跟随)+
+          job 终态 done; 命中>0 → 维持别名, 依赖未清零永不删, 反馈面给出解法文案。
         """
-        return None
+        bad = [(h, self._verify_member_state(h, job)) for h in job.hashes if not self._member_at_dst(h, job)]
+        if bad:
+            self._verify_hang(job, bad)
+            return
+        deps = self._chain_gate_deps(job)
+        if deps:
+            text = self._chain_deps_text(job, deps)
+            if job.reason != ru.REASON_CHAIN_DEPS or job.last_error != text:
+                self._set_job(replace(job, reason=ru.REASON_CHAIN_DEPS, last_error=text))
+            logger.info(f"relocate | job {job.job_id}: 删链门依赖未清({len(deps)} 个), 维持别名等依赖消失")
+            return
+        self._finalize_verified(job)
+
+    def _member_at_dst(self, h: str, job: RelocateJob) -> bool:
+        """单成员核验: 在客户端且 save_path == dst(等值比较)"""
+        rec = self._ctx.store.by_hash.get(h)
+        return rec is not None and self._norm(getattr(rec, "save_path", "") or "") == self._norm(job.dst)
+
+    def _verify_member_state(self, h: str, job: RelocateJob) -> str:
+        """核验未过的成员状态描述(文案面: 不在客户端 / 仍在旧路径)"""
+        rec = self._ctx.store.by_hash.get(h)
+        if rec is None:
+            return "已不在客户端"
+        return f"save_path 仍在 {getattr(rec, 'save_path', '') or '(空)'}"
+
+    def _verify_hang(self, job: RelocateJob, bad: list) -> None:
+        """核验不过: journal 悬挂维持 + 首次请求重放一轮(保守节奏), 不判 failed
+
+        重放 = rj.reset_rewrites 清 settled 记录使其重回 pending(daemon 下一窗口重放改写,
+        qB 再重启后核验重判)。verify_replays 计数闸: 重放一次后仍不过 → 维持悬挂 + 告警,
+        不再清账(防「改写→重启→核验不过→再改写」无限循环)。日志与账只在状态变化时写
+        一笔(对账每拍都会走到这里, 不设变化门会每 tick 刷屏/推 updated_at)。
+        """
+        detail = "; ".join(f"{h[:8]} {state}" for h, state in bad[:3])
+        more = f" 等共 {len(bad)} 个" if len(bad) > 3 else ""
+        text = f"核验未过: {detail}{more}(别名维持, 成员经别名可读)"
+        data_dir = self._data_dir()
+        replays = relocate_journal.verify_replays_of(data_dir, job.job_id)
+        changed = job.reason != ru.REASON_VERIFY_FAILED or job.last_error != text
+        if replays < 1:
+            n = relocate_journal.reset_rewrites(data_dir, job.job_id)
+            if n > 0:
+                logger.warning(
+                    f"relocate | job {job.job_id}: {text} —— 已清改写账请求重放一轮"
+                    f"({n} 个成员重回 pending, 待 qB 下线窗口改写后重启 qB 重判)"
+                )
+                # 镜像回 armed(pending 期): 反馈面转「待收尾」, 对账/ensure_daemon 按 pending 期节拍走
+                self._set_job(replace(job, phase=ru.PHASE_ARMED, reason="", last_error=""))
+                return
+            if changed:
+                logger.warning(f"relocate | job {job.job_id}: {text} —— 改写账无 settled 记录可重放, 维持悬挂等 daemon")
+                self._set_job(replace(job, reason=ru.REASON_VERIFY_FAILED, last_error=text))
+            return
+        if changed:
+            logger.warning(f"relocate | job {job.job_id}: {text} —— 重放一轮后仍不过, 维持悬挂(不重复清账, 防无限改写循环)")
+            self._set_job(replace(job, reason=ru.REASON_VERIFY_FAILED, last_error=text))
+        else:
+            logger.debug(f"relocate | job {job.job_id}: 核验仍未过(悬挂维持): {text}")
+
+    def _chain_gate_deps(self, job: RelocateJob) -> list:
+        """删链门依赖扫描: qB 全量种子的 save_path 对照旧根(等值 OR 前缀, N5 双判据)"""
+        records = list(self._ctx.store.by_hash.values())
+        save_paths = [getattr(r, "save_path", "") or "" for r in records]
+        hits = set(ru.chain_gate_hits(save_paths, job.src))
+        return [(r.hash, sp) for r, sp in zip(records, save_paths) if sp in hits]
+
+    def _chain_deps_text(self, job: RelocateJob, deps: list) -> str:
+        """删链门依赖的反馈面文案(数量 + 样例 + 解法)"""
+        samples = ", ".join(h[:8] for h, _sp in deps[:3])
+        more = f" 等共 {len(deps)} 个" if len(deps) > 3 else ""
+        return (
+            f"仍有 {len(deps)} 个种子的保存路径位于旧根 {job.src}(等值或之下){more}({samples}): "
+            "别名删除会让它们找不到数据 —— 请把这些种子迁移到新位置或删除后自动重判"
+        )
+
+    def _finalize_verified(self, job: RelocateJob) -> None:
+        """核验通过 + 依赖清零: 主循环在线删别名(非递归绝不跟随)-> 终态 done"""
+        removed = self._remove_links(job.alias_paths)
+        self._set_job(replace(job, phase=ru.PHASE_DONE, reason=ru.REASON_FINALIZED, last_error="", alias_paths=()))
+        relocate_journal.write_journal(self._data_dir(), job.job_id, {"phase": ru.PHASE_DONE, "ts": self._clock.now()})
+        logger.info(
+            f"relocate | job {job.job_id}: 收尾完成(全员核验通过, 删链门依赖清零, 已在线删除别名 "
+            f"{removed} 条) —— 成员直读新位置 {job.dst}"
+        )
 
     # ---------- P3 执行入口(三入口共用) ----------
 

@@ -189,6 +189,8 @@ CMD_ID_COMMANDS = DEFERRED_RECEIPT_COMMANDS | {
     "pause_group",
     "resume_group",
     "delete_group",
+    # D16 删种拦截(S4b): 拦截发生时 handler 自写 error 回执(成功路径回执仍由 drain defer 写)
+    "delete_torrent",
 }
 
 

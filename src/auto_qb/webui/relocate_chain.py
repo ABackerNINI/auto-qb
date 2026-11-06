@@ -106,13 +106,16 @@ def pick_job_for(snapshot: Optional[Mapping], torrent_hash: str) -> Optional[Map
 
 
 def finalize_face(job: Mapping, data_dir: str, host: str, port: int, *, now: Optional[float] = None) -> dict:
-    """收尾反馈面最小面(计划 26-11-05-0808 §3.2「失败反馈面」行)+ D14 按钮判据
+    """收尾反馈面全量口径(计划 26-11-05-0808 §3.2「失败反馈面」行 / S4b 扩面)+ D14 按钮判据
 
     输入 job = pick_job_for 的快照视图; 字段:
     - window: 相位在 FINALIZE_WINDOW_PHASES(「立即收尾」按钮可见判据单点 —— S4 相位
       模型重定义后为 {armed, rewritten}, 随该单点自动跟随);
     - pending: journal 待改写成员数(rj.pending_members 现读 spec+journal.rewrites);
-    - daemon_stale: 回收 daemon 死/心跳过期(rj.daemon_stale 判据单点)。
+    - daemon_stale: 回收 daemon 死/心跳过期(rj.daemon_stale 判据单点);
+    - verify_failed / chain_deps / note(S4b 全量口径): job 账上 reason 码分流 ——
+      核验未过(verify_failed)/删链门依赖未清(chain_deps)时 note 带解法文案,
+      前端照显不重判。三者只在 window 内有意义(前段相位零悬挂)。
     只对新链 spec(spec 带 bt_backup 字段)取证: 无 bt_backup 的 job 不走 fastresume 改写
     (S1 五闸应已拦下), pending 恒 0 防误导。journal 已终态 ⇒ pending 恒 0
     (已收口/已取消, 反馈面不再悬)。本函数只读 spec/journal 文件(原子写读侧安全),
@@ -123,12 +126,16 @@ def finalize_face(job: Mapping, data_dir: str, host: str, port: int, *, now: Opt
 
     phase = str(job.get("phase") or "")
     job_id = str(job.get("job_id") or "")
+    reason = str(job.get("reason") or "")
     face = {
         "job_id": job_id,
         "phase": phase,
         "window": phase in ru.FINALIZE_WINDOW_PHASES,
         "pending": 0,
         "daemon_stale": False,
+        "verify_failed": reason == ru.REASON_VERIFY_FAILED,
+        "chain_deps": reason == ru.REASON_CHAIN_DEPS,
+        "note": str(job.get("last_error") or "") if reason in (ru.REASON_VERIFY_FAILED, ru.REASON_CHAIN_DEPS) else "",
     }
     spec = rj.read_spec(data_dir, job_id) if job_id else None
     if not isinstance(spec, dict) or not str(spec.get("bt_backup") or "").strip():

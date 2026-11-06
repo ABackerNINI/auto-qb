@@ -18,7 +18,7 @@ S4(26-11-05-0808)退役面: 旧 guardian(finalize_watch)退化路径/CLI/pid 锁
 - test_precheck_empty_file_table_skips_representative_probe: 空文件表不把 save_path(目录)当代表文件探测(POSIX 目录 nlink>=2 的 CI 红)
 - test_daemon_spawn_argv: 真实拉起入口的 argv(detached 单点, -m auto_qb.tools.recycle_daemon)
 - test_cancel_rejects_unknown_and_failure: 未知 job -> blocked; 搬回被拒 -> blocked + failed 账
-- test_reconcile_new_chain_faces: 对账新链三分支(journal rewritten 镜像合并 / 别名丢失重建 / 全员到 dst 挂起等核验)
+- test_reconcile_new_chain_faces: 对账新链三分支(journal rewritten 镜像合并 / 别名丢失重建 / 全员到 dst 核验过+零依赖收尾完成)
 - test_task_line_exception_isolated: 单 job 抛异常 -> failed(internal_error), 不拖垮任务线
 - test_qb_up_probe: 客户端可读 -> True; 无 api -> False
 - test_daemon_three_proofs_helpers: _port_refused / _proc_absent 退化 + _alive 零副作用
@@ -243,7 +243,7 @@ def test_cancel_rejects_unknown_and_failure(tmp_path, monkeypatch):
 
 
 def test_reconcile_new_chain_faces(tmp_path, monkeypatch):
-    """对账新链三分支(S4): journal rewritten 镜像合并 / 别名丢失重建 / 全员到 dst 挂起等核验
+    """对账新链三分支(S4): journal rewritten 镜像合并 / 别名丢失重建 / 全员到 dst 核验过+零依赖收尾完成
 
     - rewritten 镜像合并: daemon 翻 journal 相位 -> 主循环把 armed job 跟进 rewritten(只前进);
     - 别名丢失 + qB 在 -> REBUILD 重建回 armed(本轮建完 penetrate);
@@ -274,14 +274,16 @@ def test_reconcile_new_chain_faces(tmp_path, monkeypatch):
     for p in job.alias_paths:
         assert os.path.exists(p), p
 
-    # (3) 全员已在 dst + journal rewritten -> ACT_VERIFY 挂起(相位保持, 不推进不 done)
+    # (3) 全员已在 dst + journal rewritten -> ACT_VERIFY(S4b 落地): 核验过 + 删链门零依赖
+    # -> 在线删别名 + 终态 done(journal 同步落终态, daemon 据此退休)
     for h in ("HA", "HB"):
         mgr.store.by_hash[h].save_path = dst
     relocate_journal.write_journal(str(tmp_path / "data"), job_id, {"phase": ru.PHASE_REWRITTEN, "ts": 2.0})
     mod.on_task_line()
     job = mod.get_job(job_id)
-    assert job.phase == ru.PHASE_REWRITTEN and not job.is_terminal, \
-        "核验+删链推进未落地前 rewritten 挂起(可接受中间态), 不得误判终态"
+    assert job.phase == ru.PHASE_DONE and job.reason == ru.REASON_FINALIZED, (job.phase, job.reason)
+    assert job.alias_paths == (), "收尾完成后别名账清空"
+    assert relocate_journal.read_journal(str(tmp_path / "data"), job_id)["phase"] == "done"
 
 
 def test_task_line_exception_isolated(tmp_path, monkeypatch):

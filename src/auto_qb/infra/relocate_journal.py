@@ -160,6 +160,15 @@ REWRITE_SETTLED = frozenset({"rewritten", "already", "unmatched"})
 # 成员账记录里计数控的键名(单点: daemon 写 / 对账读)
 REWRITE_FAILS_KEY = "fails"
 
+# 重放入口(S4b, 计划 26-11-05-0808 §3.1「未通过 → journal 悬挂」支线的恢复面):
+# 核验不过时主循环清 settled 记录使其重回 pending, daemon 在下一窗口重放改写。
+# reset_rewrites 把 settled 记录的 status 置成 REWRITE_RESET_STATUS(pending_members 判
+# 非 settled 即回账), 原状态保留在 prev_status 供诊断; 相位翻回 armed(pending 期)。
+REWRITE_RESET_STATUS = "pending"
+# journal 里的重放次数计数键(重放节奏闸: 重放一次后仍不过则维持悬挂+告警, 防无限
+# 改写循环 —— 主循环写, daemon 的 record_rewrites 整包合并时原样保留)
+VERIFY_REPLAYS_KEY = "verify_replays"
+
 
 def instance_key(host: str, port: int) -> str:
     """qB 实例键: (host, port) 的文件名安全形制 —— daemon 心跳文件命名与对账分组的单点。
@@ -290,6 +299,55 @@ def read_rewrites(data_dir: str, job_id: str) -> Dict[str, dict]:
     j = read_journal(data_dir, job_id)
     rewrites = (j or {}).get("rewrites")
     return dict(rewrites) if isinstance(rewrites, dict) else {}
+
+
+def verify_replays_of(data_dir: str, job_id: str) -> int:
+    """已重放次数(journal.verify_replays); 无 journal/无键/坏形 ⇒ 0(从未重放)"""
+    j = read_journal(data_dir, job_id) or {}
+    try:
+        return max(0, int(j.get(VERIFY_REPLAYS_KEY) or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def reset_rewrites(data_dir: str, job_id: str, *, ts: Optional[float] = None) -> int:
+    """清 settled 改写记录使其重回 pending(核验未过的重放入口; S3a 范围外发现第 3 条)
+
+    rewritten 账已收口但重启后核验不过(save_path 未到目标)= 改写被错过/未生效 ——
+    本接口把 settled 记录整体清回 pending(status -> REWRITE_RESET_STATUS, 原状态留
+    prev_status 诊断), 相位翻回 armed(pending 期), 并累加 verify_replays 计数供调用方
+    做「只重放一次」的节奏闸(重放一次后仍不过 = 维持悬挂+告警, 防无限改写循环)。
+
+    返回重置条数; 0 = 无 settled 记录可重置(不动盘, 幂等); -1 = journal 已终态
+    (拒写, 走 write_journal 的前向合并保护 —— 已收口/已取消的 job 不再重放)。
+    """
+    cur = read_journal(data_dir, job_id) or {}
+    if str(cur.get("phase") or "") in STOP_PHASES:
+        return -1
+    rewrites = cur.get("rewrites") if isinstance(cur.get("rewrites"), dict) else {}
+    now = ts if ts is not None else SYSTEM_CLOCK.now()
+    body = dict(cur)
+    new_rewrites: Dict[str, dict] = {}
+    n = 0
+    for k, rec in rewrites.items():
+        status = str(rec.get("status") or "") if isinstance(rec, dict) else ""
+        if status in REWRITE_SETTLED:
+            nr = dict(rec) if isinstance(rec, dict) else {}
+            nr["prev_status"] = status
+            nr["status"] = REWRITE_RESET_STATUS
+            nr["ts"] = now
+            new_rewrites[str(k)] = nr
+            n += 1
+        else:
+            new_rewrites[str(k)] = rec
+    if n:
+        body["rewrites"] = new_rewrites
+    else:
+        return 0  # 无 settled 记录: 不写盘不翻相位(幂等, 重复调用无副作用)
+    body["phase"] = "armed"  # 回到 pending 期, 等 daemon 在下一窗口重放
+    body[VERIFY_REPLAYS_KEY] = verify_replays_of(data_dir, job_id) + 1
+    body["ts"] = now
+    return n if write_journal(data_dir, job_id, body) else -1
 
 
 def list_spec_jobs(data_dir: str) -> List[str]:
