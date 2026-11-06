@@ -38,9 +38,9 @@
     {
       "id": "R1-5",
       "title": "traffic 采样: sample_mod/agg/blocks/common/snapshot + traffic_source",
-      "status": "pending",
-      "done_at": null,
-      "findings": 0
+      "status": "done",
+      "done_at": "26-11-06-0800",
+      "findings": 16
     },
     {
       "id": "R1-6",

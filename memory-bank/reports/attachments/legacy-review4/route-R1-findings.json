@@ -556,5 +556,149 @@
   "claim": "curves.py 行数断言 124 与快照实测 142 不符,且关键内容列已含 26-10-11 换算单点的 bytes_to_kib 却漏列同批新增的 kib_to_bytes/bytes_to_kib_floor(curves.py:127-142),属半更新漂移",
   "relevance": "相关",
   "fix": "重测行数并把 kib_to_bytes/bytes_to_kib_floor 补进 curves.py 行的关键内容清单"
+ },
+ {
+  "file": "src/auto_qb/core/modules/traffic_sample_agg.py",
+  "line": 309,
+  "quote": "if cur_epoch is None or bucket_epoch_of(row.epoch) != cur_epoch:",
+  "severity": "major",
+  "claim": "hour 重封行的合流源只有当日 day 累计器; 日关闭(_agg_flush_series L265 复位 day_epoch/day_hours)后该日 hour 再被迟到信用重封时(午夜跨天空闲 z 游程在 00:00 后首个样本封口、而 flush 恰落在 00:00 与封口记录之间), 残余行未经 v4_merge_agg 直接落盘, 解析按「同 epoch 取最后一行」使残余行替换此前已写的全量行, 该日 hour 行与紧随重关的 day 行(月界同构)的 cov_s/avg/max 被静默腐蚀, 且重启恢复以最后一行为水位不会再重算修复",
+  "relevance": "相关",
+  "fix": "为已关日/月的 hour 重封保留合流源(关层时缓存已写行或重封前从 agg 文件回读同 epoch 行做 v4_merge_agg 后再追加)"
+ },
+ {
+  "file": "src/auto_qb/core/modules/traffic_snapshot_mod.py",
+  "line": 283,
+  "quote": "max(int(up), hw_up), max(int(down), hw_down)",
+  "severity": "minor",
+  "claim": "事件补丁只钳到 _hw(仅由事件写入, 文件读盘不回填)且 _hw 只存进程内存不落盘: 文件读盘先发布了更高 day 行、随后偏低 catch-up 事件到达(工具重启后 _hw 为空或更低)仍会把 day 行刷回更小值, 违反 publish_source/publish_event 自述的「两条发布路径都不让 day 行回退」(面1/面2 同根因合并; 黄金法则3 跨轮次状态宜进 state_file); 现有测试只覆盖事件先立水位的顺序",
+  "relevance": "相关",
+  "fix": "publish_event 取 max(事件值, _hw, 当前 periods day 行值) 后再发布并记回 _hw; publish_source 的 ok 分支把当日 dat 行值回种进 _hw(或把 _hw 持久化进 state_file)"
+ },
+ {
+  "file": "src/auto_qb/core/traffic_source/agent.py",
+  "line": 167,
+  "quote": "base_url=f\"http://{host}:{port}\"",
+  "severity": "minor",
+  "claim": "发现指针 endpoint.json 的 host/token_path 未做任何校验即进 HTTP 探活: 指针被本机其它进程改写后, probe/fetch_last_spike 会把 token_path 指向的任意本地可读文件内容作为 Bearer 凭据发往任意 host(跨出本机的文件外发面)",
+  "relevance": "相关",
+  "fix": "校验 host 限定回环/私网地址, 并限定 token_path 必须位于 pointer_dir() 内"
+ },
+ {
+  "file": "src/auto_qb/core/modules/traffic_sample_agg.py",
+  "line": 145,
+  "quote": "month_epoch = agg.month_epoch if agg.month_epoch is not None else v4_month_epoch(now)",
+  "severity": "nit",
+  "claim": "_pending_agg_rows 对 day 级做了「子行更晚则前跳」守卫(L134-137), month 级没有同构前跳: 月界后 agg.month_epoch 停在上月时, 活尾 month 行排除新月的 day 行, 当前月聚合尾段在下一次 flush(≤600s)前显示真空 —— 与 day 级已修的「跨天后无采样」同形",
+  "relevance": "相关",
+  "fix": "与 day 级同构: month_epoch 取 max(agg.month_epoch, 子 day 行所属月), 并仅在 epoch 相等时并入 agg.month_days"
+ },
+ {
+  "file": "src/auto_qb/core/modules/traffic_sample_agg.py",
+  "line": 211,
+  "quote": "h = int(cur) // HOUR_SECONDS * HOUR_SECONDS",
+  "severity": "nit",
+  "claim": "_agg_credit_hours 内联的按小时切桶循环与 traffic_sample_common._hour_spans 逐字同逻辑, 同一职责两份实现(后者 docstring 自称「与 _agg_credit_hours 同源」), 改桶界口径时需人工同步两处",
+  "relevance": "相关",
+  "fix": "_agg_credit_hours 改为遍历 _hour_spans(start, end) 逐段入账, 删去内联循环"
+ },
+ {
+  "file": "src/auto_qb/core/modules/traffic_sample_mod.py",
+  "line": 177,
+  "quote": "from ..traffic_store import V4NullRun, V4Sample, V4ZeroRun",
+  "severity": "nit",
+  "claim": "V4NullRun/V4Sample/V4ZeroRun 在 L177 与 L179-199 的重导出 import 块中重复导入两次(R5 拆分残留)",
+  "relevance": "相关",
+  "fix": "删除 L177 的单独 import, 保留 L179-199 重导出块"
+ },
+ {
+  "file": "src/auto_qb/core/modules/traffic_sample_common.py",
+  "line": 5,
+  "quote": "from typing import Any",
+  "severity": "nit",
+  "claim": "typing 重复导入(L3 已有 from typing import Optional, L5 再来一行 from typing import Any), 拆分残留",
+  "relevance": "相关",
+  "fix": "合并为一句 from typing import Any, Optional"
+ },
+ {
+  "file": "src/auto_qb/core/traffic_source/agent.py",
+  "line": 474,
+  "quote": "ep = probe(PROBE_TIMEOUT_S)",
+  "severity": "nit",
+  "claim": "status() 供设置页路由同步调用却用 10s 探活超时, 工具假死时状态端点与写端点(经 _ready_endpoint -> _source_status)每次请求阻塞至 10s(主循环侧同类调用已为此单配 3s 的 SPIKE_TIMEOUT_S)",
+  "relevance": "相关",
+  "fix": "status() 的探活改用短超时(与 SPIKE_TIMEOUT_S 同级)或复用短 TTL 的探活缓存"
+ },
+ {
+  "file": "src/auto_qb/core/modules/traffic_sample_agg.py",
+  "line": 221,
+  "quote": "于是 ①其余系列本轮也不封口 ②",
+  "severity": "nit",
+  "claim": "代码注释含带圈数字 ①②③(code-style.md 非 ASCII 图形符号禁令明示禁用类, ASCII 替代 1. 2. 3.)",
+  "relevance": "相关",
+  "fix": "①②③ 替换为 1. 2. 3."
+ },
+ {
+  "file": "src/auto_qb/core/traffic_source/agent.py",
+  "line": 235,
+  "quote": "① `tool_exe` 非空且存在",
+  "severity": "nit",
+  "claim": "代码注释含带圈数字 ①②③(code-style.md 非 ASCII 图形符号禁令明示禁用类)",
+  "relevance": "相关",
+  "fix": "①②③ 替换为 1. 2. 3."
+ },
+ {
+  "file": "src/auto_qb/core/traffic_source/paths.py",
+  "line": 109,
+  "quote": "到设置页「流量与限速」→「数据来源」重新启用总开关即可恢复",
+  "severity": "nit",
+  "claim": "图形符号 → 出现在运行期字符串字面量(进日志与 UI 的 reason 文案)中, 按非 ASCII 图形符号禁令代码侧应 ASCII 表达",
+  "relevance": "相关",
+  "fix": "→ 替换为 -> 或 ASCII 文案"
+ },
+ {
+  "file": "src/auto_qb/core/modules/traffic_sample_mod.py",
+  "line": 104,
+  "quote": "dt_i ≡ interval_s 时严格退化",
+  "severity": "nit",
+  "claim": "模块 docstring 含 ≡ ≤ → 等图形符号(非 ASCII 图形符号禁令覆盖注释; 同类 → 在全仓 68 个 .py 普遍存在, 属全局惯例漂移)",
+  "relevance": "相关",
+  "fix": "docstring 内 ≡/≤/→/∧ 替换为 ASCII 等价(==/<=/->/AND)"
+ },
+ {
+  "file": "src/auto_qb/core/modules/traffic_sample_blocks.py",
+  "line": 293,
+  "quote": "关块谓词 flush ∧ has_r_row",
+  "severity": "nit",
+  "claim": "docstring 含逻辑符号 ∧(非 ASCII 图形符号禁令覆盖注释)",
+  "relevance": "相关",
+  "fix": "∧ 替换为 AND"
+ },
+ {
+  "file": "src/auto_qb/core/modules/traffic_sample_common.py",
+  "line": 93,
+  "quote": "flush ∧ has_r_row / 落盘失败复位",
+  "severity": "nit",
+  "claim": "docstring 含逻辑符号 ∧(非 ASCII 图形符号禁令覆盖注释)",
+  "relevance": "相关",
+  "fix": "∧ 替换为 AND"
+ },
+ {
+  "file": "src/auto_qb/core/modules/traffic_sample_mod.py",
+  "line": 441,
+  "quote": "or ts - run.start >= ZRUN_FLUSH_S",
+  "severity": "nit",
+  "claim": "_advance_run 天级保险闸的时长支全测试树无用例触达(唯一闸测试 test_zrun_cap_safety_valve_seals_at_day_level 以 1s 间隔只走样本数支, span=86399<ZRUN_FLUSH_S)",
+  "relevance": "相关",
+  "fix": "补一条直接驱动 ts-run.start>=ZRUN_FLUSH_S(如 30s 间隔灌 2880 样本跨满 86400s, monkeypatch 日期串恒定隔离跨天支)的闸边界用例"
+ },
+ {
+  "file": "memory-bank/config-reference/keys.md",
+  "line": 88,
+  "quote": "traffic_source.active_dat_path()",
+  "severity": "nit",
+  "claim": "文档引用不存在的 API: src/ 无 active_dat_path, 真实取数单点是 core.traffic_source.paths.dat_path(config)(speed_curve_mod.py:175 实调), 且同文件 :185 自述正确形成内部矛盾",
+  "relevance": "相关",
+  "fix": "keys.md:88 改写为 paths.dat_path(config) 与 :185 单点口径对齐"
  }
 ]
