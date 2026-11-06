@@ -144,6 +144,21 @@ cancelled 93 / failure 7 / success 0; 最后一次 success 2026-10-30T20:29Z -> 
     <p>补充事实：<code>e2e/gtm-alert.spec.mjs:83</code> 的两条用例带 <code>@fast</code> 标记，落在日常门禁的 <code>@fast</code> 子集内（<code>npx playwright test --grep @fast --list</code> = 290 例；shard 口径 282 例）。同一 run 里 <code>site-alerts.spec.mjs</code> 的 4 条 <code>@fast</code> 用例（第 373/374 例等）是 <code>✓</code> 通过，顺序污染未在该 run 复现。</p>
   </section>
 
+  <h3>2026-11-07 门禁改造落地后的实测(新增)</h3>
+  <p>改造提交 <code>ac07166b</code> 推 develop 并快进 master 后, 首次真实运行结果(取证 2026-11-07 05:57 +0800):</p>
+  <table>
+    <tr><th>run</th><th>类型</th><th>结论</th><th>失败项</th><th>耗时</th></tr>
+    <tr><td><code>42297945782</code></td><td>日常 @fast 3 片</td><td class="bad">failure</td><td><code>gtm-alert</code> 双皮肤 2 条(分片 2/3, 含 retry 仍红)</td><td>14m19s</td></tr>
+    <tr><td><code>42297959214</code></td><td>全量 5 片 + 量具</td><td class="bad">failure</td><td><code>gtm-alert</code> 2 条(分片 3/5) + <code>perf.spec.mjs:361</code> 1 条(量具 job)</td><td>21m16s</td></tr>
+    <tr><td><code>42300676278</code></td><td>纯文档 push</td><td class="good">success</td><td>无(smoke / perf-serial 均 skipped, aggregate 绿)</td><td>数秒</td></tr>
+  </table>
+  <p><strong>两条新事实</strong>:</p>
+  <ul>
+    <li><code>gtm-alert</code> 在 CI 上稳定复现(分片与全量都红, retry 后仍红), 本地隔离跑 2 passed —— 与本文原有判断一致, 属既有红, 已在池。</li>
+    <li><strong>新增既有红</strong>: <code>e2e/perf.spec.mjs:361</code> 的「主表轮询节拍不被放大」断言在 CI 上失败(实测 4 拍, 期望 2±1, 即 &lt;=3)。本地 20 例全绿。这是 CPU 敏感量具在共享 runner 上的抖动, 不是本次改动引入 —— 该断言在改造前从未在 CI 跑过(旧 job 40m 被砍时还没跑到量具)。建议与 <code>gtm-alert</code> 一并排期处理, 处置方向是放宽 CI 上的节拍容差或把量具迁到固定规格 runner。</li>
+  </ul>
+  <p>另: 分片 1/5 单片墙钟 21m, 拆解后是 <code>npm ci</code> 之后到 <code>Running N tests</code> 之间卡了 9.5 分钟(runner 侧依赖安装慢), 测试本身 11.2m —— 已回写 <code>pitfalls/testing/smoke.md</code>。</p>
+
   <section id="s3">
     <h2><span class="no">03</span>影响面</h2>
     <table>
