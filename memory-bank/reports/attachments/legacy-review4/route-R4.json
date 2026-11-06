@@ -31,9 +31,9 @@
     {
       "id": "R4-4",
       "title": "CSS 机制面 + 模板 HTML(减配: 加载序/特异性冲突/守阵对齐/双皮肤一致)",
-      "status": "pending",
-      "done_at": null,
-      "findings": 0
+      "status": "done",
+      "done_at": "26-11-07-0008",
+      "findings": 5
     }
   ],
   "started_at": "26-11-06-0730"
