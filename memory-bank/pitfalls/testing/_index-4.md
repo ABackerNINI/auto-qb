@@ -1,13 +1,14 @@
 # testing — 测试 / 冒烟 / 仿真纪律 · 卷 4/4
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `sidefx-diagnostic-probe.md` … `xdist-worker-global-snapshot.md`(共 23 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `side-effects.md` … `xdist-worker-global-snapshot.md`(共 24 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
 
 | 主题 | 一句话 | 触发词 |
 |---|---|---|
+| [side-effects.md](side-effects.md) | 测试不得产生真实系统副作用, 由 `tests/sidefx.py` 记账 + 会话级守阵兜底 —— 收尾有越界项即让本次 pytest 失败。 | 加测试, 越界, 副作用, sidefx, subprocess, 落盘, state_file, 并发跑测试 |
 | [sidefx-diagnostic-probe.md](sidefx-diagnostic-probe.md) | 生产失败路径上的「只进日志」诊断探针(端口占用者 `ss -ltnp` / `lsof` / PowerShell)在测试里会真跑外部命令 ⇒ Linux CI 的 sidefx 越界; Windows 本机的绿是被通知器守卫偶然遮蔽, 且报错归属到该 worker 最后跑的用例… | sidefx 越界, POPEN, ss -ltnp, port_owner, describe_port_owner, 端口占用者探针, WebUIBindError, CI 红本机绿, xdist, teardown ERROR |
 | [sidefx-import-time-temp-roots.md](sidefx-import-time-temp-roots.md) | sidefx 会话守卫的临时根集合不得在模块导入时固化 | 串行 -n 0 跑测试出现 sidefx 越界, 临时目录内删除/建链被判越界, TEMP_ROOTS 与 gettempdir 不一致 |
 | [sim-root-sentinel.md](sim-root-sentinel.md) | `scripts/sim_qb.py` 的 `prepare_root` 只在 root 目录**不存在**时才写哨兵 `.auto-qb-sim-root`; 自己先 `mkdir` 出来的空目录第一次跑会被当"合法空目录"放过但不留哨兵, 跑过一次目录非空后, 之后每次起 s… | dev.sim, B1, 哨兵, sim root, 已存在且非空, BoundaryViolation, 删除场景 |

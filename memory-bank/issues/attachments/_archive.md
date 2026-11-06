@@ -4,13 +4,12 @@
 > 主索引的已关闭区按 8,000 字符预算裁剪(上限 `CLOSED_KEEP` 条), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (45)
+## Open (44)
 
 - [feat] [回收 daemon 进程名册证为全机口径: 同机多 qB 实例时收尾窗可用性让位 N1(取舍记录+增强方向)](../26-11-07-0528-feat-recycle-daemon-roster-machine-wide.html) — 评审#6 后名册证=全机口径, 同机多 qB 实例(P7 形态)时 daemon 等不到收尾窗直至全部实例退场; 属 N1 零写入铁律优先的显式取舍(已声明, 单实例零影响), 未来兼顾需比映像名更强的实例身份证据
 - [question] [链式再迁移态撤销前任的语义未定稿: supersede 改道后撤销方向三选一待拍板](../26-11-07-0528-question-relocate-supersede-cancel-semantics.html) — supersede 改道态下撤销前任会把共享数据 C→A 搬回而后任仍指向 C(成员断粮); 现仅 cancel_chain 同目标护栏最小面, 前任撤销完整语义(拦/级联/清账出口)待定稿
 - [test] [GitHub CI WEB UI smoke 全量轮既有红清单待排期清理](../26-11-07-0326-test-ci-smoke-existing-red-backlog.html) — CI 全量 450 例串行下 gtm-alert 双皮肤 4 条失败等既有红; 门禁改造只展示不修, 等排期
 - [refactor] [全库代码/配置残留非 ASCII 图形符号，与 code-style ASCII 禁令冲突](../26-11-06-0756-refactor-ascii-graph-symbol-backlog.html) — 全库扫描命中 395 文件/2358 行禁用图形符号; 剔除功能性数据与第三方示例后项目自身 300 文件/1868 行待分批清偿, 本轮按用户拍板只入池不修
-- [bug] [review.check --root 快照目录被 .git 存在性检查误拒](../26-11-06-0711-bug-review-check-snapshot-root.html) — 存量评审 R4 的既定用法 review.check --root <快照目录> 被 _resolve_root 的 .git 检查拒收,与命令自身 help 文档矛盾;_verify 实际与 git 无关
 - [test] [test.pkg 4 条既有红：mutants DEFAULT_DESELECT 指向已拆分消失的测试文件](../26-11-06-0635-test-mutants-deselect-table-drift.html) — commands run test.pkg 恒有 4 条 subtest 红 —— DEFAULT_DESELECT 里 4 个 node id 指向已拆分消失的 tests/test_traffic_store.py / test_qbmanager.py / test_relocate_exec.py；按包收窄闸门不受影响，未修
 - [test] [Windows CI 连续红: Test Windows (Py3.12/3.13) 自 ced9a88a 起 failure, 本地 Windows 全量绿](../26-11-06-0321-test-ci-windows-failure.html) — GitHub Actions Windows 两个测试 job 连续红(早于版本管理本轮全部涉码), 本地 Windows test.quick/test.full 全绿——CI 环境特有; 日志 API 需鉴权, 待 gh 配 token 后定位
 - [feat] [recheck_fails 噪声收窄: FAILED/START_TIMEOUT 分记, 锐化失败证据信号](../26-11-05-0853-feat-recheck-fails-noise-narrowing.html) — recheck_fails 计数混记真数据证据(FAILED)与噪声(START_TIMEOUT 未开检), G8/G9/链1.6/冷却都消费这个混合信号; 收窄=分记并让防护闸只认真证据, 误拦面变小但动 state schema 与 bump 写点
@@ -59,9 +58,10 @@
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 - [chore] [版本号双源矛盾: __init__.__version__ 0.2.0 vs pyproject 0.1.0](../26-09-21-1408-chore-version-dual-source.html) — WebUI 顶栏透出与打包元数据已差一个 minor; 建议 pyproject 单源 + 动态读取
 
-## Done (435)
+## Done (436)
 
 - [docs] [guards.md 未登记 test_mypy_allowlist_guard 守阵](../26-11-06-0744-docs-guards-mypy-allowlist-unregistered.html) — 守阵清单缺一行: tests/test_mypy_allowlist_guard.py 从未登记进 guards.md, 违反该文件新增守阵须登记的口径
+- [bug] [review.check --root 快照目录被 .git 存在性检查误拒](../26-11-06-0711-bug-review-check-snapshot-root.html) — 存量评审 R4 的既定用法 review.check --root <快照目录> 被 _resolve_root 的 .git 检查拒收,与命令自身 help 文档矛盾;_verify 实际与 git 无关
 - [chore] [pyproject.toml 存量带圈数字注释与 code-style 非 ASCII 图形符号禁令冲突](../26-11-06-0624-chore-pyproject-circled-number-comments.html) — 配置注释 22 行含带圈数字编号(1)-(18), 禁令要求代码/配置一律 ASCII; 本轮新增注释已用 ASCII, 存量待清
 - [test] [mypy 豁免守阵冻结清单仍留 qbclient/override 条目, 回加豁免不会被拦](../26-11-06-0624-test-mypy-allowlist-stale-frozen-entry.html) — 豁免块 5 已摘除但冻结清单保留该对, 递减不红设计下重新加回同一豁免也不红, 递减成果未闭环
 - [bug] [real.down 实现用 Stop-Process -Force 强杀 qB, 触进程安全红线](../26-11-06-0448-bug-real-down-force-kill.html) — tests-real/runner.py cmd_down 以 PowerShell Stop-Process -Force 强杀 qB 进程(按镜像+路径匹配), 违反 AGENTS.md 禁止一切 taskkill/强杀红线; 替代=WebAPI app/shutdown 优雅退出(实验轮实测 HTTP 200)

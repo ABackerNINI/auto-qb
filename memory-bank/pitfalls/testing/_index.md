@@ -12,7 +12,7 @@
 
 | 卷 | 主题范围 | 条数 |
 |---|---|---|
-| [1](_index-1.md) | `annotations-lazy-eval.md` … `gate-probe-must-not-run-action.md` | 25 |
-| [2](_index-2.md) | `ghost-pkg-residue.md` … `mutmut-survived-verdict.md` | 25 |
-| [3](_index-3.md) | `mypy-config-cwd.md` … `side-effects.md` | 25 |
-| [4](_index-4.md) | `sidefx-diagnostic-probe.md` … `xdist-worker-global-snapshot.md` | 23 |
+| [1](_index-1.md) | `annotations-lazy-eval.md` … `free-port-toctou-parallel.md` | 25 |
+| [2](_index-2.md) | `gate-probe-must-not-run-action.md` … `mutmut-mtime-race-stale-trampoline.md` | 25 |
+| [3](_index-3.md) | `mutmut-survived-verdict.md` … `sandbox-venv-in-workspace.md` | 25 |
+| [4](_index-4.md) | `side-effects.md` … `xdist-worker-global-snapshot.md` | 24 |

@@ -1,7 +1,7 @@
 # testing — 测试 / 冒烟 / 仿真纪律 · 卷 1/4
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `annotations-lazy-eval.md` … `gate-probe-must-not-run-action.md`(共 25 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `annotations-lazy-eval.md` … `free-port-toctou-parallel.md`(共 25 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
@@ -11,6 +11,7 @@
 | [annotations-lazy-eval.md](annotations-lazy-eval.md) | Python 3.14 起 PEP 649 让注解默认惰性求值 —— 模块级注解引用未导入的 typing 名字(如 Dict)在导入期**不报错**, 只在 ≤3.13 的解释器上炸; import-all 守卫必须显式 `inspect.get_annotations(obj… | Dict, typing, 注解, NameError, import 报错, 3.14, PEP 649, 惰性求值, import-all, 守卫, 假绿灯, 红验, TYPE_CHECKING, 前向引用, 引号, 字符串注解, 循环… |
 | [assertions.md](assertions.md) | 恒真 / 恒红 / 安慰剂 / 量错对象 —— 断言失去意义的所有已知形态(含"样本与配置脱节"), 以及红验与 A/B 归因的纪律, 外加"存量失败登记前必须先重跑锚点"(取证时刻≠登记时刻)。 | 写断言, 红验, 反向对照, 阈值, 恒真, 摆设断言, 顺序断言, 冒烟失败归因, flaky, 反查表长度, infohash v1 v2, 手写样本, 配置没被读到, 存量失败, 入池前复跑, 历史数字, 重复报告, 复验锚点, 预期… |
 | [ast-migration-fidelity.md](ast-migration-fidelity.md) | 机械拆分/迁移文件时, **AST 只给结构, 内容必须从源行取** —— `ast.get_docstring` 返回的是**求值后**的字符串(转义已解开), 拿它写回会把 `\\p{L}` 吃成 `\p{L}`(内容被静默改写 + 触发 SyntaxWarning); 另一… | 拆分文件, 迁移脚本, 逐行搬移, ast.get_docstring, 求值串, 转义被吃, `\\p`, SyntaxWarning, 生成模块, 自我 import, 循环 import, 行守恒, 保真校验, 分批迁移, 批模式,… |
+| [baseline-merge-order.md](baseline-merge-order.md) | 基线切片的合流序漂移: 最新切片数字与当前树实测不符 | 基线, kb.baseline, 数字对不上, 最新切片, 合流, sync, 快进, 多clone, 扶正 |
 | [bg-process-cleanup.md](bg-process-cleanup.md) | 本工具环境里 `commands run dev.sim/dev.run` 这类长跑命令挂后台后, TaskStop / kill 只杀外层 (uv 或 commands 包装进程), 真正的 python 子进程继续持有 state.lock / 日志文件 / 端口 —— 复跑… | 后台进程, dev.run 停不下来, state.lock 删不掉, Device or resource busy, 端口占用, TaskStop, 杀进程, 孤儿进程 |
 | [browser-verify-iab.md](browser-verify-iab.md) | 本机没有 node 时 Playwright e2e 链路不可用, 可用 ZCode IAB 浏览器 + evaluate 替代 —— 但 evaluate 返回嵌套对象是序列化假象 `{}`。 | 浏览器验证, IAB, evaluate, 无 node, 冒烟跑不了, 序列化, 假空对象, cfgRaw, 绑定状态 |
 | [bulk-rename.md](bulk-rename.md) | 分批迁移类机械改名(W2 测试面 700+ 处)最易翻车的两处 —— ①正则替换串忘回填接收者, 整批替换全毁; ②名字按域分批 × 文件按域分批两个维度对不齐时, 该名字的替换规则不进脚本, 静默漏迁且**测试照样全绿**(旧名转发还在)。防御 = 捕获组回填 + 替换后畸形形… | 批量改名, 机械替换, re.subn, sed, 分批迁移, 迁移脚本, 旧名残留, 验收 grep, 漏迁, 接收者, 改名脚本, W3 删除波 |
@@ -32,4 +33,3 @@
 | [flaky-minute-stamp-dup.md](flaky-minute-stamp-dup.md) | 用例对文件名带分钟级戳 (`%y-%m-%d-%H%M`) 的制品做「重复建幂等拒绝」断言时, 两次真调用跨分钟边界 ⇒ 派生文件名不同 ⇒ `exists()` 永不命中 ⇒ 拒绝分支永不触发, CI 偶发红本机绿 —— 生产幂等语义 (同路径拒绝) 正确, 是用例没钉住「同路… | flaky, 分钟戳, 时间戳命名, 幂等, 重复建, 跨分钟, timekit, monkeypatch, 冻结时钟, CI 偶发红, 时刻相关, exists 查重 |
 | [flaky-random-salt-hash-identity.md](flaky-random-salt-hash-identity.md) | 随机盐逐位映射下非 hex 短假 hash 可恒等 —— 脱敏断言假红 | flaky, 偶发红, 假红, 随机盐, os.urandom, infohash, 假 hash, 恒等映射, 非 hex, 短 hash, 40 位 hex, 脱敏, 夹具, 1/16, 16^-40 |
 | [free-port-toctou-parallel.md](free-port-toctou-parallel.md) | 真绑定生命周期用例用 `_free_port()` 探空闲端口当候选表基底, 再连号持段(全占断言要 3 位全空/顺延断言钉精确端口)—— 「探测时空闲 ⇒ 真 bind 时被占」的 TOCTOU 窗在 `-n 8` 并行下关不掉: 另一 worker 同窗选中同段(或其子集),… | 写真绑定用例, _free_port, 动态端口, 并行偶发红, TOCTOU, 端口被占, xdist 端口冲突, 连号候选表, 全占断言, 单跑恒绿 |
-| [gate-probe-must-not-run-action.md](gate-probe-must-not-run-action.md) | `parse_args(argv or [])` 在 CLI 直跑时把真实 `sys.argv` 整个丢掉 —— 冒烟闸门加的 `--help` 被当"无参", 于是 `sync.py --help` **真跑一次同步**、`push.py --help` **真推一次推送**;… | 冒烟闸门, --help, --safety, parse_args, argv or [], 陌生参数被当无参, 闸门真跑动作, 真推送, sync.py --help, push.py --help, 探测与动作同形, `<each:>… |

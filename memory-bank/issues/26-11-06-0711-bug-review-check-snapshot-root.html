@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="review-check-snapshot-root">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="review.check --root 快照目录被 .git 存在性检查误拒">
 <meta name="issue-summary" content="存量评审 R4 的既定用法 review.check --root &lt;快照目录&gt; 被 _resolve_root 的 .git 检查拒收,与命令自身 help 文档矛盾;_verify 实际与 git 无关">
 <title>review.check --root 快照目录被 .git 存在性检查误拒 · bug · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-11-06-0711-bug-review-check-snapshot-root</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-06 07:11</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">review</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -166,11 +166,30 @@ $ commands run review.check -- --findings memory-bank/reports/attachments/legacy
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-11-06 07:11 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-07 05:27 — 认领（用户指派「修复」），状态 <strong>In Progress</strong>；复验<strong>已消失</strong>：修复 959dc22c 已在树（随存量评审 R4/R5 主线入库，本件补档案与回归测试收尾）</li>
+      <li>2026-11-07 05:27 — 修复并验证：快照 root 正例 rc=0 / pack 负例仍拒（详见上「复验」），回归测试补齐后 <code>test.pkg</code> 360 passed（详见下「修复后补充」），状态 <strong>Done</strong></li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验 2026-11-07 05:27（重跑锚点：<code>git archive HEAD</code> 导出无 <code>.git</code> 快照 + findings JSON，与入池证据同链路；原 R4 快照随路线完成已清理）——<strong>已消失</strong>：</p>
+<pre><code>$ commands run review.check -- --findings &lt;tmp&gt;\findings.json --root &lt;tmp&gt;\auto-qb-snap
+[ok] review.check (0.1s)
+  [PASS] #1 .commands/review/scripts/review_pack.py:68 [minor] 实际行 68
+  汇总: 1 条 / 通过 1 / 弃 0 (blocker 0 / major 0 / minor 1 / nit 0)
+rc=0
+
+# 负例: 同一快照目录跑 pack —— pack 语义保持强检查(建议修法要求的「区分两命令」核对)
+$ commands run review.pack -- --base HEAD --root &lt;tmp&gt;\auto-qb-snap
+[FAIL] review.pack (0.1s)
+  [FAIL] --root &lt;tmp&gt;\auto-qb-snap 不是 git 仓库(缺 .git)</code></pre>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><strong>实际修法</strong> = 建议方案 A：<code>_resolve_root</code> 增加 <code>require_git: bool = True</code> 参数，显式 <code>--root</code> 分支仅在 <code>require_git</code> 时检查 <code>.git</code>；<code>cmd_check</code> 传 <code>require_git=False</code>，<code>cmd_pack</code> 保持默认 True（共用点核对完成：pack 做 diff 归因确实需要 git，维持强检查）。方案 B（<code>.snapshot-hash</code> 凭证放行）未采用——check 本体与 git 无关，参数区分已足够，不引入对快照标记文件的耦合。</p>
+    <p><strong>落地</strong>：提交 959dc22c（2026-11-06，随存量评审 R4/R5 主线入库；当时缺回归测试与档案回写，本件补齐）。</p>
+    <p><strong>验证方式与测试数字</strong>：</p>
+    <ul>
+      <li>复验实跑（正例 rc=0 / pack 负例拒收），见上「复验」节</li>
+      <li>回归测试补齐：新增 <code>CheckTest.test_snapshot_root_without_git_accepted</code>（check 对无 <code>.git</code> 快照 root PASS rc=0；pack 侧拒收由既有 <code>CleanPackTest.test_non_repo_root_is_rc2</code> 钉住），测试计划 docstring 同步</li>
+      <li><code>commands run test.pkg</code>：360 passed, 15 subtests passed（2026-11-07 实测）</li>
+    </ul>
   </section>
 
   <footer>

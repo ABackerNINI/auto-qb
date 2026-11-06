@@ -16,7 +16,7 @@
 - PackTest            敏感 fixture: 基线/HEAD 后缀; 敏感面 -> 分面档; 文件清单精确行(重命名只列新路径/[已删除] 同行); 红线命中行含"出现即停"; 警告清单; 敏感面按元素归因(新增行/已跟踪路径标记/未跟踪内容/未跟踪路径/+++ 头归因, 且无幻影键); 仅删除计数; 尾斜杠目录规则; +++ 头不算内容; 空文件 0 行; 默认 root; 大 diff 用独立无敏感仓库证明分面来自行数
 - BenignPackTest      无敏感内容的小 diff -> 全能档(纯行数路径); 红线/警告清单仍命中
 - CleanPackTest      干净树 -> +0/-0 且全能; 缺/坏闸门配置 -> 可见降级 + 红线预警"无"; 坏 --base / 非 git --root / 非仓库 cwd -> rc=2; 提交后 HEAD!=base 无后缀且已提交改动仍在范围内
-- CheckTest           PASS(rc=0); 幻觉引文/超窗/缺字段/坏枚举/过短引文/非字符串字段/缺文件 REFUTE(rc=1); 窗口边界与 --window; stdin; 根外与穿越 REFUTE; 非 UTF-8 兜底; 行注入单行化; 非 JSON/非数组/非 UTF-8 输入 rc=2; 空数组 rc=0; 元素非对象 rc=1
+- CheckTest           PASS(rc=0); 幻觉引文/超窗/缺字段/坏枚举/过短引文/非字符串字段/缺文件 REFUTE(rc=1); 窗口边界与 --window; stdin; 根外与穿越 REFUTE; 快照 root(无 .git)放行; 非 UTF-8 兜底; 行注入单行化; 非 JSON/非数组/非 UTF-8 输入 rc=2; 空数组 rc=0; 元素非对象 rc=1
 - TraceDecideTest     评审留痕纯判定: 无待评/低于下限放行; 超限无 trailer 拦; trailer 行数不符/缺字段/缺行数拦; >400 行须拆批或记分面; Review-Skip 理由过短拦; 触安全敏感面小改仍要评; Review 优先于 Skip; 记账类/生成物不计入
 - TraceDecideTest(续) 低于下限时正文里的畸形 Review 段不硬拦
 - TraceGateTest       端到端(临时仓库真跑脚本): 复跑标记跳过且用后即删; 低于下限静默; 超限无 trailer rc=1; trailer 行数相符 rc=0 / 不符 rc=1; 锚点推进(漏评提交被下一批连坐); 评过的提交推进锚点; 提交后复跑不重对行数; 齐平字段弱校验(计划 26-11-07-0201 落点 3): 缺字段/合法 8hex 静默 rc0, 格式异常打 [warn] 一行但 rc0
@@ -602,6 +602,22 @@ class CheckTest(unittest.TestCase):
         proc = _run_script("check", "--findings", "-", "--root", str(self.tmp), input=payload)
         self.assertEqual(proc.returncode, 0, proc.stdout)
         self.assertIn("[PASS]", proc.stdout)
+
+    def test_snapshot_root_without_git_accepted(self):
+        """--root 指向 git archive 快照(无 .git)放行(issue 26-11-06-0711): check 只按 root/file
+        读文件逐字比对, 与 git 无关; pack 对同一目录仍拒收(两命令区分, 见 CleanPackTest.test_non_repo_root_is_rc2)。"""
+        snap = self.tmp / "snap_no_git"
+        snap.mkdir()
+        (snap / "mod.py").write_text("alpha line\nbeta line\n", encoding="utf-8")
+        fpath = self.tmp / "snap_findings.json"
+        fpath.write_text(
+            json.dumps([self._finding(file="mod.py", line=2, quote="beta line")], ensure_ascii=False),
+            encoding="utf-8",
+        )
+        proc = _run_script("check", "--findings", str(fpath), "--root", str(snap))
+        self.assertEqual(proc.returncode, 0, proc.stdout)
+        self.assertIn("[PASS]", proc.stdout)
+        self.assertIn("通过 1 / 弃 0", proc.stdout)
 
     def test_root_escape_and_absolute_path_refuted(self):
         outside = self.tmp.parent / "outside_review_test.txt"
