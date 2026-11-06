@@ -11,6 +11,7 @@ owner: clone3-main · freeze: f088329291e6 · 快照: C:\Users\11059\Desktop\Pro
 | R5-2 | shared 菜单·触发·命令链: menu/triggers/commands*/ctx_menu*/view/overlay_fit/ctl_bits/scope_audit/shortcuts(+panel) (3637行) | 10 (minor 7 / nit 3) | done |
 | R5-3 | shared 表格与列: table/dt_table/columns*/sort/filters/selection/format/rowlang/decorate (3928行) | 25 (major 3 / minor 12 / nit 10) | done |
 | R5-4 | shared drawer 族: drawer/drawer_templates/drawer_store/drawer_{general,rows,files,head} (3445行) | 16 (major 1 / minor 11 / nit 4) | done |
+| R5-5 | shared drawer 模板·general 与 trackers(01-09 号) (3556行) | 33 (major 4 / minor 20 / nit 9) | done |
 
 ## R5-1 批记录(2 面精评: 正确性+安全 / 测试缺口+文档漂移)
 
@@ -61,6 +62,19 @@ owner: clone3-main · freeze: f088329291e6 · 快照: C:\Users\11059\Desktop\Pro
 
 面1(10):precheck 回执恒带 hash 不可达 TypeError / 超时态文案正则漂移仅措辞级 / dtBridgeTo seg 固定枚举动态键不可达(留作变体扩展保底) / delTorrent 主路径内吞错误 / dtToggleMerge 二次点击需重开菜单不可达 / copyTorrentInfo 字段恒有值 / 切走 content 页签孤儿窗口自愈(已有 issue 注释覆盖) / dtWinRows [] 回落无实证行为后果 / 箭头类符号 py 侧 68 文件同用属既成风格,建议仓库级裁决后统一清(带圈数字系点名类故已报) / 预填失败有「未作修改」兜底。
 面2(8):_skipPrecheck 分支链有逐语句等值断言守阵 / _drawerWaitSources 有 e2e 值守 / 锚对账有 bridge-stub spec A-D / drawerGeneralSections 等经 e2e 变体用例真实执行 / _dtMergeRows 有 node 电池间接真跑 / drawer_head 历史类比非操作性声明 / MOVE_POP_SETTLE_MS 守阵确实存在 / conventions+README 抽查无矛盾。
+
+## R5-5 批记录(2 面精评: 正确性+安全 / 测试缺口+文档漂移)
+
+- **major 4 条(全在测试缺口面)**:01/02/03 三个 general 变体 render 零行为级覆盖(02/03 连渲染都没执行过,01 只测了可见性)/ 05 skipUnchanged 原地回填分支零覆盖(2026-10-18 根治场景行为上无保护)。
+- minor 20 条:跨变体口径漂移 4 条(01 裸拼 -1 哨兵不设防 / 08 折叠态进 sig 致整帧重建 / 05 tier 缺失折 0 排最前 / HR 徽章三变体三文案)/ 死 CSS+wide 槽位失接 / 字符串字面量 ↑↓ 与带圈数字 3 文件 / 变体切换 destroy 路径零测试 / 06 全局近似回退零测试 / adviceFor 五类分派零覆盖 / 04/06 动作钮零手势 / 09 占用条与默认序零断言 / 默认序文案漂移 3 条(07/09 注记 vs app.js defKey)/ sig 口径头注漂移 4 条(04/06/07/09,系 U4 收口漏改)/ omitEmpty 头注漂移 2 条(07/08)/ paintTick 不存在符号 3 处 / tpl-aq-dt07-cells 旧 id 引用。
+- nit 9 条:tags 徽章误用 is-hr 色 / gate 放行 title 空串 / LAN_RE 内网误报面 / barHtml 死参数 / 带圈数字 3 文件。
+- 底册复验:R2 终表零命中本批;Open issue 0149(09 变体封禁钮)仍 Open 未重报。
+
+### 自弃发现(12 条留痕)
+
+面1(12):badge innerHTML 比较已证伪(dtHtml 返回纯串幂等成立) / 07/08 模块级 _ctx 晚绑定无 null 解引用 / present 冗余写法等价 / 02:285 fallback 不可达 / rowOf 无 k 字段经描述符证实无断键 / →⇒← 箭头系全族历史风格且 code-style.md 未点名 U+2192,建议整库裁决不单点开刀 / magnet title 缺空格纯措辞 / 09 无 hand 档系文档化差异 / 03 备注双位系设计 / 多份逐字复制系自包含退役契约无真分叉 / paintTick 命名漂移无行为影响 / addrTitle 尾随冒号纯展示。
+面2(6):01/02/03 动作清单漏 chain 系枚举不全 / anchTouch 漂移锚不在本批文件 / 04 守阵 docstring 自身漂移不锚本批 / conventions+README 抽查无涉本批断言 / 06 qB 5.2 透传外部事实快照内无法核实 / 0149 底册不重报。
+
 
 ## 执行备注(路线级)
 

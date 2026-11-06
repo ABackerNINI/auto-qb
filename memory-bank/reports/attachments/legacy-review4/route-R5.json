@@ -38,9 +38,9 @@
     {
       "id": "R5-5",
       "title": "shared drawer 模板·general 与 trackers(01-09 号)",
-      "status": "pending",
-      "done_at": null,
-      "findings": 0
+      "status": "done",
+      "done_at": "26-11-07-0223",
+      "findings": 33
     },
     {
       "id": "R5-11",

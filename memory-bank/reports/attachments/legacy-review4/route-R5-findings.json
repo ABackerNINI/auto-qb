@@ -673,5 +673,302 @@
   "claim": "合并布局段封顶 2400 的落点写「三皮肤 views.css」,快照四套皮肤(atlas/console/flux/prism)的 views.css 均含该段(flux/css/views.css:412)",
   "relevance": "相关",
   "fix": "「三皮肤」改「四皮肤」或去掉计数"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/drawer_tpl/01-general-hero-tall.js",
+  "line": 208,
+  "quote": "swarm ${d.num_seeds ?? 0}(${d.num_complete ?? 0})",
+  "severity": "minor",
+  "claim": "英雄行裸拼 ?? 0 兜底,对 qB 的 -1 哨兵值不设防: 私有种子 num_complete=-1、connections_limit=-1(不限)时直接渲染出 swarm 0(-1)、连接 8 / -1(207 行 num_leechs 同病),与 04/05/06 消费 fmtPeersQb(内置 -1/null 守卫)的同语义槽口径漂移",
+  "relevance": "相关",
+  "fix": "负值走守卫降级(如 num_complete<0 显 — 或整段省略),与 fmtPeersQb 口径对齐"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/drawer_tpl/08-peers-groups-low.js",
+  "line": 308,
+  "quote": "Object.keys(ui.folded).filter((k) => ui.folded[k]).join(\",\")",
+  "severity": "minor",
+  "claim": "结构 sig 把折叠态算进去,但 onClick 折叠只翻 class 不刷新 lastSig,每次折叠后下一个 5s 数据拍 sig 必失配触发整帧 replaceChildren 重建——与 05 同语义槽「折叠态不进 sig、数据拍照常跳过」(05:353)口径相反,也正是 08 头注 2026-10-18 根治的那类重建",
+  "relevance": "相关",
+  "fix": "照 05 把折叠项从 sig 剔除(折叠仅 classList 翻转,锚/表格体零重挂)"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/drawer_tpl/03-general-dossier-collapsed.js",
+  "line": 87,
+  "quote": ".drawer .dt03-item.wide { margin:0; padding:4px 6px; }",
+  "severity": "minor",
+  "claim": "死 CSS + 槽位失接: .dt03-wide/.dt03-item.wide 三条规则在任何 JS 路径都产不出(gridRows:178 恒输出 class=\"dt03-item\"),而数据契约 drawer_rows.js 对哈希/路径/备注行发 wide:true、01 变体消费为 is-wide——03 里长哈希/保存路径被压进三列格子 nowrap 省略号截断;02 secRows(02:181)同样忽略 wide",
+  "relevance": "相关",
+  "fix": "gridRows 按 r.wide 挂 wide 类(整行 span)或删掉三条死 CSS,并与 01 的 is-wide 口径对齐"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/drawer_tpl/02-general-cards-low.js",
+  "line": 194,
+  "quote": "d.hr_satisfied ? \"已触发 · 已达标\" : \"已触发 · 未达标\"",
+  "severity": "minor",
+  "claim": "HR 达标徽章同一语义槽三变体三种文案: 02「已触发 · 已达标」、01:162「H&R 已达标」、03:219「HR 已触发 · 已达标」;且要求做种/分享率的展示顺序 02(先比率)与 01/03(先时长)相反",
+  "relevance": "相关",
+  "fix": "三变体统一为同一组文案与字段序(或收口进 reg 单源表)"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/drawer_tpl/08-peers-groups-low.js",
+  "line": 199,
+  "quote": "T`↑ <b>",
+  "severity": "minor",
+  "claim": "字符串字面量里的非 ASCII 图形符号: 聚合数文案以 ↑/↓(200 行同)起头并渲染进 DOM,违反「代码/配置禁图形符号(含字符串字面量)」硬约束",
+  "relevance": "相关",
+  "fix": "改用 CSS 三角/图标 sprite 或纯文字替代箭头字符"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/drawer_tpl/05-trackers-health-groups-low.js",
+  "line": 289,
+  "quote": "(Number(a.t.tier) || 0) - (Number(b2.t.tier) || 0)",
+  "severity": "minor",
+  "claim": "正常组 tier 排序把缺失/非法 tier 折算为 0(排最前),与 04:213/06:213 同语义槽「缺 tier 记 9(排最后)」的口径漂移,tier 缺失的 tracker 在 05 正常组会插到所有 tier0 之前",
+  "relevance": "相关",
+  "fix": "缺失 tier 记 9(或 +Infinity),与 04/06 的 tierN 兜底对齐"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/drawer_tpl/02-general-cards-low.js",
+  "line": 237,
+  "quote": "<span class=\"dt02-chip is-hr\" title=\"tags\">",
+  "severity": "nit",
+  "claim": "tags 徽章在 02/03(03:284)借用 is-hr(HR pending 橙色族)着色,01:230 同语义槽用中性 dt01-chip——同槽位跨变体视觉漂移,标签被误带 HR 语义色",
+  "relevance": "相关",
+  "fix": "tags 徽章统一用中性档,is-hr 留给 HR 专属徽章"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/drawer_tpl/05-trackers-health-groups-low.js",
+  "line": 252,
+  "quote": "gatedTitle: rGate.ok ? \"\" : rGate.title,",
+  "severity": "nit",
+  "claim": "失败区重报钮 gate 放行时 title 给空串,同文件普通行(05:235)与 04/06 同槽位放行时都给「强制重新汇报」提示——复制粘贴分叉",
+  "relevance": "相关",
+  "fix": "放行分支统一回「强制重新汇报」"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/drawer_tpl/04-trackers-status-cards-tall.js",
+  "line": 185,
+  "quote": "localhost|\\[?fd)/i;",
+  "severity": "nit",
+  "claim": "内网启发式误报面: 主机名以 fd 开头(如 https://fd.example.com/announce)或 10. 开头的公网域名都会命中 LAN_RE 打出「内网」徽章(\\[?fd 无边界、10\\. 可匹配合法域名)",
+  "relevance": "相关",
+  "fix": "fd 分支收紧为 IPv6 字面形态,10/172 分支要求数字段完整形态"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/drawer_tpl/07-peers-dashboard-tall.js",
+  "line": 377,
+  "quote": "function barHtml(ctx, list) {",
+  "severity": "nit",
+  "claim": "barHtml 的 ctx 形参从未使用(09:196 同函数已去掉该参)——死参数,亦是与 09 的签名漂移",
+  "relevance": "相关",
+  "fix": "删掉 ctx 形参,签名与 09 对齐"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/drawer_tpl/04-trackers-status-cards-tall.js",
+  "line": 146,
+  "quote": "①设计稿 sp2 跨全宽",
+  "severity": "nit",
+  "claim": "注释使用带圈数字 ①②(147 行同),属 code-style.md 明令禁用的「带圈数字」类(代码含注释)",
+  "relevance": "相关",
+  "fix": "改 ASCII 编号"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/drawer_tpl/05-trackers-health-groups-low.js",
+  "line": 18,
+  "quote": "①面板高度内容自适应",
+  "severity": "nit",
+  "claim": "注释使用带圈数字 ①②(20 行同),违反 code-style.md 非 ASCII 图形符号禁令",
+  "relevance": "相关",
+  "fix": "改 ASCII 编号"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/drawer_tpl/08-peers-groups-low.js",
+  "line": 23,
+  "quote": "①面板高度内容自适应",
+  "severity": "nit",
+  "claim": "注释使用带圈数字 ①②(25 行同),违反 code-style.md 非 ASCII 图形符号禁令",
+  "relevance": "相关",
+  "fix": "改 ASCII 编号"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/drawer_tpl/02-general-cards-low.js",
+  "line": 213,
+  "quote": "function render(host, ctx)",
+  "severity": "major",
+  "claim": "general 变体 02 的 render 从未被任何测试真执行: e2e 无一处选 02(grep 全 e2e 零命中),python 侧全是字符串锚与注册表清单对账,node 电池只跑核心层与桩变体(ok/boom)",
+  "relevance": "相关",
+  "fix": "补一条 e2e: localStorage 预置 general:'02' 渲染六卡聚类,断言卡片数/磁力钮在场,覆盖一次卡片折叠手势"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/drawer_tpl/03-general-dossier-collapsed.js",
+  "line": 251,
+  "quote": "function render(host, ctx)",
+  "severity": "major",
+  "claim": "general 变体 03 同样零行为级覆盖: 无 e2e 渲染、无 node 电池,仅字符串锚;双栏/右栏/更多字段 details 展开等分支从未执行",
+  "relevance": "相关",
+  "fix": "补一条 e2e 选 03 渲染双栏档案,断言 dt03-wrap/dt03-side 与 details 展开手势"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/drawer_tpl/01-general-hero-tall.js",
+  "line": 304,
+  "quote": "function onClick(ev)",
+  "severity": "major",
+  "claim": "01 仅在 e2e/drawer-merge.spec.mjs 作可见性断言——初始渲染被执行但全部分支从未测: 分组折叠 data-fold、原始键值 details 展开(rawOpen)、copy/open/chain 动作、keydown Enter/Space 转发、skipUnchanged 跳过路径均无行为断言",
+  "relevance": "相关",
+  "fix": "补一条 01 的手势 e2e(折叠组头/展开全部字段/点复制钮),或把 01/02/03 收进一条参数化 spec"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/drawer_tpl/05-trackers-health-groups-low.js",
+  "line": 363,
+  "quote": "sec.classList.toggle(\"dt05-hide\"",
+  "severity": "major",
+  "claim": "skipUnchanged 数据拍分支(原地回填)无行为级测试: 04-09 的 e2e 全部在初始数据落袋后冻结轮询,skip→paintHtml/内联回填从未跑过;python 唯一相关守阵是纯静态字符串序检查——05/08 的 2026-10-18「组空⇒dtNN-hide 原地切类」根治场景行为上零覆盖",
+  "relevance": "相关",
+  "fix": "补一条 e2e: 先喂含失败的 trackers 数据落袋,再改写为全 ok 数据(不改结构 sig),断言 err 组原地 dt05-hide 且锚元素身份不变"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/drawer_tpl/01-general-hero-tall.js",
+  "line": 297,
+  "quote": "function destroy(host)",
+  "severity": "minor",
+  "claim": "变体切换路径(register.destroy → H.unwireEvents → 换变体重挂)无 e2e 手势: e2e 全部经 localStorage 预置单变体后整页加载,换变体只有静态守阵;换变体监听叠加/残留只有头注释声称,无测试钉住",
+  "relevance": "相关",
+  "fix": "补一条 e2e: 右键菜单把 general 从 01 切到 02,断言旧变体根类不在场且点击只触发一次动作"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/drawer_tpl/06-trackers-table-collapsed.js",
+  "line": 175,
+  "quote": "kind: \"global\"",
+  "severity": "minor",
+  "claim": "nextOf 的回退分支(qB<5.2 无 next_announce → 种子级 reannounce_in 全局近似 + 「全局」标 dt06-gb + 种子级微条)从未被任何测试渲染: e2e 桩恒给 next_announce 且断言 .dt06-gb 数量为 0,回退路径只有静态守阵",
+  "relevance": "相关",
+  "fix": "补一条 e2e: trackers 桩去掉 next_announce 字段,断言 dt06-gb「全局」标与微条出现"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/drawer_tpl/05-trackers-health-groups-low.js",
+  "line": 178,
+  "quote": "/passkey|invalid|unauthor",
+  "severity": "minor",
+  "claim": "adviceFor 五类关键词分派分支仅 'not registered' 一条被 e2e 间接触及,且断言只查含「处置建议」字样、不查分派出的具体文案——其余四类(passkey/ban/timeout/maintenance)与通用兜底分支零覆盖,纯函数本可 node 电池直跑却无",
+  "relevance": "相关",
+  "fix": "给 adviceFor 补 node 电池(每类关键词一条断言)"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/drawer_tpl/04-trackers-status-cards-tall.js",
+  "line": 345,
+  "quote": "ctx.trackerAdd()",
+  "severity": "minor",
+  "claim": "04/06 的「添加 Tracker/删除/强制重新汇报」动作钮无 e2e 手势(trackers-variant-tables 只测排序/筛选/几何;reannounce spec 只测 06 倒计时渲染不点按钮),python 仅字符串锚",
+  "relevance": "相关",
+  "fix": "补一条手势 e2e 点 04/06 的 data-act=add/del/report,断言对话框开/请求发出"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/drawer_tpl/09-peers-density-collapsed.js",
+  "line": 177,
+  "quote": "occBar: up > 0 && upTotal > 0",
+  "severity": "minor",
+  "claim": "09 的「占用」条计算(occBar = up/upTotal)与默认序均无断言: e2e 对 09 只测筛选 chips 行数,默认序/占用列值零断言——恰是默认序已漂移(见下)却无测试能抓住的原因",
+  "relevance": "相关",
+  "fix": "给 09 的 e2e 补默认序首行断言与占用百分比数值断言"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/drawer_tpl/07-peers-dashboard-tall.js",
+  "line": 380,
+  "quote": "默认按「上传」降序",
+  "severity": "minor",
+  "claim": "用户可见注记文案漂移: 写「默认按「上传」降序」,但描述符实为 sort:{defKey:\"addr\", defDir:1}(app.js:530, 2026-10-18 改口径),e2e 也断言默认序 = addr 升序——页面文案与实际默认序矛盾",
+  "relevance": "相关",
+  "fix": "注记改为「默认按地址排序」或删掉默认序措辞"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/drawer_tpl/09-peers-density-collapsed.js",
+  "line": 199,
+  "quote": "默认按「占用」降序",
+  "severity": "minor",
+  "claim": "同 07: 页面注记「默认按「占用」降序,最吃上传的排最前」与描述符 sort:{defKey:\"addr\", defDir:1}(app.js:546)矛盾,用户看到的第一行并非最吃上传的对端",
+  "relevance": "相关",
+  "fix": "注记改为与 defKey addr 一致的措辞,或恢复占用默认序并同步描述符"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/drawer_tpl/09-peers-density-collapsed.js",
+  "line": 16,
+  "quote": "默认序 upspeed 降序由描述符",
+  "severity": "minor",
+  "claim": "头注释「默认序 upspeed 降序由描述符 sort.defKey/defDir 声明」与描述符实值 defKey:\"addr\"/defDir:1 矛盾(2026-10-18 改口径时只改了 app.js 与 e2e,09 头注释漏改)",
+  "relevance": "相关",
+  "fix": "头注释改为 addr 升序口径"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/drawer_tpl/04-trackers-status-cards-tall.js",
+  "line": 21,
+  "quote": "数据未变(整份 trackers 序列化比对)跳过重建",
+  "severity": "minor",
+  "claim": "头注释「渲染纪律」声称 sig = 整份 trackers 序列化比对,与实现矛盾: 实际 sig 是结构态 loading|err|has(295-300 行注释自证「不含 trackers 数据本身」,U4 收口后序列化 sig 已退役)",
+  "relevance": "相关",
+  "fix": "头注释改为「结构态未变跳过重建(数据拍原地回填)」"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/drawer_tpl/06-trackers-table-collapsed.js",
+  "line": 23,
+  "quote": "数据未变(整份 trackers + 汇报倒计时序列化比对)跳过重建",
+  "severity": "minor",
+  "claim": "同 04: 头注释声称 sig 含整份 trackers+倒计时序列化,实际 sig 已收窄为结构态且 254-261 行注释明确「不含 trackers 数据/倒计时基准/种子级 reannounce」,两处注释互相矛盾",
+  "relevance": "相关",
+  "fix": "头注释同步为结构态 sig 口径"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/drawer_tpl/07-peers-dashboard-tall.js",
+  "line": 22,
+  "quote": "数据未变(整份 peers 序列化比对)跳过重建",
+  "severity": "minor",
+  "claim": "同 04/06: 头注释「整份 peers 序列化比对」与实际结构态 sig(388-393 行「不含 peers 数据本身」)矛盾",
+  "relevance": "相关",
+  "fix": "头注释同步为结构态 sig 口径"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/drawer_tpl/09-peers-density-collapsed.js",
+  "line": 19,
+  "quote": "数据未变(整份 peers 序列化比对)跳过重建",
+  "severity": "minor",
+  "claim": "同上: 09 头注释仍写整份 peers 序列化比对,实际 sig 为结构态(207-212 行),头注释漏随 U4 收口更新",
+  "relevance": "相关",
+  "fix": "头注释同步为结构态 sig 口径"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/drawer_tpl/07-peers-dashboard-tall.js",
+  "line": 140,
+  "quote": "tpl-aq-dt07-cells",
+  "severity": "minor",
+  "claim": "注释引用的渲染器分片 id「tpl-aq-dt07-cells」已不存在: issue 26-10-20-2231 把 dt07/dt08/dt09 三份值格模板合一为 tpl-aq-dt-peer-cells,全 src grep 该 id 仅剩本注释一处;test_drawer_variant_skeleton_single_point 还断言旧 id 零残留",
+  "relevance": "相关",
+  "fix": "注释改为「归渲染器分片 tpl-aq-dt-peer-cells(pfx prop 出 dt07 类名)」"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/drawer_tpl/07-peers-dashboard-tall.js",
+  "line": 13,
+  "quote": "整列省略, 引擎单点 columns.js _colsOmitEmpty",
+  "severity": "minor",
+  "claim": "头注释声称 files 列声明 omitEmpty(无对端携带整列省略),与实现矛盾: app.js:247 明确「omitEmpty 已删(计划 26-10-13-0811)…列常驻,缺值由渲染器出 — 占位」,e2e 也断言无 files 数据仍 10 列",
+  "relevance": "相关",
+  "fix": "头注释改为「files 列常驻 + — 占位(omitEmpty 已删)」"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/drawer_tpl/08-peers-groups-low.js",
+  "line": 11,
+  "quote": "files 列在列定义声明 omitEmpty",
+  "severity": "minor",
+  "claim": "同 07: 08 头注释仍声称 files 列 omitEmpty 渐进省略,与 app.js「omitEmpty 已删、列常驻」及 e2e 10 列断言矛盾",
+  "relevance": "相关",
+  "fix": "头注释同步为列常驻口径"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/drawer_tpl/08-peers-groups-low.js",
+  "line": 38,
+  "quote": "走 paintTick 原地",
+  "severity": "minor",
+  "claim": "注释(38/305/338 三处)声称回填走「paintTick」,该符号全仓不存在(实际机制是 skip 分支内 querySelector+classList/textContent/innerHTML 直写;兄弟变体用的 H.paintHtml 本变体也未调用)——注释引用不存在的符号名",
+  "relevance": "相关",
+  "fix": "注释改为「skip 分支内联原地直写」或统一改走 H.paintHtml 并同步措辞"
  }
 ]
