@@ -12,20 +12,25 @@ agent 不用填 hash(填错就是假账), 且天然"连坐": 谁漏评, 那笔�
 1. 批内改动 0 行(仅记账类/生成物) → 通过(静默)
 2. 实算 < 50 行且未触安全敏感面/红线 → 通过(低于下限, 机械闸门兜住)
 3. 实算 < 50 行但触安全敏感面/红线 → 失败(不论行数都要评)
-4. 提交信息有 `Review:` 行 → 校验: `<N> 行` 必须等于实算(±0); blocker/修/入池 三个数字齐;
-   实算 > 400 行时必须带 `· 分面`(否则应先拆批)
+4. 提交信息有 `Review:` 行 → 校验(计划 26-11-07-0441): `<N> 行` 必须等于实算(±0); blocker/修/入池 数字齐;
+   `检 P/T` 必填且 0 ≤ P ≤ T、P ≥ 修 + 入池(T=送检发现数, P=引文逐字通过数; 修/入池 只数过检且未被
+   REFUTE 的发现); 实算 > 400 行时必须带 `· 派发 <K>` 且 K ≥ 2(先拆批, `· 分面` 不再是超限通路);
+   超限无派发/缺字段(含缺检)/行数不符 三类失败行尾附可粘贴整行骨架(行数位填实算, `?` 直贴必再判红)
 5. 提交信息有 `Review-Skip: <理由>`(理由 ≥4 字) → 通过(豁免进 git log, 可审计)
 6. 其余 → 失败, 一行原因 + 下一步
-7. 旁路(不判红): `Review:` 行的 `· 齐平 <8hex>` 字段只查格式(计划 26-11-07-0201 落点 3) —— 缺失不问、
-   真值不验; 格式异常打一行 `[warn]` 但 rc=0 放行(R4: 弱字段, 与「行数 ±0」的强校验刻意区分)
+7. 旁路(不判红): `· 齐平 <8hex>` 字段只查格式(计划 26-11-07-0201 落点 3) —— 缺失不问、真值不验;
+   格式异常打一行 `[warn]` 但 rc=0 放行(R4: 弱字段, 与「行数 ±0」的强校验刻意区分); `· 分面` 同为
+   信息字段(0441 D8) —— 任何档位都不判红, 也不再放行超限
 
 > 下限排在 trailer 校验之前: 5 行的小改正文里写一句「Review: 见报告」不该被硬拦「缺 `<N> 行` 声明」
 > —— 低于下限的批本来就没有 trailer 义务(2026-11-06 评审实测)。
 
 ## 计数面
 - 计入: 代码 + 事实性文档(计划/报告/约定/坑档/README/AGENTS.md)
-- 不计入: **记账类**(`memory-bank/tasks/` `activeContext/` `testing/baselines/`) 与 **生成物**
-  (`gen_all.py --list` 的权威清单; 取不到时退回 `_index*.md` 兜底, 不静默失效成"索引重排也算改动")
+- 不计入: **记账类**(`memory-bank/tasks/` `activeContext/` `testing/baselines/`, 以及
+  `reports/attachments/legacy-review4/` 整目录 —— R4 存量评审的 findings/manifest/路线小结是被评代码
+  的产物, 0441 落点 3/D3) 与 **生成物**(`gen_all.py --list` 的权威清单; 取不到时退回 `_index*.md`
+  兜底, 不静默失效成"索引重排也算改动")
 
 ## 安全敏感面
 `red_lines`(读 my-commit-flow 的闸门配置) ∪ 路径标记词(`state` `credential` `auth` `token`
@@ -44,7 +49,7 @@ import sys
 from pathlib import Path
 
 FLOOR = 50  # 下限: 低于它不要求评审(未实测, 保守推断; 见 reports/26-11-06-0723)
-CEILING = 400  # 建议上限: 超过要拆批, 或分面档并在 trailer 记 `· 分面`
+CEILING = 400  # 建议上限: 超过先拆批; 确实不可拆的残余批须 `· 派发 <K>` 且 K ≥ 2(计划 26-11-07-0441 D1)
 
 REVIEW_LINE_RE = re.compile(r"^Review:\s*(.+)$", re.M)
 SKIP_LINE_RE = re.compile(r"^Review-Skip:\s*(.+)$", re.M)
@@ -52,10 +57,25 @@ LINES_RE = re.compile(r"(\d+)\s*行")
 COUNT_FIELDS = (
     ("blocker", re.compile(r"blocker\s*(\d+)")), ("修", re.compile(r"修\s*(\d+)")), ("入池", re.compile(r"入池\s*(\d+)"))
 )
+# 检 P/T(0441 落点 2): T = 送检发现数, P = 引文逐字通过数(review.check 判过的条目)。值正则取斜杠形式;
+# `·` 锚定的在场正则只用来区分「缺字段」与「写了但形状不对」(直贴骨架的 `检 ?/?` 不许静默通过)。
+CHECK_RE = re.compile(r"检\s*(\d+)\s*/\s*(\d+)")
+CHECK_PRESENT_RE = re.compile(r"·\s*检")
+# 派发 K(0441 落点 1): 值正则锚定 `·` 前缀(D10: 防正文散文「派发 2 个子代理」过采), 缺省 1;
+# 在场正则同锚 —— 直贴骨架的 `派发 ?` 落「形状不对」判红, 不会按缺省静默通过。
+DISPATCH_RE = re.compile(r"·\s*派发\s*(\d+)")
+DISPATCH_PRESENT_RE = re.compile(r"·\s*派发")
 
 # 记账类: 结构由 check_doc_templates / check_status_drift / gen_active_recent 三道守卫管,
 # 它们的内容不进评审面(否则每笔收尾都会被自己的记账逼出一轮评审)。
-BOOKKEEPING_PREFIXES = ("memory-bank/tasks/", "memory-bank/activeContext/", "memory-bank/testing/baselines/")
+# legacy-review4/ 整目录是 R4 存量评审的 findings/manifest/路线小结 = 被评代码的产物(0441 落点 3/D3),
+# 与 review.lane.verify 的「树净仅该目录内允许落盘」同源; reports/attachments/ 其余件仍是事实性文档, 照旧计行。
+BOOKKEEPING_PREFIXES = (
+    "memory-bank/tasks/",
+    "memory-bank/activeContext/",
+    "memory-bank/testing/baselines/",
+    "memory-bank/reports/attachments/legacy-review4/",
+)
 
 # 安全敏感面路径标记词 —— 与 .commands/review/scripts/review_pack.py 同源(改一处要改两处, 见该文件同名常量)
 SENSITIVE_PATH_MARKERS = ("state", "credential", "auth", "token", "secret", "password")
@@ -182,21 +202,26 @@ def sensitive_hit(files: list[str], reds: list[str]) -> list[str]:
     return hits
 
 
-def message_text(root: Path, explicit: str | None) -> str:
+def message_text(root: Path, explicit: str | None) -> tuple[str, str]:
     """提交信息: 显式参数 → 环境变量(commit.py 注入) → 约定文件 → HEAD 消息。
+
+    返回 (文本, 来源), 来源取值 "file" / "default" / "HEAD" —— 来源为 HEAD 时 main() 会打一行
+    「未给消息文件, 按 HEAD 判, 实算 N 行」(0441 落点 4): 手工预览没给文件不再静默假装, 上一笔是
+    Skip 时按 HEAD 判会直接报 ok, 至少把实算行数亮出来; 判定语义不变, 仍按 HEAD 的 trailer 判。
 
     闸门在一次提交里会跑两次: 提交前读消息文件; 提交后(合流复跑)文件已消费, 那时 HEAD 就是本次提交
     —— 退到 HEAD 消息正好命中同一份文本。**复跑不靠这个函数区分**(显式 --message-file 的文件不会被
-    消费, 按"文件在不在"判会误判), 改由 commit.py 显式注入阶段标记(见 `PHASE_ENV`)。
+    消费, 按"文件在不在"判会误判), 改由 commit.py 写 POST_MARKER 文件标记且 main() 在调用本函数之前
+    就消费它 —— 走到 HEAD 来源的只剩"手工预览没给文件"一种情形。
     """
     for cand in (explicit, os.environ.get("COMMIT_FLOW_MSG_FILE")):
         if cand and Path(cand).exists():
-            return Path(cand).read_text(encoding="utf-8", errors="replace")
+            return Path(cand).read_text(encoding="utf-8", errors="replace"), "file"
     default = root / ".git" / "COMMIT_MSG_AI.txt"
     if default.exists():
-        return default.read_text(encoding="utf-8", errors="replace")
+        return default.read_text(encoding="utf-8", errors="replace"), "default"
     proc = _git(root, "log", "-1", "--format=%B")
-    return proc.stdout if proc.returncode == 0 else ""
+    return (proc.stdout if proc.returncode == 0 else ""), "HEAD"
 
 
 def anchor_commit(root: Path) -> str:
@@ -219,6 +244,15 @@ def anchor_commit(root: Path) -> str:
     return head
 
 
+def _skeleton(count: int) -> str:
+    """失败行尾附的可粘贴整行骨架(计划 26-11-07-0441 落点 4/D4)。
+
+    行数位直接填实算值, 其余位是 `?` —— `?` 不是数字, 直接粘贴会被 decide() 的数字正则再判红
+    (blocker/修/入池/检 走原正则, 检/派发 另有形状校验), 失败方向安全。
+    """
+    return f"可粘贴整行(把 ? 逐一换成实数): Review: <范围> · {count} 行 · blocker ? · 修 ? · 入池 ? · 检 ?/? · 派发 ?"
+
+
 def decide(count: int, sensitive: list[str], message: str) -> tuple[bool, str]:
     """纯判定: (是否通过, 失败原因/通过说明)。顺序即优先级, 见模块头「判据」。
 
@@ -237,18 +271,53 @@ def decide(count: int, sensitive: list[str], message: str) -> tuple[bool, str]:
     review = REVIEW_LINE_RE.search(message)
     if review:
         line = review.group(1)
-        if count > CEILING and "分面" not in line:
-            return False, (f"本批实算 {count} 行 > 建议上限 {CEILING} —— 先拆批(按可独立编译/测试的文件组); "
-                           "确实不可拆才走分面档并在 trailer 记 `· 分面`")
+        if count > CEILING:
+            # 超限判据只认派发(0441 D1): `· 分面` 降级为信息字段(D8), 不再是合法通路 —— 原「分面」条件已删。
+            dispatch = DISPATCH_RE.search(line)
+            if not dispatch or int(dispatch.group(1)) < 2:
+                return False, (
+                    f"本批实算 {count} 行 > 建议上限 {CEILING} —— 先拆批(按可独立编译/测试的文件组); "
+                    "确实不可拆的残余批须多派一轮: trailer 记 `· 派发 <K>`(要求 派发 ≥ 2; `· 分面` 只是"
+                    "信息字段) —— " + _skeleton(count)
+                )
         declared = LINES_RE.search(line)
         if not declared:
-            return False, f"`Review:` 行缺 `<N> 行` 声明(实算 {count} 行) —— 按 code-review skill ⑦ 的格式补齐"
+            return False, (f"`Review:` 行缺 `<N> 行` 声明(实算 {count} 行) —— 按 code-review skill ⑦ 的格式补齐"
+                           " —— " + _skeleton(count))
         if int(declared.group(1)) != count:
             return False, (f"`Review:` 声明 {declared.group(1)} 行 ≠ 实算 {count} 行 —— "
-                           "数字必须是提交那一刻实测的, 改对再提交")
-        missing = [name for name, rx in COUNT_FIELDS if not rx.search(line)]
+                           "数字必须是提交那一刻实测的, 改对再提交 —— " + _skeleton(count))
+        fixed: dict[str, int] = {}
+        missing = []
+        for name, rx in COUNT_FIELDS:
+            m = rx.search(line)
+            if m:
+                fixed[name] = int(m.group(1))
+            else:
+                missing.append(name)
+        check = CHECK_RE.search(line)
+        if check is None:
+            # 检是必填(0441 落点 2): 缺了判红; 写了但不是合法斜杠数字形状(直贴骨架的 `检 ?/?`)同样判红,
+            # 在场正则只用来把措辞说准 —— 两个方向都是红, 不存在静默通过。
+            missing.append("检(形状不对, 应为 `检 P/T`)" if CHECK_PRESENT_RE.search(line) else "检")
         if missing:
-            return False, f"`Review:` 行缺字段: {'/'.join(missing)} —— 按 skill ⑦ 的格式补齐"
+            return False, (f"`Review:` 行缺字段: {'/'.join(missing)} —— 按 skill ⑦ 的格式补齐; "
+                           "检 P/T: T=送检发现数, P=引文逐字通过数(review.check 判过的条目) —— "
+                           + _skeleton(count))
+        passed, total = int(check.group(1)), int(check.group(2))
+        if passed > total:
+            return False, (f"`检 {passed}/{total}`: P(过检数) > T(送检数) —— 通过的条目不可能多于送检的, "
+                           "数字写反了 —— " + _skeleton(count))
+        lower = fixed["修"] + fixed["入池"]
+        if passed < lower:
+            return False, (f"`检 {passed}/{total}`: P(过检数) {passed} < 修 {fixed['修']} + 入池 {fixed['入池']}"
+                           f" = {lower} —— 修/入池 只数过检且未被 REFUTE 的发现(自发顺手修、被 REFUTE 弃掉的"
+                           "条目不进这两个数), 口径对不上就改数 —— " + _skeleton(count))
+        if DISPATCH_PRESENT_RE.search(line) and not DISPATCH_RE.search(line):
+            # ≤ CEILING 不校验派发数值, 但写了 `派发` 字样就必须是数字形状 —— 否则直贴骨架的 `派发 ?`
+            # 会按缺省静默通过(0441 落点 4)。> CEILING 时上面已保证派发合法且 ≥ 2, 走不到这里。
+            return False, ("`派发` 字段形状不对(应为 `· 派发 <K>`, K 为数字) —— 骨架里的 `?` 要换成实数 —— "
+                           + _skeleton(count))
         return True, f"已评审 {count} 行"
 
     skip = SKIP_LINE_RE.search(message)
@@ -260,7 +329,8 @@ def decide(count: int, sensitive: list[str], message: str) -> tuple[bool, str]:
 
     return False, (
         f"本批累计 {count} 行待评未留痕 —— 先跑 code-review skill(批次 base = 最近一条 `Review:` 提交), "
-        "再在提交信息里写 `Review: <范围> · <N> 行 · blocker N · 修 N · 入池 N`; "
+        "再在提交信息里写 `Review: <范围> · <N> 行 · blocker N · 修 N · 入池 N · 检 P/T · 派发 K`"
+        "(检 P/T: T=送检发现数, P=引文逐字通过数; 超 400 行须 `· 派发 2` 起); "
         "确属免评写 `Review-Skip: <理由>`"
     )
 
@@ -300,7 +370,7 @@ def main(argv: list[str] | None = None) -> int:
         marker.unlink(missing_ok=True)
         return 0
 
-    msg = message_text(root, args.message_file)
+    msg, msg_source = message_text(root, args.message_file)
 
     gen = generated_paths(root)
     base = anchor_commit(root)
@@ -314,13 +384,18 @@ def main(argv: list[str] | None = None) -> int:
     files = tracked_files + untracked_files
     sensitive = sensitive_hit(files, red_lines(root))
 
+    if msg_source == "HEAD":
+        # 无消息文件可读、退到 HEAD 消息(0441 落点 4): 手工预览不再静默假装 —— 上一笔是 Skip 时按 HEAD
+        # 判会直接报 ok, 至少把实算行数亮出来; 判定不变(仍按 HEAD 的 trailer 判), 复跑轮在更早处已被拦。
+        print(f"未给消息文件, 按 HEAD 判, 实算 {count} 行")
     ok, why = decide(count, sensitive, msg)
     warn = flush_field_warn(msg)
     if warn:
         # 弱校验的让步输出(计划 26-11-07-0201 落点 3): 不改判定, 只提醒字段写坏了 —— 判定仍由 decide 独立给
         print(warn)
     if ok:
-        return 0  # v3 契约: 全过即静默(仅记账/生成物这类"本来就没批"的情形也静默; warn 是唯一让步)
+        # v3 契约: 全过即静默(仅记账/生成物这类"本来就没批"的情形也静默; warn 与「未给消息文件」提示是仅有的两处让步)
+        return 0
     print(f"评审留痕: {why}")
     return 1
 
