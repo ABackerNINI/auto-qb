@@ -59,9 +59,9 @@
     {
       "id": "R5-7",
       "title": "shared config 族: config_rules/config_editor{,_curve,_form,_tree}/config_hub{,_tm,_tracker,_hr}",
-      "status": "pending",
-      "done_at": null,
-      "findings": 0
+      "status": "done",
+      "done_at": "26-11-07-0341",
+      "findings": 26
     },
     {
       "id": "R5-8",

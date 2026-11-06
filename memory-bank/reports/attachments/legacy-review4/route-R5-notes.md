@@ -14,6 +14,21 @@ owner: clone3-main · freeze: f088329291e6 · 快照: C:\Users\11059\Desktop\Pro
 | R5-5 | shared drawer 模板·general 与 trackers(01-09 号) (3556行) | 33 (major 4 / minor 20 / nit 9) | done |
 | R5-11 | shared drawer 模板·content 与 peers(10-12/90 号) (1720行) | 21 (major 4 / minor 12 / nit 5) | done |
 | R5-6 | shared 对话框与流转: dialogs/add_torrent/delete_flow/transfer_*/relocate_chain (3257行) | 23 (major 3 / minor 11 / nit 9) | done |
+| R5-7 | shared config 族: config_rules/config_editor{,_curve,_form,_tree}/config_hub{,_tm,_tracker,_hr} (3850行) | 26 (major 6 / minor 10 / nit 10) | done |
+
+## R5-7 批记录(2 面精评: 正确性+安全 / 测试缺口+文档漂移)
+
+- **major 6 条(全在测试缺口面)**:未保存改动防护链全程零行为执行 / 单位控件族零测试(2026-09-21 整页白屏事故现场,回归无保护) / 站点回退链整族零引用(注释自称铁律无测试钉) / 曲线编辑器交互与图表全部零执行 / 命名实体增改删骨架零引用 / 站点搜索匹配语义零执行(CJK 归一曾出事故)。
+- minor 10 条:cfgLoad 幽灵站点+放弃的重命名静默复活 / 关闭工具回滚无中生 enabled 键 / HR 绑定五分支零测试 / tm 参数往返零行为执行 / 规则卡风险摘要零测试 / cfgFlatten 灰显零行为执行 / 守阵文件名指错 / collapsedRules 死状态。
+- nit 10 条:cfgPluginEntry/cfgInlineBool 死代码 2 条 / on_error prune 双实现 / 删项模式 4 份重复 / cfgReset 漏清 3 张 map / 非 ASCII 符号 7 文件(config_hub HUB_HELP 用户可见字面量含 →)。
+- 密码/secret 掩码链路(GET 掩码→setSecret 拒写→writer.py MASK_SENTINEL 还原)核对闭环,无发现。
+- 底册复验:R2 终表零命中本批;Open issues 2002(伪警示条)/0641(真机排期锚)仍 Open 未重报。
+
+### 自弃发现(16 条留痕)
+
+面1(9):cfgSave 后 fresh GET 失败误报系理论 / tm int 字段 NaN 链路完整 / 0 档徽标纯外观 / hubLedOf 截断漏警需 >8 条且仅提示 / not 切换收敛第一孩子系有意设计 / cfgExprTry 后端恒带 error / unitDefault 均在梯内 / 曲线 hover 模板恒渲染 svg / 掩码链路闭环。
+面2(7):「ai/06 约定」仓外无从证伪 / search_torrents 符号真实存在仅文件归属宽泛 / 「拟记 pitfalls」表意向 / cfgExprTry 属真机面与底册 0641 相邻 / cfgReset 漏清系面1 已报 / hubImportSites 有 e2e 真渲染 / cfgSave 主路径有 e2e+后端电池。
+
 
 ## R5-6 批记录(2 面精评: 正确性+安全 / 测试缺口+文档漂移)
 

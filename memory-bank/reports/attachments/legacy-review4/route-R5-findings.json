@@ -1366,5 +1366,239 @@
   "claim": "同上「三份」漂移(四套皮肤清单均含本文件,守阵按 _UI_ALL 四份断言);相邻 test_tt_editor_wiring:283 注释同款旧表述",
   "relevance": "相关",
   "fix": "改「四份」"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/config_editor.js",
+  "line": 178,
+  "quote": "if (!this.cfg.trackerKey) this.cfg.trackerKey",
+  "severity": "minor",
+  "claim": "cfgLoad 只在 trackerKey/ruleGroupKey 为空时才重选,不校验其是否仍存在于重拉的树里: 站点重命名(A→B)后点「放弃改动」,trackerKey 仍是 B,右栏渲染不存在的幽灵站点;此时编辑任意字段经 cfgSetPath 会把 config.trackers.B 连键带值重新写回树,静默复活已放弃的重命名",
+  "relevance": "相关",
+  "fix": "cfgLoad 里对 trackerKey/ruleGroupKey 做存在性校验(不在 cfgTrackerNames()/cfgRuleGroupNames() 内即回落首项)"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/config_hub_tm.js",
+  "line": 192,
+  "quote": "this.cfgSetBool([\"config\", \"traffic_source\", \"enabled\"], true)",
+  "severity": "minor",
+  "claim": "关闭工具保存失败后的回滚无条件写 enabled:\"true\",但磁盘原态可能是「键不存在(默认真)」——回滚后内存树与 baseline 出现不可见差异,cfgDirty 凭空翻真(刷新守卫会拦),且下次保存任意改动会把多余的 enabled 键写进 YAML",
+  "relevance": "相关",
+  "fix": "回滚前先记 cfgExists(该键),原不存在时用 cfgDelPath 删键而非写 \"true\""
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/config_rules.js",
+  "line": 42,
+  "quote": "cfgPluginEntry(groupKey, ruleName, listName, index)",
+  "severity": "nit",
+  "claim": "cfgPluginEntry 全仓无任何调用点(模板与 JS 均无),死代码/拆分残留",
+  "relevance": "相关",
+  "fix": "删除该方法"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/config_editor_tree.js",
+  "line": 182,
+  "quote": "cfgInlineBool(path, fallback)",
+  "severity": "nit",
+  "claim": "cfgInlineBool 只是 cfgBool 的透传包装,全仓无任何调用点(内联开关实际走 CE_FIELD_BASE.inlineValue),死代码",
+  "relevance": "相关",
+  "fix": "删除该方法"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/config_rules.js",
+  "line": 263,
+  "quote": "cfgOnErrorPruneIfDefault(groupKey, ruleName, i)",
+  "severity": "nit",
+  "claim": "「on_error 全缺省则整键摘除」逻辑同文件内两份逐字等价实现: 索引版 cfgOnErrorPruneIfDefault(263-270)与路径版 cfgOnErrorSetAt 内联段(695-699),头注只说「两族同口径勿各改一套」但未收敛到单一 helper,改缺省口径时漏一处即行为分叉",
+  "relevance": "相关",
+  "fix": "抽一个按 entryPath 的共用 prune 函数,索引版拼路径后转调"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/config_rules.js",
+  "line": 114,
+  "quote": "cfgPluginRemove(groupKey, ruleName, listName, index)",
+  "severity": "nit",
+  "claim": "「splice 删项 + 空则整键摘除」模式本批内重复至少 4 份: cfgPluginRemove / config_editor.js cfgItemRemove / cfgListEntryRemove / cfgChooseBranchRemove,语义完全同构,属平行机制",
+  "relevance": "相关",
+  "fix": "索引版改为拼路径后转调路径版 cfgListEntryRemove"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/config_editor.js",
+  "line": 241,
+  "quote": "cfgReset() {",
+  "severity": "nit",
+  "claim": "cfgReset(登出清场)漏清同类展开态: 只清了 openGroups/openLists/openRuleMeta,openSections/openCurves/collapsedRules 三张同族 map 原样保留,登出换账号后残留上一会话的展开状态键(含配置路径形状)",
+  "relevance": "相关",
+  "fix": "cfgReset 补齐 openSections/openCurves/collapsedRules 的清空"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/config_editor.js",
+  "line": 4,
+  "quote": "不做任何格式转换 → 零漂移",
+  "severity": "nit",
+  "claim": "含 code-style.md 禁用的非 ASCII 图形符号: 全文件 10 行含 →/⇒/①/②(均在注释)",
+  "relevance": "相关",
+  "fix": "→ 改 ->, ⇒ 改 =>, ①② 改 1. 2."
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/config_editor_tree.js",
+  "line": 13,
+  "quote": "→ 父字段的**内联开关**",
+  "severity": "nit",
+  "claim": "11 行注释含禁用符号 →",
+  "relevance": "相关",
+  "fix": "→ 改 ->"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/config_hub.js",
+  "line": 7,
+  "quote": "字段拆成「块 → 行」两层",
+  "severity": "nit",
+  "claim": "13 行含禁用符号 →/↑↓/⑤/↔;其中行 61-92 的 → 在 HUB_HELP 用户可见字符串字面量内",
+  "relevance": "相关",
+  "fix": "注释 → 改 ->;HUB_HELP 文案里的「A → B」改「A > B」"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/config_hub_tm.js",
+  "line": 154,
+  "quote": "共用 key ⇒ 两条链天然不叠加",
+  "severity": "nit",
+  "claim": "5 行注释含禁用符号 ⇒/③",
+  "relevance": "相关",
+  "fix": "⇒ 改 =>, D10③ 改 D10-3"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/config_hub_tracker.js",
+  "line": 94,
+  "quote": "↑↓ 移动命中活动项",
+  "severity": "nit",
+  "claim": "5 行注释含禁用符号 ↑↓/→",
+  "relevance": "相关",
+  "fix": "↑↓ 改 上下键, → 改 ->"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/config_editor_curve.js",
+  "line": 39,
+  "quote": "留空 = 回退常规 → interval",
+  "severity": "nit",
+  "claim": "2 行含禁用符号 →(行 39);行 39 的 → 位于渲染给用户的 help 字符串字面量内",
+  "relevance": "相关",
+  "fix": "help 文案改「回退常规 interval」或 ->;行 99 注释同改"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/config_rules.js",
+  "line": 223,
+  "quote": "沿用旧口径)→ 按子字段造对象",
+  "severity": "nit",
+  "claim": "行 223 注释含禁用符号 →(本文件仅此一处)",
+  "relevance": "相关",
+  "fix": "→ 改 ->"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/config_editor.js",
+  "line": 232,
+  "quote": "async cfgDiscard() {",
+  "severity": "major",
+  "claim": "未保存改动防护链全程零行为执行: cfgDiscard 在 tests/ 与 e2e/ 零引用;cfgGuardSync/_cfgOnReloadKey/cfgReloadGuard/_cfgOnBeforeUnload 只有子串/正则锚(改语义不换关键词不红),三分支「保存失败不刷新/放弃清零/留页」与 beforeunload 挂摘从未被跑过",
+  "relevance": "相关",
+  "fix": "为守卫族补 node 语义电池(桩 confirmThreeDialog/cfgSave/location.reload/beforeunload,断言三分支结算与挂摘幂等),e2e 补脏树刷新拦截真渲染用例"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/config_editor.js",
+  "line": 134,
+  "quote": "cfgUnitParts(kind, text, unitDefault) {",
+  "severity": "major",
+  "claim": "「数值+单位」拆/拼控件族(cfgUnitParts/cfgUnitLabel/cfgSetUnit/cfgHasUnit/cfgUnitOptions)零测试引用——这里出过 2026-09-21 整页白屏事故(注释自证),现仅存静态守阵,拆/拼/回退(空值/非法单位/未知 kind)行为无任何执行",
+  "relevance": "相关",
+  "fix": "node 电池直跑三个 kind 的拆拼往返与回退分支(空串/无单位/非法串/单位不在表内)"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/config_editor.js",
+  "line": 432,
+  "quote": "cfgFallbackValue(path, schemaDefault) {",
+  "severity": "major",
+  "claim": "站点回退链整族(cfgSiteFallbackPath/cfgFallbackValue/siteBadge/sitePlaceholder/canFollowGlobal/followGlobal/cfgResetField)在 tests/ 与 e2e/ 零引用——注释自称铁律「回填与徽标同批上,缺一不可」却无任何测试钉住,tri_state ''、路径形态判据、7 键表三个分支均零执行",
+  "relevance": "相关",
+  "fix": "node 电池造 trackers.<站点> 路径树,断言 7 键回填值/徽标/占位串/跟随全局删键,及全局页与链外键返回 null 的反例"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/config_editor_curve.js",
+  "line": 152,
+  "quote": "_buildCurveChart(i, direction) {",
+  "severity": "major",
+  "claim": "曲线编辑器交互与图表全部零执行: cfgCurveAddPeriod/cfgCurveRemovePeriod(展开态搬移)/cfgCurvePointSet/_parseSizeValue/_sizeMultiplier(1024 vs 1000 进制分叉)/_buildCurveChart 几何(∞区≤30%封顶/比例分段)在 tests/ 与 e2e/ 零引用,仅子串锚——纯函数性质本可 node 直测",
+  "relevance": "相关",
+  "fix": "node 电池喂档位序列断言阶梯 path/刻度/∞区宽与 _sizeMultiplier 进制判别,并覆盖增删档后 openCurves 序号搬移"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/config_editor_form.js",
+  "line": 30,
+  "quote": "cfgEntityAdd(def) {",
+  "severity": "major",
+  "claim": "命名实体增/改/删骨架(cfgEntityAdd/cfgEntityRename/cfgEntityRemove)与入口 hubAddEntity/规则集 _rules 后缀 normalize 在 tests/ 与 e2e/ 零引用——重命名靠重建对象保序、查重 toast、删除后选中键回落与「最后站点删空收走 trackers 段」等分支全部无执行",
+  "relevance": "相关",
+  "fix": "node 电池覆盖三骨架: 重命名保序、同名冲突拒绝、删空容器收键、normalize 补后缀与既有 _rules 名不双写"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/config_hub_tracker.js",
+  "line": 48,
+  "quote": "trackerParseQuery(q) {",
+  "severity": "major",
+  "claim": "站点搜索匹配语义(trackerNorm 的 CJK 归一/trackerParseQuery 负词与短语/trackerRows 掩码哨兵跳过/hubTrackerHits 负词整站排除+正词 AND+chip 组序与上限 3)只有子串锚与正则抽函数体断言,从未执行——注释自证 CJK 归一曾出「中文搜索直接废掉」事故,回归只能靠肉眼",
+  "relevance": "相关",
+  "fix": "node 电池直跑 parse/norm/rows/hits 四单点(负词、短语、掩码、CJK、chip 排序截断)"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/config_hub_hr.js",
+  "line": 33,
+  "quote": "hrSiteBinding(preset) {",
+  "severity": "minor",
+  "claim": "HR 站点接入绑定状态五分支(显式 tracker 不存在=warn/自动绑定唯一命中/多命中歧义/announce 域双向子域容错/未绑定)零测试引用,hrSiteSetEnabled 的「未配置不写垃圾键」守卫同样零执行",
+  "relevance": "相关",
+  "fix": "node 电池造 presets+trackers 组合断言五分支,含 endsWith 双向子域匹配正反例"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/config_hub_tm.js",
+  "line": 257,
+  "quote": "tmBuildPayload() {",
+  "severity": "minor",
+  "claim": "工具参数表单往返(tmBuildPayload 的 list 拆分/time·size·speed 复合串原样回传/未回显键不发明值/tmNormalizeForm 列表折逗号串/tmPickApplyExe 路径分隔符选择)仅源码切片锚,零行为执行;「裸数值无损往返」是注释明确承诺的语义",
+  "relevance": "相关",
+  "fix": "node 电池对 tmParams 全 12 键跑 normalize->buildPayload 往返断言恒等"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/config_rules.js",
+  "line": 363,
+  "quote": "cfgRuleRisk(groupKey, ruleName) {",
+  "severity": "minor",
+  "claim": "规则卡摘要与风险聚合(cfgRuleRisk 的 noDedup 判定/cfgTriggerLabel/cfgRuleMetaSummary 的间隔·去重·冷却摘要)零测试引用——它们喂 hubRiskList→首页 LED 与「N 条含风险」徽标,而规则树/退役键/on_error 侧已有 node 电池,唯独这块摘要面没有",
+  "relevance": "相关",
+  "fix": "把 cfgRuleRisk/cfgRuleMetaSummary 并入现有 _NODE_RULE_TREE_PROBE 电池"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/config_editor_tree.js",
+  "line": 27,
+  "quote": "cfgFlatten(fields, basePath, depth, ownerPath, allowGrouping = true) {",
+  "severity": "minor",
+  "claim": "字段树展开逻辑本身(_attachGrey 的 greyBy 本层上下文——注释自证「第七轮修复」、cfgGreyed 灰显判定、group_of bool→内联/其余→子卡分桶、三态)只有静态守阵,零行为执行,历史回归密度高",
+  "relevance": "相关",
+  "fix": "node 电池以合成 schema 跑 cfgFlatten 断言四种 item.type/内联分桶/greyBy 只在本层覆写/hidden 跳过"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/config_editor.js",
+  "line": 722,
+  "quote": "tests/test_webui_static_dom_page.py",
+  "severity": "minor",
+  "claim": "注释引用的守阵文件 tests/test_webui_static_dom_page.py 在快照中不存在(实际位于 tests/test_webui_static_dom_page_layout.py,测试名仍在)——按指引寻文件会扑空",
+  "relevance": "相关",
+  "fix": "注释文件名更正为 tests/test_webui_static_dom_page_layout.py"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/config_editor.js",
+  "line": 64,
+  "quote": "collapsedRules: {},",
+  "severity": "minor",
+  "claim": "cfg.collapsedRules 及其注释「规则卡折叠态」是死状态: 全前端零读零写,规则卡折叠实际走 openRuleMeta(键格式为路径点分)——注释描述的状态机不存在,且 cfgReset 也从未清它",
+  "relevance": "相关",
+  "fix": "删除 collapsedRules 死状态,或注释改指 openRuleMeta 并说明键格式差异"
  }
 ]
