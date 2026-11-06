@@ -17,9 +17,9 @@
     {
       "id": "R5-2",
       "title": "shared 菜单·触发·命令链: menu/triggers/commands*/ctx_menu*/view/overlay_fit/ctl_bits/scope_audit/shortcuts(+panel)",
-      "status": "pending",
-      "done_at": null,
-      "findings": 0
+      "status": "done",
+      "done_at": "26-11-07-0051",
+      "findings": 10
     },
     {
       "id": "R5-3",

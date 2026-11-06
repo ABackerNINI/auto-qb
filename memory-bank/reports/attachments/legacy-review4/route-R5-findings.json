@@ -1,26 +1,308 @@
 [
- {"file":"src/auto_qb/webui/static/shared/auth.js","line":118,"quote":"this._modalResolve = null;","severity":"minor","claim":"_logout 在有模态框打开时直接丢弃 _modalResolve 而不进行 resolve,悬空的 confirmDialog/promptDialog Promise 永远 pending(删除流程在 await 处永久挂起,且该框被新框顶替后旧 resolve 永久丢失)。","relevance":"相关","fix":"清除 _modalResolve 前先对其 resolve(false),再重置 this.modal。"},
- {"file":"src/auto_qb/webui/static/shared/auth.js","line":92,"quote":"this.stopPolling();","severity":"minor","claim":"_logout/401 路径只调 stopPolling() 未调 stopEvents():EventSource 与 _esRetry/_verTimer 跨会话残留;残留流每个 ver 事件触发一次 refresh → 无凭证 api() → 再次 _logout 空转;换票 await 期间登出,落票后仍会 this._es = es 重开(重开竞态)。","relevance":"相关","fix":"_logout 与 refresh() 的 e.auth 分支补 stopEvents(),与 _qbTeardown 同口径。"},
- {"file":"src/auto_qb/webui/static/shared/lifecycle.js","line":265,"quote":"this.stopEvents();  // P2: 断开 SSE","severity":"minor","claim":"unmounted 只移除具名句柄;mounted 添加的 5 个匿名监听(window click:76 / Esc keydown:102 / 防抖 resize:181 / visibilitychange:217 / contextmenu:228)从不移除,也未调 stopPolling() —— 与同文件「防热重载句柄堆叠」自我纪律矛盾,重挂后旧句柄堆叠操作已死实例。","relevance":"相关","fix":"匿名处理器提为实例字段并在 unmounted removeEventListener,补 stopPolling()。"},
- {"file":"src/auto_qb/webui/static/shared/polling.js","line":66,"quote":"this._verTimer = setTimeout(() => { this._verTimer = null; this.refresh(); }, 60);","severity":"minor","claim":"SSE ver 驱动的 refresh() 无 document.hidden 检查,绕过 visibilitychange「后台停止轮询」门控:后台标签每个发布版都真实请求 /api/state,touch() 使后端活跃门控恒真,后台停止语义失效。","relevance":"相关","fix":"ver 回调/refresh 门口加 document.hidden 短路,恢复可见由 visibilitychange 补拉。"},
- {"file":"src/auto_qb/webui/static/shared/polling.js","line":151,"quote":"if (st.settle) { const s = st.settle; st.settle = null; s(null); }","severity":"minor","claim":"stopPoll 对 awaitPoll 收摊只 resolve(null) 跳过 opts.onEnd,与文件头契约「onEnd: 收摊回调(收敛/耗尽/到点都走)」及 finish() 路径不一致;startPoll(key) 先 stopPoll(key),同 key 有界等待被顶掉时 onEnd 清理(loading 复位)被跳过。","relevance":"相关","fix":"stopPoll 的 settle 分支调用 opts.onEnd()。"},
- {"file":"src/auto_qb/webui/static/shared/app.js","line":209,"quote":"const DRAWER_TRACKER_COLUMNS = [","severity":"nit","claim":"DRAWER_TRACKER_COLUMNS(209)/DRAWER_FILE_COLUMNS(336) 生产无引用(仅 test_webui_static_skins_table.py:295 钉存在性);363 行注释称「变体列集由它们派生」但实为独立手写 —— 死常量+注释契约不符。","relevance":"相关","fix":"删除并同步守阵,或注释改「仅为守阵钉住保留」。"},
- {"file":"src/auto_qb/webui/static/shared/auth.js","line":141,"quote":"this.speedMode = { loaded: false, curveEnabled: false, target: null, current: null, error: \"\" };","severity":"nit","claim":"_logout 的 speedMode 复位字面量缺 altOn/altCurrent 两键,与 state.js:429 初值形态漂移(登出后读 altOn 为 undefined,暂等价 false,埋形态漂移隐患)。","relevance":"相关","fix":"补齐 altOn/altCurrent 或提取 speedModeInit() 单点复用。"},
- {"file":"src/auto_qb/webui/static/shared/lifecycle.js","line":89,"quote":"这里补兜底。⚠ 有它才必须给 meta 的字段 label 挂","severity":"nit","claim":".js 注释出现非 ASCII 图形符号 ⚠(同文件还有 →/⇒/①② 多处),违反 conventions/code-style.md 代码禁图形符号禁令(boot.js/fetch_low.js 干净)。","relevance":"相关","fix":"⚠→WARN:、①→1.、→/⇒→->。"},
- {"file":"src/auto_qb/webui/static/shared/ui_feedback.js","line":312,"quote":"⚠ 常量只是初值","severity":"nit","claim":".js 注释出现 ⚠(379-381/520-521 还有 ①②③ 与 →),违反 code-style.md 非 ASCII 图形符号禁令。","relevance":"相关","fix":"ASCII 替换。"},
- {"file":"src/auto_qb/webui/static/shared/state.js","line":284,"quote":"Ctrl/⌘+点击切换","severity":"nit","claim":".js 注释出现 ⌘(85/99/226/325 等还有 →/⇒/②/③/⑤),违反 code-style.md 非 ASCII 图形符号禁令。","relevance":"相关","fix":"⌘→Ctrl/Cmd 文字表述,其余 ASCII 替换。"},
- {"file":"src/auto_qb/webui/static/shared/app.js","line":276,"quote":"列头在两变体无语义 → CSS 隐藏","severity":"nit","claim":".js 注释大量出现 →/⇒/①②(14/304/317/503-505 等),违反 code-style.md 非 ASCII 图形符号禁令。","relevance":"相关","fix":"ASCII 替换(->、1. 2.)。"},
- {"file":"src/auto_qb/webui/static/shared/polling.js","line":5,"quote":"首次断线或 true→false 跳变","severity":"nit","claim":".js 注释出现 →/⇒(5/22/24/74/173/259/274-275 等十余处),违反 code-style.md 非 ASCII 图形符号禁令。","relevance":"相关","fix":"ASCII 替换(->)。"},
- {"file":"src/auto_qb/webui/static/shared/auth.js","line":5,"quote":"loading 恒真 ⇒ 轮询守卫把自己挡死","severity":"nit","claim":".js 注释出现 ⇒ 符号,违反 code-style.md 非 ASCII 图形符号禁令。","relevance":"相关","fix":"⇒→->。"},
- {"file":"src/auto_qb/webui/static/shared/polling.js","line":85,"quote":"this._esRetry = setTimeout(() => {","severity":"major","claim":"SSE 断线沿判定(_esDisconnectEdge)+ 换票重连状态机在快照 tests/ 内零行为回归测试:唯一守阵 test_web_auth.py::test_frontend_sse_ticket_wiring 是 4 条字符串锚,沿判定/3s 重试去重/stopEvents 归置 _esConnected 均未被执行过。","relevance":"相关","fix":"按 test_webui_static_skins_table.py 的 hrsCompareRows node 电池范式补探针真跑,并钉「重试期重复 onerror 只发一条 toast」「重连必关旧连接换新票」两行为。"},
- {"file":"src/auto_qb/webui/static/shared/polling.js","line":3,"quote":"纯函数, 探针真跑, 同 lifecycle.js _errlogReseed 先例","severity":"minor","claim":"注释声称 _esDisconnectEdge 有探针真跑,但全 tests/ grep『DisconnectEdge』零命中——探针不存在,注释契约与事实不符,误导后来者以为有测试兜底。","relevance":"相关","fix":"补真探针或删该声明,与 lifecycle.js 同款一并修正。"},
- {"file":"src/auto_qb/webui/static/shared/lifecycle.js","line":36,"quote":"后端重启判定(纯函数, 探针真跑)","severity":"minor","claim":"注释声称 _errlogReseed 有探针真跑,但 tests/ 内 grep『errlogReseed』零命中,test_webui_error_history.py 对 lifecycle.js 全是函数体字符串断言,该纯函数从未被执行。","relevance":"相关","fix":"加 node 电池真跑 _errlogReseed(cursor 0 不判重启/last<cursor 判重启)或删声明。"},
- {"file":"src/auto_qb/webui/static/shared/polling.js","line":273,"quote":"Math.min(15000, this.basePollMs() * 2 ** this.pollFails)","severity":"minor","claim":"轮询失败退避曲线(翻倍/15s 上限/成功清零)无回归测试:骨架探针(test_webui_static_dom_panel_misc.py:820)把 currentPollMs 桩成常量 1500,状态机完全绕过测试面。","relevance":"相关","fix":"node 电池补 currentPollMs 真跑分型(pollFails=0..4 序列与 cap、成功清零)。"},
- {"file":"src/auto_qb/webui/static/shared/app.js","line":779,"quote":"if (!out.hidden[page] && !out.order[page] && !out.w[page]) {","severity":"minor","claim":"默认隐藏列播种语义(「从无任何偏好才播种」「刻意全开不被覆盖」——注释自述同形陷阱曾实发)无行为测试:唯一守阵(webui_static_scan_css.py:226)只钉 DEFAULT_HIDDEN_KEYS 字符串,loadColState 从未被执行。","relevance":"相关","fix":"补 node 电池真跑 loadColState(空存储播种/仅空 hidden 不播/三键全缺才播)。"},
- {"file":"src/auto_qb/webui/static/shared/ui_feedback.js","line":94,"quote":"const hit = this._errHistory.find((e) => e.id === id);","severity":"minor","claim":"「emit 即收 + settle upsert 同 id 去重」「超限挤掉最旧」「面板关闭期计未读」环形缓冲行为契约(test_webui_error_history.py 自述「同一条错误只留一条」)只有字符串锚,无行为测试。","relevance":"相关","fix":"补 node 电池:同 id 二次 _recordErrorToast 只覆盖不增行、第 51 条挤掉最旧、errPanelOpen=false 时 _errUnread 递增。"},
- {"file":"src/auto_qb/webui/static/shared/fetch_low.js","line":19,"quote":"内联超时(AQB_BOOT_PART_TIMEOUT_MS, 值更短","severity":"nit","claim":"boot.js 实际常量名是 BOOT_PART_TIMEOUT_MS(无 AQB_ 前缀,boot.js:20),注释指向不存在的名字,按名 grep 落空。","relevance":"相关","fix":"注释名字改为 BOOT_PART_TIMEOUT_MS。"},
- {"file":"src/auto_qb/webui/static/shared/boot.js","line":28,"quote":"UI 皮肤 cookie(autoqb_ui): 三套 UI 共用本脚本","severity":"minor","claim":"「三套 UI 共用本脚本 = 唯一写入口」计数漂移:atlas/prism/console/flux 四套 index.html 均载 /shared/boot.js(flux/index.html:254),按「三套」口径维护会漏改。","relevance":"相关","fix":"注释改「四套 UI」或去掉计数。"},
- {"file":"src/auto_qb/webui/static/shared/state.js","line":542,"quote":"三套 UI 直选","severity":"nit","claim":"数据面 UI_HOME 实为四档(含 flux,state.js:16-21),注释仍写「三套 UI 直选」。","relevance":"相关","fix":"注释计数同步为四套。"},
- {"file":"src/auto_qb/webui/static/shared/ui_feedback.js","line":388,"quote":"三套皮肤同载","severity":"nit","claim":"「.aq-tip 段(三套皮肤同载)」计数漂移:flux/index.html 同样载入 shared/console_hub.css,实为四套。","relevance":"相关","fix":"计数同步为四套。"},
- {"file":"src/auto_qb/webui/static/shared/app.js","line":392,"quote":"全仓尤 `localStorage.clear()`","severity":"nit","claim":"该句读不通(疑为「全仓无 localStorage.clear()」之误;实测全 static 树零处调用),按现字面反而暗示存在 clear() 调用,与「只清 autoqb_token」的保证表述打架。","relevance":"相关","fix":"「尤」改「无」并核句子通顺。"}
+ {
+  "file": "src/auto_qb/webui/static/shared/auth.js",
+  "line": 118,
+  "quote": "this._modalResolve = null;",
+  "severity": "minor",
+  "claim": "_logout 在有模态框打开时直接丢弃 _modalResolve 而不进行 resolve,悬空的 confirmDialog/promptDialog Promise 永远 pending(删除流程在 await 处永久挂起,且该框被新框顶替后旧 resolve 永久丢失)。",
+  "relevance": "相关",
+  "fix": "清除 _modalResolve 前先对其 resolve(false),再重置 this.modal。"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/auth.js",
+  "line": 92,
+  "quote": "this.stopPolling();",
+  "severity": "minor",
+  "claim": "_logout/401 路径只调 stopPolling() 未调 stopEvents():EventSource 与 _esRetry/_verTimer 跨会话残留;残留流每个 ver 事件触发一次 refresh → 无凭证 api() → 再次 _logout 空转;换票 await 期间登出,落票后仍会 this._es = es 重开(重开竞态)。",
+  "relevance": "相关",
+  "fix": "_logout 与 refresh() 的 e.auth 分支补 stopEvents(),与 _qbTeardown 同口径。"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/lifecycle.js",
+  "line": 265,
+  "quote": "this.stopEvents();  // P2: 断开 SSE",
+  "severity": "minor",
+  "claim": "unmounted 只移除具名句柄;mounted 添加的 5 个匿名监听(window click:76 / Esc keydown:102 / 防抖 resize:181 / visibilitychange:217 / contextmenu:228)从不移除,也未调 stopPolling() —— 与同文件「防热重载句柄堆叠」自我纪律矛盾,重挂后旧句柄堆叠操作已死实例。",
+  "relevance": "相关",
+  "fix": "匿名处理器提为实例字段并在 unmounted removeEventListener,补 stopPolling()。"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/polling.js",
+  "line": 66,
+  "quote": "this._verTimer = setTimeout(() => { this._verTimer = null; this.refresh(); }, 60);",
+  "severity": "minor",
+  "claim": "SSE ver 驱动的 refresh() 无 document.hidden 检查,绕过 visibilitychange「后台停止轮询」门控:后台标签每个发布版都真实请求 /api/state,touch() 使后端活跃门控恒真,后台停止语义失效。",
+  "relevance": "相关",
+  "fix": "ver 回调/refresh 门口加 document.hidden 短路,恢复可见由 visibilitychange 补拉。"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/polling.js",
+  "line": 151,
+  "quote": "if (st.settle) { const s = st.settle; st.settle = null; s(null); }",
+  "severity": "minor",
+  "claim": "stopPoll 对 awaitPoll 收摊只 resolve(null) 跳过 opts.onEnd,与文件头契约「onEnd: 收摊回调(收敛/耗尽/到点都走)」及 finish() 路径不一致;startPoll(key) 先 stopPoll(key),同 key 有界等待被顶掉时 onEnd 清理(loading 复位)被跳过。",
+  "relevance": "相关",
+  "fix": "stopPoll 的 settle 分支调用 opts.onEnd()。"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/app.js",
+  "line": 209,
+  "quote": "const DRAWER_TRACKER_COLUMNS = [",
+  "severity": "nit",
+  "claim": "DRAWER_TRACKER_COLUMNS(209)/DRAWER_FILE_COLUMNS(336) 生产无引用(仅 test_webui_static_skins_table.py:295 钉存在性);363 行注释称「变体列集由它们派生」但实为独立手写 —— 死常量+注释契约不符。",
+  "relevance": "相关",
+  "fix": "删除并同步守阵,或注释改「仅为守阵钉住保留」。"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/auth.js",
+  "line": 141,
+  "quote": "this.speedMode = { loaded: false, curveEnabled: false, target: null, current: null, error: \"\" };",
+  "severity": "nit",
+  "claim": "_logout 的 speedMode 复位字面量缺 altOn/altCurrent 两键,与 state.js:429 初值形态漂移(登出后读 altOn 为 undefined,暂等价 false,埋形态漂移隐患)。",
+  "relevance": "相关",
+  "fix": "补齐 altOn/altCurrent 或提取 speedModeInit() 单点复用。"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/lifecycle.js",
+  "line": 89,
+  "quote": "这里补兜底。⚠ 有它才必须给 meta 的字段 label 挂",
+  "severity": "nit",
+  "claim": ".js 注释出现非 ASCII 图形符号 ⚠(同文件还有 →/⇒/①② 多处),违反 conventions/code-style.md 代码禁图形符号禁令(boot.js/fetch_low.js 干净)。",
+  "relevance": "相关",
+  "fix": "⚠→WARN:、①→1.、→/⇒→->。"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/ui_feedback.js",
+  "line": 312,
+  "quote": "⚠ 常量只是初值",
+  "severity": "nit",
+  "claim": ".js 注释出现 ⚠(379-381/520-521 还有 ①②③ 与 →),违反 code-style.md 非 ASCII 图形符号禁令。",
+  "relevance": "相关",
+  "fix": "ASCII 替换。"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/state.js",
+  "line": 284,
+  "quote": "Ctrl/⌘+点击切换",
+  "severity": "nit",
+  "claim": ".js 注释出现 ⌘(85/99/226/325 等还有 →/⇒/②/③/⑤),违反 code-style.md 非 ASCII 图形符号禁令。",
+  "relevance": "相关",
+  "fix": "⌘→Ctrl/Cmd 文字表述,其余 ASCII 替换。"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/app.js",
+  "line": 276,
+  "quote": "列头在两变体无语义 → CSS 隐藏",
+  "severity": "nit",
+  "claim": ".js 注释大量出现 →/⇒/①②(14/304/317/503-505 等),违反 code-style.md 非 ASCII 图形符号禁令。",
+  "relevance": "相关",
+  "fix": "ASCII 替换(->、1. 2.)。"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/polling.js",
+  "line": 5,
+  "quote": "首次断线或 true→false 跳变",
+  "severity": "nit",
+  "claim": ".js 注释出现 →/⇒(5/22/24/74/173/259/274-275 等十余处),违反 code-style.md 非 ASCII 图形符号禁令。",
+  "relevance": "相关",
+  "fix": "ASCII 替换(->)。"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/auth.js",
+  "line": 5,
+  "quote": "loading 恒真 ⇒ 轮询守卫把自己挡死",
+  "severity": "nit",
+  "claim": ".js 注释出现 ⇒ 符号,违反 code-style.md 非 ASCII 图形符号禁令。",
+  "relevance": "相关",
+  "fix": "⇒→->。"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/polling.js",
+  "line": 85,
+  "quote": "this._esRetry = setTimeout(() => {",
+  "severity": "major",
+  "claim": "SSE 断线沿判定(_esDisconnectEdge)+ 换票重连状态机在快照 tests/ 内零行为回归测试:唯一守阵 test_web_auth.py::test_frontend_sse_ticket_wiring 是 4 条字符串锚,沿判定/3s 重试去重/stopEvents 归置 _esConnected 均未被执行过。",
+  "relevance": "相关",
+  "fix": "按 test_webui_static_skins_table.py 的 hrsCompareRows node 电池范式补探针真跑,并钉「重试期重复 onerror 只发一条 toast」「重连必关旧连接换新票」两行为。"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/polling.js",
+  "line": 3,
+  "quote": "纯函数, 探针真跑, 同 lifecycle.js _errlogReseed 先例",
+  "severity": "minor",
+  "claim": "注释声称 _esDisconnectEdge 有探针真跑,但全 tests/ grep『DisconnectEdge』零命中——探针不存在,注释契约与事实不符,误导后来者以为有测试兜底。",
+  "relevance": "相关",
+  "fix": "补真探针或删该声明,与 lifecycle.js 同款一并修正。"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/lifecycle.js",
+  "line": 36,
+  "quote": "后端重启判定(纯函数, 探针真跑)",
+  "severity": "minor",
+  "claim": "注释声称 _errlogReseed 有探针真跑,但 tests/ 内 grep『errlogReseed』零命中,test_webui_error_history.py 对 lifecycle.js 全是函数体字符串断言,该纯函数从未被执行。",
+  "relevance": "相关",
+  "fix": "加 node 电池真跑 _errlogReseed(cursor 0 不判重启/last<cursor 判重启)或删声明。"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/polling.js",
+  "line": 273,
+  "quote": "Math.min(15000, this.basePollMs() * 2 ** this.pollFails)",
+  "severity": "minor",
+  "claim": "轮询失败退避曲线(翻倍/15s 上限/成功清零)无回归测试:骨架探针(test_webui_static_dom_panel_misc.py:820)把 currentPollMs 桩成常量 1500,状态机完全绕过测试面。",
+  "relevance": "相关",
+  "fix": "node 电池补 currentPollMs 真跑分型(pollFails=0..4 序列与 cap、成功清零)。"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/app.js",
+  "line": 779,
+  "quote": "if (!out.hidden[page] && !out.order[page] && !out.w[page]) {",
+  "severity": "minor",
+  "claim": "默认隐藏列播种语义(「从无任何偏好才播种」「刻意全开不被覆盖」——注释自述同形陷阱曾实发)无行为测试:唯一守阵(webui_static_scan_css.py:226)只钉 DEFAULT_HIDDEN_KEYS 字符串,loadColState 从未被执行。",
+  "relevance": "相关",
+  "fix": "补 node 电池真跑 loadColState(空存储播种/仅空 hidden 不播/三键全缺才播)。"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/ui_feedback.js",
+  "line": 94,
+  "quote": "const hit = this._errHistory.find((e) => e.id === id);",
+  "severity": "minor",
+  "claim": "「emit 即收 + settle upsert 同 id 去重」「超限挤掉最旧」「面板关闭期计未读」环形缓冲行为契约(test_webui_error_history.py 自述「同一条错误只留一条」)只有字符串锚,无行为测试。",
+  "relevance": "相关",
+  "fix": "补 node 电池:同 id 二次 _recordErrorToast 只覆盖不增行、第 51 条挤掉最旧、errPanelOpen=false 时 _errUnread 递增。"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/fetch_low.js",
+  "line": 19,
+  "quote": "内联超时(AQB_BOOT_PART_TIMEOUT_MS, 值更短",
+  "severity": "nit",
+  "claim": "boot.js 实际常量名是 BOOT_PART_TIMEOUT_MS(无 AQB_ 前缀,boot.js:20),注释指向不存在的名字,按名 grep 落空。",
+  "relevance": "相关",
+  "fix": "注释名字改为 BOOT_PART_TIMEOUT_MS。"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/boot.js",
+  "line": 28,
+  "quote": "UI 皮肤 cookie(autoqb_ui): 三套 UI 共用本脚本",
+  "severity": "minor",
+  "claim": "「三套 UI 共用本脚本 = 唯一写入口」计数漂移:atlas/prism/console/flux 四套 index.html 均载 /shared/boot.js(flux/index.html:254),按「三套」口径维护会漏改。",
+  "relevance": "相关",
+  "fix": "注释改「四套 UI」或去掉计数。"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/state.js",
+  "line": 542,
+  "quote": "三套 UI 直选",
+  "severity": "nit",
+  "claim": "数据面 UI_HOME 实为四档(含 flux,state.js:16-21),注释仍写「三套 UI 直选」。",
+  "relevance": "相关",
+  "fix": "注释计数同步为四套。"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/ui_feedback.js",
+  "line": 388,
+  "quote": "三套皮肤同载",
+  "severity": "nit",
+  "claim": "「.aq-tip 段(三套皮肤同载)」计数漂移:flux/index.html 同样载入 shared/console_hub.css,实为四套。",
+  "relevance": "相关",
+  "fix": "计数同步为四套。"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/app.js",
+  "line": 392,
+  "quote": "全仓尤 `localStorage.clear()`",
+  "severity": "nit",
+  "claim": "该句读不通(疑为「全仓无 localStorage.clear()」之误;实测全 static 树零处调用),按现字面反而暗示存在 clear() 调用,与「只清 autoqb_token」的保证表述打架。",
+  "relevance": "相关",
+  "fix": "「尤」改「无」并核句子通顺。"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/commands.js",
+  "line": 202,
+  "quote": "await Promise.race([evP, pollP])",
+  "severity": "minor",
+  "claim": "waitCmd 的 SSE/轮询竞态语义(事件先到时 stop 收摊轮询、_cancelCmdWait 清 waiter、双双超时回退 {ok:false})在 tests/ 内零执行——node 电池全部把 waitCmd 桩掉,e2e 只走真机混合路径,无用例区分两路",
+  "relevance": "相关",
+  "fix": "仿 rename 四态 node 电池真跑 waitCmd:分别注入事件先到/轮询先到/双超时三种时序,断言落败路径收摊与超时回退文案"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/shortcuts_panel.js",
+  "line": 188,
+  "quote": "kbConflictResolve(mode) {",
+  "severity": "minor",
+  "claim": "快捷键冲突三选一状态机(swap 分支 mine===other.def 时删对方 override、steal 分支对方置空为显式禁用)零执行,test_web_shortcuts_drawer.py 只对源码做正则提取+字符串锚断言",
+  "relevance": "相关",
+  "fix": "kbConflictResolve/_kbApplyOverrides 纳入 node 电池:真跑 swap/steal/cancel 三态后断言 kbDraft.overrides 与 AQB_KEYS._doc 键值"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/scope_audit.js",
+  "line": 23,
+  "quote": "_auditScope(event, targets) {",
+  "severity": "minor",
+  "claim": "_auditScope 的 shape/dup/empty 分类、签名去重 warn 与 50 条有界环是纯函数逻辑,但 test_scope_audit_wiring 只钉四出口接线数与默认关,分类分支零执行",
+  "relevance": "相关",
+  "fix": "node 电池真跑 _auditScope:喂形状/非串元素/内部重复/空载荷各一例,断言 rec.kind 与环内条目及挤出"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/ctx_menu_custom.js",
+  "line": 272,
+  "quote": "cmDropAt(row) {",
+  "severity": "minor",
+  "claim": "定制面板拖拽落点计算(同层 from<row.idx 回退一格、跨层插入、cmDropTail 追加)零执行——node 探针只跑 cmToggleHidden/cmMoveLevel/cmAddSep/cmMoveStep 四写路径,e2e 也无拖拽用例(cmDelSep/cmResetBranch 同样只在探针外)",
+  "relevance": "相关",
+  "fix": "cmDropAt/cmDropTail/cmDelSep/cmResetBranch 补进既有 _NODE_CTX_WRITE_PROBE,断言写回布局 order 与后端 _CTX_LAYER_KEYS 契约"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/commands.js",
+  "line": 83,
+  "quote": "setRowIcon(hash, kind, msg, ms) {",
+  "severity": "minor",
+  "claim": "注释钉住的具体回归(每 hash 先清旧定时器,否则 45s pending 兜底定时器会把后到的 10s 成功图标提前清掉)无行为测试:tests 只有 ALERT_ICON 键集静态断言,transfer e2e 把 setRowIcon 桩掉",
+  "relevance": "相关",
+  "fix": "node 电池真跑 setRowIcon:先落 pending 再落 ok,假计时器断言旧定时器被清、ok 图标按 ALERT_ICON_MS.ok 存活"
+ },
+ {
+  "file": "memory-bank/conventions/webui.md",
+  "line": 9,
+  "quote": "一级只允许一个次级菜单入口",
+  "severity": "minor",
+  "claim": "文档硬规则与代码事实矛盾:注册表现有两个一级 submenu 父项(「转移到」+「更多操作」),CTX-06 守阵(test_webui_static_dom_panel_misc.py:381)只数静态骨架 has-sub==1,对运行时项集失明——文档与守阵双双过期(同款断言在 attachments/webui-menu-components.md:12)",
+  "relevance": "相关",
+  "fix": "回写 webui.md 与 webui-menu-components.md 为新口径,守阵改从 AQB_CTX_MENU_REG 渲染层计数"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/ctx_menu_custom.js",
+  "line": 31,
+  "quote": "文案随「整集/整剧」变化",
+  "severity": "minor",
+  "claim": "episode 分支的用户可见提示与 ctx_menu.js 注册表口径矛盾:注册表注释明写「2026-10-20 起文案与 scope 无关」,episode 支 label 也确实只有动词+N,提示却在宣称已退役的旧行为",
+  "relevance": "相关",
+  "fix": "CTX_BRANCH_HINT.episode 改成与注册表现状一致的描述"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/scope_audit.js",
+  "line": 3,
+  "quote": "在三个统一出口(_actCore / _deleteFlow / _metaBulk)各记账一次",
+  "severity": "nit",
+  "claim": "文件头注释仍说「三个统一出口」(line 13 同),但守阵 test_scope_audit_wiring 自 26-10-31-0306 T7 起钉的是四出口(transfer_flow.js::transferOpen 已接线),注释少了第四出口",
+  "relevance": "相关",
+  "fix": "头注补 transferOpen 为第四出口,「三出口」改「四出口」"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/shortcuts.js",
+  "line": 20,
+  "quote": "守阵 test_webui_static_skins.py::_scan_mixin_wiring",
+  "severity": "nit",
+  "claim": "注释引用的 tests/test_webui_static_skins.py 不存在(已拆分,_scan_mixin_wiring 实居 _skin 件);line 160 同款过期引用",
+  "relevance": "相关",
+  "fix": "文件名改为 test_webui_static_skins_skin.py(或改说 webui_static_scan_js 单点)"
+ },
+ {
+  "file": "memory-bank/conventions/webui-scope.md",
+  "line": 55,
+  "quote": "与 `tpl/ctx-menus.html` 四支一一对应",
+  "severity": "nit",
+  "claim": "登记表口径说 variant 与模板四支一一对应,但模板自 2026-10-22 起已无四支段(单条 ctxItems(ctxMenuKind()) v-for),文档模板形态描述过期",
+  "relevance": "相关",
+  "fix": "改为「与 menu.js::ctxMenuKind() 的四个返回值一一对应」"
+ }
 ]
