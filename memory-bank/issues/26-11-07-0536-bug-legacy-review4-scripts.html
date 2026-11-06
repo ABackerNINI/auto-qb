@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="legacy-review4-scripts">
+<meta name="issue-stamp" content="26-11-07-0536">
+<meta name="issue-type" content="bug">
+<meta name="doc-topic" content="legacy-review4">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="存量评审 R4·scripts 汇总(major 1/minor 23)">
+<meta name="issue-summary" content="scripts 主题 major 1+minor 23 共 24 条聚合入池,来源存量评审 R4(计划 26-11-05-2335)">
+<title>存量评审 R4·scripts 汇总(major 1/minor 23) · bug · 计划外问题</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 38px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 78ch; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>现象与发现场景</a>
+    <a href="#s2"><span class="no">02</span>证据</a>
+    <a href="#s3"><span class="no">03</span>影响面</a>
+    <a href="#s4"><span class="no">04</span>定位锚点</a>
+    <a href="#s5"><span class="no">05</span>根因<span class="opt">（可选）</span></a>
+    <a href="#s6"><span class="no">06</span>建议修法<span class="opt">（可选）</span></a>
+    <a href="#s7"><span class="no">07</span>状态变更日志</a>
+    <div class="toc-foot">
+      类型 bug · 档位 standard<br>
+      入池不改码 · 规范见 create-issue skill
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">计划外问题（未修）· bug</div>
+    <h1>存量评审 R4·scripts 汇总(major 1/minor 23)</h1>
+    <p class="lede">scripts 主题 major 1+minor 23 共 24 条聚合入池,来源存量评审 R4(计划 26-11-05-2335)</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-11-07-0536-bug-legacy-review4-scripts</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-11-07 05:36</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象与发现场景</h2>
+    <p>本件为<strong>存量代码评审 R4</strong>（计划 26-11-05-2335，memory-bank/plans/26-11-05-2335-plan-legacy-code-review-4.html）五路线（R1–R5）findings 按主题聚合后的 <strong>scripts 主题汇总件</strong>：聚合口径取 severity ∈ {major, minor} 的存活条目共 <strong>24 条</strong>（major 1 / minor 23；nit 不入池），分布于 17 个文件（路线分布 R5 24）。覆盖深度按计划 §03 范围分层：根 <code>scripts/</code> 为快扫（入口 / 危险操作（删文件·进程·端口）/ 红线引用 / 明显缺陷），非逐行精评。取证与校验口径：全部条目锚定 freeze <code>f0883292</code>（git archive 快照，行号为当时行号），落盘前逐条过 <code>review.check</code> 逐字引文校验；聚合数据面单点 <code>memory-bank/reports/attachments/legacy-review4/aggregate.json</code>。本主题 dedup 记录核对无「拆回」合并组：exact_merge 组不涉及本主题；唯一候选裁决对 R5#218/R5#219（scripts/port_kill.py）判 keep_both，两目均 minor 在表，明细表 24 行 = 24 条。本件为纯盘点入池，状态保持 Open，不被认领修。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>证据</h2>
+    <p class="hint">下表由 <code>aggregate.json</code> 机械生成；「file:line」为当时行号（锚定 freeze f0883292），代码漂移后按文件 + claim 中符号重定位；「路线·批次」列取 src_ref（路线#条目号），批次归属见各路线 notes 文件。</p>
+    <h3>findings 明细表（24 行）</h3>
+    <table>
+      <tr><th>#</th><th>severity</th><th>file:line（当时行号，freeze f0883292）</th><th>claim</th><th>fix</th><th>路线·批次</th></tr>
+      <tr><td>1</td><td>major</td><td><code>scripts/sim_qb_server.py:258</code></td><td>handle_error 使用 sys 但本文件未 import sys(sim_qb_core 星号导入也不含 sys),任何 Handler 线程异常(含每次停机时必然出现的 ConnectionResetError)都会在 handle_error 内抛 NameError,既定的「连接重置静默过滤」完全失效</td><td>顶部补 import sys</td><td>R5#203</td></tr>
+      <tr><td>2</td><td>minor</td><td><code>scripts/check_command_drift.py:184</code></td><td>判红输出行含图形符号 →(全文件 4 处: L1/15/79 注释、L184 运行时输出),违反 code-style.md 代码禁令且该行正是闸门终端输出</td><td>L184 输出与注释里的 → 换 ASCII -&gt;</td><td>R5#226</td></tr>
+      <tr><td>3</td><td>minor</td><td><code>scripts/check_context_caps.py:84</code></td><td>运行时打印字符串含图形符号 →(全文件 11 处 →/⇒/①,含 L14 带圈数字①、L186 help 文案),违反 code-style.md 代码禁令且这些串会在提交闸门终端输出</td><td>→/⇒ 换 ASCII,① 换 1.</td><td>R5#225</td></tr>
+      <tr><td>4</td><td>minor</td><td><code>scripts/check_context_caps.py:119</code></td><td>git status --porcelain 的重命名行(R  old -&gt; new)被整串塞进改动集,新旧真实路径都不在集合里——AGENTS.md 若被 git mv,「改动命中」判定会静默漏检(与本文件 L108-111 自述的静默漏检同类)</td><td>解析 porcelain 时按状态位分流,rename 行拆 ' -&gt; ' 两侧路径都计入改动集</td><td>R5#224</td></tr>
+      <tr><td>5</td><td>minor</td><td><code>scripts/dev_webui.py:119</code></td><td>运行时 print 含图形符号 →(L119;L56 注释另有 ⇒,共 2 处),违反 code-style.md 代码禁令且是启动失败时的排查提示输出</td><td>→ 换 ASCII -&gt;</td><td>R5#227</td></tr>
+      <tr><td>6</td><td>minor</td><td><code>scripts/e2e_selfcheck.py:124</code></td><td>手工参数解析对 --blocking/--warn 不校验是否有后续值,写成最后一个参数时 args[i+1] 直接 IndexError 抛栈而不是走 usage 提示(L127 同病)</td><td>取值前判 i + 1 &lt; len(args),缺失时打印用法并 return 2</td><td>R5#223</td></tr>
+      <tr><td>7</td><td>minor</td><td><code>scripts/hr_ext_stub.py:229</code></td><td>运行时 print 含带圈数字 ①(code-style.md 明列禁用类;L5 docstring 同串,共 2 处)</td><td>① 换 1.</td><td>R5#228</td></tr>
+      <tr><td>8</td><td>minor</td><td><code>scripts/hr_fetch_experiment.py:546</code></td><td>按 profile 路径子串匹配后用 taskkill /T /F 击杀整进程树,同样落在 AGENTS.md「禁止一切taskkill」红线字面内(cmdline 过滤已收窄误杀面)</td><td>与 port_kill.py 同口径处理: 红线侧写明豁免或换非 taskkill 终止通道</td><td>R5#220</td></tr>
+      <tr><td>9</td><td>minor</td><td><code>scripts/port_kill.py:31</code></td><td>杀前不核验进程名也不打印归属,传入错端口(如 qB WebUI 或其它应用监听口)会对任意进程直接 /F 强杀</td><td>taskkill 前先取 Win32_Process 报出进程名/命令行,非 python 类监听者要求显式 --yes 或直接拒杀</td><td>R5#219</td></tr>
+      <tr><td>10</td><td>minor</td><td><code>scripts/port_kill.py:36</code></td><td>实现通道是 taskkill /F,与 AGENTS.md「🔴进程安全:禁止一切taskkill」红线字面冲突(脚本 docstring 有立项理由但红线侧无显式豁免记载)</td><td>在 AGENTS.md 红线条目为 dev.port-kill 写明豁免依据,或改走 PowerShell Stop-Process / psutil 等非 taskkill 通道</td><td>R5#218</td></tr>
+      <tr><td>11</td><td>minor</td><td><code>scripts/qb_capture.py:813</code></td><td>--dry 的 help 写「不发请求」(L58),但 run_capture 在判 dry 之前已先握手,实际发出 version/webapiVersion/preferences/maindata 共 4 个真实请求,与文案矛盾</td><td>把 dry 判定提前到 handshake 之前(计数请求也一并跳过),或把 help 改成「不发抓取请求」</td><td>R5#221</td></tr>
+      <tr><td>12</td><td>minor</td><td><code>scripts/sim_baseline.py:4</code></td><td>非ASCII图形符号违规: 本文件 4 处 ×(行 4/105×2/308)</td><td>按 code-style.md 换 ASCII(x 或 *)</td><td>R5#210</td></tr>
+      <tr><td>13</td><td>minor</td><td><code>scripts/sim_fsmock.py:59</code></td><td>非ASCII图形符号违规: 本文件 ⇒×5、·(行 9)、…(行 16)</td><td>换 ASCII(=&gt;、-&gt;、...)</td><td>R5#211</td></tr>
+      <tr><td>14</td><td>minor</td><td><code>scripts/sim_fsmock.py:71</code></td><td>_key() 里 UNC 分支是死代码: 任何以 \\?\UNC\ 开头的字符串必先命中上一行的 \\?\ 前缀分支被剥成 UNC\...,UNC→\\ 映射永不执行,UNC 语料路径的 mock 匹配会失配</td><td>把 UNC 判断挪到 \\?\ 判断之前(先长前缀特例、后一般前缀)</td><td>R5#204</td></tr>
+      <tr><td>15</td><td>minor</td><td><code>scripts/sim_qb.py:156</code></td><td>非ASCII图形符号违规: 本文件 ⇒×3(行 150/155/156)</td><td>换 ASCII(=&gt;)</td><td>R5#212</td></tr>
+      <tr><td>16</td><td>minor</td><td><code>scripts/sim_qb_cli.py:210</code></td><td>非ASCII图形符号违规: 本文件 ⇒×5、→(行 213)、↔(行 218)</td><td>换 ASCII(=&gt;、-&gt;、&lt;-&gt;)</td><td>R5#213</td></tr>
+      <tr><td>17</td><td>minor</td><td><code>scripts/sim_qb_core.py:225</code></td><td>非ASCII图形符号违规: 本文件 ⇒×2(行 208/225)、·×4(行 251-254 列表符)</td><td>换 ASCII(=&gt;、-)</td><td>R5#214</td></tr>
+      <tr><td>18</td><td>minor</td><td><code>scripts/sim_qb_model.py:610</code></td><td>非ASCII图形符号违规: 本文件 →×3(行 177/610/615)、⇒(行 337)、××2(行 119/158)</td><td>换 ASCII(-&gt;、=&gt;、x)</td><td>R5#215</td></tr>
+      <tr><td>19</td><td>minor</td><td><code>scripts/sim_qb_model.py:799</code></td><td>WEB 端 torrents/delete(deleteFiles=true) 对单个多种子按文件数触发 B3: declared=1 时 &gt;2 个文件的种子必被拒(403),D3 判据对多文件语料会假红;同文件 delete_torrents 路径传的是 len(paths),两处语义不一致</td><td>该调用点传 declared=len(paths)(按「一次命令」核账)或与 delete_torrents 口径统一</td><td>R5#206</td></tr>
+      <tr><td>20</td><td>minor</td><td><code>scripts/sim_qb_server.py:102</code></td><td>非ASCII图形符号违规: 本文件 ⇒×4(行 101/102×2/103)</td><td>换 ASCII(=&gt;)</td><td>R5#216</td></tr>
+      <tr><td>21</td><td>minor</td><td><code>scripts/sim_run.py:409</code></td><td>语料档下 SYNC.drift_max_s 直接读合成档裸 id 阈值(默认还兜底 1.0),与本文件 352-355 行自述的「语料档只查 corpus. 前缀、不回落合成档裸 id,否则假红假绿」不变量相矛盾</td><td>该处不显式传阈值,交给 add() 走 corpus_mode 的 corpus. 前缀路由</td><td>R5#205</td></tr>
+      <tr><td>22</td><td>minor</td><td><code>scripts/sim_run.py:574</code></td><td>非ASCII图形符号违规: 本文件 ⇒(行 574)、××4(行 585/586/593/594)</td><td>换 ASCII(=&gt;、x)</td><td>R5#217</td></tr>
+      <tr><td>23</td><td>minor</td><td><code>scripts/ui_harness.py:195</code></td><td>守卫只判 len(torrents) &lt; 2(L189),--torrents 2 或 3 时 torrents[-4] 直接 IndexError 崩桩(默认 --site-alert on 必触发)</td><td>守卫改成 len(torrents) &lt; 4</td><td>R5#222</td></tr>
+      <tr><td>24</td><td>minor</td><td><code>scripts/ui_harness.py:1030</code></td><td>运行时 print 含带圈数字 ③(全文件 16 处 →/⇒/①②③: docstring 大量 ⇒、L763 ②、L965 运行时输出也有),违反 code-style.md 代码禁令</td><td>带圈数字换 1./2./3.,→/⇒ 换 ASCII -&gt;</td><td>R5#229</td></tr>
+    </table>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>影响面</h2>
+    <table>
+      <tr><th>维度</th><th>结论</th></tr>
+      <tr><td>触发条件</td><td>盘点型汇总件——非单一触发；逐条触发条件见明细表 claim 列</td></tr>
+      <tr><td>影响范围</td><td>scripts 主题 24 个缺陷面，分布于 17 个文件；逐条见明细表 file:line 列</td></tr>
+      <tr><td>严重度</td><td>major 1 / minor 23（nit 不在本件）；逐条见明细表 severity 列</td></tr>
+    </table>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>定位锚点</h2>
+    <p class="hint">写「符号名 + grep 关键词 + 当时的行号（标取证时间）」—— 代码会漂移，靠符号与 grep 重新定位，行号只是加速项。</p>
+    <p>逐条锚点即明细表「file:line」列（当时行号，锚定 freeze <code>f0883292</code> 快照）。代码漂移后：按文件路径 + claim 中符号名/字符串 grep 重定位；路线内条目号（src_ref）可回溯 <code>route-&lt;路线&gt;-findings.json</code> 原始条目与 notes。</p>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
+    <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
+    <div class="callout">待查——本件为盘点汇总，不为入池做逐条根因分析；各 claim 引文已过 review.check 逐字校验，根因随认领逐条排查。</div>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>建议修法<span class="opt">（可选）</span></h2>
+    <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
+    <p>逐条建议修法见明细表「fix」列（聚合时原样保留，未改写）。汇总层面：建议认领时按文件聚类、同文件一次修完，先 major 后 minor。</p>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>状态变更日志</h2>
+    <ul>
+      <li>2026-11-07 05:36 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>26-11-07 聚合入池自存量评审 R4（计划 26-11-05-2335，<code>memory-bank/plans/26-11-05-2335-plan-legacy-code-review-4.html</code>）——本轮纯盘点，状态保持 Open；doc-refs 留空待认领方回填</li>
+    </ul>
+    <h3>复验</h3>
+    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <h3>修复后补充</h3>
+    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  </section>
+
+  <footer>
+    26-11-07-0536-bug-legacy-review4-scripts.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+  </footer>
+</div>
+</body>
+</html>

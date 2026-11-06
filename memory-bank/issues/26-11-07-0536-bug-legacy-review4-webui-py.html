@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="legacy-review4-webui-py">
+<meta name="issue-stamp" content="26-11-07-0536">
+<meta name="issue-type" content="bug">
+<meta name="doc-topic" content="legacy-review4">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="存量评审 R4·webui-py 汇总(major 2/minor 23)">
+<meta name="issue-summary" content="webui-py 主题 major 2+minor 23 共 25 条聚合入池,来源存量评审 R4(计划 26-11-05-2335)">
+<title>存量评审 R4·webui-py 汇总(major 2/minor 23) · bug · 计划外问题</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 38px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 78ch; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>现象与发现场景</a>
+    <a href="#s2"><span class="no">02</span>证据</a>
+    <a href="#s3"><span class="no">03</span>影响面</a>
+    <a href="#s4"><span class="no">04</span>定位锚点</a>
+    <a href="#s5"><span class="no">05</span>根因<span class="opt">（可选）</span></a>
+    <a href="#s6"><span class="no">06</span>建议修法<span class="opt">（可选）</span></a>
+    <a href="#s7"><span class="no">07</span>状态变更日志</a>
+    <div class="toc-foot">
+      类型 bug · 档位 standard<br>
+      入池不改码 · 规范见 create-issue skill
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">计划外问题（未修）· bug</div>
+    <h1>存量评审 R4·webui-py 汇总(major 2/minor 23)</h1>
+    <p class="lede">webui-py 主题 major 2+minor 23 共 25 条聚合入池,来源存量评审 R4(计划 26-11-05-2335)</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-11-07-0536-bug-legacy-review4-webui-py</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-11-07 05:36</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象与发现场景</h2>
+    <p>本件为<strong>存量代码评审 R4</strong>（计划 26-11-05-2335，memory-bank/plans/26-11-05-2335-plan-legacy-code-review-4.html）五路线（R1–R5）findings 按主题聚合后的 <strong>webui-py 主题汇总件</strong>：聚合口径取 severity ∈ {major, minor} 的存活条目共 <strong>25 条</strong>（major 2 / minor 23；nit 不入池），分布于 16 个文件（路线分布 R4 25）。取证与校验口径：全部条目锚定 freeze <code>f0883292</code>（git archive 快照，行号为当时行号），落盘前逐条过 <code>review.check</code> 逐字引文校验；聚合数据面单点 <code>memory-bank/reports/attachments/legacy-review4/aggregate.json</code>。本主题 dedup 记录核对无「拆回」合并组：exact_merge 组不涉及本主题；唯一候选裁决对 R4#34/R4#39（webui/server/routes/keys.py:33）判 keep_both，R4#34 minor 在表、R4#39 nit 不入池，明细表 25 行 = 25 条。本件为纯盘点入池，状态保持 Open，不被认领修。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>证据</h2>
+    <p class="hint">下表由 <code>aggregate.json</code> 机械生成；「file:line」为当时行号（锚定 freeze f0883292），代码漂移后按文件 + claim 中符号重定位；「路线·批次」列取 src_ref（路线#条目号），批次归属见各路线 notes 文件。</p>
+    <h3>findings 明细表（25 行）</h3>
+    <table>
+      <tr><th>#</th><th>severity</th><th>file:line（当时行号，freeze f0883292）</th><th>claim</th><th>fix</th><th>路线·批次</th></tr>
+      <tr><td>1</td><td>major</td><td><code>src/auto_qb/webui/runtime_views.py:378</code></td><td>hr_wave 为真时只把发布分叉到全量重建, 却未把波次登记进 _pending_full_reasons —— _fold_delta_pending_locked 在 reasons 为空时落代为 full=False 条目(键集仅含 store 增量键), HR 派生字段变更不进时间线。具体场景: flush_views 按 keyed 路径 mark_dirty()(无 full 理由)且重建被门控/不活跃推迟, HR worker 随后推进 revision, Web 线程经 ensure_state/ensure_view 触发发布 —— 分叉检出 hr_wave 走全量重建并前移基线, 但该代 timeline 非 full 且键集不含 HR 受影响行, delta 客户端窗口归约拿不到任何 HR 变更行, HR 列停留在旧值, 直到下一个 full 代(如下一次波次被 flush 捕获)才自愈。这正是 :370-374 注释声称要堵的「ensure_state 触发的发布不经 flush 判定点」缺口 —— 重建侧堵了, 时间线侧没堵。</td><td>分叉判定前将 hr_wave 登记为降级理由(_pending_full_reasons.add("hr_revision")), 与 flush_views 的登记点同源, 使 fold 落 full=true 条目迫使 delta 客户端整表重取。</td><td>R4#14</td></tr>
+      <tr><td>2</td><td>major</td><td><code>src/auto_qb/webui/server/routes/torrent_detail.py:45</code></td><td>响应体泄敏缺口: /api/torrents/{hash} 详情经 rec.to_dict() 与 /api/state、/api/groups 行视图(views_row.py:60 "tracker": r.tracker)把 qB torrents/info 的 tracker 字段原文外发 —— 该字段是"首个 working tracker 的完整 announce URL"(官方文档), 私站 URL 内嵌 passkey, 原样进浏览器内存/截图/复制, 与本项目自身泄敏纪律相悖(torrents/trackers 端点与缓存全走 mask_tracker_entry、"原文不再外发", config 掩码的同款理由"明文进浏览器内存、截图与日志即为凭据泄漏"); 前端还在抽屉"首选 Tracker"与成员表列把它渲染出来</td><td>在快照入库(rec.tracker 槽位落值处)或响应装配处对 rec.tracker 过 mask_tracker_url —— host 段保留, 前端展示与按域名消费的链路不破, query/高熵段照既有口径 hash</td><td>R4#33</td></tr>
+      <tr><td>3</td><td>minor</td><td><code>src/auto_qb/webui/commands_common.py:87</code></td><td>注释给出的两个守阵文件名均不存在(快照 tests/ 无 test_web_commands.py 与 test_webui_static_dom_panel.py); 实际守阵在 tests/test_web_commands_reannounce.py:347 与 test_webui_static_dom_panel_{misc,drawer,dialogs,traffic}.py。注释同时给出操作指令「改一个字就要连带改三处」, 按图索骥会找不到守阵、误判无保护。</td><td>把注释里的文件名改为实际守阵路径(test_web_commands_reannounce.py + test_webui_static_dom_panel_*.py)。</td><td>R4#10</td></tr>
+      <tr><td>4</td><td>minor</td><td><code>src/auto_qb/webui/commands_limit.py:21</code></td><td>单发种子限速对负数零校验(路由层 torrent_cmds.py api_t_limits 只做 int_param, handler 也不拦), 负数直传 qB 语义=不限速; 同文件的批量路径(handler 文档「Web 层已拦负数」+ bulk 路由显式 400「up_limit 不能为负数」)是另一套口径——同一 webui 命令面对同一输入两种裁决, 直调 API 传 -1 静默改成不限速。</td><td>handler 或单发路由补非负校验(up/dl &lt; 0 拒收), 与 bulk 口径对齐。</td><td>R4#3</td></tr>
+      <tr><td>5</td><td>minor</td><td><code>src/auto_qb/webui/commands_limit.py:66</code></td><td>ALT 限速真下发(_cmd_speed_alt_set 走 app/setPreferences alt_*、_cmd_speed_alt_toggle 走 toggleSpeedLimitsMode)落入真机轨准入类①「限速真下发」(memory-bank/testing/real-machine.md §00), 但 tests-real 全树无任何 ALT 端点用例——RM07 十条 spec 只覆盖主速度 transfer 端点与曲线; RM07 docstring 已实证 qB 5.2 的 app/preferences 主限速旧键静默失效, alt_* 键与 toggle 端点在 qB 5.2 真执行的行为无真机准入门钉住(单测只到 FakeClient 层)。</td><td>RM07 追加一条 ALT 用例(alt set 真回读 alt_up/down_limit + toggle 后 use_alt_speed_limits 回读翻转), 或在 real-machine.md 记 BLOCKED 说明理由。</td><td>R4#13</td></tr>
+      <tr><td>6</td><td>minor</td><td><code>src/auto_qb/webui/commands_torrents.py:48</code></td><td>docstring/注释含带圈数字 ①②③④(line 42-86 一带 20 处)——code-style.md「非 ASCII 图形符号禁令(用户明示)」明确禁「带圈数字 ①–⑬」且覆盖范围含注释, 替代表给定 ①→"1."。</td><td>按 code-style 替代表把 ①②③④ 换成 1./2./3./4.(或 ④' 类写法改 4')。</td><td>R4#4</td></tr>
+      <tr><td>7</td><td>minor</td><td><code>src/auto_qb/webui/commands_torrents.py:662</code></td><td>批量移动在整组迁移开启时提前 return, _cmd_bulk_torrents 开头算出的 missing/missing_groups 计数不进回执——违反同 handler 文档自订契约「不在快照中的 hash 跳过, 仍有缺失时回执 error 带缺失计数」; 而 known 在 645 行已被快照过滤, 缺失 hash 连 relocate_execute 的 gone 分桶都进不去, 用户批量移 5 个(2 个已被删)只会看到 3 个的结果, 缺失零提示(recheck/skip_check/纯 location 路径都有缺失计数, 唯独这条分支漏了)。</td><td>该分支把 missing/missing_groups 并入回执(如 truth 附加缺失计数, 或把未过滤的 req 交给 relocate_execute 让 gone 分桶报告)。</td><td>R4#1</td></tr>
+      <tr><td>8</td><td>minor</td><td><code>src/auto_qb/webui/module.py:167</code></td><td>代码注释使用带圈数字 ①②,违反 code-style.md「非 ASCII 图形符号禁令」(带圈数字 ①–⑬ 明列禁用,替代写法 1./2.);同文件 174 行还有 ②</td><td>①/② 改为「1./2.」或「其一/其二」</td><td>R4#22</td></tr>
+      <tr><td>9</td><td>minor</td><td><code>src/auto_qb/webui/runtime.py:42</code></td><td>move-only 拆分残留死导入: 本文件只剩 __init__, 以下名字在本文件体内零使用且无任何外部消费者(runtime_commands.py 自行从 .commands 导入同名集合; src/routes 只取 EVENT_TICKET_TTL_S/SSE_KEEPALIVE_S/public_traffic_view; 测试只取 CMD_SLOW_MS/REANNOUNCE_CONFIRM_TIMEOUT/EVENT_QUEUE_MAX/WEB_RESULT_*/EVENT_TICKET_*/WEB_ERR_*/WebErrLogHandler/WebUIRuntime)—— ①:33 import logging ②:35 import secrets ③:38 typing 的 Tuple ④:41 is_record_suppressed ⑤:43-53 commands 块中 9 个名字(CMD_ID_COMMANDS/RC_UNCONFIRMED_PREFIX/REANNOUNCE_JUMP_TOL/TRUTH_PUSH_CAP_MS/RESYNC_COMMANDS/SELF_POSTED_COMMANDS/_timing/is_deferred_receipt/qb_reject_text)。</td><td>删除上述死导入; commands 块保留 CMD_SLOW_MS/REANNOUNCE_CONFIRM_TIMEOUT 两个测试消费的 re-export 即可(或把测试改指向 .commands 后整块删除)。</td><td>R4#16</td></tr>
+      <tr><td>10</td><td>minor</td><td><code>src/auto_qb/webui/runtime_commands.py:160</code></td><td>确认窗口内一次瞬时读失败(qB 断连抖动/超时, client 对象仍在)即把 item 终结为「失败」回执, 与 _judge_reannounce docstring「qB 断连…回无结论, 调用方照旧等恢复」及 check_pending 自己的注释「断连/无结论: item 留在 pending, deadline 到点落未确认」相悖(那只覆盖 client is None); 同文件 _advance_reannounce_background 对同类读失败是 DEBUG+下 tick 重试(218-221 行), 两个消费方口径不一致——强制汇报可能实际成功却被报「失败 N: 读取 tracker 状态失败」, 且单次失败即终局不重试。</td><td>check_pending 的读失败分支与无结论同处置(留 pending 等恢复/到 deadline 落未确认), 或加有界重试后再终局。</td><td>R4#2</td></tr>
+      <tr><td>11</td><td>minor</td><td><code>src/auto_qb/webui/runtime_commands.py:309</code></td><td>memory-bank/pitfalls/backend/effect-confirmation.md 库内范本段(33-34 行)断言 defer_receipt 是「改种子状态的命令回执推迟到补刷新之后再写 —— 宣称落后于真值落地」, 与本批代码现行事实(回执立即写、真值落地才另走 truth 事件, 超时不推)矛盾; 该 pitfall 是被引用为权威口径的文档, 会误导后续改动「恢复」扣回执旧语义。</td><td>按 D2 定案回写 effect-confirmation.md 的 defer_receipt 描述段(回执立即写表示已执行, 真值经 flush_truths 落地才推)。</td><td>R4#9</td></tr>
+      <tr><td>12</td><td>minor</td><td><code>src/auto_qb/webui/runtime_commands.py:333</code></td><td>_truth_landed 的 docstring 仍断言 2026-09-20 D2 已废弃的旧语义「等真值落地再发回执」——与同文件 defer_receipt 的现行契约(309 行「回执**立即**写 + 真值登记为稍后推」「!回执**不带 truth**」)直接矛盾; 现行代码里 _truth_landed 只在 flush_truths 里门控 truth 事件推送, 与回执无关。tests/test_web_seed_center.py:640 也明确把「扣住回执等真值落地再发」定性为旧做法。</td><td>把 _truth_landed docstring 的尾句改写为现行语义(本函数只门控 truth 事件推送; 回执由 defer_receipt 立即写且不带 truth), 消除与 defer_receipt 的自相矛盾。</td><td>R4#8</td></tr>
+      <tr><td>13</td><td>minor</td><td><code>src/auto_qb/webui/runtime_views.py:230</code></td><td>docstring 使用带圈数字 ①②③④(230-233 行)与 ①②(614、617 行),违反非 ASCII 图形符号禁令</td><td>带圈数字改写为 1./2./3./4. 编号</td><td>R4#23</td></tr>
+      <tr><td>14</td><td>minor</td><td><code>src/auto_qb/webui/server/routes/keys.py:33</code></td><td>Python 的 $ 允许串尾恰一个 \n(re.match("...$", "Ctrl+R\n") 命中), 与自称"同一正则"的前端 shortcuts.js KB_DEF_RE(JS 的 $ 不匹配尾换行)语义不等价: 直调 PUT /api/keys 提交 {"overrides":{"x":"Ctrl+R\n"}} 服务端判合法入库并原样回读, 前端 shortcuts.js:426 却把它静默丢弃回退模板, 快捷键无任何报错地失效</td><td>服务端改用 re.fullmatch(或把 $ 换成 \Z), 消除 $-尾换行差异</td><td>R4#34</td></tr>
+      <tr><td>15</td><td>minor</td><td><code>src/auto_qb/webui/server/routes/relocate_chain.py:86</code></td><td>ChainCache.get 的 miss 路径返回的是入缓存对象的同一引用(relocate_chain.py ChainCache.get: hit 路径 deepcopy、miss 路径 `return value, False` 不拷),路由随后对它追加 "cached" 键;并发同 key 请求命中缓存在锁内 deepcopy 该 dict 时,恰逢一方在锁外追加键,deepcopy 迭代中 dict 变长会抛 RuntimeError("dictionary changed size during iteration")-&gt; 500</td><td>ChainCache.get 的 miss 路径也 deepcopy 后再入缓存(或路由在 loader 内先把 cached 补好再入缓存),保证缓存内对象出锁后不可变</td><td>R4#31</td></tr>
+      <tr><td>16</td><td>minor</td><td><code>src/auto_qb/webui/server/routes/torrent_cmds.py:309</code></td><td>列表型请求体字段无 isinstance(list) 防护,字符串会被逐字符拆开(transfer.py 已按 issue 26-11-03-0901 修了 hashes 的同族问题并注明「字符串会被逐字符拆成伪 hash, 直调可达」,但同族位置未同步修):直调 API 发 {"action":"add_tags","tags":"movietag"} 会拆成 8 个单字符标签入队,经 commands._cmd_bulk_torrents -&gt; add_tags 在 qB 里真实创建 8 个垃圾标签(需手动清理);同族位置 torrent_cmds.py:136(skip_check_precheck hashes)/:157(relocate_precheck hashes)/:299(bulk hashes)/:74(_cmd_str_list urls)</td><td>照 transfer.py:61-62 的修法,对 hashes/tags/urls 先 isinstance(x, list) 校验,非数组 400 拒收</td><td>R4#30</td></tr>
+      <tr><td>17</td><td>minor</td><td><code>src/auto_qb/webui/server/traffic_qb.py:218</code></td><td>payload_torrent 的非法 infohash 400 分支(v4_series_dir ValueError 转译)零测试覆盖:tests/ 中 /api/traffic/qb/torrent/* 的用例全部用合法 hash(HA/HB/ZZ),window 参数 400 已由 test_api_traffic_qb_window_validation 三端点全测,同层的 hash 校验 400 无任何等价断言;torrent_detail.py:99 docstring 明文断言「哈希不合法 400」为对外契约,该契约分支无守阵</td><td>在 test_web_traffic_qb.py 补一例:GET /api/traffic/qb/torrent/&lt;含非法字符或非 40/64 位 hex 的 hash&gt; 断言 400 + detail 含「种子哈希非法」</td><td>R4#37</td></tr>
+      <tr><td>18</td><td>minor</td><td><code>src/auto_qb/webui/server/traffic_qb.py:246</code></td><td>payload_group 直接迭代 store.groups[key] 的活成员列表(agg 段 :283 同),未按本项目 Web 读侧快照纪律先取 tuple 快照(fs.py api_open_path 的 tuple(members) 与 hr.py mark_local_present 均先快照,注释还点名 issue 26-10-06-0028 E-01);主循环 grouping_mod._leave_group 对同一列表原地 members.remove(hash),Web 线程迭代期间遇删除会索引左移跳过一个成员</td><td>两处循环改为 for h in tuple(members):(与 fs.py api_open_path 同款),消除迭代中被主循环 remove 的跳读窗口</td><td>R4#29</td></tr>
+      <tr><td>19</td><td>minor</td><td><code>src/auto_qb/webui/tool_client.py:205</code></td><td>_ensure_thread 无锁,两条调用线程不同源(sync() 在主循环 thread 由 module.start/apply 调,request_relaunch() 在 Web 线程由 routes/traffic_monitor.py:273 调):线程刚收线/未起时两者并发都通过 is_alive 检查,各起一条 _run 线程,双重注册订阅且先注册的 sub_id 被后者覆盖后泄漏到工具租约过期;失败场景=用户改配置触发热重载 sync() 的同时恰在设置页点「立即拉起」</td><td>给 _ensure_thread 的检查+创建段加一把锁(或把线程创建收敛到单一调用方),使「已存活不重复起」成为原子判定</td><td>R4#19</td></tr>
+      <tr><td>20</td><td>minor</td><td><code>src/auto_qb/webui/views.py:16</code></td><td>二次拆分残留死导入: logging(:15)、re(:16)、encode_group_key(:22)、view_field_value(:23, 主会话核实: 本文件体内零使用, 实际消费方 views_row.py 直接从 ..torrents 导入)、_ep_sort_key/_max_valid_ts/_min_valid_eta(:47-49) 在本文件体内零使用; 外部消费者已核实不依赖它们(runtime_views 只从 views 取 VIEW_ARRAYS; 守阵测试只取 _parse_query/_SHOW_STATE_RANK*/_ETA_SENTINEL; qbmanager/__init__ 只取 WebviewMixin)。</td><td>删除这 7 个死导入(注意保留 VIEW_ARRAYS/_parse_query/_ETA_SENTINEL/_SHOW_STATE_RANK* 等 live re-export)。</td><td>R4#17</td></tr>
+      <tr><td>21</td><td>minor</td><td><code>src/auto_qb/webui/views.py:149</code></td><td>error 态种子的 tracker 报错原文与站点健康 chip(refresh_tracker_health/_fetch_tracker_error,依赖真 qB /torrents/trackers 的 status 4/5/6 与 msg)落入真机轨准入类①(qB 真执行才成立),但 tests-real 全树 grep 零命中 —— rm08_08 只覆盖 missingFiles 分支,且 memory-bank 无任何暂缓记账</td><td>在 rm08 补一条真 tracker 报错用例(用 tests-real/lib/tracker.py 伪 tracker 迫使 qB 报 not working,断言行内 error_reason/site_alert 与去抖状态机端到端)</td><td>R4#27</td></tr>
+      <tr><td>22</td><td>minor</td><td><code>src/auto_qb/webui/views.py:253</code></td><td>「已亮」分档恒不可达: tracker_health_msg 只在 _observe_tracker_health 中于 suspect_since 非零且满窗后写入, 且 suspect_since 仅在恢复时与 health_msg 一并清零(不变量: health_msg 非空 ⟹ suspect_since 非零), 故 buckets[1](elif health_msg)永远走不到, 已亮记录恒落 buckets[0] 且 _tracker_health_due 命中 suspect 分支 —— 已亮记录按 SUSPECT_TTL(30s)而非设计的 TRACKER_LIT_TTL(60s)轮询, /trackers 请求量对已亮记录翻倍, 「疑似 -&gt; 已亮 -&gt; error 态」的预算分档设计(模块 docstring :157-158 明示 60s 探恢复)失效。</td><td>写入 health_msg(亮灯)时同步置 tracker_suspect_since = 0.0(恢复清理分支的 or 条件仍兼容), 让已亮记录落入 buckets[1] 并按 LIT_TTL 调度。</td><td>R4#15</td></tr>
+      <tr><td>23</td><td>minor</td><td><code>src/auto_qb/webui/views.py:435</code></td><td>文件列表单次拉取失败被吞成 files=[] 并作为正式条目入索引,而既有条目后续轮只刷新 name(build_search_index 的 prev.get 分支)永不重拉——一次 qB API 瞬时异常就让该种子文件兑底与文件行搜索永久失效(直到进程重启),与 docstring「单条失败跳过」的意图(应不缓存)不符</td><td>拉取失败的 hash 不写进新字典 idx(下轮 budget 续建时自然重试),或条目记失败标记允许重拉</td><td>R4#21</td></tr>
+      <tr><td>24</td><td>minor</td><td><code>src/auto_qb/webui/views_common.py:63</code></td><td>注释使用带圈数字 ①②(63-64 行),违反非 ASCII 图形符号禁令</td><td>①/② 改为 1./2.</td><td>R4#24</td></tr>
+      <tr><td>25</td><td>minor</td><td><code>src/auto_qb/webui/views_group.py:132</code></td><td>Web 线程经 ensure_state/ensure_view 触发的重建路径对 by_hash 先 `in` 判定后下标取值是两步字节码,主循环 store._apply/remove_torrent 恰在两步之间 pop 该 hash 时抛 KeyError 使该请求 500;同一形态还在 runtime_views.py:475(_publish_partial_locked)</td><td>改为 `store.by_hash.get(h)` 单步取值后判 None(或先 tuple(by_hash) 快照再取),消除 check-then-act 窗口</td><td>R4#20</td></tr>
+    </table>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>影响面</h2>
+    <table>
+      <tr><th>维度</th><th>结论</th></tr>
+      <tr><td>触发条件</td><td>盘点型汇总件——非单一触发；逐条触发条件见明细表 claim 列</td></tr>
+      <tr><td>影响范围</td><td>webui-py 主题 25 个缺陷面，分布于 16 个文件；逐条见明细表 file:line 列</td></tr>
+      <tr><td>严重度</td><td>major 2 / minor 23（nit 不在本件）；逐条见明细表 severity 列</td></tr>
+    </table>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>定位锚点</h2>
+    <p class="hint">写「符号名 + grep 关键词 + 当时的行号（标取证时间）」—— 代码会漂移，靠符号与 grep 重新定位，行号只是加速项。</p>
+    <p>逐条锚点即明细表「file:line」列（当时行号，锚定 freeze <code>f0883292</code> 快照）。代码漂移后：按文件路径 + claim 中符号名/字符串 grep 重定位；路线内条目号（src_ref）可回溯 <code>route-&lt;路线&gt;-findings.json</code> 原始条目与 notes。</p>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
+    <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
+    <div class="callout">待查——本件为盘点汇总，不为入池做逐条根因分析；各 claim 引文已过 review.check 逐字校验，根因随认领逐条排查。</div>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>建议修法<span class="opt">（可选）</span></h2>
+    <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
+    <p>逐条建议修法见明细表「fix」列（聚合时原样保留，未改写）。汇总层面：建议认领时按文件聚类、同文件一次修完，先 major 后 minor。</p>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>状态变更日志</h2>
+    <ul>
+      <li>2026-11-07 05:36 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>26-11-07 聚合入池自存量评审 R4（计划 26-11-05-2335，<code>memory-bank/plans/26-11-05-2335-plan-legacy-code-review-4.html</code>）——本轮纯盘点，状态保持 Open；doc-refs 留空待认领方回填</li>
+    </ul>
+    <h3>复验</h3>
+    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <h3>修复后补充</h3>
+    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  </section>
+
+  <footer>
+    26-11-07-0536-bug-legacy-review4-webui-py.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+  </footer>
+</div>
+</body>
+</html>

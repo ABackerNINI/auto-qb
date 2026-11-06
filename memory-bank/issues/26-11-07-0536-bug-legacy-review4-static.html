@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="legacy-review4-static">
+<meta name="issue-stamp" content="26-11-07-0536">
+<meta name="issue-type" content="bug">
+<meta name="doc-topic" content="legacy-review4">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="存量评审 R4·static 汇总(major 24/minor 111)">
+<meta name="issue-summary" content="static 主题 major 24+minor 111 共 135 条聚合入池,来源存量评审 R4(计划 26-11-05-2335)">
+<title>存量评审 R4·static 汇总(major 24/minor 111) · bug · 计划外问题</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 38px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 78ch; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>现象与发现场景</a>
+    <a href="#s2"><span class="no">02</span>证据</a>
+    <a href="#s3"><span class="no">03</span>影响面</a>
+    <a href="#s4"><span class="no">04</span>定位锚点</a>
+    <a href="#s5"><span class="no">05</span>根因<span class="opt">（可选）</span></a>
+    <a href="#s6"><span class="no">06</span>建议修法<span class="opt">（可选）</span></a>
+    <a href="#s7"><span class="no">07</span>状态变更日志</a>
+    <div class="toc-foot">
+      类型 bug · 档位 standard<br>
+      入池不改码 · 规范见 create-issue skill
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">计划外问题（未修）· bug</div>
+    <h1>存量评审 R4·static 汇总(major 24/minor 111)</h1>
+    <p class="lede">static 主题 major 24+minor 111 共 135 条聚合入池,来源存量评审 R4(计划 26-11-05-2335)</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-11-07-0536-bug-legacy-review4-static</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-11-07 05:36</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象与发现场景</h2>
+    <p>本件为<strong>存量代码评审 R4</strong>（计划 26-11-05-2335，memory-bank/plans/26-11-05-2335-plan-legacy-code-review-4.html）五路线（R1–R5）findings 按主题聚合后的 <strong>static 主题汇总件</strong>：聚合口径取 severity ∈ {major, minor} 的存活条目共 <strong>135 条</strong>（major 24 / minor 111；nit 不入池），分布于 61 个文件（路线分布 R5 135）。覆盖深度按计划 §03 范围分层：static/shared js 逻辑件为契约精评（py↔js 数据契约 / SSE 事件 / state 同步 / 错误路径），三皮肤 CSS + 模板 HTML 为机制抽查（加载序 / 特异性冲突 / 守阵清单对齐 / 双皮肤一致，不逐行）。取证与校验口径：全部条目锚定 freeze <code>f0883292</code>（git archive 快照，行号为当时行号），落盘前逐条过 <code>review.check</code> 逐字引文校验；聚合数据面单点 <code>memory-bank/reports/attachments/legacy-review4/aggregate.json</code>。本主题 dedup 记录仅一组跨路线合并（R4#44 并入 R5#73，双方均 nit，drawer_head.js:7 装载序幽灵引用，保留 claim 更全的 R5 条目），不涉及 major/minor、不影响本表行数；无「拆回」行；其余候选裁决对均判 keep_both（涉 major/minor 者两目各自在表，纯 nit 对不入池），明细表 135 行 = 135 条。本件为纯盘点入池，状态保持 Open，不被认领修。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>证据</h2>
+    <p class="hint">下表由 <code>aggregate.json</code> 机械生成；「file:line」为当时行号（锚定 freeze f0883292），代码漂移后按文件 + claim 中符号重定位；「路线·批次」列取 src_ref（路线#条目号），批次归属见各路线 notes 文件。</p>
+    <h3>findings 明细表（135 行）</h3>
+    <table>
+      <tr><th>#</th><th>severity</th><th>file:line（当时行号，freeze f0883292）</th><th>claim</th><th>fix</th><th>路线·批次</th></tr>
+      <tr><td>1</td><td>major</td><td><code>src/auto_qb/webui/static/flux/fx-mount.js:102</code></td><td>armSettle 全仓库零调用: dock(true) 只置 settleArmed 挂 fx-glide,注释承诺的兜底定时器(入场时长+100ms,防 RM 过渡归零不派 transitionend/过渡被打断/后台标签页丢事件)从未被武装——这些场景下 fireSettle 永不执行,落定回执丢失,且 html.fx-glide 在面板开着期间恒驻留(键盘 End/Home/翻页一直走平滑,违反「只罩开门窗口」口径);dock(false) 里的 settleTimer 清理也随之恒为死代码</td><td>dock(true) 分支在 settleArmed = true 后调用 armSettle(),兜底定时器与 transitionend 双路并存(单发守卫已具备)</td><td>R5#179</td></tr>
+      <tr><td>2</td><td>major</td><td><code>src/auto_qb/webui/static/shared/add_torrent.js:628</code></td><td>加种落点预检的关键分支(后端 cls==="confirm" → 落点确认弹窗 → 取消不提交/确认放行、auth 分支、volume_free 行)零执行——test_web_relocate.py:917-925 只有字符串锚,无 node 电池无 e2e</td><td>照 test_tf_open_flow_vm_probe 范式补 node vm 电池: 桩 api/waitCmd/_openModal 喂 confirm/非 confirm/抛 auth 三路,断言取消零提交与确认后载荷</td><td>R5#139</td></tr>
+      <tr><td>3</td><td>major</td><td><code>src/auto_qb/webui/static/shared/add_torrent.js:695</code></td><td>addSubmitting 在「落点预检网络往返(_relocateAddGate 内 POST+waitCmd 最长 20s)+ 逐文件 FileReader」两段 await 之后才置位,此窗口内 addCanSubmit 仍为真,双击/连点提交按钮会并发两次 POST /api/torrents/add,同一批文件/链接重复入 qB —— 违反黄金法则幂等性(重复提交有重复副作用)</td><td>进入 submitAddTorrent 时先置提交闸(独立 in-flight 标志或直接 addSubmitting=true),预检取消/读文件失败等各提前返回路径复位</td><td>R5#130</td></tr>
+      <tr><td>4</td><td>major</td><td><code>src/auto_qb/webui/static/shared/columns_grid.js:534</code></td><td>winMembers 的窗口切片/占位与渲染数组不同源: memberWin 按未排序 list 算前缀和(_rowPre.member 同序),却对 sortedMembers(list) 的排序结果做 slice;明细列排序激活且展开组成员&gt;=200 时切片行错位、padTop/padBottom 错排列计高,shortcuts_engine 的 _kbRows 走排序序与 _rowPre 同长不同序,键盘视口回落/滚动跟随取错行(group/torrent 两窗口同数组自洽,仅 member 岔开)</td><td>窗口与前缀和改按渲染同一序: winMembers 里先 rows=this.sortedMembers(list) 再 memberWin(rows),padTop/Bottom 调用点同步传排序后数组</td><td>R5#35</td></tr>
+      <tr><td>5</td><td>major</td><td><code>src/auto_qb/webui/static/shared/columns_persist.js:151</code></td><td>列持久化「意图升格」纯逻辑({colW 旧值 ∪ 渲染快照 ∪ 终值} 三层 merge,注释自述旧实现整段替换正是「隐藏列宽度被抹」根因)零执行测试——tests 只钉 persistPage 形态字符串锚,merge 保隐藏列 px 的行为无回归保护</td><td>为意图升格 merge 提纯或加 node 探针:断言拖拽/双击自适应后既有隐藏列 px 仍在、可见列被终值覆盖</td><td>R5#52</td></tr>
+      <tr><td>6</td><td>major</td><td><code>src/auto_qb/webui/static/shared/config_editor.js:134</code></td><td>「数值+单位」拆/拼控件族(cfgUnitParts/cfgUnitLabel/cfgSetUnit/cfgHasUnit/cfgUnitOptions)零测试引用——这里出过 2026-09-21 整页白屏事故(注释自证),现仅存静态守阵,拆/拼/回退(空值/非法单位/未知 kind)行为无任何执行</td><td>node 电池直跑三个 kind 的拆拼往返与回退分支(空串/无单位/非法串/单位不在表内)</td><td>R5#168</td></tr>
+      <tr><td>7</td><td>major</td><td><code>src/auto_qb/webui/static/shared/config_editor.js:232</code></td><td>未保存改动防护链全程零行为执行: cfgDiscard 在 tests/ 与 e2e/ 零引用;cfgGuardSync/_cfgOnReloadKey/cfgReloadGuard/_cfgOnBeforeUnload 只有子串/正则锚(改语义不换关键词不红),三分支「保存失败不刷新/放弃清零/留页」与 beforeunload 挂摘从未被跑过</td><td>为守卫族补 node 语义电池(桩 confirmThreeDialog/cfgSave/location.reload/beforeunload,断言三分支结算与挂摘幂等),e2e 补脏树刷新拦截真渲染用例</td><td>R5#167</td></tr>
+      <tr><td>8</td><td>major</td><td><code>src/auto_qb/webui/static/shared/config_editor.js:432</code></td><td>站点回退链整族(cfgSiteFallbackPath/cfgFallbackValue/siteBadge/sitePlaceholder/canFollowGlobal/followGlobal/cfgResetField)在 tests/ 与 e2e/ 零引用——注释自称铁律「回填与徽标同批上,缺一不可」却无任何测试钉住,tri_state ''、路径形态判据、7 键表三个分支均零执行</td><td>node 电池造 trackers.&lt;站点&gt; 路径树,断言 7 键回填值/徽标/占位串/跟随全局删键,及全局页与链外键返回 null 的反例</td><td>R5#169</td></tr>
+      <tr><td>9</td><td>major</td><td><code>src/auto_qb/webui/static/shared/config_editor_curve.js:152</code></td><td>曲线编辑器交互与图表全部零执行: cfgCurveAddPeriod/cfgCurveRemovePeriod(展开态搬移)/cfgCurvePointSet/_parseSizeValue/_sizeMultiplier(1024 vs 1000 进制分叉)/_buildCurveChart 几何(∞区≤30%封顶/比例分段)在 tests/ 与 e2e/ 零引用,仅子串锚——纯函数性质本可 node 直测</td><td>node 电池喂档位序列断言阶梯 path/刻度/∞区宽与 _sizeMultiplier 进制判别,并覆盖增删档后 openCurves 序号搬移</td><td>R5#170</td></tr>
+      <tr><td>10</td><td>major</td><td><code>src/auto_qb/webui/static/shared/config_editor_form.js:30</code></td><td>命名实体增/改/删骨架(cfgEntityAdd/cfgEntityRename/cfgEntityRemove)与入口 hubAddEntity/规则集 _rules 后缀 normalize 在 tests/ 与 e2e/ 零引用——重命名靠重建对象保序、查重 toast、删除后选中键回落与「最后站点删空收走 trackers 段」等分支全部无执行</td><td>node 电池覆盖三骨架: 重命名保序、同名冲突拒绝、删空容器收键、normalize 补后缀与既有 _rules 名不双写</td><td>R5#171</td></tr>
+      <tr><td>11</td><td>major</td><td><code>src/auto_qb/webui/static/shared/config_hub_tracker.js:48</code></td><td>站点搜索匹配语义(trackerNorm 的 CJK 归一/trackerParseQuery 负词与短语/trackerRows 掩码哨兵跳过/hubTrackerHits 负词整站排除+正词 AND+chip 组序与上限 3)只有子串锚与正则抽函数体断言,从未执行——注释自证 CJK 归一曾出「中文搜索直接废掉」事故,回归只能靠肉眼</td><td>node 电池直跑 parse/norm/rows/hits 四单点(负词、短语、掩码、CJK、chip 排序截断)</td><td>R5#172</td></tr>
+      <tr><td>12</td><td>major</td><td><code>src/auto_qb/webui/static/shared/dialogs.js:374</code></td><td>meta 标签/分类编辑对话框的行为面全部零执行(_metaCommonTags 交集、toggle 方向=有则删无则加、metaSetCategory 先建后设链、loadMetaOptions 候选并回 metaCommonTags): test_frontend_meta_dialog_paired 只钉 token 存在性,四套皮肤 e2e 无一渲染 metaOpen</td><td>补 node vm 电池真跑 openMetaDialog→metaToggleTag/metaSetCategory 全链,断言交集方向与投递载荷</td><td>R5#140</td></tr>
+      <tr><td>13</td><td>major</td><td><code>src/auto_qb/webui/static/shared/drawer.js:690</code></td><td>分享率限制对话框的哨兵契约与后端相反: 前端把 -1 当「恢复全局默认」(文案/校验 n!==-1/透传 body[key]=n===-1?-1:..., 见 690/692/703/712/715),而后端 commands_limit.py::_cmd_set_share_limits 与 torrent_cmds.py 路由 docstring 均钉死 -2=用全局、-1=不限制 —— 用户按对话框提示输入 -1,实际写入「永不限制」(种子永不停做),与用户意图完全相反</td><td>三处(-1 文案、校验、透传)统一改用 -2 哨兵,或前端不发哨兵值改由后端归一,与 commands_limit.py 的 -1/-2 语义对齐</td><td>R5#60</td></tr>
+      <tr><td>14</td><td>major</td><td><code>src/auto_qb/webui/static/shared/drawer_tpl/01-general-hero-tall.js:304</code></td><td>01 仅在 e2e/drawer-merge.spec.mjs 作可见性断言——初始渲染被执行但全部分支从未测: 分组折叠 data-fold、原始键值 details 展开(rawOpen)、copy/open/chain 动作、keydown Enter/Space 转发、skipUnchanged 跳过路径均无行为断言</td><td>补一条 01 的手势 e2e(折叠组头/展开全部字段/点复制钮),或把 01/02/03 收进一条参数化 spec</td><td>R5#91</td></tr>
+      <tr><td>15</td><td>major</td><td><code>src/auto_qb/webui/static/shared/drawer_tpl/02-general-cards-low.js:213</code></td><td>general 变体 02 的 render 从未被任何测试真执行: e2e 无一处选 02(grep 全 e2e 零命中),python 侧全是字符串锚与注册表清单对账,node 电池只跑核心层与桩变体(ok/boom)</td><td>补一条 e2e: localStorage 预置 general:'02' 渲染六卡聚类,断言卡片数/磁力钮在场,覆盖一次卡片折叠手势</td><td>R5#89</td></tr>
+      <tr><td>16</td><td>major</td><td><code>src/auto_qb/webui/static/shared/drawer_tpl/03-general-dossier-collapsed.js:251</code></td><td>general 变体 03 同样零行为级覆盖: 无 e2e 渲染、无 node 电池,仅字符串锚;双栏/右栏/更多字段 details 展开等分支从未执行</td><td>补一条 e2e 选 03 渲染双栏档案,断言 dt03-wrap/dt03-side 与 details 展开手势</td><td>R5#90</td></tr>
+      <tr><td>17</td><td>major</td><td><code>src/auto_qb/webui/static/shared/drawer_tpl/05-trackers-health-groups-low.js:363</code></td><td>skipUnchanged 数据拍分支(原地回填)无行为级测试: 04-09 的 e2e 全部在初始数据落袋后冻结轮询,skip→paintHtml/内联回填从未跑过;python 唯一相关守阵是纯静态字符串序检查——05/08 的 2026-10-18「组空⇒dtNN-hide 原地切类」根治场景行为上零覆盖</td><td>补一条 e2e: 先喂含失败的 trackers 数据落袋,再改写为全 ok 数据(不改结构 sig),断言 err 组原地 dt05-hide 且锚元素身份不变</td><td>R5#92</td></tr>
+      <tr><td>18</td><td>major</td><td><code>src/auto_qb/webui/static/shared/drawer_tpl/10-content-tree-detail-tall.js:320</code></td><td>右详情优先级分段(点击 → setFilePriority(p, subtreeIndices(sel)) 真实 POST,目录 = 整棵子树收集)从未被任何测试执行: e2e/ 内 grep 'data-setp|dt10-seg' 零命中,tests/ 静态守阵也不查该接入点——这是 S5 批量通道在本变体的唯一入口</td><td>在 drawer-content-variant-tables 的 dt10 用例里补: 选目录 → 点 .dt10-seg → 断言 POST 载荷 { priority, indices: [整棵子树 index] }</td><td>R5#121</td></tr>
+      <tr><td>19</td><td>major</td><td><code>src/auto_qb/webui/static/shared/drawer_tpl/11-content-treegrid-batch-low.js:13</code></td><td>文档漂移: 头注声称 availability「无则整列省略不占位(U4: 引擎 omitEmpty 通用机制接管)」,但 omitEmpty 对本表已删(app.js:307 明示 26-10-13-0811 删 omitEmpty、列常驻 + — 占位,DRAWER_CONTENT_V11_COLUMNS.av 无 omitEmpty 声明),e2e 用例名即「可用性列常驻」断言无数据时 4 列全在——注释描述的是已退役行为</td><td>头注改为「availability 无值列常驻出 — 占位(26-10-13-0811 删 omitEmpty)」</td><td>R5#125</td></tr>
+      <tr><td>20</td><td>major</td><td><code>src/auto_qb/webui/static/shared/drawer_tpl/11-content-treegrid-batch-low.js:472</code></td><td>主勾选框三态切换(onChange data-ckmaster 分支 → toggleSet 全量文件路径)无 e2e 执行——e2e 只测点行勾选与行内勾选,grep 'ckmaster' 在 e2e/ 零命中;全选后点批量条即真实 POST,这条批量入口未验证</td><td>补 e2e: 点主勾选框 → 断言全部文件行 is-chk + 批量条计数 + POST indices 覆盖全部文件,再点一次全不选回落</td><td>R5#122</td></tr>
+      <tr><td>21</td><td>major</td><td><code>src/auto_qb/webui/static/shared/drawer_tpl/12-content-space-treemap-collapsed.js:8</code></td><td>变体 12 的全部交互(悬停互联/组头折叠/仅看未完成/选中信息条/squarify 布局/ResizeObserver 重建/键盘)在 e2e/ 内零真渲染测试——grep 'dt12' 在 e2e/ 仅命中 perf spec 的一句注释;唯一覆盖是字符串锚守阵,文本摘除才红,行为回归不红</td><td>补一条 dt12 真手势 e2e(照 drawer-content-variant-tables 手法),至少覆盖悬停互联/组头折叠/点选联动信息条与键盘选中</td><td>R5#120</td></tr>
+      <tr><td>22</td><td>major</td><td><code>src/auto_qb/webui/static/shared/polling.js:85</code></td><td>SSE 断线沿判定(_esDisconnectEdge)+ 换票重连状态机在快照 tests/ 内零行为回归测试:唯一守阵 test_web_auth.py::test_frontend_sse_ticket_wiring 是 4 条字符串锚,沿判定/3s 重试去重/stopEvents 归置 _esConnected 均未被执行过。</td><td>按 test_webui_static_skins_table.py 的 hrsCompareRows node 电池范式补探针真跑,并钉「重试期重复 onerror 只发一条 toast」「重连必关旧连接换新票」两行为。</td><td>R5#14</td></tr>
+      <tr><td>23</td><td>major</td><td><code>src/auto_qb/webui/static/shared/selection.js:100</code></td><td>选择集与组的双向联动状态机(_selSyncGroups 回扫/补选、种子页降级分支、_selAnchor 兜底链、selSizeSummaryOf 的 occ_key 取 max 去重)全是纯逻辑却零执行测试——tests/ 只做字符串锚,无 node 电池加载 AQB_SELECTION;注释自述「种子页撤选残留组 key 卷进批量载荷」正是不执行就拦不住的回归</td><td>仿 _NODE_FILTER_PROBE 范式加 node 电池真跑 _selSyncGroups/_selAnchor/selSizeSummaryOf 四态</td><td>R5#51</td></tr>
+      <tr><td>24</td><td>major</td><td><code>src/auto_qb/webui/static/shared/shortcuts_panel.js:39</code></td><td>kbFullClose 未保存(脏)路径之外,非脏关闭(以及 kbGuardLeave 的 !this.kbDirty() 早退)都不调 kbRecordCancel():录制态点关闭钮/Esc 关覆盖层后,document 捕获期 _kbRecHandler 仍在,下一次任意按键被 preventDefault+stopPropagation 吞掉并静默提交成该条目的键位绑定(kbRecord 安装的监听只在 kbRecordCancel/kbDraftRevert 摘除)</td><td>kbFullClose 与 kbGuardLeave 的所有关闭/离开出口(或 watch(kbFullOpen)=false)统一先调 this.kbRecordCancel()</td><td>R5#232</td></tr>
+      <tr><td>25</td><td>minor</td><td><code>README.md:90</code></td><td>README 称 HR 逐种子详情表「默认只看做种中的行」,与 2026-10-03 用户二次驳回后的现行口径矛盾: 实际默认过滤是 local_present(本地仍在列,含暂停,与做种状态无关),可见文案已统一为「显示已删除种子/只看本地仍在列」且 hr_status.js 有旧措辞零残留断言——README 是残留的最后一句旧措辞</td><td>README 该句改为「默认只看本地仍在列的行」</td><td>R5#202</td></tr>
+      <tr><td>26</td><td>minor</td><td><code>memory-bank/conventions/webui.md:9</code></td><td>文档硬规则与代码事实矛盾:注册表现有两个一级 submenu 父项(「转移到」+「更多操作」),CTX-06 守阵(test_webui_static_dom_panel_misc.py:381)只数静态骨架 has-sub==1,对运行时项集失明——文档与守阵双双过期(同款断言在 attachments/webui-menu-components.md:12)</td><td>回写 webui.md 与 webui-menu-components.md 为新口径,守阵改从 AQB_CTX_MENU_REG 渲染层计数</td><td>R5#30</td></tr>
+      <tr><td>27</td><td>minor</td><td><code>src/auto_qb/webui/static/flux/fx-mount.js:225</code></td><td>fx 挂载层全部状态驱动逻辑零行为级测试且零 e2e: e2e 目录对 data-fx/AQB_FX 零引用,tests 侧只有字符串锚,TOAST_SPLIT 拆段正则、rows 行差分与幽灵退场、tabDir 方向判定、flipStack FLIP、numRoll 补间均从未跑过——正则或差分写错只有 flux 皮肤观感退化,pytest 全绿</td><td>至少给 TOAST_SPLIT 与 rows 差分补 node 电池;toast 塑形可加一条 e2e 断言两段落地</td><td>R5#193</td></tr>
+      <tr><td>28</td><td>minor</td><td><code>src/auto_qb/webui/static/prism/js/theme.js:48</code></td><td>系统明暗实时跟随路径只 apply 不派发 autoqb:themechange(qb_traffic_chart.js:43 依赖该事件整图重建烘焙令牌色的 canvas),用户未手动选主题时 OS 切换明暗,CSS 侧换肤而流量图 canvas 系列色/网格/斜纹仍停在旧主题,直到下次整图重建</td><td>onSys 里检测 data-theme 实际变化后同样 dispatchEvent(new CustomEvent("autoqb:themechange"))</td><td>R5#180</td></tr>
+      <tr><td>29</td><td>minor</td><td><code>src/auto_qb/webui/static/prism/js/theme.js:63</code></td><td>theme.js 全文件零测试: tests/e2e 无任何 AutoQbTheme/theme-menu/data-theme 断言(唯一引用是一条路由重定向),而它派发的 autoqb:themechange 是 qb_traffic_chart.js 换肤重建图的事件契约——事件名/派发点被改名或删除,流量图 canvas 换肤残旧色且无任何测试变红</td><td>在接线守阵里补一条静态锚: theme.js 须派发 autoqb:themechange 且 qb_traffic_chart.js 须监听同名事件(成对)</td><td>R5#194</td></tr>
+      <tr><td>30</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/add_torrent.js:162</code></td><td>添加对话框 Esc 逐层退栈(FIX-07: 目录浏览器→分类/标签下拉→路径面板→关窗)在 tests/ 与 e2e/ 零引用,退栈顺序回归无测试会红</td><td>补 e2e 真渲染用例(逐层按 Escape 断言当前层收起)或 node 电池按层桩断言</td><td>R5#141</td></tr>
+      <tr><td>31</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/add_torrent.js:312</code></td><td>五个自绘下拉共用的键盘导航本体(↑↓ 取模环绕、Enter 选中/enterFallback、Esc 只收面板、IME 组词守卫 isComposing)零行为执行——全仓唯一引用是静态字符串锚,e2e add/move 用例也只点选不按键</td><td>补 node 电池喂合成 KeyboardEvent 断言环绕/Esc/IME 守卫三支</td><td>R5#143</td></tr>
+      <tr><td>32</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/add_torrent.js:398</code></td><td>后端 /api/fs/mkdir 回执只有 {created, existed}(fs.py 两处 return 均无 path 键),r.path 恒 undefined —— 新建文件夹后不会跳进新目录,表达式恒走兜底分支,契约错位兼死代码</td><td>改用 await this.loadDir(r.created || this.dirBrowse.path)(r.created 正是新目录归一化路径)</td><td>R5#131</td></tr>
+      <tr><td>33</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/add_torrent.js:583</code></td><td>DND 进料分支行为(同名同大小去重、非 .torrent 忽略计数 toast、uri-list 注释行过滤与追加不覆盖、未开窗先开窗再填)零执行——test_frontend_add_torrent_drag_drop_wiring 只钉静态接线,两套皮肤 e2e 无拖拽用例</td><td>补 node 电池桩 FileList/DataTransfer 喂 _addIngestFiles/_addIngestLinks 断言去重与忽略分支</td><td>R5#142</td></tr>
+      <tr><td>34</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/app.js:779</code></td><td>默认隐藏列播种语义(「从无任何偏好才播种」「刻意全开不被覆盖」——注释自述同形陷阱曾实发)无行为测试:唯一守阵(webui_static_scan_css.py:226)只钉 DEFAULT_HIDDEN_KEYS 字符串,loadColState 从未被执行。</td><td>补 node 电池真跑 loadColState(空存储播种/仅空 hidden 不播/三键全缺才播)。</td><td>R5#18</td></tr>
+      <tr><td>35</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/auth.js:92</code></td><td>_logout/401 路径只调 stopPolling() 未调 stopEvents():EventSource 与 _esRetry/_verTimer 跨会话残留;残留流每个 ver 事件触发一次 refresh → 无凭证 api() → 再次 _logout 空转;换票 await 期间登出,落票后仍会 this._es = es 重开(重开竞态)。</td><td>_logout 与 refresh() 的 e.auth 分支补 stopEvents(),与 _qbTeardown 同口径。</td><td>R5#2</td></tr>
+      <tr><td>36</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/auth.js:118</code></td><td>_logout 在有模态框打开时直接丢弃 _modalResolve 而不进行 resolve,悬空的 confirmDialog/promptDialog Promise 永远 pending(删除流程在 await 处永久挂起,且该框被新框顶替后旧 resolve 永久丢失)。</td><td>清除 _modalResolve 前先对其 resolve(false),再重置 this.modal。</td><td>R5#1</td></tr>
+      <tr><td>37</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/boot.js:28</code></td><td>「三套 UI 共用本脚本 = 唯一写入口」计数漂移:atlas/prism/console/flux 四套 index.html 均载 /shared/boot.js(flux/index.html:254),按「三套」口径维护会漏改。</td><td>注释改「四套 UI」或去掉计数。</td><td>R5#21</td></tr>
+      <tr><td>38</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/columns_computed.js:98</code></td><td>分组页窗口化与展开面板的退避联动(「当前真的有面板」判据)零执行——node 电池直接调 _rowWindow 绕过该判据,展开态跨视图带回后误退避/漏退避无回归保护</td><td>退避分支纳入现有窗口化电池: expandedKey 命中在场组→off 全量,原组被筛掉→active 窗口</td><td>R5#57</td></tr>
+      <tr><td>39</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/columns_drag.js:22</code></td><td>可视列空间→全序列的落点折算算术(移除自身后 at=dropIdx-1、跳隐藏列计 seen、末尾边界兜底 push)是典型 off-by-one 高危纯逻辑,零执行测试</td><td>node 电池真跑 applyColOrder 四类边界</td><td>R5#53</td></tr>
+      <tr><td>40</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/columns_drag.js:92</code></td><td>拖拽尾的 capture 拦截 click 只能被「下一次 click」注销: 真拖后 mouseup 落在窗口外/不产生 click 的位置(拖出浏览器边界松手常见),swallow 常驻 capture 层,把用户页面任意位置的下次点击整个吞掉(菜单按钮/排序各哑一次);columns_persist.js startResize L191 同款复制</td><td>mouseup 后下一拍自清(setTimeout removeEventListener),或拦截限定在表壳范围内</td><td>R5#38</td></tr>
+      <tr><td>41</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/columns_grid.js:52</code></td><td>注释契约不符: 注释称逐 token 严格校验 ^\d+px$,实现(L59)是 /^\d+(\.\d+)?px$/ 放行小数 px;照注释口径复刻校验会把 getComputedStyle 的小数宽度判成不合法→「数量不符→null」,与 2026-10-18 修复意图相反</td><td>注释同步为放行小数 px 的正则(拒绝 fr/minmax 才是要点)</td><td>R5#59</td></tr>
+      <tr><td>42</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/columns_menu.js:312</code></td><td>注释契约不符: 「本文件 L186」指向的 _ensureHeadObserver 在 R4 大文件拆分后已位于 columns_grid.js L127,本文件 L186 是 _hscrollWheel 一带,按注释找范式会找错文件</td><td>改为「照 columns_grid.js::_ensureHeadObserver 的范式」并去掉行号</td><td>R5#58</td></tr>
+      <tr><td>43</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/columns_persist.js:180</code></td><td>意图升格不设 dragged 门槛: 纯点击拖宽把手(零位移)也把起始渲染快照 merge 进 colW 并落盘,该页自此从「全自动」静默转「固化」,窗口缩放不再自适应;dragged 在本函数只用于拦 click(L184),未覆盖升格分支</td><td>up() 里 dragged 为假时先 return,或仅在 dragged 时执行意图 merge</td><td>R5#37</td></tr>
+      <tr><td>44</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/commands.js:83</code></td><td>注释钉住的具体回归(每 hash 先清旧定时器,否则 45s pending 兜底定时器会把后到的 10s 成功图标提前清掉)无行为测试:tests 只有 ALERT_ICON 键集静态断言,transfer e2e 把 setRowIcon 桩掉</td><td>node 电池真跑 setRowIcon:先落 pending 再落 ok,假计时器断言旧定时器被清、ok 图标按 ALERT_ICON_MS.ok 存活</td><td>R5#29</td></tr>
+      <tr><td>45</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/commands.js:202</code></td><td>waitCmd 的 SSE/轮询竞态语义(事件先到时 stop 收摊轮询、_cancelCmdWait 清 waiter、双双超时回退 {ok:false})在 tests/ 内零执行——node 电池全部把 waitCmd 桩掉,e2e 只走真机混合路径,无用例区分两路</td><td>仿 rename 四态 node 电池真跑 waitCmd:分别注入事件先到/轮询先到/双超时三种时序,断言落败路径收摊与超时回退文案</td><td>R5#25</td></tr>
+      <tr><td>46</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/commands.js:240</code></td><td>cmdStats 是单槽且无归属校验: 上一条命令在途时再次点击,_newCmdStats 整体重写 cmdStats,旧命令回执到达后 _cmdRecToResult 把旧命令的 totalMs/waitMs/execMs/cmdId 合并进新命令的 stats(onCmdEvent 同理),[perf] 日志数字错挂到别的命令/动作上</td><td>cmdStats 记下本次 cmdId/t0 归属,回执写入前比对 cmdId(或每命令一个 stats 槽),不归属的回执只丢埋点不合并</td><td>R5#233</td></tr>
+      <tr><td>47</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/config_editor.js:64</code></td><td>cfg.collapsedRules 及其注释「规则卡折叠态」是死状态: 全前端零读零写,规则卡折叠实际走 openRuleMeta(键格式为路径点分)——注释描述的状态机不存在,且 cfgReset 也从未清它</td><td>删除 collapsedRules 死状态,或注释改指 openRuleMeta 并说明键格式差异</td><td>R5#178</td></tr>
+      <tr><td>48</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/config_editor.js:178</code></td><td>cfgLoad 只在 trackerKey/ruleGroupKey 为空时才重选,不校验其是否仍存在于重拉的树里: 站点重命名(A→B)后点「放弃改动」,trackerKey 仍是 B,右栏渲染不存在的幽灵站点;此时编辑任意字段经 cfgSetPath 会把 config.trackers.B 连键带值重新写回树,静默复活已放弃的重命名</td><td>cfgLoad 里对 trackerKey/ruleGroupKey 做存在性校验(不在 cfgTrackerNames()/cfgRuleGroupNames() 内即回落首项)</td><td>R5#153</td></tr>
+      <tr><td>49</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/config_editor.js:722</code></td><td>注释引用的守阵文件 tests/test_webui_static_dom_page.py 在快照中不存在(实际位于 tests/test_webui_static_dom_page_layout.py,测试名仍在)——按指引寻文件会扑空</td><td>注释文件名更正为 tests/test_webui_static_dom_page_layout.py</td><td>R5#177</td></tr>
+      <tr><td>50</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/config_editor_tree.js:27</code></td><td>字段树展开逻辑本身(_attachGrey 的 greyBy 本层上下文——注释自证「第七轮修复」、cfgGreyed 灰显判定、group_of bool→内联/其余→子卡分桶、三态)只有静态守阵,零行为执行,历史回归密度高</td><td>node 电池以合成 schema 跑 cfgFlatten 断言四种 item.type/内联分桶/greyBy 只在本层覆写/hidden 跳过</td><td>R5#176</td></tr>
+      <tr><td>51</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/config_hub_hr.js:33</code></td><td>HR 站点接入绑定状态五分支(显式 tracker 不存在=warn/自动绑定唯一命中/多命中歧义/announce 域双向子域容错/未绑定)零测试引用,hrSiteSetEnabled 的「未配置不写垃圾键」守卫同样零执行</td><td>node 电池造 presets+trackers 组合断言五分支,含 endsWith 双向子域匹配正反例</td><td>R5#173</td></tr>
+      <tr><td>52</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/config_hub_tm.js:192</code></td><td>关闭工具保存失败后的回滚无条件写 enabled:"true",但磁盘原态可能是「键不存在(默认真)」——回滚后内存树与 baseline 出现不可见差异,cfgDirty 凭空翻真(刷新守卫会拦),且下次保存任意改动会把多余的 enabled 键写进 YAML</td><td>回滚前先记 cfgExists(该键),原不存在时用 cfgDelPath 删键而非写 "true"</td><td>R5#154</td></tr>
+      <tr><td>53</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/config_hub_tm.js:257</code></td><td>工具参数表单往返(tmBuildPayload 的 list 拆分/time·size·speed 复合串原样回传/未回显键不发明值/tmNormalizeForm 列表折逗号串/tmPickApplyExe 路径分隔符选择)仅源码切片锚,零行为执行;「裸数值无损往返」是注释明确承诺的语义</td><td>node 电池对 tmParams 全 12 键跑 normalize-&gt;buildPayload 往返断言恒等</td><td>R5#174</td></tr>
+      <tr><td>54</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/config_rules.js:363</code></td><td>规则卡摘要与风险聚合(cfgRuleRisk 的 noDedup 判定/cfgTriggerLabel/cfgRuleMetaSummary 的间隔·去重·冷却摘要)零测试引用——它们喂 hubRiskList→首页 LED 与「N 条含风险」徽标,而规则树/退役键/on_error 侧已有 node 电池,唯独这块摘要面没有</td><td>把 cfgRuleRisk/cfgRuleMetaSummary 并入现有 _NODE_RULE_TREE_PROBE 电池</td><td>R5#175</td></tr>
+      <tr><td>55</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/ctx_menu_custom.js:31</code></td><td>episode 分支的用户可见提示与 ctx_menu.js 注册表口径矛盾:注册表注释明写「2026-10-20 起文案与 scope 无关」,episode 支 label 也确实只有动词+N,提示却在宣称已退役的旧行为</td><td>CTX_BRANCH_HINT.episode 改成与注册表现状一致的描述</td><td>R5#31</td></tr>
+      <tr><td>56</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/ctx_menu_custom.js:272</code></td><td>定制面板拖拽落点计算(同层 from&lt;row.idx 回退一格、跨层插入、cmDropTail 追加)零执行——node 探针只跑 cmToggleHidden/cmMoveLevel/cmAddSep/cmMoveStep 四写路径,e2e 也无拖拽用例(cmDelSep/cmResetBranch 同样只在探针外)</td><td>cmDropAt/cmDropTail/cmDelSep/cmResetBranch 补进既有 _NODE_CTX_WRITE_PROBE,断言写回布局 order 与后端 _CTX_LAYER_KEYS 契约</td><td>R5#28</td></tr>
+      <tr><td>57</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/decorate.js:74</code></td><td>组行装饰记忆化的指纹对(_decoFpBuild 槽清单 与 _decoFpHit 逐槽比对)零执行测试,只有字符串锚;文件头自述 S7 初版漏成员槽导致「乐观值不传导到组行状态色」静默陈旧缓存,正是零执行拦不住的形态</td><td>node 电池真跑 build→hit 往返:改任一槽必失配、未脏行必命中</td><td>R5#56</td></tr>
+      <tr><td>58</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/decorate.js:149</code></td><td>运行期字符串字面量含禁用图形符号「→」(code-style.md 非 ASCII 禁令覆盖 .js 字符串字面量),该文案经 relocateTitle 拼进徽标 title 面向用户渲染</td><td>改为 "-&gt;"</td><td>R5#40</td></tr>
+      <tr><td>59</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/delete_flow.js:109</code></td><td>删除确认框的 HR 风险点名行与 _deleteDetails 集合摘要行(站点/路径去重、实际占用条件行、名字截 3/more 后缀、HR_NO_DELETE 只认 danger)零行为测试——闸门与 _reannounceAll 有 node 电池、e2e 删除用例只喂非活跃档种子,danger 档种子的确认框从未渲染</td><td>node 电池跑 _hrRiskOf/_deleteDetails 断言行拼装 + e2e 补 danger 档种子断言风险行出现</td><td>R5#145</td></tr>
+      <tr><td>60</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/dialogs.js:235</code></td><td>管理对话框 CRUD 行为零执行(submitMgrTags 中英文逗号批量拆分、submitMgrCategory 保存路径可空、loadMgr 字典序/字典展开、openMgr 清态),只有外壳接线锚;_mgrRun/_panelLoad 骨架另有电池但校验分支没跑</td><td>补 node 电池跑 submitMgrTags/submitMgrCategory/loadMgr,断言拆分结果与投递载荷</td><td>R5#144</td></tr>
+      <tr><td>61</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/dialogs.js:632</code></td><td>历史流量弹层的聚合数学零执行: 月档 slice(-12)/年档按年汇总/天档近30、historySummary、histMove/histLeave 悬停索引换算、_histArea 路径——tests/ 与 e2e/ 对其零引用(openHistory 只有入口字符串锚)</td><td>补 node 电池喂 historyData 断言三档桶标签/条数/峰值均值</td><td>R5#147</td></tr>
+      <tr><td>62</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/dialogs_meta.js:7</code></td><td>入口缺 if (this.metaBusy) return; 闸(同文件 metaToggleTag/metaAddNewTags 都有): 双击候选行/回车与点选竞态可并发两条 set_category bulk 命令,且先完成的一方把 metaBusy 提前复位,closeMeta 的误关保护对仍在途的另一方失效</td><td>函数入口补 if (this.metaBusy) return; 与两个兄弟方法同口径</td><td>R5#133</td></tr>
+      <tr><td>63</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/dialogs_meta.js:62</code></td><td>comboKeydown(add_torrent.js:334)对回退值有 v !== "" 过滤,清空输入框后回车的回退值是空串被丢弃 —— 注释宣称的「含清空 = 无分类」回车路径实际不可达,注释与行为矛盾</td><td>comboKeydown 对带 onEnter 的 ctx 放行空串回退;或改掉注释并只留预置行清分类入口</td><td>R5#132</td></tr>
+      <tr><td>64</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/dialogs_meta.js:124</code></td><td>限速浮层编排零行为测试: openSpeedAt 定位/预聚焦、submitSpeedDialog「主速成功但备用失败留窗重试并重取回填」、closeSpeedDialog 均无 node 电池无 e2e(submitAltLimits/toggleAltSpeed 已有电池,主速与浮层层没有)</td><td>补 node 电池跑 submitSpeedDialog 双分支(okMain&amp;&amp;!okAlt 留窗回填 / 双成功关窗)</td><td>R5#146</td></tr>
+      <tr><td>65</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/drawer.js:174</code></td><td>非ASCII图形符号: 带圈数字 ①②(174/175 行,全文同类 →/⇒ 另约 12 处)——code-style.md 点名禁用类「带圈数字」,覆盖 .js 含注释与字符串</td><td>按替代表改写,本文件统一清一遍</td><td>R5#63</td></tr>
+      <tr><td>66</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/drawer.js:561</code></td><td>确认框行表纯函数(目录别名「未来种子」分支/#n 多项前缀/reasons 拼接)零执行,submitMoveDialog 的 confirm 回路(收框→确认→confirm=true 重发→取消/再 confirm 重开)也只有 test_web_relocate.py:935-976 字符串锚,无 node/e2e 行为测试</td><td>补 node 电池真跑 _relocateConfirmRows/_relocateConfirmCount,回路重开/二发分支用桩驱动</td><td>R5#69</td></tr>
+      <tr><td>67</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/drawer_general.js:38</code></td><td>非ASCII图形符号: 带圈数字 ②(38 行,另 7 行注释有 →)——code-style.md 点名禁用类</td><td>表②→表2,→ 改 ASCII 箭头</td><td>R5#64</td></tr>
+      <tr><td>68</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/drawer_general.js:164</code></td><td>夹取纯函数(含极小视口 70vh&lt;240 时 min/max 互换的边界分支)全仓零执行: test_drawer_height_w3(tests/test_web_shortcuts_drawer.py:320-324)只做子串锚检查(断言含 0.7/240/Math.min(Math.max(px)),e2e 无 grip 拖拽用例,边界行为从未真跑验证</td><td>node 电池真跑: 钉 240 下界/70vh 上界/极小视口三组断言</td><td>R5#68</td></tr>
+      <tr><td>69</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/drawer_head.js:11</code></td><td>「&lt;aq-qb-ctl&gt; 不能包 wrapper 破了是静默布局塌陷」的守卫被注指到 e2e/drawer-traffic.spec.mjs,该 spec 在快照 e2e/ 目录不存在;实际钉「直接子元素」的是 tests/test_webui_static_dom_panel_traffic.py:53</td><td>引用改为 tests/test_webui_static_dom_panel_traffic.py(或补回同名 e2e spec)</td><td>R5#74</td></tr>
+      <tr><td>70</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/drawer_rows.js:15</code></td><td>drawerDel「删除成功自动收抽屉」判据是竞态: then 回调在删除回执返回后立即读 memberByHash,但成员移除要等下一轮主轮询(1.5~3s)才落到本地,快速成功路径几乎必然判「成员还在」不收抽屉;且回调读的是回调时刻的 this.drawer.hash 而非被删目标 hash,期间换过目标时判据对象就错了</td><td>调用点捕获被删 hash,按删除回执 ok 收口(或下一轮轮询后延迟复查该 hash),不读回调时刻的 this.drawer.hash</td><td>R5#61</td></tr>
+      <tr><td>71</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/drawer_rows.js:127</code></td><td>非ASCII图形符号: 箭头 → 位于字符串字面量(会渲染进抽屉 UI,126 行注释同类,53 行 sum 模板串另有 ↓↑)——code-style.md 覆盖 .js 字符串字面量</td><td>UI 文案改 ASCII 或改走文档层措辞;sum 里 ↓↑ 改 ASCII</td><td>R5#67</td></tr>
+      <tr><td>72</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/drawer_store.js:232</code></td><td>非ASCII图形符号: 带圈数字 ①②③(232/236/243/253/254 行,全文 →/⇒ 另约 17 处)——code-style.md 点名禁用类</td><td>带圈数字改 ASCII 编号,箭头统一 -&gt;</td><td>R5#65</td></tr>
+      <tr><td>73</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/drawer_templates.js:12</code></td><td>非ASCII图形符号: 带圈数字 ①②③(12/13/15/51 行,全文 →/⇒ 另约 25 处)——code-style.md 点名禁用类;本文件全批密度最高</td><td>带圈数字改 ASCII,箭头改 -&gt;</td><td>R5#66</td></tr>
+      <tr><td>74</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/drawer_templates.js:25</code></td><td>装载序硬约束注与第 23 行删除操作指引都写「三份 manifest」,快照实况是四份(atlas/console/flux/prism 各 13 条 drawer_tpl 登记,tests/webui_helpers.py _UI_ALL 也迭代四套)——按头注执行「三份 manifest 各去 1 行」会漏两份留下死脚本标签</td><td>两处「三份」改「四份」(与 drawer_files.js/drawer_rows.js 头注「四套皮肤」对齐)</td><td>R5#71</td></tr>
+      <tr><td>75</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/drawer_templates.js:663</code></td><td>死变量(存量面 A): emptyHost 赋值后从未被读;上方 665-670 注释明言「宿主从无记账(old 空)⇒必须换代让桥重挂」,但下方循环只实现了「同 seg 锚元素被换」分支,注释声称的换代守卫实际不存在——当前靠所有换宿主路径都先经 _dtUnmountOne 摘桥兜住,一旦出现绕过该路径的宿主重建即复现注释描述的「Teleport 悬游离旧锚、新锚恒空」</td><td>删除 emptyHost 死变量,或补上注释声称的判断使代码与 2026-10-14 注释一致</td><td>R5#62</td></tr>
+      <tr><td>76</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/drawer_tpl/01-general-hero-tall.js:208</code></td><td>英雄行裸拼 ?? 0 兜底,对 qB 的 -1 哨兵值不设防: 私有种子 num_complete=-1、connections_limit=-1(不限)时直接渲染出 swarm 0(-1)、连接 8 / -1(207 行 num_leechs 同病),与 04/05/06 消费 fmtPeersQb(内置 -1/null 守卫)的同语义槽口径漂移</td><td>负值走守卫降级(如 num_complete&lt;0 显 — 或整段省略),与 fmtPeersQb 口径对齐</td><td>R5#76</td></tr>
+      <tr><td>77</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/drawer_tpl/01-general-hero-tall.js:297</code></td><td>变体切换路径(register.destroy → H.unwireEvents → 换变体重挂)无 e2e 手势: e2e 全部经 localStorage 预置单变体后整页加载,换变体只有静态守阵;换变体监听叠加/残留只有头注释声称,无测试钉住</td><td>补一条 e2e: 右键菜单把 general 从 01 切到 02,断言旧变体根类不在场且点击只触发一次动作</td><td>R5#93</td></tr>
+      <tr><td>78</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/drawer_tpl/02-general-cards-low.js:194</code></td><td>HR 达标徽章同一语义槽三变体三种文案: 02「已触发 · 已达标」、01:162「H&amp;R 已达标」、03:219「HR 已触发 · 已达标」;且要求做种/分享率的展示顺序 02(先比率)与 01/03(先时长)相反</td><td>三变体统一为同一组文案与字段序(或收口进 reg 单源表)</td><td>R5#79</td></tr>
+      <tr><td>79</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/drawer_tpl/03-general-dossier-collapsed.js:87</code></td><td>死 CSS + 槽位失接: .dt03-wide/.dt03-item.wide 三条规则在任何 JS 路径都产不出(gridRows:178 恒输出 class="dt03-item"),而数据契约 drawer_rows.js 对哈希/路径/备注行发 wide:true、01 变体消费为 is-wide——03 里长哈希/保存路径被压进三列格子 nowrap 省略号截断;02 secRows(02:181)同样忽略 wide</td><td>gridRows 按 r.wide 挂 wide 类(整行 span)或删掉三条死 CSS,并与 01 的 is-wide 口径对齐</td><td>R5#78</td></tr>
+      <tr><td>80</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/drawer_tpl/04-trackers-status-cards-tall.js:21</code></td><td>头注释「渲染纪律」声称 sig = 整份 trackers 序列化比对,与实现矛盾: 实际 sig 是结构态 loading|err|has(295-300 行注释自证「不含 trackers 数据本身」,U4 收口后序列化 sig 已退役)</td><td>头注释改为「结构态未变跳过重建(数据拍原地回填)」</td><td>R5#101</td></tr>
+      <tr><td>81</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/drawer_tpl/04-trackers-status-cards-tall.js:345</code></td><td>04/06 的「添加 Tracker/删除/强制重新汇报」动作钮无 e2e 手势(trackers-variant-tables 只测排序/筛选/几何;reannounce spec 只测 06 倒计时渲染不点按钮),python 仅字符串锚</td><td>补一条手势 e2e 点 04/06 的 data-act=add/del/report,断言对话框开/请求发出</td><td>R5#96</td></tr>
+      <tr><td>82</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/drawer_tpl/05-trackers-health-groups-low.js:178</code></td><td>adviceFor 五类关键词分派分支仅 'not registered' 一条被 e2e 间接触及,且断言只查含「处置建议」字样、不查分派出的具体文案——其余四类(passkey/ban/timeout/maintenance)与通用兜底分支零覆盖,纯函数本可 node 电池直跑却无</td><td>给 adviceFor 补 node 电池(每类关键词一条断言)</td><td>R5#95</td></tr>
+      <tr><td>83</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/drawer_tpl/05-trackers-health-groups-low.js:289</code></td><td>正常组 tier 排序把缺失/非法 tier 折算为 0(排最前),与 04:213/06:213 同语义槽「缺 tier 记 9(排最后)」的口径漂移,tier 缺失的 tracker 在 05 正常组会插到所有 tier0 之前</td><td>缺失 tier 记 9(或 +Infinity),与 04/06 的 tierN 兜底对齐</td><td>R5#81</td></tr>
+      <tr><td>84</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/drawer_tpl/06-trackers-table-collapsed.js:23</code></td><td>同 04: 头注释声称 sig 含整份 trackers+倒计时序列化,实际 sig 已收窄为结构态且 254-261 行注释明确「不含 trackers 数据/倒计时基准/种子级 reannounce」,两处注释互相矛盾</td><td>头注释同步为结构态 sig 口径</td><td>R5#102</td></tr>
+      <tr><td>85</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/drawer_tpl/06-trackers-table-collapsed.js:175</code></td><td>nextOf 的回退分支(qB&lt;5.2 无 next_announce → 种子级 reannounce_in 全局近似 + 「全局」标 dt06-gb + 种子级微条)从未被任何测试渲染: e2e 桩恒给 next_announce 且断言 .dt06-gb 数量为 0,回退路径只有静态守阵</td><td>补一条 e2e: trackers 桩去掉 next_announce 字段,断言 dt06-gb「全局」标与微条出现</td><td>R5#94</td></tr>
+      <tr><td>86</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/drawer_tpl/07-peers-dashboard-tall.js:13</code></td><td>头注释声称 files 列声明 omitEmpty(无对端携带整列省略),与实现矛盾: app.js:247 明确「omitEmpty 已删(计划 26-10-13-0811)…列常驻,缺值由渲染器出 — 占位」,e2e 也断言无 files 数据仍 10 列</td><td>头注释改为「files 列常驻 + — 占位(omitEmpty 已删)」</td><td>R5#106</td></tr>
+      <tr><td>87</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/drawer_tpl/07-peers-dashboard-tall.js:22</code></td><td>同 04/06: 头注释「整份 peers 序列化比对」与实际结构态 sig(388-393 行「不含 peers 数据本身」)矛盾</td><td>头注释同步为结构态 sig 口径</td><td>R5#103</td></tr>
+      <tr><td>88</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/drawer_tpl/07-peers-dashboard-tall.js:140</code></td><td>注释引用的渲染器分片 id「tpl-aq-dt07-cells」已不存在: issue 26-10-20-2231 把 dt07/dt08/dt09 三份值格模板合一为 tpl-aq-dt-peer-cells,全 src grep 该 id 仅剩本注释一处;test_drawer_variant_skeleton_single_point 还断言旧 id 零残留</td><td>注释改为「归渲染器分片 tpl-aq-dt-peer-cells(pfx prop 出 dt07 类名)」</td><td>R5#105</td></tr>
+      <tr><td>89</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/drawer_tpl/07-peers-dashboard-tall.js:380</code></td><td>用户可见注记文案漂移: 写「默认按「上传」降序」,但描述符实为 sort:{defKey:"addr", defDir:1}(app.js:530, 2026-10-18 改口径),e2e 也断言默认序 = addr 升序——页面文案与实际默认序矛盾</td><td>注记改为「默认按地址排序」或删掉默认序措辞</td><td>R5#98</td></tr>
+      <tr><td>90</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/drawer_tpl/08-peers-groups-low.js:11</code></td><td>同 07: 08 头注释仍声称 files 列 omitEmpty 渐进省略,与 app.js「omitEmpty 已删、列常驻」及 e2e 10 列断言矛盾</td><td>头注释同步为列常驻口径</td><td>R5#107</td></tr>
+      <tr><td>91</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/drawer_tpl/08-peers-groups-low.js:38</code></td><td>注释(38/305/338 三处)声称回填走「paintTick」,该符号全仓不存在(实际机制是 skip 分支内 querySelector+classList/textContent/innerHTML 直写;兄弟变体用的 H.paintHtml 本变体也未调用)——注释引用不存在的符号名</td><td>注释改为「skip 分支内联原地直写」或统一改走 H.paintHtml 并同步措辞</td><td>R5#108</td></tr>
+      <tr><td>92</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/drawer_tpl/08-peers-groups-low.js:199</code></td><td>字符串字面量里的非 ASCII 图形符号: 聚合数文案以 ↑/↓(200 行同)起头并渲染进 DOM,违反「代码/配置禁图形符号(含字符串字面量)」硬约束</td><td>改用 CSS 三角/图标 sprite 或纯文字替代箭头字符</td><td>R5#80</td></tr>
+      <tr><td>93</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/drawer_tpl/08-peers-groups-low.js:308</code></td><td>结构 sig 把折叠态算进去,但 onClick 折叠只翻 class 不刷新 lastSig,每次折叠后下一个 5s 数据拍 sig 必失配触发整帧 replaceChildren 重建——与 05 同语义槽「折叠态不进 sig、数据拍照常跳过」(05:353)口径相反,也正是 08 头注 2026-10-18 根治的那类重建</td><td>照 05 把折叠项从 sig 剔除(折叠仅 classList 翻转,锚/表格体零重挂)</td><td>R5#77</td></tr>
+      <tr><td>94</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/drawer_tpl/09-peers-density-collapsed.js:16</code></td><td>头注释「默认序 upspeed 降序由描述符 sort.defKey/defDir 声明」与描述符实值 defKey:"addr"/defDir:1 矛盾(2026-10-18 改口径时只改了 app.js 与 e2e,09 头注释漏改)</td><td>头注释改为 addr 升序口径</td><td>R5#100</td></tr>
+      <tr><td>95</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/drawer_tpl/09-peers-density-collapsed.js:19</code></td><td>同上: 09 头注释仍写整份 peers 序列化比对,实际 sig 为结构态(207-212 行),头注释漏随 U4 收口更新</td><td>头注释同步为结构态 sig 口径</td><td>R5#104</td></tr>
+      <tr><td>96</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/drawer_tpl/09-peers-density-collapsed.js:177</code></td><td>09 的「占用」条计算(occBar = up/upTotal)与默认序均无断言: e2e 对 09 只测筛选 chips 行数,默认序/占用列值零断言——恰是默认序已漂移(见下)却无测试能抓住的原因</td><td>给 09 的 e2e 补默认序首行断言与占用百分比数值断言</td><td>R5#97</td></tr>
+      <tr><td>97</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/drawer_tpl/09-peers-density-collapsed.js:199</code></td><td>同 07: 页面注记「默认按「占用」降序,最吃上传的排最前」与描述符 sort:{defKey:"addr", defDir:1}(app.js:546)矛盾,用户看到的第一行并非最吃上传的对端</td><td>注记改为与 defKey addr 一致的措辞,或恢复占用默认序并同步描述符</td><td>R5#99</td></tr>
+      <tr><td>98</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/drawer_tpl/10-content-tree-detail-tall.js:27</code></td><td>文档漂移: 「三份 index.html」实际是四份——atlas/console/flux/prism 四个 index.html 均含 drawer_tpl/10..90 装载行,按注释退役会漏一个皮肤;同一句在 11(L29)/12(L17)/90(L15)重复</td><td>四文件统一改「四份 index.html」(或改为「各皮肤 index.html 各去 1 行」免再漂移)</td><td>R5#128</td></tr>
+      <tr><td>99</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/drawer_tpl/10-content-tree-detail-tall.js:44</code></td><td>文档漂移: 注释声称 focusKey「记账在 anchTouch 前」——但 W5 起本变体已退役 anchTouch(同文件 45-46 行自述),且 focusKey 无任何写入点,声称的「记账 → 回焦」链路永不发生(rowRestore 恒收到空串)</td><td>改注为「focusKey 预留真换代(数据帧)回焦, W5 起交互不换代、当前无写入点(同 11 号口径)」</td><td>R5#127</td></tr>
+      <tr><td>100</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/drawer_tpl/10-content-tree-detail-tall.js:295</code></td><td>筛选无命中时合成的 __empty 空态行在本变体无任何样式兜底: .dt10-blank 无 CSS 定义、.group-row.empty-row 未豁免(engine dt_table.css 只对 .dt11-list 做了透明化),结果渲染成一条 29px 带底边框/hover 的空幽灵行;11 号同槽位有「该筛选下没有文件」文案 + empty-row 透明样式,跨变体漂移</td><td>补 .dt10-list .group-row.empty-row 透明样式,并让 dt10-cells 的 empty 分支出提示文案(或空态时不出占位行)</td><td>R5#110</td></tr>
+      <tr><td>101</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/drawer_tpl/10-content-tree-detail-tall.js:395</code></td><td>工具条「展开/折叠」全局钮(onClick data-fold 分支,折叠 = 全目录集入账)无 e2e: e2e 只点行内逐行折叠,11 的同名分支同样未测</td><td>各补两步手势: 点「折叠」断言只剩目录行,再点「展开」断言行数还原</td><td>R5#124</td></tr>
+      <tr><td>102</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/drawer_tpl/10-content-tree-detail-tall.js:431</code></td><td>focusKey 死代码(W5 拆分残留): ui.focusKey 全文件无写入点(头注声明的记账方 anchTouch 已于 W5 退役),rowRestore 恒收到空串永不回焦,锚换代重挂后的键盘焦点恢复机制实际失效;12 号已改用局部 rowFocusKey 记账,10/11 残留只读不写的空转机制</td><td>补回写入点(对齐 12 号口径)或删除 focusKey 字段与 rowRestore 调用</td><td>R5#111</td></tr>
+      <tr><td>103</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/drawer_tpl/11-content-treegrid-batch-low.js:19</code></td><td>dt11 行级键盘(头注声称 issue 26-10-07-0846 同口径)无 e2e: variant-tables 只给 dt10 测了 roving,dt11 的 Enter/Space → toggleRow 与方向键移焦从未真机执行,静态守阵只查字符串在场</td><td>在 dt11 e2e 用例尾部照 dt10 键盘段补: focus → ArrowDown → Enter,断言对应文件行翻成 is-chk</td><td>R5#123</td></tr>
+      <tr><td>104</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/drawer_tpl/11-content-treegrid-batch-low.js:100</code></td><td>文档漂移: 吸顶补偿注释盘点「三皮肤」padding 并要求「改皮肤 padding 必须连这里一起核」,但第四皮肤 flux 的 .drawer-body padding: 14px 18px 20px(flux/css/dialogs.css:66)未入清单——清单不完整,皮肤耦合假设核对面缺一个</td><td>清单补 flux: 14px 18px 20px,「三皮肤」改「四皮肤」</td><td>R5#129</td></tr>
+      <tr><td>105</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/drawer_tpl/11-content-treegrid-batch-low.js:255</code></td><td>同一漂移的第二处: 行装配注释称 av 字段「供 omitEmpty 整列判据」且「有 availability 才非空串」——实际该列判据已删且代码产出 undefined(fileRowOf: av: avNum ? avN.toFixed(2) : undefined),不是空串</td><td>注释改为「av 供渲染器判 — 占位, omitEmpty 已删(26-10-13-0811)」</td><td>R5#126</td></tr>
+      <tr><td>106</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/drawer_tpl/11-content-treegrid-batch-low.js:339</code></td><td>字符串字面量含箭头图形符号「→」(×3,用户可见的徽章 title 提示文案),违反 code-style.md 非 ASCII 图形符号禁令对 .js 字符串字面量的覆盖(同文件 346 行注释已有同文案)</td><td>改为 ASCII 替代(如「不下载-&gt;正常-&gt;高-&gt;最高」或顿号列举)</td><td>R5#114</td></tr>
+      <tr><td>107</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/drawer_tpl/11-content-treegrid-batch-low.js:374</code></td><td>「未完成」筛选判据用整数舍入的 r.progress(drawerFileRows 的 Math.round(progress*100)),而同屏 chip 计数在 derive 用原始值 prog&lt;1:raw progress ∈ [0.995,1) 的文件被计入「未完成 N」计数却在筛选列表中被隐藏,目录行同理(dirMatch 用 s.missCnt 原始值);变体 10 同数据用一位小数判据会显示,构成同语义槽位跨变体漂移</td><td>文件行筛选改用与计数同源的原始值(如 files[r.index].progress &lt; 1),或两处统一舍入口径</td><td>R5#109</td></tr>
+      <tr><td>108</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/drawer_tpl/11-content-treegrid-batch-low.js:507</code></td><td>同 10 号: focusKey 声明后全文件无写入点(45 行头注自认「平时无人写它」,但数据帧换代路径同样无人写),rowRestore 恒空转,锚换代回焦机制为死代码</td><td>同 10 号: 补回写入点或整体删除 focusKey/rowRestore 残留</td><td>R5#112</td></tr>
+      <tr><td>109</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/drawer_tpl/12-content-space-treemap-collapsed.js:323</code></td><td>平行机制漂移: 10/11 已按 W1 止血换成 O(F) 数值滚动指纹(filesSig,注释明言「不再 JSON.stringify 全量序列化(千级文件每拍白付)」),12 号仍每次整帧重建(每次点选块/行/筛选,lastSig 置空)对全量 files 做 JSON.stringify,大树点击白付全量序列化</td><td>与 10/11 同式换 filesSig 滚动指纹(或抽到 reg 单点三件共用,消除第三份复制)</td><td>R5#113</td></tr>
+      <tr><td>110</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/dt_table.js:117</code></td><td>整模块生产路径零调用: 四套 index.html 均加载 dt_table.js,但 DT_TABLE.layout/assertLayout/checkLabels 等在 src/ 生产代码内零引用(仅 node 电池自测),实际几何仍由 columns_grid._gridTemplate/colAlignCss 与桥模板平行计算——自称「几何单一出口」未接线,存量面 A(未用导出)+B(平行机制)</td><td>几何出口真正接到 DT.layout 并让 assertLayout 进渲染自查,或整体退役该模块与其守阵</td><td>R5#39</td></tr>
+      <tr><td>111</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/filters.js:216</code></td><td>路径筛选口径组视图两侧不一致: _facetPick(L44)按每个成员的 save_path 枚举选项并计数,过滤谓词只比对组级 save_path(=首成员路径)——组内成员路径不一时,选中非首成员路径选项,计数里存在的组被静默滤出;tag/category/site 都是成员级谓词,唯 path 岔开</td><td>组视图 path 谓词改 g.members.some(m=&gt;this.pathFilter.includes(m.save_path||"")),或 _facetPick 对组行只取 row.save_path</td><td>R5#36</td></tr>
+      <tr><td>112</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/format.js:22</code></td><td>单位梯/时长/ETA 纯函数族(_fmtLadder 梯顶回落、fmtEta 8640000 哨兵、fmtDuration 三段进位、fmtPeersQb 缺省只显已连接)零执行,tests 只有与后端 _ETA_SENTINEL 的字符串互锚,显示口径回归测不出</td><td>node 电池断言各 fmt 档位边界值</td><td>R5#55</td></tr>
+      <tr><td>113</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/fx/fx.js:28</code></td><td>属性约定表仍登记 data-fx-pushed(及 line 32 的 --fx-push-y)为「消费方写」的活约定,但 F7e 已全面弃用 push 位移本体: fx-mount.js 不再 stamp、fx-mount.css 载体段删除、test_frontend_fx_wiring 反向钉「零 push 载体/--fx-push-y 规则」——照本表消费即被守阵打红</td><td>从属性约定表删除两行,或加注「F7e 已退役,push 原语仅 fx.css 库面保留不消费」</td><td>R5#198</td></tr>
+      <tr><td>114</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/hr.js:16</code></td><td>文件头注释声称 failed 与 danger 同属「不能删」桶,与 3 行之后自己的修正注释(line 19-20「叫『不能删』不符合实际,独立成『考核未通过』桶」)及实际映射 HR_SAFETY_BUCKETS = { failed: "考核未通过" } 直接矛盾,读者按头部理解会写错筛选/点名逻辑</td><td>头部句改为「danger 进『不能删』桶, failed 独立成『考核未通过』桶」与 line 19-20 对齐</td><td>R5#196</td></tr>
+      <tr><td>115</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/hr.js:192</code></td><td>HR 悬停弹窗的数据组装 hrPopData(excluded 分支/badge 与 gauge 互斥/站点轨 pct 夹取/lag 判定)与定位几何 _hrPopPlace 从未被行为级执行: 测试只有挂点字符串锚,e2e 全目录无 hrPop 引用,组装分支写错只表现为人话/配色错</td><td>hrPopData 是纯映射,比照 hrsCompareRows 先例抽 node 电池跑分支矩阵;或补 e2e hover 断言弹窗 lane/verdict</td><td>R5#191</td></tr>
+      <tr><td>116</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/lifecycle.js:36</code></td><td>注释声称 _errlogReseed 有探针真跑,但 tests/ 内 grep『errlogReseed』零命中,test_webui_error_history.py 对 lifecycle.js 全是函数体字符串断言,该纯函数从未被执行。</td><td>加 node 电池真跑 _errlogReseed(cursor 0 不判重启/last&lt;cursor 判重启)或删声明。</td><td>R5#16</td></tr>
+      <tr><td>117</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/lifecycle.js:265</code></td><td>unmounted 只移除具名句柄;mounted 添加的 5 个匿名监听(window click:76 / Esc keydown:102 / 防抖 resize:181 / visibilitychange:217 / contextmenu:228)从不移除,也未调 stopPolling() —— 与同文件「防热重载句柄堆叠」自我纪律矛盾,重挂后旧句柄堆叠操作已死实例。</td><td>匿名处理器提为实例字段并在 unmounted removeEventListener,补 stopPolling()。</td><td>R5#3</td></tr>
+      <tr><td>118</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/polling.js:3</code></td><td>注释声称 _esDisconnectEdge 有探针真跑,但全 tests/ grep『DisconnectEdge』零命中——探针不存在,注释契约与事实不符,误导后来者以为有测试兜底。</td><td>补真探针或删该声明,与 lifecycle.js 同款一并修正。</td><td>R5#15</td></tr>
+      <tr><td>119</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/polling.js:66</code></td><td>SSE ver 驱动的 refresh() 无 document.hidden 检查,绕过 visibilitychange「后台停止轮询」门控:后台标签每个发布版都真实请求 /api/state,touch() 使后端活跃门控恒真,后台停止语义失效。</td><td>ver 回调/refresh 门口加 document.hidden 短路,恢复可见由 visibilitychange 补拉。</td><td>R5#4</td></tr>
+      <tr><td>120</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/polling.js:151</code></td><td>stopPoll 对 awaitPoll 收摊只 resolve(null) 跳过 opts.onEnd,与文件头契约「onEnd: 收摊回调(收敛/耗尽/到点都走)」及 finish() 路径不一致;startPoll(key) 先 stopPoll(key),同 key 有界等待被顶掉时 onEnd 清理(loading 复位)被跳过。</td><td>stopPoll 的 settle 分支调用 opts.onEnd()。</td><td>R5#5</td></tr>
+      <tr><td>121</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/polling.js:273</code></td><td>轮询失败退避曲线(翻倍/15s 上限/成功清零)无回归测试:骨架探针(test_webui_static_dom_panel_misc.py:820)把 currentPollMs 桩成常量 1500,状态机完全绕过测试面。</td><td>node 电池补 currentPollMs 真跑分型(pollFails=0..4 序列与 cap、成功清零)。</td><td>R5#17</td></tr>
+      <tr><td>122</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/qb_traffic_chart.js:54</code></td><td>「快捷键三入口」注释称后两条(Alt+5 与 [ ])走 when 条件绑定、仅流量图可见时消费键位,但注册表里 drawer-tab-traffic(Alt+Digit5)并无 when 条件、面板关着时也消费,仅 traffic-win-prev/next 两条是 when 绑定——括号描述与 shortcuts.js 注册表现状不符</td><td>括号改为「([ ] 两条走 when 条件绑定, 仅流量形态可见时消费; Alt+5 无条件, 未启用时提示后忽略)」</td><td>R5#200</td></tr>
+      <tr><td>123</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/qb_traffic_chart.js:632</code></td><td>qbSetWindow 上方注释称「窗口切换(1m-30d 十档)」,与同文件单点 QB_WINDOW_NAMES 的 13 档(含 6mo/1y/all,文件头 line 45 亦自称「十三档清单」)矛盾,属旧 10 档时代残留</td><td>注释改为「窗口切换(十三档, 单点 QB_WINDOW_NAMES)」</td><td>R5#199</td></tr>
+      <tr><td>124</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/qb_traffic_chart.js:638</code></td><td>loadQbHistory 是零调用死代码: 全快照 grep 仅此定义一处,注释自称「P5a 公开名」的兼容别名已无任何调用方(入口全走 openQbHistory/openDrawerTraffic)</td><td>删除该方法与「兼容别名」注释(存量面 A 拆分残留)</td><td>R5#182</td></tr>
+      <tr><td>125</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/qb_traffic_chart.js:1112</code></td><td>themechange 监听只挂不摘: _qbThemeBound 置位后 beforeUnmount(558 行)只清 _qbLimitUnwatch,不摘本监听——根实例卸载/重挂(HMR、auth 重建)后监听仍驻留并引用已卸载实例的闭包</td><td>beforeUnmount 里对称 removeEventListener 并复位 _qbThemeBound</td><td>R5#181</td></tr>
+      <tr><td>126</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/qb_traffic_chart.js:1118</code></td><td>x 轴刻度计算 _qbTickLabel 的四族分支与孤点索引 _qbIsolatedIdxs 从未被任何测试执行——同文件其余纯函数(_qbPointsToData/_qbYRange/_qbGapRuns/_qbChainBounds/_qbSeamHint/_qbLimitSegs/_qbLimitAt)均有 node 电池,唯独这两处标着纯函数却没有;刻度族与 QB_WINDOW_NAMES 对应写错只会在图上静默错档</td><td>并入既有 node 探针,对 13 档各断言一条刻度输出与 _qbIsolatedIdxs 三态</td><td>R5#192</td></tr>
+      <tr><td>127</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/relocate_chain.js:126</code></td><td>迁移路径链浮窗行为只有字符串锚: node 段只真跑 type/status/phase 文案映射,relChainOpen 开/关翻转、_relChainFetch 的 seq 代际守卫(快速换 hash 旧响应丢弃)、relChainPlace 上下翻转定位、scroll 即关等零执行</td><td>node vm 桩跑 relChainOpen(A)→relChainOpen(B)→A 慢响应落袋序列,断言 data 不被旧响应覆写</td><td>R5#148</td></tr>
+      <tr><td>128</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/scope_audit.js:23</code></td><td>_auditScope 的 shape/dup/empty 分类、签名去重 warn 与 50 条有界环是纯函数逻辑,但 test_scope_audit_wiring 只钉四出口接线数与默认关,分类分支零执行</td><td>node 电池真跑 _auditScope:喂形状/非串元素/内部重复/空载荷各一例,断言 rec.kind 与环内条目及挤出</td><td>R5#27</td></tr>
+      <tr><td>129</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/shortcuts_engine.js:50</code></td><td>键位匹配引擎核心(_kbTable 的 overrides/黑名单/冲突去重派生、_kbOnKeyDown 的 IME/defaultPrevented/浮层分流)零行为级执行: tests 侧对 shortcuts 域全是源码正则字符串锚,无 node 电池;e2e 只真按了默认键少数组合,自定义键位链(改键→/api/keys→重载→按键触发)与黑名单/重复跳过分支任何测试都不跑,漂移只会静默</td><td>仿 _QB_SCOPES 探针用 new Function 取出 _kbTable/_kbOnKeyDown 做 node 电池,或补 e2e: 面板录制约定键→重载→按新键断言动作触发</td><td>R5#190</td></tr>
+      <tr><td>130</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/shortcuts_engine.js:454</code></td><td>字符串字面量含图形符号 ↑↓(U+2191/U+2193): code-style.md 非 ASCII 禁令明确覆盖字符串字面量,不止注释</td><td>文案改为「或用 上下方向键 / Home / End 定位目标」等 ASCII 表述</td><td>R5#183</td></tr>
+      <tr><td>131</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/shortcuts_panel.js:56</code></td><td>kbPanelEnter 用 quiet=true 拉服务端键位,失败完全无提示;若启动期 reload 也失败(AQB_KEYS._doc 为 null),kbSaved/kbDraft 落在默认表上,此后 kbSaveKeys 的 PUT 会以「默认+本次改动」整份覆盖服务端,静默丢掉其它浏览器已保存的 overrides</td><td>面板进入改用非 quiet(失败给 toast),或 reload 失败时置「加载失败」态禁用保存钮</td><td>R5#235</td></tr>
+      <tr><td>132</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/shortcuts_panel.js:188</code></td><td>快捷键冲突三选一状态机(swap 分支 mine===other.def 时删对方 override、steal 分支对方置空为显式禁用)零执行,test_web_shortcuts_drawer.py 只对源码做正则提取+字符串锚断言</td><td>kbConflictResolve/_kbApplyOverrides 纳入 node 电池:真跑 swap/steal/cancel 三态后断言 kbDraft.overrides 与 AQB_KEYS._doc 键值</td><td>R5#26</td></tr>
+      <tr><td>133</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/sort.js:124</code></td><td>AQB_SORT 域全部零执行: 三态排序状态机、sortedDrawer 空值恒末位双向不反转、_dtStrCompare 的 IPv4 逐段数值序(注释自述报障修法)都只有形态守阵</td><td>node 电池真跑 setSort 三态循环与 _dtStrCompare(IPv4 带端口/非 IP 回落/空值两方向恒末位)</td><td>R5#54</td></tr>
+      <tr><td>134</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/ui_feedback.js:94</code></td><td>「emit 即收 + settle upsert 同 id 去重」「超限挤掉最旧」「面板关闭期计未读」环形缓冲行为契约(test_webui_error_history.py 自述「同一条错误只留一条」)只有字符串锚,无行为测试。</td><td>补 node 电池:同 id 二次 _recordErrorToast 只覆盖不增行、第 51 条挤掉最旧、errPanelOpen=false 时 _errUnread 递增。</td><td>R5#19</td></tr>
+      <tr><td>135</td><td>minor</td><td><code>src/auto_qb/webui/static/shared/view.js:93</code></td><td>静默刷新失败路径只要 searchBuilding 仍为 true 就无条件 1s 后重试,无退避: 服务端宕机/持续 5xx 且 searchBuilding 残留 true 时形成固定 1 req/s 的无限重试循环,与行内注释「错误风暴由轮询退避吸收」不符(该定时器不在轮询退避骨架内)</td><td>失败重试改走退避(逐次翻倍夹上限)或失败 N 次后交还 search_rev 轮询驱动</td><td>R5#236</td></tr>
+    </table>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>影响面</h2>
+    <table>
+      <tr><th>维度</th><th>结论</th></tr>
+      <tr><td>触发条件</td><td>盘点型汇总件——非单一触发；逐条触发条件见明细表 claim 列</td></tr>
+      <tr><td>影响范围</td><td>static 主题 135 个缺陷面，分布于 61 个文件；逐条见明细表 file:line 列</td></tr>
+      <tr><td>严重度</td><td>major 24 / minor 111（nit 不在本件）；逐条见明细表 severity 列</td></tr>
+    </table>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>定位锚点</h2>
+    <p class="hint">写「符号名 + grep 关键词 + 当时的行号（标取证时间）」—— 代码会漂移，靠符号与 grep 重新定位，行号只是加速项。</p>
+    <p>逐条锚点即明细表「file:line」列（当时行号，锚定 freeze <code>f0883292</code> 快照）。代码漂移后：按文件路径 + claim 中符号名/字符串 grep 重定位；路线内条目号（src_ref）可回溯 <code>route-&lt;路线&gt;-findings.json</code> 原始条目与 notes。</p>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
+    <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
+    <div class="callout">待查——本件为盘点汇总，不为入池做逐条根因分析；各 claim 引文已过 review.check 逐字校验，根因随认领逐条排查。</div>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>建议修法<span class="opt">（可选）</span></h2>
+    <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
+    <p>逐条建议修法见明细表「fix」列（聚合时原样保留，未改写）。汇总层面：建议认领时按文件聚类、同文件一次修完，先 major 后 minor。</p>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>状态变更日志</h2>
+    <ul>
+      <li>2026-11-07 05:36 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>26-11-07 聚合入池自存量评审 R4（计划 26-11-05-2335，<code>memory-bank/plans/26-11-05-2335-plan-legacy-code-review-4.html</code>）——本轮纯盘点，状态保持 Open；doc-refs 留空待认领方回填</li>
+    </ul>
+    <h3>复验</h3>
+    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <h3>修复后补充</h3>
+    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  </section>
+
+  <footer>
+    26-11-07-0536-bug-legacy-review4-static.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+  </footer>
+</div>
+</body>
+</html>

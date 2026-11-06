@@ -4,10 +4,16 @@
 > 主索引的已关闭区按 8,000 字符预算裁剪(上限 `CLOSED_KEEP` 条), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (44)
+## Open (50)
 
+- [bug] [存量评审 R4·scripts 汇总(major 1/minor 23)](../26-11-07-0536-bug-legacy-review4-scripts.html) — scripts 主题 major 1+minor 23 共 24 条聚合入池,来源存量评审 R4(计划 26-11-05-2335)
+- [bug] [存量评审 R4·static 汇总(major 24/minor 111)](../26-11-07-0536-bug-legacy-review4-static.html) — static 主题 major 24+minor 111 共 135 条聚合入池,来源存量评审 R4(计划 26-11-05-2335)
+- [bug] [存量评审 R4·webui-py 汇总(major 2/minor 23)](../26-11-07-0536-bug-legacy-review4-webui-py.html) — webui-py 主题 major 2+minor 23 共 25 条聚合入池,来源存量评审 R4(计划 26-11-05-2335)
 - [feat] [回收 daemon 进程名册证为全机口径: 同机多 qB 实例时收尾窗可用性让位 N1(取舍记录+增强方向)](../26-11-07-0528-feat-recycle-daemon-roster-machine-wide.html) — 评审#6 后名册证=全机口径, 同机多 qB 实例(P7 形态)时 daemon 等不到收尾窗直至全部实例退场; 属 N1 零写入铁律优先的显式取舍(已声明, 单实例零影响), 未来兼顾需比映像名更强的实例身份证据
 - [question] [链式再迁移态撤销前任的语义未定稿: supersede 改道后撤销方向三选一待拍板](../26-11-07-0528-question-relocate-supersede-cancel-semantics.html) — supersede 改道态下撤销前任会把共享数据 C→A 搬回而后任仍指向 C(成员断粮); 现仅 cancel_chain 同目标护栏最小面, 前任撤销完整语义(拦/级联/清账出口)待定稿
+- [bug] [存量评审 R4·config-infra 汇总(major 2/minor 34)](../26-11-07-0527-bug-legacy-review4-config-infra.html) — config-infra 主题 major 2+minor 34 共 36 条聚合入池,来源存量评审 R4(计划 26-11-05-2335)
+- [bug] [存量评审 R4·core 汇总(major 12/minor 31)](../26-11-07-0527-bug-legacy-review4-core.html) — core 主题 major 12+minor 31 共 43 条(R1#81/#82 合并组拆回为 44 行)聚合入池,来源存量评审 R4(计划 26-11-05-2335)
+- [bug] [存量评审 R4·hr 汇总(major 4/minor 17)](../26-11-07-0527-bug-legacy-review4-hr.html) — hr 主题 major 4+minor 17 共 21 条聚合入池,来源存量评审 R4(计划 26-11-05-2335)
 - [test] [GitHub CI WEB UI smoke 全量轮既有红清单待排期清理](../26-11-07-0326-test-ci-smoke-existing-red-backlog.html) — CI 全量 450 例串行下 gtm-alert 双皮肤 4 条失败等既有红; 门禁改造只展示不修, 等排期
 - [refactor] [全库代码/配置残留非 ASCII 图形符号，与 code-style ASCII 禁令冲突](../26-11-06-0756-refactor-ascii-graph-symbol-backlog.html) — 全库扫描命中 395 文件/2358 行禁用图形符号; 剔除功能性数据与第三方示例后项目自身 300 文件/1868 行待分批清偿, 本轮按用户拍板只入池不修
 - [test] [test.pkg 4 条既有红：mutants DEFAULT_DESELECT 指向已拆分消失的测试文件](../26-11-06-0635-test-mutants-deselect-table-drift.html) — commands run test.pkg 恒有 4 条 subtest 红 —— DEFAULT_DESELECT 里 4 个 node id 指向已拆分消失的 tests/test_traffic_store.py / test_qbmanager.py / test_relocate_exec.py；按包收窄闸门不受影响，未修

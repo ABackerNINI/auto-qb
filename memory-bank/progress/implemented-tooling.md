@@ -5,6 +5,8 @@
 
 ## 已实现 (✅, 有单测覆盖)
 
+- **存量代码全库评审 R4 五路线收口 (2026-11-06~07, 专题 legacy-code-review-4, 计划 [26-11-05-2335](../plans/26-11-05-2335-plan-legacy-code-review-4.html), 档案 [26-11-07-memory-bank-legacy-code-review-4](../tasks/26-11-07-memory-bank-legacy-code-review-4.md))**: 首次用现行方法论(批次评审 / `review.check` 引文校验 / 分级处置)对全库生产代码完整盘点 —— 新增 `review.lane` 七子命令收录 `.commands/review/`(manifest 覆盖守卫 366 文件恰被 34 批认领 116,044 行, 全局单冻结 f0883292 走 `git archive` 快照, develop 零扰动); 三 clone 并行(R1=clone1 / R2-R4=clone2 / R5=clone3)34 批全 done, findings 475→473(机械合并 2), blocker 0; major+minor 285 行按主题入 6 份 issue(全 Open), nit 189 仅记录; 终报告 [26-11-07-0545](../reports/26-11-07-0545-report-legacy-code-review-4.html) 入库(守恒式 473+2+0=475)。零代码改动, 发现处置在 issue 侧。
+
 - **TASK_REFS_RE 空行跨行捕获修复 (2026-11-06, 专题 memory-bank-task-refs-regex, 档案 [26-11-06-memory-bank-task-refs-regex](../tasks/26-11-06-memory-bank-task-refs-regex.md))**: md 档案留空 `**Refs:**` 行(kb.new 旧模板默认形态)时 `gen_doc_map.py` 的 `\s*` 跨行把下一行标题吞成 ref, 认领链机检误红(issue [26-11-06-0415](../issues/26-11-06-0415-bug-kb-refs-regex-blank-line.html)); 正则改 `[^\S\n]*` 只吃同行空白(CRLF 不受影响, 空行即视为未声明), task/baseline/progress/slice/pitfall 五个 md 模板删空 Refs 行(存量惯例: 不声明就整行不写; `md_set_refs` 缺行时在 `**Topics:**` 后插, 不受影响), 守阵 `tests/test_docs_forms.py::test_empty_refs_line_is_not_a_ref`。数字见 kb.baseline。
 
 - **AGENTS.md 精简 + Copilot 入口收敛指针 (2026-10-06, 三笔 `376dda34`/`cba7c4f6`/`295bb226`)**: 7,896→6,533 字符(去链接/装饰/空格 950→163/日期标注), 判据一条没删; `.github/copilot-instructions.md` 2,159→83 纯指针。坑: 文档删不干净先查是不是机检 token 在吊着; 「」引文照抄原文(新坑 [pitfalls/docs/anchor-quote.md](../pitfalls/docs/anchor-quote.md))。

@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="legacy-review4-config-infra">
+<meta name="issue-stamp" content="26-11-07-0527">
+<meta name="issue-type" content="bug">
+<meta name="doc-topic" content="legacy-review4">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="存量评审 R4·config-infra 汇总(major 2/minor 34)">
+<meta name="issue-summary" content="config-infra 主题 major 2+minor 34 共 36 条聚合入池,来源存量评审 R4(计划 26-11-05-2335)">
+<title>存量评审 R4·config-infra 汇总(major 2/minor 34) · bug · 计划外问题</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 38px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 78ch; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>现象与发现场景</a>
+    <a href="#s2"><span class="no">02</span>证据</a>
+    <a href="#s3"><span class="no">03</span>影响面</a>
+    <a href="#s4"><span class="no">04</span>定位锚点</a>
+    <a href="#s5"><span class="no">05</span>根因<span class="opt">（可选）</span></a>
+    <a href="#s6"><span class="no">06</span>建议修法<span class="opt">（可选）</span></a>
+    <a href="#s7"><span class="no">07</span>状态变更日志</a>
+    <div class="toc-foot">
+      类型 bug · 档位 standard<br>
+      入池不改码 · 规范见 create-issue skill
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">计划外问题（未修）· bug</div>
+    <h1>存量评审 R4·config-infra 汇总(major 2/minor 34)</h1>
+    <p class="lede">config-infra 主题 major 2+minor 34 共 36 条聚合入池,来源存量评审 R4(计划 26-11-05-2335)</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-11-07-0527-bug-legacy-review4-config-infra</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-11-07 05:27</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象与发现场景</h2>
+    <p>本件为<strong>存量代码评审 R4</strong>（计划 26-11-05-2335，memory-bank/plans/26-11-05-2335-plan-legacy-code-review-4.html）五路线（R1–R5）findings 按主题聚合后的 <strong>config-infra 主题汇总件</strong>：聚合口径取 severity ∈ {major, minor} 的存活条目共 <strong>36 条</strong>（major 2 / minor 34；nit 不入池），分布于 22 个文件（路线分布 R2 36）。取证与校验口径：全部条目锚定 freeze <code>f0883292</code>（git archive 快照，行号为当时行号），落盘前逐条过 <code>review.check</code> 逐字引文校验；聚合数据面单点 <code>memory-bank/reports/attachments/legacy-review4/aggregate.json</code>。本主题无合并组，明细表行数 = 条目数 = 36。本件为纯盘点入池，状态保持 Open，不被认领修。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>证据</h2>
+    <p class="hint">下表由 <code>aggregate.json</code> 机械生成；「file:line」为当时行号（锚定 freeze f0883292），代码漂移后按文件 + claim 中符号重定位；「路线·批次」列取 src_ref（路线#条目号），批次归属见各路线 notes 文件。</p>
+    <h3>findings 明细表（36 行）</h3>
+    <table>
+      <tr><th>#</th><th>severity</th><th>file:line（当时行号，freeze f0883292）</th><th>claim</th><th>fix</th><th>路线·批次</th></tr>
+      <tr><td>1</td><td>major</td><td><code>src/auto_qb/infra/file_access.py:212</code></td><td>LocalFileAccess.scandir 先经 _norm_logical 归一,而 utils_paths.path_normalize 的 re.sub(r'/{2,}', '/') 会把 UNC 双前导斜杠压掉(\\NAS\share\dl -&gt; /NAS/share/dl),_pref 再把该串当相对路径 abspath 拼到进程 cwd 下 —— Windows 宿主直跑(Local)且 qB save_path/content_path 为 UNC 时,目录浏览(fs.py:161)与迁移扫描(relocate_plan.py:202)打开的是 C:\&lt;cwd&gt;\NAS\share\dl 这类错误路径,抛 FileNotFoundError;且返回的 entry.path 也是 '/NAS/share/dl/...' 畸形逻辑路径,违反本模块「逻辑路径进 -&gt; 逻辑路径出」硬约束(exists/getsize 走原路径不受影响,仅 scandir 坏)。</td><td>归一压缩重复斜杠时豁免开头 '//'(UNC 边界,同 path_normalize 注释里保留协议头的思路),或 Local.scandir 直接用 _strip_win_prefix 后的原路径做 syscall、仅用归一串拼 entry.path 时保留 UNC 前缀。</td><td>R2#30</td></tr>
+      <tr><td>2</td><td>major</td><td><code>src/auto_qb/rules/conditions.py:171</code></td><td>HrCondition 未识别的 mode 值静默落入 condition-met 分支:config 层对 hr 取值无深度校验(schema.HR_MODES 仅是 UI 下拉源,registry 条目未声明 validator,validation/_SPEC_VALIDATOR_IMPLS 不含 hr),拼写错误如 'satified' 能过加载,且行为随站点是否配 HR 漂移(未配 HR 时 'satified' != 'condition-met' 恒真、配了 HR 时按 hr_managed 判),全程无任何诊断——违反黄金法则 4,且可能让规则按与用户意图相反的语义执行动作</td><td>在 __init__ 校验 self.mode ∈ HR_MODES,非法值立即抛异常(经 _build_condition_node 包装成 ConfigError 在规则构造期 fail-fast)</td><td>R2#19</td></tr>
+      <tr><td>3</td><td>minor</td><td><code>memory-bank/modules/core-runtime.md:24</code></td><td>modules 文档断言 port_owner 的 Windows 探测用 netstat+tasklist,现行实现(src/auto_qb/infra/port_owner.py::_windows_script)是单次 PowerShell 合并 Get-NetTCPConnection + Get-CimInstance,netstat/tasklist 已不存在于实现中</td><td>把该行 Windows 路径描述改为「Windows 单次 PowerShell(Get-NetTCPConnection+Get-CimInstance)」</td><td>R2#47</td></tr>
+      <tr><td>4</td><td>minor</td><td><code>src/auto_qb/config/compat.py:11</code></td><td>py 文件内使用禁令字符: 带圈数字 ①②(行 11/15/203/238)与警告符号 ⚠(行 17), 违反 code-style.md「代码一律 ASCII, 禁 emoji 与图形符号、带圈数字 ①-⑬」(覆盖含 docstring/注释)</td><td>按 code-style.md 替代表改写: ①→「R1-1.」、②→「R1-2.」、⚠→「WARN:」</td><td>R2#15</td></tr>
+      <tr><td>5</td><td>minor</td><td><code>src/auto_qb/config/loaders.py:729</code></td><td>_expand_tracker_tags_refs 去重判存用 pat.body、入集却用 pat.raw(seen.add(pat.raw)),两键面不一致导致去重结果依赖书写顺序:delete_tags ["foo", "foo:ignore_case"] 时后者被静默丢弃(大小写不敏感删除丢失,如标签 'BTS' 删了而 'bts' 删不掉),反序则两条都保留</td><td>统一键面:要么 seen.add(pat.body) 按 body 去重(首条胜出,两序一致),要么判存改 pat.raw not in seen 按原串去重;并修正 docstring 中自相矛盾的「查重用 body / 去重键用原始串」表述</td><td>R2#11</td></tr>
+      <tr><td>6</td><td>minor</td><td><code>src/auto_qb/config/migrations.py:117</code></td><td>docstring 称全局段删除 26 个废弃键, 但实际删除清单 _V3_DROP_GLOBAL_KEYS(line 90-111,注释自述「v2→v3 删除的全局段键」)实测只有 20 个键,26 疑为计划里 v2 旧键总数(含改名保留的 min_torrent_interval 与 sites 条目内废弃键)被误记到全局段名下</td><td>把该行改为「删除 20 个废弃键」或改为不带数字的表述(如「删除 §6.2 废弃键去向表所列全局键」),与 _V3_DROP_GLOBAL_KEYS 对齐</td><td>R2#18</td></tr>
+      <tr><td>7</td><td>minor</td><td><code>src/auto_qb/config/schema/__init__.py:146</code></td><td>docstring 含带圈数字 ①,违反 code-style.md「带圈数字 ①–⑬ 禁令」(代码文件禁用,ASCII 替代 1.)</td><td>① 改为 (演示测试验收 1.)</td><td>R2#12</td></tr>
+      <tr><td>8</td><td>minor</td><td><code>src/auto_qb/config/schema/__init__.py:154</code></td><td>plugins_by_kind 生产调用图不可达(全 src 仅本文件定义与 __all__ 登记,消费全部在 tests/),docstring 宣称的「供前端按名查 spec 结构」不存在——前端经 schema_payload().plugins 拿全表,属存量 A 类 test-only 导出</td><td>删函数与 __all__ 项、测试改走 schema_payload/registry 派生面;或改 docstring 如实标注仅测试消费并留 TODO 合流</td><td>R2#13</td></tr>
+      <tr><td>9</td><td>minor</td><td><code>src/auto_qb/config/validation/core.py:220</code></td><td>报错文案指示用户写「0(关闭)」,models.py:565 也注释「0=关闭」,但 parse_time 的正则要求单位后缀,裸 `state_save_interval: 0` 会先报「无效时间格式: 0」—— 文案宣称合法的写法实际不可表达(只有 0S 能过)</td><td>文案改为 0S(关闭)或让 _validate_state_save_interval 对裸 "0" 特判放行</td><td>R2#3</td></tr>
+      <tr><td>10</td><td>minor</td><td><code>src/auto_qb/config/validation/rules.py:116</code></td><td>_expr_gate 的关闭判定与上一条同款偏差:enabled: no/off/0 时 gate 判为未关闭,provider=traffic_monitor 且无 dat_path 时 traffic_configured=False,expr 条件被误报「无数据源」,而按 S1/D1 语义关闭态应恒 traffic_configured=True</td><td>与 sections.py:867 同一修法:经 parse_bool 判关闭(保守方向不变)</td><td>R2#6</td></tr>
+      <tr><td>11</td><td>minor</td><td><code>src/auto_qb/config/validation/rules.py:119</code></td><td>_expr_gate 的 provider=global_traffic_monitor 分支(恒 traffic_configured=True,带 WARN 注释说明产品裁决:gtm 的取数路径是运行期事实,配置期不得把 traffic.* 判成无数据源)在 tests/ 全目录零覆盖——无任何用例以 gtm provider + traffic.* expr 规则走 load_config/_validate_rules,回归成「判 dat_path」不会被测试捕获</td><td>补一条 load_config 用例:traffic_source.provider=global_traffic_monitor(无 dat_path)+ 规则 conditions 含 expr: sys.upload_today &gt; 0,断言校验零报错(与 test_config_misc.py::test_validate_traffic_source_enabled_key 的 enabled=false 分支用例同构)</td><td>R2#9</td></tr>
+      <tr><td>12</td><td>minor</td><td><code>src/auto_qb/config/validation/rules.py:259</code></td><td>checking 子段 mode 无 if "mode" in sub 守卫,未配置时 sub.get 缺省 "" 直接报「取值非法: ''」,而 schema/rules.py:189 Field("mode",...,default="skip-checking") 声明了默认值 —— 手写 with_reference: {enabled: true} 会被误拒,schema 默认值不可达</td><td>给 mode 检查加 if "mode" in sub 守卫(与同函数 enabled 同款),或在错误文案区分「缺 mode」;同时核对运行时 _parse_section 的 str(seg.get("mode")) 缺省路径</td><td>R2#2</td></tr>
+      <tr><td>13</td><td>minor</td><td><code>src/auto_qb/config/validation/sections.py:217</code></td><td>add_episode_tags 段是全文件唯一不做未知键检查的段(其余段一律 _check_unknown_keys),拼错键(如 add_tag_singel)零报错,loader _get_episode_tags 只读三个键,模板静默回落默认值</td><td>补 _check_unknown_keys(spec, {"enabled","add_tag_single","add_tag_multi"}, "config.add_episode_tags", errors)</td><td>R2#1</td></tr>
+      <tr><td>14</td><td>minor</td><td><code>src/auto_qb/config/validation/sections.py:867</code></td><td>关闭判定只认字面 "false",而 parse_bool(第 833 行刚用它校验本键)还接受 no/off/0 —— `traffic_source: {enabled: no}` 被当成开启,dat_path 必填报错触发,用户走不到注释承诺的「关掉没配好的来源」逃生口</td><td>改用 _try(parse_bool, ...) 的解析结果判关闭(解析失败保持现有报错,不按关闭处理)</td><td>R2#5</td></tr>
+      <tr><td>15</td><td>minor</td><td><code>src/auto_qb/config/validation/sections.py:1084</code></td><td>上一行注释与 schema help(groups.py:276)都声明「0 = 不去重(合法)」,但 `dedup_window: 0` 经 parse_time("0") 抛「无效时间格式」被拒 —— 与上一条同根:文档/注释口径里的裸 0 实际只有 0S 写法可表达</td><td>与 state_save_interval 同批处理:_try_time 对裸 0 特判,或统一文档/代码注释为 0S</td><td>R2#4</td></tr>
+      <tr><td>16</td><td>minor</td><td><code>src/auto_qb/config/writer.py:194</code></td><td>targets 第二轮按下标配对在「两个以上条目同时改名且相对顺序被调换」时会把 A 的旧密码回填进 B: 如旧 [T1(a),T2(b)], 提交 [X(原T2改名c,哨兵), Y(原T1改名d,哨兵)] 顺序对调, 数量相等即 zip 配对, X(T2 的 base_url)拿到 T1 的 password, 凭据静默写串</td><td>第二轮加非敏感键(type/base_url)一致性核对后再回填, 不一致则不猜、哨兵原样留下(与「数量不等不猜」同口径)</td><td>R2#17</td></tr>
+      <tr><td>17</td><td>minor</td><td><code>src/auto_qb/config/writer.py:222</code></td><td>写盘链(_prepare/_backup/_dump_roundtrip)无任何锁, 而 webui 的 PUT /api/config 是同步 def handler(FastAPI 线程池并发执行), 两个并发保存会交错执行: 后提交方的 .bak 可能读到前者已写入的新内容而非保存前状态(备份恢复资产退化), 且后完成的 _dump_roundtrip 整体覆盖前者, 先保存方的全部改动被静默丢弃</td><td>write_tree/preview_tree/materialize_schema_migration 共用一把模块级 threading.Lock 串行化(或由 webui 层对保存请求串行)</td><td>R2#16</td></tr>
+      <tr><td>18</td><td>minor</td><td><code>src/auto_qb/infra/__init__.py:15</code></td><td>包级声明的依赖不变量与实际矛盾:notify.py:29 from ..config import NotifyConfig(仅类型标注用)违反「不 import config」;按该纪律做的后续裁剪/守卫会漏掉这条真实反向依赖</td><td>notify.py 改 TYPE_CHECKING 导入 + 字符串注解,或修订 __init__ 的依赖纪律表述以承认该例外</td><td>R2#39</td></tr>
+      <tr><td>19</td><td>minor</td><td><code>src/auto_qb/infra/alias_fs.py:430</code></td><td>alias_fs.volume_free 是死导出:src 全仓(除定义处)无任何调用方,同一职责(目标卷剩余字节、不可读返 None)已由 relocate_common._volume_free_resolved 在 file_access.disk_usage 之上实现且带「叶子不存在上溯最近存在祖先」的增强语义 —— 存量 A 类死代码 + 同一职责两套路径的平行机制。</td><td>删除 alias_fs.volume_free(若 docstring 所述界面用途仍是计划内需求,则改为让 relocate_common 复用本函数而非各自持有,二选一收敛到单点)。</td><td>R2#32</td></tr>
+      <tr><td>20</td><td>minor</td><td><code>src/auto_qb/infra/alias_fs.py:732</code></td><td>挂载点正向识别(_is_mount_point 父目录 st_dev 不同 → True → inspect_path 判 KIND_MOUNT)零测试覆盖: tests/test_webui_relocate_chain.py 只钉了两个 False 支(父目录不可读 :297、根目录 :367), 「目录被认成挂载点」这条重要行为完全无测试</td><td>补一条注入测试(monkeypatch os.lstat 使父目录 st_dev 与目标不同, 或直接对 _is_mount_point 传父/子不等 st_dev 的替身), 断言返回 True 且 inspect_path 落 KIND_MOUNT</td><td>R2#34</td></tr>
+      <tr><td>21</td><td>minor</td><td><code>src/auto_qb/infra/file_access.py:8</code></td><td>模块 docstring 说「两条硬约束」但实际列出三条(第16-19行追加了第 3 条 SEC-1 逃逸校验), 计数与内容自相矛盾</td><td>把「两条」改为「三条」(或「硬约束」不带计数)</td><td>R2#35</td></tr>
+      <tr><td>22</td><td>minor</td><td><code>src/auto_qb/infra/file_access.py:165</code></td><td>docstring 断言「不存在抛 FileAccessError」是假的: Local 与 Mapped 的 getsize 对真实缺失的路径都由 os.path.getsize 抛 FileNotFoundError(与 FileAccessError 是平行的 OSError 子类), FileAccessError 只覆盖映射 miss(不可判定); disk_usage(第170行)与 FileAccess 类 docstring「取值语义…失败抛 FileAccessError」(第139-140行)同病 —— 按此 docstring 新写 except FileAccessError 的取值方接不住真实 I/O 失败</td><td>把断言改为「映射 miss/不可判定抛 FileAccessError; 真实 I/O 失败抛原生 OSError(FileAccessError 兼容既有 except OSError 兜底)」, 三处同改</td><td>R2#33</td></tr>
+      <tr><td>23</td><td>minor</td><td><code>src/auto_qb/infra/file_access.py:286</code></td><td>_match 命中表中第一条映射但过不了挂载根逃逸校验时直接 return None,不继续尝试后续条目 —— 重叠映射场景(如 src=/data -&gt; /mnt/a 在前、src=/data/movies -&gt; /mnt/b 在后)下,/data/movies/x 在 /mnt/a 侧撞上逃逸符号链接时被判 miss(存在性 UNDETERMINED/取值抛错),尽管更具体的 /mnt/b 条目本可安全命中。</td><td>逃逸时 continue 到下一条映射条目,全部条目穷尽后才 return None(未命中与「命中但全逃逸」统一按 miss 语义返回不变)。</td><td>R2#31</td></tr>
+      <tr><td>24</td><td>minor</td><td><code>src/auto_qb/infra/notify.py:81</code></td><td>dedup_window=0(config.models 明示「0 = 不去重」,YAML 写 0S 可通过校验)时键仍被无条件写入,而清理分支被 dedup_window&gt;0 守卫挡住,去重表永不清理——长跑进程无界增长,正是上方注释自述要防的「唯一无界内存增长点」</td><td>键记录也收进 dedup_window&gt;0 分支(或对 _dedup_at 无条件按窗口/3600s 淘汰)</td><td>R2#36</td></tr>
+      <tr><td>25</td><td>minor</td><td><code>src/auto_qb/infra/notify.py:265</code></td><td>派发线程唯一退出通道是 close(),且只挂在 logging.shutdown;notify_mod 热重载 apply→remount 走 _unmount 只 removeHandler 不调 close,每次改 notify 配置泄漏一个永久阻塞在 queue.get() 的 daemon 线程与队列</td><td>_unmount 摘 handler 前调 handler.close() 唤醒线程退出(或 handler 提供显式 stop)</td><td>R2#37</td></tr>
+      <tr><td>26</td><td>minor</td><td><code>src/auto_qb/infra/relocate_journal.py:119</code></td><td>acquire_pid 的 docstring 断言 Windows 上退化为「文件存在即认为在跑(残留锁文件让收尾推迟)」,但同模块 _alive (141-153 行) 在 Windows 已改为 OpenProcess+GetExitCodeProcess 真存活探测(死 pid 返回 False、可接管),docstring 描述的是 P7 修复前的旧行为,与实现及其测试(tests/test_relocate_paths.py:578-582「进程已死 -&gt; 接管」)矛盾</td><td>把 acquire_pid docstring 的 Windows 分支描述改为与 _alive 一致(OpenProcess 零副作用探测,死进程/无效 pid 直接接管)</td><td>R2#45</td></tr>
+      <tr><td>27</td><td>minor</td><td><code>src/auto_qb/infra/utils.py:267</code></td><td>回环判定两套口径(存量 B 类):display_host 只认 4 个字面量,与 utils_parse.is_loopback_host(localhost+127/8+::1)不一致;web.host=127.0.0.2 这类合法回环绑定不会被改写为 localhost,docstring「回环地址一律写成 localhost」落空,其要解决的浏览器 origin 分裂/localStorage 双份问题在该配置下复发</td><td>display_host 改用 is_loopback_host 判定,展示仍统一写 localhost</td><td>R2#38</td></tr>
+      <tr><td>28</td><td>minor</td><td><code>src/auto_qb/infra/versioning.py:31</code></td><td>CURRENT_VERSIONS 注释断言 hr_site 的迁移在 config/migrations.py,实际 hr_site v1→v2 迁移函数 _migrate_hr_site_1_2 定义并注册在本文件 MIGRATIONS["hr_site"](38/109-111 行),config/migrations.py 中无任何 hr_site 条目(注释疑为从 config 行复制)</td><td>修正该行注释为「迁移在本模块 _migrate_hr_site_1_2」(或按真实分工重新表述依赖纪律)</td><td>R2#46</td></tr>
+      <tr><td>29</td><td>minor</td><td><code>src/auto_qb/rules/actions/__init__.py:12</code></td><td>docstring 指向的守卫测试路径 tests/test_actions.py 不存在, 实际在 tests/test_actions_state.py::test_actions_registry_complete</td><td>docstring 更正为 tests/test_actions_state.py::test_actions_registry_complete</td><td>R2#29</td></tr>
+      <tr><td>30</td><td>minor</td><td><code>src/auto_qb/rules/conditions.py:1</code></td><td>模块 docstring 条件清单漏列 tracker_group(同文件已注册 TrackerGroupCondition, 共 13 个, README 也按 13 宣称), 第 2 行续列的 12 个里没有它</td><td>清单补上 tracker_group, 与 registry 实际注册数对齐</td><td>R2#24</td></tr>
+      <tr><td>31</td><td>minor</td><td><code>src/auto_qb/rules/conditions.py:186</code></td><td>DateTimeCondition 构造期不解析 spec(day_of_month/day_of_week/time 全部推迟到每轮 match 才解析),而 registry 未为 date_time 声明深度校验器,格式非法的区间串(如 '1,15'、'abc')能通过 config 校验,运行期 _in_range 每轮抛 ValueError 被兜成 verdict:error,规则永久失效只留节流 ERROR 日志——同文件 SizeCondition/FreespaceCondition 都在构造期解析报错,此处违反黄金法则 4 且口径不一致</td><td>把区间/时间串的解析移到 __init__(构造失败即 ConfigError),或给 date_time 注册深度校验器在 config 层拒绝非法区间格式</td><td>R2#20</td></tr>
+      <tr><td>32</td><td>minor</td><td><code>src/auto_qb/rules/conditions.py:226</code></td><td>ExprCondition docstring 宣称的「停后续规则」是已退役的死语义——base.py _process 明文修正为「本条规则本轮跳过, 其它规则照常」(W1 话术修正), 同文件 258 行 FreespaceCondition 注释同款旧话术</td><td>两处改为「本条规则本轮跳过, 不影响其它规则」</td><td>R2#25</td></tr>
+      <tr><td>33</td><td>minor</td><td><code>src/auto_qb/rules/expr/env.py:220</code></td><td>disk_usage_value docstring 宣称旧「停后续规则」语义; 同文件模块头注第 8 行「由『出错即停规则』兜住」同款旧话术</td><td>两处话术与 base.py 现行语义对齐(本条本轮跳过, 不影响其它规则)</td><td>R2#28</td></tr>
+      <tr><td>34</td><td>minor</td><td><code>src/auto_qb/rules/expr/errors.py:7</code></td><td>ExprError 契约 docstring 宣称「中断后续规则」, 与 base.py 现行语义(per-rule 任务模型, 本条跳过不影响其它规则)相悖</td><td>改为「本条规则本轮跳过, 不影响其它规则」, 删除对已退役「出错即停规则」话术的指引</td><td>R2#26</td></tr>
+      <tr><td>35</td><td>minor</td><td><code>src/auto_qb/rules/expr/eval.py:6</code></td><td>求值模块头注宣称旧「停后续规则」语义, 与 base.py W1 修正后的实际行为不符</td><td>头注话术改为「本条规则本轮跳过, 不影响其它规则」</td><td>R2#27</td></tr>
+      <tr><td>36</td><td>minor</td><td><code>src/auto_qb/rules/expr/parser.py:160</code></td><td>递归下降解析对括号/列表/函数参数嵌套无深度上限, 深嵌套输入(如 400 层括号)在配置校验与 WebUI 试算接口(POST /api/expr/eval)抛 RecursionError, 它不是 ExprError, 逃出两处 except ExprError, 配置加载绕过聚合 ConfigError 直接崩、试算接口 500 而非结构化错误</td><td>在 _Parser 里加实例级深度计数(如上限 64 层), 超限抛 ExprSyntaxError 即可纳入既有 except ExprError 路径</td><td>R2#23</td></tr>
+    </table>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>影响面</h2>
+    <table>
+      <tr><th>维度</th><th>结论</th></tr>
+      <tr><td>触发条件</td><td>盘点型汇总件——非单一触发；逐条触发条件见明细表 claim 列</td></tr>
+      <tr><td>影响范围</td><td>config-infra 主题 36 个缺陷面，分布于 22 个文件；逐条见明细表 file:line 列</td></tr>
+      <tr><td>严重度</td><td>major 2 / minor 34（nit 不在本件）；逐条见明细表 severity 列</td></tr>
+    </table>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>定位锚点</h2>
+    <p class="hint">写「符号名 + grep 关键词 + 当时的行号（标取证时间）」—— 代码会漂移，靠符号与 grep 重新定位，行号只是加速项。</p>
+    <p>逐条锚点即明细表「file:line」列（当时行号，锚定 freeze <code>f0883292</code> 快照）。代码漂移后：按文件路径 + claim 中符号名/字符串 grep 重定位；路线内条目号（src_ref）可回溯 <code>route-&lt;路线&gt;-findings.json</code> 原始条目与 notes。</p>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
+    <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
+    <div class="callout">待查——本件为盘点汇总，不为入池做逐条根因分析；各 claim 引文已过 review.check 逐字校验，根因随认领逐条排查。</div>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>建议修法<span class="opt">（可选）</span></h2>
+    <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
+    <p>逐条建议修法见明细表「fix」列（聚合时原样保留，未改写）。汇总层面：建议认领时按文件聚类、同文件一次修完，先 major 后 minor。</p>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>状态变更日志</h2>
+    <ul>
+      <li>2026-11-07 05:27 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>26-11-07 聚合入池自存量评审 R4（计划 26-11-05-2335，<code>memory-bank/plans/26-11-05-2335-plan-legacy-code-review-4.html</code>）——本轮纯盘点，状态保持 Open；doc-refs 留空待认领方回填</li>
+    </ul>
+    <h3>复验</h3>
+    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <h3>修复后补充</h3>
+    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  </section>
+
+  <footer>
+    26-11-07-0527-bug-legacy-review4-config-infra.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>

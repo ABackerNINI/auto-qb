@@ -19,6 +19,7 @@
 
 ## Done
 
+- [26-11-07-0545] [存量代码评审 R4 终报告](26-11-07-0545-report-legacy-code-review-4.html) — `legacy-code-review-4`
 - [26-11-06-0723] [评审容量实验: 批次大小对发现数与幻觉率的影响](26-11-06-0723-report-review-capacity-experiment.html) — `review-capacity-experiment`
 - [26-11-05-0417] [整组迁移零搬移假成功事故取证(relocate 零搬移)](26-11-05-0417-report-relocate-zero-move.html) — `relocate-zero-move`
 - [26-11-03-2346] [GTM 当日总量虚高修复 Code Review](26-11-03-2346-report-gtm-day-total-inflation-review.html) — `gtm-day-total-inflation-review`
@@ -70,9 +71,8 @@
 - [26-10-04-0815] [WEBUI tooltip 全量清点与去留判定 · auto-qb](26-10-04-0815-report-webui-tooltip-declutter.html) — `webui-tooltip-declutter`
 - [26-10-04-0636] [qB 流量历史存储压缩与「速度 0 vs 断线」语义调研报告 · auto-qb](26-10-04-0636-report-qb-traffic-storage.html) — `torrent-traffic-stats`
 - [26-10-04-0128] [WebUI 弹窗滚轮穿透背景滚动 · 分析报告](26-10-04-0128-report-webui-modal-scroll-chaining.html) — `webui-modal-scroll-chaining`
-- [26-10-03-1505] [HR 波次引擎四现象故障取证 · 一直在拉取 / 核实「未核实」/ 失踪 0 波 · auto-qb](26-10-03-1505-report-hr-fetch-verify-forensics.html) — `backend-partial-hr-verify`
 
-> 更早的 **27** 条已出本索引 —— 制品仍在 `reports/` 目录(未搬动), 全量清单见 [attachments/_archive.md](attachments/_archive.md).
+> 更早的 **28** 条已出本索引 —— 制品仍在 `reports/` 目录(未搬动), 全量清单见 [attachments/_archive.md](attachments/_archive.md).
 
 ## Dropped
 

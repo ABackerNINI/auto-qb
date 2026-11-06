@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>存量代码评审 R4 终报告</title>
+<meta name="doc-type" content="report">
+<meta name="doc-topic" content="legacy-code-review-4">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-11-07-0545">
+<meta name="doc-updated" content="26-11-07-0545">
+<meta name="doc-refs" content="memory-bank/plans/26-11-05-2335-plan-legacy-code-review-4.html, memory-bank/tasks/26-11-07-memory-bank-legacy-code-review-4.md">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+  .num { text-align: right; font-variant-numeric: tabular-nums; }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+  tr.total td { border-top: 1px solid var(--hair); color: var(--ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">REPORT · memory-bank · doc-topic: legacy-code-review-4</div>
+<h1>存量代码评审 R4 终报告</h1>
+<p class="lede">本篇只回答: 五路线存量评审 R4 收口那一刻的现场是什么样——34 批覆盖地图、473 条存活发现的分布与去向、R2 底册 19 项复验结论、285 行 major/minor 的入池映射与 189 条 nit 的全量留痕。快照冻结,数字全部机械取自 S6 聚合数据面,后续不改。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-07-0545 · <b>doc-updated</b> 26-11-07-0545 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 计划 <a href="../plans/26-11-05-2335-plan-legacy-code-review-4.html">26-11-05-2335-plan-legacy-code-review-4</a>(§04 步骤 S6 终产出);数据单点 <code>memory-bank/reports/attachments/legacy-review4/aggregate.json</code>(2026-11-07 05:22:49 +0800 生成)与 <code>route-R{1..5}.json / -findings.json / -notes.md</code>;发现冻结 <code>f088329291e64d0802637463e886f78842c1b34c</code>,会话基线 <code>HEAD=4da13dd2</code>
+</div>
+
+<h2><span class="no">§01</span>执行概要</h2>
+
+<p><b>结论先行:</b>存量代码评审 R4 五路线全部收口(<code>status=done</code>)。475 条发现入账 → 2 条机械合并 → <b>473 条存活、0 条排除</b>(守恒式 473+2+0=475,<code>aggregate.json</code> conservation.ok=true)。存活分布 <b>major 45 / minor 239 / nit 189</b>(输入口径 45/240/190,差的那 1 minor 1 nit 即两条被并条目);<b>blocker = 0</b>。major+minor 共 284 条存活、加 1 条入池拆回 = <b>285 行</b>,按主题映射进 <b>6 份 issue</b>(全 Open);nit 189 条不入池、仅记录。R2 底册 19 项复验:<b>17 已消失、A-03 复发(风险已收敛)、GH-01 复发(部分)</b>。</p>
+
+<h3>执行模型</h3>
+<ul>
+  <li><b>五路线并行</b>,owner 分工:R1 = clone1-main;R2·R3·R4 = clone2-main;R5 = clone3-main。每批按计划 §04 派遣三件套拆面派只读 reviewer,串行无并发。</li>
+  <li><b>全局单冻结 hash</b> <code>f088329291e64d0802637463e886f78842c1b34c</code>(manifest 钉值 = manifest 生成时点 develop tip,计划拍板 D17),五路线以 <code>git archive</code> 快照评审,develop 分支零扰动;引文与行号一律锚定该快照原文。</li>
+  <li><b>时间跨度</b>:认领自 <b>26-11-06-0506</b>(R1)起,至 <b>26-11-07-0449</b>(R5 收口)止,历时约 24 小时;各路线认领/收口见下表。</li>
+</ul>
+
+<table>
+<tr><th>路线</th><th>owner</th><th>认领</th><th>收口</th><th class="num">批</th><th class="num">findings</th></tr>
+<tr><td><b>R1</b></td><td><code>clone1-main</code></td><td><code>26-11-06-0506</code></td><td><code>26-11-07-0001</code></td><td class="num">7</td><td class="num">107</td></tr>
+<tr><td><b>R2</b></td><td><code>clone2-main</code></td><td><code>26-11-06-0512</code></td><td><code>26-11-06-0654</code></td><td class="num">6</td><td class="num">47</td></tr>
+<tr><td><b>R3</b></td><td><code>clone2-main</code></td><td><code>26-11-06-0630</code></td><td><code>26-11-06-0849</code></td><td class="num">6</td><td class="num">35</td></tr>
+<tr><td><b>R4</b></td><td><code>clone2-main</code></td><td><code>26-11-06-0729</code></td><td><code>26-11-07-0009</code></td><td class="num">4</td><td class="num">44</td></tr>
+<tr><td><b>R5</b></td><td><code>clone3-main</code></td><td><code>26-11-06-2339</code></td><td><code>26-11-07-0449</code></td><td class="num">11</td><td class="num">242</td></tr>
+<tr class="total"><td>合计</td><td>—</td><td>—</td><td>—</td><td class="num">34</td><td class="num">475</td></tr>
+</table>
+
+<h2><span class="no">§02</span>批次地图(实测回填)</h2>
+
+<p>计划定义 <b>30 批</b>(§03 路线×批次矩阵,定义级),实际执行 <b>34 批</b>——R5 由 7 批拆至 11 批(manifest 精确清单落地后批次重排,原计划的 scripts 快扫两批落在实际 <code>R5-9/R5-10</code>)。覆盖深度按计划 §03 分层<b>如实标注,不冒充精评</b>:「精评」= 全量精评档(src/auto_qb/ 全部 .py,逐文件过 checklist);「契约精评」= static/shared js 逻辑件(py↔js 数据契约 / SSE 事件 / state 同步 / 错误路径,R5 notes 覆盖深度声明:2 面串行、逐行);「机制抽查」= 三皮肤 CSS + 模板 HTML(只查机制红线,不逐行);「快扫」= 根 scripts/(入口/危险操作/红线引用/明显缺陷,单面不逐行)。</p>
+
+<table>
+<tr><th>批</th><th>对象</th><th>覆盖深度</th><th class="num">findings</th><th>完成时刻</th></tr>
+<tr><td><code>R1-1</code></td><td>内核执行面: qbmanager/taskqueue/module/qbapi/state + core 根杂件</td><td>精评(全量精评档)</td><td class="num">21</td><td><code>26-11-06-0546</code></td></tr>
+<tr><td><code>R1-2</code></td><td>迁移执行: relocate_units/relocate_exec/relocate_common</td><td>精评(全量精评档)</td><td class="num">13</td><td><code>26-11-06-0620</code></td></tr>
+<tr><td><code>R1-3</code></td><td>迁移规划与生命期: relocate_mod/plan/probe/proof/lifecycle</td><td>精评(全量精评档)</td><td class="num">18</td><td><code>26-11-06-0649</code></td></tr>
+<tr><td><code>R1-4</code></td><td>traffic 存取: store/agg/codec/common/paths/grid/limits/curves</td><td>精评(全量精评档)</td><td class="num">10</td><td><code>26-11-06-0724</code></td></tr>
+<tr><td><code>R1-5</code></td><td>traffic 采样: sample_mod/agg/blocks/common/snapshot + traffic_source</td><td>精评(全量精评档)</td><td class="num">16</td><td><code>26-11-06-0800</code></td></tr>
+<tr><td><code>R1-6</code></td><td>分组与规则模块: grouping_mod/rules_mod/tvshows</td><td>精评(全量精评档)</td><td class="num">15</td><td><code>26-11-06-0838</code></td></tr>
+<tr><td><code>R1-7</code></td><td>ops 与维护面: ops_*/maintenance/fuse/speed_curve/logging/notify/tracker</td><td>精评(全量精评档)</td><td class="num">14</td><td><code>26-11-07-0000</code></td></tr>
+<tr><td><code>R2-1</code></td><td>校验面: config/validation 全部</td><td>精评(全量精评档)</td><td class="num">10</td><td><code>26-11-06-0535</code></td></tr>
+<tr><td><code>R2-2</code></td><td>schema 与装载: schema 全部 + loaders + models</td><td>精评(全量精评档)</td><td class="num">4</td><td><code>26-11-06-0545</code></td></tr>
+<tr><td><code>R2-3</code></td><td>写入与迁移: writer/migrations/compat/errors/impact/site_presets</td><td>精评(全量精评档)</td><td class="num">4</td><td><code>26-11-06-0607</code></td></tr>
+<tr><td><code>R2-4</code></td><td>rules 全域: base/conditions/registry/checking_meta + expr + actions</td><td>精评(全量精评档)</td><td class="num">11</td><td><code>26-11-06-0619</code></td></tr>
+<tr><td><code>R2-5</code></td><td>infra 存储: alias_fs/file_access</td><td>精评(全量精评档)</td><td class="num">6</td><td><code>26-11-06-0637</code></td></tr>
+<tr><td><code>R2-6</code></td><td>infra 工具: utils*/clock/notify/locking/logging/journal/recovery 等</td><td>精评(全量精评档)</td><td class="num">12</td><td><code>26-11-06-0653</code></td></tr>
+<tr><td><code>R3-1</code></td><td>transfer 全域(新模块) + torrents/store</td><td>精评(全量精评档)</td><td class="num">4</td><td><code>26-11-06-0700</code></td></tr>
+<tr><td><code>R3-2</code></td><td>torrents 杂件 + tray + cli + tools</td><td>精评(全量精评档)</td><td class="num">2</td><td><code>26-11-06-0724</code></td></tr>
+<tr><td><code>R3-3</code></td><td>hr service 族: service_wave/service/service_common/service_status/module</td><td>精评(全量精评档)</td><td class="num">6</td><td><code>26-11-06-0749</code></td></tr>
+<tr><td><code>R3-4</code></td><td>hr 模型状态: model/status/resolve</td><td>精评(全量精评档)</td><td class="num">8</td><td><code>26-11-06-0802</code></td></tr>
+<tr><td><code>R3-5</code></td><td>hr 运行时: runtime/server/channel/worker/threadlifecycle/queue/events</td><td>精评(全量精评档)</td><td class="num">8</td><td><code>26-11-06-0821</code></td></tr>
+<tr><td><code>R3-6</code></td><td>hr 取数解析: discovery/report/parse/fetcher/store/bencode/log/ratelimit + adapters</td><td>精评(全量精评档)</td><td class="num">7</td><td><code>26-11-06-0844</code></td></tr>
+<tr><td><code>R4-1</code></td><td>webui commands 面: commands*/runtime_commands</td><td>精评(全量精评档)</td><td class="num">13</td><td><code>26-11-06-0750</code></td></tr>
+<tr><td><code>R4-2</code></td><td>webui 视图与运行时: runtime*/views*/tool_client/module/relocate_chain</td><td>精评(全量精评档)</td><td class="num">15</td><td><code>26-11-06-2327</code></td></tr>
+<tr><td><code>R4-3</code></td><td>webui server 全域: factory/auth/context/routes/traffic_qb</td><td>精评(全量精评档)</td><td class="num">11</td><td><code>26-11-06-2353</code></td></tr>
+<tr><td><code>R4-4</code></td><td>CSS 机制面 + 模板 HTML(减配: 加载序/特异性冲突/守阵对齐/双皮肤一致)</td><td>机制抽查(CSS 机制+模板 HTML, 不逐行)</td><td class="num">5</td><td><code>26-11-07-0008</code></td></tr>
+<tr><td><code>R5-1</code></td><td>shared 启动与状态: app/state/boot/lifecycle/auth/polling/fetch_low/ui_feedback</td><td>契约精评(2 面逐行)</td><td class="num">24</td><td><code>26-11-07-0016</code></td></tr>
+<tr><td><code>R5-2</code></td><td>shared 菜单·触发·命令链: menu/triggers/commands*/ctx_menu*/view/overlay_fit/ctl_bits/scope_audit/shortcuts(+panel)</td><td>契约精评(2 面逐行)</td><td class="num">21 <span class="cm">注1</span></td><td><code>26-11-07-0051</code></td></tr>
+<tr><td><code>R5-3</code></td><td>shared 表格与列: table/dt_table/columns*/sort/filters/selection/format/rowlang/decorate</td><td>契约精评(2 面逐行)</td><td class="num">25</td><td><code>26-11-07-0122</code></td></tr>
+<tr><td><code>R5-4</code></td><td>shared drawer 族: drawer/drawer_templates/drawer_store/drawer_{general,rows,files,head}</td><td>契约精评(2 面逐行)</td><td class="num">16</td><td><code>26-11-07-0157</code></td></tr>
+<tr><td><code>R5-5</code></td><td>shared drawer 模板·general 与 trackers(01-09 号)</td><td>契约精评(2 面逐行)</td><td class="num">33</td><td><code>26-11-07-0223</code></td></tr>
+<tr><td><code>R5-11</code></td><td>shared drawer 模板·content 与 peers(10-12/90 号)</td><td>契约精评(2 面逐行)</td><td class="num">21</td><td><code>26-11-07-0251</code></td></tr>
+<tr><td><code>R5-6</code></td><td>shared 对话框与流转: dialogs/add_torrent/dialogs_{meta,history}/delete_flow/transfer_{flow,targets}/relocate_chain</td><td>契约精评(2 面逐行)</td><td class="num">23</td><td><code>26-11-07-0316</code></td></tr>
+<tr><td><code>R5-7</code></td><td>shared config 族: config_rules/config_editor{,_curve,_form,_tree}/config_hub{,_tm,_tracker,_hr}</td><td>契约精评(2 面逐行)</td><td class="num">26</td><td><code>26-11-07-0341</code></td></tr>
+<tr><td><code>R5-8</code></td><td>图表·hr 面板·快捷键引擎·fx: qb_traffic_chart/hr_status/hr/shows/traffic_card/shortcuts_engine + fx/皮肤 js</td><td>契约精评(2 面逐行)</td><td class="num">24</td><td><code>26-11-07-0432</code></td></tr>
+<tr><td><code>R5-9</code></td><td>scripts 快扫: sim_* 全族</td><td>快扫(scripts, 单面不逐行)</td><td class="num">15 <span class="cm">注2</span></td><td><code>26-11-07-0440</code></td></tr>
+<tr><td><code>R5-10</code></td><td>scripts 快扫: qb_capture*/ui_harness/检查与实验散件</td><td>快扫(scripts, 单面不逐行)</td><td class="num">14</td><td><code>26-11-07-0447</code></td></tr>
+</table>
+<p class="cm">注1: R5-2 原记 10 条,26-11-07 补记漏面 1 的 11 条后批次实数 21(详见 §07 注记 D)。<br>注2: R5-9 原记 16 条含 1 条幻觉引文已被 review.check 弃,净 15(§07 注记 A)。</p>
+
+<h2><span class="no">§03</span>结果统计</h2>
+
+<h3>守恒与 severity 分布(存活口径,aggregate.json 机械计数)</h3>
+<table>
+<tr><th>路线</th><th class="num">blocker</th><th class="num">major</th><th class="num">minor</th><th class="num">nit</th><th class="num">存活小计</th><th class="num">输入(含被并)</th></tr>
+<tr><td><b>R1</b></td><td class="num">0</td><td class="num">12</td><td class="num">31</td><td class="num">63</td><td class="num">106</td><td class="num">107</td></tr>
+<tr><td><b>R2</b></td><td class="num">0</td><td class="num">2</td><td class="num">34</td><td class="num">11</td><td class="num">47</td><td class="num">47</td></tr>
+<tr><td><b>R3</b></td><td class="num">0</td><td class="num">4</td><td class="num">17</td><td class="num">14</td><td class="num">35</td><td class="num">35</td></tr>
+<tr><td><b>R4</b></td><td class="num">0</td><td class="num">2</td><td class="num">23</td><td class="num">18</td><td class="num">43</td><td class="num">44</td></tr>
+<tr><td><b>R5</b></td><td class="num">0</td><td class="num">25</td><td class="num">134</td><td class="num">83</td><td class="num">242</td><td class="num">242</td></tr>
+<tr class="total"><td>合计(存活)</td><td class="num">0</td><td class="num">45</td><td class="num">239</td><td class="num">189</td><td class="num">473</td><td class="num">475</td></tr>
+</table>
+<p class="cm">口径注记: 存活口径 = aggregate.json severity_totals(45/239/189);输入口径 = 同数 + 被并的 1 minor(R1#81)+ 1 nit(R4#44)= 45/240/190。两处口径本报告均标明,不混用。</p>
+
+<h3>两条合并记录(dedup 裁决留痕)</h3>
+<ul>
+  <li><b>R1#81(minor)并入 R1#82</b>(exact_merge 规则:键 (file,quote) 完全一致必并,保留信息最全条)——同 <code>grouping_mod.py:507</code> <code>n = skips.get(key, 0) + 1</code>,claim 指向同一计数器的两个缺陷面(组空解散不清理 / 计数不落盘)。dedup 记录明示「S6 入池时如判定两缺陷应分立,可据本记录拆回」——入池时已据该记录<b>拆回</b>,core issue 44 行即含此条。</li>
+  <li><b>R4#44(nit)并入 R5#73</b>(候选对人工裁决 merge:同 <code>drawer_head.js:7</code> 装载序注释引用已删除的 drawer_tabs.js 跨路线双报)——保留 R5 条目(claim 带移除时间与多重锚点,证据更全),R4 条目完整载荷留档 dedup 记录。</li>
+</ul>
+
+<h3>P0 专项: blocker = 0</h3>
+<p><code>aggregate.json</code> blocker_audit 实证:「机械遍历 5 份 route-R{1..5}-findings.json 全部 475 条的 severity 字段逐条计数(行级证据: 每条均参与计数, 无一跳过)」,输入 475 条 blocker=0、存活 473 条 blocker=0,与全部五路线 notes 的分级实测一致;结论行原文「475 条输入逐条计数 blocker=0, 存活 473 条 blocker=0, 与全部五路线 notes 一致。」排除面同时为零:「实测 475 条 relevance 字段全部为『相关』, 无排除条目。」</p>
+
+<h2><span class="no">§04</span>R2 底册复验(19 项)</h2>
+
+<p>复验对象为 R2 轮底册(legacy-review 全量评审系列第 2 轮)终表条目,数据取 <code>aggregate.json</code> reverification(源 = 5 份 route notes 原文,未重新评审代码;同一条目被多路线复验时合并为一行,<b>结论取交集口径——任一路线记复发即保留复发并列出处</b>)。结果:<b>17 已消失 + A-03 复发(风险已收敛)+ GH-01 复发(部分)</b>。路线覆盖:R1 复验 12 条、R2 3 条、R3 8 条、R4 1 条、R5 零命中(全 11 批逐批记「R2 终表零命中本批」)。</p>
+
+<table>
+<tr><th>R2 条目</th><th>复验路线·批</th><th>结论</th><th>证据一句话</th></tr>
+<tr><td><code>A-01</code> 相位机无 dry_run 闸</td><td>R1(R1-3)</td><td><span class="good">已消失</span></td><td>lifecycle:243/exec:872 双闸+三守阵</td></tr>
+<tr><td><code>A-02</code> 失败路径成员恢复</td><td>R1(R1-3)</td><td><span class="good">已消失</span></td><td>_fail 收口单点消费 resume_hashes, 守阵两例</td></tr>
+<tr><td><code>A-03</code> 建链失败 REMOVED→REBUILD 链路</td><td>R1(R1-2、R1-3)</td><td><span class="wr">复发(风险已收敛)</span></td><td>链条逐锚点仍在(exec:248 alias_partial→reconcile ACT_REBUILD); 注: REBUILD_MAX_ATTEMPTS=3+退避已上界, 若 R2 原报主张是「无界循环」可改判已消失</td></tr>
+<tr><td><code>A-04</code> 先 _persist 后 setLocation/恢复一律 issue=False</td><td>R1(R1-2、R1-3)</td><td><span class="good">已消失</span></td><td>_load_jobs 相位区分+move_issued 分流补发, 四条守阵在位</td></tr>
+<tr><td><code>A-05</code> 收尾全库先发 files API</td><td>R1(R1-3)<br>R3</td><td><span class="good">已消失</span></td><td>exec:516-518 先过滤再取文件表, 守阵 test_finalize_members_prefilters_file_table<br>relocate_exec.py:494-518 _finalize_members 已改先按 finalize_scope_candidate 零成本过滤再取文件表(26-10-30-0616 修复实证)</td></tr>
+<tr><td><code>A-06</code> defer 占 due 批次</td><td>R1(R1-1)</td><td><span class="good">已消失</span></td><td>taskqueue.py:288 弹出只按可执行批次计预算, 守阵 test_run_due_defer_gate_does_not_consume_budget</td></tr>
+<tr><td><code>A-07</code> ensure_running 方向相反</td><td>R1(R1-5)</td><td><span class="good">已消失</span></td><td>agent.py:419 已改 is False 同族判据</td></tr>
+<tr><td><code>A-08</code> ops 死绑定×2</td><td>R1(R1-7)</td><td><span class="good">已消失</span></td><td>commit 97af2ca7 删除两处, AST 扫描零残留</td></tr>
+<tr><td><code>B-01</code> hr done 判据三处口径分散(简述由复验证据反推, 底册原简述不在 notes)</td><td>R3(R3-3)<br>R3(R3-4)<br>R3(R3-6)</td><td><span class="good">已消失</span></td><td>三处判据收敛到单点谓词 _lane_covers_done(service_common.py:360-380, cutoff_done&lt;=0 显式判死), 调用点 _freeze_terminal(service_wave.py:813)/_position_covered(service_common.py:395)/_absence_proven_all(service_common.py:415)无一绕开<br>沿用 R3-3 结论(已消失): 本批 3 文件(model/status/resolve)未发现同语义新独立问题<br>B-01 沿用已消失(见上)</td></tr>
+<tr><td><code>B-02</code> discovery 死 import(简述由复验证据反推, 底册原简述不在 notes)</td><td>R3(R3-6)</td><td><span class="good">已消失</span></td><td>discovery.py 中 is_loopback_host/_content_length grep 零命中, 现 import 全部有使用点</td></tr>
+<tr><td><code>C-01</code> 聚合 cov_s 无下限</td><td>R1(R1-4、R1-5)</td><td><span class="good">已消失</span></td><td>codec:427-432 cov&lt;1 raise + agg fail-closed, issue 26-10-30-0622</td></tr>
+<tr><td><code>C-02</code> curves 隐式 Optional</td><td>R1(R1-4)<br>R2</td><td><span class="good">已消失</span></td><td>curves.py:76 已显式 date | None<br>底册锚实为 src/auto_qb/core/curves.py:76(非 config/validation/curves.py), 签名已显式 Optional, RUF013 不再成立</td></tr>
+<tr><td><code>D-01</code> qbittorrent 配置三 str 键校验/回显(简述由复验证据反推, 底册原简述不在 notes)</td><td>R2</td><td><span class="good">已消失</span></td><td>sections.py _validate_qbittorrent 已补三 str 键类型检查(260-262 行, 与 web.token 同形态, 注释自证 26-10 修复); loaders.py:93-101 侧同为纯字段透传无日志/回显</td></tr>
+<tr><td><code>E-01</code> webui server 裸 int()/float() 解析(简述由复验证据反推, 底册原简述不在 notes)</td><td>R4(R4-3)</td><td><span class="good">已消失</span></td><td>R2 点名的 torrent_cmds.py/torrent_detail.py 全部裸 int()/float() 位置现均经 common.int_param/float_param 转换(畸形值 400), 快照内 webui/server 无残留(R4-3 面1/面2 各自独立核实)</td></tr>
+<tr><td><code>GH-01</code> finalize_watch 心跳/journal 头注</td><td>R1(R1-3)<br>R2<br>R3</td><td><span class="bad">复发(部分)</span></td><td>三处均修: 心跳拒写即退休/max_wait 文档化/头注改两写者<br>relocate_journal.py 头注已改口径明说「两个写者」且都走 write_journal 前向合并; relocate_mod.py 写点已不存在(收敛至 relocate_exec.py 与 tools/finalize_watch.py), 头注与实际一致<br>①读后心跳整包覆盖已消失(write_journal 前向合并拒非终态覆盖终态, finalize_watch.py:193-194 + relocate_journal.py:80-84); ③journal 头注「唯一写者」已消失; ②max_wait 缺省 0 仍在(finalize_watch.py:165/:249/:270), 但 docstring/CLI help 已明示「0=不限, auto-qb 侧 finalize_timeout 才是最终兜底」, 定级交聚合会话</td></tr>
+<tr><td><code>T-01</code> gtm _autostart/_put_config 配置写无锁(简述由复验证据反推, 底册原简述不在 notes)</td><td>R3(R3-5)</td><td><span class="good">已消失</span></td><td>_autostart/_put_config 已整段持 _config_write_lock(26-10-30-0624)</td></tr>
+<tr><td><code>T-02</code> gtm 缺 http host 回环校验(简述由复验证据反推, 底册原简述不在 notes)</td><td>R3(R3-5)</td><td><span class="good">已消失</span></td><td>新增 _check_http_host 回环约束 fail-fast(config.py:199-216)</td></tr>
+<tr><td><code>T-04</code> gtm 门面漂移</td><td>R1(R1-1、R1-5、R1-7)<br>R3</td><td><span class="good">已消失</span></td><td>进度注追平 S0-S9/通知链路改零读盘直达<br>gtm/__init__.py:8-11 进度注已更新到 S0-S9 落地+S10 待授权; 「重读历史文件」措辞在 gtm README 全文件 grep 零命中, 现为「零读盘直达」口径; 根 README:62 的「读历史文件」指 TrafficMonitor 传统来源语义准确非漂移</td></tr>
+<tr><td><code>T-05</code> gtm 三处死码(简述由复验证据反推, 底册原简述不在 notes)</td><td>R3(R3-5)</td><td><span class="good">已消失</span></td><td>三处死码均已清(F401 import 收紧/uninstall 路由化/errors 全消费)</td></tr>
+</table>
+
+<div class="aside"><b>R1/R3 口径张力注记:</b> GH-01(finalize_watch 心跳/journal 头注)在 R1(R1-3)记「已消失: 三处均修——心跳拒写即退休 / max_wait 文档化 / 头注改两写者」,在 R3 记「部分复发: 读后心跳整包覆盖与『唯一写者』头注两半已消失,但 max_wait 缺省 0 仍在(finalize_watch.py:165/:249/:270),docstring/CLI help 已明示『0=不限, finalize_timeout 兜底』」——复发表按交集口径保留<b>复发(部分)</b>并列出双路线出处,定级归入池流程。A-03 带 R1 notes 原注:「REBUILD_MAX_ATTEMPTS=3+退避已上界,若 R2 原报主张是『无界循环』可改判已消失」。另 R4 notes 记 T-02/T-04/T-05 锚在 gtm/* 不在批内文件未复验(T-04 已由 R3 确认消失);R5 全 11 批零命中。</div>
+
+<h2><span class="no">§05</span>入池映射</h2>
+
+<p>major+minor 共 285 行按主题(theme)映射入 6 份 issue,<b>全部 <code>issue-status=Open</code></b>,doc-topic <code>legacy-review4</code> 待认领。其中 core 行数 44 = 存活 43(12 major + 31 minor)+ <b>1 条拆回</b>(R1#81,据 exact_merge 记录分立入池)。nit 不入池(§06)。</p>
+
+<table>
+<tr><th>issue</th><th>主题</th><th class="num">major</th><th class="num">minor</th><th class="num">行数</th><th>状态</th></tr>
+<tr><td><a href="../issues/26-11-07-0527-bug-legacy-review4-core.html"><code>26-11-07-0527-bug-legacy-review4-core.html</code></a></td><td><code>core</code></td><td class="num">12</td><td class="num">31</td><td class="num">44 <span class="cm">(含 1 拆回 R1#81)</span></td><td>Open</td></tr>
+<tr><td><a href="../issues/26-11-07-0527-bug-legacy-review4-config-infra.html"><code>26-11-07-0527-bug-legacy-review4-config-infra.html</code></a></td><td><code>config-infra</code></td><td class="num">2</td><td class="num">34</td><td class="num">36</td><td>Open</td></tr>
+<tr><td><a href="../issues/26-11-07-0527-bug-legacy-review4-hr.html"><code>26-11-07-0527-bug-legacy-review4-hr.html</code></a></td><td><code>hr</code></td><td class="num">4</td><td class="num">17</td><td class="num">21</td><td>Open</td></tr>
+<tr><td><a href="../issues/26-11-07-0536-bug-legacy-review4-webui-py.html"><code>26-11-07-0536-bug-legacy-review4-webui-py.html</code></a></td><td><code>webui-py</code></td><td class="num">2</td><td class="num">23</td><td class="num">25</td><td>Open</td></tr>
+<tr><td><a href="../issues/26-11-07-0536-bug-legacy-review4-static.html"><code>26-11-07-0536-bug-legacy-review4-static.html</code></a></td><td><code>static</code></td><td class="num">24</td><td class="num">111</td><td class="num">135</td><td>Open</td></tr>
+<tr><td><a href="../issues/26-11-07-0536-bug-legacy-review4-scripts.html"><code>26-11-07-0536-bug-legacy-review4-scripts.html</code></a></td><td><code>scripts</code></td><td class="num">1</td><td class="num">23</td><td class="num">24</td><td>Open</td></tr>
+<tr class="total"><td>合计(6 份)</td><td>—</td><td class="num">45</td><td class="num">239</td><td class="num">285(含 1 拆回)</td><td>全 Open</td></tr>
+</table>
+<p class="cm">行数来源: aggregate.json theme_x_severity 的 major+minor 列机械求和;core 的 +1 拆回取自 dedup.exact_merge 记录与入池实测。</p>
+
+<h2><span class="no">§06</span>nit 清单(189 条,全量)</h2>
+
+<p>存活 nit 189 条(R1 63 / R2 11 / R3 14 / R4 18 / R5 83),<b>nit 不入池,仅记录</b>——本节为全量留痕,处置权留待后续轮次。行号与引文均为当时现场(freeze <code>f0883292</code>)原文;# 列 = S6 聚合数据面编号(<code>agg_id</code>)。</p>
+
+<table>
+<tr><th>#</th><th>file:line(当时, freeze f0883292)</th><th>claim 一句话</th><th>路线</th></tr>
+<tr><td><code>S6-001</code></td><td><code>README.md:188</code></td><td>命令行参数表缺 --fuse-release/--fuse-release-all, 全 docs/ 亦无保险丝放行文档 —— 恢复限速的写操作入口只存在于 --help</td><td>R1 <span class="cm">R1#19</span></td></tr>
+<tr><td><code>S6-002</code></td><td><code>memory-bank/config-reference/keys.md:88</code></td><td>文档引用不存在的 API: src/ 无 active_dat_path, 真实取数单点是 core.traffic_source.paths.dat_path(config)(speed_curve_mod.py:175 实调), 且同文件 :185 自述正确形成内部矛盾</td><td>R1 <span class="cm">R1#78</span></td></tr>
+<tr><td><code>S6-004</code></td><td><code>memory-bank/conventions/modules.md:3</code></td><td>摘要称 core/modules「十功能模块」, 与本文件第 12 行「十四模块: 12 个本体」及实际(12 个 *_mod.py + 2 门面)矛盾, 计数停在 P3 时代</td><td>R1 <span class="cm">R1#106</span></td></tr>
+<tr><td><code>S6-005</code></td><td><code>memory-bank/conventions/modules.md:45</code></td><td>「模块之间不互相 import」纪律被 speed_curve_mod.py:44 运行期 `from .traffic_snapshot_mod import TrafficSnapshotModule`(仅作 _require_snapshot 返回注解)违反字面, 且 __init__.py:3 同句断言也失真</td><td>R1 <span class="cm">R1#107</span></td></tr>
+<tr><td><code>S6-006</code></td><td><code>memory-bank/modules/core-domain.md:21</code></td><td>curves.py 行数断言 124 与快照实测 142 不符,且关键内容列已含 26-10-11 换算单点的 bytes_to_kib 却漏列同批新增的 kib_to_bytes/bytes_to_kib_floor(curves.py:127-142),属半更新漂移</td><td>R1 <span class="cm">R1#62</span></td></tr>
+<tr><td><code>S6-007</code></td><td><code>memory-bank/pitfalls/backend/platform-fs.md:112</code></td><td>pitfall 代码锚点漂移: _group_facts 经 R5 拆分已迁至 relocate_plan.py:177, relocate_mod.py 内已无该函数, 按锚点 grep 会落空</td><td>R1 <span class="cm">R1#33</span></td></tr>
+<tr><td><code>S6-008</code></td><td><code>memory-bank/pitfalls/testing/ci-only-guard.md:29</code></td><td>pitfall 代码锚点漂移: _spawn 经 R5 拆分已迁至 relocate_exec.py:967, relocate_mod.py 内已无该函数</td><td>R1 <span class="cm">R1#34</span></td></tr>
+<tr><td><code>S6-009</code></td><td><code>memory-bank/systemPatterns/main-loop.md:23</code></td><td>规则加载方法名漂移: 文档写 host.get(&quot;rules&quot;)._load_rules(), 代码实际是 load_rules()(qbmanager.py:515, rules_mod.py:301)</td><td>R1 <span class="cm">R1#18</span></td></tr>
+<tr><td><code>S6-015</code></td><td><code>src/auto_qb/core/__init__.py:19</code></td><td>core 包 docstring 的模块清单漏 traffic_* 八件(traffic_grid/limits/source/traffic_store*), 枚举与实际目录漂移</td><td>R1 <span class="cm">R1#21</span></td></tr>
+<tr><td><code>S6-016</code></td><td><code>src/auto_qb/core/curves.py:5</code></td><td>注释含非ASCII图形符号 ×(第 54 行还有一处「× scale 转字节」), 违反代码禁图形符号约定</td><td>R1 <span class="cm">R1#56</span></td></tr>
+<tr><td><code>S6-017</code></td><td><code>src/auto_qb/core/episodes.py:37</code></td><td>_BARE_NUMBER_RE 仅被 111-122 行注释掉的代码块引用,本体是不可达死符号(RESOLUTION_EXCLUDE 仍被 tvshows 使用,不在其列)</td><td>R1 <span class="cm">R1#4</span></td></tr>
+<tr><td><code>S6-018</code></td><td><code>src/auto_qb/core/episodes.py:64</code></td><td>name_has_episode_marker 全仓无生产调用方(仅 tests/test_episodes.py 引用),属未用导出</td><td>R1 <span class="cm">R1#5</span></td></tr>
+<tr><td><code>S6-020</code></td><td><code>src/auto_qb/core/episodes.py:127</code></td><td>format_episode_tag 的 docstring 用 str.format(1) 示例描述模板契约,而实现是替换 ${episode_first}/${episode_last} 占位符(config 默认模板亦为后者),示例 API 与实现不符(面1/面3 同报,合并)</td><td>R1 <span class="cm">R1#7</span></td></tr>
+<tr><td><code>S6-021</code></td><td><code>src/auto_qb/core/exporter.py:72</code></td><td>collect_all_tracker_hostnames 及其唯一依赖 collect_torrent_tracker_hostnames(非 failures 变体)在 src/ 已无生产调用方(仅测试引用),生产聚合循环在 210-212 行与 webui sites.py 各自内联重写,形成同职责两套路径</td><td>R1 <span class="cm">R1#3</span></td></tr>
+<tr><td><code>S6-024</code></td><td><code>src/auto_qb/core/exporter.py:259</code></td><td>dry_run=True 时实际未写文件,仍输出「已导出 YAML 模板」INFO 日志,与 dry-run 口径矛盾误导排障</td><td>R1 <span class="cm">R1#11</span></td></tr>
+<tr><td><code>S6-025</code></td><td><code>src/auto_qb/core/modules/fuse_mod.py:15</code></td><td>代码注释含图形符号「→」, 违反编码约束(代码禁图形符号, ASCII 替代)</td><td>R1 <span class="cm">R1#101</span></td></tr>
+<tr><td><code>S6-027</code></td><td><code>src/auto_qb/core/modules/grouping_mod.py:160</code></td><td>注释含非 ASCII 图形符号 ⇒(U+21D2, 另 line 220 同款); code-style.md 禁用类未明列 ⇒/§ 且全库 58 个 .py 含 ⇒、129 个含 §, 属约定层待澄清而非本批特有缺陷</td><td>R1 <span class="cm">R1#91</span></td></tr>
+<tr><td><code>S6-028</code></td><td><code>src/auto_qb/core/modules/grouping_mod.py:441</code></td><td>_check_missing_files 与 _check_size_consistency(line 372)的 key 形参标注为 str, 实际传入的是组键元组 (path, files)(_scan_triggered_groups/_assign_to_group 调用点), 错误标注误导维护者</td><td>R1 <span class="cm">R1#87</span></td></tr>
+<tr><td><code>S6-033</code></td><td><code>src/auto_qb/core/modules/ops_common.py:55</code></td><td>代码注释含图形符号「→」, 违反编码约束(代码禁图形符号, ASCII 替代)</td><td>R1 <span class="cm">R1#102</span></td></tr>
+<tr><td><code>S6-035</code></td><td><code>src/auto_qb/core/modules/ops_mod.py:1</code></td><td>模块 docstring 含图形符号「→」「←」, 违反编码约束(代码禁图形符号, ASCII 替代)</td><td>R1 <span class="cm">R1#103</span></td></tr>
+<tr><td><code>S6-037</code></td><td><code>src/auto_qb/core/modules/ops_skip.py:44</code></td><td>docstring/注释多处含图形符号「→」「⇒」「①」「②」「≈」「×」(行44/47/48/50/51/88/108/119/120/126/136/159/221/437), 违反编码约束(代码禁图形符号, ASCII 替代)</td><td>R1 <span class="cm">R1#104</span></td></tr>
+<tr><td><code>S6-040</code></td><td><code>src/auto_qb/core/modules/ops_verdict.py:21</code></td><td>docstring/注释含图形符号「⇒」「→」「∪」(行21/145/153/165/186/253), 违反编码约束(代码禁图形符号, ASCII 替代)</td><td>R1 <span class="cm">R1#105</span></td></tr>
+<tr><td><code>S6-041</code></td><td><code>src/auto_qb/core/modules/ops_verdict.py:262</code></td><td>G7 的「文件映射一致才参与」过滤在 mine 为空(None/缺尺寸)时整体失效——任意成员的在途校验证据都会成判,与同函数注释声明的过滤语义及 G8 的 `if key is not None and mine:` 门不一致(方向偏保守, 误挡不误放)</td><td>R1 <span class="cm">R1#100</span></td></tr>
+<tr><td><code>S6-042</code></td><td><code>src/auto_qb/core/modules/relocate_exec.py:24</code></td><td>代码注释含图形符号 ⇒(同文件还有 →、D7①/D7② 等圈号),违反编码约束「代码禁图形符号, ASCII 替代」</td><td>R1 <span class="cm">R1#30</span></td></tr>
+<tr><td><code>S6-044</code></td><td><code>src/auto_qb/core/modules/relocate_exec.py:290</code></td><td>_qb_side_check 的自身异常兜底分支(rp.link_follow_evidence 抛错按 skipped)无任何测试覆盖——现有 skipped 断言全部经 ev.status==UNAVAILABLE 内部路径, 无用例让该调用真抛异常</td><td>R1 <span class="cm">R1#32</span></td></tr>
+<tr><td><code>S6-045</code></td><td><code>src/auto_qb/core/modules/relocate_exec.py:624</code></td><td>幂等判定三处并存且口径不一(relocate_execute:602 查全组成员 / evaluate_group units:467 查 facts.save_path=mover / 此处仅查 mover),行 624 实质是对 evaluate_group 幂等早退产物 cls=ok 的事后改写为 skip,三处分散易在调整口径时漏改</td><td>R1 <span class="cm">R1#29</span></td></tr>
+<tr><td><code>S6-046</code></td><td><code>src/auto_qb/core/modules/relocate_exec.py:824</code></td><td>_start_job 在建账/_persist/_publish 之后才判 dry-run(line 835): dry-run 分支一旦可达会把 phase=moving、move_issued=False 的 job 持久化进 state,下次正常启动经 _recover 判 RECOVER_STALLED 且未下发而补发真 setLocation;当前规则入口(transfer.py:32)有守卫、web 在 dry-run 不启动(webui/module.py:139)故实际不可达,但该防御分支与其回执「dry-run: 未下发搬迁」的零副作用承诺矛盾</td><td>R1 <span class="cm">R1#28</span></td></tr>
+<tr><td><code>S6-051</code></td><td><code>src/auto_qb/core/modules/relocate_lifecycle.py:89</code></td><td>代码注释含非 ASCII 图形符号(本行 ⇒, 另 101 行 ⇔, 32 行带圈数字⑥), 违反 code-style『代码一律 ASCII』禁令</td><td>R1 <span class="cm">R1#47</span></td></tr>
+<tr><td><code>S6-053</code></td><td><code>src/auto_qb/core/modules/relocate_mod.py:52</code></td><td>类 docstring 与文件头「P2(本文件当前形态): 别名单元+闸门(只读)/执行体随 P3」已过期: R5 拆分后本文件是挂 ExecMixin/PlanMixin/LifecycleMixin 的完整执行体组合根(相位机/probe 缓存/job 账/快照发布都在), 文档描述滞后于现实</td><td>R1 <span class="cm">R1#51</span></td></tr>
+<tr><td><code>S6-054</code></td><td><code>src/auto_qb/core/modules/relocate_mod.py:71</code></td><td>该注释承诺 dry-run 不落盘, 但 dry-run 下 relocate_execute→_start_job 在 dry-run 早退前已建账并 _persist 写 state.relocate.jobs(relocate_exec.py:832-834), 且 test_exec_dry_run_no_side_effects 把「有 job 账」断言为预期 —— 注释与已钉面的行为相矛盾</td><td>R1 <span class="cm">R1#52</span></td></tr>
+<tr><td><code>S6-055</code></td><td><code>src/auto_qb/core/modules/relocate_mod.py:108</code></td><td>probe_get 注释承诺「深副本」,实现是 dict(evidence) 浅拷贝:evidence 内嵌套结构(如 run_probe 写入的 cleanup 嵌套 dict)在缓存真身与返回副本间共享,注释的隔离保证对嵌套层不成立(当前调用方只读,未实际触发)</td><td>R1 <span class="cm">R1#46</span></td></tr>
+<tr><td><code>S6-056</code></td><td><code>src/auto_qb/core/modules/relocate_plan.py:21</code></td><td>RelocateJob 在 relocate_plan.py 内无任何使用,拆分遗留的未用 import</td><td>R1 <span class="cm">R1#44</span></td></tr>
+<tr><td><code>S6-057</code></td><td><code>src/auto_qb/core/modules/relocate_plan.py:289</code></td><td>字符串字面量含带圈数字①②③④(289-290 行, 该文案作为 reason 进确认框/blocked 回执), 违反 code-style 禁令(明示覆盖字符串字面量)</td><td>R1 <span class="cm">R1#48</span></td></tr>
+<tr><td><code>S6-059</code></td><td><code>src/auto_qb/core/modules/relocate_probe.py:41</code></td><td>注释含带圈数字⑤, 违反 code-style『带圈数字 ①-⑬ 禁用』</td><td>R1 <span class="cm">R1#49</span></td></tr>
+<tr><td><code>S6-065</code></td><td><code>src/auto_qb/core/modules/relocate_proof.py:12</code></td><td>模块 docstring 含 ≈(12 行)与 →(13 行)等图形符号, 违反 code-style『代码一律 ASCII』禁令</td><td>R1 <span class="cm">R1#50</span></td></tr>
+<tr><td><code>S6-066</code></td><td><code>src/auto_qb/core/modules/relocate_proof.py:43</code></td><td>logger 导入后全文件未使用(本模块按设计不打日志,把失败装进 evidence/detail)</td><td>R1 <span class="cm">R1#45</span></td></tr>
+<tr><td><code>S6-067</code></td><td><code>src/auto_qb/core/modules/relocate_units.py:8</code></td><td>代码注释含图形符号 ⇒(同文件还有 →、组③/组②/组① 圈号),违反编码约束「代码禁图形符号, ASCII 替代」</td><td>R1 <span class="cm">R1#31</span></td></tr>
+<tr><td><code>S6-071</code></td><td><code>src/auto_qb/core/modules/rules_mod.py:29</code></td><td>注释含非 ASCII 箭头 →(U+2192; line 286 同款); code-style.md 禁用类(emoji/几何符号/带圈数字)未明列 →, 且全库注释普遍使用, 属约定层待澄清</td><td>R1 <span class="cm">R1#92</span></td></tr>
+<tr><td><code>S6-072</code></td><td><code>src/auto_qb/core/modules/traffic_sample_agg.py:145</code></td><td>_pending_agg_rows 对 day 级做了「子行更晚则前跳」守卫(L134-137), month 级没有同构前跳: 月界后 agg.month_epoch 停在上月时, 活尾 month 行排除新月的 day 行, 当前月聚合尾段在下一次 flush(≤600s)前显示真空 —— 与 day 级已修的「跨天后无采样」同形</td><td>R1 <span class="cm">R1#66</span></td></tr>
+<tr><td><code>S6-073</code></td><td><code>src/auto_qb/core/modules/traffic_sample_agg.py:211</code></td><td>_agg_credit_hours 内联的按小时切桶循环与 traffic_sample_common._hour_spans 逐字同逻辑, 同一职责两份实现(后者 docstring 自称「与 _agg_credit_hours 同源」), 改桶界口径时需人工同步两处</td><td>R1 <span class="cm">R1#67</span></td></tr>
+<tr><td><code>S6-074</code></td><td><code>src/auto_qb/core/modules/traffic_sample_agg.py:221</code></td><td>代码注释含带圈数字 ①②③(code-style.md 非 ASCII 图形符号禁令明示禁用类, ASCII 替代 1. 2. 3.)</td><td>R1 <span class="cm">R1#71</span></td></tr>
+<tr><td><code>S6-076</code></td><td><code>src/auto_qb/core/modules/traffic_sample_blocks.py:293</code></td><td>docstring 含逻辑符号 ∧(非 ASCII 图形符号禁令覆盖注释)</td><td>R1 <span class="cm">R1#75</span></td></tr>
+<tr><td><code>S6-077</code></td><td><code>src/auto_qb/core/modules/traffic_sample_common.py:5</code></td><td>typing 重复导入(L3 已有 from typing import Optional, L5 再来一行 from typing import Any), 拆分残留</td><td>R1 <span class="cm">R1#69</span></td></tr>
+<tr><td><code>S6-078</code></td><td><code>src/auto_qb/core/modules/traffic_sample_common.py:93</code></td><td>docstring 含逻辑符号 ∧(非 ASCII 图形符号禁令覆盖注释)</td><td>R1 <span class="cm">R1#76</span></td></tr>
+<tr><td><code>S6-079</code></td><td><code>src/auto_qb/core/modules/traffic_sample_mod.py:104</code></td><td>模块 docstring 含 ≡ ≤ → 等图形符号(非 ASCII 图形符号禁令覆盖注释; 同类 → 在全仓 68 个 .py 普遍存在, 属全局惯例漂移)</td><td>R1 <span class="cm">R1#74</span></td></tr>
+<tr><td><code>S6-080</code></td><td><code>src/auto_qb/core/modules/traffic_sample_mod.py:177</code></td><td>V4NullRun/V4Sample/V4ZeroRun 在 L177 与 L179-199 的重导出 import 块中重复导入两次(R5 拆分残留)</td><td>R1 <span class="cm">R1#68</span></td></tr>
+<tr><td><code>S6-081</code></td><td><code>src/auto_qb/core/modules/traffic_sample_mod.py:441</code></td><td>_advance_run 天级保险闸的时长支全测试树无用例触达(唯一闸测试 test_zrun_cap_safety_valve_seals_at_day_level 以 1s 间隔只走样本数支, span=86399&lt;ZRUN_FLUSH_S)</td><td>R1 <span class="cm">R1#77</span></td></tr>
+<tr><td><code>S6-083</code></td><td><code>src/auto_qb/core/qbmanager.py:264</code></td><td>注释含非 ASCII 图形符号 →(全批注释普遍存在 →/≈/≤/· 等),按任务口径(注释里也不该有)与 code-style.md「覆盖含注释」字面要求记 nit</td><td>R1 <span class="cm">R1#12</span></td></tr>
+<tr><td><code>S6-086</code></td><td><code>src/auto_qb/core/taskqueue.py:38</code></td><td>Task docstring 列的 refresh/torrent 两种 kind 全库无实例化点(实际 kind 只有 rule/rule-event/internal/check/check-wait, 种子级内置也用 internal)</td><td>R1 <span class="cm">R1#20</span></td></tr>
+<tr><td><code>S6-087</code></td><td><code>src/auto_qb/core/taskqueue.py:75</code></td><td>Task.uid 与 Task.created_at(91 行)全仓(src+tests)只写不读,是纯死字段;clock 参数现仅剩喂这两个死字段与 created_at 的用途</td><td>R1 <span class="cm">R1#6</span></td></tr>
+<tr><td><code>S6-088</code></td><td><code>src/auto_qb/core/traffic_grid.py:546</code></td><td>注释/docstring 含多处非ASCII数学符号(⟺ 546、Σ 34/269/560/600/633/674、≈ 101/552、∈ 352、÷ 630、ε 378、②③ 269/307/388), 违反代码禁图形符号约定</td><td>R1 <span class="cm">R1#57</span></td></tr>
+<tr><td><code>S6-089</code></td><td><code>src/auto_qb/core/traffic_limits.py:1</code></td><td>docstring 含非ASCII符号 ′ ″(第 1/37/276 行), 违反代码禁图形符号约定</td><td>R1 <span class="cm">R1#58</span></td></tr>
+<tr><td><code>S6-091</code></td><td><code>src/auto_qb/core/traffic_limits.py:175</code></td><td>跨天硬切轮 carry 追加失败(OSError)且同轮 cur 值变化事件写成功时, _last_date 被值变化分支推进, 该新天文件将永久缺基线 carry 首行, 违反模块 docstring「新天首行 = 基线 carry 无条件写入, 单看一个天文件自洽可读」的承诺(读侧跨天回看可兜住图面, 实害趋零)</td><td>R1 <span class="cm">R1#55</span></td></tr>
+<tr><td><code>S6-093</code></td><td><code>src/auto_qb/core/traffic_source/agent.py:235</code></td><td>代码注释含带圈数字 ①②③(code-style.md 非 ASCII 图形符号禁令明示禁用类)</td><td>R1 <span class="cm">R1#72</span></td></tr>
+<tr><td><code>S6-094</code></td><td><code>src/auto_qb/core/traffic_source/agent.py:474</code></td><td>status() 供设置页路由同步调用却用 10s 探活超时, 工具假死时状态端点与写端点(经 _ready_endpoint -&gt; _source_status)每次请求阻塞至 10s(主循环侧同类调用已为此单配 3s 的 SPIKE_TIMEOUT_S)</td><td>R1 <span class="cm">R1#70</span></td></tr>
+<tr><td><code>S6-095</code></td><td><code>src/auto_qb/core/traffic_source/paths.py:109</code></td><td>图形符号 → 出现在运行期字符串字面量(进日志与 UI 的 reason 文案)中, 按非 ASCII 图形符号禁令代码侧应 ASCII 表达</td><td>R1 <span class="cm">R1#73</span></td></tr>
+<tr><td><code>S6-097</code></td><td><code>src/auto_qb/core/traffic_store.py:491</code></td><td>注释含非ASCII数学符号 ≈(第 376/491/498 行共 5 处), 违反代码禁图形符号约定</td><td>R1 <span class="cm">R1#59</span></td></tr>
+<tr><td><code>S6-098</code></td><td><code>src/auto_qb/core/traffic_store_agg.py:8</code></td><td>docstring 含非ASCII数学符号 Σ(第 8/9/12/18/44/45/46/47 行)与 ±(第 21 行), 违反代码禁图形符号约定</td><td>R1 <span class="cm">R1#60</span></td></tr>
+<tr><td><code>S6-099</code></td><td><code>src/auto_qb/core/traffic_store_codec.py:76</code></td><td>docstring 含非ASCII符号 d̄(U+0304 组合宏音符, 第 76 行)与 ∈(第 645/646 行), 违反代码禁图形符号约定</td><td>R1 <span class="cm">R1#61</span></td></tr>
+<tr><td><code>S6-100</code></td><td><code>src/auto_qb/core/tvshows.py:12</code></td><td>docstring 含非 ASCII 箭头 →(U+2192, 全文件 7 处); 同上, code-style.md 禁用类未明列且全库普遍, 属约定层待澄清</td><td>R1 <span class="cm">R1#93</span></td></tr>
+<tr><td><code>S6-101</code></td><td><code>src/auto_qb/core/tvshows.py:22</code></td><td>docstring 已知限制指向 docs/webui-shows-view-plan.html, 快照树内该文件不存在(实际为 memory-bank/plans/26-09-15-1534-webui-shows-view-plan.html), 代码内文档指针失效</td><td>R1 <span class="cm">R1#90</span></td></tr>
+<tr><td><code>S6-103</code></td><td><code>src/auto_qb/core/tvshows.py:330</code></td><td>_EXTRA_NOISE_BIGRAMS 里的 &quot;dts hd ma&quot; 是三 token 词组, 而 _normalize_key 的匹配只拼接相邻两 token, 该条目永远匹配不上(且 _NOISE_RE 的 dts(?:[ ._-]?h?d?(?:[ ._-]?ma)?)? 已先行剥除该形态), 死条目</td><td>R1 <span class="cm">R1#88</span></td></tr>
+<tr><td><code>S6-105</code></td><td><code>src/auto_qb/core/tvshows.py:459</code></td><td>模块顶部(line 35)已 import episodes 且已使用(line 209), parse_files 内的局部再导入冗余, 属拆分/演进而来的残留</td><td>R1 <span class="cm">R1#89</span></td></tr>
+<tr><td><code>S6-113</code></td><td><code>src/auto_qb/config/schema/groups.py:622</code></td><td>traffic_source.enabled 的 Field.default 用 Python 布尔 True,违反 Field docstring「default 为 YAML 空间标量字符串」契约,也是全 schema 唯一一个布尔型 default(其余 bool 字段均为 &quot;true&quot;/&quot;false&quot; 串)</td><td>R2 <span class="cm">R2#14</span></td></tr>
+<tr><td><code>S6-118</code></td><td><code>src/auto_qb/config/validation/rules.py:366</code></td><td>注释使用带圈数字 ①(同文件 390/437 行还有两处),命中 code-style.md「带圈数字 ①-⑬」禁令(代码含注释一律 ASCII,替代口径 ①→1.)</td><td>R2 <span class="cm">R2#7</span></td></tr>
+<tr><td><code>S6-119</code></td><td><code>src/auto_qb/config/validation/sections.py:141</code></td><td>注释使用带圈数字 ①③⑤⑥(本文件 125/141/350/366/372/378 行共 6 处),命中 code-style.md 带圈数字禁令(替代口径 ①→1.)</td><td>R2 <span class="cm">R2#8</span></td></tr>
+<tr><td><code>S6-121</code></td><td><code>src/auto_qb/config/validation/sections.py:681</code></td><td>docstring 断言「9 键」,但 KNOWN_RELOCATE_KEYS 实为 11 键(pending_tag 与 assume_shared 后续计划加入后计数未同步)</td><td>R2 <span class="cm">R2#10</span></td></tr>
+<tr><td><code>S6-137</code></td><td><code>src/auto_qb/infra/utils.py:547</code></td><td>注释使用图形符号 ⚠(547/574/588 三处),违反编码约束「代码禁图形符号」</td><td>R2 <span class="cm">R2#43</span></td></tr>
+<tr><td><code>S6-138</code></td><td><code>src/auto_qb/infra/utils.py:755</code></td><td>docstring 使用带圈数字 ①②(755-757 行),违反编码约束「代码禁图形符号」</td><td>R2 <span class="cm">R2#42</span></td></tr>
+<tr><td><code>S6-139</code></td><td><code>src/auto_qb/infra/utils_parse.py:7</code></td><td>R5 拆分残留的未用导入:base64/json/shutil/tempfile/hashlib/secrets/subprocess/threading/time/logging/dataclass 及 typing 的 List/Tuple 在本文件均无使用点</td><td>R2 <span class="cm">R2#41</span></td></tr>
+<tr><td><code>S6-140</code></td><td><code>src/auto_qb/infra/utils_parse.py:64</code></td><td>注释使用带圈数字 ⑤,违反编码约束「代码禁图形符号」</td><td>R2 <span class="cm">R2#44</span></td></tr>
+<tr><td><code>S6-141</code></td><td><code>src/auto_qb/infra/utils_paths.py:10</code></td><td>R5 拆分残留的未用导入:ipaddress/math/hashlib/secrets/subprocess/sys/threading 及 typing 的 Callable/Tuple 在本文件均无使用点</td><td>R2 <span class="cm">R2#40</span></td></tr>
+<tr><td><code>S6-144</code></td><td><code>src/auto_qb/rules/base.py:20</code></td><td>注释掉的 import 是拆分残留死代码(A 类),且类型提示里 manager 已改用 Any,该行无复活可能</td><td>R2 <span class="cm">R2#21</span></td></tr>
+<tr><td><code>S6-153</code></td><td><code>src/auto_qb/rules/registry.py:181</code></td><td>注释里使用带圈数字 ①,违反代码禁非 ASCII 图形符号约束(检查清单明列 ①-⑬,箭头/全角标点已豁免,此项不在豁免内)</td><td>R2 <span class="cm">R2#22</span></td></tr>
+<tr><td><code>S6-155</code></td><td><code>src/auto_qb/hr/channel.py:52</code></td><td>TASK_KINDS 在 src 与 tests 均无消费点(TASK_PAGE/TASK_TORRENT 各自被 fetcher 使用, 聚合元组无人用) —— 未用导出(发现类 A)</td><td>R3 <span class="cm">R3#28</span></td></tr>
+<tr><td><code>S6-157</code></td><td><code>src/auto_qb/hr/events.py:197</code></td><td>src 全域无调用点(仅 tests/test_hr_runtime_feeder.py:314 一处测试消费), docstring 宣称『报告与日志都要人读』但无报告/日志调用方 —— 拆分残留死导出(发现类 A)</td><td>R3 <span class="cm">R3#27</span></td></tr>
+<tr><td><code>S6-158</code></td><td><code>src/auto_qb/hr/fetcher.py:259</code></td><td>对已过 fail-fast 校验、恒有该属性的配置对象用 getattr 带默认,违反项目「禁用防御性掩盖:恒有值属性的 getattr」明文规则(键被改名时静默落回 180)</td><td>R3 <span class="cm">R3#33</span></td></tr>
+<tr><td><code>S6-159</code></td><td><code>src/auto_qb/hr/model.py:40</code></td><td>lane_is_satisfied/lane_is_exempt 生产代码零消费者(仅 __init__ 再导出与 test_hr_status_entry 测试),ALL_LANES 同样只有再导出;与已被 service/service_wave 使用的 lane_is_terminal 同族但三者均无生产调用(存量面 A)。</td><td>R3 <span class="cm">R3#17</span></td></tr>
+<tr><td><code>S6-162</code></td><td><code>src/auto_qb/hr/parse.py:242</code></td><td>page_bounds 在生产代码零调用(仅测试引用),docstring 却称「仅作报告用」,属拆分残留的死导出</td><td>R3 <span class="cm">R3#34</span></td></tr>
+<tr><td><code>S6-164</code></td><td><code>src/auto_qb/hr/ratelimit.py:125</code></td><td>now_ts 生产代码零调用(仅 test_hr_ratelimit 引用),是只为测试存在的取时通道,违反「不能为测试专门留通道」约定(docstring 所称「叶子走取时单点」并未接线)</td><td>R3 <span class="cm">R3#35</span></td></tr>
+<tr><td><code>S6-166</code></td><td><code>src/auto_qb/hr/report.py:215</code></td><td>重复执行 --hr-confirm-empty 会在 wave.notes 无去重地叠加同一条确认文案(违反黄金法则 1 幂等精神,人工 CLI 动作影响有限)</td><td>R3 <span class="cm">R3#32</span></td></tr>
+<tr><td><code>S6-170</code></td><td><code>src/auto_qb/hr/service_wave.py:207</code></td><td>_do_wave 的 HrFetchError 处理中 retry_after&lt;=0 的后半段(had_error/notes/_mark_fetch_failed_lane,本行起 3 行)不可达:_run_pages 与 _run_downloads 对 HrFetchError 只在 retry_after&gt;0 时原样上抛,非 retry 失败全部在档位内消化 —— 属拆分前遗留的防御死代码(A 面)</td><td>R3 <span class="cm">R3#11</span></td></tr>
+<tr><td><code>S6-174</code></td><td><code>src/auto_qb/hr/service_wave.py:773</code></td><td>refresh_site 先填入的 session.read_error(坏文件隔离/备份恢复事实)在波正常跑完后被此处整体覆盖,最终 result 与拉取历史事件的 reason 都看不到「数据来自备份恢复」这一事实(仅 store 当时的 WARNING 有痕);同文件 version_mismatch 分支(service.py:249)用的是拼接保留写法,两处口径不一</td><td>R3 <span class="cm">R3#12</span></td></tr>
+<tr><td><code>S6-175</code></td><td><code>src/auto_qb/hr/status.py:266</code></td><td>_lane_statuses 的 now 形参全函数体未使用(调用点 line 323 传了 now),死参数。</td><td>R3 <span class="cm">R3#19</span></td></tr>
+<tr><td><code>S6-176</code></td><td><code>src/auto_qb/hr/status.py:327</code></td><td>quota.day 的窗口键公式与 ratelimit._day_count(ratelimit.py:57-58)是同一语义的两份实现(存量面 B 平行机制):窗口键语义若变,展示 day 与 quota_left(走单点)会分叉。</td><td>R3 <span class="cm">R3#20</span></td></tr>
+<tr><td><code>S6-178</code></td><td><code>src/auto_qb/hr/status.py:613</code></td><td>blocking_reason 的 site 形参全函数体未使用(调用方 status.py:392 还在传),死参数。</td><td>R3 <span class="cm">R3#18</span></td></tr>
+<tr><td><code>S6-185</code></td><td><code>src/auto_qb/torrents/store.py:806</code></td><td>docstring 行内锚 `:237-244` 已陈旧: 现指向 expect_due_at 尾部/clear_expect(expect 落地块 26-10-30 插入后整体下移), 而所称 _apply 的 state_changed/dirty_groups/view_changed 三条通路实际在 406-509 行</td><td>R3 <span class="cm">R3#4</span></td></tr>
+<tr><td><code>S6-187</code></td><td><code>src/auto_qb/torrents/view.py:11</code></td><td>注释字面为「派derive 而非手抄」,是「派生」改写为「derive」时的编辑残留,语义需读者脑补</td><td>R3 <span class="cm">R3#6</span></td></tr>
+<tr><td><code>S6-189</code></td><td><code>src/auto_qb/webui/commands.py:7</code></td><td>模块 docstring 的宿主属性清单只列 api/store/client/web/apply_new_config 五项, 但批内 handler 实际还依赖 self.ctx(ops/relocate/config/host, 如 commands_torrents.py:288/306/346/377)、self._clock(commands_torrents.py:229)、self._group_hashes、self._expect_landing(commands_config.py:225)、self.build_search_index —— 清单滞后于二次/三次拆分后的实况。</td><td>R4 <span class="cm">R4#12</span></td></tr>
+<tr><td><code>S6-190</code></td><td><code>src/auto_qb/webui/commands.py:20</code></td><td>拆分残留死导入: time(13)/Mapping(14)/HTTP401Error, HTTP4XXError(17)/Config(19)/traffic_paths(20)/mask_tracker_url, sanitize_tracker_url(21) 在本模块零使用, 实现已分别落 commands_common/commands_config/commands_torrents, 且无任何调用方经 commands 命名空间取这些名字(已 grep src+tests 确认)。</td><td>R4 <span class="cm">R4#5</span></td></tr>
+<tr><td><code>S6-192</code></td><td><code>src/auto_qb/webui/commands_common.py:102</code></td><td>引用的 webui/web_view.py 文件不存在(该模块已拆分为 views*.py / runtime_views.py); 实际自投递点为 views_search.py:104、views_episodes.py:236、runtime_views.py:575。</td><td>R4 <span class="cm">R4#11</span></td></tr>
+<tr><td><code>S6-196</code></td><td><code>src/auto_qb/webui/commands_torrents.py:269</code></td><td>后台核实队列「丢弃最旧」按 dict 首键取, 但同 hash 重复登记时 bg[h] = ent 是原位覆盖(插入序不变), 队列满时可能丢掉刚刷新的条目而非真正最旧, WARNING 文案「丢弃最旧」与事实可能不符(仅影响后台日志核实, 不影响回执)。</td><td>R4 <span class="cm">R4#6</span></td></tr>
+<tr><td><code>S6-197</code></td><td><code>src/auto_qb/webui/commands_torrents.py:411</code></td><td>_relocate_receipt 的 blocked-only 分支写 error 回执后直接 return, 无任何日志(ok 分支有 INFO)——整组迁移被闸门拒绝时服务端零留痕, 排障「点了移动没反应」在日志里查不到记录(回执原因只有前端可见)。</td><td>R4 <span class="cm">R4#7</span></td></tr>
+<tr><td><code>S6-204</code></td><td><code>src/auto_qb/webui/runtime_stream.py:31</code></td><td>同一注释块自相矛盾:首句断言「订阅/退订都记一条 INFO」,紧接的第二行与代码(logger.debug,:33)都说 DEBUG —— 首句是改级前的残留,误导排查者去 INFO 级找订阅记录</td><td>R4 <span class="cm">R4#26</span></td></tr>
+<tr><td><code>S6-207</code></td><td><code>src/auto_qb/webui/server/routes/fs.py:25</code></td><td>模块级 logger 是死代码:build_router 内 :90 又重定义了一份同名 logger,:219 的 mkdir 记录用的是内层那份,模块级那份只剩 noqa 压未用告警(拆分残留)</td><td>R4 <span class="cm">R4#32</span></td></tr>
+<tr><td><code>S6-208</code></td><td><code>src/auto_qb/webui/server/routes/fs.py:51</code></td><td>docstring 指向的 tests/test_web_hr.py 在快照中不存在(该文件已拆分,归一契约测试现位于 tests/test_web_hr_fs.py::test_fs_path_helpers_strip_long_path_prefix_before_compare),按图索骥找不到守阵</td><td>R4 <span class="cm">R4#38</span></td></tr>
+<tr><td><code>S6-209</code></td><td><code>src/auto_qb/webui/server/routes/hr.py:184</code></td><td>带圈数字 ①②③(hr.py:184/186/192/212/218)与 ⑥(keys.py:1)、①(groups.py:33)同样落在禁令清单明列的&quot;带圈数字 ①–⑬&quot;条目内</td><td>R4 <span class="cm">R4#36</span></td></tr>
+<tr><td><code>S6-211</code></td><td><code>src/auto_qb/webui/server/routes/keys.py:33</code></td><td>docstring 指向的 tests/test_webui_static_skins.py 在快照中不存在:_scan_keys_serial_re 定义在 tests/webui_static_scan_js.py,由 tests/test_webui_static_skins_skin.py 调用,文件名漂移后引用失准</td><td>R4 <span class="cm">R4#39</span></td></tr>
+<tr><td><code>S6-215</code></td><td><code>src/auto_qb/webui/server/routes/traffic_monitor.py:245</code></td><td>代码 docstring 使用 code-style.md 禁令清单明列的 ⚠ 图形符号(245 与 285 行各一处), 违反&quot;代码/配置一律 ASCII&quot;的 2026-09-30 用户明示禁令</td><td>R4 <span class="cm">R4#35</span></td></tr>
+<tr><td><code>S6-218</code></td><td><code>src/auto_qb/webui/static/atlas/css/components.css:548</code></td><td>同文件 545 行的首条 .modal 已声明 animation: modal-in .16s var(--ease),本条同特异性后到覆盖使其成为死声明;同一 double-def 模式原样复制在 console/css/components.css:513/516 与 flux/css/components.css:525/531(fork 带出)——改 545 行的动画时机会无任何效果</td><td>R4 <span class="cm">R4#40</span></td></tr>
+<tr><td><code>S6-219</code></td><td><code>src/auto_qb/webui/static/atlas/index.html:13</code></td><td>注释称 row_lang.css/hscroll.css「三皮肤共用」,但 prism(index.html 21/23 行)同样加载,现为四皮肤——级联序约束的适用面注释少计一个皮肤</td><td>R4 <span class="cm">R4#43</span></td></tr>
+<tr><td><code>S6-220</code></td><td><code>src/auto_qb/webui/static/prism/css/dialogs.css:543</code></td><td>与 190 行的同名同类选择器双定义且无覆盖注释:本条 margin:0 同特异性后到,静默压掉 190 行的 margin-top:7px(warn 变体因特异性更高不受影响)——按 190 行调基础提示间距会落空</td><td>R4 <span class="cm">R4#41</span></td></tr>
+<tr><td><code>S6-221</code></td><td><code>src/auto_qb/webui/static/shared/hscroll.css:4</code></td><td>消费方枚举已失准:flux/index.html:19 同样挂载本文件(行语言同款失准见 shared/row_lang.css:1 与 shared/console_hub_controls.css:384 的「三皮肤共用」,flux 均在消费)——维护者据注释会误判 flux 不吃这层而漏查第四皮肤渲染</td><td>R4 <span class="cm">R4#42</span></td></tr>
+<tr><td><code>S6-223</code></td><td><code>src/auto_qb/webui/tool_client.py:335</code></td><td>TrafficMonitorSubscriber 对真 gtm 工具的注册/心跳续租/注销/推送回调全链路只有桩覆盖(进程内端到端),真机联调自 S7 起挂账(memory-bank/testing/baselines/attachments/26-10-16-1404 §未闭合项)且 RM07-10 记账「本轮不可达,解锁条件=gtm 停跑或授权隔离环境」至今未解锁 —— 准入债务仍开</td><td>R4 <span class="cm">R4#28</span></td></tr>
+<tr><td><code>S6-224</code></td><td><code>src/auto_qb/webui/views.py:5</code></td><td>模块 docstring 的现状描述指向 W1 改名前的旧模块名 web_runtime(现已是 auto_qb/webui/runtime.py,归拢说明在 webui/__init__.py:5「runtime.py 在 W1 前是根模块 web_runtime.py」),读者按此指针找模块会落空</td><td>R4 <span class="cm">R4#25</span></td></tr>
+<tr><td><code>S6-229</code></td><td><code>src/auto_qb/webui/views_common.py:7</code></td><td>TorrentState 在本模块零使用(只有 TrackerStatus 用于 _TRACKER_ERROR_STATUSES), 系 views.py 拆出时的残留导入。</td><td>R4 <span class="cm">R4#18</span></td></tr>
+<tr><td><code>S6-233</code></td><td><code>memory-bank/conventions/webui-scope.md:55</code></td><td>登记表口径说 variant 与模板四支一一对应,但模板自 2026-10-22 起已无四支段(单条 ctxItems(ctxMenuKind()) v-for),文档模板形态描述过期</td><td>R5 <span class="cm">R5#34</span></td></tr>
+<tr><td><code>S6-244</code></td><td><code>scripts/qb_capture.py:494</code></td><td>docstring 含图形符号 ⇒/↔(全文件 9 处,全部在注释与 docstring),违反 code-style.md 代码禁令(不含运行时输出,降为 nit)</td><td>R5 <span class="cm">R5#230</span></td></tr>
+<tr><td><code>S6-246</code></td><td><code>scripts/qb_capture_core.py:143</code></td><td>docstring 含图形符号 ⇒(全文件 1 处),违反 code-style.md 代码禁令(仅注释,降为 nit)</td><td>R5 <span class="cm">R5#231</span></td></tr>
+<tr><td><code>S6-251</code></td><td><code>scripts/sim_qb_cli.py:27</code></td><td>parse_spec 对非数字段(如 --delete-torrents a:b)直接 int() 抛裸 ValueError 栈,只有段数不足才有友好 SystemExit</td><td>R5 <span class="cm">R5#209</span></td></tr>
+<tr><td><code>S6-255</code></td><td><code>scripts/sim_qb_model.py:673</code></td><td>replay_cursor 属性全仓无人赋值(只有 replay_pos/replay_cursor_ms),fsmock_state 的 t_seq 恒为 0,时间源字段名存实亡</td><td>R5 <span class="cm">R5#207</span></td></tr>
+<tr><td><code>S6-261</code></td><td><code>scripts/sim_run.py:650</code></td><td>verdict_of 处理 result==&quot;WARN&quot;,但 add() 只可能产出 PASS/FAIL/BASELINE,WARN 分支是死代码</td><td>R5 <span class="cm">R5#208</span></td></tr>
+<tr><td><code>S6-264</code></td><td><code>src/auto_qb/webui/static/flux/fx-mount.js:72</code></td><td>注释含带圈数字 ①② 共 7 处、≤ 1 处,违反代码非 ASCII 图形符号禁令</td><td>R5 <span class="cm">R5#189</span></td></tr>
+<tr><td><code>S6-272</code></td><td><code>src/auto_qb/webui/static/shared/add_torrent.js:429</code></td><td>注释含 code-style.md 明列禁用的非 ASCII 图形符号(⚠×4 行、带圈数字①②③×3 行、→×7 行、⇒×2 行),违反 AGENTS.md「代码禁图形符号」硬约束</td><td>R5 <span class="cm">R5#135</span></td></tr>
+<tr><td><code>S6-276</code></td><td><code>src/auto_qb/webui/static/shared/add_torrent.js:782</code></td><td>注释指 &lt;aq-combo-input&gt; 模板在 tpl/xtpl.html,实际快照中该模板在 shared/tpl/combo-input.html(xtpl.html 内 grep tpl-combo-input 为 0)</td><td>R5 <span class="cm">R5#149</span></td></tr>
+<tr><td><code>S6-277</code></td><td><code>src/auto_qb/webui/static/shared/app.js:209</code></td><td>DRAWER_TRACKER_COLUMNS(209)/DRAWER_FILE_COLUMNS(336) 生产无引用(仅 test_webui_static_skins_table.py:295 钉存在性);363 行注释称「变体列集由它们派生」但实为独立手写 —— 死常量+注释契约不符。</td><td>R5 <span class="cm">R5#6</span></td></tr>
+<tr><td><code>S6-278</code></td><td><code>src/auto_qb/webui/static/shared/app.js:276</code></td><td>.js 注释大量出现 →/⇒/①②(14/304/317/503-505 等),违反 code-style.md 非 ASCII 图形符号禁令。</td><td>R5 <span class="cm">R5#11</span></td></tr>
+<tr><td><code>S6-279</code></td><td><code>src/auto_qb/webui/static/shared/app.js:392</code></td><td>该句读不通(疑为「全仓无 localStorage.clear()」之误;实测全 static 树零处调用),按现字面反而暗示存在 clear() 调用,与「只清 autoqb_token」的保证表述打架。</td><td>R5 <span class="cm">R5#24</span></td></tr>
+<tr><td><code>S6-281</code></td><td><code>src/auto_qb/webui/static/shared/auth.js:5</code></td><td>.js 注释出现 ⇒ 符号,违反 code-style.md 非 ASCII 图形符号禁令。</td><td>R5 <span class="cm">R5#13</span></td></tr>
+<tr><td><code>S6-284</code></td><td><code>src/auto_qb/webui/static/shared/auth.js:141</code></td><td>_logout 的 speedMode 复位字面量缺 altOn/altCurrent 两键,与 state.js:429 初值形态漂移(登出后读 altOn 为 undefined,暂等价 false,埋形态漂移隐患)。</td><td>R5 <span class="cm">R5#7</span></td></tr>
+<tr><td><code>S6-286</code></td><td><code>src/auto_qb/webui/static/shared/columns.js:13</code></td><td>注释含禁用非ASCII图形符号(①②),本文件共 2 行命中</td><td>R5 <span class="cm">R5#41</span></td></tr>
+<tr><td><code>S6-290</code></td><td><code>src/auto_qb/webui/static/shared/columns_drag.js:107</code></td><td>注释含禁用箭头符号「→」,本文件共 1 行命中</td><td>R5 <span class="cm">R5#42</span></td></tr>
+<tr><td><code>S6-291</code></td><td><code>src/auto_qb/webui/static/shared/columns_grid.js:32</code></td><td>注释含禁用箭头/推导符号(→ ⇒),本文件共 6 行命中</td><td>R5 <span class="cm">R5#43</span></td></tr>
+<tr><td><code>S6-294</code></td><td><code>src/auto_qb/webui/static/shared/columns_menu.js:52</code></td><td>注释含禁用带圈数字(①②③④),本文件共 10 行命中</td><td>R5 <span class="cm">R5#44</span></td></tr>
+<tr><td><code>S6-296</code></td><td><code>src/auto_qb/webui/static/shared/columns_persist.js:29</code></td><td>注释含禁用符号(⇒ ↔ →),本文件共 4 行命中(含 L54 用户提示文案源串里的「↔」)</td><td>R5 <span class="cm">R5#45</span></td></tr>
+<tr><td><code>S6-300</code></td><td><code>src/auto_qb/webui/static/shared/commands.js:169</code></td><td>eventMs 未在 _newCmdStats 初始化(114-132 行字段清单无此键),SSE 不可用、轮询路径赢下竞速时 onCmdEvent 从未触发,[perf] 撤下行打印「事件 undefinedms」</td><td>R5 <span class="cm">R5#234</span></td></tr>
+<tr><td><code>S6-303</code></td><td><code>src/auto_qb/webui/static/shared/config_editor.js:4</code></td><td>含 code-style.md 禁用的非 ASCII 图形符号: 全文件 10 行含 →/⇒/①/②(均在注释)</td><td>R5 <span class="cm">R5#160</span></td></tr>
+<tr><td><code>S6-308</code></td><td><code>src/auto_qb/webui/static/shared/config_editor.js:241</code></td><td>cfgReset(登出清场)漏清同类展开态: 只清了 openGroups/openLists/openRuleMeta,openSections/openCurves/collapsedRules 三张同族 map 原样保留,登出换账号后残留上一会话的展开状态键(含配置路径形状)</td><td>R5 <span class="cm">R5#159</span></td></tr>
+<tr><td><code>S6-311</code></td><td><code>src/auto_qb/webui/static/shared/config_editor_curve.js:39</code></td><td>2 行含禁用符号 →(行 39);行 39 的 → 位于渲染给用户的 help 字符串字面量内</td><td>R5 <span class="cm">R5#165</span></td></tr>
+<tr><td><code>S6-314</code></td><td><code>src/auto_qb/webui/static/shared/config_editor_tree.js:13</code></td><td>11 行注释含禁用符号 →</td><td>R5 <span class="cm">R5#161</span></td></tr>
+<tr><td><code>S6-316</code></td><td><code>src/auto_qb/webui/static/shared/config_editor_tree.js:182</code></td><td>cfgInlineBool 只是 cfgBool 的透传包装,全仓无任何调用点(内联开关实际走 CE_FIELD_BASE.inlineValue),死代码</td><td>R5 <span class="cm">R5#156</span></td></tr>
+<tr><td><code>S6-317</code></td><td><code>src/auto_qb/webui/static/shared/config_hub.js:7</code></td><td>13 行含禁用符号 →/↑↓/⑤/↔;其中行 61-92 的 → 在 HUB_HELP 用户可见字符串字面量内</td><td>R5 <span class="cm">R5#162</span></td></tr>
+<tr><td><code>S6-319</code></td><td><code>src/auto_qb/webui/static/shared/config_hub_tm.js:154</code></td><td>5 行注释含禁用符号 ⇒/③</td><td>R5 <span class="cm">R5#163</span></td></tr>
+<tr><td><code>S6-323</code></td><td><code>src/auto_qb/webui/static/shared/config_hub_tracker.js:94</code></td><td>5 行注释含禁用符号 ↑↓/→</td><td>R5 <span class="cm">R5#164</span></td></tr>
+<tr><td><code>S6-324</code></td><td><code>src/auto_qb/webui/static/shared/config_rules.js:42</code></td><td>cfgPluginEntry 全仓无任何调用点(模板与 JS 均无),死代码/拆分残留</td><td>R5 <span class="cm">R5#155</span></td></tr>
+<tr><td><code>S6-325</code></td><td><code>src/auto_qb/webui/static/shared/config_rules.js:114</code></td><td>「splice 删项 + 空则整键摘除」模式本批内重复至少 4 份: cfgPluginRemove / config_editor.js cfgItemRemove / cfgListEntryRemove / cfgChooseBranchRemove,语义完全同构,属平行机制</td><td>R5 <span class="cm">R5#158</span></td></tr>
+<tr><td><code>S6-326</code></td><td><code>src/auto_qb/webui/static/shared/config_rules.js:223</code></td><td>行 223 注释含禁用符号 →(本文件仅此一处)</td><td>R5 <span class="cm">R5#166</span></td></tr>
+<tr><td><code>S6-327</code></td><td><code>src/auto_qb/webui/static/shared/config_rules.js:263</code></td><td>「on_error 全缺省则整键摘除」逻辑同文件内两份逐字等价实现: 索引版 cfgOnErrorPruneIfDefault(263-270)与路径版 cfgOnErrorSetAt 内联段(695-699),头注只说「两族同口径勿各改一套」但未收敛到单一 helper,改缺省口径时漏一处即行为分叉</td><td>R5 <span class="cm">R5#157</span></td></tr>
+<tr><td><code>S6-331</code></td><td><code>src/auto_qb/webui/static/shared/decorate.js:13</code></td><td>注释含禁用带圈数字与推导符号(①② ⇒),本文件注释共 6 行命中(另有 L149 字符串已单列)</td><td>R5 <span class="cm">R5#46</span></td></tr>
+<tr><td><code>S6-335</code></td><td><code>src/auto_qb/webui/static/shared/delete_flow.js:299</code></td><td>注释含图形符号 →(299)与 ⇒(180/257),违反代码禁图形符号约束</td><td>R5 <span class="cm">R5#136</span></td></tr>
+<tr><td><code>S6-336</code></td><td><code>src/auto_qb/webui/static/shared/delete_flow.js:353</code></td><td>回退标签取的是参数 hash 而非解析出的 target: 右键菜单路径 ctx_menu.js:115 以无参调用 delTorrent(),hash=&quot;&quot;,name 缺失时 _reannounceAll 回执文案的 label 退化为空引号(应为 target.slice(0,12))</td><td>R5 <span class="cm">R5#134</span></td></tr>
+<tr><td><code>S6-337</code></td><td><code>src/auto_qb/webui/static/shared/dialogs.js:157</code></td><td>注释含明列禁用的带圈数字①②③(157-159)与大量 →/⇒(→×13 行、⇒×3 行),违反代码禁图形符号约束</td><td>R5 <span class="cm">R5#137</span></td></tr>
+<tr><td><code>S6-340</code></td><td><code>src/auto_qb/webui/static/shared/dialogs.js:542</code></td><td>注释引用的 mixins/web_view.py 在快照中不存在(无 mixins/ 目录),单种子 dl_limit 列实际装配在 src/auto_qb/webui/views_row.py:58</td><td>R5 <span class="cm">R5#150</span></td></tr>
+<tr><td><code>S6-345</code></td><td><code>src/auto_qb/webui/static/shared/drawer.js:43</code></td><td>合并布局段封顶 2400 的落点写「三皮肤 views.css」,快照四套皮肤(atlas/console/flux/prism)的 views.css 均含该段(flux/css/views.css:412)</td><td>R5 <span class="cm">R5#75</span></td></tr>
+<tr><td><code>S6-351</code></td><td><code>src/auto_qb/webui/static/shared/drawer_head.js:7</code></td><td>装载序约束指向已删除的 drawer_tabs.js(经典渲染链 2026-10-14 整体移除,drawer_templates.js 头注与 app.js:481 均可证),四份 manifest 里该文件已不存在</td><td>R5 <span class="cm">R5#73</span></td></tr>
+<tr><td><code>S6-355</code></td><td><code>src/auto_qb/webui/static/shared/drawer_store.js:25</code></td><td>头注把流量源跨模块成对纪律指到不存在的「kb_traffic_chart.js」(实际为 qb_traffic_chart.js),且下一行写的回执形态 _drawerDone(&quot;traffic&quot;, hash, 0) 与实际调用(qb_traffic_chart.js:768 为 (&quot;traffic&quot;, ctx, 0))不符</td><td>R5 <span class="cm">R5#70</span></td></tr>
+<tr><td><code>S6-359</code></td><td><code>src/auto_qb/webui/static/shared/drawer_templates.js:52</code></td><td>CSS 令牌白名单核实范围写「三皮肤」,flux(第四套)现已存在且令牌在 flux/style.css 齐——「各皮肤求交」白名单口径按三套陈述,变体作者会误以为 flux 不受此口径覆盖</td><td>R5 <span class="cm">R5#72</span></td></tr>
+<tr><td><code>S6-366</code></td><td><code>src/auto_qb/webui/static/shared/drawer_tpl/02-general-cards-low.js:237</code></td><td>tags 徽章在 02/03(03:284)借用 is-hr(HR pending 橙色族)着色,01:230 同语义槽用中性 dt01-chip——同槽位跨变体视觉漂移,标签被误带 HR 语义色</td><td>R5 <span class="cm">R5#82</span></td></tr>
+<tr><td><code>S6-370</code></td><td><code>src/auto_qb/webui/static/shared/drawer_tpl/04-trackers-status-cards-tall.js:146</code></td><td>注释使用带圈数字 ①②(147 行同),属 code-style.md 明令禁用的「带圈数字」类(代码含注释)</td><td>R5 <span class="cm">R5#86</span></td></tr>
+<tr><td><code>S6-371</code></td><td><code>src/auto_qb/webui/static/shared/drawer_tpl/04-trackers-status-cards-tall.js:185</code></td><td>内网启发式误报面: 主机名以 fd 开头(如 https://fd.example.com/announce)或 10. 开头的公网域名都会命中 LAN_RE 打出「内网」徽章(\[?fd 无边界、10\. 可匹配合法域名)</td><td>R5 <span class="cm">R5#84</span></td></tr>
+<tr><td><code>S6-373</code></td><td><code>src/auto_qb/webui/static/shared/drawer_tpl/05-trackers-health-groups-low.js:18</code></td><td>注释使用带圈数字 ①②(20 行同),违反 code-style.md 非 ASCII 图形符号禁令</td><td>R5 <span class="cm">R5#87</span></td></tr>
+<tr><td><code>S6-375</code></td><td><code>src/auto_qb/webui/static/shared/drawer_tpl/05-trackers-health-groups-low.js:252</code></td><td>失败区重报钮 gate 放行时 title 给空串,同文件普通行(05:235)与 04/06 同槽位放行时都给「强制重新汇报」提示——复制粘贴分叉</td><td>R5 <span class="cm">R5#83</span></td></tr>
+<tr><td><code>S6-383</code></td><td><code>src/auto_qb/webui/static/shared/drawer_tpl/07-peers-dashboard-tall.js:377</code></td><td>barHtml 的 ctx 形参从未使用(09:196 同函数已去掉该参)——死参数,亦是与 09 的签名漂移</td><td>R5 <span class="cm">R5#85</span></td></tr>
+<tr><td><code>S6-386</code></td><td><code>src/auto_qb/webui/static/shared/drawer_tpl/08-peers-groups-low.js:23</code></td><td>注释使用带圈数字 ①②(25 行同),违反 code-style.md 非 ASCII 图形符号禁令</td><td>R5 <span class="cm">R5#88</span></td></tr>
+<tr><td><code>S6-394</code></td><td><code>src/auto_qb/webui/static/shared/drawer_tpl/10-content-tree-detail-tall.js:9</code></td><td>注释含箭头图形符号「→」(本文件 7 处)与「←」(271 行),违反 code-style.md 非 ASCII 图形符号禁令对注释的覆盖;shared 层此类箭头系存量惯性(61 个文件命中),建议入池批量清理</td><td>R5 <span class="cm">R5#116</span></td></tr>
+<tr><td><code>S6-401</code></td><td><code>src/auto_qb/webui/static/shared/drawer_tpl/11-content-treegrid-batch-low.js:10</code></td><td>注释含箭头图形符号「→」(本文件注释 8 处,另有 339 行字符串字面量单列一条),同 code-style.md 禁令对注释的覆盖</td><td>R5 <span class="cm">R5#117</span></td></tr>
+<tr><td><code>S6-405</code></td><td><code>src/auto_qb/webui/static/shared/drawer_tpl/11-content-treegrid-batch-low.js:158</code></td><td>吸底批量条水平负边距 -16px 只与 prism 的 .drawer-body 水平 padding(16px)吻合;atlas/console/flux 均为 18px(dialogs.css 实测),批量条两侧各短 2px 不贴边,且同文件 100 行头注自己列明「atlas|console: 14px 18px 20px」,代码与自列数据不一致</td><td>R5 <span class="cm">R5#115</span></td></tr>
+<tr><td><code>S6-413</code></td><td><code>src/auto_qb/webui/static/shared/drawer_tpl/90-peers-stub-bridge.js:6</code></td><td>注释含箭头图形符号「→」(本文件 3 处: 6/13/35 行),同 code-style.md 禁令对注释的覆盖</td><td>R5 <span class="cm">R5#119</span></td></tr>
+<tr><td><code>S6-414</code></td><td><code>src/auto_qb/webui/static/shared/drawer_tpl/90-peers-stub-bridge.js:8</code></td><td>注释含带圈数字「④」(U+2463),属 code-style.md 明列禁用类「带圈数字 ①-⑬」</td><td>R5 <span class="cm">R5#118</span></td></tr>
+<tr><td><code>S6-416</code></td><td><code>src/auto_qb/webui/static/shared/fetch_low.js:19</code></td><td>boot.js 实际常量名是 BOOT_PART_TIMEOUT_MS(无 AQB_ 前缀,boot.js:20),注释指向不存在的名字,按名 grep 落空。</td><td>R5 <span class="cm">R5#20</span></td></tr>
+<tr><td><code>S6-417</code></td><td><code>src/auto_qb/webui/static/shared/filters.js:136</code></td><td>注释含禁用符号(⇒ ·),本文件共 3 行命中</td><td>R5 <span class="cm">R5#47</span></td></tr>
+<tr><td><code>S6-420</code></td><td><code>src/auto_qb/webui/static/shared/format.js:80</code></td><td>注释含禁用箭头/推导符号(→ ⇒),本文件共 7 行命中</td><td>R5 <span class="cm">R5#48</span></td></tr>
+<tr><td><code>S6-421</code></td><td><code>src/auto_qb/webui/static/shared/fx/fx.js:21</code></td><td>注释称 S6 提升原语 18 个,但 REGISTRY.effects 实为基线 9 + S6 17 = 26 名(row-flash 于 2026-11-03 退役后未回写计数,守阵 docstring 亦自称「注册表 26 名」)</td><td>R5 <span class="cm">R5#197</span></td></tr>
+<tr><td><code>S6-424</code></td><td><code>src/auto_qb/webui/static/shared/hr.js:152</code></td><td>注释含 →←⇒≠ 共 12 处,违反代码非 ASCII 图形符号禁令</td><td>R5 <span class="cm">R5#187</span></td></tr>
+<tr><td><code>S6-426</code></td><td><code>src/auto_qb/webui/static/shared/hr_status.js:365</code></td><td>注释含 ⚠(U+26A0,禁令明列且给了 WARN: 替代);该文件同类还有 →⇒⇄≤ 共 19 处、带圈数字 ①-⑤ 共 26 处,全在注释</td><td>R5 <span class="cm">R5#184</span></td></tr>
+<tr><td><code>S6-428</code></td><td><code>src/auto_qb/webui/static/shared/lifecycle.js:89</code></td><td>.js 注释出现非 ASCII 图形符号 ⚠(同文件还有 →/⇒/①② 多处),违反 conventions/code-style.md 代码禁图形符号禁令(boot.js/fetch_low.js 干净)。</td><td>R5 <span class="cm">R5#8</span></td></tr>
+<tr><td><code>S6-430</code></td><td><code>src/auto_qb/webui/static/shared/menu.js:146</code></td><td>注释使用带圈数字 ①②③,属 code-style.md「非 ASCII 图形符号禁令」点名的禁用类(.js 注释也在覆盖面内)</td><td>R5 <span class="cm">R5#237</span></td></tr>
+<tr><td><code>S6-432</code></td><td><code>src/auto_qb/webui/static/shared/polling.js:5</code></td><td>.js 注释出现 →/⇒(5/22/24/74/173/259/274-275 等十余处),违反 code-style.md 非 ASCII 图形符号禁令。</td><td>R5 <span class="cm">R5#12</span></td></tr>
+<tr><td><code>S6-437</code></td><td><code>src/auto_qb/webui/static/shared/qb_traffic_chart.js:12</code></td><td>注释含带圈数字 ①②③ 与 ⇒∈ 共 11 处,违反代码非 ASCII 图形符号禁令</td><td>R5 <span class="cm">R5#186</span></td></tr>
+<tr><td><code>S6-439</code></td><td><code>src/auto_qb/webui/static/shared/qb_traffic_chart.js:466</code></td><td>注释引用 webui.md 的「同一口径收成 computed 单点」口径,但快照 memory-bank/conventions/webui.md 及其 attachments 全族均无该表述(全 memory-bank 库仅一份 issue HTML 含此短语),属悬空文档引用</td><td>R5 <span class="cm">R5#201</span></td></tr>
+<tr><td><code>S6-445</code></td><td><code>src/auto_qb/webui/static/shared/scope_audit.js:3</code></td><td>文件头注释仍说「三个统一出口」(line 13 同),但守阵 test_scope_audit_wiring 自 26-10-31-0306 T7 起钉的是四出口(transfer_flow.js::transferOpen 已接线),注释少了第四出口</td><td>R5 <span class="cm">R5#32</span></td></tr>
+<tr><td><code>S6-448</code></td><td><code>src/auto_qb/webui/static/shared/selection.js:266</code></td><td>注释含禁用带圈数字与推导符号(①②③ ⇒),本文件共 4 行命中</td><td>R5 <span class="cm">R5#49</span></td></tr>
+<tr><td><code>S6-449</code></td><td><code>src/auto_qb/webui/static/shared/shortcuts.js:20</code></td><td>注释引用的 tests/test_webui_static_skins.py 不存在(已拆分,_scan_mixin_wiring 实居 _skin 件);line 160 同款过期引用</td><td>R5 <span class="cm">R5#33</span></td></tr>
+<tr><td><code>S6-450</code></td><td><code>src/auto_qb/webui/static/shared/shortcuts.js:177</code></td><td>注释使用带圈数字 ⑤③,属 code-style.md 图形符号禁令</td><td>R5 <span class="cm">R5#238</span></td></tr>
+<tr><td><code>S6-451</code></td><td><code>src/auto_qb/webui/static/shared/shortcuts.js:283</code></td><td>注释使用带圈数字 ③,属 code-style.md 图形符号禁令</td><td>R5 <span class="cm">R5#239</span></td></tr>
+<tr><td><code>S6-452</code></td><td><code>src/auto_qb/webui/static/shared/shortcuts.js:305</code></td><td>注释使用带圈数字 ③,属 code-style.md 图形符号禁令</td><td>R5 <span class="cm">R5#240</span></td></tr>
+<tr><td><code>S6-453</code></td><td><code>src/auto_qb/webui/static/shared/shortcuts.js:360</code></td><td>注释使用 ⚠ 符号,属 code-style.md 禁令清单(替代写法 WARN:)</td><td>R5 <span class="cm">R5#241</span></td></tr>
+<tr><td><code>S6-454</code></td><td><code>src/auto_qb/webui/static/shared/shortcuts_engine.js:8</code></td><td>注释含 ⊕(U+2295)及 →←↑↓⇒①② 共 33 处,全在注释,违反代码非 ASCII 图形符号禁令</td><td>R5 <span class="cm">R5#185</span></td></tr>
+<tr><td><code>S6-459</code></td><td><code>src/auto_qb/webui/static/shared/shortcuts_panel.js:116</code></td><td>注释使用 ⚠ 符号,属 code-style.md 禁令清单</td><td>R5 <span class="cm">R5#242</span></td></tr>
+<tr><td><code>S6-461</code></td><td><code>src/auto_qb/webui/static/shared/shows.js:32</code></td><td>集键展示纯函数 epLabel 的四形态分支(ep/range/date/整季包)从未被任何测试执行;memberHashesOf 有静态守阵、decoratedShows 有 e2e 间接覆盖,epLabel 只有模板引用</td><td>R5 <span class="cm">R5#195</span></td></tr>
+<tr><td><code>S6-462</code></td><td><code>src/auto_qb/webui/static/shared/shows.js:130</code></td><td>注释含 →⇒≈ 共 4 处,违反代码非 ASCII 图形符号禁令</td><td>R5 <span class="cm">R5#188</span></td></tr>
+<tr><td><code>S6-464</code></td><td><code>src/auto_qb/webui/static/shared/state.js:284</code></td><td>.js 注释出现 ⌘(85/99/226/325 等还有 →/⇒/②/③/⑤),违反 code-style.md 非 ASCII 图形符号禁令。</td><td>R5 <span class="cm">R5#10</span></td></tr>
+<tr><td><code>S6-465</code></td><td><code>src/auto_qb/webui/static/shared/state.js:542</code></td><td>数据面 UI_HOME 实为四档(含 flux,state.js:16-21),注释仍写「三套 UI 直选」。</td><td>R5 <span class="cm">R5#22</span></td></tr>
+<tr><td><code>S6-466</code></td><td><code>src/auto_qb/webui/static/shared/table.js:41</code></td><td>注释含禁用带圈数字与箭头(①~⑥ →),本文件共 20 行命中,为 14 文件中密度最高</td><td>R5 <span class="cm">R5#50</span></td></tr>
+<tr><td><code>S6-467</code></td><td><code>src/auto_qb/webui/static/shared/transfer_flow.js:12</code></td><td>文件头注释含带圈数字①②③(12-14),明列禁用类</td><td>R5 <span class="cm">R5#138</span></td></tr>
+<tr><td><code>S6-468</code></td><td><code>src/auto_qb/webui/static/shared/transfer_flow.js:44</code></td><td>「三份 index.html 清单」已漂移: 快照有四套皮肤(atlas/prism/console/flux)且守阵 test_tf_wiring_static 按 _UI_ALL 四份断言装载序</td><td>R5 <span class="cm">R5#151</span></td></tr>
+<tr><td><code>S6-469</code></td><td><code>src/auto_qb/webui/static/shared/transfer_targets.js:33</code></td><td>同上「三份」漂移(四套皮肤清单均含本文件,守阵按 _UI_ALL 四份断言);相邻 test_tt_editor_wiring:283 注释同款旧表述</td><td>R5 <span class="cm">R5#152</span></td></tr>
+<tr><td><code>S6-471</code></td><td><code>src/auto_qb/webui/static/shared/ui_feedback.js:312</code></td><td>.js 注释出现 ⚠(379-381/520-521 还有 ①②③ 与 →),违反 code-style.md 非 ASCII 图形符号禁令。</td><td>R5 <span class="cm">R5#9</span></td></tr>
+<tr><td><code>S6-472</code></td><td><code>src/auto_qb/webui/static/shared/ui_feedback.js:388</code></td><td>「.aq-tip 段(三套皮肤同载)」计数漂移:flux/index.html 同样载入 shared/console_hub.css,实为四套。</td><td>R5 <span class="cm">R5#23</span></td></tr>
+</table>
+
+<h2><span class="no">§07</span>方法论注记(评审可信度痕迹)</h2>
+
+<p><b>A. 引文校验口径。</b>每批 findings 落盘前过 <code>review.check --root &lt;快照&gt;</code> 逐字校验,<b>refute 即弃、不入册</b>。全程 refute 2 条——R4 1 条幻觉引文、R5-9 批 <code>sim_run.py:723 --tick</code> 幻觉引文——均被 review.check 拦下,不在 475 之内(aggregate notes_flags_for_s6 原文留痕)。通过侧:R1 七批 107/107 PASS 零弃,R5 补记后 242/242 全过,其余路线各批全过。工具面曾有缺陷:<code>review.check --root 快照</code> 被 <code>_resolve_root</code> 的 .git 存在性检查误拒(R2 首报,issue 已入池),R2 走「git diff 零变更 + 工作树校验」等价通路,R3/R4/R5 以快照根预建空 .git 绕过,R1 记工具侧修复 commit <code>d2b272a5</code>(check 子命令放行 <code>require_git=False</code>);全程零代码改动原则未被工具修复破坏(修的是评审工具,非被评对象)。</p>
+
+<p><b>B. 自弃发现记录。</b>各批 reviewer 命中「不报清单」即留痕不报,notes 逐批可查。如 R1:taskqueue 的 Task.torrent/run_count/attempt 字段有真实消费方、不属死字段(R1-1 面1);R1-7 曾在快照根短暂生成 .venv(核验用),当场删除并经主会话核实无残留后才采信该面发现。R2 refute 0 但有 5 条有据候选排除(如 base.py <code>_POLICY_STOP</code> 系注释锚点)。R3 六批自弃 45 条、R5 逐批自弃留痕(如 R5-9 七条、R5-10 九条),均写明放弃理由。</p>
+
+<p><b>C. notes 分级不一致已留痕。</b>R2 notes 的分级数字三处互不一致:终态行(minor 33 / nit 12)、findings 文件实测(minor 34 / nit 11)、批次勾选表逐批求和(minor 35 / nit 10)——按冲突裁决(数据&gt;文档)<b>以 findings 文件为准</b>,差异细节留痕于 aggregate.json stats.notes_crosscheck;R5 的两个快扫批(R5-9/R5-10)批内分级同样存在 notes 与文件差(如 R5-9 文件实测 major 1/minor 11/nit 3 vs notes 1/8/6),终报告引用批内数字时以 findings 文件为准。其余三路线(R1/R3/R4)notes 与文件一致。</p>
+
+<p><b>D. R5-2 漏记补记。</b>R5-2 批原记 10 条,26-11-07 收口前发现面 1 的 11 条(含 major <code>shortcuts_panel.js:39</code> 录制态残留吞键)漏记进 findings JSON,补记后批次实数 21,review.check 242/242 全过——漏记在路线收口前被拦下,未污染聚合面;route-R5.json 批次记录与 notes 均留有修正行。</p>
+
+<h2><span class="no">§08</span>遗留与后续</h2>
+
+<ul>
+  <li><b>本轮零代码改动</b>——评审为只读快照评审(git archive 快照,develop 零扰动);唯一例外是评审工具侧 <code>review_pack.py</code> 放行 check 子命令(commit d2b272a5,R1 notes 记录),非被评对象。</li>
+  <li><b>major/minor 285 行已入池待认领</b>:6 份 issue(§05)全 Open,认领链走 <code>doc-refs</code> 双向声明;处置答案在 issue 侧。</li>
+  <li><b>A-03 建议跟踪</b>:R2 底册唯一以「链路仍在」口径记复发的项(REMOVED→REBUILD 链条逐锚点仍在,exec:248 alias_partial→reconcile ACT_REBUILD);已加上界(REBUILD_MAX_ATTEMPTS=3+退避),风险较原报收敛——建议在后续轮次复核「原报主张是否为无界循环」,若是否可改判已消失(§04 注记)。</li>
+  <li><b>跨文件同根留痕 3 组</b>(机械去重键为同 file,跨文件同根不动条目只留痕,aggregate notes_flags_for_s6):①R3 service_wave.py:542(major)与 ratelimit.py:8(minor)非 Retry-After 失败绕过最小间隔同根;②taskkill 红线口径 2 条(port_kill.py:36 与 hr_fetch_experiment.py:546);③「三份 index.html/三套 UI」计数漂移族 8 条——均已随主题入池,合并或分立以 issue 处置为准。</li>
+  <li><b>nit 189 条仅记录不入池</b>(§06);复验表中其余 17 项已消失条目随底册归档,不再跟踪。</li>
+</ul>
+
+</div>
+</body>
+</html>

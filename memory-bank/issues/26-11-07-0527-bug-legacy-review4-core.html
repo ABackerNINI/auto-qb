@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="legacy-review4-core">
+<meta name="issue-stamp" content="26-11-07-0527">
+<meta name="issue-type" content="bug">
+<meta name="doc-topic" content="legacy-review4">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="存量评审 R4·core 汇总(major 12/minor 31)">
+<meta name="issue-summary" content="core 主题 major 12+minor 31 共 43 条(R1#81/#82 合并组拆回为 44 行)聚合入池,来源存量评审 R4(计划 26-11-05-2335)">
+<title>存量评审 R4·core 汇总(major 12/minor 31) · bug · 计划外问题</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 38px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 78ch; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>现象与发现场景</a>
+    <a href="#s2"><span class="no">02</span>证据</a>
+    <a href="#s3"><span class="no">03</span>影响面</a>
+    <a href="#s4"><span class="no">04</span>定位锚点</a>
+    <a href="#s5"><span class="no">05</span>根因<span class="opt">（可选）</span></a>
+    <a href="#s6"><span class="no">06</span>建议修法<span class="opt">（可选）</span></a>
+    <a href="#s7"><span class="no">07</span>状态变更日志</a>
+    <div class="toc-foot">
+      类型 bug · 档位 standard<br>
+      入池不改码 · 规范见 create-issue skill
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">计划外问题（未修）· bug</div>
+    <h1>存量评审 R4·core 汇总(major 12/minor 31)</h1>
+    <p class="lede">core 主题 major 12+minor 31 共 43 条(R1#81/#82 合并组拆回为 44 行)聚合入池,来源存量评审 R4(计划 26-11-05-2335)</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-11-07-0527-bug-legacy-review4-core</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-11-07 05:27</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象与发现场景</h2>
+    <p>本件为<strong>存量代码评审 R4</strong>（计划 26-11-05-2335，memory-bank/plans/26-11-05-2335-plan-legacy-code-review-4.html）五路线（R1–R5）findings 按主题聚合后的 <strong>core 主题汇总件</strong>：聚合口径取 severity ∈ {major, minor} 的存活条目共 <strong>43 条</strong>（major 12 / minor 31；nit 不入池），分布于 25 个文件（路线分布 R1 43）。取证与校验口径：全部条目锚定 freeze <code>f0883292</code>（git archive 快照，行号为当时行号），落盘前逐条过 <code>review.check</code> 逐字引文校验；聚合数据面单点 <code>memory-bank/reports/attachments/legacy-review4/aggregate.json</code>。R1#81/R1#82 曾按 (file,quote,line) 键完全一致机械合并（dedup 记录标注「入池时可拆回」），两 claim 各指一缺陷面（解散不清理计数 / 计数不落盘），入池时拆回两行并注「合并组拆回」，故明细表 44 行 = 43 条 + 拆回 1 行。本件为纯盘点入池，状态保持 Open，不被认领修。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>证据</h2>
+    <p class="hint">下表由 <code>aggregate.json</code> 机械生成；「file:line」为当时行号（锚定 freeze f0883292），代码漂移后按文件 + claim 中符号重定位；「路线·批次」列取 src_ref（路线#条目号），批次归属见各路线 notes 文件。</p>
+    <h3>findings 明细表（44 行 = 43 条 + 合并组拆回 1 行）</h3>
+    <table>
+      <tr><th>#</th><th>severity</th><th>file:line（当时行号，freeze f0883292）</th><th>claim</th><th>fix</th><th>路线·批次</th></tr>
+      <tr><td>1</td><td>major</td><td><code>src/auto_qb/core/modules/grouping_mod.py:481</code></td><td>缺文件扫描的 UNDETERMINED 三态闸门(路径不可判定即跳过整组、不暂停不打标, docstring 自称『报告 §05 红线』)与孪生探测『非 True 一律按无孪生』子分支在 tests/ 全无覆盖——grouping 各测试均未伪造 fa.exists 返回 UNDETERMINED, 该防误暂停守门属完全无测试的高风险行为</td><td>在 test_grouping_state.py 补一例: 伪造 file_access.exists 返回 UNDETERMINED 断言整组早退(零暂停/零打标/不计过渡态计数), 对照孪生路径返回 UNDETERMINED 时按无孪生继续判缺失</td><td>R1#85</td></tr>
+      <tr><td>2</td><td>major</td><td><code>src/auto_qb/core/modules/ops_jobs.py:51</code></td><td>跳检崩溃恢复重加与正常重加(_skip_add_call)口径不一致: 缺 contentLayout 与 upload_limit/download_limit/ratio_limit/seeding_time_limit/share_limit_action 等参数, 且 _backup_torrent 元数据(ops_mod.py:371-377 只记 path/save_path/category/tags/ts)根本没记录这些字段, 恢复无从回传 —— 恢复出的种子可能 contentLayout 落在默认 Original 与实际 NoSubfolder 布局错位(missingFiles), 且单种分享/限速限制被 qB 默认值静默重置(PT 刷量义务丢失风险)</td><td>_backup_torrent 元数据补记 content_layout 与限速/分享限制字段, _recover_skip_backups 重加时按 _skip_add_call 同口径原样回传</td><td>R1#94</td></tr>
+      <tr><td>3</td><td>major</td><td><code>src/auto_qb/core/modules/relocate_exec.py:235</code></td><td>_build_links 建链与落账之间存在崩溃窗口(落账粒度 chunk/200 条,目录别名整条不落账): create_file_alias/create_dir_alias(alias_fs.py:619/629, os.link/os.symlink)对已存在路径抛 FileExistsError,重启后按已落账 link_pos 续建必撞盘上孤儿链接,而失败回滚 _remove_links 只删 job.alias_paths 已落账条目,孤儿留在盘上且永不入账,此后每轮 ACT_REBUILD 都在同一孤儿处失败,attempts 耗尽后 rebuild_exhausted 永久失败需手工清现场(面1/面2 同根因合并;与底册 A-03 根因不同: A-03 是能力性失败,本条是崩溃窗口非幂等重建+回滚范围缺口)(黄金法则#1)</td><td>建链改幂等: 创建前探测(alias_kind_of 命中且指向 target 则跳过),或落账粒度缩到单条,或失败回滚按 plan 文件表全量清理而非只删已落账链接</td><td>R1#22</td></tr>
+      <tr><td>4</td><td>major</td><td><code>src/auto_qb/core/modules/relocate_exec.py:891</code></td><td>relocate_cancel 忽略 _remove_links 的实际删除数,未核实链接已删净就下发 setLocation(src) 搬回: 目录别名删失败残留时搬回路径穿过 junction 指回 dst,libtorrent rename 失败走 copy+delete 回退时构成 copy-onto-self,且残留链接从此脱离 job 账失管</td><td>搬回前校验 _remove_links 返回值等于 len(alias_paths),有残留则 blocked 留现场提示人工处理</td><td>R1#23</td></tr>
+      <tr><td>5</td><td>major</td><td><code>src/auto_qb/core/modules/relocate_lifecycle.py:47</code></td><td>stop() 无条件 _persist: enabled=false 时 start() 跳过 _load_jobs, 内存 _jobs 为空, 优雅退出把 state 里历史在途 job 账整段清空(stop_all 后紧跟 ctx.state.save() 落盘), 未收尾 job 永久失账(别名链接无人收口、未收尾拦截失明)</td><td>stop() 仅在本会话加载过 job(或 enabled=true)时才 _persist, 或 _persist 前 box 非空且本会话未 load 时跳过 clear</td><td>R1#36</td></tr>
+      <tr><td>6</td><td>major</td><td><code>src/auto_qb/core/modules/relocate_plan.py:412</code></td><td>B′ 级 positive(本机文件 size 与种子元数据相等,完全不经过 qB,本机有独立完整副本即命中)与 dst 侧 visibility_only positive(qB 能列出目标祖先目录,不证明与 auto-qb 共享同一命名空间)都被当成与 D 级同权的同机证明返回 proved=True,而执行链(relocate_exec.py:663 `if facts.same_fs_proved: return None`)据此跳过 E1 强探测——远程 qB(qB&lt;5.0 无列目录端点走 B′,或 qB≥5.0 且 src 侧不可判定而目标祖先同名存在)会误判同机,多成员组走链接路线建出 qB 不跟随的别名</td><td>只有 D 级(目录元数据比对)positive 才跳过 E1;B′ 与 visibility_only 的 positive 降级为 note 并照常执行 E1 强探测(一次性、有缓存,成本有界)</td><td>R1#35</td></tr>
+      <tr><td>7</td><td>major</td><td><code>src/auto_qb/core/modules/relocate_probe.py:167</code></td><td>_await_probe_torrent 仅按固定 tag=aqb-probe 定位探针种子、不校验种子名前缀: 用户恰打了同名 tag 的种子会被当作探针执行 recheck 与 setLocation(数据被搬到 dst 临时目录), 最终被 _cleanup 以 delete_files=True 连文件删除</td><td>认领前校验 tor.name 以 PROBE_DIR_PREFIX 开头(与 sweep_probe_residue 的 ours 双条件同款), 不匹配则按不可见处理</td><td>R1#37</td></tr>
+      <tr><td>8</td><td>major</td><td><code>src/auto_qb/core/modules/relocate_probe.py:174</code></td><td>run_probe 的证读/证写/清理轮询用 time.sleep 同步阻塞, 且经 relocate_exec._ensure_probe(relocate_exec.py:707, 规则自动迁移共用)在主循环线程执行: FS 不可达时单次探测阻塞主循环约 25s+(10s 证读+10s 证写+5s 清理, 另加各 qB HTTP 超时), 整库监控与其它模块任务线同期停滞, 与 on_task_line 自述「单步零阻塞」纪律矛盾(面1/面2 同报合并)</td><td>把探测改为跨 tick 分步推进的相位状态机, 或移到独立线程执行并经主循环消费结论(保持单一写线程约束)</td><td>R1#39</td></tr>
+      <tr><td>9</td><td>major</td><td><code>src/auto_qb/core/modules/relocate_probe.py:242</code></td><td>_cleanup 按 tag 补删对全部 tag=aqb-probe 的种子 delete_files=True, 同文件 sweep_probe_residue 已对『用户自己打了同名 tag 的种子』守卫为只删记录不删文件, 此处缺失该守卫</td><td>补删同样要求种子名或 save_path 带 aqb-probe 前缀才 delete_files=True, 否则只删记录或跳过</td><td>R1#38</td></tr>
+      <tr><td>10</td><td>major</td><td><code>src/auto_qb/core/modules/traffic_sample_agg.py:309</code></td><td>hour 重封行的合流源只有当日 day 累计器; 日关闭(_agg_flush_series L265 复位 day_epoch/day_hours)后该日 hour 再被迟到信用重封时(午夜跨天空闲 z 游程在 00:00 后首个样本封口、而 flush 恰落在 00:00 与封口记录之间), 残余行未经 v4_merge_agg 直接落盘, 解析按「同 epoch 取最后一行」使残余行替换此前已写的全量行, 该日 hour 行与紧随重关的 day 行(月界同构)的 cov_s/avg/max 被静默腐蚀, 且重启恢复以最后一行为水位不会再重算修复</td><td>为已关日/月的 hour 重封保留合流源(关层时缓存已写行或重封前从 agg 文件回读同 epoch 行做 v4_merge_agg 后再追加)</td><td>R1#63</td></tr>
+      <tr><td>11</td><td>major</td><td><code>src/auto_qb/core/state.py:131</code></td><td>load() 的损坏恢复写回在持锁之前执行(QbManager.__init__ 的 _reload_state 先于 SingleInstanceLock.acquire),且 --export-yaml 等 no_lock 只读模式同样会触发,实际向 state_file 写盘,违背「未持锁不写盘」的单一写线程判据(与 materialize_migration/cleanup_orphan_tmp 自述口径矛盾),可与正常运行实例并发写同一状态文件</td><td>恢复写回改为挂待写标志延迟到持锁后物化(仿 materialize_migration),no_lock 模式跳过写回只留日志</td><td>R1#8</td></tr>
+      <tr><td>12</td><td>major</td><td><code>src/auto_qb/core/tvshows.py:199</code></td><td>_DIR_SEASON_SUFFIX_RE 灾难性回溯: \d{3,4} 以 3/4 两种长度平铺长数字串, fullmatch 失败时按平铺方式指数回溯(实测 72 位数字 246ms, 每 6 位约 3.4 倍增长; 目录段可达 255 字符即分钟~小时级挂起); 触发形态: 季标记命中的目录段其余部分为长纯数字串且尾随一个非白名单字符(如 'S01 ' + 90+ 位数字 + 'x'), parse_files 无缓存且在视图构建路径对每个种子每目录段执行(webui/views_episodes.py:68、webui/runtime.py:186 每 tick 调用), 可被恶意/异常种子名打挂主循环</td><td>把 \d{3,4} 改为原子组/占有量符 (?&gt;\d{3,4}) 或 \d{3,4}++(Python 3.11+ 支持, 消除 token 内 3/4 重试), 或对段长设上限并在匹配前预检纯数字串长度</td><td>R1#79</td></tr>
+      <tr><td>13</td><td>minor</td><td><code>memory-bank/config-reference/keys.md:191</code></td><td>config-reference 把 stop_following_rules_if 列为规则级键且无退役标注(loading-and-write.md:51 仍写『stop_following_rules_if 六值』), 与代码事实矛盾: 含键规则载入即转未启用+warning(rules_mod.py RETIRED_CONTROL_KEYS/载入分支), 本文档对其它退役键(如 notify_cooldown_s)均有『已退役』标注</td><td>keys.md 规则集段与 loading-and-write.md 校验面按 rule-system/rules-and-triggers.md:68-73 同步补两键退役说明(含键规则转未启用+等价写法提示)</td><td>R1#86</td></tr>
+      <tr><td>14</td><td>minor</td><td><code>memory-bank/systemPatterns/main-loop.md:52</code></td><td>任务线 run_due 调用签名缺 defer_gate 实参(实际传 self._own_write_defer_gate), 行号注 (:817) 已失效(实际 qbmanager.py:822)</td><td>回写为 run_due(dry_run, now, max_tasks, defer_gate=self._own_write_defer_gate) 并更正行号</td><td>R1#16</td></tr>
+      <tr><td>15</td><td>minor</td><td><code>memory-bank/systemPatterns/main-loop.md:63</code></td><td>REQUEUE 收尾描述漏 retry_delay 分支: _requeue 在 handler 挂 retry_delay 时推迟到期且保留断点(taskqueue.py:321-327, plan 26-11-01-0106), 断点续跑不再是只经子任务一条路</td><td>补记 retry backoff 保留断点的队列内续跑路径</td><td>R1#17</td></tr>
+      <tr><td>16</td><td>minor</td><td><code>memory-bank/systemPatterns/taskqueue.md:11</code></td><td>Task 字段清单漂移: 仍列已不存在的 tracker_conf 字段, 缺 _store/attempt/retry_delay/created_at(快照 __slots__)</td><td>按 taskqueue.py:41-57 __slots__ 重写字段清单</td><td>R1#15</td></tr>
+      <tr><td>17</td><td>minor</td><td><code>memory-bank/systemPatterns/taskqueue.md:24</code></td><td>run_due 签名漂移: 代码已加 defer_gate 参数且让位者不占 max_tasks 预算(issue 26-10-30-0616),文档仍写旧签名且整段缺 D-1 队列级让位语义</td><td>按快照 taskqueue.py:232-302 回写 defer_gate 参数、让位不占预算与扫描面封顶三件事</td><td>R1#14</td></tr>
+      <tr><td>18</td><td>minor</td><td><code>src/auto_qb/cli.py:76</code></td><td>fuse_release 的 --all 零条目合法清点返回 True 分支无任何测试(现有测试只覆盖显式列表零命中→False 与 dry-run),回归翻转该条件会让 --fuse-release-all 清残留场景误报退出码 1</td><td>补一条 CLI 级测试: fuse.release 返回 0 + release_all=True -&gt; 返回 True/退出码 0</td><td>R1#13</td></tr>
+      <tr><td>19</td><td>minor</td><td><code>src/auto_qb/core/episodes.py:91</code></td><td>_episodes_from_names 的 docstring 仍宣称 bare-number 提取生效(如 '01.mkv' -&gt; 1),但对应代码块已在 111-122 行整体注释禁用,文档与行为相反</td><td>把 docstring 该条改为「无标记文件不提取集数(bare-number 已禁用, 见行内注释)」并同步函数头说明</td><td>R1#1</td></tr>
+      <tr><td>20</td><td>minor</td><td><code>src/auto_qb/core/exporter.py:200</code></td><td>export_yaml_template 先自取一次全量 torrents_info 只用于日志计数,而 collect_torrent_tracker_hostnames_with_failures 内部(43 行)再取一次 —— 每次导出/扫描双份全量请求,且两次抓取间种子集可变化导致日志计数与实际扫描集不一致(webui sites.py:57 同款模式)</td><td>给 collect_torrent_tracker_hostnames_with_failures 增加 torrents 入参复用第一次抓取结果,或删掉首取改用 len(torrent_sets) 记日志</td><td>R1#2</td></tr>
+      <tr><td>21</td><td>minor</td><td><code>src/auto_qb/core/exporter.py:250</code></td><td>--export-yaml 对 output_path 无守卫,传 config.yml 自身即对生产配置做 yaml.dump 重排重写(注释全部丢失、格式重排),且该模式 no_lock 不持锁、可与运行实例并发,踩「重排 config.yml」红线</td><td>output_path 与 config_path 相同(或命中生产配置路径)时 parser.error 拒绝导出</td><td>R1#9</td></tr>
+      <tr><td>22</td><td>minor</td><td><code>src/auto_qb/core/modules/grouping_mod.py:143</code></td><td>删除事件的分组簿记(_leave_group 摘除 groups/group_sizes/member_to_key)被 check_missing_files 闸门整体拦下: 该开关关闭时已删种子永久残留为幽灵成员(store._apply 只标 dirty 不摘成员, 全量轮不重建分组索引), 索引随删除量无限增长; 同时开启 cross_group_conflict_check 时幽灵成员的文件路径仍参与跨组物理路径展开, 可与现役组构成假交叉事件误暂停下载方</td><td>把 _leave_group 簿记移出 check_missing_files 闸门(仅 _scan_triggered_groups 缺文件扫描受闸门), 或在 store 删除链路兜底清理三个分组索引</td><td>R1#80</td></tr>
+      <tr><td>23</td><td>minor</td><td><code>src/auto_qb/core/modules/grouping_mod.py:507</code></td><td>_leave_group 组空解散时不清理 store.transitional_missing_skips[key]: 同内容删除重加(组键相同)后继承旧计数, 新一轮第一次过渡态命中即达 TRANSITIONAL_SKIP_LIMIT 被按真实缺失整组暂停+打 MISSING 标签, 绕过「连续 3 次独立事件」的容忍设计</td><td>_leave_group 在组空解散分支同步 skips.pop(key, None)</td><td>R1#81（合并组拆回）</td></tr>
+      <tr><td>24</td><td>minor</td><td><code>src/auto_qb/core/modules/grouping_mod.py:507</code></td><td>过渡态连续计数 transitional_missing_skips 只存内存不落盘(line 458 注释自认), 违反黄金法则 #3 跨轮次状态统一进 state_file; 失败场景: 重启落在 qB 改名窗口附近后计数清零, 真实缺失组要多容忍最多 TRANSITIONAL_SKIP_LIMIT 次触发才被暂停+打 MISSING 标签</td><td>将该计数并入 state_file 持久化, 或在黄金法则 #3 的豁免登记/文档中显式记录该偏离及理由</td><td>R1#82（合并组拆回）</td></tr>
+      <tr><td>25</td><td>minor</td><td><code>src/auto_qb/core/modules/maintenance_mod.py:135</code></td><td>handle_maintenance 里 handled 累加 add_tags/remove_tags/remove_similar_tags/add_hr_tag_or_category 四处结果后从未被读取,函数尾部无条件 return REQUEUE,死变量误导读者以为返回值承载「本轮是否有动作」</td><td>删掉 handled 及四处 handled |= 累加,或让返回值真正消费 handled(按调用方契约二选一)</td><td>R1#96</td></tr>
+      <tr><td>26</td><td>minor</td><td><code>src/auto_qb/core/modules/maintenance_mod.py:252</code></td><td>state 的 auto_categories 按 hash 只增不删(种子删除后残留条目), 全仓无任何淘汰/迁移清理点, 长期运行 state 缓慢无界增长</td><td>参照 skip_check_day/speed_curve 的 prune_day_keys 口径按保留期淘汰, 或在种子消失路径清对应条目</td><td>R1#99</td></tr>
+      <tr><td>27</td><td>minor</td><td><code>src/auto_qb/core/modules/ops_mod.py:62</code></td><td>R5 move-only 拆分残留: 从 ops_common 导入的 GATE_BLOCKED/GATE_FORCE/GATE_OK/SKIP_DRIVE_TIMEOUT/_SKIP_BACKOFF_MS/_SKIP_GONE_MSG/_SKIP_RESULT_KEEP/_SKIP_TERMINAL/全部 8 个 SKIP_PHASE_*/GateVerdict/SkipJob 共 17 个符号在本文件已无代码引用(仅第 99 行注释提及一处),成为死绑定</td><td>删除 ops_mod.py 顶部 ops_common 导入块中未被引用的符号,只保留 _RECHECK_BUSY_MSG/_RECHECK_GONE_MSG/logger(必要时 _SKIP_RESULT_KEEP 改注释引用为 ops_common 名)</td><td>R1#95</td></tr>
+      <tr><td>28</td><td>minor</td><td><code>src/auto_qb/core/modules/ops_skip.py:308</code></td><td>_skip_retry 先自增 attempts 再索引退避表,导致 _SKIP_BACKOFF_MS[0]=10ms 永不使用、每相位实际只有 4 次重试(20/50/50/50, 计 170ms),与 ops_common 注释「10/20/50/50/50」的 5 拍退避口径不符</td><td>改为 job.next_run = now + _SKIP_BACKOFF_MS[job.attempts - 1](或先判溢出再自增),使 10ms 首拍生效且重试次数与退避表长度一致,并同步 ops_common 注释</td><td>R1#97</td></tr>
+      <tr><td>29</td><td>minor</td><td><code>src/auto_qb/core/modules/ops_skip.py:323</code></td><td>_skip_fail 在 GONE 相位重试耗尽时按 torrents_info 仍能看到种子就清掉备份,但删除是异步的且失败前刚重发过删除——删除在备份清理之后落地时,种子被删而 .torrent 恢复凭据已丢(与同函数「备份可能是唯一恢复凭据, 宁可留着」纪律相悖; 文件仍保留, 恢复需回站点重下 .torrent)</td><td>GONE 相位的失败(区别于 DELETING 前失败)不清备份,改为保留备份并在失败文案里指明备份路径,让对账/用户按 skip_check_backup 账本收尾</td><td>R1#98</td></tr>
+      <tr><td>30</td><td>minor</td><td><code>src/auto_qb/core/modules/relocate_exec.py:893</code></td><td>relocate_cancel 无相位守卫: MOVING/WATCHING 期取消会对 qB 仍在执行的迁往 dst 的在途搬迁再发回搬 setLocation,同时立即落 CANCELLED 终态并 _resume_members,回搬过程脱离 job 跟踪;成员被恢复时共享数据正被 qB 搬动,可见短暂 missingFiles,回搬中断则数据分居 src/dst 无账可对</td><td>MOVING/WATCHING 相位拒绝取消(提示等搬迁结束),或先记录回搬意图并走对账轮询确认 qB 回到 src 后再终态</td><td>R1#24</td></tr>
+      <tr><td>31</td><td>minor</td><td><code>src/auto_qb/core/modules/relocate_lifecycle.py:56</code></td><td>热重载 apply 在 relocate.enabled 由 false 变 true 时只换配置对象并重探能力,不调 _load_jobs:以 enabled=false 启动(state 里有崩溃残留的在途 job)后再热启用,这些 job 永久休眠不推进,且 _sync_relocating 不重建 relocating_hashes,未收尾拦截闸门对这批成员失效</td><td>apply 检测 enabled 从假变真时补一次 _load_jobs(与 start 的启用分支同口径)</td><td>R1#40</td></tr>
+      <tr><td>32</td><td>minor</td><td><code>src/auto_qb/core/modules/relocate_mod.py:35</code></td><td>拆分残留:relocate_mod 从 relocate_common 导入的 7 个符号(_DISABLED_GATE/_LINK_CHUNK/_QB_TEMP_SUFFIX/_native/_same_volume_resolved/_top_children/_volume_free_resolved)在本文件正文全部未使用</td><td>删除这组未用 import(实际消费方已随拆分落到 plan/exec/lifecycle 各叶)</td><td>R1#43</td></tr>
+      <tr><td>33</td><td>minor</td><td><code>src/auto_qb/core/modules/relocate_probe.py:85</code></td><td>指纹是对 host|port|username|password/api_key 的无盐单轮 SHA1 截短, 落 state.json 且被 relocate_exec 打进日志: 泄露场景(日志贴 issue/备份外流)下可对弱 qB 口令离线爆破</td><td>改 HMAC-SHA256 加随机盐, 盐与指纹同存 state(换盐即缓存失效, 语义不变)</td><td>R1#42</td></tr>
+      <tr><td>34</td><td>minor</td><td><code>src/auto_qb/core/modules/relocate_probe.py:404</code></td><td>启动扫描对 tag 命中但不带探针前缀的种子仍删除种子记录(delete_files=False), 用户同 tag 种子会被静默移出 qB(做种中断需重新添加); 且其 save_path 恰以 aqb-probe- 开头时还会 rmtree 该目录</td><td>未通过前缀认领的条目只 logger.warning 不动手, 保留种子记录与目录</td><td>R1#41</td></tr>
+      <tr><td>35</td><td>minor</td><td><code>src/auto_qb/core/modules/relocate_units.py:43</code></td><td>GATE_GONE/GATE_DISABLED 两个闸门常量全树零消费(调用侧 relocate_cancel:871/relocate_execute:566 用字面量 "gone"/"disabled",relocate_plan.py:64 又在用 _DISABLED_GATE),同一职责常量与字面量两套并存,改文案/id 时易漏改(存量面 A+B)</td><td>删除死常量,或让 relocate_cancel 与 relocate_execute 的 blocked 回执统一引用常量</td><td>R1#25</td></tr>
+      <tr><td>36</td><td>minor</td><td><code>src/auto_qb/core/modules/relocate_units.py:147</code></td><td>RelocateUnitPlan.fallback 字段(src 内无任何读取方)从未被消费,且其「用户拒绝确认后的回落形态 file_links」语义与实际行为(确认拒绝即不发起迁移、无回落)不符,误导维护者(存量面 A)</td><td>删除 fallback 字段,或按注释语义真正实现拒绝确认后的 file_links 回落路径</td><td>R1#26</td></tr>
+      <tr><td>37</td><td>minor</td><td><code>src/auto_qb/core/modules/relocate_units.py:228</code></td><td>plan() 阈值分支先于 hard_max 检查,而配置校验(sections.py:697)对 alias_file_threshold 与 hard_max_links 只各自查 &gt;=1、无交叉校验:配置 threshold &gt; hard_max 时 count &lt; threshold 的组绕过逐文件链接硬上限,「链接爆炸防护」静默失效</td><td>validate_config 增加 alias_file_threshold &lt;= hard_max_links 交叉校验,或 plan() 在阈值分支前统一检查 count &gt; hard_max</td><td>R1#27</td></tr>
+      <tr><td>38</td><td>minor</td><td><code>src/auto_qb/core/modules/traffic_snapshot_mod.py:283</code></td><td>事件补丁只钳到 _hw(仅由事件写入, 文件读盘不回填)且 _hw 只存进程内存不落盘: 文件读盘先发布了更高 day 行、随后偏低 catch-up 事件到达(工具重启后 _hw 为空或更低)仍会把 day 行刷回更小值, 违反 publish_source/publish_event 自述的「两条发布路径都不让 day 行回退」(面1/面2 同根因合并; 黄金法则3 跨轮次状态宜进 state_file); 现有测试只覆盖事件先立水位的顺序</td><td>publish_event 取 max(事件值, _hw, 当前 periods day 行值) 后再发布并记回 _hw; publish_source 的 ok 分支把当日 dat 行值回种进 _hw(或把 _hw 持久化进 state_file)</td><td>R1#64</td></tr>
+      <tr><td>39</td><td>minor</td><td><code>src/auto_qb/core/qbmanager.py:1029</code></td><td>--export-torrents_info 把种子原始字典原样写进明文 torrents.txt,其中 tracker 字段是完整 tracker URL(私站含 passkey),绕过项目自身的 mask_tracker_entry 脱敏口径</td><td>写出前对 tracker URL 做与 Facade 同款脱敏,或在该调试文件头部注明含密钥、限制文件权限</td><td>R1#10</td></tr>
+      <tr><td>40</td><td>minor</td><td><code>src/auto_qb/core/traffic_limits.py:100</code></td><td>注释声称撕裂尾由写侧下轮追加前补换行, 但 SpeedLimitRecorder._append 直接 open("a") 追加、无尾字节查补(对照 traffic_store._ensure_file_prefix), 撕裂残片会与下一条事件行并成一行, 解析按坏行整行丢弃 —— 每次撕裂实际丢两条事件而非一条, 文档与写侧行为不符</td><td>_append 前做尾字节查补(缺尾则先补 \n, 照 _ensure_file_prefix 先例), 或改注释为如实描述并在文档标注该丢失形态</td><td>R1#54</td></tr>
+      <tr><td>41</td><td>minor</td><td><code>src/auto_qb/core/traffic_source/agent.py:167</code></td><td>发现指针 endpoint.json 的 host/token_path 未做任何校验即进 HTTP 探活: 指针被本机其它进程改写后, probe/fetch_last_spike 会把 token_path 指向的任意本地可读文件内容作为 Bearer 凭据发往任意 host(跨出本机的文件外发面)</td><td>校验 host 限定回环/私网地址, 并限定 token_path 必须位于 pointer_dir() 内</td><td>R1#65</td></tr>
+      <tr><td>42</td><td>minor</td><td><code>src/auto_qb/core/traffic_store.py:20</code></td><td>自称「格式 v4 契约主题事实单点」的模块 docstring 里 z 行规格仍是形态 D 之前的 4/5 列旧形, 缺末端对 6/7 列形态, 与 traffic_store_codec 的实际实现及其区头注释(z,&lt;run_len&gt;,&lt;dl&gt;,&lt;up&gt;,&lt;dl_endd&gt;,&lt;up_endd&gt;[,&lt;dt_ms&gt;])漂移, 单点契约失真</td><td>把该行更新为 6/7 列形态并补一句末端对语义(或改为指向 codec 区头注释, 消除双规格)</td><td>R1#53</td></tr>
+      <tr><td>43</td><td>minor</td><td><code>src/auto_qb/core/tvshows.py:439</code></td><td>名称侧「带集数无季标记兜底 season=1」未置 season_inferred=True, 而 refine_with_files(line 504)对 KIND_EPISODE 早退不再补标, 与字段注释(line 60)声明的「无信息兜底 1」口径及 refine docstring「默认 1 不允许无声发生」矛盾——最常见路径的兜底 S1 无法与显式 S01 区分</td><td>parse_release 该分支返回时置 season_inferred=True, 或修订字段注释把该口径排除</td><td>R1#83</td></tr>
+      <tr><td>44</td><td>minor</td><td><code>src/auto_qb/core/tvshows.py:469</code></td><td>parse_files 对跨目录的多季合包无守卫: 季号取第一个命中目录即 break, 集数来自全部文件(episodes 解析忽略目录路径), S01+S02 完结合包会被 refine_with_files 并成单季 range(如 S1 E1-24), 误并进真实 S1——违反模块「宁可误拆, 不可误并」取向(_dir_season 只防单目录段内的多季标记)</td><td>parse_files 收集全部目录段的季号, 出现多个不同季号时返回 None 让整包保持未识别/不展开</td><td>R1#84</td></tr>
+    </table>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>影响面</h2>
+    <table>
+      <tr><th>维度</th><th>结论</th></tr>
+      <tr><td>触发条件</td><td>盘点型汇总件——非单一触发；逐条触发条件见明细表 claim 列</td></tr>
+      <tr><td>影响范围</td><td>core 主题 43 个缺陷面，分布于 25 个文件；逐条见明细表 file:line 列</td></tr>
+      <tr><td>严重度</td><td>major 12 / minor 31（nit 不在本件）；逐条见明细表 severity 列</td></tr>
+    </table>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>定位锚点</h2>
+    <p class="hint">写「符号名 + grep 关键词 + 当时的行号（标取证时间）」—— 代码会漂移，靠符号与 grep 重新定位，行号只是加速项。</p>
+    <p>逐条锚点即明细表「file:line」列（当时行号，锚定 freeze <code>f0883292</code> 快照）。代码漂移后：按文件路径 + claim 中符号名/字符串 grep 重定位；路线内条目号（src_ref）可回溯 <code>route-&lt;路线&gt;-findings.json</code> 原始条目与 notes。</p>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
+    <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
+    <div class="callout">待查——本件为盘点汇总，不为入池做逐条根因分析；各 claim 引文已过 review.check 逐字校验，根因随认领逐条排查。</div>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>建议修法<span class="opt">（可选）</span></h2>
+    <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
+    <p>逐条建议修法见明细表「fix」列（聚合时原样保留，未改写）。汇总层面：建议认领时按文件聚类、同文件一次修完，先 major 后 minor。</p>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>状态变更日志</h2>
+    <ul>
+      <li>2026-11-07 05:27 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>26-11-07 聚合入池自存量评审 R4（计划 26-11-05-2335，<code>memory-bank/plans/26-11-05-2335-plan-legacy-code-review-4.html</code>）——本轮纯盘点，状态保持 Open；doc-refs 留空待认领方回填</li>
+    </ul>
+    <h3>复验</h3>
+    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <h3>修复后补充</h3>
+    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  </section>
+
+  <footer>
+    26-11-07-0527-bug-legacy-review4-core.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>

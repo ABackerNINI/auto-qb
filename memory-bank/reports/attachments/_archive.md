@@ -12,8 +12,9 @@
 
 (暂无)
 
-## Done (79)
+## Done (80)
 
+- [26-11-07-0545] [存量代码评审 R4 终报告](../26-11-07-0545-report-legacy-code-review-4.html) — `legacy-code-review-4`
 - [26-11-06-0723] [评审容量实验: 批次大小对发现数与幻觉率的影响](../26-11-06-0723-report-review-capacity-experiment.html) — `review-capacity-experiment`
 - [26-11-05-0417] [整组迁移零搬移假成功事故取证(relocate 零搬移)](../26-11-05-0417-report-relocate-zero-move.html) — `relocate-zero-move`
 - [26-11-03-2346] [GTM 当日总量虚高修复 Code Review](../26-11-03-2346-report-gtm-day-total-inflation-review.html) — `gtm-day-total-inflation-review`
