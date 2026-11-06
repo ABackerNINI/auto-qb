@@ -1,7 +1,7 @@
 # type-annotations-mypy
 
 > 摘要: 认领 issue 26-09-21-1408: 复验现象仍在(AST 实测 2333 def 完整 65%, 缺口 rules/webui/config/core/tray, 隐式 Optional 400+; pyproject 无 mypy 配置) + 出分步实施计划 26-11-05-0635(标准清偿/mypy/不进闸门, 拍板 D1-D3) + issue 置 In Progress 双向认领链 + kb.check 硬判据清零; 本轮零代码改动
-> 最后活动: 2026-11-06 07:03
+> 最后活动: 2026-11-07 00:51
 **Refs:**
 
 **R0(2026-11-05 06:39):** 认领 issue 26-09-21-1408: 复验现象仍在(AST 实测 2333 def 完整 65%, 缺口 rules/webui/config/core/tray, 隐式 Optional 400+; pyproject 无 mypy 配置) + 出分步实施计划 26-11-05-0635(标准清偿/mypy/不进闸门, 拍板 D1-D3) + issue 置 In Progress 双向认领链 + kb.check 硬判据清零; 本轮零代码改动
@@ -11,3 +11,7 @@
 **R2(2026-11-06 06:15):** 认领并修复 issue 26-11-06-0247(用户指派): _slot_agg_obs 返回注解 Optional[Tuple[int,int]] 改 4 元组(agg_totals 形参复验无漂移), core.modules.* 的 call-arg 豁免摘除(allowlist 递减 1 条/3 对, 守阵冻结面同步撤下), 摘除前用临时 mypy 配置全库探针证明该码仅此一处; dev.typecheck 退出码 0(195 文件), 相关面 76 passed, test.full 全绿(见 kb.baseline), 基线切片 26-11-06-0615; issue Open→In Progress→Done 两处状态+日志三行+索引重建; 收口评审不触发(阈值不命中: 1 个源文件 1 行注解 + 配置/守阵各 1 行, 未立档案); 本轮无提交动作
 
 **R3(2026-11-06 07:03):** 修复 issue 26-11-06-0624: pyproject.toml 22 行与守阵冻结清单注释 17 行带圈编号统一 ASCII, 豁免面零改动; 零命中 / dev.typecheck 零错 / test.full 全绿(见 kb.baseline)
+
+**R4(2026-11-07 00:14):** 修复 issue 26-11-06-0744(用户指派): guards.md 新增「类型注解 / mypy allowlist」节 + 一行登记 test_mypy_allowlist_guard.py(真仓对账面 test_repo_allowlist_matches_frozen), 补全登记规则 ①③(② 原有 11 条测试计划已满足); 红验: 真仓 pyproject 注入冻结外豁免 redprobe_tmp[union-attr] -> 1 failed 指名新增对, 撤注入后守阵 11 passed; 纯文档改动, 产品代码/守阵/pyproject 零改动; 全量全绿见 kb.baseline(切片 26-11-07-0013); issue Open->In Progress->Done; 收口评审与立档阈值均不命中
+
+**R5(2026-11-07 00:51):** 计划 26-11-05-0635 收尾(用户说「执行」): doc-status Open->Done(与 R1「计划收口」自述对齐的状态漂移纠偏) + §10 追加 R3 收尾裁定与长期递减面清单; 判据复核 dev.typecheck 195 文件 0 错、守阵 test_mypy_allowlist_guard.py 11 passed 且已登记 guards.md、母 issue 26-09-21-1408 Done、§05 无待拍板; 零代码改动, 不新增基线切片(引用 26-11-07-0013); kb.docmap 专题 7 件全部 Done(已完结), 本切片待蒸馏迁出 activeContext

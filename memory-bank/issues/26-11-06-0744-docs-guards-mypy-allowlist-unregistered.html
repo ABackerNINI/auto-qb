@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-11-06-0744">
 <meta name="issue-type" content="docs">
 <meta name="doc-topic" content="type-annotations-mypy">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/testing/baselines/26-11-07-0013-docs-guards-mypy-allowlist.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="guards.md 未登记 test_mypy_allowlist_guard 守阵">
 <meta name="issue-summary" content="守阵清单缺一行: tests/test_mypy_allowlist_guard.py 从未登记进 guards.md, 违反该文件新增守阵须登记的口径">
 <title>guards.md 未登记 test_mypy_allowlist_guard 守阵 · docs · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-11-06-0744-docs-guards-mypy-allowlist-unregistered</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-06 07:44</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">docs</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -77,6 +77,7 @@
   <section id="s1">
     <h2><span class="no">01</span>现象</h2>
     <p>守阵 <code>tests/test_mypy_allowlist_guard.py</code> 存在且有效（钉住 <code>pyproject.toml</code> 的 mypy 豁免 allowlist 只减不增），但从未登记进 <code>memory-bank/testing/guards.md</code> 守阵清单 —— 该清单第 11-12 行明写「新增守阵必须同时 ①在本表加一行」。2026-11-06 07:43 复验：全表 grep <code>mypy / allowlist / 豁免 / 冻结 / test_mypy_allowlist_guard</code> 仍零命中，现象仍在。</p>
+    <p><strong>复验 2026-11-07 00:08：仍复现。</strong>锚点重扫：<code>memory-bank/testing/guards.md</code> 全文对 <code>mypy</code> / <code>allowlist</code> / <code>豁免</code> / <code>冻结</code> / <code>test_mypy_allowlist_guard</code> 仍零命中；被测守阵本体健康（<code>tests/test_mypy_allowlist_guard.py</code> 单文件 <code>11 passed</code>，真仓对账面 <code>test_repo_allowlist_matches_frozen</code> 绿），即缺的只是清单登记这一行。</p>
   </section>
 
   <section id="s2">
@@ -92,12 +93,19 @@
   <section id="s3">
     <h2><span class="no">03</span>建议<span class="opt">（可选）</span></h2>
     <p>在 <code>guards.md</code> 补一行：<code>test_mypy_allowlist_guard</code> · 钉住「pyproject mypy 豁免面冻结、只减不增；递减须同步撤下冻结条目，撤下后回加即红；顶层全局豁免一律红」· 红验「合成 TOML 回加已递减的豁免对」；顺带按登记规则 ② 核对守阵头部「## 测试计划」清单。只改文档，不动守阵代码与 <code>pyproject.toml</code>。</p>
+    <h3>修复后补充（2026-11-07 00:14）</h3>
+    <p><strong>实际修法（按建议路径，只改文档）：</strong>仅改 <code>memory-bank/testing/guards.md</code> 一个文件，产品代码 / 守阵代码 / <code>pyproject.toml</code> 零改动。在「flaky 治理批次守阵」之后、「通用纪律」之前新增一节「类型注解 / mypy allowlist (26-11-06, 计划 26-11-05-0635 §04 S4, 专题 type-annotations-mypy)」，表内一行登记 <code>test_mypy_allowlist_guard.py</code>（真仓对账面 = <code>test_repo_allowlist_matches_frozen</code>）：钉住的结论一栏写明 <code>[tool.mypy]</code> 三张清单对账（ignore_errors 整模块豁免面 / disable_error_code 的 (模块, 码) 豁免对 / 收紧面 disallow_untyped_defs 模块集合）与五条判定（新增豁免红 · 递减不红 · <strong>递减后回加红</strong> · 顶层全局豁免红 · 收紧面回撤红），红验一栏写内建合成源红验 + 本次真仓注入实测；节下补两句「只做静态扫描、不在 pytest 内跑 mypy（拍板 D3），豁免面外的类型正确性由 <code>commands run dev.typecheck</code> 验收」与登记来源（本 issue）。</p>
+    <p><strong>登记规则三件核对：</strong>①本表加一行 —— 本轮补上；②被测文件头部「## 测试计划」清单 —— 守阵原有 11 条已与用例一一对应，无需改动；③红验 —— 见下，实测做了一次真仓注入。</p>
+    <p><strong>验证方式（红验按登记规则 ③）：</strong>①临时向真仓 <code>pyproject.toml</code> 追加冻结外豁免（合成模块 <code>auto_qb.core.redprobe_tmp</code> + <code>disable_error_code = ["union-attr"]</code>）⇒ <code>test_repo_allowlist_matches_frozen</code> <code>1 failed</code>，finding 指名「新增 disable_error_code 豁免对(守阵冻结外): <code>auto_qb.core.redprobe_tmp[union-attr]</code>」—— 守阵确有能力把新增豁免判红；②<code>git checkout -- pyproject.toml</code> 撤注入（复扫 <code>redprobe_tmp</code> 零命中、<code>git status</code> 只剩 guards.md）后守阵单文件 <code>11 passed</code>；③<code>commands run test.full</code> 全绿。</p>
+    <p><strong>测试数字（2026-11-07 实测）：</strong><code>5471 passed, 10 skipped, 1 warning in 137.13s</code>；覆盖率 <code>TOTAL 24538 stmts / 74 miss / 8396 branch / 41 partial / 99%</code>。逐位对比见 <code>commands run kb.baseline</code>，本轮基线切片 <a href="../testing/baselines/26-11-07-0013-docs-guards-mypy-allowlist.md">26-11-07-0013-docs-guards-mypy-allowlist</a>（用例数较上基线 +11，来自开工时快进的 11 笔远端提交，非本轮新增）。</p>
   </section>
 
   <section id="s4">
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-11-06 07:44 — 用户明确「入池」后由 create-issue skill 入池，状态 <strong>Open</strong>（计划外，未修；0624 轮收尾时发现，按范围守恒当轮未动）</li>
+      <li>2026-11-07 00:11 — 认领（用户指派「修复」），状态 <strong>In Progress</strong>；复验仍复现（见 01 节「复验」行），守阵本体 11 passed 健康</li>
+      <li>2026-11-07 00:14 — 修复并验证：<code>guards.md</code> 新增「类型注解 / mypy allowlist」节 + 一行登记（登记规则 ② 已满足、③ 真仓注入红验 = 1 failed → 撤注入 11 passed）→ test.full 全绿，状态 <strong>Done</strong>（详见 03 节「修复后补充」）</li>
     </ul>
   </section>
 

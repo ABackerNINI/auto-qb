@@ -21,7 +21,7 @@
 |---|---|
 | bug | 6 |
 | perf | 2 |
-| docs | 2 |
+| docs | 1 |
 | test | 6 |
 | refactor | 2 |
 | feat | 18 |
@@ -31,7 +31,6 @@
 ## Open
 
 - [refactor] [全库代码/配置残留非 ASCII 图形符号，与 code-style ASCII 禁令冲突](26-11-06-0756-refactor-ascii-graph-symbol-backlog.html) — 全库扫描命中 395 文…
-- [docs] [guards.md 未登记 test_mypy_allowlist_guard 守阵](26-11-06-0744-docs-guards-mypy-allowlist-unregistered.html) — 守阵清单缺一行: tes…
 - [bug] [review.check --root 快照目录被 .git 存在性检查误拒](26-11-06-0711-bug-review-check-snapshot-root.html) — 存量评审 R4 的既定用…
 - [test] [test.pkg 4 条既有红：mutants DEFAULT_DESELECT 指向已拆分消失的测试文件](26-11-06-0635-test-mutants-deselect-table-drift.html) — commands run…
 - [test] [Windows CI 连续红: Test Windows (Py3.12/3.13) 自 ced9a88a 起 failure, 本地 Windows 全量绿](26-11-06-0321-test-ci-windows-failure.html) — GitHub Actio…
@@ -83,11 +82,11 @@
 
 ## Done
 
+- [docs] [guards.md 未登记 test_mypy_allowlist_guard 守阵](26-11-06-0744-docs-guards-mypy-allowlist-unregistered.html) — 守阵清单缺一行: tes…
 - [chore] [pyproject.toml 存量带圈数字注释与 code-style 非 ASCII 图形符号禁令冲突](26-11-06-0624-chore-pyproject-circled-number-comments.html) — 配置注释 22 行含带圈…
 - [test] [mypy 豁免守阵冻结清单仍留 qbclient/override 条目, 回加豁免不会被拦](26-11-06-0624-test-mypy-allowlist-stale-frozen-entry.html) — 豁免块 5 已摘除但冻结…
-- [bug] [real.down 实现用 Stop-Process -Force 强杀 qB, 触进程安全红线](26-11-06-0448-bug-real-down-force-kill.html) — tests-real/r…
 
-> 更早的 **431** 条已出本索引 —— 报告仍在 `issues/` 目录(未搬动), 全量清单见 [attachments/_archive.md](attachments/_archive.md).
+> 更早的 **432** 条已出本索引 —— 报告仍在 `issues/` 目录(未搬动), 全量清单见 [attachments/_archive.md](attachments/_archive.md).
 
 ## Dropped
 

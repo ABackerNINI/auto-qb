@@ -65,6 +65,15 @@
 > 随机序周巡检(pytest-randomly)不是守阵而是巡检入口: `commands run test.random-order`,
 > 约定见 [flaky-ledger.md](flaky-ledger.md)「巡检约定」节。
 
+## 类型注解 / mypy allowlist (26-11-06, 计划 26-11-05-0635 §04 S4, 专题 type-annotations-mypy)
+
+| 守阵 | 钉住的结论 | 红验 |
+|---|---|---|
+| `test_mypy_allowlist_guard.py`(11 例; 真仓对账面 = `test_repo_allowlist_matches_frozen`) | 钉住 `pyproject.toml` `[tool.mypy]` 三张清单: ignore_errors 整模块豁免面 / disable_error_code 的 (模块, 码) 豁免对 / 收紧面 disallow_untyped_defs 模块集合 —— 新增豁免红、递减不红, 但**递减须同步撤下冻结条目, 撤下后回加当场红**(递减不可逆) / 顶层 disable_error_code·ignore_errors 全局豁免一律红 / 收紧面回撤红、新增收紧不红 | 合成 TOML 回加已递减的 `auto_qb.core.qbclient[override]` 对(内建 `test_frozen_rejects_re_add_of_reduced_exemption`)⇒ 红; 2026-11-07 实测: 向真仓 pyproject 注入 `auto_qb.core.redprobe_tmp[union-attr]` ⇒ 红在「新增 disable_error_code 豁免对(守阵冻结外)」, 撤注入后 11 passed |
+
+> 只做静态扫描, **不在 pytest 内跑 mypy** —— 豁免面外的类型正确性由 `commands run dev.typecheck` 验收(拍板 D3)。
+> 登记来源: issue `26-11-06-0744-docs-guards-mypy-allowlist-unregistered`(守阵 2026-11-06 随 S4 落地但漏登记, 2026-11-07 补登记)。
+
 ## 通用纪律
 
 - **红验优先用运行时 monkeypatch 还原旧实现**(不碰工作区), `lru_cache` 记得先 `cache_clear()`。

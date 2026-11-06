@@ -21,13 +21,13 @@
 - [26-11-05-1049] [memory-bank 文档压缩与防回涨分步执行计划(8K 新口径)](26-11-05-1049-plan-kb-doc-compress.html) — `kb-doc-compress`
 - [26-11-05-0848] [跳检自身失败闸门 G9: WEB case-2 强制 + 规则侧硬 skip 双点同谓词](26-11-05-0848-plan-skip-check-self-fail-gate-g9.html) — `skip-check-self-fail-gate-g9`
 - [26-11-05-0808] [relocate 整组迁移重构: fastresume 改写收尾(回收 daemon 下线窗口)+ 未收尾再迁移](26-11-05-0808-plan-relocate-fastresume-finalize.html) — `relocate-fastresume-finalize`
-- [26-11-05-0635] [类型注解标准清偿与 mypy 渐进接入分步计划](26-11-05-0635-plan-type-annotations-mypy.html) — `type-annotations-mypy`
 - [26-11-03-2212] [整组迁移同盘证明误拒：根因与修复计划](26-11-03-2212-plan-relocate-same-fs-proof.html) — `relocate-same-fs-proof`
 
 ## Done
 
 - [26-11-06-0759] [分批评审: 从「收口一次评」到「一批一评 + 强制留痕」](26-11-06-0759-plan-review-batch-policy.html) — `review-batch-policy`
 - [26-11-06-0124] [提交信息自动审查: ship.commit 内联三态机检(BOM/乱码/骨架/残留)](26-11-06-0124-plan-commit-msg-review.html) — `commit-msg-review`
+- [26-11-05-0635] [类型注解标准清偿与 mypy 渐进接入分步计划](26-11-05-0635-plan-type-annotations-mypy.html) — `type-annotations-mypy`
 - [26-11-05-0546] [relocate 零搬移修复方案压测(renameFolder 两步复位 + 三闸门)](26-11-05-0546-plan-relocate-zero-move-fix-stress.html) — `relocate-zero-move-fix-stress`
 - [26-11-05-0118] [flaky 测试结构化治理: 时钟注入与抖动消除](26-11-05-0118-plan-flaky-test-governance.html) — `flaky-test-governance`
 - [26-11-04-2357] [跳检 dedup 闸门遮蔽修复: 提到 G3 之前恢复 skip 语义与文案](26-11-04-2357-plan-skip-check-gates.html) — `skip-check-gates`
