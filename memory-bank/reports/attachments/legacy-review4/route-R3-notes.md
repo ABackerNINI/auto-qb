@@ -44,3 +44,35 @@ R3-6 批自弃 8 条(discovery stop/retry 竞态窗口实际闭合 / bencode 拒
 - review.check --root 快照 在快照根建空 .git 目录绕过 _resolve_root 存在性误拒(R2 用 diff 等价通路,本路线改用更直接 workaround,零代码改动)。
 - 本批含 1 条 docs 类发现(5 份 pitfalls 的 hr/service.py::<符号> 指路因拆分漂移),按口径只报不改,交 S6 聚合。
 - R3-6 批 #3(ratelimit.py:8 失败路径绕过最小间隔)与 R3-3 批 major(service_wave.py:542 budget.mark 漏调)为同根双报,交 S6 聚合按 file+quote 去重合并。
+
+## 路线终态
+
+status 翻为 done(`commands run review.lane.done --route R3`,校验:findings 35 条 / 批次 6/6)。
+
+### 分级实测(route-R3-findings.json 逐条实数)
+
+六批合计 **35 条:blocker 0 / major 4 / minor 17 / nit 14**。
+
+- 注:与收尾预期「major 3 / nit 15」差 1 条——实测 **R3-3 批 service_wave.py:542(budget.mark 漏调)在 findings 文件定级为 major**(本文件批次勾选表 R3-3 行「major 1」同此口径,route-R3.json 与 findings 数据源一致),非数据错位,以本实测为准。
+- 无 blocker,无 P0 呈报项。
+
+### major 单列(4 条)
+
+- **R3-1** 限速写视图置脏口径矛盾(torrents/store.py:812):`up_limit/dl_limit` 不置 `view_changed`,而派生口径含二者且 WebUI 渲染限速列,已发布视图限速列无限期旧值。
+- **R3-2** finalize_watch failed 相位不在对账表致 guardian 无限重拉(tools/finalize_watch.py:208):journal `failed` 无 ACT 处置,心跳过期即 ACT_RESPAWN,失败证据自毁、job 永不收敛 failed 终态。
+- **R3-3** 非 Retry-After 取数失败不调 budget.mark(hr/service_wave.py:542):页面级失败与 .torrent 下载失败不前进 last_fetch_ts,零间隔连发绕过 min_interval 账号安全线。
+- **R3-5** compare_digest 非 ASCII token 运行期 TypeError(hr/server.py:478):配置期只验字符串不限字符集,非 ASCII token 过 fail-fast 后每请求 500,通道整体不可用(黄金法则 4 落空)。
+
+以上 major 待 S6 聚合会话定级入池。
+
+### R2 复验总账
+
+底册 8 条:7 条已消失——**T-04**(gtm 进度注已更新)/**A-05**(_finalize_members 已零成本过滤)/**B-01**(判据收敛单点谓词 _lane_covers_done)/**B-02**(discovery 死 import 已清)/**T-01**(_autostart/_put_config 已持锁)/**T-02**(_check_http_host 回约束 fail-fast)/**T-05**(三处死码已清);**GH-01 部分复发**——读后心跳整包覆盖与「唯一写者」头注两半已消失,`max_wait` 缺省 0 仍在(finalize_watch.py:165/:249/:270),但 docstring/CLI help 已明示「0=不限,finalize_timeout 兜底」,定级交聚合会话。
+
+### 跨批同根双报(交 S6 聚合去重)
+
+1 组:**R3-3 批 service_wave.py:542(major)** 与 **R3-6 批 ratelimit.py:8(minor)**——失败路径绕过最小间隔同一根因,按 file+quote 去重合并。
+
+### docs 类发现
+
+1 条(5 份 pitfalls 的 hr/service.py::<符号> 指路因拆分漂移,实锚 memory-bank/pitfalls/backend/high-risk-ops.md:80,minor):按口径只报不改,交 S6 聚合。
