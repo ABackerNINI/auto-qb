@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="review-trace-fields">
 <meta name="doc-status" content="Open">
 <meta name="doc-added" content="26-11-07-0441">
-<meta name="doc-updated" content="26-11-07-0441">
+<meta name="doc-updated" content="26-11-07-0655">
 <meta name="doc-refs" content="">
 <style>
   :root {
@@ -75,8 +75,8 @@
 <h1>code-review 留痕面修补: 派发次数与引文校验进闸门</h1>
 <p class="lede">本篇只回答: 提交闸门验的是「声明与实算一致」, 那怎么让这条链也算上「真派了几次」与「引文校验过没过」—— 而不只是让 agent 多写一个词。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-07-0441 · <b>doc-updated</b> 26-11-07-0441 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
-  <b>来源</b> 用户指令「code review 闸门刚上线不久, 结合此次经验判定流程是否合理」→ 判定结论四条 → 用户指令「出一个修复计划」<br>
+  <b>doc-added</b> 26-11-07-0441 · <b>doc-updated</b> 26-11-07-0655 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 用户指令「code review 闸门刚上线不久, 结合此次经验判定流程是否合理」→ 判定结论四条 → 用户指令「出一个修复计划」→ grilling 两轮 11 项拍板(2026-11-07, D1 改写见 §06)<br>
   <b>前序</b> 计划 <a href="26-11-06-0759-plan-review-batch-policy.html">26-11-06-0759</a>(批 + 强制留痕) · <a href="26-11-07-0201-plan-review-rebase-gap.html">26-11-07-0201</a>(齐平弱字段)
 </div>
 
@@ -84,7 +84,7 @@
 <p><b>背景。</b>评审闸门 2026-11-06 落地, 2026-11-07 跑完第一笔真实大批次(<code>630a9b9f</code>, 1229 行 / 17 文件 / 2 次派发 / 15 条发现)。复盘发现: 闸门能证明「你报的数对得上」, 不能证明「你真的评了、真的校验了引文」。三个缺口都在同一处 —— <b>留痕面只记了结果数字, 没记过程事实</b>。</p>
 <p><b>目标(做到什么算成)。</b></p>
 <ol>
-  <li><b>超限的补救从「写一个词」变成「报一个数」</b>: 批 &gt; 400 行时, 闸门要求<b>派发次数 ≥ 2</b>; 既有 <code>· 分面</code> 保留为等价声明(Q2 待拍), 但不再是唯一通路。拆批仍是首要判据 —— 拆得动的批次每笔都 ≤ 400, 走不到这一步, 所以闸门见到的 400+ 就是「确实不可拆」的残余;</li>
+  <li><b>超限的补救从「写一个词」变成「报一个数」</b>: 批 &gt; 400 行时, 闸门要求<b>派发次数 ≥ 2</b>; <code>· 分面</code> 不再是合法通路(拍板 D1: 原拟等价声明作废), 降级为纯信息字段(D8)。拆批仍是首要判据 —— 拆得动的批次每笔都 ≤ 400, 走不到这一步, 所以闸门见到的 400+ 就是「确实不可拆」的残余;</li>
   <li><b>引文校验进闸门</b>: <code>review.check</code> 从独立 task 变成必跑动作, 其结果以 <code>· 检 P/T</code> 进 trailer, 并与「修 + 入池」做下界一致校验;</li>
   <li><b>评审自身的产物不再触发评审义务</b>: 消掉实测中 13 笔同句 <code>Review-Skip</code>。</li>
 </ol>
@@ -113,7 +113,7 @@
     <tr><td>P1</td><td><b>词闸</b>: &gt; 400 行只验「分面」二字</td><td>本批 1165 行 &gt; 400, 闸门拦一次(107.5s); 补上「分面」后即过。而 <code>SKILL.md:139</code> 反模式恰好写着「超 400 行用分面代替拆批」是反模式</td><td>闸门实际在鼓励它自己文档里的反模式; 400 行这条规则没有行为后果, 只产生文书</td></tr>
     <tr><td>P2</td><td><b>裸采信</b>: 引文校验可跳过且无痕迹</td><td>本批 15 条发现<b>没跑 <code>review.check</code></b>就采信(findings 只在对话里, 未落盘); 闸门绿灯</td><td>「只写 trailer 不真评」与「真评了但引文是幻觉」在闸门眼里完全一样; <code>SKILL.md:138</code> 的禁令无机械面</td></tr>
     <tr><td>P3</td><td><b>分类错位</b>: 评审产物被算进待评面</td><td>截至 <code>4da13dd2</code> 的近 30 笔里有 16 笔 <code>Review-Skip</code>, <b>其中 13 笔是同一句</b>「纯盘点数据落盘, 零代码改动」(复现: <code>git log --format=%B -30 | grep "^Review-Skip:" | sort | uniq -c</code>); 这类提交 100% 落在 <code>reports/attachments/legacy-review4/</code>(目录内 11 json + 5 md)</td><td>每写一份 findings 就要手写一遍豁免; 固定措辞让 Skip 退化成仪式, 也稀释了真正需要解释的 Skip</td></tr>
-    <tr><td>P4</td><td><b>报数摩擦</b>: 失败行不给整行, 且 N 会漂</td><td>失败行只给「本批实算 1165 行」, N 要自己再捞。更要紧的一处: 无消息文件跑 <code>review.trace</code> 会退回按 HEAD 的 trailer 判 —— 上一笔是 Skip 时直接报 ok(本次实测把 233 行待评静默放行), 真实行数只能靠故意写错一次才捞到; 实算含事实性文档, 收尾回写后同一批从 1137/1811 漂到 1138/1812</td><td>每次提交多一次试错(本批 1 次, 107.5s); 数字漂移逼你重算, 容易写错而被二次拦</td></tr>
+    <tr><td>P4</td><td><b>报数摩擦</b>: 失败行不给整行, 且 N 会漂</td><td>失败行只给「本批实算 1165 行」, N 要自己再捞。更要紧的一处: 无消息文件跑 <code>review.trace</code> 会退回按 HEAD 的 trailer 判 —— 上一笔是 Skip 时直接报 ok(本次实测把 233 行待评静默放行), 真实行数只能靠故意写错一次才捞到; 实算含事实性文档, 收尾回写后同一批从 1137/1811 漂到 1138/1812(D10: 瞬态工作树测量, 事后无法从 git 独立复算)</td><td>每次提交多一次试错(本批 1 次, 107.5s); 数字漂移逼你重算, 容易写错而被二次拦</td></tr>
   </tbody>
 </table>
 <div class="aside"><b>为什么这条缺口值得修。</b>实验(10 派发 / 56 发现)的三条结论要分开读: ① 发现数 ≈ 派发次数 × 5.6, <b>与批次大小无关</b>; ② 「2 批召回 7/8, 1 批 0/8」比的是<b>同一 diff 的切分粒度</b>(报告 §02: 只改切分粒度), 不是同一大块派两次; ③ 幻觉率不随批次变大而上升。<b>所以超限的首要补救仍是拆批</b>(②直接支持它), 而「单块多派」能否换来同等召回<b>没有实测</b> —— 只有 ① 支持「多派必多得」, 因此它只对「确实不可拆」的残余可接受。闸门在提交时点管不到拆批(代码已写完), 能核的只有「有没有至少多派一次」, 这就是 D1 只设派发下限的原因, 不是把多派当成拆批的等价物。</div>
@@ -123,9 +123,9 @@
 
 <h3>落点 1 —— <code>· 派发 &lt;K&gt;</code> 字段取代「分面」判据 (D1)</h3>
 <ul>
-  <li><b>语法</b>: <code>Review: … · 派发 &lt;K&gt;</code>, 缺省 1。历史格式的 <code>· 分面</code> 视为 <code>派发 ≥ 2</code> 的等价声明 —— 老 trailer 继续合法, 不追溯。</li>
-  <li><b>判据</b>: <code>count &gt; CEILING</code> 时要求 <code>派发 ≥ 2</code>(或带 <code>分面</code>); <code>≤ 400</code> 时不校验派发。<b>拆批仍是 skill ② 的首要判据</b>: 拆得动的批次每笔都 ≤ 400, 走不到这条; 走到它的都是「确实不可拆」, 此时闸门能核的最小事实是「至少多派了一次」。</li>
-  <li><b>为什么是数</b>: 派发次数可用 <code>git log --format=%B | grep -o "派发 [0-9]*" | sort | uniq -c</code> 统计, 能与行数/发现数对账; 词没有这个性质。</li>
+  <li><b>语法</b>: <code>Review: … · 派发 &lt;K&gt;</code>, 缺省 1。<code>· 分面</code> 不是等价声明(拍板 D1 改写), 降级为纯信息字段(D8); 老 trailer 不追溯、不重判。</li>
+  <li><b>判据</b>: <code>count &gt; CEILING</code> 时要求 <code>派发 ≥ 2</code>; <code>≤ 400</code> 时不校验派发。<b>拆批仍是 skill ② 的首要判据</b>: 拆得动的批次每笔都 ≤ 400, 走不到这条; 走到它的都是「确实不可拆」, 此时闸门能核的最小事实是「至少多派了一次」。</li>
+  <li><b>为什么是数</b>: 派发次数可用 <code>git log --format=%B | grep -o "· 派发 [0-9]*" | sort | uniq -c</code> 统计(D10: 锚定 <code>·</code> 前缀), 能与行数/发现数对账; 词没有这个性质。</li>
 </ul>
 
 <h3>落点 2 —— <code>· 检 &lt;P&gt;/&lt;T&gt;</code> 把引文校验钉进 trailer (D2)</h3>
@@ -156,10 +156,10 @@
   <tbody>
     <tr>
       <td><b>A</b></td>
-      <td><b>机械面</b> · 新字段解析 + <code>decide()</code> 三处判据 + 失败行骨架 + <b>既有 11 处 pass 用例补 <code>检</code> 字段</b></td>
+      <td><b>机械面</b> · 新字段解析 + <code>decide()</code> 三处判据(超限判据改 <code>派发</code>; 删 <code>:240</code> 分面条件随 D8) + 失败行骨架 + <b>既有 11 处 pass 用例补 <code>检</code> 字段</b>(oversize 用例断言改写随矩阵例 11)</td>
       <td><code>.commands/review/scripts/check_review_trace.py</code><br><code>.commands/review/scripts/test_review_pkg.py</code></td>
       <td>~175</td>
-      <td>判定矩阵 10 例全过(见下); 既有 11 处 pass 用例迁移后仍绿; <code>python .commands/review/scripts/test_review_pkg.py</code> 全绿</td>
+      <td>判定矩阵 11 例全过(见下); 既有 11 处 pass 用例迁移后仍绿; <code>python .commands/review/scripts/test_review_pkg.py</code> 全绿</td>
     </tr>
     <tr>
       <td><b>B</b></td>
@@ -170,7 +170,7 @@
     </tr>
     <tr>
       <td><b>C</b></td>
-      <td><b>协议面</b> · skill ②④⑤⑦ + 反模式两条改写; 本计划 §06 回填、状态转 Done</td>
+      <td><b>协议面</b> · skill ②④⑤⑦ + 反模式两条改写(② 加「确实不可拆 → 派发 ≥2」句, D1/D8 连带); 本计划 §06 回填、状态转 Done</td>
       <td><code>.agents/skills/code-review/SKILL.md</code><br>本文件</td>
       <td>~70</td>
       <td>引用的行号与常量在快照里真实存在; <code>commands run kb.check</code> / <code>doc.links</code> 绿</td>
@@ -180,7 +180,7 @@
 
 <h3>判定矩阵(批 A 的单测清单)</h3>
 <ol>
-  <li>带 <code>· 分面</code> 无 <code>派发</code>、带 <code>检 3/3</code>, count=800 → 过(分面仍是等价声明);</li>
+  <li>带 <code>· 分面</code> 无 <code>派发</code>、带 <code>检 3/3</code>, count=800 → 红(D1: 分面不再是通路, 原拟等价声明作废);</li>
   <li>带 <code>· 派发 2</code> 无 <code>分面</code>、带 <code>检 3/3</code>, count=800 → 过;</li>
   <li><code>派发 1</code>(或两者皆无), count=800 → 红, 失败行含「派发 ≥ 2」与可粘贴骨架;</li>
   <li>count=120 无 <code>检</code> → 红(≤400 也要报校验);</li>
@@ -188,8 +188,9 @@
   <li><code>修 5 · 入池 2 · 检 6/6</code> → 红(P &lt; 修+入池);</li>
   <li><code>修 5 · 入池 2 · 检 6/12</code>(6 过 6 弃) → 红, 弃掉的条目不计入下界;</li>
   <li><code>修 5 · 入池 2 · 检 8/9 · 派发 2</code>, count=120 → 过;</li>
+  <li><code>检 0/0 · 修 0 · 入池 0</code>(全干净批) → 过(0≤P≤T 且 0≥0+0; 全 REFUTE 同理)(D6);</li>
   <li>骨架直贴(<code>?</code> 未替换) → 红, 数字正则不匹配;</li>
-  <li>既有 <code>test_oversize_needs_split_or_facet</code> 的 <code>· 分面</code> 断言回归仍绿。</li>
+  <li>既有 <code>test_oversize_needs_split_or_facet</code> 断言改写: 「<code>· 分面</code> 放行」→「带分面无派发判红」(D1/D8 连带)。</li>
 </ol>
 
 <h3>自举顺序(这条不写清会卡住落地)</h3>
@@ -197,21 +198,22 @@
 <p><b>首个实战样本</b>: 本计划落地后的<b>下一笔真实功能提交</b>即验收样本 —— 若它 &gt; 400 行, 看闸门是否在「没报派发」时真的拦下; 若 ≤ 400 行, 看 <code>检</code> 缺失是否被拦。用 <code>git log</code> 出一行统计留档。</p>
 
 <h2><span class="no">§05</span>待拍板清单</h2>
-<ol>
-  <li><b>Q1 <code>T ≥ 修 + 入池</code> 这道下界收不收。</b>收(推荐) ⇒ 代价是 <code>修</code> 的口径收紧为「过检的发现」, 自发顺手修不再计入; 好处是不加字段也堵住了 P2。备选: 只要求 <code>检</code> 存在、不做下界 —— 更宽松, 但等于没堵住「凭空写 修 15」。</li>
-  <li><b>Q2 超限判据是否保留「分面」作为等价声明。</b>保留(推荐) ⇒ 历史 trailer 与 skill ④ 的分面档都不用改写; 代价是同一意思两种写法。备选: 只认 <code>派发</code>, <code>分面</code> 判红 —— 干净, 但要让 26-11-06-0759 以来的既有写法全部失效。</li>
-  <li><b>Q3 记账类扩容的范围。</b>只加 <code>legacy-review4/</code>(推荐) ⇒ 最小面、可验证。备选: 整个 <code>reports/attachments/</code> 归为记账 —— 覆盖未来所有附件, 但会漏掉真实的事实性附件文档。</li>
-</ol>
+<p>无剩余待拍板 —— Q1-Q3 与 D1-D5 于 2026-11-07 grilling 会话逐项拍板, 追加 D6-D10(只读评审发现回填), 结论全表见 §06; 四个实现级细节授权执行者按计划口径定(D7, 先例 26-11-07-0201)。</p>
 
 <h2><span class="no">§06</span>拍板记录</h2>
 <table>
   <thead><tr><th>编号</th><th>结论</th><th>日期</th></tr></thead>
   <tbody>
-    <tr><td>D1</td><td>超限批(&gt; 400 行)判据由「必须有『分面』二字」改为「<code>派发 ≥ 2</code> 或带 <code>分面</code>」; 拆批仍是首要判据, 本字段只覆盖「确实不可拆」的残余</td><td>待拍板</td></tr>
-    <tr><td>D2</td><td>trailer 增 <code>· 检 P/T</code>, 校验 <code>0 ≤ P ≤ T</code> 且 <code>P ≥ 修 + 入池</code>; <code>修/入池</code> 口径 := 过检且未被 REFUTE 的发现</td><td>待拍板</td></tr>
-    <tr><td>D3</td><td>记账类前缀加 <code>memory-bank/reports/attachments/legacy-review4/</code>(不扩父目录)</td><td>待拍板</td></tr>
-    <tr><td>D4</td><td>三类失败行尾附可粘贴整行骨架, 行数位填实算值</td><td>待拍板</td></tr>
-    <tr><td>D5</td><td>不动: 锚点法 / FLOOR=50 / Skip / 齐平弱字段 / 提交后不补评 / findings 不入 git</td><td>待拍板</td></tr>
+    <tr><td>D1</td><td><b>(grilling 改写)</b>超限批(&gt; 400 行)判据 = 只认 <code>派发 ≥ 2</code> —— 分面不再是合法通路。原拟「或带 <code>分面</code>」作废: 其兼容理由(历史 trailer)不成立 —— 闸门不追溯历史提交, 老 trailer 本就不重判; skill ④ 分面档条件(≤400+敏感面)走不到 &gt;400 分支。批 C 把 skill ②「确实不可拆才走分面档」改写为「确实不可拆 → 派发 ≥2」</td><td>2026-11-07</td></tr>
+    <tr><td>D2</td><td>trailer 增 <code>· 检 P/T</code>, 校验 <code>0 ≤ P ≤ T</code> 且 <code>P ≥ 修 + 入池</code>; <code>修/入池</code> 口径 := 过检且未被 REFUTE 的发现</td><td>2026-11-07</td></tr>
+    <tr><td>D3</td><td>记账类前缀加 <code>memory-bank/reports/attachments/legacy-review4/</code>(不扩父目录)</td><td>2026-11-07</td></tr>
+    <tr><td>D4</td><td>三类失败行尾附可粘贴整行骨架, 行数位填实算值; 无消息文件预览照算实算打提示行、仍按 HEAD 判(不动 <code>message_text</code> 的 HEAD 回退语义, 复跑轮兜底不受影响)</td><td>2026-11-07</td></tr>
+    <tr><td>D5</td><td>不动: 锚点法 / FLOOR=50 / Skip / 齐平弱字段 / 提交后不补评 / findings 不入 git</td><td>2026-11-07</td></tr>
+    <tr><td>D6</td><td>全干净批 <code>检 0/0 · 修 0 · 入池 0</code> 合法通过(0≤P≤T 且 0≥0+0; 全 REFUTE 同理); 判定矩阵补正例</td><td>2026-11-07</td></tr>
+    <tr><td>D7</td><td>实现级细节授权执行者按计划口径定: (a) <code>检</code> 正则形状(斜杠形式) (b) <code>派发</code> 锚 <code>· 派发</code> (c) 骨架措辞 (d) 失败行文案(先例 26-11-07-0201)</td><td>2026-11-07</td></tr>
+    <tr><td>D8</td><td><code>· 分面</code> 保留为纯信息字段(地位等同 <code>· 齐平</code>, 不判红); 实现面 = 删 <code>check_review_trace.py:240</code> 分面条件, 零额外代码; ≤400 敏感面分面批仍可留痕</td><td>2026-11-07</td></tr>
+    <tr><td>D9</td><td>§07 水派发审计措辞照实收窄: 主流程 findings 不落盘, 事后审计只剩 git log 比例面; 抽看 findings 仅对落盘批次(R4 <code>legacy-review4/</code>)可行</td><td>2026-11-07</td></tr>
+    <tr><td>D10</td><td>两 nit 回填: ① 审计 grep 锚定 <code>· 派发</code>(防正文散文「派发 2 个子代理」过采); ② P4 的 1137/1811→1138/1812 补瞬态测量来源注</td><td>2026-11-07</td></tr>
   </tbody>
 </table>
 
@@ -220,7 +222,7 @@
   <thead><tr><th>风险</th><th>触发条件</th><th>处置</th></tr></thead>
   <tbody>
     <tr><td><b>自报数字仍不可验</b></td><td>永远成立: <code>派发</code>/<code>检</code> 都是 agent 写的</td><td>只做<b>下界一致</b>与形状校验, 不假装能验真; skill ⑦ 顶部一句话写明「这是记账闸门, 不是质量闸门」</td></tr>
-    <tr><td><b>水派发</b></td><td>为过闸门派两次, 第二次敷衍</td><td><code>P ≥ 修+入池</code> 只挡得住「派了但一条没交」的极端; <b>「派发多而修少」与「这批本来就干净」机械上不可区分</b>, 所以只做事后人工看比例: <code>git log --format=%B | grep -o "派发 [0-9]*" | sort | uniq -c</code>, 对高派发低发现的批次抽看 findings 是否落在不同面。不假装能自动检。</td></tr>
+    <tr><td><b>水派发</b></td><td>为过闸门派两次, 第二次敷衍</td><td><code>P ≥ 修+入池</code> 只挡得住「派了但一条没交」的极端; <b>「派发多而修少」与「这批本来就干净」机械上不可区分</b>, 所以只做事后人工看比例: <code>git log --format=%B | grep -o "· 派发 [0-9]*" | sort | uniq -c</code>(D10: 锚定 <code>·</code> 前缀, 防正文散文过采)。主流程 findings 不落盘(D5), 「抽看 findings 是否落在不同面」只对落盘批次(R4 <code>legacy-review4/</code>)可行, 其余批次审计面 = 比例本身(D9)。不假装能自动检。</td></tr>
     <tr><td><b>兼容性</b></td><td>老 trailer 无 <code>检</code> 字段</td><td>落地后第一笔提交起生效(闸门只看当前批, 不追溯历史); skill ⑦ 标注生效日</td></tr>
     <tr><td><b>骨架被直接粘贴</b></td><td>忘记替换 <code>?</code></td><td><code>?</code> 不匹配数字正则 ⇒ 判红, 失败方向安全</td></tr>
     <tr><td><b>自举卡死</b></td><td>批 A 改完后自己的提交过不了新判据</td><td>§04「自举顺序」固定六步; 真卡住时逃生 = 该笔用 <code>Review-Skip</code> 并在下笔补评(可见、可审计, 不进静默区)</td></tr>
@@ -230,6 +232,7 @@
 <h2><span class="no">§10</span>变更记录</h2>
 <ul>
   <li><span class="tag">R0 · 26-11-07-0441</span> 初版(提交前经一轮文档面评审: 13 条全过引文校验, 含 1 blocker = 机检点行号漂移, 已逐条修): 依据 2026-11-07 首笔真实批次(630a9b9f, 1229 行)的闸门实测与流程判定四条, 给出四个落点 + 三批实施 + 三条待拍板 + 五条决策。</li>
+  <li><span class="tag">R1 · 26-11-07-0655</span> grilling 两轮 11 项拍板回填: 只读评审发现 Q2 原推荐(保留分面等价声明)的兼容理由不成立 —— 闸门不追溯历史提交, 老 trailer 本就不重判, skill ④ 分面档(≤400+敏感面)走不到 &gt;400 分支 —— <b>D1 改写为只认 <code>派发 ≥2</code></b>, 分面降级纯信息字段(D8); 新增 D6(检 0/0 合法)/D7(实现级授权)/D9(审计措辞照实收窄)/D10(两 nit); §05 清空、§06 落日期、判定矩阵 10→11 例(例 1 翻红、oversize 断言例改写(现例 11)、补 0/0 正例)、§07 grep 锚定 <code>· 派发</code>、P4 补瞬态测量注。</li>
 </ul>
 
 </div>
