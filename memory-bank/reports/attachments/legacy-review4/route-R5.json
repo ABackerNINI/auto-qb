@@ -4,15 +4,15 @@
   "claimed_at": "26-11-06-2339",
   "freeze": "f088329291e64d0802637463e886f78842c1b34c",
   "freeze_note": "manifest 钉值 (生成时点 develop tip, D17)",
-  "snapshot": null,
-  "status": "claimed",
+  "snapshot": "C:\\Users\\11059\\Desktop\\Projects\\zcode\\auto-qb-review4-snap\\auto-qb-zcode-clone3",
+  "status": "in-progress",
   "batches": [
     {
       "id": "R5-1",
       "title": "shared 启动与状态: app/state/boot/lifecycle/auth/polling/fetch_low/ui_feedback",
-      "status": "pending",
-      "done_at": null,
-      "findings": 0
+      "status": "done",
+      "done_at": "26-11-07-0016",
+      "findings": 24
     },
     {
       "id": "R5-2",
@@ -84,5 +84,6 @@
       "done_at": null,
       "findings": 0
     }
-  ]
+  ],
+  "started_at": "26-11-06-2342"
 }
