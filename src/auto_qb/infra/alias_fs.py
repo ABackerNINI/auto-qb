@@ -896,7 +896,9 @@ def retarget_alias(link: str, target: str, kind: Optional[str] = None) -> str:
 
     形态取舍: 现存链接的实际形态**优先**(qB 正在读的就是它, 保有形态零惊扰); 缺失时用
     调用方给的 kind(job plan 的 link_kind); 再缺失按目标类型推断(目录= Windows junction
-    /POSIX 目录 symlink; 文件= symlink —— 推断面只兜旧账无 kind 的防御支)。
+    /POSIX 目录 symlink; 文件= symlink —— 推断面只兜旧账无 kind 的防御支)。hardlink 形态
+    遇跨卷新目标时回落 KIND_SYMLINK(os.link 跨卷必 EXDEV, 见建链段注释) —— 由搬前预检
+    保证回落可行(symlink 能力在场), 否则应在搬前整体拒绝而不是搬后吊死 supersede。
 
     返回: "skipped"(已指向目标, 零动作) / "retargeted"(删旧建新) / "rebuilt"(缺失重建)。
     失败抛 OSError/RuntimeError(删失败=占用/权限; 建/穿透失败=环境) —— 调用方按 D20
@@ -942,12 +944,18 @@ def retarget_alias(link: str, target: str, kind: Optional[str] = None) -> str:
     # 建新链接: 目录别名(junction/目录 symlink) vs 文件别名(硬链接/文件 symlink)
     if dir_like:
         create_dir_alias(link, target, form)
-    elif form == KIND_HARDLINK:
+    elif form in (KIND_HARDLINK, KIND_SYMLINK):
+        # 跨卷回落(收口评审 #2): hardlink 形态且新链接位置与新目标跨卷 => os.link 必 EXDEV,
+        # 而删旧链接已先行(旧孪生被 qB 跨卷搬移后 nlink 收敛 1, alias_kind_of 认不出, 删的
+        # 正是前任成员的现存数据名), 之后每拍重试恒失败 = 前任永停 supersede stage(D20 无从
+        # 收敛)。跨卷时回落 KIND_SYMLINK: 成员经符号链接照常读, 形态对 qB 透明; 卷位判不了
+        # (st_dev 不可得)按跨卷保守处理 —— symlink 同/跨卷皆可建, 宁降级也不进 EXDEV 死循环;
+        # 回落也失败 => 抛错交 D20 搬后重试路径(搬前预检应已拦掉 symlink 也不可用的组合)。
+        # 卷位探的是新链接的父目录(os.link 的新名落点), 链接本体缺失(重建支)也判得准。
+        if form == KIND_HARDLINK and same_volume(os.path.dirname(link) or ".", target) is not True:
+            form = KIND_SYMLINK
         os.makedirs(os.path.dirname(link) or ".", exist_ok=True)  # 与 _build_links 文件支同口径
-        create_file_alias(link, target, KIND_HARDLINK)
-    elif form == KIND_SYMLINK:
-        os.makedirs(os.path.dirname(link) or ".", exist_ok=True)
-        create_file_alias(link, target, KIND_SYMLINK)
+        create_file_alias(link, target, form)
     else:
         raise ValueError(f"重定向不支持形态: {form}(link={link})")
     # 穿透校验: 经新链接读得到目标内容(目录= 可列; 文件= 尺寸一致)

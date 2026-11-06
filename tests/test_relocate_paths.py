@@ -21,7 +21,8 @@ S4(26-11-05-0808)退役面: 旧 guardian(finalize_watch)退化路径/CLI/pid 锁
 - test_reconcile_new_chain_faces: 对账新链三分支(journal rewritten 镜像合并 / 别名丢失重建 / 全员到 dst 核验过+零依赖收尾完成)
 - test_task_line_exception_isolated: 单 job 抛异常 -> failed(internal_error), 不拖垮任务线
 - test_qb_up_probe: 客户端可读 -> True; 无 api -> False
-- test_daemon_three_proofs_helpers: _port_refused / _proc_absent 退化 + _alive 零副作用
+- test_daemon_three_proofs_helpers: _port_refused / _proc_absent 双判合取(评审 #6: 名册见
+  qB + 端口拒连不判缺席)+ _alive 零副作用
 - test_daemon_process_names_parsing: tasklist/ps//proc 三条进程表解析 + 平台分派 + 读不到 ⇒ 空
 - test_execute_early_returns
 - test_arm_spec_and_daemon_failure_paths: spec 落盘失败只告警 / daemon 拉起异常被对账吞掉 / 删链接异常计 0
@@ -315,9 +316,11 @@ def test_daemon_three_proofs_helpers(tmp_path, monkeypatch):
     + _alive 零副作用(P7: Windows os.kill(pid,0) 自噬循环的守阵)"""
     assert rd._port_refused("127.0.0.1", 0) is True
     assert rd._port_refused("127.0.0.1", 1, timeout=0.2) is True
-    assert rd._proc_absent(()) is False  # 判不出 -> 未证明
-    # P7: 实例级判定 —— 同机还有别的 qB 进程时, 端点拒连仍证明「该实例已退出」
-    assert rd._proc_absent(("qbittorrent.exe", "python.exe"), "127.0.0.1", 1) is True
+    assert rd._proc_absent(()) is False  # 判不出 -> 未证明(port=0 无端口证, 保守)
+    # 评审 #6: 双判合取 —— 名册见 qB(任一实例)时即使端点拒连也不判缺席: WebUI 不可达
+    # (被关/挂死/链路断)!= 进程不在, 假阳性进窗会在 qB 运行期改写 fastresume(N1 铁律);
+    # 旧「端点拒连即实例级缺席」短路判据随本修退役
+    assert rd._proc_absent(("qbittorrent.exe", "python.exe"), "127.0.0.1", 1) is False
     # P7: _alive 零副作用 —— Windows 上 os.kill(pid,0) 会 TerminateProcess 掉被探测进程;
     # 探测自身进程必须返回 True 且不得终止它
     assert relocate_journal._alive(os.getpid()) is True

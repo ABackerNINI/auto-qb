@@ -26,6 +26,9 @@
 - test_qbapi_delete_guard_file_links_form: 文件级形态(scope==src)同判据拦截(文件级 symlink
   deleteFiles 跟随直删)
 - test_qbapi_delete_guard_allows_outside_and_unregistered: 门外种子放行; 无活动别名登记放行
+- test_qbapi_delete_guard_allows_probe_tagged_seeds: 探测种子(tag 含 TAG_PROBE)落在活动别名
+  根下也放行(评审 #5, 自造探针非组成员数据; 拦截会让探测清理 deleteFiles 恒失败)/ 普通种子
+  同根仍拦
 ### WebUI 删除命令面(第二条路径, 经命令队列全链)
 - test_webui_delete_blocked_receipt_single_and_group: delete_torrent / delete_group 撞拦截 →
   error 回执带解法文案 + qB 客户端未收到 delete; 纯删除照常发
@@ -290,6 +293,28 @@ def test_qbapi_delete_guard_allows_outside_and_unregistered():
     api2, client2 = _guard_api({}, {r"R:\src": "j1"})  # 有登记但种子不在快照: 不可判, 放行
     api2.torrents_delete(torrent_hashes=["HX"], delete_files=True)
     assert ("delete", True) in client2.calls
+
+
+def test_qbapi_delete_guard_allows_probe_tagged_seeds():
+    """探测种子(tag 含 TAG_PROBE)落在活动别名根下也放行(评审 #5): 自造探针非组成员数据,
+    拦截会让 _cleanup/启动残留扫描的 deleteFiles 恒失败(探针滞留每次启动重复告警);
+    普通种子(无探测标签)同根仍拦(拦截面对成员数据不松动)"""
+    from auto_qb.core.modules.relocate_probe import TAG_PROBE
+
+    probe = types.SimpleNamespace(hash="HP", save_path=r"R:\src\probe-x", tags_set=frozenset({TAG_PROBE}))
+    normal = _rec("HA", r"R:\src")  # 无 tags_set 属性(旧形态替身也判得出: 非探针)
+    api, client = _guard_api({"HP": probe, "HA": normal}, {r"R:\src": "j1"})
+    api.torrents_delete(torrent_hashes=["HP"], delete_files=True)  # 探针: 放行
+    assert ("delete", True) in client.calls
+    with pytest.raises(DeleteBlockedError) as ei:  # 普通成员种子同根: 照拦
+        api.torrents_delete(torrent_hashes=["HA"], delete_files=True)
+    assert [b[0] for b in ei.value.blocked] == ["HA"]
+    # 混批: 探针不进拦截名单, 拦截只点名普通种子
+    client.calls.clear()
+    with pytest.raises(DeleteBlockedError) as ei2:
+        api.torrents_delete(torrent_hashes=["HP", "HA"], delete_files=True)
+    assert [b[0] for b in ei2.value.blocked] == ["HA"], ei2.value.blocked
+    assert not any(c[0] == "delete" for c in client.calls), "整批仍不发 qB(同批有被拦种子)"
 
 
 # ---------------------------------------------------------------- WebUI 删除命令面(第二条路径)

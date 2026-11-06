@@ -78,9 +78,21 @@ daemon 主体:
 - test_verify_replays_of_bad_shape_is_zero: verify_replays 坏形 => 0
 - test_reset_rewrites_terminal_refused_and_keeps_unsettled: 重放入口终态拒(-1)/非 settled 原样保留
 - test_tasklist_ignores_non_quoted_lines: tasklist CSV 非引号行跳过
-- test_names_from_proc_tolerates_unreadable_comm: /proc 名册逐项容错(comm 打不开跳过)
+- test_names_from_proc_tolerates_unreadable_comm: /proc 名册逐项容错(comm 打不开跳过;
+  pid 1 comm 重定向真实文件 => 可读支两平台非空可断, 修 Windows 主平台空转断言)
 - test_qb_process_names_dispatches_non_windows: 进程名册分派(ps 支/proc 支)
+
+收口评审修复轮(26-11-07):
+- test_spec_retarget_mid_window_rewrites_remaining_to_new_dst: 窗口中段 spec.dst 被改道
+  (supersede 账面段不需 qB 在线)=> 剩余成员按新 dst 改写(评审 #4: 旧实现用窗口 scan
+  快照, 剩余成员写旧 dst)/ spec 现读失败 => 本 job 本拍放弃不拿旧快照改写
+- test_spec_unreadable_mid_window_skips_job_without_stale_rewrite: spec 现读失败(撕态/被删)
+  => 本 job 本拍放弃, 零改写零落账不拿旧快照(评审 #4 容错支)
+- test_proc_absent_dual_evidence_and_roster_fallback: 证一判定(评审 #6)—— 名册可用时
+  「进程不在 AND 端口拒连」合取(名册见 qB + 端口拒连 = 不进窗, WebUI 不可达 != 进程
+  不在)/ 名册无 qB + 拒连成立 / 名册不可用退端口单证但告警降级 / 无端口退名册单证
 """
+import logging
 import os
 from pathlib import Path
 from unittest import mock
@@ -160,15 +172,19 @@ def _write_job(
 
 def _stub_qb(monkeypatch, state):
     """三证桩: 端口证桩在 socket.create_connection(连得上=在/拒连=不在, rd 内三证判据
-    消费同一 socket 模块对象); 进程名册恒含 qbittorrent(端口拒连时 _proc_absent 按
-    实例级判定短路, 名册内容不参与判定)。state["up"]=True 即「qB 在」。"""
+    消费同一 socket 模块对象); 进程名册与 state 联动 —— qB 在 = 名册含 qbittorrent,
+    不在 = 名册可用但只有无关进程(评审 #6 起 _proc_absent 双判合取, 名册参与判定;
+    单实例机器语义: qB 真死时名册自然无 qB 进程, 合取不损窗口可用性)。state["up"]=True
+    即「qB 在」。"""
     def _connect(addr, timeout=None):
         if state["up"]:
             return mock.MagicMock()
         raise OSError(10061, "refused")
 
     monkeypatch.setattr(rd.socket, "create_connection", _connect)
-    monkeypatch.setattr(rd, "_qb_process_names", lambda: ("qbittorrent.exe", ))
+    monkeypatch.setattr(
+        rd, "_qb_process_names", lambda: ("qbittorrent.exe", ) if state["up"] else ("explorer.exe", "svchost.exe")
+    )
 
 
 def _clock_gen(start=1000.0, step=5.0):
@@ -564,7 +580,9 @@ def test_qb_revives_before_first_write_zero_member_writes(tmp_path, monkeypatch)
         roster["n"] += 1
         if roster["n"] >= 2:
             state["up"] = True  # 第二次名册现读时 qB 已回升
-        return ("qbittorrent.exe", )
+        # 评审 #6 合取语义: 名册与 state 联动(down = 名册可用但无 qB, up = 名册见 qB) ——
+        # 旧桩恒含 qbittorrent, 在合取判定下窗永不开, 进窗/回升路径覆盖不到
+        return ("qbittorrent.exe", ) if state["up"] else ("explorer.exe", )
 
     monkeypatch.setattr(rd, "_qb_process_names", _roster)
     assert _run(data_dir, max_wait=60.0) == "timeout", "回升后无窗可进, max_wait 收束"
@@ -967,22 +985,32 @@ def test_tasklist_ignores_non_quoted_lines(monkeypatch):
     assert rd._names_from_tasklist() == ("qbittorrent.exe", )
 
 
-def test_names_from_proc_tolerates_unreadable_comm(monkeypatch):
-    """/proc 名册: 非数字项跳过; comm 打不开(权限/消失)逐项跳过不炸"""
+def test_names_from_proc_tolerates_unreadable_comm(monkeypatch, tmp_path):
+    """/proc 名册: 非数字项跳过; comm 打不开(权限/消失)逐项跳过不炸, 可读项照常收"""
     monkeypatch.setattr(rd.os, "listdir", lambda p: ["1", "self", "2"])
+    # pid 1 的 comm 重定向到已知内容的真实文件: Windows 无 /proc, 不重定向则可读支在
+    # 主平台空转(名册空 tuple, all(()) 恒真断言失效), 重定向后两平台都断到非空名册
+    comm1 = tmp_path / "comm1"
+    comm1.write_text("systemd\n", encoding="utf-8")
     real_open = open
 
     def _open(path, *a, **kw):
-        if str(path).endswith("/comm") and "/2/" in str(path).replace("\\", "/"):
-            raise OSError(13, "permission")
+        p = str(path).replace("\\", "/")
+        if p.endswith("/comm"):
+            if "/2/" in p:
+                raise OSError(13, "permission")
+            if "/1/" in p:
+                return real_open(str(comm1), *a, **kw)
         return real_open(path, *a, **kw)
 
     import builtins
 
     monkeypatch.setattr(builtins, "open", _open)
     names = rd._names_from_proc()
-    assert all("qbittorrent" not in n or True for n in names)  # 形状断言: 元组可建
     assert isinstance(names, tuple)
+    # 真断言(评审 #7: 原行 "X or True" 恒真): 可读项(pid 1 重定向文件)收进名册, 不可读
+    # 项(拒读的 pid 2)跳过, 不产空串垃圾项 —— 两平台名册均非空, 断言不再空转
+    assert names == ("systemd", )
 
 
 def test_qb_process_names_dispatches_non_windows(monkeypatch):
@@ -994,3 +1022,111 @@ def test_qb_process_names_dispatches_non_windows(monkeypatch):
     monkeypatch.setattr(rd.os.path, "isdir", lambda p: True)
     monkeypatch.setattr(rd, "_names_from_proc", lambda: ("proc-qbittorrent", ))
     assert rd._qb_process_names() == ("proc-qbittorrent", )
+
+
+def test_proc_absent_dual_evidence_and_roster_fallback(monkeypatch, caplog):
+    """证一判定(评审 #6): 名册可用时「进程不在 AND 端口拒连」双判合取 —— 端口拒连只证明
+    WebUI 不可达, 不证明进程不在; 旧实现端口短路恒 True, qB 存活但 WebUI 不可达时假阳性
+    进窗, daemon 在 qB 运行期改写 fastresume(N1 零写入被破)"""
+    port_state = {"refused": True}
+    monkeypatch.setattr(rd, "_port_refused", lambda host, port, timeout=1.0: port_state["refused"])
+    # 名册见 qB + 端口拒连 => False(评审 #6 核心支: 不进窗)
+    assert rd._proc_absent(("qbittorrent.exe", ), "127.0.0.1", 8080) is False
+    # 名册见 qB + 端口可连 => False
+    port_state["refused"] = False
+    assert rd._proc_absent(("qbittorrent.exe", ), "127.0.0.1", 8080) is False
+    # 名册无 qB + 端口可连 => False(端口证不成立)
+    assert rd._proc_absent(("chrome.exe", ), "127.0.0.1", 8080) is False
+    # 名册无 qB + 端口拒连 => True(合取成立; qB 真死两证自然同向, 窗口可用性不受损)
+    port_state["refused"] = True
+    assert rd._proc_absent(("chrome.exe", ), "127.0.0.1", 8080) is True
+    # 名册不可用(空)+ 端口拒连 => 端口单证 True, 但告警降级留痕(证据链弱化不许静默)
+    with caplog.at_level(logging.WARNING, logger="auto_qb.tools.recycle_daemon"):
+        assert rd._proc_absent((), "127.0.0.1", 8080) is True
+    assert any("名册不可用" in r.message for r in caplog.records), caplog.text
+    # 名册不可用 + 端口可连 => False(端口在服务, 不告警)
+    caplog.clear()
+    port_state["refused"] = False
+    assert rd._proc_absent((), "127.0.0.1", 8080) is False
+    assert not any("名册不可用" in r.message for r in caplog.records)
+    # 无端口可判(port=0): 退回名册单证(旧行为, 兼容无端口场景)
+    assert rd._proc_absent(("chrome.exe", ), "", 0) is True
+    assert rd._proc_absent(("qbittorrent.exe", ), "", 0) is False
+    # 无端口且无名册 => 未证明(保守 False, 旧口径「判不出不算已退出」不变)
+    assert rd._proc_absent((), "", 0) is False
+
+
+def test_spec_retarget_mid_window_rewrites_remaining_to_new_dst(tmp_path, monkeypatch):
+    """[supersede 即时生效/评审 #4] 窗口中段 spec.dst 被改道(retarget_spec 不需 qB 在线)
+    => 剩余成员按新 dst 改写; 旧实现沿用窗口 scan 快照会把剩余成员写旧 dst(改写方向错)。
+    另: spec 现读失败(被并发重写撕态) => 本 job 本拍放弃, 绝不拿旧快照改写。"""
+    tmp_path.joinpath("src").mkdir()
+    tmp_path.joinpath("dst1").mkdir()
+    tmp_path.joinpath("dst2").mkdir()
+    backup = tmp_path / "BT_backup"
+    old_root = str(tmp_path / "src")
+    dst1, dst2 = str(tmp_path / "dst1"), str(tmp_path / "dst2")
+    h_a = _member_fixture(backup, b"m-a", old_root)
+    h_b = _member_fixture(backup, b"m-b", old_root)
+    data_dir = str(tmp_path / "data")
+    _write_job(tmp_path, data_dir, "job-1", [h_a, h_b], src=old_root, dst=dst1)
+    state = {"up": False}
+    _stub_qb(monkeypatch, state)
+    real = rd.fastresume.retarget
+
+    def _retarget_then_redirect(backup_dir, h1, h2, old, new):
+        # A 改写落盘的同一间隙, supersede 改道 spec.dst(dst1 -> dst2; 账面段不需 qB 在线)
+        assert new == dst1, "前置: 改道发生在窗口 scan 之后, 本拍仍按 scan 快照的目标"
+        out = real(backup_dir, h1, h2, old, new)
+        assert rj.retarget_spec(data_dir, "job-1", dst2)
+        return out
+
+    calls = {"n": 0}
+
+    def _hook(backup_dir, h1, h2, old, new):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return _retarget_then_redirect(backup_dir, h1, h2, old, new)
+        return real(backup_dir, h1, h2, old, new)
+
+    monkeypatch.setattr(rd.fastresume, "retarget", _hook)
+    assert _run(data_dir) == "idle"
+    assert rj.read_spec(data_dir, "job-1")["dst"] == dst2, "改道已落盘"
+    rw = rj.read_rewrites(data_dir, "job-1")
+    assert rw[h_a]["status"] == "rewritten", "A: 改道前按当时账面 dst1 改写(时序正确)"
+    assert rw[h_b]["status"] == "rewritten", "B: 改道后必须按新 dst 改写"
+    fr_b = _fr_path(tmp_path, h_b)
+    val, _pos = frmod.bdecode(fr_b.read_bytes())
+    assert val[b"save_path"] == (dst2 + "\\m-b").encode("utf-8"), "B 落到新 dst(旧实现会写 dst1)"
+    assert val[b"qBt-savePath"] == (dst2.replace("\\", "/") + "/m-b").encode("utf-8")
+    fr_a = _fr_path(tmp_path, h_a)
+    val_a, _pos = frmod.bdecode(fr_a.read_bytes())
+    assert val_a[b"save_path"] == (dst1 + "\\m-a").encode("utf-8"), "A 维持改道前的 dst1(已写部分不追改)"
+
+
+def test_spec_unreadable_mid_window_skips_job_without_stale_rewrite(tmp_path, monkeypatch):
+    """spec 现读失败(撕态/被删) => 本 job 本拍放弃, 不拿窗口 scan 快照改写(评审 #4 容错支)"""
+    tmp_path.joinpath("src").mkdir()
+    tmp_path.joinpath("dst").mkdir()
+    backup = tmp_path / "BT_backup"
+    old_root = str(tmp_path / "src")
+    h1 = _member_fixture(backup, b"m-1", old_root)
+    data_dir = str(tmp_path / "data")
+    _write_job(tmp_path, data_dir, "job-1", [h1], src=old_root, dst=str(tmp_path / "dst"))
+    state = {"up": False}
+    _stub_qb(monkeypatch, state)
+    real_read_spec = rj.read_spec
+    spec_calls = {"n": 0}
+
+    def _flaky_spec(dd, job_id):
+        spec_calls["n"] += 1
+        if spec_calls["n"] <= 1:
+            return real_read_spec(dd, job_id)  # 窗口 scan 时 spec 还在
+        return None  # 窗口内逐成员现读: 撕态/被删
+
+    monkeypatch.setattr(rd.rj, "read_spec", _flaky_spec)
+    assert _run(data_dir, max_wait=200.0) == "timeout", "spec 恒读不到 => 放弃本 job(pending 留守), max_wait 兜底"
+    assert spec_calls["n"] >= 2, "窗口内确有逐成员现读(非只用 scan 快照)"
+    rw = rj.read_rewrites(data_dir, "job-1")
+    assert not rw, "零改写零落账: 绝不拿旧快照改写(下一窗口按新账重放)"
+    assert not (rj.read_journal(data_dir, "job-1") or {}), "零建账(从未落过改写记录)"

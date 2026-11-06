@@ -23,6 +23,8 @@ D19 旧 mover 通用补条目、搬前别名重建可行性预检(alias_busy)、
 ### 失败分段(D20)
 - test_supersede_alias_busy_blocks_before_move: 搬前预检(alias_busy)失败 = 整体拒绝零副作用 ——
   无新 job、无 setLocation、旧 job 现场指纹原样(armed + dst 不变 + 别名在位)
+- test_supersede_alias_form_volume_gate: 形态 x 卷位预检(评审 #2)—— hardlink 前任别名 + 跨卷
+  目标 + symlink 不可用 = 整体拒绝零副作用; symlink 回落可行 = 放行不出此闸
 - test_supersede_post_move_redirect_retries_until_converged: 搬后重定向失败注入 = 不回滚不判
   失败 —— 账面改道已提交(先账后链)、J1 保持 armed、J2 停 moved 重试; 解除注入后幂等续跑
   收敛(J1 别名指 C / J2 武装), journal retarget 在账
@@ -33,6 +35,9 @@ D19 旧 mover 通用补条目、搬前别名重建可行性预检(alias_busy)、
 ### 撤销护栏(S5 改道态的新暴露面)
 - test_supersede_cancel_guard_blocks_codestination: 存在改道到同一目标的在途前任时撤销新 job
   = 拒绝(cancel_chain)且零 qB 写(撤销会把共享数据搬回源, 掏空已改道前任的成员服务)
+- test_supersede_cancel_refuses_settled_rewrites: journal 已有 settled 改写记录 = 拒绝撤销
+  (评审 #3, 成员 fastresume 已指向 dst, 撤销留 0420 同款冻结态)/ 成本确认前即拒(无 confirm
+  面)/ 无 settled 记录(pending/无账)撤销行为不变
 
 覆盖率缺口清偿(26-11-07, test.full 99.31% -> 99.5% 闸):
 - test_supersede_stage_tick_failure_keeps_retrying_without_link: 重定向失败落在 supersede stage
@@ -221,6 +226,40 @@ def test_supersede_alias_busy_blocks_before_move(tmp_path, monkeypatch):
     assert all(afs.alias_kind_of(p) is not None for p in job1.alias_paths), "别名在位未动"
 
 
+def test_supersede_alias_form_volume_gate(tmp_path, monkeypatch):
+    """形态 x 卷位预检(评审 #2): hardlink 形态前任别名 + 跨卷目标 + symlink 不可用 = 整体拒绝
+    (指纹级回滚 = 此刻零副作用); symlink 回落可行时放行(不再出此闸)"""
+    pin_disk_usage(monkeypatch)
+    mgr, client, mod, j1, spawned, src, dst, content = _armed_env(tmp_path, monkeypatch)
+    dst_c = _c_root(tmp_path)
+    hb, ha = mgr.store.by_hash["HB"], mgr.store.by_hash["HA"]
+    recs = [hb, ha]
+    # 前任别名按 hardlink 形态注入(闸门只对 hardlink 形态设防; 真实卷位由 facts 注入控制);
+    # 名册扩到 4 条触发文案「等共 N 条」截断支(假链接路径不触盘: busy 探测对缺失路径放行)。
+    # 另挂一条 junction 形态前任: 非 hardlink 形态不设此闸(天然跨卷可建, continue 支)
+    monkeypatch.setattr(
+        afs, "alias_kind_of", lambda p: afs.KIND_HARDLINK if "R:/x/" in str(p).replace("\\", "/") else afs.KIND_JUNCTION
+    )
+    mod._jobs[j1] = replace(mod.get_job(j1), alias_paths=("R:/x/1", "R:/x/2", "R:/x/3", "R:/x/4"))
+    mod._jobs["j0"] = _job(
+        "j0", phase=ru.PHASE_ARMED, src="R:/src0", dst=dst, hashes=("HA", ), alias_paths=("Q:/elsewhere/alias", )
+    )
+    facts = replace(mod._group_facts(recs, dst_c, client), same_volume=False, file_link_kind=None)
+    client.calls.clear()
+    item = mod._start_job(recs, dst_c, facts, {"cls": "ok", "notes": [], "reasons": []}, client)
+    assert item["cls"] == "blocked", item
+    assert item["reasons"][0]["gate"] == ru.GATE_ALIAS_BUSY, item
+    assert "卷位" in item["reasons"][0]["text"]
+    assert len(mod.jobs_view()) == 2, "未建新 job(j1+j0 在账, 整体拒绝账面/文件指纹原样)"
+    assert client.calls == [], "零副作用: 未暂停成员、未下发 setLocation"
+    # 放行支: symlink 回落可行(file_link_kind=symlink) -> 不再出形态 x 卷位闸
+    # (后续按真实 facts 面走 started/其它闸, 均与本报文无关)
+    facts_ok = replace(facts, file_link_kind=afs.KIND_SYMLINK)
+    item2 = mod._start_job(recs, dst_c, facts_ok, {"cls": "ok", "notes": [], "reasons": []}, client)
+    assert not any(r.get("gate") == ru.GATE_ALIAS_BUSY for r in item2.get("reasons", [])), item2
+    assert item2["cls"] == "started", item2
+
+
 def test_supersede_post_move_redirect_retries_until_converged(tmp_path, monkeypatch):
     """搬后重定向失败注入(D20): 不回滚不判失败 —— 账面已提交(先账后链), 重试至收敛"""
     pin_disk_usage(monkeypatch)
@@ -317,6 +356,59 @@ def test_supersede_cancel_guard_blocks_codestination(tmp_path, monkeypatch):
     out2 = mod.relocate_cancel(j2, cost_confirmed=True)
     assert out2["cls"] == "ok", out2
     assert mod.get_job(j2).phase == ru.PHASE_CANCELLED
+
+
+def test_supersede_cancel_refuses_settled_rewrites(tmp_path, monkeypatch):
+    """撤销护栏(评审 #3): journal 已有 settled 改写记录 = 拒绝撤销(成员 fastresume 已指向
+    dst, 撤销留冻结态且 cancelled 终态后 daemon 不再管); 无 settled 记录撤销行为不变"""
+    pin_disk_usage(monkeypatch)
+    mgr, client, mod, j1, spawned, src, dst, content = _armed_env(tmp_path, monkeypatch)
+    dd = mgr.config.data_dir
+    files = client.files_map["HA"]
+    dst_c = _c_root(tmp_path)
+    items = mod.relocate_execute(["HA"], dst_c)
+    j2 = items[0]["job_id"]
+    _simulate(mgr, dst_c, files, os.path.join(dst, "Show"))
+    _run_ticks(mod, 8)
+    assert mod.get_job(j2).phase == ru.PHASE_ARMED, mod.get_job(j2).phase
+    # 拒绝支: daemon 已在窗口把成员改写 settled(rewrites 账在) -> 撤销拒绝且零 qB 写
+    # (4 个 settled 触发文案「等共 N 个」截断支; 另塞一条非 dict 残账记录验证守卫跳过)
+    assert rj.record_rewrites(dd, j2, {h: {"status": "rewritten", "path": "x"} for h in ("HA", "HB", "HC", "HD")})
+    j_body = rj.read_journal(dd, j2) or {}
+    rj.write_journal(
+        dd,
+        j2,
+        {
+            **j_body,
+            "rewrites": {
+                **(j_body.get("rewrites") or {}),
+                "HBAD": "garbage"  # 跨进程账面的撕态形态
+            }
+        }
+    )
+    before = list(client.calls)
+    out = mod.relocate_cancel(j2, cost_confirmed=True)
+    assert out["cls"] == "blocked" and out["reasons"][0]["gate"] == "cancel_rewritten", out
+    assert "收尾" in out["reasons"][0]["text"] and "fastresume" in out["reasons"][0]["text"]
+    assert client.calls == before, "拒绝撤销 = 零 qB 写(不删链不搬回)"
+    assert mod.get_job(j2).phase == ru.PHASE_ARMED, "现场指纹原样"
+    # 成本未确认同样直接拒(检查在成本确认之前, 不给 confirm 面误导可撤)
+    out_dry = mod.relocate_cancel(j2, cost_confirmed=False)
+    assert out_dry["cls"] == "blocked" and out_dry["reasons"][0]["gate"] == "cancel_rewritten", out_dry
+    assert "cost" not in out_dry, "拒绝面不出成本单(不可撤的形态谈成本是误导)"
+    # 放行支: settled 记录清回 pending(reset_rewrites 重放入口同款; 非 dict 残账原样保留)
+    # + 前任收尾(同目标同伴清零, 不踩 cancel_chain) -> 撤销行为不变(删链 + 搬回 + cancelled)
+    assert rj.reset_rewrites(dd, j2) == 4
+    assert rj.read_rewrites(dd, j2)["HBAD"] == "garbage"
+    for h in ("HA", "HB"):
+        mgr.store.by_hash[h].save_path = dst_c
+    _run_ticks(mod, 6)
+    assert mod.get_job(j1).phase == ru.PHASE_DONE, "前任已收尾(同目标同伴清零)"
+    calls_before_ok = list(client.calls)
+    out2 = mod.relocate_cancel(j2, cost_confirmed=True)
+    assert out2["cls"] == "ok", out2
+    assert mod.get_job(j2).phase == ru.PHASE_CANCELLED
+    assert any("set_location" in str(c) for c in client.calls[len(calls_before_ok):]), "搬回已下发"
 
 
 # ---------------------------------------------------------------------------

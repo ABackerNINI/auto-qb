@@ -196,8 +196,11 @@ def rewrite_save_paths(val: Dict[bytes, BValue], old_root: str,
     """双键前缀替换: save_path + qBt-savePath(+qBt-downloadPath 在场时), 逐键在原串上做。
 
     - 纯函数: 不改入参, 返回浅拷贝改写(只换顶层 bytes 值, 嵌套值共享不动)。
-    - 幂等: 任一键值已是新根(任一风味, 含嵌套根 old 是 new 前缀的形态)即记 already 跳过,
-      先于旧根判定, 杜绝二次改写。
+    - 幂等与嵌套方向裁决: 先算旧根命中与改写产物 —— 产物==原值, 或值同时命中新旧根且
+      旧根是新根前缀(嵌套 old<new, 值已在新根内) => already 跳过, 杜绝二次改写; 若
+      新根是旧根前缀(嵌套 new<old, 目标=源祖先), 值虽也命中新根前缀但那是旧根命中的
+      必然推论, 旧根命中优先 => 产物!=原值必改写(否则旧根键值被 already 误判永不改写,
+      daemon 记 already 出账后核验永不过, journal 永久悬挂, 违反 D10)。
     - 不匹配即跳过(unmatched): 含 N10 相对路径形态 —— 绝不自行重推导绝对路径。
     - old/new 为空或等值(字节面) => ValueError(fail-fast, 调用方契约错误); 仅分隔符风味
       不同的新旧根视为同一路径, 全键 unmatched 原样返回(无差异可改)。
@@ -216,19 +219,28 @@ def rewrite_save_paths(val: Dict[bytes, BValue], old_root: str,
         v = out.get(key)
         if not isinstance(v, bytes):
             continue
-        if any(_prefix_match(v, np) for np in new_prefixes):
-            already.append(key.decode("utf-8", "replace"))
-            continue
-        hit = None
+        new_hit = any(_prefix_match(v, np) for np in new_prefixes)
+        old_hit = None
         for ov, nv in pairs:
             if _prefix_match(v, ov):
-                hit = nv + v[len(ov):]
+                old_hit = (ov, nv)
                 break
-        if hit is None:
-            unmatched.append(key.decode("utf-8", "replace"))
-        else:
-            out[key] = hit
+        if old_hit is not None:
+            ov, nv = old_hit
+            product = nv + v[len(ov):]
+            # already 只在改写确为无操作时判: 产物==原值, 或嵌套 old<new(旧根是新根
+            # 前缀, 值同时命中两根 => 值已在新根内, 改写只会二次加深)。嵌套 new<old
+            # 时新根前缀命中是旧根命中的推论, 必须改写(嵌套裁决见函数 docstring)。
+            if product == v or (new_hit and _prefix_match(nv, ov)):
+                already.append(key.decode("utf-8", "replace"))
+                continue
+            out[key] = product
             rewritten.append(key.decode("utf-8", "replace"))
+            continue
+        if new_hit:
+            already.append(key.decode("utf-8", "replace"))
+            continue
+        unmatched.append(key.decode("utf-8", "replace"))
     return out, RewriteOutcome(tuple(rewritten), tuple(already), tuple(unmatched))
 
 

@@ -1045,6 +1045,45 @@ class ExecMixin:
                         }
                     ],
             }
+        # ---- S5 搬前预检加项(收口评审 #2, D20): 前任别名形态 x 新目标卷位可行性 ——
+        # hardlink 形态文件别名改道到跨卷目标只能回落 symlink(见 alias_fs.retarget_alias 跨卷
+        # 回落), symlink 也不可用时改道永不可能收敛; 与其搬完把前任吊死在 supersede stage
+        # (成员已被搬走, 搬后回滚无法恢复服务), 不如搬前整体拒绝 —— 此刻零副作用, 账面/文件
+        # 指纹原样。卷位关系借用本 job 的 src/dst 同卷判定: hardlink 建链约束保证别名与所指
+        # 数据同卷, 所指数据根 = pred.dst = 本 job 源根(_predecessors_of 按 pred.dst==src
+        # 匹配), 故别名所在 pred.src 与本 job src 同卷; 改道目标 = job.dst(=target), 两者
+        # 同/跨卷关系与 facts.same_volume 一致。中途改道链(superseded_from 命中)下该等价
+        # 可破(pred.dst 已翻新值), 由 retarget_alias 内层 same_volume 探测 + symlink 回落
+        # 兜底, 不在此处复判。
+        infeasible = []
+        for pred in self._predecessors_of(src, [r.hash for r in records]):
+            plan_kind = (pred.plan or {}).get("link_kind")
+            for link in pred.alias_paths:
+                form = alias_fs.alias_kind_of(self._syscall(link)) or plan_kind
+                if form != alias_fs.KIND_HARDLINK:
+                    continue  # 非 hardlink 形态: junction/symlink 天然跨卷可建, 不设此闸
+                if facts.same_volume is True:
+                    continue  # 同卷: hardlink 原形态改道可行
+                if facts.file_link_kind == alias_fs.KIND_SYMLINK:
+                    continue  # 跨卷但 symlink 回落可行(retarget_alias 会自动降级)
+                infeasible.append(link)
+        if infeasible:
+            shown = "; ".join(infeasible[:3]) + (f" 等共 {len(infeasible)} 条" if len(infeasible) > 3 else "")
+            return {
+                **verdict,
+                "cls":
+                    "blocked",
+                "reasons":
+                    [
+                        {
+                            "gate": ru.GATE_ALIAS_BUSY,
+                            "text":
+                                f"前任别名改道可行性预检未过(形态 x 卷位): {shown} —— hardlink 形态别名改道到跨卷"
+                                "目标只能回落符号链接, 而本次源/目标组合探不到可用的文件符号链接能力; 强行迁移会把"
+                                "前任吊死在 supersede stage。出路: 换同卷目标, 或先修好符号链接能力(提权/开发者模式)",
+                        }
+                    ],
+            }
         unit = ru.plan(
             src,
             [n for n, _s in facts.files],
@@ -1145,6 +1184,35 @@ class ExecMixin:
                     "gate": "dry_run",
                     "text": "dry-run: 撤销不执行(不删链接、不搬回)"
                 }],
+            }
+        # ---- 收口评审 #3(§1.2): journal 已有 settled 改写记录时拒绝撤销 —— daemon 已在
+        # 窗口把成员 fastresume 改写到 dst; 此时删别名 + 搬回 src, 成员重启会从 dst 载入而
+        # 数据已回 src(0420 同款冻结态), 且 journal 落 cancelled 是终态、daemon 不再管 ——
+        # 没有任何机制再把 fastresume 改回来, 违反「失败态永远收敛到别名还在、成员可读、
+        # journal 待重放」。检查放在成本确认前: 连 confirm 面都不给, 不误导可撤。
+        # D15 cancel_chain 只挡同目标在途同伴, 挡不住这种「改写已落账」形态。
+        settled = [
+            h for h, rec in relocate_journal.read_rewrites(self._data_dir(), job_id).items()
+            if isinstance(rec, dict) and rec.get("status") in relocate_journal.REWRITE_SETTLED
+        ]
+        if settled:
+            shown = ", ".join(h[:8] for h in settled[:3]) + (f" 等共 {len(settled)} 个" if len(settled) > 3 else "")
+            return {
+                "cls":
+                    "blocked",
+                "job_id":
+                    job_id,
+                "reasons":
+                    [
+                        {
+                            "gate": "cancel_rewritten",
+                            "text":
+                                f"该迁移的 fastresume 改写已部分/全部落账({shown}): 成员重启将从 {job.dst} 载入, "
+                                f"此时撤销(删别名+搬回 {job.src})会留下指向 {job.dst} 的 fastresume 而数据已回源, "
+                                "冻结态无人兜底 —— 请等收尾完成后成员自动落终态(别名退场, 无需撤销), "
+                                "需要回迁时重新发起反向迁移",
+                        }
+                    ],
             }
         total = sum(int(s) for _r, s in self._plan_files(job))
         cost = {

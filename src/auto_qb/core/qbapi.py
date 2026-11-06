@@ -31,6 +31,7 @@ from qbittorrentapi import (
 from ..infra.utils import mask_tracker_entry
 from ..torrents import TorrentStore
 from . import curves
+from .modules.relocate_probe import TAG_PROBE
 from .modules.relocate_units import under_alias_root
 
 logger = logging.getLogger(__name__)
@@ -199,6 +200,8 @@ class QbApi:
         symlink 直删(N5 实测), 两条删除路径(WebUI 删除命令与内部删种流程)都经本入口,
         判据单点 = relocate_units.under_alias_root(等值 OR 前缀); 活动别名根集来自
         relocate 模块维护的 store.relocating_alias_roots(非终态且确有别名记录的 job)。
+        例外(收口评审 #5): tag 含探测标签(TAG_PROBE)的种子放行 —— 自造探针非组成员
+        数据, 拦截会让探测清理的 deleteFiles 永远失败(探针滞留, 见 _relocate_delete_blocked)。
         delete_files=False 不拦: 纯删除不触盘, 正是 D16 要求的「去文件化」出口。
         """
         hashes = self._to_list(torrent_hashes)
@@ -216,8 +219,14 @@ class QbApi:
         """D16 拦截判定: 待删种子里 save_path 位于活动别名根(等值或之下)的明细
 
         无登记(store 无 relocating_alias_roots)/种子不在快照(save_path 不可判, 快照是
-        qB 镜像)一律放行 —— 判据只对「能判的事实」生效, 不猜。命中返回 (hash, 命中根
-        原值, job_id) —— 根以登记原值回显(判据内部的归一形不进文案)。"""
+        qB 镜像)一律放行 —— 判据只对「能判的事实」生效, 不猜。探测种子(tag 含 TAG_PROBE,
+        收口评审 #5)放行: 它们是 relocate 探针自造自删的种子, 不是组成员数据 —— save_path
+        可能落在活动别名根下(别组共享同一平铺根 / armed 态 supersede 探测用旧根), 拦截会让
+        探测清理(_cleanup/启动残留扫描)的 deleteFiles 永远失败(吞掉只告警), 探针滞留 qB
+        每次启动重复告警; 且真探针删除即便穿别名删到的也只是探针自己的 4KiB 文件, 无成员
+        数据风险 —— 该豁免按 tag 单判是**最小方案**: TAG_PROBE 是普通用户标签可被伪造,
+        伪造者本就有 qB WebUI 直删通路(本拦截不覆盖), 不为此加第二判据。命中返回
+        (hash, 命中根原值, job_id) —— 根以登记原值回显(判据内部的归一形不进文案)。"""
         roots = getattr(self.store, "relocating_alias_roots", None)
         if not roots:
             return []
@@ -227,6 +236,8 @@ class QbApi:
             sp = str(getattr(rec, "save_path", "") or "") if rec is not None else ""
             if not sp:
                 continue
+            if TAG_PROBE in (getattr(rec, "tags_set", None) or frozenset()):
+                continue  # 自造探针: 不在 D16 拦截面内(见 docstring)
             for raw_root, job_id in roots.items():
                 if under_alias_root(sp, (raw_root, )) is not None:
                     blocked.append((h, str(raw_root), str(job_id or "")))

@@ -29,6 +29,7 @@ setLocation/取消/再迁移只在 qB 在线时可达;两侧写不同文件(job 
 命令行;不 import 主循环 store/state/config)
 """
 import argparse
+import logging
 import os
 import socket
 import subprocess
@@ -38,6 +39,8 @@ from typing import Optional
 
 from ..core import fastresume
 from ..infra import relocate_journal as rj
+
+logger = logging.getLogger(__name__)
 
 HEARTBEAT_INTERVAL = 10.0  # daemon.json 心跳周期(D12: 每 10s touch)
 HEARTBEAT_MAX_AGE = 60.0  # 心跳过期线(对账判挂死/重拉的口径, 与旧 guardian 判过期同量级)
@@ -109,20 +112,31 @@ def _qb_process_names() -> tuple:
 
 
 def _proc_absent(names: tuple, host: str = "", port: int = 0) -> bool:
-    """证一: 该端点的 qB 进程不存在; 进程表读不到且无端口证据 ⇒ False(未证明)
+    """证一: 该端点的 qB 进程不存在; 名册可用时「进程不在 AND 端口拒连」双判合取(评审 #6)
 
-    !实例级判定(不再只按全机进程名): 同机可能同时跑着**别的** qB 实例(日常库/测试库),
-    全机名册只要有一个 qbittorrent.exe 就恒「在」, 收尾永不触发(P7 真机实测: 日常实例
-    在跑 ⇒ daemon 永远等不到窗口)。口径:
-    - 端点已拒连 ⇒ 该实例没有进程在服务(同机其它 qB 与此无关) ⇒ 证一成立;
-    - 端点仍可连 ⇒ 该实例在服务 ⇒ 证一不成立(此时证二也不成立, 双证同向);
-    - 无端口可判(port=0) ⇒ 退回全机名册(旧行为, 兼容无端口场景)。
+    全机口径(复核纠正: 非「实例级判定」—— 进程名册分不出实例, 只能按全机判): 名册见
+    任一 qB(任一实例, 日常库/测试库)⇒ 判「进程在」。多实例部署下窗口可用性让位于
+    N1 铁律, 宁可不进窗 —— 收尾窗等全部 qB 进程退场才可能开(P7 真机实测形态: 日常
+    实例在跑 ⇒ daemon 等不到窗口)。进程证与端口证**合取**(防「三证退化单证」的假
+    阳性进窗 —— 端口拒连只证明 WebUI 不可达(被关/挂死/远程链路断而 BT_backup 文件
+    系统可达), 不证明进程不在; 假阳性进窗 = daemon 在 qB 运行期改写 fastresume,
+    N1 零写入铁律被破):
+    - 名册可用: 名册见 qB(任一实例)⇒ 证一不成立 —— 即使端口拒连(N1 铁律, 宁可不进窗);
+      名册无 qB ⇒ 再看端口证, 拒连才算成立。qB 真死时两证自然同向, 合取不损窗口可用性;
+    - 名册不可用(探测命令异常 => 空名册): 退回端口单证, 但告警降级说明(证据链弱化必须
+      留痕, 不许静默); 无端口可判(port=0)且无名册 ⇒ 未证明(False, 保守);
+    - 无端口可判(port=0) ⇒ 退回全机名册单证(旧行为, 兼容无端口场景)。
     """
-    if port and _port_refused(host or "127.0.0.1", port):
-        return True
-    if not names:
-        return False
-    return not any("qbittorrent" in n for n in names)
+    refused = bool(port) and _port_refused(host or "127.0.0.1", port)
+    if names:
+        if any("qbittorrent" in n for n in names):
+            return False  # 名册见 qB: 进程证不成立(端口拒连 != 进程不在, 评审 #6)
+        return refused or not port  # 名册无 qB: 与端口证合取; port=0 退回名册单证
+    if not port or not refused:
+        return False  # 无端口可判 / 端口在服务: 未证明(保守)
+    logger.warning("进程名册不可用(探测命令异常), qB 下线判据退化为端口单证(WebUI 不可达被当进程不在)"
+                   " —— N1 防线弱化, 请检查进程探测通道")
+    return True
 
 
 STABLE_WINDOW = 30.0  # 证三: 连续判定「qB 不在」这么久才算下线窗口开启
@@ -322,9 +336,17 @@ def _process_window(
                 journal = rj.read_journal(data_dir, job_id) or {}
                 if str(journal.get("phase") or "") in rj.STOP_PHASES:
                     break  # 本 job 已收口(取消): 剩余成员全跳
+                # 窗口内逐成员现读 spec(评审 #4): supersede 的账面改道(retarget_spec)不需要
+                # qB 在线, 可落在本窗口中段 —— 沿用窗口 scan 时的快照会把剩余成员改写到旧
+                # dst, 违背本模块 docstring「窗口内逐拍现读续保(supersede 即时生效)」。现读
+                # 失败(残缺/并发重写撕态)按 scan 同款容错: 本 job 本拍放弃, 绝不拿旧快照
+                # 改写, 留下一拍/下一窗口按新账重放(D8)。
+                spec = rj.read_spec(data_dir, job_id)
+                if not isinstance(spec, dict):
+                    break
                 prev = journal.get("rewrites") if isinstance(journal.get("rewrites"), dict) else {}
                 mkey = rj.member_key(member)
-                rec = _rewrite_member(job["spec"], member, prev.get(mkey))
+                rec = _rewrite_member(spec, member, prev.get(mkey))
                 if not rj.record_rewrites(data_dir, job_id, {mkey: rec}, ts=now, pid=owner.pid):
                     break  # 拒写 = 对账刚收口: 放弃本 job(下拍 scan 剔除)
         sleep(poll)

@@ -63,6 +63,9 @@ S5 重定向原语簇(计划 26-11-05-0808 S5, D15: 0247 S6③ 设想从零实�
   删旧建新 + 穿透读 + 幂等重放 skipped
 - test_retarget_alias_hardlink_and_idempotent: 硬链接改指(换 inode)+ 重放 skipped(同 inode 幂等)
 - test_retarget_alias_missing_link_rebuilds: 链接缺失(经别名搬迁被改名带走形态)-> 按 kind 重建
+- test_retarget_alias_hardlink_cross_volume_falls_back_to_symlink: hardlink 形态改指跨卷目标 ->
+  删旧前回落 symlink(评审 #2, 不进 os.link EXDEV 死循环)/ 卷位判不了(None)保守回落 /
+  同卷对照不回落保 hardlink
 - test_retarget_alias_refuses_when_target_missing: 新目标不存在 -> 拒绝且旧链接原样(绝不做删了建不回)
 - test_retarget_alias_refuses_nonempty_real_dir: 链接位置被非空真目录占据 -> 拒绝不动数据
 - test_probe_alias_rebuild_busy: 句柄占用探测(DELETE 权限独占打开 = 「此刻真删也会成功」的忠实预言)——
@@ -910,6 +913,44 @@ def test_retarget_alias_missing_link_rebuilds(tmp_path):
         assert f.read() == b"C-data"
 
 
+def test_retarget_alias_hardlink_cross_volume_falls_back_to_symlink(tmp_path, monkeypatch):
+    """hardlink 形态改指跨卷目标 -> 删旧前先回落 KIND_SYMLINK(评审 #2)
+
+    不修则 os.link 跨卷必 EXDEV: 删旧链接已先行(旧孪生被 qB 跨卷搬移后 nlink 收敛 1, 删的
+    正是前任成员的现存数据名), 每拍重试恒失败 = 前任永停 supersede stage。回落 symlink 后
+    成员经符号链接照常读(形态透明); 卷位判不了(None)按跨卷保守回落。同卷不回落保 hardlink。
+    """
+    root = str(tmp_path)
+    real_same_volume = alias_fs.same_volume
+    fb = _mk_file(os.path.join(root, "b", "e00.mkv"), b"x" * 64)
+    fc = _mk_file(os.path.join(root, "c", "e00.mkv"), b"y" * 64)
+    link = os.path.join(root, "a", "e00.mkv")
+    os.makedirs(os.path.dirname(link), exist_ok=True)
+    alias_fs.create_file_alias(link, fb, alias_fs.KIND_HARDLINK)
+    # 跨卷注入: st_dev 判定恒 False(新目标在另一块卷)
+    monkeypatch.setattr(alias_fs, "same_volume", lambda a, b: False)
+    assert alias_fs.retarget_alias(link, fc, alias_fs.KIND_HARDLINK) == "retargeted"
+    assert alias_fs.alias_kind_of(link) == alias_fs.KIND_SYMLINK, "跨卷必须回落 symlink, 不进 EXDEV"
+    assert alias_fs.alias_points_to(link, fc)
+    with open(link, "rb") as f:  # 穿透: 成员经 symlink 读到新目标内容
+        assert f.read() == b"y" * 64
+    # 卷位判不了(st_dev 不可得 => None)同样保守回落
+    link_none = os.path.join(root, "a-none", "e00.mkv")
+    os.makedirs(os.path.dirname(link_none), exist_ok=True)
+    alias_fs.create_file_alias(link_none, fb, alias_fs.KIND_HARDLINK)
+    monkeypatch.setattr(alias_fs, "same_volume", lambda a, b: None)
+    assert alias_fs.retarget_alias(link_none, fc, alias_fs.KIND_HARDLINK) == "retargeted"
+    assert alias_fs.alias_kind_of(link_none) == alias_fs.KIND_SYMLINK
+    # 对照: 同卷(st_dev 实测相等, 恢复真函数解除注入)不回落, hardlink 原形态改道
+    monkeypatch.setattr(alias_fs, "same_volume", real_same_volume)
+    link_same = os.path.join(root, "a2", "e00.mkv")
+    os.makedirs(os.path.dirname(link_same), exist_ok=True)
+    alias_fs.create_file_alias(link_same, fb, alias_fs.KIND_HARDLINK)
+    assert alias_fs.retarget_alias(link_same, fc, alias_fs.KIND_HARDLINK) == "retargeted"
+    assert alias_fs.alias_kind_of(link_same) == alias_fs.KIND_HARDLINK
+    assert os.stat(link_same).st_ino == os.stat(fc).st_ino
+
+
 def test_retarget_alias_refuses_when_target_missing(tmp_path):
     """新目标不存在 -> 拒绝(RuntimeError)且旧链接原样 —— 绝不做「删了建不回」的自毁"""
     root = str(tmp_path)
@@ -1092,8 +1133,7 @@ def test_retarget_alias_consumes_empty_real_dir_at_link_position(tmp_path):
     os.makedirs(link)  # 空真目录占位
     kind = alias_fs.KIND_JUNCTION if _win() else alias_fs.KIND_SYMLINK
     assert alias_fs.retarget_alias(link, b, kind) == "rebuilt"
-    assert not os.path.islink(link) or alias_fs.alias_kind_of(link) == kind  # 位置已由别名接管
-    assert alias_fs.alias_kind_of(link) == kind
+    assert alias_fs.alias_kind_of(link) == kind  # 位置已由别名接管
 
 
 def test_retarget_alias_unsupported_form_raises_valueerror(tmp_path):

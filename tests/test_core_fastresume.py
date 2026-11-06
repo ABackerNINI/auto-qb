@@ -35,6 +35,9 @@
   在新根的值判 already 不误改
 - test_rewrite_idempotent_skips_already_at_target: 改写产物重跑全键 already 且 dict
   相等; 嵌套根(old 是 new 前缀)先判 already 防二次改写
+- test_rewrite_nested_new_prefix_of_old_rewrites: 嵌套反向(new 是 old 前缀, 目标=源
+  祖先)旧根键值必改写不被新根前缀命中误判 already(D10); 新根下但旧根外的值仍 already;
+  改写产物重跑 already 幂等
 - test_rewrite_relative_save_path_skipped: N10 形态 —— lt save_path 为 CWD 相对路径 ->
   unmatched 原样保留(输出无任何重推导的绝对路径), qBt 键照改
 - test_rewrite_autotmm_form: N8 形态 —— 无 qBt-savePath/qBt-downloadPath 键, 仅
@@ -288,6 +291,23 @@ def test_rewrite_idempotent_skips_already_at_target():
     fresh, fnoc = frmod.rewrite_save_paths({b"save_path": rb"R:\a\x", b"qBt-savePath": b"R:/a/x"}, r"R:\a", r"R:\a\b")
     assert fnoc.rewritten == ("save_path", "qBt-savePath")
     assert fresh[b"save_path"] == rb"R:\a\b\x" and fresh[b"qBt-savePath"] == b"R:/a/b/x"
+
+
+def test_rewrite_nested_new_prefix_of_old_rewrites():
+    # 嵌套反向(new 是 old 的真前缀, 目标=源的祖先目录): 值命中旧根时虽也命中新根前缀
+    # (旧根命中的必然推论), 必须改写而非 already —— 误判会让旧根键值永不改写, daemon
+    # 记 already 出账后核验永不过, journal 永久悬挂(D10)
+    val = {b"save_path": rb"R:\data\sub", b"qBt-savePath": b"R:/data/sub/member"}
+    out, oc = frmod.rewrite_save_paths(val, r"R:\data\sub", r"R:\data")
+    assert oc.rewritten == ("save_path", "qBt-savePath") and oc.already == ()
+    assert out[b"save_path"] == rb"R:\data"  # 等值命中 -> 整串替换为新根
+    assert out[b"qBt-savePath"] == b"R:/data/member"  # 子目录命中 -> 尾巴原样保留
+    # 新根下但旧根外(R:\data\other)的值: 已在新根内, 仍判 already 不动
+    out2, oc2 = frmod.rewrite_save_paths({b"save_path": rb"R:\data\other\x"}, r"R:\data\sub", r"R:\data")
+    assert oc2.already == ("save_path", ) and out2[b"save_path"] == rb"R:\data\other\x"
+    # 改写产物重跑: 不再命中旧根, 全键 already, 幂等(黄金法则 1)
+    twice, oc3 = frmod.rewrite_save_paths(out, r"R:\data\sub", r"R:\data")
+    assert oc3.rewritten == () and oc3.already == ("save_path", "qBt-savePath") and twice == out
 
 
 def test_rewrite_relative_save_path_skipped():
