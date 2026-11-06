@@ -7,9 +7,9 @@
 <title>GitHub CI WEB UI smoke 门禁改造: 超时根因、分片接线与 push 节流全量轮</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="github-ci-smoke-gate">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-11-07-0452">
-<meta name="doc-updated" content="26-11-07-0452">
+<meta name="doc-updated" content="26-11-07-0638">
 <meta name="doc-refs" content="memory-bank/issues/26-11-07-0326-test-ci-smoke-existing-red-backlog.html">
 <style>
   :root {
@@ -72,7 +72,7 @@
 <h1>GitHub CI WEB UI smoke 门禁改造: 超时根因、分片接线与 push 节流全量轮</h1>
 <p class="lede">本篇只回答一件事: 怎么让 GitHub 上的 <code>WEB UI smoke (chromium)</code> 从「每次跑满 40 分钟被强杀」变成「日常门禁 10 分钟内出真结论 + 低频全量轮兜底」, 且不靠调大超时、不靠少跑用例、不掩盖既有红。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-07-0452 · <b>doc-updated</b> 26-11-07-0452 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-11-07-0452 · <b>doc-updated</b> 26-11-07-0638 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 会话 grilling 40 轮拍板(2026-11-07 02:00-04:52) + GitHub 侧运行记录取证 + 本仓实测
 </div>
 
@@ -247,6 +247,7 @@ run-name: ${{ github.event_name == 'workflow_dispatch' &amp;&amp; 'full-smoke' |
 <h2><span class="no">§10</span>变更记录</h2>
 <ul>
   <li><span class="tag">R0 · 26-11-07-0452</span> 初版: 会话 grilling 40 轮拍板(D1-D16) + GitHub run 历史取证 + 本仓分片规模实测。要点: 单文件改造、gate 级节流(1 天 / 1000 行)、全量 5 片、master 一次性快进、既有红入池不修。</li>
+  <li><span class="tag">R1 · 26-11-07-0638</span> 落地并验收: 提交 <code>ac07166b</code> 推 develop 并快进 master(Gitee/GitHub 四 ref 齐平)。首跑暴露 25m 护栏不足(setup 抽风时单步 <code>playwright install --with-deps</code> 占 12m17s), 已重定为 smoke/perf-serial 35m、full/full-perf 40m(<code>68b1058a</code>)。验收实测: 日常 run 22m51s 跑完(gate 6s, shard1 22m34s 绿, shard2 因 gtm-alert 红, shard3 20m20s 绿, perf 3m18s 绿); 纯文档 push 数秒且 aggregate 绿; 全量 run 21m16s(4 片绿 / 1 片 gtm-alert 红 / 量具 perf:361 红)。两条红均为既有红, 已入池 <code>26-11-07-0326</code>, 按 D7 不修。</li>
 </ul>
 
 </div>

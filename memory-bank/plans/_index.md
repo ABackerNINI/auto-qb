@@ -17,7 +17,6 @@
 
 ## Open
 
-- [26-11-07-0452] [GitHub CI WEB UI smoke 门禁改造: 超时根因、分片接线与 push 节流全量轮](26-11-07-0452-plan-github-ci-smoke-gate.html) — `github-ci-smoke-gate`
 - [26-11-07-0441] [code-review 留痕面修补: 派发次数与引文校验进闸门](26-11-07-0441-plan-review-trace-fields.html) — `review-trace-fields`
 - [26-11-05-1049] [memory-bank 文档压缩与防回涨分步执行计划(8K 新口径)](26-11-05-1049-plan-kb-doc-compress.html) — `kb-doc-compress`
 - [26-11-05-0848] [跳检自身失败闸门 G9: WEB case-2 强制 + 规则侧硬 skip 双点同谓词](26-11-05-0848-plan-skip-check-self-fail-gate-g9.html) — `skip-check-self-fail-gate-g9`
@@ -25,6 +24,7 @@
 
 ## Done
 
+- [26-11-07-0452] [GitHub CI WEB UI smoke 门禁改造: 超时根因、分片接线与 push 节流全量轮](26-11-07-0452-plan-github-ci-smoke-gate.html) — `github-ci-smoke-gate`
 - [26-11-07-0201] [code-review 跨 clone rebase 组合缺口修补](26-11-07-0201-plan-review-rebase-gap.html) — `review-rebase-gap`
 - [26-11-06-0759] [分批评审: 从「收口一次评」到「一批一评 + 强制留痕」](26-11-06-0759-plan-review-batch-policy.html) — `review-batch-policy`
 - [26-11-06-0124] [提交信息自动审查: ship.commit 内联三态机检(BOM/乱码/骨架/残留)](26-11-06-0124-plan-commit-msg-review.html) — `commit-msg-review`
