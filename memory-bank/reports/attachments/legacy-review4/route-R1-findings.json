@@ -835,5 +835,131 @@
   "claim": "docstring 含非 ASCII 箭头 →(U+2192, 全文件 7 处); 同上, code-style.md 禁用类未明列且全库普遍, 属约定层待澄清",
   "relevance": "相关",
   "fix": "若裁定 → 在禁用列, 在 code-style.md 补充明示并全库统一替换为 '->'"
+ },
+ {
+  "file": "src/auto_qb/core/modules/ops_jobs.py",
+  "line": 51,
+  "quote": "save_path=meta.get(\"save_path\"),",
+  "severity": "major",
+  "claim": "跳检崩溃恢复重加与正常重加(_skip_add_call)口径不一致: 缺 contentLayout 与 upload_limit/download_limit/ratio_limit/seeding_time_limit/share_limit_action 等参数, 且 _backup_torrent 元数据(ops_mod.py:371-377 只记 path/save_path/category/tags/ts)根本没记录这些字段, 恢复无从回传 —— 恢复出的种子可能 contentLayout 落在默认 Original 与实际 NoSubfolder 布局错位(missingFiles), 且单种分享/限速限制被 qB 默认值静默重置(PT 刷量义务丢失风险)",
+  "relevance": "相关",
+  "fix": "_backup_torrent 元数据补记 content_layout 与限速/分享限制字段, _recover_skip_backups 重加时按 _skip_add_call 同口径原样回传"
+ },
+ {
+  "file": "src/auto_qb/core/modules/ops_mod.py",
+  "line": 62,
+  "quote": "GATE_BLOCKED,",
+  "severity": "minor",
+  "claim": "R5 move-only 拆分残留: 从 ops_common 导入的 GATE_BLOCKED/GATE_FORCE/GATE_OK/SKIP_DRIVE_TIMEOUT/_SKIP_BACKOFF_MS/_SKIP_GONE_MSG/_SKIP_RESULT_KEEP/_SKIP_TERMINAL/全部 8 个 SKIP_PHASE_*/GateVerdict/SkipJob 共 17 个符号在本文件已无代码引用(仅第 99 行注释提及一处),成为死绑定",
+  "relevance": "相关",
+  "fix": "删除 ops_mod.py 顶部 ops_common 导入块中未被引用的符号,只保留 _RECHECK_BUSY_MSG/_RECHECK_GONE_MSG/logger(必要时 _SKIP_RESULT_KEEP 改注释引用为 ops_common 名)"
+ },
+ {
+  "file": "src/auto_qb/core/modules/maintenance_mod.py",
+  "line": 135,
+  "quote": "handled = False",
+  "severity": "minor",
+  "claim": "handle_maintenance 里 handled 累加 add_tags/remove_tags/remove_similar_tags/add_hr_tag_or_category 四处结果后从未被读取,函数尾部无条件 return REQUEUE,死变量误导读者以为返回值承载「本轮是否有动作」",
+  "relevance": "相关",
+  "fix": "删掉 handled 及四处 handled |= 累加,或让返回值真正消费 handled(按调用方契约二选一)"
+ },
+ {
+  "file": "src/auto_qb/core/modules/ops_skip.py",
+  "line": 308,
+  "quote": "_SKIP_BACKOFF_MS[job.attempts]",
+  "severity": "minor",
+  "claim": "_skip_retry 先自增 attempts 再索引退避表,导致 _SKIP_BACKOFF_MS[0]=10ms 永不使用、每相位实际只有 4 次重试(20/50/50/50, 计 170ms),与 ops_common 注释「10/20/50/50/50」的 5 拍退避口径不符",
+  "relevance": "相关",
+  "fix": "改为 job.next_run = now + _SKIP_BACKOFF_MS[job.attempts - 1](或先判溢出再自增),使 10ms 首拍生效且重试次数与退避表长度一致,并同步 ops_common 注释"
+ },
+ {
+  "file": "src/auto_qb/core/modules/ops_skip.py",
+  "line": 323,
+  "quote": "self._clear_backup(job.hash)",
+  "severity": "minor",
+  "claim": "_skip_fail 在 GONE 相位重试耗尽时按 torrents_info 仍能看到种子就清掉备份,但删除是异步的且失败前刚重发过删除——删除在备份清理之后落地时,种子被删而 .torrent 恢复凭据已丢(与同函数「备份可能是唯一恢复凭据, 宁可留着」纪律相悖; 文件仍保留, 恢复需回站点重下 .torrent)",
+  "relevance": "相关",
+  "fix": "GONE 相位的失败(区别于 DELETING 前失败)不清备份,改为保留备份并在失败文案里指明备份路径,让对账/用户按 skip_check_backup 账本收尾"
+ },
+ {
+  "file": "src/auto_qb/core/modules/maintenance_mod.py",
+  "line": 252,
+  "quote": "auto_categories[torrent.hash] = category",
+  "severity": "minor",
+  "claim": "state 的 auto_categories 按 hash 只增不删(种子删除后残留条目), 全仓无任何淘汰/迁移清理点, 长期运行 state 缓慢无界增长",
+  "relevance": "相关",
+  "fix": "参照 skip_check_day/speed_curve 的 prune_day_keys 口径按保留期淘汰, 或在种子消失路径清对应条目"
+ },
+ {
+  "file": "src/auto_qb/core/modules/ops_verdict.py",
+  "line": 262,
+  "quote": "if mine and sizes.get(h) and sizes.get(h) != mine:",
+  "severity": "nit",
+  "claim": "G7 的「文件映射一致才参与」过滤在 mine 为空(None/缺尺寸)时整体失效——任意成员的在途校验证据都会成判,与同函数注释声明的过滤语义及 G8 的 `if key is not None and mine:` 门不一致(方向偏保守, 误挡不误放)",
+  "relevance": "相关",
+  "fix": "把 G7 过滤对齐 G8 的门: mine 为空时跳过 G7 成员遍历,或显式注释 mine 为空时全放行的取舍"
+ },
+ {
+  "file": "src/auto_qb/core/modules/fuse_mod.py",
+  "line": 15,
+  "quote": "armed→triggered 与 pause 同拍批量加",
+  "severity": "nit",
+  "claim": "代码注释含图形符号「→」, 违反编码约束(代码禁图形符号, ASCII 替代)",
+  "relevance": "相关",
+  "fix": "改为 ASCII 箭头 ->"
+ },
+ {
+  "file": "src/auto_qb/core/modules/ops_common.py",
+  "line": 55,
+  "quote": "删除→重加窗口不许无限拉长",
+  "severity": "nit",
+  "claim": "代码注释含图形符号「→」, 违反编码约束(代码禁图形符号, ASCII 替代)",
+  "relevance": "相关",
+  "fix": "改为 ASCII 箭头 ->"
+ },
+ {
+  "file": "src/auto_qb/core/modules/ops_mod.py",
+  "line": 1,
+  "quote": "rules → ops ← web",
+  "severity": "nit",
+  "claim": "模块 docstring 含图形符号「→」「←」, 违反编码约束(代码禁图形符号, ASCII 替代)",
+  "relevance": "相关",
+  "fix": "改为 ASCII 箭头 -> 和 <-"
+ },
+ {
+  "file": "src/auto_qb/core/modules/ops_skip.py",
+  "line": 44,
+  "quote": "准备(导出/布局/备份) → 删除(保留文件)",
+  "severity": "nit",
+  "claim": "docstring/注释多处含图形符号「→」「⇒」「①」「②」「≈」「×」(行44/47/48/50/51/88/108/119/120/126/136/159/221/437), 违反编码约束(代码禁图形符号, ASCII 替代)",
+  "relevance": "相关",
+  "fix": "逐处换 ASCII: -> / => / (1) / (2) / ~ / x"
+ },
+ {
+  "file": "src/auto_qb/core/modules/ops_verdict.py",
+  "line": 21,
+  "quote": "⇒ 种子必已完成 ⇒ 链 0",
+  "severity": "nit",
+  "claim": "docstring/注释含图形符号「⇒」「→」「∪」(行21/145/153/165/186/253), 违反编码约束(代码禁图形符号, ASCII 替代)",
+  "relevance": "相关",
+  "fix": "逐处换 ASCII: => / -> / U(并集语义)"
+ },
+ {
+  "file": "memory-bank/conventions/modules.md",
+  "line": 3,
+  "quote": "十功能模块",
+  "severity": "nit",
+  "claim": "摘要称 core/modules「十功能模块」, 与本文件第 12 行「十四模块: 12 个本体」及实际(12 个 *_mod.py + 2 门面)矛盾, 计数停在 P3 时代",
+  "relevance": "相关",
+  "fix": "摘要计数改为「十四功能模块」或删去具体数字避免再次漂移"
+ },
+ {
+  "file": "memory-bank/conventions/modules.md",
+  "line": 45,
+  "quote": "模块之间不互相 import",
+  "severity": "nit",
+  "claim": "「模块之间不互相 import」纪律被 speed_curve_mod.py:44 运行期 `from .traffic_snapshot_mod import TrafficSnapshotModule`(仅作 _require_snapshot 返回注解)违反字面, 且 __init__.py:3 同句断言也失真",
+  "relevance": "相关",
+  "fix": "speed_curve_mod 改用 TYPE_CHECKING 守卫 + 字符串注解(协作本就走 ctx.traffic_snapshot 句柄), 或在 modules.md 明文豁免注解级 import"
  }
 ]

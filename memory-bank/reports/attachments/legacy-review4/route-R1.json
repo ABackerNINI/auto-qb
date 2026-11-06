@@ -5,7 +5,7 @@
   "freeze": "f088329291e64d0802637463e886f78842c1b34c",
   "freeze_note": "manifest 钉值 (生成时点 develop tip, D17)",
   "snapshot": "C:\\Users\\11059\\Desktop\\Projects\\zcode\\auto-qb-review4-snap\\auto-qb-zcode-clone1",
-  "status": "in-progress",
+  "status": "done",
   "batches": [
     {
       "id": "R1-1",
@@ -52,10 +52,11 @@
     {
       "id": "R1-7",
       "title": "ops 与维护面: ops_*/maintenance/fuse/speed_curve/logging/notify/tracker",
-      "status": "pending",
-      "done_at": null,
-      "findings": 0
+      "status": "done",
+      "done_at": "26-11-07-0000",
+      "findings": 14
     }
   ],
-  "started_at": "26-11-06-0507"
+  "started_at": "26-11-06-0507",
+  "done_at": "26-11-07-0001"
 }
