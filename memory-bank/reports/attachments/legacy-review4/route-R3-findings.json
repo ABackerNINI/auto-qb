@@ -178,5 +178,77 @@
     "claim": "quota.day 的窗口键公式与 ratelimit._day_count(ratelimit.py:57-58)是同一语义的两份实现(存量面 B 平行机制):窗口键语义若变,展示 day 与 quota_left(走单点)会分叉。",
     "relevance": "相关",
     "fix": "ratelimit 把 _day_count 提为公开 view 函数(如 day_count_used)供 status.py 复用。"
+  },
+  {
+    "file": "src/auto_qb/hr/server.py",
+    "line": 478,
+    "quote": "return bool(given) and bool(self.token) and secrets.compare_digest(given, self.token)",
+    "severity": "major",
+    "claim": "compare_digest 对 str 入参要求双方均为 ASCII, 非密钥含非 ASCII 即抛 TypeError; config 校验(sections.py:331)只验『必须是字符串』不限字符集 —— 用户配非 ASCII token(如中文)能通过配置期 fail-fast, 之后每个请求在鉴权处抛 TypeError 被兜成 500, 通道整体不可用(黄金法则 4 落空: 非法配置未在配置期拦下)",
+    "relevance": "相关",
+    "fix": "比较前编码成字节( compare_digest(given.encode(), self.token.encode()) ), 或在 validate_config 对 channel.token 限 ASCII 并聚合报错"
+  },
+  {
+    "file": "src/auto_qb/hr/worker.py",
+    "line": 330,
+    "quote": "logger.warning(f\"HR 取数线程获取本地锚点失败(本轮忽略): {e}\")",
+    "severity": "minor",
+    "claim": "_collect_anchors 的 WARNING 无任何节流: 取数线程每 60s poll 一次, anchors_fn 持续异常时每分钟一条 WARNING, 而本仓 WARNING 会被 notify 推成系统通知 —— 正是本文件 docstring(:13-16)自述要避免的『弹窗轰炸』, 与 _note 的状态变化+warn_gap 节流纪律不一致",
+    "relevance": "相关",
+    "fix": "沿用 _note 同款节流(状态变化报一次 + warn_gap 周期提醒), 或降为每轮 DEBUG"
+  },
+  {
+    "file": "src/auto_qb/hr/server.py",
+    "line": 153,
+    "quote": "body = self.rfile.read(length) if length else b\"\"",
+    "severity": "minor",
+    "claim": "读体路径无连接异常保护: 客户端声明 Content-Length 后中途断开, rfile.read 抛 ConnectionResetError 冒泡到 ThreadingHTTPServer.handle_error 打 stderr traceback —— 与同文件 _safe_respond(:164『客户端半路断开…是常态不是故障』)的既定意图相悖(只护了写侧没护读侧)",
+    "relevance": "相关",
+    "fix": "rfile.read 包 try/except (ConnectionError, OSError), 与 _safe_respond 同口径按 debug 记"
+  },
+  {
+    "file": "src/auto_qb/hr/channel.py",
+    "line": 151,
+    "quote": "「非回环 + off + 未配 token」的危险组合由 config 校验在配置期拦下(S1 ⑤), 这里不重复判;",
+    "severity": "minor",
+    "claim": "docstring 含带圈数字 ⑤ —— conventions/code-style.md 明令 .py(含注释)禁带圈数字 ①-⑬(checklist 14 需评审真查)",
+    "relevance": "相关",
+    "fix": "改写为『S1 5)』等 ASCII 形态"
+  },
+  {
+    "file": "src/auto_qb/hr/runtime.py",
+    "line": 358,
+    "quote": "是否同机 / 同源**(用户口径⑤)。",
+    "severity": "minor",
+    "claim": "docstring 含带圈数字 ⑤(行358)与 ②(行436) —— 同 code-style 带圈数字禁令",
+    "relevance": "相关",
+    "fix": "改写为『用户口径5)』『计划 S2 2)』等 ASCII 形态"
+  },
+  {
+    "file": "src/auto_qb/hr/worker.py",
+    "line": 158,
+    "quote": "#: —— 有人在用 WebUI 却收不到扩展联系, 就是要提醒的那种状态(用户口径⑤)。None = 无信号。",
+    "severity": "minor",
+    "claim": "docstring 含带圈数字 ⑤(行158/396/400 共三处) —— 同 code-style 带圈数字禁令",
+    "relevance": "相关",
+    "fix": "三处一并改写为 ASCII 形态"
+  },
+  {
+    "file": "src/auto_qb/hr/events.py",
+    "line": 197,
+    "quote": "def summarize_sites(sites: Iterable[str]) -> str:",
+    "severity": "nit",
+    "claim": "src 全域无调用点(仅 tests/test_hr_runtime_feeder.py:314 一处测试消费), docstring 宣称『报告与日志都要人读』但无报告/日志调用方 —— 拆分残留死导出(发现类 A)",
+    "relevance": "相关",
+    "fix": "删除函数与 __all__ 项(连同其测试), 或落到实际报告/日志使用点"
+  },
+  {
+    "file": "src/auto_qb/hr/channel.py",
+    "line": 52,
+    "quote": "TASK_KINDS = (TASK_PAGE, TASK_TORRENT)",
+    "severity": "nit",
+    "claim": "TASK_KINDS 在 src 与 tests 均无消费点(TASK_PAGE/TASK_TORRENT 各自被 fetcher 使用, 聚合元组无人用) —— 未用导出(发现类 A)",
+    "relevance": "相关",
+    "fix": "删除常量与 __all__ 项; 若留作文档性口径, 在消费点(如 from_json 校验 kind)真正引用"
   }
 ]

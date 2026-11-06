@@ -38,9 +38,9 @@
     {
       "id": "R3-5",
       "title": "hr 运行时: runtime/server/channel/worker/threadlifecycle/queue/events",
-      "status": "pending",
-      "done_at": null,
-      "findings": 0
+      "status": "done",
+      "done_at": "26-11-06-0821",
+      "findings": 8
     },
     {
       "id": "R3-6",
