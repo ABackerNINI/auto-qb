@@ -8,7 +8,7 @@ owner: clone3-main · freeze: f088329291e6 · 快照: C:\Users\11059\Desktop\Pro
 | 批 | 内容 | findings 过检 | 状态 |
 |---|---|---|---|
 | R5-1 | shared 启动与状态: app/state/boot/lifecycle/auth/polling/fetch_low/ui_feedback (3581行) | 24 (major 1 / minor 11 / nit 12) | done |
-| R5-2 | shared 菜单·触发·命令链: menu/triggers/commands*/ctx_menu*/view/overlay_fit/ctl_bits/scope_audit/shortcuts(+panel) (3637行) | 10 (minor 7 / nit 3) | done |
+| R5-2 | shared 菜单·触发·命令链: menu/triggers/commands*/ctx_menu*/view/overlay_fit/ctl_bits/scope_audit/shortcuts(+panel) (3637行) | 21 (major 1 / minor 10 / nit 10) | done(26-11-07 修正补记) |
 | R5-3 | shared 表格与列: table/dt_table/columns*/sort/filters/selection/format/rowlang/decorate (3928行) | 25 (major 3 / minor 12 / nit 10) | done |
 | R5-4 | shared drawer 族: drawer/drawer_templates/drawer_store/drawer_{general,rows,files,head} (3445行) | 16 (major 1 / minor 11 / nit 4) | done |
 | R5-5 | shared drawer 模板·general 与 trackers(01-09 号) (3556行) | 33 (major 4 / minor 20 / nit 9) | done |
@@ -16,7 +16,7 @@ owner: clone3-main · freeze: f088329291e6 · 快照: C:\Users\11059\Desktop\Pro
 | R5-6 | shared 对话框与流转: dialogs/add_torrent/delete_flow/transfer_*/relocate_chain (3257行) | 23 (major 3 / minor 11 / nit 9) | done |
 | R5-7 | shared config 族: config_rules/config_editor{,_curve,_form,_tree}/config_hub{,_tm,_tracker,_hr} (3850行) | 26 (major 6 / minor 10 / nit 10) | done |
 | R5-8 | 图表·hr 面板·快捷键引擎·fx: qb_traffic_chart/hr_status/hr/shows/traffic_card/shortcuts_engine + fx/theme (4032行) | 24 (major 1 / minor 17 / nit 6) | done |
-| R5-9 | scripts 快扫: sim_* 全族 (3700行, 快扫档单面) | 16 (major 1 / minor 8 / nit 7) | done |
+| R5-9 | scripts 快扫: sim_* 全族 (3700行, 快扫档单面) | 15 (major 1 / minor 8 / nit 6;refute 1 已弃) | done |
 | R5-10 | scripts 快扫: qb_capture*/ui_harness/检查与实验散件 (5559行, 快扫档单面) | 14 (minor 9 / nit 5) | done |
 
 ## R5-10 批记录(快扫档: 入口/危险操作/红线引用/明显缺陷/非ASCII,不逐行精评)
@@ -38,7 +38,7 @@ owner: clone3-main · freeze: f088329291e6 · 快照: C:\Users\11059\Desktop\Pro
 - **major 1 条**:sim_qb_server.py:258 handle_error 用 sys 但未 import sys——任何 Handler 线程异常(含每次停机必现的 ConnectionResetError)在 handle_error 内抛 NameError,「连接重置静默过滤」完全失效。
 - minor 8 条:sim_fsmock UNC 分支死代码(长前缀被一般前缀截走) / sim_run 语料档阈值读合成档裸 id 违自述不变量 / sim_qb_model WEB 删除 declared=1 多文件必 403 与 delete_torrents 口径不一 / 非 ASCII 符号 6 文件。
 - nit 7 条:replay_cursor 无赋值点 / WARN 死分支 / --tick 字面替换 / parse_spec 裸 ValueError。
-- 引文校验 refute 1 条(sim_run.py:723 --tick 字面替换,幻觉引文直接弃,未复核);本批净入 16 条。
+- 引文校验 refute 1 条(sim_run.py:723 --tick 字面替换,幻觉引文直接弃,未复核);本批净入 15 条。
 - 危险操作面:rmtree/unlink/杀进程/端口均在模拟根与回环内,DEFAULT_ROOT 写仓外真实盘系设计且有 B1/B2/B4 三道边界,不触 config.yml/auto-qb-data 红线。
 - 底册复验:R2 终表与 Open issues 零命中本批。
 
@@ -116,11 +116,11 @@ open(...) 未接句柄 CPython 引用计数即关 / DEFAULT_ROOT 仓外真实盘
 面1(6):boot.js fail() innerHTML 拼接无攻击者输入不构成 XSS / token 存 localStorage 系用户拍板设计 / startPoll chain 抛错静默死亡现网不可达 / _logout 不清 pendingOps 窗口极窄 / 超时+AbortError 翻译三处实现系文档化例外(守阵钉同值) / _esDisconnectEdge(undefined) 首次断线 toast 系设计口径。
 面2(7):退避注释 2s→15s 系代表性举例 / 401 不断 SSE 属面1 已报不越面 / delta 合并有 e2e 真页面测试担忧不成立 / 字符串锚守阵属既定范式不构成缺口 / boot 超时值守阵核实属实 / auth.js「60 余个 api()」计数值必然漂移 / 底册两条未重报。
 
-## R5-2 批记录(2 面精评: 正确性+安全 / 测试缺口+文档漂移)
+## R5-2 批记录(2 面精评: 正确性+安全 / 测试缺口+文档漂移;26-11-07 修正: 面1 的 11 条当时漏记进 findings JSON,现补记,批次实数 21 非 10)
 
 - **major 1 条**:shortcuts_panel.js:39 快捷键录制态的非脏关闭路径不调 kbRecordCancel——document 捕获期 _kbRecHandler 残留,下一次任意按键被吞掉并静默提交成键位绑定。
-- minor 7 条:cmdStats 单槽无归属校验(旧命令回执错挂新命令) / kbPanelEnter quiet 加载失败后保存会整份覆盖服务端 overrides / view.js 静默刷新失败无退避 1 req/s 死循环 / waitCmd 竞态零测试 / kbConflictResolve 三态零测试 / _auditScope 分类零测试 / ctx 拖拽落点零测试 / setRowIcon 定时器回归零测试 / webui.md「一级只允许一个次级菜单入口」与守阵双双过期 / episode 分支提示宣称已退役旧行为。
-- (上列 10 条与 findings 文件一一对应,minor 实数 7、含文档类 1 条 webui.md:9)
+- minor 10 条:cmdStats 单槽无归属校验(旧命令回执错挂新命令) / kbPanelEnter quiet 加载失败后保存会整份覆盖服务端 overrides / view.js 静默刷新失败无退避 1 req/s 死循环 / waitCmd 竞态零测试 / kbConflictResolve 三态零测试 / _auditScope 分类零测试 / ctx 拖拽落点零测试 / setRowIcon 定时器回归零测试 / 文档类 1 条 webui.md:9「一级只允许一个次级菜单入口」与守阵双双过期 / episode 分支提示宣称已退役旧行为。
+- nit 10 条:eventMs 未初始化 / 带圈数字与 ⚠ 符号 4 文件(menu/shortcuts×3/shortcuts_panel) / scope_audit 三出口→四出口 / shortcuts.js 守阵文件名过期 / webui-scope.md 模板四支口径过期。
 - py↔js 契约对账(面1 对照 runtime_commands.py / system.py / ops_skip.py / groups.py):回执 status 三值 / truth 事件 / skip_check 事件 / flags / 组 key base64url 均核实无错位。
 - 底册复验:R2 终表零命中本批;Open issue 0411(涉 view.js)仍 Open 未重报。
 
@@ -170,3 +170,36 @@ open(...) 未接句柄 CPython 引用计数即关 / DEFAULT_ROOT 仓外真实盘
 
 - review.check --root 快照 的 .git 强检查误拒仍在(R2 首报,58849374 只定位根因):本路线用 R3 的 workaround——快照根建空 .git 目录绕过,零代码改动。
 - 提交闸门 review.trace 对纯盘点数据提交按累计口径计行(认领提交曾滚入他 clone R4-2 数据),走 Review-Skip「纯盘点数据落盘」豁免。
+
+
+## 路线终态
+
+status 翻为 done(`commands run review.lane.done --route R5`,校验:findings 242 条 / 批次 11/11)。
+
+### 分级实测(route-R5-findings.json 逐条实数)
+
+十一批合计 **242 条:blocker 0 / major 25 / minor 134 / nit 83**(含 26-11-07 R5-2 补记修正:批次实数 21 非 10,漏记面 1 的 11 条已补入,review.check 242/242 全过)。 refute 累计 1 条(R5-9 批 sim_run.py:723 幻觉引文,已弃未复核)。
+
+- 无 blocker,无 P0 呈报项。
+- **major 25 条中,真缺陷类 4 条**(其余 21 条为零行为测试/文档漂移类):
+  1. **drawer.js:690 分享率哨兵契约前后端相反**(前端 -1=恢复全局默认,后端 -1=不限制/-2=用全局;用户按提示输 -1 实际写入「永不限制」)——本路线最重发现。
+  2. **add_torrent.js:695 加种提交闸置位过晚**(20s 落点预检+FileReader 窗口内双击并发重复 POST 加种,幂等性违例)。
+  3. **columns_grid.js:534 member 窗口切片与渲染数组不同源**(排序激活+大展开组切片错位、键盘跟随取错行)。
+  4. **sim_qb_server.py:258 缺 import sys**(停机必现 ConnectionResetError 在 handle_error 内抛 NameError,静默过滤失效)。
+  另 shortcuts_panel.js:39(录制态残留吞键)与 fx-mount.js:102(armSettle 零调用,落定回执丢失)介于缺陷与强信号之间,S6 定级。
+- 21 条 major 系「零行为级测试」面(改动即静默漂移的高危纯逻辑/状态机)与「文档漂移」面(omitEmpty/sig 口径/三份→四份等 U4 收口漏改族),交 S6 按模块主题聚合入池。
+
+### R2 复验总账
+
+底册 R2 终表条目在 R5 全 11 批零命中(无复发、无已消失可记);Open issues 涉及面(0149 抽屉开合/0149 封禁钮/0411 分页/0521 重命名/2120 标签对话框/0330 两案/1420/0641/2002/0315)均仍 Open,未重报,其中 0521(重命名入口缺失)被三条自弃记录引用为「暂不可达」的因果前提。
+
+### 跨批同根双报(交 S6 聚合去重)
+
+1. lifecycle.js 匿名监听器(R5-1 批内两面对账,已就地去重保留 1 条)。
+2. dialogs_meta.js:62 enterFallback 清空回车(R5-6 批内两面对账,已就地去重保留 1 条)。
+3. taskkill 红线口径(R5-10 批 port_kill.py:36 与 hr_fetch_experiment.py:546 同根,交 S6 一并裁决)。
+4. 「三份 index.html/三套 UI」计数漂移族(R5-4/5/11/6 四批 8 条同根,交 S6 合并成一条主题 issue)。
+
+### 覆盖深度声明
+
+R5-1~R5-8、R5-11 九批为契约精评档(2 面串行,逐行);R5-9/R5-10 两批为快扫档(单面,入口/危险操作/红线/明显缺陷五面,不逐行精评)——终报告按批标注覆盖深度,不冒充精评。

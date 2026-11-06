@@ -2077,5 +2077,104 @@
   "claim": "docstring 含图形符号 ⇒(全文件 1 处),违反 code-style.md 代码禁令(仅注释,降为 nit)",
   "relevance": "相关",
   "fix": "⇒ 换 ->"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/shortcuts_panel.js",
+  "line": 39,
+  "quote": "this.kbFullOpen = false;",
+  "severity": "major",
+  "claim": "kbFullClose 未保存(脏)路径之外,非脏关闭(以及 kbGuardLeave 的 !this.kbDirty() 早退)都不调 kbRecordCancel():录制态点关闭钮/Esc 关覆盖层后,document 捕获期 _kbRecHandler 仍在,下一次任意按键被 preventDefault+stopPropagation 吞掉并静默提交成该条目的键位绑定(kbRecord 安装的监听只在 kbRecordCancel/kbDraftRevert 摘除)",
+  "relevance": "相关",
+  "fix": "kbFullClose 与 kbGuardLeave 的所有关闭/离开出口(或 watch(kbFullOpen)=false)统一先调 this.kbRecordCancel()"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/commands.js",
+  "line": 240,
+  "quote": "...(this.cmdStats || {}),",
+  "severity": "minor",
+  "claim": "cmdStats 是单槽且无归属校验: 上一条命令在途时再次点击,_newCmdStats 整体重写 cmdStats,旧命令回执到达后 _cmdRecToResult 把旧命令的 totalMs/waitMs/execMs/cmdId 合并进新命令的 stats(onCmdEvent 同理),[perf] 日志数字错挂到别的命令/动作上",
+  "relevance": "相关",
+  "fix": "cmdStats 记下本次 cmdId/t0 归属,回执写入前比对 cmdId(或每命令一个 stats 槽),不归属的回执只丢埋点不合并"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/commands.js",
+  "line": 169,
+  "quote": "事件 ${c.eventMs}ms",
+  "severity": "nit",
+  "claim": "eventMs 未在 _newCmdStats 初始化(114-132 行字段清单无此键),SSE 不可用、轮询路径赢下竞速时 onCmdEvent 从未触发,[perf] 撤下行打印「事件 undefinedms」",
+  "relevance": "相关",
+  "fix": "_newCmdStats 里补 eventMs: null,打印处用 (c.eventMs ?? \"-\") 兜底"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/shortcuts_panel.js",
+  "line": 56,
+  "quote": "this._kbReloadKeys(true)",
+  "severity": "minor",
+  "claim": "kbPanelEnter 用 quiet=true 拉服务端键位,失败完全无提示;若启动期 reload 也失败(AQB_KEYS._doc 为 null),kbSaved/kbDraft 落在默认表上,此后 kbSaveKeys 的 PUT 会以「默认+本次改动」整份覆盖服务端,静默丢掉其它浏览器已保存的 overrides",
+  "relevance": "相关",
+  "fix": "面板进入改用非 quiet(失败给 toast),或 reload 失败时置「加载失败」态禁用保存钮"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/view.js",
+  "line": 93,
+  "quote": "setTimeout(() => this.doSearch(true), 1000);",
+  "severity": "minor",
+  "claim": "静默刷新失败路径只要 searchBuilding 仍为 true 就无条件 1s 后重试,无退避: 服务端宕机/持续 5xx 且 searchBuilding 残留 true 时形成固定 1 req/s 的无限重试循环,与行内注释「错误风暴由轮询退避吸收」不符(该定时器不在轮询退避骨架内)",
+  "relevance": "相关",
+  "fix": "失败重试改走退避(逐次翻倍夹上限)或失败 N 次后交还 search_rev 轮询驱动"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/menu.js",
+  "line": 146,
+  "quote": "① 菜单灰色后缀的 N; ② 容器 data-count(e2e 挂点, D9)",
+  "severity": "nit",
+  "claim": "注释使用带圈数字 ①②③,属 code-style.md「非 ASCII 图形符号禁令」点名的禁用类(.js 注释也在覆盖面内)",
+  "relevance": "相关",
+  "fix": "改为「1. / 2. / 3.」ASCII 写法"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/shortcuts.js",
+  "line": 177,
+  "quote": "拍板⑤), E-H 第二波接线; 2026-09-30 决策③保留",
+  "severity": "nit",
+  "claim": "注释使用带圈数字 ⑤③,属 code-style.md 图形符号禁令",
+  "relevance": "相关",
+  "fix": "改为「5)/3)」ASCII 写法"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/shortcuts.js",
+  "line": 283,
+  "quote": "§08 决策③保留; 单目标动作",
+  "severity": "nit",
+  "claim": "注释使用带圈数字 ③,属 code-style.md 图形符号禁令",
+  "relevance": "相关",
+  "fix": "改为「3)」"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/shortcuts.js",
+  "line": 305,
+  "quote": "§08 决策③: F5/F6 保留默认键",
+  "severity": "nit",
+  "claim": "注释使用带圈数字 ③,属 code-style.md 图形符号禁令",
+  "relevance": "相关",
+  "fix": "改为「3)」"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/shortcuts.js",
+  "line": 360,
+  "quote": "无确认框, 面板标 ⚠)",
+  "severity": "nit",
+  "claim": "注释使用 ⚠ 符号,属 code-style.md 禁令清单(替代写法 WARN:)",
+  "relevance": "相关",
+  "fix": "改为「面板标 WARN」"
+ },
+ {
+  "file": "src/auto_qb/webui/static/shared/shortcuts_panel.js",
+  "line": 116,
+  "quote": "其余(超级做种)只标 ⚠(§08)",
+  "severity": "nit",
+  "claim": "注释使用 ⚠ 符号,属 code-style.md 禁令清单",
+  "relevance": "相关",
+  "fix": "改为「只标 WARN」"
  }
 ]
