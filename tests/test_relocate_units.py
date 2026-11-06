@@ -14,7 +14,8 @@
 - test_layout_of: 平铺 / 单一子目录 / 混合顶层段 三布局
 - test_evaluate_group_idempotent_skip: 全组已在目标位置 -> ok + 幂等 note(不再跑目标冲突闸门)
 - test_evaluate_group_unfinished_job_blocks: 非终态 job 碰本组 -> blocked(unfinished);
-  终态 job 不拦(§3.6 第 14 行 / S10)
+  终态 job 不拦(§3.6 第 14 行 / S10); S5 新口径断言: 文案说明收尾窗(armed/rewritten)
+  放行语义(supersede 改道)与别组落目录别名作用域的分支文案
 - test_evaluate_group_gates_table: 闸门表驱动(incomplete/moving/target_conflict/target_type/qb_temp/
   space 不足/space 不可判定/target_unknown/same_fs 判负多成员/platform 多成员/第三方文件链接/硬链接)
 - test_evaluate_group_single_member_remote_allows: 单成员 + 证明不过/能力不支持 -> ok + note
@@ -297,6 +298,9 @@ def test_evaluate_group_unfinished_job_blocks():
     )
     item = ru.evaluate_group(_ok_facts(jobs=(moving, )))
     assert item["cls"] == ru.CLS_BLOCKED and "unfinished" in _gates(item)
+    # S5 新口径: 拦截文案说明 armed/rewritten 放行语义(可直接再迁移, 旧迁移自动改道)
+    text = item["reasons"][0]["text"]
+    assert "收尾窗" in text and "supersede" in text and "再迁移" in text, text
     done = ru.RelocateJob(
         job_id="j2", hashes=("HA", ), mover="HA", src=S, dst=T, scope=os.path.join(S, "Show"), phase=ru.PHASE_DONE
     )
@@ -330,6 +334,7 @@ def test_evaluate_group_unfinished_job_blocks():
     )
     item3 = ru.evaluate_group(_ok_facts(jobs=(other, )))
     assert "unfinished" in _gates(item3)
+    assert "作用域" in item3["reasons"][0]["text"], "别组落进目录别名作用域的分支文案(S5 新口径)"
     # P7 S14b 回归: 逐文件链接组(平铺内容根 scope=save_path)在途时, 同 save_path 下的
     # **别组**不被拦 —— 逐文件链接无目录重定向危害, §08 要求多选按组拆开各迁各的
     flat = ru.RelocateJob(

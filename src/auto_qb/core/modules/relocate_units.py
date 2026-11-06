@@ -42,7 +42,8 @@ CLS_BLOCKED = "blocked"
 # 闸门 id(稳定字符串: 测试与前端按它断言, 改文案不改 id)
 GATE_GONE = "gone"  # 种子已不在客户端
 GATE_DISABLED = "disabled"  # relocate.enabled=false(纵深防御, 路由层已 403)
-GATE_UNFINISHED = "unfinished"  # 已有未收尾迁移碰本组(§3.6 第 14 行 / S10)
+GATE_UNFINISHED = "unfinished"  # 已有未收尾迁移碰本组(§3.6 第 14 行 / S10; D15 收窄后只拦前段相位)
+GATE_ALIAS_BUSY = "alias_busy"  # S5 搬前预检加项: 前任别名重建可行性(句柄占用)探测未过, 整体拒绝(D20)
 GATE_INCOMPLETE = "incomplete"  # 组内存在未完成成员(progress < 1)
 GATE_MOVING = "moving"  # 成员正处于 qB 搬迁态(state 含 moving)
 GATE_TARGET_CONFLICT = "target_conflict"  # 目标已存在同名内容(qB 会走全量校验)
@@ -526,14 +527,26 @@ def evaluate_group(facts: GroupFacts) -> dict:
         if cls != CLS_BLOCKED:
             cls = CLS_CONFIRM
 
-    # ---- 未收尾拦截(先于一切: §3.6 第 14 行 / S10; D15 收窄: 收尾窗放行) ----
+    # ---- 未收尾拦截(先于一切: §3.6 第 14 行 / S10; D15 收窄: 收尾窗放行, S5 文案新口径) ----
+    # 新口径(计划 26-11-05-0808 S5): 收尾窗(armed/rewritten)的组**可**直接再迁移 ——
+    # armed 态走 supersede 重定向(旧迁移自动改道新目标), rewritten 态链式独立双门;
+    # 仍拦的只有两类: 同组前段相位(moving/watching/moved, 叠加 setLocation 互相覆盖)、
+    # 别组落进目录别名作用域(写入会被整体重定向进旧 job 目标)。
     for job in facts.jobs:
-        if job.blocks_relocation(facts.hashes, content_root):
+        if not job.blocks_relocation(facts.hashes, content_root):
+            continue
+        if job.touches(facts.hashes):
             _block(
-                GATE_UNFINISHED, f"该组有搬迁在途的迁移(job {job.job_id} 相位 {job.phase}): 等搬迁完成建好别名后"
-                "才能再次迁移, 否则叠加的 setLocation 会互相覆盖、链接套链接让旧迁移失效"
+                GATE_UNFINISHED, f"该组有搬迁在途的迁移(job {job.job_id} 相位 {job.phase}): 叠加的 setLocation 会"
+                "互相覆盖、链接套链接让旧迁移失效 —— 等搬迁完成建好别名进入收尾窗(armed/rewritten)后即可直接"
+                "再迁移, 旧迁移会自动改道(supersede)新目标, 无需先撤销"
             )
-            break
+        else:
+            _block(
+                GATE_UNFINISHED, f"该组落点位于在途迁移 job {job.job_id} 的目录别名作用域内(相位 {job.phase}): "
+                "落入该目录的写入会被别名整体重定向进旧 job 的目标, 别组数据会混进旧迁移 —— 请等旧迁移收尾或换目标"
+            )
+        break
 
     # ---- 幂等: 全组已在目标位置(§05 T3; 目标冲突等闸门对同路径无意义, 直接返回) ----
     if _norm(facts.save_path) == _norm(facts.target):

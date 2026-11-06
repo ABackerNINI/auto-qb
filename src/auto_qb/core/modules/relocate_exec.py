@@ -4,7 +4,7 @@
 """
 import os
 from dataclasses import replace
-from typing import Any, Iterable, List, Optional
+from typing import Any, Iterable, List, Optional, Sequence, Tuple
 
 from ...config.models import bt_backup_path_of
 from ...infra import alias_fs, file_access, relocate_journal, utils
@@ -207,10 +207,18 @@ class ExecMixin:
             if not self._dst_ready(job):
                 self._fail(job, "verify_mismatch", "目标侧文件数/大小不符")
                 return
-            rt["stage"] = "link"
-            # 已建链接不重建(崩溃恢复: 重启后 alias_paths 非空, 从断点续建)
-            rt["link_pos"] = len(job.alias_paths)
-            rt["links"] = list(job.alias_paths)
+            rt["stage"] = "supersede"
+            # S5 未收尾再迁移(D15/D20, 硬约束①「先搬后重定向」): 搬移完成(本拍 verify
+            # 过 = 目标数据落位)才允许改道 —— 前任 job 的 journal/spec 条目 {A→B}→{A→C}
+            # 重定向 + 别名重建指向新目标。无前任 = 纯查表零动作, 同拍落链(常规迁移的
+            # 单步预算口径不变); 有前任且未收敛(重定向失败)留在 supersede stage 下一拍
+            # 重试, 不回滚不判失败(D20 搬后失败语义: journal 留守、别名幂等重试、告警)。
+            if self._supersede_redirect(job, rt):
+                self._stage_link(job, rt)
+            return
+        if stage == "supersede":
+            if self._supersede_redirect(job, rt):
+                self._stage_link(job, rt)
             return
         if stage == "link":
             if job.plan and job.plan.get("form") == ru.FORM_DIRECT:
@@ -245,6 +253,14 @@ class ExecMixin:
         logger.debug(f"relocate | job {job.job_id}: 未知 stage {stage}(按 arm 收口)")
         self._arm(job, rt)
 
+    def _stage_link(self, job: RelocateJob, rt: dict) -> None:
+        """moved 段进入建链 stage 的单点(verify→link 与 supersede 收敛共用)"""
+        cur = self._jobs.get(job.job_id, job)
+        rt["stage"] = "link"
+        # 已建链接不重建(崩溃恢复: 重启后 alias_paths 非空, 从断点续建)
+        rt["link_pos"] = len(cur.alias_paths)
+        rt["links"] = list(cur.alias_paths)
+
     def _build_links(self, job: RelocateJob, rt: dict) -> bool:
         """按形态建一批链接(每 tick 一批, 单步有界); 中途失败 ⇒ 删已建链接转收尾路径
 
@@ -273,6 +289,12 @@ class ExecMixin:
                 for rel, _size in chunk:
                     link = self._native(job.src, rel)
                     target = self._native(job.dst, rel)
+                    # 链式再迁移(S5): 经别名搬迁会在 src 留下已指向目标的孪生(硬链接同
+                    # inode / 重放半途已建的链接)—— 已在目标指向即幂等跳过(黄金法则 1);
+                    # 真文件/真目录撞位(alias_kind_of None)仍走 create 报错, 不静默吞。
+                    if alias_fs.alias_kind_of(link) is not None and alias_fs.alias_points_to(link, target):
+                        links.append(link)
+                        continue
                     os.makedirs(os.path.dirname(link), exist_ok=True)
                     alias_fs.create_file_alias(link, target, kind)
                     links.append(link)
@@ -387,6 +409,159 @@ class ExecMixin:
         scope = job.scope.replace("\\", "/").rstrip("/")
         return scope[len(sp):].lstrip("/") if scope.startswith(sp + "/") else ""
 
+    # ---------- S5 未收尾再迁移: supersede 重定向(计划 26-11-05-0808 §3.4/D15/D19/D20) ----------
+
+    def _predecessors_of(self, src: str, hashes: Iterable[str]) -> list:
+        """本 job 的前任迁移(收尾窗 {armed, rewritten} 且碰本组且旧目标 = 本 job 源根)
+
+        §07「supersede 与对账竞态」行: 判定一律读 state 当前相位(active_jobs 现值),
+        判定后的翻转在本 tick 内完成(单一写线程, 无中间态)。改道进行中的前任按
+        plan.superseded_from(改道起点根, 翻账时落)补认 —— dst 已翻到新值, 靠它才能
+        在重试拍里重新匹配上(D20 重试至收敛)。
+        """
+        hs = set(hashes or ())
+        out = []
+        for p in self.active_jobs():
+            if p.phase not in ru.FINALIZE_WINDOW_PHASES or not p.touches(hs):
+                continue
+            if self._norm(p.dst) == self._norm(src) or \
+                    self._norm((p.plan or {}).get("superseded_from") or "") == self._norm(src):
+                out.append(p)
+        return out
+
+    def _physical_anchor(self, mover_save_path: str, files: Sequence[Tuple[str, int]]) -> str:
+        """链式再迁移的搬迁锚点根: mover 声明根经活跃 job 作用域解析到**物理根**
+
+        收尾窗再迁移的 mover 账面可能还在旧根(经前任别名做种, N10 实测 setLocation 经
+        别名搬 B→C): 直接拿账面 save_path 当 src 会把新 job 的别名/spec/删链门锚到前任
+        的别名根上(建链相撞、删链门失锚)。作用域命中 ⇒ 物理保存根 = 前任 dst(setLocation
+        落位根, 文件在其 <内容根相对段> 下 —— 内容根段由 _build_links/spec 的 rel 换算
+        承担, 不在这里拼)。无命中(常规首迁/账面已在物理根)= 原样返回, 零行为差。
+        """
+        names = [n for n, _s in files]
+        content_root = ru.content_root_of(mover_save_path, names)
+        for p in self.active_jobs():
+            if p.is_terminal:
+                continue
+            if p.scope_hit(mover_save_path, content_root):
+                return p.dst
+        return mover_save_path
+
+    def _supersede_redirect(self, job: RelocateJob, rt: dict) -> bool:
+        """supersede 重定向一步(D15 重心): 全部前任改道收敛 = True, 否则 False(下一拍重试)
+
+        顺序钉死(硬约束①/D20): 本 stage 在 moved verify 之后 —— 搬移完成、目标数据落位
+        才动前任的账与别名。每任前任按「先账后链」两段提交:
+        1. 账面改道(提交点): D19 通用补条目 -> spec.dst {A→B}→{A→C} -> journal 记 retarget
+           -> job.dst 翻 C(附 plan.superseded_from=B)—— 全幂等, 失败下一拍重放;
+        2. 别名重指向: 逐条 retarget_alias(读旧目标→删→建→穿透校验), 每 tick 一批
+           (_LINK_CHUNK), 失败告警留进度, 下一拍幂等续跑(已是目标指向则跳过)。
+        任一段失败不回滚不判失败(D20: N12 实测搬后回滚无法恢复成员服务 —— 数据已在 C);
+        反馈面 = 本 job 停在 supersede stage(相位 moved)+ WARNING 日志。
+        """
+        preds = self._predecessors_of(job.src, job.hashes)
+        if not preds:
+            return True
+        ok = True
+        for pred in preds:
+            if not self._retarget_predecessor(pred, job, rt):
+                ok = False
+        return ok
+
+    def _retarget_predecessor(self, pred: RelocateJob, job: RelocateJob, rt: dict) -> bool:
+        """单个前任的改道(先账后链); 返回是否已收敛"""
+        data_dir = self._data_dir()
+        old_dst = str((pred.plan or {}).get("superseded_from") or "") or pred.dst
+        # ---- D19 旧 mover 覆盖: 扫「save_path 位于被搬离根」的本组成员, 一律补 {B→C} 条目
+        # (改道后前任 spec 只会改写 {A→C}, 账面/已改写落在被搬离根 B 的成员只能由本 job
+        # 的 spec {B→C} 覆盖 —— 不在本 job 成员清单里的前任成员经 extra_members 并入)。
+        self._supersede_cover_movers(pred, job, old_dst)
+        # ---- 账面改道(提交点; 各自幂等, 重复执行无副作用)
+        n_spec = relocate_journal.retarget_spec(data_dir, pred.job_id, job.dst)
+        if n_spec:
+            logger.info(f"relocate | supersede: job {pred.job_id} 改写账已改道 {old_dst} -> {job.dst}(spec.dst)")
+        if not relocate_journal.mark_journal_retarget(data_dir, pred.job_id, old_dst, job.dst):
+            logger.debug(f"relocate | supersede: job {pred.job_id} journal 未记 retarget(已终态/无 journal, 不承重)")
+        if self._norm(pred.dst) != self._norm(job.dst):
+            pred = self._set_job(replace(
+                pred,
+                dst=job.dst,
+                plan={
+                    **(pred.plan or {}), "superseded_from": old_dst
+                },
+            ))
+            logger.warning(
+                f"relocate | supersede: job {pred.job_id}({pred.phase}) 已改道 -> {job.dst}"
+                f"(原目标 {old_dst}; 收尾窗再迁移 D15, 先搬后重定向)"
+            )
+        # ---- 别名重指向(逐条幂等; 每 tick 一批, 失败留进度下一拍续)
+        plan = pred.plan or {}
+        kind = plan.get("link_kind")
+        state = rt.setdefault("supersede", {}).setdefault(pred.job_id, {"pos": 0})
+        links = list(pred.alias_paths)
+        pos = int(state.get("pos") or 0)
+        chunk = links[pos:pos + _LINK_CHUNK]
+        for link in chunk:
+            rel = self._rel_under(pred.src, link)
+            if rel is None:
+                logger.warning(
+                    f"relocate | supersede: job {pred.job_id} 别名 {link} 不在声明源 {pred.src} 下, 跳过重定向(账不自洽, 交人处理)"
+                )
+                pos += 1
+                continue
+            target = _native(job.dst, rel)
+            try:
+                what = alias_fs.retarget_alias(link, target, kind)
+                logger.info(f"relocate | supersede: job {pred.job_id} 别名重指向 {link} -> {target}({what})")
+            except Exception as e:  # noqa: BLE001 - D20: 重试至收敛, 不回滚
+                state["pos"] = pos
+                logger.warning(
+                    f"relocate | supersede: job {pred.job_id} 别名重指向失败({link} -> {target}): {e} —— "
+                    "保留现场下一拍重试(重试至收敛, 不回滚; 搬前占用类预检已前置)"
+                )
+                return False
+            pos += 1
+        state["pos"] = pos
+        return pos >= len(links)
+
+    def _supersede_cover_movers(self, pred: RelocateJob, job: RelocateJob, moved_away: str) -> None:
+        """D19 通用补条目: 被搬离根上的组成员并入本 job 的改写清单(plan.extra_members)
+
+        扫描面 = 前任成员 ∪ 本 job 成员 中「账面 save_path 位于被搬离根(等值 OR 前缀,
+        under_alias_root 单点)」者, 加上前任成员全集兜底(改写已落 B 的成员账面还挂在
+        A, 账面扫描看不见 —— 前任成员并入本 job spec 后 {B→C} 改写自然命中, 未落 B 的
+        成员按 unmatched 出账零副作用)。只进改写清单(spec.members), 不动本 job 的
+        hashes/核验集合 —— 补写成员的收敛由删链门(扫全量 save_path)托底。
+        """
+        store = getattr(self._ctx, "store", None)
+        by_hash = getattr(store, "by_hash", {}) or {}
+        group = set(pred.hashes) | set(job.hashes)
+        hit = set()
+        for h, rec in by_hash.items():
+            if h in group and ru.under_alias_root(getattr(rec, "save_path", "") or "", (moved_away, )) is not None:
+                hit.add(h)
+        extras = [h for h in dict.fromkeys((*pred.hashes, *hit)) if h not in set(job.hashes)]
+        if not extras:
+            return
+        plan = job.plan or {}
+        merged = [h for h in dict.fromkeys((*extras, *(plan.get("extra_members") or ())))]
+        if merged == list(plan.get("extra_members") or ()):
+            return
+        self._set_job(replace(job, plan={**plan, "extra_members": merged}))
+        logger.info(
+            f"relocate | supersede: D19 补条目 {len(merged)} 个成员并入 job {job.job_id} 改写清单"
+            f"({', '.join(h[:8] for h in merged[:5])} 覆盖被搬离根 {moved_away} 上的任意混合态)"
+        )
+
+    def _rel_under(self, root: str, path: str) -> Optional[str]:
+        """path 相对 root 的段(重定向目标换算); 不在根下返回 None(账不自洽, 交人处理)"""
+        r, p = self._norm(root), self._norm(path)
+        if p == r:
+            return ""
+        if p.startswith(r + "/"):
+            return p[len(r) + 1:]
+        return None
+
     # ---------- P6 对账: journal 合并 + 对账表处置 ----------
 
     def _qb_up(self) -> bool:
@@ -428,12 +603,30 @@ class ExecMixin:
         j_phase = str(journal.get("phase") or "")
         if j_phase == ru.PHASE_REWRITTEN and job.phase == ru.PHASE_ARMED:
             job = self._set_job(replace(job, phase=ru.PHASE_REWRITTEN))
-        alias_present = bool(job.alias_paths) and any(alias_fs.alias_kind_of(p) for p in job.alias_paths)
+        alias_present = bool(job.alias_paths) and any(self._alias_live(p) for p in job.alias_paths)
         qb_up = self._qb_up()
         at_dst = self._all_at_dst(job)
         action = ru.reconcile(job, alias_present=alias_present, qb_up=qb_up, all_at_dst=at_dst)
         self._ensure_daemon(job, rt)
         self._apply_reconcile(job, rt, action)
+
+    @staticmethod
+    def _alias_live(path: str) -> bool:
+        """单条别名存活判定(对账现场输入; S5 链式再迁移的必要修正)
+
+        形态可识(junction/symlink/硬链接 nlink>=2)即活; 形态不可识但路径在也判活 ——
+        硬链接别名在孪生(目标侧副本)被搬走后 nlink 收敛到 1, alias_kind_of 认不出它,
+        但该路径**本身就是完整数据**, 成员经它照常做种(nlink 数值是「识别」判据, 不是
+        「存活」判据)。链式迁移的搬移窗(B 侧被搬空)正落在这个形态上, 旧判据(nlink)
+        会误判别名丢失 -> 误触发 REBUILD 清账重建, 打断 supersede 重定向。
+        """
+        if alias_fs.alias_kind_of(path) is not None:
+            return True
+        try:
+            os.lstat(utils.add_long_path_prefix_for_win(path))
+        except OSError:
+            return False
+        return True
 
     def _apply_reconcile(self, job: RelocateJob, rt: dict, action: str) -> None:
         """对账动作处置(S4 新链三动作; ACT_ENSURE_DAEMON 的处置在 _ensure_daemon 独立走)"""
@@ -790,9 +983,15 @@ class ExecMixin:
         client: Any,
         origin: str = "unknown"
     ) -> dict:
-        """建账 + 暂停 + 下发搬迁(一步到位, 后续相位交任务线)"""
+        """建账 + 暂停 + 下发搬迁(一步到位, 后续相位交任务线)
+
+        S5 链式再迁移(D15): src 取**搬迁锚点根**(mover 账面经活跃 job 作用域解析到
+        物理根, _physical_anchor), mover 优先选账面已在锚点根的成员(免经别名搬迁留下
+        硬链接孪生)—— 常规首迁两者都恒等于 mover 账面, 零行为差。
+        """
         mover = records[0]
-        src = mover.save_path
+        src = self._physical_anchor(mover.save_path, facts.files)
+        mover = next((r for r in records if self._norm(r.save_path) == self._norm(src)), mover)
         job_id = ru.job_id_for(mover.hash, target, src)
         existing = self._jobs.get(job_id)
         if existing is not None and not existing.is_terminal:
@@ -803,10 +1002,40 @@ class ExecMixin:
                 "job_id":
                     job_id,
                 "reasons":
-                    [{
-                        "gate": ru.GATE_UNFINISHED,
-                        "text": f"该组已有在途迁移(job {job_id}, 相位 {existing.phase}): 先收尾或先撤销"
-                    }],
+                    [
+                        {
+                            "gate": ru.GATE_UNFINISHED,
+                            "text":
+                                f"该组已有在途迁移(job {job_id}, 相位 {existing.phase}): 同键(同 mover/源/目标)"
+                                "重复发起不能并行 —— 收尾窗(armed/rewritten)相位的组可换新目标直接再迁移"
+                                "(旧迁移自动改道 supersede), 同目标在途由幂等 skip 去重"
+                        }
+                    ],
+            }
+        # ---- S5 搬前预检加项(D20): 别名重建可行性(句柄占用) —— 失败=整体拒绝, 零副作用
+        # (此刻尚未暂停/未下发 setLocation; 探测只独占打开链接本体, 不写不删)
+        busy = []
+        for pred in self._predecessors_of(src, [r.hash for r in records]):
+            for link in pred.alias_paths:
+                why = alias_fs.probe_alias_rebuild_busy(self._syscall(link))
+                if why:
+                    busy.append(f"{link}: {why}")
+        if busy:
+            shown = "; ".join(busy[:3]) + (f" 等共 {len(busy)} 条" if len(busy) > 3 else "")
+            return {
+                **verdict,
+                "cls":
+                    "blocked",
+                "reasons":
+                    [
+                        {
+                            "gate": ru.GATE_ALIAS_BUSY,
+                            "text":
+                                f"别名重建可行性预检未过(句柄占用, S5 搬前预检加项): {shown} —— 收尾窗再迁移要把"
+                                "前任别名改道到新目标(先删后建), 探测判「此刻删除也会失败」; 请关闭占用者后重试"
+                                "(qB 做种句柄带共享删除不会误报; 探测判不了的形态由搬移后重试至收敛兜底)",
+                        }
+                    ],
             }
         unit = ru.plan(
             src,
@@ -919,6 +1148,30 @@ class ExecMixin:
         }
         if not cost_confirmed:
             return {"cls": "confirm", "cost": cost, "reasons": [{"gate": "cost", "text": cost["note"]}]}
+        # ---- S5 护栏: 有改道到同一目标的在途链式迁移时拒绝撤销 —— 撤销会把数据从本 job
+        # 目标搬回源, 掏空已改道前任(A→C)的成员数据服务(D15 零悬空纪律的撤销面)。
+        # 常规单迁移无同目标在途同伴, 护栏恒不触发(零行为差)。
+        codest = [
+            p for p in self.active_jobs()
+            if p.job_id != job.job_id and p.touches(job.hashes) and self._norm(p.dst) == self._norm(job.dst)
+        ]
+        if codest:
+            names = ", ".join(p.job_id for p in codest[:3])
+            return {
+                "cls":
+                    "blocked",
+                "job_id":
+                    job_id,
+                "reasons":
+                    [
+                        {
+                            "gate": "cancel_chain",
+                            "text":
+                                f"存在改道到同一目标({job.dst})的在途迁移({names}): 撤销会把共享数据搬回 {job.src}, "
+                                "使已改道前任的成员断粮 —— 请先撤销或等其收尾后再撤销本迁移",
+                        }
+                    ],
+            }
         self._remove_links(list(job.alias_paths))
         try:
             self._ctx.api.torrents_set_location(torrent_hashes=[job.mover], location=job.src)
@@ -960,10 +1213,14 @@ class ExecMixin:
           功能未启用 ⇒ **不写字段**(S1 五闸本应拦下该形态 —— 这里防御性降级并告警,
           job 停在 armed 等人工, 绝不静默丢收尾);
         - members: S3a 成员清单(arm_members_of, hash_v2 经 <hash>.torrent 现算, 取不到
-          留空)。新链 daemon 以此为 pending 账底。
+          留空)。新链 daemon 以此为 pending 账底。S5(D19)追加 plan.extra_members:
+          supersede 补条目成员(被搬离根上的前任成员)并入改写清单, 不进本 job 的
+          核验集合(hashes 不动)。
         """
         data_dir = self._data_dir()
         backup = bt_backup_path_of(getattr(self._ctx, "config", None))
+        extras = [str(h) for h in ((job.plan or {}).get("extra_members") or ()) if str(h)]
+        members = list(dict.fromkeys((*job.hashes, *extras)))
         try:
             spec = {
                 "job_id": job.job_id,
@@ -977,7 +1234,7 @@ class ExecMixin:
                 "files": [list(f) for f in self._plan_files(job)],
                 "host": self._qb_host(),
                 "port": self._qb_port(),
-                "members": arm_members_of(job.hashes, backup),
+                "members": arm_members_of(members, backup),
             }
             if backup:
                 spec["bt_backup"] = backup

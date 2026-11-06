@@ -793,6 +793,181 @@ def remove_alias(path: str) -> None:
     os.unlink(p)
 
 
+# ---------------------------------------------------------------- 别名重定向(计划 26-11-05-0808 S5, D15: 0247 S6③ 设想从零实现)
+# supersede 重定向的三个原语: 幂等判定(alias_points_to)/ 占用探测(probe_alias_rebuild_busy)/
+# 重定向(retarget_alias: 读旧目标 -> 删旧链接(非递归绝不跟随) -> 按形态建新链接 -> 穿透校验)。
+# 形态分流照 create_dir_alias/create_file_alias 口径: junction/目录 symlink 走目录别名,
+# 硬链接/文件 symlink 走文件别名; 形态优先沿用**现存链接**的实际形态(qB 读的就是它),
+# 链接缺失(搬移经别名时 qB 把链接改名带走等)才按调用方给的 kind / 目标类型重建。
+
+
+def _norm_abs(path: str) -> str:
+    """重定向指向比较用的归一形(绝对路径 + normcase; Windows 大小写不敏感语义)"""
+    p = os.path.abspath(strip_device_prefix(path or ""))
+    return os.path.normcase(p)
+
+
+def alias_points_to(link: str, target: str) -> bool:
+    """链接现指是否恰为目标(重定向幂等判定; 黄金法则 1: 已是目标指向则跳过)
+
+    - junction / 符号链接: readlink 原始结果经 resolve_link_target 归一后与目标比
+      (normcase + abspath, NT 设备前缀/相对目标都吃得下);
+    - 硬链接: 没有链接对象, 比两侧 stat 的 inode(同 inode = 已指向同一份数据);
+    - 不是链接或读不了: False(调用方按需重建/报错)。
+    """
+    kind = alias_kind_of(link)
+    if kind == KIND_HARDLINK:
+        try:
+            return os.stat(utils.add_long_path_prefix_for_win(link)).st_ino == os.stat(
+                utils.add_long_path_prefix_for_win(target)
+            ).st_ino
+        except OSError:
+            return False
+    if kind in (KIND_JUNCTION, KIND_SYMLINK):
+        raw = alias_target(link)
+        if not raw:
+            return False
+        return _norm_abs(resolve_link_target(raw, link)) == _norm_abs(target)
+    return False
+
+
+def probe_alias_rebuild_busy(link: str) -> Optional[str]:
+    """别名重建可行性探测(S5 搬前预检加项, D20: 句柄占用类失败前移): 返回拒绝文案, None = 未检出占用
+
+    原理(2026-11-06 Win32 实测定型): 重建要先删后建 —— 删除成败的忠实预言 = 以 **DELETE
+    访问权 + 全共享模式**(FILE_SHARE_READ|WRITE|DELETE)打开链接本体: 打开成功 ⟺
+    「此刻真删也会成功」(实测三元组逐一对照: 持有者 share=0 / R|W 时探测与 os.unlink
+    同报 WinError 32; 持有者带 FILE_SHARE_DELETE 时两者都放行 —— POSIX 式延迟删除语义;
+    共享检查是双向的, 探测自己必须开全共享, 冲突才精确落在「对方没给共享删除」这一种)。
+    junction/重解析点的打开走 OPEN_REPARSE_POINT, 现代 Windows 上链接本体的删除对读
+    句柄稳健(实测持句柄 rmdir 全部成功), 探测随之放行 —— 不假阳、不空拦。
+
+    qB 做种不假阳的依据: libtorrent 自身要在做种中 rename/move 文件, 打开文件带
+    FILE_SHARE_DELETE —— 做种句柄不会让 DELETE 探测失败(整组成员在搬前预检时点仍在
+    做种, 这是探测面能覆盖文件级形态的前提)。
+
+    保守边界: 探测异常(路径消失/权限/远端超时)一律 None —— 判不了**不拦**(漏报由搬后
+    重试至收敛兜底, 误报会拦死正常迁移, 两害取其轻); 打开 DELETE 句柄后立即 CloseHandle,
+    不置 disposition, 零删除副作用。
+    """
+    if not utils.is_windows():
+        return None  # POSIX 删链接无句柄占用失败形态(目录可带打开句柄删除)
+    import ctypes
+    from ctypes import wintypes
+
+    k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    create_file = k32.CreateFileW
+    create_file.argtypes = [
+        wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD, ctypes.c_void_p, wintypes.DWORD, wintypes.DWORD,
+        wintypes.HANDLE
+    ]
+    create_file.restype = wintypes.HANDLE
+    close_handle = k32.CloseHandle
+    close_handle.restype = wintypes.BOOL
+    p = utils.add_long_path_prefix_for_win(link)
+    flags = _FILE_FLAG_OPEN_REPARSE_POINT
+    try:
+        if os.path.isdir(p):
+            flags |= _FILE_FLAG_BACKUP_SEMANTICS  # 目录/目录链接本体必须带 BACKUP_SEMANTICS 才打得开
+    except OSError:
+        return None  # 存在性判不了: 不拦(与「其它探测异常」同口径)
+    _DELETE_ACCESS = 0x00010000  # DELETE(NT 访问权); 打开本身零删除副作用(删除须再设 disposition)
+    _SHARE_ALL = 0x1 | 0x2 | 0x4  # FILE_SHARE_READ|WRITE|DELETE: 冲突精确落在「对方未开共享删除」
+    handle = create_file(p, _DELETE_ACCESS, _SHARE_ALL, None, _OPEN_EXISTING, flags, None)
+    if handle != wintypes.HANDLE(-1).value:
+        close_handle(handle)
+        return None  # DELETE 独占打开成功 = 此刻真删也会成功
+    err = ctypes.get_last_error()
+    if err in (2, 3):  # ERROR_FILE_NOT_FOUND / PATH_NOT_FOUND: 链接本就不在, 重建无占用可言
+        return None
+    if err == 32:  # ERROR_SHARING_VIOLATION
+        return ("链接本体被其它进程占用(WinError 32, 删除权限探测): 常见为杀毒/备份/同步工具握着文件且未开共享删除 —— "
+                "关闭占用者后重试")
+    return None  # 其余错误判不了占用与否: 不拦, 交搬后重试
+
+
+def retarget_alias(link: str, target: str, kind: Optional[str] = None) -> str:
+    """重定向一条别名到新目标(S5 supersede 单点; D15: 0247 S6③ 设想从零实现)
+
+    步骤: 幂等判定 -> 读旧目标(留诊断) -> 删旧链接(remove_alias, 非递归绝不跟随) ->
+    按形态建新链接(create_dir_alias/create_file_alias 同口径分流) -> 穿透校验(经新链接
+    读得到目标内容)。链接缺失(搬移把链接改名带走/外部误删)时按 kind 重建 —— 重建即
+    恢复服务, 与 rebuild-from-journal 同语义。
+
+    形态取舍: 现存链接的实际形态**优先**(qB 正在读的就是它, 保有形态零惊扰); 缺失时用
+    调用方给的 kind(job plan 的 link_kind); 再缺失按目标类型推断(目录= Windows junction
+    /POSIX 目录 symlink; 文件= symlink —— 推断面只兜旧账无 kind 的防御支)。
+
+    返回: "skipped"(已指向目标, 零动作) / "retargeted"(删旧建新) / "rebuilt"(缺失重建)。
+    失败抛 OSError/RuntimeError(删失败=占用/权限; 建/穿透失败=环境) —— 调用方按 D20
+    搬后「重试至收敛」处置, 本函数保证失败时不留半截链接(建失败即删, 见 create 侧)。
+    """
+    existing = alias_kind_of(link)
+    if existing is not None and alias_points_to(link, target):
+        return "skipped"
+    was_dir = False
+    if existing is not None:
+        was_dir = os.path.isdir(utils.add_long_path_prefix_for_win(link))
+    elif kind is None:
+        # 防御支: 无现存链接也无 kind(旧账/直调) —— 按目标类型推断
+        kind = KIND_JUNCTION if utils.is_windows() else KIND_SYMLINK
+        if not os.path.isdir(utils.add_long_path_prefix_for_win(target)):
+            kind = KIND_SYMLINK
+    form = existing or kind
+    old_target = alias_target(link) if existing in (KIND_JUNCTION, KIND_SYMLINK) else None
+    # 目录形态判定(建新链接与穿透校验共用同一谓词): junction 恒目录; symlink 沿用现存
+    # 链接的目录性(os.path.isdir 穿透判, 悬空时回落到目标侧判断)。
+    dir_like = form == KIND_JUNCTION or (
+        form == KIND_SYMLINK and (was_dir or os.path.isdir(utils.add_long_path_prefix_for_win(target)))
+    )
+    # 目标存在性前置闸: 新目标不在就绝不动旧链接(删了建不回 = 现存别名被毁;
+    # 上游时序保证重定向只发生在搬移完成、目标数据落位之后 —— 这里是最后一道防线)。
+    target_probe = utils.add_long_path_prefix_for_win(target)
+    if not os.path.exists(target_probe):
+        raise RuntimeError(f"重定向拒绝: 新目标不存在({target}) —— 保留旧链接原样, 不做删建")
+    # 删旧链接前先处理「位置被真目录/真文件占着」的形态: 与 _build_links 目录支同口径,
+    # 只挪**空**目录(qB 搬走文件后的残留); 非空 = 有真数据, 绝不动(不猜)。
+    try:
+        st = os.lstat(utils.add_long_path_prefix_for_win(link))
+        is_real_dir = stat.S_ISDIR(st.st_mode) and existing is None and \
+            getattr(st, "st_reparse_tag", 0) == 0
+    except OSError:
+        is_real_dir = False
+    if is_real_dir:
+        if os.listdir(utils.add_long_path_prefix_for_win(link)):
+            raise RuntimeError(f"重定向失败: 链接位置被非空真目录占据({link}), 不猜测不动数据")
+        os.rmdir(utils.add_long_path_prefix_for_win(link))
+    else:
+        remove_alias(link)
+    # 建新链接: 目录别名(junction/目录 symlink) vs 文件别名(硬链接/文件 symlink)
+    if dir_like:
+        create_dir_alias(link, target, form)
+    elif form == KIND_HARDLINK:
+        os.makedirs(os.path.dirname(link) or ".", exist_ok=True)  # 与 _build_links 文件支同口径
+        create_file_alias(link, target, KIND_HARDLINK)
+    elif form == KIND_SYMLINK:
+        os.makedirs(os.path.dirname(link) or ".", exist_ok=True)
+        create_file_alias(link, target, KIND_SYMLINK)
+    else:
+        raise ValueError(f"重定向不支持形态: {form}(link={link})")
+    # 穿透校验: 经新链接读得到目标内容(目录= 可列; 文件= 尺寸一致)
+    try:
+        if dir_like:
+            if not os.path.isdir(utils.add_long_path_prefix_for_win(link)):
+                raise RuntimeError("目录别名建后不可穿透(isdir 为假)")
+            os.listdir(utils.add_long_path_prefix_for_win(link))
+        else:
+            if not os.path.isfile(utils.add_long_path_prefix_for_win(link)):
+                raise RuntimeError("文件别名建后不可穿透(isfile 为假)")
+            if os.path.getsize(utils.add_long_path_prefix_for_win(link)) != os.path.getsize(
+                utils.add_long_path_prefix_for_win(target)
+            ):
+                raise RuntimeError("文件别名穿透尺寸与目标不一致")
+    except (OSError, RuntimeError) as e:
+        raise RuntimeError(f"重定向穿透校验失败({link} -> {target}, 旧指 {old_target}): {e}") from e
+    return "retargeted" if existing is not None else "rebuilt"
+
+
 # ---------------------------------------------------------------- 能力矩阵(§3.3)
 
 

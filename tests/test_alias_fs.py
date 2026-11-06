@@ -58,6 +58,17 @@ P1-T1.4 守卫与容错簇(计划 26-10-20-2101, 覆盖率缺口清偿):
   CreateFileW 返回 INVALID_HANDLE / DeviceIoControl 失败 -> 抛 OSError 且删掉刚建的空目录;
   清理时 rmdir 再失败也不掩盖主因
 
+S5 重定向原语簇(计划 26-11-05-0808 S5, D15: 0247 S6③ 设想从零实现):
+- test_retarget_alias_dir_forms: 目录别名(Windows junction / POSIX 目录 symlink)改指 -> 读旧目标
+  删旧建新 + 穿透读 + 幂等重放 skipped
+- test_retarget_alias_hardlink_and_idempotent: 硬链接改指(换 inode)+ 重放 skipped(同 inode 幂等)
+- test_retarget_alias_missing_link_rebuilds: 链接缺失(经别名搬迁被改名带走形态)-> 按 kind 重建
+- test_retarget_alias_refuses_when_target_missing: 新目标不存在 -> 拒绝且旧链接原样(绝不做删了建不回)
+- test_retarget_alias_refuses_nonempty_real_dir: 链接位置被非空真目录占据 -> 拒绝不动数据
+- test_probe_alias_rebuild_busy: 句柄占用探测(DELETE 权限独占打开 = 「此刻真删也会成功」的忠实预言)——
+  Windows 文件型链接被无共享删除句柄占用时检出、释放/带共享删除放行、junction 持句柄放行
+  (现代 Windows 链接本体删除对读句柄稳健, 实测口径)/ 路径缺失放行; POSIX 恒 None
+
 ## 环境能力 skip(2026-10-18, issue 26-10-18-2030)
 
 真实建符号链接类用例依赖**宿主建链能力**: Windows 非特权进程(非管理员且未开开发者模式)缺
@@ -821,3 +832,149 @@ def test_win_create_junction_kernel_failure_cleans_up(tmp_path, monkeypatch):
     assert os.path.isdir(link)
     monkeypatch.undo()
     os.rmdir(link)
+
+
+# ---------------------------------------------------------------- S5 重定向原语(计划 26-11-05-0808 S5, D15)
+
+
+def _mk_file(path, content=b"auto-qb"):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "wb") as f:
+        f.write(content)
+    return path
+
+
+def _win():
+    return alias_fs.utils.is_windows()
+
+
+def test_retarget_alias_dir_forms(tmp_path):
+    """目录别名改指: 读旧目标删旧建新 + 穿透读 + 幂等重放 skipped(Windows junction / POSIX 目录 symlink)"""
+    root = str(tmp_path)
+    b, c = os.path.join(root, "b"), os.path.join(root, "c")
+    _mk_file(os.path.join(b, "e00.mkv"), b"B-data")
+    _mk_file(os.path.join(c, "e00.mkv"), b"C-data")
+    link = os.path.join(root, "alias")
+    kind = alias_fs.KIND_JUNCTION if _win() else alias_fs.KIND_SYMLINK
+    alias_fs.create_dir_alias(link, b, kind)
+    assert alias_fs.retarget_alias(link, c, kind) == "retargeted"
+    assert alias_fs.alias_points_to(link, c)
+    with open(os.path.join(link, "e00.mkv"), "rb") as f:  # 穿透: 经新链接读到新目标内容
+        assert f.read() == b"C-data"
+    # 幂等(黄金法则 1): 已是目标指向 -> skipped, 零删建
+    assert alias_fs.retarget_alias(link, c, kind) == "skipped"
+    assert alias_fs.alias_kind_of(link) == kind
+    # 删旧链接非递归绝不跟随: 旧目标数据原封不动
+    with open(os.path.join(b, "e00.mkv"), "rb") as f:
+        assert f.read() == b"B-data"
+
+
+def test_retarget_alias_hardlink_and_idempotent(tmp_path):
+    """硬链接改指: 换到新目标 inode; 重放同 inode -> skipped(幂等判定走 inode 比对)"""
+    root = str(tmp_path)
+    fb = _mk_file(os.path.join(root, "b", "e00.mkv"), b"x" * 64)
+    fc = _mk_file(os.path.join(root, "c", "e00.mkv"), b"y" * 64)  # 同尺寸不同内容(穿透校验比尺寸)
+    link = os.path.join(root, "a", "e00.mkv")
+    os.makedirs(os.path.dirname(link), exist_ok=True)
+    alias_fs.create_file_alias(link, fb, alias_fs.KIND_HARDLINK)
+    assert alias_fs.retarget_alias(link, fc, alias_fs.KIND_HARDLINK) == "retargeted"
+    assert alias_fs.alias_points_to(link, fc), "改指后与目标同 inode"
+    assert os.stat(link).st_ino == os.stat(fc).st_ino
+    assert alias_fs.retarget_alias(link, fc, alias_fs.KIND_HARDLINK) == "skipped"
+
+
+def test_retarget_alias_missing_link_rebuilds(tmp_path):
+    """链接缺失(经别名搬迁被 qB 改名带走 / 外部误删形态) -> 按 kind 重建, 返回 rebuilt"""
+    root = str(tmp_path)
+    fc = _mk_file(os.path.join(root, "c", "e00.mkv"), b"C-data")
+    link = os.path.join(root, "a", "e00.mkv")  # 从不存在
+    assert alias_fs.retarget_alias(link, fc, alias_fs.KIND_SYMLINK) == "rebuilt"
+    assert alias_fs.alias_kind_of(link) == alias_fs.KIND_SYMLINK
+    with open(link, "rb") as f:
+        assert f.read() == b"C-data"
+
+
+def test_retarget_alias_refuses_when_target_missing(tmp_path):
+    """新目标不存在 -> 拒绝(RuntimeError)且旧链接原样 —— 绝不做「删了建不回」的自毁"""
+    root = str(tmp_path)
+    b = os.path.join(root, "b")
+    _mk_file(os.path.join(b, "e00.mkv"))
+    link = os.path.join(root, "alias")
+    kind = alias_fs.KIND_JUNCTION if _win() else alias_fs.KIND_SYMLINK
+    alias_fs.create_dir_alias(link, b, kind)
+    with pytest.raises(RuntimeError):
+        alias_fs.retarget_alias(link, os.path.join(root, "gone"), kind)
+    assert alias_fs.alias_points_to(link, b), "旧链接必须原样保留"
+
+
+def test_retarget_alias_refuses_nonempty_real_dir(tmp_path):
+    """链接位置被非空真目录占据 -> 拒绝(不猜测不动数据); 空目录残留则照常重建"""
+    root = str(tmp_path)
+    fc = _mk_file(os.path.join(root, "c", "e00.mkv"))
+    link = os.path.join(root, "a")
+    os.makedirs(os.path.join(link, "junk"))
+    with pytest.raises(RuntimeError):
+        alias_fs.retarget_alias(link, fc, alias_fs.KIND_SYMLINK)
+    assert os.path.isdir(link), "非空真目录必须原样保留"
+    os.rmdir(os.path.join(link, "junk"))
+    os.rmdir(link)  # 空目录(qB 搬走文件后的残留形态) -> 照常重建
+    assert alias_fs.retarget_alias(
+        link, os.path.dirname(fc), alias_fs.KIND_SYMLINK if not _win() else alias_fs.KIND_JUNCTION
+    ) == "rebuilt"
+
+
+def test_probe_alias_rebuild_busy(tmp_path):
+    """句柄占用探测: DELETE 权限独占打开 = 「此刻真删也会成功」的忠实预言(Win32 实测口径)
+
+    - 文件型链接被「无 FILE_SHARE_DELETE」句柄握着 -> 检出(与 unlink 同报共享冲突);
+    - 持有者带 FILE_SHARE_DELETE(libtorrent 做种形态)或释放后 -> 放行;
+    - junction 持句柄 -> 放行(现代 Windows 链接本体删除对读句柄稳健, 探测随之不假阳);
+    - 路径缺失放行; POSIX 恒 None。
+    """
+    if not _win():
+        # POSIX 删链接无句柄占用失败形态: 任何路径(含不存在)恒 None
+        assert alias_fs.probe_alias_rebuild_busy(str(tmp_path / "whatever")) is None
+        pytest.skip("句柄占用探测为 Windows 面(POSIX 恒 None 已断言)")
+    import ctypes
+
+    GENERIC_READ, OPEN_EXISTING = 0x80000000, 3
+    SHARE_RW, SHARE_RWD = 0x1 | 0x2, 0x1 | 0x2 | 0x4
+    k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    root = str(tmp_path)
+    t = _mk_file(os.path.join(root, "t.bin"), b"seed")
+    # 文件型链接用硬链接(免提权, 任何 Windows 可建; 探测命中的是文件本体, 与 symlink 同判)
+    hl = os.path.join(root, "hlink")
+    alias_fs.create_file_alias(hl, t, alias_fs.KIND_HARDLINK)
+    assert alias_fs.probe_alias_rebuild_busy(hl) is None, "无人占用时放行"
+    hold = k32.CreateFileW(utils.add_long_path_prefix_for_win(hl), GENERIC_READ, SHARE_RW, None, OPEN_EXISTING, 0, None)
+    assert hold != -1
+    try:
+        busy = alias_fs.probe_alias_rebuild_busy(hl)
+        assert busy is not None and "占用" in busy, busy
+    finally:
+        k32.CloseHandle(hold)
+    assert alias_fs.probe_alias_rebuild_busy(hl) is None, "释放后放行"
+    # qB 做种形态: libtorrent 打开带 FILE_SHARE_DELETE -> 探测放行(不假阳)
+    hold = k32.CreateFileW(
+        utils.add_long_path_prefix_for_win(hl), GENERIC_READ, SHARE_RWD, None, OPEN_EXISTING, 0, None
+    )
+    assert hold != -1
+    try:
+        assert alias_fs.probe_alias_rebuild_busy(hl) is None, "带共享删除的做种句柄不构成重建障碍"
+    finally:
+        k32.CloseHandle(hold)
+    # junction 持句柄(含独占) -> 放行: 现代 Windows 链接本体删除对读句柄稳健(实测 rmdir 全成)
+    b = os.path.join(root, "b")
+    _mk_file(os.path.join(b, "e00.mkv"))
+    jlink = os.path.join(root, "jalias")
+    alias_fs.create_dir_alias(jlink, b, alias_fs.KIND_JUNCTION)
+    hold = k32.CreateFileW(
+        utils.add_long_path_prefix_for_win(jlink), GENERIC_READ, 0, None, OPEN_EXISTING, 0x02000000, None
+    )
+    assert hold != -1
+    try:
+        assert alias_fs.probe_alias_rebuild_busy(jlink) is None
+    finally:
+        k32.CloseHandle(hold)
+    # 路径缺失: 无占用可言
+    assert alias_fs.probe_alias_rebuild_busy(os.path.join(root, "gone")) is None

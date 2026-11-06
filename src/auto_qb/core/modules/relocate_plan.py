@@ -465,7 +465,10 @@ class PlanMixin:
                 tag = getattr(st, "st_reparse_tag", 0)
                 if stat.S_ISLNK(st.st_mode) or tag:
                     tp_files = (names[0], )
-                elif st.st_nlink > 1:
+                elif st.st_nlink > 1 and not self._own_alias_hardlink(st):
+                    # S5(D15 收窄的必然推论): 收尾窗再迁移时组文件正被**前任 job 的逐文件
+                    # 硬链接别名**挂着(nlink>=2 来源是自己的别名) —— 这是迁移设计的一部分,
+                    # 不是第三方去重, 放行; D11 拦的第三方硬链接(别名之外的同 inode 名)照拦。
                     hl_files = (names[0], )
             except OSError:
                 tp_dir_note = "代表文件不可读(远程/容器未映射?): 第三方链接与硬链接未识别"
@@ -526,6 +529,24 @@ class PlanMixin:
             source_missing_files=tuple(source_missing),
             source_unknown_files=tuple(source_unknown),
         )
+
+    def _own_alias_hardlink(self, st: os.stat_result) -> bool:
+        """nlink>1 的代表文件是否挂着**自有别名硬链接**(S5 链式再迁移的放行面)
+
+        判定: 任一活跃 job 的 alias_paths 中存在与代表文件同 inode(dev+ino)的路径 ——
+        同一份数据的另一个名字正是前任 job 建的逐文件别名(hardlink 形态), 不是第三方
+        去重。代表文件本身就是别名路径时同样命中(stat 同文件同 inode)。目录别名
+        (junction/目录 symlink)不产生 nlink, 天然不进本判定。
+        """
+        for job in self.active_jobs():
+            for p in job.alias_paths:
+                try:
+                    pst = os.stat(utils.add_long_path_prefix_for_win(self._syscall(p)))
+                except OSError:
+                    continue
+                if pst.st_ino == st.st_ino and pst.st_dev == st.st_dev:
+                    return True
+        return False
 
     def _same_fs_proof(
         self,
