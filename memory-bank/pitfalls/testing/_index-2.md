@@ -1,7 +1,7 @@
 # testing — 测试 / 冒烟 / 仿真纪律 · 卷 2/4
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `ghost-pkg-residue.md` … `mutmut-mtime-race-stale-trampoline.md`(共 24 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `ghost-pkg-residue.md` … `mutmut-survived-verdict.md`(共 25 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
@@ -32,3 +32,4 @@
 | [mutation-pool-artifact.md](mutation-pool-artifact.md) | 窄池跑出来的存活清单, 相当一部分是「相关测试不在池里」的**假存活** —— 同一目标同一套变异, 只把池从 1 个测试文件换到 5 个, 存活数 97 → 70(−27%); 一个被判成 SURVIVED 的变异, 拿**全套件**手工改一次其实是被杀死的。判一个存活变异是不… | 变异测试, mutmut, pytest-gremlins, 存活变异, 杀死率, 选择池, 假存活, 等价变异, 真洞, 机器提名手工确认, 变异审计 |
 | [mutation-revert-git-checkout.md](mutation-revert-git-checkout.md) | 红绿双验做突变时, 用 `git checkout -- <file>` 还原文件会把**本轮尚未提交的全部改动**一起冲掉 —— 突变注入的 sed 与手头未提交的实现在同一个工作区文件里, checkout 不区分。防御: 精确反向 Edit 重放突变(或 `git stas… | 红绿双验, 变异测试, 突变, 判红, git checkout 还原, 冲掉未提交, 工作区回退, sed 注入 |
 | [mutmut-mtime-race-stale-trampoline.md](mutmut-mtime-race-stale-trampoline.md) | mutmut 3.8 跨轮增量 + 预置 src 的 mtime 竞态: 跳过 trampoline 生成致 forced-fail 假轮与 dump 全部无法重放(两形态) | mutmut run 换目标, cp src 进镜像, 镜像 mutants 旧副本, Unable to force test failures, 全 no tests 假判定, dump 重放失败, source_mtime, 无 tr… |
+| [mutmut-survived-verdict.md](mutmut-survived-verdict.md) | mutmut 报 `survived` 的变异, 把那条 diff **手工 apply 回去、跑一遍定向池**, 池会直接变红 —— 也就是说它其实**早就被杀死了**。rules 首轮实测: 1364 条存活/超时里 **404 条是伪存活(29.6%)**, 名义杀死率 5… | 变异测试, mutmut, 存活不可信, 假存活, survived 误报, verify 恒 KILLED, 基线常红, 全杀等于没杀, 表类变异不生效, import 期函数, process_isolation, 杀死率虚低, app… |

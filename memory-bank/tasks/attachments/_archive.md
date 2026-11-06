@@ -4,8 +4,9 @@
 > 主索引的已完结区按 8,000 字符预算裁剪(上限 `CLOSED_KEEP` 条), **本文件是全量**(只列 slug 与标题; 摘要全文在档案里)。
 > 每条链接指回 `tasks/` 下的档案原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## In Progress (29)
+## In Progress (30)
 
+- [26-11-07-memory-bank-nav-relation-graph](../26-11-07-memory-bank-nav-relation-graph.md) kb.nav 关联文档交互: 抽屉内关系图 (局部环 / 关联泳道 / 全库) + 认领链五态解析
 - [26-09-22-deps-version-management](../26-09-22-deps-version-management.md) 软件版本管理方案（版本号 / Tag / CHANGELOG / 发版流程）
 - [26-11-06-backend-hr-badge-total-crosscheck](../26-11-06-backend-hr-badge-total-crosscheck.md) issue 26-09-30-0052 上限徽章总数轴互证复验、前提纠错与拍板
 - [26-11-06-backend-hr-lastpage-fetch-skip](../26-11-06-backend-hr-lastpage-fetch-skip.md) issue 26-09-30-0052 末页追翻省略复验与拍板
@@ -41,12 +42,15 @@
 - [26-10-14-webui-qb-traffic-agg-live-tail](../26-10-14-webui-qb-traffic-agg-live-tail.md) qB 流量图 agg 段活尾合流(S7): 3d+ 视图图尾真空修复
 - [26-10-09-backend-transport-encryption](../26-10-09-backend-transport-encryption.md) 本地通道传输安全调研(WebUI + HR 取数通道)
 
-## Done (298)
+## Done (301)
 
 - [26-11-05-backend-relocate-fastresume-finalize](../26-11-05-backend-relocate-fastresume-finalize.md) relocate 收尾重构: fastresume 改写收尾 + 未收尾再迁移(S1-S6 全程)
+- [26-11-07-memory-bank-review-rebase-gap](../26-11-07-memory-bank-review-rebase-gap.md) 跨 clone rebase 组合缺口修补实施
 - [26-11-06-memory-bank-kb-nav-search-ghint](../26-11-06-memory-bank-kb-nav-search-ghint.md) kb.nav 搜索被排除匹配项提示行
 - [26-11-06-memory-bank-task-refs-regex](../26-11-06-memory-bank-task-refs-regex.md) TASK_REFS_RE 空行跨行捕获修复
+- [26-11-06-rule-review-batch-policy](../26-11-06-rule-review-batch-policy.md) 分批评审: 一批一评 + 提交闸门强制留痕
 - [26-11-06-test-flaky-governance](../26-11-06-test-flaky-governance.md) flaky 测试结构化治理: 时钟注入与抖动消除 (S1-S6 收口)
+- [26-11-06-test-windows-codepage-ci](../26-11-06-test-windows-codepage-ci.md) 修复 GitHub CI Windows 码页六红: 文本子进程显式 UTF-8 收端 + 全仓 AST 守阵
 - [26-09-26-webui-sites-import](../26-09-26-webui-sites-import.md) WEB UI 一键导入缺失站点（对齐 CLI --export-yaml --only-missing）
 - [26-10-07-webui-delta-sync-feasibility](../26-10-07-webui-delta-sync-feasibility.md) webui 增量同步(qB rid 式)可行性分析
 - [26-11-04-test-coverage-uplift-3](../26-11-04-test-coverage-uplift-3.md) 覆盖率提升第三轮实施 — 新欠账清偿与出生即绿 (99% / 319 单位 → ≤100)

@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="recycle-daemon-roster-machine-wide">
+<meta name="issue-stamp" content="26-11-07-0528">
+<meta name="issue-type" content="feat">
+<meta name="doc-topic" content="relocate-fastresume-finalize">
+<meta name="doc-refs" content="memory-bank/plans/26-11-05-0808-plan-relocate-fastresume-finalize.html, memory-bank/tasks/26-11-05-backend-relocate-fastresume-finalize.md">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="回收 daemon 进程名册证为全机口径: 同机多 qB 实例时收尾窗可用性让位 N1(取舍记录+增强方向)">
+<meta name="issue-summary" content="评审#6 后名册证=全机口径, 同机多 qB 实例(P7 形态)时 daemon 等不到收尾窗直至全部实例退场; 属 N1 零写入铁律优先的显式取舍(已声明, 单实例零影响), 未来兼顾需比映像名更强的实例身份证据">
+<title>回收 daemon 进程名册证为全机口径: 同机多 qB 实例时收尾窗可用性让位 N1(取舍记录+增强方向) · feat · 计划外问题</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 38px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 78ch; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>现象与发现场景</a>
+    <a href="#s2"><span class="no">02</span>证据</a>
+    <a href="#s3"><span class="no">03</span>影响面</a>
+    <a href="#s4"><span class="no">04</span>定位锚点</a>
+    <a href="#s5"><span class="no">05</span>根因<span class="opt">（可选）</span></a>
+    <a href="#s6"><span class="no">06</span>建议修法<span class="opt">（可选）</span></a>
+    <a href="#s7"><span class="no">07</span>状态变更日志</a>
+    <div class="toc-foot">
+      类型 feat · 档位 standard<br>
+      入池不改码 · 规范见 create-issue skill
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">计划外问题（未修）· feat</div>
+    <h1>回收 daemon 进程名册证为全机口径: 同机多 qB 实例时收尾窗可用性让位 N1(取舍记录+增强方向)</h1>
+    <p class="lede">评审#6 后名册证=全机口径, 同机多 qB 实例(P7 形态)时 daemon 等不到收尾窗直至全部实例退场; 属 N1 零写入铁律优先的显式取舍(已声明, 单实例零影响), 未来兼顾需比映像名更强的实例身份证据</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-11-07-0528-feat-recycle-daemon-roster-machine-wide</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-11-07 05:28</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">feat</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">tools/recycle-daemon</div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">0808 收尾遗留(用户裁决入池)</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象与发现场景</h2>
+    <p>0808 计划（<a href="../plans/26-11-05-0808-plan-relocate-fastresume-finalize.html">26-11-05-0808-plan-relocate-fastresume-finalize</a>，已实施完成，档案 Done）收尾时用户裁决的两条设计遗留之二。<strong>这不是缺陷，是已声明的设计取舍记录 + 未来增强方向。</strong></p>
+    <p>收口评审修复 #6（<code>recycle_daemon._proc_absent</code> 进程证与端口证双判合取）后，进程名册证为<strong>全机口径</strong>：进程名册见任一 qB 进程（任一实例，日常库/测试库）即判「进程在」。同机多 qB 实例形态（P7 真机实测形态：目标实例已死、同机另一实例在跑）下，daemon 永等不到下线窗口——收尾改写一直不发生，直至同机全部 qB 实例都退出。这是 N1 铁律（qB 运行期零写入）优先于窗口可用性的<strong>显式取舍</strong>，已在 <code>_proc_absent</code> docstring 与档案切片 26-11-07-0440 声明；单实例部署零影响（qB 真死时进程证与端口证自然同向，合取不损窗口可用性）。</p>
+    <p>本条记录该取舍及其边界，并挂账未来增强方向：若日后要多实例兼顾，需比映像名更强的实例身份证据——设计题，不是一行修复。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>证据</h2>
+    <p class="hint">贴原文（报错 / 日志 / 命令输出），不转述；附取证时间，让读者自己判断新鲜度。</p>
+<pre><code># src/auto_qb/tools/recycle_daemon.py · _proc_absent docstring（取证 2026-11-07 05:28, 行 114-139）
+def _proc_absent(names: tuple, host: str = "", port: int = 0) -> bool:
+    """证一: 该端点的 qB 进程不存在; 名册可用时「进程不在 AND 端口拒连」双判合取(评审 #6)
+
+    全机口径(复核纠正: 非「实例级判定」—— 进程名册分不出实例, 只能按全机判): 名册见
+    任一 qB(任一实例, 日常库/测试库)⇒ 判「进程在」。多实例部署下窗口可用性让位于
+    N1 铁律, 宁可不进窗 —— 收尾窗等全部 qB 进程退场才可能开(P7 真机实测形态: 日常
+    实例在跑 ⇒ daemon 等不到窗口)。进程证与端口证**合取**(防「三证退化单证」的假
+    阳性进窗 —— 端口拒连只证明 WebUI 不可达(被关/挂死/远程链路断而 BT_backup 文件
+    系统可达), 不证明进程不在; 假阳性进窗 = daemon 在 qB 运行期改写 fastresume,
+    N1 零写入铁律被破):
+    - 名册可用: 名册见 qB(任一实例)⇒ 证一不成立 —— 即使端口拒连(N1 铁律, 宁可不进窗);
+      名册无 qB ⇒ 再看端口证, 拒连才算成立。qB 真死时两证自然同向, 合取不损窗口可用性;</code></pre>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>影响面</h2>
+    <table>
+      <tr><th>维度</th><th>结论</th></tr>
+      <tr><td>触发条件</td><td>同机多 qB 实例（P7 形态）且其一有待收尾 journal：目标实例已死、同机另一实例在跑</td></tr>
+      <tr><td>影响范围</td><td>recycle_daemon 收尾窗开启判据（<code>_window_open</code> / <code>_proc_absent</code>）：收尾改写延迟至全机 qB 全部退场；单实例零影响</td></tr>
+      <tr><td>严重度</td><td>低 —— 显式声明的设计取舍，失败方向安全（宁可不进窗，不破 N1 零写入）；仅多实例部署下损失窗口可用性</td></tr>
+    </table>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>定位锚点</h2>
+    <p class="hint">写「符号名 + grep 关键词 + 当时的行号（标取证时间）」—— 代码会漂移，靠符号与 grep 重新定位，行号只是加速项。</p>
+    <ul>
+      <li><code>src/auto_qb/tools/recycle_daemon.py</code>（取证 2026-11-07 05:28 行 114-139）· <code>_proc_absent</code> · grep <code>全机口径</code>（取舍声明原文）；<code>_window_open</code> 行 145-149（两证合取的窗口判据）；另一调用点行 406</li>
+      <li>计划 <a href="../plans/26-11-05-0808-plan-relocate-fastresume-finalize.html">26-11-05-0808</a> / 档案 <a href="../tasks/26-11-05-backend-relocate-fastresume-finalize.md">26-11-05-backend-relocate-fastresume-finalize.md</a>（Done；R3 切片 26-11-07-0440-code-review-fix-baseline，评审 #6 修复轮）</li>
+      <li>pitfalls 无 P7 多实例形态专档（grep <code>P7</code> 于 <code>memory-bank/pitfalls/</code> 无命中，2026-11-07）——本件兼作该取舍的记录位，互链自此始</li>
+    </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
+    <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
+    <div class="callout">非缺陷——证据结构使然：进程名册只有映像名（跨平台 tasklist//proc/ps 尽力而为），分不出实例；而端口证据只在实例死后才成立（端口释放才拒连），彼时全机名册仍见另一实例——两证天然矛盾，实例级判定做不出。取舍 = N1 零写入铁律优先于窗口可用性（假阳性进窗 = daemon 在 qB 运行期改写 fastresume，铁律被破；假阴性 = 只延迟收尾，方向安全）。</div>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>建议修法<span class="opt">（可选）</span></h2>
+    <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
+    <p>未来增强方向（未排期；动手前先拍板证据链形态）：若要多实例兼顾收尾窗，需比映像名更强的<strong>实例身份证据</strong>。候选思路（仅方向，未论证）：</p>
+    <ul>
+      <li>按端口的进程归属探测（netstat / /proc net → pid → 命令行）把「该端点的实例」与「其它实例」分开；难点：实例死后端口释放，端口证即刻失效，会与全机名册证矛盾——需定义「实例死后如何证明它死了」的证据链（如名册数量下降 + 该端口历史归属记录）。</li>
+      <li>qB 侧身份凭据（WebUI 登录态 + 实例指纹 API，若可用）：实例活着时可验，死后同样面临「死无对证」，须与落盘侧证据（journal / BT_backup 文件锁）组合。</li>
+    </ul>
+    <p>约束不变：任何放宽都不得引入「qB 运行期改写 fastresume」的假阳性进窗（N1 铁律）；证据链弱化必须留痕告警（现行退化路径同款纪律）。</p>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>状态变更日志</h2>
+    <ul>
+      <li>2026-11-07 05:28 — 入池，状态 <strong>Open</strong>（0808 计划收尾遗留，用户裁决按标准档入池：设计权衡记录+未来增强方向）</li>
+    </ul>
+    <h3>复验</h3>
+    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <h3>修复后补充</h3>
+    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  </section>
+
+  <footer>
+    26-11-07-0528-feat-recycle-daemon-roster-machine-wide.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>

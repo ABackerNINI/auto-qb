@@ -5,7 +5,7 @@
 **Updated:** 2026-11-07
 **Summary:** relocate 收尾弃 dir_alias 链改 fastresume 改写(N2-N8 实测背书); R1 并入 0247(Superseded): 收敛公理→回收 daemon 复活职权换位(下线窗口改写)+ 未收尾再迁移(supersede 两形态); R2 实验轮 N9-N12 全绿拍板 D19-D20; R3 实现轮 S1-S6 全部完成(9 子任务串行派遣, N0-N12 实现路径复跑全绿+0546 继承项回归全 PASS), 收口评审 blocker 清零(8+5 条全修, 入池 0), 全量全绿(见 kb.baseline)
 **Topics:** backend-relocate-fastresume-finalize
-**Refs:** memory-bank/plans/26-11-05-0808-plan-relocate-fastresume-finalize.html, memory-bank/issues/26-11-05-0420-bug-relocate-zero-move.html, memory-bank/issues/26-11-06-0448-bug-real-down-force-kill.html, memory-bank/pitfalls/backend/prefix-rewrite-nested-root.md, memory-bank/pitfalls/testing/free-port-toctou-parallel.md
+**Refs:** memory-bank/plans/26-11-05-0808-plan-relocate-fastresume-finalize.html, memory-bank/issues/26-11-05-0420-bug-relocate-zero-move.html, memory-bank/issues/26-11-06-0448-bug-real-down-force-kill.html, memory-bank/issues/26-11-07-0528-question-relocate-supersede-cancel-semantics.html, memory-bank/issues/26-11-07-0528-feat-recycle-daemon-roster-machine-wide.html, memory-bank/pitfalls/backend/prefix-rewrite-nested-root.md, memory-bank/pitfalls/testing/free-port-toctou-parallel.md
 
 ## 原始请求
 

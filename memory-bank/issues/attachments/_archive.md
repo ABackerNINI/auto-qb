@@ -4,8 +4,10 @@
 > 主索引的已关闭区按 8,000 字符预算裁剪(上限 `CLOSED_KEEP` 条), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (43)
+## Open (45)
 
+- [feat] [回收 daemon 进程名册证为全机口径: 同机多 qB 实例时收尾窗可用性让位 N1(取舍记录+增强方向)](../26-11-07-0528-feat-recycle-daemon-roster-machine-wide.html) — 评审#6 后名册证=全机口径, 同机多 qB 实例(P7 形态)时 daemon 等不到收尾窗直至全部实例退场; 属 N1 零写入铁律优先的显式取舍(已声明, 单实例零影响), 未来兼顾需比映像名更强的实例身份证据
+- [question] [链式再迁移态撤销前任的语义未定稿: supersede 改道后撤销方向三选一待拍板](../26-11-07-0528-question-relocate-supersede-cancel-semantics.html) — supersede 改道态下撤销前任会把共享数据 C→A 搬回而后任仍指向 C(成员断粮); 现仅 cancel_chain 同目标护栏最小面, 前任撤销完整语义(拦/级联/清账出口)待定稿
 - [test] [GitHub CI WEB UI smoke 全量轮既有红清单待排期清理](../26-11-07-0326-test-ci-smoke-existing-red-backlog.html) — CI 全量 450 例串行下 gtm-alert 双皮肤 4 条失败等既有红; 门禁改造只展示不修, 等排期
 - [refactor] [全库代码/配置残留非 ASCII 图形符号，与 code-style ASCII 禁令冲突](../26-11-06-0756-refactor-ascii-graph-symbol-backlog.html) — 全库扫描命中 395 文件/2358 行禁用图形符号; 剔除功能性数据与第三方示例后项目自身 300 文件/1868 行待分批清偿, 本轮按用户拍板只入池不修
 - [bug] [review.check --root 快照目录被 .git 存在性检查误拒](../26-11-06-0711-bug-review-check-snapshot-root.html) — 存量评审 R4 的既定用法 review.check --root <快照目录> 被 _resolve_root 的 .git 检查拒收,与命令自身 help 文档矛盾;_verify 实际与 git 无关
