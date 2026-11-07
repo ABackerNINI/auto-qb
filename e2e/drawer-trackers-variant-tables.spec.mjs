@@ -23,6 +23,13 @@ import { collectRuntimeErrors, installRuntimeErrorGuard } from './lib/errors.mjs
  *   06: 引擎排序三态(默认异常置顶 → tier 降/升 → 回默认) + 拖宽落盘 + 右键隐藏落盘
  *       + 刷新偏好回放 + 仅看异常(容器类切换, benign 行隐藏) + msg 展开。
  *
+ * P13 批补测(存量评审 R4 static 清池):
+ *   05(R5#92 major): skipUnchanged 数据拍分支的行为级覆盖 —— 不冻结轮询, 首拍含失败数据
+ *       落袋后改写为全 ok(条数不变 → 结构 sig 不变), 断言 err 组原地切 dt05-hide(2026-10-18
+ *       「组空⇒原地切类」根治场景)+ 徽章计数原地回填 + section/ghead/锚元素身份不变;
+ *   04/06(R5#96): 动作钮手势 —— data-act=add/del/report 真点击, 断言对话框开/命令链回执
+ *       (此前 trackers-variant-tables 只测排序/筛选/几何, reannounce spec 只测渲染不点按钮)。
+ *
  * 数据口径: page.route 桩掉 /api/torrents/{hash}/trackers, 8 条覆盖全桶 ——
  *   ok×2(tier 0/1, 供组内 tier 升序断言) / err×1(status 4) / warn×1(status 1) /
  *   upd×1(status 3) / off 实体×1(status 0) / 虚拟×2([DHT]/[PeX], drawerTrackerVirtual 判据)。
@@ -261,6 +268,160 @@ for (const skin of SKINS) {
       const drawer2 = await openTrackersVariant(page, '06');
       const anchor2 = drawer2.locator('[data-dt-table-anchor="drawerTrackerV06"]');
       await expect(anchor2.locator('.group-head .h-cell'), '刷新后隐藏偏好回放(7 列)').toHaveCount(7);
+    });
+
+    /* R5#92(major, P13): skipUnchanged 数据拍分支此前零行为级覆盖 —— 上面三条用例全在初始
+     * 数据落袋后冻结轮询, skip→原地回填从未真跑。本条**不冻结**: 首拍含失败数据落袋后把
+     * trackers 改写为全 ok(8 条不变 → 结构 sig loading|err|y 不变), 断言 err 组空⇒原地切
+     * dt05-hide(2026-10-18「组空⇒dtNN-hide 原地切类」根治场景)+ ok 组徽章计数原地回填
+     * + section/ghead/锚元素身份不变(整帧重建 = section 新建 = __p13keep 记账标记丢失即红;
+     * 锚本体 anchFill 本就保活, 真正的重建探针是 section/ghead)。 */
+    test(`dt05 数据拍原地回填: err 组空⇒dt05-hide 原地切类 + 徽章回填 + 元素身份不变 @fast (${skin})`, async ({ page }) => {
+      collectRuntimeErrors(page);
+      await page.setViewportSize(WIDE);
+      await page.route('**/api/torrents/*/trackers', (route) =>
+        route.fulfill({ contentType: 'application/json', body: JSON.stringify(makeTrackers()) }));
+      await page.addInitScript(() =>
+        localStorage.setItem('autoqb.ui.drawerTpl', JSON.stringify({ trackers: '05' })));
+      await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 15_000 });
+      await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
+      const drawer = await openTrackersVariant(page, '05');
+      const errSec = drawer.locator('[data-grp="err"]');
+      const okSec = drawer.locator('[data-grp="ok"]');
+      await expect(errSec.locator('.dt05-fail'), '失败组在场(处置块形态)').toHaveCount(1);
+      await expect(okSec.locator('.group-row[data-table="drawerTrackerV05"]'), 'ok 组 2 行').toHaveCount(2);
+
+      // 元素身份记账(重建 = replaceChildren 换新 section = 标记丢失)
+      await errSec.evaluate((sec) => {
+        sec.__p13keep = true;
+        sec.querySelector('.dt05-ghead').__p13keep = true;
+        const a = sec.querySelector('[data-dt-table-anchor="drawerTrackerV05"]');
+        if (a) a.__p13keep = true;
+      });
+      await okSec.evaluate((sec) => { sec.__p13keep = true; });
+
+      // 改写为全 ok 数据(tracker-c 4→2, 条数不变 → sig 不变); 后注册路由优先, 计数器等真拍
+      let ticks = 0;
+      const v2 = makeTrackers().map((t) => (t.status === 4 ? { ...t, status: 2, msg: '' } : t));
+      await page.route('**/api/torrents/*/trackers', (route) => {
+        ticks++;
+        route.fulfill({ contentType: 'application/json', body: JSON.stringify(v2) });
+      });
+      await expect.poll(() => ticks, '等下一个数据拍真到达(抽屉轮询 1.5/2/3s 档)').toBeGreaterThan(0);
+
+      // ①err 组空⇒原地切 dt05-hide(整节仍就位: 锚仍在 DOM, 不是旧口径的整节缺席)
+      await expect(errSec, 'err 组空 → 原地切 dt05-hide').toHaveClass(/dt05-hide/);
+      await expect(errSec.locator('[data-dt-table-anchor="drawerTrackerV05"]'),
+        '空组锚元素仍在 DOM(display:none, 五组恒在场)').toHaveCount(1);
+      // ②徽章计数原地回填: ok 2→3, err 1→0(隐藏组同样回填)
+      await expect(okSec.locator('.dt05-badge'), 'ok 组徽章计数原地回填').toContainText('工作 3');
+      await expect(errSec.locator('.dt05-badge'), 'err 组徽章计数原地回填(0)').toContainText('未工作 0');
+      // ③元素身份不变(skip 分支只动不含锚的子树; 整帧重建即红)
+      const kept = await drawer.locator('.dt05-wrap').evaluate((wrap) => {
+        const q = (sel) => wrap.querySelector(sel);
+        const errS = q('[data-grp="err"]');
+        const okS = q('[data-grp="ok"]');
+        return {
+          errSec: !!(errS && errS.__p13keep),
+          errHead: !!(errS && errS.querySelector('.dt05-ghead') && errS.querySelector('.dt05-ghead').__p13keep),
+          errAnchor: !!(errS && errS.querySelector('[data-dt-table-anchor="drawerTrackerV05"]')
+            && errS.querySelector('[data-dt-table-anchor="drawerTrackerV05"]').__p13keep),
+          okSec: !!(okS && okS.__p13keep),
+        };
+      });
+      expect(kept.errSec && kept.errHead && kept.errAnchor && kept.okSec,
+        `err/ok 组 section/ghead/锚元素身份不变(整帧重建即红), 实测 ${JSON.stringify(kept)}`).toBeTruthy();
+    });
+
+    /* R5#96(P13): 04/06 动作钮手势 —— data-act=add/del/report 真点击(此前只测排序/筛选/几何,
+     * 按钮的 onClick 分派零覆盖)。add/del 断言对话框开 + 提交后命令链回执 toast(命令 POST
+     * 打真桩 FakeClient, 记账回 ok); report 无对话框直发命令, 回执 toast 为「请求发出」的证。
+     * report 走重报闸门: 桩默认序(added_on 降序)首行是暂停档会被拦 —— 按状态文案选**活跃**
+     * 种子行(做种/下载)开抽屉, 不依赖行序算术。 */
+    test(`dt04 动作钮手势: add 对话框提交 / del 确认框提交 / report 命令回执 @fast (${skin})`, async ({ page }) => {
+      collectRuntimeErrors(page);
+      await page.setViewportSize(WIDE);
+      await page.addInitScript(() =>
+        localStorage.setItem('autoqb.ui.drawerTpl', JSON.stringify({ trackers: '04' })));
+      await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 15_000 });
+      await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
+      await page.click('nav.tabs [data-view="torrents"]');
+      await expect(page.locator('.torrent-row').first()).toBeVisible({ timeout: 15_000 });
+      await page.locator('.torrent-row', { hasText: /做种|下载/ }).first().dblclick({ force: true });
+      const drawer = page.locator('.drawer-dock > .drawer');
+      await expect(drawer).toBeVisible({ timeout: 5_000 });
+      await drawer.locator('.drawer-tabs button', { hasText: 'Tracker' }).click();
+      await expect(drawer.locator('.dt04-wrap')).toBeVisible({ timeout: 10_000 });
+      await expect(drawer.locator('[data-dt-table-anchor="drawerTrackerV04"]')
+        .locator('.group-row[data-table="drawerTrackerV04"]').first()).toBeVisible({ timeout: 10_000 });
+
+      // add: 概览条「添加 Tracker」→ prompt 对话框开 → 填 URL 提交 → trackers/add 命令链回执
+      await drawer.locator('.dt04-add').click();
+      const addModal = page.locator('.modal-mask .modal');
+      await expect(addModal.locator('.modal-title'), 'add 钮开 prompt 对话框').toHaveText('添加 Tracker');
+      await addModal.locator('.modal-input').fill('https://tracker-new.example.org/announce.php');
+      await addModal.locator('.modal-actions .bt.primary').click();
+      await expect(page.locator('.toast-wrap .toast', { hasText: '已执行: tracker 已添加' }).first(),
+        'add 走 trackerAdd→trackers/add 命令链(回执 toast 为证)').toBeVisible();
+
+      // del: 首卡行内删除钮 → 危险确认框开 → 确认 → trackers/remove 命令链回执
+      await drawer.locator('.group-row[data-table="drawerTrackerV04"]').first()
+        .locator('.dt04-act[data-act="del"]').click();
+      const delModal = page.locator('.modal-mask .modal');
+      await expect(delModal.locator('.modal-title'), 'del 钮开确认对话框').toHaveText('删除 Tracker');
+      await expect(delModal).toContainText('将删除该 tracker');
+      await delModal.locator('.modal-actions .bt.danger-solid').click();
+      await expect(page.locator('.toast-wrap .toast', { hasText: '已执行: tracker 已删除' }).first(),
+        'del 走 trackerRemove→trackers/remove 命令链').toBeVisible();
+
+      // report: 首卡行内重报钮(闸门放行) → 无对话框直发 drawerCmd("reannounce") → 回执 toast
+      await drawer.locator('.group-row[data-table="drawerTrackerV04"]').first()
+        .locator('.dt04-act[data-act="report"]').click();
+      await expect(page.locator('.toast-wrap .toast', { hasText: '已执行: 强制重新汇报' }).first(),
+        'report 走 drawerCmd("reannounce") 命令链').toBeVisible();
+    });
+
+    test(`dt06 动作钮手势: add 对话框提交 / del 确认框提交 / report 命令回执 @fast (${skin})`, async ({ page }) => {
+      collectRuntimeErrors(page);
+      await page.setViewportSize(WIDE);
+      await page.addInitScript(() =>
+        localStorage.setItem('autoqb.ui.drawerTpl', JSON.stringify({ trackers: '06' })));
+      await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 15_000 });
+      await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
+      // 同 dt04: 按状态文案选活跃种子行(report 重报闸门放行档)
+      await page.click('nav.tabs [data-view="torrents"]');
+      await expect(page.locator('.torrent-row').first()).toBeVisible({ timeout: 15_000 });
+      await page.locator('.torrent-row', { hasText: /做种|下载/ }).first().dblclick({ force: true });
+      const drawer = page.locator('.drawer-dock > .drawer');
+      await expect(drawer).toBeVisible({ timeout: 5_000 });
+      await drawer.locator('.drawer-tabs button', { hasText: 'Tracker' }).click();
+      await expect(drawer.locator('.dt06-wrap')).toBeVisible({ timeout: 10_000 });
+      await expect(drawer.locator('[data-dt-table-anchor="drawerTrackerV06"]')
+        .locator('.group-row[data-table="drawerTrackerV06"]').first()).toBeVisible({ timeout: 10_000 });
+      const firstRow = drawer.locator('.group-row[data-table="drawerTrackerV06"]').first();
+
+      // add: 工具条「添加 Tracker」→ prompt 对话框开 → 提交 → 命令链回执
+      await drawer.locator('.dt06-add').click();
+      const addModal = page.locator('.modal-mask .modal');
+      await expect(addModal.locator('.modal-title'), 'add 钮开 prompt 对话框').toHaveText('添加 Tracker');
+      await addModal.locator('.modal-input').fill('https://tracker-new.example.org/announce.php');
+      await addModal.locator('.modal-actions .bt.primary').click();
+      await expect(page.locator('.toast-wrap .toast', { hasText: '已执行: tracker 已添加' }).first()).toBeVisible();
+
+      // report: 首行(sev 升序 = 异常置顶)行内重报钮 → 命令链回执
+      await firstRow.locator('.dt06-act[data-act="report"]').click();
+      await expect(page.locator('.toast-wrap .toast', { hasText: '已执行: 强制重新汇报' }).first()).toBeVisible();
+
+      // del: 首行行内删除钮 → 危险确认框开 → 确认 → 命令链回执
+      await firstRow.locator('.dt06-act[data-act="del"]').click();
+      const delModal = page.locator('.modal-mask .modal');
+      await expect(delModal.locator('.modal-title'), 'del 钮开确认对话框').toHaveText('删除 Tracker');
+      await expect(delModal).toContainText('将删除该 tracker');
+      await delModal.locator('.modal-actions .bt.danger-solid').click();
+      await expect(page.locator('.toast-wrap .toast', { hasText: '已执行: tracker 已删除' }).first()).toBeVisible();
     });
   });
 }

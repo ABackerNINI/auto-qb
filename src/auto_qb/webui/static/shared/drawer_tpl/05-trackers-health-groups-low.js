@@ -284,9 +284,13 @@
         rows = (chips ? [chips] : []).concat(
           byKey[g.key].filter((x) => !ctx.drawerTrackerVirtual(x.t.url)).map((x) => rowOf(ctx, x.t, x.i, rGate)));
       } else {
-        /* 正常区按 tier 升序(设计稿口径); 其余保 qB 原序 */
+        /* 正常区按 tier 升序(设计稿口径); 其余保 qB 原序。缺失/非法 tier 殿后(R5#81,
+         * 与 04 的 tierN 记 9 / 06 的 _raw.tier 记 null(引擎空值恒末位)同口径 —— 同语义槽
+         * 都是「缺 tier 排最后」) —— 旧写法折算 0, 会把 tier 缺失的 tracker 插到所有 tier0
+         * 之前; 这里取 04 的记 9 写法, 9 档并列由稳定序保 qB 原序。 */
+        const tierN = (t) => (num(t.tier) ? Number(t.tier) : 9);
         const list = g.key === "ok"
-          ? byKey[g.key].slice().sort((a, b2) => (Number(a.t.tier) || 0) - (Number(b2.t.tier) || 0))
+          ? byKey[g.key].slice().sort((a, b2) => tierN(a.t) - tierN(b2.t))
           : byKey[g.key];
         rows = list.map((x) => rowOf(ctx, x.t, x.i, rGate));
       }

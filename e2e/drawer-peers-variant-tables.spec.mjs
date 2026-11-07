@@ -176,12 +176,90 @@ for (const skin of SKINS) {
       const anchor = drawer.locator('[data-dt-table-anchor="drawerPeerV09"]');
       await expect(anchor.locator('.group-row[data-table="drawerPeerV09"]')).toHaveCount(12);
 
+      // R5#97(P13): 默认序首行(addr 升序, 2026-10-18 改口径由描述符 defKey/defDir 声明 ——
+      // 桩 fixture 首段恒 10..21 递增, 数值序 = i 升序 → 首行 = i=0)与「占用」列数值断言
+      // (此前对 09 只测筛选 chips 行数, 默认序/占用列值零断言)。upTotal = 4×0 + 4×250000
+      // + 4×500000 = 3e6((i%3)×250000): i=1 行 occBar = 250000/3e6 = 8.3%, i=2 峰值行 =
+      // 500000/3e6 = 16.7%(条长即占用数值); i=0 行 up=0 → 无条 + z 弱色档。
+      const rows09 = anchor.locator('.group-row[data-table="drawerPeerV09"]');
+      await expect(rows09.first(), '默认序 = addr 升序: 首行 = i=0(10.0.0.0)').toContainText(addrOf(0));
+      await expect(rows09.nth(1).locator('.dt09-occ .track i'), '占用条长 = 8.3%(up/upTotal 数值断言)')
+        .toHaveAttribute('style', /width:\s*8\.3%/);
+      await expect(rows09.nth(2).locator('.dt09-occ .track i'), '峰值行占用条长 = 16.7%')
+        .toHaveAttribute('style', /width:\s*16\.7%/);
+      await expect(rows09.nth(1).locator('.dt09-occ b'), '有上传行占用速度非弱色档').not.toHaveClass(/z/);
+      await expect(rows09.first().locator('.dt09-occ b'), '零上传行占用值 = 0 且弱色档').toHaveText('0');
+      await expect(rows09.first().locator('.dt09-occ .track'), '零上传行不画占用条(occBar=0 档)').toHaveCount(0);
+
       await page.route('**/api/torrents/*/peers', (route) => { /* hang: 冻结轮询(同 07 红验手法) */ });
 
       await drawer.locator('.dt09-fchip[data-f="down"]').click();
       await expect(anchor.locator('.group-row[data-table="drawerPeerV09"]')).toHaveCount(9);
       await drawer.locator('.dt09-fchip[data-f="all"]').click();
       await expect(anchor.locator('.group-row[data-table="drawerPeerV09"]')).toHaveCount(12);
+    });
+
+    /* R5#77 修复回归(P13): 08 结构 sig 曾把折叠态算进去, 而 onClick 折叠只翻 class 不刷
+     * lastSig —— 每次折叠后下一个数据拍 sig 必失配 = 整帧 replaceChildren 重建(2026-10-18
+     * 根治的那类重建回潮, 与 05「折叠态不进 sig、数据拍照常跳过」口径相反)。修后折叠态不进
+     * sig: 折叠后喂一拍**变了计数**的数据, 断言 ①折叠态保持 ②组头计数原地更新(证明数据拍
+     * 真走了 skip 分支的内联回填, 排除「啥都没发生」的假绿) ③section/ghead/锚元素身份不变
+     * (重建 = 新 section = __p13keep 记账标记丢失即红; 锚本体 anchFill 本就保活, 真正的
+     * 重建探针是 section/ghead)。 */
+    test(`dt08 折叠后数据拍零重建(折叠态不进 sig): 组头计数原地更新 + 元素身份不变 @fast (${skin})`, async ({ page }) => {
+      collectRuntimeErrors(page);
+      await page.setViewportSize(WIDE);
+      await page.route('**/api/torrents/*/peers', (route) =>
+        route.fulfill({ contentType: 'application/json', body: JSON.stringify({ peers: makePeers() }) }));
+      await page.addInitScript(() =>
+        localStorage.setItem('autoqb.ui.drawerTpl', JSON.stringify({ peers: '08' })));
+      await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 15_000 });
+      await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
+      const drawer = await openPeersVariant(page, '08');
+      const take = drawer.locator('.dt08-grp[data-grp="take"]');
+      await expect(take.locator('.group-row[data-table="drawerPeerV08"]'), 'take 组 3 行').toHaveCount(3);
+
+      // 折叠 take 组(真实手势: onClick 只翻 class 不刷 sig)
+      await take.locator('.dt08-ghead').click();
+      await expect(take, '折叠态输出').toHaveClass(/folded/);
+
+      // 元素身份记账(三件各打一枚可判读标记)
+      const marked = await take.evaluate((sec) => {
+        const head = sec.querySelector('.dt08-ghead');
+        const anchor = sec.querySelector('[data-dt-table-anchor="drawerPeerV08"]');
+        sec.__p13keep = true;
+        if (head) head.__p13keep = true;
+        if (anchor) anchor.__p13keep = true;
+        return { sec: !!sec.__p13keep, head: !!head, anchor: !!anchor };
+      });
+      expect(marked.sec && marked.head && marked.anchor, '三件元素都在座并已打标').toBeTruthy();
+
+      // 下一拍喂变了计数的数据(take 3→4): 后注册路由优先, 计数器等真拍到达(轮询 1.5/2/3s 档)
+      let ticks = 0;
+      const v2 = { peers: makePeers() };
+      v2.peers.push({ ...v2.peers[0], ip: '203.0.113.77', port: 51413, flags: 'U D' });
+      await page.route('**/api/torrents/*/peers', (route) => {
+        ticks++;
+        route.fulfill({ contentType: 'application/json', body: JSON.stringify(v2) });
+      });
+      await expect.poll(() => ticks, '等下一个数据拍真到达').toBeGreaterThan(0);
+
+      // ①折叠态保持(折叠自保) ②组头计数原地回填 3→4(skip 分支内联直写, 数据拍真跑了)
+      await expect(take, '折叠态不因数据拍丢失').toHaveClass(/folded/);
+      await expect(take.locator('.dt08-gcnt'), '组头计数原地回填(数据拍真走了 skip 分支)').toHaveText('4');
+      // ③元素身份不变(折叠态进 sig = 本拍整帧重建, 修复前必红)
+      const kept = await take.evaluate((sec) => {
+        const head = sec.querySelector('.dt08-ghead');
+        const anchor = sec.querySelector('[data-dt-table-anchor="drawerPeerV08"]');
+        return {
+          sec: !!sec.__p13keep,
+          head: !!(head && head.__p13keep),
+          anchor: !!(anchor && anchor.__p13keep),
+        };
+      });
+      expect(kept.sec && kept.head && kept.anchor,
+        `section/ghead/锚元素身份不变(重建即红), 实测 ${JSON.stringify(kept)}`).toBeTruthy();
     });
 
     test(`dt08 分段锚/折叠/只看在传/组内 dyn 排序 @fast (${skin})`, async ({ page }) => {

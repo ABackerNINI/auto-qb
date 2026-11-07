@@ -14,6 +14,12 @@
   说明不足 2 字单行/全角冒号与逗号分隔/单行也挂 toast-txt)+ toastSync 差分 stamp(rise/队列牌/倒计时
   只归 own 条/danger 原位升级)+ rows 行差分(首轮只建缓存/增删检出排一帧/退场幽灵克隆定格 row-out
   附回原容器/入场行 stamp row-in/无增删不排帧)
+- test_r4_dt05_advice_dispatch: R5#95(P13) —— 05 adviceFor 五类关键词分派经 rowsFn 真跑(失败桶
+  failRowOf 装配路径, 不经字符串锚): not registered/passkey/ban/timeout/maintenance 每类一条
+  命中各自文案 + 通用兜底分支(零覆盖的纯判据, node 电池直跑)
+- test_r4_dt05_tier_sort_missing_last: R5#81(P13) 修复回归 —— 05 ok 组 tier 升序对缺失/非法
+  tier 记 9 殿后(与 04/06 的 tierN 兜底同口径), 稳定序保 qB 原序; 修复前折算 0 把 tier 缺失
+  tracker 插到所有 tier0 之前必红
 
 加载口径: columns 域经 webui_helpers.bundle_file("columns.js") 聚合(根 + 五片段清单序, 与拆分前
 同一份代码); 单文件域(selection/sort/format)直接 eval。app.js 以 loadColState 截断切片加载
@@ -822,3 +828,112 @@ def test_r4_fx_mount_toast_split_and_rows_ghost():
     """R5#193: fx 挂载层 node 电池 —— TOAST_SPLIT 拆段正则族 + rows 行差分与幽灵退场"""
     report = _run_probe(_NODE_FX_MOUNT_PROBE, os.path.join(STATIC_ROOT, "flux", "fx-mount.js"))
     _assert_battery(report, "fx 挂载层电池")
+
+
+# R5#95/R5#81(P13): 05 变体 rowsFn 真跑(node 电池) ------------------------------------------
+# 沙箱口径: drawer_templates.js 在无 DOM 下自发布 window.AQB_DRAWER_TPL_REG(dtInjectCss 等
+# 载荷全部自带 typeof document 守卫); 05 IIFE 消费真 reg(dtHtml/helpers/trackers 单源)自注册,
+# 电池经 reg.get 取回 rowsFn —— 判据走生产函数, 不经字符串锚。ctx 桩只给 rowsFn 需要的四件
+# (drawer.trackers / drawerTrackerVirtual / drawerReannounceGate / fmtPeersQb)。
+_NODE_DT05_ROWSFN_PRELUDE = r"""
+const fs = require("fs");
+const checks = [];
+const ok = (name, cond) => checks.push([name, !!cond]);
+global.window = {};
+let reg = null;
+try {
+  eval(fs.readFileSync(process.argv[1], "utf8"));  // drawer_templates.js -> window.AQB_DRAWER_TPL_REG
+  reg = global.window.AQB_DRAWER_TPL_REG;
+} catch (e) { ok("drawer_templates.js 加载失败: " + e.message, false); }
+if (!reg || !reg.trackers) ok("reg/trackers 未发布(沙箱口径漂移)", false);
+let def = null;
+if (reg && reg.trackers) {
+  try {
+    eval(fs.readFileSync(process.argv[2], "utf8"));  // 05-trackers-health-groups-low.js
+    def = reg.get("trackers", "05");
+  } catch (e) { ok("05 变体加载失败: " + e.message, false); }
+}
+if (!def || typeof def.rowsFn !== "function") ok("05 rowsFn 未注册", false);
+// rowsFn 需要的 ctx 四件(drawer.trackers / 虚拟判据 / 重报闸门 / peers 计数格式化)
+const mkCtx = (trackers) => ({
+  drawer: { trackers: trackers },
+  drawerTrackerVirtual: () => false,
+  drawerReannounceGate: () => ({ ok: true, title: "" }),
+  fmtPeersQb: (a) => String(a == null ? 0 : a),
+});
+const segRow = (trackers, segKey, i) => {
+  const segs = def.rowsFn(mkCtx(trackers));
+  const seg = segs.find((s) => s.key === segKey);
+  return seg && seg.rows[i] ? seg.rows[i] : null;
+};
+"""
+
+_NODE_DT05_ADVICE_PROBE = _NODE_DT05_ROWSFN_PRELUDE + r"""
+// R5#95: adviceFor 五类关键词分派(经 err 桶 failRowOf 装配路径 = 生产行对象 .advice)。
+// 样本逐条核对过分派序(unregistered -> passkey -> ban -> timeout -> maintenance -> 兜底),
+// 互不越档命中。
+const CASES = [
+  ["not registered 类", "torrent not registered with this tracker", "站点删除"],
+  ["passkey 类", "invalid passkey", "鉴权信息疑似失效"],
+  ["ban 类", "you are banned by the tracker", "客户端或行为可能被站点限制"],
+  ["timeout 类", "connection timed out", "网络层不可达"],
+  ["maintenance 类", "site is under maintenance", "站点侧暂时不可用"],
+];
+for (const [name, msg, marker] of CASES) {
+  const row = segRow([{ url: "https://t.example/announce", status: 4, tier: 0, msg: msg }], "err", 0);
+  ok(name + "走失败处置块形态(kind=fail)", !!row && row.kind === "fail");
+  ok("adviceFor " + name + " 分派命中各自文案", !!row && String(row.advice).indexOf(marker) >= 0);
+}
+// 通用兜底分支: 零命中 -> 「先点强制重新汇报」通用话术(此前五类 + 兜底全无覆盖, R5#95)
+const fb = segRow([{ url: "https://t.example/announce", status: 4, tier: 0, msg: "weird unknown failure" }], "err", 0);
+ok("adviceFor 通用兜底分支", !!fb && String(fb.advice).indexOf("先点「强制重新汇报」") >= 0);
+const failed = checks.filter((c) => !c[1]).map((c) => c[0]);
+console.log(JSON.stringify({ ok: checks.length - failed.length, total: checks.length, failed: failed }));
+"""
+
+_NODE_DT05_TIER_PROBE = _NODE_DT05_ROWSFN_PRELUDE + r"""
+// R5#81: ok 组 tier 升序的缺失/非法 tier 兜底。a=T1 / b=缺 tier / c=T0 / d=非法 "x":
+// 修后(记 9)序 = c(0), a(1), b(9), d(9)(9 档并列保 qB 原序: b 先于 d);
+// 修前(折算 0)序 = b, c, d, a —— tier 缺失的 tracker 插到所有 tier0 之前。
+const mk = (url, tier) => {
+  const t = { url: url, status: 2, msg: "", num_seeds: 1, num_complete: 1,
+    num_leeches: 0, num_incomplete: 0, num_downloaded: 0 };
+  if (tier !== undefined) t.tier = tier;
+  return t;
+};
+const trackers = [
+  mk("https://a.example/announce", 1),
+  mk("https://b.example/announce"),        // tier 缺失
+  mk("https://c.example/announce", 0),
+  mk("https://d.example/announce", "x"),   // 非法 tier(负值/非数值同档)
+];
+const segs = def.rowsFn(mkCtx(trackers));
+const seg = segs.find((s) => s.key === "ok");
+const order = (seg ? seg.rows : []).map((r) => r.host);
+ok("ok 组恰 4 行(缺 tier 不得跌出 ok 桶)", order.length === 4);
+ok("tier0(c)居首(修复前缺失 tier(b)插队最前)", order[0] === "c.example");
+ok("tier 升序次位 = tier1(a)", order[1] === "a.example");
+ok("缺失 tier(b)与非法 tier(d)殿后且保 qB 原序(记 9 稳定序)", order[2] === "b.example" && order[3] === "d.example");
+const failed = checks.filter((c) => !c[1]).map((c) => c[0]);
+console.log(JSON.stringify({ ok: checks.length - failed.length, total: checks.length, failed: failed }));
+"""
+
+
+def test_r4_dt05_advice_dispatch():
+    """R5#95(P13): 05 adviceFor 五类关键词分派 + 通用兜底 —— rowsFn 真跑不经字符串锚"""
+    report = _run_probe(
+        _NODE_DT05_ADVICE_PROBE,
+        os.path.join(STATIC_ROOT, "shared", "drawer_templates.js"),
+        os.path.join(STATIC_ROOT, "shared", "drawer_tpl", "05-trackers-health-groups-low.js"),
+    )
+    _assert_battery(report, "05 adviceFor 分派电池")
+
+
+def test_r4_dt05_tier_sort_missing_last():
+    """R5#81(P13) 修复回归: 05 ok 组 tier 排序缺失/非法 tier 记 9 殿后(与 04/06 同口径)"""
+    report = _run_probe(
+        _NODE_DT05_TIER_PROBE,
+        os.path.join(STATIC_ROOT, "shared", "drawer_templates.js"),
+        os.path.join(STATIC_ROOT, "shared", "drawer_tpl", "05-trackers-health-groups-low.js"),
+    )
+    _assert_battery(report, "05 tier 兜底电池")

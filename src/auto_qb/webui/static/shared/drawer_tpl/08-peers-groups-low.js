@@ -33,7 +33,7 @@
  *   被皮肤吸左首格不透明底盖掉大半, 只在发丝线缝隙与圆角弧以散落像素重现(机理与修法见
  *   CSS 段内注释)。
  * 渲染纪律: dtHtml 全量转义(dtRaw 只用于拼接本变体 dtHtml 产出的预转义片段), replaceChildren
- * 原子换帧, **结构态**(加载/失败/空态/只看在传/折叠)未变跳过重建 —— 数据拍(5s 轮询每拍必到,
+ * 原子换帧, **结构态**(加载/失败/空态/只看在传; 折叠态不进 sig, R5#77)未变跳过重建 —— 数据拍(5s 轮询每拍必到,
  * 组 membership 随握手翻动是常态)不整帧重建(整帧重建 = 56-75ms longtask/拍 = 用户所报
  * "表格闪烁, 数据随闪烁刷新"); 行走桥响应式, 组头计数/聚合数/空组隐藏类在 skip 分支内联
  * 原地直写(querySelector + classList/textContent, 不经 paintHtml)
@@ -300,13 +300,17 @@
     /* 五区分桶(空分区不缺席, 由 hidden 类隐藏; 判据与 rowsFn / 数据拍回填同一条) */
     const buckets = { take: [], feed: [], idle: [], choke: [], hand: [] };
     for (const p of list) buckets[P.bucketOf(p)].push(p);
-    /* 结构 sig(2026-10-18 用户报障根治收口): 只含**帧形态**决定项 —— 加载/失败/空态/只看在传/
-     * 折叠态; **不再含在场分组集**。旧口径组空⇒整节隐藏(锚离场)、组补⇒新锚进场都算结构变化
-     * ⇒ 握手连接翻动一次就整帧 replaceChildren + anchFill + Teleport 重挂(全组表格抖动);
-     * 现五区恒在场, 组的进出场在 skip 分支内联原地切类, 不触发任何重建。
+    /* 结构 sig(2026-10-18 用户报障根治收口): 只含**帧形态**决定项 —— 加载/失败/空态/只看在传
+     * (R5#77: **折叠态不进 sig** —— 折叠仅 classList 翻转且 onClick 不刷 lastSig, 折叠态进
+     * sig 必使每次折叠后的下一个数据拍失配 = 整帧 replaceChildren, 恰是 2026-10-18 根治的
+     * 那类重建; 与 05「折叠态不进 sig、数据拍照常跳过」同口径。「只看在传」保留: 它的
+     * onClick 走 rerender 重置 lastSig, 与 sig 一致); **不再含在场分组集**。旧口径组空⇒整节
+     * 隐藏(锚离场)、组补⇒新锚进场都算结构变化 ⇒ 握手连接翻动一次就整帧 replaceChildren +
+     * anchFill + Teleport 重挂(全组表格抖动); 现五区恒在场, 组的进出场在 skip 分支内联原地
+     * 切类, 不触发任何重建。
      * **不含 peers 数据**: 数据拍(5s 轮询每拍必到)不整帧重建, 行走桥响应式。 */
     const sig = String(!!loading) + "|" + err + "|" + (list.length ? "y" : "n")
-      + "|" + String(!!ui.onlyMoving) + "|" + Object.keys(ui.folded).filter((k) => ui.folded[k]).join(",");
+      + "|" + String(!!ui.onlyMoving);
     if (H.skipUnchanged(host, ui, sig)) {
       /* 数据拍: 各组头的计数/聚合数 + 空组隐藏类 + 过滤空态提示原地回填 —— 锚全程不动。
        * quiet 区在「只看在传数据」下整组离场(无 section), 原地查询天然跳过。 */
@@ -375,6 +379,8 @@
       if (grp) {
         const key = grp.getAttribute("data-grp");
         ui.folded[key] = !ui.folded[key];
+        /* 折叠只翻 class 不重建(锚元素集合不变, 桥零重挂); 折叠态不进 sig(R5#77) ——
+         * 不刷 lastSig 也拍拍常跳过, 与 05 同口径 */
         grp.classList.toggle("folded");
       }
     }
