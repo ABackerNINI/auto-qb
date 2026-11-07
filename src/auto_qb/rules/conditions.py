@@ -1,6 +1,7 @@
-"""内置条件插件: path, size, tags, category, trackers, state, hr, date_time, seedtime,
-upload_ratio, freespace, expr(表达式)"""
+"""内置条件插件: path, size, tags, category, trackers, tracker_group, state, hr, date_time,
+seedtime, upload_ratio, freespace, expr(表达式)"""
 from datetime import datetime
+from datetime import time as dtime
 from typing import Any
 
 from ..config.schema.fields import HR_MODES
@@ -12,12 +13,59 @@ from .expr.errors import ExprError
 from .registry import register_condition
 
 
+def _parse_range_bounds(value: Any, label: str) -> tuple[int, int] | None:
+    """date_time 的 day_of_month / day_of_week 区间/单值串 -> (lo, hi) 端点(单值 v 即 (v, v));
+    空值/falsy(None/''/0/False) -> None = 未配置(与旧 match 真值门同口径, 刻意保留)。
+
+    解析边界(R2#20): 串的格式解析(区间切分 / int 转换)不依赖运行期上下文, 前移到构造期
+    fail-fast(黄金法则 4, 与 SizeCondition/FreespaceCondition 的构造期解析同模式)——此前
+    非法串(如 '1,15' / 'abc')推迟到每轮 match 才抛 ValueError, 被兜成 verdict:error,
+    规则永久失效只留节流 ERROR 日志; 现在构造失败即异常, 经 _build_condition_node 包装成
+    ConfigError 携带规则名。与「当天日期」的比较依赖运行期 now, 留在 match(见 DateTimeCondition)。
+    """
+    if not value:
+        return None
+    s = str(value).strip()
+    try:
+        if "-" in s:
+            a, b = s.split("-", 1)
+            return int(a), int(b)
+        v = int(s)
+        return v, v
+    except ValueError as e:
+        raise ValueError(f"{label} 区间串非法: {value!r}") from e
+
+
+def _parse_time_bounds(value: Any) -> tuple[dtime, dtime] | None:
+    """date_time 的 time 时段串 -> (start, end) 端点时刻; 空值/falsy(None/''/0/False) -> None = 未配置(与旧 match 真值门同口径, 刻意保留)。
+
+    解析走单点 utils.parse_time_range(与通知 quiet_hours / HR 限速窗口共用), 构造期完成;
+    与「当前时刻」的比较依赖运行期 now, 留在 match(见 DateTimeCondition)。
+    """
+    if not value:
+        return None
+    try:
+        return utils.parse_time_range(value)
+    except ValueError as e:
+        raise ValueError(f"time 时段串非法: {value!r}: {e}") from e
+
+
+def _within(value: int, bounds: tuple[int, int]) -> bool:
+    """预解析端点的区间判定: "a-b" 含端点, 单值 v 即 (v, v) 退化为等值(语义与旧 _in_range 一致)"""
+    lo, hi = bounds
+    return lo <= value <= hi
+
+
 def _in_range(value: int, spec: str) -> bool:
-    spec = str(spec).strip()
-    if "-" in spec:
-        a, b = spec.split("-", 1)
-        return int(a) <= value <= int(b)
-    return value == int(spec)
+    """区间/单值串判定(解析单点 _parse_range_bounds): "3-8" 含端点, 单值即等值。
+
+    DateTimeCondition.match 用构造期预解析端点走 _within; 本函数保留为同一份语义的
+    纯函数直测入口(test_conditions 的 C40 守阵等), 生产路径不再逐轮调用。
+    """
+    bounds = _parse_range_bounds(spec, "spec")
+    if bounds is None:
+        raise ValueError(f"区间串非法: {spec!r}")
+    return _within(value, bounds)
 
 
 @register_condition
@@ -180,22 +228,31 @@ class HrCondition(BaseCondition):
 
 @register_condition
 class DateTimeCondition(BaseCondition):
-    """日期时间条件: day_of_month / day_of_week / time"""
+    """日期时间条件: day_of_month / day_of_week / time
+
+    区间/时段串在构造期解析(R2#20, 黄金法则 4, 与 SizeCondition/FreespaceCondition 同模式):
+    day_of_month/day_of_week -> (lo, hi) 端点(单值 v 即 (v, v)), time -> (start, end) 端点
+    时刻(解析单点 utils.parse_time_range)。解析边界: 纯格式解析不依赖运行期上下文, 前移到
+    构造期; 「当天日期/当前时刻」(now)是运行期值, 比较留在 match —— match 行为与解析前移前
+    一致。非法串构造失败即 ValueError, 经 _build_condition_node 包装成 ConfigError 携带
+    规则名(此前每轮 match 才抛, 被兜成 verdict:error, 规则永久失效只留节流 ERROR 日志)。
+    """
     name = "date_time"
 
     def __init__(self, spec: Any) -> None:
-        self.day_of_month = spec.get("day_of_month")
-        self.day_of_week = spec.get("day_of_week")
-        self.time_range = spec.get("time")
+        self.day_of_month = _parse_range_bounds(spec.get("day_of_month"), "day_of_month")
+        self.day_of_week = _parse_range_bounds(spec.get("day_of_week"), "day_of_week")
+        self.time_range = _parse_time_bounds(spec.get("time"))
 
     def match(self, ctx: RuleContext) -> bool:
         now = datetime.now()
-        if self.day_of_month and not _in_range(now.day, str(self.day_of_month)):
+        if self.day_of_month is not None and not _within(now.day, self.day_of_month):
             return False
-        if self.day_of_week and not _in_range(now.isoweekday(), str(self.day_of_week)):
+        if self.day_of_week is not None and not _within(now.isoweekday(), self.day_of_week):
             return False
-        if self.time_range:
-            if not utils.time_in_range(now.time(), self.time_range):
+        if self.time_range is not None:
+            start, end = self.time_range
+            if not utils.time_within(now.time(), start, end):
                 return False
         return True
 
@@ -230,7 +287,7 @@ class ExprCondition(BaseCondition):
 
     与旧条件**并存**: 旧条件行为不变, 本条件只是新增的一种写法(对照表见计划第 08 节)。
     编译期解析 + 语义校验(名字/函数/参数/类型/结果必须是布尔), 运行期纯读取求值;
-    求值出错抛 ExprError, 由 Rule.process 兜成「不匹配 + 停后续规则」(见 base.py)。
+    求值出错抛 ExprError, 由 Rule.process 兜成「本条规则本轮跳过, 不影响其它规则」(见 base.py)。
     """
     name = "expr"
 
@@ -262,6 +319,6 @@ class FreespaceCondition(BaseCondition):
         if not self.path:
             return False
         # 与 disk_* 表达式同口径(单点 disk_usage_value): 映射 miss / 盘不可读都显式报错,
-        # 绝不降级成假值(拍板 P-07); ExprError 由 Rule.process 兜成「不匹配 + 停后续规则」
+        # 绝不降级成假值(拍板 P-07); ExprError 由 Rule.process 兜成「本条规则本轮跳过, 不影响其它规则」
         free = disk_usage_value(self.path, "free")
         return utils.compare(self.op, free, self.value)

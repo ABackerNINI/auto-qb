@@ -34,7 +34,9 @@ logger = logging.getLogger(__name__)
 # ---- R5 拆分后的公开面回填: 原 utils 名继续可用, 调用方 import 路径不变 ----
 from .utils_parse import (
     parse_hm,
+    parse_time_range,
     time_in_range,
+    time_within,
     is_loopback_host,
     parse_bool,
     convert_bool_in_dict,

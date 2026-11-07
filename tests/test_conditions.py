@@ -27,6 +27,8 @@
 - test_date_time_day_of_week_mismatch: day_of_week 不匹配 -> 不触发
 - test_date_time_cross_midnight: 跨午夜 time 区间匹配/不匹配
 - test_date_time_out_of_range: 非跨午夜区间当前时刻不在 -> 不触发
+- test_date_time_invalid_spec_fails_fast: R2#20 —— date_time 区间/时段串构造期解析,
+  非法串抛 ValueError/建树包装 ConfigError, 合法区间串 match 行为不变
 - test_tags_condition_case_sensitive: 标签条件精确匹配默认区分大小写, :ignore_case 后缀显式开启
 - test_tags_condition_ignore_case: tags 条件 :ignore_case(精确+regex 两型)
 - test_category_condition_ignore_case: category 条件 :ignore_case(精确+regex 两型)
@@ -501,6 +503,33 @@ def test_date_time_out_of_range(monkeypatch):
         ctx = _ctx(mgr, FakeTorrent())
         assert DateTimeCondition({"time": "10:00-12:00"}).match(ctx) is False, \
             "14:00 不在 10:00-12:00 内"
+
+
+def test_date_time_invalid_spec_fails_fast():
+    """R2#20: date_time 区间/时段串构造期解析(黄金法则 4)—— 非法串构造即抛 ValueError,
+    建树包装成 ConfigError 携带规则名(此前推迟到每轮 match 才抛, 被兜成 verdict:error,
+    规则永久失效只留节流 ERROR); 合法区间串 match 行为不变(解析前移只动时机不动语义)"""
+    import datetime
+    from auto_qb.config import ConfigError
+    from auto_qb.rules.base import _build_condition_node
+
+    with pytest.raises(ValueError, match="day_of_month"):
+        DateTimeCondition({"day_of_month": "1,15"})
+    with pytest.raises(ValueError, match="day_of_week"):
+        DateTimeCondition({"day_of_week": "abc"})
+    with pytest.raises(ValueError, match="time"):
+        DateTimeCondition({"time": "25:00-26:00"})
+    # 规则建树路径: 叶子构造异常包装成 ConfigError 携带规则名(规则加载期即报错, 不进运行期)
+    with pytest.raises(ConfigError, match="规则 bad-dt-rule"):
+        _build_condition_node({"date_time": {"day_of_month": "1,15"}}, "bad-dt-rule")
+    # 合法区间串/单值: 解析前移后 match 行为不变(区间含端点)
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        ctx = _ctx(mgr, FakeTorrent())
+        today = datetime.date.today()
+        assert DateTimeCondition({"day_of_month": "1-31"}).match(ctx), "今天必在 1-31 内(含端点)"
+        assert DateTimeCondition({"day_of_month": str(today.day)}).match(ctx)
+        assert DateTimeCondition({"day_of_week": f"{today.isoweekday()}-{today.isoweekday()}"}).match(ctx), "单值区间退化为等值"
 
 
 # ---------------- P2-a 长尾清偿 (计划 26-10-01-2157 §3 P2, 2026-10-02) ----------------

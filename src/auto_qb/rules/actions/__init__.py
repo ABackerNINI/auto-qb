@@ -9,7 +9,7 @@
 - skip_checking.py: 跳检四阶段(SkipCheckingMixin)
 
 新增动作模块后必须在此 import, 否则插件不会注册(config 校验会拒绝合法动作名);
-test_actions.py::test_actions_registry_complete 锁定全部动作名清单。
+tests/test_actions_state.py::test_actions_registry_complete 锁定全部动作名清单。
 """
 from .basic import (
     AddCategoryAction,

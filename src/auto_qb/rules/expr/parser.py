@@ -86,10 +86,19 @@ def compile_expr(text) -> Expr:
 
 class _Parser:
     """递归下降解析: 每个括号层一个 _level 调用, 层内运算符计数即"一层一个"判定"""
+
+    # 括号/列表/函数参数嵌套深度上限(R2#23): 递归下降无上限时, 深嵌套输入(如 400 层括号)
+    # 抛 RecursionError —— 它不是 ExprError, 逃出两处 except ExprError(config 校验绕过聚合
+    # ConfigError 直接崩 / WebUI 试算 500 而非结构化错误)。超限按语法错报, 纳入既有
+    # except ExprError 路径。上限给合法表达式留足余量: 仓库现存最深用例 3 层括号
+    # (tests/test_expr_parse.py), 条件组合树上限 CONDITION_TREE_MAX_DEPTH=16 同量级。
+    MAX_DEPTH = 64
+
     def __init__(self, tokens, text: str):
         self._tokens = tokens
         self._text = text
         self._i = 0
+        self._depth = 0  # 当前嵌套层深(见 _level)
 
     # ---------- token 流 ----------
 
@@ -115,8 +124,17 @@ class _Parser:
         return Expr(self._text, root)
 
     def _level(self):
-        """一个括号层: 最多一个运算符"""
+        """一个括号层: 最多一个运算符
+
+        嵌套深度计数在此单点: 括号体 / 列表项 / 函数参数每层恰好各经一次 _level
+        (顶层 parse 直调 _level_ex 不计), 超上限按语法错报(纳入 except ExprError 路径);
+        深度计数同时给 evaluate/_check_literals/trace 的 AST 递归兜了底。
+        """
+        self._depth += 1
+        if self._depth > self.MAX_DEPTH:
+            raise ExprSyntaxError(f"表达式嵌套超过上限 {self.MAX_DEPTH} 层", self._peek().pos)
         node, _ = self._level_ex()
+        self._depth -= 1
         return node
 
     def _level_ex(self):

@@ -4,7 +4,7 @@
 - ExprSyntaxError: 编译期错误(词法/语法/静态检查)。配置加载阶段 fail-fast, 由 config
   校验聚合成 ConfigError 一并报出, 运行期不会再遇到。
 - ExprError: 求值期错误(除零 / 类型不符 / 数据源不可用)。由 Rule.process 的条件分支
-  兜住 -> 不匹配 + 中断后续规则(见计划第 05 节「出错即停规则」)。
+  兜住 -> 本条规则本轮跳过, 不影响其它规则(per-rule 任务模型, 见 base.py)。
 """
 
 
