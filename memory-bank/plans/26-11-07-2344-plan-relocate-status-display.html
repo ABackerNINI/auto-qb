@@ -7,9 +7,9 @@
 <title>整组迁移状态展示 v2 落地: 着色A→B两排+弧形箭头+悬停浮窗(模板定稿)</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="relocate-status-display">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-11-07-2344">
-<meta name="doc-updated" content="26-11-08-0033">
+<meta name="doc-updated" content="26-11-08-0107">
 <meta name="doc-refs" content="">
 <style>
   :root {
@@ -75,7 +75,7 @@
 <h1>整组迁移状态展示 v2 落地: 着色A→B两排+弧形箭头+悬停浮窗(模板定稿)</h1>
 <p class="lede">本篇只回答: 整组迁移状态展示 v2(着色 A→B 两排 + 右缘弧形箭头 + 悬停浮窗)如何落生产码 —— 数据面增量、前端替换面、浮窗调度、守阵改写与验收判据。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-07-2344 · <b>doc-updated</b> 26-11-08-0033 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-11-07-2344 · <b>doc-updated</b> 26-11-08-0107 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 会话(2026-11-07): grilling 四轮逐项拍板 + 可交互模板五轮迭代定稿; 视觉规格入库件 = <code>memory-bank/plans/attachments/relocate-status-display-v2-mockup.html</code>(四皮肤可切换、交互真实可点)
 </div>
 
@@ -165,6 +165,7 @@
 <ul>
   <li><span class="tag">R0 · 26-11-07-2344</span> 初版: 会话 grilling 四轮(D1-D14)+ 可交互模板五轮迭代定稿; 视觉规格入库 <code>attachments/relocate-status-display-v2-mockup.html</code>; 实施步骤 S1-S6。</li>
   <li><span class="tag">R1 · 26-11-08</span> 微调:当前位置行固定色系(D15, 新令牌 --path-src);委派实施前定稿。</li>
+  <li><span class="tag">R2 · 26-11-08</span> 实施完成(S1-S6 全落): 五笔分支提交(e37e570f..d7494351), test.full 5635+2(基线 26-11-08-0050), 真机 harness 四皮肤目检通过; doc-updated 同步。实施偏差: 浮窗 tone 色在 <code>.relpop</code> 域另给一份(teleport 后 <code>.rl-scope</code> 行内规则不命中); ttag 外部链接小标未实现(行级数据面无外部链接场景, 随 issue 26-11-07-1322 落地时补)。</li>
 </ul>
 
 </div>
