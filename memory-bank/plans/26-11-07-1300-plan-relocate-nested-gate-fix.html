@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="relocate-nested-gate-fix">
 <meta name="doc-status" content="Open">
 <meta name="doc-added" content="26-11-07-1300">
-<meta name="doc-updated" content="26-11-07-1300">
+<meta name="doc-updated" content="26-11-07-2339">
 <meta name="doc-refs" content="">
 <style>
   :root {
@@ -73,7 +73,7 @@
 
 <div class="kicker">PLAN · memory-bank · doc-topic: relocate-nested-gate-fix</div>
 <h1>relocate 嵌套目标闸门误拦修正: 锚点换内容根 + 形态感知 + UI 整组语义披露</h1>
-<p class="lede">本篇只回答: <b>relocate 嵌套目标闸门的误拦怎么修</b> —— 硬拦锚点从「成员声明源」换成「新旧内容根互嵌」并收窄到目录别名形态; 在途 job src 分支锚点收窄到 job.scope; 「新家嵌在旧声明源树下」降为 confirm; 文件级与单成员不再因路径嵌套被硬拦; 并补 UI 整组迁移语义披露。全部结构判据先经真机实验逐条验证(不通过即回炉), 再动代码。</p>
+<p class="lede">本篇只回答: <b>relocate 嵌套目标闸门的误拦怎么修</b> —— 硬拦锚点从「成员声明源」换成「新旧内容根互嵌」并收窄到目录别名形态; 在途 job src 分支锚点收窄到 job.scope; 「新家嵌在旧声明源树下」降为 confirm; 文件级与单成员不再因路径嵌套被硬拦; 并补 UI 整组迁移语义披露; 回炉追加<b>删链门重锚(R7)</b>(P1 真机实验实证: 不修则嵌套放行形态收尾永不发生)。全部结构判据先经真机实验逐条验证(不通过即回炉), 再动代码。</p>
 <div class="meta">
   <b>doc-added</b> 26-11-07-1300 · <b>doc-updated</b> 26-11-07-1300 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 会话 grilling(2026-11-07, Q1-Q6 六问六答) + 用户误拦报告(整组移动下移 3 文件种子到 <code>R:\Download\PTing\待删</code> 被拦) + 关联件: issue 26-11-05-0420(修法③出处) · 计划 26-11-05-0546(机制③/E2.3) · 计划 26-11-05-0808(重构继承)
@@ -116,6 +116,7 @@
   <tr><td>R4</td><td class="wr">confirm</td><td>任意形态, target 严格 ⊆ mover 声明源(facts.save_path)且未被 R1/R2/R3 拦</td><td>「新家嵌在旧声明源树下: 旧根将来整组迁移时这片数据会被覆盖扫描连带走(D19)」—— 出现在既有确认框, 零额外点击</td><td>D3</td></tr>
   <tr><td>R5</td><td>note</td><td>FILE_LINKS 且 target 严格 ⊆ src_cr</td><td>「别名存续期该种子带文件删除被 D16 拦(收尾后消失); 旧内容根内链接叶与新数据混居」</td><td>D4</td></tr>
   <tr><td>R6</td><td>UI</td><td>(a) submitMoveDialog 常驻提示「整组迁移已启用: 移动将以内容组为单位, 同组其它成员一并迁移」(relocate.enabled 时显示, 经既有 gate-flag 通路暴露新 flag); (b) 确认框「来源」行扩为「来源(整组 N 个成员)」—— item 增 <code>member_count = len(facts.hashes)</code></td><td>不强制 confirm(全 ok 迁移不新增点击)</td><td>D5/D8</td></tr>
+  <tr><td>R7</td><td class="bad">blocked 侧修正</td><td>删链门依赖扫描(<code>relocate_exec.py:746</code> _chain_gate_deps / <code>ru.chain_gate_hits</code>): 锚 job.src → <b>job.scope</b>(别名真实落点/搬移树), 扫描结果<b>豁免本组成员(job.hashes)</b>; 等值/前缀双判据与 scope 下组外种子保守计数保留; 反馈面文案(_chain_deps_text)同步</td><td>回炉实证(T1a/E2 + T1b/E7): 嵌套放行形态下成员搬后 save_path=dst ⊆ src 恒命中 → 收尾自锁(别名永不删、D16 永久拦, 实测 240s 无收敛); 组外停车进旧根同样触发。不修则 R4/R5 放行 = 永久别名, 比现状更糟。E2/E3 删链断言移 P4 修后必验</td><td>D9</td></tr>
 </table>
 <p><b>纯函数改造</b>: <code>nested_target_on(target, save_paths, jobs) -&gt; str</code> → <code>nested_target_on(target, jobs, *, form, src_cr, dst_cr, mover_save_path) -&gt; (blocked, confirm, note)</code>; 调用点移到 evaluate_group 的 plan() 分流(<code>:675</code>)之后, <code>unit.form == FORM_REJECT</code> 时跳过(已被 GATE_FORM 拦); 执行入口二次拦截(<code>relocate_exec.py:849</code>)同签名同步。组内成员声明源多样性(同物理根不同声明)不新增物理化面 —— 锚点全部取 mover 声明空间派生物, 与组键的 resolve_physical 口径一致。</p>
 <p><b>分期</b>: P1 真机实验先行(E1-E8, 判据回炉条款) → P2 纯函数+单测 → P3 实现+UI → P4 真机全链路验收+基线切片。</p>
@@ -129,7 +130,7 @@
   <tr><td>E3</td><td>FILE_LINKS + 深层嵌套(target ⊆ 内容根)</td><td>target 建在旧内容根内部</td><td>全链路成立 + D16 拦带文件删除的摩擦实证(收尾后消失) —— R5 场景</td></tr>
   <tr><td>E4</td><td>FORM_DIRECT(单成员)+ 嵌套</td><td>单成员组, target 嵌套</td><td>qB 直接搬移成功, 无别名无收尾 —— R1 不该拦 DIRECT 的实证</td></tr>
   <tr><td>E5</td><td>DIR_ALIAS + 正向嵌套的真卡死形态</td><td>≥8 文件组(或文件级不可建), target ⊆ 旧内容根</td><td>复现 <code>relocate_exec.py:281</code>「内容根目录非空」RuntimeError 搬后卡死 —— R1 必要性实证</td></tr>
-  <tr><td>E6</td><td>DIR_ALIAS + 平铺反向成环实证</td><td>平铺组, target ⊇ 源(祖先目录)</td><td>junction 指向自身祖先: 递归列举成环实证 —— R1 对称拦必要性</td></tr>
+  <tr><td>E6</td><td>DIR_ALIAS + 反向成环实证</td><td>非平铺组且 save_path 恰 = target/内容根段名(T1b 实测的产品可达坐标;平铺组被 plan() exclusive 硬前提恒判 FILE_LINKS,产品不可达,保留为 E8 defensive 用例)</td><td>junction 指向自身祖先成环实证(有界探测,禁递归列举)+ 现行闸门对反向零防御取证 —— R1 对称拦必要性</td></tr>
   <tr><td>E7</td><td>在途 job + 往旧根停车</td><td>一组在途, 另一组落点在旧根兄弟目录</td><td>现行误拦取证; job.scope 收窄后放行且旧 job 全链路不受扰</td></tr>
   <tr><td>E8</td><td>成分级不误伤回归(新锚点)</td><td>待删2 兄弟 / 待删除 前缀同串 / 尾斜杠 / 大小写变体 / 父目录方向 / 相等(幂等)</td><td>新判据下全部不误伤、幂等分支照常先行</td></tr>
 </table>
@@ -137,6 +138,7 @@
 <h3>P2 纯函数 + 单测</h3>
 <ul>
   <li><code>nested_target_on</code> 按新签名重写(三输出, 形态感知, 严格嵌套); <code>evaluate_group</code> 闸门重排 + <code>member_count</code>; <code>relocate_exec.py:849</code> 入口同步。</li>
+  <li><b>R7 删链门重锚</b>: <code>ru.chain_gate_hits</code> 扩参(锚 scope + 排除本组 hashes)、<code>_chain_gate_deps</code>/<code>_chain_deps_text</code> 同步;单测覆盖: 本组豁免 / 组外 scope 内保守计数 / 组外 scope 外不计 / 嵌套与非嵌套双向。</li>
   <li><code>tests/test_relocate_fastresume_gates.py:421</code> 重锚: E2.3 原 8 例按内容根锚改写保留; 新增: 形态感知矩阵(DIRECT/FILE_LINKS/DIR_ALIAS × 嵌套方向)、互嵌对称、R4 confirm / R5 note 触发与不触发、幂等排除、R2 scope 收窄、R3 维持。</li>
   <li>验收: 单测全绿; 文件头部 docstring「测试计划」清单同步(仓库守卫)。</li>
 </ul>
@@ -147,7 +149,7 @@
 </ul>
 <h3>P4 真机全链路验收</h3>
 <ul>
-  <li>E1-E8 场景在<b>实现后代码路径</b>全量复跑(放行面全链路走通, 拦截面预检即拦); 既有 relocate 测试面回归; 闸门文案/确认框/toast 回归。</li>
+  <li>E1-E8 场景在<b>实现后代码路径</b>全量复跑(放行面全链路走通, 拦截面预检即拦); <b>E2/E3 删链断言修后必验(R7 修后删链门收敛、别名清零)</b>; 既有 relocate 测试面回归; 闸门文案/确认框/toast 回归。</li>
   <li><code>commands run test.full</code> → <code>kb.new baseline</code> 切片(数字实测誊写)。</li>
   <li>收尾 DoD: code-review(改动预计远超 50 行且触安全敏感面, 强制) → kb.wrap → 代码事实回写 memory-bank → 0420/0546/0808 表述勘误在收尾轮按回写口径处理, 不预写历史件。</li>
 </ul>
@@ -166,6 +168,8 @@
   <tr><td>D6</td><td>形式化 = 「新旧内容根互嵌」(替代 Q1 字面「内容根落点 ⊆ 目标树」, 修正目标在声明源之上且内容根非平铺时的误拦; 已逐形态推演)</td><td>2026-11-07</td></tr>
   <tr><td>D7</td><td>真机测试先行: 每条判据先真机实测, 各情况全测一遍, 不想当然(用户指定; 写入 P1 硬性阶段 + 回炉条款)</td><td>2026-11-07</td></tr>
   <tr><td>D8</td><td>补 UI 整组语义提醒缺口(用户指出「目前 UI 没有任何移动一个种子就移动整组的提醒」)</td><td>2026-11-07</td></tr>
+  <tr><td>D9</td><td>回炉 R7 批准: 删链门重锚 = 锚 job.scope + 豁免本组成员(修 T1a 自锁 + T1b/E7 组外停车假依赖);E2/E3 删链断言移 P4 修后必验</td><td>2026-11-07</td></tr>
+  <tr><td>D10</td><td>E2c 同盘收尾链无效 → 入池 issue 26-11-07-2336-bug-relocate-same-drive-finalize,本计划不修</td><td>2026-11-07</td></tr>
 </table>
 
 <h2><span class="no">§07</span>风险与对策</h2>
@@ -177,11 +181,14 @@
   <tr><td>confirm 新增改变确认框触发面</td><td>原「全 ok 直发」的迁移现在弹确认框</td><td>P4 真机验证确认框两态行为 + toast/文案回归; 用户已拍板接受(D3)</td></tr>
   <tr><td>等于/幂等语义回归</td><td>互嵌判据误吞相等态</td><td>判据用严格嵌套 + 幂等分支先行双保险; E8 加相等用例</td></tr>
   <tr><td>生产误触</td><td>真机实验/验收操作错实例</td><td>全程测试实例 + real-fake; <code>dev.run</code> 一律先 <code>--dry-run</code>; 红线(config.yml/auto-qb-data)不动</td></tr>
+  <tr><td>同盘部署收尾链无效(先于本计划存在, T1a/E2c 实测)</td><td>数据盘 = qB CWD 同盘符的部署发起迁移</td><td>超出本计划范围, 已入池 <a href="../issues/26-11-07-2336-bug-relocate-same-drive-finalize.html">26-11-07-2336-bug-relocate-same-drive-finalize</a>(D10);P4 验收统一用跨盘(subst)拓扑</td></tr>
+  <tr><td>issues 索引超预算(存量)</td><td>入池 E2c 后 Open 区条数触顶告警(索引 8,312 &gt; 8,000 字符)</td><td>病根在存量 Open 条数, 非本计划引入 —— 已告警待人工处置, 本轮不动(范围守恒)</td></tr>
 </table>
 
 <h2><span class="no">§10</span>变更记录</h2>
 <ul>
   <li><span class="tag">R0 · 26-11-07-1300</span> 初版: 会话 grilling(Q1-Q6)拍板 + 用户误拦报告; 机制面核实表(§02, 全部行号实测); 判据 R1-R6; 真机实验矩阵 E1-E8 与回炉条款; 分期 P1-P4。实施开工另按会话协议立档。</li>
+  <li><span class="tag">R1 · 26-11-07-2339</span> 回炉改版(P1 真机实验 E1-E8 完成): R7 删链门重锚入 §03(T1a 自锁 + T1b/E7 组外停车假依赖, 用户拍板 D9);E6 产品可达坐标修正(平铺+DIR_ALIAS 不可达, T1b 实测);E2/E3 删链断言移 P4;E2c 同盘发现入池 26-11-07-2336(D10);P2/P4 与 §07 同步扩充。</li>
 </ul>
 
 </div>
