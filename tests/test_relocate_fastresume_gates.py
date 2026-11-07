@@ -473,6 +473,15 @@ def test_nested_target_boundaries_pure():
     assert "别名作用域" in blocked, blocked
     blocked, _c, _n = _gate("D:/jobsrc", form=ru.FORM_FILE_LINKS, save_path="D:/elsewhere", files=_FLAT, jobs=(job, ))
     assert "别名作用域" in blocked, blocked  # R2 含等于(保守)
+    # 旧账 scope 缺失: R2 回落声明源(与 R7 删链门回落同口径, 评审修复 —— 不回落则旧账
+    # 非终态 job 的嵌套保护静默丢失)
+    legacy = ru.RelocateJob(
+        job_id="j9", hashes=("HX", ), mover="HX", src="D:/jobsrc", dst="D:/jobdst", scope="", phase=ru.PHASE_ARMED
+    )
+    blocked, _c, _n = _gate(
+        "D:/jobsrc/inner", form=ru.FORM_FILE_LINKS, save_path="D:/elsewhere", files=_FLAT, jobs=(legacy, )
+    )
+    assert "别名作用域" in blocked, blocked
     blocked, _c, _n = _gate(
         "D:/jobdst/inner", form=ru.FORM_FILE_LINKS, save_path="D:/elsewhere", files=_FLAT, jobs=(job, )
     )

@@ -751,22 +751,25 @@ class ExecMixin:
         save_path=dst ⊆ src 恒命中 = 收尾自锁(别名永不删, T1a 实测 240s 无收敛)。
         锚 job.src → job.scope(别名真实落点/搬移树, 建账 content_root_of 既有产物): 组外
         种子停旧根兄弟目录不再顶进依赖集(T1b/E7 实测假依赖); 旧账 scope 缺失回落 job.src
-        (保守, 与旧锚同口径)。
+        (保守, 与旧锚同口径)。等值面并列 job.src(R7 评审修复): dir_alias 收尾窗内经别名
+        落进作用域的组外种子账面 save_path 恰等 job.src —— 只按 scope 前缀判会漏计(D16
+        契约对齐, 误放删链 = 该种子断粮)。
         """
         anchor = job.scope or job.src
         members = set(job.hashes)
         records = list(self._ctx.store.by_hash.values())
         save_paths = [getattr(r, "save_path", "") or "" for r in records]
-        hits = set(ru.chain_gate_hits(save_paths, anchor))
+        hits = set(ru.chain_gate_hits(save_paths, anchor, equal_root=job.src))
         return [(r.hash, sp) for r, sp in zip(records, save_paths) if sp in hits and r.hash not in members]
 
     def _chain_deps_text(self, job: RelocateJob, deps: list) -> str:
-        """删链门依赖的反馈面文案(数量 + 样例 + 解法; R7 锚口径 = 别名作用域)"""
+        """删链门依赖的反馈面文案(数量 + 样例 + 解法; R7 锚口径 = 别名作用域 + 旧根等值面)"""
         anchor = job.scope or job.src
         samples = ", ".join(h[:8] for h, _sp in deps[:3])
         more = f" 等共 {len(deps)} 个" if len(deps) > 3 else ""
         return (
-            f"仍有 {len(deps)} 个种子的保存路径位于别名作用域 {anchor}(等值或之下){more}({samples}): "
+            f"仍有 {len(deps)} 个种子的保存路径在别名作用域 {anchor} 之下或恰在旧根 {job.src}"
+            f"(等值){more}({samples}): "
             "别名删除会让它们找不到数据 —— 请把这些种子迁移到新位置或删除后自动重判"
         )
 

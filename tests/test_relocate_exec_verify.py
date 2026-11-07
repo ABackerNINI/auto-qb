@@ -249,9 +249,9 @@ def test_chain_gate_deps_scope_anchor_and_member_exempt(tmp_path):
         mod._ctx.store = types.SimpleNamespace(by_hash={h: _rec(h, sp) for h, sp in records}, relocating_hashes=set())
         return [h for h, _sp in mod._chain_gate_deps(job)]
 
-    # 本组豁免 + scope 外不计: 成员停在嵌套落点(dst ⊆ scope), 组外种子停旧根兄弟目录
-    job = _job("j1", src="R:/src", dst="R:/src/待删", scope="R:/src/Show", hashes=("HA", "HB"))
-    assert _deps(job, [("HA", "R:/src/待删"), ("HB", "R:/src/待删"), ("HZ", "R:/src/停车")]) == [], \
+    # 本组豁免 + scope 外不计: 成员停在嵌套落点(dst ⊆ scope, 豁免承重), 组外种子停旧根兄弟目录
+    job = _job("j1", src="R:/src", dst="R:/src/Show/待删", scope="R:/src/Show", hashes=("HA", "HB"))
+    assert _deps(job, [("HA", "R:/src/Show/待删"), ("HB", "R:/src/Show/待删"), ("HZ", "R:/src/停车")]) == [], \
         "成员豁免(R7)+ 组外 scope 外不计(E7 假依赖修)"
     # 组外 scope 内保守计数: 等值与前缀双向照算
     job2 = _job("j2", src="R:/src", dst="R:/dst", scope="R:/src/Show", hashes=("HA", ))

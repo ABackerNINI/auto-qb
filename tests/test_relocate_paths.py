@@ -12,6 +12,7 @@ S4(26-11-05-0808)退役面: 旧 guardian(finalize_watch)退化路径/CLI/pid 锁
 ## 测试计划(每个测试函数一条)
 - test_journal_roundtrip: spec/journal 往返 + 坏文件读 None
 - test_exec_dir_alias_flow: F>=阈值 + 专属子目录 -> 目录别名(需确认)整条建链并武装
+- test_exec_nested_confirm_two_phase: R4 嵌套 confirm 执行面双相(confirm=false 零副作用/confirm=true started)
 - test_exec_dir_alias_non_empty_root_rolls_back: 内容根非空 -> 别名建不出 -> 回 armed 交对账重建
 - test_exec_penetration_failure_keeps_scene: 穿透校验失败 -> failed(alias_unreadable) 且链接保留
 - test_exec_reject_and_pause_failure: 形态拒绝(空文件表)/ 暂停失败 -> blocked
@@ -91,6 +92,28 @@ def test_exec_dir_alias_flow(tmp_path, monkeypatch):
     assert len(job.alias_paths) == 1
     assert os.path.isdir(job.alias_paths[0]) and os.listdir(job.alias_paths[0])
     assert spawned, "武装后应确保回收 daemon 在位(S4 新链)"
+
+
+def test_exec_nested_confirm_two_phase(tmp_path, monkeypatch):
+    """R4 嵌套 confirm 执行面双相(计划 26-11-07-1300 D3): confirm=false 零副作用(不建 job/
+    不发 setLocation/不暂停成员), confirm=true 全量闸门重跑后 started —— 嵌套 confirm 与
+    目录别名 confirm 同走执行入口确认回路, 不能借确认绕过 blocked"""
+    pin_disk_usage(monkeypatch)
+    mgr, client, src, dst, content, files = relocate_env(tmp_path, file_count=2)
+    mod = mgr.host.get("relocate")
+    _spy_spawn(mod, [])
+    nested = os.path.join(src, "待删")
+    os.makedirs(nested)  # 目标真实存在: 免 space/unknown 闸门噪声(本用例只看 R4 双相)
+    before = list(client.calls)
+    first = mod.relocate_execute(["HA"], nested, confirm=False)
+    assert first[0]["cls"] == "confirm", first
+    r = next(x for x in first[0]["reasons"] if x["gate"] == "nested")
+    assert r["cls"] == "confirm" and "旧声明源树下" in r["text"], r
+    assert client.calls == before, "confirm=false 必须零副作用(不发 setLocation/不暂停/不建账)"
+    items = mod.relocate_execute(["HA"], nested, confirm=True)
+    assert items[0]["cls"] == "started", items
+    assert any(c[0] == "set_location" and "待删" in (c[1] or "") for c in client.calls), \
+        "确认后应下发 setLocation 到嵌套目标"
 
 
 def test_exec_dir_alias_non_empty_root_rolls_back(tmp_path, monkeypatch):

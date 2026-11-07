@@ -187,7 +187,7 @@ def test_supersede_rewritten_chain_dual_gates(tmp_path, monkeypatch):
     client.torrents["HZ"] = hz
     mgr.store.by_hash["HZ"] = hz
     assert [h for h, _sp in mod._chain_gate_deps(job2)] == ["HZ"], "B 作用域账面 = 新门依赖"
-    assert [h for h, _sp in mod._chain_gate_deps(job1)] == [], "A 门户内零依赖: 本组成员豁免(R7), HZ 停 B 侧不在 A 作用域"
+    assert [h for h, _sp in mod._chain_gate_deps(job1)] == [], "A 门户内零依赖: 锚窄化(HB 账面在 src 不在 A 作用域), 成员到位由核验步把关"
     assert "HZ" not in [h for h, _sp in mod._chain_gate_deps(job1)], "B 根账面不漏进旧门(双门独立)"
     # 旧门先删不扰新门: 成员重启加载到 C(账面全到 C) -> J1 核验过 + 根 A 依赖清零 -> done 删 A 侧;
     # HZ 账面仍在 B -> J2 删链门依赖未清, 别名维持(删旧门不扰新门)

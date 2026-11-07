@@ -457,7 +457,7 @@ class GroupFacts:
     # 全成员声明源(0546 机制③「全成员覆盖」; 空 = 回落 mover 的 save_path, 兼容既有构造)。
     # 计划 26-11-07-1300 R1-R5 起嵌套闸门不再消费本字段(锚点全部取 mover 内容根派生物,
     # 声明源 ≠ 别名真实落点是误拦根因)—— 字段与构建面(relocate_plan._group_facts)留存,
-    # 仅供回执/排查, 不参与判定。
+    # 仅供排查, 不参与判定。
     member_save_paths: Tuple[str, ...] = ()
     # 源侧三态检查(0808 S1 继承 0546 机制①, 逐声明文件、深层天然覆盖): 只收「缺失」与
     # 「不可判定」两态; .!qB 孪生态并入 qb_temp_entries(复用既有 GATE_QB_TEMP, 不另造闸)
@@ -519,11 +519,11 @@ def nested_target_on(
         for job in jobs or ():
             if job.is_terminal:
                 continue
-            if _within(job.scope, target):
+            scope_eff = job.scope or job.src  # 旧账 scope 缺失回落声明源(与 R7 删链门回落同口径)
+            if _within(scope_eff, target):
                 blocked = (
-                    f"目标位于在途迁移 job {job.job_id} 的别名作用域之下({target} ⊆ {job.scope}): 该作用域是"
-                    "旧迁移的别名落点/搬移树, 落进去的写入会被重定向进旧 job 的目标 —— 请等旧迁移收尾或换目标"
-                    "(计划 26-11-07-1300 R2)"
+                    f"目标位于在途迁移 job {job.job_id} 的别名作用域/搬移树之下({target} ⊆ {scope_eff}): "
+                    "数据混入会干扰旧迁移的收尾与删链门 —— 请等旧迁移收尾或换目标(计划 26-11-07-1300 R2)"
                 )
                 break
             if _norm(target) != _norm(job.dst) and _within(job.dst, target):
@@ -1234,19 +1234,25 @@ def alias_roots_of(jobs: Iterable[RelocateJob]) -> tuple:
     return tuple(out)
 
 
-def chain_gate_hits(save_paths: Iterable[str], root: str) -> tuple:
-    """删链门依赖扫描(纯函数): 作用域根上/内的 save_path 集合(N5 双判据, 判据单点 under_alias_root)
+def chain_gate_hits(save_paths: Iterable[str], root: str, equal_root: str = "") -> tuple:
+    """删链门依赖扫描(纯函数): 作用域根上/内的 save_path 集合 + 恰等旧根的并列等值面
+    (N5 双判据, 判据单点 under_alias_root)
 
     save_paths = qB 全量种子的 save_path(不限于本组 —— 门外共享者/落进作用域的组外种子
     都算依赖, §07 风险表「pending 期组外种子落旧根」行); root = 别名作用域(job.scope,
     计划 26-11-07-1300 R7 重锚: 旧锚 job.src 会把停进旧根兄弟目录的组外种子与嵌套放行形态
     下成员搬后的 save_path=dst 全数顶进依赖集 —— 收尾自锁/假依赖, T1a/E2+E7 实测)。
-    本组成员的豁免在调用侧按 hash 过滤(relocate_exec._chain_gate_deps)—— 豁免是成员身份
-    语义不是路径语义, 路径层排除会误伤恰同路径的组外种子。
+    equal_root = 旧声明根(job.src)的**仅等值**并列面(R7 评审修复): dir_alias 收尾窗内经
+    别名落进作用域的组外种子, 账面 save_path 恰等 job.src(内容根=scope, evaluate_add D16
+    分支同款建模并承诺其为删链门永久依赖)—— 只按 scope 前缀判会漏计, 别名被误删后该种子
+    断粮且失去 D16 保护。仅并等值不并前缀: job.src 的前缀面正是 R2/E7 要摘掉的假依赖
+    (旧根兄弟目录)。本组成员的豁免在调用侧按 hash 过滤(relocate_exec._chain_gate_deps)
+    —— 豁免是成员身份语义不是路径语义, 路径层排除会误伤恰同路径的组外种子。
     返回命中的 save_path 原值元组(保持输入侧大小写/斜杠原样, 供文案展示)。
     """
     out = []
+    eq = _norm(equal_root)
     for sp in save_paths or ():
-        if sp and under_alias_root(sp, (root, )) is not None:
+        if sp and (under_alias_root(sp, (root, )) is not None or (eq and _norm(sp) == eq)):
             out.append(sp)
     return tuple(out)

@@ -1002,6 +1002,7 @@ def test_relocate_confirm_loop_wired_in_move_dialog():
     # 只扩 value 不改名, 不新增行, 触发条件在 _relocateConfirmGate(不在本行表)
     assert "member_count" in rows and "(整组 ${members} 个成员)" in rows, \
         "确认框来源行缺整组成员数披露(R6b)"
+    assert "members > 1" in rows, "披露阈值 >1 必须钉死(单成员/缺字段不得披露)"
     assert 'label: p + "来源"' in rows, "来源行标签不得改名(R6b 只扩 value)"
     gate = _drawer_body(drawer, "async _relocateConfirmGate(r) {", "/* 成功 toast")
     assert "this._openModal({" in gate and "verdict:" in gate and "确认迁移" in gate
