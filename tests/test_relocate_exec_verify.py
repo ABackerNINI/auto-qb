@@ -259,6 +259,9 @@ def test_chain_gate_deps_scope_anchor_and_member_exempt(tmp_path):
         "组外种子在作用域等值/之下仍算依赖(N5 双判据保留)"
     # 成员与组外同处 scope 内: 只有组外计入(豁免按 hash 身份, 不误伤同路径组外种子语义)
     assert _deps(job2, [("HA", "R:/src/Show/inner"), ("HZ", "R:/src/Show")]) == ["HZ"], "成员豁免不误伤组外计数"
+    # 旧根仅等值并列面(equal_root, R7 评审修复): dir_alias 收尾窗内经别名落进作用域的组外
+    # 种子账面 save_path 恰等 job.src —— ⊄ scope, 只按 scope 判会漏计(D16 契约对齐)
+    assert _deps(job2, [("HZ", "R:/src")]) == ["HZ"], "组外 save_path 恰等旧根仍算依赖(equal_root 等值面)"
     # 旧账 scope 缺失: 回落 job.src(保守)
     legacy = _job("j3", src="R:/src", dst="R:/dst", scope="", hashes=("HA", ))
     assert _deps(legacy, [("HZ", "R:/src/停车")]) == ["HZ"], "scope 缺失回落 src(旧账兼容)"

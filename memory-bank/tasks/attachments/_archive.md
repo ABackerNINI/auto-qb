@@ -4,9 +4,8 @@
 > 主索引的已完结区按 8,000 字符预算裁剪(上限 `CLOSED_KEEP` 条), **本文件是全量**(只列 slug 与标题; 摘要全文在档案里)。
 > 每条链接指回 `tasks/` 下的档案原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## In Progress (32)
+## In Progress (31)
 
-- [26-11-07-backend-relocate-nested-gate-fix](../26-11-07-backend-relocate-nested-gate-fix.md) relocate 嵌套闸门误拦修正实施
 - [26-11-07-memory-bank-issue-fusion](../26-11-07-memory-bank-issue-fusion.md) create-issue 融合 memory-bank(代码融合+双 SKILL)与 issue 工位机械化
 - [26-11-07-memory-bank-nav-relation-graph](../26-11-07-memory-bank-nav-relation-graph.md) kb.nav 关联文档交互: 抽屉内关系图 (局部环 / 关联泳道 / 全库) + 认领链五态解析
 - [26-09-22-deps-version-management](../26-09-22-deps-version-management.md) 软件版本管理方案（版本号 / Tag / CHANGELOG / 发版流程）
@@ -44,8 +43,9 @@
 - [26-10-14-webui-qb-traffic-agg-live-tail](../26-10-14-webui-qb-traffic-agg-live-tail.md) qB 流量图 agg 段活尾合流(S7): 3d+ 视图图尾真空修复
 - [26-10-09-backend-transport-encryption](../26-10-09-backend-transport-encryption.md) 本地通道传输安全调研(WebUI + HR 取数通道)
 
-## Done (305)
+## Done (306)
 
+- [26-11-07-backend-relocate-nested-gate-fix](../26-11-07-backend-relocate-nested-gate-fix.md) relocate 嵌套闸门误拦修正实施
 - [26-11-08-webui-legacy-review4-webui-py-fix](../26-11-08-webui-legacy-review4-webui-py-fix.md) 存量评审 R4 webui-py 主题修复批: 25 条批A-批L 委派实施与收编
 - [26-11-05-backend-relocate-fastresume-finalize](../26-11-05-backend-relocate-fastresume-finalize.md) relocate 收尾重构: fastresume 改写收尾 + 未收尾再迁移(S1-S6 全程)
 - [26-11-07-memory-bank-legacy-code-review-4](../26-11-07-memory-bank-legacy-code-review-4.md) 存量代码全库评审 R4: 五路线并行体系化

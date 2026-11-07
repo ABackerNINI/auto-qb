@@ -7,9 +7,9 @@
 <title>relocate 嵌套目标闸门误拦修正: 锚点换内容根 + 形态感知 + UI 整组语义披露</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="relocate-nested-gate-fix">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-11-07-1300">
-<meta name="doc-updated" content="26-11-07-2339">
+<meta name="doc-updated" content="26-11-08-0310">
 <meta name="doc-refs" content="">
 <style>
   :root {
@@ -111,12 +111,12 @@
 <table>
   <tr><th>#</th><th>级别</th><th>条件</th><th>说明与落点</th><th>拍板</th></tr>
   <tr><td>R1</td><td class="bad">blocked</td><td>DIR_ALIAS 且 <code>_within(src_cr, dst_cr) || _within(dst_cr, src_cr)</code>(成分级; 严格嵌套, 相等不算 —— 相等=幂等, 由 evaluate_group 既有幂等分支先行返回)</td><td>新旧内容根互嵌: 正向(目标 ⊆ 旧内容根, junction 落点被新数据占住 → <code>relocate_exec.py:281</code> 非空 RuntimeError 搬后卡死)与反向(平铺时 junction 指向自身祖先 → 递归列举成环)。锚点: src_cr = <code>facts.content_root</code>(<code>relocate_units.py:516-517</code> 既有产物), dst_cr = <code>_join(target, rel)</code>(rel 与 content_root 同源 layout_of)</td><td>D1/D6</td></tr>
-  <tr><td>R2</td><td class="bad">blocked</td><td>任意形态, <code>_within(job.scope, target)</code>(含等于, 保守)</td><td>在途 job src 分支锚点从 job.src 收窄到 job.scope(别名落点/搬移树 = <code>relocate_exec.py:1102</code> 既有产物); 兄弟落点不再误拦</td><td>D2</td></tr>
+  <tr><td>R2</td><td class="bad">blocked</td><td>任意形态, <code>_within(job.scope or job.src, target)</code>(含等于, 保守; 旧账 scope 缺失回落声明源, 与 R7 同口径)</td><td>在途 job src 分支锚点从 job.src 收窄到 job.scope(别名落点/搬移树 = <code>relocate_exec.py:1102</code> 既有产物); 兄弟落点不再误拦</td><td>D2</td></tr>
   <tr><td>R3</td><td>维持现状</td><td><code>_within(job.dst, target)</code> 且 target ≠ job.dst</td><td>落定数据树语义, 本轮不动; dst 锚点过宽记 known-limitation</td><td>D2</td></tr>
   <tr><td>R4</td><td class="wr">confirm</td><td>任意形态, target 严格 ⊆ mover 声明源(facts.save_path)且未被 R1/R2/R3 拦</td><td>「新家嵌在旧声明源树下: 旧根将来整组迁移时这片数据会被覆盖扫描连带走(D19)」—— 出现在既有确认框, 零额外点击</td><td>D3</td></tr>
   <tr><td>R5</td><td>note</td><td>FILE_LINKS 且 target 严格 ⊆ src_cr</td><td>「别名存续期该种子带文件删除被 D16 拦(收尾后消失); 旧内容根内链接叶与新数据混居」</td><td>D4</td></tr>
   <tr><td>R6</td><td>UI</td><td>(a) submitMoveDialog 常驻提示「整组迁移已启用: 移动将以内容组为单位, 同组其它成员一并迁移」(relocate.enabled 时显示, 经既有 gate-flag 通路暴露新 flag); (b) 确认框「来源」行扩为「来源(整组 N 个成员)」—— item 增 <code>member_count = len(facts.hashes)</code></td><td>不强制 confirm(全 ok 迁移不新增点击)</td><td>D5/D8</td></tr>
-  <tr><td>R7</td><td class="bad">blocked 侧修正</td><td>删链门依赖扫描(<code>relocate_exec.py:746</code> _chain_gate_deps / <code>ru.chain_gate_hits</code>): 锚 job.src → <b>job.scope</b>(别名真实落点/搬移树), 扫描结果<b>豁免本组成员(job.hashes)</b>; 等值/前缀双判据与 scope 下组外种子保守计数保留; 反馈面文案(_chain_deps_text)同步</td><td>回炉实证(T1a/E2 + T1b/E7): 嵌套放行形态下成员搬后 save_path=dst ⊆ src 恒命中 → 收尾自锁(别名永不删、D16 永久拦, 实测 240s 无收敛); 组外停车进旧根同样触发。不修则 R4/R5 放行 = 永久别名, 比现状更糟。E2/E3 删链断言移 P4 修后必验</td><td>D9</td></tr>
+  <tr><td>R7</td><td class="bad">blocked 侧修正</td><td>删链门依赖扫描(<code>relocate_exec.py:746</code> _chain_gate_deps / <code>ru.chain_gate_hits</code>): 锚 job.src → <b>job.scope</b>(别名真实落点/搬移树), 扫描结果<b>豁免本组成员(job.hashes)</b>; 等值/前缀双判据与 scope 下组外种子保守计数保留; <b>并列 job.src 仅等值面</b>(equal_root, R2 改版评审修复: dir_alias 收尾窗经别名落进作用域的组外种子账面恰等旧根, 只按 scope 前缀判会漏计); 反馈面文案(_chain_deps_text)同步</td><td>回炉实证(T1a/E2 + T1b/E7): 嵌套放行形态下成员搬后 save_path=dst ⊆ src 恒命中 → 收尾自锁(别名永不删、D16 永久拦, 实测 240s 无收敛); 组外停车进旧根同样触发。不修则 R4/R5 放行 = 永久别名, 比现状更糟。E2/E3 删链断言移 P4 修后必验</td><td>D9</td></tr>
 </table>
 <p><b>纯函数改造</b>: <code>nested_target_on(target, save_paths, jobs) -&gt; str</code> → <code>nested_target_on(target, jobs, *, form, src_cr, dst_cr, mover_save_path) -&gt; (blocked, confirm, note)</code>; 调用点移到 evaluate_group 的 plan() 分流(<code>:675</code>)之后, <code>unit.form == FORM_REJECT</code> 时跳过(已被 GATE_FORM 拦); 执行入口二次拦截(<code>relocate_exec.py:849</code>)同签名同步。组内成员声明源多样性(同物理根不同声明)不新增物理化面 —— 锚点全部取 mover 声明空间派生物, 与组键的 resolve_physical 口径一致。</p>
 <p><b>分期</b>: P1 真机实验先行(E1-E8, 判据回炉条款) → P2 纯函数+单测 → P3 实现+UI → P4 真机全链路验收+基线切片。</p>
@@ -189,6 +189,7 @@
 <ul>
   <li><span class="tag">R0 · 26-11-07-1300</span> 初版: 会话 grilling(Q1-Q6)拍板 + 用户误拦报告; 机制面核实表(§02, 全部行号实测); 判据 R1-R6; 真机实验矩阵 E1-E8 与回炉条款; 分期 P1-P4。实施开工另按会话协议立档。</li>
   <li><span class="tag">R1 · 26-11-07-2339</span> 回炉改版(P1 真机实验 E1-E8 完成): R7 删链门重锚入 §03(T1a 自锁 + T1b/E7 组外停车假依赖, 用户拍板 D9);E6 产品可达坐标修正(平铺+DIR_ALIAS 不可达, T1b 实测);E2/E3 删链断言移 P4;E2c 同盘发现入池 26-11-07-2336(D10);P2/P4 与 §07 同步扩充。</li>
+  <li><span class="tag">R2 · 26-11-08-0310</span> 实现完成收口置 Done: P2 判据+删链门重锚(fd53c8fe)、P3 UI 披露(c7c839da)、P4 真机复验 8/8(删链断言兑现, E2/E3 修后必验过)、全量基线 5651→5652 passed; 评审 5 派(批A 文档/批B 正确性+安全/批C UI/收口终审) 检 10/10, blocker 1 修(R7 并列 job.src 仅等值面 equal_root, 回炉条款外评审发现)、minor/nit 9 条全修、major 1 条(equal_root 回归测试)已补; §03 R7/R2 行随实现同步。遗留移交见任务档案 R6 节(dev.fmt shim/issues 索引预算/死字段/move-note 措辞)。</li>
 </ul>
 
 </div>
