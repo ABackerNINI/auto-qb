@@ -171,11 +171,14 @@ window.AQB_COMMANDS = {
       if (c.settleMs > budget) console.warn(head + ` —— 撤下 >${budget}ms 属异常`);
       else console.log(head);
     },
+    /* !写入前比对 t0 归属(R5#233): t0 是 _newCmdStats 建槽那一刻的返回值 —— 槽被下一次
+     *   点击整体重写后 slot.t0 已换人, 上一条命令迟到入账的 patch/post 两段若照旧写入,
+     *   会把旧命令的耗时挂进新命令的 stats([perf] 数字错挂)。 */
     _markCmdPatch(t0) {
-      if (this.cmdStats && t0) this.cmdStats.patchMs = Math.round(performance.now() - t0);
+      if (this.cmdStats && this.cmdStats.t0 === t0) this.cmdStats.patchMs = Math.round(performance.now() - t0);
     },
     _markCmdPost(t0) {
-      if (this.cmdStats && t0) this.cmdStats.postMs = Math.round(performance.now() - t0);
+      if (this.cmdStats && this.cmdStats.t0 === t0) this.cmdStats.postMs = Math.round(performance.now() - t0);
     },
     /* ---------------- 命令回执(轮询 /api/cmd/{id}): 主循环执行完/确认完才出结果 ----------------
      * pause/resume 等命令几乎即时; reannounce 的回执由后端 tracker 确认跟踪器在
@@ -191,6 +194,11 @@ window.AQB_COMMANDS = {
        * P0-0 埋点: 后端回执带 wait_ms/exec_ms 时记入 this.cmdStats, 并在超阈值时打一条
        * [perf](见下方 —— 埋点没有消费者就是死字段)。 */
       const start = Date.now();
+      /* 归属补记(R5#233): cmdStats 单槽在点击侧建槽时还不知道 cmdId(POST 未回), 等回执的
+       * 漏斗在这里补记 —— _cmdRecToResult / onCmdEvent 写入前比对它, 不归属的回执只丢埋点
+       * 不合并(上一条命令在途时再次点击, cmdStats 已被 _newCmdStats 整体重写, 旧命令的
+       * 回执若照旧合并, totalMs/waitMs/execMs 就错挂进新命令的 stats)。 */
+      if (this.cmdStats && this.cmdStats.cmdId == null) this.cmdStats.cmdId = cmdId;
       const firstMs = opts.firstMs || 0;
       const capMs = opts.capMs || 500;
       /* P2 事件驱动: SSE 连着时回执由 `cmd` 事件**推**过来, 不必等轮询退避的粒度
@@ -233,9 +241,12 @@ window.AQB_COMMANDS = {
         until: (r) => !!r,
       });
     },
-    /* 回执 -> {ok, truth|error}, 并落埋点/[perf](事件路径与轮询路径共用, 保证两边观感一致) */
+    /* 回执 -> {ok, truth|error}, 并落埋点/[perf](事件路径与轮询路径共用, 保证两边观感一致)
+     * !归属校验(R5#233): 埋点合并只认「等的就是这条命令」—— cmdId 由 waitCmd 补记(见上),
+     *   旧命令在途时再次点击, cmdStats 已整体重写且归属换了人, 旧回执到达这里整块跳过
+     *   (只丢埋点, 结果转换不受影响)。 */
     _cmdRecToResult(r, start, cmdId) {
-      if (typeof r.wait_ms === "number") {
+      if (typeof r.wait_ms === "number" && this.cmdStats && this.cmdStats.cmdId === cmdId) {
         // 合并而非替换: 点击侧的两段(_newCmdStats 写入)不能在这里被冲掉
         this.cmdStats = {
           ...(this.cmdStats || {}),
@@ -302,7 +313,8 @@ window.AQB_COMMANDS = {
        * 到底是"服务端推得慢"还是"浏览器主线程忙、回调排队", 只看 totalMs 分不出来:
        *   事件 ≈ 25ms 而回执 68ms  => 事件早就到了, 是前端主线程被占(大库渲染/JSON 解析)
        *   事件 ≈ 65ms 而回执 68ms  => 是服务端推送链路慢(生成器唤醒 / uvicorn 写 socket) */
-      if (this.cmdStats && this.cmdStats.t0 && this.cmdStats.eventMs == null) {
+      if (this.cmdStats && this.cmdStats.t0 && this.cmdStats.eventMs == null
+          && rec && rec.cmd_id === this.cmdStats.cmdId) {
         this.cmdStats.eventMs = Math.round(performance.now() - this.cmdStats.t0);
       }
       const w = this._cmdWaiters && this._cmdWaiters.get(rec && rec.cmd_id);

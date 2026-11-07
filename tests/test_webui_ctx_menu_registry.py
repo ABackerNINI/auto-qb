@@ -25,9 +25,11 @@ v-for 消费 ctxItems/ctxSubItems, 判据链与子面板交互原样); ③接线
   hubRestore 认它 + 模板 v-else-if 分支内四支 tab 与两个固定区(D17)+ 跳检开关绑 cmSkipCheck(D6)
   + app.js mixin + 三 manifest 装载序(ctx_menu.js < ctx_menu_custom.js < app.js)+ .ctx-custom-* 样式在
 - test_ctx_custom_write_shape_passes_config_contract: 契约闭环守阵(W5) —— node 真跑定制面板的
-  **写路径**(真 vm 桩上调 cmToggleHidden/cmMoveLevel/cmAddSep/cmMoveStep), 产出的布局必须
+  **写路径**(真 vm 桩上调 cmToggleHidden/cmMoveLevel/cmAddSep/cmMoveStep; R5#28 起加跑拖拽
+  cmDropAt/cmDropTail 与 cmDelSep/cmResetBranch), 产出的布局必须
   ①只写动过的那一支 ②支级/次级键集合 == 后端 _CTX_BRANCH_KEYS/_CTX_LAYER_KEYS ③过
   validate_config 零错误 ④隐藏留槽位 / 跨层双向 / 用户线 sep:uN / 同层换位生效
+  ⑤拖拽落点三形态(同层向后回退一格/同层向前原位/跨层按目标 idx 插入)+ 表尾追加 + 删线无残迹 + 恢复默认两层同回
 - test_ctx_menu_wiring: 接线守阵 —— 三份 manifest 成对登记 ctx_menu.js 且装载序
   menu.js < ctx_menu.js < app.js; app.js mixin 行在; REG/mixin 双挂载面在文件里
 """
@@ -46,33 +48,105 @@ _CTX_MENUS_TPL = os.path.join(STATIC_ROOT, "shared", "tpl", "ctx-menus.html")
 
 # node 探针: 在真 vm 桩上跑**定制面板的写路径**(ctx_menu_custom.js 的 methods), 输出面板
 # 实际写回的 ctx_menu 形状 —— 交 python 侧过 validate_config(两端对"合法布局"的认定必须一致)
+# R5#28 起加跑第二阶段: 拖拽落点(cmDropAt/cmDropTail)与 cmDelSep/cmResetBranch —— 每场景
+# 一新桩互不串台, 输出 drops 交 python 侧断言写回 order 语义与 _CTX_LAYER_KEYS 契约。
 _NODE_CTX_WRITE_PROBE = r"""
 const fs = require("fs");
 global.window = {};
 eval(fs.readFileSync(process.argv[1], "utf8"));   // ctx_menu.js: 注册表 + 合并语义
 eval(fs.readFileSync(process.argv[2], "utf8"));   // ctx_menu_custom.js: 面板编辑面
 const R = window.AQB_CTX_MENU_REG, C = window.AQB_CTX_CUSTOM;
-const vm = {
-  cfg: { tree: { config: {} } },
-  ctxCust: { branch: "member", drag: null, over: null },
-  cfgConfig() { return this.cfg.tree.config; },
-  toast() {},
+const mkVm = () => {
+  const vm = {
+    cfg: { tree: { config: {} } },
+    ctxCust: { branch: "member", drag: null, over: null },
+    cfgConfig() { return this.cfg.tree.config; },
+    toast() {},
+  };
+  /* 面板方法之间走 this.xxx 互调(cmToggleHidden -> cmDraft -> cmLayout ...), 得把整面方法
+   * 挂到桩上 —— 只挂被测的那一个会立刻 "this.cmDraft is not a function" */
+  for (const k of Object.keys(C.methods)) vm[k] = (...a) => C.methods[k].apply(vm, a);
+  /* 拖拽写路径(cmDropAt/cmDropTail)经 computed cmBranch() 认支 —— 同 Vue 实例把 computed 一并求值挂上 */
+  for (const k of Object.keys(C.computed)) vm[k] = C.computed[k].call(vm);
+  return vm;
 };
-const call = (name, ...args) => C.methods[name].call(vm, ...args);
-/* 面板方法之间走 this.xxx 互调(cmToggleHidden -> cmDraft -> cmLayout ...), 得把整面方法
- * 挂到桩上 —— 只挂被测的那一个会立刻 "this.cmDraft is not a function" */
-for (const k of Object.keys(C.methods)) vm[k] = (...a) => C.methods[k].apply(vm, a);
-call("cmToggleHidden", "member", 0, "info");      // 隐藏一项
-call("cmToggleHidden", "member", 0, "sep:d2");    // 隐藏一条默认线
-call("cmMoveLevel", "member", 0, "rename");       // 一级 -> 「更多操作」
-call("cmAddSep", "member", 1);                    // 次级加一条用户线
-call("cmMoveStep", "member", 0, "resume", 1);     // ↑↓ 换位
+const call = (vm, name, ...args) => C.methods[name].call(vm, ...args);
+
+// ---- 阶段一(原五写路径, 输出契约不变): 隐藏/跨层/加线/换位 ----
+const vm = mkVm();
+call(vm, "cmToggleHidden", "member", 0, "info");      // 隐藏一项
+call(vm, "cmToggleHidden", "member", 0, "sep:d2");    // 隐藏一条默认线
+call(vm, "cmMoveLevel", "member", 0, "rename");       // 一级 -> 「更多操作」
+call(vm, "cmAddSep", "member", 1);                    // 次级加一条用户线
+call(vm, "cmMoveStep", "member", 0, "resume", 1);     // ↑↓ 换位
 const lay = vm.cfg.tree.config.web.ctx_menu;
+
+// ---- 阶段二(R5#28): 拖拽落点/删线/恢复默认 —— member 默认序里 rename idx=8 / info idx=4 ----
+const row = (id, level, idx) => ({ id, level, idx, movable: true });
+const memberOf = (v) => v.cfg.tree.config.web.ctx_menu.member;
+const drops = {};
+// 同层向后: resume(idx0) 拖到 info(idx4) —— 摘除后 from<row.idx 回退一格, 插在 sep:d1 与 info 之间
+{
+  const v = mkVm();
+  call(v, "cmDragStart", row("resume", 0, 0), null);
+  call(v, "cmDropAt", row("info", 0, 4));
+  drops.sameLater = memberOf(v);
+  drops.sameLaterDragCleared = v.ctxCust.drag === null && v.ctxCust.over === null;
+}
+// 同层向前: info(idx4) 拖到 resume(idx0) —— from>row.idx 原位插入表头
+{
+  const v = mkVm();
+  call(v, "cmDragStart", row("info", 0, 4), null);
+  call(v, "cmDropAt", row("resume", 0, 0));
+  drops.sameEarlier = memberOf(v);
+}
+// 跨层插入: 次级 queue-top(idx0) 拖到一级 info(idx4) —— 跨层不回退, 按目标行 idx 插入
+{
+  const v = mkVm();
+  call(v, "cmDragStart", row("queue-top", 1, 0), null);
+  call(v, "cmDropAt", row("info", 0, 4));
+  drops.crossInsert = memberOf(v);
+}
+// cmDropTail 跨层追加: 一级 rename 拖到次级表尾空白
+{
+  const v = mkVm();
+  call(v, "cmDragStart", row("rename", 0, 8), null);
+  call(v, "cmDropTail", "member", 1);
+  drops.tailSub = memberOf(v);
+}
+// cmDropTail 同层追加: resume 拖到一级表尾空白
+{
+  const v = mkVm();
+  call(v, "cmDragStart", row("resume", 0, 0), null);
+  call(v, "cmDropTail", "member", 0);
+  drops.tailTop = memberOf(v);
+}
+// cmDelSep: 加一条用户线再删掉(order/hidden 两处都不留残迹)
+{
+  const v = mkVm();
+  call(v, "cmAddSep", "member", 0);
+  drops.delSepAdded = memberOf(v).order.slice();
+  call(v, "cmDelSep", "member", 0, "sep:u1");
+  drops.delSep = memberOf(v);
+}
+// cmResetBranch: 定制后一键回默认(整对象替换, 两层同回)
+{
+  const v = mkVm();
+  call(v, "cmToggleHidden", "member", 0, "info");
+  call(v, "cmMoveLevel", "member", 0, "rename");
+  call(v, "cmResetBranch", "member");
+  drops.reset = memberOf(v);
+  drops.resetMatchesDefault = JSON.stringify(drops.reset.order) === JSON.stringify(R.DEFAULT_CTX_LAYOUT.member.order)
+    && JSON.stringify(drops.reset.hidden) === JSON.stringify([])
+    && JSON.stringify(drops.reset.sub.order) === JSON.stringify(R.DEFAULT_CTX_LAYOUT.member.sub.order)
+    && JSON.stringify(drops.reset.sub.hidden) === JSON.stringify([]);
+}
 console.log(JSON.stringify({
   layout: lay,
   topKeys: Object.keys(lay.member).sort(),
   subKeys: Object.keys(lay.member.sub).sort(),
   userSeps: lay.member.sub.order.filter((t) => t.indexOf("sep:u") === 0),
+  drops,
 }));
 """
 
@@ -535,6 +609,42 @@ def test_ctx_custom_write_shape_passes_config_contract():
     assert "rename" not in member["order"] and "rename" in member["sub"]["order"], "跨层移动没有双向生效(一级 -> 次级)"
     assert rep["userSeps"] == ["sep:u1"], f"用户线 token 不合 sep:uN 口径: {rep['userSeps']}"
     assert member["order"][0] == "pause", f"同层 ↑↓ 换位没生效: {member['order'][:3]}"
+
+    # ---- R5#28: 拖拽落点/删线/恢复默认 —— 写回 order 语义与后端 _CTX_LAYER_KEYS 契约 ----
+    drops = rep["drops"]
+    d_same_later = drops["sameLater"]
+    assert set(d_same_later) == _CTX_BRANCH_KEYS and set(
+        d_same_later["sub"]
+    ) == _CTX_LAYER_KEYS, ("拖拽写回的支级/次级键集合与后端 _CTX_BRANCH_KEYS/_CTX_LAYER_KEYS 不一致 —— 面板点得动、保存被拒")
+    assert d_same_later["order"][:5] == ["pause", "reannounce", "sep:d1", "resume",
+                                         "info"], (f"同层向后落点没回退一格: {d_same_later['order'][:5]}(from<row.idx 应插到目标行前一格)")
+    assert drops["sameLaterDragCleared"] is True, "落完拖拽态没清(ctxCust.drag/over 残留会让下一次落点误判)"
+    assert drops["sameEarlier"]["order"][:2] == ["info",
+                                                 "resume"], (f"同层向前落点没原位插入表头: {drops['sameEarlier']['order'][:2]}")
+    cross = drops["crossInsert"]
+    assert cross["order"][:5] == ["resume", "pause", "reannounce", "sep:d1",
+                                  "queue-top"], (f"跨层插入没按目标行 idx 落位: {cross['order'][:5]}(跨层不回退)")
+    assert "queue-top" not in cross["sub"]["order"] and cross["sub"]["order"][0] == "queue-up", (
+        "跨层插入没把 queue-top 从次级摘除(同一目标两层并存 = 重复渲染)"
+    )
+    assert drops["tailSub"]["sub"]["order"][-1] == "rename" and "rename" not in drops["tailSub"]["order"], (
+        "cmDropTail 跨层追加没把 rename 追到次级表尾"
+    )
+    assert drops["tailTop"]["order"][-1] == "resume" and drops["tailTop"]["order"][0] == "pause", (
+        "cmDropTail 同层追加没把 resume 追到一级表尾"
+    )
+    assert "sep:u1" in drops["delSepAdded"], "cmAddSep 没产出 sep:u1(删线用例的输入不成立)"
+    assert "sep:u1" not in drops["delSep"]["order"] and "sep:u1" not in drops["delSep"]["hidden"], (
+        "cmDelSep 删线后 order/hidden 两处都该无残迹"
+    )
+    assert drops["resetMatchesDefault"] is True, "cmResetBranch 没把两层布局回写为默认(定制残留会赖在配置里)"
+    assert validate_config({"config": {
+        "web": {
+            "ctx_menu": {
+                "member": drops["crossInsert"]
+            }
+        }
+    }}) == [], ("拖拽写回的布局过不了后端校验 —— 用户拖得动、保存被拒")
 
 
 def test_ctx_menu_wiring():
