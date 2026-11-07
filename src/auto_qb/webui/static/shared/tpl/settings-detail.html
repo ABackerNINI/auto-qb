@@ -154,8 +154,7 @@
                   </div>
                   <div class="hr-full-modal-bd">
                     <div style="padding:12px 14px">
-                      <p v-if="kbKeysLoading" class="hb-hp">正在读取服务端键位…</p>
-                      <p v-else-if="kbKeysLoadFailed" class="hb-hp">服务端键位加载失败, 当前显示默认键位; 保存已禁用(避免用默认键位覆盖服务端数据), 点「重新加载」重试成功后恢复。</p>
+                      <p v-if="kbKeysLoading" class="hb-hp">正在读取服务端键位…</p><p v-else-if="kbKeysLoadFailed" class="hb-hp">服务端键位加载失败, 当前显示默认键位; 保存已禁用(避免用默认键位覆盖服务端数据), 点「重新加载」重试成功后恢复。</p>
                       <p class="kb-note">
                         键位存于服务端 webui-keys.json, 所有浏览器共享; 保存后其它标签/浏览器刷新后生效。
                         浏览器保留键(Ctrl+W/T/N/Q 等)不可绑定; 标 ⚠ 的危险操作触发时有确认框兜底。

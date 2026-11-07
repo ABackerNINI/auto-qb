@@ -11,12 +11,27 @@
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 - [chore] [版本号双源矛盾: __init__.__version__ 0.2.0 vs pyproject 0.1.0](../26-09-21-1408-chore-version-dual-source.html) — WebUI 顶栏透出与打包元数据已差一个 minor; 建议 pyproject 单源 + 动态读取
 
-## Open (51)
+## Open (66)
 
 - [bug] [R4-static 清池清单外发现汇总(13 子项, 修复批记录未修)](../26-11-08-0229-bug-r4-static-cleanup-extras.html) — R4 static 主题清池(P01-P16)各批记录的清单外发现 13 子项聚合入池: dialogs 注释失实族/契约层 -1 裸拼/aria-expanded 陈旧/非ASCII注释存量等, 全部未动待认领
 - [bug] [dt_table.js 整模块生产路径零调用: 自称几何单一出口未接线, 实际几何由 columns_grid 平行计算](../26-11-08-0147-bug-dt-table-geometry-unwired.html) — dt_table.js 四皮肤均加载但 DT_TABLE 六口子生产路径零调用, 自称几何单一出口未接线, 实际几何由 columns_grid 平行计算; R4-static 清池拍板暂缓挂账待决(整体退役 vs 真接线)
-- [bug] [存量评审 R4·scripts 汇总(major 1/minor 23)](../26-11-07-0536-bug-legacy-review4-scripts.html) — scripts 主题 major 1+minor 23 共 24 条聚合入池,来源存量评审 R4(计划 26-11-05-2335)
-- [bug] [存量评审 R4·webui-py 汇总(major 2/minor 23)](../26-11-07-0536-bug-legacy-review4-webui-py.html) — webui-py 主题 major 2+minor 23 共 25 条聚合入池,来源存量评审 R4(计划 26-11-05-2335)
+- [refactor] [mypy 后端既有类型债: dev.typecheck 8 errors](../26-11-08-0118-refactor-mypy-backend-typecheck-debt.html) — dev.typecheck 全库 8 errors(relocate_journal.py / alias_fs.py / recycle_daemon.py / webui/relocate_chain.py 四文件), 均为后端既有债, mypy allowlist 守阵在 test.quick 中仍绿(允许清单机制外的新增暴露); 不在 26-11-07-2344 改动面, 2026-11-08 S5 收口排查时发现, 用户拍板入池
+- [bug] [traffic_store_common._INFOHASH_RE 配 re.match, $ 允许串尾恰一个换行(与 R4#34 同族)](../26-11-08-0045-bug-traffic-store-infohash-re-tail-newline.html) — traffic_store_common.py:32 _INFOHASH_RE 配 re.match, 实测串尾恰一个换行放行; 与 R4#34(表行14 已修 keys.py fullmatch)同族; HTTP 层可达性待查, 建议同款 re.fullmatch
+- [bug] [/api/speed/override 与 /api/speed/alt 的 upload_kib/download_kib 不拦负数](../26-11-08-0044-bug-webui-speed-kib-negative-unchecked.html) — 只过 int_param 不拦负数(torrent_detail.py:124-132 一带; server/common.py:113 int_param 只拦畸形), 负数直达命令层与 qbapi; qbapi set_alt_speed_limits 修好后(批L)负数从静默 no-op 变真下发——与 R4#3/表行4 同族
+- [question] [非 ASCII 符号面宽于 code-style.md 禁用示例: §/→/⇒/≠ 在 src/ 泛在, 口径待拍板](../26-11-08-0044-question-non-ascii-symbol-policy-src.html) — §(131文件)/→(70)/⇒(57)/≠ 在 src/ 泛在, code-style.md 禁令只点名带圈数字等; 需项目拍板口径(全清/豁免清单), 不建议机械全清
+- [test] [tests/clock.py wait_until 的 desc 调用期求值, f-string 拼最后观测值显示旧值](../26-11-08-0044-test-tests-clock-wait-until-desc-eager.html) — wait_until desc 是调用期求值, 调用点拼 f-string 带「最后观测值」显示调用前旧值(RM07-11 首版踩过); 建议基座加惰性 desc(callable 支持)
+- [test] [tests-real RM08 基座写 schema_version: 5 已过期——产品迁移 v5→v6 并改写落盘](../26-11-08-0044-test-tests-real-rm08-schema-version-stale.html) — RM08 基座 CONFIG_TEMPLATE/write_cfg 写 schema_version: 5, 产品现在迁移 v5→v6 并改写落盘(每用例实例留 config.yml.v5.bak); 「必写 5 避免迁移改写」口径已过期; 现有断言只查写入前文本所以不红
+- [bug] [tool_client.stop() 与 _ensure_lock 不同步, 两条竞争路径可致孤儿双订阅](../26-11-08-0043-bug-webui-tool-client-stop-race.html) — stop() 全程在锁外(:195-204): join 期间 _ensure_thread 可起替换线程, stop 随后置 None 丢引用成孤儿双订阅; _stop.set() 落在锁内 clear() 之前则新线程看不到停位
+- [bug] [/api/torrents/add 的 tags/urls/files_b64 与 file-priority indices 无 isinstance(list)](../26-11-08-0043-bug-webui-torrent-add-list-type-guards.html) — torrent_cmds.py add 面 tags(:396)/urls(:387)/files_b64(:380) 与 file-priority indices 无 isinstance(list), 字符串逐字符拆; tags 单字符伪标签在 qB 真实建出(表行16 同族)
+- [bug] [响应体泄敏同族: 详情 rec.to_dict() 透传 magnet_uri, 表达式面 tor.magnet_uri 同](../26-11-08-0043-bug-webui-torrent-detail-magnet-leak.html) — /api/torrents/{hash} 详情 rec.to_dict() 全字段透传含 magnet_uri(私站 tr= announce 凭据), 表达式面 tor.magnet_uri 同——与已修 tracker 泄漏(26-11-07-0536 表行2)同性质
+- [docs] [effect-confirmation.md 两处陈旧指针(_verdict_reannounce 链接与真值直查红线指向)](../26-11-08-0043-docs-effect-confirmation-stale-pointers.html) — _verdict_reannounce 链接指 commands.py 实际在 commands_torrents.py(:30); :44「真值直查红线」指 webui/runtime.py 实际已迁 runtime_commands.py:370(move-only 拆分后)
+- [refactor] [带圈数字存量第二片: extension_proxy 两文件与三测试文件(约15处含断言字符串)](../26-11-08-0043-refactor-ascii-circled-number-second-batch.html) — extension_proxy_support.py/extension_proxy_page_fetch.py 及 test_web_commands_reannounce.py(约15处含断言消息字符串)/test_web_longtail_runtime.py/test_extension_proxy_options.py 等; 另 26-11-07-0536 修复批新增⑥⑦/①②⚠ 为所在文件既有符号延续
+- [refactor] [views.py 另 3 个零使用死导入(Dict/TrackerStatus/VIRTUAL_TRACKER_PREFIXES)](../26-11-08-0043-refactor-webui-views-dead-imports-residue.html) — 批H 清 7 个死导入后仍余 3 个零使用: Dict(:15)/TrackerStatus(:17)/VIRTUAL_TRACKER_PREFIXES(:20, 体内只用 _VIRTUAL_TRACKER_PREFIXES); 已核实无经 views 模块的消费者
+- [feat] [主循环链登记簿: 行级路径链数据面(外部链接 A->B 展示的前置基建)](../26-11-07-1322-feat-relocate-chain-registry.html) — 主循环分片扫描种子路径链(junction/symlink 跟随, 含外部建的)+ save_path 事件失效 + 只读快照发布, 为路径列行级 A->B 展示补 auto-qb job 之外的数据面; 外部逐文件硬链接明确不可测
+- [bug] [porcelain_paths 不解 git C 风格引号路径, 非 ASCII rename 静默漏检](../26-11-07-1216-bug-check-context-caps-porcelain-quote.html) — check_context_caps.py porcelain_paths 对 quotePath 转义路径不 unquote, 非 ASCII rename 行「改动命中」判定静默漏检
+- [bug] [check_kb_structure.py 运行时输出含图形符号(违反 code-style 代码禁令)](../26-11-07-1216-bug-check-kb-structure-glyph.html) — skill 侧 check_kb_structure.py 运行时提示行含 ->类符号(trim_hint 返回串/print 列表符), 经提交闸门终端输出
+- [bug] [port_kill.py 存量子进程未钉 encoding(cp1252 同病)](../26-11-07-1216-bug-port-kill-subprocess-encoding.html) — port_kill.py 两处 subprocess.run text=True 缺 encoding/errors, 守卫只扫 tests/ 不含 scripts/, CI 不红但同病
+- [docs] [hr_ext_stub.py 提示文案未提 port_kill 新 --yes 门](../26-11-07-1216-docs-hr-ext-stub-port-kill-yes-doc.html) — hr_ext_stub.py :27/:205 提示仍写旧口径, 非 python 监听者无 --yes 会被拒杀(rc=1), 按旧文案操作碰壁
 - [feat] [回收 daemon 进程名册证为全机口径: 同机多 qB 实例时收尾窗可用性让位 N1(取舍记录+增强方向)](../26-11-07-0528-feat-recycle-daemon-roster-machine-wide.html) — 评审#6 后名册证=全机口径, 同机多 qB 实例(P7 形态)时 daemon 等不到收尾窗直至全部实例退场; 属 N1 零写入铁律优先的显式取舍(已声明, 单实例零影响), 未来兼顾需比映像名更强的实例身份证据
 - [question] [链式再迁移态撤销前任的语义未定稿: supersede 改道后撤销方向三选一待拍板](../26-11-07-0528-question-relocate-supersede-cancel-semantics.html) — supersede 改道态下撤销前任会把共享数据 C→A 搬回而后任仍指向 C(成员断粮); 现仅 cancel_chain 同目标护栏最小面, 前任撤销完整语义(拦/级联/清账出口)待定稿
 - [bug] [存量评审 R4·config-infra 汇总(major 2/minor 34)](../26-11-07-0527-bug-legacy-review4-config-infra.html) — config-infra 主题 major 2+minor 34 共 36 条聚合入池,来源存量评审 R4(计划 26-11-05-2335)
@@ -65,10 +80,12 @@
 - [bug] [设置页警示条是伪警示: 只复述 schema 风险文案, 不反映配置健康; 升级失效键无任何提示](../26-09-22-2002-bug-webui-config-health-warning.html) — 首页警示条由『已配置且 schema 带 risk 文案』驱动, 恒亮、静态、与配置健康无关; 且 load_config 对 schema 外键静默忽略, 版本升级后配置项失效无任何提示
 - [chore] [hatch-pet 调付费 OpenAI 图像 API 且无成本提示](../26-09-20-1427-chore-skill-hatch-pet-api-cost.html) — hatch-pet 生成图会直连 api.openai.com 计费接口, skill 未标注费用风险
 
-## Done (438)
+## Done (440)
 
 - [bug] [重定向链接位被真文件占据时会删掉真文件(真目录有保护, 真文件没有)](../26-11-07-0748-bug-relocate-retarget-real-file-unlink.html) — retarget_alias 只护真目录(非空拒绝/空则 rmdir), 真文件位落到 remove_alias 的 os.unlink —— 静默删除真实数据
+- [bug] [存量评审 R4·scripts 汇总(major 1/minor 23)](../26-11-07-0536-bug-legacy-review4-scripts.html) — scripts 主题 major 1+minor 23 共 24 条聚合入池,来源存量评审 R4(计划 26-11-05-2335)
 - [bug] [存量评审 R4·static 汇总(major 24/minor 111)](../26-11-07-0536-bug-legacy-review4-static.html) — static 主题 major 24+minor 111 共 135 条聚合入池,来源存量评审 R4(计划 26-11-05-2335)
+- [bug] [存量评审 R4·webui-py 汇总(major 2/minor 23)](../26-11-07-0536-bug-legacy-review4-webui-py.html) — webui-py 主题 major 2+minor 23 共 25 条聚合入池,来源存量评审 R4(计划 26-11-05-2335)
 - [docs] [guards.md 未登记 test_mypy_allowlist_guard 守阵](../26-11-06-0744-docs-guards-mypy-allowlist-unregistered.html) — 守阵清单缺一行: tests/test_mypy_allowlist_guard.py 从未登记进 guards.md, 违反该文件新增守阵须登记的口径
 - [bug] [review.check --root 快照目录被 .git 存在性检查误拒](../26-11-06-0711-bug-review-check-snapshot-root.html) — 存量评审 R4 的既定用法 review.check --root <快照目录> 被 _resolve_root 的 .git 检查拒收,与命令自身 help 文档矛盾;_verify 实际与 git 无关
 - [chore] [pyproject.toml 存量带圈数字注释与 code-style 非 ASCII 图形符号禁令冲突](../26-11-06-0624-chore-pyproject-circled-number-comments.html) — 配置注释 22 行含带圈数字编号(1)-(18), 禁令要求代码/配置一律 ASCII; 本轮新增注释已用 ASCII, 存量待清
