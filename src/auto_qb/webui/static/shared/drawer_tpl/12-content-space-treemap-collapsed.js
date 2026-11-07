@@ -14,7 +14,7 @@
  * 随面板拖拽/展开重建图, destroy 摘监听 + disconnect。
  * 行级键盘: 树图块/体积榜行 roving tabindex + 方向键移焦 + Enter/Space 选中(issue
  * 26-10-07-0846; 锚点/记账/回焦/移焦走核心 helpers 单点; 焦点互联复用悬停 onOver/onOut)。
- * 自包含: 删除本文件 + 三份 index.html 各去 1 行 manifest 即整体退役, 其它零接触。
+ * 自包含: 删除本文件 + 四份 index.html 各去 1 行 manifest 即整体退役, 其它零接触。
  */
 (function () {
   "use strict";

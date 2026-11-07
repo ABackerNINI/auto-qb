@@ -61,7 +61,6 @@ window.CONFIG_EDITOR = {
         trackerKey: null,  // 站点编辑器当前选中站点
         trackerQuery: "",  // 站点二级页搜索框(不持久化, 与首页 hub.query 互不影响; 逻辑在 config_hub.js)
         ruleGroupKey: null,  // 规则集编辑器当前选中规则集
-        collapsedRules: {},  // 规则卡折叠态 { "<规则集>::<规则名>": true }
         openRuleMeta: {},  // 规则卡「触发与节奏」段展开态 { "<规则集>.<规则名>": true }; 缺省 = 折叠
         openSections: {},  // 可选段展开态 { "<路径>": true }; **缺省 = 折叠**(设置页字段多, 展开应是主动选择)
         openGroups: {},  // 普通 object 段(group)展开态 { "<路径 join>": true }; 缺省 = 折叠(同 section)
@@ -719,7 +718,7 @@ window.CE_FIELD_BASE = {
      * WARN: `unitParts` 是 **computed**(无参 getter), 只能 `this.unitParts.unit` 取属性;
      *    写成 `this.unitParts()` 是把 getter 的**返回值**({num, unit} 对象)当函数调用
      *    ⇒ TypeError ⇒ 经典设置页一改"数值 + 单位"字段的数字就整页白屏
-     *    (2026-09-21 实测修复; 静态守阵见 tests/test_webui_static_dom_page.py
+     *    (2026-09-21 实测修复; 静态守阵见 tests/test_webui_static_dom_page_layout.py
      *     `test_frontend_computed_not_invoked_as_function`)。 */
     setUnitNum(value) {
       this.ce.cfgSetUnit(this.path, value, this.unitParts.unit);

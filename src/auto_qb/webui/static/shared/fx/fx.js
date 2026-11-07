@@ -25,11 +25,13 @@
  *   data-fx-exit                               退场态标记(挂载器写, 见 exit)
  *   data-fx-play                               一次性动画触发标记(挂载器写, 见 play)
  *   data-fx-dir="left|right"                   dir 方向槽(S6, fx.js::dir 写)
- *   data-fx-pushed                             push 让位态标记(S6, 消费方写)
+ *   data-fx-pushed                             push 让位态标记(S6; F7e 已退役 —— fx-mount
+ *                                              不再 stamp, 仅 fx.css 库面保留规则不消费)
  *   data-fx-on="1"                             已扫描标记(挂载器写, 幂等依据)
  *   --fx-i (style)                             stagger 序号槽(0..N, CSS 算延迟)
  *   --fx-life (style)                          countdown 倒计时毫秒(S6, 消费方写)
- *   --fx-base-tx / --fx-push-y (style)         pop 基础位移 / push 让位量(S6, 消费方写)
+ *   --fx-base-tx (style)                       pop 基础位移(S6, 消费方写)
+ *   --fx-push-y (style)                        push 让位量(S6; F7e 已退役, 消费方不再写)
  *
  * 漏挂载检测口(S2 交付面之一):
  *   - 扫描时给元素写 data-fx-on 标记; audit() 汇报「有 data-fx 但没标记」的

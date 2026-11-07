@@ -9,8 +9,8 @@
  * idle=--border-strong / choke=--warn / hand=--fg-dim。
  * 动作: 纯观察无动作(plan §4 映射行); 筛选 chips 为纯前端态。
  * 吸血嫌疑 = client 名含 "XL/迅雷" 启发式, 纯展示(与 09 同判据); 链路健康卡的警戒条不接动作。
- * 渐进字段: country_code/connection/files 随 qB 版本浮动 —— 有则渲染; files 列在列定义声明
- * omitEmpty(无任何对端携带时整列省略, 引擎单点 columns.js _colsOmitEmpty); cc 徽章逐行省略;
+ * 渐进字段: country_code/connection/files 随 qB 版本浮动 —— 有则渲染; files 列常驻 + — 占位
+ * (omitEmpty 已删, 计划 26-10-13-0811; 缺值由渲染器出 — 占位/dimc 暗色); cc 徽章逐行省略;
  * flags 缺失行归握手段。
  * !U2 重写(计划 26-10-12-0527, 拍板 D1=锚桥/D2=列个性/D3=排序并引擎/D5=观感保持/D6=键独立):
  *   表格体重写为**引擎消费面** —— 外壳只出锚槽(anchFill 保活), 表壳/行渲染器由
@@ -19,9 +19,10 @@
  *   (Q4), 排序/拖宽/右键隐藏/偏好持久化与主视图同源(按 table-id 落盘)。行来源与筛选是
  *   版式语义, 单点在 rowsFn(register 声明) —— 筛选翻动走反应式行更新(W5, 不再换代)。
  * 渲染纪律: dtHtml 全量转义(dtRaw 只用于拼接本变体 dtHtml 产出的预转义片段), replaceChildren
- * 原子换帧, 数据未变(整份 peers 序列化比对)跳过重建, 锚元素跨帧保活(锚被重建 = Teleport
+ * 原子换帧, 结构态未变(loading|err|has 外壳形状 sig, 不含 peers 数据)跳过重建, 数据拍
+ * 走原地回填, 锚元素跨帧保活(锚被重建 = Teleport
  * 重挂 = 行抖动), 滚动位置/筛选态自保。
- * 自包含: 删除本文件 + 三份 index.html 各去 1 行 manifest 即整体退役, 其它零接触。
+ * 自包含: 删除本文件 + 四份 index.html 各去 1 行 manifest 即整体退役, 其它零接触。
  */
 (function () {
   "use strict";
@@ -137,7 +138,7 @@
      * (引擎表头 .group-head 在抽屉内被皮肤置 static —— 变体在此恢复吸顶个性;
      *  底色/边框归 shared/dt_table.css --bg 族, 不在此声明 —— W6 症状1 单点。) */
     ".drawer .dt07-list .group-head { position:sticky; top:-14px; z-index:1; }",
-    /* 单元格(值格呈现归渲染器 tpl-aq-dt07-cells, 规则仍在变体注入 CSS) */
+    /* 单元格(值格呈现归渲染器分片 tpl-aq-dt-peer-cells, pfx prop 出 dt07 类名; 规则仍在变体注入 CSS) */
     ".drawer .dt07-addr { display:flex; align-items:center; gap:7px; min-width:0; }",
     ".drawer .dt07-cc { flex:none; min-width:26px; text-align:center; padding:1px 4px; border-radius:var(--radius-sm);",
     "  background:var(--surface-1); border:1px solid var(--border-soft);",
@@ -377,7 +378,7 @@
   function barHtml(ctx, list) {
     const chips = FILTERS.filter((f) => f.key !== "bad" || countOf(list, "bad") > 0).map((f) =>
       T`<button type="button" class="dt07-fchip${ui.filter === f.key ? " active" : ""}${f.key === "bad" ? " c-err" : ""}" data-f="${f.key}">${f.text} <b>${countOf(list, f.key)}</b></button>`).join("");
-    return chips + T`<span class="dt07-note">5s 自动刷新 · 列头点击排序, 默认按「上传」降序</span>`;
+    return chips + T`<span class="dt07-note">5s 自动刷新 · 列头点击排序, 默认按地址排序</span>`;
   }
 
   function render(host, ctx) {

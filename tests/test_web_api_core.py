@@ -189,7 +189,7 @@ def test_frontend_ui_skin_cookie_persisted():
     """boot.js 必须把当前 UI 写进 autoqb_ui cookie —— 根路径「记住上次 UI」的数据源(2026-09-29 用户报)
 
     根路径 307 由服务端在收到请求那一刻裁决, localStorage 服务端读不到, cookie 是唯一可行载体;
-    三套 UI 共用 boot.js = 唯一写入口(打开即记录, 切换菜单无需单独埋点)。服务端取值校验
+    四套 UI 共用 boot.js = 唯一写入口(打开即记录, 切换菜单无需单独埋点)。服务端取值校验
     (形状 + 目录存在性)见 test_ui_root_and_legacy_newui_redirect。
     """
     boot = open(os.path.join(STATIC_ROOT, "shared", "boot.js"), encoding="utf-8").read()

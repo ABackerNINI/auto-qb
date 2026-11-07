@@ -6,7 +6,7 @@
 
 ## 写 WebUI 前必读(硬规则)
 
-- **菜单项是数据不是模板**: 项集注册在 `shared/ctx_menu.js` 的 `CTX_ITEM_DEFS` / `CTX_SUB_ITEM_DEFS`, 模板只 `v-for` 消费; 支名由 `menu.js::ctxMenuKind()` 单点给出; 一级只允许一个次级菜单入口; 多选与单组两条入口的项集必须一致。
+- **菜单项是数据不是模板**: 项集注册在 `shared/ctx_menu.js` 的 `CTX_ITEM_DEFS` / `CTX_SUB_ITEM_DEFS`, 模板只 `v-for` 消费; 支名由 `menu.js::ctxMenuKind()` 单点给出; 次级菜单入口由注册表 `kind: "submenu"` 声明(现状「更多操作」+「转移到」两个, 口径见 `attachments/webui-menu-components.md`); 多选与单组两条入口的项集必须一致。
 - **动作文案 = 动词 + 灰色种子数 N**: N = 实际受作用的种子总数, 计数单点 `selection.js::_seedCountOf`; scope 词(批量/该种子/整组/整剧/整集)不进可见文案。
 - **令牌纪律**: 同名语义只允许一个令牌族; 令牌名集三皮肤必须相等; 新增令牌 = 三皮肤同轮补名; 新增弹窗只选 `--modal-w-*` 档位, 不写新数字。
 - **按钮与弹窗**: 动作按钮一律 `.bt` 族, `<button>` 显式 `color`; 弹窗按后果等级染色走 `_openModal` 派生 tone, 新对话框不要自己判 danger。

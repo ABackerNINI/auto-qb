@@ -20,9 +20,10 @@
  *   行级真值/种子级回退/正在汇报三态混合口径, 无单一排序原值)。仅看异常 = 外壳容器类
  *   切换(行不重装配, 与原口径同); msg 展开态 rowsFn 读取(重建后恢复)。
  * 渲染纪律: dtHtml 全量转义(dtRaw 只用于拼接本变体 dtHtml 产出的预转义片段), replaceChildren
- * 原子换帧, 数据未变(整份 trackers + 汇报倒计时序列化比对)跳过重建, 锚元素跨帧保活(锚被
+ * 原子换帧, 结构态未变(loading|err|has 外壳形状 sig, 不含 trackers 数据/倒计时基准)跳过
+ * 重建, 数据拍走原地回填, 锚元素跨帧保活(锚被
  * 重建 = Teleport 重挂 = 行抖动), 滚动位置/过滤/msg 展开态自保。
- * 自包含: 删除本文件 + 三份 index.html 各去 1 行 manifest 即整体退役, 其它零接触。
+ * 自包含: 删除本文件 + 四份 index.html 各去 1 行 manifest 即整体退役, 其它零接触。
  */
 (function () {
   "use strict";

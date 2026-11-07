@@ -8,7 +8,7 @@
  *
  * 两个组件的**存在理由**与结构约束(多根片段 / 直接子选择器 / 单点化)全写在模板文件头注里,
  * 改它们之前先读那段 —— 尤其「<aq-qb-ctl> 不能包 wrapper」一条: 破了是**静默**的布局塌陷,
- * 静态守阵看不见(e2e/drawer-traffic.spec.mjs 按直接子元素钉)。
+ * 静态守阵看不见(tests/test_webui_static_dom_panel_traffic.py 按直接子元素钉)。
  */
 
 window.AQ_DRAWER_HEAD_COMPONENT = {

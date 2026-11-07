@@ -13,7 +13,7 @@
  * 颜色编码安全档位五档(2026-09-25 用户修正; 2026-09-30 计划 hr-trigger-semantics: unknown 灰档
  * 退役, 换 warning 黄档=本地未达标且疑似辅种 —— 可能有义务也可能原机已完成, 警示但不拦删):
  * danger 橙=考察中进行中 / failed 红=未达标终态(考核期已过, 独立醒目色, 不与考察中混橙、
- * 更不是可删绿) / safe 绿 / warning 黄; danger 与 failed 同属「不能删」桶。
+ * 更不是可删绿) / safe 绿 / warning 黄; danger 进「不能删」桶, failed 独立成「考核未通过」桶。
  * 来源用非文字底线编码(2026-09-29 起, 原 2 字徽标已退役)。 */
 const HR_SAFETY_CLASSES = { danger: "pending", failed: "hr-fail", safe: "reached", warning: "hr-warn" };
 /* 桶名(2026-09-25 用户修正): failed = 考核期已过仍未达标, 结果已成立的**终态** —— 删除不会新增

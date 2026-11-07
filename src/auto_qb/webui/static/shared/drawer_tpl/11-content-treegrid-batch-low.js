@@ -10,8 +10,8 @@
  * 动作(plan §04 映射行): 勾选批量优先级 → setFilePriority(p, indices)(S5 批量通道, indices
  * 从 drawerFileRows() 树收集: 勾目录 = 整棵子树三态框, 一次 POST files/priority); 单文件徽章
  * 点击循环 不下载→正常→高→最高(逐次真实提交, 回执/toast 由既有链自带)。
- * 渐进字段: 每文件 availability 有则整列渲染, 无则整列省略不占位(U4: 引擎 omitEmpty
- * 通用机制接管, 原 hasav/noav 双 grid 手搓退役)。
+ * 渐进字段: 每文件 availability 列常驻, 无值出 — 占位(U4: 引擎 omitEmpty 已删, 计划
+ * 26-10-13-0811 列常驻 + — 占位, 原 hasav/noav 双 grid 手搓退役)。
  * 渲染纪律: dtHtml 全量转义(dtRaw 只用于拼接本变体 dtHtml 产出的预转义片段), replaceChildren
  * 原子换帧, 数据未变(廉价指纹比对, W1)跳过重建, 折叠/筛选/勾选集自保(按 path 记账;
  * 换种子只重置勾选集与筛选, 折叠记账跨种子保持 —— P3-6, 报告 26-10-07-0542; 勾选集必须重置:
@@ -26,7 +26,7 @@
  * 折叠/勾选判据全在 rowsFn(判据零复制), 行来源读反应式 UI 态(checked/folded/filter,
  * W5 起 Vue.reactive)。排序不适用(树序 = 树语义, 原口径无排序, 全列 sortable:false +
  * dyn 空键)。行内勾选框三态经分片 :indeterminate 声明式。
- * 自包含: 删除本文件 + 三份 index.html 各去 1 行 manifest 即整体退役, 其它零接触。
+ * 自包含: 删除本文件 + 四份 index.html 各去 1 行 manifest 即整体退役, 其它零接触。
  */
 (function () {
   "use strict";
@@ -96,8 +96,8 @@
     /* 引擎表头 + 行(U4): 列宽/网格/拖宽/右键隐藏归引擎声明, 本变体只保留表头/行观感个性。
      * 吸顶补偿: .drawer-body(滚动容器)的 padding 会内缩 sticky 视矩形 —— top:0 实际停在
      * padding-top 之下, 中途滚动时行文字从那条 14px 缝里漏出来(实测 headTop 比 body 顶缘
-     * 恒低 14px); -14px 抵消后表头贴到可见上缘。14px = 三皮肤 .drawer-body 的 padding-top
-     * (atlas|console: 14px 18px 20px / prism: 14px 16px 20px), 与下方 .dt11-foot 的
+     * 恒低 14px); -14px 抵消后表头贴到可见上缘。14px = 四皮肤 .drawer-body 的 padding-top
+     * (atlas|console|flux: 14px 18px 20px / prism: 14px 16px 20px), 与下方 .dt11-foot 的
      * margin:-16/-20 同一假设(改皮肤 padding 必须连这里一起核)。 */
     ".drawer .dt11-list { --tbl-pad-x:4px; --tbl-gap:8px; --tbl-head-minh:28px; --tbl-row-minh:27px; }",
     /* 表头底/边框归 shared/dt_table.css --bg 族(W6 症状1 单点); 本变体留定高/字号/不换行个性 */
@@ -251,8 +251,8 @@
   /* ---------------- 行装配(U4: 判据在这里, 呈现在渲染器分片) ----------------
    * 行对象 = 显示值 + 修饰字段 + _cls 行态(dir/file + is-chk); 行身份 k = path(引擎行容器
    * data-dt-key 消费)。勾选三态(ckState 0/1/2)在装配时算好, 分片 :checked/:indeterminate
-   * 声明式直持(原生 property)。可用性: av 字段(有 availability 才非空串)供 omitEmpty
-   * 整列判据, avTxt 供显示(目录 "—"/文件真值或 "—")。 */
+   * 声明式直持(原生 property)。可用性: av 供渲染器判 — 占位(omitEmpty 已删, 26-10-13-0811,
+   * 无值产出 undefined 不是空串), avTxt 供显示(目录 "—"/文件真值或 "—")。 */
   function dirRowOf(ctx, r, d) {
     const s = d.stats.get(r.path);
     const folded = ui.folded.has(r.path);

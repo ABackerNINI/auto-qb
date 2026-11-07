@@ -13,12 +13,14 @@
  *   表格体重写为**引擎消费面** —— 外壳只出锚槽(anchFill 保活), 表壳/行渲染器由
  *   <aq-dt-bridge> Teleport 进锚(描述符 drawerPeerV09: 列集 DRAWER_PEER_V09_COLUMNS,
  *   「占用」= upspeed 列改 label —— 排序键不变(R7), occ 条长由行装配预挂 occBar)。
- *   手搓排序状态机/列宽 grid/表头拼装全部退役(Q4), 默认序 upspeed 降序由描述符
- *   sort.defKey/defDir 声明。行来源与筛选是版式语义, 单点在 rowsFn。
+ *   手搓排序状态机/列宽 grid/表头拼装全部退役(Q4), 默认序 addr 升序由描述符
+ *   sort.defKey/defDir 声明(2026-10-18 改口径, 原 upspeed 降序)。行来源与筛选是版式语义,
+ *   单点在 rowsFn。
  * 渲染纪律: dtHtml 全量转义(dtRaw 只用于拼接本变体 dtHtml 产出的预转义片段), replaceChildren
- * 原子换帧, 数据未变(整份 peers 序列化比对)跳过重建, 锚元素跨帧保活(锚被重建 = Teleport
+ * 原子换帧, 结构态未变(loading|err|has 外壳形状 sig, 不含 peers 数据)跳过重建, 数据拍
+ * 走原地回填, 锚元素跨帧保活(锚被重建 = Teleport
  * 重挂 = 行抖动), 滚动位置/筛选态自保。
- * 自包含: 删除本文件 + 三份 index.html 各去 1 行 manifest 即整体退役, 其它零接触。
+ * 自包含: 删除本文件 + 四份 index.html 各去 1 行 manifest 即整体退役, 其它零接触。
  */
 (function () {
   "use strict";
@@ -196,7 +198,7 @@
   function barHtml(list) {
     const chips = FILTERS.filter((f) => f.key !== "bad" || countOf(list, "bad") > 0).map((f) =>
       T`<button type="button" class="dt09-fchip${ui.filter === f.key ? " active" : ""}${f.key === "bad" ? " c-err" : ""}" data-f="${f.key}">${f.text} <b>${countOf(list, f.key)}</b></button>`).join("");
-    return chips + T`<span class="dt09-note">默认按「占用」降序, 最吃上传的排最前 · 5s 自动刷新</span>`;
+    return chips + T`<span class="dt09-note">默认按地址排序 · 5s 自动刷新</span>`;
   }
 
   function render(host, ctx) {

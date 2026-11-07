@@ -2,7 +2,7 @@
 
 ## 测试计划(每个测试函数一条)
 
-- test_frontend_ctx_submenu_single_entry_and_hover_close: 右键次级菜单守阵 —— 一级只留「更多操作」一个入口(复制族并入, CTX-06)、移出父项后延迟收起(CTX-05)、hover 图标规则必须限定直接子级且压特异性否则整片子面板变灰(CTX-04)
+- test_frontend_ctx_submenu_single_entry_and_hover_close: 右键次级菜单守阵 —— 次级入口由注册表声明、渲染层计数(「更多操作」+「转移到」, 模板骨架单份; 原 CTX-06 单入口断言随「转移到」入口过期, R5#30)、移出父项后延迟收起(CTX-05)、hover 图标规则必须限定直接子级且压特异性否则整片子面板变灰(CTX-04)
 - test_frontend_reannounce_inactive_gate_wiring: 非活跃种子禁强制汇报(qB 口径)入口接线守阵(2026-10-10; 2026-10-17 扩段删除链, issue 26-10-17-1703) —— qB 的 Force reannounce 仅在种子活跃时可用(commit aa189a7 关闭 issue #12080: isPaused/isChecking/isQueued 时 setEnabled(false)), 本项目沿用同一判据(暂停/停止·排队·校验中·错误/文件丢失): ①判定单点 decorate.js 的 REANNOUNCE_BLOCKED_STATES 必含 paused*/stopped*/queued*/checking*/error/missingFiles/**moving** 且**读 qB 原始 state**(kind 现 7 档, 排队仍被归进 downloading/seeding ⇒ 单看 kind 判不出排队; moving 虽自成第 7 档, 后端却不在任何 state_enum 谓词集合里 ⇒ 后端同须判 state 串); ②右键菜单 ctx-menus.html 四支(多选/整集/单种子/单组)的强制汇报项都挂 reannounceMenuGate(); ③行为层两道 —— _actCore 的 reannounce 前置闸门(早于乐观补丁/POST) + _kbAct 的 reannounce 分支先于 confirmDialog("先问确定再回不行"是坏体感); ④详情面板 tracker 页签 04/05/06 三个变体的 data-act=report 钮挂 drawerReannounceGate() + 各变体 .is-gated CSS(压过 base :hover, 含 05 失败区 .dt05-fail 的 (0,4,0) 覆盖) + drawer.js torrentCmd 兜底; ⑤投递收敛 —— 闸门(集合级全有全无, 与 qB oneCanForceReannounce 一致)只管「允不允许」, 放行后「发给谁」由 reannouncePlan 单点收敛为活跃子集(混选时 qB 引擎对非活跃目标静默空转, 照集合全量投递会让 tracker 确认层白等 item deadline 后落假「未确认」, 把一次干净的成功报成部分失败), 回执体现跳过数, 空投递必须显式收口(不得落成功分支报「成功 0 个目标」), 且前后端判据表(REANNOUNCE_BLOCKED_STATES)逐项同表; ⑥删除链(唯一漏接入口的修复) —— _deleteFlow 按 reannouncePlan 收敛 + 全非活跃时闸门禁用复选框(popovers.html is-gated 类/标题/点击短路三件 + .opt-pill.is-gated 三套 CSS 成套压过 :hover)+ _reannounceAll 的 skip 桶(非活跃 warn 降级为跳过不挡删除, 推迟中/error 维持不放行)+ 后端 REANNOUNCE_INACTIVE_SKIP 文案含「非活跃」(前端文本判据锚点)。行为语义由同批 node 电池真跑(判定表 + 投递计划 + 删除闸门 + skip 桶分型)。键盘与详情面板是右键之外的两条绕行路径, 任一入口被摘除即红
 - test_frontend_api_request_timeout: 前端请求级超时守阵(issue 26-10-16-0954-bug-webui-chart-fetch-no-timeout 方案 #1, 2026-10-16) —— `_request` 旧的裸 `fetch(path, { ...options, headers })` 无超时: 连接静默失效时 await 永不返回, 调用方 finally 整条失效(流量图 loading 卡死⇒轮询守卫把自己挡死; polling.js::refresh 更是永久停表), 界面上也无任何提示。四层静态锚: ①常量单点 AQB_FETCH_TIMEOUT_S/MS(毫秒值由秒值派生, 不手抄两份); ②fetch 必须带 `signal: ctl.signal`(裸 fetch 不得回潮); ③AbortError 必须翻译(超时/取消分型 + timeout 标记); ④`finally` 必须 `clearTimeout(timer)` 且跨文件不变式 `_QB_LOAD_STALL_MS >= AQB_FETCH_TIMEOUT_MS`(兜底不得早于请求级超时)。行为面 node 电池真跑(无 node 静默跳过): 桩 fetch + 手动触发定时器, 六型 —— 悬挂→「请求超时(15s)」+ timeout 标记 + 定时器已清 / 成功值透传且定时器清 / 401 仍走 auth 分支(_logout + auth 标记) / 非 2xx 文案照旧 / 已 abort 的外部 signal → 「请求已取消」不冒充超时 / - test_frontend_raw_fetch_timeout_single_point: 前端裸 fetch 零回潮 + 低层带超时单点守阵(issue 26-10-16-1303-bug-webui-raw-fetch-bypass-no-timeout, 2026-10-16) —— 5 处请求有意或历史地绕开 auth.js::_request(它已有请求级超时), 直接裸 fetch 且无 signal: 启动分片装载 / 免鉴权判定 / 导出下载 / 快捷键密钥读写 x2; 连接静默失效时 await 永不返回 ⇒ 各有收尾动作停在中途(白屏 / 停在“验证中” / 回执停在“进行中” / 密钥面板 loading 不复位)。修法 = 低层单点 shared/fetch_low.js(aqbFetch: AbortController + 15s + AbortError 翻译, **原始 Response** 透传不解析), 四处改调它; boot.js 在清单脚本之前执行(用不了单点), 自带等价内联超时(10s, 阻塞首屏 ⇒ 早失败)。四层静态锚: ①单点常量在且与 auth.js 请求级超时同值(同口径两处实现, 只改一边即红); ②**裸 fetch 零回潮**(全 shared 除 vendor 外, 出现调用点 fetch( 的文件只允许单点自身 / auth.js / boot.js); ③boot.js 内联件齐(常量 10s + AbortController + signal 透传 + clearTimeout + AbortError 翻译); ④四旁路调用点全改调单点 + lifecycle 采纳行的等价格式(字段名与空值占位各一个常量; 回潮成字面成员赋值会让该文件对本仓 agent 只读)。行为面 node 电池真跑(无 node 静默跳过): 单点七型(悬挂→「请求超时(15s)」+ timeout 标记 / 原始 Response 透传不解析 / 非 abort 错误上抛 / 外部取消不冒充超时 / method+headers 透传 / 定时器清理)与 boot.js 白屏悬挂五项(信号在 / 10s 定时器在 / 悬挂→可读失败文案 / 定时器清掉)
 - test_frontend_poll_skeleton_single_point: 长驻/有界轮询骨架单点守阵(issue 26-10-20-2231, 2026-10-22) —— 同一份「启停 + 守卫 + 在途悬挂兜底 + 代际守卫」此前写了三份(主轮 setTimeout 链 / 抽屉 setInterval / 流量图 setInterval), 停止条件五处手写, 且**抽屉侧漏了悬挂兜底**(同一类「loading 卡死⇒面板永久冻结」缺陷只修了流量图一边, 本件的实质缺陷面)。收敛后: ①骨架三口子 startPoll/stopPoll/awaitPoll 在 polling.js + 阈值常量 AQB_POLL_STALL_MS(30s = 请求级超时 15s 的两倍余量); ②抽屉/流量两侧只声明差异(ms/guard/stall/mutex/onStall), 裸 setInterval 零残留; ③document.hidden 守卫单点在骨架里, shared/ 内除骨架与 lifecycle 的 visibilitychange 事件响应外不得再有散点; ④三条有界等待(_pollCmd / tmPollSettle / tmPollShutdown)一律经 awaitPoll, 手写 ++pollGen 代际守卫与 setTimeout 递归不得回潮。行为面 node 电池真跑(无 node 静默跳过): chain 在途不排下一拍(不堆叠请求) / 悬挂超阈值补偿一次且重新计时 / 退避曲线与旧 _pollCmd 逐项等价(0,150,300,500,500 与 500,1000,1000) / 拍数上限与截止时间收摊兑现 null / 同名先停后起(旧链兑现 null) / 外部叫停 / fn 抛出即 reject / 页面隐藏恒等守卫
@@ -343,8 +343,58 @@ def test_frontend_reannounce_inactive_gate_wiring():
         f"强制汇报判定电池 {report['ok']}/{report['total']} 过, 失败: {report['failed']}"
 
 
+# 一级次级入口渲染层计数电池(R5#30, 2026-11-07): 原 CTX-06「一级只允许一个次级菜单入口」
+# 随「转移到」动态入口(计划 26-10-31-0306)过期 —— 静态骨架 has-sub 份数与一级入口数已脱钩,
+# 入口由注册表 kind:"submenu" 声明, 真计数必须在 AQB_CTX_MENU_REG 渲染层做。
+# 无 node 静默跳过(与本文件其它 node 电池同口径)。
+_NODE_CTX_SUBMENU_COUNT_PROBE = r"""
+const fs = require("fs");
+global.window = {};
+eval(fs.readFileSync(process.argv[1], "utf8"));   // ctx_menu.js(注册表单点, 与 test_webui_ctx_menu_registry 电池同沙箱)
+const R = window.AQB_CTX_MENU_REG;
+const checks = [];
+const ok = (name, cond) => checks.push([name, !!cond]);
+const subOf = (arr) => (arr || []).filter((it) => it.kind === "submenu");
+/* 渲染层用最小 vm 桩(动态文案/门控求值用; 与 test_webui_ctx_menu_registry.stubVm 同口径) */
+const vm = {
+  flags: { skip_check_menu: true, qb_traffic_enabled: true },
+  reannounceMenuGate: () => ({ ok: true, title: "" }),
+  menuTorrent: () => ({ super_seeding: false, force_start: false, auto_tmm: false }),
+  ctxSeedCount: () => 42,
+};
+const subNames = [R.CTX_SUB_NAME, R.CTX_DYN_SUB];
+for (const branch of R.CTX_BRANCHES) {
+  const declared = (R.ctxDefsOf(branch, 0) || []).filter((d) => d.kind === "submenu").map((d) => d.id);
+  const layer = R.ctxRenderLayer(branch, 0, vm.flags, vm);
+  const rendered = subOf(layer).map((it) => it.id);
+  ok(branch + " 渲染层 submenu 父项与注册表声明一一对应(" + declared.join("+") + ")",
+     JSON.stringify(rendered) === JSON.stringify(declared));
+  for (const it of subOf(layer)) {
+    ok(branch + "." + it.id + " subName 是注册表单点(" + it.subName + ")",
+       subNames.indexOf(it.subName) >= 0);
+    ok(branch + "." + it.id + " 子面板子项已就地解析成数组(subItems)",
+       Array.isArray(it.subItems));
+  }
+}
+/* 现状一级入口数(渲染层计数): 「转移到」四支各一 + 「更多操作」只在单种子支
+ * = member 支 2 个, 其余支 1 个。加第三个次级入口 = 有意的层级决策,
+ * 须回写 webui.md / webui-menu-components.md 口径并同步本电池。 */
+const memberSubs = subOf(R.ctxRenderLayer("member", 0, vm.flags, vm)).map((it) => it.id);
+ok("member 支现状两个一级次级入口(更多操作 + 转移到)",
+   memberSubs.length === 2 && memberSubs.indexOf("sub-more") >= 0 && memberSubs.indexOf("transfer") >= 0);
+for (const branch of ["multi", "episode", "group"]) {
+  const subs = subOf(R.ctxRenderLayer(branch, 0, vm.flags, vm)).map((it) => it.id);
+  ok(branch + " 支现状只有「转移到」一个一级次级入口", subs.length === 1 && subs[0] === "transfer");
+}
+console.log(JSON.stringify({
+  ok: checks.filter((c) => c[1]).length, total: checks.length,
+  failed: checks.filter((c) => !c[1]).map((c) => c[0]),
+}));
+"""
+
+
 def test_frontend_ctx_submenu_single_entry_and_hover_close():
-    """右键菜单的次级菜单: 一级只留「更多操作」一个入口, 且移出后必须收起 (CTX-04 / CTX-05 / CTX-06)
+    """右键菜单的次级菜单: 入口由注册表声明 + 渲染层计数, 且移出后必须收起 (CTX-04 / CTX-05 / CTX-06)
     三条用户报的故障形态, 全部是"pytest 全绿 + node --check 全绿 + 界面废掉"那一类:
       1. **二级菜单图标 hover 变灰**: `.ctx-item:hover .ico` 是后代选择器, 而 `.ctx-sub` 是父项的
          DOM 后代 —— hover 父项会把整个子面板的图标一起刷成 `--fg-muted`, 语义色全被抹平。
@@ -354,6 +404,9 @@ def test_frontend_ctx_submenu_single_entry_and_hover_close():
          "从面板回到父项"时误收起), 延迟只为跨过父项与面板之间那 4px 缝隙。
       3. **复制族并成第二个子面板**: 一级出现两个"更多"入口, 用户得先选"该进哪个"。
          CTX-06 把 复制名称/哈希/magnet 并入「更多操作」末尾。
+         (2026-11-07 口径修订, 存量评审 R5#30: 「转移到」动态入口(计划 26-10-31-0306)是第二个
+         合法次级入口 —— 骨架仍单份, 静态骨架 has-sub 份数不再冒充一级入口计数, 入口数改从
+         AQB_CTX_MENU_REG 渲染层计数(下方 node 电池)。)
     """
     # 1. CSS 的 hover 规则: 直接子级 + 特异性压制(改回后代选择器 = 整片子面板变灰; flux 收编 S5)
     css = {
@@ -370,15 +423,19 @@ def test_frontend_ctx_submenu_single_entry_and_hover_close():
         assert not re.search(r"\.ctx-item:hover\s+\.ico\b",
                              text), (f"{ui} 仍存在后代写法的 `.ctx-item:hover .ico` —— hover 父项会连子面板图标一起变灰(CTX-04)")
 
-    # 2. 三套 UI 的次级菜单: 一级只有一个入口, 复制三项在面板内(模板侧只留父项结构与交互;
-    #    W3 计划 26-10-20-0024 起面板内容与「更多操作」文案搬到注册表次级定义段;
-    #    2026-10-22 issue 26-10-20-2231 起四支骨架合并为一条, 行菜单根块整段即渲染面)
+    # 2. 四套 UI 的次级菜单: 模板侧只留父项结构与交互, 骨架单份(四支共用一条 has-sub 骨架 +
+    #    一条 ctx-sub 面板骨架); 一级入口数不由静态骨架数断言 —— 原 CTX-06「一级只允许一个
+    #    次级菜单入口」已随「转移到」动态入口(计划 26-10-31-0306)过期, 入口由注册表
+    #    kind:"submenu" 声明, 真计数在下方 2b 渲染层电池(W3 计划 26-10-20-0024 起面板内容与
+    #    「更多操作」文案搬到注册表次级定义段; 2026-10-22 issue 26-10-20-2231 起四支骨架合并
+    #    为一条, 行菜单根块整段即渲染面)
     for ui in _UI_ALL:
         text = _ui_aggregate(ui)
         assert "<!-- 表头右键菜单" in text, f"{ui}/index.html 找不到行右键菜单段锚点(模板分片变了? 同步本守阵)"
         block = text[:text.index("<!-- 表头右键菜单")]
         n_sub = block.count('class="ctx-item has-sub"')
-        assert n_sub == 1, (f"{ui} 一级菜单出现 {n_sub} 个「更多操作」入口 —— 只允许一个(CTX-06)")
+        assert n_sub == 1, (f"{ui} 行菜单根块出现 {n_sub} 份 has-sub 父项骨架 —— 四支共用一条"
+                            f"(多出来 = 按支抄骨架; 一级入口数由注册表声明, 不由本断言计数)")
         assert '@mouseleave="scheduleSubClose()"' in block, (
             f"{ui} 次级菜单父项缺 @mouseleave=\"scheduleSubClose()\" —— 鼠标移出后子面板不会消失(CTX-05)"
         )
@@ -386,8 +443,25 @@ def test_frontend_ctx_submenu_single_entry_and_hover_close():
             f"{ui} 子面板缺 @mouseenter=\"keepSub()\" —— 跨过父项与面板之间 4px 缝隙时会被收掉, 鼠标进不去子面板"
         )
         assert block.count('class="ctx-sub"'
-                          ) == 1, (f"{ui} 一级菜单出现 {block.count('class=\"ctx-sub\"')} 个子面板 —— 只允许「更多操作」一个入口(CTX-06)")
+                          ) == 1, (f"{ui} 行菜单根块出现 {block.count('class=\"ctx-sub\"')} 份子面板骨架 —— 四支共用一条")
         assert "subMenu === 'copy'" not in text, (f"{ui} 仍残留 subMenu === 'copy' 分支 —— 复制已并入「更多操作」, 双入口会回潮(CTX-06)")
+    # 2b. 一级次级入口数从注册表渲染层计数(原静态骨架断言对运行时项集失明, 存量评审 R5#30):
+    #     渲染层的 submenu 父项必须与注册表 kind:"submenu" 声明一一对应, subName 落在注册表
+    #     两个单点(advanced/transfer)内, 且现状入口数被显式钉住(改 = 有意的层级决策, 须回写
+    #     webui.md / webui-menu-components.md 口径)。无 node 静默跳过(与其它 node 电池同口径)。
+    node = shutil.which("node")
+    if node:
+        proc = subprocess.run(
+            [node, "-e", _NODE_CTX_SUBMENU_COUNT_PROBE, os.path.join(STATIC_ROOT, "shared", "ctx_menu.js")],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+        assert proc.returncode == 0, f"ctx submenu 渲染层计数 node 电池跑挂: {proc.stderr.strip()}"
+        report = json.loads(proc.stdout.strip().splitlines()[-1])
+        assert report["failed"] == [], \
+            f"ctx submenu 渲染层计数 {report['ok']}/{report['total']} 过, 失败: {report['failed']}"
     # 「更多操作」文案 + 复制族三项: W3 起在注册表单点(次级定义段; 模板只渲染 it.label)
     reg = open(os.path.join(STATIC_ROOT, "shared", "ctx_menu.js"), encoding="utf-8").read()
     assert 'label: "更多操作"' in reg, "注册表缺「更多操作」父项文案(sub-more 定义)"

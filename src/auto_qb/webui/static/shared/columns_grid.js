@@ -49,7 +49,9 @@ Object.assign(window.AQB_COLUMNS.methods, {
     },
     /* 从列头行(真正的 grid 容器)读取**当前渲染**的列宽 px; 列数不符(渲染未完成)返回 null。
      * !2026-10-18(用户报障「用户表格隐藏一列其它列坍塌」根治): 逐 token 严格校验
-     * ^\d+px$ —— display:none 的表头(08 五区分组的折叠组/空组, 表头在 .dt08-rows 内)
+     * ^\d+(\.\d+)?px$(放行小数 px —— getComputedStyle 量出的是布局精确值, 拒小数会把
+     * 合法宽度误判不合法; 拒 fr/minmax 才是要点) —— display:none 的表头(08 五区分组的
+     * 折叠组/空组, 表头在 .dt08-rows 内)
      * getComputedStyle 返回的是**指定形**(minmax(170px, 1.6fr) ...), 旧的 parseFloat 兜底
      * 会把 "1.6fr)" 解析成 1.6px 混进宽度表, 全组列宽随即坍成最小宽; 严格校验后这种
      * 量不到的表头只会得到"数量不符 → null"(调用方按未渲染处理), 垃圾值进不了引擎。 */

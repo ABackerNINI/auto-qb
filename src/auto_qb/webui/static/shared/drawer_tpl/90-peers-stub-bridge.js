@@ -12,7 +12,7 @@
  *     rowModel/rowProp 四件, 列 = DRAWER_PEER_COLUMNS 列子集)。
  * 渲染纪律: skipUnchanged(恒定 sig)→ 锚只建一次不随数据轮询重建 —— 这是桥变体的
  * **稳定 HTML 不变量**(锚被重建 = Teleport 重挂 = 行抖动); withScroll 自保滚动。
- * 自包含: 删除本文件 + 三份 index.html 各去 1 行 manifest 即整体退役, 其它零接触。
+ * 自包含: 删除本文件 + 四份 index.html 各去 1 行 manifest 即整体退役, 其它零接触。
  */
 (function () {
   "use strict";

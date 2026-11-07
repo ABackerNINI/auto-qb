@@ -50,8 +50,8 @@
  * 定义在本文件(三份 tpl-manifest 里本文件均排在 state.js 之前, 见 prism/atlas/console),
  * 由 state.js 的 data() 调用 —— 档位域归流量图模块所有。落盘纪律与 persistDrawerTab 同款:
  * 只落"选了哪档"这个用户意图, 写失败吞异常(刷新后回落默认), 不打断换窗。
- * 快捷键三入口(shortcuts.js): 打开全局图 Ctrl+Backslash / 详情面板流量页签 Alt+5 /
- * 窗口前后切换 [ ](后两条走 when 条件绑定, 仅流量图可见时消费键位)。
+ * 快捷键三入口(shortcuts.js): 打开全局图 Ctrl+Backslash / 详情面板流量页签 Alt+5(无条件,
+ * 功能未启用时提示后忽略) / 窗口前后切换 [ ](两条走 when 条件绑定, 仅流量形态可见时消费)。
  *
  * 纵轴固定模式 + 画布注解层(2026-10-08, 用户拍板; 三挂点通用, issue 26-10-07-0149 认领一并做):
  * 纵轴三态 auto(默认, 随数据峰值) / limit(全局限速 ×1.2) / manual(手动 MiB/s)。限速一律取
@@ -629,7 +629,7 @@ window.AQB_QB_TRAFFIC = {
       if (!def || this[def.loading]) return;
       this._qbLoad(scope);
     },
-    /* 窗口切换(1m-30d 十档): 换窗即重拉重画; 打开中的轮询由骨架每拍重读间隔自动重排 */
+    /* 窗口切换(十三档, 单点 QB_WINDOW_NAMES): 换窗即重拉重画; 打开中的轮询由骨架每拍重读间隔自动重排 */
     qbSetWindow(w) {
       const s = this.qbCurScope;
       return s ? this._qbSetWindow(s, w) : undefined;

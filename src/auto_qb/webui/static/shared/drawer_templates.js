@@ -20,9 +20,9 @@
  *   prioText, issue 26-10-29-1340) + trackers 五桶判据表(reg.trackers: TRACKER_BUCKETS/
  *   TRACKER_BUCKET_ORDER, issue 26-10-29-1343) + content 目录树单点(reg.content:
  *   buildFileTree/findNode, issue 26-10-29-1343)。本文件是「核心层」: 不含任何具体模板变体 —— 变体是
- * shared/drawer_tpl/<NN>-<tab>-<slug>.js 一个自注册文件, 删除 = 删文件 + 三份 manifest 各去 1 行。
+ * shared/drawer_tpl/<NN>-<tab>-<slug>.js 一个自注册文件, 删除 = 删文件 + 四份 manifest 各去 1 行。
  *
- * 装载序: 必须排在 drawer.js 之后、state.js 之前(三份 index.html 的 tpl-manifest)。
+ * 装载序: 必须排在 drawer.js 之后、state.js 之前(四份 index.html 的 tpl-manifest)。
  *   - 在 drawer.js 之后没有强约束(钩子经 this. 调用, 运行时才求值), 放同域便于阅读;
  *   - 在 state.js 之前是硬约束: state.js 的 data() 调 initialDrawerTpl()(app.js), 其白名单
  *     校验依赖注册表 —— 变体文件(自注册)也必须全部排在 state.js 之前, 否则已存的合法 id

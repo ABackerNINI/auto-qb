@@ -309,7 +309,7 @@ Object.assign(window.AQB_COLUMNS.methods, {
       HSCROLL_IND.hot = inBand && HSCROLL_IND.overflow;
       this._hscrollShow();
     },
-    /* 照 _ensureHeadObserver 的范式(本文件 L186 一带): 只观察当前主表容器, 元素换了才重挂;
+    /* 照 columns_grid.js::_ensureHeadObserver 的范式: 只观察当前主表容器, 元素换了才重挂;
      * 回调 rAF 合并(同一帧多次变化只重算一次); 无 ResizeObserver 时降级为不挂 ——
      * 此时容器盒变化仍会在下一次进入热区(②)或容器 scroll(①)时被修正。 */
     _hscrollObserve(el) {

@@ -18,9 +18,10 @@
  *   卡片无列语义 → 列头 CSS 隐藏, 拖宽/右键隐藏不适用(Q3 记档); 筛选 pills 是版式语义
  *   → rowsFn + 反应式行更新(W5, 不再 anchTouch 换代)。
  * 渲染纪律: dtHtml 全量转义(dtRaw 只用于拼接本变体 dtHtml 产出的预转义片段), replaceChildren
- * 原子换帧, 数据未变(整份 trackers 序列化比对)跳过重建, 锚元素跨帧保活(锚被重建 = Teleport
+ * 原子换帧, 结构态未变(loading|err|has 外壳形状 sig, 不含 trackers 数据)跳过重建,
+ * 数据拍走原地回填, 锚元素跨帧保活(锚被重建 = Teleport
  * 重挂 = 行抖动), 滚动位置/筛选态自保。
- * 自包含: 删除本文件 + 三份 index.html 各去 1 行 manifest 即整体退役, 其它零接触。
+ * 自包含: 删除本文件 + 四份 index.html 各去 1 行 manifest 即整体退役, 其它零接触。
  */
 (function () {
   "use strict";

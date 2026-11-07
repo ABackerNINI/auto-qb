@@ -8,8 +8,8 @@
  * 一键收起安静分区(idle/hand 整组隐藏)。
  * 动作: 分组折叠 + 只看在传数据过滤(纯前端, plan §4 映射行)。
  * 吸血嫌疑 = client 名含 "XL/迅雷" 启发式, 纯展示红标(与 07/09 同判据)。
- * 渐进字段: country_code/connection/files 随 qB 版本浮动 —— files 列在列定义声明 omitEmpty
- * (无任何对端携带时整列省略, 引擎单点 columns.js _colsOmitEmpty); cc 徽章逐行省略;
+ * 渐进字段: country_code/connection/files 随 qB 版本浮动 —— files 列常驻 + — 占位(omitEmpty
+ * 已删, 计划 26-10-13-0811; 缺值由渲染器出 — 占位/dimc 暗色); cc 徽章逐行省略;
  * 关联度列设计稿未纳入(分区语义已隐含, 列定义 sortable:false), 空分区整节隐藏(2026-10-18
  * 起改**原地 hidden 类**切换, 不再整节缺席, 见下段根治注)。
  * !U2 重写(计划 26-10-12-0527, 拍板 D1=锚桥/D2=列个性/D3=排序并引擎/D5=观感保持/D6=键独立):
@@ -35,10 +35,11 @@
  * 渲染纪律: dtHtml 全量转义(dtRaw 只用于拼接本变体 dtHtml 产出的预转义片段), replaceChildren
  * 原子换帧, **结构态**(加载/失败/空态/只看在传/折叠)未变跳过重建 —— 数据拍(5s 轮询每拍必到,
  * 组 membership 随握手翻动是常态)不整帧重建(整帧重建 = 56-75ms longtask/拍 = 用户所报
- * "表格闪烁, 数据随闪烁刷新"); 行走桥响应式, 组头计数/聚合数/空组隐藏类走 paintTick 原地
+ * "表格闪烁, 数据随闪烁刷新"); 行走桥响应式, 组头计数/聚合数/空组隐藏类在 skip 分支内联
+ * 原地直写(querySelector + classList/textContent, 不经 paintHtml)
  * 回填(不含锚的子树), 各组锚元素跨帧保活(锚被重建 = Teleport 重挂 = 行抖动), 滚动位置/
  * 折叠/筛选态自保。
- * 自包含: 删除本文件 + 三份 index.html 各去 1 行 manifest 即整体退役, 其它零接触。
+ * 自包含: 删除本文件 + 四份 index.html 各去 1 行 manifest 即整体退役, 其它零接触。
  */
 (function () {
   "use strict";
@@ -302,7 +303,7 @@
     /* 结构 sig(2026-10-18 用户报障根治收口): 只含**帧形态**决定项 —— 加载/失败/空态/只看在传/
      * 折叠态; **不再含在场分组集**。旧口径组空⇒整节隐藏(锚离场)、组补⇒新锚进场都算结构变化
      * ⇒ 握手连接翻动一次就整帧 replaceChildren + anchFill + Teleport 重挂(全组表格抖动);
-     * 现五区恒在场, 组的进出场走 paintTick 原地切类, 不触发任何重建。
+     * 现五区恒在场, 组的进出场在 skip 分支内联原地切类, 不触发任何重建。
      * **不含 peers 数据**: 数据拍(5s 轮询每拍必到)不整帧重建, 行走桥响应式。 */
     const sig = String(!!loading) + "|" + err + "|" + (list.length ? "y" : "n")
       + "|" + String(!!ui.onlyMoving) + "|" + Object.keys(ui.folded).filter((k) => ui.folded[k]).join(",");
@@ -335,7 +336,7 @@
       errText: "用户列表加载失败, 将在下次自动刷新时重试", emptyText: "暂无已连接用户",
     })) return;
     /* 五区恒在场(quiet 区在「只看在传数据」下整组离场, 其余区空组以 dt08-hide 隐藏)——
-     * 组头计数/聚合数在数据拍由 paintTick 原地回填, 隐藏类随组 membership 翻动原地切换 */
+     * 组头计数/聚合数在数据拍由 skip 分支内联原地回填, 隐藏类随组 membership 翻动原地切换 */
     const body = GROUPS
       .filter((g) => !(ui.onlyMoving && g.quiet))
       .map((g) => groupHtml(g, buckets[g.key], groupHidden(g, buckets[g.key])))

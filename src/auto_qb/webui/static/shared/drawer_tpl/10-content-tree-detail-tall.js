@@ -24,7 +24,7 @@
  * 排序不适用(树序 = 树语义, 原口径无排序, 全列 sortable:false + dyn 空键)。行级键盘:
  * 行容器 tabindex/data-dt-key 由桥输出(rowTab/rowKey), roving 锚点/回焦经描述符
  * rowAfter → rowAfterFn(锚换代重挂后跑)。
- * 自包含: 删除本文件 + 三份 index.html 各去 1 行 manifest 即整体退役, 其它零接触。
+ * 自包含: 删除本文件 + 四份 index.html 各去 1 行 manifest 即整体退役, 其它零接触。
  */
 (function () {
   "use strict";

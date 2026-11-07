@@ -25,7 +25,7 @@
     return (err && err.message || err);
   }
 
-  /* UI 皮肤 cookie(autoqb_ui): 三套 UI 共用本脚本 = 唯一写入口 —— 打开任一 UI 就把它的
+  /* UI 皮肤 cookie(autoqb_ui): 四套 UI 共用本脚本 = 唯一写入口 —— 打开任一 UI 就把它的
    * 目录段记进 cookie(1 年), 之后从根路径 / 进入时服务端读 cookie 直达上次用的 UI
    * (修复"关窗口重开总回星图")。载体必须是 cookie 而非 localStorage: 307 在服务端裁决,
    * 服务端读不到 localStorage。这里只做形状校验, 目录是否真实存在由服务端把关
