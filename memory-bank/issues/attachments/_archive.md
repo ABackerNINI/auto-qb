@@ -11,8 +11,9 @@
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 - [chore] [版本号双源矛盾: __init__.__version__ 0.2.0 vs pyproject 0.1.0](../26-09-21-1408-chore-version-dual-source.html) — WebUI 顶栏透出与打包元数据已差一个 minor; 建议 pyproject 单源 + 动态读取
 
-## Open (64)
+## Open (65)
 
+- [refactor] [mypy 后端既有类型债: dev.typecheck 8 errors](../26-11-08-0118-refactor-mypy-backend-typecheck-debt.html) — dev.typecheck 全库 8 errors(relocate_journal.py / alias_fs.py / recycle_daemon.py / webui/relocate_chain.py 四文件), 均为后端既有债, mypy allowlist 守阵在 test.quick 中仍绿(允许清单机制外的新增暴露); 不在 26-11-07-2344 改动面, 2026-11-08 S5 收口排查时发现, 用户拍板入池
 - [bug] [traffic_store_common._INFOHASH_RE 配 re.match, $ 允许串尾恰一个换行(与 R4#34 同族)](../26-11-08-0045-bug-traffic-store-infohash-re-tail-newline.html) — traffic_store_common.py:32 _INFOHASH_RE 配 re.match, 实测串尾恰一个换行放行; 与 R4#34(表行14 已修 keys.py fullmatch)同族; HTTP 层可达性待查, 建议同款 re.fullmatch
 - [bug] [/api/speed/override 与 /api/speed/alt 的 upload_kib/download_kib 不拦负数](../26-11-08-0044-bug-webui-speed-kib-negative-unchecked.html) — 只过 int_param 不拦负数(torrent_detail.py:124-132 一带; server/common.py:113 int_param 只拦畸形), 负数直达命令层与 qbapi; qbapi set_alt_speed_limits 修好后(批L)负数从静默 no-op 变真下发——与 R4#3/表行4 同族
 - [question] [非 ASCII 符号面宽于 code-style.md 禁用示例: §/→/⇒/≠ 在 src/ 泛在, 口径待拍板](../26-11-08-0044-question-non-ascii-symbol-policy-src.html) — §(131文件)/→(70)/⇒(57)/≠ 在 src/ 泛在, code-style.md 禁令只点名带圈数字等; 需项目拍板口径(全清/豁免清单), 不建议机械全清

@@ -23,7 +23,7 @@
 | perf | 2 |
 | docs | 3 |
 | test | 9 |
-| refactor | 4 |
+| refactor | 5 |
 | feat | 20 |
 | chore | 1 |
 | question | 8 |
@@ -37,6 +37,7 @@
 
 ## Open
 
+- [refactor] [mypy 后端既有类型债: dev.typecheck 8 errors](26-11-08-0118-refactor-mypy-backend-typecheck-debt.html) — dev.typechec…
 - [bug] [traffic_store_common._INFOHASH_RE 配 re.match, $ 允许串尾恰一个换行(与 R4#34 同族)](26-11-08-0045-bug-traffic-store-infohash-re-tail-newline.html) — traffic_stor…
 - [bug] [/api/speed/override 与 /api/speed/alt 的 upload_kib/download_kib 不拦负数](26-11-08-0044-bug-webui-speed-kib-negative-unchecked.html) — 只过 int_param…
 - [question] [非 ASCII 符号面宽于 code-style.md 禁用示例: §/→/⇒/≠ 在 src/ 泛在, 口径待拍板](26-11-08-0044-question-non-ascii-symbol-policy-src.html) — §(131文件)/→(7…
