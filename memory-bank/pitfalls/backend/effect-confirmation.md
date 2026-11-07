@@ -30,8 +30,10 @@
 - **守阵**: `tests/test_checking_*.py` A 组(谓词 / 逐行表测 / 160 组合穷举) + `tests/test_ops_*.py`
   B 组(门控状态机) / C 组(仲裁直查) / D 组(R1 实时复核) / E 组(等待期零 API 红线)。
 - **库内既有范本** (同一纪律的四处先例):
-  [src/auto_qb/webui/runtime.py](../../../src/auto_qb/webui/runtime.py) `defer_receipt` / `flush_truths`
-  (改种子状态的命令回执推迟到补刷新之后再写 —— 宣称落后于真值落地); 同文件 `check_pending` +
+  [src/auto_qb/webui/runtime_commands.py](../../../src/auto_qb/webui/runtime_commands.py)
+  `defer_receipt` / `flush_truths`(改种子状态的命令回执**立即**写 —— 只表示「命令已执行」,
+  真值经 flush_truths 直查 qB, 落地了才另走 truth 事件推送, 超时不推; 旧「扣住回执等真值
+  落地再发」语义 2026-09-20 D2 已废弃); 同文件 `check_pending` +
   [commands.py](../../../src/auto_qb/webui/commands.py) `_verdict_reannounce`(reannounce 只发指令
   并登记确认跟踪, 回执由消解等待判定表纯函数对照 baseline 核实后给出 —— updating 恒不构成成功证据,
   成功凭 working 转换/epoch 前跳, 失败凭 status 4/5/6+msg; 结论 ∈ confirmed/rejected/pending,

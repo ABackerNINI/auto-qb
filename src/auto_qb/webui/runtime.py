@@ -30,28 +30,15 @@
 `_publish_locked`, 不要在调用点各建一部分。
 """
 
-import logging
 import queue
-import secrets
 import threading
 from collections import deque
-from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Dict, List, Optional
 
 from ..infra.clock import SYSTEM_CLOCK, Clock
-from ..infra.logging import is_record_suppressed
-from .commands import (
-    CMD_ID_COMMANDS,
-    CMD_SLOW_MS,
-    RC_UNCONFIRMED_PREFIX,
-    REANNOUNCE_CONFIRM_TIMEOUT,
-    REANNOUNCE_JUMP_TOL,
-    TRUTH_PUSH_CAP_MS,
-    RESYNC_COMMANDS,
-    SELF_POSTED_COMMANDS,
-    _timing,
-    is_deferred_receipt,
-    qb_reject_text,
-)
+# re-export 供测试经本门面取(commands 拆分后本文件不再直接使用): test_web_longtail_* 五个
+# 文件从这里连同 EVENT_QUEUE_MAX/WEB_RESULT_*/WebUIRuntime 一把导入, 改指向 .commands 动面更大
+from .commands import CMD_SLOW_MS, REANNOUNCE_CONFIRM_TIMEOUT
 from .runtime_commands import CommandsMixin
 from .runtime_common import (
     EVENT_QUEUE_MAX,

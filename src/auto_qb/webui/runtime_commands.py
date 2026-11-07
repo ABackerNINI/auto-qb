@@ -105,8 +105,8 @@ class CommandsMixin:
         """读一次 trackers 并出结论(判定处置单点) -> (state, reason)
 
         `check_pending`(在途轮询确认)与 `_advance_reannounce_background`(推迟后台核实)两处
-        同骨架「读 trackers -> host._verdict_reannounce」, 抽本单点后异常面仍各自处理:
-        前者落 item 级 error 回执, 后者只 DEBUG(issue webui-bulk-receipt-boilerplate-dup)。
+        同骨架「读 trackers -> host._verdict_reannounce」, 抽本单点后读失败口径一致:
+        只 DEBUG, item 留在原处下 tick 重试, 不单次终局。
         qB 断连(host.client 为 None)不下读: 回 ("", "") = 无结论, 调用方照旧等恢复。
         """
         host = self._host
@@ -120,7 +120,7 @@ class CommandsMixin:
 
         逐 item 推进(判定链, 见 commands._verdict_reannounce 的判定表·消解等待模型):
           item 级 deadline 超时 -> warn「未确认」(不再判「失败」) / store 快照 stopped 直判 ->
-          qB 断连等待 / 调 _verdict_reannounce 出 confirmed(ok)/rejected(error)。
+          qB 断连/读失败等待 / 调 _verdict_reannounce 出 confirmed(ok)/rejected(error)。
         全部 item 出结论后聚合三桶(D4=warn): 任一 error -> error; 否则任一 warn -> warn;
         全 ok -> ok, 文案「成功 X, 失败 Y, 未确认 Z: <前 3 条原因>」。
         推迟登记的后台核实(reannounce_background)同 tick 推进, 结论只落日志。
@@ -157,13 +157,17 @@ class CommandsMixin:
                 try:
                     state, reason = self._judge_reannounce(h, it["baseline"], t0=it["t0"], now=now)
                 except Exception as e:
-                    it["done"], it["status"], it["reason"] = True, "error", f"读取 tracker 状态失败: {e}"
+                    # 瞬时读失败(qB 断连抖动/超时, client 对象仍在)与「无结论」同处置: item 留在
+                    # pending 等恢复, 下 tick 重试, deadline 到点落「未确认」。单次失败即终局会把
+                    # 可能已成功的汇报报成「失败 N: 读取 tracker 状态失败」且不重试 —— 与
+                    # _advance_reannounce_background 的 DEBUG+下 tick 重试口径对齐。
+                    logger.debug(f"WEB UI | 强制汇报确认读取失败 {h[:8]}, 留待下 tick 重试: {e}")
                     continue
                 if state == "confirmed":
                     it["done"], it["status"] = True, "ok"
                 elif state == "rejected":
                     it["done"], it["status"], it["reason"] = True, "error", reason
-                # 断连 / 无结论: item 留在 pending, deadline 到点落「未确认」(见上方超时分支)
+                # 断连 / 无结论 / 读失败: item 留在 pending, deadline 到点落「未确认」(见上方超时分支)
             if all(it["done"] for it in entry["items"].values()):
                 finished.append(cmd_id)
         for cmd_id in finished:
@@ -328,9 +332,11 @@ class CommandsMixin:
         """真值是否已**落地**(命令的效果是否已经在种子状态上体现)
 
         !与"命令执行成功"是两回事: `torrents/resume` 返回 200 时 qB 可能还没翻状态,
-        补刷新读到的还是命令**前**的 paused。此时若把回执发出去, 回执里的真值就是旧值 ——
-        前端一旦采纳就会把行改回「已暂停」, 用户看到"乐观做种 → 弹回暂停 → 2 秒后变做种"
-        (2026-09-20 真机回归)。故这里在服务端**等真值落地**再发回执, 前端拿到的必然是自洽的。
+        补刷新读到的还是命令**前**的 paused。此时若把这种旧值发出去, 前端一旦采纳就会
+        把行改回「已暂停」, 用户看到"乐观做种, 弹回暂停, 2 秒后变做种"(2026-09-20 真机回归)。
+        现行语义(2026-09-20 D2 定案, 旧"扣住回执等真值落地再发"已废弃): 本函数只门控
+        truth 事件推送 —— flush_truths 里落地了才推; 回执由 defer_receipt **立即**写且
+        **不带 truth**, 不受本函数影响。
         """
         if not truth:
             return True  # 取不到真值就不等(退回前端拉一次的老路径)

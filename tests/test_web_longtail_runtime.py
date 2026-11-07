@@ -3,7 +3,7 @@
 ## 测试计划(每个测试函数一条)
 ### P1 覆盖率提升轮: webui 运行时与命令长尾
 - test_web_runtime_notify_drops_are_counted: SSE 广播非阻塞(慢/坏订阅者各计丢弃)
-- test_web_runtime_check_pending_paths: 在途汇报确认全路径(item 级 deadline 超时 warn(epoch/legacy 文案)/停止直判/断连/读异常 error/判定聚合三桶与前 3 条原因截断)
+- test_web_runtime_check_pending_paths: 在途汇报确认全路径(item 级 deadline 超时 warn(epoch/legacy 文案)/停止直判/断连/读失败留 pending 重试恢复后出结论/判定聚合三桶与前 3 条原因截断)
 - test_web_runtime_resync_elapsed_ms_logs_by_threshold: 补刷新计时按阈值分级(慢 WARNING / 正常 DEBUG)
 - test_web_runtime_set_result_prunes_stale_and_carries_truth: 回执表 TTL 淘汰 + truth 附带
 - test_web_runtime_affected_hashes_shapes: 受影响种子三种取法 + 异常退化
@@ -77,7 +77,7 @@ def test_web_runtime_notify_drops_are_counted():
 
 def test_web_runtime_check_pending_paths():
     """在途汇报确认全路径(item 级 deadline): 完成跳过/超时 warn(epoch+legacy 文案)/停止直判/断连等待/
-    读 tracker 异常 error/判定 confirmed 与 rejected/聚合三桶与前 3 条原因截断"""
+    读 tracker 异常留 pending 重试(恢复后下 tick 出结论)/判定 confirmed 与 rejected/聚合三桶与前 3 条原因截断"""
     from auto_qb.core.qbmanager import QbManager
     from auto_qb.webui.commands import RC_FAIL_PREFIX
 
@@ -134,14 +134,16 @@ def test_web_runtime_check_pending_paths():
     assert items["H_OK"]["status"] == "ok" and items["H_FAIL"]["status"] == "error"
     assert items["H_FAIL"]["reason"] == RC_FAIL_PREFIX + "ann"
     assert items["H_STOP"]["status"] == "warn" and "种子已停止" in items["H_STOP"]["reason"], "store 快照 stopped 直判"
-    assert items["H_ERR"]["done"] is True and "读取失败" in items["H_ERR"]["reason"]
+    assert items["H_ERR"]["done"] is False, "读失败不终局, item 留 pending 下 tick 重试"
     # 断连: client None -> 本轮跳过(等恢复), 保持在途
     host.client = None
     rt.check_pending()
     assert "c_disconnected" in rt.reannounce_pending, "断连不判失败, 等恢复继续确认"
     # 最后一个未决出结论 -> 聚合三桶(任一 error -> error; 原因截断为前 3 条)
     host.client = client
+    client.torrents_trackers = lambda h: [h]  # H_ERR 恢复可读: 读失败留 pending 的条目重试出结论
     verdicts["H_WAIT"] = ("confirmed", "")
+    verdicts["H_ERR"] = ("rejected", RC_FAIL_PREFIX + "ann")
     verdicts["H_D"] = ("rejected", RC_FAIL_PREFIX + "ann")  # 同 tick 断连条目恢复, 出拒绝结论
     rt.check_pending()
     assert "c1" not in rt.reannounce_pending, "全部种子出结论后聚合并移除"

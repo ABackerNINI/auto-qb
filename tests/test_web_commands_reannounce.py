@@ -12,6 +12,7 @@
 - test_reannounce_register_immediate_verdicts_and_deadline: 注册直判(停止种子: 投递面已拦故注册支退化为竞态兜底/推迟检出早回执+后台登记) + item 级 deadline 公式与 600 上限
 - test_reannounce_skips_inactive_targets: 投递收敛(2026-10-10): 混选只投活跃子集(组内排队/暂停成员不发指令也不进确认层, 免白等窗口报假「未确认」)+ 全非活跃给显式 warn 回执 + 单种非活跃同口径; 判据读 qB 原始 state 串(queuedDL 命中 is_downloading, 谓词判不出排队)
 - test_reannounce_stopped_midwindow_direct_verdict: 窗口内暂停直判(下一 tick warn「种子已停止」, 不等 deadline)
+- test_reannounce_read_failure_stays_pending_until_deadline: 瞬时读失败不终局(批E #2: client 在但读 trackers 抛异常 -> 读失败 tick 不写回执 item 留 pending / 恢复后照常确认 / 或读失败 tick 拖到 deadline 落「未确认」不落「失败」; 与 _advance_reannounce_background 重试口径对齐)
 - test_reannounce_background_verify_and_cap: 推迟后台核实(达 min_e 出结论落 INFO/WARNING 日志并移除/逾时 DEBUG 静默移除/500 上限丢最旧 WARNING)
 - test_reannounce_torrent_missing_and_blocked: 单种汇报 —— 未知 hash 有无 cmd_id; 非活跃 warn 且不发指令
 """
@@ -407,6 +408,47 @@ def test_reannounce_stopped_midwindow_direct_verdict():
         r = mgr.web.results["cmd9"]
         assert r["status"] == "warn" and "未确认: 种子已停止" in r["error"]
         assert mgr.web.reannounce_pending == {}
+
+
+def test_reannounce_read_failure_stays_pending_until_deadline():
+    """瞬时读失败不终局(issue 26-11-07-0536 批E #2): client 对象仍在但读 trackers 抛异常
+    (qB 断连抖动/超时) -> 与「无结论」同处置: 不写回执, item 留 pending 下 tick 重试;
+    恢复后照常确认; 读失败拖到 deadline 仍落「未确认」(warn), 不落「失败」(error)"""
+    import time as _time
+
+    def _boom(h):
+        raise RuntimeError("qB 连接抖动")
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr, client, key = _make_grouped_manager(td)
+        u = "https://tracker.hhanclub.net/announce.php"
+        client.trackers_map = {"HA": [_epoch_tracker(url=u, status=2, next_announce=100_000, min_announce=90_000)]}
+        mgr.web.commands.put(("reannounce_torrent", {"hash": "HA", "cmd_id": "cmdr"}))
+        mgr.web.consume_commands()
+        assert "cmdr" in mgr.web.reannounce_pending and "cmdr" not in mgr.web.results
+        client.torrents_trackers = _boom  # client 在(非 None), 读一次抛一次
+        mgr.web.check_pending()
+        assert "cmdr" not in mgr.web.results, "读失败不终局, 不写失败回执"
+        assert not mgr.web.reannounce_pending["cmdr"]["items"]["HA"]["done"], "item 留 pending 等恢复"
+        del client.torrents_trackers  # 去掉实例遮蔽, 回到 FakeClient.torrents_trackers
+        client.trackers_map["HA"][0]["next_announce"] = 105_000  # epoch 前跳 +5000s
+        mgr.web.check_pending()
+        assert mgr.web.results["cmdr"]["status"] == "ok", "恢复后下 tick 照常确认"
+        assert mgr.web.reannounce_pending == {}
+    with tempfile.TemporaryDirectory() as td:
+        mgr, client, key = _make_grouped_manager(td)
+        u = "https://tracker.hhanclub.net/announce.php"
+        client.trackers_map = {"HA": [_epoch_tracker(url=u, status=2, next_announce=100_000, min_announce=90_000)]}
+        mgr.web.commands.put(("reannounce_torrent", {"hash": "HA", "cmd_id": "cmds"}))
+        mgr.web.consume_commands()
+        client.torrents_trackers = _boom
+        mgr.web.check_pending()
+        assert "cmds" not in mgr.web.results, "读失败一 tick: 不写回执, item 留 pending"
+        mgr.web.reannounce_pending["cmds"]["items"]["HA"]["deadline"] = _time.time() - 1
+        mgr.web.check_pending()
+        r = mgr.web.results["cmds"]
+        assert r["status"] == "warn" and "未确认: " in r["error"], "读失败拖到 deadline 落「未确认」不落「失败」"
+        assert "读取 tracker 状态失败" not in r["error"]
 
 
 def test_reannounce_background_verify_and_cap():
