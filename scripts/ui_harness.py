@@ -431,7 +431,9 @@ def _inject_hr_site(torrents):
     token 与详情抽屉 hrStateLine 短语在前端从未被真渲染过。
     这里 monkeypatch 每个种子的 hr_judgement, 按 v3 四行判定表逐行轮转 7 场景:
     行1 考察中 / 行2 终态 B-C-D / 行3 放行记录 / 行4 本地兜底 / judged=None 未接入回落。
-    身份与 facts.lane 强耦合(真判定里档位决定身份, resolve_identity 各行的 reason 原文直抄),
+    身份与 facts.lane 强耦合(真判定里档位决定身份, resolve_identity 各行的 reason 原文直抄。
+    注: 2026-11-07 起两侧 reason 字面有意不一致 -- 本文件按图形符号禁令把间隔号改作连字符,
+    生产 resolve.py 仍是间隔号; 无断言依赖, e2e 断言取 lane 标签渲染而非 reason),
     站点侧达标结论按 HrEntry.satisfied_verdict 的档位即结论口径给(A/C=False, B=True, D=None)。
     只构造真 dataclass, 不接取数链 —— _hr_view_fields 消费的就是这些对象, 与真机同构。
     """

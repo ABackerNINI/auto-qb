@@ -67,7 +67,7 @@ doc     = "../../memory-bank/pitfalls/web-ui/frontend-split.md"
 run     = ["uv run python scripts/port_kill.py <args>"]
 timeout = 60
 when    = "桩/e2e 端口被残留进程占用或冒烟报陈旧桩时, 按实绑端口(启动行/命令行里可见)查 PID 强杀; 端口已不固定, 归属一律看 PID 命令行"
-note    = "exec kill 杀掉的是 uv 包装进程, python 子进程不死仍占端口 —— 必须按端口查真 PID 强杀, 别杀会话就当完事; <args> 传端口号(可多个)"
+note    = "exec kill 杀掉的是 uv 包装进程, python 子进程不死仍占端口 —— 必须按端口查真 PID 强杀, 别杀会话就当完事; <args> 传端口号(可多个); 非 python 监听须 --yes"
 doc     = "../../memory-bank/pitfalls/testing/harness-save-flow.md"
 
 [tasks."dev.e2e-fast-shard"]

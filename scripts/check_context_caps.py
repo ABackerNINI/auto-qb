@@ -123,6 +123,10 @@ def porcelain_paths(text: str) -> set[str]:
     AGENTS.md docs/AGENTS.md` 后「改动命中」判定会静默漏检(与上面整段 strip 的漏检同类)。
     状态列第二位若是数字(评分形态 `R90 old -> new`; 常规 porcelain v1 不出评分, 防御性
     兼容), 路径起点右移一位 -- 常规 XY 两列后必是空格, 第二位不可能是数字, 不误伤。
+
+    局限: 路径含非 ASCII/特殊字符时 git 默认 C 风格引号转义(rename 行形如 `R  "\\350..." ->
+    "docs/..."`), partition 后入集的是带引号转义串, 对不上真实路径, 「改动命中」静默漏检(与
+    改动前同结果, 无回归); quotePath 改进道(`git -c core.quotePath=false`)不做, 留待入池裁决。
     """
     out: set[str] = set()
     for line in text.splitlines():

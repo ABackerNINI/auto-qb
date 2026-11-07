@@ -659,7 +659,7 @@ def auto_cookie_login(args) -> int:
             try:
                 cookies = _cdp_get_cookies(ws, request_id)
             except (MiniWSError, OSError, json.JSONDecodeError):
-                print("WS 断开, 重连…")
+                print("WS 断开, 重连...")
                 ws = MiniWS(ver["webSocketDebuggerUrl"], timeout=10.0)
                 continue
             request_id += 1
@@ -709,7 +709,7 @@ def print_rows(rows: list[dict]) -> None:
     print(" | ".join(h.ljust(w) for h, w in zip(head, widths)))
     print("-" * (sum(widths) + 3 * (len(widths) - 1)))
     for r in rows:
-        name = r["name"][:widths[1] - 1] + "…" if len(r["name"]) > widths[1] else r["name"]
+        name = r["name"][:widths[1] - 1] + "..." if len(r["name"]) > widths[1] else r["name"]
         cells = (
             str(r["tid"]),
             name,
@@ -729,7 +729,7 @@ def selftest() -> int:
         data = base64.b64decode(b64)
         v1, v2, info = compute_infohashes(data)
         ok = v1 == want_v1 and v2 == want_v2
-        print(f"[{'OK' if ok else 'FAIL'}] infohash v1={v1[:12]}… v2={v2[:12]}… name={info.get(b'name', b'?')!r}")
+        print(f"[{'OK' if ok else 'FAIL'}] infohash v1={v1[:12]}... v2={v2[:12]}... name={info.get(b'name', b'?')!r}")
         failed += 0 if ok else 1
     checks = [
         (parse_size("27.34 GB"), int(27.34 * 1024**3)),
@@ -841,7 +841,7 @@ def main(argv: list[str] | None = None) -> int:
     for i, row in enumerate(targets):
         if i:
             pause = args.min_interval * random.uniform(0.75, 1.25)
-            print(f"  … 限速等待 {pause:.1f}s")
+            print(f"  ... 限速等待 {pause:.1f}s")
             time.sleep(pause)
         try:
             result = download_torrent(client, args.base_url, row["tid"], out_dir)
