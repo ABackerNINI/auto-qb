@@ -42,6 +42,9 @@
 - test_plan_empty_files_reject
 - test_plan_hard_max_dir_kind_none_suffix
 - test_reconcile_table_rows
+- test_reconcile_journal_failed_rows: journal failed 相位行(issue 26-11-07-0527 #3)——
+  证据可信 -> fail_terminal / 形态可疑(reason/ts 缺失坏形/锚点缺失) -> fail_suspect /
+  陈旧残留(ts 早于锚点, 含证据残缺形态) -> fail_stale(清账动作在执行体)
 - test_finalize_window_phase_set_redefined: S4 相位集 {armed, rewritten}+ 旧三相位退役
 - test_blocks_relocation_finalize_window_release: D15 收窄直测(收尾窗放行/前段仍拦)
 - test_ensure_daemon_action_three_way: S3 新链对账判据三分(pending 空/daemon 健康/pending+stale
@@ -706,6 +709,42 @@ def test_reconcile_table_rows():
     assert ru.reconcile(job, alias_present=False, qb_up=True, all_at_dst=True) == ru.ACT_VERIFY
     # qB 不在即使已到 dst -> wait(qB 回来核验; 下线窗口是 daemon 现场)
     assert ru.reconcile(job, alias_present=True, qb_up=False, all_at_dst=True) == ru.ACT_WAIT
+
+
+def test_reconcile_journal_failed_rows():
+    """journal failed 相位行(issue 26-11-07-0527 #3): 证据可信 -> fail_terminal / 形态可疑 ->
+    fail_suspect / 陈旧残留 -> fail_stale(执行体清账后重评常规表; 陈旧优先于可疑)"""
+    job = _job(armed_at=100.0, created_at=50.0)
+    # 证据可信(reason 非空 + ts 不早于 armed_at): 消费
+    assert ru.reconcile(
+        job, journal_phase="failed", journal_reason="verify_mismatch", journal_ts=150.0
+    ) == ru.ACT_FAIL_TERMINAL
+    # 锚点回退: armed_at 缺(0)时用 created_at
+    assert ru.reconcile(
+        _job(created_at=50.0), journal_phase="failed", journal_reason="verify_mismatch", journal_ts=60.0
+    ) == ru.ACT_FAIL_TERMINAL
+    # 形态可疑: reason 缺失/空/ts 缺失/坏形 => 保守搁置, 绝不误转终态
+    assert ru.reconcile(job, journal_phase="failed") == ru.ACT_FAIL_SUSPECT
+    assert ru.reconcile(job, journal_phase="failed", journal_reason="", journal_ts=150.0) == ru.ACT_FAIL_SUSPECT
+    assert ru.reconcile(job, journal_phase="failed", journal_reason="verify_mismatch") == ru.ACT_FAIL_SUSPECT
+    assert ru.reconcile(
+        job, journal_phase="failed", journal_reason="verify_mismatch", journal_ts="bad"
+    ) == ru.ACT_FAIL_SUSPECT
+    # 锚点缺失(state 旧账两时间戳皆 0 = 既无法证明新鲜也无从证伪陈旧): 同按可疑
+    assert ru.reconcile(
+        _job(armed_at=0.0, created_at=0.0),
+        journal_phase="failed",
+        journal_reason="verify_mismatch",
+        journal_ts=150.0,
+    ) == ru.ACT_FAIL_SUSPECT
+    # 陈旧残留(ts 早于锚点 = 同 job_id 上一世账): fail_stale(清账动作在执行体, 表只出处置)
+    assert ru.reconcile(
+        job, journal_phase="failed", journal_reason="verify_mismatch", journal_ts=40.0
+    ) == ru.ACT_FAIL_STALE
+    # 陈旧优先于可疑: 上一世残留即使证据形态残缺(reason 缺)也只属于上一世, 清账不搁置新世
+    assert ru.reconcile(job, journal_phase="failed", journal_ts=40.0) == ru.ACT_FAIL_STALE
+    # 非 failed 相位不进 failed 分支(rewritten 合并照旧)
+    assert ru.reconcile(job, journal_phase="rewritten", alias_present=True, qb_up=True, all_at_dst=False) == ru.ACT_WAIT
 
 
 def test_finalize_window_phase_set_redefined():

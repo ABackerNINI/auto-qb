@@ -595,6 +595,13 @@ class ExecMixin:
         - journal rewritten 相位向前合并(S3a 协议: daemon 翻账, state.json 镜像由主循环
           合并 —— D13): journal.phase == rewritten 且 job 还在 armed ⇒ 镜像跟进 rewritten
           (只前进不后退; 终态合并不在此 —— active_jobs 已滤终态, 终态写权在主循环);
+        - journal 相位 failed(issue 26-11-07-0527 #3): 处置优先于 daemon 重拉判据 ——
+          消费(转 failed 终态)与搁置(证据可疑留人工)两态经 _apply_reconcile 收口并
+          提前返回, 不再走 _ensure_daemon(failed 相位对 daemon 已退休, 重拉只会空转);
+          陈旧残留(ACT_FAIL_STALE, ts 早于本生命周期锚点)先清账(_clear_stale_failed_
+          journal, 删前证据留痕, 解除 daemon 对该 job_id 的退休)再按无账现场重评常规表
+          —— 重拉判据一并恢复, 否则同 job_id 再迁移死锁在 armed; 清账未成本拍直接收口
+          (不重评不重拉, 下拍重试);
         - 现场三输入(别名在? qB 在? 全员已到目标?)交 ru.reconcile 新表判 WAIT/REBUILD/
           VERIFY; ACT_ENSURE_DAEMON 判据独立(pending + daemon_stale), 每拍顺带判;
         - 旧链输入(seed_state/心跳)已随对账表重定义退役。
@@ -606,7 +613,26 @@ class ExecMixin:
         alias_present = bool(job.alias_paths) and any(self._alias_live(p) for p in job.alias_paths)
         qb_up = self._qb_up()
         at_dst = self._all_at_dst(job)
-        action = ru.reconcile(job, alias_present=alias_present, qb_up=qb_up, all_at_dst=at_dst)
+        action = ru.reconcile(
+            job,
+            alias_present=alias_present,
+            qb_up=qb_up,
+            all_at_dst=at_dst,
+            journal_phase=j_phase,
+            journal_reason=str(journal.get("reason") or ""),
+            journal_ts=journal.get("ts"),
+        )
+        if action == ru.ACT_FAIL_STALE:
+            # 陈旧残留(上一生命周期账): 清账解除 daemon 对该 job_id 的退休, 清成后按无账
+            # 现场走常规对账(重拉判据一并恢复) —— 残留不清则再迁移死锁在 armed; 清账未成
+            # (盘/权限)本拍直接收口: journal 仍 failed, 重评常规表/重拉只会空转, 下拍重试
+            if not self._clear_stale_failed_journal(job, rt):
+                return
+            action = ru.reconcile(job, alias_present=alias_present, qb_up=qb_up, all_at_dst=at_dst)
+        elif j_phase == ru.PHASE_FAILED:
+            # 消费/搁置: 收口即提前返回, 本拍起不再判重拉 —— 证据消费先于任何重拉动作
+            self._apply_reconcile(job, rt, action)
+            return
         self._ensure_daemon(job, rt)
         self._apply_reconcile(job, rt, action)
 
@@ -629,8 +655,17 @@ class ExecMixin:
         return True
 
     def _apply_reconcile(self, job: RelocateJob, rt: dict, action: str) -> None:
-        """对账动作处置(S4 新链三动作; ACT_ENSURE_DAEMON 的处置在 _ensure_daemon 独立走)"""
+        """对账动作处置(S4 新链三动作; ACT_ENSURE_DAEMON 的处置在 _ensure_daemon 独立走;
+        journal failed 相位的两态在 _consume_failed_journal/_warn_suspect_failed_journal)"""
         if action == ru.ACT_WAIT:
+            return
+        if action == ru.ACT_FAIL_TERMINAL:
+            # 收尾校验失败证据消费: 转 failed 终态, 证据原文保留(_fail 单点)
+            self._consume_failed_journal(job)
+            return
+        if action == ru.ACT_FAIL_SUSPECT:
+            # 可疑失败证据: 保守搁置留人工, 不转终态(绝不把可疑证据误判成终态)
+            self._warn_suspect_failed_journal(job, rt)
             return
         if action == ru.ACT_VERIFY:
             # 核验+删链推进单点(S4 后半): 全员逐成员等值核验 -> 删链门依赖扫描 ->
@@ -670,6 +705,90 @@ class ExecMixin:
                 rt["stage"] = "penetrate"
             return
         logger.debug(f"relocate | job {job.job_id}: 对账动作 {action} 无处置")
+
+    def _consume_failed_journal(self, job: RelocateJob) -> None:
+        """对账消费 journal failed 相位 -> job failed 终态(issue 26-11-07-0527 #3 单点)
+
+        journal 里的 failed 相位 = 收尾窗校验写下的失败证据(guardian 时代的
+        reason=verify_mismatch 形态; 对账表已按「reason 非空 + ts 不早于本生命周期锚点」
+        判可消费)。处置:
+        - job 转 failed 终态, 走 _fail 单点(暂停成员恢复; 现场保留: 不搬回、不删别名);
+        - 证据保留: journal 的 reason 原文进 job.reason, ts 与出处进 last_error —— 不丢弃;
+        - journal 本身已是终相位(failed 随 STOP_PHASES 扩展纳入停止语义): 不重写不覆盖,
+          daemon 与重拉判据据此退休, 且 write_journal 前向合并保证任何非终态写者都抹不掉
+          这份证据;
+        - 再发起路径: 用户排除故障后重新发起同 id 迁移, 新生命周期对账把本账判陈旧
+          (ts 早于新 created_at)清掉(_clear_stale_failed_journal), daemon 退休随之解除
+          —— 「排除故障后可重新发起迁移」的承诺成立, 不死锁在 armed。
+        幂等(黄金法则 1): 消费后 job 终态, 对账不再触及(active_jobs 滤终态); 直接再入由
+        终态闸挡下(以账上现值为准, 不依赖调用方传进来的相位)。
+        """
+        cur = self.get_job(job.job_id) or job
+        if cur.is_terminal:
+            return
+        journal = relocate_journal.read_journal(self._data_dir(), job.job_id) or {}
+        if str(journal.get("phase") or "") != ru.PHASE_FAILED:
+            return  # 消费瞬间账已变(单线程下不应发生): 以盘上现值为准, 不凭旧读误判
+        reason = str(journal.get("reason") or "").strip()
+        if not reason:
+            return  # 判定与执行之间证据形变: 回到下拍对账重判(可疑分支会兜住)
+        text = (
+            f"收尾校验失败(journal 相位 failed, reason={reason}, ts={journal.get('ts')}): "
+            "转 failed 终态, 现场保留(别名不删, 成员经别名可读); 排除故障后可重新发起迁移"
+        )
+        logger.warning(f"relocate | job {job.job_id}: {text}")
+        self._fail(cur, reason, text)
+
+    def _warn_suspect_failed_journal(self, job: RelocateJob, rt: dict) -> None:
+        """可疑 failed journal 的保守搁置面: WARNING 一次(对账每拍都来, 不设门会刷屏),
+        不转终态、不推进、不重拉 —— 留人工核处(黄金法则 2 保守默认; 人工出口 = 撤销,
+        journal 终态互覆通道仍开放)。"""
+        if rt.get("journal_failed_suspect_warned"):
+            return
+        rt["journal_failed_suspect_warned"] = True
+        logger.warning(
+            f"relocate | job {job.job_id}: journal 相位 failed 但证据形态可疑"
+            "(reason/ts 缺失或坏形, 或无法锚定所属生命周期) —— 保守不转终态, 留人工核处; "
+            "该 job 对账不再推进, 回收 daemon 已按终态退休"
+        )
+
+    def _clear_stale_failed_journal(self, job: RelocateJob, rt: dict) -> bool:
+        """清理确证陈旧的 failed journal(上一生命周期残留; issue 26-11-07-0527 #3 评审 finding 1)
+
+        failed 入 STOP_PHASES 后 daemon 对该 job_id 退休(scan 剔除 + record_rewrites
+        拒写), 而同 job_id 再迁移(_arm 不重置 journal)会带着上一世的失败账进入新生命
+        周期 —— 残留账不清, 新生命周期的改写/重放被永久堵死。清理 = 删文件
+        (relocate_journal.clear_journal 主循环专属口, 幂等); state.json 旧条目随再发起
+        登记被覆盖是既有语义(新世接管)。
+        证据契约: 含 reason/ts 的证据行在调用 clear_journal **之前**落盘(进程在删除成功
+        与任何后续动作之间退出, 上一世失败证据也有痕可查), 删后只记结果行 —— failed 是
+        终相位、内容冻结, 证据行一次留痕即覆盖其后任何一次成功删除。
+        只在对账表判 ACT_FAIL_STALE(ts 早于本生命周期锚点)时进入; 落手前对盘上现相位
+        再核一次(单线程下不应变, 变了 = 以盘上现值为准不删, 下拍对账重判)。
+        返回 False = 本拍未清成(盘/权限或现相位已变): 调用方必须直接收口本拍 —— journal
+        仍 failed、daemon 尚未解除退休, 此刻重评常规表/重拉只会空转; 留待下拍对账重试。
+        证据行与失败 WARNING 各按 rt 键限频一次(对账每拍都来, 不设门会刷屏)。
+        """
+        journal = relocate_journal.read_journal(self._data_dir(), job.job_id) or {}
+        if str(journal.get("phase") or "") != ru.PHASE_FAILED:
+            return False
+        if not rt.get("journal_failed_clear_evidence_logged"):
+            rt["journal_failed_clear_evidence_logged"] = True
+            reason = str(journal.get("reason") or "") or "(空)"
+            logger.info(
+                f"relocate | job {job.job_id}: 陈旧失败账证据留痕(reason={reason}, "
+                f"ts={journal.get('ts')}) —— 上一生命周期残留, 即将清理(删除前留痕)"
+            )
+        if not relocate_journal.clear_journal(self._data_dir(), job.job_id):
+            if not rt.get("journal_failed_clear_warned"):
+                rt["journal_failed_clear_warned"] = True
+                logger.warning(
+                    f"relocate | job {job.job_id}: 陈旧失败账清理失败(盘/权限?), 下拍对账重试; "
+                    "本拍不重评常规表不重拉(journal 仍 failed, daemon 尚未解除退休)"
+                )
+            return False
+        logger.info(f"relocate | job {job.job_id}: 已清理陈旧失败账 —— daemon 退休随新生命周期解除")
+        return True
 
     def _step_verify(self, job: RelocateJob, rt: dict) -> None:
         """核验+删链推进(S4 后半单点; 计划 26-11-05-0808 §3.1「qB 重启 → 主循环核验」段)

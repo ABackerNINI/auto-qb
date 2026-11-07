@@ -195,8 +195,8 @@ def _scan_jobs(data_dir: str, host: str, port: int) -> list:
 
     口径: spec 属本实例(host/port 字面相等, 不做 localhost/127.0.0.1 智能匹配)且带
     bt_backup 字段(新链 opt-in; 旧链 spec 无此字段不归本模块); journal 已终态
-    (done/cancelled)的 job 跳过 —— 取消/收口即时生效(D12)。src/dst 缺项的残缺 spec
-    跳过(arm 侧责任, daemon 不猜)。
+    (done/cancelled/failed)的 job 跳过 —— 取消/收口/失败终态即时生效(D12)。src/dst
+    缺项的残缺 spec 跳过(arm 侧责任, daemon 不猜)。
     返回 [{job_id, spec, pending, flip}]; flip = pending 空 + 改写账非空 + 相位未翻
     (窗口中崩溃错过翻相)⇒ 主循环补翻 rewritten。
     """

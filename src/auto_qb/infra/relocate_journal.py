@@ -4,7 +4,7 @@
 - state.json → relocate.jobs.<job_id>: **权威**, 唯一写者 = auto-qb 主循环线程;
 - <data_dir>/relocate/<job_id>.json: job journal(收尾账)。实际有**两个写者**: 回收
   daemon 写成员改写账(rewrites)与 rewritten 相位翻转, auto-qb 主循环写终态
-  (done/cancelled)与重建回滚(armed) —— 无跨进程锁, 整包 last-writer-wins, 靠
+  (done/cancelled/failed)与重建回滚(armed) —— 无跨进程锁, 整包 last-writer-wins, 靠
   write_journal 的「终态不得被非终态覆盖」前向合并保序(两个写者都走该函数)。
 
 第三份文件 `<job_id>.spec.json` 是 auto-qb 写给 daemon 的**规格**: 路径可能含
@@ -56,9 +56,11 @@ def _read_json(path: str) -> Optional[dict]:
 
 # ---------- journal(daemon 写改写账 / auto-qb 写终态与回滚) ----------
 
-# journal 里出现这两个相位 = auto-qb 侧已收口(撤销/收尾完成), daemon 必须退出/放弃该 job ——
-# 否则已终结 job 的改写账会被继续重放(D12: 取消/收口即时生效)
-STOP_PHASES = frozenset({"done", "cancelled"})
+# journal 里出现这三个相位 = auto-qb 侧已收口(撤销/收尾完成/失败终态), daemon 必须退出/
+# 放弃该 job —— 否则已终结 job 的改写账会被继续重放(D12: 取消/收口即时生效)。failed 是
+# 主循环对账消费收尾校验失败证据时写下的终相位(与 done/cancelled 同为终态: 非终态写者
+# 不得覆盖, 失败证据不被 daemon 重拉后的记账/翻相抹掉; 终态互覆仍 last-writer-wins)
+STOP_PHASES = frozenset({"done", "cancelled", "failed"})
 
 
 def write_journal(data_dir: str, job_id: str, payload: dict) -> bool:
@@ -67,7 +69,7 @@ def write_journal(data_dir: str, job_id: str, payload: dict) -> bool:
     整包 last-writer-wins 且无跨进程锁, 唯一必须守住的序: **非终态相位不得覆盖终态**
     ——否则 daemon 的记账落进 auto-qb「写终态」之后的读-写间隙, 终态被回退成非终态,
     daemon 看不到退休指令(已收口 job 的改写账被继续重放)。写前读一次做前向合并:
-    竞态窗口从「整个循环轮次」收窄到本函数内部读-写的微秒级。终态写终态(done/cancelled
+    竞态窗口从「整个循环轮次」收窄到本函数内部读-写的微秒级。终态写终态(done/cancelled/failed
     互覆)仍 last-writer-wins。返回 False = 被拒写(对方已收口), 调用方(daemon)据此立即
     放弃该 job, 不再继续后续动作。
     """
@@ -83,6 +85,26 @@ def write_journal(data_dir: str, job_id: str, payload: dict) -> bool:
 
 def read_journal(data_dir: str, job_id: str) -> Optional[dict]:
     return _read_json(journal_path(data_dir, job_id))
+
+
+def clear_journal(data_dir: str, job_id: str) -> bool:
+    """删除一份 job journal(主循环专属清理口; 返回是否真删除, 幂等)
+
+    唯一合法用途: 对账确证 journal 是**上一生命周期**的陈旧残留(同 job_id 再迁移,
+    ts 早于新生命周期锚点)时清除 —— failed 入 STOP_PHASES 后 daemon 对该 job_id 退休
+    (scan 剔除 + record_rewrites 拒写), 残留账不清, 新生命周期的改写/重放被永久堵死。
+    绕过 write_journal 前向合并是刻意的: 该账不属于任何在途生命周期, 「非终态不得覆盖
+    终态」要保护的对象不存在; 删除与同目录 daemon.json 的按归属删除(release_daemon_state)
+    同先例。证据处置: 调用方必须在调用本函数**之前**把 reason/ts 留一行日志(证据行
+    存续先于删除 —— os.remove 成功与后续动作之间进程退出, 证据仍有痕; 结果行删后另记)
+    —— state.json 旧条目随再发起登记被覆盖本就是既有语义(新世接管), 盘上证据的存续面
+    即该行日志。
+    """
+    try:
+        os.remove(journal_path(data_dir, job_id))
+    except OSError:
+        return False  # 已不在(FileNotFoundError)或盘/权限问题: 幂等不抛, 调用方下拍重试
+    return True
 
 
 # ---------- spec(auto-qb 写 / daemon 读) ----------
@@ -142,7 +164,7 @@ def _alive(pid: int) -> bool:
 # --------------------------------------------------------------------------
 
 # journal 相位补充: job 的全部 pending 成员收口后, daemon 把 journal 相位翻到 rewritten
-# (计划 §2.4 新相位模型 {armed, rewritten}; 仍是**非终态** —— 终态(done/cancelled)
+# (计划 §2.4 新相位模型 {armed, rewritten}; 仍是**非终态** —— 终态(done/cancelled/failed)
 # 只有主循环能写, 前向合并保护不变)
 PHASE_REWRITTEN = "rewritten"
 
@@ -270,7 +292,7 @@ def record_rewrites(
 ) -> bool:
     """daemon 专用记账口: 把成员改写账读-改-写并进 journal.rewrites(整包 last-writer-wins
     下的合并单点), 可选翻转相位(phase=rewritten)。落盘走 write_journal 复用其前向合并:
-    对账已收口(journal 已终态 done/cancelled)⇒ 拒写返回 False —— 取消/完成对 daemon
+    对账已收口(journal 已终态 done/cancelled/failed)⇒ 拒写返回 False —— 取消/完成/失败对 daemon
     即时生效的协议级闸门(D12), 调用方据此立即放弃该 job。phase 参数只收非终态相位
     (终态是主循环的专属写权, fail-fast)。
     """
@@ -319,7 +341,7 @@ def reset_rewrites(data_dir: str, job_id: str, *, ts: Optional[float] = None) ->
     做「只重放一次」的节奏闸(重放一次后仍不过 = 维持悬挂+告警, 防无限改写循环)。
 
     返回重置条数; 0 = 无 settled 记录可重置(不动盘, 幂等); -1 = journal 已终态
-    (拒写, 走 write_journal 的前向合并保护 —— 已收口/已取消的 job 不再重放)。
+    (拒写, 走 write_journal 的前向合并保护 —— 已收口/已取消/已判失败的 job 不再重放)。
     """
     cur = read_journal(data_dir, job_id) or {}
     if str(cur.get("phase") or "") in STOP_PHASES:

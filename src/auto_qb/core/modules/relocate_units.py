@@ -1135,6 +1135,14 @@ ACT_WAIT = "wait"  # 等(armed 做种中 / qB 不在等下线窗口 / pending �
 ACT_REBUILD = "rebuild_links"  # 别名丢失 + qB 在 ⇒ 从 job 账重建别名回 armed(rebuild-from-journal 判据侧)
 ACT_VERIFY = "verify_chain"  # 全员 save_path 已在目标位置 ⇒ 核验+删链推进(体在 relocate_exec._step_verify)
 ACT_ENSURE_DAEMON = "ensure_daemon"  # pending 非空且回收 daemon 死/心跳过期 ⇒ 重拉 recycle_daemon
+# journal failed 相位的三个处置(issue 26-11-07-0527 #3: 收尾校验失败写下的 journal 相位
+# failed 原先无任何消费者, daemon 重拉后整包覆盖失败证据, job 永不收敛 failed 终态):
+ACT_FAIL_TERMINAL = "fail_terminal"  # 证据可信(有 reason 且 ts 不早于本生命周期)⇒ 转 job failed 终态
+ACT_FAIL_SUSPECT = "fail_suspect"  # 证据形态可疑(reason/ts 缺失坏形)⇒ 保守搁置: WARNING 留人工, 不转终态
+# 陈旧残留(ts 早于本生命周期锚点 = 同 job_id 再迁移的上一世账)⇒ 执行体清账
+# (relocate_journal.clear_journal)后按无账现场重评常规表 —— failed 入 STOP_PHASES 后
+# daemon 对该 job_id 退休, 残留账不清则新生命周期的改写/重放被永久堵死(死锁在 armed)
+ACT_FAIL_STALE = "fail_stale"
 
 # 重试退避与上限(防无界重试): 建链必失败的环境(权限不足 / 未开 Windows 开发者模式且
 # allow_uac 关 —— 预检文案自己点名的常见环境)里, 「别名丢失 → 对账 REBUILD → 置 MOVED
@@ -1167,11 +1175,24 @@ def ensure_daemon_action(*, pending: int, daemon_stale: bool) -> str:
     return ACT_ENSURE_DAEMON
 
 
-def reconcile(job: RelocateJob, *, alias_present: bool = True, qb_up: bool = True, all_at_dst: bool = False) -> str:
+def reconcile(
+    job: RelocateJob,
+    *,
+    alias_present: bool = True,
+    qb_up: bool = True,
+    all_at_dst: bool = False,
+    journal_phase: str = "",
+    journal_reason: str = "",
+    journal_ts: Optional[float] = None
+) -> str:
     """收尾窗(armed/rewritten)对账表: (别名在?, qB 在?, 全员已到目标?) -> 处置动作(纯函数)
 
     新链判据只认**证据**而非意图相位 —— 收尾窗没有「先删别名再归位」的意图账, 三个
     输入把现场分干净:
+    - journal 相位 failed(issue 26-11-07-0527 #3): 收尾校验失败的证据账, 处置优先于
+      三输入现场推进 —— 证据可信 ⇒ ACT_FAIL_TERMINAL(消费转 failed 终态); 形态可疑 ⇒
+      ACT_FAIL_SUSPECT(保守搁置留人工); 陈旧残留 ⇒ ACT_FAIL_STALE(执行体清账后按
+      无账现场重评三输入 —— 本表不再回落, 重拉判据的恢复在执行体清账之后);
     - 全员已在目标位置(改写生效/qB 重启加载完成或外部归位)⇒ ACT_VERIFY: 核验+删链
       推进(全员逐成员等值核验、删链门依赖扫描与删别名在 _step_verify 单点);
     - 别名丢失而 qB 在线 ⇒ ACT_REBUILD: 从 job 账(alias_paths/plan)重建别名回 armed
@@ -1180,11 +1201,42 @@ def reconcile(job: RelocateJob, *, alias_present: bool = True, qb_up: bool = Tru
     - 其余(armed 做种中 / qB 不在)⇒ ACT_WAIT。pending 集与 daemon 存活的对账不进本表
       —— ACT_ENSURE_DAEMON 判据独立(ensure_daemon_action), 由执行体每拍顺带判。
     """
+    if journal_phase == PHASE_FAILED:
+        # 失败证据三态(消费/搁置/陈旧清账)处置优先于现场推进; 陈旧清账与恢复重拉在执行体
+        return _journal_failed_action(job, reason=journal_reason, ts=journal_ts)
     if all_at_dst and qb_up:
         return ACT_VERIFY
     if not alias_present and qb_up:
         return ACT_REBUILD
     return ACT_WAIT
+
+
+def _journal_failed_action(job: RelocateJob, *, reason: str, ts: Optional[float]) -> str:
+    """journal failed 相位的消费判定(纯函数; reconcile 的 failed 分支单点)
+
+    判定次序: **陈旧优先于可疑** —— ts 可解析且早于锚点 = 上一生命周期的残留账
+    (job_id 由 mover/src/dst 摘要而来, 同组同目标再迁移复用同 id), 证据形态再残缺也
+    只属于上一世, 清账让位新生命周期(否则同 id 再迁移死锁在 armed), 不落入可疑搁置。
+
+    - ACT_FAIL_STALE: ts 可解析且早于本生命周期锚点 —— 锚点取 armed_at(arm 之后收尾链
+      才可能写下失败), 缺则退 created_at; 执行体清账(clear_journal)后按无账现场重评;
+    - ACT_FAIL_SUSPECT: reason 缺失/空 或 ts 缺失/坏形, 或锚点缺失(两账皆 0 = 既无法
+      证明新鲜也无从证伪陈旧)—— 宁可保守: 不转终态留人工, 绝不把可疑证据误判成终态;
+    - ACT_FAIL_TERMINAL: reason 非空且 ts 不早于锚点 —— 本生命周期内写下的失败证据,
+      执行体据此转 failed 终态并把证据原文保留进 reason/last_error。
+    """
+    anchor = job.armed_at if job.armed_at > 0 else job.created_at
+    ts_f: Optional[float] = None
+    if ts is not None:
+        try:
+            ts_f = float(ts)
+        except (TypeError, ValueError):
+            ts_f = None
+    if ts_f is not None and anchor > 0 and ts_f < anchor:
+        return ACT_FAIL_STALE
+    if not str(reason or "").strip() or ts_f is None or anchor <= 0:
+        return ACT_FAIL_SUSPECT
+    return ACT_FAIL_TERMINAL
 
 
 # ---------------------------------------------------------------- 核验与删链门(S4 后半)

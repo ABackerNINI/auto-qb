@@ -16,6 +16,21 @@ verify 三动作, 判据面 ru.reconcile 纯函数层在 test_relocate_units)与
 ### journal 镜像合并(_step_reconcile)
 - test_step_reconcile_merges_rewritten_forward: armed + journal rewritten -> 跟进 rewritten; rewritten + 旧 journal 相位 -> 不回退
 - test_step_reconcile_same_journal_phase_no_remerge: 相位一致 -> 不重复落账, 对账照常走完
+### journal failed 相位消费(issue 26-11-07-0527 #3: 对账表消费 failed 相位)
+- test_step_reconcile_consumes_failed_journal_to_failed_terminal: 对账读到 journal failed
+  (证据可信) => job 转 failed 终态 + 证据原文保留 reason/last_error + journal 终相位不被
+  重写 + 本拍不再判 daemon 重拉(消费先于重拉)
+- test_failed_journal_consume_idempotent_on_reentry: 幂等 —— 消费后再入(含拿旧非终端对象
+  直接再入)不重复写 state/不重复记因
+- test_suspect_failed_journal_parks_without_terminal: 保守支 —— 证据形态可疑不转终态,
+  WARNING 一次(rt 门), 不推进不重拉
+- test_stale_failed_journal_cleared_and_daemon_reclaimed: 陈旧支(评审 finding 1)—— ts
+  早于本生命周期锚点(上一世残留)主循环清账(删前证据留痕行 + 删后结果行)+ 本拍恢复
+  常规对账与 daemon 重拉判据(残留不清则再迁移死锁在 armed)
+- test_stale_failed_journal_clear_failure_parks_tick_and_gates_warning: 清账失败
+  (r2-finding 2)—— WARNING 限频一次 + 失败拍直接收口(不重评常规表不重拉), 下拍原样重试
+- test_reinitiation_after_consumed_failure_reclaims_daemon: 消费支再发起路径 —— 消费转
+  终态后重发起同 id 迁移, 新生命周期把上一世失败账判陈旧清掉, daemon 重拉恢复
 ### S3 接线(计划 26-11-05-0808 §3.2/S3: spec 双字段 + ACT_ENSURE_DAEMON, 全替身不起真进程)
 - test_write_arm_spec_bt_backup_and_members: 实例命中 bt_backup 表 -> spec 写 bt_backup +
   members 双 hash(<hash>.torrent 现算 v2); 未命中 -> 不写 bt_backup(警告降级);
@@ -208,6 +223,178 @@ def test_step_reconcile_same_journal_phase_no_remerge(tmp_path):
     job = _job("j1", phase=ru.PHASE_REWRITTEN)
     mod._step_reconcile(job, {})
     assert mod._jobs == {}, "同相位不得重复落账"
+
+
+# ---------------------------------------------------------------- journal failed 相位消费(issue 26-11-07-0527 #3)
+# 收尾校验失败写下的 journal 相位 failed 必须被对账收敛: 消费转 failed 终态(证据保留)/
+# 可疑保守搁置/陈旧残留落回常规表; 三态都不再判 daemon 重拉(STOP_PHASES 扩展后 failed
+# 相位对 daemon 退休, 重拉只会空转 —— 证据消费必须先于任何重拉动作)。
+
+
+def _failed_journal_env(tmp_path, journal_body, **job_kw):
+    """failed 相位消费用环境: spec 带 bt_backup(pending 非空, 若无闸门 _ensure_daemon 会
+    真重拉)+ journal 落盘 + armed job 登记 + _spawn_daemon 替身。返回 (mod, job, spawned)。"""
+    data_dir = str(tmp_path / "data")
+    backup = tmp_path / "BT_backup"
+    v1, _v2 = _torrent_fixture(backup, b"m-ok", "R:/src")
+    mod = _s3_mod(tmp_path, backup=backup)
+    host, port = mod._qb_host(), mod._qb_port()
+    _write_new_chain_spec(data_dir, "j1", host, port, backup, v1)
+    base = {
+        "phase": ru.PHASE_ARMED,
+        "hashes": (v1, ),
+        "armed_at": 100.0,
+        "created_at": 50.0,
+    }
+    base.update(job_kw)
+    job = _job("j1", **base)
+    mod.register_job(job)
+    relocate_journal.write_journal(data_dir, "j1", dict(journal_body))
+    spawned = []
+    mod._spawn_daemon = lambda d, h, p: spawned.append((d, h, p))
+    return mod, job, spawned
+
+
+def test_step_reconcile_consumes_failed_journal_to_failed_terminal(tmp_path):
+    """消费支(拍板方向): 对账读到 journal failed(证据可信: reason + ts 不早于 armed_at)
+    => job 转 failed 终态(_fail 单点), 证据原文保留进 reason/last_error; journal 本身就是
+    终相位(STOP_PHASES 已纳 failed), 不被重写; 本拍不再判 daemon 重拉(消费先于重拉)"""
+    mod, job, spawned = _failed_journal_env(tmp_path, {
+        "phase": "failed",
+        "reason": "verify_mismatch",
+        "ts": 150.0,
+    })
+    with capture_logs("auto_qb.core.modules.relocate_mod") as cap:
+        mod._step_reconcile(job, {})
+    saved = mod.get_job("j1")
+    assert saved.phase == ru.PHASE_FAILED and saved.is_terminal, (saved.phase, saved.reason)
+    assert saved.reason == "verify_mismatch", "失败原因原文必须保留(不丢证据)"
+    assert "journal 相位 failed" in saved.last_error and "verify_mismatch" in saved.last_error, saved.last_error
+    j = relocate_journal.read_journal(str(tmp_path / "data"), "j1")
+    assert j["phase"] == "failed" and j["reason"] == "verify_mismatch", "终相位 journal 不被重写(证据留存)"
+    assert spawned == [], f"failed 相位不再判重拉: {spawned}"
+    assert any("收尾校验失败" in m for m in cap.messages), cap.messages
+
+
+def test_failed_journal_consume_idempotent_on_reentry(tmp_path):
+    """幂等(黄金法则 1): 消费后对账再入(含拿着旧非终端 job 对象的直接再入)不重复写
+    state/不重复记因 —— 终态闸以账上现值为准"""
+    mod, job, spawned = _failed_journal_env(tmp_path, {
+        "phase": "failed",
+        "reason": "verify_mismatch",
+        "ts": 150.0,
+    })
+    mod._step_reconcile(job, {})
+    first = ru.job_to_dict(mod.get_job("j1"))
+    assert first["phase"] == ru.PHASE_FAILED
+    # 直接再入: 主动画传旧的非终端 armed 对象(active_jobs 已滤终态, 生产不会; 防御面钉死)
+    mod._step_reconcile(job, {})
+    mod._apply_reconcile(job, {}, ru.ACT_FAIL_TERMINAL)
+    assert ru.job_to_dict(mod.get_job("j1")) == first, "重复消费不得改账(无重复副作用)"
+    assert spawned == [], spawned
+
+
+def test_suspect_failed_journal_parks_without_terminal(tmp_path):
+    """保守支: failed 相位但证据形态可疑(reason/ts 缺失) => 不转终态、不推进、不重拉,
+    WARNING 一次(rt 门, 对账每拍都来不设门会刷屏); 换 job 重开 rt 后再警一次"""
+    mod, job, spawned = _failed_journal_env(tmp_path, {"phase": "failed"})
+    rt = {}
+    with capture_logs("auto_qb.core.modules.relocate_mod") as cap:
+        mod._step_reconcile(job, rt)
+        mod._step_reconcile(mod.get_job("j1"), rt)
+    saved = mod.get_job("j1")
+    assert saved.phase == ru.PHASE_ARMED and not saved.is_terminal, (saved.phase, saved.reason)
+    assert saved.reason == "" and saved.last_error == "", "可疑证据不得写进账(留人工, 不误判终态)"
+    assert rt.get("journal_failed_suspect_warned") is True, rt
+    warns = [m for m in cap.messages if "证据形态可疑" in m]
+    assert len(warns) == 1, f"同 job 只警一次: {warns}"
+    assert spawned == [], f"可疑支同样不重拉: {spawned}"
+
+
+def test_stale_failed_journal_cleared_and_daemon_reclaimed(tmp_path):
+    """陈旧支(评审 finding 1 修正): failed 但 ts 早于本生命周期锚点(同 job_id 上一世残留)
+    => 主循环清账(删前证据留痕行 + 删后结果行), 本拍起恢复常规对账与 daemon 重拉判据
+    —— 残留账不清, failed 入 STOP_PHASES 后 daemon 对该 id 永久退休, 再迁移死锁在 armed"""
+    mod, job, spawned = _failed_journal_env(
+        tmp_path,
+        {
+            "phase": "failed",
+            "reason": "verify_mismatch",
+            "ts": 10.0,
+        },
+        created_at=1000.0,
+        armed_at=0.0,
+    )
+    data_dir = str(tmp_path / "data")
+    rt = {}
+    with capture_logs("auto_qb.core.modules.relocate_mod") as cap:
+        mod._step_reconcile(job, rt)
+    assert relocate_journal.read_journal(data_dir, "j1") is None, "陈旧失败账必须被清掉(解除 daemon 退休)"
+    saved = mod.get_job("j1")
+    assert saved.phase == ru.PHASE_ARMED and not saved.is_terminal, (saved.phase, saved.reason)
+    assert spawned == [(data_dir, mod._qb_host(), mod._qb_port())], f"清账后重拉判据恢复: {spawned}"
+    # 证据契约(r2-finding 1): reason/ts 证据行删除前落盘, 结果行删后另记
+    evidence = [m for m in cap.messages if "证据留痕" in m]
+    assert any("j1" in m and "verify_mismatch" in m and "ts=10.0" in m for m in evidence), cap.messages
+    assert any("已清理陈旧失败账" in m for m in cap.messages), cap.messages
+    assert not any("收尾校验失败" in m or "证据形态可疑" in m for m in cap.messages), cap.messages
+    # 下一拍: 账已不在, 常规对账照走; 重拉退避生效不重复拉
+    mod._step_reconcile(mod.get_job("j1"), rt)
+    assert len(spawned) == 1, spawned
+
+
+def test_stale_failed_journal_clear_failure_parks_tick_and_gates_warning(tmp_path, monkeypatch):
+    """清账失败(r2-finding 2): WARNING 限频一次, 且失败拍直接收口 —— 不重评常规表不重拉
+    (journal 仍 failed, daemon 尚未解除退休, 空拉与「下拍对账重试」文案矛盾); 账不消失,
+    下拍对账原样重试"""
+    mod, job, spawned = _failed_journal_env(
+        tmp_path,
+        {
+            "phase": "failed",
+            "reason": "verify_mismatch",
+            "ts": 10.0,
+        },
+        created_at=1000.0,
+        armed_at=0.0,
+    )
+    monkeypatch.setattr(relocate_journal, "clear_journal", lambda d, jid: False)
+    rt = {}
+    with capture_logs("auto_qb.core.modules.relocate_mod") as cap:
+        mod._step_reconcile(job, rt)
+        mod._step_reconcile(mod.get_job("j1"), rt)
+    assert relocate_journal.read_journal(str(tmp_path / "data"), "j1") is not None, "清账失败账不消失"
+    saved = mod.get_job("j1")
+    assert saved.phase == ru.PHASE_ARMED and not saved.is_terminal, (saved.phase, saved.reason)
+    assert spawned == [], f"清账失败拍不得重拉(journal 仍 failed): {spawned}"
+    warns = [m for m in cap.messages if "清理失败" in m]
+    assert len(warns) == 1, f"清理失败 WARNING 限频一次: {warns}"
+    evidence = [m for m in cap.messages if "证据留痕" in m]
+    assert len(evidence) == 1, f"证据留痕行同样限频: {evidence}"
+
+
+def test_reinitiation_after_consumed_failure_reclaims_daemon(tmp_path):
+    """消费支再发起路径(评审 finding 1 第二半): 消费转 failed 终态后用户重发起同 id 迁移
+    => 新生命周期对账把上一世失败账判陈旧清掉, daemon 重拉恢复 —— 「排除故障后可重新
+    发起迁移」的承诺成立, 不死锁在 armed"""
+    mod, job, spawned = _failed_journal_env(
+        tmp_path,
+        {
+            "phase": "failed",
+            "reason": "verify_mismatch",
+            "ts": 150.0,
+        },
+    )
+    mod._step_reconcile(job, {})
+    assert mod.get_job("j1").is_terminal, "本世失败账先消费为前置"
+    data_dir = str(tmp_path / "data")
+    # 重发起: 同 job_id 新生命周期(登记覆盖旧条目是既有语义), 上一世账 ts 早于新 created_at
+    fresh = _job("j1", phase=ru.PHASE_ARMED, hashes=job.hashes, armed_at=500.0, created_at=400.0)
+    mod.register_job(fresh)
+    mod._step_reconcile(fresh, {})
+    assert relocate_journal.read_journal(data_dir, "j1") is None, "上一世失败账按陈旧清掉"
+    saved = mod.get_job("j1")
+    assert saved.phase == ru.PHASE_ARMED and not saved.is_terminal, (saved.phase, saved.reason)
+    assert len(spawned) == 1, f"新生命周期 daemon 重拉恢复: {spawned}"
 
 
 # ---------------------------------------------------------------- S3 接线(计划 26-11-05-0808 §3.2/S3)

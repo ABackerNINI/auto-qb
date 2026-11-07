@@ -20,8 +20,13 @@ relocate_journal S3 扩展段)+ 回收 daemon 主体(D12 简化形制)的竞态�
 - test_release_daemon_state_remove_failure_is_false: 删除 OSError => False 不抛
 - test_list_spec_jobs_missing_dir_is_empty: relocate 目录缺失 => 空清单
 - test_spec_members_non_dict_entries_fall_back_to_hashes: members 形不符 => 退 hashes 派生
+- test_clear_journal_removes_stale_life_journal: 主循环专属清理口 —— 真删/幂等(已不在
+  => False)/上一世 failed 残留清掉后 daemon 认领面恢复
 - test_record_rewrites_merges_members_and_refuses_terminal: 成员账合并(不丢前账)/fresh 建账
   相位 armed/翻相 rewritten 保账/终态拒收(取消收口即时生效的协议级闸)/终态相位参数 fail-fast
+- test_failed_phase_is_stop_phase_daemon_side: failed 相位纳入停止语义(issue 26-11-07-0527
+  #3)—— 记账/翻相/心跳式整包写拒收(失败证据不被覆盖)/scan 剔除/重放入口拒写/成员级
+  failed 状态不回归(仍不视为收口)
 - test_pending_members_settled_semantics: pending 口径 —— rewritten/already/unmatched 出账,
   failed/not_found/无账留守; members 字段优先于 hashes 派生
 
@@ -341,6 +346,52 @@ def test_record_rewrites_merges_members_and_refuses_terminal(tmp_path):
         raise AssertionError("终态相位参数必须 ValueError")
     except ValueError:
         pass
+
+
+def test_failed_phase_is_stop_phase_daemon_side(tmp_path):
+    """failed 相位纳入停止语义(issue 26-11-07-0527 #3): daemon/写侧协议对 failed 与
+    done/cancelled 同退休 —— 记账/翻相/心跳式整包写一律拒收(失败证据不被重拉后的
+    daemon 抹掉), scan 剔除, 重放入口拒写; 成员级 failed 状态不回归(仍不视为收口)"""
+    d = str(tmp_path)
+    rj.write_journal(d, "jf", {"phase": "failed", "reason": "verify_mismatch", "ts": 1.0})
+    assert "failed" in rj.STOP_PHASES
+    # daemon 记账拒收: journal 原样(证据不被整包覆盖)
+    assert rj.record_rewrites(d, "jf", {"h1": {"status": "rewritten"}}, ts=2.0) is False
+    j = rj.read_journal(d, "jf")
+    assert j["phase"] == "failed" and j["reason"] == "verify_mismatch" and "rewrites" not in j, j
+    # 心跳式/翻相的非终态整包写同样拒收(前向合并: 非终态不得覆盖终态)
+    assert rj.write_journal(d, "jf", {"phase": "armed", "pid": 9}) is False
+    assert rj.write_journal(d, "jf", {"phase": rj.PHASE_REWRITTEN}) is False
+    assert rj.read_journal(d, "jf")["phase"] == "failed"
+    # 终态相位参数 fail-fast 与重放入口拒写
+    try:
+        rj.record_rewrites(d, "jf2", {}, phase="failed")
+        raise AssertionError("failed 相位参数必须 ValueError")
+    except ValueError:
+        pass
+    assert rj.reset_rewrites(d, "jf") == -1
+    # scan 剔除: 失败终态的 job 不再被 daemon 认领(退休)
+    data_dir = str(tmp_path / "data2")
+    backup = tmp_path / "BT_backup2"
+    h1 = _member_fixture(backup, b"m-f", str(tmp_path / "src"))
+    _write_job(tmp_path, data_dir, "job-failed", [h1])
+    rj.write_journal(data_dir, "job-failed", {"phase": "failed", "reason": "verify_mismatch", "ts": 1.0})
+    assert [x["job_id"] for x in rd._scan_jobs(data_dir, HOST, PORT)] == []
+    # 成员级 failed 状态不回归: 仍不在收口集(pending 留守, 窗口内重试/下一窗口重放)
+    assert rj.record_rewrites(d, "j-ok", {"h1": {"status": "failed", rj.REWRITE_FAILS_KEY: 1}}, ts=3.0) is True
+    spec = {"members": [{"hash_v1": "h1", "hash_v2": ""}]}
+    assert [rj.member_key(m) for m in rj.pending_members(spec, rj.read_rewrites(d, "j-ok"))] == ["h1"]
+
+
+def test_clear_journal_removes_stale_life_journal(tmp_path):
+    """主循环专属清理口(issue 26-11-07-0527 #3 评审 finding 1): 真删/幂等(已不在 => False
+    不抛); 清掉上一世 failed 残留后 daemon 认领面自然恢复(退休随新生命周期解除)"""
+    d = str(tmp_path)
+    rj.write_journal(d, "jc", {"phase": "failed", "reason": "verify_mismatch", "ts": 1.0})
+    assert rj.clear_journal(d, "jc") is True
+    assert rj.read_journal(d, "jc") is None
+    assert rj.clear_journal(d, "jc") is False, "幂等: 已不在 => False 不抛"
+    assert rj.clear_journal(d, "never-existed") is False
 
 
 def test_pending_members_settled_semantics():
