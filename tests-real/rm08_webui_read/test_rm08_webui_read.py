@@ -7,6 +7,10 @@
 error_reason 数据面 missingFiles 分支(RM08-08)。
 另按计划 26-11-02-0351 §06.1 待跑清单增 RM08-09: 真 qB 单种子 1000 文件的内容页签数据面
 (files payload/端点耗时/真实命令回执)+ 真产品前端首帧/窗口化/乐观优先级可见延迟实测。
+另按 R4 评审补真机门(R4#27)增 RM08-14: tracker 报错真机面 —— 伪 tracker failure reason
+迫 qB /torrents/trackers 报 not working(status 4/5/6 + msg 原文), 站点 chip 去抖状态机
+端到端(疑似窗未亮 → 满窗亮 tracker_error+原文 → 恢复即灭)+ error_reason 配对语义 +
+行级 delta 即达(refresh_tracker_health/note_error_reason_hashes 增量时间线)。
 
 驱动形态(计划 §01/§03: dev.webui 安全模式): 每条用例经 Popen 起一份**最小配置**的产品进程
 (interval=86400S 任务线全关 · sync_interval=1.5S 同步线照常 · 规则集零段 · grouping 只读归组 ·
@@ -71,6 +75,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from lib import app, guard, instances, torrent  # noqa: E402
 from lib.bencode import encode  # noqa: E402
+from lib.net import local_host  # noqa: E402  (RM08-14: announce 必须指局域网 IP, 写 127.0.0.1 → WSAEADDRNOTAVAIL)
+from lib.tracker import FakeTracker  # noqa: E402  (RM08-14: 伪 tracker 健康侧 + failure reason 迫错侧)
 
 pytestmark = [
     pytest.mark.skipif(sys.platform != "win32", reason="本片断言含 Windows 特有语义(taskkill 进程树/盘符路径)"),
@@ -164,17 +170,26 @@ config:
         host: 127.0.0.1
         port: {web_port}
         skip_local_verify: {skip_local}{token_line}
-    trackers: {{}}
+    trackers:{trackers_yaml}
     notify:
         enabled: false
 """
 
 
-def write_cfg(case: Path, *, qb_port: int, grouping: bool, api_key: str, auth: str = "") -> tuple[Path, int]:
+def write_cfg(case: Path,
+              *,
+              qb_port: int,
+              grouping: bool,
+              api_key: str,
+              auth: str = "",
+              trackers_block: str = "") -> tuple[Path, int]:
     """生成 dev.webui 同款最小配置(schema_version: 5; 任务线全关, 同步线 1.5S, 回环免密钥)。
 
     auth 非空(RM08-07 升档, scoped 只影响该用例实例): skip_local_verify=false + 显式
     web.token —— 请求必须带 Bearer, 环票闸可达, 坏票/无票负向可断言(D2)。
+    trackers_block 非空(RM08-14, scoped): 注入 trackers 段 YAML(条目 8 空格起,
+    test_rm08_missing_groups.tracker_entry_block 同款形状), 让站点配置命中自造 announce 域
+    —— tracker_conf 非 None 是 site_alert 走到 tracker_error 分支的前置(缺配置会先判 no_site_conf)。
     """
     cfg = case / "config.yml"
     web_port = app.free_port()
@@ -187,6 +202,7 @@ def write_cfg(case: Path, *, qb_port: int, grouping: bool, api_key: str, auth: s
             web_port=web_port,
             skip_local="false" if auth else "true",
             token_line=f'\n        token: "{auth}"' if auth else "",
+            trackers_yaml=" {}" if not trackers_block else "\n" + trackers_block,
         ),
         encoding="utf-8",
     )
@@ -237,15 +253,24 @@ def web_ready(port: int) -> dict:
 
 @contextlib.contextmanager
 def product_case(
-    name: str, *, qb_port: int = instances.SECONDARY, grouping: bool = True, api_key: str = "", auth: str = ""
+    name: str,
+    *,
+    qb_port: int = instances.SECONDARY,
+    grouping: bool = True,
+    api_key: str = "",
+    auth: str = "",
+    trackers_block: str = ""
 ):
     """起一份 dev.webui 安全模式产品进程跑单条用例, 收尾必杀进程树。
 
     auth 非空 ⇒ 该实例 skip_local_verify=false + Bearer 鉴权(scoped, RM08-07 升档用);
     Bearer 值经 _AUTH_TOKENS 按 web 端口派发, web_req/web_err 自动携带, 收尾即撤。
+    trackers_block 非空 ⇒ 配置注入 trackers 段(scoped, RM08-14 用), 见 write_cfg。
     """
     case = case_dir(name)
-    cfg, port = write_cfg(case, qb_port=qb_port, grouping=grouping, api_key=api_key, auth=auth)
+    cfg, port = write_cfg(
+        case, qb_port=qb_port, grouping=grouping, api_key=api_key, auth=auth, trackers_block=trackers_block
+    )
     if auth:
         _AUTH_TOKENS[port] = auth
     proc = app.AppProc(_popen_auto_qb(cfg), case, cfg)
@@ -1389,3 +1414,190 @@ def test_rm08_09_content_thousand_files(clean_fakes):
             f"[rm08-09] 数据面: files {n} 行 payload {b1}B | 冷 {dt1 * 1000:.0f}ms / 热 {dt2 * 1000:.0f}ms | "
             f"detail {dt3 * 1000:.0f}ms | files/priority 真实回执 {dt_cmd * 1000:.0f}ms"
         )
+
+
+# ---------------------------------------------------------------- RM08-14(R4#27 补真机门)
+
+FAIL_TEXT = "rm08f-bad: announce rejected (fake failure reason)"  # 伪 tracker 报错原文(逐字断言用)
+
+
+def tracker_entry_block(key: str, domain: str) -> str:
+    """trackers 段单条目 YAML(8 空格起; test_rm08_missing_groups.tracker_entry_block 同款字段形状)。"""
+    return (
+        f"        {key}:\n"
+        f"            domains:\n"
+        f"                - {domain}\n"
+        f"            tags:\n"
+        f"                - Rm08F\n"
+        f"            upload_speed_limit: 0KiB/s\n"
+        f"            download_speed_limit: 0KiB/s\n"
+        f"            hr:\n"
+        f"                required_seeding_time: 3D\n"
+        f"                required_share_ratio: 0\n"
+        f"                extra_seeding_time: 12H\n"
+        f"                condition: 80%\n"
+    )
+
+
+def http_trackers(qb, ih: str) -> list[dict]:
+    """该种子的真实 tracker 条目(滤掉 ** [DHT] ** 等虚拟条目, §2.5)。"""
+    return [t for t in qb.trackers(ih) if str(t.get("url", "")).startswith("http")]
+
+
+def force_reannounce(qb, ih: str) -> None:
+    """强制立即重报(qB 原生 /torrents/reannounce; 恢复相不等 interval 退避, 只对自造种子)。"""
+    qb._call(
+        "/torrents/reannounce",
+        urllib.parse.urlencode({
+            "hashes": ih
+        }).encode(),
+        "application/x-www-form-urlencoded",
+    )
+
+
+def running_seed(qb, case: Path, name: str, announce: str, sub: str) -> str:
+    """带数据 + announce 的**运行态**假种子(会真 announce 到本机伪 tracker; 零外连)。"""
+    savepath = case / sub
+    os.makedirs(savepath, exist_ok=True)
+    path = torrent.write_file(str(savepath / name), 256 * 1024, "random", name)
+    raw, ih = torrent.build_from_path(path, name, announce)
+    _add_retry(qb, raw, str(savepath), ih, paused=False)
+    settle(qb, ih)
+    wait_state(qb, ih, "stalledUP", timeout=60, desc="做种态(才会 announce)")
+    return ih
+
+
+def row_of(port: int, ih: str) -> dict:
+    rows = {t["hash"]: t for t in flat_rows(port)}
+    assert ih in rows, f"行不在 flat 视图: {ih[:8]}"
+    return rows[ih]
+
+
+def wait_delta_row(port: int, rid0: int, ih: str, want: dict, timeout: float) -> dict:
+    """持陈旧 rid 轮询增量时间线(note_error_reason_hashes 行级归约), 直到该行 upsert 满足 want。"""
+    deadline = time.time() + timeout
+    last_full = None
+    while time.time() < deadline:
+        r = rid_poll(port, rid0, view="torrent", delta=True)
+        if r.get("updated"):
+            last_full = r.get("full")
+            for x in (r.get("delta") or {}).get("torrents") or []:
+                if x.get("hash") == ih and all(x.get(k) == v for k, v in want.items()):
+                    return x
+        time.sleep(0.4)
+    raise AssertionError(f"delta 时间线未出现满足 {want} 的行: 最后一代 full={last_full}")
+
+
+def test_rm08_14_tracker_error_site_alert(clean_fakes):
+    """[RM08-14] tracker 报错真机面(R4#27): 伪 tracker failure reason 迫 qB not working → 站点 chip 去抖端到端
+
+    前置: 副实例 在线空库; 伪 tracker 双实例(ok = 零 peer 健康侧 / bad = 恒回 failure
+          reason 原文); **先造场后起产品** —— 2 枚带数据假种子 RUNNING(真 announce, 流量只到
+          本机伪 tracker 零外连): 种A→ok 健康对照, 种B→bad 主角; 等到 qB 侧报错可见
+          (status 4/5/6 + msg 原文)且种A tracker working 后才起产品。
+    ⚠ 定序依据(首跑实测): 产品的 tracker 健康扫描按 TTL 分档 —— 健康(无报错)观测一次后
+      进 TRACKER_HEALTH_TTL(600s)全库轮转档。若产品首观测抢在种子首次 announce 之前,
+      记录落进健康档, 报错要 ~10 分钟后才被复查到(用例超时内永远不亮)。同场景复跑
+      亮/不亮各半的 flake 即此竞态; 先造场后起产品消掉它。
+    副作用: 副实例 加 2 枚 real-fake 种子(运行态, 收尾删净); /torrents/reannounce 直调一次
+          (恢复相加速, 只对自造种子); 只读 GET /api/state 轮询; 种子数据落 .work/rm08_14_scene
+          (独立于 product_case 的 case 目录 —— 那个目录每次进 with 都会整个重建)。
+    回滚: real-fake 种子收尾删净(clean_fakes); 伪 tracker 经 FakeTracker.stop() 线程内优雅
+          关闭(非外部强杀); 产品进程 kill_tree(product_case 收尾); 场景目录与临时目录清场。
+    失败判据: qB 侧种B tracker 无 status∈{4,5,6}+msg=原文(迫错面不成立, 记 BLOCKED); 报错
+              可见后去抖窗内 chip 已亮(去抖破, 高优); 满窗后 chip 不亮或 site_alert_msg !=
+              报错原文(状态机/取数单点断); 报错行 error_reason 非空(非 error 态行不得携带
+              tracker 报错 —— chip 与 error_reason 两面配对语义破); 健康种A 任一时刻非空
+              site_alert(误报, 高优); 恢复后 chip 不灭(恢复即灭断); 亮灯未按行级归约进
+              delta 时间线(增量客户端冻结旧值, 高优)。
+    实测口径: 亮灯 ≈ 产品首观测 + TRACKER_DEBOUNCE_WINDOW(30s 墙钟) + 复查节拍; 灭灯 ≈
+    亮灯观测 + TRACKER_LIT_TTL(60s 档) —— 两段等待上界按常量放宽, 实测数进 metric 落盘。
+    """
+    ok_trk = FakeTracker(interval=5)
+    bad_trk = FakeTracker(interval=5, fail_msg=FAIL_TEXT)
+    scene = WORK / "rm08_14_scene"
+    try:
+        # 先构造后统一 start(都在 try 内): 任一 start 失败, finally 仍能收掉已起的那只
+        ok_trk.start()
+        bad_trk.start()
+        qb = clean_fakes
+        shutil.rmtree(scene, ignore_errors=True)
+        scene.mkdir(parents=True)
+        # ---- 先造场: 种子先于产品存在, 且 qB 侧报错先于产品首观测可见(定序依据见 docstring)
+        ih_a = running_seed(qb, scene, "rm08f-ok.bin", ok_trk.url, "ok")
+        ih_b = running_seed(qb, scene, "rm08f-bad.bin", bad_trk.url, "bad")
+        wait_until(
+            lambda: any(
+                t.get("status") in (4, 5, 6) and (t.get("msg") or "").strip() == FAIL_TEXT
+                for t in http_trackers(qb, ih_b)
+            ),
+            60,
+            "种B tracker 未报 not working(status 4/5/6 + msg 原文; 迫错面不成立)",
+        )
+        wait_until(
+            lambda: all(t.get("status") == 2 for t in http_trackers(qb, ih_a)), 60, "种A tracker 未到 working(健康对照面不成立)"
+        )
+        assert bad_trk.count(ih_b) >= 1 and ok_trk.count(ih_a) >= 1, "伪 tracker 未收到 announce(报到面缺)"
+        metric(
+            f"[rm08-14] 迫错面: 种B tracker status={[t.get('status') for t in http_trackers(qb, ih_b)]} "
+            f"msg 原文逐字命中; announces bad/ok = {bad_trk.count(ih_b)}/{ok_trk.count(ih_a)}"
+        )
+
+        with product_case("rm08_14", trackers_block=tracker_entry_block("rm08f", local_host())) as (case, port, _proc):
+            wait_in_store(port, ih_a, ih_b, timeout=30)
+
+            # ---- 基线: 双种子 chip 未亮(产品首观测前/疑似未满窗)
+            assert row_of(port, ih_a)["site_alert"] == "", "健康种A 基线 site_alert 非空(误报)"
+            assert row_of(port, ih_b)["site_alert"] == "", "种B 尚未观测就亮了"
+
+            # ---- 去抖窗(疑似): 连采样 12s chip 必须保持未亮 —— 首观测即亮 = 去抖破
+            deadline = time.time() + 12
+            while time.time() < deadline:
+                assert row_of(port, ih_b)["site_alert"] == "", "去抖窗内 chip 已亮(去抖破, 高优)"
+                assert row_of(port, ih_a)["site_alert"] == "", "去抖窗内健康种A 误报"
+                time.sleep(1.0)
+            # delta 基线 rid 放采样窗之后: 窗内(→亮灯)只留健康复查期的少量代, 避开启动期
+            # 建场代(种子入库/HR 首评等可能标 full 的代, R11 —— full 代在窗内即整代降全量)
+            rid0 = web_req(port, "GET", "/api/state?view=torrent")["rid"]
+
+            # ---- 满窗亮: site_alert=tracker_error + 报错原文逐字; error_reason 保持空串(配对语义)
+            t_lit0 = time.time()
+            wait_until(
+                lambda: row_of(port, ih_b)["site_alert"] == "tracker_error", 150, "满窗后 chip 未亮 tracker_error(健康状态机断)"
+            )
+            lit_s = time.time() - t_lit0
+            row = row_of(port, ih_b)
+            assert row["site_alert_msg"] == FAIL_TEXT, f"site_alert_msg != 报错原文: {row['site_alert_msg']!r}"
+            assert row["error_reason"] == "", f"非 error 态行携带 tracker 报错(error_reason={row['error_reason']!r})"
+            assert row_of(port, ih_a)["site_alert"] == "", "亮灯时健康种A 误报"
+            metric(f"[rm08-14] 去抖端到端: 窗尾到亮灯 {lit_s:.1f}s site_alert_msg 逐字命中")
+
+            # ---- 行级 delta 即达: 窗内持 rid0 的增量客户端拿到亮灯行(行级归约, 非 full 降级)
+            delta_row = wait_delta_row(
+                port, rid0, ih_b, {
+                    "site_alert": "tracker_error",
+                    "site_alert_msg": FAIL_TEXT
+                }, 30
+            )
+            assert delta_row["error_reason"] == "", "delta 行 error_reason 漂移"
+            metric("[rm08-14] delta 即达: rid 窗内增量拿到亮灯行(full=False 归约)")
+
+            # ---- 恢复即灭: 撤 fail + 强制重报 → qB tracker 回 working → LIT 复查档内 chip 灭
+            bad_trk.fail_msg = None
+            force_reannounce(qb, ih_b)
+            wait_until(
+                lambda: all(t.get("status") == 2 and not (t.get("msg") or "").strip() for t in http_trackers(qb, ih_b)),
+                40, "撤 fail 后 qB tracker 未回 working(reannounce 未生效)"
+            )
+            t_dark0 = time.time()
+            wait_until(
+                lambda: row_of(port, ih_b)["site_alert"] == "" and row_of(port, ih_b)["site_alert_msg"] == "", 150,
+                "恢复后 chip 未灭(恢复即灭断)"
+            )
+            dark_s = time.time() - t_dark0
+            assert row_of(port, ih_a)["site_alert"] == "", "恢复后健康种A 误报"
+            metric(f"[rm08-14] 恢复即灭: {dark_s:.1f}s(LIT_TTL 60s 档复查) qB tracker status 回 2 msg 清空")
+    finally:
+        bad_trk.stop()
+        ok_trk.stop()
+        shutil.rmtree(scene, ignore_errors=True)

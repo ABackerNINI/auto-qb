@@ -4,6 +4,11 @@
 L2 需要真流量时把 `peers` 设成对端实例的 (ip, listen_port) 即可 —— 两端都只打这个本地 tracker,
 所以流量不出网卡, 也不需要任何真实站点。
 
+`fail_msg` 非 None 时改回 BitTorrent 规范的 failure reason 响应(仍 HTTP 200): libtorrent 把
+tracker 记为 not working(status=4)且 msg = failure reason 原文 —— 迫错场景(RM08-14)用,
+报错文本可断言逐字透传。运行期改 `fail_msg` 即可在健康/报错间切换(改完配 /torrents/reannounce
+立即生效, 不必等 interval)。
+
 每次 announce 都记进 `announces`, 用例用它断言「qB 真的来报到了」(否则 stalledUP 可能只是没 announce)。
 """
 from __future__ import annotations
@@ -46,13 +51,23 @@ class _Handler(BaseHTTPRequestHandler):
         # min_interval 显式回传(= interval): libtorrent 对缺失键的回退语义不确定, 显式给出让
         # min_announce = now + interval 确定(用例的「窗内推迟」分支依赖 min 在未来; RM00/RM07
         # 用 interval=5, min=5 语义不变)
-        body = bencode.encode(
-            {
-                "interval": self.tracker.interval,
-                "min_interval": self.tracker.interval,
-                "peers": self.tracker.peers_payload(exclude_port=own_port)
-            }
-        )
+        if self.tracker.fail_msg is not None:
+            # failure reason 响应(仍 200): libtorrent 记 not working + msg = 原文(RM08-14 迫错面)
+            body = bencode.encode(
+                {
+                    "failure reason": self.tracker.fail_msg,
+                    "interval": self.tracker.interval,
+                    "min_interval": self.tracker.interval,
+                }
+            )
+        else:
+            body = bencode.encode(
+                {
+                    "interval": self.tracker.interval,
+                    "min_interval": self.tracker.interval,
+                    "peers": self.tracker.peers_payload(exclude_port=own_port)
+                }
+            )
         self.send_response(200)
         self.send_header("Content-Type", "text/plain")
         self.send_header("Content-Length", str(len(body)))
@@ -61,10 +76,17 @@ class _Handler(BaseHTTPRequestHandler):
 
 
 class FakeTracker:
-    def __init__(self, interval: int = 5, peers: list[tuple[str, int]] | None = None, bind: str = "0.0.0.0"):
+    def __init__(
+        self,
+        interval: int = 5,
+        peers: list[tuple[str, int]] | None = None,
+        bind: str = "0.0.0.0",
+        fail_msg: str | None = None
+    ):
         self.interval = interval
         self.peers: list[tuple[str, int]] = list(peers or [])
         self.announces: list[dict] = []
+        self.fail_msg = fail_msg  # 非 None: announce 回 failure reason(迫 qB tracker 报错; 运行期可切换)
         self._httpd: ThreadingHTTPServer | None = None
         self._thread: threading.Thread | None = None
         self.port = 0

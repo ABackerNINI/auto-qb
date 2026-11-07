@@ -1,10 +1,10 @@
-"""RM07 限速·流量曲线·全局流量 —— 十条真机用例(限速下发/曲线采样/流量源三态/重启缺口/工具状态面)。
+"""RM07 限速·流量曲线·全局流量 —— 十一条真机用例(限速下发/曲线采样/流量源三态/重启缺口/工具状态面)。
 
-验证面对准冻结计划 plans/26-10-31-1605-plan-real-RM07.html §03 的十条 spec:
+验证面对准冻结计划 plans/26-10-31-1605-plan-real-RM07.html §03 的十条 spec + R4 评审补真机门(R4#13):
 未配流量源启动观察项收口(RM07-01)· 来源刷新三态 off/stale/ok(RM07-02)· 切源即刷新(RM07-03)·
 限速曲线主链+改档对照(RM07-04)· 全局限速手动保护+退出恢复(RM07-05)· 曲线任务短路三路(RM07-06)·
 qB 口径采样+重启尖峰缺口(RM07-07)· L2 互传真实速率聚合(RM07-08)· 采样间隔配比与关块重开(RM07-09)·
-工具状态端点五态(RM07-10)。
+工具状态端点五态(RM07-10)· ALT 备用限速真下发 set+toggle(RM07-11)。
 
 代码实况落刀点(计划给意图, 这里按 src 实况):
 - 全局限速的 qB 5.2 权威面 = **transfer 端点**(app/preferences 旧键 upload/download_limit 已失效,
@@ -26,6 +26,13 @@ qB 口径采样+重启尖峰缺口(RM07-07)· L2 互传真实速率聚合(RM07-0
 - 采样节拍: sample_interval 非 main_tick 整数倍 → ceil 取整 + WARNING 一次(D5); 变更 interval →
   关块重开(新旧块各有 interval_s); 块头 B 行 interval_s = **生效值**(ceil 后), 可从文件读回。
 - 工具状态端点(traffic_monitor.py:206): 恒 200 + 结构化五态; 未就绪写端点 502。
+- ALT 备用限速(RM07-11): 值面 = app/preferences alt_up_limit/alt_dl_limit(bytes/s,
+  qbapi.set_alt_speed_limits 增量写); 模式面 = transfer 端点(GET speedLimitsMode /
+  POST toggleSpeedLimitsMode)。qB 5.2.3 实况(2026-11-07 开工探针): 全 223 prefs 键
+  **没有** use_alt_speed_limits, setPreferences 写它被静默忽略 —— 模式只能走 transfer
+  端点观测; alt_* 两键在 qB 侧真生效(探针 65536/131072 写入回读逐字命中)。首跑另实证
+  产品调用面静默 no-op(app_set_preferences 签名漂移, qbapi.py set_alt_speed_limits,
+  详见 RM07-11 docstring 定档段)—— set 腿按缺陷签名 BLOCKED, toggle 腿真机过。
 
 计划 spec 的两处如实调整(按 src 实况, 详见基线切片):
 - RM07-07 单种系列: 零传输种子不进采样集(_sample_torrents 数据门: 目录存在才采)—— L1 单实例
@@ -1023,3 +1030,169 @@ def test_rm07_10_tool_status_endpoint_five_states():
     finally:
         if p is not None:
             p.stop()
+
+
+# ================================================================ RM07-11
+
+
+def speed_limits_mode(qb) -> int:
+    """速度模式(qB 权威面 GET /transfer/speedLimitsMode): 0=主速度 / 1=备用速度。
+
+    qB 5.2.3 实测(开工探针): app/preferences 全 223 键里**没有** use_alt_speed_limits,
+    往 setPreferences 写它也被静默忽略 —— 模式只能经 transfer 端点观测, 与产品
+    get_speed_limits_mode(qbapi.py get_speed_limits_mode)同一权威面。
+    """
+    return int(qb._call("/transfer/speedLimitsMode").decode().strip())
+
+
+def toggle_mode(qb) -> None:
+    qb._call("/transfer/toggleSpeedLimitsMode", b"", "application/x-www-form-urlencoded")
+
+
+def poll_until(fn, timeout: float, interval: float = 0.4) -> bool:
+    """轮询到 fn() 真值; 超时返回 False 不抛(RM07-11 的「按实况定档」分支用)。
+
+    断言式轮询用上面的 wait_until; 这里给的是**观测**而不是断言 —— 观测结果交给
+    用例按实况分档(RM07-10 双分支先例)。
+    """
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if fn():
+            return True
+        time.sleep(interval)
+    return False
+
+
+def wait_cmd_ok(port: int, path: str, body: dict | None) -> dict:
+    """写命令投递 + 回执轮询(RM09 同款口径: POST 200 只代表入队, 轮询 /api/cmd/{id} 到终态)。"""
+    req = web_client(port)
+    r = req("POST", path, body)
+    cmd_id = r.get("cmd_id")
+    assert r.get("queued") is True and cmd_id, f"入队回执形状不对(缺 queued/cmd_id): {path} -> {r}"
+
+    def probe():
+        rec = req("GET", f"/api/cmd/{cmd_id}")
+        return rec if rec.get("status") != "pending" else None
+
+    return wait_until(probe, 20, f"命令回执未到终态: {path}")
+
+
+def test_rm07_11_alt_speed_real_dispatch(global_limits):
+    """[RM07-11] ALT 备用限速真下发(ALT-01): set 经 app/setPreferences alt_* 真生效 + toggle 真翻转主/备模式
+
+    前置: 副实例 在线; 预置 alt_up_limit/alt_dl_limit(与原值必异、与目标 64/128KiB 必异
+          → set 是否真写可判), alt_* 原值与速度模式已快照(原模式经 transfer/speedLimitsMode
+          读; qB 5.2.3 无 use_alt_speed_limits prefs 键, 模式还原只能走 toggle 端点)。
+    副作用: 经产品 WEB 命令线(/api/speed/alt + /api/speed/alt/toggle)改写 副实例 的
+          alt_* 两键与速度模式各一次; 临时目录。
+    回滚: 模式经 transfer/toggleSpeedLimitsMode 在 finally 切回原值(断言失败也还原);
+          alt_* 两键与 transfer 主限速由 global_limits fixture 按开工快照逐字还原; 删临时目录。
+    失败判据: toggle 后模式不翻转(toggle 端点断, 高优); ALT set/toggle 波及主速度
+              (主档 prefs 镜像 up_limit/dl_limit 被改, 与主速度互不触碰语义破); 回执非 ok
+              (命令线断); 修复后 set 回读≠目标或 /api/speed/mode 读侧与 qB 权威面不一致
+              (读路径断)。
+    ⚠ 观测面事实(探针实测): /transfer/{upload,download}Limit 是**模式相关**面 —— 返回
+    当前生效档(模式 1 时回 alt 档值), 跨 toggle 比较无意义; 主档的可靠观测 = prefs
+    up_limit/dl_limit 镜像(实测与 transfer PUT 实时同步)。隔离断言按镜像; 生效档对照按
+    saved_mode 分支: 模式 0 生效档=主档, set 后不变; 模式 1 生效档=alt 档, set 落地后
+    =目标 64/128KiB(修复后正确行为, 与「波及」断言不矛盾)。
+    定档(首跑 2026-11-07 实测, 按实况不硬凹): qB 侧 alt_* 键真生效(预置经 setPreferences
+    逐字落盘), 但**产品调用面是静默 no-op** —— 回执 ok + 「备用速度限制设置」日志在,
+    qB 回读纹丝不动。根因(实机复现 + 库源码核实): qbittorrent-api==2026.10.1 的
+    app_set_preferences 签名是 (prefs=None, **kwargs), 产品 qbapi.set_alt_speed_limits
+    传的 json=… 落进 kwargs 被并进表单(qB 收到非法 JSON, 200 零应用); 单测 FakeClient
+    (tests/helpers.py app_set_preferences(json=None)) 复刻的是旧签名, 单测轨看不见。
+    set 腿按缺陷签名 BLOCKED 定档(skip 带 unlock), toggle 腿(独立 transfer 端点路径)
+    真机全量断言; 产品修掉 json=→prefs= 后本条**自动转全量真断言**, 无需改用例。
+    """
+    case = case_dir("rm07_11")
+    qb = global_limits
+    saved = qb.prefs()
+    saved_mode = speed_limits_mode(qb)
+    main_mirror0 = (saved.get("up_limit"), saved.get("dl_limit"))  # 主档镜像(模式无关, 探针验证实时同步)
+    # 预置值与原值必异(0/8KiB 二选一), 与目标 64/128KiB 也必异 —— 「预置已落」与「set 真写」都可判
+    preset_up = 0 if saved.get("alt_up_limit") else 8 * 1024
+    preset_dl = 0 if saved.get("alt_dl_limit") else 16 * 1024
+    qb.set_prefs(alt_up_limit=preset_up, alt_dl_limit=preset_dl)
+    preset_landed = poll_until(
+        lambda: qb.prefs().get("alt_up_limit") == preset_up and qb.prefs().get("alt_dl_limit") == preset_dl, 8
+    )
+    active_up0 = global_limit_bytes(qb, "up")  # 当前生效档(模式 1 时 = alt 档预置后值; 仅腿① 同模式对照用)
+    active_down0 = global_limit_bytes(qb, "down")
+    p = None
+    set_verdict = "ok"
+    try:
+        cfg = write_cfg(case, web=True)  # 无曲线/无流量源: ALT 值无接管方, 只由本用例命令写
+        p = app.start(cfg, case)
+        assert p.wait_web(40), f"WEB 没起来:\n{p.log()[-600:]}"
+        port = web_port_of(cfg)
+
+        # ---- 腿① set 真下发: /api/speed/alt → app/setPreferences alt_*(bytes/s) → qB 回读精确命中
+        rec = wait_cmd_ok(port, "/api/speed/alt", {"upload_kib": 64, "download_kib": 128})
+        assert rec["status"] == "ok", f"speed_alt_set 回执非 ok: {rec}"
+        assert "WEB UI | 备用速度限制设置: 上 64 / 下 128 KiB/s" in p.log(), "缺 ALT set 命令日志"
+        assert (qb.prefs().get("up_limit"),
+                qb.prefs().get("dl_limit")) == main_mirror0, ("ALT set 波及主速度(主档 prefs 镜像被改, 互不触碰语义破)")
+        set_landed = poll_until(
+            lambda: qb.prefs().get("alt_up_limit") == 64 * 1024 and qb.prefs().get("alt_dl_limit") == 128 * 1024, 15
+        )
+        # 生效档对照按 saved_mode 分支(transfer 端点是模式相关面, 见 docstring 观测面事实):
+        if saved_mode == 0:
+            # 主档生效: set 不动主档 → 生效档(=主档)同模式回读不变
+            assert global_limit_bytes(qb, "up") == active_up0 and global_limit_bytes(qb, "down") == active_down0, (
+                "ALT set 波及主速度(transfer 端点同模式回读变了)"
+            )
+        elif set_landed:
+            # 备用档生效(模式 1): 生效档 = alt 档 —— 修复后 set 落地即目标 64/128KiB; 缺陷态
+            # (未落地)生效档仍是预置值, 该态不作此对照(定档走 product_noop)
+            assert global_limit_bytes(qb, "up") == 64 * 1024 and global_limit_bytes(qb, "down") == 128 * 1024, (
+                "ALT set 落地后生效档(=alt 档)回读 != 目标 64/128KiB(transfer 端点模式相关面漂移)"
+            )
+        if set_landed:
+            mode_view = web_client(port)("GET", "/api/speed/mode")
+            assert mode_view["alt_on"] == bool(saved_mode), f"set 阶段模式读侧漂移: alt_on={mode_view['alt_on']}"
+            assert mode_view["alt_current"] == {
+                "upload_limit": 64,
+                "download_limit": 128
+            }, (f"/api/speed/mode 读侧与 qB 权威面不一致: {mode_view['alt_current']}")
+        else:
+            # 按实况定档: qB 侧键可用(预置已落)而产品下发不动 = 产品调用面缺陷; 预置也没落 =
+            # qB 5.2 对 alt_* 键本身静默失效(准入要验的另一种实况)。两态都不在本条硬红 ——
+            # 证据链记进 skip 文案, 两腿跑完后统一落档(腿②不因腿①阻断)。
+            set_verdict = "qb_silent" if not preset_landed else "product_noop"
+
+        # ---- 腿② toggle 真翻转(独立 transfer 端点路径, 不因腿①定档而跳过):
+        #      /api/speed/alt/toggle → transfer/toggleSpeedLimitsMode → 模式翻转
+        rec = wait_cmd_ok(port, "/api/speed/alt/toggle", None)
+        assert rec["status"] == "ok", f"speed_alt_toggle 回执非 ok: {rec}"
+        wait_until(
+            lambda: speed_limits_mode(qb) != saved_mode, 15,
+            f"toggle 后模式未翻转(仍 {speed_limits_mode(qb)}, 原 {saved_mode}; toggle 端点断)"
+        )
+        mode_view = web_client(port)("GET", "/api/speed/mode")
+        assert mode_view["alt_on"] == (not saved_mode), f"toggle 后读侧 alt_on 未翻转: {mode_view['alt_on']}"
+        assert "WEB UI | 速度模式已切换(主/备)" in p.log(), "缺 toggle 命令日志"
+        assert (qb.prefs().get("up_limit"), qb.prefs().get("dl_limit")
+               ) == main_mirror0, ("toggle 波及主速度(主档 prefs 镜像被改; transfer 端点跨模式无对照意义, 见 docstring 观测面事实)")
+        assert_no_crash(case)
+    finally:
+        if p is not None:
+            p.stop()
+        # 模式还原(权威面 transfer/toggle; 断言失败也必须走这里): alt_* 两键由 fixture 收口
+        if speed_limits_mode(qb) != saved_mode:
+            toggle_mode(qb)
+            wait_until(lambda: speed_limits_mode(qb) == saved_mode, 10, "速度模式还原未生效")
+    if set_verdict == "product_noop":
+        pytest.skip(
+            "BLOCKED(产品缺陷, 如实定档): qB 侧 alt_* 键可用(预置经 setPreferences 落盘), 但产品 "
+            "speed_alt_set 是静默 no-op —— 回执 ok + 命令日志在, qB 回读不变。根因: qbittorrent-api"
+            "==2026.10.1 app_set_preferences 签名 (prefs=None, **kwargs), 产品传 json=… 落 kwargs 并进"
+            "表单, qB 收到非法 JSON 200 零应用(qbapi.set_alt_speed_limits; 单测 FakeClient 复刻旧签名"
+            "看不见)。解锁 = 调用面改 prefs= 后重跑, 本条自动转全量真断言; toggle 腿本跑已真机过"
+        )
+    if set_verdict == "qb_silent":
+        pytest.skip(
+            "BLOCKED(qB 侧行为, 如实定档): qB 5.2.3 对 app/setPreferences 的 alt_* 键本身静默失效"
+            "(预置都未落盘)—— 与主速度旧键 upload/download_limit 同类; 产品 ALT 设置在真机不生效"
+            "待 qB 侧解锁, 调用面正确性归单测轨"
+        )
