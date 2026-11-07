@@ -203,8 +203,8 @@ class FakeClient:
         # 只暴露本测试关心的 alt_* 键(真实 qB 返回全量偏好, 调用方按键取用)
         return {"alt_up_limit": self.alt_up_limit_value, "alt_dl_limit": self.alt_dl_limit_value}
 
-    def app_set_preferences(self, json=None, **kw):
-        prefs = json or {}
+    def app_set_preferences(self, prefs=None, **kw):
+        prefs = prefs or {}
         if "alt_up_limit" in prefs:
             self.alt_up_limit_value = int(prefs["alt_up_limit"])
         if "alt_dl_limit" in prefs:

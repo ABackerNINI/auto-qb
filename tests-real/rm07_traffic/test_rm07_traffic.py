@@ -32,7 +32,8 @@ qB 口径采样+重启尖峰缺口(RM07-07)· L2 互传真实速率聚合(RM07-0
   **没有** use_alt_speed_limits, setPreferences 写它被静默忽略 —— 模式只能走 transfer
   端点观测; alt_* 两键在 qB 侧真生效(探针 65536/131072 写入回读逐字命中)。首跑另实证
   产品调用面静默 no-op(app_set_preferences 签名漂移, qbapi.py set_alt_speed_limits,
-  详见 RM07-11 docstring 定档段)—— set 腿按缺陷签名 BLOCKED, toggle 腿真机过。
+  详见 RM07-11 docstring 定档段)—— set 腿曾按缺陷签名 BLOCKED; 2026-11-07 修复轮
+  产品改传 prefs= 后升档全量真断言 passed(复跑两轮, 见用例 docstring 升档兑现段)。
 
 计划 spec 的两处如实调整(按 src 实况, 详见基线切片):
 - RM07-07 单种系列: 零传输种子不进采样集(_sample_torrents 数据门: 目录存在才采)—— L1 单实例
@@ -1104,6 +1105,11 @@ def test_rm07_11_alt_speed_real_dispatch(global_limits):
     (tests/helpers.py app_set_preferences(json=None)) 复刻的是旧签名, 单测轨看不见。
     set 腿按缺陷签名 BLOCKED 定档(skip 带 unlock), toggle 腿(独立 transfer 端点路径)
     真机全量断言; 产品修掉 json=→prefs= 后本条**自动转全量真断言**, 无需改用例。
+    升档兑现(2026-11-07 修复轮): 产品 qbapi.py set_alt_speed_limits 改传 prefs=、
+    FakeClient(tests/helpers.py)签名同步为 prefs=None 后复跑两轮均 passed —— set 腿
+    全量真断言: alt 回读 64/128KiB 逐字命中, /api/speed/mode 读侧 alt_current 与 qB
+    权威面一致, 主档 prefs 镜像不动; toggle 腿照旧全过; 终态复核 alt 两键回快照值、
+    模式还原、双实例零种子残留。
     """
     case = case_dir("rm07_11")
     qb = global_limits

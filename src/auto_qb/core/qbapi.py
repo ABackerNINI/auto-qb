@@ -508,7 +508,7 @@ class QbApi:
         if download_kib is not None:
             prefs["alt_dl_limit"] = curves.kib_to_bytes(download_kib)
         if prefs:
-            self._client.app_set_preferences(json=prefs)
+            self._client.app_set_preferences(prefs=prefs)
 
     def get_speed_limits_mode(self) -> int:
         """当前速度模式: 0 = 主速度 / 1 = 备用速度(transfer/speedLimitsMode)"""
