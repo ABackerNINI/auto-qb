@@ -39,7 +39,7 @@
 | S3 | T2 纯函数+单测重锚 | Done(2026-11-07, fd53c8fe) |
 | S4 | T3 UI 披露实现 | Done(2026-11-07, c7c839da) |
 | S5 | T4a 真机全链路复验 | Done(2026-11-08, 8/8 场景 PASS, 见 R4) |
-| S6 | T4b test.full+基线切片 | Open |
+| S6 | T4b test.full+基线切片 | Done(2026-11-08, 切片 26-11-08-0132, 失败集=存量 1 条措辞守卫, 见 R5) |
 | S7 | T5 code-review | Open |
 | S8 | T6 收尾回写 | Open |
 | S9 | 合回本地 develop(不推) | Open |
@@ -109,3 +109,9 @@
 实验机制附注: ①rm04 `fake_multi` 契约:files 的 rel 首段必须 == tname(首段会被 info.files 剥掉,数据按 savepath/rel 落盘而 qB 按 savepath/<tname>/ 找内容——不一致时私有 tracker 无 peers 恒 stalledDL,wait_complete 必超时;R-D 前两跑因此失败,已加 `build_group` 断言钉住)。②B-A 首跑把 target(内容根内 待删2)**预创建** → 内容根含杂项 → exclusive=False → form=file_links(R4 confirm 放行而非 R1 拦)——E5 坐标的 待删2 是搬移时由 mover 落位才出现的,重跑不预创建即 dir_alias 形态;非判据问题。③R-D 观察一处 qB 侧现象(非产品缺陷):setLocation 的成员 save_path 若在全局下线前 ~1s 内才变更,qB 重启后该成员 save_path 回落旧值(qB fastresume 持久化竞态);给 8s 落盘裕量后未再现;产品 journal 只含本组成员(`rd/journal.json` 只有 A 的两个 hash),非成员 fastresume 产品不碰。④UI 默认视图是 groups,.torrent-row 只在种子视图渲染 —— Playwright 需先点导航 `data-view="torrents"`。
 
 现场已还原: 双实例 0 种子、save_path 还原(`R:\Download\PTing`)、subst 已拆、X: 与 .work/rm04 用例子树定点清、`.work/p4` 只留脚本+证据(gitignored)、实例按初见状态停机(会话开工时双实例在线,收尾按 R1/R2 同款口径 real.down;如需再起 `commands run real.up`);`git status` 除本档案 md 外干净(HEAD c7c839da 未动,零产品代码改动)。
+
+### R5 · T4b 全量基线 (2026-11-08)
+
+- 全量基线切片: `memory-bank/testing/baselines/26-11-08-0132-backend-relocate-nested-gate-fix.md`(`commands run test.full` 后台实测, pytest 140.44s; 汇总行 `1 failed, 5651 passed, 2 skipped, 1 warning`; 覆盖率 TOTAL 25530 stmts / 6 miss / 8816 branch / 28 partial = 99%, 门槛 99.5 达标(总覆盖 99.90%); 缺口单位 34, 对上片 32 净额 +2 远低于点名线; 副作用台账 9565 条越界 0)。数字均从实测誊写入切片, 本档案只引述不另抄。
+- 失败明细: 唯一 failed = `tests/test_memory_bank_docs.py::test_wording_guard_is_green_on_current_kb`(存量措辞守卫), 违规点 = 本档案 18/25 行历史表述(`等…指令`/`待提交` 两类时点相对措辞), 与任务提示给的已知基线(test.quick 口径)逐位一致 —— **失败集未超出存量 1 条, 无新增回归**; 按本轮收尾纪律不修, T6 收尾回写改写该措辞后自然消除。
+- 差值说明: 对上一条切片(26-11-07-1248)passed 净增 2 = P2/P3 两批新增用例(relocate 判据/删链门重锚 + webui 披露)随全量通过; 2 skipped 与上片同 2-skip 权限面。全量口径与任务提示的 test.quick 口径同数, 无口径差。
