@@ -680,12 +680,13 @@ window.AQB_DRAWER = {
       await this._editPost(hash, "limits", body, "限速已更新");
     },
     /* 分享率限制…: 分享率/做种时间(h)/不活跃做种时间(h) -> POST share-limits(-2 = 恢复全局默认)
-     * 哨兵语义与后端 commands_limit.py::_cmd_set_share_limits 对齐: -2 = 用全局, -1 = 不限制(R5#60)。 */
+     * 哨兵语义与后端 commands_limit.py::_cmd_set_share_limits 对齐: 对话框只提供 -2 恢复全局
+     * (校验只放非负数字与 -2); 后端 -1 = 不限制语义保留但对话框不设入口(残余入池, R5#60)。 */
     async editShareLimits(h = "") {
       const hash = this._editTargetHash(h);
       if (!hash) return;
       const d = await this._editDetail(hash);
-      const hrs = (sec) => (sec > 0 ? String(Math.round((sec / 3600) * 100) / 100) : "");  // -2/-1/0(全局/不限制/未设)留空
+      const hrs = (sec) => (sec > 0 ? String(Math.round((sec / 3600) * 100) / 100) : "");  // 哨兵/未设留空: -2=全局, -1=不限制(仅后端语义, 对话框无入口), 0=未设
       const res = await this._openModal({
         title: "分享率限制",
         body: "达到任一限制后该种子将停止做种。留空 = 保持不变, 输 -2 = 恢复全局默认。",

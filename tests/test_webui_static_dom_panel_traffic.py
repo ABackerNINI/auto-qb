@@ -1554,3 +1554,12 @@ def test_frontend_qb_themechange_event_pair():
     assert on_change and on_change.group(1).find("this._qbChartDestroy(s)") \
         < on_change.group(1).find("this._qbChartBuild(s)"), \
         "换肤处理器必须先 _qbChartDestroy 再 _qbChartBuild(canvas 色建图时烘焙, setData 快路不换色)"
+
+    # 卸载对称(池条目 R5#181): beforeUnmount 内必须按同一引用摘监听并复位 _qbThemeBound,
+    # 只挂不摘则 documentElement 持 mixin 实例引用一起泄漏(静态锚: 成对 API + 复位同在卸载点)
+    unmount_blk = re.search(r"beforeUnmount\(\) \{(.*?)\n  \},", chart_js, re.S)
+    assert unmount_blk, "qb_traffic_chart.js 必须有 beforeUnmount 卸载钩子"
+    ub = unmount_blk.group(1)
+    assert 'document.documentElement.removeEventListener("autoqb:themechange", this._qbOnThemeChange)' in ub \
+        and "_qbThemeBound = false" in ub, \
+        "beforeUnmount 必须对称摘除 autoqb:themechange 监听(removeEventListener + _qbThemeBound 复位)"

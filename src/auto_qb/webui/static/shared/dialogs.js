@@ -385,9 +385,14 @@ window.AQB_DIALOGS = {
       }
     },
     async metaAddNewTags() {
+      // 入口闸 + 闸后同步占闸(与 metaSetCategory 同式, R4 终审增量): 新标签创建的 POST /api/tags
+      // 在 _metaBulk 之前 await, 那段窗口 metaBusy 尚未由 _postWaitCmd 置真, 二次调用(双击/回车
+      // 与点选竞态)漏闸并发 —— 过闸立即占闸; 空输入提前 return 就地复位, 成功路径的复位仍归
+      // _metaBulk(_postWaitCmd) 既有收口。
       if (this.metaBusy) return;
+      this.metaBusy = true;
       const tags = this.metaNewTags.split(/[,,]/).map((t) => t.trim()).filter(Boolean);
-      if (!tags.length) { this.toast("标签不能为空: 请至少输入一个标签", "warn"); return; }
+      if (!tags.length) { this.toast("标签不能为空: 请至少输入一个标签", "warn"); this.metaBusy = false; return; }
       const fresh = tags.filter((t) => !this.metaTags.includes(t));
       if (fresh.length) {
         // 新标签定义先入队创建(定义列表/管理对话框可见); 已存在时创建失败不影响后续打标

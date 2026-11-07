@@ -6,9 +6,12 @@
   node vm 真跑 openMetaDialog→metaToggleTag/metaSetCategory 全链: 目标锁定(单种子/组级联展开去重/
   空目标早退)、_metaCommonTags 交集方向(双方都有才留)、共同分类与分歧清空、loadMetaOptions 候选
   并回 metaCommonTags(共同携带标签不在候选也不丢)、metaToggleTag 有则删无则加(bulk 载荷 keys/hashes/
-  tags 与回执失败交集不动)、metaAddNewTags 中英文逗号拆分 + 先建后打标、metaSetCategory 先建后设链
+  tags 与回执失败交集不动)、metaAddNewTags 半角逗号拆分(全角不支持, 清单外已知项) + 先建后打标、
+  metaSetCategory 先建后设链
   (创建 POST 在 bulk 之前)/清除分类空串直投/已存在只设不建/未变化静默零投递、投递载荷逐字段;
-  R5#133: metaBusy 在飞时 metaSetCategory 被入口闸拒绝零投递(与 metaToggleTag 同口径), 在飞期
+  R5#133: metaBusy 在飞时 metaSetCategory 被入口闸拒绝零投递(与 metaToggleTag 同口径), 新分类创建
+  POST /api/categories 在途窗口内 metaBusy 已同步置真、第二次调用被拒(闸后同步占闸), metaAddNewTags
+  同构占闸(新标签创建 POST /api/tags 在途窗口第二发被拒), 在飞期
   closeMeta 拒绝误关(闸保证保护对仍在途命令不失效), metaBusy 清零后正常关窗
 - test_r4_dialogs_meta_enter_empty_battery: R5#132 修复回归 —— 清空输入框后回车的「含清空 = 无分类」
   路径真达: onMetaCatKeydown 的 ctx 带 onEnter 钩子, comboKeydown 对带 onEnter 的 ctx 放行空串回退,
@@ -17,7 +20,8 @@
   零投递(不给假反馈); metaBusy 在飞时空串回车被入口闸拒绝(R5#132 x R5#133 交叉)
 - test_r4_dialogs_mgr_crud_battery: R5#144 管理对话框 CRUD 行为面 —— node 电池真跑 openMgr(收筛选
   弹层 + 清态 + loadMgr 拉平)、loadMgr 双分支(标签数组字典序 / 分类字典展开成行 + save_path 缺省
-  空串 + 字典序)、submitMgrTags 中英文逗号批量拆分(空段剔除/成功清草稿重拉/空输入 warn 零投递)、
+  空串 + 字典序)、submitMgrTags 半角逗号批量拆分(全角不支持, 清单外已知项; 空段剔除/成功清草稿重拉/
+  空输入 warn 零投递)、
   submitMgrCategory(名称必填/保存路径可空 = payload 无 save_path 键/路径 trim 随投递/成功清双草稿)、
   mgrBusy 在飞双入口拒绝重复投递
 - test_r4_dialogs_history_math_battery: R5#147 历史流量弹层聚合数学 —— node 电池喂 historyData 断言
@@ -166,7 +170,7 @@ _NODE_META_CHAIN_BODY = r"""
   vm.metaNewTags = " x1 , x2,  ";
   await D.metaAddNewTags.call(vm);
   const tagPost = vm.posts.find((p) => p.url === "/api/tags" && p.body.tags);
-  ok("addNewTags: 中英文逗号拆分 + 空段剔除后先建定义(POST /api/tags)",
+  ok("addNewTags: 半角逗号拆分(全角不支持, 清单外已知项) + 空段剔除后先建定义(POST /api/tags)",
      JSON.stringify(tagPost.body.tags) === JSON.stringify(["x1", "x2"]));
   ok("addNewTags: bulk 打标载荷带全部输入段",
      lastBulk(vm).action === "add_tags" && JSON.stringify(lastBulk(vm).tags) === JSON.stringify(["x1", "x2"]));
@@ -197,6 +201,61 @@ _NODE_META_CHAIN_BODY = r"""
   const n0 = vm.posts.length;
   await D.metaSetCategory.call(vm, "b");
   ok("setCategory 未变化: 静默返回(零投递, 不给「已设置」的假反馈)", vm.posts.length === n0);
+
+  // ---- metaBusy 闸后同步占闸: 新分类创建的 POST /api/categories 在途窗口, 第二发拒绝(修复前红:
+  // 闸只在 _metaBulk/_postWaitCmd 里置真, 创建 await 窗口内二次调用漏闸并发) ----
+  {
+    let releaseCreate;
+    const vmG = mkVm({
+      metaTargets: { groupKeys: [], memberHashes: ["h1"] },
+      metaCategories: ["a", "b"], metaCat: "tv", metaCatDiff: false, metaCatInput: "tv",
+    });
+    const gate = new Promise((res) => { releaseCreate = res; });
+    vmG.api = async (url, opt) => {
+      const method = (opt && opt.method) || "GET";
+      if (method === "POST") vmG.posts.push({ url, body: JSON.parse(opt.body) });
+      if (url === "/api/categories" && method === "POST") { await gate; return {}; }  // 创建 POST 挂起在途
+      return { cmd_id: "c1" };
+    };
+    const first = D.metaSetCategory.call(vmG, "anime");  // 过闸 -> 占闸 -> 卡在创建 POST
+    await flush();
+    ok("metaBusy 闸后同步占闸: 新分类创建在途(POST 未回执)时 metaBusy 已置真", vmG.metaBusy === true);
+    await D.metaSetCategory.call(vmG, "anime2");  // 第二发: 落在创建 await 窗口内
+    ok("metaBusy 闸后同步占闸: 创建在途窗口内第二次调用被拒(零新增创建, 零 bulk)",
+       vmG.posts.filter((p) => p.url === "/api/categories").length === 1 && bulkPosts(vmG).length === 0);
+    releaseCreate();
+    await first;
+    await flush();
+    ok("metaBusy 闸后同步占闸: 第一发走完先建后设, busy 由既有收口(_postWaitCmd)复位",
+       lastBulk(vmG).action === "set_category" && lastBulk(vmG).category === "anime" && vmG.metaBusy === false);
+  }
+
+  // ---- metaAddNewTags 同构占闸(增量评审): 新标签创建的 POST /api/tags 在途窗口, 第二发拒绝 ----
+  {
+    let releaseTags;
+    const vmT = mkVm({
+      metaTargets: { groupKeys: [], memberHashes: ["h1"] },
+      metaTags: [], metaCommonTags: [], metaNewTags: "t1",
+    });
+    const gate = new Promise((res) => { releaseTags = res; });
+    vmT.api = async (url, opt) => {
+      const method = (opt && opt.method) || "GET";
+      if (method === "POST") vmT.posts.push({ url, body: JSON.parse(opt.body) });
+      if (url === "/api/tags" && method === "POST") { await gate; return {}; }  // 创建 POST 挂起在途
+      return { cmd_id: "c1" };
+    };
+    const firstT = D.metaAddNewTags.call(vmT);  // 过闸 -> 占闸 -> 卡在创建 POST
+    await flush();
+    ok("metaAddNewTags 同构占闸: 新标签创建在途(POST 未回执)时 metaBusy 已置真", vmT.metaBusy === true);
+    await D.metaAddNewTags.call(vmT);  // 第二发: 落在创建 await 窗口内
+    ok("metaAddNewTags 同构占闸: 创建在途窗口内第二次调用被拒(零新增创建, 零 bulk)",
+       vmT.posts.filter((p) => p.url === "/api/tags").length === 1 && bulkPosts(vmT).length === 0);
+    releaseTags();
+    await firstT;
+    await flush();
+    ok("metaAddNewTags 同构占闸: 第一发走完先建后打标, busy 由既有收口(_postWaitCmd)复位",
+       lastBulk(vmT).action === "add_tags" && vmT.metaBusy === false);
+  }
 
   // ---- R5#133: metaBusy 入口闸(修复前红: 双发并发 set_category + closeMeta 保护失效) ----
   vm.metaBusy = true;
@@ -347,7 +406,7 @@ _NODE_MGR_BODY = r"""
   vm.mgrNew.tags = " a , b,c,中文, d,, ";
   await D.submitMgrTags.call(vm);
   const tagPost = vm.posts.find((p) => p.url === "/api/tags" && p.body.tags);
-  ok("submitMgrTags: 中英文逗号拆分 + 空段剔除(载荷 tags 逐字段)",
+  ok("submitMgrTags: 半角逗号拆分(全角不支持, 清单外已知项) + 空段剔除(载荷 tags 逐字段)",
      JSON.stringify(tagPost.body.tags) === JSON.stringify(["a", "b", "c", "中文", "d"]));
   ok("submitMgrTags: 成功后清草稿 + 重拉列表(_mgrRun ok 链)", vm.mgrNew.tags === "" && vm.mgrTags.length === 3);
   ok("submitMgrTags: ok toast 带计数", vm.toasts.some((t) => t[1] === "ok" && t[0].includes("已创建 5 个标签")));

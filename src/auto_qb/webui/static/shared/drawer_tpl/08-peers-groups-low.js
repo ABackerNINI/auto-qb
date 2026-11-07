@@ -304,8 +304,8 @@
      * (R5#77: **折叠态不进 sig** —— 折叠仅 classList 翻转且 onClick 不刷 lastSig, 折叠态进
      * sig 必使每次折叠后的下一个数据拍失配 = 整帧 replaceChildren, 恰是 2026-10-18 根治的
      * 那类重建; 与 05「折叠态不进 sig、数据拍照常跳过」同口径。「只看在传」保留: 它的
-     * onClick 走 rerender 重置 lastSig, 与 sig 一致); **不再含在场分组集**。旧口径组空⇒整节
-     * 隐藏(锚离场)、组补⇒新锚进场都算结构变化 ⇒ 握手连接翻动一次就整帧 replaceChildren +
+     * onClick 走 rerender 重置 lastSig, 与 sig 一致); **不再含在场分组集**。旧口径组空->整节
+     * 隐藏(锚离场)、组补->新锚进场都算结构变化 -> 握手连接翻动一次就整帧 replaceChildren +
      * anchFill + Teleport 重挂(全组表格抖动); 现五区恒在场, 组的进出场在 skip 分支内联原地
      * 切类, 不触发任何重建。
      * **不含 peers 数据**: 数据拍(5s 轮询每拍必到)不整帧重建, 行走桥响应式。 */
@@ -386,7 +386,7 @@
     }
   }
 
-  /* 视图偏好变化后的强制重渲染(sig 不含偏好, 置空 lastSig 即可; 口径同 04) */
+  /* 视图偏好变化后的强制重渲染(sig 已含 onlyMoving, 此处置空 lastSig 为双保险) */
   function rerender(host) {
     ui.lastSig = "";
     const ctx = host.__dtCtx;

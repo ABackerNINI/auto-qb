@@ -1638,7 +1638,8 @@ def test_frontend_busy_skeleton_single_point():
     (_mgrRun 管理对话框写操作 / _panelLoad 面板加载与 tm 槽回执 / _postWaitCmd POST+waitCmd 三态
     toast) + 19 处调用点接线数对账(dialogs 14: mgr 5 + 面板加载 5 + POST 4; config_hub 5: tm 族
     4 槽 + 一键导入) + finally 复位保底必须住在单点内(漏 finally = 面板永久转圈) + 裸 busy 置位
-    反向断言(再手抄 = 破单点, 回潮即红)。"""
+    反向断言(再手抄 = 破单点, 回潮即红; metaBusy 两处例外 = metaSetCategory/metaAddNewTags 过闸
+    占闸, R4 终审修复面 —— 计数恰 2 + 占闸/就地复位同住各自方法, 详见第 4 段)。"""
     dlg = read_shared("dialogs.js")
     hub = read_shared("config_hub.js")
     # 1. 三单点在册(dialogs.js 是骨架单点文件, config_hub.js 经同一根实例混入调用)
@@ -1661,12 +1662,23 @@ def test_frontend_busy_skeleton_single_point():
     m = re.search(r"async _postWaitCmd\(busyObj, busyKey, url, body, opts\) \{.*?\n    \},", dlg, re.S)
     assert m and "busyObj[busyKey] = false" in m.group(0), "_postWaitCmd 必须 finally 复位 busy 位"
     # 4. 裸骨架散写反向断言: 这些 busy 置位原先各处手抄, 收敛后只许出现在单点内(回潮 = 破单点)
+    #    metaBusy 例外收紧(R4 终审修复 + 增量轮): metaSetCategory/metaAddNewTags 过闸同步占闸是
+    #    _postWaitCmd 单点之外仅有的两处合法置位 —— 各自的候选资源创建 POST(/api/categories 与
+    #    /api/tags)在单点之前 await, 不占闸则该窗口内二次调用漏闸并发; 复位仍归单点 finally
+    #    (各自提前 return 就地复位)。计数对账: 恰 2 处且与各自就地复位同住方法体, 再散写 = 回潮即红。
+    assert dlg.count("this.metaBusy = true") == 2, \
+        "dialogs 域 metaBusy 置位应恰 2 处(metaSetCategory/metaAddNewTags 过闸占闸; 其余一律走 _postWaitCmd 单点)"
+    m = re.search(r"async metaSetCategory\(name\) \{(.*?)\n    \},", dlg, re.S)
+    assert m and "this.metaBusy = true" in m.group(0) and "this.metaBusy = false" in m.group(0), \
+        "metaBusy 占闸与未变化静默返回的就地复位必须同住 metaSetCategory(挪走 = 同步本守阵)"
+    m = re.search(r"async metaAddNewTags\(\) \{(.*?)\n    \},", dlg, re.S)
+    assert m and "this.metaBusy = true" in m.group(0) and "this.metaBusy = false" in m.group(0), \
+        "metaBusy 占闸与空输入提前 return 的就地复位必须同住 metaAddNewTags(挪走 = 同步本守阵)"
     for gone in (
         "this.statsLoading = true",
         "this.mgrLoading = true",
         "this.logs.loading = true",
         "this.historyLoading = true",
-        "this.metaBusy = true",
         "this.speedOverride.busy = true",
         "this.speedAlt.busy = true",
         "this.altToggling = true",

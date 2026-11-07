@@ -560,6 +560,14 @@ window.AQB_QB_TRAFFIC = {
       this._qbLimitUnwatch();
       this._qbLimitUnwatch = null;
     }
+    /* themechange 监听对称摘除(池条目 R5#181): 挂载在 _qbChartBuild 里由 _qbThemeBound 保证
+     * 只挂一次, 卸载不同步摘除则 documentElement 持实例引用一起泄漏; 处理器在挂载点已提为
+     * 实例字段 _qbOnThemeChange, 此处按同一引用摘, 并复位 _qbThemeBound 让重挂可重绑。 */
+    if (this._qbThemeBound) {
+      document.documentElement.removeEventListener("autoqb:themechange", this._qbOnThemeChange);
+      this._qbThemeBound = false;
+      this._qbOnThemeChange = null;
+    }
   },
   methods: {
     /* ---------------- 流量形态开关(三挂点并入抽屉; 打开 = 把抽屉切到流量形态) ----------------

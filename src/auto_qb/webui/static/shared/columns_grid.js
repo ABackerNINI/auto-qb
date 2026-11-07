@@ -29,8 +29,9 @@ Object.assign(window.AQB_COLUMNS.methods, {
     },
     /* 渐进列(U2, 计划 26-10-12-0527 D2): 列定义声明 omitEmpty 的列(07/08 的 qB files 字段
      * —— 随 qB 版本浮动, 原变体口径「无任何对端携带时整列省略」)在**当前所有行都无该字段
-     * 值**时整列省略。行来源走描述符 rows(变体表 = dtTplRows → rowsFn; 经典表无 omitEmpty
-     * 列, 零开销短路)。行未落袋(加载中)按声明全集保守显示。
+     * 值**时整列省略。2026-10-13-0811 起声明全删, 本机制现无声明者、恒短路保留。行来源走
+     * 描述符 rows(变体表 = dtTplRows -> rowsFn; 经典表无 omitEmpty 列, 零开销短路)。行未落袋
+     * (加载中)按声明全集保守显示。
      * !放在 _visibleCols 尾部单点: 表头/行/grid 模板/colAlignCss/列选择器全走同一条路,
      *   省略态下 :nth-child 列对齐天然一致(nofiles 9 列错位 bug 类的结构性根除)。 */
     _colsOmitEmpty(page, cols) {

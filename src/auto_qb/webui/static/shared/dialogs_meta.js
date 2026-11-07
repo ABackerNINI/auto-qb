@@ -8,11 +8,15 @@ Object.assign(window.AQB_DIALOGS.methods, {
       // 回执等待期防重复投递(与 metaToggleTag/metaAddNewTags 同口径): 双击候选行/回车与点选竞态
       // 会并发两条 set_category bulk, 且先完成的一方把 metaBusy 提前复位, closeMeta 的误关保护
       // 对仍在途的另一方失效 —— 入口闸让第二发在投递前返回, busy 只归第一发所有。
+      // 闸后同步置位(占闸): 新分类创建的 POST /api/categories 在 _metaBulk 之前 await, 那段窗口
+      // metaBusy 尚未由 _postWaitCmd 置真, 二次调用仍会漏闸并发 —— 过闸立即占闸; 唯一提前
+      // return(未变化静默返回)就地复位, 成功路径的复位仍归 _metaBulk(_postWaitCmd) 既有收口。
       if (this.metaBusy) return;
+      this.metaBusy = true;
       name = (name || "").trim();
       this.metaCatMenu = false;
       this.metaCatHi = -1;
-      if (name === this.metaCat && !this.metaCatDiff) return;  // 未变化: 静默返回(不给"已设置"的假反馈)
+      if (name === this.metaCat && !this.metaCatDiff) { this.metaBusy = false; return; }  // 未变化: 静默返回(不给"已设置"的假反馈)
       if (name && !this.metaCategories.includes(name)) {
         try {
           await this.api("/api/categories", { method: "POST", body: JSON.stringify({ name }) });

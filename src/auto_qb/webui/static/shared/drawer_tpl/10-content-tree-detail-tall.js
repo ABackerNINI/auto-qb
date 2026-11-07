@@ -54,7 +54,8 @@
   const rowMem = new Map(); /* path -> 输入快照 + 上一轮行对象 */
   let rowMemHash = "";
   let rowMemCtx = null;
-  /* W1: sig 廉价指纹走核心 helpers 单点 H.filesSig(R5#113 抽单点, 原 10/11/12 各持一份) ——
+  /* W1: sig 廉价指纹走核心 helpers 单点 H.filesSig(R5#113 抽单点, 口径同 drawer_templates.js
+   * HELPERS.filesSig: 原为 10/11 各持一份, 12 号曾漏随 W1 收口) ——
    * 引用相等 O(1) 快路 / 引用变 O(F) 数值滚动指纹, 不再 JSON.stringify 全量序列化。 */
 
   const CSS = [

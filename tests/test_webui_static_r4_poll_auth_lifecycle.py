@@ -9,15 +9,13 @@
 - test_r4_lifecycle_unmounted_listener_sweep: R5#3 —— lifecycle.js mounted/unmounted 监听对称 node 电池真跑: mounted 挂的五支监听(click 收层/Esc 退栈/防抖 resize/visibilitychange/contextmenu)提为实例字段后 unmounted 逐一撤除(热重载句柄不再堆叠), stopPolling 与 stopEvents 同收, 既有撤除面(键盘引擎/守卫/storage/时钟 interval)零回归
 
 加载口径: 单文件域直接读盘 eval(顶层纯函数声明随非严格 eval 入作用域, 同 hrsCompareRows 电池范式);
-定时器全部桩住(只记节拍/手动放拍), 时钟可手动放拍 —— 免得真睡 3s/15s。无 node 静默跳过(返回 None,
-不引入 pytest skip; 有 node 时断言电池全绿)。
+定时器全部桩住(只记节拍/手动放拍), 时钟可手动放拍 —— 免得真睡 3s/15s。无 node 时 _run_probe 返回
+None、_assert_battery 即红(不引入 pytest skip; 有 node 时断言电池全绿)。
 """
 
 import json
 import shutil
 import subprocess
-
-import pytest
 
 from webui_helpers import STATIC_ROOT
 
@@ -28,7 +26,7 @@ def _shared(name):
 
 
 def _run_probe(probe, path):
-    """跑一个 node 电池: 无 node 返回 None(静默跳过); 输出末行必须是 {ok, total, failed} JSON"""
+    """跑一个 node 电池: 无 node 返回 None(由 _assert_battery fail-fast 红); 输出末行必须是 {ok, total, failed} JSON"""
     node = shutil.which("node")
     if not node:
         return None
@@ -45,8 +43,7 @@ def _run_probe(probe, path):
 
 
 def _assert_battery(report, what):
-    if report is None:
-        pytest.skip("无 node: 本电池静默跳过(与既有 node 电池同口径)")
+    assert report is not None, "无 node: 本电池无法运行(不再静默跳过, 见 R4 终审修复)"
     assert report["failed"] == [], f"{what} {report['ok']}/{report['total']} 过, 失败: {report['failed']}"
 
 

@@ -176,6 +176,7 @@ for (const skin of SKINS) {
       const drawer = await openTorrentDrawer(page);
       const wrap = drawer.locator('.dt02-wrap');
       await expect(wrap, 'localStorage 预置 general=02 直接渲染六卡聚类').toBeVisible({ timeout: 5_000 });
+      await expectNoDeadClass(page, '变体 02 挂载态(六卡聚类)');
 
       // ---- R5#89: 六卡聚类(base/time/xfer/id/meta/store)+ HR 触发时的 HR 卡 = 7
       // (relocate 桩置空, 「迁移」卡确定性离场)
@@ -213,6 +214,7 @@ for (const skin of SKINS) {
       const drawer = await openTorrentDrawer(page);
       const wrap = drawer.locator('.dt03-wrap');
       await expect(wrap, 'localStorage 预置 general=03 渲染双栏档案').toBeVisible({ timeout: 5_000 });
+      await expectNoDeadClass(page, '变体 03 挂载态(双栏档案)');
       const side = drawer.locator('.dt03-side');
       await expect(side, '右 252px 元信息栏在场').toBeVisible();
       await expect(side).toContainText('元信息');

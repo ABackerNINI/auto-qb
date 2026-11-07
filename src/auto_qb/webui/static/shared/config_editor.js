@@ -174,7 +174,7 @@ window.CONFIG_EDITOR = {
         const [schema, conf] = await Promise.all([this.api("/api/config/schema"), this.api("/api/config")]);
         this.cfg.schema = schema;
         this.cfgSetTree(conf.tree);
-        // 选中键存在性校验(R5#153): 只在为空时重选不兜住「键已消失」—— 重命名 A→B 未保存点
+        // 选中键存在性校验(R5#153): 只在为空时重选不兜住「键已消失」—— 重命名 A->B 未保存点
         // 「放弃改动」, 重拉的磁盘树上只有 A, trackerKey 仍是 B, 右栏渲染幽灵站点; 此时编辑任意
         // 字段经 cfgSetPath 会把 config.trackers.B 连键带值写回树, 静默复活已放弃的改名。
         // 不在重拉的树里即回落首项; 空容器回落 null(与原缺省语义一致)。
