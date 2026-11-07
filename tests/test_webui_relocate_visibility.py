@@ -12,8 +12,8 @@
 - test_relocate_null_when_disabled_or_no_jobs: relocate 关 / 无 job(含旧 state 无 relocate 段) => relocate 字段 null
 - test_view_build_does_not_probe_filesystem_or_iterate_jobs: 列表构建期不 lstat/stat/readlink/islink, 不遍历 _jobs
 - test_decorate_fingerprint_includes_relocate: decorate.js 成员/组 relocate 签名进指纹且槽位长度同步
-- test_p1_badge_rendered_in_path_cells: 组行/种子行路径列渲染 button.rel-badge, click.stop 只开详情
-- test_p1_badge_state_mapping_node: node 探针验证 moving/pending/failed/mixed 词表与 done/空态不挂徽标
+- test_p1_pair_rendered_in_path_cells: 组行/种子行路径列渲染 .rel-pair 两排 A→B(rel-pcol+rel-arc), 零点击(无 button/relocateOpen), tone 经 relocateView
+- test_p1_pair_state_mapping_node: node 探针验证 relocateView 矩阵(pair/one/null)+ 指纹 src 值变化必须变签名
 - test_p1_filter_semantics_and_path_filter_untouched: 迁移状态筛走 facetRows/_facetOptions, 路径筛仍按 save_path
 - test_p1_filter_behavior_node: node 探针真跑 filteredGroups/relocateOptions —— 组内或、跨筛与、路径筛叠加、清空重置
 - test_p1_detail_section_and_endpoint_projection: 详情端点带 relocate; 无 job 时详情段整段不渲染
@@ -281,8 +281,14 @@ def test_decorate_fingerprint_includes_relocate():
     assert "_relocateSig(m.relocate)" in js
     assert "fp.length !== ms.length * 8 + 3" in js, "成员 relocate 槽 + 组 relocate 槽必须同步长度"
     assert "_groupRelocateSig(g.relocate)" in js
-    assert "r.armed_at" in js and "r.src" in js, "P1 详情/徽标消费 src/armed_at, 必须进装饰指纹"
+    assert "r.armed_at" in js, "P1 详情消费 armed_at, 必须进装饰指纹"
     assert "r.created_at" in js, "P1 详情消费设置时间, 新字段必须进装饰指纹"
+    # src 必须进**两份**签名(plan 26-11-07-2344 S2): 行内两排 A→B(relocateView)消费 src/dst,
+    # S1 又给组级聚合补了 src —— 漏槽 = 相位/src 推进后两排停在旧值(风险表第一行)
+    sig_body = js.split("function _relocateSig(", 1)[1].split("\n}", 1)[0]
+    grp_body = js.split("function _groupRelocateSig(", 1)[1].split("\n}", 1)[0]
+    assert "r.src" in sig_body, "成员 relocate 签名必须含 src"
+    assert "r.src" in grp_body, "组级 relocate 签名必须含 src(S1 组级聚合新增字段)"
 
 
 def _static(name: str) -> str:
@@ -291,46 +297,68 @@ def _static(name: str) -> str:
     return (Path(__file__).resolve().parents[1] / "src/auto_qb/webui/static" / name).read_text(encoding="utf-8")
 
 
-def test_p1_badge_rendered_in_path_cells():
+def test_p1_pair_rendered_in_path_cells():
+    """行内迁移展示 = 着色 A→B 两排 + 右缘弧形箭头(plan 26-11-07-2344 S2/S4), 徽章全撤"""
     cells = _static("shared/tpl/xtpl-cells.html")
-    assert cells.count('class="rel-badge"') >= 2, "组行与种子行路径列都要有迁移徽标"
-    assert cells.count('type="button" class="rel-badge"') == 2, "徽标必须是可访问 button(非 div/span)"
-    assert cells.count('@click.stop="$root.relocateOpen(') == 2, "徽标点击只能开详情, 不得冒泡触发路径筛选"
-    assert cells.count("$root.relocateBadge(") >= 4, "徽标文案/类/title 必须走同一展示方法, 模板不写状态字面量"
-    assert ".g-save-path.has-rel" in _static("shared/row_lang.css")
+    # 两排结构: 组行与种子行两个 save_path 分支各有 .rel-pair(rel-pcol 纵排 + 右缘弧形箭头)
+    assert cells.count('class="rel-pair"') == 2, "组行与种子行路径列都要有两排 A→B 展示"
+    assert cells.count('class="rel-pcol"') == 2, "pair 内部必须是纵排列(rel-pcol > rel-pa + rel-pb)"
+    assert cells.count('class="rel-pa"') == 2 and cells.count('class="rel-pb"') == 2
+    assert cells.count('class="rel-arc"') == 2, "弧形箭头(方向语义)每分支一个"
+    # 零点击(plan D9): 不再有任何按钮语义, 旧徽标连开抽屉的坑③从根上消失
+    assert "rel-badge" not in cells, "文字徽章已撤, 两排结构取代"
+    assert "relocateBadge" not in cells and "relocateOpen" not in cells
+    assert "'has-rel'" not in cells, "旧 has-rel 绑定已改 has-relpair"
+    assert 'type="button"' not in cells, "零点击口径: 路径列不得有任何按钮语义"
+    # 展示口径单点: tone 类经 relocateView 拼接, 模板不写状态字面量
+    assert "$root.relocateView(" in cells, "pair/one 判定与 tone 必须走 relocateView 单点"
+    assert "'rel-tone-' +" in cells, "tone 类必须经 relocateView().tone 拼接"
+    assert "rel-tone-moving" not in cells and "rel-tone-failed" not in cells, "模板不写状态字面量"
+
     css = _static("shared/row_lang.css")
-    assert ".rl-scope .rel-badge" in css
-    # 可访问性验收: 焦点环必须钉在徽标自己身上(文件里别处也有 :focus-visible, 泛断言守不住)
-    assert ".rl-scope .rel-badge:focus-visible" in css, "徽标必须有焦点可见样式"
+    assert ".rl-scope .rel-badge" not in css, "999px 药丸样式已撤(flux/console 直角皮肤冲突的坑②)"
+    assert ".g-save-path.has-relpair" in css, "has-relpair 同款 flex 布局(路径文字 flex:1 min-width:0 保省略)"
+    assert ".rl-scope .rel-pair" in css and ".rl-scope .rel-pcol" in css
+    assert ".rl-scope .rel-pa" in css and ".rl-scope .rel-pb" in css and ".rl-scope .rel-arc" in css
+    for tone in ("moving", "pending", "failed", "mixed"):
+        assert f".rl-scope .rel-tone-{tone}" in css, f"tone {tone} 的着色规则缺失(状态唯一载体 = 颜色)"
+    assert "@keyframes rel-pulse" in css, "moving 态脉冲动画缺失"
+    assert "prefers-reduced-motion" in css, "脉冲必须尊重系统减动效设置"
 
 
-_NODE_BADGE_PROBE = r"""
+_NODE_VIEW_PROBE = r"""
 const fs=require('fs'),vm=require('vm');
 const sandbox={window:{},console};
 vm.createContext(sandbox);
 vm.runInContext(fs.readFileSync(process.argv[1],'utf8'),sandbox);
 const M=Object.assign({},sandbox.window.AQB_DECORATE.methods);
 const call=(name,row)=>M[name].call(Object.assign({},M),row);
-const b=(row)=>{const x=call('relocateBadge',row);return x&&{label:x.label,cls:x.cls,title:x.title};};
+const v=(row)=>{const x=call('relocateView',row);return x&&{mode:x.mode,tone:x.tone,a:x.a,b:x.b,label:x.label};};
 const out={
-  moving:b({relocate:{state:'moving',src:'R:/src',dst:'R:/dst'}}),
-  pending:b({relocate:{state:'pending_finalize',src:'R:/src',dst:'R:/dst',armed_at:5}}),
-  failed:b({relocate:{state:'failed',src:'R:/src',dst:'R:/dst',reason:'boom'}}),
-  mixed:b({members:[{}],relocate:{state:'mixed',pending:1,total:2,dst:['R:/dst']}}),
-  done:b({relocate:{state:'done',src:'R:/src',dst:'R:/dst'}}),
-  cancelled:b({relocate:{state:'cancelled',src:'R:/src',dst:'R:/dst'}}),
-  none:b({relocate:null}),
+  moving:v({relocate:{state:'moving',src:'R:/src',dst:'R:/dst'}}),
+  pending:v({relocate:{state:'pending_finalize',src:'R:/src',dst:'R:/dst',armed_at:5}}),
+  failed:v({relocate:{state:'failed',src:'R:/src',dst:'R:/dst',reason:'boom'}}),
+  seedOneNoSrc:v({relocate:{state:'moving',src:'',dst:'R:/dst'}}),
+  seedOneNoDst:v({relocate:{state:'moving',src:'R:/src',dst:''}}),
+  grpPair:v({members:[{}],relocate:{state:'moving',src:'R:/src',dst:['R:/dst']}}),
+  grpMixed:v({members:[{}],relocate:{state:'mixed',src:'R:/src',dst:['R:/dst'],pending:1,total:2}}),
+  grpMultiDst:v({members:[{}],relocate:{state:'moving',src:'R:/src',dst:['R:/a','R:/b']}}),
+  grpNoSrc:v({members:[{}],relocate:{state:'moving',src:'',dst:['R:/dst']}}),
+  done:v({relocate:{state:'done',src:'R:/src',dst:'R:/dst'}}),
+  cancelled:v({relocate:{state:'cancelled',src:'R:/src',dst:'R:/dst'}}),
+  none:v({relocate:null}),
   buckets:call('_relocateBuckets',{members:[
     {relocate:{state:'moving'}},{relocate:{state:'pending_finalize'}},{relocate:{state:'done'}},{}
   ]}),
-  target:call('relocateTargetHash',{members:[{hash:'H0'},{hash:'H1',relocate:{mover:true}}]}),
-  targetNone:call('relocateTargetHash',{members:[{hash:'H0'}]}),
+  sigSrcChg:sandbox._relocateSig({state:'moving',src:'R:/a'})!==sandbox._relocateSig({state:'moving',src:'R:/b'}),
+  grpSigSrcChg:sandbox._groupRelocateSig({state:'moving',src:'R:/a',dst:['R:/d']})!==sandbox._groupRelocateSig({state:'moving',src:'R:/b',dst:['R:/d']}),
 };
 process.stdout.write(JSON.stringify(out));
 """
 
 
-def test_p1_badge_state_mapping_node():
+def test_p1_pair_state_mapping_node():
+    """relocateView 矩阵(plan 26-11-07-2344 S2): pair/one/null 三态 + 指纹 src 敏感性"""
     node = shutil.which("node")
     if not node:
         return
@@ -338,7 +366,7 @@ def test_p1_badge_state_mapping_node():
 
     js = Path(__file__).resolve().parents[1] / "src/auto_qb/webui/static/shared/decorate.js"
     proc = subprocess.run(
-        [node, "-e", _NODE_BADGE_PROBE, str(js)],
+        [node, "-e", _NODE_VIEW_PROBE, str(js)],
         capture_output=True,
         text=True,
         encoding="utf-8",
@@ -347,19 +375,27 @@ def test_p1_badge_state_mapping_node():
     assert proc.returncode == 0, proc.stderr
     out = json.loads(proc.stdout)
 
-    assert out["moving"]["label"] == "迁移中" and out["moving"]["cls"] == "moving"
-    assert out["moving"]["title"].startswith("迁移中") and "R:/src → R:/dst" in out["moving"]["title"]
-    assert out["pending"]["label"] == "待收尾" and out["pending"]["cls"] == "pending"
-    assert "已武装收尾" in out["pending"]["title"]
-    assert out["failed"]["label"] == "迁移失败" and out["failed"]["cls"] == "failed"
-    assert "boom" in out["failed"]["title"]
-    assert out["mixed"]["label"] == "迁移多任务" and out["mixed"]["cls"] == "mixed"
-    # 空态/终态绝不挂徽标 —— 没有迁移记录时不得出现「已完成」误导结论
+    # 进行中三态 + src/dst 齐全 -> 两排(pair), tone 直映
+    assert out["moving"]["mode"] == "pair" and out["moving"]["tone"] == "moving"
+    assert out["moving"]["a"] == "R:/src" and out["moving"]["b"] == "R:/dst"
+    assert out["pending"]["mode"] == "pair" and out["pending"]["tone"] == "pending"
+    assert out["failed"]["mode"] == "pair" and out["failed"]["tone"] == "failed"
+    # 种子行 src/dst 任一缺失 -> 单排(one, a/b 置空, label 挂状态词)
+    assert out["seedOneNoSrc"]["mode"] == "one" and out["seedOneNoSrc"]["a"] is None
+    assert out["seedOneNoSrc"]["b"] is None and out["seedOneNoSrc"]["label"] == "迁移中"
+    assert out["seedOneNoDst"]["mode"] == "one"
+    # 组行: 组级 src 非空且 dst 恰 1 个 -> 两排(a=src, b=dst[0]); mixed/多 dst/src 缺失 -> 单排
+    assert out["grpPair"]["mode"] == "pair" and out["grpPair"]["a"] == "R:/src" and out["grpPair"]["b"] == "R:/dst"
+    assert out["grpMixed"]["mode"] == "one" and out["grpMixed"]["tone"] == "mixed"
+    assert out["grpMultiDst"]["mode"] == "one"
+    assert out["grpNoSrc"]["mode"] == "one"
+    # 终态/无标注 -> null(模板回落纯单排正常色, 不出现「已完成」结论)
     assert out["done"] is None and out["cancelled"] is None and out["none"] is None
-    # 组级筛选桶: 组内任一成员落档即保留; done 只贡献「有过迁移」
+    # 组级筛选桶口径不变(P1 既有行为): 组内任一成员落档即保留; done 只贡献「有过迁移」
     assert "迁移中" in out["buckets"] and "待收尾" in out["buckets"] and "有过迁移" in out["buckets"]
-    assert out["target"] == "H1", "组行徽标优先打开搬移成员详情"
-    assert out["targetNone"] == "H0", "无迁移成员时退回组内首成员"
+    # 指纹敏感性(plan §07 风险第一行): src 值变化必须让成员/组两份签名都变, 否则两排停旧值
+    assert out["sigSrcChg"] is True, "改 src 值 _relocateSig 签名必须变"
+    assert out["grpSigSrcChg"] is True, "改 src 值 _groupRelocateSig 签名必须变(S2 新增槽位)"
 
 
 def test_p1_filter_semantics_and_path_filter_untouched():

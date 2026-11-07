@@ -29,28 +29,32 @@
  */
 const _decoCache = new WeakMap();
 
-/* relocate 标注签名(plan 26-11-04-1042 P0-5; P1 补齐 src/armed_at): 后端每次重建会产出新的
- * relocate 对象, 直接把对象引用放进指纹会让所有组行恒失配 —— 必须压成值签名后再比较。
- * P1 详情段消费 src/created_at/armed_at; 徽标 title 也消费 src, 任一值推进必须让装饰缓存失效。 */
+/* relocate 标注签名(plan 26-11-04-1042 P0-5; P1 补齐 src/armed_at; 26-11-07-2344 S2 组级签名补 src):
+ * 后端每次重建会产出新的 relocate 对象, 直接把对象引用放进指纹会让所有组行恒失配 —— 必须压成
+ * 值签名后再比较。P1 详情段消费 src/created_at/armed_at; 行内两排 A→B(relocateView)消费 src/dst,
+ * 任一值推进必须让装饰缓存失效(漏槽 = 相位推进后两排停在旧值)。 */
 function _relocateSig(r) {
   if (!r) return "";
   return [r.state, r.phase, r.job_id, r.mover ? 1 : 0, r.origin, r.alias_kind, r.alias_count, r.src, r.dst,
           r.created_at, r.armed_at, r.updated_at, r.reason].join("|");
 }
 
-/* 迁移状态展示词表(plan 26-11-04-1042 P1): 徽标 / 筛选 / 详情段共用一份, 禁止在模板里
- * 另写字面量三元。done / cancelled 不长期挂徽标, 但仍算「有过迁移」。 */
+/* 迁移状态展示词表(plan 26-11-04-1042 P1): 筛选 / 详情段 / 单排回落语义共用一份, 禁止在模板里
+ * 另写字面量三元。done / cancelled 不长期挂行内展示, 但仍算「有过迁移」。 */
 const RELOCATE_STATE_TEXT = {
   moving: "迁移中", pending_finalize: "待收尾", failed: "迁移失败",
   mixed: "迁移多任务", done: "已完成", cancelled: "已撤销",
 };
-const RELOCATE_STATE_CLASS = { moving: "moving", pending_finalize: "pending", failed: "failed", mixed: "mixed" };
+/* 状态 -> 色调映射(plan 26-11-07-2344 S2, 取代旧 RELOCATE_STATE_CLASS): 状态唯一载体 = 颜色
+ * (.rel-tone-<tone>, row_lang.css 单点定义), 无底形无边框无药丸。done / cancelled 不在表内 ——
+ * relocateView 对它们恒 null, 行内回落单排正常色。 */
+const RELOCATE_TONE = { moving: "moving", pending_finalize: "pending", failed: "failed", mixed: "mixed" };
 const RELOCATE_FILTER_ANY = "有过迁移";
 const RELOCATE_ORIGIN_TEXT = { web: "WebUI", rule: "规则", unknown: "未知来源" };
 
 function _groupRelocateSig(r) {
   if (!r) return "";
-  return [r.state, r.pending, r.total, (r.job_ids || []).join(","), (r.dst || []).join(","),
+  return [r.state, r.pending, r.total, (r.job_ids || []).join(","), (r.dst || []).join(","), r.src,
           r.updated_at].join("|");
 }
 
@@ -115,7 +119,7 @@ const REANNOUNCE_BLOCKED_KINDS = { paused: "种子暂停", checking: "种子校�
 window.AQB_DECORATE = {
   methods: {
     /* ------------------------------------------- 迁移可见性 P1(plan 26-11-04-1042)
-     * 行内徽标 / 筛选桶 / 详情段的**唯一**展示口径。数据一律来自后端 P0 投影:
+     * 行内展示(relocateView)/ 筛选桶 / 详情段的**唯一**展示口径。数据一律来自后端 P0 投影:
      * 组行读 g.relocate(后端聚合, 不取首成员推断), 种子行读 m.relocate。 */
     relocateStateText(state) {
       return RELOCATE_STATE_TEXT[state] || "未知状态";
@@ -123,51 +127,34 @@ window.AQB_DECORATE = {
     relocateOriginText(origin) {
       return RELOCATE_ORIGIN_TEXT[origin] || (origin ? origin : "未知来源");
     },
-    /* 徽标只挂"还需要用户看一眼"的状态: moving / pending_finalize / failed / mixed。
-     * done / cancelled / 无 relocate 恒 null —— 没有迁移记录时绝不显示「已完成」之类结论。 */
-    relocateBadge(row) {
+    /* 行内迁移展示单点(plan 26-11-07-2344 S2): 路径列两排 A→B / 单排着色的**唯一**判定与口径,
+     * 模板与后续悬停浮窗(relocate_pop.js)都只从这里取。输出 {mode, tone, a, b, label} 或 null:
+     *   mode='pair' -> 两排(a=当前位置 src, b=目标位置 dst), tone 类挂 .rel-pair 整块着色;
+     *   mode='one'  -> 单排回落(a/b 置空), label 挂状态词, tone 类只给路径文字着色 —— 不渲染
+     *                  任何文字徽章(状态唯一载体 = 颜色);
+     *   null        -> 无 relocate / done / cancelled —— 纯单排正常色, 不出「已完成」结论。
+     * 组行(有 members)读 g.relocate(后端聚合, 不取首成员推断 —— P0 纪律); 种子行读 m.relocate。
+     * 两排判定: 组级 src 非空且 dst 恰 1 个 -> pair(a=src, b=dst[0]); mixed 恒单排(组内多任务
+     * 状态不一致, 一对路径表达不了); 种子行 src/dst 均非空 -> pair, 任一缺失 -> one。
+     * 零点击(plan D9): 本方法不携带任何行为, 模板不给它挂 click/title。 */
+    relocateView(row) {
       const rel = row && row.relocate;
       if (!rel) return null;
-      const cls = RELOCATE_STATE_CLASS[rel.state];
-      if (!cls) return null;
-      const label = RELOCATE_STATE_TEXT[rel.state];
-      if (!label) return null;
-      return { cls, label, title: this.relocateTitle(row) };
-    },
-    relocateTitle(row) {
-      const rel = row.relocate;
-      // 组行 dst 是数组(P0 聚合), 成员行 dst 是字符串(P0 投影) —— 展示层统一成列表, 不在此猜类型
-      const dst = (Array.isArray(rel.dst) ? rel.dst : (rel.dst ? [rel.dst] : [])).filter(Boolean);
-      const dstText = dst.length ? ` · 目标 ${dst.join(" / ")}` : "";
-      if (row.members) {
-        const base = rel.state === "mixed" ? "组内存在多个迁移任务，状态不一致"
-          : rel.state === "failed" ? "迁移失败"
-            : rel.state === "moving" ? "迁移中" : "待收尾";
-        const pendingText = rel.total ? ` · ${rel.pending}/${rel.total} 个成员待收尾` : "";
-        return `${base}${pendingText}${dstText} · 点击打开详情`;
+      const tone = RELOCATE_TONE[rel.state];
+      if (!tone) return null;
+      const isGroup = !!row.members;
+      let pair;
+      if (isGroup) {
+        pair = rel.state !== "mixed" && !!rel.src && Array.isArray(rel.dst) && rel.dst.length === 1;
+      } else {
+        pair = !!(rel.src && rel.dst);
       }
-      const arrow = rel.src && rel.dst ? ` · ${rel.src} → ${rel.dst}` : dstText;
-      const base = rel.state === "failed"
-        ? `迁移失败${rel.reason ? "：" + rel.reason : ""}`
-        : rel.state === "pending_finalize"
-          ? `待收尾${rel.armed_at ? "（已武装收尾）" : ""}` : "迁移中";
-      return `${base}${arrow} · 点击打开详情`;
+      if (!pair) {
+        return { mode: "one", tone, a: null, b: null, label: RELOCATE_STATE_TEXT[rel.state] || null };
+      }
+      return { mode: "pair", tone, a: rel.src, b: isGroup ? rel.dst[0] : rel.dst, label: null };
     },
-    /* 徽标点击只开详情, 绝不触发路径筛选(@click.stop 在模板侧保证)。组行取搬移成员优先 */
-    relocateTargetHash(row) {
-      const ms = row && row.members;
-      if (!ms || !ms.length) return (row && row.hash) || "";
-      const rel = ms.find((m) => m.relocate && m.relocate.mover) || ms.find((m) => m.relocate) || ms[0];
-      return rel.hash || "";
-    },
-    relocateOpen(row, ev) {
-      const hash = this.relocateTargetHash(row);
-      if (!hash) return;
-      this.openTorrentDrawer(hash);
-      // P2: 徽标本身就是路径链入口 —— 打开浮窗(锚在徽标上), 详情在后; 列表渲染期不探测
-      this.relChainOpen(hash, ev && ev.currentTarget);
-    },
-    /* 迁移筛选桶(成员级): 进行中三态 + 「有过迁移」(done/cancelled 也计入历史, 但不挂徽标) */
+    /* 迁移筛选桶(成员级): 进行中三态 + 「有过迁移」(done/cancelled 也计入历史, 行内不着色) */
     _relocatePick(r) {
       const rel = r && r.relocate;
       if (!rel) return [];

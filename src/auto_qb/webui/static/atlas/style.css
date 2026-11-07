@@ -37,6 +37,7 @@
   --accent: #3b82f6;
   --accent-hi: #60a5fa;
   --accent-soft: rgba(59, 130, 246, .16);
+  --path-src: #8fa8c4; /* 迁移浮窗当前位置行固定色(不随状态, D15) */
   --ring: rgba(59, 130, 246, .45);
   /* 按钮体系派生令牌(2026-09-26): 实心 accent / 实心 error 底上的前景色 ——
    * --on-accent 渐变主钮用(亮 accent 上白字), --on-accent-ink 实心主钮用(双色配方深字),

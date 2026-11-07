@@ -499,34 +499,40 @@ html[data-rowlang="wave"]:not([data-theme="frost"]):not([data-theme="golden"]) .
 .rowlang-menu .rowlang-item.on { background: var(--accent-soft); color: var(--fg); font-weight: 600;
   box-shadow: inset 2px 0 0 var(--accent); }
 
-/* ---------------------------------------------------------------- 迁移徽标(plan 26-11-04-1042 P1)
+/* ---------------------------------------------------------------- 迁移展示: 着色 A→B 两排(plan 26-11-07-2344 S2/S4)
  * 落点 = 路径列 .g-save-path(**在 .rl-scope 主表内**, 故只挂 .rl-scope 前缀; 与行语言无关,
- * 不依赖 data-rowlang)。结构: 路径文字 .sp-body + 可访问控件 button(原生 Tab/Enter/Space/触屏
- * tap), 点击只开详情(@click.stop 在模板侧), 不触发路径筛选。
- * 宽度: has-rel 时单元格转 flex, 路径文字 flex:1 min-width:0 保左右省略, 徽标 flex:0 0 auto
- * 不被长路径挤出列外。颜色一律吃皮肤令牌(warn/error/accent 三族名集由 token parity 守阵)。 */
-.rl-scope .g-save-path.has-rel { display: flex; align-items: center; gap: 6px; overflow: hidden; }
-.rl-scope .g-save-path.has-rel .sp-body { flex: 1 1 auto; min-width: 0; }
-.rl-scope .rel-badge {
-  flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
-  min-height: 0; height: 18px; margin: 0; padding: 0 6px; box-sizing: border-box;
-  border: 1px solid var(--accent-line, rgba(255,255,255,.25)); border-radius: 999px;
-  background: var(--accent-soft, rgba(58,166,166,.12)); color: var(--accent, #3aa6a6);
-  font: inherit; font-size: 11px; line-height: 1; white-space: nowrap; cursor: pointer;
+ * 不依赖 data-rowlang)。取代 26-11-04-1042 P1 的 button.rel-badge 文字药丸(占列宽/999px 与
+ * flux·console 直角皮肤冲突/点击连开抽屉三坑)。
+ * 结构(xtpl-cells.html 两组 save_path 分支对称): pair = .rel-pair(块宽 fit-content) >
+ * .rel-pcol 纵排(.rel-pa 上排当前位置暗 / .rel-pb 下排目标位置亮)+ .rel-arc 右缘弧形箭头
+ * (方向语义); one = 单排, tone 类只给 .sp-body 路径文字着色。状态唯一载体 = 颜色
+ * (.rel-tone-*, 无底形无边框无药丸, 圆角语言冲突从根上消解), 零点击 —— 无任何按钮语义、
+ * 无原生迁移 title, 详情真相在悬停浮窗(relocate_pop.js, 后续任务)。
+ * 宽度: has-relpair 时单元格转 flex, 路径文字 flex:1 min-width:0 保左右省略, pair 块
+ * flex:0 0 auto 不被长路径挤出列外; 列宽模板不动, 行高按需增长仅限两排行。颜色一律吃皮肤
+ * 语义令牌(warn/error/accent 三族名集由 token parity 守阵), 不写皮肤分支。 */
+.rl-scope .g-save-path.has-relpair { display: flex; align-items: center; gap: 6px; overflow: hidden; }
+.rl-scope .g-save-path.has-relpair .sp-body { flex: 1 1 auto; min-width: 0; }
+.rl-scope .rel-pair { display: flex; width: fit-content; max-width: 100%; align-items: stretch; gap: 4px; flex: 0 0 auto; }
+.rl-scope .rel-pcol { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.rl-scope .rel-pa, .rl-scope .rel-pb {
+  display: block; font-family: var(--font-mono, ui-monospace, monospace); font-size: 11px; line-height: 1.3;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.rl-scope .rel-badge:hover { filter: brightness(1.08); }
-.rl-scope .rel-badge:focus-visible { outline: 2px solid var(--accent, #3aa6a6); outline-offset: 2px; }
-.rl-scope .rel-badge.rel-pending {
-  border-color: var(--warn-line, rgba(245,187,66,.45)); background: var(--warn-soft, rgba(245,187,66,.15));
-  color: var(--warn, #f5bb42);
-}
-.rl-scope .rel-badge.rel-failed {
-  border-color: var(--error-line, rgba(243,118,111,.45)); background: var(--error-soft, rgba(243,118,111,.15));
-  color: var(--error, #f3766f);
-}
-.rl-scope .rel-badge.rel-mixed {
-  border-color: var(--warn-line, rgba(245,187,66,.45)); background: var(--warn-soft, rgba(245,187,66,.15));
-  color: var(--warn, #f5bb42); border-style: dashed;
+.rl-scope .rel-pa { color: currentColor; opacity: .55; }
+.rl-scope .rel-pb { color: inherit; }
+.rl-scope .rel-arc { width: 8px; height: 20px; flex: none; align-self: center; }
+/* tone 色类 = 状态唯一载体(plan D2/D4): pair 内 arc/pa/pb 全随 .rel-pair 的 currentColor
+ * (tone 类颜色), one 模式同一条规则落在 .sp-body 上同理着色。 */
+.rl-scope .rel-tone-moving { color: var(--accent, #3aa6a6); }
+.rl-scope .rel-tone-pending { color: var(--warn, #f5bb42); }
+.rl-scope .rel-tone-failed { color: var(--error, #f3766f); }
+.rl-scope .rel-tone-mixed { color: var(--warn, #f5bb42); }
+/* moving 态脉冲(目标排 + 箭头呼吸), 尊重系统减动效设置 */
+@keyframes rel-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
+.rl-scope .rel-tone-moving .rel-pb, .rl-scope .rel-tone-moving .rel-arc { animation: rel-pulse 1.8s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .rl-scope .rel-tone-moving * { animation: none !important; }
 }
 
 /* ============ 迁移路径链浮窗(P2, 计划 26-11-04-1042) ============
@@ -557,7 +563,7 @@ html[data-rowlang="wave"]:not([data-theme="frost"]):not([data-theme="golden"]) .
   border-radius: var(--radius-sm); background: transparent; color: var(--fg-dim); cursor: pointer;
 }
 .relc-x:hover { color: var(--fg); background: var(--bg-hover, rgba(255,255,255,.08)); }
-.relc-x:focus-visible, .relc-btn:focus-visible, .rel-badge:focus-visible { outline: 2px solid var(--accent, #3aa6a6); outline-offset: 2px; }
+.relc-x:focus-visible, .relc-btn:focus-visible { outline: 2px solid var(--accent, #3aa6a6); outline-offset: 2px; }
 .relc-state {
   display: flex; align-items: center; gap: 8px; padding: 14px 4px; color: var(--fg-muted);
   font-size: 12.5px;

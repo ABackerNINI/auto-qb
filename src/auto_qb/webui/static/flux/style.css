@@ -33,6 +33,7 @@
   --accent: #45b3c9;
   --accent-hi: #74d2e2;
   --accent-soft: rgba(69, 179, 201, .16);
+  --path-src: #7d9bc2; /* 迁移浮窗当前位置行固定色(不随状态, D15) */
   --ring: rgba(69, 179, 201, .45);
   /* 按钮体系派生令牌(与 atlas/prism/console 成对声明): 实心 accent / 实心 error 底上的前景色。
    * flux 按钮沿用"描边 + 发光"语言不铺实心, 但 danger-solid 变体(危险·实心)仍需要 on-error。 */

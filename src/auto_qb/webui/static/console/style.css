@@ -30,6 +30,7 @@
   --accent: #3aa6a6;
   --accent-hi: #5cc3c3;
   --accent-soft: rgba(58, 166, 166, .15);
+  --path-src: #7d97ba; /* 迁移浮窗当前位置行固定色(不随状态, D15) */
   --ring: rgba(58, 166, 166, .45);
   /* 按钮体系派生令牌(与 atlas/prism 成对声明): 实心 accent / 实心 error 底上的前景色。
    * 控制台按钮走"描边 + 发光"语言不铺实心, 但 danger-solid 变体(危险·实心)仍需要 on-error。 */
