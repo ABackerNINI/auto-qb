@@ -204,13 +204,23 @@ def build_router(ctx: WebContext) -> APIRouter:
 
     @router.post("/api/torrents/{hash}/limits")
     def api_t_limits(hash: str, body: dict | None = None):
-        """种子传输限速(bytes/s, 0=不限); 两方向均可缺省(缺省的方向不下发)"""
+        """种子传输限速(bytes/s, 0=不限); 两方向均可缺省(缺省的方向不下发); 负数 400 拒收
+
+        负数校验与 bulk 路由同口径(400 detail 同文案): qB 端点对负数 limit 的语义是
+        "不限速", 单发直调 API 传负数若静默入队, 用户"限 5MB/s"会反向变成不限速。
+        """
         b = body or {}
         payload = {"hash": hash}
         if b.get("up_limit") is not None:
-            payload["up_limit"] = _int_param(b["up_limit"])
+            v = _int_param(b["up_limit"])
+            if v < 0:
+                raise HTTPException(status_code=400, detail="up_limit 不能为负数(0 = 不限速)")
+            payload["up_limit"] = v
         if b.get("dl_limit") is not None:
-            payload["dl_limit"] = _int_param(b["dl_limit"])
+            v = _int_param(b["dl_limit"])
+            if v < 0:
+                raise HTTPException(status_code=400, detail="dl_limit 不能为负数(0 = 不限速)")
+            payload["dl_limit"] = v
         return _enqueue("set_torrent_limits", payload)
 
     @router.post("/api/torrents/{hash}/share-limits")

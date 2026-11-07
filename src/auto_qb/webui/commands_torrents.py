@@ -403,17 +403,43 @@ class TorrentsMixin:
     def _cmd_force_start(self, hash: str, enable: bool = False):
         self._torrent_action(hash, "torrents_set_force_start", f"强制开始({'开' if enable else '关'})", enable=enable)
 
-    def _relocate_receipt(self, cmd_id: str, items: list, what: str) -> None:
+    def _relocate_receipt(self, cmd_id: str, items: list, what: str, missing_msgs: List[str] | None = None) -> None:
         """整组迁移执行回执(三入口共用): 判定数据经 truth 带出, 形态同迁移预检
 
         cls: started=已发起(qB 在搬) / skip=已在目标位置(幂等) / confirm=需二次确认
         (目录别名「以后新增也落新位置」)/ blocked=闸门拒绝。blocked 给 error 回执并带
         首条自解释原因, confirm 给 ok + truth(由前端据 summary 开确认框)。
+
+        missing_msgs(issue 26-11-07-0536 #3): 批量入口的缺失计数文案段(_bulk_missing_msgs
+        拼装, 单发入口不传), 非空时回执 error 带该文案 —— 与 bulk 其余动作同契约(handler
+        文档「仍有缺失时回执 error 带缺失计数, 部分成功也报错」); truth 照常带 items+summary,
+        已发起/需确认的明细不因缺失报错而丢失。优先于 blocked 判定: 缺失计数是入口层事实,
+        比「全部被闸门拒绝」的首条原因更完整(闸门明细本就在 truth 逐项 reasons 里)。
+
+        缺失强制 error 会让前端确认门控(drawer.js 读 r.ok)不再开确认框 —— relocate 侧非零桶
+        (待确认/已发起/幂等跳过/被拒)按 summary 以「; 另有 N 项待确认 / 已发起 M 项」形态
+        追加进文案(批C评审), 用户可见层不丢事实。
         """
         summary = {"started": 0, "skip": 0, "confirm": 0, "blocked": 0}
         for it in items:
             summary[it.get("cls", "blocked")] = summary.get(it.get("cls", "blocked"), 0) + 1
         if not cmd_id:
+            return
+        if missing_msgs:
+            counts = []
+            if summary["confirm"]:
+                counts.append(f"另有 {summary['confirm']} 项待确认")
+            if summary["started"]:
+                counts.append(f"已发起 {summary['started']} 项")
+            if summary["skip"]:
+                counts.append(f"幂等跳过 {summary['skip']} 项")
+            if summary["blocked"]:
+                counts.append(f"另有 {summary['blocked']} 项被闸门拒绝")
+            msg = "; ".join(missing_msgs)
+            if counts:
+                msg = f"{msg}; " + " / ".join(counts)
+            self._set_web_result(cmd_id, "error", msg, truth={"results": items, "summary": summary})
+            logger.info(f"WEB UI | {what}: {msg}")
             return
         if summary["blocked"] and not (summary["started"] or summary["skip"] or summary["confirm"]):
             reason = ""
@@ -674,8 +700,12 @@ class TorrentsMixin:
             return
         if action == "location" and self._relocate_armed():
             # 整组迁移开: 批量移动走同一闸门 + 执行体(多选按组拆开逐组判定, §3.2.1)
+            # 缺失计数并入回执(issue 26-11-07-0536 #3): 与 recheck/skip_check/其余动作同契约
+            # —— 仍有缺失时回执 error 带缺失计数(部分成功也报错), 明细照常经 truth 带出;
+            # 缺失 hash 不交 relocate_execute(known 已按快照过滤, gone 分桶是预检/直调的兜底面)
+            msgs = self._bulk_missing_msgs(missing, len(req), missing_groups, len(keys))
             items = self.ctx.relocate.relocate_execute(known, extra["location"], confirm=bool(confirm), origin="web")
-            self._relocate_receipt(cmd_id, items, f"批量移动位置(整组迁移) {len(known)} 个")
+            self._relocate_receipt(cmd_id, items, f"批量移动位置(整组迁移) {len(known)} 个", missing_msgs=msgs)
             return
         if action == "skip_check":
             # 批量跳检(计划 26-10-02-1955 W3): 逐 hash 串行经 ops 层四阶段, 不直调 API;

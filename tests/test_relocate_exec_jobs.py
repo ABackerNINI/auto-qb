@@ -12,6 +12,9 @@
 - test_cancel_requires_cost_confirmation_then_rolls_back: 撤销先给成本, 确认后删链接 + 搬回
 - test_jobs_persist_and_reload: job 账落 state 并能重启恢复(非终态重挂 relocating 登记)
 - test_entry_single_and_bulk_create_jobs: 开关开: 单件/批量都产生 job(回执 truth 计数)
+- test_entry_bulk_missing_hashes_in_receipt: 批量移动(整组迁移开)缺失计数进回执(issue 26-11-07-0536 #3)
+  —— 仍有缺失时 error 带「N/M 个种子不存在或已被删除」+ relocate 非零桶计数段(「已发起 M 项 / 另有 N 项待确认」),
+  truth 明细照常带出(与 handler 缺失契约/其余动作同口径)
 ### P1-T1.1 守卫与容错簇(计划 26-10-20-2101)
 - test_persist_noop_when_state_box_unavailable: state 账不可用时 _persist 静默返回
 ### 收口 / 退避守卫(issues 26-10-30-0616 批A: resume_hashes 失败路径 / dry_run 短路 / 重试退避)
@@ -130,6 +133,54 @@ def test_entry_single_and_bulk_create_jobs(tmp_path, monkeypatch):
     rec2 = mgr.web.results["c2"]
     assert rec2["status"] == "ok" and rec2["truth"]["summary"]["skip"] == 1, rec2
     assert len(mod.jobs_view()) == 1
+
+
+def test_entry_bulk_missing_hashes_in_receipt(tmp_path, monkeypatch):
+    """批量移动(整组迁移开)缺失计数进回执(issue 26-11-07-0536 #3): 与其余动作同契约
+
+    handler 文档自订契约「不在快照中的 hash 跳过, 仍有缺失时回执 error 带缺失计数」:
+    整组迁移分支此前提前 return, missing/missing_groups 不进回执 —— 批量移 2 个(1 个已被
+    删)只看到 1 个的结果, 缺失零提示。修后与既有 location 路径(recheck/skip_check/其余
+    动作共用 _bulk_missing_msgs 单点)同口径: error 回执带「N/M 个种子不存在或已被删除」,
+    且 relocate 侧非零桶计数以「; 已发起 M 项 / 另有 N 项待确认」形态追加进文案(批C评审:
+    缺失强制 error 后前端确认门控读 r.ok 不再开框, 用户可见层不丢事实),
+    truth 照常带 items+summary(在册成员照常发起迁移, 明细不因缺失报错而丢失)。
+    """
+    pin_disk_usage(monkeypatch)
+    mgr, client, src, dst, content, files = relocate_env(tmp_path, file_count=2, state="uploading")
+    mod = mgr.host.get("relocate")
+    _spy_spawn(mod, [])
+    # HA 在册, GONE 不在快照(已被删): 1/2 缺失
+    mgr.web.commands.put(
+        ("bulk_torrents", {
+            "hashes": ["HA", "GONE"],
+            "action": "location",
+            "location": dst,
+            "cmd_id": "c1"
+        })
+    )
+    mgr.web.consume_commands()
+    rec = mgr.web.results["c1"]
+    assert rec["status"] == "error", rec
+    assert rec["error"] == "1/2 个种子不存在或已被删除; 已发起 1 项", rec
+    # truth 明细不丢: 在册成员照常发起(与既有 location 路径回执共用同一缺失文案单点)
+    assert rec["truth"]["summary"]["started"] == 1, rec
+    assert mod.jobs_view(), "在册成员照常发起迁移"
+    # 缺失+待确认混合(直驱回执单点, 仿 test_web_commands_bulk 直驱模式): confirm 门控被
+    # error 状态关掉后, 待确认计数必须仍在文案里可见
+    mgr._relocate_receipt(
+        "c2",
+        [{
+            "cls": "confirm",
+            "reasons": []
+        }],
+        "批量移动位置(整组迁移)",
+        missing_msgs=["1/2 个种子不存在或已被删除"],
+    )
+    rec2 = mgr.web.results["c2"]
+    assert rec2["status"] == "error", rec2
+    assert rec2["error"] == "1/2 个种子不存在或已被删除; 另有 1 项待确认", rec2
+    assert rec2["truth"]["summary"]["confirm"] == 1, rec2
 
 
 def test_persist_noop_when_state_box_unavailable(monkeypatch):

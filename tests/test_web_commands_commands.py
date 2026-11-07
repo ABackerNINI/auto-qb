@@ -3,6 +3,7 @@
 ## 测试计划(每个测试函数一条)
 - test_virtual_tracker_prefix_single_point: 守阵(issue webui-virtual-tracker-prefix-dup) 虚拟 tracker 前缀集只认 infra 单点 —— commands.py 零字面量 + 改单点即改三处过滤(猴补空元组后 DHT 行进基线)
 - test_api_torrent_write_endpoints_enqueue: 二轮种子写端点(15个) POST 转发 cmd/参数入队 + 无密钥 401; location 的 confirm 提供才透传(单发 /api/torrents/{hash}/location 与 bulk location 动作两处, T2a2)
+- test_api_t_limits_negative_rejected: 单发限速负数 400 拒收(issue 26-11-07-0536 #2, 与 bulk 路由同文案同口径) —— up/dl 负数不入队; 合法 0/正值仍正常入队(0=不限速语义不回归)
 ### T2a 覆盖率第三轮: 转移命令回执弧
 - test_transfer_cmd_receipt_paths: 转移命令回执弧直驱 —— run 目标缺失/空批次成功两路无 cmd_id 只落日志不写回执; test 目标缺失(cmd_id 在场)写 error / 适配器异常无 cmd_id 落 WARNING / tr stub 按不可用处理 / 正常探测成功落 INFO
 """
@@ -292,3 +293,27 @@ def test_transfer_cmd_receipt_paths(monkeypatch):
             mgr._cmd_transfer_test("T1", cmd_id="")
         assert mgr.web.results == {}
         assert any("转移目标测试 T1: qBittorrent v5.2.3" in m for m in cap.messages)
+
+
+def test_api_t_limits_negative_rejected(web_env):
+    """单发限速负数 400 拒收(issue 26-11-07-0536 #2): 与 bulk 路由同文案同口径
+
+    qB 端点对负数 limit 的语义是"不限速" —— 修复前单发直调 API 传负数静默入队直传 qB,
+    "限 5MB/s"反向变成不限速, 与 bulk 路由的 400("up_limit 不能为负数")同一输入两种裁决。
+    路由层拒收不入队(参数错误在路由层 400 的既有分层惯例); 合法 0/正值不回归。
+    """
+    mgr, client = web_env
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    for field in ("up_limit", "dl_limit"):
+        resp = client.post("/api/torrents/HA/limits", headers=auth, json={field: -1})
+        assert resp.status_code == 400, f"{field}=-1: {resp.status_code} {resp.text}"
+        assert resp.json()["detail"] == f"{field} 不能为负数(0 = 不限速)", resp.json()
+    assert mgr.web.commands.empty(), "负数拒收不得入队"
+    # 合法值不回归: 0 = 不限速(qB 语义), 正常入队
+    resp = client.post("/api/torrents/HA/limits", headers=auth, json={"up_limit": 0, "dl_limit": 5242880})
+    assert resp.status_code == 200, resp.text
+    got_cmd, got_payload = mgr.web.commands.get_nowait()
+    assert got_cmd == "set_torrent_limits"
+    got_payload.pop("cmd_id")
+    got_payload.pop("_queued_ts", None)
+    assert got_payload == {"hash": "HA", "up_limit": 0, "dl_limit": 5242880}

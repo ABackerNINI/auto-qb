@@ -84,8 +84,9 @@ REANNOUNCE_BLOCKED_STATES = frozenset(
     }
 )
 # 非活跃目标的回执文案(第二道闸命中时用; 前端正常路径已被 reannouncePlan 收敛, 不会到这里)
-# !此串被 tests/test_web_commands.py 与 test_webui_static_dom_panel.py 逐字断言(后者还有
-#   "前后端文案漂移"守卫), 改一个字就要连带改三处 —— 本次 moving 入闸不在此列, 保持原样。
+# !此串被 tests/test_web_commands_reannounce.py 与 test_webui_static_dom_panel_misc.py 断言(后者
+#   还有"前后端文案漂移"守卫): 改「非活跃」以外的字要连带改两处(常量 + reannounce 全等断言),
+#   动到「非活跃」才波及 misc 守卫, 共三处 —— 本次 moving 入闸不在此列, 保持原样。
 REANNOUNCE_INACTIVE_SKIP = "种子非活跃(暂停/停止/排队/校验中/错误), qB 静默忽略强制汇报"
 
 
