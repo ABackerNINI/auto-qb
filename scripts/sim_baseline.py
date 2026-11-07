@@ -1,7 +1,7 @@
 """W4: 跑齐性能矩阵 P1–P7 并把基线固化到 baseline.json
 
 一次运行 = 依次跑 SCENARIOS 里每个场景(每个都是一次完整的 sim_run), 收集统计层
-`summary.json` 的关键数字, 按"实测值 × 余量系数"推出建议阈值, 写入:
+`summary.json` 的关键数字, 按"实测值 x 余量系数"推出建议阈值, 写入:
     memory-bank/plans/26-09-19-1433-sim-client-5000.baseline.json
 
 之后 `sim_run.py` 启动时会自动读这个文件填阈值 —— 未固化时统计层记 BASELINE(不算 FAIL),
@@ -102,7 +102,7 @@ CORPUS_SCENARIOS: list[tuple[str, list[str]]] = [
 # 语料档需要固化的指标(余量系数): 硬判据(group_exact / fs_state_match / endpoints_covered /
 # stream_consumed / maindata_lag_modeled)已在 sim_run 里写死 0/1, 不需要固化。
 # !`CORPUS.replay_timeline_aligned` **不进固化表**: 它的预算在 sim_run 里按
-#   「客户端轮询间隔 × 倍速 × 2 裕度」动态算 —— 固化成常数会在换倍速 / 换轮询档时假红或假绿。
+#   「客户端轮询间隔 x 倍速 x 2 裕度」动态算 —— 固化成常数会在换倍速 / 换轮询档时假红或假绿。
 CORPUS_MARGINS: dict[str, tuple[str, float]] = {
     "P1.first_round_s": ("first_round_s", 1.5),
     "S3.write_rate_per_min": ("writes_per_min", 1.3),
@@ -305,7 +305,7 @@ def main(argv=None) -> int:
     out = {
         "_":
             {
-                "说明": "仿真测试性能基线(W4 固化)。thresholds 由实测值×余量系数推出, "
+                "说明": "仿真测试性能基线(W4 固化)。thresholds 由实测值x余量系数推出, "
                       "sim_run.py 启动时读取; 不存在时统计层对应项记 BASELINE(不算 FAIL)。",
                 "生成时间": time.strftime("%Y-%m-%d %H:%M:%S"),
                 "生成命令": "uv run python scripts/sim_baseline.py",

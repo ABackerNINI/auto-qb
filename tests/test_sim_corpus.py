@@ -6,6 +6,8 @@
 ## 测试计划(每个测试函数一条)
 - test_fsmock_intercepts_corpus_paths: 语料树内的路径走表(三态), 树外原样委托真函数
 - test_fsmock_long_path_prefix_and_case: 剥 \\\\?\\ 前缀 + 大小写不敏感(NTFS 语义) —— 不这么做会把存在的文件报成缺失
+- test_fsmock_unc_prefix_long_form_matches_share_path: \\\\?\\UNC\\ 长前缀与裸 UNC 归一到同一个 key, 两种查询形态都命中表(UNC 分支曾是死代码 => 匹配失配)
+- test_fsmock_unc_prefix_red_on_swapped_order: **红验** —— 把 UNC 判断挪回一般前缀之后(还原旧序) => 长前缀查询在表内也失配(证明上条不恒绿)
 - test_fsmock_case_folding_does_not_follow_platform: **防回潮** —— 折叠必须固定走 NTFS 语义, 不得跟随 `os.path`(运行时把 os 换成 posixpath 判, 不靠文本扫描)
 - test_sim_is_within_host_semantics: B2 逃逸判定在**宿主语义**下成立(真子路径/根自身/树外兄弟), 两平台各真跑一次
 - test_sim_is_within_linux_equivalent: Linux 等价(`os`->posixpath + sep '/')下同一组断言仍成立
@@ -28,6 +30,7 @@
 - test_group_exact_diff_green
 - test_group_exact_diff_red_on_member_swap
 - test_group_exact_diff_red_on_missing_group
+- test_build_checks_drift_threshold_routes_corpus_prefix: 语料档下 SYNC.drift_max_s 阈值只走 corpus. 前缀路由, 不读合成档裸 id、不吃 1.0 兜底; 合成档裸 id 照常生效
 - test_group_exact_diff_red_on_split_group
 - test_known_tag_literals_are_mapped_after_sanitization
 - test_merge_window_tags_net
@@ -109,6 +112,41 @@ def test_fsmock_long_path_prefix_and_case():
     assert m.exists(r"\\?\X:\corpus-fs\d0\A\Movie.MKV") is True, "必须剥 \\\\?\\ 前缀"
     assert m.exists(r"x:\CORPUS-FS\d0\a\movie.mkv") is True, "必须大小写不敏感"
     assert m.exists(r"X:/corpus-fs/d0/a/movie.mkv") is True, "分隔符必须归一"
+
+
+def test_fsmock_unc_prefix_long_form_matches_share_path():
+    """\\\\?\\UNC\\ 长前缀形态必须与裸 UNC 形态归一到同一个 key, 两种查询形态都命中表
+
+    顺序敏感: \\\\?\\UNC\\ 也以 \\\\?\\ 开头 —— 若先判一般前缀, UNC 分支就成了永远执行不到的
+    死代码, 查询侧被剥成 UNC\\... 而表侧是 \\\\server\\..., 同一物理路径得到两个 key => 匹配失配。
+    """
+    assert fsmock._key(r"\\?\UNC\server\share\d0\a.mkv") == fsmock._key(r"\\server\share\d0\a.mkv"), \
+        "长前缀 UNC 与裸 UNC 必须归一到同一个 key"
+    m = fsmock.FsMock(r"\\?\UNC\server\share\d0", {r"\\server\share\d0\a.mkv": {"exists": True, "size": 1}})
+    assert m.exists(r"\\?\UNC\server\share\d0\a.mkv") is True, "查询带 \\\\?\\UNC\\ 前缀时必须命中语料表"
+    assert m.exists(r"\\server\share\d0\a.mkv") is True, "查询为裸 UNC 形态时也必须命中语料表"
+
+
+def test_fsmock_unc_prefix_red_on_swapped_order(monkeypatch):
+    """**红验**: 把 UNC 判断挪回一般前缀之后(还原旧序) => 长前缀查询在表内也失配
+
+    证明上一条守阵能区分两种顺序, 不是恒绿。旧序下查询侧被剥成 UNC\\... 而表侧是
+    \\\\server\\..., 命中语料树却查不到表 -> 报"不存在"(纯内存失配, 不委托真 FS)。
+    """
+    def _old_order_key(p):
+        if not p:
+            return p
+        s = str(p)
+        if s.startswith("\\\\?\\"):
+            s = s[4:]
+        elif s.startswith("\\\\?\\UNC\\"):
+            s = "\\\\" + s[8:]
+        return fsmock.ntpath.normcase(s.replace("/", "\\"))
+
+    monkeypatch.setattr(fsmock, "_key", _old_order_key)
+    m = fsmock.FsMock(r"\\?\UNC\server\share\d0", {r"\\server\share\d0\a.mkv": {"exists": True, "size": 1}})
+    assert m.exists(r"\\?\UNC\server\share\d0\a.mkv") is False, \
+        "旧序下长前缀 UNC 查询必须失配(否则这条红验没钉住任何东西)"
 
 
 def test_fsmock_case_folding_does_not_follow_platform(monkeypatch):
@@ -1039,6 +1077,82 @@ def test_group_exact_diff_red_on_missing_group():
     actual = [{"a", "b"}]
     missing, extra = simrun.group_exact_diff(truth, actual)
     assert len(missing) == 1 and not extra
+
+
+# --------------------------------------------------------------------------- 判据阈值路由(计划 09)
+class _FakeChecksCorpus:
+    groups = {"groups": []}
+
+    def disk_table(self):
+        return {}
+
+
+class _FakeChecksSim:
+    """build_checks 的最小替身: 只供给它在最小数据路径下实际读取的属性/方法(不起 HTTP/不建语料/不落盘)"""
+
+    torrents = {}
+    removed_all = frozenset()
+    manual_limits = {}
+
+    def __init__(self, corpus_mode: bool):
+        self.corpus_mode = corpus_mode
+        self.stats = {"endpoint_hits": {}, "sync_full_rounds": 0}
+        self.replay_stats = {"frames_consumed": 0, "max_drift_ms": 0.0}
+        self.replay_speed = 0.0
+        self.replay_data = []
+        self._disk_override = {}
+        self.run_dir = os.path.join(os.sep, "nonexistent-autoqb-sim-run")
+        self.corpus = _FakeChecksCorpus() if corpus_mode else None
+
+    def reconcile(self):
+        return {"unexpected_removals": [], "files_before": 0, "files_after": 0}
+
+    def fsmock_state(self):
+        return {"files": {}}
+
+
+def test_build_checks_drift_threshold_routes_corpus_prefix():
+    """语料档下 SYNC.drift_max_s 阈值必须走 corpus. 前缀路由, 不读合成档裸 id、不吃 1.0 兜底
+
+    build_checks.add 自述的不变量(计划 09): 两套阈值不混用。曾直接传
+    THRESH.get("SYNC.drift_max_s", 1.0) 绕过路由 => 语料档吃到合成档阈值或 1.0 默认 => 假红假绿。
+    还原该写法即本测试变红(裸 id 在场时 threshold 会变成 9.9 而非 3.0/None)。
+    """
+    simrun = _load("sim_run")
+    args = types.SimpleNamespace(
+        dry_run=False,
+        duration=60.0,
+        ramp=0,
+        stress=False,
+        web_poll=0,
+        abort_after=0.0,
+        redeliver_removed=0,
+        delete_files=[],
+        delete_torrents=[],
+        tick=2.0,
+        command_latency_ms=0.0,
+        maindata_lag_ms=0.0,
+    )
+    sync = {"rounds": 3, "first_round_s": 0.5, "avg_interval_s": 2.0, "drift_max_s": 0.4}
+    logscan = {"tracebacks": 0, "critical": 0, "error": 0, "lines": 10}
+
+    def checks_of(sim, thresh_map):
+        simrun.THRESH.clear()
+        simrun.THRESH.update(thresh_map)
+        return simrun.build_checks(sim, args, [], sync, set(), logscan, [], [], 0, [0], [], set())
+
+    def drift(checks):
+        return next(c for c in checks if c["id"] == "SYNC.drift_max_s")
+
+    # 1. 语料档: 只查 corpus. 前缀; 裸 id 是合成档阈值, 不得被读走
+    got = drift(checks_of(_FakeChecksSim(corpus_mode=True), {"corpus.SYNC.drift_max_s": 3.0, "SYNC.drift_max_s": 9.9}))
+    assert got["threshold"] == 3.0 and got["op"] == "<=", f"语料档必须走 corpus. 前缀路由: {got}"
+    # 2. 语料档: 固化表没有 corpus.SYNC.drift_max_s 时记 BASELINE —— 不回落裸 id, 也不吃 1.0 兜底
+    got = drift(checks_of(_FakeChecksSim(corpus_mode=True), {"SYNC.drift_max_s": 9.9}))
+    assert got["threshold"] is None and got["result"] == "BASELINE", f"不得回落合成档裸 id 或 1.0 兜底: {got}"
+    # 3. 合成档: 裸 id 阈值照常生效(两档各走各的路由)
+    got = drift(checks_of(_FakeChecksSim(corpus_mode=False), {"SYNC.drift_max_s": 9.9}))
+    assert got["threshold"] == 9.9, f"合成档仍应使用裸 id 阈值: {got}"
 
 
 # --------------------------------------------------------------------------- 脱敏映射(W3 补: tracker / tag)

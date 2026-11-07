@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
@@ -98,9 +99,9 @@ class Handler(BaseHTTPRequestHandler):
             self.close_connection = True
             return
         # 人为延迟(默认 0): 让假 qB 表现得像**真机上有负载的 qB**。
-        # 没有它, 本地每个请求 ~0.5ms ⇒ `_build_search_index` 一轮 500 次文件 API 只要 250ms,
-        # 主循环永远不饱和 ⇒ "命令排队 wait_ms" 恒为 0 ⇒ 真机上"点了要等 2-4s"这类缺陷
-        # **在本地永远复现不出来**(与「桩服务是瞬时的 ⇒ 顺序型缺陷测不出」同一类, 但在后端)。
+        # 没有它, 本地每个请求 ~0.5ms => `_build_search_index` 一轮 500 次文件 API 只要 250ms,
+        # 主循环永远不饱和 => "命令排队 wait_ms" 恒为 0 => 真机上"点了要等 2-4s"这类缺陷
+        # **在本地永远复现不出来**(与「桩服务是瞬时的 => 顺序型缺陷测不出」同一类, 但在后端)。
         if sim.latency_ms:
             time.sleep(sim.latency_ms / 1000.0)
         route = self._route()
@@ -143,7 +144,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         if route == "torrents/info":
             self._trace(route, params, 200, 0)
-            # 语料档: 走**实况状态**(流状态 ⊕ 已到期 overlay)。它与 sync/maindata 的差异正是
+            # 语料档: 走**实况状态**(流状态 + 已到期 overlay)。它与 sync/maindata 的差异正是
             # issue 26-09-20-2145 要复现的"真值尚未落地"。合成档沿用原样(无 overlay)。
             if sim.corpus_mode:
                 return self._json([sim._live(h) for h in sim.torrents])

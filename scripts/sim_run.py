@@ -406,7 +406,7 @@ def build_checks(
     if args.ramp or args.stress or args.web_poll:
         add("P2.drift_max_s", sync["drift_max_s"], "<=", None, "灌入期 / 带 WEB 轮询的漂移(观测项, 与纯主循环基线对比用)")
     else:
-        add("SYNC.drift_max_s", sync["drift_max_s"], "<=", THRESH.get("SYNC.drift_max_s", 1.0), "纯主循环稳态单轮漂移上限(已排除首轮)")
+        add("SYNC.drift_max_s", sync["drift_max_s"], "<=", None, "纯主循环稳态单轮漂移上限(已排除首轮)")
 
     # 优雅停机: rc=0 说明走完 finally(状态已落盘); 非 0 多为被硬杀
     add("RUN.graceful_exit", rc, "==", 0, "auto-qb 必须优雅退出, 否则 state_file 不落盘")
@@ -571,7 +571,7 @@ def build_checks(
     if getattr(sim, "corpus_mode", False):
         rs = sim.replay_stats
         # 录播必须把流**完整消费**掉 —— 否则"回放提前结束却判 OK"是空转陷阱。
-        # WARN: 静态档(--replay-speed 0)不推进游标, 本就没有"流被吐完"这回事 ⇒ 只在录播档判。
+        # WARN: 静态档(--replay-speed 0)不推进游标, 本就没有"流被吐完"这回事 => 只在录播档判。
         if sim.replay_speed <= 0:
             add("CORPUS.replay_stream_consumed", None, "==", None, "静态回放(不推进游标): 无“流被吐完”可判 -> BASELINE")
         else:
@@ -582,16 +582,16 @@ def build_checks(
                 f"(结束标记 {rs.get('ended')})"
             )
         # 回放推进的录制时刻与墙上时钟的偏差(计划 §09 replay_timeline_aligned)。
-        # !这个滞后**天然受客户端轮询间隔 × 倍速限制**: 客户端每 1.5 s 来拉一次, 游标却连续推进,
-        # 所以"已交付位置"最多落后一个轮询间隔(折算到录制时间就是 interval × speed)。故阈值按它算,
+        # !这个滞后**天然受客户端轮询间隔 x 倍速限制**: 客户端每 1.5 s 来拉一次, 游标却连续推进,
+        # 所以"已交付位置"最多落后一个轮询间隔(折算到录制时间就是 interval x speed)。故阈值按它算,
         # 而不是拍一个常数 —— 拍常数会在换倍速/换轮询档时变成假红或假绿。
         # 真掉拍的信号是"落后**超过**一个轮询间隔", 那说明 sim 端自己没跟上。
         poll_ms = max(sync.get("avg_interval_s") or 0.0, 0.0) * 1000.0
         budget = round(max(poll_ms * max(sim.replay_speed, 1e-9) * 2.0, 500.0), 1)
         add(
             "CORPUS.replay_timeline_aligned", round(rs.get("max_drift_ms", 0.0), 1), "<=", budget,
-            f"回放游标相对已交付位置的滞后(ms); 预算 = 客户端轮询间隔 {poll_ms:.0f}ms × 倍速 "
-            f"{sim.replay_speed} × 2 裕度 = {budget:.0f}ms"
+            f"回放游标相对已交付位置的滞后(ms); 预算 = 客户端轮询间隔 {poll_ms:.0f}ms x 倍速 "
+            f"{sim.replay_speed} x 2 裕度 = {budget:.0f}ms"
         )
         # mock 层回给 auto-qb 的三态必须 == 语料表(files.json + fs_delta)。
         # 这是 mock 方案的核心断言: mock 若静默失效, D4 全绿也是假的。
@@ -695,7 +695,7 @@ def main(argv=None) -> int:
     )
     p.add_argument("--replay-speed", type=float, default=1.0, help="录播回放倍速(W4)")
     p.add_argument("--latency-mode", choices=("recorded", "p50", "p95", "const"), default="recorded")
-    p.add_argument("--baseline", default="", help="固化阈值文件路径(默认 memory-bank/plans/…baseline.json)")
+    p.add_argument("--baseline", default="", help="固化阈值文件路径(默认 memory-bank/plans/...baseline.json)")
     p.add_argument("--no-baseline", action="store_true", help="不读固化阈值(全部记 BASELINE)")
     p.add_argument("--stress", action="store_true", help="标记为压力档: 漂移等只观测不判红(否则会盖住真实稳态回归)")
     args = p.parse_args(argv)

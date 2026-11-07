@@ -6,14 +6,14 @@ infra/file_access.py 单点, plan 26-09-27-1407; grouping/checking/env 经 get_f
 
     infra/file_access.py  基类 FileAccess.exists 经 _probe 传 os.path.exists 属性引用 + getsize / disk_usage 直调
     (Local/Mapped 只实现 _probe_path; 2026-10-12 三态探针收编单点)
-    (消费方: 缺文件扫描 grouping.py / 跳检前检查 checking.py / 表达式 exists()·disk_*() env.py)
+    (消费方: 缺文件扫描 grouping.py / 跳检前检查 checking.py / 表达式 exists()->disk_*() env.py)
 
 三条硬条件(不满足就会出错):
   1. **按路径前缀限定作用域** —— 默认放行, 只有命中语料树(<fs-root> 之下)才拦。否则会把
      auto-qb 自己的文件也 mock 掉: `config/writer.py`(config.yml, 红线) / `utils.py`(state 文件 / 原子写 /
      备份) / `notify.py` / `web.py`(WEB 密钥 / 静态目录) / `qbclient.py`(~/.netrc)。
   2. **大小写不敏感 + 剥 `\\\\?\\` 前缀** —— 传进来的路径是 `add_long_path_prefix_for_win(...)` 的产物
-     (`\\\\?\\D:\\…` 形态), 而 NTFS 不区分大小写。若按原样精确匹配, 会把存在的文件报成缺失 ⇒ D4 判据全假。
+     (`\\\\?\\D:\\...` 形态), 而 NTFS 不区分大小写。若按原样精确匹配, 会把存在的文件报成缺失 => D4 判据全假。
   3. **时间源归播放器** —— 磁盘状态随时间变(录制期的 fs_delta), 而 mock 在 auto-qb 进程里不知道回放游标
      走到哪。故 mock 向播放器查"当前磁盘状态"(`GET /_fsmock/state`, 按 t_seq 缓存约 1 次/秒),
      保持"播放器是唯一时间源"这条原则。
@@ -56,8 +56,8 @@ def _key(p: str) -> str:
 
     1. !**必须用 `ntpath.normcase`, 不能用 `os.path.normcase`**(2026-09-22 Linux CI 红了这条):
       `os.path` 在 Windows 是 `ntpath`、在 Linux 是 `posixpath`, 而 **`posixpath.normcase` 是恒等函数**
-      (POSIX 路径本来区分大小写) ⇒ 同一份代码在 Linux 上退化成**大小写敏感**匹配 ⇒
-      把存在的文件报成缺失 ⇒ D4 判据全假(最坏的一种失败: 判据绿得发亮却什么都没测到)。
+      (POSIX 路径本来区分大小写) => 同一份代码在 Linux 上退化成**大小写敏感**匹配 =>
+      把存在的文件报成缺失 => D4 判据全假(最坏的一种失败: 判据绿得发亮却什么都没测到)。
       本 mock 模拟的是 **NTFS 语义**(语料抓自 Windows 真机), 归一规则必须**固定**, 不能跟随
       运行平台 —— 故显式用 `ntpath`(纯字符串模块, 两平台都能 import 且语义一致)。
     2. 不做 realpath/abspath —— mock 表是按语料里的 save_path 拼出来的, 走 realpath 会因
@@ -66,10 +66,11 @@ def _key(p: str) -> str:
     if not p:
         return p
     s = str(p)
-    if s.startswith("\\\\?\\"):
-        s = s[4:]
-    elif s.startswith("\\\\?\\UNC\\"):
+    # 先长前缀特例(UNC), 后一般前缀: \\?\UNC\ 也以 \\?\ 开头, 判断顺序反了 UNC 分支就永不执行
+    if s.startswith("\\\\?\\UNC\\"):
         s = "\\\\" + s[8:]
+    elif s.startswith("\\\\?\\"):
+        s = s[4:]
     return ntpath.normcase(s.replace("/", "\\"))
 
 
@@ -152,7 +153,7 @@ _real_disk_usage = shutil.disk_usage
 class _PlayerPoller:
     """按 ~1 次/秒向播放器查"当前磁盘状态", 保持"播放器是唯一时间源"。
 
-    静态回放时表不变, 拉到的与初值相同; 时间轴回放时按 t_seq 施加 fs_delta ⇒ 真机重演。
+    静态回放时表不变, 拉到的与初值相同; 时间轴回放时按 t_seq 施加 fs_delta => 真机重演。
     拉取失败**不阻断**: 保留上一次成功的表(录制期磁盘状态变化是增量信息, 不是可用性前提)。
     """
     def __init__(self, mock: FsMock, url: str, interval: float = 1.0):
