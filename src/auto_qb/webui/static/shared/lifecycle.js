@@ -73,7 +73,9 @@ window.AQB_LIFECYCLE = {
     window.addEventListener("resize", this._onWinResize);
     this._winListening = true;
     // 点击页面空白处: 关闭右键菜单与列选择器(两者都是临时浮层)
-    window.addEventListener("click", () => {
+    // R4 清池(row117): 匿名处理器提为实例字段 —— unmounted 里 removeEventListener 需要同一
+    // 引用, 匿名函数永远摘不掉(热重载后旧句柄堆叠, 操作已死实例)。下面五支监听同此。
+    this._onDocClick = () => {
       this.menu.visible = false;
       this.headMenu.visible = false;   // 表头右键菜单(TBL-05)与右键菜单同层
       this.colMenuOpen = false;
@@ -94,12 +96,13 @@ window.AQB_LIFECYCLE = {
       this.errPanelOpen = false;
       // FX-08: 限速浮层无遮罩 -> 点空白视为"放弃本次修改"直接收起(与 Esc 同语义)
       if (this.speedOpen) this.closeSpeedDialog();
-    });
+    };
+    window.addEventListener("click", this._onDocClick);
     // Esc: 逐层退栈(FIX-07) —— 确认框/弹窗 → 抽屉内浮层 → 历史弹层 → 抽屉 → 筛选器下拉/其余弹层(pop) → 右键菜单 → 清选择/收展开兜底 → 清筛选兜底(仅数据页+非输入态, 26-10-01-2108)
     // 收展开兜底档(2026-10-22 起)**顺便把键盘光标退回被收起的父行**, 不再让它悬空指向已卸载的明细行。
     // WARN: 本链与 dialogs.js::escBusy 是同一份浮层名单(后者给 config_hub 的「Esc 返回设置首页」守门),
     //   新增浮层两处同步; config_hub.js::hubOnKey 的 Esc 分支排在本链之后(链上有层时它不动)
-    document.addEventListener("keydown", (e) => {
+    this._onEscKey = (e) => {
       if (e.key !== "Escape") return;
       const inInput = !!(e.target && e.target.closest &&
         e.target.closest("input, textarea, select, [contenteditable]"));  // 仅清筛选兜底消费(与引擎同式, 既有分支行为不变)
@@ -168,7 +171,8 @@ window.AQB_LIFECYCLE = {
         this.clearFilters();
         this.toast("已清除全部筛选: 搜索词保留", "ok", 2500);
       }
-    });
+    };
+    document.addEventListener("keydown", this._onEscKey);
     // 键盘快捷键引擎(计划 26-09-28-0354 W1): 必须注册在 Esc 退栈链**之后**(注册序 = 触发序);
     // 引擎自身对 Escape 也直接放行, 双保险。句柄存实例, unmounted 撤掉防热重载堆叠。
     this._kbKeyDown = (e) => this._kbOnKeyDown(e);
@@ -180,14 +184,15 @@ window.AQB_LIFECYCLE = {
     document.addEventListener("keydown", this._cfgGuardKey);
     // 生效宽度: 全自动页按当前渲染现算(见 recomputeEffective); 窗口变化后重算, 保持
     // "填满容器 + 自适应"的观感; 固化页(colW 非空)用意图值, 不随窗口变(拖一列不再影响其它列)
-    let resizeTimer = null;
-    window.addEventListener("resize", () => {
-      if (resizeTimer) clearTimeout(resizeTimer);
-      resizeTimer = setTimeout(() => {
+    this._resizeDebounceTimer = 0;
+    this._onWinResizeDebounced = () => {
+      if (this._resizeDebounceTimer) clearTimeout(this._resizeDebounceTimer);
+      this._resizeDebounceTimer = setTimeout(() => {
         this._syncHeadHeight();
         this.recomputeEffective();
       }, 120);
-    });
+    };
+    window.addEventListener("resize", this._onWinResizeDebounced);
     this.$nextTick(() => {
       this._syncHeadHeight();
       this.recomputeEffective();
@@ -217,22 +222,24 @@ window.AQB_LIFECYCLE = {
       this.nowSec = Math.floor(Date.now() / 1000);
     }, 30000);
     // 页面可见性(与 qB 自带 WebUI 同策略): 后台标签停止轮询; 恢复可见立即刷新并续排
-    document.addEventListener("visibilitychange", () => {
+    this._onVisChange = () => {
       if (document.hidden) this.stopPolling();
       else {
         this.adoptColState();  // F3: 补漏 —— 标签被冻结 / storage 事件丢失时, 回到可见即对齐一次
         this.adoptTimeFmt();   // 同上(FX-28): 时间口径也在回到可见时补对齐一次
         if (this.authOk) this.refresh();  // 登出态切回标签不发空 Bearer; R10-01: 判据 = 鉴权模式
       }
-    });
+    };
+    document.addEventListener("visibilitychange", this._onVisChange);
     // 全局右键屏蔽(CTX-03): 除顶部导航栏(header.topbar, atlas/prism 两套 UI 共用类名)与输入类
     // 元素(input/textarea/contenteditable, 保留复制粘贴的原生菜单)外, 一律阻止原生右键菜单;
     // 各处 .ctx-menu 自定义菜单由 Vue @contextmenu.prevent 触发, 与本监听器共存(preventDefault 幂等无害)
-    document.addEventListener("contextmenu", (e) => {
+    this._onCtxMenu = (e) => {
       const t = e.target;
       if (t && t.closest && (t.closest("header.topbar") || t.closest("input, textarea, [contenteditable]"))) return;
       e.preventDefault();
-    });
+    };
+    document.addEventListener("contextmenu", this._onCtxMenu);
     // 本地存储密钥必须重新验证后才放行遮罩; 密钥已轮换则由 401 收口清除。
     // 验证期间显示"验证中"加载态(bootstrapping)而非密钥输入表单 —— 修复刷新时闪现输入界面。
     // 跳过本地验证: 先读公开只读标志, 本机免鉴权则直接进入, 不弹登录表单
@@ -266,6 +273,33 @@ window.AQB_LIFECYCLE = {
   },
   unmounted() {
     this.stopEvents();  // P2: 断开 SSE(否则热重载后句柄堆叠)
+    this.stopPolling();  // R4 清池(row117): 主轮骨架一并收(同上, 防热重载句柄堆叠)
+    // R4 清池(row117): mounted 挂的五支浮层/退栈/防抖/可见性/右键监听提为实例字段后在此撤除
+    // (原先匿名函数摘不掉, 热重载后旧句柄堆叠、操作已死实例)。防抖定时器一并清。
+    if (this._onDocClick) {
+      window.removeEventListener("click", this._onDocClick);
+      this._onDocClick = null;
+    }
+    if (this._onEscKey) {
+      document.removeEventListener("keydown", this._onEscKey);
+      this._onEscKey = null;
+    }
+    if (this._onWinResizeDebounced) {
+      window.removeEventListener("resize", this._onWinResizeDebounced);
+      this._onWinResizeDebounced = null;
+    }
+    if (this._resizeDebounceTimer) {
+      clearTimeout(this._resizeDebounceTimer);
+      this._resizeDebounceTimer = 0;
+    }
+    if (this._onVisChange) {
+      document.removeEventListener("visibilitychange", this._onVisChange);
+      this._onVisChange = null;
+    }
+    if (this._onCtxMenu) {
+      document.removeEventListener("contextmenu", this._onCtxMenu);
+      this._onCtxMenu = null;
+    }
     // 键盘快捷键引擎(计划 26-09-28-0354 W1): keydown 监听随组件销毁撤掉(同上, 防堆叠)
     if (this._kbKeyDown) {
       document.removeEventListener("keydown", this._kbKeyDown);

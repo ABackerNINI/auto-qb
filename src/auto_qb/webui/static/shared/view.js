@@ -36,6 +36,7 @@ window.AQB_VIEW = {
       this._clearSearchRefreshHint();
       if (this._searchRefreshTimer) clearTimeout(this._searchRefreshTimer);
       this._searchRefreshTimer = null;
+      this._searchRetryFails = 0;  // R4 清池(row135): 新搜索会话从零起算退避, 不带上一轮残值
       this.expandedKey = null;
     },
     async doSearch(quiet = false) {
@@ -79,6 +80,7 @@ window.AQB_VIEW = {
         if (this.searchBuilding) {
           // 文件索引构建中(增量限流可能需多轮): 用**独立**定时器续查, 绝不复用输入防抖的
           // searchTimer —— 复用会让续查取消用户刚输入的防抖, 首词/改词被吞
+          this._searchRetryFails = 0;  // R4 清池(row135): 成功一轮退避计数清零(同轮询 pollFails 口径)
           if (this._searchRefreshTimer) clearTimeout(this._searchRefreshTimer);
           this._searchRefreshTimer = setTimeout(() => this.doSearch(true), 1000);
         }
@@ -90,7 +92,11 @@ window.AQB_VIEW = {
             // 否则等到下一轮 search_rev 变化再试(错误风暴由轮询退避吸收)
             if (this.searchBuilding) {
               if (this._searchRefreshTimer) clearTimeout(this._searchRefreshTimer);
-              this._searchRefreshTimer = setTimeout(() => this.doSearch(true), 1000);
+              // R4 清池(row135): 失败重试走退避(逐次翻倍夹 15s 上限, 与轮询失败退避
+              // currentPollMs 同曲线口径: base*2**fails, 指数封顶 4), 服务端宕机/持续
+              // 5xx 不再形成固定 1 req/s 的无限重试循环; 成功一轮即清零(见上方 building 块)。
+              this._searchRetryFails = Math.min(4, (this._searchRetryFails || 0) + 1);
+              this._searchRefreshTimer = setTimeout(() => this.doSearch(true), Math.min(15000, 1000 * 2 ** this._searchRetryFails));
             }
           } else {
             // 不再静默(否则与"无匹配结果"无法区分): 401 由 api() 回登录框, 其余在搜索框旁提示

@@ -62,8 +62,11 @@ window.AQB_POLL = {
       es.addEventListener("ver", (e) => {
         // 只带版本号、**不含数据** —— 收到后拉一次 /api/state。密集发布时去抖合并,
         // 免得一轮 sync 触发 N 次全量拉取(3000 种子一轮 63ms, 打满主线程的坑踩过)。
+        // R4 清池(row119): 落拍时 document.hidden 短路 —— 后台标签不吃 ver 驱动(否则
+        // 绕过骨架「后台不拉数」恒等守卫, 每个发布版都真实请求一次 /api/state); 恢复
+        // 可见由 visibilitychange 处理器(lifecycle.js)补拉一次, 不双份。
         if (this._verTimer) clearTimeout(this._verTimer);
-        this._verTimer = setTimeout(() => { this._verTimer = null; this.refresh(); }, 60);
+        this._verTimer = setTimeout(() => { this._verTimer = null; if (!document.hidden) this.refresh(); }, 60);
       });
       es.onopen = () => {
         // 恢复成功: 只回置状态位, 静默不广播(断线提示只在断线沿发, 不发"已恢复"噪音)
@@ -148,7 +151,14 @@ window.AQB_POLL = {
       if (st.timer) { clearTimeout(st.timer); st.timer = null; }
       if (st.wake) { const w = st.wake; st.wake = null; w(); }  // 唤醒在途 sleep, 不留永不兑现的 Promise
       if (this._polls[key] === st) this._polls[key] = null;
-      if (st.settle) { const s = st.settle; st.settle = null; s(null); }  // awaitPoll: 收摊兑现 null
+      if (st.settle) {
+        // R4 清池(row120): 外部叫停/顶掉也走收摊回调 —— 与 finish() 同序同口径(文件头契约
+        // 「onEnd: 收摊回调(收敛/耗尽/到点都走)」含 stopPoll 收摊; 漏了会让 onEnd 侧的
+        // loading 复位等清理被跳过, 同 key 有界等待被 startPoll/awaitPoll 顶掉即此形态)。
+        // 幂等: alive 已置 false, 此后 finish() 的守卫挡住, 不会双调。
+        if (st.onEnd) st.onEnd();
+        const s = st.settle; st.settle = null; s(null);  // awaitPoll: 收摊兑现 null
+      }
     },
     startPoll(key, opts) {
       this.stopPoll(key);
@@ -187,7 +197,7 @@ window.AQB_POLL = {
     },
     awaitPoll(key, opts) {
       if (key) this.stopPoll(key);
-      const st = { alive: true, timer: null, settle: null, fail: null, wake: null };
+      const st = { alive: true, timer: null, settle: null, fail: null, wake: null, onEnd: opts.onEnd || null };
       if (key) {
         if (!this._polls) this._polls = {};
         this._polls[key] = st;
@@ -427,6 +437,7 @@ window.AQB_POLL = {
         // 401(密钥无效): 停止轮询并回到密钥输入界面(防无谓空转)。
         if (e.auth) {
           this.stopPolling();
+          this.stopEvents();  // R4 清池(row35): 与 _logout 同口径 —— 推送通道一并拆, 残留流不再空转
           return;
         }
         this.serviceDown = true;

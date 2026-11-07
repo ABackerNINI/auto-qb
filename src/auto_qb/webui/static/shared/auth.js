@@ -90,6 +90,10 @@ window.AQB_AUTH = {
       this.token = "";
       localStorage.removeItem("autoqb_token");
       this.stopPolling();
+      // R4 清池(row35): SSE 通道与轮询同口径一并拆 —— 不拆则 EventSource 与 _esRetry/_verTimer
+      // 跨会话残留: 残留流每个 ver 事件触发一次 refresh -> 无凭证 api() -> 再次 _logout 空转;
+      // 换票 await 期间登出、落票后重开的流也在此收口(重开流首个 ver 即被本行拆除)。
+      this.stopEvents();
       if (this.searchTimer) clearTimeout(this.searchTimer);  // 登出后停掉搜索防抖/重试, 防空头竞态
       this.searchTimer = null;
       this.groups = [];
@@ -114,8 +118,11 @@ window.AQB_AUTH = {
       this.filterMenu = "";
       this.colMenuOpen = false;
       this.toasts = [];
+      // R4 清池(row36): 悬空模态先结算再复位 —— 直接丢弃 _modalResolve 会让 confirmDialog/
+      // promptDialog 的 Promise 永远 pending(删除流程在 await 处永久挂起, 该框被新框顶替后旧
+      // resolve 也永久丢失); resolve(false) = 取消语义, 调用方走安全分支。无框时为 null, no-op。
+      if (this._modalResolve) { const r = this._modalResolve; this._modalResolve = null; r(false); }
       this.modal = this._modalInit();
-      this._modalResolve = null;
       this.clearSelection();
       this.historyOpen = false;
       this.histHoverIdx = -1;
