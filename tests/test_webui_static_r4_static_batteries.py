@@ -1,4 +1,4 @@
-"""test_webui_static_r4_static_batteries 测试计划: 存量评审 R4 static 主题清池 P09 —— commands/hr/scope_audit/ui_feedback 四域 node 电池
+"""test_webui_static_r4_static_batteries 测试计划: 存量评审 R4 static 主题清池 P09 —— commands/hr/scope_audit/ui_feedback 四域 node 电池(P11 追加 shortcuts 域 4 电池)
 
 ## 测试计划(每个测试函数一条)
 - test_r4_cmdstats_receipt_ownership: R5#233(major) 修复回归 —— cmdStats 单槽归属校验 node 电池真跑:
@@ -22,8 +22,26 @@
   (info/busy 不入史)/同 id 二次 _recordErrorToast 只覆盖不增行(「同一条错误只留一条」)/busy 经
   _finishToast 结算成终态首次入史/第 51 条挤掉最旧(unshift 新在上 + pop 最旧)/errPanelOpen=false 时
   _errUnread 递增而 true 不计
+- test_r4_shortcuts_engine_table_and_keydown: R5#190 —— 键位匹配引擎 node 电池(仿 _QB_SCOPES 探针
+  用 new Function 在源码作用域内取 _kbTable/_kbOnKeyDown 真跑): _kbTable 派生(overrides 覆盖与旧键
+  释放/黑名单脏数据与 Meta 全族不进表/空串与 fixed(Esc) 跳过/冲突先到先得) + _kbOnKeyDown 分流
+  (Escape 早退/defaultPrevented/IME 双保险/纯修饰键/登录遮罩/repeat 丢与 repeat 条目连发/输入元素
+  屏蔽与 inputSafe 放行/模态层屏蔽/浮层屏蔽与自切换白名单/when 条件不消费/preventDefault 消费)
+- test_r4_shortcuts_panel_record_cancel_exits: R5#232(major) 修复回归 —— 关闭/离开出口摘录制监听:
+  非脏 kbFullClose 与 kbGuardLeave 非脏早退必须调 kbRecordCancel(修复前残留 document 捕获期
+  _kbRecHandler, 下一次任意按键被吞并静默提交成键位绑定); 脏路径确认后经 kbDraftRevert 内含取消;
+  导向 webui 自身/覆盖层未开不误取消
+- test_r4_shortcuts_panel_load_failed_gate: R5#235 —— 面板装载失败态: kbPanelEnter 在 _kbReloadKeys
+  失败(quiet=true 无 toast)时置 kbKeysLoadFailed(kbSaved/kbDraft 落默认表), 保存钮据此禁用直堵
+  「默认+本次改动」整份覆盖服务端丢 overrides 的路径; 「重新加载」重试成功复位即恢复(退出路径);
+  附 state.js 字段与模板 :disabled/失败提示静态锚
+- test_r4_shortcuts_panel_conflict_resolve: R5#26 —— 冲突三选一状态机 node 电池真跑(swap/steal/cancel):
+  cancel 零写入; steal 对方置空串(显式禁用而非缺省); swap 常规互换与「对方回落默认即删 override」
+  分支; 三态终值同时断言 kbDraft.overrides 与 AQB_KEYS._doc(即时试用单点)
 
 加载口径: 单文件域直接读盘 eval(顶层纯函数声明随非严格 eval 入作用域, 同 hrsCompareRows 电池范式);
+shortcuts 域为根+两片段聚合(bundle_file), 其方法体引用模块级 const(注册表/序列化/黑名单单点)不随
+eval 外泄 —— 电池体经 new Function(源码 + return battery) 在源码作用域内编译后调用(闭包持有单点)。
 定时器桩住只记节拍/手动放拍(waitCmd 双超时一支用 1.1s 真钟, 其余零真睡)。无 node 静默跳过(返回 None,
 不引入 pytest skip; 有 node 时断言电池全绿)。
 """
@@ -33,7 +51,7 @@ import os
 import shutil
 import subprocess
 
-from webui_helpers import STATIC_ROOT
+from webui_helpers import STATIC_ROOT, bundle_file
 
 
 def _shared(name):
@@ -567,3 +585,362 @@ def test_r4_err_history_ring_upsert_unread():
     """R5#19: 通知环形缓冲契约 —— emit 即收/同 id upsert 去重/第 51 条挤最旧/未读按面板开合计"""
     report = _run_probe(_NODE_ERR_HISTORY_PROBE, _shared("overlay_fit.js"), _shared("ui_feedback.js"))
     _assert_battery(report, "通知环形缓冲电池")
+
+
+# R5#190: 键位匹配引擎(_kbTable 派生 + _kbOnKeyDown 分流) -----------------------
+# shortcuts 域方法体引用模块级 const(AQB_SHORTCUT_DEFS/kbSerializeEvent/KB_MODIFIER_CODES/
+# KB_SELF_TOGGLE_OVERLAY 单点), 不随 sloppy eval 外泄 —— 电池体经 new Function(源码 +
+# return battery) 在源码作用域内编译后调用, 闭包持有全部单点(同 _QB_SCOPES 探针口径)。
+_NODE_SHORTCUTS_ENGINE_PROBE = r"""
+const fs = require("fs");
+global.window = {};
+const src = fs.readFileSync(process.argv[1], "utf8");
+function battery() {
+  const M = window.AQB_SHORTCUTS.methods;
+  const KEYS = window.AQB_KEYS;
+  const checks = [];
+  const ok = (n, c) => checks.push([n, !!c]);
+
+  // ---------- _kbTable 派生(模板基准 根 overrides; 黑名单/空串/fixed 跳过; 冲突先到先得) ----------
+  const tvm = { _kbTableCache: null };
+  KEYS._doc = null;  // 默认表
+  let tbl = M._kbTable.call(tvm);
+  ok("默认表: Digit1 -> view-groups", !!(tbl.get("Digit1") && tbl.get("Digit1").id === "view-groups"));
+  ok("默认表: fixed(Escape)不进匹配表", !tbl.get("Escape"));
+  ok("默认表: 默认空位(空串)不进匹配表", !tbl.get(""));
+
+  KEYS.apply({ schema_version: 1, template: "aqb-default", overrides: { "view-groups": "Digit9" } });
+  tvm._kbTableCache = null;
+  tbl = M._kbTable.call(tvm);
+  ok("overrides 覆盖: view-groups 生效于 Digit9", !!(tbl.get("Digit9") && tbl.get("Digit9").id === "view-groups"));
+  ok("overrides 覆盖: 原键 Digit1 释放", !tbl.get("Digit1"));
+
+  KEYS.apply({ schema_version: 1, template: "aqb-default", overrides: { "add-torrent": "Ctrl+KeyW" } });
+  tvm._kbTableCache = null;
+  tbl = M._kbTable.call(tvm);
+  ok("黑名单脏数据: Ctrl+KeyW 不进表(引擎层兜底)", !tbl.get("Ctrl+KeyW"));
+  ok("黑名单脏数据: 原键 KeyN 已被 override 释放", !tbl.get("KeyN"));
+
+  KEYS.apply({ schema_version: 1, template: "aqb-default", overrides: { "add-torrent": "Meta+KeyN" } });
+  tvm._kbTableCache = null;
+  tbl = M._kbTable.call(tvm);
+  ok("黑名单: Meta 全族(mac Cmd)不进表", !tbl.get("Meta+KeyN"));
+
+  KEYS.apply({ schema_version: 1, template: "aqb-default", overrides: { "view-torrents": "Digit1" } });
+  tvm._kbTableCache = null;
+  tbl = M._kbTable.call(tvm);
+  ok("冲突去重: Digit1 归注册表先声明的 view-groups", !!(tbl.get("Digit1") && tbl.get("Digit1").id === "view-groups"));
+  KEYS._doc = null;
+  tvm._kbTableCache = null;
+
+  // ---------- _kbOnKeyDown 分流(拦截层 + 作用域 + 消费) ----------
+  const calls = [];
+  const vm = Object.assign({}, M, {
+    authOk: true, page: "groups", _kbTableCache: null,
+    modal: { visible: false },
+    addOpen: false, statsOpen: false, speedOpen: false, mgrOpen: false, metaOpen: false,
+    relChain: { open: false }, filePrio: { visible: false }, historyOpen: false,
+    headMenu: { visible: false }, colMenuOpen: false, uiMenuOpen: false,
+    searchHelpOpen: false, filterMenu: null, menu: { visible: false },
+    kbHelpOpen: false, kbFullOpen: false,
+    qbTrafficActive: false,
+    goView: (v) => calls.push(["goView", v]),
+    _kbToggleStats: () => calls.push(["toggleStats"]),
+    _kbMove: (d) => calls.push(["move", d]),
+    qbCycleWindow: (d) => calls.push(["cycleWin", d]),
+    cfgSave: () => calls.push(["cfgSave"]),
+    _kbDelete: () => calls.push(["delete"]),
+  });
+  let pd = false;
+  const mkEv = (over) => Object.assign({
+    key: "1", code: "Digit1", ctrlKey: false, altKey: false, shiftKey: false, metaKey: false,
+    isComposing: false, keyCode: 0, repeat: false, defaultPrevented: false,
+    preventDefault: () => { pd = true; },
+    target: null,
+  }, over || {});
+  const fire = (e) => { pd = false; calls.length = 0; M._kbOnKeyDown.call(vm, e); };
+
+  fire(mkEv());
+  ok("正常派发: view-groups 命中 goView(groups)", calls.length === 1 && calls[0][0] === "goView" && calls[0][1] === "groups");
+  ok("正常派发: 消费按键(preventDefault)", pd);
+
+  fire(mkEv({ key: "Escape", code: "Escape" }));
+  ok("Escape 早退: 引擎永不接(归退栈链)", calls.length === 0 && !pd);
+  fire(mkEv({ defaultPrevented: true }));
+  ok("defaultPrevented: 多 handler 先到先得", calls.length === 0 && !pd);
+  fire(mkEv({ isComposing: true }));
+  ok("IME 组合期: 不判定", calls.length === 0 && !pd);
+  fire(mkEv({ keyCode: 229 }));
+  ok("keyCode 229(IME 双保险): 不判定", calls.length === 0 && !pd);
+  fire(mkEv({ key: "Shift", code: "ShiftLeft" }));
+  ok("纯修饰键: 不判定", calls.length === 0 && !pd);
+  vm.authOk = false; fire(mkEv()); vm.authOk = true;
+  ok("登录遮罩期: 不响应", calls.length === 0 && !pd);
+  fire(mkEv({ repeat: true }));
+  ok("长按自动重复: 非 repeat 条目丢弃", calls.length === 0 && !pd);
+  fire(mkEv({ repeat: true, key: "ArrowDown", code: "ArrowDown" }));
+  ok("repeat 条目(cursor-down)放行连发", calls.length === 1 && calls[0][0] === "move" && calls[0][1] === 1);
+
+  fire(mkEv({ target: { closest: (sel) => (sel.indexOf("input") === 0 ? {} : null) } }));
+  ok("输入元素内: 非 inputSafe 绑定不触发", calls.length === 0 && !pd);
+  vm.page = "settings";
+  fire(mkEv({ key: "s", code: "KeyS", ctrlKey: true, target: { closest: () => ({}) } }));
+  ok("输入元素内: inputSafe(settings-save)放行", calls.length === 1 && calls[0][0] === "cfgSave");
+  vm.page = "groups";
+
+  vm.modal.visible = true; fire(mkEv()); vm.modal.visible = false;
+  ok("模态层打开: 非模态键位失效", calls.length === 0 && !pd);
+  vm.historyOpen = true; fire(mkEv()); vm.historyOpen = false;
+  ok("浮层打开: 全局/列表键位失效(非自切换)", calls.length === 0 && !pd);
+  vm.statsOpen = true; fire(mkEv({ key: "\\", code: "Backslash" })); vm.statsOpen = false;
+  ok("自切换白名单: 开着本键控制的浮层时本键仍消费", calls.length === 1 && calls[0][0] === "toggleStats");
+  fire(mkEv({ key: "[", code: "BracketLeft" }));
+  ok("when 条件不成立: 不消费(preventDefault 不落, 键留给浏览器)", calls.length === 0 && !pd);
+  vm.qbTrafficActive = true; fire(mkEv({ key: "[", code: "BracketLeft" })); vm.qbTrafficActive = false;
+  ok("when 条件成立: 消费并触发(前一档窗口)", calls.length === 1 && calls[0][0] === "cycleWin" && calls[0][1] === -1);
+  fire(mkEv({ key: "Delete", code: "Delete" }));
+  ok("Delete 直连注册表外的删除链", calls.length === 1 && calls[0][0] === "delete" && pd);
+  fire(mkEv({ key: "Delete", code: "Delete", target: { closest: () => ({}) } }));
+  ok("输入元素内 Delete 不直连", calls.length === 0 && !pd);
+  vm.page = "settings";
+  fire(mkEv({ key: "Delete", code: "Delete" }));
+  ok("非列表作用域 Delete 不直连", calls.length === 0 && !pd);
+  vm.page = "groups";
+
+  console.log(JSON.stringify({
+    ok: checks.filter((c) => c[1]).length, total: checks.length,
+    failed: checks.filter((c) => !c[1]).map((c) => c[0]),
+  }));
+}
+new Function(src + "\nreturn " + battery.toString() + ";")()();
+"""
+
+# R5#232: 关闭/离开出口摘录制监听 ------------------------------------------------
+_NODE_SHORTCUTS_REC_CANCEL_PROBE = r"""
+const fs = require("fs");
+global.window = {};
+const src = fs.readFileSync(process.argv[1], "utf8");
+async function battery() {
+  const M = window.AQB_SHORTCUTS.methods;
+  const checks = [];
+  const ok = (n, c) => checks.push([n, !!c]);
+  // document 桩: 只为真实现 kbRecordCancel 的 removeEventListener 落点(捕获段)
+  const removed = [];
+  globalThis.document = {
+    addEventListener: () => {},
+    removeEventListener: (t, fn, cap) => removed.push(fn),
+  };
+  const mkVm = (over) => {
+    const vm = Object.assign({
+      kbFullOpen: true, kbRecId: "view-groups",
+      _kbRecHandler: function kbRec() {},
+      hub: { view: "webui" },
+      confirmDialog: () => Promise.resolve(true),
+      kbDirty: () => false,
+      kbDraftRevert() { this._reverted = (this._reverted || 0) + 1; this.kbRecordCancel(); },
+    }, over || {});
+    let cancelCalls = 0;
+    vm.kbRecordCancel = function () {
+      cancelCalls++;
+      return M.kbRecordCancel.call(this);
+    };
+    vm._cancelCalls = () => cancelCalls;
+    return vm;
+  };
+
+  // 非脏关闭(R5#232 主洞): 录制态点关闭/Esc 关覆盖层, 必须摘捕获期录制监听
+  let vm = mkVm();
+  M.kbFullClose.call(vm);
+  ok("非脏关闭: kbRecordCancel 被调", vm._cancelCalls() === 1);
+  ok("非脏关闭: 覆盖层关闭", vm.kbFullOpen === false);
+  ok("非脏关闭: 捕获期监听已摘(handler 置空)", vm._kbRecHandler === null && removed.length === 1);
+  ok("非脏关闭: 录制态复位", vm.kbRecId === "");
+
+  // 脏关闭确认后: 回滚路径自带取消(kbDraftRevert 内含 kbRecordCancel)
+  vm = mkVm({ kbDirty: () => true });
+  const p1 = M.kbFullClose.call(vm);
+  ok("脏关闭: 先走确认框(不立即关)", vm.kbFullOpen === true);
+  await Promise.resolve(p1);
+  ok("脏关闭: 确认放弃后回滚(内含取消)", vm._reverted === 1 && vm._cancelCalls() === 1);
+  ok("脏关闭: 覆盖层关闭", vm.kbFullOpen === false);
+
+  // 非脏离开 webui 分区(kbGuardLeave 早退): 导航放行且摘录制监听
+  removed.length = 0;
+  vm = mkVm();
+  const ret = M.kbGuardLeave.call(vm, "hub");
+  ok("非脏离开: 守卫放行(return false 不拦导航)", ret === false);
+  ok("非脏离开: kbRecordCancel 被调且监听已摘", vm._cancelCalls() === 1 && vm._kbRecHandler === null);
+
+  // 导向 webui 自身(target === "webui"): 仍在面板内, 不应取消
+  vm = mkVm();
+  ok("导向 webui 自身: 不取消", M.kbGuardLeave.call(vm, "webui") === false && vm._cancelCalls() === 0);
+
+  // 覆盖层没开: 守卫不适用也不取消
+  vm = mkVm({ kbFullOpen: false });
+  ok("覆盖层未开: 不取消", M.kbGuardLeave.call(vm, "hub") === false && vm._cancelCalls() === 0);
+
+  // 脏离开确认后: 回滚路径自带取消
+  vm = mkVm({ kbDirty: () => true, hubBack: () => {} });
+  await Promise.resolve(M.kbGuardLeave.call(vm, "hub"));
+  ok("脏离开: 确认放弃后回滚(内含取消)", vm._reverted === 1 && vm._cancelCalls() === 1);
+
+  console.log(JSON.stringify({
+    ok: checks.filter((c) => c[1]).length, total: checks.length,
+    failed: checks.filter((c) => !c[1]).map((c) => c[0]),
+  }));
+}
+new Function(src + "\nreturn " + battery.toString() + ";")()();
+"""
+
+# R5#235: 面板装载失败态(直堵「默认+本次改动」整份覆盖服务端) --------------------
+_NODE_SHORTCUTS_LOAD_FAILED_PROBE = r"""
+const fs = require("fs");
+global.window = {};
+const src = fs.readFileSync(process.argv[1], "utf8");
+async function battery() {
+  const M = window.AQB_SHORTCUTS.methods;
+  const KEYS = window.AQB_KEYS;
+  const checks = [];
+  const ok = (n, c) => checks.push([n, !!c]);
+  const toasts = [];
+  const vm = {
+    token: "t",
+    kbRecId: "stale", kbConflict: { stale: 1 },
+    kbKeysLoading: true, kbKeysLoadFailed: true,  // 预置脏值: 进门必须复位
+    kbSaved: null, kbDraft: null,
+    toast: (msg, kind) => toasts.push([kind, msg]),
+    _kbReloadKeys: M._kbReloadKeys,  // 真实现(消费适配器 reload 的布尔 + 失效键表缓存)
+  };
+  // reload 桩在适配器口: 底层 aqbFetch 不进 node; _kbReloadKeys 只消费其布尔
+  let reloadOk = false;
+  KEYS.reload = async () => reloadOk;
+
+  await M.kbPanelEnter.call(vm);
+  ok("装载失败: kbKeysLoadFailed 置位(保存钮禁用依据)", vm.kbKeysLoadFailed === true);
+  ok("装载失败: kbSaved 落默认表(overrides 空)", !!vm.kbSaved && Object.keys(vm.kbSaved.overrides).length === 0);
+  ok("装载失败: kbDraft 落默认表", !!vm.kbDraft && Object.keys(vm.kbDraft.overrides).length === 0);
+  ok("装载失败: loading 复位", vm.kbKeysLoading === false);
+  ok("装载失败: quiet=true 不 toast(静默装载不打扰)", toasts.length === 0);
+  ok("进门复位: 旧录制/冲突态清空", vm.kbRecId === "" && vm.kbConflict === null);
+  ok("装载后: 引擎键表缓存失效", vm._kbTableCache === null);
+
+  // 退出路径: 「重新加载」重试成功即恢复保存
+  reloadOk = true;
+  await M.kbPanelEnter.call(vm);
+  ok("重试成功: kbKeysLoadFailed 复位(保存恢复)", vm.kbKeysLoadFailed === false);
+  ok("重试成功: kbSaved/kbDraft 照常装载", !!vm.kbSaved && !!vm.kbDraft);
+  ok("重试成功: loading 复位", vm.kbKeysLoading === false);
+
+  console.log(JSON.stringify({
+    ok: checks.filter((c) => c[1]).length, total: checks.length,
+    failed: checks.filter((c) => !c[1]).map((c) => c[0]),
+  }));
+}
+new Function(src + "\nreturn " + battery.toString() + ";")()();
+"""
+
+# R5#26: 冲突三选一状态机(swap/steal/cancel) ------------------------------------
+_NODE_SHORTCUTS_CONFLICT_PROBE = r"""
+const fs = require("fs");
+global.window = {};
+const src = fs.readFileSync(process.argv[1], "utf8");
+function battery() {
+  const M = window.AQB_SHORTCUTS.methods;
+  const KEYS = window.AQB_KEYS;
+  const checks = [];
+  const ok = (n, c) => checks.push([n, !!c]);
+  const fresh = () => {
+    KEYS._doc = null;  // 即时试用单点 apply 的落袋位从零起
+    return {
+      kbDraft: { schema_version: 1, template: "aqb-default", overrides: {} },
+      kbConflict: null, _kbTableCache: null,
+      _kbApplyOverrides: M._kbApplyOverrides,
+      toast: () => {},
+    };
+  };
+
+  // cancel: 冲突态清空, 零写入(草稿与即时试用单点都不动)
+  let vm = fresh();
+  vm.kbConflict = { id: "view-shows", serial: "Digit1", other: "view-groups", otherLabel: "切到辅种页" };
+  M.kbConflictResolve.call(vm, "cancel");
+  ok("cancel: 冲突态清空", vm.kbConflict === null);
+  ok("cancel: 草稿零写入", Object.keys(vm.kbDraft.overrides).length === 0);
+  ok("cancel: 不写 AQB_KEYS._doc(引擎无感)", KEYS._doc === null);
+
+  // steal: 我拿冲突键, 对方置空串 = 显式禁用(语义保留, 不能当缺省丢)
+  vm = fresh();
+  vm.kbConflict = { id: "view-shows", serial: "Digit1", other: "view-groups" };
+  M.kbConflictResolve.call(vm, "steal");
+  ok("steal: view-shows 拿到冲突键 Digit1", vm.kbDraft.overrides["view-shows"] === "Digit1");
+  ok("steal: view-groups 置空串(显式禁用而非缺省)", vm.kbDraft.overrides["view-groups"] === "");
+  ok("steal: 即时试用同步进 AQB_KEYS._doc", !!KEYS._doc
+    && KEYS._doc.overrides["view-shows"] === "Digit1" && KEYS._doc.overrides["view-groups"] === "");
+
+  // swap 常规: 对方拿我原来的键位
+  vm = fresh();
+  vm.kbConflict = { id: "view-torrents", serial: "Digit1", other: "view-groups" };
+  M.kbConflictResolve.call(vm, "swap");
+  ok("swap: view-torrents 拿到 Digit1", vm.kbDraft.overrides["view-torrents"] === "Digit1");
+  ok("swap: view-groups 拿走我的原键 Digit2", vm.kbDraft.overrides["view-groups"] === "Digit2");
+  ok("swap: 即时试用同步进 AQB_KEYS._doc", !!KEYS._doc
+    && KEYS._doc.overrides["view-torrents"] === "Digit1" && KEYS._doc.overrides["view-groups"] === "Digit2");
+
+  // swap 回落默认分支: 我原来的键位 == 对方默认 -> 删对方 override(回到纯模板)
+  vm = fresh();
+  vm.kbDraft.overrides = { "view-torrents": "Digit9", "view-shows": "Digit2" };
+  vm.kbConflict = { id: "view-shows", serial: "Digit9", other: "view-torrents" };
+  M.kbConflictResolve.call(vm, "swap");
+  ok("swap 回落默认: view-torrents 的 override 被删除(不落 Digit2 死值)", !("view-torrents" in vm.kbDraft.overrides));
+  ok("swap 回落默认: view-shows 拿到 Digit9", vm.kbDraft.overrides["view-shows"] === "Digit9");
+  ok("swap 回落默认: _doc 与草稿键值一致", JSON.stringify(KEYS._doc.overrides) === JSON.stringify(vm.kbDraft.overrides));
+
+  // 未知条目: 冲突态清空且零写入(防御)
+  vm = fresh();
+  vm.kbConflict = { id: "nope", serial: "Digit1", other: "view-groups" };
+  M.kbConflictResolve.call(vm, "swap");
+  ok("未知条目: 冲突态清空且零写入", vm.kbConflict === null && Object.keys(vm.kbDraft.overrides).length === 0);
+  ok("未知条目: 不写 AQB_KEYS._doc", KEYS._doc === null);
+
+  console.log(JSON.stringify({
+    ok: checks.filter((c) => c[1]).length, total: checks.length,
+    failed: checks.filter((c) => !c[1]).map((c) => c[0]),
+  }));
+}
+new Function(src + "\nreturn " + battery.toString() + ";")()();
+"""
+
+
+def test_r4_shortcuts_engine_table_and_keydown():
+    """R5#190: 键位匹配引擎 node 电池 —— _kbTable 派生(overrides/黑名单/冲突去重)与 _kbOnKeyDown 分流"""
+    report = _run_probe(_NODE_SHORTCUTS_ENGINE_PROBE, bundle_file("shortcuts.js"))
+    _assert_battery(report, "键位引擎电池")
+
+
+def test_r4_shortcuts_panel_record_cancel_exits():
+    """R5#232(major) 修复回归: 非脏关闭/离开出口必须调 kbRecordCancel(摘捕获期录制监听)"""
+    report = _run_probe(_NODE_SHORTCUTS_REC_CANCEL_PROBE, bundle_file("shortcuts.js"))
+    _assert_battery(report, "录制出口摘除电池")
+
+
+def test_r4_shortcuts_panel_load_failed_gate():
+    """R5#235: 面板装载失败态 —— kbPanelEnter 失败置 kbKeysLoadFailed 禁保存, 重试成功恢复; 附静态锚"""
+    panel_js = open(_shared("shortcuts_panel.js"), encoding="utf-8").read()
+    state_js = open(_shared("state.js"), encoding="utf-8").read()
+    tpl = open(os.path.join(STATIC_ROOT, "shared", "tpl", "settings-detail.html"), encoding="utf-8").read()
+    # 静态锚: 字段单点 + 保存钮禁用判据 + 失败提示行(直堵覆盖丢数据的 UI 面)
+    assert "kbKeysLoadFailed: false" in state_js, "state.js 缺 kbKeysLoadFailed 字段(R5#235 装载失败态单点)"
+    assert "if (!ok) this.kbKeysLoadFailed = true;" in panel_js, \
+        "kbPanelEnter 装载失败必须置 kbKeysLoadFailed(否则默认表+本次改动 PUT 整份覆盖服务端丢 overrides)"
+    assert "this.kbKeysLoadFailed = false;" in panel_js, \
+        "kbPanelEnter 进门必须复位 kbKeysLoadFailed(「重新加载」重试成功要能恢复保存)"
+    assert ':disabled="!kbDirty() || kbKeysLoading || kbKeysLoadFailed"' in tpl, \
+        "模板保存钮禁用判据必须含 kbKeysLoadFailed(失败态直堵 PUT 覆盖路径)"
+    assert 'v-else-if="kbKeysLoadFailed"' in tpl, "模板缺装载失败提示行(用户须知道保存为何不可用)"
+    report = _run_probe(_NODE_SHORTCUTS_LOAD_FAILED_PROBE, bundle_file("shortcuts.js"))
+    _assert_battery(report, "装载失败态电池")
+
+
+def test_r4_shortcuts_panel_conflict_resolve():
+    """R5#26: 冲突三选一状态机 node 电池 —— swap/steal/cancel 三态终值双断言(草稿 + 引擎 _doc)"""
+    report = _run_probe(_NODE_SHORTCUTS_CONFLICT_PROBE, bundle_file("shortcuts.js"))
+    _assert_battery(report, "冲突三选一电池")

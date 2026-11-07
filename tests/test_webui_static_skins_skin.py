@@ -6,7 +6,7 @@
 - test_frontend_skin_css_token_parity: 各皮肤令牌**名集**相等守阵(issue 26-10-20-2231; 26-11-01 S5 收编 flux) —— 皮肤少声明令牌 = 该皮肤下 `var(--x)` 整条声明在计算值阶段作废且无报错(星图此前少 3 个字体令牌 86 vs 89, 自己 4 处 `var(--font-mono)` 裸引用全程失效、共用层只能各写兜底链); 钉名集相等(取值自由), 差异按缺/多两侧成对报出
 - test_frontend_shell_sprite_login_parity: 各皮肤 index.html shell 内联段守阵(issue 26-10-20-2231; S5 收编 flux) —— sprite 段(80 行/67 symbol)逐字相等(manifest 已被 split_wiring 钉死, 本守阵补上 sprite 与 login)+ #app+login 段(注释/空行归一后, 皮肤说明注释为合法差异不参与比对)相等; symbol 数下限防"sprite 整体外提成共享文件后各份同时消失、相等断言恒真"; 失败信息提示"改图标/改登录遮罩须各皮肤同步"
 - test_frontend_button_system_paired: 按钮体系(.bt)迁移守阵 —— ce-btn/ce-icon 全语料零残留、.bt 六变体各套 CSS 成对定义(atlas/prism/console/flux, S5 收编 flux)、atlas/prism 模板 bt 用量逐类相等、双色令牌(on-accent/on-accent-ink/on-error)星图 :root + 棱镜五主题成对声明
-- test_frontend_fx_wiring: fx 动效库挂行守阵(计划 26-10-31-2316 S6 前半 + 后半) —— shared/fx 三件只挂 flux: flux shell 恰挂 fx.css/fx-presets.css 各一次(head link, 级联序排本皮肤全部 CSS 之后)与 fx.js 一次(shell 静态 script, 不进 tpl-manifest —— 四套清单守阵钉逐项相等), S6 后半追加 flux 专属挂载面 fx-mount.css(link, 排 fx 三件之后)与 fx-mount.js(script)恰一次、三旧皮肤对 /shared/fx/ 与 fx-mount 零引用(D14 隔离反向钉)、flux <html> 带 data-fx-preset="glass"(S4 主 preset 拍板)、fx.js REGISTRY.effects 逐名能在 fx.css 找到 [data-fx~="名"] 规则且 presets 逐名能在 fx-presets.css 找到配方块(漏 CSS = audit 放行但样式静默不生效; 2026-11-03 用户要求移除 flux 右键强调动效 ⇒ row-flash/D4-3 连同 keyframes/RM 降级/注册项退役, 注册表 26 名); R1 精修(26-10-31-2316 §06)追加回归钉: fx-mount.css 不得复活行板 :hover gradient 叠底(B2 行板/首格悬停管线分家)/fx-mount.js 滚动干预三符号(ensureFocusedVisible/scheduleReveal/revealFocusedRow)反向钉不在档(F7c: R3 精修退役 R1 B3 自定义回拉, 滚动单点交还 shortcuts.js 原版逻辑; F7d: 落定回执链路钉 —— fx-mount.js transitionend/兜底定时器/单发守卫 + state.js dock 第二参重入原版 _kbScrollRowIntoView; F7e(R5 精修): push 位移本体弃用反向钉(fx-mount.css/js 零 push 载体/--fx-push-y 规则, 打点实证 scrollY=0 时位移把聚焦行推出视野且滚动不可恢复) + 两段动效落点钉(dialogs.css 面板底部上滑 translateY(100%) 消费 --fx-dur-panel/--fx-ease-out, fx-mount.css 面板开着 scroll-behavior:smooth 的 :has 作用域), 缺一即回退到「聚焦行终位被推出视野」的 D3-4 三轮报障缺陷)
+- test_frontend_fx_wiring: fx 动效库挂行守阵(计划 26-10-31-2316 S6 前半 + 后半) —— shared/fx 三件只挂 flux: flux shell 恰挂 fx.css/fx-presets.css 各一次(head link, 级联序排本皮肤全部 CSS 之后)与 fx.js 一次(shell 静态 script, 不进 tpl-manifest —— 四套清单守阵钉逐项相等), S6 后半追加 flux 专属挂载面 fx-mount.css(link, 排 fx 三件之后)与 fx-mount.js(script)恰一次、三旧皮肤对 /shared/fx/ 与 fx-mount 零引用(D14 隔离反向钉)、flux <html> 带 data-fx-preset="glass"(S4 主 preset 拍板)、fx.js REGISTRY.effects 逐名能在 fx.css 找到 [data-fx~="名"] 规则且 presets 逐名能在 fx-presets.css 找到配方块(漏 CSS = audit 放行但样式静默不生效; 2026-11-03 用户要求移除 flux 右键强调动效 ⇒ row-flash/D4-3 连同 keyframes/RM 降级/注册项退役, 注册表 26 名); R1 精修(26-10-31-2316 §06)追加回归钉: fx-mount.css 不得复活行板 :hover gradient 叠底(B2 行板/首格悬停管线分家)/fx-mount.js 滚动干预三符号(ensureFocusedVisible/scheduleReveal/revealFocusedRow)反向钉不在档(F7c: R3 精修退役 R1 B3 自定义回拉, 滚动单点交还 shortcuts.js 原版逻辑; F7d: 落定回执链路钉 —— fx-mount.js transitionend/兜底定时器/单发守卫 + state.js dock 第二参重入原版 _kbScrollRowIntoView; F7e(R5 精修): push 位移本体弃用反向钉(fx-mount.css/js 零 push 载体/--fx-push-y 规则, 打点实证 scrollY=0 时位移把聚焦行推出视野且滚动不可恢复) + 两段动效落点钉(dialogs.css 面板底部上滑 translateY(100%) 消费 --fx-dur-panel/--fx-ease-out, fx-mount.css 面板开着 scroll-behavior:smooth 的 :has 作用域), 缺一即回退到「聚焦行终位被推出视野」的 D3-4 三轮报障缺陷; R5#179: dock(true) 须真武装 armSettle 兜底定时器(此前零调用, 回执丢失场景 fx-glide 恒驻留))
 - test_frontend_console_square_radius: console 方角口径守阵(R1 精修 B1, 用户报「console 详情模板/文字元素出现圆角」) —— console/style.css 的 --radius-lg/--radius/--radius-sm 三令牌全 0px + console 自有 CSS 与 console 实际加载的四件共享面(row_lang/dt_table/hscroll/console_hub)的 border-radius 声明值全量白名单(0/999px 胶囊/小值/50%/var(--radius*)/inherit, 现存值盘点后冻结): flux 意图的圆角 16/10/6 写进共享面 = 三皮肤同时回归, 新值入列必须显式改白名单(有意识决策)
 - test_frontend_tpl_ctl_bits_single_source
 
@@ -626,6 +626,14 @@ def test_frontend_fx_wiring():
         ("settleArmed", "fx-mount.js 落定回执缺 settleArmed 单发守卫 -- 关面板路径会误发重入"),
     ):
         assert needle in mount_js, f"fx-mount.js 缺 {needle} —— {why}"
+    #     R5#179: armSettle 必须在 dock(true) 时真的武装(此前全仓库零调用, 兜底定时器从未生效:
+    #     RM 过渡归零不派 transitionend/过渡被打断/后台标签页丢事件场景下回执永不发,
+    #     fx-glide 恒驻留 -- 键盘 End/Home/翻页一直平滑)。双路并存, fireSettle 单发守卫兜冲突。
+    dock_blk = re.search(r"function dock\(open, onSettled\) \{(.*?)\n  \}", mount_js, re.S)
+    assert dock_blk and "armSettle()" in dock_blk.group(1), (
+        "fx-mount.js dock(true) 分支缺 armSettle() 武装(R5#179) -- 兜底定时器与 transitionend "
+        "双路并存, 不武装则回执丢失场景下 fx-glide 恒驻留(键盘滚动一直平滑)"
+    )
     state_js = open(os.path.join(STATIC_ROOT, "shared", "state.js"), encoding="utf-8").read()
     assert re.search(r"AQB_FX_MOUNT\.dock\(v,\s*\(\)",
                      state_js), ("state.js 的 dock 消费点缺落定回执回调(第二参) -- F7d 重入链路断, "

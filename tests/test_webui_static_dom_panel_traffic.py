@@ -7,7 +7,9 @@
 - test_frontend_qb_traffic_drawer_page_guard: 流量图抽屉的页面守卫(2026-10-06 修「qB 全局流量图出现在设置页」) —— drawerVisible 两形态先挡非主内容页且状态位不随切页翻(回页连数据/窗口选择一起回来) + 轮询与建图 active 同源含 page 判据(面板不在 DOM 还拉还画 = 对空气取数) + openDrawerTraffic 先切回主内容页 + state.js drawerVisible watcher 退场销毁图/进场补拉(种子详情支路 !s 的 $nextTick _dtSync 回页变体重挂, 归 test_drawer_seed_reentry_variant_remount)
 - test_frontend_qb_traffic_yaxis_and_annotation: 流量图纵轴固定模式 + 画布注解层守阵(2026-10-08, issue 26-10-07-0149 认领一并做) —— _qbYRange/_qbGapRuns 纯函数 node 真跑(自动 = peak*1.05 / 固定上限取 max(cap, peak*1.05) 峰值超上限按峰值显示 / 缺口 = 上下行皆 null 才算); 限速三作用域同源 = qB 全局限速上下行**较大者**(_qbGlobalLimit -> speedLimitBytes); 上限派生单点 _qbYCapOf(limit×1.2 / manual MiB); 三作用域**各自独立**持久化(qbYAxisStoreKey 三键 + qbInitialYAxis 只认合法模式与正数 + persistQbYAxis 吞异常) + 切档落盘重排(qbSetYAxisMode/qbSetYAxisManual -> _qbChartRescale 走 setData 重算 scale 不重建) + 限速变化重排 watcher(mounted 注册, this.drawer 守卫剔除 BaseTransition 假实例); 建图 y range 接纯函数 + draw/drawClear 两钩子画限速虚线/缺口斜纹(共享图面三挂点全生效, uPlot.pxRatio 设备像素换算, 限速线只画落在可视值域内的); 模板 .qb-tools/.qb-seg 控件 + CSS 三皮肤成对 + **控件组唯一挂点**(图下统计栏 .qb-statctl; 2026-10-16 版式改: 流量形态头部不再挂控件, 全局/分组与种子流量图三挂点对齐, 上限读数 qbYAxisCapText/.qb-tools-hint 随 UI 移除退役) + P4 重启缝提示(plan 26-10-15-0829; 左端口径修订 2026-10-16, issue 26-10-16-0954): _qbSeamHint 判据纯函数 node 真跑(重启贴近链末->提示(含首采即链末桶的实测帧形态)/链到右沿或链确已接续或旧后端->null, 边界含尾区起点、右沿与左端前一桶三点) + computed qbCurSeamHint 消费单点 + drawer.html 提示行文案单源带重启时刻锚 + 断线语义不变(spanGaps:false ×2)
 - test_frontend_qb_traffic_scope_stale_polarity: 流量图三挂点 stale 谓词极性守阵(2026-10-12 修「种子流量图加载不出来」) —— W2–W6 机械改名把 torrent/group 两处 `!(...)` 写成 `!!(...)`(取反变双重取反), 恰在本图活跃时判「响应已过期」⇒ 数据不落袋 + loading 不复位 + 早退不建图 ⇒ 种子「流量」页签恒停「正在加载流量数据…」且轮询被 loading 卡住不自愈(global 未中招, 故症状只在种子/分组图)。既有静态锚(源码字符串级)对单/双 bang 天然失明, 本守阵补两层: ①node 电池用 `new Function(源码 + "return _QB_SCOPES;")` 取出作用域表, 对三挂点喂「活跃/切走/关闭/换目标/功能关」五类上下文断言 stale 真假 + `active => stale === false` 同向性; ②静态极性兜底钉 `!(...)` 书写形态、`!!(...)` 不得回潮
-- test_frontend_qb_traffic_load_stall_fallback: 流量图轮询「在途悬挂」兜底守阵(issue 26-10-16-0954-bug-webui-chart-fetch-no-timeout 方案 #2, 2026-10-16) —— loading 是单向「请求在途」标志(_qbLoad 入口无条件置 true, 唯一复位路径是它的 finally), 请求悬挂时 finally 不执行 ⇒ tick 守卫把之后每一拍都挡掉, 图表永久停在旧帧且无提示(与 10-12 修的同链另一入口 stale 谓词取反不同)。三层静态锚: ①阈值常量 _QB_LOAD_STALL_MS(=30000, 请求级超时的两倍余量); ②判据单点 _qbLoadStalled 在且 tick 必须经它(合体写法 `document.hidden || this[def.loading]` 不得回潮); ③_qbLoad 置位处写计时起点 _qbLoadAt[scope] 且 finally 不擦(擦会把换目标场景下新请求的起点抹成 0)。行为面 node 电池真跑(无 node 静默跳过): 真 _qbLoad + 永不 settle 的 api 桩 —— 在途未悬挂照旧挡拍 / 悬挂放行且只留一条警告 / 新起点生效故后续照常挡拍 / 图不活跃与页面隐藏照旧跳过 / 判据边界(29s 不判、31s 判、无起点不判)
+- test_frontend_qb_traffic_load_stall_fallback: 流量图轮询「在途悬挂」兜底守阵(issue 26-10-16-0954-bug-webui-chart-fetch-no-timeout 方案 #2, 2026-10-16) —— loading 是单向「请求在途」标志(_qbLoad 入口无条件置 true, 唯一复位路径是它的 finally), 请求悬挂时 finally 不执行 ⇒ tick 守卫把之后每一拍都挡掉, 图表永久停在旧帧且无提示(与 10-12 修的同链另一入口 stale 谓词取反不同)。三层静态锚: ①阈值常量 _QB_LOAD_STALL_MS(=30000, 请求级超时的两倍余量); ②判据单点 _qbLoadStalled 在且 tick 必须经它(合体写法 `document.hidden || this[def.loading]` 不得回潮); ③_qbLoad 置位处写计时起点 _qbLoadAt[scope] 且 finally 不擦(擦会把换目标场景下新请求的起点抹成 0)。行为面 node 电池真跑(无 node 静默跳过): 真 _qbLoad + 永不 settle 的 api 桩 —— 在途未悬挂照旧挡拍 / 悬挂放行且只留一条警告 / 新起点生效故后续照常挡拍 / 图不活跃与页面隐藏照旧跳过 / 判据边界(29s 不判、31s 判、无起点不判); 附 R5#182 死代码反向锚(loadQbHistory 兼容别名零残留, 入口全走 openQbHistory/openDrawerTraffic)
+- test_frontend_qb_tick_label_and_isolated_idxs: R5#192 —— x 轴刻度与孤点索引 node 电池(同文件其余纯函数均有电池, 唯这两处标着纯函数却零执行): _qbTickLabel 四族分支 13 档逐档断言(1m/5m 标到秒 / 30m-24h 只标时刻 / 3d/7d/30d 标日期 / 6mo/1y/all 标年月; 期望值由同一 Date 本地时区现算, 与机器时区无关)+ torrent 挂点读自己的窗口字段(三挂点窗口互不串) + _qbIsolatedIdxs 三态(两侧皆 null 的孤点收/任一侧非 null 的链中链端不收/贴边孤点与空系列边界)
+- test_frontend_qb_themechange_event_pair: R5#194 —— theme.js↔qb_traffic_chart.js 换肤事件契约成对静态锚(此前 theme.js 全文件零测试, 事件名/派发点被改名或删除时流量图 canvas 换肤残旧色且无测试变红): theme.js 手动切换(set)与系统明暗跟随(onSys, R5#180 补)两路都必须派发 autoqb:themechange 且落在 documentElement 上, qb_traffic_chart.js 必须监听同名事件且挂在同一 target(documentElement) —— 成对断言, 单侧改名/换 target 即红
 
 ## 皮肤档位口径
 - 皮肤清单单点在 webui_helpers._UI_ALL(atlas/prism/console/flux); flux(第四套, plan 26-10-31-2316 S5)
@@ -401,6 +403,10 @@ def test_frontend_qb_traffic_chart_wiring():
         "qbCurPending 必须三合一(loading + 无数据 + 无错误): 少任一项都有一种既有状态(图/空态/错误)被续拉顶掉"
     load_blk = re.search(r"async _qbLoad\(scope\) \{\n(.*?)\n    \},", js, re.S)
     assert load_blk, "qb_traffic_chart.js 缺 _qbLoad(取数单点)"
+    # R5#182: loadQbHistory「P5a 兼容别名」零调用死代码已删(全快照 grep 仅定义一处, 入口全走
+    # openQbHistory/openDrawerTraffic) —— 反向钉防复活: 复活即与 _qbLoad 双写取数入口
+    assert "loadQbHistory" not in js, \
+        "qb_traffic_chart.js 残留 loadQbHistory 兼容别名(R5#182 已删的死代码, 复活即双写取数入口)"
     load_body = load_blk.group(1)
     assert load_body.index("await this.api(") < load_body.index('this[def.error] = "";') \
         and load_body.index("this[def.data] = data;") < load_body.index('this[def.error] = "";'), \
@@ -1443,3 +1449,108 @@ def test_frontend_qb_traffic_load_stall_fallback():
         report = json.loads(proc.stdout.strip().splitlines()[-1])
         assert report["failed"] == [], \
             f"悬挂兜底电池 {report['ok']}/{report['total']} 过, 失败: {report['failed']}"
+
+
+# R5#192: x 轴刻度四族 + 孤点索引三态(同文件其余纯函数均有 node 电池, 唯这两处一直零执行)。
+# _qbTickLabel 是 methods 上的方法(消费 this[_QB_SCOPES[scope].window]) —— 经导出面真跑;
+# _QB_WINDOW_NAMES/_QB_SCOPES 是模块级 const 不随 sloppy eval 外泄, 用 new Function 取出(同
+# _NODE_QB_SCOPE_STALE_PROBE 口径); _qbIsolatedIdxs 是顶层 function 声明, eval 后可直接取用。
+_NODE_QB_TICK_ISOLATED_PROBE = r"""
+const fs = require("fs");
+global.window = {};
+const src = fs.readFileSync(process.argv[1], "utf8");
+eval(src);
+const M = window.AQB_QB_TRAFFIC.methods;
+const CST = new Function(src + "\nreturn { WN: QB_WINDOW_NAMES, SCOPES: _QB_SCOPES };")();
+const checks = [];
+const ok = (n, c) => checks.push([n, !!c]);
+const p2 = (n) => String(n).padStart(2, "0");
+const ts = 1767225600;  // 任意固定时刻; 期望值按同一 Date 本地时区现算, 与机器时区无关
+const d = new Date(ts * 1000);
+// 四族期望(与 _qbTickLabel 的分支一一对应; 错档 = 族与 QB_WINDOW_NAMES 对应写错, 这里逐档钉死)
+const SEC = `${p2(d.getHours())}:${p2(d.getMinutes())}:${p2(d.getSeconds())}`;
+const TIME = `${p2(d.getHours())}:${p2(d.getMinutes())}`;
+const DATE = `${p2(d.getMonth() + 1)}-${p2(d.getDate())}`;
+const MONTH = `${d.getFullYear()}-${p2(d.getMonth() + 1)}`;
+const FAM = {
+  "1m": SEC, "5m": SEC,
+  "30m": TIME, "3h": TIME, "6h": TIME, "12h": TIME, "24h": TIME,
+  "3d": DATE, "7d": DATE, "30d": DATE,
+  "6mo": MONTH, "1y": MONTH, "all": MONTH,
+};
+ok("QB_WINDOW_NAMES 恰 13 档", CST.WN.length === 13 && CST.WN.every((w) => FAM[w] !== undefined));
+
+const vm = { qbHistWindow: "24h", qbTorrentWindow: "24h", qbGroupWindow: "24h" };
+for (const w of CST.WN) {
+  vm.qbHistWindow = w;
+  ok(`刻度 ${w} -> ${FAM[w]}`, M._qbTickLabel.call(vm, ts, "global") === FAM[w]);
+}
+// 三挂点窗口互不串: torrent 挂点读自己的窗口字段(换 global 的档不影响)
+vm.qbHistWindow = "24h";
+vm.qbTorrentWindow = "3d";
+ok("torrent 挂点读 qbTorrentWindow(作用域窗口不串)", M._qbTickLabel.call(vm, ts, "torrent") === DATE);
+
+// _qbIsolatedIdxs 三态(u.data = [xs, up, dl]; 断言走 up 列)
+const iso = (up) => _qbIsolatedIdxs({ data: [up.map((_, i) => i), up, up] }, 1);
+ok("孤点(两侧皆 null): 收点标", JSON.stringify(iso([null, 5, null, null, 7, 7, null])) === "[1]");
+ok("链中/链端(任一侧非 null): 不收", JSON.stringify(iso([null, 5, 6, 7, null])) === "[]");
+ok("贴边孤点(一侧出界视作 null): 收", JSON.stringify(iso([5, null, 7])) === "[0,2]");
+ok("单元素系列: 收(零长线段不可见, 靠点标可见)", JSON.stringify(iso([9])) === "[0]");
+ok("空系列: 空", JSON.stringify(iso([])) === "[]");
+console.log(JSON.stringify({ ok: checks.filter((c) => c[1]).length, total: checks.length,
+  failed: checks.filter((c) => !c[1]).map((c) => c[0]) }));
+"""
+
+
+def test_frontend_qb_tick_label_and_isolated_idxs():
+    """R5#192: _qbTickLabel 四族 13 档逐档 + _qbIsolatedIdxs 三态 node 电池(无 node 静默跳过)"""
+    shared = os.path.join(STATIC_ROOT, "shared")
+    node = shutil.which("node")
+    if not node:
+        return
+    proc = subprocess.run(
+        [node, "-e", _NODE_QB_TICK_ISOLATED_PROBE,
+         os.path.join(shared, "qb_traffic_chart.js")],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+    assert proc.returncode == 0, f"刻度/孤点 node 电池跑挂: {proc.stderr.strip()}"
+    report = json.loads(proc.stdout.strip().splitlines()[-1])
+    assert report["failed"] == [], \
+        f"刻度/孤点电池 {report['ok']}/{report['total']} 过, 失败: {report['failed']}"
+
+
+def test_frontend_qb_themechange_event_pair():
+    """R5#194(+R5#180): theme.js 与 qb_traffic_chart.js 的换肤事件契约成对静态锚
+
+    事件契约: prism 主题引擎在主题变化处派发 ``autoqb:themechange``(documentElement 上),
+    流量图监听同名事件整图重建(canvas 色建图时烘焙令牌值, setData 快路不换色)。
+    theme.js 全文件此前零测试 —— 事件名/派发点被改名或删除时, 换肤残旧色且无测试变红。
+    成对断言: 派发侧两路(手动 set + 系统明暗跟随 onSys)与监听侧一落点, 任何一侧缺失/
+    改名/换 target 即红。
+    """
+    theme_js = open(os.path.join(STATIC_ROOT, "prism", "js", "theme.js"), encoding="utf-8").read()
+    chart_js = open(os.path.join(STATIC_ROOT, "shared", "qb_traffic_chart.js"), encoding="utf-8").read()
+
+    # 派发侧: 手动切换 set() 与系统跟随 onSys() 两路都派发, 且都落在 documentElement
+    set_blk = re.search(r"set: function \(id\) \{(.*?)\n    \},", theme_js, re.S)
+    assert set_blk and 'document.documentElement.dispatchEvent' in set_blk.group(1) \
+        and 'CustomEvent("autoqb:themechange"' in set_blk.group(1), \
+        "theme.js set(手动切换)必须在 documentElement 上派发 autoqb:themechange(流量图换肤重建契约)"
+    onsys_blk = re.search(r"var onSys = function \(\) \{(.*?)\n    \};", theme_js, re.S)
+    assert onsys_blk and 'document.documentElement.dispatchEvent' in onsys_blk.group(1) \
+        and 'CustomEvent("autoqb:themechange"' in onsys_blk.group(1), \
+        "theme.js onSys(系统明暗跟随)必须在 data-theme 实际变化时派发 autoqb:themechange" \
+        "(R5#180: 只 apply 不派发 = OS 切明暗后流量图 canvas 残旧主题)"
+    assert theme_js.count('CustomEvent("autoqb:themechange"') == 2, \
+        "theme.js 派发点应恰两处(set + onSys); 增删派发路须同步本守阵"
+
+    # 监听侧: 流量图监听同名事件, 且挂在同一 target(documentElement) —— 换 target 即收不到
+    assert 'document.documentElement.addEventListener("autoqb:themechange"' in chart_js, \
+        "qb_traffic_chart.js 必须监听 autoqb:themechange(派发在 documentElement, 挂别处收不到)"
+    on_change = re.search(r"_qbOnThemeChange = \(\) => \{\n(.*?)\n        \};", chart_js, re.S)
+    assert on_change and on_change.group(1).find("this._qbChartDestroy(s)") \
+        < on_change.group(1).find("this._qbChartBuild(s)"), \
+        "换肤处理器必须先 _qbChartDestroy 再 _qbChartBuild(canvas 色建图时烘焙, setData 快路不换色)"

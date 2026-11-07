@@ -45,7 +45,16 @@
   /* 未手动选择过主题: 跟随系统明暗实时切换 */
   if (window.matchMedia && !stored()) {
     var mq = window.matchMedia("(prefers-color-scheme: dark)");
-    var onSys = function () { apply(resolve()); };
+    var onSys = function () {
+      var before = document.documentElement.getAttribute("data-theme");
+      apply(resolve());
+      var after = document.documentElement.getAttribute("data-theme");
+      if (after === before) return;
+      /* data-theme 实际变了才派发(R5#180): 消费方 qb_traffic_chart.js 靠该事件整图重建
+       * 烘焙令牌色的 canvas —— 只 apply 不派发 = OS 切明暗后 CSS 换肤而流量图残旧主题。 */
+      document.documentElement.dispatchEvent(
+        new CustomEvent("autoqb:themechange", { detail: { theme: after } }));
+    };
     if (mq.addEventListener) mq.addEventListener("change", onSys);
     else if (mq.addListener) mq.addListener(onSys);
   }

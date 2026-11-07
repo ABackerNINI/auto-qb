@@ -9,6 +9,11 @@
 - test_r4_load_col_state_seeding: R5#18 —— loadColState 默认隐藏播种三态: 空存储播种 / 仅空 hidden 不播(「刻意全开」合法偏好) / 有任一偏好键不播; 附坏 JSON 走完整流程、locked 列忽略、w 白名单洗净(洗净后三键全缺照播)
 - test_r4_sort_domain: R5#54 —— AQB_SORT 真跑: setSort 三态循环(经典 gk/gd 与 dyn dtSortState 两形态) + _dtStrCompare(IPv4 逐段数值序/端口数值/等值/非 IP localeCompare 回落) + sortedDrawer 空值两方向恒末位与 IPv4 数值序
 - test_r4_format_ladder_family: R5#55 —— format 函数族档位边界: _fmtLadder 梯顶回落(top 命中/缺省/档名写错回落整梯)与字节/速度两族、fmtEta 8640000 哨兵与非正值、fmtDuration 三段进位边界、fmtPeersQb 缺省只显已连接
+- test_r4_fx_mount_toast_split_and_rows_ghost: R5#193 —— flux fx 挂载层 node 电池(fx-mount.js 是 IIFE,
+  桩 DOM/BOM 后真跑): TOAST_SPLIT 拆段正则族(主标题+说明两段落地/无分隔符与括号头与超 14 字头与
+  说明不足 2 字单行/全角冒号与逗号分隔/单行也挂 toast-txt)+ toastSync 差分 stamp(rise/队列牌/倒计时
+  只归 own 条/danger 原位升级)+ rows 行差分(首轮只建缓存/增删检出排一帧/退场幽灵克隆定格 row-out
+  附回原容器/入场行 stamp row-in/无增删不排帧)
 
 加载口径: columns 域经 webui_helpers.bundle_file("columns.js") 聚合(根 + 五片段清单序, 与拆分前
 同一份代码); 单文件域(selection/sort/format)直接 eval。app.js 以 loadColState 截断切片加载
@@ -631,6 +636,132 @@ console.log(JSON.stringify({
 }));
 """
 
+# R5#193: fx 挂载层(fx-mount.js) -------------------------------------------------
+# fx-mount.js 是 IIFE, 顶层就要 window.AQB_FX 与 document —— 桩最小 DOM/BOM 后 eval 真跑;
+# TOAST_SPLIT/rows 是模块私有, 经导出面 toastSync/rows 驱动(与浏览器消费点同一入口)。
+_NODE_FX_MOUNT_PROBE = r"""
+const fs = require("fs");
+const rafQ = [];
+let scans = 0;
+function mkEl(tag) {
+  const el = {
+    tagName: String(tag).toUpperCase(),
+    children: [], className: "", textContent: "",
+    _classes: [], attrs: {},
+    parentElement: null, isConnected: true,
+    scrollTop: 0, scrollLeft: 0,  // 真实 DOM 默认 0(幽灵定格几何要用)
+    _rect: { top: 0, left: 0, width: 800, height: 40 },
+    style: { _props: {}, setProperty(k, v) { el.style._props[k] = v; } },
+    classList: {
+      add: (c) => el._classes.push(c),
+      remove: () => {}, toggle: () => {},
+    },
+    appendChild(c) { el.children.push(c); return c; },
+    querySelector: () => null,
+    setAttribute(k, v) { el.attrs[k] = v; },
+    getAttribute(k) { return k in el.attrs ? el.attrs[k] : null; },
+    hasAttribute(k) { return k in el.attrs; },
+    removeAttribute(k) { delete el.attrs[k]; },
+    cloneNode() { const c = mkEl("div"); c.attrs = Object.assign({}, el.attrs); c._rect = el._rect; return c; },
+    getBoundingClientRect() { return el._rect; },
+  };
+  return el;
+}
+const bySel = {};
+const wrap = mkEl("div");
+wrap.querySelectorAll = () => wrap.children;
+global.window = { CSS: null };
+global.window.AQB_FX = { reduced: () => false, ripple() {}, dir() {}, scan() { scans++; }, viewTransition(fn) { fn(); } };
+global.document = {
+  addEventListener: () => {}, removeEventListener: () => {},
+  documentElement: { classList: { add() {}, remove() {} } },
+  querySelector: (sel) => (sel === ".toast-wrap" ? wrap : bySel[sel] || null),
+  querySelectorAll: () => [],
+  createElement: (tag) => mkEl(tag),
+};
+global.requestAnimationFrame = (cb) => { rafQ.push(cb); return rafQ.length; };
+const src = fs.readFileSync(process.argv[1], "utf8");
+eval(src);
+const checks = [];
+const ok = (n, c) => checks.push([n, !!c]);
+const MNT = window.AQB_FX_MOUNT;
+
+// ---------- TOAST_SPLIT 拆段正则(经 toastSync 消费面驱动) ----------
+function mkToast(text, cls, id) {
+  const span = mkEl("span");
+  span.textContent = text;
+  const n = mkEl("div");
+  n.children.push(span);
+  n.attrs["class"] = cls || "toast";
+  if (id != null) n.attrs["data-id"] = id;
+  return { n, span };
+}
+const t1 = mkToast("已执行: 重命名", "toast", "id1");
+const t2 = mkToast("无分隔符的一句话", "toast", "id2");
+const t3 = mkToast("一二三四五六七八九十甲乙丙丁戊: 说明超限", "toast", "id3");  // 头 15 字 > 14 上限
+const t4 = mkToast("一二三四五六七八九十甲乙丙丁: 边界十四字", "toast", "id4");  // 头恰 14 字
+const t5 = mkToast("复制(3): 文件", "toast", "id5");                            // 括号不是分隔符
+const t6 = mkToast("已执行:x", "toast", "id6");                                 // 说明不足 2 字(无空格)
+const t7 = mkToast("已执行: 重命名", "toast", "id7");                           // 全角冒号
+const t8 = mkToast("已复制, 名称已写入剪贴板", "toast", "id8");                  // 逗号分隔
+const t9 = mkToast("保存失败: 磁盘已满", "toast error", "id9");                  // danger 原位升级
+const t10 = mkToast("已执行: x", "toast", "id10");  // ": x" 分隔符后的空格计入 {2,} 原始计数(2 字含空格会拆, trim 后单字)
+const toasts = [t1, t2, t3, t4, t5, t6, t7, t8, t9, t10];
+wrap.children.push(...toasts.map((t) => t.n));
+MNT.toastSync(4000, "id1");
+ok("拆段: 半角冒号两段落地(标题+说明)", t1.span.children.length === 2
+  && t1.span.children[0].className === "toast-t" && t1.span.children[0].textContent === "已执行"
+  && t1.span.children[1].className === "toast-s" && t1.span.children[1].textContent === "重命名");
+ok("拆段: 全角冒号同族", t7.span.children.length === 2
+  && t7.span.children[0].textContent === "已执行" && t7.span.children[1].textContent === "重命名");
+ok("拆段: 逗号分隔(说明为名字/计数)", t8.span.children.length === 2
+  && t8.span.children[0].textContent === "已复制" && t8.span.children[1].textContent === "名称已写入剪贴板");
+ok("拆段: 头恰 14 字上界命中", t4.span.children.length === 2
+  && t4.span.children[0].textContent === "一二三四五六七八九十甲乙丙丁");
+ok("残留单行: 无分隔符", t2.span.children.length === 0 && t2.span._classes.includes("toast-txt"));
+ok("残留单行: 头 15 字超上限(拆段退回单行)", t3.span.children.length === 0);
+ok("残留单行: 括号不是分隔符", t5.span.children.length === 0);
+ok("残留单行: 说明不足 2 字(无空格)", t6.span.children.length === 0);
+ok("拆段边界: \": x\" 空格计入 {2,} 原始计数故会拆(现状口径, 改 trim 语义须同步本电池)", t10.span.children.length === 2);
+ok("单行也挂 toast-txt(flex:1/min-width:0 生效)", t2.span._classes.includes("toast-txt"));
+ok("stamp: 新条 rise + 队列牌(栈内已有多条)", t1.n.attrs["data-fx"] === "rise" && t1.n.attrs["data-fx-queue"] === "");
+ok("stamp: 倒计时只归 own 条(ttl 精确命中 data-id)", t1.n.attrs["data-fx-cd"] === "" && t2.n.attrs["data-fx-cd"] === undefined);
+ok("stamp: danger 条原位升级 rise danger", t9.n.attrs["data-fx"] === "rise danger");
+ok("文本安全: 标题/说明经 textContent 落地(非 innerHTML)", t1.span.children[0].textContent === "已执行");
+ok("扫描: FX.scan 被触发", scans > 0);
+
+// ---------- rows 行差分与幽灵退场 ----------
+const cont = mkEl("div");
+const rowN = { a: mkEl("div"), b: mkEl("div"), c: mkEl("div") };
+rowN.a.parentElement = cont; rowN.a._rect = { top: 10, left: 0, width: 800, height: 44 };
+rowN.b.parentElement = cont; rowN.b._rect = { top: 54, left: 0, width: 800, height: 44 };
+rowN.c.parentElement = cont; rowN.c._rect = { top: 98, left: 0, width: 800, height: 44 };
+bySel['[data-hash="a"]'] = rowN.a;
+bySel['[data-hash="b"]'] = rowN.b;
+bySel['[data-hash="c"]'] = rowN.c;
+const row = (h) => ({ hash: h });
+const scansBefore = scans;
+MNT.rows([row("a"), row("b")], "hash");
+ok("rows 首轮只建缓存(零 rAF 零扫描)", rafQ.length === 0 && scans === scansBefore);
+MNT.rows([row("a"), row("c")], "hash");
+ok("rows 差分: 检出增删后排一帧", rafQ.length === 1);
+rafQ.shift()();
+ok("幽灵退场: b 行克隆以 row-out 附回原容器", cont.children.length === 1
+  && cont.children[0].getAttribute("data-fx") === "row-out");
+ok("幽灵定格: top/宽写进内联样式", cont.children[0].style.top === "54px"
+  && cont.children[0].style.width === "800px");
+ok("幽灵定格: --fx-row-h 覆写实际行高(44px)", cont.children[0].style._props["--fx-row-h"] === "44px");
+ok("入场行: c 行 stamp row-in", rowN.c.getAttribute("data-fx") === "row-in");
+ok("差分扫描: FX.scan 被触发", scans > scansBefore);
+MNT.rows([row("a"), row("c")], "hash");
+ok("rows 无增删: 不排帧(幂等重扫不空转)", rafQ.length === 0);
+
+console.log(JSON.stringify({
+  ok: checks.filter((c) => c[1]).length, total: checks.length,
+  failed: checks.filter((c) => !c[1]).map((c) => c[0]),
+}));
+"""
+
 
 def test_r4_winmembers_sorted_window_same_source():
     """R5#35(major) 修复回归: winMembers 三入口先排序再开窗, 切片/前缀和/占位/键盘行序同源"""
@@ -685,3 +816,9 @@ def test_r4_format_ladder_family():
     """R5#55: _fmtLadder 梯顶回落 + fmtEta 哨兵 + fmtDuration 三段进位 + fmtPeersQb 缺省"""
     report = _run_probe(_NODE_FORMAT_PROBE, os.path.join(STATIC_ROOT, "shared", "format.js"))
     _assert_battery(report, "format 函数族电池")
+
+
+def test_r4_fx_mount_toast_split_and_rows_ghost():
+    """R5#193: fx 挂载层 node 电池 —— TOAST_SPLIT 拆段正则族 + rows 行差分与幽灵退场"""
+    report = _run_probe(_NODE_FX_MOUNT_PROBE, os.path.join(STATIC_ROOT, "flux", "fx-mount.js"))
+    _assert_battery(report, "fx 挂载层电池")

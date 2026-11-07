@@ -634,10 +634,6 @@ window.AQB_QB_TRAFFIC = {
       const s = this.qbCurScope;
       return s ? this._qbSetWindow(s, w) : undefined;
     },
-    /* 兼容别名(P5a 公开名; 现归一到 _qbLoad 单点) */
-    loadQbHistory() {
-      return this._qbLoad("global");
-    },
     async _qbSetWindow(scope, w) {
       const def = _QB_SCOPES[scope];
       if (this[def.window] === w) return;

@@ -299,6 +299,9 @@ window.AQB_STATE = {
       kbRecId: "",            // 正在录制的 action id("" = 不在录制态)
       kbConflict: null,       // 录制冲突待决 {id, serial, other, otherLabel}(三选一: 交换/覆盖/取消)
       kbKeysLoading: false,   // 面板打开/重载时拉取服务端真值中
+      kbKeysLoadFailed: false, // 最近一次面板装载失败(R5#235): 失败时 kbSaved/kbDraft 落在默认表上,
+                              // 此时保存会以「默认+本次改动」整份覆盖服务端, 静默丢掉其它浏览器
+                              // 已保存的 overrides —— 置位后保存钮禁用, 「重新加载」成功即复位
       // 行右键菜单定制面板(计划 26-10-20-0024 W4; 方法在 ctx_menu_custom.js): 草稿不在前端
       // 另存 —— 每次编辑整对象替换写回 cfg.tree.web.ctx_menu(cfgDirty 自动接管脏标记, 保存走
       // 全局 cfgSave), 本处只放面板**视图态**(当前 tab / 拖拽中的行), 不持久化。

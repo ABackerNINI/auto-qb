@@ -85,6 +85,10 @@
     if (onSettled) settleCb = onSettled;
     if (open) {
       settleArmed = true;
+      /* 武装兜底定时器(R5#179): 主路 transitionend 在 RM 过渡归零/过渡被打断/后台标签页
+       * 丢事件时永不点火 —— 不武装则回执不发、fx-glide 恒驻留(键盘 End/Home/翻页一直平滑)。
+       * 与下方 transitionend 双路并存, fireSettle 的 settleArmed 单发守卫保证只发一次。 */
+      armSettle();
       /* 上推过渡动效窗口(F7e 动效②): 开门到落定回执之间, 原版让位/重入的滚动走
        * 平滑(fx-mount.css html.fx-glide 段)。作用域只罩这段窗口 —— 面板开着期间的
        * 键盘滚动(End/Home/翻页)保持原版瞬时, 与 console 手感逐位一致。 */

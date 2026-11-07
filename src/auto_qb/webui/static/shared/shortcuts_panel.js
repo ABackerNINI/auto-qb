@@ -36,6 +36,7 @@ Object.assign(window.AQB_SHORTCUTS.methods, {
         });
         return;
       }
+      this.kbRecordCancel();  // 非脏关闭出口也要摘录制监听(R5#232): 录制态点关闭/Esc, 脏路径有 kbDraftRevert 代劳, 本路不摘则 document 捕获期 _kbRecHandler 残留, 下一次任意按键被吞并静默提交成键位绑定
       this.kbFullOpen = false;
     },
     /* 折叠块头/首页卡共用的键位读数: N 条已自定义 / 默认键位(AQB_KEYS 适配器同步快照,
@@ -53,7 +54,13 @@ Object.assign(window.AQB_SHORTCUTS.methods, {
       this.kbRecId = "";
       this.kbConflict = null;
       this.kbKeysLoading = true;
-      return this._kbReloadKeys(true).then(() => {
+      this.kbKeysLoadFailed = false;
+      return this._kbReloadKeys(true).then((ok) => {
+        /* 装载失败态(R5#235): quiet=true 拉取失败时 kbSaved/kbDraft 只能落在默认表上,
+         * 此后 kbSaveKeys 的 PUT 会以「默认+本次改动」整份覆盖服务端, 静默丢掉其它浏览器
+         * 已保存的 overrides —— 置失败位禁用保存钮直堵覆盖路径, 退出路径 = 「重新加载」
+         * (kbPanelEnter 重入: 进门先复位, 成功即恢复保存)。 */
+        if (!ok) this.kbKeysLoadFailed = true;
         this.kbSaved = JSON.parse(JSON.stringify(window.AQB_KEYS.load()));
         this.kbDraft = JSON.parse(JSON.stringify(this.kbSaved));
         this.kbKeysLoading = false;
@@ -63,7 +70,11 @@ Object.assign(window.AQB_SHORTCUTS.methods, {
      * 分区先确认; 确认后回滚再继续导航。覆盖层开着时正常导航路径都被盖住, 本守卫是漏网路径
      * (如程序化跳转)的安全网 —— 关闭覆盖层自身的守卫在 kbFullClose */
     kbGuardLeave(target) {
-      if (this.hub.view !== "webui" || target === "webui" || !this.kbFullOpen || !this.kbDirty()) return false;
+      if (this.hub.view !== "webui" || target === "webui" || !this.kbFullOpen) return false;
+      if (!this.kbDirty()) {
+        this.kbRecordCancel();  // 非脏离开 webui 分区同样摘录制监听(R5#232): 本早退不拦导航, 残留的捕获期 handler 会跟着新页面吞按键
+        return false;
+      }
       this.confirmDialog("键位改动还未保存",
         "离开将放弃本次试用的改动; 点「保存」才会写入服务端(所有浏览器共享)。",
         { okText: "放弃并离开", cancelText: "留在此页" }).then((ok) => {
