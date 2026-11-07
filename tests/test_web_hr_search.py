@@ -1,7 +1,7 @@
 """test_web_hr_search 测试计划: HR web 端点与搜索 / 文件系统端点
 
 ## 测试计划(每个测试函数一条)
-- test_build_search_index_files: 搜索索引构建(hash -> name+files), 单条文件拉取失败跳过该种子
+- test_build_search_index_files: 搜索索引构建(hash -> name+files), 单条文件拉取失败跳过该种子(不入索引保持脏, 下轮重试成功后正常入索引)
 - test_build_search_index_incremental_and_evict: 增量维护(不重拉已建条目/补拉新增/淘汰已删)
 - test_build_search_index_budget_resumes: 限流分批构建, 未拉完保持脏, 续建至完成
 - test_build_search_index_aborts_when_disconnected: qB 断连时中止构建且不写空索引
@@ -59,35 +59,50 @@ from web_hr_support import (
 
 
 def test_build_search_index_files():
-    """build_search_index: 主循环构建索引(hash -> name+files), 单条文件拉取失败跳过该种子"""
-    from helpers import FakeClient, FakeTorrent, make_manager, seed_store, seed_store
+    """build_search_index: 主循环构建索引(hash -> name+files), 单条文件拉取失败跳过该种子
+
+    失败语义(issue 26-11-07-0536): 拉取失败的 hash 不进新字典(不把空文件列表当正式条目
+    缓存 —— 修复前 files=[] 永久生效, 文件兑底与文件行搜索失效到进程重启), 保持脏由下轮
+    续建自然重试; 重试成功后正常入索引。
+    """
+    from helpers import FakeClient, FakeTorrent, make_manager, seed_store
 
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
         client = FakeClient()
         mgr.client = client
         from helpers import _fake_file
-        client.files_map["HA"] = [_fake_file("movie.mkv", 0), _fake_file("sub.srt", 0)]
-        client.files_map["HB"] = [_fake_file("anime.mkv", 0)]
         t1 = FakeTorrent(hash="HA", name="Alpha", tracker_conf=None)
         t2 = FakeTorrent(hash="HB", name="Beta", tracker_conf=None)
         seed_store(mgr, [t1, t2])
 
-        # 让 HB 的文件拉取失败: files() 抛异常 -> 该种子 files 为空但不阻塞
-        def boom(h):
-            if h == "HB":
-                raise RuntimeError("fail")
-            return [_fake_file("movie.mkv", 0), _fake_file("sub.srt", 0)]
+        # 让 HB 的文件拉取失败: files() 抛异常 -> 该种子本轮不进索引(跳过, 不阻塞 HA)
+        state = {"fail_hb": True}
 
-        client.torrents_files = boom
+        def flaky(h):
+            if h == "HB" and state["fail_hb"]:
+                raise RuntimeError("fail")
+            if h == "HA":
+                return [_fake_file("movie.mkv", 0), _fake_file("sub.srt", 0)]
+            return [_fake_file("anime.mkv", 0)]
+
+        client.torrents_files = flaky
 
         mgr.build_search_index()
-        assert mgr.web.search_index_dirty is False
+        assert mgr.web.search_index_dirty is True, "有拉取失败: 保持脏(下轮续建重试), 不得当成已建完"
         idx = mgr.web.search_index
         assert idx["HA"]["name"] == "Alpha"
         assert "movie.mkv" in idx["HA"]["files"]
-        assert idx["HB"]["files"] == [], "文件拉取失败的种子 files 应为空"
-        assert set(idx.keys()) == {"HA", "HB"}
+        assert "HB" not in idx, "拉取失败的种子不进新字典(修复前缓存 files=[] 永久失效)"
+
+        # 下轮重试: 拉取恢复 -> HB 正常入索引, 已建条目(HA)不重拉
+        state["fail_hb"] = False
+        mgr.build_search_index()
+        assert mgr.web.search_index_dirty is False, "重试成功后不再脏"
+        idx2 = mgr.web.search_index
+        assert set(idx2.keys()) == {"HA", "HB"}
+        assert idx2["HB"]["files"] == ["anime.mkv"], "下轮重试成功后正常入索引"
+        assert idx2["HA"]["name"] == "Alpha" and "movie.mkv" in idx2["HA"]["files"], "已建条目原值保留"
 
 
 def test_build_search_index_incremental_and_evict():

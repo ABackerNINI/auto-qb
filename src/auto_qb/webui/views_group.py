@@ -129,7 +129,10 @@ class GroupMixin:
         # 落代时与上一已发布代比较, 增删即本代 full(R11 —— 标记派生自去重集合, 旧组键不归约)
         self.web.note_cross_keys(cross_keys)
         for key, members in tuple(self.store.groups.items()):
-            recs = [self.store.by_hash[h] for h in members if h in self.store.by_hash]
+            # 单步 get(issue 26-11-07-0536): 「in 判定 + 下标取值」两步之间主循环可并发
+            # pop/remove_torrent 或 _apply 换代回绑 by_hash(均不持 view_lock), 两步形态
+            # KeyError 使请求 500 —— 单步取值后判 None, 与 runtime_views 局部重聚合组段同款
+            recs = [rec for rec in (self.store.by_hash.get(h) for h in members) if rec is not None]
             row = self._build_group_row(key, recs, cross_keys)
             if row is not None:
                 view.append(row)

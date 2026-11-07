@@ -17,6 +17,8 @@
 - test_tracker_health_ignores_fetch_failure: 取数失败(qB 异常)按"取不到"处理 —— 不改现值, 只推进 TTL 时间戳
 - test_tracker_health_skips_paused: 暂停态不扫描(不发请求), 健康态保留不灭
 - test_tracker_health_error_state_reason_ttl_unchanged: error 态展示原因仍按 ERROR_REASON_TTL 重取(与改造前一致)
+- test_tracker_health_lit_schedules_by_lit_ttl: 已亮记录按 LIT_TTL(60s)调度而非 SUSPECT_TTL(30s)(issue 26-11-07-0536, 亮灯清 suspect 疑似/已亮互斥, 已亮复查不回去抖循环)
+- test_build_group_view_by_hash_probe_index_race: 组视图构建 by_hash 成员取值改单步 get(issue 26-11-07-0536, 竞态替身钉 pop 窗口 + 缺失成员按 None 跳过行为等价)
 - test_site_alert_priority_and_virtual_tracker: site_alert 判定单点 —— no_site_conf 优先于 tracker_error / 纯 DHT 不算缺配置 / 报错文本截断
 """
 
@@ -100,6 +102,39 @@ def test_build_group_view(tmp_path):
     assert [m["category"] for m in g["members"]] == ["anime", "anime"]
     # seeding_time 展示值按分钟取整(与 store 重建判定同一步长, 防视图内容与脏标记脱钩)
     assert [m["seeding_time"] for m in g["members"]] == [3600, 3600]
+
+
+def test_build_group_view_by_hash_probe_index_race(tmp_path):
+    """组视图构建的 by_hash 成员取值改单步 get(issue 26-11-07-0536 #4)
+
+    「in 判定 + 下标取值」两步之间主循环可并发 pop 该 hash(remove_torrent / _apply 换代
+    回绑 by_hash, 均不持 view_lock), 两步形态 KeyError 使 Web 请求 500 —— 单步取值后判
+    None 跳过。确定性竞态替身把 pop 钉在两步之间; 行为等价面: 成员已删(groups 残留)时
+    按缺失跳过, 组行以剩余成员构建。
+    """
+    from helpers import FakeClient, FakeTorrent, make_manager, seed_store
+
+    mgr = make_manager(str(tmp_path / "state.json"))
+    mgr.config.grouping.enabled = True
+    mgr.client = FakeClient()
+    t1 = FakeTorrent(hash="HA", name="Show", state="stalledUP", save_path=r"R:/s")
+    t2 = FakeTorrent(hash="HB", name="Show", state="stalledUP", save_path=r"R:/s")
+    seed_store(mgr, [t1, t2])
+    key = ("R:/s", ("a.mkv", "b.mkv"))
+    mgr.store.groups[key] = ["HA", "HB"]
+    mgr.store.member_to_key["HA"] = key
+    mgr.store.member_to_key["HB"] = key
+
+    # 竞态注入: __contains__ 判真后立即 pop victim(修复前两步形态在此抛 KeyError)
+    mgr.store.by_hash = _PopBetweenProbeAndIndex(mgr.store.by_hash, "HB")
+    view = mgr._build_group_view()
+    assert len(view) == 1
+    assert view[0]["count"] == 2, "单步 .get 不经过 __contains__: 竞态窗口不复存在, 按当刻快照完整构建"
+
+    # 行为等价面: 成员已被主循环删掉(groups 条目残留)时按缺失跳过, 不抛 KeyError
+    mgr.store.by_hash = {h: rec for h, rec in mgr.store.by_hash.items() if h != "HB"}
+    view = mgr._build_group_view()
+    assert view[0]["count"] == 1, "缺失成员按 None 过滤跳过, 组行以剩余成员构建"
 
 
 def test_build_group_view_cross_group_conflict_flag(tmp_path):
@@ -353,6 +388,23 @@ def test_member_view_occ_key(tmp_path):
     assert seed["HC"]["occ_key"] is None
 
 
+class _PopBetweenProbeAndIndex(dict):
+    """确定性竞态替身(dict 子类, 批A tests/test_webui_delta_merge.py 同款): __contains__ 判真后
+    立即 pop victim —— 把主循环的并发删除钉在「in 判定」与「下标取值」两步之间的窗口内
+    (remove_torrent 原地 pop / _apply 换代回绑 by_hash, 均不持 view_lock; Web 线程经
+    ensure_view/ensure_state 触发的组视图重建读同一字典)。修复后的单步 .get(h) 不再经过
+    __contains__, 窗口不复存在。"""
+    def __init__(self, inner, victim):
+        super().__init__(inner)
+        self._victim = victim
+
+    def __contains__(self, h):
+        has = super().__contains__(h)
+        if has and h == self._victim:
+            dict.pop(self, h, None)  # 竞态窗口: 判真后主循环 pop 落地
+        return has
+
+
 def _tracker_calls(client):
     """给 FakeClient 的 torrents_trackers 挂调用计数器(返回被查询过的 hash 列表)
 
@@ -540,6 +592,48 @@ def test_tracker_health_debounce_state_machine(tmp_path):
     mgr.refresh_tracker_health()
     assert t.tracker_health_msg == "" and t.tracker_suspect_since == 0.0, "恢复即灭"
     assert mgr._member_view(t)["site_alert"] == ""
+
+
+def test_tracker_health_lit_schedules_by_lit_ttl(tmp_path):
+    """已亮记录按 LIT_TTL(60s)调度而非 SUSPECT_TTL(30s)(issue 26-11-07-0536 #2)
+
+    修复前不变量 "health_msg 非空 ⟹ suspect_since 非零" 让已亮记录恒走疑似分档:
+    buckets[1](elif health_msg)不可达, 已亮记录按 30s 复查(/trackers 请求量翻倍),
+    「疑似 -> 已亮 -> error 态」的预算分档失效。修复: 亮灯时清 suspect_since(疑似与
+    已亮互斥), 已亮记录落 LIT_TTL 分档; 已亮复查仍报错走"保持已亮"分支, 不回疑似去抖循环。
+    """
+    from helpers import FakeClient, FakeTorrent, FakeTracker, make_manager, seed_store
+
+    mgr = make_manager(str(tmp_path / "state.json"))
+    client = FakeClient()
+    mgr.client = client
+    client.trackers_map["HA"] = [{"url": "https://tracker.hhanclub.net/announce.php", "status": 4, "msg": "连接被拒"}]
+    t = FakeTorrent(hash="HA", name="A", state="stalledUP", tracker="https://tracker.hhanclub.net/announce.php")
+    t.tracker_conf = FakeTracker("HHan")
+    seed_store(mgr, [t])
+    seen = _tracker_calls(client)
+
+    # 去抖: 首次疑似 -> 满窗亮灯
+    mgr.refresh_tracker_health()
+    t.tracker_health_ts = time.time() - 31
+    t.tracker_suspect_since = time.time() - 31
+    mgr.refresh_tracker_health()
+    assert t.tracker_health_msg == "连接被拒", "满窗复查仍报错 -> 确认亮"
+    assert t.tracker_suspect_since == 0.0, "亮灯时清疑似起点(疑似与已亮互斥), 已亮记录由此落 LIT_TTL 分档"
+
+    # 亮灯后 45s(> SUSPECT_TTL 30s, < LIT_TTL 60s): 不重取 —— 修复前按 30s 疑似分档此处会重取
+    mgr.web.group_view_dirty = False
+    t.tracker_health_ts = time.time() - 45
+    mgr.refresh_tracker_health()
+    assert seen == ["HA", "HA"], "已亮未到 LIT_TTL: 不重取(修复前按 SUSPECT_TTL 30s 会重取, 请求量翻倍)"
+    assert mgr.web.group_view_dirty is False
+
+    # 61s(> LIT_TTL 60s): 到期重取; 同报错保持已亮, 不回疑似去抖循环
+    t.tracker_health_ts = time.time() - 61
+    mgr.refresh_tracker_health()
+    assert seen == ["HA", "HA", "HA"], "LIT_TTL 到期才重取"
+    assert t.tracker_health_msg == "连接被拒", "仍报错: 保持已亮"
+    assert t.tracker_suspect_since == 0.0, "已亮复查不得重回疑似去抖循环"
 
 
 def test_tracker_health_ignores_fetch_failure(tmp_path):

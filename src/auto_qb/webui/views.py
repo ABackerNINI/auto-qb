@@ -12,15 +12,13 @@
 - self.client               qB 原始客户端(搜索索引拉取文件列表用)
 - self.web                  WebUIRuntime(快照 / 脏标记 / 搜索索引 / 命令投递)
 """
-import logging
-import re
 from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
 
 from qbittorrentapi import TorrentState, TrackerStatus
 
 from ..hr.resolve import safety_display
-from ..infra.utils import VIRTUAL_TRACKER_PREFIXES, encode_group_key
-from ..torrents import TorrentRecord, view_field_value
+from ..infra.utils import VIRTUAL_TRACKER_PREFIXES
+from ..torrents import TorrentRecord
 
 if TYPE_CHECKING:
     from ..core.tvshows import ParsedRelease
@@ -44,9 +42,6 @@ from .views_common import (
     _SHOW_STATE_RANK_LAST,
     _TRACKER_ERROR_STATUSES,
     _VIRTUAL_TRACKER_PREFIXES,
-    _ep_sort_key,
-    _max_valid_ts,
-    _min_valid_eta,
     _parse_query,
     _search_norm,
     logger,
@@ -174,9 +169,15 @@ class WebviewMixin(GroupMixin, RowMixin, EpisodesMixin, SearchMixin):
         去抖状态机(计划 §3.2, 按**墙钟**不按观测次数):
           无报错        -> 清 health_msg 与 suspect_since(恢复即灭)
           有报错·首次   -> 只置 suspect_since(不亮), 调度器 30s 后复查
-          有报错·满窗   -> 写 health_msg(亮), 此后按 60s 复查等恢复
+          有报错·满窗   -> 写 health_msg(亮)并清 suspect_since, 此后按 60s 复查等恢复
+          有报错·已亮   -> 保持已亮(报错文本变了就换), 不回疑似去抖循环
           有报错·未满窗 -> 不动, 等下次复查
         取数失败(None): 不动任何现值 —— 只保留本次已推进的 TTL 时间戳。
+
+        不变量(issue 26-11-07-0536): 疑似与已亮**互斥** —— 亮灯即清 suspect_since,
+        已亮记录由此落入 _tracker_health_due / refresh_tracker_health 的 LIT_TTL(60s)
+        分档。修复前 health_msg 非空 ⟹ suspect_since 非零, suspect 分支把已亮记录吃进
+        SUSPECT_TTL(30s)档, buckets[1] 恒不可达(/trackers 请求量对已亮记录翻倍)。
         """
         rec.tracker_health_ts = now
         is_err = self.state_kind(rec) == "error"
@@ -194,14 +195,23 @@ class WebviewMixin(GroupMixin, RowMixin, EpisodesMixin, SearchMixin):
                 rec.tracker_suspect_since = 0.0
                 changed.add(rec.hash)
             return
+        if rec.tracker_health_msg:
+            # 已亮且仍报错: 保持已亮(报错文本变了就换), 不回疑似去抖循环 —— 否则每次复查
+            # 都重走 30s 去抖, 已亮分档(LIT_TTL)失效
+            if msg != rec.tracker_health_msg:
+                rec.tracker_health_msg = msg
+                changed.add(rec.hash)
+            return
         if not rec.tracker_suspect_since:
             rec.tracker_suspect_since = now  # 首次疑似: 不亮, 30s 后复查确认
             return
         if now - rec.tracker_suspect_since < TRACKER_DEBOUNCE_WINDOW:
             return  # 未满窗: 等下次复查
-        if rec.tracker_health_msg != msg:
-            rec.tracker_health_msg = msg
-            changed.add(rec.hash)
+        # 满窗确认 -> 亮灯, 同时清疑似起点(疑似与已亮互斥, issue 26-11-07-0536): 已亮记录
+        # 由此落入 LIT_TTL(60s)分档, 而非被 suspect 分支吃进 SUSPECT_TTL(30s)
+        rec.tracker_health_msg = msg
+        rec.tracker_suspect_since = 0.0
+        changed.add(rec.hash)
 
     def refresh_tracker_health(self) -> None:
         """主循环调用: 统一的 tracker 健康取数器(error 态展示原因 + 站点 chip 健康图标)
@@ -250,7 +260,7 @@ class WebviewMixin(GroupMixin, RowMixin, EpisodesMixin, SearchMixin):
                 continue  # 未到期: 直接复用现值
             if rec.tracker_suspect_since:
                 buckets[0].append(rec)
-            elif rec.tracker_health_msg:
+            elif rec.tracker_health_msg:  # 已亮(suspect 已清, 与疑似互斥): LIT_TTL 分档
                 buckets[1].append(rec)
             elif is_err:
                 buckets[2].append(rec)
@@ -412,7 +422,7 @@ class WebviewMixin(GroupMixin, RowMixin, EpisodesMixin, SearchMixin):
         `_search_index` 引用 —— 绝不就地增删旧字典, 否则 Web 线程正在迭代时会抛
         "dictionary changed size during iteration"。已建条目只刷新名称(值替换不改结构, 并发只读安全),
         新种子拉取文件列表(rec.files 惰性拉取 + 记录 _files 跨 tick 缓存, 只在主循环线程), 单条失败
-        跳过(记空文件列表)不阻塞整体。
+        跳过(该 hash 不进新字典, 保持脏由下轮续建重试 —— 不把空文件列表当正式条目缓存)不阻塞整体。
         限流: 单次最多拉取 SEARCH_INDEX_BUILD_BUDGET 条, 未拉完保持 web.search_index_dirty=True,
         由后续调用(下一 tick 推进 / 前端据 building 重查投递)续建 —— 避免首轮 N 次 API 长时间阻塞主循环。
         """
@@ -424,17 +434,22 @@ class WebviewMixin(GroupMixin, RowMixin, EpisodesMixin, SearchMixin):
         idx: dict = {}
         budget = SEARCH_INDEX_BUILD_BUDGET
         added = 0  # 本轮新增条目数(追剧视图文件兑底的重建触发依据)
+        fetch_failed = False  # 本轮有文件拉取失败: 失败 hash 不进索引, 保持脏下轮重试
         for h, rec in self.store.by_hash.items():
             entry = prev.get(h)
             if entry is not None:
                 entry["name"] = rec.name
             elif budget > 0:
                 budget -= 1
-                added += 1
                 try:
                     files = [f.name for f in rec.files(self.client)]
                 except Exception:
-                    files = []
+                    # 拉取失败(issue 26-11-07-0536): 该 hash 不进新字典 —— 不把空文件列表当
+                    # 正式条目缓存(修复前 files=[] 永久生效, 文件兑底与文件行搜索失效到重启);
+                    # 下轮续建时该 hash 仍是"新种子", 自然重试
+                    fetch_failed = True
+                    continue
+                added += 1
                 entry = {"name": rec.name, "files": files, "files_q": [_search_norm(f) for f in files]}
             else:
                 # 预算用尽: 剩余种子本轮不进新字典(下次调用续建), 保持脏
@@ -444,7 +459,7 @@ class WebviewMixin(GroupMixin, RowMixin, EpisodesMixin, SearchMixin):
                 return
             idx[h] = entry
         self.web.search_index = idx
-        self.web.search_index_dirty = False
+        self.web.search_index_dirty = fetch_failed  # 有失败: 保持脏(待重试), 全部成功才视为已建完
         self._trigger_shows_rebuild_if_pending(added)
 
     def _group_hashes(self, key: tuple) -> List[str]:
