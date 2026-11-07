@@ -442,4 +442,7 @@ _CONSOLE_RADIUS_ALLOW = {
     "var(--radius)",
     "var(--radius-sm)",
     "var(--radius-sm, 4px)",
+    # 迁移浮窗状态圆点(plan 26-11-07-2344 D12): 形状随皮肤 = calc(var(--radius-sm)/2) 单点
+    # 自适应 —— console 令牌 0px, calc 结果仍 0(方角), 不破坏 console 设计语言(判据 1 钉令牌)。
+    "calc(var(--radius-sm, 4px) / 2)",
 }

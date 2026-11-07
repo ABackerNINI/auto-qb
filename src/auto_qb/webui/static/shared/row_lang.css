@@ -638,38 +638,51 @@ html[data-rowlang="wave"]:not([data-theme="frost"]):not([data-theme="golden"]) .
 .relc-btn:hover:not(:disabled) { background: var(--bg-hover, rgba(255,255,255,.08)); }
 .relc-btn:disabled { opacity: .55; cursor: default; }
 
-/* ================= 迁移悬停浮窗 .relpop(T3b 重写; plan 26-11-07-2344 S3 临时兜底) =================
- * !本段只是「让浮窗可读」的最小兜底, 正式样式(色条全出血/标签状态色/宽度 max-content 上限
- * min(94%,680px)/皮肤圆点圆角 calc(var(--radius-sm)/2) 等)在 S4 重写本段。
- * teleport 到 body 级(脱离 .rl-scope) -> 选择器不带 .rl-scope 前缀; z-index 同 .hr-pop 层(140,
- * 单点在四皮肤 dialogs.css)。tone 色类复用行内 .rel-tone-*(上面 S2 段, 走 --accent/--warn/--error)。 */
+/* ================= 迁移悬停浮窗 .relpop(plan 26-11-07-2344 S3/S4, 定稿视觉 =
+ *   memory-bank/plans/attachments/relocate-status-display-v2-mockup.html) =================
+ * teleport 到 body 级(不在 .rl-scope 内) -> 选择器不带 .rl-scope 前缀(与 .hr-pop 同口径);
+ * z-index 140 同 .hr-pop 实际值(单点在四皮肤 dialogs.css)。
+ * 宽度 max-content 随最长元素, 上限 min(94%, 680px)(D11); 状态圆点圆角 =
+ * calc(var(--radius-sm)/2) 单点自适应四皮肤(atlas 3.5 圆感 / flux·console 0 方 / prism 2)(D12);
+ * 「当前位置」行(标签+值)固定色 --path-src 不随状态(D15, 四皮肤令牌表各定值),
+ * 「目标位置」行 currentColor = 状态色强调(D13); 分隔条 3px 负边距全出血(D10)。
+ * tone 色类在浮窗内另给一份(.relpop 域): teleport 后行内 S2 段的 .rl-scope .rel-tone-* 不命中,
+ * 圆点/分隔条/目标位置行的 currentColor 全靠这四条着色。 */
 .relpop {
   position: fixed; left: 0; top: 0; z-index: 140; box-sizing: border-box;
-  max-width: min(94%, 680px); padding: 10px 12px 9px;
-  color: var(--fg, #e4eaef); background: var(--bg-pop, #1a2231);
-  border: 1px solid var(--border-strong, #2c3944); border-radius: var(--radius-sm, 4px);
-  box-shadow: var(--shadow-3, 0 8px 24px rgba(0, 0, 0, .45)); color-scheme: dark;
+  width: max-content; max-width: min(94%, 680px); padding: 10px 12px 9px;
+  font-size: 12px; line-height: 1.55; color: var(--fg, #e4eaef);
+  background: var(--bg-pop, #1a2231); border: 1px solid var(--border-strong, #2c3944);
+  border-radius: var(--radius-sm, 4px); box-shadow: var(--shadow-2, 0 6px 18px rgba(0, 0, 0, .22));
+  color-scheme: dark;
 }
-.rp-arrow { position: absolute; width: 10px; height: 10px; transform: rotate(45deg); display: none;
-  background: var(--bg-pop, #1a2231); }
-.relpop.above .rp-arrow { display: block; bottom: -5.5px;
-  border-right: 1px solid var(--border-strong, #2c3944); border-bottom: 1px solid var(--border-strong, #2c3944); }
-.relpop.below .rp-arrow { display: block; top: -5.5px;
+.relpop .rel-tone-moving { color: var(--accent, #3aa6a6); }
+.relpop .rel-tone-pending { color: var(--warn, #f5bb42); }
+.relpop .rel-tone-failed { color: var(--error, #f3766f); }
+.relpop .rel-tone-mixed { color: var(--warn, #f5bb42); }
+/* 指向箭头: 照 .hr-pop 的 .hp-arrow 形态(8px 旋转方块, 上下翻两态换边), 不抽公共类 */
+.rp-arrow { position: absolute; width: 8px; height: 8px; display: none; transform: rotate(45deg);
+  background: var(--bg-pop, #1a2231);
   border-left: 1px solid var(--border-strong, #2c3944); border-top: 1px solid var(--border-strong, #2c3944); }
-.rp-head { display: flex; align-items: center; gap: 7px; font-weight: 600; font-size: 12.5px; }
-.rp-dot { width: 8px; height: 8px; flex: none; background: currentColor; }
-.rp-phase { font-family: var(--font-mono, monospace); font-size: 10.5px; font-weight: 400;
+.relpop.below .rp-arrow { display: block; top: -4.5px; }
+.relpop.above .rp-arrow { display: block; bottom: -4.5px; border: 0;
+  border-right: 1px solid var(--border-strong, #2c3944); border-bottom: 1px solid var(--border-strong, #2c3944); }
+.rp-head { display: flex; align-items: center; gap: 7px; font-weight: 600; }
+.rp-dot { width: 8px; height: 8px; flex: none; background: currentColor;
+  border-radius: calc(var(--radius-sm, 4px) / 2); }
+.rp-phase { font-family: var(--font-mono, ui-monospace, monospace); font-size: 10.5px; font-weight: 400;
   color: var(--fg-dim, #a2b0bd); margin-left: 4px; }
 .rp-sep { height: 3px; margin: 6px -12px 8px; background: currentColor; }
-.rp-paths { display: flex; flex-direction: column; gap: 4px; margin: 0 0 9px; }
+.rp-paths { display: flex; flex-direction: column; gap: 4px; margin: 0 0 9px; min-width: 0; }
 .rp-pr { display: flex; gap: 7px; align-items: baseline; min-width: 0; }
 .rp-pl { flex: none; width: 46px; font-size: 10px; color: var(--path-src, #7d9bc2); }
-.rp-pv { font-family: var(--font-mono, monospace); font-size: 11.5px; line-height: 1.4;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.rp-pv.rp-em { color: var(--accent, #3aa6a6); }
-.rp-kv { display: flex; gap: 8px; padding: 1.5px 0; min-width: 0; font-size: 11px; }
+.rp-pv { font-family: var(--font-mono, ui-monospace, monospace); font-size: 11.5px; line-height: 1.4;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
+  color: var(--path-src, #7d9bc2); }
+.rp-pv.rp-em { color: currentColor; }
+.rp-kv { display: flex; gap: 8px; padding: 1.5px 0; min-width: 0; }
 .rp-k { flex: none; width: 44px; color: var(--fg-dim, #a2b0bd); }
-.rp-v { font-family: var(--font-mono, monospace); font-size: 11px;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.rp-reason { margin-top: 5px; padding-top: 5px; border-top: 1px solid var(--border-soft, #26313a);
-  color: var(--error, #f3766f); font-size: 11px; }
+.rp-v { font-family: var(--font-mono, ui-monospace, monospace); font-size: 11px; color: var(--fg, #e4eaef);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.rp-reason { margin-top: 5px; padding-top: 5px; border-top: 1px solid var(--border-soft, rgba(255, 255, 255, .07));
+  color: var(--error, #f3766f); }
