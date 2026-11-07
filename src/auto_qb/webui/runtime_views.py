@@ -227,10 +227,10 @@ class ViewsMixin:
     def flush_views(self, force: bool = False) -> None:
         """消费视图脏标记并在 Web 活跃时惰性重建(同步线 / 任务线各自调用一次)
 
-        每拍次序(plan 26-10-07-0414 S2): ①先排空 store 增量为脏行键并入 `_delta_pending`
-        —— **先于**"已取走"门控, 门控跳拍的键集累积进下一代不丢(R4); ②消费 view_changed
+        每拍次序(plan 26-10-07-0414 S2): 1.先排空 store 增量为脏行键并入 `_delta_pending`
+        —— **先于**"已取走"门控, 门控跳拍的键集累积进下一代不丢(R4); 2.消费 view_changed
         置脏(keyed 判定须联合 `rounds_applied` 前进, 防「最近一轮」快照残值误判, 见下);
-        ③HR 判定新鲜度波次置脏; ④门控通过才 `rebuild_views()`。落代在 `_publish_locked`:
+        3.HR 判定新鲜度波次置脏; 4.门控通过才 `rebuild_views()`。落代在 `_publish_locked`:
         跨拍累积折叠进 `_delta_timeline` —— **只存键不存值**, 行内容回放时从当前已发布视图
         现取(R1); 四视图 + 版本号在同一 `view_lock` 临界区内发布(「四视图同轮发布」硬约束,
         模块 docstring), 主循环与 Web 线程的 ensure_* 兜底都只经这一条发布路径 —— 单一写
@@ -371,6 +371,12 @@ class ViewsMixin:
         # 局部重聚合只刷新脏行的 HR 派生字段, 波次未捕获会让未脏行的 HR 字段永久陈旧
         hr = getattr(host, "hr", None)
         hr_wave = hr is not None and hr.revision != self._hr_rev_at_build
+        if hr_wave:
+            # 时间线侧同源登记(issue 26-11-07-0536): 重建侧分叉由下面的 partial 判定兜住,
+            # 但 fold 落代只看 _pending_full_reasons —— 不登记则本代落 full=False 条目且
+            # 键集仅含 store 增量键, HR 派生字段变更不进时间线, delta 客户端停旧值直到
+            # 下一个 full 代才自愈。理由名与 flush_views 的 mark_dirty 登记点同一来源。
+            self._pending_full_reasons.add("hr_revision")
         has_keys = bool(
             upsert["torrent"] or upsert["group"] or upsert["show"] or removed["torrent"] or removed["group"] or
             removed["show"]
@@ -472,7 +478,10 @@ class ViewsMixin:
         old_group_keys = {r["key"] for r in self.group_view}
         for k in list(upsert["group"]):  # 快照迭代: 重建为空的行止转换写回原集合(fold 读同一对象)
             members = store.groups.get(k) or ()
-            recs = [store.by_hash[h] for h in members if h in store.by_hash]
+            # 单步 get(issue 26-11-07-0536): 「in 判定 + 下标取值」两步之间主循环可并发
+            # pop/remove_torrent 或 _apply 换代回绑 by_hash(均不持 view_lock), 两步形态
+            # KeyError 使请求 500 —— 单步取值后判 None, 与本函数 singles/flat/shows 段同款
+            recs = [rec for rec in (store.by_hash.get(h) for h in members) if rec is not None]
             row = host._build_group_row(k, recs, cross_keys)
             enc = _utils.encode_group_key(k)
             if row is not None:
@@ -611,10 +620,10 @@ class ViewsMixin:
         降到约 1/4。四视图仍共享同一版本号 —— 切视图时前端把 lastRid 置空强制取一次全量。
 
         **增量归约**(plan 26-10-07-0414 S3/S9b): 双重门控后才走归约分支 ——
-        ①协商: 请求带 delta=1(路由层解析)才允许归约, 未带协商参数的请求**不进归约**,
+        1.协商: 请求带 delta=1(路由层解析)才允许归约, 未带协商参数的请求**不进归约**,
         响应与历史版本逐字节等价(无 full 键)—— S3 与 S4 各自独立提交/回滚的兼容闸
         (P-01 定案: 未升级前端把增量载荷当全量吃会四数组 undefined 白屏);
-        ②启用矩阵: view ∈ _DELTA_VIEWS(group/torrent/show); 缺省与未知值一律 full(无视图
+        2.启用矩阵: view 属于 _DELTA_VIEWS(group/torrent/show); 缺省与未知值一律 full(无视图
         上下文可裁剪)。归约判定详见 _reduce_delta; 窗外/窗内含 full 代/防御检查不过时
         (R10)回落全量并标 full: true。
         """

@@ -23,6 +23,9 @@
 ### T2a2 覆盖率第三轮: 剧视图余下小件
 - test_agg_show_node_hr_counts_and_show_row_empty_title: _agg_show_node 的 HR 计数分支(触发计数/未达标 pending 两弧)与 _build_show_row 空标题成员分支(titles 不累加, 展示名回落剧键)直驱
 - test_build_shows_view_row_none_guard_and_pending_no_repost: _build_shows_view 行剔除防御弧(单剧可调用回 None -> 行不进视图, 确定性替身直驱)与全量路径 pending 兑底接线(索引已建成且无脏 -> 只登记 shows_pending 不重投 build_search_index)
+### issue 26-11-07-0536 批A
+- test_ensure_state_publish_hr_wave_lands_full_timeline_entry: ensure_state 触发的发布检出 hr_wave(flush 判定点后 HR worker 才推进 revision, 门控又推迟了重建)-> 发布路径登记 hr_revision 理由, fold 落 full=True 条目(修复前 full=False 且键集仅 store 增量键, HR 派生字段变更不进时间线); 理由随落代清空、基线前移不循环
+- test_publish_partial_group_members_by_hash_probe_index_race: 局部重聚合组段成员取值改单步 by_hash.get —— 确定性替身(dict 子类)把主循环 pop 钉在「in 判定」与「下标取值」之间(修复前 KeyError 使请求 500), 局部路径照常完成且组行按当刻快照完整重建
 """
 
 import inspect
@@ -246,6 +249,43 @@ def test_publish_partial_merge_skeleton_single_point():
     assert ".pop(k) if k in" not in caller  # 调用方内联合并骨架零残留
     helper = inspect.getsource(WebUIRuntime._merge_rows)
     assert helper.count(".pop(k) if k in") == 1  # 骨架在单点里恰一份
+
+
+class _PopBetweenProbeAndIndex(dict):
+    """确定性竞态替身(dict 子类): __contains__ 判真后立即 pop victim —— 把主循环的并发
+    删除钉在「in 判定」与「下标取值」两步之间的窗口内(remove_torrent 原地 pop / _apply
+    增量轮换代回绑 by_hash, 均不持 view_lock; ensure_state 触发的发布在 Web 线程读)。
+    修复后的单步 .get(h) 不再经过 __contains__, 窗口不复存在。"""
+    def __init__(self, inner, victim):
+        super().__init__(inner)
+        self._victim = victim
+
+    def __contains__(self, h):
+        has = super().__contains__(h)
+        if has and h == self._victim:
+            dict.pop(self, h, None)  # 竞态窗口: 判真后主循环 pop 落地
+        return has
+
+
+def test_publish_partial_group_members_by_hash_probe_index_race():
+    """issue 26-11-07-0536 #3: 局部重聚合组段成员取值改单步 get —— 「in 判定 + 下标取值」
+    两步之间主循环 pop 该 hash 时 KeyError 使请求 500。确定性替身把 pop 钉在两步之间;
+    行为等价面: 与 singles/flat 段同款按当刻快照取值, 本代局部路径照常完成不降级"""
+    store = make_store("H1", "H2")
+    store.member_to_key["H1"] = ("R:\\D", )
+    store.member_to_key["H2"] = ("R:\\D", )
+    store.groups[("R:\\D", )] = ["H1", "H2"]
+    rt = _delta_runtime(store)
+    rt.mark_dirty()
+    _publish(rt)  # 基线代: 组行在视图
+    _beat(store, "H1", dlspeed=321)
+    store.by_hash = _PopBetweenProbeAndIndex(store.by_hash, "H1")
+    entry = _publish(rt)  # 修复前: in 判真后下标取值踩空 -> KeyError
+    assert entry["full"] is False  # 竞态不炸也不降级: 本代仍走局部路径
+    gkey = encode_group_key(("R:\\D", ))
+    row = _rows_by(rt.group_view, "key")[gkey]
+    assert [m["hash"] for m in row["members"]] == ["H1", "H2"]  # 单步 get 按当刻快照完整重建
+    assert [m["dlspeed"] for m in row["members"]] == [321, 0]
 
 
 def test_s8_added_hash_registered_without_candidates():
@@ -526,6 +566,40 @@ def test_publish_hr_baseline_holds_when_revision_moves_mid_build():
     rt.pending_ver = None
     rt.flush_views()
     assert rt.group_view_dirty is False, "基线已前移, 不得循环置脏"
+
+
+def test_ensure_state_publish_hr_wave_lands_full_timeline_entry():
+    """issue 26-11-07-0536 #1: ensure_state 触发的发布检出 hr_wave -> 登记理由落 full=True 条目
+
+    重建侧分叉早就兜住(flush_views 同款判定), 缺的是时间线侧: HR worker 在 flush 的判定
+    点**之后**推进 revision 时, flush 的 mark_dirty(full, "hr_revision") 登记没赶上, 发布
+    路径只重建不登记 -> fold 见理由为空落 full=False 条目且键集仅含 store 增量键, HR 派生
+    字段变更不进时间线, delta 客户端停旧值直到下一个 full 代才自愈。修复 = 发布路径与
+    flush 登记点同源登记, 落代即 full(整表重取语义)且理由清空、基线前移不循环。
+    """
+    store = make_store("H1")
+    rt = _delta_runtime(store)
+    rt._host.hr = SimpleNamespace(revision=1)
+    rt.mark_dirty()
+    _publish(rt)  # 基线代: 基线记当刻 revision
+    assert rt._hr_rev_at_build == 1
+    # 主循环一拍: keyed 路径 mark_dirty, 但上一版未被取走 -> 门控推迟重建; flush 的 HR
+    # 判定读到的还是 revision=1(波次未现), 不登记理由
+    _beat(store, "H1", dlspeed=512)
+    rt.pending_ver = 99  # 模拟上一版未被取走: 门控拦下本轮重建
+    rt.flush_views()
+    assert rt.group_view_dirty is True  # 前置: 脏已置上, 重建被门控推迟
+    assert rt._pending_full_reasons == set()  # 前置: flush 判定点未见波次, 理由为空
+    # HR worker 推进 revision(flush 判定点之后), Web 线程经 ensure_state 触发发布
+    rt._host.hr = SimpleNamespace(revision=2)
+    rt.ensure_state(None)
+    entry = rt._delta_timeline[-1]
+    assert entry["full"] is True  # 修复前: full=False 且键集仅 store 增量键, HR 变更不进时间线
+    assert rt._pending_full_reasons == set()  # 理由随落代清空
+    assert rt._hr_rev_at_build == 2  # 基线前移: 下一拍不再波次
+    # 对照: revision 未再变的后继拍恢复行级增量, 不循环 full
+    _beat(store, "H1", dlspeed=700)
+    assert _publish(rt)["full"] is False
 
 
 def test_show_partial_pending_without_index_coverage_does_not_repost_command():
