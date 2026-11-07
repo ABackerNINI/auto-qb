@@ -11,9 +11,8 @@
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 - [chore] [版本号双源矛盾: __init__.__version__ 0.2.0 vs pyproject 0.1.0](../26-09-21-1408-chore-version-dual-source.html) — WebUI 顶栏透出与打包元数据已差一个 minor; 建议 pyproject 单源 + 动态读取
 
-## Open (51)
+## Open (50)
 
-- [bug] [重定向链接位被真文件占据时会删掉真文件(真目录有保护, 真文件没有)](../26-11-07-0748-bug-relocate-retarget-real-file-unlink.html) — retarget_alias 只护真目录(非空拒绝/空则 rmdir), 真文件位落到 remove_alias 的 os.unlink —— 静默删除真实数据
 - [bug] [存量评审 R4·scripts 汇总(major 1/minor 23)](../26-11-07-0536-bug-legacy-review4-scripts.html) — scripts 主题 major 1+minor 23 共 24 条聚合入池,来源存量评审 R4(计划 26-11-05-2335)
 - [bug] [存量评审 R4·static 汇总(major 24/minor 111)](../26-11-07-0536-bug-legacy-review4-static.html) — static 主题 major 24+minor 111 共 135 条聚合入池,来源存量评审 R4(计划 26-11-05-2335)
 - [bug] [存量评审 R4·webui-py 汇总(major 2/minor 23)](../26-11-07-0536-bug-legacy-review4-webui-py.html) — webui-py 主题 major 2+minor 23 共 25 条聚合入池,来源存量评审 R4(计划 26-11-05-2335)
@@ -65,8 +64,9 @@
 - [bug] [设置页警示条是伪警示: 只复述 schema 风险文案, 不反映配置健康; 升级失效键无任何提示](../26-09-22-2002-bug-webui-config-health-warning.html) — 首页警示条由『已配置且 schema 带 risk 文案』驱动, 恒亮、静态、与配置健康无关; 且 load_config 对 schema 外键静默忽略, 版本升级后配置项失效无任何提示
 - [chore] [hatch-pet 调付费 OpenAI 图像 API 且无成本提示](../26-09-20-1427-chore-skill-hatch-pet-api-cost.html) — hatch-pet 生成图会直连 api.openai.com 计费接口, skill 未标注费用风险
 
-## Done (436)
+## Done (437)
 
+- [bug] [重定向链接位被真文件占据时会删掉真文件(真目录有保护, 真文件没有)](../26-11-07-0748-bug-relocate-retarget-real-file-unlink.html) — retarget_alias 只护真目录(非空拒绝/空则 rmdir), 真文件位落到 remove_alias 的 os.unlink —— 静默删除真实数据
 - [docs] [guards.md 未登记 test_mypy_allowlist_guard 守阵](../26-11-06-0744-docs-guards-mypy-allowlist-unregistered.html) — 守阵清单缺一行: tests/test_mypy_allowlist_guard.py 从未登记进 guards.md, 违反该文件新增守阵须登记的口径
 - [bug] [review.check --root 快照目录被 .git 存在性检查误拒](../26-11-06-0711-bug-review-check-snapshot-root.html) — 存量评审 R4 的既定用法 review.check --root <快照目录> 被 _resolve_root 的 .git 检查拒收,与命令自身 help 文档矛盾;_verify 实际与 git 无关
 - [chore] [pyproject.toml 存量带圈数字注释与 code-style 非 ASCII 图形符号禁令冲突](../26-11-06-0624-chore-pyproject-circled-number-comments.html) — 配置注释 22 行含带圈数字编号(1)-(18), 禁令要求代码/配置一律 ASCII; 本轮新增注释已用 ASCII, 存量待清

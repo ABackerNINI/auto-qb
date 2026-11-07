@@ -93,6 +93,16 @@ CI 红修复(POSIX 口径, 26-11-07):
 - test_alias_kind_of_real_dir_is_none: 真目录(含子目录, POSIX nlink>=2)不被 nlink 判据认成
   硬链接 —— 缺了它「非空真目录占据链接位」拒绝分支在 Linux 上会拿目录去 unlink
 
+真文件占位保护(issue 26-11-07-0748, 26-11-07):
+- test_retarget_alias_refuses_real_file_at_link_position: 链接位被真文件占据 -> 拒绝不动数据
+  (形态非 hardlink / 无 kind 防御支 / hardlink 形态但与新目标尺寸不一致三路, 文件原样保留)
+- test_retarget_alias_refuses_foreign_reparse_tag_real_file: 非链接重解析标签的真体(OneDrive
+  云占位符形态, lstat 桩)同样进真文件保护支 —— 链接标签豁免只认 MOUNT_POINT/SYMLINK
+- test_retarget_alias_allows_hardlink_twin_residue: hardlink 孪生残名(qB 搬移删另一名字后
+  nlink 收敛 1 的真文件)与新目标同尺寸 -> 放行删除照常重建(同卷保 hardlink 形态)
+- test_retarget_alias_twin_residue_cross_volume_falls_back_to_symlink: 孪生残名占位且跨卷 ->
+  放行删除后回落 symlink(N10 生产形态, 不进 EXDEV 死循环)〔无 symlink 建链能力的环境 skip〕
+
 ## 环境能力 skip(2026-10-18, issue 26-10-18-2030)
 
 真实建符号链接类用例依赖**宿主建链能力**: Windows 非特权进程(非管理员且未开开发者模式)缺
@@ -999,6 +1009,101 @@ def test_retarget_alias_refuses_nonempty_real_dir(tmp_path):
     assert alias_fs.retarget_alias(
         link, os.path.dirname(fc), alias_fs.KIND_SYMLINK if not _win() else alias_fs.KIND_JUNCTION
     ) == "rebuilt"
+
+
+def test_retarget_alias_refuses_real_file_at_link_position(tmp_path):
+    """链接位置被真文件占据 -> 拒绝且文件原样(真目录支有非空拒绝, 文件支同口径; issue 26-11-07-0748)
+
+    旧实现真文件位落到 remove_alias 的 os.unlink 静默删真数据: 形态非 hardlink(应持链接位
+    出现真文件 = 外来物)或 hardlink 形态但与新目标尺寸不一致(不是搬移落位后的孪生残名)
+    一律不动数据, 交 D20 重试路径留现场给人。
+    """
+    root = str(tmp_path)
+    fc = _mk_file(os.path.join(root, "c", "e00.mkv"), b"target-data")
+    link = os.path.join(root, "a", "e00.mkv")
+    _mk_file(link, b"foreign-data")  # 真文件占位(nlink=1, 非链接非目录)
+    with pytest.raises(RuntimeError):
+        alias_fs.retarget_alias(link, fc, alias_fs.KIND_SYMLINK)
+    with open(link, "rb") as f:
+        assert f.read() == b"foreign-data", "真文件必须原样保留, 内容不变"
+    # 无 kind(旧账/直调)防御支同样拒绝: 文件目标推断 symlink 形态, 真文件位不认
+    with pytest.raises(RuntimeError):
+        alias_fs.retarget_alias(link, fc)
+    # hardlink 形态但尺寸与新目标不一致 = 不是搬移落位后的孪生残名, 同样不动
+    with pytest.raises(RuntimeError):
+        alias_fs.retarget_alias(link, fc, alias_fs.KIND_HARDLINK)
+    assert os.path.isfile(link) and os.path.getsize(link) == len(b"foreign-data")
+    assert alias_fs.alias_kind_of(link) is None, "占位真文件全程未被改写"
+
+
+def test_retarget_alias_refuses_foreign_reparse_tag_real_file(tmp_path, monkeypatch):
+    """带非链接重解析标签的真文件(OneDrive 云占位符形态)也进真文件保护支(评审 minor)
+
+    链接标签豁免只认 MOUNT_POINT/SYMLINK 两个: 云族等非链接标签且 S_ISREG 的真体不再
+    落 remove_alias 的 os.unlink, 与普通真文件同一拒绝口径(issue 26-11-07-0748)。
+    """
+    root = str(tmp_path)
+    fc = _mk_file(os.path.join(root, "c", "e00.mkv"), b"target-data")
+    link = _mk_file(os.path.join(root, "a", "e00.mkv"), b"cloud-placeholder")
+    cloud_tag = 0x90000001  # IO_REPARSE_TAG_CLOUD 族(OneDrive); 非链接标签
+    real_lstat = os.lstat
+
+    def fake_lstat(p, *args, **kwargs):
+        st = real_lstat(p, *args, **kwargs)
+        if os.path.normcase(os.path.abspath(p)) == os.path.normcase(
+            os.path.abspath(utils.add_long_path_prefix_for_win(link))
+        ):
+            # retarget_alias/alias_kind_of 对 lstat 结果只取属性: 桩带齐被读字段(st_mode/
+            # st_reparse_tag/st_nlink), S_ISREG + tag=云族 + nlink=1 = 云占位符真体形态
+            return SimpleNamespace(st_mode=stat.S_IFREG | 0o644, st_reparse_tag=cloud_tag, st_nlink=1)
+        return st
+
+    monkeypatch.setattr(alias_fs.os, "lstat", fake_lstat)
+    with pytest.raises(RuntimeError):
+        alias_fs.retarget_alias(link, fc, alias_fs.KIND_SYMLINK)
+    assert os.path.isfile(link)
+    with open(link, "rb") as f:
+        assert f.read() == b"cloud-placeholder", "云占位符真体必须原样保留"
+
+
+def test_retarget_alias_allows_hardlink_twin_residue(tmp_path):
+    """hardlink 形态的合法真文件占位 = 孪生残名(nlink 收敛 1) -> 放行删除照常重建(同卷保 hardlink)
+
+    qB 搬移删掉另一名字后别名位收敛成普通真文件(数据已随搬移落到新目标): 形态声明
+    hardlink 且新目标同尺寸才放行 —— 这是注释里「删的正是前任成员的现存数据名」的
+    有意路径, 与意外真文件的拒绝支(issue 26-11-07-0748)两分。
+    """
+    root = str(tmp_path)
+    fb = _mk_file(os.path.join(root, "b", "e00.mkv"), b"x" * 64)
+    fc = _mk_file(os.path.join(root, "c", "e00.mkv"), b"y" * 64)  # 同尺寸不同内容(穿透校验比尺寸)
+    link = os.path.join(root, "a", "e00.mkv")
+    os.makedirs(os.path.dirname(link), exist_ok=True)
+    alias_fs.create_file_alias(link, fb, alias_fs.KIND_HARDLINK)
+    os.unlink(fb)  # qB 搬移删掉另一名字: 别名位 nlink 收敛 1, 变成普通真文件
+    assert alias_fs.alias_kind_of(link) is None and stat.S_ISREG(os.lstat(link).st_mode)
+    assert alias_fs.retarget_alias(link, fc, alias_fs.KIND_HARDLINK) == "rebuilt"
+    assert alias_fs.alias_kind_of(link) == alias_fs.KIND_HARDLINK, "同卷重建保 hardlink 形态"
+    assert os.stat(link).st_ino == os.stat(fc).st_ino
+    with open(link, "rb") as f:
+        assert f.read() == b"y" * 64
+
+
+@_SYMLINK_REQUIRED
+def test_retarget_alias_twin_residue_cross_volume_falls_back_to_symlink(tmp_path, monkeypatch):
+    """孪生残名占位 + 跨卷 -> 放行删除后回落 symlink(N10 生产形态, 不进 EXDEV 死循环)"""
+    root = str(tmp_path)
+    fb = _mk_file(os.path.join(root, "b", "e00.mkv"), b"x" * 64)
+    fc = _mk_file(os.path.join(root, "c", "e00.mkv"), b"y" * 64)
+    link = os.path.join(root, "a", "e00.mkv")
+    os.makedirs(os.path.dirname(link), exist_ok=True)
+    alias_fs.create_file_alias(link, fb, alias_fs.KIND_HARDLINK)
+    os.unlink(fb)  # 别名位 nlink 收敛 1 -> 普通真文件(孪生残名)
+    monkeypatch.setattr(alias_fs, "same_volume", lambda a, b: False)
+    assert alias_fs.retarget_alias(link, fc, alias_fs.KIND_HARDLINK) == "rebuilt"
+    assert alias_fs.alias_kind_of(link) == alias_fs.KIND_SYMLINK, "跨卷回落 symlink"
+    assert alias_fs.alias_points_to(link, fc)
+    with open(link, "rb") as f:
+        assert f.read() == b"y" * 64
 
 
 def test_probe_alias_rebuild_busy(tmp_path):

@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="relocate-alias-supersede">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="重定向链接位被真文件占据时会删掉真文件(真目录有保护, 真文件没有)">
 <meta name="issue-summary" content="retarget_alias 只护真目录(非空拒绝/空则 rmdir), 真文件位落到 remove_alias 的 os.unlink —— 静默删除真实数据">
 <title>重定向链接位被真文件占据时会删掉真文件(真目录有保护, 真文件没有) · bug · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-11-07-0748-bug-relocate-retarget-real-file-unlink</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-07 07:48</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">backend</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -205,11 +205,29 @@
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-11-07 07:48 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-    </ul>
+      <li>2026-11-07 — 状态 Open → In Progress（kb.status）</li>
+      <li>2026-11-07 — 状态 In Progress → Done（kb.status）</li>
+</ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验: 2026-11-07 09:56 仍复现 —— 锚点 <code>alias_fs.py:939-952</code> 现读与取证一致(真文件位落
+    <code>remove_alias</code> 的 <code>os.unlink</code>); 新增拒绝用例
+    <code>test_retarget_alias_refuses_real_file_at_link_position</code> 对未修代码红验
+    <code>DID NOT RAISE</code>(真文件被静默删除、重定向照常成功), 与本报告现象吻合。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><strong>实际修法(与建议①改道, 收窄式放行)</strong>: 未采用①的「真文件一律拒绝」——
+    <code>retarget_alias</code> 内「删旧链接」段下游存在一条<strong>有意删除真文件</strong>的路径:
+    hardlink 形态的<strong>孪生残名</strong>(qB 跨卷搬移删掉另一名字后 nlink 收敛 1,
+    <code>alias_kind_of</code> 认不出 → <code>existing is None</code> + 真文件), 数据已随搬移落到新目标,
+    该残名必须可删, 否则 supersede 永久重试不收敛(即代码注释引 N10 真机实测描述的形态)。
+    故改为<strong>①+②混合收窄</strong>: 判据 <code>existing is None</code> 且 lstat 非链接(重解析标签豁免只认
+    MOUNT_POINT/SYMLINK 两个)时, <code>S_ISREG</code> → <strong>仅当 plan 声明 hardlink 形态且与新目标尺寸一致</strong>
+    (孪生残名的必要特征)才放行删除并照常重建; <code>S_ISDIR</code> → 沿用原目录支口径(非空拒绝/空则挪);
+    其余(意外真文件/云占位符真体/尺寸不符)一律 <code>RuntimeError</code> 留现场交 D20 重试路径。</p>
+    <p><strong>验证</strong>: 红验两条(拒绝用例对未修代码 <code>DID NOT RAISE</code>; 云占位符用例对
+    <code>tag == 0</code> 判据红验后收窄标签豁免转绿); 放行族钉住孪生残名两分支(同卷保 hardlink / 跨卷回落
+    symlink)。<strong>测试数字</strong>: <code>test_alias_fs.py</code> 68 passed; <code>test.full</code> 全量
+    <strong>5626 passed, 2 skipped</strong>(覆盖率 99%, 2026-11-07 实测; 上一基线 5621, 本批 +4 用例,
+    另 +1 来自开工同步远端)。评审 1 条 minor(链接标签豁免过宽)当场修, <code>review.check</code> 过检 1/1。</p>
   </section>
 
   <footer>

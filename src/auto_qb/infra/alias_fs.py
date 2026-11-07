@@ -938,16 +938,31 @@ def retarget_alias(link: str, target: str, kind: Optional[str] = None) -> str:
         raise RuntimeError(f"重定向拒绝: 新目标不存在({target}) —— 保留旧链接原样, 不做删建")
     # 删旧链接前先处理「位置被真目录/真文件占着」的形态: 与 _build_links 目录支同口径,
     # 只挪**空**目录(qB 搬走文件后的残留); 非空 = 有真数据, 绝不动(不猜)。
+    # 真文件位(issue 26-11-07-0748): 旧写法落到 remove_alias 的 os.unlink —— 静默删真数据。
+    # 「非占位」豁免只认 MOUNT_POINT/SYMLINK 两个链接标签(评审 minor): 云族等非链接
+    # 重解析标签的真体(OneDrive 占位符形态)不被 tag!=0 豁免, 照进真文件/真目录保护支。
+    # 唯一放行 = hardlink 形态的孪生残名(qB 搬移删掉另一名字后 nlink 收敛 1, 数据已随搬移
+    # 落到新目标): plan 声明 hardlink 且与新目标同尺寸才删(同卷重建 hardlink / 跨卷回落
+    # symlink, 见下方建新链接段); 其余形态出现真文件 = 非链接残留的外来数据, 一律拒绝
+    # 留现场(D20 重试路径交人), 与「非空真目录绝不动」同一保守默认。
     try:
         st = os.lstat(utils.add_long_path_prefix_for_win(link))
-        is_real_dir = stat.S_ISDIR(st.st_mode) and existing is None and \
-            getattr(st, "st_reparse_tag", 0) == 0
+        real_occupied = existing is None and getattr(st, "st_reparse_tag",
+                                                     0) not in (IO_REPARSE_TAG_MOUNT_POINT, IO_REPARSE_TAG_SYMLINK)
+        is_real_dir = real_occupied and stat.S_ISDIR(st.st_mode)
+        is_real_file = real_occupied and stat.S_ISREG(st.st_mode)
     except OSError:
-        is_real_dir = False
+        is_real_dir = is_real_file = False
     if is_real_dir:
         if os.listdir(utils.add_long_path_prefix_for_win(link)):
             raise RuntimeError(f"重定向失败: 链接位置被非空真目录占据({link}), 不猜测不动数据")
         os.rmdir(utils.add_long_path_prefix_for_win(link))
+    elif is_real_file:
+        if form == KIND_HARDLINK and os.path.getsize(utils.add_long_path_prefix_for_win(link)
+                                                    ) == os.path.getsize(utils.add_long_path_prefix_for_win(target)):
+            os.unlink(utils.add_long_path_prefix_for_win(link))
+        else:
+            raise RuntimeError(f"重定向失败: 链接位置被真文件占据({link}), 不猜测不动数据")
     else:
         remove_alias(link)
     # 建新链接: 目录别名(junction/目录 symlink) vs 文件别名(硬链接/文件 symlink)
