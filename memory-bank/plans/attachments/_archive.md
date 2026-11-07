@@ -10,15 +10,15 @@
 - [26-10-10-2001] [计划 · WEBUI 选中 × 触发 一致性](../26-10-10-2001-plan-webui-selection-trigger-parity.html) — `webui-selection-trigger-parity`
 - [26-09-22-2318] [auto-qb 软件版本管理方案 v2 · 版本号 / Tag / CHANGELOG / 机械化发版](../26-09-22-2318-version-management-plan.html) — `deps-version-management`
 
-## Open (4)
+## Open (3)
 
-- [26-11-07-0708] [WebUI 设置页接线收口: bt_backup 上页、描述换新与退役键移除](../26-11-07-0708-plan-relocate-fastresume-finalize.html) — `relocate-fastresume-finalize`
 - [26-11-05-1049] [memory-bank 文档压缩与防回涨分步执行计划(8K 新口径)](../26-11-05-1049-plan-kb-doc-compress.html) — `kb-doc-compress`
 - [26-11-05-0848] [跳检自身失败闸门 G9: WEB case-2 强制 + 规则侧硬 skip 双点同谓词](../26-11-05-0848-plan-skip-check-self-fail-gate-g9.html) — `skip-check-self-fail-gate-g9`
 - [26-11-03-2212] [整组迁移同盘证明误拒：根因与修复计划](../26-11-03-2212-plan-relocate-same-fs-proof.html) — `relocate-same-fs-proof`
 
-## Done (220)
+## Done (221)
 
+- [26-11-07-0708] [WebUI 设置页接线收口: bt_backup 上页、描述换新与退役键移除](../26-11-07-0708-plan-relocate-fastresume-finalize.html) — `relocate-fastresume-finalize`
 - [26-11-07-0608] [kb.nav 关联文档交互: 抽屉内关系图三档 + 认领链五态解析](../26-11-07-0608-plan-memory-bank-nav-relation-graph.html) — `memory-bank-nav-relation-graph`
 - [26-11-07-0549] [create-issue 融合 memory-bank(代码融合+双 SKILL)与 issue 工位机械化](../26-11-07-0549-plan-memory-bank-issue-fusion.html) — `memory-bank-issue-fusion`
 - [26-11-07-0452] [GitHub CI WEB UI smoke 门禁改造: 超时根因、分片接线与 push 节流全量轮](../26-11-07-0452-plan-github-ci-smoke-gate.html) — `github-ci-smoke-gate`

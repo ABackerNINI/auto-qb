@@ -3,9 +3,9 @@
 **Status:** Done
 **Added:** 2026-11-05
 **Updated:** 2026-11-07
-**Summary:** relocate 收尾弃 dir_alias 链改 fastresume 改写(N2-N8 实测背书); R1 并入 0247(Superseded): 收敛公理→回收 daemon 复活职权换位(下线窗口改写)+ 未收尾再迁移(supersede 两形态); R2 实验轮 N9-N12 全绿拍板 D19-D20; R3 实现轮 S1-S6 全部完成(9 子任务串行派遣, N0-N12 实现路径复跑全绿+0546 继承项回归全 PASS), 收口评审 blocker 清零(8+5 条全修, 入池 0), 全量全绿(见 kb.baseline)
+**Summary:** relocate 收尾弃 dir_alias 链改 fastresume 改写(N2-N8 实测背书); R1 并入 0247(Superseded): 收敛公理→回收 daemon 复活职权换位(下线窗口改写)+ 未收尾再迁移(supersede 两形态); R2 实验轮 N9-N12 全绿拍板 D19-D20; R3 实现轮 S1-S6 全部完成(9 子任务串行派遣, N0-N12 实现路径复跑全绿+0546 继承项回归全 PASS), 收口评审 blocker 清零(8+5 条全修, 入池 0), 全量全绿(见 kb.baseline); 后续 WebUI 设置页接线收口批(计划 26-11-07-0708): bt_backup 编辑组件嵌「整组迁移」块 / finalize_timeout v6 移除 / e2e settings spec / 评审 5 批全过, 计划已 Done
 **Topics:** backend-relocate-fastresume-finalize
-**Refs:** memory-bank/plans/26-11-05-0808-plan-relocate-fastresume-finalize.html, memory-bank/issues/26-11-05-0420-bug-relocate-zero-move.html, memory-bank/issues/26-11-06-0448-bug-real-down-force-kill.html, memory-bank/issues/26-11-07-0528-question-relocate-supersede-cancel-semantics.html, memory-bank/issues/26-11-07-0528-feat-recycle-daemon-roster-machine-wide.html, memory-bank/pitfalls/backend/prefix-rewrite-nested-root.md, memory-bank/pitfalls/testing/free-port-toctou-parallel.md
+**Refs:** memory-bank/plans/26-11-05-0808-plan-relocate-fastresume-finalize.html, memory-bank/issues/26-11-05-0420-bug-relocate-zero-move.html, memory-bank/issues/26-11-06-0448-bug-real-down-force-kill.html, memory-bank/issues/26-11-07-0528-question-relocate-supersede-cancel-semantics.html, memory-bank/issues/26-11-07-0528-feat-recycle-daemon-roster-machine-wide.html, memory-bank/pitfalls/backend/prefix-rewrite-nested-root.md, memory-bank/pitfalls/testing/free-port-toctou-parallel.md, memory-bank/pitfalls/web-ui/ui-entry-tradeoff-unreported.md
 
 ## 原始请求
 
@@ -93,3 +93,5 @@
 - 2026-11-06 06:42 用户指派补做真机实测并授权既有红入池: ①真机验收 real.down 经 WebAPI app/shutdown 优雅退出(环境2 qB 5.2.3, 6/6 PASS —— 端口释放 / 目标进程退出 / 对照实例 56589 零误伤 / fastresume 在 shutdown 窗口内被重写 / 重启后假种子状态逐字读回, 收尾清场并恢复开工前无进程状态), 逐字证据 testing/real-baselines/26-11-06-0639-real-RM00.md; issue 0448 验证方式补第 6 条并作废「未做真机实测」旧结论, 真机规程 2.2 与红线坑档补背书; ②test.pkg 4 条既有红(mutants DEFAULT_DESELECT 悬空路径)按 create-issue 规程入池 26-11-06-0635(test/standard, Open, 未修), 索引重建; 本轮无提交动作
 
 - 2026-11-07 05:18 实现轮收口: S1-S6 全程完成(9 子任务串行派遣, commit 链 c84049d4..4f70190f), dir_alias 收尾链整链退役(净-1353 行, finalize_watch.py 删)换 bt_backup+fastresume 双键改写+回收 daemon+相位 {armed,rewritten}+核验删链门+删种拦截+立即收尾按钮+supersede 未收尾再迁移; N0-N12 实现路径复跑全绿+0546 继承项回归全 PASS(T8b 修复部署闸漏执行入口), 收口评审 blocker 清零(主评 8+复查 5 条全修, 入池 0); 全量全绿(见 kb.baseline, 切片 26-11-07-0440); 坑档新记 2 条(free-port-toctou-parallel/prefix-rewrite-nested-root), 回写 keys.md(finalize_timeout 退役+再迁口径)+pitfalls 指针
+
+- 2026-11-07 11:09 WebUI 设置页接线收口批(计划 26-11-07-0708): bt_backup 编辑组件嵌迁移组 / finalize_timeout v6 移除 / help 换新 / e2e settings spec / 评审 5 批全过

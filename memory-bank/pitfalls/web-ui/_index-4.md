@@ -1,16 +1,13 @@
 # web-ui — 前端 / WEB UI 纪律 · 卷 4/4
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `search-views.md` … `wording-audit-surface.md`(共 24 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `stale-predicate-inverted.md` … `wording-audit-surface.md`(共 22 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
 
 | 主题 | 一句话 | 触发词 |
 |---|---|---|
-| [search-views.md](search-views.md) | 搜索不是虚拟分组、负词种子级排除、脏标记是共享状态、鉴权不能靠"凭证串非空"、配置写盘按 BaseLoader 语义。 | 改搜索, 改视图脏标记, 改鉴权, 改登录, 改设置页, 改配置写盘, rid 门控 |
-| [show-if-residual-key.md](show-if-residual-key.md) | schema 字段的 show_if 只控制「这一行渲染不渲染」; 用户把触发键从命中值切走后, 该字段先前写进树的值**仍留在配置树里**(show_if 不删键), 行又已隐藏 ⇒ 用户看不见也改不了, 保存时后端校验对残留键报错(如 watch_fields 仅在 trig… | 给规则/段字段配 show_if; 切走关联键后保存报"该键非法"; 字段在某取值下才合法 |
-| [sortable-gate-source-split.md](sortable-gate-source-split.md) | 能力判据源分裂: 视觉侧硬编码 + 行为侧门控 = 「看着能点、点了没反应」的静默全灭 | 补门控, a11y 补课, headActivate, col.sortable, sortable, thead, 表头排序失效, 点了没反应, 视觉与行为分叉, 判据同源, 唯一调用方 |
 | [stale-predicate-inverted.md](stale-predicate-inverted.md) | 同一对象上成对出现的 `active`(本图此刻该不该显示/拉)与 `stale`(在途响应是否**已过期**→丢弃)是**互为反义**的两个谓词; 机械改名/整行重写时把 `stale` 的 `!(...)` 敲成 `!!(...)`, 语义整个翻面 —— 恰在「本图正在被看」… | 改 stale 谓词, 机械改名, 双重取反, 图加载不出来, 一直显示正在加载, loading 不复位, 谓词极性, _qbLoad, _QB_SCOPES, active 与 stale |
 | [sticky-scrollpad-inset.md](sticky-scrollpad-inset.md) | sticky 的视矩形被**滚动容器自身的 padding 内缩** —— top:0 实际停在 padding-top 之下、bottom:0 实际停在 padding-bottom 之上, 中途滚动时数据行文字从这两条缝里漏出来; 行级 grid 表格的吸顶列头与吸底汇总条会… | 吸顶, 吸底, sticky, 滚动容器 padding, drawer-body, 表头吸顶, 统计条吸底, 漏出文字, 行文字漏出, 顶部漏字, 底部漏字, 中途滚动, 未到顶, 没到底, dt11, 树表批量, drawer_tpl,… |
 | [surface-color-family-single-point.md](surface-color-family-single-point.md) | 同一个视觉区域(面板 / 表区)的各层表面(列头底、行板底、悬停、落影)若被多处各写一遍——表头 `--bg-card`、行板 skin 卡底 `--bg-row`、行板透明露面板、页面级吸顶列头的 `--shadow-1` 落影——就会在主题切换时露出肉眼可见的色带 / 横条,… | 表头异色, 异色背景, 色带, 横条, 表头下方颜色不一样, 背景不一致, 主题下表头发白, 抽屉表格底色, --bg-card, --bg-row, box-shadow 落影, 吸顶列头阴影, 三皮肤观感分叉 |
@@ -23,6 +20,7 @@
 | [toast-kind-unstyled.md](toast-kind-unstyled.md) | toast 新 kind 不登记样式 = 与 info 同貌 | toast, kind, 提示条, warn 档, 消息弹窗, 样式没生效, 与 info 一样, toast 颜色, 语义档, msg-tone, msg-line |
 | [toast-queue-pushin-overlap.md](toast-queue-pushin-overlap.md) | 给底部锚定的提示条栈补了 FLIP 之后, 新条仍走「原地淡入」, 于是旧条还没让开、新条已经落在同一块地方 —— 重叠是入场形态的锅, 不是 FLIP 的锅 | toast 重叠, 队列重排, FLIP, 叠画, 新条入场, 顶掉, 提示条重叠, 强制汇报两个窗口, 队列推入, data-fx-queue |
 | [tpl-comment-split-orphan.md](tpl-comment-split-orphan.md) | 把单文件模板切成 `shared/tpl/*.html` 时, 若一条 `<!-- ... -->` 的开头半被切走/丢弃, 分片里只剩 结尾的 `-->`, 聚合(boot.js 把清单里同目标分片拼成一条 HTML 串再注入)里就成了**孤儿 `-->`** —— 被当**文… | 页面出现不该有的中文注释文字, 页面上出现 `-->`, 模板分片, tpl-manifest, 聚合, 注释没闭合 |
+| [ui-entry-tradeoff-unreported.md](ui-entry-tradeoff-unreported.md) | 配置键/功能在设置页的**入口取舍**(图形化与否、hidden 后用户在哪编辑、接线位置)是用户可感知的交互面决策, 不是实现细节 —— 实现者把「通用编辑树表达不了 → hidden + YAML 手编」当可自行拍板的实现细节定下, 代码全绿、评审通过, 入口却没上设置页;… | 设置页, 接线, hidden, 入口, 验收遗漏, UI 未接线, 图形化 |
 | [ui-location-persist.md](ui-location-persist.md) | "刷新后回到别的页"这类报障的固定判据 —— 位置属于**用户意图**该落盘, 但只改初值不够(按需加载的页面必须在启动路径补一次加载), 且恢复的值必须对 schema 校验, 采用时要复用既有跳转方法。 | 刷新回种子页, 设置页刷新, 刷新掉回首页, 页面位置, 停在哪一页, page 持久化, hub.view, F5 丢位置, 记住上次在哪, 展开态被收起, 切视图, expandedKey, 分组展开, 追剧展开 |
 | [unsaved-guard-reload-keys.md](unsaved-guard-reload-keys.md) | 做「有未保存改动时刷新要提醒」这类守卫时, 三处最容易踩: ① 别被 `shortcuts.js` 的 `KB_BLACKLIST`(把 `F5` 列为"浏览器不可拦组合")误导 —— 那条黑名单管的是"业务动作不许绑到这些键", 而**拦截浏览器默认刷新**是另一回事, 桌面端… | 未保存改动, 刷新守卫, beforeunload, F5 拦截, Ctrl+R, 弹确认框, 防丢改动, 脏标记, bfcache |
 | [variant-singleton-shadow.md](variant-singleton-shadow.md) | 详情面板变体文件头把核心层三件套收进模块级单点(`const T = reg.dtHtml` / `const R = reg.dtRaw` / `const H = reg.helpers`), 变体函数内再声明同名局部即遮蔽 —— dt12「空间树图」的 layoutMap… | 改 drawer_tpl 变体, 写变体局部变量, 空间树图不显示, 选模板无显示, 换种子回到经典, 模板选择被重置, H.rowFocusKey is not a function, TypeError, 遮蔽, shadowing,… |

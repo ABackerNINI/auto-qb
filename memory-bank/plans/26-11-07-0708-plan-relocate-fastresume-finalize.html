@@ -7,9 +7,9 @@
 <title>WebUI 设置页接线收口: bt_backup 上页、描述换新与退役键移除</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="relocate-fastresume-finalize">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-11-07-0708">
-<meta name="doc-updated" content="26-11-07-0708">
+<meta name="doc-updated" content="26-11-07-1109">
 <meta name="doc-refs" content="">
 <style>
   :root {
@@ -75,7 +75,7 @@
 <h1>WebUI 设置页接线收口: bt_backup 上页、描述换新与退役键移除</h1>
 <p class="lede">本篇只回答: <strong>怎么收整组迁移 fastresume 收尾功能的 WebUI 设置页缺口</strong> —— bt_backup 动态映射上页(嵌「整组迁移」组)、relocate 组 help 换新口径、退役键 <code>finalize_timeout</code> 移除, 并补 e2e settings spec 防复发。前一件计划 <code>26-11-05-0808</code> 的 WebUI 范围只有反馈面与「立即收尾」按钮(已接线), 设置页是它计划外的缝 —— 本篇是那道缝的收口, 不改 26-11-05-0808 本体。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-07-0708 · <b>doc-updated</b> 26-11-07-0708 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-11-07-0708 · <b>doc-updated</b> 26-11-07-1109 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 2026-11-07 grilling 会话(用户逐项拍板 Q1–Q12)+ 只读探查回报(HEAD <code>9f69075a</code>)
 </div>
 
@@ -158,6 +158,7 @@
 <h2><span class="no">§10</span>变更记录</h2>
 <ul>
   <li><span class="tag">R0 · 26-11-07-0708</span> 初版。来源: 2026-11-07 grilling 会话(用户拍板 Q1–Q12, 见 §06 D1–D9)+ 只读探查回报(HEAD <code>9f69075a</code>)。要点: bt_backup 组件嵌迁移组、relocate 组 help 换新、<code>finalize_timeout</code> 升级路线移除、e2e settings spec、双因坑档、浏览器实测验收。</li>
+  <li><span class="tag">R1 · 26-11-07-1109</span> S1 两项结论入档: ①组区块自定义渲染钩子可行 —— bt_backup 编辑组件嵌「整组迁移」块, 与 aq-transfer-targets 同范式(模板件 + app.component 注册); ②finalize_timeout 残留不容忍(loaders/validation 不清洗未知键) → 退役升级为 config v5→v6 迁移清洗。实施与验收: 提交链 c4d068c0 计划 / 88082316 S3+S4 / a106e210 S2 / b1fb6bd4 S5 / a282fc40 S6 / 7e77c791+699b8f81 评审处置; 验收 test.full 5623 passed + 2 skipped / e2e 全量 433 passed 1 flaky(复跑绿) / 截图 24 断言</li>
 </ul>
 
 </div>
