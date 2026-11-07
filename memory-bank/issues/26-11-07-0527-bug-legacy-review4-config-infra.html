@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="legacy-review4">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="存量评审 R4·config-infra 汇总(major 2/minor 34)">
 <meta name="issue-summary" content="config-infra 主题 major 2+minor 34 共 36 条聚合入池,来源存量评审 R4(计划 26-11-05-2335)">
 <title>存量评审 R4·config-infra 汇总(major 2/minor 34) · bug · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-11-07-0527-bug-legacy-review4-config-infra</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-07 05:27</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -191,11 +191,22 @@
     <ul>
       <li>2026-11-07 05:27 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
       <li>26-11-07 聚合入池自存量评审 R4（计划 26-11-05-2335，<code>memory-bank/plans/26-11-05-2335-plan-legacy-code-review-4.html</code>）——本轮纯盘点，状态保持 Open；doc-refs 留空待认领方回填</li>
-    </ul>
+      <li>2026-11-08 — 状态 Open → Done（kb.status）</li>
+</ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验：2026-11-08 认领修复，36 条锚点重定位后 35 条仍复现已修，#26（R2#45 relocate_journal acquire_pid docstring）复验已消失——acquire_pid 随 <code>66418c7e</code>（relocate fastresume 收尾 S4a）整链退役，现行 _alive docstring 已与实现一致。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p>2026-11-08 认领修复，分支 <code>fix/legacy-review4-config-infra</code>，6 个批次提交（<code>f5edc616</code> → <code>dfb6384a</code>），36 条中 35 条修复、#26 复验已消失（见上），全部闭环。逐批实际修法（建议修法原文一律保留在明细表「fix」列，仅 #27 改道、说明见下）：</p>
+    <ul>
+      <li>批次 1（<code>f5edc616</code>）：#1 path_normalize 归一豁免 UNC 根边界（开头 2+ 斜杠收敛到两个，前端 _addNormPath 锁步镜像）；#2 HrCondition 构造期校验 mode ∈ HR_MODES（经 _build_condition_node 包装 ConfigError）。实测全量 test.quick 5674 passed / 2 skipped</li>
+      <li>批次 2（<code>fd08ebb6</code>）：#23 _match 逃逸弃条目 continue（fall-through，穷尽才 miss，SEC-1 无绕过）；#19 删 alias_fs.volume_free（用户拍板）；#20 补挂载点正向测试；#21/#22 docstring 修正。实测 5676 passed / 2 skipped</li>
+      <li>批次 3（<code>64e0cc8c</code>）：#9/#15 裸 0 特判放行（_is_bare_zero 单点 + loader _parse_time_bare_zero_ok 闭环）；#14/#10 parse_bool 关闭判定；#12 mode 守卫；#13 未知键；#11 gtm 回归用例。实测 5680 passed / 2 skipped</li>
+      <li>批次 4（<code>2deebdb5</code>）：#16 targets 身份核对（type/base_url 不猜）；#17 写盘链模块级 _WRITE_LOCK（用户拍板，preview_tree 纯读不加锁）；#5 去重统一按 raw；#8 删 plugins_by_kind（用户拍板）；#4/#6/#7 禁字符与 docstring。实测 5683 passed / 2 skipped</li>
+      <li>批次 5（<code>fa4ddeaf</code>）：#24 dedup_window=0 不记键；#25 _unmount 摘后 close 修线程泄漏；#27 display_host 可达等价折叠（改道说明见下）；#18 TYPE_CHECKING；#3/#28 文档；#26 已消失。实测 5686 passed / 2 skipped</li>
+      <li>批次 6（<code>dfb6384a</code>）：#31 DateTimeCondition 构造期解析（解析/比较拆分，time_in_range 拆两单点）；#36 _Parser 深度上限 64；#32-#35 话术对齐；#29/#30 docstring。实测 5690 passed / 2 skipped</li>
+    </ul>
+    <p><strong>改道说明（#27）</strong>：建议修法原文（「display_host 改用 is_loopback_host 判定，展示仍统一写 localhost」）是全量折叠；实际实现为「可达等价折叠」——本函数消费点是可连接地址提示，127.0.0.2 这类合法回环绑定对 localhost 拒连，全量折叠会输出连不上的地址、误导用户，故只折叠可达等价项。</p>
+    <p><strong>验证方式</strong>：每批次提交前跑全量测试（数字见各批次行）；任务收口另做接缝终审，零发现。</p>
   </section>
 
   <footer>
