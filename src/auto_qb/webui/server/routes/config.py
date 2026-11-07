@@ -46,10 +46,15 @@ def build_router(ctx: WebContext) -> APIRouter:
 
         ctx_menu(计划 26-10-20-0024 W1): 行右键菜单四支的用户布局原样下发; None(缺省)=
         前端用默认布局(与静态模板逐位一致)。fail-closed: 前端拉取失败回落 null = 默认布局。
+
+        relocate_enabled(计划 26-11-07-1300 R6a): 整组迁移入口旗标 —— relocate.enabled 原样透传
+        (与 torrent_cmds 路由 403 门控同源同键, 读实时配置), fail-closed: 段缺省/关 = False。
+        前端消费面只有设定位置对话框的「整组迁移已启用」常驻提示(R6a), 关闭 = 普通移动语义不变。
         """
         return {
             "skip_check_menu": bool(manager.config.web.skip_check_menu),
             "qb_traffic_enabled": bool(manager.config.qb_traffic and manager.config.qb_traffic.enabled),
+            "relocate_enabled": bool(manager.config.relocate and manager.config.relocate.enabled),
             "ctx_menu": manager.config.web.ctx_menu,
         }
 

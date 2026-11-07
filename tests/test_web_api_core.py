@@ -1,7 +1,7 @@
 """test_web_api_core 测试计划: WEB UI 核心 API 读写
 
 ## 测试计划(每个测试函数一条)
-- test_api_webui_flags_endpoint: R2 功能旗标端点(计划 26-10-02-1955 W1) —— 开/关读实时配置 + 未鉴权 401; qb_traffic_enabled 旗标(P5a)段缺省/关 = False, 开 = True
+- test_api_webui_flags_endpoint: R2 功能旗标端点(计划 26-10-02-1955 W1) —— 开/关读实时配置 + 未鉴权 401; qb_traffic_enabled 旗标(P5a)段缺省/关 = False, 开 = True; relocate_enabled 旗标(计划 26-11-07-1300 R6a)同口径透传 relocate.enabled
 - test_lifecycle_wait_until_started_and_stop_timeout: 生命周期等待/停止三出口(P0-T0.5)
 - test_api_t_skip_check_gated_by_config: R2 skip-check 端点 gate —— 配置关 403(detail 注明 web.skip_check_menu)/ 开 200 入队, 403 不投递命令
 - test_api_status_and_groups: 状态与分组快照读取(经注入的 manager; status 含 version)
@@ -25,18 +25,22 @@ def test_api_webui_flags_endpoint(web_env):
     不按值持有旧 Config(hot-reload-held-config 坑)。
     qb_traffic_enabled(P5a, plan 26-10-03-0946 §07): 段缺省 None / enabled=false 均 False,
     _enable_qb_traffic 置段 enabled=True 后即时翻真(读实时配置口径)。
+    relocate_enabled(计划 26-11-07-1300 R6a): relocate.enabled 原样透传, FakeConfig 用真
+    RelocateConfig 模型(缺省 enabled=False 保守默认), 置 True/False 即时翻真(同口径)。
     """
     mgr, client = web_env
     auth = {"Authorization": f"Bearer {mgr.web.token}"}
     assert client.get("/api/webui/flags", headers=auth).json() == {
         "skip_check_menu": True,
         "qb_traffic_enabled": False,  # FakeConfig 默认 qb_traffic=None(未启用)
+        "relocate_enabled": False,  # FakeConfig 默认 relocate=RelocateConfig()(enabled=False)
         "ctx_menu": None,  # FakeConfig 默认无布局(计划 26-10-20-0024 W1: None = 默认菜单)
     }
     mgr.config.web.skip_check_menu = False
     assert client.get("/api/webui/flags", headers=auth).json() == {
         "skip_check_menu": False,
         "qb_traffic_enabled": False,
+        "relocate_enabled": False,
         "ctx_menu": None,
     }
     # ctx_menu 原样下发(实时配置): 置布局即回布局, 与 skip_check_menu 同口径现取现真
@@ -51,6 +55,11 @@ def test_api_webui_flags_endpoint(web_env):
     assert client.get("/api/webui/flags", headers=auth).json()["qb_traffic_enabled"] is True
     _enable_qb_traffic(mgr, enabled=False)
     assert client.get("/api/webui/flags", headers=auth).json()["qb_traffic_enabled"] is False
+    # relocate_enabled(计划 26-11-07-1300 R6a): relocate.enabled 翻转即时生效(读实时配置口径)
+    mgr.config.relocate.enabled = True
+    assert client.get("/api/webui/flags", headers=auth).json()["relocate_enabled"] is True
+    mgr.config.relocate.enabled = False
+    assert client.get("/api/webui/flags", headers=auth).json()["relocate_enabled"] is False
     assert client.get("/api/webui/flags").status_code == 401
 
 

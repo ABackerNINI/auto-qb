@@ -212,8 +212,8 @@ def test_frontend_qb_traffic_chart_wiring():
 
     # 1. enabled 门(fail-closed 单点; 三挂点共用 qbTrafficOn, 全局入口另挂今日流量面板本体)
     # ctx_menu(计划 26-10-20-0024 W2/W3): 行右键菜单布局下发键, 与两个旗标同一通道同一显式建字段口径
-    assert 'flags: { skip_check_menu: false, qb_traffic_enabled: false, ctx_menu: null }' in state_js, \
-        "state.js flags 默认缺 qb_traffic_enabled: false(fail-closed 初值必须显式建)或 ctx_menu: null"
+    assert 'flags: { skip_check_menu: false, qb_traffic_enabled: false, relocate_enabled: false, ctx_menu: null }' in state_js, \
+        "state.js flags 默认缺 qb_traffic_enabled/relocate_enabled: false(fail-closed 初值必须显式建)或 ctx_menu: null"
     assert "qb_traffic_enabled: !!(f && f.qb_traffic_enabled)" in lifecycle_js, \
         "loadWebFlags 必须写回 qb_traffic_enabled(缺了旗标恒 false = 功能永不可见)"
     assert "ctx_menu: (f && f.ctx_menu) || null" in lifecycle_js, \

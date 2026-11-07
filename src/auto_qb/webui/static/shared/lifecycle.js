@@ -426,19 +426,22 @@ window.AQB_LIFECYCLE = {
      * 403 兜底)。整对象替换赋值(非原地改键), 保证 Vue 响应式触发。
      * qb_traffic_enabled(P5a, plan 26-10-03-0946 §07): qB 口径流量图入口旗标, 同一
      * fail-closed 口径 —— false 时入口不渲染、不请求(P5 验收)。
+     * relocate_enabled(计划 26-11-07-1300 R6a): 整组迁移入口旗标(relocate.enabled 原样透传),
+     * 同一 fail-closed 口径 —— false 时设定位置对话框不出「整组迁移已启用」常驻提示。
      * ctx_menu(计划 26-10-20-0024 W2): 行右键菜单四支用户布局原样透传(后端只存不发解析,
      * 合并语义在前端 ctx_menu.js 单点); 缺键/取失败 = null = 默认布局(注册表定义序)。
-     * !三个键都必须显式写回: 漏一个 = 该功能恒取不到真值(旗标恒 false / 布局恒默认)。 */
+     * !四个键都必须显式写回: 漏一个 = 该功能恒取不到真值(旗标恒 false / 布局恒默认)。 */
     async loadWebFlags() {
       try {
         const f = await this.api("/api/webui/flags");
         this.flags = {
           skip_check_menu: !!(f && f.skip_check_menu),
           qb_traffic_enabled: !!(f && f.qb_traffic_enabled),
+          relocate_enabled: !!(f && f.relocate_enabled),
           ctx_menu: (f && f.ctx_menu) || null,
         };
       } catch (e) {
-        this.flags = { skip_check_menu: false, qb_traffic_enabled: false, ctx_menu: null };
+        this.flags = { skip_check_menu: false, qb_traffic_enabled: false, relocate_enabled: false, ctx_menu: null };
       }
     },
   },

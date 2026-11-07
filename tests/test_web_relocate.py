@@ -22,7 +22,8 @@
 - test_relocate_confirm_loop_wired_in_move_dialog: 前端静态守阵(issue 26-11-04-0734): _editPost /
   _bulkEditPost 在 r.ok 且 truth.summary.confirm > 0 时返回 "confirm" 且不弹成功; submitMoveDialog
   先收设定位置框 -> _relocateConfirmGate 展示形态/来源/目标/未来种子/原因 -> 带 confirm=true 重发;
-  confirm = 0 仍走原成功路径
+  confirm = 0 仍走原成功路径; 整组语义披露(计划 26-11-07-1300 R6): R6a move-dialog 常驻提示
+  (relocate_enabled 旗标门控, flags 通路 fail-closed) + R6b 来源行接 member_count(>1 披露整组 N 个成员)
 - test_web_relocate_confirm_passthrough_routes: 路由 confirm 透传契约 —— 缺省/False 载荷无 confirm
   键(历史形状不变), confirm=true 才附加(单种子 set_torrent_location + 批量 bulk_torrents)
 - test_relocate_module_branch_extras
@@ -972,6 +973,9 @@ def test_relocate_confirm_loop_wired_in_move_dialog():
     后端 confirm 仍回 status=ok(只在 truth.summary.confirm 计数), 前端必须在 r.ok 之上消费 summary:
     命中时不得先弹「已执行」, 由设定位置提交点收框 -> 二次确认框 -> 带 confirm=true 重发。
     confirm=0 仍走原成功路径(成功 toast + 关框)。
+    整组语义披露两披露点(计划 26-11-07-1300 R6, 拍板 D5/D8): R6a = move-dialog.html 常驻提示
+    (relocate_enabled 旗标门控, shared 单点 + flags 通路 fail-closed); R6b = 确认框「来源」行
+    接 member_count(>1 才后缀披露, 旧回执/单成员形状不变, 不新增行不改触发条件)。
     """
     from pathlib import Path
 
@@ -994,6 +998,11 @@ def test_relocate_confirm_loop_wired_in_move_dialog():
     rows = _drawer_body(drawer, "_relocateConfirmRows(r) {", "/* 二次确认框")
     for token in ("未来种子", "目录别名", "save_path", "target", "reasons"):
         assert token in rows, f"确认框缺 {token} 信息面"
+    # 整组语义披露(计划 26-11-07-1300 R6b, D8): 来源行 value 接 member_count(>1 才后缀披露);
+    # 只扩 value 不改名, 不新增行, 触发条件在 _relocateConfirmGate(不在本行表)
+    assert "member_count" in rows and "(整组 ${members} 个成员)" in rows, \
+        "确认框来源行缺整组成员数披露(R6b)"
+    assert 'label: p + "来源"' in rows, "来源行标签不得改名(R6b 只扩 value)"
     gate = _drawer_body(drawer, "async _relocateConfirmGate(r) {", "/* 成功 toast")
     assert "this._openModal({" in gate and "verdict:" in gate and "确认迁移" in gate
     assert "目录别名" in gate, "确认框正文必须讲清目录别名会影响未来落点"
@@ -1009,6 +1018,19 @@ def test_relocate_confirm_loop_wired_in_move_dialog():
     assert "if (ok) this.moveOpen = false;" in sub
     done = _drawer_body(drawer, "_relocateDoneText(r, okText) {", "/* 编辑类命令统一投递")
     assert "if (!s) return `已执行: ${okText}`;" in done, "无 summary 的动作文案与历史一致"
+    # R6a(计划 26-11-07-1300, D5): 设定位置对话框常驻提示在 shared 单点模板(五主题共用, 不碰
+    # 各主题 index.html), relocate_enabled 旗标门控 —— 开 = 提交前披露整组语义(零额外点击),
+    # 关 = 不渲染(普通移动语义不变)
+    tpl = (shared / "tpl" / "move-dialog.html").read_text(encoding="utf-8")
+    assert 'v-if="flags.relocate_enabled"' in tpl, "move-dialog 缺整组提示旗标门(R6a)"
+    assert "整组迁移已启用: 移动将以内容组为单位, 同组其它成员一并迁移" in tpl, "R6a 常驻提示文案缺失"
+    # flags 通路(relocate.enabled -> flags.relocate_enabled): 显式建 fail-closed 默认 + loadWebFlags 写回
+    state_js = (shared / "state.js").read_text(encoding="utf-8")
+    lifecycle_js = (shared / "lifecycle.js").read_text(encoding="utf-8")
+    assert "relocate_enabled: false" in state_js and "relocate_enabled: false" in lifecycle_js, \
+        "flags 默认/失败分支缺 relocate_enabled: false(fail-closed 初值必须显式建)"
+    assert "relocate_enabled: !!(f && f.relocate_enabled)" in lifecycle_js, \
+        "loadWebFlags 必须写回 relocate_enabled(缺了旗标恒 false = 提示永不出现)"
 
 
 def test_web_relocate_confirm_passthrough_routes(web_env):

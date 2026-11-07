@@ -567,7 +567,12 @@ window.AQB_DRAWER = {
         const p = multi ? `#${i + 1} ` : "";
         const alias = it.form === "dir_alias";
         rows.push({ icon: "#i-folder-open", label: p + "迁移形态", value: FORMS[it.form] || String(it.form || "未知") });
-        rows.push({ icon: "#i-folder", label: p + "来源", value: String(it.save_path || "") });
+        /* 整组语义披露(计划 26-11-07-1300 R6b, 拍板 D8): 回执 item 带 member_count 且 >1 时来源行
+         * 值后缀披露成员数; 旧回执无该字段 / 单成员 = 不披露(展示形状与历史逐字一致)。
+         * 只改本行 value, 不新增行, 触发条件(_relocateConfirmGate)不动。 */
+        const members = Number(it.member_count || 0);
+        const src = String(it.save_path || "") + (members > 1 ? `(整组 ${members} 个成员)` : "");
+        rows.push({ icon: "#i-folder", label: p + "来源", value: src });
         rows.push({ icon: "#i-folder", label: p + "目标", value: String(it.target || ""), wide: true });
         rows.push({
           icon: alias ? "#i-warn" : "#i-info",
