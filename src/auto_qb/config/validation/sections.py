@@ -23,6 +23,7 @@ from .core import (
     _check_str_list,
     _check_unknown_keys,
     _fmt_s,
+    _is_bare_zero,
     _try,
     _try_number,
     _try_port,
@@ -214,10 +215,15 @@ KNOWN_TRACKER_HR_KEYS = {
 
 
 def _validate_add_episode_tags(spec: Any, errors: List[str]) -> None:
-    """校验 config.add_episode_tags 段(布尔 enabled + 单集/多集模板字符串)"""
+    """校验 config.add_episode_tags 段(布尔 enabled + 单集/多集模板字符串)
+
+    键面与 schema(groups.add_episode_tags 三字段)及 loader _get_episode_tags 的读取面一致;
+    此前是全文件唯一不做未知键检查的段(R4#13): 模板键拼错零报错, loader 静默回落默认值。
+    """
     if not isinstance(spec, dict):
         errors.append("config.add_episode_tags: 必须是字典")
         return
+    _check_unknown_keys(spec, {"enabled", "add_tag_single", "add_tag_multi"}, "config.add_episode_tags", errors)
     if "enabled" in spec:
         _try(parse_bool, spec["enabled"], "config.add_episode_tags.enabled", errors)
     for key in ("add_tag_single", "add_tag_multi"):
@@ -854,8 +860,11 @@ def _validate_traffic_source(spec: dict | None, errors: List[str]) -> None:
     _check_unknown_keys(spec, KNOWN_TRAFFIC_SOURCE_KEYS, where, errors)
     # enabled 总开关(26-10-17-1737 S1/D1): bool, 缺省 true。关闭的连带停摆(曲线/expr/工具
     # 订阅)由运行期闸门承载, 这里只管形状 —— 不因 enabled=false 免检其余键(关来源也要能改配置)
+    # 解析值留存(R4#14): 关闭判定与格式校验同走 parse_bool 单一事实来源, no/off/0 等价写法
+    # 同样算关闭; 解析失败返回 None(_try 已记录错误), 不按关闭处理
+    enabled_parsed: bool | None = None
     if "enabled" in spec:
-        _try(parse_bool, spec["enabled"], f"{where}.enabled", errors)
+        enabled_parsed = _try(parse_bool, spec["enabled"], f"{where}.enabled", errors)
     # 来源侧快照节奏(26-10-18-0813 A3/D9): 10S ~ 1H。下限防"每 tick 读盘 + 发布"空转(读的是
     # 一个随流量增长的文件), 上限防历史图停在一天前; 与曲线 interval 是两个独立节奏, 各自校验。
     if "refresh_interval" in spec:
@@ -888,8 +897,9 @@ def _validate_traffic_source(spec: dict | None, errors: List[str]) -> None:
                 _try_time(tool["notify_cooldown_s"], f"{tool_where}.notify_cooldown_s", errors, min_s=0, max_s=86400)
     # enabled=false 时来源已整体停摆(26-10-17-1737 S1/D1): 免检 dat_path —— 关来源本就是
     # "没配好数据源"时的出路; 若仍要求 dat_path, 用户无法从设置页把没配好的来源关掉
-    # (保存必败, 且 UI 里找不到能改的地方)。非法值不当成关闭(parse_bool 已在上面报错)。
-    source_off = str(spec.get("enabled") or "").strip().lower() == "false"
+    # (保存必败, 且 UI 里找不到能改的地方)。关闭判定取 parse_bool 解析结果(R4#14, 与上面
+    # 校验同一来源): no/off/0 等价写法同算关闭; 非法值(None)不当成关闭(错误已另行记录)。
+    source_off = enabled_parsed is False
     # 按 provider 校验所需字段: traffic_monitor 来源必须有 dat_path
     if provider == "traffic_monitor" and not source_off:
         dat = tm.get("dat_path") if isinstance(tm, dict) else None
@@ -1105,8 +1115,10 @@ def _validate_notify(spec: dict | None, errors: List[str]) -> None:
             elif n > 100:
                 errors.append("config.notify.max_per_hour: 须 <= 100")  # 防风暴参数自身无上界则失去意义
     if "dedup_window" in spec:
-        # 0 = 不去重(合法); 上限 24H: 过大 → 相同前缀的真实 ERROR 被长期压制(掩盖故障)
-        _try_time(spec["dedup_window"], "config.notify.dedup_window", errors, max_s=86400)
+        # 0 = 不去重(合法, R4#15: 与 models/schema help 的「0 = 不去重」口径一致, 裸 0 特判放行);
+        # 上限 24H: 过大 -> 相同前缀的真实 ERROR 被长期压制(掩盖故障)
+        if not _is_bare_zero(spec["dedup_window"]):
+            _try_time(spec["dedup_window"], "config.notify.dedup_window", errors, max_s=86400)
     if "channels" in spec:
         ch = spec["channels"]
         if not isinstance(ch, list) or not ch:

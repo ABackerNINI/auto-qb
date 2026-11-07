@@ -12,6 +12,7 @@
 - test_add_long_path_prefix_unc: UNC 路径 -> \\?\\UNC 前缀
 - test_add_long_path_prefix_already_prefixed: 已加前缀 -> 原样返回
 - test_path_normalize_empty: 空路径 -> 原样返回
+- test_path_normalize_keeps_unc_boundary: UNC 开头双斜杠豁免压缩(R2#30), 其余重复斜杠照常压缩
 
 ### P1 覆盖率提升轮: infra 长尾
 - test_atomic_write_backup_failure_continues: 备份失败只 WARNING, 写盘照常
@@ -76,6 +77,25 @@ def test_add_long_path_prefix_already_prefixed(monkeypatch):
 def test_path_normalize_empty():
     """空路径 -> 原样返回"""
     assert utils.path_normalize("") == ""
+
+
+def test_path_normalize_keeps_unc_boundary():
+    """UNC 开头双斜杠豁免压缩(R2#30): `\\\\NAS\\share` 折成 `//NAS/share` 后必须保留 `//` 根边界
+
+    旧实现 `re.sub(r'/{2,}', '/', ...)` 把开头双斜杠也压掉 -> `/NAS/share/dl` 在 Windows
+    宿主侧被当相对路径拼到 cwd 所在盘根下, POSIX 侧本就是绝对路径不发生拼接 —— 两种宿主
+    都触达不了 UNC 目标本体。其余位置的重复斜杠与三斜杠以上开头(收敛到两个, 保持 UNC
+    形状)照常归一。
+    """
+    assert utils.path_normalize(r"\\NAS\share\dl") == "//NAS/share/dl"
+    assert utils.path_normalize("//NAS//share//dl") == "//NAS/share/dl"
+    assert utils.path_normalize("///NAS/share") == "//NAS/share"
+    assert utils.path_normalize("////NAS") == "//NAS"
+    assert utils.path_normalize("//") == "//"
+    # 非 UNC 形状的既有行为不变(盘符 / POSIX 绝对 / 中段压缩 / 首尾斜杠保留)
+    assert utils.path_normalize("R://Seeds///A") == "R:/Seeds/A"
+    assert utils.path_normalize("/mnt//media/") == "/mnt/media/"
+    assert utils.path_normalize("a//b///c") == "a/b/c"
 
 
 def test_exists_dir_file_apply_long_path_prefix(tmp_path, monkeypatch):

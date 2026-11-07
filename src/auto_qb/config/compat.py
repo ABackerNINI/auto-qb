@@ -8,13 +8,13 @@
 validate_config 之前)—— 归一后的形态才进校验器, 校验器报错看到的已是归一形。
 
 两条 R1 附注(设计约束, 专测钉住):
-- R1① 错误定位回映射: 校验器报错话术须把归一形坐标翻回用户写的扁平坐标(如「第 2 个动作」
+- R1-1 错误定位回映射: 校验器报错话术须把归一形坐标翻回用户写的扁平坐标(如「第 2 个动作」
   而非归一后的结构路径); 本函数保序转换(列表序号 1:1 保留), 动作项报错路径继续用
   「actions[i].<动作名>」扁平坐标 + 序号话术, 条件项报错路径继续用「conditions[i].<条件名>」
   (顶层 all 的孩子序号 = 用户写的扁平列表序号, 校验器按此回映射, W3-A 落地)。
-- R1② 命名透传: normalize 只动 conditions/actions 结构, 规则名(含复合形「组.规则」)原样
+- R1-2 命名透传: normalize 只动 conditions/actions 结构, 规则名(含复合形「组.规则」)原样
   透传 —— 它是 exec_history 去重键「规则名:hash」的前半(core/state.py:281), 命名一变去重
-  窗口全部失效。⚠ 去重键的 hash 输入 = 种子 infohash(ctx.hash), **不含任何 spec 序列化**
+  窗口全部失效。WARN: 去重键的 hash 输入 = 种子 infohash(ctx.hash), **不含任何 spec 序列化**
   (core/state.py:262/281 唯一写读点)—— on_error 注入/条件建树只动 actions/conditions 条目
   形状, 不触碰规则名与种子 hash 两个键输入, 去重窗口天然零重置(回归断言见 test_rule_compat)。
 
@@ -200,7 +200,7 @@ def normalize_conditions(conds: Any) -> Any:
     """条件侧建树单点(W3-A, plan §3.2/G4): 旧扁平单键 dict 列表 -> 包隐式 `all:` 树形
 
     - list(现行 legacy 形态: 单键 dict 条件的列表) -> `{"all": list(conds)}` —— 语义 =
-      现行 Rule.matches 的 all(...); 列表序号 1:1 保留进 all 的孩子(R1① 扁平坐标回映射依据);
+      现行 Rule.matches 的 all(...); 列表序号 1:1 保留进 all 的孩子(R1-1 扁平坐标回映射依据);
     - dict(已是树形: 组合节点 {all/any/not} 或单条件节点)原样返回(幂等收敛);
     - 其它形状(非 list 非 dict, 如字符串/数字)原样透传交校验器报 —— normalize 不吞错误;
     - 叶子(条件 spec)零触碰: 「逗号分组」等行内语义全部留在叶内(见 CONDITION_GROUPING_MAP),
@@ -235,7 +235,7 @@ def normalize_legacy_rule(spec: Any) -> Any:
 def normalize_legacy_rules(data: Any) -> None:
     """config 解析树就地规范化全部 `*_rules` 规则集(load_config 载入链单点, 校验之前)
 
-    就地改写 group 内的 spec 映射(group dict 本身保留, 规则名零触碰 = R1②); 非 dict
+    就地改写 group 内的 spec 映射(group dict 本身保留, 规则名零触碰 = R1-2); 非 dict
     段/组原样跳过, 交校验器报结构错。
     """
     if not isinstance(data, dict):

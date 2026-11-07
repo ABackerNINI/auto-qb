@@ -239,13 +239,20 @@ def path_normalize(p: str) -> str:
     """
     路径规范化：仅统一分隔符并压缩冗余斜杠。
     重要：保留首尾斜杠不做删除，避免误匹配（如 'c:/windows/' 与 'c:/windowsg' 区分）。
+    开头的 UNC 双斜杠边界豁免压缩(存量评审 R4#1 / R2#30)：UNC 写法(\\\\NAS\\share\\dl)折成
+    `//NAS/share/dl` 后若照常压缩成 `/NAS/share/dl`，宿主侧会把单斜杠开头当相对路径处理：
+    Windows 拼到 cwd 所在盘根下(实测 abspath('\\NAS\\share\\dl') = 'D:\\NAS\\share\\dl',
+    或产出非法 \\\\?\\ 前缀串)，POSIX 上 `/NAS/...` 本就是绝对路径不发生拼接 —— 两种宿主
+    都触达不了 UNC 目标本体(Local.scandir 抛 FileNotFoundError)。
     """
     if not p:
         return p
     # 1. 反斜杠转正斜杠
     p = p.replace('\\', '/')
-    # 2. 压缩连续重复斜杠（如 "a//b" -> "a/b"），但保留根目录 "//" 或协议头 "file://" 等特殊场景（这里简单处理，仅压缩非边界处）
-    # 使用正则替换 2 个以上斜杠为 1 个
+    # 2. 压缩连续重复斜杠（如 "a//b" -> "a/b"）；开头两个及以上斜杠是 UNC 根边界，
+    #    收敛到恰好两个（仍保持 UNC 形状），其余位置照常压缩
+    if p.startswith("//"):
+        return "//" + re.sub(r'/{2,}', '/', p.lstrip("/"))
     return re.sub(r'/{2,}', '/', p)
 
 

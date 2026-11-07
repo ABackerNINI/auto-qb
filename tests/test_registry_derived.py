@@ -175,8 +175,8 @@ def test_demo_new_action_one_place():
             return ActionResult.ok("w5 demo noop")
 
     try:
-        # 1. schema 链路: 插件表派生自动可见(按名引用缺省 = 自带 decl)
-        assert schema.plugins_by_kind("action")["w5_demo_noop"].name == "w5_demo_noop"
+        # 1. schema 链路: 插件表派生自动可见(按名引用缺省 = 自带 decl; plugins_by_kind 已删, 走 plugin_table)
+        assert {p.name: p for p in schema.plugin_table()["action"]}["w5_demo_noop"].name == "w5_demo_noop"
         payload_names = [p.name for p in schema.schema_payload()["plugins"]["action"]]
         assert "w5_demo_noop" in payload_names
 

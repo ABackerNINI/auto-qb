@@ -18,7 +18,8 @@
 - test_capability_blocks_when_link_invisible: link_visible_to_host=False 时两种形态都不可用(跨 OS 反例)
 - test_platform_verdict_rows: §3.3 七行能力矩阵逐行落位(row/supported)
 - test_platform_verdict_unsupported_reason: 全不可用时 supported=False 且原因里带上各探测错误
-- test_same_volume_and_free: 同卷 True / 不可读 None(不可判定, 不是 False); 剩余空间可读与不可读
+- test_same_volume: 同卷 True / 不可读 None(不可判定, 不是 False); volume_free 死导出已删(R2#32,
+  同一职责由 relocate_common._volume_free_resolved 单点承担)
 - test_is_unc: UNC 判定(含 `\\\\?\\` 与 `\\\\.\\` 设备前缀不算 UNC)
 - test_is_remote_path: 远端判定 = UNC(含设备前缀 UNC); 本机固定盘/相对路径/非 Windows 为 False
 - test_is_remote_path_drive_type: 盘符映射网络盘(DRIVE_REMOTE)判远端, 本机固定盘判本地
@@ -424,11 +425,9 @@ def test_platform_verdict_unsupported_reason():
 # ---------------------------------------------------------------- 平台事实
 
 
-def test_same_volume_and_free(tmp_path):
+def test_same_volume(tmp_path):
     assert alias_fs.same_volume(str(tmp_path), str(tmp_path)) is True
     assert alias_fs.same_volume(str(tmp_path), str(tmp_path / "missing")) is None  # 不可判定 != 不同卷
-    assert alias_fs.volume_free(str(tmp_path)) > 0
-    assert alias_fs.volume_free(str(tmp_path / "missing")) is None
 
 
 def test_is_unc():

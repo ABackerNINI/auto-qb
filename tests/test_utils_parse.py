@@ -54,7 +54,7 @@
 - test_mask_tracker_url_path_and_query: mask R5/R6 path 末段高熵判定(边界 15/16 位)/端点名保留/fragment 丢/query 全值 hash 含未知参数名/裸名原样/段序不变/值不百分号解码
 - test_mask_tracker_url_deterministic_and_unique: mask R7/R8 确定性(两次逐字节一致)与唯一性三例
 - test_mask_tracker_entry: mask R9 只改 url 其余字段保全/原条目不被就地改/缺 url 与虚拟条目原样返回
-- test_display_host: 展示地址(回环 IPv4/IPv6/IPv4-mapped -> localhost, 对外地址与大小写原样, 异常入参不炸)
+- test_display_host: 展示地址(可达等价回环 127.0.0.1/::1 含 v4-mapped/全写法折 localhost, 其余回环 127.0.0.2+ 与对外地址原样, 异常入参不炸)
 - test_time_in_range_minute_granularity: 时段判定按**分钟**粒度(端点整分钟含在内: 23:59:30 在 "00:00-23:59" 内 / 跨午夜两端 / 起点前 1 分仍在区间外) —— issue 26-10-19-0013 的守阵
 - test_is_loopback_host_empty_and_unparsable: 回环判据两条保守出口(空/None、主机名 -> False; localhost 大小写与两族字面量 -> True)
 - test_fmt_size_invalid
@@ -748,18 +748,21 @@ def test_mask_tracker_entry():
 
 
 def test_display_host():
-    """display_host: 回环地址统一显示 localhost, 其余原样(只改展示, 不改监听面)
+    """display_host: 可达等价回环(127.0.0.1/::1 含等价写法)折成 localhost 展示, 其余原样
 
-    动机(2026-09-25): 浏览器把 127.0.0.1 与 localhost 当两个 origin, 列偏好/登录态各存一份,
-    提示里给 localhost 才能让用户每次都落在同一个 origin 上。
+    折叠口径是「可达等价」而非「全量回环」: 唯一消费点是 lifecycle 的 WEB UI 可连接地址
+    提示, 折成 localhost 后要仍连得上才有意义 —— 绑定 127.0.0.2 时 localhost(127.0.0.1/::1)
+    拒连, 折叠是误导, 127.0.0.2 必须原样给出。
     """
     from auto_qb.infra.utils import display_host
 
-    # 回环的四种写法都折成 localhost(含 IPv6 与 IPv4-mapped)
+    # 可达等价回环折成 localhost: 127.0.0.1/::1 本尊、IPv6 全写法(解析归一)、
+    # IPv4-mapped(::ffff:127.0.0.1 实测解析后经 ipv4_mapped 解包出 127.0.0.1)、大小写与首尾空白
     for h in ("127.0.0.1", "::1", "::ffff:127.0.0.1", "0:0:0:0:0:0:0:1", " 127.0.0.1 ", "::FFFF:127.0.0.1"):
         assert display_host(h) == "localhost", f"{h!r} 应显示为 localhost"
-    # 对外地址原样返回(不能把 0.0.0.0 / 局域网 IP 也折掉, 否则掩盖暴露面)
-    for h in ("0.0.0.0", "192.168.1.10", "qb.example.com"):
+    # 其余回环与对外地址原样返回(127.0.0.2 是合法回环绑定但 localhost 对它不可达;
+    # 0.0.0.0 / 局域网 IP 也不折, 否则掩盖暴露面)
+    for h in ("127.0.0.2", "0.0.0.0", "192.168.1.5", "192.168.1.10", "qb.example.com"):
         assert display_host(h) == h
     # 非字符串(配置缺失/取错类型)原样返回: 调用方都在日志路径上, 不该炸
     for bad in ("", None, 123):

@@ -34,7 +34,9 @@ logger = logging.getLogger(__name__)
 # ---- R5 拆分后的公开面回填: 原 utils 名继续可用, 调用方 import 路径不变 ----
 from .utils_parse import (
     parse_hm,
+    parse_time_range,
     time_in_range,
+    time_within,
     is_loopback_host,
     parse_bool,
     convert_bool_in_dict,
@@ -263,24 +265,42 @@ def mask_tracker_entry(entry: dict) -> dict:
     return {**entry, "url": mask_tracker_url(url)}
 
 
-# 展示口径的回环地址集合(IPv4 / IPv6 / IPv4-mapped / IPv6 全写法), 命中即统一显示成 localhost
-DISPLAY_LOOPBACK_HOSTS = frozenset({"127.0.0.1", "::1", "::ffff:127.0.0.1", "0:0:0:0:0:0:0:1"})
+# display_host 的折叠锚:「可达等价回环」= 解析归一后等于 127.0.0.1 或 ::1 —— IPv6 全写法
+# (0:0:...:1)与 dotted-tail(::0.0.0.1)等价形态由解析归一自动覆盖, IPv4-mapped
+# (::ffff:127.0.0.1)先经 ipv4_mapped 解包再比。127.0.0.2 等其余回环不在内: 绑定它们时
+# localhost(127.0.0.1/::1)拒连, 展示成 localhost 是误导。
+_DISPLAY_FOLD_ADDRS = (ipaddress.ip_address("127.0.0.1"), ipaddress.ip_address("::1"))
 
 
 def display_host(host) -> str:
-    """给用户看的地址: 回环地址一律写成 localhost, 其余(含对外地址)原样
+    """给用户看的地址: 可达等价回环折成 localhost 展示, 其余(含 127.0.0.2 等其余回环)原样
 
-    只改**展示**, 不动监听面(绑定仍用配置里的原值)。原因(2026-09-25 实测):
-    浏览器把 `127.0.0.1` 与 `localhost` 视作**两个不同 origin**, localStorage(列偏好 / 登录态)
-    各存一份, 而且 127.0.0.1 上的那份更容易被浏览器顺手清掉 —— 提示统一给 `localhost`,
-    用户每次点开都是同一个 origin, 偏好不会"莫名其妙回默认"。
+    只改**展示**, 不动监听面(绑定仍用配置里的原值)。唯一消费点是 webui lifecycle 的
+    「WEB UI 已启动: http://<host>:<port>」可连接地址提示 —— 折成 localhost 后浏览器落在
+    127.0.0.1/::1, 只有绑定本身就是 127.0.0.1/::1(或字面 localhost)时才与原地址**可达等价**;
+    origin 统一的动机(2026-09-25 实测: 浏览器把 127.0.0.1 与 localhost 视作两个 origin,
+    localStorage 列偏好/登录态各存一份, 127.0.0.1 那份更易被清掉)只对可达等价成立。
+    web.host=127.0.0.2 这类其余回环绑定下 localhost 拒连, 折叠是误导 -> 原样展示。
+
+    判定: 字面 localhost(大小写不敏感)或解析归一后 == 127.0.0.1 / ::1(锚见
+    _DISPLAY_FOLD_ADDRS); 解析失败(主机名等)原样返回。口径与 is_loopback_host(127/8
+    全量回环, config 校验与 hr 配对门用)刻意不同 —— 那里判「是不是回环」, 这里判
+    「折成 localhost 后还连不连得上」。
 
     - 入参异常(空 / 非字符串)原样返回: 调用方都在日志路径上, 不该因为取不到值就炸。
     """
     if not isinstance(host, str):
         return host
     raw = host.strip()
-    return "localhost" if raw.lower() in DISPLAY_LOOPBACK_HOSTS else raw
+    if raw.lower() == "localhost":
+        return "localhost"
+    try:
+        addr = ipaddress.ip_address(raw)
+    except ValueError:
+        return raw
+    if addr.version == 6 and addr.ipv4_mapped is not None:
+        addr = addr.ipv4_mapped
+    return "localhost" if addr in _DISPLAY_FOLD_ADDRS else raw
 
 
 def match_tracker_confs(trackers: dict, urls: list):

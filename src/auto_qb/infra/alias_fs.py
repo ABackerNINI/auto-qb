@@ -39,7 +39,6 @@ import logging
 import os
 import posixpath
 import re
-import shutil
 import stat
 import struct
 import tempfile
@@ -425,14 +424,6 @@ def same_volume(a: str, b: str) -> Optional[bool]:
     except OSError:
         return None
     return dev_a == dev_b
-
-
-def volume_free(path: str) -> Optional[int]:
-    """路径所在卷的剩余字节; 不可读 => None(界面显示「不可判定」而不是 0)"""
-    try:
-        return shutil.disk_usage(utils.add_long_path_prefix_for_win(path)).free
-    except OSError:
-        return None
 
 
 def classify_link_failure(path: str, exc: BaseException) -> str:

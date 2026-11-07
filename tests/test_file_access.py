@@ -12,6 +12,9 @@
 - test_mapped_prefix_boundary: `/` 边界强制(D:/Downloads 不得命中 D:/Downloads2)
 - test_mapped_casefold_expanding_prefix: casefold 变长字符(ß→ss)出现在映射前缀 —— 边界按原串码点定位、余量不错位(回归: 旧实现按折叠长度硬切原串, 容器路径丢字符 → exists 误判「不存在」重演误暂停)
 - test_mapped_scandir_logical_space: scandir entry 译回逻辑空间(白名单消费方零改动的前提)
+- test_local_scandir_unc_boundary_not_cwd_joined: Local scandir 的 UNC 逻辑路径保留 `//` 边界
+  (不落 cwd 拼接, entry.path 仍 UNC 形状, R2#30)
+- test_mapped_unc_source_scandir_logical: UNC 映射源(`\\\\NAS\\share`)命中映射, entry.path 仍 UNC 形状
 - test_mapped_mkdir_real_and_miss: mkdir 挂载点可写即真实执行; miss 报 FileAccessError(不可判定)
 - test_mapped_realpath_lexical: Mapped realpath_lexical 纯词法(normcase+normpath, 不解析符号链接)
 - test_mapped_symlink_escape_treated_as_miss: SEC-1 逃逸加固 —— 挂载内符号链接指向挂载外按
@@ -19,6 +22,8 @@
   挂载内合法符号链接不受影响(宿主无建链能力时 skip —— 含 os.symlink 假成功)
 - test_mapped_escape_containment_logic: SEC-1 逃逸判定逻辑(非 symlink 环境可跑) —— 容器侧
   realpath 解析跳出挂载根 -> 按 miss, 仍在根内 -> 正常
+- test_mapped_overlap_escape_falls_through_to_next_entry: 重叠映射首条命中条目逃逸 -> 弃用该条目
+  继续尝试后续映射, 更具体的安全条目仍命中; 全部条目穷尽仍无安全命中 -> 与未命中同判 miss(R2#31)
 - test_mapped_mount_root_via_symlink: 挂载根本身经符号链接到达 -> 按解析后的真实根比较不误伤
   (同上, 宿主无建链能力时 skip)
 - test_mapped_open_path_not_supported: 容器 open_path 恒 NotSupported(B/C 类根因, 优雅降级)
@@ -242,6 +247,57 @@ def test_mapped_scandir_logical_space(tmp_path):
     assert not by_name["Season 1"].path.startswith(str(tmp_path))
 
 
+def test_local_scandir_unc_boundary_not_cwd_joined(monkeypatch):
+    """Local scandir 的 UNC 逻辑路径保留 `//` 根边界: syscall 不落 cwd 拼接, entry.path 仍 UNC 形状(R2#30)
+
+    修复前: _norm_logical 经 path_normalize 把 UNC 写法(`\\\\NAS\\share\\dl`)压成
+    `/NAS/share/dl`, Local._pref 对单斜杠开头走相对路径分支 —— Windows 上 abspath 拼到
+    cwd 所在盘根下(实测 abspath("\\NAS\\share\\dl") = "D:\\NAS\\share\\dl", 或产出非法
+    \\\\?\\ 前缀串), POSIX 上 `/NAS/...` 本就是绝对路径不发生拼接, 两种宿主都触达不了
+    UNC 目标本体(Windows 宿主直跑 + qB 报 UNC save_path/content_path 时, 目录浏览 fs.py
+    与迁移扫描 relocate_plan.py 打开错误路径抛 FileNotFoundError), entry.path 也是
+    `/NAS/...` 畸形逻辑路径(违反「逻辑路径进 -> 逻辑路径出」)。UNC 目标不必真实存在:
+    scandir 打桩, 断言打在归一化/路径拼接层(与 testing/file-conventions.md「测试不得依赖
+    宿主环境能力」同口径)。
+    """
+    assert file_access._norm_logical(r"\\NAS\share\dl") == "//NAS/share/dl", "归一必须保留 UNC 边界"
+    seen = {}
+
+    class _FakeEntry:
+        name = "a.bin"
+
+        def is_dir(self):
+            return False
+
+    import contextlib
+
+    @contextlib.contextmanager
+    def fake_scandir(p):
+        seen["p"] = p
+        yield [_FakeEntry()]
+
+    monkeypatch.setattr(file_access.os, "scandir", fake_scandir)
+    entries = LocalFileAccess().scandir(r"\\NAS\share\dl")
+    syscall = str(seen["p"]).replace("\\", "/")
+    # syscall 收到 UNC 形状(Windows 宿主已译成 \\?\UNC\..., 非 Windows 原样保留),
+    # 绝不是 abspath 拼到 cwd 下的形态
+    assert syscall.startswith("//NAS/share/dl") or syscall.startswith("//?/UNC/NAS/share/dl"), syscall
+    assert entries[0].path == "//NAS/share/dl/a.bin", entries[0].path
+
+
+def test_mapped_unc_source_scandir_logical(tmp_path):
+    """UNC 映射源(`\\NAS\share`)命中映射且 entry.path 保持 UNC 形状(逻辑进 -> 逻辑出, R2#30)"""
+    mount = str(tmp_path).replace(os.sep, "/")
+    fa = MappedFileAccess((PathMapEntry(src=r"\\NAS\share", dst=mount), ))
+    (tmp_path / "sub").mkdir()
+    (tmp_path / "sub" / "a.bin").write_bytes(b"x")
+    assert fa.map_to_container(r"\\NAS\share\sub") == mount + "/sub"
+    assert fa.exists(r"\\NAS\share\sub\a.bin") is True
+    entries = fa.scandir(r"\\NAS\share\sub")
+    assert [e.name for e in entries] == ["a.bin"]
+    assert entries[0].path == "//NAS/share/sub/a.bin", "entry.path 是 UNC 逻辑路径, 不是压掉双斜杠的畸形串"
+
+
 def test_mapped_mkdir_real_and_miss(tmp_path):
     """mkdir: 挂载点可写即真实执行(2026-09-27 拍板放宽); miss 报不可判定"""
     fa = _mapped(tmp_path)
@@ -360,6 +416,53 @@ def test_mapped_escape_containment_logic(tmp_path, monkeypatch):
     # 根内路径语义不变
     assert fa.exists("D:/Downloads/real/a.bin") is True
     assert fa.exists("D:/Downloads/real/ghost.bin") is False
+
+
+def test_mapped_overlap_escape_falls_through_to_next_entry(tmp_path, monkeypatch):
+    """重叠映射 + 首条命中条目逃逸 -> 弃用该条目继续尝试后续映射(R2#31), 更具体的安全条目仍命中;
+    全部条目穷尽仍无安全命中 -> 与未命中同判 miss(UNDETERMINED/FileAccessError), 语义不变。
+
+    realpath 桩注入(非 symlink 环境可跑, 同 test_mapped_escape_containment_logic): 宽条目
+    挂载下的 movies/jail 前缀解析到挂载外, 具体条目挂载不受桩影响。
+    """
+    mount_a = tmp_path / "mountA"  # 宽条目 D:/Downloads -> mountA(其下 movies/jail 由桩判逃逸)
+    mount_b = tmp_path / "mountB"  # 具体条目 D:/Downloads/movies -> mountB
+    mount_a.mkdir()
+    mount_b.mkdir()
+    (mount_b / "x.bin").write_bytes(b"x" * 3)
+    outside = tmp_path.parent / (tmp_path.name + "-outside")
+    outside.mkdir()
+    real_realpath = os.path.realpath
+    escaped_prefixes = [str(real_realpath(mount_a / name)) for name in ("movies", "jail")]
+    outside_real = str(real_realpath(outside))
+
+    def fake_realpath(p, **kw):
+        rp = str(real_realpath(p))
+        for prefix in escaped_prefixes:
+            if rp == prefix or rp.startswith(prefix + os.sep):
+                return outside_real + rp[len(prefix):]
+        return rp
+
+    monkeypatch.setattr(os.path, "realpath", fake_realpath)
+    dst_a = str(mount_a).replace(os.sep, "/")
+    dst_b = str(mount_b).replace(os.sep, "/")
+    fa = MappedFileAccess(
+        (
+            PathMapEntry(src="D:/Downloads", dst=dst_a),
+            PathMapEntry(src="D:/Downloads/movies", dst=dst_b),
+        )
+    )
+    # 首条(宽条目)命中但容器路径逃逸 -> 弃用该条目, 落到后续更具体的条目命中
+    assert fa.map_to_container("D:/Downloads/movies/x.bin") == dst_b + "/x.bin"
+    assert fa.exists("D:/Downloads/movies/x.bin") is True
+    assert fa.getsize("D:/Downloads/movies/x.bin") == 3
+    # 目录本身: 宽条目逃逸后落到具体条目的「根本身命中」(根命中恒在根内, 不做逃逸校验)
+    assert fa.map_to_container("D:/Downloads/movies") == dst_b
+    # 只命中宽条目且逃逸: 全部条目穷尽仍无安全命中 -> 与未命中同判 miss(语义不变)
+    assert fa.map_to_container("D:/Downloads/jail/secret.bin") is None
+    assert fa.exists("D:/Downloads/jail/secret.bin") is UNDETERMINED
+    with pytest.raises(FileAccessError, match="不可判定"):
+        fa.getsize("D:/Downloads/jail/secret.bin")
 
 
 def test_mapped_open_path_not_supported(tmp_path):

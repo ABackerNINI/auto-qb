@@ -27,6 +27,9 @@
   (字符串缺少结束引号)
 - test_unary_plus_literal_folds_without_sign_flip: C39 守阵 —— 一元 + 折叠不得翻符号
 - test_not_keyword_not_folded_as_unary_sign: C54 守阵 —— `not` 关键字判定失效即退化成符号折叠
+- test_deep_nesting_depth_cap: R2#23 —— 深嵌套(100 层括号)抛 ExprSyntaxError 而非 RecursionError
+- test_nesting_depth_cap_covers_lists_and_calls: R2#23 —— 深度上限同样拦列表字面量与函数参数嵌套
+- test_shallow_nesting_within_depth_cap_ok: R2#23 —— 合法浅嵌套(10 层括号)不受上限影响
 """
 import pytest
 
@@ -271,3 +274,29 @@ def test_not_keyword_not_folded_as_unary_sign():
     (关键字判定失效 -> `not 5` 变成 Lit(5), 配置期类型检查被整段绕过)"""
     with pytest.raises(ExprSyntaxError, match="操作数必须是布尔"):
         compile_expr("(not 5) > 3")
+
+
+def test_deep_nesting_depth_cap():
+    """R2#23: 深嵌套(100 层括号)抛 ExprSyntaxError 而非 RecursionError —— 递归下降无上限时
+    RecursionError 不是 ExprError, 会逃出 config 校验与 WebUI 试算的两处 except ExprError"""
+    deep = "(" * 100 + "tor.size > 1GiB" + ")" * 100
+    with pytest.raises(ExprSyntaxError, match="嵌套超过上限"):
+        compile_expr(deep)
+
+
+def test_nesting_depth_cap_covers_lists_and_calls():
+    """R2#23: 深度上限同样拦住列表字面量与函数参数的深嵌套(同一 _level 计数单点)"""
+    deep_list = "[" * 100 + "1" + "]" * 100
+    with pytest.raises(ExprSyntaxError, match="嵌套超过上限"):
+        compile_expr("tor.size in " + deep_list)
+    deep_call = "len(" * 100 + "tor.tags" + ")" * 100
+    with pytest.raises(ExprSyntaxError, match="嵌套超过上限"):
+        compile_expr(deep_call + " > 0")
+
+
+def test_shallow_nesting_within_depth_cap_ok():
+    """R2#23: 合法浅嵌套(10 层括号, 远低于上限 64 / 仓库最深用例 3 层)不受影响"""
+    expr = "(" * 10 + "tor.size > 1GiB" + ")" * 10
+    root = compile_expr(expr).root
+    assert isinstance(root, Binary), f"10 层括号应正常建树: {root!r}"
+    assert (root.op, root.left.name, root.right.value) == (">", "tor.size", 1024**3)

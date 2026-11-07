@@ -5,11 +5,12 @@
 
 名字可用性三态(见计划第 04 节):
 - **恒定可用** —— 配置期只校验名字存在: tor.* / tracker.* / sys 的时间与计数 / 全部函数
-- **运行期不可用** —— 数据源当时拿不到, getter 直接抛 ExprError, 由「出错即停规则」兜住。
+- **运行期不可用** —— 数据源当时拿不到, getter 直接抛 ExprError, 由 Rule.process 兜住
+  (本条规则本轮跳过, 不影响其它规则, 见 base.py)。
   WARN: **绝不降级成假值**: `sys.dl_speed` 拿不到就是报错, **不返回 0** —— 返回 0 会让
   「全局速度低于阈值」在数据源失效时**静默成真**, 进而批量触发限速/停止动作
 - **「值不存在」≠「求值出错」** —— 未匹配站点 `tracker.name` = "Unknown"、无 HR 配置
-  `tor.hr_condition_met` = false, 都是有定义的缺省, 正常参与求值, 不报错不停规则
+  `tor.hr_condition_met` = false, 都是有定义的缺省, 正常参与求值, 不报错
 
 昂贵标记(expensive): 有系统调用 / API 调用 / 遍历全库的取值, 求值侧按 ctx 缓存(见 eval.py),
 并靠 and/or 短路避免无谓调用。时间类名字也标昂贵 —— 缓存后同一规则执行内时间一致。
@@ -216,8 +217,8 @@ def disk_usage_value(path, attr: str):
     FreespaceCondition 共用(conditions.py 从此导入), 消四处逐字同的「取数 + 错误映射」。
 
     「不可判定」显式报错(报告 §05), **绝不降级成假值**: 映射 miss 转 ExprError;
-    盘不可读/盘符掉线同口径 —— 磁盘故障时规则由静默失活变显式停规则 + ERROR。
-    ExprError 由 Rule.process 兜成「不匹配 + 停后续规则」。
+    盘不可读/盘符掉线同口径 —— 磁盘故障时规则由静默失活变显式报错 + ERROR。
+    ExprError 由 Rule.process 兜成「本条规则本轮跳过, 不影响其它规则」。
     """
     path = str(path)
     try:

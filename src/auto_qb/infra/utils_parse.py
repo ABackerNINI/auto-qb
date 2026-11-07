@@ -40,22 +40,38 @@ def parse_hm(text: str) -> "tuple[int, int]":
     return hour, minute
 
 
-def time_in_range(now: dtime, spec: str) -> bool:
-    """当前时刻是否在 "HH:MM-HH:MM" 区间内(支持跨午夜, 如 "23:00-08:00"; date_time 条件与通知共用)
+def parse_time_range(spec: str) -> "tuple[dtime, dtime]":
+    """解析 "HH:MM-HH:MM" -> (start, end) 端点时刻(支持跨午夜, 端点次序原样保留);
+    非法格式/越界抛 ValueError。解析单点: date_time 条件构造期预解析(R2#20)与本函数的
+    原消费方(通知 quiet_hours / HR 限速窗口)共用, 不得各写一份。"""
+    start_s, end_s = str(spec).split("-", 1)
+    return dtime(*parse_hm(start_s)), dtime(*parse_hm(end_s))
+
+
+def time_within(now: dtime, start: dtime, end: dtime) -> bool:
+    """已解析端点的时段判定(time_in_range 的比较半边; date_time 条件构造期预解析端点后
+    按本函数逐轮比较)。
 
     **按分钟粒度比较**: 区间语法只写到分钟, 故先把秒/微秒截掉再比 —— 端点所在的整分钟都算在内
     (23:59:30 落在 "…-23:59" 之内)。2026-10-19 前按秒直比, 端点分钟的后 59 秒被判出界:
     "00:00-23:59"(用户表达"全天")每天漏掉 23:59:01-23:59:59, 且与表达式侧
     sys.time_of_day(hour*60+minute, 分钟口径)结论相反 —— 等价性用例在该分钟必红
-    (issue 26-10-19-0013)。三个消费方(规则条件 / 通知 quiet_hours / HR 限速窗口)口径一致。
+    (issue 26-10-19-0013)。
     """
-    start_s, end_s = str(spec).split("-", 1)
     now = now.replace(second=0, microsecond=0)
-    t_start = dtime(*parse_hm(start_s))
-    t_end = dtime(*parse_hm(end_s))
-    if t_start <= t_end:
-        return t_start <= now <= t_end
-    return now >= t_start or now <= t_end  # 跨午夜: 不在 start-24:00 即在 00:00-end
+    if start <= end:
+        return start <= now <= end
+    return now >= start or now <= end  # 跨午夜: 不在 start-24:00 即在 00:00-end
+
+
+def time_in_range(now: dtime, spec: str) -> bool:
+    """当前时刻是否在 "HH:MM-HH:MM" 区间内(支持跨午夜, 如 "23:00-08:00"; 通知 quiet_hours /
+    HR 限速窗口共用; date_time 条件已改为构造期预解析端点, 走 parse_time_range + time_within)
+
+    解析与比较拆为 parse_time_range / time_within 单点, 本函数是二者的组合入口,
+    三个消费方(规则条件 / 通知 quiet_hours / HR 限速窗口)口径一致。
+    """
+    return time_within(now, *parse_time_range(spec))
 
 
 def is_loopback_host(host: str) -> bool:

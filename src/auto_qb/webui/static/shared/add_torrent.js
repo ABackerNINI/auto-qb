@@ -26,11 +26,16 @@ function _addOrderByRecent(options, recency) {
   });
 }
 
-/* 路径归一(与后端 infra/utils.path_normalize 同口径): 反斜杠转正斜杠 + 压缩重复斜杠, 首尾斜杠保留。
+/* 路径归一(与后端 infra/utils.path_normalize 同口径): 反斜杠转正斜杠 + 压缩重复斜杠, 首尾斜杠保留;
+ * 开头 UNC 根边界(两个及以上斜杠)收敛到恰好两个(与后端同批修法, 两侧不同径则时间表恒不命中)。
  * 必要性: /api/paths 返回的是**已归一**路径, 而 SEED_ITEM 的 save_path 是 qB **原文** ——
  * 两侧不同径则时间表恒不命中, 功能静默退化成纯字母序(不报错、不白屏, 只是"排序没生效")。 */
 function _addNormPath(p) {
-  return String(p == null ? "" : p).replace(/\\/g, "/").replace(/\/{2,}/g, "/");
+  const s = String(p == null ? "" : p).replace(/\\/g, "/");
+  /* 开头 UNC 根边界: 剥掉全部开头斜杠再补恰好两个(与后端 lstrip("/") 等价,
+   * ///NAS/share -> //NAS/share); 单斜杠开头(POSIX 绝对)不走本支, 照常保留。 */
+  if (!s.startsWith("//")) return s.replace(/\/{2,}/g, "/");
+  return "//" + s.replace(/^\/+/, "").replace(/\/{2,}/g, "/");
 }
 
 /* combobox 失焦收层的合帧窗(毫秒): 焦点离开与 label 转发回焦之间隔着整段按住时长

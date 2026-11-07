@@ -19,6 +19,7 @@
 - test_write_tree_updates_derived_state_file: 改 data_dir 时派生的 state_file 一并回退
 - test_write_tree_writes_float_and_negative_scalars_plain: 浮点字符串按原生标量写出
 - test_write_tree_backup_created: 写盘前生成 `data/config.yml.bak` 备份(父目录按需创建)
+- test_write_tree_concurrent_saves_serialize: 并发写盘串行化(批次4 #17) —— 两线程 barrier 后并发 write_tree, 磁盘恰好一个保存完整胜出(两标记不混合), .bak 恒为「胜出保存前」的另一保存完整结果
 - test_preview_tree_does_not_touch_disk: 预览不落盘, 且内容与写盘结果一致(除注释形态)
 - test_preview_tree_invalid_raises: 预览同样做校验
 - test_preview_tree_does_not_create_backup: 预览不产生任何备份文件
@@ -362,6 +363,54 @@ def test_write_tree_backup_created(tmp_path):
     with open(backup, "r", encoding="utf-8") as f:
         assert f.read() == before
     assert not (tmp_path / "config.yml.bak").exists(), "项目目录不得再产生 .bak"
+
+
+def test_write_tree_concurrent_saves_serialize(tmp_path):
+    """并发写盘串行化(批次4 #17): 两线程并发 write_tree, 两次保存都完整落盘且 .bak 语义不被交错破坏
+
+    webui 的 PUT /api/config 是同步 def handler(FastAPI 线程池并发): 无锁时两个并发保存会
+    交错 —— 后保存方的 .bak 可能读到前者已写入的新内容而非保存前状态(备份恢复资产退化),
+    后完成的 _dump_roundtrip 整体覆盖前者(先保存方改动静默丢失)。模块级单锁串行化后可钉死的
+    确定性: 恰好一次保存完整胜出(磁盘 = 其完整树), .bak = 另一方保存的完整结果(即「胜出那次
+    保存前」的磁盘状态), 两侧都是可 load_config 的完整配置。两保存各改不同键
+    (main_tick/sync_interval), 「混合落盘」即可检: 两标记不得同时出现在磁盘上。
+    """
+    import threading
+
+    path = _make(tmp_path, BASE)
+    old = load_config(path)
+    tree_a = read_tree(path)
+    tree_b = read_tree(path)
+    tree_a["config"]["main_tick"] = "5s"
+    tree_b["config"]["sync_interval"] = "7s"
+    backup = _bak(tmp_path)
+    errors: list = []
+    barrier = threading.Barrier(2, timeout=30)
+
+    def _save(tree):
+        try:
+            barrier.wait()
+            write_tree(path, tree, old, backup)
+        except BaseException as e:  # 线程内异常收进断言, 不静默吞掉
+            errors.append(e)
+
+    threads = [threading.Thread(target=_save, args=(t, ), name=f"save-{i}") for i, t in enumerate((tree_a, tree_b))]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(60)
+    assert not any(t.is_alive() for t in threads), "并发保存不得挂死"
+    assert not errors, f"并发保存不得抛错(交错破坏会以异常/混合内容显形): {errors}"
+
+    # 磁盘 = 恰好一个保存方的完整树: 两标记恰中其一, 不得混合
+    final = load_config(path)
+    a_on_disk = final.main_tick == 5.0
+    b_on_disk = final.sync_interval == 7.0
+    assert a_on_disk != b_on_disk, f"整树保存必须恰好一个完整胜出, 不得混合: main_tick={final.main_tick} sync_interval={final.sync_interval}"
+    # .bak = 胜出方的上一次保存结果(即另一方的完整树), 不是交错半途状态
+    bak = load_config(backup)
+    assert (bak.sync_interval == 7.0) == a_on_disk and (bak.main_tick == 5.0) == b_on_disk, \
+        f".bak 语义被交错破坏: 应为「胜出保存前」的完整状态, 实际 main_tick={bak.main_tick} sync_interval={bak.sync_interval}"
 
 
 def test_preview_tree_does_not_create_backup(tmp_path):

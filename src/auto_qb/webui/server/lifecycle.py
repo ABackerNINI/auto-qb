@@ -216,8 +216,9 @@ def start_web_server(manager) -> WebServerHandle:
     thread = threading.Thread(target=_run_server, args=(server, ), name="auto-qb-web", daemon=True)
     thread.start()
     handle = WebServerHandle(server, thread)
-    # 地址一律按展示口径给(回环 -> localhost): 浏览器把 127.0.0.1 与 localhost 当两个 origin,
-    # localStorage 各存一份且 127.0.0.1 那份更易被清理 —— 提示写 localhost, 用户每次都落同一 origin
+    # 地址按展示口径给(可达等价回环折成 localhost, 判定口径见 display_host): 浏览器把
+    # 127.0.0.1 与 localhost 当两个 origin, localStorage 各存一份且 127.0.0.1 那份更易被
+    # 清理 —— 提示写 localhost 用户每次都落同一 origin; 127.0.0.2 等其余回环不折(不可达)
     shown = display_host(manager.config.web.host)
     if _wait_until_started(handle, WEB_START_TIMEOUT):
         # 生命周期消息按 INFO 记(pitfalls/ops/alert-levels.md: 启动类不许用 WARNING, 否则 notify

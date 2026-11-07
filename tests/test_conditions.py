@@ -11,6 +11,8 @@
 - test_state_condition: state 条件匹配
 - test_hr_condition: HR 条件(condition-met=需管束 / satisfied=义务已了; 无hr站点 satisfied 默认满足)
 - test_hr_condition_no_tracker_conf: 未匹配站点(conf=None)不抛 AttributeError, 保守按未管束/未满足
+- test_hr_condition_invalid_mode_fails_fast: HR 条件未知 mode 构造期抛 ValueError, 建树包装成
+  ConfigError(R2#19: 不再静默落 condition-met 分支)
 - test_date_time_condition: 日期时间条件
 - test_seedtime_condition: 做种时间条件
 - test_upload_ratio_condition: 上传分享率条件
@@ -25,6 +27,8 @@
 - test_date_time_day_of_week_mismatch: day_of_week 不匹配 -> 不触发
 - test_date_time_cross_midnight: 跨午夜 time 区间匹配/不匹配
 - test_date_time_out_of_range: 非跨午夜区间当前时刻不在 -> 不触发
+- test_date_time_invalid_spec_fails_fast: R2#20 —— date_time 区间/时段串构造期解析,
+  非法串抛 ValueError/建树包装 ConfigError, 合法区间串 match 行为不变
 - test_tags_condition_case_sensitive: 标签条件精确匹配默认区分大小写, :ignore_case 后缀显式开启
 - test_tags_condition_ignore_case: tags 条件 :ignore_case(精确+regex 两型)
 - test_category_condition_ignore_case: category 条件 :ignore_case(精确+regex 两型)
@@ -306,6 +310,30 @@ def test_hr_condition_no_tracker_conf():
         assert HrCondition("satisfied").match(ctx) is False
 
 
+def test_hr_condition_invalid_mode_fails_fast():
+    """HR 条件未知 mode 构造期 fail-fast(R2#19): 不再静默落 condition-met 分支
+
+    config 层对 hr 取值无深度校验(schema.HR_MODES 只是 UI 下拉源, registry 条目未声明
+    validator), 拼写错误如 'satified' 旧实现能过加载, 行为随站点是否配 HR 漂移(未配 HR 时
+    'satified' != 'condition-met' 恒真)且全程零诊断 —— 违反黄金法则 4。构造期抛 ValueError,
+    规则建树经 _build_condition_node 包装成 ConfigError 携带规则名。
+    """
+    from auto_qb.config import ConfigError
+    from auto_qb.config.schema.fields import HR_MODES
+    from auto_qb.rules.base import _build_condition_node
+
+    for mode in HR_MODES:  # 合法取值(取值源与实现同 import 自 config.schema.fields)
+        HrCondition(mode)
+    with pytest.raises(ValueError, match="mode 非法"):
+        HrCondition("satified")
+    # mode 精确比较, 大小写不同也非法(不静默归一到小写)
+    with pytest.raises(ValueError, match="mode 非法"):
+        HrCondition("Condition-Met")
+    # 规则建树路径: 叶子构造异常包装成 ConfigError 携带规则名(规则加载期即报错, 不进运行期)
+    with pytest.raises(ConfigError, match="规则 bad-hr-rule"):
+        _build_condition_node({"hr": "satified"}, "bad-hr-rule")
+
+
 def test_date_time_condition():
     """日期时间条件: day_of_month/day_of_week/time(含跨午夜)"""
     with tempfile.TemporaryDirectory() as td:
@@ -475,6 +503,33 @@ def test_date_time_out_of_range(monkeypatch):
         ctx = _ctx(mgr, FakeTorrent())
         assert DateTimeCondition({"time": "10:00-12:00"}).match(ctx) is False, \
             "14:00 不在 10:00-12:00 内"
+
+
+def test_date_time_invalid_spec_fails_fast():
+    """R2#20: date_time 区间/时段串构造期解析(黄金法则 4)—— 非法串构造即抛 ValueError,
+    建树包装成 ConfigError 携带规则名(此前推迟到每轮 match 才抛, 被兜成 verdict:error,
+    规则永久失效只留节流 ERROR); 合法区间串 match 行为不变(解析前移只动时机不动语义)"""
+    import datetime
+    from auto_qb.config import ConfigError
+    from auto_qb.rules.base import _build_condition_node
+
+    with pytest.raises(ValueError, match="day_of_month"):
+        DateTimeCondition({"day_of_month": "1,15"})
+    with pytest.raises(ValueError, match="day_of_week"):
+        DateTimeCondition({"day_of_week": "abc"})
+    with pytest.raises(ValueError, match="time"):
+        DateTimeCondition({"time": "25:00-26:00"})
+    # 规则建树路径: 叶子构造异常包装成 ConfigError 携带规则名(规则加载期即报错, 不进运行期)
+    with pytest.raises(ConfigError, match="规则 bad-dt-rule"):
+        _build_condition_node({"date_time": {"day_of_month": "1,15"}}, "bad-dt-rule")
+    # 合法区间串/单值: 解析前移后 match 行为不变(区间含端点)
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        ctx = _ctx(mgr, FakeTorrent())
+        today = datetime.date.today()
+        assert DateTimeCondition({"day_of_month": "1-31"}).match(ctx), "今天必在 1-31 内(含端点)"
+        assert DateTimeCondition({"day_of_month": str(today.day)}).match(ctx)
+        assert DateTimeCondition({"day_of_week": f"{today.isoweekday()}-{today.isoweekday()}"}).match(ctx), "单值区间退化为等值"
 
 
 # ---------------- P2-a 长尾清偿 (计划 26-10-01-2157 §3 P2, 2026-10-02) ----------------

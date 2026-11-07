@@ -113,8 +113,13 @@ def _expr_gate(data: Any) -> _ExprGate:
     ts = data.get("traffic_source") if isinstance(data, dict) else None
     if not isinstance(ts, dict):
         return _ExprGate()
-    if str(ts.get("enabled") or "").strip().lower() == "false":
-        return _ExprGate(traffic_configured=True)
+    # 关闭判定经 parse_bool(R4#10, 与 _validate_traffic_source 同口径): no/off/0 等价写法
+    # 同算关闭 -> 恒 True; 解析失败按未关闭处理(保守: 名字仍禁用), 结构错由段校验负责报
+    try:
+        if parse_bool(ts.get("enabled")) is False:
+            return _ExprGate(traffic_configured=True)
+    except ValueError:
+        pass
     provider = str(ts.get("provider") or "traffic_monitor").strip()
     if provider == "global_traffic_monitor":
         return _ExprGate(traffic_configured=True)
@@ -256,8 +261,10 @@ def _validate_checking_action_spec(value: Any, where: str, errors: List[str], ga
         _check_unknown_keys(sub, CHECKING_SECTION_KNOWN_KEYS, f"{where}.{seg}", errors)
         if "enabled" in sub:
             _try(parse_bool, sub["enabled"], f"{where}.{seg}.enabled", errors)
-        if str(sub.get("mode", "")) not in CHECKING_MODES:
-            errors.append(f"{where}.{seg}.mode 取值非法: '{sub.get('mode', '')}', 可选: {list(CHECKING_MODES)}")
+        # mode 仅在显式配置时校验(R4#12, 与上面 enabled 同款存在守卫): 未配置走 schema 默认
+        # skip-checking, 不该报「取值非法: ''」把 schema 默认值变成不可达
+        if "mode" in sub and str(sub["mode"]) not in CHECKING_MODES:
+            errors.append(f"{where}.{seg}.mode 取值非法: '{sub['mode']}', 可选: {list(CHECKING_MODES)}")
 
 
 def _validate_tags_condition_spec(value: Any, where: str, errors: List[str], gate: _ExprGate | None = None) -> None:

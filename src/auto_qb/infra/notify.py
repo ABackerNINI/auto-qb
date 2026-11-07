@@ -22,11 +22,14 @@ import threading
 import time
 import xml.sax.saxutils
 from datetime import datetime
-from typing import Callable, List, Optional
+from typing import TYPE_CHECKING, Callable, List, Optional
 
 from . import utils
 from .logging import is_record_suppressed
-from ..config import NotifyConfig
+
+if TYPE_CHECKING:
+    # 仅类型标注用: infra 依赖纪律为运行期不 import config(包 __init__), 类型引用以字符串注解落地
+    from ..config import NotifyConfig
 
 logger = logging.getLogger(__name__)
 
@@ -67,8 +70,9 @@ class NotifyThrottle:
         """是否放行该通知: 超每小时上限或处于同键去重窗口内则丢弃"""
         now = self._now()
         self._sent_at = [t for t in self._sent_at if now - t < 3600.0]
-        # 去重表按窗口淘汰(与 _sent_at 同理): 只写不清会随通知种类单调膨胀 —— 每条不同的
-        # 日志文本都是一个键, 长跑进程里这张表是唯一的无界内存增长点。
+        # 去重表只在本窗口分支内读写(写入同样收在 dedup_window>0 下): 0 = 不去重 = 不记键,
+        # 键的唯一用途就是去重 —— 若 0 配置下写入照旧而清理被挡, 每条不同的日志文本都是一个
+        # 键, 长跑进程里这张表会退化成无界内存增长点。
         if self._dedup_at and self.dedup_window > 0:
             self._dedup_at = {k: t for k, t in self._dedup_at.items() if now - t < self.dedup_window}
         if len(self._sent_at) >= self.max_per_hour:
@@ -77,8 +81,8 @@ class NotifyThrottle:
             last = self._dedup_at.get(key)
             if last is not None and now - last < self.dedup_window:
                 return False
+            self._dedup_at[key] = now
         self._sent_at.append(now)
-        self._dedup_at[key] = now
         return True
 
 
@@ -213,7 +217,7 @@ class NotifyHandler(logging.Handler):
 
     DEDUP_PREFIX_LEN = 80
 
-    def __init__(self, config: NotifyConfig, channel: PlatformChannel, now: Callable[[], datetime] | None = None):
+    def __init__(self, config: "NotifyConfig", channel: PlatformChannel, now: Callable[[], datetime] | None = None):
         super().__init__(level=getattr(logging, config.min_level, logging.ERROR))
         self.channel = channel
         self.enabled = True  # 运行时热开关(UI Switch/托盘勾选共用; bool 赋值原子, 无需锁)
@@ -270,7 +274,7 @@ class NotifyHandler(logging.Handler):
         super().close()
 
 
-def setup_notify(config: Optional[NotifyConfig], force: bool = False) -> Optional[NotifyHandler]:
+def setup_notify(config: Optional["NotifyConfig"], force: bool = False) -> Optional[NotifyHandler]:
     """按配置构造并挂载通知 handler 到 "auto_qb" logger; 未启用且未强挂返回 None
 
     force=True: 配置未启用时也会挂载(UI 通知开关热开启, 会话级, 重启后回到配置状态)。
@@ -296,7 +300,7 @@ def setup_notify(config: Optional[NotifyConfig], force: bool = False) -> Optiona
     return handler
 
 
-def notify_fatal(message: str, config: Optional[NotifyConfig] = None) -> None:
+def notify_fatal(message: str, config: Optional["NotifyConfig"] = None) -> None:
     """进程退出前的致命错误通知(best-effort: 同步发送, 短超时, 任何异常静默)
 
     仅在"程序运行中致命退出"(如 QbCompatError)且通知已启用时由 CLI 调用;

@@ -28,7 +28,7 @@ VERSION_KEY = "schema_version"
 
 CURRENT_VERSIONS: Dict[str, int] = {
     "state": 3,  # <data_dir>/state.json 顶层 schema_version
-    "hr_site": 2,  # hr/<site>.json 的 schema_version; v2 = HR 波次模型 v3(迁移在 config/migrations.py, 依赖纪律)
+    "hr_site": 2,  # hr/<site>.json 的 schema_version; v2 = HR 波次模型 v3(迁移在本模块 _migrate_hr_site_1_2)
     # v4 = 站点级「显式空 = 覆盖为空」三态(report 26-10-03-0504 方案 B 阶段 1; 迁移在 config/migrations.py)
     # v5 = 数据源并入顶层 traffic_source 段(计划 26-10-17-0339 S15; 迁移在 config/migrations.py)
     # v6 = 退役键 relocate.finalize_timeout 移除(计划 26-11-07-0708 S4; 迁移在 config/migrations.py)

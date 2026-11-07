@@ -13,6 +13,9 @@
   (schema_version/data_dir/state_file/fs)提交后一律回退为磁盘旧值 —— R 级回退与版本盖章已实际
   兜住这四点, 本防线按 schema 键面再兜一层, 防未来新增点位漏配时重演「UI 可编辑但保存不生效」
 - **ruamel round-trip 写盘**: 已存在键的注释保留; 列表项与新增键无注释(设计取舍, 见计划)
+- **写盘链并发防线(issue 26-11-07-0527 R2#17)**: write_tree / materialize_schema_migration
+  全程持模块级 _WRITE_LOCK 串行化(webui PUT handler 走 FastAPI 线程池并发, 无锁时两次保存
+  交错会退化备份语义并互相覆盖丢改动); preview_tree 纯读不写盘, 不取锁
 - **备份路径由调用方指定**(`write_tree(..., backup_path)`): 生产落 `<data_dir>/<配置名>.bak`,
   不在项目根目录产生 `config.yml.bak`
 
@@ -22,6 +25,7 @@
 import os
 import re
 import tempfile
+import threading
 from dataclasses import dataclass
 from io import StringIO
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
@@ -44,6 +48,13 @@ if TYPE_CHECKING:
 # 树根键(与 validate_config 的"根节点仅允许 config"一致)
 ROOT_KEY = "config"
 
+# 写盘链串行锁(issue 26-11-07-0527 R2#17): webui 的 PUT /api/config 是同步 def handler,
+# FastAPI 线程池并发执行下两个并发保存会交错 —— 后提交方的 .bak 可能读到前者已写入的新内容
+# 而非保存前状态(备份恢复资产退化), 后完成的 _dump_roundtrip 整体覆盖前者(先保存方改动静默丢失)。
+# 模块级单锁串行化全部写盘链(write_tree / materialize_schema_migration); preview_tree 纯读
+# 不写盘(临时文件与内存 dump 之外零落盘), 不加锁。锁内不做阻塞等待外部资源的操作, 无死锁面。
+_WRITE_LOCK = threading.Lock()
+
 # 敏感字段掩码: `/api/config` 把配置树整棵返回前端, qB 密码 / tracker passkey / WEB 密钥会明文
 # 进浏览器内存与截图。GET 时按**键名**掩码为哨兵, PUT/预览时由 unmask_tree 用磁盘旧值还原 ——
 # 哨兵即"用户未修改"的显式信号, 因此掩码不会把密码写成 "********"(那会直接毁掉生产配置)。
@@ -59,6 +70,9 @@ MASK_SENTINEL = "********"
 TRANSFER_TARGETS_PATH = (ROOT_KEY, "web", "transfer", "targets")
 # targets 条目内的敏感标量(issue 26-11-01-0335 起含 api_key): 掩码/还原与 password 同一套哨兵
 TARGET_SECRET_KEYS = ("password", "api_key")
+# 第二轮下标配对的一致性锚键(issue 26-11-07-0527 R2#16): 非敏感身份键 —— 改名场景里原样保留,
+# 是位置配对仅有的稳定锚(见 _target_identity_mismatch)
+TARGET_IDENTITY_KEYS = ("type", "base_url")
 
 
 @dataclass
@@ -162,6 +176,9 @@ def _unmask_target_items(items: List[Any], old_items: List[Any]) -> None:
     2. 剩余哨兵条目(典型 = 本轮**改名**了) vs 未被认领的旧条目: **数量相等才按下标配对**
        —— 覆盖「只改名」; 数量不等说明同时增删过, 不猜, 哨兵原样留下(与 unmask_tree
        「旧值缺失保持哨兵」同口径: 宁可留明显占位串让人发现, 不静默写错密码)。
+       配对前先做非敏感身份键(type/base_url)一致性核对(_target_identity_mismatch):
+       两边都有非空值且不同, 更可能是相对顺序被调换的改名(也可能是改名同时改了身份键)——
+       两种都按不猜处置, 位置配对不可信, 哨兵原样留下, 防「把 A 的旧密码回填进 B」的凭据串写。
     旧值缺失/本身是哨兵时同样不动(与顶层标量守卫一致); 条目内**逐键**判定 ——
     只回填仍是哨兵的键, 用户本轮真键入的其它敏感键不被旧值覆盖。
     """
@@ -193,7 +210,25 @@ def _unmask_target_items(items: List[Any], old_items: List[Any]) -> None:
     rest_old = [e for e in old_items if isinstance(e, dict) and id(e) not in consumed]
     if len(pending) == len(rest_old):
         for entry, old in zip(pending, rest_old):
+            if _target_identity_mismatch(entry, old):
+                continue  # 身份键对不上 = 配错对象, 不猜: 哨兵原样留下(与「数量不等不猜」同口径)
             _unmask_target_secrets(entry, old)
+
+
+def _target_identity_mismatch(entry: dict, old_entry: dict) -> bool:
+    """第二轮下标配对前的一致性核对(issue 26-11-07-0527 R2#16): 非敏感身份键是否矛盾
+
+    下标配对只看「数量相等」, 两个以上条目同时改名且相对顺序被调换时会把 A 的旧密码回填进
+    B(凭据静默写串)。name 在第二轮恒配不上(它就是进不了第一轮的原因), 不能当锚; type 与
+    base_url 是改名不动、能区分条目身份的非敏感键 —— 两边都有非空值且值不同即判配对不可信。
+    键缺失/空值不算反证(改名 + 增删这类键的合法编辑不该被误拒, 维持位置配对的原有信任级)。
+    """
+    for key in TARGET_IDENTITY_KEYS:
+        ev = entry.get(key)
+        ov = old_entry.get(key)
+        if ev not in (None, "") and ov not in (None, "") and str(ev) != str(ov):
+            return True
+    return False
 
 
 def _unmask_target_secrets(entry: dict, old_entry: dict) -> None:
@@ -226,11 +261,14 @@ def write_tree(config_path: str, tree: Dict[str, Any], old_config: Config, backu
     `backup_path` 由调用方给出 —— 生产为 `<data_dir>/<配置文件名>.bak`(见 web.py), 备份集中到
     运行时数据目录, 不在项目根目录散落 `config.yml.bak`; 备份目录不存在时自动创建。
     校验失败抛 `ConfigError`(由调用方转 400 且不触碰磁盘); 结构非法抛 `ValueError`。
+    全程持模块级 _WRITE_LOCK(issue 26-11-07-0527 R2#17): 并发保存串行化, 备份恒读「本次保存前」
+    的磁盘状态, 两次保存不交错。
     """
-    changes, restart_required = _prepare(config_path, tree, old_config)
-    _stamp_schema_version(tree)
-    _backup(config_path, backup_path)
-    _dump_roundtrip(config_path, tree)
+    with _WRITE_LOCK:
+        changes, restart_required = _prepare(config_path, tree, old_config)
+        _stamp_schema_version(tree)
+        _backup(config_path, backup_path)
+        _dump_roundtrip(config_path, tree)
     return WriteResult(changes=changes, restart_required=restart_required)
 
 
@@ -239,6 +277,8 @@ def preview_tree(config_path: str, tree: Dict[str, Any], old_config: Config) -> 
 
     与 write_tree 共用校验与 round-trip 逻辑, 因此预览内容与写入内容一致(除注释形态);
     校验失败同样抛 ConfigError。
+    纯读不写盘(读磁盘 + 临时文件校验 + 内存 dump, 不触碰配置文件与备份), 不取 _WRITE_LOCK ——
+    锁只护写盘链, 读侧经 atomic_write 的原子替换天然只见完整旧/新内容(issue 26-11-07-0527 R2#17)。
     """
     _prepare(config_path, tree, old_config)
     _stamp_schema_version(tree)
@@ -259,27 +299,31 @@ def materialize_schema_migration(config_path: str, backup_dir: str, *, write: bo
     也不至于写错); 落盘前 _validate_tree 复核(写什么校验什么), 不过则抛 ConfigError 且磁盘
     一字未动。文件不存在(配置由调用方直接注入的测试/非常规构造)无事可做, 原样返回 ("", "")。
     返回 (迁移描述, 备份路径); 无迁移 = ("", "")。
+    全程持模块级 _WRITE_LOCK(issue 26-11-07-0527 R2#17): 生产上它先于 WebUI 对外服务(单实例锁内),
+    与并发保存本无交集, 加锁是让「重读 -> 版本备份 -> 写回」与 write_tree 共用同一串行域,
+    版本号备份不会被并发保存的写盘插进别的状态。
     """
-    if not os.path.exists(config_path):
-        return "", ""
-    tree = read_tree(config_path)
-    cfg = tree.get(ROOT_KEY)
-    if not isinstance(cfg, dict):
-        return "", ""
-    normalize_schema_version(cfg)  # read_tree 标量全为字符串, 先归一才能 detect
-    try:
-        from_version = detect_version("config", cfg)
-    except SchemaVersionError as e:
-        raise ConfigError(f"配置 schema 版本问题({config_path}): {e}") from e
-    desc = migrate_config_schema(tree, config_path)
-    if not desc:
-        return "", ""
-    if not write:
-        return desc, ""
-    _validate_tree(tree)  # 写什么校验什么: 迁移结果复核, 不过则抛错且磁盘未动
-    backup_path = backup_versioned(config_path, backup_dir, from_version)
-    _dump_roundtrip(config_path, tree)
-    return desc, backup_path
+    with _WRITE_LOCK:
+        if not os.path.exists(config_path):
+            return "", ""
+        tree = read_tree(config_path)
+        cfg = tree.get(ROOT_KEY)
+        if not isinstance(cfg, dict):
+            return "", ""
+        normalize_schema_version(cfg)  # read_tree 标量全为字符串, 先归一才能 detect
+        try:
+            from_version = detect_version("config", cfg)
+        except SchemaVersionError as e:
+            raise ConfigError(f"配置 schema 版本问题({config_path}): {e}") from e
+        desc = migrate_config_schema(tree, config_path)
+        if not desc:
+            return "", ""
+        if not write:
+            return desc, ""
+        _validate_tree(tree)  # 写什么校验什么: 迁移结果复核, 不过则抛错且磁盘未动
+        backup_path = backup_versioned(config_path, backup_dir, from_version)
+        _dump_roundtrip(config_path, tree)
+        return desc, backup_path
 
 
 def _atomic_copy(src_path: str, dst_path: str) -> None:
