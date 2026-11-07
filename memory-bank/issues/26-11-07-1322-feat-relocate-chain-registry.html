@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>主循环链登记簿: 行级路径链数据面(外部链接 A-&gt;B 展示的前置基建) · feat · 计划外问题</title>
+<meta name="issue-slug" content="relocate-chain-registry">
+<meta name="issue-stamp" content="26-11-07-1322">
+<meta name="issue-type" content="feat">
+<meta name="doc-topic" content="relocate-status-display">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="主循环链登记簿: 行级路径链数据面(外部链接 A-&gt;B 展示的前置基建)">
+<meta name="issue-summary" content="主循环分片扫描种子路径链(junction/symlink 跟随, 含外部建的)+ save_path 事件失效 + 只读快照发布, 为路径列行级 A-&gt;B 展示补 auto-qb job 之外的数据面; 外部逐文件硬链接明确不可测">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --mark: #161e26;     /* issue 特有: callout 底色 (plan.html 不用) */
+    --warn-bg: #2a2119;  /* issue 特有: 状态徽标底色 */
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 单栏流式版面: 与 plan.html 同一套 .sheet (封顶 1280px, 侧距 clamp(18~44px)); 旧双栏+粘性目录已删 */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+
+  /* 封面 meta 行: issue 特有, DOM 形态别改 —— 状态徽标 <span class="badge"> 被
+     flip_status (W4) 与 check_status_drift 的 BADGE_RE 机读 (k/v div 结构在判据里) */
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px 28px; font-family: var(--mono); font-size: 11.5px; color: var(--faint); border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta-row .item .k { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .meta-row .item .v { font-size: 13.5px; color: var(--dim); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin: 14px 0; font-size: 14px; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-family: var(--mono); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">计划外问题（未修）· feat</div>
+<h1>主循环链登记簿: 行级路径链数据面(外部链接 A-&gt;B 展示的前置基建)</h1>
+<p class="lede">主循环分片扫描种子路径链(junction/symlink 跟随, 含外部建的)+ save_path 事件失效 + 只读快照发布, 为路径列行级 A-&gt;B 展示补 auto-qb job 之外的数据面; 外部逐文件硬链接明确不可测</p>
+<div class="meta-row">
+  <div class="item"><div class="k">编号</div><div class="v">26-11-07-1322-feat-relocate-chain-registry</div></div>
+  <div class="item"><div class="k">报告时间</div><div class="v">2026-11-07 13:22</div></div>
+  <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">feat</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">涉及模块</div><div class="v">core</div></div>
+  <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+</div>
+
+<section id="s1">
+  <h2><span class="no">§01</span>现象与发现场景</h2>
+  <p>2026-11-07「整组迁移状态展示 v2」grilling 中拍板：路径列行级 A→B 两排展示（参照做种时长 HR 在线核实浮窗范式）。用户要求覆盖范围 = <strong>所有有链接的种子，包括其它程序/用户自己设置的链接</strong>。但行级数据现状只有 auto-qb job 快照（<code>member_relocate</code>），外部 junction/symlink 链接行级不可知；而列表渲染有零触盘纪律，渲染期不能探测 → 缺一个行级数据源，需新基建。</p>
+  <p>先行方案（展示设计已拍板）：行级 A→B 先仅读 job 快照（零新基建）；本件落地后外部链接才进得了行级 A→B。</p>
+</section>
+
+<section id="s2">
+  <h2><span class="no">§02</span>证据</h2>
+  <p class="hint">贴原文，不转述；取证时间 2026-11-07 13:22。</p>
+<pre><code># src/auto_qb/webui/views_relocate.py:4（模块 docstring, P0 纪律原文）
+**零触盘**: 本文件不 lstat/readlink, 不做任何文件系统探测 —— 列表渲染期只读内存快照。
+
+# src/auto_qb/webui/relocate_chain.py:234（probe_chain 只跟两类链接, 不问归属）
+if info.kind not in (alias_fs.KIND_JUNCTION, alias_fs.KIND_SYMLINK):
+    break  # 普通目录/文件/硬链接/挂载点: 链到此为止
+
+# src/auto_qb/webui/relocate_chain.py:9（模块 docstring, 渲染期隔离现状）
+**缓存**: 结果短缓存(~20s), 只由浮窗打开或显式 refresh 触发; 列表渲染期不调用本模块
+
+# src/auto_qb/core/modules/relocate_mod.py:155（快照只读发布模式, 可复刻）
+def _publish_snapshot(self) -> None:
+    """发布不可变 job 快照(主循环写线程单点; Web 只读引用)"""</code></pre>
+</section>
+
+<section id="s3">
+  <h2><span class="no">§03</span>影响面</h2>
+  <table>
+    <tr><th>维度</th><th>结论</th></tr>
+    <tr><td>触发条件</td><td>「整组迁移状态展示 v2」落地的行级 A→B 若要覆盖外部 junction/symlink 链接种子（用户显式要求）——不做本件则该范围只到 hover 浮窗/链浮窗按需探测</td></tr>
+    <tr><td>影响范围</td><td>主循环（新增分片扫描步）+ 只读快照发布 + webui 行渲染消费面；不触碰 job 账与迁移状态机</td></tr>
+    <tr><td>严重度</td><td>低（展示增强的数据前置，无数据风险；不做的代价 = 外部链接行级不显示 A→B）</td></tr>
+  </table>
+</section>
+
+<section id="s4">
+  <h2><span class="no">§04</span>定位锚点</h2>
+  <p class="hint">写「符号名 + grep 关键词 + 当时的行号（标取证时间）」—— 代码会漂移，靠符号与 grep 重新定位，行号只是加速项。</p>
+  <ul>
+    <li><code>src/auto_qb/webui/views_relocate.py:1-7</code>（取证 2026-11-07 13:22）· 模块 docstring 零触盘纪律 · grep「零触盘」</li>
+    <li><code>src/auto_qb/webui/relocate_chain.py:189</code>（取证 2026-11-07 13:22）· <code>probe_chain</code> · grep「KIND_JUNCTION」；起点派生口径同函数 docstring（root_path/content_path 优先，回退 save_path）</li>
+    <li><code>src/auto_qb/core/modules/relocate_mod.py:155</code>（取证 2026-11-07 13:22）· <code>_publish_snapshot</code> · grep「_publish_snapshot」（快照发布模式先例）</li>
+    <li><code>src/auto_qb/core/modules/relocate_units.py:988</code>（取证 2026-11-07 13:22）· <code>job_rank</code> · grep「job_rank」（同一 hash 多记录选取序先例）</li>
+  </ul>
+</section>
+
+<section id="s5">
+  <h2><span class="no">§05</span>根因<span class="opt">（可选）</span></h2>
+  <p>不适用（feat 需求件，非缺陷）。<strong>已排除</strong>：① qB API 侧没有链接信息可用（save_path/content_path/root_path 均不暴露链接事实，无免费数据源）；② 外部逐文件硬链接行级可测 —— path 链不含硬链接（同 inode 孪生非路径链接），发现它需全树逐文件扫 nlink，探测成本爆炸，明确不进登记簿边界。</p>
+</section>
+
+<section id="s6">
+  <h2><span class="no">§06</span>建议修法<span class="opt">（可选）</span></h2>
+  <p>主循环维护「链登记簿」（2026-11-07 grilling 拍板方向，落地前需立计划细化）：</p>
+  <ul>
+    <li><strong>分片扫描</strong>：每 tick 探 N 个种子（起点派生与 <code>probe_chain</code> 同口径），全量一遍约几十 ms 摊进主循环；只跟 junction/symlink，复用环检测 + 跳数上限</li>
+    <li><strong>事件失效</strong>：save_path 变更（视图脏事件）即重探该种子；低频周期复扫兜底链接被外部改动</li>
+    <li><strong>快照发布</strong>：不可变 snapshot 只读引用给 Web（复刻 <code>_publish_snapshot</code> 模式），渲染期零触盘纪律不破、单一写线程不破</li>
+    <li><strong>登记内容</strong>（per hash）：链首尾端点（初始/最终位置）、跳数、是否含外部链接、auto/非 auto 归属章（供展示层区分着色与标注）</li>
+    <li><strong>边界</strong>：外部逐文件硬链接不进登记簿（见 §05 已排除②），只到 hover 浮窗/链浮窗按需探测</li>
+  </ul>
+  <p class="hint">关联：doc-topic <code>relocate-status-display</code> —— 展示设计先行仅用 job 快照（先行方案 C），本件是外部链接数据面的前置。</p>
+</section>
+
+<section id="s7">
+  <h2><span class="no">§07</span>状态变更日志</h2>
+  <ul>
+    <li>2026-11-07 13:22 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+  </ul>
+  <h3>复验</h3>
+  <p>feat 件：认领时先确认「整组迁移状态展示 v2」计划是否仍需要外部链接数据面（展示先行方案 C 已覆盖 job 数据面），并重跑 §04 锚点确认现状未变。</p>
+  <h3>修复后补充</h3>
+  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+</section>
+
+<footer>
+  26-11-07-1322-feat-relocate-chain-registry.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+</footer>
+
+</div>
+</body>
+</html>

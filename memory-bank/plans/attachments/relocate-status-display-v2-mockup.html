@@ -1,0 +1,313 @@
+<div id="rsd">
+  <div class="viz-controls" aria-label="皮肤切换">
+    <span class="text-small" style="color:var(--muted-foreground)">皮肤</span>
+    <button type="button" class="btn btn-sm rsd-skin" data-skin="atlas" aria-pressed="true">atlas</button>
+    <button type="button" class="btn btn-sm rsd-skin" data-skin="flux" aria-pressed="false">flux</button>
+    <button type="button" class="btn btn-sm rsd-skin" data-skin="console" aria-pressed="false">console</button>
+    <button type="button" class="btn btn-sm rsd-skin" data-skin="prism" aria-pressed="false">prism · galaxy</button>
+  </div>
+
+  <div id="rsd-stage" class="rsd-stage"></div>
+
+  <style>
+    /* ---- 皮肤令牌(取自各皮肤 style.css / prism themes/galaxy.css) ---- */
+    #rsd.skin-atlas { --aq-bg:#0e1218; --aq-card:#151b24; --aq-row:#111722; --aq-hover:#1c2534;
+      --aq-fg:#e7ebf1; --aq-muted:#96a2b5; --aq-dim:#6c7a8e; --aq-border:#253045; --aq-border-strong:#37455f;
+      --aq-soft:rgba(255,255,255,.07); --aq-pop:#1a2231; --aq-accent:#3b82f6; --aq-warn:#fbbf24; --aq-error:#f87171;
+      --aq-accent-soft:rgba(59,130,246,.16); --aq-warn-soft:rgba(251,191,36,.16); --aq-error-soft:rgba(248,113,113,.16);
+      --aq-r-lg:14px; --aq-r:10px; --aq-r-sm:7px; --aq-fd:"Segoe UI","Microsoft YaHei",sans-serif;
+      --aq-path-src:#8fa8c4;
+      --aq-sh:0 20px 48px rgba(0,0,0,.42); }
+    #rsd.skin-flux { --aq-bg:#0b111b; --aq-card:rgba(24,35,52,.82); --aq-row:rgba(30,43,63,.62); --aq-hover:rgba(52,74,104,.55);
+      --aq-fg:#e9eff7; --aq-muted:#a3b3c9; --aq-dim:#7189a6; --aq-border:rgba(146,176,214,.18); --aq-border-strong:rgba(168,196,232,.3);
+      --aq-soft:rgba(255,255,255,.08); --aq-pop:#1c2a3f; --aq-accent:#45b3c9; --aq-warn:#f5bb42; --aq-error:#f3766f;
+      --aq-accent-soft:rgba(69,179,201,.16); --aq-warn-soft:rgba(245,187,66,.15); --aq-error-soft:rgba(243,118,111,.15);
+      --aq-r-lg:0px; --aq-r:0px; --aq-r-sm:0px; --aq-fd:"Bahnschrift","Segoe UI","Microsoft YaHei",sans-serif;
+      --aq-path-src:#7d9bc2;
+      --aq-sh:0 14px 40px rgba(0,0,0,.3); }
+    #rsd.skin-console { --aq-bg:#0d1724; --aq-card:#15233a; --aq-row:#112034; --aq-hover:#1c3050;
+      --aq-fg:#e9eff7; --aq-muted:#9cadc6; --aq-dim:#6e84a3; --aq-border:#23395a; --aq-border-strong:#34507c;
+      --aq-soft:rgba(255,255,255,.07); --aq-pop:#1b2d4b; --aq-accent:#3aa6a6; --aq-warn:#f5bb42; --aq-error:#f3766f;
+      --aq-accent-soft:rgba(58,166,166,.15); --aq-warn-soft:rgba(245,187,66,.15); --aq-error-soft:rgba(243,118,111,.15);
+      --aq-r-lg:0px; --aq-r:0px; --aq-r-sm:0px; --aq-fd:"Bahnschrift","Segoe UI","Microsoft YaHei",sans-serif;
+      --aq-path-src:#7d97ba;
+      --aq-sh:0 14px 40px rgba(0,0,0,.3); }
+    #rsd.skin-prism { --aq-bg:#151021; --aq-card:#221a38; --aq-row:#1c1530; --aq-hover:#322653;
+      --aq-fg:#ece8f6; --aq-muted:#a89dc7; --aq-dim:#7d72a0; --aq-border:#372a55; --aq-border-strong:#4d3b74;
+      --aq-soft:rgba(255,255,255,.07); --aq-pop:#2b2149; --aq-accent:#b79fe0; --aq-warn:#f0b64a; --aq-error:#f08080;
+      --aq-accent-soft:rgba(183,159,224,.14); --aq-warn-soft:rgba(240,182,74,.15); --aq-error-soft:rgba(240,128,128,.15);
+      --aq-r-lg:8px; --aq-r:6px; --aq-r-sm:4px; --aq-fd:"Bahnschrift","Segoe UI","Microsoft YaHei",sans-serif;
+      --aq-path-src:#8f9fc7;
+      --aq-sh:0 14px 40px rgba(0,0,0,.3); }
+
+    /* ---- 产品 mockup(全部 #rsd 域内产品专属类,不用宿主工具类) ---- */
+    #rsd .rsd-stage { padding: 6px 2px 10px; min-height: 382px; box-sizing: border-box; }
+    #rsd .aq-app { background: var(--aq-bg); border: 1px solid var(--aq-border); border-radius: var(--aq-r-lg);
+      box-shadow: var(--aq-sh); overflow: hidden; font-family: "Segoe UI","Microsoft YaHei",sans-serif; color: var(--aq-fg); }
+    #rsd .aq-titlebar { display:flex; align-items:center; gap:8px; padding:8px 14px; background: var(--aq-card);
+      border-bottom: 1px solid var(--aq-soft); font-family: var(--aq-fd); font-size: 12.5px; color: var(--aq-muted); }
+    #rsd .aq-titlebar b { color: var(--aq-fg); font-weight: 600; letter-spacing: .01em; }
+
+    #rsd .aq-head, #rsd .aq-row { display:grid; grid-template-columns: minmax(150px,1.1fr) 58px minmax(240px,1.7fr);
+      gap:12px; align-items:center; padding:7px 14px; }
+    #rsd .aq-head { font-size:11px; letter-spacing:.06em; color: var(--aq-dim);
+      border-bottom:1px solid var(--aq-soft); background: var(--aq-card); }
+    #rsd .aq-row { border-bottom:1px solid var(--aq-soft); font-size:12.5px; }
+    #rsd .aq-row:last-child { border-bottom:0; }
+    #rsd .aq-row:hover { background: var(--aq-hover); }
+    #rsd .aq-name { min-width:0; display:flex; align-items:center; gap:7px; }
+    #rsd .aq-name .aq-nt { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color: var(--aq-fg); }
+    #rsd .aq-name.is-group .aq-nt { font-weight:600; }
+    #rsd .aq-name i[data-lucide], #rsd .aq-name svg.lucide { width:14px; height:14px; flex:none; color: var(--aq-dim); }
+    #rsd .aq-state { display:flex; align-items:center; gap:6px; color: var(--aq-muted); font-size:12px; }
+    /* 状态圆点形状随皮肤: atlas 圆 / flux·console 方 / prism 微圆角 */
+    #rsd .aq-state .aq-dot, #rsd .aq-pop .pdot { width:8px; height:8px; border-radius:0; background:currentColor; flex:none; }
+    #rsd.skin-atlas .aq-state .aq-dot, #rsd.skin-atlas .aq-pop .pdot { border-radius:50%; }
+    #rsd.skin-prism .aq-state .aq-dot, #rsd.skin-prism .aq-pop .pdot { border-radius:2px; }
+
+    /* 路径单元格:两排 + 右缘弧形箭头(块宽随内容收缩, 箭头紧贴文字; 长路径封顶截断) */
+    #rsd .aq-pathcell { min-width:0; position:relative; }
+    #rsd .aq-path2 { display:flex; width:fit-content; max-width:100%; align-items:stretch; gap:4px; min-width:0; }
+    #rsd .aq-pcol { flex:0 1 auto; min-width:0; display:flex; flex-direction:column; gap:2px; }
+    #rsd .aq-p { font-family:"Cascadia Code","Consolas",ui-monospace,monospace; font-size:11px; line-height:1.3;
+      white-space:nowrap; overflow:hidden; text-overflow:ellipsis; display:block; color:var(--aq-fg); }
+    #rsd .aq-p.fs10 { font-size:10px; }
+    #rsd .aq-pa { color:var(--aq-dim); }
+    #rsd .aq-arc { width:8px; height:20px; flex:none; align-self:center; }
+    #rsd .aq-one { display:flex; align-items:center; gap:7px; min-width:0; }
+
+    /* 状态着色(唯一的状态载体;无底形无边框) */
+    #rsd .st-moving  { color:var(--aq-accent); }
+    #rsd .st-pending { color:var(--aq-warn); }
+    #rsd .st-failed  { color:var(--aq-error); }
+    #rsd .st-mixed   { color:var(--aq-warn); }
+    #rsd .st-ext     { color:var(--aq-dim); }
+    #rsd .st-none    { color:var(--aq-fg); }
+    #rsd .aq-row.st-moving .aq-arc, #rsd .aq-row.st-moving .aq-p { color:var(--aq-accent); }
+    #rsd .aq-row.st-moving .aq-pa { color:var(--aq-accent); opacity:.55; }
+    #rsd .aq-row.st-pending .aq-arc, #rsd .aq-row.st-pending .aq-p { color:var(--aq-warn); }
+    #rsd .aq-row.st-pending .aq-pa { color:var(--aq-warn); opacity:.5; }
+    #rsd .aq-row.st-failed .aq-arc, #rsd .aq-row.st-failed .aq-p { color:var(--aq-error); }
+    #rsd .aq-row.st-failed .aq-pa { color:var(--aq-error); opacity:.55; }
+    #rsd .aq-row.st-ext .aq-arc, #rsd .aq-row.st-ext .aq-p { color:var(--aq-dim); }
+    #rsd .aq-row.st-ext .aq-pa { color:var(--aq-dim); opacity:.7; }
+    #rsd .aq-row.st-mixed .aq-p { color:var(--aq-warn); }
+    @keyframes rsd-pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
+    #rsd .aq-row.st-moving .aq-pb, #rsd .aq-row.st-moving .aq-arc { animation:rsd-pulse 1.8s ease-in-out infinite; }
+    @media (prefers-reduced-motion: reduce) { #rsd .aq-row.st-moving * { animation:none !important; } }
+
+    /* 悬停浮窗(照做种时长 HR 浮窗范式:enter 120ms / leave 160ms / 移入不关) */
+    #rsd .aq-pop { position:absolute; z-index:40; width:max-content; max-width:min(94%, 680px); padding:10px 12px 9px;
+      background:var(--aq-pop); border:1px solid var(--aq-border-strong); border-radius:var(--aq-r-sm);
+      box-shadow:0 6px 18px rgba(0,0,0,.35); font-size:12px; line-height:1.55; color:var(--aq-fg); display:none; }
+    #rsd .aq-pop.open { display:block; }
+    #rsd .aq-pop .ah { position:absolute; width:8px; height:8px; transform:rotate(45deg);
+      background:var(--aq-pop); border-left:1px solid var(--aq-border-strong); border-top:1px solid var(--aq-border-strong); }
+    #rsd .aq-pop.below .ah { top:-4.5px; }
+    #rsd .aq-pop.above .ah { border:0; border-right:1px solid var(--aq-border-strong); border-bottom:1px solid var(--aq-border-strong); bottom:-4.5px; }
+    #rsd .aq-pop .hd { display:flex; align-items:center; gap:7px; font-weight:600; margin-bottom:0; font-family:var(--aq-fd); }
+    #rsd .aq-pop .ph { font-family:"Cascadia Code","Consolas",ui-monospace,monospace; font-size:10.5px; font-weight:400; color:var(--aq-dim); margin-left:4px; }
+    #rsd .aq-pop .ttag { margin-left:auto; flex:none; font-size:10px; color:var(--aq-dim);
+      border:1px dashed var(--aq-border-strong); border-radius:var(--aq-r-sm); padding:0 5px; line-height:1.5; font-weight:400; }
+    /* 状态色间隔: 扁平 3px, 铺满浮窗全宽 */
+    #rsd .aq-pop .sep { height:3px; margin:6px -12px 8px; }
+    /* A→B 强调块: 标签列/当前位置值固定色(--aq-path-src, 不随状态) + 目标位置值状态色; 零底形零额外列, 全部禁换行 */
+    #rsd .aq-pop .paths { display:flex; flex-direction:column; gap:4px; margin:0 0 9px; }
+    #rsd .aq-pop .pr { display:flex; gap:7px; align-items:baseline; min-width:0; }
+    #rsd .aq-pop .pl { flex:none; width:46px; font-size:10px; color:var(--aq-path-src); }
+    #rsd .aq-pop .pv { font-family:"Cascadia Code","Consolas",ui-monospace,monospace; font-size:11.5px; line-height:1.4;
+      white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; color:var(--aq-path-src); }
+    #rsd .aq-pop .pv.em { color:var(--tone); }
+    #rsd .aq-pop .kv { display:flex; gap:8px; padding:1.5px 0; min-width:0; }
+    #rsd .aq-pop .kv .k { flex:none; width:44px; color:var(--aq-dim); }
+    #rsd .aq-pop .kv .v { font-family:"Cascadia Code","Consolas",ui-monospace,monospace; font-size:11px; color:var(--aq-fg);
+      white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; }
+    #rsd .aq-pop .reason { margin-top:5px; padding-top:5px; border-top:1px solid var(--aq-soft); color:var(--aq-error); }
+    #rsd .aq-pop .note { margin-top:5px; padding-top:5px; border-top:1px solid var(--aq-soft); color:var(--aq-dim); font-size:11px; }
+    #rsd .aq-cap { padding:8px 14px 10px; font-size:11px; color:var(--aq-dim); border-top:1px solid var(--aq-soft); background:var(--aq-card); }
+  </style>
+
+  <script>
+  (function () {
+    var root = document.getElementById('rsd');
+    if (!root) return;
+
+    /* ---------------- 数据(六行覆盖状态矩阵;popup 内容 = 行载荷快照口径) ---------------- */
+    var ROWS = [
+      { kind: 'group', icon: 'folder', state: '做种', st: 'moving', layout: 'two',
+        name: 'Bloodline.2024.S01.Complete.1080p.WEB-DL.H264-GroupA',
+        a: 'D:\\pt\\torrents\\series\\Bloodline.2024.S01',
+        b: 'E:\\media\\library\\series\\Bloodline.2024.S01',
+        pop: { v: '迁移中', tone: 'st-moving', phase: 'moving',
+          paths: [['当前位置', 'D:\\pt\\torrents\\series\\Bloodline.2024.S01'], ['目标位置', 'E:\\media\\library\\series\\Bloodline.2024.S01', true]],
+          kv: [['成员', '12 个 · 全组一致'], ['别名', '目录 junction ×1'], ['来源', '规则'], ['更新', '2 分钟前']] } },
+      { kind: 'group', icon: 'folder', state: '做种', st: 'mixed', layout: 'one',
+        name: 'Cosmos.2023.S02.2160p.WEB-DL.DV.H265-GroupB',
+        b: 'E:\\media\\library\\series\\Cosmos.2023.S02',
+        pop: { v: '状态不一致(mixed)', tone: 'st-mixed', phase: 'moving · 任务 ×2',
+          paths: [['目标位置', 'E:\\media\\library\\series\\Cosmos.2023.S02', true], ['目标位置', 'F:\\archive\\series\\Cosmos.2023.S02', true]],
+          kv: [['成员', '8 个 · 3/8 待收尾'], ['更新', '1 分钟前']] } },
+      { kind: 'group', icon: 'folder', state: '做种', st: 'none', layout: 'one',
+        name: 'Frieren.S01.Complete.1080p.BluRay.FLAC2.0.x264-GroupC',
+        b: 'E:\\media\\library\\anime\\Frieren.S01',
+        pop: null },
+      { kind: 'torrent', icon: 'file', state: '做种', st: 'pending', layout: 'two',
+        name: 'Frieren.S01E01-E28.1080p.BluRay.FLAC2.0.x264-GroupC',
+        a: 'D:\\pt\\torrents\\anime\\Frieren.S01',
+        b: 'E:\\media\\library\\anime\\Frieren.S01',
+        pop: { v: '待收尾(已武装收尾)', tone: 'st-pending', phase: 'armed',
+          paths: [['当前位置', 'D:\\pt\\torrents\\anime\\Frieren.S01'], ['目标位置', 'E:\\media\\library\\anime\\Frieren.S01', true]],
+          kv: [['改写账', 'fastresume 3/28 在途'], ['来源', 'WebUI'], ['更新', '40 秒前']] } },
+      { kind: 'torrent', icon: 'file', state: '下载', st: 'failed', layout: 'two',
+        name: 'ubuntu-24.04.2-desktop-amd64.iso',
+        a: 'D:\\pt\\torrents\\linux\\iso\\ubuntu-24.04.2-desktop-amd64', fs: 'fs10',
+        b: 'E:\\iso\\ubuntu-24.04.2-desktop-amd64',
+        pop: { v: '迁移失败', tone: 'st-failed', phase: 'moving · 重试 ×2',
+          paths: [['当前位置', 'D:\\pt\\torrents\\linux\\iso\\ubuntu-24.04.2-desktop-amd64'], ['目标位置', 'E:\\iso\\ubuntu-24.04.2-desktop-amd64', true]],
+          kv: [['来源', 'WebUI'], ['更新', '5 分钟前']],
+          reason: '原因: 目标卷剩余空间不足' } },
+      { kind: 'torrent', icon: 'file', state: '做种', st: 'ext', layout: 'two',
+        name: 'archlinux-2026.01-x86_64.iso', ext: true,
+        a: 'E:\\iso\\archlinux-2026.01',
+        b: 'M:\\vault\\iso\\archlinux-2026.01', fs: 'fs10',
+        pop: { v: '链接位(外部设置)', tone: 'st-ext', phase: null, tag: '外部链接',
+          paths: [['当前位置', 'E:\\iso\\archlinux-2026.01'], ['目标位置', 'M:\\vault\\iso\\archlinux-2026.01', true]],
+          kv: [['链接', '目录 junction(外部建立)']],
+          note: '非本程序设置 · 行级 A→B 待「链登记簿」(issue 26-11-07-1322)落地;现阶段仅链浮窗按需探测' } }
+    ];
+
+    var TONE = { 'st-moving': 'var(--aq-accent)', 'st-pending': 'var(--aq-warn)', 'st-failed': 'var(--aq-error)', 'st-mixed': 'var(--aq-warn)', 'st-ext': 'var(--aq-fg)', 'st-none': 'var(--aq-fg)' };
+
+    var ARC = '<svg class="aq-arc" viewBox="0 0 14 36" aria-hidden="true">' +
+      '<path d="M4 4 C 12 9.5 12 26.5 4 32" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>' +
+      '<path d="M8.6 31.6 L4 32 L6.2 27.9" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+    function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
+
+    function pathCellHTML(r, idx) {
+      if (r.layout !== 'two') {
+        return '<div class="aq-pathcell" data-r="' + idx + '"><div class="aq-one">' +
+          '<span class="aq-p ' + (r.fs || '') + ' ' + (r.st === 'none' ? '' : r.st) + '">' + esc(r.b) + '</span></div></div>';
+      }
+      return '<div class="aq-pathcell" data-r="' + idx + '"><div class="aq-path2">' +
+        '<div class="aq-pcol"><span class="aq-p ' + (r.fs || '') + ' aq-pa">' + esc(r.a) + '</span>' +
+        '<span class="aq-p ' + (r.fs || '') + ' aq-pb">' + esc(r.b) + '</span></div>' + ARC + '</div></div>';
+    }
+
+    function appHTML() {
+      var rows = ROWS.map(function (r, i) {
+        return '<div class="aq-row st-' + r.st + '">' +
+          '<div class="aq-name ' + (r.kind === 'group' ? 'is-group' : '') + '"><i data-lucide="' + r.icon + '" aria-hidden="true"></i><span class="aq-nt">' + esc(r.name) + '</span></div>' +
+          '<div class="aq-state"><span class="aq-dot"></span>' + r.state + '</div>' +
+          pathCellHTML(r, i) + '</div>';
+      }).join('');
+      return '<div class="aq-app">' +
+        '<div class="aq-titlebar"><b>auto-qb · 分组视图</b><span>迁移状态展示模板</span></div>' +
+        '<div class="aq-head"><span>名称</span><span>状态</span><span>保存路径</span></div>' + rows +
+        '<div class="aq-cap">当前位置(固定青灰)→ 目标位置(状态色) 两排 · 右缘弧形箭头表方向 · 颜色 = 迁移态 · 悬停路径看浮窗 · done / cancelled 回落单排(第 3 行)</div>' +
+        '<div class="aq-pop" role="tooltip"></div>' +
+        '</div>';
+    }
+
+    var stage = document.getElementById('rsd-stage');
+    stage.innerHTML = appHTML();
+    var section = stage;
+
+    /* ---------------- 皮肤切换(模板 chrome;选择存 widgetState) ---------------- */
+    var SKINS = ['atlas', 'flux', 'console', 'prism'];
+    var btns = Array.prototype.slice.call(root.querySelectorAll('.rsd-skin'));
+    function applySkin(s) {
+      root.classList.remove('skin-atlas', 'skin-flux', 'skin-console', 'skin-prism');
+      root.classList.add('skin-' + s);
+      btns.forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.skin === s)); });
+    }
+    btns.forEach(function (b) {
+      b.addEventListener('click', function () {
+        applySkin(b.dataset.skin);
+        if (window.zcode && window.zcode.setWidgetState) {
+          window.zcode.setWidgetState({ privateContent: { skin: b.dataset.skin } }).catch(function () {});
+        }
+      });
+    });
+    var saved = null;
+    try { saved = window.zcode && window.zcode.widgetState && window.zcode.widgetState.privateContent; } catch (e) {}
+    applySkin(saved && SKINS.indexOf(saved.skin) >= 0 ? saved.skin : 'atlas');
+    window.addEventListener('zcode:set_globals', function (e) {
+      var g = e && e.detail && e.detail.globals;
+      var s = g && g.widgetState && g.widgetState.privateContent;
+      if (s && SKINS.indexOf(s.skin) >= 0) applySkin(s.skin);
+    });
+
+    /* ---------------- 悬停浮窗调度(与 hr.js 同参:enter 120ms / leave 160ms) ---------------- */
+    function popHTML(p) {
+      var tone = TONE[p.tone] || TONE['st-none'];
+      var h = '<div class="hd ' + p.tone + '"><span class="pdot"></span>' + esc(p.v) +
+        (p.phase ? '<span class="ph">' + esc(p.phase) + '</span>' : '') +
+        (p.tag ? '<span class="ttag">' + esc(p.tag) + '</span>' : '') + '</div>';
+      h += '<div class="sep" style="background:' + tone + '"></div>';
+      if (p.paths && p.paths.length) {
+        h += '<div class="paths" style="--tone:' + tone + '">' + p.paths.map(function (pr) {
+          return '<div class="pr">' +
+            '<span class="pl">' + esc(pr[0]) + '</span>' +
+            '<span class="pv' + (pr[2] ? ' em' : '') + '">' + esc(pr[1]) + '</span></div>';
+        }).join('') + '</div>';
+      }
+      (p.kv || []).forEach(function (pair) {
+        h += '<div class="kv"><span class="k">' + esc(pair[0]) + '</span><span class="v">' + esc(pair[1]) + '</span></div>';
+      });
+      if (p.reason) h += '<div class="reason">' + esc(p.reason) + '</div>';
+      if (p.note) h += '<div class="note">' + esc(p.note) + '</div>';
+      return h;
+    }
+    var tShow = 0, tHide = 0, openPop = null, openCell = null;
+    function hideNow() {
+      if (openPop) { openPop.classList.remove('open'); openPop = null; openCell = null; }
+    }
+    function showPop(cell) {
+      var r = ROWS[Number(cell.dataset.r)];
+      var pop = stage.querySelector('.aq-pop');
+      if (!r || !r.pop || !pop) return;
+      clearTimeout(tHide);
+      pop.innerHTML = popHTML(r.pop);
+      pop.style.visibility = 'hidden';
+      pop.classList.add('open');
+      var secR = section.getBoundingClientRect(), cR = cell.getBoundingClientRect();
+      var pw = pop.offsetWidth, ph = pop.offsetHeight;
+      var cx = cR.left - secR.left + cR.width / 2;
+      var left = Math.max(8, Math.min(cx - pw / 2, secR.width - pw - 8));
+      var below = (cR.bottom - secR.top + ph + 18) < secR.height;
+      var top = below ? (cR.bottom - secR.top + 9) : (cR.top - secR.top - ph - 9);
+      pop.style.left = left + 'px';
+      pop.style.top = top + 'px';
+      pop.classList.toggle('below', below);
+      pop.classList.toggle('above', !below);
+      var ah = pop.querySelector('.ah');
+      if (!ah) { ah = document.createElement('i'); ah.className = 'ah'; pop.appendChild(ah); }
+      ah.style.left = Math.max(6, Math.min(cx - left - 4, pw - 14)) + 'px';
+      pop.style.visibility = '';
+      openPop = pop; openCell = cell;
+    }
+    Array.prototype.forEach.call(stage.querySelectorAll('[data-r]'), function (cell) {
+      cell.addEventListener('mouseenter', function () {
+        clearTimeout(tShow); clearTimeout(tHide);
+        tShow = setTimeout(function () { showPop(cell); }, 120);
+      });
+      cell.addEventListener('mouseleave', function () {
+        clearTimeout(tShow);
+        tHide = setTimeout(hideNow, 160);
+      });
+      cell.addEventListener('click', function () {
+        if (openPop && openCell === cell) { hideNow(); } else { showPop(cell); }
+      });
+    });
+    var pop = stage.querySelector('.aq-pop');
+    pop.addEventListener('mouseenter', function () { clearTimeout(tHide); });
+    pop.addEventListener('mouseleave', function () { tHide = setTimeout(hideNow, 160); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') hideNow(); });
+
+    if (window.lucide && window.lucide.createIcons) {
+      window.lucide.createIcons({ attrs: { width: 14, height: 14 } });
+    }
+  })();
+  </script>
+</div>

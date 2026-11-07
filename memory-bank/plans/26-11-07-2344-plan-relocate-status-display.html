@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>整组迁移状态展示 v2 落地: 着色A→B两排+弧形箭头+悬停浮窗(模板定稿)</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="relocate-status-display">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-07-2344">
+<meta name="doc-updated" content="26-11-08">
+<meta name="doc-refs" content="">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: relocate-status-display</div>
+<h1>整组迁移状态展示 v2 落地: 着色A→B两排+弧形箭头+悬停浮窗(模板定稿)</h1>
+<p class="lede">本篇只回答: 整组迁移状态展示 v2(着色 A→B 两排 + 右缘弧形箭头 + 悬停浮窗)如何落生产码 —— 数据面增量、前端替换面、浮窗调度、守阵改写与验收判据。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-07-2344 · <b>doc-updated</b> 26-11-08 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 会话(2026-11-07): grilling 四轮逐项拍板 + 可交互模板五轮迭代定稿; 视觉规格入库件 = <code>memory-bank/plans/attachments/relocate-status-display-v2-mockup.html</code>(四皮肤可切换、交互真实可点)
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<p><strong>背景</strong>: 26-11-04-1042 P1 的 <code>rel-badge</code> 文字徽章踩了三个坑(占列宽 / 999px 药丸与多款皮肤风格冲突 / 点击连开种子详情抽屉), 用户 2026-11-07 拍板重设计。参照范式 = 做种时长单元格的 HR 在线核实浮窗(<code>hr.js</code> hrPop*): 状态着色承载在既有内容上 + 详情走悬停浮窗 + 零点击。</p>
+<p><strong>目标</strong>: 路径列迁移展示改为「着色 A→B 两排(当前位置/目标位置)+ 右缘弧形箭头」, 详情进悬停浮窗; done/cancelled 回落单排。做到 = 四皮肤下三坑全消、守阵全绿、真机四态目检通过。</p>
+<p><strong>设计底线(不变量)</strong>:</p>
+<ol>
+  <li><strong>渲染期零触盘</strong>(<code>views_relocate.py</code> P0 纪律不动): 行级数据仅 job 快照, 不做任何文件系统探测;</li>
+  <li><strong>浮窗数据全来自行载荷、零新请求</strong>: <code>/api/relocate_chain</code> 深探测仍只在链浮窗按需触发(pitfalls/web-ui/contract-api 纪律);</li>
+  <li><strong>零点击</strong>: 行内不再有任何按钮语义, 原生 title 同步摘除(HR 范式同款, 防与浮窗叠影);</li>
+  <li><strong>无底形无边框</strong>: 状态唯一载体 = 颜色; 药丸形从根上消失, 皮肤冲突自然消解;</li>
+  <li><strong>指纹机制不破</strong>: relocate 标注值签名仍进装饰指纹, 新展示字段必须同步进签名;</li>
+  <li><strong>范围守恒</strong>: 链登记簿(外部链接行级数据面)<em>不在本计划</em> —— issue 26-11-07-1322 单独排期; 外部逐文件硬链接明确不可测。</li>
+</ol>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+<p><strong>现状</strong>: 路径列尾挂文字药丸徽章 —— 模板 <code>xtpl-cells.html:115-118</code>(组行)与 <code>:204-207</code>(种子行)的 <code>button.rel-badge</code>; 样式 <code>row_lang.css:510-530</code>(<code>border-radius:999px</code> + has-rel flex 布局 <code>:506-509</code>); 展示口径 <code>decorate.js:128-155</code>(relocateBadge/relocateTitle)与点击 <code>:163-169</code>(relocateOpen = openTorrentDrawer + relChainOpen 连开)。</p>
+<ul>
+  <li><strong>坑①占列宽</strong>: 徽章文字(迁移中/待收尾/迁移失败/迁移多任务)+ <code>has-rel</code> 强制单元格转 flex, 路径列 <code>minmax(150px,1.6fr)</code> 被双向挤压;</li>
+  <li><strong>坑②皮肤冲突</strong>: 999px 药丸 vs 皮肤圆角语言 —— atlas <code>--radius:10px</code> / prism 4-6px / <strong>flux·console 0px(全直角)</strong>, 三款全撞(各皮肤 style.css 令牌实测);</li>
+  <li><strong>坑③连开抽屉</strong>: 徽标点击同时开抽屉+链浮窗; 抽屉内本就有链入口(<code>drawer_tpl/</code> 三处), 列表页连开抽屉属无用操作。</li>
+</ul>
+<p><strong>守阵现状</strong>: <code>tests/test_webui_relocate_visibility.py</code> P1 组断言钉死徽标形态(<code>:246-254</code> badge button/click.stop/css), <code>test_webui_relocate_chain.py:406</code> 钉模板取数边界 —— 本计划须同步改写(S5)。</p>
+
+<h2><span class="no">§03</span>方案总览</h2>
+<p><strong>主线</strong>: 数据面小增量(组级聚合补 src)→ 行渲染替换(模板+decorate 单点)→ 悬停浮窗(新调度, 照 hrPop 范式)→ 样式(row_lang.css 四皮肤同一份)→ 守阵改写(红验)→ 全量与真机。</p>
+<table>
+  <tr><th>状态</th><th>行内(组行/种子行)</th><th>悬停浮窗</th></tr>
+  <tr><td><code>moving</code></td><td>两排 accent + 脉冲动画</td><td>迁移中 · <code>moving</code> 小字</td></tr>
+  <tr><td><code>pending_finalize</code></td><td>两排 warn</td><td>待收尾(已武装收尾) · <code>armed</code> 小字 + 改写账</td></tr>
+  <tr><td><code>failed</code></td><td>两排 error</td><td>迁移失败 · <code>moving · 重试 ×N</code> 小字 + 原因行</td></tr>
+  <tr><td><code>mixed</code>(仅组行)</td><td><strong>单排 warn 回落</strong></td><td>状态不一致 + 多目标路径块(两行, 无箭头)</td></tr>
+  <tr><td><code>done/cancelled/无标注</code></td><td>单排默认色(回落)</td><td>无浮窗(悬停无响应)</td></tr>
+</table>
+<p><strong>两排判定</strong>(<code>relocateView(row)</code> 单点): 种子行 = <code>m.relocate</code> state ∈ {moving, pending_finalize, failed} → 两排(a=job src, b=job dst); 组行 = 组级聚合 state ∈ 同集且 <strong>src/dst 全组唯一</strong> → 两排, mixed → 单排 warn; done/cancelled/null → 单排正常色。</p>
+<p><strong>浮窗结构</strong>(定稿, D10/D11): verdict 头(状态色点 8px + 状态词 + phase mono 小字 + 外部类 ttag 虚线小标)→ <strong>3px 状态色分隔条(负边距全出血)</strong> → 路径块(「当前位置/目标位置」标签列:目标位置状态色/当前位置 --path-src 固定色 10px + 值 mono 11.5px 单行尾省略, 目标位置值状态色强调, <strong>无箭头/无竖轨/无软底</strong>)→ kv 行(成员·别名·改写账 → 来源 → 更新, 单行省略)→ 失败原因行 → note。</p>
+<p><strong>皮肤适配单点</strong>: 圆点/端点圆角 = <code>calc(var(--radius-sm) / 2)</code> 一条规则四皮肤自适应(atlas 7px→3.5 / flux·console→0 方 / prism 4px→2), 不写皮肤分支; 状态色全走现有语义令牌(--accent/--warn/--error)。</p>
+<p><strong>行为变更说明</strong>: 列表页不再有链浮窗入口(原徽标点击) —— 链拓扑深看走抽屉内入口(D9 零点击拍板的自然结果); 筛选桶(_relocatePick/_relocateBuckets)口径不变。</p>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+<table>
+  <tr><th>#</th><th>内容</th><th>验收判据</th></tr>
+  <tr><td>S1</td><td><strong>组级聚合补 src</strong>(<code>views_relocate.py group_relocate</code>): src = 成员标注 src 去重唯一值, 不一致/缺失 = ""(mixed 回落单排本就不需要 src)</td><td>新增组级 src 断言三例(全组一致/不一致/单成员); 既有组级用例全绿; 零触盘纪律不破(<code>test_view_build_does_not_probe_filesystem_or_iterate_jobs</code> 仍绿)</td></tr>
+  <tr><td>S2</td><td><strong>行渲染替换</strong>: <code>xtpl-cells.html</code> 两组 save_path 分支删 <code>button.rel-badge</code> 改 <code>.rel-pair</code> 两排结构(fit-content + arc inline svg 8×20)/单排; <code>decorate.js</code> 删 relocateBadge/relocateTitle/relocateOpen/relocateTargetHash/RELOCATE_STATE_CLASS, 新 <code>relocateView(row)</code> 单点出 {mode, tone, a, b, pop}; 指纹 <code>_relocateSig/_groupRelocateSig</code> 补 src</td><td>守阵红验先行(S5); 模板无状态字面量(全走 relocateView); 指纹用例补 src 断言</td></tr>
+  <tr><td>S3</td><td><strong>悬停浮窗</strong>: 新 <code>shared/relocate_pop.js</code>(mixin 片段, 文件序在 app.js 前)+ <code>popovers.html</code> 模板锚 <code>aq:relocate-pop</code>; 调度照 hr.js hrPop* 同参: enter 120ms / leave 160ms / 移入浮窗不关 / teleport body / 上下翻 / 指向箭头 / ESC 接 lifecycle 退栈链 / 滚动缩放即关; 数据组装 assembleRelPop(row) 全行载荷零请求</td><td>新锚扫描守阵(test_frontend_*_wiring 同款) + node 单测判定/组装; 真机 hover 四态目检</td></tr>
+  <tr><td>S4</td><td><strong>样式</strong>(<code>row_lang.css</code>): 删 <code>.rel-badge</code> 块(:510-530)重写 has-rel 段(:506-509); 新 .rel-pair/.rel-pa/.rel-pb/.rel-arc/.rel-tone-*/脉冲(prefers-reduced-motion 关)/.relpop-*(色条全出血/标签状态色/kv 单行省略/ttag/宽度 max-content 上限 min(94%,680px)); 新增 --path-src 专用令牌(atlas/flux/console/prism 四皮肤令牌表各加一条, 青灰-钢蓝系固定色, 建议值 atlas #8fa8c4 / flux #7d9bc2 / console #7d97ba / prism #8f9fc7)</td><td>四皮肤截图目检(至少 flux 直角 + atlas 圆角); 列宽模板不动; 行高不因两排溢出</td></tr>
+  <tr><td>S5</td><td><strong>守阵改写(红验)</strong>: <code>test_webui_relocate_visibility.py</code> P1 组(:246-254 badge 形态→两排结构/无 button/无 title; :283 状态映射→relocateView 矩阵; :225 指纹补 src)+ <code>test_webui_relocate_chain.py:406</code>(取数边界改指 relocate_pop.js); 新增浮窗锚用例; 全测试面 grep relocate 排查漏锚(harness 注入桩面含 ui-harness-relocate-inject 切片)</td><td>先改守阵对旧生产红 → 落 S1-S4 转绿(红验留痕); test.full 全绿</td></tr>
+  <tr><td>S6</td><td><strong>收尾</strong>: 真机 dry-run harness 桩四态目检四皮肤; <code>test.full</code> 新基线切片; 回写 memory-bank(conventions/webui.md 展示口径 + progress)</td><td>kb.baseline 新切片数字回写; 文档回写完成</td></tr>
+</table>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p>无 —— 全部决策已在 grilling 四轮逐项拍板(见 §06), 模板五轮迭代定稿经用户逐条确认。</p>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+  <tr><th>#</th><th>结论</th></tr>
+  <tr><td>D1</td><td>参照范式 = 做种时长 HR 在线核实浮窗: 状态着色承载既有内容 + 详情悬停浮窗 + 零点击(26-11-07)</td></tr>
+  <tr><td>D2</td><td>状态一眼可见 = 路径文字/箭头按态着色; 图标变体与单排对照变体否决, 仅留基线(模板第一套)(26-11-07)</td></tr>
+  <tr><td>D3</td><td>A→B 生命周期 = 仅 moving/pending_finalize/failed; done/cancelled 回落单排(收尾即止, 不持久展示)(26-11-07)</td></tr>
+  <tr><td>D4</td><td>数据面 = 仅 auto-qb job 快照(先行方案 C); 外部链接行级等链登记簿(issue 26-11-07-1322 排期); 外部逐文件硬链接不可测(26-11-07)</td></tr>
+  <tr><td>D5</td><td>多跳链行内显示首尾两端(当前位置→目标位置), 中间跳进链浮窗/抽屉(26-11-07)</td></tr>
+  <tr><td>D6</td><td>排版 = 两排小字(11px, 长路径 10px)+ 右缘弧形箭头 8×20、块宽 fit-content 紧贴文字; 当前位置上排(暗)/目标位置下排(亮)(26-11-07)</td></tr>
+  <tr><td>D7</td><td>行内单行截断保头部, 全路径在浮窗兑现; 一切展示面禁自动换行(26-11-07)</td></tr>
+  <tr><td>D8</td><td>组行 = src/dst 全组一致才两排; mixed 回落单排 warn(26-11-07)</td></tr>
+  <tr><td>D9</td><td>零点击(不开抽屉不开链浮窗), 原生 title 摘除; 浮窗调度与 hrPop 同参(120/160/移入不关/teleport/上下翻/ESC 退栈)(26-11-07)</td></tr>
+  <tr><td>D10</td><td>浮窗结构 = verdict+phase 小字+ttag → 3px 状态色全出血分隔条 → 路径块(标签「当前位置/目标位置」状态色 + 目标值状态色; 无箭头/无竖轨/无软底) → kv(业务→来源→更新) → reason/note(26-11-07, 五轮迭代终版)</td></tr>
+  <tr><td>D11</td><td>浮窗宽度 = max-content 随最长元素, 上限 min(94%, 680px)(26-11-07)</td></tr>
+  <tr><td>D12</td><td>状态圆点 8px, 形状随皮肤 = calc(var(--radius-sm)/2) 单点自适应(26-11-07)</td></tr>
+  <tr><td>D13</td><td>术语 = 当前位置/目标位置(废「初始/当前/目标」); 外部链接场景同口径(当前位置=种子现路径, 目标位置=链接指向)(26-11-07)</td></tr>
+  <tr><td>D14</td><td>浮窗 verdict 相位进状态词后方 mono 小字; 来源 kv 位次在「更新」前(26-11-07)</td></tr>
+  <tr><td>D15</td><td>浮窗路径块「当前位置」行(标签+路径值)改为固定色系、不随状态色(用户 2026-11-08 拍板); 实现 = 新增专用令牌 --path-src(四皮肤令牌表各定值, 青灰/钢蓝系), 「目标位置」行保持状态色强调</td></tr>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+  <tr><th>风险</th><th>触发条件</th><th>对策</th></tr>
+  <tr><td>指纹漏新字段 → 相位推进渲染不刷新</td><td>S2 改 sig 时漏 src/dst 变化位</td><td>指纹守阵补 src 断言; 迁移推进手测(harness 桩相位推进)</td></tr>
+  <tr><td>守阵与生产同批改 → 红验失真</td><td>S5 守阵先落后 S1-S4 未动</td><td>纪律: 守阵先行对旧生产跑红留痕, 再落生产转绿; 红验输出进档案</td></tr>
+  <tr><td>浮窗调度与 hrPop 双实现漂移</td><td>两处参数/宽限语义各自演化</td><td>参数逐条对齐 hr.js 并注释互指; 锚扫描守阵钉 120/160 数值; 不抽公共基类(语义独立, 避免过度耦合)</td></tr>
+  <tr><td>两排行高撑爆行高/列模板</td><td>长路径 + 10px 缩字边界</td><td>S4 四皮肤截图目检; 列模板 tpl 不动; 行高按需增长仅限两排行</td></tr>
+  <tr><td>组级 src 聚合遗漏 mixed 场景</td><td>组内多 job 多 src</td><td>S1 断言三例含不一致例; mixed 单排回落不消费 src</td></tr>
+  <tr><td>列表页链浮窗入口消失被当回归</td><td>用户习惯徽标点击开链浮窗</td><td>D9 拍板零点击; 链拓扑入口 = 抽屉; 如需列表页入口属新拍板, 不在本计划回补</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-07-2344</span> 初版: 会话 grilling 四轮(D1-D14)+ 可交互模板五轮迭代定稿; 视觉规格入库 <code>attachments/relocate-status-display-v2-mockup.html</code>; 实施步骤 S1-S6。</li>
+  <li><span class="tag">R1 · 26-11-08</span> 微调:当前位置行固定色系(D15, 新令牌 --path-src);委派实施前定稿。</li>
+</ul>
+
+</div>
+</body>
+</html>

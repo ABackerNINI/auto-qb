@@ -11,7 +11,7 @@
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 - [chore] [版本号双源矛盾: __init__.__version__ 0.2.0 vs pyproject 0.1.0](../26-09-21-1408-chore-version-dual-source.html) — WebUI 顶栏透出与打包元数据已差一个 minor; 建议 pyproject 单源 + 动态读取
 
-## Open (63)
+## Open (64)
 
 - [bug] [traffic_store_common._INFOHASH_RE 配 re.match, $ 允许串尾恰一个换行(与 R4#34 同族)](../26-11-08-0045-bug-traffic-store-infohash-re-tail-newline.html) — traffic_store_common.py:32 _INFOHASH_RE 配 re.match, 实测串尾恰一个换行放行; 与 R4#34(表行14 已修 keys.py fullmatch)同族; HTTP 层可达性待查, 建议同款 re.fullmatch
 - [bug] [/api/speed/override 与 /api/speed/alt 的 upload_kib/download_kib 不拦负数](../26-11-08-0044-bug-webui-speed-kib-negative-unchecked.html) — 只过 int_param 不拦负数(torrent_detail.py:124-132 一带; server/common.py:113 int_param 只拦畸形), 负数直达命令层与 qbapi; qbapi set_alt_speed_limits 修好后(批L)负数从静默 no-op 变真下发——与 R4#3/表行4 同族
@@ -24,6 +24,7 @@
 - [docs] [effect-confirmation.md 两处陈旧指针(_verdict_reannounce 链接与真值直查红线指向)](../26-11-08-0043-docs-effect-confirmation-stale-pointers.html) — _verdict_reannounce 链接指 commands.py 实际在 commands_torrents.py(:30); :44「真值直查红线」指 webui/runtime.py 实际已迁 runtime_commands.py:370(move-only 拆分后)
 - [refactor] [带圈数字存量第二片: extension_proxy 两文件与三测试文件(约15处含断言字符串)](../26-11-08-0043-refactor-ascii-circled-number-second-batch.html) — extension_proxy_support.py/extension_proxy_page_fetch.py 及 test_web_commands_reannounce.py(约15处含断言消息字符串)/test_web_longtail_runtime.py/test_extension_proxy_options.py 等; 另 26-11-07-0536 修复批新增⑥⑦/①②⚠ 为所在文件既有符号延续
 - [refactor] [views.py 另 3 个零使用死导入(Dict/TrackerStatus/VIRTUAL_TRACKER_PREFIXES)](../26-11-08-0043-refactor-webui-views-dead-imports-residue.html) — 批H 清 7 个死导入后仍余 3 个零使用: Dict(:15)/TrackerStatus(:17)/VIRTUAL_TRACKER_PREFIXES(:20, 体内只用 _VIRTUAL_TRACKER_PREFIXES); 已核实无经 views 模块的消费者
+- [feat] [主循环链登记簿: 行级路径链数据面(外部链接 A->B 展示的前置基建)](../26-11-07-1322-feat-relocate-chain-registry.html) — 主循环分片扫描种子路径链(junction/symlink 跟随, 含外部建的)+ save_path 事件失效 + 只读快照发布, 为路径列行级 A->B 展示补 auto-qb job 之外的数据面; 外部逐文件硬链接明确不可测
 - [bug] [porcelain_paths 不解 git C 风格引号路径, 非 ASCII rename 静默漏检](../26-11-07-1216-bug-check-context-caps-porcelain-quote.html) — check_context_caps.py porcelain_paths 对 quotePath 转义路径不 unquote, 非 ASCII rename 行「改动命中」判定静默漏检
 - [bug] [check_kb_structure.py 运行时输出含图形符号(违反 code-style 代码禁令)](../26-11-07-1216-bug-check-kb-structure-glyph.html) — skill 侧 check_kb_structure.py 运行时提示行含 ->类符号(trim_hint 返回串/print 列表符), 经提交闸门终端输出
 - [bug] [port_kill.py 存量子进程未钉 encoding(cp1252 同病)](../26-11-07-1216-bug-port-kill-subprocess-encoding.html) — port_kill.py 两处 subprocess.run text=True 缺 encoding/errors, 守卫只扫 tests/ 不含 scripts/, CI 不红但同病
