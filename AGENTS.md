@@ -63,6 +63,9 @@ commands run env.sync # 首次/依赖变更后同步依赖
 
 ## 🔴进程安全:禁止一切taskkill
 
+- 豁免(用户拍板 2026-11-07): `scripts/port_kill.py`(经 dev.port-kill; 杀前核验监听进程归属, 非 python 监听者须显式 --yes)与 `scripts/hr_fetch_experiment.py`(专用 profile 浏览器, 按 cmdline 过滤后对 PID 定点)两处**脚本内部**定点杀。
+- 依据/边界: 二者正是「先核身份再定点杀」的对策面(`memory-bank/pitfalls/ops/taskkill-image-name-ban.md`、`port-kill-prod-instance.md`); AI 代理在 shell 直接执行 taskkill 仍一律禁止。
+
 ## ⚠环境硬约束:Git操作(AI工具shell特有)
 
 **工作区模式:多clone并行**:每个AI实例用**一份独立克隆**,跨clone同步一律走Gitee `develop`。细则见`memory-bank/conventions/collaboration.md`「协作约定」;完整判据与事故档案单点在`memory-bank/pitfalls/git/_index.md`。本节只留最容易致命的几条:

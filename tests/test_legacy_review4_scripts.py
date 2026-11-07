@@ -13,6 +13,20 @@ e2e_selfcheck 的 --blocking/--warn 缺值走 usage 提示退 2(不再 IndexErro
 qb_capture 的 --dry 真零请求: 判定从 run_capture 内部(handshake 之后)提前到 main() 里
 Capture 构造之前(QbClient 构造即 POST /auth/login x4), 本地计数假服断言 dry 全程 0 请求。
 
+P5 batch (items #8/#9/#10): port_kill pre-kill verify + taskkill red-line exemption.
+port_kill now verifies attribution before every kill via process_info (Win32_Process,
+same PowerShell channel as listening_pids): the listener's name/cmdline is printed
+first, and the decision is extracted into kill_decision (really called by production
+main) -- python-like listeners (python*.exe / uv running python) keep the old flow,
+non-python listeners refuse without --yes and pass with it (new flag, default off),
+and a failed verify always refuses (fail-safe). The red-line side records the
+exemption in AGENTS.md's process-safety entry (hr_fetch_experiment's pinned kill got
+a comment pointing there in the same batch).
+
+The test cases below for port_kill are all monkeypatched (fake
+listening_pids/process_info/subprocess.run), so taskkill is never really executed --
+the kill path never actually runs in tests, only decisions and refusal wiring.
+
 本文件是 legacy-review4 scripts 各批次共用的测试落点, 后续批次往里追加用例,
 头部 docstring 的「## 测试计划」清单随用例同步登记。用例纯内存构造, 不真跑 git
 写操作、不连 qB、不写仓库外文件(P4 表#11 的本地计数假服听 127.0.0.1 随机口, 不是 qB)。
@@ -28,6 +42,11 @@ Capture 构造之前(QbClient 构造即 POST /auth/login x4), 本地计数假服
 - test_e2e_selfcheck_parse_port_args_normal_values (P4 表#6): 正常取值/缺省/多值串解析不回归, 未知参数仍走报错行; parse_port_args 为生产 main 真实调用点
 - test_ui_harness_site_alerts_needs_four_torrents (P4 表#23): 2/3 条种子整段跳过注入不崩, 4 条放行且倒数第 4/第 3 注入生效; 红验: 旧守卫(len<2)逐字重放, 2 条时 torrents[-4] 必 IndexError
 - test_qb_capture_dry_true_zero_requests (P4 表#11): --dry 打本地计数假服请求计数为 0(不 login/不握手/不计数; 缺 --sample 不预查计数), 带 --sample 计划行给出 Nx2; 对照组真构造 Capture 计到 4 个 login, 证明计数器非空转、旧顺序(main 先构造后判 dry)回潮即红
+- test_port_kill_decision_matrix (P5 #9): kill_decision 4 states -- python-like listener passes (python*.exe / uv running python), non-python refuses without --yes (reason points to --yes), non-python passes with --yes, verify-failure (None) refuses even with --yes; red check: old kill loop replayed verbatim issues taskkill for any pid on a wrong port with no verification
+- test_port_kill_process_info_parses_ps_json (P5 #9): process_info PS JSON parsing -- array / single-dict forms both normalized, null CommandLine becomes empty string, pids the query cannot answer stay absent
+- test_port_kill_main_attribution_refusal_and_yes (P5 #9): main wiring (all monkeypatched, taskkill never really executed) -- non-python listener gets attribution line then REFUSED with rc!=0 and zero taskkill; with --yes exactly one pinned taskkill
+- test_port_kill_main_python_listener_keeps_old_flow (P5 #9): compat -- python.exe listener still passes without --yes, bare port list usage unbroken, no-listener behavior unchanged
+- test_port_kill_main_verify_failure_fails_safe (P5 #9): fail-safe -- empty process_info result refuses with verify-failed regardless of --yes, never silently passes
 """
 
 from __future__ import annotations
@@ -304,3 +323,185 @@ def test_qb_capture_dry_true_zero_requests(tmp_path, caplog):
     finally:
         srv.shutdown()
         srv.server_close()
+
+
+# --------------------------------------------------------------------------- P5 item#9: port_kill pre-kill verify
+def test_port_kill_decision_matrix():
+    """P5 item#9: kill_decision (really called by production main before every kill)
+    -- 4 decision states + red check.
+
+    Red check: the old implementation had no verification at all -- whatever pid
+    listening_pids returned went straight to taskkill, including a wrong port (the
+    production discovery endpoint 18788, a qB WebUI port, any other app's listener;
+    pitfalls/ops/port-kill-prod-instance.md records exactly that accident shape).
+    Replaying the old kill loop verbatim shows it issues taskkill for ANY pid, while
+    kill_decision refuses on the same input -- the criterion distinguishes old from
+    new, it is not tautologically green.
+    """
+    mod_pk = _load_script("port_kill")
+    py_cases = [
+        ("python.exe", r"C:\Python312\python.exe scripts/ui_harness.py --port 0"),
+        ("pythonw.exe", "pythonw -m uvicorn ..."),
+        ("PYTHON.EXE", "python stub.py"),  # case-insensitive
+        ("uv.exe", "uv run python scripts/ui_harness.py --port 0"),  # uv wrapping python
+    ]
+    non_py = ("chrome.exe", r'"C:\Program Files\Google\Chrome\Application\chrome.exe" --user-data-dir=x')
+
+    # python-like listeners (the stub interpreters this script cleans): old flow, no --yes needed
+    for name, cmd in py_cases:
+        ok, _ = mod_pk.kill_decision((name, cmd), False)
+        assert ok, f"python-like listener must pass: {name}"
+
+    # non-python without --yes: refuse; the reason must say how to confirm explicitly
+    ok, why = mod_pk.kill_decision(non_py, False)
+    assert not ok, "non-python listener without --yes must be refused"
+    assert "--yes" in why, f"refusal reason must point to --yes: {why}"
+
+    # non-python with --yes: allowed
+    ok, why = mod_pk.kill_decision(non_py, True)
+    assert ok, f"non-python listener with --yes must pass: {why}"
+
+    # verify failure (info=None: query failed / pid exited): always refuse, even with --yes
+    for confirmed in (False, True):
+        ok, why = mod_pk.kill_decision(None, confirmed)
+        assert not ok, f"verify failure must refuse (confirmed={confirmed})"
+        assert "verify-failed" in why
+
+    # red check: replay the old kill loop verbatim -- no verification, taskkill for any pid
+    def _old_kill_loop(pids, run):
+        for pid in sorted(pids):  # old main: listening_pids result fed straight to taskkill
+            run(["taskkill", "/F", "/PID", str(pid)], capture_output=True, text=True)
+
+    issued = []
+
+    def _recording_run(cmd, **kw):
+        issued.append(cmd)
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    _old_kill_loop({4321}, _recording_run)
+    assert issued == [
+        ["taskkill", "/F", "/PID", "4321"]
+    ], "old loop kills any pid with no verification (red face on regression)"
+    ok, _ = mod_pk.kill_decision(non_py, False)  # same unknown-pid shape, new gate refuses
+    assert not ok
+
+
+def test_port_kill_process_info_parses_ps_json(monkeypatch):
+    """P5 item#9: process_info PS JSON parsing -- array / single-dict forms both
+    normalized, null CommandLine becomes empty string, pids the query cannot answer
+    stay absent (absence = verify failure, callers refuse)."""
+    mod_pk = _load_script("port_kill")
+
+    def _fake_run(cmd, **kw):
+        ps = cmd[-1]  # [powershell, -NoProfile, -Command, <ps>]
+        if "ProcessId=11" in ps:
+            payload = '[{"ProcessId":11,"Name":"python.exe","CommandLine":"python x"}]'
+        elif "ProcessId=22" in ps:
+            payload = '{"ProcessId":22,"Name":"chrome.exe","CommandLine":null}'  # single-dict form (defensive)
+        else:
+            payload = ""
+        return SimpleNamespace(returncode=0, stdout=payload, stderr="")
+
+    monkeypatch.setattr(mod_pk.subprocess, "run", _fake_run)
+    assert mod_pk.process_info([11]) == {11: ("python.exe", "python x")}
+    assert mod_pk.process_info([22]) == {22: ("chrome.exe", "")}, "single dict normalized + null cmdline becomes empty"
+    infos = mod_pk.process_info([11, 33])
+    assert 11 in infos and 33 not in infos, "pid the query cannot answer stays absent"
+    assert mod_pk.process_info([]) == {}, "empty input, empty result"
+    # query failure faces: rc!=0 / empty output / broken JSON -> empty dict (caller refuses all)
+    monkeypatch.setattr(
+        mod_pk.subprocess, "run", lambda cmd, **kw: SimpleNamespace(returncode=1, stdout="x", stderr="")
+    )
+    assert mod_pk.process_info([11]) == {}
+    monkeypatch.setattr(
+        mod_pk.subprocess, "run", lambda cmd, **kw: SimpleNamespace(returncode=0, stdout="not-json", stderr="")
+    )
+    assert mod_pk.process_info([11]) == {}
+
+
+def test_port_kill_main_attribution_refusal_and_yes(monkeypatch, capsys):
+    """P5 item#9 main wiring (all monkeypatched, taskkill never really executed):
+    non-python listener without --yes -> attribution line printed first (name/cmdline
+    visible), then REFUSED with rc!=0 and zero taskkill; with --yes -> allowed,
+    exactly one pinned taskkill. Old implementation kills on the same input -- red
+    on regression."""
+    mod_pk = _load_script("port_kill")
+    taskkill_calls = []
+
+    def _fake_run(cmd, **kw):
+        if cmd and cmd[0] == "taskkill":
+            taskkill_calls.append(cmd)
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(mod_pk, "listening_pids", lambda port: {4321})
+    monkeypatch.setattr(mod_pk, "process_info", lambda pids: {4321: ("chrome.exe", "chrome.exe --headless")})
+    monkeypatch.setattr(mod_pk.subprocess, "run", _fake_run)
+
+    rc = mod_pk.main(["18788"])
+    out = capsys.readouterr().out
+    assert rc != 0, "refusal without --yes must exit non-zero"
+    assert "pid 4321 = chrome.exe : chrome.exe --headless" in out, f"attribution line must be printed first: {out!r}"
+    assert "REFUSED" in out and "--yes" in out, f"refusal line must explain cause and how to confirm: {out!r}"
+    assert taskkill_calls == [], f"refusal path must not run taskkill, got: {taskkill_calls}"
+
+    rc = mod_pk.main(["18788", "--yes"])
+    out = capsys.readouterr().out
+    assert "killed" in out
+    assert taskkill_calls == [
+        ["taskkill", "/F", "/PID", "4321"]
+    ], f"--yes passes exactly one pinned taskkill: {taskkill_calls}"
+
+
+def test_port_kill_main_python_listener_keeps_old_flow(monkeypatch, capsys):
+    """P5 item#9 compat: python.exe listener (the stub this script cleans) still
+    passes without --yes; bare port-list usage unbroken (dev.port-kill passes args
+    through); no-listener behavior unchanged."""
+    mod_pk = _load_script("port_kill")
+    taskkill_calls = []
+
+    def _fake_run(cmd, **kw):
+        if cmd and cmd[0] == "taskkill":
+            taskkill_calls.append(cmd)
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(mod_pk, "listening_pids", lambda port: {1111} if port == 8137 else set())
+    monkeypatch.setattr(
+        mod_pk, "process_info", lambda pids: {p: ("python.exe", f"python scripts/ui_harness.py pid={p}")
+                                              for p in pids}
+    )
+    monkeypatch.setattr(mod_pk.subprocess, "run", _fake_run)
+
+    rc = mod_pk.main(["8137", "99999"])  # existing usage: bare port list, no --yes
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert taskkill_calls == [
+        ["taskkill", "/F", "/PID", "1111"]
+    ], f"python-like listener passes without --yes as before: {taskkill_calls}"
+    assert "pid 1111 = python.exe" in out, "attribution line printed for python listeners too"
+    assert "no-listener" in out, "no-listener behavior unchanged"
+
+
+def test_port_kill_main_verify_failure_fails_safe(monkeypatch, capsys):
+    """P5 item#9 fail-safe: when process_info comes back empty (query failed / pid
+    exited) the kill is refused with verify-failed regardless of --yes, never
+    silently passed. Old implementation did not query at all -- killing a vanished
+    pid failed inside taskkill; the new implementation blocks before the kill, and
+    neither input ever issues taskkill."""
+    mod_pk = _load_script("port_kill")
+    taskkill_calls = []
+
+    def _fake_run(cmd, **kw):
+        if cmd and cmd[0] == "taskkill":
+            taskkill_calls.append(cmd)
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(mod_pk, "listening_pids", lambda port: {4321})
+    monkeypatch.setattr(mod_pk, "process_info", lambda pids: {})  # query answers nothing
+    monkeypatch.setattr(mod_pk.subprocess, "run", _fake_run)
+
+    for argv in (["18788"], ["18788", "--yes"]):
+        rc = mod_pk.main(argv)
+        out = capsys.readouterr().out
+        assert rc != 0, f"verify failure must exit non-zero: {argv}"
+        assert "verify-failed" in out, f"refusal line must say verify failed: {out!r}"
+        assert taskkill_calls == [], f"verify failure must not kill ({argv}): {taskkill_calls}"

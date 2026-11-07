@@ -540,6 +540,10 @@ def _kill_profile_browsers(profile_dir: Path) -> None:
     )
     try:
         r = subprocess.run(["powershell", "-NoProfile", "-Command", ps], capture_output=True, text=True, timeout=20)
+        # taskkill here is covered by the AGENTS.md process-safety exemption: the pid
+        # list is narrowed above by image name + dedicated-profile cmdline filter, so
+        # only this script's own profile browsers are hit; AI agents must still never
+        # run taskkill directly in a shell.
         for line in r.stdout.splitlines():
             pid = line.strip()
             if pid.isdigit():
