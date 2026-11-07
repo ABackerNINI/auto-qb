@@ -129,6 +129,9 @@ window.AQB_LIFECYCLE = {
       else if (this.searchHelpOpen) this.searchHelpOpen = false;  // 搜索语法浮卡(pop)
       else if (this.kbHelpOpen) this.kbHelpOpen = false;  // 快捷键帮助浮层(W6, H 组 Shift+Slash 打开)
       else if (this.errPanelOpen) this.errPanelOpen = false;  // 通知面板(S4): pop 层, escBusy 已同步
+      // 迁移悬停浮窗(plan 26-11-07-2344 S3): pop 层 tooltip, 收卡即短路 —— 该次 Esc 不再往下走。
+      // 数据页专属(hover 触发), 设置页不可能在屏, 故不进 dialogs_meta.js::escBusy 名单
+      else if (this.relPop.open) this.relPopHideNow();
       else if (this.filterMenu) this.filterMenu = "";  // 筛选器下拉(pop)
       else if (this.menu.visible) this.menu.visible = false;  // 右键菜单: pop 层之后
       else if (this.selGroups.length || this.selMembers.length) this.clearSelection();  // 兜底: 清除行/组选择(复用现有逻辑)

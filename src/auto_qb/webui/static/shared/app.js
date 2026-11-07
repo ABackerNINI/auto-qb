@@ -906,6 +906,7 @@ app.mixin(window.AQB_COLUMNS);
 app.mixin(window.AQB_FORMAT);
 app.mixin(window.AQB_DECORATE);
 app.mixin(window.AQB_RELOCATE_CHAIN);  // 迁移路径链浮窗(P2, 计划 26-11-04-1042): 只在打开/刷新时取数, 列表渲染期零探测
+app.mixin(window.AQB_RELOCATE_POP);  // 迁移悬停浮窗(plan 26-11-07-2344 S3): 数据全行载荷零请求, 调度参数逐条对齐 hr.js hrPop*
 app.mixin(window.AQB_HR);
 app.mixin(window.AQB_SORT);
 app.mixin(window.AQB_MENU);

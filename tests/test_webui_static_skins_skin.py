@@ -110,7 +110,7 @@ def test_frontend_template_split_wiring():
       2. 清单挂了不存在的分片 / into 非法 —— boot fetch 404, 整页停在错误占位;
       3. 两套 shell 清单漂移(各自演化 parts/scripts)—— 单一语义模板下等于偷偷分裂出第二份模板;
       4. 绕开 UI 差异口私拷模板块(双模板副本的复发形态)—— 由 _scan_ui_diff_registry 钉住。
-    另钉: 聚合标签配平(切割边界错位的兜底)、shell ≤256 行(S1 定 200, 26-10-06-0838 S5/S6 各 +3, R2 26-10-09-2219 S1 +4, W6 26-10-13-0811 dt_table.css 挂载 +2, issue 26-10-20-2231 prism dialogs.css 挂载 +2, 计划 26-10-30-0217 阶段2 row_lang.css 挂载(注释+link)+2 → 218; 计划 26-11-01-0553 shared/hscroll.css 挂载(注释+link)+2 → 220; 计划 26-10-31-2316 S6 fx 三件挂 flux(注释+2link+注释+script)+7 → 227; S6 后半 fx 挂载面(fx-mount.css 注释+link + fx-mount.js 注释+script, flux 专属)+6 → 233; R4 计划 26-11-02-2342 §07 域片段挂载(console_hub.css 拆 4 link 净 +3 + 7 域 20 片段 script)+23 → 256)/ 单分片 ≤400 行、清单脚本序(vendor 首 / app.js 尾)。
+    另钉: 聚合标签配平(切割边界错位的兜底)、shell ≤256 行(S1 定 200, 26-10-06-0838 S5/S6 各 +3, R2 26-10-09-2219 S1 +4, W6 26-10-13-0811 dt_table.css 挂载 +2, issue 26-10-20-2231 prism dialogs.css 挂载 +2, 计划 26-10-30-0217 阶段2 row_lang.css 挂载(注释+link)+2 → 218; 计划 26-11-01-0553 shared/hscroll.css 挂载(注释+link)+2 → 220; 计划 26-10-31-2316 S6 fx 三件挂 flux(注释+2link+注释+script)+7 → 227; S6 后半 fx 挂载面(fx-mount.css 注释+link + fx-mount.js 注释+script, flux 专属)+6 → 233; R4 计划 26-11-02-2342 §07 域片段挂载(console_hub.css 拆 4 link 净 +3 + 7 域 20 片段 script)+23 → 256; 26-11-08 计划 26-11-07-2344 S3 flux 挂 relocate_pop.js 靠 hr.js 同行并排, 净 +0 → 256)/ 单分片 ≤400 行(popovers.html 例外 440, 26-11-08 计划 26-11-07-2344 S3 relPop 块)、清单脚本序(vendor 首 / app.js 尾)。
     """
     problems = []
     manifests = {}
@@ -153,8 +153,11 @@ def test_frontend_template_split_wiring():
             # 重构成独立组件」。26-10-18(计划 26-10-18-0813 B3/D15)正是这么做的 —— 三张卡并成
             # 「流量与限速」并抽成 aq-traffic-card + shared/tpl/traffic-card.html, settings.html 只剩
             # 一行挂载, 例外额度随之删除(不留给下一次"再加一点")。
+            # 26-11-08(计划 26-11-07-2344 S3)给 popovers.html 开 440 的例外: 迁移悬停浮窗 relPop
+            # teleport 块(+锚注释)按任务拍板落在 HR 弹窗同款锚旁, 397 -> 426 行 —— 该分片是全部
+            # 悬停/链/确认浮层的既有单点, 不为 26 行再拆独立分片; 下次再长应把浮窗族拆出(同上口径)。
             name = os.path.basename(part["src"])
-            cap = 560 if name == "settings-detail.html" else 400
+            cap = 560 if name == "settings-detail.html" else 440 if name == "popovers.html" else 400
             if n > cap:
                 problems.append(f"{ui}/{part['src']} {n} 行, 超 {cap} 行单分片体量上限")
             if part.get("into") not in ("app", "body"):

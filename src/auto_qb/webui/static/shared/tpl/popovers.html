@@ -374,6 +374,35 @@
       </div>
     </teleport>
 
+    <!-- aqb:relocate-pop:begin (守阵锚, 计划 26-11-07-2344 S3 扫描用)
+         迁移悬停浮窗: 单例浮层, 触发面 = 组行/种子行 save_path 单元格(xtpl-cells.html 两组分支)。
+         teleport 到 body 级 —— 脱离列表容器的 overflow/特异性纠缠(HR 弹窗同款教训);
+         数据组装/调度/定位单点在 shared/relocate_pop.js(relPop*), 参数逐条对齐 hr.js hrPop*
+         (enter 120ms / leave 160ms 宽限 / 移入不关 / below 优先上下翻), 数据全行载荷零请求。 -->
+    <teleport to="body">
+      <div v-show="relPop.open" ref="relPop" class="relpop" :class="relPop.above ? 'above' : 'below'"
+           role="tooltip" @mouseenter="relPopKeepOpen" @mouseleave="relPopLeave">
+        <template v-if="relPop.data">
+          <i class="rp-arrow" aria-hidden="true"></i>
+          <div class="rp-head" :class="'rel-tone-' + relPop.data.tone">
+            <i class="rp-dot" aria-hidden="true"></i>
+            <span class="rp-verdict">{{ relPop.data.verdict }}</span>
+            <span v-if="relPop.data.phase" class="rp-phase">{{ relPop.data.phase }}</span>
+          </div>
+          <div class="rp-sep" :class="'rel-tone-' + relPop.data.tone"></div>
+          <div class="rp-paths" :class="'rel-tone-' + relPop.data.tone">
+            <div v-for="(p, i) in relPop.data.paths" :key="i" class="rp-pr">
+              <span class="rp-pl">{{ p[0] }}</span>
+              <span class="rp-pv" :class="{ 'rp-em': p[0] === '目标位置' }">{{ p[1] }}</span>
+            </div>
+          </div>
+          <div v-for="(kv, i) in relPop.data.kv" :key="'k'+i" class="rp-kv"><span class="rp-k">{{ kv[0] }}</span><span class="rp-v">{{ kv[1] }}</span></div>
+          <div v-if="relPop.data.reason" class="rp-reason">{{ relPop.data.reason }}</div>
+        </template>
+      </div>
+    </teleport>
+    <!-- aqb:relocate-pop:end -->
+
     <!-- 键盘快捷键帮助浮层(W6, 计划 26-09-28-0354 §5.2: H 组 Shift+Slash 打开, 只读速查;
          Esc 关闭归 lifecycle 退栈链, 名单三处同步: 退栈链 / escBusy / _kbOverlayBusy) -->
     <aq-modal :open="kbHelpOpen" :close="closeKbHelp" icon="#i-select-all"

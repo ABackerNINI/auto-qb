@@ -109,9 +109,10 @@
       <!-- P1 迁移展示(plan 26-11-07-2344 S2, 取代 26-11-04-1042 文字徽章): 位于路径列但**独立于
            路径筛选**。pair = 着色 A→B 两排(上排当前位置/下排目标位置 + 右缘弧形箭头), one = 单排
            仅状态着色。零点击(plan D9): 无任何按钮语义、原生 title 不写迁移状态 —— 详情真相在
-           悬停浮窗(relocate_pop.js, 后续任务), 展示判定单点 $root.relocateView。 -->
+           悬停浮窗(relocate_pop.js, 本单元格挂触发), 展示判定单点 $root.relocateView。 -->
       <div v-else-if="col.key === 'save_path'" class="g-save-path"
-           :class="{ 'has-relpair': !!$root.relocateView(g) && $root.relocateView(g).mode === 'pair' }" :title="g.save_path">
+           :class="{ 'has-relpair': !!$root.relocateView(g) && $root.relocateView(g).mode === 'pair' }" :title="g.save_path"
+           @mouseenter="$root.relPopEnter($event, g)" @mouseleave="$root.relPopLeave">
         <span class="sp-body f-cell"
               :class="[{ 'f-on': $root.isFilterOn('pathFilter', g.save_path) }, $root.relocateView(g) && $root.relocateView(g).mode === 'one' ? 'rel-tone-' + $root.relocateView(g).tone : '']"
               @click.stop="$root.filterFromChip('path', g.save_path)">{{ g.save_path || '' }}</span>
@@ -206,9 +207,10 @@
            (行是 grid, 单元格被拉满列宽), 与 .m-dur 的 .dur-body 同一教训 -->
       <!-- P1 迁移展示(plan 26-11-07-2344 S2): 与组行 save_path 分支完全对称 —— pair 两排/one
            单排着色/零点击(无按钮语义, title 不写迁移状态), 判定单点 $root.relocateView,
-           浮窗在 relocate_pop.js(后续任务)。 -->
+           浮窗在 relocate_pop.js(本单元格挂触发)。 -->
       <div v-else-if="col.key === 'save_path'" class="g-save-path"
-           :class="{ 'has-relpair': !!$root.relocateView(m) && $root.relocateView(m).mode === 'pair' }" :title="m.save_path">
+           :class="{ 'has-relpair': !!$root.relocateView(m) && $root.relocateView(m).mode === 'pair' }" :title="m.save_path"
+           @mouseenter="$root.relPopEnter($event, m)" @mouseleave="$root.relPopLeave">
         <span class="sp-body f-cell"
               :class="[{ 'f-on': $root.isFilterOn('pathFilter', m.save_path) }, $root.relocateView(m) && $root.relocateView(m).mode === 'one' ? 'rel-tone-' + $root.relocateView(m).tone : '']"
               @click.stop="$root.filterFromChip('path', m.save_path)">{{ m.save_path || '' }}</span>
