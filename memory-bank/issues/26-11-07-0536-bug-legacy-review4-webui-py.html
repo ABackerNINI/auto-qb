@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-11-07-0536">
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="legacy-review4">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-08-webui-legacy-review4-webui-py-fix.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="存量评审 R4·webui-py 汇总(major 2/minor 23)">
 <meta name="issue-summary" content="webui-py 主题 major 2+minor 23 共 25 条聚合入池,来源存量评审 R4(计划 26-11-05-2335)">
 <title>存量评审 R4·webui-py 汇总(major 2/minor 23) · bug · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-11-07-0536-bug-legacy-review4-webui-py</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-07 05:36</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -180,11 +180,39 @@
     <ul>
       <li>2026-11-07 05:36 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
       <li>26-11-07 聚合入池自存量评审 R4（计划 26-11-05-2335，<code>memory-bank/plans/26-11-05-2335-plan-legacy-code-review-4.html</code>）——本轮纯盘点，状态保持 Open；doc-refs 留空待认领方回填</li>
-    </ul>
+      <li>2026-11-08 — 认领修复完成（分支 fix/r4-webui-py，批A-批L 共 11 commit；逐批评审 + 接缝终审均无 blocker）</li>
+      <li>2026-11-08 — 状态 Open → Done（kb.status）</li>
+</ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验：2026-11-08 认领后逐条锚点重定位（行号漂移按符号重定位；freeze <code>f0883292</code> 后代码已漂移），25/25 仍复现并修复。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <h4>实际修法（批次映射）</h4>
+    <p>25/25 修复完毕，按表行聚 11 批（批A-批L，批号无 J；每批独立 commit，编排方统一提交）：</p>
+    <table>
+      <tr><th>批</th><th>commit</th><th>明细表行（R4#）</th><th>实际修法一句话</th></tr>
+      <tr><td>A</td><td><code>980e2cce</code></td><td>行1(R4#14 major)·行13(R4#23)·行25 半边(R4#20)</td><td>runtime_views 分叉判定前把 hr_wave 登记进 _pending_full_reasons（降级代落 full 条目）；同文件带圈数字清 ASCII；runtime_views.py:475 改 get() 单步取值</td></tr>
+      <tr><td>B</td><td><code>48f2ce8b</code></td><td>行2(R4#33 major)</td><td>tracker 入库单点掩码（apply_delta 收口）；附带收紧规则表达式 tracker.url 与 /api/expr/eval</td></tr>
+      <tr><td>C</td><td><code>f8bde913</code></td><td>行3(R4#10)·行4(R4#3)·行7(R4#1)</td><td>守阵注释改实际守阵文件名；单发限速负数 400 与 bulk 口径对齐；整组迁移缺失计数进回执</td></tr>
+      <tr><td>D</td><td><code>e8c3766c</code></td><td>行6(R4#4)·行8(R4#22)·行24(R4#24)</td><td>commands_torrents/module/views_common 带圈数字清 ASCII</td></tr>
+      <tr><td>E</td><td><code>e48c023e</code></td><td>行9(R4#16)·行10(R4#2)·行11(R4#9)·行12(R4#8)</td><td>runtime.py 死导入清 13 个；check_pending 读失败留 pending（与无结论同处置）；effect-confirmation.md defer_receipt 段按 D2 回写；_truth_landed docstring 改现行语义</td></tr>
+      <tr><td>F</td><td><code>45c04c07</code></td><td>行14(R4#34)·行15(R4#31)·行16(R4#30)</td><td>keys.py 改 re.fullmatch；ChainCache miss 路径 deepcopy 后入缓存；torrent_cmds 五处接 _list_param</td></tr>
+      <tr><td>G</td><td><code>6379679e</code></td><td>行17(R4#37)·行18(R4#29)</td><td>非法哈希 400 detail 契约补断言（改道见下）；traffic_qb 两处循环 tuple 快照</td></tr>
+      <tr><td>H</td><td><code>651d2fe6</code></td><td>行20(R4#17)·行22(R4#15)·行23(R4#21)·行25 半边(R4#20)</td><td>views.py 死导入清 7 个；已亮分档可达化（改道见下）；文件拉取失败 hash 不入索引+保住 dirty；views_group.py:132 改 get()</td></tr>
+      <tr><td>I</td><td><code>a79cc045</code></td><td>行19(R4#19)</td><td>_ensure_thread 检查+创建段加实例锁</td></tr>
+      <tr><td>K</td><td><code>c56ef164</code></td><td>行5(R4#13)·行21(R4#27)</td><td>RM07-11 ALT 限速真机用例；RM08-14 tracker 报错真机用例（用户拍板本轮补真机用例）</td></tr>
+      <tr><td>L</td><td><code>6352ccc8</code></td><td>—（非 issue 条目）</td><td>批K 真机挖出的产品缺陷顺手修（用户拍板）：qbapi set_alt_speed_limits 签名漂移一行修，RM07-11 从 BLOCKED 升档全量真断言</td></tr>
+    </table>
+    <h4>改道说明</h4>
+    <ul>
+      <li>表行17（R4#37）：与建议修法不同——issue「零测试覆盖」前提经复验失真，HA.X 用例已在 tests/，真缺口是 400 detail 契约无守阵；存储层口径是文件名安全集而非 40/64 hex，已按实际契约守阵。</li>
+      <li>表行22（R4#15）：与建议修法不同——单做「亮灯时同步置 suspect_since=0」会 30s 振荡，改道为亮灯清 suspect_since + 补「已亮且仍报错保持已亮」早退。</li>
+    </ul>
+    <h4>验证方式</h4>
+    <p>逐批评审 + 接缝终审均无 blocker；每条修复经「先复验锚点仍在 → 修复 → 红验/真机」流程；真机轨两准入门全过（RM07-11 三轮复跑全 passed、RM08-14 passed，批K/批L）。</p>
+    <h4>测试数字</h4>
+    <p>test.full 5663 passed / 2 skipped / 0 failed，覆盖率 99%（TOTAL 25549/8/8826/30）；基线切片 <code>memory-bank/testing/baselines/26-11-08-0025-r4-webui-py-closeout.md</code>。分支 fix/r4-webui-py（基于 develop f7ac0e46），批A-批L 共 11 commit（980e2cce..6352ccc8）。</p>
+    <h4>doc-refs</h4>
+    <p>已回填认领方任务档案 <code>memory-bank/tasks/26-11-08-webui-legacy-review4-webui-py-fix.md</code>（认领链双向）。</p>
   </section>
 
   <footer>

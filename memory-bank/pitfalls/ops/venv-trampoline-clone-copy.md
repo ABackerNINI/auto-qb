@@ -2,7 +2,7 @@
 
 > 摘要: clone 连 .venv 复制致 uv trampoline 内嵌路径失效, env.sync 假自愈
 > 触发: uv trampoline failed to canonicalize script path,uv run pytest 报错,console script 起不来,uv sync 后仍坏,uv run python 却正常
-**Refs:**
+**Refs:** memory-bank/tasks/26-11-08-webui-legacy-review4-webui-py-fix.md
 
 ### clone 连 .venv 复制后 console-script trampoline 全坏, `uv sync` 假装自愈
 
@@ -16,3 +16,4 @@
 - **复发**: 4(2026-11-06 04:40, issue 26-11-06-0330 修复轮)—— `commands run test.full` 0.2s 内 FAIL 且只有一行 `uv trampoline failed to canonicalize script path`; 未命中本档的原因是**没先跑 pitfalls 索引路由就直接跑全量**(先看到报错才去 grep `trampoline`), 与前三轮同款漏执行; `uv sync --reinstall-package pytest` → 探 yapf 也坏 → 同法重装, 两包各 0.5s 即愈。
 - **复发**: 5(2026-11-06 04:45, clone2 修 issue 26-11-06-0330 轮)—— 55 笔同步后首次 `commands run test.one` 0.3s 内 FAIL, 报错原文只有一行 `uv trampoline failed to canonicalize script path`; 触发词路由命中本档, 探出 pytest/yapf/coverage **三包同坏**, `uv sync --reinstall-package pytest --reinstall-package yapf --reinstall-package coverage` 一次装完即愈 —— 本 clone 的 .venv 同为整目录复制遗留, 预防口径仍未回溯适用。
 - **复发**: 6(2026-11-06 06:05, clone2 修 issue 26-11-06-0448 轮)—— `commands run test.one` 0.2s 内单行 trampoline 错; **为什么没命中**: 本轮开工已按路由读 `pitfalls/_index.md` 与 `ops/_index.md`(触发词在册, 路由到位), 但没把「逐个探 console script」的预防自检列为开工动作, 首个踩坑动作就是跑定向测试; 按处置一次定点重装 pytest/yapf/coverage 三包即愈, 三入口探测均出版本号。预防口径(新 clone 不要连 .venv 整目录复制)仍未回溯适用。
+- **复发**: 7(2026-11-08, R4 webui-py 收尾轮)—— **坑面首次扩到 tools 级 venv**: `tools/global-traffic-monitor/.venv` 的 `pytest.exe` 报同款 `uv trampoline failed to canonicalize script path`(该 venv 落盘 2026-10-17, 疑复制迁移带来的陈旧绝对路径, 机制与本档 clone 复制同源); 对策同款定点重装 `uv sync --reinstall-package pytest` 后恢复。**为什么没命中**: 事发点在 tools 子目录 venv 而非仓根 `.venv`, 历史六轮复发全在仓根, 触发词路由虽在册但排查动线没把 tools/ 下 venv 纳入「逐个探 console script」的自检面 —— 教训: 复制迁移**任何** venv 都会留陈旧绝对路径, 修法一律 uv 重装入口而不是手工补 exe。

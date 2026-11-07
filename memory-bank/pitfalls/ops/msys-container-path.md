@@ -2,7 +2,7 @@
 
 > 摘要: 工具 shell 是 Git Bash, `docker exec / docker run / docker compose run` 的**容器内**路径参数(如 `/data/web.token`、`/config/x.yml`)会被 MSYS 按"POSIX 绝对路径"自动改写成 Windows 形态(`D:/Program Files/Git/data/web.token`) —— 命令能跑、退出码正常, 但容器里报「找不到文件/配置文件读取失败」, 看着像容器坏了其实是参数在进容器前就被改了。
 > 等级: L0
-> 触发: docker exec, docker run, docker compose run, 容器路径, 找不到文件, 配置文件读取失败, Git Bash, 路径转换, MSYS, web.token, token 文件
+> 触发: docker exec, docker run, docker compose run, 容器路径, 找不到文件, 配置文件读取失败, Git Bash, 路径转换, MSYS, web.token, token 文件, 命令参数被改写, 标题斜杠开头, kb.new title, Program Files/Git 前缀
 
 ## 现象与判别
 
@@ -25,3 +25,7 @@
 - `docker compose run` 的**服务名后**命令参数是重灾区(每个都是容器内路径); `-v` 挂载源在 Windows 下用
   `cygpath -w` 转成 `D:\...` 形态再拼(见 `deployment.md` §8 备份示例的 alpine tar 写法)。
 - 关联部署文档: [docs/deployment.md](../../../docs/deployment.md) §13 排障速查最后两行。
+
+## 复发
+
+- **复发**: 1(2026-11-08, R4 webui-py 收尾轮, 非 docker 场景)—— **坑面扩到任意本地命令参数**: `commands run kb.new issue --title "/api/torrents/add ..."` 的标题以 `/api/` 开头, Git Bash 对**本地 Windows 程序**的参数同样做 POSIX→Windows 转换, 标题落盘成 `C:/Program Files/Git/api/torrents/add ...`(3 个新 issue 的 title/meta/h1/lede 共 7 处), 命令照常成功零报错 —— 纯静默污染。按判别字样(`Program Files/Git/` 前缀)定位, 原位改回 `/api/` 后重跑 `kb.index` 恢复。**为什么没命中**: 本档标题与触发词全钉在 docker 面, 非 docker 的本地命令参数没进路由。教训: Git Bash 下**任何**本地命令的参数以 `/` 起头都会中招(不只 docker), 长文本参数避免以 `/` 起头, 或对该命令前缀 `MSYS_NO_PATHCONV=1`。
