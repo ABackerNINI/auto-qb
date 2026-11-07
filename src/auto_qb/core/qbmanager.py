@@ -36,7 +36,9 @@ rules 引用时该站点种子不绑定任何规则 —— 不会回退为"执�
 import logging
 import os
 import threading
+from collections.abc import Mapping
 from typing import Any, List, Optional
+from urllib.parse import quote, unquote, urlparse
 
 from qbittorrentapi import APIConnectionError, Client
 
@@ -128,6 +130,52 @@ def _wait_next(stop_event: Optional[threading.Event], wake_event: threading.Even
             return False
         if stop_event.is_set():
             return True
+
+
+def _mask_magnet_tracker_urls(magnet_uri: str) -> str:
+    """magnet URI 的 tr= 参数值过 tracker URL 同款 mask(export_torrents_info 泄敏面之二)
+
+    magnet_uri 由 qB 从种子 tracker 集生成, tr= 值是 percent-encoded 的完整 announce URL
+    (私站含 passkey), 与 tracker 字段同泄敏面(issue 26-11-07-0527 R1#10)。先 unquote 还原
+    再过 mask_tracker_url(对 encoded 串 mask 取不出 host, 只会整串降级), 掩码值重新
+    percent-encode 拼回(保持 magnet 形态)。非 magnet URI / 解析异常 / 无 query 原样返回,
+    绝不抛异常(同 infra.utils mask 口径: 脱敏失败不打断导出)。
+    """
+    try:
+        parts = urlparse(magnet_uri)
+    except Exception:
+        return magnet_uri
+    if parts.scheme != "magnet" or not parts.query:
+        return magnet_uri
+    masked = []
+    for seg in parts.query.split("&"):
+        name, eq, value = seg.partition("=")
+        if name == "tr" and eq and value:
+            masked.append(f"tr={quote(utils.mask_tracker_url(unquote(value)), safe='')}")
+        else:
+            masked.append(seg)
+    return f"magnet:?{'&'.join(masked)}"
+
+
+def _mask_debug_torrent_dict(tor: Any) -> Any:
+    """debug 导出字典的泄敏面单点(issue 26-11-07-0527 R1#10): tracker 槽位与 magnet_uri
+
+    qB 的 TorrentDictionary 是 dict 子类, tracker 是完整 announce URL、magnet_uri 的 tr=
+    参数内嵌同一批 URL —— 私站两者都带 passkey, 明文落盘 = 凭据泄露。mask 口径复用
+    infra.utils.mask_tracker_url 单点(记录入库 tracker 槽位同款, torrents/record.py); 掩码
+    作用于写盘副本, 不就地改写 qB 原始对象。空值不掩(mask 会把 "" 抬成占位串); 其余字段
+    (名称/路径/计数/状态等)无凭据面原样保留; 非 Mapping(测试桩/兼容对象)原样返回。
+    """
+    if not isinstance(tor, Mapping):
+        return tor
+    masked = dict(tor)
+    tracker = masked.get("tracker")
+    if isinstance(tracker, str) and tracker:
+        masked["tracker"] = utils.mask_tracker_url(tracker)
+    magnet = masked.get("magnet_uri")
+    if isinstance(magnet, str) and magnet:
+        masked["magnet_uri"] = _mask_magnet_tracker_urls(magnet)
+    return masked
 
 
 class QbManager(
@@ -1023,8 +1071,11 @@ class QbManager(
     def export_torrents_info(self, path: str) -> None:
         """导出种子信息, 用于debug"""
         torrents = self.client.torrents_info()
+        # 写盘前过泄敏面单点 _mask_debug_torrent_dict(tracker/magnet_uri 内嵌 passkey,
+        # issue 26-11-07-0527 R1#10)
+        masked = [_mask_debug_torrent_dict(tor) for tor in torrents]
         # encoding 显式 utf-8: Windows 默认 cp936, 种子名含 GBK 外字符会中途崩
         # (同款见 exporter.py; issue 26-10-06-0028 chore-export-torrents-info-encoding)
         with open(path, "w", encoding="utf-8") as f:
-            for tor in torrents:
+            for tor in masked:
                 f.write(f"{tor}\n\n")

@@ -17,6 +17,9 @@
 - test_main_hr_status_runs_report_without_qb: --hr-status 不构造 manager(不连 qB), 行数上限透传
 - test_main_tray_mutex_with_export: --tray 与 --export-yaml 互斥 -> 退出码 2
 - test_main_split_trackers_requires_export_yaml: --split-trackers 单独传(无 --export-yaml)配合校验 -> 退出码 2
+- test_main_export_yaml_output_same_as_config_rejected: --export-yaml 输出与配置文件同路径 -> parser.error
+  退出码 2 且配置文件一字不动(路径归一变体覆盖: exact/冗余段/大小写[CONFIG.YML, 仅 Windows],
+  issue 26-11-07-0527 R1#9)
 - test_main_export_yaml_split_trackers_passthrough: --export-yaml --split-trackers -> export_yaml_template kwargs.split_trackers is True
 - test_main_export_yaml_default_merge_passthrough: --export-yaml 缺省 -> kwargs.split_trackers is False
 - test_main_tray_mode_calls_run_tray: --tray 模式交由 ui.run_tray 托管
@@ -43,8 +46,10 @@
 - test_main_fuse_release_dispatch_parses_hashes: --fuse-release 清单解析(全角逗号/空白归一小写)并派发 fuse_release, 落 state 后返回 0
 - test_main_fuse_release_all_zero_entries_exits_0: --fuse-release-all 零条目合法清点 -> 仍返回 True/退出码 0(与显式列表零命中 False 相对)
 """
+import os
 import signal
 import sys
+import tempfile
 from pathlib import Path
 from unittest import mock
 
@@ -282,6 +287,46 @@ def test_main_split_trackers_requires_export_yaml():
             main()
     assert ei.value.code == 2
     m_qb.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "out_rel",
+    [
+        "config.yml",
+        os.path.join(".", "config.yml"),
+        pytest.param(
+            "CONFIG.YML",
+            marks=pytest.mark.skipif(
+                sys.platform != "win32",
+                reason="posix 大小写敏感文件系统上 CONFIG.YML 与 config.yml 是不同文件, 拒绝才是错",
+            ),  # owner: abacker
+        ),
+    ],
+    ids=["exact-same", "redundant-dot-segment", "case-variant-normcase"],
+)
+def test_main_export_yaml_output_same_as_config_rejected(out_rel):
+    """--export-yaml 输出与配置文件同一路径 -> parser.error 退出码 2 且配置文件一字不动
+
+    issue 26-11-07-0527 R1#9: 导出模式 no_lock 不持锁、可与运行实例并发, 输出落配置文件
+    自身 = yaml.dump 重排重写生产配置(注释全丢/键序重排)。argparse 校验层 fail-fast,
+    不构造 manager 不读配置; 冗余路径段变体钉住 abspath 冗余段折叠, 大小写变体(CONFIG.YML,
+    仅 Windows)钉住 normcase 大小写归一。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        cfg_path = os.path.join(td, "config.yml")
+        original = "config:\n  trackers:  # 用户注释, 导出重排会丢\n    HHan:\n      domains: [tracker.hhanclub.net]\n"
+        with open(cfg_path, "w", encoding="utf-8") as f:
+            f.write(original)
+        out_path = os.path.join(td, out_rel)
+        with _patch_argv("auto-qb", cfg_path, "--export-yaml", out_path), \
+                mock.patch("auto_qb.cli.QbManager") as m_qb:
+            from auto_qb.cli import main
+            with pytest.raises(SystemExit) as ei:
+                main()
+        assert ei.value.code == 2
+        m_qb.assert_not_called()  # argparse 校验层拒绝, 不构造 manager 不读配置
+        with open(cfg_path, "r", encoding="utf-8") as f:
+            assert f.read() == original, "配置文件必须一字不动"
 
 
 def test_main_hr_status_mutex_with_hr_once():

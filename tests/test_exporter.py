@@ -8,6 +8,8 @@
 - test_collect_torrent_tracker_hostnames: 逐种子收集, 每颗种子一个集合
 - test_collect_torrent_tracker_hostnames_error_isolated: 单种查询异常该种子空集, 不终止
 - test_collect_torrent_tracker_hostnames_with_failures_counts: with_failures 变体返回 (逐种集合, 失败数)
+- test_collect_torrent_tracker_hostnames_with_failures_accepts_prefetched_torrents: 可选 torrents 入参
+  —— 传入已取好的种子则不再自取(消双取, issue 26-11-07-0527 R1#2); 缺省 None 仍自取(旧行为)
 - test_tracker_scan_batch_failed_threshold: 批量失败判据边界(无种子/单种/恰好一半不触发, 过半/全失败触发)
 - test_collect_torrent_tracker_hostnames_call_shape: qB 调用面 = 一次 torrents_info + 逐种 torrents_trackers
 - test_find_missing_domains: 找出缺失域名
@@ -43,6 +45,8 @@
 - test_export_yaml_template_batch_failure_raises: 逐种 tracker 查询过半失败 -> TrackerScanBatchError
   (CLI 经 AutoQbError 出口干净退出码 1), 不静默导出「无缺失」空模板(issue 26-11-04-2347)
 - test_export_yaml_template_minor_failure_still_exports: 单种失败(未过半)仍正常导出(阈值不过界)
+- test_export_yaml_template_single_torrents_info_fetch: 全量 torrents_info 恰取一次并复用进逐种扫描
+  (消双取与日志计数漂移, issue 26-11-07-0527 R1#2)
 - test_export_yaml_template_pins_utf8_encoding: 守阵(W6, 平台相关)—— 读 config/写 output 显式钉 encoding="utf-8"
   (参数面用 open 探针全平台可观测; Windows locale 内容面 mojibake 仅作加强, WSL UTF-8 locale 下不敏感)
 - test_collect_torrent_tracker_hostnames_prefers_fresh_bypass: 扫描优先走 fresh 直查(不吃记录级缓存)
@@ -174,6 +178,23 @@ def test_collect_torrent_tracker_hostnames_with_failures_counts():
         [{"a.example.com"}, {"a.example.com"}],
         0,
     )
+
+
+def test_collect_torrent_tracker_hostnames_with_failures_accepts_prefetched_torrents():
+    """可选 torrents 入参: 传入调用方已取好的种子列表则不再自取 torrents_info
+
+    消双取与两次抓取间种子集漂移(issue 26-11-07-0527 R1#2); 缺省 None 仍自取(旧行为,
+    由 test_collect_torrent_tracker_hostnames_with_failures_counts 钉住)。
+    """
+    client = FakeClient()
+    info_calls = []
+    client.torrents_info = lambda *a, **kw: info_calls.append(1) or []
+    client.torrents_trackers = lambda h: [{"url": f"https://{h}.example.com/announce"}]
+    torrents = [FakeTorrent(hash="H1", name="T1"), FakeTorrent(hash="H2", name="T2")]
+    sets, failed = exporter.collect_torrent_tracker_hostnames_with_failures(client, torrents)
+    assert sets == [{"h1.example.com"}, {"h2.example.com"}]
+    assert failed == 0
+    assert info_calls == [], "传入 torrents 后不得再自取 torrents_info"
 
 
 def test_tracker_scan_batch_failed_threshold():
@@ -746,6 +767,33 @@ def test_export_yaml_template_minor_failure_still_exports():
     client.torrents_trackers = flaky
     # only_missing + dry_run: 不落盘, 走完即视为未抛错
     exporter.export_yaml_template(client, FakeConfig(), "unused.yml", "out.yml", dry_run=True, only_missing=True)
+
+
+def test_export_yaml_template_single_torrents_info_fetch():
+    """export_yaml_template 全量 torrents_info 恰取一次并复用进逐种扫描
+
+    issue 26-11-07-0527 R1#2: 修前自取一次只用于日志计数, collect 内部再取一次 —— 每次导出
+    双份全量请求, 且两次抓取间种子集可变导致日志计数与实际扫描集不一致。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        cfg_path = os.path.join(td, "config.yml")
+        out_path = os.path.join(td, "out.yml")
+        with open(cfg_path, "w", encoding="utf-8") as f:
+            yaml.dump({"config": {"trackers": {}}}, f, allow_unicode=True)
+        client = FakeClient()
+        client.torrents["H1"] = FakeTorrent(hash="H1", name="T1")
+        client.torrents_trackers = lambda h: [{"url": "https://hdchina.org/announce.php"}]
+        info_calls = []
+        real_info = client.torrents_info
+
+        def counting_info(*args, **kwargs):
+            info_calls.append(1)
+            return real_info(*args, **kwargs)
+
+        client.torrents_info = counting_info
+        cfg = _make_config_with_trackers()
+        exporter.export_yaml_template(client, cfg, cfg_path, out_path, dry_run=True, only_missing=True)
+        assert len(info_calls) == 1, f"全量 torrents_info 必须恰取一次, 实际 {len(info_calls)} 次"
 
 
 def test_export_yaml_template_pins_utf8_encoding(monkeypatch):

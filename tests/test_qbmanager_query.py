@@ -8,6 +8,9 @@
 - test_refresh_schema_validation_missing_raises: 首次拉到非空种子信息时校验字段, 缺失抛 QbCompatError
 - test_refresh_schema_validation_passes_once: 全字段通过置 flag 不再重复校验
 - test_export_torrents_info: export_torrents_info 写种子信息到文件(编码恒 utf-8, GBK 外字符不崩)
+- test_export_torrents_info_masks_tracker_and_magnet_passkey: 导出脱敏(issue 26-11-07-0527 R1#10)
+  —— tracker 字段与 magnet_uri 的 tr= 参数过 mask 单点, passkey 原文不落盘, host/参数名保留,
+  掩码作用于写盘副本不改写 qB 原始对象
 - test_view_rebuild_waits_for_client_consume: 节拍对齐门控 —— 上一版没被 /api/state 取走就不生产下一版(>3000 种子时约一半 rebuild 无人消费), 且**脏标记必须保留**; 命令驱动的那一轮 force=True **必须绕过**(P0-5 要求真值几十毫秒内进快照, 不能等客户端轮询)
 - test_ensure_view_clears_pending_ver: 守阵(issue 26-09-19-2122 顺带小修)——/api/groups 的 ensure_view 与 ensure_state 同款「消费即清」, 只取 /api/groups 的外部脚本不再让欠账恒挂
 - test_tick_rebuilds_all_views_when_changed: 视图变化且 Web 活跃 -> 四份视图同一入口**同次**重建
@@ -44,6 +47,8 @@ import threading
 import time
 
 from unittest import mock
+
+from urllib.parse import quote
 
 from auto_qb.core.taskqueue import FINISHED, PENDING, REQUEUE, Task, TaskQueue
 
@@ -209,6 +214,35 @@ def test_export_torrents_info():
 
         src = inspect.getsource(type(mgr).export_torrents_info)
         assert 'encoding="utf-8"' in src, "export_torrents_info 必须显式 encoding=utf-8(禁 open(path, 'w'))"
+
+
+def test_export_torrents_info_masks_tracker_and_magnet_passkey():
+    """导出脱敏(issue 26-11-07-0527 R1#10): qB 原始字典的 tracker 字段与 magnet_uri 的 tr=
+    参数内嵌完整 announce URL(私站含 passkey), 写盘前必须过 mask 单点 —— passkey 原文
+    (含 percent-encoded 形态)不得进明文 torrents.txt; host/参数名保留(mask 口径诊断面);
+    掩码作用于写盘副本, 不就地改写 qB 原始对象"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        mgr.client = client
+        passkey = "s3cret:PassKey42"
+        tracker_url = f"https://tracker.hhanclub.net/announce.php?passkey={passkey}"
+        tor = {
+            "hash": "H1",
+            "name": "T1",
+            "state": "stalledUP",
+            "tracker": tracker_url,
+            "magnet_uri": f"magnet:?xt=urn:btih:H1&dn=T1&tr={quote(tracker_url, safe='')}",
+        }
+        client.torrents_info = lambda **kw: [tor]
+        out = os.path.join(td, "torrents.txt")
+        mgr.export_torrents_info(out)
+        text = open(out, encoding="utf-8").read()
+        assert passkey not in text, "passkey 原文不得进明文导出文件"
+        assert quote(passkey, safe="") not in text, "percent-encoded passkey 也不得进导出文件"
+        assert "tracker.hhanclub.net" in text, "host 保留(mask 口径诊断面)"
+        assert "passkey=" in text, "参数名保留(mask R6)"
+        assert tor["tracker"] == tracker_url, "不得就地改写 qB 原始对象"
 
 
 def test_tick_rebuilds_all_views_when_changed():

@@ -6,7 +6,7 @@
 """
 import logging
 import re
-from typing import Any, List, Tuple
+from typing import Any, List, Optional, Tuple
 
 import yaml
 
@@ -26,7 +26,8 @@ def collect_configured_domains(config: Config) -> set:
     return configured
 
 
-def collect_torrent_tracker_hostnames_with_failures(api: Any) -> Tuple[List[set], int]:
+def collect_torrent_tracker_hostnames_with_failures(api: Any,
+                                                    torrents: Optional[List[Any]] = None) -> Tuple[List[set], int]:
     """逐种子收集 tracker hostname, 返回 (torrent_sets, 失败数) 二元组
 
     单种查询失败 = 该种空集 + 失败数 +1(沿用现状静默容忍单种); 但批量失败(qB 断连/重启等
@@ -36,11 +37,14 @@ def collect_torrent_tracker_hostnames_with_failures(api: Any) -> Tuple[List[set]
     走 Facade 的 fresh 直查旁路记录级惰性缓存(issue 26-11-04-0228): 扫描是低频事件,
     缓存只被产品自身 tracker 写操作失效, qB 侧改 tracker 后二次扫描会吃到首扫旧值;
     非 Facade 客户端(测试桩/兼容客户端)没有 fresh 方法, 回退普通 torrents_trackers。
+    torrents: 调用方已取好的全量种子列表(缺省 None = 本函数自取一次, 旧行为)—— 已持有
+    全量结果的调用方(export_yaml_template)复用传入, 消除重复全量拉取与两次抓取间种子集
+    漂移导致的日志计数失真(issue 26-11-07-0527 R1#2)。
     """
     fetch_trackers = getattr(api, "torrents_trackers_fresh", None) or api.torrents_trackers
     torrent_sets = []
     failed_count = 0
-    for tor in api.torrents_info():
+    for tor in (torrents if torrents is not None else api.torrents_info()):
         try:
             trackers_info = fetch_trackers(tor.hash)
         except Exception:
@@ -196,10 +200,12 @@ def export_yaml_template(
     split_trackers=False(默认)时同一颗种子共现的缺失域名合并为一个站点;
     True 拆回逐域名(行为与改造前一致)。
     """
-    # 1. 获取所有种子并收集 tracker 域名(逐种集合保留, 共现分组复用同一次逐种遍历)
+    # 1. 获取所有种子并收集 tracker 域名(逐种集合保留, 共现分组复用同一次逐种遍历;
+    #    全量 torrents_info 只取一次并复用进逐种扫描 —— 消双取与两次抓取间种子集漂移
+    #    导致的日志计数失真(issue 26-11-07-0527 R1#2))
     torrents = api.torrents_info()
     logger.info(f"扫描 {len(torrents)} 个种子的 tracker")
-    torrent_sets, failed_count = collect_torrent_tracker_hostnames_with_failures(api)
+    torrent_sets, failed_count = collect_torrent_tracker_hostnames_with_failures(api, torrents)
     if tracker_scan_batch_failed(failed_count, len(torrent_sets)):
         # 批量失败(过半)拒绝出结果: 空结果会被当成「无缺失站点」静默漏站(issue 26-11-04-2347);
         # CLI 经 main() 的 AutoQbError 出口 stderr 干净退出 + 退出码 1

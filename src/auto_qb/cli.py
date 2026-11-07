@@ -29,6 +29,15 @@ def _cli_version_string() -> str:
         return __version__
 
 
+def _is_same_path(a: str, b: str) -> bool:
+    """路径同一性判断(纯路径数学, 不要求文件存在): abspath 归一 + normcase
+
+    Windows 大小写不敏感且正/反斜杠等价, 冗余段("./"等)由 abspath 折叠; 输出文件尚未创建
+    也能比较(不用 samefile)。
+    """
+    return os.path.normcase(os.path.abspath(a)) == os.path.normcase(os.path.abspath(b))
+
+
 def export_yaml(manager: QbManager, args):
     """导出模式: 连接后由 exporter 模块完成导出"""
     if not manager.connect():
@@ -193,6 +202,16 @@ def main():
         parser.error("--hr-html-dir 需配合 --hr-once 使用")
     if args.split_trackers and not args.export_yaml:
         parser.error("--split-trackers 需配合 --export-yaml 使用")
+    if args.export_yaml and _is_same_path(args.export_yaml, args.config):
+        # 导出模式 no_lock 不持锁、可与运行实例并发(issue 26-11-07-0527 R1#9): 输出落配置
+        # 文件自身会被 yaml.dump 重排重写(注释全丢/键序重排/示例值混入真实配置), 拒绝导出
+        parser.error("--export-yaml 的输出路径与配置文件相同: 导出会按模板格式重排重写该文件"
+                     "(注释丢失/键序重排), 请指定其它输出路径")
+    if args.export_yaml and _is_same_path(args.export_yaml, DEFAULT_CONFIG_FILE):
+        # R1#9 第二守卫: --config 指向其它文件(如 minimal.yml)时, 输出仍可能命中默认生产
+        # 配置路径, 同样会被 yaml.dump 重排重写, 拒绝导出(原因与第一守卫一致)
+        parser.error(f"--export-yaml 的输出路径与默认配置文件 {DEFAULT_CONFIG_FILE} 相同: "
+                     "导出会按模板格式重排重写该文件(注释丢失/键序重排), 请指定其它输出路径")
     if args.hr_once and (args.tray or args.export_yaml or args.export_torrents_info):
         parser.error("--hr-once 与托盘/导出模式互斥")
     if args.hr_status and (args.tray or args.export_yaml or args.export_torrents_info):
