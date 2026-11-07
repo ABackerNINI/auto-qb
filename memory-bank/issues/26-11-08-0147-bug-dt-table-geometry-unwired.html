@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>dt_table.js 整模块生产路径零调用: 自称几何单一出口未接线, 实际几何由 columns_grid 平行计算 · bug · 计划外问题</title>
+<meta name="issue-slug" content="dt-table-geometry-unwired">
+<meta name="issue-stamp" content="26-11-08-0147">
+<meta name="issue-type" content="bug">
+<meta name="doc-topic" content="legacy-review4">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="dt_table.js 整模块生产路径零调用: 自称几何单一出口未接线, 实际几何由 columns_grid 平行计算">
+<meta name="issue-summary" content="dt_table.js 四皮肤均加载但 DT_TABLE 六口子生产路径零调用, 自称几何单一出口未接线, 实际几何由 columns_grid 平行计算; R4-static 清池拍板暂缓挂账待决(整体退役 vs 真接线)">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --mark: #161e26;     /* issue 特有: callout 底色 (plan.html 不用) */
+    --warn-bg: #2a2119;  /* issue 特有: 状态徽标底色 */
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 单栏流式版面: 与 plan.html 同一套 .sheet (封顶 1280px, 侧距 clamp(18~44px)); 旧双栏+粘性目录已删 */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+
+  /* 封面 meta 行: issue 特有, DOM 形态别改 —— 状态徽标 <span class="badge"> 被
+     flip_status (W4) 与 check_status_drift 的 BADGE_RE 机读 (k/v div 结构在判据里) */
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px 28px; font-family: var(--mono); font-size: 11.5px; color: var(--faint); border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta-row .item .k { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .meta-row .item .v { font-size: 13.5px; color: var(--dim); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin: 14px 0; font-size: 14px; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-family: var(--mono); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">计划外问题（未修）· bug</div>
+<h1>dt_table.js 整模块生产路径零调用: 自称几何单一出口未接线, 实际几何由 columns_grid 平行计算</h1>
+<p class="lede">dt_table.js 四皮肤均加载但 DT_TABLE 六口子生产路径零调用, 自称几何单一出口未接线, 实际几何由 columns_grid 平行计算; R4-static 清池拍板暂缓挂账待决(整体退役 vs 真接线)</p>
+<div class="meta-row">
+  <div class="item"><div class="k">编号</div><div class="v">26-11-08-0147-bug-dt-table-geometry-unwired</div></div>
+  <div class="item"><div class="k">报告时间</div><div class="v">2026-11-08 01:47</div></div>
+  <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
+  <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+</div>
+
+<section id="s1">
+  <h2><span class="no">§01</span>现象与发现场景</h2>
+  <p>源:存量评审 R4(计划 <code>memory-bank/plans/26-11-05-2335-plan-legacy-code-review-4.html</code>)R5#39,聚合面 <code>memory-bank/reports/attachments/legacy-review4/aggregate.json</code> static 主题 row110(agg_id S6-415),挂账自汇总件 <code>memory-bank/issues/26-11-07-0536-bug-legacy-review4-static.html</code> 明细表第 110 行。发现场景:R4 静态评审核查「几何单一出口」接线情况时,发现四套皮肤 index.html 均加载 <code>dt_table.js</code>,但其导出口子在 src/ 生产代码内零引用。</p>
+  <div class="callout"><strong>2026-11-08 R4-static 清池拍板(用户):暂缓不修码,挂账待决</strong>——两个方向(整体退役 vs 真接线)各有代价,待用户后续拍板后再动;拍板前 dt_table.js 与其守阵、相关 e2e 一律保留现状。R4-static 清池(135 条)其余 134 条已随分支 <code>fix/legacy-review4-static</code> 修复收编。</div>
+</section>
+
+<section id="s2">
+  <h2><span class="no">§02</span>证据</h2>
+  <p class="hint">aggregate.json 原文(取证 2026-11-07,锚定 freeze <code>f0883292</code>,行号为当时行号):</p>
+<pre><code>file: src/auto_qb/webui/static/shared/dt_table.js:117
+quote: window.DT_TABLE = {
+claim: 整模块生产路径零调用: 四套 index.html 均加载 dt_table.js,但 DT_TABLE.layout/assertLayout/checkLabels 等在 src/ 生产代码内零引用(仅 node 电池自测),实际几何仍由 columns_grid._gridTemplate/colAlignCss 与桥模板平行计算——自称「几何单一出口」未接线,存量面 A(未用导出)+B(平行机制)
+fix:   几何出口真正接到 DT.layout 并让 assertLayout 进渲染自查,或整体退役该模块与其守阵</code></pre>
+  <p>2026-11-08 复核(分支 head <code>2a5433ea</code>):现象未变——四套 index.html 仍各加载 dt_table.js;<code>grep -rln "DT_TABLE" src/</code> 仅 dt_table.js 自身;<code>window.DT_TABLE = {</code> 仍在 L117;实际几何仍由 columns_grid 平行计算。</p>
+</section>
+
+<section id="s3">
+  <h2><span class="no">§03</span>影响面</h2>
+  <table>
+    <tr><th>维度</th><th>结论</th></tr>
+    <tr><td>触发条件</td><td>无运行时触发——模块从未接线,不影响现网行为;影响面是存量维护面(未用导出 + 平行机制双份几何口径)</td></tr>
+    <tr><td>影响范围</td><td>dt_table.js 整模块;其守阵 <code>tests/test_webui_static_dom_panel_drawer.py::test_dt_table_kernel_single_point</code>(③⑤⑥ node 真跑);相关 e2e <code>e2e/dt-table-layout-parity.spec.mjs</code> 与 <code>e2e/dt-table-face-bg.spec.mjs</code>——退役或接线裁决时须同步处置</td></tr>
+    <tr><td>严重度</td><td>低(现网零行为差;代价在双口径漂移风险与维护税)</td></tr>
+  </table>
+</section>
+
+<section id="s4">
+  <h2><span class="no">§04</span>定位锚点</h2>
+  <ul>
+    <li><code>src/auto_qb/webui/static/shared/dt_table.js:117</code>(当时行号,锚定 freeze <code>f0883292</code>;取证 2026-11-08)· 符号 <code>window.DT_TABLE</code> · grep 词 <code>DT_TABLE</code>(src/ 内应仅本文件命中)</li>
+    <li>守阵:<code>tests/test_webui_static_dom_panel_drawer.py</code> grep <code>_NODE_DT_TABLE_PROBE</code> / <code>test_dt_table_kernel_single_point</code>(2026-10-13 计划 26-10-13-0811 W1 立)</li>
+    <li>相关 e2e:<code>e2e/dt-table-layout-parity.spec.mjs</code>、<code>e2e/dt-table-face-bg.spec.mjs</code>(在册,随裁决同步处置)</li>
+  </ul>
+</section>
+
+<section id="s5">
+  <h2><span class="no">§05</span>根因<span class="opt">（可选）</span></h2>
+  <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
+  <div class="callout">待查(挂账待决中)。已排除:非「漏加载」——四套 index.html 均在加载,是「装载了但从未接线」;26-10-13-0811 W1 建内核时守阵只自测(③⑤⑥ node 真跑),生产调用方(columns_grid 侧)当时即未迁移,几何双口径由此并存。</div>
+</section>
+
+<section id="s6">
+  <h2><span class="no">§06</span>建议修法<span class="opt">（可选）</span></h2>
+  <p>aggregate 原文两候选(未拍板,维持原文):</p>
+  <ul>
+    <li><strong>真接线</strong>:几何出口真正接到 <code>DT.layout</code> 并让 <code>assertLayout</code> 进渲染自查——代价是迁移 columns_grid._gridTemplate/colAlignCss 与桥模板的现有平行计算,回归面大。</li>
+    <li><strong>整体退役</strong>:删除 dt_table.js 模块与其守阵(<code>test_dt_table_kernel_single_point</code> 的内核段)及两条相关 e2e——代价是丢掉「渲染即自查」的既有设计意图,需另议列名守卫等在册条款的去留。</li>
+  </ul>
+</section>
+
+<section id="s7">
+  <h2><span class="no">§07</span>状态变更日志</h2>
+  <ul>
+    <li>2026-11-08 01:47 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    <li>2026-11-08 — R4-static 清池拍板(用户):暂缓不修码,挂账待决(整体退役 vs 真接线);源 0536-static 明细表 row110(R5#39),守阵与相关 e2e 在册保留,拍板后随裁决一并处置;doc-refs 留空待认领方回填</li>
+  </ul>
+  <h3>复验</h3>
+  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <h3>修复后补充</h3>
+  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+</section>
+
+<footer>
+  26-11-08-0147-bug-dt-table-geometry-unwired.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+</footer>
+
+</div>
+</body>
+</html>

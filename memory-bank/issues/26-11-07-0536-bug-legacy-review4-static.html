@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="legacy-review4">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="存量评审 R4·static 汇总(major 24/minor 111)">
 <meta name="issue-summary" content="static 主题 major 24+minor 111 共 135 条聚合入池,来源存量评审 R4(计划 26-11-05-2335)">
 <title>存量评审 R4·static 汇总(major 24/minor 111) · bug · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-11-07-0536-bug-legacy-review4-static</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-07 05:36</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -290,11 +290,38 @@
     <ul>
       <li>2026-11-07 05:36 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
       <li>26-11-07 聚合入池自存量评审 R4（计划 26-11-05-2335，<code>memory-bank/plans/26-11-05-2335-plan-legacy-code-review-4.html</code>）——本轮纯盘点，状态保持 Open；doc-refs 留空待认领方回填</li>
-    </ul>
+      <li>2026-11-08 — 状态 Open → Done（kb.status）</li>
+</ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>2026-11-08 认领复验(分支 <code>fix/legacy-review4-static</code>,<code>cbd72097..2a5433ea</code> 共 15 提交):135 条锚点在 P01-P14 分批重定位,除 P02 部分符号锚在 freeze <code>f0883292</code> 后已消失(逐批报告有证)外全部仍复现,重定位后逐批修复。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <h4>实际修法</h4>
+    <p>134/135 修复落地,1 条挂账(见「改道」);行为修复约 30 条(31 行)按域归组如下(各批明细见分支提交 <code>cbd72097..2a5433ea</code>,P01-P14 每批 stash 法修复前红证+回绿):</p>
+    <ul>
+      <li><strong>注释/文档/文案批 29 条(P01)</strong>:注释口径/指向/计数修正(「三份」→「四份」、omitEmpty 退役口径、sig 结构态口径等),用户可见文案对齐(25/55/89/97);#26 守阵改 AQB_CTX_MENU_REG 渲染层计数;#47 collapsedRules 死状态全仓零引用证实后删除。</li>
+      <li><strong>非 ASCII 符号批 9 条(P02)</strong>:带圈数字/箭头等图形符号按 code-style.md 替代表清理 99 处(注释+字符串字面量),用户可见文案(58/71/92/106/130)改纯 ASCII;守阵同步 2 处。</li>
+      <li><strong>列/表格域 4 条(P03)</strong>:#4 winMembers 窗口切片改排序后同源(major);#40 拖拽尾 capture 拦截下一拍自清(columns_drag+persist 两处);#43 意图升格加 dragged 门槛(零位移不固化);#111 组视图 path 谓词改成员级。</li>
+      <li><strong>添加/抽屉域 3 条(P04+P07)</strong>:#3 addSubmitting 提交闸前置(堵双击并发重复 POST 幂等洞);#32 mkdir 回执改用 r.created;#70 drawerDel 按回执 ok+捕获 hash 收口。</li>
+      <li><strong>配置域 2 条(P05+P06)</strong>:#48 cfgLoad trackerKey/ruleGroupKey 存在性校验(幽灵站点/幽灵键不再复活);#52 tm 回滚按 cfgExists 分流(键原不存在走 cfgDelPath)。</li>
+      <li><strong>元数据/命令域 3 条(P09+P10+P16)</strong>:#46 cmdStats 记 cmdId/t0 归属严格比对;#62 metaSetCategory 补 metaBusy 闸(P16 同构补 metaAddNewTags);#63 comboKeydown 空串回退对带 onEnter ctx 放行。</li>
+      <li><strong>轮询/认证/生命周期域 6 条(P08)</strong>:#35 _logout/refresh 补 stopEvents;#36 悬空 _modalResolve 先 resolve(false);#117 匿名监听提实例字段对称摘除+stopPolling;#119 SSE ver 落拍 document.hidden 短路;#120 stopPoll settle 分支补 onEnd;#135 搜索失败重试退避(1s 翻倍 15s 封顶)。</li>
+      <li><strong>fx/快捷键/主题域 5 条(P11+P16)</strong>:#1 dock(true) 武装 armSettle 兜底定时器;#24 kbFullClose/kbGuardLeave 非脏出口统一 kbRecordCancel;#28 prism onSys 实际变化派发 autoqb:themechange;#125 qb_traffic_chart beforeUnmount 对称摘 themechange 监听(P16 终审补漏);#131 键位 reload 失败置「加载失败」态禁保存。</li>
+      <li><strong>drawer 变体域 8 条(P12+P13+P14)</strong>:#76 变体 01 英雄行 -1 哨兵守卫(与 fmtPeersQb 口径对齐);#78 HR 达标徽章收口 reg.general 单源;#79 变体 03 wide 类整行接线;#83 变体 05 缺失 tier 记 9 殿后;#93 变体 08 折叠态剔除结构 sig(数据拍零重建);#100 变体 10 空态行兜底;#107 变体 11 未完成判据与计数同源;#109 变体 12 filesSig 滚动指纹(抽 HELPERS 单点)。</li>
+      <li><strong>死代码删除 5 条(P01/P07/P11/P14)</strong>:#47 collapsedRules;#75 emptyHost;#124 loadQbHistory;#102/#108 变体 10/11 focusKey/rowRestore 残留(用户拍板删除,引擎 H.rowRestore 单点保留供 tpl12 消费),#99 头注随删同步。</li>
+      <li><strong>补测</strong>:node 行为电池 57 组(新测试文件 8 个 <code>tests/test_webui_static_r4_*.py</code> 共 57 测试函数)+ e2e 14 条(新 spec <code>e2e/drawer-general-variants.spec.mjs</code> 4 用例 × prism/atlas + 既有 spec 扩展 dt04-06/09/10/11/12 手势),覆盖测试缺口行约 60 条。</li>
+    </ul>
+    <h4>改道说明(3 条)</h4>
+    <ul>
+      <li>row13(#13):用户拍板分享率哨兵统一 -2(文案/校验/透传,与 commands_limit.py -2=用全局/-1=不限制 对齐);对话框不设 -1 入口,残余已注明。</li>
+      <li>row99/102/108(#99/#102/#108):用户拍板删除 focusKey 死代码(rowRestore 引擎单点保留)。</li>
+      <li>row110(#110):用户拍板暂缓不修码,挂账新 issue <code>memory-bank/issues/26-11-08-0147-bug-dt-table-geometry-unwired.html</code>(整体退役 vs 真接线待决;相关 e2e dt-table-layout-parity/face-bg 与守阵在册保留)。</li>
+    </ul>
+    <h4>验证方式</h4>
+    <p>每批 stash 法修复前红证→修复后回绿(逐批实测有证);各批 test.quick 全绿(批账 5626→5685 单调爬升);P16 收口另做终审三面评审(code-reviewer 只读×3 串行,findings 11 条全过 review.check+追加轮 3 条)14 条全修;终验 test.full + e2e 全量(数字见下)。</p>
+    <h4>测试数字</h4>
+    <p>test.full <strong>5685 passed + 2 skipped</strong>,覆盖 <strong>99.91%</strong>(TOTAL 25505 语句缺失 5 / 8800 分支 27 部分覆盖,门槛 99%;2026-11-08 终验实测,基线切片见 <code>commands run kb.baseline</code> 最新一条)。e2e 全量 <strong>474 例:455 passed + 18 skipped + 1 flaky</strong>(15.4m):唯一红 <code>traffic-gap-zones.spec.mjs:203 [atlas]</code>(Ctrl+\ 开全局流量图抽屉 10s 未现)——同 spec prism 孪生用例套内 1.4s 过、该用例定向重跑 4/4 全绿,键盘入口满载时序抖动,与本分支改动面(themechange 卸载/metaBusy 占闸均为注释外仅有的行为差,不触抽屉打开路径)无关,既有环境型 flaky 照实记录。分支 <code>fix/legacy-review4-static</code>(<code>76b56fa1..2a5433ea</code>,15 提交,合流待用户安排)。</p>
+    <h4>doc-refs 留空说明</h4>
+    <p>本轮按用户指定流程未立计划/任务档案认领,doc-refs 维持空(同 scripts 主题先例);分支与提交号已在上文 prose 记载,清池账目以本节与各批提交为准。</p>
   </section>
 
   <footer>
