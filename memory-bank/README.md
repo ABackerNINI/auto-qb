@@ -25,7 +25,7 @@
 | 跨会话任务档案 (立档 / 查档) | [tasks/_index.md](tasks/_index.md) |
 | 计划外问题池 (8 类 × 两档) | [issues/_index.md](issues/_index.md) |
 | **计划 / 报告 / 一件事的全部材料** | [plans/_index.md](plans/_index.md) · [reports/_index.md](reports/_index.md) · 专题视图 `kb.docmap`(不落盘) · **人的导航页 `kb.nav`(本地服务现算, 顶栏含仅快进拉取; 详情抽屉内嵌关系图, 局部环 / 关联泳道 / 全库三档, 节点可下钻)** |
-| **建制品 / 翻状态 / 改版 / 收尾** | 命令化(一次逻辑动作 = 一条命令 + 一次填空): `kb.new <族>`(计划/档案/报告/基线/坑档/进展件)· `kb.status` · `kb.bump` · `kb.wrap` —— 口径与族清单见 [conventions/doc-forms.md](conventions/doc-forms.md)「创建/更新方式」 |
+| **建制品 / 翻状态 / 改版 / 收尾** | 命令化(一次逻辑动作 = 一条命令 + 一次填空): `kb.new <族>`(计划/档案/报告/issue/基线/坑档/进展件)· `kb.status` · `kb.bump` · `kb.wrap` —— 口径与族清单见 [conventions/doc-forms.md](conventions/doc-forms.md)「创建/更新方式」 |
 | **跑项目命令** | `.commands/` 包(每包一 `config.toml`), 经 `commands` 引擎按 task id 调; 文档不许抄命令(`commands run doc.drift` 判红) |
 | **定期做变异测试审计(测试够不够硬)** | 怎么做 = skill `.agents/skills/mutation-testing/`(四段流程 / 三分类 / 派生计划模板); 命令 = `.commands/mutants/`; 证据 = [reports/26-10-08-0231](reports/26-10-08-0231-report-mutation-testing-feasibility.html); 排期锚 = [issues/26-10-08-0642](issues/26-10-08-0642-test-mutation-audit-standing.html) |
 | **真机实测(常用验收手段: 功能完工即触发, agent 自跑连真实 qB 的写侧 / 真行为; 排期锚兜底巡检)** | 怎么做 = [testing/real-machine.md](testing/real-machine.md)(准入判据 / 硬约束 / 环境守卫 / 免token免鉴权口径 / 种子层 L0-L2 / 切片更新规则 / 漂移判定 / 成熟度 L0-L3); 片表与进度 = 排期锚 [issues/26-10-31-0641](issues/26-10-31-0641-test-real-machine-test-standing.html); 每轮数字 = `testing/real-baselines/` |
@@ -35,7 +35,7 @@
 - 各目录的 `_index.md` —— `commands run kb.index` 扫主题文件的三行头元数据生成
 - 分卷页 `_index-<n>.md` —— 主题多到一份 `_index.md` 装不进 8,000 字符时同批生成, 此时主索引退化为分卷路由(见 [pitfalls/web-ui/_index.md](pitfalls/web-ui/_index.md)); 同批重建、同批清残留, 一样不要手改
 - [tasks/_index.md](tasks/_index.md) —— `commands run kb.index` 扫档案 `Status` / `Summary` 生成
-- [issues/_index.md](issues/_index.md) —— create-issue skill 的生成器重建
+- [issues/_index.md](issues/_index.md) —— `commands run kb.index` 扫报告 `issue-*` meta 生成(生成器在 memory-bank skill)
 - [plans/_index.md](plans/_index.md) / [reports/_index.md](reports/_index.md) —— `gen_docs_index.py`; 专题视图 `kb.docmap` 查询现算不落盘(_doc-map.md 已退役)
 - 新增目录 / 超 cap 的处置见 [memory-bank skill](../.agents/skills/memory-bank/SKILL.md) —— 改目录须同时改本细路由, 少一处守卫就红。
 

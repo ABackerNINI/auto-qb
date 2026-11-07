@@ -11,9 +11,9 @@
   是生成器遇表外值时的 fail-fast 异常 (见 pitfalls/kb/doc-status-meta.md)
 - `TASK_STATUSES` / `TASK_DOMAINS` / `TASK_FILE_RE`: 任务档案的 4 词表 / 领域枚举 / 命名正则
   (`gen_tasks_index` 与 `kb.new` / `check_doc_templates` 同源)
-- `FAMILIES`: 文档族注册表 (plan/task/slice + P3 二期 pitfall/report/baseline/progress →
-  命名/模板/词表/索引动作) —— `kb.new` / `kb.wrap` / `check_doc_templates` 与模板的同一份注册表
-  (计划 26-10-17-0527 P1/P3)
+- `FAMILIES`: 文档族注册表 (plan/task/slice + P3 二期 pitfall/report/baseline/progress +
+  2026-11-07 W3 收编的 issue → 命名/模板/词表/索引动作) —— `kb.new` / `kb.wrap` /
+  `check_doc_templates` 与模板的同一份注册表 (计划 26-10-17-0527 P1/P3; issue 收编见 26-11-07-0549 D4)
 - `detect_doc_kind` / `DOC_KIND_*`: 载体探测 (**改面**: plans|reports HTML · tasks · slices · issues) ——
   `kb.status` / `kb.bump` 的同一份; 与建面的 `FAMILIES` 分工 (那边管「建」, 这里管「改」)
 - `html_meta` / `set_html_meta` / `md_field` / `set_md_field` / `set_last_active`: 元数据行读写单点
@@ -24,6 +24,11 @@
   (D4 反向补链; 值 = 仓库根相对路径, 英文逗号; md 只动**首个** `**Refs:**` 行; 幂等)
 - `rebuild_index`: 改后重建受影响索引的共同落点 —— `kb.new` / `kb.status` / `kb.bump` 共用
   (与 `gen_all` 的集合单点同一 build 实现)
+- `TYPES` / `TIERS` / `TIER_BY_TYPE` / `SLUG_RE` / `ISSUE_FILE_RE` / `rel_skill()`: issue 族常量
+  (2026-11-07 起 create-issue 的脚本与模板物理并入本 skill ——
+  计划 26-11-07-0549 W1; 原两侧各一份的 5 词表合一为 `DOC_STATUSES`, 取时走 timekit 单点, 不另设;
+  同日 W3 起 `kb.new issue` 收编建件, 档位→模板映射搬进 `FAMILIES["issue"].template_by_tier`,
+  原 `TIER_TEMPLATE` 退役)
 - `find_root()`: 仓库根探测 (向上找 `.git`, 而非按 skill 安装深度反推 `parents[n]`)
 - `resolve_mb_dir()`: memory-bank 目录探测 (`--mb-dir` 显式指定优先)
 - `read_meta()`: 主题文件三行头元数据 (`# 标题` / `> 摘要:` / `> 触发:`)
@@ -35,7 +40,7 @@ from __future__ import annotations
 import os
 import re
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 SCRIPTS_DIR = Path(__file__).resolve().parent
@@ -126,16 +131,15 @@ class StatusVocabularyError(ValueError):
 # 主索引的已完结分区只保留最近 `CLOSED_KEEP` 条(控 index-auto cap): 档案/制品**原地不动**,
 # 只是不出主索引 —— 索引大小由常量钉住, 不再随完结条目数线性涨(issues 侧 2026-10-11 实测:
 # 243 条时无摘要口径已达 cap 108%, 砍摘要救不回来, 搬文件又打坏 `**Refs:**` 认领链)。
-# 语义与 create-issue 的 `gen_issues_index.CLOSED_KEEP` 同值同款(60); 跨 skill 不 import
-# (单点纪律, 见 gen_all._load_isolated) —— 两边各有一份常量, 由守阵
-# test_closed_keep_constants_match_issues 等值钉住, 不许漂移。
+# gen_issues_index 也 import 这里 —— 2026-11-07 起 issue 生成器与本 `_common` 同目录, 同一份
+# 常量(计划 26-11-07-0549 W1 把原先两侧各一份 + 3 条等值钉住测试防漂移的旧格局收拢)。
 CLOSED_KEEP = 60
 
 # 归档清单文件名: 故意**不叫 `_index.md`** —— 那会被 role_of 套成 index-auto(8,000 cap),
 # 全量清单必然超(计划 §07 风险表); `_archive.md` 不在任何 cap 扫描面。
 ARCHIVE_NAME = "_archive.md"
 
-# 归档清单相对所在目录的落点(与 create-issue 的 gen_issues_index.ARCHIVE_REL 同值)。
+# 归档清单相对所在目录的落点(gen_issues_index 同样 import 这里, 单点)。
 # `<dir>/attachments/` 在 EXCLUDED_DIRS, 不计 cap。
 ARCHIVE_REL = f"attachments/{ARCHIVE_NAME}"
 
@@ -157,12 +161,67 @@ def closed_hidden_note(hidden: int, dir_name: str, noun: str) -> str:
             f"全量清单见 [{ARCHIVE_REL}]({ARCHIVE_REL}).")
 
 
+# --------------------------------------------------------------------------- issue 族
+# (2026-11-07 起 create-issue 的脚本与模板物理并入本 skill (计划 26-11-07-0549 W1), 常量随之
+# 单点化: 原先 create-issue `_common.py` 里另设的 5 词表并入上方 `DOC_STATUSES`, issue 专属枚举
+# 落在本节 —— 增删类型/档位只改这里。同日 W3 起 `kb.new issue` 收编建件 (D4, new_issue.py 退役),
+# 枚举的消费方 = FAMILIES["issue"] (type_enum / naming_re / template_by_tier 全从本节拼出)。
+# 取时不用本文件: 走 timekit 单点(UTC+8 naive 墙钟), 不引入第二套时间实现。)
+
+# 问题类型枚举 —— 增删类型只改这一处 (文件名、meta、索引、脚本校验全部读它)
+TYPES = ("bug", "perf", "docs", "test", "refactor", "feat", "chore", "question")
+
+# 类型 → 默认档位; --tier 可覆盖 (如 test 的失败用例用 --tier standard)
+TIER_BY_TYPE = {
+    "bug": "standard",
+    "perf": "standard",
+    "feat": "standard",
+    "docs": "light",
+    "test": "light",
+    "refactor": "light",
+    "chore": "light",
+    "question": "light",
+}
+TIERS = ("light", "standard")
+
+# slug: 小写英文短横线, 允许单段 (<领域>-<专题> 只是建议, 分类职责已交给 type)
+# (与下方 TOPIC_FILE_RE 同款正则 —— 那份带 .md 后缀管主题文件名, 这份用于 slug 的裸校验)
+SLUG_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
+# issue 报告文件名: <时间>-<类型>-<slug>.html —— 类型固定在第二段, 扫描目录即可按类型聚合。
+# 带 `.html$` 的**完整文件名**正则 (同 PLAN_FILE_RE 等族注册表口径; W3 起 kb.new 的派生名守卫
+# 与 FAMILIES.naming_re 都按完整文件名匹配)。
+# 中段**从 TYPES 单点拼出** (W3: 不手抄第二份枚举) —— 扩类型只改 TYPES, 命名正则/索引
+# 校验/CLI 枚举全部跟着走; 枚举外类型在这里就匹配不上 (建件端正则与索引端正则同一份)。
+ISSUE_FILE_RE = re.compile(
+    r"^(?P<stamp>\d{2}-\d{2}-\d{2}-\d{4})-(?P<type>" + "|".join(TYPES) + r")-(?P<slug>[a-z0-9-]+)\.html$"
+)
+
+# issues 目录 = `<mb>/issues`(`FAMILIES["issue"].spec.dir` 单点落点) —— 建件 (kb.new) / 索引重建
+# (rebuild_index) / 生成器独立 CLI 全走这一处。原 create-issue 独立工具时代的三候选探测
+# (`memory-bank/issues` → `issues` → `docs/issues`, resolve_issues_dir/ISSUES_CANDIDATE_DIRS)
+# 已随 new_issue.py 一并退役 (2026-11-07, 计划 26-11-07-0549 D2; 评审裁定: 无任何生产语义
+# 依赖候选 2/3, 留着只会让「目录在哪」出现两套口径)。
+
+
+def rel_skill(issues_dir: Path) -> str:
+    """skill 目录相对 issues 目录的路径 (索引 HEADER 的链接用); 跨盘时返回空串 (不写链接)。
+
+    用 `os.path.relpath` 而非 `Path.relative_to` —— 后者在目标不是前缀时直接抛错, 而索引
+    目录通常在 skill 目录之外, 需要形如 `../../.agents/skills/memory-bank` 的回跳路径。
+    """
+    try:
+        rel = os.path.relpath(str(SKILL_DIR.resolve()), str(issues_dir.resolve()))
+    except ValueError:
+        return ""
+    return Path(rel).as_posix()
+
+
 # --------------------------------------------------------------------------- 结构枚举
 
 # pitfalls 的类枚举。**扩类须三处同步**: 本常量 / 新建 `<class>/_about.md` / memory-bank/README.md 细路由。
 PITFALL_CLASSES = ("git", "web-ui", "backend", "testing", "ops", "kb", "docs")
 
-# 主题文件名: 小写英文与数字, 短横线分段 (与 create-issue 的 SLUG_RE 同款)
+# 主题文件名: 小写英文与数字, 短横线分段 (同款裸名正则见上方 issue 族的 SLUG_RE)
 TOPIC_FILE_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*\.md$")
 
 # activeContext 会话切片文件名: 定宽 `YY-MM-DD-HHMM-<slug>` —— 前缀定宽才能保证**字典序 == 时间序**
@@ -179,11 +238,12 @@ SLICE_DIR = "activeContext"
 # (`kb.new` / `kb.wrap` / `check_doc_templates` 与模板的**同一份**注册表 —— 命名/模板/词表/
 # 索引动作只在这里定义一次, 命令与守卫都 import 它, 不造第二套规范)。
 #
-# 模板落点: skill 的 `templates/<spec.template>`; 状态词表 import 既有单点
-# (HTML 制品 5 词 `DOC_STATUSES` / 档案 4 词 `TASK_STATUSES`); 建后由命令按
+# 模板落点: skill 的 `templates/<spec.template>` (分级族按 `template_by_tier` 选); 状态词表
+# import 既有单点 (HTML 制品 5 词 `DOC_STATUSES` / 档案 4 词 `TASK_STATUSES`); 建后由命令按
 # `index_script` 重建**该族受影响的那份索引**(与 `gen_all` 的集合单点同一实现, 不另建)。
 # P3 扩四族 (计划 §04/§07): pitfall (子目录选类) / report (出厂即 Done) / baseline
-# (`--total` 誊写, 无索引) / progress (三行头)。
+# (`--total` 誊写, 无索引) / progress (三行头)。W3 收编 issue 族 (计划 26-11-07-0549 D4):
+# 模板按档位选 + 文件名中段从 TYPES 拼 (new_issue.py 退役, 26-10-17-0527 D2 正式翻案)。
 
 # 任务档案的领域枚举 (文件名首段; 不足用先扩枚举再建档 —— 口径见 SKILL.md「任务档案规范」)
 TASK_DOMAINS = ("webui", "backend", "rule", "memory-bank", "docs", "test", "deps", "config")
@@ -230,7 +290,7 @@ class FamilySpec:
     name: str
     dir: str  # memory-bank 下的子目录 (切片族是 `activeContext`; 可多段如 `testing/baselines`)
     ext: str  # ".html" | ".md"
-    template: str  # skill `templates/` 下的文件名
+    template: str  # skill `templates/` 下的文件名 (issue 族为空串 —— 模板按档位选, 见下)
     statuses: tuple  # 状态词表 (切片族无状态, 空元组)
     default_status: str  # 出厂状态
     index_script: str  # 建后重建哪个生成器 (切片族无索引, 空串)
@@ -238,6 +298,12 @@ class FamilySpec:
     domain_first: bool  # `--topic` 领域段须 ∈ `TASK_DOMAINS` (最长前缀匹配, 仅档案族)
     subdir_flag: str = ""  # 第二段子目录的 CLI 参数名 (坑档 = `class`; 其余族空)
     subdir_values: tuple = ()  # 子目录允许值 (坑档 = `PITFALL_CLASSES`; 其余族空)
+    # 档位选模板 (W3, 计划 26-11-07-0549): 非空时模板按 `--tier` 从这里选 (issue 族), `template`
+    # 让位为空串; 空 dict = 该族不分级, 模板恒 `template` (既有七族零影响)。
+    template_by_tier: dict = field(default_factory=dict)
+    # 文件名中段的类型枚举 (issue 族 = `TYPES` 单点, 同 `subdir_values` 的 import 纪律);
+    # 空元组 = 该族文件名无类型段 (CLI 据此决定是否收 `--type`)。
+    type_enum: tuple = ()
 
 
 FAMILIES: dict[str, FamilySpec] = {
@@ -264,6 +330,25 @@ FAMILIES: dict[str, FamilySpec] = {
             index_script="gen_tasks_index",
             naming_re=TASK_FILE_RE,
             domain_first=True,
+        ),
+    # ---- W3 建件收编 (计划 26-11-07-0549 D4, 翻案 26-10-17-0527 D2): issue 族入列,
+    # new_issue.py 退役 —— 命名/模板/词表/索引动作收进本注册表, 不造第二套。
+    "issue":
+        FamilySpec(
+            name="issue",
+            dir="issues",
+            ext=".html",
+            template="",  # 模板按档位选 (template_by_tier), `template` 让位为空串
+            statuses=DOC_STATUSES,  # issue-status 与 doc-* 制品同一 5 词表 (gen_issues_index / gen_doc_map 同源)
+            default_status="Open",  # 出厂恒 Open; 翻状态 W4 收编后走 kb.status (CLI 不设 --status)
+            index_script="gen_issues_index",  # 建后重建 issues/_index.md + attachments/_archive.md
+            naming_re=ISSUE_FILE_RE,  # 文件名中段从 TYPES 单点拼出 (见上方 issue 族节)
+            domain_first=False,
+            template_by_tier={
+                "light": "issue-light.html",
+                "standard": "issue-standard.html"
+            },
+            type_enum=TYPES,  # `--type` 枚举 (文件名中段; 单点 TYPES, 同 subdir_values 的 import 纪律)
         ),
     "slice":
         FamilySpec(
@@ -339,12 +424,18 @@ FAMILIES: dict[str, FamilySpec] = {
 DOC_KIND_PLAN = "plan"  # plans|reports/*.html —— 5 词表 (`doc-status`), 翻转抬 doc-updated
 DOC_KIND_TASK = "task"  # tasks/*.md —— 4 词表 (`**Status:**`), 翻转抬 **Updated:**
 DOC_KIND_SLICE = "slice"  # activeContext/*.md —— **无状态**: kb.status 拒绝并指路 kb.wrap 迁出
-DOC_KIND_ISSUE = "issue"  # issues/*.html —— 自己的词表/索引在 create-issue skill (跨 skill 不 import,
-# 单点纪律), kb.status/kb.bump 拒绝并指路; 但**可以是 refs 目标** (doc-refs meta)
+DOC_KIND_ISSUE = "issue"  # issues/*.html —— 建件已收编进 FAMILIES (W3, `kb.new issue`), 词表/索引
+# 单点同在本文件 (DOC_STATUSES / gen_issues_index); 翻状态 W4 起收编进 kb.status (计划 26-11-07-0549
+# D5: 徽标 + issue-status meta 两处一次改 + 状态变更日志追加一行); 改版仍不在 kb.bump 范围 (直编辑);
+# 但**可以是 refs 目标** (doc-refs meta)
 
 # 词表与索引动作 (单点: 翻转与重建都查这两张表, 不在命令里分叉 if-else)
-DOC_KIND_STATUSES = {DOC_KIND_PLAN: DOC_STATUSES, DOC_KIND_TASK: TASK_STATUSES}
-DOC_KIND_INDEX_SCRIPT = {DOC_KIND_PLAN: "gen_docs_index", DOC_KIND_TASK: "gen_tasks_index"}
+DOC_KIND_STATUSES = {DOC_KIND_PLAN: DOC_STATUSES, DOC_KIND_TASK: TASK_STATUSES, DOC_KIND_ISSUE: DOC_STATUSES}
+DOC_KIND_INDEX_SCRIPT = {
+    DOC_KIND_PLAN: "gen_docs_index",
+    DOC_KIND_TASK: "gen_tasks_index",
+    DOC_KIND_ISSUE: "gen_issues_index",
+}
 DOC_KIND_CN = {DOC_KIND_PLAN: "计划/报告", DOC_KIND_TASK: "任务档案", DOC_KIND_SLICE: "会话切片", DOC_KIND_ISSUE: "issue"}
 
 # 索引/元数据文件名: `_` 开头, 不参与「主题文件」计数
@@ -485,7 +576,7 @@ GEN_CMD_BY_SCRIPT = {
     "gen_tasks_index.py": "commands run kb.index",
     "gen_kb_index.py": "commands run kb.index",
     "gen_docs_index.py": "commands run kb.index",
-    # 生成物集合的单点: kb.index 调它, 由它覆盖上面三条 + create-issue 的 gen_issues_index。
+    # 生成物集合的单点: kb.index 调它, 由它覆盖上面三条 + 本 skill 的 gen_issues_index。
     "gen_all.py": "commands run kb.index",
     # 只校验/查询不写文件的脚本 —— 它的"重跑"是校验或查询命令, 不是重建命令
     # (gen_doc_map.py 同类: 2026-09-29 起 _doc-map.md 物化退役, 改查询 `commands run kb.docmap`)
@@ -552,6 +643,18 @@ def rebuild_index(root: Path, mb: Path, script: str) -> list[Path]:
         # 分卷页是生成物: 主题变少/改名后不再需要的卷页同批删除 (否则 --check 恒红)。
         for stale in module.stale_volume_pages(mb, targets):
             stale.unlink()
+    elif script == "gen_issues_index":
+        # W3 (计划 26-11-07-0549): `kb.new issue` 建件后的重建落点 —— 主索引与归档**同批**
+        # (同批纪律同 tasks/plans 侧; issues 目录恒 `<mb>/issues` = spec.dir 单点落点, 目录探测
+        # 已随 new_issue.py 一并退役删除)。
+        issues_dir = mb / "issues"
+        issues_dir.mkdir(parents=True, exist_ok=True)
+        index = issues_dir / "_index.md"
+        archive = issues_dir / ARCHIVE_REL
+        archive.parent.mkdir(parents=True, exist_ok=True)
+        index.write_text(module.build(root, issues_dir), encoding="utf-8", newline="\n")
+        archive.write_text(module.build_archive(root, issues_dir), encoding="utf-8", newline="\n")
+        written += [index, archive]
     return written
 
 

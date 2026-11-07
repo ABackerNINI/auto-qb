@@ -24,6 +24,7 @@
 ## Done
 
 - [26-11-07-0608] [kb.nav 关联文档交互: 抽屉内关系图三档 + 认领链五态解析](26-11-07-0608-plan-memory-bank-nav-relation-graph.html) — `memory-bank-nav-relation-graph`
+- [26-11-07-0549] [create-issue 融合 memory-bank(代码融合+双 SKILL)与 issue 工位机械化](26-11-07-0549-plan-memory-bank-issue-fusion.html) — `memory-bank-issue-fusion`
 - [26-11-07-0452] [GitHub CI WEB UI smoke 门禁改造: 超时根因、分片接线与 push 节流全量轮](26-11-07-0452-plan-github-ci-smoke-gate.html) — `github-ci-smoke-gate`
 - [26-11-07-0441] [code-review 留痕面修补: 派发次数与引文校验进闸门](26-11-07-0441-plan-review-trace-fields.html) — `review-trace-fields`
 - [26-11-07-0201] [code-review 跨 clone rebase 组合缺口修补](26-11-07-0201-plan-review-rebase-gap.html) — `review-rebase-gap`
@@ -62,9 +63,8 @@
 - [26-11-01-0434] [提交闸门按改动收窄优化](26-11-01-0434-plan-commit-gate-scope.html) — `commit-gate-scope`
 - [26-11-01-0106] [规则引擎重设计方案](26-11-01-0106-plan-rule-engine-redesign.html) — `rule-engine-redesign`
 - [26-10-31-2354] [reannounce 确认跟踪改消解等待模型:废除在途直证,成功凭 working/前跳正证据](26-10-31-2354-plan-webui-write-side.html) — `webui-write-side`
-- [26-10-31-2316] [WEBUI 动效皮肤 flux 分步实施计划](26-10-31-2316-plan-webui-fx-skin.html) — `webui-fx-skin`
 
-> 更早的 **179** 条已出本索引 —— 制品仍在 `plans/` 目录(未搬动), 全量清单见 [attachments/_archive.md](attachments/_archive.md).
+> 更早的 **180** 条已出本索引 —— 制品仍在 `plans/` 目录(未搬动), 全量清单见 [attachments/_archive.md](attachments/_archive.md).
 
 ## Dropped
 

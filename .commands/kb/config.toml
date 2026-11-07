@@ -64,8 +64,8 @@ note    = "stream 前台长跑: 输出直连终端(timeout 不生效), Ctrl-C �
 
 [tasks."kb.new"]
 run     = ["python <skill-dir:memory-bank>/scripts/new_doc.py <args>"]
-when    = "新建计划/任务档案: 一次逻辑动作 = 一条命令 + 一次填空(时间戳/命名/头部/SLOT/索引全派生; 切片走 kb.wrap)"
-note    = "建后必填 SLOT(守卫拦残留); --refs 走 D4 双向补链(2026-10-17 P2: 目标件自动反向声明, 只动元数据行, 幂等); 目标已存在即 rc=1; 档案撞名按 slug 查重(含跨 clone ../auto-qb-*/)"
+when    = "新建计划/任务档案/issue: 一次逻辑动作 = 一条命令 + 一次填空(时间戳/命名/头部/SLOT/索引全派生; issue 零 SLOT, 切片走 kb.wrap)"
+note    = "建后必填 SLOT(守卫拦残留); issue 族 2026-11-07 收编(计划 26-11-07-0549 W3, new_issue.py 退役): slug 位置参数 + --type/--title/--summary 必填, --tier/--module/--reporter/--topic 可选, 出厂恒 Open(翻状态走 kb.status), 模板零 SLOT 按档位填正文; --refs 走 D4 双向补链(2026-10-17 P2: 目标件自动反向声明, 只动元数据行, 幂等); 目标已存在即 rc=1; 档案撞名按 slug 查重(含跨 clone ../auto-qb-*/)"
 timeout = 60
 
 [tasks."kb.ref"]
@@ -76,8 +76,8 @@ timeout = 60
 
 [tasks."kb.status"]
 run     = ["python <skill-dir:memory-bank>/scripts/flip_status.py <args>"]
-when    = "翻转文档状态 (计划/报告 doc-status 5 词表 · 档案 **Status:** 4 词表): 词表校验/抬时间戳/重建索引全派生, 终态带提醒"
-note    = "词表单点 import(_common), 别凭记忆写 —— 表外值会让 gen_docs_index 静默漏收该件(见 pitfalls/kb/doc-status-meta.md); 切片/issue 一律拒绝并指路(kb.wrap / create-issue); 同状态翻转幂等(不抬时间戳不重建索引); 路径三形态(绝对/仓库根相对/mb 相对)都认; 输出带「机械 0」收录断言"
+when    = "翻转文档状态 (计划/报告 doc-status 5 词表 · 档案 **Status:** 4 词表 · issue 徽标+meta 两处): 词表校验/抬时间戳/重建索引全派生, 终态带提醒"
+note    = "词表单点 import(_common), 别凭记忆写 —— 表外值会让 gen_docs_index 静默漏收该件(见 pitfalls/kb/doc-status-meta.md); 切片一律拒绝并指路 kb.wrap; issue 已收编(2026-11-07 W4, 计划 26-11-07-0549): badge+meta 两处一起改+追加状态日志行+重建索引(含归档); 同状态翻转幂等(不抬时间戳不重建索引); 路径三形态(绝对/仓库根相对/mb 相对)都认; 输出带「机械 0」收录断言"
 timeout = 60
 
 [tasks."kb.bump"]

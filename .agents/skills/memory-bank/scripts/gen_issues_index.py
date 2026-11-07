@@ -3,7 +3,7 @@
 用法:
     python <skill>/scripts/gen_issues_index.py                      重建
     python <skill>/scripts/gen_issues_index.py --check              只比对, 不一致退出码 1
-    python <skill>/scripts/gen_issues_index.py --root D:/tmp/x --dir issues   指定仓库根与 issues 目录
+    python <skill>/scripts/gen_issues_index.py --root D:/tmp/x      指定仓库根 (issues 目录恒 <root>/memory-bank/issues)
 
 数据源是各报告 HTML 的 meta 标签(issue-status / -stamp / -summary / -title / -type), 与
 memory-bank skill 的 `scripts/gen_tasks_index.py` 同思路: 索引降级为生成物, 多个 worktree 并行时冲突的解法是
@@ -13,7 +13,8 @@ memory-bank skill 的 `scripts/gen_tasks_index.py` 同思路: 索引降级为生
 文件名必须是 `<YY-MM-DD-HHMM>-<type>-<slug>.html` 且 type 在枚举内 —— 不合规直接报错退出
 (护栏建在生成器里, 不靠自觉)。
 
-与项目无关: 目录用 `--dir`(不传则探测), 仓库根靠 `.git` 向上探测, HEADER 的 skill 链接动态计算。
+与项目无关: issues 目录恒 `<root>/memory-bank/issues`(`FAMILIES["issue"].spec.dir` 单点落点; 原三候选
+`--dir` 探测随 new_issue.py 一并退役, 2026-11-07), 仓库根靠 `.git` 向上探测, HEADER 的 skill 链接动态计算。
 """
 
 from __future__ import annotations
@@ -26,7 +27,17 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _common import (  # noqa: E402
-    FILE_RE, STATUSES, TYPES, dir_of, find_root, rel_skill, resolve_issues_dir,
+    ARCHIVE_REL,
+    CAP_POLICY,
+    CLOSED_KEEP,
+    DOC_STATUSES,
+    ISSUE_FILE_RE,
+    TERMINAL_DOC_STATUSES,
+    TYPES,
+    find_root,
+    rel_posix as dir_of,  # 原 create-issue `_common.dir_of`, 与 rel_posix 同一实现
+    rel_skill,
+    resolve_mb_dir,
 )
 
 META_RE = {
@@ -35,7 +46,7 @@ META_RE = {
 }
 
 EMPTY_HINT = {
-    "Open": "(暂无 — 撞见计划外问题时用 new_issue.py 入池)",
+    "Open": "(暂无 — 撞见计划外问题时用 commands run kb.new issue 入池)",
 }
 
 # 索引行里摘要的截断长度 —— 与 `gen_tasks_index.SUMMARY_MAX` 同款 (同一病: 摘要全文只增不减,
@@ -62,21 +73,24 @@ SUMMARY_MAX = 12
 # `CLOSED_KEEP` 条, 全量清单另写 `attachments/_archive.md`(该目录在 `EXCLUDED_DIRS`, 不计 cap)。
 # 于是 ①零坏链零改指 ②索引大小由常量钉住, 不再随入池线性涨 ③老 issue 照样可检索(归档索引)。
 # 实测: 保留 60 条 → 主索引 16,716(余量 8,484); 保留 90 条 → 20,849。取 60 留足增长余量。
-CLOSED_KEEP = 60
-CLOSED_STATUSES = ("Done", "Dropped", "Superseded")
-ARCHIVE_REL = "attachments/_archive.md"
+# (CLOSED_KEEP / ARCHIVE_REL 本体在 `_common` —— 2026-11-07 W1 起上方 import 单点, 本文件不再抄一份;
+# 完结状态 = 5 词表 ∩ `TERMINAL_DOC_STATUSES`, 派生为 tuple 保展示顺序确定: Done / Dropped / Superseded。)
+CLOSED_STATUSES = tuple(s for s in DOC_STATUSES if s in TERMINAL_DOC_STATUSES)
 
-# 主索引字符预算 —— 与 memory-bank `_common.CAP_POLICY["index-auto"]` 同值(cap 单点仍在那边;
-# 跨 skill 不 import, 由守卫 `test_issues_index_budget_matches_cap_policy` 等值钉住)。
+# 主索引字符预算 —— 就是 `_common.CAP_POLICY["index-auto"]`(cap 单点 import, 不再手抄同值)。
 # 2026-11-05 B4: `CLOSED_KEEP` 从"定值"降为"上限" —— 装不下就逐级收紧。收紧到 0 条后若**仍超预算**
 # (病根变成 Open 区条数本身, 已关闭窗口无能为力), 不再继续收紧, 由 `build` 报一行告警交人工处置。
-INDEX_BUDGET = 8000
+INDEX_BUDGET = CAP_POLICY["index-auto"]
 
 
 def header(issues_dir: Path, root: Path) -> str:
     skill_rel = rel_skill(issues_dir)
     script_rel = f"{skill_rel}/scripts/gen_issues_index.py" if skill_rel else "gen_issues_index.py"
     skill_link = f"({skill_rel}/SKILL.md)" if skill_rel else ""
+    # 2026-11-07 W5 (计划 26-11-07-0549): 生成器已并入 memory-bank skill, 头部「流程」链接改指
+    # create-issue skill(与 memory-bank skill 同级), 机械面指 kb.new issue / kb.status —— 文案与链接一致。
+    issue_parent = skill_rel.rsplit("/", 1)[0] if "/" in skill_rel else "."
+    issue_skill_link = f"({issue_parent}/create-issue/SKILL.md)" if skill_rel else ""
     dir_name = dir_of(issues_dir, root)
     closed = " / ".join(f"`{s}`" for s in CLOSED_STATUSES)
     archive = ARCHIVE_REL
@@ -86,15 +100,15 @@ def header(issues_dir: Path, root: Path) -> str:
 > (`issue-status` / `issue-stamp` / `issue-title` / `issue-summary` / `issue-type`)生成;
 > 新增报告或改状态后重跑脚本即可, 合并冲突也只需重跑。
 > 每行 = **类型 · 简述 · 报告链接**(分区即状态); 状态改在报告 HTML 的封面徽标与
-> `<meta name="issue-status">`(两处一起改)。状态取值: {" / ".join(f"`{s}`" for s in STATUSES)}。
+> `<meta name="issue-status">`(两处一起改)。状态取值: {" / ".join(f"`{s}`" for s in DOC_STATUSES)}。
 > 文件名 = `<YY-MM-DD-HHMM>-<type>-<slug>.html`, type 取值: {" / ".join(TYPES)}。
 > 本索引里摘要按 `SUMMARY_MAX` **截断**(全文在报告里): 这样索引大小由**条数**决定, 不随摘要写得多长而膨胀
 > —— 否则迟早撞 `index-auto` cap, 而靠"外迁老条目"化解会打坏外部引用。
 > **已关闭状态**({closed})只列**最近若干条**(上限 `CLOSED_KEEP`, 装不进 {INDEX_BUDGET:,} 字符预算就继续收紧;
 > 更老的**报告原地不动**, 只是不出本索引):
 > 全量清单见 [{archive}]({archive}), 该目录不计 cap。
-> **入池规则**: 计划外问题一律不改码, 只入池 —— 见 create-issue skill {skill_link}
-> (该不该现在修, 见 scope-guard skill)。
+> **入池规则**: 计划外问题一律不改码, 只入池 —— 流程见 create-issue skill {issue_skill_link};
+> 机械面 `commands run kb.new issue` / `commands run kb.status` (生成器在 memory-bank skill {skill_link}); 该不该现在修, 见 scope-guard skill。
 """
 
 
@@ -104,7 +118,9 @@ def collect(issues_dir: Path) -> list[dict]:
     for path in sorted(issues_dir.glob("*.html")):
         if path.name.startswith("_"):
             continue
-        matched = FILE_RE.match(path.stem)
+        # W3 起 ISSUE_FILE_RE 是**完整文件名**正则 (带 .html$, 同族注册表 FAMILIES 口径) ——
+        # kb.new issue 的派生名守卫与这里的索引校验是同一份
+        matched = ISSUE_FILE_RE.match(path.name)
         if not matched:
             raise ValueError(f"{path.name}: 文件名应为 <YY-MM-DD-HHMM>-<type>-<slug>.html")
         file_type = matched.group("type")
@@ -118,8 +134,8 @@ def collect(issues_dir: Path) -> list[dict]:
             return html.unescape(m.group(1)).strip() if m else ""
 
         status = meta("status") or "Open"
-        if status not in STATUSES:
-            raise ValueError(f"{path.name}: status `{status}` 不在枚举内 ({' / '.join(STATUSES)})")
+        if status not in DOC_STATUSES:
+            raise ValueError(f"{path.name}: status `{status}` 不在枚举内 ({' / '.join(DOC_STATUSES)})")
         items.append(
             {
                 "file": path.name,
@@ -161,7 +177,7 @@ def render(items: list[dict], issues_dir: Path, root: Path, keep: int = CLOSED_K
     """主索引: 已关闭状态只留最近 `keep` 条(报告原地不动, 只是不出索引)。"""
     out = [header(issues_dir, root)]
     out.extend(count_table(items))
-    for status in STATUSES:
+    for status in DOC_STATUSES:
         group = [i for i in items if i["status"] == status]
         out.append(f"## {status}\n")
         if not group:
@@ -196,7 +212,7 @@ def render_archive(items: list[dict], issues_dir: Path, root: Path) -> str:
         f"> 每条链接指回 `{dir_name}/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。",
         "",
     ]
-    for status in STATUSES:
+    for status in DOC_STATUSES:
         group = sorted((i for i in items if i["status"] == status), key=lambda i: i["stamp"], reverse=True)
         out.append(f"## {status} ({len(group)})\n")
         if not group:
@@ -236,14 +252,12 @@ def build_archive(root: Path, issues_dir: Path) -> str:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true", help="只比对, 不写文件")
-    parser.add_argument(
-        "--dir", default=None, help="issues 目录(相对仓库根); 不传则按 memory-bank/issues → issues → docs/issues 探测"
-    )
     parser.add_argument("--root", type=Path, default=None, help="仓库根(默认向上探测 .git)")
     args = parser.parse_args(argv)
 
     root = (args.root or find_root()).resolve()
-    issues_dir = resolve_issues_dir(root, args.dir)
+    # issues 目录恒 `<mb>/issues` (spec.dir 单点落点; 目录探测随 new_issue.py 一并退役, 见 _common)
+    issues_dir = resolve_mb_dir(root, None) / "issues"
     index = issues_dir / "_index.md"
 
     archive = issues_dir / ARCHIVE_REL

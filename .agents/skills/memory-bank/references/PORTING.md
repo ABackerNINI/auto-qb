@@ -6,10 +6,10 @@
 ## 为什么能整目录拷走
 
 本 skill 是**自足**的: 一切脚本在 `scripts/`, 常量单点 `_common.py`, 不出现项目名、不假定安装深度
-(仓库根靠 `.git` 向上探测)。唯一外部依赖是 **create-issue skill**(它的 `gen_issues_index.py` 是生成物
-集合的一员) —— 缺它时 `gen_all.py` 报 rc=2 并说明。
+(仓库根靠 `.git` 向上探测)。2026-11-07 起 issue 索引生成器 `gen_issues_index.py` 也已并入本 skill
+(计划 26-11-07-0549 W1, create-issue skill 只留流程文档) —— 生成物集合不再有 skill 外部依赖。
 
-时间戳一律 **UTC+8 naive 墙钟**(`scripts/timekit.py`; create-issue 侧本地内联同口径), 与机器时区无关。
+时间戳一律 **UTC+8 naive 墙钟**(`scripts/timekit.py` 单点), 与机器时区无关。
 
 ## 最小移植 (3 步)
 

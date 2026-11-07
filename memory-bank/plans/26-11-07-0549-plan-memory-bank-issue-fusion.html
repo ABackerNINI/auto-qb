@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>create-issue 融合 memory-bank(代码融合+双 SKILL)与 issue 工位机械化</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="memory-bank-issue-fusion">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-11-07-0549">
+<meta name="doc-updated" content="26-11-07-0828">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-07-memory-bank-issue-fusion.md">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: memory-bank-issue-fusion</div>
+<h1>create-issue 融合 memory-bank(代码融合+双 SKILL)与 issue 工位机械化</h1>
+<p class="lede">本篇只回答: create-issue 以什么形态融合进 memory-bank skill, 以及 issue 工位的建件/翻状态/模板怎么机械化对齐其余三工位(五波 W1-W5)。入池语义本身(类型/档位/防过期五条/状态机)不在改造范围, 一字不动。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-07-0549 · <b>doc-updated</b> 26-11-07-0828 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 本会话 grilling 三轮十问(2026-11-07), 用户逐项拍板; 前序口径: 计划 26-10-17-0527 §08 D2(「issues 不入列」, 标注可翻案, 本案即翻案)
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<p><b>背景</b>: create-issue 与 memory-bank 深度绑定却物理分居两个 skill —— 双 <code>_common</code> 常量、跨 skill 钉住测试、<code>gen_all</code> 跨目录伸手、提交闸门指向另一 skill; 与此同时 issue 是四工位里机械化最弱的一档: 建件裸 python、翻状态手工两处改、模板停在 10-05 旧版式。绑定是既成事实, 分居是历史包袱。</p>
+<p><b>目标</b>(做到什么程度算成):</p>
+<ul>
+  <li>① 常量与生成器单点化 —— 状态词表/<code>TYPES</code>/<code>CLOSED_KEEP</code> 只有一份, 3 条跨 skill 钉住测试删除而非继续维护;</li>
+  <li>② 建件与翻状态走 task id —— issue 对齐「一次逻辑动作 = 一条命令 + 一次填空」, 四工位命令面统一;</li>
+  <li>③ issue 模板对齐新文档模板 —— 单栏流式 + <code>@@VAR@@</code>, 视觉与机制都入列;</li>
+  <li>④ create-issue 触发面原样保留 —— 「记个 issue / 入池」的命中行为不变。</li>
+</ul>
+<p><b>设计底线/不变量</b>: 触发界限不损伤(SKILL.md 不合并); <code>AGENTS.md</code> 零改动(余量仅 ~150 字, 且 skill 路径不变, 无需动); 存量豁免 + 冻结线(实施日 stamp); 入池语义、类型枚举、状态机、防过期五条零行为变化。</p>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+<table>
+  <tr><th style="width:2em">#</th><th>事实</th><th>锚点</th></tr>
+  <tr><td>1</td><td><b>版式分叉</b>(痛点 A): issue 模板 10-05 双栏+粘性目录旧版式; plan/report 模板 11-06 重设计为单栏流式(2026-10-17「宽度不统一不协调」反馈的产物); 占位符机制也分叉(<code>{{VAR}}</code> vs <code>@@VAR@@</code>)</td><td><code>create-issue/assets/issue-*.html</code> ↔ <code>memory-bank/templates/plan.html</code></td></tr>
+  <tr><td>2</td><td><b>翻状态手工</b>(痛点 B): <code>kb.status</code> 明确拒收 issue(指路 create-issue), issue 是四工位唯一没有一条命令翻状态的; 每次认领/修复收口要「两处手改 badge+meta → 重跑索引」—— activeContext 74 条切片里出现频率最高的手工流水</td><td><code>flip_status.py</code> L162-165</td></tr>
+  <tr><td>3</td><td><b>双 _common</b>: 状态词表(<code>STATUSES</code> ↔ <code>DOC_STATUSES</code>)与 <code>CLOSED_KEEP</code>/<code>ARCHIVE_REL</code> 同值常量两处维护, 靠 3 条钉住测试防漂移(纪律「跨 skill 不 import」)</td><td><code>test_memory_bank_cli.py</code>::<code>test_closed_keep_constants_match_issues</code> 等</td></tr>
+  <tr><td>4</td><td><b>建件不走 task id</b>: 裸 <code>python .../new_issue.py</code>; <code>gen_all</code> GENERATORS 跨 skill 登记; 提交闸门直跑 <code>&lt;skill-dir:create-issue&gt;</code></td><td><code>gen_all.py</code> GENERATORS · <code>.my-commit-flow.toml</code> L93</td></tr>
+  <tr><td>5</td><td><b>守卫缺口</b>: <code>check_doc_templates</code> 冻结线扫描面(plan/task/slice/report/baseline)不含 issue 族</td><td><code>check_doc_templates.py</code> 头注</td></tr>
+  <tr><td>6</td><td><b>上次拍板</b>: 26-10-17-0527 D2「issues 不入列: 已有 create-issue 生成器在管」——当时跨 skill import 无解, 已标注「可翻案」</td><td>该计划 §08 D2</td></tr>
+</table>
+
+<h2><span class="no">§03</span>方案总览</h2>
+<p><b>主线: 代码融合 + 双 SKILL</b>(拍板 D3)。scripts 与 assets 物理并入 memory-bank skill; create-issue 保留为独立 skill、只剩一份 SKILL.md —— frontmatter/触发描述一字不动, 内容改写为纯流程文档, 机械面全部指向 <code>commands run kb.*</code>。</p>
+<p><b>落点</b>:</p>
+<ul>
+  <li><b>常量单点</b>: <code>TYPES</code>/<code>TIERS</code>/<code>STATUSES</code> 并入 memory-bank 侧 <code>_common</code>(<code>DOC_STATUSES</code> 与 <code>STATUSES</code> 合一), <code>CLOSED_KEEP</code>/<code>ARCHIVE_REL</code> 删重复 —— 钉住测试从「防漂移装置」降级为「可删除」;</li>
+  <li><b>建件收编</b>: <code>kb.new issue</code> 族(FamilySpec 扩两处: 模板按档位选 + 文件名中段从 <code>TYPES</code> 拼命名正则), <code>new_issue.py</code> 退役(D4);</li>
+  <li><b>翻状态收编</b>: <code>kb.status</code> 加 issue 分支 —— badge+meta 两处一次改 + 状态变更日志追加一行 + 重建索引(D5);</li>
+  <li><b>模板翻新</b>: 单栏新样式 + <code>@@VAR@@</code>, 档位正文结构不变; 不引入 SLOT、不扩 <code>check_doc_templates</code> 扫描面(D6);</li>
+  <li><b>存量豁免</b>: 冻结线 = 实施日 stamp, 200+ 存量件一字不动(D7)。</li>
+</ul>
+<p class="aside"><b>关键取舍</b>: 融合只到代码层。全融合(单 SKILL)要吃进类型/档位/防过期/状态机整套流程(约 +4KB), 触发描述被迫同时覆盖「会话协议」与「记 issue」两个场景, 且 AGENTS.md 等外链引用全要改写 —— 用组织整洁换触发可靠性, 不取。双 SKILL 下 AGENTS.md/scope-guard/code-review/doc-forms 对 create-issue 路径的既有引用<b>全部继续为真</b>, 引用面改动收窄到 gen_all、闸门 toml、两个测试文件。</p>
+<p><b>分期</b>: 五波 W1-W5(§04), 顺序即依赖序, 每波结束可提交。</p>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+<table>
+  <tr><th>波</th><th>内容</th><th>验收判据</th></tr>
+  <tr><td><b>W1</b> 代码融合<br>(纯机械, 行为零变化)</td><td><code>git mv</code> <code>new_issue.py</code>/<code>gen_issues_index.py</code> 与常量进 memory-bank skill; assets → <code>templates/issue-{light,standard}.html</code>; <code>gen_all</code> GENERATORS 改 <code>("memory-bank", "gen_issues_index.py")</code>; 闸门 toml 改 <code>&lt;skill-dir:memory-bank&gt;</code>; <code>test_pipeline.py</code>/<code>test_memory_bank_cli.py</code> 引用改指; 3 条钉住测试删除(常量已同源)</td><td><code>kb.index</code>/<code>kb.check</code>/提交闸门全绿; 相关测试文件全绿; 行为 diff 为零(同输入同输出)</td></tr>
+  <tr><td><b>W2</b> 模板翻新</td><td>issue 双模板重排单栏新样式(对齐 plan.html 设计语言), <code>{{VAR}}</code>→<code>@@VAR@@</code>, light 三段/standard 七段结构不变</td><td>两档各试建一件肉眼看版式; <code>kb.html-audit</code> 增量行无新 error; <code>gen_issues_index</code> meta 读取不受影响</td></tr>
+  <tr><td><b>W3</b> 建件收编</td><td>FamilySpec 扩档位选模板 + <code>--type</code> 进文件名中段(正则从 TYPES 单点拼); <code>new_doc.py</code> 加 issue 族参数(<code>--type</code>/<code>--summary</code> 必填, <code>--tier</code>/<code>--module</code>/<code>--reporter</code>/<code>--topic</code> 可选、topic 默认 slug); <code>new_issue.py</code> 退役; 测试改靶</td><td>「建件→填正文→翻状态→重建索引」全链演练; 枚举外 <code>--type</code> 拒收 fail-fast; 同名幂等拒绝; 既有六族建件回归各一条</td></tr>
+  <tr><td><b>W4</b> 翻状态收编</td><td><code>flip_status.py</code> 加 issue 分支: badge+meta 两处一次改 + 状态变更日志追加一行(幂等) + 重建索引; 拒收文案改指路 kb.status</td><td>红绿双验(漏改 badge 或 meta 任一即红); 终态提醒; 同状态幂等不抬戳; 词表单点 import</td></tr>
+  <tr><td><b>W5</b> 回写收口</td><td>doc-forms「创建/更新方式」表加 issue 行、「issues 仍走 create-issue skill」句改写; create-issue SKILL.md 改写(纯流程 + task id 指针 + 可移植性节改「随整套搬」); README 生成物节与 kb 包 note 措辞更新</td><td><code>kb.check</code> 全绿; <code>test.full</code> 全绿 + 新基线切片; 实测一次「记个 issue」触发命中 create-issue</td></tr>
+</table>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p>无 —— grilling 十问已全部拍板(见 §06)。实施期出现新分叉(如 FamilySpec 扩展撞上既有守卫)再入本节, 不静默自裁。</p>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+  <tr><th>D#</th><th>结论</th><th>拍板</th></tr>
+  <tr><td>D1</td><td>痛点认定: B(翻状态手工)+A(版式分叉)为真痛点; C/D/E 顺手治; F(组织整洁)单独不构成融合理由</td><td>2026-11-07</td></tr>
+  <tr><td>D2</td><td>可移植性弃独立保留: 统一「随整套 memory bank 搬走(PORTING.md)」, <code>--dir</code>/<code>--root</code>/<code>--project</code> 参数随 new_issue.py 退役</td><td>2026-11-07</td></tr>
+  <tr><td>D3</td><td>融合形态 = 代码融合 + 双 SKILL(SKILL.md 不合并, 触发界限不动)</td><td>2026-11-07</td></tr>
+  <tr><td>D4</td><td>建件收编为 <code>kb.new issue</code> 族(26-10-17-0527 D2 正式翻案), new_issue.py 退役</td><td>2026-11-07</td></tr>
+  <tr><td>D5</td><td><code>kb.status</code> 收编 issue 翻状态(badge+meta+日志行+索引一条命令)</td><td>2026-11-07</td></tr>
+  <tr><td>D6</td><td>模板翻新深度 = 版式+占位符统一; 不引入 SLOT、不扩 check_doc_templates 扫描面</td><td>2026-11-07</td></tr>
+  <tr><td>D7</td><td>存量豁免, 冻结线 = 实施日 stamp</td><td>2026-11-07</td></tr>
+  <tr><td>D8</td><td>立档三件套全建(计划+档案+切片)</td><td>2026-11-07</td></tr>
+  <tr><td>D9</td><td>本轮止于计划, 实施等显式开工</td><td>2026-11-07</td></tr>
+  <tr><td>D10</td><td>实施波次 W1-W5 按 §04 顺序与切分</td><td>2026-11-07</td></tr>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+  <tr><th>#</th><th>风险(触发条件)</th><th>对策</th></tr>
+  <tr><td>R1</td><td>触发界限稀释: 「记个 issue」不再命中 create-issue skill</td><td>SKILL.md 独立保留 + frontmatter/描述一字不动; W5 实测一次触发</td></tr>
+  <tr><td>R2</td><td>常量并轨引入回归: gen_issues_index 改 import 后行为漂移</td><td>W1 纯搬移零行为变化; 删钉住测试前先全绿; kb.check + test_docs_forms 过了才进 W2</td></tr>
+  <tr><td>R3</td><td>FamilySpec 扩展破坏既有六族建件</td><td>新字段带默认值向后兼容; 既有族各跑一条建件回归</td></tr>
+  <tr><td>R4</td><td>flip_status issue 分支两处改漏一(单改 badge 或单改 meta)</td><td>红绿双验钉住该形态; 漏任一处判红</td></tr>
+  <tr><td>R5</td><td>存量件被误重刷/误迁移</td><td>冻结线只看新建; 存量件仅状态翻转照旧(W4 后走 kb.status), 模板/版式不动</td></tr>
+  <tr><td>R6</td><td>new_issue.py 存在未盘点的调用方, 退役即断</td><td>W3 退役前全仓 grep 复核(已盘点: gen_all/闸门 toml/test_pipeline/test_memory_bank_cli/issues 索引头/SKILL/README/doc-forms/code-style —— 脚本路径类引用随 W1/W3 一并改, skill 路径类引用在双 SKILL 下保持为真)</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-07-0549</span> 初版: 本会话 grilling 三轮十问逐项拍板成案 —— 代码融合+双 SKILL / kb.new issue 收编(翻 26-10-17-0527 D2 案) / kb.status 收 issue / 模板单栏+@@ 统一 / 存量豁免; 实施五波 W1-W5 待显式开工。</li>
+</ul>
+
+</div>
+</body>
+</html>

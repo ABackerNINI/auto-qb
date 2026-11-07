@@ -90,7 +90,7 @@ note  = "包与引擎的脚本测试: 改哪个包跑哪个包(≥2 包/引擎�
 
 [[gates]]
 match = ["memory-bank/issues/"]
-run   = ["python <skill-dir:create-issue>/scripts/gen_issues_index.py --check"]
+run   = ["python <skill-dir:memory-bank>/scripts/gen_issues_index.py --check"]
 auto  = true
 timeout = 60
 note  = "issue 索引: skill 路径由预检定位, 找不到即 STOP"

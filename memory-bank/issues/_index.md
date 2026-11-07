@@ -1,18 +1,18 @@
 # Issues Index
 
-> **本文件是生成物, 不要手改** —— 由 `../../.agents/skills/create-issue/scripts/gen_issues_index.py` 扫描 `memory-bank/issues/*.html` 的 meta
+> **本文件是生成物, 不要手改** —— 由 `../../.agents/skills/memory-bank/scripts/gen_issues_index.py` 扫描 `memory-bank/issues/*.html` 的 meta
 > (`issue-status` / `issue-stamp` / `issue-title` / `issue-summary` / `issue-type`)生成;
 > 新增报告或改状态后重跑脚本即可, 合并冲突也只需重跑。
 > 每行 = **类型 · 简述 · 报告链接**(分区即状态); 状态改在报告 HTML 的封面徽标与
-> `<meta name="issue-status">`(两处一起改)。状态取值: `Open` / `In Progress` / `Done` / `Dropped` / `Superseded`。
+> `<meta name="issue-status">`(两处一起改)。状态取值: `In Progress` / `Open` / `Done` / `Dropped` / `Superseded`。
 > 文件名 = `<YY-MM-DD-HHMM>-<type>-<slug>.html`, type 取值: bug / perf / docs / test / refactor / feat / chore / question。
 > 本索引里摘要按 `SUMMARY_MAX` **截断**(全文在报告里): 这样索引大小由**条数**决定, 不随摘要写得多长而膨胀
 > —— 否则迟早撞 `index-auto` cap, 而靠"外迁老条目"化解会打坏外部引用。
 > **已关闭状态**(`Done` / `Dropped` / `Superseded`)只列**最近若干条**(上限 `CLOSED_KEEP`, 装不进 8,000 字符预算就继续收紧;
 > 更老的**报告原地不动**, 只是不出本索引):
 > 全量清单见 [attachments/_archive.md](attachments/_archive.md), 该目录不计 cap。
-> **入池规则**: 计划外问题一律不改码, 只入池 —— 见 create-issue skill (../../.agents/skills/create-issue/SKILL.md)
-> (该不该现在修, 见 scope-guard skill)。
+> **入池规则**: 计划外问题一律不改码, 只入池 —— 流程见 create-issue skill (../../.agents/skills/create-issue/SKILL.md);
+> 机械面 `commands run kb.new issue` / `commands run kb.status` (生成器在 memory-bank skill (../../.agents/skills/memory-bank/SKILL.md)); 该不该现在修, 见 scope-guard skill。
 
 
 ## 待处理分布（Open）
@@ -27,6 +27,13 @@
 | feat | 19 |
 | chore | 1 |
 | question | 7 |
+
+## In Progress
+
+- [docs] [memory-bank 超 8K 文档摸排: 142 件需压缩蒸馏(本次只摸排)](26-11-05-0855-docs-kb-doc-compress.html) — memory-bank…
+- [question] [兼容 Transmission 可行性分析](26-10-01-2212-question-transmission-compat-feasibility.html) — (需要可行性分析)支持…
+- [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正…
+- [chore] [版本号双源矛盾: __init__.__version__ 0.2.0 vs pyproject 0.1.0](26-09-21-1408-chore-version-dual-source.html) — WebUI 顶栏透出与打…
 
 ## Open
 
@@ -81,13 +88,6 @@
 - [feat] [重新设计单种周期上传/下载量统计 (upload_size 四条件 + begin_round 底座已移除)](26-09-27-1248-feat-stats-redesign-torrent-traffic.html) — upload_size/…
 - [bug] [设置页警示条是伪警示: 只复述 schema 风险文案, 不反映配置健康; 升级失效键无任何提示](26-09-22-2002-bug-webui-config-health-warning.html) — 首页警示条由『已配置且…
 - [chore] [hatch-pet 调付费 OpenAI 图像 API 且无成本提示](26-09-20-1427-chore-skill-hatch-pet-api-cost.html) — hatch-pet 生成…
-
-## In Progress
-
-- [docs] [memory-bank 超 8K 文档摸排: 142 件需压缩蒸馏(本次只摸排)](26-11-05-0855-docs-kb-doc-compress.html) — memory-bank…
-- [question] [兼容 Transmission 可行性分析](26-10-01-2212-question-transmission-compat-feasibility.html) — (需要可行性分析)支持…
-- [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正…
-- [chore] [版本号双源矛盾: __init__.__version__ 0.2.0 vs pyproject 0.1.0](26-09-21-1408-chore-version-dual-source.html) — WebUI 顶栏透出与打…
 
 ## Done
 

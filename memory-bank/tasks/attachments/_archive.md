@@ -4,8 +4,9 @@
 > 主索引的已完结区按 8,000 字符预算裁剪(上限 `CLOSED_KEEP` 条), **本文件是全量**(只列 slug 与标题; 摘要全文在档案里)。
 > 每条链接指回 `tasks/` 下的档案原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## In Progress (30)
+## In Progress (31)
 
+- [26-11-07-memory-bank-issue-fusion](../26-11-07-memory-bank-issue-fusion.md) create-issue 融合 memory-bank(代码融合+双 SKILL)与 issue 工位机械化
 - [26-11-07-memory-bank-nav-relation-graph](../26-11-07-memory-bank-nav-relation-graph.md) kb.nav 关联文档交互: 抽屉内关系图 (局部环 / 关联泳道 / 全库) + 认领链五态解析
 - [26-09-22-deps-version-management](../26-09-22-deps-version-management.md) 软件版本管理方案（版本号 / Tag / CHANGELOG / 发版流程）
 - [26-11-06-backend-hr-badge-total-crosscheck](../26-11-06-backend-hr-badge-total-crosscheck.md) issue 26-09-30-0052 上限徽章总数轴互证复验、前提纠错与拍板

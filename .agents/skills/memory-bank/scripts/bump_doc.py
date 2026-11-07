@@ -10,7 +10,8 @@
   (直编辑正文 / 补段), 不猜位置硬塞
 - 任务档案 (`tasks/*.md`): 抬 `**Updated:**` (日期)
 - 会话切片 (`activeContext/*.md`): 抬 `> 最后活动:` (严格 YYYY-MM-DD HH:MM)
-- issue (`issues/*.html`): 自己的约定 (create-issue skill, 跨 skill 不 import 单点纪律) —— 拒绝并指路
+- issue (`issues/*.html`): 改版有自己的约定 —— 拒绝并指路 (翻状态 W4 起已收编 kb.status, 见
+  flip_status; bump 只管改版, 不翻状态)
 
 fail-fast (黄金法则): 载体不认识 / 缺状态行或变更记录段一律 rc=1 (原因与下一步打在输出里);
 HTML 变更记录只追加 li 行, 已有行零触碰。末尾固定输出「剩余人工 0 项(判断 0 · 条件 0 ·
@@ -167,10 +168,8 @@ def main(argv: list[str] | None = None) -> int:
 
     kind = detect_doc_kind(path, mb)
     if kind == DOC_KIND_ISSUE:
-        return _fail(
-            "issue 改版有自己的约定 (create-issue skill, 跨 skill 不 import 单点纪律) —— 不在 kb.bump "
-            "范围; 直改正文与 issue-stamp, 重建索引走 commands run kb.index"
-        )
+        return _fail("issue 改版有自己的约定 —— 不在 kb.bump 范围 (翻状态走 commands run kb.status); "
+                     "直改正文后重跑 commands run kb.index")
     if kind == DOC_KIND_SLICE:
         pass  # 切片可 bump: 只抬最后活动 (正文编辑是判断面)
     elif kind not in (DOC_KIND_PLAN, DOC_KIND_TASK):

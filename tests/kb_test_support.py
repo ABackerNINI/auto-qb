@@ -270,9 +270,27 @@ x
 
 
 def _write_issue(mb: Path, name: str = "26-10-17-0900-bug-p2.html") -> Path:
+    """issue 夹具: W2 机读形态 (issue-status meta + 状态徽标/类型徽标 + 状态变更日志节)。
+
+    类型徽标放在状态徽标**之前** (同模板封面行序) —— kb.status 的徽标替换若误锚到首个
+    badge (类型), 断言立即判红; 翻状态 (W4) 的两处改与日志追加都依赖这份形态。
+    """
     path = mb / "issues" / name
     path.write_text(
-        '<html><head>\n<meta name="issue-status" content="Open">\n<meta name="doc-topic" content="p2-bug">\n</head><body>x</body></html>\n',
+        """<html><head>
+<meta name="issue-status" content="Open">
+<meta name="doc-topic" content="p2-bug">
+</head><body>
+<div class="meta-row">
+  <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+</div>
+<h2>状态变更日志</h2>
+<ul>
+  <li>2026-10-17 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+</ul>
+</body></html>
+""",
         encoding="utf-8",
         newline="\n",
     )
@@ -331,6 +349,15 @@ def _closed_keep_module():
     import gen_tasks_index
 
     return gen_tasks_index
+
+
+def _issues_index_module():
+    """载入 issues 索引生成器 (进程内 import; 2026-11-07 W1 起与 gen_tasks_index 同目录同 `_common`)。"""
+    if str(SKILL_SCRIPTS) not in sys.path:
+        sys.path.insert(0, str(SKILL_SCRIPTS))
+    import gen_issues_index
+
+    return gen_issues_index
 
 
 def _closed_keep_fixture(tmp_path: Path, done: int = 0, dropped: int = 0, inflight: int = 0) -> tuple[Path, Path]:

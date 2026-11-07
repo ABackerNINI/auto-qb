@@ -19,13 +19,12 @@
     python <skill-dir>/scripts/gen_all.py --check             只比对, 不一致则退出码 1
     python <skill-dir>/scripts/gen_all.py --safety            只回答冒烟安全性, 不碰文件
     python <skill-dir>/scripts/gen_all.py --root <dir> --mb-dir <dir>   覆盖探测
-退出码: 0 成功 / 1 校验漂移或 `doc-status` 表外值 / 2 环境缺失(定位不到 create-issue skill 等)
+退出码: 0 成功 / 1 校验漂移或 `doc-status` 表外值
 """
 
 from __future__ import annotations
 
 import argparse
-import importlib.util
 import sys
 from pathlib import Path
 
@@ -36,11 +35,13 @@ from _common import StatusVocabularyError, find_root, gen_cmd, rel_posix, resolv
 SCRIPTS_DIR = Path(__file__).resolve().parent
 
 # 生成器脚本 → 所属 skill 名。**集合的唯一声明处** —— 新增一个生成器只改这里。
+# (2026-11-07 W1 起 gen_issues_index 物理并入本 skill, 四个生成器同目录同一 `_common`,
+# 计划 26-11-07-0549; 原先跨 skill 载入用的 find_skill_dir/_load_isolated 隔离机制随之退役。)
 GENERATORS = (
     ("memory-bank", "gen_tasks_index.py"),
     ("memory-bank", "gen_kb_index.py"),
     ("memory-bank", "gen_docs_index.py"),
-    ("create-issue", "gen_issues_index.py"),
+    ("memory-bank", "gen_issues_index.py"),
 )
 
 # 「无参即真动作」的生成器 —— **同步的生成物自动化解只准碰这一类**。
@@ -50,52 +51,6 @@ GENERATORS = (
 #   失败行(保守侧, 不猜不丢内容); 多登记一个非无参即动作的 → 冲突时**静默丢手写内容**,
 #   这才是危险方向, 所以登记前先问「无参跑一次, 它是不是把全部生成物都写了一遍」。
 PARAMETERLESS_ACTION_GENERATORS = frozenset({"gen_all.py"})
-
-# `<skill-dir:NAME>` 的候选位置 —— 与命令引擎 / my-commit-flow 同一套口径: 项目级 → 用户级。
-SKILL_DIR_CANDIDATES = (
-    ".agents/skills/{name}",
-    ".codebuddy/skills/{name}",
-    "~/.workbuddy-ai/skills/{name}",
-    "~/.codebuddy/skills/{name}",
-)
-
-
-def find_skill_dir(name: str, root: Path) -> Path | None:
-    """定位 skill 目录: 项目级 → 用户级, 第一个存在的即命中; 都找不到返回 None。"""
-    for tpl in SKILL_DIR_CANDIDATES:
-        cand = Path(tpl.format(name=name)).expanduser()
-        if not cand.is_absolute():
-            cand = root / cand
-        if (cand / "scripts").is_dir():
-            return cand
-    return None
-
-
-def _skill_scripts(skill: str, root: Path) -> Path | None:
-    """某个生成器所在 skill 的 scripts 目录 —— 本 skill 直接用自身, 其余按候选位置找。"""
-    if skill == "memory-bank":
-        return SCRIPTS_DIR
-    found = find_skill_dir(skill, root)
-    return (found / "scripts") if found else None
-
-
-def _load_isolated(path: Path, mod_name: str):
-    """按文件路径载入脚本, 并**隔离同名 `_common`** —— memory-bank 与 create-issue 各有一份,
-    直接 import 会串味(先载入的那份会被后一份误用)。载入完把原 `_common` 还原。"""
-    scripts = str(path.parent)
-    saved = sys.modules.pop("_common", None)
-    sys.path.insert(0, scripts)
-    try:
-        spec = importlib.util.spec_from_file_location(mod_name, path)
-        module = importlib.util.module_from_spec(spec)
-        sys.modules[mod_name] = module
-        spec.loader.exec_module(module)
-    finally:
-        sys.path.remove(scripts)
-        sys.modules.pop("_common", None)
-        if saved is not None:
-            sys.modules["_common"] = saved
-    return module
 
 
 def _mb_module(name: str):
@@ -134,15 +89,15 @@ def collect(root: Path, mb: Path) -> dict[Path, str]:
     for archive, text in docs.build_archives(root, mb).items():
         out[archive] = text
 
-    ci_scripts = _skill_scripts("create-issue", root)
-    if ci_scripts is None:
-        raise FileNotFoundError("定位不到 create-issue skill —— 它的 gen_issues_index.py 是生成物之一")
-    ci = _load_isolated(ci_scripts / "gen_issues_index.py", "_gen_issues_index")
-    issues_dir = ci.resolve_issues_dir(root)
-    out[issues_dir / "_index.md"] = ci.build(root, issues_dir)
+    issues_gen = _mb_module("gen_issues_index")
+    # issues 目录恒 `<mb>/issues`(FAMILIES["issue"].spec.dir 单点落点) —— 与上面 tasks/plans/reports
+    # 同用 `mb`; 原三候选探测(`resolve_issues_dir(root)`)随 new_issue.py 一并退役(2026-11-07),
+    # 顺带修掉 `--mb-dir` 指向他处时 issues 落错树的隐患。
+    issues_dir = mb / "issues"
+    out[issues_dir / "_index.md"] = issues_gen.build(root, issues_dir)
     # 归档索引: 主索引的已关闭区只留最近 `CLOSED_KEEP` 条(控 cap), 全量清单另落这里 ——
     # 它必须与主索引**同批**生成, 否则 `gen_issues_index --check` 会因它缺席而恒红。
-    out[issues_dir / ci.ARCHIVE_REL] = ci.build_archive(root, issues_dir)
+    out[issues_dir / issues_gen.ARCHIVE_REL] = issues_gen.build_archive(root, issues_dir)
     return out
 
 
@@ -168,9 +123,6 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         outputs = collect(root, mb)
-    except FileNotFoundError as exc:
-        sys.stderr.write(f"{exc}\n")
-        return 2
     except StatusVocabularyError as exc:
         # gen_docs_index.build() 的表外状态 fail-fast —— 让它从"静默漏收"变成响亮报错,
         # kb.index / kb.check 两条入口都在这里接住 (见 pitfalls/kb/doc-status-meta.md)。

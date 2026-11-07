@@ -23,7 +23,7 @@ Form 切**内容形态**, 与四工位(制品用途/寿命)**正交**, 四工位
 
 | 这一轮做的事 | 放 | 形态判定 (Form) |
 |---|---|---|
-| 撞见计划外的问题, 暂不修 | `issues/<stamp>-<type>-<slug>.html` (create-issue skill) | `how-to`(复现) + `reference`(事实) |
+| 撞见计划外的问题, 暂不修 | `issues/<stamp>-<type>-<slug>.html` (create-issue skill; 入池/翻状态走 `kb.new issue`/`kb.status`) | `how-to`(复现) + `reference`(事实) |
 | 要改动, 需方案与拍板 | `plans/<stamp>-plan-<topic>.html` | `explanation` |
 | 审计 / 故障取证 / 可行性分析 | `reports/<stamp>-report-<topic>.html` | `explanation` |
 | 跨会话推进的专题 (≥2 会话 / ≥5 轮指令 / 出现波次表述) | `tasks/YY-MM-DD-<领域>-<专题>.md` (memory-bank skill) | `explanation` |
@@ -103,6 +103,7 @@ issue 被认领 → 两侧都记引用 (issue 的 `doc-refs` ↔ 档案的 `**Re
 | 新建计划 | `commands run kb.new plan --title ".." --topic <kebab>` | 戳 / 命名 / 头部 / SLOT / 索引 |
 | 新建任务档案 | `commands run kb.new task --title ".." --topic <领域>-<专题>` | 同上 + Summary 预填 (裁定 A1) + 查重 (含跨 clone) |
 | 新建报告 | `commands run kb.new report --title ".." --topic <kebab>` | 同上; **出厂即 Done** (快照终态) |
+| 新建 issue | `commands run kb.new issue <slug> --type <8 类之一> --title ".." --summary ".." [--tier|--module|--reporter|--topic]` | 戳 / 命名 / 头部 / badge / 索引 (含归档); 流程语义见 create-issue skill |
 | 新建坑档 | `commands run kb.new pitfall --class <7 类之一> --title ".." --topic <slug> --triggers "词, 词"` | 三行头 (摘要预填; **触发词走参数** —— 路由判断不可派生, 裁定 A7 参数分支) |
 | 新建基线切片 | `commands run kb.new baseline --title ".." --topic <slug> --total "N passed + M skipped"` | 戳 / 基线时间 / 命名; **`--total` 由 test.full 实测誊写** (裁定 A4: 命令不编造数字) |
 | 新建进展件 | `commands run kb.new progress --title ".." --topic <slug> --triggers "词, 词"` | 三行头 |
@@ -113,7 +114,7 @@ issue 被认领 → 两侧都记引用 (issue 的 `doc-refs` ↔ 档案的 `**Re
 - 命令建后留 `<!-- SLOT: -->` 填空标记 (判断面), **头部区零 SLOT** (机器字段由命令填); 填完前
   新增面守卫 (冻结线之后新建件) 判红 (坑档 / 进展件命名无时间戳, 不在扫描面, 由既有守卫兜底)。
 - `--refs` 走 D4 双向补链: 目标件自动反向声明, 只动元数据行, 幂等 (见上「认领链」)。
-- **切片不由 `kb.new` 建** (拍板: 统一 `kb.wrap` 收尾处理); issues 仍走 create-issue skill。
+- **切片不由 `kb.new` 建** (拍板: 统一 `kb.wrap` 收尾处理); issues 已入列 (2026-11-07 翻案 [26-10-17-0527](../plans/26-10-17-0527-plan-memory-bank-doc-pipeline.html) D2): 入池 `commands run kb.new issue` / 翻状态 `commands run kb.status`, 流程语义见 create-issue skill。
 - **伞形档案与派生计划各持不同 key 时用档案锚点**: `kb.wrap --topic <切片 slug> --archive <档案 Topics 键>`
   一次同时命中两侧 (切片仍由 `--topic` 落, 档案按 `--archive` 精确匹配; 不传时沿用 `--topic` 匹配,
   行为不变)。**不要为此改档案 Topics** —— 档案键是件自身身份, 不随派生计划变。注: `kb.docmap --forks`

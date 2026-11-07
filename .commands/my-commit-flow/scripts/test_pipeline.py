@@ -74,7 +74,9 @@ class ExpandTest(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp.name)
-        (self.root / ".agents" / "skills" / "create-issue").mkdir(parents=True)
+        # 2026-11-07 W1 起夹具用 memory-bank(计划 26-11-07-0549: 闸门里 skill-dir 的实际指向;
+        # create-issue 已不再含 scripts) —— 机制断言与 skill 名无关, 名字只求贴近真实用法。
+        (self.root / ".agents" / "skills" / "memory-bank").mkdir(parents=True)
 
     def tearDown(self) -> None:
         self.tmp.cleanup()
@@ -110,9 +112,9 @@ class ExpandTest(unittest.TestCase):
         self.assertIn("each_limit", str(raised.exception))
 
     def test_skill_dir_placeholder(self) -> None:
-        cmds, skip = _pipeline.expand_run("python <skill-dir:create-issue>/scripts/gen.py --check", ctx(self.root, []))
+        cmds, skip = _pipeline.expand_run("python <skill-dir:memory-bank>/scripts/gen.py --check", ctx(self.root, []))
         self.assertIsNone(skip)
-        found = _pipeline.find_skill_dir("create-issue", self.root)
+        found = _pipeline.find_skill_dir("memory-bank", self.root)
         self.assertEqual(cmds, [f"python {found}/scripts/gen.py --check"])
 
     def test_skill_dir_missing_is_error(self) -> None:
