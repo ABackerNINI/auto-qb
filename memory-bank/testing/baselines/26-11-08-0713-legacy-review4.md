@@ -2,6 +2,7 @@
 
 > 摘要: test.full 5753+2: R4 config-infra 36 条收口合并树基线
 > 基线时间: 2026-11-08 07:13
+**Refs:** memory-bank/tasks/26-11-08-config-legacy-review4-config-infra-claim.md
 
 ## 验收数字
 
