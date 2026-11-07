@@ -466,7 +466,7 @@ def test_chain_frontend_static_and_node():
     assert "overflow: auto" in pop_css
     assert "pop.contains(t)" in js, "滚动关闭必须放过浮窗内部滚动, 否则长链滚不动"
     rows = _static("shared/drawer_rows.js")
-    assert 'act: "chain"' in rows and 'A → B → C' in rows
+    assert 'act: "chain"' in rows and 'A -> B -> C' in rows
     for tpl in (
         "shared/drawer_tpl/01-general-hero-tall.js", "shared/drawer_tpl/02-general-cards-low.js",
         "shared/drawer_tpl/03-general-dossier-collapsed.js"

@@ -9,7 +9,7 @@
  * (大小/进度/缺口/可用性最低值)以核心 buildFileTree 为准 —— 口径改动须两处对齐。
  * 动作(plan §04 映射行): 勾选批量优先级 → setFilePriority(p, indices)(S5 批量通道, indices
  * 从 drawerFileRows() 树收集: 勾目录 = 整棵子树三态框, 一次 POST files/priority); 单文件徽章
- * 点击循环 不下载→正常→高→最高(逐次真实提交, 回执/toast 由既有链自带)。
+ * 点击循环 不下载->正常->高->最高(逐次真实提交, 回执/toast 由既有链自带)。
  * 渐进字段: 每文件 availability 列常驻, 无值出 — 占位(U4: 引擎 omitEmpty 已删, 计划
  * 26-10-13-0811 列常驻 + — 占位, 原 hasav/noav 双 grid 手搓退役)。
  * 渲染纪律: dtHtml 全量转义(dtRaw 只用于拼接本变体 dtHtml 产出的预转义片段), replaceChildren
@@ -336,7 +336,7 @@
       avTitle: avNum ? "qB availability: 全 swarm 中该文件数据的份数" : "qB 未返回该文件可用性",
       badge: H.prioText(item.prio, "正常"),
       badgeCls: prioBadgeClass(item.prio).trim(),
-      badgeTitle: "优先级: " + H.prioText(item.prio, "正常") + " — 点击循环 不下载→正常→高→最高",
+      badgeTitle: "优先级: " + H.prioText(item.prio, "正常") + " — 点击循环 不下载->正常->高->最高",
       _cls: "file" + (checked ? " is-chk" : ""),
     };
     rowMem.set(r.path, { dir: false, ck: checked, size: item.size, prog: item.prog, prio: item.prio, avN, row });

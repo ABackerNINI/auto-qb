@@ -22,7 +22,7 @@ const SKIP_GATE_LABELS = {
 
 /* 设定位置对话框: 下拉开层后「限高重测」的延时(2026-10-29)。开层时 body 的 padding-bottom 走
  * 200ms 过渡(三皮肤 dialogs.css `.modal.move-dialog .add-dialog-body`), 过渡**进行中**量到的净空
- * 只有一半 ⇒ _fitAddPop 会把列表误限到 120px 且不再自恢复; 过渡结束(+余量)后复位重测一次。
+ * 只有一半 -> _fitAddPop 会把列表误限到 120px 且不再自恢复; 过渡结束(+余量)后复位重测一次。
  * !本常量必须 > CSS 过渡时长 —— 改任一边必须同步另一边(守阵查两处都在)。 */
 const MOVE_POP_SETTLE_MS = 240;
 
@@ -36,7 +36,7 @@ const MOVE_POP_SETTLE_MS = 240;
  *   (有序), 渲染列组(dtPairCols)/合并页签清单(dtMergeTabList)/命中判据(_dtPairOf)共此一份
  *   —— tpl/drawer.html 不再硬编码 gc/tp 两个 <template> 分支与两张合并页签按钮(删「渲染列组
  *   vs 命中」双份判据, 计划 W4 改动面)。
- * !R2→R3 历史(判据语义, 不得回退): R2 曾按标志值渲染固定一对 + 挂载按当前对找宿主 = 空列 bug
+ * !R2->R3 历史(判据语义, 不得回退): R2 曾按标志值渲染固定一对 + 挂载按当前对找宿主 = 空列 bug
  *   (用户报「选择并排后 tracker/用户标签显示常规/内容且为空」); R3 起列组/挂载/命中统一读
  *   「当前页签所属对」(dtPair)。宽度门 1920 是**暂态遮蔽**(dtSplitOn/dtMergeTabsOn 判 false,
  *   drawerMerge 标志不动) —— 缩窗过门回落单栏, 拉宽自动恢复; 门常量与两列封顶 2400(W6 起
@@ -171,8 +171,8 @@ window.AQB_DRAWER = {
       }));
     },
   },
-  /* W4 收口的两条监听(语义逐字未改): ① resize 防抖回写 dtWinW +
-   * 门跨越后重挂/补给; ② drawerMerge 换代(右键开关)后重挂 + 第二列数据补给。
+  /* W4 收口的两条监听(语义逐字未改): (1) resize 防抖回写 dtWinW +
+   * 门跨越后重挂/补给; (2) drawerMerge 换代(右键开关)后重挂 + 第二列数据补给。
    * !全局 mixin 会波及子组件与 <transition> 的 BaseTransition 假实例(其上无数据面), 必须
    * `if (!this.drawer) return;` 守卫 —— 与模板选择层的 traffic 通知同规避式(后者在
    * drawer_templates.js 的 mixin 里, 同为全局注入, 互不重复注册)。 */
@@ -354,7 +354,7 @@ window.AQB_DRAWER = {
         danger: true,
         icon: "#i-bolt",
         wide: true,          // 原因/名称行宽松可读(与删除确认框同形态)
-        // 语义配色分级(计划 26-10-19-2341): 跳检有代价但可重来 → warn 档(与不可逆的删除拉开
+        // 语义配色分级(计划 26-10-19-2341): 跳检有代价但可重来 -> warn 档(与不可逆的删除拉开
         // 一档); 整框 tone 不随预检结果升级 —— 升级由 verdict 行级 is-error 表达。这样取舍
         // 一半是被 T24 逼的: _skipPrecheck 六分支被逐语句等值断言钉死, 加一行就红, 故派生
         // 只能落在构造参数里
@@ -446,7 +446,7 @@ window.AQB_DRAWER = {
       if (results.length > 1) {
         rows.push({
           icon: "#i-select-all",
-          // 计数行按最坏结果取档: 有禁止→error, 有需强制→warn, 全 ok→ok(计划 26-10-19-2341)
+          // 计数行按最坏结果取档: 有禁止->error, 有需强制->warn, 全 ok->ok(计划 26-10-19-2341)
           tone: blocked.length ? "error" : force.length ? "warn" : "ok",
           label: "预检",
           value: `可跳检 ${ok.length} / 需强制 ${force.length} / 禁止 ${blocked.length}`,
@@ -647,7 +647,7 @@ window.AQB_DRAWER = {
       }
       return false;
     },
-    /* 速度限制…: 上传/下载两输入(KiB/s; 空=不改, 0=不限) → POST limits(×1024 转 bytes, 0 原样传) */
+    /* 速度限制…: 上传/下载两输入(KiB/s; 空=不改, 0=不限) -> POST limits(×1024 转 bytes, 0 原样传) */
     async editLimits(h = "") {
       const hash = this._editTargetHash(h);
       if (!hash) return;
@@ -671,7 +671,7 @@ window.AQB_DRAWER = {
           this.toast("限速值无效: 需为非负数字(KiB/s)", "warn");
           return;
         }
-        body[key] = Math.round(this.kibToBytes(n));  // KiB/s → bytes/s; 0 原样传(后端语义 = 不限)
+        body[key] = Math.round(this.kibToBytes(n));  // KiB/s -> bytes/s; 0 原样传(后端语义 = 不限)
       }
       if (!Object.keys(body).length) {
         this.toast("未作修改: 输入与当前值一致", "ok", 2000);
@@ -679,7 +679,7 @@ window.AQB_DRAWER = {
       }
       await this._editPost(hash, "limits", body, "限速已更新");
     },
-    /* 分享率限制…: 分享率/做种时间(h)/不活跃做种时间(h) → POST share-limits(-1 = 恢复全局默认) */
+    /* 分享率限制…: 分享率/做种时间(h)/不活跃做种时间(h) -> POST share-limits(-1 = 恢复全局默认) */
     async editShareLimits(h = "") {
       const hash = this._editTargetHash(h);
       if (!hash) return;
@@ -712,7 +712,7 @@ window.AQB_DRAWER = {
           this.toast("时长无效: 需为非负小时数或 -1", "warn");
           return;
         }
-        body[key] = n === -1 ? -1 : Math.round(n * 3600);  // 小时 → 秒; -1 原样(未设/全局)
+        body[key] = n === -1 ? -1 : Math.round(n * 3600);  // 小时 -> 秒; -1 原样(未设/全局)
       }
       if (!Object.keys(body).length) {
         this.toast("未作修改: 输入与当前值一致", "ok", 2000);
@@ -725,8 +725,8 @@ window.AQB_DRAWER = {
      * 单点 —— 全局 mixin 合并, 跨模块互调与拆分前逐字等价)。下拉候选 = /api/paths 已知保存路径;
      * 单种子预填当前 save_path, 批量/单组无预填(各值不同, 预填误导)。目标集合打开时刻锁定(与 meta 同口径)。
      * combobox 收层/限高/悬停与添加种子三下拉 + meta 分类同套口径(见 pitfalls/web-ui/combobox-focusout-close)。
-     * 三入口名/签名(editMove/editMoveMulti/editMoveGroup)与下游投递(editMove→_editPost,
-     * editMoveMulti/editMoveGroup→_bulkEditPost)不变 —— 守阵 + 触发登记表钉这些。 */
+     * 三入口名/签名(editMove/editMoveMulti/editMoveGroup)与下游投递(editMove->_editPost,
+     * editMoveMulti/editMoveGroup->_bulkEditPost)不变 —— 守阵 + 触发登记表钉这些。 */
     async editMove(h = "") {
       const hash = this._editTargetHash(h);
       if (!hash) return;
@@ -786,7 +786,7 @@ window.AQB_DRAWER = {
       this._movePopSettle();  // 高度过渡结束后复位重测限高(过渡中量到的净空只有一半)
     },
     /* 高度过渡后的限高重测(2026-10-29): 开层时 body 的 padding-bottom 走 200ms 过渡, 过渡中量到的
-     * 净空偏小会把列表误限到 120px 且不再自恢复 ⇒ 过渡结束(+余量)后 _fitAddPop 复位重测一次。
+     * 净空偏小会把列表误限到 120px 且不再自恢复 -> 过渡结束(+余量)后 _fitAddPop 复位重测一次。
      * 时长单点见文件头 MOVE_POP_SETTLE_MS(必须 > CSS 过渡时长, 改任一边同步另一边)。 */
     _movePopSettle() {
       clearTimeout(this._movePopSettleT);
@@ -967,7 +967,7 @@ window.AQB_DRAWER = {
         return false;
       }
     },
-    /* 重命名…: 种子显示名(不改磁盘文件名) → POST rename */
+    /* 重命名…: 种子显示名(不改磁盘文件名) -> POST rename */
     async editRename(h = "") {
       const hash = this._editTargetHash(h);
       if (!hash) return;

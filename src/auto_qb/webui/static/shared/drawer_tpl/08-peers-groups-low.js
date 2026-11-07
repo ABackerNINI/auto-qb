@@ -197,8 +197,8 @@
   /* 组头聚合(设计稿同款口径) */
   function aggText(key, ms) {
     const sum = (k) => ms.reduce((s, p) => s + num(p[k]), 0);
-    if (key === "take") return T`↑ <b>${fmtSpeedOf(sum("upspeed"))}</b> · 会话已上传 <b>${fmtSizeOf(sum("uploaded"))}</b>`;
-    if (key === "feed") return T`↓ <b>${fmtSpeedOf(sum("dlspeed"))}</b> · 会话已下载 <b>${fmtSizeOf(sum("downloaded"))}</b>`;
+    if (key === "take") return T`实时上传 <b>${fmtSpeedOf(sum("upspeed"))}</b> · 会话已上传 <b>${fmtSizeOf(sum("uploaded"))}</b>`;
+    if (key === "feed") return T`实时下载 <b>${fmtSpeedOf(sum("dlspeed"))}</b> · 会话已下载 <b>${fmtSizeOf(sum("downloaded"))}</b>`;
     if (key === "idle") return T`完整副本同伴 · 当前无流量`;
     if (key === "choke") return T`对方有意 · 我方已限流`;
     return T`握手未完成`;

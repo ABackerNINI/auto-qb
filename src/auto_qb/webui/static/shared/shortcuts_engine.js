@@ -451,7 +451,7 @@ Object.assign(window.AQB_SHORTCUTS.methods, {
     },
     /* ---------------- W2/W3: 选择与目标解析 ---------------- */
     _kbHint() {
-      this.toast("先点选一行, 或用 ↑↓ / Home / End 定位目标(空列表无动作)", "info", 2500);
+      this.toast("先点选一行, 或用 上下方向键 / Home / End 定位目标(空列表无动作)", "info", 2500);
     },
     /* 追剧页与 _kbRows 同序的单元链(剧单元 + 展开的集单元), 供 _toggleUnit/_extendUnit */
     _kbShowUnits() {

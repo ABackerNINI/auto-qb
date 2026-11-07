@@ -4,7 +4,7 @@
  * 加载序 = 四套皮肤 index.html 清单里紧跟根文件之后(与拆分前同一迭代替换序)。
  */
 Object.assign(window.AQB_DRAWER.methods, {
-    /* ---------------- 种子详情面板(R1B → 方案A 底部停靠, 计划 26-10-03-0917 W1/W2) ----------------
+    /* ---------------- 种子详情面板(R1B -> 方案A 底部停靠, 计划 26-10-03-0917 W1/W2) ----------------
      * 数据: /api/torrents/{hash} 全字段详情; /trackers /files /peers 按需拉取。
      * trackers/peers 在对应 tab 激活期间主节拍轮询(2026-10-14 改, =currentPollMs; 页面隐藏时暂停), 关闭面板即停 —— 不进主循环 tick;
      * General 分组行在 drawerGeneralSections 预格式化(qB 哨兵 -1/-2/8640000 在此统一翻译)。
@@ -35,7 +35,7 @@ Object.assign(window.AQB_DRAWER.methods, {
       this._stopDrawerPoll();
       this._stopDrawerFollow();  // 显式打开优先于在途跟随(双击换目标 vs 防抖中的跟随, 不得互相打架)
       this._drawerSwitchEnd();   // FX-29: 面板整体重建 -> 无"旧内容可保留", 待到集合与遮罩一并作废
-      // 流量页签(S5b, plan 26-10-03-0946 §07 表②)受 qb_traffic_enabled 门控: 上次停在流量页签
+      // 流量页签(S5b, plan 26-10-03-0946 §07 表2)受 qb_traffic_enabled 门控: 上次停在流量页签
       // 而功能后来关闭时落回常规页(页签按钮 v-if=qbTrafficOn 不渲染, 初值也不能落在隐形页签上)
       const last = this.drawerLastTab;
       const initialTab = last === "traffic" && !this.qbTrafficOn ? "general" : (last || "general");

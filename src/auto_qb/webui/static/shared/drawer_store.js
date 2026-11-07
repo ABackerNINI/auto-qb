@@ -28,9 +28,9 @@
  */
 /* W5(计划 26-10-13-0811 L5「更新是写字段, 不是重建」): 三个列表数据源(trackers/files/peers)
  * 共用的引用稳定合并 —— 轮询/重拉到来时按行键对账: 旧行在 = **原对象写字段**(Object.assign,
- * Vue 3 同值不触发 → 未变行零重渲), 新行追加, 失踪行剔除; 数组恒按服务端序重建(顺序不承载
+ * Vue 3 同值不触发 -> 未变行零重渲), 新行追加, 失踪行剔除; 数组恒按服务端序重建(顺序不承载
  * 语义, 与主循环 applyStateRows 同口径)。返回新数组实例(顶层引用变更保证 Vue 感知), 但行
- * 对象生命周期内引用稳定 → keyed 补丁下行 DOM 身份恒定(速度格原节点续用, 勾选不跳动)。
+ * 对象生命周期内引用稳定 -> keyed 补丁下行 DOM 身份恒定(速度格原节点续用, 勾选不跳动)。
  * 行键单点: trackers=url / files=index(缺则 name) / peers=ip:port —— 与各表 rowKey 口径一致。 */
 function _dtMergeRows(oldRows, newRows, keyOf) {
   if (!Array.isArray(newRows)) return [];
@@ -132,7 +132,7 @@ window.AQB_DRAWER_STORE = {
      * !seq bump 只在「确有缺口要补」时执行(issue 26-10-30-0622): 两源都被数据/门挡住仍前进
      *   代际, 会把**在飞**的页签取数(旧 seq)打成 stale —— 响应在 _fetchDrawerSource 被丢弃,
      *   而 finally 的 stale 分支刻意不清 loading 门(前提是「新在途请求持有它」, 补给方没补发
-     *   时不成立), 门成孤儿且无重发路径 ⇒ 合并对双列停「正在加载…」。 */
+     *   时不成立), 门成孤儿且无重发路径 -> 合并对双列停「正在加载…」。 */
     _drawerMergeSupply() {
       if (!this.drawer.open || !this.dtSplitOn) return;
       const pair = this._dtPairOf(this.drawer.tab);
@@ -158,7 +158,7 @@ window.AQB_DRAWER_STORE = {
     },
     _stopDrawerPoll() {
       this.stopPoll("drawer");
-      // !本方法**不清** _drawerSoftSwitch: 它会在 _switchDrawerTarget→_loadDrawerTab→_startDrawerPoll
+      // !本方法**不清** _drawerSoftSwitch: 它会在 _switchDrawerTarget->_loadDrawerTab->_startDrawerPoll
       // 途中被调用, 而列表 loading 门抑制必须在同一次 _loadDrawerTab 的 fetcher 里已生效(见
       // _drawerListLoadingOn); 该标记只在 _drawerSwitchEnd 落定/被打断时清。
       // 流量页签(S5b)的低频轮询同收: 本方法是抽屉页签轮询的收口单点(closeDrawer/drawerTab/
@@ -167,7 +167,7 @@ window.AQB_DRAWER_STORE = {
       this._qbPollStop("torrent");
     },
     /* 抽屉页签轮询走长驻骨架(polling.js::startPoll 单点): 这里只声明差异 ——
-     *   - 节拍 2026-10-14(用户报「详情面板用户页实时速度刷新率太低」): 5s 固定 → 主节拍
+     *   - 节拍 2026-10-14(用户报「详情面板用户页实时速度刷新率太低」): 5s 固定 -> 主节拍
      *     currentPollMs()(种子页刷新间隔, 按种子量分档 1.5/2/3s) —— 实时速度与行数据同频观。
      *     旧 P1-4 把 5s 省 qB 直连成本但把速度滞后直接卖掉, 用户口径是同频; 服务端 peers 短缓存
      *     (1s)窗口仍窗口外, trackers 默认 2s 缓存把 1.5s 档里的白拉吸收。失败退背同主轮。
@@ -229,18 +229,18 @@ window.AQB_DRAWER_STORE = {
     },
     /* ---------------- 四 fetcher 的唯一取数骨架(R21-A-01, 2026-10-21 收敛) ----------------
      * 落袋次序是有心之作, 原先在 detail/trackers/files/peers 里各写一遍(每份 ~22 行, 全层 13 个
-     * _drawerStale 判点): hash 快照 -> ① 前置门 -> try{api} -> ② stale 守卫 -> ③ 归一 + 引用稳定
+     * _drawerStale 判点): hash 快照 -> (1) 前置门 -> try{api} -> (2) stale 守卫 -> (3) 归一 + 引用稳定
      * 合并 -> 清失败标记 -> catch{失败提示 / stale 守卫 / 落失败标记} -> finally{stale 守卫
      * -> 清 loading -> _dtNotify -> _drawerDone}。
      * 次序颠倒不报错, 只静默变成用户可见故障, 所以只留这一份:
-     *   - ③ 之前不判 stale = 旧响应覆盖新目标(W2);
+     *   - (3) 之前不判 stale = 旧响应覆盖新目标(W2);
      *   - 列表源 _dtNotify 早于清 loading = 空列表停「正在加载…」一拍轮询(2026-10-07 报障);
      *   - 漏 _drawerDone = FX-29 遮罩等一个永不到手的源, 永久挂死(2026-10-04 实测)。
      * 差异项全部外置在 _DT_FETCH 表, 本方法不认识任何具体数据源。 */
     async _fetchDrawerSource(src, silent = false, seq = 0) {
       const cfg = _DT_FETCH[src];
       const hash = this.drawer.hash;
-      // ① 前置门: 列表源走门抑制单点(软切换窗口内不置门, 见 _drawerListLoadingOn); 详情源没有
+      // (1) 前置门: 列表源走门抑制单点(软切换窗口内不置门, 见 _drawerListLoadingOn); 详情源没有
       //    「上一目标留下的空态」要保, 恒置 loading 并清 error(它不参与轮询, 无静默路径)。
       if (cfg.loadingKey) {
         if (this._drawerListLoadingOn(silent)) this.drawer[cfg.loadingKey] = true;
@@ -250,8 +250,8 @@ window.AQB_DRAWER_STORE = {
       }
       try {
         const r = await this.api(cfg.url(hash));
-        if (this._drawerStale(hash, seq)) return;  // ② 旧响应丢弃(W2 代际纪律)
-        /* ③ 落袋三步: 归一(qB 键名适配 / 恒数组形) -> 按行键引用稳定合并(W5: 写字段不重建, 行
+        if (this._drawerStale(hash, seq)) return;  // (2) 旧响应丢弃(W2 代际纪律)
+        /* (3) 落袋三步: 归一(qB 键名适配 / 恒数组形) -> 按行键引用稳定合并(W5: 写字段不重建, 行
          * DOM 身份恒定) -> 写目标状态键。详情源 rowKey 为 null, 整值落袋。 */
         const v = cfg.norm(this, r);
         this.drawer[cfg.key] = cfg.rowKey
@@ -310,7 +310,7 @@ window.AQB_DRAWER_STORE = {
         this._fetchDrawerPeers(false, seq);
         this._startDrawerPoll();
       } else if (tab === "content") this._fetchDrawerFiles(false, seq);
-      // 流量页签(S5b, plan 26-10-03-0946 §07 表②): 数据源 /api/traffic/qb/torrent/{hash};
+      // 流量页签(S5b, plan 26-10-03-0946 §07 表(2)): 数据源 /api/traffic/qb/torrent/{hash};
       // 打开时拉取一次 + 打开期间按采样间隔低频续拉(qb_traffic_chart.js _qbPollStart,
       // meta.interval_s 取间隔), 关抽屉/切页签/换目标由 _stopDrawerPoll 统一收 ——
       // hash 上下文竞态(换目标后旧响应)在 _qbLoad 的 stale 判定里丢弃
@@ -354,12 +354,12 @@ window.AQB_DRAWER_STORE = {
       this._drawerBusyArm();   // 延迟点亮遮罩(快响应时用户看不到任何中间态)
       this.filePrio.visible = false;  // 内容页签小菜单跨种子失效(与 drawerTab/closeDrawer 同口径)
       /* FX-29 软切换标记(第九次形态, 见 _drawerListLoadingOn): 本次换目标保留**上一个目标的已落袋
-       * 结果**(其中"空列表"= 没有对端/没有 tracker, 是种子的**常态**) ⇒ 期间三个列表 fetcher
+       * 结果**(其中"空列表"= 没有对端/没有 tracker, 是种子的**常态**) -> 期间三个列表 fetcher
        * 不置 loading 门 —— 否则模板门 `loading && 无行` 会把这份常态空态顶掉一帧换成「正在加载…」,
-       * 数据回来再换回 = 用户所报「切换种子时『暂无已连接用户』闪烁」(逐帧实测 `E→L→E`)。
+       * 数据回来再换回 = 用户所报「切换种子时『暂无已连接用户』闪烁」(逐帧实测 `E->L->E`)。
        * !必须在 _loadDrawerTab **之前**置位: 三 fetcher 在 _loadDrawerTab 内、await 之前**同步**读它;
        *   而本方法开头的 _stopDrawerPoll **不清**本标记(见其注释), 故置位不会被其内的
-       *   _startDrawerPoll→_stopDrawerPoll 抹掉(这一点与旧宽限标记相反)。落定/被打断由
+       *   _startDrawerPoll->_stopDrawerPoll 抹掉(这一点与旧宽限标记相反)。落定/被打断由
        *   _drawerSwitchEnd 清。 */
       this._drawerSoftSwitch = true;
       this._loadDrawerTab(this.drawer.tab);
@@ -416,7 +416,7 @@ window.AQB_DRAWER_STORE = {
     /* 切换期收尾: 撤待到集合 / 撤延迟 / 撤遮罩(closeDrawer 与中途打断同样走这里) */
     _drawerSwitchEnd() {
       this._drawerWait = null;
-      this._drawerSoftSwitch = false;  // 软切换结束 ⇒ 列表 loading 门恢复(见 _drawerListLoadingOn)
+      this._drawerSoftSwitch = false;  // 软切换结束 -> 列表 loading 门恢复(见 _drawerListLoadingOn)
       this._drawerBusyDisarm();
       this.drawer.switching = false;
     },
@@ -425,7 +425,7 @@ window.AQB_DRAWER_STORE = {
      * drawerPeerRows, 变体 07/08/09 的 peerList 直读原始对端对象)统一按 dlspeed / upspeed
      * 取名, 故在落袋单点(_fetchDrawerPeers)做一次键名适配: 补 dlspeed / upspeed(保留原键,
      * 其余字段 dl_speed 系的 downloaded/uploaded/flags/progress/relevance 本就同名无需动)。
-     * 漏这一步的症状 = 用户页上下载恒 0(取不到值 → 0), 而桩服务若也按错名造数据则测不出来。 */
+     * 漏这一步的症状 = 用户页上下载恒 0(取不到值 -> 0), 而桩服务若也按错名造数据则测不出来。 */
     _drawerNormPeers(resp) {
       const r = resp && typeof resp === "object" ? resp : { peers: [] };
       const fix = (x) => {
@@ -444,16 +444,16 @@ window.AQB_DRAWER_STORE = {
      * 「保留旧数据撑几何 + 遮罩防串显」保留的是**上一个目标的已落袋结果** —— 而**空列表(没有对端/
      * 没有 tracker)是种子的常态**, 这份"已落袋的空"同样在屏上。但三个列表 fetcher 一律 `loading = true`,
      * 模板门 `loading && !行数` 就把这份既有的空态顶掉一帧换成「正在加载…」, 数据(空)回来再换回 ——
-     * 用户看到的就是「『暂无已连接用户』闪烁」。逐帧实测(临时探针, 已删): 全空桩下软切换序列 = `E→L→E`
+     * 用户看到的就是「『暂无已连接用户』闪烁」。逐帧实测(临时探针, 已删): 全空桩下软切换序列 = `E->L->E`
      * (E=空态 / L=加载门), 即本坑。
      * 修法: 换目标窗口(`_drawerSoftSwitch`, 由 _switchDrawerTarget 于 _loadDrawerTab **之前**置位)内
      * **不置**列表 loading 门 —— 屏上那份旧结果(含空)是归属上一目标的**已确认**状态, 在被新结果取代
      * 之前不该被 loading 覆盖; 「还没到新的」由 FX-29 遮罩(160ms 延迟点亮)表达。
      * !两条硬约束(本轮踩过):
-     *   ①**不得**改成「空响应视为『未就绪』→ 延迟渲染/重拉」—— 那会把常态的空推迟(首版固定 1s 重拉,
+     *   (1)**不得**改成「空响应视为『未就绪』-> 延迟渲染/重拉」—— 那会把常态的空推迟(首版固定 1s 重拉,
      *     被用户否掉: 「种子的常态就是没有对端」; 何况后端对空响应还有 1s 短缓存, 重拉只会拿回空包)。
-     *   ②标记必须**在 _loadDrawerTab 之前**置位(三 fetcher 在其内 await 前同步读), 且
-     *     _stopDrawerPoll **不得**清它(_loadDrawerTab→_startDrawerPoll 会调它)。
+     *   (2)标记必须**在 _loadDrawerTab 之前**置位(三 fetcher 在其内 await 前同步读), 且
+     *     _stopDrawerPoll **不得**清它(_loadDrawerTab->_startDrawerPoll 会调它)。
      * 冷启动(openTorrentDrawer)不走本方法: 那时无旧结果可保留, loading 由该方法按 initialTab 同帧置位。 */
     _drawerListLoadingOn(silent) {
       return !silent && !this._drawerSoftSwitch;

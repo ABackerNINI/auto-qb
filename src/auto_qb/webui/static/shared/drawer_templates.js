@@ -9,10 +9,10 @@
  * !W7(计划 26-10-11-2106)恢复注(历史): W5/W6 曾退役本文件与 15 个变体(改声明式密度档) —— 用户
  * 裁定**越权**(计划目标只是「表格与主表能力统一」= W2 接壳, 从未授权动模板), 本文件与
  * drawer_tpl/ 全体按 W4 期形态原样恢复。相对 a05d35da 基座的三处适配(均为 W2-W4 已定案):
- *   ① 合并机械住 drawer.js(W4 收口), 本层只经 window.AQB_DRAWER_MERGE.pairOf 消费对结构;
- *   ② 00-core 注入只余变体专属的 .dt-tpl 限宽规则(合并/菜单/流量布局规则 W6 起在
+ *   (1) 合并机械住 drawer.js(W4 收口), 本层只经 window.AQB_DRAWER_MERGE.pairOf 消费对结构;
+ *   (2) 00-core 注入只余变体专属的 .dt-tpl 限宽规则(合并/菜单/流量布局规则 W6 起在
  *      三皮肤 views/components.css, 单一来源, 此处不重复注入);
- *   ③ dtMenuPick 落盘后 $nextTick 再 _dtSync(换变体要重建宿主子树, 同拍挂载会撞上未提交的渲染)。
+ *   (3) dtMenuPick 落盘后 $nextTick 再 _dtSync(换变体要重建宿主子树, 同拍挂载会撞上未提交的渲染)。
  *
  * 注册表 + 宿主生命周期 + dtHtml 转义标签模板 + CSS 注入单点 + autoqb.ui.drawerTpl 读写
  * + 变体公共骨架 helpers(reg.helpers: 工具/sig 比对/滚动自保/事件挂摘, 报告 26-10-07-0845;
@@ -48,7 +48,7 @@
  *        变体内禁止 innerHTML 裸拼 —— 一律走 dtHtml 标签模板(插值自动转义, dtRaw 显式豁免);
  *        每次重建用 replaceChildren 原子换帧, 自保滚动位置与内部 UI 态(折叠/筛选/选中)。
  *
- * ---------------- CSS 令牌白名单(S1 对账, plan §05 ①) ----------------
+ * ---------------- CSS 令牌白名单(S1 对账, plan §05 (1)) ----------------
  * 变体 CSS 只允许引用下列令牌(已对 atlas / console / prism 三皮肤逐一核实同名存在;
  * prism 的颜色令牌在 css/themes/*.css 五主题内逐一核实, 结构令牌在 css/tokens.css)。
  * 未入名单的一律写字面值或 var(--x, <字面 fallback>)。对账脚本口径: 提取各皮肤
@@ -187,14 +187,14 @@
       }
     },
     /* ---------------- 数据拍原地回填(计划 26-10-12 用户报障: 模板表格每 5s 闪) ----------------
-     * 病根(80 对端实测): 变体 render 的 sig 含整包列表数据 ⇒ 5s 轮询每拍必整帧重建
+     * 病根(80 对端实测): 变体 render 的 sig 含整包列表数据 -> 5s 轮询每拍必整帧重建
      * (replaceChildren + anchFill 把锚换进新 slot = **锚移动**)。锚里 Teleport 着整张表,
      * 锚移动 = 表格整树重排 —— 实测每拍 56-75ms longtask(经典表同数据量 0ms), 浏览器
      * 卡顿近 5 帧, 用户观感即"表格每 5s 闪一下, 数据只随闪刷新"(经典表走纯 Vue 补丁故丝滑)。
      * 正解: sig 只含**结构态**(加载/失败/空态/分组成员/UI 态), 数据拍不重建外壳 ——
-     * 行走桥自身响应式(drawer.peers 更替 → 根重渲染 → 行原地补丁), 壳上数据依赖值
+     * 行走桥自身响应式(drawer.peers 更替 -> 根重渲染 -> 行原地补丁), 壳上数据依赖值
      * (卡值/chips 计数/组头聚合)由各变体把同一构建器的产出 paintHtml 进**不含锚**的
-     * 子树(卡区/筛选条/工具条), 列表区(锚+表)自始至终不动 ⇒ 无重排无闪。
+     * 子树(卡区/筛选条/工具条), 列表区(锚+表)自始至终不动 -> 无重排无闪。
      * sel 命中不到(首帧/空态/结构刚变)时静默跳过 —— 调用方靠结构 sig 保证只在整帧态进场。
      * innerHTML 相同则跳过写(内容没变的拍零 DOM 操作)。 */
     paintHtml: function (host, sel, html) {
@@ -299,7 +299,7 @@
      * (纯文案) + 整帧替换」—— 27 块除槽类名与文案外逐字同(入池报告 R21-B)。general
      * 三件的裸空态(无槽无文案 + lastSig 复位记账)形状不同, 刻意不入本 helper。
      * 调用方已从 ctx 取好 loading/err 与数据长度; 本 helper 只认开关: has = 有数据
-     * (直接返 false, 调用方继续走整帧); 否则按 loading → err → empty 优先级渲对应
+     * (直接返 false, 调用方继续走整帧); 否则按 loading -> err -> empty 优先级渲对应
      * 空帧并返 true(调用方直接 return) —— 与原三块 if 的判定序和 !length 合并语义
      * 逐位对齐。err 进 title 经 esc(与 dtHtml 插值同口径 —— API 错误文案可能带引号),
      * 静态文案同样过 esc(与 KIT 同口径)。 */
@@ -351,7 +351,7 @@
   /* ---------------- peers 判据共用模块(reg.peers, issue 26-10-20-2231) ----------------
    * 07/08/09 三件 peers 变体各手抄一份的判据簇: FLAG_META(flags 徽章表) / flagTokens
    * (bucketOf 的依赖) / isBad(吸血启发式) / bucketOf(flags 方向分桶) / isLanIp(内网
-   * 判定) —— 程序化 diff 三份逐字同(入池报告 R21-C)。漂移代价: 判据只改一份 ⇒ 同一
+   * 判定) —— 程序化 diff 三份逐字同(入池报告 R21-C)。漂移代价: 判据只改一份 -> 同一
    * peer 在三个版式下分桶不同(吸血名单/内网口径各说各话)。提为单点, 三变体经同一
    * reg 消费。变体私有不入本模块: BUCKETS(方向桶配色, 07 独有) / FILTERS(筛选档,
    * 07 比 09 多 hand 档) / flagHas·clientName·countsOf(07 独有封装)。 */
@@ -538,7 +538,7 @@
         id: id, tab: tab,
         label: String(entry.label || id),
         tableId: tableId,
-        /* 变体行装配(U2): 桥描述符 rows: "dtTplRows" → 根方法按本条目回调 —— 行来源与筛选
+        /* 变体行装配(U2): 桥描述符 rows: "dtTplRows" -> 根方法按本条目回调 —— 行来源与筛选
          * 是版式语义(过滤 chips/只看在传/五区分桶), 单点回变体文件; 排序仍由引擎 sortedDrawer
          * 做。声明了 tableId 却无 rowsFn 的变体行恒空(守阵钉"桥变体必须配 rowsFn")。 */
         rowsFn: typeof entry.rowsFn === "function" ? entry.rowsFn : null,
@@ -575,7 +575,7 @@
     hasClassic: function (tab) {
       return CLASSIC_TABS.indexOf(tab) >= 0;
     },
-    /* 该页签的缺省档: 有经典 → classic; 无经典(四内容页签) → **首个注册变体**
+    /* 该页签的缺省档: 有经典 -> classic; 无经典(四内容页签) -> **首个注册变体**
      * (注册序 = manifest 装载序 = 设计稿编号序)。无变体可落时回 classic 兜底。 */
     defaultSel: function (tab) {
       if (CLASSIC_TABS.indexOf(tab) >= 0) return CLASSIC;
@@ -639,7 +639,7 @@
    * !判据是**按 (tid, seg) 映射的元素身份**, 不是位置数组(2026-10-12 用户报障实锤):
    *   多锚同 id(08 五分组/05 健康分组)的段集合随数据增减/重排是**常态** —— 组空整节隐藏
    *   (锚离场)、组补进新锚、dtHoldAnchors 早分支把锚改挂宿主尾部(次序变), 集合内容没变
-   *   也会被位置比对误判"换代" → gen++ → **整桥(所有组的表)重挂 = 全表格闪烁**, 且 5s 轮询
+   *   也会被位置比对误判"换代" -> gen++ -> **整桥(所有组的表)重挂 = 全表格闪烁**, 且 5s 轮询
    *   下活数据每拍组 membership 翻动 = 每拍全闪(数据还只随重挂刷新, 观感"冻在一帧一爆")。
    *   正解: 仅当**同一 seg 的锚元素被换新**才换代 —— 那段 teleport 的目标元素变了, 必须重挂
    *   重解析(Vue 3 Teleport 目标被外部换新后不会自行迁回); seg 新增不换代(该段 segment 本就
@@ -665,8 +665,8 @@
         /* 2026-10-14(四内容页签经典移除后 100% 暴露): **宿主是新的**时, 上一拍对账必为空
          * (__dtAnchorEls 按宿主记账, 换宿主/重建宿主都从空开始)。此时"上拍没有这个 seg"不再
          * 能推出"新段随 v-for 新挂进旧锚"—— 桥的 Teleport 目标还钉在**已离文档的旧锚**上,
-         * 而 :to 选择器串没变, Vue 不会重解析目标 ⇒ 表格体挂进游离节点, 新锚恒空、行恒 0。
-         * 判别 = 该 tid 在这台宿主上**从无记账**(old 空) ⇒ 锚元素对本宿主是新的, 必须换代
+         * 而 :to 选择器串没变, Vue 不会重解析目标 -> 表格体挂进游离节点, 新锚恒空、行恒 0。
+         * 判别 = 该 tid 在这台宿主上**从无记账**(old 空) -> 锚元素对本宿主是新的, 必须换代
          * 让桥重挂一次(重挂才会重解析 :to)。原判据保留(同宿主同元素不换代, 数据轮询零重挂;
          * 同宿主**新增 seg** 仍不换代 —— 该段随桥自身 v-for 新挂进新锚)。 */
         for (var s in seen[t]) {
@@ -686,14 +686,14 @@
 
   /* ---------------- 桥锚驻留(模板表格闪烁修复, 与 dtSyncAnchors/anchFill 同族) ----------------
    * 病根: 变体早分支(正在加载 / 加载失败 / 暂无数据)用 replaceChildren 清掉整帧时, 宿主里
-   * 记账的锚元素(Teleport 表格体就挂在它里面)随之离场 → dtSyncAnchors 当场摘 on → 桥卸载;
-   * 数据回来整帧重建, 锚再现 → gen 自增 → 桥重挂。这一卸一挂在用户眼里就是**表格闪烁**,
+   * 记账的锚元素(Teleport 表格体就挂在它里面)随之离场 -> dtSyncAnchors 当场摘 on -> 桥卸载;
+   * 数据回来整帧重建, 锚再现 -> gen 自增 -> 桥重挂。这一卸一挂在用户眼里就是**表格闪烁**,
    * 且卸/挂两拍与根渲染批一旦错位(换代拍的 :key 净写在途), Teleport 内容会被抛进**游离旧锚**
    * —— 表格直接消失且不恢复(本缺陷的两种面貌, 真机复现取证所见)。
    * 驻留: 早分支清帧后把记账锚按原样接回宿主(display:none 隐藏持有)——
-   *   ·锚不离场 ⇒ dtSyncAnchors 不摘 on ⇒ 桥不卸载 ⇒ 零闪烁;
-   *   ·整帧回来时 anchFill 把**同一元素**换回 slot 位并复位 display, 元素身份不变 ⇒ 不换代
-   *     ⇒ 不重挂(行更新照走引擎响应式, 横滚位/列宽/排序态全保留)。
+   *   ·锚不离场 -> dtSyncAnchors 不摘 on -> 桥不卸载 -> 零闪烁;
+   *   ·整帧回来时 anchFill 把**同一元素**换回 slot 位并复位 display, 元素身份不变 -> 不换代
+   *     -> 不重挂(行更新照走引擎响应式, 横滚位/列宽/排序态全保留)。
    * 观感口径: 早分支文案(加载/失败/空态)原样呈现, 只是等待期不再拆掉旧表格 —— 与 FX-29
    * 「拉新数据前先清空旧数据」坑档同向(快中间态本身就是闪)。多锚同 id(08 五分组)逐段驻留。
    * 只认「整帧未渲染(无 slot)且记账非空」: 整帧路径锚归 anchFill 管, 不插手; 宿主从未出过
@@ -802,7 +802,7 @@
       _dtCurTab() {
         return this.qbTrafficActive ? "traffic" : this.drawer.tab;
       },
-      /* 该页签生效档的**唯一取值口**: 选中表缺键/脏值 → 该页签缺省档(四内容页签 = 首个变体,
+      /* 该页签生效档的**唯一取值口**: 选中表缺键/脏值 -> 该页签缺省档(四内容页签 = 首个变体,
        * 流量 = classic)。全层不再出现 `|| CLASSIC` 字面量 —— 缺省口径单点在注册表 defaultSel。 */
       _dtSel(tab) {
         return (this.drawerTplSel || {})[tab] || window.AQB_DRAWER_TPL_REG.defaultSel(tab);
@@ -820,10 +820,10 @@
       /* ---------------- 变体表格体桥(计划 26-10-12-0527 D1 = Teleport 锚) ----------------
        * 变体声明 tableId 时, 其表格体 = dtHtml 输出的空锚 + drawer.html 的 <teleport> 渲染
        * (表壳 aq-table + 行渲染器, 全 Vue 管理)。锚代数表 dtBridge(state.js data):
-       * _dtMountOne 每见一次锚自增(:key 含代数 → 宿主重建后 Teleport 强制重挂进**当前**锚,
+       * _dtMountOne 每见一次锚自增(:key 含代数 -> 宿主重建后 Teleport 强制重挂进**当前**锚,
        * 不重挂会残留进游离节点 —— Vue 3 Teleport 目标被移除后不会自行迁回), _dtUnmountOne
        * 清零(v-if 摘内容, 防死锚泄漏)。四件方法都是模板可达(不带下划线)。 */
-      /* 该页签当前选中变体的桥表 id; 经典/未声明 tableId/未注册 → ""(无桥) */
+      /* 该页签当前选中变体的桥表 id; 经典/未声明 tableId/未注册 -> ""(无桥) */
       dtBridgeTbl(tab) {
         var sel = this._dtSel(tab);
         var e = window.AQB_DRAWER_TPL_REG.get(tab, sel);
@@ -836,12 +836,12 @@
       },
       /* Teleport 目标是否**此刻真在文档里**(挂载拍判据, 2026-10-14 合并态切换报障)。
        * 为什么必须由**桥组件自己的渲染拍**判, 不能并进 dtBridgeOn: 布局换代(合并开关/门跨越/
-       * 切页签/换目标)的 patch 顺序是「先拆旧分支(旧锚随之离场) → 再挂新分支」, 而父级 v-if 的
+       * 切页签/换目标)的 patch 顺序是「先拆旧分支(旧锚随之离场) -> 再挂新分支」, 而父级 v-if 的
        * dtBridgeOn 是**拆之前**求值的 —— 那一拍旧锚还在, 判真; 等桥组件真挂载时锚已消失。
        * 目标不存在的 teleport, Vue 生产版**静默不挂子节点**(无警告), 之后卸载它时对 null
-       * component 解构而抛 TypeError, 整次 patch 中断 ⇒ 抽屉停在半渲染态(用户所见「合并态
+       * component 解构而抛 TypeError, 整次 patch 中断 -> 抽屉停在半渲染态(用户所见「合并态
        * 切换后内容消失」)。本判据在桥组件渲染拍求值, 与 teleport 的 mount 同拍, 故为真值。
-       * 锚稍后由 _dtSync 挂变体时出现 ⇒ dtBridge 状态变更 ⇒ 桥重渲 ⇒ teleport 归位, 不缺内容。 */
+       * 锚稍后由 _dtSync 挂变体时出现 -> dtBridge 状态变更 -> 桥重渲 -> teleport 归位, 不缺内容。 */
       dtBridgeTargetOn(tab, seg) {
         var sel = this.dtBridgeTo(tab, seg);
         if (!sel || typeof document === "undefined") return false;
@@ -907,7 +907,7 @@
         if (def && def.window && !def.segs && v && v.tab === tab) return v.lines;
         return this.sortedDrawer(this.dtBridgeTbl(tab), seg.rows);
       },
-      /* W3 键盘跨窗回焦: 行 roving(变体 keydown 委托 → H.rowMove)只在已渲染行内移焦,
+      /* W3 键盘跨窗回焦: 行 roving(变体 keydown 委托 -> H.rowMove)只在已渲染行内移焦,
        * 窗口化后焦点落在已渲染块端沿再按方向键/Home/End 时, 数据序的下一行不在 DOM ——
        * 这里补跨窗段: 按前缀和(_rowPre[kind], _rowWindow 留存)换算目标行的容器 y,
        * **先滚动后回焦**(pitfalls/web-ui/kbd-cursor-collapse-dangling 家族: 回焦目标必须
@@ -962,7 +962,7 @@
           }
         });
       },
-      /* 变体行装配单点(U2): 描述符 rows: "dtTplRows" → 按当前选中变体的注册条目回调
+      /* 变体行装配单点(U2): 描述符 rows: "dtTplRows" -> 按当前选中变体的注册条目回调
        * rowsFn(ctx)。行来源与筛选是版式语义(变体文件自管), 排序/列交互归引擎 —— 两层
        * 在桥模板会合。无 rowsFn 的条目返回 [](行恒空, 守阵钉"桥变体必须配 rowsFn")。 */
       dtTplRows(tab) {
@@ -989,7 +989,7 @@
         return !!(def && def.rowTab);
       },
       /* U4: .group-table @vue:mounted 的回调(锚每次换代重挂恰好一次)。描述符 rowAfter
-       * 声明位 → 按归属变体反查注册条目 rowAfterFn(el)。异常吞掉不阻断渲染链。 */
+       * 声明位 -> 按归属变体反查注册条目 rowAfterFn(el)。异常吞掉不阻断渲染链。 */
       dtRowAfter(tab, vnode) {
         var def = this.dtBridgeDef(tab);
         if (!def || !def.rowAfter) return;
