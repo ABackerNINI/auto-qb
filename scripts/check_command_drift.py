@@ -1,4 +1,4 @@
-"""反漂移闸门: 文档里**手抄**了已收录的命令 → 判红。
+"""反漂移闸门: 文档里**手抄**了已收录的命令 -> 判红。
 
 为什么必须有它: 命令一旦在包里有了单点定义, 文档里再抄一份就是副本 ——
 而"哪一份才是生效的那份"并不写在命令旁边(§01 现场证据: 5 种写法里 4 种不满足项目约定,
@@ -12,7 +12,7 @@
     python scripts/check_command_drift.py                    # 全量扫(无参兼容 doc.drift / 手工)
     python scripts/check_command_drift.py --files <路径...>   # 只扫传入文件(仍逐个过 SCAN_GLOBS/EXEMPT)
     python scripts/check_command_drift.py --full <路径...>    # --full 优先: 忽略位置参数, 强制全量
-                                                             # (注册表/骨架提取逻辑变了 → 旧副本可能在新判据下漂移)
+                                                             # (注册表/骨架提取逻辑变了 -> 旧副本可能在新判据下漂移)
 改动清单单点在提交预检(<changed:> 展开), 本脚本**不自查 git** —— 复跑阶段树已净, 自查就错了。
 """
 
@@ -84,7 +84,7 @@ TOKEN_RE = re.compile(r'"[^"]*"|\S+')
 
 
 def skeleton(cmd: str) -> list[str]:
-    """命令 → 归一化 token 序列(去环境前缀 / 引号 / 路径只留文件名)。"""
+    """命令 -> 归一化 token 序列(去环境前缀 / 引号 / 路径只留文件名)。"""
     parts = [p.strip() for p in cmd.split("&&")]
     kept = [p for p in parts if p and not ENV_PREFIX.match(p)]
     text = " ".join(kept) if kept else cmd
@@ -192,7 +192,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     print(f"命令漂移检查: {len(hits)} 处手抄 —— 命令只应在包里定义一份, 文档里写 task id")
     for rel, no, text, tid in hits:
-        print(f"  [DRIFT] {rel}:{no}  → commands run {tid}")
+        print(f"  [DRIFT] {rel}:{no}  -> commands run {tid}")
         print(f"          {text}")
     return 1
 

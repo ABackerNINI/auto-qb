@@ -53,7 +53,7 @@ config:
         enabled: false          # 不给种子补集数标签
     delete_tags: []             # 不做全局标签清理
     # !规则集: 不写任何 `*_rules` 段即可 —— 规则是按键名 `_rules` 结尾自动发现的,
-    #   没有这样的键 = 没有规则 ⇒ 不会自动删种/改限速/打 HR 标签。(写成 rules_config: {{}}
+    #   没有这样的键 = 没有规则 => 不会自动删种/改限速/打 HR 标签。(写成 rules_config: {{}}
     #   反而会被 validate_config 判"未知键", 已实测)
     hr:
         add_tag: ""
@@ -116,7 +116,7 @@ def main() -> int:
         print(f"\n[失败] 连不上 qBittorrent: {args.qb_host}:{args.qb_port} 没有服务在听\n")
         print("  请依次确认:")
         print("    1. qBittorrent 正在运行")
-        print("    2. 设置 → Web UI → 已勾选「启用 Web 用户界面」")
+        print("    2. 设置 -> Web UI -> 已勾选「启用 Web 用户界面」")
         print("    3. 端口对: qB 里显示的端口才是端口(默认 8080, 不一定是它)")
         print(f"       改端口: --qb-port <qB 里那个端口>")
         print("    4. 若 qB 只监听了具体网卡, 用 --qb-host 指定那个地址")
@@ -157,7 +157,7 @@ def main() -> int:
 
     url = f"http://{display_host(args.web_host)}:{web_port}/atlas/"
     print("=" * 68)
-    print("auto-qb · 最小配置 · 只开 WEB UI")
+    print("auto-qb - 最小配置 - 只开 WEB UI")
     print("=" * 68)
     print(f"  qB      : {args.qb_host}:{args.qb_port}")
     print(f"  WEB UI  : {url}   (prism: .../prism/)")

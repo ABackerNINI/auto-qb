@@ -9,12 +9,12 @@ IDE 注入项目引导文件时, 超出 `MAX_GUIDANCE_CHARS`(8000) 的部分会�
 
 2026-09-30 债务制改造 (计划 memory-bank/plans/26-09-30-2112-plan-memory-bank-cap-debt.html)
 -----------------------------------------------------------------------------------------
-旧的口径是「任何 cap 超限且本次改动命中 → STOP」。实测后果: 触顶都发生在**任务后期**,
+旧的口径是「任何 cap 超限且本次改动命中 -> STOP」。实测后果: 触顶都发生在**任务后期**,
 此时压字数要带着满载的会话历史反复返工, token 成本远大于文件变长本身 —— 而债务记了也还不上
-(切片 26-09-27-1812 待办①记了 3 天仍是 7,975)。改造后:
+(切片 26-09-27-1812 待办1.记了 3 天仍是 7,975)。改造后:
 
 - **硬规定**(只有 `AGENTS.md`): 越过它发生的是**注入截断**(尾部真不可见), 不是"读起来贵"。
-  超 8,000 且本次改动命中 → **仍 STOP**。它不进债务清单、不套 50% 收缩(用户 2026-09-30 拍板)。
+  超 8,000 且本次改动命中 -> **仍 STOP**。它不进债务清单、不套 50% 收缩(用户 2026-09-30 拍板)。
 - **债务**(其余全部): 违反只是多花阅读/加载 token, 无截断 —— 报告为 `[债务]`, **不拦提交**。
   债务是**派生**的: 每次由本脚本从真实文件尺寸现算, 不设手写债务表(手记会陈旧、会与事实分叉)。
 - **触发点 = 提交时**: 那一刻 agent 必读输出、用户就在会话另一端; 警告文案自带处置指令
@@ -34,8 +34,8 @@ import 它**(与 `tests/test_memory_bank.py` 同做法) —— 不在两处各�
 
 用法
 ----
-    python scripts/check_context_caps.py             # 默认: 只有 AGENTS.md 超限且本次改了它 → 退出码 1
-    python scripts/check_context_caps.py --strict    # 收口模式: 债务非空(或 AGENTS.md 超限) → 退出码 1
+    python scripts/check_context_caps.py             # 默认: 只有 AGENTS.md 超限且本次改了它 -> 退出码 1
+    python scripts/check_context_caps.py --strict    # 收口模式: 债务非空(或 AGENTS.md 超限) -> 退出码 1
     python scripts/check_context_caps.py --quiet     # 只打印非 PASS 项
     python scripts/check_context_caps.py --files <路径...>  # 只算传入文件的 cap(闸门 <changed:> 通道, 2026-11-01 方案 D)
 """
@@ -50,7 +50,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 # --------------------------------------------------------------------------- 硬规定
-# 越过它 = **内容真的没了**(IDE 注入时被 slice 掉), 不是"读起来贵一点" ⇒ 超了仍拦提交。
+# 越过它 = **内容真的没了**(IDE 注入时被 slice 掉), 不是"读起来贵一点" => 超了仍拦提交。
 # key = 仓库根相对路径, value = 最大**字符**数(不是字节)。
 # AGENTS.md 的依据: IDE 注入项目引导文件时 MAX_GUIDANCE_CHARS = 8000, 超出部分被 slice 掉;
 # 引导文件按 GUIDANCE_FILES = [CODEBUDDY.md, .codebuddy/CODEBUDDY.md, AGENTS.md] 首个存在即停 ——
@@ -61,7 +61,7 @@ HARD_CAPS: dict[str, int] = {
 }
 
 # --------------------------------------------------------------------------- 债务型上限
-# 这些文件**不被 IDE 注入截断**, 超限只是多花加载 / 阅读 token ⇒ 2026-09-30 起降级为债务。
+# 这些文件**不被 IDE 注入截断**, 超限只是多花加载 / 阅读 token => 2026-09-30 起降级为债务。
 # 2026-09-29 用户定调过一次翻倍: 旧值频繁触顶, 每次触顶都逼出一轮"压文案"返工,
 # 返工轮次的 token 成本远大于文件变长; 2026-09-30 再往前一步 —— 连"必须当场返工"都取消。
 SKILL_CAPS: dict[str, int] = {
@@ -81,8 +81,8 @@ PASS, WARN, STOP, DEBT, GROUP = "PASS", "WARN", "STOP", "债务", "GROUP"
 # 债务汇总行 —— 提交时打印出来, 读到它的人(agent)不必先查规则就知道该做什么
 DEBT_SUMMARY = (
     "\ncap 债务 {n} 项 —— 请在回复中提醒用户: 文档数字已超标, 需另开新会话清理"
-    "\n  → 提交照常: 债务不拦提交; AGENTS.md 除外 —— 它超限即拦"
-    "\n  → 清理会话收口: commands run doc.caps -- --strict (债务非空即 rc=1)"
+    "\n  -> 提交照常: 债务不拦提交; AGENTS.md 除外 —— 它超限即拦"
+    "\n  -> 清理会话收口: commands run doc.caps -- --strict (债务非空即 rc=1)"
 )
 
 
@@ -111,13 +111,38 @@ def git(*args: str) -> str:
     return proc.stdout.rstrip("\n") if proc.returncode == 0 else ""
 
 
+def porcelain_paths(text: str) -> set[str]:
+    """`git status --porcelain` 文本 -> 改动路径集合(仓库根相对路径)。
+
+    每行前两列是状态位 XY, 路径从第 3 列起, 未暂存改动行以空格开头(` M AGENTS.md`) --
+    只能按行 rstrip, 不能对整段 stdout 做 .strip()(会吃掉**第一行**的行首空格, 后面的
+    `line[3:]` 整体左移一位, 变成 "GENTS.md" -- 静默漏检)。
+
+    rename/copy 行(状态列含 R/C, 形如 `R  old -> new`)按状态位分流, 以 " -> " 拆开,
+    **新旧两侧路径都计入改动集** -- 整串塞进集合的话两个真实路径都不在, `git mv
+    AGENTS.md docs/AGENTS.md` 后「改动命中」判定会静默漏检(与上面整段 strip 的漏检同类)。
+    状态列第二位若是数字(评分形态 `R90 old -> new`; 常规 porcelain v1 不出评分, 防御性
+    兼容), 路径起点右移一位 -- 常规 XY 两列后必是空格, 第二位不可能是数字, 不误伤。
+    """
+    out: set[str] = set()
+    for line in text.splitlines():
+        if len(line) < 4 or not line.strip():
+            continue
+        status = line[:2]
+        body = line[4:] if status[1].isdigit() else line[3:]
+        if "R" in status or "C" in status:
+            old, sep, new = body.partition(" -> ")
+            if sep:
+                out.add(old.strip())
+                out.add(new.strip())
+                continue
+        out.add(body.strip())
+    return out
+
+
 def changed_files() -> set[str]:
     """本次改动到的文件(仓库根相对路径, 已暂存与未暂存都算)。"""
-    out: set[str] = set()
-    for line in git("status", "--porcelain").splitlines():
-        if line.strip():
-            out.add(line[3:].strip())
-    return out
+    return porcelain_paths(git("status", "--porcelain"))
 
 
 def char_count(path: Path) -> int:
@@ -131,7 +156,7 @@ def char_count(path: Path) -> int:
 
 
 def _kb_checker():
-    """定位并 import memory-bank skill 的 `check_kb_structure`(项目级 → 用户级)。
+    """定位并 import memory-bank skill 的 `check_kb_structure`(项目级 -> 用户级)。
 
     KB 角色 cap 的**严重度单点在 skill 源码里**(`HARD_CAP_ROLES`), 这里只消费它的输出 ——
     不在两处各写一份判定。找不到 skill 返回 None(报告一次, 不拦提交)。
@@ -156,7 +181,7 @@ def kb_cap_rows(only: set[str] | None = None) -> tuple[list[tuple[str, str]], st
     `check_caps` 的同名参数, 收窄的是**读取面**, 严重度单点不动。
     返回 ([(相对路径, 详情)], 硬错误, 软提示):
     - **硬错误**: 剔除硬规定角色后 `check_caps` 仍报 problem —— 说明严重度单点被绕过, 抬成 STOP;
-    - **软提示**: skill / memory-bank 目录找不到 ⇒ **只报告, 不拦** —— "KB 没检查到"是环境
+    - **软提示**: skill / memory-bank 目录找不到 => **只报告, 不拦** —— "KB 没检查到"是环境
       问题, 让它去拦一次无关提交, 正是债务制要取消的那类误伤(2026-09-30)。
     """
     checker = _kb_checker()
@@ -183,7 +208,7 @@ def kb_cap_rows(only: set[str] | None = None) -> tuple[list[tuple[str, str]], st
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="检查 IDE 上下文注入上限与包内文档的阅读预算(2026-09-30 起: 除 AGENTS.md 外均为债务)")
-    parser.add_argument("--strict", action="store_true", help="收口模式: 债务非空(或 AGENTS.md 超限) → 退出码 1")
+    parser.add_argument("--strict", action="store_true", help="收口模式: 债务非空(或 AGENTS.md 超限) -> 退出码 1")
     parser.add_argument("--quiet", action="store_true", help="只打印非 PASS 项")
     parser.add_argument(
         "--files",
@@ -202,7 +227,7 @@ def main() -> int:
     rows: list[tuple[str, str, str]] = []
 
     # ---- 1. 硬规定: 超了内容真的会被截断, 不降级、不挂账 ----
-    rows.append((GROUP, "硬规定 (不降级 · 不挂账)", ""))
+    rows.append((GROUP, "硬规定 (不降级 - 不挂账)", ""))
     for rel, limit in sorted(HARD_CAPS.items()):
         if scope is not None and rel not in scope:
             continue  # 收窄: 本次没改的帽点不进报告(硬规定语义不变 —— 传入即改动)
@@ -243,7 +268,7 @@ def main() -> int:
     # ---- 3. 知识库角色 cap: 债务 (由 skill 单点现算) ----
     kb_scope = None if scope is None else {r for r in scope if r.startswith("memory-bank/")}
     if scope is None or kb_scope:  # 收窄: 本次没改 memory-bank/ 就整段跳过
-        rows.append((GROUP, "知识库角色 cap (债务 · 由 skill 单点现算)", ""))
+        rows.append((GROUP, "知识库角色 cap (债务 - 由 skill 单点现算)", ""))
         kb_rows, kb_hard, kb_soft = kb_cap_rows(kb_scope)
         for rel, detail in kb_rows:
             rows.append((DEBT, rel, f"超 cap: {detail}"))
@@ -283,7 +308,7 @@ def main() -> int:
     if debts:
         print(DEBT_SUMMARY.format(n=len(debts)))
     else:
-        print("\n无阻塞项 · 无 cap 债务。")
+        print("\n无阻塞项 - 无 cap 债务。")
     return 1 if args.strict and debts else 0
 
 
