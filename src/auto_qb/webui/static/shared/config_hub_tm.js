@@ -184,12 +184,17 @@ Object.assign(window.CONFIG_HUB.methods, {
       try {
         // 次序(D3): 先落盘 enabled=false 并热重载(订阅线程随之停), 再停工具进程 ——
         // 反序会让停工具的瞬间又被订阅线程抢拉起来。
+        // 磁盘原态可能是「键不存在(默认真)」—— 回滚口径按原存在性分流, 见保存失败分支。
+        const hadEnabledKey = this.cfgExists(["config", "traffic_source", "enabled"]);
         this.cfgSetBool(["config", "traffic_source", "enabled"], false);
         const saved = await this.cfgSave();
         if (!saved) {
-          // 保存失败: 内存态回滚成 true 与磁盘一致(工具继续跑, 用户可重试; 不留「内存关了
+          // 保存失败: 内存态回滚成与磁盘一致(工具继续跑, 用户可重试; 不留「内存关了
           // 盘没关」的错位——那会让下次普通保存把关闭静默写进去)。
-          this.cfgSetBool(["config", "traffic_source", "enabled"], true);
+          // 键盘上本就不存在时删键还原而非写 "true": 无条件写回会让内存树多出盘上没有的键,
+          // cfgDirty 凭空翻真(刷新守卫会拦), 下次保存还会把多余的 enabled 键写进 YAML。
+          if (hadEnabledKey) this.cfgSetBool(["config", "traffic_source", "enabled"], true);
+          else this.cfgDelPath(["config", "traffic_source", "enabled"]);
           this.tm.shutdownErr = "保存失败, 未停止工具(可重试)";
           return;
         }

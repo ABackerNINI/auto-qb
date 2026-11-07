@@ -289,6 +289,17 @@ const J = (v) => JSON.stringify(v);
 const t = () => ctx.cfg.tree.config.example_rules;
 const rp = (rn) => ctx.cfgCondRootPath("example_rules", rn);
 const DEF_OE = J({ policy: "stop", retries: 3, backoff: 60 });
+// mini ctx(R5#175 摘要/风险段专用): 干净可数的 actions 与规则级字段, 不与前文用例共树;
+// cfgPluginIndex 给风险元数据(cfgRuleRisk 的点名与去重敏感名单判据)
+const miniRiskCtx = (ruleSpec, meta) => Object.assign({}, M, {
+  cfg: { tree: { config: { g: { r: Object.assign({ enabled: "true" }, ruleSpec, meta) } } } },
+  cfgPluginIndex: {
+    add_tags: { name: "add_tags", label: "添加标签", spec_kind: "list" },
+    reannounce: { name: "reannounce", label: "重新汇报", risk: true },
+    checking: { name: "checking", label: "校验", risk: true },
+    delete_files: { name: "delete_files", label: "删除文件", risk: true },
+  },
+});
 const checks = [
   // ---- 草稿规范化(D2): 打开即归一形, 保存即写新形态 ----
   // 红验式三步(issue 26-11-04-0504): 先钉输入确为扁平列表(fixture 漂成树形则红) -> 调归一
@@ -368,6 +379,63 @@ const checks = [
      !("default" in t().chooser.actions[0]),
      ctx.cfgChooseDefaultToggle("example_rules", "chooser", 0, true),
      J(t().chooser.actions[0].default) === J([]))],
+  // ---- 规则卡摘要与风险聚合(R5#175): cfgRuleRisk / cfgTriggerLabel / cfgRuleMetaSummary ----
+  // 喂 hubRiskList -> 首页 LED 与「N 条含风险」徽标。用独立 mini-ctx(主 ctx 的 example_rules
+  // 已被前面用例改写, 风险判定要的是干净可数的 actions/规则级字段), 方法体仍是同一份。
+  ["cfgRuleRisk: 高风险动作点名 + noDedup 双记(reannounce 无执行一次/冷却)",
+    (() => {
+      const c = miniRiskCtx({ actions: [{ type: "reannounce", params: [] }] }, {});
+      const s = c.cfgRuleRisk("g", "r");
+      return s.indexOf("含高风险动作: reannounce") >= 0 && s.indexOf("未配置去重") >= 0 && s.indexOf("; ") >= 0;
+    })()],
+  ["cfgRuleRisk: noDedup 判据边界(执行一次=once 或 冷却非零 都算已去重)",
+    (() => {
+      const risky = [{ type: "reannounce", params: [] }];
+      return miniRiskCtx({ actions: risky }, { execute_once: "once" }).cfgRuleRisk("g", "r").indexOf("未配置去重") < 0
+        && miniRiskCtx({ actions: risky }, { cooldown: "10S" }).cfgRuleRisk("g", "r").indexOf("未配置去重") < 0
+        && miniRiskCtx({ actions: risky }, { cooldown: "0" }).cfgRuleRisk("g", "r").indexOf("未配置去重") >= 0
+        && miniRiskCtx({ actions: risky }, { cooldown: "" }).cfgRuleRisk("g", "r").indexOf("未配置去重") >= 0;
+    })()],
+  ["cfgRuleRisk: 高风险但非去重敏感动作只点名不劝去重; 无高风险动作为空串",
+    (() => {
+      const del = miniRiskCtx({ actions: [{ type: "delete_files", params: [] }] }, {});
+      const clean = miniRiskCtx({ actions: [{ type: "add_tags", params: [] }] }, {});
+      const sDel = del.cfgRuleRisk("g", "r");
+      return sDel.indexOf("含高风险动作: delete_files") >= 0 && sDel.indexOf("未配置去重") < 0
+        && clean.cfgRuleRisk("g", "r") === "";
+    })()],
+  ["cfgTriggerLabel: 五张中文短标签 + 未知值原样 + 空值兜「周期检查」",
+    (() => {
+      const c = miniRiskCtx({}, {});
+      return c.cfgTriggerLabel("interval") === "周期检查"
+        && c.cfgTriggerLabel("on_torrent_added") === "种子新增时"
+        && c.cfgTriggerLabel("on_torrent_deleted") === "种子删除时"
+        && c.cfgTriggerLabel("on_torrent_state_enum_changed") === "状态变化时"
+        && c.cfgTriggerLabel("on_torrent_field_changed") === "字段变化时"
+        && c.cfgTriggerLabel("weird_trigger") === "weird_trigger"
+        && c.cfgTriggerLabel("") === "周期检查" && c.cfgTriggerLabel(null) === "周期检查";
+    })()],
+  ["cfgRuleMetaSummary: 触发时机 + 非默认间隔/去重/冷却全拼; 缺省只剩触发时机",
+    (() => {
+      const full = miniRiskCtx({}, { trigger: "interval", interval: "5M", execute_once: "once", cooldown: "10S" });
+      const bare = miniRiskCtx({}, {});
+      return full.cfgRuleMetaSummary("g", "r") === "周期检查 · 间隔 5M · 仅执行一次 · 冷却 10S"
+        && bare.cfgRuleMetaSummary("g", "r") === "周期检查";
+    })()],
+  ["cfgRuleMetaSummary: 间隔零值不占摘要(0/0S/空), 去重档位中文映射",
+    (() => {
+      const zero = (iv) => miniRiskCtx({}, { trigger: "interval", interval: iv }).cfgRuleMetaSummary("g", "r");
+      const daily = miniRiskCtx({}, { execute_once: "daily" }).cfgRuleMetaSummary("g", "r");
+      const hourly = miniRiskCtx({}, { execute_once: "hourly" }).cfgRuleMetaSummary("g", "r");
+      const never = miniRiskCtx({}, { execute_once: "never" }).cfgRuleMetaSummary("g", "r");
+      return zero("0") === "周期检查" && zero("0S") === "周期检查" && zero("") === "周期检查"
+        && daily.indexOf("每天一次") >= 0 && hourly.indexOf("每小时一次") >= 0 && never === "周期检查";
+    })()],
+  ["cfgRuleMetaSummary: 非 interval 触发不吃间隔段(键在也不显)",
+    (() => {
+      const c = miniRiskCtx({}, { trigger: "on_torrent_added", interval: "5M", cooldown: "10S" });
+      return c.cfgRuleMetaSummary("g", "r") === "种子新增时 · 冷却 10S";
+    })()],
 ];
 // 活性注入(issue 26-11-04-0504, 坑档 pitfalls/testing/guard-dead-branch 手法): Python 侧
 // 二次运行传 "liveness" 追加一例必红期望, 供端到端红验 —— 电池空转(某条语句早退/结果
