@@ -333,8 +333,17 @@ def _validate_hr_check(spec: dict | None, errors: List[str]) -> None:
                         f"config.hr_check.channel.pairing: 取值非法: '{channel['pairing']}', "
                         f"可选: {'/'.join(CHANNEL_PAIRING_MODES)}"
                     )
-            if "token" in channel and not isinstance(channel["token"], str):
-                errors.append("config.hr_check.channel.token: 必须是字符串")
+            if "token" in channel:
+                raw_token = channel["token"]
+                if not isinstance(raw_token, str):
+                    errors.append("config.hr_check.channel.token: 必须是字符串")
+                elif not raw_token.isascii():
+                    # 常数时间密钥比较(hmac/secrets.compare_digest)要求两侧均为 ASCII,
+                    # 非 ASCII 密钥运行期逐请求失效 —— 必须配置期拦下, 不能放行到运行期
+                    errors.append(
+                        "config.hr_check.channel.token: 含非 ASCII 字符 —— 请改用纯 ASCII 字符"
+                        "(字母/数字/符号; 留空 = 首次启动随机生成)"
+                    )
             if "extension_id" in channel:
                 # 填了就按它钉死 CORS origin(chrome-extension://<id>); 留空 = 放行任意扩展 origin
                 # (真鉴权是 token, origin 白名单只是第二道)。id 形态错 = 写了也不会生效 ⇒ fail-fast

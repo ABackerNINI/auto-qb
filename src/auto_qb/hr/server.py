@@ -150,7 +150,16 @@ def make_endpoint_handler(route_fn: Callable, *, banner: str, access_log_prefix:
             if length > MAX_BODY_BYTES:
                 self._safe_respond(413, {}, _json({"error": "body too large"}))
                 return
-            body = self.rfile.read(length) if length else b""
+            try:
+                body = self.rfile.read(length) if length else b""
+            except (ConnectionError, OSError) as e:
+                # 读侧与写侧(_safe_respond)同口径: 客户端声明 Content-Length 后半路断开
+                # 是常态不是故障, 不该冒泡成 ThreadingHTTPServer.handle_error 的 traceback。
+                # 连接已不可读, 顺手置 close_connection 结束本连接(handle 不再进下一轮 readline
+                # 在已复位的套接字上再吃一次 reset)。
+                logger.debug(f"{error_tag} | 请求体读取失败(客户端已断开): {e}")
+                self.close_connection = True
+                return
             try:
                 status, headers, payload = route_fn(
                     method, self.path, self.headers, body, source=self.client_address[0]
@@ -474,8 +483,15 @@ class HrChannelServer:
     # ---------- 内部 ----------
 
     def _token_ok(self, given: str) -> bool:
-        """常数时间比较(避免用比较耗时反推密钥); 未配置 token 时一律拒"""
-        return bool(given) and bool(self.token) and secrets.compare_digest(given, self.token)
+        """常数时间比较(避免用比较耗时反推密钥); 未配置 token 时一律拒
+
+        两侧先按 UTF-8 编码成字节再比较: compare_digest 的 str 形态要求双方均为 ASCII,
+        非 ASCII 密钥(配置校验已拦, 但运行期不能靠它)会在此抛 TypeError 被兜成 500,
+        通道整体不可用 —— 编码后比较让不匹配(含非 ASCII 头值)老老实实落 401。
+        """
+        if not given or not self.token:
+            return False
+        return secrets.compare_digest(given.encode("utf-8"), self.token.encode("utf-8"))
 
     def _note_rejected(self, kind: str, detail: str) -> None:
         """记一次**被拒**的敲门(401 / 403) —— 逻辑单点在 RejectThrottle(server/discovery 同口径)"""

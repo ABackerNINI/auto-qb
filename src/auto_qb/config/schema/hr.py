@@ -65,7 +65,7 @@ HR_CHECK_CHANNEL_FIELDS: Tuple[Field, ...] = (
         "端点密钥",
         "password",
         default="",
-        help="访问密钥; 留空 = 首次启动随机生成并持久化到 <data_dir>/hr.token(扩展侧需逐实例填写)",
+        help="访问密钥; 仅限 ASCII 字符(含非 ASCII 会被校验拒绝); 留空 = 首次启动随机生成并持久化到 <data_dir>/hr.token(扩展侧需逐实例填写)",
     ),
     Field(
         "extension_id",

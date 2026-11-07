@@ -148,7 +148,7 @@ def pairing_credential(secret: str) -> str:
 def pairing_needed(mode: str, host: str) -> bool:
     """配对码是否强制(S3 生效逻辑): on 恒要; off 恒不要; auto = host 非回环时强制
 
-    「非回环 + off + 未配 token」的危险组合由 config 校验在配置期拦下(S1 ⑤), 这里不重复判;
+    「非回环 + off + 未配 token」的危险组合由 config 校验在配置期拦下(S1 5), 这里不重复判;
     回环判据单点在 infra.utils.is_loopback_host(与 config 校验共用)。
     """
     if mode == "on":

@@ -26,6 +26,8 @@
 - test_run_hr_confirm_empty_blank_notes
 - test_run_hr_confirm_empty_disabled_hint
 - test_run_hr_confirm_empty_stamps_site
+- test_run_hr_confirm_empty_unknown_site_rejected: 拼错站点名先对表后写 —— 明确报错整批拒绝(非 0),
+  不凭空创建 <typo>.json/.lock, 混合批(合法+拼错)里合法站点也不写(保守默认)
 - test_run_hr_once_multisite_join
 - test_run_hr_once_passes_html_dir_to_fetcher
 """
@@ -212,6 +214,28 @@ def test_confirm_empty_disabled_reports_hint(tmp_path):
     out = io.StringIO()
     code = run_hr_confirm_empty(_config(tmp_path, enabled=False), [SITE], out=out)
     assert code == 1 and "hr_check.enabled=false" in out.getvalue()
+
+
+def test_run_hr_confirm_empty_unknown_site_rejected(tmp_path):
+    """站点名先对表再写(issue 26-11-07-0527 #10): 拼错的名字不凭空创建 <typo>.json/.lock
+
+    cli 侧只做逗号切分, 拼错名若放进来会在锁目录凭空建文件并打印「已写入人工对账戳」
+    的假成功 —— 写入前对 hr_site_confs() 核名, 不认识即明确报错整批拒绝(非 0 退出)。
+    """
+    cfg = _config(tmp_path, data_dir=tmp_path)
+    hr_dir = tmp_path / "hr"
+    buf = io.StringIO()
+    code = run_hr_confirm_empty(cfg, ["exmaple"], out=buf)
+    text = buf.getvalue()
+    assert code == 1
+    assert "exmaple" in text and "example" in text, "报错点名拼错的名字并列出登记的名字"
+    assert not (hr_dir / "exmaple.json").exists() and not (hr_dir / "exmaple.lock").exists()
+
+    # 混合批(合法 + 拼错)整批拒绝: 合法站点也不写(保守默认), 修好名字重跑即可
+    buf2 = io.StringIO()
+    assert run_hr_confirm_empty(cfg, [SITE, "exmaple"], out=buf2) == 1
+    assert not (hr_dir / "example.json").exists(), "整批拒绝时合法站点也不该被写"
+    assert "exmaple" in buf2.getvalue()
 
 
 def test_confirm_empty_readonly_and_lock_busy(tmp_path, monkeypatch):

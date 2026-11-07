@@ -355,7 +355,7 @@ class HrRuntime:
 
         只服务于「通道静默」的出口分档: 活跃 ⇒ 有人在场却收不到扩展联系 ⇒ 该发声; 不活跃 ⇒
         「没人在用」= 预期离线 ⇒ 只进后端 log。判据是「WebUI 是否活跃」这一件事, **不判断
-        是否同机 / 同源**(用户口径⑤)。
+        是否同机 / 同源**(用户口径5)。
 
         没有 web 面(测试替身 / 未装配)时如实返回 False —— 它只影响是否提醒, 不影响取数与判定;
         返回 False 的后果是**少提醒**(保守), 不会把「没人用」误报成「有人在用」。
@@ -433,7 +433,7 @@ class HrRuntime:
         )
 
     def _registry_entry_id(self) -> str:
-        """注册表条目 id = sha1(data_dir)[:12](计划 S2 ②): 同 data_dir 重启复用同一条目(upsert)"""
+        """注册表条目 id = sha1(data_dir)[:12](计划 S2 2): 同 data_dir 重启复用同一条目(upsert)"""
         return hashlib.sha1(self.config.data_dir.encode("utf-8")).hexdigest()[:12]
 
     def _data_endpoint_url(self) -> str:

@@ -199,6 +199,17 @@ def run_hr_confirm_empty(config: Config, sites: List[str], out=None) -> int:
     if not config.hr_check.enabled:
         print("hr_check.enabled=false: HR 在线核实未启用, 无需对账。", file=out)
         return 1
+    # 站点名先对表再写: cli 侧只做逗号切分, 拼错的站点名若放进来会在锁目录凭空创建
+    # <typo>.json/.lock 并打印「已写入人工对账戳」的假成功 —— 整批拒绝, 一个都不写。
+    known = config.hr_site_confs()
+    unknown = [s for s in sites if s not in known]
+    if unknown:
+        print(
+            f"站点名不认识: {', '.join(unknown)} —— hr_check 登记的站点: {', '.join(sorted(known)) or '(无)'}。"
+            "未写任何文件; 请核对站点名(站点接入里登记的名字)后重试。",
+            file=out,
+        )
+        return 1
     service = _build_service(
         config,
         fetcher=NullFetcher("确认操作不取数"),

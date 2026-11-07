@@ -68,10 +68,19 @@
   「已暴露到内网」文案 + discovery_port 在场补「发现端口」段/缺省不带
 - test_status_note_survives_discovery_bound_fn_error: 发现读取器抛异常 -> note 回落「发现 关」不打死 status
 - test_hr_thread_handle_start_refuses_when_alive: 线程句柄幂等启动的「已在跑」支 => False 不再起线程
+
+### 存量评审 R4 修复轮(issue 26-11-07-0527 #1/#12)
+- test_token_compare_encodes_both_sides_non_ascii_safe: 非 ASCII token 比较前双侧 UTF-8 编码 ——
+  匹配的放行 / 不匹配的落 401, 不再 TypeError 兜成 500(配置期 ASCII 校验的双保险面)
+- test_http_mid_body_disconnect_contained: 客户端声明 Content-Length 后半路断开 -> 读侧与写侧
+  同口径按 debug 记, 不冒泡成 handle_error 的 stderr traceback, 线程存活后续请求照常
 """
+import io
 import json
 import logging
 import socket
+import struct
+import sys
 import threading
 import time
 import urllib.error
@@ -953,3 +962,64 @@ def test_hr_thread_handle_start_refuses_when_alive():
     h = HrThreadHandle()
     h._thread = SimpleNamespace(is_alive=lambda: True)
     assert h.start(lambda: None, "test-thread") is False
+
+
+# ---------------------------------------------------------------------------
+# 存量评审 R4 修复轮(issue 26-11-07-0527 #1/#12)
+# ---------------------------------------------------------------------------
+
+
+def test_token_compare_encodes_both_sides_non_ascii_safe():
+    """非 ASCII token: 比较前双侧按 UTF-8 编码, 匹配放行 / 不匹配落 401(不再 TypeError 兜成 500)
+
+    compare_digest 的 str 形态要求双方均为 ASCII; 配置期 ASCII 限集(sections.py)是第一道闸,
+    运行期编码比较是双保险 —— 本用例直接构造非 ASCII token 的服务端, 钉死运行期不再炸。
+    """
+    server = make_server(token="密钥-k3y")
+    server.queue.put("pt.example.com", "page", URL)
+    status, headers, _body = server.route("GET", API_TASKS, {TOKEN_HEADER: "密钥-k3y", "Origin": ORIGIN})
+    assert status == 200 and headers["Access-Control-Allow-Origin"] == ORIGIN, "匹配的密钥照常放行(双侧编码后常数时间比较)"
+    status, _h, body = server.route("GET", API_TASKS, {TOKEN_HEADER: "别的密钥", "Origin": ORIGIN})
+    assert status == 401 and b"unauthorized" in body, "不匹配的非 ASCII 密钥落 401(原先 TypeError 兜 500)"
+    status, _h, _body = server.route("GET", API_TASKS, {TOKEN_HEADER: "ascii-wrong", "Origin": ORIGIN})
+    assert status == 401, "ASCII 侧不匹配照旧 401"
+    assert server.queue.pending() == 1, "401 不动队列"
+
+
+def test_http_mid_body_disconnect_contained(monkeypatch):
+    """客户端声明 Content-Length 后半路断开: 读侧与写侧(_safe_respond)同口径按 debug 记,
+    不冒泡成 ThreadingHTTPServer.handle_error 的 stderr traceback; 线程存活, 后续请求照常
+
+    确定性: 钉 _content_length 触发器等「服务端已过头部解析、正要进 rfile.read(体)」再 RST,
+    免得 RST 跑在头部读取之前(那异常落标准库 readline 路径, 不是本条修的读体路径)。
+    """
+    stderr = io.StringIO()
+    monkeypatch.setattr(sys, "stderr", stderr)
+    import auto_qb.hr.server as server_mod
+
+    entered = threading.Event()
+    orig_content_length = server_mod._content_length
+
+    def spy_content_length(headers):
+        entered.set()  # 处理线程已进 _dispatch(头已解析完), 下一个套接字动作就是读体
+        return orig_content_length(headers)
+
+    monkeypatch.setattr(server_mod, "_content_length", spy_content_length)
+    server = make_server()
+    handle = server.start()
+    try:
+        with capture_logs("auto_qb.hr.server") as cap:
+            raw = socket.create_connection(("127.0.0.1", handle.port), timeout=5)
+            raw.sendall(b"POST /api/hr/result HTTP/1.1\r\nHost: x\r\nContent-Length: 1000\r\n\r\npartial")
+            assert wait_until(entered.is_set, timeout=2.0), "服务端应已进入读体阶段"
+            raw.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, struct.pack("ii", 1, 0))
+            raw.close()  # SO_LINGER(1,0) = RST 关闭: 阻塞中的 rfile.read 吃 ConnectionResetError
+            assert wait_until(
+                lambda: any("请求体读取失败" in m for m in cap.messages), timeout=2.0
+            ), "读侧断开必须被按 debug 记(否则已冒泡成 handle_error)"
+        assert "Exception occurred during processing" not in stderr.getvalue(
+        ), "handle_error 不该被触发(它会往 stderr 打 traceback)"
+        assert handle.started, "端点线程必须还活着"
+        assert _http("GET", handle.port, API_TASKS, token=TOKEN)[0] == 200, "后续请求照常"
+    finally:
+        server.stop()

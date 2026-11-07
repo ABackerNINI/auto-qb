@@ -39,6 +39,7 @@ config v2→v3 迁移(config/migrations.py)一次性删除或改名, 无常驻�
 - test_channel_port_collision_with_discovery: port 与 discovery_port 相同报「两端口不能相同」(现产 port:18788 撞默认 discovery 18788 的形态); 任一侧 0(随机)不判撞
 - test_channel_lan_off_without_token_rejected: ⑤ 非回环 + pairing=off + 无 token 必须拦(V4); 配 token / 回环 / pairing=auto 三档放行
 - test_channel_discovery_port_ephemeral_warns_not_blocks: ⑥ discovery_port 落入 OS 临时端口段只告警不阻断(V12); 段值按平台取(Windows 49152-65535 / 类 Unix 32768-60999), dport=0 整段跳过
+- test_channel_token_ascii_only: token 含非 ASCII 字符报「ASCII」错(常数时间密钥比较要求两侧均为 ASCII, 非 ASCII 密钥旧校验放行、运行期逐请求 TypeError 兜 500 —— 必须配置期拦下); 纯 ASCII 放行, 非字符串仍报「必须是字符串」
 """
 
 import logging
@@ -431,6 +432,23 @@ def test_channel_pairing_enum_and_token_type():
     errors = _validate({"hr_check": {"channel": {"token": 123}}})
     assert any("config.hr_check.channel.token: 必须是字符串" in e for e in errors), errors
     assert _validate({"hr_check": {"channel": {"token": "abc"}}}) == []
+
+
+def test_channel_token_ascii_only():
+    """token 字符集限 ASCII: 含非 ASCII 字符报错并聚合(issue 26-11-07-0527 #1)
+
+    常数时间密钥比较的 str 形态要求两侧均为 ASCII, 非 ASCII 密钥(如中文)能过旧
+    「必须是字符串」校验, 运行期每个请求在鉴权处抛 TypeError 被兜成 500, 通道整体
+    不可用 —— 必须在配置期拦下; 纯 ASCII 放行, 非字符串仍走「必须是字符串」不串档。
+    """
+    errors = _validate({"hr_check": {"channel": {"token": "密钥"}}})
+    assert any("config.hr_check.channel.token" in e and "ASCII" in e for e in errors), errors
+    errors = _validate({"hr_check": {"channel": {"token": "ok中"}}})
+    assert any("config.hr_check.channel.token" in e and "ASCII" in e for e in errors), errors
+    assert _validate({"hr_check": {"channel": {"token": "plain-KEY_42"}}}) == []
+    errors = _validate({"hr_check": {"channel": {"token": 123}}})
+    assert any("config.hr_check.channel.token: 必须是字符串" in e for e in errors), errors
+    assert not any("ASCII" in e for e in errors), "非字符串不串档到字符集报错"
 
 
 def test_channel_port_collision_with_discovery():
