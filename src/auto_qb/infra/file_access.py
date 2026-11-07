@@ -5,7 +5,7 @@
 用映射表(config.fs.path_map)把逻辑路径在本层内部的 **syscall 边界**译成容器挂载路径
 (**容器空间**, 如 `/mnt/downloads/x`), 译回逻辑空间再返回。
 
-两条硬约束(报告 §04/§05, 违反即复刻历史事故):
+三条硬约束(前两条报告 §04/§05, 第 3 条 SEC-1; 违反即复刻历史事故):
 1. **逻辑路径进 → 逻辑路径出**: 映射只发生在本层内部, 所有返回值/entry 仍是逻辑空间
    —— 组 key / 回传 qB 的动作(set_location/edit_category)/ 跳检备份元数据消费的
    字符串永不经过映射, 零污染。
@@ -14,9 +14,9 @@
    误暂停事故 —— 故 miss 时存在性语义返回 UNDETERMINED 哨兵、取值语义抛
    FileAccessError, 让功能显式退化为报错/跳过(显式报错优于静默假值)。
 3. **容器侧挂载根逃逸校验(SEC-1)**: 映射命中的容器路径经 realpath 解析后必须仍落在
-   挂载根的真实路径内, 逃逸按 miss 处理 —— 下载目录内的符号链接指向挂载外时,
-   存在性探测/读取/新建/目录列举一概触达不了挂载外(Local 实现的 realpath 逃逸
-   防护在容器侧的等价补齐)。
+   挂载根的真实路径内, 逃逸条目弃用并继续尝试后续映射, 穷尽仍无安全命中才按 miss
+   处理 —— 下载目录内的符号链接指向挂载外时, 存在性探测/读取/新建/目录列举一概
+   触达不了挂载外(Local 实现的 realpath 逃逸防护在容器侧的等价补齐)。
 
 包装范围口径: 只收编**下载数据目录**访问(qB save_path/content_path 派生);
 派生自 data_dir 的路径(state/锁/日志/token/HR/跳检备份/配置 .bak)在容器里本就落
@@ -137,7 +137,9 @@ class FileAccess:
     """文件访问抽象: 全部方法 **逻辑路径进 → 逻辑路径出**
 
     存在性语义(exists/isdir/isfile)可能返回 UNDETERMINED; 取值语义(getsize/
-    disk_usage/scandir/mkdir)失败抛 FileAccessError(子类可另有 NotSupported)。
+    disk_usage/scandir/mkdir)映射 miss/不可判定抛 FileAccessError(子类可另有
+    NotSupported), 真实 I/O 失败抛原生 OSError(FileAccessError 继承 OSError,
+    既有 except OSError 兜底照常接住)。
     存在性三连在基类经 `_probe` 单点实现(issue 26-10-11-0352-refactor-infra-utils-small-helper-dup):
     子类只实现 `_probe_path` 给出 syscall 路径(None = 不可判定 => UNDETERMINED),
     Local 直通与 Mapped 映射分支不再各写一遍 exists/isdir/isfile。
@@ -162,11 +164,11 @@ class FileAccess:
         return self._probe(os.path.isfile, path)
 
     def getsize(self, path: str) -> int:
-        """文件大小(字节); 不存在/不可判定抛 FileAccessError"""
+        """文件大小(字节); 映射 miss/不可判定抛 FileAccessError, 真实 I/O 失败(如路径不存在)抛原生 OSError"""
         raise NotImplementedError
 
     def disk_usage(self, path: str) -> DiskUsage:
-        """路径所在盘的 (total, used, free); 不可用/不可判定抛 FileAccessError"""
+        """路径所在盘的 (total, used, free); 映射 miss/不可判定抛 FileAccessError, 真实 I/O 失败抛原生 OSError"""
         raise NotImplementedError
 
     def scandir(self, path: str) -> List[DirEntry]:
@@ -229,8 +231,9 @@ class MappedFileAccess(FileAccess):
       强制 `/` 边界(`D:/Downloads` 不得命中 `D:/Downloads2`), 尾斜杠归一后匹配;
     - miss: 存在性 → UNDETERMINED; 取值 → FileAccessError —— 绝不返回「不存在」;
     - 逃逸加固(SEC-1): 命中映射的容器路径经容器侧 realpath 解析后必须仍落在挂载根的
-      真实路径内(下载目录内的符号链接指向挂载外 → 按 miss 处理) —— Local 的
-      realpath 逃逸防护在容器侧等价补齐, fs.py 目录浏览不再「词法退化」;
+      真实路径内(下载目录内的符号链接指向挂载外 → 逃逸条目弃用并继续尝试后续映射,
+      穷尽仍无安全命中才按 miss 处理) —— Local 的 realpath 逃逸防护在容器侧等价补齐,
+      fs.py 目录浏览不再「词法退化」;
     - mkdir: **真实执行**(挂载点可写即成功); 只读挂载由 OS 的 EROFS/EACCES 冒泡,
       调用方语义化拒绝; miss 抛 FileAccessError;
     - open_path: NotSupported(恒) —— 容器缺 xdg-open 更缺文件管理器, 与挂载无关;
@@ -269,8 +272,9 @@ class MappedFileAccess(FileAccess):
         """映射匹配核心: 返回 (挂载根, 容器路径); **None = miss(含逃逸)** —— fail-safe 判定点
 
         匹配在 casefold 空间进行, 边界定位回原串: 前缀余量必须按**原串**码点切割
-        (casefold 可能变长, 折叠长度 ≠ 原串长度, 见 _fold_prefix_len)。命中后过挂载根
-        逃逸校验, 逃逸与未命中同样返回 None —— 调用方据此统一走三态。
+        (casefold 可能变长, 折叠长度 ≠ 原串长度, 见 _fold_prefix_len)。命中条目过不了
+        挂载根逃逸校验时弃用该条目继续尝试后续映射(重叠映射下更具体的安全条目仍可命中),
+        全部条目穷尽仍无安全命中才返回 None —— 逃逸与未命中对外同判 miss, 调用方据此统一走三态。
         """
         lp = _norm_logical(path)
         for src_folded, dst in self._table:
@@ -282,15 +286,15 @@ class MappedFileAccess(FileAccess):
             if lp[n] == "/":  # `/` 边界(D:/Downloads 不得命中 D:/Downloads2)
                 cp = dst + lp[n:]
                 if not self._root_contained(dst, cp):
-                    logger.debug(f"fs.path_map 逃逸拦截 | '{path}' -> '{cp}' 经 realpath 解析落在挂载根 '{dst}' 之外, 按 miss 处理")
-                    return None
+                    logger.debug(f"fs.path_map 逃逸拦截 | '{path}' -> '{cp}' 经 realpath 解析落在挂载根 '{dst}' 之外, 弃用该条目继续尝试后续映射")
+                    continue
                 return dst, cp
         return None
 
     def map_to_container(self, path: str) -> Optional[str]:
         """逻辑路径 → 容器路径; **None = miss 或逃逸**(fail-safe 判定点, 调用方据此走三态)
 
-        匹配见 _match; 逃逸(映射命中但容器侧 realpath 跳出挂载根)与未命中同判 None。
+        匹配见 _match; 逃逸条目弃用后继续尝试后续映射, 全部条目穷尽仍无安全命中与未命中同判 None。
         """
         m = self._match(path)
         return None if m is None else m[1]

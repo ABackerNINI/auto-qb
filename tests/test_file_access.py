@@ -22,6 +22,8 @@
   挂载内合法符号链接不受影响(宿主无建链能力时 skip —— 含 os.symlink 假成功)
 - test_mapped_escape_containment_logic: SEC-1 逃逸判定逻辑(非 symlink 环境可跑) —— 容器侧
   realpath 解析跳出挂载根 -> 按 miss, 仍在根内 -> 正常
+- test_mapped_overlap_escape_falls_through_to_next_entry: 重叠映射首条命中条目逃逸 -> 弃用该条目
+  继续尝试后续映射, 更具体的安全条目仍命中; 全部条目穷尽仍无安全命中 -> 与未命中同判 miss(R2#31)
 - test_mapped_mount_root_via_symlink: 挂载根本身经符号链接到达 -> 按解析后的真实根比较不误伤
   (同上, 宿主无建链能力时 skip)
 - test_mapped_open_path_not_supported: 容器 open_path 恒 NotSupported(B/C 类根因, 优雅降级)
@@ -414,6 +416,53 @@ def test_mapped_escape_containment_logic(tmp_path, monkeypatch):
     # 根内路径语义不变
     assert fa.exists("D:/Downloads/real/a.bin") is True
     assert fa.exists("D:/Downloads/real/ghost.bin") is False
+
+
+def test_mapped_overlap_escape_falls_through_to_next_entry(tmp_path, monkeypatch):
+    """重叠映射 + 首条命中条目逃逸 -> 弃用该条目继续尝试后续映射(R2#31), 更具体的安全条目仍命中;
+    全部条目穷尽仍无安全命中 -> 与未命中同判 miss(UNDETERMINED/FileAccessError), 语义不变。
+
+    realpath 桩注入(非 symlink 环境可跑, 同 test_mapped_escape_containment_logic): 宽条目
+    挂载下的 movies/jail 前缀解析到挂载外, 具体条目挂载不受桩影响。
+    """
+    mount_a = tmp_path / "mountA"  # 宽条目 D:/Downloads -> mountA(其下 movies/jail 由桩判逃逸)
+    mount_b = tmp_path / "mountB"  # 具体条目 D:/Downloads/movies -> mountB
+    mount_a.mkdir()
+    mount_b.mkdir()
+    (mount_b / "x.bin").write_bytes(b"x" * 3)
+    outside = tmp_path.parent / (tmp_path.name + "-outside")
+    outside.mkdir()
+    real_realpath = os.path.realpath
+    escaped_prefixes = [str(real_realpath(mount_a / name)) for name in ("movies", "jail")]
+    outside_real = str(real_realpath(outside))
+
+    def fake_realpath(p, **kw):
+        rp = str(real_realpath(p))
+        for prefix in escaped_prefixes:
+            if rp == prefix or rp.startswith(prefix + os.sep):
+                return outside_real + rp[len(prefix):]
+        return rp
+
+    monkeypatch.setattr(os.path, "realpath", fake_realpath)
+    dst_a = str(mount_a).replace(os.sep, "/")
+    dst_b = str(mount_b).replace(os.sep, "/")
+    fa = MappedFileAccess(
+        (
+            PathMapEntry(src="D:/Downloads", dst=dst_a),
+            PathMapEntry(src="D:/Downloads/movies", dst=dst_b),
+        )
+    )
+    # 首条(宽条目)命中但容器路径逃逸 -> 弃用该条目, 落到后续更具体的条目命中
+    assert fa.map_to_container("D:/Downloads/movies/x.bin") == dst_b + "/x.bin"
+    assert fa.exists("D:/Downloads/movies/x.bin") is True
+    assert fa.getsize("D:/Downloads/movies/x.bin") == 3
+    # 目录本身: 宽条目逃逸后落到具体条目的「根本身命中」(根命中恒在根内, 不做逃逸校验)
+    assert fa.map_to_container("D:/Downloads/movies") == dst_b
+    # 只命中宽条目且逃逸: 全部条目穷尽仍无安全命中 -> 与未命中同判 miss(语义不变)
+    assert fa.map_to_container("D:/Downloads/jail/secret.bin") is None
+    assert fa.exists("D:/Downloads/jail/secret.bin") is UNDETERMINED
+    with pytest.raises(FileAccessError, match="不可判定"):
+        fa.getsize("D:/Downloads/jail/secret.bin")
 
 
 def test_mapped_open_path_not_supported(tmp_path):

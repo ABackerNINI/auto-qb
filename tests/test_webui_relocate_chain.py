@@ -12,6 +12,8 @@
 - test_probe_chain_edge_states: 空起点/空根/缺失起点/目标越界/目标不可映射的兜底分支;
 - test_inspect_path_error_classification: 不存在/权限不足/未知类型各自可表达;
 - test_inspect_path_link_variants: UNC 前缀/空目标/父目录不可读/重解析标签与 S_ISLNK/readlink 失败;
+- test_inspect_path_mount_point_positive: 挂载点正向识别(父/子 st_dev 不等 -> True + KIND_MOUNT,
+  lstat 替身注入, 不依赖宿主真实挂载点);
 - test_chain_start_derivation_and_env: 空记录/映射/远程 UNC/候选越界回退四种起点派生与环境判定;
 - test_alias_helpers: `\\??\\` 前缀、相对链接、硬链接、挂载点识别;
 - test_chain_alias_index_prefers_active_job: 同路径多 job 优先活跃 job;
@@ -368,6 +370,25 @@ def test_inspect_path_link_variants(tmp_path, monkeypatch):
     bad = alias_fs.inspect_path(str(tmp_path / "l3"))
     assert bad.status == "unknown" and bad.kind == alias_fs.KIND_SYMLINK
     assert "权限不足" in bad.error
+
+
+def test_inspect_path_mount_point_positive(tmp_path, monkeypatch):
+    """挂载点正向识别(此前零覆盖): 父目录 st_dev 与目录不同 -> _is_mount_point True ->
+    inspect_path 判 KIND_MOUNT; lstat 替身注入父/子不等 st_dev, 不依赖宿主真实挂载点
+    (False 支已有钉: test_inspect_path_link_variants 父目录不可读 / test_alias_helpers 根目录恒 False)。"""
+    target = tmp_path / "mounted"
+    st_self = SimpleNamespace(st_mode=stat.S_IFDIR, st_nlink=1, st_dev=2)
+    self_abs = os.path.abspath(str(target))
+
+    def _lstat(path):
+        # 父目录与目标用不同 st_dev 的替身(去设备/长路径前缀后按路径区分)
+        p = os.path.abspath(alias_fs.strip_device_prefix(str(path)))
+        return st_self if p == self_abs else SimpleNamespace(st_mode=stat.S_IFDIR, st_nlink=1, st_dev=1)
+
+    monkeypatch.setattr(alias_fs.os, "lstat", _lstat)
+    assert alias_fs._is_mount_point(str(target), st_self) is True
+    ins = alias_fs.inspect_path(str(target))
+    assert ins.status == "ok" and ins.kind == alias_fs.KIND_MOUNT and ins.is_mount is True
 
 
 def test_inspect_path_error_classification(tmp_path, monkeypatch):
