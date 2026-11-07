@@ -5,6 +5,10 @@
  */
 Object.assign(window.AQB_DIALOGS.methods, {
     async metaSetCategory(name) {
+      // 回执等待期防重复投递(与 metaToggleTag/metaAddNewTags 同口径): 双击候选行/回车与点选竞态
+      // 会并发两条 set_category bulk, 且先完成的一方把 metaBusy 提前复位, closeMeta 的误关保护
+      // 对仍在途的另一方失效 —— 入口闸让第二发在投递前返回, busy 只归第一发所有。
+      if (this.metaBusy) return;
       name = (name || "").trim();
       this.metaCatMenu = false;
       this.metaCatHi = -1;
@@ -60,6 +64,9 @@ Object.assign(window.AQB_DIALOGS.methods, {
         setHi: (v) => { this.metaCatHi = v; },
         onPick: (name) => this.metaSetCategory(name),
         enterFallback: () => this.metaCatInput,  // 无高亮项时回车提交输入框文本(含清空 = 无分类)
+        // 回退分支落地钩子: 与 onPick 同指 metaSetCategory —— 带 onEnter 的 ctx 才吃空串回退
+        // (comboKeydown 单点放行条件, R5#132), 清空输入框回车 = 提交「无分类」直达本方法
+        onEnter: (name) => this.metaSetCategory(name),
         listRef: "metaCatList",
         openOnArrow: true,
       }, e);

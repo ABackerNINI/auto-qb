@@ -23,8 +23,8 @@
 - test_r4_add_combo_keydown_battery: R5#143 五个自绘下拉共用键盘导航本体 —— IME 组词守卫
   (isComposing/keyCode 229 零接管)、ArrowDown/ArrowUp 取模环绕(尾→首/首→尾)、关层方向键先开层
   (openOnArrow 双形态: cat/tag 开, 保存路径面板不接管)、Enter 选中高亮项/enterFallback 落地
-  (onEnter 优先于 onPick、空串与 null 不落地、无 enterFallback 不吃回车)、Esc 只收面板
-  (stopPropagation 冒泡交退栈链, 未开时零动作)
+  (onEnter 优先于 onPick、空串仅 ctx 带 onEnter 时放行 = 无分类 R5#132, null 不落地、
+  无 enterFallback 不吃回车)、Esc 只收面板(stopPropagation 冒泡交退栈链, 未开时零动作)
 - test_r4_add_dnd_ingest_battery: R5#142 DND 进料分支 —— _addIngestFiles 同名同大小去重(纯重复
   toast「已在列表」/混合新增不误报)、非 .torrent 忽略(零开窗零入列 + warn toast)、混合进料忽略
   计数 toast、未开窗先开窗再填(先清空后 push, 两文件都在); _addIngestLinks uri-list 注释行
@@ -427,7 +427,7 @@ const v = makeVm();  // comboKeydown 只经 this 走 _hiScroll(listRef 非空时
   ok("保存路径面板关层: 方向键不接管(preventDefault 不调)", st.open === false && e.prevented === 0);
 }
 
-// ⑤ Enter 选中高亮项 / enterFallback 落地(onEnter 优先) / 空串与 null 不落地
+// ⑤ Enter 选中高亮项 / enterFallback 落地(onEnter 优先) / 空串仅带 onEnter 放行(=无分类), null 不落地
 {
   const { ctx, st } = mkCtx();
   st.open = true; st.hi = 1;
@@ -440,10 +440,16 @@ const v = makeVm();  // comboKeydown 只经 this 走 _hiScroll(listRef 非空时
      JSON.stringify(st.enters) === JSON.stringify(["手输值"]) && st.picks.length === 1 && st.picks[0] === "b");
   ctx.enterFallback = () => "";
   v.comboKeydown(ctx, ev("Enter"));
-  ok("enterFallback 空串: 不落地(不吃哑回退)", st.enters.length === 1);
+  ok("enterFallback 空串 + ctx 带 onEnter: 放行落地(=无分类, R5#132; 原「不落地」语义已改)",
+     JSON.stringify(st.enters) === JSON.stringify(["手输值", ""]));
+  delete ctx.onEnter;  // 无 onEnter 形态(cat/tag/path 三处): 空串回退仍丢弃
+  ctx.enterFallback = () => "";
+  v.comboKeydown(ctx, ev("Enter"));
+  ok("enterFallback 空串 + ctx 无 onEnter: 不落地也不误投 onPick",
+     st.enters.length === 2 && st.picks.length === 1 && st.picks[0] === "b");
   ctx.enterFallback = () => null;
   v.comboKeydown(ctx, ev("Enter"));
-  ok("enterFallback null: 不落地", st.enters.length === 1);
+  ok("enterFallback null: 不落地", st.enters.length === 2);
   delete ctx.enterFallback;
   const e = ev("Enter");
   v.comboKeydown(ctx, e);
@@ -605,7 +611,7 @@ def test_r4_add_esc_stack_battery():
 
 
 def test_r4_add_combo_keydown_battery():
-    """R5#143: comboKeydown 键盘导航本体 —— IME 守卫 / 取模环绕 / 开层落位 / Enter+fallback / Esc 收面板"""
+    """R5#143 + R5#132: comboKeydown 键盘导航本体 —— IME 守卫 / 取模环绕 / 开层落位 / Enter+fallback(空串仅带 onEnter 放行 = 无分类) / Esc 收面板"""
     report = _run_probe(_NODE_COMBO_KEYDOWN_PROBE, _ADD_JS)
     _assert_battery(report, "下拉键盘导航电池")
 

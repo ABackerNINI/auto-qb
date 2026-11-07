@@ -304,9 +304,10 @@ window.AQB_ADD = {
      *   open()/setOpen(v)   hi()/setHi(v)   面板开合与高亮索引(根数据读写)
      *   onPick(item)   选中候选(点选与回车共用同一个回调)
      *   enterFallback() Enter 无高亮项时的回退值(null = 不回退; meta = 输入框文本,
-     *                   move = 修剪后的输入框文本)
+     *                   move = 修剪后的输入框文本)。空串仅当 ctx 带 onEnter 时放行
+     *                   (meta: 清空输入框回车 = 提交「无分类」, R5#132), 其余路径丢弃。
      *   onEnter(item)  **可选**: 回退分支的落地回调(缺省 = onPick)。2026-10-29 设定位置点选改为
-     *                   「只回填」后, 手输回车仍需直接提交 —— 只有 move 传本钩子, 其余四处不传。
+     *                   「只回填」后, 手输回车仍需直接提交 —— move 与 meta 传本钩子, 其余三处不传。
      *   listRef         ↑↓ 后滚动跟随的 $refs 名(null = 不跟随)
      *   openOnArrow     关层时方向键是否先开层(false = 未开时不接管任何键, 保存路径面板) */
     comboKeydown(ctx, ev) {
@@ -331,7 +332,9 @@ window.AQB_ADD = {
         } else if (ctx.enterFallback) {
           ev.preventDefault();  // meta/move: 菜单未开或无高亮也吃掉回车(提交当前输入), 与收敛前逐字一致
           const v = ctx.enterFallback();
-          if (v != null && v !== "") (ctx.onEnter || ctx.onPick)(v);
+          // 空串仅对显式带 onEnter 的 ctx 放行(meta: 清空输入框回车 = 提交「无分类」, R5#132);
+          // onPick 回退路径(cat/tag/path)不吃哑空串 —— 那三处的提交语义只在点选/选中高亮时发生
+          if (v != null && (v !== "" || ctx.onEnter)) (ctx.onEnter || ctx.onPick)(v);
         }
       } else if (ev.key === "Escape" && ctx.open()) {
         ev.stopPropagation();  // 只收面板, 不关对话框(冒泡交 lifecycle 的 Esc 退栈链)
