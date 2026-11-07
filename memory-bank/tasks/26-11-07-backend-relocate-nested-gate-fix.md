@@ -2,7 +2,7 @@
 
 **Status:** In Progress
 **Added:** 2026-11-07
-**Updated:** 2026-11-07
+**Updated:** 2026-11-08
 **Summary:** relocate 嵌套闸门误拦修正实施
 **Topics:** backend-relocate-nested-gate-fix
 
@@ -36,9 +36,9 @@
 | S1a | T1a 真机实验(环境核验+E1/E2/E3) | Done(2026-11-07) |
 | S1b | T1b 真机实验(E4-E7+E8 判据模拟) | Done(2026-11-07) |
 | S2 | 回炉检查点(P1 结果对照判据) | Done(2026-11-07: R7 批准 + E2c 入池, 计划改版 R1) |
-| S3 | T2 纯函数+单测重锚 | Open |
-| S4 | T3 UI 披露实现 | Open |
-| S5 | T4a 真机全链路复验 | Open |
+| S3 | T2 纯函数+单测重锚 | Done(2026-11-07, fd53c8fe) |
+| S4 | T3 UI 披露实现 | Done(2026-11-07, c7c839da) |
+| S5 | T4a 真机全链路复验 | Done(2026-11-08, 8/8 场景 PASS, 见 R4) |
 | S6 | T4b test.full+基线切片 | Open |
 | S7 | T5 code-review | Open |
 | S8 | T6 收尾回写 | Open |
@@ -91,3 +91,21 @@
 实验机制附注: ①qB 搬移进「已存在非空目录」时走 rename 失败→逐文件拷贝合并路径(E6a 实测),这是反向成环 junction 得以建成的前提,生产同形态(目标=声明源祖先)同理;②E5/E6 的 armed 卡死现场受重建退避 300s 约束,观测窗内只见 attempts 1->2,不等 rebuild_exhausted(全耗尽需 ~15min,不必要);③本机所有实验无 qB 下线窗需求(E4-E7 均止步于 armed/direct,E5 卡死),real.down 仅收尾用。
 
 现场已还原: 双实例 0 种子、save_path 还原(`R:\Download\PTing`)、subst 已拆、.work/rm04 用例目录已清、`.work/p1b` 只留脚本+证据(gitignored)、实例按初见状态停机;`git status` 干净(HEAD 1e5bd695 未动,零产品代码改动)。
+
+### R4 · T4a P4 真机复验 (2026-11-08)
+
+环境: 同 P1(环境2, 56589/56590 qB 5.2.3 Legacy 免鉴权, real.up/down 起停);subst X: -> `tests-real/.work/p4/xdrive`(收尾已拆)。**零旁路零 monkeypatch** —— 全部场景走产品真实路径(P2 fd53c8fe 判据+删链门重锚、P3 c7c839da UI 披露之后;会话开工 HEAD c7c839da,全程未动)。证据(驱动脚本 `p4.py`/`u_check.mjs` + JSON/截图)在 `tests-real/.work/p4/evidence/`(gitignored;勿跑 real.seed.clean,会整扫清掉)。三约束全程未破(不删种/不 skip_check 重加/不读盘哈希校验,teardown 清理不受限);生产 26586/16585 与 `I:\PT\`、`config.yml`、`auto-qb-data/` 零触碰。**8/8 场景 PASS,无「该拦不拦/该放不放/删链不收敛/UI 不显示」项,无置顶缺陷。**
+
+逐场景结果(判据对照 = 计划 §03 R1-R7):
+- **R-A(=E2) PASS**: 2 成员 3 文件组,target=源内兄弟目录 src\待删。预检放行 cls=confirm/gates=[nested]/member_count=2,R4 confirm 文案逐字(「新落点仍在旧声明源树下(X:\p4_ra\src\待删 ⊆ X:\p4_ra\src)…(D19)…」),R5 note 未触发(target 不在内容根内,符合判据)。两步发起实证:confirm=false → confirm 回执零副作用(jobs_on_disk=0);confirm=true → started。全链路:setLocation→3 硬链别名→武装穿透(经原路径读同 size)→下线窗改写(52s,journal rewritten)→重启双成员原生落位 target 账面 1.00→**job done(reason=finalized, alias_paths=[])——R7 修后删链门收敛、别名清零**,旧根 0 残留链接,零 recheck/零拒载(「无法解析恢复数据」0 条)/零异态。T1a 的删链自锁(旧码 240s 恒卡 rewritten/chain_deps)消除。
+- **R-B(=E3) PASS**: target ⊆ 旧内容根(src\e_seed\待删2)。预检 R4 confirm + R5 note **均出现**(「新落点在旧内容根内…链接叶与新数据混居, 带文件删除会被 D16 拦(收尾完成后消失)」),放行。全链路:混居现场实证(旧内容根内 3 硬链叶 + 待删2 新数据并存,`rb/disk_src_armed.json`);别名期 D16 摩擦实证(两成员 delete_files=true 均 error「1 个种子位于迁移收尾窗口的活动别名之下(X:\p4_rb\src)…」,种子仍在、dst/链接文件无损)——R5 note 语义兑现;下线窗改写 52s→重启→**job done/finalized + alias_paths=[] + 旧叶全删,删链后旧内容根只剩待删2 新数据**。
+- **R-C(=E4) PASS**: 单成员 3 文件,target=src\待删。预检 cls=confirm/form=direct + R4 confirm(旧码 blocked 拦空气 → 现按 R4 披露放行)。confirm=true → qB 直接搬移落位原名,job done(reason=direct),alias_paths/alias_kind 空、无 journal(无收尾窗),零异态。
+- **R-D(=E7) PASS**: A 组(2 成员 a_seed)独立目标发起至 armed(3 硬链,scope=srcA\a_seed);B 组(b_seed)落点 srcA\停车(A 声明源之下、A 内容根之外)→ **预检 cls=ok/gates=[] 放行(R2 收窄生效;P1 旧码同坐标 nested blocked)**,cls=ok 走 confirm=false 直发,B 实迁落位 srcA\停车\b_seed 原名;A 别名在位可读、A job 相位/alias_paths 不变。R7 记账对照(纯函数,`rd/out.json`):`chain_gate_hits(旧锚 job.src)` 命中 [srcA, srcA\停车] / `新锚 job.scope` 命中 []。A 全链路(下线窗 58s 改写→重启→核验)→ **A job done/finalized + 别名清零 + 旧叶全删 —— R7 对组外停车来源的豁免在真机收尾链实证**(旧锚下 B 的停车 save_path 会把 A 永久顶在删链门);B 组数据/落位全程无损(B 的非 mover 成员由 B 自己的 job 在同一窗口完成改写,收敛 srcA\停车)。
+- **B-A(=E5) PASS**: 8 文件两成员组(DIR_ALIAS 形态),target ⊆ 旧内容根 → 预检 **blocked**,R1 正向文案逐字(「目标与旧内容根互嵌(正向: 新内容根 X:/p4_ba/src/e_seed/待删2/e_seed 落于旧内容根 …之下): 目录别名落点会被搬入的新数据占住, 搬移后建链必失败…」);零副作用(无 job/save_path 不变/无 junction/状态不变)——**搬后卡死形态不再可达(拦在预检,无需现场拆除)**。
+- **B-B(=E6a) PASS**: 非平铺组 save_path 恰 = target/内容根段名(src_cr=X:\p4_bb\e_seed\e_seed ⊊ dst_cr=X:\p4_bb\e_seed)→ 预检 **blocked**(P1 同坐标旧码 confirm 放行 → 现拦,即 P1 时的零防御缺口已闭合),R1 反向文案逐字(「…目录别名会指向自身祖先, 目录列举成环…」);零副作用。
+- **B-C PASS**: 待删2(已存在兄弟目录)/待删2x(前缀同串)/待删除(前缀同串)/尾斜杠 四变体 → 全部 cls=confirm(R4)不 blocked,成分级(_within 以分隔符为界)不误伤。
+- **U PASS(浏览器真机)**: `/api/webui/flags` relocate_enabled=true(第 4 键在位);`/shared/tpl/move-dialog.html` 服务端下发含 R6a 提示行 + `v-if="flags.relocate_enabled"` 门控;Playwright(chromium headless)真机走通 atlas UI:行右键→「设定位置…」→移动对话框渲染两行提示(第二行「整组迁移已启用: 移动将以内容组为单位, 同组其它成员一并迁移。」= R6a)→填路径提交→确认框「需确认: 迁移方式」行表逐行留证:迁移形态=逐文件链接/**来源=X:\p4_u\src(整组 2 个成员)**(R6b 后缀)/目标/未来种子/原因=R4 文案全文/提示 → 点「取消」收场零副作用(confirm=true 未发出)。截图 `u/u_move_dialog.png`/`u/u_confirm_modal.png`。
+
+实验机制附注: ①rm04 `fake_multi` 契约:files 的 rel 首段必须 == tname(首段会被 info.files 剥掉,数据按 savepath/rel 落盘而 qB 按 savepath/<tname>/ 找内容——不一致时私有 tracker 无 peers 恒 stalledDL,wait_complete 必超时;R-D 前两跑因此失败,已加 `build_group` 断言钉住)。②B-A 首跑把 target(内容根内 待删2)**预创建** → 内容根含杂项 → exclusive=False → form=file_links(R4 confirm 放行而非 R1 拦)——E5 坐标的 待删2 是搬移时由 mover 落位才出现的,重跑不预创建即 dir_alias 形态;非判据问题。③R-D 观察一处 qB 侧现象(非产品缺陷):setLocation 的成员 save_path 若在全局下线前 ~1s 内才变更,qB 重启后该成员 save_path 回落旧值(qB fastresume 持久化竞态);给 8s 落盘裕量后未再现;产品 journal 只含本组成员(`rd/journal.json` 只有 A 的两个 hash),非成员 fastresume 产品不碰。④UI 默认视图是 groups,.torrent-row 只在种子视图渲染 —— Playwright 需先点导航 `data-view="torrents"`。
+
+现场已还原: 双实例 0 种子、save_path 还原(`R:\Download\PTing`)、subst 已拆、X: 与 .work/rm04 用例子树定点清、`.work/p4` 只留脚本+证据(gitignored)、实例按初见状态停机(会话开工时双实例在线,收尾按 R1/R2 同款口径 real.down;如需再起 `commands run real.up`);`git status` 除本档案 md 外干净(HEAD c7c839da 未动,零产品代码改动)。
