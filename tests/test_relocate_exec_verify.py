@@ -20,6 +20,10 @@
 - test_step_verify_deps_block_then_release: 门外共享者 save_path 恰等于旧根(N5 形态)→
   reason=chain_deps 别名不删; 依赖消失后重跑 → 收尾完成
 - test_step_verify_deps_prefix_hit: 前缀命中(组外种子落旧根之下)同为依赖, 别名不删
+### 删链门重锚(R7, 计划 26-11-07-1300 D9)
+- test_chain_gate_deps_scope_anchor_and_member_exempt: 本组成员豁免(嵌套放行形态 dst ⊆ scope
+  不再自锁)/ 组外 scope 内保守计数(等值+前缀双向)/ scope 外不计(旧根兄弟停车假依赖修)/
+  旧账 scope 缺失回落 job.src
 ### D16 删种拦截(qbapi.torrents_delete 单点, 两条删除路径共用判据)
 - test_qbapi_delete_guard_blocks_delete_files: 目录别名形态(junction 根=src)——等值与前缀
   成员都拦(整批不发 qB, 文案带解法); delete_files=False(纯删除)放行
@@ -229,6 +233,35 @@ def test_step_verify_deps_prefix_hit(tmp_path):
     mod._step_verify(job, rt)
     saved = mod.get_job("j1")
     assert saved.reason == ru.REASON_CHAIN_DEPS and removed == [], (saved.reason, removed)
+
+
+def test_chain_gate_deps_scope_anchor_and_member_exempt(tmp_path):
+    """R7 删链门重锚(计划 26-11-07-1300 D9): 锚 job.scope + 本组成员豁免(调用侧按 hash 过滤)
+    - 本组豁免: 成员 save_path=dst(嵌套放行形态 dst ⊆ scope)不再顶进依赖集(T1a 自锁修);
+      成员是否到位由核验步先行把关, 依赖集只关组外种子
+    - 组外 scope 内保守计数: 等值(恰等 scope)与前缀(scope 之下)双向照算(N5 双判据保留)
+    - scope 外不计: 组外种子停旧根(src)兄弟目录不算依赖(T1b/E7 假依赖修)
+    - 旧账 scope 缺失: 回落 job.src(保守, 与旧锚同口径)
+    """
+    mod = _bare_mod(data_dir=str(tmp_path / "data"))
+
+    def _deps(job, records):
+        mod._ctx.store = types.SimpleNamespace(by_hash={h: _rec(h, sp) for h, sp in records}, relocating_hashes=set())
+        return [h for h, _sp in mod._chain_gate_deps(job)]
+
+    # 本组豁免 + scope 外不计: 成员停在嵌套落点(dst ⊆ scope), 组外种子停旧根兄弟目录
+    job = _job("j1", src="R:/src", dst="R:/src/待删", scope="R:/src/Show", hashes=("HA", "HB"))
+    assert _deps(job, [("HA", "R:/src/待删"), ("HB", "R:/src/待删"), ("HZ", "R:/src/停车")]) == [], \
+        "成员豁免(R7)+ 组外 scope 外不计(E7 假依赖修)"
+    # 组外 scope 内保守计数: 等值与前缀双向照算
+    job2 = _job("j2", src="R:/src", dst="R:/dst", scope="R:/src/Show", hashes=("HA", ))
+    assert _deps(job2, [("HZ", "R:/src/Show"), ("HY", r"R:\src\Show\g2")]) == ["HZ", "HY"], \
+        "组外种子在作用域等值/之下仍算依赖(N5 双判据保留)"
+    # 成员与组外同处 scope 内: 只有组外计入(豁免按 hash 身份, 不误伤同路径组外种子语义)
+    assert _deps(job2, [("HA", "R:/src/Show/inner"), ("HZ", "R:/src/Show")]) == ["HZ"], "成员豁免不误伤组外计数"
+    # 旧账 scope 缺失: 回落 job.src(保守)
+    legacy = _job("j3", src="R:/src", dst="R:/dst", scope="", hashes=("HA", ))
+    assert _deps(legacy, [("HZ", "R:/src/停车")]) == ["HZ"], "scope 缺失回落 src(旧账兼容)"
 
 
 # ---------------------------------------------------------------- D16 删种拦截(qbapi 单点)

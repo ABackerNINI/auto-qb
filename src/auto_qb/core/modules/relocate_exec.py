@@ -679,9 +679,10 @@ class ExecMixin:
           daemon 等下一窗口重放), 不判 failed(S4a 已退役 FAILED_TIMEOUT, 悬挂是良性态)。
           首次不过经重放入口(rj.reset_rewrites 清 settled 使重回 pending)请求重放一轮;
           重放一次后仍不过则维持悬挂+告警(防无限改写循环, 保守节奏)。
-        - 删链门(N5 教训): 扫 qB 全量种子的 save_path(不限于本组)——「save_path == 旧根
-          (等值)或位于旧根之下(前缀)」双判据(判据单点 ru.under_alias_root), 命中=0(含
-          组外共享者零依赖)→ 主循环在线删别名(alias_fs.remove_alias 非递归绝不跟随)+
+        - 删链门(N5 教训): 扫 qB 全量种子的 save_path(不限于本组)——「save_path == 别名
+          作用域(等值)或位于其下(前缀)」双判据(判据单点 ru.under_alias_root; R7 重锚
+          job.src → job.scope + 本组成员豁免, 计划 26-11-07-1300 D9), 命中=0(含组外共享者
+          零依赖)→ 主循环在线删别名(alias_fs.remove_alias 非递归绝不跟随)+
           job 终态 done; 命中>0 → 维持别名, 依赖未清零永不删, 反馈面给出解法文案。
         """
         bad = [(h, self._verify_member_state(h, job)) for h in job.hashes if not self._member_at_dst(h, job)]
@@ -744,18 +745,28 @@ class ExecMixin:
             logger.debug(f"relocate | job {job.job_id}: 核验仍未过(悬挂维持): {text}")
 
     def _chain_gate_deps(self, job: RelocateJob) -> list:
-        """删链门依赖扫描: qB 全量种子的 save_path 对照旧根(等值 OR 前缀, N5 双判据)"""
+        """删链门依赖扫描: qB 全量种子的 save_path 对照别名作用域(等值 OR 前缀, N5 双判据);
+        本组成员豁免(R7, 计划 26-11-07-1300 D9)—— 成员是否到位由核验步(_step_verify 前置
+        的全员 save_path==dst)先行把关, 依赖集只关组外种子: 嵌套放行形态(R4/R5)下成员搬后
+        save_path=dst ⊆ src 恒命中 = 收尾自锁(别名永不删, T1a 实测 240s 无收敛)。
+        锚 job.src → job.scope(别名真实落点/搬移树, 建账 content_root_of 既有产物): 组外
+        种子停旧根兄弟目录不再顶进依赖集(T1b/E7 实测假依赖); 旧账 scope 缺失回落 job.src
+        (保守, 与旧锚同口径)。
+        """
+        anchor = job.scope or job.src
+        members = set(job.hashes)
         records = list(self._ctx.store.by_hash.values())
         save_paths = [getattr(r, "save_path", "") or "" for r in records]
-        hits = set(ru.chain_gate_hits(save_paths, job.src))
-        return [(r.hash, sp) for r, sp in zip(records, save_paths) if sp in hits]
+        hits = set(ru.chain_gate_hits(save_paths, anchor))
+        return [(r.hash, sp) for r, sp in zip(records, save_paths) if sp in hits and r.hash not in members]
 
     def _chain_deps_text(self, job: RelocateJob, deps: list) -> str:
-        """删链门依赖的反馈面文案(数量 + 样例 + 解法)"""
+        """删链门依赖的反馈面文案(数量 + 样例 + 解法; R7 锚口径 = 别名作用域)"""
+        anchor = job.scope or job.src
         samples = ", ".join(h[:8] for h, _sp in deps[:3])
         more = f" 等共 {len(deps)} 个" if len(deps) > 3 else ""
         return (
-            f"仍有 {len(deps)} 个种子的保存路径位于旧根 {job.src}(等值或之下){more}({samples}): "
+            f"仍有 {len(deps)} 个种子的保存路径位于别名作用域 {anchor}(等值或之下){more}({samples}): "
             "别名删除会让它们找不到数据 —— 请把这些种子迁移到新位置或删除后自动重判"
         )
 

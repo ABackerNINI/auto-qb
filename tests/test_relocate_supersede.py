@@ -179,13 +179,15 @@ def test_supersede_rewritten_chain_dual_gates(tmp_path, monkeypatch):
     assert a_links and b_links and not (set(a_links) & set(b_links))
     _points_at_c(mod, job1, src, dst_c)
     _points_at_c(mod, job2, dst, dst_c)
-    # 各删链门各自判依赖: B 根上的账面只算 J2(root=B)的依赖; J1(root=A)的依赖是仍未
-    # 重启的成员(账面还挂在 A), HZ 的 B 账面不漏进 J1 的门(双门各判各的根)
-    hz = FakeTorrent(hash="HZ", name="Show", save_path=dst, progress=1.0, state="pausedUP")
+    # 各删链门各自判依赖(R7 锚口径 = 别名作用域 + 本组成员豁免, 计划 26-11-07-1300 D9):
+    # HZ 停在恰等 J2 作用域的位置(dst/Show = 别名落点, N5 等值形态) = 真依赖, 只算 J2 的门;
+    # J1 的门不再数本组成员(账面仍挂 A 的 HB 由核验步把关, 成员豁免), HZ 的 B 账面也不漏进
+    # J1 的门(双门各判各的作用域)
+    hz = FakeTorrent(hash="HZ", name="Show", save_path=os.path.join(dst, "Show"), progress=1.0, state="pausedUP")
     client.torrents["HZ"] = hz
     mgr.store.by_hash["HZ"] = hz
-    assert [h for h, _sp in mod._chain_gate_deps(job2)] == ["HZ"], "B 根账面 = 新门依赖"
-    assert [h for h, _sp in mod._chain_gate_deps(job1)] == ["HB"], "A 根依赖 = 未重启成员(经别名做种中)"
+    assert [h for h, _sp in mod._chain_gate_deps(job2)] == ["HZ"], "B 作用域账面 = 新门依赖"
+    assert [h for h, _sp in mod._chain_gate_deps(job1)] == [], "A 门户内零依赖: 本组成员豁免(R7), HZ 停 B 侧不在 A 作用域"
     assert "HZ" not in [h for h, _sp in mod._chain_gate_deps(job1)], "B 根账面不漏进旧门(双门独立)"
     # 旧门先删不扰新门: 成员重启加载到 C(账面全到 C) -> J1 核验过 + 根 A 依赖清零 -> done 删 A 侧;
     # HZ 账面仍在 B -> J2 删链门依赖未清, 别名维持(删旧门不扰新门)

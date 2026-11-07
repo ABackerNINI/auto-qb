@@ -60,7 +60,7 @@ GATE_FORM = "form"  # 形态分流本身的拒绝/需确认(plan() 产出)
 GATE_AUTO_TMM = "auto_tmm"  # 组内有 AutoTMM 成员(fastresume 无 qBt-savePath 键, N8 实测, 改写不生效)
 GATE_BACKEND = "backend"  # qB fastresume 存储后端非 Legacy(部署矩阵 E 格: SQLite 无 fastresume 文件, D2/D4 fail-fast 禁用)
 GATE_BT_BACKUP = "bt_backup"  # BT_backup 路径未配置/不可达不可写(部署矩阵 D 格)
-GATE_NESTED = "nested"  # 嵌套目标: target 位于成员声明源或活跃 job 声明源/目标之下(0546 机制③, 成分级 E2.3)
+GATE_NESTED = "nested"  # 嵌套目标: 形态分治 R1-R5(计划 26-11-07-1300)—— DIR_ALIAS 内容根互嵌硬拦 / 在途 job 作用域与目标拦 / 嵌旧声明源 confirm / FILE_LINKS 深嵌 note
 GATE_SOURCE_MISSING = "source_missing"  # 源侧三态之缺失: 声明文件原名与 .!qB 孪生都不在(0546 机制①/E2.2 零搬移假成功)
 GATE_SOURCE_UNKNOWN = "source_unknown"  # 源侧三态之不可判定: exists 探测判不了(容器映射 miss, 保守拒同 target_unknown 口径)
 
@@ -454,7 +454,10 @@ class GroupFacts:
     # 组内 AutoTMM 成员 hash(计划 26-11-05-0808 S1): auto_tmm=true 的成员 fastresume 无
     # qBt-savePath 键(N8 实测), 改写收尾对它不生效 => 有即整组拒迁(evaluate_group 闸门)
     auto_tmm_hashes: Tuple[str, ...] = ()
-    # 全成员声明源(0546 机制③「全成员覆盖」; 空 = 回落 mover 的 save_path, 兼容既有构造)
+    # 全成员声明源(0546 机制③「全成员覆盖」; 空 = 回落 mover 的 save_path, 兼容既有构造)。
+    # 计划 26-11-07-1300 R1-R5 起嵌套闸门不再消费本字段(锚点全部取 mover 内容根派生物,
+    # 声明源 ≠ 别名真实落点是误拦根因)—— 字段与构建面(relocate_plan._group_facts)留存,
+    # 仅供回执/排查, 不参与判定。
     member_save_paths: Tuple[str, ...] = ()
     # 源侧三态检查(0808 S1 继承 0546 机制①, 逐声明文件、深层天然覆盖): 只收「缺失」与
     # 「不可判定」两态; .!qB 孪生态并入 qb_temp_entries(复用既有 GATE_QB_TEMP, 不另造闸)
@@ -466,39 +469,80 @@ def _reason(gate: str, cls: str, text: str) -> dict:
     return {"gate": gate, "cls": cls, "text": text}
 
 
-def nested_target_on(target: str, save_paths: Iterable[str], jobs: Sequence["RelocateJob"]) -> str:
-    """嵌套目标判定(计划 26-11-05-0808 S1 继承 0546 机制③; E2.3 成分级判据 8/8): 命中返回拒绝文案, "" = 放行
+def nested_target_on(
+    target: str,
+    jobs: Sequence["RelocateJob"],
+    *,
+    form: str,
+    src_cr: str,
+    dst_cr: str,
+    mover_save_path: str,
+) -> Tuple[str, str, str]:
+    """嵌套目标判定(计划 26-11-07-1300 R1-R5, 形态分治 + 三输出): -> (blocked, confirm, note), 空串 = 无
 
-    target 位于下列任一路径**之下**即嵌套(成分级比较: _within 以分隔符为界 —— 兄弟目录
-    (待删2)/前缀同串(待删除)/尾斜杠不误伤, 父目录方向不判, 大小写按 _norm 平台口径折叠):
-    - 任一成员的声明源 save_path(0546「全成员覆盖」; 目标嵌进自己源树 = qB 把数据搬进
-      原目录内部, 别名与收尾语义全破);
-    - 任一**非终态** job 的声明源 src(别名作用域: 落点写入穿别名重定向进旧 job 目标)或
-      声明目标 dst(旧 job 后续收尾/再迁会连带这片目录; 恰等于 dst 不算嵌套 —— 两组落
-      同一根各放各的内容, 不是嵌套形态)。
-    等于成员源自身 = 幂等迁移, 已由 evaluate_group 幂等分支先行返回, 本函数不特判。
+    在 evaluate_group 的 plan() 分流**之后**调用并消费形态(旧版在形态判定之前跑 = 形态盲,
+    文件级/单成员被按目录别名口径硬拦, E1/E4 实测拦空气)。全部判据成分级 _within(以分隔符
+    为界: 兄弟目录(待删2)/前缀同串(待删除)/尾斜杠不误伤, 大小写按 _norm 平台口径折叠),
+    严格嵌套 = 相等不算(相等 = 幂等, 由 evaluate_group 幂等分支先行返回, 本函数不得吞相等态):
+    - R1(blocked, 仅 DIR_ALIAS): 新旧内容根互嵌, 双向对称。正向(新 ⊆ 旧): junction 落点
+      会被搬入的新数据占住, 搬移后建链必失败(E5 实测「内容根目录非空」卡死); 反向
+      (旧 ⊆ 新): junction 指向自身祖先, 目录列举成环(E6 实测)。锚 src_cr/dst_cr 由调用方
+      按 layout_of 同源派生(evaluate_group: content_root 与 _join(target, rel))。
+    - R2(blocked, 任意形态, 非终态 job): target ⊆ job.scope(含等于, 保守)。在途 job src
+      分支锚点从 job.src 收窄到 job.scope(别名落点/搬移树, relocate_exec 建账既有产物)——
+      停旧根兄弟目录的种子不再误拦(E7 实测); 作用域内写入仍会被重定向, hazard 保留。
+    - R3(blocked, 维持现状): target ⊆ job.dst 且 target != job.dst(恰等 dst = 两组落同一
+      根各放各的内容, 不是嵌套形态); dst 锚过宽记 known-limitation(计划 §03 D2)。
+    - R4(confirm, 未被 R1/R2/R3 拦): target 严格 ⊆ mover 声明源 —— 新落点嵌在旧声明源树
+      下, 旧根将来整组迁移时这片新数据会被覆盖扫描连带走(D19)。
+    - R5(note, 仅 FILE_LINKS): target 严格 ⊆ src_cr —— 别名存续期链接叶与新数据混居,
+      带文件删除被 D16 拦(收尾完成后消失)。
+    blocked 与 confirm/note 并存时以 blocked 为准(cls 归并由调用方); R4 让位于 blocked,
+    R5 独立照常产出(调用方决定是否展示)。
     """
-    t = _norm(target)
-    if not t:
-        return ""
-    for sp in save_paths or ():
-        if _within(sp, target):
-            return (
-                f"目标位于组成员声明源之下({target} ⊆ {sp}): 目标嵌在迁移源内部, qB 会把数据搬进自己"
-                "原来的目录树, 别名与收尾语义全破 —— 请选源之外的独立目录(0546 E2.3 成分级判据)"
+    if not _norm(target):
+        return "", "", ""
+    blocked = ""
+    if form == FORM_DIR_ALIAS and _norm(src_cr) != _norm(dst_cr):
+        # R1: 新旧内容根互嵌(严格: 相等不算 —— 相等即幂等形态, 不在此拦)
+        if _within(src_cr, dst_cr):
+            blocked = (
+                f"目标与旧内容根互嵌(正向: 新内容根 {dst_cr} 落于旧内容根 {src_cr} 之下): 目录别名落点会被"
+                "搬入的新数据占住, 搬移后建链必失败 —— 请选旧内容根之外的独立目录(计划 26-11-07-1300 R1)"
             )
-    for job in jobs or ():
-        if job.is_terminal:
-            continue
-        if _within(job.src, target):
-            return (
-                f"目标位于在途迁移 job {job.job_id} 的声明源之下({target} ⊆ {job.src}): 该目录现在是活动"
-                "别名的作用域, 落进去的写入会被重定向进旧 job 的目标 —— 请等旧迁移收尾或换目标"
+        elif _within(dst_cr, src_cr):
+            blocked = (
+                f"目标与旧内容根互嵌(反向: 旧内容根 {src_cr} 落于新内容根 {dst_cr} 之下): 目录别名会指向"
+                "自身祖先, 目录列举成环 —— 请选与旧内容根互不嵌套的目标(计划 26-11-07-1300 R1)"
             )
-        if _norm(target) != _norm(job.dst) and _within(job.dst, target):
-            return (f"目标位于在途迁移 job {job.job_id} 的声明目标之下({target} ⊆ {job.dst}): 旧 job 后续收尾"
-                    "或再迁移会连带这片目录 —— 请换独立目标")
-    return ""
+    if not blocked:
+        for job in jobs or ():
+            if job.is_terminal:
+                continue
+            if _within(job.scope, target):
+                blocked = (
+                    f"目标位于在途迁移 job {job.job_id} 的别名作用域之下({target} ⊆ {job.scope}): 该作用域是"
+                    "旧迁移的别名落点/搬移树, 落进去的写入会被重定向进旧 job 的目标 —— 请等旧迁移收尾或换目标"
+                    "(计划 26-11-07-1300 R2)"
+                )
+                break
+            if _norm(target) != _norm(job.dst) and _within(job.dst, target):
+                blocked = (
+                    f"目标位于在途迁移 job {job.job_id} 的声明目标之下({target} ⊆ {job.dst}): 旧 job 后续收尾"
+                    "或再迁移会连带这片目录 —— 请换独立目标(计划 26-11-07-1300 R3)"
+                )
+                break
+    confirm = ""
+    if not blocked and _norm(mover_save_path) != _norm(target) and _within(mover_save_path, target):
+        confirm = (
+            f"新落点仍在旧声明源树下({target} ⊆ {mover_save_path}): 旧根将来整组迁移时这片新数据会被覆盖"
+            "扫描连带走(D19) —— 如非有意请换独立目录(计划 26-11-07-1300 R4)"
+        )
+    note = ""
+    if form == FORM_FILE_LINKS and _norm(src_cr) != _norm(target) and _within(src_cr, target):
+        note = (f"新落点在旧内容根内({target} ⊆ {src_cr}): 别名存续期链接叶与新数据混居, 带文件删除会被 D16 拦"
+                "(收尾完成后消失)(计划 26-11-07-1300 R5)")
+    return blocked, confirm, note
 
 
 def evaluate_group(facts: GroupFacts) -> dict:
@@ -558,6 +602,7 @@ def evaluate_group(facts: GroupFacts) -> dict:
             "save_path": facts.save_path,
             "target": facts.target,
             "file_count": len(names),
+            "member_count": len(facts.hashes),
             "form": FORM_DIRECT,
             "alias_kind": None,
             "link_count": 0,
@@ -577,11 +622,6 @@ def evaluate_group(facts: GroupFacts) -> dict:
             GATE_AUTO_TMM, "成员由 qB 自动管理(AutoTMM: " + ", ".join(h[:8] for h in facts.auto_tmm_hashes[:3]) +
             "): 其 fastresume 无 qBt-savePath 键, 改写收尾不生效 —— 请先在 qB 里改为手动管理或把它移出该组"
         )
-
-    # ---- 嵌套目标闸门(0546 机制③, 成分级; 全成员 + 活跃 job 源/目标, 0808 S1 继承) ----
-    nested = nested_target_on(facts.target, facts.member_save_paths or (facts.save_path, ), facts.jobs)
-    if nested:
-        _block(GATE_NESTED, nested)
 
     # ---- 源侧三态之缺失/不可判定(0546 机制①; .!qB 孪生态已并入 qb_temp_entries 走上方既有闸) ----
     # 缺失 = 数据已不在这两个名字下(qB 搬迁对 stat 不到的源文件忽略并算成功, storage_utils.cpp:151,
@@ -690,6 +730,28 @@ def evaluate_group(facts: GroupFacts) -> dict:
     elif unit.needs_confirm:
         _confirm(GATE_FORM, unit.reason)
 
+    # ---- 嵌套目标闸门(计划 26-11-07-1300 R1-R5; 形态分治 + 三输出) ----
+    # 在 plan() 分流之后跑并消费 unit.form(旧位置 :582 在形态判定之前 = 形态盲, §02):
+    # R1 只拦 DIR_ALIAS 的内容根互嵌, DIRECT/FILE_LINKS 的嵌套按 R4 confirm/R5 note 披露;
+    # FORM_REJECT 已被 GATE_FORM 拦, 嵌套判据跳过(不再拦空气)。锚点全部取 mover 声明空间
+    # 派生物(与组键 resolve_physical 口径一致): src_cr = mover 内容根(上方 layout_of 产物),
+    # dst_cr = target + 同源 rel, mover_save_path = mover 声明源; 相等态已由幂等分支先行返回。
+    if unit.form != FORM_REJECT:
+        nested, nested_confirm, nested_note = nested_target_on(
+            facts.target,
+            facts.jobs,
+            form=unit.form,
+            src_cr=content_root,
+            dst_cr=_join(facts.target, rel),
+            mover_save_path=facts.save_path,
+        )
+        if nested:
+            _block(GATE_NESTED, nested)
+        if nested_confirm:
+            _confirm(GATE_NESTED, nested_confirm)
+        if nested_note:
+            notes.append(nested_note)
+
     # ---- 告知性 notes ----
     if facts.target_free is not None:
         notes.append(f"目标卷剩余 {facts.target_free} 字节; 本组数据 {needed} 字节")
@@ -711,6 +773,7 @@ def evaluate_group(facts: GroupFacts) -> dict:
         "save_path": facts.save_path,
         "target": facts.target,
         "file_count": len(names),
+        "member_count": len(facts.hashes),  # 整组语义披露(计划 1300 R6b; P3 前端「来源(整组 N 个成员)」消费)
         "form": unit.form,
         "alias_kind": unit.link_kind,
         "link_count": unit.link_count,
@@ -1172,10 +1235,14 @@ def alias_roots_of(jobs: Iterable[RelocateJob]) -> tuple:
 
 
 def chain_gate_hits(save_paths: Iterable[str], root: str) -> tuple:
-    """删链门依赖扫描(纯函数): 旧根上/内的 save_path 集合(N5 双判据, 判据单点 under_alias_root)
+    """删链门依赖扫描(纯函数): 作用域根上/内的 save_path 集合(N5 双判据, 判据单点 under_alias_root)
 
-    save_paths = qB 全量种子的 save_path(不限于本组 —— 门外共享者/落进旧根的组外种子
-    都算依赖, §07 风险表「pending 期组外种子落旧根」行); root = job.src(旧根)。
+    save_paths = qB 全量种子的 save_path(不限于本组 —— 门外共享者/落进作用域的组外种子
+    都算依赖, §07 风险表「pending 期组外种子落旧根」行); root = 别名作用域(job.scope,
+    计划 26-11-07-1300 R7 重锚: 旧锚 job.src 会把停进旧根兄弟目录的组外种子与嵌套放行形态
+    下成员搬后的 save_path=dst 全数顶进依赖集 —— 收尾自锁/假依赖, T1a/E2+E7 实测)。
+    本组成员的豁免在调用侧按 hash 过滤(relocate_exec._chain_gate_deps)—— 豁免是成员身份
+    语义不是路径语义, 路径层排除会误伤恰同路径的组外种子。
     返回命中的 save_path 原值元组(保持输入侧大小写/斜杠原样, 供文案展示)。
     """
     out = []

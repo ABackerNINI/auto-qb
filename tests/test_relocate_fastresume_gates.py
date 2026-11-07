@@ -42,10 +42,17 @@
   成员; 空元组零理由(缺省字段向后兼容既有 GroupFacts 构造)
 - test_bt_backup_section_claimed_and_apply: RelocateModule 认领 bt_backup(P6); apply 两段
   全等 none / 仅 bt_backup 变 reloaded(现读, 不换 relocate 缓存)/ relocate 变换缓存
-- test_nested_target_boundaries_pure: nested_target_on 成分级边界(E2.3 8/8): 子目录/深层/
-  尾斜杠/大小变体(Windows 口径)判嵌套; 兄弟(待删2)/前缀同串(待删除)/父目录/等值 job dst/
-  终态 job 不误伤; 活跃 job src/dst 之下命中并区分文案
-- test_nested_target_blocks_group: 全链预检 target=成员源内子目录 -> blocked + gate=nested
+- test_nested_target_boundaries_pure: nested_target_on 成分级边界(计划 1300 R1-R5 新签名,
+  E2.3 原 8 例按内容根锚重释): 子目录/深层/尾斜杠/大小变体(Windows 口径)按锚判嵌套;
+  兄弟(待删2)/前缀同串(待删除)/父目录/等值 job dst/终态 job 不误伤; 严格嵌套 = 相等不算
+  (幂等排除, 判据不吞相等态)
+- test_nested_gate_form_aware_matrix: 形态分治矩阵(对齐 E8 模拟 29 例语义, e8_sim.py 蓝本):
+  DIR_ALIAS 互嵌双向拦(正向/反向)/FILE_LINKS 与 DIRECT 嵌套放行(R4 confirm/R5 note)/
+  平铺正反向/相等幂等/R2 scope 收窄(含等于拦/恰等 dst 豁免/终态豁免)/R3 维持现状
+- test_nested_file_links_confirm_group: 全链预检 FILE_LINKS target=源内兄弟目录(事故同款)
+  -> confirm + gate=nested(R4 披露 D19 连带, 不再硬拦); 回执带 member_count
+- test_nested_dir_alias_blocked_group: 全链预检 DIR_ALIAS(8 文件专属)target=旧内容根内 ->
+  blocked + gate=nested(R1 互嵌正向: 搬后建链必卡死形态, 预检即拦)
 - test_source_missing_blocks_group: 源盘真实文件删除 -> gate=source_missing, 文案点名文件
 - test_source_qb_twin_deep_reuses_qb_temp: 深层 .!qB 孪生(E2.1 漏拦形态) -> 复用既有
   gate=qb_temp(不另造 id), 深层路径被逐文件判定覆盖
@@ -73,7 +80,6 @@ from auto_qb.core.modules.relocate_plan import (
     is_legacy_resume_storage,
     probe_bt_backup_reject,
 )
-from auto_qb.core.modules.relocate_units import nested_target_on
 from helpers import pin_disk_usage, relocate_env
 from relocate_exec_support import _stub_cap
 
@@ -410,47 +416,200 @@ def test_bt_backup_section_claimed_and_apply():
     assert res.action == "reloaded" and mod._conf is rel_changed.relocate, res
 
 
-# ---------- 嵌套目标闸门(0546 机制③, 成分级) ----------
+# ---------- 嵌套目标闸门(计划 26-11-07-1300 R1-R5, 形态分治 + 三输出) ----------
+
+_FLAT = (("a.bin", 64), ("b.bin", 64))  # 平铺布局: 内容根 = save_path 本身
+_SHOW = (("Show/e00.mkv", 64), ("Show/e01.mkv", 64))  # 非平铺: 内容根 = save_path/Show
+_ESEED = tuple((f"e_seed/f{i}.bin", 64) for i in range(1, 9))  # E5/E6a 真机坐标布局
+_ESEED3 = tuple((f"e_seed/f{i}.bin", 64) for i in range(1, 4))  # E4 真机坐标布局
 
 
-def _job(job_id, src, dst, phase=ru.PHASE_ARMED):
-    return ru.RelocateJob(job_id=job_id, hashes=("HX", ), mover="HX", src=src, dst=dst, scope=src, phase=phase)
+def _job(job_id, src, dst, phase=ru.PHASE_ARMED, scope=None):
+    return ru.RelocateJob(job_id=job_id, hashes=("HX", ), mover="HX", src=src, dst=dst, scope=scope or src, phase=phase)
+
+
+def _gate(target, *, form, save_path, files, jobs=()):
+    """按 evaluate_group 的接线口径派生锚点后调 nested_target_on(rel 与内容根同源 layout_of)"""
+    names = [n for n, _s in files]
+    _flat, rel = ru.layout_of(save_path, names)
+    return ru.nested_target_on(
+        target,
+        jobs,
+        form=form,
+        src_cr=ru.content_root_of(save_path, names),
+        dst_cr=ru._join(target, rel),
+        mover_save_path=save_path,
+    )
 
 
 def test_nested_target_boundaries_pure():
-    """nested_target_on 成分级边界(E2.3 8/8): 嵌套全拦(子目录/深层/尾斜杠/大小变体@Windows),
-    兄弟/前缀同串/父目录/等值 job dst/终态 job 不误伤; 活跃 job src/dst 之下命中并区分文案"""
-    # 嵌套: 子目录 / 深层 / 尾斜杠源
-    assert "声明源之下" in nested_target_on("D:/src/sub", ("D:/src", ), ())
-    assert "声明源之下" in nested_target_on("D:/src/a/b/c", ("D:/src/", ), ())
-    # 兄弟目录 / 前缀同串 / 父目录: 不误伤
-    assert nested_target_on("D:/待删2", ("D:/待删", ), ()) == ""
-    assert nested_target_on("D:/待删2/x", ("D:/待删除", ), ()) == ""
-    assert nested_target_on("D:/src", ("D:/src/sub", ), ()) == ""
+    """nested_target_on 成分级边界(计划 1300 R1-R5 新签名; E2.3 原 8 例按内容根锚重释):
+    嵌套全拦(子目录/深层/尾斜杠/大小变体@Windows, DIR_ALIAS 锚内容根), 兄弟/前缀同串/
+    父目录/等值 job dst/终态 job 不误伤; 严格嵌套 = 相等不算(幂等排除, 不吞相等态)"""
+    # R1 正向(DIR_ALIAS, 平铺锚 = 声明源): 子目录 / 深层 / 尾斜杠源判嵌套, 文案带互嵌方向
+    for target, sp in (("D:/src/sub", "D:/src"), ("D:/src/a/b/c", "D:/src"), ("D:/src/sub", "D:/src/")):
+        blocked, confirm, note = _gate(target, form=ru.FORM_DIR_ALIAS, save_path=sp, files=_FLAT)
+        assert blocked and "互嵌" in blocked and "正向" in blocked, (target, blocked)
+        assert confirm == "" and note == "", (target, confirm, note)
+    # 兄弟目录 / 前缀同串 / 父目录: 不误伤(E2.3 原判在新锚下保持)
+    assert _gate("D:/待删2", form=ru.FORM_DIR_ALIAS, save_path="D:/待删", files=_FLAT) == ("", "", "")
+    assert _gate("D:/待删2/x", form=ru.FORM_DIR_ALIAS, save_path="D:/待删除", files=_FLAT) == ("", "", "")
+    assert _gate("D:/src", form=ru.FORM_FILE_LINKS, save_path="D:/src/sub", files=_FLAT) == ("", "", "")
     # 大小写变体: _norm 平台口径(Windows 折叠判嵌套; POSIX 大小写敏感判不嵌)
     if os.path.normcase("A") == "a":
-        assert "声明源之下" in nested_target_on("D:/SRC/x", ("D:/src", ), ())
+        blocked, _c, _n = _gate("D:/SRC/x", form=ru.FORM_DIR_ALIAS, save_path="D:/src", files=_FLAT)
+        assert "正向" in blocked, blocked
     else:
-        assert nested_target_on("D:/SRC/x", ("D:/src", ), ()) == ""
-    # 活跃 job: src 之下(含等于 src)与 dst 之下命中, 文案区分; 等值 dst 不算嵌套
+        assert _gate("D:/SRC/x", form=ru.FORM_DIR_ALIAS, save_path="D:/src", files=_FLAT) == ("", "", "")
+    # 严格嵌套 = 相等不算: src_cr == dst_cr 与 target == mover 声明源都不触发(R1/R4 幂等排除;
+    # 产品面由 evaluate_group 幂等分支先行, 判据自身也不吞相等态)
+    assert _gate("D:/src", form=ru.FORM_DIR_ALIAS, save_path="D:/src", files=_FLAT) == ("", "", "")
+    assert _gate("D:/src", form=ru.FORM_FILE_LINKS, save_path="D:/src", files=_FLAT) == ("", "", "")
+    # 活跃 job: scope 之下命中 R2(别名作用域口径); dst 之下命中 R3 且恰等 dst 豁免; 终态不参与
     job = _job("j1", "D:/jobsrc", "D:/jobdst")
-    assert "声明源之下" in nested_target_on("D:/jobsrc/inner", ("D:/elsewhere", ), (job, ))
-    assert "声明源之下" in nested_target_on("D:/jobsrc", ("D:/elsewhere", ), (job, ))
-    assert "声明目标之下" in nested_target_on("D:/jobdst/inner", ("D:/elsewhere", ), (job, ))
-    assert nested_target_on("D:/jobdst", ("D:/elsewhere", ), (job, )) == ""
-    # 终态 job 不参与
+    blocked, _c, _n = _gate(
+        "D:/jobsrc/inner", form=ru.FORM_FILE_LINKS, save_path="D:/elsewhere", files=_FLAT, jobs=(job, )
+    )
+    assert "别名作用域" in blocked, blocked
+    blocked, _c, _n = _gate("D:/jobsrc", form=ru.FORM_FILE_LINKS, save_path="D:/elsewhere", files=_FLAT, jobs=(job, ))
+    assert "别名作用域" in blocked, blocked  # R2 含等于(保守)
+    blocked, _c, _n = _gate(
+        "D:/jobdst/inner", form=ru.FORM_FILE_LINKS, save_path="D:/elsewhere", files=_FLAT, jobs=(job, )
+    )
+    assert "声明目标之下" in blocked, blocked
+    assert _gate("D:/jobdst", form=ru.FORM_FILE_LINKS, save_path="D:/elsewhere", files=_FLAT,
+                 jobs=(job, )) == ("", "", "")
     done = _job("j2", "D:/jobsrc", "D:/jobdst", phase=ru.PHASE_DONE)
-    assert nested_target_on("D:/jobsrc/inner", ("D:/elsewhere", ), (done, )) == ""
+    assert _gate("D:/jobsrc/inner", form=ru.FORM_FILE_LINKS, save_path="D:/elsewhere", files=_FLAT,
+                 jobs=(done, )) == ("", "", "")
 
 
-def test_nested_target_blocks_group(tmp_path, monkeypatch):
-    """全链预检: target = 成员源内子目录 -> blocked + gate=nested(点名 ⊆ 关系)"""
+def test_nested_gate_form_aware_matrix():
+    """形态分治矩阵(计划 1300 §03 R1-R5; 29 例坐标对齐 E8 真机模拟 e8_sim.py):
+    A 块 = E2.3 原 8 例按内容根锚重释; B 块 = 新形态(DIR_ALIAS 互嵌双向拦 / FILE_LINKS 与
+    DIRECT 嵌套放行 / 相等幂等 / 平铺正反向); C 块 = R2 scope 收窄(E7 坐标)+ R3 维持 +
+    终态豁免。判定期望 = (blocked 文案标记, confirm 有无, note 有无)。"""
+    j_live = _job("jr-src", "D:/jobsrc", "D:/jobdst")
+    j_scope = _job("jr-e7", "X:/p1b_e7/srcA", "X:/p1b_e7/dstA", scope="X:/p1b_e7/srcA/a_seed")
+    j_done = _job("jr-done", "D:/jobsrc", "D:/jobdst", phase=ru.PHASE_DONE)
+    j_done_e7 = _job("jr-done2", "X:/p1b_e7/srcA", "X:/p1b_e7/dstA", phase=ru.PHASE_DONE, scope="X:/p1b_e7/srcA/a_seed")
+    win_fold = os.path.normcase("A") == "a"
+    # (名称, 形态, save_path, files, target, jobs, blocked 标记(""=不拦), confirm?, note?)
+    rows = [
+        # ---- A 块: E2.3 原 8 例按内容根锚重释 ----
+        ("A1 子目录(DIR_ALIAS 平铺锚=声明源)", ru.FORM_DIR_ALIAS, "D:/src", _FLAT, "D:/src/sub", (), "正向", False, False),
+        ("A1f 子目录(FILE_LINKS 同形)", ru.FORM_FILE_LINKS, "D:/src", _FLAT, "D:/src/sub", (), "", True, True),
+        ("A2 深层(DIR_ALIAS)", ru.FORM_DIR_ALIAS, "D:/src", _FLAT, "D:/src/a/b/c", (), "正向", False, False),
+        ("A3 尾斜杠源(DIR_ALIAS)", ru.FORM_DIR_ALIAS, "D:/src/", _FLAT, "D:/src/sub", (), "正向", False, False),
+        ("A4 兄弟(待删2; DIR_ALIAS 平铺)", ru.FORM_DIR_ALIAS, "D:/待删", _FLAT, "D:/待删2", (), "", False, False),
+        ("A4x 事故同款(非平铺, target=声明源内内容根兄弟)", ru.FORM_DIR_ALIAS, "D:/src", _SHOW, "D:/src/待删", (), "", True, False),
+        ("A5 前缀同串(待删除)", ru.FORM_DIR_ALIAS, "D:/待删除", _FLAT, "D:/待删2/x", (), "", False, False),
+        ("A6 父目录(FILE_LINKS, target 在源之上)", ru.FORM_FILE_LINKS, "D:/src/sub", _FLAT, "D:/src", (), "", False, False),
+        ("A6x 父目录(DIR_ALIAS 平铺 = 平铺反向拦)", ru.FORM_DIR_ALIAS, "D:/src/sub", _FLAT, "D:/src", (), "反向", False, False),
+        (
+            "A7 大小写变体(平台条件)", ru.FORM_DIR_ALIAS, "D:/src", _FLAT, "D:/SRC/x", (), ("正向" if win_fold else ""), False,
+            False
+        ),
+        (
+            "A8 活跃 job scope 之下(scope==src 常规形态)", ru.FORM_FILE_LINKS, "D:/elsewhere", _FLAT, "D:/jobsrc/inner",
+            (j_live, ), "别名作用域", False, False
+        ),
+        ("A8b 等值 job dst", ru.FORM_FILE_LINKS, "D:/elsewhere", _FLAT, "D:/jobdst", (j_live, ), "", False, False),
+        (
+            "A8c 活跃 job dst 之下", ru.FORM_FILE_LINKS, "D:/elsewhere", _FLAT, "D:/jobdst/inner", (j_live, ), "声明目标之下",
+            False, False
+        ),
+        ("A9 终态 job 不参与", ru.FORM_FILE_LINKS, "D:/elsewhere", _FLAT, "D:/jobsrc/inner", (j_done, ), "", False, False),
+        # ---- B 块: 新形态(真机坐标闭环) ----
+        (
+            "B1 DIR_ALIAS 互嵌正向(E5 实测坐标: 搬后建链卡死)", ru.FORM_DIR_ALIAS, "X:/p1b_e5/src", _ESEED,
+            "X:/p1b_e5/src/e_seed/待删2", (), "正向", False, False
+        ),
+        (
+            "B2/B8 平铺反向拦(DIR_ALIAS, target ⊇ 源; 产品不可达 defensive)", ru.FORM_DIR_ALIAS, "X:/e6/a", _FLAT, "X:/e6", (),
+            "反向", False, False
+        ),
+        (
+            "B3 DIR_ALIAS 互嵌反向非平铺(E6a 实测坐标: 成环)", ru.FORM_DIR_ALIAS, "X:/p1b_e6/e_seed", _ESEED, "X:/p1b_e6", (), "反向",
+            False, False
+        ),
+        ("B4 dst-above-src 非平铺放行(D6 修正点)", ru.FORM_DIR_ALIAS, "D:/src/sub", _SHOW, "D:/src", (), "", False, False),
+        ("B5a FILE_LINKS+兄弟落点(E2 场景)放行+confirm", ru.FORM_FILE_LINKS, "D:/src", _SHOW, "D:/src/待删", (), "", True, False),
+        (
+            "B5b FILE_LINKS+深层嵌套(E3 场景)confirm+note", ru.FORM_FILE_LINKS, "D:/src", _SHOW, "D:/src/Show/待删2", (), "",
+            True, True
+        ),
+        ("B6 DIRECT 嵌套放行(E4 实测坐标)", ru.FORM_DIRECT, "X:/p1b_e4/src", _ESEED3, "X:/p1b_e4/src/待删", (), "", True, False),
+        ("B7 相等=幂等不进判据", ru.FORM_DIR_ALIAS, "D:/src", _FLAT, "D:/src", (), "", False, False),
+        ("B9 平铺正向拦(DIR_ALIAS)", ru.FORM_DIR_ALIAS, "D:/src", _FLAT, "D:/src/sub", (), "正向", False, False),
+        # ---- C 块: R2 scope 收窄(E7 实测坐标)+ R3 维持 ----
+        (
+            "C1 E7 兄弟停车放行(R2 收窄本体)", ru.FORM_FILE_LINKS, "X:/p1b_e7/srcB", _FLAT, "X:/p1b_e7/srcA/停车", (j_scope, ), "",
+            False, False
+        ),
+        (
+            "C2 target ⊆ 在途 job.scope(严格)", ru.FORM_FILE_LINKS, "X:/elsewhere", _FLAT, "X:/p1b_e7/srcA/a_seed/inner",
+            (j_scope, ), "别名作用域", False, False
+        ),
+        (
+            "C3 target == job.scope(R2 含等于)", ru.FORM_FILE_LINKS, "X:/elsewhere", _FLAT, "X:/p1b_e7/srcA/a_seed",
+            (j_scope, ), "别名作用域", False, False
+        ),
+        (
+            "C4 target == job.dst(R3 豁免)", ru.FORM_FILE_LINKS, "X:/elsewhere", _FLAT, "X:/p1b_e7/dstA", (j_scope, ), "",
+            False, False
+        ),
+        (
+            "C5 target ⊆ job.dst(≠)", ru.FORM_FILE_LINKS, "X:/elsewhere", _FLAT, "X:/p1b_e7/dstA/inner", (j_scope, ),
+            "声明目标之下", False, False
+        ),
+        (
+            "C6 终态 job 全豁免(E7 后正常再迁)", ru.FORM_FILE_LINKS, "X:/p1b_e7/srcB", _FLAT, "X:/p1b_e7/srcA/inner",
+            (j_done_e7, ), "", False, False
+        ),
+    ]
+    assert len(rows) == 29  # 与 E8 模拟矩阵同例数(29/29 为验收口径)
+    for name, form, sp, files, target, jobs, marker, want_confirm, want_note in rows:
+        blocked, confirm, note = _gate(target, form=form, save_path=sp, files=files, jobs=jobs)
+        assert (marker in blocked) if marker else (blocked == ""), (name, blocked)
+        assert bool(confirm) == want_confirm, (name, confirm)
+        assert bool(note) == want_note, (name, note)
+        if blocked:
+            assert "计划 26-11-07-1300" in blocked, name  # 判据出处标注在案
+            assert not confirm, (name, "R4 让位于 blocked")
+
+
+def test_nested_file_links_confirm_group(tmp_path, monkeypatch):
+    """全链预检(FILE_LINKS, 事故同款形态): target = 源内兄弟目录 -> confirm + gate=nested
+    (R4 披露 D19 连带, 不再硬拦 —— E1 误拦本体); 回执带 member_count(整组语义披露 R6b)"""
     mgr, client, dst, td = _gate_env(tmp_path, monkeypatch)
+    target = os.path.join(str(td), "src", "待删")
+    os.makedirs(target)  # 目标真实存在: 免 space/unknown 闸门噪声(本用例只看嵌套判据)
     mod = mgr.host.get("relocate")
-    it = mod.relocate_precheck(["HA"], os.path.join(str(td), "src", "sub"))[0]
-    assert it["cls"] == "blocked", it
+    it = mod.relocate_precheck(["HA", "HB"], target)[0]
+    assert it["cls"] == "confirm", it
     r = next(r for r in it["reasons"] if r["gate"] == "nested")
-    assert "声明源之下" in r["text"], r
+    assert r["cls"] == "confirm" and "旧声明源树下" in r["text"] and "D19" in r["text"], r
+    assert it["member_count"] == 2, it
+
+
+def test_nested_dir_alias_blocked_group(tmp_path, monkeypatch):
+    """全链预检(DIR_ALIAS, 8 文件内容根专属): target = 旧内容根内 -> blocked + gate=nested
+    (R1 互嵌正向: junction 落点被新数据占住, 搬后建链必卡死(E5 实测), 预检即拦)"""
+    pin_disk_usage(monkeypatch)
+    # 不走 _gate_env: 它内部钉 file_kind="hardlink"(后设覆盖), DIR_ALIAS 需 dir_kind 替身
+    _stub_cap(monkeypatch, file_kind="hardlink", dir_kind="junction")
+    mgr, client, src, dst, content, files = relocate_env(tmp_path, file_count=8, state="pausedUP")
+    mgr.config.relocate.enabled = True
+    mgr.config.bt_backup["127.0.0.1:16585"] = str(tmp_path)
+    target = os.path.join(src, "Show", "待删2")  # 不预建: 目标叶子未建是迁移正常输入(上溯祖先取卷位),
+    # 预建反而把内容根 listing 混入非本组条目 -> exclusive=False -> 形态降级 FILE_LINKS
+    mod = mgr.host.get("relocate")
+    it = mod.relocate_precheck(["HA", "HB"], target)[0]
+    assert it["cls"] == "blocked", it
+    assert it["form"] == ru.FORM_DIR_ALIAS, it  # 形态判定先行(闸门重排后消费 unit.form)
+    r = next(r for r in it["reasons"] if r["gate"] == "nested")
+    assert "互嵌" in r["text"] and "正向" in r["text"], r
 
 
 # ---------- 源侧三态(0546 机制①; .!qB 态复用 GATE_QB_TEMP) ----------

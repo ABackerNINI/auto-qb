@@ -1031,12 +1031,13 @@ def test_plan_dir_link_error_long_path_text():
 def test_evaluate_group_receipt_contract_keys():
     """回执契约键面: 幂等/主回执/添加预检三张 dict 的键名与取值即前端契约(改名/丢键/值翻转都算断)"""
     keys = {
-        "hashes", "mover", "name", "save_path", "target", "file_count", "form", "alias_kind", "link_count",
-        "needs_confirm", "cls", "reasons", "notes", "target_free", "same_volume"
+        "hashes", "mover", "name", "save_path", "target", "file_count", "member_count", "form", "alias_kind",
+        "link_count", "needs_confirm", "cls", "reasons", "notes", "target_free", "same_volume"
     }
     item = ru.evaluate_group(_ok_facts(target=S))  # 幂等分支
     assert set(item) == keys, set(item) ^ keys
     assert item["file_count"] == 2 and item["link_count"] == 0
+    assert item["member_count"] == 2  # 整组语义披露(计划 26-11-07-1300 R6b)
     assert item["needs_confirm"] is False and item["alias_kind"] is None and item["cls"] == ru.CLS_OK
     item = ru.evaluate_group(_ok_facts(files=_files(9), same_volume=False, target_free=1234))
     assert set(item) == keys, set(item) ^ keys
