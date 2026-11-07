@@ -642,6 +642,13 @@ def alias_kind_of(path: str) -> Optional[str]:
     junction 与符号链接靠重解析点标签区分(`islink` 对两者都为真); 硬链接没有链接对象,
     只能按 `st_nlink > 1` 认出「这份数据还有别的名字」—— 是不是**我们要找的那个**名字
     由调用方比对 inode 判定。
+
+    !真目录恒为 None, 不参与 nlink 判据: POSIX 目录的 st_nlink = 2 + 子目录数(自己的 `.`、父目录
+    里指向它的那个条目、每个子目录的 `..`), 天生 >= 2 —— 旧写法会把**任何真目录**(空目录也算,
+    nlink=2)认成硬链接(Windows 目录 nlink 常为 1, 于是本地全绿、Linux CI 全红)。而硬链接指向目录
+    在 POSIX 与 Windows 都建不出来, 所以目录只可能是「真目录」或上面已判完的链接形态 —— 这一条是
+    重定向「非空真目录占据链接位」拒绝分支的前置条件(缺了它 retarget_alias 会拿真目录去 os.unlink,
+    抛 IsADirectoryError)。
     """
     try:
         st = os.lstat(utils.add_long_path_prefix_for_win(path))
@@ -654,6 +661,8 @@ def alias_kind_of(path: str) -> Optional[str]:
         return KIND_SYMLINK
     if stat.S_ISLNK(st.st_mode):
         return KIND_SYMLINK
+    if stat.S_ISDIR(st.st_mode):
+        return None
     if st.st_nlink > 1:
         return KIND_HARDLINK
     return None

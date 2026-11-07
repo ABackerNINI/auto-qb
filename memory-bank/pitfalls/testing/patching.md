@@ -1,8 +1,8 @@
 # 平台差异与打桩 (Windows / Linux)
 
-> 摘要: 「Windows 全绿 / Linux 全红」的**五类根因**与"归错类比不修更危险"的教训 —— 平台相关测试必须以 `monkeypatch` 固定平台; 末一类最隐蔽: **Windows 路径归一化(结尾点/空格被剥、大小写不敏感)让"路径存在性"判据在本机恒真**, 2026-10-11 一条坏的相对链接连过三道本机防线、只在 Linux CI 红; 另记一条**本工具 shell 注入 `PYTHONUTF8=1` 造出的假红**(2026-09-25 已修: 环境揭出引擎码页回退真缺陷, GetACP + 测试钉缝双修)。
+> 摘要: 「Windows 全绿 / Linux 全红」的**多类根因**与"归错类比不修更危险"的教训 —— 平台相关测试必须以 `monkeypatch` 固定平台; 最隐蔽的两类: **Windows 路径归一化(结尾点/空格被剥、大小写不敏感)让"路径存在性"判据在本机恒真**(2026-10-11 一条坏的相对链接连过三道本机防线、只在 Linux CI 红), 与**给 `os.stat` 打桩在 Windows 对 C 内建的 `os.path.exists` 无效**(2026-11-07 两条预检用例 Linux 上被判「源文件缺失」抢拦); 另记一条**本工具 shell 注入 `PYTHONUTF8=1` 造出的假红**(2026-09-25 已修: 环境揭出引擎码页回退真缺陷, GetACP + 测试钉缝双修)。
 > 等级: L1
-> 触发: CI 红, Linux CI, 平台差异, monkeypatch, WSL, normcase, dir_fd, 平台专属模块, 码页, GBK, cp936, PYTHONUTF8, 假红, 路径归一化, 结尾点, 大小写不敏感, exists, 坏链, 省略号占位
+> 触发: CI 红, Linux CI, 平台差异, monkeypatch, WSL, normcase, dir_fd, 平台专属模块, 码页, GBK, cp936, PYTHONUTF8, 假红, 路径归一化, 结尾点, 大小写不敏感, exists, 坏链, 省略号占位, os.stat 桩, os.path.exists, C 内建, nt._path_exists, posixpath, exist_ok
 
 **Refs:** memory-bank/tasks/26-10-04-test-ci-platform.md,memory-bank/tasks/26-10-11-doc-links-strict-check.md
 
@@ -35,14 +35,16 @@
   "属性必须已存在"); ③ Windows 路径语义用显式 `ntpath`; ④ 真值改用 `tmp_path` 这类跨平台真实存在的路径。
   **判据**: 改完必须在 **Linux 容器**里跑全量(见 [attachments/patching-local-linux-repro.md](attachments/patching-local-linux-repro.md)), 与 Windows 侧**两侧都绿**才算完。
 
-### 判别法: 五类"本机绿不算绿"
+### 判别法: 六类"本机绿不算绿"
 
 - **触发**: 判断一条失败是不是平台差异。
 - **判别**: 凡是"**记账器判越界 / 平台专属模块导入 / 真实 socket 连接 / 平台相关的路径 API /
-  路径存在性归一化(结尾点 · 空格 · 大小写, 见 ⑥)**"这五类,
+  路径存在性归一化(结尾点 · 空格 · 大小写, 见 ⑥) / 给 `os.stat` 打桩造三态
+  (Windows 的 `os.path.exists` 是 C 内建、桩穿不透, 见 ⑦)**"这六类,
   本机绿**不算绿**。平台相关测试必须以 `monkeypatch` **固定平台**(测试主体是"平台逻辑"而非"当前真实平台");
   纯 Windows 行为(长路径 `\\?\` 前缀)直接断言在 Linux CI 上**必失败**。
-- **处置**: 按四类分别用 `monkeypatch.setitem(sys.modules, …)` / 补 `dir_fd` 绝对路径 / patch 真实名字。
+- **处置**: 按上面各类分别用 `monkeypatch.setitem(sys.modules, …)` / 补 `dir_fd` 绝对路径 / patch 真实名字
+  / 桩打到判定层(见 ⑦)。
 
 **形态④ 平台相关的路径 API(`os.path.normcase` 在 Linux 是恒等函数)**: 触发/判别/处置(含
 `sim_fsmock._key` 修法与 `sim_qb._norm` 同类未修现状)原文见 [attachments/patching-form-path-api.md](attachments/patching-form-path-api.md)。
@@ -98,6 +100,24 @@
   —— 正是两类漏检的实证。
   **泛化: 任何"按路径存在性判绿"的检查(链接 / 找文件 / 白名单比对)在本机都是上界**;
   收口时补一次 `commands run test.linux` 或等 CI, 别拿本机绿当结论。
+
+### ⑦ 给 `os.stat` 打桩: 在 Windows 对 `os.path` 判定**无效**, 在 Linux 有效
+
+- **触发**: 用 `monkeypatch.setattr(os, "stat", boom)` 造「元数据读不到」, 再指望同一刺激在两侧等价 ——
+  典型是想模拟「B′ 同机证据不可判定」, 或想验某个存在性判据在 stat 失败时的降级。
+- **判别**: `os.path.exists/isdir/isfile` 在 **Windows 是 C 内建**(`nt._path_exists` 一系, 直接走系统调用,
+  **绕过 Python 层属性补丁**), 在 **POSIX 是 Python 版**(`posixpath.exists` → `os.stat`)。同一份桩于是
+  「本地全绿、Linux CI 全红」: 2026-11-07 两条 relocate 预检用例就这么红的 —— Linux 上桩一装,
+  `FileAccess.exists` 立刻返回 False, 0808 S1 的源侧三态把声明文件判成「缺失」并以 `source_missing` 抢拦,
+  用例想验的 B′ 分支根本走不到; 本机因为补丁对 C 内建无效而照绿。
+  两个同族面: ①桩 `os.stat` 会**顺带打掉别的判据** —— `os.makedirs(..., exist_ok=True)` 里的
+  `path.isdir`(POSIX 上「已存在目录」于是抛 `FileExistsError`, 夹具根本建不出来)、`same_volume` 的
+  `st_dev` 判定(Windows 上会让形态闸门误判「跨卷」而拒绝); ②真实 POSIX 上**不存在**「stat 读不到但文件
+  在盘」这个状态(stat 失败即不存在), 拿它当刺激本身就不忠实。
+- **处置**: 桩打在**判定层**, 不打 `os.stat` —— 造「B′ 不可判定」就桩
+  `relocate_proof._bprime_evidence` 返回 `_unavailable(...)`
+  (`tests/test_web_relocate.py::_stub_bprime_unavailable`); 建夹具一律在装桩**之前**; 真要桩 `os.stat`,
+  先问一句「`os.path.exists` 这条链在两侧是不是同一个实现」—— 不是就别用这个刺激。
 
 ## 已外迁(原文见附件)
 

@@ -63,9 +63,10 @@ S5 重定向原语簇(计划 26-11-05-0808 S5, D15: 0247 S6③ 设想从零实�
   删旧建新 + 穿透读 + 幂等重放 skipped
 - test_retarget_alias_hardlink_and_idempotent: 硬链接改指(换 inode)+ 重放 skipped(同 inode 幂等)
 - test_retarget_alias_missing_link_rebuilds: 链接缺失(经别名搬迁被改名带走形态)-> 按 kind 重建
+  〔无 symlink 建链能力的环境 skip〕
 - test_retarget_alias_hardlink_cross_volume_falls_back_to_symlink: hardlink 形态改指跨卷目标 ->
   删旧前回落 symlink(评审 #2, 不进 os.link EXDEV 死循环)/ 卷位判不了(None)保守回落 /
-  同卷对照不回落保 hardlink
+  同卷对照不回落保 hardlink〔无 symlink 建链能力的环境 skip〕
 - test_retarget_alias_refuses_when_target_missing: 新目标不存在 -> 拒绝且旧链接原样(绝不做删了建不回)
 - test_retarget_alias_refuses_nonempty_real_dir: 链接位置被非空真目录占据 -> 拒绝不动数据
 - test_probe_alias_rebuild_busy: 句柄占用探测(DELETE 权限独占打开 = 「此刻真删也会成功」的忠实预言)——
@@ -81,12 +82,16 @@ S5 重定向原语簇(计划 26-11-05-0808 S5, D15: 0247 S6③ 设想从零实�
 - test_probe_alias_rebuild_busy_unclassifiable_error_is_none: 其它 CreateFileW 错误(非法路径字符)
   => None 不拦
 - test_retarget_alias_infers_kind_when_link_and_kind_absent: 无链接无 kind 防御支(目录/文件目标
-  两路推断)
+  两路推断)〔无 symlink 建链能力的环境 skip〕
 - test_retarget_alias_consumes_empty_real_dir_at_link_position: 空真目录占位 -> 挪掉照常重建
 - test_retarget_alias_unsupported_form_raises_valueerror: 形态不支持 => ValueError
 - test_retarget_alias_dir_penetration_failure_leaves_error: 目录别名建后不可穿透 => RuntimeError
   带旧指诊断
 - test_retarget_alias_file_penetration_failures: 文件别名穿透双闸(isfile 为假/尺寸不符)
+
+CI 红修复(POSIX 口径, 26-11-07):
+- test_alias_kind_of_real_dir_is_none: 真目录(含子目录, POSIX nlink>=2)不被 nlink 判据认成
+  硬链接 —— 缺了它「非空真目录占据链接位」拒绝分支在 Linux 上会拿目录去 unlink
 
 ## 环境能力 skip(2026-10-18, issue 26-10-18-2030)
 
@@ -574,6 +579,20 @@ def test_alias_primitives(tmp_path):
         alias_fs.create_file_alias(str(tmp_path / "x2"), str(file_target), KIND_JUNCTION)
 
 
+def test_alias_kind_of_real_dir_is_none(tmp_path):
+    """真目录恒判「不是链接」: POSIX 目录 nlink 天生 >= 2, 不得被 nlink 判据认成硬链接
+
+    !Linux CI 实测红: POSIX 目录 st_nlink = 2 + 子目录数(自己的 `.`、父目录里指向它的那个条目、
+    每个子目录的 `..`), 空目录就已经是 2, 旧写法一律返回 KIND_HARDLINK -> 重定向「非空真目录占据
+    链接位」拒绝分支的前置条件(existing is None)不成立, retarget_alias 拿目录本体去 os.unlink,
+    抛 IsADirectoryError 而不是按设计拒绝。Windows 目录 nlink 常为 1, 本地永远走不到那条路,
+    只有 POSIX 才暴露 —— 故必须有这条守卫。
+    """
+    plain_dir = tmp_path / "plain_dir"
+    (plain_dir / "sub").mkdir(parents=True)  # 子目录把 nlink 抬上去(POSIX 口径)
+    assert alias_fs.alias_kind_of(str(plain_dir)) is None
+
+
 @_WIN_ONLY
 def test_junction_roundtrip(tmp_path):
     target = tmp_path / "target"
@@ -902,6 +921,7 @@ def test_retarget_alias_hardlink_and_idempotent(tmp_path):
     assert alias_fs.retarget_alias(link, fc, alias_fs.KIND_HARDLINK) == "skipped"
 
 
+@_SYMLINK_REQUIRED
 def test_retarget_alias_missing_link_rebuilds(tmp_path):
     """链接缺失(经别名搬迁被 qB 改名带走 / 外部误删形态) -> 按 kind 重建, 返回 rebuilt"""
     root = str(tmp_path)
@@ -913,6 +933,7 @@ def test_retarget_alias_missing_link_rebuilds(tmp_path):
         assert f.read() == b"C-data"
 
 
+@_SYMLINK_REQUIRED
 def test_retarget_alias_hardlink_cross_volume_falls_back_to_symlink(tmp_path, monkeypatch):
     """hardlink 形态改指跨卷目标 -> 删旧前先回落 KIND_SYMLINK(评审 #2)
 
@@ -1055,15 +1076,23 @@ def test_inspect_path_junction_kind(tmp_path):
 
 
 def test_alias_points_to_hardlink_stat_failure_is_false(tmp_path, monkeypatch):
-    """硬链接比对两侧 stat 任一炸 => False(不猜指向)"""
-    def _boom(path, *a, **kw):
-        raise OSError("stat denied")
+    """硬链接比对两侧 stat 任一炸 => False(不猜指向)
 
-    monkeypatch.setattr(alias_fs.os, "stat", _boom)
+    !桩必须**装在建链之后**: os.stat 是进程级单例, 装上就同时打死了 os.makedirs 的
+    `exist_ok` 判据(POSIX 的 posixpath.isdir 先 stat, 炸 -> isdir False -> 已存在目录的
+    FileExistsError 不再被吞), 于是建夹具那一步会以 FileExistsError 炸在 _mk_file 里,
+    而不是走到被测分支(Windows 上 os.path.isdir/ exists 是 C 内建, 绕过 Python 层补丁,
+    桩晚了也照绿 —— 本地全绿、Linux CI 全红的典型形态)。
+    """
     fb = _mk_file(os.path.join(str(tmp_path), "b.bin"), b"x")
     link = os.path.join(str(tmp_path), "l.bin")
     alias_fs.create_file_alias(link, fb, alias_fs.KIND_HARDLINK)
     assert alias_fs.alias_kind_of(link) == alias_fs.KIND_HARDLINK
+
+    def _boom(path, *a, **kw):
+        raise OSError("stat denied")
+
+    monkeypatch.setattr(alias_fs.os, "stat", _boom)
     assert alias_fs.alias_points_to(link, fb) is False
 
 
@@ -1105,6 +1134,7 @@ def test_probe_alias_rebuild_busy_unclassifiable_error_is_none(tmp_path):
     assert alias_fs.probe_alias_rebuild_busy(str(tmp_path / "bad<>name.bin")) is None
 
 
+@_SYMLINK_REQUIRED
 def test_retarget_alias_infers_kind_when_link_and_kind_absent(tmp_path):
     """防御支: 无现存链接也无 kind(旧账/直调) -> 目录目标推断 junction(POSIX 目录 symlink),
     文件目标推断文件 symlink —— 重建即恢复服务"""

@@ -19,7 +19,7 @@
 
 | 类型 | 条数 |
 |---|---|
-| bug | 11 |
+| bug | 12 |
 | perf | 2 |
 | docs | 1 |
 | test | 7 |
@@ -30,6 +30,7 @@
 
 ## Open
 
+- [bug] [重定向链接位被真文件占据时会删掉真文件(真目录有保护, 真文件没有)](26-11-07-0748-bug-relocate-retarget-real-file-unlink.html) — retarget_ali…
 - [bug] [存量评审 R4·scripts 汇总(major 1/minor 23)](26-11-07-0536-bug-legacy-review4-scripts.html) — scripts 主题 m…
 - [bug] [存量评审 R4·static 汇总(major 24/minor 111)](26-11-07-0536-bug-legacy-review4-static.html) — static 主题 ma…
 - [bug] [存量评审 R4·webui-py 汇总(major 2/minor 23)](26-11-07-0536-bug-legacy-review4-webui-py.html) — webui-py 主题…

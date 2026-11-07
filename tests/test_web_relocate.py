@@ -185,6 +185,20 @@ def _fwd(p):
     return str(p).replace("\\", "/")
 
 
+def _stub_bprime_unavailable(monkeypatch):
+    """把同机证明的 B′ 降级判定桩成「不可判定」—— 桩打在**判定层**, 不碰 os.stat
+
+    !别用「桩 os.stat」造这个状态(2026-11-07 Linux CI 红的根): POSIX 的 `os.path.exists` 就是
+    `posixpath.exists`(每次调用走 os.stat), 元数据桩会连带把 0808 S1 的源侧三态判成「声明文件
+    缺失」并以 source_missing 抢拦, B′ 分支根本走不到; Windows 的 `os.path.exists` 是 C 内建、
+    绕过 Python 层补丁, 于是同一份桩本地全绿、CI 全红。而真实 POSIX 上也**不存在**「stat 读不到
+    但文件在盘」这个状态(stat 失败即不存在), 该刺激只能在判定层造。
+    """
+    from auto_qb.core.modules import relocate_proof as rp_mod
+
+    monkeypatch.setattr(rp_mod, "_bprime_evidence", lambda *a, **kw: rp_mod._unavailable("B′ 桩: 成员元数据比对不可判定"))
+
+
 def test_relocate_module_precheck_qb_temp_gate(tmp_path, monkeypatch):
     """本组文件的 .!qB 孪生(剥后缀对回本组 own) -> blocked(qb_temp): 本组数据尚未落定
 
@@ -513,8 +527,8 @@ def test_relocate_module_same_fs_p3_semantics(tmp_path, monkeypatch):
 
     # 3. 不可判定(D 端点不可用 + B′ 读不到)-> 多成员不再硬拦, note 转执行链强探测
     # !0808 S1 源侧三态起(E2.2): 「声明文件不在盘」会以 source_missing 抢拦 —— 本场景的
-    # ghost 落盘成真文件(size 与声明一致, 三态判「在」), B′ 不可判定面改由 stat 桩承载
-    # (仅源路径炸; 真实部署对应 stat 成功面之外的权限/IO 边缘形态)。
+    # ghost 落盘成真文件(size 与声明一致, 三态判「在」), B′ 不可判定面由判定层桩承载
+    # (见 _stub_bprime_unavailable: 不用 os.stat 桩, 它会把三态一起打死)。
     mgr3, client3, src3, dst3, content3, _ = relocate_env(tmp_path / "c", file_count=2, data_dir=False)
     ghost = [_fake_file("Show/ghost.mkv", 100)]
     client3.files_map["HA"] = list(ghost)
@@ -523,15 +537,7 @@ def test_relocate_module_same_fs_p3_semantics(tmp_path, monkeypatch):
         t._files = None
     with open(os.path.join(src3, "Show", "ghost.mkv"), "wb") as f:
         f.write(b"x" * 100)
-    _real_stat = os.stat
-
-    def _stat_boom(p, *a, **kw):
-        # 路径可能带 Windows 长路径前缀(\?\)(B′ 走 _prefixed), 用包含而非前缀匹配
-        if str(src3) in str(p):
-            raise OSError("stat 桩: B′ 不可判定形态")
-        return _real_stat(p, *a, **kw)
-
-    monkeypatch.setattr(os, "stat", _stat_boom)
+    _stub_bprime_unavailable(monkeypatch)
     item3 = mgr3.host.get("relocate").relocate_precheck(["HA", "HB"], dst3)[0]
     assert item3["cls"] == "ok" and "same_fs" not in [r["gate"] for r in item3["reasons"]]
     assert any("一次性强探测" in n for n in item3["notes"]), item3["notes"]
@@ -553,8 +559,9 @@ def test_relocate_module_precheck_scandir_and_lstat_degraded(tmp_path, monkeypat
     mgr, client, src, dst, content, _ = relocate_env(tmp_path, file_count=2, data_dir=False)
     # 文件表与磁盘不一致: 记录里的文件(ghost)不在盘上 -> scandir 只见别组/杂项 + lstat 失败
     # !0808 S1 源侧三态起(E2.2): 「声明文件不在盘」会以 source_missing 抢拦 —— ghost 落盘
-    # 成真文件(size 与声明一致, 三态判「在」), 代表文件不可读面改由 lstat 桩承载(仅源路径炸),
-    # B′ 不可判定面同前例由 stat 桩承载。
+    # 成真文件(size 与声明一致, 三态判「在」), 代表文件不可读面由 lstat 桩承载(仅源路径炸),
+    # B′ 不可判定面由判定层桩承载(见 _stub_bprime_unavailable: 不用 os.stat 桩, 它会连带把
+    # 三态判成「缺失」抢拦)。
     ghost = [_fake_file("Show/ghost.mkv", 100)]
     client.files_map["HA"] = list(ghost)
     client.files_map["HB"] = list(ghost)
@@ -562,18 +569,15 @@ def test_relocate_module_precheck_scandir_and_lstat_degraded(tmp_path, monkeypat
         t._files = None  # 失效惰性缓存, 重拉
     with open(os.path.join(content, "ghost.mkv"), "wb") as f:
         f.write(b"x" * 100)
-    _real_stat, _real_lstat = os.stat, os.lstat
+    _real_lstat = os.lstat
     # 路径可能带 Windows 长路径前缀(\?\)(_prefixed), 桩用包含而非前缀匹配
-    monkeypatch.setattr(
-        os, "stat", lambda p, *a, **kw: (_ for _ in ()).throw(OSError("stat 桩"))
-        if str(src) in str(p) else _real_stat(p, *a, **kw)
-    )
     monkeypatch.setattr(
         os, "lstat", lambda p, *a, **kw: (_ for _ in ()).throw(OSError("lstat 桩"))
         if str(src) in str(p) else _real_lstat(p, *a, **kw)
     )
+    _stub_bprime_unavailable(monkeypatch)
     item = mgr.host.get("relocate").relocate_precheck(["HA", "HB"], dst)[0]
-    # P3 同机闸门重排: 未证明(此处 B′ 也不可判定 —— ghost 文件 stat 不到)不再硬拦多成员组
+    # P3 同机闸门重排: 未证明(此处 B′ 也不可判定)不再硬拦多成员组
     assert item["cls"] == "ok" and item["form"] == "file_links"  # 不专属 -> 逐文件
     assert "same_fs" not in [r["gate"] for r in item["reasons"]]
     assert any("一次性强探测" in n for n in item["notes"])
