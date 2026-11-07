@@ -2,7 +2,7 @@
 """HR 扩展选项页验收桩服务(dev-only): 模拟 hr-fetch-proxy 后端(发现端点 + 双数据端点)。
 
 用途: 计划 26-10-16-0214 §06 真机验收(V1 实例表状态列 / V2 重测全部 / V7 图标四态外框)——
-在 Chrome 里加载已解压扩展后, 选项页「① 连接后端」对着这套可控的后端:
+在 Chrome 里加载已解压扩展后, 选项页「1. 连接后端」对着这套可控的后端:
 默认两个实例(一个正常 = 绿 / 一个 401 = 红), POST /control 实时翻转 ok/401/down,
 停用效果立刻在实例表状态列与工具栏图标上看到。桩**不连任何真实站点**:
 GET /api/hr/tasks 恒回空任务清单(无任务 = 取数通道的正常稳态), /api/hr/refresh 恒回受理。
@@ -226,7 +226,7 @@ def main() -> int:
     print(f"[stub] 实例 B(401/红):  http://127.0.0.1:{ports[1]}  token={TOKEN_B}  mode=401")
     print("[stub] 控制面: GET  http://127.0.0.1:%d/control 看状态" % args.discovery_port)
     print('[stub]         POST /control {"port": %d, "mode": "ok|401|down"} 实时翻转(演示 V1)' % ports[0])
-    print("[stub] 验收路径: chrome://extensions 加载本仓 extensions/hr-fetch-proxy -> 选项页「① 连接后端」")
+    print("[stub] 验收路径: chrome://extensions 加载本仓 extensions/hr-fetch-proxy -> 选项页「1. 连接后端」")
     print("[stub] V1 停用演示: 把某实例切 down/401 -> 点「重测全部」或等 1 分钟轮询, 实例表状态列变橙/红")
     print("[stub] V7 图标演示: 连接正常=绿框; 发现地址改到 127.0.0.1:19999 再发现 -> 红框 + 角标 !")
     print("=" * 72, flush=True)

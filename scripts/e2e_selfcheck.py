@@ -41,6 +41,32 @@ DEFAULT_WARN_PORTS = "8099"
 CLONE_HINT_RE = re.compile(r"[A-Za-z]:\\[^\"']*auto-qb[^\"']*")
 
 
+def parse_port_args(args: list[str]) -> tuple[str, str, str | None]:
+    """--blocking / --warn 参数列表 -> (blocking_raw, warn_raw, 错误行)。
+
+    生产入口 main() 真实调用(非测试旁路)。错误行非 None 时已含用法提示(未知参数 /
+    选项缺值), main() 原样打印并退 2。选项写成最后一个参数时, 旧实现直接取 args[i+1]
+    抛裸 IndexError 堆栈(评审 #6), 这里先判 i+1 越界, 缺值与未知参数同走 usage 退 2。
+    """
+    blocking_raw = ""
+    warn_raw = DEFAULT_WARN_PORTS
+    usage = "(支持 --blocking <ports> / --warn <ports>, 逗号分隔, 空串关闭)"
+    i = 0
+    while i < len(args):
+        arg = args[i]
+        if arg == "--blocking" or arg == "--warn":
+            if i + 1 >= len(args):
+                return blocking_raw, warn_raw, f"参数 {arg} 缺少值 {usage}"
+            if arg == "--blocking":
+                blocking_raw = args[i + 1]
+            else:
+                warn_raw = args[i + 1]
+            i += 2
+        else:
+            return blocking_raw, warn_raw, f"未知参数: {arg} {usage}"
+    return blocking_raw, warn_raw, None
+
+
 def _utf8_stdout() -> None:
     for stream in (sys.stdout, sys.stderr):
         if hasattr(stream, "reconfigure"):
@@ -116,19 +142,10 @@ def main(argv: list[str] | None = None) -> int:
         print("RESULT: 环境自检未过 —— 不进 spec, 按 NEXT: 修复后重跑")
         return 1
     args = [a for a in (argv if argv is not None else sys.argv[1:])]
-    blocking_raw = ""
-    warn_raw = DEFAULT_WARN_PORTS
-    i = 0
-    while i < len(args):
-        if args[i] == "--blocking":
-            blocking_raw = args[i + 1]
-            i += 2
-        elif args[i] == "--warn":
-            warn_raw = args[i + 1]
-            i += 2
-        else:
-            print(f"未知参数: {args[i]} (支持 --blocking <ports> / --warn <ports>, 逗号分隔, 空串关闭)")
-            return 2
+    blocking_raw, warn_raw, parse_error = parse_port_args(args)
+    if parse_error is not None:
+        print(parse_error)
+        return 2
     root = Path(__file__).resolve().parents[1]
     blocking_ports = [int(p) for p in blocking_raw.split(",") if p.strip().isdigit()]
     warn_ports = [int(p) for p in warn_raw.split(",") if p.strip().isdigit()]

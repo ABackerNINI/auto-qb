@@ -4,7 +4,7 @@
 ------------
 没有可用的浏览器自动化就跑不了这类验证, 而本项目有一整类改动**单测根本测不到**:
 (历史背景: 写本脚本时 `agent-browser` 插件还是 1.0.0, 它的 SessionStart hook 在 Windows 上
-直接判 `WINDIR` 打印"不支持 Windows"并退出, 连 CLI 都不装 ⇒ 当时只能自己搭。1.3.0 起该插件
+直接判 `WINDIR` 打印"不支持 Windows"并退出, 连 CLI 都不装 => 当时只能自己搭。1.3.0 起该插件
 已支持 Windows x64; 但本脚本走的是 Playwright, 与它无关, 不因此改变做法。
 环境细节见 `memory-bank/techContext.md`「浏览器冒烟环境 (Playwright)」。)
 乐观 UI 的半透明与失败回滚、按视图回传后切视图、表头同步是否还在每帧强制布局、
@@ -26,7 +26,7 @@
 参数
 ----
     --torrents N   合成种子总数(默认 1500; 用 3000 复现大库)
-    --groups G     前 G×2 个种子两两归组(默认 200 组), 其余为未归组单种子
+    --groups G     前 Gx2 个种子两两归组(默认 200 组), 其余为未归组单种子
     --port P       监听端口(默认 0 = 由 OS 分配; 显式指定具体口仍可用)
     --no-groups    不建分组(纯平铺, 测种子页窗口化最快)
     --cmd-result   ok|error|hang(默认 ok): 兜底命令泵给每条命令的回执 ——
@@ -34,18 +34,18 @@
                    (例外: 非活跃目标的 reannounce 恒回 warn —— 后端第二道闸同口径,
                     issue 26-10-17-1703; 否则 warn 路径在桩上不可达)
     --skip-check-menu on|off(默认 on): web.skip_check_menu 桩值两态 ——
-                   on 走「跳检…」菜单项/确认链断言(计划 26-10-02-1955 W3/W5),
+                   on 走「跳检...」菜单项/确认链断言(计划 26-10-02-1955 W3/W5),
                    off 验 fail-closed 门控(菜单两处都不渲染; 配套 e2e 轮 E2E_SKIP_CHECK=off)
     --hr-scene on|empty|off(默认 on): HR 在线核实桩场景(计划 26-10-04-0312 S5) ——
-                   on 灌五形态拉取历史(表③, HHan/HDSky 跨站时间轴), empty 验空态,
-                   off 验未启用态; 配套 e2e 轮 E2E_HR_SCENE(仅 on 跑表③断言组, e2e/hr-history.spec.mjs)
+                   on 灌五形态拉取历史(表3., HHan/HDSky 跨站时间轴), empty 验空态,
+                   off 验未启用态; 配套 e2e 轮 E2E_HR_SCENE(仅 on 跑表3.断言组, e2e/hr-history.spec.mjs)
 
 注意
 ----
 * 仅开发期使用, 不参与打包; 数据全在内存 + 临时 state 文件, 关闭即弃。
 * 合成数据面(种子之外): peers / trackers 响应、HR 站点与拉取历史、**添加种子窗口的分类/标签候选**
   (`_inject_add_options`)、**迁移状态 job 快照**(`_inject_relocate_jobs`, issue 26-11-06-0330)
-  —— 都是"默认桩恒空 ⇒ 某条渲染路径永远测不到"那一类, 按需补灌;
+  —— 都是"默认桩恒空 => 某条渲染路径永远测不到"那一类, 按需补灌;
   合成种子的 `save_path` 按组对取同一条, 组键 = 真机口径 `(save_path, ())`。
 * 鉴权走 `skip_local_verify`(本机免密钥), 浏览器不需要带 token。
   !正因如此 `--host` **只接受回环地址**(127.0.0.0/8 / ::1 / localhost) —— 绑 0.0.0.0
@@ -89,11 +89,11 @@ _SIZES = [2 * 1024**3, 8 * 1024**3, 25 * 1024**3, 60 * 1024**3]
 
 
 def _inject_add_options(mgr, torrents) -> None:
-    """添加种子三候选(分类/标签)的数据面 —— FakeClient 的分类/标签定义默认恒空 ⇒
+    """添加种子三候选(分类/标签)的数据面 —— FakeClient 的分类/标签定义默认恒空 =>
     `/api/categories` 与 `/api/tags` 恒回空, 添加窗口的分类/标签下拉在桩服务下**永远**是空态,
     「按最近使用排序」的渲染路径在 e2e 与截图目检里从未被覆盖(同 drawer peers/trackers 两条)。
 
-    口径与真机同源: 两个端点都读 store 的 client 缓存(`all_categories`/`all_tags` → 转发
+    口径与真机同源: 两个端点都读 store 的 client 缓存(`all_categories`/`all_tags` -> 转发
     `client.torrents_categories()`/`torrents_tags()`), 故把按合成种子现算出的分类定义与标签
     集合灌进 client 即可。站点标签(如 HHan)由后端 `exclude_auto=1` 过滤掉 —— 正是要覆盖的真实链路。
     """
@@ -122,10 +122,10 @@ class _FakeRelocateJobs:
 def _inject_relocate_jobs(mgr, torrents) -> None:
     """迁移状态标注(issue 26-11-06-0330)的数据面 —— relocate 徽标/筛选的取数源是
     **relocate 模块的 job 快照**(views.py::_relocate_snapshot: config.relocate.enabled 门 +
-    ctx.relocate.jobs_snapshot()), 与 qB 种子字段无关 ⇒ 桩不装配该模块时投影恒 None,
+    ctx.relocate.jobs_snapshot()), 与 qB 种子字段无关 => 桩不装配该模块时投影恒 None,
     前端 relocateOptions 恒空, 「种子页筛选器有数据」的 relocate kind 空筛选器组恒红。
 
-    与 _inject_add_options 同病同治: 默认桩恒空 ⇒ 那条渲染路径(迁移徽标/迁移筛选)永远测不到。
+    与 _inject_add_options 同病同治: 默认桩恒空 => 那条渲染路径(迁移徽标/迁移筛选)永远测不到。
     灌 4 个 job 覆盖筛选桶全部取值分支(moving / pending_finalize(armed) / failed /
     done=只进「有过迁移」); 前两个落同一组对(i=0,1)让组级聚合出真实的跨状态多 job 形态。
     """
@@ -239,18 +239,22 @@ def _inject_site_alerts(torrents) -> None:
     """站点健康两态(计划 26-10-19-2007 S3 e2e): 造 1 行缺站点配置 + 1 行 tracker 报错
 
     桩里**没有主循环**(不跑 refresh_tracker_health), 故直接写终态 —— 与主循环写出的字段同形:
-      · `tracker_conf=None` + 真实 tracker URL -> `site_alert=no_site_conf`(固定文案)
-      · 有站点配置 + `tracker_health_msg`      -> `site_alert=tracker_error`(报错原文进 title)
+      - `tracker_conf=None` + 真实 tracker URL -> `site_alert=no_site_conf`(固定文案)
+      - 有站点配置 + `tracker_health_msg`      -> `site_alert=tracker_error`(报错原文进 title)
     取**末尾两个**(added_on 最大 = 种子页默认序最前两行, 且行窗口化下必然被渲染;
     合成数据里它们同属最后一组): 组行的两个 chip 与种子页平铺行**同时**覆盖,
     e2e 一处断言即验到两个视图, 右槽用例也不必先搜索把目标拉进窗口。
     `tracker_health_ts` 置到未来, 防任何取数路径(若将来桩接了主循环)在用例中途把图标灭掉。
     """
-    if len(torrents) < 2:
+    # 守卫(评审 #23): 本注入取末尾倒数第 4/第 3 两个种子(torrents[-4]/[-3]), 少于 4 条
+    # 会 IndexError 崩在启动行打印前(--torrents 2/3 + 默认 --site-alert on 必触发; 旧守卫只
+    # 判 <2 挡不住)。同文件 _inject_relocate_jobs 的索引注入同款守卫 len<4。少于 4 条时
+    # 跳过注入(站点健康两态缺席, 不崩)。
+    if len(torrents) < 4:
         return
     # 取末尾倒数第 4/第 3(状态池 296%8=stalledUP / 297%8=uploading, 两者活跃且同属最后一组):
-    #   · 同组 -> 组行的两个 chip 上两种告警并存(左槽断言);
-    #   · **不是最上面那个活跃行**(末尾 298 才是) -> 不劫持既有用例里 `.torrent-row.s-seeding,
+    #   - 同组 -> 组行的两个 chip 上两种告警并存(左槽断言);
+    #   - **不是最上面那个活跃行**(末尾 298 才是) -> 不劫持既有用例里 `.torrent-row.s-seeding,
     #     .s-downloading` 的 `.first()` 选取(那条用例走删除链, 汇报被拒会按设计中止删除)。
     a, b = torrents[-4], torrents[-3]
     a.tracker_conf = None
@@ -274,7 +278,7 @@ def _make_torrents(count: int, site_conf):
                 size=size,
                 total_size=size,
                 # 保存路径按**组对**(2k, 2k+1)取同一条(`i // 2`): 组内一致 = 真机形态(同组同目录)、
-                # 组间互异 ⇒ /api/paths 有多个真候选(而不是全库一条), 组键 (save_path, ()) 也不会塌成一组。
+                # 组间互异 => /api/paths 有多个真候选(而不是全库一条), 组键 (save_path, ()) 也不会塌成一组。
                 save_path=f"R:\\Downloads\\Set{i // 2:03d}",
                 state=state,
                 progress=1.0 if done else (i % 10) / 10,
@@ -426,7 +430,7 @@ def _inject_hr_site(torrents):
     safety_display 的 judged=None 分支(本地兜底/不适用); 站点在线判定的 hr_safety_src
     token 与详情抽屉 hrStateLine 短语在前端从未被真渲染过。
     这里 monkeypatch 每个种子的 hr_judgement, 按 v3 四行判定表逐行轮转 7 场景:
-    行1 考察中 / 行2 终态 B·C·D / 行3 放行记录 / 行4 本地兜底 / judged=None 未接入回落。
+    行1 考察中 / 行2 终态 B-C-D / 行3 放行记录 / 行4 本地兜底 / judged=None 未接入回落。
     身份与 facts.lane 强耦合(真判定里档位决定身份, resolve_identity 各行的 reason 原文直抄),
     站点侧达标结论按 HrEntry.satisfied_verdict 的档位即结论口径给(A/C=False, B=True, D=None)。
     只构造真 dataclass, 不接取数链 —— _hr_view_fields 消费的就是这些对象, 与真机同构。
@@ -442,12 +446,12 @@ def _inject_hr_site(torrents):
     )
     from auto_qb.hr.resolve import HrIdentity, HrJudgement, HrSiteFacts
 
-    # (identity, lane, reason, released_src, site_satisfied); lane="" ⇒ 命中行缺席, facts=None
+    # (identity, lane, reason, released_src, site_satisfied); lane="" => 命中行缺席, facts=None
     _SCENES = [
-        (HrIdentity.HR, LANE_SCOPE, "清单命中·考察中(档位 A)", "", False),
-        (HrIdentity.RELEASED, LANE_SATISFIED, "清单命中·已达标(B, 终态放行)", SOURCE_SATISFIED, True),
-        (HrIdentity.RELEASED, LANE_UNSATISFIED, "清单命中·未达标(C, 考核结论已定, 终态放行)", "", False),
-        (HrIdentity.RELEASED, LANE_EXEMPT, "清单命中·已免罪(D, 终态放行)", SOURCE_EXEMPT, None),
+        (HrIdentity.HR, LANE_SCOPE, "清单命中-考察中(档位 A)", "", False),
+        (HrIdentity.RELEASED, LANE_SATISFIED, "清单命中-已达标(B, 终态放行)", SOURCE_SATISFIED, True),
+        (HrIdentity.RELEASED, LANE_UNSATISFIED, "清单命中-未达标(C, 考核结论已定, 终态放行)", "", False),
+        (HrIdentity.RELEASED, LANE_EXEMPT, "清单命中-已免罪(D, 终态放行)", SOURCE_EXEMPT, None),
         (HrIdentity.RELEASED, "", "放行记录(覆盖范围内未列出)", SOURCE_NOT_LISTED, None),
         (HrIdentity.NO_EVIDENCE, "", "无有效站点证据(本地判据兜底)", "", None),
     ]
@@ -477,23 +481,23 @@ def _inject_hr_site(torrents):
 
 
 def _inject_hr_history(mgr, data_dir: str, scene: str):
-    """--hr-scene: HR「站点状态」块与拉取历史表③(计划 26-10-04-0312)的桩场景
+    """--hr-scene: HR「站点状态」块与拉取历史表3.(计划 26-10-04-0312)的桩场景
 
     三态(冒烟的既知盲区与 --hr-site 同源: 桩 manager 没有 HR 取数线程, /api/hr/* 全族
-    端点此前在冒烟里只能走到「未启用」空态, 启用态 / 表③ 时间轴从未被真浏览器渲染过):
-      on    启用 + 五形态历史(默认): 完成(ok) / 部分·截断(warn) / 拦下·未到时刻(dim,
+    端点此前在冒烟里只能走到「未启用」空态, 启用态 / 表3. 时间轴从未被真浏览器渲染过):
+      on    启用 + 五形态历史(默认): 完成(ok) / 部分-截断(warn) / 拦下-未到时刻(dim,
             defer) / 通道不可用(err) / 对账(blue) 各一条, 跨两站(HHan + HDSky)合并成
             时间轴; 完成行带 A/B/C 三档 lanes 快照 = 「行展开明细子行」的数据面。
             五形态的 action/kind/trigger 字面量逐一对齐 service 记录器的真实写点
             (refreshed/partial/waiting/no-channel/confirm-empty), 不凭空造形态。
       empty 启用 + 零历史: 空态文案(「最近还没有拉取记录」)。
       off   未启用: 保持 FakeConfig 默认(hr_check.enabled=False), /api/hr/status 回
-            enabled=false, 前端站点状态块与表③ 段都显示未启用文案。
+            enabled=false, 前端站点状态块与表3. 段都显示未启用文案。
 
     保真口径: 只灌 HrHistoryEvent **输入**, 22 键人话行(徽章色档/耗时文案/档位人话)
     全部经生产 hr.status.history_rows 现算 —— 桩不复制展示层的映射逻辑(替身漂移 =
     自以为在测, 见 pitfalls/testing/stubs-sim.md)。HDSky 除进 service 的 site_confs
-    外, 还要在 config.trackers 补一个**绑定壳**(见下方站点绑定段): 表③ 是跨站合并
+    外, 还要在 config.trackers 补一个**绑定壳**(见下方站点绑定段): 表3. 是跨站合并
     时间轴, 站点 chips 需要第二个站才能目检; 种子行的站点匹配不受影响 —— 行 site 取
     rec.tracker_conf(合成种子的 tracker_conf 恒指 HHan 对象), HDSky 壳无任何种子引用。
     """
@@ -566,7 +570,7 @@ def _inject_hr_history(mgr, data_dir: str, scene: str):
                         notes=["B/C 档第 1 页即命中本地全集, 提前收档"],
                         by="harness",
                     ),
-                    # 部分·截断(warn): 预算/页数上限截断, 截断点之前的数据仍有效
+                    # 部分-截断(warn): 预算/页数上限截断, 截断点之前的数据仍有效
                     HrHistoryEvent(
                         ts=now - 1900,
                         kind="wave",
@@ -601,7 +605,7 @@ def _inject_hr_history(mgr, data_dir: str, scene: str):
                 ],
             "HDSky":
                 [
-                    # 拦下·未到时刻(dim): defer(立即拉取被频控闸拦下; 记录器口径
+                    # 拦下-未到时刻(dim): defer(立即拉取被频控闸拦下; 记录器口径
                     # kind=defer + trigger=manual + action=waiting, 计数字段全 0)
                     HrHistoryEvent(
                         ts=now - 3400,
@@ -630,7 +634,7 @@ def _inject_hr_history(mgr, data_dir: str, scene: str):
 
     # 端点侧的站点接入绑定: /api/hr/sites/{site}/entries 与 /api/hr/history?site= 按
     # config.trackers.<站>.hr_check.enabled 判站点接入(生产口径), 不绑则站点明细端点
-    # 全 404 —— 前端打开站点状态块会给每个站点拉一次表①(loadHrStatus 首拉), 404 以
+    # 全 404 —— 前端打开站点状态块会给每个站点拉一次表1.(loadHrStatus 首拉), 404 以
     # console.error 落进冒烟末尾的「无 console.error」总检(实测 2 错误/皮肤, 恒红)。
     # 壳只当绑定用: domains/tags 给无害占位值, 不与任何合成种子的 tracker 域相撞。
     for name in svc.enabled_sites():
@@ -642,7 +646,7 @@ def _inject_hr_history(mgr, data_dir: str, scene: str):
             mgr.config.trackers[name] = tracker
         tracker.hr_check = SiteHrCheckConfig(enabled=True, tracker=name, listing="list")
 
-    # 站点状态块(/api/hr/status)与表③(/api/hr/history)同源的消费面: 真读 service 的
+    # 站点状态块(/api/hr/status)与表3.(/api/hr/history)同源的消费面: 真读 service 的
     # 磁盘文件, 桩只补「线程在跑」的运行时快照与一个永远 409 的立即拉取(桩没有取数线程)。
     # revision 也一并给(webui 视图重建基线读它, 真 HrRuntime 上是 publisher.revision 属性)
     mgr.hr = SimpleNamespace(
@@ -695,9 +699,9 @@ def _restore_state(mgr, hashes):
 
     !为什么需要: 真机上"暂停"是永久的, 但桩服务是**长驻**的(起一次要跑很多轮冒烟, 红绿双验
     更是同一进程反复跑)。状态一旦永久累积, 跑过一轮"整剧暂停"(合成数据里一剧 = 全部种子)之后,
-    下一轮冒烟里**所有行都是 s-paused** ⇒ 所有"挑一个未暂停的行"的断言全部假失败 —— 实测第二轮
+    下一轮冒烟里**所有行都是 s-paused** => 所有"挑一个未暂停的行"的断言全部假失败 —— 实测第二轮
     就 4 条断言因此变红, 而它们跟被测代码毫无关系。
-    !记的是**最初**值(不是上一次命令后的值): pause→resume 连续两次操作同一批种子时, 若记
+    !记的是**最初**值(不是上一次命令后的值): pause->resume 连续两次操作同一批种子时, 若记
     "上一次", 回弹会把它们还原成暂停态。
     """
     orig = getattr(mgr, "_harness_orig_state", None) or {}
@@ -719,9 +723,9 @@ def _publish_with_delta(mgr, new_states):
     !桩保真(S6/S7 间回归修复, 2026-10-07): 本函数 S4 期曾直改 FakeTorrent.state + 手写
       delta_fields/view_changed 绕过 _apply —— 当时能过; S5b 给 flush_views 加了 keyed
       判定(「本拍确有新 _apply 轮(rounds_applied 前进)」才认行级键, 防 S1 残值误判),
-      绕过 ⇒ rounds_applied 不前进 ⇒ keyed=False ⇒ unkeyed_command_source ⇒ 命令真值轮
+      绕过 => rounds_applied 不前进 => keyed=False => unkeyed_command_source => 命令真值轮
       **恒 full**(增量被静默降级为全量, 违背"增量成为默认路径"的计划目标; S7 收尾冒烟
-      抓到, 净树 stash 对照确认非 S7 引入)。生产主循环每拍都跑 _apply 不受影响 ⇒ 这是
+      抓到, 净树 stash 对照确认非 S7 引入)。生产主循环每拍都跑 _apply 不受影响 => 这是
       **桩失真不是生产回归**。
     修法 = 让桩走生产同一条推导: 目标 state 作为增量 patch 喂给**真 store._apply**
     (patch 形状与 qB sync 增量响应同形: 只含变化种子的变化字段), 不再手工预写任何
@@ -813,20 +817,20 @@ def _apply_truth(mgr, cmd: str, body: dict, revert_ms: int = 0):
             new_states[h] = _RESUME_DONE if getattr(tor, "progress", 0) >= 1 else _RESUME_TODO
     # !不再直改 tor.state(那会让真 _apply 的 apply_delta 比不出变化), 目标 state 作为
     #   增量 patch 经 _publish_with_delta 喂给真 _apply, 由 store 完成生产同款推导。
-    # 版本号自增 ⇒ 前端下一次 /api/state 拿到新数组(而不是"版本未变"空响应)
+    # 版本号自增 => 前端下一次 /api/state 拿到新数组(而不是"版本未变"空响应)
     _publish_with_delta(mgr, new_states)
     if revert_ms > 0 and hashes:
         threading.Thread(target=_revert_after_consume, args=(mgr, hashes, revert_ms), daemon=True).start()
 
 
 def _reannounce_receipt(mgr, cmd: str, body: dict):
-    """reannounce 命令的回执(按 state 判活跃, 复刻后端第二道闸, issue 26-10-17-1703 D7-②)
+    """reannounce 命令的回执(按 state 判活跃, 复刻后端第二道闸, issue 26-10-17-1703 D7-2.)
 
     兜底命令泵原来对一切命令直接写 {"status": "ok"} —— 非活跃种子的 reannounce 因此永远回
     ok, 后端第二道闸的 warn 路径(与前端 _reannounceAll 的 skip 降级、删除链的收敛)在 e2e
     桩上**不可达**: 删除确认框那条 warn 不放行的旧 bug 在桩上永远复现不了。这里按
     `commands.py::reannounce_blocked` 同判据(从生产单点导入, 不另抄一份)补上:
-      单种: 目标非活跃 -> warn「种子非活跃…」(文案与后端逐字一致);
+      单种: 目标非活跃 -> warn「种子非活跃...」(文案与后端逐字一致);
       组:   成员全部非活跃 -> warn「组内 N 个种子均非活跃, 已跳过」(含部分活跃 -> ok,
             与后端 _reannounce_active 过滤后投递同效果)。
     返回 None = 不受影响, 照旧按 mode 写 ok/error。
@@ -844,7 +848,7 @@ def _reannounce_receipt(mgr, cmd: str, body: dict):
 
 
 def _start_command_pump(mgr, mode: str, revert_ms: int = 0, wait_ms: int = 0):
-    """兜底命令泵: 桩服务没有主循环, 命令没人消费 ⇒ 前端 waitCmd 会一直轮询到超时。
+    """兜底命令泵: 桩服务没有主循环, 命令没人消费 => 前端 waitCmd 会一直轮询到超时。
 
     这里不**执行**命令(合成数据没有真实 qB 可打), 只按 mode 直接写回执, 让前端的命令
     闭环可测: ok = 正常完成(乐观值被真值取代), error = 失败(乐观值必须**回滚**),
@@ -991,8 +995,8 @@ def main() -> int:
         choices=["on", "empty", "off"],
         default="on",
         help="HR 在线核实桩场景(默认 on, 见 _inject_hr_history): on = 启用 + 五形态拉取历史"
-        "(表③); empty = 启用 + 零历史(空态); off = 未启用(前端显示未启用态)。"
-        "配套 e2e 轮 E2E_HR_SCENE —— 仅 on 跑表③断言组(e2e/hr-history.spec.mjs)",
+        "(表3.); empty = 启用 + 零历史(空态); off = 未启用(前端显示未启用态)。"
+        "配套 e2e 轮 E2E_HR_SCENE —— 仅 on 跑表3.断言组(e2e/hr-history.spec.mjs)",
     )
     ap.add_argument(
         "--site-alert",
@@ -1007,7 +1011,7 @@ def main() -> int:
         choices=["on", "off"],
         default="on",
         help="web.skip_check_menu 桩值(默认 on): off 起盘验 fail-closed 门控 —— "
-        "「跳检…」在多选与单选菜单都不渲染(配套 e2e 轮 E2E_SKIP_CHECK=off, e2e/menus.spec.mjs)",
+        "「跳检...」在多选与单选菜单都不渲染(配套 e2e 轮 E2E_SKIP_CHECK=off, e2e/menus.spec.mjs)",
     )
     ap.add_argument(
         "--state-revert-ms",
@@ -1022,7 +1026,7 @@ def main() -> int:
         type=int,
         default=0,
         help="模拟真机「主循环正忙, 命令排在其后」: 回执与真值**一起**延后这么久(两者出自同一轮"
-        "主循环)。本地桩没有主循环, wait_ms 恒为 0 ⇒ 「命令投递→回执」这一段从来测不到, "
+        "主循环)。本地桩没有主循环, wait_ms 恒为 0 => 「命令投递->回执」这一段从来测不到, "
         "而真机上它往往是最长的那一段。0 = 瞬时(默认)",
     )
     ap.add_argument("--host", default="127.0.0.1", help="监听地址(**只接受回环**)")
@@ -1060,7 +1064,7 @@ def main() -> int:
     state_file = os.path.join(tmp, "state.json")
     mgr = make_manager(state_file)
     mgr.client = FakeClient()
-    # skip_check_menu 两态可参数化(W5 汇总): 默认 on —— 既有断言依赖「跳检…」菜单项与确认链
+    # skip_check_menu 两态可参数化(W5 汇总): 默认 on —— 既有断言依赖「跳检...」菜单项与确认链
     # (计划 26-10-02-1955 W3); off 复刻生产默认(fail-closed), 供 e2e 轮 E2E_SKIP_CHECK=off
     # 验证门控(菜单两处都不渲染)。走真实 /api/webui/flags 端点渲染菜单, 桩只决定旗标值。
     mgr.config.web = WebConfig(
@@ -1087,7 +1091,7 @@ def main() -> int:
         print(f"[harness] HR 站点判定已注入: {args.torrents} 个种子轮转全分支")
     _inject_hr_history(mgr, tmp, args.hr_scene)
     if args.hr_scene != "off":
-        print(f"[harness] HR 场景={args.hr_scene}: 站点状态 + 拉取历史表③已注入(HHan/HDSky)")
+        print(f"[harness] HR 场景={args.hr_scene}: 站点状态 + 拉取历史表3.已注入(HHan/HDSky)")
     seed_store(mgr, torrents)
     for tor in torrents:  # 抽屉/详情端点按 hash 取, 与 store 保持一致
         mgr.client.torrents[tor.hash] = tor
@@ -1100,7 +1104,7 @@ def main() -> int:
     mgr.store.apply_sync(mgr.api)
     if args.site_alert == "on":
         _inject_site_alerts(torrents)
-    # 抽屉 peers 页签的数据面(issue 26-10-07-2309): FakeClient.peers_map 默认恒空 ⇒ peers 页签
+    # 抽屉 peers 页签的数据面(issue 26-10-07-2309): FakeClient.peers_map 默认恒空 => peers 页签
     # 在桩服务下永远渲染空态, e2e 与截图目检从未覆盖「有数据」渲染路径。按种子序号灌合成对端
     # (含 flags/速度/进度/客户端多样性, 见 _make_peers_response), 端点 /api/torrents/{h}/peers
     # 走 sync_torrent_peers 整包透传, 前端据此渲染。
@@ -1128,7 +1132,7 @@ def main() -> int:
                 },
             ]
 
-    # 添加种子窗口的分类/标签候选(2026-10-09): 与 peers/trackers 同病 —— 默认桩恒空 ⇒ 那两条
+    # 添加种子窗口的分类/标签候选(2026-10-09): 与 peers/trackers 同病 —— 默认桩恒空 => 那两条
     # 下拉的「最近使用排序」渲染路径在 e2e 与截图里从未被覆盖过(see _inject_add_options)。
     _inject_add_options(mgr, torrents)
 
@@ -1140,7 +1144,7 @@ def main() -> int:
             # 组键 = (规范化 save_path, 文件列表) —— **真机口径**(store 归组键)。旧的 (name, ()) 是假键:
             # /api/paths 与 /api/fs/dirs 的允许根都取 key[0](见 routes/fs.py), 拿名字当路径会把全库
             # 种子名灌成"保存位置"候选, open-path(group) 也会去开一个名字。改走 save_path 后三处同时
-            # 归真; 组名显示取自成员 rec.name(views.py), 与组键无关 ⇒ 观感不变。
+            # 归真; 组名显示取自成员 rec.name(views.py), 与组键无关 => 观感不变。
             groups[(a.save_path, ())] = [a.hash, b.hash]
         mgr.store.groups = groups
         # member_to_key 同步重建(增量协议保真, plan 26-10-07-0414 S4 冒烟): 真机上组键索引

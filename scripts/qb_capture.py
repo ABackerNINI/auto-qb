@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""真实 qB 语料抓取 · 脱敏 · 离线回放 —— 抓取器 (计划 26-09-21-0024 §04/§05/§06)
+"""真实 qB 语料抓取 - 脱敏 - 离线回放 —— 抓取器 (计划 26-09-21-0024 §04/§05/§06)
 
 把真机 qB 的数据面抓成「可复现 + 可脱敏 + 自洽」的语料, 供 sim_qb.py --source=corpus 离线回放。
 
@@ -7,7 +7,7 @@
   1. 零语义转换 = 零失真: 每帧是 qB 响应整帧原样落盘(含 server_state / tags / categories),
      种子与全局状态只有一个来源 —— 流。不另存 torrents/server_state/tags/categories。
   2. 语料 = 一条原始流: 首帧即 T0(full_update=true), 末帧必是一份全量(ok=closure / aborted=mismatch)。
-     中间检查点抓而不存 —— 由 T0 ⊕ 增量流 可重建, 没有保存价值。
+     中间检查点抓而不存 —— 由 T0 + 增量流 可重建, 没有保存价值。
   3. 脱敏必须守恒分组等价类: 归组 key 是 (归一化 save_path, 排序后的文件相对路径集合)。
      形态守恒伪名化 + 单射性硬约束 + 脱敏前后逐组对拍(不一致即不落盘)。
 
@@ -63,6 +63,39 @@ if _SCRIPTS_DIR not in sys.path:
 from qb_capture_core import *  # noqa: F401,F403
 from qb_capture_core import _SNAPSHOT_FIELDS, REQUIRED_TORRENT_FIELDS, group_key_of, utils  # noqa: F401
 from qb_capture_cli import _self_test_only, build_parser, load_from_config  # noqa: F401
+
+
+# ==========================================================================================
+# --dry 计划打印(真零请求口径: 判定必须发生在 Capture 构造之前, 见 _dry_plan)
+# ==========================================================================================
+def interval_ms_of(args) -> int:
+    """录制间隔 ms 的纯参数计算(单点: Capture.interval_ms 与 _dry_plan 共用, 不另抄一份)"""
+    if args.interval_ms:
+        return int(args.interval_ms)
+    if args.interval:
+        return int(float(args.interval) * 1000)
+    return 100 if args.profile == "perf" else 2000
+
+
+def _dry_plan(args) -> int:
+    """--dry: 只打印真跑将要发的请求计划, 本身零请求(评审 #11)。
+
+    口径(help: 不发请求): 本函数由 main() 在 **Capture 构造之前**调用 —— QbClient 构造即
+    POST /auth/login(Capture 一造就是 4 个独立 session), 旧实现在 run_capture 里先
+    handshake 后判 dry, version/webapiVersion/preferences/maindata 4 个真实请求已经发出,
+    缺 --sample 时计数请求(_count_torrents)再发 1 个, 与文案矛盾。现在不 login、不握手、
+    不计数: 种子数取 --sample; 未给时全库计数本身要发请求, 与零请求矛盾, 计划里以"全库"
+    占位不预查。真跑的请求序列见 run_capture -> handshake / run_full。
+    """
+    interval = interval_ms_of(args)
+    per_torrent = (f"{args.sample}x2(files+trackers)" if args.sample else "全库种子数x2(files+trackers, 计数本身要发请求, 零请求模式不预查)")
+    logger.info(
+        "[DRY] 本次实际发出请求 0 个(未连接 qB: 不 login / 不握手 / 不计数)。真跑将发: "
+        "1(version)+1(webapi)+1(preferences)+1(maindata rid=0) + %s + 录流 %d 次(maindata, %.0f ms 间隔)"
+        " + 检查点 %d 次", per_torrent, int(args.minutes * 60000 / interval), interval,
+        max(int(args.minutes * 60 / args.full_every), 1)
+    )
+    return 0
 
 
 # ==========================================================================================
@@ -153,11 +186,7 @@ class Capture:
 
     @property
     def interval_ms(self) -> int:
-        if self.args.interval_ms:
-            return int(self.args.interval_ms)
-        if self.args.interval:
-            return int(float(self.args.interval) * 1000)
-        return 100 if self.args.profile == "perf" else 2000
+        return interval_ms_of(self.args)
 
     # ---------- T0 / 全量 ----------
     def full_frame(self, client: QbClient, role: str) -> dict:
@@ -307,7 +336,7 @@ class Capture:
         self._catch_up()
         frame = self.full_frame(self.ck, "closure" if final else "checkpoint")
         acc = StreamAccumulator()
-        for f in self.stream:  # frame 尚未入流, 故这里就是「首帧 ⊕ 中间全部增量帧」
+        for f in self.stream:  # frame 尚未入流, 故这里就是「首帧 + 中间全部增量帧」
             acc.apply(f)
         res = diff_full(acc, frame)
         res["label"] = label
@@ -487,15 +516,15 @@ class Capture:
 
     # ---------- 落盘 ----------
     def _sanitize_mapping(self, seen: set[str] | None = None) -> dict:
-        """脱敏后的「tracker 域名 ↔ 站点标签」与「auto-qb 自有标签字面量」映射
+        """脱敏后的「tracker 域名 <-> 站点标签」与「auto-qb 自有标签字面量」映射
 
         为什么必须记下来: 语料里的域名已换成 `site-N.example`、标签已伪名化, 而回放端生成的 config
         必须落在**同一个伪名空间**里, 否则:
-          · tracker 规则按真域名写 ⇒ 站点匹配全落空 ⇒ `tracker_name` 解析不出来、依赖站点的规则空转;
-          · `missing_tag` / `skip_checking_tag` 按真字面量写 ⇒ 与语料里的伪名标签对不上 ⇒
+          - tracker 规则按真域名写 => 站点匹配全落空 => `tracker_name` 解析不出来、依赖站点的规则空转;
+          - `missing_tag` / `skip_checking_tag` 按真字面量写 => 与语料里的伪名标签对不上 =>
             跳检 / 缺文件的行为跟真机不一致(该跳的没跳、该打的标签打不上) —— 判据全绿也是假的。
 
-        WARN: **只记已脱敏的两侧**(伪域名 ↔ 伪标签)。站点标签的伪名**绝不**反向对应到真实站名
+        WARN: **只记已脱敏的两侧**(伪域名 <-> 伪标签)。站点标签的伪名**绝不**反向对应到真实站名
         —— 那等于把站点名原样写进语料。`MISSING` / `zSkipChecked` 是 auto-qb 自己的常量、非用户数据,
         记它们的伪名不构成泄露(这是本映射能成立的前提)。
         """
@@ -649,7 +678,7 @@ class Capture:
           B. mapped : 对 raw 施加同一套伪名映射后再分组 —— 这是"脱敏后**应该**得到的分组"
           C. post   : 直接对**已落盘形态**的语料(torrents/files 均已脱敏)分组
         A == B 是脱敏自身的一致性; B == C 才是"落盘产物真的按预期分组"。
-        任一不等 ⇒ 脱敏破坏了等价类 ⇒ 中止抓取、不落盘。
+        任一不等 => 脱敏破坏了等价类 => 中止抓取、不落盘。
 
         组的 key 会被脱敏整体改写(盘符 -> <FSROOT>/dN/), 所以只能比**成员集合结构**,
         不能比 key 本身 —— 比 key 会永远不等(这是本条判据最容易写错的地方)。
@@ -708,8 +737,8 @@ class Capture:
         res: dict = {}
         # 1. 字段完整性: 硬下限 = 27 必需字段(缺失即 FAIL); 扩展字段缺失按 WARN 逐项列出。
         #    两处 qB 语义修正(计划 §09 只要求"与 70 字段表比对", 这里把口径写实):
-        #      · hash 不在响应体内 —— 它是 torrents 字典的键(store.py 注释亦如此), 视为已满足;
-        #      · reannounce / reannounce_in 是不同 qB 版本二选一出现, 满足其一即可。
+        #      - hash 不在响应体内 —— 它是 torrents 字典的键(store.py 注释亦如此), 视为已满足;
+        #      - reannounce / reannounce_in 是不同 qB 版本二选一出现, 满足其一即可。
         all_fields: set = set()
         with self._stream_lock:
             for f in self.stream:
@@ -737,11 +766,11 @@ class Capture:
         res["sanitize_injective"] = {"ok": inj}
         # 3. 分组守恒
         res["group_conservation"] = self.meta.get("group_conservation", {})
-        # 4. 首尾闭合: 流首帧 ⊕ 中间增量 == 流末帧
+        # 4. 首尾闭合: 流首帧 + 中间增量 == 流末帧
         with self._stream_lock:
             stream = list(self.stream)
         if self.status == "snapshot":
-            res["stream_closure"] = {"ok": True, "skipped": "snapshot 模式无录流 ⇒ 无闭合锚点"}
+            res["stream_closure"] = {"ok": True, "skipped": "snapshot 模式无录流 => 无闭合锚点"}
         elif stream and stream[-1].get("role") in ("closure", "mismatch"):
             acc = StreamAccumulator()
             for f in stream[:-1]:
@@ -810,22 +839,15 @@ class Capture:
 
     # ---------- 主流程 ----------
     def run_capture(self) -> int:
+        # --dry 不在这里判: Capture 构造(QbClient login x4)与 handshake 都发真实请求,
+        # 零请求口径要求 dry 在 main() 里、Capture 构造之前分流(见 _dry_plan, 评审 #11)。
         self.handshake()
-        if self.args.dry:
-            n = self.args.sample or self._count_torrents()
-            logger.info(
-                "[DRY] 将发请求: 1(version)+1(webapi)+1(preferences)+1(maindata rid=0) "
-                "+%d×2(files+trackers) + 录流 %d 次(maindata, %.0f ms 间隔) "
-                "+ 检查点 %d 次", n, int(self.args.minutes * 60000 / self.interval_ms), self.interval_ms,
-                max(int(self.args.minutes * 60 / self.args.full_every), 1)
-            )
-            return 0
         if self.args.command == "snapshot":
             return self.run_snapshot()
         return self.run_full()
 
     def run_snapshot(self) -> int:
-        """snapshot: 只出 T0 + files/trackers (分步调试用, 无录流 ⇒ 无闭合锚点)"""
+        """snapshot: 只出 T0 + files/trackers (分步调试用, 无录流 => 无闭合锚点)"""
         t0 = self.full_frame(self.client, "t0")
         self.acc_torrents = {h: dict(v) for h, v in (t0.get("torrents") or {}).items()}
         hashes = list(self.acc_torrents.keys())
@@ -854,7 +876,7 @@ class Capture:
 
     def run_full(self) -> int:
         if self.args.command == "record" and (self.out / "meta.json").exists():
-            # 分两步时 session 已断、rid 无从续 ⇒ 两步之间的变化会丢; 记 gap=true(计划 §04)
+            # 分两步时 session 已断、rid 无从续 => 两步之间的变化会丢; 记 gap=true(计划 §04)
             self.meta["gap"] = True
             logger.warning("record 模式: 会重抓一份全量当新 T0, meta 记 gap=true(两步之间的变化已丢)")
         t0 = self.full_frame(self.client, "t0")
@@ -948,10 +970,6 @@ class Capture:
                 if self.stream:
                     self.stream[-1].setdefault("fs_delta", {}).update(delta)
 
-    def _count_torrents(self) -> int:
-        d, _ = self.client.maindata(0)
-        return len(d.get("torrents") or {})
-
     def _report(self, report: dict) -> bool:
         ok = True
         logger.info("=" * 68)
@@ -989,12 +1007,16 @@ def main(argv=None) -> int:
     if not args.out:
         raise SystemExit("[FATAL] 必须显式传 --out <dir>(计划 §12: 语料位置是参数, 不写死)")
 
-    # self-test 只读本地语料目录, 不连 qB ⇒ 不需要凭据
+    # self-test 只读本地语料目录, 不连 qB => 不需要凭据
     if args.command == "self-test":
         return _self_test_only(args)
     if not args.user or not args.password:
         raise SystemExit("[FATAL] 缺凭据: 传 --user/--pass, 或 --from-config <path> 只读解析")
 
+    # --dry 的判定必须早于 Capture 构造(QbClient 构造即 login x4, 见 _dry_plan) —— 旧实现
+    # 在 run_capture 里先 handshake 后判 dry, 4 个握手请求(+1 个计数请求)已经发出(评审 #11)。
+    if args.command in ("capture", "snapshot", "record") and args.dry:
+        return _dry_plan(args)
     cap = Capture(args)
     if args.command in ("capture", "snapshot", "record"):
         return cap.run_capture()
