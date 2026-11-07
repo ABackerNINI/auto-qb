@@ -83,13 +83,18 @@ Object.assign(window.AQB_COLUMNS.methods, {
         this.colGhost = null;   // FX-25: 松手即消失
         if (!dragging) return;  // 未过阈值 = 普通点击, click 正常冒泡(排序不受影响)
         if (drag && drag.page === page) this.applyColOrder(page, key, drag.idx);
-        // 拖拽尾冒泡 click 会触发 setSort(同列释放时) —— capture 阶段拦掉即停(同 startResize)
+        // 拖拽尾冒泡 click 会触发 setSort(同列释放时) —— capture 阶段拦掉即停(同 startResize)。
+        // !自清兜底(R4 存量评审 R5#38): 真拖后 mouseup 可能落在窗口外/不产生 click 的位置
+        // (拖出浏览器边界松手常见), 拦截层只等「下一次 click」注销就会常驻 capture 层,
+        // 把用户页面任意位置的下次点击整个吞掉(菜单按钮/排序各哑一次)。click 若在本拍派发
+        // 必先于定时器回调(同一输入任务内), 故下一拍自清不会漏拦。
         const swallow = (ev) => {
           ev.stopPropagation();
           ev.preventDefault();
           document.removeEventListener("click", swallow, true);
         };
         document.addEventListener("click", swallow, true);
+        setTimeout(() => document.removeEventListener("click", swallow, true), 0);
       };
       document.addEventListener("mousemove", move);
       document.addEventListener("mouseup", up);
@@ -106,14 +111,17 @@ Object.assign(window.AQB_COLUMNS.methods, {
      * methods(否则模板里 memberPadTop(g.members) 触发 this.memberWin 当 getter 调用,
      * 拿到的是对象而不是函数 → "this.memberWin is not a function", 整表就地白屏)。
      * 该 bug 由拆分前的同一段代码继承而来, 之前未塌是因为它走的是追剧页的成员行(整表
-     * 不白)还是其它原因未复现, 现在辅种页展开一行即 100% 触发, 必须正名。 */
+     * 不白)还是其它原因未复现, 现在辅种页展开一行即 100% 触发, 必须正名。
+     * !调用契约(R4 存量评审 R5#35): 传入的必须是**排序后**的数组 —— 前缀和/切片/占位
+     * 与渲染数组同源同序, 调用点(winMembers / memberPadTop / memberPadBottom)各自先过
+     * sortedMembers; 直接喂未排序的 g.members 会在明细排序激活时切片错位(见 winMembers 注)。 */
     memberWin(list) {
       return this._rowWindow("member", list || [], null);
     },
     memberPadTop(list) {
-      return this.memberWin(list).padTop;
+      return this.memberWin(this.sortedMembers(list)).padTop;
     },
     memberPadBottom(list) {
-      return this.memberWin(list).padBottom;
+      return this.memberWin(this.sortedMembers(list)).padBottom;
     },
 });

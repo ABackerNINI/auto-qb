@@ -145,8 +145,11 @@ Object.assign(window.AQB_COLUMNS.methods, {
      *
      * 拖拽抑制误触排序: resizer 与 .h-cell 共父级, mouseup 后浏览器仍派发 click 冒泡到
      * .h-cell 触发 setSort(用户感知为"调列宽顺手把排序变了")。这里累计位移超过阈值时,
-     * 在 capture 阶段拦截下一次 click(stopPropagation+preventDefault), 拦完即注销。
-     * 未拖动(纯点击 resizer)不拦截, 保持原行为。
+     * 在 capture 阶段拦截下一次 click(stopPropagation+preventDefault), 拦完即注销;
+     * 且 mouseup 后下一拍自清 —— mouseup 落在窗口外(不产生 click)时拦截层若只等"下一次
+     * click"注销, 会常驻吞掉页面任意位置的下次点击(R4 存量评审 R5#38)。
+     * 未拖动(纯点击 resizer)不升格意图也不拦截, 保持原行为(R4 存量评审 R5#37):
+     * 升格会把起始渲染快照 merge 进 colW 落盘, 该页自此从「全自动」静默转「固化」。
      */
     startResize(event, page, key) {
       const headEl = event.target.closest(".group-head") || event.target.closest(".detail-head");
@@ -175,20 +178,25 @@ Object.assign(window.AQB_COLUMNS.methods, {
       const up = () => {
         document.removeEventListener("mousemove", move);
         document.removeEventListener("mouseup", up);
+        // 未拖动 = 纯点击 resizer: 先 return, 不升格意图也不拦 click(保持原行为) ——
+        // 零位移也把起始渲染快照 merge 进 colW 落盘, 该页会静默从「全自动」转「固化」
+        // (R4 存量评审 R5#37; dragged 在本函数只覆盖本门槛与 click 拦截两件事)
+        if (!dragged) return;
         // 意图升格: 以既有 colW 为底 merge(!隐藏列的 px 在这里保住 —— 渲染快照只含可见列,
         // 旧实现整段替换正是"隐藏列宽度被抹"的根因), 再叠本次拖拽终值; 整页自此固化
         const intent = { ...(this.colW[page] || {}), ...widths, ...(lastWidths || {}) };
         this.colW = { ...this.colW, [page]: intent };
         this.persistPage(page);
         this.$nextTick(() => this.recomputeEffective());
-        if (!dragged) return;  // 未拖动 = 纯点击 resizer, 不拦 click(保持原行为)
-        // 拖拽尾处浏览器会冒泡一次 click 到 .h-cell 触发 setSort —— capture 阶段拦掉即停
+        // 拖拽尾处浏览器会冒泡一次 click 到 .h-cell 触发 setSort —— capture 阶段拦掉即停;
+        // 下一拍自清兜底(mouseup 落窗口外不产生 click 时拦截层不得常驻, R4 存量评审 R5#38)
         const swallow = (ev) => {
           ev.stopPropagation();
           ev.preventDefault();
           document.removeEventListener("click", swallow, true);
         };
         document.addEventListener("click", swallow, true);
+        setTimeout(() => document.removeEventListener("click", swallow, true), 0);
       };
       document.addEventListener("mousemove", move);
       document.addEventListener("mouseup", up);

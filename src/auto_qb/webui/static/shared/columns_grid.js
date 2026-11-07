@@ -530,10 +530,16 @@ Object.assign(window.AQB_COLUMNS.methods, {
       this._winViewH = WIN_SRC_DOC.viewH();
       this._winScrollY = WIN_SRC_DOC.scrollY();
     },
-    /* 模板用: 成员行切片(展开明细)。窗口未启用时原样返回, 与改动前完全等价 */
+    /* 模板用: 成员行切片(展开明细)。窗口未启用时原样返回, 与改动前完全等价。
+     * !窗口切片/占位/前缀和必须按**渲染同一序**(R4 存量评审 R5#35): memberWin 内部的
+     * 前缀和(_rowPre.member)与切片都吃传入的 list —— 旧实现按未排序 list 开窗、却对
+     * sortedMembers 的排序结果做 slice, 明细列排序激活且展开组成员 >= ROW_WIN_EST_MIN
+     * 时切片行错位、padTop/padBottom 错排列计高, 键盘视口回落(shortcuts 按 _rowPre.member
+     * 换算文档 y, 行序与 _kbRows 同走 sortedMembers)也取错行。先排好序再交给窗口引擎,
+     * 切片/占位/前缀和/键盘行序四者同源同序。 */
     winMembers(list) {
       const rows = this.sortedMembers(list);
-      const w = this.memberWin(list);
+      const w = this.memberWin(rows);
       return w.active ? rows.slice(w.start, w.end) : rows;
     },
 });

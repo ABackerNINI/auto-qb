@@ -213,7 +213,11 @@ window.AQB_FILTERS = {
         base = base.filter((g) => this.relocateFilter.some((b) => this._relocateBuckets(g).includes(b)));
       }
       if (this.pathFilter.length) {
-        base = base.filter((g) => this.pathFilter.includes(g.save_path));
+        // 谓词与选项计数**同侧成员级**(R4 存量评审 R5#36): _facetPick 对组行按每个成员的
+        // save_path 枚举选项并计数, 谓词若只比对组级 save_path(=首成员路径), 组内路径不一时
+        // 选非首成员路径会把计数里存在的组静默滤出 —— tag/category/site 都是成员级谓词,
+        // path 收齐同口径(组内任一成员路径命中即保留整组); 空值兜 "" 与选项/虚拟行分支一致
+        base = base.filter((g) => g.members.some((m) => this.pathFilter.includes(m.save_path || "")));
       }
       if (this.tagFilter.length) {
         base = base.filter((g) => g.members.some((m) => (m.tags || []).some((t) => this.tagFilter.includes(t))));
