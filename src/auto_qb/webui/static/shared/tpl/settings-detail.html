@@ -215,6 +215,7 @@
                   <template v-if="!b.section || cfgExists(b.item.path)">
                     <hub-field v-for="row in b.rows" :key="hubKey(row.path)" :item="row"></hub-field>
                   </template>
+                  <aq-bt-backup-editor v-if="b.key === 'config.relocate'"></aq-bt-backup-editor>
                 </div>
                 <!-- M4+合并(2026-09-25): HR 站点状态(只读端点 /api/hr/status) 并入「HR 在线核实」分区页尾,
                      不再单列首页卡片; 26-10-02-1936 阶段2 起默认折叠, 打开分区不再自动拉数(决策点⑤a),

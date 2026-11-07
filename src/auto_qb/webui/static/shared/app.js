@@ -912,6 +912,7 @@ app.mixin(window.AQB_MENU);
 app.mixin(window.AQB_CTX_MENU);  // 行右键菜单注册表 + 布局解析(计划 26-10-20-0024 W2): 数据在 AQB_CTX_MENU_REG, 模板消费在 W3
 app.mixin(window.AQB_CTX_CUSTOM);  // 设置页「WebUI」卡右键菜单定制块(W4): 读写同一份 web.ctx_menu 草稿, 合并语义复用 AQB_CTX_MENU_REG
 app.mixin(window.AQB_TRANSFER_TARGETS);  // 设置页「WebUI」卡种子转移目标编辑器(计划 26-10-31-0306 W1/T5): 读写同一份 web.transfer 草稿, 模板件 AQ_TRANSFER_TARGETS_COMPONENT 见下
+app.mixin(window.AQB_BT_BACKUP_EDITOR);  // 设置页「整组迁移」块 BT_backup 路径表编辑器(计划 26-11-07-0708 S2): 读写同一份 config.bt_backup 草稿, 模板件 AQ_BT_BACKUP_EDITOR_COMPONENT 见下
 app.mixin(window.AQB_TRANSFER_FLOW);  // 种子转移交互流(计划 26-10-31-0306 W4/T6): 右键菜单「转移到」读侧缓存 + 触发钩子单点 transferOpen(确认弹窗 T7 实现于其内)
 app.mixin(window.AQB_COMMANDS);
 app.mixin(window.AQB_ADD);
@@ -941,6 +942,10 @@ app.component("aq-traffic-card", window.AQ_TRAFFIC_CARD_COMPONENT);
 /* 「种子转移」目标编辑器(计划 26-10-31-0306 W1/T5): 「WebUI」卡二级页的目标列表/编辑器,
  * 模板件 + $root 回调(方法域在 transfer_targets.js 的 tt* 系列), 模板见 shared/tpl/transfer-targets.html。 */
 app.component("aq-transfer-targets", window.AQ_TRANSFER_TARGETS_COMPONENT);
+/* 「BT_backup 路径表」编辑器(计划 26-11-07-0708 S2): 「整组迁移」块内的实例映射表(fastresume
+ * 收尾的依赖配置, 键 = host:port), 模板件 + $root 回调(方法域在 bt_backup_editor.js 的 bb* 系列),
+ * 模板见 shared/tpl/bt-backup-editor.html。 */
+app.component("aq-bt-backup-editor", window.AQ_BT_BACKUP_EDITOR_COMPONENT);
 // 表格公共组件(计划 26-10-11-1722 P1/P2/P3): 表壳 <aq-table> + 行模型单元格渲染器
 // (<aq-member-cells> / <aq-group-cells> / <aq-torrent-cells> / <aq-show-cells> / <aq-ep-cells>)。
 // 它们只包**模板**(表头块 / 单元格分支链), 行为与状态仍在既有单点上 —— 组件模板经 $root 回调根实例。

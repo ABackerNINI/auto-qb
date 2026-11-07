@@ -1,0 +1,39 @@
+<!-- 「BT_backup 路径表」编辑器(计划 26-11-07-0708 S2): x-template 注入 body(transfer-targets.html
+     同范式) —— 本文件**只贡献模板**, 数据与动作一律经 $root 回调根实例(方法域在
+     shared/bt_backup_editor.js 的 bb* 系列); 组件里再写一份会触发 _scan_mixin_wiring 重名守阵。
+     挂载点: settings-detail.html 通用分区分支的 config.relocate 块内(D3: bt_backup 是 fastresume
+     收尾的依赖配置, 与「整组迁移」同块呈现; bt_backup 本体 hidden, 通用编辑树不渲染 —— 组件接管)。
+     树形状与写回口径(整对象替换 / 空映射删键 / 键唯一与空键拦截是编辑面机制不是平行校验)见
+     bt_backup_editor.js 头注释。键值合法性不在前端做平行实现: host:port 格式与非空路径由后端
+     validate_config 聚合 400 拦下, 报错经 cfg.saveError(config_editor.js)在列表下方原样展开
+     (多行 pre-wrap)。 -->
+<script type="text/x-template" id="tpl-aq-bt-backup-editor">
+  <div class="bt-bk">
+    <p v-if="!$root.bbRows.length" class="hb-hp">
+      还没有实例条目 —— 映射为空 = fastresume 收尾功能整体未启用: 迁移预检会拒绝需要收尾的迁移(其余迁移功能不受影响)。
+      点「新增实例」按 qB 连接配置填 host:port 与该实例的 BT_backup 目录即启用。
+    </p>
+
+    <div v-for="(r, i) in $root.bbRows" :key="i" class="bt-bk-row">
+      <input class="hb-input hb-mono" :value="r.key" placeholder="host:port, 如 127.0.0.1:8080"
+             title="该 qB 实例的连接身份: 与 qbittorrent 连接配置的 host/port 一致(端口 1-65535)"
+             @input="$root.bbSetKey(i, $event.target.value)">
+      <input class="hb-input" :value="r.value" placeholder="该实例的 BT_backup 目录路径(qB profile 下 data/BT_backup)"
+             title="qB profile 下 data/BT_backup 的本机路径; 留空保存时会被后端拒绝"
+             @input="$root.bbSetValue(i, $event.target.value)">
+      <span class="bt-bk-acts">
+        <button class="hb-btn ghost sm" @click="$root.bbRemove(i)">删除</button>
+      </span>
+    </div>
+
+    <div class="hb-add-row">
+      <button class="hb-btn ghost sm" @click="$root.bbAdd()">+ 新增实例</button>
+    </div>
+
+    <p v-if="$root.cfg.saveError" class="bt-bk-saveerr">{{ $root.cfg.saveError }}</p>
+    <p class="ctx-custom-note">
+      映射与其它配置项一起保存(右上角「保存并应用」), 非法条目(host:port 格式 / 空路径)会被后端整体拒下并在上方列出全部问题;
+      条目清空后保存 = 回到「fastresume 收尾未启用」。
+    </p>
+  </div>
+</script>

@@ -440,6 +440,16 @@
 .tr-tgt-saveerr { margin: 0 14px 12px; padding: 8px 10px; white-space: pre-wrap; font-size: 12.5px;
   color: var(--error); border: 1px solid var(--error-line); border-radius: var(--radius-sm); }
 
+/* ---- F · BT_backup 路径表编辑器(.bt-bk-*: 设置页「整组迁移」块内, 计划 26-11-07-0708 S2) ----
+ * 三皮肤共用层(与 .tr-tgt-* 同层); 本段只摆行表版式, 控件外观全复用 hb-* 件套
+ * (.hb-btn/.hb-input + 原生 title 悬浮提示)。 */
+.bt-bk { padding: 2px 14px 12px; }
+.bt-bk-row { display: flex; align-items: center; gap: 8px; padding: 5px 0; }
+.bt-bk-row .hb-input { flex: 1 1 200px; min-width: 0; }
+.bt-bk-acts { flex: none; }
+.bt-bk-saveerr { margin: 8px 0 0; padding: 8px 10px; white-space: pre-wrap; font-size: 12.5px;
+  color: var(--error); border: 1px solid var(--error-line); border-radius: var(--radius-sm); }
+
 /* ---- 规则结构树编辑器(W3-A/W3-B, plan 26-11-01-0106 D2/D8) ----
  * 条件组合树节点(.hb-cond-*)与 choose 编排块(.hb-branch-*)的版式; 三皮肤共用层单点
  * (组件 aq-cond-node / aq-choose-block, 模板 tpl/rule-tree.html)。 */
