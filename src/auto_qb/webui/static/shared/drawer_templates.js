@@ -348,6 +348,28 @@
     },
   };
 
+  /* ---------------- general 页 HR 摘要文案单源表(reg.general, 存量评审 R5#79) ----------------
+   * general 三变体(01 英雄行/02 六卡/03 双栏档案)各持一份的 HR 触达徽章文案
+   * (「H&R 已达标」/「已触发 · 已达标」/「HR 已触发 · 已达标」三种字面)与 要求做种/要求分享率
+   * 的展示顺序(02 先比率, 01/03 先时长)收口成单源 —— 同一语义槽一个口径, 改文案/调序一处生效。
+   * 口径裁决: 文案取信息最全的 03 形态(HR 已触发 · 已达标/未达标), 字段序取 01/03 多数派
+   * (先时长); 呈现形态(01/03 的行内 span 群、02 的 " · " 拼行)与站点侧结论行(hr_state 系)
+   * 仍是变体私有, 不入本表。判据命名空间按页签走(reg.peers/reg.trackers 先例)。 */
+  var GENERAL = {
+    /* HR 触达徽章文案(hr_triggered 分支内; 未触发/已排除的整行省略语义留各变体) */
+    hrBadge: function (satisfied) {
+      return satisfied ? "HR 已触发 · 已达标" : "HR 已触发 · 未达标";
+    },
+    /* 要求做种/要求分享率 的有值件(先时长序): k=标签 v=格式化值 —— 01/03 拼行内 span,
+     * 02 拼 " · " 单行; hr_req_time 为 0/缺失与 hr_req_ratio<=0 恒不进件(与旧三份判据逐位同) */
+    hrReqParts: function (ctx, d) {
+      var parts = [];
+      if (d.hr_req_time) parts.push({ k: "要求做种", v: ctx.fmtDuration(d.hr_req_time) });
+      if (d.hr_req_ratio > 0) parts.push({ k: "要求分享率", v: Number(d.hr_req_ratio).toFixed(2) });
+      return parts;
+    },
+  };
+
   /* ---------------- peers 判据共用模块(reg.peers, issue 26-10-20-2231) ----------------
    * 07/08/09 三件 peers 变体各手抄一份的判据簇: FLAG_META(flags 徽章表) / flagTokens
    * (bucketOf 的依赖) / isBad(吸血启发式) / bucketOf(flags 方向分桶) / isLanIp(内网
@@ -515,6 +537,7 @@
     dtRaw: dtRaw,
     helpers: HELPERS,
     kit: KIT,
+    general: GENERAL,
     peers: PEERS,
     trackers: TRACKERS,
     content: CONTENT,

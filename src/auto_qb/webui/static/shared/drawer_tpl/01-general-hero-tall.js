@@ -159,9 +159,8 @@
       if (d.hr_safety_text) bits.push(T`<span>${d.hr_safety_text}</span>`);
     } else if (d.hr_triggered) {
       tone = d.hr_satisfied ? "is-done" : "is-pending";
-      bits.push(T`<span class="dt01-hr-badge" title="${d.hr_reason || ""}">${d.hr_satisfied ? "H&R 已达标" : "H&R 未达标"}</span>`);
-      if (d.hr_req_time) bits.push(T`<span>要求做种 <b>${ctx.fmtDuration(d.hr_req_time)}</b></span>`);
-      if (d.hr_req_ratio > 0) bits.push(T`<span>要求分享率 <b>${Number(d.hr_req_ratio).toFixed(2)}</b></span>`);
+      bits.push(T`<span class="dt01-hr-badge" title="${d.hr_reason || ""}">${reg.general.hrBadge(d.hr_satisfied)}</span>`);
+      for (const p of reg.general.hrReqParts(ctx, d)) bits.push(T`<span>${p.k} <b>${p.v}</b></span>`);
       if (d.hr_state) {
         const line = (d.hr_safety_text || d.hr_state_text || "") + (d.hr_reason ? " · " + d.hr_reason : "");
         if (line) bits.push(T`<span>${line}</span>`);
@@ -180,6 +179,13 @@
     if (!bits.length) return "";
     return T`<div class="dt01-hr ${tone}">${R(bits.join(""))}</div>`;
   }
+
+  /* qB -1/null 哨兵守卫(R5#76): 私有种子 num_complete=-1 / num_leechs=-1 / connections_limit=-1
+   * 是「无数据/不限」哨兵而非 0 —— 裸拼 ?? 0 会渲染出 swarm 0(-1)、连接 8 / -1。
+   * peerNum = 单值槽负值/缺失降级 —, 与 04/05/06 消费 fmtPeersQb(...)||"—" 的同语义槽口径对齐;
+   * 成对槽(已连接/总数)直接走 fmtPeersQb 本尊(total -1 = 只显已连接); 连接上限 -1 照实译「不限」 */
+  const peerNum = (v) => (v === null || v === undefined || v < 0) ? "—" : String(v);
+  const connLimit = (v) => (v === null || v === undefined) ? "—" : (v < 0 ? "不限" : String(v));
 
   /* 英雄行五数字: progress / ratio / upspeed / num_seeds / reannounce_in */
   function hero(ctx, d) {
@@ -204,8 +210,8 @@
       </div>
       <div title="num_seeds(num_complete) / num_leechs(num_incomplete)">
         <span class="dt01-k">做种数 / 用户</span>
-        <span class="dt01-v">${d.num_seeds ?? 0}<span class="u">/ ${d.num_leechs ?? 0}</span></span>
-        <span class="dt01-s">swarm ${d.num_seeds ?? 0}(${d.num_complete ?? 0}) · 连接 ${d.connections_count ?? 0} / ${d.connections_limit ?? 0}</span>
+        <span class="dt01-v">${peerNum(d.num_seeds)}<span class="u">/ ${peerNum(d.num_leechs)}</span></span>
+        <span class="dt01-s">swarm ${ctx.fmtPeersQb(d.num_seeds, d.num_complete) || "—"} · 连接 ${peerNum(d.connections_count)} / ${connLimit(d.connections_limit)}</span>
       </div>
       <div title="reannounce_in / trackers_count">
         <span class="dt01-k">下次重新汇报</span>

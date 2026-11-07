@@ -72,7 +72,7 @@
     ".drawer .dt03-sec-h .dt03-chev { color:var(--fg-dim); transition:transform var(--dur) var(--ease); }",
     ".drawer .dt03-sec-h::after { content:\"\"; flex:1; height:1px; background:var(--hairline); }",
     ".drawer .dt03-sec.folded .dt03-chev { transform:rotate(-90deg); }",
-    ".drawer .dt03-sec.folded .dt03-grid, .drawer .dt03-sec.folded .dt03-wide { display:none; }",
+    ".drawer .dt03-sec.folded .dt03-grid { display:none; }",
     ".drawer .dt03-grid { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); column-gap:16px; }",
     /* Q1(报告 26-10-07-0542): 键值项标签在前、值紧随, 不再用 space-between 两端推开(dt03-item/dt03-kv 同批) */
     ".drawer .dt03-item { display:flex; align-items:baseline; gap:8px; padding:4px 6px;",
@@ -82,9 +82,10 @@
     ".drawer .dt03-item .v { min-width:0; font-family:var(--font-mono, ui-monospace, monospace); font-size:12px; color:var(--fg);",
     "  text-align:right; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }",
     ".drawer .dt03-item .v.is-dim { color:var(--fg-dim); }",
-    /* 整行项(保存路径) */
-    ".drawer .dt03-wide { display:flex; flex-direction:column; gap:2px; }",
-    ".drawer .dt03-item.wide { margin:0; padding:4px 6px; }",
+    /* 整行项(R5#78 接线): wide 类由 gridRows 按数据契约的 r.wide 挂出, 整行 span =
+     * grid-column 1 / -1(与 01 的 is-wide 口径对齐)。设计稿的 .g-wide 包裹层(wide 行 +
+     * 嵌套 grid 上下叠放)在 JS 移植时并成了单层网格, 包裹类无产出结构, 随本接线一并移除 */
+    ".drawer .dt03-item.wide { margin:0; padding:4px 6px; grid-column:1 / -1; }",
     ".drawer .dt03-item.wide .v { display:inline-flex; align-items:center; gap:4px; max-width:100%; }",
     /* 行内动作钮 */
     ".drawer .dt03-act { flex:none; display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px;",
@@ -165,7 +166,10 @@
     return R(T`<svg class="ico ico-sm${tone ? " " + tone : ""}" viewBox="0 0 16 16"><use href="${icon}"></use></svg>`);
   }
 
-  /* 经典分组行 -> 网格键值项(保留行级 open/copy 动作钮); keep 过滤列(值原样) */
+  /* 经典分组行 -> 网格键值项(保留行级 open/copy 动作钮); keep 过滤列(值原样)
+   * R5#78 接线: 数据契约 drawer_rows.js 对哈希/路径/备注等长值行发 wide:true, 在此挂 wide 类
+   * (整行 span, CSS 见 .dt03-item.wide) —— 与 01 变体消费 is-wide 的口径对齐, 长值不再被
+   * 压进三列格子 nowrap 截断 */
   function gridRows(sec, keep) {
     return (sec ? sec.rows : []).filter((r) => !keep || keep.indexOf(r.label) >= 0).map((r) => {
       const btn = r.act === "open"
@@ -175,7 +179,7 @@
           : (r.act === "chain"
             ? T`<button type="button" class="dt03-act" data-act="chain" title="查看路径链"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-link"></use></svg></button>`
             : ""));
-      return T`<div class="dt03-item">${r.icon ? icoSvg(r.icon) : ""}<span class="k">${r.label}</span><span style="min-width:0; display:inline-flex; align-items:center; gap:4px; max-width:100%;"><span class="v">${r.text}</span>${btn ? R(btn) : ""}</span></div>`;
+      return T`<div class="dt03-item${r.wide ? " wide" : ""}">${r.icon ? icoSvg(r.icon) : ""}<span class="k">${r.label}</span><span style="min-width:0; display:inline-flex; align-items:center; gap:4px; max-width:100%;"><span class="v">${r.text}</span>${btn ? R(btn) : ""}</span></div>`;
     }).join("");
   }
 
@@ -216,9 +220,8 @@
       if (d.hr_safety_text) bits.push(T`<span>${d.hr_safety_text}</span>`);
     } else if (d.hr_triggered) {
       tone = d.hr_satisfied ? "is-done" : "";
-      bits.push(T`<span>${d.hr_satisfied ? "HR 已触发 · 已达标" : "HR 已触发 · 未达标"}</span>`);
-      if (d.hr_req_time) bits.push(T`<span>要求做种 <b>${ctx.fmtDuration(d.hr_req_time)}</b></span>`);
-      if (d.hr_req_ratio > 0) bits.push(T`<span>要求分享率 <b>${Number(d.hr_req_ratio).toFixed(2)}</b></span>`);
+      bits.push(T`<span>${reg.general.hrBadge(d.hr_satisfied)}</span>`);
+      for (const p of reg.general.hrReqParts(ctx, d)) bits.push(T`<span>${p.k} <b>${p.v}</b></span>`);
       if (d.hr_state) {
         const line = (d.hr_safety_text || d.hr_state_text || "") + (d.hr_reason ? " · " + d.hr_reason : "");
         if (line) bits.push(T`<span>${line}</span>`);

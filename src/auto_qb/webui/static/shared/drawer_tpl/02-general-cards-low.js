@@ -191,10 +191,9 @@
       if (d.hr_safety_text) bits.push(T`<div class="dt02-hr-req">${d.hr_safety_text}</div>`);
     } else if (d.hr_triggered) {
       tone = d.hr_satisfied ? "is-done" : "is-hr";
-      bits.push(T`<div class="dt02-hr-line"><span class="dt02-hr-badge">${d.hr_satisfied ? "已触发 · 已达标" : "已触发 · 未达标"}</span></div>`);
-      const req = [];
-      if (d.hr_req_ratio > 0) req.push("要求分享率 " + Number(d.hr_req_ratio).toFixed(2));
-      if (d.hr_req_time) req.push("要求做种 " + ctx.fmtDuration(d.hr_req_time));
+      bits.push(T`<div class="dt02-hr-line"><span class="dt02-hr-badge">${reg.general.hrBadge(d.hr_satisfied)}</span></div>`);
+      /* 字段序单源(reg.general.hrReqParts, 先时长序): 02 旧版自拼「先比率」与 01/03 相反(R5#79) */
+      const req = reg.general.hrReqParts(ctx, d).map((p) => p.k + " " + p.v);
       if (d.hr_state) req.push((d.hr_safety_text || d.hr_state_text || "") + (d.hr_reason ? " · " + d.hr_reason : ""));
       if (req.length) bits.push(T`<div class="dt02-hr-req">${req.join(" · ")}</div>`);
       if (d.hr_site_lane) {
