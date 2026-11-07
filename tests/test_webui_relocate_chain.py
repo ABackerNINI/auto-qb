@@ -6,6 +6,8 @@
 - test_chain_walk_types_targets_and_attribution: A->B->C 逐跳类型/目标/归属章(命中/非命中/陈旧);
 - test_chain_cycle_and_hop_limit: 环检测与 8 跳上限;
 - test_chain_cache_ttl_refresh_and_capacity: TTL / refresh=1 / LRU 容量;
+- test_chain_cache_miss_path_hands_out_private_copy: miss 路径交出对象与缓存内对象非同一引用
+  (issue 26-11-07-0536: 返回对象上追加键不得进缓存, hit 路径深拷贝保证不回归);
 - test_chain_mapped_and_remote_are_unknown_not_guessed: 映射/远程不做 syscall, 返回未确认;
 - test_probe_chain_edge_states: 空起点/空根/缺失起点/目标越界/目标不可映射的兜底分支;
 - test_inspect_path_error_classification: 不存在/权限不足/未知类型各自可表达;
@@ -221,6 +223,38 @@ def test_chain_cache_ttl_refresh_and_capacity(web_env, tmp_path):
     cache.get("x", _load)
     cache.get("y", _load)
     assert len(cache._data) == 2, "容量上限必须淘汰最久未用条目"
+
+
+def test_chain_cache_miss_path_hands_out_private_copy():
+    """miss 路径交出的对象与缓存内对象非同一引用(issue 26-11-07-0536)
+
+    miss 路径曾把入缓存对象的原引用交出, 路由随后对它追加 "cached" 键; 并发同 key 请求
+    命中缓存在锁内 deepcopy 该 dict 时, 恰逢一方在锁外追加键 -> RuntimeError("dictionary
+    changed size during iteration") -> 500。修复后入缓存的是深拷贝, 调用方持有 loader 原件,
+    缓存内对象无外部引用; hit 路径交出深拷贝的既有保证不回归。
+    """
+    cache = relocate_chain.ChainCache(ttl=60.0)
+
+    def _load():
+        return {"nodes": [{"path": "C:/x"}], "probed_at": 1.0}
+
+    value, hit = cache.get("k", _load)
+    assert hit is False
+    # 路由的消费方式: 返回对象上追加装饰键 —— 缓存内不得出现(非同一引用)
+    value["cached"] = False
+    value["finalize"] = {"pending": 3}
+    assert "cached" not in cache._data["k"][1]
+    assert "finalize" not in cache._data["k"][1]
+    # 命中路径: 交出深拷贝, 内容为 loader 原样(无调用方追加键)
+    second, hit2 = cache.get("k", _load)
+    assert hit2 is True
+    assert second == {"nodes": [{"path": "C:/x"}], "probed_at": 1.0}
+    assert "cached" not in second
+    # hit 返回值上追加键同样不污染缓存(既有 deepcopy 保证不回归)
+    second["cached"] = True
+    third, _ = cache.get("k", _load)
+    assert "cached" not in third
+    assert "finalize" not in third
 
 
 def test_chain_mapped_and_remote_are_unknown_not_guessed():

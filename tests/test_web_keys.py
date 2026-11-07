@@ -4,6 +4,7 @@
 - test_api_keys_get_default_when_missing: 快捷键配置文件不存在 -> GET 回默认表(计划 26-09-28-0354 W6 §4.4)
 - test_api_keys_put_roundtrip: PUT 合法配置落盘(atomic_write)且 GET 原样回读; 空串=显式禁用语义保留
 - test_api_keys_put_invalid_rejected: PUT 结构非法(schema_version/模板/overrides 形状/归一化串) -> 422 且不触碰磁盘
+- test_api_keys_put_trailing_newline_rejected: 尾换行归一化串 422 拒收不落盘 + 合法键不回归(issue 26-11-07-0536: Python $ 允许串尾 \\n, 消费端 fullmatch 与前端 KB_DEF_RE.test 语义对齐)
 - test_api_keys_read_corrupt_fallback: 主文件坏 JSON -> WARN + 默认表; .bak 完好 -> 回备份(读时兜底链)
 - test_api_keys_unknown_schema_version_fallback: schema_version 不识别 -> 回默认表 + WARN(升级链口径: 宁可回默认不带病生效)
 - test_drain_web_commands_recheck_rejected_while_checking: R1 单发拒绝(plan 26-09-30-0109) —— 规则校验在途时 WEB recheck 回执 error「校验进行中」, qB 不重启校验
@@ -110,6 +111,33 @@ def test_api_keys_put_invalid_rejected(web_env):
     import json as _json2
     stored = _json2.loads(Path(keys_file_path(mgr)).read_text(encoding="utf-8"))
     assert stored == good
+
+
+def test_api_keys_put_trailing_newline_rejected(web_env):
+    """尾换行归一化串拒收(issue 26-11-07-0536): Python 的 $ 允许串尾恰一个 \\n, re.match 把
+    "Ctrl+R\\n" 判合法入库并原样回读, 前端 shortcuts.js _sanitize 却按 KB_DEF_RE.test(JS 的 $
+    不匹配串尾换行)判非法静默丢弃回退模板 —— 快捷键无任何报错地失效。服务端消费端改 fullmatch
+    与 JS test() 全串匹配语义对齐: 尾换行 422 拒收且不触碰磁盘, 合法键(含双修饰组合)不回归"""
+    import json as _json
+
+    from auto_qb.webui.server.routes.keys import _KEYS_SERIAL_RE, keys_file_path
+
+    mgr, client = web_env
+    # 单测面: 同一正则字面量, 尾换行在 fullmatch 下拒绝、合法键照常通过
+    assert _KEYS_SERIAL_RE.fullmatch("Ctrl+R") is not None
+    assert _KEYS_SERIAL_RE.fullmatch("Ctrl+R\n") is None
+    assert _KEYS_SERIAL_RE.fullmatch("Ctrl+Alt+KeyP") is not None
+    # 端到端: 尾换行 422 拒收且不落盘
+    good = {"schema_version": 1, "template": "aqb-default", "overrides": {"act-pause": "Ctrl+KeyP"}}
+    assert client.put("/api/keys", headers=_keys_headers(mgr), json=good).status_code == 200
+    bad = {"schema_version": 1, "template": "aqb-default", "overrides": {"x": "Ctrl+R\n"}}
+    r = client.put("/api/keys", headers=_keys_headers(mgr), json=bad)
+    assert r.status_code == 422, r.text
+    stored = _json.loads(Path(keys_file_path(mgr)).read_text(encoding="utf-8"))
+    assert stored == good, "尾换行拒收后磁盘不得被触碰"
+    # 合法键不回归: 保存读回一致
+    r2 = client.put("/api/keys", headers=_keys_headers(mgr), json=good)
+    assert r2.status_code == 200 and r2.json() == good
 
 
 def test_api_keys_read_corrupt_fallback(web_env, caplog):

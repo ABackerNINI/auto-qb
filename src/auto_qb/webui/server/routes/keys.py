@@ -30,6 +30,9 @@ logger = logging.getLogger("auto_qb.web")
 _KEYS_SCHEMA_VERSION = 1
 # 与 shortcuts.js KB_DEF_RE 同一正则(修饰键固定序 + 单个 e.code); 改一边必须改另一边 ——
 # 两侧逐字一致由 tests/test_webui_static_skins.py::_scan_keys_serial_re 机械守阵(issue 26-10-11-0310)
+# 消费端必须 fullmatch(issue 26-11-07-0536): JS 的 $ 不匹配串尾换行, Python 的 $ 允许串尾恰一
+# 个 \n —— re.match 会把 "Ctrl+R\n" 判合法入库, 前端 _sanitize 再按 KB_DEF_RE.test 静默丢弃,
+# 快捷键无任何报错地失效; fullmatch(全串必须被消费)才与 JS test() 的语义等价, 正则字面量不动。
 _KEYS_SERIAL_RE = re.compile(r"^(Ctrl\+)?(Alt\+)?(Shift\+)?(Meta\+)?[A-Z][A-Za-z0-9]*$")
 _KEYS_DEFAULT = {"schema_version": _KEYS_SCHEMA_VERSION, "template": "aqb-default", "overrides": {}}
 
@@ -48,7 +51,8 @@ def _sanitize(doc):
 
     - 必须是 dict; schema_version 必须是当前支持的整数(未来版本走升级链口径: 回默认表 + WARN);
     - template 必须是非空字符串(v1 仅 aqb-default 一套, 模板名合法性归前端注册表);
-    - overrides 必须是 dict[str, str], 值要么是空串(显式禁用), 要么匹配归一化串正则。
+    - overrides 必须是 dict[str, str], 值要么是空串(显式禁用), 要么全串匹配归一化串正则
+      (fullmatch, 与前端 KB_DEF_RE.test 同语义, 见上方正则注释)。
     """
     if not isinstance(doc, dict):
         return None
@@ -63,7 +67,7 @@ def _sanitize(doc):
     for k, v in overrides.items():
         if not isinstance(k, str) or not isinstance(v, str):
             return None
-        if v and not _KEYS_SERIAL_RE.match(v):
+        if v and not _KEYS_SERIAL_RE.fullmatch(v):
             return None
     return {"schema_version": _KEYS_SCHEMA_VERSION, "template": template, "overrides": overrides}
 

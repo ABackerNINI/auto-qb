@@ -4,6 +4,7 @@
 ### P1 覆盖率提升轮: webui 运行时与命令长尾
 - test_api_torrent_write_endpoints_extra_enqueue: 写端点补遗(pause/resume/delete/skip-check/limits 部分方向)
 - test_api_numeric_params_malformed_string_400: 数值型请求体字段畸形值(字符串)回 400 而不是 500(issue 26-10-30-0622, 五处裸 int()/float() 收口 common.int_param/float_param); 拒收在路由层不入队, 合法数值照常入队
+- test_api_list_body_fields_string_rejected_400: 列表型请求体字段传字符串 400 拒收不入队(issue 26-11-07-0536, 与 transfer.py hashes 同口径) —— torrent_cmds.py 全部 5 处(bulk tags/hashes + 两预检 hashes + trackers/add urls) + 合法 list 载荷原样不回归
 - test_api_torrents_add_endpoint_errors_and_enqueue: 添加种子 base64 坏/空载荷 400 + 合法入队
 - test_api_config_put_and_preview_tree_shape: 配置树 PUT/preview 非对象 400 + preview 不落盘; 校验失败(ConfigError) 400 带文案且不落盘(T2a2)
 - test_api_expr_eval_runtime_error: 求值期失败(除零) -> ok=False 带文案与 used
@@ -165,6 +166,90 @@ def test_api_numeric_params_malformed_string_400(web_env):
     assert resp.status_code == 200
     cmd, payload = mgr.web.commands.get_nowait()
     assert cmd == "set_torrent_limits" and payload["up_limit"] == 1024
+
+
+def test_api_list_body_fields_string_rejected_400(web_env):
+    """列表型请求体字段传字符串 400 拒收不入队(issue 26-11-07-0536, 与 transfer.py hashes 同口径)
+
+    字符串会被逐字符拆开: bulk tags "movietag" 曾拆成 8 个单字符标签入队, 经
+    commands._cmd_bulk_torrents -> add_tags 在 qB 里真实建出 8 个垃圾标签(需手动清理);
+    bulk/预检 hashes、trackers/add urls 同族(issue 26-11-03-0901 只修了 transfer.py 一处)。
+    覆盖 torrent_cmds.py 全部 5 处 + 合法 list 不回归(载荷原样)。
+    """
+    mgr, client = web_env
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    mgr.config.relocate.enabled = True  # relocate 预检 403 门控先开, 两种用例都要过门
+    bad_cases = [
+        ("/api/torrents/bulk", {
+            "action": "add_tags",
+            "hashes": ["HA"],
+            "tags": "movietag"
+        }),
+        ("/api/torrents/bulk", {
+            "action": "pause",
+            "hashes": "HA"
+        }),
+        ("/api/torrents/skip-check/precheck", {
+            "hashes": "abc"
+        }),
+        ("/api/torrents/relocate/precheck", {
+            "hashes": "abc",
+            "location": "D:/dst"
+        }),
+        ("/api/torrents/HA/trackers/add", {
+            "urls": "http://x/announce"
+        }),
+    ]
+    for path, body in bad_cases:
+        resp = client.post(path, json=body, headers=auth)
+        assert resp.status_code == 400, (path, body, resp.status_code)
+        assert "必须是数组" in resp.json()["detail"], (path, resp.json()["detail"])
+    assert mgr.web.commands.empty(), "非数组拒收在路由层, 不得产生命令入队"
+    # 合法 list 不回归: 照常入队且载荷原样
+    ok_cases = [
+        (
+            "/api/torrents/bulk", {
+                "action": "add_tags",
+                "hashes": ["HA"],
+                "tags": ["real", "t2"]
+            }, "bulk_torrents", {
+                "hashes": ["HA"],
+                "action": "add_tags",
+                "delete_files": False,
+                "tags": ["real", "t2"]
+            }
+        ),
+        ("/api/torrents/skip-check/precheck", {
+            "hashes": ["HA"]
+        }, "skip_check_precheck", {
+            "hashes": ["HA"]
+        }),
+        (
+            "/api/torrents/relocate/precheck", {
+                "hashes": ["HA"],
+                "location": "D:/dst"
+            }, "relocate_precheck", {
+                "hashes": ["HA"],
+                "location": "D:/dst"
+            }
+        ),
+        (
+            "/api/torrents/HA/trackers/add", {
+                "urls": ["http://a/announce", "http://b/announce"]
+            }, "add_trackers", {
+                "hash": "HA",
+                "urls": ["http://a/announce", "http://b/announce"]
+            }
+        ),
+    ]
+    for path, body, cmd, want_payload in ok_cases:
+        resp = client.post(path, json=body, headers=auth)
+        assert resp.status_code == 200, (path, body, resp.text)
+        got_cmd, got_payload = mgr.web.commands.get_nowait()
+        got_payload.pop("cmd_id", None)
+        got_payload.pop("_queued_ts", None)
+        assert got_cmd == cmd, (path, got_cmd)
+        assert got_payload == want_payload, (path, got_payload)
 
 
 def test_api_torrents_add_endpoint_errors_and_enqueue(web_env):

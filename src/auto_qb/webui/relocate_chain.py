@@ -282,7 +282,14 @@ class ChainCache:
         self._data: "OrderedDict[str, Tuple[float, dict]]" = OrderedDict()
 
     def get(self, key: str, loader, refresh: bool = False) -> Tuple[dict, bool]:
-        """返回 (结果, 是否命中缓存); refresh=True 强制重探"""
+        """返回 (结果, 是否命中缓存); refresh=True 强制重探
+
+        miss 路径入缓存的是 loader 结果的深拷贝(issue 26-11-07-0536): 返回值保持 loader
+        原件交给调用方自由追加装饰键(路由的 "cached" / "finalize"), 缓存内对象从此没有
+        任何外部引用 —— 否则并发同 key 请求在锁内 deepcopy 缓存对象时, 恰逢持有原引用的
+        一方在锁外追加键, deepcopy 迭代中 dict 变长会抛 RuntimeError -> 500。深拷贝在取锁
+        之前完成, 不拉长锁持有时间。
+        """
         now = self._clock.now()
         with self._lock:
             hit = self._data.get(key)
@@ -290,8 +297,9 @@ class ChainCache:
                 self._data.move_to_end(key)
                 return copy.deepcopy(hit[1]), True
         value = loader()
+        stored = copy.deepcopy(value)
         with self._lock:
-            self._data[key] = (self._clock.now(), value)
+            self._data[key] = (self._clock.now(), stored)
             self._data.move_to_end(key)
             while len(self._data) > self.capacity:
                 self._data.popitem(last=False)

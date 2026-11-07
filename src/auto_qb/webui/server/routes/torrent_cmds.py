@@ -40,6 +40,19 @@ def _require_relocate(ctx: WebContext) -> None:
         raise HTTPException(status_code=403, detail="整组迁移未启用(配置键 relocate.enabled)")
 
 
+def _list_param(body: dict | None, field: str, noun: str) -> list:
+    """列表型请求体字段的取值守卫单点(issue 26-11-07-0536): 非数组 400 拒收不入队
+
+    字符串直接当列表消费会被逐字符拆成伪元素(hashes -> 逐字符伪 hash / tags -> 单字符
+    伪标签会在 qB 里真实建出 / urls 同族), 与 transfer.py 对 hashes 的既有修法
+    (issue 26-11-03-0901)同口径; 缺字段仍按 [] 放行(是否为空的业务校验归各端点)。
+    """
+    raw = (body or {}).get(field) or []
+    if not isinstance(raw, list):
+        raise HTTPException(status_code=400, detail=f"{field} 必须是数组(issue 26-11-07-0536: 字符串会被逐字符拆成伪 {noun})")
+    return raw
+
+
 def build_router(ctx: WebContext) -> APIRouter:
     _enqueue = ctx.enqueue
     router = APIRouter()
@@ -70,8 +83,9 @@ def build_router(ctx: WebContext) -> APIRouter:
         return _enqueue(cmd, payload)
 
     def _cmd_str_list(cmd: str, hash: str, body: dict, field: str) -> dict:
-        """字符串列表字段透传: trackers/add(urls)"""
-        return _enqueue(cmd, {"hash": hash, field: [str(u) for u in ((body or {}).get(field) or []) if u]})
+        """字符串列表字段透传: trackers/add(urls); 非数组 400(见 _list_param, issue 26-11-07-0536)"""
+        raw = _list_param(body, field, "url")
+        return _enqueue(cmd, {"hash": hash, field: [str(u) for u in raw if u]})
 
     @router.post("/api/torrents/{hash}/pause")
     def api_t_pause(hash: str):
@@ -127,13 +141,14 @@ def build_router(ctx: WebContext) -> APIRouter:
         挂与单发跳检**同一 403 门控**(web.skip_check_menu, fail-closed); 经 _enqueue 走
         主循环线程执行 ops.skip_check_precheck(与写命令串行化, 快照无撕裂; 复用 cmd_id +
         waitCmd 既有通道, 不开第二套请求-响应机制)。body {hashes: [...]}(单发 = 单元素数组
-        由前端拼, 端点不关心); 空 hashes 400 拒收不入队(同文件 bulk/limits/location 的
-        路由层参数校验先例: 参数错误在路由层 400, 前端即时可见)。回执(经 cmd 通道):
+        由前端拼, 端点不关心); hashes 非数组 400(issue 26-11-07-0536, 同 transfer.py 口径)/
+        空 hashes 400 拒收不入队(同文件 bulk/limits/location 的路由层参数校验先例: 参数错误
+        在路由层 400, 前端即时可见)。回执(经 cmd 通道):
         status=ok + truth={results: [{hash, name, cls, reasons}], summary: {ok, force, blocked}}
         (summary 按单 hash 总 cls 计数), 未知 hash 透传 ops 的 gone/blocked verdict。
         """
         _require_skip_check(ctx)
-        hashes = [str(h) for h in ((body or {}).get("hashes") or []) if h]
+        hashes = [str(h) for h in _list_param(body, "hashes", "hash") if h]
         if not hashes:
             raise HTTPException(status_code=400, detail="未提供任何 hash(预检目标不能为空)")
         return _enqueue("skip_check_precheck", {"hashes": hashes})
@@ -148,13 +163,14 @@ def build_router(ctx: WebContext) -> APIRouter:
 
         挂 relocate.enabled 403 门控(fail-closed, 与跳检预检同口径); 经 _enqueue 走主循环
         线程执行 ctx.relocate.relocate_precheck(与写命令串行化, 快照无撕裂; 复用 cmd_id +
-        waitCmd 既有通道)。body {hashes: [...], location: "..."}; 空 hashes / 空 location
-        400 拒收不入队(同 skip-check 预检的路由层参数校验先例)。回执(经 cmd 通道):
+        waitCmd 既有通道)。body {hashes: [...], location: "..."}; hashes 非数组 400
+        (issue 26-11-07-0536, 同 transfer.py 口径)/ 空 hashes / 空 location 400 拒收不入队
+        (同 skip-check 预检的路由层参数校验先例)。回执(经 cmd 通道):
         status=ok + truth={results: [逐组 item / gone 种子逐条], summary: {ok, confirm, blocked}}
         (summary 由命令层按单条 cls 计数)。
         """
         _require_relocate(ctx)
-        hashes = [str(h) for h in ((body or {}).get("hashes") or []) if h]
+        hashes = [str(h) for h in _list_param(body, "hashes", "hash") if h]
         location = str((body or {}).get("location") or "").strip()
         if not hashes:
             raise HTTPException(status_code=400, detail="未提供任何 hash(预检目标不能为空)")
@@ -298,7 +314,8 @@ def build_router(ctx: WebContext) -> APIRouter:
         limits/location 扩展动作(计划 26-10-02-1955 W2): up_limit/dl_limit 非负 int
         (bytes/s, 0=qB 语义的"无限制", 允许), location 非空 str —— 均按"提供才透传"
         (队列载荷不带多余键, 纯 pause 调用的历史形态不变)。参数错误(负数 / limits
-        两方向全空 / location 空路径)在路由层 400 拒收: 不入队, 前端即时可见。
+        两方向全空 / location 空路径 / hashes·tags 非数组, issue 26-11-07-0536)在路由层
+        400 拒收: 不入队, 前端即时可见。
 
         skip_check 批量动作(计划 26-10-02-1955 W3): 无额外参数(hashes/keys 即全部载荷),
         路由层不设独立 gate —— 分派处在 drain 时读实时配置拒单(D2=是·fail-closed,
@@ -306,7 +323,7 @@ def build_router(ctx: WebContext) -> APIRouter:
         """
         b = body or {}
         payload = {
-            "hashes": [str(h) for h in (b.get("hashes") or []) if h],
+            "hashes": [str(h) for h in _list_param(b, "hashes", "hash") if h],
             "action": str(b.get("action") or ""),
             "delete_files": bool(b.get("delete_files", False)),
         }
@@ -316,7 +333,7 @@ def build_router(ctx: WebContext) -> APIRouter:
             payload["keys"] = keys
         # 标签/分类动作: 同样"提供才透传"(queue 载荷不带多余键)。
         # tags 非空才入; category 按键存在性入(payload 允许空串 = qB 语义的"清除分类")
-        tags = [str(t).strip() for t in (b.get("tags") or []) if str(t).strip()]
+        tags = [str(t).strip() for t in _list_param(b, "tags", "tag") if str(t).strip()]
         if tags:
             payload["tags"] = tags
         if b.get("category") is not None:
