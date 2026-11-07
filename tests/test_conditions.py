@@ -11,6 +11,8 @@
 - test_state_condition: state 条件匹配
 - test_hr_condition: HR 条件(condition-met=需管束 / satisfied=义务已了; 无hr站点 satisfied 默认满足)
 - test_hr_condition_no_tracker_conf: 未匹配站点(conf=None)不抛 AttributeError, 保守按未管束/未满足
+- test_hr_condition_invalid_mode_fails_fast: HR 条件未知 mode 构造期抛 ValueError, 建树包装成
+  ConfigError(R2#19: 不再静默落 condition-met 分支)
 - test_date_time_condition: 日期时间条件
 - test_seedtime_condition: 做种时间条件
 - test_upload_ratio_condition: 上传分享率条件
@@ -304,6 +306,30 @@ def test_hr_condition_no_tracker_conf():
         assert HrCondition("condition-met").match(ctx) is False
         assert HrCondition("condition-not-met").match(ctx) is True
         assert HrCondition("satisfied").match(ctx) is False
+
+
+def test_hr_condition_invalid_mode_fails_fast():
+    """HR 条件未知 mode 构造期 fail-fast(R2#19): 不再静默落 condition-met 分支
+
+    config 层对 hr 取值无深度校验(schema.HR_MODES 只是 UI 下拉源, registry 条目未声明
+    validator), 拼写错误如 'satified' 旧实现能过加载, 行为随站点是否配 HR 漂移(未配 HR 时
+    'satified' != 'condition-met' 恒真)且全程零诊断 —— 违反黄金法则 4。构造期抛 ValueError,
+    规则建树经 _build_condition_node 包装成 ConfigError 携带规则名。
+    """
+    from auto_qb.config import ConfigError
+    from auto_qb.config.schema.fields import HR_MODES
+    from auto_qb.rules.base import _build_condition_node
+
+    for mode in HR_MODES:  # 合法取值(取值源与实现同 import 自 config.schema.fields)
+        HrCondition(mode)
+    with pytest.raises(ValueError, match="mode 非法"):
+        HrCondition("satified")
+    # mode 精确比较, 大小写不同也非法(不静默归一到小写)
+    with pytest.raises(ValueError, match="mode 非法"):
+        HrCondition("Condition-Met")
+    # 规则建树路径: 叶子构造异常包装成 ConfigError 携带规则名(规则加载期即报错, 不进运行期)
+    with pytest.raises(ConfigError, match="规则 bad-hr-rule"):
+        _build_condition_node({"hr": "satified"}, "bad-hr-rule")
 
 
 def test_date_time_condition():

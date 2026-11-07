@@ -3,6 +3,7 @@ upload_ratio, freespace, expr(表达式)"""
 from datetime import datetime
 from typing import Any
 
+from ..config.schema.fields import HR_MODES
 from ..infra import utils
 from .base import BaseCondition, RuleContext
 from .expr import compile_expr, evaluate, validate
@@ -148,6 +149,12 @@ class HrCondition(BaseCondition):
 
     def __init__(self, spec: Any) -> None:
         self.mode = str(spec)
+        if self.mode not in HR_MODES:
+            # 未知 mode 旧实现静默落 condition-met 分支: 行为随站点是否配 HR 漂移且全程零诊断
+            # (拼写错误如 'satified' 能过加载, 违反黄金法则 4)。config 层无 hr 深度校验
+            # (registry 条目未声明 validator), 这里是唯一闸口 —— 构造期 fail-fast; 规则建树
+            # 经 _build_condition_node 包装成 ConfigError 携带规则名。
+            raise ValueError(f"hr 条件 mode 非法: {self.mode!r} (合法取值: {', '.join(HR_MODES)})")
 
     def match(self, ctx: RuleContext) -> bool:
         torrent = ctx.torrent

@@ -100,7 +100,7 @@ def _strip_win_prefix(p: str) -> str:
 
     前缀让同一路径有两种写法, 而比较与映射只认一种(语义与 webui/server/routes/fs.py
     的 _bare 一致 —— 该处保留同名薄委托, 供既有测试钉住)。path_normalize 更危险:
-    它先折叠 `\\` ⇒ `\\\\?\\H:\\a` 会折坏成 `/?/H:/a`, 所以必须**先剥再规范化**。
+    它先折叠 `\\` ⇒ `\\\\?\\H:\\a` 会折坏成 `//?/H:/a`, 所以必须**先剥再规范化**。
     """
     if p.startswith("\\\\?\\UNC\\"):
         return "\\\\" + p[8:]

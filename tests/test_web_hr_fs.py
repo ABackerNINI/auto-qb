@@ -264,7 +264,9 @@ def test_api_fs_dirs_endpoint(web_env, tmp_path):
     assert mgr.web.commands.empty()
 
 
-@pytest.mark.skipif(not sys.platform.startswith("linux"), reason="只有大小写敏感的 FS(ext4)上两个名字才是两个目录; NTFS 上是同一个, 断言无意义")  # owner: abacker
+@pytest.mark.skipif(
+    not sys.platform.startswith("linux"), reason="只有大小写敏感的 FS(ext4)上两个名字才是两个目录; NTFS 上是同一个, 断言无意义"
+)  # owner: abacker
 def test_api_fs_dirs_case_sibling_is_outside_whitelist(web_env, tmp_path):
     """**大小写兄弟目录必须判为越界** —— `web._fs_real` 不得做 NTFS 式大小写折叠
 
@@ -437,7 +439,7 @@ def test_fs_path_helpers_strip_long_path_prefix_before_compare():
     assert fs_mod._bare("\\\\?\\UNC\\server\\share") == "\\\\server\\share", "UNC 形态还原"
     # 带前缀与不带前缀必须归一到同一个可比较形式(_fs_real 委托包装层, 内部先剥再规范化)
     assert fs_mod._fs_real("\\\\?\\" + bare) == fs_mod._fs_real(bare)
-    # 前缀单点幂等: 已是带前缀形态再进包装层不得叠加 —— path_normalize 会把 `\\?\\` 折坏成 `/?/`
+    # 前缀单点幂等: 已是带前缀形态再进包装层不得叠加 —— path_normalize 会把 `\\?\\` 折坏成 `//?/`
     fa = file_access.LocalFileAccess()
     assert fa._pref(fa._pref(bare)) == fa._pref(bare)
     assert file_access._norm_logical(file_access._norm_logical("\\\\?\\" + bare)) == file_access._norm_logical(bare)

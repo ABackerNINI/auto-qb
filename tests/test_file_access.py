@@ -12,6 +12,9 @@
 - test_mapped_prefix_boundary: `/` 边界强制(D:/Downloads 不得命中 D:/Downloads2)
 - test_mapped_casefold_expanding_prefix: casefold 变长字符(ß→ss)出现在映射前缀 —— 边界按原串码点定位、余量不错位(回归: 旧实现按折叠长度硬切原串, 容器路径丢字符 → exists 误判「不存在」重演误暂停)
 - test_mapped_scandir_logical_space: scandir entry 译回逻辑空间(白名单消费方零改动的前提)
+- test_local_scandir_unc_boundary_not_cwd_joined: Local scandir 的 UNC 逻辑路径保留 `//` 边界
+  (不落 cwd 拼接, entry.path 仍 UNC 形状, R2#30)
+- test_mapped_unc_source_scandir_logical: UNC 映射源(`\\\\NAS\\share`)命中映射, entry.path 仍 UNC 形状
 - test_mapped_mkdir_real_and_miss: mkdir 挂载点可写即真实执行; miss 报 FileAccessError(不可判定)
 - test_mapped_realpath_lexical: Mapped realpath_lexical 纯词法(normcase+normpath, 不解析符号链接)
 - test_mapped_symlink_escape_treated_as_miss: SEC-1 逃逸加固 —— 挂载内符号链接指向挂载外按
@@ -240,6 +243,57 @@ def test_mapped_scandir_logical_space(tmp_path):
     assert by_name["file.bin"].is_dir is False
     assert by_name["Season 1"].path == "D:/Downloads/Season 1"  # 逻辑空间, 非容器路径
     assert not by_name["Season 1"].path.startswith(str(tmp_path))
+
+
+def test_local_scandir_unc_boundary_not_cwd_joined(monkeypatch):
+    """Local scandir 的 UNC 逻辑路径保留 `//` 根边界: syscall 不落 cwd 拼接, entry.path 仍 UNC 形状(R2#30)
+
+    修复前: _norm_logical 经 path_normalize 把 UNC 写法(`\\\\NAS\\share\\dl`)压成
+    `/NAS/share/dl`, Local._pref 对单斜杠开头走相对路径分支 —— Windows 上 abspath 拼到
+    cwd 所在盘根下(实测 abspath("\\NAS\\share\\dl") = "D:\\NAS\\share\\dl", 或产出非法
+    \\\\?\\ 前缀串), POSIX 上 `/NAS/...` 本就是绝对路径不发生拼接, 两种宿主都触达不了
+    UNC 目标本体(Windows 宿主直跑 + qB 报 UNC save_path/content_path 时, 目录浏览 fs.py
+    与迁移扫描 relocate_plan.py 打开错误路径抛 FileNotFoundError), entry.path 也是
+    `/NAS/...` 畸形逻辑路径(违反「逻辑路径进 -> 逻辑路径出」)。UNC 目标不必真实存在:
+    scandir 打桩, 断言打在归一化/路径拼接层(与 testing/file-conventions.md「测试不得依赖
+    宿主环境能力」同口径)。
+    """
+    assert file_access._norm_logical(r"\\NAS\share\dl") == "//NAS/share/dl", "归一必须保留 UNC 边界"
+    seen = {}
+
+    class _FakeEntry:
+        name = "a.bin"
+
+        def is_dir(self):
+            return False
+
+    import contextlib
+
+    @contextlib.contextmanager
+    def fake_scandir(p):
+        seen["p"] = p
+        yield [_FakeEntry()]
+
+    monkeypatch.setattr(file_access.os, "scandir", fake_scandir)
+    entries = LocalFileAccess().scandir(r"\\NAS\share\dl")
+    syscall = str(seen["p"]).replace("\\", "/")
+    # syscall 收到 UNC 形状(Windows 宿主已译成 \\?\UNC\..., 非 Windows 原样保留),
+    # 绝不是 abspath 拼到 cwd 下的形态
+    assert syscall.startswith("//NAS/share/dl") or syscall.startswith("//?/UNC/NAS/share/dl"), syscall
+    assert entries[0].path == "//NAS/share/dl/a.bin", entries[0].path
+
+
+def test_mapped_unc_source_scandir_logical(tmp_path):
+    """UNC 映射源(`\\NAS\share`)命中映射且 entry.path 保持 UNC 形状(逻辑进 -> 逻辑出, R2#30)"""
+    mount = str(tmp_path).replace(os.sep, "/")
+    fa = MappedFileAccess((PathMapEntry(src=r"\\NAS\share", dst=mount), ))
+    (tmp_path / "sub").mkdir()
+    (tmp_path / "sub" / "a.bin").write_bytes(b"x")
+    assert fa.map_to_container(r"\\NAS\share\sub") == mount + "/sub"
+    assert fa.exists(r"\\NAS\share\sub\a.bin") is True
+    entries = fa.scandir(r"\\NAS\share\sub")
+    assert [e.name for e in entries] == ["a.bin"]
+    assert entries[0].path == "//NAS/share/sub/a.bin", "entry.path 是 UNC 逻辑路径, 不是压掉双斜杠的畸形串"
 
 
 def test_mapped_mkdir_real_and_miss(tmp_path):

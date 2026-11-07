@@ -1528,6 +1528,8 @@ const eq = (n, got, want) => checks.push([n, JSON.stringify(got) === JSON.string
 eq("路径归一: 反斜杠转正斜杠", _addNormPath("R:\\Seeds\\A"), "R:/Seeds/A");
 eq("路径归一: 压重复斜杠", _addNormPath("R://Seeds///A"), "R:/Seeds/A");
 eq("路径归一: 首尾斜杠保留", _addNormPath("/mnt//media/"), "/mnt/media/");
+eq("路径归一: UNC 开头双斜杠豁免", _addNormPath("\\\\NAS\\share//dl"), "//NAS/share/dl");
+eq("路径归一: 三斜杠开头收敛到两个", _addNormPath("///NAS/share"), "//NAS/share");
 eq("路径归一: 空/null/未定义安全", [_addNormPath(""), _addNormPath(null), _addNormPath(undefined)], ["", "", ""]);
 const m = new Map([["Movies", 300], ["TV", 100], ["Anime", 200]]);
 eq("最近使用降序", _addOrderByRecent(["TV", "Movies", "Anime"], m), ["Movies", "Anime", "TV"]);
@@ -1561,7 +1563,8 @@ def test_frontend_add_options_recent_order():
     1. 排序语义(node 真跑 _addOrderByRecent/_addNormPath): 最近使用降序 -> 未用过(时间 0)落
        末尾并按字母序 -> 表空/表 null/值未命中一律退化纯字母序(候选未到位时零观感差异);
        纯函数不改入参(改了会把传进来的候选数组原地打乱)。路径归一必须与后端
-       infra/utils.path_normalize 同口径(反斜杠转正斜杠 + 压重复斜杠, 首尾斜杠保留) ——
+       infra/utils.path_normalize 同口径(反斜杠转正斜杠 + 压重复斜杠, 首尾斜杠保留,
+       UNC 开头双斜杠豁免) ——
        两侧不同径则 /api/paths 的**已归一**路径与取数行的 qB **原文** save_path 对不上,
        时间表恒不命中, 功能静默退化成纯字母序(不报错、不白屏, 只是"排序没生效");
     2. 接线(静态): loadAddOptions 三个候选都过 _addOrderByRecent 单点(不是各自 .sort()),
