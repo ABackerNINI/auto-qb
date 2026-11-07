@@ -32,7 +32,7 @@
 - test_validate_section_type_errors: 各段非字典/非列表类型错误聚合(log/qbittorrent/grouping/hr/add_episode_tags/delete_tags 坏项)
 - test_validate_hr_value_errors: 站点 hr 段值错误聚合(extra_seeding_time/required_share_ratio/condition/布尔)
 - test_validate_tracker_groups: 站点 groups 非列表/空串项报错(fail-fast)
-- test_validate_state_save_interval: state_save_interval 0(关闭)与 >=30s 合法; 低于下限/坏格式报错(防误配置写放大)
+- test_validate_state_save_interval: state_save_interval 0(关闭, 含裸 0/0S 两写法)与 >=30s 合法; 低于下限/坏格式报错(防误配置写放大)
 - test_validate_schema_version_shape: validate_config 形状校验(须为整数/须>=1, 防御层)
 - test_validate_web_ctx_menu_errors: web.ctx_menu 布局坏形状全类型报错(非字典/支级非字典/order·hidden 非字符串数组/sub 非字典/未知层键/sep token 格式错, 计划 26-10-20-0024 W1)
 - test_validate_web_ctx_menu_pass_shapes: web.ctx_menu 合法形态不报错(空字典/全层齐全/未知支名容忍)
@@ -65,7 +65,11 @@
 - test_validate_tracker_field_errors
 - test_validate_tracker_rules_non_list_skips_refs
 - test_validate_trackers_and_rules_structure
-- test_validate_traffic_source_enabled_key
+- test_validate_traffic_source_enabled_key: enabled 总开关(缺省 True/false 关闭/非布尔报错; false 免检 dat_path 且 expr 门控放行) + no/off/0 等价关闭写法同口径(R4#14/#10), 非 0 数字不算关闭
+- test_validate_traffic_source_gtm_expr_gate: provider=global_traffic_monitor 恒 traffic_configured(R4#11): gtm + 无 dat_path + sys.upload_today expr 规则零报错(回归成判 dat_path 即红)
+- test_validate_notify_dedup_window_bare_zero: notify.dedup_window 裸 0 = 不去重(R4#15): 裸 0/整数 0/0S 放行, 坏格式照拒
+- test_validate_checking_section_mode_absent_ok: checking 子段 mode 缺省走 schema 默认(R4#12): {enabled: true} 不报「取值非法: ''」, 显式非法 mode 照拒
+- test_validate_add_episode_tags_unknown_keys: add_episode_tags 未知键 fail-fast(R4#13): 模板键拼错报未知键, 合法键面放行
 - test_validate_value_errors_extended
 - test_validate_web_errors
 - test_validate_qbittorrent_str_keys
@@ -220,9 +224,12 @@ def test_validate_max_tasks_per_tick_range():
 
 
 def test_validate_state_save_interval():
-    """state_save_interval: 0(关闭)与 >=30s 合法; 低于下限/坏格式报错(防误配置写放大)"""
+    """state_save_interval: 0(关闭; 裸 0 与 0S 两写法)与 >=30s 合法; 低于下限/坏格式报错(防误配置写放大)"""
     with tempfile.TemporaryDirectory() as td:
-        # 合法: 0=关闭 / 下限值 / 常规值 / 带单位换算
+        # 合法: 0=关闭(裸 0 与 0S 同放行, R4#9: 文案/文档口径「0(关闭)」的裸 0 写法须可表达)
+        # / 下限值 / 常规值 / 带单位换算
+        assert "state_save_interval" not in _load_errors(td, "config:\n  state_save_interval: 0\n")
+        assert _errs({"state_save_interval": 0}) == []  # 整数 0(程序内构造)同样放行
         assert "state_save_interval" not in _load_errors(td, "config:\n  state_save_interval: 0S\n")
         assert "state_save_interval" not in _load_errors(td, "config:\n  state_save_interval: 30S\n")
         assert "state_save_interval" not in _load_errors(td, "config:\n  state_save_interval: 120S\n")
@@ -230,7 +237,7 @@ def test_validate_state_save_interval():
         # 低于下限 -> 拒绝(下限 30s 防误配置写放大, issue 26-09-21-1347 拍板)
         err = _load_errors(td, "config:\n  state_save_interval: 29S\n")
         assert "config.state_save_interval: 须为 0(关闭)或 >= 30S(防误配置写放大): 29S" in err, err
-        # 坏格式(裸数字无单位)/负数 -> 格式报错
+        # 坏格式(裸数字无单位)/负数 -> 格式报错(裸 0 特判只放行 0 本身, 非零裸数字照拒)
         assert "config.state_save_interval: 无效时间格式" in _load_errors(td, "config:\n  state_save_interval: 120\n")
         assert "config.state_save_interval: 无效时间格式" in _load_errors(td, "config:\n  state_save_interval: -5S\n")
 
@@ -638,6 +645,84 @@ def test_validate_traffic_source_enabled_key():
         # 对照: enabled 缺省 + 无 dat_path -> 门控照旧报"无数据源"
         on_rules = off_rules.replace("    enabled: false\n", "")
         assert "无数据源" in _load_errors(td, on_rules)
+        # no/off/0 等价关闭写法(R4#14, 关闭判定经 parse_bool): 同样免检 dat_path
+        # (此前只认字面 "false", enabled: no 被当开启 -> dat_path 必填报错, 走不到逃生口)
+        for form in ("no", "off", "0"):
+            assert _load_errors(td, f"config:\n  traffic_source:\n    enabled: {form}\n") == ""
+        # gate 同口径(R4#10): enabled: no 时 traffic.* 名字不被门控禁掉
+        no_rules = off_rules.replace("    enabled: false\n", "    enabled: no\n")
+        assert _load_errors(td, no_rules) == "", _load_errors(td, no_rules)
+        # 对照: 非 0 数字不是布尔, 不算关闭(格式错照记 + gate 照禁, 保守方向不变)
+        bad_num_rules = off_rules.replace("    enabled: false\n", "    enabled: 2\n")
+        err = _load_errors(td, bad_num_rules)
+        assert "config.traffic_source.enabled" in err, err
+        assert "无数据源" in err, err
+
+
+def test_validate_traffic_source_gtm_expr_gate():
+    """provider=global_traffic_monitor 恒 traffic_configured(R4#11): gtm 无 dat_path + sys.upload_today expr 规则零报错
+
+    gtm 分支此前 tests/ 零覆盖: 回归成「判 dat_path」(-> traffic 派生的 sys.* 门控名(GATED_NAMES)被禁用)
+    会被本用例捕获; 对照支钉住 traffic_monitor 缺 dat_path 仍报"无数据源", 保证用例非空转。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        gtm_rules = (
+            "config:\n"
+            "  traffic_source:\n"
+            "    provider: global_traffic_monitor\n"
+            "  example_rules:\n"
+            "    r1:\n"
+            "      conditions:\n"
+            "        - expr: \"sys.upload_today > 0\"\n"
+        )
+        assert _load_errors(td, gtm_rules) == "", _load_errors(td, gtm_rules)
+        # 对照: provider 缺省(=traffic_monitor)且无 dat_path -> 门控报"无数据源"
+        assert "无数据源" in _load_errors(td, gtm_rules.replace("    provider: global_traffic_monitor\n", ""))
+
+
+def test_validate_notify_dedup_window_bare_zero():
+    """notify.dedup_window 裸 0 = 不去重(合法, R4#15): 裸 0/整数 0/0S 放行, 坏格式照拒"""
+    with tempfile.TemporaryDirectory() as td:
+        assert "dedup_window" not in _load_errors(td, "config:\n  notify:\n    dedup_window: 0\n")
+        assert _errs({"notify": {"dedup_window": 0}}) == []  # 整数 0(程序内构造)同样放行
+        assert "dedup_window" not in _load_errors(td, "config:\n  notify:\n    dedup_window: 0S\n")
+        assert "config.notify.dedup_window" in _load_errors(td, "config:\n  notify:\n    dedup_window: abc\n")
+
+
+def test_validate_checking_section_mode_absent_ok():
+    """checking 子段 mode 缺省走 schema 默认 skip-checking(R4#12): {enabled: true} 不报「取值非法: ''」
+
+    存在守卫只对显式配置的 mode 校验取值域: 非法显式值照拒(守卫不放水)。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        ok = (
+            "config:\n"
+            "  example_rules:\n"
+            "    r1:\n"
+            "      actions:\n"
+            "        - checking:\n"
+            "            basic_check: filelist\n"
+            "            with_reference: {enabled: true}\n"
+            "            without_reference: {auto_start: true}\n"
+        )
+        assert _load_errors(td, ok) == "", _load_errors(td, ok)
+        bad = ok.replace("with_reference: {enabled: true}", "with_reference: {mode: xxx}")
+        assert "with_reference.mode 取值非法: 'xxx'" in _load_errors(td, bad)
+
+
+def test_validate_add_episode_tags_unknown_keys():
+    """add_episode_tags 未知键 fail-fast(R4#13): 模板键拼错报未知键(此前全段零报错、loader 静默回落默认), 合法键面放行"""
+    with tempfile.TemporaryDirectory() as td:
+        err = _load_errors(td, "config:\n  add_episode_tags:\n    add_tag_singel: zE01\n")
+        assert "config.add_episode_tags: 未知键 ['add_tag_singel']" in err, err
+        ok = (
+            "config:\n"
+            "  add_episode_tags:\n"
+            "    enabled: true\n"
+            "    add_tag_single: zE${episode_first}\n"
+            "    add_tag_multi: zE${episode_first}-${episode_last}\n"
+        )
+        assert _load_errors(td, ok) == "", _load_errors(td, ok)
 
 
 def test_validate_empty_file():

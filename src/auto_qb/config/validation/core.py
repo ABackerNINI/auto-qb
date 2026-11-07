@@ -203,6 +203,21 @@ def _try_time(
         errors.append(f"{where}: 须 <= {_fmt_s(max_s)}s")
 
 
+def _is_bare_zero(value: Any) -> bool:
+    """裸 0 判定(R4#9/#15): 字符串 "0"(含空白)或整数 0, 带单位形("0S")不在内 —— 那本就过 parse_time
+
+    parse_time 本体不动(服务全仓多处, 「数值须带单位后缀」契约保持): 特判只收敛在本谓词,
+    供两个文档口径声明「0 = 关闭/不去重」的键的调用路径使用(state_save_interval /
+    notify.dedup_window)。bool 先排除(int 子类, False == 0 恒真): 非数值类型照走
+    parse_time 的「无效时间格式」报错, 不得被静默当成 0。
+    """
+    if isinstance(value, bool):
+        return False
+    if isinstance(value, int):
+        return value == 0
+    return isinstance(value, str) and value.strip() == "0"
+
+
 # state_save_interval 下限: 状态的真实变更频率是小时~天级, 更激进的间隔只会白白放大磁盘
 # 写入, 换不来等比例的有效丢失窗口(issue 26-09-21-1347 拍板: 防误配置写放大)。0 = 关闭
 # 周期落盘, 不受限。
@@ -212,6 +227,8 @@ STATE_SAVE_INTERVAL_MIN = 30.0
 def _validate_state_save_interval(value: Any, errors: List[str]) -> None:
     """state_save_interval: 合法时间格式, 且为 0(=关闭)或 >= 30s(防误配置写放大)"""
     where = "config.state_save_interval"
+    if _is_bare_zero(value):
+        return  # 裸 0 = 关闭(R4#9: models「0=关闭」文档口径的合法写法; parse_time 要求单位后缀, 特判放行)
     try:
         seconds = parse_time(value)
     except ValueError as e:

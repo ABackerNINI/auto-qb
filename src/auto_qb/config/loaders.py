@@ -46,12 +46,24 @@ from .models import (
 from . import site_presets
 from .compat import normalize_legacy_rules
 from .validation import _strip_none, validate_config
+from .validation.core import _is_bare_zero
 
 
 def _under(data_dir: str, *parts: str) -> str:
     """把 parts 拼到数据主目录下(正斜杠风格, 去掉 data_dir 尾部斜杠; 配置空间路径统一用 /)"""
     base = str(data_dir).rstrip("/\\")
     return "/".join([base, *parts])
+
+
+def _parse_time_bare_zero_ok(value: Any) -> float:
+    """parse_time 的裸 0 放行包装(R4#9/#15): 仅「0 = 关闭/不去重」文档口径的两个键使用
+
+    校验层(_is_bare_zero)放行裸 0 后, loader 对同键的 parse_time 必须同口径 —— 否则裸 0
+    过了校验却在模型构建期抛裸 ValueError(绕过 load_config「配置问题统一抛 ConfigError」
+    契约, 比修复前的干净校验报错更糟)。判定复用校验层同一谓词(无第二份口径), 非 0 值
+    原样走 parse_time(「数值须带单位后缀」契约不变)。
+    """
+    return 0.0 if _is_bare_zero(value) else parse_time(value)
 
 
 def _get(spec: dict, key: str, default: Any, parse: Callable[[Any], Any] | None = None) -> Any:
@@ -195,7 +207,7 @@ def load_notify_config(spec: dict) -> NotifyConfig:
         min_level=_get(spec, "min_level", d.min_level, lambda v: str(v).strip().upper()),
         quiet_hours=_get(spec, "quiet_hours", d.quiet_hours),
         max_per_hour=_get(spec, "max_per_hour", d.max_per_hour, int),
-        dedup_window=_get(spec, "dedup_window", d.dedup_window, parse_time),
+        dedup_window=_get(spec, "dedup_window", d.dedup_window, _parse_time_bare_zero_ok),
         channels=channels,
     )
 
@@ -690,7 +702,7 @@ def load_config(config_path: str) -> Config:
     return Config(
         main_tick=_get(cfg, "main_tick", d.main_tick, parse_time),
         sync_interval=_get(cfg, "sync_interval", d.sync_interval, parse_time),
-        state_save_interval=_get(cfg, "state_save_interval", d.state_save_interval, parse_time),
+        state_save_interval=_get(cfg, "state_save_interval", d.state_save_interval, _parse_time_bare_zero_ok),
         max_tasks_per_tick=_get(cfg, "max_tasks_per_tick", d.max_tasks_per_tick, int),
         interval=_get(cfg, "interval", d.interval, parse_time),
         data_dir=data_dir,
