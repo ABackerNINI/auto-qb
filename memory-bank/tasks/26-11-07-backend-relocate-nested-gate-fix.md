@@ -33,7 +33,7 @@
 | 步 | 内容 | 状态 |
 |---|---|---|
 | S0 | 建分支+提交计划+立档 | Done(2026-11-07) |
-| S1a | T1a 真机实验(环境核验+E1/E2/E3) | Open |
+| S1a | T1a 真机实验(环境核验+E1/E2/E3) | Done(2026-11-07) |
 | S1b | T1b 真机实验(E4-E7+E8 判据模拟) | Open |
 | S2 | 回炉检查点(P1 结果对照判据) | Open |
 | S3 | T2 纯函数+单测重锚 | Open |
@@ -50,3 +50,19 @@
 
 - 会话: 误拦报告 → 设计文档溯源 → grilling 六问 → 计划 1300 入库(37926370)→ 用户下达实施指令。
 - Stage 0 完成: 分支 `relocate-nested-gate-fix` 自 develop(f7ac0e46),计划+索引已提交(37926370),本档案立档。
+
+### R1 · T1a P1a 真机实验 (2026-11-07)
+
+环境: 本机=环境2(C盘机),测试实例 56589/56590(qB 5.2.3 Legacy,免鉴权),real.up/down 起停,全程 real-fake 假种子,三约束全程未破,生产零触碰。任务提示写的 36595/36596 与 `R:/tests-real/.work` 是环境1机器事实,本机无 R: 盘;工作目录=仓库内 `tests-real/.work/`。证据(含脚本)在 `tests-real/.work/p1exp/evidence/`(gitignored;勿跑 real.seed.clean,整扫会清掉它)。
+
+**⚠ 回炉发现(与 §03 推演不符,置顶)**: E2/E3 全链路走到核验通过后,**删链门自锁** —— `_chain_gate_deps`(relocate_exec.py:746)扫 qB 全量 save_path 对 `job.src`(= mover 声明源,非内容根)做等值/前缀匹配且**不排除本组成员**;target 在声明源内(R4/R5 放行形态)时成员搬后 save_path=dst ⊆ src 恒命中,依赖恒 ≥2,job 永卡 `rewritten/chain_deps`("删链门依赖未清(2 个)"×123 行/轮),别名永不删。E2 断言「删链全绿」**FAIL**;E3 的「D16 摩擦收尾后消失」推演随之**不成立**(收尾永不到来)。P2 若放行 R4/R5,必须同步重锚删链门(如锚改 job.scope 或豁免 job.hashes),否则放行=永久别名+永久 D16 摩擦。E1/E2/E3 其余断言全过: 账面 1.00 恒定 / 磁盘原名落位 / 零 recheck(244-918 拍状态采样,状态集合仅 stalledUP/stoppedUP)/ 零拒载(qB 日志「无法解析恢复数据」0 条)/ 别名期经硬链接可达。
+
+逐 E 结果:
+- **E1 PASS**: 多成员(2)3 文件同内容异 piece_len 组,target=源内待删兄弟目录,现行预检 `gates=['nested']` blocked,文案逐字留证(e1/precheck_receipt.json)。
+- **E2(X: 跨盘符拓扑,生产同形)PASS 除删链外**: 旁路=测试侧启动器进程内 monkeypatch `nested_target_on`(盘上代码零改动);setLocation→3 硬链→武装→离线窗改写(52s,daemon 全机无 qB 才开窗)→重启双成员原生落位→核验;删链门自锁如上。
+- **E2c(同盘 C: 变体,附加)**: qB 5.2.3 对与自身 CWD 同盘的保存路径把 fastresume 三路径键写成**相对形态**(probe_fr_path_forms.json 实证,相对 qB 便携 profile 目录约 4 层),daemon 改写按设计跳过(N10 口径)→ 非 mover 成员重启滞留旧根(经别名可读),job 静默等在 rewritten。同盘部署形态下整条收尾链无效 —— 生产同盘部署(数据与 qB 同盘符)有同样风险,建议委派方知悉。
+- **E3 PASS 除删链外**: target ⊆ 旧内容根,qB setLocation 搬入自身子树**成功**;链接叶与新数据混居实证(disk_src_final.json: 旧内容根内 3 硬链叶 nlink=2 + 待删2/e_seed 新数据);journal 实证 h1=already/h2=rewritten(改写器 old<new 嵌套裁决正确);D16 拦截实证: 两成员 delete_files=true 均 error「1 个种子位于迁移收尾窗口的活动别名之下(X:\p1_e3\src): 带文件删除会经别名删到已迁往新位置的数据 —— …」,种子仍在、文件无损;删链后删除可行**不可达**(收尾被自锁挡死),qB 侧 teardown 删除正常(收尾清理不受限)。
+
+实验机制附注: ①执行入口要求 `config.bt_backup` 表(rm04 模板没有,实验配置已补 56590 便携路径);②daemon 下线窗判定是**全机** qbittorrent.exe 名册口径,窗口期主实例也要 down;③派生配置被产品自动 v5→v6 迁移(带备份,无害);④产品自选 mover(组内序不定),harness 已按回执 mover 适配;⑤X: = subst 虚拟盘符指向 .work/p1exp/xdrive(用户级命令,数据物理仍在 gitignored .work 内,收尾已 subst /d 拆除)。
+
+现场已还原: 双实例 0 种子、save_path 还原、subst 已拆、BT_backup 孤儿 .bak 已清、实例按初见状态停机;`git status` 干净(HEAD a7590059 未动,零产品代码改动)。
