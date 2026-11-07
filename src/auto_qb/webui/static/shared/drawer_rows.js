@@ -8,11 +8,15 @@ Object.assign(window.AQB_DRAWER.methods, {
     drawerAct(action) {
       this.actTorrent(action, this.drawer.hash);
     },
-    /* 抽屉删除: 复用 delTorrent(确认框流程一致); 删除成功(成员消失)后自动收起抽屉 */
+    /* 抽屉删除: 复用 delTorrent(确认框流程一致); 删除回执 ok 且抽屉仍停在同一目标才自动收起
+     * (R5#61): 判据不能等 memberByHash 落地(成员移除要等下一轮主轮询 1.5~3s, 快速成功路径
+     * 几乎必判「成员还在」不收), 也不能读回调时刻的 this.drawer.hash(期间换过目标判据对象就错)
+     * —— 调用点捕获被删 hash, 按删除回执 ok 收口, 只收「仍是同一 hash」的抽屉。 */
     drawerDel() {
+      const hash = this.drawer.hash;
       this._drawerDeletePending = true;
-      Promise.resolve(this.delTorrent(this.drawer.hash)).then(() => {
-        if (this._drawerDeletePending && !this.memberByHash.get(this.drawer.hash)) this.closeDrawer();
+      Promise.resolve(this.delTorrent(hash)).then((ok) => {
+        if (ok && this._drawerDeletePending && this.drawer.open && this.drawer.hash === hash) this.closeDrawer();
         this._drawerDeletePending = false;
       });
     },

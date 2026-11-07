@@ -145,7 +145,7 @@ window.AQB_DELETE = {
       this._auditScope("delete", targets);  // S4 运行时审计(默认关, 只记账)
       const keys = targets.keys || [];
       const hashes = targets.hashes || [];
-      if (!keys.length && !hashes.length) return;
+      if (!keys.length && !hashes.length) return false;
       const members = this._deleteMembers(keys, hashes);
       const details = this._deleteDetails(keys, hashes);
       // P2 HR 风险点名(2026-09-25): 目标含「不能删」(HR_NO_DELETE: danger)种子时, 确认框点名
@@ -173,7 +173,7 @@ window.AQB_DELETE = {
         details,
         reannounceGate,
       });
-      if (!res) return;
+      if (!res) return false;
       const deleteFiles = res.checks.delete_files;
       if (res.checks.reannounce) {
         /* 投递层(与右链同源单点 decorate.js::reannouncePlan, D1): 非活跃目标收敛掉再投 ——
@@ -191,22 +191,26 @@ window.AQB_DELETE = {
           if (plan.skipped) this.toast(`目标均非活跃, 跳过强制重新汇报, 直接删除`, "ok", 3000);
         } else {
           const ok = await this._reannounceAll(jobs, targets.label, plan.skipped);
-          if (!ok) return;  // 活跃目标汇报失败/未确认: 已提示且保留未删除(保守口径不放宽)
+          if (!ok) return false;  // 活跃目标汇报失败/未确认: 已提示且保留未删除(保守口径不放宽)
         }
       }
-      // 投递删除: 统一走 bulk 单命令并等聚合回执(比旧右键的"已投递"更可信: 失败可见)
+      // 投递删除: 统一走 bulk 单命令并等聚合回执(比旧右键的"已投递"更可信: 失败可见);
+      // 回执 ok 返回 true(R5#61: 抽屉删除按回执收口, 不再等下一轮轮询的 memberByHash 落地)
+      let ok = false;
       try {
         const resp = await this.api("/api/torrents/bulk", {
           method: "POST",
           body: JSON.stringify({ action: "delete", keys, hashes, delete_files: deleteFiles }),
         });
         const r = await this.waitCmd(resp.cmd_id);
-        if (r.ok) this.toast(`已删除: ${targets.countText}${deleteFiles ? "(含文件)" : ""}`, "ok", 3000);
+        ok = !!(r && r.ok);
+        if (ok) this.toast(`已删除: ${targets.countText}${deleteFiles ? "(含文件)" : ""}`, "ok", 3000);
         else this.toast(`删除未完全成功: ${r.error}`, "error", 8000);
       } catch (e) {
         if (!e.auth) this.toast("删除命令发送失败: " + e.message, "error");
       }
       this.clearSelection();  // 列表交下一轮 rid 轮询自然刷新(不主动 refresh)
+      return ok;
     },
     /* 汇报前置: 逐目标投递并**全部等回执**; 全部确认成功(ok)或跳过(非活跃)才返回 true。
      * 回执按 status 分流(计划 26-10-05-0923 D4=warn; issue 26-10-17-1703 增 skip 桶):
@@ -343,8 +347,8 @@ window.AQB_DELETE = {
       if (!m) m = this.torrents.find((x) => x.hash === target) || null;  // 种子页平铺数组(全量兑底)
       if (!m) return;
       // FX-16: 删除链统一 —— 走 _deleteFlow(目标明细 + 汇报前置 + 等聚合回执 + 收尾清选择)
-      // R10-16: 不再自传 details(条目与右键/批量/整集同构)
-      await this._deleteFlow({
+      // R10-16: 不再自传 details(条目与右键/批量/整集同构); 返回删除回执 ok(R5#61 抽屉收口判据)
+      return await this._deleteFlow({
         keys: [],
         hashes: [target],
         title: "删除该种子",

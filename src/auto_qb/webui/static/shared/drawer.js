@@ -679,19 +679,20 @@ window.AQB_DRAWER = {
       }
       await this._editPost(hash, "limits", body, "限速已更新");
     },
-    /* 分享率限制…: 分享率/做种时间(h)/不活跃做种时间(h) -> POST share-limits(-1 = 恢复全局默认) */
+    /* 分享率限制…: 分享率/做种时间(h)/不活跃做种时间(h) -> POST share-limits(-2 = 恢复全局默认)
+     * 哨兵语义与后端 commands_limit.py::_cmd_set_share_limits 对齐: -2 = 用全局, -1 = 不限制(R5#60)。 */
     async editShareLimits(h = "") {
       const hash = this._editTargetHash(h);
       if (!hash) return;
       const d = await this._editDetail(hash);
-      const hrs = (sec) => (sec > 0 ? String(Math.round((sec / 3600) * 100) / 100) : "");  // -1/0(未设)留空
+      const hrs = (sec) => (sec > 0 ? String(Math.round((sec / 3600) * 100) / 100) : "");  // -2/-1/0(全局/不限制/未设)留空
       const res = await this._openModal({
         title: "分享率限制",
-        body: "达到任一限制后该种子将停止做种。留空 = 保持不变, 填 -1 = 恢复全局默认。",
+        body: "达到任一限制后该种子将停止做种。留空 = 保持不变, 输 -2 = 恢复全局默认。",
         fields: [
-          { key: "ratio", label: "分享率上限", value: d && d.max_ratio >= 0 ? String(d.max_ratio) : "", placeholder: "留空不修改, -1 = 全局" },
-          { key: "time", label: "做种时间上限(小时)", value: d ? hrs(d.max_seeding_time) : "", placeholder: "留空不修改, -1 = 全局" },
-          { key: "inactive", label: "不活跃做种上限(小时)", value: d ? hrs(d.max_inactive_seeding_time) : "", placeholder: "留空不修改, -1 = 全局" },
+          { key: "ratio", label: "分享率上限", value: d && d.max_ratio >= 0 ? String(d.max_ratio) : "", placeholder: "留空不修改, -2 = 全局" },
+          { key: "time", label: "做种时间上限(小时)", value: d ? hrs(d.max_seeding_time) : "", placeholder: "留空不修改, -2 = 全局" },
+          { key: "inactive", label: "不活跃做种上限(小时)", value: d ? hrs(d.max_inactive_seeding_time) : "", placeholder: "留空不修改, -2 = 全局" },
         ],
         okText: "应用", cancelText: "取消",
       });
@@ -699,8 +700,8 @@ window.AQB_DRAWER = {
       const body = {};
       if (res.ratio !== "") {
         const n = Number(res.ratio);
-        if (!Number.isFinite(n) || (n < 0 && n !== -1)) {
-          this.toast("分享率无效: 需为非负数字或 -1", "warn");
+        if (!Number.isFinite(n) || (n < 0 && n !== -2)) {
+          this.toast("分享率无效: 需为非负数字或 -2", "warn");
           return;
         }
         body.ratio_limit = n;
@@ -708,11 +709,11 @@ window.AQB_DRAWER = {
       for (const [k, key] of [["time", "seeding_time_limit"], ["inactive", "inactive_seeding_time_limit"]]) {
         if (res[k] === "") continue;  // 空 = 不修改
         const n = Number(res[k]);
-        if (!Number.isFinite(n) || (n < 0 && n !== -1)) {
-          this.toast("时长无效: 需为非负小时数或 -1", "warn");
+        if (!Number.isFinite(n) || (n < 0 && n !== -2)) {
+          this.toast("时长无效: 需为非负小时数或 -2", "warn");
           return;
         }
-        body[key] = n === -1 ? -1 : Math.round(n * 3600);  // 小时 -> 秒; -1 原样(未设/全局)
+        body[key] = n === -2 ? -2 : Math.round(n * 3600);  // 小时 -> 秒; -2 原样(用全局)
       }
       if (!Object.keys(body).length) {
         this.toast("未作修改: 输入与当前值一致", "ok", 2000);
