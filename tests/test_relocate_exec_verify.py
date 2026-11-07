@@ -58,8 +58,9 @@ from relocate_exec_support import _bare_mod, _job
 def test_under_alias_root_dual_criteria():
     """等值 OR 前缀双判据(N5): 恰等于根的 save_path 必须命中, 纯前缀判据会漏"""
     root = r"R:\media"
-    assert ru.under_alias_root(r"R:\media", (root, )) == "r:/media"  # 等值(N5 漏拦形态)
-    assert ru.under_alias_root(r"R:\media\sub", (root, )) == "r:/media"  # 前缀
+    norm_root = ru._norm(root)  # 归一形按宿主平台折叠(Win 折小写 / POSIX 恒等), 断言不绑平台
+    assert ru.under_alias_root(r"R:\media", (root, )) == norm_root  # 等值(N5 漏拦形态)
+    assert ru.under_alias_root(r"R:\media\sub", (root, )) == norm_root  # 前缀
     assert ru.under_alias_root(r"R:\mediax", (root, )) is None  # 前缀同串兄弟目录: 不误伤
     assert ru.under_alias_root(r"R:\other", (root, )) is None  # 门外
     assert ru.under_alias_root("", (root, )) is None  # 空路径不可判
