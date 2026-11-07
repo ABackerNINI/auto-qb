@@ -67,7 +67,11 @@ window.AQB_BT_BACKUP_EDITOR = {
       const rows = this.bbRows;
       if (!rows[i] || rows[i].key === value) return;
       if (rows.some((r, j) => j !== i && r.key === value)) {
-        /* 撞键: 不写树(写了会把两行折叠成一行 = 静默丢数据), 原样重挂把输入框弹回树真值 */
+        /* 撞键: 不写树(写了会把两行折叠成一行 = 静默丢数据)。回弹靠原样重挂触发的重渲染:
+         * Vue 对 input 的 :value 恒重补丁(等值 prop 不跳过, 受控输入语义)+ 按 DOM 现值对比回写,
+         * 键入的撞键文本因此被弹回该行树真值(等值 prop 跳过写入只对其它 prop 成立)。这条补丁
+         * 语义有 e2e 钉住(settings-bt-backup.spec.mjs 撞键例), 换 Vue 版本/给 cfgSetPath 加
+         * 等值短路时先看它 —— 短路掉这次重挂, 回弹就没了。 */
         this.bbPersist(rows);
         this.toast("实例地址重复: 每行的 host:port 必须唯一, 请换一个未用过的", "timeout", 6000);
         return;

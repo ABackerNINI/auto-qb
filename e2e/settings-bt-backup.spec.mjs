@@ -19,7 +19,9 @@ import { openApp } from './lib/gestures.mjs';
  *   4) S3 新口径关键词在场: 「下线窗口」「可直接再迁」「fastresume」(块头 help, schema
  *      groups.py 单点透传 —— 取短词, 不押易改写的长句);
  *   5) 旧口径退场: 「setLocation 收尾」「拒绝再迁」不再出现在设置页 DOM(textContent 口径,
- *      连隐藏残留一起抓)。
+ *      连隐藏残留一起抓);
+ *   6) 撞键拒绝: 第二行键改成与第一行相同 -> 只 toast 不写树, 输入框回到该行树真值
+ *      (bbSetKey 撞键分支的回弹机制, 键序与保存载荷不受键入脏文本影响)。
  *
  * 桩口径(ctx-custom.spec.mjs 同款): 不往 harness 的真实 config.yml 写 —— 那是同轮其它 spec
  * 共用的临时文件, 改了会互相污染。page.route 把 /api/config 的 PUT 拦下来, 记下载荷当"已落盘",
@@ -109,6 +111,62 @@ test.describe('设置页 · 整组迁移 BT_backup 路径表(S5)', () => {
       await expect(ed2.getByPlaceholder('该实例的 BT_backup 目录路径')).toHaveValue('D:/qb/BT_backup');
       /* 有条目后空态退场 */
       await expect(ed2).not.toContainText('fastresume 收尾功能整体未启用');
+    });
+
+    test(`[${skin}] 撞键拒绝: 只 toast 不写树, 输入框回弹该行树真值`, async ({ page }) => {
+      /** 预置两条实例: 拒绝路径要有"已存在的同名键"可撞, 第二行改名撞第一行。 */
+      let btBackup = { '127.0.0.1:8080': 'D:/qb/BT_backup', '127.0.0.1:8081': 'D:/qb/BT_backup2' };
+      /** @type {any} */
+      let saved = null;
+
+      await page.route('**/api/config', async (route) => {
+        if (route.request().method() !== 'PUT') {
+          const res = await route.fetch();
+          const json = await res.json();
+          if (btBackup && json && json.tree && json.tree.config) {
+            json.tree.config.bt_backup = { ...btBackup };
+          }
+          return route.fulfill({ json });
+        }
+        saved = route.request().postDataJSON();
+        btBackup = (saved && saved.tree && saved.tree.config && saved.tree.config.bt_backup) || null;
+        return route.fulfill({ json: { changes: ['config.bt_backup'], restart_required: [] } });
+      });
+
+      await openApp(page, skin);
+
+      await page.locator('nav.tabs-right button').first().click();
+      await expect(page.locator('.hb-grid .hb-card').first()).toBeVisible({ timeout: 20_000 });
+      await page.locator('.hb-card')
+        .filter({ has: page.locator('.hb-card-t', { hasText: '自动化' }) })
+        .click();
+
+      const ed = page.locator('.hb-blk')
+        .filter({ has: page.locator('.bh-t', { hasText: '整组迁移' }) }).last()
+        .locator('.bt-bk');
+      await expect(ed).toBeVisible({ timeout: 15_000 });
+
+      const keys = ed.getByPlaceholder('host:port');
+      await expect(keys).toHaveCount(2, { timeout: 15_000 });
+      await expect(keys.nth(0)).toHaveValue('127.0.0.1:8080');
+      await expect(keys.nth(1)).toHaveValue('127.0.0.1:8081');
+
+      /* 第二行键入第一行的 host:port -> 撞键: toast 说明 + 树不动(拒绝写入)。 */
+      await keys.nth(1).fill('127.0.0.1:8080');
+      const toast = page.locator('.toast-wrap .toast.timeout');
+      await expect(toast, '撞键必须给 toast 说明').toBeVisible({ timeout: 10_000 });
+      await expect(toast).toContainText('实例地址重复');
+
+      /* 回弹: 输入框回到该行树真值(8081), 不是用户刚键入的撞键文本(8080)。 */
+      await expect(keys.nth(1)).toHaveValue('127.0.0.1:8081');
+
+      /* 树真值未被动过: 后续正常改路径保存, 载荷里键序与两条键都原样。 */
+      await ed.getByPlaceholder('该实例的 BT_backup 目录路径').nth(1).fill('D:/qb/BT_backup2b');
+      const actbar = page.locator('.hb-actbar');
+      await actbar.locator('.hb-btn.primary').click();
+      await expect.poll(() => saved, { message: 'PUT /api/config 未发出', timeout: 15_000 }).not.toBeNull();
+      expect(saved.tree.config.bt_backup, '撞键脏文本不得泄漏进保存载荷')
+        .toEqual({ '127.0.0.1:8080': 'D:/qb/BT_backup', '127.0.0.1:8081': 'D:/qb/BT_backup2b' });
     });
   }
 });
