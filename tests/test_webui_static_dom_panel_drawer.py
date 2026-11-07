@@ -7,7 +7,7 @@
 - test_drawer_tpl_table_variants_scrollleft_restore: 表格型变体横向滚动位自保守阵(P2-2, 报告 26-10-07-0542; 骨架收口 26-10-07-0845) —— 滚动自保单点收口在核心 H.withScroll(纵横两轴成对读写, 恢复次序 scrollLeft 先 scrollTop 后) + dt06/07/08/09 四变体整帧重建都包在 withScroll 回调内 + 变体内分散自保(scroller 直读写/host.parentElement)不得回潮, 任一变体绕开单点或核心两轴不成对即红
 - test_drawer_tpl_trackers_per_tracker_reannounce: 06 变体逐行汇报倒计时真 per-tracker 口径守阵(P-02 升级, issue 26-10-07-0149, 2026-10-09) —— 真口径分支读行级 next_announce 且先减 nowSec(epoch 绝对时间当倒计时是事故根因) + 「全局」标(dt06-gb)只许出现在回退分支(真值行不标全局) + 回退分支仍在(qB < 5.2 无该字段, 保留种子级 detail.reannounce_in 全局近似) + nowSec 计入 sig(否则跳过重建把倒计时冻在上一帧) + 真口径分支不画微条(per-tracker interval 不可得, 不造假) + 调用点传行 t 与 nowSec
 - test_drawer_tpl_a11y_and_fetch_error_states: 变体可访问性 + fetch 失败态区分守阵(P3-4/P3-5, 报告 26-10-07-0542) —— 核心层 drawer-close 钮 aria-label(种子/流量两头部成对) + 纯 div/span 模拟控件 role=button/tabindex=0(01/02/03/05/08 折叠组头含 aria-expanded、07/08/09 排序表头含 aria-sort 升/降/无随态输出、05/06 msg 展开行) + keydown 委托与 click 委托成对挂摘(挂摘纪律收口在核心 wireEvents/unwireEvents 单点, 26-10-07-0845; 变体只声明事件表)且转发前排除原生交互元素(防 Enter 双重触发) + 三 fetcher 失败标记(trackersError/filesError/peersError)显式建字段(初值在 drawer.js)/catch 落/成功清/换目标作废(随 W1 数据层抽离在 drawer_store.js) + 九个 fetch 型变体(04-12)错误态先于空态且文案对齐轮询事实(trackers/peers 5s 轮询可写自动重试, content 无轮询不得虚构承诺)
-- test_drawer_tpl_content_row_keyboard_roving: content 组行级键盘 roving tabindex 守阵(issue 26-10-07-0846) —— 核心 helpers 四件套(roving 锚点/rowFocusKey 记账/rowRestore 回焦/rowMove 移焦)单点存在; dt10/11 [data-node] 与 dt12 [data-blk]/[data-row] 行容器 tabindex=-1 不进 Tab 序(整行不加 role=button, 行内原生控件自然参与 Tab)且 CSS 带 :focus-visible 可见焦点; keydown 委托成对挂宿主且只有 ev.target 是行容器自身才接管(行内原生控件键盘行为自持); 重建前记账/重建后回焦成对(原子换帧打断焦点链, 不回焦一次激活就甩回文档头); dt12 树图块焦点互联复用悬停 onOver/onOut(focusin/focusout 同语义)
+- test_drawer_tpl_content_row_keyboard_roving: content 组行级键盘 roving tabindex 守阵(issue 26-10-07-0846) —— 核心 helpers 四件套(roving 锚点/rowFocusKey 记账/rowRestore 回焦/rowMove 移焦)单点存在; dt10/11 [data-node] 与 dt12 [data-blk]/[data-row] 行容器 tabindex=-1 不进 Tab 序(整行不加 role=button, 行内原生控件自然参与 Tab)且 CSS 带 :focus-visible 可见焦点; keydown 委托成对挂宿主且只有 ev.target 是行容器自身才接管(行内原生控件键盘行为自持); dt12 自管 DOM 重建前记账/重建后回焦成对(原子换帧打断焦点链, 不回焦一次激活就甩回文档头), 10/11 的 focusKey 死代码已随 R5#111/112 删除(无写入点 rowRestore 恒空转, 在场即回潮); dt12 树图块焦点互联复用悬停 onOver/onOut(focusin/focusout 同语义)
 - test_drawer_tpl_row_after_hook_wiring: 抽屉行级键盘恢复钩子接线守阵(issue 26-11-03-0802) —— 桥表 .group-table 的 @vue:mounted 必须把**页签 key**交给 dtRowAfter(方法内按页签 key 走 dtBridgeDef/_dtSel/REG.get 取描述符与变体条目); 传 table id(dtBridgeTbl 的返回值)会落到 defaultSel=classic 且 REG.get 无此表 ⇒ 描述符恒 null, 10/11 声明的 rowAfterFn(锚换代后 roving 锚点/回焦)永不执行。静态钉模板调用点 + node 真跑 dtRowAfter(tab) 命中 / dtRowAfter(table id) 不命中
 - test_drawer_tpl_variant_no_singleton_shadowing: 变体单点 T/R/H 遮蔽禁令守阵(2026-10-09 用户报障「空间树图选了不显示、换种子回落经典」) —— dt12 layoutMap 曾写 `const W = mapEl.clientWidth, H = mapEl.clientHeight`, 局部 H 把文件头 helpers 单点(reg.helpers)遮蔽成数字, 同函数尾 H.rowFocusKey(...) 对数字取属性抛 TypeError -> 核心 _dtRender catch 把该页签选择复位 classic 并落盘: 树图块只在 layoutMap 绘制故永远空白 + 用户选择跨会话被静默复位。守阵 = 每个变体文件凡声明了 T/R/H 单点(const <N> = reg.dtHtml|dtRaw|helpers), 该名在全文件(单点声明行之外)禁止再被任何声明语句绑定 —— 含多声明符列表(let a = 1, H = 2, 本案根因形态)与解构(const { H } = ...); 未声明单点的名不查(15 号变体无 H 单点, 其局部 H = 22 是合法常量)
 
@@ -858,8 +858,10 @@ def test_drawer_tpl_content_row_keyboard_roving():
     核心 helpers 四件套单点(roving 锚点/rowFocusKey 记账/rowRestore 回焦/rowMove 移焦);
     行容器 tabindex=-1 不进 Tab 序(行内原生控件自然参与 Tab; 整行不加 role=button —— 行内已含
     原生控件, 嵌套交互语义反而更糟, 入池报告根因段口径); :focus-visible 焦点可见; keydown 委托
-    成对挂宿主且只有 ev.target 是行容器自身才接管; 重建前记账/重建后回焦成对(原子换帧打断焦点
-    链); dt12 树图块焦点互联复用悬停 onOver/onOut(focusin/focusout 与 mouseover/out 同语义)。"""
+    成对挂宿主且只有 ev.target 是行容器自身才接管; dt12 自管 DOM 重建前记账/重建后回焦成对
+    (原子换帧打断焦点链), 10/11 走引擎桥行无整帧换代 —— focusKey 死代码已随 R5#111/112 删除
+    (无写入点, rowRestore 恒空转), 在场即回潮; dt12 树图块焦点互联复用悬停 onOver/onOut
+    (focusin/focusout 与 mouseover/out 同语义)。"""
     shared = os.path.join(STATIC_ROOT, "shared")
     core = open(os.path.join(shared, "drawer_templates.js"), encoding="utf-8").read()
     vdir = os.path.join(shared, "drawer_tpl")
@@ -900,10 +902,18 @@ def test_drawer_tpl_content_row_keyboard_roving():
         for hook in hooks:
             assert hook in text, f"drawer_tpl/{name}: 缺接入点 {hook}(锚点/接管守卫被摘)"
         # W5(计划 26-10-13-0811 L5): 交互态反应式化后 anchTouch 换代已退役(10/11 的
-        # rowFocusKey 记账随 touch() 退役 —— 交互不再重挂, 焦点不再被打断); rowRestore
-        # 仍在 rowAfterFn, 服务真换代(数据帧)后的回焦。
-        assert "H.rowRestore(" in text, \
-            f"drawer_tpl/{name}: 缺回焦接入点(rowAfterFn 的 rowRestore 被摘)"
+        # rowFocusKey 记账随 touch() 退役 —— 交互不再重挂, 焦点不再被打断)。
+        # R5#111/112(用户拍板删死代码): 10/11 的 focusKey 全文件无写入点(交互不换代、
+        # 数据帧换代路径同样无人写), rowRestore 恒收到空串空转 —— ui.focusKey 字段与
+        # rowAfterFn 里的 rowRestore 调用已整体删除, 在场即死代码回潮; 12 号自管 DOM
+        # 仍每次重建前记账后回焦(rowFocusKey/rowRestore 成对, 引擎 helper 保留)。
+        if name[:2] in ("10", "11"):
+            # 钉死代码形态本身(ui 字段声明 + rowRestore 实参读点), 注释里的名字不拦
+            assert 'focusKey: ""' not in text and "ui.focusKey" not in text, \
+                f"drawer_tpl/{name}: focusKey 死代码回潮(R5#111/112 已删: 无写入点, rowRestore 恒空转)"
+        else:
+            assert "H.rowRestore(" in text, \
+                f"drawer_tpl/{name}: 缺回焦接入点(layoutMap/render 的 rowFocusKey/rowRestore 成对被拆)"
         assert "H.rowMove(" in text, \
             f"drawer_tpl/{name}: 方向键移焦未走核心 rowMove(键盘用户无法在行间转移焦点)"
         assert "keydown: onKeyDown" in text, \
@@ -2519,8 +2529,9 @@ console.log(JSON.stringify({ total: checks.length, ok: checks.filter((c) => c[1]
 
 def test_drawer_tpl_row_memoization_and_cheap_sig():
     """千级文件列表止血守阵(计划 26-11-02-0351 W1) ——
-    ① sig 廉价指纹: 10/11 两变体 JSON.stringify(files) 零回潮(引用相等 O(1) 快路 + 引用变
-       O(F) 数值滚动指纹, filesSig 单点各一份);
+    ① sig 廉价指纹: 10/11/12 三变体 JSON.stringify(files) 零回潮(引用相等 O(1) 快路 + 引用变
+       O(F) 数值滚动指纹); filesSig 收口核心 helpers 单点(R5#113: 原为 10/11 各一份、12 漏随
+       W1 收口仍全量 stringify, 抽 reg 单点三件共用消复制), 三件一律经 H.filesSig 消费;
     ② 行对象按 path 记忆化: 两变体各持模块级 rowMem(path -> 输入快照 + 上轮行对象), 行装配
        (rowOf/dirRowOf/fileRowOf)命中即复用 —— 桥 keyed diff 对引用相等行跳渲; _cls 挂行
        对象, 勾选/折叠/选中态必须进快照失效面(漏键 = 染色停旧值);
@@ -2535,15 +2546,22 @@ def test_drawer_tpl_row_memoization_and_cheap_sig():
        buildFileTree 口径逐项相等。行为等价 e2e 盯 dt-live-update。"""
     shared = os.path.join(STATIC_ROOT, "shared")
     tpl_dir = os.path.join(shared, "drawer_tpl")
+    core = open(os.path.join(shared, "drawer_templates.js"), encoding="utf-8").read()
     v10 = open(os.path.join(tpl_dir, "10-content-tree-detail-tall.js"), encoding="utf-8").read()
     v11 = open(os.path.join(tpl_dir, "11-content-treegrid-batch-low.js"), encoding="utf-8").read()
+    v12 = open(os.path.join(tpl_dir, "12-content-space-treemap-collapsed.js"), encoding="utf-8").read()
 
-    # ---- ① sig 廉价指纹(计划验收机检点: JSON.stringify(files) 零回潮) ----
-    for name, v in (("10-content-tree-detail-tall", v10), ("11-content-treegrid-batch-low", v11)):
+    # ---- ① sig 廉价指纹(计划验收机检点: JSON.stringify(files) 零回潮; R5#113 起指纹函数
+    #      收口核心单点, 变体侧钉消费接线 —— 在文件里复刻第三份即红) ----
+    assert "filesSig: function" in core, "核心 helpers 缺 filesSig 单点(R5#113 收口被拆回)"
+    for name, v in (
+        ("10-content-tree-detail-tall", v10), ("11-content-treegrid-batch-low", v11),
+        ("12-content-space-treemap-collapsed", v12)
+    ):
         assert "JSON.stringify(files)" not in v, f"{name}: sig 仍全量序列化 files(W1 廉价指纹回潮)"
-        assert "function filesSig(files)" in v and "filesSig(files)" in v, \
-            f"{name}: sig 未走 filesSig 廉价指纹单点"
-        # ---- ② 记忆化: 模块级缓存 + 命中快照(命名避开 T/R/H 单点) ----
+        assert "H.filesSig(files)" in v, f"{name}: sig 未走核心 filesSig 廉价指纹单点"
+    # ---- ② 记忆化: 模块级缓存 + 命中快照(命名避开 T/R/H 单点; 12 自管 DOM 无桥行, 不在此列) ----
+    for name, v in (("10-content-tree-detail-tall", v10), ("11-content-treegrid-batch-low", v11)):
         assert "const rowMem = new Map()" in v, f"{name}: 缺模块级行记忆化缓存 rowMem"
         assert "rowMem.clear()" in v, f"{name}: 记忆化缓存无清空路径(换种子/卸载)"
 

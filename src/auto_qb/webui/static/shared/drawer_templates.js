@@ -143,6 +143,7 @@
    *   - dur/size/present/num: 格式化小工具(dur 缺失/负值回退文案; size 空值补 —;
    *     num = Number(v)||0 —— 注意 04/05/06 里的同名 num 是「非负谓词」语义, 属另一函数不共用);
    *   - skipUnchanged: sig 比对跳过重建(序列化比对, 宿主非空才跳; 变了先记账再放行);
+   *   - filesSig: files 数据 O(F) 数值滚动指纹(W1 廉价指纹, 内容组 10/11/12 消费, 见函数注);
    *   - withScroll: 滚动位置自保(滚动容器是宿主父级 .drawer-body, Vue 所有 —— 原子换帧前后
    *     纵横两轴成对恢复, 恢复次序 scrollLeft 先 scrollTop 后);
    *   - wireEvents/unwireEvents: 事件委托挂摘成对(宿主元素跨变体复用, 换变体必须摘掉旧监听,
@@ -157,6 +158,10 @@
    * 「正常」, 回执侧(setFilePriority)回退码原文 String(p) —— 4 从此走「高」, 不再打「4」。
    * drawer.js 核心经 window.AQB_DRAWER_TPL_REG 方法内取别名消费(openFilePrio 的 FIT 先例)。 */
   var PRIO_TEXT = { 0: "不下载", 1: "正常", 4: "高", 6: "高", 7: "最高" };
+
+  /* filesSig 的引用记账缓存(模块级瞬态, 语义同变体侧 W1 实现: 按数组引用命中, 换数组自然失配) */
+  var SIG_FILES = null;
+  var SIG_FILES_VAL = "";
 
   var HELPERS = {
     dur: function (ctx, v, dash) {
@@ -175,6 +180,26 @@
       if (sig === ui.lastSig && host.firstChild) return true;
       ui.lastSig = sig;
       return false;
+    },
+    /* filesSig: 内容组 files 数据廉价指纹(W1, 计划 26-11-02-0351; 原为 10/11 各持一份,
+     * R5#113 抽入本单点消第三份复制 —— 12 号曾漏随 W1 收口, 仍 JSON.stringify 全量序列化)。
+     * 数组引用相等直接复用上轮指纹(O(1) 快路); 引用变了比 O(F) 数值滚动指纹
+     * (size/progress/priority/availability 全部数据输入都进指纹, 任一变化必翻 sig),
+     * 不再 JSON.stringify 全量序列化(千级文件每拍白付)。缓存按引用记账, 换种子/补拉
+     * 换新数组自然失配重算; 消费方: 10/11/12 render 的 sig 拼接。 */
+    filesSig: function (files) {
+      if (files === SIG_FILES) return SIG_FILES_VAL;
+      var h = files.length;
+      for (var i = 0; i < files.length; i++) {
+        var f = files[i] || {};
+        h = (h * 31 + (f.size || 0)) | 0;
+        h = (h * 31 + (f.progress || 0)) | 0;
+        h = (h * 31 + (f.priority || 0)) | 0;
+        h = (h * 31 + (f.availability || 0)) | 0;
+      }
+      SIG_FILES = files;
+      SIG_FILES_VAL = String(h);
+      return SIG_FILES_VAL;
     },
     withScroll: function (host, swap) {
       var sc = host ? host.parentElement : null;

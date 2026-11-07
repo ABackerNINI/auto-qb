@@ -17,7 +17,8 @@ import { INST } from './lib/vm.mjs';
  *    按 2026-11-02 千级实测收紧(数字写在断言消息里), 不是拍的; 滚动丢帧只钉
  *    「无灾难冻结」粗界(>250ms 的单帧), 精细数字进任务档案(基线切片统一建)。
  *  · W1「sig 不再全量 stringify」的直接证据 = #11 数据回路 0 longtask + rowsFn 直测耗时
- *    (本 spec K1); dt12:323 残留 stringify 属计划外缺陷池, 不在本矩阵内。
+ *    (本 spec K1); dt12 同面已随 R5#113 收口(H.filesSig 核心单点, 12 同式接入), 行为量具
+ *    仍只盯 10/11(12 无引擎桥行, 不在本矩阵内)。
  *
  * 桩口径: page.route 拦 /api/torrents/(星号)/files(同 drawer-content-dt11-sticky), 千文件树 =
  * 单层目录 D 下 1000 文件(1 目录行 + 1000 文件行, 与 dt-live-update 的 makeFilesK 同源同构,

@@ -9,7 +9,8 @@
  * 信息条(纯展示, 无优先级动作 —— 优先级回 classic / 变体 10/11 用)。
  * 渐进字段: 每文件 availability 有则进 title/信息条, 无则省略。
  * 渲染纪律: dtHtml 全量转义(dtRaw 只用于拼接本变体 dtHtml 产出的预转义片段), replaceChildren
- * 原子换帧, 数据未变(整份 files 序列化比对)跳过重建, 选中/折叠/筛选态自保(按 path 记账;
+ * 原子换帧, 数据未变(廉价指纹比对, W1: H.filesSig 单点, R5#113 起 12 同式接入)跳过重建,
+ * 选中/折叠/筛选态自保(按 path 记账;
  * 换种子只重置选中与筛选, 折叠记账跨种子保持 —— P3-6, 报告 26-10-07-0542); ResizeObserver
  * 随面板拖拽/展开重建图, destroy 摘监听 + disconnect。
  * 行级键盘: 树图块/体积榜行 roving tabindex + 方向键移焦 + Enter/Space 选中(issue
@@ -319,8 +320,10 @@
       ui.selPath = "";
       ui.fmiss = false;
     }
-    /* 数据未变跳过重建 */
-    const sig = JSON.stringify(files) + "|" + String(!!loading) + "|" + err;
+    /* 数据未变跳过重建(R5#113): 与 10/11 同式走核心 helpers 单点 H.filesSig —— W1 廉价指纹
+     * (引用相等 O(1) 快路 / 引用变 O(F) 数值滚动指纹), 不再 JSON.stringify 全量序列化
+     * (千级文件每次交互 lastSig 置空后全量 stringify 白付) */
+    const sig = H.filesSig(files) + "|" + String(!!loading) + "|" + err;
     if (H.skipUnchanged(host, ui, sig)) return;
     _ctx = ctx;
     /* 三态空帧(加载/错态/空态)走 reg.helpers::emptyFrame 单点(issue 26-10-20-2231);

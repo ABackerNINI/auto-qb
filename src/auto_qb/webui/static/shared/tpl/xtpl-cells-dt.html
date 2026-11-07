@@ -132,7 +132,7 @@
      随格走)。折叠钮 data-act="fold"、优先级徽章 data-act="prio-menu"(经典锚定小菜单,
      判据在变体)。 -->
 <script type="text/x-template" id="tpl-aq-dt10-cells">
-  <span v-if="p.kind === 'empty'" class="dt10-blank"></span>
+  <span v-if="p.kind === 'empty'" class="dt10-blank">该筛选下没有文件</span>
   <template v-else v-for="col in cols" :key="col.key">
     <span v-if="col.key === 'name'" class="dt10-n" :style="{ paddingLeft: p.indent + 'px' }" :title="p.path">
       <button v-if="p.dir" type="button" class="dt10-tgl" :class="{ closed: p.folded }"

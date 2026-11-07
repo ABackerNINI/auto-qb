@@ -14,7 +14,7 @@
  * 原子换帧, 数据未变(廉价指纹比对, W1)跳过重建, 滚动/折叠/筛选/选中态自保(换种子只重置
  * 选中与筛选, 折叠记账跨种子保持 —— P3-6, 报告 26-10-07-0542)。
  * 行级键盘: 树行 roving tabindex + 方向键移焦 + Enter/Space 激活(issue 26-10-07-0846;
- * 锚点/记账/回焦/移焦走核心 helpers 单点, 整行不加 role=button —— 行内已含原生控件)。
+ * 锚点/移焦走核心 helpers 单点, 整行不加 role=button —— 行内已含原生控件)。
  * 桥声明(U4, 计划 26-10-12-0527, D4=A): 左树表格体走引擎 —— tableId 对应 app.js
  * DRAWER_TABLE_DEFS.drawerContentV10, 外壳只留版式(工具条/统计条/右详情), 树行由
  * <aq-dt-bridge> Teleport 进锚(3 列引擎行容器 —— name(折叠钮/缩进/图标/名称/徽章在格内)
@@ -22,7 +22,7 @@
  * 两条交互轨道 2026-10-14 已收编进 name 格, 见下); 树聚合/筛选/折叠/选中判据全在
  * rowsFn(判据零复制), 行来源读反应式 UI 态(selPath/folded/filter, W5 起 Vue.reactive)。
  * 排序不适用(树序 = 树语义, 原口径无排序, 全列 sortable:false + dyn 空键)。行级键盘:
- * 行容器 tabindex/data-dt-key 由桥输出(rowTab/rowKey), roving 锚点/回焦经描述符
+ * 行容器 tabindex/data-dt-key 由桥输出(rowTab/rowKey), roving 锚点经描述符
  * rowAfter → rowAfterFn(锚换代重挂后跑)。
  * 自包含: 删除本文件 + 四份 index.html 各去 1 行 manifest 即整体退役, 其它零接触。
  */
@@ -40,11 +40,10 @@
   /* 优先级文案经 H.prioText 单点取文(issue 26-10-29-1340), 本变体不再持字面表 */
   const PRIO_ORDER = [0, 1, 6, 7];
 
-  /* 视图偏好(跨重渲染与换变体保持): 筛选 / 折叠目录集 / 选中节点路径; lastSig 供跳过重建;
-   * focusKey 供锚换代重挂后回焦(记账在 anchTouch 前, 恢复在 rowAfterFn) */
+  /* 视图偏好(跨重渲染与换变体保持): 筛选 / 折叠目录集 / 选中节点路径; lastSig 供跳过重建 */
   /* W5(计划 26-10-13-0811 L5): 选中/折叠/筛选进反应式驱动数据 —— 桥 keyed 写补丁原行更新,
    * 不再 anchTouch 强制换代整表重挂(行抖动/焦点丢的旧结构)。 */
-  const ui = Vue.reactive({ filter: "all", folded: new Set(), selPath: "", lastSig: "", lastHash: "", focusKey: "" });
+  const ui = Vue.reactive({ filter: "all", folded: new Set(), selPath: "", lastSig: "", lastHash: "" });
 
   /* W1(计划 26-11-02-0351)止血: 行对象按 path 记忆化 —— 输入未变的行复用上一轮对象,
    * 桥 keyed diff(v-for :key=path + 行对象作 prop)对引用相等的行跳渲。命中判据 = 该行
@@ -55,25 +54,8 @@
   const rowMem = new Map(); /* path -> 输入快照 + 上一轮行对象 */
   let rowMemHash = "";
   let rowMemCtx = null;
-  /* W1: sig 廉价指纹 —— 数组引用相等直接复用上轮指纹(O(1) 快路); 引用变了比 O(F) 数值
-   * 滚动指纹(size/progress/priority/availability 全部数据输入都进指纹, 任一变化必翻 sig),
-   * 不再 JSON.stringify 全量序列化(千级文件每拍白付)。 */
-  let sigFiles = null;
-  let sigFilesVal = "";
-  function filesSig(files) {
-    if (files === sigFiles) return sigFilesVal;
-    let h = files.length;
-    for (let i = 0; i < files.length; i++) {
-      const f = files[i] || {};
-      h = (h * 31 + (f.size || 0)) | 0;
-      h = (h * 31 + (f.progress || 0)) | 0;
-      h = (h * 31 + (f.priority || 0)) | 0;
-      h = (h * 31 + (f.availability || 0)) | 0;
-    }
-    sigFiles = files;
-    sigFilesVal = String(h);
-    return sigFilesVal;
-  }
+  /* W1: sig 廉价指纹走核心 helpers 单点 H.filesSig(R5#113 抽单点, 原 10/11/12 各持一份) ——
+   * 引用相等 O(1) 快路 / 引用变 O(F) 数值滚动指纹, 不再 JSON.stringify 全量序列化。 */
 
   const CSS = [
     /* 主从双栏骨架(右栏 324px = 设计稿口径)。滚动容器是 .drawer-body 本身(overflow:auto),
@@ -109,6 +91,13 @@
     ".drawer .dt10-list .group-row:hover { background:var(--bg-hover); transform:none; border-color:transparent; }",
     ".drawer .dt10-list .group-row.sel { background:var(--sel-bg); box-shadow:inset 2px 0 0 var(--accent-line); }",
     ".drawer .dt10-list .group-row:focus-visible { outline:2px solid var(--ring); outline-offset:-2px; }",
+    /* 空态行(R5#110): 筛选无命中时 rowsFn 合成 __empty 占位行 —— 免掉 29px 定高/底边框/
+     * hover 底色与引擎首格 --bg-card 重锚(dt_table.css 只对 .dt11-list 做了豁免, 11 号
+     * 同款先例), 出「该筛选下没有文件」提示(.dt10-blank 原本无任何 CSS 定义) */
+    ".drawer .dt10-list .group-row.empty-row { display:block; height:auto; border-bottom:0; background:transparent; }",
+    ".drawer .dt10-list .group-row.empty-row:hover { background:transparent; }",
+    ".drawer .dt10-list .group-row.empty-row > :first-child { background:transparent; }",
+    ".drawer .dt10-blank { display:block; padding:24px 0; text-align:center; color:var(--fg-dim); font-size:12px; }",
     /* 行内格(呈现归渲染器 tpl-aq-dt10-cells) —— 2026-10-14 复查修法: tgl/prio 两列已删,
      * 折叠钮(格首, 随缩进)与优先级徽章(格尾, margin-left:auto 右对齐)都收编进 name 格,
      * 行只剩 name/size/prog 三轨; name 格 = flex, 名称可省略,  chips/钮 flex:none 不缩。 */
@@ -365,7 +354,7 @@
     /* 数据未变跳过重建(优先级改动补拉 / 换页签回来都会触发通知); sig 走廉价指纹(W1,
      * 引用相等 O(1) 快路 / 引用变 O(F) 数值滚动指纹, 不再 JSON.stringify 全量序列化);
      * 锚元素由 anchFill 跨帧保活(锚被重建 = Teleport 重挂 = 行抖动, 桥变体稳定 HTML 不变量) */
-    const sig = filesSig(files) + "|" + String(!!loading) + "|" + err;
+    const sig = H.filesSig(files) + "|" + String(!!loading) + "|" + err;
     if (H.skipUnchanged(host, ui, sig)) return;
     _ctx = ctx;
     /* 三态空帧(加载/错态/空态)走 reg.helpers::emptyFrame 单点(issue 26-10-20-2231);
@@ -424,11 +413,12 @@
    * 仍由 rerender 单点重渲(anchFill 保锚, 不换代)。 */
 
   /* 锚换代重挂后的行级键盘恢复(issue 26-10-07-0846; 描述符 rowAfter → rowAfterFn):
-   * roving 锚点(选中行或首行) + 回焦 —— 与原「replaceChildren 后 roving」同语义。 */
+   * roving 锚点(选中行或首行)。回焦不在本变体: focusKey 死代码已整体删除(R5#111,
+   * W5 起交互不换代、数据帧换代路径无写入点, rowRestore 恒空转); 12 号自管 DOM 仍有
+   * 真记账/回焦(rowFocusKey/rowRestore 成对), 引擎 helper 保留。 */
   function rowAfterFn(el) {
     if (!el || typeof el.querySelectorAll !== "function") return;
     H.roving(el, "data-dt-key", ui.selPath);
-    H.rowRestore(el, "data-dt-key", ui.focusKey);
   }
 
   function onClick(ev) {
@@ -530,7 +520,7 @@
     label: "树 + 详情",
     /* 桥声明(U4): 表格体走引擎 —— tableId 对应 app.js DRAWER_TABLE_DEFS.drawerContentV10,
      * rowsFn = 行装配(树聚合/筛选/折叠/选中判据单点), 列头/拖宽/偏好归引擎(列头 CSS 隐藏)。
-     * rowAfterFn = 锚换代重挂后的 roving 锚点/回焦(行级键盘, issue 26-10-07-0846)。 */
+     * rowAfterFn = 锚换代重挂后的 roving 锚点(行级键盘, issue 26-10-07-0846)。 */
     tableId: TABLE_ID,
     rowsFn: rowsFn,
     rowAfterFn: rowAfterFn,

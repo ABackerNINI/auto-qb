@@ -17,7 +17,7 @@
  * 换种子只重置勾选集与筛选, 折叠记账跨种子保持 —— P3-6, 报告 26-10-07-0542; 勾选集必须重置:
  * 上一种子的勾选落到新种子文件上是真实的优先级误操作面); 批量条/汇总条 sticky 吸底不随行滚动。
  * 行级键盘: 树行 roving tabindex + 方向键移焦 + Enter/Space 勾选(issue 26-10-07-0846;
- * 锚点/记账/回焦/移焦走核心 helpers 单点, 整行不加 role=button —— 行内已含原生控件)。
+ * 锚点/移焦走核心 helpers 单点, 整行不加 role=button —— 行内已含原生控件)。
  * 桥声明(U4, 计划 26-10-12-0527, D4=A): 表格体走引擎 —— tableId 对应 app.js
  * DRAWER_TABLE_DEFS.drawerContentV11, 外壳只留版式(工具条/批量条), 4 列引擎行容器
  * (name/size/prog/av —— 勾选框/折叠钮/优先级徽章 2026-10-14 起收编进 name 格, ck/tgl/prio
@@ -41,12 +41,13 @@
   /* 优先级文案经 H.prioText 单点取文(issue 26-10-29-1340), 本变体不再持字面表 */
   const PRIO_CYCLE = [0, 1, 6, 7]; /* 徽章点击循环序(qB 4 档; 旧值 4 = 高, 归入 6 位) */
 
-  /* 视图偏好(跨重渲染与换变体保持): 筛选 / 折叠目录集 / 勾选集(文件 path); lastSig 供跳过重建;
-   * focusKey 供真换代(数据帧)后的 rowAfterFn 回焦 —— W5 起交互态不再换代, 平时无人写它。
+  /* 视图偏好(跨重渲染与换变体保持): 筛选 / 折叠目录集 / 勾选集(文件 path); lastSig 供跳过重建。
+   * focusKey 已删(R5#112): 声明后全文件无写入点(W5 起交互态不再换代, 数据帧换代路径同样
+   * 无人写), rowRestore 恒空转 —— 死代码整体退役, 与 10 号同批。
    * W5(计划 26-10-13-0811 L5): 勾选/折叠/筛选是桥行来源 rowsFn 的读数, 必须**进反应式驱动
    * 数据**(Vue.reactive)—— 点选后桥 keyed 写补丁原行更新, 不再 anchTouch 强制换代整表重挂
    * (旧结构 = 每次点选行 DOM 全换 → 勾选跳动 + 大树点选卡死, 用户 2026-10-13 症状 7/8)。 */
-  const ui = Vue.reactive({ filter: "all", folded: new Set(), checked: new Set(), lastSig: "", lastHash: "", focusKey: "" });
+  const ui = Vue.reactive({ filter: "all", folded: new Set(), checked: new Set(), lastSig: "", lastHash: "" });
 
   /* W1(计划 26-11-02-0351)止血: 行对象按 path 记忆化 —— 输入未变的行复用上一轮对象,
    * 桥 keyed diff(v-for :key=path + 行对象作 prop)对引用相等的行跳渲。命中判据 = 该行
@@ -57,25 +58,8 @@
   const rowMem = new Map(); /* path -> 输入快照 + 上一轮行对象 */
   let rowMemHash = "";
   let rowMemCtx = null;
-  /* W1: sig 廉价指纹 —— 数组引用相等直接复用上轮指纹(O(1) 快路); 引用变了比 O(F) 数值
-   * 滚动指纹(size/progress/priority/availability 全部数据输入都进指纹, 任一变化必翻 sig),
-   * 不再 JSON.stringify 全量序列化(千级文件每拍白付)。 */
-  let sigFiles = null;
-  let sigFilesVal = "";
-  function filesSig(files) {
-    if (files === sigFiles) return sigFilesVal;
-    let h = files.length;
-    for (let i = 0; i < files.length; i++) {
-      const f = files[i] || {};
-      h = (h * 31 + (f.size || 0)) | 0;
-      h = (h * 31 + (f.progress || 0)) | 0;
-      h = (h * 31 + (f.priority || 0)) | 0;
-      h = (h * 31 + (f.availability || 0)) | 0;
-    }
-    sigFiles = files;
-    sigFilesVal = String(h);
-    return sigFilesVal;
-  }
+  /* W1: sig 廉价指纹走核心 helpers 单点 H.filesSig(R5#113 抽单点, 原 10/11/12 各持一份) ——
+   * 引用相等 O(1) 快路 / 引用变 O(F) 数值滚动指纹, 不再 JSON.stringify 全量序列化。 */
 
   const CSS = [
     /* 骨架: 工具条 / 行区(引擎行容器, .drawer-body 本体滚动)/ 吸底条 */
@@ -368,10 +352,14 @@
       return false;
     }
     for (const r of d.rows) {
+      /* 未完成判据与计数同源(R5#109): derive/chip 计数/dirMatch 都用原始 0-1 progress<1,
+       * drawerFileRows 的 r.progress 是 Math.round 整数舍入 —— progress∈[0.995,1) 的文件
+       * 会被「未完成 N」计入却在整数判据下被藏掉(目录行因此可见子文件不可见), 10 号同数据
+       * 一位小数判据会显示, 跨变体漂移。文件行改吃 files[index] 原始值(与 skip 分支同形)。 */
       const show = r.dir
         ? (ui.filter === "all" ? true : dirMatch(r.path, ui.filter, d.stats))
         : (ui.filter === "all" ? true
-          : ui.filter === "miss" ? r.progress < 100
+          : ui.filter === "miss" ? (files[r.index] ? num(files[r.index].progress) < 1 : false)
             : (files[r.index] ? num(files[r.index].priority) === 0 : false));
       if (!show) continue;
       /* 筛选态下无视折叠全部铺平(命中行可见); 全部态下被折叠目录的整棵子树不渲染 */
@@ -423,7 +411,7 @@
     /* 数据未变跳过重建(优先级改动补拉 / 换页签回来都会触发通知); sig 走廉价指纹(W1,
      * 引用相等 O(1) 快路 / 引用变 O(F) 数值滚动指纹, 不再 JSON.stringify 全量序列化);
      * 锚元素由 anchFill 跨帧保活(锚被重建 = Teleport 重挂 = 行抖动, 桥变体稳定 HTML 不变量) */
-    const sig = filesSig(files) + "|" + String(!!loading) + "|" + err;
+    const sig = H.filesSig(files) + "|" + String(!!loading) + "|" + err;
     if (H.skipUnchanged(host, ui, sig)) return;
     _ctx = ctx;
     /* 三态空帧(加载/错态/空态)走 reg.helpers::emptyFrame 单点(issue 26-10-20-2231);
@@ -500,11 +488,11 @@
    * 外壳件(foot/master/chips)仍由 rerender 单点重渲(anchFill 保锚, 不换代)。 */
 
   /* 锚换代重挂后的行级键盘恢复(issue 26-10-07-0846; 描述符 rowAfter → rowAfterFn):
-   * roving 锚点(首行; 勾选集无「选中行」语义) + 回焦。 */
+   * roving 锚点(首行; 勾选集无「选中行」语义)。回焦不在本变体: focusKey 死代码已整体
+   * 删除(R5#112, 无写入点恒空转); 12 号自管 DOM 仍有真记账/回焦, 引擎 helper 保留。 */
   function rowAfterFn(el) {
     if (!el || typeof el.querySelectorAll !== "function") return;
     H.roving(el, "data-dt-key", "");
-    H.rowRestore(el, "data-dt-key", ui.focusKey);
   }
 
   function onClick(ev) {
@@ -631,7 +619,7 @@
     label: "树表批量",
     /* 桥声明(U4): 表格体走引擎 —— tableId 对应 app.js DRAWER_TABLE_DEFS.drawerContentV11,
      * rowsFn = 行装配(树聚合/筛选/折叠/勾选判据单点), 表头/拖宽/右键隐藏/偏好归引擎。
-     * rowAfterFn = 锚换代重挂后的 roving 锚点/回焦(行级键盘, issue 26-10-07-0846)。 */
+     * rowAfterFn = 锚换代重挂后的 roving 锚点(行级键盘, issue 26-10-07-0846)。 */
     tableId: TABLE_ID,
     rowsFn: rowsFn,
     rowAfterFn: rowAfterFn,
