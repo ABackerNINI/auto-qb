@@ -138,16 +138,25 @@ class GroupingModule(BaseModule):
     # ---------- 删除事件 ----------
 
     def _handle_removed_torrents(self, removed_hashes: list[str], dry_run: bool) -> None:
-        """删除事件处理: 组内种子被删除 -> 移出分组; 组内仍有剩余种子 -> 立即触发缺文件扫描(可能文件丢失) """
-        if not self._ctx.config.grouping.check_missing_files:
-            return  # 配置禁用缺文件检查
+        """删除事件处理: 组内种子被删除 -> 移出分组; 组内仍有剩余种子 -> 立即触发缺文件扫描(可能文件丢失)
 
-        # 缺文件检查
+        分组簿记(_leave_group 摘除成员/空组解散)不受 check_missing_files 闸门(issue
+        26-11-07-0527 条目2): 摘除本身不是「缺文件扫描」的一部分, 不该被同一开关拦 ——
+        开关关闭时若整体早退, 已删种子永久残留为幽灵成员(store._apply 只标 dirty 不摘
+        成员, 全量轮也不重建分组索引): 三个分组索引随删除量无界增长, 且幽灵成员的文件
+        路径仍参与跨组物理路径展开(_check_cross_group_file_conflicts), 可与现役组构成
+        假交叉事件误暂停下载方。口径与 _handle_save_path_changes 对齐(那边 _leave_group/
+        _assign_to_group 同样在闸门之前执行); 闸门只拦 _scan_triggered_groups。
+        """
+        # 分组簿记: 摘除成员/解散空组(纯内存操作, 无外部动作, 与 dry_run 无关)
         affected = set()
         for h in removed_hashes:
             key = self._leave_group(h)
             if key is not None:
                 affected.add(key)
+        if not self._ctx.config.grouping.check_missing_files:
+            return  # 配置禁用缺文件检查(仅扫描受闸门, 簿记已完成)
+        # 缺文件检查
         for key in affected:
             self._scan_triggered_groups({key}, dry_run)
 
@@ -391,6 +400,11 @@ class GroupingModule(BaseModule):
 
         P7 补: 旧组键登记进 store.group_key_migrations —— 该键的行要么随组解散而消失
         (removed), 要么内容已变(upsert); 不登记则增量视图留孤儿行(见 store 字段注释)。
+
+        条目3 补(issue 26-11-07-0527): 组空解散同步清 store.transitional_missing_skips[key]
+        —— 同内容删除重加(组键相同)不得继承旧计数, 否则新一轮第一次过渡态命中即达
+        TRANSITIONAL_SKIP_LIMIT, 绕过「连续 3 次独立事件」的容忍设计(误按真实缺失整组
+        暂停 + 打 MISSING)。计数随组存在, 组亡即清。
         """
         store = self._ctx.store
         key = store.member_to_key.pop(hash, None)
@@ -405,6 +419,7 @@ class GroupingModule(BaseModule):
         if not members:
             del store.groups[key]
             store.group_sizes.pop(key, None)
+            store.transitional_missing_skips.pop(key, None)  # 条目3: 组亡计清, 同内容重加从零容忍
             return None
         return key
 
@@ -454,7 +469,8 @@ class GroupingModule(BaseModule):
         (原名缺失 且 原名+.!qB 孪生存在, 后缀成因保持中立, 只看可观测状态)时**整轮放弃判定**
         (目录处于改名窗口, 部分文件在、部分带后缀, 任何部分结论都不可靠): 不暂停、不打标, 等
         下一个触发事件再判; 连续 TRANSITIONAL_SKIP_LIMIT 次未消除视为 qB 残留, 按真实缺失兜底。
-        连续计数存 store.transitional_missing_skips(仅内存, 不落盘, 跨轮存活) —— 正常判定
+        连续计数存 store.transitional_missing_skips(持久化于 state.json 顶层键, 重启延续;
+        绑定与键面见 StateService.bind_transitional_missing_skips) —— 正常判定
         (含真实缺失/大小不符/文件齐全)即清零重计; 大小不一致 / OSError 分支与窗口无关(原名存在),
         保持原判定; UNDETERMINED 早退路径未发生判定, 计数不动。dry-run 下容忍分支同样只报告,
         外部动作由下方原有 dry_run 闸门拦截。

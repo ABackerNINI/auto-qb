@@ -18,6 +18,7 @@ from ..infra import utils
 from ..infra.store_recovery import recover_corrupt_file
 from ..infra.versioning import CURRENT_VERSIONS, migrate
 from ..torrents import TorrentStore
+from ..torrents.store import TransitionalSkipCounts
 
 logger = logging.getLogger(__name__)
 
@@ -420,6 +421,25 @@ class StateService:
         每次落盘前回拷。每次 self.data 被整体替换(启动加载)后必须重新绑定。
         """
         store.field_snapshots = self.data.setdefault("field_snapshots", {})
+
+    def bind_transitional_missing_skips(self, store: TorrentStore) -> None:
+        """把 store.transitional_missing_skips 绑定到 state 顶层键(同一对象; issue 26-11-07-0527 条目4)
+
+        过渡态连续计数并入持久化(黄金法则 3): 重启不再清零 —— 否则重启落在 qB 改名窗口
+        附近后计数清零, 真实缺失组要多容忍最多 TRANSITIONAL_SKIP_LIMIT 次触发才被暂停+
+        打 MISSING。形态: state["transitional_missing_skips"] 与 store 同字段是**同一个**
+        TransitionalSkipCounts(原地改即落盘内容, 与 field_snapshots 同款); 其内部存储即
+        持久化键面(encode_group_key 编码串, 见该类 docstring), json 落盘零转换。
+        老 state 文件缺键: setdefault 物化空表 —— 补键非破坏性, 按 versioning 纪律不走
+        schema 版本链(不为补字段造版本; 与 rule_traces / auto_categories / speed_limit_curve
+        等顶层键同口径)。每次 self.data 被整体替换(__init__/run() 双入口加载, 见
+        _reload_state)后必须重新绑定; 热重载 L2 不重读磁盘 state(rules_mod.rebuild_runtime),
+        运行期清空(reset_runtime)经同一对象落盘, 口径一致。
+        """
+        raw = self.data.setdefault("transitional_missing_skips", {})
+        wrapped = TransitionalSkipCounts(raw)  # 装填拷贝: 载荷键已是持久化键面(编码串), 直入内部存储
+        self.data["transitional_missing_skips"] = wrapped  # 同一对象落回载荷: 运行期原地改即落盘内容
+        store.transitional_missing_skips = wrapped
 
 
 __all__ = ["StateService", "prune_day_keys"]

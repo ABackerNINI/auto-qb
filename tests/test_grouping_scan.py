@@ -11,7 +11,8 @@
 - test_grouping_no_full_files_scan: 归组仅拉一次文件列表, 后续不重复扫描
 - test_grouping_save_path_change_no_cache: 无缓存文件映射 -> 维持原行为不重归组
 - test_missing_scan_dedup_within_round: 同组同轮多触发源只扫一次(轮内去重), 跨轮清空后可再扫
-- test_grouping_removed_event_disabled_check_returns_early: 删除事件 check_missing_files=False 早退 (P2-a)
+- test_grouping_removed_event_disabled_check_keeps_bookkeeping: 删除事件 check_missing_files=False 只拦扫描, 分组簿记照常 (R1#80)
+- test_removed_bookkeeping_prevents_ghost_cross_group_pause: 幽灵成员文件路径不得参与跨组展开构成假交叉误暂停下载方 (R1#80)
 - test_grouping_removed_event_group_emptied_no_scan: 组内最后成员删除 -> 组解散不扫描 (P2-a)
 - test_grouping_save_path_change_ghost_and_same_path_skipped: save_path 变化幽灵 hash / 未变路径跳过 (P2-a)
 - test_grouping_save_path_change_no_cached_map_skipped: 无缓存文件映射不重归组 (P2-a)
@@ -332,14 +333,47 @@ def test_missing_scan_dedup_within_round():
         assert client.calls.count(("stop", None)) == 1, "跨轮应重新扫描"
 
 
-def test_grouping_removed_event_disabled_check_returns_early():
-    """删除事件: check_missing_files=False -> 直接返回, 分组结构不动"""
+def test_grouping_removed_event_disabled_check_keeps_bookkeeping():
+    """删除事件: check_missing_files=False -> 只拦缺文件扫描, 分组簿记(摘除成员/空组解散)照常 (R1#80)
+
+    修复前开关整体拦下 _leave_group: 已删种子永久残留为幽灵成员(store._apply 只标 dirty
+    不摘成员, 全量轮也不重建分组索引), 三个分组索引随删除量无界增长。簿记摘除本身不是
+    「缺文件扫描」的一部分, 不该被同一开关拦(口径与 _handle_save_path_changes 对齐)。
+    """
     with tempfile.TemporaryDirectory() as td:
         mgr, grp, client = _grp_env(os.path.join(td, "state.json"), check_missing_files=False)
-        _seed_group(mgr.store, (r"R:/D", "k"), ["H1", "H2"])
+        key = (r"R:/D", "k")
+        _seed_group(mgr.store, key, ["H1", "H2"])
         grp._handle_removed_torrents(["H1"], False)
-        assert mgr.store.groups[(r"R:/D", "k")] == ["H1", "H2"], "禁用缺文件检查: 不移出成员"
-        assert client.calls == []
+        assert mgr.store.groups[key] == ["H2"], "开关关闭仍应摘除已删成员(簿记不受闸门)"
+        assert "H1" not in mgr.store.member_to_key, "成员索引应同步清理"
+        assert "H1" not in mgr.store.group_sizes[key], "大小映射应同步清理"
+        assert client.calls == [], "开关关闭: 不触发缺文件扫描"
+        # 组内最后一名成员删除 -> 空组解散, 依旧零扫描
+        grp._handle_removed_torrents(["H2"], False)
+        assert key not in mgr.store.groups, "空组应解散"
+        assert mgr.store.group_sizes.get(key) is None, "空组大小映射应随解散删除"
+        assert client.calls == [], "解散路径同样零扫描"
+
+
+def test_removed_bookkeeping_prevents_ghost_cross_group_pause():
+    """幽灵成员防线(R1#80): 开关关闭下删除的成员若不摘除, 其文件路径仍参与跨组物理路径
+    展开, 与现役组构成假交叉事件误暂停下载方 —— 簿记先行摘除后假交叉不复存在"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, grp, client = _grp_env(
+            os.path.join(td, "state.json"), check_missing_files=False, cross_group_conflict_check=True
+        )
+        key_a, key_b = _seed_cross_pair(mgr.store, td, _OVERLAP_A, td, _OVERLAP_B)
+        # 删除已由同步应用(by_hash 已无 HA); 分组索引的摘除是 grouping 删除事件的簿记职责
+        del mgr.store.by_hash["HA"]
+        grp._handle_removed_torrents(["HA"], False)
+        assert "HA" not in mgr.store.member_to_key, "已删成员必须摘出分组索引(不留幽灵)"
+        assert key_a not in mgr.store.groups, "A 组已空应解散(幽灵路径随之退出跨组展开)"
+        with _grab_cross_warnings() as cap:
+            grp._check_cross_group_file_conflicts(dry_run=False)
+        assert not any("跨组文件交叉" in m for m in cap.messages), f"幽灵路径不得构成假交叉: {cap.messages}"
+        assert client.calls == [], f"假交叉不得误暂停下载方 HB: {client.calls}"
+        assert key_b in mgr.store.groups and mgr.store.groups[key_b] == ["HB"], "现役 B 组不受影响"
 
 
 def test_grouping_removed_event_group_emptied_no_scan():

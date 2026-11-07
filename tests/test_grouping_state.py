@@ -28,9 +28,12 @@
 - test_check_missing_files_transitional_counter_resets_on_clean: 过渡态跳过后一次正常判定 -> 计数清零, 之后需重新连续 3 次
 - test_check_missing_files_real_missing_no_twin: 原名缺失且无孪生 -> 照旧判缺失(回归保护)
 - test_check_missing_files_dry_run_transitional: dry-run 下过渡态命中 -> 零外部副作用(不暂停不打标)
+- test_check_missing_files_undetermined_skips_whole_group: 路径不可判定(UNDETERMINED)-> 整组早退, 零暂停/零打标/计数不动(R1#85)
+- test_check_missing_files_twin_undetermined_treated_as_no_twin: 孪生探测 UNDETERMINED -> 非 True 按无孪生, 继续判真实缺失(R1#85)
 - test_grouping_errored_transition_pauses_group: 重校验发现缺失(进入 errored)-> 同轮整组暂停 + MISSING; 持续 errored 不重复触发
 - test_grouping_state_transitions_first_round_and_empty_paths: 状态转移首轮无快照 / key 缺失 / 空组跳过 (P2-a)
 - test_grouping_leave_group_member_index_missing_from_group_list: 索引有组表无的成员移出仍清理映射 (P2-a)
+- test_leave_group_dissolve_clears_transitional_skips: 组空解散清过渡态计数, 同内容重加不继承旧计数 (R1#81)
 - test_grouping_missing_files_check_disabled_guard: 缺文件检查入口禁用守卫 (P2-a)
 - test_grouping_physical_dir_three_layers
 - test_grouping_state_transitions_first_round_no_snapshot_skipped
@@ -38,7 +41,11 @@
 - test_guard_state_transitions_mixed_delta: state_changed 首条非触发不得 break 截断扫描(st16 高危) + dry-run 闸(st22)
 - test_guard_physical_dir_layer2_alias_resolved: 第2层目录级别名必须真解析(pd23/25/26/27/29/30/33 失效簇)
 - test_guard_assign_move_cleans_old_and_dirty: 归组迁移幂等: 旧组摘除+新旧组双置脏(ag19/ag31/lv7)
+- test_transitional_skips_persist_round_trip: 过渡态计数随 state.json 重启延续, 键面 = encode_group_key 编码串 (R1#82)
+- test_transitional_skips_legacy_state_defaults_empty: 老 state 文件缺键 -> setdefault 物化空表且与 store 同一对象 (R1#82)
 """
+
+import json
 
 import logging
 
@@ -53,6 +60,8 @@ from types import SimpleNamespace
 from unittest import mock
 
 import pytest
+
+from auto_qb.infra.utils import QB_INCOMPLETE_SUFFIX, encode_group_key
 
 from helpers import FakeClient, FakeTorrent, _fake_file, capture_logs, grouping_cfg, make_manager, seed_store
 
@@ -575,6 +584,58 @@ def test_check_missing_files_dry_run_transitional():
         assert "MISSING" not in client.tags
 
 
+def test_check_missing_files_undetermined_skips_whole_group(monkeypatch):
+    """路径不可判定(fa.exists 返回 UNDETERMINED)-> 整组早退: 零暂停/零打标/过渡态计数不动 (R1#85)
+
+    docstring 自称「跳过该组, 不暂停不打标」(报告 §05 红线: 配错映射时宁可功能退化, 不能
+    照常返回 False 重演误暂停事故)。映射 miss 的实测面在 test_file_access(真实 Mapped
+    访问未命中映射), 这里以替身钉住三态分支本身: 早退必须发生在布尔化之前(否则
+    UNDETERMINED 不可作布尔值会 TypeError), 且未发生判定 —— 计数保持原值不动。
+    """
+    from auto_qb.core.modules import grouping_mod
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr, grp, client = _grp_env(os.path.join(td, "state.json"))
+        rep = FakeTorrent(hash="H1", name="T1", state="stalledUP", save_path=td, amount_left=0)
+        sizes = {"H1": {"movie.mkv": 100}}
+        key = (td, ("movie.mkv", ))
+        mgr.store.transitional_missing_skips[key] = 2  # 预置计数: 早退不得动它
+        und = grouping_mod.file_access.UNDETERMINED
+        monkeypatch.setattr(grouping_mod.file_access, "get_file_access", lambda: SimpleNamespace(exists=lambda p: und))
+        grp._check_missing_files([rep], sizes, dry_run=False, key=key)
+        assert client.calls == [], "不可判定不得暂停整组"
+        assert "MISSING" not in client.tags, "不可判定不得打标"
+        assert mgr.store.transitional_missing_skips.get(key) == 2, "早退未发生判定, 过渡态计数不动"
+
+
+def test_check_missing_files_twin_undetermined_treated_as_no_twin(monkeypatch):
+    """孪生探测「非 True 一律按无孪生」子分支: 原名缺失且孪生路径不可判定 -> 按无孪生
+    继续判真实缺失(暂停 + MISSING), 不落入过渡态容忍 (R1#85)
+
+    该子分支(存 in 判定 `is True`)此前 tests/ 全无覆盖: 孪生与原名同目录前缀, 真实映射
+    环境造不出「原名 False 且孪生 UNDETERMINED」, 只能替身伪造。
+    """
+    from auto_qb.core.modules import grouping_mod
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr, grp, client = _grp_env(os.path.join(td, "state.json"))
+        rep = FakeTorrent(hash="H1", name="T1", state="stalledUP", save_path=td, amount_left=0)
+        sizes = {"H1": {"movie.mkv": 100}}
+        und = grouping_mod.file_access.UNDETERMINED
+        mgr.store.transitional_missing_skips["K"] = 5  # 预置: 让真实缺失分支的清零语义(pop)真被断言
+
+        def fake_exists(p):
+            # 原名缺失(False); 孪生路径不可判定(UNDETERMINED) —— 非 True 一律按无孪生
+            return und if p.endswith(QB_INCOMPLETE_SUFFIX) else False
+
+        monkeypatch.setattr(grouping_mod.file_access, "get_file_access", lambda: SimpleNamespace(exists=fake_exists))
+        grp._check_missing_files([rep], sizes, dry_run=False, key="K")
+        assert client.calls.count(("stop", None)) == 1, f"孪生不可判定按无孪生 -> 真实缺失应暂停: {client.calls}"
+        assert "MISSING" in client.tags, "真实缺失分支应打标"
+        assert "K" not in mgr.store.transitional_missing_skips, "真实缺失分支应清零过渡态计数(pop 生效)"
+        assert mgr.store.transitional_missing_skips == {}, "走的是真实缺失分支, 不落过渡态计数"
+
+
 def test_grouping_errored_transition_pauses_group():
     """重校验发现文件缺失(stalledUP -> missingFiles)-> 同轮触发缺文件扫描, 整组暂停 + MISSING;
     持续 errored 不重复触发"""
@@ -640,6 +701,32 @@ def test_grouping_leave_group_member_index_missing_from_group_list():
         assert remain == key, "组内仍有 H2: 返回组 key"
         assert "H1" not in mgr.store.group_sizes[key], "大小映射应清理"
         assert mgr.store.groups[key] == ["H2"]
+
+
+def test_leave_group_dissolve_clears_transitional_skips():
+    """组空解散同步清过渡态计数(R1#81): 同内容删除重加(组键相同)不继承旧计数
+
+    修复前解散不清 -> 重加后第一次过渡态命中计数即达 TRANSITIONAL_SKIP_LIMIT, 绕过
+    「连续 3 次独立事件」的容忍设计, 误按真实缺失整组暂停 + 打 MISSING 标签。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        mgr, grp, client = _grp_env(os.path.join(td, "state.json"))
+        key = (td, ("movie.mkv", ))
+        _seed_group(mgr.store, key, ["H1"])
+        mgr.store.transitional_missing_skips[key] = 2  # 上一段会话累计的连续命中
+        assert grp._leave_group("H1") is None, "组内最后一名成员移出应解散整组"
+        assert key not in mgr.store.transitional_missing_skips, "组空解散应清过渡态计数"
+
+        # 同内容重加(组键相同): 计数从零起算 —— 第一次过渡态命中只计数不兜底
+        _seed_group(mgr.store, key, ["H1"])
+        with open(os.path.join(td, "movie.mkv.!qB"), "wb") as f:
+            f.write(b"x" * 100)
+        rep = mgr.store.by_hash["H1"]
+        sizes = {"H1": {"movie.mkv": 100}}
+        grp._check_missing_files([rep], sizes, dry_run=False, key=key)
+        assert client.calls == [], f"重加后第一次过渡态命中不得兜底判缺失: {client.calls}"
+        assert "MISSING" not in client.tags
+        assert mgr.store.transitional_missing_skips.get(key) == 1, "重加后计数应从 1 重计(不继承旧值 2)"
 
 
 def test_grouping_missing_files_check_disabled_guard():
@@ -802,3 +889,66 @@ def test_guard_assign_move_cleans_old_and_dirty():
         assert key2 == ("R:/D2", ("b.mkv", )), "必须按新路径+新文件表归组"
         assert key1 in mgr.store.dirty_groups, "旧组必须置脏(冲突重算覆盖)"
         assert key2 in mgr.store.dirty_groups, "新组必须置脏(冲突重算覆盖)"
+
+
+def test_transitional_skips_persist_round_trip():
+    """过渡态计数持久化(R1#82): 随 state.json 重启延续, 落盘键面 = encode_group_key 编码串
+
+    失败场景守阵: 计数若不落盘, 重启落在 qB 改名窗口附近后清零, 真实缺失组要多容忍最多
+    TRANSITIONAL_SKIP_LIMIT 次触发才被暂停+打 MISSING —— 本例前 2 次命中存盘, 重启后第
+    3 次命中即达上限按真实缺失处置(不再从零重容忍)。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        with open(os.path.join(td, "movie.mkv.!qB"), "wb") as f:
+            f.write(b"x" * 100)
+        rep = FakeTorrent(hash="H1", name="T1", state="stalledUP", save_path=td, amount_left=0)
+        sizes = {"H1": {"movie.mkv": 100}}
+        key = (td, ("movie.mkv", ))
+
+        mgr1 = make_manager(state_file, bare=True, grouping=grouping_cfg(), client=FakeClient())
+        g1 = mgr1.host.get("grouping")
+        for _ in range(2):
+            g1._missing_scanned_keys.clear()  # 模拟跨轮独立触发事件
+            g1._check_missing_files([rep], sizes, dry_run=False, key=key)
+        assert mgr1.store.transitional_missing_skips.get(key) == 2, "前两次过渡态命中应累计 2"
+        mgr1.ctx.state.save()
+
+        # 落盘键面: 组 key 经 encode_group_key 编码(与 WEB 组路由标识同一键空间, 单一编码)
+        with open(state_file, "r", encoding="utf-8") as f:
+            on_disk = json.load(f)
+        assert on_disk["transitional_missing_skips"] == {encode_group_key(key): 2}, f"落盘键面应为编码串: {on_disk}"
+
+        # 重启(同一 state_file 重新构造): 计数延续, 第 3 次过渡态命中即按真实缺失兜底
+        client2 = FakeClient()
+        mgr2 = make_manager(state_file, bare=True, grouping=grouping_cfg(), client=client2)
+        assert mgr2.store.transitional_missing_skips.get(key) == 2, "重启后过渡态计数应延续"
+        g2 = mgr2.host.get("grouping")
+        g2._check_missing_files([rep], sizes, dry_run=False, key=key)
+        assert client2.calls.count(("stop", None)) == 1, f"重启后第 3 次连续过渡态应兜底判缺失: {client2.calls}"
+        assert "MISSING" in client2.tags, "兜底分支应打 MISSING 标签"
+
+
+def test_transitional_skips_legacy_state_defaults_empty():
+    """老 state 文件缺 transitional_missing_skips 键 -> setdefault 物化空表, 且与 store 同一对象 (R1#82)
+
+    默认值物化口径: 补键非破坏性, 不走 schema 版本链(versioning 纪律: 不为补字段造版本);
+    绑定走 field_snapshots 同款「同一对象原地改即落盘」契约。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        with open(state_file, "w", encoding="utf-8") as f:
+            json.dump({"schema_version": 3}, f)  # 老版本 state: 无该顶层键
+        mgr = make_manager(state_file, bare=True, grouping=grouping_cfg(), client=FakeClient())
+        assert mgr.store.transitional_missing_skips == {}, "老 state 缺键应得默认空表"
+        assert mgr.state["transitional_missing_skips"] == {}, "state 顶层键应物化(缺键 setdefault)"
+        assert mgr.store.transitional_missing_skips is mgr.state["transitional_missing_skips"], (
+            "绑定必须是同一对象: store 原地改即落盘内容"
+        )
+        # 原地改经同一对象进入载荷: 落盘即含计数
+        key = (r"R:/D", ("movie.mkv", ))
+        mgr.store.transitional_missing_skips[key] = 1
+        mgr.ctx.state.save()
+        with open(state_file, "r", encoding="utf-8") as f:
+            on_disk = json.load(f)
+        assert on_disk["transitional_missing_skips"] == {encode_group_key(key): 1}, "原地写应随 save 落盘"

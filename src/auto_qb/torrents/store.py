@@ -7,6 +7,7 @@ import logging
 from qbittorrentapi import NotFound404Error, TorrentDictionary
 
 from ..infra.clock import SYSTEM_CLOCK, Clock
+from ..infra.utils import encode_group_key
 from .record import TorrentRecord
 from .view import _VIEW_FIELD_SET
 
@@ -55,6 +56,46 @@ _EXPECT_TTL = 3.0
 _EXPECT_MIN_ASK = 0.01
 
 
+class TransitionalSkipCounts(dict):
+    """过渡态容忍计数字典: 运行期以组 key(元组)透明读写, 内部存储 = 持久化键面(编码串)
+
+    持久化(issue 26-11-07-0527 条目4, 黄金法则 3): 计数随 state.json 顶层键
+    transitional_missing_skips 落盘, 重启延续 —— 否则重启落在 qB 改名窗口附近后计数清零,
+    真实缺失组要多容忍最多 TRANSITIONAL_SKIP_LIMIT 次触发才被暂停+打 MISSING。绑定点在
+    StateService.bind_transitional_missing_skips: state 载荷与 store 字段是**同一个**本类
+    对象(原地改即落盘内容, 与 field_snapshots 同款)。
+
+    键面: JSON dict 键必须是字符串而组 key 是 (save_path, 文件元组) 元组, 故内部存储统一
+    用 encode_group_key 编码串 —— 与 WEB UI 组路由标识同一键空间(infra.utils 单一编码,
+    不造第二套), 语义可经 decode_group_key 逆读。get/[]/pop/in/setdefault 透明接收元组
+    组key并即时翻译, 调用方(grouping_mod)无感知; 裸字符串键(测试替身常用)同样走编码,
+    同键同译读写自洽。keys()/items() 直通内部存储 —— 那是落盘内容的真值; json 落盘直接
+    序列化内部存储, 无需转换钩子。经 update()/字面量拷贝注入的原始键**不经翻译**(内部
+    存储被污染后 json 落盘会 TypeError 显式炸出, 不会静默假值)。
+    """
+    @staticmethod
+    def _k(key: Any) -> str:
+        return encode_group_key(key)
+
+    def __setitem__(self, key: Any, value: int) -> None:
+        super().__setitem__(self._k(key), value)
+
+    def __getitem__(self, key: Any) -> int:
+        return super().__getitem__(self._k(key))
+
+    def __contains__(self, key: object) -> bool:
+        return super().__contains__(self._k(key))
+
+    def get(self, key: Any, default: Any = None) -> Any:
+        return super().get(self._k(key), default)
+
+    def pop(self, key: Any, *args: Any) -> Any:
+        return super().pop(self._k(key), *args)
+
+    def setdefault(self, key: Any, default: Any = None) -> Any:
+        return super().setdefault(self._k(key), default)
+
+
 class TorrentStore:
     """种子信息数据层: 主索引 + 增量同步 + 惰性缓存 + 分组索引 + 全局标签/分类缓存
 
@@ -72,7 +113,7 @@ class TorrentStore:
       - group_key_migrations: 组键迁移待办(旧/新键双向登记, WebUI 增量排空消费, P7)
       - state_snapshot: hash -> 上一轮 state_enum(上传转暂停检测)
       - download_conflict_warned: (组key, 冲突类型) 去重集合
-      - transitional_missing_skips: 组key -> 连续「.!qB 过渡态」命中次数(仅内存, 见 __init__)
+      - transitional_missing_skips: 组key -> 连续「.!qB 过渡态」命中次数(持久化, 见 __init__)
     本轮变化集(供主循环把 O(N) 扫描降为 O(变化数)):
       - delta_fields:  {hash: 变化字段名集合} 本轮发生变化的种子
       - state_changed: [(hash, fetch 时 state_enum)] state 字段变化的种子
@@ -168,11 +209,14 @@ class TorrentStore:
         # 软信号不落盘(纯内存, 重启即失忆, 方向是「更早恢复检测」, 保守); 热重载不清,
         # 理由见 reset_runtime 注释。
         self.cross_group_conflict_warned: Set[Tuple[Any, Any]] = set()
-        # 缺文件扫描的过渡态容忍计数(仅内存, 重启归零): 组key -> 连续「原名缺失但 .!qB 孪生
-        # 存在」命中次数(issue 26-09-21-0219 / plan 26-09-22-2038)。软信号不落盘 —— 丢失方向
-        # 是"更早恢复判定"(保守, 沿用 verified_references 仅内存先例); 跨轮存活, 不随每轮
-        # 变化集清空(与 _missing_scanned_keys 的轮清不同); 热重载 reset_runtime 仍归零(软信号与重启口径一致)。
-        self.transitional_missing_skips: Dict[Any, int] = {}
+        # 缺文件扫描的过渡态容忍计数(持久化于 state.json 顶层键 transitional_missing_skips,
+        # 绑定见 StateService.bind_transitional_missing_skips): 组key -> 连续「原名缺失但 .!qB
+        # 孪生存在」命中次数(issue 26-09-21-0219 / plan 26-09-22-2038)。重启延续(条目4, 黄金
+        # 法则 3 跨轮次状态进 state_file): 否则重启落在改名窗口附近后计数清零, 真实缺失组要多
+        # 容忍最多 TRANSITIONAL_SKIP_LIMIT 次触发才被兜底。跨轮存活, 不随每轮变化集清空(与
+        # _missing_scanned_keys 的轮清不同); 热重载 reset_runtime 仍归零(与重启口径一致);
+        # 组空解散同步清理见 GroupingModule._leave_group(条目3)。键面形态见 TransitionalSkipCounts。
+        self.transitional_missing_skips: TransitionalSkipCounts = TransitionalSkipCounts()
         # 内存参考种子集合(仅内存, 重启后重新积累): full-checking 校验通过的种子, 可作为同组参考
         self.verified_references: Set[str] = set()
         # 在途整组迁移的成员登记(计划 26-10-18-1604 §2.3/P4): 搬迁窗口内 qB 正把文件搬走,
@@ -767,7 +811,7 @@ class TorrentStore:
         self.own_writes.clear()  # 自有写登记不跨热重载残留(S2; 纯内存态, 与 state_snapshot 同级)
         self.clear_expect()  # 追平待办不跨热重载: 下一轮是全量, 该出现的自然会出现
         self.state_since.clear()  # 状态时长随状态快照一并重置(下一轮全量 refresh 重新起算)
-        self.transitional_missing_skips.clear()  # 过渡态容忍计数仍归零: 软信号与重启口径一致, 不随索引保留续用
+        self.transitional_missing_skips.clear()  # 过渡态容忍计数归零: 热重载与重启同口径(计数已持久化, 清空随下次落盘生效)
         # download_conflict_warned / cross_group_conflict_warned 有意不清(决策钉死, 防"顺手补 clear"):
         # 两个去重集合的组 key 均为纯函数派生(grouping_mod.group_key_of 单一事实源), 热重载保留
         # 分组索引后同数据派生同 key, 旧条目语义仍成立; 过期条目由每轮扫描的消除循环兜底丢弃。

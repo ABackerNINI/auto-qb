@@ -444,13 +444,14 @@ class QbManager(
         self._reset_reconnect_backoff()
 
     def _reload_state(self) -> None:
-        """state 加载 + 字段变化基线挂接(计划 26-09-27-1438)
+        """state 加载 + 字段变化基线挂接(计划 26-09-27-1438) + 过渡态计数挂接(条目4)
 
-        __init__ 与 run() 双入口同口径: run() 时再次加载覆盖, 字段变化基线随整体
-        替换重新挂接。
+        __init__ 与 run() 双入口同口径: run() 时再次加载覆盖, 字段变化基线与过渡态计数
+        随整体替换重新挂接。
         """
         self.state = self.ctx.state.load()
         self.ctx.state.bind_field_snapshots(self.store)
+        self.ctx.state.bind_transitional_missing_skips(self.store)  # 过渡态计数随 state 持久化(issue 26-11-07-0527 条目4)
 
     def connect(self) -> bool:
         """连接 qBittorrent(本地地址经 new_client 使用关闭 trust_env 的 LocalQbClient)"""
