@@ -8,7 +8,7 @@ from qbittorrentapi import TorrentState
 from ..config import TrackerConfig
 from ..hr.resolve import HrAnchor, HrIdentity, HrJudgement
 from ..infra.clock import SYSTEM_CLOCK
-from ..infra.utils import mask_tracker_entry, match_tag_patterns
+from ..infra.utils import mask_tracker_entry, mask_tracker_url, match_tag_patterns
 from .compat import REQUIRED_TORRENT_FIELDS, _SNAPSHOT_FIELDS, _SNAPSHOT_FIELD_SET
 from .view import _VIEW_FIELD_SET, _VIEW_QUANTUM, view_field_value
 
@@ -70,6 +70,9 @@ class TorrentRecord:
     num_leechs: int = 0
     num_complete: int = 0
     num_incomplete: int = 0
+    # qB torrents/info 的 tracker 字段(官方口径: 首个 working tracker 的完整 announce URL,
+    # 私站内嵌 passkey): 入库即掩码(apply_delta 单点, issue 26-11-07-0536 批B) —— 槽内只有
+    # mask 值, 原文不落快照; 详情 to_dict / state/groups 行视图全走本槽, 响应面零原文
     tracker: str = ""
     trackers_count: int = 0
     connections_count: int = 0
@@ -198,6 +201,14 @@ class TorrentRecord:
                     raw = self._raw = {}
                 raw[f] = v
                 continue
+            if f == "tracker" and isinstance(v, str) and v:
+                # 入库泄敏单点(issue 26-11-07-0536 批B): tracker 槽位只落 mask 值 —— announce
+                # URL 内嵌的 passkey 等凭据原文不进快照, 详情 to_dict / state/groups 行视图
+                # 全从本槽取数, 单点掩码即全覆盖(响应装配多点必然漏新面)。host/path/参数名
+                # 保留(mask R5/R6), 展示与按域名消费不破; 空值不掩(mask 会把 "" 抬成占位串,
+                # 破坏 _site_alert 的「无 tracker 不算缺配置」判定); 虚拟条目经 R1 原样透传。
+                # 掩码放在相等比较之前: 旧值已掩, 掩后逐值确定性一致(R7)才不产生假变化。
+                v = mask_tracker_url(v)
             cur = getattr(self, f)
             if cur == v:
                 continue

@@ -10,6 +10,9 @@
 - test_api_torrent_detail_endpoint: /api/torrents/{hash} 全字段详情(to_dict+site+HR); 未知 hash 404
 - test_api_torrent_subresources: /api/torrents/{hash}/trackers|files|peers 透传(trackers 例外: url 已 mask, plan 26-10-07-0055 S3); 未知 404/断连 503
 - test_api_torrent_trackers_masked_response: 守阵① API 外发(plan 26-10-07-0055 S4) —— trackers 响应 url 一律 mask(凭据原文不外发, 缺席断言不写死参数名), mask 保留 scheme://host+path+参数名, 虚拟条目透传, 两次请求逐字节一致; 红验: 路由改回透传
+- test_tracker_snapshot_masked_at_ingestion: 入库泄敏单点(issue 26-11-07-0536 批B) —— tracker 槽位只落 mask 值(原文 passkey 不进快照; 空值不掩/虚拟条目透传/同 host 不同凭据 mask 互异/重复灌同原文不产生假变化); 红验: apply_delta 临时去掉 mask_tracker_url
+- test_api_torrent_detail_tracker_masked: 守阵⑥ 详情响应外发(issue 26-11-07-0536 批B) —— /api/torrents/{hash} 的 torrent.tracker 为 mask 值(host/path/参数名保留), 凭据原文不在响应体; 红验: 同入库点去掩码
+- test_tracker_masked_in_state_and_groups_rows: 守阵⑦ 行视图外发(issue 26-11-07-0536 批B) —— /api/state 的 groups/singles/torrents 行与 /api/groups 成员行的 tracker 一律 mask 值, 凭据原文不在载荷; 红验: 同入库点去掩码
 - test_api_readonly_endpoints_short_cache: P1-4 只读端点短缓存(窗口内合并 / 写命令后失效 / 断连仍 503)
 - test_api_torrent_peers_endpoint: /api/torrents/{hash}/peers 走 sync_torrent_peers(torrent_hash=..)整包透传(404/503)
 - test_api_stats_endpoint: /api/stats 透出 store.server_state(未同步时 null)
@@ -28,6 +31,8 @@
 ### T2a2 覆盖率第三轮: 静态挂载防御分支
 - test_mount_static_ui_missing_static_dir_registers_no_routes: static 目录不存在时 mount_static_ui 零注册不炸(不注册根重定向与 /newui, 防御分支直驱)
 """
+import json
+
 import logging
 import os
 import re
@@ -444,6 +449,140 @@ def test_api_torrent_trackers_masked_response(web_env):
         "虚拟条目原样透传"
     body2 = client.get("/api/torrents/HA/trackers", headers=auth).content
     assert body1 == body2, "两次请求必须逐字节一致(mask 确定性)"
+
+
+def test_tracker_snapshot_masked_at_ingestion():
+    """入库泄敏单点(issue 26-11-07-0536 批B): tracker 槽位只落 mask 值, 原文不进快照
+
+    qB torrents/info 的 tracker 字段是首个 working tracker 的完整 announce URL(私站内嵌
+    passkey)。掩码落在入库点(apply_delta)则详情 to_dict / state/groups 行视图全部响应面
+    零原文; 口径与既有 mask_tracker_url 完全一致(不自造):
+    - host/path/参数名保留(R5/R6), 展示与按域名消费不破;
+    - 空值不掩(mask 会把 "" 抬成占位串, 破坏 _site_alert 的「无 tracker 不算缺配置」判定);
+    - 虚拟条目("** [DHT] **" 等)经 R1 原样透传;
+    - 同 host 不同凭据 mask 互异(R8): 变化检测不被掩码抹平;
+    - 重复灌同一原文: 掩码确定性(R7) -> 不产生假变化。
+    红验: 把 record.py apply_delta 里的 mask_tracker_url 调用临时去掉 -> 本组必红。
+    """
+    from auto_qb.torrents import TorrentRecord
+
+    raw = "https://pt.example.com/announce?passkey=SUPERSECRET123"
+    rec = TorrentRecord.from_torrent({"hash": "H1", "tracker": raw})
+    assert rec.tracker == mask_tracker_url(raw), "入库单点: 快照槽位应只有 mask 值"
+    assert rec.tracker != raw, "mask 不得与原文相同(等于没脱敏)"
+    assert rec.tracker.startswith("https://pt.example.com/announce?passkey="), \
+        "mask 必须保留 scheme://host + path 端点名 + 参数名(只换值)"
+    assert TorrentRecord.from_torrent({"hash": "H2", "tracker": ""}).tracker == "", \
+        "空值不掩: mask 会把空串抬成占位串, 破坏 _site_alert 的无 tracker 判定"
+    assert TorrentRecord.from_torrent({"hash": "H3", "tracker": "** [DHT] **"}).tracker == "** [DHT] **", \
+        "虚拟条目经 R1 原样透传"
+    a = TorrentRecord.from_torrent({"hash": "H4", "tracker": "https://pt.example.com/announce?passkey=AAA"})
+    b = TorrentRecord.from_torrent({"hash": "H5", "tracker": "https://pt.example.com/announce?passkey=BBB"})
+    assert a.tracker != b.tracker, "同 host 不同凭据 mask 互异(R8), 变化检测不得被掩码抹平"
+    rec6 = TorrentRecord.from_torrent({"hash": "H6", "tracker": raw})
+    assert "tracker" not in rec6.apply_delta({"tracker": raw}), \
+        "重复灌同一原文: 掩码确定性(R7), 不产生假变化"
+    assert "tracker" in rec6.apply_delta({"tracker": "https://pt.example.com/announce?passkey=ROTATED"}), \
+        "凭据轮换(同 host 新 passkey)掩码不同, 仍应判变化"
+
+
+def test_api_torrent_detail_tracker_masked(web_env):
+    """守阵⑥ 详情响应外发(issue 26-11-07-0536 批B): /api/torrents/{hash} 的 torrent.tracker 一律 mask
+
+    详情端点经 rec.to_dict() 全字段透传, tracker 字段随快照槽位入库即掩码 —— 响应里
+    host/path/参数名可辨, passkey 等凭据值(hash16)不可回原文。
+    红验: 同 test_tracker_snapshot_masked_at_ingestion(入库点去掉掩码, 本测试必红)。
+    """
+    from auto_qb.torrents import TorrentRecord
+
+    mgr, client = web_env
+    raw = "https://pt.example.com/announce?passkey=SUPERSECRET123"
+    rec = TorrentRecord.from_torrent({"hash": "HA", "name": "Detail", "state": "stalledUP", "tracker": raw}, hash="HA")
+    mgr.store.get = lambda h: {"HA": rec}.get(h)
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    resp = client.get("/api/torrents/HA", headers=auth)
+    assert resp.status_code == 200
+    body = resp.content.decode("utf-8")
+    masked = resp.json()["torrent"]["tracker"]
+    assert masked == mask_tracker_url(raw), "tracker 应为 mask 值"
+    assert masked != raw, "mask 不得与原文相同(等于没脱敏)"
+    assert masked.startswith("https://pt.example.com/announce?passkey="), \
+        "mask 必须保留 scheme://host + path 端点名 + 参数名(只换值), 否则站点/端点不可辨"
+    assert "SUPERSECRET123" not in body, "凭据原文不得出现在详情响应体"
+    assert rec.tracker == masked, "入库单点: 快照槽位本身就是 mask 值(to_dict 只是从槽位读)"
+
+
+def test_tracker_masked_in_state_and_groups_rows(tmp_path):
+    """守阵⑦ 行视图外发(issue 26-11-07-0536 批B): /api/state 行与 /api/groups 行的 tracker 一律 mask
+
+    行视图构造单点 _member_view(组行 members 与 singles 共用)+ _seed_view(种子页平铺)
+    都从 rec.tracker 槽位取数 —— 入库掩码后行载荷零原文。groups 行经 store.groups 手工
+    挂组(同 test_build_group_view 既有口径), singles/flat 为未归组行。
+    红验: 同 test_tracker_snapshot_masked_at_ingestion(入库点去掉掩码, 本测试必红)。
+    """
+    from helpers import make_manager
+
+    from auto_qb.torrents import TorrentRecord
+
+    raw = "https://pt.example.com/announce?passkey=SUPERSECRET123"
+    mgr = make_manager(str(tmp_path / "state.json"))
+    # dict patch = 生产 wire 形态(qB sync 响应): apply_delta 走 .items() 全字段采集,
+    # tracker 才进入库点(FakeTorrent 对象形态只喂 REQUIRED 字段, 扩展字段不采集)
+    mgr.store.by_hash = {
+        "H1":
+            TorrentRecord.from_torrent(
+                {
+                    "hash": "H1",
+                    "name": "T1",
+                    "state": "stalledUP",
+                    "save_path": r"R:/s",
+                    "tracker": raw
+                }
+            ),
+        "H2":
+            TorrentRecord.from_torrent(
+                {
+                    "hash": "H2",
+                    "name": "T2",
+                    "state": "pausedUP",
+                    "save_path": r"R:/s",
+                    "tracker": raw
+                }
+            ),
+        "H3":
+            TorrentRecord.from_torrent(
+                {
+                    "hash": "H3",
+                    "name": "T3",
+                    "state": "stalledUP",
+                    "save_path": r"R:/u",
+                    "tracker": raw
+                }
+            ),
+    }
+    key = (r"R:/s", ("a.mkv", "b.mkv"))
+    mgr.store.groups[key] = ["H1", "H2"]
+    mgr.store.member_to_key["H1"] = key
+    mgr.store.member_to_key["H2"] = key
+    mgr.web.group_view_dirty = True
+    mgr.web.rebuild_views()
+
+    state = mgr.web.ensure_state(rid=None)  # /api/state 载荷(同源 ensure_state)
+    masked = mask_tracker_url(raw)
+    rows = (
+        [m for g in state["groups"] for m in g["members"]]  # /api/groups 行(组行成员)
+        + state["singles"]  # 未归组成员行(同一 _member_view)
+        + state["torrents"]  # 种子页平铺行(_seed_view 继承)
+    )
+    assert len(rows) == 6, "组行(2) + singles(1) + 平铺行(3)都应有数据"
+    assert all(r["tracker"] == masked for r in rows), \
+        f"全部行视图的 tracker 都应为 mask 值(入库单点覆盖): {[r['tracker'] for r in rows]}"
+    assert all(r["tracker"].startswith("https://pt.example.com/announce?passkey=") for r in rows), \
+        "行视图 tracker 保留 scheme://host + path + 参数名(前端展示与按域名消费不破)"
+    assert "SUPERSECRET123" not in json.dumps(state, ensure_ascii=False), "凭据原文不得出现在 state 行载荷"
+    groups = mgr.web.ensure_view()  # /api/groups 路由取数口(manager.web.ensure_view)
+    assert [m["tracker"] for g in groups for m in g["members"]] == [masked, masked], \
+        "/api/groups 成员行 tracker 一律 mask 值"
 
 
 def test_api_readonly_endpoints_short_cache(web_env):
