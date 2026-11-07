@@ -40,6 +40,9 @@
 - test_pass_force_relaunch_consumed_by_thread: force_relaunch 只本轮生效(读到即清并转 agent)
 - test_heartbeat_interval_fallback_on_bad_value: 心跳周期缺/非数值/<=1s 回落缺省(防节拍归零紧循环)
 - test_ensure_thread_idempotent_when_alive: _ensure_thread 幂等(线程已存活时复用同一条, 不重复起)(P2-T2.5)
+- test_ensure_thread_concurrent_no_double_start: sync()(主循环线程)与 request_relaunch()(WEB 线程)并发进
+  _ensure_thread 只起一条订阅线程(检查+创建段持锁原子判定, R4#19: 无锁时两边同过 is_alive -> 双
+  _run 双注册订阅, 先注册的 sub_id 被覆盖后泄漏到工具租约过期; 26-11-07-0536 批I)
 - test_run_survives_pass_and_unregister_exceptions: 主循环容错(单轮异常不杀线程 / 收线注销异常只记 WARNING)(P2-T2.5)
 - test_clear_error_logs_recovery_info: 失败后恢复补 INFO 且清记忆, 无失败记忆时零日志(P2-T2.5)
   ⚠ 本轮修三处**假绿**(P2-T2.5): `_FAKE_EP.token_path` 是空串, 而 `_register`/`_heartbeat`/`_unregister`
@@ -910,6 +913,56 @@ def test_ensure_thread_idempotent_when_alive(sub_env):
         assert sub._thread is first, "已存活必须复用同一条线程"
     finally:
         sub.stop()
+
+
+def test_ensure_thread_concurrent_no_double_start(sub_env, monkeypatch):
+    """sync()(主循环线程)与 request_relaunch()(WEB 线程)并发进 _ensure_thread 只起一条订阅线程
+
+    复放 R4#19 竞态交错(issue 26-11-07-0536 批I): 调用方A(WEB 线程入口)通过「已存活」检查后
+    被卡在造线程一步, 调用方B(主循环线程入口)随后也过检查并完整起线 —— 检查+创建不是原子段:
+    无锁时两边都从同一窗口穿过, 各起一条 _run 双注册订阅(先注册的 sub_id 被后者覆盖, 泄漏到
+    工具租约过期); 加锁后「已存活不重复起」是原子判定, B 只复用 A 起的那条。
+    「线程刚收线后立刻双调」走的是同一个 is_alive 检查-行动窗口, 同被这把锁收敛。
+    """
+    _mgr, sub, _tool = sub_env
+    real_thread_cls = threading.Thread
+    arrived = threading.Event()  # A 已通过存活检查、进到造线程一步(竞态窗口已开)
+    gate = threading.Event()  # 放行 A 完成创建+start; B 进场后由定时器触发
+    # Timer 先建后打补丁: 构造时走真 Thread.__init__, 触发动作只是 set 一个事件(非裸 sleep)
+    opener = threading.Timer(0.2, gate.set)
+
+    class _GatedThread(real_thread_cls):
+        """替身线程类: 构造时(调用方已过检查、尚未拿到线程引用)停住, 制造稳定竞态窗口"""
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            arrived.set()
+            gate.wait(timeout=5.0)
+
+    monkeypatch.setattr(threading, "Thread", _GatedThread)
+
+    def _reap() -> bool:
+        """收尾清场拍: 补发共享 wake 再看线程清零 —— 双起孤儿可能错过 stop 的那次 set
+        (被同窗另一 waiter 消费/清掉, 沉进 60s 心跳等), 必须靠补发信号叫醒它收线"""
+        sub._wake.set()
+        return not _sub_threads()
+
+    try:
+        racer = real_thread_cls(target=sub.request_relaunch, name="racer-web-relaunch", daemon=True)
+        racer.start()  # A: WEB 线程入口, 进窗口后停住
+        assert arrived.wait(5.0), "调用方A未抵达创建窗口"
+        opener.start()
+        sub.sync()  # B: 主循环线程入口 -- 无锁时从同一窗口穿过双起; 有锁则等 A 完成后复用
+        racer.join(timeout=5.0)
+        assert not racer.is_alive(), "调用方A未返回"
+        live = _sub_threads()
+        assert len(live) == 1, f"并发双调起了 {len(live)} 条订阅线程: 检查+创建竞态未收敛"
+        assert sub._thread is not None and sub._thread.is_alive()
+    finally:
+        # 清场段不抛断言: 主断言失败时原始异常直出, 不被清场异常遮蔽
+        gate.set()  # 双保险: 任何路径都放行被卡住的构造
+        sub.stop()
+        wait_until(_reap, interval=0.01)
+    assert not _sub_threads(), "订阅线程未收线(清场失败)"
 
 
 def test_run_survives_pass_and_unregister_exceptions(sub_env, monkeypatch):

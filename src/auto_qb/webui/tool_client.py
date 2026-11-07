@@ -133,6 +133,11 @@ class TrafficMonitorSubscriber:
         self._manager = manager
         self._wake = threading.Event()
         self._stop = threading.Event()
+        # _ensure_thread 的检查+创建互斥(R4#19, issue 26-11-07-0536 批I): 本方法有两条调用
+        # 线程 -- sync() 在主循环线程(module.start/apply), request_relaunch() 在 WEB 线程
+        # (routes/traffic_monitor.py)。无锁时「线程未起/刚收线」窗口里两边可同时通过 is_alive
+        # 检查, 各起一条 _run 双注册订阅(先注册的 sub_id 被覆盖, 泄漏到工具租约过期)。
+        self._ensure_lock = threading.Lock()
         self._thread: Optional[threading.Thread] = None
         # 工具发现/拉起单点(S16): 状态内聚在它自己身上; UI 可经 self.agent 读状态区
         self._agent = agent.TrafficSourceAgent()
@@ -201,13 +206,20 @@ class TrafficMonitorSubscriber:
     # ---------------- 订阅线程 ----------------
 
     def _ensure_thread(self) -> None:
-        """确保订阅线程在跑(幂等: 已存活不重复起; stop 过再 sync 也复用同一入口)"""
-        if self._thread is not None and self._thread.is_alive():
-            return
-        self._stop.clear()
-        thread = threading.Thread(target=self._run, name="auto-qb-gtm-sub", daemon=True)
-        self._thread = thread
-        thread.start()
+        """确保订阅线程在跑(幂等: 已存活不重复起; stop 过再 sync 也复用同一入口)
+
+        !检查+创建段整段持 _ensure_lock(R4#19): 「已存活不重复起」必须是原子判定, 否则
+        「线程未起/刚收线」窗口里两条调用线程(sync() 主循环线程 / request_relaunch() WEB
+        线程)各起一条 _run 双注册订阅。锁内只有检查/清标志/造线程/start -- 无网络无 sleep
+        无长 CPU, 不拖另一条调用线程; 锁不重入(._run 与控制面动作不取这把锁), 无死锁面。
+        """
+        with self._ensure_lock:
+            if self._thread is not None and self._thread.is_alive():
+                return
+            self._stop.clear()
+            thread = threading.Thread(target=self._run, name="auto-qb-gtm-sub", daemon=True)
+            self._thread = thread
+            thread.start()
 
     def _run(self) -> None:
         """订阅线程主循环: 每轮按期望态收敛一次, 期望态转假即收线
