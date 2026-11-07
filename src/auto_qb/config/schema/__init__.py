@@ -100,7 +100,6 @@ __all__ = [
     "real_config_fields",
     "readonly_config_paths",
     "plugin_table",
-    "plugins_by_kind",
     "schema_payload",
 ]
 
@@ -143,19 +142,11 @@ def plugin_table() -> Dict[str, Tuple[Plugin, ...]]:
     """插件元数据表: {"condition": (...), "action": (...)}
     W5/G9 派生: 表 = registry 条目**按名引用**本包声明(声明作者单点仍是 .rules 手写元组,
     方向 R6-a, 延迟导入躲 rules->config 环); 新增插件只注册 registry 一处即入表
-    (演示测试验收①), 声明零复制。守卫测试钉住派生序 == 手写声明序。
+    (演示测试验收 1.), 声明零复制。守卫测试钉住派生序 == 手写声明序。
     """
     from ...rules import registry  # 延迟导入: rules 包反向依赖 config, 顶层导入会循环
 
     return {"condition": registry.condition_plugins(), "action": registry.action_plugins()}
-
-
-def plugins_by_kind(kind: str) -> Dict[str, Plugin]:
-    """按插件名索引的元数据(供前端按名查 spec 结构); 未知 kind 落 action 兜底(既有契约)"""
-    from ...rules import registry  # 延迟导入: rules 包反向依赖 config, 顶层导入会循环
-
-    table = registry.condition_plugins() if kind == "condition" else registry.action_plugins()
-    return {p.name: p for p in table}
 
 
 def schema_payload() -> Dict[str, Any]:

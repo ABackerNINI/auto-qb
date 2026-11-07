@@ -737,8 +737,10 @@ def load_config(config_path: str) -> Config:
 def _expand_tracker_tags_refs(items: List[str], tracker_tags: List[str]) -> List[str]:
     """展开 @tracker_tags 引用: 替换为所有 tracker 配置的 tags 并集(去重保序)
 
-    模式语法(regex:/:ignore_case)解析统一走 utils.MatchPattern; 引用判定与查重用
-    仅剥后缀的 body(保留 regex: 前缀, 与既有行为一致), 输出与去重键用含后缀的原始串。
+    模式语法(regex:/:ignore_case)解析统一走 utils.MatchPattern; 引用判定(@tracker_tags
+    识别)用仅剥后缀的 body(保留 regex: 前缀, 与既有行为一致), 普通条目的查重与入集统一用
+    含后缀的原始串 raw —— 键面一致才与书写顺序无关: 同 body 不同后缀(如 foo 与
+    foo:ignore_case)是两条不同配置声明, 按 raw 去重两条都保留(不静默丢语义), 全同原串只留首条。
     """
     out: List[str] = []
     seen = set()
@@ -750,7 +752,7 @@ def _expand_tracker_tags_refs(items: List[str], tracker_tags: List[str]) -> List
                 if entry not in seen:
                     seen.add(entry)
                     out.append(entry)
-        elif pat.body and pat.body not in seen:
+        elif pat.body and pat.raw not in seen:
             seen.add(pat.raw)
             out.append(pat.raw)
     return out

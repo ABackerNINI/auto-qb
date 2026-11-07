@@ -10,6 +10,8 @@
 - test_config_tracker_tags_expand_ignore_case: @tracker_tags:ignore_case 展开附加后缀
 - test_config_tracker_tags_expand_no_tracker_tags: 无任何 tracker tags 时 @tracker_tags 展开为空
 - test_config_tracker_tags_expand_dedup: 重复 tag/@tracker_tags 引用去重保序
+- test_config_tracker_tags_refs_raw_dedup: 普通条目按 raw 原串查重入集(R4 批次4 #5 裁决) —— 同 body 不同后缀两序都保留, 全同原串只留首条
+- test_config_tracker_tags_refs_cross_branch_dedup: @tracker_tags 展开产物与后续字面量条目跨支同串只发一次(批次4 评审 nit, raw 键面统一的顺带行为增量)
 - test_non_tri_state_empty_still_stripped: 全局段与站点段非 tri_state 键的显式空串照剥(语义不随 v4 翻转)
 - test_load_web_skip_check_menu_tristate: web.skip_check_menu 三态(显式 true / 显式 false / 缺省默认 false, 计划 26-10-02-1955 W1)
 - test_skip_checking_tag_global_default_and_override
@@ -89,6 +91,43 @@ def test_config_tracker_tags_expand_dedup():
         cfg = load_config(cfg_path)
         assert cfg.delete_tags == ["HHan", "Kufirc", "regex:^seed-"], \
             f"去重展开错误: {cfg.delete_tags}"
+
+
+def test_config_tracker_tags_refs_raw_dedup():
+    """普通条目查重与入集统一用 raw 原串(批次4 #5 裁决): 去重结果与书写顺序无关
+
+    旧实现判存用 pat.body、入集用 pat.raw(键面不一致): ["foo", "foo:ignore_case"] 正序时
+    第二条被静默丢弃(大小写不敏感删除语义丢失), 反序两条都留 —— 顺序决定结果。按 raw 去重
+    (raw 是完整配置语义, 含 :ignore_case 后缀)最保守: 两条不同的配置声明都保留, 全同只留首条。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        cfg_path = _write_config(td, delete_tags=["foo", "foo:ignore_case"])
+        cfg = load_config(cfg_path)
+        assert cfg.delete_tags == ["foo", "foo:ignore_case"], \
+            f"同 body 不同后缀是两条声明, 不得静默丢弃: {cfg.delete_tags}"
+        cfg_path = _write_config(td, delete_tags=["foo:ignore_case", "foo"])
+        cfg = load_config(cfg_path)
+        assert cfg.delete_tags == ["foo:ignore_case", "foo"], \
+            f"反序不得丢条目(去重键面须与顺序无关): {cfg.delete_tags}"
+        cfg_path = _write_config(td, delete_tags=["foo", "foo"])
+        cfg = load_config(cfg_path)
+        assert cfg.delete_tags == ["foo"], f"全同原串只留一条: {cfg.delete_tags}"
+
+
+def test_config_tracker_tags_refs_cross_branch_dedup():
+    """@tracker_tags 展开产物与后续字面量条目跨支同串只发一次(批次4 评审 nit)
+
+    raw 键面统一前的旧行为: 展开产物按含后缀原串入 seen、字面量条目按剥后缀 body 判存 ——
+    键面不一致让 ["@tracker_tags:ignore_case", "Kufirc:ignore_case"](tag Kufirc 存在)把
+    Kufirc:ignore_case 发两次。统一按 raw 去重后, 跨支同串首条胜出(展开产物在前, 保序)。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        cfg_path = _write_config(td, delete_tags=["@tracker_tags:ignore_case", "Kufirc:ignore_case"])
+        cfg = load_config(cfg_path)
+        assert cfg.delete_tags.count("Kufirc:ignore_case") == 1, \
+            f"跨支同串不得重复输出: {cfg.delete_tags}"
+        assert cfg.delete_tags == ["HHan:ignore_case", "Kufirc:ignore_case"], \
+            f"展开产物在前保序, 字面量条目被去重: {cfg.delete_tags}"
 
 
 def test_parse_hr_spec_missing_required():

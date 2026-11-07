@@ -32,8 +32,9 @@
 - test_readonly_config_paths_exact_and_order: readonly 点路径集合与**顺序**逐位钉住(4 条)
 - test_readonly_config_paths_walk_contract: 用合成结构钉遍历契约 —— ui_only 段须 `continue`(不
   断链) · 前缀须逐层拼接 · 非 readonly object 段须递归(issue 26-10-08-0903-schema-surface)
-- test_plugins_by_kind_condition_and_action_branches: plugins_by_kind 的 condition/action 两支
-  分别返回对应插件表(旧守卫只走 action 一支) · 未知 kind 落到 action 兜底
+- test_schema_payload_plugins_condition_and_action_tables: schema_payload()["plugins"] 的
+  condition/action 两支分别与手写声明逐值一致(旧守卫只走 action 一支) · 两表按名可索引
+  (plugins_by_kind 已随 test-only 死导出删除, 批次4 #8, 语义面改走唯一生产派生面)
 - test_schema_payload_constants_keys_exact: constants 分区键集合逐位钉住(12 项)
 - test_schema_payload_constants_values: 每个常量表与源常量的取值一致(顺序敏感)
 - test_schema_payload_preset_key_metadata: hr_check_site_presets 每条键集合与逐字段取值钉住
@@ -334,7 +335,7 @@ def test_unit_kind_defaults_are_parseable():
 
 def test_checking_action_spec_keys_match_validation():
     """checking 动作的 spec 字段 == validation.CHECKING_ACTION_KNOWN_KEYS"""
-    plugin = schema.plugins_by_kind("action")["checking"]
+    plugin = {p.name: p for p in schema.plugin_table()["action"]}["checking"]
     assert set(_field_map(plugin.fields)) == CHECKING_ACTION_KNOWN_KEYS
 
 
@@ -572,8 +573,9 @@ def test_download_fuse_shape_and_unparsable_limit():
 
 # ---------- 键面/分支函数守阵(issue 26-10-08-0903-test-config-mutation-schema-surface) ----------
 #
-# 这组守阵对应变异审计里 schema/__init__.py 的 27 条「全套件杀不掉」候选:
-# readonly_config_paths 8 · plugins_by_kind 3 · schema_payload 16。
+# 这组守阵对应变异审计里 schema/__init__.py 的「全套件杀不掉」候选:
+# readonly_config_paths 8 · schema_payload 16(plugins_by_kind 的 3 条随 test-only 死导出删除,
+# 批次4 #8; 其两支语义由 test_schema_payload_plugins_condition_and_action_tables 改道承接)。
 # 旧守卫只钉了「当前输出」的一小部分(如 test_schema_payload_is_complete 只查了部分 constants 名),
 # 于是字符串键名大小写、分支短路、递归参数这类「结果恰好一样」的变异全部存活。
 # 这里改成: 能钉死的**逐位钉死**; 不能只靠当前扁平 schema 钉死的(遍历契约), 用**合成结构**探针钉住机制本身。
@@ -619,17 +621,22 @@ def test_readonly_config_paths_walk_contract(monkeypatch):
     assert schema.readonly_config_paths() == ("zz_seg.zz_inner", )
 
 
-def test_plugins_by_kind_condition_and_action_branches():
-    """plugins_by_kind 的 condition 与 action **两支**都要走对(旧守卫只覆盖 action 一支)
+def test_schema_payload_plugins_condition_and_action_tables():
+    """payload plugins 表 condition/action 两支都要走对(旧守卫只覆盖 action 一支)
 
-    test_checking_action_spec_keys_match_validation 只调了 plugins_by_kind("action"), 因此
-    `kind == "condition"` 这个分支被改成恒假 / 错串 / 错大小写、以及 `and False` 短路, 全套件都杀不掉。
-    这里两支都断言, 并补「未知 kind 落到 action 兜底」的现有语义(单一 else 分支)。
+    test_checking_action_spec_keys_match_validation 历史上只调了 plugins_by_kind("action"), 因此
+    condition 一支被改错时全套件杀不掉。plugins_by_kind 已随 test-only 死导出删除(批次4 #8,
+    前端唯一消费面是 schema_payload()["plugins"]), 其「两支各归各位 + 按名可索引」语义改由
+    生产派生面承接: 两支分别与 .rules 手写声明逐值一致(两支互换/串表即红), 且都能按名索引。
     """
-    assert schema.plugins_by_kind("condition") == {p.name: p for p in schema.CONDITION_PLUGINS}
-    assert schema.plugins_by_kind("action") == {p.name: p for p in schema.ACTION_PLUGINS}
-    # 非 "condition" 一律走 action 兜底(现语义): 误把 condition 分支扩大会让前端拿错 spec 结构
-    assert schema.plugins_by_kind("不存在的 kind") == {p.name: p for p in schema.ACTION_PLUGINS}
+    plugins = schema.schema_payload()["plugins"]
+    assert plugins["condition"] == schema.CONDITION_PLUGINS, "payload condition 支必须与手写声明一致"
+    assert plugins["action"] == schema.ACTION_PLUGINS, "payload action 支必须与手写声明一致"
+    by_name = {p.name: p for p in plugins["condition"]}
+    assert by_name[[p.name for p in schema.CONDITION_PLUGINS][0]] == schema.CONDITION_PLUGINS[0], \
+        "condition 表按名索引应取回同一条目"
+    assert {p.name: p for p in plugins["action"]}["checking"] == \
+        {p.name: p for p in schema.ACTION_PLUGINS}["checking"], "action 表按名索引应取回同一条目"
 
 
 def test_schema_payload_constants_keys_exact():

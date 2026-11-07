@@ -13,6 +13,7 @@
 - test_transfer_targets_mask_roundtrip_write: GET→PUT 往返无损 —— 多条目各还原各的旧值, 重复还原零变化, 写盘后磁盘仍是各自真密码且无哨兵
 - test_unmask_transfer_targets_typed_and_new_entries: 用户真改的密码/新增条目的密码(含空)原样保留, 不得被旧值覆盖
 - test_unmask_transfer_targets_rename_and_delete_pairing: 配对两轮 —— name 为主, 等量剩余按下标兜底「只改名」; 删除后幸存者按 name 对上; 改名+删除(数量不等)不猜, 哨兵原样留下; 旧值缺失/即哨兵同守卫
+- test_unmask_transfer_targets_swap_rename_identity_guard: 第二轮下标配对前做非敏感身份键(type/base_url)一致性核对(批次4 #16) —— 两以上条目同时改名且顺序对调不串密码(哨兵留下), 正常对位仍回填, 身份键缺失不算反证
 - test_transfer_target_api_key_mask_and_unmask: targets 条目 api_key 与 password 同套哨兵(issue 26-11-01-0335) —— 非空掩码/空不掩/GET→PUT 还原旧值; 逐键判定(只改 password 不动 api_key 哨兵, 反之亦然)
 - test_mask_tree_target_non_dict_entry_passthrough: targets 里的非 dict 条目掩码原样放行(交给校验层报错), dict 条目照常掩码
 - test_unmask_targets_skips_non_dict_and_unnamed_old_entries: 旧表非 dict 条目/无名条目不进 name 索引; 提交表非 dict 条目跳过还原; 按 name 配对照常
@@ -287,6 +288,111 @@ def test_unmask_transfer_targets_rename_and_delete_pairing():
     assert submitted["config"]["web"]["transfer"]["targets"][0]["password"] == MASK_SENTINEL
 
 
+def test_unmask_transfer_targets_swap_rename_identity_guard():
+    """第二轮下标配对前做非敏感身份键一致性核对(批次4 #16): 顺序对调的改名不串密码
+
+    旧 [T1(pa), T2(pb)], 提交 [X(原T2改名c, 哨兵), Y(原T1改名d, 哨兵)] 相对顺序被调换:
+    数量相等即 zip 配对会把 T1 的 pa 回填进 X(base_url 是 T2 的)—— 凭据静默写串。
+    type/base_url 在改名场景原样保留, 是仅有的稳定身份锚: 有非空值且不同 = 配错对象,
+    不猜, 哨兵原样留下(与「数量不等不猜」同口径); 正常对位(只改名不调序)仍回填成功;
+    身份键缺失/空值不算反证(改名 + 未配 base_url 的合法编辑不被误拒)。
+    """
+    from auto_qb.config.writer import MASK_SENTINEL, unmask_tree
+
+    def _tree(targets):
+        return {"config": {"web": {"transfer": {"targets": targets}}}}
+
+    # 顺序对调: X(原T2)按下标对上 T1, base_url 不同 -> 不猜, 哨兵原样留下
+    old = _tree(
+        [
+            {
+                "name": "T1",
+                "type": "webdav",
+                "base_url": "https://a",
+                "password": "pa"
+            },
+            {
+                "name": "T2",
+                "type": "webdav",
+                "base_url": "https://b",
+                "password": "pb"
+            },
+        ]
+    )
+    submitted = _tree(
+        [
+            {
+                "name": "c",
+                "type": "webdav",
+                "base_url": "https://b",
+                "password": MASK_SENTINEL
+            },
+            {
+                "name": "d",
+                "type": "webdav",
+                "base_url": "https://a",
+                "password": MASK_SENTINEL
+            },
+        ]
+    )
+    unmask_tree(submitted, old)
+    targets = submitted["config"]["web"]["transfer"]["targets"]
+    assert targets[0]["password"] == MASK_SENTINEL, "base_url 对不上 = 配错对象, 不得把 T1 密码回填进 X"
+    assert targets[1]["password"] == MASK_SENTINEL, "Y 对 T2 同样身份矛盾, 不回填"
+
+    # 只改名不调序: 身份键两边一致 -> 仍按下标配对正常回填(不误伤既有「只改名」覆盖面)
+    old2 = _tree(
+        [
+            {
+                "name": "T1",
+                "type": "webdav",
+                "base_url": "https://a",
+                "password": "pa"
+            },
+            {
+                "name": "T2",
+                "type": "webdav",
+                "base_url": "https://b",
+                "password": "pb"
+            },
+        ]
+    )
+    submitted2 = _tree(
+        [
+            {
+                "name": "d",
+                "type": "webdav",
+                "base_url": "https://a",
+                "password": MASK_SENTINEL
+            },
+            {
+                "name": "c",
+                "type": "webdav",
+                "base_url": "https://b",
+                "password": MASK_SENTINEL
+            },
+        ]
+    )
+    unmask_tree(submitted2, old2)
+    targets2 = submitted2["config"]["web"]["transfer"]["targets"]
+    assert targets2[0]["password"] == "pa", "正常对位(身份键一致)仍回填成功"
+    assert targets2[1]["password"] == "pb"
+
+    # type 不同同样拦下(base_url 双方都未配时 type 是唯一锚)
+    old3 = _tree([{"name": "T1", "type": "webdav", "password": "pa"}])
+    submitted3 = _tree([{"name": "x", "type": "smb", "password": MASK_SENTINEL}])
+    unmask_tree(submitted3, old3)
+    assert submitted3["config"]["web"]["transfer"]["targets"][0]["password"] == MASK_SENTINEL, \
+        "type 对不上不回填"
+
+    # 身份键缺失不算反证: 只改名 + 双方都没配身份键, 维持原位置配对语义
+    old4 = _tree([{"name": "T1", "password": "pa"}])
+    submitted4 = _tree([{"name": "x", "password": MASK_SENTINEL}])
+    unmask_tree(submitted4, old4)
+    assert submitted4["config"]["web"]["transfer"]["targets"][0]["password"] == "pa", \
+        "身份键都缺失时不得误拒合法改名编辑"
+
+
 def test_transfer_target_api_key_mask_and_unmask():
     """targets 条目 api_key 与 password 同套哨兵(issue 26-11-01-0335): 非空掩码/空不掩/还原旧值; 逐键判定互不覆盖"""
     from auto_qb.config.writer import MASK_SENTINEL, mask_tree, unmask_tree
@@ -360,21 +466,44 @@ def test_unmask_targets_skips_non_dict_and_unnamed_old_entries():
     old = {
         "config":
             {
-                "web": {
-                    "transfer": {
-                        "targets": [
-                            "junk",  # 非 dict 旧条目: 不进 name 索引, 也不进位置配对
-                            {"name": "", "password": "px"},  # 无名旧条目: 不进 name 索引
-                            {"name": "a", "password": "pa"},
-                        ]
-                    }
-                },
+                "web":
+                    {
+                        "transfer":
+                            {
+                                "targets":
+                                    [
+                                        "junk",  # 非 dict 旧条目: 不进 name 索引, 也不进位置配对
+                                        {
+                                            "name": "",
+                                            "password": "px"
+                                        },  # 无名旧条目: 不进 name 索引
+                                        {
+                                            "name": "a",
+                                            "password": "pa"
+                                        },
+                                    ]
+                            }
+                    },
             }
     }
-    submitted = {"config": {"web": {"transfer": {"targets": [
-        "junk",  # 提交表非 dict 条目: 原样跳过
-        {"name": "a", "password": MASK_SENTINEL},
-    ]}}}}
+    submitted = {
+        "config":
+            {
+                "web":
+                    {
+                        "transfer":
+                            {
+                                "targets": [
+                                    "junk",  # 提交表非 dict 条目: 原样跳过
+                                    {
+                                        "name": "a",
+                                        "password": MASK_SENTINEL
+                                    },
+                                ]
+                            }
+                    }
+            }
+    }
     unmask_tree(submitted, old)
     targets = submitted["config"]["web"]["transfer"]["targets"]
     assert targets[0] == "junk", "提交表非 dict 条目不动"

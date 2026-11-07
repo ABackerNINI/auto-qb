@@ -118,7 +118,8 @@ _V3_DROP_GLOBAL_KEYS = (
 def _migrate_config_2_3(cfg: dict) -> dict:
     """v2→v3: HR 14 键口径(计划 26-09-28-1932 §6/§7.1)。
 
-    - 全局段: 删除 26 个废弃键; min_torrent_interval 改名 min_interval(语义接管页面间隔)。
+    - 全局段: 删除 20 个废弃键(以 _V3_DROP_GLOBAL_KEYS 实数为准); min_torrent_interval
+      改名 min_interval(语义接管页面间隔)。
     - sites 条目: mode partial/all → enabled: true, mode off 条目整体删除; 无 mode 但带
       enabled 的条目(v1 章缺失的新写法)原样保留 enabled —— 迁移是版本链上的一次性变换,
       但「缺版本章 = 按 v1 处理」的存量口径意味着新写法也会走到这里, 不能误杀。
