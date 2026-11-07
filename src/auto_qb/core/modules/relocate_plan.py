@@ -324,7 +324,6 @@ class PlanMixin:
         names = [n for n, _s in files]
         needed = sum(s for _n, s in files)
         hashes = tuple(r.hash for r in records)
-        member_save_paths = tuple(dict.fromkeys(str(r.save_path) for r in records))  # 全成员声明源(保序去重)
 
         # ---- 源侧三态检查(0808 S1 继承 0546 机制①: 在/.!qB 孪生/缺失/不可判定, 逐声明文件) ----
         # 未勾选(priority=0)文件不参与 —— 它们本就不落盘, 不构成缺失形态(误报防线);
@@ -525,7 +524,6 @@ class PlanMixin:
             hardlink_files=hl_files,
             third_party_dir_note=tp_dir_note,
             auto_tmm_hashes=tuple(r.hash for r in records if bool(getattr(r, "auto_tmm", False))),
-            member_save_paths=member_save_paths,
             source_missing_files=tuple(source_missing),
             source_unknown_files=tuple(source_unknown),
         )

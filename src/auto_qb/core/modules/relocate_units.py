@@ -454,11 +454,6 @@ class GroupFacts:
     # 组内 AutoTMM 成员 hash(计划 26-11-05-0808 S1): auto_tmm=true 的成员 fastresume 无
     # qBt-savePath 键(N8 实测), 改写收尾对它不生效 => 有即整组拒迁(evaluate_group 闸门)
     auto_tmm_hashes: Tuple[str, ...] = ()
-    # 全成员声明源(0546 机制③「全成员覆盖」; 空 = 回落 mover 的 save_path, 兼容既有构造)。
-    # 计划 26-11-07-1300 R1-R5 起嵌套闸门不再消费本字段(锚点全部取 mover 内容根派生物,
-    # 声明源 ≠ 别名真实落点是误拦根因)—— 字段与构建面(relocate_plan._group_facts)留存,
-    # 仅供排查, 不参与判定。
-    member_save_paths: Tuple[str, ...] = ()
     # 源侧三态检查(0808 S1 继承 0546 机制①, 逐声明文件、深层天然覆盖): 只收「缺失」与
     # 「不可判定」两态; .!qB 孪生态并入 qb_temp_entries(复用既有 GATE_QB_TEMP, 不另造闸)
     source_missing_files: Tuple[str, ...] = ()  # 原名与 .!qB 孪生都不在(数据藏走 -> 零搬移假成功, E2.2)

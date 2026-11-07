@@ -24,7 +24,7 @@
               mask-class="modal-mask move-dialog-mask"
               :width-class="['add-dialog move-dialog', { 'pop-open': movePathMenu }]">
           <p class="move-targets">作用于 <b>{{ moveCount }}</b> 个种子(打开时锁定)</p>
-          <p class="move-note">将把种子文件移动到新路径。注意: 移动后该种子将离开当前辅种组。</p>
+          <p class="move-note">将把种子文件移动到新路径。注意: 移动后保存路径变化, 种子将按新路径重新归组。</p>
           <!-- 整组迁移常驻提示(计划 26-11-07-1300 R6a, 拍板 D5): relocate_enabled 旗标门控
                (/api/webui/flags 下发, state.js 显式建 fail-closed 默认) —— 开 = 提交前就披露
                「以内容组为单位」语义, 零额外点击(确认框披露点在 drawer.js::_relocateConfirmRows);
