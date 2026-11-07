@@ -22,6 +22,14 @@
 - [x] parse_files: 目录段季号(Season 01/S01/第1季); 集数来自视频文件名
 - [x] parse_files: 「季标记 + 发布后缀」目录(Season 2 (1080p)/S02 Complete/第2季(1080p) 等);
       多季合包与白名单外尾词仍判未知 (issue 26-10-29-1329-bug-b-r08e03-dir-season-anchor)
+- [x] parse_files: 目录段季号全量收集, 跨目录多季合包(S01/.../S02/)返回 None 不归单季;
+      refine_with_files 对多季冲突不展开(issue 26-11-07-0527 条目3)
+- [x] parse_files: 6 位以上胶连数字串不是合法发布后缀(原子组语义收窄锁定)(issue 26-11-07-0527 条目1)
+- [x] 名称侧「带集数无季标记」兜底 S1 置 season_inferred(parse_release 落子, refine 早退不再补标)
+      (issue 26-11-07-0527 条目2)
+- [x] _DIR_SEASON_SUFFIX_RE 数字 token 原子组: 超长数字尾串宽松时限内完成(灾难性回溯回退防护)
+      (issue 26-11-07-0527 条目1)
+- [x] refine_with_files 单次扫描共用: 目录段正则对同一 files 只跑一遍(评审 minor 2026-11-08)
 - [x] refine_with_files: 季包展开集数范围; unknown 抢救为 episode; 有明确集数不改;
       名称无季标记时 season_inferred 留痕
 - [x] 中文数字百位进位与非法字符兜底(_cjk_int) (P2-a)
@@ -61,6 +69,7 @@
 - test_date_invalid_not_date
 - test_default_unknown_shared
 - test_dir_season_99_boundary
+- test_dir_season_long_digit_suffix_bounded_time: 超长数字尾串宽松时限内完成且回 None(灾难回溯回退防护, issue 26-11-07-0527 条目1)
 - test_e05_glued_title_side_unknown
 - test_e_lookalike_not_matched
 - test_empty_name_defaults
@@ -71,6 +80,7 @@
 - test_episode_scan_after_season_beats_zero_position_bare
 - test_episode_upper_bounds
 - test_episode_wins_over_date
+- test_fallback_season1_inferred: 兜底 S1 置 season_inferred, 名称侧季号不置位(issue 26-11-07-0527 条目2)
 - test_find_episode_non_bare_zero_skipped
 - test_find_season_out_of_range_and_earliest_kept
 - test_find_season_rejects_hundred_plus
@@ -89,6 +99,8 @@
 - test_normalize_key_multi_bigram_terminates
 - test_normalize_key_strips_punctuation
 - test_normalize_key_tail_bigram_noise
+- test_parse_files_cross_dir_multi_season_unknown: 跨目录多季合包返回 None 不归单季(issue 26-11-07-0527 条目3)
+- test_parse_files_glued_digit_run_not_suffix: 6 位以上胶连数字串不是合法发布后缀(原子组语义收窄锁定, issue 26-11-07-0527 条目1)
 - test_parse_files_multi_season_dir_unknown
 - test_parse_files_no_season
 - test_parse_files_s01_dir_and_zh_marker
@@ -98,7 +110,9 @@
 - test_parse_files_season_in_later_file
 - test_parse_files_season_scan_skips_non_matching_parts
 - test_range_end_from_resolution_dropped
+- test_refine_cross_dir_multi_season_not_expanded: 多季冲突不展开, 季包/unknown 保持原判定(issue 26-11-07-0527 条目3)
 - test_refine_explicit_episode_untouched
+- test_refine_files_single_dir_scan: 目录段扫描对同一 files 只跑一次(单次扫描契约, 评审 minor 2026-11-08)
 - test_refine_name_season_not_inferred
 - test_refine_name_episode_and_date_untouched
 - test_refine_no_usable_files_unchanged
@@ -115,6 +129,8 @@
 - test_year_window_bare_edges
 - test_zero_position_marker_name_keyless
 """
+import time
+
 import pytest
 
 from auto_qb.core import tvshows
@@ -182,6 +198,22 @@ class TestEpisodePatterns:
         r = p("Show E05 S01 1080p")
         assert r.kind == KIND_EPISODE
         assert (r.season, r.ep_start) == (1, 5)
+
+    def test_fallback_season1_inferred(self):
+        # 名称侧「带集数无季标记」兜底 S1 必须置 season_inferred(issue 26-11-07-0527 条目2):
+        # refine_with_files 对 KIND_EPISODE 早退不再补标, 留痕只能在 parse_release 落子
+        # ——「默认 1」不允许无声发生, 兜底 S1 与显式 S01 必须可区分。
+        for name in ("剧名 第5集", "Show.Name.EP05.1080p", "Show - 05 [1080p]", "Show [05]"):
+            r = p(name)
+            assert r.kind == KIND_EPISODE and r.season == 1, name
+            assert r.season_inferred is True, name
+        # 对照: 季号来自名称标记(季内嵌/独立季标记)不置位
+        assert p("Show.Name.S01E05").season_inferred is False
+        assert p("Show.Name.S01x05").season_inferred is False
+        assert p("Show E05 S01 1080p").season_inferred is False
+        # 兜底留痕在 refine 早退后仍保留(frozen 字段随对象原样返回)
+        r2 = refine_with_files(p("剧名 第5集"), ["Some/Dir/E05.mkv"])
+        assert r2 == p("剧名 第5集") and r2.season_inferred is True
 
     def test_marker_cut_takes_first_position(self):
         # 标记前段才是剧名: 后续同形标记不参与
@@ -412,6 +444,33 @@ class TestFiles:
     def test_parse_files_season_dir_non_suffix_tail_unknown(self):
         # 白名单外的尾随词不算发布后缀: 不放宽成标题侧的模糊搜(防剧名尾词误判)
         assert parse_files(["Show/Season 2 of Show/E05.mkv"]) == (None, [5])
+
+    def test_parse_files_cross_dir_multi_season_unknown(self):
+        # 跨目录多季合包: 各目录段单独看都是合法单季, 并起来跨季 -> 返回 None
+        # (旧实现取首个命中目录即 break, S02 的集数被误并进 S1, issue 26-11-07-0527 条目3)
+        assert parse_files(["Show/S01/Show.S01E01.mkv", "Show/S02/Show.S02E13.mkv"]) == (None, [1, 13])
+        assert parse_files(["Season 1/a.mkv", "Season 2/b.mkv"]) == (None, [])
+        # 同一季号的多目录段(不同写法/重复出现)不误报
+        assert parse_files(["Show/Season 1/a.mkv", "Show/S01/b.mkv"]) == (1, [])
+        # 对照: 首目录无季、后目录有季的既有行为不变(全量收集不丢季)
+        assert parse_files(["Show/Extras/a.mkv", "Season 02/b.mkv"])[0] == 2
+
+    def test_refine_cross_dir_multi_season_not_expanded(self):
+        # refine_with_files 对跨目录多季合包不展开(issue 26-11-07-0527 条目3):
+        # 集数范围跨季, 并进任一单季都是误并 —— 名称无季标记的 unknown 不再被抢救成 S1 区间
+        parsed = p("Show.Name.Complete.1080p")
+        files = ["Show/S01/Show.S01E01.mkv", "Show/S02/Show.S02E13.mkv"]
+        assert refine_with_files(parsed, files) == parsed
+        # 名称侧已有季标记的季包同样不展开(S02 的 E13 不得折进 S1 的集数范围)
+        parsed2 = p("Show.Name.S01.1080p")
+        assert refine_with_files(parsed2, files) == parsed2
+
+    def test_parse_files_glued_digit_run_not_suffix(self):
+        # 白名单数字 token 是 3-4 位分辨率(可带 p/i); 6 位胶连数字串不是合法后缀
+        # (原子组语义收窄的显式锁定: 旧 \d{3,4} 按 3/4 平铺可「碰巧」命中 3+3,
+        # 原子组后明确拒绝; 3/4 位分辨率 token 不受影响)
+        assert parse_files(["Show/S01 123456/E05.mkv"]) == (None, [5])
+        assert parse_files(["Show/S01 1080p/E05.mkv"]) == (1, [5])
 
     def test_refine_season_from_suffixed_dir(self):
         # issue 26-10-29-1329: 名称无季标记 + 带后缀季目录 → season 2(曾静默落 S1);
@@ -725,3 +784,46 @@ def test_bracket_group_hint_case_and_negation():
     assert r.key == "show"
     assert r.kind == KIND_EPISODE
     assert (r.season, r.ep_start) == (1, 5)
+
+
+# ---------------- 评审修复 R4 (issue 26-11-07-0527, 2026-11-08) ----------------
+
+
+def test_dir_season_long_digit_suffix_bounded_time():
+    """目录段超长纯数字尾串在宽松时限内完成且回 None(灾难性回溯回退防护)
+
+    issue 26-11-07-0527 条目1: _DIR_SEASON_SUFFIX_RE 的数字 token 若为普通
+    \\d{3,4}, 3/4 两种长度在长数字串上平铺出指数回溯(实测 72 位 246ms, 每 +6 位
+    约 x3.4, 120 位约 1 小时级); 目录段上限 255 字符, parse_files 在视图构建路径
+    对每个种子每 tick 执行且无缓存, 可被打挂主循环。原子组 (?>\\d{3,4}) 锁死
+    token 内重试后实测 <1ms。若回退到非原子写法, 本用例将远超时限失败。
+    时限取 10s(实际 ~0.1ms, 留 4 个数量级余量防机器抖动误伤)。
+    """
+    t0 = time.perf_counter()
+    result = parse_files(["Show/S01 " + "1" * 120 + "x/E05.mkv"])
+    elapsed = time.perf_counter() - t0
+    assert result == (None, [5])  # 长数字串不是合法发布后缀: 季号丢弃, 集数照常解析
+    assert elapsed < 10.0
+
+
+def test_refine_files_single_dir_scan(monkeypatch):
+    """refine_with_files 对同一 files 只做一次目录段扫描(单次扫描契约锁定)
+
+    评审 minor(2026-11-08): 抽出 _files_seasons_eps 共用变体之前, refine 经 parse_files
+    扫一遍目录段、再为多季冲突判定对同一 files 重扫一遍 —— 目录段执行面扩为「全部去重
+    段」后双跑使每 tick 每个 season_pack/unknown 种子的目录段正则成本 x2。
+    守阵: 全程 _dir_seasons 恰被调 1 次, 且扫描语义(展开/冲突判定)不变。
+    """
+    calls = []
+    orig = tvshows._dir_seasons
+
+    def counting(names):
+        calls.append(names)
+        return orig(names)
+
+    monkeypatch.setattr(tvshows, "_dir_seasons", counting)
+    parsed = p("Show.Name.S01.Complete.1080p")
+    r = refine_with_files(parsed, ["Season 1/Show.S01E01.mkv", "Season 1/Show.S01E02.mkv"])
+    assert r.kind == KIND_EPISODE and r.season == 1  # 展开语义不变
+    assert r.episode_key == ("range", 1, 2)
+    assert len(calls) == 1

@@ -23,7 +23,8 @@ TVDB 之类的真值可对, 只能靠种子自身携带的信息把"同一部剧
   - 动画绝对编号(无季标记的 - 05)一律归第 1 季, 不做跨季映射;
   - 纯数字尾缀(Show Name 2)保守保留在剧名里, 不视为季;
   - 简繁异体同剧不做转换(同剧通常同简繁);
-  - 多季合包(S01-S04/第1-4季)判为未识别, 避免错误归入单季。
+  - 多季合包(S01-S04/第1-4季)判为未识别, 避免错误归入单季; 跨目录多季合包
+    (S01/.../S02/...)文件兑底不展开, 保持原判定。
 """
 import datetime
 import re
@@ -57,7 +58,7 @@ class ParsedRelease:
     ep_start: Optional[int] = None  # 集数起点(含)
     ep_end: Optional[int] = None  # 集数终点(含); None = 单集
     date: Optional[str] = None  # ISO 日期(仅 KIND_DATE)
-    season_inferred: bool = False  # 季号非来自名称标记(文件目录推断或无信息兜底 1), refine_with_files 落子
+    season_inferred: bool = False  # 季号非来自名称标记(文件目录推断或无信息兜底 1), parse_release 兜底分支与 refine_with_files 落子
 
     @property
     def episode_key(self) -> tuple:
@@ -193,10 +194,17 @@ _MULTI_SEASON_RE = re.compile(
 # 「季 + 画质/后缀」目录是合法命名, 旧 $ 锚定整段拒绝后季号丢失, 被 refine_with_files
 # 兜底成第 1 季(issue 26-10-29-1329-bug-b-r08e03-dir-season-anchor);白名单外的一律
 # 不算后缀 —— 防把「剧名尾随词」的目录误判成季(不放宽成标题侧的模糊搜)。
+# !数字 token 必须是原子组 (?>\d{3,4})(Python 3.11+, 本仓 requires-python >= 3.12):
+# \d{3,4} 的 3/4 两种长度在长数字串上平铺出指数回溯(实测 72 位 246ms, 每 +6 位约 x3.4;
+# 目录段上限 255 字符即分钟~小时级, parse_files 在视图构建路径无缓存, 恶意/异常目录名
+# 可打挂主循环)—— 原子组锁死 token 内重试后实测 255 位 <0.1ms(issue 26-11-07-0527
+# 条目1)。语义收窄仅剩「3/4 位数字与后续数字开头 token 无分隔胶连」的形态(如
+# 1088bit / 123456)不再命中: 白名单本就不含此类 token, 旧命中是平铺回溯的副产品,
+# 防护守阵见 test_dir_season_long_digit_suffix_bounded_time。
 _DIR_SEASON_SUFFIX_RE = re.compile(
     r"[\s._()\[\]-]*"
     r"(?:(?:"
-    r"\d{3,4}[pPiI]?|[Cc]omplete|全集|完结|全一季"
+    r"(?>\d{3,4})[pPiI]?|[Cc]omplete|全集|完结|全一季"
     r"|中字|简繁|简体|繁体|双语|国语|粤语|国粤|内封|内嵌"
     r"|x26[45]|H\.?26[45]|10bit|8bit|[56]0fps|HDR(?:10\+)?|DoVi|DV|SDR"
     r"|BluRay|BDMV|Remux|WEB-?DL|WEBRip|WEB|HDTV|NF|AMZN|ATVP|DSNP|HMAX|PMTP"
@@ -435,10 +443,13 @@ def parse_release(name: str) -> ParsedRelease:
     if ep is not None:
         _, _, start, end, embedded = ep
         s = embedded if embedded is not None else (season[2] if season else None)
+        season_inferred = s is None
         if s is None:
-            s = 1  # 带集数但无季标记(第5集/EP05/动画编号): 按第 1 季归档
+            s = 1  # 带集数但无季标记(第5集/EP05/动画编号): 按第 1 季归档, season_inferred 留痕
         title, key = _title_and_key(name[:min(cuts)])
-        return ParsedRelease(key, title, KIND_EPISODE, s, start, end)
+        # !season_inferred 必须在此落子: refine_with_files 对 KIND_EPISODE 早退, 不再有
+        # 补标机会(issue 26-11-07-0527 条目2)——「默认 1」不允许无声发生。
+        return ParsedRelease(key, title, KIND_EPISODE, s, start, end, season_inferred=season_inferred)
     if date is not None:
         title, key = _title_and_key(name[:min(cuts)])
         return ParsedRelease(key, title, KIND_DATE, date=date[1])
@@ -449,26 +460,53 @@ def parse_release(name: str) -> ParsedRelease:
     return ParsedRelease(key, title, KIND_UNKNOWN)
 
 
+def _dir_seasons(names: List[str]) -> set:
+    """全部路径的目录段季号集合(段去重后逐段扫 _dir_season)
+
+    经 _files_seasons_eps 被 parse_files(单季归属)与 refine_with_files(多季冲突检测)
+    共用; 目录段先去重再匹配 —— 大合包(上千文件同目录)每 tick 全量重算时正则成本从
+    O(文件数) 降为 O(不同目录段数)。
+    """
+    seasons = set()
+    parts_seen = set()
+    for n in names:
+        parts = (n or "").replace("\\", "/").split("/")
+        for part in parts[:-1]:
+            part = part.strip()
+            if part and part not in parts_seen:
+                parts_seen.add(part)
+                s = _dir_season(part)
+                if s is not None:
+                    seasons.add(s)
+    return seasons
+
+
+def _files_seasons_eps(names: List[str]) -> Tuple[set, List[int]]:
+    """文件列表单次扫描: (目录段季号集合, 集数列表)
+
+    parse_files(坍缩成单季的公开契约)与 refine_with_files(多季冲突判定 + 单季归属)
+    共用这一次扫描, 目录段正则(经 _dir_seasons, 段已去重)对同一输入只跑一遍 ——
+    曾经由 parse_files 先扫一遍、refine_with_files 再为冲突判定对同一 files 重扫一遍,
+    每 tick 每个 season_pack/unknown 种子的目录段正则成本 x2(评审 minor, 2026-11-08)。
+    """
+    from . import episodes as _episodes
+
+    return _dir_seasons(names), _episodes.extract_episodes_from_names(names)
+
+
 def parse_files(names: List[str]) -> Tuple[Optional[int], List[int]]:
     """文件列表(相对路径)兜底: 返回 (季号或None, 集数列表)
 
     - 季号扫**目录段**(Season 01/S01/第1季, 含「季标记 + 发布后缀」如 Season 2 (1080p)),
       文件名部分不参与; 判定口径见 _dir_season;
+    - 目录段季号**全量收集**(旧实现取首个命中即 break): 出现 ≥2 个不同季号(跨目录
+      多季合包, S01/.../S02/...)返回 None —— 每个目录段单独看都是合法单季, 但并起来
+      跨季, 归进先扫到的季会把其余季的集数误并进去(issue 26-11-07-0527 条目3);
     - 集数复用 episodes 的解析(仅视频文件、明确标记、无 bare number)。
     """
-    from . import episodes as _episodes
-
-    season = None
-    for n in names:
-        parts = (n or "").replace("\\", "/").split("/")
-        for part in parts[:-1]:
-            s = _dir_season(part.strip())
-            if s is not None:
-                season = s
-                break
-        if season is not None:
-            break
-    return season, _episodes.extract_episodes_from_names(names)
+    seasons, eps = _files_seasons_eps(names)
+    season = next(iter(seasons)) if len(seasons) == 1 else None
+    return season, eps
 
 
 def _dir_season(part: str) -> Optional[int]:
@@ -499,13 +537,19 @@ def refine_with_files(parsed: ParsedRelease, files: List[str]) -> ParsedRelease:
     已有明确集数/日期的结果不改(名称标记优先于文件推断); 无剧名的结果同样不动。
     名称侧已有季标记的结果季号不改; 名称侧无季标记时, 季号来自文件目录或沿用
     「带集数无季标记按第 1 季」的既有口径, 两种来源都置 season_inferred=True 留痕 ——
-    「解析不到季就默认 1」不允许无声发生(issue 26-10-29-1329-bug-b-r08e03)。
+    「解析不到季就默认 1」不允许无声发生(issue 26-10-29-1329-bug-b-r08e03; 名称侧
+    「带集数无季标记兜底 1」的留痕在 parse_release 落子, 本函数对 KIND_EPISODE 早退)。
+    跨目录多季合包(目录段解出 ≥2 个不同季号)不展开: 集数范围跨季, 并进任何一个单季
+    都是误并(issue 26-11-07-0527 条目3), 整包保持原判定进原桶。
     """
     if parsed.kind in (KIND_EPISODE, KIND_DATE) or not parsed.key:
         return parsed
-    season_f, eps = parse_files(files)
+    seasons, eps = _files_seasons_eps(files)
     if not eps:
         return parsed
+    if len(seasons) > 1:
+        return parsed
+    season_f = next(iter(seasons)) if seasons else None  # 守卫后 seasons ∈ {空, 单季}
     start, end = min(eps), max(eps)
     if parsed.season is not None:
         return replace(parsed, kind=KIND_EPISODE, ep_start=start, ep_end=end if end != start else None)
