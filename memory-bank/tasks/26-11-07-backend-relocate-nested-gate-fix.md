@@ -34,7 +34,7 @@
 |---|---|---|
 | S0 | 建分支+提交计划+立档 | Done(2026-11-07) |
 | S1a | T1a 真机实验(环境核验+E1/E2/E3) | Done(2026-11-07) |
-| S1b | T1b 真机实验(E4-E7+E8 判据模拟) | Open |
+| S1b | T1b 真机实验(E4-E7+E8 判据模拟) | Done(2026-11-07) |
 | S2 | 回炉检查点(P1 结果对照判据) | Open |
 | S3 | T2 纯函数+单测重锚 | Open |
 | S4 | T3 UI 披露实现 | Open |
@@ -66,3 +66,20 @@
 实验机制附注: ①执行入口要求 `config.bt_backup` 表(rm04 模板没有,实验配置已补 56590 便携路径);②daemon 下线窗判定是**全机** qbittorrent.exe 名册口径,窗口期主实例也要 down;③派生配置被产品自动 v5→v6 迁移(带备份,无害);④产品自选 mover(组内序不定),harness 已按回执 mover 适配;⑤X: = subst 虚拟盘符指向 .work/p1exp/xdrive(用户级命令,数据物理仍在 gitignored .work 内,收尾已 subst /d 拆除)。
 
 现场已还原: 双实例 0 种子、save_path 还原、subst 已拆、BT_backup 孤儿 .bak 已清、实例按初见状态停机;`git status` 干净(HEAD a7590059 未动,零产品代码改动)。
+
+### R2 · T1b P1b 真机实验 (2026-11-07)
+
+环境: 同 T1a(环境2,测试实例 56589/56590,qB 5.2.3 Legacy 免鉴权,real.up/real.guard 过,真实种子 0);跨盘符拓扑 = 用户级 subst X: -> `tests-real/.work/p1b/xdrive`(收尾已拆,拆法=`cmd //c "subst X: /D"`,Git Bash 直跑 `subst /D` 会被 MSYS 路径转换吃掉);闸门旁路仍为测试侧启动器进程内 monkeypatch,盘上产品代码零改动。三约束全程未破(不删种/不 skip_check 重加/不读盘哈希校验),生产 26586/16585 与 `I:\PT\`、config.yml、auto-qb-data 零触碰。证据(含脚本 `p1b.py`/`e8_sim.py`)在 `tests-real/.work/p1b/evidence/`(gitignored)。实验全程产品发起 6 次、旁路 3 次,双实例按初见状态停机。
+
+**⚠ 与 §03 推演的差异(置顶;属构造口径澄清,不推翻判据,无回炉)**: E6 计划写的「平铺组 + DIR_ALIAS junction」在产品里**不可达** —— `plan()` 的 exclusive 硬前提要求内容根段非空(`relocate_units.py:203` `exclusive = ... and rel != ""`),平铺组恒 FILE_LINKS,结构性没有 junction 成环面(E6b 实测:平铺反向预检放行 cls=ok + form=file_links)。产品可达的反向成环形态是「非平铺且 save_path 恰 = target/<内容根段名>」(E6a):src_cr = save_path/rel ⊆ dst_cr = target/rel 严格成立。R1 形式化(`_within(src_cr,dst_cr) || _within(dst_cr,src_cr)`)对平铺/非平铺两种形态都拦 —— 判据文本不受影响;E6 改按 E6a 实测坐标实证成环 + E6b 平铺放行取证;E8 矩阵保留「平铺 DIR_ALIAS 反向拦」为 defensive 用例(A6x/B2/B9,标注产品不可达)。
+
+逐 E 结果:
+- **E4 PASS**: 单成员组(单枚 3 文件 e_seed 种子),target=src/待删。L1 现行预检 blocked+gate=nested,文案逐字留证(`e4/precheck_current.json`,「目标位于组成员声明源之下(X:\p1b_e4\src\待删 ⊆ X:\p1b_e4\src)…」)—— 单成员也被拦 = 拦空气实证。L2 旁路发起 started(form=direct,job jr-d0547f3ca7e3):qB 直接搬移落位 target、3 文件原名落位、job done(reason=direct)、alias_paths/alias_kind 空、无 journal 无 spec(无收尾窗口,`e4/job_final.json`)、旧内容根搬空、目标侧零链接、零 recheck(状态时间线 0 异态拍)/零拒载。→ **R1 不该拦 DIRECT 实证成立**;拟议判据下该形态 = R4 confirm(E8 B6)。
+- **E5 PASS**: 8 文件两成员组(同内容异 piece_len),target=旧内容根内 待删2,旁路发起。qB 搬移成功(mover 落位 target,8/8 文件进内容根子目录)→ 建链 RuntimeError「内容根目录非空(X:\p1b_e5\src\e_seed), 目录别名建不出来」(`e5/runtime_error_loglines.json` 2 行,relocate_exec.py:281 形态)→ job armed/alias_partial/attempts=2/last_error 同文案/alias_paths 空(`e5/job_stuck.json`;重建退避 300s,观测窗 100s 不收敛,不等 rebuild_exhausted);旧内容根被待删2 占用(非空),非 mover 声明路径数据缺失(数据随 mover 进子目录)。全程零 recheck。→ **R1 正向必要性实证**:搬后卡死、别名建不出、无法收敛。mover=产品自选 h2(组内序不定,T1a 已知,E5 首跑因盯死 h1 空等 90s 踩中一次,已按回执适配)。
+- **E6 PASS(E6a 非平铺反向成环 + E6b 平铺放行)**: E6b:单文件两成员平铺组,现行预检(无旁路)cls=ok/gates=[]/form=file_links(`e6/e6b_precheck_flat.json`)——闸门对祖先目标盲 + 平铺无 junction 面。E6a:save_path=X:\p1b_e6\e_seed(内容根 e_seed),target=X:\p1b_e6(祖先),**现行闸门零旁路**预检 cls=confirm/form=dir_alias/无 nested 拦截(`e6/e6a_precheck.json` —— `_within` 只判 target ⊆ 锚,对 target ⊇ 源无任何分支可命中)→ 发起 started → qB 搬移成功(rename 进非空父目录失败自动落逐文件拷贝,数据并入 X:\p1b_e6\e_seed)→ 产品自建 junction `X:\p1b_e6\e_seed\e_seed` -> `X:\p1b_e6\e_seed`(旧内容根位 -> 自身祖先;realpath/ino+dev/父位三口径一致,`e6/e6a_cycle_topology.json`)→ 祖先单层列表可见 junction + 8 个新数据文件 → 有界 DFS(深度+步数双上限,绝不递归列举)深度 1 即命中真实目录重复访问 = **成环实证**(`e6a_cycle_topology.json` bounded_walk.cycle)→ job armed(alias=[junction]),经 junction 穿透读文件 OK,成员 progress 1.0,零异态。拆现场:先停产品再 os.rmdir junction(不跟随),后清数据。→ **R1 对称拦(反向)必要性实证成立**。
+- **E7 PASS**: A 组(3 文件 FILE_LINKS)独立目标发起至 armed(3 硬链别名);B 组(不同内容根,同 save_path 根)落点 = srcA\停车(A 声明源之下、A 内容根之外)。L1(无旁路):B 预检被嵌套闸门 job.src 分支拦,文案逐字留证(`e7/B_precheck_blocked.json`,「目标位于在途迁移 job jr-6aa9d7dc9c1b 的声明源之下(X:\p1b_e7\srcA\停车 ⊆ X:\p1b_e7\srcA):该目录现在是活动别名的作用域…」—— FILE_LINKS 形态下「活动别名作用域」的说法与实际不符,即误拦本体)。L2(旁路):R2 替身(进程内直接用产品纯函数 `ru._within`)按 job.scope 锚重算:`_within(job.src,target)=True` -> `_within(job.scope,target)=False`,R3=False => 放行(`e7/r2_sim.json`);B 发起 started,落位 srcA\停车\b_seed 原名;A 别名 3 硬链在位可读、A job 相位/alias_paths 不变、A 内容根 vs B 落点互不嵌套(B ⊄ A.scope)—— 物理互不干扰实证。记账面观察(纯函数):B 停进 A.src 后 `chain_gate_hits(A.src)` 把 B 的 save_path 计入 A 的删链门依赖 —— R2 放行与 T1a 回炉项(删链门 `_chain_gate_deps` 需重锚)叠加,给 P2 补了一个新实证来源(组外停车也会顶进依赖集)。→ **R2 收窄必要性+充分性实证成立**。
+- **E8 PASS(29/29)**: 独立模拟脚本 `tests-real/.work/p1b/e8_sim.py` 按 §03 R1-R5 语义实现拟议判据,`_within/_norm/_join/layout_of/content_root_of/FORM_*/TERMINAL_PHASES` 直接 import 产品 relocate_units(不抄口径);矩阵 29 例 = E2.3 原 8 例按内容根锚重释(A1-A9:子目录/深层/尾斜杠源/兄弟待删2/事故同款 A4x confirm 放行/前缀同串/父目录/大小写平台条件/job src/dst 分支+终态)+ 新形态(B1-B9:DIR_ALIAS 互嵌双向拦以 E5/E6a 真机坐标闭环、dst-above-src 非平铺放行(D6 修正点)、FILE_LINKS 兄弟与深层嵌套放行(R4/R5)、DIRECT 嵌套放行(E4 坐标)、相等=幂等不进判据、平铺正反向)+ R2/R3 矩阵(C1-C6,E7 坐标:scope 收窄翻转/严格嵌套拦/含等于拦/恰等 dst 豁免/终态豁免)。全部与 §03 推演一致,**无回炉项**。过程中替身笔误 2 处(layout_of 实参传了 (名,大小) 元组、R4/R5 实参序反)当场修正,属脚本 bug 非判据问题;A1f(平铺 FILE_LINKS)R4+R5 同触发是 §03 字面语义的正确结果(平铺时链接叶就在声明源=src_cr 内)。现行闸门对照(A4x/B1/C1 现行均 blocked)逐字留证于 `evidence/e8/e8_matrix.json`。
+
+实验机制附注: ①qB 搬移进「已存在非空目录」时走 rename 失败→逐文件拷贝合并路径(E6a 实测),这是反向成环 junction 得以建成的前提,生产同形态(目标=声明源祖先)同理;②E5/E6 的 armed 卡死现场受重建退避 300s 约束,观测窗内只见 attempts 1->2,不等 rebuild_exhausted(全耗尽需 ~15min,不必要);③本机所有实验无 qB 下线窗需求(E4-E7 均止步于 armed/direct,E5 卡死),real.down 仅收尾用。
+
+现场已还原: 双实例 0 种子、save_path 还原(`R:\Download\PTing`)、subst 已拆、.work/rm04 用例目录已清、`.work/p1b` 只留脚本+证据(gitignored)、实例按初见状态停机;`git status` 干净(HEAD 1e5bd695 未动,零产品代码改动)。
