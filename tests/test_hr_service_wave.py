@@ -93,6 +93,12 @@
 - test_downloaded_identity_backfills_row_not_in_index: 永久层身份回填(行不在索引但 downloaded 有记录)
 - test_append_history_swallows_internal_error: 记录历史内部异常降级 WARNING 不外抛, 历史原样
 - test_finish_wave_zero_listing_warn_gated_by_parse_problem: 零行波第二道守卫 —— parse_problem 在场不打 zero_listing 告警
+
+### 存量评审 R4 修复(issue 26-11-07-0527 #2/#9/#13/#14)
+- test_page_fetch_failure_advances_interval_base: 页面级取数失败(无 Retry-After)也前进间隔基准(失败请求也是真实请求), 同波后续档位被 min_interval 拦下
+- test_download_failure_advances_interval_base: .torrent 下载失败(无 Retry-After)也前进间隔基准(mark 调用次数 = 三页成功 + 一次下载失败)
+- test_history_verified_is_releases_signed_not_stock: 拉取历史 verified 记本波签发数(releases_signed), 不记放行记录存量总数
+- test_login_expired_preserves_prev_wave_evidence: 登录过期走让位收尾: 上一波 lanes/fetched_at/expires_at 原样保留, 痕迹落拉取历史
 """
 
 import logging
@@ -690,6 +696,38 @@ def test_channel_quota_lets_wave_yield_and_warns_once(tmp_path):
     assert any("仍生效(已告警过" in m for m in cap.messages)
 
 
+def test_login_expired_preserves_prev_wave_evidence(tmp_path):
+    """登录过期走让位收尾(issue 26-11-07-0527 #14): 上一波挣得的档位覆盖证据(lanes)、
+    fetched_at / wave_ts / expires_at 原样保留 —— 不换成本波全新 lane_states, 不推进
+    新鲜度基准, 与 quota / 无通道路径(_abort_wave)同口径; 登录痕迹落在拉取历史里。"""
+    clock = FakeClock()
+    fetcher = FakeFetcher(pages=standard_pages(rows_b=five_expired_rows(20)))
+    service = make_service(tmp_path, fetcher, clock=clock)
+    assert run_wave(service).action == ACTION_REFRESHED
+    data, _ = service.store(SITE).read_unlocked()
+    wave_ts1, fetched1, expires1 = data.wave.wave_ts, data.fetched_at, data.expires_at
+    lane_b1 = data.wave.lanes["B"]
+    assert lane_b1.ok and lane_b1.full_depth and lane_b1.rows == 5
+    # 下一波 A 档命中登录页
+    fetcher.login_at.add("A")
+    clock.advance(13 * 3600.0)
+    result = run_wave(service)
+    assert result.action == ACTION_ERROR and result.alerted is True
+    data, _ = service.store(SITE).read_unlocked()
+    # 上一波证据原样保留(修复前被本波全新 lane_states 整体替换: B 档 ok/full_depth/rows/wave_ts 全丢)
+    lane_b2 = data.wave.lanes["B"]
+    assert lane_b2.ok and lane_b2.full_depth and lane_b2.rows == 5
+    assert lane_b2.wave_ts == lane_b1.wave_ts
+    assert data.wave.wave_ts == wave_ts1
+    assert data.fetched_at == fetched1, "登录波不推进新鲜度基准(HrLoginExpired: 证据链不会被动)"
+    assert data.expires_at == expires1
+    # 间隔基准照常前进(登录页请求是真实请求), 登录痕迹落拉取历史
+    assert data.rate.last_fetch_ts == clock.now()
+    ev = data.history[-1]
+    assert (ev.kind, ev.trigger, ev.action) == ("wave", "auto", "error")
+    assert any("登录" in n for n in ev.notes), f"登录 note 落拉取历史: {ev.notes}"
+
+
 def test_challenge_page_truncates_wave(tmp_path):
     """挑战页 = 页面取数失败(无 Retry-After) -> 波级 had_error -> ACTION_PARTIAL"""
     clock = FakeClock()
@@ -1007,6 +1045,43 @@ def test_run_downloads_subsecond_retry_after_yields_wave(tmp_path):
     assert data.retry_after_until >= clock.now()
 
 
+def test_page_fetch_failure_advances_interval_base(tmp_path):
+    """页面级取数失败(无 Retry-After)同样前进间隔基准(issue 26-11-07-0527 #2):
+    全档失败的波里唯一的真实请求就是失败的那个 —— last_fetch_ts 必须前进, 且同波
+    后续档位被 min_interval 拦下(修复前失败不 mark, 同波后续档零间隔连发真实请求)。"""
+    clock = FakeClock()
+    fetcher = FakeFetcher(pages=standard_pages(), fail_text_at={"A": "boom", "B": "boom", "C": "boom"})
+    service = make_service(tmp_path, fetcher, gconf=global_conf(min_interval=90.0), clock=clock, sleeper=None)
+    result = run_wave(service, {})
+    data, _ = service.store(SITE).read_unlocked()
+    assert result.action == ACTION_ERROR
+    assert len(fetcher.text_calls) == 1, "首个失败请求后 min_interval 拦下同波后续档位"
+    assert data.rate.last_fetch_ts == clock.now(), "失败的请求也是真实请求: 间隔基准前进(修复前恒 0)"
+
+
+def test_download_failure_advances_interval_base(tmp_path, monkeypatch):
+    """.torrent 下载失败(无 Retry-After)同样前进间隔基准(issue 26-11-07-0527 #2):
+    页面成功本就 mark, 假钟同拍下用 mark 调用次数分辨 —— 不变量: 每个真实请求
+    (成功页面 + 每次下载尝试, 无论成败)各 mark 一次; 修复前下载失败路径不 mark。"""
+    clock = FakeClock()
+    marks = []
+    orig_mark = _Budget.mark
+
+    def _spy_mark(self):
+        marks.append(self._now())
+        orig_mark(self)
+
+    monkeypatch.setattr(_Budget, "mark", _spy_mark)
+    fetcher = FakeFetcher(pages=standard_pages(rows_a=[row(21, "OTHER 21")]), fail_bytes_at={21: "boom"})
+    service = make_service(tmp_path, fetcher, clock=clock)
+    result = run_wave(service, {})
+    data, _ = service.store(SITE).read_unlocked()
+    assert result.torrents_failed >= 1 and data.fails[21].count == result.torrents_failed
+    assert len(marks) == result.pages_fetched + result.torrents_fetched + result.torrents_failed, \
+        "每个真实请求(成功或失败)各前进一次间隔基准"
+    assert marks[-1] == clock.now()
+
+
 def test_finish_wave_meta_and_result_fields(tmp_path):
     """波元数据落盘: wave_ts=本波时刻; 无上波 A 行时 retention_ratio=-1 ∧ retention_ok=True;
     result 汇总字段(lane_texts/verified_count/persisted)如实填写"""
@@ -1020,6 +1095,25 @@ def test_finish_wave_meta_and_result_fields(tmp_path):
     assert result.verified_count == len(data.verified) == 1
     assert "A:" in result.lane_texts and "C:" in result.lane_texts
     assert result.persisted is True
+
+
+def test_history_verified_is_releases_signed_not_stock(tmp_path):
+    """拉取历史 verified 字段口径 = 本波签发放行数(releases_signed), 不是放行记录存量
+    总数(issue 26-11-07-0527 #13): 第二波零签发时历史行记 0, 存量(1)不进历史 ——
+    修复前记 result.verified_count(存量), 累积后每一波都显示同一个大数。"""
+    clock = FakeClock()
+    fetcher = FakeFetcher(pages=standard_pages(rows_b=five_expired_rows(20)))
+    service = make_service(tmp_path, fetcher, clock=clock)
+    result1 = run_wave(service, {"h1": anchor_for("h1", completion_on=T_DONE_NEW)})
+    data, _ = service.store(SITE).read_unlocked()
+    assert result1.releases_signed == 1 and len(data.verified) == 1
+    assert data.history[-1].verified == 1, "本波签发 1 条, 历史行记 1"
+    # 第二波: 零签发, 存量仍是 1 —— 历史行必须记本波签发数 0(修复前记存量 1)
+    clock.advance(13 * 3600.0)
+    result2 = run_wave(service)
+    data, _ = service.store(SITE).read_unlocked()
+    assert len(data.verified) == 1 and result2.releases_signed == 0
+    assert data.history[-1].verified == 0, "历史行记本波签发数, 不记存量总数"
 
 
 def test_finish_wave_releases_signed_includes_observation_exits(tmp_path):

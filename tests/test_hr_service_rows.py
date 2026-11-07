@@ -716,7 +716,7 @@ def test_history_wave_events_six_terminal_states(tmp_path):
     failed_b = [l for l in ev.lanes if l["lane"] == "B"][0]
     assert failed_b["status"] == "failed" and failed_b["pages"] == 0 and "页面取数失败" in failed_b["detail"]
 
-    # 3. login(A 档命中登录页 -> 走 _finish_wave 收尾, 终态 error)
+    # 3. login(A 档命中登录页 -> 走让位收尾(_abort_wave 口径), 终态 error)
     fetcher = FakeFetcher(pages=standard_pages(), login_at={"A"})
     service = make_service(tmp_path / "s3-login", fetcher, clock=FakeClock())
     assert service.refresh_site(SITE, {}).action == ACTION_ERROR

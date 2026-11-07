@@ -34,7 +34,7 @@
 - test_run_pages_js_marks_at_last_page: currentpage==maxpage 即末页(< 而非 <=): 不翻不存在的下一页, 记全深度
 - test_do_wave_channel_stopped_yields_without_history: 被叫停 = 让位不告警: action=WAITING 且不记拉取历史
 - test_do_wave_quota_abort_records_history_and_elapsed: 扩展侧硬上限让位收尾: 记一条 wave 历史, elapsed 落 0
-- test_do_wave_login_expired_marks_error_note_and_alerted: 登录失效: action=ERROR + 告警 + notes 留痕, 波照常收尾不外抛
+- test_do_wave_login_expired_marks_error_note_and_alerted: 登录失效: action=ERROR + 告警 + 拉取历史 notes 留痕, 波照常让位收尾不外抛
 - test_do_wave_fetch_failure_marks_partial_and_lane_failed: 页面取数失败(无 Retry-After): 该档失效截断, 波级降 PARTIAL 并告警
 - test_refresh_locked_dry_run_force_defers_with_history: dry-run(allow_fetch=false)被 force 叫起: 让位 + defer 历史
 - test_lanes_summary_from_display_tags_and_counters: 档位摘要排版单点: [x]/x/- 三态标签、缺失档「无」、计数对平/对不平
@@ -500,7 +500,7 @@ def test_do_wave_quota_abort_records_history_and_elapsed(tmp_path):
 
 
 def test_do_wave_login_expired_marks_error_note_and_alerted(tmp_path):
-    """登录失效: action=ERROR + 告警 + notes 留痕(站点与异常详情都在), 波照常收尾不外抛"""
+    """登录失效: action=ERROR + 告警 + 拉取历史 notes 留痕(站点与异常详情都在), 波照常让位收尾不外抛"""
     clock = FakeClock()
     pages = standard_pages([])
     fetcher = FakeFetcher(pages=pages, login_at={"A"})
@@ -510,8 +510,8 @@ def test_do_wave_login_expired_marks_error_note_and_alerted(tmp_path):
     assert result.alerted is True
     assert "登录" in result.reason
     data, _ = service.store(SITE).read_unlocked()
-    note = next((n for n in data.wave.notes.split("; ") if "登录" in n), "")
-    assert SITE in note and "登录页" in note, f"notes 留痕含站点与异常详情: {note!r}"
+    note = next((n for n in data.history[-1].notes if "登录" in n), "")
+    assert SITE in note and "登录页" in note, f"拉取历史 notes 留痕含站点与异常详情: {note!r}"
 
 
 def test_do_wave_fetch_failure_marks_partial_and_lane_failed(tmp_path):

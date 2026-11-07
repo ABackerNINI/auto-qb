@@ -178,17 +178,19 @@ class WaveMixin:
             return
         except HrLoginExpired as e:
             # 登录失效: 只有人去浏览器登录才会好 —— 不算取数失败。痕迹: 1.一条 WARNING 2.
-            # wave.notes。不动任何数据语义(档位截断 + 周期自然重试, §5.2)。
+            # 拉取历史 notes。不动任何数据语义(档位截断 + 周期自然重试, §5.2)。
             wave.notes.append(events.login_expired_note(site, e))
             self._warn_login(site, e)
             result.action = ACTION_ERROR
             result.reason = str(e)
-            wave.alerted = True  # _finish_wave 会重算 result.alerted, 这里只留信号(见 _WaveContext)
+            result.alerted = True  # 让位收尾不重算 alerted, 产生处直接置位
             # 扩展回传「登录页」时请求确实发出去了: 间隔基准必须前进, 否则登录态恢复前
             # 每轮 poll(60s)都立即重发, 白烧日额还持续刷站点(这条路径不经过页面级 mark)。
             budget.mark()
-            _stamp_elapsed()
-            self._finish_wave(site, site_conf, data, session, result, wave, lane_states, unmatched, trigger=trigger)
+            # 让位收尾与 quota / 无通道路径同口径(_abort_wave 单点, issue 26-11-07-0527 #14):
+            # 不碰 data.wave.lanes / fetched_at —— 上一波挣得的档位覆盖证据与新鲜度基准
+            # 原样保留, 与 fetcher.HrLoginExpired「证据链不会被动」的承诺一致。
+            _abort_wave()
             return
         except HrFetchError as e:
             # 页面取数失败 = 该档证据在此截断(失效点之前有效), 其它档已按档位独立跑完各自的份;
@@ -251,6 +253,10 @@ class WaveMixin:
                     retry_after = float(getattr(e, "retry_after", 0.0) or 0.0)
                     if retry_after > 0:
                         raise  # 站点明确指令等待 → 波级处理(全档让位)
+                    # 失败的请求也是真实请求(与波级 Retry-After 分支同口径, issue
+                    # 26-11-07-0527 #2): 间隔基准照常前进, 否则连续失败时同波内后续
+                    # 档位被即时放行, 零间隔连发真实站点请求, 绕过 min_interval 安全线。
+                    budget.mark()
                     # 页面级失败: 该档在失效点截断(之前有效), 其它档独立继续(§3.4 档位独立)
                     wave.had_error = True
                     wave.notes.append(f"档位 {lane} 页面取数失败: {e}")
@@ -539,6 +545,9 @@ class WaveMixin:
                     # 站点明确指令等待: 与页面同口径上抛波级落 retry_after_until 让位 ——
                     # 计成「种子失败」会把站点限速伪装成种子坏了, 且指令不会落盘。
                     raise
+                # 失败的请求也是真实请求(与页面级失败同口径, issue 26-11-07-0527 #2):
+                # 一批 pending 下载连续失败时, 间隔基准必须逐个前进, 否则同波内零间隔连发。
+                budget.mark()
                 self._note_dl_fail(data, tid, self._now())
                 result.torrents_failed += 1
                 self._persist_step(session)
@@ -628,7 +637,9 @@ class WaveMixin:
                 rows=result.entries if result is not None else 0,
                 torrents_ok=result.torrents_fetched if result is not None else 0,
                 torrents_fail=result.torrents_failed if result is not None else 0,
-                verified=result.verified_count if result is not None else 0,
+                # 口径 = 本波签发放行数(releases_signed), 不是放行记录存量总数
+                #(verified_count 是 len(data.verified) 存量, 会随累积变大; issue 26-11-07-0527 #13)
+                verified=result.releases_signed if result is not None else 0,
                 elapsed_s=result.elapsed_s if result is not None else 0.0,
                 lanes=snapshot,
                 notes=[str(n) for n in (notes or [])][:HISTORY_NOTES_MAX],
