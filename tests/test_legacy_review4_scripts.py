@@ -370,7 +370,13 @@ def test_port_kill_decision_matrix():
     # red check: replay the old kill loop verbatim -- no verification, taskkill for any pid
     def _old_kill_loop(pids, run):
         for pid in sorted(pids):  # old main: listening_pids result fed straight to taskkill
-            run(["taskkill", "/F", "/PID", str(pid)], capture_output=True, text=True)
+            run(
+                ["taskkill", "/F", "/PID", str(pid)],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace"
+            )
 
     issued = []
 

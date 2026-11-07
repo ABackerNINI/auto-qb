@@ -46,7 +46,13 @@ def process_info(pids) -> dict:
         "Select-Object ProcessId,Name,CommandLine; "
         "ConvertTo-Json -InputObject @($r) -Compress"
     )
-    r = subprocess.run(["powershell", "-NoProfile", "-Command", ps], capture_output=True, text=True)
+    r = subprocess.run(
+        ["powershell", "-NoProfile", "-Command", ps],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace"
+    )
     out = (r.stdout or "").strip()
     if r.returncode != 0 or not out:
         return {}
