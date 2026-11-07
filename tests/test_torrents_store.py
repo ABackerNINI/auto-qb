@@ -17,7 +17,8 @@
 - test_store_unbound_client: 未绑定 client 时惰性拉取报错
 - test_store_view_changed_only_for_view_fields: 仅视图字段/成员变化置脏, 其它字段不置脏(downloaded 已进平铺视图)
 - test_store_view_changed_consume: consume_view_changed 读取即复位
-- test_store_update_fields_marks_view_changed: state/save_path 写操作置脏, 标签不置脏
+- test_store_update_fields_marks_view_changed: save_path/tags/category/限速写操作置脏(均为视图展示字段;
+  限速置脏单点在写路径 —— qB 同值增量回流被 apply_delta 短路)
 - test_store_seeding_time_quantized_no_repaint: 做种时长秒级递增不每轮置脏, 跨分钟才置脏
 - test_store_attaches_hr_link: 注入的判定桥挂到新记录上(未注入时不引入 HR 依赖)
 - test_store_extension_fields_dirty_view_and_quantum: 视图纪律(缓存≠展示): 扩展字段已进平铺视图置脏; eta 分钟量化; 非展示字段不置脏
@@ -354,15 +355,21 @@ def test_store_view_changed_consume():
 
 
 def test_store_update_fields_marks_view_changed():
-    """save_path/tags/category 写操作置脏(均为视图展示字段); 限速不置脏
+    """save_path/tags/category/限速写操作置脏(均为视图展示字段)
 
     !A 系 26-10-13-0540 S1 起 `state` 不再是写方法形参(合成回写删除, 视图脏由同步 delta 的
-    `_VIEW_FIELD_SET` 通路驱动), 故本用例的字段面收敛为 save_path/tags/category。
+    `_VIEW_FIELD_SET` 通路驱动), 故本用例的字段面为 save_path/tags/category/限速。
+    限速(up_limit/dl_limit)同为视图展示字段(issue 26-11-07-0527 #4): WebUI 种子列表渲染
+    限速列且 view.py 派生口径未排除二者; 且命令写后 qB 增量同值回流被 apply_delta 的
+    cur==v 短路, 置脏只能发生在写路径自身 —— 漏置 = 已发布视图限速列无限期旧值。
     """
     store = TorrentStore()
     store.refresh([FakeTorrent(hash="H1", state="stalledUP")])
     store.consume_view_changed()
     store.update_torrent_fields("H1", up_limit=1024)
+    assert store.consume_view_changed() is True  # 限速列在视图中: 写后必须重建
+    # qB 增量回流同值: apply_delta 的 cur==v 短路不再置脏 —— 印证置脏单点在写路径
+    store.refresh([FakeTorrent(hash="H1", state="stalledUP", up_limit=1024)])
     assert store.consume_view_changed() is False
     store.update_torrent_fields("H1", tags_add=["x"])
     assert store.consume_view_changed() is True  # 组级共同标签列
@@ -371,7 +378,7 @@ def test_store_update_fields_marks_view_changed():
     store.update_torrent_fields("H1", save_path=r"R:\Other")
     assert store.consume_view_changed() is True
     store.update_torrent_fields("H1", dl_limit=2048)
-    assert store.consume_view_changed() is False  # 限速不参与视图
+    assert store.consume_view_changed() is True  # 限速列在视图中: 写后必须重建
 
 
 def test_store_reset_runtime_marks_view_changed():

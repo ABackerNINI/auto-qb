@@ -354,7 +354,11 @@ class TransferOrchestrator:
 
         failure = self._verify(adapter, source_hash)
         if failure is not None:
-            return TorrentTransferResult(hash_, failure.status, _join_notes(failure.reason, "源已保留"), failure.code)
+            # add 已受理 = 目标侧该种子已在: 验证失败回执保留添加受理详情与降级注明
+            # (issue 26-11-07-0527 #21), 不只报验证结果 —— 否则用户无从知道目标侧已有该种子
+            return TorrentTransferResult(
+                hash_, failure.status, _join_notes(reason, failure.reason, "源已保留"), failure.code
+            )
 
         note = ""
         if target.after_state == "paused":

@@ -161,7 +161,7 @@ class TorrentStore:
         # (与 state_snapshot 同级, state.json 无相关键)。语义 = 「本程序刚下发过停/起/暂停/恢复,
         # qB 缓存尚未回流, 快照对暂停轴仍陈旧」—— 校验类决策(跳检闸门/决策链/D-1 队列闸门)据此
         # 延迟到下一 tick, 收回 G4/G6 的「陈旧-放行 ⇒ 脏数据洗白」窗口。三处清理:
-        # ① 同步应用到该 hash 新 state 时逐出; ② 种子删除时清理; ③ TTL 兜底(_OWN_WRITE_TTL)。
+        # 1. 同步应用到该 hash 新 state 时逐出; 2. 种子删除时清理; 3. TTL 兜底(_OWN_WRITE_TTL)。
         self.own_writes: Dict[str, float] = {}
         self.download_conflict_warned: Set[Tuple[Any, str]] = set()
         # 跨组文件交叉检测的去重集合(plan 26-10-04-0107 S3): (组key_a, 组key_b) 规范序组对 ——
@@ -808,9 +808,15 @@ class TorrentStore:
         """
         hashes = [torrent_hashes] if isinstance(torrent_hashes, str) else list(torrent_hashes or [])
         tags_changed = tags_add is not None or tags_remove is not None
-        # save_path/tags/category 均为视图展示字段(组级共同标签/分类列): 写操作后视图需重建;
-        # 限速(up_limit/dl_limit)不参与视图, 不置脏
-        if save_path is not None or tags_changed or category is not None:
+        # save_path/tags/category/限速(up_limit/dl_limit)均为视图展示字段(组级共同标签/分类列;
+        # 限速列 WebUI 种子列表渲染, view.py 派生口径未排除二者): 写操作后视图需重建。
+        # 置脏只能发生在本写路径: 命令写后 qB 增量回流同值被 apply_delta 的 cur==v 短路,
+        # 漏置 = 已发布视图的限速列无限期显示旧值(issue 26-11-07-0527 #4)。
+        touches_view = (
+            save_path is not None or tags_changed or category is not None or up_limit is not None or
+            dl_limit is not None
+        )
+        if touches_view:
             self.view_changed = True
         for h in hashes:
             torrent = self.by_hash.get(h)

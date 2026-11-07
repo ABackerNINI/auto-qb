@@ -12,6 +12,8 @@
 - test_skip_check_disabled_always_false: 跳检关 -> 完成与否恒 skip_check=False 且无降级注明
 - test_verify_success_on_hash_appearance: 第 N 轮才查到 + 正常态 -> 成功并删源(轮询生效, 期间有 sleep)
 - test_verify_timeout_keeps_source: 目标恒查无 -> 验证超时失败, 源保留, sleep 按 poll_interval 节拍
+- test_verify_failure_keeps_add_receipt_details: 验证失败回执保留 add 受理详情与降级注明
+  (issue 26-11-07-0527 #21): 目标侧该种子已随 add 受理, 回执按 添加详情/验证失败/源已保留 全链拼装
 - test_verify_target_error_state: 目标 error / missingFiles 态 -> TARGET_ERROR 失败, 源保留
 - test_verify_unsupported_adapter: 适配器无 find_torrent 扩展点 -> VERIFY_UNSUPPORTED, 不删源
 - test_duplicate_skips_and_keeps_source: 已存在(SKIPPED) -> 结果跳过 + DUPLICATE, 源保留
@@ -335,6 +337,28 @@ def test_verify_timeout_keeps_source(monkeypatch):
     assert qb.deletions == []  # 源保留
     # verify_timeout=1.0 / poll_interval=0.25 -> 恰 4 拍后判超时(不真等)
     assert sleeps == [0.25] * 4
+
+
+def test_verify_failure_keeps_add_receipt_details(monkeypatch):
+    """验证失败回执保留 add 受理详情与降级注明(issue 26-11-07-0527 #21)
+
+    目标侧该种子已随 add 受理落地: 回执若只报"验证超时...源已保留", 用户无从知道
+    目标侧已有该种子(重试虽安全落 DUPLICATE 跳过, 信息面仍误导)。reason 须按
+    添加受理详情 -> 降级注明 -> 验证失败 -> 源已保留 全链拼装, 不丢前置段。
+    """
+    qb = _FakeQbApi(torrents={HASH_A.lower(): _full_torrent(progress=0.5)})  # 未完成 -> 降级校验添加
+    adapter = _FakeAdapter(
+        add_results=[AddResult.added("目标已受理(成功 1 / 失败 0 / 待定 0)")],
+        find_sequence=[],  # 恒查无 -> 验证超时
+    )
+    results, _ = _run(monkeypatch, qb, _make_target(skip_check=True), [HASH_A], adapter=adapter)
+    assert results[0].status is TransferStatus.FAILED
+    assert results[0].code is TransferOutcomeCode.VERIFY_TIMEOUT
+    assert "目标已受理(成功 1 / 失败 0 / 待定 0)" in results[0].reason  # add 受理详情保留
+    assert "未完成, 已自动改为校验添加" in results[0].reason  # 降级注明保留
+    assert "验证超时" in results[0].reason  # 验证失败原因仍在
+    assert "源已保留" in results[0].reason
+    assert qb.deletions == []  # 源保留
 
 
 @pytest.mark.parametrize("state", ["error", "missingFiles"])
