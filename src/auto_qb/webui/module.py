@@ -164,14 +164,14 @@ class WebUIModule(BaseModule):
     # ---------- 热重载(_apply_web_config 语义迁入, plan P2) ----------
 
     def apply(self, old, new) -> ApplyResult:
-        # ① 视图置脏: 视图含配置派生展示值(HR 标签模板如 ${required_seeding_time} 等),
+        # 1. 视图置脏: 视图含配置派生展示值(HR 标签模板如 ${required_seeding_time} 等),
         #    任何配置差异都可能改变展示内容 —— 有差异即置脏, 不限于本模块认领的 web 段
         #    (plan §4.3「webui.apply 不能完全短路」); 零差异保存无需重建
         if old is not new and old != new:
             # full 降级源(plan 26-10-07-0414 S2 R11): 配置热重载改写配置派生展示值,
             # 无法归约为行级脏 -> 落代时该代标 full
             self._manager.web.mark_dirty(full=True, reason="config_reload")
-        # ② 服务器: 仅"监听身份"(enabled/host/port)变化才重启 —— 改个日志级别也拆服务器
+        # 2. 服务器: 仅"监听身份"(enabled/host/port)变化才重启 —— 改个日志级别也拆服务器
         #    会白白放大端口竞态窗口; 重启必须"先停旧服务并等其线程退出"再启新(uvicorn 的
         #    should_exit 是异步生效的, 直接重启会与新服务竞抢端口 -> WinError 10048)
         old_web, new_web = old.web, new.web

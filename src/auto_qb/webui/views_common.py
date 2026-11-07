@@ -60,8 +60,8 @@ def _parse_query(q: str) -> Tuple[List[str], List[str]]:
 
 # tracker 健康取数(计划 26-10-19-2007 S1): qB torrents/info **不含**错误文本, 报错原因与站点
 # 健康都只能从 torrents/trackers 的 msg 取。**一个取数入口、两个消费方**:
-#   ① error 态种子的展示原因(状态列"错误"背后的具体原因, ERROR_REASON_TTL 控制重取间隔)
-#   ② 站点 chip 左槽的健康图标(缺配置 / tracker 报错, 见 site_alert)
+#   1. error 态种子的展示原因(状态列"错误"背后的具体原因, ERROR_REASON_TTL 控制重取间隔)
+#   2. 站点 chip 左槽的健康图标(缺配置 / tracker 报错, 见 site_alert)
 # 两套机制共用同一次 /trackers 调用 —— 否则 error 态种子会被各查一次(计划 §3.2 aside)。
 # !qB **无批量接口**, 只能逐种子 GET /torrents/trackers; 故全库轮转靠预算 + TTL 摊开。
 TRACKER_HEALTH_BUDGET = 20  # 每 tick 最多发起的 /trackers 请求数(S0 实测 0.38ms/次 -> 20 条约 7.5ms, 占 1.5s tick 的 0.5%)

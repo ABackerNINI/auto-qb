@@ -40,26 +40,26 @@ class TorrentsMixin:
 
         !!消解等待模型(plan 26-10-31-2354 D1/D2/D3; 事故 issue 26-10-31-1740): updating(旧版
         API 的 status==3 同义)在 announce 请求**发出前置位**(libtorrent torrent.cpp:3571),
-        对成败零信息量 —— **任何模式下 updating 都不构成成功证据**。旧分支②「在途直证」是
+        对成败零信息量 —— **任何模式下 updating 都不构成成功证据**。旧分支 2.「在途直证」是
         死端口 tracker +1ms 假 ok 的事故根源, 已全域废除; 判定等 updating 消解:
-          成功 -> ③″ working 转换 / ③ epoch 前跳(正证据);
-          失败 -> ④′ status 4/5/6 + msg(死端口 RST 立即落地, 不等超时/重试);
+          成功 -> 3" working 转换 / 3. epoch 前跳(正证据);
+          失败 -> 4' status 4/5/6 + msg(死端口 RST 立即落地, 不等超时/重试);
           消解不了 -> pending 到 deadline 由轮询侧落「未确认」诚实标签。
 
-        逐行判定, 任一行命中即结论(①stopped 在轮询侧直判不进本函数):
-          ④′ status in {4,5,6} 且 msg 非空 -> rejected(tracker 拒绝, 唯一可靠否定信号;
-             qB 5.x 枚举细分 TrackerError=5/Unreachable=6, 旧版只产 4; **逐行先于③″③判** ——
+        逐行判定, 任一行命中即结论(1. stopped 在轮询侧直判不进本函数):
+          4' status in {4,5,6} 且 msg 非空 -> rejected(tracker 拒绝, 唯一可靠否定信号;
+             qB 5.x 枚举细分 TrackerError=5/Unreachable=6, 旧版只产 4; **逐行先于 3"/3. 判** ——
              libtorrent failed() 按退避改写 next, 顺序反了会把重试排程误判成成功);
              status 4/5/6 但 msg 空 -> 不判败(歧义保守落 pending);
-          ③″ status==2 且基线 status 非 None 非 2 -> confirmed(「tracker 状态转为 working」;
+          3" status==2 且基线 status 非 None 非 2 -> confirmed(「tracker 状态转为 working」;
              失败路径产不出 working(qB 侧 verified && fails==0 才置 2), 强正证据; 从未联系行/
              曾失败行的唯一成功出口, plan D6);
-          ③  (epoch 行) next > b_next + tol -> confirmed(主判据; 判定域限基线 status>=2 且
+          3. (epoch 行) next > b_next + tol -> confirmed(主判据; 判定域限基线 status>=2 且
              b_next 非空, 规避未联系行 epoch 极值假前跳; 基线 min 同向前跳写入 reason 佐证,
              不作必要条件 —— min_announce 在请求发出时即赋值(torrent.cpp:3572), 不是干净的成功信号);
           其余 -> pending("")(含 updating/status==3 在途、min 窗口假瞬态、无变化行)。
 
-        legacy 行(基线行无 next, qB < 5.2)与 epoch 行共用④′③″, 区别只在无③前跳判据
+        legacy 行(基线行无 next, qB < 5.2)与 epoch 行共用 4'/3", 区别只在无 3. 前跳判据
         (成功难证、失败可证); 超时由轮询侧落「未确认(旧版 qB 无 epoch 字段)」, 不假称成功
         —— 与 pitfalls/backend/effect-confirmation.md 的证据门控口径一致, 回执语义只承诺
         诚实标签。
@@ -76,16 +76,16 @@ class TorrentsMixin:
             b_min = b.get("min")
             status = t.get("status")
             msg = t.get("msg") or ""
-            # ④′ 失败(tracker 拒绝, 唯一可靠否定信号; 两个模式同判, msg 空不武断判败;
-            #    逐行先于③″③判 —— 失败退避同样前跳 next, 顺序反了会把重试排程误判成成功)
+            # 4' 失败(tracker 拒绝, 唯一可靠否定信号; 两个模式同判, msg 空不武断判败;
+            #    逐行先于 3"/3. 判 —— 失败退避同样前跳 next, 顺序反了会把重试排程误判成成功)
             if status in (4, 5, 6) and msg:
                 return "rejected", RC_FAIL_PREFIX + msg
-            # ③″ 成功正证据: 状态转为 working(失败路径产不出 working; plan D6; 原 legacy ③′ 收编)
+            # 3" 成功正证据: 状态转为 working(失败路径产不出 working; plan D6; 原 legacy 3' 收编)
             if status == 2 and b_status is not None and b_status != 2:
                 return "confirmed", "tracker 状态转为 working"
             if b_next is None:
-                continue  # legacy 行: 无前跳判据(②在途直证已废, plan D3)
-            # ③ 主判据: epoch 前跳(判定域限基线 status>=2 且 b_next 非空)
+                continue  # legacy 行: 无前跳判据(2. 在途直证已废, plan D3)
+            # 3. 主判据: epoch 前跳(判定域限基线 status>=2 且 b_next 非空)
             na = t.get("next_announce")
             if na is not None and b_status is not None and b_status >= 2 and na > b_next + tol:
                 reason = f"epoch 前跳 +{na - b_next:.0f}s"
