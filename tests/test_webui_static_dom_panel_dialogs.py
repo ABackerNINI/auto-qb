@@ -720,15 +720,16 @@ def test_frontend_add_torrent_partial_receipt_wiring():
         "submitAddTorrent 缺 r.status === \"warn\" 分支 —— 部分受理被 error 化, 窗口不消失(2026-10-18 报障)"
     )
     # 2. warn 分支: 关窗 + warn 类 toast(详情由后端文案带出, 见 commands.py 三态回执)
-    warn_branch = re.search(r'\} else if \(r\.status === "warn"\) \{(.*?)\n        \} else \{', body, re.S)
+    # (缩进锚 10 空格: R4 存量评审 P04 把提交闸 addSubmitting 前置、整个提交段外包 try/finally, 缩进 +2)
+    warn_branch = re.search(r'\} else if \(r\.status === "warn"\) \{(.*?)\n          \} else \{', body, re.S)
     assert warn_branch, "warn 分支结构被改写(else if 链形状变了? 同步本守阵)"
     assert "this.addOpen = false" in warn_branch.group(1), ("warn 分支不关窗 —— 部分受理时添加窗口仍留在前台(本案报障原状)")
     assert '"warn", 8000' in warn_branch.group(1), ("warn 分支未以 warn 类 toast 给出部分失败详情(TOAST_MS_FLOOR: warn 停留下限 8s)")
     # 3. ok 分支保持关窗
-    ok_branch = re.search(r"if \(r\.ok\) \{(.*?)\n        \} else if", body, re.S)
+    ok_branch = re.search(r"if \(r\.ok\) \{(.*?)\n          \} else if", body, re.S)
     assert ok_branch and "this.addOpen = false" in ok_branch.group(1), "ok 分支不关窗(全受理时窗口应消失)"
     # 4. error(全拒)分支不得关窗
-    err_branch = re.search(r"\n        \} else \{\n(.*?)\n        \}", body, re.S)
+    err_branch = re.search(r"\n          \} else \{\n(.*?)\n          \}", body, re.S)
     assert err_branch, "submitAddTorrent 找不到末尾 else(全拒)分支"
     assert "addOpen" not in err_branch.group(1), ("error(全拒)分支关了窗 —— 那一份文件/链接原样没进 qB, 关窗用户就没法改完重提了")
 

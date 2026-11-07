@@ -395,7 +395,9 @@ window.AQB_ADD = {
           body: JSON.stringify({ path: this.dirBrowse.path, name }),
         });
         this.dirBrowse.newName = "";
-        await this.loadDir(r.path || this.dirBrowse.path);
+        // mkdir 回执只有 {created, existed}(routes/fs.py 两处 return 均无 path 键) ——
+        // 旧代码 r.path 恒 undefined 恒走旧路径兜底, 新建后永远不跳进新目录; created 正是新目录归一化路径
+        await this.loadDir(r.created || this.dirBrowse.path);
         this.toast(`已新建文件夹: 「${r.created}」已创建`, "ok", 3000);
       } catch (e) {
         if (!e.auth) this.toast("新建文件夹失败: " + e.message, "error", 8000);
@@ -664,55 +666,62 @@ window.AQB_ADD = {
     },
     async submitAddTorrent() {
       if (!this.addCanSubmit) return;
-      if (!(await this._relocateAddGate())) return;  // 落点预检: 取消则整个不提交
-      // .torrent 读取为 base64 随 JSON 提交(后端解码后 bytes 内存直传 qB —— 零临时文件零新依赖)
-      const filesB64 = [];
-      for (const f of this.addFiles) {
-        filesB64.push(
-          await new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () => {
-              const result = String(reader.result || "");
-              resolve(result.includes(",") ? result.slice(result.indexOf(",") + 1) : result);
-            };
-            reader.onerror = () => reject(new Error(`无法读取文件: ${f.name}`));
-            reader.readAsDataURL(f);
-          })
-        );
-      }
-      const payload = {
-        files_b64: filesB64,
-        urls: this.addUrls.split("\n").map((u) => u.trim()).filter(Boolean),
-        save_path: this.addSavePath.trim(),
-        category: this.addCategory.trim(),
-        tags: this.addTags.split(",").map((t) => t.trim()).filter(Boolean),
-        paused: !this.addStart,  // DLG-03: 「添加后开始」勾选 = 立即开始; 默认不勾 = paused 添加
-        skip_checking: this.addSkipCheck,
-        sequential: this.addSequential,
-        first_last_piece_prio: this.addFirstLast,
-        auto_tmm: this.addTmm,
-      };
+      /* 提交闸前置(R5#130): 落点预检的网络往返(_relocateAddGate 内 POST + waitCmd 最长 20s)
+       * 与逐文件 FileReader 是两段长 await —— 闸若等它们走完才落下, 窗口内 addCanSubmit 仍为真,
+       * 双击/连点提交按钮会并发两次 POST /api/torrents/add(同一批文件/链接重复入 qB,
+       * 违反幂等黄金法则)。复位收口在函数唯一的 finally: 预检取消 return / 读文件抛错 /
+       * 提交成败各路径都经它复位, 无遗漏分支(提前 return 逐一核对此处)。 */
       this.addSubmitting = true;
       try {
-        // JSON 提交(this.api() 恒置 Content-Type: application/json, 见 auth.js _request)
-        const queued = await this.api("/api/torrents/add", { method: "POST", body: JSON.stringify(payload) });
-        const r = await this.waitCmd(queued.cmd_id);
-        if (r.ok) {
-          this.toast("添加种子已受理, 列表稍后自动刷新", "ok", 4000);
-          this.addOpen = false;
-        } else if (r.status === "warn") {
-          /* 部分受理(2026-10-18 报障「部分种子添加失败(已存在)时添加窗口不消失」):
-           * qB 已把其中一部分加进去了(其余多为"已存在"被拒) —— 与"全部未接受"是两回事。
-           * 窗口按已受理收口(关闭), 明细进 warn toast(后端文案已带"成功 N / 失败 M"计数,
-           * 见 commands.py::_cmd_add_torrents 三态回执); 想补提剩下的再开窗即可。
-           * 只有全拒(error)才保留窗口: 那一份文件/链接原样没进 qB, 留着改完能直接重提。 */
-          this.toast(`部分种子未添加: ${r.error}, 列表稍后自动刷新`, "warn", 8000);
-          this.addOpen = false;
-        } else {
-          this.toast(`添加种子失败: ${r.error}`, "error", 8000);
+        if (!(await this._relocateAddGate())) return;  // 落点预检: 取消则整个不提交
+        // .torrent 读取为 base64 随 JSON 提交(后端解码后 bytes 内存直传 qB —— 零临时文件零新依赖)
+        const filesB64 = [];
+        for (const f of this.addFiles) {
+          filesB64.push(
+            await new Promise((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onload = () => {
+                const result = String(reader.result || "");
+                resolve(result.includes(",") ? result.slice(result.indexOf(",") + 1) : result);
+              };
+              reader.onerror = () => reject(new Error(`无法读取文件: ${f.name}`));
+              reader.readAsDataURL(f);
+            })
+          );
         }
-      } catch (e) {
-        if (!e.auth) this.toast("添加种子失败: " + e.message, "error", 8000);
+        const payload = {
+          files_b64: filesB64,
+          urls: this.addUrls.split("\n").map((u) => u.trim()).filter(Boolean),
+          save_path: this.addSavePath.trim(),
+          category: this.addCategory.trim(),
+          tags: this.addTags.split(",").map((t) => t.trim()).filter(Boolean),
+          paused: !this.addStart,  // DLG-03: 「添加后开始」勾选 = 立即开始; 默认不勾 = paused 添加
+          skip_checking: this.addSkipCheck,
+          sequential: this.addSequential,
+          first_last_piece_prio: this.addFirstLast,
+          auto_tmm: this.addTmm,
+        };
+        try {
+          // JSON 提交(this.api() 恒置 Content-Type: application/json, 见 auth.js _request)
+          const queued = await this.api("/api/torrents/add", { method: "POST", body: JSON.stringify(payload) });
+          const r = await this.waitCmd(queued.cmd_id);
+          if (r.ok) {
+            this.toast("添加种子已受理, 列表稍后自动刷新", "ok", 4000);
+            this.addOpen = false;
+          } else if (r.status === "warn") {
+            /* 部分受理(2026-10-18 报障「部分种子添加失败(已存在)时添加窗口不消失」):
+             * qB 已把其中一部分加进去了(其余多为"已存在"被拒) —— 与"全部未接受"是两回事。
+             * 窗口按已受理收口(关闭), 明细进 warn toast(后端文案已带"成功 N / 失败 M"计数,
+             * 见 commands.py::_cmd_add_torrents 三态回执); 想补提剩下的再开窗即可。
+             * 只有全拒(error)才保留窗口: 那一份文件/链接原样没进 qB, 留着改完能直接重提。 */
+            this.toast(`部分种子未添加: ${r.error}, 列表稍后自动刷新`, "warn", 8000);
+            this.addOpen = false;
+          } else {
+            this.toast(`添加种子失败: ${r.error}`, "error", 8000);
+          }
+        } catch (e) {
+          if (!e.auth) this.toast("添加种子失败: " + e.message, "error", 8000);
+        }
       } finally {
         this.addSubmitting = false;
       }
