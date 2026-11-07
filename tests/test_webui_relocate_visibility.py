@@ -6,6 +6,9 @@
 - test_origin_roundtrip_and_legacy_unknown: web/rule/cli origin 落账回读; 旧 state 条目缺 origin 回落 unknown
 - test_snapshot_prefers_active_job_over_old_terminal: 同 hash 活跃新 job 取代终态旧 job, 快照换代并置 full 脏
 - test_group_relocate_priority_mixed_and_order_independent: 组级 failed>moving>pending_finalize>done、同优先级多 job 记 mixed、pending/total/job_ids/dst、成员顺序无关、全 cancelled 为 None
+- test_group_relocate_src_unique_when_all_members_agree: 组级 src 全组一致(去重唯一非空值)给该值, mixed 不影响
+- test_group_relocate_src_empty_when_conflicting: 组内两个不同 src => ""
+- test_group_relocate_src_empty_when_no_member_has_src: 全部标注 src 空串 => ""
 - test_relocate_null_when_disabled_or_no_jobs: relocate 关 / 无 job(含旧 state 无 relocate 段) => relocate 字段 null
 - test_view_build_does_not_probe_filesystem_or_iterate_jobs: 列表构建期不 lstat/stat/readlink/islink, 不遍历 _jobs
 - test_decorate_fingerprint_includes_relocate: decorate.js 成员/组 relocate 签名进指纹且槽位长度同步
@@ -35,6 +38,7 @@ def _job(
     hashes=("HA", "HB"),
     *,
     mover: str = "HA",
+    src: str = r"R:\src",
     phase: str = ru.PHASE_MOVING,
     origin: str = "web",
     updated_at: float = 1.0,
@@ -45,7 +49,7 @@ def _job(
         job_id=job_id,
         hashes=tuple(hashes),
         mover=mover,
-        src=r"R:\src",
+        src=src,
         dst=r"R:\dst",
         scope=r"R:\src",
         alias_kind="file" if alias_paths else "",
@@ -172,6 +176,52 @@ def test_group_relocate_priority_mixed_and_order_independent(tmp_path):
     # 全 cancelled => 无组级标注
     mod.register_job(_job("j_done", phase=ru.PHASE_CANCELLED, updated_at=9.0))
     assert env.mgr._build_group_row(key, members, set())["relocate"] is None
+
+
+def test_group_relocate_src_unique_when_all_members_agree(tmp_path):
+    """组级 src 聚合(plan 26-11-07-2344 S1): 全组一致(恰 1 个非空去重值) => 该值"""
+    env = relocate_env(tmp_path)
+    mod = env.mgr.ctx.relocate
+    key = next(iter(env.mgr.store.groups))
+    members = [env.mgr.store.by_hash[h] for h in env.mgr.store.groups[key]]
+
+    # 单 job 覆盖全组 => 两成员标注同 src
+    mod.register_job(_job("j1", phase=ru.PHASE_MOVING, src=r"R:\from", updated_at=2.0))
+    row = env.mgr._build_group_row(key, members, set())
+    assert row["relocate"]["src"] == r"R:\from"
+
+    # 两个不同 job 但 src 相同 => 去重后仍唯一(state mixed 不影响 src 聚合)
+    mod.register_job(_job("j2", hashes=("HA", ), phase=ru.PHASE_MOVING, src=r"R:\from", updated_at=3.0))
+    row = env.mgr._build_group_row(key, members, set())
+    assert row["relocate"]["state"] == "mixed"
+    assert row["relocate"]["src"] == r"R:\from", "src 去重唯一即给值, 与 state 是否 mixed 无关"
+
+
+def test_group_relocate_src_empty_when_conflicting(tmp_path):
+    """组级 src 聚合: 组内出现两个不同 src => ""(不一致不给值)"""
+    env = relocate_env(tmp_path)
+    mod = env.mgr.ctx.relocate
+    key = next(iter(env.mgr.store.groups))
+    members = [env.mgr.store.by_hash[h] for h in env.mgr.store.groups[key]]
+
+    mod.register_job(_job("j_a", hashes=("HA", ), phase=ru.PHASE_MOVING, src=r"R:\a", updated_at=2.0))
+    mod.register_job(_job("j_b", hashes=("HB", ), phase=ru.PHASE_MOVING, src=r"R:\b", updated_at=3.0))
+    row = env.mgr._build_group_row(key, members, set())
+    assert row["relocate"]["src"] == ""
+    assert row["relocate"]["job_ids"] == ["j_a", "j_b"], "src 缺席不影响其余聚合字段"
+
+
+def test_group_relocate_src_empty_when_no_member_has_src(tmp_path):
+    """组级 src 聚合: 全部标注无 src(空串) => ""(全缺失不给值)"""
+    env = relocate_env(tmp_path)
+    mod = env.mgr.ctx.relocate
+    key = next(iter(env.mgr.store.groups))
+    members = [env.mgr.store.by_hash[h] for h in env.mgr.store.groups[key]]
+
+    mod.register_job(_job("j1", phase=ru.PHASE_MOVING, src="", updated_at=2.0))
+    row = env.mgr._build_group_row(key, members, set())
+    assert row["relocate"] is not None and row["relocate"]["state"] == "moving"
+    assert row["relocate"]["src"] == ""
 
 
 def test_relocate_null_when_disabled_or_no_jobs(tmp_path):

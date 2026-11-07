@@ -74,6 +74,8 @@ def group_relocate(members: Sequence[dict]) -> Optional[dict]:
     - state: 成员标注的最高优先级状态; 同一优先级出现多个不同 job_id -> "mixed"
     - pending / total: 非终态成员数 / 组内成员总数(按成员计, 同一 job 覆盖多个成员时逐成员计入)
     - job_ids / dst: 全组涉及的非撤销 job 去重排序
+    - src: 成员标注 src 的去重唯一值 —— 全组一致(恰 1 个非空去重值)为该值; 不一致(>1)
+      或全缺失(0)为 ""。mixed(state)时 src 语义上不被消费(前端回落单排), 仍按同一规则给值。
     全组无标注(无 job / 全部 cancelled / relocate 关) -> None。
     """
     annotations = [m.get("relocate") for m in members if m.get("relocate")]
@@ -83,6 +85,8 @@ def group_relocate(members: Sequence[dict]) -> Optional[dict]:
     top_priority = max(_PRIORITY.get(a.get("state"), 0) for a in annotations)
     top = [a for a in annotations if _PRIORITY.get(a.get("state"), 0) == top_priority]
     state = str(top[0]["state"]) if len({a.get("job_id") for a in top}) == 1 else "mixed"
+    srcs = {str(a.get("src") or "") for a in annotations}
+    srcs.discard("")
     return {
         "state": state,
         "pending": sum(1 for a in annotations if a.get("state") in _ACTIVE_STATES),
@@ -91,5 +95,6 @@ def group_relocate(members: Sequence[dict]) -> Optional[dict]:
                            for a in annotations}),
         "dst": sorted({str(a.get("dst") or "")
                        for a in annotations if a.get("dst")}),
+        "src": next(iter(srcs)) if len(srcs) == 1 else "",
         "updated_at": max(float(a.get("updated_at") or 0.0) for a in annotations),
     }
