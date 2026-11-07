@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>R4-static 清池清单外发现汇总(13 子项, 修复批记录未修) · bug · 计划外问题</title>
+<meta name="issue-slug" content="r4-static-cleanup-extras">
+<meta name="issue-stamp" content="26-11-08-0229">
+<meta name="issue-type" content="bug">
+<meta name="doc-topic" content="legacy-review4">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="R4-static 清池清单外发现汇总(13 子项, 修复批记录未修)">
+<meta name="issue-summary" content="R4 static 主题清池(P01-P16)各批记录的清单外发现 13 子项聚合入池: dialogs 注释失实族/契约层 -1 裸拼/aria-expanded 陈旧/非ASCII注释存量等, 全部未动待认领">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --mark: #161e26;     /* issue 特有: callout 底色 (plan.html 不用) */
+    --warn-bg: #2a2119;  /* issue 特有: 状态徽标底色 */
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 单栏流式版面: 与 plan.html 同一套 .sheet (封顶 1280px, 侧距 clamp(18~44px)); 旧双栏+粘性目录已删 */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+
+  /* 封面 meta 行: issue 特有, DOM 形态别改 —— 状态徽标 <span class="badge"> 被
+     flip_status (W4) 与 check_status_drift 的 BADGE_RE 机读 (k/v div 结构在判据里) */
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px 28px; font-family: var(--mono); font-size: 11.5px; color: var(--faint); border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta-row .item .k { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .meta-row .item .v { font-size: 13.5px; color: var(--dim); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin: 14px 0; font-size: 14px; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-family: var(--mono); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">计划外问题（未修）· bug</div>
+<h1>R4-static 清池清单外发现汇总(13 子项, 修复批记录未修)</h1>
+<p class="lede">R4 static 主题清池(P01-P16)各批记录的清单外发现 13 子项聚合入池: dialogs 注释失实族/契约层 -1 裸拼/aria-expanded 陈旧/非ASCII注释存量等, 全部未动待认领</p>
+<div class="meta-row">
+  <div class="item"><div class="k">编号</div><div class="v">26-11-08-0229-bug-r4-static-cleanup-extras</div></div>
+  <div class="item"><div class="k">报告时间</div><div class="v">2026-11-08 02:29</div></div>
+  <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">涉及模块</div><div class="v">webui-static</div></div>
+  <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+</div>
+
+<section id="s1">
+  <h2><span class="no">§01</span>现象与发现场景</h2>
+  <p>本件为 <strong>R4 存量评审 static 主题清池</strong>（issue 26-11-07-0536-static，16 笔提交 <code>cbd72097..9760fa64</code>，分支 fix/legacy-review4-static 已合入本地 develop）各批次实施报告中按<strong>范围守恒（黄金法则 6）</strong>记录、**未动一行**的清单外发现聚合件。来源：P01-P14 十四批实施代理的「清单外发现（只记录未改）」节 + 终审三面评审（R1/R2/R3）与增量轮的新发现记录。共 <strong>13 子项</strong>，严重度 major 0 / minor 7 / nit 6；全部经报告归因，未复跑锚点（认领时先复验）。子项按域排列，认领时建议按文件聚类一次修完。</p>
+</section>
+
+<section id="s2">
+  <h2><span class="no">§02</span>证据</h2>
+  <p class="hint">贴原文（报错 / 日志 / 命令输出），不转述；附取证时间，让读者自己判断新鲜度。</p>
+  <p class="hint">下表由各批实施/评审报告汇总誊写（取证时点 2026-11-07/08，P01-P16 批次报告原文）；行号为各报告记录时点行号，认领时按符号与 grep 重定位。「来源」列 = 批次/评审轮。</p>
+  <table>
+    <tr><th>#</th><th>sev</th><th>位置（报告时点）</th><th>claim</th><th>fix 方向</th><th>来源</th></tr>
+    <tr><td>1</td><td>minor</td><td><code>shared/dialogs.js:237/389</code></td><td>split 字符类 <code>/[,,]/</code> 经码点核验为两个半角逗号（U+002C），全角 U+FF0C 不拆分——两处注释宣称「中英文逗号分隔批量创建」失实；R2 终审复核同结论，电池断言名已改口径但源码未动</td><td>改注释对齐现状，或补全角分支并同步断言</td><td>P10 / R2</td></tr>
+    <tr><td>2</td><td>minor</td><td><code>shared/drawer_rows.js:67/69/71</code></td><td>「做种数/完整/连接」三行裸拼 <code>?? 0</code>，对 qB -1 哨兵不设防（私有种子直接渲染 swarm 0(-1) 等）——数据契约层预格式化单点未译，01/02/03 三变体栅格/卡片行共同消费；与清池已修的 row76（01 英雄行）同源、锚点在契约层</td><td>照 fmtPeersQb 口径在契约层补守卫（单点覆盖三变体）</td><td>P12</td></tr>
+    <tr><td>3</td><td>minor</td><td><code>shared/drawer_tpl/01,02,03,05,08 各组头</code></td><td>折叠头 aria-expanded 只在渲染拍写入，onClick 折叠只翻 class 不同步属性——点击到下一次数据重渲之间读屏语义与视觉相反；01/02/03（P12 记录）与 05/08（P13 记录）五变体同族</td><td>onClick 同步 setAttribute（或抽 helpers 单点）</td><td>P12 / P13</td></tr>
+    <tr><td>4</td><td>minor</td><td><code>src 44 个 .js + e2e 约 40 个 .mjs</code></td><td>注释内非 ASCII 图形符号存量（→/⇒/←/↑↓/①②③）：P02 只清了池条目点名的 9 文件，存量面未动；终审补记 config_editor.js 8 处、columns_grid.js 4 处、tpl10/11 多处等；字符串字面量已证零残留（全部在注释）</td><td>按 code-style.md 替代表另批清理（可用扫描脚本提名单）</td><td>P02 / 终审</td></tr>
+    <tr><td>5</td><td>minor</td><td><code>shared/config_editor.js cfgUnitParts</code></td><td>unitDefault（schema <code>unit_default</code>）不在 UNIT_OPTIONS 梯内也原样采用，cfgSetUnit 会把表外单位拼回树——现靠后端 load_config 兜底夹紧，属信任 schema 的既有设计</td><td>采纳前校验梯内、表外回落默认</td><td>P05</td></tr>
+    <tr><td>6</td><td>minor</td><td><code>shared/config_hub_tm.js tmShutdownTool</code></td><td>保存失败回滚的 cfgDelPath 只删叶键：若 <code>config.traffic_source</code> 段是被 cfgSetBool 新建的，回滚后残留空 <code>{}</code> 容器，cfgDirty 凭空翻真（现实形态该段通常带 provider 键，触发面窄）</td><td>删键后空容器回收（cfgDelPath 增强或调用点补删）</td><td>P06</td></tr>
+    <tr><td>7</td><td>minor</td><td><code>shared/polling.js startEvents</code></td><td>换票 await 期间登出的重开竞态只收窄未根除：skip_local_verify 模式下落票后仍会开一次流，首个 ver 事件经 refresh→_logout→stopEvents 拆除（无限空转已断，残留至多一轮）；根除需 startEvents 加代际/鉴权复查，超出 R5#2 fix 列</td><td>startEvents 落票后复查会话代际/鉴权态再开流</td><td>P08</td></tr>
+    <tr><td>8</td><td>minor</td><td><code>shared/polling.js stopPoll/finish</code></td><td>onEnd 在 settle 之前调用：onEnd 抛异常会吞掉 settle（调用方 Promise 悬挂）；finish() 路径既有同形，P08 修复保持同序未改</td><td>onEnd 包 try/finally（或后置到 settle 后），两路同改</td><td>P08</td></tr>
+    <tr><td>9</td><td>nit</td><td><code>shared/dialogs.js metaAddNewTags</code></td><td>fresh 创建清单不去重：重复段原样 POST /api/tags，bulk 打标载荷也带重复段——后端幂等则无观感影响</td><td>入口去重，或确认后端幂等后注释声明</td><td>P10</td></tr>
+    <tr><td>10</td><td>nit</td><td><code>shared/columns_persist.js startResize</code></td><td>位移未过 3px 阈值时也把起始快照写进生效轨 colWidths（内存态）：覆盖 ≤3px 且下次窗口变化自愈，纯观感级既有行为（row43 修复后不再升格落盘，残留仅内存）</td><td>过阈值才写生效轨</td><td>P03</td></tr>
+    <tr><td>11</td><td>nit</td><td><code>shared/drawer.js kbGuardLeave</code></td><td>非脏早退后 <code>kbFullOpen</code> 残留 true：覆盖层随 webui 视图卸载无观感，复位只在 hubGo 进 webui 时发生——状态卫生问题</td><td>非脏早退路径复位 kbFullOpen</td><td>P11</td></tr>
+    <tr><td>12</td><td>nit</td><td><code>flux/fx-mount.js TOAST_SPLIT</code></td><td>拆段正则把分隔符后空格计入 2 字门槛：「已执行： x」trim 后说明侧仅 1 字仍拆段，与代码注释「残留单行 = 说明侧过短 &lt;2 字」表述不符（纯观感，电池已按现状钉住）</td><td>trim 后计长，或注释对齐现状</td><td>P11</td></tr>
+    <tr><td>13</td><td>nit</td><td><code>shared/drawer_tpl/02-general-cards-low.js:177 附近 secRows</code></td><td>02 的 secRows 忽略 r.wide（长哈希/保存路径被压三列格子）——与清池已修的 row78（03 wide 接线）同语义槽，P12 按 fix 列只裁了 03 未动 02</td><td>照 03 同式接 wide（或按 02 布局论证不需要后注释说明）</td><td>P12</td></tr>
+  </table>
+</section>
+
+<section id="s3">
+  <h2><span class="no">§03</span>影响面</h2>
+  <table>
+    <tr><th>维度</th><th>结论</th></tr>
+    <tr><td>触发条件</td><td>盘点型聚合件——逐子项触发条件见 §02 明细表 claim 列</td></tr>
+    <tr><td>影响范围</td><td>13 子项分布于 shared 域 8 文件 + drawer_tpl 五变体 + e2e 注释存量面；逐项见明细表</td></tr>
+    <tr><td>严重度</td><td>minor 7 / nit 6（无 major；多项为观感级或触发面窄，逐项见表）</td></tr>
+  </table>
+</section>
+
+<section id="s4">
+  <h2><span class="no">§04</span>定位锚点</h2>
+  <p class="hint">写「符号名 + grep 关键词 + 当时的行号（标取证时间）」—— 代码会漂移，靠符号与 grep 重新定位，行号只是加速项。</p>
+  <ul>
+    <li>#1 <code>shared/dialogs.js:237/389</code>（取证 2026-11-08，P10 报告）· split 字符类 · grep <code>\[,,\]</code> 与「中英文逗号」</li>
+    <li>#2 <code>shared/drawer_rows.js:67-71</code>（取证 2026-11-07，P12 报告）· 契约层三行裸拼 · grep <code>?? 0</code></li>
+    <li>#3 <code>shared/drawer_tpl/{01,02,03,05,08}</code> 组头（取证 2026-11-07/08，P12/P13 报告）· aria-expanded · grep <code>aria-expanded</code></li>
+    <li>#4 全 src/.js 与 e2e/.mjs（取证 2026-11-08，P02/终审报告）· grep <code>[\x{2190}-\x{21FF}\x{2460}-\x{24FF}]</code>（注释行）</li>
+    <li>#5 <code>shared/config_editor.js</code>（取证 2026-11-07，P05 报告）· cfgUnitParts/unitDefault · grep <code>unit_default</code></li>
+    <li>#6 <code>shared/config_hub_tm.js</code>（取证 2026-11-07，P06 报告）· tmShutdownTool/cfgDelPath · grep <code>cfgDelPath</code></li>
+    <li>#7 <code>shared/polling.js</code>（取证 2026-11-07，P08 报告）· startEvents/换票 · grep <code>startEvents</code></li>
+    <li>#8 <code>shared/polling.js</code>（取证 2026-11-07，P08 报告）· stopPoll/onEnd · grep <code>opts.onEnd</code></li>
+    <li>#9 <code>shared/dialogs.js</code>（取证 2026-11-07，P10 报告）· metaAddNewTags/fresh · grep <code>fresh</code></li>
+    <li>#10 <code>shared/columns_persist.js</code>（取证 2026-11-07，P03 报告）· startResize/move · grep <code>THRESHOLD\|3px\|dragged</code></li>
+    <li>#11 <code>shared/drawer.js</code>（取证 2026-11-07，P11 报告）· kbGuardLeave/kbFullOpen · grep <code>kbFullOpen</code></li>
+    <li>#12 <code>flux/fx-mount.js</code>（取证 2026-11-07，P11 报告）· TOAST_SPLIT · grep <code>TOAST_SPLIT</code></li>
+    <li>#13 <code>shared/drawer_tpl/02-general-cards-low.js</code>（取证 2026-11-07，P12 报告）· secRows/wide · grep <code>secRows</code></li>
+  </ul>
+</section>
+
+<section id="s5">
+  <h2><span class="no">§05</span>根因<span class="opt">（可选）</span></h2>
+  <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
+  <div class="callout">待查——本件为清池批间清单外发现的盘点聚合，逐子项归因随认领排查；各条发现时已有批次报告的一手归因（见来源列），未复跑锚点。</div>
+</section>
+
+<section id="s6">
+  <h2><span class="no">§06</span>建议修法<span class="opt">（可选）</span></h2>
+  <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
+  <p>逐子项 fix 方向见 §02 明细表「fix 方向」列。汇总层面：认领时按文件聚类、同文件一次修完；#4（非 ASCII 注释存量）建议先用扫描脚本出精确名单再派批；#1/#12 一类「注释与实现不符」先裁决改实现还是改注释再动手。</p>
+</section>
+
+<section id="s7">
+  <h2><span class="no">§07</span>状态变更日志</h2>
+  <ul>
+    <li>2026-11-08 02:29 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+  </ul>
+  <h3>复验</h3>
+  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <h3>修复后补充</h3>
+  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+</section>
+
+<footer>
+  26-11-08-0229-bug-r4-static-cleanup-extras.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+</footer>
+
+</div>
+</body>
+</html>

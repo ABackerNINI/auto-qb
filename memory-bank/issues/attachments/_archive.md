@@ -11,8 +11,9 @@
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 - [chore] [版本号双源矛盾: __init__.__version__ 0.2.0 vs pyproject 0.1.0](../26-09-21-1408-chore-version-dual-source.html) — WebUI 顶栏透出与打包元数据已差一个 minor; 建议 pyproject 单源 + 动态读取
 
-## Open (50)
+## Open (51)
 
+- [bug] [R4-static 清池清单外发现汇总(13 子项, 修复批记录未修)](../26-11-08-0229-bug-r4-static-cleanup-extras.html) — R4 static 主题清池(P01-P16)各批记录的清单外发现 13 子项聚合入池: dialogs 注释失实族/契约层 -1 裸拼/aria-expanded 陈旧/非ASCII注释存量等, 全部未动待认领
 - [bug] [dt_table.js 整模块生产路径零调用: 自称几何单一出口未接线, 实际几何由 columns_grid 平行计算](../26-11-08-0147-bug-dt-table-geometry-unwired.html) — dt_table.js 四皮肤均加载但 DT_TABLE 六口子生产路径零调用, 自称几何单一出口未接线, 实际几何由 columns_grid 平行计算; R4-static 清池拍板暂缓挂账待决(整体退役 vs 真接线)
 - [bug] [存量评审 R4·scripts 汇总(major 1/minor 23)](../26-11-07-0536-bug-legacy-review4-scripts.html) — scripts 主题 major 1+minor 23 共 24 条聚合入池,来源存量评审 R4(计划 26-11-05-2335)
 - [bug] [存量评审 R4·webui-py 汇总(major 2/minor 23)](../26-11-07-0536-bug-legacy-review4-webui-py.html) — webui-py 主题 major 2+minor 23 共 25 条聚合入池,来源存量评审 R4(计划 26-11-05-2335)

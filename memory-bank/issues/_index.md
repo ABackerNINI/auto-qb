@@ -19,7 +19,7 @@
 
 | 类型 | 条数 |
 |---|---|
-| bug | 11 |
+| bug | 12 |
 | perf | 2 |
 | docs | 1 |
 | test | 7 |
@@ -37,6 +37,7 @@
 
 ## Open
 
+- [bug] [R4-static 清池清单外发现汇总(13 子项, 修复批记录未修)](26-11-08-0229-bug-r4-static-cleanup-extras.html) — R4 static 主题…
 - [bug] [dt_table.js 整模块生产路径零调用: 自称几何单一出口未接线, 实际几何由 columns_grid 平行计算](26-11-08-0147-bug-dt-table-geometry-unwired.html) — dt_table.js…
 - [bug] [存量评审 R4·scripts 汇总(major 1/minor 23)](26-11-07-0536-bug-legacy-review4-scripts.html) — scripts 主题 m…
 - [bug] [存量评审 R4·webui-py 汇总(major 2/minor 23)](26-11-07-0536-bug-legacy-review4-webui-py.html) — webui-py 主题…
