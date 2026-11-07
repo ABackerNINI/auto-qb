@@ -12,7 +12,7 @@
 - test_api_traffic_qb_global_30d_hour_segment: global 30d 窗 agg hour 行直映栅格桶(epoch 即桶键), interval_s=3600, 相邻桶差分
 - test_api_traffic_qb_global_6mo_1y_day_segment: (S3b D4 沿用)6mo/1y 窗 agg day 行直映本地日界桶 —— 滚动窗切片(300 天前行 1y 可见/6mo 不可见), 缺日断链, interval_s=86400
 - test_api_traffic_qb_global_all_month_segment: (S3b D4 沿用)all 窗 agg month 行数据面逐月铺格(缺失月 null), 相邻月差分, interval_s=标称月长; 空数据面空态
-- test_api_traffic_qb_torrent_endpoint: 单种端点取数 / 非法哈希 400 / 未知哈希空态 / 冻结种子历史仍可查
+- test_api_traffic_qb_torrent_endpoint: 单种端点取数 / 非法哈希 400 + detail 种子哈希非法(存储层 v4_series_dir ValueError 转译, 多非法字符形态守阵, issue 26-11-07-0536 R4#37)/ 未知哈希空态 / 冻结种子历史仍可查
 - test_api_traffic_qb_torrent_1y_single_agg_cold_read: (S3b 验收)年视图单 agg 文件冷读恰 1 open, 缓存命中再查零 open
 - test_api_traffic_qb_global_24h_reads_only_involved_day_files: (S3b 端点面回归)24h 窗只开窗口涉及日期天文件(含窗首种子外扩: 常态恰 2 个/跨午夜边界至多 3 个), 窗外日期/agg.dat 零 open; 三档时钟 —— 真钟(钉入口时刻, 消除用例 now 与服务端收边横跨零点的竞态) + 假钟 00:05(issue 26-10-20-0024: base 恒取本地当日 00:00, 不随真钟漂前一日) + 假钟 00:00:15(2026-10-22 跨日窗口抖动: 当日首记录 base+30 未到窗尾时 base 桶为空桶 null, 期望值按几何分档)
 - test_api_traffic_qb_group_endpoint: 分组读侧现算(Σ 成员区间平均/全员空闲 z 覆盖 0 线/全员无观测断线 —— 借 global 判 null 退役且零全局读取/成员重置贡献 0/历史回溯可见/解析不到成员空态/畸形 key 400)
@@ -539,8 +539,14 @@ def test_api_traffic_qb_torrent_endpoint(web_env):
     assert body["meta"]["source"] == "qb" and body["meta"]["stale"] is False
     p = next(p for p in body["points"] if p and p["t"] == base)
     assert p == {"t": base, "dl": 0, "up": 0}  # 区间平均口径: 单记录窗首无基线, D4 豁免 0 线(瞬时值不上图)
-    # 非法哈希(路径不安全字符, 存储层 fail-fast) -> 400; 未知哈希(合法字符, 无文件) -> 空态
-    assert client.get("/api/traffic/qb/torrent/HA.X", headers=auth).status_code == 400
+    # 非法哈希(路径不安全字符 -> 存储层 v4_series_dir ValueError 转译) -> 400 + detail
+    # 契约「种子哈希非法」(torrent_detail.py docstring「哈希不合法 400」的守阵, issue
+    # 26-11-07-0536 R4#37); 合法字符口径 = 文件名安全集(非 40/64 位 hex 也放行, ZZ 即此形)
+    # -> 未知哈希(合法字符, 无文件) -> 空态
+    for bad in ("HA.X", "HA,X"):
+        r = client.get(f"/api/traffic/qb/torrent/{bad}", headers=auth)
+        assert r.status_code == 400, bad
+        assert "种子哈希非法" in r.json()["detail"], bad
     assert client.get("/api/traffic/qb/torrent/ZZ", headers=auth).json()["points"] == []
     # 删种冻结(hash 已不在 by_hash 快照)后历史仍可查: 数据以 v4 天文件为准, 不以快照存在性裁决
     assert "HA" not in mgr.store.by_hash

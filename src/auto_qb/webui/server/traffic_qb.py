@@ -243,7 +243,11 @@ class QbTrafficChartApi:
             member_obs = []
             member_blocks = []
             member_has_tail = []
-            for h in members:
+            # 成员循环一律先取 tuple 快照再迭代(读侧快照纪律, 同 fs.py api_open_path /
+            # hr.py mark_local_present, issue 26-10-06-0028 E-01): 本方法在 Web 线程执行,
+            # 主循环 grouping_mod._leave_group 会对同一活列表原地 members.remove(hash),
+            # 直接迭代遇删除会索引左移跳过一个成员(raw/agg 两段成员循环同规)
+            for h in tuple(members):
                 tail_slots = ()
                 try:
                     days = self.v4cache.read_window(TORRENT_KEY_PREFIX + h, seed_t0, grid.t1)
@@ -280,7 +284,7 @@ class QbTrafficChartApi:
         else:
             aggs = []
             live_tails = []
-            for h in members:
+            for h in tuple(members):  # 同上: 读侧快照迭代(主循环 _leave_group 原地 remove)
                 try:
                     aggs.append(self.v4cache.read_agg(TORRENT_KEY_PREFIX + h))
                 except OSError:
