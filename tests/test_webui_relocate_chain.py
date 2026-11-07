@@ -437,7 +437,10 @@ def test_chain_frontend_static_and_node():
     # 列表渲染期零探测: 只有浮窗模块碰端点, 徽标渲染文件绝不能出现
     assert "/api/relocate/chain" not in _static("shared/decorate.js")
     cells = _static("shared/tpl/xtpl-cells.html")
-    assert "relChainOpen" not in cells, "徽标模板只负责触发 relocateOpen, 浮窗取数在 JS 方法里"
+    # S2 撤徽标后路径列零点击: 列表模板不得有任何链浮窗入口/按钮语义(relChainOpen 旧值在
+    # 撤徽标前后都不在 cells, 逮不住回归) —— 链浮窗入口只许在 drawer_tpl(data-act="chain")
+    assert "relChainOpen" not in cells and 'data-act="chain"' not in cells and "<button" not in cells, \
+        "路径列零点击: 列表模板不得有链浮窗入口/按钮语义, 链浮窗入口只在 drawer_tpl"
     assert "AQB_RELOCATE_CHAIN" in _static("shared/app.js")
     for skin in ("console", "atlas", "prism", "flux"):
         assert "/shared/relocate_chain.js" in (ROOT / f"src/auto_qb/webui/static/{skin}/index.html").read_text(
