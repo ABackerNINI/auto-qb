@@ -8,10 +8,16 @@
 - test_load_rules_from_config: 从配置加载规则
 - test_load_state_missing_or_broken: 状态文件缺失或损坏(且无备份) -> 空状态
 - test_load_state_valid: 有效状态加载
-- test_load_state_corrupt_falls_back_to_bak: 主文件损坏 -> 用 .bak 恢复并自愈写回主文件(备份不被损坏内容盖掉)
+- test_load_state_corrupt_falls_back_to_bak: 主文件损坏 -> 用 .bak 恢复进内存(写回挂起不落盘), materialize 物化后主文件修好且备份不被损坏内容盖掉
 - test_load_state_corrupt_without_backup_warns: 主文件损坏且备份不可用 -> 空状态 + 两条 WARNING(损坏/备份不可用)留痕
 - test_load_state_missing_file_is_silent: 首启(文件不存在)不告警 —— 与"损坏"区分
-- test_load_state_recovered_writeback_failure_is_nonfatal: 自愈写回失败(磁盘满)仍返回备份恢复出的状态, 只告警不抛
+- test_load_state_recovered_writeback_failure_is_nonfatal: 自愈写回失败(磁盘满)仍返回备份恢复出的状态, 物化时只告警不抛且挂起保持
+- test_load_state_recovery_writeback_deferred_not_written_before_lock: 守阵(26-11-07-0527)——load 未持锁不写盘, 恢复只挂 pending 标志; materialize 物化才写回
+- test_load_state_recovery_dry_run_skips_writeback: 物化 dry-run 不落盘只留日志, 挂起保持
+- test_save_while_recovery_pending_skips_backup: 挂起期间 save 以 keep_backup=False 落盘自愈, .bak 不被损坏内容覆盖(物化点之前的 save 调用面: cli fuse_release)
+- test_save_failure_while_recovery_pending_keeps_flag: 守阵(复核 R2#2)——挂起期间 save 失败(OSError)保持挂起, keep_backup=False 保护延续到下次落盘
+- test_load_state_unusable_backup_on_reload_clears_pending: 守阵(复核 R2#1)——备份转不可用后 load 返回空态, 陈旧挂起载荷不得活过这次 load(物化不写回)
+- test_load_state_valid_reload_clears_pending: 守阵(复核 R2#3)——主文件修复后重复 load 复位挂起, 后续 save 恢复 keep_backup=True
 - test_load_state_backup_unusable_falls_to_empty: 主文件损坏且备份**存在但也不可用** -> 空状态 + ERROR 留痕(正向对照: 备份可用先恢复)
 - test_load_state_invalid_encoding_treated_as_corrupt: 位翻转坏编码(UnicodeDecodeError)同算损坏走告警链; 正向对照: 合法内容同一路径原样返回
 - test_read_state_file_pins_utf8_encoding: 守阵(issue 26-10-31-0458)——读侧 open 显式 encoding="utf-8"(builtins.open 探针); 主文件与 .bak 两条读取都钉住
@@ -41,7 +47,7 @@
 - test_dirty_exit_interval_zero_loses_runtime_state: 对照: 关闭周期落盘时脏退出丢运行期状态(0 = 旧行为)
 - test_load_state_no_version_field_then_save_stamps: schema 版本链: 旧格式文件(无字段)加载成功, save 后带版本章
 - test_load_state_future_version_fails_fast_keeps_bak: 未来版本 fail-fast 抛 SchemaVersionError(不算 _CORRUPT), 不触碰 .bak
-- test_load_state_bak_recovery_passes_migration_chain: .bak 回退路径同样过迁移链, 写回文件带新版本章
+- test_load_state_bak_recovery_passes_migration_chain: .bak 回退路径同样过迁移链, 物化后写回文件带新版本章
 - test_materialize_state_migration: 物化方法: 无迁移/描述为空不落盘, dry-run 仅内存, 正常路径落盘新版本
 - test_state_migration_materialize_is_wired_in_run: 接线守阵: 物化必须挂在 run() 的 ctx.state.load() 之后
 - test_rule_process_resumes_from_breakpoint: 断点续跑起点取 task.resume_index(恒 0 会重放已成功动作)
@@ -105,10 +111,12 @@ def test_load_state_valid():
 
 
 def test_load_state_corrupt_falls_back_to_bak():
-    """主文件损坏 -> 用 .bak 恢复, 并把恢复出的内容写回主文件(自愈)
+    """主文件损坏 -> 用 .bak 恢复进内存, 写回挂起到持锁后物化(issue 26-11-07-0527)
 
-    写回是关键: 不写回的话, 下一次 save_state 的 keep_backup 会把损坏的主文件复制成新的
-    .bak —— 唯一一份好备份被盖掉, 这次恢复等于白做。
+    写回仍是关键: 不写回的话, 下一次 save 的 keep_backup 会把损坏的主文件复制成新的
+    .bak —— 唯一一份好备份被盖掉, 这次恢复等于白做。但写回不能在 load() 里立即执行:
+    load 的调用链含 __init__ 早期加载(先于持锁)与 no_lock 只读模式, 未持锁写盘违背单一
+    写线程判据 —— 故 load 只挂 pending 标志, 物化在持锁后的 materialize_migration。
     """
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
@@ -125,15 +133,22 @@ def test_load_state_corrupt_falls_back_to_bak():
         with open(state_file, "w", encoding="utf-8") as f:
             f.write("{not json")  # 模拟磁盘/外部改写造成的损坏
         with mock.patch.object(qb_state.logger, "warning") as warn, \
-             mock.patch.object(qb_state.logger, "info") as info:
+             mock.patch.object(qb_state.logger, "info") as info, \
+             mock.patch.object(qb_state.utils, "atomic_write") as m_write:
             got = mgr.ctx.state.load()
 
         assert got == {**first, "schema_version": STATE_V}, "损坏时应回退到 .bak 的内容, 而不是静默清空"
         assert any("损坏" in c[0][0] for c in warn.call_args_list), "损坏必须留 WARNING(此前是完全静默)"
         assert any("备份" in c[0][0] for c in info.call_args_list), "用了备份要记 INFO 便于事后核对"
-        # 自愈: 主文件已修好(带版本章), 且 .bak 仍是那份好备份(没被损坏内容盖掉)
+        m_write.assert_not_called(), "load 处在未持锁调用链(测试 no_lock 构造), 不得写盘"
+        assert mgr.ctx.state.pending_recovery_write is not None, "恢复写回必须挂起(待持锁后物化)"
+        # 挂起期间损坏现场原样保留: 主文件仍是损坏内容, .bak 未被触碰
+        assert open(state_file, encoding="utf-8").read() == "{not json"
+        # 持锁后物化(run() 内 materialize_migration 同一入口): 主文件修好(带版本章), .bak 仍是那份好备份
+        mgr.ctx.state.materialize_migration(dry_run=False)
         assert json.loads(open(state_file, encoding="utf-8").read()) == {**first, "schema_version": STATE_V}
         assert json.loads(open(bak_file, encoding="utf-8").read()) == {**first, "schema_version": STATE_V}
+        assert mgr.ctx.state.pending_recovery_write is None, "物化完成即清挂起标志"
 
 
 def test_load_state_corrupt_without_backup_warns():
@@ -162,10 +177,12 @@ def test_load_state_missing_file_is_silent():
 
 
 def test_load_state_recovered_writeback_failure_is_nonfatal():
-    """自愈写回失败(磁盘满/只读)不得影响本次启动 —— 内存里已是备份恢复出的状态, 只告警
+    """自愈写回失败(磁盘满/只读)不得影响启动/物化 —— 内存里已是备份恢复出的状态, 只告警
 
     这条专门钉 `_write_back_recovered` 的异常分支: 它一旦把异常放出去, "有备份可恢复"的场景
-    反而比"没备份"更糟(启动直接崩), 与本次修复的意图正好相反。
+    反而比"没备份"更糟(启动直接崩), 与本次修复的意图正好相反。写回已移到持锁后的
+    materialize_migration(issue 26-11-07-0527), 失败分支随之移动; 失败时挂起保持 —— 期间
+    save 的 keep_backup=False 继续保护 .bak, 下次落盘再试。
     """
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
@@ -176,12 +193,195 @@ def test_load_state_recovered_writeback_failure_is_nonfatal():
         mgr.ctx.state.save()
         with open(state_file, "w", encoding="utf-8") as f:
             f.write("{not json")
+        with mock.patch.object(qb_state.utils, "atomic_write") as m_write:
+            got = mgr.ctx.state.load()
+        m_write.assert_not_called(), "load 本身不写盘(写回只挂起, issue 26-11-07-0527)"
+        assert got == {"exec_history": {"r:h": {"ts": 1.0}}, "schema_version": STATE_V}, \
+            "恢复出的状态要完整返回(.bak 由 save_state 写出, 自带版本章)"
         with mock.patch.object(qb_state.utils, "atomic_write", side_effect=OSError("disk full")), \
              mock.patch.object(qb_state.logger, "warning") as warn:
-            got = mgr.ctx.state.load()
-        assert got == {"exec_history": {"r:h": {"ts": 1.0}}, "schema_version": STATE_V}, \
-            "写回失败不能把已恢复出的状态也搭进去(.bak 由 save_state 写出, 自带版本章)"
+            mgr.ctx.state.materialize_migration(dry_run=False)
         assert any("写回" in c[0][0] for c in warn.call_args_list), "写回失败要留痕"
+        assert mgr.ctx.state.pending_recovery_write is not None, "写回失败保持挂起, 下次落盘继续保护 .bak"
+        mgr.ctx.state.materialize_migration(dry_run=False)  # 磁盘恢复后重物化: 主文件修好
+        assert json.loads(open(state_file, encoding="utf-8").read()) == \
+            {"exec_history": {"r:h": {"ts": 1.0}}, "schema_version": STATE_V}
+        assert mgr.ctx.state.pending_recovery_write is None, "物化成功即清挂起"
+
+
+def test_load_state_recovery_writeback_deferred_not_written_before_lock():
+    """守阵(issue 26-11-07-0527): 损坏恢复写回在 load() 里只挂起不落盘 —— 未持锁不写盘
+
+    触发链: QbManager.__init__ 的 _reload_state 先于 SingleInstanceLock.acquire, no_lock
+    只读模式(--export-yaml 等)更是全程无锁 —— 旧实现在 load() 里立即 _write_back_recovered,
+    两态下都与正常运行实例并发写同一状态文件。修复后写回延迟到持锁后的 materialize_migration。
+    红验: 写回挪回 load()(恢复分支直接 _write_back_recovered) -> 本用例 atomic_write 断言与
+    「主文件仍是损坏内容」断言双红。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        bak_file = state_file + utils.BACKUP_SUFFIX
+        with open(state_file, "w", encoding="utf-8") as f:
+            f.write("{not json")  # 主文件损坏
+        with open(bak_file, "w", encoding="utf-8") as f:
+            json.dump({"exec_history": {"k": 1}, "schema_version": STATE_V}, f)  # 当前版本备份(不触发迁移链)
+        svc = qb_state.StateService(state_file)
+        with mock.patch.object(qb_state.utils, "atomic_write") as m_write:
+            got = svc.load()
+        assert got == {"exec_history": {"k": 1}, "schema_version": STATE_V}, "备份内容恢复进内存"
+        m_write.assert_not_called(), "load 处在未持锁调用链, 不得写盘"
+        assert svc.pending_recovery_write is not None, "恢复写回挂起"
+        assert open(state_file, encoding="utf-8").read() == "{not json", "主文件损坏现场原样保留"
+        # 持锁后物化(run() 内 materialize_migration 同一入口): 主文件修好, .bak 保持不动
+        svc.materialize_migration(dry_run=False)
+        assert json.loads(open(state_file, encoding="utf-8").read()) == \
+            {"exec_history": {"k": 1}, "schema_version": STATE_V}, "物化写回带版本章"
+        assert json.loads(open(bak_file, encoding="utf-8").read()) == \
+            {"exec_history": {"k": 1}, "schema_version": STATE_V}, "好备份未被写回路径触碰"
+        assert svc.pending_recovery_write is None, "物化完成清挂起"
+
+
+def test_load_state_recovery_dry_run_skips_writeback():
+    """物化 dry-run: 恢复写回不落盘只留日志, 挂起保持(与迁移物化的 dry-run 口径一致)
+
+    dry-run 进程其余写盘面均被 `if not dry_run` 闸住(退出落盘/周期落盘), 挂起保持即
+    全程零写盘; 主文件损坏现场留给下次正常启动的恢复链, 与「写回失败」同收敛。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        with open(state_file, "w", encoding="utf-8") as f:
+            f.write("{not json")
+        with open(state_file + utils.BACKUP_SUFFIX, "w", encoding="utf-8") as f:
+            json.dump({"exec_history": {"k": 1}, "schema_version": STATE_V}, f)
+        svc = qb_state.StateService(state_file)
+        svc.load()
+        assert svc.pending_recovery_write is not None
+        with mock.patch.object(qb_state.utils, "atomic_write") as m_write, \
+             mock.patch.object(qb_state.logger, "info") as info:
+            svc.materialize_migration(dry_run=True)
+        m_write.assert_not_called(), "dry-run 物化不落盘"
+        assert any("dry-run" in c[0][0] for c in info.call_args_list), "挂起原因要留日志"
+        assert svc.pending_recovery_write is not None, "dry-run 不清挂起(没有后续物化机会, 进程即退)"
+        assert open(state_file, encoding="utf-8").read() == "{not json", "主文件仍为损坏内容"
+
+
+def test_save_while_recovery_pending_skips_backup():
+    """守阵(issue 26-11-07-0527): 恢复写回挂起期间 save 以 keep_backup=False 落盘自愈
+
+    覆盖 run() 物化点之前的 save 调用面(cli fuse_release 放行即落 state, 不经 run()):
+    挂起期间主文件在盘上仍是损坏内容, 照常 keep_backup=True 会把它复制成新 .bak —— 唯一
+    一份好备份被盖掉。红验: save 恢复无条件 keep_backup=True -> .bak 内容断言红。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        bak_file = state_file + utils.BACKUP_SUFFIX
+        svc = qb_state.StateService(state_file)
+        svc.data = {"exec_history": {"old": 1}, "schema_version": STATE_V}
+        svc.save()  # 第一版: state.json=第一版, 无 .bak(无旧文件不凭空造)
+        svc.data = {"exec_history": {"new": 2}, "schema_version": STATE_V}
+        svc.save()  # 第二版: .bak=第一版(好备份), state.json=第二版
+        with open(state_file, "w", encoding="utf-8") as f:
+            f.write("{not json")  # 主文件损坏
+        svc.load()  # 恢复挂起(主文件仍损坏; 恢复内容只进挂起载荷, 不写盘)
+        assert svc.pending_recovery_write is not None
+        svc.data = {"exec_history": {"post_recovery": 3}, "schema_version": STATE_V}
+        svc.save()  # 挂起期间的落盘(模拟 fuse_release 路径)
+        assert json.loads(open(state_file, encoding="utf-8").read())["exec_history"] == {"post_recovery": 3}, \
+            "save 写的是当前内存态, 落盘本身即自愈"
+        assert json.loads(open(bak_file, encoding="utf-8").read()) == \
+            {"exec_history": {"old": 1}, "schema_version": STATE_V}, "好备份不被损坏内容覆盖"
+        assert svc.pending_recovery_write is None, "写成功即视为已自愈, 清挂起"
+
+
+def test_save_failure_while_recovery_pending_keeps_flag():
+    """守阵(复核 R2#2): 挂起期间 save 失败(OSError) -> 挂起保留, keep_backup=False 保护延续
+
+    状态机的另一半: 失败也清挂起的回归会让下次 save 照常 keep_backup=True —— 届时主文件在
+    盘上仍是损坏内容, 唯一好 .bak 被盖掉。红验: save 把清挂起挪到 atomic_write 之前/异常
+    之外 -> 挂起保留断言红。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        bak_file = state_file + utils.BACKUP_SUFFIX
+        svc = qb_state.StateService(state_file)
+        svc.data = {"exec_history": {"old": 1}, "schema_version": STATE_V}
+        svc.save()  # 第一版: state.json=第一版, 无 .bak(无旧文件不凭空造)
+        svc.data = {"exec_history": {"new": 2}, "schema_version": STATE_V}
+        svc.save()  # 第二版: .bak=第一版(好备份), state.json=第二版
+        with open(state_file, "w", encoding="utf-8") as f:
+            f.write("{not json")  # 主文件损坏
+        svc.load()  # 恢复挂起(主文件仍损坏)
+        assert svc.pending_recovery_write is not None, "前置: 恢复挂起已立"
+        with mock.patch.object(qb_state.utils, "atomic_write", side_effect=OSError("disk full")), \
+             mock.patch.object(qb_state.logger, "error"):
+            svc.save()  # 失败: 不抛, 不清挂起
+        assert svc.pending_recovery_write is not None, "save 失败保持挂起, 保护延续到下次落盘"
+        assert open(state_file, encoding="utf-8").read() == "{not json", "失败写盘不留半截内容(原子写契约)"
+        assert json.loads(open(bak_file, encoding="utf-8").read()) == \
+            {"exec_history": {"old": 1}, "schema_version": STATE_V}, "失败路径 .bak 不被触碰"
+        svc.save()  # 磁盘恢复后重试: keep_backup=False 落盘自愈 + 清挂起
+        assert svc.pending_recovery_write is None, "重试成功即清挂起"
+        assert json.loads(open(state_file, encoding="utf-8").read())["exec_history"] == {"new": 2}
+        assert json.loads(open(bak_file, encoding="utf-8").read()) == \
+            {"exec_history": {"old": 1}, "schema_version": STATE_V}, "自愈落盘不把损坏内容盖进 .bak"
+
+
+def test_load_state_unusable_backup_on_reload_clears_pending():
+    """守阵(复核 R2#1): 备份转不可用后的 load 返回空态, 陈旧挂起载荷不得活过这次 load
+
+    旧实现即时写回时, 第二次 load 会从已自愈的主文件读到恢复内容; 延迟物化后主文件在盘上
+    仍是损坏内容, 第二次 load 重走恢复链 —— 若备份此时已不可用, 返回空态的同时挂起必须复位:
+    否则 materialize 把陈旧载荷写回主文件, 内存却是空态, 下一次落盘再盖掉(白写还说谎)。
+    红验: load 入口的挂起复位被删 -> 本用例挂起断言与物化不写盘断言红。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        bak_file = state_file + utils.BACKUP_SUFFIX
+        with open(state_file, "w", encoding="utf-8") as f:
+            f.write("{not json")  # 主文件损坏
+        with open(bak_file, "w", encoding="utf-8") as f:
+            json.dump({"exec_history": {"k": 1}, "schema_version": STATE_V}, f)  # 当前版本备份
+        svc = qb_state.StateService(state_file)
+        assert svc.load()["exec_history"] == {"k": 1}, "第一次 load: 备份可用, 恢复进内存"
+        assert svc.pending_recovery_write is not None, "前置: 恢复挂起已立"
+        with open(bak_file, "w", encoding="utf-8") as f:
+            f.write("{also broken")  # 备份转不可用
+        with mock.patch.object(qb_state.logger, "error"):
+            assert svc.load() == {}, "第二次 load: 备份也不可用 -> 空状态"
+        assert svc.pending_recovery_write is None, "陈旧挂起不得活过返回空态的 load"
+        with mock.patch.object(qb_state.utils, "atomic_write") as m_write:
+            svc.materialize_migration(dry_run=False)
+        m_write.assert_not_called(), "空态后物化不得把陈旧载荷写回主文件"
+        assert open(state_file, encoding="utf-8").read() == "{not json", "主文件损坏现场原样保留"
+
+
+def test_load_state_valid_reload_clears_pending():
+    """守阵(复核 R2#3): 主文件修复后的重复 load 复位挂起, 后续 save 恢复 keep_backup=True
+
+    复位转移丢失的回归后果: 陈旧挂起让 materialize 把恢复内容重写一遍(无害但说谎), 且期间
+    任何 save 恒 keep_backup=False —— .bak 不再随落盘更新。红验: load 入口复位被删 -> 挂起
+    断言红; save 的 keep_backup=not healed 被回归成恒 False -> .bak 更新断言红。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        bak_file = state_file + utils.BACKUP_SUFFIX
+        with open(state_file, "w", encoding="utf-8") as f:
+            f.write("{not json")  # 主文件损坏
+        with open(bak_file, "w", encoding="utf-8") as f:
+            json.dump({"exec_history": {"k": 1}, "schema_version": STATE_V}, f)
+        svc = qb_state.StateService(state_file)
+        svc.load()
+        assert svc.pending_recovery_write is not None, "前置: 恢复挂起已立"
+        repaired = {"exec_history": {"fixed": 1}, "schema_version": STATE_V}
+        with open(state_file, "w", encoding="utf-8") as f:
+            json.dump(repaired, f)  # 主文件被(外部/他实例)修好
+        assert svc.load() == repaired, "第二次 load: 主文件可读, 原样返回"
+        assert svc.pending_recovery_write is None, "主文件修复后再 load, 挂起必须复位"
+        svc.data = {"exec_history": {"after": 2}, "schema_version": STATE_V}
+        svc.save()
+        assert json.loads(open(bak_file, encoding="utf-8").read()) == repaired, \
+            "挂起复位后 save 恢复 keep_backup=True: 修复好的主文件随落盘留为备份"
+        assert json.loads(open(state_file, encoding="utf-8").read())["exec_history"] == {"after": 2}
 
 
 def test_load_state_backup_unusable_falls_to_empty():
@@ -380,6 +580,7 @@ def test_load_state_bak_recovery_passes_migration_chain(monkeypatch):
         mgr = make_manager(state_file)
         got = mgr.ctx.state.load()
         assert got["v2"] is True and got["schema_version"] == 2, "备份恢复出的状态也必须过链"
+        mgr.ctx.state.materialize_migration(dry_run=False)  # 写回挂起, 持锁后物化(issue 26-11-07-0527)
         assert json.loads(open(state_file, encoding="utf-8").read())["schema_version"] == 2, "自愈写回带新版本章"
 
 

@@ -92,6 +92,17 @@ class StateService:
         self.next_flush_at: float = 0.0
         # 最近一次 load 发生的 schema 迁移描述("v1→v2"; 无迁移为空串) —— 供 run() 持锁后物化
         self.migration_desc: str = ""
+        # 损坏恢复写回挂起(None = 无挂起; dict = 最近一次 load() 从 .bak 恢复出的待写回载荷,
+        # issue 26-11-07-0527): load 的调用链含 QbManager.__init__ 的 _reload_state(先于
+        # SingleInstanceLock.acquire)与 no_lock 只读模式(--export-yaml 等), 两态下立即写盘都
+        # 违背「未持锁不写盘」(materialize_migration/cleanup_orphan_tmp 同判据) —— 故 load 只
+        # 挂起不落盘, 由持锁后的 materialize_migration 物化; 物化前任何 save() 以
+        # keep_backup=False 写盘兜底(损坏主文件不得被复制成新 .bak, 见 save)。刻意存载荷
+        # 而非布尔标志: 物化写回的是「恢复出的内容」本身(与旧即时写回同载荷), 不依赖调用方
+        # 把返回值回填 data 的次序。挂起只反映最近一次 load 的结果: load() 入口复位 ——
+        # 主文件修复后再 load、备份转不可用后 load 返回空态, 陈旧载荷都不会活过去
+        # (materialize 据此不再把陈旧载荷写回一个内存已是别样真相的状态面)。
+        self.pending_recovery_write: Optional[dict] = None
 
     # ---------- 加载 / 迁移 ----------
 
@@ -100,8 +111,13 @@ class StateService:
 
         - 主文件不存在: 首启, 静默返回 {}
         - 主文件损坏: 记 WARNING(损坏文件原样保留、不删) → 读到合法 .bak 即用(INFO 记录
-          "用了备份"), 并把恢复出的内容**写回主文件**(自愈): 否则下次 save 会把损坏
-          内容复制成新的 .bak, 把唯一一份好备份盖掉 —— 那等于这次恢复白做
+          "用了备份"), 恢复出的内容**只挂起不写回**(pending_recovery_write, 自愈写回延迟到
+          持锁后物化): 否则下次 save 会把损坏内容复制成新的 .bak, 把唯一一份好备份盖掉 ——
+          那等于这次恢复白做。写回不在 load() 里立即执行: 本方法被 QbManager.__init__ 的
+          _reload_state 调用(先于 SingleInstanceLock.acquire), no_lock 只读模式
+          (--export-yaml 等)同样会走到, 未持锁写盘违背单一写线程判据; 挂起载荷由 run()
+          持锁后的 materialize_migration 写回主文件, 物化前的 save() 以 keep_backup=False
+          兜底(见 save)
         - 备份也不可用: 返回 {}(与修复前一致, 不阻塞启动, 但一路告警留痕)
 
         读回的 dict 一律过 schema 升级链(versioning.migrate, 计划 26-09-26-0506): 磁盘版本
@@ -111,9 +127,11 @@ class StateService:
 
         损坏分支的「留证 -> 读 .bak」编排与 hr 站点文件恢复链走同一 infra 单点
         (infra.store_recovery.recover_corrupt_file, issue 26-10-11-0240): state 侧不传
-        quarantine(坏文件原地保留待查), 结论的分级日志与自愈写回保留在本方法。
+        quarantine(坏文件原地保留待查), 结论的分级日志与写回编排保留在本方法
+        (写回时机=挂起待持锁后物化, 不再立即落盘)。
         """
         self.migration_desc = ""
+        self.pending_recovery_write = None  # 挂起只反映最近一次 load 的结果(复核 R2#1/#3)
         data = self._read_state_file(self.state_file)
         if data is not _CORRUPT:
             return self._migrate_state_dict(data if isinstance(data, dict) else {})
@@ -126,9 +144,10 @@ class StateService:
             what="状态文件",
         )
         if rec.recovered:
-            logger.info(f"已用备份恢复状态: {bak_path}({len(rec.data)} 个键) —— 执行历史与跨日去重以备份为准")
+            logger.info(f"已用备份恢复状态: {bak_path}({len(rec.data)} 个键) —— 执行历史与跨日去重以备份为准;"
+                        "恢复写回挂起, 待持锁后物化(未持锁不写盘)")
             bak = self._migrate_state_dict(rec.data)
-            self._write_back_recovered(bak)
+            self.pending_recovery_write = bak
             return bak
         logger.error(f"备份 {bak_path} 也不可用 -> 状态从空开始: 规则执行历史与跨日去重记录会丢失(同一天可能重复跳检)")
         return {}
@@ -182,18 +201,22 @@ class StateService:
         """落盘载荷: 顶部盖 schema_version 章(不改内存真相) —— save / _write_back_recovered 共用"""
         return {**data, "schema_version": CURRENT_VERSIONS["state"]}
 
-    def _write_back_recovered(self, data: dict) -> None:
+    def _write_back_recovered(self, data: dict) -> bool:
         """把从备份恢复出的状态写回主文件(**不带** keep_backup: 免得把损坏内容复制成新的 .bak)
 
-        自愈失败只告警、不阻断启动: 内存里已是恢复出的状态, 下次正常落盘同样能修好主文件。
+        调用点 = materialize_migration(持锁后的启动物化点, issue 26-11-07-0527); 返回写回是否
+        成功 —— 失败只告警、返回 False、不抛: 内存里已是恢复出的状态, 下次正常落盘同样能修好
+        主文件, 调用方据返回值保持挂起(期间 save 的 keep_backup=False 继续保护 .bak)。
         写回载荷盖 schema_version 章(备份与主文件同版本, 盖章让恢复出的文件即刻带上版本标记)。
         """
         try:
             utils.atomic_write(
                 self.state_file, lambda f: json.dump(self._state_write_payload(data), f, ensure_ascii=False, indent=2)
             )
+            return True
         except OSError as e:
             logger.warning(f"把备份状态写回 {self.state_file} 失败(不阻断启动, 下次落盘会再试): {e}")
+            return False
 
     def cleanup_orphan_tmp(self) -> None:
         """清理 atomic_write 遗留的孤儿临时文件 `<state_file>.<随机>.tmp`
@@ -234,25 +257,47 @@ class StateService:
         文件, 而 state 没有备份 ⇒ 执行历史(exec_history)与跨日去重(skip_check_day)全丢, 重启后
         规则重放(同一天可能对同一种子重复跳检)。原子写保证目标文件"要么全旧、要么全新",
         .bak 再兜一层"新内容本身写错了"的情况。写前盖 schema_version 章(见 _state_write_payload)。
+
+        恢复写回挂起期间(pending_recovery_write, issue 26-11-07-0527)刻意 keep_backup=False:
+        主文件此刻在盘上仍是损坏内容, 照常复制会把唯一一份好 .bak 盖掉 —— 本次写盘写入的是
+        恢复出的合法状态, 落盘本身即完成自愈, 写成功才清挂起(失败则保持, 下次落盘继续保护)。
+        覆盖 run() 物化点之前的 save 调用面(cli fuse_release 放行即落 state, 不经 run())。
         """
+        healed = self.pending_recovery_write is not None
         try:
             utils.atomic_write(
                 self.state_file,
                 lambda f: json.dump(self._state_write_payload(self.data), f, ensure_ascii=False, indent=2),
-                keep_backup=True,
+                keep_backup=not healed,
             )
+            if healed:
+                logger.info("备份恢复出的状态已随本次保存写回主文件(自愈完成, .bak 保持不动)")
+            self.pending_recovery_write = None
         except OSError as e:
             logger.error(f"保存状态文件失败: {e}")
 
     def materialize_migration(self, dry_run: bool) -> None:
-        """启动序列的迁移物化: 磁盘状态文件版本 < CURRENT 时立即落盘一次新版本(计划 26-09-26-0506)
+        """启动序列的挂起写物化: 损坏恢复写回 + schema 迁移落盘(计划 26-09-26-0506; issue 26-11-07-0527)
 
         调用点在 run() 内 —— 只在**已持锁**后执行(与 cleanup_orphan_tmp 同判据: 持锁 ⇒ 没有
-        别的实例在写); __init__ 的早期加载只做内存迁移、不落盘(未持锁写盘违背单一写线程判据)。
-        dry-run 不落盘(与退出路径 `if not dry_run` 口径一致), 只留 INFO 说明内存已迁移。
+        别的实例在写); __init__ 的早期加载只做内存迁移/挂起恢复写回、不落盘(未持锁写盘违背
+        单一写线程判据)。两个挂起面按序物化:
+        - 恢复写回(pending_recovery_write)先走: _write_back_recovered 不带 keep_backup ——
+          主文件修好之前, 任何 keep_backup=True 的写盘都会把损坏内容复制成新 .bak, 盖掉唯一
+          一份好备份;
+        - 迁移(migration_desc)随后: 常规 save(keep_backup=True), 此时主文件已是合法内容。
+        dry-run 不落盘(与退出路径 `if not dry_run` 口径一致), 只留 INFO 说明内存已生效,
+        挂起保持(dry-run 进程随后退出, 其余写盘面均被 `if not dry_run` 闸住, 不再有物化机会)。
         幂等性: 迁移链的输入是磁盘上的真实版本, 落盘前崩溃则文件保持旧版本完整内容,
-        下次启动从旧版本重放同一条链(黄金法则 1)。
+        下次启动从旧版本重放同一条链(黄金法则 1); 恢复写回落盘前崩溃则主文件仍为损坏内容,
+        下次启动再走一次 .bak 恢复链, 结果一致。
         """
+        if self.pending_recovery_write is not None:
+            if dry_run:
+                logger.info("备份恢复出的状态写回挂起(dry-run 不落盘, 主文件在盘上仍为损坏内容)")
+            elif self._write_back_recovered(self.pending_recovery_write):
+                self.pending_recovery_write = None
+                logger.info("备份恢复出的状态已写回主文件(自愈完成)")
         if not self.migration_desc:
             return
         if dry_run:

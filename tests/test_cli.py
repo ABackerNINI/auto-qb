@@ -41,6 +41,7 @@
 - test_fuse_release_dry_run_skips_state_save: dry-run 放行 -> release(dry_run=True) 且不落 state
 - test_main_fuse_release_mutex_errors: fuse 放行互斥矩阵(--fuse-release 与 --all / 与托盘导出 HR 模式 / 纯分隔符空清单) -> 退出码 2
 - test_main_fuse_release_dispatch_parses_hashes: --fuse-release 清单解析(全角逗号/空白归一小写)并派发 fuse_release, 落 state 后返回 0
+- test_main_fuse_release_all_zero_entries_exits_0: --fuse-release-all 零条目合法清点 -> 仍返回 True/退出码 0(与显式列表零命中 False 相对)
 """
 import signal
 import sys
@@ -634,3 +635,21 @@ def test_main_fuse_release_dispatch_parses_hashes():
             main()
     assert ei.value.code == 2
     m_qb.assert_not_called()
+
+
+def test_main_fuse_release_all_zero_entries_exits_0():
+    """--fuse-release-all 零条目是合法清点: release 返回 0 仍算成功 -> 退出码 0
+
+    与显式列表零命中(返回 False -> 退出码 1)相对: --all 清零常与 enabled=false 配合清残留,
+    回归翻转 `released == 0 and not release_all` 的条件会把这个合法场景误报成失败退出码。
+    """
+    manager = _fuse_mgr()
+    manager.ctx.fuse.release.return_value = 0
+    with _patch_argv("auto-qb", "config.yml", "--fuse-release-all"), \
+            mock.patch("auto_qb.cli.QbManager", return_value=manager), \
+            capture_logs("") as cap:
+        from auto_qb.cli import main
+        assert main() == 0
+    manager.ctx.fuse.release.assert_called_once_with(None, dry_run=False)  # --all 以 None 清单放行全部
+    manager.ctx.state.save.assert_called_once()
+    assert any("已放行 0 个条目" in m for m in cap.messages), "零条目清点也要留汇总日志"

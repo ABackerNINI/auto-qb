@@ -12,11 +12,13 @@
     **不算**坏文件(不挪也不从备份猜);
   - state: 坏文件原地保留待查(**不传** quarantine); 未来版本 SchemaVersionError fail-fast
     放出去(不算损坏 —— 备份里也是同一个新版本, 回退没有意义); _CORRUPT 三态(None=首启 vs
-    损坏)由 `_read_state_file` 自己区分; 自愈写回立即执行且失败只告警不阻断启动。
+    损坏)由 `_read_state_file` 自己区分; 自愈写回挂起待持锁后物化(StateService.
+    materialize_migration, issue 26-11-07-0527 —— load 的调用链含未持锁的早期加载/只读模式,
+    未持锁不写盘), 失败只告警不阻断启动。
 
 本模块只收**编排**(先留证后读备份)与**挪文件**两段确定性纪律; 日志/消息口径由调用方定
 (hr 要防轰炸去重, state 要 WARNING/INFO/ERROR 分级), 自愈写回的时机与载荷也不同
-(hr 随下次 commit、state 立即写回)。
+(hr 随下次 commit、state 持锁后启动物化)。
 """
 import logging
 import os
@@ -73,7 +75,7 @@ def recover_corrupt_file(
     保留待查, 不删除)。
 
     只编排 + 挪文件, **不写日志、不自愈**: WARNING/ERROR 由调用方按自身口径报(hr 有防轰炸
-    去重, state 有分级), 自愈写回的时机与载荷两侧不同(hr 随下次 commit、state 立即写回)。
+    去重, state 有分级), 自愈写回的时机与载荷两侧不同(hr 随下次 commit、state 持锁后启动物化)。
     """
     moved_to = quarantine() if quarantine is not None else ""
     data, reason = read_backup()

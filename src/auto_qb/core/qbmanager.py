@@ -507,8 +507,9 @@ class QbManager(
                     logger.warning(f"连接 qBittorrent 失败, {main_tick:g}s 后重试(检查 qB 是否运行/端口是否正确)")
                     retry_warned = True
             self._reload_state()  # state 被整体替换, 字段变化基线重新挂接
-            # schema 迁移物化(计划 26-09-26-0506): 磁盘版本 < CURRENT 时立即落盘一次新版本。
-            # 此处已持锁(与 __init__ 的 cleanup_orphan_tmp 同判据); __init__ 的早期加载只做内存迁移。
+            # 启动挂起写物化(计划 26-09-26-0506 / issue 26-11-07-0527): schema 迁移与损坏恢复
+            # 写回都在这里落盘 —— 此处已持锁(与 __init__ 的 cleanup_orphan_tmp 同判据);
+            # __init__ 的早期加载只做内存迁移/挂起恢复写回, 未持锁一律不写盘。
             self.ctx.state.materialize_migration(dry_run)
             # 周期落盘起点: 刚从磁盘加载过, 到期点从现在起算一个完整间隔(避免启动即无意义重写)
             self.ctx.state.next_flush_at = self._clock.now() + max(self.config.state_save_interval, 0.0)
