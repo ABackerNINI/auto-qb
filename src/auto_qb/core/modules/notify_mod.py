@@ -79,4 +79,8 @@ class NotifyModule(BaseModule):
     def _unmount(self) -> None:
         if self._handler is not None:
             logging.getLogger("auto_qb").removeHandler(self._handler)
+            # 先摘后关(摘后无新记录入队); close 投哨兵唤醒派发线程把积压派发完后退出 ——
+            # 该哨兵是线程唯一退出通道, 只摘不关的话每次热重载都泄漏一个永久阻塞在
+            # queue.get() 的 daemon 线程与队列(重挂走 setup_notify 新实例, 旧 handler 不复用)
+            self._handler.close()
             self._handler = None

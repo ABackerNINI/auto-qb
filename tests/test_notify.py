@@ -11,6 +11,7 @@
 - test_notify_handler_quiet_hours: 免打扰时段(含跨午夜)跳过发送, 时段外照常
 - test_notify_quiet_hours_does_not_consume_quota: 免打扰判定在节流**之前**, 免打扰期间不消耗每小时配额/不刷新去重窗口
 - test_notify_throttle_dedup_table_evicted: 去重表按窗口淘汰(长跑进程里唯一的无界增长点)
+- test_notify_throttle_dedup_zero_no_key_recorded: dedup_window=0 不记键(去重表读写都收在窗口分支, 0 配置不退化成无界增长)
 - test_notify_handler_throttle_drops: 同键重复与超限的记录不派发
 - test_notify_channel_windows_command: Windows 命令构造(powershell -EncodedCommand, toast XML 经双层 base64, AUMID 注册跳过)
 - test_notify_windows_appid_ensure: AUMID 幂等注册(已存在复用/无 APPDATA/注册失败回退 PowerShell 来源)
@@ -290,6 +291,17 @@ def test_notify_throttle_dedup_table_evicted():
     clock["t"] += 6.0  # a/b 已超窗口(11s > 10s), c 仍在(6s)
     assert throttle.allow("d")
     assert set(throttle._dedup_at) == {"c", "d"}, f"过期键应被淘汰: {throttle._dedup_at}"
+
+
+def test_notify_throttle_dedup_zero_no_key_recorded():
+    """dedup_window=0 不记键: 去重表恒空(0 = 不去重 = 不记键, 键的唯一用途就是去重)
+
+    写入若不收进窗口分支, 0 配置下写入照旧而清理被挡, 每条不同日志文本都是一个键 ——
+    长跑进程里去重表退化成无界内存增长点(正是 evicted 用例注释自述要防的形态)。
+    """
+    throttle = NotifyThrottle(max_per_hour=100, dedup_window=0, now=lambda: 0.0)
+    assert all(throttle.allow(f"k{i}") for i in range(20)), "dedup_window=0 不去重, 全部放行"
+    assert throttle._dedup_at == {}, f"0 配置下去重表不得记键: {throttle._dedup_at}"
 
 
 def test_notify_handler_throttle_drops():

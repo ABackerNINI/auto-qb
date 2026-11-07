@@ -13,6 +13,7 @@ P1 内容: 契约样板(sections 认领 + apply 整段短路) / run() 启动接�
 - test_logging_module_apply_short_circuit_and_remount: 段相等短路 none; 段变重挂新配置
 - test_notify_module_start_semantics: dry-run 不调挂载; start 无条件调 setup_notify(force=False, 未启用由其内部判 None); 重复 start 幂等
 - test_notify_module_apply_remount: 段相等短路; 段变先摘旧再 force=True 重挂
+- test_notify_module_remount_does_not_leak_dispatch_threads: remount 循环 N 次派发线程数不增长(_unmount 投 close 哨兵; 同名线程计数对首挂前基线取等, 免遭 test_notify.py 存量泄漏线程洗牌打假红)
 - test_notify_module_tray_api: enabled_state 三态 / set_enabled 翻转与会话级挂载(托盘契约)
 - test_apply_new_config_notify_remount_only_on_change: 改 notify 段才重挂, 无关保存零动作(P1 指定守阵)
 - test_no_private_notify_access_from_outside: 托盘/内核源码零 manager._notify_handler 直写
@@ -22,6 +23,7 @@ import inspect
 import os
 import tempfile
 import textwrap
+import threading
 from types import SimpleNamespace
 from unittest import mock
 
@@ -29,6 +31,8 @@ from auto_qb.config import LoggingConfig, NotifyConfig
 from auto_qb.config.impact import ConfigChange
 from auto_qb.core.modules import LoggingModule, NotifyModule
 from auto_qb.core.modules import logging_mod, notify_mod
+from auto_qb.infra.notify import WINDOWS_TOAST_APPID, PlatformChannel
+from clock import wait_until
 from helpers import make_manager
 
 
@@ -110,6 +114,41 @@ def test_notify_module_apply_remount():
         assert setup.call_count == 2
         assert setup.call_args == mock.call(new_diff.notify, force=True), "重挂保留原 L1 语义: force=True(会话级)"
         assert mod.enabled_state() is True, "重挂后是新 handler(挂载即 enabled=True)"
+
+
+def test_notify_module_remount_does_not_leak_dispatch_threads(monkeypatch):
+    """热重载 remount 循环 N 次, 派发线程数不增长(评审 #25)
+
+    修复前 _unmount 只 removeHandler 不 close, 而 close 哨兵是派发线程的唯一退出通道 ——
+    每次改 notify 配置重挂都泄漏一个永久阻塞在 queue.get() 的 daemon 线程与队列。
+    重挂走 setup_notify 新实例(旧 handler 不复用), 摘旧时投 close 即可优雅退出。
+
+    计数按线程名(auto-qb-notify)且**基线化**(pre 取首次挂载前, 稳态断言 == pre + 1 即
+    「比基线恰好多当前 worker 这一个」): test_notify.py 存量用例建 NotifyHandler 后只
+    removeHandler 不 close, 每进程留下同名 auto-qb-notify 守护线程 —— test.random-order
+    全局洗牌下泄漏用例先跑时, 绝对断言(== 1)会打假红, 基线把外来泄漏隔离在断言之外。
+    wait_until 容忍线程退出延迟(先例 test_hr_server.py); 不用全局 active_count 因 xdist
+    同 worker 上无关线程启停会污染计数(告诫见 test_traffic_store_codec.py)。
+    AUMID 注册打桩, 不动真实开始菜单; 不 emit 任何记录, 不触发真实发送(conftest 守卫兜底)。
+    """
+    def _alive_workers() -> int:
+        return sum(1 for t in threading.enumerate() if t.name == "auto-qb-notify" and t.is_alive())
+
+    monkeypatch.setattr(PlatformChannel, "_ensure_appid_registered", lambda self: WINDOWS_TOAST_APPID)
+    conf = NotifyConfig(enabled=True, min_level="ERROR", max_per_hour=100, dedup_window=0)
+    mod = NotifyModule(_ctx_with(notify_conf=conf))
+    pre = _alive_workers()  # 基线: 首次挂载前的同名线程数(含外来泄漏)
+    mod._mount(conf, force=True)
+    try:
+        for _ in range(3):
+            mod._unmount()
+            mod._mount(conf, force=True)
+        # 旧派发线程全被 close 哨兵唤醒退出(wait_until 容忍退出延迟): 稳态 = 基线 + 当前
+        # handler 这一个 worker; 修复前每次重挂净增一个阻塞线程, 等不到 pre + 1
+        assert wait_until(lambda: _alive_workers() == pre + 1,
+                          timeout=2.0), (f"remount 循环后应回落到 基线({pre})+当前 worker 一个(修复前每次重挂净增一个阻塞线程)")
+    finally:
+        mod._unmount()
 
 
 def test_notify_module_tray_api():
