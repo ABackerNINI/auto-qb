@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="legacy-review4">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="存量评审 R4·scripts 汇总(major 1/minor 23)">
 <meta name="issue-summary" content="scripts 主题 major 1+minor 23 共 24 条聚合入池,来源存量评审 R4(计划 26-11-05-2335)">
 <title>存量评审 R4·scripts 汇总(major 1/minor 23) · bug · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-11-07-0536-bug-legacy-review4-scripts</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-07 05:36</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -179,11 +179,28 @@
     <ul>
       <li>2026-11-07 05:36 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
       <li>26-11-07 聚合入池自存量评审 R4（计划 26-11-05-2335，<code>memory-bank/plans/26-11-05-2335-plan-legacy-code-review-4.html</code>）——本轮纯盘点，状态保持 Open；doc-refs 留空待认领方回填</li>
-    </ul>
+      <li>2026-11-07 — 状态 Open → Done（kb.status）</li>
+</ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>2026-11-07,分支 head <code>a2eab2a1</code> 重跑锚点:24 条全部仍复现(由 P6 只读评审逐条重定位核验),随后修复;行号漂移轻微(例: #6 <code>:124→:44/:145</code>、#23 <code>:189/:195→:253/:259</code>、#11 <code>:813→:841</code>)。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <h4>实际修法</h4>
+    <p>24/24 按明细表「fix」列实施,同文件聚 5 批(sim 组 A/B、守卫组、工具组、taskkill 组),major #1 最先。</p>
+    <h4>改道/超集说明</h4>
+    <ul>
+      <li>#11: 实测旧 dry 路径发 9 个真实请求(4 login + 4 handshake + 1 计数,多于 claim 所指 4 个)——dry 分流提到 main() Capture 构造之前,真零请求;<code>_count_torrents</code> 失去调用方一并删除。</li>
+      <li>#10/#8: 经用户拍板走「AGENTS.md 红线条目写明豁免」路线(不换通道);AGENTS.md <code>doc.caps</code> 6915/8000 PASS。</li>
+      <li>#9: 新增 Win32_Process 杀前核验(纯函数 <code>kill_decision</code>);非 python 监听须显式 <code>--yes</code>(新旗标默认关),核验失败恒拒杀。</li>
+      <li>#19: 传 <code>declared=len(paths)</code>,与 delete_torrents/delete_group_files 口径统一。</li>
+      <li>#21: 不显式传阈值,交 <code>add()</code> 走 <code>corpus.</code> 前缀路由;设计内副作用:合成档未固化基线时该项记 BASELINE 而非隐式 1.0 判。</li>
+      <li>非 ASCII 类:全文件清零并含扫描追加同类(⊕/·/…/① 等);修后 scripts/ 目录零图形符号残留。</li>
+    </ul>
+    <h4>验证方式</h4>
+    <p>每批定向 <code>test.one</code> + 红验实测(旧实现逐字重放必红:UNC 旧序/corpus 裸阈值/porcelain 整串/e2e IndexError/守卫 IndexError/dry 旧序 4-login 对照/无核验 taskkill);实跑旁证:dev.port-kill 拒杀路径(rc=1 零杀)、e2e_selfcheck 缺值 rc=2 走 usage、qb_capture --dry 无 qB 在听时 rc=0 零请求;taskkill 全程零真实执行。P6 只读评审:blocker 0/major 0,3 minor + 1 nit 已修,UTF-8 钉码补钉 1 处。</p>
+    <h4>测试数字</h4>
+    <p>test.full 5641 passed / 2 skipped,覆盖 99.91%(门槛 99.5%);新增 19 条单测(<code>tests/test_legacy_review4_scripts.py</code> 15 + <code>tests/test_sim_corpus.py</code> 4),既有用例 0 改写。本地分支 <code>fix/legacy-review4-scripts</code>(b7367a99..a2eab2a1,8 提交,合流 develop 待推)。</p>
+    <h4>doc-refs 留空说明</h4>
+    <p>本轮按用户指定流程未立计划/切片/baseline 档案,doc-refs 维持空(存在同先例);分支与提交号已在上文 prose 记载。</p>
   </section>
 
   <footer>

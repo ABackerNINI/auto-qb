@@ -19,7 +19,7 @@
 
 | 类型 | 条数 |
 |---|---|
-| bug | 11 |
+| bug | 10 |
 | perf | 2 |
 | docs | 1 |
 | test | 7 |
@@ -37,7 +37,6 @@
 
 ## Open
 
-- [bug] [存量评审 R4·scripts 汇总(major 1/minor 23)](26-11-07-0536-bug-legacy-review4-scripts.html) — scripts 主题 m…
 - [bug] [存量评审 R4·static 汇总(major 24/minor 111)](26-11-07-0536-bug-legacy-review4-static.html) — static 主题 ma…
 - [bug] [存量评审 R4·webui-py 汇总(major 2/minor 23)](26-11-07-0536-bug-legacy-review4-webui-py.html) — webui-py 主题…
 - [feat] [回收 daemon 进程名册证为全机口径: 同机多 qB 实例时收尾窗可用性让位 N1(取舍记录+增强方向)](26-11-07-0528-feat-recycle-daemon-roster-machine-wide.html) — 评审#6 后名册证=全机…
@@ -91,7 +90,7 @@
 ## Done
 
 
-> 更早的 **437** 条已出本索引 —— 报告仍在 `issues/` 目录(未搬动), 全量清单见 [attachments/_archive.md](attachments/_archive.md).
+> 更早的 **438** 条已出本索引 —— 报告仍在 `issues/` 目录(未搬动), 全量清单见 [attachments/_archive.md](attachments/_archive.md).
 
 ## Dropped
 
