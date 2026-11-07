@@ -167,6 +167,9 @@ test.describe('设置页 · 整组迁移 BT_backup 路径表(S5)', () => {
       await expect.poll(() => saved, { message: 'PUT /api/config 未发出', timeout: 15_000 }).not.toBeNull();
       expect(saved.tree.config.bt_backup, '撞键脏文本不得泄漏进保存载荷')
         .toEqual({ '127.0.0.1:8080': 'D:/qb/BT_backup', '127.0.0.1:8081': 'D:/qb/BT_backup2b' });
+      /* toEqual 对键序不敏感, 头注释声称的「键序原样」由这条直接钉住。 */
+      expect(Object.keys(saved.tree.config.bt_backup), '载荷键序原样')
+        .toEqual(['127.0.0.1:8080', '127.0.0.1:8081']);
     });
   }
 });
