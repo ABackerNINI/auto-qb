@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>relocate 嵌套目标闸门误拦修正: 锚点换内容根 + 形态感知 + UI 整组语义披露</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="relocate-nested-gate-fix">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-07-1300">
+<meta name="doc-updated" content="26-11-07-1300">
+<meta name="doc-refs" content="">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: relocate-nested-gate-fix</div>
+<h1>relocate 嵌套目标闸门误拦修正: 锚点换内容根 + 形态感知 + UI 整组语义披露</h1>
+<p class="lede">本篇只回答: <b>relocate 嵌套目标闸门的误拦怎么修</b> —— 硬拦锚点从「成员声明源」换成「新旧内容根互嵌」并收窄到目录别名形态; 在途 job src 分支锚点收窄到 job.scope; 「新家嵌在旧声明源树下」降为 confirm; 文件级与单成员不再因路径嵌套被硬拦; 并补 UI 整组迁移语义披露。全部结构判据先经真机实验逐条验证(不通过即回炉), 再动代码。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-07-1300 · <b>doc-updated</b> 26-11-07-1300 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 会话 grilling(2026-11-07, Q1-Q6 六问六答) + 用户误拦报告(整组移动下移 3 文件种子到 <code>R:\Download\PTing\待删</code> 被拦) + 关联件: issue 26-11-05-0420(修法③出处) · 计划 26-11-05-0546(机制③/E2.3) · 计划 26-11-05-0808(重构继承)
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<p><b>事故</b>: 启用整组迁移后, 移动一个 3 文件种子到组成员声明源内的兄弟目录(<code>PTing\xxx</code> → <code>PTing\待删\xxx</code>)被 <code>GATE_NESTED</code> 硬拦。用户三点质疑经代码核实全部成立(见 §02): 闸门锚点用声明源而非别名真实落点(内容根)、闸门形态盲、文件级形态无自递归可能。</p>
+<p><b>做到什么算成</b>:</p>
+<ol>
+  <li>用户场景(文件级组迁入源内待删兄弟目录)预检放行, 且真机全链路(setLocation → 建链 → fastresume 改写 → 核验 → 删链)走通: 账面 1.00 / 磁盘原名 / 零 recheck / 零拒载。</li>
+  <li>真形态不放松: 目录别名(DIR_ALIAS)且新旧内容根互嵌 → 预检硬拦(数据不进执行期卡死形态); 平铺反向(junction 指向自身祖先)同样被拦。</li>
+  <li>在途 job 期间往旧根兄弟目录停车不再误拦(job.scope 收窄)。</li>
+  <li>「新家嵌在旧声明源树下」以 confirm 披露 D19 连带后果; UI 在提交前可见「移动 = 整组迁移」语义。</li>
+  <li>既有不误伤面(兄弟目录/前缀同串/尾斜杠/大小写/父目录方向)在新锚点下回归全绿。</li>
+</ol>
+<p><b>设计底线 / 不变量</b> (继承 0546 §1.3): 数据安全三约束全程断言 —— 不删种 / 不 skip_check 重加 / 不读盘(哈希)校验; 生产实例 26586/16585 与 <code>I:\PT\</code> 零触碰, 只在测试实例 + real-fake 假种子 + <code>R:/tests-real/.work</code> 上操作; 闸门保持纯函数不触盘; 预检拦截先于任何数据移动(fail-fast); <b>真机实验先行</b>(D7): 任何结构判据先上真机构造场景实证, 与推演不符即回炉改设计, 不带假设进实现。</p>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+<table>
+  <tr><th>环节</th><th>位置</th><th>事实</th><th>对修法的含义</th></tr>
+  <tr><td>闸门本体</td><td><code>relocate_units.py:469-501</code> nested_target_on; 调用点 <code>:582</code>(预检) + <code>relocate_exec.py:849</code>(执行入口二次拦截)</td><td>三支: 目标 ⊆ 成员声明源 / ⊆ 在途 job 声明源 / ⊆ 在途 job 声明目标; 成分级比较(_within)</td><td>重写为形态分治 + 三输出(blocked/confirm/note)</td></tr>
+  <tr><td>硬拦锚点</td><td><code>relocate_plan.py:327</code> member_save_paths(全成员声明源, 空=回落 mover save_path)</td><td class="bad">声明源 ≠ 别名真实落点(内容根): 目标与内容根为兄弟时被误判嵌套 —— 本次事故直接根因</td><td>锚点换 facts.content_root + target+rel 派生的新内容根</td></tr>
+  <tr><td>别名真实落点</td><td><code>relocate_exec.py:276-283</code>(DIR_ALIAS junction = job.src+_scope_rel = 内容根; 落点非空 RuntimeError:281) / <code>:290</code>(FILE_LINKS 逐文件叶)</td><td class="good">落点全在内容根层, 不在声明源层</td><td>结构危险面只有「互嵌 × DIR_ALIAS」一种</td></tr>
+  <tr><td>单成员形态</td><td><code>relocate_units.py:211-215</code>(FORM_DIRECT, 无别名) + <code>relocate_exec.py:224-226</code>(无别名无收尾)</td><td class="bad">闸门仍按路径形态拦 —— 拦空气</td><td>DIRECT 不因嵌套硬拦</td></tr>
+  <tr><td>形态分流顺序</td><td><code>relocate_units.py:675</code>(plan 纯函数) vs 嵌套闸门 <code>:582</code></td><td>闸门在形态判定<b>之前</b>跑 —— 形态盲</td><td>闸门重排到 plan() 之后, 消费 unit.form</td></tr>
+  <tr><td>阈值</td><td><code>relocate_units.py:179</code> threshold=8</td><td>3 文件 → FILE_LINKS(本次事故形态)</td><td>—</td></tr>
+  <tr><td>组解析</td><td><code>relocate_plan.py:288-291</code>(组成员取 store 全组) + <code>relocate_exec.py:113</code>(setLocation 只下发 mover)</td><td>「移动一个种子」= 入口, 整个内容组一起迁(共享物理文件, 设计如此); UI 无任何整组语义提醒</td><td>R6 UI 披露(D8)</td></tr>
+  <tr><td>判据测试钉死</td><td><code>tests/test_relocate_fastresume_gates.py:421</code>(E2.3 8 例, 声明源锚)</td><td>断言「声明源之下」文案与现行行为</td><td>P2 重锚 + 新用例矩阵</td></tr>
+  <tr><td>UI 渲染事实</td><td><code>drawer.js _relocateConfirmGate</code>(无 confirm 项不弹框) / <code>_relocateConfirmRows</code>(行表无成员数) / gate-flag 通路既有(<code>ctx_menu.js:34</code> CTX_GATE_FLAG)</td><td class="bad">全 ok 迁移零披露; 用户提交前看不出「整组」语义</td><td>R6 两个披露点 + flags 通路复用</td></tr>
+  <tr><td>判据出处</td><td>0420 修法③原文「target ⊆ save_path/<b>content_root</b>(或反向)→ blocked(dir_alias 的 junction 会自递归)」→ 0546 机制③/E2.3 → 0808 S1 原样继承</td><td>双锚并列的保守写法逐代照抄; E2.3 只验证「成分级不误伤」, 从未收窄「用哪个锚」与「哪个形态」</td><td>保守泛化, 非有意严格设计 —— 修正有文档内部依据</td></tr>
+</table>
+
+<h2><span class="no">§03</span>方案总览</h2>
+<p><b>主线</b>: 判据从「目标 ⊆ 成员声明源(全形态一刀切)」改为<b>按形态分治</b> —— 结构危险面收敛为「互嵌 × 目录别名」一种; 其余形态放行, 后果用 confirm/note 披露; UI 补两个披露点。判据全部经 P1 真机实验实证后才实现。</p>
+<table>
+  <tr><th>#</th><th>级别</th><th>条件</th><th>说明与落点</th><th>拍板</th></tr>
+  <tr><td>R1</td><td class="bad">blocked</td><td>DIR_ALIAS 且 <code>_within(src_cr, dst_cr) || _within(dst_cr, src_cr)</code>(成分级; 严格嵌套, 相等不算 —— 相等=幂等, 由 evaluate_group 既有幂等分支先行返回)</td><td>新旧内容根互嵌: 正向(目标 ⊆ 旧内容根, junction 落点被新数据占住 → <code>relocate_exec.py:281</code> 非空 RuntimeError 搬后卡死)与反向(平铺时 junction 指向自身祖先 → 递归列举成环)。锚点: src_cr = <code>facts.content_root</code>(<code>relocate_units.py:516-517</code> 既有产物), dst_cr = <code>_join(target, rel)</code>(rel 与 content_root 同源 layout_of)</td><td>D1/D6</td></tr>
+  <tr><td>R2</td><td class="bad">blocked</td><td>任意形态, <code>_within(job.scope, target)</code>(含等于, 保守)</td><td>在途 job src 分支锚点从 job.src 收窄到 job.scope(别名落点/搬移树 = <code>relocate_exec.py:1102</code> 既有产物); 兄弟落点不再误拦</td><td>D2</td></tr>
+  <tr><td>R3</td><td>维持现状</td><td><code>_within(job.dst, target)</code> 且 target ≠ job.dst</td><td>落定数据树语义, 本轮不动; dst 锚点过宽记 known-limitation</td><td>D2</td></tr>
+  <tr><td>R4</td><td class="wr">confirm</td><td>任意形态, target 严格 ⊆ mover 声明源(facts.save_path)且未被 R1/R2/R3 拦</td><td>「新家嵌在旧声明源树下: 旧根将来整组迁移时这片数据会被覆盖扫描连带走(D19)」—— 出现在既有确认框, 零额外点击</td><td>D3</td></tr>
+  <tr><td>R5</td><td>note</td><td>FILE_LINKS 且 target 严格 ⊆ src_cr</td><td>「别名存续期该种子带文件删除被 D16 拦(收尾后消失); 旧内容根内链接叶与新数据混居」</td><td>D4</td></tr>
+  <tr><td>R6</td><td>UI</td><td>(a) submitMoveDialog 常驻提示「整组迁移已启用: 移动将以内容组为单位, 同组其它成员一并迁移」(relocate.enabled 时显示, 经既有 gate-flag 通路暴露新 flag); (b) 确认框「来源」行扩为「来源(整组 N 个成员)」—— item 增 <code>member_count = len(facts.hashes)</code></td><td>不强制 confirm(全 ok 迁移不新增点击)</td><td>D5/D8</td></tr>
+</table>
+<p><b>纯函数改造</b>: <code>nested_target_on(target, save_paths, jobs) -&gt; str</code> → <code>nested_target_on(target, jobs, *, form, src_cr, dst_cr, mover_save_path) -&gt; (blocked, confirm, note)</code>; 调用点移到 evaluate_group 的 plan() 分流(<code>:675</code>)之后, <code>unit.form == FORM_REJECT</code> 时跳过(已被 GATE_FORM 拦); 执行入口二次拦截(<code>relocate_exec.py:849</code>)同签名同步。组内成员声明源多样性(同物理根不同声明)不新增物理化面 —— 锚点全部取 mover 声明空间派生物, 与组键的 resolve_physical 口径一致。</p>
+<p><b>分期</b>: P1 真机实验先行(E1-E8, 判据回炉条款) → P2 纯函数+单测 → P3 实现+UI → P4 真机全链路验收+基线切片。</p>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+<h3>P1 真机实验先行(改代码前; 全部在测试实例, real-fake 假种子)</h3>
+<table>
+  <tr><th>E</th><th>目的</th><th>构造</th><th>断言 / 判定</th></tr>
+  <tr><td>E1</td><td>复现误拦(基线取证)</td><td>多成员组 3 文件, target = 源内待删兄弟目录</td><td>现行 blocked + 文案留档 —— 事故等价复现</td></tr>
+  <tr><td>E2</td><td>FILE_LINKS + 兄弟落点全链路成立性</td><td>同 E1 构造, 旁路闸门发起迁移</td><td>setLocation→建链→改写→核验→删链 全绿: 账面 1.00 / 磁盘原名 / 零 recheck / 零拒载 —— R4/R5 场景的结构假设实证</td></tr>
+  <tr><td>E3</td><td>FILE_LINKS + 深层嵌套(target ⊆ 内容根)</td><td>target 建在旧内容根内部</td><td>全链路成立 + D16 拦带文件删除的摩擦实证(收尾后消失) —— R5 场景</td></tr>
+  <tr><td>E4</td><td>FORM_DIRECT(单成员)+ 嵌套</td><td>单成员组, target 嵌套</td><td>qB 直接搬移成功, 无别名无收尾 —— R1 不该拦 DIRECT 的实证</td></tr>
+  <tr><td>E5</td><td>DIR_ALIAS + 正向嵌套的真卡死形态</td><td>≥8 文件组(或文件级不可建), target ⊆ 旧内容根</td><td>复现 <code>relocate_exec.py:281</code>「内容根目录非空」RuntimeError 搬后卡死 —— R1 必要性实证</td></tr>
+  <tr><td>E6</td><td>DIR_ALIAS + 平铺反向成环实证</td><td>平铺组, target ⊇ 源(祖先目录)</td><td>junction 指向自身祖先: 递归列举成环实证 —— R1 对称拦必要性</td></tr>
+  <tr><td>E7</td><td>在途 job + 往旧根停车</td><td>一组在途, 另一组落点在旧根兄弟目录</td><td>现行误拦取证; job.scope 收窄后放行且旧 job 全链路不受扰</td></tr>
+  <tr><td>E8</td><td>成分级不误伤回归(新锚点)</td><td>待删2 兄弟 / 待删除 前缀同串 / 尾斜杠 / 大小写变体 / 父目录方向 / 相等(幂等)</td><td>新判据下全部不误伤、幂等分支照常先行</td></tr>
+</table>
+<p><b>回炉条款</b>: 任一 E 与 §03 推演不符 → 停, 回 §03 改判据, 重走受影响 E, 才进 P2。禁止「实验结果与设计不符就调实验」。</p>
+<h3>P2 纯函数 + 单测</h3>
+<ul>
+  <li><code>nested_target_on</code> 按新签名重写(三输出, 形态感知, 严格嵌套); <code>evaluate_group</code> 闸门重排 + <code>member_count</code>; <code>relocate_exec.py:849</code> 入口同步。</li>
+  <li><code>tests/test_relocate_fastresume_gates.py:421</code> 重锚: E2.3 原 8 例按内容根锚改写保留; 新增: 形态感知矩阵(DIRECT/FILE_LINKS/DIR_ALIAS × 嵌套方向)、互嵌对称、R4 confirm / R5 note 触发与不触发、幂等排除、R2 scope 收窄、R3 维持。</li>
+  <li>验收: 单测全绿; 文件头部 docstring「测试计划」清单同步(仓库守卫)。</li>
+</ul>
+<h3>P3 实现 + UI</h3>
+<ul>
+  <li>flags 通路暴露 <code>relocate.enabled</code>(ctx_menu.js CTX_GATE_FLAG 同款); <code>submitMoveDialog</code> 常驻提示(R6a); <code>_relocateConfirmRows</code>「来源」行接 member_count(R6b)。</li>
+  <li>验收: 单测过 + 五主题共享 drawer 静态渲染检查 + 确认框手测(有/无 confirm 项两态)。</li>
+</ul>
+<h3>P4 真机全链路验收</h3>
+<ul>
+  <li>E1-E8 场景在<b>实现后代码路径</b>全量复跑(放行面全链路走通, 拦截面预检即拦); 既有 relocate 测试面回归; 闸门文案/确认框/toast 回归。</li>
+  <li><code>commands run test.full</code> → <code>kb.new baseline</code> 切片(数字实测誊写)。</li>
+  <li>收尾 DoD: code-review(改动预计远超 50 行且触安全敏感面, 强制) → kb.wrap → 代码事实回写 memory-bank → 0420/0546/0808 表述勘误在收尾轮按回写口径处理, 不预写历史件。</li>
+</ul>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p>无遗留 —— 六问(Q1-Q6)已全部拍板, 结论见 §06。</p>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+  <tr><th>D</th><th>结论</th><th>日期</th></tr>
+  <tr><td>D1</td><td>对称修: DIR_ALIAS 正反双向互嵌都拦(反向是真实结构死角, 不留已知缺口)</td><td>2026-11-07</td></tr>
+  <tr><td>D2</td><td>在途 job src 分支同步收窄到 job.scope; dst 分支本轮不动(落定数据树语义不同, 已有「恰等 dst 不算」豁免), 记 known-limitation</td><td>2026-11-07</td></tr>
+  <tr><td>D3</td><td>「新家嵌在旧声明源内」降 confirm(既有确认框顺带展示, 披露 D19 连带后果; 不维持 blocked)</td><td>2026-11-07</td></tr>
+  <tr><td>D4</td><td>FILE_LINKS + 深层嵌套放行, 仅加一行 note(D16 摩擦与混居告知)</td><td>2026-11-07</td></tr>
+  <tr><td>D5</td><td>UI 提醒 = 输入对话框常驻提示 + 确认框成员数披露, 不强制 confirm(全 ok 迁移不加点击)</td><td>2026-11-07</td></tr>
+  <tr><td>D6</td><td>形式化 = 「新旧内容根互嵌」(替代 Q1 字面「内容根落点 ⊆ 目标树」, 修正目标在声明源之上且内容根非平铺时的误拦; 已逐形态推演)</td><td>2026-11-07</td></tr>
+  <tr><td>D7</td><td>真机测试先行: 每条判据先真机实测, 各情况全测一遍, 不想当然(用户指定; 写入 P1 硬性阶段 + 回炉条款)</td><td>2026-11-07</td></tr>
+  <tr><td>D8</td><td>补 UI 整组语义提醒缺口(用户指出「目前 UI 没有任何移动一个种子就移动整组的提醒」)</td><td>2026-11-07</td></tr>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+  <tr><th>风险</th><th>触发条件</th><th>处置</th></tr>
+  <tr><td>真机实验推翻判据</td><td>任一 E 与 §03 推演不符</td><td>回炉条款: 改 §03 → 重走受影响 E → 才进 P2; 严禁为凑设计调实验</td></tr>
+  <tr><td>E5/E6 卡死形态污染测试实例</td><td>构造搬后卡死/成环现场</td><td>实验前快照实例配置与 state; real-fake 假种子隔离; 实例可整体重建; 生产零触碰</td></tr>
+  <tr><td>闸门重排改变 reasons 顺序</td><td>下游回执形状/表驱动用例漂移</td><td>P2 同步修表驱动用例; 回执契约测试全绿为准</td></tr>
+  <tr><td>confirm 新增改变确认框触发面</td><td>原「全 ok 直发」的迁移现在弹确认框</td><td>P4 真机验证确认框两态行为 + toast/文案回归; 用户已拍板接受(D3)</td></tr>
+  <tr><td>等于/幂等语义回归</td><td>互嵌判据误吞相等态</td><td>判据用严格嵌套 + 幂等分支先行双保险; E8 加相等用例</td></tr>
+  <tr><td>生产误触</td><td>真机实验/验收操作错实例</td><td>全程测试实例 + real-fake; <code>dev.run</code> 一律先 <code>--dry-run</code>; 红线(config.yml/auto-qb-data)不动</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-07-1300</span> 初版: 会话 grilling(Q1-Q6)拍板 + 用户误拦报告; 机制面核实表(§02, 全部行号实测); 判据 R1-R6; 真机实验矩阵 E1-E8 与回炉条款; 分期 P1-P4。实施开工另按会话协议立档。</li>
+</ul>
+
+</div>
+</body>
+</html>

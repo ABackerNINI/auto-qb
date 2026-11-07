@@ -17,6 +17,7 @@
 
 ## Open
 
+- [26-11-07-1300] [relocate 嵌套目标闸门误拦修正: 锚点换内容根 + 形态感知 + UI 整组语义披露](26-11-07-1300-plan-relocate-nested-gate-fix.html) — `relocate-nested-gate-fix`
 - [26-11-05-1049] [memory-bank 文档压缩与防回涨分步执行计划(8K 新口径)](26-11-05-1049-plan-kb-doc-compress.html) — `kb-doc-compress`
 - [26-11-05-0848] [跳检自身失败闸门 G9: WEB case-2 强制 + 规则侧硬 skip 双点同谓词](26-11-05-0848-plan-skip-check-self-fail-gate-g9.html) — `skip-check-self-fail-gate-g9`
 - [26-11-03-2212] [整组迁移同盘证明误拒：根因与修复计划](26-11-03-2212-plan-relocate-same-fs-proof.html) — `relocate-same-fs-proof`
