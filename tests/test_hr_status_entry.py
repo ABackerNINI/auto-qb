@@ -16,10 +16,8 @@
 ### P1 覆盖率提升轮: 展示层与模型长尾
 - test_model_lane_predicates_and_done_epoch_edges: lane_is_satisfied/exempt + done_epoch 空值与坏值不猜
 - test_model_infohash_of_falls_back_to_downloaded: infohash_of 回落永久层(v1 优先, 缺失回落 v2)
-- test_model_index_by_infohash_skips_inactive_and_empty: 反查表跳过非活跃与空 hash
 - test_model_from_json_drops_invalid_verified_records: 放行记录脏数据(无 hash/无时刻)不入账
 - test_model_infohash_of_prefers_index: infohash_of 索引条目优先且 v1 优先 v2(有索引就不回落)
-- test_model_index_by_infohash_continue_skips_inactive_head: 反查表遇非活跃条目 continue 跳过而非 break 停表
 
 ### 拉取历史导出(history_rows, 计划 26-10-04-0312 §3.4)
 - test_history_rows_merges_sites_desc_and_site_column: 多站合并成一条时间轴, ts 降序, 行带 site 归属
@@ -231,19 +229,6 @@ def test_model_infohash_of_falls_back_to_downloaded():
     assert data.infohash_of(9) == "V2", "v1 缺失回落 v2"
 
 
-def test_model_index_by_infohash_skips_inactive_and_empty():
-    """反查表: 非活跃条目与空 hash 都不收"""
-    active = HrEntry(tid=1, name="a")
-    active.infohash_v1 = "HA"
-    inactive = HrEntry(tid=2, name="b")
-    inactive.infohash_v1 = "HB"
-    inactive.active = False
-    nohash = HrEntry(tid=3, name="c")
-    data = HrSiteData()
-    data.index = {1: active, 2: inactive, 3: nohash}
-    assert data.index_by_infohash() == {"HA": 1}
-
-
 def test_model_infohash_of_prefers_index():
     """infohash_of: 索引条目优先(且 v1 优先 v2) —— 有索引就不该回落已取记录"""
     from auto_qb.hr.model import HrDownloaded
@@ -254,18 +239,6 @@ def test_model_infohash_of_prefers_index():
     assert data.infohash_of(1) == "IDX1", "索引命中优先, 不回落已取记录"
     data.index[1] = HrEntry(tid=1, infohash_v2="IDX2")
     assert data.infohash_of(1) == "IDX2", "v1 缺失回落 v2(而不是取空)"
-
-
-def test_model_index_by_infohash_continue_skips_inactive_head():
-    """反查表遇非活跃条目要 continue(跳过)而非 break(整表停): 后面的活跃条目仍要收"""
-    inactive = HrEntry(tid=1, name="a")
-    inactive.infohash_v1 = "H1"
-    inactive.active = False
-    active = HrEntry(tid=2, name="b")
-    active.infohash_v1 = "H2"
-    data = HrSiteData()
-    data.index = {1: inactive, 2: active}
-    assert data.index_by_infohash() == {"H2": 2}
 
 
 def test_model_from_json_drops_invalid_verified_records():

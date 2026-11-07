@@ -187,11 +187,12 @@ class HrSiteStore:
         return data, err
 
     def rebaseline_after_recovery(self, data: HrSiteData) -> None:
-        """从备份恢复后重置写者心跳自检基线
+        """恢复路径重置写者心跳自检基线(从备份恢复 / 备份不可用按空数据重建, 两处同口径)
 
-        〘必需〙备份必然比本进程上次写的**旧**, 不重置的话下面「revision 回退」的锁自检会把这次
-        恢复判成「共享目录上锁不生效」而退化为只读 —— 于是这个站点再也写不回去(自愈反而变砖)。
-        只发生恢复时基线, 不取消自检本身: 没恢复过的路径照常拦 revision 回退。
+        〘必需〙恢复出的数据必然比本进程上次写的**旧**(备份是上一版; 空数据重建是 revision 0),
+        不重置的话下面「revision 回退」的锁自检会把这次恢复判成「共享目录上锁不生效」而退化
+        为只读 —— 于是这个站点再也写不回去(自愈反而变砖)。只在恢复时基线, 不取消自检本身:
+        没恢复过的路径照常拦 revision 回退。
         """
         self._last_write_rev = data.revision
         self._last_write_heartbeat = data.writer_heartbeat
@@ -287,6 +288,10 @@ class HrLockSession:
             store.rebaseline_after_recovery(data)
             self.read_error += f"; 已从备份(.bak)恢复: 索引 {len(data.index)} 条 / 放行 {len(data.verified)} 条"
         else:
+            # 备份不可用: 本轮按空数据(revision 0)重建, 同样要重置写者心跳基线 —— 否则
+            # _last_write_rev 停在本进程上次写的值, 下一轮读到 revision=0 恒判「回退」,
+            # 站点永久退化为只读、只能重启恢复(issue 26-11-07-0527 #17)
+            store.rebaseline_after_recovery(self.data)
             self.read_error += f"; 备份不可用({rec.backup_reason}), 本轮按空数据处理(保守回落未核实)"
 
     @property

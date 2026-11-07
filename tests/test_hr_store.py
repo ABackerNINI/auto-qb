@@ -15,11 +15,19 @@
 - test_corrupt_file_is_quarantined_and_recovered_from_backup: 坏文件挪到 `.bad-<ts>` 留证 + 从 `.bak` 恢复,
   且恢复后的写入**不得**把好备份盖成坏内容
 - test_corrupt_file_without_backup_warns_once: 无备份 -> 空数据 + 同一坏文件只告警一次
+- test_corrupt_without_backup_rebaselines_and_stays_writable: 备份不可用按空数据重建同样重置写者心跳基线
+  (否则本进程此后 revision=0 恒判「回退」, 站点永久退化只读; issue 26-11-07-0527 #17)
 - test_repeated_read_failure_does_not_rewarn: 坏文件挪不走(被占用)时也不逐轮重报(降 DEBUG)
 - test_non_utf8_file_is_quarantined_and_recovered_from_backup: 守阵(26-10-06-0028 B2-01)——非 UTF-8 字节(GBK 重存)
   同属「坏文件」, 归入隔离 -> .bak 自愈链而非每波 ERROR 刷屏
 - test_non_utf8_bytes_never_raise_on_unlocked_read_and_backup: 守阵(26-10-06-0028 B2-01)——无锁只读 / 备份路径
   对非 UTF-8 文件「读坏不抛」如实带回错误(status.py 契约钉死)
+- test_corrupt_field_shapes_do_not_escape_read_path: 守阵(issue 26-11-07-0527 #8)——list/dict 字段坏形状(手改坏)
+  读路径不抛: 非 dict 元素跳过 / 坏容器回空, 其余字段照常读出(AttributeError 不许穿透坏文件兜底)
+- test_non_iterable_container_still_lands_in_bad_file_bucket: 容器整体成非可迭代标量仍落既有「字段解析失败」
+  兜底(TypeError 网), 不逃逸(守卫补齐后 _parse 的 except 元组无需扩)
+- test_model_sitedata_bad_shapes_never_raise_and_skip: HrSiteData.from_json 的 list/dict 字段坏形状不抛, 非 dict 元素跳过 / 坏容器回空, 好元素照常入账(issue 26-11-07-0527 #8)
+- test_model_wavemeta_bad_lanes_shapes_never_raise: HrWaveMeta 内层 lanes/prev_a_tids 坏形状不抛, 容器回空 / 非 dict 值跳过(读路径契约覆盖到 wave 子对象)
 - test_schema_mismatch_is_not_quarantined: schema 不符是版本迁移, 不挪走也不从备份猜
 - test_schema_version_old_migrates_and_materializes_on_commit: 旧版本沿链迁移(旧迁新拒), 随下次 commit 物化新版本
 - test_schema_migration_logs_once: 迁移 INFO 只报一次(读路径含无锁只读, 防通知轰炸)
@@ -73,6 +81,10 @@
 - test_model_sitedata_roundtrip_all_fields: HrSiteData 顶层标量 + 子表 + wave/rate/history 全字段往返
 - test_model_sitedata_schema_version_and_writer_fallback: schema_version 从 raw 取; writer 三级回退链
 - test_model_sitedata_verified_filter_positive_ts: 放行入账闸 verified_ts > 0(正小数也算)
+- test_model_sitedata_bad_shapes_never_raise_and_skip: HrSiteData.from_json 的 list/dict 字段坏形状不抛:
+  非 dict 元素跳过 / 非 dict 容器回空, 好元素照常入账(issue 26-11-07-0527 #8)
+- test_model_wavemeta_bad_lanes_shapes_never_raise: HrWaveMeta 内层 lanes/prev_a_tids 坏形状不抛:
+  容器回空 / 非 dict 值跳过(读路径契约覆盖到 wave 子对象)
 - test_store_instance_id_is_twelve_hex: 实例标识固定 12 位十六进制
 - test_store_hr_dir_strips_trailing_separators: 尾部分隔符剥掉; 目录名以 X 结尾不误剥
 - test_store_init_defaults_and_lock_timeout: 构造默认(owner 12 位 / 锁超时 0 / 各旗标初始态)
@@ -174,8 +186,6 @@ def test_roundtrip_all_substructures(tmp_path):
     assert data.wave.lanes["A"].full_depth is True and data.wave.releases_enabled is True
     assert data.wave.prev_a_tids == {313852: "aa" * 20}
     assert data.rate.day_count == 5
-    # 反查表只在读取时现建, 且以 tid 为主键(不存双份)
-    assert data.index_by_infohash() == {"aa" * 20: 313852, "bb" * 32: 313852}
 
 
 def test_missing_file_is_empty_not_error(tmp_path):
@@ -342,6 +352,29 @@ def test_corrupt_file_without_backup_warns_once(tmp_path, caplog):
     assert "坏文件已挪走" in warnings[0].getMessage()
 
 
+def test_corrupt_without_backup_rebaselines_and_stays_writable(tmp_path):
+    """备份不可用按空数据重建时同样重置写者心跳基线: 本进程写过的站点读坏且无 .bak,
+    不能因 revision=0 < 上次写入值被永久判「revision 回退」退化只读(issue 26-11-07-0527 #17)"""
+    store = HrSiteStore("s", str(tmp_path), owner="me")
+    with store.hold() as session:
+        session.data.index[1] = HrEntry(tid=1, name="t1")
+        assert session.commit(now=10.0) == "written"
+    assert store._last_write_rev == 1
+    # 站点文件读坏, 且没有 .bak(首次写入无旧文件可留)
+    (tmp_path / "s.json").write_text("{ 这不是 json", encoding="utf-8")
+    assert not (tmp_path / "s.json.bak").exists()
+
+    with store.hold() as session:
+        assert "备份不可用" in session.read_error, session.read_error
+        assert store._last_write_rev == 0 and store._last_write_heartbeat == 0.0, "重建路径也要重置心跳基线"
+        assert session.writable is True, "按空数据重建后必须还能写(否则站点永久只读, 只能重启恢复)"
+        assert session.commit(now=11.0) == "written"
+
+    data, err = store.read_unlocked()
+    assert err is None and data.revision == 1 and data.index == {}, \
+        "重建后下一轮正常读写(坏文件带走的索引无备份可回, 从空重建是既定保守语义)"
+
+
 def test_repeated_read_failure_does_not_rewarn(tmp_path, caplog):
     """坏文件挪不走时(如被占用), 同一文本只 WARNING 一次, 后续轮次降 DEBUG"""
     (tmp_path / "s.json").write_text("{ 坏", encoding="utf-8")
@@ -392,6 +425,36 @@ def test_non_utf8_bytes_never_raise_on_unlocked_read_and_backup(tmp_path):
     (tmp_path / "b.json.bak").write_bytes(b"\xb9\xf9\xb2\xcb\xd6\xd0\xce\xc4")  # GBK 字节
     bdata, berr = HrSiteStore("b", str(tmp_path)).read_backup()  # 不抛
     assert berr is not None and bdata.index == {}
+
+
+def test_corrupt_field_shapes_do_not_escape_read_path(tmp_path):
+    """守阵(issue 26-11-07-0527 #8): 手改坏的站点文件(list/dict 字段形状坏)读路径不抛 ——
+    非 dict 元素跳过 / 坏容器回空, 其余字段照常读出(AttributeError 不许穿透坏文件兜底)"""
+    payload = {
+        "schema_version": versioning.CURRENT_VERSIONS["hr_site"],
+        "revision": 3,
+        "index": [1, {
+            "tid": 5,
+            "name": "t5"
+        }],  # 1 不是 dict -> 跳过, 好条目照常入账
+        "history": "corrupt",  # 容器是字符串 -> 空表
+        "wave": {
+            "lanes": "corrupt"
+        },  # wave 是 dict 但内层 lanes 坏 -> lanes 回空
+    }
+    (tmp_path / "s.json").write_text(json.dumps(payload), encoding="utf-8")
+    data, err = HrSiteStore("s", str(tmp_path)).read_unlocked()  # 不抛
+    assert err is None, "坏形状守卫跳过坏元素后其余字段照常解析, 不整站判坏"
+    assert data.revision == 3
+    assert set(data.index) == {5} and data.index[5].name == "t5"
+    assert data.history == [] and data.wave.lanes == {}
+
+
+def test_non_iterable_container_still_lands_in_bad_file_bucket(tmp_path):
+    """容器整体成非可迭代标量(手改坏)仍落既有「字段解析失败」兜底(TypeError 网), 不逃逸"""
+    (tmp_path / "s.json").write_text(json.dumps({"history": 5}), encoding="utf-8")
+    data, err, recoverable = HrSiteStore("s", str(tmp_path))._read_full()
+    assert "字段解析失败" in err and recoverable is True and data.history == []
 
 
 def test_schema_mismatch_is_not_quarantined(tmp_path):
@@ -887,6 +950,49 @@ def test_model_sitedata_verified_filter_positive_ts():
             ]
     }
     assert set(HrSiteData.from_json(raw).verified) == {"aa" * 20}
+
+
+def test_model_sitedata_bad_shapes_never_raise_and_skip():
+    """list/dict 字段坏形状(手改坏/外部损坏)不抛也不让整站读盘失败: 非 dict 元素跳过 /
+    非 dict 容器回空, 好元素照常入账(issue 26-11-07-0527 #8)"""
+    raw = {
+        "history": "corrupt",  # 容器是字符串: 逐字符都不是 dict -> 空表
+        "index": [1, "x", {
+            "tid": 5,
+            "name": "t5"
+        }, None],  # 非 dict 元素跳过
+        "downloaded": [7, {
+            "tid": 6
+        }],
+        "fails": [{
+            "tid": 8,
+            "count": 1
+        }, ["bad"]],
+        "verified": [{
+            "infohash": "aa" * 20,
+            "tid": 1,
+            "verified_ts": 1.0
+        }, 3],
+        "wave": "corrupt",  # 容器非 dict -> 空 wave
+        "rate": 9,
+        "writer": "corrupt",  # 容器非 dict -> 三级回退落空串/0
+    }
+    data = HrSiteData.from_json(raw)  # 不抛
+    assert data.history == []
+    assert set(data.index) == {5} and data.index[5].name == "t5"
+    assert set(data.downloaded) == {6}
+    assert set(data.fails) == {8} and data.fails[8].count == 1
+    assert set(data.verified) == {"aa" * 20}
+    assert data.wave == HrWaveMeta() and data.rate == HrRateLedger()
+    assert data.writer_instance == "" and data.writer_heartbeat == 0.0
+
+
+def test_model_wavemeta_bad_lanes_shapes_never_raise():
+    """wave 内层坏形状同样不抛(issue 26-11-07-0527 #8 读路径契约覆盖到子对象):
+    lanes/prev_a_tids 容器非 dict 回空, lanes 的非 dict 值跳过不停表"""
+    assert HrWaveMeta.from_json({"lanes": "corrupt", "prev_a_tids": 5}) == HrWaveMeta()
+    mixed = HrWaveMeta.from_json({"lanes": {"A": {"lane": "A", "status": "ok"}, "B": "corrupt"}})
+    assert set(mixed.lanes) == {"A"} and mixed.lanes["A"].status == "ok"
 
 
 # ==================== R17: 存储层(构造默认 / 原子写 / 取证串 / 恢复路径) ====================

@@ -443,13 +443,17 @@ class HrWaveMeta:
 
     @classmethod
     def from_json(cls, raw: Dict[str, Any]) -> "HrWaveMeta":
+        # 容器形状守卫(issue 26-11-07-0527 #8): lanes/prev_a_tids 非 dict(手改坏/外部损坏)回空,
+        # lanes 的非 dict 值跳过 —— 内层坏形状同样不许让读路径抛 AttributeError
+        lanes = raw.get("lanes") if isinstance(raw.get("lanes"), dict) else {}
+        prev_a_tids = raw.get("prev_a_tids") if isinstance(raw.get("prev_a_tids"), dict) else {}
         return cls(
             wave_ts=_as_float(raw.get("wave_ts")),
             healthy_ts=_as_float(raw.get("healthy_ts")),
             idle_mode=bool(raw.get("idle_mode")),
             lanes={
                 str(k): HrLaneState.from_json(v)
-                for k, v in (raw.get("lanes") or {}).items()
+                for k, v in lanes.items() if isinstance(v, dict)
             },
             releases_enabled=bool(raw.get("releases_enabled")),
             zero_rows=bool(raw.get("zero_rows")),
@@ -457,7 +461,7 @@ class HrWaveMeta:
             retention_ok=bool(raw.get("retention_ok", True)),
             prev_a_tids={
                 _as_int(k): str(v)
-                for k, v in (raw.get("prev_a_tids") or {}).items()
+                for k, v in prev_a_tids.items()
             },
             notes=str(raw.get("notes") or ""),
         )
@@ -510,7 +514,7 @@ class HrHistoryEvent:
     rows: int = 0  # 本波有效行数合计(result.entries)
     torrents_ok: int = 0  # 回填 .torrent 成功数(result.torrents_fetched)
     torrents_fail: int = 0  # 回填 .torrent 失败数(result.torrents_failed)
-    verified: int = 0  # 本波签发放行数(result.verified_count)
+    verified: int = 0  # 本波签发放行数(result.releases_signed)
     elapsed_s: float = 0.0  # 波耗时(result.elapsed_s)
     #: 各档终态快照 {lane, status, pages, rows, detail}(取自 lane_states, 与波次表同构)
     lanes: List[Dict[str, Any]] = field(default_factory=list)
@@ -612,17 +616,6 @@ class HrSiteData:
             return (got.infohash_v1 or got.infohash_v2) if got is not None else ""
         return entry.infohash_v1 or entry.infohash_v2
 
-    def index_by_infohash(self) -> Dict[str, int]:
-        """(infohash -> tid) 反查表。站点文件只存 tid 主键, 反查表在读取时现建。"""
-        out: Dict[str, int] = {}
-        for tid, entry in self.index.items():
-            if not entry.active:
-                continue
-            for h in (entry.infohash_v1, entry.infohash_v2):
-                if h:
-                    out.setdefault(h, tid)
-        return out
-
     def to_json(self) -> Dict[str, Any]:
         return {
             "schema_version": self.schema_version,
@@ -647,7 +640,10 @@ class HrSiteData:
 
     @classmethod
     def from_json(cls, raw: Dict[str, Any]) -> "HrSiteData":
-        writer = raw.get("writer") or {}
+        # 容器形状守卫(issue 26-11-07-0527 #8): dict 字段非 dict(旧文件或手改坏)回空, list 字段
+        # 的非 dict 元素跳过 —— 坏形状只降级自己那一块, 不许 AttributeError 穿透 store._parse
+        # 的坏文件兜底(「站点文件读坏时不抛」契约, status.build_site_statuses)
+        writer = raw.get("writer") if isinstance(raw.get("writer"), dict) else {}
         data = cls(
             schema_version=_as_int(raw.get("schema_version"), SCHEMA_VERSION),
             revision=_as_int(raw.get("revision")),
@@ -655,25 +651,33 @@ class HrSiteData:
             expires_at=_as_float(raw.get("expires_at")),
             writer_instance=str(writer.get("instance_id") or raw.get("writer_instance") or ""),
             writer_heartbeat=_as_float(writer.get("heartbeat") or raw.get("writer_heartbeat")),
-            wave=HrWaveMeta.from_json(raw.get("wave") or {}),
-            rate=HrRateLedger.from_json(raw.get("rate") or {}),
+            wave=HrWaveMeta.from_json(raw.get("wave") if isinstance(raw.get("wave"), dict) else {}),
+            rate=HrRateLedger.from_json(raw.get("rate") if isinstance(raw.get("rate"), dict) else {}),
             empty_confirmed_at=_as_float(raw.get("empty_confirmed_at")),
             retry_after_until=_as_float(raw.get("retry_after_until")),
-            history=[HrHistoryEvent.from_json(item) for item in (raw.get("history") or [])],
+            history=[HrHistoryEvent.from_json(item) for item in raw.get("history") or [] if isinstance(item, dict)],
             # 缺键 / 非 dict(旧文件或手改坏)一律回空 dict —— 观测字段不该让整站读盘失败
             channel_last_error=dict(raw.get("channel_last_error"))
             if isinstance(raw.get("channel_last_error"), dict) else {},
         )
         for item in raw.get("index") or []:
+            if not isinstance(item, dict):
+                continue
             entry = HrEntry.from_json(item)
             data.index[entry.tid] = entry
         for item in raw.get("downloaded") or []:
+            if not isinstance(item, dict):
+                continue
             got = HrDownloaded.from_json(item)
             data.downloaded[got.tid] = got
         for item in raw.get("fails") or []:
+            if not isinstance(item, dict):
+                continue
             fail = HrDlFail.from_json(item)
             data.fails[fail.tid] = fail
         for item in raw.get("verified") or []:
+            if not isinstance(item, dict):
+                continue
             ver = HrVerified.from_json(item)
             if ver.infohash and ver.verified_ts > 0:
                 data.verified[ver.infohash] = ver
