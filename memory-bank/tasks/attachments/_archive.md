@@ -43,11 +43,12 @@
 - [26-10-14-webui-qb-traffic-agg-live-tail](../26-10-14-webui-qb-traffic-agg-live-tail.md) qB 流量图 agg 段活尾合流(S7): 3d+ 视图图尾真空修复
 - [26-10-09-backend-transport-encryption](../26-10-09-backend-transport-encryption.md) 本地通道传输安全调研(WebUI + HR 取数通道)
 
-## Done (303)
+## Done (304)
 
 - [26-11-05-backend-relocate-fastresume-finalize](../26-11-05-backend-relocate-fastresume-finalize.md) relocate 收尾重构: fastresume 改写收尾 + 未收尾再迁移(S1-S6 全程)
 - [26-11-07-memory-bank-legacy-code-review-4](../26-11-07-memory-bank-legacy-code-review-4.md) 存量代码全库评审 R4: 五路线并行体系化
 - [26-11-07-memory-bank-review-rebase-gap](../26-11-07-memory-bank-review-rebase-gap.md) 跨 clone rebase 组合缺口修补实施
+- [26-11-07-test-ci-perf-benchmark](../26-11-07-test-ci-perf-benchmark.md) 修复 GitHub CI 性能基准挂钟假红与 runpy RuntimeWarning
 - [26-11-07-test-legacy-review4-scripts-fix](../26-11-07-test-legacy-review4-scripts-fix.md) 存量评审 R4 scripts 主题修复批: 24 条 17 文件五批委派实施
 - [26-11-06-memory-bank-kb-nav-search-ghint](../26-11-06-memory-bank-kb-nav-search-ghint.md) kb.nav 搜索被排除匹配项提示行
 - [26-11-06-memory-bank-task-refs-regex](../26-11-06-memory-bank-task-refs-regex.md) TASK_REFS_RE 空行跨行捕获修复

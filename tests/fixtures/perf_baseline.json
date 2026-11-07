@@ -5,7 +5,9 @@
     "sampled_at_commit": "f3564847",
     "sampled_date": "2026-10-01",
     "methodology": "coverage run --branch --source=src 插桩下采样 (与 pytest-cov 断言环境同源; 插桩使 rebuild 约慢 2x), 2 进程 x 10 轮 (每进程第 1 轮为冷轮), 共 20 样本/操作; 另有无插桩裸跑 10 样本作对照 (rebuild 中位 0.43ms)。",
-    "timing": "time.perf_counter, 打印精度 0.01ms"
+    "timing": "time.perf_counter, 打印精度 0.01ms",
+    "threshold_profiles": "threshold = 开发机严格档(本机采样口径); ci_threshold = CI 档, 只由 GITHUB_ACTIONS 启用(通用 CI 变量在本仓库开发机入口常态为真, 见 .commands/dev/config.toml dev.e2e note, 拿它判档会让严格档永不生效)。两档都远紧于 disaster_line_ms。为何不换 time.process_time: ci.yml 的 test(ubuntu-latest) 与 test-windows(windows-latest) 跑同一份测试代码, 计时口径须取两 OS 交集; 本机实测 Windows 侧该钟最小刻度 15.625ms(与等待原语刻度 WIN_TIMER_TICK_S=0.0156s 数值接近但不同源), 而本测试量的是亚毫秒操作, Windows 侧换 CPU 时间会把测量打废。Linux 侧该钟通常纳秒级, 本轮无 Linux 环境(Docker 不可用)未实测, 不声称它也不可用; 若只跑 Linux 一侧, 改 CPU 时间是更优解。故属 platform_tolerance 规范第 2 条「非用挂钟不可」情形, 按规范放宽 CI 挂钟上界。已知取舍: 只放宽上界、未从测量层消除抢占放大, CI 侧回归检测力下降, 本地严格档保留。",
+    "ci_profile": "GitHub Actions ubuntu-latest / windows-latest, -n 8 xdist + coverage 插桩。2026-11-07 ubuntu-latest 实测 rebuild median-of-5 8.158ms(挂钟) > 旧 4.0ms 阈值, 本机同口径 0.864ms —— 合法调度放大近 10x, 假红非回归。"
   },
   "short_circuit": {
     "op": "rules.apply(old, new) 整段相等短路, 5000 种子",
@@ -15,7 +17,9 @@
     "median": 0.01,
     "max": 0.03,
     "threshold": 0.1,
+    "ci_threshold": 1.0,
     "threshold_rationale": "中位 0.01ms x5 = 0.05ms, 向上取整到 0.1ms 整刻度 (亚毫秒量级下计时粒度与调度抖动绝对量主导, 0.05ms 刻度过脆); median-of-5 口径下需持续 10x 劣化才触发",
+    "ci_threshold_rationale": "CI 并行 worker 抢占下纯比较仍远低于 1ms; 1ms << CI 档 rebuild 阈值 20ms, 短路若退化成重建(约 8ms)仍会判红, 守阵判别力不丢",
     "disaster_line_ms": 1000.0
   },
   "rebuild": {
@@ -27,7 +31,9 @@
     "max": 1.48,
     "per_process_median": [0.87, 0.82],
     "threshold": 4.0,
+    "ci_threshold": 20.0,
     "threshold_rationale": "中位 0.85ms x~4.7 = 4ms (3-5x 建议带内), 2.7x 于 20 样本最大值; median-of-5 口径下需持续 ~5x 劣化才触发",
+    "ci_threshold_rationale": "CI 实测 8.158ms x2.45 = 20ms, 约 23x 本机中位 0.85ms, 合 platform_tolerance 规范第 2 条「至少几十倍于被测量」「放宽到不可撞线」; 仍 << 30000ms 灾难线。runner 规格变更致 CI 档稳定红时按 docstring 重采样",
     "disaster_line_ms": 30000.0
   }
 }

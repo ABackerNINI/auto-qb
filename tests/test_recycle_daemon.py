@@ -70,7 +70,7 @@ daemon 主体:
 - test_run_timeout_keeps_pending: max_wait 到点 => timeout, pending 原样(账面零 records),
   daemon.json 按归属释放
 - test_cli_main_timeout_exit_one: CLI timeout 档退出码 1
-- test_module_main_entry_exits_with_result_code: python -m 入口结论码经 sys.exit 上抛
+- test_module_main_entry_exits_with_result_code: python -m 入口结论码经 sys.exit 上抛 + 零 sys.modules 抢先加载告警
 
 覆盖率缺口清偿(26-11-07, test.full 99.31% -> 99.5% 闸):
 - test_write_journal_refuses_nonterminal_over_terminal: 终态闸门(非终态拒/终态互覆)
@@ -533,8 +533,15 @@ def test_cli_main_timeout_exit_one(tmp_path, monkeypatch, capsys):
     assert "timeout" in capsys.readouterr().out
 
 
-def test_module_main_entry_exits_with_result_code(tmp_path, monkeypatch):
-    """python -m 入口: main() 结论码经 sys.exit 上抛(空载 idle 档退出码 0)"""
+def test_module_main_entry_exits_with_result_code(tmp_path, monkeypatch, recwarn):
+    """python -m 入口: main() 结论码经 sys.exit 上抛(空载 idle 档退出码 0)
+
+    文件级 `from auto_qb.tools import recycle_daemon as rd` 已让目标模块先入 sys.modules,
+    runpy.run_module(3.12+) 会据此抛 RuntimeWarning('found in sys.modules ... unpredictable
+    behaviour')。按 `python -m` 的首次执行语义, 运行前摘掉该条目(monkeypatch 在 teardown
+    自动还原), warning 根因消除且入口仍真跑一遍; 包属性仍指向原模块, 其余用例的 rd 不受影响。
+    recwarn 断言把「零告警」钉成守阵 —— 删掉 delitem 即回归判红(红验已验)。
+    """
     import runpy
     import sys
 
@@ -547,9 +554,13 @@ def test_module_main_entry_exits_with_result_code(tmp_path, monkeypatch):
             str(PORT), "--grace", "0", "--poll", "0"
         ],
     )
+    monkeypatch.delitem(sys.modules, "auto_qb.tools.recycle_daemon", raising=False)
     with pytest.raises(SystemExit) as ei:
         runpy.run_module("auto_qb.tools.recycle_daemon", run_name="__main__")
     assert ei.value.code == 0
+    assert not [
+        w for w in recwarn if issubclass(w.category, RuntimeWarning) and "found in sys.modules" in str(w.message)
+    ], "python -m 入口执行期不得再出现 sys.modules 抢先加载告警(delitem 修复回潮)"
 
 
 # ---------------------------------------------------------------------------

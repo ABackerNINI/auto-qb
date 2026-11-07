@@ -12,7 +12,7 @@
 
 | 卷 | 主题范围 | 条数 |
 |---|---|---|
-| [1](_index-1.md) | `annotations-lazy-eval.md` … `free-port-toctou-parallel.md` | 25 |
-| [2](_index-2.md) | `gate-probe-must-not-run-action.md` … `mutation-revert-git-checkout.md` | 25 |
-| [3](_index-3.md) | `mutmut-mtime-race-stale-trampoline.md` … `sandbox-tool-cache.md` | 25 |
-| [4](_index-4.md) | `sandbox-venv-in-workspace.md` … `xdist-worker-global-snapshot.md` | 25 |
+| [1](_index-1.md) | `annotations-lazy-eval.md` … `free-port-toctou-parallel.md` | 26 |
+| [2](_index-2.md) | `gate-probe-must-not-run-action.md` … `mutmut-mtime-race-stale-trampoline.md` | 26 |
+| [3](_index-3.md) | `mutmut-survived-verdict.md` … `side-effects.md` | 26 |
+| [4](_index-4.md) | `sidefx-diagnostic-probe.md` … `xdist-worker-global-snapshot.md` | 23 |

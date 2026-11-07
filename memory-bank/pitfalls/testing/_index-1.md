@@ -1,7 +1,7 @@
 # testing — 测试 / 冒烟 / 仿真纪律 · 卷 1/4
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `annotations-lazy-eval.md` … `free-port-toctou-parallel.md`(共 25 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `annotations-lazy-eval.md` … `free-port-toctou-parallel.md`(共 26 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
@@ -15,6 +15,7 @@
 | [bg-process-cleanup.md](bg-process-cleanup.md) | 本工具环境里 `commands run dev.sim/dev.run` 这类长跑命令挂后台后, TaskStop / kill 只杀外层 (uv 或 commands 包装进程), 真正的 python 子进程继续持有 state.lock / 日志文件 / 端口 —— 复跑… | 后台进程, dev.run 停不下来, state.lock 删不掉, Device or resource busy, 端口占用, TaskStop, 杀进程, 孤儿进程 |
 | [browser-verify-iab.md](browser-verify-iab.md) | 本机没有 node 时 Playwright e2e 链路不可用, 可用 ZCode IAB 浏览器 + evaluate 替代 —— 但 evaluate 返回嵌套对象是序列化假象 `{}`。 | 浏览器验证, IAB, evaluate, 无 node, 冒烟跑不了, 序列化, 假空对象, cfgRaw, 绑定状态 |
 | [bulk-rename.md](bulk-rename.md) | 分批迁移类机械改名(W2 测试面 700+ 处)最易翻车的两处 —— ①正则替换串忘回填接收者, 整批替换全毁; ②名字按域分批 × 文件按域分批两个维度对不齐时, 该名字的替换规则不进脚本, 静默漏迁且**测试照样全绿**(旧名转发还在)。防御 = 捕获组回填 + 替换后畸形形… | 批量改名, 机械替换, re.subn, sed, 分批迁移, 迁移脚本, 旧名残留, 验收 grep, 漏迁, 接收者, 改名脚本, W3 删除波 |
+| [ci-env-var-profile.md](ci-env-var-profile.md) | 通用 CI 变量在本仓库开发机入口常态为真, 拿它判「是否 CI」会让本地严格档永不生效(假绿) | CI, GITHUB_ACTIONS, 环境变量判档, 阈值分档, dev.e2e, playwright, 严格档失效, 假绿, 回归检测力, 性能基准 |
 | [ci-only-guard.md](ci-only-guard.md) | 多类守阵/用例**只在与开发机不同的那一侧 CI job 上现形**, 本机单平台绿不构成"守阵成立"的证据 —— ①跨平台断言把**前缀切片长度写死**(`args[:2]`), nt 侧凑巧成立而 POSIX 侧恒红; ②并发守阵的**活性阈值绑机器速度**("写者写满 30… | CI 红本机绿, 跨平台断言, os.name, sys.platform, 写死切片长度, 前缀长度, 仅一侧存在的模块常量, CREATE_NO_WINDOW, 活性阈值, 并发守阵, 读次数, flaky, gtm, atomic_w… |
 | [commands-wrapper-from-python.md](commands-wrapper-from-python.md) | python 脚本里 `subprocess.run(["commands", "run", ...])` 必 FileNotFoundError(WinError 2) —— commands wrapper 是 bash 侧脚本, 不在 Windows CreateProce… | subprocess, commands wrapper, WinError 2, FileNotFoundError, 造种脚本 |
 | [config-validation-test-input.md](config-validation-test-input.md) | 给 config 校验器写测试时, 走 `load_config`/`_load_errors` 这条真实链路(而非直调校验函数)最省事, 但**输入必须先过两道加工**再进校验器: ①YAML 用 **BaseLoader** 读, **所有标量一律是字符串** —— `- 1… | 写 config 校验测试, 校验器测试, _load_errors, load_config, BaseLoader, 标量全是字符串, 空串被剥, _strip_none, _check_str_list, 第 N 项必须是非空字符串,… |

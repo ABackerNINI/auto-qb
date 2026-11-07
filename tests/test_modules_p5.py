@@ -22,6 +22,7 @@ test_rule_engine / test_trigger_events / test_rules_core(经同一刷新路径�
 - test_l2_rebuild_group_view_not_empty: L2 重建保留分组索引, 全量轮后组视图不得为空且不重拉文件表(issue 26-11-03-2206)
 - test_rebuild_preserves_runtime_memory_state: 重建不重读磁盘, exec_history 原对象保留
 - test_rebuild_benchmark_5000_seeds: 5000 种子下短路/重建耗时回归阈值(基线化, 审计 L9)
+- test_rebuild_benchmark_limit_profile_selection: 性能基准两档阈值选档守阵(通用 CI 变量不参与)
 - test_p2a_dispatch_event_guards_skip_without_side_effects: 事件分派四守卫(快照/配置/首轮/同值)静默跳过 (P2-a)
 - test_p2a_apply_event_rule_process_exception_caught: 事件规则同步执行异常捕获不传播 (P2-a)
 - test_p2a_handle_event_rule_resume_exception_caught: 断点续跑异常捕获, handler 恒 FINISHED (P2-a)
@@ -654,6 +655,31 @@ def _median_ms(fn, repeats: int = 5) -> float:
     return sorted(times)[repeats // 2]
 
 
+def _perf_limit_key() -> str:
+    """按环境选性能上界档: GitHub Actions runner 用宽松档, 其余一律严格档。
+
+    只认 GITHUB_ACTIONS —— 通用 CI 变量在本仓库的开发机入口会被显式置真
+    (.commands/dev/config.toml dev.e2e 的 note 明记「本机 CI=true」, playwright.config.mjs
+    也拿它做 retries/forbidOnly), 拿它判档会让严格档在开发机永不生效, 放走真回归。
+    GitHub Actions 的 ubuntu / windows 两个 job 均保证设置该变量。
+    """
+    return "ci_threshold" if os.environ.get("GITHUB_ACTIONS") else "threshold"
+
+
+@pytest.mark.parametrize("gh_actions, expected_key", [(None, "threshold"), ("true", "ci_threshold")])
+def test_rebuild_benchmark_limit_profile_selection(monkeypatch, gh_actions, expected_key):
+    """性能基准选档守阵: 开发机严格档 / GitHub Actions 宽松档, 通用 CI 变量不参与判档"""
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
+    monkeypatch.setenv("CI", "true")  # 开发机常态(见 _perf_limit_key docstring), 不得影响选档
+    if gh_actions is not None:
+        monkeypatch.setenv("GITHUB_ACTIONS", gh_actions)
+    assert _perf_limit_key() == expected_key
+    baseline = json.loads(PERF_BASELINE_PATH.read_text(encoding="utf-8"))
+    for op in ("short_circuit", "rebuild"):
+        # 档位倒置要红; 宽松档松到放走灾难也要红
+        assert baseline[op]["threshold"] < baseline[op]["ci_threshold"] < baseline[op]["disaster_line_ms"] / 100
+
+
 def test_rebuild_benchmark_5000_seeds(capsys):
     """5000 种子下: 整段短路 apply 耗时 vs L2 重建耗时(审计 26-10-01-0918 L9: 回归阈值基线化)
 
@@ -665,21 +691,40 @@ def test_rebuild_benchmark_5000_seeds(capsys):
       (实测分布 / 采样口径 / 机器 / commit / 采样日期), 断言运行时读入。
     - 测试内计时口径 median-of-5: 单次毛刺(调度 / GC)被中位吸收, 持续性劣化才触发 ——
       防抖动靠中位口径, 不靠放大系数。
-    - 短路 0.1ms(中位 0.01ms × 5, 向上取整到 0.1ms 整刻度); 重建 4.0ms(中位 0.85ms × ~4.7,
-      2.7x 于 20 样本最大值)。均远紧于旧灾难线(紧 4 个数量级), 旧 1s/30s 保留为第二道兜底。
+    - 两档阈值(数字单点在基线文件, 测试只按环境选档):
+      开发机严格档 threshold: 短路 0.1ms(中位 0.01ms × 5, 向上取整到 0.1ms 整刻度);
+      重建 4.0ms(中位 0.85ms × ~4.7, 2.7x 于 20 样本最大值)。
+      CI 档 ci_threshold: 短路 1.0ms / 重建 20.0ms, 只由 GITHUB_ACTIONS 启用。
+    - 为何 CI 要分档、且仍用挂钟: 基线采于本机(7950X / CPython 3.13.14), CI 是
+      ubuntu-latest 少核 runner + `-n 8` xdist 抢占 + coverage 插桩; 2026-11-07 实测
+      rebuild median-of-5 8.158ms(本机同口径 0.864ms), 挂钟被合法调度放大近 10x ——
+      是假红不是回归。按 tests/platform_tolerance.py 规范第 2 条, 性能上界优先换
+      time.process_time(CPU 时间, 可从测量层消除抢占放大)。不走该支路的主因是双 OS
+      共用一份测试代码: ci.yml 的 test(ubuntu-latest) 与 test-windows(windows-latest)
+      跑的是同一个函数, 计时口径必须取两 OS 的交集; 本机实测 Windows 侧该钟最小刻度
+      15.625ms(与等待原语刻度 WIN_TIMER_TICK_S=0.0156s 数值接近但不同源: 后者是
+      Event.wait / Sleep 的定时器刻度, 不是 CPU 时钟分辨率), 而本测试量的是亚毫秒操作
+      (0.85ms), 在 Windows 侧换 CPU 时间会把测量打废(读数量化到 0 或 15.625ms)。
+      Linux 侧该钟基于 CLOCK_PROCESS_CPUTIME_ID 通常为纳秒级, 本轮无 Linux 环境
+      (Docker 不可用)未实测, 不声称它也不可用; 若将来只跑 Linux 一侧, 改 CPU 时间
+      是更优解。故本轮走规范第 2 条「非用挂钟不可」分支: 把 CI 挂钟上界放宽到不可撞线
+      的量级(几十倍于被测量), 开发机严格档不动。已知取舍: 分档只放宽上界, 没有从
+      测量层消除抢占放大, 代价是 CI 侧需 ~23x 中位劣化才报; 本地严格档保留检测力,
+      且两档均远紧于旧灾难线(1s / 30s), 后者保留为第二道兜底。
     - 插桩注意: 基线在 coverage 插桩下采集(与 pytest-cov 断言环境同源, 插桩使重建约慢 2x);
       裸跑数字只作对照, 不要拿裸跑数当基线。
 
     基线重采样流程(人工; 何时 + 如何):
     - 何时: ①换机器 / 换 Python 大版本; ②本测试在正常机器上稳定红(先重采样排除基线过时,
-      再判断真回归); ③相关代码大改后想复核余量。
+      再判断真回归); ③相关代码大改后想复核余量; ④CI runner 规格变更后 CI 档稳定红。
     - 如何(零脚本): ①`uv run pytest tests/test_modules_p5.py -k rebuild_benchmark -q -rP -n 0`
       连跑 ≥6 次(每次独立进程即冷启动), 从 PASSES 段抓 `[5000-seed benchmark]` 行 ——
       中位数 print 在 capsys.readouterr() 之后, 常规输出被吞, 只有 -rP 能看到; 该命令带
       pytest.ini 默认 --cov, 天然与断言环境同源(想看裸跑对照加 --no-cov);
-      ②取中位, 阈值 = 中位 × 3-5(向上取整到整数 / 一位小数刻度);
+      ②取中位, 开发机档阈值 = 中位 × 3-5(向上取整到整数 / 一位小数刻度); CI 档另取
+      CI 日志 `[5000-seed benchmark]` 行的最坏值 × 2-3(打印行带档位与所用阈值, 可直接对照);
       ③连同实测分布 / 采样日期 / 当时 commit 更新 perf_baseline.json, 并同步本 docstring
-      的两处阈值数字。
+      的两档阈值数字。
     """
     with tempfile.TemporaryDirectory() as td:
         mgr = _mgr(td)
@@ -710,21 +755,29 @@ def test_rebuild_benchmark_5000_seeds(capsys):
         t_rebuild = _median_ms(lambda: rules.apply(old, new2))
 
         baseline = json.loads(PERF_BASELINE_PATH.read_text(encoding="utf-8"))
+        # CI 少核 runner + `-n 8` xdist 抢占会把挂钟放大近 10x(2026-11-07 实测 8.158ms);
+        # 双 OS 共用本函数 + Windows process_time 15.625ms 刻度 => 保留挂钟, 按环境选上界档,
+        # 数字单点在基线文件(依据见本测试 docstring 与 tests/platform_tolerance.py 规范第 2 条)。
+        limit_key = _perf_limit_key()
+        short_limit = baseline["short_circuit"][limit_key]
+        rebuild_limit = baseline["rebuild"][limit_key]
         hint = f"若非真回归而是机器/环境变化, 按本测试 docstring「基线重采样流程」重采样并更新 {PERF_BASELINE_PATH.name}"
-        assert t_short < baseline["short_circuit"]["threshold"], (
-            f"短路 median-of-5 {t_short:.3f}ms >= 回归阈值 {baseline['short_circuit']['threshold']}ms"
-            f"(基线中位 {baseline['short_circuit']['median']}ms); {hint}"
+        assert t_short < short_limit, (
+            f"短路 median-of-5 {t_short:.3f}ms >= 回归阈值 {short_limit}ms"
+            f"(档位 {limit_key}, 基线中位 {baseline['short_circuit']['median']}ms); {hint}"
         )
-        assert t_rebuild < baseline["rebuild"]["threshold"], (
-            f"重建 median-of-5 {t_rebuild:.3f}ms >= 回归阈值 {baseline['rebuild']['threshold']}ms"
-            f"(基线中位 {baseline['rebuild']['median']}ms); {hint}"
+        assert t_rebuild < rebuild_limit, (
+            f"重建 median-of-5 {t_rebuild:.3f}ms >= 回归阈值 {rebuild_limit}ms"
+            f"(档位 {limit_key}, 基线中位 {baseline['rebuild']['median']}ms); {hint}"
         )
         # 第二道兜底: 原灾难线(数字单点也在基线文件)
         assert t_short < baseline["short_circuit"]["disaster_line_ms"], "短路路径必须近似零成本(整段相等直接返回)"
         assert t_rebuild < baseline["rebuild"]["disaster_line_ms"], "重建在 5000 种子下必须完成(纯内存操作, 无 API)"
 
-        out = (f"[5000-seed benchmark] median-of-5 short-circuit={t_short:.3f}ms "
-               f"rebuild={t_rebuild:.3f}ms")
+        out = (
+            f"[5000-seed benchmark] median-of-5 short-circuit={t_short:.3f}ms "
+            f"rebuild={t_rebuild:.3f}ms limits={limit_key}:{short_limit}/{rebuild_limit}ms"
+        )
         capsys.readouterr()  # 常规输出保持安静; 其后的 print 仅供重采样时 -rP 从 PASSES 段抓取
         print(out)
 
