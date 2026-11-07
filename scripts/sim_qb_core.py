@@ -205,7 +205,7 @@ def make_torrent(
 #
 # 语料 = 一条原始流(首帧即 T0 / 末帧必是一份全量) + 流里没有的按 hash 元数据(files/trackers)
 #        + 真值分组(groups.json)。回放端退化成"按时间轴吐帧的播放器": 每帧都是 qB 响应整帧原样,
-#        不重建响应、不自己维护脏集合 ⇒ 零语义转换 = 零失真。
+#        不重建响应、不自己维护脏集合 => 零语义转换 = 零失真。
 
 FSROOT_PLACEHOLDER = "<FSROOT>"
 
@@ -222,7 +222,7 @@ def piece_hashes_of(rel_sizes: list[tuple[str, int]], pieces: int = 8) -> list[s
 
     为什么不能按 hash 各自随机合成: `rules/actions/checking.py:145-154` 的严格模式是把候选与目标的
     piece hash 列表**逐项比对**; 真实世界里辅种组成员的 piece hash 必须相同(同文件、同大小、同分块)。
-    若各自随机, 同组成员会互不相等 ⇒ 严格模式判据**恒假**(比不测更糟: 会给出"没有候选通过"的错误结论)。
+    若各自随机, 同组成员会互不相等 => 严格模式判据**恒假**(比不测更糟: 会给出"没有候选通过"的错误结论)。
     按内容集合派生则同组成员天然共享同一列表, 与真机语义一致。
     """
     seed = repr(sorted(rel_sizes)).encode("utf-8")
@@ -248,10 +248,10 @@ def merge_window(frames: list[dict]) -> dict:
 
     !语义必须与 store 自己对齐, 否则 D 系列(删除 / 重复投递 / 幂等)判据会因**合并错误**而假红或假绿,
     且极难归因(看起来像 auto-qb 的 bug)。规则:
-      · torrents          —— 逐 hash **后写覆盖**(窗口内先改再改回, 取末值)
-      · torrents_removed  —— 与 torrents 做**净额判定**(以窗口末态为准: 先删后加 => 净额是"加")
-      · categories/tags   —— 同理(增删净额)
-      · server_state      —— 仍是 **merge**(与 store.py:111-118 同款)
+      - torrents          —— 逐 hash **后写覆盖**(窗口内先改再改回, 取末值)
+      - torrents_removed  —— 与 torrents 做**净额判定**(以窗口末态为准: 先删后加 => 净额是"加")
+      - categories/tags   —— 同理(增删净额)
+      - server_state      —— 仍是 **merge**(与 store.py:111-118 同款)
     """
     out: dict = {
         "torrents": {},

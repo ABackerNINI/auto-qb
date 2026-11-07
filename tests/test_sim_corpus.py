@@ -14,6 +14,7 @@
 - test_sim_is_within_red_on_fold_without_sep: **红验** —— 只换 ntpath 折叠、分隔符不动 => 真子路径被误拒(证明上条不恒绿)
 - test_safe_delete_rejects_path_outside_fs_root: B2 逃逸(从 `sim_qb.py --self-test` **下沉**, 进 CI)—— 树外删除目标被拒 + 文件没被真删 + 记进 violations
 - test_safe_delete_rejects_bulk_over_declared: B3 数量上限(下沉)—— 钉**两侧**: 超 declared*2 要拒, 恰好 2 倍不拒(只钉一侧会被"更严格"或"更宽松"两头骗过)
+- test_web_delete_multifile_one_command_not_false_red: WEB torrents/delete(deleteFiles=true) 按「一次命令」核账(#19)—— 多文件种子单命令删除不再假红 B3(防"更严"回潮), 声明/实删失配超 2 倍仍拒(防"更松")
 - test_delete_group_files_removes_them_from_disk: D4 删组文件(下沉)—— 走**合成档**(语料档 mock 模式磁盘上没文件 ⇒ `_walk()` 恒 0 ⇒ 判据恒假), 删完磁盘真少文件 + 组内恰好一个成员进 error
 - test_fsmock_unknown_path_in_scope_is_missing: 命中语料树但表里没有 -> 报"不存在"并计数(暴露探测不完整, 不伪装成真缺失)
 - test_fsmock_disk_usage_uses_recorded_free_space: shutil.disk_usage 回录制到的可用空间(不是回放机的)
@@ -250,6 +251,49 @@ def test_safe_delete_rejects_bulk_over_declared(tmp_path):
     assert any("B3" in v for v in sim.violations), f"必须记进 violations: {sim.violations}"
     # 反向: 恰好 declared*2 条 ⇒ 不该触发 B3(放行; 文件不存在时各自被吞, 不抛)
     sim.safe_delete_files(paths * 2, 1)
+
+
+def test_web_delete_multifile_one_command_not_false_red(tmp_path):
+    """WEB torrents/delete(deleteFiles=true) 对多文件种子按「一次命令」核账(#19), 不再假红 B3
+
+    旧实现对该调用点写死 declared=1, 而 B3 判据是 len(paths) > declared*2 —— 语料档里
+    **>2 个文件**的种子(整季包是常态)必被拒成 403, D3 判据对多文件语料假红。现与
+    delete_torrents 路径统一成「本命令声明 = 本命令目标文件数」(declared=len(paths))。
+    钉**两侧**防两头骗: 1. 多文件单命令必须整种子放行(防"更严"回潮到 declared=1);
+    2. 声明数与实删数失配(实删 > 声明*2)仍必须被 B3 拒(防"更松"把护栏拆成摆设)。
+    """
+    sim = _make_synthetic_sim(tmp_path, n=40)
+    rels = [r"multi\ep%02d.mkv" % i for i in range(3)]  # 3 文件: 旧 declared=1 口径下必炸的形态
+    t = simqb.make_torrent(
+        sim.rng, 999, sim.fs_root, "https://ptfans.cc/announce", os.path.join(sim.fs_root, "multi"), rels, 1024,
+        "multi", "stalledUP"
+    )
+    sim.torrents[t["hash"]] = t
+    sim._materialize_one(t)
+    paths = sim.file_paths_of(t)
+    assert len(paths) == 3 and all(os.path.exists(p) for p in paths), "前置: 3 个文件必须真物化, 否则判据恒假"
+
+    # 侧1(防更严): 单条 WEB 删除命令必须整种子放行 —— 文件真删 / 种子出库 / 记账齐全, 全程无 B3
+    sim.apply_write("torrents/delete", {"hashes": t["hash"], "deleteFiles": "true"})
+    assert t["hash"] not in sim.torrents, "种子必须被删除"
+    assert all(not os.path.exists(p) for p in paths), f"3 个文件必须真被删: {[p for p in paths if os.path.exists(p)]}"
+    assert not any("B3" in v for v in sim.violations), f"多文件单命令不得触发 B3: {sim.violations}"
+    assert t["hash"] in sim.removed_all, "删除必须进 removed_all(供 sync 上报, 否则 auto-qb 留幽灵种子)"
+    expect_rels = {os.path.relpath(p, sim.fs_root) for p in paths}
+    assert expect_rels <= sim.expected_removals, f"被删文件必须登记为预期删除(B4 核账口径): {sim.expected_removals}"
+
+    # 侧2(防更松): 声明 2 个文件却删 6 个(超声明*2)仍必须被 B3 拒
+    t2 = simqb.make_torrent(
+        sim.rng, 998, sim.fs_root, "https://ptfans.cc/announce", os.path.join(sim.fs_root, "one"),
+        [r"one\a.mkv", r"one\b.mkv"], 1024, "one", "stalledUP"
+    )
+    sim.torrents[t2["hash"]] = t2
+    sim._materialize_one(t2)
+    p2 = sim.file_paths_of(t2)
+    assert len(p2) == 2
+    with pytest.raises(simqb.BoundaryViolation):
+        sim.safe_delete_files(p2 * 3, len(p2))  # 实删 6 vs 声明 2 => 6 > 2*2, 必须拒
+    assert any("B3" in v for v in sim.violations), f"超额命令必须记进 violations: {sim.violations}"
 
 
 def test_delete_group_files_removes_them_from_disk(tmp_path):

@@ -116,7 +116,7 @@ class SimQb:
         # 真值分组(groups.json) —— D4 取"真机上磁盘就有问题的组"时的样本来源
         self.groups = [list(g.get("members") or []) for g in (self.corpus.groups.get("groups") or [])]
         # ---- 录播时间轴(计划 §08) ----
-        # 帧自带**实测 dt_ms**, 累积成时间轴; 回放按墙钟 × 倍速推进游标。
+        # 帧自带**实测 dt_ms**, 累积成时间轴; 回放按墙钟 x 倍速推进游标。
         # !末帧(closure/mismatch)是校验锚点, **不吐给客户端**(吐了客户端会按全量轮重置一次)。
         allf = self.corpus.frames
         self.replay_data = allf[:-1] if (allf and allf[-1].get("role") in ("closure", "mismatch")) else list(allf)
@@ -155,7 +155,7 @@ class SimQb:
     # ---------- 录播游标(计划 §08) ----------
 
     def replay_cursor_ms(self) -> float:
-        """回放游标(录制时间轴上的毫秒位置) = 墙钟已过 × 倍速。speed<=0 => 静态回放(不推进)"""
+        """回放游标(录制时间轴上的毫秒位置) = 墙钟已过 x 倍速。speed<=0 => 静态回放(不推进)"""
         if self.replay_speed <= 0:
             return 0.0
         return (time.time() - self.replay_started) * 1000.0 * self.replay_speed
@@ -174,7 +174,7 @@ class SimQb:
     def consume_replay(self, cursor_ms: float | None = None) -> dict:
         """把游标推进到 cursor_ms, 把这段时间内落过的采样帧**合并成一拍**(计划 §08)。
 
-        WARN: 顺序: 先合并窗口(本函数) → 再由 `_snapshot_view` 叠 overlay。反了会让滞后边界落在错误的 t_seq 上。
+        WARN: 顺序: 先合并窗口(本函数) -> 再由 `_snapshot_view` 叠 overlay。反了会让滞后边界落在错误的 t_seq 上。
         """
         if cursor_ms is None:
             cursor_ms = self.replay_cursor_ms()
@@ -250,7 +250,7 @@ class SimQb:
         return {f: tup[0] for f, tup in ov.items() if tup[idx] <= now}
 
     def _live(self, h: str, now: float | None = None) -> dict:
-        """实况状态 = 流状态 ⊕ 已到期的 overlay(立即生效侧)"""
+        """实况状态 = 流状态 + 已到期的 overlay(立即生效侧)"""
         t = self.torrents.get(h)
         if t is None:
             return {}
@@ -259,7 +259,7 @@ class SimQb:
         return out
 
     def _snapshot_view(self, h: str, now: float | None = None) -> dict:
-        """流状态(snapshot view) = 流状态 ⊕ 已过 md 滞后线的 overlay"""
+        """流状态(snapshot view) = 流状态 + 已过 md 滞后线的 overlay"""
         t = self.torrents.get(h)
         if t is None:
             return {}
@@ -334,7 +334,7 @@ class SimQb:
             # S8 限速保护: 约 10% 的种子带**手设单种限速**。
             # !必须造**奇数 KiB/s** —— 项目约定 `utils.is_manual_speed_limit` 判定为
             # `(bytes // 1024) % 2 == 1`, 奇数值才被当作"用户手设、本程序不覆盖"。
-            # 造偶数(初版写成 i*7+1, i 恒为奇数 ⇒ KiB 恒为偶数)会被正常覆盖 -> 假红。
+            # 造偶数(初版写成 i*7+1, i 恒为奇数 => KiB 恒为偶数)会被正常覆盖 -> 假红。
             if i % 10 == 3:
                 t["up_limit"] = (i * 8 + 1) * 1024  # KiB = i*8+1 恒为奇数
                 self.manual_limits[t["hash"]] = t["up_limit"]
@@ -607,12 +607,12 @@ class SimQb:
     def _sync_corpus(self, rid: int) -> dict:
         """语料档的 sync/maindata —— 流状态视图(计划 §07 两层状态)。
 
-        WARN: 顺序: 先合并窗口(§08) → **再**按滞后规则叠 overlay。反了会让滞后边界落在错误的 t_seq 上。
+        WARN: 顺序: 先合并窗口(§08) -> **再**按滞后规则叠 overlay。反了会让滞后边界落在错误的 t_seq 上。
         静态回放时流不推进(帧已全量加载, 由 W4 的游标按时间轴吐), 所以这里只处理 overlay。
         """
         with self.lock:
             self.stats["sync_rounds"] += 1
-            # WARN: 顺序: 先合并窗口(§08) → 再叠 overlay 的可见性(§07)。
+            # WARN: 顺序: 先合并窗口(§08) -> 再叠 overlay 的可见性(§07)。
             # 反了会让滞后边界落在错误的 t_seq 上 —— 故刻意写成两个独立调用, 不揉在一起。
             self.consume_replay()
             self._promote_overlays()
@@ -796,7 +796,10 @@ class SimQb:
                 if t is None:
                     continue
                 if with_files:
-                    self.safe_delete_files(self.file_paths_of(t), 1)
+                    # B3 按「一次命令」核账: 本命令声明的目标文件数 = 它要删的文件数
+                    # (与 delete_torrents 同口径; 写死 1 会让 >2 文件的种子必被拒成 403 假红)
+                    paths = self.file_paths_of(t)
+                    self.safe_delete_files(paths, len(paths))
                 self.torrents.pop(h, None)
                 self.dirty.pop(h, None)
                 self.removed.append(h)  # 同上: 必须上报, 否则 auto-qb 快照留幽灵

@@ -206,16 +206,16 @@ def corpus_tracker_section(sim: SimQb) -> str:
     """按语料里的真实数据派生 tracker 段(计划 §12 / W3)
 
     为什么必须派生: 语料里的 tracker 域名已被脱敏成 `site-N.example`、标签也已伪名化。
-    若沿用合成档写死的 `ptfans.cc` / `hhanclub`, auto-qb 的站点匹配会全部落空 ⇒
-    `tracker_name` 解析不出来 ⇒ 依赖站点的规则与日志全是空转。
+    若沿用合成档写死的 `ptfans.cc` / `hhanclub`, auto-qb 的站点匹配会全部落空 =>
+    `tracker_name` 解析不出来 => 依赖站点的规则与日志全是空转。
 
     站点标签的推断 —— 取"**对该 host 最专有**"的那个标签: score = 该站出现次数 / 全局出现次数。
-    真机上站点标签几乎只出现在本站的种子上(score→1), 而通用标签(MISSING / zSkipChecked / 辅种)
-    散布在全库(score 很小)。⇒ 不能按"出现最多"挑, 那会被通用标签抢走。
+    真机上站点标签几乎只出现在本站的种子上(score->1), 而通用标签(MISSING / zSkipChecked / 辅种)
+    散布在全库(score 很小)。=> 不能按"出现最多"挑, 那会被通用标签抢走。
     (WARN: 标签在语料里已伪名化, 所以**不能**用原始字面量 "MISSING" 之类去排除 —— 只能靠这个统计判据。)
 
     WARN: 首选 `meta.sanitize_map.tracker_tags`: 抓取端拿用户 config 的 trackers 段算出来的**权威**
-    伪域名 ↔ 伪标签映射; 取不到才退回上面的统计派生。两者都只产出**已脱敏**的两侧。
+    伪域名 <-> 伪标签映射; 取不到才退回上面的统计派生。两者都只产出**已脱敏**的两侧。
     """
     # !`or {}`: 老语料 / 无映射时 `.get()` 返回 None, 后面再 .get() 会直接 AttributeError
     _corpus = getattr(sim, "corpus", None)
@@ -241,8 +241,8 @@ def corpus_tracker_section(sim: SimQb) -> str:
     # ---- 输出: 权威映射优先, 覆盖不到的域名退回统计派生, 且只输出语料里真出现过的域名 ----
     # !**不能只信权威映射**: 用户 config 的 `domains:` 字面量与 tracker URL 的 **host 不一定相等**
     #   (auto-qb 的站点匹配是**后缀**匹配, 而这里按 host 精确对表)。实测该映射漏掉了语料里最大的
-    #   站点(35 个种子) ⇒ 那些种子因"未匹配 tracker 配置"被 `continue` 跳过(qbmanager.py:685-690),
-    #   **连带不参与归组** ⇒ 头号判据 group_exact 从 0 变成 34(真值 63 组只分出 29 组)。
+    #   站点(35 个种子) => 那些种子因"未匹配 tracker 配置"被 `continue` 跳过(qbmanager.py:685-690),
+    #   **连带不参与归组** => 头号判据 group_exact 从 0 变成 34(真值 63 组只分出 29 组)。
     # !也**不能只信统计**: 站点混用标签时统计会挑错。故**两者合并**: 有权威就用, 没有才统计。
     stat_tag: dict[str, str] = {}
     for host in host_tags:
