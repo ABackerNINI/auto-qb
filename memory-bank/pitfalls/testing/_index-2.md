@@ -1,7 +1,7 @@
 # testing — 测试 / 冒烟 / 仿真纪律 · 卷 2/4
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `gate-probe-must-not-run-action.md` … `mutmut-mtime-race-stale-trampoline.md`(共 25 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `gate-probe-must-not-run-action.md` … `mutation-revert-git-checkout.md`(共 25 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
@@ -23,6 +23,7 @@
 | [hr-registry-pollution.md](hr-registry-pollution.md) | 测试期 `hr.runtime` 的注册表路径必须被 conftest 重定向到临时目录 —— 用例的 `data_dir` 是每例唯一的 `tmp_path`, 不隔离就是**每个用例往用户真实 `%LOCALAPPDATA%/auto-qb-hr/instances.json… | 加 hr runtime 测试, 发现端点测试, 扩展发现列表出现无关实例, 主实例连不上 Failed to fetch, instances.json 无界增长, 写 app-data, 注册表条目堆积, 测试污染用户数据 |
 | [iab-click-rerender-flake.md](iab-click-rerender-flake.md) | 用 IAB 浏览器 (Playwright surface) 对 kb.nav 这类「动作即整段重渲染 innerHTML」的单文件页做冒烟时, 多个 locator 动作挤在一个 cell 里连打 (间隔 ≤150ms), 后继动作可能报 `Timeout waiting fo… | 冒烟中 locator click 超时; 想断定「功能有 bug」之前; 冒烟脚本连续动作 (右键菜单 → 开关按钮 → 专区内按钮) 后继点击超时。 |
 | [importlib-sys-modules-dataclass.md](importlib-sys-modules-dataclass.md) | importlib 就地加载 future-annotations dataclass 模块, 不先注册 sys.modules 会在 3.13 上炸 NoneType | importlib, spec_from_file_location, exec_module, sys.modules, dataclass, NoneType, 3.13, 就地加载, 守阵加载引擎, find_skill_dir |
+| [inproc-server-conn-abort.md](inproc-server-conn-abort.md) | 测试自起 `http.server.ThreadingHTTPServer(("127.0.0.1", 0))` 当假服, test.full(并行 + 覆盖率插桩)高载下, **真客户端打真本地服**的段偶发 `ProtocolError: Connection aborted… | 10053, ConnectionAbortedError, Connection aborted, 你的主机中的软件中止了一个已建立的连接, ProtocolError, ThreadingHTTPServer, 进程内假服, 本地假服,… |
 | [log-capture.md](log-capture.md) | caplog 与全局日志状态是跨测试共享的 —— 断言日志要挂模块 logger 自建 handler + 显式 setLevel, 不碰 caplog。 | caplog, 日志断言, 日志级别, root handlers, root level, xdist, 偶发, CI 红, setup_logging, make_manager |
 | [manager-builder-single-point.md](manager-builder-single-point.md) | 测试构造单点参数面不足导致内联旁路 | 内联构造, make_manager, 单点旁路, 装配样板, FakeConfig, QbManager, 段覆盖, 测试构造器, builder |
 | [manager-connect-stub.md](manager-connect-stub.md) | QbManager.run() 主循环用例里把 `connect` mock 成 `return True` 却不给 `mgr.client` 落值, 在断连稳态守卫(26-10-31-1029)生效后会让请求线被整段静默跳过 —— 用例不报错, 断言以「线没跑」的形态假红/假绿… | 写或改 run() 主循环测试, mock/替换 connect; 或改断连守卫判据后跑主循环用例 |
@@ -32,4 +33,3 @@
 | [mutants-wsl-shell.md](mutants-wsl-shell.md) | 本机 WSL(`Ubuntu-26.04`, 登录壳实为 zsh 5.9)里 `cd X && cmd` 会真的在 X 下执行, 但 **`$PWD` 与 `$(...)` 命令替换仍报 WSL 的启动目录**(即调用方的 Windows cwd 映射成的 `/mnt/d/...… | WSL, wsl.exe, bash -lc, zsh, 命令替换, $(), $PWD, cd 不生效, 相对路径读错, mutants.status, mutmut=no, 镜像目录, 路径漂移 |
 | [mutation-pool-artifact.md](mutation-pool-artifact.md) | 窄池跑出来的存活清单, 相当一部分是「相关测试不在池里」的**假存活** —— 同一目标同一套变异, 只把池从 1 个测试文件换到 5 个, 存活数 97 → 70(−27%); 一个被判成 SURVIVED 的变异, 拿**全套件**手工改一次其实是被杀死的。判一个存活变异是不… | 变异测试, mutmut, pytest-gremlins, 存活变异, 杀死率, 选择池, 假存活, 等价变异, 真洞, 机器提名手工确认, 变异审计 |
 | [mutation-revert-git-checkout.md](mutation-revert-git-checkout.md) | 红绿双验做突变时, 用 `git checkout -- <file>` 还原文件会把**本轮尚未提交的全部改动**一起冲掉 —— 突变注入的 sed 与手头未提交的实现在同一个工作区文件里, checkout 不区分。防御: 精确反向 Edit 重放突变(或 `git stas… | 红绿双验, 变异测试, 突变, 判红, git checkout 还原, 冲掉未提交, 工作区回退, sed 注入 |
-| [mutmut-mtime-race-stale-trampoline.md](mutmut-mtime-race-stale-trampoline.md) | mutmut 3.8 跨轮增量 + 预置 src 的 mtime 竞态: 跳过 trampoline 生成致 forced-fail 假轮与 dump 全部无法重放(两形态) | mutmut run 换目标, cp src 进镜像, 镜像 mutants 旧副本, Unable to force test failures, 全 no tests 假判定, dump 重放失败, source_mtime, 无 tr… |

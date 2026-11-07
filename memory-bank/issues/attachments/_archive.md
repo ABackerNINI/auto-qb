@@ -11,8 +11,12 @@
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 - [chore] [版本号双源矛盾: __init__.__version__ 0.2.0 vs pyproject 0.1.0](../26-09-21-1408-chore-version-dual-source.html) — WebUI 顶栏透出与打包元数据已差一个 minor; 建议 pyproject 单源 + 动态读取
 
-## Open (49)
+## Open (53)
 
+- [bug] [porcelain_paths 不解 git C 风格引号路径, 非 ASCII rename 静默漏检](../26-11-07-1216-bug-check-context-caps-porcelain-quote.html) — check_context_caps.py porcelain_paths 对 quotePath 转义路径不 unquote, 非 ASCII rename 行「改动命中」判定静默漏检
+- [bug] [check_kb_structure.py 运行时输出含图形符号(违反 code-style 代码禁令)](../26-11-07-1216-bug-check-kb-structure-glyph.html) — skill 侧 check_kb_structure.py 运行时提示行含 ->类符号(trim_hint 返回串/print 列表符), 经提交闸门终端输出
+- [bug] [port_kill.py 存量子进程未钉 encoding(cp1252 同病)](../26-11-07-1216-bug-port-kill-subprocess-encoding.html) — port_kill.py 两处 subprocess.run text=True 缺 encoding/errors, 守卫只扫 tests/ 不含 scripts/, CI 不红但同病
+- [docs] [hr_ext_stub.py 提示文案未提 port_kill 新 --yes 门](../26-11-07-1216-docs-hr-ext-stub-port-kill-yes-doc.html) — hr_ext_stub.py :27/:205 提示仍写旧口径, 非 python 监听者无 --yes 会被拒杀(rc=1), 按旧文案操作碰壁
 - [bug] [存量评审 R4·static 汇总(major 24/minor 111)](../26-11-07-0536-bug-legacy-review4-static.html) — static 主题 major 24+minor 111 共 135 条聚合入池,来源存量评审 R4(计划 26-11-05-2335)
 - [bug] [存量评审 R4·webui-py 汇总(major 2/minor 23)](../26-11-07-0536-bug-legacy-review4-webui-py.html) — webui-py 主题 major 2+minor 23 共 25 条聚合入池,来源存量评审 R4(计划 26-11-05-2335)
 - [feat] [回收 daemon 进程名册证为全机口径: 同机多 qB 实例时收尾窗可用性让位 N1(取舍记录+增强方向)](../26-11-07-0528-feat-recycle-daemon-roster-machine-wide.html) — 评审#6 后名册证=全机口径, 同机多 qB 实例(P7 形态)时 daemon 等不到收尾窗直至全部实例退场; 属 N1 零写入铁律优先的显式取舍(已声明, 单实例零影响), 未来兼顾需比映像名更强的实例身份证据

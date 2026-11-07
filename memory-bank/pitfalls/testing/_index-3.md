@@ -1,13 +1,14 @@
 # testing — 测试 / 冒烟 / 仿真纪律 · 卷 3/4
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `mutmut-survived-verdict.md` … `sandbox-venv-in-workspace.md`(共 25 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `mutmut-mtime-race-stale-trampoline.md` … `sandbox-tool-cache.md`(共 25 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
 
 | 主题 | 一句话 | 触发词 |
 |---|---|---|
+| [mutmut-mtime-race-stale-trampoline.md](mutmut-mtime-race-stale-trampoline.md) | mutmut 3.8 跨轮增量 + 预置 src 的 mtime 竞态: 跳过 trampoline 生成致 forced-fail 假轮与 dump 全部无法重放(两形态) | mutmut run 换目标, cp src 进镜像, 镜像 mutants 旧副本, Unable to force test failures, 全 no tests 假判定, dump 重放失败, source_mtime, 无 tr… |
 | [mutmut-survived-verdict.md](mutmut-survived-verdict.md) | mutmut 报 `survived` 的变异, 把那条 diff **手工 apply 回去、跑一遍定向池**, 池会直接变红 —— 也就是说它其实**早就被杀死了**。rules 首轮实测: 1364 条存活/超时里 **404 条是伪存活(29.6%)**, 名义杀死率 5… | 变异测试, mutmut, 存活不可信, 假存活, survived 误报, verify 恒 KILLED, 基线常红, 全杀等于没杀, 表类变异不生效, import 期函数, process_isolation, 杀死率虚低, app… |
 | [mypy-config-cwd.md](mypy-config-cwd.md) | mypy 的 `[tool.mypy] files = [...]` 按**当前工作目录**解析相对路径, 不按 pyproject.toml 所在目录 —— 想跑「某个基线 commit 的类型检查」时, 若从别处指 `--config-file` 指到基线目录, 实际检查的仍… | mypy, files, 相对路径, cwd, 基线对比, 静默查错, 工作树, 改错文件, typecheck 前后对照 |
 | [nested-pytest-config.md](nested-pytest-config.md) | 仓库内子目录独立包(自带 pyproject+venv)内 `uv run pytest` 会向上拾取仓库根 pytest.ini, rootdir 上移, 根 ini 的 addopts(-n/--cov 等)在子包 venv 不可用 → unrecognized argume… | 在 tools/ 下「仓库内嵌套、自带 pyproject 与 venv 的独立子包」内跑 pytest |
@@ -32,4 +33,3 @@
 | [sandbox-full-run.md](sandbox-full-run.md) | 沙箱内跑 `commands run test.full` 等自带 `TMPDIR=R:/Temp/...` 的测试命令, 沙箱拒写 R 盘 ⇒ `TMPDIR` 建不了目录 ⇒ pytest 回落 `H:\Temp`(重解析点读不了) ⇒ **点号全过却在收尾崩**, 看着像回… | 沙箱, 沙箱假红, TRAE Sandbox, R:\Temp, TMPDIR 没设, 跑全量, test.full, preflight, 闸门假红, run_in_background, 后台跑测试 |
 | [sandbox-tempfile-cwd-fallback.md](sandbox-tempfile-cwd-fallback.md) | 工具(`tools/global-traffic-monitor`)是独立 uv 项目, 其套件不在根 `testpaths` 内 ⇒ 跑它时**不带**根 `test.*` 包的 `TMPDIR` 收口; 若又在本 agent 沙箱内跑, `H:\Temp` 与 `%TEMP%… | 跑工具侧测试, 工具套件, global-traffic-monitor, 临时目录, TMPDIR, 沙箱, 临时垃圾, git status 脏, tmp 文件, pytest-of |
 | [sandbox-tool-cache.md](sandbox-tool-cache.md) | agent 工具 shell 的沙箱按**白名单**放行写操作。工具若把自己的缓存写到白名单外(本仓实测: yapf 的语法缓存 `%LOCALAPPDATA%\Google\YAPF\Cache`), 而该目录**已存在**却写不进, 失败路径可能不是报错而是**紧循环**:… | 沙箱, sandbox, 工具挂住, yapf 挂住, 高CPU, 一直写磁盘, 缓存目录, mkstemp, NamedTemporaryFile, 白名单, AppData, platformdirs, 提交闸门卡住, 闸门超时后仍在跑… |
-| [sandbox-venv-in-workspace.md](sandbox-venv-in-workspace.md) | agent 沙箱给工作区目录打了 Low 完整性标签 + 沙箱 capability ACE, 在**工作区内**新建的 venv, 其 `Scripts/python.exe` 读不到**同目录的** `pyvenv.cfg` —— 报 `Cannot read ... pyv… | exit 107, Cannot read pyvenv.cfg, pyvenv.cfg 不可读, uv run 失败, 工具 venv 坏, permission denied os error 5, uv trampoline, ven… |

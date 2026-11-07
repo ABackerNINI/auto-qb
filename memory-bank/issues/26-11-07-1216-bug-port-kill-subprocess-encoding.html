@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>port_kill.py 存量子进程未钉 encoding(cp1252 同病) · bug · 计划外问题</title>
+<meta name="issue-slug" content="port-kill-subprocess-encoding">
+<meta name="issue-stamp" content="26-11-07-1216">
+<meta name="issue-type" content="bug">
+<meta name="doc-topic" content="port-kill-subprocess-encoding">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="port_kill.py 存量子进程未钉 encoding(cp1252 同病)">
+<meta name="issue-summary" content="port_kill.py 两处 subprocess.run text=True 缺 encoding/errors, 守卫只扫 tests/ 不含 scripts/, CI 不红但同病">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --mark: #161e26;     /* issue 特有: callout 底色 (plan.html 不用) */
+    --warn-bg: #2a2119;  /* issue 特有: 状态徽标底色 */
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 单栏流式版面: 与 plan.html 同一套 .sheet (封顶 1280px, 侧距 clamp(18~44px)); 旧双栏+粘性目录已删 */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+
+  /* 封面 meta 行: issue 特有, DOM 形态别改 —— 状态徽标 <span class="badge"> 被
+     flip_status (W4) 与 check_status_drift 的 BADGE_RE 机读 (k/v div 结构在判据里) */
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px 28px; font-family: var(--mono); font-size: 11.5px; color: var(--faint); border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta-row .item .k { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .meta-row .item .v { font-size: 13.5px; color: var(--dim); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin: 14px 0; font-size: 14px; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-family: var(--mono); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">计划外问题（未修）· bug</div>
+<h1>port_kill.py 存量子进程未钉 encoding(cp1252 同病)</h1>
+<p class="lede">port_kill.py 两处 subprocess.run text=True 缺 encoding/errors, 守卫只扫 tests/ 不含 scripts/, CI 不红但同病</p>
+<div class="meta-row">
+  <div class="item"><div class="k">编号</div><div class="v">26-11-07-1216-bug-port-kill-subprocess-encoding</div></div>
+  <div class="item"><div class="k">报告时间</div><div class="v">2026-11-07 12:16</div></div>
+  <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">涉及模块</div><div class="v">scripts</div></div>
+  <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+</div>
+
+<section id="s1">
+  <h2><span class="no">§01</span>现象与发现场景</h2>
+  <p><strong>发现场景</strong>: R4 scripts 修复批（2026-11-07 会话，修复存量评审 R4 的 24 条 scripts findings）的<strong>清单外发现</strong>，经只读评审确认（评审报告 blocker 0 / minor 3 + nit 1 已修，本件为其裁决不入批部分）。本批 P5 只给新增的 <code>process_info</code>（:49 一带）补了钉码，存量两处经裁决不入本批范围。</p>
+  <p><strong>现象</strong>: <code>scripts/port_kill.py</code> 两处 <code>subprocess.run(..., capture_output=True, text=True)</code> 缺 <code>encoding/errors</code>——:29（<code>listening_pids</code> 的 Get-NetTCPConnection powershell）与 :142（taskkill 调用）。2026-11-06 CI 六连红事故口径（英文 runner cp1252 打死文本子进程读线程）只对 <code>tests/**</code> 有静态守卫（<code>test_platform_tolerance_guards.py::test_repo_text_subprocess_calls_pin_utf8</code> 只 rglob tests/），scripts/ 不在扫描范围，故 CI 不红但同病。</p>
+</section>
+
+<section id="s2">
+  <h2><span class="no">§02</span>证据</h2>
+  <p class="hint">贴原文（报错 / 日志 / 命令输出），不转述；附取证时间，让读者自己判断新鲜度。</p>
+<pre><code># scripts/port_kill.py，取证 2026-11-07，head c9e13890
+:29   r = subprocess.run(["powershell", "-NoProfile", "-Command", ps],
+                         capture_output=True, text=True)              # listening_pids: 缺 encoding/errors
+:142  k = subprocess.run(["taskkill", "/F", "/PID", str(pid)],
+                         capture_output=True, text=True)              # taskkill 调用: 缺 encoding/errors
+
+# 对照——P5 新增的 process_info（:49 一带）已钉码，存量两处是旧写法:
+:49   r = subprocess.run(
+          ["powershell", "-NoProfile", "-Command", ps],
+          capture_output=True, text=True, encoding="utf-8", errors="replace")
+
+# 守卫扫描面（tests/test_platform_tolerance_guards.py::test_repo_text_subprocess_calls_pin_utf8）:
+for p in sorted(TESTS.rglob("*.py")):    # 只扫 tests/**，scripts/ 不在范围 —— 不红但同病</code></pre>
+</section>
+
+<section id="s3">
+  <h2><span class="no">§03</span>影响面</h2>
+  <table>
+    <tr><th>维度</th><th>结论</th></tr>
+    <tr><td>触发条件</td><td>非 UTF-8 活动码页（英文 Windows runner cp1252）上跑 <code>dev.port-kill</code>，且子进程输出含非 ASCII 字符（如中文进程名）时解码错乱或打死读线程</td></tr>
+    <tr><td>影响范围</td><td>仅 <code>scripts/port_kill.py</code> 两处调用点（:29 监听者发现 / :142 击杀结果回读）；不影响 src/auto_qb 主程序，也不影响 tests/（有守卫）</td></tr>
+    <tr><td>严重度</td><td>低——人工触发的一次性运维脚本且 CI 不挡；但与 2026-11-06 六连红同病（同类解码路径致死已实证过一次）</td></tr>
+  </table>
+</section>
+
+<section id="s4">
+  <h2><span class="no">§04</span>定位锚点</h2>
+  <p class="hint">写「符号名 + grep 关键词 + 当时的行号（标取证时间）」—— 代码会漂移，靠符号与 grep 重新定位，行号只是加速项。</p>
+  <ul>
+    <li><code>scripts/port_kill.py:29</code>（取证 2026-11-07，head <code>c9e13890</code>）· 符号 <code>listening_pids</code> · grep <code>Get-NetTCPConnection</code></li>
+    <li><code>scripts/port_kill.py:142</code>（同上）· grep <code>subprocess.run(["taskkill"</code></li>
+    <li>守卫: <code>tests/test_platform_tolerance_guards.py::test_repo_text_subprocess_calls_pin_utf8</code> · grep <code>TESTS.rglob</code>（扫描面只含 tests/**）</li>
+  </ul>
+</section>
+
+<section id="s5">
+  <h2><span class="no">§05</span>根因<span class="opt">（可选）</span></h2>
+  <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
+  <div class="callout">直因明确: 两处调用写于 2026-11-06 事故守卫的覆盖面之外——该守卫只 rglob <code>tests/**</code>，scripts/ 从未被扫描，缺 encoding 从未被判红。已排除: 非 P5 新增代码回归（P5 新增的 process_info 已带 encoding/errors，:49 一带）。</div>
+</section>
+
+<section id="s6">
+  <h2><span class="no">§06</span>建议修法<span class="opt">（可选）</span></h2>
+  <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
+  <p>① 两处补 <code>encoding="utf-8"</code> + <code>errors="replace"</code>（与 :49 的 process_info 同款）。② 可一并裁决是否把 <code>test_repo_text_subprocess_calls_pin_utf8</code> 扫描面扩到 scripts/（注意 scripts 有意用 GBK 通道的场景需豁免口径，若有则以逐文件豁免清单收窄）。</p>
+</section>
+
+<section id="s7">
+  <h2><span class="no">§07</span>状态变更日志</h2>
+  <ul>
+    <li>2026-11-07 12:16 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+  </ul>
+  <h3>复验</h3>
+  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <h3>修复后补充</h3>
+  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+</section>
+
+<footer>
+  26-11-07-1216-bug-port-kill-subprocess-encoding.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+</footer>
+
+</div>
+</body>
+</html>
