@@ -249,7 +249,7 @@ def test_shell_child_env_forces_utf8_stdio():
 class _FakeProc:
     """假子进程: 提供 `_shell` 要读的属性(Popen 形态 —— pid / communicate / returncode)。
 
-    ❗形态随实现走: `_shell` 已不用 `subprocess.run`, 改为 `Popen` 拿 pid 才能在超时点
+    ! 形态随实现走: `_shell` 已不用 `subprocess.run`, 改为 `Popen` 拿 pid 才能在超时点
     **杀整棵进程树**(2026-10-08)。假对象不同步改就会"看起来在测、其实真起子进程"。
     """
     def __init__(self, stdout: bytes, stderr: bytes = b"", returncode: int = 0):

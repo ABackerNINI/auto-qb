@@ -417,17 +417,17 @@ def _scan_message_surface_parity(problems):
     「消息通知不要切角」: 切角只属弹窗级大面浮层, 通知是过路小条。
 
     钉五件事(每条都是"看着还能跑、观感却分家"或"新增 kind 静默变中性"的静默故障):
-    ① `--msg-surface` 在 flux 内**恰一处**声明(提示条/确认框共用的供给面单点) —— 两处各写一份
+    1. `--msg-surface` 在 flux 内**恰一处**声明(提示条/确认框共用的供给面单点) —— 两处各写一份
       渐变表达式就是本次要消灭的漂移;
-    ② `.toast` 基线消费 `background: var(--msg-surface` + `border: ... var(--msg-line)`,
+    2. `.toast` 基线消费 `background: var(--msg-surface` + `border: ... var(--msg-line)`,
       且**不得**带 clip-path(切角只属弹窗; 本轮先统一成切角, 被用户退回并反向钉);
-    ③ `.modal` 基线同样消费 `--msg-surface` 与 `--msg-line`(只换其中一边 = 材质又分家);
-    ④ 语义档值 = 期望表(ok→green / warn→warn / error→error / busy→accent / timeout→warn):
+    3. `.modal` 基线同样消费 `--msg-surface` 与 `--msg-line`(只换其中一边 = 材质又分家);
+    4. 语义档值 = 期望表(ok→green / warn→warn / error→error / busy→accent / timeout→warn):
       值漂移(如 warn 改回 border-strong)会让 warn 档重新与 info 同貌;
-    ⑤ **模板与 JS 里出现的每个 toast kind 都必须有对应 `.toast.<kind>` 规则**(info 除外 ——
+    5. **模板与 JS 里出现的每个 toast kind 都必须有对应 `.toast.<kind>` 规则**(info 除外 ——
       中性档就是基线, 不单列)。warn 档此前正是整档缺失: 21 处调用点在四套皮肤下与 info
       完全同貌(既无琥珀描边也无琥珀图标), 肉眼读成"普通提示";
-    ⑥ **文字排版 = D6-2「倒计时进度条」骨架**(用户四轮口径): `.toast` 基座顶对齐 + 600 字重,
+    6. **文字排版 = D6-2「倒计时进度条」骨架**(用户四轮口径): `.toast` 基座顶对齐 + 600 字重,
       `.toast-txt/.toast-s` 两行块级(13/600 + 12/--fg-muted/400), 且 flux/fx-mount.js 的
       toastSync 必须调 `shapeToastText(n)` —— 共享模板只有一条 span, 两段由挂载层拆; JS 缺席
       时全部退回单行而 CSS 守阵看不出来, 故这条要连 JS 一起钉。
@@ -570,8 +570,8 @@ def _scan_message_surface_parity(problems):
     elif '"toast-t"' not in js or '"toast-s"' not in js:
         problems.append("shapeToastText 拆出的段名不是 toast-t / toast-s —— 与 views.css 文字区选择器对不上")
 
-    # 位置与队列(用户八轮, 2026-11-02): ① 提示条必须坐在状态栏**之上** —— 状态栏是常驻仪表盘,
-    # 压上去等于盖住速率(报障原话「通知挡住了状态栏」); ② 队列重排要真做: toastSync/toastDrop
+    # 位置与队列(用户八轮, 2026-11-02): 1. 提示条必须坐在状态栏**之上** —— 状态栏是常驻仪表盘,
+    # 压上去等于盖住速率(报障原话「通知挡住了状态栏」); 2. 队列重排要真做: toastSync/toastDrop
     # 都得调 flipStack, 缺一处就回到"新条插入/旧条退场时邻居瞬移"(报障的「互相重叠」另一半)。
     wrap_body = typo.get(".toast-wrap")
     if wrap_body is None:
@@ -614,10 +614,10 @@ def _scan_message_surface_parity(problems):
             continue
         text = open(os.path.join(shared_dir, name), encoding="utf-8").read()
         for lineno, line in enumerate(text.splitlines(), 1):
-            # ① sticky 条只能由 _runningToast 建(手搓 { sticky: true } = 绕开最短展示与归档口径)
+            # 1. sticky 条只能由 _runningToast 建(手搓 { sticky: true } = 绕开最短展示与归档口径)
             if "{ sticky: true }" in line and "_runningToast" not in line:
                 offenders.append(f"shared/{name}:{lineno}")
-        # ② 归档条文案必须**归档后仍成立**: 它会留在队列里与结果条并存, 不能自称"进行中/等待"。
+        # 2. 归档条文案必须**归档后仍成立**: 它会留在队列里与结果条并存, 不能自称"进行中/等待"。
         # 先剥注释再扫: 注释里既有用法示例(_runningToast(`…`)), 也有带引号的解释词("进行中"),
         # 都会被字面量正则误抓 —— 只留真代码里的模板/字符串。
         stripped = re.sub(r"/\*.*?\*/", "", text, flags=re.S)
@@ -639,7 +639,7 @@ def _scan_message_surface_parity(problems):
     if banned_hits:
         problems.append(f"归档条文案写成了进行时态({banned_hits[0]}) —— 它结算后要留在队列里"
                         "继续被读到, 文案必须归档后仍成立(用「已投递/已开始/已提交」)")
-    # ③ 结算点下限护栏(全 shared 汇总, 不单看 commands.js —— 单文件计数会被 docstring 里的
+    # 3. 结算点下限护栏(全 shared 汇总, 不单看 commands.js —— 单文件计数会被 docstring 里的
     # 用法示例撑起来, 虚绿)。目前 5 条链路(强制汇报/导出/删除前置/跳检/转移)共 12 处(含定义);
     # 阈值取 10 = 允许删掉一两条分支, 但整条链路退回"原位改字"时必红。
     settle_total = 0

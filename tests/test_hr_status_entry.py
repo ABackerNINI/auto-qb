@@ -6,7 +6,7 @@
 - test_entry_details_need_seed_text_reuses_single_point: need_seed 人话确为复用单点(与 CLI 同一函数)而非另写
 - test_entry_details_verified_join: verified join —— 有记录→ts+source 原值+人话 / 无记录→未核实 / v2 键也能命中
 - test_entry_details_source_texts: 放行来源人话映射(D 免罪 / 未列出 / 已达标); 未知原值回落原文不静默丢
-- test_entry_details_field_surface: 导出字段面 = §3 P0+P1 全集; remain_seconds 等 P2 字段不得出现(决策点③)
+- test_entry_details_field_surface: 导出字段面 = §3 P0+P1 全集; remain_seconds 等 P2 字段不得出现(决策点3)
 - test_mark_local_present_v1_hit: 本地库存在(v1 命中) -> local_present=True
 - test_mark_local_present_absent: 本地不存在 -> local_present=False(未做种)
 - test_mark_local_present_v2_only_hit: 仅 v2 命中(v1 未命中) -> local_present=True
@@ -202,7 +202,7 @@ def test_entry_details_field_surface():
     )
     row = entry_details(_site([entry]))[0].to_dict()
     assert set(row) == ENTRY_ROW_KEYS, "字段面要与计划 §3 逐字对齐(多导出 = 体积浪费, 少导出 = 前端没得吃)"
-    assert "remain_seconds" not in row, "决策点③: 考核窗口倒计时不得进表(2026-09-25 误读教训)"
+    assert "remain_seconds" not in row, "决策点3: 考核窗口倒计时不得进表(2026-09-25 误读教训)"
     assert row["dl_id"] == 173107 and row["done_iso"] == "2026-09-20 10:00:00"
     assert row["lane_text"] == "考察中" and row["first_seen"] == 111.0 and row["last_seen"] == 222.0
 

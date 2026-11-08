@@ -312,7 +312,7 @@ def test_lane_statuses_text_condition_boundaries():
 
 
 def test_lanes_summary_parity_between_service_and_status():
-    """同一波次两套摘要逐字相等(issue 26-10-29-1327 验证①): service._lanes_summary_from 与
+    """同一波次两套摘要逐字相等(issue 26-10-29-1327 验证1): service._lanes_summary_from 与
     status._lane_statuses 的 parts 在 tag/深度/计数三部件上读同一 model 单点, 排版模板一致
     ⇒ 整串相等; 缺档与未知状态回落也同口径(透传原值不静默降级)"""
     data = HrSiteData()

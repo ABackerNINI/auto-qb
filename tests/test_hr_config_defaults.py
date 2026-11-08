@@ -37,8 +37,8 @@ config v2→v3 迁移(config/migrations.py)一次性删除或改名, 无常驻�
 - test_channel_host_literal_only: channel.host 只认 IPv4/IPv6 字面量与 localhost —— 空/None 报「不能为空」, localhost 大小写与两族字面量放行, 主机名(含 .local 后缀)报「须为 IPv4/IPv6 字面量」
 - test_channel_pairing_enum_and_token_type: pairing 取值域 auto/on/off(非法值报错并列出可选值, 大小写不敏感) + token 非字符串报错(类型错会让密钥比对静默失效)
 - test_channel_port_collision_with_discovery: port 与 discovery_port 相同报「两端口不能相同」(现产 port:18788 撞默认 discovery 18788 的形态); 任一侧 0(随机)不判撞
-- test_channel_lan_off_without_token_rejected: ⑤ 非回环 + pairing=off + 无 token 必须拦(V4); 配 token / 回环 / pairing=auto 三档放行
-- test_channel_discovery_port_ephemeral_warns_not_blocks: ⑥ discovery_port 落入 OS 临时端口段只告警不阻断(V12); 段值按平台取(Windows 49152-65535 / 类 Unix 32768-60999), dport=0 整段跳过
+- test_channel_lan_off_without_token_rejected: 5. 非回环 + pairing=off + 无 token 必须拦(V4); 配 token / 回环 / pairing=auto 三档放行
+- test_channel_discovery_port_ephemeral_warns_not_blocks: 6. discovery_port 落入 OS 临时端口段只告警不阻断(V12); 段值按平台取(Windows 49152-65535 / 类 Unix 32768-60999), dport=0 整段跳过
 - test_channel_token_ascii_only: token 含非 ASCII 字符报「ASCII」错(常数时间密钥比较要求两侧均为 ASCII, 非 ASCII 密钥旧校验放行、运行期逐请求 TypeError 兜 500 —— 必须配置期拦下); 纯 ASCII 放行, 非字符串仍报「必须是字符串」
 """
 
@@ -410,7 +410,7 @@ def test_channel_request_timeout_range():
 
 
 def test_channel_host_literal_only():
-    """channel.host 只认 IPv4/IPv6 字面量与 localhost(S1 ①): 空/None -> 报「不能为空」;
+    """channel.host 只认 IPv4/IPv6 字面量与 localhost(S1 1): 空/None -> 报「不能为空」;
     localhost(大小写不敏感)与两族字面量放行; 主机名(含 .local 后缀)报错 —— 扩展侧 normalize
     按字面量判私网段, 主机名无法分类(NAS 部署请直接填内网 IP)"""
     assert any("不能为空" in e for e in _validate({"hr_check": {"channel": {"host": "   "}}}))
@@ -452,17 +452,17 @@ def test_channel_token_ascii_only():
 
 
 def test_channel_port_collision_with_discovery():
-    """③ port 与 discovery_port 相同 -> 报「两端口不能相同」(计划 §01 派生口径 + §08 迁移:
+    """3. port 与 discovery_port 相同 -> 报「两端口不能相同」(计划 §01 派生口径 + §08 迁移:
     现产 port:18788 撞默认 discovery 18788 即此形态); 任一侧 0(交 OS 随机)不判撞"""
     errors = _validate({"hr_check": {"channel": {"port": 18788, "discovery_port": 18788}}})
     assert any("两端口不能相同" in e and "18788" in e for e in errors), errors
     assert _validate({"hr_check": {"channel": {"port": 18788, "discovery_port": 18888}}}) == []
-    # dport=0: ⑥ 的临时端口段判定整段跳过(`if dport_v:` 假弧), 不误报
+    # dport=0: 6 的临时端口段判定整段跳过(`if dport_v:` 假弧), 不误报
     assert _validate({"hr_check": {"channel": {"port": 0, "discovery_port": 0}}}) == []
 
 
 def test_channel_lan_off_without_token_rejected():
-    """⑤ 非回环 + pairing=off + 未配 token = LAN 上无人工关口的密钥分发器, 一道都不许少(V4);
+    """5. 非回环 + pairing=off + 未配 token = LAN 上无人工关口的密钥分发器, 一道都不许少(V4);
     配了 token / host 回环 / pairing=auto 三档均放行"""
     errors = _validate({"hr_check": {"channel": {"host": "192.168.1.5", "pairing": "off"}}})
     assert any("非回环且 pairing=off 且未配置 token" in e for e in errors), errors
@@ -472,7 +472,7 @@ def test_channel_lan_off_without_token_rejected():
 
 
 def test_channel_discovery_port_ephemeral_warns_not_blocks(monkeypatch):
-    """⑥ discovery_port 落入 OS 临时端口段 -> 告警不阻断(V12; 默认 18788 在段外);
+    """6. discovery_port 落入 OS 临时端口段 -> 告警不阻断(V12; 默认 18788 在段外);
     段值按平台取: Windows 49152-65535 / 类 Unix 32768-60999"""
     from auto_qb.config.validation import sections as v_sections
 

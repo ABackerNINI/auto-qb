@@ -59,7 +59,7 @@ P1-T1.4 守卫与容错簇(计划 26-10-20-2101, 覆盖率缺口清偿):
   CreateFileW 返回 INVALID_HANDLE / DeviceIoControl 失败 -> 抛 OSError 且删掉刚建的空目录;
   清理时 rmdir 再失败也不掩盖主因
 
-S5 重定向原语簇(计划 26-11-05-0808 S5, D15: 0247 S6③ 设想从零实现):
+S5 重定向原语簇(计划 26-11-05-0808 S5, D15: 0247 S6 3 设想从零实现):
 - test_retarget_alias_dir_forms: 目录别名(Windows junction / POSIX 目录 symlink)改指 -> 读旧目标
   删旧建新 + 穿透读 + 幂等重放 skipped
 - test_retarget_alias_hardlink_and_idempotent: 硬链接改指(换 inode)+ 重放 skipped(同 inode 幂等)

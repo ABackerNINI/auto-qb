@@ -746,7 +746,7 @@ def test_retry_loop_backoff_and_stop_exit(monkeypatch):
 
 
 def test_default_registry_path_posix_shape(monkeypatch):
-    """类 Unix 分支(S2 ② 平台单点): XDG_DATA_HOME 优先, 缺省回落 ~/.local/share"""
+    """类 Unix 分支(S2 2 平台单点): XDG_DATA_HOME 优先, 缺省回落 ~/.local/share"""
     import auto_qb.hr.discovery as discovery_mod
 
     monkeypatch.setattr(discovery_mod.sys, "platform", "linux")

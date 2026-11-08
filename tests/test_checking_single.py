@@ -315,12 +315,12 @@ def test_checking_action_deferred_on_own_write():
     client.torrents["HB"] = hb
     inject_group(mgr, "HA", "HB")
 
-    # ① 同组成员 HB 刚被自有停/起 -> HA 的校验决策让位(不提交 recheck)
+    # 1. 同组成员 HB 刚被自有停/起 -> HA 的校验决策让位(不提交 recheck)
     mgr.store.note_own_write("HB")
     process_rule(mgr, client, ha)
     assert ("recheck", None) not in client.calls, f"让位不应提交 recheck: {client.calls}"
 
-    # ② 登记清除后照常提交 recheck(证明是 deferral 而非永久拒绝)
+    # 2. 登记清除后照常提交 recheck(证明是 deferral 而非永久拒绝)
     mgr.store.own_writes.clear()
     process_rule(mgr, client, ha)
     assert ("recheck", None) in client.calls, f"登记清除后应提交 recheck: {client.calls}"

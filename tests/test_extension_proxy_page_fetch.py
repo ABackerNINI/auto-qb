@@ -609,7 +609,7 @@ def test_badge_text_is_ascii_only():
 
 
 def test_row_health_of_four_states():
-    """行级四态真值表(计划 §3.2/S5①): 绿=正常 / 红=401 或 403(token 或来源被拒, 红优先于 ok) /
+    """行级四态真值表(计划 §3.2/S5 1): 绿=正常 / 红=401 或 403(token 或来源被拒, 红优先于 ok) /
     橙=连不上·连败 N 轮 / 灰=还没轮过(无台账条目); 旧台账无 state 字段按 C2 降级(ok->绿, 否则橙)。"""
     node = _node()
     if not node:
@@ -631,7 +631,7 @@ def test_row_health_of_four_states():
 
 
 def test_probe_all_message_writes_ledger():
-    """probe-all(「重测全部」)真跑(计划 S2/S5②): 消息存在且处理走 noteInstanceHealth —— 三实例
+    """probe-all(「重测全部」)真跑(计划 S2/S5 2): 消息存在且处理走 noteInstanceHealth —— 三实例
     (ok / down / 401)各探一次, 结构化 state 落台账(401 记 ok:true + state='401': 端点有应答是配置态,
     行级红靠 state 而非 ok); probe-one 已随 R3 取消, 两文件都不得出现。"""
     node = _node()
@@ -676,7 +676,7 @@ def test_retest_all_goes_through_background():
 
 
 def test_badge_legend_says_browser_toolbar():
-    """徽标图例措辞守阵(计划 §01 事实澄清/S5④): 图例必须写明「浏览器工具栏」—— 旧句「工具栏图标徽标
+    """徽标图例措辞守阵(计划 §01 事实澄清/S5 4): 图例必须写明「浏览器工具栏」—— 旧句「工具栏图标徽标
     四态…」未说"浏览器", 读者会误解为本页实例表(用户实问之一); 四态框式色样(R4)齐全。"""
     html = _read(OPTIONS_HTML)
     assert "工具栏图标徽标" not in html, "旧歧义措辞不得回潮(未说「浏览器」, 会被误解为本页元素)"
@@ -699,7 +699,7 @@ def test_instance_source_badge_is_manual_or_auto():
 
 
 def test_badge_icon_frame_mapping():
-    """图标外框映射守阵(R4/S6/S5⑦): 四态 -> {16,32} 路径纯函数直测 + 8 个 PNG(生成物
+    """图标外框映射守阵(R4/S6/S5 7): 四态 -> {16,32} 路径纯函数直测 + 8 个 PNG(生成物
     scripts/gen_ext_icons.py)在盘上 + manifest default_icon 指向基础图(Chrome 无还原默认图标 API,
     外框方案必须自带基础图; 未配置态与安装初始态共用); 旧 OK/.. 徽标文案不得回潮。"""
     expected = {
@@ -748,7 +748,7 @@ def test_badge_icon_frame_mapping():
 def test_conn_state_judgement_matches_badge():
     """**跨层机械比对**: 徽标态(background.js)与顶部总览态(options.js)必须逐输入一致
 
-    两者是同一条判据的两个展示面(计划 §3.3/Q4②), 此前是两份实现、只靠注释互指 —— 一旦分头演化,
+    两者是同一条判据的两个展示面(计划 §3.3/Q4 2), 此前是两份实现、只靠注释互指 —— 一旦分头演化,
     「徽标报警但页面说正常」这类漂移就没有任何机械拦阻。这里把两个函数体各自从文件里切出来真跑同一张
     真值表(含 C4 边界: 有应答无可用实例 = 重连中 vs 候选全无应答 = 发现失败), 并把四态键集与徽标图例
     文案一起钉住(改判据必须三处一起改)。

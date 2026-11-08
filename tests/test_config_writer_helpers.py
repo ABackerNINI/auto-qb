@@ -293,7 +293,7 @@ def test_sync_mapping_scalar_vs_container_not_skipped():
     """_sync_mapping 的类型分派: `not isinstance(value, (dict, list)) and not isinstance(existing, ...)`
     的 and 链不得被写坏(变异把两侧 not 去掉/换 or → 标量与容器互转时误跳过或误比较)
 
-    守阵: ①标量值覆盖容器节点 ②容器值覆盖标量节点 —— 两种都不得被"未变化"逻辑吞掉.
+    守阵: 1. 标量值覆盖容器节点 2. 容器值覆盖标量节点 —— 两种都不得被"未变化"逻辑吞掉.
     """
     from ruamel.yaml.comments import CommentedMap
 

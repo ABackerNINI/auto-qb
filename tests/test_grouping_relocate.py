@@ -1,9 +1,9 @@
 """test_grouping_relocate 测试计划: 组判定改造与联动抑制(计划 26-10-18-1604 §04 P4)
 
 验收判据(plan §04 P4): 现有 grouping 测试全绿; 新增六条守阵 ——
-① 文件链接在场 ⇒ 两成员同组(别名不裂组); ② 搬迁窗口不误暂停(relocating 让路);
-③ 别名期间新加的同内容辅种自动并组; ④ 同名不同内容仍被跨组交叉检测拦下;
-⑤ 第三方目录级链接(junction)按解析后路径并组; ⑥ 第三方文件级链接/硬链接被识别且拒迁。
+1. 文件链接在场 ⇒ 两成员同组(别名不裂组); 2. 搬迁窗口不误暂停(relocating 让路);
+3. 别名期间新加的同内容辅种自动并组; 4. 同名不同内容仍被跨组交叉检测拦下;
+5. 第三方目录级链接(junction)按解析后路径并组; 6. 第三方文件级链接/硬链接被识别且拒迁。
 
 ## 测试计划(每个测试函数一条)
 - test_file_links_keep_group_together: 活跃 job 作用域内, 指向 src 的成员与已到 dst 的 mover 同组
@@ -40,7 +40,7 @@ def _job(src, dst, content, phase="armed", hashes=("HA", "HB")):
 
 
 def test_file_links_keep_group_together(tmp_path):
-    """① 文件链接在场: 仍指向 src 的 HB 与已到 dst 的 HA 落进同一组(不裂组)"""
+    """1. 文件链接在场: 仍指向 src 的 HB 与已到 dst 的 HA 落进同一组(不裂组)"""
     mgr, client, src, dst, content, _ = relocate_env(tmp_path, assign=False)
     grouping = mgr.host.get("grouping")
     mgr.host.get("relocate").register_job(_job(src, dst, content))
@@ -55,7 +55,7 @@ def test_file_links_keep_group_together(tmp_path):
 
 
 def test_relocating_skips_missing_scan(tmp_path):
-    """② 搬迁窗口: 组内成员在 relocating 登记内 ⇒ 跳过错文件扫描(不暂停、不打 MISSING)"""
+    """2. 搬迁窗口: 组内成员在 relocating 登记内 ⇒ 跳过错文件扫描(不暂停、不打 MISSING)"""
     mgr, client, src, dst, content, _ = relocate_env(tmp_path, assign=False)
     grouping = mgr.host.get("grouping")
     grouping._assign_new_torrent("HA")
@@ -76,7 +76,7 @@ def test_relocating_skips_missing_scan(tmp_path):
 
 
 def test_new_member_joins_alias_group(tmp_path):
-    """③ 别名期间新加的同内容辅种自动并进同一组(作用域不是快照)"""
+    """3. 别名期间新加的同内容辅种自动并进同一组(作用域不是快照)"""
     mgr, client, src, dst, content, _ = relocate_env(tmp_path, assign=False)
     grouping = mgr.host.get("grouping")
     mgr.host.get("relocate").register_job(_job(src, dst, content))
@@ -93,7 +93,7 @@ def test_new_member_joins_alias_group(tmp_path):
 
 
 def test_cross_group_conflict_still_blocks(tmp_path):
-    """④ 同名不同内容(文件集不同 ⇒ 两组)仍被跨组交叉检测拦下, 只暂停下载方"""
+    """4. 同名不同内容(文件集不同 ⇒ 两组)仍被跨组交叉检测拦下, 只暂停下载方"""
     mgr, client, src, dst, content, _ = relocate_env(tmp_path, assign=False)
     mgr.config.grouping.cross_group_conflict_check = True  # 该检测默认关(保守默认), 守阵显式开
     # HB 改成 {Show/e01, Show/e02}: 与 HA 的 {e00,e01} 不同组但共享 e01.mkv
@@ -115,7 +115,7 @@ def test_cross_group_conflict_still_blocks(tmp_path):
 
 @pytest.mark.skipif(not utils.is_windows(), reason="junction 仅 Windows")  # owner: abacker
 def test_third_party_junction_joins_group(tmp_path, monkeypatch):
-    """⑤ 第三方目录 junction: 按 realpath 解析后的物理目录并组"""
+    """5. 第三方目录 junction: 按 realpath 解析后的物理目录并组"""
     mgr, client, src, dst, content, _ = relocate_env(tmp_path, assign=False)
     real = os.path.join(str(tmp_path), "real")
     os.makedirs(os.path.join(real, "Show"))
@@ -137,7 +137,7 @@ def test_third_party_junction_joins_group(tmp_path, monkeypatch):
 
 
 def test_third_party_link_detected_and_relocation_blocked(tmp_path, monkeypatch):
-    """⑥ 硬链接组: 组被打标(识别), 迁移闸门拒迁(hardlink) —— 搬走的是链接本身, 数据留原地"""
+    """6. 硬链接组: 组被打标(识别), 迁移闸门拒迁(hardlink) —— 搬走的是链接本身, 数据留原地"""
     pin_disk_usage(monkeypatch)
     mgr, client, src, dst, content, _ = relocate_env(tmp_path, assign=False)
     target = os.path.join(content, "e00.mkv")

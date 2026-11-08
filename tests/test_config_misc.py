@@ -489,7 +489,7 @@ def test_validate_rule_refs():
 
         # -- 重复引用判重(26-10-02-1621 W1): 运行时按规则名去重使重复条目完全惰性, 配置期 fail-fast 拒收 --
 
-        # ① 同一 @ 引用写两遍 -> 报「规则引用重复」(序号 0 基, 与 path_map 判重先例口径一致)
+        # 1. 同一 @ 引用写两遍 -> 报「规则引用重复」(序号 0 基, 与 path_map 判重先例口径一致)
         dup = (
             "config:\n"
             "  example_rules:\n"
@@ -508,7 +508,7 @@ def test_validate_rule_refs():
         err = _load_errors(td, dup)
         assert "config.trackers.T1.rules[1]: 规则引用重复(与第 0 条相同): @example_rules" in err, err
 
-        # ② 尾随空白归一后判重("@A" 与 "@A " 同一归一形); 报错显示归一形, 序号仍指首现
+        # 2. 尾随空白归一后判重("@A" 与 "@A " 同一归一形); 报错显示归一形, 序号仍指首现
         ws = dup.replace(
             "        - '@example_rules'\n        - '@example_rules'\n",
             "        - '@example_rules'\n        - '@example_rules '\n"
@@ -516,7 +516,7 @@ def test_validate_rule_refs():
         err = _load_errors(td, ws)
         assert "config.trackers.T1.rules[1]: 规则引用重复(与第 0 条相同): @example_rules" in err, err
 
-        # ③ 畸形引用重复: 第一轮只报格式错(逐条各报一次), 不叠加查重错
+        # 3. 畸形引用重复: 第一轮只报格式错(逐条各报一次), 不叠加查重错
         bad = dup.replace(
             "        - '@example_rules'\n        - '@example_rules'\n",
             "        - example_rules\n        - example_rules\n"
@@ -525,7 +525,7 @@ def test_validate_rule_refs():
         assert err.count("规则引用必须以 @ 开头") == 2, err
         assert "规则引用重复" not in err, err
 
-        # ④ 无重复的合法配置 load 通过且 rules 原样保序(锁「loaders 不静默去重」)
+        # 4. 无重复的合法配置 load 通过且 rules 原样保序(锁「loaders 不静默去重」)
         # (规则集键约定: config 段下以 _rules 结尾, 见 loaders.py rules_config 提取)
         ok_multi = (
             "config:\n"
@@ -1254,7 +1254,7 @@ def test_validate_schema_version_lower_endpoint():
 def test_validate_qb_traffic_main_tick_crosscheck():
     """qb_traffic.sample_interval 与**同一份配置**的 main_tick 交叉校验(采样节奏不细于主循环节拍)
 
-    钉住两件事: ①main_tick 取自当前配置(而非模型默认); ②边界是 `>=`(相等合法)。
+    钉住两件事: 1. main_tick 取自当前配置(而非模型默认); 2. 边界是 `>=`(相等合法)。
     """
     with tempfile.TemporaryDirectory() as td:
         # main_tick=60S 时 sample_interval 30S 必须报错(若取模型默认 2s 则不报 -> 变异存活)
@@ -1754,9 +1754,9 @@ def test_validate_short_circuit_pairs_differing_truth():
 def test_validate_nested_section_shapes_and_unparsable_intervals():
     """嵌套段「形状非字典」与「时间串不可解析」两条纵深守卫
 
-    ① `traffic_source.global_traffic_monitor` 非字典 -> 报「必须是字典」并停在该层
+    1. `traffic_source.global_traffic_monitor` 非字典 -> 报「必须是字典」并停在该层
       (不继续取 tool_dir/tool_exe, 否则标量上取 in 判据语义漂移);
-    ② `qb_traffic.sample_interval` 不可解析 -> 只报解析错, **范围比较整段跳过**
+    2. `qb_traffic.sample_interval` 不可解析 -> 只报解析错, **范围比较整段跳过**
       (`if seconds is not None:` 假弧) —— 否则 None 参与比较会叠出假错或直接 TypeError。
     """
     with tempfile.TemporaryDirectory() as td:
@@ -1891,7 +1891,7 @@ def test_validate_fs_prefix_ambiguity_keeps_scanning():
     """fs.path_map 前缀歧义检查: 自比跳过须 continue(非 break, mutmut_106)、命中后只 break 内层(非 return, mutmut_113)
 
     构造两组「深路径在前、浅路径在后」的歧义对 —— 深层条目要跟**更后面**的浅层条目比才命中, 故:
-    ①自比改成 break 会漏掉本组命中(mutmut_106); ②命中后 return 会让第二组不再被检查(mutmut_113)。
+    1. 自比改成 break 会漏掉本组命中(mutmut_106); 2. 命中后 return 会让第二组不再被检查(mutmut_113)。
     """
     with tempfile.TemporaryDirectory() as td:
         text = (

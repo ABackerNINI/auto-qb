@@ -276,9 +276,9 @@ def _scan_state_color_tokens(problems):
     处置 = 行元素上声明 --st/--st-soft(7 kind), 图例/芯片/行文字/进度条统一消费变量。
 
     钉四件事(缺一条都是静默故障):
-    ① 每个 kind 都要有 --st 声明, 且取值 = 期望表(防漏一个状态 → 回落写死色);
-    ② --st-soft 同条声明(芯片底用); ③进度条 `.bar > i` 每皮肤恰 1 条且体内含 var(--st;
-    ④ 值漂移即红(checking 被人改回 --blue → 校验中又和下载中同色, 用户报障原样复发)。
+    1. 每个 kind 都要有 --st 声明, 且取值 = 期望表(防漏一个状态 → 回落写死色);
+    2. --st-soft 同条声明(芯片底用); 3. 进度条 `.bar > i` 每皮肤恰 1 条且体内含 var(--st;
+    4. 值漂移即红(checking 被人改回 --blue → 校验中又和下载中同色, 用户报障原样复发)。
     """
     found = {ui: {} for ui in _UI_ALL}
     bar = {ui: [] for ui in _UI_ALL}
@@ -329,17 +329,17 @@ def _scan_flux_modal_frost(problems):
     现象与根因: `backdrop-filter` 声明从未被删(仍在 `.modal` 上), 但 26-11-02 的消息面统一把
     弹窗底从 `--bg-card`(82%) 换成 `--bg-elev`(92%) —— 只剩 8% 透视, blur 形同不存在, 肉眼
     读成"毛玻璃被上一次透明修复弄丢了"。故本守阵**同时钉两侧**, 只钉其一都会让修复来回翻烧饼:
-    ① 弹窗侧: `.modal` 必须保留无前缀 + `-webkit-`(Safari < 18)两份 blur 声明, 且底必须是
+    1. 弹窗侧: `.modal` 必须保留无前缀 + `-webkit-`(Safari < 18)两份 blur 声明, 且底必须是
        半透明角色面(`--msg-base`), 不允许再回到 `--bg-elev` 近不透明底;
-    ② 透明修复侧(26-11-02 R7, 2026-11-04 反转): flux `--bg-pop` 必须仍是不透明色 —— 但 26-11-02
+    2. 透明修复侧(26-11-02 R7, 2026-11-04 反转): flux `--bg-pop` 必须仍是不透明色 —— 但 26-11-02
        「八类无 blur 浮层一律 --bg-pop」的口径已被 2026-11-04「全浮层玻璃化」取代(用户报「添加
        种子/右键菜单等弹窗毛玻璃近乎没有」): 26-11-02 透正文的根因是半透明底**无 blur**, 挂上
-       blur 后半透明即毛玻璃。现钉菜单/浮层族 = 半透明 --bg-card + blur(见 ④); --bg-pop 消费面
+       blur 后半透明即毛玻璃。现钉菜单/浮层族 = 半透明 --bg-card + blur(见 4); --bg-pop 消费面
        收窄到 .col-ghost(拖动虚影不玻璃化);
-    ③ 提示条不得被 `--msg-base` 波及: `--msg-base` 只许在 `.modal-mask` 作用域声明(挂 :root
+    3. 提示条不得被 `--msg-base` 波及: `--msg-base` 只许在 `.modal-mask` 作用域声明(挂 :root
        会让无 blur 的 `.toast` 一起变透明, 即透明修复倒退), 且 --bg-card 的 alpha 必须低于
        --bg-elev, 保证 blur 有可见透视;
-    ⑥ 遮罩浓度钉(2026-11-04 第二根因): `.modal-mask` alpha ≤ .6 —— 玻璃可见度 = 弹窗底 alpha ×
+    6. 遮罩浓度钉(2026-11-04 第二根因): `.modal-mask` alpha ≤ .6 —— 玻璃可见度 = 弹窗底 alpha ×
        遮罩 alpha, 11-03 轮修了弹窗底但 .72 遮罩仍把实际透视压到 ~5%。
     WARN: 只钉 flux —— 三旧皮肤没有毛玻璃(见 _scan_backdrop_filter 恒 0), 不随本守阵放开。
     """
@@ -359,7 +359,7 @@ def _scan_flux_modal_frost(problems):
                     if sel:
                         rules.setdefault(sel, []).append((rel, body))
 
-    # ① 弹窗本体: 两份 blur + 半透明角色底
+    # 1. 弹窗本体: 两份 blur + 半透明角色底
     modal = rules.get(".modal", [])
     if not modal:
         problems.append("flux 缺 `.modal` 规则 —— 弹窗基线无处落(毛玻璃/描边/材质全失效)")
@@ -375,7 +375,7 @@ def _scan_flux_modal_frost(problems):
         if "var(--msg-surface" not in body:
             problems.append(f"{rel} `.modal` 底未消费 --msg-surface —— 消息面材质与提示条分家")
 
-    # ② 角色底单点: --msg-surface 恰一处, 且用 --msg-base 分流(提示条近不透明 / 弹窗半透明)
+    # 2. 角色底单点: --msg-surface 恰一处, 且用 --msg-base 分流(提示条近不透明 / 弹窗半透明)
     surface_decls = [(rel, body) for rel, body in rule_bodies if re.search(r"--msg-surface\s*:", body)]
     if len(surface_decls) != 1:
         problems.append(f"flux 的 --msg-surface 声明数 = {len(surface_decls)} —— 消息面供给面必须恰一处单点"
@@ -397,7 +397,7 @@ def _scan_flux_modal_frost(problems):
             "blur 只剩 8% 透视, 毛玻璃名存实亡(2026-11-03 回归根因)"
         )
 
-    # ③ 提示条不得被半透明角色底波及(无 blur 的小条透出正文 = 透明修复倒退)
+    # 3. 提示条不得被半透明角色底波及(无 blur 的小条透出正文 = 透明修复倒退)
     for rel, sel, _body in base_decls:
         if sel != ".modal-mask":
             problems.append(
@@ -405,7 +405,7 @@ def _scan_flux_modal_frost(problems):
                 "会让无 blur 的提示条一起变透明(下层正文透出, 用户报障原症状)"
             )
 
-    # ④ 2026-11-04 全浮层玻璃化(用户复报「添加种子/右键菜单等弹窗毛玻璃近乎没有」): 26-11-02
+    # 4. 2026-11-04 全浮层玻璃化(用户复报「添加种子/右键菜单等弹窗毛玻璃近乎没有」): 26-11-02
     #   「透正文」的根因是半透明底**无 blur**; 挂上 blur 后半透明即毛玻璃, 不再透可读正文。
     #   - --bg-pop 仍必须不透明, 消费面收窄到 .col-ghost(列头拖动虚影 —— 每帧移动的 fixed 元素
     #     挂 blur = 逐帧回读采样, 唯一不玻璃化的浮层);
@@ -444,7 +444,7 @@ def _scan_flux_modal_frost(problems):
             body = "\n".join(b for _r, b in bodies)
             # 两份声明各钉各的: "backdrop-filter: blur(" 是 "-webkit-backdrop-filter: blur(" 的
             # 子串, 纯子串判断挡不住「只删无前缀(Chrome/Edge/Firefox 主链路)留前缀别名」的回归
-            # (评审面②内存探针实测全绿) —— 无前缀侧用负向环视排除前缀别名。
+            # (评审面2内存探针实测全绿) —— 无前缀侧用负向环视排除前缀别名。
             if not re.search(r"(?<!-webkit-)backdrop-filter: blur\(", body):
                 problems.append(
                     f"flux `{sel}` 缺无前缀 backdrop-filter —— 2026-11-04 全浮层玻璃化档位缺失"
@@ -467,14 +467,14 @@ def _scan_flux_modal_frost(problems):
         )
     else:
         # 逐成员锚定: 组正则只看整体时, 任一成员被删出组会静默回落 shared 不透明基线
-        # (评审面②探针实测: 只锚 .relc-pop 时删 .aq-tip 全绿)
+        # (评审面2探针实测: 只锚 .relc-pop 时删 .aq-tip 全绿)
         for member in (
             ".hb-pop-arrow", ".hb-tr-drop", ".search-help-pop", ".aq-tip", ".err-panel", ".rowlang-menu", ".relc-pop"
         ):
             if member not in [m.strip() for m in grp.group(1).split(",")]:
                 problems.append(f"flux 共用层 :is() 玻璃化覆盖组缺 `{member}` —— 该面回落不透明基线, 玻璃静默丢失")
 
-    # ⑤ blur 要有可见透视: --bg-card alpha 必须低于 --bg-elev 且明显低于 1
+    # 5. blur 要有可见透视: --bg-card alpha 必须低于 --bg-elev 且明显低于 1
     def _alpha(name):
         mm = re.search(rf"{re.escape(name)}\s*:\s*rgba\([^)]*,\s*([0-9.]+)\s*\)", style)
         return float(mm.group(1)) if mm else None
@@ -488,10 +488,10 @@ def _scan_flux_modal_frost(problems):
             "backdrop blur 会被不透明底压成不可见(毛玻璃形同虚设)"
         )
 
-    # ⑥ 遮罩浓度: 玻璃可见度 = 弹窗底 alpha × 遮罩 alpha 的叠乘 —— 2026-11-03 轮只修了弹窗底
+    # 6. 遮罩浓度: 玻璃可见度 = 弹窗底 alpha × 遮罩 alpha 的叠乘 —— 2026-11-03 轮只修了弹窗底
     #   (.92→.82), 但遮罩 .72 使对下层内容的实际透视仅 ~5%, blur 依旧肉眼不可见(2026-11-04
     #   用户复报「近乎没有」的第二根因)。本轮同批降浓的三块遮罩统一钉 alpha ≤ .6, 防
-    #   「调深遮罩提对比」把玻璃再次压死(评审面②探针实测只钉 .modal-mask 时另两块回拨不红)。
+    #   「调深遮罩提对比」把玻璃再次压死(评审面2探针实测只钉 .modal-mask 时另两块回拨不红)。
     for mask_sel in (".modal-mask", ".hr-full-mask", ".add-drop-mask"):
         mask_bodies = rules.get(mask_sel, [])
         if not mask_bodies:

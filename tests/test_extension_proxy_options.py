@@ -24,7 +24,7 @@
   而非守阵松动 —— 手动条目 = 高优先级(整条胜 + 置顶 + 永不自动删), 发现集 = 租约(整批替换, 空集除外)。
 - 降噪场景(_NODE_RUN_NOISE)显式 discoveryAddress 置空 —— 那条守阵钉「连接失败降噪」, 不混发现流日志
 ### 连接自愈轮 · S6 守阵补强(计划 26-10-15-2357 S6)
-- test_options_listens_instances_changes: storage.onChanged 监听 instances/instanceHealth/lastDiscovery(S3④)
+- test_options_listens_instances_changes: storage.onChanged 监听 instances/instanceHealth/lastDiscovery(S3 4)
 ### 连接区 UI 重排 + 实例状态入表轮(计划 26-10-16-0214 S4-S6)
 - test_options_swiss_wiring 扩: 元素清单随 S1 更新(helpTroubleshoot/connStateDot/Text/Meta)
   + 「自测端点连通」「载入」按钮字面量不得回潮 + 实例表真表头(状态列)
@@ -95,7 +95,7 @@ def test_options_swiss_wiring():
 
     2026-09-26 用户澄清「三模板」是三套独立风格选一套实施(非共存)—— 选定 A 后本条守阵随之改钉
     单一风格终态, 并钉住「共存实现不回潮」(三档切换机制不得再出现)。
-    2026-10-16 计划 26-10-15-2357 S4 把「连接端点 + 手动端点 + 底部工具栏」合并为**一个「① 连接
+    2026-10-16 计划 26-10-15-2357 S4 把「连接端点 + 手动端点 + 底部工具栏」合并为**一个「1. 连接
     后端」区**并删掉「保存发现地址与配对码」按钮(隐式保存)—— 被删的 id/落点随口径更新, 属口径
     演进非守阵松动; 新布局的判据(总览行/折叠手动区/徽标图例)在此一并钉住。
     2026-10-16 计划 26-10-16-0214 S1 再重排: 状态卡(connStateDot/Text/Meta)+ 实例表真表头 +
@@ -185,7 +185,7 @@ def test_options_swiss_wiring():
 
 
 def test_options_listens_instances_changes():
-    """连接面实时刷新(计划 §S3-④): storage.onChanged 必须监听 instances / instanceHealth / lastDiscovery
+    """连接面实时刷新(计划 §S3-4): storage.onChanged 必须监听 instances / instanceHealth / lastDiscovery
 
     此前只监听 logs/events/siteLedger, 后台发现并入的实例要**重开页面**才看得见 —— 这正是用户实报
     「操作逻辑混乱」的一半: 点了发现, 页面上的实例列表纹丝不动。监听面必须覆盖连接面并触发重渲染。

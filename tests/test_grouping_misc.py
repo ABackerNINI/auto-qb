@@ -7,10 +7,10 @@
 - test_grouping_errored_check_disabled: check_missing_files=False -> errored 转换不触发
 - test_group_key_of_is_single_source_of_truth: 归组 key 纯函数 group_key_of 与真实 mixin 输出一致(语料计划 §04 守阵)
 - test_grouping_size_consistency_dry_run_no_stop: 大小一致性 dry-run 只告警 (P2-a)
-- test_cross_group_partial_overlap_warns: 场景①部分重叠 -> 警告含重叠文件物理路径; S3 起处置生效 (26-10-04-0107 S2/S3)
-- test_cross_group_case_only_posix_no_false_positive: 场景②POSIX normcase 恒等 -> 大小写不同不误报 (26-10-04-0107 S2)
-- test_cross_group_case_only_windows_detected: 场景②Windows normcase 折叠 -> 大小写交叉检出 (26-10-04-0107 S2)
-- test_cross_group_junction_alias_detected: 场景③junction 别名目录 realpath_lexical 归同 -> 检出 (26-10-04-0107 S2)
+- test_cross_group_partial_overlap_warns: 场景1部分重叠 -> 警告含重叠文件物理路径; S3 起处置生效 (26-10-04-0107 S2/S3)
+- test_cross_group_case_only_posix_no_false_positive: 场景2POSIX normcase 恒等 -> 大小写不同不误报 (26-10-04-0107 S2)
+- test_cross_group_case_only_windows_detected: 场景2Windows normcase 折叠 -> 大小写交叉检出 (26-10-04-0107 S2)
+- test_cross_group_junction_alias_detected: 场景3junction 别名目录 realpath_lexical 归同 -> 检出 (26-10-04-0107 S2)
 - test_cross_group_missing_tag_exempt: D3 任一侧成员带 MISSING 标签豁免, 去标签后照常检出 (26-10-04-0107 S2)
 - test_cross_group_zero_change_short_circuit: rounds_applied>0 且 dirty 空 -> 提前返回; dirty 非空恢复全量 (26-10-04-0107 S2)
 - test_cross_group_switch_off_silent: 开关缺省 false -> 交叉在场仍零输出零动作, 打开后检出 (26-10-04-0107 S2)
@@ -204,7 +204,7 @@ def test_grouping_size_consistency_dry_run_no_stop():
 
 
 def test_cross_group_partial_overlap_warns():
-    """场景①部分重叠: 两组同 save_path 文件列表 [ep01,ep02]/[ep02,ep03], B 下载中
+    """场景1部分重叠: 两组同 save_path 文件列表 [ep01,ep02]/[ep02,ep03], B 下载中
     -> 警告含 ep02 物理路径; S3 起处置生效: 涉事下载方被暂停(hash 精确断言见 S3 用例)"""
     with tempfile.TemporaryDirectory() as td:
         mgr, grp, client = _grp_env(os.path.join(td, "state.json"), cross_group_conflict_check=True)
@@ -218,7 +218,7 @@ def test_cross_group_partial_overlap_warns():
 
 @pytest.mark.skipif(os.name == "nt", reason="normcase 在 Windows 折叠大小写, 该不误报断言仅在 POSIX 成立")  # owner: abacker
 def test_cross_group_case_only_posix_no_false_positive():
-    """场景②POSIX 不误报: 两组文件名仅大小写不同(normcase 恒等 = 两个物理文件) -> 无警告"""
+    """场景2POSIX 不误报: 两组文件名仅大小写不同(normcase 恒等 = 两个物理文件) -> 无警告"""
     with tempfile.TemporaryDirectory() as td:
         mgr, grp, client = _grp_env(os.path.join(td, "state.json"), cross_group_conflict_check=True)
         _seed_cross_pair(mgr.store, td, {"ep01.mkv": 100}, td, {"EP01.mkv": 100})
@@ -229,7 +229,7 @@ def test_cross_group_case_only_posix_no_false_positive():
 
 @pytest.mark.skipif(os.name != "nt", reason="大小写折叠仅在 Windows 生效")  # owner: abacker
 def test_cross_group_case_only_windows_detected():
-    """场景②Windows 真检出: 同样大小写数据, normcase 折叠为同一物理文件 -> 警告(与 POSIX 用例分开断言, 不按平台分支期望)"""
+    """场景2Windows 真检出: 同样大小写数据, normcase 折叠为同一物理文件 -> 警告(与 POSIX 用例分开断言, 不按平台分支期望)"""
     with tempfile.TemporaryDirectory() as td:
         mgr, grp, client = _grp_env(os.path.join(td, "state.json"), cross_group_conflict_check=True)
         _seed_cross_pair(mgr.store, td, {"ep01.mkv": 100}, td, {"EP01.mkv": 100})
@@ -241,7 +241,7 @@ def test_cross_group_case_only_windows_detected():
 
 @pytest.mark.skipif(os.name != "nt", reason="junction 仅 Windows(目录 symlink 需开发者模式, 不测)")  # owner: abacker
 def test_cross_group_junction_alias_detected():
-    """场景③junction 别名: 两组 save_path 分别指向真身与 junction, realpath_lexical 归同 -> 警告"""
+    """场景3junction 别名: 两组 save_path 分别指向真身与 junction, realpath_lexical 归同 -> 警告"""
     import _winapi  # CPython 标准库内部 API(测试套同款), 无需管理员权限; 平台用例体内导入, POSIX 收集不触
 
     with tempfile.TemporaryDirectory() as td:

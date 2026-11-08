@@ -7,7 +7,7 @@
 - test_silence_reminder_is_throttled: 通道静默按 channel_silence_warn 周期提醒一次
 - test_silence_warning_names_affected_sites: 通道静默是**端点级**事件 ⇒ 文案里要列出受影响站点(M4 四类事件)
 - test_silence_is_quiet_when_nobody_watching: 无人在用 WebUI 且无被拒敲门 ⇒ 预期离线, 只进后端 log(hr_silent)
-- test_silence_is_visible_when_web_active: WebUI 活跃 + 扩展未联系 ⇒ 可见告警(不静默, 口径⑤)
+- test_silence_is_visible_when_web_active: WebUI 活跃 + 扩展未联系 ⇒ 可见告警(不静默, 口径5)
 - test_silence_names_rejected_root_cause: 有被拒敲门(401/403) ⇒ 文案指名 token / origin 根因
 
 ### hr 首轮变异审计轮: 取数线程长尾(issue 26-10-10-1108-runtime-worker)
@@ -191,7 +191,7 @@ def test_silence_warning_names_affected_sites(tmp_path, caplog, monkeypatch):
 def test_silence_is_quiet_when_nobody_watching(tmp_path, caplog, monkeypatch):
     """无人在用 WebUI 且无被拒敲门 ⇒ 「预期离线」: 只进后端 log(hr_silent), 不进前端错误历史
 
-    这正是用户实报的那一类(关浏览器过夜) —— 它不该出现在错误历史里(计划 §03.2 / D2①)。
+    这正是用户实报的那一类(关浏览器过夜) —— 它不该出现在错误历史里(计划 §03.2 / D2 1)。
     """
     clock = FakeClock()
     monkeypatch.setattr(worker_module, "CHANNEL_SILENCE_WARN", 3600.0)
@@ -220,7 +220,7 @@ def test_silence_is_quiet_when_nobody_watching(tmp_path, caplog, monkeypatch):
 
 
 def test_silence_is_visible_when_web_active(tmp_path, caplog, monkeypatch):
-    """WebUI 活跃但扩展未联系 ⇒ **可见告警, 不静默**(用户口径⑤)
+    """WebUI 活跃但扩展未联系 ⇒ **可见告警, 不静默**(用户口径5)
 
     只陈述「有人在看 WebUI, 而扩展没在联系」; **不**推断「扩展离线」, 也**不**判断是否同机 / 同源。
     """

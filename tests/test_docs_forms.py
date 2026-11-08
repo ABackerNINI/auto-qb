@@ -18,7 +18,7 @@
 - test_doc_topics_complete: 四形态任一文档缺 `doc-topic` / `**Topics:**` 即红 (旧覆盖测试的补漏版)
 - test_doc_map_live_rotation: 全完结专题在默认视图只留名 (轮转), `--all` 仍全量
 - test_doc_map_name_list_never_splits_keys: 名录折行以专题名为原子, 含空格的复合键不被撕断 (2026-10-18)
-- test_doc_map_flags_composite_topic_key: 逗号复合键 / 非 kebab 主键判红, 单 kebab 与空值放行; 真实语料零违例 (issue 26-10-18-0858 拍板②)
+- test_doc_map_flags_composite_topic_key: 逗号复合键 / 非 kebab 主键判红, 单 kebab 与空值放行; 真实语料零违例 (issue 26-10-18-0858 拍板2)
 - test_issue_topics_present: 每条 issue 都有 `doc-topic` (否则会从专题视图里静默漏掉)
 - test_claim_chain_is_bidirectional: 声明了 `doc-refs` / `**Refs:**` 的件, 目标必须存在且反向声明
 - test_claim_chain_missing_target_hints_separator: ref 含视觉分隔符报「目标不存在」时, 报错自带英文逗号分隔提示 (issue 26-10-03-0746)
@@ -162,9 +162,9 @@ def test_doc_map_name_list_never_splits_keys() -> None:
 
 
 def test_doc_map_flags_composite_topic_key() -> None:
-    """主键形态纪律 (2026-10-18, issue 26-10-18-0858 拍板②): 逗号复合键 / 非 kebab 判红, 单 kebab 与空值放行。
+    """主键形态纪律 (2026-10-18, issue 26-10-18-0858 拍板2): 逗号复合键 / 非 kebab 判红, 单 kebab 与空值放行。
 
-    拍板②(维持单主键口径, 生成器不拆键)后, 机检单点下沉到 gen_doc_map.check_topic_key_shape ——
+    拍板2(维持单主键口径, 生成器不拆键)后, 机检单点下沉到 gen_doc_map.check_topic_key_shape ——
     与认领链 (2026-10-03)、状态词表 (2026-10-16) 同款路径: 校验只活在 pytest 时, 纯文档轮
     (test.quick 闸门 match 只盯 src/tests) 会漏。tasks 的 `**Topics:**` 与四形态 `doc-topic`
     同一正则; 空值 (缺主键) 归 check_topics 管, 本函数只判形态。存量 8 份已于同轮回归单主键,

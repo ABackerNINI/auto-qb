@@ -12,7 +12,7 @@
 - `python_normalize(spec)` = `normalize_legacy_rule` —— Python 侧真身(不是再手写一份期望);
 - `_NODE_PARITY_PROBE` = 同一批 spec 走 `cfgNormalizeRulesDraft` 后 dump 回 stdout 的 node 电池;
 
-两侧产出在 `test_webui_config_normalize_parity.py` 里 `==` 比对。⚠ 期望不写在这里: 写了就是
+两侧产出在 `test_webui_config_normalize_parity.py` 里 `==` 比对。WARN: 期望不写在这里: 写了就是
 "第三份手抄", 又在两侧之外漂流。这里只放输入; 输出以 Python 侧为基准, JS 侧追平 —— 谁改了
 语义, 对拍用例就红, 逼改动方同时改两侧(或明确退役前端镜像)。
 """

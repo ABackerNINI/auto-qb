@@ -342,7 +342,7 @@ def test_merge_seen_refreshes_last_seen(tmp_path):
     assert data.index[21].active is False
     assert data.index[21].last_seen == t0, "退役条目不再进合并口: last_seen 冻结在最后见到时刻(淘汰计时起点)"
     assert data.index[22].active is True and data.index[22].last_seen == t1, "重见条目 last_seen 刷新"
-    # 详情表导出契约(webui 表①「最近被见到」列): last_seen 随写入点亮起
+    # 详情表导出契约(webui 表1「最近被见到」列): last_seen 随写入点亮起
     details = {d.tid: d for d in entry_details(data)}
     assert details[21].last_seen == t0 and details[22].last_seen == t1
 

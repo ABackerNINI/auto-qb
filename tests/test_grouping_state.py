@@ -740,10 +740,10 @@ def test_grouping_missing_files_check_disabled_guard():
 def test_grouping_physical_dir_three_layers(monkeypatch):
     """物理解析三层各自的保守出口(组键首元 = 物理内容根, 解析错了就是误并/裂组)
 
-    ① 迁移模块缺席(装配未挂) -> 直接进别名层;
-    ② 迁移模块抛错 -> 退回词法路径(异常不影响归组, 少并一组的代价 < 误并一组);
-    ③ 别名层: 判为 junction 但解析结果与词法路径相同 -> 返回原路径(没搬家);
-    ④ 别名层抛错 -> 保守返回词法路径。
+    1. 迁移模块缺席(装配未挂) -> 直接进别名层;
+    2. 迁移模块抛错 -> 退回词法路径(异常不影响归组, 少并一组的代价 < 误并一组);
+    3. 别名层: 判为 junction 但解析结果与词法路径相同 -> 返回原路径(没搬家);
+    4. 别名层抛错 -> 保守返回词法路径。
     """
     from auto_qb.core.modules import grouping_mod
 
@@ -759,17 +759,17 @@ def test_grouping_physical_dir_three_layers(monkeypatch):
             def resolve_physical(self, p, root):
                 return r"T:/lib/movie"
 
-        # ① relocate 缺席
+        # 1. relocate 缺席
         monkeypatch.setattr(grp._ctx, "relocate", None)
         assert grp._physical_dir(sp, sp) == sp
-        # ② relocate 抛错 -> 词法路径
+        # 2. relocate 抛错 -> 词法路径
         monkeypatch.setattr(grp._ctx, "relocate", _BoomRelocate())
         assert grp._physical_dir(sp, sp) == sp
         # 迁移模块解析出不同物理路径 -> 直接采用(别名在场时组键首元应是 T)
         monkeypatch.setattr(grp._ctx, "relocate", _Moved())
         assert grp._physical_dir(sp, sp) == r"T:/lib/movie"
 
-        # ③ 别名层判为 junction 但 realpath 与词法路径一致 -> 返回原路径
+        # 3. 别名层判为 junction 但 realpath 与词法路径一致 -> 返回原路径
         monkeypatch.setattr(grp._ctx, "relocate", None)
         monkeypatch.setattr(grouping_mod.alias_fs, "alias_kind_of", lambda p: grouping_mod.alias_fs.KIND_JUNCTION)
         monkeypatch.setattr(
@@ -777,7 +777,7 @@ def test_grouping_physical_dir_three_layers(monkeypatch):
         )
         assert grp._physical_dir(sp, sp) == sp
 
-        # ④ 别名层抛错 -> 词法路径
+        # 4. 别名层抛错 -> 词法路径
         def _alias_boom(p):
             raise OSError("stat 失败")
 

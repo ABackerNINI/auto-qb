@@ -1109,8 +1109,8 @@ process.stdout.write(JSON.stringify({
 }));
 """
 
-#: 一次跑完: ① 两份 originGranted(background / options)对同一张真值表必须一致;
-#: ② runTask 三场景 —— 未授权(不发请求, kind=no-permission) / 已授权但 fetch 抛 Failed to fetch
+#: 一次跑完: 1. 两份 originGranted(background / options)对同一张真值表必须一致;
+#: 2. runTask 三场景 —— 未授权(不发请求, kind=no-permission) / 已授权但 fetch 抛 Failed to fetch
 #: (kind=network) / 已授权且成功(ok)。
 _NODE_RUN_SITE_PERM = """
 const fs = require('fs');

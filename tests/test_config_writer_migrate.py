@@ -479,8 +479,8 @@ def test_reject_stale_version_message_carries_both_versions(tmp_path):
 def test_fallback_readonly_skips_version_key_but_covers_others():
     """readonly 回退必须**跳过 schema_version**、**continue 而非 break**、按点路径处理其余键
 
-    三条同构变异: ①`path == VERSION_KEY` 改 `!=`(全部跳过) ②`continue` 改 `break`(命中版本键后
-    整轮中断, 后面的 readonly 键再也不回退) ③split(".") 改错. 守阵: 磁盘对 data_dir/fs 有旧值,
+    三条同构变异: 1. `path == VERSION_KEY` 改 `!=`(全部跳过) 2. `continue` 改 `break`(命中版本键后
+    整轮中断, 后面的 readonly 键再也不回退) 3. split(".") 改错. 守阵: 磁盘对 data_dir/fs 有旧值,
     对 schema_version 也构造「程序更新」的值 — 版本键必须**不被回退**(交给校验层报错).
     """
     from auto_qb.config.writer import _fallback_readonly_fields

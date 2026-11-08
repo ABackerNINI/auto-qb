@@ -298,7 +298,7 @@ def _ui_css_effective(ui):
     """UI 最终生效的样式面 = 本皮肤聚合 + 三皮肤共用层(shared/*.css), 仍按 link 序
 
     issue 26-10-20-2231 把逐字节相同的规则族(qb-tabs / drawer-tabs / 弹窗语义配色 /
-    HR 表① 件)收敛进 shared/console_hub.css 后, 这些规则**只在共用层存在一份**。
+    HR 表1 件)收敛进 shared/console_hub.css 后, 这些规则**只在共用层存在一份**。
     此时继续用 _ui_css_aggregate 断言「三皮肤各有一份」会恒红, 而放宽成「共用层有就算过」
     又会把「某皮肤真漏了」也放过 —— 所以判据要落在**该皮肤实际吃到的级联面**上:
     共用层在三皮肤 shell 里都挂且排在各皮肤 CSS 之后(级联序即收敛点), 故聚合后接共用层
@@ -468,11 +468,11 @@ ENTRY_ROW_KEYS = frozenset(
         "last_seen",
     }
 )
-# 响应层多一个只读标记: mark_local_present 的 join 追加(server/routes/hr.py, 计划 26-10-02-1936 §3.3 决策点③a)
+# 响应层多一个只读标记: mark_local_present 的 join 追加(server/routes/hr.py, 计划 26-10-02-1936 §3.3 决策点3a)
 ENTRY_ROW_KEYS_API = ENTRY_ROW_KEYS | {"local_present"}
 # history 行内嵌的 lane 子键面(HistoryLane.to_dict; 拉取历史展开小表的一行)
 HISTORY_LANE_KEYS = frozenset({"lane", "lane_text", "status", "status_text", "pages", "rows", "detail"})
-# 站点级快照面(SiteStatus.to_dict; WebUI 表② 的 kv 行与摘要层)
+# 站点级快照面(SiteStatus.to_dict; WebUI 表2 的 kv 行与摘要层)
 SITE_STATUS_KEYS = frozenset(
     {
         "site",
