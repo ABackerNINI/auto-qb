@@ -1332,6 +1332,7 @@ class ExecMixin:
         )
         job = self._carry_prev_tag_state(job_id, job)
         self._jobs[job_id] = job
+        self._jobs_loaded = True  # 会话级不变量: 动 job 账必置位(stop() 补写闸的依据, 见 RelocateModule.__init__ 注)
         self._rt[job_id] = {
             "issue": True,
             "started": self._clock.monotonic(),

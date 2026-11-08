@@ -40,10 +40,19 @@ class LifecycleMixin:
     def stop(self) -> None:
         """优雅退出: job 账已在每次推进时落 state(周期落盘由 state 服务兜底), 此处只补一次
 
+        补写只在本会话接管过 job 账(_load_jobs 恢复过 / register_job/_set_job 动过)时做:
+        _persist 是整段重写(内存表覆盖 state 的 relocate.jobs), 而 enabled=false 启动且未
+        热启用时内存 _jobs 为空 —— 无条件补写会把 state 里的历史在途 job 整段清空, 紧随
+        stop_all 的 ctx.state.save() 落盘后清账即永久失账(别名链接无人收口、未收尾拦截失明)。
+        跳过补写 = state 维持上次会话的账, 下次启用时由 _load_jobs 正常恢复。
+
         回收 daemon 是独立进程, 不随 auto-qb 消亡(D10 收敛公理: 它要在 auto-qb 不在时
         也能捕窗改写) —— 故 stop() 不碰 daemon(退位走 pid 抢占自检自杀, 绝不 taskkill),
         也不删别名(qB 可能还在跑, 删链接会造假种)。
         """
+        if not self._jobs_loaded:
+            logger.debug("relocate | stop: 本会话未接管 job 账, 跳过补写(state 既有账原样保留)")
+            return None
         try:
             self._persist()
         except Exception:  # noqa: BLE001 - 退出路径不抛: state 落盘失败不影响进程退出
@@ -56,6 +65,11 @@ class LifecycleMixin:
         认领面含 bt_backup(计划 26-11-05-0808 S1): 预检部署闸经 bt_backup_path_of 现读
         ctx.config(L0, 无缓存), 段变化换对象即生效 —— 这里只做「变化可感知」的回执,
         不换缓存。relocate 与 bt_backup 两段独立比较, 任一变化即 reloaded。
+        热启用(enabled 假 -> 真)与 start() 的启用分支同口径: 补一次 _load_jobs ——
+        以 disabled 启动后热启用的会话, state 里的历史在途 job(崩溃/停用期残留)不恢复
+        就永久休眠(on_task_line 只推内存账), _sync_relocating 也不重建, 未收尾拦截对
+        这批成员失明。仅在「假 -> 真」跳变时灌: 持续启用下的段变化不重灌(重灌会重置
+        在途 job 的运行期账 _rt, 无谓回到恢复判据)。
         """
         relocate_changed = getattr(old, "relocate", None) != getattr(new, "relocate", None)
         bt_backup_changed = getattr(old, "bt_backup", None) != getattr(new, "bt_backup", None)
@@ -63,19 +77,26 @@ class LifecycleMixin:
             return ApplyResult(self.name)
         if bt_backup_changed and not relocate_changed:
             return ApplyResult(self.name, "reloaded", "bt_backup 路径表已更新(部署闸现读, 下轮预检即生效)")
+        was_enabled = bool(getattr(getattr(old, "relocate", None), "enabled", False))
         self._conf = getattr(new, "relocate", None)
         enabled = bool(getattr(self._conf, "enabled", False))
+        restored = 0
         if enabled:
             alias_fs.get_capability(refresh=True)
-        return ApplyResult(
-            self.name, "reloaded", "relocate 段已更新(生效配置已缓存" + (", 已重探链接能力" if enabled else ", 未启用不重探") + ")"
-        )
+            if not was_enabled:
+                restored = self._load_jobs()
+        detail = "relocate 段已更新(生效配置已缓存" + (", 已重探链接能力" if enabled else ", 未启用不重探")
+        if restored:
+            # 不写「在途」: _load_jobs 整箱恢复, 计数含终态 job(终态永久留账), 长期部署热启用几乎必然多报
+            detail += f", 恢复 job {restored} 条"
+        return ApplyResult(self.name, "reloaded", detail + ")")
 
     # ---------- job 登记(P3 执行体的账; P2 只读消费) ----------
 
     def register_job(self, job: RelocateJob) -> None:
         """登记/更新一个在途迁移(job_id 同键覆盖; P3 相位推进时逐次调用)"""
         self._jobs[job.job_id] = job
+        self._jobs_loaded = True  # 本会话动过账(stop() 补写闸的依据, 见 RelocateModule.__init__ 注)
         self._publish_snapshot()
 
     def active_jobs(self) -> tuple:

@@ -41,6 +41,16 @@
 - test_start_job_plan_faces: plan 消费 file_link_error 与 hard_max 配置
 - test_start_wiring_and_load_jobs: start 接线(ctx/dry/enabled)与 _load_jobs rt 账
 - test_cancel_write_intent_faces: 撤销写意图(删链接/搬回实参/reason/回执)
+### 生命周期账闸(issue 26-11-07-0527)
+- test_stop_skips_persist_when_ledger_not_loaded: enabled=false 启动(本会话未接管账)——
+  stop 跳过补写, state 既有在途账原样保留(无条件 _persist = 整段重写清账, 优雅退出
+  紧跟 ctx.state.save() 落盘后未收尾 job 永久失账)
+- test_stop_persists_after_ledger_touched_this_session: 本会话接管过账(enabled=true 恢复
+  或 register_job 动过)—— stop 照常补写(不动内容 = 同值重写; 仅动内存的变更靠补写落盘),
+  不得矫枉过正把合法落盘也禁了
+- test_apply_hot_enable_restores_ledger_and_interception: 热启用(enabled 假->真)补
+  _load_jobs: state 里的历史在途 job 灌回内存 + relocating_hashes/别名根登记重建;
+  持续启用下的段变化不重灌(不重置在途 job 的运行期账 _rt)
 """
 
 import os
@@ -51,13 +61,15 @@ import types
 
 import pytest
 
+from dataclasses import replace
+
 from auto_qb.core.modules import relocate_units as ru
 
 from auto_qb.infra import relocate_journal
 
 from helpers import pin_disk_usage, relocate_env
 
-from auto_qb.config.models import RelocateConfig
+from auto_qb.config.models import Config, RelocateConfig
 
 from auto_qb.core.modules.grouping_mod import group_key_of
 
@@ -767,6 +779,93 @@ def test_start_wiring_and_load_jobs(tmp_path, monkeypatch):
     assert rt["issue"] is False, rt  # 键漂移/值反转 = 恢复后必重发 setLocation
     assert rt["started"] > 0 and rt["sample_ts"] == 0.0, rt
     assert rt["last_size"] == -1 and rt["stall_since"] == 0.0, rt  # 停滞起点真值 = 首采样误判 FAILED
+
+
+# ---- 生命周期账闸(issue 26-11-07-0527: stop 补写闸 / 热启用补恢复账) ----
+
+
+def test_stop_skips_persist_when_ledger_not_loaded(tmp_path, monkeypatch):
+    """enabled=false 启动(本会话未接管账)-> stop 跳过补写, state 既有在途账原样保留(条目1)
+
+    _persist 是整段重写(内存表覆盖 state 的 relocate.jobs): 前一会话留下的在途 job 在
+    state 里, 本会话没 _load_jobs 过(内存 _jobs 为空) —— 无条件补写等于清账, 且优雅退出
+    紧随 stop_all 的 ctx.state.save() 落盘, 清账即永久失账(别名链接无人收口、拦截失明)。
+    """
+    pin_disk_usage(monkeypatch)
+    mgr, client, src, dst, content, files = relocate_env(tmp_path, state="uploading")
+    mod = mgr.host.get("relocate")
+    _spy_spawn(mod, [])
+    job_id = mod.relocate_execute(["HA"], dst)[0]["job_id"]
+    assert job_id in mgr.state["relocate"]["jobs"]
+
+    # 下一会话 enabled=false 启动: 不恢复账(开关关零副作用, R15), 优雅退出不得清既有账
+    mgr.config.relocate = RelocateConfig(enabled=False)
+    mod2 = RelocateModule(mgr.ctx)
+    mod2.start(mgr.ctx, dry_run=False)
+    assert mod2.get_job(job_id) is None, "开关关启动不恢复账(R15)"
+    mod2.stop()
+    assert job_id in mgr.state["relocate"]["jobs"], "stop 不得清本会话未接管的既有账"
+
+
+def test_stop_persists_after_ledger_touched_this_session(tmp_path, monkeypatch):
+    """本会话接管过账 -> stop 照常补写(不得矫枉过正把合法落盘也禁了)(条目1)
+
+    enabled=true 启动经 _load_jobs 接管账后: 未动内容时补写为同值重写(账不丢); 仅动
+    内存不经 _set_job 的变更(register_job 落内存不落盘)靠 stop 补写带进 state。
+    """
+    pin_disk_usage(monkeypatch)
+    mgr, client, src, dst, content, files = relocate_env(tmp_path, state="uploading")
+    mod = mgr.host.get("relocate")
+    _spy_spawn(mod, [])
+    job_id = mod.relocate_execute(["HA"], dst)[0]["job_id"]
+
+    mod2 = RelocateModule(mgr.ctx)  # enabled 会话: start 恢复账 = 接管
+    mod2.start(mgr.ctx, dry_run=False)
+    assert mod2._jobs_loaded and mod2.get_job(job_id) is not None
+    mod2.stop()  # 未动内容: 同值重写, 账不丢
+    assert job_id in mgr.state["relocate"]["jobs"]
+
+    mod2.register_job(replace(mod2.get_job(job_id), reason="touched"))  # 只落内存
+    mod2.stop()
+    assert mgr.state["relocate"]["jobs"][job_id]["reason"] == "touched", "动过账的会话退出必须补写落盘"
+
+
+def test_apply_hot_enable_restores_ledger_and_interception(tmp_path, monkeypatch):
+    """热启用(enabled 假->真)补 _load_jobs: 历史在途 job 灌回 + relocating_hashes 重建(条目2)
+
+    disabled 启动的会话(state 里有崩溃/停用期残留)热启用后不补恢复: on_task_line 只推
+    内存账, job 永久休眠; _sync_relocating 不重建, 未收尾拦截对这批成员失明。补灌后与
+    start 的启用分支同口径; 持续启用下的段变化不重灌(不重置在途 job 的运行期账 _rt)。
+    """
+    pin_disk_usage(monkeypatch)
+    mgr, client, src, dst, content, files = relocate_env(tmp_path, state="uploading")
+    mod = mgr.host.get("relocate")
+    _spy_spawn(mod, [])
+    job_id = mod.relocate_execute(["HA"], dst)[0]["job_id"]
+
+    # 下一会话 disabled 启动: 账不恢复; 拦截登记为空(重启后 store 全新, 这里显式清出同形)
+    mgr.config.relocate = RelocateConfig(enabled=False)
+    mod2 = RelocateModule(mgr.ctx)
+    mod2.start(mgr.ctx, dry_run=False)
+    mod2._sync_relocating()
+    assert mod2.get_job(job_id) is None and not mgr.store.relocating_hashes
+
+    old = Config()
+    new = Config()
+    new.relocate = RelocateConfig(enabled=True)
+    res = mod2.apply(old, new)
+    # 文案不带「在途」(nit, issue 26-11-07-0527): 计数含终态 job, 说「在途」长期部署必然多报
+    assert res.action == "reloaded" and "恢复 job 1 条" in res.detail and "在途" not in res.detail, res
+    assert mod2.get_job(job_id) is not None and mod2.get_job(job_id).phase == ru.PHASE_MOVING
+    assert {"HA", "HB"} <= mgr.store.relocating_hashes, "未收尾拦截登记必须随热启用重建"
+
+    # 持续启用下的段变化不重灌: rt 账不重置(重灌会让在途 job 无谓回到恢复判据)
+    mod2._rt[job_id]["sample_ts"] = 123.0
+    newer = Config()
+    newer.relocate = RelocateConfig(enabled=True, verify="sample")
+    res2 = mod2.apply(new, newer)
+    assert res2.action == "reloaded" and "恢复 job" not in res2.detail, res2
+    assert mod2._rt[job_id]["sample_ts"] == 123.0
 
 
 def test_cancel_write_intent_faces(tmp_path):

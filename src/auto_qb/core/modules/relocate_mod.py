@@ -56,6 +56,10 @@ class RelocateModule(LifecycleMixin, PlanMixin, ExecMixin, BaseModule):
         self._clock = SYSTEM_CLOCK if clock is None else clock
         self._conf = None  # 生效的 RelocateConfig(热重载换对象即更新)
         self._jobs: dict = {}  # job_id -> RelocateJob(P3 执行体写入; P2 恒空)
+        # 本会话是否接管过 job 账(_load_jobs 恢复过 / register_job/_set_job 动过): stop()
+        # 补写闸的依据 —— 未接管时内存空表不代表账空, _persist 整段重写会把 state 里的
+        # 历史在途 job 清掉(优雅退出紧跟 ctx.state.save() 落盘, 清账即永久失账)。
+        self._jobs_loaded = False
         self._rt: dict = {}  # job_id -> 运行期进度(采样式, 不落盘; 重启由 qB 现场恢复)
         self._qb_up_cache: Optional[tuple] = None  # (monotonic, up) 「qB 在?」探测缓存
         self._dry = False  # dry_run(启动期透传; 干跑不落盘不建链, 与全局口径一致)
@@ -170,6 +174,7 @@ class RelocateModule(LifecycleMixin, PlanMixin, ExecMixin, BaseModule):
 
     def _load_jobs(self) -> int:
         """启动/热重载时从 state 恢复 job 账; 非终态的重挂 relocating 登记(抑制缺文件误判)"""
+        self._jobs_loaded = True  # 本会话已接管 job 账(stop() 补写闸的依据, 见 __init__ 注)
         box = self._state_jobs()
         n = 0
         for jid, d in list(box.items()):
@@ -228,6 +233,7 @@ class RelocateModule(LifecycleMixin, PlanMixin, ExecMixin, BaseModule):
         """
         job = replace(job, updated_at=self._clock.now())
         self._jobs[job.job_id] = job
+        self._jobs_loaded = True
         self._sync_relocating()
         self._persist()
         self._publish_snapshot()
