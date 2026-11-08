@@ -20,12 +20,12 @@
  *   drawerPeerV08: 列集 DRAWER_PEER_V08_COLUMNS + 行模型 dt08 + rowCls 行修饰。
  *   手搓排序状态机/列宽 grid/每组列头拼装全部退役(Q4)。
  * !2026-10-18(用户报障「五区分组中『握手中』的组消失与出现导致详情模板高度跳动」根治):
- *   病根两层: ①面板高度内容自适应 —— 未拖拽过时 drawerPanelStyle 返回 {} 走 CSS max-height
+ *   病根两层: (1)面板高度内容自适应 —— 未拖拽过时 drawerPanelStyle 返回 {} 走 CSS max-height
  *   上限(无确定 height), 组进出场即改面板实高(已在 drawer.js 单点修掉: 展开恒锁高度,
- *   内容超高由 .drawer-body 内部滚动消化); ②本变体结构 sig 含在场分组集 ⇒ 组空⇒整节隐藏
- *   (锚离场)、组补⇒新锚进场, 每翻动一次就整帧 replaceChildren + anchFill + Teleport 重挂
+ *   内容超高由 .drawer-body 内部滚动消化); (2)本变体结构 sig 含在场分组集 => 组空=>整节隐藏
+ *   (锚离场)、组补=>新锚进场, 每翻动一次就整帧 replaceChildren + anchFill + Teleport 重挂
  *   = 全组表格抖动。修法: **五区恒在场** —— 空组不进 sig, 只切 hidden 类(.dt08-hide,
- *   display:none); rowsFn 保留空段 ⇒ 桥 v-for 段集合不变 ⇒ teleport 不卸不重挂, 握手中组
+ *   display:none); rowsFn 保留空段 => 桥 v-for 段集合不变 => teleport 不卸不重挂, 握手中组
  *   再现时行原地补丁进场; 数据拍(render 的 skip 分支内)原地切隐藏类 + 回填组头计数/聚合数。
  *   「只看在传数据」是用户显式动作, 维持整组离场口径(quiet 组不进 DOM, 单次 rebuild 可接受)。
  * !2026-10-18(用户报障「分组展开时状态条有几个像素显示到列表间隔中」根治): 组卡左缘
@@ -242,10 +242,10 @@
         .filter(Boolean).join(" ") || null,
     };
   }
-  /* 桥行来源(注册条目 rowsFn ← 根方法 dtTplRows): 描述符 segs=true → 返回 [{key, rows}] 分段。
+  /* 桥行来源(注册条目 rowsFn <- 根方法 dtTplRows): 描述符 segs=true -> 返回 [{key, rows}] 分段。
    * 分桶判据与外壳 render 同一条(GROUPS × bucketOf × onlyMoving) —— 桥段与锚槽一一对应。
    * !2026-10-18(用户报障根治): **空段不撤** —— 恒返回只看在传过滤后的全部五区, 空区给 [] 行。
-   * 段集合不变 ⇒ 桥 v-for 的 :key 稳定 ⇒ teleport 不卸载不重挂: 握手中组随握手进出场时,
+   * 段集合不变 => 桥 v-for 的 :key 稳定 => teleport 不卸载不重挂: 握手中组随握手进出场时,
    * 该组行原地补丁进场(v-if seg.rows.length 翻 div), 其余组的行/横滚位/列宽/排序态全不动。
    * 旧口径撤空段, 再现即整表重挂 = 面板内容整块抖动(与面板高度跳动的报障同源)。 */
   function rowsFn(ctx) {
@@ -289,7 +289,7 @@
 
   /* ---------------- 数据拍原地回填(2026-10-18 用户报障根治) ----------------
    * 组头计数/聚合数 + 空组隐藏类 + 过滤空态提示, 全部落在**不含锚**的子树上, 锚元素与表格体
-   * 零接触(桥零重挂)。组空⇒该组 section 切 dt08-hide(display:none), 组补⇒摘类原地进场;
+   * 零接触(桥零重挂)。组空=>该组 section 切 dt08-hide(display:none), 组补=>摘类原地进场;
    * 5s 轮询每拍必到, 只在真变时写 DOM(classList.toggle 带 force 幂等, 文本先比后写)。
    * 与整帧同一条判据(groupHidden) —— 组 membership 翻动(握手动不动进出场)零整帧重建。 */
   function render(host, ctx) {

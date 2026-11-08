@@ -6,9 +6,9 @@
  * 数据: /files qB 透传(drawer.files, 进入页签拉一次 + 优先级改动后静默补拉), 树与子树聚合
  * (子树大小 / 文件数 / 加权进度 / 缺口字节 / 最低可用性)全部前端派生(buildFileTree 判据
  * 单点在核心 reg.content, issue 26-10-29-1343), 零后端改动。
- * 动作(plan §04 映射行): 目录点选子树聚合; 文件行优先级徽章 → openFilePrio(经典锚定小菜单,
- * 回执/toast 由既有链自带); 右侧详情优先级分段 → setFilePriority(p, indices)(S5 批量通道,
- * 单文件 = [index], 目录 = 整棵子树收集)。重命名不在本变体设计内 → 回 classic 用(试用期对照)。
+ * 动作(plan §04 映射行): 目录点选子树聚合; 文件行优先级徽章 -> openFilePrio(经典锚定小菜单,
+ * 回执/toast 由既有链自带); 右侧详情优先级分段 -> setFilePriority(p, indices)(S5 批量通道,
+ * 单文件 = [index], 目录 = 整棵子树收集)。重命名不在本变体设计内 -> 回 classic 用(试用期对照)。
  * 渐进字段: 每文件 availability(qB 版本浮动)有则渲染可用性格与详情格, 无则整格省略不占位。
  * 渲染纪律: dtHtml 全量转义(dtRaw 只用于拼接本变体 dtHtml 产出的预转义片段), replaceChildren
  * 原子换帧, 数据未变(廉价指纹比对, W1)跳过重建, 滚动/折叠/筛选/选中态自保(换种子只重置
@@ -23,7 +23,7 @@
  * rowsFn(判据零复制), 行来源读反应式 UI 态(selPath/folded/filter, W5 起 Vue.reactive)。
  * 排序不适用(树序 = 树语义, 原口径无排序, 全列 sortable:false + dyn 空键)。行级键盘:
  * 行容器 tabindex/data-dt-key 由桥输出(rowTab/rowKey), roving 锚点经描述符
- * rowAfter → rowAfterFn(锚换代重挂后跑)。
+ * rowAfter -> rowAfterFn(锚换代重挂后跑)。
  * 自包含: 删除本文件 + 四份 index.html 各去 1 行 manifest 即整体退役, 其它零接触。
  */
 (function () {
@@ -222,7 +222,7 @@
     const dir = n.dir;
     const sel = ui.selPath === n.path;
     const folded = ui.folded.has(n.path);
-    /* W1 记忆化: 输入快照逐项全等 → 返回上一轮行对象(新装配零分配, 该行跳渲) */
+    /* W1 记忆化: 输入快照逐项全等 -> 返回上一轮行对象(新装配零分配, 该行跳渲) */
     const prev = rowMem.get(n.path);
     if (prev && prev.dir === dir && prev.sel === sel && prev.folded === folded) {
       if (dir
@@ -258,7 +258,7 @@
     return row;
   }
 
-  /* 桥行来源(注册条目 rowsFn ← 根方法 dtTplRows): 树扁平 emit(筛选 + 折叠判据)。
+  /* 桥行来源(注册条目 rowsFn <- 根方法 dtTplRows): 树扁平 emit(筛选 + 折叠判据)。
    * 排序不适用(树序 = 树语义, dyn 空键 = 原序)。 */
   function rowsFn(ctx) {
     const files = fileList(ctx);
@@ -410,10 +410,10 @@
     return c;
   }
 
-  /* W5: 旧「UI 态翻动 → anchTouch 强制换代」退役(见 ui 处注); 外壳件(右详情/chip active)
+  /* W5: 旧「UI 态翻动 -> anchTouch 强制换代」退役(见 ui 处注); 外壳件(右详情/chip active)
    * 仍由 rerender 单点重渲(anchFill 保锚, 不换代)。 */
 
-  /* 锚换代重挂后的行级键盘恢复(issue 26-10-07-0846; 描述符 rowAfter → rowAfterFn):
+  /* 锚换代重挂后的行级键盘恢复(issue 26-10-07-0846; 描述符 rowAfter -> rowAfterFn):
    * roving 锚点(选中行或首行)。回焦不在本变体: focusKey 死代码已整体删除(R5#111,
    * W5 起交互不换代、数据帧换代路径无写入点, rowRestore 恒空转); 12 号自管 DOM 仍有
    * 真记账/回焦(rowFocusKey/rowRestore 成对), 引擎 helper 保留。 */

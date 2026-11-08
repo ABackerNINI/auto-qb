@@ -187,7 +187,7 @@
         .filter(Boolean).join(" ") || null,
     };
   }
-  /* 桥行来源(注册条目 rowsFn ← 根方法 dtTplRows): 占用条分母按全量列表的 upspeed 合计 */
+  /* 桥行来源(注册条目 rowsFn <- 根方法 dtTplRows): 占用条分母按全量列表的 upspeed 合计 */
   function rowsFn(ctx) {
     const list = peerList(ctx);
     const upTotal = list.reduce((s, p) => s + num(p.upspeed), 0);

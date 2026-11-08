@@ -30,7 +30,7 @@ const HR_SRC_CLASSES = {
   site_released: "src-online", site_exempt: "src-online",
   local: "src-local",
 };
-/* 来源档位(2026-09-29 晚起)不再进单元格原生 title: 经 hrSrcClass → CSS 底线三编码(长度/线型/明暗),
+/* 来源档位(2026-09-29 晚起)不再进单元格原生 title: 经 hrSrcClass -> CSS 底线三编码(长度/线型/明暗),
  * 文字结论由悬停弹窗(hrPopEnter)承载; 原生 title 已移除以避免与弹窗叠出被遮挡的冗余提示。 */
 const HR_SRC_BUCKETS = {
   site_scope: "在线核实", site_satisfied: "在线核实", site_unsatisfied: "在线核实", site_released: "在线核实", site_exempt: "在线核实",
@@ -43,7 +43,7 @@ const HR_EXCLUDED_BY_TEXT = { tag: "标签规则", category: "分类规则", "ta
 /* ---------------- HR 悬停弹窗(T3 进度仪表; 26-09-26-webui-hr-popup) ----------------
  * 做种时间单元格的原生 title(一大段文字)换成悬停小弹窗。渲染规则以
  * plans/26-09-25-2043-plan-webui-hr-popup-t3-progress-ledger.html 页脚「实现说明」为单点:
- * 结论短语已含来源与进行中状态 ⇒ 不出「来源章/考核中章」, 生命周期 chip 仅终态标「已结束」;
+ * 结论短语已含来源与进行中状态 => 不出「来源章/考核中章」, 生命周期 chip 仅终态标「已结束」;
  * 双轨进度 = 本地粗轨(已做种/要求) + 站点细轨(还需/要求, 仅站点给出 need 端点时出现);
  * 角标只在结论没说时出现(还需 X / 已超出 X / 考核期已过); 数值条仅站点侧值(本地值表格行可见);
  * 无时长要求(**身份层放行** / 未配时长)时轨道收起换状态徽记, 不留空轨。
@@ -149,7 +149,7 @@ window.AQB_HR = {
     },
     /* position:fixed 锚定触发矩形: 优先上方(间距 10px), 上方空间不足翻下方, 横向夹取视口(8px 边距),
      * 下方也放不下则贴底; 箭头指向触发矩形中心并随翻转换向。行已被轮询重建(windowing/刷新)时矩形
-     * 为零 → 视为悬停目标已消失, 直接收弹窗(否则会钉在视口左上角)。 */
+     * 为零 -> 视为悬停目标已消失, 直接收弹窗(否则会钉在视口左上角)。 */
     _hrPopPlace(el, trg) {
       const FIT = window.AQB_OVERLAY_FIT; /* 几何单点(issue 26-10-20-2231), 方法内取别名 */
       const r = trg.getBoundingClientRect();
@@ -183,9 +183,9 @@ window.AQB_HR = {
       window.addEventListener("resize", () => this.hrPopHideNow());
     },
     /* 弹窗数据组装(全为后端算好字段的展示映射; null = 不弹):
-     * lane ← hr_safety(danger 橙=考察中 / failed 红=考核未通过终态 / safe 绿 / warning 黄=疑似辅种),
-     * verdict ← hr_safety_text, 依据 ← hr_reason, 站点侧值 ← hr_site_*(与详情抽屉 hrSiteLine 同源),
-     * 本地值 ← seeding_time / hr_req_time(与表格列同口径)。
+     * lane <- hr_safety(danger 橙=考察中 / failed 红=考核未通过终态 / safe 绿 / warning 黄=疑似辅种),
+     * verdict <- hr_safety_text, 依据 <- hr_reason, 站点侧值 <- hr_site_*(与详情抽屉 hrSiteLine 同源),
+     * 本地值 <- seeding_time / hr_req_time(与表格列同口径)。
      * "none" = 不适用(站点未配 HR / 命中排除表 —— 后端组装层短路成空串), 与无字段行同等不弹;
      * 唯 hr_excluded 行例外(2026-10-02 用户实报): 排除行不进任何档位, 但 hover 不能真空 ——
      * 结论复用详情抽屉同款短语, 依据 = hr_excluded_by 映射(HR_EXCLUDED_BY_TEXT), 无轨道/站点值。 */
@@ -322,7 +322,7 @@ window.AQB_HR = {
       return e.hr_pending + "/" + e.hr_triggered + " 未满足要求";
     },
     /* 站点侧三态行(详情抽屉): 结论(含来源档位) + 依据原文 —— 全由后端算好,
-     * 前端只拼展示; 未接入 hr_check 的站点 hr_state 为空 ⇒ 返回空串(不显示这行) */
+     * 前端只拼展示; 未接入 hr_check 的站点 hr_state 为空 => 返回空串(不显示这行) */
     hrStateLine(m) {
       if (!m.hr_state) return "";
       const why = m.hr_reason ? " · " + m.hr_reason : "";
@@ -331,7 +331,7 @@ window.AQB_HR = {
     /* 站点侧值一行(与本地实时值对照): 空串 = 该字段站点没给; 0 要单独说"已达标"(未知 ≠ 0)
      * !fmtDuration/fmtSize 是 methods(format.js), 必须经 this 调 —— 裸调用在渲染函数里
      *   ReferenceError, Vue 3 会卸掉整棵组件树(白屏); 站点未接入(hr_site_lane 空)时本方法
-     *   提前返回, 裸调用永远不被求值 ⇒ 雷埋着不响, 站点接入后每行 title 都踩中。
+     *   提前返回, 裸调用永远不被求值 => 雷埋着不响, 站点接入后每行 title 都踩中。
      * 档位前缀已撤(2026-09-25 用户修正): A/B/C 是站点内部档位词, 界面不展示。 */
     hrSiteLine(m) {
       if (!m.hr_site_lane) return "";
@@ -349,7 +349,7 @@ window.AQB_HR = {
     /* H&R 四桶计数(不能删/考核未通过/可删/疑似辅种; 未配 HR 的行不属于任何桶):
      * 只消费后端算好的 hr_safety, 前端不重算判定; 组行 = 组内出现过的档位各计 1(计数 = 含该档的组数),
      * 种子行按自身。!取数面走 `facetRows`(**单点**, 见 filters.js): 组视图按组计数、种子页按种子计数。
-     * (原先一律遍历 decoratedGroups ⇒ 种子页(按视图分片不回 groups)恒得 0/0 —— issue 见 filters.js) */
+     * (原先一律遍历 decoratedGroups => 种子页(按视图分片不回 groups)恒得 0/0 —— issue 见 filters.js) */
     hrOptions() {
       const counts = { "不能删": 0, "考核未通过": 0, "可删": 0, "疑似辅种": 0 };
       for (const r of this.facetRows) {

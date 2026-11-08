@@ -77,9 +77,9 @@ window.AQB_FORMAT = {
      * 档位: 刚刚 / 分钟 / 小时 / 天 / 月 / 年 —— **一律相对, 不回落绝对日期**: 同一列里"有的
      * 显示 3天前、有的显示 08-11 20:56"会让人以为没改干净(2026-09-20 用户实测反馈); 长跨度
      * 的可读性损失由 title 上的绝对时间点补回(调用方挂 :title="fmtTs(...)" )。
-     * 哨兵与 fmtTs 同口径: -1/0 = 从未传输 → 空白(TBL-01)。
+     * 哨兵与 fmtTs 同口径: -1/0 = 从未传输 -> 空白(TBL-01)。
      * WARN: 时基必须读 this.nowSec(响应式秒计数, app.js 每 30s 一跳)而不是现取 Date.now():
-     *   后端 last_activity 按分钟量化且只在活动发生时才变 ⇒ 行对象不变时 Vue 不重渲染,
+     *   后端 last_activity 按分钟量化且只在活动发生时才变 => 行对象不变时 Vue 不重渲染,
      *   现取时间会让"刚刚"之类的相对值**永久停在渲染那一刻**。 */
     fmtRelTime(ts) {
       if (!ts || ts < 0) return "";
@@ -153,20 +153,20 @@ window.AQB_FORMAT = {
     cellTimeHint(ts, key) {
       return this.timeFmt[key] === "rel" ? this.fmtTs(ts) : this.fmtRelTime(ts);
     },
-    /* FX-28 跨标签同步(F2/F3, 与列偏好 adoptColState 同一套机制): 别的标签改了口径 → storage
-     * 事件触发本方法**整份采用**存储值; 标签被冻结 / storage 事件丢失 → 回到可见时补对齐一次。
+    /* FX-28 跨标签同步(F2/F3, 与列偏好 adoptColState 同一套机制): 别的标签改了口径 -> storage
+     * 事件触发本方法**整份采用**存储值; 标签被冻结 / storage 事件丢失 -> 回到可见时补对齐一次。
      * 整份采用而非逐列合并: 同一列的后写赢, 半合并反而会让两个标签各留一半旧值(列偏好踩过)。 */
     adoptTimeFmt() {
       this.timeFmt = loadTimeFmt();
     },
-    /* 数值色阶(TBL-03): value/denom 比值分两档底色 —— ratio<0.75 → tone-low(偏弱), >=0.75 → tone-high(接近满档);
+    /* 数值色阶(TBL-03): value/denom 比值分两档底色 —— ratio<0.75 -> tone-low(偏弱), >=0.75 -> tone-high(接近满档);
      * value<=0 或分母缺失/<=0 返回空串(交给 zero/空白机制)。全局限速分母来自 /api/stats 的 statsServer
-     * (懒加载, 未开过统计面板时为 null → 速度列自动无色阶, 属预期降级, 规则内自然兜住) */
+     * (懒加载, 未开过统计面板时为 null -> 速度列自动无色阶, 属预期降级, 规则内自然兜住) */
     numTone(value, denom) {
       if (!value || value <= 0 || !denom || denom <= 0) return "";
       return value / denom < 0.75 ? "tone-low" : "tone-high";
     },
-    /* KiB/s ↔ bytes/s 换算单点(收敛 issue 26-10-20-2231 / 台账 R20-F-05): 后端限速口径是
+    /* KiB/s <-> bytes/s 换算单点(收敛 issue 26-10-20-2231 / 台账 R20-F-05): 后端限速口径是
      * KiB/s, qB 与显示口径是 bytes/s(后端半已登记 R06-A02)。全前端乘除 1024 只此两个函数;
      * 调用侧**禁止内联** `* 1024` / `/ 1024` —— 后端改限速单位口径时要能一处收口。 */
     kibToBytes(kib) {

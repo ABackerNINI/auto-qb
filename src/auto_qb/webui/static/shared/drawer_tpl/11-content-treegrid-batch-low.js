@@ -7,7 +7,7 @@
  * 最低可用性 / 缺口)前端按路径前缀派生, 零后端改动。本变体走 derive() 扁平表 + path 前缀
  * 归并的第三算法(issue 26-10-29-1343 未并入 reg.content::buildFileTree), 聚合口径
  * (大小/进度/缺口/可用性最低值)以核心 buildFileTree 为准 —— 口径改动须两处对齐。
- * 动作(plan §04 映射行): 勾选批量优先级 → setFilePriority(p, indices)(S5 批量通道, indices
+ * 动作(plan §04 映射行): 勾选批量优先级 -> setFilePriority(p, indices)(S5 批量通道, indices
  * 从 drawerFileRows() 树收集: 勾目录 = 整棵子树三态框, 一次 POST files/priority); 单文件徽章
  * 点击循环 不下载->正常->高->最高(逐次真实提交, 回执/toast 由既有链自带)。
  * 渐进字段: 每文件 availability 列常驻, 无值出 — 占位(U4: 引擎 omitEmpty 已删, 计划
@@ -46,7 +46,7 @@
    * 无人写), rowRestore 恒空转 —— 死代码整体退役, 与 10 号同批。
    * W5(计划 26-10-13-0811 L5): 勾选/折叠/筛选是桥行来源 rowsFn 的读数, 必须**进反应式驱动
    * 数据**(Vue.reactive)—— 点选后桥 keyed 写补丁原行更新, 不再 anchTouch 强制换代整表重挂
-   * (旧结构 = 每次点选行 DOM 全换 → 勾选跳动 + 大树点选卡死, 用户 2026-10-13 症状 7/8)。 */
+   * (旧结构 = 每次点选行 DOM 全换 -> 勾选跳动 + 大树点选卡死, 用户 2026-10-13 症状 7/8)。 */
   const ui = Vue.reactive({ filter: "all", folded: new Set(), checked: new Set(), lastSig: "", lastHash: "" });
 
   /* W1(计划 26-11-02-0351)止血: 行对象按 path 记忆化 —— 输入未变的行复用上一轮对象,
@@ -245,7 +245,7 @@
     /* W1: ckState 一次算存局部(旧码双算) —— 勾选计数已随 derive 单遍落到 stats.ck,
      * subtreeFiles 每目录全表 filter 的 O(D×F) 装配冗余消除 */
     const ckState = s ? (s.ck === 0 ? 0 : s.ck === s.files ? 2 : 1) : 0;
-    /* W1 记忆化: 行输入(子树聚合 + 行态)逐项全等 → 返回上一轮行对象(该行跳渲) */
+    /* W1 记忆化: 行输入(子树聚合 + 行态)逐项全等 -> 返回上一轮行对象(该行跳渲) */
     const prev = rowMem.get(r.path);
     if (prev && prev.dir && prev.folded === folded && prev.ckState === ckState &&
       (s
@@ -289,7 +289,7 @@
     const checked = ui.checked.has(r.path);
     const avNum = item.av !== undefined && item.av !== null;
     const avN = avNum ? num(item.av) : undefined;
-    /* W1 记忆化: 文件行输入(size/prog/prio/av + 勾选态)逐项全等 → 返回上一轮行对象 */
+    /* W1 记忆化: 文件行输入(size/prog/prio/av + 勾选态)逐项全等 -> 返回上一轮行对象 */
     const prev = rowMem.get(r.path);
     if (prev && !prev.dir && prev.ck === checked && prev.size === item.size &&
       prev.prog === item.prog && prev.prio === item.prio && prev.avN === avN) {
@@ -328,7 +328,7 @@
     return row;
   }
 
-  /* 桥行来源(注册条目 rowsFn ← 根方法 dtTplRows): 树扁平遍历(筛选 + 折叠判据)。
+  /* 桥行来源(注册条目 rowsFn <- 根方法 dtTplRows): 树扁平遍历(筛选 + 折叠判据)。
    * 排序不适用(树序 = 树语义, dyn 空键 = 原序); 筛选空合成空态行(原文案口径)。 */
   function rowsFn(ctx) {
     const files = fileList(ctx);
@@ -484,11 +484,11 @@
     }
   }
 
-  /* W5(计划 26-10-13-0811 L5): 旧「UI 态翻动 → anchTouch 强制换代」已退役 —— ui 态已进
+  /* W5(计划 26-10-13-0811 L5): 旧「UI 态翻动 -> anchTouch 强制换代」已退役 —— ui 态已进
    * 反应式驱动数据(Vue.reactive), 行更新走桥 keyed 写补丁(行 DOM 身份恒定, 勾选不跳动);
    * 外壳件(foot/master/chips)仍由 rerender 单点重渲(anchFill 保锚, 不换代)。 */
 
-  /* 锚换代重挂后的行级键盘恢复(issue 26-10-07-0846; 描述符 rowAfter → rowAfterFn):
+  /* 锚换代重挂后的行级键盘恢复(issue 26-10-07-0846; 描述符 rowAfter -> rowAfterFn):
    * roving 锚点(首行; 勾选集无「选中行」语义)。回焦不在本变体: focusKey 死代码已整体
    * 删除(R5#112, 无写入点恒空转); 12 号自管 DOM 仍有真记账/回焦, 引擎 helper 保留。 */
   function rowAfterFn(el) {

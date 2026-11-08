@@ -5,7 +5,7 @@
  * 已随面板折叠状态整体移除(2026-10-09)。
  * 数据: /trackers qB 透传(drawer.trackers, 5s 轮询)。逐行汇报倒计时按 P-02 升级为真 per-tracker
  * 口径(行级 next_announce, qB 5.2+/WebAPI 2.13.0 起随 /trackers 透传, Unix epoch 秒) 减 now;
- * qB < 5.2 无该字段 → 回退种子级 detail.reannounce_in 全局近似并标「全局」; 真口径下
+ * qB < 5.2 无该字段 -> 回退种子级 detail.reannounce_in 全局近似并标「全局」; 真口径下
  * per-tracker interval 不可得(微条分母缺失), 故不画微条 —— 不造 per-tracker 假数据)。
  * 状态色点 / tier / num_downloaded 透传即有(渐进);
  * msg 行内点击展开全文; 「仅看异常」过滤聚焦 警告/更新中/失败 行。
@@ -159,7 +159,7 @@
   /* P-02(拍板升级, 2026-10-09): 逐行汇报倒计时改真 per-tracker 口径 —— 行级 next_announce
    * (qB 5.2+ 随 /trackers 透传, Unix epoch 绝对秒) 减 nowSec 得剩余; 去「全局」标; 真口径下
    * per-tracker interval 不可得, 不画微条(不造假)。!epoch 是绝对时间不是倒计时, 必须先减 now。
-   * 回退: 行缺 next_announce(qB < 5.2) → 种子级 detail.reannounce_in 全局近似 + 「全局」标 +
+   * 回退: 行缺 next_announce(qB < 5.2) -> 种子级 detail.reannounce_in 全局近似 + 「全局」标 +
    * 种子级微条(即旧路径)。detail 未落袋显示「—」。更新中行显「正在汇报」, 虚拟/未启用行显「—」
    * (后两者由调用方分流, 不进本函数)。U3: 返回数据对象(渲染在分片), 判据不变。 */
   function nextOf(ctx, t, nowSec) {
@@ -223,7 +223,7 @@
     };
   }
 
-  /* 桥行来源(注册条目 rowsFn ← 根方法 dtTplRows): 全量行(仅看异常是容器类切换不裁行);
+  /* 桥行来源(注册条目 rowsFn <- 根方法 dtTplRows): 全量行(仅看异常是容器类切换不裁行);
    * 排序由引擎按 dyn 键做(默认 sev 升序), 这里不排。 */
   function rowsFn(ctx) {
     const ts = (ctx.drawer && ctx.drawer.trackers) || [];

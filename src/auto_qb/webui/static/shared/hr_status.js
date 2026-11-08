@@ -6,16 +6,16 @@
  *
  * !加载时机: 打开「HR 在线核实」分区时拉一次(config_hub.js hubGo), 之后手动刷新
  *   (不轮询: 站点数据的小时级节奏不需要前端高频拉, 而轮询会给 Web 线程添无谓负载)。
- * !种子明细(表①, 计划 26-10-01-2216 阶段2): /api/hr/sites/<site>/entries 按站点**按需**
- *   拉一次(打开分区/手动刷新时随 loadHrStatus 触发, 拍板②b), 不进 /api/hr/status 全量
+ * !种子明细(表(1), 计划 26-10-01-2216 阶段2): /api/hr/sites/<site>/entries 按站点**按需**
+ *   拉一次(打开分区/手动刷新时随 loadHrStatus 触发, 拍板(2)b), 不进 /api/hr/status 全量
  *   响应也不进 /api/state 轮询载荷(pitfalls/web-ui/contract-api.md: 只在用户显式动作时才
  *   需要的字段不塞轮询载荷); 单站点失败只置该站错误态(.empty 错误行), 不阻塞分区其余内容;
  *   无新增定时器。
- * !排障视图(表②, 计划 26-10-01-2216 阶段3): 站点级 kv 行(hrsKvRows)+ 各档波次明细
+ * !排障视图(表(2), 计划 26-10-01-2216 阶段3): 站点级 kv 行(hrsKvRows)+ 各档波次明细
  *   (hrsWaveCutoff/hrsWaveCount)全部取自 /api/hr/status 现有载荷, **零新请求**; 收进
  *   <details> 默认收起, 展开态不持久化(临时排障动作)。
- * !拉取历史(表③, 计划 26-10-04-0312): 只读端点 /api/hr/history 按需拉一次(limit=300,
- *   表③ <details> 首次展开 @toggle 触发 hrsHistEnsureLoaded), 「刷新」手动重拉, 不轮询;
+ * !拉取历史(表(3), 计划 26-10-04-0312): 只读端点 /api/hr/history 按需拉一次(limit=300,
+ *   表(3) <details> 首次展开 @toggle 触发 hrsHistEnsureLoaded), 「刷新」手动重拉, 不轮询;
  *   站点 chips 与「仅看异常」纯前端本地过滤不回后端; 行人话(22 键)全由后端算好, 前端只挑
  *   徽章色档与排版。状态挂 hrsHist —— 与 hrs 同一份 mixin data 的伴生键(hrs 根对象键集被
  *   test_frontend_hr_status_fields_match_backend 闭集钉住, 不往里加新键), 方法前缀 hrsHist*。
@@ -28,7 +28,7 @@
  * !本文件在 HTML 里必须排在 app.js **之前**(app.js 末尾 mixin window.AQB_HR_STATUS)。
  */
 
-/* ---------------- 表① 排序纯函数(计划 26-10-02-1936 §3.4, 阶段3) ----------------
+/* ---------------- 表(1) 排序纯函数(计划 26-10-02-1936 §3.4, 阶段3) ----------------
  * 模块级单例(不走 app.mixin, 被 hrsDetailRows 与守阵的 node 单测直接消费 —— frontend-split
  * 「非 mixin 单例」书写形态)。排序语义对齐 shared/sort.js 三态, 但比较器收在这里:
  * - 按原始值排不按人话: bytes/ratio/秒/epoch 数值比较, 名称/tid/done_iso 字符串比较,
@@ -74,7 +74,7 @@ function hrsCompareRows(a, b, key, dir) {
   return r * dir;
 }
 
-/* ---------------- 表③ 拉取历史常量与判据(计划 26-10-04-0312 §3.5, 模块级单例) ----------------
+/* ---------------- 表(3) 拉取历史常量与判据(计划 26-10-04-0312 §3.5, 模块级单例) ----------------
  * token 都是后端字面量, 只比对不重算: BAD_ACTIONS = 波终态里算「异常」的四个 action
  * (kind='defer' 的拦下载不论 action 一律算异常, 计划 §3.5 拍板); TONES = result_tone 徽章
  * 色档白名单(后端 HISTORY_RESULT_BADGES 色档族), 未知档回落 dim(与后端未知 action 回落
@@ -153,7 +153,7 @@ window.AQB_HR_STATUS = {
         confirming: false,
         refreshing: false,
         refreshNote: "",
-        /* 表① 逐站点明细(键 = 站点名): { loading, loaded, error, entries, readError, now }
+        /* 表(1) 逐站点明细(键 = 站点名): { loading, loaded, error, entries, readError, now }
          * laneSel(键 = 站点名): 档位筛选 chips 的本地选择("" = 全部), 前端过滤不回后端
         * oldOn(键 = 站点名): 已删除种子切换钮状态(计划 26-10-02-1936 §3.3) —— false = 默认只看
         *   本地仍在列(local_present), true = 连已删除行一起显示; 不持久化(与 laneSel 同层)
@@ -164,7 +164,7 @@ window.AQB_HR_STATUS = {
         sortSel: {},
         sortDir: {},
       },
-      /* 表③ 拉取历史(计划 26-10-04-0312 §3.5): 与 hrs 同一份 mixin data 的伴生状态 —— 不并进
+      /* 表(3) 拉取历史(计划 26-10-04-0312 §3.5): 与 hrs 同一份 mixin data 的伴生状态 —— 不并进
        * hrs 根对象的原因: 模板对 hrs.* 的键引用被 test_frontend_hr_status_fields_match_backend
        * 闭集钉死, 加新键即红; hrsHist.* 前缀不落进那个扫描。首次展开才 fetch, 不轮询不持久化。 */
       hrsHist: {
@@ -196,7 +196,7 @@ window.AQB_HR_STATUS = {
         this.hrs.fetchEnabled = !!r.fetch_enabled;
         this.hrs.workerRunning = !!r.worker_running;
         this.hrs.pollInterval = r.poll_interval || 0;
-        /* 表① 明细随站点各拉一次: 打开分区(loadHrStatus())首拉, 手动刷新/立即拉取
+        /* 表(1) 明细随站点各拉一次: 打开分区(loadHrStatus())首拉, 手动刷新/立即拉取
          * (loadHrStatus(true))重拉 —— 每站点自有 loaded/loading 守卫, 失败不阻塞彼此 */
         for (const s of this.hrs.sites) this.loadHrSiteEntries(s.site, force);
       } catch (e) {
@@ -205,7 +205,7 @@ window.AQB_HR_STATUS = {
         this.hrs.loading = false;
       }
     },
-    /* ---------------- 表① 种子明细(计划 26-10-01-2216 阶段2) ----------------
+    /* ---------------- 表(1) 种子明细(计划 26-10-01-2216 阶段2) ----------------
      * 端点校验: HR 未启用 400 / 站点未接入 404 / 取数线程未启动 409; 站点文件读坏不抛,
      * read_error 随响应带出(前端单独显示, 与「明细请求本身失败」分开)。行字段与人话
      * (lane_text/need_seed_text/verified_source_text)全部后端算好, 排序(档位·下载量)与
@@ -261,7 +261,7 @@ window.AQB_HR_STATUS = {
     hrsSetLaneSel(site, lane) {
       this.hrs.laneSel[site] = lane;
     },
-    /* ---------------- 已删除种子切换钮(计划 26-10-02-1936 §3.3, 决策点③a) ----------------
+    /* ---------------- 已删除种子切换钮(计划 26-10-02-1936 §3.3, 决策点(3)a) ----------------
      * 两个可见文案只描述「本地在不在」, 不描述做种状态(2026-10-03 用户二次驳回上轮文案:
      * 默认过滤实为「本地已删除/从未下载」而非「没在做种」, 反向态又含暂停/异常而非都在
      * 做种, 故按钮不再使用「做种」措辞):
@@ -281,7 +281,7 @@ window.AQB_HR_STATUS = {
       return this.hrsOldOnOf(site) ? `只看本地仍在列 (${present})` : `显示已删除种子 (${rows.length - present})`;
     },
     /* ---------------- 三态排序(计划 26-10-02-1936 §3.4, 对齐 shared/sort.js setSort) ----------------
-     * 首点该列 = 降序 → 再点 = 升序 → 第三次 = 恢复后端默认序(档位·下载量); 换列直接
+     * 首点该列 = 降序 -> 再点 = 升序 -> 第三次 = 恢复后端默认序(档位·下载量); 换列直接
      * 降序开始。逐站点独立(与 laneSel 同层), 排序在当前过滤后的行集上进行(hrsDetailRows)。 */
     hrsSortKeyOf(site) {
       return this.hrs.sortSel[site] || "";
@@ -302,12 +302,12 @@ window.AQB_HR_STATUS = {
       this.hrs.sortSel[site] = "";
       this.hrs.sortDir[site] = -1;
     },
-    /* 表① 列定义取 HR 表注册表(P5: 表身份单点在 HR_TABLE_DEFS); 表头由表壳组件 thead 模式渲染
+    /* 表(1) 列定义取 HR 表注册表(P5: 表身份单点在 HR_TABLE_DEFS); 表头由表壳组件 thead 模式渲染
      * (列名 + 排序箭头 + emit sort), 排序状态与三态机仍走本文件 hrsSetSort(D3=B: 只借壳)。 */
     hrsCols() {
       return HR_TABLE_DEFS.hrDetail.columns;
     },
-    /* 表② 波次表列定义取注册表(不接排序: 行数 ≤4, 计划 26-10-02-1936 §3.4); 表头由模板 v-for 摆 */
+    /* 表(2) 波次表列定义取注册表(不接排序: 行数 ≤4, 计划 26-10-02-1936 §3.4); 表头由模板 v-for 摆 */
     hrsWaveCols() {
       return HR_TABLE_DEFS.hrWave.columns;
     },
@@ -340,7 +340,7 @@ window.AQB_HR_STATUS = {
     hrsLaneCls(lane) {
       return `hr-lane-${String(lane || "").toLowerCase()}`;
     },
-    /* 字节数复用共享 fmtSize(AQB_FORMAT 单点); null/undefined = 站点没给 → — (0 是真值, 照显) */
+    /* 字节数复用共享 fmtSize(AQB_FORMAT 单点); null/undefined = 站点没给 -> — (0 是真值, 照显) */
     hrsSize(v) {
       return v === null || v === undefined ? "—" : this.fmtSize(v);
     },
@@ -351,18 +351,18 @@ window.AQB_HR_STATUS = {
     hrsNeedSeed(t) {
       return !t || t === "-" ? "—" : t;
     },
-    /* 完成时间: 站点 ISO 字符串取日期段; 缺失 → — */
+    /* 完成时间: 站点 ISO 字符串取日期段; 缺失 -> — */
     hrsDone(iso) {
       return iso ? String(iso).slice(0, 10) : "—";
     },
-    /* ---------------- 核实结论列(计划 26-10-02-1936 §3.6, 决策点④; 2026-10-03 修 B3) ----------------
+    /* ---------------- 核实结论列(计划 26-10-02-1936 §3.6, 决策点(4); 2026-10-03 修 B3) ----------------
      * 主徽章三态 —— 数据源只有后端给的 verified_source / lane / active, 前端不重算判定:
-     *   ① 有放行记录            : 「已核实」(色沿用 hr-vsrc 色义: satisfied=绿 / exempt·not-listed=蓝);
-     *   ② 无记录 + 行在列 + 档位为终态(B/C/D): 「在列·<档位人话>」中间态(蓝) —— 站侧已给结论
-     *      (如 B 已达标)但行仍挂清单未消失 ⇒ _freeze_terminal 未触发 ⇒ 后端刻意不写 verified
+     *   (1) 有放行记录            : 「已核实」(色沿用 hr-vsrc 色义: satisfied=绿 / exempt·not-listed=蓝);
+     *   (2) 无记录 + 行在列 + 档位为终态(B/C/D): 「在列·<档位人话>」中间态(蓝) —— 站侧已给结论
+     *      (如 B 已达标)但行仍挂清单未消失 => _freeze_terminal 未触发 => 后端刻意不写 verified
      *      (防伪: 命中不是放行, 见 test_hr_service.py 守阵), 此时显「未核实」会掩盖「已达标」;
-     *   ③ 其余(无记录 + A 考察中, 或已退役但无记录): 「未核实」(中性)。
-     * ⚠ 切勿改成「命中即写 verified」—— 那会破坏放行防伪语义(后端判定侧唯一写点是冻结/未列出)。
+     *   (3) 其余(无记录 + A 考察中, 或已退役但无记录): 「未核实」(中性)。
+     * WARN: 切勿改成「命中即写 verified」—— 那会破坏放行防伪语义(后端判定侧唯一写点是冻结/未列出)。
      * 副行 = 已核实时「<来源人话> · <verified_ts>」, 其余 = 中间态说明 / —。
      * verified_ts 的 0 哨兵纪律同旧 hrsVerifiedText: 绝不显示 epoch。 */
     hrsVerdictText(e) {
@@ -385,7 +385,7 @@ window.AQB_HR_STATUS = {
       if (e.active && hrsTerminalLane(e.lane)) return "hr-vsrc-d";
       return "";
     },
-    /* ---------------- 在列列(计划 26-10-02-1936 §3.6, 决策点④) ----------------
+    /* ---------------- 在列列(计划 26-10-02-1936 §3.6, 决策点(4)) ----------------
      * 主徽章两态按 active 分流(2026-10-03 修 B4: 退役行不再借「失踪 N 波」)—— 
      *   active=true : 「在列」(绿);
      *   active=false: 退役行 —— 有放行记录显「已移出」(蓝, 与「已核实」同义), 无记录显
@@ -408,10 +408,10 @@ window.AQB_HR_STATUS = {
       if (seen) parts.push(`最近被见到 ${seen}`);
       return parts.length ? parts.join(" · ") : "—";
     },
-    /* ---------------- 折叠 ⇄ 全屏覆盖层(计划 26-10-02-1936 阶段2) ----------------
-     * 「展开」即打开覆盖式全屏弹窗(用户拍板①改判), 两态之间没有内嵌展开态; hrsOpen 在 state.js
+    /* ---------------- 折叠 <-> 全屏覆盖层(计划 26-10-02-1936 阶段2) ----------------
+     * 「展开」即打开覆盖式全屏弹窗(用户拍板(1)改判), 两态之间没有内嵌展开态; hrsOpen 在 state.js
      * 根 data(同 logs.open 先例), 不持久化、每次进分区回折叠(config_hub.js hubGo 复位)。
-     * 取数时机(决策点⑤a): 首次展开才拉 —— 复用 loadHrStatus 既有链路, 无新定时器;
+     * 取数时机(决策点(5)a): 首次展开才拉 —— 复用 loadHrStatus 既有链路, 无新定时器;
      * 覆盖层展示的就是同一份已加载明细(单节点 v-show 显隐), 关闭/打开零新请求。 */
     hrsToggle() {
       if (this.hrsOpen) {
@@ -460,7 +460,7 @@ window.AQB_HR_STATUS = {
       const l = s.lane_counts || {};
       return `A=${l.A || 0} B=${l.B || 0} C=${l.C || 0} D=${l.D || 0}`;
     },
-    /* ---------------- 表② 排障视图(计划 26-10-01-2216 阶段3, 拍板①a) ----------------
+    /* ---------------- 表(2) 排障视图(计划 26-10-01-2216 阶段3, 拍板(1)a) ----------------
      * 排障性文本收进 <details> 默认收起的排障视图, 表格化为站点级 kv 行 + 各档波次明细;
      * kv 行集在这里拼好(模板 v-for 摆行, 保 settings-detail.html 体量守阵), 字段全来自
      * /api/hr/status 现有载荷的 SiteStatus/LaneStatus, 措辞与 CLI --hr-status 对齐
@@ -494,13 +494,13 @@ window.AQB_HR_STATUS = {
       ];
     },
     /* 波次表「截至深度」列: full_depth = 覆盖证明达全深度; 否则显示已见最深行的完成时刻
-     * (cutoff_done 是 epoch, model.HrLaneState 口径; 0 = 没有位置概念 → —) */
+     * (cutoff_done 是 epoch, model.HrLaneState 口径; 0 = 没有位置概念 -> —) */
     hrsWaveCutoff(ls) {
       if (ls.full_depth) return "全深";
       return this.fmtTs(ls.cutoff_done) || "—";
     },
     /* 波次表「对平(声称/命中)」列: 声称 = count_claim; 命中后端只给平/不平两态(count_match),
-     * None = 无从对平 → ?(与 CLI「声明 N 行 / 对不平」同源, 不重算) */
+     * None = 无从对平 -> ?(与 CLI「声明 N 行 / 对不平」同源, 不重算) */
     hrsWaveCount(ls) {
       if (ls.count_claim === null || ls.count_claim === undefined) return "—";
       const m = ls.count_match === null || ls.count_match === undefined ? "?" : (ls.count_match ? "平" : "不平");
@@ -562,11 +562,11 @@ window.AQB_HR_STATUS = {
     hrsPollText() {
       return this.hrs.pollInterval ? `每 ${this.hrs.pollInterval}s 检查一次站点` : "";
     },
-    /* ---------------- 表③ 拉取历史(计划 26-10-04-0312 §3.5) ----------------
+    /* ---------------- 表(3) 拉取历史(计划 26-10-04-0312 §3.5) ----------------
      * 端点 /api/hr/history 只读; 行字段与人话(22 键)全部后端算好(hr.status.history_rows 单点),
-     * 这里只存取 / 本地过滤 / 排版。取数时机同表① 范式: 首次展开才拉(模板 @toggle ->
+     * 这里只存取 / 本地过滤 / 排版。取数时机同表(1) 范式: 首次展开才拉(模板 @toggle ->
      * hrsHistOnToggle -> hrsHistEnsureLoaded), 「刷新」手动重拉(hrsHistReload), 不轮询无定时器;
-     * force 重拉期间 loaded 维持 true, 旧行留在表里不闪回加载态(表① loadHrSiteEntries 同款)。
+     * force 重拉期间 loaded 维持 true, 旧行留在表里不闪回加载态(表(1) loadHrSiteEntries 同款)。
      * fetch 错误处理随 loadHrStatus 范式: auth 失败交给全局登出, 其余落 hrsHist.error。 */
     async hrsHistLoad(force = false) {
       const h = this.hrsHist;

@@ -15,12 +15,12 @@
  *   留在外壳(分组是版式), 行是引擎表体**(失败处置块/普通行/off 组 chips 合成行三形态,
  *   kind 分支经渲染器分片 tpl-aq-dt05-cells); 无排序(dyn 空键 = 组内 qB 原序, 原口径);
  *   msg 展开态 rowsFn 读取(重建后恢复), 折叠仍 classList 翻转不重挂(锚元素集合不变)。
- * !2026-10-18(用户报障「详情面板跳动」根治, 与 08 同口径): 病根两层 —— ①面板高度内容自适应
+ * !2026-10-18(用户报障「详情面板跳动」根治, 与 08 同口径): 病根两层 —— (1)面板高度内容自适应
  *   (未拖拽过时 drawerPanelStyle 返回 {} 走 CSS max-height 上限), 任何元素进出场都改面板实高,
- *   已在 drawer.js 单点修掉(展开恒锁高度); ②本变体结构 sig 含在场分组集 ⇒ 组空⇒整节隐藏
- *   (锚离场)、组补⇒新锚进场, tracker 状态每翻动一次(失败⇄警告⇄正常…)就整帧 replaceChildren
+ *   已在 drawer.js 单点修掉(展开恒锁高度); (2)本变体结构 sig 含在场分组集 => 组空=>整节隐藏
+ *   (锚离场)、组补=>新锚进场, tracker 状态每翻动一次(失败<->警告<->正常…)就整帧 replaceChildren
  *   + anchFill + Teleport 重挂 = 全组表格抖动。修法: **五组恒在场** —— 空组不进 sig, 只切
- *   hidden 类(.dt05-hide, display:none); rowsFn 保留空段 ⇒ 桥 v-for 段集合不变 ⇒ teleport
+ *   hidden 类(.dt05-hide, display:none); rowsFn 保留空段 => 桥 v-for 段集合不变 => teleport
  *   不卸不重挂; 数据拍(render 的 skip 分支内)原地切隐藏类 + 回填组头徽章计数。
  * 渲染纪律: dtHtml 全量转义(dtRaw 只用于拼接本变体 dtHtml 产出的预转义片段), replaceChildren
  * 原子换帧, **结构态**(加载/失败/空态/折叠/msg 展开)未变跳过重建 —— 数据拍(5s 轮询每拍必到,
@@ -82,8 +82,8 @@
     ".drawer .dt05-group.folded .dt05-gbody { display:none; }",
     ".drawer .dt05-gbody { padding:3px 0 2px; }",
     /* !表格几何变量(W2 口径, 06/11 先例): 本面行是**整宽容器** —— 横向内距 0, 行观感(8px
-     * 内缩 + 悬停带)由内容根 .dt05-rowin 自己承担 ⇒ 引擎列头必须同取该值。不声明
-     * --tbl-pad-x 时列头落到皮肤默认 14px, 而行内距在下面那条规则里是 0 ⇒ 列头首格比行内容根
+     * 内缩 + 悬停带)由内容根 .dt05-rowin 自己承担 => 引擎列头必须同取该值。不声明
+     * --tbl-pad-x 时列头落到皮肤默认 14px, 而行内距在下面那条规则里是 0 => 列头首格比行内容根
      * **右移 14px**(几何守阵 e2e/dt-table-layout-parity.spec.mjs「列头与值格同缘」2026-10-16
      * CI 实测; 同一处偏移在 Windows 侧精确复现)。单点在此声明值, 行与列头都读它 ——
      * 以后要改内距只动这一处, 不会再出现「只改行、列头留在旧值」。 */
@@ -265,10 +265,10 @@
     };
   }
 
-  /* 桥行来源(注册条目 rowsFn ← 根方法 dtTplRows): 描述符 segs=true → 返回 [{key, rows}] 分段。
+  /* 桥行来源(注册条目 rowsFn <- 根方法 dtTplRows): 描述符 segs=true -> 返回 [{key, rows}] 分段。
    * 分桶判据与外壳 render 同一条(GROUPS × bucketOf) —— 桥段与锚槽一一对应。
    * !2026-10-18(用户报障根治, 与 08 同口径): **空段不撤** —— 恒返回全部五组, 空组给 [] 行。
-   * 段集合不变 ⇒ 桥 v-for 的 :key 稳定 ⇒ teleport 不卸载不重挂: tracker 在组间移动时各组行
+   * 段集合不变 => 桥 v-for 的 :key 稳定 => teleport 不卸载不重挂: tracker 在组间移动时各组行
    * 原地补丁; 旧口径撤空段, 再现即整表重挂 = 面板内容整块抖动。 */
   function rowsFn(ctx) {
     const ts = (ctx.drawer && ctx.drawer.trackers) || [];
@@ -299,7 +299,7 @@
   }
 
   /* 组的可见性单点(2026-10-18): 空组整节隐藏改**原地切 .dt05-hide 类** —— 可见性不进结构
-   * sig, tracker 状态翻动(组空⇒组补)不整帧重建; 锚元素与表格体全程在场(display:none 不
+   * sig, tracker 状态翻动(组空=>组补)不整帧重建; 锚元素与表格体全程在场(display:none 不
    * 影响 Teleport 目标寻址)。 */
   function groupHidden(ms) {
     return !ms.length;
@@ -350,7 +350,7 @@
     }
     const virtualN = ts.filter((t) => ctx.drawerTrackerVirtual(t.url)).length;
     /* 结构 sig(2026-10-18 用户报障根治收口, 与 08 同口径): 只含"外壳形状"决定项 —— 加载/失败/
-     * 空态; **不再含在场分组集**(旧口径组空⇒整节隐藏⇒锚离场, 组补⇒新锚进场, tracker 状态每翻
+     * 空态; **不再含在场分组集**(旧口径组空=>整节隐藏=>锚离场, 组补=>新锚进场, tracker 状态每翻
      * 动一次就整帧重建 + Teleport 重挂 = 全组表格抖动)。折叠态**不进** sig: 折叠只翻 class 不
      * 重建(锚元素集合不变, 桥零重挂 —— 既有设计), 数据拍照常跳过。
      * **不含 trackers 数据**: 数据拍不整帧重建, 行走桥响应式 + 数据拍原地回填。 */
@@ -386,7 +386,7 @@
     /* !行容器必须是 .dt05-list(内层), 外层保持 .dt05-wrap —— 本变体全部 .group-row
      * 版式规则(摘引擎卡底/行观感归 .dt05-rowin/失败区与 chips 合成行)都以 .dt05-list
      * 为作用域前缀(U3 引擎化时写入), 而 2026-10-14 前外壳只有一层 dt05-wrap、行直接
-     * 挂在它下面 ⇒ 前缀全程不匹配, 六条规则空转, 行一直带着主表卡底(--bg-row + 描边
+     * 挂在它下面 => 前缀全程不匹配, 六条规则空转, 行一直带着主表卡底(--bg-row + 描边
      * + 圆角 + padding), 用户报「必现列背景与其他列不一致」诊断时逐面量计算样式才发现
      * (inList=false/inWrap=true)。修法 = 补内层 .dt05-list 包住分区(与 04/06/07/09/
      * 10/11 的 dtNN-wrap(外壳) + dtNN-list(行容器) 两层家族约定对齐; e2e 通用助手

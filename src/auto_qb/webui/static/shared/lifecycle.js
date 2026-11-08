@@ -13,9 +13,9 @@
 const ERR_POLL_INTERVAL_MS = 60000;  // 补拉节拍(写常量; 不进配置 —— 纯前端体验参数)
 
 /* 密钥字段名与空值占位(本文件单点): 本文件只在本机免鉴权分支采纳一次本地旧密钥。
- * ① 空值占位: token 字段**恒为字符串** —— 导出下载会把它无条件插值进 Bearer 头, 置 null 会拼出
+ * (1) 空值占位: token 字段**恒为字符串** —— 导出下载会把它无条件插值进 Bearer 头, 置 null 会拼出
  *    "Bearer null"(与「不带密钥」不是一回事);
- * ② 属性名走常量: 工作区写入判据会把「凭据族字段名 + 赋值」的行误报成凭据字面量(误判实例与处置
+ * (2) 属性名走常量: 工作区写入判据会把「凭据族字段名 + 赋值」的行误报成凭据字面量(误判实例与处置
  *    见 memory-bank/pitfalls/ops/agent-write-guard-secret-false-positive.md) —— 走常量后语义不变、
  *    该行不再带那种字面形态; 本等价形态经属主授权采用(2026-10-16), 回潮即触发守阵。 */
 const AQB_TOKEN_FIELD = "token";
@@ -88,8 +88,8 @@ window.AQB_LIFECYCLE = {
       this.addTagMenu = false;
       this.addPathPop = false;
       /* meta 对话框(标签与分类)的分类下拉: 同族浮层, 原本漏在名单外 —— 点对话框别处只靠
-       * @focusout(2026-10-03 补)收, 这里补兜底。⚠ 有它才必须给 meta 的字段 label 挂
-       * @click.stop —— 否则点 label 走"window click 收层 → label 转发 click 重开" = 闪烁。 */
+       * @focusout(2026-10-03 补)收, 这里补兜底。WARN: 有它才必须给 meta 的字段 label 挂
+       * @click.stop —— 否则点 label 走"window click 收层 -> label 转发 click 重开" = 闪烁。 */
       this.metaCatMenu = false;
       this.movePathMenu = false;  // 设定位置对话框(2026-10-13)保存路径下拉: 同族浮层, 与 meta 同套收层口径
       // 通知面板(S4): 非模态浮层同族 —— 点空白收层(面板根与入口钮 .sb-err 都已 @click.stop 拦截)
@@ -98,7 +98,7 @@ window.AQB_LIFECYCLE = {
       if (this.speedOpen) this.closeSpeedDialog();
     };
     window.addEventListener("click", this._onDocClick);
-    // Esc: 逐层退栈(FIX-07) —— 确认框/弹窗 → 抽屉内浮层 → 历史弹层 → 抽屉 → 筛选器下拉/其余弹层(pop) → 右键菜单 → 清选择/收展开兜底 → 清筛选兜底(仅数据页+非输入态, 26-10-01-2108)
+    // Esc: 逐层退栈(FIX-07) —— 确认框/弹窗 -> 抽屉内浮层 -> 历史弹层 -> 抽屉 -> 筛选器下拉/其余弹层(pop) -> 右键菜单 -> 清选择/收展开兜底 -> 清筛选兜底(仅数据页+非输入态, 26-10-01-2108)
     // 收展开兜底档(2026-10-22 起)**顺便把键盘光标退回被收起的父行**, 不再让它悬空指向已卸载的明细行。
     // WARN: 本链与 dialogs.js::escBusy 是同一份浮层名单(后者给 config_hub 的「Esc 返回设置首页」守门),
     //   新增浮层两处同步; config_hub.js::hubOnKey 的 Esc 分支排在本链之后(链上有层时它不动)
@@ -107,7 +107,7 @@ window.AQB_LIFECYCLE = {
       const inInput = !!(e.target && e.target.closest &&
         e.target.closest("input, textarea, select, [contenteditable]"));  // 仅清筛选兜底消费(与引擎同式, 既有分支行为不变)
       if (this.modal.visible) this.resolveModal(false);
-      else if (this.addOpen) this.escAddTorrent();  // 添加种子对话框: 先收内部浮层(分类/标签下拉 → 位置面板), 再关对话框
+      else if (this.addOpen) this.escAddTorrent();  // 添加种子对话框: 先收内部浮层(分类/标签下拉 -> 位置面板), 再关对话框
       else if (this.statsOpen) this.closeStats();  // 统计面板对话框: 与添加对话框同层(先后于确认框)
       else if (this.speedOpen) this.closeSpeedDialog();  // 限速弹窗(SPD-04): 与统计面板同层
       else if (this.mgrOpen) this.closeMgr();  // 分类/标签管理对话框: 与添加对话框同层(内部确认框仍最优先)
@@ -120,7 +120,7 @@ window.AQB_LIFECYCLE = {
       else if (this.drawerMenu.visible) this.drawerMenu.visible = false;  // 抽屉右键菜单(R2 S3): 同为抽屉内浮层
       // 历史流量弹层: 遮罩层(z-index 130)盖在停靠抽屉(80)之上, 与 qB 口径流量图(drawerVisible)
       // 同时存在时它才是视觉上的**最上层** —— 必须先关它, 否则 Esc 会穿过遮罩去关底下被盖住的抽屉
-      // (退栈顺序 = 视觉层叠顺序: 弹层 → 抽屉; 2026-10-06 报障: 两图同开时 Esc 先关错了抽屉)
+      // (退栈顺序 = 视觉层叠顺序: 弹层 -> 抽屉; 2026-10-06 报障: 两图同开时 Esc 先关错了抽屉)
       else if (this.historyOpen) this.historyOpen = false;
       // 详情抽屉(种子详情 / qB 口径流量图): 确认框优先, 其后于其它浮层。判据用 drawerVisible
       // 而非 drawer.open —— 面板 DOM 随 drawerVisible 退场(非主内容页), 看不见的面板不吃 Esc:
@@ -140,8 +140,8 @@ window.AQB_LIFECYCLE = {
       else if (this.selGroups.length || this.selMembers.length) this.clearSelection();  // 兜底: 清除行/组选择(复用现有逻辑)
       /* 兜底: 收起分组展开。**收起不"清光标", 光标退回被收起的父行**(2026-10-22):
        *   明细行随收起一起卸载, 光标却仍指着那个已不在链上的成员 hash —— 虚线框被宿主连坐带走,
-       *   观感就是"锚点丢了", 下一次 ↑↓ 还得走无光标回落(_kbViewportRow)重新猜落点。
-       *   归位口径与 ← (shortcuts.js::_kbCollapseRow) 一致: 成员行 -> 所属组行。就地赋值不调
+       *   观感就是"锚点丢了", 下一次 up/down 还得走无光标回落(_kbViewportRow)重新猜落点。
+       *   归位口径与 <- (shortcuts.js::_kbCollapseRow) 一致: 成员行 -> 所属组行。就地赋值不调
        *   引擎内部方法 —— 退栈链自成一体, 不反向依赖快捷键引擎; 父行紧邻被收起的明细块, 本就在
        *   视口内, 无需滚动跟随(也避开禁 scrollIntoView 的红线)。 */
       else if (this.expandedKey) {
@@ -204,14 +204,14 @@ window.AQB_LIFECYCLE = {
     /* 跨标签同步(F2, issue 26-09-20-1800): 别的标签改了列 -> 本标签整份采用存储值。
      * 若不同步, 本标签下一次 persistPage 会以旧底整段覆盖该页, 把别的标签的改动静默吞掉
      * (用户感知 = "列设置被重置")。双轨模型下采纳的是意图, 采纳永远安全。
-     * storage 事件**只在其它标签**触发(写入方自己收不到) ⇒ 无需去重, 也不会自激。 */
+     * storage 事件**只在其它标签**触发(写入方自己收不到) => 无需去重, 也不会自激。 */
     this._onColStore = (e) => {
       if (e.key === COLS_STORE_KEY) this.adoptColState();
     };
     window.addEventListener("storage", this._onColStore);
     /* FX-28: 时间口径跨标签同步(F2) —— 与列偏好同一套机制(整份采用存储值), 但**独立监听**:
      * 两个 key 的生命周期不同(列集合/列宽 vs 显示口径), 塞进同一个监听只会让判据互相纠缠。
-     * 写入方自己收不到 storage 事件 ⇒ 无需去重, 也不会自激。 */
+     * 写入方自己收不到 storage 事件 => 无需去重, 也不会自激。 */
     this._onTimeFmtStore = (e) => {
       if (e.key === TIME_FMT_STORE_KEY) this.adoptTimeFmt();
     };
@@ -244,7 +244,7 @@ window.AQB_LIFECYCLE = {
     // 验证期间显示"验证中"加载态(bootstrapping)而非密钥输入表单 —— 修复刷新时闪现输入界面。
     // 跳过本地验证: 先读公开只读标志, 本机免鉴权则直接进入, 不弹登录表单
     const savedToken = localStorage.getItem("autoqb_token");
-    // !走低层带超时单点 aqbFetch(issue 26-10-16-1303): 裸 fetch 悬挂时 await 永不返回 ⇒ 既不进
+    // !走低层带超时单点 aqbFetch(issue 26-10-16-1303): 裸 fetch 悬挂时 await 永不返回 => 既不进
     //   免鉴权分支也不进 catch, 界面永久停在"正在验证本地密钥…"; 挂上限后悬挂落到下面 catch,
     //   与"公开标志读取失败"同一条兜底跳转(退密钥表单, 不让加载卡永久占位)。
     aqbFetch("/api/config/public").then((r) => (r.ok ? r.json() : null)).then((pub) => {
@@ -353,7 +353,7 @@ window.AQB_LIFECYCLE = {
   },
   updated() {
     // P1-3: 顶栏高度改由 ResizeObserver 驱动 —— **只在尺寸真变时量一次**。
-    // 旧实现每次渲染都调 _syncHeadHeight() → getBoundingClientRect 是**强制同步布局**,
+    // 旧实现每次渲染都调 _syncHeadHeight() -> getBoundingClientRect 是**强制同步布局**,
     // 在大 DOM(3000 行)下每次渲染都要付一次, 是"不跟手"的直接来源之一。
     // 这里只做"元素换没换"的引用比较(不触发布局), 换了才重新挂观察器并立即量一次。
     this._ensureHeadObserver();

@@ -135,10 +135,10 @@ window.AQB_FILTERS = {
      * 组视图 / 追剧视图按**组**(计数 = 含该值的组数), 种子页按**种子**(计数 = 含该值的种子数)。
      *
      * !不能一律按组算: 种子页按视图分片**不回 groups**(`VIEW_ARRAYS["torrent"] = ("torrents",)`),
-     *   而筛选弹层的选项原先只遍历 groups ⇒ 四个筛选器恒空、弹层显示"暂无数据"
+     *   而筛选弹层的选项原先只遍历 groups => 四个筛选器恒空、弹层显示"暂无数据"
      *   (2026-09-21 用户报「种子页筛选器无数据」)。
      * !也不能一律按种子算: 组视图同理不回 torrents, 且组级筛选的语义是"含该值的组"。
-     * · 追剧视图回传 groups(VIEW_ARRAYS), 明细成员就在组里 ⇒ 与组视图同源, 不必单列一支。
+     * · 追剧视图回传 groups(VIEW_ARRAYS), 明细成员就在组里 => 与组视图同源, 不必单列一支。
      * · 种子页平铺数组还没到时回落组视图口径(首轮/旧服务端): 那时两处都是空, 不会给出错的计数。 */
     facetRows() {
       if (this.viewMode === "torrents" && this.torrents.length) return this.torrents;
@@ -290,7 +290,7 @@ window.AQB_FILTERS = {
      * 搜索命中 = 服务端裁决 searchHits(与辅种/追剧页同一套, 见 views.py::search_torrents 的
      * 匹配口径), 前端不持有文本匹配实现 —— 输入新词到响应返回之间沿用上一查询的命中集
      * (标准 search-as-you-type, 与 filteredGroups 同节奏); 待响应且命中集未落袋时命中门不生效
-     * (_searchGateActive: 首词待响应窗不得把列表塌成 0 行); 仅负词/无命中服务端返回空 ⇒ 空列表。
+     * (_searchGateActive: 首词待响应窗不得把列表塌成 0 行); 仅负词/无命中服务端返回空 => 空列表。
      * facets(状态/标签/分类/站点/路径下拉)仍是纯客户端即时过滤(_memberPass), 与文本搜索叠加。
      * 排序独立(三态同分组表)。 */
     filteredTorrents() {

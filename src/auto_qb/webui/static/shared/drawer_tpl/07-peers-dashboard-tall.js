@@ -361,7 +361,7 @@
         .filter(Boolean).join(" ") || null,
     };
   }
-  /* 桥行来源(注册条目 rowsFn ← 根方法 dtTplRows) */
+  /* 桥行来源(注册条目 rowsFn <- 根方法 dtTplRows) */
   function rowsFn(ctx) {
     const list = peerList(ctx);
     return filtered(list).map((p) => rowOf(ctx, p));

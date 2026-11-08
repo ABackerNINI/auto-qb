@@ -15,8 +15,8 @@
  *   满宽 + 行模型 dt04 + rowCls 卡态)。手搓 CSS order 排序退役(Q4): 分段钮经 dtSortSet
  *   直设引擎 dyn 键(R7: 模式选择语义, 非 h-cell 三态循环; 复合权值 sev*10+tier /
  *   tier*10+sev 在 _raw, 虚拟合并卡恒 95 = 原 order:95 口径), 默认 sev 升序 = 异常优先。
- *   卡片无列语义 → 列头 CSS 隐藏, 拖宽/右键隐藏不适用(Q3 记档); 筛选 pills 是版式语义
- *   → rowsFn + 反应式行更新(W5, 不再 anchTouch 换代)。
+ *   卡片无列语义 -> 列头 CSS 隐藏, 拖宽/右键隐藏不适用(Q3 记档); 筛选 pills 是版式语义
+ *   -> rowsFn + 反应式行更新(W5, 不再 anchTouch 换代)。
  * 渲染纪律: dtHtml 全量转义(dtRaw 只用于拼接本变体 dtHtml 产出的预转义片段), replaceChildren
  * 原子换帧, 结构态未变(loading|err|has 外壳形状 sig, 不含 trackers 数据)跳过重建,
  * 数据拍走原地回填, 锚元素跨帧保活(锚被重建 = Teleport
@@ -90,7 +90,7 @@
      * !width:auto 必配(2026-10-12 用户报障「真实 tracker 卡与虚拟卡之间/虚拟卡后方有长空隙」
      * 根治): 引擎行容器被三皮肤经典表 CSS 继承 width:fit-content(与 min-width:100% 成对,
      * 经典 flex 列容器里靠 min-width 兜底成整行宽); 本栅格是 grid + min-width:0, fit-content
-     * 直接生效 ⇒ 卡片收缩到内容宽(实测 ~330px / 695px 格), 两列卡片之间留下 ~700px 永久
+     * 直接生效 => 卡片收缩到内容宽(实测 ~330px / 695px 格), 两列卡片之间留下 ~700px 永久
      * 空洞, 且卡宽随内容漂移(实体 330 vs 虚拟 378, 违反「宽度统一」)。grid 项 width:auto
      * + 默认 justify-self:stretch 才填满栅格格。守阵双扣(静态第 4 节 + e2e 几何)钉住。 */
     ".drawer .dt04-list { display:flex; flex-direction:column; }",
@@ -144,8 +144,8 @@
     ".drawer .dt04-msg.m-warn { color:var(--fg-soft); background:var(--warn-soft); border:1px solid var(--warn-line); }",
     ".drawer .dt04-msg.m-note { color:var(--fg-dim); background:var(--surface-1); border:1px solid var(--border-soft); }",
     /* 虚拟条目合并卡(与实体卡同占一格半宽; 无虚拟条目整卡省略) —— 与设计稿的刻意差异:
-     * ①设计稿 sp2 跨全宽, 本卡取半宽与实体卡对齐(2026-10-09 用户拍板「宽度统一」);
-     * ②设计稿 footer 的「qB 下 DHT/PeX/LSD 已禁用」长描述 2026-10-10 用户要求移除 —— 卡面只留
+     * (1)设计稿 sp2 跨全宽, 本卡取半宽与实体卡对齐(2026-10-09 用户拍板「宽度统一」);
+     * (2)设计稿 footer 的「qB 下 DHT/PeX/LSD 已禁用」长描述 2026-10-10 用户要求移除 —— 卡面只留
      * head + chips, 高度改由栅格 align-items:stretch 与同排实体卡齐平。 */
     ".drawer .dt04-vchips { display:flex; flex-wrap:wrap; gap:7px; margin-top:9px; }",
     ".drawer .dt04-vchip { font-family:var(--font-mono, ui-monospace, monospace); font-size:11.5px; color:var(--fg-muted);",
@@ -246,7 +246,7 @@
     };
   }
 
-  /* 桥行来源(注册条目 rowsFn ← 根方法 dtTplRows): 实体卡(虚拟条目不进栅格) + 虚拟合并卡
+  /* 桥行来源(注册条目 rowsFn <- 根方法 dtTplRows): 实体卡(虚拟条目不进栅格) + 虚拟合并卡
    * (仅 全部/禁用 筛选下附加, 与原口径一致); 重报闸门 torrent 级判据取一次(rGate) */
   function rowsFn(ctx) {
     const ts = (ctx.drawer && ctx.drawer.trackers) || [];
