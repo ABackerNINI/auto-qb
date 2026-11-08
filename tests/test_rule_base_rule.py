@@ -44,6 +44,8 @@
 - test_rule_cooldown_sub_second_boundary: 0 < cooldown <= 1 秒的冷却同样生效
 - test_rule_cooldown_bare_zero_means_no_cooldown: cooldown 裸 0(整数 0/字符串 "0")= 不冷却,
   构造期解析为 0.0 不抛错且运行时语义与 0S 一致(issue 26-11-08-0703)
+- test_rule_cooldown_float_zero_means_no_cooldown: cooldown 浮点 0.0 = 不冷却(issue 26-11-08-1923,
+  口径 A 谓词扩 float): 校验/构造两侧一致解析为 0.0 不裸抛, 非零浮点 3.5 校验侧照拒
 - test_rule_never_not_deduped: never 有记录仍放行(对照 once 必须去重, 防 !=never 反转)
 - test_rule_cooldown_expired_allows_rerun: C32 守阵 —— cooldown 合取是 and(改 or -> 冷却过期
   也不放行, 规则永久静默)
@@ -1047,6 +1049,33 @@ def test_rule_cooldown_bare_zero_means_no_cooldown():
         # 运行时语义: cooldown=0 -> 不冷却, 有执行记录仍放行(与 0S 写法一致)
         mgr.ctx.state.record_execution("g.cd0", ctx.hash)
         assert rule_int._dedup_allowed(ctx) is True, "cooldown 裸 0 = 不冷却, 有记录仍放行"
+
+
+def test_rule_cooldown_float_zero_means_no_cooldown():
+    """cooldown 浮点 0.0 = 不冷却(issue 26-11-08-1923, 口径 A 谓词扩 float): 构造期解析为 0.0 不裸抛
+
+    程序内 dict 路径: 校验侧 _is_bare_zero 扩 float 0.0 后放行(此前经 parse_time 的
+    empty_zero 分支同样放行, 口径不变), Rule 构造期原始值直传谓词解析为 0.0 —— 此前
+    str(0.0)="0.0" 绕过特判裸抛 ValueError 绕过 ConfigError 契约。非零浮点 3.5 照走
+    校验侧聚合报错(干净 ConfigError), 不得被顺手放行。
+    """
+    from auto_qb.config.validation import validate_config
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        ctx = make_ctx(mgr, FakeTorrent(tags=""), FakeClient())
+        # 校验/构造两侧一致: float 0.0 过校验 -> Rule 构造成功且 cooldown == 0.0
+        errs = validate_config({"config": {"example_rules": {"r1": {"cooldown": 0.0, "actions": []}}}})
+        assert errs == [], f"浮点 0.0 须过校验(不冷却): {errs}"
+        rule_f = Rule("g.cd0f", {"actions": [{"add_tags": ["X"]}], "cooldown": 0.0}, mgr)
+        assert rule_f.cooldown == 0.0, "浮点 0.0 须解析为 0.0, 不得裸抛 ValueError"
+        # 运行时语义: 0.0 = 不冷却, 有执行记录仍放行
+        mgr.ctx.state.record_execution("g.cd0f", ctx.hash)
+        assert rule_f._dedup_allowed(ctx) is True, "cooldown 浮点 0.0 = 不冷却, 有记录仍放行"
+        # 非零浮点照拒: 校验侧聚合报错(干净 ConfigError), 不放行
+        errs = validate_config({"config": {"example_rules": {"r1": {"cooldown": 3.5, "actions": []}}}})
+        assert "config.example_rules.r1.cooldown: 无效时间格式: 3.5" in errs, \
+            "非零浮点 3.5 须被校验侧拒绝"
 
 
 def test_rule_never_not_deduped():

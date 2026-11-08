@@ -204,17 +204,24 @@ def _try_time(
 
 
 def _is_bare_zero(value: Any) -> bool:
-    """裸 0 判定(R4#9/#15): 字符串 "0"(含空白)或整数 0, 带单位形("0S")不在内 —— 那本就过 parse_time
+    """裸 0 判定(R4#9/#15): 字符串 "0"(含空白)或数值 0(整数 0 / 浮点 0.0),
+    带单位形("0S")不在内 —— 那本就过 parse_time
 
     parse_time 本体不动(服务全仓多处, 「数值须带单位后缀」契约保持): 特判只收敛在本谓词,
     供文档口径声明「0 = 关闭/不去重/不冷却」的键的调用路径使用(state_save_interval /
     notify.dedup_window / example_rules.*.cooldown / gtm.notify_cooldown_s, R4#9/#15 +
     issue 26-11-08-0703)。bool 先排除(int 子类, False == 0 恒真): 非数值类型照走
     parse_time 的「无效时间格式」报错, 不得被静默当成 0。
+
+    浮点 0.0(issue 26-11-08-1923, 用户拍板口径 A: 谓词扩 float): 程序内 dict 构造路径
+    cooldown: 0.0 在校验侧经 parse_time 的 empty_zero 分支本就放行(parse_time(0.0)==0),
+    但构造侧曾把 0.0 str() 成 "0.0" 后 parse_time 裸抛 ValueError 绕过 ConfigError 契约
+    —— 谓词只对数值 0(含 -0.0)放行闭合该缺口; 字符串 "0.0" 与非零浮点(如 3.5)不在内,
+    照走原有「无效时间格式」报错, 既有四键口径不变。
     """
     if isinstance(value, bool):
         return False
-    if isinstance(value, int):
+    if isinstance(value, (int, float)):
         return value == 0
     return isinstance(value, str) and value.strip() == "0"
 

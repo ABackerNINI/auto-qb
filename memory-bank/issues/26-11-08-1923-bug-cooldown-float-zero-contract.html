@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="cooldown-bare-zero">
 <meta name="doc-refs" content="memory-bank/issues/26-11-08-0703-bug-config-bare-zero-cooldown-keys.html">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="cooldown 浮点 0.0 构造期裸抛 ValueError 绕过 ConfigError 契约">
 <meta name="issue-summary" content="rules/base.py 构造期 str(spec.get(cooldown)) 把 YAML 浮点 0.0 变成 &#x27;0.0&#x27; 后 parse_time 裸抛 ValueError, 绕过 ConfigError 契约; 与 26-11-08-0703 同根残余缝隙, 修前即存在非回归">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-08-1923-bug-cooldown-float-zero-contract</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-08 19:23</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
@@ -141,11 +141,20 @@ self.cooldown = _parse_time_bare_zero_ok(str(spec.get("cooldown", "0S")))</code>
   <h2><span class="no">§07</span>状态变更日志</h2>
   <ul>
     <li>2026-11-08 19:23 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-08 — 状态 Open → Done（kb.status）</li>
+</ul>
   <h3>复验</h3>
-  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <p>复验（2026-11-08, HEAD f42fe5db）：仍复现, 但<strong>触发面比 §01 记载的窄</strong>。真链路实测（<code>load_config</code> 走 <code>yaml.BaseLoader</code>, 标量全为字符串）: 配置文件写 <code>cooldown: 0.0</code> 到达校验侧时已是字符串 <code>"0.0"</code>, <code>_is_bare_zero("0.0")</code> 为 False → <code>_try_time("0.0")</code> 裸拒 → <strong>干净的 ConfigError 聚合报错</strong>「config.example_rules.r1.cooldown: 无效时间格式: 0.0」, 契约未破。§01 的「校验放行 0.0 经 empty_zero」只在<strong>程序内 dict 构造路径</strong>成立: <code>validate_config({'example_rules': {'r1': {'cooldown': 0.0, ...}}})</code> 放行（<code>parse_time(0.0)</code> 经 empty_zero 得 0）, 随后 <code>Rule({'cooldown': 0.0})</code> 构造期 <code>str(0.0)</code>="0.0" → <strong>裸 ValueError「无效时间格式: 0.0」</strong>, 绕过 ConfigError 契约 —— 锚点 base.py:369 引文仍在, 缺口真实。</p>
   <h3>修复后补充</h3>
-  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  <p>实际修法与 §06 建议不同 —— <strong>用户拍板改道为口径 A（谓词扩 float）</strong>, 不在构造期包裹 ConfigError（保留建议原文于 §06）:</p>
+  <ul>
+    <li><strong>谓词扩 float</strong>: <code>validation/core.py</code> <code>_is_bare_zero</code> 的 <code>isinstance(value, int)</code> 分支扩为 <code>(int, float)</code>, 只对数值 0（含 -0.0）放行; 字符串 "0.0" 与非零浮点（3.5）不在内, 照走原有「无效时间格式」报错。</li>
+    <li><strong>构造侧同口径</strong>: <code>rules/base.py</code> cooldown 解析去掉 <code>str()</code> 包裹, 原始值直传 <code>_parse_time_bare_zero_ok</code> —— 浮点 0.0 须以数值形态进谓词（包裹成 "0.0" 会绕过特判）; 非零值由 <code>parse_time</code> 内部自行 str(), 报错行为不变。</li>
+    <li><strong>既有四键口径核对（issue §05 的牵动担忧）</strong>: 其余三键（state_save_interval / notify.dedup_window / gtm.notify_cooldown_s）对浮点 0.0 在校验侧本就经 empty_zero 放行（<code>parse_time(0.0)==0</code>）, 谓词扩 float 后走 bare-zero 特判早退, <strong>结果值与放行结论均不变</strong>; 非零浮点照拒。四键行为零变化, 仅闭合构造期缺口。</li>
+    <li><strong>文件路径口径</strong>: 配置文件写 <code>cooldown: 0.0</code>（BaseLoader → 字符串 "0.0"）仍干净拒（聚合计数报错形态, 非裸抛）——扩法只对数值 0 放行, 未顺手放宽字符串; 逃生口 <code>0S</code> 照旧。</li>
+    <li><strong>测试</strong>: 新增 <code>test_rule_cooldown_float_zero_means_no_cooldown</code>（test_rule_base_rule: 0.0 校验过 → Rule 构造成功 cooldown==0.0 → 运行时不冷却; 3.5 校验侧照拒）; 扩 <code>test_validate_rule_cooldown_bare_zero</code>（test_config_misc: 浮点 0.0 dict 路径放行 / 文件路径 "0.0" 干净拒 / 浮点 3.5 照拒）; 两文件头「测试计划」清单同步。</li>
+    <li><strong>验证</strong>: 两触碰文件单跑 116 passed; 全量 <code>test.quick</code> 5855 passed / 2 skipped（53.0s）。</li>
+  </ul>
 </section>
 
 <footer>

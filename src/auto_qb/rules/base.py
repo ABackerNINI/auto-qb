@@ -365,8 +365,10 @@ class Rule:
         self.interval = utils.parse_time(str(spec.get("interval", "0S")))  # 规则扫描间隔, 0 = 每轮
         self.execute_once = str(spec.get("execute_once", "never"))
         # 裸 0 = 不冷却(校验侧 _is_bare_zero 特判放行, issue 26-11-08-0703): 解析同口径走
-        # _parse_time_bare_zero_ok(R4#9/#15 既有单点), 其余值先 str() 再 parse_time(行为不变)
-        self.cooldown = _parse_time_bare_zero_ok(str(spec.get("cooldown", "0S")))
+        # _parse_time_bare_zero_ok(R4#9/#15 既有单点); 原始值直传不做 str() 包裹 —— 浮点 0.0
+        # 须以数值形态进谓词(issue 26-11-08-1923, str(0.0)="0.0" 会绕过特判裸抛 ValueError);
+        # 非零值由 parse_time 内部自行 str() 后报同样的「无效时间格式」, 行为不变
+        self.cooldown = _parse_time_bare_zero_ok(spec.get("cooldown", "0S"))
         # evaluation 引擎参数(W4/D4): 只留 schema 枚举位, 默认 all = 现状; first_match 是占位
         # 键值(校验放行先占坑), 本版本不实现 —— 非 all 值显式 warning 后按 all 处理, 行为零变化
         # (键位先占坑, 后续版本实现首中即停时键面/校验零改动)。
