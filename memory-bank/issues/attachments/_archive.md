@@ -11,8 +11,11 @@
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 - [chore] [版本号双源矛盾: __init__.__version__ 0.2.0 vs pyproject 0.1.0](../26-09-21-1408-chore-version-dual-source.html) — WebUI 顶栏透出与打包元数据已差一个 minor; 建议 pyproject 单源 + 动态读取
 
-## Open (76)
+## Open (79)
 
+- [bug] [alias_fs mount_point 正则 $ 尾换行缺口](../26-11-08-1923-bug-alias-fs-mount-point-regex.html) — alias_fs.py 用 re.match+$ 匹配 mount_point, 串尾恰一个换行可放行, 与 0045/keys.py fullmatch 同族; 输入来自内部 WSL mount 信息, severity 低
+- [bug] [cooldown 浮点 0.0 构造期裸抛 ValueError 绕过 ConfigError 契约](../26-11-08-1923-bug-cooldown-float-zero-contract.html) — rules/base.py 构造期 str(spec.get(cooldown)) 把 YAML 浮点 0.0 变成 '0.0' 后 parse_time 裸抛 ValueError, 绕过 ConfigError 契约; 与 26-11-08-0703 同根残余缝隙, 修前即存在非回归
+- [bug] [_V4_DATE_RE 同款 $ 尾换行缺口](../26-11-08-1923-bug-v4-date-re-tail-newline.html) — traffic_store_common.py _V4_DATE_RE 用 ^...$ 配 re.match, 尾随换行放行, 0045 已修该文件 _INFOHASH_RE 四消费端的旁支残留; 下游 strptime 兜底拒收, severity 低
 - [bug] [评审闸门 0 行二进制改动绕过基哈希比对](../26-11-08-1701-bug-review-gate-binary-zero-line-bypass.html) — numstat 对二进制计 0 行, count==0 短路使 D6 基比对不生效, 评审后替换/新增二进制可评文件(夹具图片/压缩包)静默放行
 - [bug] [awaitPoll fail 路径不调 onEnd, 与文件头契约存在张力](../26-11-08-1621-bug-awaitpoll-fail-no-onend.html) — polling.js fail()(fn 抛异常 reject)不调 onEnd; 现注册点 tm relaunching fail 时不复位标志 — 需先裁决调用方是否在 reject 分支自清理, 有害才修
 - [bug] [drawer_rows 下载/根路径 wide:true 无条件, 值为空也占整行折行位](../26-11-08-1621-bug-drawer-rows-wide-unconditional.html) — drawer_rows.js:108-109 无条件 wide:true 且 text 兜底「—」, 值空仍占折行位(观感), 02/03 路径段同受影响
