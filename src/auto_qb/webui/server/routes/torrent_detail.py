@@ -124,12 +124,16 @@ def build_router(ctx: WebContext) -> APIRouter:
     def _cmd_speed_limits(cmd: str, body: dict) -> dict:
         """全局限速值透传单点: speed/override 与 speed/alt 二端点此前逐字同一形状(仅命令名不同)"""
         b = body or {}
-        return _enqueue(
-            cmd, {
-                "upload_kib": _int_param(b.get("upload_kib") or 0),
-                "download_kib": _int_param(b.get("download_kib") or 0)
-            }
-        )
+        payload = {
+            "upload_kib": _int_param(b.get("upload_kib") or 0),
+            "download_kib": _int_param(b.get("download_kib") or 0)
+        }
+        # 负数 400 拒收(issue 26-11-08-0044; 与单发/bulk 限速路由同口径): qB 端点对负数
+        # limit 的语义是"不限速", 负数静默入队会让"限 5MB/s"反向变成不限速。
+        for key in ("upload_kib", "download_kib"):
+            if payload[key] < 0:
+                raise HTTPException(status_code=400, detail=f"{key} 不能为负数(0 = 不限速)")
+        return _enqueue(cmd, payload)
 
     @router.get("/api/categories")
     def api_categories_list():

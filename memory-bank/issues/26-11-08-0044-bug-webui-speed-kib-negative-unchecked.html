@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="webui-speed-kib-negative-unchecked">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="/api/speed/override 与 /api/speed/alt 的 upload_kib/download_kib 不拦负数">
 <meta name="issue-summary" content="只过 int_param 不拦负数(torrent_detail.py:124-132 一带; server/common.py:113 int_param 只拦畸形), 负数直达命令层与 qbapi; qbapi set_alt_speed_limits 修好后(批L)负数从静默 no-op 变真下发——与 R4#3/表行4 同族">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-08-0044-bug-webui-speed-kib-negative-unchecked</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-08 00:44</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
@@ -143,11 +143,13 @@
   <h2><span class="no">§07</span>状态变更日志</h2>
   <ul>
     <li>2026-11-08 00:44 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-08 17:40 — 修复完成，状态 <strong>Open → Done</strong></li>
+    <li>2026-11-08 — 状态 Open → Done（kb.status）</li>
+</ul>
   <h3>复验</h3>
-  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <p>复验 2026-11-08 17:40(分支 fix/issue-batch-26-11-08 顶 775136e3): 锚点仍复现 —— <code>torrent_detail.py:124-132</code> 的 _cmd_speed_limits(speed/override 与 speed/alt 共用透传单点)仍只过 int_param, 无负数校验; <code>server/common.py:113</code> int_param 仍只拦畸形。负数经 _enqueue 直达命令层与 qbapi。</p>
   <h3>修复后补充</h3>
-  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  <p>实际修法: _cmd_speed_limits 单点内补非负校验 —— 载荷先经 int_param 构造, 任一方向 &lt; 0 即 <code>HTTPException(400, "{upload_kib|download_kib} 不能为负数(0 = 不限速)")</code>, 文案与单发限速路由(torrent_cmds.py api_t_limits)及 bulk 路由同款同口径; 两端点共用单点, 一处修复同罩。验证方式: tests/test_web_admin.py 两用例增补 —— test_api_speed_mode_and_override 与 test_api_speed_alt_and_toggle 各加「负数 400(两方向各一, 断言 detail 含键名) + 0/0 放行入队落命令」断言(400 拒收不入队, 不影响既有 toggle 断言)。测试数字: <code>commands run test.one -- tests/test_web_admin.py</code> 24 passed。</p>
 </section>
 
 <footer>

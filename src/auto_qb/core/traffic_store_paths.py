@@ -31,7 +31,7 @@ def v4_series_dir(data_dir: str, key: str) -> str:
         return os.path.join(v4_root_dir(data_dir), V4_GLOBAL_DIR_NAME)
     if key.startswith(TORRENT_KEY_PREFIX):
         h = key[len(TORRENT_KEY_PREFIX):]
-        if not h or not _INFOHASH_RE.match(h):
+        if not h or not _INFOHASH_RE.fullmatch(h):
             raise ValueError(f"非法单种系列键(哈希须为文件名安全字符): {key!r}")
         return os.path.join(v4_root_dir(data_dir), TORRENTS_DIR_NAME, h)
     raise ValueError(f"未知系列键: {key!r}")
@@ -56,7 +56,7 @@ def v4_rel_dir_to_key(rel_dir: str) -> Optional[str]:
         return GLOBAL_KEY
     if norm.startswith(TORRENTS_DIR_NAME + "/"):
         h = norm[len(TORRENTS_DIR_NAME) + 1:]
-        if h and _INFOHASH_RE.match(h):
+        if h and _INFOHASH_RE.fullmatch(h):
             return TORRENT_KEY_PREFIX + h
     return None
 

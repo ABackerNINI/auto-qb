@@ -3,8 +3,8 @@
 ## 测试计划(每个测试函数一条)
 - test_api_category_tag_endpoints: 分类/标签 CRUD 端点(入队与 400 校验)
 - test_category_tag_commands_execute: 分类/标签命令执行(QbApi 封装 + 缓存失效)
-- test_api_speed_mode_and_override: /api/speed/mode 曲线/停用两形态 + /api/speed/override 落 transfer 端点
-- test_api_speed_alt_and_toggle: ALT-01 备用速度 —— /api/speed/mode 增列 alt_on/alt_current + /api/speed/alt 落 setPreferences(alt_*) + /api/speed/alt/toggle 落 toggle 端点
+- test_api_speed_mode_and_override: /api/speed/mode 曲线/停用两形态 + /api/speed/override 落 transfer 端点(负数 400 / 0 放行, issue 26-11-08-0044)
+- test_api_speed_alt_and_toggle: ALT-01 备用速度 —— /api/speed/mode 增列 alt_on/alt_current + /api/speed/alt 落 setPreferences(alt_*) + /api/speed/alt/toggle 落 toggle 端点(负数 400 / 0 放行, issue 26-11-08-0044)
 - test_qbapi_alt_speed_limits_normalization: ALT-01 QbApi 备用限速 KiB<->bytes/s 换算 + setPreferences 增量语义(只传非 None 方向) + 模式切换
 - test_api_speed_mode_curve_config_disabled: 曲线存在但 enabled=False -> curve_enabled=False(快照之上叠加配置判定)
 - test_api_add_torrent_endpoint: /api/torrents/add multipart(bytes 内存直传/选项透传/空来源 400)
@@ -115,6 +115,19 @@ def test_api_speed_mode_and_override():
         assert mgr.web.results[cmd_id]["status"] == "ok"
         assert ("transfer_set_upload_limit", 2048 * 1024) in client.calls
         assert ("transfer_set_download_limit", 1024 * 1024) in client.calls
+        # issue 26-11-08-0044: 负数 400 拒收(与单发/bulk 限速路由同口径), 0 = 不限合法
+        r = tc.post("/api/speed/override", json={"upload_kib": -1, "download_kib": 0}, headers=auth)
+        assert r.status_code == 400 and "upload_kib" in r.json()["detail"]
+        r = tc.post("/api/speed/override", json={"upload_kib": 0, "download_kib": -5}, headers=auth)
+        assert r.status_code == 400 and "download_kib" in r.json()["detail"]
+        cmd_id = tc.post("/api/speed/override", json={
+            "upload_kib": 0,
+            "download_kib": 0
+        }, headers=auth).json()["cmd_id"]
+        mgr.web.consume_commands()
+        assert mgr.web.results[cmd_id]["status"] == "ok"
+        assert ("transfer_set_upload_limit", 0) in client.calls
+        assert ("transfer_set_download_limit", 0) in client.calls
 
 
 def test_api_speed_alt_and_toggle():
@@ -150,6 +163,13 @@ def test_api_speed_alt_and_toggle():
         assert client.alt_dl_limit_value == 512 * 1024
         assert ("app_set_preferences", ["alt_dl_limit", "alt_up_limit"]) in client.calls
 
+        # issue 26-11-08-0044: 负数 400 拒收(与单发/bulk 限速路由同口径, 400 不入队不落
+        # setPreferences, 不影响后续 toggle 断言)
+        r = tc.post("/api/speed/alt", json={"upload_kib": -1, "download_kib": 0}, headers=auth)
+        assert r.status_code == 400 and "upload_kib" in r.json()["detail"]
+        r = tc.post("/api/speed/alt", json={"upload_kib": 0, "download_kib": -5}, headers=auth)
+        assert r.status_code == 400 and "download_kib" in r.json()["detail"]
+
         # 模式切换: toggle 端点 0 -> 1, mode 读数联动
         data = tc.get("/api/speed/mode", headers=auth).json()
         assert data["alt_current"] == {"upload_limit": 1024, "download_limit": 512}
@@ -159,6 +179,13 @@ def test_api_speed_alt_and_toggle():
         assert client.speed_limits_mode_value == 1
         data = tc.get("/api/speed/mode", headers=auth).json()
         assert data["alt_on"] is True
+
+        # issue 26-11-08-0044: 0 = 不限合法(两方向 0 入队落 setPreferences(0))
+        cmd_id = tc.post("/api/speed/alt", json={"upload_kib": 0, "download_kib": 0}, headers=auth).json()["cmd_id"]
+        mgr.web.consume_commands()
+        assert mgr.web.results[cmd_id]["status"] == "ok"
+        assert client.alt_up_limit_value == 0
+        assert client.alt_dl_limit_value == 0
 
 
 def test_qbapi_alt_speed_limits_normalization(tmp_path):
@@ -815,6 +842,7 @@ def test_webui_module_bind_diagnosis_adds_no_error_events(tmp_path, monkeypatch)
 
 # ---------- T2a 覆盖率第三轮: 启动诊断的静默采集与占用者探针降级 ----------
 
+
 def test_bind_capture_swallows_poisoned_record():
     """_BindFailureCapture.emit 采集失败静默: 记录本身坏掉(文案插值炸)不得逃逸,
     也不得污染已采集的原因(启动期 fail-fast 不被诊断面干扰)"""
@@ -822,7 +850,13 @@ def test_bind_capture_swallows_poisoned_record():
 
     capture = _BindFailureCapture()
     poisoned = logging.LogRecord(
-        name="t", level=logging.ERROR, pathname=__file__, lineno=1, msg="bad %d", args=("not-a-number",), exc_info=None
+        name="t",
+        level=logging.ERROR,
+        pathname=__file__,
+        lineno=1,
+        msg="bad %d",
+        args=("not-a-number", ),
+        exc_info=None
     )
     capture.emit(poisoned)  # 不得抛(采集器永不干扰业务日志)
     assert capture.reason == "", "坏记录不得伪造原因"

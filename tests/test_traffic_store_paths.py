@@ -218,6 +218,13 @@ def test_v4_paths_dates_and_window(tmp_path):
         v4_series_dir(data_dir, "torrent:../evil")
     with pytest.raises(ValueError):
         v4_series_dir(data_dir, "weird")
+    # issue 26-11-08-0045: Python 的 $ 允许串尾恰一个换行, re.match 下 "ABC\n" 放行;
+    # 消费端改 fullmatch 后尾随换行与空哈希一律拒收(合法哈希仍放行)
+    with pytest.raises(ValueError):
+        v4_series_dir(data_dir, "torrent:ABC\n")
+    with pytest.raises(ValueError):
+        v4_series_dir(data_dir, "torrent:")
+    assert v4_rel_dir_to_key("torrents/ABC\n") is None
     with pytest.raises(ValueError):
         v4_day_file_path(data_dir, "global", "2026-13-01")
     with pytest.raises(ValueError):

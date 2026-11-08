@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="traffic-store-infohash-re-tail-newline">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="traffic_store_common._INFOHASH_RE 配 re.match, $ 允许串尾恰一个换行(与 R4#34 同族)">
 <meta name="issue-summary" content="traffic_store_common.py:32 _INFOHASH_RE 配 re.match, 实测串尾恰一个换行放行; 与 R4#34(表行14 已修 keys.py fullmatch)同族; HTTP 层可达性待查, 建议同款 re.fullmatch">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-08-0045-bug-traffic-store-infohash-re-tail-newline</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-08 00:45</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
@@ -141,11 +141,13 @@
   <h2><span class="no">§07</span>状态变更日志</h2>
   <ul>
     <li>2026-11-08 00:45 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-08 17:40 — 修复完成，状态 <strong>Open → Done</strong></li>
+    <li>2026-11-08 — 状态 Open → Done（kb.status）</li>
+</ul>
   <h3>复验</h3>
-  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <p>复验 2026-11-08 17:40(分支 fix/issue-batch-26-11-08 顶 775136e3): 锚点仍复现 —— <code>traffic_store_common.py:32</code> 的 _INFOHASH_RE 仍配 re.match, 实测 <code>re.compile(r"^[A-Za-z0-9_-]+$").match("HA\n")</code> 放行、fullmatch 拒收。<strong>可达性已证(HTTP 层直达)</strong>: 消费面共 4 处 —— <code>traffic_store_paths.py:34</code> v4_series_dir(其 400 拒绝分支被 <code>webui/server/traffic_qb.py:216</code> payload_torrent 消费, 路由 <code>GET /api/traffic/qb/torrent/{hash}</code> 的路径参数直达, URL 编码 <code>%0A</code> 即尾换行入库校验被绕过)、<code>traffic_store_paths.py:59</code> v4_rel_dir_to_key 与 <code>traffic_store.py:412/474</code> 系列扫描/按龄淘汰(落盘目录名可达, 存储目录内 crafted 目录名可绕过 fail-fast)。无路径穿越风险(字符集仍排除 / 与点), 影响限于校验绕过与新行字符进路径, severity 按低-中档定。</p>
   <h3>修复后补充</h3>
-  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  <p>实际修法: 4 处消费端 <code>re.match</code> 全部改 <code>re.fullmatch</code>(traffic_store_paths.py v4_series_dir/v4_rel_dir_to_key, traffic_store.py series_keys/evict_expired_series), 并在 _INFOHASH_RE 定义处补消费端须 fullmatch 的注释(与 keys.py 修法对齐); 正则字面量不动。验证方式: tests/test_traffic_store_paths.py test_v4_paths_dates_and_window 增补 —— 合法哈希放行(既有断言)、尾随换行 "torrent:ABC\n" 拒收(ValueError)、空哈希 "torrent:" 拒收、v4_rel_dir_to_key("torrents/ABC\n") 回 None。测试数字: <code>commands run test.one -- tests/test_traffic_store_paths.py</code> 22 passed; 相关面回归 test_traffic_store_store/slots/agg/codec 62 passed、test_web_longtail_routes + test_traffic_sample_core 77 passed。</p>
 </section>
 
 <footer>

@@ -409,7 +409,7 @@ class TrafficV4Store:
         torrents_dir = os.path.join(root, TORRENTS_DIR_NAME)
         if os.path.isdir(torrents_dir):
             for name in sorted(os.listdir(torrents_dir)):
-                if _INFOHASH_RE.match(name) and os.path.isdir(os.path.join(torrents_dir, name)):
+                if _INFOHASH_RE.fullmatch(name) and os.path.isdir(os.path.join(torrents_dir, name)):
                     keys.append(TORRENT_KEY_PREFIX + name)
         return keys
 
@@ -471,7 +471,7 @@ class TrafficV4Store:
             return evicted
         for name in sorted(os.listdir(torrents_dir)):
             series_dir = os.path.join(torrents_dir, name)
-            if not _INFOHASH_RE.match(name) or not os.path.isdir(series_dir):
+            if not _INFOHASH_RE.fullmatch(name) or not os.path.isdir(series_dir):
                 continue
             dates = [d for d in (v4_day_file_date(n) for n in os.listdir(series_dir)) if d is not None]
             if not dates:

@@ -29,6 +29,8 @@ HOUR_SECONDS = 3600
 
 #: 单种哈希合法字符(infohash 实际为 hex, 但 FakeTorrent 式测试哈希与宽容口径取
 #: 文件名安全集: 字母/数字/下划线/连字符 —— 排除路径分隔符与点, 非法键 fail-fast)
+#: 消费端必须 fullmatch(issue 26-11-08-0045): Python 的 $ 允许串尾恰一个换行,
+#: re.match 下 "ABC\n" 放行, fail-fast 形同虚设; fullmatch(全串必须被消费)才是本意。
 _INFOHASH_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 
 #: v4 全局系列目录名(天文件 + agg.dat 的父目录)
