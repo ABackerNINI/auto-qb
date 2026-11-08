@@ -8,7 +8,8 @@
   为空选首项、空容器回落 null(原语义不回归); cfgDiscard 三分支经真 cfgLoad 结算(净树直重拉/
   脏确认放弃回磁盘/脏取消不动)
 - test_r4_unit_controls_family: R5#168(major) —— 数值+单位控件族: cfgUnitParts 三个 kind 的拆/
-  拼往返(零漂移)与回退分支(空串/无单位/非法串/单位不在表内/unitDefault 优先于梯回退)、
+  拼往返(零漂移)与回退分支(空串/无单位/非法串/单位不在表内/unitDefault 优先于梯回退/
+  unitDefault 表外回落 kind 缺省 —— 表外默认不原样采用, issue 26-11-08-0229 #5)、
   cfgUnitOptions/cfgHasUnit 未知 kind 回退、cfgUnitLabel time 中文映射与非字符串归一、
   cfgSetUnit 空数值写空串(不产生裸单位)与 trim
 - test_r4_unsaved_guard_chain: R5#167(major) —— 未保存改动防护链: cfgGuardSync 挂摘幂等
@@ -227,6 +228,10 @@ ok("非法串(符号)整体回退", eq(vm.cfgUnitParts("size", "abc!@#"), { num:
 ok("字母尾巴数字保留单位回退", eq(vm.cfgUnitParts("time", "3x"), { num: "3", unit: "S" }));
 ok("单位不在表内回退", eq(vm.cfgUnitParts("speed", "5XB"), { num: "5", unit: "KiB/s" }));
 ok("单位不在表内且 unitDefault 优先", eq(vm.cfgUnitParts("speed", "5XB", "MiB/s"), { num: "5", unit: "MiB/s" }));
+// unitDefault 表外(issue 26-11-08-0229 #5): 不原样采用, 回落 kind 缺省; 梯内解析单位不受牵连
+ok("unitDefault 表外回落 kind 缺省", eq(vm.cfgUnitParts("speed", "5XB", "XB/s"), { num: "5", unit: "KiB/s" }));
+ok("unitDefault 表外但解析单位梯内则单位胜出", eq(vm.cfgUnitParts("speed", "5MiB/s", "XB/s"), { num: "5", unit: "MiB/s" }));
+ok("unitDefault 空串同缺省回落", eq(vm.cfgUnitParts("size", "30", ""), { num: "30", unit: "MiB" }));
 
 // 拆拼往返零漂移: 拆出的 num/unit 经 cfgSetUnit 拼回与原串一致
 for (const [kind, text] of [["time", "30M"], ["size", "30MiB"], ["speed", "6MiB/s"], ["time", "1.5D"]]) {

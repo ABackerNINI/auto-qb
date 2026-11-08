@@ -185,7 +185,10 @@ Object.assign(window.CONFIG_HUB.methods, {
         // 次序(D3): 先落盘 enabled=false 并热重载(订阅线程随之停), 再停工具进程 ——
         // 反序会让停工具的瞬间又被订阅线程抢拉起来。
         // 磁盘原态可能是「键不存在(默认真)」—— 回滚口径按原存在性分流, 见保存失败分支。
+        // hadSourceSeg: 段本身的盘上存在性 —— 若段是被本次 cfgSetBool 顺手新建的(盘上无
+        // traffic_source 键), 回滚删叶后残留空 {} 容器会让 cfgDirty 凭空翻真, 需连段一起回收。
         const hadEnabledKey = this.cfgExists(["config", "traffic_source", "enabled"]);
+        const hadSourceSeg = this.cfgExists(["config", "traffic_source"]);
         this.cfgSetBool(["config", "traffic_source", "enabled"], false);
         const saved = await this.cfgSave();
         if (!saved) {
@@ -194,7 +197,13 @@ Object.assign(window.CONFIG_HUB.methods, {
           // 键盘上本就不存在时删键还原而非写 "true": 无条件写回会让内存树多出盘上没有的键,
           // cfgDirty 凭空翻真(刷新守卫会拦), 下次保存还会把多余的 enabled 键写进 YAML。
           if (hadEnabledKey) this.cfgSetBool(["config", "traffic_source", "enabled"], true);
-          else this.cfgDelPath(["config", "traffic_source", "enabled"]);
+          else {
+            this.cfgDelPath(["config", "traffic_source", "enabled"]);
+            // 段是本次 cfgSetPath 新建的(盘上无此键): 删叶后必是空 {}, 连段一起删还原盘上形态。
+            // 不改共享的 cfgDelPath(15+ 调用点, 多处自管父容器生命周期) —— 空容器回收只在
+            // 本调用点做(issue 26-11-08-0229 #6)。
+            if (!hadSourceSeg) this.cfgDelPath(["config", "traffic_source"]);
+          }
           this.tm.shutdownErr = "保存失败, 未停止工具(可重试)";
           return;
         }

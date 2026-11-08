@@ -129,13 +129,16 @@ window.CONFIG_EDITOR = {
       const u = String(unit);
       return (UNIT_LABELS[kind] && UNIT_LABELS[kind][u]) || u;
     },
-    /* 拆: "1.5D" -> {num:"1.5", unit:"D"}; 空/不可解析时 unit 取 unit_default 或 kind 回退值 */
+    /* 拆: "1.5D" -> {num:"1.5", unit:"D"}; 空/不可解析时 unit 取 unit_default 或 kind 回退值。
+     * unitDefault(schema unit_default)采纳前同样校验梯内: 表外默认不原样采用(原样会把表外
+     * 单位经 cfgSetUnit 拼回树), 回落 kind 缺省 —— 合法性兜底仍是后端 load_config, 这里只防
+     * 前端自己把表外单位写进树(issue 26-11-08-0229 #5)。 */
     cfgUnitParts(kind, text, unitDefault) {
       const opts = this.cfgUnitOptions(kind);
       const m = String(text === undefined || text === null ? "" : text).trim().match(/^([\d.]*)\s*([A-Za-z/]*)$/);
       const num = m ? m[1] : "";
       let unit = m ? m[2] : "";
-      if (!opts.includes(unit)) unit = unitDefault || UNIT_FALLBACK[kind] || opts[0] || "";
+      if (!opts.includes(unit)) unit = opts.includes(unitDefault) ? unitDefault : UNIT_FALLBACK[kind] || opts[0] || "";
       return { num: num, unit: unit };
     },
     /* 拼: 数值为空则写空串(= 未配置, 走默认), 避免产生 "MiB" 这种无数字值 */

@@ -5,7 +5,9 @@
 - test_r4_tm_shutdown_rollback_presence: R5#154 修复回归 —— 「关闭工具」保存失败后的回滚尊重
   磁盘原态: enabled 键盘上本就不存在(默认真)时删键还原(cfgExists 假 + cfgDirty 不翻真),
   不再无条件写 "true" 把多余键留在内存树里(修复前 cfgDirty 凭空翻真, 下次保存把多余键写进
-  YAML); 键盘上存在时行为不变(回滚写回 "true"); 两场景 shutdownErr 落账、shutting 复位
+  YAML); 键盘上存在时行为不变(回滚写回 "true"); traffic_source 段整个不存在(被 cfgSetBool
+  顺手新建)时回滚连空段一起回收(cfgDelPath 只删叶, 空 {} 残留曾让 cfgDirty 凭空翻真,
+  issue 26-11-08-0229 #6); 各场景 shutdownErr 落账、shutting 复位
 - test_r4_tracker_search_battery: R5#172(major) —— 站点搜索匹配语义四单点直跑:
   trackerNorm 的 CJK 归一(中文词不折空 —— 「中文搜索直接废掉」事故回归锚)、
   trackerParseQuery 负词/短语/孤立 -/未闭合引号宽容容错/negOnly、trackerRows 序列化兜底
@@ -101,6 +103,15 @@ await vm2.tmShutdownTool();
 ok("键原存在: 回滚写回 true(原行为保持)", vm2.cfgRaw(ENABLED) === "true");
 ok("键原存在: cfgDirty 不翻真", vm2.cfgDirty === false);
 ok("键原存在: shutdownErr 同样落账", vm2.tm.shutdownErr.indexOf("保存失败") >= 0);
+
+// (3) 段整个不存在(盘上无 traffic_source 键): cfgSetBool 会顺手新建段, 保存失败回滚删叶后
+//   必残留空 {} 容器(cfgDelPath 只删叶) —— 回滚须连空段一起回收(issue 26-11-08-0229 #6)
+const vm3 = makeVm({ config: { trackers: { A: {} } } });
+await vm3.tmShutdownTool();
+ok("段原不存在: 回滚后空段整个回收(cfgExists 为假)", vm3.cfgExists(["config", "traffic_source"]) === false);
+ok("段原不存在: cfgDirty 不翻真(修复前空 {} 残留必红)", vm3.cfgDirty === false);
+ok("段原不存在: trackers 等既有键不受牵连", vm3.cfgExists(["config", "trackers", "A"]) === true);
+ok("段原不存在: shutdownErr 落账", vm3.tm.shutdownErr === "保存失败, 未停止工具(可重试)");
 """ + "\n" + _IIFE_CLOSE
 
 # R5#172(major): 站点搜索匹配语义四单点 ----------------------------------------------------
