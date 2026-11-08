@@ -104,7 +104,7 @@ run   = ["python <skill-dir:memory-bank>/scripts/gen_kb_index.py --check",
          "python <skill-dir:memory-bank>/scripts/check_wording.py --check",
          "python <skill-dir:memory-bank>/scripts/check_mutation_anchor.py --check",
          "python <skill-dir:memory-bank>/scripts/check_doc_templates.py --check",
-         "python <skill-dir:memory-bank>/scripts/timekit.py --check",
+         "python <skill-dir:memory-bank>/scripts/timekit.py --check --files <changed:memory-bank/**>",
          "python <skill-dir:memory-bank>/scripts/check_status_drift.py --check",
          "python <skill-dir:memory-bank>/scripts/check_html.py --check"]
 auto  = true

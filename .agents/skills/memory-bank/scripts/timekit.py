@@ -15,6 +15,7 @@
     python <skill-dir>/scripts/timekit.py time      YYYY-MM-DD HH:MM (最后活动 / 正文时刻)
     python <skill-dir>/scripts/timekit.py stamp     YY-MM-DD-HHMM (文件名前缀)
     python <skill-dir>/scripts/timekit.py check     日期守卫, 有违规退出码 1
+    python <skill-dir>/scripts/timekit.py --check --files <路径...>  日期守卫只查传入文件 (提交闸门增量; 无 --files 仍全量)
     python <skill-dir>/scripts/timekit.py --safety  冒烟探针 (回答「无参跑我是否即真动作」)
 
 守卫三层 (严宽有别, 见计划 plans/26-09-30-0931):
@@ -99,6 +100,16 @@ HTML_BLOCK_TAGS = ("code", "pre", "script", "style")
 TASK_DIR = "tasks"
 STAMP_DIRS = ("active-context", "testing/baselines", "plans", "reports", "issues")
 
+# `<changed:memory-bank/**>` 会把本次改动里各类文件(图片 / 数据 / 无后缀)都带进来 ——
+# 三层守卫只消费文本载体, 传入清单先按后缀收窄 (2026-11-09 计划 §04 S1)。
+TEXT_SUFFIXES = (".md", ".html", ".htm")
+ANY_DIGIT_RE = re.compile(r"\d")  # 正文行预筛: 一个数字都没有的行不可能命中任何日期 token
+
+# 文件名前缀判定的「目录 → 正则」单点: 全量(按目录 iterdir)与增量(按传入文件反查父目录)
+# 共用同一张表与同一个判定函数, 判据不因收窄而分叉。
+DIR_RX = ((TASK_DIR, TASK_PREFIX_RE), ) + tuple((d, STAMP_PREFIX_RE) for d in STAMP_DIRS)
+RX_BY_DIR = dict(DIR_RX)
+
 # --------------------------------------------------------------------------- 解析工具
 
 
@@ -152,7 +163,8 @@ def _html_body_lines(text: str) -> list[tuple[int, str]]:
 
 def _scan_body_line(line: str) -> list[tuple[str, str]]:
     """一行正文里的非规范日期 token → [(类型, 修复提示)]。"""
-    if ALLOW_MARK in line:
+    # 所有日期判据都要求数字; 无数字行直接跳过 (实测可跳约 53.1% 的正文行, 计划 §02)。
+    if ALLOW_MARK in line or not ANY_DIGIT_RE.search(line):
         return []
     clean = URL_RE.sub("", line)
     hits: list[tuple[str, str]] = []
@@ -165,38 +177,93 @@ def _scan_body_line(line: str) -> list[tuple[str, str]]:
     return hits
 
 
-# --------------------------------------------------------------------------- 三层守卫
+# --------------------------------------------------------------------------- 扫描面
 
 
-def check_filenames(root: Path, mb: Path) -> list[str]:
-    """文件名层: tasks 的 `YY-MM-DD` / 切片与 HTML 制品的 `YY-MM-DD-HHMM`。"""
+def resolve_paths(root: Path, mb: Path, files: list[str] | None) -> list[Path] | None:
+    """CLI `--files` 清单 → 待检查的绝对 Path 列表; None = 全量 (无参兼容 kb.check / 手工)。
+
+    - 缺省 / 空参 → None: 保守兜底成全量 (计划 §01「改动面拿不准宁可全量跑」)。
+    - 传入但过滤后为空 → []: 增量零对象 (各类非文本改动全被摘掉是常态, **不是**全量)。
+    - 路径是仓库根相对 POSIX (`<changed:>` 展开口径); 绝对路径也认。
+    - 已删除 / 不存在 / 非文本后缀一律跳过 —— 脚本内按后缀过滤, 不自查 git (改动清单单点在预检)。
+    """
+    if not files:
+        return None
+    out: set[Path] = set()
+    for raw in files:
+        rel = raw.replace("\\", "/").strip()
+        if not rel:
+            continue
+        cand = Path(rel)
+        path = cand if cand.is_absolute() else root / cand
+        if not path.is_file() or path.suffix.lower() not in TEXT_SUFFIXES:
+            continue
+        out.add(path.resolve())
+    return sorted(out)
+
+
+def _iter_text_files(mb: Path, paths: list[Path] | None) -> list[Path]:
+    """统一遍历面: None = 全库一次 rglob (两轮合一), list = 只走传入清单。"""
+    if paths is not None:
+        return paths
+    return sorted(p for p in mb.rglob("*") if p.is_file() and p.suffix.lower() in TEXT_SUFFIXES)
+
+
+# --------------------------------------------------------------------------- 三层守卫(单文件判定同源)
+
+
+def check_filenames(root: Path, mb: Path, paths: list[Path] | None = None) -> list[str]:
+    """文件名层: tasks 的 `YY-MM-DD` / 切片与 HTML 制品的 `YY-MM-DD-HHMM`。
+
+    paths=None 全量 (按 6 个目录 iterdir, 判据逐字不变); 增量只遍历传入清单、按父目录反查正则 ——
+    不再扫目录, 消除约 0.39s 固定成本 (2026-11-09 计划 §04 S1)。
+    """
     problems: list[str] = []
     today = now().date()
     moment = now()
-    for rel_dir, rx in ((TASK_DIR, TASK_PREFIX_RE), ) + tuple((d, STAMP_PREFIX_RE) for d in STAMP_DIRS):
-        directory = mb / rel_dir
-        if not directory.is_dir():
-            continue
-        for path in sorted(directory.iterdir()):
-            if path.is_dir() or path.name.startswith("_"):
+    if paths is None:
+        for rel_dir, rx in DIR_RX:
+            directory = mb / rel_dir
+            if not directory.is_dir():
                 continue
-            m = rx.match(path.name)
-            if not m:
-                continue  # 无日期前缀的命名由别的守卫管, 这里只管值
-            rel = rel_posix(path, root)
-            if rx is TASK_PREFIX_RE:
-                d = parse_date(2000 + int(m.group(1)), int(m.group(2)), int(m.group(3)))
-                if d is None:
-                    problems.append(f"{rel}: 文件名日期不是合法日期")
-                elif d > today:
-                    problems.append(f"{rel}: 文件名日期在未来 ({d.isoformat()}) —— 取时走 `commands run kb.time`")
-            else:
-                dt = parse_stamp(*(int(g) for g in m.groups()))
-                if dt is None:
-                    problems.append(f"{rel}: 文件名时间戳不是合法时间")
-                elif dt > moment:
-                    problems.append(f"{rel}: 文件名时间戳在未来 ({dt:%Y-%m-%d %H:%M}) —— 取时走 `commands run kb.time`")
+            for path in sorted(directory.iterdir()):
+                if path.is_dir() or path.name.startswith("_"):
+                    continue
+                problems.extend(_filename_problems(path, rx, root, today, moment))
+    else:
+        for path in paths:
+            if path.name.startswith("_"):
+                continue
+            try:
+                rel_dir = path.parent.relative_to(mb).as_posix()
+            except ValueError:
+                continue
+            rx = RX_BY_DIR.get(rel_dir)
+            if rx is not None:
+                problems.extend(_filename_problems(path, rx, root, today, moment))
     return problems
+
+
+def _filename_problems(path: Path, rx, root: Path, today: date, moment: datetime) -> list[str]:
+    """文件名层单文件: 前缀命中才校验值 (合法 + 非未来)。全量 / 增量共用同一判据。"""
+    m = rx.match(path.name)
+    if not m:
+        return []  # 无日期前缀的命名由别的守卫管, 这里只管值
+    rel = rel_posix(path, root)
+    if rx is TASK_PREFIX_RE:
+        d = parse_date(2000 + int(m.group(1)), int(m.group(2)), int(m.group(3)))
+        if d is None:
+            return [f"{rel}: 文件名日期不是合法日期"]
+        if d > today:
+            return [f"{rel}: 文件名日期在未来 ({d.isoformat()}) —— 取时走 `commands run kb.time`"]
+    else:
+        dt = parse_stamp(*(int(g) for g in m.groups()))
+        if dt is None:
+            return [f"{rel}: 文件名时间戳不是合法时间"]
+        if dt > moment:
+            return [f"{rel}: 文件名时间戳在未来 ({dt:%Y-%m-%d %H:%M}) —— 取时走 `commands run kb.time`"]
+    return []
 
 
 def _check_meta_value(value: str, today: date) -> str | None:
@@ -218,95 +285,115 @@ def _check_meta_value(value: str, today: date) -> str | None:
     return "后缀非规范 (应为 ` HH:MM` 或 ` (附注)`), 时刻取 `commands run kb.time`"
 
 
-def check_metadata(root: Path, mb: Path) -> list[str]:
-    """元数据层: Added / Updated / 最后活动 / doc-added / doc-updated。"""
+def _meta_problems(rel: str, suffix: str, text: str, today: date, moment: datetime) -> list[str]:
+    """元数据层单文件: Added / Updated / 最后活动 / doc-added / doc-updated (原文判据搬入)。"""
     problems: list[str] = []
-    today = now().date()
-    moment = now()
-    for path in sorted(mb.rglob("*")):
-        if path.is_dir():
-            continue
-        suffix = path.suffix.lower()
-        if suffix not in (".md", ".html", ".htm"):
-            continue
-        rel = rel_posix(path, root)
-        text = _read(path)
 
-        for m in META_FIELD_RE.finditer(text):
-            lineno = text[:m.start()].count("\n") + 1
-            err = _check_meta_value(m.group(2), today)
-            if err:
-                problems.append(f"{rel}:{lineno}: `**{m.group(1)}:**` {err}")
+    for m in META_FIELD_RE.finditer(text):
+        lineno = text[:m.start()].count("\n") + 1
+        err = _check_meta_value(m.group(2), today)
+        if err:
+            problems.append(f"{rel}:{lineno}: `**{m.group(1)}:**` {err}")
 
-        for m in LAST_ACTIVE_LINE_RE.finditer(text):
-            lineno = text[:m.start()].count("\n") + 1
-            value = m.group(1)
-            sm = LAST_ACTIVE_STRICT_RE.match(value)
-            if not sm:
+    for m in LAST_ACTIVE_LINE_RE.finditer(text):
+        lineno = text[:m.start()].count("\n") + 1
+        value = m.group(1)
+        sm = LAST_ACTIVE_STRICT_RE.match(value)
+        if not sm:
+            problems.append(
+                f"{rel}:{lineno}: `最后活动` 必须是严格 `YYYY-MM-DD HH:MM`, 现为 `{value}` "
+                "—— 取时走 `commands run kb.time`"
+            )
+            continue
+        dt = parse_stamp(
+            int(sm.group(1)) - 2000, int(sm.group(2)), int(sm.group(3)), int(sm.group(4)), int(sm.group(5))
+        )
+        if dt is None:
+            problems.append(f"{rel}:{lineno}: `最后活动` 不是合法时间 (`{value}`)")
+        elif dt > moment:
+            problems.append(f"{rel}:{lineno}: `最后活动` 在未来 ({value}) —— 取时走 `commands run kb.time`")
+
+    if suffix in (".html", ".htm"):
+        for tag in META_TAG_RE.finditer(text):
+            name_m = NAME_ATTR_RE.search(tag.group(0))
+            if not name_m or name_m.group(1) not in DOC_META_FIELDS:
+                continue
+            content_m = CONTENT_ATTR_RE.search(tag.group(0))
+            value = content_m.group(1) if content_m else ""
+            lineno = text[:tag.start()].count("\n") + 1
+            vm = DOC_META_VALUE_RE.match(value)
+            if not vm:
                 problems.append(
-                    f"{rel}:{lineno}: `最后活动` 必须是严格 `YYYY-MM-DD HH:MM`, 现为 `{value}` "
-                    "—— 取时走 `commands run kb.time`"
+                    f"{rel}:{lineno}: `<meta name=\"{name_m.group(1)}\">` 必须是 `YY-MM-DD-HHMM`, "
+                    f"现为 `{value}` —— 取时走 `commands run kb.time`"
                 )
                 continue
-            dt = parse_stamp(
-                int(sm.group(1)) - 2000, int(sm.group(2)), int(sm.group(3)), int(sm.group(4)), int(sm.group(5))
-            )
+            dt = parse_stamp(*(int(g) for g in vm.groups()))
             if dt is None:
-                problems.append(f"{rel}:{lineno}: `最后活动` 不是合法时间 (`{value}`)")
+                problems.append(f"{rel}:{lineno}: `<meta name=\"{name_m.group(1)}\">` 不是合法时间 (`{value}`)")
             elif dt > moment:
-                problems.append(f"{rel}:{lineno}: `最后活动` 在未来 ({value}) —— 取时走 `commands run kb.time`")
-
-        if suffix in (".html", ".htm"):
-            for tag in META_TAG_RE.finditer(text):
-                name_m = NAME_ATTR_RE.search(tag.group(0))
-                if not name_m or name_m.group(1) not in DOC_META_FIELDS:
-                    continue
-                content_m = CONTENT_ATTR_RE.search(tag.group(0))
-                value = content_m.group(1) if content_m else ""
-                lineno = text[:tag.start()].count("\n") + 1
-                vm = DOC_META_VALUE_RE.match(value)
-                if not vm:
-                    problems.append(
-                        f"{rel}:{lineno}: `<meta name=\"{name_m.group(1)}\">` 必须是 `YY-MM-DD-HHMM`, "
-                        f"现为 `{value}` —— 取时走 `commands run kb.time`"
-                    )
-                    continue
-                dt = parse_stamp(*(int(g) for g in vm.groups()))
-                if dt is None:
-                    problems.append(f"{rel}:{lineno}: `<meta name=\"{name_m.group(1)}\">` 不是合法时间 (`{value}`)")
-                elif dt > moment:
-                    problems.append(
-                        f"{rel}:{lineno}: `<meta name=\"{name_m.group(1)}\">` 在未来 ({value}) "
-                        "—— 取时走 `commands run kb.time`"
-                    )
+                problems.append(
+                    f"{rel}:{lineno}: `<meta name=\"{name_m.group(1)}\">` 在未来 ({value}) "
+                    "—— 取时走 `commands run kb.time`"
+                )
     return problems
 
 
-def check_body(root: Path, mb: Path) -> list[str]:
-    """正文层: 全部 .md / .html 的非规范日期变体 (规范 token 不查未来)。"""
+def _body_problems(rel: str, suffix: str, text: str) -> list[str]:
+    """正文层单文件: 非规范日期变体 (规范 token 不查未来; 代码上下文由 *body_lines 遮蔽)。"""
+    if suffix == ".md":
+        lines = _md_body_lines(text)
+    elif suffix in (".html", ".htm"):
+        lines = _html_body_lines(text)
+    else:
+        return []
     problems: list[str] = []
-    for path in sorted(mb.rglob("*")):
-        if path.is_dir():
+    for lineno, line in lines:
+        if not line:
             continue
-        suffix = path.suffix.lower()
-        if suffix == ".md":
-            lines = _md_body_lines(_read(path))
-        elif suffix in (".html", ".htm"):
-            lines = _html_body_lines(_read(path))
-        else:
-            continue
-        rel = rel_posix(path, root)
-        for lineno, line in lines:
-            if not line:
-                continue
-            for kind, detail in _scan_body_line(line):
-                problems.append(f"{rel}:{lineno}: 正文日期体例 —— {kind}: {detail}")
+        for kind, detail in _scan_body_line(line):
+            problems.append(f"{rel}:{lineno}: 正文日期体例 —— {kind}: {detail}")
     return problems
 
 
-def collect_violations(root: Path, mb: Path) -> list[str]:
-    """三层守卫合并 (顺序: 文件名 → 元数据 → 正文)。"""
-    return check_filenames(root, mb) + check_metadata(root, mb) + check_body(root, mb)
+def check_metadata(root: Path, mb: Path, paths: list[Path] | None = None) -> list[str]:
+    """元数据层单独入口 (日常编排走 collect_violations 的合并遍历); 可收窄到传入文件。"""
+    today = now().date()
+    moment = now()
+    problems: list[str] = []
+    for path in _iter_text_files(mb, paths):
+        problems.extend(_meta_problems(rel_posix(path, root), path.suffix.lower(), _read(path), today, moment))
+    return problems
+
+
+def check_body(root: Path, mb: Path, paths: list[Path] | None = None) -> list[str]:
+    """正文层单独入口 (日常编排走 collect_violations 的合并遍历); 可收窄到传入文件。"""
+    problems: list[str] = []
+    for path in _iter_text_files(mb, paths):
+        problems.extend(_body_problems(rel_posix(path, root), path.suffix.lower(), _read(path)))
+    return problems
+
+
+def collect_violations(root: Path, mb: Path, files: list[str] | None = None) -> list[str]:
+    """三层守卫合并 (顺序: 文件名 → 元数据 → 正文, 与无参逐字一致)。
+
+    files=None 全量 (kb.check / 手工); 增量只扫传入清单。元数据 + 正文在**一次遍历**里完成:
+    两轮 rglob 合一、每文件只读一次 —— 输出仍按「全部元数据行 → 全部正文行」分组, 保序不变
+    (2026-11-09 计划 §02 附带算法优化, 合计约 -0.8s)。
+    """
+    paths = resolve_paths(root, mb, files)
+    problems = check_filenames(root, mb, paths)
+    today = now().date()
+    moment = now()
+    meta_problems: list[str] = []
+    body_problems: list[str] = []
+    for path in _iter_text_files(mb, paths):
+        rel = rel_posix(path, root)
+        suffix = path.suffix.lower()
+        text = _read(path)
+        meta_problems.extend(_meta_problems(rel, suffix, text, today, moment))
+        body_problems.extend(_body_problems(rel, suffix, text))
+    return problems + meta_problems + body_problems
 
 
 # --------------------------------------------------------------------------- CLI
@@ -333,6 +420,11 @@ def main(argv: list[str] | None = None) -> int:
         "command", nargs="?", choices=("date", "time", "stamp", "check"), help="date / time / stamp / check; 省略则三行全打"
     )
     parser.add_argument("--check", action="store_true", help="日期守卫 (等价于 `check`)")
+    parser.add_argument(
+        "--files", nargs="*", metavar="PATH",
+        help="日期守卫只查传入文件 (仓库根相对 POSIX; 提交闸门经 <changed:memory-bank/**> 展开) "
+             "—— 缺省 / 空参仍全量 (兼容 kb.check 与手工全量调用)"
+    )
     parser.add_argument("--safety", action="store_true", help="回答「无参跑我是否即真动作」(冒烟过滤用)")
     parser.add_argument("--quiet", action="store_true", help="只打印违规行")
     parser.add_argument("--root", help="仓库根 (默认向上找 .git)")
@@ -362,7 +454,7 @@ def main(argv: list[str] | None = None) -> int:
         if not mb.is_dir():
             sys.stderr.write(f"memory-bank 目录不存在: {mb}\n")
             return 2
-        problems = collect_violations(root, mb)
+        problems = collect_violations(root, mb, args.files)
         for p in problems:
             print(p)
         if problems:
