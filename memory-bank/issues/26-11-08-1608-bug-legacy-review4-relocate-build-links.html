@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>relocate _build_links 建链与落账间崩溃窗口(孤儿链接撞车 rebuild_exhausted) · bug · 计划外问题</title>
+<meta name="issue-slug" content="legacy-review4-relocate-build-links">
+<meta name="issue-stamp" content="26-11-08-1608">
+<meta name="issue-type" content="bug">
+<meta name="doc-topic" content="legacy-review4-relocate-build-links">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="relocate _build_links 建链与落账间崩溃窗口(孤儿链接撞车 rebuild_exhausted)">
+<meta name="issue-summary" content="_build_links 建链与落账间崩溃窗口: os.link/os.symlink 撞盘上孤儿链接必 FileExistsError, 续建每轮 ACT_REBUILD 同处失败, attempts 耗尽 rebuild_exhausted 永久失败需手工清现场(R4 汇总件行 3 拆出)">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --mark: #161e26;     /* issue 特有: callout 底色 (plan.html 不用) */
+    --warn-bg: #2a2119;  /* issue 特有: 状态徽标底色 */
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 单栏流式版面: 与 plan.html 同一套 .sheet (封顶 1280px, 侧距 clamp(18~44px)); 旧双栏+粘性目录已删 */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+
+  /* 封面 meta 行: issue 特有, DOM 形态别改 —— 状态徽标 <span class="badge"> 被
+     flip_status (W4) 与 check_status_drift 的 BADGE_RE 机读 (k/v div 结构在判据里) */
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px 28px; font-family: var(--mono); font-size: 11.5px; color: var(--faint); border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta-row .item .k { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .meta-row .item .v { font-size: 13.5px; color: var(--dim); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin: 14px 0; font-size: 14px; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-family: var(--mono); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">计划外问题（未修）· bug</div>
+<h1>relocate _build_links 建链与落账间崩溃窗口(孤儿链接撞车 rebuild_exhausted)</h1>
+<p class="lede">_build_links 建链与落账间崩溃窗口: os.link/os.symlink 撞盘上孤儿链接必 FileExistsError, 续建每轮 ACT_REBUILD 同处失败, attempts 耗尽 rebuild_exhausted 永久失败需手工清现场(R4 汇总件行 3 拆出)</p>
+<div class="meta-row">
+  <div class="item"><div class="k">编号</div><div class="v">26-11-08-1608-bug-legacy-review4-relocate-build-links</div></div>
+  <div class="item"><div class="k">报告时间</div><div class="v">2026-11-08 16:08</div></div>
+  <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">涉及模块</div><div class="v">core</div></div>
+  <div class="item"><div class="k">发现者</div><div class="v">R4-core 收尾会话</div></div>
+</div>
+
+<section id="s1">
+  <h2><span class="no">§01</span>现象与发现场景</h2>
+  <p>本条来自<strong>存量评审 R4</strong>(计划 26-11-05-2335)R1#22(major),原聚合入池于汇总件 <a href="26-11-07-0527-bug-legacy-review4-core.html">26-11-07-0527-bug-legacy-review4-core.html</a> 明细行 3;<strong>用户拍板 2026-11-08 本轮不修,拆出本件独立认领</strong>。</p>
+  <p>触发条件:<code>relocate_exec._build_links</code> 建链与落账之间存在<strong>崩溃窗口</strong>——落账粒度按 chunk(_LINK_CHUNK,200 条)推进,目录别名整条不落账;进程在建链成功后、对应账(link_pos)落盘前崩溃/被杀,盘上留下已建成但未入账的<strong>孤儿链接</strong>。重启后按已落账 link_pos 续建,首条即撞盘上孤儿链接。</p>
+</section>
+
+<section id="s2">
+  <h2><span class="no">§02</span>证据</h2>
+  <p>claim 原文(汇总件明细行 3,锚定 freeze <code>f0883292</code>,已过 review.check 逐字校验;2026-11-08 转写):</p>
+  <div class="callout">_build_links 建链与落账之间存在崩溃窗口(落账粒度 chunk/200 条,目录别名整条不落账): create_file_alias/create_dir_alias(alias_fs.py:619/629, os.link/os.symlink)对已存在路径抛 FileExistsError,重启后按已落账 link_pos 续建必撞盘上孤儿链接,而失败回滚 _remove_links 只删 job.alias_paths 已落账条目,孤儿留在盘上且永不入账,此后每轮 ACT_REBUILD 都在同一孤儿处失败,attempts 耗尽后 rebuild_exhausted 永久失败需手工清现场(面1/面2 同根因合并;与底册 A-03 根因不同: A-03 是能力性失败,本条是崩溃窗口非幂等重建+回滚范围缺口)(黄金法则#1)</div>
+  <p>代码现状佐证(取证 2026-11-08 16:08,行号为现取):</p>
+  <ul>
+    <li><code>src/auto_qb/infra/alias_fs.py:619</code> <code>create_dir_alias</code>(os.symlink target_is_directory=True)与 <code>:629</code> <code>create_file_alias</code>(os.link 优先、回落 os.symlink):目标路径已存在时直接抛错,无「已指向 target 则跳过」的幂等探测。</li>
+    <li><code>src/auto_qb/core/modules/relocate_exec.py:264</code> <code>_build_links</code>:按 <code>rt["link_pos"]</code> 分 chunk 续建(<code>:287-302</code>),账随 chunk 落——「盘上已建成、账未落」窗口内的链接重启后重复创建即 FileExistsError。</li>
+  </ul>
+</section>
+
+<section id="s3">
+  <h2><span class="no">§03</span>影响面</h2>
+  <table>
+    <tr><th>维度</th><th>结论</th></tr>
+    <tr><td>触发条件</td><td>E1 强探测/建链执行期间进程崩溃或被杀,孤儿链接已落盘而 link_pos 账未落;此后每轮 ACT_REBUILD 在同一孤儿处必现</td></tr>
+    <tr><td>影响范围</td><td>relocate 链接路线(file_links/dir_alias)全部 job;孤儿链接永不入 job.alias_paths 账,失败回滚 _remove_links 清不掉,只能人工清现场</td></tr>
+    <tr><td>严重度</td><td>高——attempts 耗尽后 rebuild_exhausted 永久失败需手工清现场,违反黄金法则#1(幂等性:重复执行不得有副作用)</td></tr>
+  </table>
+</section>
+
+<section id="s4">
+  <h2><span class="no">§04</span>定位锚点</h2>
+  <ul>
+    <li><code>src/auto_qb/core/modules/relocate_exec.py:264</code>(取证 2026-11-08 16:08)· <code>_build_links</code> · grep <code>_build_links</code> / <code>link_pos</code></li>
+    <li><code>src/auto_qb/infra/alias_fs.py:619</code>(create_dir_alias)/<code>:629</code>(create_file_alias)/<code>:639</code>(alias_kind_of)(取证 2026-11-08 16:08)· grep <code>def create_file_alias</code> / <code>alias_kind_of</code></li>
+    <li>来源:汇总件 <code>memory-bank/issues/26-11-07-0527-bug-legacy-review4-core.html</code> 明细行 3(路线·批次 R1#22;当时行号 relocate_exec.py:235,锚定 freeze f0883292)</li>
+  </ul>
+</section>
+
+<section id="s5">
+  <h2><span class="no">§05</span>根因<span class="opt">（可选）</span></h2>
+  <div class="callout">claim 已指明根因面:崩溃窗口 + 非幂等重建 + 回滚范围缺口三事叠加(黄金法则#1 被违反)。与底册 A-03 不同根:A-03 是能力性失败,本条是崩溃窗口非幂等;认领后按修法方向排查落账粒度即可。</div>
+</section>
+
+<section id="s6">
+  <h2><span class="no">§06</span>建议修法<span class="opt">（可选）</span></h2>
+  <p>汇总件「fix」列原文三案(聚合时原样保留,未改写;认领时三选一或组合):</p>
+  <ul>
+    <li>建链改幂等:创建前探测(alias_kind_of 命中且指向 target 则跳过);</li>
+    <li>或落账粒度缩到单条;</li>
+    <li>或失败回滚按 plan 文件表全量清理而非只删已落账链接。</li>
+  </ul>
+</section>
+
+<section id="s7">
+  <h2><span class="no">§07</span>状态变更日志</h2>
+  <ul>
+    <li>2026-11-08 16:08 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    <li>2026-11-08 — 从汇总件 26-11-07-0527-bug-legacy-review4-core.html 明细行 3(R1#22)拆出;用户拍板 2026-11-08 本轮不修,拆出独立认领,fix 原文三案保留待裁决</li>
+  </ul>
+  <h3>复验</h3>
+  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <h3>修复后补充</h3>
+  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+</section>
+
+<footer>
+  26-11-08-1608-bug-legacy-review4-relocate-build-links.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+</footer>
+
+</div>
+</body>
+</html>

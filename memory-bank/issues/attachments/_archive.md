@@ -11,7 +11,7 @@
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 - [chore] [版本号双源矛盾: __init__.__version__ 0.2.0 vs pyproject 0.1.0](../26-09-21-1408-chore-version-dual-source.html) — WebUI 顶栏透出与打包元数据已差一个 minor; 建议 pyproject 单源 + 动态读取
 
-## Open (80)
+## Open (83)
 
 - [bug] [awaitPoll fail 路径不调 onEnd, 与文件头契约存在张力](../26-11-08-1621-bug-awaitpoll-fail-no-onend.html) — polling.js fail()(fn 抛异常 reject)不调 onEnd; 现注册点 tm relaunching fail 时不复位标志 — 需先裁决调用方是否在 reject 分支自清理, 有害才修
 - [bug] [drawer_rows 下载/根路径 wide:true 无条件, 值为空也占整行折行位](../26-11-08-1621-bug-drawer-rows-wide-unconditional.html) — drawer_rows.js:108-109 无条件 wide:true 且 text 兜底「—」, 值空仍占折行位(观感), 02/03 路径段同受影响
@@ -21,6 +21,9 @@
 - [refactor] [e2e .mjs 注释残留非 ASCII 图形符号, 0229 #4 原始记载同族扩展面](../26-11-08-1621-refactor-e2e-mjs-ascii-symbol-backlog.html) — 0229 #4 原始记载约 40 个 e2e .mjs 未随本轮 src 批清理; 2026-11-08 复测 58 个文件命中, 修法同 src 批: 提名单+替代表脚本化
 - [refactor] [src 下 103 个 .py 注释残留非 ASCII 图形符号(箭头/几何符等), 0229 #4 同族扩展面](../26-11-08-1621-refactor-src-py-ascii-symbol-backlog.html) — grep 实测 src 103 个 .py 命中(大头 relocate_exec 51 行/relocate_units 50 行/ops_skip 29 行), 修法同 0229 #4: 扫描提名单+code-style.md 替代表脚本化清理
 - [bug] [add_torrent 标签输入仅识别半角逗号, 与 dialogs.js 全角 U+FF0C 口径分叉](../26-11-08-1620-bug-add-torrent-tag-comma.html) — add_torrent.js 四处 split 半角逗号不认全角 U+FF0C; 68ae5221 修 dialogs.js 支持全角后同产品标签输入口径分叉
+- [bug] [relocate _build_links 建链与落账间崩溃窗口(孤儿链接撞车 rebuild_exhausted)](../26-11-08-1608-bug-legacy-review4-relocate-build-links.html) — _build_links 建链与落账间崩溃窗口: os.link/os.symlink 撞盘上孤儿链接必 FileExistsError, 续建每轮 ACT_REBUILD 同处失败, attempts 耗尽 rebuild_exhausted 永久失败需手工清现场(R4 汇总件行 3 拆出)
+- [bug] [relocate_cancel 对终态 job 无守卫: 撤 FAILED 重试整套回滚, 终态可撤语义未定义](../26-11-08-1608-bug-relocate-cancel-terminal-state-semantics.html) — relocate_cancel 对 FAILED 等终态 job 会重试整套回滚(链接已删、账面仍记), 「撤终态 job」语义未定义; 另撤销回搬对放行相位(MOVED/ARMED)是 fire-and-forget, 回搬中断数据分居 src/dst 无账可对, 该残余设计风险对所有撤销存在
+- [bug] [relocate 热启用缺 sweep_probe_residue: 探测残留延迟到下次重启才清](../26-11-08-1608-bug-relocate-hot-enable-probe-sweep.html) — relocate_lifecycle.apply 热启用(假→真)补了 _load_jobs 但未做探测残留清理(start 启用分支非 dry-run 时有), E1 强探测中崩溃留下的探测种子经 disabled 启动→热启用路径要延迟到下次重启才清
 - [refactor] [kb.new 各族 slug/topic 传参方式不一致, 跨族套用即 rc=1](../26-11-08-1131-refactor-kb-new-arg-unify.html) — issue 族收位置参数 slug、其余族要求 --topic, 跨族套形态即失败(2026-11-08 实踩 2 笔 rc=1); 彻底修=各族统一传参, 轻修=show 按族列签名
 - [docs] [hr/relocate docstring 措辞漂移聚合(fetcher refresh.reason/finalize_face failed 语义/store 行锚)](../26-11-08-0827-docs-hr-relocate-docstring-drift.html) — fetcher.py:74-76 提 refresh.reason 与 v3 字段对不上; relocate_chain.finalize_face docstring 未跟上 failed 入 STOP_PHASES; store.py:806 docstring 内部行锚 :237-244 已漂移
 - [refactor] [小件清理聚合: _WaveContext.alerted 死字段 + 测试 docstring 超宽两行](../26-11-08-0827-refactor-hr-leftover-cleanups.html) — service_common.py _WaveContext.alerted 经 0527-hr #14 修后无写入方成只读死字段; test_torrents_store.py:7/:35 存量 docstring 两行超 120 列

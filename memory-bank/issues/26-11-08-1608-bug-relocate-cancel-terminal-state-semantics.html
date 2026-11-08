@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>relocate_cancel 对终态 job 无守卫: 撤 FAILED 重试整套回滚, 终态可撤语义未定义 · bug · 计划外问题</title>
+<meta name="issue-slug" content="relocate-cancel-terminal-state-semantics">
+<meta name="issue-stamp" content="26-11-08-1608">
+<meta name="issue-type" content="bug">
+<meta name="doc-topic" content="relocate-cancel-terminal-state-semantics">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="relocate_cancel 对终态 job 无守卫: 撤 FAILED 重试整套回滚, 终态可撤语义未定义">
+<meta name="issue-summary" content="relocate_cancel 对 FAILED 等终态 job 会重试整套回滚(链接已删、账面仍记), 「撤终态 job」语义未定义; 另撤销回搬对放行相位(MOVED/ARMED)是 fire-and-forget, 回搬中断数据分居 src/dst 无账可对, 该残余设计风险对所有撤销存在">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --mark: #161e26;     /* issue 特有: callout 底色 (plan.html 不用) */
+    --warn-bg: #2a2119;  /* issue 特有: 状态徽标底色 */
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 单栏流式版面: 与 plan.html 同一套 .sheet (封顶 1280px, 侧距 clamp(18~44px)); 旧双栏+粘性目录已删 */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+
+  /* 封面 meta 行: issue 特有, DOM 形态别改 —— 状态徽标 <span class="badge"> 被
+     flip_status (W4) 与 check_status_drift 的 BADGE_RE 机读 (k/v div 结构在判据里) */
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px 28px; font-family: var(--mono); font-size: 11.5px; color: var(--faint); border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta-row .item .k { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .meta-row .item .v { font-size: 13.5px; color: var(--dim); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin: 14px 0; font-size: 14px; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-family: var(--mono); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">计划外问题（未修）· bug</div>
+<h1>relocate_cancel 对终态 job 无守卫: 撤 FAILED 重试整套回滚, 终态可撤语义未定义</h1>
+<p class="lede">relocate_cancel 对 FAILED 等终态 job 会重试整套回滚(链接已删、账面仍记), 「撤终态 job」语义未定义; 另撤销回搬对放行相位(MOVED/ARMED)是 fire-and-forget, 回搬中断数据分居 src/dst 无账可对, 该残余设计风险对所有撤销存在</p>
+<div class="meta-row">
+  <div class="item"><div class="k">编号</div><div class="v">26-11-08-1608-bug-relocate-cancel-terminal-state-semantics</div></div>
+  <div class="item"><div class="k">报告时间</div><div class="v">2026-11-08 16:08</div></div>
+  <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">涉及模块</div><div class="v">core</div></div>
+  <div class="item"><div class="k">发现者</div><div class="v">R4-core 收尾会话</div></div>
+</div>
+
+<section id="s1">
+  <h2><span class="no">§01</span>现象与发现场景</h2>
+  <p>B9 批(汇总件 26-11-07-0527-bug-legacy-review4-core.html 行 4/30:撤销残留验删/相位拒撤)实施时<strong>范围外发现</strong>(2026-11-08),两个面:</p>
+  <ul>
+    <li><strong>面 1·终态可撤语义未定义</strong>:<code>relocate_cancel</code> 对 FAILED 等终态 job 没有守卫,会重试整套回滚(删链接→搬回→落 CANCELLED),而终态 job 的链接在失败路径已删、账面仍记——「撤终态 job」这一行为本身是合法重试还是应拒撤,<strong>语义未定义、待裁决</strong>。B9 的残留校验(验删后现场)已使其不再有 copy-onto-self 风险,但终态可撤本身是否合法行为待裁决。</li>
+    <li><strong>面 2·放行相位的回搬是 fire-and-forget</strong>(残余设计风险,对所有撤销存在,不限终态):撤销回搬对放行相位(MOVED/ARMED)在 <code>setLocation(src)</code> 下发后<strong>立即落 CANCELLED 终态</strong>并 <code>_resume_members</code>,回搬过程脱离 job 跟踪(active_jobs 滤终态、相位机不再推进);回搬中断则数据分居 src/dst 无账可对。</li>
+  </ul>
+</section>
+
+<section id="s2">
+  <h2><span class="no">§02</span>证据</h2>
+  <p>代码现状(取证 2026-11-08 16:08,行号为现取):</p>
+<pre><code># src/auto_qb/core/modules/relocate_exec.py — relocate_cancel(:1173-1325)守卫序列,无终态检查:
+:1182  job is None            -&gt; blocked
+:1184  dry_run                -&gt; blocked
+:1200  MOVING/WATCHING        -&gt; blocked            (B9 修, R1#24)
+:1228  journal settled 改写   -&gt; blocked
+:1255  cost 未确认            -&gt; confirm
+:1264  同目标链式在途          -&gt; blocked
+:1288  _remove_links 后验残留 -&gt; blocked             (B9 修, R1#23)
+:1317  setLocation(job.src)   (fire-and-forget 回搬)
+:1321  落 PHASE_CANCELLED + alias_paths 清空
+:1323  journal 落 cancelled   :1324 _resume_members
+
+# 终态词表与判定:
+# src/auto_qb/core/modules/relocate_units.py:86
+TERMINAL_PHASES = frozenset({PHASE_DONE, PHASE_FAILED, PHASE_CANCELLED})
+# relocate_units.py:323-324
+def is_terminal(self): return self.phase in TERMINAL_PHASES</code></pre>
+  <p>对照:relocate_exec.py:1169 处其它入口有 <code>job.is_terminal</code> 守卫,cancel 无等价检查——对 PHASE_FAILED job 调 cancel 会把已失败的 job 再删一遍链接、再下发一次 setLocation 搬回、并把失败账(相位/last_error)改写为 CANCELLED;对 PHASE_DONE(已 finalized,alias_paths 已清)job 调 cancel 会直落 :1317 对已收尾数据再发起一次搬回。</p>
+  <p>B9 残留校验注释(relocate_exec.py:1281-1287)已载明「验删式不用计数式」的取舍,该校验挡住了残留别名下的 copy-onto-self;但「撤终态」的行为合法性不在其射程内。</p>
+</section>
+
+<section id="s3">
+  <h2><span class="no">§03</span>影响面</h2>
+  <table>
+    <tr><th>维度</th><th>结论</th></tr>
+    <tr><td>触发条件</td><td>对已 FAILED/DONE/CANCELLED 的终态 job 再次调用 relocate_cancel(如撤销入口对终态 job 未禁用、用户对失败任务点撤销重试)</td></tr>
+    <tr><td>影响范围</td><td>面 1:FAILED job 被撤后失败证据(last_error/reason)被 CANCELLED 覆盖,DONE job 被撤会对已收尾数据再发起搬回;面 2:所有撤销的回搬都是 fire-and-forget,中断即数据分居 src/dst 无账可对</td></tr>
+    <tr><td>严重度</td><td>中——需显式调用触发;面 1 属语义/设计缺口待裁决,面 2 为已知残余设计风险需登记裁决(接受并写豁免,或改对账式回搬)</td></tr>
+  </table>
+</section>
+
+<section id="s4">
+  <h2><span class="no">§04</span>定位锚点</h2>
+  <ul>
+    <li><code>src/auto_qb/core/modules/relocate_exec.py:1173</code>(取证 2026-11-08 16:08)· <code>relocate_cancel</code> · grep <code>def relocate_cancel</code>;守卫序列 :1182/:1184/:1200/:1228,回搬与终态落账 :1317-:1324</li>
+    <li><code>src/auto_qb/core/modules/relocate_units.py:86</code> · <code>TERMINAL_PHASES</code>/<code>is_terminal</code>(:323-324)· grep <code>TERMINAL_PHASES</code></li>
+    <li>来源:B9 批实施范围外发现(2026-11-08;B9 对应汇总件 26-11-07-0527-bug-legacy-review4-core.html 行 4/30,提交 52d03e18)</li>
+  </ul>
+</section>
+
+<section id="s5">
+  <h2><span class="no">§05</span>根因<span class="opt">（可选）</span></h2>
+  <div class="callout">待裁决,非实现笔误——「撤终态 job」语义未定义是设计缺口:终态可撤应报错拒撤,还是定义为「FAILED 可撤 = 重试回滚收尾」,需拍板;面 2 fire-and-forget 是当初有意的即时终态取舍,残余风险登记在案待裁决(接受并文档登记豁免,或改对账轮询式回搬)。</div>
+</section>
+
+<section id="s6">
+  <h2><span class="no">§06</span>建议修法<span class="opt">（可选）</span></h2>
+  <ul>
+    <li>面 1:relocate_cancel 增加终态守卫——终态 blocked,文案写明当前相位无撤销面;或显式定义「FAILED 可撤 = 重试回滚收尾」并写清账面改写语义(二选一,待拍板)。</li>
+    <li>面 2:先记录回搬意图并走对账轮询确认 qB 回到 src 后再落终态;或接受该风险并在设计文档登记豁免(改动代价:对账式需引入新状态机,B9 已在拒撤文案中注明不取该方案,此处仅登记)。</li>
+  </ul>
+  <p class="hint">关联件:question <a href="26-11-07-0528-question-relocate-supersede-cancel-semantics.html">26-11-07-0528-question-relocate-supersede-cancel-semantics.html</a>(链式再迁移撤销方向三选一)——相邻的撤销语义待决面,不同缺口。</p>
+</section>
+
+<section id="s7">
+  <h2><span class="no">§07</span>状态变更日志</h2>
+  <ul>
+    <li>2026-11-08 16:08 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    <li>2026-11-08 — 来源:B9 批(提交 52d03e18,汇总件行 4/30)实施范围外发现,2026-11-08;面 1 终态可撤语义未定义、面 2 放行相位回搬 fire-and-forget 残余风险,一并登记待裁决</li>
+  </ul>
+  <h3>复验</h3>
+  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <h3>修复后补充</h3>
+  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+</section>
+
+<footer>
+  26-11-08-1608-bug-relocate-cancel-terminal-state-semantics.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+</footer>
+
+</div>
+</body>
+</html>

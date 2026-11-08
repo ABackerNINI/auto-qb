@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>relocate 热启用缺 sweep_probe_residue: 探测残留延迟到下次重启才清 · bug · 计划外问题</title>
+<meta name="issue-slug" content="relocate-hot-enable-probe-sweep">
+<meta name="issue-stamp" content="26-11-08-1608">
+<meta name="issue-type" content="bug">
+<meta name="doc-topic" content="relocate-hot-enable-probe-sweep">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="relocate 热启用缺 sweep_probe_residue: 探测残留延迟到下次重启才清">
+<meta name="issue-summary" content="relocate_lifecycle.apply 热启用(假→真)补了 _load_jobs 但未做探测残留清理(start 启用分支非 dry-run 时有), E1 强探测中崩溃留下的探测种子经 disabled 启动→热启用路径要延迟到下次重启才清">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --mark: #161e26;     /* issue 特有: callout 底色 (plan.html 不用) */
+    --warn-bg: #2a2119;  /* issue 特有: 状态徽标底色 */
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 单栏流式版面: 与 plan.html 同一套 .sheet (封顶 1280px, 侧距 clamp(18~44px)); 旧双栏+粘性目录已删 */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+
+  /* 封面 meta 行: issue 特有, DOM 形态别改 —— 状态徽标 <span class="badge"> 被
+     flip_status (W4) 与 check_status_drift 的 BADGE_RE 机读 (k/v div 结构在判据里) */
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px 28px; font-family: var(--mono); font-size: 11.5px; color: var(--faint); border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta-row .item .k { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .meta-row .item .v { font-size: 13.5px; color: var(--dim); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin: 14px 0; font-size: 14px; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-family: var(--mono); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">计划外问题（未修）· bug</div>
+<h1>relocate 热启用缺 sweep_probe_residue: 探测残留延迟到下次重启才清</h1>
+<p class="lede">relocate_lifecycle.apply 热启用(假→真)补了 _load_jobs 但未做探测残留清理(start 启用分支非 dry-run 时有), E1 强探测中崩溃留下的探测种子经 disabled 启动→热启用路径要延迟到下次重启才清</p>
+<div class="meta-row">
+  <div class="item"><div class="k">编号</div><div class="v">26-11-08-1608-bug-relocate-hot-enable-probe-sweep</div></div>
+  <div class="item"><div class="k">报告时间</div><div class="v">2026-11-08 16:08</div></div>
+  <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">涉及模块</div><div class="v">core</div></div>
+  <div class="item"><div class="k">发现者</div><div class="v">R4-core 收尾会话</div></div>
+</div>
+
+<section id="s1">
+  <h2><span class="no">§01</span>现象与发现场景</h2>
+  <p>B8 批(汇总件 26-11-07-0527-bug-legacy-review4-core.html 行 5/31:stop 条件持久化/热启用 load)实施后的<strong>批评审 nit3</strong>,发现于 2026-11-08:B8 给 <code>relocate_lifecycle.apply</code> 热启用(enabled 假→真跳变)补了 <code>_load_jobs</code>(与 start 启用分支同口径),但 start 启用分支在非 dry-run 时还做 <code>sweep_probe_residue</code> 探测残留清理,<strong>apply 热启用分支没有同款清理</strong>——两分支口径不对称。</p>
+  <p>后果:E1 强探测中崩溃(auto-qb 被杀)会在用户 qB 留下探测种子+文件(R2 纪律:启动时按 tag 清理);经「disabled 启动→热启用」路径进入的会话,这批探测残留要<strong>延迟到下次进程重启</strong>(start 再跑到启用分支)才被扫走。</p>
+</section>
+
+<section id="s2">
+  <h2><span class="no">§02</span>证据</h2>
+  <p>代码对照(取证 2026-11-08 16:08,行号为现取;start:34 为任务给定的对照锚):</p>
+<pre><code># src/auto_qb/core/modules/relocate_lifecycle.py — start() 启用分支(:29-36),有 sweep:
+29:         if getattr(self._conf, "enabled", False):
+30:             alias_fs.get_capability(refresh=True)
+31:             n = self._load_jobs()
+32:             # E1 探测崩溃残留扫描(计划 26-11-04-0055 P2-⑥): add 之后 delete 之前被杀会在用户
+33:             # qB 留探测种子+文件, 启动时按 tag 清理(R2); dry-run 不动手(真写, 与相位机同口径)
+34:             swept = 0 if self._dry_run() else sweep_probe_residue(ctx)
+
+# 同文件 apply() 热启用分支(:84-88),只补了 _load_jobs,无 sweep_probe_residue:
+84:         if enabled:
+85:             alias_fs.get_capability(refresh=True)
+86:             if not was_enabled:
+87:                 restored = self._load_jobs()</code></pre>
+  <p>B8 修复提交 a3d67d0e(「热启用补 _load_jobs 恢复在途账」)只对齐了 job 账恢复一半,sweep 一半漏对齐。</p>
+</section>
+
+<section id="s3">
+  <h2><span class="no">§03</span>影响面</h2>
+  <table>
+    <tr><th>维度</th><th>结论</th></tr>
+    <tr><td>触发条件</td><td>enabled=false 启动(先前会话 E1 强探测中崩溃留有探测种子)→ 配置热启用 relocate.enabled 假→真且非 dry-run;期间无进程重启</td></tr>
+    <tr><td>影响范围</td><td>用户 qB 中残留 aqb-probe 前缀探测种子与文件(列表可见、占空间);热启用会话内无人清理,延迟到下次重启才被 start 启用分支扫走</td></tr>
+    <tr><td>严重度</td><td>低-中——残留有界且最终会清;但热启用与 start 启用分支守卫口径不对称,属 B8 修复的对齐缺口</td></tr>
+  </table>
+</section>
+
+<section id="s4">
+  <h2><span class="no">§04</span>定位锚点</h2>
+  <ul>
+    <li><code>src/auto_qb/core/modules/relocate_lifecycle.py:86-87</code>(取证 2026-11-08 16:08)· <code>apply</code> 热启用分支(补 _load_jobs 处)· grep <code>if not was_enabled</code></li>
+    <li>对照:<code>src/auto_qb/core/modules/relocate_lifecycle.py:34</code>(start 启用分支的 sweep_probe_residue)· grep <code>sweep_probe_residue</code></li>
+    <li>来源:B8 批评审 nit3(2026-11-08 发现;B8 对应汇总件 26-11-07-0527-bug-legacy-review4-core.html 行 5/31,提交 a3d67d0e)</li>
+  </ul>
+</section>
+
+<section id="s5">
+  <h2><span class="no">§05</span>根因<span class="opt">（可选）</span></h2>
+  <div class="callout">非待查——根因即「热启用分支与 start 启用分支口径不对称」:B8 对齐 _load_jobs 时未同步对齐 sweep_probe_residue 一半,属修复的对齐缺口而非新缺陷。</div>
+</section>
+
+<section id="s6">
+  <h2><span class="no">§06</span>建议修法<span class="opt">（可选）</span></h2>
+  <p>热启用且非 dry-run 时补 <code>sweep_probe_residue</code>(与 start 同判:非 dry-run 才动手;dry-run 保持零真写)。<code>apply</code> 无 ctx 时的取参方式按 <code>_load_jobs</code>/能力重探同款现读路径处理,认领时再定。</p>
+</section>
+
+<section id="s7">
+  <h2><span class="no">§07</span>状态变更日志</h2>
+  <ul>
+    <li>2026-11-08 16:08 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    <li>2026-11-08 — 来源:B8 批评审 nit3(B8 修汇总件行 5/31,提交 a3d67d0e),发现于 2026-11-08;与汇总件行 31(热启用 load,B8 已修)同分支不同半,余 sweep 一半未对齐</li>
+  </ul>
+  <h3>复验</h3>
+  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <h3>修复后补充</h3>
+  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+</section>
+
+<footer>
+  26-11-08-1608-bug-relocate-hot-enable-probe-sweep.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+</footer>
+
+</div>
+</body>
+</html>
