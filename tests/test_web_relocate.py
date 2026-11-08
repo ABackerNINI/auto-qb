@@ -15,8 +15,8 @@
 - test_web_relocate_precheck_routes: 路由级 403(关, 零入队)/ 400(空 hashes/空 location/缺 name)/
   门开后入队 cmd 与载荷形状
 - test_web_relocate_cancel_route: 撤销路由 403(关)/ 400(空 job_id)/ 门开后入队 cmd 与载荷形状
-- test_web_relocate_cancel_drain: drain 级两步走: 未确认只回成本(数据零变动), 确认后
-  搬回 + phase=cancelled + journal 落盘
+- test_web_relocate_cancel_drain: drain 级两步走: MOVING 期撤销 blocked(moving, R1#24 零 qB 写),
+  推进到 armed 后未确认只回成本(数据零变动), 确认后搬回 + phase=cancelled + journal 落盘
 - test_web_relocate_precheck_drain: drain 级回执 truth={results, summary} 结构 + gone verdict +
 - test_relocate_add_gate_wired_in_add_dialog
 - test_relocate_confirm_loop_wired_in_move_dialog: 前端静态守阵(issue 26-11-04-0734): _editPost /
@@ -906,16 +906,32 @@ def test_web_relocate_cancel_route(web_env):
 
 def test_web_relocate_cancel_drain(tmp_path, monkeypatch):
     """drain 级撤销两步走: 未确认(cls=confirm + cost, 数据零变动); 确认(cls=ok,
-    set_location 搬回 src + phase=cancelled + journal 落盘)"""
-    from relocate_exec_support import _stub_probe_pass
+    set_location 搬回 src + phase=cancelled + journal 落盘)
+
+    R1#24 起 MOVING/WATCHING 期撤销直接拒绝(在途搬迁不可叠加回搬指令), 两步走改在
+    armed 现场走 —— 这才是撤销的真实窗口。
+    """
+    from relocate_exec_support import _run_ticks, _simulate_moved, _spy_spawn, _stub_probe_pass
 
     pin_disk_usage(monkeypatch)
     _stub_probe_pass(monkeypatch)  # R1#35 后多成员组执行链必走 run_probe(本用例只关心撤销链)
-    mgr, client, src, dst, content, _ = relocate_env(tmp_path, file_count=2, data_dir=False)
+    mgr, client, src, dst, content, files = relocate_env(tmp_path, file_count=2, data_dir=False)
     mgr.config.data_dir = str(tmp_path / "data")
     mod = mgr.host.get("relocate")
+    _spy_spawn(mod, [])
     job_id = mod.relocate_execute(["HA"], dst)[0]["job_id"]
     assert mod.get_job(job_id).phase == "moving" and client.calls  # 已下发搬迁
+    # 在途搬迁期撤销: blocked(moving), 连成本确认面都不给(R1#24)
+    client.calls.clear()
+    mgr.web.commands.put(("relocate_cancel", {"job_id": job_id, "cmd_id": "rc0"}))
+    mgr.web.consume_commands()
+    truth0 = mgr.web.results["rc0"]["truth"]
+    assert truth0["cls"] == "blocked" and truth0["reasons"][0]["gate"] == "moving", truth0
+    assert client.calls == [], f"在途搬迁期撤销零 qB 写: {client.calls}"
+    # 推进到 armed(撤销的真实窗口)再走两步
+    _simulate_moved(mgr, dst, files, content)
+    _run_ticks(mod, 6)
+    assert mod.get_job(job_id).phase == "armed", mod.get_job(job_id).phase
     # 第一步: 不确认 => 只回成本, 零 qB 写(撤销前清空并断言无新调用)
     client.calls.clear()
     mgr.web.commands.put(("relocate_cancel", {"job_id": job_id, "cmd_id": "rc1"}))

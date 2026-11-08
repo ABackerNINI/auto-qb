@@ -191,9 +191,15 @@ def test_pending_tag_remove_failure_retried(tmp_path, monkeypatch):
 
 
 def test_pending_tag_never_added_terminal_no_remove(tmp_path, monkeypatch):
-    """未 armed(从未加过标签)直接撤销: 终态也不得发 remove —— 那是多余的 qB 写"""
+    """未 armed(从未加过标签)直接撤销: 终态也不得发 remove —— 那是多余的 qB 写
+
+    车辆相位用 moved(数据已到目标、未武装、从未 add; R1#24 起 MOVING/WATCHING 期撤销
+    被 phase guard 拒绝, 不再是可撤窗口)。
+    """
     mgr, client, mod, job_id, dst, content, files = _tag_env(tmp_path, monkeypatch)
-    assert mod.get_job(job_id).phase == ru.PHASE_MOVING  # 未 armed, 从未 add
+    _simulate_moved(mgr, dst, files, content)
+    _run_ticks(mod, 1)  # 单拍: MOVING -> MOVED(第二拍就进 moved 段建链武装了)
+    assert mod.get_job(job_id).phase == ru.PHASE_MOVED  # 未 armed, 从未 add
 
     r = mod.relocate_cancel(job_id, cost_confirmed=True)
     assert r["cls"] == "ok" and mod.get_job(job_id).phase == ru.PHASE_CANCELLED
