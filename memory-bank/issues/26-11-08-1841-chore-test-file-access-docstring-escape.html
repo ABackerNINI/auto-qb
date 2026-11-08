@@ -97,7 +97,7 @@
 
 <section id="s1">
   <h2><span class="no">§01</span>现象</h2>
-  <p>导入 <code>tests/test_file_access.py</code> 时 Python 报 <code>SyntaxWarning: invalid escape sequence '\s'</code> —— 用例 docstring 里的 Windows UNC 路径 <code>\\NAS\share</code> 末段用了单反斜杠, 属无效转义; 全量 / 快测每次收集都在 warnings summary 刷该行。用例行为不受影响, 属源码卫生, 计划外未修。</p>
+  <p><span class="hint">（入池时 18:41 的现象快照；现已修复并翻 Done，见 §04）</span>导入 <code>tests/test_file_access.py</code> 时 Python 报 <code>SyntaxWarning: invalid escape sequence '\s'</code> —— 用例 docstring 里的 Windows UNC 路径 <code>\\NAS\share</code> 末段用了单反斜杠, 属无效转义; 当时全量 / 快测每次收集都在 warnings summary 刷该行。用例行为不受影响, 属源码卫生, 入池时计划外未修。</p>
 </section>
 
 <section id="s2">
@@ -106,13 +106,13 @@
   <ul>
     <li><code>tests/test_file_access.py:289</code>（取证 2026-11-08 18:39）· <code>def test_mapped_unc_source_scandir_logical</code> 的 docstring · grep <code>UNC 映射源</code></li>
     <li>复验：2026-11-08 本轮 <code>test.full</code> 与 <code>test.quick</code> 的 warnings summary 仍出现该告警（取证 2026-11-08 18:39）。</li>
-    <li>复验：2026-11-08 本轮认领后，<code>python -W error::SyntaxWarning</code> 编译该文件精确报 <code>line 289: "\s" is an invalid escape sequence</code> —— 现象仍在，未过期。</li>
+    <li>改前红验（修复前取证，2026-11-08 本轮认领后）：<code>python -W error::SyntaxWarning</code> 编译该文件精确报 <code>line 289: "\s" is an invalid escape sequence</code>；改后同命令为 <code>COMPILE OK: no SyntaxWarning</code>，详见 §04 修复后补充。</li>
   </ul>
 </section>
 
 <section id="s3">
   <h2><span class="no">§03</span>建议<span class="opt">（可选）</span></h2>
-  <p>改 raw docstring（<code>r"""..."""</code>）或把 <code>\share</code> 双写成 <code>\\share</code>；一行改动，待排期。</p>
+  <p><span class="hint">（入池时 18:41 的建议原文）</span>改 raw docstring（<code>r"""..."""</code>）或把 <code>\share</code> 双写成 <code>\\share</code>；一行改动，待排期。<span class="hint">实际采用前者，见 §04 修复后补充。</span></p>
 </section>
 
 <section id="s4">
