@@ -7,7 +7,7 @@
 - test_flat_view_refreshed_by_main_loop_tick: 种子页速度随主循环刷新(回归: 平铺视图曾被"饿死"停在旧快照)
 - test_rebuild_views_single_entry_point: rebuild_views 唯一重建入口(四视图 + 版本号 + 脏标记一次完成)
 - test_api_state_status_carries_server_state: status.server(state)恒回传不受 rid 门控(状态栏与行数据同源同轮)
-- test_api_torrent_detail_endpoint: /api/torrents/{hash} 全字段详情(to_dict+site+HR); 未知 hash 404
+- test_api_torrent_detail_endpoint: /api/torrents/{hash} 全字段详情(to_dict+site+HR); 未知 hash 404; magnet_uri 只外发 tr= 掩码值(issue 26-11-08-0043)
 - test_api_torrent_subresources: /api/torrents/{hash}/trackers|files|peers 透传(trackers 例外: url 已 mask, plan 26-10-07-0055 S3); 未知 404/断连 503
 - test_api_torrent_trackers_masked_response: 守阵① API 外发(plan 26-10-07-0055 S4) —— trackers 响应 url 一律 mask(凭据原文不外发, 缺席断言不写死参数名), mask 保留 scheme://host+path+参数名, 虚拟条目透传, 两次请求逐字节一致; 红验: 路由改回透传
 - test_tracker_snapshot_masked_at_ingestion: 入库泄敏单点(issue 26-11-07-0536 批B) —— tracker 槽位只落 mask 值(原文 passkey 不进快照; 空值不掩/虚拟条目透传/同 host 不同凭据 mask 互异/重复灌同原文不产生假变化); 红验: apply_delta 临时去掉 mask_tracker_url
@@ -31,6 +31,7 @@
 ### T2a2 覆盖率第三轮: 静态挂载防御分支
 - test_mount_static_ui_missing_static_dir_registers_no_routes: static 目录不存在时 mount_static_ui 零注册不炸(不注册根重定向与 /newui, 防御分支直驱)
 """
+import hashlib
 import json
 
 import logging
@@ -315,7 +316,10 @@ def test_api_state_status_carries_server_state(web_env):
 
 
 def test_api_torrent_detail_endpoint(web_env):
-    """GET /api/torrents/{hash}: 全字段详情(to_dict + site + HR 展示字段); 未知 hash 404"""
+    """GET /api/torrents/{hash}: 全字段详情(to_dict + site + HR 展示字段); 未知 hash 404
+
+    magnet_uri 走入库掩码槽(issue 26-11-08-0043): 响应体里 tr= 只有掩码值, passkey 原文不外发。
+    """
     from auto_qb.torrents import TorrentRecord
 
     mgr, client = web_env
@@ -342,7 +346,7 @@ def test_api_torrent_detail_endpoint(web_env):
             "tags": "",
             "category": "",
             "content_path": r"R:\D\Detail",
-            "magnet_uri": "magnet:?xt=urn:btih:HA",
+            "magnet_uri": "magnet:?xt=urn:btih:HA&tr=https%3A%2F%2Fpt.example.com%2Fannounce%3Fpasskey%3Dsec",
             "eta": 8640000,
             "num_seeds": 3,
         },
@@ -354,7 +358,14 @@ def test_api_torrent_detail_endpoint(web_env):
     assert resp.status_code == 200
     t = resp.json()["torrent"]
     assert t["hash"] == "HA" and t["name"] == "Detail"
-    assert t["magnet_uri"] == "magnet:?xt=urn:btih:HA" and t["num_seeds"] == 3
+    raw_magnet = "magnet:?xt=urn:btih:HA&tr=https%3A%2F%2Fpt.example.com%2Fannounce%3Fpasskey%3Dsec"
+    # 回退必红(掩码分支删掉这条就红): 响应体 tr= 值 unquote 后等于掩码期望
+    # (passkey 值 = sha256 前 16 位, 测试侧独立重算, 不同源 mask 函数)
+    assert t["magnet_uri"] != raw_magnet, "详情响应体不得透传 magnet_uri 原文(issue 26-11-08-0043)"
+    from urllib.parse import unquote as _unquote
+    assert _unquote(t["magnet_uri"].split("&tr=", 1)[1]) == \
+        "https://pt.example.com/announce?passkey=" + hashlib.sha256(b"sec").hexdigest()[:16]
+    assert t["num_seeds"] == 3
     assert t["site"] == "Unknown", "未匹配站点时 site 为 Unknown(与 tracker_name 语义一致)"
     assert "hr_triggered" in t and "infohash_v1" in t, "HR 字段与 to_dict 全字段都应透出"
     assert client.get("/api/torrents/NOPE", headers=auth).status_code == 404

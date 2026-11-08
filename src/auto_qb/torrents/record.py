@@ -8,7 +8,7 @@ from qbittorrentapi import TorrentState
 from ..config import TrackerConfig
 from ..hr.resolve import HrAnchor, HrIdentity, HrJudgement
 from ..infra.clock import SYSTEM_CLOCK
-from ..infra.utils import mask_tracker_entry, mask_tracker_url, match_tag_patterns
+from ..infra.utils import mask_magnet_tracker_urls, mask_tracker_entry, mask_tracker_url, match_tag_patterns
 from .compat import REQUIRED_TORRENT_FIELDS, _SNAPSHOT_FIELDS, _SNAPSHOT_FIELD_SET
 from .view import _VIEW_FIELD_SET, _VIEW_QUANTUM, view_field_value
 
@@ -84,6 +84,9 @@ class TorrentRecord:
     max_seeding_time: int = -1
     max_inactive_seeding_time: int = -1
     # ---- 元数据 ----
+    # tr= 内嵌 announce URL(私站含 passkey): 入库即掩码(apply_delta 单点之二, issue
+    # 26-11-08-0043) —— 槽内只有 tr= 掩码值, 原文不落快照; 详情 to_dict / 表达式面
+    # tor.magnet_uri 全走本槽。前端「复制 magnet」因此拿到的是掩码版(改造后续任务)。
     magnet_uri: str = ""
     infohash_v1: str = ""
     infohash_v2: str = ""
@@ -209,6 +212,12 @@ class TorrentRecord:
                 # 破坏 _site_alert 的「无 tracker 不算缺配置」判定); 虚拟条目经 R1 原样透传。
                 # 掩码放在相等比较之前: 旧值已掩, 掩后逐值确定性一致(R7)才不产生假变化。
                 v = mask_tracker_url(v)
+            elif f == "magnet_uri" and isinstance(v, str) and v:
+                # 入库泄敏单点之二(issue 26-11-08-0043): magnet_uri 的 tr= 参数内嵌同一批
+                # announce URL(私站含 passkey), 与 tracker 同泄敏面 —— 槽位只落 tr= 掩码值,
+                # 详情 to_dict 与表达式面 tor.magnet_uri 全从本槽取数, 单点掩码即全覆盖。
+                # 空值不掩(同 tracker 口径); 掩码确定性一致, 同样放在相等比较之前。
+                v = mask_magnet_tracker_urls(v)
             cur = getattr(self, f)
             if cur == v:
                 continue

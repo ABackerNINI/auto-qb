@@ -9,9 +9,9 @@
 <meta name="issue-stamp" content="26-11-08-0043">
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="webui-torrent-detail-magnet-leak">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/issues/26-11-09-0639-bug-webui-copy-magnet-masked-degrade.html, memory-bank/tasks/26-11-09-backend-magnet-uri-ingest-mask.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="响应体泄敏同族: 详情 rec.to_dict() 透传 magnet_uri, 表达式面 tor.magnet_uri 同">
 <meta name="issue-summary" content="/api/torrents/{hash} 详情 rec.to_dict() 全字段透传含 magnet_uri(私站 tr= announce 凭据), 表达式面 tor.magnet_uri 同——与已修 tracker 泄漏(26-11-07-0536 表行2)同性质">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-08-0043-bug-webui-torrent-detail-magnet-leak</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-08 00:43</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
@@ -143,11 +143,15 @@
   <h2><span class="no">§07</span>状态变更日志</h2>
   <ul>
     <li>2026-11-08 00:43 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-09 — 状态 Open → In Progress（kb.status）</li>
+    <li>2026-11-09 — 状态 In Progress → Done（kb.status）</li>
+</ul>
   <h3>复验</h3>
-  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <p>复验 2026-11-09（HEAD eefda04f）仍复现：<code>record.py:87</code> magnet_uri 快照槽位原文落槽；<code>to_dict()</code> 全库唯一消费面就是详情路由（<code>torrent_detail.py:45</code>）；表达式面 <code>tor.magnet_uri</code> 由 <code>rules/expr/env.py</code> 名字表从快照字段自动派生（改槽位即自动覆盖，无需单独改 env.py）；field_snapshots 只存监听字段，state.json 无原文 —— 泄露面=内存槽位 + 详情响应体 + 表达式面三处，单点掩码全覆盖。</p>
   <h3>修复后补充</h3>
-  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  <p><strong>实际修法</strong>（2026-11-09，采纳建议修法的「快照入库」路径）：① qbmanager 的 <code>_mask_magnet_tracker_urls</code>（26-11-07-0527 debug 导出先例）下沉为 <code>infra/utils.py::mask_magnet_tracker_urls</code> 公开单点；② <code>torrents/record.py apply_delta</code> 增设入库泄敏单点之二（与 26-11-07-0536 批B tracker 同款口径：掩码在相等比较之前、空值不掩、确定性一致不产生假变化），tr= 掩码值落槽 —— 详情响应体与表达式面自动全覆盖，原文不再落快照。</p>
+  <p><strong>与建议修法的差异（改道说明）</strong>：建议的「响应装配处掩码/剥离」未采用 —— 响应装配多点必然漏新面（批B 已证），且 <code>to_dict()</code> 消费面唯一，槽位单点更优。<strong>产品拍板</strong>：前端「复制 magnet」三处入口依赖原文（BUG-9/P-06 按需取详情），掩码后复制出的是废链接（tr= 凭据被掩、私站无法 announce）；用户拍板口径从紧 —— 本修不动前端，复制 magnet 出掩码版，入口移除/改造为后续独立任务（另入池）。</p>
+  <p><strong>验证方式与测试数字</strong>：新增钉面 <code>test_utils_parse.py::test_mask_magnet_tracker_urls</code>（tr= 掩码/多 tr=/非 magnet 与空原样/确定性）、<code>test_sync.py::test_apply_delta_masks_magnet_uri_tr_values</code>（落槽即掩/重复喂同原文零假变化）、<code>test_web_seed_center.py::test_api_torrent_detail_endpoint</code> 扩（详情响应体 passkey 原文不外发）；<code>commands run test.quick</code> 实测 5871 passed, 2 skipped。</p>
 </section>
 
 <footer>

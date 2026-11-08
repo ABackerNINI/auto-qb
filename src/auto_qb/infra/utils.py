@@ -24,7 +24,7 @@ import logging
 from dataclasses import dataclass
 from datetime import time as dtime
 from functools import wraps
-from urllib.parse import urlparse
+from urllib.parse import quote, unquote, urlparse
 from typing import Callable, List, Optional, Tuple
 
 from .clock import SYSTEM_CLOCK
@@ -263,6 +263,35 @@ def mask_tracker_entry(entry: dict) -> dict:
     if not isinstance(url, str) or not url or url.startswith(VIRTUAL_TRACKER_PREFIXES):
         return entry
     return {**entry, "url": mask_tracker_url(url)}
+
+
+def mask_magnet_tracker_urls(magnet_uri: str) -> str:
+    """magnet URI 的 tr= 参数值过 tracker URL 同款 mask(泄敏域之三, issue 26-11-08-0043)
+
+    magnet_uri 由 qB 从种子 tracker 集生成, tr= 值是 percent-encoded 的完整 announce URL
+    (私站含 passkey), 与 tracker 字段同泄敏面(先例: qbmanager debug 导出
+    _mask_debug_torrent_dict 26-11-07-0527 R1#10; 本函数由该处下沉, 现为
+    torrents/record.py apply_delta 入库单点共用)。先 unquote 还原再过 mask_tracker_url
+    (对 encoded 串 mask 取不出 host, 只会整串降级), 掩码值重新 percent-encode 拼回
+    (保持 magnet 形态)。非 magnet URI / 解析异常 / 无 query 原样返回, 绝不抛异常
+    (同 infra.utils mask 口径: 脱敏失败不打断入库)。空值不掩(同 tracker 口径: mask 会
+    把 "" 抬成占位串); 确定性: unquote/mask/quote 均逐值确定, 同原文掩出同值 ——
+    apply_delta 掩后比较不产生假变化(同 tracker R7)。
+    """
+    try:
+        parts = urlparse(magnet_uri)
+    except Exception:
+        return magnet_uri
+    if parts.scheme != "magnet" or not parts.query:
+        return magnet_uri
+    masked = []
+    for seg in parts.query.split("&"):
+        name, eq, value = seg.partition("=")
+        if name == "tr" and eq and value:
+            masked.append(f"tr={quote(mask_tracker_url(unquote(value)), safe='')}")
+        else:
+            masked.append(seg)
+    return f"magnet:?{'&'.join(masked)}"
 
 
 # display_host 的折叠锚:「可达等价回环」= 解析归一后等于 127.0.0.1 或 ::1 —— IPv6 全写法

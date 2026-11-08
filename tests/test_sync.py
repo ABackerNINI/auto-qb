@@ -18,6 +18,7 @@
 - test_apply_delta_unknown_fields_to_raw: 未声明字段(qB 新版本)落 _raw, 属性兜底(前向兼容)
 - test_record_required_fields_always_present: 必需字段全为 slot 恒存在; 未知属性仍抛 AttributeError
 - test_apply_delta_extension_fields: 扩展字段(可选快照字段)更新生效并计入变化集
+- test_apply_delta_masks_magnet_uri_tr_values: 入库泄敏单点之二(issue 26-11-08-0043)——magnet_uri 的 tr= 落槽即掩/重复喂同原文不产生假变化/无 tr= 原样
 - test_record_defaults_are_qb_sentinels: 未提供字段保持 qB 哨兵默认值(老版本兼容)
 - test_record_to_dict_merges_raw: to_dict 快照全字段 + _raw 合并
 - test_record_state_enum_cached_and_invalidated: state_enum 有缓存, state 变化后失效
@@ -66,6 +67,7 @@
 - test_store_reset_sync_clears_rate_freshness: reset_sync 清新鲜度追踪
 """
 import ast
+import hashlib
 import io
 import logging
 import os
@@ -76,6 +78,7 @@ import tokenize
 from io import StringIO
 from pathlib import Path
 from types import SimpleNamespace
+from urllib.parse import unquote
 
 import pytest
 
@@ -205,6 +208,33 @@ def test_apply_delta_extension_fields():
     assert changed == {"eta", "num_seeds", "magnet_uri"}
     assert rec.apply_delta({"eta": None}) == frozenset()  # None = 未提供
     assert rec.eta == 120
+
+
+def test_apply_delta_masks_magnet_uri_tr_values():
+    """入库泄敏单点之二(issue 26-11-08-0043): magnet_uri 的 tr= 值落槽即掩, 原文不进快照
+
+    - tr= 内嵌 announce URL(私站含 passkey): 槽内只有 tr= 掩码值, passkey 原文不可见,
+      非 tr= 参数(xt/dn)原样
+    - 掩码放在相等比较之前(R7 同款): 同一原文重复 apply_delta 不产生假变化(变化集为空)
+    - 无 tr= / 空 / 非 magnet 值原样透传(掩码口径不碰无凭据面)
+    """
+    rec = TorrentRecord(hash="H1")
+    raw = "magnet:?xt=urn:btih:H1&dn=T1&tr=https%3A%2F%2Fpt.example.com%2Fannounce%3Fpasskey%3Dabc"
+    changed = rec.apply_delta({"hash": "H1", "magnet_uri": raw})
+    assert changed == {"magnet_uri"}
+    # 回退必红(掩码分支整体删掉这条就红): 落槽值必须 != 原文, 且 tr= 值 unquote 后
+    # 等于掩码期望(passkey 值 = sha256 前 16 位, 测试侧独立重算, 不同源 mask 函数)
+    assert rec.magnet_uri != raw, "原文不得原样落槽"
+    tr_unquoted = unquote(rec.magnet_uri.split("&tr=", 1)[1])
+    assert tr_unquoted == "https://pt.example.com/announce?passkey=" + hashlib.sha256(b"abc").hexdigest()[:16]
+    assert rec.magnet_uri.startswith("magnet:?xt=urn:btih:H1&dn=T1&tr="), "非 tr= 参数原样"
+    assert rec.to_dict()["magnet_uri"] == rec.magnet_uri, "详情响应面与槽位同值(单点掩码即全覆盖)"
+    # 重复喂同一原文: 掩后确定性一致, 不产生假变化
+    assert rec.apply_delta({"hash": "H1", "magnet_uri": raw}) == frozenset()
+    # 无 tr= 的 magnet 原样透传
+    rec2 = TorrentRecord(hash="H2")
+    rec2.apply_delta({"hash": "H2", "magnet_uri": "magnet:?xt=urn:btih:H2"})
+    assert rec2.magnet_uri == "magnet:?xt=urn:btih:H2"
 
 
 def test_record_defaults_are_qb_sentinels():

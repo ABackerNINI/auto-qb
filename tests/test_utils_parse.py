@@ -54,6 +54,7 @@
 - test_mask_tracker_url_path_and_query: mask R5/R6 path 末段高熵判定(边界 15/16 位)/端点名保留/fragment 丢/query 全值 hash 含未知参数名/裸名原样/段序不变/值不百分号解码
 - test_mask_tracker_url_deterministic_and_unique: mask R7/R8 确定性(两次逐字节一致)与唯一性三例
 - test_mask_tracker_entry: mask R9 只改 url 其余字段保全/原条目不被就地改/缺 url 与虚拟条目原样返回
+- test_mask_magnet_tracker_urls: magnet tr= 值过 tracker 同款 mask(issue 26-11-08-0043)/多 tr= 逐个掩/非 tr= 参数原样/非 magnet 与空原样/确定性
 - test_display_host: 展示地址(可达等价回环 127.0.0.1/::1 含 v4-mapped/全写法折 localhost, 其余回环 127.0.0.2+ 与对外地址原样, 异常入参不炸)
 - test_time_in_range_minute_granularity: 时段判定按**分钟**粒度(端点整分钟含在内: 23:59:30 在 "00:00-23:59" 内 / 跨午夜两端 / 起点前 1 分仍在区间外) —— issue 26-10-19-0013 的守阵
 - test_is_loopback_host_empty_and_unparsable: 回环判据两条保守出口(空/None、主机名 -> False; localhost 大小写与两族字面量 -> True)
@@ -745,6 +746,42 @@ def test_mask_tracker_entry():
     # 命中 R1(虚拟条目): 原样返回
     virt = {"url": "** [DHT] **", "status": 0}
     assert mask_tracker_entry(virt) is virt
+
+
+def test_mask_magnet_tracker_urls():
+    """mask_magnet_tracker_urls(issue 26-11-08-0043): magnet tr= 值过 tracker 同款 mask, 其余参数原样
+
+    - tr= percent-encoded announce URL(私站含 passkey): unquote 还原 -> mask -> 重新
+      percent-encode 拼回, 掩码值里 passkey 不可见(host/参数名保留)
+    - 多 tr= 逐个掩; 非 tr= 参数(xt/dn 等)逐字节原样
+    - 非 magnet URI / 无 query / 空串原样返回; 确定性: 同原文两次掩出逐字节一致
+    """
+    from auto_qb.infra.utils import mask_magnet_tracker_urls
+    from urllib.parse import quote, unquote
+
+    tr = quote("https://pt.example.com/announce?passkey=abc", safe="")
+    magnet = f"magnet:?xt=urn:btih:H1&dn=T1&tr={tr}"
+    masked = mask_magnet_tracker_urls(magnet)
+    # tr= 值已掩(passkey 不可见), 掩码值重新 percent-encode 保持 magnet 形态
+    assert masked.startswith("magnet:?xt=urn:btih:H1&dn=T1&tr=")
+    tr_value = unquote(masked.split("&tr=")[1])
+    assert tr_value == "https://pt.example.com/announce?passkey=" + _mask_h16("abc")
+    assert "abc" not in masked
+    # 多 tr=: 逐个掩, 其余参数原样
+    tr2 = quote("udp://tracker.opentrackr.org:1337", safe="")
+    masked2 = mask_magnet_tracker_urls(f"magnet:?xt=urn:btih:H1&tr={tr}&tr={tr2}")
+    assert masked2.count("&tr=") == 2, "两个 tr= 分隔符原样保留"
+    assert unquote(masked2.split("&tr=")[2]) == "udp://tracker.opentrackr.org:1337"
+    # 无凭据的裸 tr= 值掩后 host 保留(不降级为整串占位)
+    masked3 = mask_magnet_tracker_urls("magnet:?xt=urn:btih:H1&tr=udp%3A%2F%2Ftracker.opentrackr.org%3A1337")
+    assert "tracker.opentrackr.org" in unquote(masked3.split("&tr=")[1])
+    # 非 magnet URI / 无 query / 空串原样返回
+    assert mask_magnet_tracker_urls("https://pt.example.com/announce?passkey=abc") == \
+        "https://pt.example.com/announce?passkey=abc"
+    assert mask_magnet_tracker_urls("magnet:?") == "magnet:?"
+    assert mask_magnet_tracker_urls("") == ""
+    # 确定性: 同原文两次掩出逐字节一致(apply_delta 掩后比较不产生假变化)
+    assert mask_magnet_tracker_urls(magnet) == masked
 
 
 def test_display_host():

@@ -32,7 +32,9 @@ def build_router(ctx: WebContext) -> APIRouter:
     def api_torrent_detail(hash: str):
         """单种子全量详情: TorrentRecord.to_dict 全字段(含 _raw 前向兼容字段)
         + site(站点名) + HR 展示字段(与分组成员视图同源) + 迁移标注(P1 详情段)
-        —— 详情抽屉 General tab 数据源"""
+        —— 详情抽屉 General tab 数据源
+        泄敏: tracker 与 magnet_uri 的 tr= 都是入库掩码槽(apply_delta 单点, issue
+        26-11-07-0536 批B / 26-11-08-0043), 响应体只含掩码值, 凭据原文不外发。"""
         manager.web.touch()
         rec = _require_torrent(hash)
         # 与列表成员视图同一投影(P0 契约): 无 job 时为 null, 详情段据此整段不渲染。
