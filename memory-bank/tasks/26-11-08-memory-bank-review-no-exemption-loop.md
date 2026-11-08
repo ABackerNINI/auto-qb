@@ -1,9 +1,9 @@
 # 26-11-08-memory-bank-review-no-exemption-loop — 评审流程改造: 废除裁量豁免+修复增量强制复评+基哈希闸门
 
-**Status:** In Progress
+**Status:** Done
 **Added:** 2026-11-08
 **Updated:** 2026-11-08
-**Summary:** 评审流程改造: 废除裁量豁免+修复增量强制复评+基哈希闸门
+**Summary:** 评审流程改造落地: 豁免退役+可评必评+基哈希机械闸门+修复循环, 6 笔提交 5783 全绿(99%), 遗留 issue 1701(0 行二进制窗口)
 **Topics:** memory-bank-review-no-exemption-loop
 **Refs:** memory-bank/plans/26-11-08-1240-plan-review-no-exemption-loop.html
 
@@ -55,3 +55,5 @@ grilling 3 轮闭合设计树(12 项拍板,D1-D12)→ 计划档落成 `plans/26-
 - **T2 闸门规则** 84b8da8f: 下限退役/Review-Skip 判红/·基 必填现算比对/·轮 缺省 1/累计口径注释; 敏感面语义随下限退役修正为「强制评非必红」; 金值用例锁规范化(--unified=1 变异红); 评审 2 轮 4 送检 4 过检 修 4; **已知窗口如实声明: 0 行二进制改动基比对被短路**(用户批准入池: 26-11-08-1701)。
 - **T34 规则文档+测试终扫** 960598ef: SKILL.md 全文新口径 + 测试计划 5 处漂移修正 + 3 缺口用例; 评审 2 轮 1 送检 1 过检 修 1(残余窗口口径补二进制窗)→ 复评空 [] 出口。
 - **接缝终审**(4 送检 4 过检): 2 major 第三/四份旧口径副本(.my-commit-flow.toml 注册 note/memory-bank SKILL.md 第 0 步)+ 1 minor 档案 stale + 1 nit pack --base 措辞, 全修; 计划 R2 回写三处口径级偏差。
+
+- 2026-11-08 17:41 评审流程改造: 12 项拍板落计划, T1-T34+W4 六笔提交落地(豁免退役/基哈希闸门/修复循环), 接缝终审+issue 1701 入池
