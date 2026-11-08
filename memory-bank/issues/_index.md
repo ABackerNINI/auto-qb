@@ -23,7 +23,7 @@
 | perf | 2 |
 | docs | 3 |
 | test | 11 |
-| refactor | 7 |
+| refactor | 8 |
 | feat | 20 |
 | chore | 1 |
 | question | 8 |
@@ -37,6 +37,7 @@
 
 ## Open
 
+- [refactor] [kb.new 各族 slug/topic 传参方式不一致, 跨族套用即 rc=1](26-11-08-1131-refactor-kb-new-arg-unify.html) — issue 族收位置参数…
 - [bug] [compare_digest str 非 ASCII 隐患同构两处(discovery 配对码/webui auth token)](26-11-08-0827-bug-hr-webui-compare-digest-ascii.html) — discovery.py…
 - [bug] [relocate _arm 不重置旧 journal: 终态残留致同 id 再迁移收不到 fastresume 改写](26-11-08-0827-bug-relocate-arm-journal-reset.html) — job_id=sha1(…
 - [docs] [hr/relocate docstring 措辞漂移聚合(fetcher refresh.reason/finalize_face failed 语义/store 行锚)](26-11-08-0827-docs-hr-relocate-docstring-drift.html) — fetcher.py:7…
