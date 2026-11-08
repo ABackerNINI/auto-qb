@@ -53,6 +53,8 @@ memory-bank skill 的 `scripts/flip_status.py` / `bump_doc.py`, **进程内 impo
 - test_timekit_guards_catch_three_layers: 文件名未来 / 坏「最后活动」/ 斜杠日期三种种子全逮住
 - test_timekit_body_ignores_code_and_paths: 正文层跳过代码上下文与路径标识符 (不误报)
 - test_timekit_check_is_green_on_current_kb: 存量 KB 零违规 (清洗完成后)
+- test_timekit_check_without_files_scans_full_kb: 无参 `--check` 仍全量扫(深层子目未来日期必逮住; 误退化成空清单增量即红)
+- test_timekit_files_narrowing_keeps_future_date_red_and_skips_others: `--files` 只扫传入文件 —— 传入的未来日期仍判红, 盘上未传入的脏件既不报也不污染 rc (收窄不放松判据)
 
 回写措辞守卫 (检查器 memory-bank skill 的 `scripts/check_wording.py`, 2026-10-07 加):
 
@@ -90,6 +92,7 @@ import**; L1 行级正则 + L2 stdlib 解析器残缺标签名校验双网, scri
 - test_html_guard_flags_broken_endtag_and_passes_clean: `</code)` 缺 `>` 双网命中(L1 行级 + L2 残缺名), 补 `>` 后零命中 —— 26-11-01 两起事故(issues/26-11-01-0334 s2-s7 掉左栏 / reports/26-10-14-1110:320)的最小复现形态钉住
 - test_html_guard_ignores_script_literal_regex: `<script>` 内 JS 字面量 `replace(/</g, …)` 不判红(存量实况 plans/26-09-25-2043:502; 分词器 script data 态不认标签, L1 遮蔽 + L2 CDATA 态双保险, 首跑实测无遮蔽时全库误报)
 - test_html_guard_corpus_zero_hits: 全库 645 件 HTML 存量零命中(冻结线起点)
+- test_check_html_check_with_explicit_paths_scans_only_them: `--check` 与显式 paths 共存 —— 只扫给定文件(坏件判红/干净件绿, 坏件在盘也不波及), 无参仍全量, 非 html 传入在脚本内摘掉 (2026-11-09 计划 §04 S2)
 - test_html_guard_wired_into_kb_check_and_gate: 守卫挂进 kb.check 与提交闸门两侧(同 test_mutation_anchor 钉法), v.Nu 增量闸门行与 kb.html-audit 巡检任务同鍗住
 - test_html_vnu_skips_vue_template_fragments: `shared/tpl/` 下的 Vue 模板分片不送 v.Nu(`v-if`/`@click`/`:prop` 是指令, 必然被判 Attribute not allowed; 26-11-02 首次提交改分片实测 22 条); 判据只认路径, 全被摘掉时不碰 java/vnu.jar
 """
@@ -519,6 +522,50 @@ def test_timekit_check_is_green_on_current_kb() -> None:
     assert not problems, "日期守卫违规 (取时走 `commands run kb.time`):\n" + "\n".join(problems)
 
 
+def test_timekit_check_without_files_scans_full_kb(tmp_path: Path, capsys) -> None:
+    """无参 `--check` = 全量 (不是增量): 深层子目录里种的未来日期必须被逮住。
+
+    收窄只认 `--files`; 缺省 / 空参必须回落全库 (`kb.check` 与手工全量调用都走无参形态)。
+    若误退化成「清单为空 → 零对象」的增量, 结果会是 rc=0、脏件静默漏过 —— 本用例即红。
+    """
+    timekit = _timekit()
+    mb = tmp_path / "memory-bank"
+    deep = mb / "documents" / "nested"
+    deep.mkdir(parents=True)
+    (deep / "a.md").write_text("# t\n\n**Added:** 2099-01-01\n", encoding="utf-8")
+
+    rc = timekit.main(["--check", "--root", str(tmp_path), "--mb-dir", str(mb)])
+    out = capsys.readouterr().out
+
+    assert rc == 1, f"无参 --check 必须全量扫 (深层脏件应收红): {out}"
+    assert "2099-01-01" in out and "日期在未来" in out, out
+
+
+def test_timekit_files_narrowing_keeps_future_date_red_and_skips_others(tmp_path: Path, capsys) -> None:
+    """`--files` 只扫传入文件: 传入的未来日期仍红; 盘上同目录的脏件未传入 → 绿。
+
+    后半句是收窄的**证据**: 坏件一直在盘上, 只传干净件仍绿, 说明没有偷偷全量 (而增量判据
+    本身不因收窄而放松 —— 前半句)。
+    """
+    timekit = _timekit()
+    mb = tmp_path / "memory-bank"
+    mb.mkdir()
+    dirty = mb / "dirty.md"
+    clean = mb / "clean.md"
+    dirty.write_text("# t\n\n**Updated:** 2099-01-01\n", encoding="utf-8")
+    clean.write_text("# t\n\n**Updated:** 2020-01-01\n", encoding="utf-8")
+    base = ["--check", "--root", str(tmp_path), "--mb-dir", str(mb), "--files"]
+
+    rc = timekit.main(base + [str(dirty)])
+    out = capsys.readouterr().out
+    assert rc == 1, f"增量下未来日期仍须判红: {out}"
+    assert "2099-01-01" in out and "日期在未来" in out, out
+
+    rc = timekit.main(base + [str(clean)])
+    out = capsys.readouterr().out
+    assert rc == 0, f"只传干净件应绿 (dirty 在盘上但不在清单里): {out}"
+
+
 def test_wording_guard_is_green_on_current_kb() -> None:
     """存量 KB 零违规 (清洗完成后) —— 两个滚动更新面上不得再有「待提交」类时点相对断言。"""
     problems = _wording().collect_violations(ROOT, MB)
@@ -861,6 +908,45 @@ def test_html_guard_corpus_zero_hits() -> None:
     assert files, "memory-bank 下没有 HTML?"
     bad = [str(f) for f in files if m.check_text(f.read_bytes().decode("utf-8"))]
     assert not bad, f"存量 HTML 结构命中 (修好后有人又写坏了?): {bad[:5]}"
+
+
+def test_check_html_check_with_explicit_paths_scans_only_them(tmp_path: Path, monkeypatch, capsys) -> None:
+    """`--check` 与显式 paths 共存: 带 paths 只扫给定文件, 无参仍全量, 非 html 脚本内摘掉。
+
+    闸门第 9 条改 `check_html.py --check <changed:**/*.html>` (2026-11-09 计划 §04 S2) 后,
+    `--check` 不能把 paths 当噪声忽略回全量 (那是空跑), 也不能让 L1+L2 判据因收窄而放松。
+    """
+    m = _check_html()
+    root = tmp_path / "repo"
+    mb = root / "memory-bank"
+    mb.mkdir(parents=True)
+    broken = mb / "broken.html"
+    clean = mb / "clean.html"
+    broken.write_text("<p>记录 <code>x.md</code): 目标 qB。</p>", encoding="utf-8")
+    clean.write_text("<html><body><p>ok</p></body></html>", encoding="utf-8")
+    monkeypatch.setattr(m, "find_root", lambda: root)
+
+    rc = m.main(["--check", str(broken)])
+    out = capsys.readouterr().out
+    assert rc == 1, f"显式传入坏件必须判红: {out}"
+    assert "broken.html" in out and "闭合标签缺" in out, out
+
+    # 坏件仍在盘上但不在清单里 → 绿: 证明 `--check <paths>` 真的只扫清单 (不是回退全量)。
+    rc = m.main(["--check", str(clean)])
+    assert rc == 0, capsys.readouterr().out
+
+    # 无参 `--check` 仍全量: 同一个坏件这次要红。
+    rc = m.main(["--check"])
+    out = capsys.readouterr().out
+    assert rc == 1, f"无参 --check 必须全量扫: {out}"
+    assert "broken.html" in out, out
+
+    # 非 html 后缀在脚本内摘掉: 不误判、不炸 (闸门 `<changed:>` 会把任何改动都带进来)。
+    note = mb / "note.md"
+    note.write_text("<code)x>", encoding="utf-8")
+    rc = m.main(["--check", str(note)])
+    out = capsys.readouterr().out
+    assert rc == 0 and "0 个 HTML" in out, out
 
 
 def test_html_guard_wired_into_kb_check_and_gate() -> None:

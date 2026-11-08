@@ -37,7 +37,8 @@ L1+L2 对分片照常跑 —— 结构判据 (闭合标签/标签名) 对模板�
 
 用法 (从仓库根; `<skill-dir>` = memory-bank skill 实际所在目录):
     python <skill-dir>/scripts/check_html.py --check          全库 L1+L2 守卫, 有命中 rc=1
-    python <skill-dir>/scripts/check_html.py <files...>       只查给定文件 (闸门 <changed:> 用)
+    python <skill-dir>/scripts/check_html.py --check <files...>  只扫给定文件 (闸门 <changed:> 增量形态)
+    python <skill-dir>/scripts/check_html.py <files...>       同上 (--check 可省)
     python <skill-dir>/scripts/check_html.py --vnu --strict <files...>   增量规范级 (闸门)
     python <skill-dir>/scripts/check_html.py --vnu --all      全库巡检报告 (kb.html-audit)
     python <skill-dir>/scripts/check_html.py --safety         冒烟探针 (无参是否真动作)
@@ -122,7 +123,11 @@ def check_text(text: str) -> list[str]:
 
 
 def collect_files(mb: Path, paths: list[Path] | None) -> list[Path]:
-    """检查面: 显式文件参数优先 (闸门 <changed:> 形态); 否则全库 *.html。"""
+    """检查面: 显式文件参数优先 (闸门 `<changed:>` 增量形态); 否则全库 *.html。
+
+    显式清单里非 `.html` / 不存在的一律在脚本内摘掉 (`<changed:>` 会把任何改动都带进来),
+    与 timekit 的 `resolve_paths` 同口径 —— 过滤在脚本里做, 不自查 git。
+    """
     if paths:
         return sorted(p for p in paths if p.is_file() and p.suffix == ".html")
     return sorted(mb.rglob("*.html"))
@@ -283,15 +288,15 @@ def main(argv: list[str] | None = None) -> int:
     vnu = "--vnu" in args
     strict = "--strict" in args
     check_all = "--check" in args or "--all" in args
-    paths = [Path(a) for a in args if not a.startswith("--")]
+    paths = [p if p.is_absolute() else root / p for p in (Path(a) for a in args if not a.startswith("--"))]
 
     if vnu:
-        files = sorted(mb.rglob("*.html")) if "--all" in args else [p if p.is_absolute() else root / p for p in paths]
+        files = sorted(mb.rglob("*.html")) if "--all" in args else paths
         return run_vnu(files, root, strict, "java")
-    if check_all:
-        return run_l1l2(collect_files(mb, None), root)
-    if paths:
-        return run_l1l2(collect_files(mb, [p if p.is_absolute() else root / p for p in paths]), root)
+    if check_all or paths:
+        # `--check` 与显式 paths 共存 (2026-11-09 计划 §04 S2): 带 paths 只扫这些 (闸门增量形态),
+        # 无参仍全量 —— 与 timekit 的 `--files` 同一「paths or None」收窄口径。
+        return run_l1l2(collect_files(mb, paths or None), root)
     print("用法: check_html.py --check | <files...> | --vnu [--all|--strict] <files...> | --safety")
     return 2
 
