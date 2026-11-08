@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="relocate-hot-enable-probe-sweep">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="relocate 热启用缺 sweep_probe_residue: 探测残留延迟到下次重启才清">
 <meta name="issue-summary" content="relocate_lifecycle.apply 热启用(假→真)补了 _load_jobs 但未做探测残留清理(start 启用分支非 dry-run 时有), E1 强探测中崩溃留下的探测种子经 disabled 启动→热启用路径要延迟到下次重启才清">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-08-1608-bug-relocate-hot-enable-probe-sweep</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-08 16:08</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">core</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">R4-core 收尾会话</div></div>
 </div>
@@ -155,11 +155,15 @@
   <ul>
     <li>2026-11-08 16:08 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
     <li>2026-11-08 — 来源:B8 批评审 nit3(B8 修汇总件行 5/31,提交 d7b4a068),发现于 2026-11-08;与汇总件行 31(热启用 load,B8 已修)同分支不同半,余 sweep 一半未对齐</li>
-  </ul>
+    <li>2026-11-08 19:40 — 复验仍复现,认领修复;热启用分支补 sweep_probe_residue(与 start 同判),状态翻 <strong>Done</strong>(详见「修复后补充」)</li>
+    <li>2026-11-08 — 状态 Open → Done（kb.status）</li>
+</ul>
   <h3>复验</h3>
-  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <p>复验:2026-11-08 19:40 仍复现 —— grep 符号锚全中:<code>apply</code> 热启用分支(<code>if not was_enabled</code>)在 relocate_lifecycle.py :86-:87 只有 <code>_load_jobs</code> 无 sweep;start 启用分支的 <code>sweep_probe_residue(ctx)</code> 在 :34(非 dry-run 才动手)原样;两分支口径不对称与档案 §02 一致。</p>
   <h3>修复后补充</h3>
-  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  <p><strong>实际修法</strong>:按 §06 落地 —— <code>apply</code> 热启用分支(<code>if not was_enabled</code>,relocate_lifecycle.py :88-:94)在 <code>_load_jobs</code> 之后补 <code>sweep_probe_residue(self._ctx)</code>:取参走 <code>self._ctx</code>(与 _load_jobs/能力重探同款现读路径,<code>apply</code> 无 ctx 形参,不造新途径);与 start 同判 —— 非 dry-run 才动手(<code>0 if self._dry_run() else sweep</code>),dry-run 保持零真写;回执 detail 追加「清理探测残留 N 条」(与 start 启用日志同口径),持续启用下的段变化不重扫(仍只在假-&gt;真跳变灌)。</p>
+  <p><strong>验证方式</strong>:新增 <code>tests/test_relocate_exec_jobs.py::test_apply_hot_enable_sweeps_probe_residue</code> —— 桩 <code>relocate_lifecycle.sweep_probe_residue</code>(既有 monkeypatch 桩风格)记录调用与实参,三个断言面:热启用非 dry-run 调一次且实参 == <code>mod2._ctx</code>、detail 带「清理探测残留 2 条」;持续启用下的段变化不重扫;<code>start(ctx, dry_run=True)</code> 会话热启用不调用且 detail 无清理字样。</p>
+  <p><strong>测试数字</strong>(2026-11-08 实测):<code>commands run test.quick</code> 全绿 5856 passed + 2 skipped;单文件 test_relocate_exec_jobs.py 29 passed。</p>
 </section>
 
 <footer>

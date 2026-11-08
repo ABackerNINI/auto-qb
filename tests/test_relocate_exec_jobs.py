@@ -48,6 +48,10 @@
   幂等面不误判残留(「已消失 ≠ 残留」, 计数式校验会把撤销永久卡死)
 - test_cancel_rejected_in_moving_and_watching_phases: MOVING/WATCHING 在途搬迁拒绝取消
   (连成本确认面都不给), 不下发回搬指令、不终态、不恢复成员, 文案写明相位与可选动作
+### 终态拒撤守卫(issue 26-11-08-1608 面 1)
+- test_cancel_rejected_for_terminal_phases: FAILED/DONE/CANCELLED 终态 job 拒绝撤销
+  (守卫序列头部, 连 dry_run/成本确认面都不给): 不删链接不搬回不终态不恢复成员,
+  失败账(last_error/reason)与相位/alias_paths 原样不被改写, 文案写明当前相位无撤销面
 ### 生命周期账闸(issue 26-11-07-0527)
 - test_stop_skips_persist_when_ledger_not_loaded: enabled=false 启动(本会话未接管账)——
   stop 跳过补写, state 既有在途账原样保留(无条件 _persist = 整段重写清账, 优雅退出
@@ -58,6 +62,10 @@
 - test_apply_hot_enable_restores_ledger_and_interception: 热启用(enabled 假->真)补
   _load_jobs: state 里的历史在途 job 灌回内存 + relocating_hashes/别名根登记重建;
   持续启用下的段变化不重灌(不重置在途 job 的运行期账 _rt)
+### 热启用探测残留扫描(issue 26-11-08-1608 hot-enable)
+- test_apply_hot_enable_sweeps_probe_residue: 热启用(enabled 假->真)非 dry-run 补
+  sweep_probe_residue(与 start 启用分支同口径, 取参走 self._ctx); dry-run 零真写
+  不调用; 持续启用下的段变化不重扫
 """
 
 import os
@@ -338,6 +346,53 @@ def test_cancel_rejected_in_moving_and_watching_phases(tmp_path):
     first = mod.relocate_cancel("j1")
     assert first["cls"] == "blocked" and first["reasons"][0]["gate"] == ru.GATE_MOVING, first
     assert "cost" not in first, "硬拒绝不给成本面板"
+
+
+def test_cancel_rejected_for_terminal_phases(tmp_path):
+    """终态 job(DONE/FAILED/CANCELLED)拒绝撤销(issue 26-11-08-1608 面 1): 无撤销面, 账面原样
+
+    撤销对终态现场会重试整套回滚(删链接 -> 搬回 -> 落 CANCELLED): FAILED 的失败证据
+    (last_error/reason)被 CANCELLED 覆盖, DONE(已 finalized)会对已收尾数据再发起一次
+    搬回 —— 与 _start_job 的 not existing.is_terminal 同口径, 守卫在序列头部, 连成本
+    确认面都不给(不误导可撤, 与 MOVING 拒撤同一原则)。
+    """
+    locs, resumed = [], []
+    mod = _bare_mod(
+        api=types.SimpleNamespace(
+            torrents_set_location=lambda **kw: locs.append(dict(kw)),
+            torrents_resume=lambda **kw: resumed.append(list(kw["torrent_hashes"])),
+        ),
+        data_dir=str(tmp_path),
+    )
+    # FAILED: 失败账(last_error/reason)不得被 CANCELLED 覆盖; DONE/CANCELLED: 已收尾
+    # 数据不得再被发起搬回(alias_paths 若还在账上也不得被动)
+    for phase, alias_paths in (
+        (ru.PHASE_FAILED, ("R:/alias.mkv", )),
+        (ru.PHASE_DONE, ()),
+        (ru.PHASE_CANCELLED, ("R:/alias.mkv", )),
+    ):
+        mod._jobs["j1"] = _job(
+            "j1",
+            phase=phase,
+            alias_paths=alias_paths,
+            last_error="boom",
+            reason="probe_failed",
+            resume_hashes=("HA", ),
+        )
+        out = mod.relocate_cancel("j1", cost_confirmed=True)
+        assert out["cls"] == "blocked" and out["reasons"][0]["gate"] == "cancel_terminal", (phase, out)
+        text = out["reasons"][0]["text"]
+        assert phase in text and "没有撤销面" in text and "反向迁移" in text, (phase, text)
+        job = mod._jobs["j1"]
+        assert job.phase == phase, f"终态拒撤不得改相位: {phase}"
+        assert job.last_error == "boom" and job.reason == "probe_failed", (phase, job.last_error, job.reason)
+        assert job.alias_paths == alias_paths, f"终态拒撤不得动链接账面: {phase}"
+        assert not locs and not resumed, (phase, locs, resumed)
+    # 守卫在序列头部: 未确认成本同样 blocked, 连成本面板都不给(不误导可撤)
+    mod._jobs["j1"] = _job("j1", phase=ru.PHASE_FAILED, last_error="boom", reason="probe_failed")
+    first = mod.relocate_cancel("j1")
+    assert first["cls"] == "blocked" and first["reasons"][0]["gate"] == "cancel_terminal", first
+    assert "cost" not in first, "终态拒撤不给成本面板"
 
 
 def test_group_facts_gate_inputs_block_gates(monkeypatch):
@@ -958,6 +1013,58 @@ def test_apply_hot_enable_restores_ledger_and_interception(tmp_path, monkeypatch
     res2 = mod2.apply(new, newer)
     assert res2.action == "reloaded" and "恢复 job" not in res2.detail, res2
     assert mod2._rt[job_id]["sample_ts"] == 123.0
+
+
+def test_apply_hot_enable_sweeps_probe_residue(tmp_path, monkeypatch):
+    """热启用(enabled 假->真)补 sweep_probe_residue(issue 26-11-08-1608 hot-enable)
+
+    disabled 启动的会话, 前次 E1 强探测中崩溃留下的探测种子+文件(aqb-probe 前缀)此前要
+    等下次进程重启才被 start 启用分支扫走 —— 热启用即扫, 与 start 同判: 非 dry-run 才
+    动手(dry-run 零真写); 持续启用下的段变化不重扫(幂等且无谓写放大)。
+    """
+    pin_disk_usage(monkeypatch)
+    mgr, client, src, dst, content, files = relocate_env(tmp_path, state="uploading")
+    mod = mgr.host.get("relocate")
+    _spy_spawn(mod, [])
+    mod.relocate_execute(["HA"], dst)
+
+    # 下一会话 disabled 启动(账不恢复); 桩 sweep 记调用与实参(真跑会撞替身 qB 无 tag 端点)
+    mgr.config.relocate = RelocateConfig(enabled=False)
+    from auto_qb.core.modules import relocate_lifecycle as _rlc
+
+    swept_args = []
+
+    def _fake_sweep(ctx):
+        swept_args.append(ctx)
+        return 2
+
+    monkeypatch.setattr(_rlc, "sweep_probe_residue", _fake_sweep)
+    mod2 = RelocateModule(mgr.ctx)
+    mod2.start(mgr.ctx, dry_run=False)
+
+    old = Config()
+    new = Config()
+    new.relocate = RelocateConfig(enabled=True)
+    res = mod2.apply(old, new)
+    assert res.action == "reloaded" and "恢复 job 1 条" in res.detail, res
+    assert "清理探测残留 2 条" in res.detail, res
+    assert swept_args == [mod2._ctx], "热启用非 dry-run 必须扫一次探测残留(取参 self._ctx)"
+
+    # 持续启用下的段变化不重扫(enabled 已真, 非 假->真 跳变)
+    newer = Config()
+    newer.relocate = RelocateConfig(enabled=True, verify="sample")
+    res2 = mod2.apply(new, newer)
+    assert res2.action == "reloaded" and len(swept_args) == 1, (res2, swept_args)
+
+    # dry-run 会话热启用: 零真写, 不调用 sweep(与 start 启用分支同判)
+    mod3 = RelocateModule(mgr.ctx)
+    mod3.start(mgr.ctx, dry_run=True)
+    mgr.config.relocate = RelocateConfig(enabled=False)
+    new_dry = Config()
+    new_dry.relocate = RelocateConfig(enabled=True)
+    res3 = mod3.apply(Config(), new_dry)
+    assert res3.action == "reloaded" and len(swept_args) == 1, (res3, swept_args)
+    assert "清理探测残留" not in res3.detail, res3
 
 
 def test_cancel_write_intent_faces(tmp_path):

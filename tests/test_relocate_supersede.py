@@ -350,10 +350,12 @@ def test_supersede_cancel_guard_blocks_codestination(tmp_path, monkeypatch):
     assert client.calls == before, "护栏拒绝 = 零 qB 写(不删链不搬回)"
     assert mod.get_job(j2).phase != ru.PHASE_CANCELLED
     assert mod.get_job(j1).phase == ru.PHASE_ARMED, "前任现场未动"
-    # 无同目标同伴时护栏不触发(常规撤销照旧): 前任收尾后再撤 J2 放行
+    # 无同目标同伴时护栏不触发(常规撤销照旧): 前任落终态离场(active_jobs 只看非终态)后撤 J2 放行
+    # —— 直接落终态而非连跑 6 拍: 同拍会把 J2 也推进收尾窗落 DONE, 撤销就先撞终态守卫了
+    # (issue 26-11-08-1608 面 1: 终态无撤销面), 放行支需要 J2 保持 armed 可撤
     for h in ("HA", "HB"):
         mgr.store.by_hash[h].save_path = dst_c
-    _run_ticks(mod, 6)
+    mod._set_job(replace(mod.get_job(j1), phase=ru.PHASE_DONE, alias_paths=()))
     assert mod.get_job(j1).phase == ru.PHASE_DONE, "前任已收尾(同目标同伴清零)"
     out2 = mod.relocate_cancel(j2, cost_confirmed=True)
     assert out2["cls"] == "ok", out2
@@ -400,11 +402,13 @@ def test_supersede_cancel_refuses_settled_rewrites(tmp_path, monkeypatch):
     assert "cost" not in out_dry, "拒绝面不出成本单(不可撤的形态谈成本是误导)"
     # 放行支: settled 记录清回 pending(reset_rewrites 重放入口同款; 非 dict 残账原样保留)
     # + 前任收尾(同目标同伴清零, 不踩 cancel_chain) -> 撤销行为不变(删链 + 搬回 + cancelled)
+    # —— 前任直接落终态而非连跑 6 拍: 同拍会把 J2 也推进收尾窗落 DONE, 撤销就先撞终态守卫了
+    # (issue 26-11-08-1608 面 1: 终态无撤销面), 放行支需要 J2 保持 armed 可撤
     assert rj.reset_rewrites(dd, j2) == 4
     assert rj.read_rewrites(dd, j2)["HBAD"] == "garbage"
     for h in ("HA", "HB"):
         mgr.store.by_hash[h].save_path = dst_c
-    _run_ticks(mod, 6)
+    mod._set_job(replace(mod.get_job(j1), phase=ru.PHASE_DONE, alias_paths=()))
     assert mod.get_job(j1).phase == ru.PHASE_DONE, "前任已收尾(同目标同伴清零)"
     calls_before_ok = list(client.calls)
     out2 = mod.relocate_cancel(j2, cost_confirmed=True)

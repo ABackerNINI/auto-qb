@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="relocate-cancel-terminal-state-semantics">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="relocate_cancel 对终态 job 无守卫: 撤 FAILED 重试整套回滚, 终态可撤语义未定义">
 <meta name="issue-summary" content="relocate_cancel 对 FAILED 等终态 job 会重试整套回滚(链接已删、账面仍记), 「撤终态 job」语义未定义; 另撤销回搬对放行相位(MOVED/ARMED)是 fire-and-forget, 回搬中断数据分居 src/dst 无账可对, 该残余设计风险对所有撤销存在">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-08-1608-bug-relocate-cancel-terminal-state-semantics</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-08 16:08</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">core</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">R4-core 收尾会话</div></div>
 </div>
@@ -167,11 +167,16 @@ def is_terminal(self): return self.phase in TERMINAL_PHASES</code></pre>
   <ul>
     <li>2026-11-08 16:08 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
     <li>2026-11-08 — 来源:B9 批(提交 9255265e,汇总件行 4/30)实施范围外发现,2026-11-08;面 1 终态可撤语义未定义、面 2 放行相位回搬 fire-and-forget 残余风险,一并登记待裁决</li>
-  </ul>
+    <li>2026-11-08 19:40 — 复验仍复现,认领修复;面 1 终态守卫落地、面 2 豁免登记 <code>memory-bank/progress/roadmap.md</code>(已定案口径节),状态翻 <strong>Done</strong>(详见「修复后补充」)</li>
+    <li>2026-11-08 — 状态 Open → Done（kb.status）</li>
+</ul>
   <h3>复验</h3>
-  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <p>复验:2026-11-08 19:40 仍复现 —— grep 符号锚全中(行号按修前树 dd6fe04a 实测重取):<code>relocate_cancel</code> :1439,守卫序列 job None :1448 / dry_run :1450 / MOVING/WATCHING :1466 起,回搬 :1583,落 CANCELLED :1587-:1589;<code>TERMINAL_PHASES</code>/<code>is_terminal</code> 在 relocate_units.py :86/:323-324 原样;守卫序列确无终态检查。(终态守卫落地后守卫序列整体后移,修后位置见「修复后补充」。)</p>
   <h3>修复后补充</h3>
-  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  <p><strong>实际修法(面 1,用户拍板 = ①终态守卫拒撤)</strong>:<code>relocate_cancel</code> 守卫序列头部(job None 之后、dry_run 之前)补 <code>job.is_terminal</code> 检查(relocate_exec.py:1452-:1474),终态 blocked,gate=<code>cancel_terminal</code>,文案写明当前相位无撤销面、失败账(last_error/reason)会被 CANCELLED 覆盖、需回迁时重新发起反向迁移 —— 与 MOVING 拒撤同原则,连 dry_run 与成本确认面都不给;与 <code>_start_job</code> 的 <code>not existing.is_terminal</code> 守卫口径一致。</p>
+  <p><strong>面 2(用户拍板 = ①接受并登记豁免,不改代码)</strong>:豁免登记在 <code>memory-bank/progress/roadmap.md</code> 新增「已定案口径(别改回去) → 整组迁移(relocate): 撤销回搬 fire-and-forget 豁免(2026-11-08 拍板)」节 —— 写明残余风险对所有撤销存在、B9 已在 MOVING/WATCHING 拒撤守卫注释注明不取对账方案、豁免理由(回搬走 qB 原生 setLocation,中断现场用户可见可人工处置,对账状态机复杂度大于残余风险收益)与边界(只豁免撤销回搬,迁移本体全程 job 跟踪不豁免)。memory-bank 无 relocate 专门设计/约定单点文档,按 doc-forms 口径落「已定案口径」单点 roadmap.md,未新造文档形态。</p>
+  <p><strong>验证方式</strong>:新增 <code>tests/test_relocate_exec_jobs.py::test_cancel_rejected_for_terminal_phases</code> —— FAILED/DONE/CANCELLED 三终态调 <code>relocate_cancel</code>(含 cost_confirmed=True 与未确认两支)均 blocked 且 gate=cancel_terminal、文案含相位与「没有撤销面」、last_error/reason/相位/alias_paths 不被改写、零 setLocation/resume 调用、不出成本面板。既有 <code>test_relocate_supersede.py</code> 两例(cancel_chain/settled 拒撤)的放行支原用 6 拍推进,会把 J2 一并推过收尾窗落 DONE 而撞新守卫 —— 按新语义改为直接把前任落终态离场(active_jobs 滤终态,J2 保持 armed),链护栏意图不变。</p>
+  <p><strong>测试数字</strong>(2026-11-08 实测):<code>commands run test.quick</code> 全绿 5856 passed + 2 skipped;单文件 test_relocate_exec_jobs.py 29 passed、test_relocate_supersede.py 14 passed。</p>
 </section>
 
 <footer>

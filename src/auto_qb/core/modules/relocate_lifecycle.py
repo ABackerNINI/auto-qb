@@ -65,7 +65,8 @@ class LifecycleMixin:
         认领面含 bt_backup(计划 26-11-05-0808 S1): 预检部署闸经 bt_backup_path_of 现读
         ctx.config(L0, 无缓存), 段变化换对象即生效 —— 这里只做「变化可感知」的回执,
         不换缓存。relocate 与 bt_backup 两段独立比较, 任一变化即 reloaded。
-        热启用(enabled 假 -> 真)与 start() 的启用分支同口径: 补一次 _load_jobs ——
+        热启用(enabled 假 -> 真)与 start() 的启用分支同口径: 补一次 _load_jobs +
+        sweep_probe_residue(非 dry-run 才动手) ——
         以 disabled 启动后热启用的会话, state 里的历史在途 job(崩溃/停用期残留)不恢复
         就永久休眠(on_task_line 只推内存账), _sync_relocating 也不重建, 未收尾拦截对
         这批成员失明。仅在「假 -> 真」跳变时灌: 持续启用下的段变化不重灌(重灌会重置
@@ -81,14 +82,22 @@ class LifecycleMixin:
         self._conf = getattr(new, "relocate", None)
         enabled = bool(getattr(self._conf, "enabled", False))
         restored = 0
+        swept = 0
         if enabled:
             alias_fs.get_capability(refresh=True)
             if not was_enabled:
                 restored = self._load_jobs()
+                # E1 探测崩溃残留扫描(与 start() 启用分支同口径, issue 26-11-08-1608-…hot-enable):
+                # disabled 启动的会话, 前次强探测中崩溃留下的探测种子+文件要等下次进程重启
+                # 才被扫走 —— 热启用即扫, 两分支口径对称。取参走 self._ctx(与 _load_jobs/
+                # 能力重探同款现读路径, apply 无 ctx 形参); dry-run 不动手(真写, 与 start 同判)。
+                swept = 0 if self._dry_run() else sweep_probe_residue(self._ctx)
         detail = "relocate 段已更新(生效配置已缓存" + (", 已重探链接能力" if enabled else ", 未启用不重探")
         if restored:
             # 不写「在途」: _load_jobs 整箱恢复, 计数含终态 job(终态永久留账), 长期部署热启用几乎必然多报
             detail += f", 恢复 job {restored} 条"
+        if swept:
+            detail += f", 启动扫描清理探测残留 {swept} 条"
         return ApplyResult(self.name, "reloaded", detail + ")")
 
     # ---------- job 登记(P3 执行体的账; P2 只读消费) ----------

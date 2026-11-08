@@ -1442,11 +1442,36 @@ class ExecMixin:
         未确认成本时只回「将把 X 从 T 搬回 S(预计)」, 不动任何东西(§3.5.1)。
 
         dry_run 时不执行(删链接 + qB 搬回都是真写, 且搬回要再复制一遍全量数据)。
-        MOVING/WATCHING(在途搬迁)拒绝撤销; 链接未删净(残留别名仍指向 dst)拒绝搬回, 留现场重试。
+        终态 job(DONE/FAILED/CANCELLED)拒绝撤销 —— 终态相位没有撤销面(失败现场要保留,
+        已收尾数据不再二次搬回); MOVING/WATCHING(在途搬迁)拒绝撤销; 链接未删净(残留
+        别名仍指向 dst)拒绝搬回, 留现场重试。
         """
         job = self._jobs.get(job_id)
         if job is None:
             return {"cls": "blocked", "reasons": [{"gate": ru.GATE_GONE, "text": f"未找到迁移任务 {job_id}"}]}
+        # ---- 终态守卫(issue 26-11-08-1608 面 1): DONE/FAILED/CANCELLED 无撤销面 —— 撤销
+        # 会对终态现场重试整套回滚(删链接 -> 搬回 -> 落 CANCELLED): FAILED 的失败证据
+        # (last_error/reason)被 CANCELLED 覆盖, DONE(已 finalized, alias_paths 已清)会对
+        # 已收尾数据再发起一次搬回。与 _start_job 的 not existing.is_terminal 同口径;
+        # 放在最前 —— 连 dry_run 与成本确认面都不给, 不误导可撤(与 MOVING 拒撤同一原则)。
+        if job.is_terminal:
+            return {
+                "cls":
+                    "blocked",
+                "job_id":
+                    job_id,
+                "reasons":
+                    [
+                        {
+                            "gate": "cancel_terminal",
+                            "text":
+                                f"该迁移已落终态(相位 {job.phase}), 当前相位没有撤销面: "
+                                "撤销会对已收尾/已失败的现场重试整套回滚(删链接再搬回), "
+                                "失败账(last_error/reason)也会被 CANCELLED 覆盖 —— "
+                                "失败任务请按失败现场交人处理, 需要回迁时重新发起反向迁移",
+                        }
+                    ],
+            }
         if self._dry_run():
             return {
                 "cls": "blocked",
