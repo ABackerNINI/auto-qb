@@ -141,7 +141,7 @@ class GroupingModule(BaseModule):
         """删除事件处理: 组内种子被删除 -> 移出分组; 组内仍有剩余种子 -> 立即触发缺文件扫描(可能文件丢失)
 
         分组簿记(_leave_group 摘除成员/空组解散)不受 check_missing_files 闸门(issue
-        26-11-07-0527 条目2): 摘除本身不是「缺文件扫描」的一部分, 不该被同一开关拦 ——
+        26-11-07-0527 R1#80): 摘除本身不是「缺文件扫描」的一部分, 不该被同一开关拦 ——
         开关关闭时若整体早退, 已删种子永久残留为幽灵成员(store._apply 只标 dirty 不摘
         成员, 全量轮也不重建分组索引): 三个分组索引随删除量无界增长, 且幽灵成员的文件
         路径仍参与跨组物理路径展开(_check_cross_group_file_conflicts), 可与现役组构成
@@ -401,7 +401,7 @@ class GroupingModule(BaseModule):
         P7 补: 旧组键登记进 store.group_key_migrations —— 该键的行要么随组解散而消失
         (removed), 要么内容已变(upsert); 不登记则增量视图留孤儿行(见 store 字段注释)。
 
-        条目3 补(issue 26-11-07-0527): 组空解散同步清 store.transitional_missing_skips[key]
+        R1#81 补(issue 26-11-07-0527): 组空解散同步清 store.transitional_missing_skips[key]
         —— 同内容删除重加(组键相同)不得继承旧计数, 否则新一轮第一次过渡态命中即达
         TRANSITIONAL_SKIP_LIMIT, 绕过「连续 3 次独立事件」的容忍设计(误按真实缺失整组
         暂停 + 打 MISSING)。计数随组存在, 组亡即清。
@@ -419,7 +419,7 @@ class GroupingModule(BaseModule):
         if not members:
             del store.groups[key]
             store.group_sizes.pop(key, None)
-            store.transitional_missing_skips.pop(key, None)  # 条目3: 组亡计清, 同内容重加从零容忍
+            store.transitional_missing_skips.pop(key, None)  # R1#81: 组亡计清, 同内容重加从零容忍
             return None
         return key
 

@@ -1507,7 +1507,7 @@ class ExecMixin:
                 "reasons":
                     [
                         {
-                            "gate": "cancel_alias_left",
+                            "gate": ru.GATE_CANCEL_ALIAS_LEFT,
                             "text":
                                 f"撤销中止: {len(leftover)} 条别名未删净({shown}) —— 残留别名仍指向 {job.dst}, "
                                 f"此时搬回 {job.src} 的路径会穿过别名指回目标(回搬变自我复制)。"

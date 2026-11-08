@@ -277,6 +277,7 @@ def test_cancel_blocked_when_alias_left_behind(tmp_path, monkeypatch):
     monkeypatch.setattr(afs, "remove_alias", _fail_one)
     client.calls.clear()
     out = mod.relocate_cancel(job_id, cost_confirmed=True)
+    # gate 断言有意用字面量而非 ru.GATE_CANCEL_ALIAS_LEFT: 锁稳定字符串契约(常量改名/换值应在此炸)
     assert out["cls"] == "blocked" and out["reasons"][0]["gate"] == "cancel_alias_left", out
     text = out["reasons"][0]["text"]
     assert victim in text and dst in text and "重试" in text, text
