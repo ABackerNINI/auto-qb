@@ -49,6 +49,7 @@ CHECKING_ACTION_KNOWN_KEYS = {
     "basic_check",
     "custom_basic_check_program_path",
     "custom_basic_check_timeout",
+    "recheck_fail_cooldown",
     "with_reference",
     "without_reference",
 }
@@ -261,6 +262,11 @@ def _validate_checking_action_spec(value: Any, where: str, errors: List[str], ga
     # 不给运行时留「timeout=0 立即超时」或裸数字误写秒数的暗面(relocate.move_stall_timeout 同形制)
     if "custom_basic_check_timeout" in value:
         _try_time(value["custom_basic_check_timeout"], f"{where}.custom_basic_check_timeout", errors, positive=True)
+    # 校验失败冷却窗口(运行时缺省 1h, 26-11-08-1717): 时间串 + 正值; 0/负数/坏格式在此
+    # fail-fast, 不给运行时留「0=关闭冷却」暗面 —— 窗口只在真实校验失败后生效, 关闭它等于
+    # 放回「每轮重复校验」的本 issue 形态(relocate.move_stall_timeout 同形制)
+    if "recheck_fail_cooldown" in value:
+        _try_time(value["recheck_fail_cooldown"], f"{where}.recheck_fail_cooldown", errors, positive=True)
     for seg in ("with_reference", "without_reference"):
         if seg not in value:
             continue

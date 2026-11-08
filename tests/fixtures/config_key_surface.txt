@@ -13,6 +13,7 @@ version: 6
 <任意>_rules.*.actions.checking.basic_check
 <任意>_rules.*.actions.checking.custom_basic_check_program_path
 <任意>_rules.*.actions.checking.custom_basic_check_timeout
+<任意>_rules.*.actions.checking.recheck_fail_cooldown
 <任意>_rules.*.actions.checking.with_reference
 <任意>_rules.*.actions.checking.with_reference.auto_start
 <任意>_rules.*.actions.checking.with_reference.enabled

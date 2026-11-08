@@ -32,6 +32,8 @@
 import os
 import tempfile
 
+from unittest.mock import patch
+
 from auto_qb.config import ConfigError, load_config
 from auto_qb.rules import Rule, RuleContext
 from auto_qb.core.taskqueue import FINISHED, PENDING, Task, TaskQueue
@@ -328,8 +330,13 @@ def test_event_checking_resume_success():
 
 
 def test_event_checking_resume_fail():
-    """事件配 checking: 校验失败 -> 轮询默认重置 origin -> 重走完整决策链(重新提交)"""
-    with tempfile.TemporaryDirectory() as td:
+    """事件配 checking: 校验失败 -> 轮询默认重置 origin -> 重走完整决策链(重新提交)
+
+    失败冷却窗口(决策链 0.5, 26-11-08-1717)与本用例的重试时间线正交(队列时间模拟推进而
+    冷却记录走挂钟), 打桩掉窗口记录写点隔离出「判败 -> 重入队 -> 重试」语义本身。
+    """
+    with tempfile.TemporaryDirectory() as td, \
+            patch("auto_qb.core.modules.ops_mod.record_recheck_cooldown"):
         mgr = _event_mgr({"r1": _ev("on_torrent_added", _check_cfg([{"add_tags": ["after-check"]}]))})
         tor = _pause_target(progress=0.5)
         mgr.client = FakeClient()

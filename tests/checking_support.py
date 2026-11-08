@@ -61,9 +61,13 @@ def make_check_cfg(
     without_start=True,
     custom_program=None,
     extra_actions=None,
-    execute_once="never"
+    execute_once="never",
+    fail_cooldown=None
 ):
     """构造 checking 规则配置(条件: 标签含"需校验"); extra_actions 追加到动作序列(续跑测试用)
+
+    fail_cooldown: checking spec 的 recheck_fail_cooldown(校验失败冷却窗口, 时间串);
+    None = 不配置该键(运行时走 1h 缺省档)。
 
     跳检标签名全局统一(config.skip_checking_tag), spec 不配置该键。
     """
@@ -86,6 +90,8 @@ def make_check_cfg(
     }
     if custom_program:
         action["checking"]["custom_basic_check_program_path"] = custom_program
+    if fail_cooldown is not None:
+        action["checking"]["recheck_fail_cooldown"] = fail_cooldown
     actions = [action] + (extra_actions or [])
     cfg.rules_config = {
         "example_rules":

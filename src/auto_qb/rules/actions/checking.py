@@ -11,6 +11,7 @@ from typing import Any
 
 from ...infra import utils
 from ..base import ActionResult, BaseAction, RuleContext
+from ..checking_meta import RECHECK_COOLDOWN_DEFAULT
 from .full_checking import FullCheckingMixin
 from ..registry import register_action
 from .skip_checking import SkipCheckingMixin
@@ -31,6 +32,8 @@ class CheckAction(FullCheckingMixin, SkipCheckingMixin, BaseAction):
         hash 列表相同, 相对严格) | custom(运行 custom_basic_check_program_path 程序判定)
       - custom_basic_check_program_path: basic_check=custom 时必填; 参数: <种子hash> <保存路径>
       - custom_basic_check_timeout: custom 程序单次执行超时(时间串, 缺省 600s), 超时该候选视为非参考
+      - recheck_fail_cooldown: 校验失败冷却窗口(时间串, 缺省 1h, 不可关闭), full-checking 判
+        FAILED 后窗口内不再重复校验(记录/清除在 ops 层, 见决策链 0.5)
       - with_reference / without_reference: 各含 mode(skip-checking|full-checking) + auto_start(默认 false)
 
     跳检标签名不在 spec 配置(全局统一, 校验层已列为 spec 未知键): 运行时经 ctx 读全局
@@ -43,6 +46,8 @@ class CheckAction(FullCheckingMixin, SkipCheckingMixin, BaseAction):
          ops dedup 闸门对规则源结构性不可达(与 ops 侧 26-10-11-2045 同构)
       0. 仅"暂停中未完成"种子(is_paused 且 progress<1, 如跨种添加后的 pausedDL)才校验,
          已完成(progress=1)/活跃中(下载/做种中)种子一律跳过(避免已完成种子被反复校验)
+      0.5. 校验失败冷却窗口(26-11-08-1717): 该种子处于失败冷却窗口内 -> skip(记录点在 ops
+         层轮询 FAILED 判定, rule 源; 不消耗 recheck_fails 额度, 与其分工见 execute 注释)
       1. 组内有活跃下载种子(is_downloading) -> skip(整组未完成, 不进行任何校验, 包括跳检)
       1.5. 组内其它成员 full-checking 在途 -> 让位等待(组内校验串行, FullCheckingMixin)
       1.6. 组内其它成员校验失败且文件映射一致 -> 结果必然相同, skip(失败推断, FullCheckingMixin;
@@ -72,6 +77,15 @@ class CheckAction(FullCheckingMixin, SkipCheckingMixin, BaseAction):
         self.custom_timeout = (
             utils.parse_time(timeout_raw) if timeout_raw not in (None, "") else CUSTOM_CHECK_TIMEOUT_DEFAULT
         )
+        # 校验失败冷却窗口(26-11-08-1717, 时间串如 "1H"/"30M"): full-checking 判 FAILED 后
+        # 窗口内不再重复校验(决策链 0.5)。正值由 config 校验期 fail-fast(_validate_checking_
+        # action_spec, 不可关闭 —— 窗口只在真实校验失败后生效), 此处直接解析; 键缺省 = 1h
+        # 缺省档。键放动作 spec 而非全局 config: 唯一消费方是本闸门(ops 层记录时间戳/成功
+        # 清除都不需要窗口值), 与 custom_basic_check_timeout 同形制。
+        cooldown_raw = spec.get("recheck_fail_cooldown")
+        self.recheck_fail_cooldown = (
+            utils.parse_time(cooldown_raw) if cooldown_raw not in (None, "") else RECHECK_COOLDOWN_DEFAULT
+        )
         self.with_reference = self._parse_section(spec, "with_reference")
         self.without_reference = self._parse_section(spec, "without_reference")
 
@@ -93,10 +107,8 @@ class CheckAction(FullCheckingMixin, SkipCheckingMixin, BaseAction):
 
     def execute(self, ctx: RuleContext) -> ActionResult:
         if ctx.dry_run:
-            return ActionResult.ok("校验决策链(状态判定+组内下载判定+组内校验串行/失败推断+参考确定+分段执行)")
+            return ActionResult.ok("校验决策链(状态判定+失败冷却+组内下载判定+组内校验串行/失败推断+参考确定+分段执行)")
         manager = ctx.manager
-
-        # TODO: 未完成且暂停的种子若 recheck 后仍未完成，下一轮会再次校验, 需处理
 
         # 跨规则同日去重(26-11-05-0019): 排最前 —— 谓词一次 dict 查询全链最便宜(对齐 ops 侧
         # dedup 排最前先例, ops_verdict._skip_gates_detail); 只读 ops 的 skip_check_day(经
@@ -121,6 +133,22 @@ class CheckAction(FullCheckingMixin, SkipCheckingMixin, BaseAction):
         # 此闸门覆盖 full-checking/skip-checking 及有/无任务队列全部路径, 修复完成种子被反复校验的问题
         if not (ctx.torrent.state_enum.is_stopped and ctx.torrent.progress < 1.0):
             return ActionResult.skip("种子非暂停中未完成状态, 无需校验")
+
+        # 决策链 0.5: 校验失败冷却窗口(26-11-08-1717 销 TODO): full-checking 判定 FAILED 后
+        # (生效后未完成 / progress 回落), 记录点在 ops 层轮询终态(rule 源); 数据不随重试改变,
+        # 窗口内重试只烧 I/O 与 recheck_fails 额度 —— 直接 skip, 一次失败即冷却, 不烧 3 次
+        # 失败额度。与 ops 层 3 次/日失败冷却(recheck_fails)分工: 本闸在前(不消耗额度),
+        # recheck_fails 在提交点兜底(窗口过期后的重试失败仍被它计数, 3 次/日封顶)。
+        # WEB 源不经决策链(ctx.ops.recheck 直达), 手动排障不受限 —— 记录/清除路径也只认
+        # rule 源失败, WEB 语义不受影响。窗口时长按本动作 spec(recheck_fail_cooldown)取值;
+        # 记录 {hash: 失败时刻} 在 state_file(键 RECHECK_COOLDOWN_KEY), 时间戳过期自然失效,
+        # 校验通过时 ops 层清除(pop 先例对齐 recheck_fails)。
+        cooldown_remain = manager.ctx.ops.recheck_cooldown_remaining(ctx.hash, self.recheck_fail_cooldown)
+        if cooldown_remain > 0:
+            return ActionResult.skip(
+                f"校验失败冷却中(距上次校验失败 {self.recheck_fail_cooldown - cooldown_remain:.0f}s, "
+                f"窗口剩余 {cooldown_remain:.0f}s), 窗口内不重复校验"
+            )
 
         # 决策链 1: 组内有活跃下载种子 -> 整组未完成, 不进行任何校验(包括跳检)
         grouping = manager.host.get("grouping")

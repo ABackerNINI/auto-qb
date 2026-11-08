@@ -16,6 +16,14 @@
 - test_recheck_fail_flushed_immediately: recheck 失败冷却计数即时落盘(防死循环闸门不因崩溃失效)
 - test_bump_recheck_fail_resets_count_across_day: C28 守阵 —— 跨自然日重置写 count 键(键名漂移
   -> 昨日计数不清零)
+- test_checking_fail_cooldown_gate_skips_within_window: 校验失败冷却窗口(26-11-08-1717, 决策链
+  0.5): 窗口内直接 skip 不再提交 recheck, 且不消耗 recheck_fails 额度(两机制分工)
+- test_checking_fail_cooldown_expired_allows_recheck: 冷却记录过期后决策链放行(时间戳自愈,
+  种子删除后的残留记录同样自愈)
+- test_checking_fail_cooldown_recorded_on_fail_flushed: rule 源 FAILED 判定写入冷却记录并即时
+  落盘(窗口闸门不因崩溃失效)
+- test_checking_fail_cooldown_key_absent_uses_default: spec 未配 recheck_fail_cooldown -> 运行时
+  取 1h 缺省档(缺省档唯一来源 checking_meta)
 """
 
 import json
@@ -42,7 +50,7 @@ from auto_qb.rules.actions.full_checking import bump_recheck_fail, recheck_fail_
 
 from auto_qb.rules.base import VERDICT_EXECUTED, VERDICT_PENDING
 
-from auto_qb.rules.checking_meta import PieceCheckingStates, PollVerdict, is_piece_checking, poll_verdict
+from auto_qb.rules.checking_meta import RECHECK_COOLDOWN_DEFAULT, PieceCheckingStates, PollVerdict, is_piece_checking, poll_verdict
 
 from auto_qb.core.taskqueue import FINISHED, PENDING, REQUEUE, TaskQueue
 
@@ -113,7 +121,11 @@ def test_checking_recheck_fail_cooldown():
     origin.interval = 60.0
     mgr.task_queue.add_task(origin, t0)
 
-    with patch("auto_qb.core.modules.ops_mod.CHECK_START_GIVEUP", 0.0):
+    # 本用例钉 recheck_fails 当日预算闸门(ops 提交点), 与失败冷却窗口(决策链 0.5)正交:
+    # 队列时间(+61s/+121.5s)是模拟推进而冷却记录走挂钟, 窗口闸门会误拦模拟时间线上的重试
+    # —— 打桩掉窗口记录写点, 隔离出预算语义本身(窗口语义见 test_checking_fail_cooldown_*)
+    with patch("auto_qb.core.modules.ops_mod.CHECK_START_GIVEUP", 0.0), \
+            patch("auto_qb.core.modules.ops_mod.record_recheck_cooldown"):
         # 第 1 次执行: 提交 recheck -> 让位; 轮询(+0.5)判失败(count=1) -> origin 重入队
         run_queue(mgr, t0)
         run_queue(mgr, t0 + 0.5)
@@ -286,6 +298,9 @@ def test_checking_full_checking_fail_retry():
 
     失败判定前提(首样本竞态修复): 未曾观察到 checking 态不算失败(宽限窗口内继续轮询),
     快照见 checking 后再落回未完成才定罪 —— 真实校验失败必然经过 checking 态。
+
+    失败冷却窗口(决策链 0.5)与本用例的重试时间线正交(队列时间模拟推进而冷却记录走挂钟),
+    打桩掉窗口记录写点隔离出「判败 -> 重入队 -> 重试」语义本身(见 recheck_fail_cooldown 系用例)。
     """
     cfg = make_check_cfg(without_mode="full-checking", without_start=True)
     mgr = make_mgr(cfg, with_tq=True)
@@ -299,27 +314,28 @@ def test_checking_full_checking_fail_retry():
     origin = mgr.host.get("rules")._create_rule_task(rule, "HASH123")
     origin.interval = 60.0
     mgr.task_queue.add_task(origin, t0)
-    run_queue(mgr, t0)
-    assert origin.resume_index == 1 and origin not in mgr.task_queue._fast, "首次执行应记录断点且不重入队"
-    # 首样本: 快照仍是提交前状态(非 checking, progress=0.0) -> 宽限窗口内继续轮询, 不计败
-    seed_store(mgr, [make_target()])
-    run_queue(mgr, t0 + 2.5)
-    assert mgr.state.get("recheck_fails", {}).get("HASH123") is None, "未见 checking 不得计败"
-    assert any(p.kind == "check" for p in mgr.task_queue._fast), "轮询任务应 REQUEUE 存活"
-    # 快照见 checking(校验已启动) -> 继续轮询
-    seed_store(mgr, [make_target(state="checkingDL")])
-    run_queue(mgr, t0 + 5.0)
-    # 校验跑完仍未完成(真实失败) -> 定罪: 计败 + origin reset 重入队
-    seed_store(mgr, [make_target(state="pausedDL", progress=0.5)])
-    run_queue(mgr, t0 + 7.5)
-    assert mgr.state["recheck_fails"]["HASH123"]["count"] == 1, "见过 checking 后的未完成才计败"
-    assert origin.state == PENDING, "失败后应由子任务重新入队重试"
-    assert origin.resume_index is None, "失败应重置断点(重走完整决策链)"
-    assert mgr.store.verified_references == set(), "失败不应晋升参考"
-    assert not mgr.state.get("exec_history"), "失败不应记录执行历史"
-    # 重走决策链: origin 到期 -> 重新 full-checking(再次 pending + 再发 recheck)
-    run_queue(mgr, t0 + 60.5)
-    assert origin.resume_index == 1 and origin not in mgr.task_queue._fast, "重走决策链应再次校验(再次记录断点)"
+    with patch("auto_qb.core.modules.ops_mod.record_recheck_cooldown"):
+        run_queue(mgr, t0)
+        assert origin.resume_index == 1 and origin not in mgr.task_queue._fast, "首次执行应记录断点且不重入队"
+        # 首样本: 快照仍是提交前状态(非 checking, progress=0.0) -> 宽限窗口内继续轮询, 不计败
+        seed_store(mgr, [make_target()])
+        run_queue(mgr, t0 + 2.5)
+        assert mgr.state.get("recheck_fails", {}).get("HASH123") is None, "未见 checking 不得计败"
+        assert any(p.kind == "check" for p in mgr.task_queue._fast), "轮询任务应 REQUEUE 存活"
+        # 快照见 checking(校验已启动) -> 继续轮询
+        seed_store(mgr, [make_target(state="checkingDL")])
+        run_queue(mgr, t0 + 5.0)
+        # 校验跑完仍未完成(真实失败) -> 定罪: 计败 + origin reset 重入队
+        seed_store(mgr, [make_target(state="pausedDL", progress=0.5)])
+        run_queue(mgr, t0 + 7.5)
+        assert mgr.state["recheck_fails"]["HASH123"]["count"] == 1, "见过 checking 后的未完成才计败"
+        assert origin.state == PENDING, "失败后应由子任务重新入队重试"
+        assert origin.resume_index is None, "失败应重置断点(重走完整决策链)"
+        assert mgr.store.verified_references == set(), "失败不应晋升参考"
+        assert not mgr.state.get("exec_history"), "失败不应记录执行历史"
+        # 重走决策链: origin 到期 -> 重新 full-checking(再次 pending + 再发 recheck)
+        run_queue(mgr, t0 + 60.5)
+        assert origin.resume_index == 1 and origin not in mgr.task_queue._fast, "重走决策链应再次校验(再次记录断点)"
 
 
 def test_checking_full_checking_first_sample_race_not_failed():
@@ -468,3 +484,82 @@ def test_bump_recheck_fail_resets_count_across_day():
     assert bump_recheck_fail(state, "HX") == 1, "跨日必须从 1 重新计数"
     assert state.data["recheck_fails"]["HX"] == {"date": date.today().isoformat(), "count": 1}
     assert bump_recheck_fail(state, "HX") == 2, "同日继续累加"
+
+
+# ============================================================
+# H. 校验失败冷却窗口(26-11-08-1717, 决策链 0.5)
+# ============================================================
+def test_checking_fail_cooldown_gate_skips_within_window():
+    """校验失败冷却窗口: 窗口内决策链 0.5 直接 skip, 不再提交 recheck 且不消耗 recheck_fails 额度
+
+    记录点在 ops 层轮询 FAILED 判定(rule 源); 本用例直接预置新鲜记录(挂钟 -30s, 窗口缺省
+    1h)钉闸门 skip 语义与「两机制分工」(记录写入本身见 test_checking_fail_cooldown_recorded_on_fail_flushed
+    与 test_ops_recheck)。
+    """
+    cfg = make_check_cfg(without_mode="full-checking", without_start=True)
+    mgr = make_mgr(cfg, with_tq=True)
+    client = CheckingFakeClient()
+    mgr.client = client
+    t = make_target(state="stoppedDL", progress=0.5)  # 满足闸门 0(暂停中未完成)
+    seed_store(mgr, [t])
+    client.torrents["HASH123"] = t
+    mgr.ctx.state.data.setdefault("recheck_cooldowns", {})["HASH123"] = time.time() - 30.0
+    mgr.ctx.state.save()
+    ctx = make_ctx(mgr, t, client, dry_run=False)
+    ctx.rule_name = "example_rules.check_rule"
+    action = CheckAction({"basic_check": "filelist", "without_reference": {"enabled": True, "mode": "full-checking"}})
+    r = action.execute(ctx)
+    assert r.is_skipped and "校验失败冷却" in r.message, f"窗口内应被冷却闸门拦截: {r}"
+    assert ("recheck", None) not in client.calls, f"窗口内不得再提交 recheck: {client.calls}"
+    assert mgr.state.get("recheck_fails", {}).get("HASH123") is None, "冷却闸门在前, 不消耗失败额度"
+
+
+def test_checking_fail_cooldown_expired_allows_recheck():
+    """窗口过期(时间戳自愈): 过期记录不再拦截, 决策链放行正常提交 recheck
+
+    种子删除后的残留记录走同一条过期自愈路径(无主动清扫), 本用例一并钉住该语义。
+    """
+    cfg = make_check_cfg(without_mode="full-checking", without_start=True)
+    mgr = make_mgr(cfg, with_tq=True)
+    client = CheckingFakeClient()
+    mgr.client = client
+    t = make_target(state="stoppedDL", progress=0.5)
+    seed_store(mgr, [t])
+    client.torrents["HASH123"] = t
+    mgr.ctx.state.data.setdefault("recheck_cooldowns", {})["HASH123"] = time.time() - 7200.0  # 窗口(缺省 1h)已过期
+    mgr.ctx.state.save()
+    handled = process_rule(mgr, client, t, dry_run=False)
+    assert handled, f"窗口过期应放行: {client.calls}"
+    assert ("recheck", None) in client.calls, f"窗口过期后应正常提交 recheck: {client.calls}"
+
+
+def test_checking_fail_cooldown_recorded_on_fail_flushed():
+    """rule 源 FAILED 判定写入冷却记录并即时落盘: 窗口闸门不因崩溃失效(对齐 recheck_fails 落盘纪律)"""
+    cfg = make_check_cfg(without_mode="full-checking", without_start=True)
+    mgr = make_mgr(cfg, with_tq=True)
+    client = CheckingFakeClient()
+    mgr.client = client
+    t = make_target(state="stoppedDL", progress=0.5)
+    seed_store(mgr, [t])
+    client.torrents["HASH123"] = t
+    t0 = time.time()
+    process_rule(mgr, client, t, dry_run=False)  # 提交 recheck + 登记轮询
+    seed_store(mgr, [make_target(state="checkingDL")])
+    run_queue(mgr, t0 + 2.5)  # 生效证据 -> REQUEUE
+    seed_store(mgr, [make_target(state="pausedDL", progress=0.5)])
+    run_queue(mgr, t0 + 5.0)  # 生效后未完成 -> FAILED
+    rec = mgr.state.get("recheck_cooldowns", {}).get("HASH123")
+    assert rec is not None, f"FAILED 判定应写入冷却记录: {mgr.state.get('recheck_cooldowns')}"
+    assert t0 - 1.0 <= rec <= time.time() + 1.0, f"记录应为挂钟失败时刻: {rec}"
+    assert mgr.state["recheck_fails"]["HASH123"]["count"] == 1, "失败冷却计数照常累加(两机制并存)"
+    with open(mgr.state_file, "r", encoding="utf-8") as f:
+        on_disk = json.load(f)
+    assert on_disk.get("recheck_cooldowns", {}).get("HASH123") is not None, "冷却记录必须已写上盘"
+
+
+def test_checking_fail_cooldown_key_absent_uses_default():
+    """spec 未配 recheck_fail_cooldown -> 运行时取 1h 缺省档(缺省档唯一来源 checking_meta.RECHECK_COOLDOWN_DEFAULT)"""
+    action = CheckAction({"basic_check": "filelist"})
+    assert action.recheck_fail_cooldown == RECHECK_COOLDOWN_DEFAULT, "键缺省应取 1h 缺省档"
+    action2 = CheckAction({"basic_check": "filelist", "recheck_fail_cooldown": "30M"})
+    assert action2.recheck_fail_cooldown == 1800.0, "时间串应解析为秒"

@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="checking-paused-recheck-loop">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="checking: 未完成且暂停的种子 recheck 后仍未完成会下轮再次校验">
 <meta name="issue-summary" content="CheckAction.execute 内历史 TODO(checking.py:87)未销: 该形态种子每轮重复进校验, 现仅 3 次失败冷却兜底; 需设计跳过/冷却口径后销 TODO">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-08-1717-refactor-checking-paused-recheck-loop</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-08 17:17</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
 
@@ -113,11 +113,18 @@
   <p class="todo">TODO: 一句话方向；没有就写「待定」。不为填单做分析。</p>
 </section>
 
+<section id="s5">
+  <h2><span class="no">§05</span>修复后补充（2026-11-09）</h2>
+  <p><strong>实际修法</strong>：已拍板口径「冷却窗口记一次」。full-checking 轮询判定 FAILED（rule 源）时在 state_file 记 <code>recheck_cooldowns[hash] = 失败时刻</code>（覆盖写 + 即时落盘，helper 单点 <code>rules/checking_meta.py</code>）；CheckAction 决策链 0 之后新增 0.5 冷却闸门，窗口内直接 skip（不消耗 recheck_fails 额度）。窗口时长为 checking 动作 spec 键 <code>recheck_fail_cooldown</code>（时间串，缺省 1H，正值校验不可关闭），schema/validation/docs/键面基线全链登记。校验成功（progress>=1）清除记录（对齐 recheck_fails pop 先例）；种子删除残留由时间戳过期自愈。START_TIMEOUT（从未真正开检）不记冷却。skip-checking 失败形态不记：跳检成功路径已被同日去重闸门覆盖、操作型失败重试有益，且与 recheck_fails 只覆盖 full 路径的既有口径一致。</p>
+  <p><strong>验证方式</strong>：<code>commands run test.quick</code> 实测 5864 passed / 2 skipped（2026-11-09）；新增冷却窗口用例 4 条（窗口内 skip / 过期放行 / 失败记录即时落盘 / 缺省档）+ ops 层 web/rule 源记录与成功清除断言扩展 + 配置校验用例 1 条；键面基线 199→200 键重生成。</p>
+</section>
+
 <section id="s4">
   <h2><span class="no">§04</span>状态变更日志</h2>
   <ul>
     <li>2026-11-08 17:17 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-09 — 状态 Open → Done（kb.status）</li>
+</ul>
 </section>
 
 <footer>

@@ -271,6 +271,13 @@ ACTION_PLUGINS: Tuple[Plugin, ...] = (
                 help="单次调用自定义校验程序的最长等待; 超时强制结束并把该候选视为非参考(缺省 600s), 不可关闭",
             ),
             Field(
+                "recheck_fail_cooldown",
+                "校验失败冷却",
+                "time",
+                default="1H",
+                help="全量校验判定失败后, 该种子在窗口内不再重复校验(缺省 1 小时, 不可关闭); 窗口过期自动恢复重试, 校验通过立即解除",
+            ),
+            Field(
                 "with_reference",
                 "有参考种子",
                 "object",

@@ -27,6 +27,18 @@ CHECK_RESULT_INTERVAL = 2.0
 # 同一种子当日连续校验失败上限: 防止损坏文件导致 recheck 死循环(次日重置)
 RECHECK_FAIL_LIMIT = 3
 
+# 校验失败冷却窗口缺省(秒; schema 侧同值写作 "1H"): full-checking 判定 FAILED 后窗口内
+# 不再重复校验(26-11-08-1717, 决策链 0.5) —— 数据不随重试改变, 窗口内重试只烧 I/O 与
+# 失败额度。取 1h 量级: 决策链触发节拍是规则 interval(分钟级), 1h 足够压平「每轮重复
+# 校验」; 又远短于 recheck_fails 的当日预算, 窗口过期后当日内仍可有约 2 次真重试(与
+# 3 次/日兜底口径衔接)。不可关闭(校验期 positive 拦 0/负): 窗口只在真实校验失败后生效,
+# 关闭它等于放回本 issue 的「每轮重复校验」形态。
+RECHECK_COOLDOWN_DEFAULT = 3600.0
+
+# 校验失败冷却记录的 state_file 键: {hash: 记录时刻(epoch 秒, 语义=最近一次失败, 见
+# record_recheck_cooldown)}; 与 recheck_fails 同层
+RECHECK_COOLDOWN_KEY = "recheck_cooldowns"
+
 # 组内校验等待上限(秒): 防在途标记异常泄漏导致等待任务活锁(大种子全量校验可超 1h, 取宽松值)
 GROUP_CHECK_WAIT_LIMIT = 2 * 3600.0
 
@@ -119,3 +131,53 @@ def bump_recheck_fail(state: Any, hash: str) -> int:
     rec["count"] += 1
     state.save()  # 冷却计数即时落盘: 丢了会对同一损坏文件多试 recheck(当日上限闸门失效一次); 上界 3 次/日/种, 频率天然低
     return rec["count"]
+
+
+# ============================================================
+# 校验失败冷却窗口(26-11-08-1717): 记录 / 剩余 / 清除
+# ============================================================
+# 与 recheck_fails 的分工(两者并存, 互不替代): 冷却窗口在前(规则决策链 0.5, 窗口内直接
+# skip, 不消耗 recheck_fails 额度), recheck_fails 在 ops 提交点兜底(窗口过期后的重试失败
+# 仍被它计数, 3 次/日封顶)。记录点只在 ops 层 recheck 轮询 FAILED 判定(rule 源, D1 口径
+# 与 recheck_fails 对齐; WEB 手动排障不记不受限)。
+
+
+def recheck_cooldown_remaining(state: Any, hash: str, now: float, window: float) -> float:
+    """该 hash 校验失败冷却窗口剩余秒数; 无记录或已过期 -> 0.0
+
+    窗口从记录时刻起算(记录语义 = 最近一次失败, 见 record_recheck_cooldown), 时间戳过期
+    自然失效 —— 不依赖轮次频率, 种子删除后的残留记录同样自愈, 无需主动清扫。now 由调用方
+    传入(挂钟 epoch 秒): 纯算术函数可测, 取时单点在消费方(ops 层经注入时钟, 见
+    OpsModule.recheck_cooldown_remaining)。
+    """
+    ts = state.data.get(RECHECK_COOLDOWN_KEY, {}).get(hash)
+    if ts is None:
+        return 0.0
+    remain = window - (now - ts)
+    return remain if remain > 0.0 else 0.0
+
+
+def record_recheck_cooldown(state: Any, hash: str, now: float) -> None:
+    """记录校验失败冷却起点(写入即覆盖为本次失败时刻), 即时落盘
+
+    语义选择(覆盖写 = 「最近一次失败起算」而非「首次失败起算」): 记录点仅 rule 源 FAILED
+    判定, 而窗口内规则源重试被决策链 0.5 结构性阻断 —— 可达路径上不存在「窗口内第二个
+    失败事件」, 两种锚定等价; 覆盖写让 ops 层记录时无需读取窗口配置值(窗口是 checking
+    动作 spec 键, ops 层不依赖动作 spec, 键面归属简洁), 且若将来出现窗口内失败的新路径
+    (如窗口被调小), 覆盖写偏向顺延保护而非提前放行, 方向保守。幂等: 同一失败事件只到
+    达一次(轮询单跳判定唯一出口), 不存在同事件重复记; 落盘纪律与 bump_recheck_fail 相同
+    (丢了 = 窗口闸门失效一次, 对同一损坏文件多试 recheck)。
+    """
+    state.data.setdefault(RECHECK_COOLDOWN_KEY, {})[hash] = now
+    state.save()
+
+
+def clear_recheck_cooldown(state: Any, hash: str) -> None:
+    """清除该 hash 的冷却记录(校验通过时调用, 对齐 recheck_fails 成功路径 pop 先例)
+
+    只在有记录时落盘(成功路径高频, 避免无写放行写); 数据已证实完整, 残留记录只会造成
+    窗口内的无谓 skip。
+    """
+    cds = state.data.get(RECHECK_COOLDOWN_KEY)
+    if cds and cds.pop(hash, None) is not None:
+        state.save()

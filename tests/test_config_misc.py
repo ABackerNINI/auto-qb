@@ -23,6 +23,8 @@
   enabled 非布尔报错, 全键面合法不报)
 - test_validate_checking_custom_timeout_key: checking 的 custom_basic_check_timeout 合法时间串放行;
   负数/坏格式/0 fail-fast 拒绝(超时保险丝只可调档不可关掉)
+- test_validate_checking_cooldown_key: checking 的 recheck_fail_cooldown 合法时间串放行;
+  负数/坏格式/0 fail-fast 拒绝(校验失败冷却窗口不可关闭, 26-11-08-1717)
 - test_validate_rule_refs: tracker.rules 引用必须 @ 开头且目标存在; 重复引用判重(尾随空白归一判重/畸形只报格式错不叠加/合法配置原样保序不去重)
 - test_validate_regex_patterns: 非法 regex: 模式报错
 - test_validate_condition_and_remove_tags_regex: tags/category/trackers 条件与 remove_tags 动作非法 regex: fail-fast
@@ -425,6 +427,33 @@ def test_validate_checking_custom_timeout_key():
         # 0(关掉保险丝的写法)按正时间校验拒绝
         err = _load_errors(td, base + "            custom_basic_check_timeout: 0S\n")
         assert "custom_basic_check_timeout" in err and "必须为正时间" in err, err
+
+
+def test_validate_checking_cooldown_key():
+    """recheck_fail_cooldown: 合法时间串放行; 负数/坏格式/0 在 config 校验期 fail-fast 拒绝
+    (校验失败冷却窗口不可关闭, 26-11-08-1717 —— 窗口只在真实校验失败后生效, 0=关闭等于放回
+    「每轮重复校验」的本 issue 形态)"""
+    with tempfile.TemporaryDirectory() as td:
+        base = (
+            "config:\n"
+            "  example_rules:\n"
+            "    r1:\n"
+            "      actions:\n"
+            "        - checking:\n"
+            "            basic_check: filelist\n"
+        )
+        # 合法时间串(含人话形式)放行
+        assert _load_errors(td, base + "            recheck_fail_cooldown: 1H\n") == ""
+        assert _load_errors(td, base + "            recheck_fail_cooldown: 30M\n") == ""
+        # 负数: 不满足时间串形状, 报无效格式(坐标含键名)
+        err = _load_errors(td, base + "            recheck_fail_cooldown: -5M\n")
+        assert "recheck_fail_cooldown" in err and "无效时间格式" in err, err
+        # 非时间串照拒
+        err = _load_errors(td, base + "            recheck_fail_cooldown: soon\n")
+        assert "recheck_fail_cooldown" in err and "无效时间格式" in err, err
+        # 0(关掉冷却的写法)按正时间校验拒绝
+        err = _load_errors(td, base + "            recheck_fail_cooldown: 0S\n")
+        assert "recheck_fail_cooldown" in err and "必须为正时间" in err, err
 
 
 def test_validate_rule_refs():

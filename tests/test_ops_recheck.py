@@ -4,8 +4,10 @@
 - test_ops_web_recheck_registers_and_releases: web 源提交 -> 登记 _active_checks(决策链 1.5 可见); 轮询 FINISHED 释放, 无 origin 重入队副作用, 不晋升
 - test_ops_web_recheck_rejected_when_inflight: 在途互斥(全来源): 规则轮询在途 -> web 源拒绝「校验进行中」, qB 不重启校验
 - test_ops_web_recheck_rejected_when_snapshot_checking: 快照 checking 态 -> 拒绝(不依赖登记, 覆盖 qB 自家 WebUI 发起的校验)
-- test_ops_web_recheck_no_cooldown_no_promotion: web 源反复失败不计冷却(D1 手动排障不受限), 成功不晋升 verified_references
-- test_ops_rule_recheck_cooldown_and_requeue_regression: rule 源失败计冷却 + origin 默认重置重入队 + 达上限当日拒绝(回归不变)
+- test_ops_web_recheck_no_cooldown_no_promotion: web 源反复失败不计冷却(D1 手动排障不受限, 含失败冷却
+  窗口记录不写入 26-11-08-1717), 成功不晋升 verified_references
+- test_ops_rule_recheck_cooldown_and_requeue_regression: rule 源失败计冷却 + 写失败冷却窗口记录(26-11-08-1717)
+  + origin 默认重置重入队 + 达上限当日拒绝(回归不变)
 - test_ops_recheck_completed_torrent_first_hop_no_false_success: 已完成种子首跳读旧快照 -> 无证据不判成功(WAITING), 在途登记持有, 见证据后才真判定成功 (S2a)
 - test_ops_recheck_stale_snapshot_timeline_no_false_success: 生产时间线重放: 快照冻结两拍无结论 -> 证据 -> 完成才唯一一次「校验成功」 (S2a)
 - test_ops_rule_recheck_success_once_after_evidence: rule 源全序列 on_success 恰 1 次且只发生在见证据之后(带序号回调) (S2a)
@@ -28,7 +30,7 @@
 - test_skip_check_precheck_readonly: T20 预检只读(state 深比对不变/去重表不写入不 prune/零写 API/种子零变动)+ gone 判定 + dedup 前移回归钉(reasons[0]=dedup, 26-11-04-2357 R2)
 - test_guard_recheck_scope_single: recheck 作用域必须单 hash(rc164 高危 None=全库重校验)
 - test_guard_recheck_delete_branch_requeues_origin: 轮询期种子删除 -> rule origin 重入队(rc53)
-- test_guard_recheck_success_clears_cooldown: 校验成功清除失败冷却(rc74/77/81/82)
+- test_guard_recheck_success_clears_cooldown: 校验成功清除失败冷却(rc74/77/81/82, 含失败冷却窗口记录 26-11-08-1717)
 
 覆盖率第三轮 T2b 补测(26-11-05):
 - test_ops_recheck_gone_hash_skips_cleanly: 快照与显式传入都没有该种子 -> 干净放弃零 API 成本(182->184)
@@ -133,11 +135,15 @@ def test_ops_web_recheck_rejected_when_snapshot_checking():
 
 
 def test_ops_web_recheck_no_cooldown_no_promotion():
-    """测试: web 源反复失败不计冷却(D1), 达到规则源上限后仍可提交; 成功不晋升参考"""
+    """测试: web 源反复失败不计冷却(D1, 含失败冷却窗口记录不写入 26-11-08-1717), 达到规则源
+    上限后仍可提交; 成功不晋升参考"""
     mgr = make_mgr(FakeConfig())
     client = FakeClient()
     mgr.client = client
     t = seed_paused(mgr, client)
+    # 预置新鲜失败冷却窗口记录: WEB 手动排障不受窗口限制(闸门在规则决策链, ops 提交点不拦)
+    mgr.ctx.state.data.setdefault("recheck_cooldowns", {})["HA"] = time.time()
+    mgr.ctx.state.save()
     now = time.time()
     for i in range(RECHECK_FAIL_LIMIT + 1):
         r = mgr.ctx.ops.recheck("HA", source="web")
@@ -149,6 +155,7 @@ def test_ops_web_recheck_no_cooldown_no_promotion():
         run_queue(mgr, now + i * 10 + 3)  # 落回未完成 -> 判败
         assert "HA" not in mgr.state.get("recheck_fails", {}), "web 源失败不得计入冷却计数"
         assert "HA" not in mgr.task_queue.active_check_hashes(), "判败后轮询应消亡释放在途"
+    assert "HA" in mgr.state.get("recheck_cooldowns", {}), "web 源失败不得写入失败冷却窗口记录(预置记录不得被改写)"
     # 成功路径: 不晋升
     t.state = "pausedDL"
     t.progress = 0.0
@@ -176,6 +183,8 @@ def test_ops_rule_recheck_cooldown_and_requeue_regression():
     t.progress = 0.5
     run_queue(mgr, now + 3)
     assert mgr.state["recheck_fails"]["HA"]["count"] == 1, "rule 源失败应计入冷却"
+    assert "HA" in mgr.state.get("recheck_cooldowns", {}), \
+        f"rule 源失败应写入失败冷却窗口记录(26-11-08-1717): {mgr.state.get('recheck_cooldowns')}"
     assert any(task is origin for task in mgr.task_queue._fast), "失败后 origin 应被默认重置重入队"
     # 达上限 -> 当日拒绝(冷却闸门在提交点, qB 不再收到 recheck)
     while bump_recheck_fail(mgr.ctx.state, "HA") < RECHECK_FAIL_LIMIT:
@@ -720,6 +729,8 @@ def test_guard_recheck_success_clears_cooldown():
     mgr.client = client
     t = seed_paused(mgr, client)
     bump_recheck_fail(mgr.ctx.state, "HA")  # 预置 1 次失败账(低于上限)
+    mgr.ctx.state.data.setdefault("recheck_cooldowns", {})["HA"] = time.time()  # 预置新鲜窗口记录(26-11-08-1717)
+    mgr.ctx.state.save()
     r = mgr.ctx.ops.recheck("HA", source="rule")
     assert r.is_pending, f"rule 源应 pending: {r}"
     now = time.time()
@@ -730,6 +741,8 @@ def test_guard_recheck_success_clears_cooldown():
     run_queue(mgr, now + 3)  # 证据已立 + progress=1.0 -> SUCCESS
     assert "HA" not in mgr.state["recheck_fails"], \
         f"校验成功必须清除冷却账: {mgr.state.get('recheck_fails')}"
+    assert "HA" not in mgr.state.get("recheck_cooldowns", {}), \
+        f"校验成功必须清除失败冷却窗口记录: {mgr.state.get('recheck_cooldowns')}"
 
 
 # ---------- 覆盖率第三轮 T2b 补测(26-11-05): 干净放弃与判败文案标签 ----------

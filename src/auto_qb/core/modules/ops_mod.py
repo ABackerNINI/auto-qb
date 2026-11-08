@@ -7,7 +7,9 @@ manager 旧名单行委托(plan §7.2, P5 收口时随规则模块一起改 ctx.
 
 recheck / 跳检的 qB 交互序列、提交点检查与保护策略单点归本模块。保护策略按来源(source)
 区分(计划 §3.5, D1 拍板口径):
-- 防「自动化频率失控」的保护只作用 source="rule": 3 次/日校验失败冷却(recheck_fails)。
+- 防「自动化频率失控」的保护只作用 source="rule": 3 次/日校验失败冷却(recheck_fails) +
+  校验失败冷却窗口记录(recheck_cooldowns, 26-11-08-1717 —— 记录在 ops, 闸门消费在规则
+  决策链 0.5, 窗口值按动作 spec; 分工见 checking_meta)。
   WEB 源是手动排障, 不受限 —— 限制它就是「按钮为什么不生效」。
 - 防「真实冲突」的作用所有来源: 在途互斥(_active_checks 登记 / 快照 checking 态, R1)、
   recheck 提交点检查(R1: 在途 + 快照)、跳检相位机 + 同日去重(提交前不直查, 见 26-10-21-2323 S3)
@@ -45,9 +47,12 @@ from ...rules.checking_meta import (
     RECHECK_FAIL_LIMIT,
     PollVerdict,
     bump_recheck_fail,
+    clear_recheck_cooldown,
     is_piece_checking,
     poll_verdict,
+    recheck_cooldown_remaining,
     recheck_fail_count,
+    record_recheck_cooldown,
 )
 from ...torrents import TorrentRecord
 from ..module import AppContext, BaseModule
@@ -96,6 +101,16 @@ class OpsModule(SkipMixin, VerdictMixin, JobsMixin, BaseModule):
     def save_state(self) -> None:
         """状态立即落盘(冷却计数/跳检去重/备份元数据等非常规路径的即时写)"""
         self._ctx.state.save()
+
+    def recheck_cooldown_remaining(self, hash: str, window: float) -> float:
+        """校验失败冷却窗口剩余秒数(只读 helper, 26-11-08-1717 决策链 0.5 经 ctx.ops 消费)
+
+        与 skip_checked_today 同形(谓词单点在本模块, 规则侧只读消费); 窗口值按调用方的
+        checking 动作 spec(recheck_fail_cooldown)传入 —— ops 层不读动作 spec, 记录/判定
+        共用 state 单键(recheck_cooldowns)。取时经注入时钟(与记录点 record 同一钟面,
+        测试换假钟两端同受控)。
+        """
+        return recheck_cooldown_remaining(self._ctx.state, hash, self._clock.now(), window)
 
     # ---------- 日志 ----------
 
@@ -232,6 +247,10 @@ class OpsModule(SkipMixin, VerdictMixin, JobsMixin, BaseModule):
                     if on_success is not None:
                         on_success()
                     self.state.get("recheck_fails", {}).pop(hash, None)  # 校验通过: 清除失败冷却计数
+                    # 校验通过同时清除失败冷却窗口记录(26-11-08-1717): 数据已证实完整, 残留
+                    # 记录只会造成窗口内的无谓 skip; 全来源清除 —— WEB 源校验成功同样构成
+                    # 「数据完整」证据, 且 progress>=1 的种子本就被决策链 0 拦, 清除无副作用
+                    clear_recheck_cooldown(self._ctx.state, hash)
                     if auto_start:
                         self._ctx.api.torrents_start(torrent_hashes=hash)
                         logger.info(f"{prefix} {rec.log_repr} | 校验成功自动开始")
@@ -242,6 +261,11 @@ class OpsModule(SkipMixin, VerdictMixin, JobsMixin, BaseModule):
                     # 均为真实校验未通过(冷却仅规则源, D1); 两到达路径只是标签差异, 处置相同
                     if source == "rule":
                         fail_count = bump_recheck_fail(self._ctx.state, hash)
+                        # 校验失败冷却窗口记录(26-11-08-1717): 仅 rule 源(D1 口径与 recheck_fails
+                        # 对齐, WEB 手动排障不记不受限)。START_TIMEOUT 不记 —— 该分支从未真正
+                        # 开检, 「校验后仍未完成」前提不成立, 其重试节奏仍由 recheck_fails 兜底。
+                        # 记录语义(覆盖写/即时落盘)见 record_recheck_cooldown 注释。
+                        record_recheck_cooldown(self._ctx.state, hash, self._clock.now())
                         if seen_checking:
                             logger.warning(f"{prefix} {rec.log_repr} | 校验未通过(第{fail_count}次, progress={rec.progress})")
                         else:
