@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="hr-ext-stub-port-kill-yes-doc">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="hr_ext_stub.py 提示文案未提 port_kill 新 --yes 门">
 <meta name="issue-summary" content="hr_ext_stub.py :27/:205 提示仍写旧口径, 非 python 监听者无 --yes 会被拒杀(rc=1), 按旧文案操作碰壁">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-07-1216-docs-hr-ext-stub-port-kill-yes-doc</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-07 12:16</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">docs</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
 
@@ -114,13 +114,17 @@
 <section id="s3">
   <h2><span class="no">§03</span>建议<span class="opt">（可选）</span></h2>
   <p>两处文案补「非 python 监听须 <code>--yes</code>」口径（或指向 AGENTS.md:66 豁免行 / 脚本 usage :9）。</p>
+  <h3>修复后补充（2026-11-08）</h3>
+  <p><strong>实际修法</strong>: 按建议第一案，两处文案各补「非 python 监听须加 --yes」——:27 docstring 另指向 AGENTS.md「进程安全」节；:205 运行时 f-string 提示因行长拆成两个相邻 f-string 字面量拼接（yapf 列宽 120 内）。未动 <code>scripts/port_kill.py</code> 行为侧。</p>
+  <p><strong>验证方式</strong>: <code>python -I -m py_compile scripts/hr_ext_stub.py</code> 通过；<code>commands run test.quick</code> 实测 5779 passed + 2 skipped（2026-11-08，head <code>a9e1cbcf</code>；首轮同命令出现 <code>test_r4_shortcuts_panel_load_failed_gate</code> 1 失败，单跑通过、复跑全绿，判并行偶发与本改动无关——该用例只读 webui 静态文件，与 hr_ext_stub 无交集）。测试未钉这两处文案（grep 证），无需补锚。</p>
 </section>
 
 <section id="s4">
   <h2><span class="no">§04</span>状态变更日志</h2>
   <ul>
     <li>2026-11-07 12:16 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-08 — 状态 Open → Done（kb.status）</li>
+</ul>
 </section>
 
 <footer>

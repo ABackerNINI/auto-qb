@@ -11,7 +11,7 @@
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 - [chore] [版本号双源矛盾: __init__.__version__ 0.2.0 vs pyproject 0.1.0](../26-09-21-1408-chore-version-dual-source.html) — WebUI 顶栏透出与打包元数据已差一个 minor; 建议 pyproject 单源 + 动态读取
 
-## Open (78)
+## Open (77)
 
 - [bug] [model._as_int 对 inf/超大值抛 OverflowError(约 30 调用方)](../26-11-08-0827-bug-as-int-overflow-gap.html) — _as_int 只捕 TypeError/ValueError, pages 写 1e999(解析 inf)或裸 Infinity 时 int(inf) 抛 OverflowError 穿透, history_rows 等读路径仍可整体抛错
 - [bug] [hr server 头部读取路径 ConnectionResetError 冒泡 handle_error 打 stderr](../26-11-08-0827-bug-hr-server-header-read-reset.html) — 读体路径已护(#12), 但标准库请求行/头部 readline 路径的连接重置仍走 handle_error 打 traceback, 与『半路断开是常态』意图相悖
@@ -45,7 +45,6 @@
 - [bug] [porcelain_paths 不解 git C 风格引号路径, 非 ASCII rename 静默漏检](../26-11-07-1216-bug-check-context-caps-porcelain-quote.html) — check_context_caps.py porcelain_paths 对 quotePath 转义路径不 unquote, 非 ASCII rename 行「改动命中」判定静默漏检
 - [bug] [check_kb_structure.py 运行时输出含图形符号(违反 code-style 代码禁令)](../26-11-07-1216-bug-check-kb-structure-glyph.html) — skill 侧 check_kb_structure.py 运行时提示行含 ->类符号(trim_hint 返回串/print 列表符), 经提交闸门终端输出
 - [bug] [port_kill.py 存量子进程未钉 encoding(cp1252 同病)](../26-11-07-1216-bug-port-kill-subprocess-encoding.html) — port_kill.py 两处 subprocess.run text=True 缺 encoding/errors, 守卫只扫 tests/ 不含 scripts/, CI 不红但同病
-- [docs] [hr_ext_stub.py 提示文案未提 port_kill 新 --yes 门](../26-11-07-1216-docs-hr-ext-stub-port-kill-yes-doc.html) — hr_ext_stub.py :27/:205 提示仍写旧口径, 非 python 监听者无 --yes 会被拒杀(rc=1), 按旧文案操作碰壁
 - [feat] [回收 daemon 进程名册证为全机口径: 同机多 qB 实例时收尾窗可用性让位 N1(取舍记录+增强方向)](../26-11-07-0528-feat-recycle-daemon-roster-machine-wide.html) — 评审#6 后名册证=全机口径, 同机多 qB 实例(P7 形态)时 daemon 等不到收尾窗直至全部实例退场; 属 N1 零写入铁律优先的显式取舍(已声明, 单实例零影响), 未来兼顾需比映像名更强的实例身份证据
 - [question] [链式再迁移态撤销前任的语义未定稿: supersede 改道后撤销方向三选一待拍板](../26-11-07-0528-question-relocate-supersede-cancel-semantics.html) — supersede 改道态下撤销前任会把共享数据 C→A 搬回而后任仍指向 C(成员断粮); 现仅 cancel_chain 同目标护栏最小面, 前任撤销完整语义(拦/级联/清账出口)待定稿
 - [bug] [存量评审 R4·core 汇总(major 12/minor 31)](../26-11-07-0527-bug-legacy-review4-core.html) — core 主题 major 12+minor 31 共 43 条(R1#81/#82 合并组拆回为 44 行)聚合入池,来源存量评审 R4(计划 26-11-05-2335)
@@ -92,10 +91,11 @@
 - [bug] [设置页警示条是伪警示: 只复述 schema 风险文案, 不反映配置健康; 升级失效键无任何提示](../26-09-22-2002-bug-webui-config-health-warning.html) — 首页警示条由『已配置且 schema 带 risk 文案』驱动, 恒亮、静态、与配置健康无关; 且 load_config 对 schema 外键静默忽略, 版本升级后配置项失效无任何提示
 - [chore] [hatch-pet 调付费 OpenAI 图像 API 且无成本提示](../26-09-20-1427-chore-skill-hatch-pet-api-cost.html) — hatch-pet 生成图会直连 api.openai.com 计费接口, skill 未标注费用风险
 
-## Done (444)
+## Done (445)
 
 - [docs] [远端 hr-review4 收尾两条 pitfalls 缺三行头元数据(存量红)](../26-11-08-1048-docs-hr-review4-pitfalls-metadata-missing.html) — e07d2c88 的两条 pitfalls 缺 > 摘要:/> 触发: 头,test_kb_topic_files_have_metadata 恒红阻塞提交闸门
 - [bug] [评审闸门锚点在合并拓扑下树差虚增: 侧分支 trailer 遮蔽主线锚点致提交死锁](../26-11-08-0903-bug-review-anchor-merge-topology.html) — check_review_trace 锚点取平铺 log 最新 trailer, 侧分支(旧基线切出)合并后树差把主线已评工作整支算进本批(~9600 行), 提交被闸门死锁
+- [docs] [hr_ext_stub.py 提示文案未提 port_kill 新 --yes 门](../26-11-07-1216-docs-hr-ext-stub-port-kill-yes-doc.html) — hr_ext_stub.py :27/:205 提示仍写旧口径, 非 python 监听者无 --yes 会被拒杀(rc=1), 按旧文案操作碰壁
 - [bug] [重定向链接位被真文件占据时会删掉真文件(真目录有保护, 真文件没有)](../26-11-07-0748-bug-relocate-retarget-real-file-unlink.html) — retarget_alias 只护真目录(非空拒绝/空则 rmdir), 真文件位落到 remove_alias 的 os.unlink —— 静默删除真实数据
 - [bug] [存量评审 R4·scripts 汇总(major 1/minor 23)](../26-11-07-0536-bug-legacy-review4-scripts.html) — scripts 主题 major 1+minor 23 共 24 条聚合入池,来源存量评审 R4(计划 26-11-05-2335)
 - [bug] [存量评审 R4·static 汇总(major 24/minor 111)](../26-11-07-0536-bug-legacy-review4-static.html) — static 主题 major 24+minor 111 共 135 条聚合入池,来源存量评审 R4(计划 26-11-05-2335)

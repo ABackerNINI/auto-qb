@@ -24,7 +24,7 @@ GET /api/hr/tasks 恒回空任务清单(无任务 = 取数通道的正常稳态)
     curl http://127.0.0.1:18788/control
     curl -X POST http://127.0.0.1:18788/control -H "Content-Type: application/json" ^
          -d "{\"port\": <数据端口>, \"mode\": \"down\"}"     # Git Bash 里引号转义同 bash
-停止: Ctrl+C。端口被占会一行报错并退出(可用 scripts/port_kill.py -- 18788 清理)。
+停止: Ctrl+C。端口被占会一行报错并退出(可用 scripts/port_kill.py -- 18788 清理; 非 python 监听须加 --yes, 见 AGENTS.md「进程安全」节)。
 """
 from __future__ import annotations
 
@@ -202,7 +202,8 @@ def main() -> int:
         disc = ThreadingHTTPServer(("127.0.0.1", args.discovery_port), _Handler)
     except OSError as e:
         print(
-            f"[stub] 发现端口 {args.discovery_port} 绑不上({e}) —— 先 scripts/port_kill.py -- {args.discovery_port} 清理占用",
+            f"[stub] 发现端口 {args.discovery_port} 绑不上({e}) —— 先 scripts/port_kill.py -- {args.discovery_port} 清理占用"
+            f"(非 python 监听须加 --yes)",
             file=sys.stderr
         )
         return 1

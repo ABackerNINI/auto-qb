@@ -21,7 +21,7 @@
 |---|---|
 | bug | 25 |
 | perf | 2 |
-| docs | 4 |
+| docs | 3 |
 | test | 11 |
 | refactor | 7 |
 | feat | 20 |
@@ -69,7 +69,6 @@
 - [bug] [porcelain_paths 不解 git C 风格引号路径, 非 ASCII rename 静默漏检](26-11-07-1216-bug-check-context-caps-porcelain-quote.html) — check_contex…
 - [bug] [check_kb_structure.py 运行时输出含图形符号(违反 code-style 代码禁令)](26-11-07-1216-bug-check-kb-structure-glyph.html) — skill 侧 chec…
 - [bug] [port_kill.py 存量子进程未钉 encoding(cp1252 同病)](26-11-07-1216-bug-port-kill-subprocess-encoding.html) — port_kill.py…
-- [docs] [hr_ext_stub.py 提示文案未提 port_kill 新 --yes 门](26-11-07-1216-docs-hr-ext-stub-port-kill-yes-doc.html) — hr_ext_stub.…
 - [feat] [回收 daemon 进程名册证为全机口径: 同机多 qB 实例时收尾窗可用性让位 N1(取舍记录+增强方向)](26-11-07-0528-feat-recycle-daemon-roster-machine-wide.html) — 评审#6 后名册证=全机…
 - [question] [链式再迁移态撤销前任的语义未定稿: supersede 改道后撤销方向三选一待拍板](26-11-07-0528-question-relocate-supersede-cancel-semantics.html) — supersede 改道…
 - [bug] [存量评审 R4·core 汇总(major 12/minor 31)](26-11-07-0527-bug-legacy-review4-core.html) — core 主题 majo…
@@ -119,7 +118,7 @@
 ## Done
 
 
-> 更早的 **444** 条已出本索引 —— 报告仍在 `issues/` 目录(未搬动), 全量清单见 [attachments/_archive.md](attachments/_archive.md).
+> 更早的 **445** 条已出本索引 —— 报告仍在 `issues/` 目录(未搬动), 全量清单见 [attachments/_archive.md](attachments/_archive.md).
 
 ## Dropped
 
