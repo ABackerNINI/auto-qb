@@ -286,7 +286,7 @@ def test_local_scandir_unc_boundary_not_cwd_joined(monkeypatch):
 
 
 def test_mapped_unc_source_scandir_logical(tmp_path):
-    """UNC 映射源(`\\NAS\share`)命中映射且 entry.path 保持 UNC 形状(逻辑进 -> 逻辑出, R2#30)"""
+    r"""UNC 映射源(`\\NAS\share`)命中映射且 entry.path 保持 UNC 形状(逻辑进 -> 逻辑出, R2#30)"""
     mount = str(tmp_path).replace(os.sep, "/")
     fa = MappedFileAccess((PathMapEntry(src=r"\\NAS\share", dst=mount), ))
     (tmp_path / "sub").mkdir()

@@ -4,16 +4,16 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="color-scheme" content="dark">
-<title>test_file_access.py docstring 无效转义触发 SyntaxWarning · chore · 计划外问题（便签）</title>
+<title>test_file_access.py docstring 无效转义触发 SyntaxWarning · chore · 计划外问题（已修）</title>
 <meta name="issue-slug" content="test-file-access-docstring-escape">
 <meta name="issue-stamp" content="26-11-08-1841">
 <meta name="issue-type" content="chore">
 <meta name="doc-topic" content="test-file-access-docstring-escape">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="test_file_access.py docstring 无效转义触发 SyntaxWarning">
-<meta name="issue-summary" content="tests/test_file_access.py:289 docstring 内 \\NAS\share 的 \s 是无效转义序列, 每次导入报 SyntaxWarning; 改 raw docstring 或双写反斜杠即可">
+<meta name="issue-summary" content="tests/test_file_access.py:289 docstring 内 \\NAS\share 的 \s 是无效转义序列; 已改 raw docstring 消除 SyntaxWarning, 单文件 + 全量验证通过">
 <style>
   :root {
     --bg: #10151a;
@@ -84,14 +84,14 @@
 <body>
 <div class="sheet">
 
-<div class="kicker">计划外问题（便签）· chore</div>
+<div class="kicker">计划外问题（已修）· chore</div>
 <h1>test_file_access.py docstring 无效转义触发 SyntaxWarning</h1>
-<p class="lede">tests/test_file_access.py:289 docstring 内 <code>\\NAS\share</code> 的 <code>\s</code> 是无效转义序列, 每次导入报 SyntaxWarning; 改 raw docstring 或双写反斜杠即可</p>
+<p class="lede">tests/test_file_access.py:289 docstring 内 <code>\\NAS\share</code> 的 <code>\s</code> 是无效转义序列, 每次导入报 SyntaxWarning; 2026-11-08 已改 raw docstring 消除告警, 单文件 + 全量验证通过</p>
 <div class="meta-row">
   <div class="item"><div class="k">编号</div><div class="v">26-11-08-1841-chore-test-file-access-docstring-escape</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-08 18:41</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">chore</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
 
@@ -106,6 +106,7 @@
   <ul>
     <li><code>tests/test_file_access.py:289</code>（取证 2026-11-08 18:39）· <code>def test_mapped_unc_source_scandir_logical</code> 的 docstring · grep <code>UNC 映射源</code></li>
     <li>复验：2026-11-08 本轮 <code>test.full</code> 与 <code>test.quick</code> 的 warnings summary 仍出现该告警（取证 2026-11-08 18:39）。</li>
+    <li>复验：2026-11-08 本轮认领后，<code>python -W error::SyntaxWarning</code> 编译该文件精确报 <code>line 289: "\s" is an invalid escape sequence</code> —— 现象仍在，未过期。</li>
   </ul>
 </section>
 
@@ -118,7 +119,13 @@
   <h2><span class="no">§04</span>状态变更日志</h2>
   <ul>
     <li>2026-11-08 18:41 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    <li>2026-11-08 — 状态 Open → In Progress（kb.status）</li>
+    <li>2026-11-08 — 状态 In Progress → Done（kb.status）</li>
   </ul>
+  <h3>修复后补充（2026-11-08 20:31）</h3>
+  <p><strong>实际修法</strong>：采用 §03 建议① —— 给该用例 docstring 加 <code>r</code> 前缀改为 raw docstring，全文件仅 1 行 1 字符改动。未选「双写反斜杠」的理由：同函数体内其余 UNC 路径（<code>r"\\NAS\share"</code> / <code>r"\\NAS\share\sub"</code>）本就是 raw string，加前缀后 docstring 字面 <code>`\\NAS\share`</code> 与它们同形；且普通字符串会把前缀 <code>\\</code> 折叠成单反斜杠，改 raw 后顺带修正了文档里 UNC 路径的形态。产品代码零改动。</p>
+  <p><strong>验证方式与测试数字</strong>（均为 2026-11-08 本轮实测）：①红验 —— 改前编译精确报 line 289 无效转义；②转绿 —— 改后同命令输出 <code>COMPILE OK: no SyntaxWarning</code>，且 AST 取出 docstring 值为 <code>`\\NAS\share`</code>（UNC 双反斜杠保真）；③全树扫描 <code>tests/</code> 321 个 .py 逐一 compile，无效转义 / SyntaxWarning 命中 <strong>0</strong>；④单文件 <code>commands run test.one -- tests/test_file_access.py</code> <strong>34 passed</strong>；⑤全量 <code>commands run test.full</code> <strong>5,833 passed, 2 skipped in 125.58s</strong>，覆盖率 99%（TOTAL 26,073 语句 / 9,058 分支），与基线 <code>26-11-08-2009</code> 一致；⑥<code>commands run kb.check</code> 全绿（状态词表 / 认领链 / 日期守卫 / <code>check_html</code> 零命中）。</p>
+  <p class="hint">注：本轮首次全量有两条与本修复无关的红 —— <code>test_r4_drawer_clamp_height</code> / <code>test_r4_winmembers_sorted_window_same_source</code>（webui 静态 <code>node</code> 子进程探针在 xdist 并行下偶发），单跑 <strong>2 passed</strong>、重跑全量全绿；按范围守卫本轮未修、未另立新件。提交前复查远端已推入 <code>26-11-08-1955-test-xdist-js-bundle-temp-race</code>（<code>tests/webui_helpers.bundle_file</code> 共享临时 bundle 文件在 xdist 下竞态），即同一问题且已定位到锚点，本地重复件已撤销。</p>
 </section>
 
 <footer>
