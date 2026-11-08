@@ -9,17 +9,17 @@
   一旦加载, 会把这里的 git 子进程记成越界 POPEN, 整卷红(那是执行方式错, 不是代码缺陷)。
 
 ## 测试计划
-- ConfigTomlTest      config.toml 可解析 + [pack].name == "review" + 九 task(review.pack/check + review.lane 七子命令)必备键 + run 指向对应包内脚本且 lane 系含子命令 token + 带 <args>
+- ConfigTomlTest      config.toml 可解析 + [pack].name == "review" + 十 task(review.pack/check/trace + review.lane 七子命令)必备键 + run 指向对应包内脚本(lane 系含子命令 token, trace 系裸 python) + 带 <args>
 - LaneManifestTest    提交在库的 manifest.json 结构守阵: coverage.ok=true + 批次 id 唯一且前缀==route + routes 映射一致 + 文件跨批不重 + 批内不重 + 全部路径在分层范围内(src 代码文件/scripts py, 无 vendor/test_*) + registry 键齐
 - LaneScriptTest      review_lane.py 无参 rc=2(无参无动作) + --help rc=0
-- LaneStateTest       状态机直驱单测: batch 转换与原子写(无 .tmp 残留)/坏批次 id 拒/重复勾选拒/done 批次未齐拒/产出缺失拒/合法终态/schema 校验(status 枚举/批次条目/缺文件)
+- LaneStateTest       状态机直驱单测: batch 转换与原子写(无 .tmp 残留)/坏批次 id 拒/重复勾选拒/done 批次未齐拒/产出缺失拒/合法终态/done 需进行中态/schema 校验(status 枚举/批次条目/缺文件)/require_clean lane 边界(lane 内未跟踪与修改放行/lane 外拒/lane 内改名到 lane 外拒)
 - PackTest            敏感 fixture: 基线/HEAD 后缀; 敏感面 -> 分面档; 文件清单精确行(重命名只列新路径/[已删除] 同行); 红线命中行含"出现即停"; 警告清单; 敏感面按元素归因(新增行/已跟踪路径标记/未跟踪内容/未跟踪路径/+++ 头归因, 且无幻影键); 仅删除计数; 尾斜杠目录规则; +++ 头不算内容; 空文件 0 行; 默认 root; 大 diff 用独立无敏感仓库证明分面来自行数
 - BenignPackTest      无敏感内容的小 diff -> 全能档(纯行数路径); 红线/警告清单仍命中
 - CleanPackTest      干净树 -> +0/-0 且全能; 缺/坏闸门配置 -> 可见降级 + 红线预警"无"; 坏 --base / 非 git --root / 非仓库 cwd -> rc=2; 提交后 HEAD!=base 无后缀且已提交改动仍在范围内
 - CheckTest           PASS(rc=0); 幻觉引文/超窗/缺字段/坏枚举/过短引文/非字符串字段/缺文件 REFUTE(rc=1); 窗口边界与 --window; stdin; 根外与穿越 REFUTE; 快照 root(无 .git)放行; 非 UTF-8 兜底; 行注入单行化; 非 JSON/非数组/非 UTF-8 输入 rc=2; 空数组 rc=0; 元素非对象 rc=1
-- BatchBaseHashTest   基哈希(batch_base_hash, 共享模块 review_content): 同树确定且 12hex; 金值锁规范化格式(固定 fixture 硬编码 12hex, 改钉子必红须显式换金值); 记账类/生成物变更(含未跟踪)不动哈希; 可评已跟踪/未跟踪变更动哈希; 未跟踪文件序无关(按 path 排序); repo 配置逐颗覆写(diff.context/前缀/颜色/算法/orderFile/excludesFile/quotepath/diff.external...)哈希不漂(env 掐 system+global + -c 逐键压 repo 的回归); 工作树改名按删+增展开(name-only 两条路径/无 rename 段); pathspec 逐字精确(f[1].txt 不 glob 误匹配、分块不重复); pack 输出「基哈希:」行与共享实现同值; generated_paths 优先 gen_all --list 清单(反斜杠归一)
-- TraceDecideTest     评审留痕纯判定: 实算恒 0 静默; 可评 >0 无 trailer 拦(50 行下限退役 D9, 各量级一律); Review-Skip 恒红(豁免退役 D8, 理由长短不再重要); trailer 行数不符/缺字段(含缺检缺基)/缺行数拦; >400 行只认 派发 ≥ 2(分面降级信息字段); `· 基` 必填+12hex 形状+与重算基哈希比对(不一致红含「重跑 pack 取新基复评」出路, D6); `· 轮` 缺省 1、出现须整数 ≥1(D7); 判定矩阵 11 例(计划 26-11-07-0441 §04: 分面无派发红/派发 2 过/派发 1 红含骨架/缺检红/P>T 红/P<修+入池 红含口径/弃条目不计下界红/自洽数过/全干净 0-0 过/骨架直贴红/无分面超限过); 触安全敏感面无 trailer 拦(含 0 行)/有有效 trailer 放行; Review 优先于 Skip; 正文畸形 Review 段小批也拦(下限豁免已退役); 记账类(含 legacy-review4/)/生成物不计入
-- TraceGateTest       端到端(临时仓库真跑脚本): 复跑标记跳过且用后即删; 小批无 trailer 红(>0 即评, D9); 仅记账类恒 0 静默; trailer 行数相符+基一致 rc=0 / 行数不符 rc=1; 缺基红 / 基不一致(评审后又改一行)红含重跑出路(D6); Review-Skip 新提交红(D8); 历史 Skip 锚点识别回归(Skip 提交照旧推进锚点, 其后无 trailer 提交连坐滚进, 不追溯); 锚点推进(漏评提交被下一批连坐); 评过的提交推进锚点; 冷启动只算工作树; 合并拓扑两例(0903: 侧支带 trailer 不污染/无 trailer 连坐); 提交后复跑不重对行数且 HEAD 回退打「未给消息文件, 实算 N 行」提示(0441 落点 4); 齐平字段弱校验(计划 26-11-07-0201 落点 3): 缺字段/合法 8hex 静默 rc0, 格式异常打 [warn] 一行但 rc0
+- BatchBaseHashTest   基哈希(batch_base_hash, 共享模块 review_content): 同树确定且 12hex; 金值锁规范化格式(固定 fixture 硬编码 12hex, 改钉子必红须显式换金值); 记账类/生成物变更(含未跟踪)不动哈希; 可评已跟踪/未跟踪变更动哈希; 工作树 CRLF 行尾噪音不动哈希(--ignore-cr-at-eol 两侧压掉); 未跟踪文件序无关(按 path 排序); repo 配置逐颗覆写(diff.context/前缀/颜色/算法/orderFile/excludesFile/quotepath/diff.external...)哈希不漂(env 掐 system+global + -c 逐键压 repo 的回归); 工作树改名按删+增展开(name-only 两条路径/无 rename 段); pathspec 逐字精确(f[1].txt 不 glob 误匹配、分块不重复); pack 输出「基哈希:」行与共享实现同值; generated_paths 优先 gen_all --list 清单(反斜杠归一)
+- TraceDecideTest     评审留痕纯判定: 实算恒 0 静默; 可评 >0 无 trailer 拦(50 行下限退役 D9, 各量级一律); Review-Skip 恒红(豁免退役 D8, 理由长短不再重要); trailer 行数不符/缺字段(含缺检缺基)/缺行数拦; >400 行只认 派发 ≥ 2(分面降级信息字段); `· 基` 必填+12hex 形状+与重算基哈希比对(不一致红含「重跑 pack 取新基复评」出路, D6); `· 轮` 缺省 1、出现须整数 ≥1(D7), 与 `· 派发` 同现且值合法放行(形状组合); 判定矩阵 11 例(计划 26-11-07-0441 §04: 分面无派发红/派发 2 过/派发 1 红含骨架/缺检红/P>T 红/P<修+入池 红含口径/弃条目不计下界红/自洽数过/全干净 0-0 过/骨架直贴红/无分面超限过); 触安全敏感面无 trailer 拦(含 0 行)/有有效 trailer 放行; Review 优先于 Skip; 正文畸形 Review 段小批也拦(下限豁免已退役); 记账类(含 legacy-review4/)/生成物不计入
+- TraceGateTest       端到端(临时仓库真跑脚本): 复跑标记短路先于消息/基比对(带 trailer 错基也 rc=0)且用后即删; 无 trailer 红(10 行小批/60 行, >0 即评, D9); 仅记账类恒 0 静默; trailer 行数相符+基一致 rc=0 / 行数不符 rc=1; 敏感面批(路径标记词)带 trailer 且基一致放行(端到端); 缺基红 / 基不一致(评审后又改一行)红含重跑出路(D6); Review-Skip 新提交红(D8); 历史 Skip 锚点识别回归(Skip 提交照旧推进锚点, 其后无 trailer 提交连坐滚进, 不追溯); 锚点推进(漏评提交被下一批连坐); 评过的提交推进锚点; 冷启动只算工作树; 合并拓扑两例(0903: 侧支带 trailer 不污染/无 trailer 连坐); 提交后复跑不重对行数且 HEAD 回退打「未给消息文件, 实算 N 行」提示(0441 落点 4); 齐平字段弱校验(计划 26-11-07-0201 落点 3): 缺字段/合法 8hex 静默 rc0, 格式异常打 [warn] 一行但 rc0
 """
 
 from __future__ import annotations
@@ -1171,6 +1171,11 @@ class TraceDecideTest(unittest.TestCase):
             self.assertFalse(ok, bad)
             self.assertIn("形状不对", why)
 
+    def test_round_and_dispatch_coexist_passes(self):
+        """`· 轮` 与 `· 派发` 同现且值均合法 -> 放行(形状组合: 轮=修复轮数与派发=首轮派遣正交, D7/F4)。"""
+        ok, _ = self._decide(800, "Review: S3 · 800 行 · blocker 0 · 修 1 · 入池 1 · 检 2/2 · 基 a1b2c3d4e5f6 · 派发 2 · 轮 2\n")
+        self.assertTrue(ok)
+
     def test_generated_and_bookkeeping_are_not_counted(self):
         self.assertFalse(self._counted("memory-bank/pitfalls/_index.md", set()))
         self.assertFalse(self._counted("memory-bank/tasks/26-11-06-x.md", set()))
@@ -1289,6 +1294,18 @@ class TraceGateTest(unittest.TestCase):
         self.assertIn("重跑", proc.stdout)
         self.assertIn("复评", proc.stdout)
 
+    def test_sensitive_batch_with_trailer_and_matching_base_passes(self):
+        """敏感面 x 基比对(端到端): 敏感路径在场 + trailer 齐全 + 基与闸门同源现算一致 -> 放行。
+
+        敏感面强制的是「必须评」而非「必红」(decide 纯判定面已有); 这里补闸门真跑面: 敏感检测来自
+        numstat/untracked 的文件路径标记词, 基由 main 用 review_content 现算(含未跟踪可评文件)传入
+        decide 比对 —— 敏感面批若被跳过基比对或哈希算错, 本用例红。
+        """
+        (self.tmp / "auth_mod.py").write_text("A = 1\n" * 5, encoding="utf-8")
+        msg = f"✨ 改\n\nReview: auth · 5 行 · blocker 0 · 修 0 · 入池 0 · 检 0/0 · 基 {self._batch_hash()}\n"
+        proc = _run_trace(self.tmp, self._msg(msg))
+        self.assertEqual(proc.returncode, 0, proc.stdout)
+
     def test_review_skip_on_new_commit_blocks(self):
         """D8: 新提交写 Review-Skip → 判红, 理由再充分也不放行(豁免已退役)。"""
         self._append(10)
@@ -1399,6 +1416,18 @@ class TraceGateTest(unittest.TestCase):
         marker = self.tmp / ".git" / "review_trace_post"
         marker.write_text("deadbeef", encoding="utf-8")
         proc = _run_trace(self.tmp)
+        self.assertEqual(proc.returncode, 0, proc.stdout)
+        self.assertFalse(marker.exists(), "标记应被消费掉, 否则下一次提交会静默跳过检查")
+
+    def test_post_marker_short_circuits_before_base_check(self):
+        """复跑短路先于基比对(D6 语义确认): 标记在场时直接 rc=0 —— 即使消息带 `Review:` trailer 且
+        `· 基` 故意给错, 也走不到 decide 的基哈希比对(合流复跑那次验的是合并后的树, 行数与基都已对过,
+        再算只会把 rebase 进来的远端提交算成本批假红)。标记照旧一次性消费。"""
+        self._append(60)
+        marker = self.tmp / ".git" / "review_trace_post"
+        marker.write_text("deadbeef", encoding="utf-8")
+        msg = "✨ 改\n\nReview: 本批 · 60 行 · blocker 0 · 修 0 · 入池 0 · 检 0/0 · 基 000000000000\n"
+        proc = _run_trace(self.tmp, self._msg(msg))
         self.assertEqual(proc.returncode, 0, proc.stdout)
         self.assertFalse(marker.exists(), "标记应被消费掉, 否则下一次提交会静默跳过检查")
 
