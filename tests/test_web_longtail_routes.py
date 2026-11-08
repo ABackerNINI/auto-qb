@@ -4,7 +4,7 @@
 ### P1 覆盖率提升轮: webui 运行时与命令长尾
 - test_api_torrent_write_endpoints_extra_enqueue: 写端点补遗(pause/resume/delete/skip-check/limits 部分方向)
 - test_api_numeric_params_malformed_string_400: 数值型请求体字段畸形值(字符串)回 400 而不是 500(issue 26-10-30-0622, 五处裸 int()/float() 收口 common.int_param/float_param); 拒收在路由层不入队, 合法数值照常入队
-- test_api_list_body_fields_string_rejected_400: 列表型请求体字段传字符串 400 拒收不入队(issue 26-11-07-0536, 与 transfer.py hashes 同口径) —— torrent_cmds.py 全部 5 处(bulk tags/hashes + 两预检 hashes + trackers/add urls) + 合法 list 载荷原样不回归
+- test_api_list_body_fields_string_rejected_400: 列表型请求体字段传字符串 400 拒收不入队(issue 26-11-07-0536, 与 transfer.py hashes 同口径) —— torrent_cmds.py 全部 10 处(bulk tags/hashes/keys + 两预检 hashes + trackers/add urls + add files_b64/urls/tags + file-priority indices, 后三处为 issue 26-11-08-0043 补齐) + 合法 list 载荷原样不回归
 - test_api_torrents_add_endpoint_errors_and_enqueue: 添加种子 base64 坏/空载荷 400 + 合法入队
 - test_api_config_put_and_preview_tree_shape: 配置树 PUT/preview 非对象 400 + preview 不落盘; 校验失败(ConfigError) 400 带文案且不落盘(T2a2)
 - test_api_expr_eval_runtime_error: 求值期失败(除零) -> ok=False 带文案与 used
@@ -174,7 +174,8 @@ def test_api_list_body_fields_string_rejected_400(web_env):
     字符串会被逐字符拆开: bulk tags "movietag" 曾拆成 8 个单字符标签入队, 经
     commands._cmd_bulk_torrents -> add_tags 在 qB 里真实建出 8 个垃圾标签(需手动清理);
     bulk/预检 hashes、trackers/add urls 同族(issue 26-11-03-0901 只修了 transfer.py 一处)。
-    覆盖 torrent_cmds.py 全部 5 处 + 合法 list 不回归(载荷原样)。
+    覆盖 torrent_cmds.py 全部 10 处(_list_param 调用点) + 合法 list 不回归(载荷原样);
+    add 面与 file-priority indices、bulk keys 为 issue 26-11-08-0043 补齐。
     """
     mgr, client = web_env
     auth = {"Authorization": f"Bearer {mgr.web.token}"}
@@ -189,6 +190,13 @@ def test_api_list_body_fields_string_rejected_400(web_env):
             "action": "pause",
             "hashes": "HA"
         }),
+        # bulk keys 字符串: 逐字符送 _group_key_param 虽 fail-closed, 但报"分组标识无效"
+        # 误导(issue 26-11-08-0043), 守卫后报准确的"必须是数组"
+        ("/api/torrents/bulk", {
+            "action": "pause",
+            "hashes": ["HA"],
+            "keys": "abc"
+        }),
         ("/api/torrents/skip-check/precheck", {
             "hashes": "abc"
         }),
@@ -198,6 +206,19 @@ def test_api_list_body_fields_string_rejected_400(web_env):
         }),
         ("/api/torrents/HA/trackers/add", {
             "urls": "http://x/announce"
+        }),
+        ("/api/torrents/add", {
+            "files_b64": "AAAA"
+        }),
+        ("/api/torrents/add", {
+            "urls": "magnet:?xt=urn:btih:abc"
+        }),
+        ("/api/torrents/add", {
+            "urls": ["magnet:?xt=urn:btih:abc"],
+            "tags": "movietag"
+        }),
+        ("/api/torrents/HA/files/priority", {
+            "indices": "0"
         }),
     ]
     for path, body in bad_cases:
@@ -239,6 +260,28 @@ def test_api_list_body_fields_string_rejected_400(web_env):
             }, "add_trackers", {
                 "hash": "HA",
                 "urls": ["http://a/announce", "http://b/announce"]
+            }
+        ),
+        (
+            "/api/torrents/HA/files/priority", {
+                "indices": [0, 2],
+                "priority": 6
+            }, "set_file_priority", {
+                "hash": "HA",
+                "indices": [0, 2],
+                "priority": 6
+            }
+        ),
+        # bulk keys 合法形态不回归: 编码组键 list 照常解码入队(issue 26-11-08-0043 守卫后)
+        (
+            "/api/torrents/bulk", {
+                "keys": [encode_group_key(("R:/Downloads", ("a.mkv", )))],
+                "action": "pause"
+            }, "bulk_torrents", {
+                "hashes": [],
+                "action": "pause",
+                "delete_files": False,
+                "keys": [("R:/Downloads", ("a.mkv", ))]
             }
         ),
     ]

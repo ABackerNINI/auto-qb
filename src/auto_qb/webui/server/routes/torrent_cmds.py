@@ -287,7 +287,7 @@ def build_router(ctx: WebContext) -> APIRouter:
         b = body or {}
         payload = {
             "hash": hash,
-            "indices": [_int_param(i) for i in (b.get("indices") or [])],
+            "indices": [_int_param(i) for i in _list_param(b, "indices", "文件下标")],
             "priority": _int_param(b.get("priority") or 0),
         }
         return _enqueue("set_file_priority", payload)
@@ -314,7 +314,8 @@ def build_router(ctx: WebContext) -> APIRouter:
         limits/location 扩展动作(计划 26-10-02-1955 W2): up_limit/dl_limit 非负 int
         (bytes/s, 0=qB 语义的"无限制", 允许), location 非空 str —— 均按"提供才透传"
         (队列载荷不带多余键, 纯 pause 调用的历史形态不变)。参数错误(负数 / limits
-        两方向全空 / location 空路径 / hashes·tags 非数组, issue 26-11-07-0536)在路由层
+        两方向全空 / location 空路径 / hashes·tags 非数组(issue 26-11-07-0536) / keys
+        非数组(issue 26-11-08-0043))在路由层
         400 拒收: 不入队, 前端即时可见。
 
         skip_check 批量动作(计划 26-10-02-1955 W3): 无额外参数(hashes/keys 即全部载荷),
@@ -328,7 +329,9 @@ def build_router(ctx: WebContext) -> APIRouter:
             "delete_files": bool(b.get("delete_files", False)),
         }
         # 组键模式(DLG-02): 非空才入 payload, 纯 hash 调用的队列载荷与历史形态完全一致
-        keys = [_group_key_param(str(k)) for k in (b.get("keys") or []) if k]
+        # keys 非数组 400(issue 26-11-08-0043): 原先逐字符送 _group_key_param 报
+        # "分组标识无效" —— 虽 fail-closed 但文案误导, 换守卫后报准确的"必须是数组"
+        keys = [_group_key_param(str(k)) for k in _list_param(b, "keys", "组键") if k]
         if keys:
             payload["keys"] = keys
         # 标签/分类动作: 同样"提供才透传"(queue 载荷不带多余键)。
@@ -377,14 +380,14 @@ def build_router(ctx: WebContext) -> APIRouter:
 
         b = body or {}
         file_payload: List[bytes] = []
-        for item in b.get("files_b64") or []:
+        for item in _list_param(b, "files_b64", "torrent 文件"):
             try:
                 data = base64.b64decode(str(item), validate=False)
             except Exception:
                 raise HTTPException(status_code=400, detail="torrent 文件 base64 解码失败")
             if data:
                 file_payload.append(data)
-        url_list = [u.strip() for u in (b.get("urls") or []) if str(u).strip()]
+        url_list = [u.strip() for u in _list_param(b, "urls", "url") if str(u).strip()]
         if not file_payload and not url_list:
             raise HTTPException(status_code=400, detail="未提供 .torrent 文件或 magnet/URL")
         return _enqueue(
@@ -393,7 +396,7 @@ def build_router(ctx: WebContext) -> APIRouter:
                 "urls": url_list,
                 "save_path": str(b.get("save_path") or "").strip(),
                 "category": str(b.get("category") or "").strip(),
-                "tags": [str(t).strip() for t in (b.get("tags") or []) if str(t).strip()],
+                "tags": [str(t).strip() for t in _list_param(b, "tags", "标签") if str(t).strip()],
                 "paused": bool(b.get("paused")),
                 "skip_checking": bool(b.get("skip_checking")),
                 "sequential": bool(b.get("sequential")),
