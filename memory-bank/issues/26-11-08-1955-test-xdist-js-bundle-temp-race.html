@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>xdist 并行下 node 电池共享临时 bundle 文件偶发假红 · test · 计划外问题</title>
+<meta name="issue-slug" content="xdist-js-bundle-temp-race">
+<meta name="issue-stamp" content="26-11-08-1955">
+<meta name="issue-type" content="test">
+<meta name="doc-topic" content="xdist-js-bundle-temp-race">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="xdist 并行下 node 电池共享临时 bundle 文件偶发假红">
+<meta name="issue-summary" content="webui_helpers.bundle_file 把聚合文本写到共享临时根固定前缀 aqb_js_bundle_ 的同一路径, 8 个 worker 并发读写 -&gt; PermissionError 或 node 电池挂, 两次拦下 ship.commit 闸门, 单跑与合流树复跑全绿">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --mark: #161e26;     /* issue 特有: callout 底色 (plan.html 不用) */
+    --warn-bg: #2a2119;  /* issue 特有: 状态徽标底色 */
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 单栏流式版面: 与 plan.html 同一套 .sheet (封顶 1280px, 侧距 clamp(18~44px)); 旧双栏+粘性目录已删 */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+
+  /* 封面 meta 行: issue 特有, DOM 形态别改 —— 状态徽标 <span class="badge"> 被
+     flip_status (W4) 与 check_status_drift 的 BADGE_RE 机读 (k/v div 结构在判据里) */
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px 28px; font-family: var(--mono); font-size: 11.5px; color: var(--faint); border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta-row .item .k { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .meta-row .item .v { font-size: 13.5px; color: var(--dim); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin: 14px 0; font-size: 14px; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-family: var(--mono); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">计划外问题（未修）· test</div>
+<h1>xdist 并行下 node 电池共享临时 bundle 文件偶发假红</h1>
+<p class="lede">webui_helpers.bundle_file 把聚合文本写到共享临时根固定前缀 aqb_js_bundle_ 的同一路径, 8 个 worker 并发读写 -&gt; PermissionError 或 node 电池挂, 两次拦下 ship.commit 闸门, 单跑与合流树复跑全绿</p>
+<div class="meta-row">
+  <div class="item"><div class="k">编号</div><div class="v">26-11-08-1955-test-xdist-js-bundle-temp-race</div></div>
+  <div class="item"><div class="k">报告时间</div><div class="v">2026-11-08 19:55</div></div>
+  <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">涉及模块</div><div class="v">tests / node 电池</div></div>
+  <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+</div>
+
+<section id="s1">
+  <h2><span class="no">§01</span>现象与发现场景</h2>
+  <p>2026-11-08 晚修复 issue 26-11-08-0703 后走提交流程，<code>ship.commit</code> 的 <code>test.quick</code> 闸门连续两次偶发判红，且两次落在不同用例、不同报错形态：</p>
+  <ul>
+    <li>第一次（提交前闸门）：<code>tests/test_webui_static_r4_static_batteries.py</code> 的键位引擎电池在 <code>webui_helpers.py:378</code> 写临时脚本时抛 <code>PermissionError [Errno 13]</code>，整次提交被拦。</li>
+    <li>第二次（合流 7 笔远端提交后复跑闸门）：<code>tests/test_webui_static_r4_drawer.py</code> 两条用例在 <code>_run_probe</code> 的 <code>assert proc.returncode == 0</code> 判红（node 电池跑挂），本地提交 <code>ec039bf3</code> 已生成但推送未完成。</li>
+  </ul>
+  <p>两次都<strong>单跑全绿、同一棵树独立复跑全量也全绿</strong>，与平台/配置相关（Windows 文件共享语义 + <code>pytest.ini</code> 默认 <code>-n 8</code> 并行），非必现。入池时未修任何代码。</p>
+</section>
+
+<section id="s2">
+  <h2><span class="no">§02</span>证据</h2>
+  <p class="hint">贴原文（报错 / 日志 / 命令输出），不转述；附取证时间，让读者自己判断新鲜度。</p>
+<pre><code># 取证 2026-11-08 18:5x-19:0x, commands run ship.commit 两次输出原文
+# --- 第一次: 提交前闸门 ---
+[FAIL] ship.commit (98.1s)
+  提交失败: 闸门「全量测试(跳覆盖率报表): 经 commands 引擎跑 test.quick, 红了即 STOP」未过 (rc=1, 97.5s)
+        E           PermissionError: [Errno 13] Permission denied: 'R:\\Temp\\auto-qb-tests\\0784c7b3-31564-cpjp25\\aqb_js_bundle_shortcuts_js'
+        tests\webui_helpers.py:378: PermissionError
+        FAILED tests/test_webui_static_r4_static_batteries.py::test_r4_shortcuts_engine_table_and_keydown
+        1 failed, 5854 passed, 2 skipped, 15 warnings in 95.03s (0:01:35)
+
+# --- 第二次: 合流远端 7 笔后复跑闸门 ---
+[ok] ship.commit (286.2s)
+  同步: 远端领先 7 笔 · 本地领先 1 笔(分叉) → rebase 重放本地 1 笔 c81a02a8→ec039bf3
+  提交成功 ec039bf3(未推送)
+  推送未完成: 闸门「全量测试(跳覆盖率报表)」未过(合并远端后复跑, rc=1, 125.7s)
+        tests\test_webui_static_r4_drawer.py:69: AssertionError
+        FAILED tests/test_webui_static_r4_drawer.py::test_r4_drawer_clamp_height
+        FAILED tests/test_webui_static_r4_drawer.py::test_r4_drawer_del_receipt_close
+        2 failed, 5860 passed, 2 skipped, 15 warnings in 115.94s (0:01:55)
+
+# --- 对照: 同一棵树单跑与独立全量复跑全绿 ---
+[ok] test.one (3.8s)   tests/test_webui_static_r4_static_batteries.py  -> 10 passed in 2.16s
+[ok] test.one (8.8s)   tests/test_webui_static_r4_drawer.py             -> 8 passed in 1.57s
+[ok] test.quick (65.5s) 合流树 ec039bf3                                  -> 5862 passed, 2 skipped, 15 warnings in 56.83s
+[ok] test.quick         提交前本地树(另两次)                              -> 5855 passed, 2 skipped
+
+# 失败点源码(取证 2026-11-08 19:54)
+tests/webui_helpers.py:378:  with open(path, "w", encoding="utf-8", newline="\n") as f:
+tests/test_webui_static_r4_drawer.py:69:  assert proc.returncode == 0, f"node 电池跑挂: {proc.stderr.strip()}"</code></pre>
+</section>
+
+<section id="s3">
+  <h2><span class="no">§03</span>影响面</h2>
+  <table>
+    <tr><th>维度</th><th>结论</th></tr>
+    <tr><td>触发条件</td><td><code>test.quick</code> / <code>test.full</code> 默认 <code>-n 8</code>；多个 worker 在同一轮里首次调用 <code>bundle_file(同一 name)</code>，共享同一实例临时根并写同一固定路径。偶发：同一棵树 3 次全绿 / 2 次红，Windows 下更敏感。</td></tr>
+    <tr><td>影响范围</td><td>所有经 <code>tests/webui_helpers.bundle_file</code> 落临时脚本的 node 电池用例（<code>test_webui_static_r4_static_batteries.py</code>、<code>test_webui_static_r4_drawer.py</code> 等）；表现层是 <code>ship.commit</code> 的 <code>test.quick</code> 闸门假红 —— 提交被拦或推送未完成，需人工诊断后补推。</td></tr>
+    <tr><td>严重度</td><td>中。不改产品行为，但每次假红逼出一次全量重跑（约 60-125s）；更麻烦的是它与真回归同形，反复「重跑即绿」会钝化闸门信号，有掩盖真回归的风险。既有同类先例：issue 26-10-16-0348（端口竞态误拦一次 ship.commit）。</td></tr>
+  </table>
+</section>
+
+<section id="s4">
+  <h2><span class="no">§04</span>定位锚点</h2>
+  <p class="hint">写「符号名 + grep 关键词 + 当时的行号（标取证时间）」—— 代码会漂移，靠符号与 grep 重新定位，行号只是加速项。</p>
+  <ul>
+    <li><code>tests/webui_helpers.py:373-381</code>（取证 2026-11-08 19:54）· <code>def bundle_file</code> · grep <code>aqb_js_bundle_</code> —— 写死 <code>tempfile.gettempdir()</code> + 固定文件名。</li>
+    <li><code>tests/webui_helpers.py:370</code> · <code>_BUNDLE_FILES</code> 进程内缓存 · grep <code>_BUNDLE_FILES</code> —— 每个 worker 各持一份缓存，因此每个 worker 都会各自去写同一路径。</li>
+    <li><code>tests/test_webui_static_r4_static_batteries.py:918</code> · <code>bundle_file("shortcuts.js")</code> · grep <code>bundle_file</code>（第一次红的调用点）。</li>
+    <li><code>tests/test_webui_static_r4_drawer.py:57-69</code> · <code>_run_probe</code> / <code>assert proc.returncode == 0</code> · grep <code>node 电池跑挂</code>（第二次红的断言）。</li>
+    <li><code>memory-bank/pitfalls/testing/tmpdir.md</code>「xdist worker 同根」· grep <code>同根</code> —— 实例临时根由 <code>tests/_tmp_bootstrap.py</code> 自举、同一次运行的 worker 共用，是「共享路径」这一事实的口径来源。</li>
+  </ul>
+</section>
+
+<section id="s5">
+  <h2><span class="no">§05</span>根因<span class="opt">（可选）</span></h2>
+  <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
+  <div class="callout"><strong>待查（以下为推断，未仪器化证实）。</strong>已排除：① 本批 AST 守阵改动（只新增 1 个测试文件与知识库文档，不碰前端静态资源、临时根或 <code>webui_helpers</code>）；② 合流的远端 7 笔提交引入前端回归（两个失败文件单跑全绿、合流树独立全量 5862 passed 全绿）。<br>推断链：<code>_tmp_bootstrap</code> 让同一次运行的 8 个 xdist worker 共用同一个实例临时根，而 <code>bundle_file</code> 把路径拼成不含 worker 标识的固定名；两个 worker 同时 <code>open(path, "w")</code> 在 Windows 共享语义下可抛 <code>PermissionError</code>，或某个 worker 读到别的 worker 尚未写完/内容不同的文件，使 node 探针 <code>returncode != 0</code> 触发断言。<code>_BUNDLE_FILES</code> 是进程级缓存，不能跨 worker 去重，反而保证每个 worker 都会各自写一次。</div>
+</section>
+
+<section id="s6">
+  <h2><span class="no">§06</span>建议修法<span class="opt">（可选）</span></h2>
+  <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
+  <p>方向：让 bundle 临时路径按 worker 唯一（或彻底不落共享路径）。候选：</p>
+  <ol>
+    <li><strong>路径掺 worker 标识</strong>：文件名加 <code>PYTEST_XDIST_WORKER</code> 或 <code>os.getpid()</code>。改动最小（<code>bundle_file</code> 一行），代价是临时文件数随 worker 数增长，需纳入实例根清扫。</li>
+    <li><strong>改用 <code>tmp_path</code> / <code>tempfile.NamedTemporaryFile(delete=False)</code></strong>：逐次唯一、pytest 收尾自动回收。代价是要改 <code>bundle_file</code> 签名并逐个改调用点（<code>test_webui_static_r4_*.py</code> 多处）。</li>
+    <li><strong>原子替换 + 只读加载</strong>：先写 <code>.pid</code> 临时件再 <code>os.replace</code>。代价是 Windows 共享语义仍要处理，实现最复杂，且要额外守阵证明不再竞态。</li>
+  </ol>
+  <p>另按 <code>memory-bank/testing/flaky-ledger.md</code> 先归因登记（flaky / 恒红候选的登记单点），<strong>重跑不是修复</strong>；改完需红验（注入并发写或固定同路径反复跑）并用 <code>test.quick</code> 复跑验证。本件只记录方案，不实施。</p>
+</section>
+
+<section id="s7">
+  <h2><span class="no">§07</span>状态变更日志</h2>
+  <ul>
+    <li>2026-11-08 19:55 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+  </ul>
+  <h3>复验</h3>
+  <p>入池时复验：2026-11-08 19:54 锚点 <code>tests/webui_helpers.py:373-381</code> 与 <code>_BUNDLE_FILES</code> 仍在且未改，共享固定路径的竞态条件未消除；现象为偶发，认领时按防过期原则重跑锚点并用 <code>-n 8</code> 重复跑复现。</p>
+  <h3>修复后补充</h3>
+  <p>待修完补「实际修法 / 验证方式 / 测试数字」；与 §06 建议不同则保留建议原文并说明改道原因。</p>
+</section>
+
+<footer>
+  26-11-08-1955-test-xdist-js-bundle-temp-race.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+</footer>
+
+</div>
+</body>
+</html>
