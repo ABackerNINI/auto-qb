@@ -19,7 +19,7 @@
 
 | 类型 | 条数 |
 |---|---|
-| bug | 24 |
+| bug | 23 |
 | perf | 2 |
 | docs | 3 |
 | test | 10 |
@@ -52,7 +52,6 @@
 - [refactor] [kb.new 各族 slug/topic 传参方式不一致, 跨族套用即 rc=1](26-11-08-1131-refactor-kb-new-arg-unify.html) — issue 族收位置参数…
 - [docs] [hr/relocate docstring 措辞漂移聚合(fetcher refresh.reason/finalize_face failed 语义/store 行锚)](26-11-08-0827-docs-hr-relocate-docstring-drift.html) — fetcher.py:7…
 - [refactor] [小件清理聚合: _WaveContext.alerted 死字段 + 测试 docstring 超宽两行](26-11-08-0827-refactor-hr-leftover-cleanups.html) — service_comm…
-- [bug] [auth.py _is_loopback_host 自有字面量集,回环判定三套并存](26-11-08-0703-bug-webui-auth-loopback-third-set.html) — auth.py:32-3…
 - [refactor] [infra 依赖纪律「不 import config」无 AST 机械守卫](26-11-08-0703-refactor-infra-import-discipline-guard.html) — infra/__init…
 - [test] [test_notify 8 用例 NotifyHandler 只 removeHandler 不 close,每进程泄漏 8 守护线程](26-11-08-0703-test-test-notify-handler-thread-leak.html) — tests/test_n…
 - [bug] [dt_table.js 整模块生产路径零调用: 自称几何单一出口未接线, 实际几何由 columns_grid 平行计算](26-11-08-0147-bug-dt-table-geometry-unwired.html) — dt_table.js…
@@ -119,7 +118,7 @@
 ## Done
 
 
-> 更早的 **457** 条已出本索引 —— 报告仍在 `issues/` 目录(未搬动), 全量清单见 [attachments/_archive.md](attachments/_archive.md).
+> 更早的 **458** 条已出本索引 —— 报告仍在 `issues/` 目录(未搬动), 全量清单见 [attachments/_archive.md](attachments/_archive.md).
 
 ## Dropped
 

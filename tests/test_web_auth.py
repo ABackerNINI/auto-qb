@@ -4,6 +4,7 @@
 - test_api_requires_token：无/错密钥访问 /api/* -> 401
 - test_config_public_endpoint_no_auth: 公开端点 /api/config/public 免 token 只读本机免鉴权标志(不含机密); **仅限 loopback**(远端 403, issue 26-09-21-1408 B-02)
 - test_skip_local_verify_loopback_bypass: web.skip_local_verify=true 时本机连接免密钥放行(提示日志 **INFO 级**、**每进程只记一次**), 对外/远端仍强制鉴权
+- test_skip_local_verify_loopback_127_subnet: 127/8 其余回环源(127.0.0.2)同口径免密钥 + /api/config/public「仅限 loopback」门同判, 远端仍 401/403(回环判据收敛单点 is_loopback_host 的钉桩, issue 26-11-08-0703)
 - test_skip_local_verify_cross_site_guard_host_whitelist: skip_local_verify 开启时 Host 白名单(DNS rebinding 防护, issue 26-09-21-1408) —— 外部域名 403(API+静态), loopback 全形态、自配 host 与 *.localhost 子域(api.localhost, 2026-10-16)放行, 相似串(localhost.attacker.com/notlocalhost)仍拒
 - test_skip_local_verify_cross_site_guard_write_origin: skip_local_verify 开启时写方法 Origin 同源校验(CSRF 防护) —— 跨站 Origin 403 且不入队, 同源/无 Origin 放行, GET 不校验(跨站读拿不到响应体, 危害面在写); *.localhost 子域同源同样成立
 - test_skip_local_verify_cross_site_guard_all_write_endpoints: 全部写端点穷举(迭代路由表) —— 跨站 Origin 下一律 403(闸在全局依赖单点, 先于任何处理器/422)
@@ -126,7 +127,8 @@ def test_skip_local_verify_loopback_bypass(web_env, caplog):
     """web.skip_local_verify=true 时: 本机(loopback)连接免密钥放行, 直接进入
 
     默认 false(保守): 本机连接仍强制鉴权; 开启后仅 loopback 放行 —— 对外/远端连接
-    (request.client.host 非 127.0.0.1/::1)即使带对密钥以外的任何请求也须密钥(仍强制)。
+    (request.client.host 非回环, 即 127/8 与 ::1 之外)即使带对密钥以外的任何请求也须密钥
+    (仍强制; 回环判据口径见 test_skip_local_verify_loopback_127_subnet)。
     提示日志**每进程只记一次**(R10-01)且为 **INFO**: 免鉴权模式下前端按设计不发 Authorization
     头, 每请求都记会把轮询日志刷满; 首次记一条足以说明该实例不校验密钥。级别用 INFO 而非
     WARNING —— 免鉴权是用户显式开启的配置(非异常), WARNING 会经 notify 推送扰民。
@@ -157,6 +159,37 @@ def test_skip_local_verify_loopback_bypass(web_env, caplog):
     # 对外/远端连接: 仍强制鉴权(Host 头合法 —— 白名单不关心对端地址; 凭证面语义不变)
     assert remote.get("/api/status", headers=host_hdr).status_code == 401
     assert remote.get("/api/status", headers={**host_hdr, _AUTH_HEADER: f"Bearer {mgr.web.token}"}).status_code == 200
+
+
+@pytest.mark.parametrize("web_env", [{"client_addr": ("127.0.0.2", 50000)}], indirect=True)
+def test_skip_local_verify_loopback_127_subnet(web_env):
+    """127/8 其余回环源(127.0.0.2)同口径免密钥(收敛单点 is_loopback_host 的钉桩, issue 26-11-08-0703)
+
+    回环判据单点认 127/8 全段: web.host 绑 127.0.0.2 这类合法回环时(config 校验 S1-5/hr
+    配对门早已按 127/8 判回环, 本模块旧字面量集是漏判的第三套), 显式绑该源的本机连接
+    免密钥放行 —— Host 白名单经自配 host 并入 127.0.0.2, 跨站闸不误拦; /api/config/public
+    的「仅限 loopback」门同判。安全性: 127/8 不可路由, 对端在段内 = 本机进程 ——
+    skip_local_verify 本就整体信任本机(127.0.0.1 源同权), 免认证面没有跨出本机。
+    对端地址(127.0.0.2/192.168.1.50)是 TestClient client= 的模拟值, 非真实 socket
+    peername —— 真实 127/8 源同样只会来自本机(该段不可路由), 判定面等价。
+    """
+    from fastapi.testclient import TestClient
+
+    mgr, loopback = web_env
+    mgr.config.web.skip_local_verify = True
+    mgr.config.web.host = "127.0.0.2"  # issue 场景: 绑定 127/8 其余回环(Host 白名单随之并入)
+    host_hdr = {"Host": "127.0.0.2:8080"}
+    remote = TestClient(loopback.app, client=("192.168.1.50", 50000))
+    # 本机 127.0.0.2 源: 无密钥/错密钥均放行(收敛前旧字面量集漏判 -> 强制 401)
+    assert loopback.get("/api/status", headers=host_hdr).status_code == 200
+    assert loopback.get("/api/status", headers={**host_hdr, _AUTH_HEADER: "Bearer wrong"}).status_code == 200
+    # 公开端点「仅限 loopback」门同口径放行(127.0.0.2 也是回环; 带 Host 头过跨站闸)
+    resp = loopback.get("/api/config/public", headers=host_hdr)
+    assert resp.status_code == 200
+    assert resp.json() == {"web": {"skip_local_verify": True}}
+    # 远端仍强制鉴权 + 公开端点依旧 loopback only(免认证/公开面都没被收敛扩大到本机之外)
+    assert remote.get("/api/status", headers=host_hdr).status_code == 401
+    assert remote.get("/api/config/public", headers=host_hdr).status_code == 403
 
 
 @pytest.mark.parametrize("web_env", [{"client_addr": ("127.0.0.1", 50000)}], indirect=True)
@@ -328,6 +361,12 @@ def test_auth_host_origin_parsing_helpers():
     assert _is_loopback_host("") is False
     assert _is_loopback_host("127.0.0.1") is True and _is_loopback_host("::1") is True
     assert _is_loopback_host("nas.lan") is False
+    # 回环判据已收敛到 infra.utils.is_loopback_host 单点(issue 26-11-08-0703): 127/8 全段
+    # 与 IPv4-mapped 形态同判 —— 该段不可路由、只可能来自本机, 免认证面不跨出本机
+    assert _is_loopback_host("127.0.0.2") is True
+    assert _is_loopback_host("::ffff:127.0.0.1") is True
+    assert _is_loopback_host("::ffff:127.0.0.2") is True
+    assert _is_loopback_host("192.168.1.50") is False
     # T2a2: 未配置 web.host(空串/纯空白) -> 白名单只含 loopback 变体, 不混入空串键
     empty_allowed = _allowed_hostnames("")
     blank_allowed = _allowed_hostnames("   ")

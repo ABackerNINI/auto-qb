@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="legacy-review4">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="auth.py _is_loopback_host 自有字面量集,回环判定三套并存">
 <meta name="issue-summary" content="auth.py:32-37 _is_loopback_host 自有字面量集,与 utils_parse.is_loopback_host 及 infra/utils display_host 折叠锚三套并存(消费面 request.client.host 不同,故独立成条)">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-08-0703-bug-webui-auth-loopback-third-set</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-08 07:03</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
 
@@ -118,7 +118,13 @@
   <h2><span class="no">§04</span>状态变更日志</h2>
   <ul>
     <li>2026-11-08 07:03 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-08 18:38 — 修复完成（裁决走<strong>收敛路</strong>：auth.py 回环判定并入 infra.utils.is_loopback_host 单点；详见「修复后补充」）</li>
+    <li>2026-11-08 — 状态 Open → Done（kb.status）</li>
+</ul>
+  <h3>复验</h3>
+  <p>复验: 2026-11-08(认领时点)锚点仍成立 —— grep <code>_LOOPBACK_HOSTNAMES</code>/<code>def is_loopback_host</code>/<code>def display_host</code> 三套并存如旧(取证 43e7ee13)。一处与 issue 文本的小偏差: <code>_is_loopback_host</code> 实际判定用的是函数体内联三元组(仅 <code>127.0.0.1</code>/<code>::1</code>/<code>::ffff:127.0.0.1</code>, 不含 localhost), <code>_LOOPBACK_HOSTNAMES</code> 四元集只喂 Host/Origin 白名单(<code>_allowed_hostnames</code>) —— 消费面其实有<b>四个</b>语义位而非三个。消费面核查: 回环判定(内联三元组)共两个调用点且都吃 <code>request.client.host</code> —— ①<code>auth.py</code> require_token 的 skip_local_verify 免认证分支; ②<code>routes/config.py</code> /api/config/public 的「仅限 loopback」403 门。</p>
+  <h3>修复后补充</h3>
+  <p><strong>裁决: 收敛路</strong>(issue §03 第一支)。依据三条代码事实: (a) 消费输入 <code>request.client.host</code> 是 TCP 对端地址, lifecycle 显式 <code>proxy_headers=False</code>(B-03, test_start_web_server_config_disables_proxy_headers 钉住)挡住反代头改写 —— 不可被请求头伪造; (b) 收敛扩面 = 127/8 全段(含 127.0.0.0/127.255.255.255 两端)+ "localhost" 字符串 + IPv4-mapped 各形态(含 ::ffff:7f00:2 类十六进制书写, 实测均判回环): 127/8 不可路由、只可能来自本机进程, 而 skip_local_verify 本就是对「本机连接」整体信任的显式开关(127.0.0.1 源早已免认证), 扩面不给任何攻击者新增能力; (c) config 校验(S1-5)与 hr 配对门早已按 127/8 判回环, auth 自有字面量集是漏判的孤例 —— web.host 绑 127.0.0.2 时同一地址在配置面判回环、在鉴权面不判。<strong>实施</strong>: auth.py <code>_is_loopback_host</code> 改为 <code>is_loopback_host = </code>infra.utils 单点的别名(仿 config/validation/sections.py:137 既有别名范式), 删内联三元组; <code>_LOOPBACK_HOSTNAMES</code> 保留(它是 Host/Origin 白名单种子集, 消费 hostname 字符串、需含 localhost 主机名, 与回环判定是不同语义位)并在注释声明与单点的关系及「为何不并 127/8」; display_host 折叠锚不动(口径差异是刻意设计, infra/utils.py 注释已声明「折成 localhost 后还连不连得上」的展示语义)。<strong>验证</strong>: test_web_auth.py 新增 test_skip_local_verify_loopback_127_subnet(web.host=127.0.0.2 场景: 无密钥/错密钥放行、/api/config/public 200、远端仍 401/403)+ 单测补 127.0.0.2/::ffff:127.0.0.1/::ffff:127.0.0.2/192.168.1.50 断言; 19 passed(test_web_auth) / 76 passed(test_utils_parse, display_host 既有口径不受扰) / 6 passed(test_webui_static_r4_poll_auth_lifecycle), 均 2026-11-08 实测。</p>
 </section>
 
 <footer>

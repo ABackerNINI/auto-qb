@@ -23,22 +23,32 @@ from urllib.parse import urlsplit
 
 from fastapi import Header, HTTPException, Request
 
+from ...infra.utils import is_loopback_host
+
 logger = logging.getLogger("auto_qb.web")
 
 # 视为"写动作"的 HTTP 方法: CSRF 的危害面 = 跨站可驱动的状态变更。按方法守而不按路由
 # 清单逐个守 —— 闸门挂在全局依赖单点上, 今后新增任何写端点自动进覆盖面
 _WRITE_METHODS = frozenset({"POST", "PUT", "DELETE", "PATCH"})
 
-# loopback 主机名的合法书写变体(与 _is_loopback_host 的地址集对齐; localhost 是
-# 浏览器把 127.0.0.1/::1 解析后的常客, Host 头里两者都可能出现)
+# Host/Origin 白名单的 loopback 种子集 —— **不是**回环判定, 不并入 infra.utils.is_loopback_host
+# 单点(issue 26-11-08-0703 收敛时明析): 它喂的是 Host/Origin 头里的 hostname 字符串(浏览器
+# 控制, "localhost" 这类主机名只会以头字符串形态出现), 走 _hostname_allowed 精确命中/后缀
+# 判定; 127/8 其余回环不进本集合 —— 实际绑定的自配 host 由 _allowed_hostnames 单独并入,
+# rebinding 白名单扩面没有需求支撑(保守不扩)。回环判定(消费 request.client.host)见下方
+# _is_loopback_host 别名。
 _LOOPBACK_HOSTNAMES = frozenset({"localhost", "127.0.0.1", "::1", "::ffff:127.0.0.1"})
 
-
-def _is_loopback_host(host) -> bool:
-    """是否为本机 loopback 地址: 仅 127.0.0.1 / ::1 及其 IPv4-mapped 形式"""
-    if not host:
-        return False
-    return host in ("127.0.0.1", "::1", "::ffff:127.0.0.1")
+# 回环判据单点在 infra.utils.is_loopback_host(与 config 校验 / hr 配对门共用, 不得各写一份;
+# 本名沿用 webui 侧别名, routes/config.py 经 ..auth 引用)。消费面是 request.client.host
+# (TCP 对端地址): lifecycle 显式 proxy_headers=False(B-03)挡住反代头改写, 该输入不可被
+# 请求头伪造。127/8 全段(含 127.0.0.2)判回环**不扩大免认证威胁面**: 该段不可路由、只可能
+# 来自本机进程, 而 skip_local_verify 本就是对"本机连接"整体信任的显式开关(127.0.0.1 源
+# 早已免认证) —— 收敛掉的是本模块原来自有的第三套字面量集(issue 26-11-08-0703)。与
+# display_host 的折叠锚刻意不同口径: 那边判「折成 localhost 后还连不连得上」(展示面),
+# 这里判「是不是回环」(见 infra/utils.display_host 注释)。空值/None/无法解析一律 False
+# (utils_parse 保守出口), fail-closed 与原实现一致。
+_is_loopback_host = is_loopback_host
 
 
 def _host_header_parts(host_header: str) -> Tuple[str, Optional[int]]:
