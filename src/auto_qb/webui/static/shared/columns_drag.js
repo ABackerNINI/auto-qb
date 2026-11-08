@@ -109,7 +109,7 @@ Object.assign(window.AQB_COLUMNS.methods, {
     /* 成员行(展开明细)窗口: 与 group/torrent 不同, 三个成员窗口都要按"当前展开单元"
      * 的成员数组计算占位 —— 故**带参数**。Vue 3 computed 是无参 getter, 这里必须放
      * methods(否则模板里 memberPadTop(g.members) 触发 this.memberWin 当 getter 调用,
-     * 拿到的是对象而不是函数 → "this.memberWin is not a function", 整表就地白屏)。
+     * 拿到的是对象而不是函数 -> "this.memberWin is not a function", 整表就地白屏)。
      * 该 bug 由拆分前的同一段代码继承而来, 之前未塌是因为它走的是追剧页的成员行(整表
      * 不白)还是其它原因未复现, 现在辅种页展开一行即 100% 触发, 必须正名。
      * !调用契约(R4 存量评审 R5#35): 传入的必须是**排序后**的数组 —— 前缀和/切片/占位

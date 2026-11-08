@@ -55,7 +55,7 @@ Object.assign(window.AQB_COLUMNS.methods, {
      * 折叠组/空组, 表头在 .dt08-rows 内)
      * getComputedStyle 返回的是**指定形**(minmax(170px, 1.6fr) ...), 旧的 parseFloat 兜底
      * 会把 "1.6fr)" 解析成 1.6px 混进宽度表, 全组列宽随即坍成最小宽; 严格校验后这种
-     * 量不到的表头只会得到"数量不符 → null"(调用方按未渲染处理), 垃圾值进不了引擎。 */
+     * 量不到的表头只会得到"数量不符 -> null"(调用方按未渲染处理), 垃圾值进不了引擎。 */
     _renderedWidths(headEl, page) {
       const rendered = (getComputedStyle(headEl).gridTemplateColumns || "")
         .split(" ")
@@ -176,7 +176,7 @@ Object.assign(window.AQB_COLUMNS.methods, {
     /* 行容器的**真实**行间距(px): 三个容器并不相同 —— atlas `.group-table` 是 6px、
      * prism 是 5px、成员容器 `.detail` 是块级容器(没有 flex gap = 0)。硬编码任何一个值
      * 都会让另外两层的占位总高失真, 所以一律读计算样式实测(见文件头 BUG-1 注释)。
-     * 块级容器的 rowGap 计算值是 "normal" ⇒ parseFloat 得 NaN ⇒ 回落 0, 正是我们要的值。
+     * 块级容器的 rowGap 计算值是 "normal" => parseFloat 得 NaN => 回落 0, 正是我们要的值。
      * !返回 **null = 容器当前没渲染**(如种子页未打开时问 .group-table) —— 调用方**不得**
      * 把它当 0 缓存: 否则在分组页问一次就把种子页的间距永久记成 0(实测占位总高少 5px×2999)。 */
     _winGapOf(kind) {
@@ -309,7 +309,7 @@ Object.assign(window.AQB_COLUMNS.methods, {
       this._winCtnSync();
     },
     /* 容器顶边相对滚动内容顶的偏移(按 kind 走描述符): 只在签名变化时读一次(getBoundingClientRect
-     * = 强制同步布局, 每帧读会把 P1-3 的收益又吐回去)。签名含 lastRid ⇒ 每轮数据最多读一次。 */
+     * = 强制同步布局, 每帧读会把 P1-3 的收益又吐回去)。签名含 lastRid => 每轮数据最多读一次。 */
     _ensureWinTop() {
       this._ensureWinCtnBind();  // 容器型滚动源惰性绑定(元素引用比对, 常态零开销)
       const base = `${this.viewMode}|${this.page}|${this._winResize}|${this._winSigExtra()}|${this.lastRid}`;
@@ -334,7 +334,7 @@ Object.assign(window.AQB_COLUMNS.methods, {
       // !签名不含 viewMode(2026-11-02 关抽屉/切页卡死取证): 三 kind 行宽几何都不随 viewMode 变
       // —— 列集合由 colcounts 因子独立盯住、视口宽由 _winResize 盯住, 行本身只在固定列集的
       // 同宽表区渲染。旧签名含 viewMode = 每次切页把三 kind 行高全表作废 + _winMeasured 翻 false
-      // ⇒ 下一轮 _rowWindow 走全量渲染量齐, 3000 行实测 5.9~8.4s 长任务(切页卡死的根因)。
+      // => 下一轮 _rowWindow 走全量渲染量齐, 3000 行实测 5.9~8.4s 长任务(切页卡死的根因)。
       const sig = `${this._winResize}|${winDefs.map((d) => this[d.cols].length).join("|")}`;
       // !用 getBoundingClientRect().height 而不是 offsetHeight: 后者取整, 0.4px 的误差 ×
       // 3000 行就是 1200px 的漂移。
@@ -433,7 +433,7 @@ Object.assign(window.AQB_COLUMNS.methods, {
       }
     },
     /* 该 kind 已实测行的**全局均值**(遍历 _rowHs 的 kind: 前缀)。
-     * 为什么不用「当前窗口均值」: 窗口随滚动换一批行, 窗口均值会跟着跳变(如 49.7 ↔ 71.4),
+     * 为什么不用「当前窗口均值」: 窗口随滚动换一批行, 窗口均值会跟着跳变(如 49.7 <-> 71.4),
      * 占位总高与滚动条长度每帧抖一下; 全局均值只随新实测行缓慢收敛, 滚到哪里都稳定。
      * 首访千级列表此时只有视口那几十行, 之后每滚一屏补一批, 估算偏差单调收敛。 */
     _rowHAvgOf(kind) {

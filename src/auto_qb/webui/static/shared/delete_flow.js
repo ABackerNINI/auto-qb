@@ -177,7 +177,7 @@ window.AQB_DELETE = {
       const deleteFiles = res.checks.delete_files;
       if (res.checks.reannounce) {
         /* 投递层(与右链同源单点 decorate.js::reannouncePlan, D1): 非活跃目标收敛掉再投 ——
-         * 照发只会命中后端第二道闸回 warn, 而 warn 不放行删除 ⇒ 删除被中止(本 issue 的现象)。
+         * 照发只会命中后端第二道闸回 warn, 而 warn 不放行删除 => 删除被中止(本 issue 的现象)。
          * 解析不出(组行已消失)的目标原样走组端点, 由后端给显式回执。 */
         const plan = this.reannouncePlan({ keys, hashes });
         const jobs = [
@@ -258,7 +258,7 @@ window.AQB_DELETE = {
     /* 删除确认框「删除前强制重新汇报」的可用性(闸门层, issue 26-10-17-1703; 判据与右链
      * 同源 = decorate.js::reannounceBlocked, 全族 paused/stopped/queued/checking/error/
      * missingFiles 覆盖, 不新造「仅 paused」特例): 目标**全部**非活跃时该项不可能有回执
-     * (后端第二道闸必回 warn, 而 _reannounceAll 保守口径 warn 不放行 ⇒ 删除被中止, 用户
+     * (后端第二道闸必回 warn, 而 _reannounceAll 保守口径 warn 不放行 => 删除被中止, 用户
      * 须手动取消勾选才能删), 故禁用并取消勾选(D3); 混选(任一活跃)放行, 只在 pill 上报
      * 将跳过的非活跃数(D5, 投递收敛由 _deleteFlow 内 reannouncePlan 执行); 解析不出
      * (成员为空)不误拦 —— 与 decorate.js::_reannounceVerdict「解析出不拦」同口径。 */
@@ -300,7 +300,7 @@ window.AQB_DELETE = {
         cancelText: "取消",
         danger: true,
         icon: "#i-trash-x",
-        // 语义配色分级(计划 26-10-19-2341): 删除不可逆 → error 档 + 标题区警示条。
+        // 语义配色分级(计划 26-10-19-2341): 删除不可逆 -> error 档 + 标题区警示条。
         // tone 本可由 danger 派生得同一结果, 此处显式写死 —— 免日后调整 danger 语义时
         // 把删除框悄悄降级而无人察觉; strip 是「范围内仅删除/跳检两框」开启的警示条开关(D7)
         tone: "error",

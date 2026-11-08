@@ -273,7 +273,7 @@ const DRAWER_PEER_V09_COLUMNS = [
 ];
 /* ---------------- U3: Tracker 三变体列集(计划 26-10-12-0527, D2/D5) ----------------
  * 04 状态卡片栅格 / 05 健康分组: 行 = 卡片/处置块(非列状数据), 引擎行容器走**单列满宽**;
- * 列头在两变体无语义 → CSS 隐藏(.dt04-list/.dt05-list .group-head display:none)。
+ * 列头在两变体无语义 -> CSS 隐藏(.dt04-list/.dt05-list .group-head display:none)。
  * 排序键不占列(引擎 sortedDrawer 只按 _raw[key] 取值, 不要求 key ∈ cols):
  * 04 的分段钮(sev/tier 复合权值)经 dtSortSet 直设 dyn 键 —— 排序态仍归引擎单点。
  * Q3 记档: 两变体无列头, 拖宽/右键隐藏/列偏好持久化**不适用**(非缺能力, 是无列可拖)。 */
@@ -301,8 +301,8 @@ const DRAWER_TRACKER_V06_COLUMNS = [
  * 10 树 + 详情 / 11 树表批量: 原 grid `18px minmax(0,1fr) 78px 128px 62px`(10) 与
  * `26px 18px minmax(0,1fr) 78px 130px [62px] 64px`(11) 逐列转声明, 树缩进格(name 列) =
  * D4 拍板「树是行模型的一部分」(折叠钮/勾选框/缩进/图标/名称/徽章都在格内, 判据在变体
- * rowsFn)。排序不适用(树序 = 树语义, 原口径无排序 → 全列 sortable:false + dyn 空键,
- * 非借壳 —— 本来就没有手搓排序状态机, Q3 不增项)。Q3 记档: 10 无表头设计 → 列头 CSS
+ * rowsFn)。排序不适用(树序 = 树语义, 原口径无排序 -> 全列 sortable:false + dyn 空键,
+ * 非借壳 —— 本来就没有手搓排序状态机, Q3 不增项)。Q3 记档: 10 无表头设计 -> 列头 CSS
  * 隐藏(05 先例), 拖宽/右键隐藏/列偏好**不适用**; 11 表头保留, 拖宽/右键隐藏首次落地。
  * 11 可用性列原 omitEmpty 渐进已删(26-10-13-0811): 轨道数随数据浮动, 列常驻 + — 占位。
  *
@@ -314,11 +314,11 @@ const DRAWER_TRACKER_V06_COLUMNS = [
  *     树层级只由 name 格的 paddingLeft 表达; 折叠钮收编进 **name 格首部随缩进**(与节点
  *     同层, 层级直接可视)。
  *   tgl/prio 两列自此删除(终态: 10 = name/size/prog 三列; 11 = ck/name/size/prog/av 五列),
- *   交互件随 name 格走 ⇒ **name 列 locked**(L4 续效: 隐藏 name = 一并废掉折叠钮与徽章
+ *   交互件随 name 格走 => **name 列 locked**(L4 续效: 隐藏 name = 一并废掉折叠钮与徽章
  *   两个交互件; ck 列同口径)。用户已存列偏好按 key 求交, tgl/prio 陈旧键自然失效, 免迁移。
  *   !2026-10-14 用户二次复查(报告 26-10-14-0136 §02 续): ck 勾选框仍独立成列且拖宽可调 ——
  *   勾选框收进 **name 格首部随缩进**(与节点同层, 不占轨道); ck 列自此删除(终态: 11 =
- *   name/size/prog/av 四列), 勾选框随 name 格走 ⇒ name 列 locked 续效(隐藏 name = 一并废
+ *   name/size/prog/av 四列), 勾选框随 name 格走 => name 列 locked 续效(隐藏 name = 一并废
  *   掉勾选框/折叠钮/徽章三个交互件)。用户已存列偏好按 key 求交, ck 陈旧键自然失效, 免迁移。 */
 const DRAWER_CONTENT_V10_COLUMNS = [
   { key: "name", label: "名称", tpl: "minmax(0, 1fr)", sortable: false, locked: true, align: "left" },  /* L4: 折叠钮+徽章在格内, 隐藏即废 */
@@ -500,9 +500,9 @@ const DRAWER_TABLE_DEFS = {
    * 与经典三表的形态差异(增量, 经典三表不动):
    *   sort.dyn   排序状态进根 data 的 `dtSortState` 映射(按 table-id 通用存取, sort.js
    *              dyn 分支) —— 不再每表往 state.js 加两个 data 字段(注册一行即完事);
-   *   variantTab/variantId  归属页签与变体 id —— ① columns.js `tableDefs` 据此过滤列选择器
-   *              (变体表只在对应变体被选中时出现, 不泄进生产选择器); ② drawer.html 桥按
-   *              dtBridgeTbl(tab) 反查(选择变体 → 桥表格)。
+   *   variantTab/variantId  归属页签与变体 id —— (1) columns.js `tableDefs` 据此过滤列选择器
+   *              (变体表只在对应变体被选中时出现, 不泄进生产选择器); (2) drawer.html 桥按
+   *              dtBridgeTbl(tab) 反查(选择变体 -> 桥表格)。
    *   rows/rowProp/rowModel  行来源(根方法名)/渲染器 prop 名/渲染器模型(aq-<rowModel>-cells)。
    * drawerStubV0 = U1 spike 的 stub(真实变体一行不改): 列 = DRAWER_PEER_COLUMNS 列子集
    * (D2 口径), 行复用 peer 行模型与 drawerPeerRows 装配 —— 只由 ?dtstub 查询参数激活的
@@ -551,7 +551,7 @@ const DRAWER_TABLE_DEFS = {
    * 04 状态卡片栅格: 行 = 卡片(引擎行容器单列满宽, 列头 CSS 隐藏 —— 卡片无列语义, D5);
    *   手搓分段钮排序并引擎(R7): _raw 挂复合权值(sev*10+tier / tier*10+sev, 虚拟合并卡恒 95),
    *   分段钮经 dtSortSet 直设 dyn 键(模式选择语义, 非 h-cell 三态循环), 默认 sev 升序 =
-   *   异常优先。筛选 pills 是版式语义 → rowsFn + anchTouch(同 07)。
+   *   异常优先。筛选 pills 是版式语义 -> rowsFn + anchTouch(同 07)。
    * 05 健康分组: segs:true 五组(err/warn/upd/ok/off, 空组整段缺席), 组头/折叠留外壳
    *   (分组是版式, 行是引擎表体); 无排序(dyn 空键 = 组内 qB 原序, 原口径); 行三形态
    *   (失败处置块/普通行/off 组 chips 合成行)经 kind 分支 + rowCls, msg 展开态 rowsFn 读。
@@ -584,11 +584,11 @@ const DRAWER_TABLE_DEFS = {
   },
   /* ---------------- U4: 内容树两变体(10/11, 计划 26-10-12-0527; D4=A 树缩进格进渲染器) ----------------
    * 10 树 + 详情: 左树 = 引擎表体(行容器单行 grid), 右详情/工具条/foot 留外壳(版式);
-   *   无表头设计 → 列头 CSS 隐藏(05 先例), 拖宽/右键隐藏不适用(Q3 记档)。行选中(selPath)
-   *   驱动右详情 + 行 _cls, 行来源含非响应式 UI 态 → anchTouch(同 04/07)。
+   *   无表头设计 -> 列头 CSS 隐藏(05 先例), 拖宽/右键隐藏不适用(Q3 记档)。行选中(selPath)
+   *   驱动右详情 + 行 _cls, 行来源含非响应式 UI 态 -> anchTouch(同 04/07)。
    * 11 树表批量: 7 列(勾选/折叠列 locked —— 隐藏即废勾选/折叠功能, 引擎 locked 消费);
    *   可用性列常驻(omitEmpty 已删, 26-10-13-0811); 批量优先级条留外壳, 勾选集
-   *   (checked/子树三态)是版式语义 → rowsFn + anchTouch; 行内勾选框三态经分片
+   *   (checked/子树三态)是版式语义 -> rowsFn + anchTouch; 行内勾选框三态经分片
    *   :indeterminate 声明式(原生 property, Vue patch 直持)。
    * 两表行级键盘(issue 26-10-07-0846): rowTab = 行容器 tabindex=-1 声明位;
    *   rowAfter = 锚换代重挂后回调变体 rowAfterFn(roving 锚点/回焦) —— 行身份锚 =
@@ -636,7 +636,7 @@ window.AQB_DRAWER_TPL_DEFS = DRAWER_TABLE_DEFS;
  * 三条硬约束(漏了就出事):
  *   1. 占位高度必须等于被折叠掉的行高之和 —— 而**行高是不齐的**(带 H&R 要求的行多渲染一行,
  *      实测 43.7px 与 65.4px 混排), 故一律**逐行实测 + 前缀和**, 不做"等高"近似
- *      (等高假设在 3000 行上会漂 218px ⇒ 滚到底够不着)。首轮先全量渲染一次量齐。
+ *      (等高假设在 3000 行上会漂 218px => 滚到底够不着)。首轮先全量渲染一次量齐。
  *   2. 视图有"插队元素"时必须退避: 分组页展开的 .detail 面板高度不定, 会让后续行整体下移,
  *      此时窗口的"第 i 行在 pre[i]"假设失效 —— 有展开即回退全量。
  *   3. 阈值以下不开窗: 小库(<ROW_WIN_MIN)开窗只是平白多一次测量, 且更容易露白。
@@ -644,7 +644,7 @@ window.AQB_DRAWER_TPL_DEFS = DRAWER_TABLE_DEFS;
  * WARN: 行间距必须**实测**, 不能硬编码(2026-09-19 修 BUG-1): 三个行容器的真实 gap 并不相同 ——
  * atlas `.group-table` 是 6px, prism `.group-table` 是 5px, 而成员容器 `.detail` 是**块级容器**
  * (没有 flex gap, 行间距为 0)。曾按 6px 写死, 结果 prism 的占位总高比全量渲染多 2973px
- * (3000 行实测) ⇒ 滚动条长度失真、中段位置最多偏 49 行。真值由 `_measureRowH` 读
+ * (3000 行实测) => 滚动条长度失真、中段位置最多偏 49 行。真值由 `_measureRowH` 读
  * `getComputedStyle(container).rowGap` 实测, 三层各存一份。
  */
 const ROW_WIN_MIN = 200;        // 行数低于此值不开窗口
@@ -804,7 +804,7 @@ function initialViewMode() {
 
 /* 顶层页面初值(持久化用户偏好, 与 initialViewMode 同口径)。
  *
- * 为什么要有: `page` 原本是**纯内存态**、初值恒 "groups" ⇒ 在设置页按 F5 必掉回辅种页
+ * 为什么要有: `page` 原本是**纯内存态**、初值恒 "groups" => 在设置页按 F5 必掉回辅种页
  * (2026-09-25 用户报"设置页刷新会回到种子页"), 编辑到一半的位置全丢。
  * 白名单式取值: 只认 "settings", 其余(含脏值/被清空)一律落回 "groups" —— 不信任存储内容。
  * WARN: 只把初值改成读存储**还不够**: 设置页的配置树是按需加载的, 启动路径必须补一次
@@ -875,7 +875,7 @@ function initialDrawerMerge() {
  * 必须与后端 `auto_qb/mixins/web_view.py::_SHOW_STATE_RANK` **逐项一致** —— 追剧页的集状态
  * (`e.state`) 是后端按那张表算好后回传的, 而辅种页的组状态 (`decoratedGroups.status.primary`)
  * 是前端按这张表算的。两张表一旦不一致, **同一批种子在两个页面会显示成不同颜色**;
- * 更糟的是乐观 UI: 前端按自己的表算出"点击后的颜色", 下一轮回执却按后端的表算真值 ⇒ 颜色弹回。
+ * 更糟的是乐观 UI: 前端按自己的表算出"点击后的颜色", 下一轮回执却按后端的表算真值 => 颜色弹回。
  * 两表一致性由 `tests/test_webui_static_skins.py::_scan_state_rank`(test_frontend_static_bundle_health 第 8 项)
  * 机械守卫(改一边必须改另一边), 该项同时钉住"做种排在暂停之前"的顺序语义。
  *
@@ -883,7 +883,7 @@ function initialDrawerMerge() {
  * 组内"部分暂停部分做种"是常态(整组只有个别站点被暂停), 取 paused 会把整个做种的组刷成灰的。
  * 曾用顺序 ["error","checking","downloading","seeding","paused","other"] 与后端差两处:
  * {downloading,checking}(后端取 downloading —— 保留) 与 {paused,seeding}(前端取 seeding —— 恢复)。
- * !2026-09-19 的 BUG-7 把前端表整体对齐到后端, 顺手把 {paused,seeding} 也翻成 paused ⇒
+ * !2026-09-19 的 BUG-7 把前端表整体对齐到后端, 顺手把 {paused,seeding} 也翻成 paused =>
  * 辅种页"部分暂停部分做种"的组由绿变灰(2026-09-21 用户报"以前是对的"), 本次两表一起改回做种优先。
  * !2026-10-29 加入 moving(第 7 档), 插在 paused 之后 / other 之前 —— 不扰动上面这段踩过坑的
  *   相对顺序。它是"qB 在动磁盘、不传输"的临时态, 属非典型态, 与 other 相邻。
@@ -950,7 +950,7 @@ app.component("aq-bt-backup-editor", window.AQ_BT_BACKUP_EDITOR_COMPONENT);
 // 表格公共组件(计划 26-10-11-1722 P1/P2/P3): 表壳 <aq-table> + 行模型单元格渲染器
 // (<aq-member-cells> / <aq-group-cells> / <aq-torrent-cells> / <aq-show-cells> / <aq-ep-cells>)。
 // 它们只包**模板**(表头块 / 单元格分支链), 行为与状态仍在既有单点上 —— 组件模板经 $root 回调根实例。
-// 这组注册即「渲染器注册表」单点(行模型 → 组件), 守阵 test_frontend_table_shell_single_point 钉住。
+// 这组注册即「渲染器注册表」单点(行模型 -> 组件), 守阵 test_frontend_table_shell_single_point 钉住。
 app.component("aq-table", window.AQ_TABLE_COMPONENT);
 /* combobox 输入行 + 候选面板(收敛 issue 26-10-20-2230 / R23-A-01): 五个自绘下拉(添加窗口
  * 保存路径/分类/标签 · 设定位置 movePath · 编辑弹窗 metaCat)的骨架此前逐字复写五份, 现只此
@@ -987,7 +987,7 @@ app.component("aq-ep-cells", window.AQ_EP_CELLS_COMPONENT);
    11 行骨架合一(模板 xtpl-cells.html#tpl-aq-site-chip, 定义在 table.js) —— chip 是单元格内
    元素, 组件根即 span.site-chip, 不触碰"单元格必须是行直接子元素"的 grid 约束。 */
 app.component("aq-site-chip", window.AQ_SITE_CHIP_COMPONENT);
-/* 变体表格体桥(计划 26-10-12-0527 U1): 外壳锚 → Teleport 表壳 + 行渲染器(见 table.js 尾注) */
+/* 变体表格体桥(计划 26-10-12-0527 U1): 外壳锚 -> Teleport 表壳 + 行渲染器(见 table.js 尾注) */
 app.component("aq-dt-bridge", window.AQ_DT_BRIDGE_COMPONENT);
 /* U2 变体格渲染器(计划 26-10-12-0527): 用户表三变体的行模型(桥模板按 rowModel 动态解析) */
 app.component("aq-dt07-cells", window.AQ_DT07_CELLS_COMPONENT);

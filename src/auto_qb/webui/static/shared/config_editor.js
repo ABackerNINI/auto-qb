@@ -1,7 +1,7 @@
 /* auto-qb WEB UI 图形化配置编辑器(Vue 3 全局 mixin, 无构建链)
  *
  * 设计要点(与 ai/06 约定一致):
- * - 前端持有**与磁盘同构的 YAML 树**(标量全为字符串), 编辑即就地增删改, 不做任何格式转换 → 零漂移
+ * - 前端持有**与磁盘同构的 YAML 树**(标量全为字符串), 编辑即就地增删改, 不做任何格式转换 -> 零漂移
  * - `schema`(来自 /api/config/schema)只决定"怎么渲染 + 怎么提示", 不承载正确性规则;
  *   合法性唯一入口仍是后端 load_config —— 保存失败时 400 返回可读错误并原样展示
  * - 脏检测用 JSON 快照对比; 保存成功后重新拉取树(后端会把 R 级字段回退为旧值)
@@ -23,14 +23,14 @@ const UNIT_FALLBACK = { time: "S", size: "MiB", speed: "KiB/s" };
 /* 时间单位下拉的中文显示文案(仅改显示, value 仍是 S/M/H/D 与后端解析一致) */
 const UNIT_LABELS = { time: { S: "秒", M: "分", H: "时", D: "天" } };
 
-/* 站点→全局 回退链 map(report 26-10-03-0504 方案 B 阶段2)
+/* 站点->全局 回退链 map(report 26-10-03-0504 方案 B 阶段2)
  *
  * 语义单点在后端 loaders.py: remove_similar_tags 走 load_tracker_config(站点未设回退全局),
  * hr 输出字段走 load_tracker_hr 的 out/out_bool(站点 spec -> 全局 hr 段 -> 字段默认)。
  * 键 = 站点段叶子键, 值 = 全局对应键在 config 根下的中间段(叶子键同名, 空数组 = config 顶层)。
  * 站点绝对路径形如 ["config","trackers",<站点名>,...中间段,叶子键], 全局对应路径 =
  * ["config",...中间段,叶子键] —— 以路径上的站点名动态展开, 不穷举静态路径。
- * 仅这 7 个键做「站点值→全局对应键→schema 默认」生效值回填与来源徽标;
+ * 仅这 7 个键做「站点值->全局对应键->schema 默认」生效值回填与来源徽标;
  * hr.exclude_tags / hr.exclude_categories 是并集语义(全局∪站点, loaders out_union, 设计注
  * 防「站点段写了就静默丢全局排除」), 不进本表 —— 不做回填与徽标(阶段3 只补 help 文案)。
  */
@@ -212,7 +212,7 @@ window.CONFIG_EDITOR = {
       this.cfg.saveError = "";
       try {
         const result = await this.api("/api/config", { method: "PUT", body: JSON.stringify({ tree: this.cfg.tree }) });
-        // 后端会把 R 级字段回退为磁盘旧值 → 重新拉取树保证 UI 与磁盘一致
+        // 后端会把 R 级字段回退为磁盘旧值 -> 重新拉取树保证 UI 与磁盘一致
         const fresh = await this.api("/api/config");
         this.cfgSetTree(fresh.tree);
         const n = (result.changes || []).length;
@@ -436,7 +436,7 @@ window.CONFIG_EDITOR = {
       return ["config", ...mid, key];
     },
     /* 生效值回填(报告 §3.3 显示失真的修复; 铁律: 与来源徽标同批上, 缺一不可):
-     * 站点值 → 全局对应键 → schema 默认。仅对回退链 7 键生效, 其余字段原样返回
+     * 站点值 -> 全局对应键 -> schema 默认。仅对回退链 7 键生效, 其余字段原样返回
      * schemaDefault, 行为不变。站点 tri_state 键的 '' 是真值(覆盖为空), 调用方(cfgInputValue)
      * 用 cfgRaw 先判存在性, '' 不会落进这里当缺失; 全局对应键的 '' 不存在(后端 _strip_none 照剥)。 */
     cfgFallbackValue(path, schemaDefault) {
@@ -605,7 +605,7 @@ window.CE_FIELD_BASE = {
       return this.ce.cfgInputValue(this.f, this.path);
     },
     boolValue() {
-      // 生效值回填(方案 B 阶段2): 站点回退链键缺失时按「全局对应键 → schema 默认」显示,
+      // 生效值回填(方案 B 阶段2): 站点回退链键缺失时按「全局对应键 -> schema 默认」显示,
       // 不再拿 schema 默认冒充生效值(显示失真, report §3.3); 非链上键行为不变
       return this.ce.cfgBool(this.path, this.ce.cfgFallbackValue(this.path, this.f.default));
     },
@@ -693,7 +693,7 @@ window.CE_FIELD_BASE = {
      * 回来照样复现。根因不在设置页自己的逻辑 —— 密码框被包成「用户名 + 密码」的表单形状
      * (见 xtpl.html 密码分支, 为消 Chrome 两条可访问性警告), 浏览器 / 密码管理器会把它当
      * **登录表单**, 把同源(登录页)保存的凭据**自动填**进来, 并在**未聚焦**时派发 input 事件;
-     * 原实现 @input=set() 把自动填充的值原样写进配置树 ⇒ 脏标记凭空变真(实测: 一个未聚焦
+     * 原实现 @input=set() 把自动填充的值原样写进配置树 => 脏标记凭空变真(实测: 一个未聚焦
      * input 事件即翻真), 而框里显示的是掩码, 用户看不出改的是哪一项。
      *
      * 判据 = 事件到达时该框**是不是焦点**: 自动填充发生在未聚焦时(页面加载 / 后台), 而真实
@@ -728,7 +728,7 @@ window.CE_FIELD_BASE = {
      *
      * WARN: `unitParts` 是 **computed**(无参 getter), 只能 `this.unitParts.unit` 取属性;
      *    写成 `this.unitParts()` 是把 getter 的**返回值**({num, unit} 对象)当函数调用
-     *    ⇒ TypeError ⇒ 经典设置页一改"数值 + 单位"字段的数字就整页白屏
+     *    => TypeError => 经典设置页一改"数值 + 单位"字段的数字就整页白屏
      *    (2026-09-21 实测修复; 静态守阵见 tests/test_webui_static_dom_page_layout.py
      *     `test_frontend_computed_not_invoked_as_function`)。 */
     setUnitNum(value) {
@@ -751,9 +751,9 @@ window.CE_FIELD_BASE = {
       return Array.isArray(v) && v.some((it) => it && typeof it === "object" && name in it);
     },
     /* 取消勾选**最后一项**时必须删键, 不能写空列表(2026-10-10 报障, 与 cfgItemRemove 同口径):
-     * ① 空列表与"键缺失"不同构 —— 全树 JSON 对比的脏标记认它是改动, 「勾选再取消」后仍提示
+     * (1) 空列表与"键缺失"不同构 —— 全树 JSON 对比的脏标记认它是改动, 「勾选再取消」后仍提示
      *    "有改动还没保存", 且这一改动在 UI 上没有任何可见痕迹;
-     * ② 空列表过不了后端校验(notify.channels 要求非空), 保存必败且用户无法从界面自救。
+     * (2) 空列表过不了后端校验(notify.channels 要求非空), 保存必败且用户无法从界面自救。
      * 删键 = 回到"未配置"(后端走缺省), 勾选再取消因此是零副作用的可逆操作。 */
     toggleKey(name) {
       const v = this.ce.cfgRaw(this.path);

@@ -220,7 +220,7 @@ window.CONFIG_RULES = {
     cfgDefaultForPlugin(meta) {
       if (!meta) return "";
       if (meta.spec_kind === "list") return [];
-      // 非单值形态(含 object 与任何未知形态, 沿用旧口径)→ 按子字段造对象, 必填优先 + object 子段递归
+      // 非单值形态(含 object 与任何未知形态, 沿用旧口径)-> 按子字段造对象, 必填优先 + object 子段递归
       if (!SPEC_SCALAR_KINDS.includes(meta.spec_kind)) {
         return this.cfgDefaultForFields(meta.fields, { requiredOnly: true, recurse: true });
       }

@@ -101,8 +101,8 @@ Object.assign(window.AQB_COMMANDS.methods, {
     reapplyPending() {
       /* 每轮 refresh 整表替换会盖掉乐观值, 这里把仍 pending 的补丁重新贴上。
        * !**真值已到就收工**(issue 26-09-19-2024-webui-truth-convergence): 原先这里只管贴,
-       * pendingOps 唯一的出口是 3s 兜底 ⇒ 真值早就到了、行还半透明挂着, 用户看到的就是
-       * "点了之后 2-4s 才恢复正常"。现在逐个比对**服务端真值快照** ⇒ 对齐就立即清掉。 */
+       * pendingOps 唯一的出口是 3s 兜底 => 真值早就到了、行还半透明挂着, 用户看到的就是
+       * "点了之后 2-4s 才恢复正常"。现在逐个比对**服务端真值快照** => 对齐就立即清掉。 */
       for (const h of Object.keys(this.pendingOps)) {
         /* !不再跳过"已结束压暗"的 op: hold 期间必须继续盖住行上的值, 否则轮询带回的
          * 命令**前**旧值会把行打回去(弹回)。压暗只是视觉, 与值覆盖无关(见 isPending)。 */
@@ -119,12 +119,12 @@ Object.assign(window.AQB_COMMANDS.methods, {
     },
     /* 本轮 /api/state 的真值快照(只记仍 pending 的 hash)。
      * !**必须比服务端原始值, 不能比行上的当前值**: 行在上一轮已经被贴过补丁了, 拿行上的值
-     *   跟补丁比 = 跟自己比 ⇒ 首轮必"匹配"、pending 立刻消失(2026-09-19 实测 28ms 就清了,
+     *   跟补丁比 = 跟自己比 => 首轮必"匹配"、pending 立刻消失(2026-09-19 实测 28ms 就清了,
      *   而桩服务真值 +120ms 才到 —— 断言全绿却什么都没测到)。
      * !**拷值不拷引用**: 赋值后 `this.torrents` 与 payload 是同一批对象, 补丁随后就改到它们,
      *   存引用等于没存。
      * !只认 payload 里**真的带了**的 hash: 当前视图的 payload 可能不含它(如追剧视图只回
-     *   shows), 那时返回 false ⇒ 继续贴、交给 3s 兜底 —— 宁可慢收, 不可误判。 */
+     *   shows), 那时返回 false => 继续贴、交给 3s 兜底 —— 宁可慢收, 不可误判。 */
     _snapshotTruth(state) {
       const keys = Object.keys(this.pendingOps);
       if (!keys.length) { this.truthSnapshot = null; return; }

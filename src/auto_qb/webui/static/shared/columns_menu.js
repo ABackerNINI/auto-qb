@@ -49,8 +49,8 @@ Object.assign(window.AQB_COLUMNS.methods, {
     /* 表头横滚同步(计划 26-10-11-1722 P4 收敛): 三视图共用一份。
      * 表头已脱离 .group-table 容器做纵向 sticky(overflow 上下文), 横向滚动靠 JS 桥接:
      * 用 transform 而非 scrollLeft, 避免反向触发自身 scroll 事件形成回环; 不带 transition 跟手不滞后。
-     * 三件事(缺一即静默坏): ①表头位移 = 容器 scrollLeft 反向; ②--head-pin-x 供首列吸左首格反向抵消;
-     * ③.is-hscrolled 打标(容器 + 表头)供 CSS 画右缘落影 —— CSS 无法感知 scrollLeft, 丢标 = 边界落影永不出现。
+     * 三件事(缺一即静默坏): (1)表头位移 = 容器 scrollLeft 反向; (2)--head-pin-x 供首列吸左首格反向抵消;
+     * (3).is-hscrolled 打标(容器 + 表头)供 CSS 画右缘落影 —— CSS 无法感知 scrollLeft, 丢标 = 边界落影永不出现。
      * 调用点: groups.html(container ref=groupTable, page=group) / torrents.html(torrentTable, torrent)
      *        / shows.html(showTable, show) —— 三个容器都是 .group-table, 表头元素经 _headEl(page) 取。 */
     syncHeadScroll(ev, page) {
@@ -74,11 +74,11 @@ Object.assign(window.AQB_COLUMNS.methods, {
      * 抽屉列集窄、横滚罕见, 不配指示条(D4/R5)。这条判定必须留在**建 DOM 之前**,
      * 否则抽屉面滚一下就在 body 里留下一个永远不用的胶囊。
      *
-     * !重算时机只有四个: ①容器 scroll(本函数) ②热区进入那一刻 ③ResizeObserver(容器盒变)
-     *   ④window resize(清状态栏高缓存 + 重算)。
+     * !重算时机只有四个: (1)容器 scroll(本函数) (2)热区进入那一刻 (3)ResizeObserver(容器盒变)
+     *   (4)window resize(清状态栏高缓存 + 重算)。
      * 刻意**不**在列应用路径(6 处 colWidths 写入点)显式触发, 也不挂 MutationObserver:
      * 改列宽 / 隐藏列会让 scrollWidth 变而容器盒子不变(RO 观察不到), 但那一刻指示条必然不可见
-     * (它只在热区里显示), 陈旧几何没人观察得到; 下一次进入热区时 ② 用同一份本函数修正。
+     * (它只在热区里显示), 陈旧几何没人观察得到; 下一次进入热区时 (2) 用同一份本函数修正。
      * 为一个观察不到的瞬时值挂 MutationObserver = 每次行 DOM 变更都付一次回调, 不值。
      */
     _hscrollSync(el, page) {
@@ -130,7 +130,7 @@ Object.assign(window.AQB_COLUMNS.methods, {
       return pill;
     },
     /* 状态栏实测高: 优先量 .statusbar(状态条可能不渲染 -> 量不到时回落令牌), 再回落 34。
-     * 值缓存到 window resize(④) —— 热区 handler 每次 mousemove 都要用它, 不能每次都量。 */
+     * 值缓存到 window resize((4)) —— 热区 handler 每次 mousemove 都要用它, 不能每次都量。 */
     _hscrollStatusbarH() {
       if (HSCROLL_IND.sbH >= 0) return HSCROLL_IND.sbH;
       let h = 0;
@@ -204,14 +204,14 @@ Object.assign(window.AQB_COLUMNS.methods, {
       return null;
     },
     /* 热区纵向带 = [状态栏上缘 - 24px, 状态栏上缘) —— **不含状态栏本身**(D5)。
-     * !早先写成单边 `clientY >= innerHeight - 状态栏高 - 24`, 少了上界 ⇒ 状态栏那 34px 也落在带内
+     * !早先写成单边 `clientY >= innerHeight - 状态栏高 - 24`, 少了上界 => 状态栏那 34px 也落在带内
      * (状态栏是常用控件区, 不该召唤滚动条)。2026-11-01 用户验收指出后补上上界。 */
     _hscrollBand(ev) {
       const bottom = window.innerHeight - this._hscrollStatusbarH();  // 状态栏上缘
       return ev.clientY >= bottom - 24 && ev.clientY < bottom;
     },
     /* 横向判据: 指针要落在胶囊**本身**的邻域内(左右各放 40px 余量), 不是全屏宽都算。
-     * !早先只判 clientY ⇒ 鼠标扫过底部右侧的速度/限速区也召唤胶囊(2026-11-01 用户验收指出)。
+     * !早先只判 clientY => 鼠标扫过底部右侧的速度/限速区也召唤胶囊(2026-11-01 用户验收指出)。
      * 只读缓存(HSCROLL_IND.pillW), 热路径上不量布局。 */
     _hscrollInPillSpan(ev) {
       const w = HSCROLL_IND.pillW;
@@ -219,7 +219,7 @@ Object.assign(window.AQB_COLUMNS.methods, {
       return Math.abs(ev.clientX - window.innerWidth / 2) <= w / 2 + 40;
     },
     /* 热区 handler(R1: 落在热路径上, 每次 mousemove 都跑): 纵向两次比较 + 横向一次减法,
-     * 不读布局、不写 DOM; 状态没变立刻返回。**入带那一刻**才重算几何(重算时机 ②)。 */
+     * 不读布局、不写 DOM; 状态没变立刻返回。**入带那一刻**才重算几何(重算时机 (2))。 */
     _hscrollHot(ev) {
       if (!this._hscrollBand(ev)) {
         HSCROLL_IND.bandIn = false;  // 出带: 下次入带要重新量一次几何
@@ -311,7 +311,7 @@ Object.assign(window.AQB_COLUMNS.methods, {
     },
     /* 照 columns_grid.js::_ensureHeadObserver 的范式: 只观察当前主表容器, 元素换了才重挂;
      * 回调 rAF 合并(同一帧多次变化只重算一次); 无 ResizeObserver 时降级为不挂 ——
-     * 此时容器盒变化仍会在下一次进入热区(②)或容器 scroll(①)时被修正。 */
+     * 此时容器盒变化仍会在下一次进入热区((2))或容器 scroll((1))时被修正。 */
     _hscrollObserve(el) {
       if (typeof ResizeObserver === "undefined") return;
       if (el === HSCROLL_IND.roEl) return;  // 元素没换: 什么都不做(不触发任何布局读取)

@@ -106,8 +106,8 @@ window.AQB_COMMANDS = {
       const g = this._findGroup(k);
       return g ? (g.members || []).map((m) => m.hash) : [];
     },
-    /* ---------------- P0-3 埋点(点击侧): 「点击 → 补丁」/「点击 → POST 返回」 ----------------
-     * 原先 cmdStats 只量**回执段**(wait_ms / exec_ms / 端到端), 「点击 → 命令投递」这一段
+    /* ---------------- P0-3 埋点(点击侧): 「点击 -> 补丁」/「点击 -> POST 返回」 ----------------
+     * 原先 cmdStats 只量**回执段**(wait_ms / exec_ms / 端到端), 「点击 -> 命令投递」这一段
      * 既没打点也没超时, 是**盲区**: 真机上 POST 慢到秒级时, 前端日志全绿、只有用户肉眼能看见
      * "点了 2-4s 才有反应"(issue 26-09-19-1939-webui-optimistic-latency 就是这么报上来的)。
      * 埋点没有消费者就是死字段 —— 这两段一并写进 cmdStats, 由 waitCmd 的 [perf] 统一消费。 */
@@ -188,7 +188,7 @@ window.AQB_COMMANDS = {
      */
     async waitCmd(cmdId, timeoutMs = 40000, opts = {}) {
       /* 首查后退避(原实现第一查也要先睡 500ms —— 快命令平白多 500ms):
-       * 快命令曲线 0 → 150 → 300 → 500 封顶; reannounce 走宽松曲线 500 → 1000 封顶
+       * 快命令曲线 0 -> 150 -> 300 -> 500 封顶; reannounce 走宽松曲线 500 -> 1000 封顶
        * (tracker 确认本来就要几秒, 密轮询只增请求数不减延迟)。
        * 多发的请求只落在"命令在途"的极短窗口内, 空闲时没有任何额外轮询。
        * P0-0 埋点: 后端回执带 wait_ms/exec_ms 时记入 this.cmdStats, 并在超阈值时打一条
@@ -202,7 +202,7 @@ window.AQB_COMMANDS = {
       const firstMs = opts.firstMs || 0;
       const capMs = opts.capMs || 500;
       /* P2 事件驱动: SSE 连着时回执由 `cmd` 事件**推**过来, 不必等轮询退避的粒度
-       * (0→150→300→500ms)—— 那段粒度本身就是撤下延迟的一部分。
+       * (0->150->300->500ms)—— 那段粒度本身就是撤下延迟的一部分。
        * !与轮询**赛跑**而不是替换: SSE 不可用/断了就自动退回原路径, 语义不变。 */
       const evP = this._awaitCmd(cmdId, timeoutMs);
       const stop = { v: false };
@@ -217,7 +217,7 @@ window.AQB_COMMANDS = {
     },
     /* 原轮询路径, 抽出来供 waitCmd 与事件路径赛跑(SSE 不可用时的兜底)。
      * 有界等待走轮询骨架的 awaitPoll 单点(polling.js): 退避曲线由 ms(n, prev) 表达
-     * (首拍 firstMs, 之后 0→150 起跳、逐拍翻倍夹到 capMs), 时间上限由 deadline 表达,
+     * (首拍 firstMs, 之后 0->150 起跳、逐拍翻倍夹到 capMs), 时间上限由 deadline 表达,
      * 叫停由 stop 表达 —— 三份有界等待(_pollCmd / tmPollSettle / tmPollShutdown)自此同骨架。
      * !key 传 null: 并发命令各等各的回执, 不能互相顶掉(传 key 会先停后起)。 */
     _pollCmd(cmdId, timeoutMs, firstMs, capMs, start, stop) {
@@ -324,11 +324,11 @@ window.AQB_COMMANDS = {
      * 到这里把真值落到行上, 但**不结束值覆盖** —— 覆盖的终点是"服务端**快照**同意"
      * (_optimisticSettled) 或 hold 超时兜底, 不是"真值到达"。
      *
-     * !为什么不能在这里 `delete pendingOps[h]`(2026-09-21 用户报「整组暂停后 灰→绿→灰」):
+     * !为什么不能在这里 `delete pendingOps[h]`(2026-09-21 用户报「整组暂停后 灰->绿->灰」):
      *   真值走 `torrents/info` **直查**, 比我们自己的 `/sync/maindata` **快照**新 —— 快照要等主循环
      *   下一次 sync(≤ sync_interval = 1.5s)才带上同一个状态。此刻把覆盖撤掉, 这 1.5s 内任何一次
      *   **视图发布**(任何种子任何字段变化都会让 rid 前进、整表重发)都会带着"命令前"的 kind 覆盖行
-     *   对象 ⇒ 行被打回命令前的颜色(整组暂停闪回做种绿), 直到快照追上才再变灰。
+     *   对象 => 行被打回命令前的颜色(整组暂停闪回做种绿), 直到快照追上才再变灰。
      *   覆盖留着, 那一轮只会被 reapplyPending 用真值重新贴回去(观感: 一直是灰的)。
      * !真值**同时改 patch 与 prev**: patch 的值 = 已落地的真值(resume 的"落地态 6 种 vs 预测 2 种"
      *   由此收敛, 不再依赖"预测 == 真值"这种严格相等), prev 的值 = **最后已知真值** ——
@@ -378,7 +378,7 @@ window.AQB_COMMANDS = {
       if (!op) return false;
       /* D2: 回执一到(grey=false)就不再"在飞" —— 压暗到此结束(撤下)。
        * 但**值覆盖还要继续**(op.hold), 直到真值事件到达; 否则下一轮 refresh 会把
-       * 命令**前**的旧值打回行上 ⇒ 弹回。这里只管压暗, 不要和值覆盖混在一起。 */
+       * 命令**前**的旧值打回行上 => 弹回。这里只管压暗, 不要和值覆盖混在一起。 */
       if (op.grey === false) return false;
       /* !超时**只判 false、不在这里 delete**: 模板每帧都会调 isPending, 在渲染函数里改响应式
        * 数据(回滚字段)有递归更新风险; 真正的回滚交给 _expirePending()(每轮 refresh 一次)。
@@ -388,7 +388,7 @@ window.AQB_COMMANDS = {
     },
     /* 3s 兜底: 超时未确认的补丁**显式回滚到补丁前的值**, 与失败回滚同一写法。
      * !旧写法"不再贴补丁、下轮以服务端为准"在 rid 门控下**不成立**: 服务端版本未变时不回传
-     * 数组、行对象不被替换 ⇒ 上一轮贴的 kind:"paused" 会一直留在行上 —— 命令根本没执行,
+     * 数组、行对象不被替换 => 上一轮贴的 kind:"paused" 会一直留在行上 —— 命令根本没执行,
      * 界面却一直显示已暂停(hang 模式实测: 3.66s 清 pending 后行仍是 s-paused, 真值 s-downloading)。
      * 回滚用的是 op.prev(贴补丁那一刻的行值 = 最近一次已知的服务端真值); 之后若真值真的变了,
      * 下一轮 refresh 自然会把它换成真值, 不会互相打架。 */
@@ -404,7 +404,7 @@ window.AQB_COMMANDS = {
         if (now - op.ts <= cap) continue;
         /* 回滚目标不得是"命令前的旧值"(report 26-10-11-2017 §4.4): 若本轮服务端快照已经
          * 离开命令前的状态, 说明命令其实已生效 —— 回 op.prev 等于把一个已改变的种子显示回
-         * 旧态(本 bug 的直接成因: 批量路径没有真值事件 ⇒ prev 永远停在点击那一刻)。
+         * 旧态(本 bug 的直接成因: 批量路径没有真值事件 => prev 永远停在点击那一刻)。
          * 有服务端现值就用它(它才是"最后已知真值"), 没有才退回 prev。 */
         const t = this.truthSnapshot && this.truthSnapshot.get(h);
         this._forEachRow(h, (row) => Object.assign(row, t || op.prev));
@@ -413,7 +413,7 @@ window.AQB_COMMANDS = {
       }
     },
 
-    /* ---- 进行中 → 结果: 统一两段式("统一收", 2026-11-02 九轮) ----
+    /* ---- 进行中 -> 结果: 统一两段式("统一收", 2026-11-02 九轮) ----
      * 口径: 「进行中 / 已投递」与「结果」是**两个事件**, 队列里必须是两条 —— 进行中条归档成
      * 中性(info)留在队列, 结果**另起一条**推入; 新条推入时归档条被 flipStack 顶上一格,
      * 两条并存可见(D6-3 队列重排的可见前提)。

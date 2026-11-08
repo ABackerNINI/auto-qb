@@ -151,11 +151,11 @@ Object.assign(window.CONFIG_HUB.methods, {
     },
     /* 轮询收敛(有界): 每 2s 重读状态, 直到离开 launching 或到上限 —— 走轮询骨架的 awaitPoll
      * 单点(polling.js): 同名 key 自带先停后起, 代际守卫不必再手写(漏掉代际检查曾是
-     * "两条轮询链叠加双请求"的隐患); 与 tmPollShutdown 共用 key ⇒ 两条链天然不叠加。 */
+     * "两条轮询链叠加双请求"的隐患); 与 tmPollShutdown 共用 key => 两条链天然不叠加。 */
     tmPollSettle() {
       this.awaitPoll("tm", {
         ms: () => 2000,
-        max: 16,  // 旧实现 n < 15 递归 ⇒ n = 0..15, 共 16 拍(拍数上限语义换成 max, 次数不变)
+        max: 16,  // 旧实现 n < 15 递归 => n = 0..15, 共 16 拍(拍数上限语义换成 max, 次数不变)
         fn: () => this.tmLoad(),
         until: () => this.tm.state !== "launching",
         onEnd: () => { this.tm.relaunching = false; },  // 收敛/耗尽都收摊(与旧实现同)
@@ -220,11 +220,11 @@ Object.assign(window.CONFIG_HUB.methods, {
       }
     },
     /* 停止后轮询收敛(有界): 每 1s 重读状态, 直到工具离开 ready(指针删除即 not_running)或到
-     * 上限; 与 tmPollSettle 同 key ⇒ 先停后起, 两条链不叠加。 */
+     * 上限; 与 tmPollSettle 同 key => 先停后起, 两条链不叠加。 */
     tmPollShutdown() {
       this.awaitPoll("tm", {
         ms: () => 1000,
-        max: 11,  // 旧实现 n < 10 递归 ⇒ n = 0..10, 共 11 拍
+        max: 11,  // 旧实现 n < 10 递归 => n = 0..10, 共 11 拍
         fn: () => this.tmLoad(),
         until: () => this.tm.state !== "ready",
       });
@@ -349,7 +349,7 @@ Object.assign(window.CONFIG_HUB.methods, {
       const thr = s.threshold_bps ? `（阈值 ${this.fmtSpeed(s.threshold_bps)}，仅告警已照常入账）` : "（仅告警已照常入账）";
       return `${at} ${detail}${thr}`;
     },
-    /* ---- 文件选择器(D10③): 找不到工具时, 目录导航 + 文件名输入写 tool_exe / tool_dir ----
+    /* ---- 文件选择器(D10(3)): 找不到工具时, 目录导航 + 文件名输入写 tool_exe / tool_dir ----
      * 后端 /api/fs/dirs 只列目录、且限在允许的保存路径内 —— 工具安装目录若不在范围内, 走上方文本框
      * 手填绝对路径; 在范围内可直接导航并用文件名拼出绝对路径写 tool_exe。 */
     tmPickOpen() {

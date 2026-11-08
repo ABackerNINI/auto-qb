@@ -10,15 +10,15 @@ Object.assign(window.CONFIG_EDITOR.methods, {
      *        field(叶子字段) / subcard(由 group_of 归入父字段的"相关设置"子卡)
      *
      * 两种从属项的呈现方式(2026-09-14 调整):
-     *   · **布尔**型从属项(如 add_category 的"覆盖已有分类")→ 父字段的**内联开关**
+     *   · **布尔**型从属项(如 add_category 的"覆盖已有分类")-> 父字段的**内联开关**
      *     (挂到父项的 `inline` 上, 由 ce-field 渲染在标签右侧)。它本身只有一个开关,
      *     单独占一张子卡比父字段还显眼, 与"这是父字段的一个附加选项"的语义不符。
      *   · 其余(对象/字符串等)仍走 group_of **子卡**(缩进小卡)。
      *
      * 折叠策略(2026-09-14 第五轮):
-     *   · 可选段(optional object) → section(已默认折叠, 保留开关与摘要)
-     *   · 普通 object 段 → group(默认折叠, 仅显示标题 + 摘要, 点击展开才看到子字段)
-     *   · pattern_list 字段(delete_tags 等) → 自身默认折叠 list 区
+     *   · 可选段(optional object) -> section(已默认折叠, 保留开关与摘要)
+     *   · 普通 object 段 -> group(默认折叠, 仅显示标题 + 摘要, 点击展开才看到子字段)
+     *   · pattern_list 字段(delete_tags 等) -> 自身默认折叠 list 区
      *   · 设置页字段很多, "展开"应是用户主动选择; 折叠态仍可见标题与摘要(已配置数)
      *   · 子项以 item.items 嵌套, 渲染层用 v-show 控制 —— 与 section 同构
      * allowGrouping=false 用于子卡/section/group 内部: 那些字段已归属上层, 不能再参与一次分组判定
@@ -124,7 +124,7 @@ Object.assign(window.CONFIG_EDITOR.methods, {
       else next[key] = true;
       this.cfg.openSections = next;
     },
-    /* path→key 与 hubKey 是同一事实(收敛 issue 26-10-20-2231 / 台账 R20-C-18): 本文件历史上
+    /* path->key 与 hubKey 是同一事实(收敛 issue 26-10-20-2231 / 台账 R20-C-18): 本文件历史上
      * 的第二份单点(比内联更隐蔽 —— 看着都像合法的单点)。现转调 hubKey, 判据只此一处。 */
     cfgPathKey(path) {
       return this.hubKey(path);
@@ -191,15 +191,15 @@ Object.assign(window.CONFIG_EDITOR.methods, {
       }
       this.cfgSetPath(path, this.cfgDefaultForField(field));
     },
-    /* schema → 默认值阶梯单点(issue 26-10-20-2231)
+    /* schema -> 默认值阶梯单点(issue 26-10-20-2231)
      *
      * "按 schema 形状造初值"这条阶梯曾有三份实现(可选段 cfgDefaultForField / 插件 spec /
      * 插件 section), 后两份还互相嵌套 —— 加一种 kind 的默认值规则要三处同改, 漏一处新条目
      * 就过不了后端校验或写出非法空值。现在只剩这一条下降链, 三处的差异退化成 opts 开关:
-     *   cfgDefaultScalar(node, opts)      —— 叶子 → 标量(enum / bool / 其它)
-     *   cfgDefaultForFields(fields, opts) —— 字段清单 → 对象(object 且 recurse 时再下一层)
+     *   cfgDefaultScalar(node, opts)      —— 叶子 -> 标量(enum / bool / 其它)
+     *   cfgDefaultForFields(fields, opts) —— 字段清单 -> 对象(object 且 recurse 时再下一层)
      * opts: requiredOnly(只填必填子字段) / recurse(object 子段递归一层) / boolOn(bool 初值取 "true")
-     * 插件形态的分派(spec_kind → list / object / 叶子)在 config_rules.js::cfgDefaultForPlugin。 */
+     * 插件形态的分派(spec_kind -> list / object / 叶子)在 config_rules.js::cfgDefaultForPlugin。 */
     cfgDefaultScalar(node, opts) {
       const o = opts || {};
       if (node.kind === "enum") return (node.options && node.options[0]) || "";
@@ -217,14 +217,14 @@ Object.assign(window.CONFIG_EDITOR.methods, {
       }
       return out;
     },
-    /* 可选段初值: object 段按必填子字段造对象; 非 object(历史口径)→ 空列表 */
+    /* 可选段初值: object 段按必填子字段造对象; 非 object(历史口径)-> 空列表 */
     cfgDefaultForField(field) {
       if (field.kind !== "object") return [];
       return this.cfgDefaultForFields(field.fields, { requiredOnly: true });
     },
     cfgInputValue(field, path) {
       const v = this.cfgRaw(path);
-      // 站点回退链键(方案 B 阶段2): 键缺失时回填「全局对应键 → schema 默认」的生效值;
+      // 站点回退链键(方案 B 阶段2): 键缺失时回填「全局对应键 -> schema 默认」的生效值;
       // 注意 tri_state 键的站点 '' 是真值(覆盖为空), cfgRaw 判存在性(非 undefined)即原样返回空串
       if (v === undefined || v === null) return this.cfgScalar(this.cfgFallbackValue(path, field.default));
       return this.cfgScalar(v);

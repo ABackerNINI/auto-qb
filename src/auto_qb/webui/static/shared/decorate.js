@@ -10,9 +10,9 @@
 /* S7 装饰记忆化(plan 26-10-07-0414; S10 收尾回归修复 2026-10-07): WeakMap<组行对象, {fp, deco}>。
  *
  * 缓存键 = 行对象引用 + 缓存值带「输入指纹」(纯函数缓存的标准失效法)。输出**只**依赖:
- *   ①组行自身字段 —— 服务端承诺脏行恒新建 dict、跨版本引用稳定(S6 后 delta 合并原样保留),
- *     行对象引用不变 ⇒ 内容不变, 这一半由 WeakMap 键覆盖;
- *   ②g.members 的**成员字段值** —— 成员行会被**原地改**: P0-3 乐观补丁链(applyOptimistic /
+ *   (1)组行自身字段 —— 服务端承诺脏行恒新建 dict、跨版本引用稳定(S6 后 delta 合并原样保留),
+ *     行对象引用不变 => 内容不变, 这一半由 WeakMap 键覆盖;
+ *   (2)g.members 的**成员字段值** —— 成员行会被**原地改**: P0-3 乐观补丁链(applyOptimistic /
  *     resolveOptimistic 回滚 / reapplyPending / onTruthEvent)沿 _forEachRow 对成员直接
  *     Object.assign kind, 成员对象引用不变。S7 初版"行对象引用即完整缓存键"漏了这一面:
  *     组行身份不变 => WeakMap 恒命中 => 装饰结果陈旧 => 乐观值不再传导到组行状态色
@@ -31,7 +31,7 @@ const _decoCache = new WeakMap();
 
 /* relocate 标注签名(plan 26-11-04-1042 P0-5; P1 补齐 src/armed_at; 26-11-07-2344 S2 组级签名补 src):
  * 后端每次重建会产出新的 relocate 对象, 直接把对象引用放进指纹会让所有组行恒失配 —— 必须压成
- * 值签名后再比较。P1 详情段消费 src/created_at/armed_at; 行内两排 A→B(relocateView)消费 src/dst,
+ * 值签名后再比较。P1 详情段消费 src/created_at/armed_at; 行内两排 A->B(relocateView)消费 src/dst,
  * 任一值推进必须让装饰缓存失效(漏槽 = 相位推进后两排停在旧值)。 */
 function _relocateSig(r) {
   if (!r) return "";
@@ -101,12 +101,12 @@ function _decoFpHit(g, fp) {
  * 26-10-05-0854 §3 附注「停止种子盲区」)。
  *
  * !判定必须读 qB **原始 state 串**而不是 kind: kind 现 7 档(2026-10-29 加 moving), 而
- *   queuedDL/queuedUP 被 qbittorrent-api 归进 is_downloading/is_uploading ⇒ 落成
+ *   queuedDL/queuedUP 被 qbittorrent-api 归进 is_downloading/is_uploading => 落成
  *   downloading/seeding, 单看 kind 会把排队种子当成活跃。state 缺失(老版本/异常行)时回落到
  *   kind 的 paused/checking/error 三档兜底(与 views.py::state_kind 的非活跃三档一一对应,
  *   宁可漏放不误拦)。
  *   moving 是反向的一例: 它自成第 7 档, **看 kind 判得出来**, 但它同样不在后端任何 state_enum
- *   谓词集合里 ⇒ 后端仍必须按 state 串判(见 commands.py 同名表)。 */
+ *   谓词集合里 => 后端仍必须按 state 串判(见 commands.py 同名表)。 */
 const REANNOUNCE_BLOCKED_STATES = {
   pausedDL: "种子暂停", pausedUP: "种子暂停",
   stoppedDL: "种子已停止", stoppedUP: "种子已停止",
@@ -130,7 +130,7 @@ window.AQB_DECORATE = {
     relocateOriginText(origin) {
       return RELOCATE_ORIGIN_TEXT[origin] || (origin ? origin : "未知来源");
     },
-    /* 行内迁移展示单点(plan 26-11-07-2344 S2): 路径列两排 A→B / 单排着色的**唯一**判定与口径,
+    /* 行内迁移展示单点(plan 26-11-07-2344 S2): 路径列两排 A->B / 单排着色的**唯一**判定与口径,
      * 模板与后续悬停浮窗(relocate_pop.js)都只从这里取。输出 {mode, tone, a, b, label} 或 null:
      *   mode='pair' -> 两排(a=当前位置 src, b=目标位置 dst), tone 类挂 .rel-pair 整块着色;
      *   mode='one'  -> 单排回落(a/b 置空), label 挂状态词, tone 类只给路径文字着色 —— 不渲染
@@ -452,7 +452,7 @@ window.AQB_DECORATE = {
       for (const r of this.torrents) if (!map.has(r.hash)) map.set(r.hash, r);  // SEED_ITEM 全量(扩展展示字段在这份; magnet_uri 刻意不在 —— 按需取详情, 见 drawer.js copyTorrentInfo)
       return map;
     },
-    /* 未识别折叠区: hash → 成员解析, 过同一套筛选/搜索, 按种子名排序 */
+    /* 未识别折叠区: hash -> 成员解析, 过同一套筛选/搜索, 按种子名排序 */
     unrecognizedTorrents() {
       const q = (this.searchQuery || "").trim().toLowerCase();
       const hits = this.searchHits;

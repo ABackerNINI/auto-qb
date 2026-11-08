@@ -4,7 +4,7 @@
  * **不复制任何编辑能力** —— 增删改全部复用既有的 cfg* 方法(同一棵 YAML 树、同一套保存/脏检测),
  * 本文件只负责:
  *   1. Hub & Spoke 的视图状态(首页 / 分区二级页 / 面包屑);
- *   2. 把 schema 字段拆成「块 → 行」两层(取代旧页五种折叠容器);
+ *   2. 把 schema 字段拆成「块 -> 行」两层(取代旧页五种折叠容器);
  *   3. 就近说明浮窗的内容与定位(富文案优先, 否则回退 schema 的 help / risk / default)。
  *
  * 版式与控件外观见 shared/console_hub.css(样张 05-console-hub 的原样复刻)。
@@ -158,7 +158,7 @@ const TRACKER_CHIP_ORDER = { 名称: 0, 标签: 1, 域名: 2, 分组: 3, 删标:
 const TRACKER_MASK = "********";
 
 /* 设置分区初值(持久化用户偏好): 刷新后回到上次看的分区, 而不是设置首页 ——
- * 只把顶层 page 持久化的话, 在「设置 → 站点」按 F5 会落到设置首页, 位置照样丢一半。
+ * 只把顶层 page 持久化的话, 在「设置 -> 站点」按 F5 会落到设置首页, 位置照样丢一半。
  * 这里只**取值**; 合法性等 schema 到手后由 hubRestore() 校验(分区 key 由 schema 定义,
  * 模块加载时读不到, 且升级后可能改名/删除)。 */
 function initialHubView() {
@@ -186,7 +186,7 @@ window.CONFIG_HUB = {
         arrow: { left: 0, top: 0, place: "left" },
         focusKey: "",      // 搜索跳转后要高亮的行
         trackerSearchFocus: false,  // 聚焦搜索层(方案C, plans/26-09-29-0323): 搜索框聚焦即开层
-        trackerHitIdx: -1,          // 命中面板键盘活动项(↑↓ 移动), -1 = 无
+        trackerHitIdx: -1,          // 命中面板键盘活动项(up/down 移动), -1 = 无
         trackerMouseAt: null,       // 悬停接管的最后一次接管坐标 {x,y}(hubTrackerHoverIdx); null = 无
         /* 「流量与限速」合并卡三个子区的折叠态(计划 26-10-18-0813 B4/D14): 键 = source|curve|chart;
          * 缺省 = 展开。**不持久化**(与站点状态块/运行日志同口径) —— 折叠是浏览时的临时动作,
@@ -231,7 +231,7 @@ window.CONFIG_HUB = {
       });
       // 运行日志不再单列首页卡(2026-09-26 并入「常规」分区页尾, 随分区模板渲染);
       // HR 站点状态同理(2026-09-25 合并): 它是只读现状不是配置项,
-      // 并进「HR 在线核实」分区页尾; 打开分区只复位折叠态不发请求(阶段2 决策点⑤a,
+      // 并进「HR 在线核实」分区页尾; 打开分区只复位折叠态不发请求(阶段2 决策点(5)a,
       // 见 hubGo), 首次展开(hrsToggle)才拉 /api/hr/status。
       // 键盘快捷键(W6, 计划 26-09-28-0354 §5.2)原也是首页独立卡 —— 本轮改版(2026-11-03)并入
       // 「WebUI」卡(展开即全屏覆盖层编辑), 首页不再单列, 读数并入 WebUI 卡读数段。
@@ -304,7 +304,7 @@ window.CONFIG_HUB = {
     kbDirtyView() {
       return this.kbDirty();
     },
-    /* 当前分区的「块 → 行」(站点/规则/限速三个专段不走这里, 模板里单独渲染) */
+    /* 当前分区的「块 -> 行」(站点/规则/限速三个专段不走这里, 模板里单独渲染) */
     hubBlocks() {
       const schema = this.cfg.schema;
       if (!schema || !this.cfg.tree || this.hub.view === "hub") return [];
@@ -419,7 +419,7 @@ window.CONFIG_HUB = {
     },
   },
   methods: {
-    /* ---------------------------------------------------------- 视图跳转(首页 ↔ 二级页) */
+    /* ---------------------------------------------------------- 视图跳转(首页 <-> 二级页) */
     hubGo(key) {
       if (this.kbGuardLeave(key)) return;  // 离开快捷键分区且有未保存改动: 先确认(W6, §5.2)
       this.hubCloseHelp();
@@ -433,7 +433,7 @@ window.CONFIG_HUB = {
         const names = this.cfgRuleGroupNames();
         this.cfg.ruleGroupKey = names.length ? names[0] : null;
       }
-      // 站点状态块(计划 26-10-02-1936 阶段2): 默认折叠, 打开分区不再自动拉数(决策点⑤a,
+      // 站点状态块(计划 26-10-02-1936 阶段2): 默认折叠, 打开分区不再自动拉数(决策点(5)a,
       // 首次展开才拉, 取数时机在 hr_status.js hrsToggle) —— 展开态不持久化, 每次进分区
       // (含刷新后 hubRestore 恢复到本分区)都回到折叠态
       if (key === "hr_check") this.hrsOpen = false;
@@ -494,7 +494,7 @@ window.CONFIG_HUB = {
       }
       this.hubGo(v);
     },
-    /* 路径数组→点分键单点(收敛 issue 26-10-20-2231 / 台账 R20-C-18): 改键格式(如加前缀防碰撞)
+    /* 路径数组->点分键单点(收敛 issue 26-10-20-2231 / 台账 R20-C-18): 改键格式(如加前缀防碰撞)
      * 只改这一处; 调用侧**禁止内联** `path.join(".")`。 */
     hubKey(path) {
       return Array.isArray(path) ? path.join(".") : String(path);

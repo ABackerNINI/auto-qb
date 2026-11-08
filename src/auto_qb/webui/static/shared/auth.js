@@ -2,7 +2,7 @@
  * W2b 自 app.js 拆出, 全局 mixin 方法域(与既有 AQB_* 同范式, this 同一实例)。 */
 /* 请求级超时(2026-10-16, issue 26-10-16-0954-bug-webui-chart-fetch-no-timeout):
  * 裸 `fetch()` **没有超时** —— 连接静默失效(服务端不响应 / TCP 半开 / 中间设备丢包)时 await
- * 永不返回, 调用方的 finally 整条失效: 流量图的 loading 恒真 ⇒ 轮询守卫把自己挡死(图表永久停在
+ * 永不返回, 调用方的 finally 整条失效: 流量图的 loading 恒真 => 轮询守卫把自己挡死(图表永久停在
  * 旧帧、无提示); polling.js 的 refresh 更彻底 —— 它 await 之后才 scheduleNext(), 悬挂即永久停表。
  * 给每次请求挂 AbortController + 上限, 把「悬挂」变成一次**可报的失败**, finally / 错误态路径照常走。
  * 取值 15s: 本机 WEBUI 直连(127.0.0.1)正常响应亚秒级, 后端路由另有自身超时与降级返回(meta.stale),

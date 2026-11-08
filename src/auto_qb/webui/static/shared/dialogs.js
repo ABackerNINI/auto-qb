@@ -48,7 +48,7 @@ window.AQB_DIALOGS = {
       await this._panelLoad(this, async () => {
         const r = await this.api("/api/stats");
         this.statsServer = r.server || null;
-        // FIX-04b: 失败不清空已有数据(骨架常驻防闪烁); 仅首次加载失败保持 null → 错误占位重试
+        // FIX-04b: 失败不清空已有数据(骨架常驻防闪烁); 仅首次加载失败保持 null -> 错误占位重试
       }, { loading: "statsLoading", err: "statsError", errFallback: "加载失败" });
     },
     /* 统计值兜底: 字段缺失(null/undefined)显示 —; 0 是合法值(如 DHT 0 节点)原样展示 */
@@ -106,12 +106,12 @@ window.AQB_DIALOGS = {
       this.kbHelpOpen = false;
     },
     /* ---------------- busy 骨架单点(issue 26-10-20-2231: dialogs/config_hub 共 19 处收敛) ----------------
-     * 「置 busy → try 请求 → 失败反馈 → finally 复位」这条骨架原先在 dialogs.js 与 config_hub.js
+     * 「置 busy -> try 请求 -> 失败反馈 -> finally 复位」这条骨架原先在 dialogs.js 与 config_hub.js
      * 手抄 19 遍; 漏 finally 的症状是面板永久转圈(见 pitfalls/web-ui/inflight-flag-no-timeout)。
      * 三个单点按反馈通道分家(反馈形态不同是族的真实边界, 不强并成一个万能 helper):
-     *   _mgrRun      管理对话框写操作(R20-B-01): busy → fn → ok toast → 重拉列表 → 失败 toast(!auth) → 复位
-     *   _panelLoad   面板加载/槽回执(R20-B-02 + R20-C-15): busy(可选) → 槽清空 → fn → 失败落槽或 toast → 复位
-     *   _postWaitCmd POST+waitCmd 三态 toast(R20-B-03): busy → POST → waitCmd → ok / 命令失败 / 发送失败 → 复位
+     *   _mgrRun      管理对话框写操作(R20-B-01): busy -> fn -> ok toast -> 重拉列表 -> 失败 toast(!auth) -> 复位
+     *   _panelLoad   面板加载/槽回执(R20-B-02 + R20-C-15): busy(可选) -> 槽清空 -> fn -> 失败落槽或 toast -> 复位
+     *   _postWaitCmd POST+waitCmd 三态 toast(R20-B-03): busy -> POST -> waitCmd -> ok / 命令失败 / 发送失败 -> 复位
      * 各处差异(成功收尾 / 失败回滚 / 槽名 / 静默变体)作为参数或回调留在调用点。刻意不入
      * helper 的特例: tmShutdownTool(保存失败回滚内存态, 见 R20-C-15 台账)保持原样。 */
     /* 管理对话框写操作骨架: fn 抛错 = 失败(auth 拦截静默, 交给登录框); 成功先 toast 再重拉列表 */
@@ -154,9 +154,9 @@ window.AQB_DIALOGS = {
         if (o.onFinally) o.onFinally();
       }
     },
-    /* POST+waitCmd 三态 toast 骨架(三态判据单点): ①ok 回执 → okMsg(okMs 缺省 2500; 传函数 =
-     * 成功此刻才取值, 供「按切换前状态措辞」的场景) ②命令回执失败(已送达被拒) → cmdFail: r.error(8000)
-     * ③请求本身失败(发送不出去) → sendFail: e.message(auth 拦截静默, 交给登录框)。onPost 在
+    /* POST+waitCmd 三态 toast 骨架(三态判据单点): (1)ok 回执 -> okMsg(okMs 缺省 2500; 传函数 =
+     * 成功此刻才取值, 供「按切换前状态措辞」的场景) (2)命令回执失败(已送达被拒) -> cmdFail: r.error(8000)
+     * (3)请求本身失败(发送不出去) -> sendFail: e.message(auth 拦截静默, 交给登录框)。onPost 在
      * POST 完成与 waitCmd 之间(命令遥测 _markCmdPost 的记账点), onOk 在成功 toast 后
      * (await 完才走 finally 复位)。 */
     async _postWaitCmd(busyObj, busyKey, url, body, opts) {
@@ -207,7 +207,7 @@ window.AQB_DIALOGS = {
     async loadMgr() {
       await this._panelLoad(this, async () => {
         if (this.mgrOpen === "category") {
-          // qB categories: {名字: {save_path, ...}} → 行数组(名字字典序)
+          // qB categories: {名字: {save_path, ...}} -> 行数组(名字字典序)
           const r = await this.api("/api/categories");
           const cats = r.categories || {};
           this.mgrCategories = Object.keys(cats)
@@ -418,7 +418,7 @@ window.AQB_DIALOGS = {
      * 取 /api/stats 的 server_state(纯内存快照, 与主轮询同周期静默同步)。
      * FX-07: 退役 本次 / 累计 / DHT 三项(本次与累计与"今日流量"口径重叠, DHT 属低频诊断),
      * 只留 连接 与 剩余 两个运行态指标; 今日流量改由模板单独渲染(数据源不同, 见 todayTraffic)。
-     * server_state 未同步时返回空数组 → 显示未同步提示 */
+     * server_state 未同步时返回空数组 -> 显示未同步提示 */
     sbStats() {
       const s = this.statsServer;
       if (!s) return [];
@@ -444,10 +444,10 @@ window.AQB_DIALOGS = {
     },
     /* 状态分布(按当前视图聚合): 旧版只读 this.groups, 种子页(groups 不被后端回传)
      * 与首次进入种子页(localStorage 持久化 view=torrent, 首轮 groups=[])时统计全空,
-     * 「做种10 错误1」这一行消失 ⇒ 必须按 viewMode 各自取数:
-     *   groups  →  各组 members + singles(同一来源 _member_view, kind 字段一致)
-     *   torrents→  平铺数组(kind 字段同样由 _member_view 透出)
-     *   shows   →  剧集节点的聚合 state(后端 _build_show_view 已取 min kind)
+     * 「做种10 错误1」这一行消失 => 必须按 viewMode 各自取数:
+     *   groups  ->  各组 members + singles(同一来源 _member_view, kind 字段一致)
+     *   torrents->  平铺数组(kind 字段同样由 _member_view 透出)
+     *   shows   ->  剧集节点的聚合 state(后端 _build_show_view 已取 min kind)
      * 顺序表与 kind 口径与 decorate.kindText 一致, 计数为 0 的类别被 filter 掉
      * !这张表同时是**状态筛选器下拉的选项源**(tpl/topbar.html 按 distSegments 渲染 v-for),
      *   所以新 kind 不进来 = 既统计不到也筛不到(2026-10-29 moving 补齐时补此注) */
@@ -546,8 +546,8 @@ window.AQB_DIALOGS = {
     },
     /* 全局限速取数单点(R10-04): qB server_state 的全局限速键是 **dl_rate_limit / up_rate_limit**
      * (bytes/s, 0 = 不限速), **不是 dl_limit/up_limit** —— 后者是**单种子**级字段(TorrentRecord,
-     * 见 mixins/web_view.py 的种子限速列)。前端曾读 s.dl_limit/s.up_limit ⇒ 恒 undefined ⇒
-     * 状态栏"限制速度"永远显示 "—", 同时作速度染色分母时也恒缺失 ⇒ 色阶从未生效(连带故障)。
+     * 见 mixins/web_view.py 的种子限速列)。前端曾读 s.dl_limit/s.up_limit => 恒 undefined =>
+     * 状态栏"限制速度"永远显示 "—", 同时作速度染色分母时也恒缺失 => 色阶从未生效(连带故障)。
      * 现在状态栏文案、速度染色分母两处全部引用本单点, 改口径只改这里。
      * 单位维持 bytes/s(与 fmtSpeed 同源); 浮层内的编辑仍走 /api/speed/mode 的 KiB/s 口径,
      * 两套单位各在自己的显示层换算, 不在同一函数里混用。
@@ -785,7 +785,7 @@ window.AQ_MODAL_HEAD_COMPONENT = {
     iconClass: { type: String, default: "" },    // 图标附加类(stats ico-chart / hist ico-history)
     title: { type: String, default: "" },        // 标题文本(#title 插槽缺省时的回退)
     close: { type: Function, required: true },   // 关闭动作(遮罩/关闭钮共用一份)
-    x: { type: Boolean, default: true },         // 关闭钮(通用确认框无 ✕)
+    x: { type: Boolean, default: true },         // 关闭钮(通用确认框无 x)
   },
   template: "#tpl-aq-modal-head",
 };
@@ -802,7 +802,7 @@ window.AQ_MODAL_COMPONENT = {
     widthClass: { default: "" },                 // .modal 附加类(字符串/数组/对象透传; move 的 pop-open 走数组)
     bodyClass: { type: String, default: "" },    // 中部包裹类; 空 = 裸插槽(不加空 wrapper)
     maskClass: { type: String, default: "modal-mask" }, // 遮罩附加类(add-dialog-mask / dir-browse-mask)
-    x: { type: Boolean, default: true },         // 关闭钮(通用确认框无 ✕)
+    x: { type: Boolean, default: true },         // 关闭钮(通用确认框无 x)
   },
   template: "#tpl-aq-modal",
 };

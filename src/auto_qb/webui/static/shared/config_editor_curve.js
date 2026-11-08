@@ -96,7 +96,7 @@ Object.assign(window.CONFIG_EDITOR.methods, {
       if (list.length) this.cfgSetPath(this.cfgCurvePointsPath(i, direction), list);
       else this.cfgDelPath(this.cfgCurvePointsPath(i, direction));
     },
-    /* 曲线方向→限速键映射单点(收敛 issue 26-10-20-2231 / 台账 R20-C-10): 加第三方向(如双向
+    /* 曲线方向->限速键映射单点(收敛 issue 26-10-20-2231 / 台账 R20-C-10): 加第三方向(如双向
      * 曲线)只改这一处; 调用侧**禁止内联**同名三元。 */
     cfgCurveDirectionKey(direction) {
       return direction === "upload_curve" ? "upload_speed_limit" : "download_speed_limit";

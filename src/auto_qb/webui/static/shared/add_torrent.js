@@ -15,7 +15,7 @@
  * 取舍: 与候选集同源(候选集本就派生自 store/qB), 故零后端改动、零新请求、零新增持久化,
  * 多端天然一致且不受「清站点数据」影响; 代价是程序按规则自动赋的分类/标签也会计入「使用」。
  * 排序规则: 时间降序 -> 从未使用过(时间 0)落末尾 -> 同时间按字母序(localeCompare)。
- * 表为空/值缺失一律落字母序, 与旧行为逐字一致 ⇒ 候选未到位时零观感差异。
+ * 表为空/值缺失一律落字母序, 与旧行为逐字一致 => 候选未到位时零观感差异。
  * 纯函数(不改入参): 与 _addNormPath 同在模块顶层, 供 node 单测探针直接调用。 */
 function _addOrderByRecent(options, recency) {
   return (options || []).slice().sort((a, b) => {
@@ -56,8 +56,8 @@ window.AQB_ADD = {
     /* 四轮加固(2026-10-04): 失焦收层的 JS 侧单点守卫, 不依赖模板 @mousedown.prevent 是否到达浏览器。
      * capture 记录最近一次 mousedown 落点是不是「label[for]」(先于一切 stopPropagation) ——
      * addPopBlurClose / metaCatBlurClose 的 40ms 合帧定时器收层前先问 _popBlurShouldHold:
-     * 本族 label 的转发 click 仍在途(人手按住 80~150ms > 40ms 窗)或焦点已回本族输入框 → 跳过收层,
-     * 根除「按住期收层 → 松手转发回焦重开 = 闪烁」。模板修饰符正常时 mousedown 已被 prevent
+     * 本族 label 的转发 click 仍在途(人手按住 80~150ms > 40ms 窗)或焦点已回本族输入框 -> 跳过收层,
+     * 根除「按住期收层 -> 松手转发回焦重开 = 闪烁」。模板修饰符正常时 mousedown 已被 prevent
      * (焦点不掉, 定时器根本不武装), 本记录器是纯兜底 —— 兜修饰符缺位的任何形态: 旧模板残留在
      * 长开页签(修复后不刷新页面就继续用)、未来模板回归、个别浏览器 label-blur 不可防。 */
     this._popLabelDownRecorder = (e) => {
@@ -132,7 +132,7 @@ window.AQB_ADD = {
     },
     /* 三候选「最近使用」的取数行 —— **跨视图自取数**(与 filters.js::facetRows 同族):
      * 添加种子入口是顶栏常驻, 而 state 的阵列按 viewMode 裁剪(VIEW_ARRAYS: 辅种页只回
-     * groups + singles、追剧页回 shows + groups + singles、种子页只回 torrents)⇒ 只读
+     * groups + singles、追剧页回 shows + groups + singles、种子页只回 torrents)=> 只读
      * this.torrents 时, 用户在**默认的辅种页**开窗会拿到空表, 排序**静默退化**成纯字母序
      * (不报错不白屏, 2026-10-09 e2e 首跑实测抓到)。判据同 pitfalls/web-ui/contract-api.md
      * 「跨视图的常驻消费者不能依赖按视图裁剪的阵列」。
@@ -165,7 +165,7 @@ window.AQB_ADD = {
       return { cat, tag, path };
     },
     escAddTorrent() {
-      // Esc 逐层退栈(FIX-07)接入: 对话框内浮层(目录浏览器 → 分类/标签下拉 → 位置面板)先收起, 再关对话框
+      // Esc 逐层退栈(FIX-07)接入: 对话框内浮层(目录浏览器 -> 分类/标签下拉 -> 位置面板)先收起, 再关对话框
       if (this.dirBrowse.open) {
         this.closeDirBrowse();
       } else if (this.addCatMenu || this.addTagMenu) {
@@ -282,8 +282,8 @@ window.AQB_ADD = {
     },
     /* 悬停接管(治「上下键选中项闪烁/Enter 选错」2026-09-29, issue 26-09-29-2142; 同款: config_hub.hubTrackerHoverIdx):
      * 分类/标签/编辑分类三处下拉的悬停高亮原是 @mouseenter 直写键盘活动项 —— 光标静止停在列表上
-     * 用 ↑↓ 选择时, 行滚动/DOM 变更后浏览器给静止光标补发合成 hover 事件, 活动项被拽回光标行
-     * (改前真机实测: ↓×16 两次被拽回, Enter 选中光标行 cat-06 而非键盘到达的 cat-16 —— 不止闪烁, 实选错)。
+     * 用 up/down 选择时, 行滚动/DOM 变更后浏览器给静止光标补发合成 hover 事件, 活动项被拽回光标行
+     * (改前真机实测: down×16 两次被拽回, Enter 选中光标行 cat-06 而非键盘到达的 cat-16 —— 不止闪烁, 实选错)。
      * 改为 @mousemove + 位移门限: 位移 <3px(静止 / 合成事件)不接管, 真实移动才把活动项交给光标;
      * 门限坐标按下拉分存(state.js *MouseAt), 开层单点复位(openAddCatMenu/openAddTagMenu/openMetaCatMenu) */
     comboHoverIdx(kind, i, ev) {
@@ -299,9 +299,9 @@ window.AQB_ADD = {
     },
     /* ---------------- combobox 键盘导航单点(收敛 issue 26-10-20-2230, R20-B-05/C-12 + R21-A-04) ----------------
      * 五个自绘下拉(添加窗口 保存路径/分类/标签 · 设定位置 movePath · 编辑弹窗 metaCat)的键盘
-     * 导航原是五份同骨架实现(IME 守卫 -> ↑↓ 取模环绕 -> Enter 选中 -> Esc 只收面板), 分歧只在
+     * 导航原是五份同骨架实现(IME 守卫 -> up/down 取模环绕 -> Enter 选中 -> Esc 只收面板), 分歧只在
      * 选项上; 且五份里只有站点搜索 hubTrackerKeydown(另一族, 第 6 变体)带 IME 组词守卫, 其余
-     * 四份缺 —— 中文输入法组词期间方向键/回车会被劫持(路径输入多为 ASCII 而未暴露, R21-A-04 ③)。
+     * 四份缺 —— 中文输入法组词期间方向键/回车会被劫持(路径输入多为 ASCII 而未暴露, R21-A-04 (3))。
      * 收敛为单点 + 守卫恒开; 第 6 变体(settings.html 站点搜索层)有自己的类族/滚动跟随/无 Esc
      * 语义且守阵独立钉着, 不并本单点。
      * ctx 由调用方注入, 全部经 getter 现读现取(不用闭包快照, 根数据随时在变):
@@ -313,7 +313,7 @@ window.AQB_ADD = {
      *                   (meta: 清空输入框回车 = 提交「无分类」, R5#132), 其余路径丢弃。
      *   onEnter(item)  **可选**: 回退分支的落地回调(缺省 = onPick)。2026-10-29 设定位置点选改为
      *                   「只回填」后, 手输回车仍需直接提交 —— move 与 meta 传本钩子, 其余三处不传。
-     *   listRef         ↑↓ 后滚动跟随的 $refs 名(null = 不跟随)
+     *   listRef         up/down 后滚动跟随的 $refs 名(null = 不跟随)
      *   openOnArrow     关层时方向键是否先开层(false = 未开时不接管任何键, 保存路径面板) */
     comboKeydown(ctx, ev) {
       if (ev.isComposing || ev.keyCode === 229) return;  // IME 组词期不劫持(与 shortcuts/config_hub 同口径)
@@ -366,7 +366,7 @@ window.AQB_ADD = {
     },
     async loadDir(path) {
       // 请求代际守卫(path 戳, 同 drawer.js _drawerStale 收口式): 发请求即记目标路径,
-      // 落袋前比对 —— 快速连点目录 A→B 时 A 的慢响应后到不得把 B 的列表覆写回 A
+      // 落袋前比对 —— 快速连点目录 A->B 时 A 的慢响应后到不得把 B 的列表覆写回 A
       // (issue 26-10-06-0028 F2-03)
       const reqPath = path || "";
       this._dirReqPath = reqPath;
@@ -436,22 +436,22 @@ window.AQB_ADD = {
     /* ---------------- 失焦收层单点(收敛 R20-B-06 + R21-A-05: 三处 40ms 合帧各写一遍) ----------------
      * 收层主判据 = 输入框 @focusout(模板接线), window click(lifecycle.js)降级为兜底:
      * 点空白/点别的字段/Tab 走 focusout 必然触发; 点字段 label(for= 转发激活)不触发重开闪烁。
-     * ⚠ 不能在 focusout 里同步收 —— 点 label 时 mousedown 默认动作先把已聚焦的输入框 blur 掉,
+     * WARN: 不能在 focusout 里同步收 —— 点 label 时 mousedown 默认动作先把已聚焦的输入框 blur 掉,
      * label 的 click 默认动作才把焦点转回, 这两步之间隔着**整段按住时长**(人手 80~150ms,
      * 必 > 合帧窗); 同步收层 = 关了又开, leave 过渡被打断 = 用户看到的"下拉闪烁再现"
      * (2026-10-03 报障, 三修才坐实, 完整判别见 pitfalls/web-ui/combobox-focusout-close)。
      * 挂合帧定时器: 焦点真离开(点空白/别的字段/Tab)下一拍收层; 焦点回来了(开层方法先跑
      * _popBlurCancel)则撤销, 菜单全程不闪。定时窗内 window click 兜底照常生效。
-     * ⚠ label 一侧的 blur 由模板 @mousedown.prevent 根除(焦点不掉, 本定时器不武装) —— 合帧
+     * WARN: label 一侧的 blur 由模板 @mousedown.prevent 根除(焦点不掉, 本定时器不武装) —— 合帧
      * 窗只兜点空白/Tab 这类瞬时焦点迁移, 不许把 label 的长按间隙算进来(2026-10-04 三修)。
-     * ⚠ 四轮加固: 收层前问 _popBlurShouldHold(记录器见 mounted 注释) —— 焦点已回本族输入框
+     * WARN: 四轮加固: 收层前问 _popBlurShouldHold(记录器见 mounted 注释) —— 焦点已回本族输入框
      * 或本族 label 转发 click 仍在途时跳过收层; 模板修饰符缺位(旧页签残留模板/未来回归)时
      * 由它独立根除闪烁, 不再依赖模板与 JS 同代到达浏览器。
      * ids = 本族输入框 id 名单; close = 收层动作(关面板 + 复位高亮)。 */
     /* 失焦收层前的守卫(记录器见 mounted 注释): 在合帧定时器**触发那刻**判定 ——
-     * ①焦点已回本族输入框(转发 click 已落地 / 合成零延迟点击) → 不收, 开层方法会接手;
-     * ②本族 label 的 mousedown 落在 350ms 内且焦点不在任何输入框上 = 转发 click 仍在途
-     *   (人手按住中) → 不收, 等松手后 label 默认动作把焦点转回。350ms 上界防旧记录误挡
+     * (1)焦点已回本族输入框(转发 click 已落地 / 合成零延迟点击) -> 不收, 开层方法会接手;
+     * (2)本族 label 的 mousedown 落在 350ms 内且焦点不在任何输入框上 = 转发 click 仍在途
+     *   (人手按住中) -> 不收, 等松手后 label 默认动作把焦点转回。350ms 上界防旧记录误挡
      *   后续无 mousedown 的失焦(如 Tab)。ids = 本族输入框 id(add 三字段 / meta 分类 / move)。 */
     _popBlurShouldHold(ids) {
       const ae = document.activeElement;
@@ -522,10 +522,10 @@ window.AQB_ADD = {
     },
     _hiScroll(refName) {
       /* 高亮项滚进可视区(block: nearest 语义) —— **只滚菜单内部的可滚层**, 逐级向上到菜单根为止。
-       * ⚠ 禁用 scrollIntoView(2026-10-29 八修, 用户报「选中新路径后再点下拉框, 弹窗里的文字从上往下
+       * WARN: 禁用 scrollIntoView(2026-10-29 八修, 用户报「选中新路径后再点下拉框, 弹窗里的文字从上往下
        * 滑一次」): 它会把**所有可滚祖先**一起滚 —— `.add-dialog-body` 就是 overflow-y 容器, 开层过渡期
        * 它的 scrollHeight 比 clientHeight 大 166px, 于是整段文案被滚走再弹回(实测 body.scrollTop
-       * 0 → 166 → 83 → 18 → 0, 文案 top 352 → 186 → 269 → 334)。输入框为空时 hi = -1、没有
+       * 0 -> 166 -> 83 -> 18 -> 0, 文案 top 352 -> 186 -> 269 -> 334)。输入框为空时 hi = -1、没有
        * [data-hi="1"], 所以只有"已选中过路径"才看得见 —— 与用户描述逐字吻合。
        * 同一条禁令本仓库另有先例(26-09-29-2142 键盘光标滚动跟随: 逐层滚可滚祖先会连带滚整页), 这里补上。 */
       this.$nextTick(() => {

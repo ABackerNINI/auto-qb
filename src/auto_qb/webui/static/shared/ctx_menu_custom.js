@@ -2,7 +2,7 @@
  *
  * 分工(与 ctx_menu.js 一致的分层):
  *   ctx_menu.js         注册表 + 默认布局 + 合并语义(纯函数), 行右键菜单运行时消费
- *   本文件              定制面板的**编辑面**: 读合并布局 -> 用户编辑(显隐/↑↓/拖拽/跨层/线) -> 写回
+ *   本文件              定制面板的**编辑面**: 读合并布局 -> 用户编辑(显隐/up/down/拖拽/跨层/线) -> 写回
  *   tpl/settings-detail.html  <template v-else-if="hub.view === 'webui'"> 的表格 + tab
  *
  * 草稿不另存(重要):
@@ -182,7 +182,7 @@
         this.cmPersist(branch, d);
       },
 
-      /* ---------------------------------------------------------- ↑↓(D14: 键盘可达的那一半) */
+      /* ---------------------------------------------------------- up/down(D14: 键盘可达的那一半) */
       cmMoveStep(branch, level, id, delta) {
         const d = this.cmDraft(branch);
         const layer = level === 1 ? d.sub : d;
@@ -195,7 +195,7 @@
         this.cmPersist(branch, d);
       },
 
-      /* ---------------------------------------------------------- 跨层(一级 ↔「更多操作」, D1) */
+      /* ---------------------------------------------------------- 跨层(一级 <->「更多操作」, D1) */
       cmMoveLevel(branch, level, id) {
         const d = this.cmDraft(branch);
         const src = level === 1 ? d.sub : d;

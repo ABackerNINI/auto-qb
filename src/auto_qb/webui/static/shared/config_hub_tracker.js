@@ -91,7 +91,7 @@ Object.assign(window.CONFIG_HUB.methods, {
       this.hub.trackerMouseAt = { x, y };
       this.hub.trackerHitIdx = i;
     },
-    /* 聚焦层键盘导航(方案C): ↑↓ 移动命中活动项, Enter 打开活动项(=点命中); IME 组词中不劫持。
+    /* 聚焦层键盘导航(方案C): up/down 移动命中活动项, Enter 打开活动项(=点命中); IME 组词中不劫持。
      * Esc 不在这里处理 —— 归 hubOnKey 的既有 Esc 链(帮助浮窗优先级在前), 避免双路径清词 */
     hubTrackerKeydown(e) {
       if (e.isComposing || e.keyCode === 229) return;
@@ -112,8 +112,8 @@ Object.assign(window.CONFIG_HUB.methods, {
       }
     },
 
-    /* 键盘活动项滚动跟随(26-09-29-2142): 命中列表 max-height 300px 可滚, 但 ↑↓ 只改 idx 不推滚动条,
-     * 长列表上高亮走出可视区 = 键盘选择不可用。↑↓ 改 idx 后把 .act 行滚进列表视野。
+    /* 键盘活动项滚动跟随(26-09-29-2142): 命中列表 max-height 300px 可滚, 但 up/down 只改 idx 不推滚动条,
+     * 长列表上高亮走出可视区 = 键盘选择不可用。up/down 改 idx 后把 .act 行滚进列表视野。
      * 手动差值调 scrollTop(block:"nearest" 语义: 行在视野内不动, 出视野才滚最小距离);
      * 不用 scrollIntoView —— 它会逐层滚动所有可滚祖先, 连带滚动暗幕后面的整页产生二次干扰。
      * $nextTick 等 Vue 把 .act 类挪到新行之后再量。程序滚动不产生光标位移,
@@ -123,8 +123,8 @@ Object.assign(window.CONFIG_HUB.methods, {
       const row = list && list.querySelector(".hb-tr-hit.act");
       if (!list || !row) return;
       const lr = list.getBoundingClientRect(), rr = row.getBoundingClientRect();
-      if (rr.top < lr.top) list.scrollTop += rr.top - lr.top; // 行在上方视野外 → 上滚
-      else if (rr.bottom > lr.bottom) list.scrollTop += rr.bottom - lr.bottom; // 行在下方视野外 → 下滚
+      if (rr.top < lr.top) list.scrollTop += rr.top - lr.top; // 行在上方视野外 -> 上滚
+      else if (rr.bottom > lr.bottom) list.scrollTop += rr.bottom - lr.bottom; // 行在下方视野外 -> 下滚
     },
 
     /* ---------------------------------------------------------- 行 / 控件辅助 */

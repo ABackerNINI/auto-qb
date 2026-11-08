@@ -352,7 +352,7 @@ Object.assign(window.AQB_COMMANDS.methods, {
       return this._copyText(text, label);
     },
     /* 右键菜单复制项: field = name | hash | magnet(数据取 memberByHash 的 SEED_ITEM 完整字段) */
-    /* 导出 .torrent(种子页右键 R2 补遗): fetch 字节 → blob 下载(Bearer 走 header, 不能用 a href 直链;
+    /* 导出 .torrent(种子页右键 R2 补遗): fetch 字节 -> blob 下载(Bearer 走 header, 不能用 a href 直链;
      * 不能用 this.api —— 它固定 resp.json(), 而这里是二进制流; 下载核心抽在 _exportDownload,
      * 多选导出(W4)共用同一套, 本方法只补单选的 toast 语义) */
     async exportTorrent(hash = "") {
@@ -366,11 +366,11 @@ Object.assign(window.AQB_COMMANDS.methods, {
         if (!e.auth) this.toast("导出失败: " + e.message, "error", 8000);
       }
     },
-    /* 导出下载核心(单选/多选共用, W4 抽取): 裸 fetch 字节 → Blob 触发浏览器下载(Bearer 走 header,
+    /* 导出下载核心(单选/多选共用, W4 抽取): 裸 fetch 字节 -> Blob 触发浏览器下载(Bearer 走 header,
      * 不能用 a href 直链; 不能用 this.api —— 它固定 resp.json(), 而这里是二进制流)。
      * 401 走 _logout 收口后抛 e.auth 错(调用方 catch 静默, 与 api() 的 401 契约同形);
      * 其余非 2xx 抛 Error(detail) —— 成功/失败的 toast 由调用方按各自语义给。
-     * !走低层带超时单点 aqbFetch(issue 26-10-16-1303): 裸 fetch 悬挂时 await 永不返回 ⇒
+     * !走低层带超时单点 aqbFetch(issue 26-10-16-1303): 裸 fetch 悬挂时 await 永不返回 =>
      *   回执永远停在"进行中"、失败 toast 也永不出现; 挂上限后悬挂变一次可报的失败(超时文案)。 */
     async _exportDownload(hash) {
       const resp = await aqbFetch(`/api/torrents/${hash}/export`, { headers: aqbAuthHeaders(this.token) });
