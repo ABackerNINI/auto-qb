@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="xdist-js-bundle-temp-race">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="xdist 并行下 node 电池共享临时 bundle 文件偶发假红">
 <meta name="issue-summary" content="webui_helpers.bundle_file 把聚合文本写到共享临时根固定前缀 aqb_js_bundle_ 的同一路径, 8 个 worker 并发读写 -&gt; PermissionError 或 node 电池挂, 两次拦下 ship.commit 闸门, 单跑与合流树复跑全绿">
 <style>
@@ -84,14 +84,14 @@
 <body>
 <div class="sheet">
 
-<div class="kicker">计划外问题（未修）· test</div>
+<div class="kicker">计划外问题（已修）· test</div>
 <h1>xdist 并行下 node 电池共享临时 bundle 文件偶发假红</h1>
 <p class="lede">webui_helpers.bundle_file 把聚合文本写到共享临时根固定前缀 aqb_js_bundle_ 的同一路径, 8 个 worker 并发读写 -&gt; PermissionError 或 node 电池挂, 两次拦下 ship.commit 闸门, 单跑与合流树复跑全绿</p>
 <div class="meta-row">
   <div class="item"><div class="k">编号</div><div class="v">26-11-08-1955-test-xdist-js-bundle-temp-race</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-08 19:55</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">tests / node 电池</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
@@ -164,7 +164,8 @@ tests/test_webui_static_r4_drawer.py:69:  assert proc.returncode == 0, f"node �
 <section id="s5">
   <h2><span class="no">§05</span>根因<span class="opt">（可选）</span></h2>
   <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
-  <div class="callout"><strong>待查（以下为推断，未仪器化证实）。</strong>已排除：① 本批 AST 守阵改动（只新增 1 个测试文件与知识库文档，不碰前端静态资源、临时根或 <code>webui_helpers</code>）；② 合流的远端 7 笔提交引入前端回归（两个失败文件单跑全绿、合流树独立全量 5862 passed 全绿）。<br>推断链：<code>_tmp_bootstrap</code> 让同一次运行的 8 个 xdist worker 共用同一个实例临时根，而 <code>bundle_file</code> 把路径拼成不含 worker 标识的固定名；两个 worker 同时 <code>open(path, "w")</code> 在 Windows 共享语义下可抛 <code>PermissionError</code>，或某个 worker 读到别的 worker 尚未写完/内容不同的文件，使 node 探针 <code>returncode != 0</code> 触发断言。<code>_BUNDLE_FILES</code> 是进程级缓存，不能跨 worker 去重，反而保证每个 worker 都会各自写一次。</div>
+  <div class="callout"><strong>入池时为待查推断（2026-11-09 已证实，见本节末段；下段保留当时的推断链）。</strong>已排除：① 本批 AST 守阵改动（只新增 1 个测试文件与知识库文档，不碰前端静态资源、临时根或 <code>webui_helpers</code>）；② 合流的远端 7 笔提交引入前端回归（两个失败文件单跑全绿、合流树独立全量全绿）。<br>推断链：<code>_tmp_bootstrap</code> 让同一次运行的 8 个 xdist worker 共用同一个实例临时根，而 <code>bundle_file</code> 把路径拼成不含 worker 标识的固定名；两个 worker 同时 <code>open(path, "w")</code> 在 Windows 共享语义下可抛 <code>PermissionError</code>，或某个 worker 读到别的 worker 尚未写完/内容不同的文件，使 node 探针 <code>returncode != 0</code> 触发断言。<code>_BUNDLE_FILES</code> 是进程级缓存，不能跨 worker 去重，反而保证每个 worker 都会各自写一次。</div>
+  <p><strong>2026-11-09 已证实（不再是推断）。</strong>Linux（WSL）复现：4 写 4 读各 4000 次，共享路径读到空/半文件 <strong>1600+ 次/读</strong>；换 <code>mkstemp</code> + <code>os.replace</code> 原子替换后 0 次。CI 那次的形态也坐实「读到空文件」：报错栈 <code>&lt;anonymous&gt;:5:34</code> ⇔ <code>new Function(src + …)</code> 的 <code>src</code> 是空串（实测 100 行 src 报 <code>:104:34</code>），即 <code>fs.readFileSync(process.argv[1])</code> 拿到 0 字节，与 JS 逻辑无关。</p>
 </section>
 
 <section id="s6">
@@ -183,11 +184,15 @@ tests/test_webui_static_r4_drawer.py:69:  assert proc.returncode == 0, f"node �
   <h2><span class="no">§07</span>状态变更日志</h2>
   <ul>
     <li>2026-11-08 19:55 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-09 — 状态 Open → Done（kb.status）</li>
+</ul>
   <h3>复验</h3>
   <p>入池时复验：2026-11-08 19:54 锚点 <code>tests/webui_helpers.py:373-381</code> 与 <code>_BUNDLE_FILES</code> 仍在且未改，共享固定路径的竞态条件未消除；现象为偶发，认领时按防过期原则重跑锚点并用 <code>-n 8</code> 重复跑复现。</p>
   <h3>修复后补充</h3>
-  <p>待修完补「实际修法 / 验证方式 / 测试数字」；与 §06 建议不同则保留建议原文并说明改道原因。</p>
+  <p><strong>实际修法</strong>：取 §06 候选 ①，但标识用 <code>os.getpid()</code> 而非 <code>PYTEST_XDIST_WORKER</code>（后者在非 xdist 串跑时不存在，pid 恒可用）。<code>tests/webui_helpers.py::bundle_file</code> 落点改为 <code>aqb_js_bundle_&lt;pid&gt;_&lt;name&gt;</code>，各 worker 只读写自己的文件，跨进程零争用。</p>
+  <p><strong>同类一并收口</strong>：同一形态另有两处（评审发现）—— <code>tests/extension_proxy_support.py::background_bundle</code> 的 <code>aqb_background_bundle.js</code>（经 trace 辅助被 <code>test_extension_proxy_page_fetch.py</code> 的多条用例调用，同文件内用例被 xdist 分到不同 worker，并发面与本次同级）与 <code>test_webui_static_r4_node_batteries.py::test_r4_load_col_state_seeding</code> 的 <code>aqb_app_head_for_probe.js</code>，均已掺 pid；两处 helper 各配守阵（<code>test_bundle_file_is_process_private</code> / <code>test_background_bundle_is_process_private</code>），head 探针在用例内联断言 pid。</p>
+  <p><strong>改道说明</strong>：候选 ③（<code>os.replace</code> 原子替换）实测能消掉 Linux 竞态（1600+ 次坏读 → 0），但 Windows 下替换正被别的进程打开的目标会抛 <code>PermissionError</code> —— 只是把一种偶发红换成另一种，故不采用；候选 ②（改 <code>tmp_path</code>）要动签名与多处调用点，收益不抵改动面。</p>
+  <p><strong>验证方式</strong>：新增守阵 <code>test_bundle_file_is_process_private</code>（pid 入文件名 + 内容 == <code>read_shared(name)</code>），摘掉 pid 当场红（红绿双验）；<code>tests/test_webui_static_r4_static_batteries.py</code> 以 <code>-n 8</code> 复跑全绿；全量数字见基线切片（<code>commands run kb.baseline</code>）；<code>doc.caps</code> 与 <code>kb.check</code> 通过。坑档沉淀在 <code>memory-bank/pitfalls/testing/parallel-run.md</code>「共享实例根下的聚合脚本」条。</p>
 </section>
 
 <footer>

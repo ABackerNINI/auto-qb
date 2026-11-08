@@ -371,10 +371,18 @@ _BUNDLE_FILES: dict = {}
 
 
 def bundle_file(name):
-    """node 探针用: 把域聚合文本落一个临时脚本文件, 探针仍按「单文件」加载(与拆分前 argv 语义一致)"""
+    """node 探针用: 把域聚合文本落一个临时脚本文件, 探针仍按「单文件」加载(与拆分前 argv 语义一致)
+
+    !落点按进程隔离(pid 入文件名): pytest.ini 默认 -n 8, xdist 各 worker 继承同一自举实例根
+    (TMPDIR, 见 _tmp_bootstrap.py), 同名文件会被另一 worker 的 open(..., "w") 先截断再写 ——
+    Linux CI 实测有 worker 在截断窗读到 0 字节, node 电池因 src 为空而报
+    "Cannot read properties of undefined (reading 'methods')"(window.AQB_SHORTCUTS 未定义)。
+    各 worker 只读写自己的落点, 跨进程零争用; 不用 os.replace 收口是因为 Windows 下替换
+    正被其它进程打开的目标会 PermissionError, 反而把偶发红换成另一种偶发红。
+    """
     if name not in _BUNDLE_FILES:
         import tempfile
-        path = os.path.join(tempfile.gettempdir(), "aqb_js_bundle_" + name.replace(".", "_"))
+        path = os.path.join(tempfile.gettempdir(), f"aqb_js_bundle_{os.getpid()}_" + name.replace(".", "_"))
         with open(path, "w", encoding="utf-8", newline="\n") as f:
             f.write(read_shared(name))
         _BUNDLE_FILES[name] = path

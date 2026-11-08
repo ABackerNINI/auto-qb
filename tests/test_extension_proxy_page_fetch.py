@@ -22,6 +22,7 @@
 - test_connection_failure_logs_head_tail_only: 真跑 background.js —— 连不上时只打「头尾」: 首报全量
   排查清单 ERROR; 连败期降 debug(默认记录级别下不落盘), 每 30 轮重提一次全量; 恢复补一句 INFO 并清
   连败计数(计数落 storage, SW 回收也不丢); 状态栏同文复读降 debug(2026-09-28 用户实报每轮复读)
+- test_background_bundle_is_process_private: 回归 xdist 共享实例根 —— vm 沙箱聚合脚本落点须掺 pid 且非空
 - test_log_ui_wiring_and_escape: 选项页日志面 —— 清空走 clear-logs 协议(两边一致, 直接改 storage
   会被后台内存缓冲盖回)、渲染过 esc 转义(明细含站点 URL/页面片段)、限渲染条数、
   storage.onChanged 自动刷新、日志容器在脚本之前
@@ -88,6 +89,8 @@
 """
 
 import json
+
+import os
 
 import pathlib
 
@@ -835,3 +838,11 @@ def test_log_ui_wiring_and_escape():
     assert "esc(" in js, "日志渲染必须过 HTML 转义(明细含站点 URL/页面片段, 裸插 innerHTML 是注入面)"
     assert "chrome.storage.onChanged" in js, "后台落盘后选项页要自动刷出来(不用手点刷新)"
     assert "LOG_RENDER_CAP" in js, "全量渲染 10000 行会卡死选项页, 必须限渲染条数"
+
+
+def test_background_bundle_is_process_private():
+    """回归: vm 沙箱聚合脚本落点掺 pid —— xdist worker 共用实例根, 固定名会被并发截断成 0 字节"""
+    path = background_bundle()
+    assert str(os.getpid()) in os.path.basename(path), \
+        "background_bundle 落点缺 pid: 同文件多条用例被 xdist 分到不同 worker, 并发写同名脚本会互相截断"
+    assert os.path.getsize(path) > 0, "聚合脚本不得为空"

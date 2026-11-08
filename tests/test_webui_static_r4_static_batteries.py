@@ -40,6 +40,9 @@
 - test_r4_shortcuts_panel_conflict_resolve: R5#26 —— 冲突三选一状态机 node 电池真跑(swap/steal/cancel):
   cancel 零写入; steal 对方置空串(显式禁用而非缺省); swap 常规互换与「对方回落默认即删 override」
   分支; 三态终值同时断言 kbDraft.overrides 与 AQB_KEYS._doc(即时试用单点)
+- test_bundle_file_is_process_private: 回归 Linux CI 偶发红 —— xdist 8 worker 共用自举实例根,
+  聚合脚本落点须带 pid 且内容 == read_shared(name)(同名落点被并发 open 'w' 截断 → node 读到
+  0 字节 → window.AQB_SHORTCUTS 未定义, 报 Cannot read properties of undefined (reading 'methods'))
 
 加载口径: 单文件域直接读盘 eval(顶层纯函数声明随非严格 eval 入作用域, 同 hrsCompareRows 电池范式);
 shortcuts 域为根+两片段聚合(bundle_file), 其方法体引用模块级 const(注册表/序列化/黑名单单点)不随
@@ -53,7 +56,7 @@ import os
 import shutil
 import subprocess
 
-from webui_helpers import STATIC_ROOT, bundle_file
+from webui_helpers import STATIC_ROOT, bundle_file, read_shared
 
 
 def _shared(name):
@@ -950,3 +953,13 @@ def test_r4_shortcuts_panel_conflict_resolve():
     """R5#26: 冲突三选一状态机 node 电池 —— swap/steal/cancel 三态终值双断言(草稿 + 引擎 _doc)"""
     report = _run_probe(_NODE_SHORTCUTS_CONFLICT_PROBE, bundle_file("shortcuts.js"))
     _assert_battery(report, "冲突三选一电池")
+
+
+def test_bundle_file_is_process_private():
+    """回归: 聚合脚本落点按进程隔离且内容完整 —— 防 -n 8 下 worker 互相截断同名脚本(Linux CI 偶发红)"""
+    path = bundle_file("shortcuts.js")
+    assert str(os.getpid()) in os.path.basename(path), \
+        "聚合脚本落点缺 pid: xdist worker 共用 TMPDIR 实例根时会互相截断(open 'w' 先清成 0 字节)"
+    assert os.path.getsize(path) > 0, "聚合脚本不得为空"
+    with open(path, encoding="utf-8") as f:
+        assert f.read() == read_shared("shortcuts.js"), "聚合脚本内容须与 read_shared 同源"

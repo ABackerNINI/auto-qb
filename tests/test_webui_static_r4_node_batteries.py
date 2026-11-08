@@ -828,7 +828,9 @@ def test_r4_selection_state_machine():
 
 def test_r4_load_col_state_seeding():
     """R5#18: loadColState 播种三态(空存储/仅空 hidden/任一偏好键) + 坏数据 + 白名单洗净"""
-    head_path = os.path.join(tempfile.gettempdir(), "aqb_app_head_for_probe.js")
+    # 落点带 pid: xdist worker 共用实例根, 固定名会被别的 worker 截断成 0 字节(同 bundle_file 竞态)
+    head_path = os.path.join(tempfile.gettempdir(), f"aqb_app_head_for_probe_{os.getpid()}.js")
+    assert str(os.getpid()) in os.path.basename(head_path), "head 探针落点缺 pid(同 bundle_file 竞态)"
     with open(head_path, "w", encoding="utf-8", newline="\n") as f:
         f.write(_app_head_source())
     report = _run_probe(_NODE_LOADCOLSTATE_PROBE, head_path)

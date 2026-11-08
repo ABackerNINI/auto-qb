@@ -83,6 +83,15 @@
 
 > 判据来源: [计划 26-09-22-2112 §04](../plans/26-09-22-2112-src-layout-restructure-plan.html) 依赖方向表 + `infra/__init__.py:15` 纪律声明; R4#18 把 notify.py 的 config 引用收进 TYPE_CHECKING(运行期零依赖)。用 AST 而非文本: 纪律声明本身就写在 `__init__.py` 的 docstring 里, 文本扫描会假红。
 
+## xdist 临时脚本隔离 (26-11-09, issue 26-11-08-1955)
+
+| 守阵 | 钉住的结论 | 红验 |
+|---|---|---|
+| `test_webui_static_r4_static_batteries.py::test_bundle_file_is_process_private` | `bundle_file` 落点掺 `os.getpid()` 且内容 == `read_shared` | 摘 pid ⇒ 红(2026-11-09 实测) |
+| `test_extension_proxy_page_fetch.py::test_background_bundle_is_process_private` | `background_bundle` 落点掺 pid 且非空 | 摘 pid ⇒ 红(2026-11-09 实测) |
+
+> 根因: xdist worker 共用自举实例根, 固定文件名被并发 `open(..., "w")` 截断 → node 读到 0 字节。判据见 [../pitfalls/testing/parallel-run.md](../pitfalls/testing/parallel-run.md)。
+
 ## 通用纪律
 
 - **红验优先用运行时 monkeypatch 还原旧实现**(不碰工作区), `lru_cache` 记得先 `cache_clear()`。

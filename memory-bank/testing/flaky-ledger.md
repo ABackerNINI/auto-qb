@@ -17,6 +17,7 @@
 | `e2e/views.spec.mjs` 「种子页筛选器有数据」双皮肤**恒红** —— relocate kind 恒空(桩数据缺该类目), 不进 fast | 共享状态(桩数据缺口) | Open | 已入池 [26-11-06-0330](../issues/26-11-06-0330-test-e2e-views-relocate-kind-empty.html) | 2026-11-05 |
 | `tests/test_hr_discovery.py` 生命周期层真绑定用例 —— `-n 8` 全量并行下偶发端口碰撞 | 端口/资源 | Done | 已修(2026-11-06): 断言改「落在候选表」+ 占位收敛 `hold_run`(三条同形一起), 去向 [26-11-06-0330](../issues/26-11-06-0330-test-hr-discovery-port-collision.html) | 2026-11-05 |
 | `tests/test_hr_discovery.py::test_start_all_busy_returns_false_and_retries` —— ~~疑似 timing flake~~ 经随机序巡检证据修正为端口/资源(10013 排除段拒绝) | 端口/资源 | Done | 已修(2026-11-06): 端口单点 `tests/_test_ports.py::hold_run` 整段自验替代「只验基址」, 守阵 +2; 去向 [26-11-06-0330](../issues/26-11-06-0330-test-hr-discovery-busy-retry-flake.html) | 2026-11-05 |
+| `tests/test_webui_static_r4_static_batteries.py::test_r4_shortcuts_engine_table_and_keydown` 及同源 node 电池 —— `-n 8` 下共享临时 bundle 被并发截断, 偶发假红(单跑恒绿) | 并发/竞态 | Done | 已修(2026-11-09): 三处落点掺 `os.getpid()` + 两例守阵; 去向 [26-11-08-1955](../issues/26-11-08-1955-test-xdist-js-bundle-temp-race.html) | 2026-11-09 |
 
 > 状态词与四形态 5 词表同源: `Open` → `In Progress` → `Done` | `Dropped`。
 

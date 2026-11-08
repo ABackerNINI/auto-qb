@@ -2,6 +2,8 @@
 
 import json
 
+import os
+
 import pathlib
 
 import re
@@ -51,11 +53,15 @@ _BG_BUNDLE: str | None = None
 
 
 def background_bundle() -> str:
-    """vm 沙箱里 importScripts 是 no-op, 故用拼接文件模拟同一全局作用域。"""
+    """vm 沙箱里 importScripts 是 no-op, 故用拼接文件模拟同一全局作用域。
+
+    !落点带 pid: xdist 各 worker 共用同一自举实例根, 固定文件名会被别的 worker 的
+    write_text 先截断再写, 其 node 子进程可能读到 0 字节(同 webui_helpers.bundle_file 竞态)。
+    """
     global _BG_BUNDLE
     if _BG_BUNDLE is None:
         import tempfile
-        bundle = pathlib.Path(tempfile.gettempdir()) / "aqb_background_bundle.js"
+        bundle = pathlib.Path(tempfile.gettempdir()) / f"aqb_background_bundle_{os.getpid()}.js"
         bundle.write_text(background_text(), encoding="utf-8")
         _BG_BUNDLE = str(bundle)
     return _BG_BUNDLE

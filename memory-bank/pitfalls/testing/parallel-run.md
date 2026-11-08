@@ -1,7 +1,7 @@
 # 并行跑测试 (pytest-xdist)
 
 > 摘要: **已设为默认**(`pytest.ini` 的 `addopts = -n 8`, 2026-10-08 由 `-n 4` 上调) —— 全量 21s → **7.6s**(带覆盖率); sidefx 台账已用 `workeroutput` 回传汇总, 「越界 0 条」不再消失。⚠ `-n 0` 曾对**包脚本那批真实临时仓库用例**挂住 —— 根因是 **Windows `subprocess` 无限挂死**(非仓库逻辑), 2026-10-03 用 `_pipeline.run_capture` 看门狗修复(见下节); 覆盖率分支 partial 与串行差 1。**并行甜点= -n 8, 不是 `-n auto`**(32 worker 打满机器, `test.pkg` 会 2 failed + 16 errors) —— 见下节「甜点随笔例体量与负载形态变」。
-> 触发: 并行, 并发跑测试, xdist, -n, 加速, 多进程, 跑得慢, 闸门, 端口冲突, 台账不打印, 串行挂住, 提交卡死, test.pkg, -n 0, subprocess 挂死, CreateProcess
+> 触发: 并行, 并发跑测试, xdist, -n, 加速, 多进程, 跑得慢, 闸门, 端口冲突, 台账不打印, 串行挂住, 提交卡死, test.pkg, -n 0, subprocess 挂死, CreateProcess, 聚合脚本, bundle_file, 空文件, node 电池, 共享实例根, 截断
 
 ### ⚠ `-n 0` 曾对 my-commit-flow 的真实仓库用例**挂住**(2026-10-03, 根因已定位并修复)
 
@@ -123,3 +123,14 @@
     ⚠ 但 [fixed-port-test-collision.md](fixed-port-test-collision.md) 记过一次「猜 `_free_port()`
     TOCTOU 结果猜错」的前科 —— 要定性得先有栈, 别顺着最像竞态的那个猜。
 - **同族**: [fixed-port-test-collision.md](fixed-port-test-collision.md)(固定端口 + 连号候选表的面)。
+
+### 共享实例根下的聚合脚本: `open("w")` 截断窗让 node 读到 0 字节(2026-11-08, 已修)
+
+- **触发**: `-n 8` 下多 worker 同跑一域 node 电池(`bundle_file` 等临时聚合脚本); Linux CI 偶发
+  `TypeError: Cannot read properties of undefined (reading 'methods')` @ `window.AQB_SHORTCUTS.methods`,
+  单跑恒绿。
+- **判别**: 栈里 `<anonymous>:5:34` ⇔ `new Function(src + …)` 的 **src 是空串**(100 行 src 报
+  `:104:34`) ⇒ node 读到 0 字节。根因: worker 共用实例根 `TMPDIR` + 固定文件名, `open(…, "w")`
+  截断写时另一 worker 的 node 正在读。
+- **处置**: 落点掺 `os.getpid()`; **别用 `os.replace`**(Windows 替换被打开的目标会 `PermissionError`)。
+  守阵 `test_bundle_file_is_process_private` 与 `test_background_bundle_is_process_private`。

@@ -44,6 +44,10 @@
   (本 shell 自带 `TMPDIR=H:\Temp`), 加 `env -u TMPDIR` 前缀后全绿; 其后 `test.full` 从第一次就带前缀。
   为什么没命中: 开工只读了 pitfalls 总索引与 conventions 总索引, 没进 testing 类索引(路由没到);
   且把 AGENTS.md「别手工加前缀」读成了不必清 env —— 应把「跑任何 pytest 前先 `env -u TMPDIR`」当固定动作。
+- **复发**: 6(2026-11-08)—— 修 Linux CI `test_r4_shortcuts_engine_table_and_keydown` 偶发红时,
+  首次 `commands run test.one` 又直跑 rc=4(本 shell 仍自带 `TMPDIR=H:\Temp`), `env -u TMPDIR` 后过;
+  本轮其后所有 pytest 均带前缀。为什么没命中: 开工按「先索引后 grep」读了总索引/README, 但定位焦点在
+  前端 node 电池, 没顺着 testing 类索引点开本文件 —— 跨专题时最容易漏的固定动作。
 
 ### `--basetemp` 换了目录会让 4 条 sidefx 用例**假红**
 
