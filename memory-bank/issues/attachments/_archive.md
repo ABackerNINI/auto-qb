@@ -11,14 +11,13 @@
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 - [chore] [版本号双源矛盾: __init__.__version__ 0.2.0 vs pyproject 0.1.0](../26-09-21-1408-chore-version-dual-source.html) — WebUI 顶栏透出与打包元数据已差一个 minor; 建议 pyproject 单源 + 动态读取
 
-## Open (76)
+## Open (75)
 
 - [refactor] [kb.new 各族 slug/topic 传参方式不一致, 跨族套用即 rc=1](../26-11-08-1131-refactor-kb-new-arg-unify.html) — issue 族收位置参数 slug、其余族要求 --topic, 跨族套形态即失败(2026-11-08 实踩 2 笔 rc=1); 彻底修=各族统一传参, 轻修=show 按族列签名
 - [bug] [compare_digest str 非 ASCII 隐患同构两处(discovery 配对码/webui auth token)](../26-11-08-0827-bug-hr-webui-compare-digest-ascii.html) — discovery.py:412 与 webui/server/auth.py:183 仍为 str 形态 compare_digest, 非 ASCII 输入抛 TypeError(与 0527-hr #1 已修同构), web.token 校验亦不限字符集
 - [bug] [relocate _arm 不重置旧 journal: 终态残留致同 id 再迁移收不到 fastresume 改写](../26-11-08-0827-bug-relocate-arm-journal-reset.html) — job_id=sha1(mover|src|dst) 复用, 再发起时 spec 重写但 journal 残留终态, daemon 因 STOP_PHASES 跳过该 job, 新迁移收不到改写(现靠核验路径偶然收敛, 非已在目标位则悬挂)
 - [docs] [hr/relocate docstring 措辞漂移聚合(fetcher refresh.reason/finalize_face failed 语义/store 行锚)](../26-11-08-0827-docs-hr-relocate-docstring-drift.html) — fetcher.py:74-76 提 refresh.reason 与 v3 字段对不上; relocate_chain.finalize_face docstring 未跟上 failed 入 STOP_PHASES; store.py:806 docstring 内部行锚 :237-244 已漂移
 - [refactor] [小件清理聚合: _WaveContext.alerted 死字段 + 测试 docstring 超宽两行](../26-11-08-0827-refactor-hr-leftover-cleanups.html) — service_common.py _WaveContext.alerted 经 0527-hr #14 修后无写入方成只读死字段; test_torrents_store.py:7/:35 存量 docstring 两行超 120 列
-- [test] [e2e move-dialog-fit .move-note 定位器 strict violation: 两提示段共存后两皮肤恒红](../26-11-08-0820-test-e2e-move-note-strict-collision.html) — move-dialog 两个 .move-note 段共存使 e2e move-dialog-fit.spec.mjs:434 strict mode 爆炸(prism/atlas 恒红)
 - [bug] [cooldown/notify_cooldown_s 文档口径「0 = 不冷却」但校验拒裸 0(与已修 R4#9/#15 同根)](../26-11-08-0703-bug-config-bare-zero-cooldown-keys.html) — example_rules.*.cooldown(schema/rules.py:46 help)与 gtm.notify_cooldown_s(sections.py 注释)宣称 0 = 不冷却,_try_time 拒裸 0,修法可复用 _is_bare_zero/_parse_time_bare_zero_ok
 - [bug] [测试文件存量带圈数字违反 code-style 禁字符](../26-11-08-0703-bug-tests-circled-digit-legacy.html) — tests/test_registry_derived.py(7 处)与 tests/test_config_writer_write.py(4 处)docstring/注释存 ①-④,违反 code-style 禁字符(存量,早于 R4 认领)
 - [bug] [auth.py _is_loopback_host 自有字面量集,回环判定三套并存](../26-11-08-0703-bug-webui-auth-loopback-third-set.html) — auth.py:32-37 _is_loopback_host 自有字面量集,与 utils_parse.is_loopback_host 及 infra/utils display_host 折叠锚三套并存(消费面 request.client.host 不同,故独立成条)
@@ -90,12 +89,13 @@
 - [bug] [设置页警示条是伪警示: 只复述 schema 风险文案, 不反映配置健康; 升级失效键无任何提示](../26-09-22-2002-bug-webui-config-health-warning.html) — 首页警示条由『已配置且 schema 带 risk 文案』驱动, 恒亮、静态、与配置健康无关; 且 load_config 对 schema 外键静默忽略, 版本升级后配置项失效无任何提示
 - [chore] [hatch-pet 调付费 OpenAI 图像 API 且无成本提示](../26-09-20-1427-chore-skill-hatch-pet-api-cost.html) — hatch-pet 生成图会直连 api.openai.com 计费接口, skill 未标注费用风险
 
-## Done (447)
+## Done (448)
 
 - [docs] [远端 hr-review4 收尾两条 pitfalls 缺三行头元数据(存量红)](../26-11-08-1048-docs-hr-review4-pitfalls-metadata-missing.html) — e07d2c88 的两条 pitfalls 缺 > 摘要:/> 触发: 头,test_kb_topic_files_have_metadata 恒红阻塞提交闸门
 - [bug] [评审闸门锚点在合并拓扑下树差虚增: 侧分支 trailer 遮蔽主线锚点致提交死锁](../26-11-08-0903-bug-review-anchor-merge-topology.html) — check_review_trace 锚点取平铺 log 最新 trailer, 侧分支(旧基线切出)合并后树差把主线已评工作整支算进本批(~9600 行), 提交被闸门死锁
 - [bug] [model._as_int 对 inf/超大值抛 OverflowError(约 30 调用方)](../26-11-08-0827-bug-as-int-overflow-gap.html) — _as_int 只捕 TypeError/ValueError, pages 写 1e999(解析 inf)或裸 Infinity 时 int(inf) 抛 OverflowError 穿透, history_rows 等读路径仍可整体抛错
 - [bug] [hr server 头部读取路径 ConnectionResetError 冒泡 handle_error 打 stderr](../26-11-08-0827-bug-hr-server-header-read-reset.html) — 读体路径已护(#12), 但标准库请求行/头部 readline 路径的连接重置仍走 handle_error 打 traceback, 与『半路断开是常态』意图相悖
+- [test] [e2e move-dialog-fit .move-note 定位器 strict violation: 两提示段共存后两皮肤恒红](../26-11-08-0820-test-e2e-move-note-strict-collision.html) — move-dialog 两个 .move-note 段共存使 e2e move-dialog-fit.spec.mjs:434 strict mode 爆炸(prism/atlas 恒红)
 - [docs] [hr_ext_stub.py 提示文案未提 port_kill 新 --yes 门](../26-11-07-1216-docs-hr-ext-stub-port-kill-yes-doc.html) — hr_ext_stub.py :27/:205 提示仍写旧口径, 非 python 监听者无 --yes 会被拒杀(rc=1), 按旧文案操作碰壁
 - [bug] [重定向链接位被真文件占据时会删掉真文件(真目录有保护, 真文件没有)](../26-11-07-0748-bug-relocate-retarget-real-file-unlink.html) — retarget_alias 只护真目录(非空拒绝/空则 rmdir), 真文件位落到 remove_alias 的 os.unlink —— 静默删除真实数据
 - [bug] [存量评审 R4·scripts 汇总(major 1/minor 23)](../26-11-07-0536-bug-legacy-review4-scripts.html) — scripts 主题 major 1+minor 23 共 24 条聚合入池,来源存量评审 R4(计划 26-11-05-2335)

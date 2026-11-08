@@ -189,6 +189,14 @@ const scrollSamplerOn = (page) => page.evaluate(() => {
 const scrollSamplerOff = (page) => page.evaluate(() => window.__moveScroll || []);
 
 /**
+ * 对话框常驻说明段定位器(issue 26-11-08-0820): relocate 旗标开启后对话框里有两段 .move-note
+ * (静态段 + 整组迁移条件段, 见 tpl/move-dialog.html), 裸 `.move-note` 定位器两段共存即触发
+ * Playwright strict mode。用文本锚对准**常驻静态段**(无 v-if 恒渲染), 以后再加提示段也不歧义;
+ * 别改回裸定位器 —— querySelector 版(scrollSamplerOn 内)取首个不受 strict 约束, 无需此锚。
+ */
+const staticMoveNote = (page) => page.locator('.move-note', { hasText: '将把种子文件移动到新路径' });
+
+/**
  * 等对话框几何进入稳态(连续三拍采样全等, 节拍 = expect.poll 默认间隔, 静默跨度 >= 350ms) ——
  * 开/收层的 padding 过渡(200ms)与面板挂载没有单一 DOM 终点, 旧 350/400/450ms 睡等「赌过渡
  * 跑完」的显式化: 稳态即过渡终态, 超时上限挂在 poll 上, 不再赌时长; 三拍口径防「过渡尚未
@@ -461,7 +469,7 @@ for (const skin of SKINS) {
       // —— 变体 A: 抬到输入框下方 6px(行内留白 / 面板顶)。click 的 target 变成公共祖先
       //    `.add-input-row` —— 修复前它没有 @click.stop, 事件冒泡到 lifecycle 的 window 收层名单
       //    ⇒ 面板"点一下就消失"(七修, 排查「无焦点点击弹回」时复现)
-      await page.locator('.move-note').click();  // 先失焦: 面板在按住期间才挂载, 落点才可能被改写
+      await staticMoveNote(page).click();  // 先失焦: 面板在按住期间才挂载, 落点才可能被改写
       await expect(pop).toBeHidden();  // 旧 300ms 睡等: blur 收层(40ms 合帧)落定的显式等待
       await downThenUpAt(cx, Math.round(inputBox.y + inputBox.height + 6));
       // 旧 400ms 睡等「睡一觉赌面板没被点没」→ 逐帧采样合帧收层危险窗内恒可见
@@ -481,7 +489,7 @@ for (const skin of SKINS) {
       expect(await page.locator('#move-path').inputValue(), '抬到候选行不得回填(onPick 走 mousedown)').toBe('');
 
       // —— 反向守门: 真点到组件外(上方说明文案)仍必须收层 —— 防 @click.stop 挂得过宽
-      await page.locator('.move-note').click();
+      await staticMoveNote(page).click();
       await expect(pop, '点组件外仍须收层(@click.stop 只许挡住组件内部的点击)').toBeHidden();
     });
 
