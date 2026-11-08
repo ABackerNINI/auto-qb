@@ -349,7 +349,9 @@ def windows_backed_mount(path: str,
         return None
     if info.is_drvfs:
         return info
-    if (wsl if wsl is not None else is_wsl()) and re.match(r"^/mnt/[A-Za-z]/?$", info.mount_point):
+    # fullmatch 而不是 match(issue 26-11-08-1923): Python 的 $ 允许串尾恰一个换行,
+    # 挂载点经八进制转义还原(\\012 = 换行)可带出尾换行, re.match 下 "/mnt/s\n" 放行。
+    if (wsl if wsl is not None else is_wsl()) and re.fullmatch(r"/mnt/[A-Za-z]/?", info.mount_point):
         return info
     return None
 

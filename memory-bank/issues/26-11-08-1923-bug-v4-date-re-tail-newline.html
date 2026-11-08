@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="regex-tail-newline">
 <meta name="doc-refs" content="memory-bank/issues/26-11-08-0045-bug-traffic-store-infohash-re-tail-newline.html">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="_V4_DATE_RE 同款 $ 尾换行缺口">
 <meta name="issue-summary" content="traffic_store_common.py _V4_DATE_RE 用 ^...$ 配 re.match, 尾随换行放行, 0045 已修该文件 _INFOHASH_RE 四消费端的旁支残留; 下游 strptime 兜底拒收, severity 低">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-08-1923-bug-v4-date-re-tail-newline</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-08 19:23</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
 
@@ -118,7 +118,9 @@
   <h2><span class="no">§04</span>状态变更日志</h2>
   <ul>
     <li>2026-11-08 19:23 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-08 20:05 — 修复完成，状态 <strong>Open → Done</strong>。实际修法：消费端 <code>re.match</code> 改 <code>re.fullmatch</code>（traffic_store_paths.py 的 v4_day_file_date 与 _validate_date 两处；正则字面量不动，并在 _V4_DATE_RE 定义处补「消费端须 fullmatch」注释，对齐 0045 修 _INFOHASH_RE 的同款处理）。验证方式：tests/test_traffic_store_paths.py test_v4_paths_dates_and_window 增补尾换行用例 —— v4_day_file_date("2026-10-04\n.dat") 返回 None；_validate_date("2026-10-04\n") 的 ValueError 须出自形状闸门（非法日期串文案）而非 strptime 兜底；合法日期串仍放行。测试数字：tests/test_traffic_store_paths.py 22 passed；test.quick 全量 5854 passed / 2 skipped。</li>
+    <li>2026-11-08 — 状态 Open → Done（kb.status）</li>
+</ul>
 </section>
 
 <footer>

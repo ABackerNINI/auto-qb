@@ -27,7 +27,7 @@
 - test_container_evidence: 环境变量 / 哨兵文件 / cgroup 三路证据(含 `container=0` 不算)
 - test_is_wsl: env 与 /proc/version 两路判定
 - test_mount_info_and_windows_backed: /proc/mounts 解析(最长前缀 + 八进制转义)与 Windows 共享挂载识别
-  (drvfs 标记 / WSL 的 /mnt/<盘符>; 非盘符挂载不算)
+  (drvfs 标记 / WSL 的 /mnt/<盘符>; 非盘符挂载不算; 尾换行挂载点拒收, issue 26-11-08-1923)
 - test_alias_primitives: create_file_alias 硬链接 + alias_kind_of/alias_target 对普通文件/缺失路径的判定 + 形态错配 ValueError(不依赖建链能力, 任何环境都跑)
 - test_alias_primitives_symlink: create_dir_alias/create_file_alias 的 symlink 形态往返(建/识/穿透读/删)〔无 symlink 建链能力的环境 skip〕
 - test_junction_roundtrip: Windows 真建 junction -> 形态识别 + 穿透读 + 删链接不动目标(非 Windows 跳过)
@@ -524,6 +524,13 @@ def test_mount_info_and_windows_backed():
     assert alias_fs.windows_backed_mount("/mnt/z/x", _MOUNTS, wsl=False).is_drvfs
     assert alias_fs.windows_backed_mount("/mnt/y/x", _MOUNTS, wsl=True) is not None
     assert alias_fs.windows_backed_mount("/mnt/y/x", _MOUNTS, wsl=False) is None
+
+    # issue 26-11-08-1923: 挂载点经八进制转义还原(\012 = 换行)可带出尾换行, Python 的 $
+    # 允许串尾恰一个换行 —— re.match 下 "/mnt/s\n" 被当成合法盘符挂载放行; 改 fullmatch 后拒收
+    mounts_nl = "dev /mnt/s\\012 ext4 rw 0 0\n"
+    info_nl = alias_fs.mount_info_for_path("/mnt/s\n/x", mounts_nl)
+    assert info_nl is not None and info_nl.mount_point == "/mnt/s\n"
+    assert alias_fs.windows_backed_mount("/mnt/s\n/x", mounts_nl, wsl=True) is None
 
     # 宿主推断与链接可见性: WSL 的 Windows 盘 = Linux 进程 + Windows 宿主 + 链接宿主读不了
     drvfs = alias_fs.windows_backed_mount("/mnt/c/x", _MOUNTS, wsl=True)

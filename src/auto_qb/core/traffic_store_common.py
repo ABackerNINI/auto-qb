@@ -61,6 +61,8 @@ V4_DATE_FORMAT = "%Y-%m-%d"
 V4_ROLLUP_KINDS = ("day", "month")
 
 #: 天文件日期串形状(严格 4-2-2 位, 配合 strptime 拒绝 2 月 30 日等)
+#: 消费端必须 fullmatch(issue 26-11-08-1923): Python 的 $ 允许串尾恰一个换行,
+#: re.match 下 "2026-11-08\n" 放行; fullmatch(全串必须被消费)才是本意。
 _V4_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 

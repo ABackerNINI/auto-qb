@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="regex-tail-newline">
 <meta name="doc-refs" content="memory-bank/issues/26-11-08-0045-bug-traffic-store-infohash-re-tail-newline.html">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="alias_fs mount_point 正则 $ 尾换行缺口">
 <meta name="issue-summary" content="alias_fs.py 用 re.match+$ 匹配 mount_point, 串尾恰一个换行可放行, 与 0045/keys.py fullmatch 同族; 输入来自内部 WSL mount 信息, severity 低">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-08-1923-bug-alias-fs-mount-point-regex</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-08 19:23</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
 
@@ -118,7 +118,9 @@
   <h2><span class="no">§04</span>状态变更日志</h2>
   <ul>
     <li>2026-11-08 19:23 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-08 20:05 — 修复完成，状态 <strong>Open → Done</strong>。实际修法：windows_backed_mount 的挂载点判定 <code>re.match</code> 改 <code>re.fullmatch</code>（正则字面量去掉冗余 <code>^</code>/<code>$</code>，对齐 keys.py / 0045 先例；挂载点经八进制转义 \012 还原可带出尾换行，re.match 下 "/mnt/s\n" 放行），全仓 grep 确认该字面量仅此一处消费。验证方式：tests/test_alias_fs.py test_mount_info_and_windows_backed 增补尾换行用例 —— mounts_text 注入 <code>/mnt/s\012</code> 还原成尾换行挂载点后 windows_backed_mount 拒收（None），正常 /mnt/&lt;盘符&gt; 仍放行。测试数字：tests/test_alias_fs.py 68 passed；test.quick 全量 5854 passed / 2 skipped。</li>
+    <li>2026-11-08 — 状态 Open → Done（kb.status）</li>
+</ul>
 </section>
 
 <footer>

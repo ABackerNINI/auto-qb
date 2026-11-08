@@ -67,7 +67,7 @@ def v4_day_file_date(filename: str) -> Optional[str]:
     if not filename.endswith(DAT_SUFFIX):
         return None
     d = filename[:-len(DAT_SUFFIX)]
-    if not _V4_DATE_RE.match(d):
+    if not _V4_DATE_RE.fullmatch(d):
         return None
     try:
         datetime.strptime(d, V4_DATE_FORMAT)  # 真实日期校验(2 月 30 日等)
@@ -78,7 +78,7 @@ def v4_day_file_date(filename: str) -> Optional[str]:
 
 def _validate_date(date_str: str) -> None:
     """日期串校验: 形状 YYYY-MM-DD 且为真实日历日期; 违者 ValueError"""
-    if not _V4_DATE_RE.match(date_str or ""):
+    if not _V4_DATE_RE.fullmatch(date_str or ""):
         raise ValueError(f"非法日期串(须 YYYY-MM-DD): {date_str!r}")
     datetime.strptime(date_str, V4_DATE_FORMAT)  # 真实日期校验(2 月 30 日等)
 

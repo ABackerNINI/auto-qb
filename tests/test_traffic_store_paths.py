@@ -5,7 +5,7 @@ handler 接线(S2a, v4 写侧):
 - test_empty_data_dir_persists_nothing: data_dir 为空(防御, 真实配置恒非空) -> 零文件零目录(CWD 无泄漏)
 
 v4 纯函数区(B1 立并于批 2 接线, plan 26-10-05-2200 §01):
-- test_v4_paths_dates_and_window: 按天目录与路径解析(§06.2)
+- test_v4_paths_dates_and_window: 按天目录与路径解析(§06.2; 尾换行键/日期串拒收, issue 26-11-08-0045/1923)
 
 v4 写侧存储(S2a/S2b, TrafficV4Store):
 - test_v4_store_series_has_data_gate: 数据门(目录存在且含 >=1 个 .dat)
@@ -141,6 +141,7 @@ from auto_qb.core.traffic_store import (
     v4_series_dir,
     v4_window_dates,
     v4_z_totals_ramp,
+    _validate_date,
 )
 
 from helpers import (
@@ -225,6 +226,12 @@ def test_v4_paths_dates_and_window(tmp_path):
     with pytest.raises(ValueError):
         v4_series_dir(data_dir, "torrent:")
     assert v4_rel_dir_to_key("torrents/ABC\n") is None
+    # issue 26-11-08-1923: _V4_DATE_RE 同族缺口 —— 尾换行日期串拒收(消费端 fullmatch),
+    # 合法日期串仍放行; _validate_date 的 ValueError 须出自形状闸门(非法日期串文案),
+    # 不是放行后才由 strptime 兜底的另一种 ValueError
+    assert v4_day_file_date("2026-10-04\n.dat") is None
+    with pytest.raises(ValueError, match="非法日期串"):
+        _validate_date("2026-10-04\n")
     with pytest.raises(ValueError):
         v4_day_file_path(data_dir, "global", "2026-13-01")
     with pytest.raises(ValueError):
