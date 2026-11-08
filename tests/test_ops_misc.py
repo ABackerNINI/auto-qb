@@ -11,6 +11,9 @@
 - test_ops_sync_line_noop_without_backup_ledger: 无备份账本时同步线对账直接返回(33), 一次性闸照常落
 - test_ops_sync_line_missing_backup_file_errors_and_keeps_entry: 不在客户端且备份文件缺失 -> ERROR 交人, 账本条目保留(41-43)
 - test_ops_sync_line_readd_failure_keeps_backup: 备份重加抛错 -> ERROR+备份保留, 条目不清、备份文件不动(56-58)
+
+评审修复 R4-core B5(issue 26-11-07-0527 明细 1):
+- test_ops_sync_line_readd_field_parity_with_live_readd: R1#94 —— 恢复重加与正常重加的属性回传面逐字段一致(wire 级全字典相等, 口径单点 skip_readd_kwargs)
 """
 
 import copy
@@ -187,3 +190,70 @@ def test_ops_sync_line_readd_failure_keeps_backup(tmp_path):
     assert any("重加失败" in m and "备份保留" in m and "HRETRY"[:8] in m for m in logs), logs
     assert "HRETRY" in mgr.state["skip_check_backup"], "重加失败不得清账(凭据还在, 下轮可再试)"
     assert backup.exists(), "备份文件不得被改动"
+
+
+def test_ops_sync_line_readd_field_parity_with_live_readd():
+    """测试(R1#94): 崩溃恢复重加与正常重加(_skip_add_call)的属性回传面**逐字段一致** ——
+    同一条种子走两条路径, FakeClient 记账的 add kwargs 全字典相等(contentLayout/限速/
+    分享限制/顺序下载偏好等 skip_readd_kwargs 全键; torrent_files 不在记账 dict ——
+    恢复侧的二进制数据面由 test_guard_recover_backup_readd_pin 另行钉死)。口径单点在
+    ops_common.skip_readd_kwargs, 本测试在 wire 层钉死两条路径不漂移(旧实现恢复缺
+    contentLayout/限速等: 布局错位 missingFiles + 单种分享/限速限制被 qB 默认值静默重置)"""
+    mgr = make_mgr(FakeConfig())
+    client = FakeClient()
+    mgr.client = client
+    t = FakeTorrent(
+        hash="HASH123",
+        state="stoppedDL",
+        progress=0.0,
+        save_path="R:/Downloads",
+        content_path="R:/Downloads/Test",
+        category="cat",
+        tags="t1,t2",
+        seq_dl=True,
+        f_l_piece_prio=True,
+        up_limit=1234,
+        dl_limit=5678,
+        ratio_limit=2.5,
+        seeding_time_limit=3600,
+        inactive_seeding_time_limit=42,
+        share_limit_action="ModeX",
+        share_limits_mode="MatchAny",
+    )
+    keep = FakeTorrent(hash="HKEEP", state="pausedUP", progress=1.0)  # 保 by_hash 非空(对账首闸)
+    seed_store(mgr, [t, keep])
+    client.torrents["HASH123"] = t
+    client.torrents["HKEEP"] = keep
+    assert mgr.ctx.ops.skip_check("HASH123", source="web").is_ok, "前置: 正常跳检应完成"
+    live_add = dict(next(c for c in client.calls if c[0] == "add")[1])
+
+    # 崩溃窗口形态: 删除已落地(快照无记录/客户端无种子) + 备份账本在 -> 恢复重加
+    backup_file = os.path.join(os.path.dirname(mgr.state_file), "skip-check-backup", "HPARITY.torrent")
+    with open(backup_file, "wb") as f:
+        f.write(b"TORRENT-DATA")
+    mgr.state.setdefault("skip_check_backup", {})["HPARITY"] = {
+        "path": backup_file,
+        "save_path": "R:/Downloads",
+        "category": "cat",
+        "tags": "t1,t2",
+        "ts": 0,
+        "content_layout": live_add["contentLayout"],
+        "up_limit": 1234,
+        "dl_limit": 5678,
+        "seq_dl": True,
+        "f_l_piece_prio": True,
+        "ratio_limit": 2.5,
+        "seeding_time_limit": 3600,
+        "inactive_seeding_time_limit": 42,
+        "share_limit_action": "ModeX",
+        "share_limits_mode": "MatchAny",
+    }
+    client.calls.clear()
+    mgr.store.by_hash.pop("HASH123")  # 崩溃于删除之后: 该种子不在快照
+    mgr.ctx.ops._skip_recovered = False  # 对账一次性闸复位(模拟重启后的首条同步线)
+    mgr.ctx.ops.on_sync_line(True)
+    rec_adds = [c for c in client.calls if c[0] == "add"]
+    assert len(rec_adds) == 1, f"恢复重加应恰一次: {client.calls}"
+    assert rec_adds[0][1] == live_add, \
+        f"恢复重加与正常重加的回传面必须逐字段一致(R1#94):\nlive={live_add}\nrecovery={rec_adds[0][1]}"
+    assert "HPARITY" not in mgr.state["skip_check_backup"], "恢复重加成功应清账"

@@ -55,24 +55,6 @@ from ..taskqueue import FINISHED, REQUEUE, Task
 from .ops_common import (
     _RECHECK_BUSY_MSG,
     _RECHECK_GONE_MSG,
-    _SKIP_BACKOFF_MS,
-    _SKIP_GONE_MSG,
-    _SKIP_RESULT_KEEP,
-    _SKIP_TERMINAL,
-    GATE_BLOCKED,
-    GATE_FORCE,
-    GATE_OK,
-    SKIP_DRIVE_TIMEOUT,
-    SKIP_PHASE_ADDING,
-    SKIP_PHASE_APPEARED,
-    SKIP_PHASE_DELETING,
-    SKIP_PHASE_DONE,
-    SKIP_PHASE_FAILED,
-    SKIP_PHASE_FINISHING,
-    SKIP_PHASE_GONE,
-    SKIP_PHASE_PREPARING,
-    GateVerdict,
-    SkipJob,
     logger,
 )
 from .ops_jobs import JobsMixin
@@ -96,7 +78,7 @@ class OpsModule(SkipMixin, VerdictMixin, JobsMixin, BaseModule):
         # 在途跳检 job(相位机; 同步入口内联驱动, 异步入口由微步线推进)
         self._skip_jobs: dict = {}
         # 最近终态结果 {hash: ActionResult}(供规则侧/测试取异步终态, 也供进度事件回放);
-        # 有界: 只留最近 _SKIP_RESULT_KEEP 条(纯观测面, 不参与判定)
+        # 有界: 只留最近 _SKIP_RESULT_KEEP(ops_common)条(纯观测面, 不参与判定)
         self._skip_results: dict = {}
         # 启动对账一次性开关(第一轮 sync 落地后跑一次; 进程内不复位)
         self._skip_recovered = False
@@ -352,12 +334,17 @@ class OpsModule(SkipMixin, VerdictMixin, JobsMixin, BaseModule):
             return ActionResult.pending("full-checking 校验已提交")
         return ActionResult.ok("校验已提交")
 
-    def _backup_torrent(self, tor: TorrentRecord, data: bytes) -> str:
+    def _backup_torrent(self, tor: TorrentRecord, data: bytes, content_layout: Optional[str] = None) -> str:
         """删除前把 .torrent 落盘备份并记录元数据(便于手动恢复), 返回备份路径
 
         用删除前捕获的 tor 记录(删除后 store 记录已移除)。元数据立即落盘(非常规路径,
         不适用"仅退出时落盘"的写放大规避): 备份后程序一旦崩溃, 没有 state 里的元数据指引,
         用户不知道 .torrent 备份的存在与原始保存路径。
+
+        元数据除恢复凭据(path/save_path/category/tags)外, 还按 skip_readd_kwargs 的消费键
+        记全重加回传面(content_layout + 限速/分享限制, R1#94): 崩溃恢复重加
+        (_recover_skip_backups)按账本原样回传 —— 账本缺记的字段恢复无从回传, 恢复出的
+        种子会被 qB 默认值静默重置(contentLayout 布局错位 / 单种限速与分享限制丢失)。
 
         调用时机是崩溃安全的关键: 必须**先于** torrents_delete(第一个不可逆步骤), 而不是
         挂在重加的失败路径上 —— 重加前那几秒缝隙内崩溃, 谁也来不及备份(issue 26-09-21-1347)。
@@ -374,6 +361,18 @@ class OpsModule(SkipMixin, VerdictMixin, JobsMixin, BaseModule):
             "category": tor.category,
             "tags": tor.tags,
             "ts": self._clock.now(),
+            # 重加回传面(skip_readd_kwargs 消费键, 键名 = TorrentRecord 属性名, R1#94 起记全):
+            # content_layout 是 _skip_step_prepare 的推断产物, 经入参传入(不在 tor 上)
+            "content_layout": content_layout,
+            "up_limit": tor.up_limit,
+            "dl_limit": tor.dl_limit,
+            "seq_dl": tor.seq_dl,
+            "f_l_piece_prio": tor.f_l_piece_prio,
+            "ratio_limit": tor.ratio_limit,
+            "seeding_time_limit": tor.seeding_time_limit,
+            "inactive_seeding_time_limit": tor.inactive_seeding_time_limit,
+            "share_limit_action": tor.share_limit_action,
+            "share_limits_mode": tor.share_limits_mode,
         }
         self.save_state()
         return path

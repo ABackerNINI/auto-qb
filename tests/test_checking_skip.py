@@ -13,7 +13,7 @@
 - test_checking_skip_guard_add_fail_backup: 重加标签失败回退
 - test_checking_skip_readd_unconfirmed_backs_up: 重加已发出但轮询确认不到种子 -> 同样备份 .torrent(否则种子已从客户端移除、data 只存内存随即丢弃)
 - test_checking_skip_backup_precedes_delete_and_cleared_on_success: 备份先于删除落盘(崩溃窗口), 重加确认成功后清理备份文件与元数据
-- test_checking_skip_delete_unconfirmed_clears_backup: 删除未生效(种子仍在) -> 放弃跳检并清掉删除前的备份(不留孤儿文件与误导性元数据)
+- test_checking_skip_delete_unconfirmed_keeps_backup: 删除未生效(种子仍在) -> 放弃跳检但保留删除前的备份并在失败文案指明备份路径(R1#98: 删除异步未定, 备份是唯一恢复凭据宁可留着)
 - test_checking_skip_backup_failure_aborts_before_delete: 备份写不进去 -> 不删除(无损失)直接 fail
 - test_checking_skip_dedup_same_day: 同日跳检去重
 - test_checking_skip_partial_download_forbidden: 部分下载(0<progress<1)禁止跳检
@@ -292,11 +292,14 @@ def test_checking_skip_backup_precedes_delete_and_cleared_on_success():
     assert not os.path.exists(seen["meta"]["path"]), "重加成功后应删除备份文件(不留孤儿)"
 
 
-def test_checking_skip_delete_unconfirmed_clears_backup():
-    """测试: 删除未生效(种子仍在客户端) -> 放弃跳检并清掉删除前的备份
+def test_checking_skip_delete_unconfirmed_keeps_backup():
+    """测试(R1#98): 删除未生效(种子仍在客户端) -> 放弃跳检但**保留**删除前的备份并在失败
+    文案里指明备份路径
 
-    种子没删掉时那份备份已无意义: 留着只剩一个孤儿 .torrent 文件 + 一条"待恢复"的误导性
-    元数据(state 会指引用户去恢复一个其实还在做种的种子)。
+    旧口径(「种子没删掉时那份备份已无意义, 留着只剩孤儿文件 + 误导性元数据」)被 R1#98
+    推翻: 删除是异步的且重试路径刚重发过删除 —— 此刻「种子还在」不代表删除不会在备份清理
+    之后才落地, 那会种子被删而 .torrent 恢复凭据已丢。备份保留(唯一恢复凭据宁可留着),
+    交对账/用户按 skip_check_backup 账本收尾。
     """
     cfg = make_check_cfg(with_mode="skip-checking", without_mode="skip-checking", without_start=False)
     mgr = make_mgr(cfg)
@@ -309,14 +312,16 @@ def test_checking_skip_delete_unconfirmed_clears_backup():
         client.calls.append(("delete", delete_files))  # 只记调用, 不真删
 
     client.torrents_delete = noop_delete
-    # !S3 收敛: sleep 桩解包, 退避重试(10/20/50/50/50ms, 名义 170ms)真实发生 ——
-    #   ops_mod.time 是 stdlib time 模块对象, 经它 patch 即进程级改写(旧注释 10 × 0.5s 为相位机前口径)
     handled = process_rule(mgr, client, t, dry_run=False)
     assert handled, "放弃跳检以 fail 返回(fail 视为已处理)"
     assert not any(c[0] == "add" for c in client.calls), f"未确认消失前不得重加: {client.calls}"
     backup_file = os.path.join(os.path.dirname(mgr.state_file), "skip-check-backup", "HASH123.torrent")
-    assert not os.path.exists(backup_file), "种子没丢 -> 备份应被清理"
-    assert not mgr.state.get("skip_check_backup"), f"不应留下误导性备份元数据: {mgr.state}"
+    meta = mgr.state.get("skip_check_backup", {}).get("HASH123")
+    assert meta and meta["path"] == backup_file and os.path.exists(backup_file), \
+        f"GONE 相位失败(删除仍会异步落地)备份必须保留(唯一恢复凭据): {meta}"
+    res = mgr.ctx.ops.skip_result("HASH123")
+    assert res is not None and res.is_failed, f"GONE 相位失败应有终态结果: {res}"
+    assert "已备份" in res.message and backup_file in res.message, f"失败文案必须指明备份路径: {res.message}"
 
 
 def test_checking_skip_backup_failure_aborts_before_delete():

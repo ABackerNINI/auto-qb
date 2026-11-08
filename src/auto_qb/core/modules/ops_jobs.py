@@ -7,7 +7,24 @@ from typing import Any
 
 from ...infra import file_access, utils
 from ...torrents import TorrentRecord
-from .ops_common import logger
+from .ops_common import logger, skip_readd_kwargs
+
+# 备份元数据 R1#94 起补记的重加回传面字段(键名 = TorrentRecord 属性名, 见 _backup_torrent):
+# 恢复时按其存在性判旧格式 —— 旧格式缺这些键, 重加按 qB 默认值(库对 None 不发键, wire 同缺省)
+_SKIP_BACKUP_READD_KEYS = frozenset(
+    (
+        "content_layout",
+        "up_limit",
+        "dl_limit",
+        "seq_dl",
+        "f_l_piece_prio",
+        "ratio_limit",
+        "seeding_time_limit",
+        "inactive_seeding_time_limit",
+        "share_limit_action",
+        "share_limits_mode",
+    )
+)
 
 
 class JobsMixin:
@@ -45,12 +62,15 @@ class JobsMixin:
             try:
                 with open(path, "rb") as f:
                     data = f.read()
+                if not (_SKIP_BACKUP_READD_KEYS & meta.keys()):
+                    logger.warning(f"跳检对账: {h[:8]} 备份元数据为旧格式(缺重加回传面字段), "
+                                   "布局/限速/分享限制按 qB 默认重加, 需人工复核")
                 logger.warning(f"跳检对账: {h[:8]} 不在客户端(崩溃于删除之后), 用备份重加(未经哈希校验)")
+                # 属性回传面与正常重加(_skip_add_call)共用 skip_readd_kwargs 单点(R1#94):
+                # 旧格式备份缺键 -> None 值键库不发, wire 与改动前的重加完全一致
                 self._ctx.api.torrents_add(
                     torrent_files=[data],
-                    save_path=meta.get("save_path"),
-                    category=meta.get("category") or None,
-                    tags=meta.get("tags") or None,
+                    **skip_readd_kwargs(meta, meta.get("content_layout")),
                     is_skip_checking=True,
                     is_stopped=True,
                 )

@@ -26,6 +26,7 @@ from .ops_common import (
     SKIP_PHASE_PREPARING,
     SkipJob,
     logger,
+    skip_readd_kwargs,
 )
 
 
@@ -300,18 +301,31 @@ class SkipMixin:
         return stepped
 
     def _skip_retry(self, job: SkipJob, message: str) -> bool:
-        """本相位重试一次(10/20/50/50/50ms 退避); 次数耗尽 -> FAILED 并返回 False"""
-        job.attempts += 1
+        """本相位重试一次(10/20/50/50/50ms 退避, 每相位至多 len(_SKIP_BACKOFF_MS) 拍);
+        次数耗尽 -> FAILED 并返回 False
+
+        拍序按「先判溢出, 再按当前拍取退避, 最后自增」(R1#97): attempts 是**已消耗的拍数**,
+        第 n 次重试(n 从 1 起)吃表第 n 项 —— 首拍 10ms 生效且拍数与表长一致。原先
+        「先自增再索引 attempts」会把表首项永久跳过且实际只剩 4 拍(20/50/50/50)。
+        """
         if job.attempts >= len(_SKIP_BACKOFF_MS):
             self._skip_fail(job, message)
             return False
         job.next_run = self._clock.now() + (_SKIP_BACKOFF_MS[job.attempts] / 1000.0)
+        job.attempts += 1
         return True
 
     def _skip_fail(self, job: SkipJob, message: str) -> None:
         """终态失败: 种子还在 -> 清掉无意义的备份(没有丢失, 无需恢复凭据);
         种子已不在 -> 保留备份, 并把快照里那条记录撤掉(它就是假账, 下轮上报按真删除处理);
-        **看不见(直查异常) -> 什么都不动**: 备份可能是唯一恢复凭据, 宁可留着"""
+        **看不见(直查异常) -> 什么都不动**: 备份可能是唯一恢复凭据, 宁可留着。
+
+        GONE 相位(确认删除)的失败**不清备份**(R1#98): 删除是异步的且重试路径刚重发过删除,
+        此刻 torrents_info 仍看得到种子不代表删除不会在备份清理之后才落地 —— 那会「种子被删
+        而 .torrent 恢复凭据已丢」。与「备份宁可留着」同一纪律: 备份保留, 失败文案指明备份
+        路径, 交对账(on_sync_line)/用户按 skip_check_backup 账本收尾。
+        """
+        gone_phase = job.phase == SKIP_PHASE_GONE  # 先取相位: 下一行立刻改写为 FAILED
         job.phase = SKIP_PHASE_FAILED
         job.error = message
         logger.warning(f"ops[{job.source}] {job.hash[:8]} | 跳检失败: {message}")
@@ -320,32 +334,24 @@ class SkipMixin:
         except Exception:
             return
         if live:
+            if gone_phase:
+                job.error = (f"{message}; 删除可能仍会异步落地, .torrent 已备份: {job.backup}"
+                             "(账本 skip_check_backup), 请按备份路径收尾")
+                logger.warning(f"ops[{job.source}] {job.hash[:8]} | GONE 相位失败, 备份保留: {job.backup}")
+                return
             self._clear_backup(job.hash)
             return
         self._ctx.store.remove_torrent(job.hash)
 
     def _skip_add_call(self, job: SkipJob) -> None:
-        """下发重加(跳过校验 + 暂停): 属性直传, 0/负值有语义(不限速/跟随全局)不吞"""
-        tor = job.tor
+        """下发重加(跳过校验 + 暂停): 属性直传, 0/负值有语义(不限速/跟随全局)不吞
+
+        属性回传面单点在 ops_common.skip_readd_kwargs(与崩溃恢复 _recover_skip_backups
+        共用, 防两条路径口径漂移; shareLimitsMode 等 camelCase 键的 wire 说明也在那里)。
+        """
         self._ctx.api.torrents_add(
             torrent_files=[job.data],
-            save_path=tor.save_path,
-            category=tor.category or None,
-            tags=tor.tags or None,
-            upload_limit=tor.up_limit,
-            download_limit=tor.dl_limit,
-            is_sequential_download=tor.seq_dl,
-            is_first_last_piece_priority=tor.f_l_piece_prio,
-            contentLayout=job.content_layout,
-            ratio_limit=tor.ratio_limit,
-            seeding_time_limit=tor.seeding_time_limit,
-            inactive_seeding_time_limit=tor.inactive_seeding_time_limit,
-            share_limit_action=tor.share_limit_action,
-            # qB 5.3 新增分享限制模式, 重加须原样回传(否则被静默重置为 Default);
-            # camelCase kwarg: facade 纯透传, 库(2026.8.1 无具名参/2026.10.1 同理)对未知
-            # kwargs 经 _format_payload 并进 POST data —— 键名必须与服务端 camelCase 一致;
-            # 5.2 快照无该字段恒 None -> requests 对 None 值键不发(wire 完全不变)
-            shareLimitsMode=tor.share_limits_mode,
+            **skip_readd_kwargs(job.tor, job.content_layout),
             is_skip_checking=True,
             is_stopped=True,
         )
@@ -363,7 +369,7 @@ class SkipMixin:
             return
         job.content_layout = self._infer_content_layout(job.tor, self._ctx.api.client)
         try:
-            job.backup = self._backup_torrent(job.tor, job.data)
+            job.backup = self._backup_torrent(job.tor, job.data, job.content_layout)
         except Exception as e:
             self._skip_fail(job, f"跳检备份 .torrent 失败(未删除, 无损失): {e}")
             return

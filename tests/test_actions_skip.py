@@ -200,7 +200,7 @@ def test_skip_checking_delete_not_confirmed():
 
         client.torrents_info = info_after_delete
         action = _check_action(without_seg=_seg("skip-checking"))
-        # !S3 收敛: sleep 桩解包, 退避重试(10/20/50/50/50ms, 名义 170ms)真实发生 ——
+        # !S3 收敛: sleep 桩解包, 退避重试(10/20/50/50/50ms, 名义 180ms)真实发生 ——
         #   ops_mod.time 是 stdlib time 模块对象, 经它 patch 即进程级改写
         r = _run_action(action, ctx)
         assert r.is_failed and "确认删除失败" in r.message, f"应失败(看不见就当没确认, fail-closed): {r}"

@@ -33,7 +33,7 @@
 - test_guard_skip_begin_idempotent: 同 hash 在途幂等闸(sb8 失效=旧 job 被覆盖)
 
 覆盖率第三轮 T1a(ops_skip 相位机推进/守卫余量, 26-11-04 快照缺口 18 单位):
-- test_skip_gone_retry_delete_raise_and_attempts_exhausted: gone 相位确认种子仍在 -> 幂等重试删除抛错被吞(402-403), 退避次数耗尽终态失败 + 残留记录撤账
+- test_skip_gone_retry_delete_raise_and_attempts_exhausted: gone 相位确认种子仍在 -> 幂等重试删除抛错被吞(402-403), 退避拍数(=表长, R1#97)耗尽终态失败 + 残留记录撤账
 - test_skip_drive_settle_during_backoff_sleep_race: 退避 sleep 期间主循环微步并发推进把 job 推到终态 -> 驱动循环经 while 条件出口收束(189->200 分支弧, 非 break 出口)
 - test_skip_step_after_settle_is_noop: 终态 job 再被步进(并发双驱动形态)为 no-op: 不重复结算/广播/回调(213->217 分支)
 - test_skip_result_cache_trims_oldest: 终态结果缓存超 _SKIP_RESULT_KEEP 淘汰最旧条目(234-235); 兼验 web=None 时 settle 跳过进度广播(237->249 分支)
@@ -41,7 +41,10 @@
 - test_skip_settle_on_done_failure_isolated: 终态回调异常只记 ERROR, 终态结果照常落账可查(254-255)
 - test_advance_due_budget_calls_truncates: advance_due 步数预算先到先止, 超预算 job 留待下轮(296-297)
 - test_skip_appeared_confirm_error_retries: 确认重加直查异常走退避重试不终态(418-420, 直驱拨相位)
-- test_skip_appeared_retry_add_raise_swallowed: 重加确认不到时的幂等重加抛错被吞(433-434), 次数耗尽终态失败并撤掉快照残留记录
+- test_skip_appeared_retry_add_raise_swallowed: 重加确认不到时的幂等重加抛错被吞(433-434), 拍数耗尽终态失败并撤掉快照残留记录
+
+评审修复 R4-core B5(issue 26-11-07-0527 明细 3/4):
+- test_skip_retry_backoff_schedule_beats: R1#97 —— _skip_retry 拍序钉死: 第 n 次重试吃退避表第 n 项(10/20/50/50/50, 首拍 10ms 生效), 拍数=表长, 溢出兜底 FAILED 返回 False(假钟零 sleep)
 """
 
 import copy
@@ -64,7 +67,7 @@ from datetime import date
 
 from types import SimpleNamespace
 
-from auto_qb.core.modules.ops_common import SKIP_PHASE_APPEARED, SKIP_PHASE_GONE
+from auto_qb.core.modules.ops_common import SKIP_PHASE_APPEARED, SKIP_PHASE_FAILED, SKIP_PHASE_GONE
 from auto_qb.core.modules.ops_mod import OpsModule
 
 from auto_qb.core.taskqueue import REQUEUE, Task, TaskQueue
@@ -75,7 +78,9 @@ from auto_qb.rules.checking_meta import INFLIGHT_TTL, is_piece_checking
 
 from auto_qb.rules.actions.full_checking import bump_recheck_fail
 
-from clock import wait_until
+from clock import FakeClock, wait_until
+
+from platform_tolerance import SLEEP_LOWER_MARGIN_S
 
 from helpers import FakeClient, FakeConfig, FakeTorrent, capture_logs, drive_skip, make_manager, seed_store
 
@@ -988,11 +993,12 @@ def test_guard_skip_begin_idempotent():
 # ============================================================
 def test_skip_gone_retry_delete_raise_and_attempts_exhausted():
     """测试: gone 相位确认种子仍在(qB 删除异步未落地形态) -> 幂等重试删除抛错被吞(兜底分支),
-    退避次数(10/20/50/50/50ms)耗尽终态失败; 删除不摘记录, 失败不清同日去重
+    退避拍数(10/20/50/50/50ms, 拍数=表长)耗尽终态失败; 删除不摘记录, 失败不清同日去重
 
     S3 monkeypatch 收敛(2026-11-05): 旧形态经 `ops_mod.time.sleep` 计数断言退避真发生 ——
-    那是 stdlib time 模块对象的进程级改写; 现改用**真实经过时间下界**验证(4 次重试退避
-    名义合计 170ms, Windows 睡眠刻度抖动下界留 60ms 余量; 退避被跳过/归零当场红),
+    那是 stdlib time 模块对象的进程级改写; 现改用**真实经过时间下界**验证(5 次重试退避
+    名义合计 180ms(R1#97: 先判溢出再取拍, 首拍 10ms 生效); 下界余量用
+    platform_tolerance.SLEEP_LOWER_MARGIN_S 单点, 退避被跳过/归零当场红),
     与 test_guard_drive_backoff_sleeps 同口径, 真实退避直接发生(测试耗时 +~0.2s)。
     """
     mgr = make_mgr(FakeConfig())
@@ -1014,8 +1020,9 @@ def test_skip_gone_retry_delete_raise_and_attempts_exhausted():
     r = mgr.ctx.ops.skip_check("HASH123", source="web")
     elapsed = time.monotonic() - start
     assert r.is_failed and "删除后种子仍在客户端" in r.message, f"重试耗尽应终态失败: {r}"
-    assert dels["n"] == 5, f"首删 + 4 次幂等重试(第 5 次退避名额耗尽不再重试): {dels['n']}"
-    assert elapsed >= 0.11, f"退避窗口真实存在(名义合计 170ms, 跳过/归零即红): {elapsed:.3f}s"
+    assert dels["n"] == 6, f"首删 + 5 次幂等重试(第 6 次退避名额耗尽不再重试): {dels['n']}"
+    assert elapsed >= 0.18 - SLEEP_LOWER_MARGIN_S, \
+        f"退避窗口真实存在(名义合计 180ms, 跳过/归零即红): {elapsed:.3f}s"
     assert mgr.store.get("HASH123") is t, "失败路径不摘快照记录(种子明明还在)"
     assert mgr.ctx.ops._skip_jobs == {}, "终态后 job 出账"
 
@@ -1187,11 +1194,12 @@ def test_skip_appeared_confirm_error_retries():
 
 
 def test_skip_appeared_retry_add_raise_swallowed():
-    """测试: 重加后确认不到时的幂等重加抛错被吞(433-434), 退避次数耗尽终态失败;
+    """测试: 重加后确认不到时的幂等重加抛错被吞(433-434), 退避拍数耗尽终态失败;
     失败路径把快照里的残留记录撤掉(它是假账, 下轮上报按真删除处理)
 
-    S3 monkeypatch 收敛(2026-11-05): sleep 桩解包 —— 4 次重试退避(名义 170ms)真实发生,
-    `ops_mod.time.sleep` 是 stdlib time 模块对象的进程级改写, 无断言价值的等待抑制一并退役。
+    S3 monkeypatch 收敛(2026-11-05): sleep 桩解包 —— 5 次重试退避(名义 180ms, R1#97:
+    拍数=退避表长)真实发生, `ops_mod.time.sleep` 是 stdlib time 模块对象的进程级改写,
+    无断言价值的等待抑制一并退役。
     """
     mgr = make_mgr(FakeConfig())
     client = FakeClient()
@@ -1211,6 +1219,40 @@ def test_skip_appeared_retry_add_raise_swallowed():
     client.torrents_add = flaky_add
     r = mgr.ctx.ops.skip_check("HASH123", source="web")
     assert r.is_failed and "重加后未确认到种子" in r.message, f"确认不到应终态失败: {r}"
-    assert adds["n"] == 5, f"首次重加 + 4 次幂等重加(第 5 次重试名额耗尽不再重加): {adds['n']}"
+    assert adds["n"] == 6, f"首次重加 + 5 次幂等重加(第 6 次重试名额耗尽不再重加): {adds['n']}"
     assert mgr.store.get("HASH123") is None, "失败路径应撤掉快照残留记录(假账)"
     assert mgr.ctx.ops._skip_jobs == {}, "终态后 job 出账"
+
+
+def test_skip_retry_backoff_schedule_beats():
+    """测试(R1#97): _skip_retry 拍序钉死 —— 第 n 次重试吃退避表第 n 项(10/20/50/50/50),
+    每相位至多 len(_SKIP_BACKOFF_MS)=5 拍, 第 6 次调用溢出兜底 FAILED 返回 False
+
+    旧实现「先自增再索引 attempts」把表首项(10ms)永久跳过且实际只剩 4 拍(20/50/50/50);
+    现实现「先判溢出, 再按当前拍取退避, 最后自增」: 首拍 10ms 生效且拍数与表长一致。
+    用假钟(冻结)断言每拍的 next_run 增量, 零真实 sleep。
+    """
+    from auto_qb.core.modules.ops_common import _SKIP_BACKOFF_MS
+
+    clock = FakeClock()
+    mgr = make_mgr(FakeConfig(), clock=clock)
+    client = FakeClient()
+    mgr.client = client
+    t = FakeTorrent(hash="HASH123", state="stoppedDL", progress=0.0)
+    seed_store(mgr, [t])
+    client.torrents["HASH123"] = t
+    ops = mgr.ctx.ops
+    job = ops._skip_job_new("HASH123", t, "web", False, True)
+    for i, expected_ms in enumerate(_SKIP_BACKOFF_MS):
+        before = clock.now()
+        assert ops._skip_retry(job, "耗尽文案") is True, f"第 {i + 1} 拍应成功排程"
+        assert job.next_run == before + expected_ms / 1000.0, \
+            f"第 {i + 1} 拍退避应取表第 {i + 1} 项 {expected_ms}ms(首拍 10ms 生效): {job.next_run - before}"
+        assert job.attempts == i + 1, "取拍后才自增(attempts = 已消耗拍数)"
+        clock.advance(expected_ms / 1000.0)  # 模拟退避窗口真实流逝
+    # 溢出兜底: 拍数耗尽后下一次调用直接 FAILED 且返回 False
+    assert job.attempts == len(_SKIP_BACKOFF_MS)
+    assert ops._skip_retry(job, "耗尽文案") is False, "拍数耗尽应返回 False(不再排程)"
+    assert job.phase == SKIP_PHASE_FAILED and job.error == "耗尽文案", "溢出兜底必须终态失败并落文案"
+    ops._skip_step(job)  # 终态相位经步进结算出账(与真实推进同路径)
+    assert ops._skip_jobs == {}, "终态后 job 出账"

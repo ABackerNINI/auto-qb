@@ -265,6 +265,7 @@ class FakeClient:
                     "contentLayout": contentLayout,
                     "ratio_limit": ratio_limit,
                     "seeding_time_limit": seeding_time_limit,
+                    "inactive_seeding_time_limit": inactive_seeding_time_limit,
                     "share_limit_action": share_limit_action,
                     # camelCase kwarg 直透(与真库 _format_payload 对未知 kwargs 的并入行为一致):
                     # 跳检重加回传分享限制模式(None = 5.2 快照缺省, 库不发键)

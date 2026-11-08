@@ -3,16 +3,20 @@
 ## 测试计划(每个测试函数一条)
 
 跳检闸门扩展(plan 26-10-05-0314 S1b-1: 三分流 detail 单点 + force + 预检):
-- test_guard_backup_meta_pin: 备份元数据键面 pin(bt38-43) + 备份目录名 pin(bt9/10)
+- test_guard_backup_meta_pin: 备份元数据键面 pin(bt38-43) + 重加回传面字段 pin(R1#94) + 备份目录名 pin(bt9/10)
 - test_guard_recover_backup_readd_pin: 崩溃恢复重加参数 pin(rb34/37/40/41/42/43/45/46/47/48/49/51/52/53/54/64)
+  + 旧格式备份缺新字段按 None 透传不硬造默认值 + 旧格式 WARNING(R1#94)
 - test_guard_fail_keeps_backup_when_gone: 种子不在时 _skip_fail 必须保留恢复凭据(fl6 中危 info(None) 销毁凭据)
+- test_guard_fail_gone_phase_keeps_backup: R1#98 —— GONE 相位失败不清备份(删除可能仍会异步落地),
+  文案指明备份路径; 对照组 DELETING 前失败(删除未发出)备份照旧清理
 - test_guard_drive_deadline_fail: 驱动超时必须 _skip_fail(job, msg) 收敛且返回原 job(dr8/10/11/13 崩溃卡死簇 + dr9/12 文案)
 - test_guard_step_exception_settles: 相位步进异常必须收敛结算(st5/7/8 + na2/4/5 except 逃逸簇)
 - test_guard_force_does_not_bypass_blocked: force 只豁越 force 闸, 后置 blocked 必须硬拒(sg10)
 - test_guard_sections_pin_ops: ops sections 认领段名 pin(sec1/sec2 双杀)
 - test_guard_on_sync_line_once: 启动对账一次性开关(os1/os3/os4)
 - test_guard_arbitration_scope_single: 启动超时仲裁直查作用域单 hash(rc112 他人校验态劫持)
-- test_guard_drive_backoff_sleeps: GONE 重试退避真睡(dr22/rt11/gn14) + 重试删除作用域/keep_record(gn18/19/20/21/22)
+- test_guard_drive_backoff_sleeps: GONE 重试退避真睡(dr22/rt11/gn14, R1#97 起 5 拍 10/20/50/50/50)
+  + 重试删除作用域/keep_record(gn18/19/20/21/22)
 - test_guard_appeared_retry_attempts: APPEARED 重试 attempts 活性(na7 置 None=重加成功反报失败)
 - test_guard_gates_ghost_member_inflight: G7 幽灵成员在途必须安全出判(gd103/114/115 崩溃簇)
 - test_guard_checking_evidence_none_tor_safe: _checking_evidence tor=None 安全返回(ce3)
@@ -39,6 +43,8 @@ from datetime import date
 
 from types import SimpleNamespace
 
+from auto_qb.core.modules.ops_common import SKIP_PHASE_ADDING, SKIP_PHASE_DELETING, SKIP_PHASE_FAILED, SKIP_PHASE_GONE
+
 from auto_qb.core.modules.ops_mod import OpsModule
 
 from auto_qb.core.taskqueue import REQUEUE, Task, TaskQueue
@@ -53,6 +59,8 @@ from clock import FakeClock
 
 from helpers import FakeClient, FakeConfig, FakeTorrent, capture_logs, drive_skip, make_manager, seed_store
 
+from platform_tolerance import SLEEP_LOWER_MARGIN_S
+
 from ops_support import (
     _TMP_STATE_DIR,
     _wrap_client,
@@ -65,13 +73,28 @@ from ops_support import (
 
 
 def test_guard_backup_meta_pin():
-    """守阵(W9a bt38/bt39/bt40/bt41/bt42/bt43 + bt9/bt10): 备份元数据键面 pin —— 恢复凭据
-    的 save_path/category/tags 键名与备份目录名是崩溃恢复的契约面"""
+    """守阵(W9a bt38/bt39/bt40/bt41/bt42/bt43 + bt9/bt10 + R1#94): 备份元数据键面 pin ——
+    恢复凭据的 save_path/category/tags 键名 + 重加回传面字段(content_layout/限速/分享限制,
+    恢复重加按账本原样回传的记账面)与备份目录名是崩溃恢复的契约面"""
     with tempfile.TemporaryDirectory() as td:
         mgr = make_mgr(FakeConfig())
         ops = mgr.ctx.ops
-        tor = FakeTorrent(hash="HB1", save_path="R:/X", category="cat", tags="t1,t2")
-        path = ops._backup_torrent(tor, b"DATA")
+        tor = FakeTorrent(
+            hash="HB1",
+            save_path="R:/X",
+            category="cat",
+            tags="t1,t2",
+            seq_dl=True,
+            f_l_piece_prio=True,
+            up_limit=1234,
+            dl_limit=5678,
+            ratio_limit=2.5,
+            seeding_time_limit=3600,
+            inactive_seeding_time_limit=42,
+            share_limit_action="ModeX",
+            share_limits_mode="MatchAny",
+        )
+        path = ops._backup_torrent(tor, b"DATA", "NoSubfolder")
         assert "skip-check-backup" in path, f"备份必须落专用子目录: {path}"
         with open(path, "rb") as f:
             assert f.read() == b"DATA"
@@ -81,11 +104,21 @@ def test_guard_backup_meta_pin():
         assert meta["path"] == path and os.path.exists(path)
         assert os.path.basename(os.path.dirname(path)) == "skip-check-backup", \
             f"备份必须落 state 同级的 skip-check-backup 专用目录: {path}"
+        # R1#94: 重加回传面字段入账(恢复重加原样回传的记账面, 键名=TorrentRecord 属性名)
+        assert meta["content_layout"] == "NoSubfolder", "恢复元数据必须含内容布局(缺=恢复重加布局错位)"
+        assert meta["up_limit"] == 1234 and meta["dl_limit"] == 5678, "恢复元数据必须含上下行限速"
+        assert meta["seq_dl"] is True and meta["f_l_piece_prio"] is True, "恢复元数据必须含顺序下载/首末块偏好"
+        assert meta["ratio_limit"] == 2.5 and meta["seeding_time_limit"] == 3600 \
+            and meta["inactive_seeding_time_limit"] == 42, "恢复元数据必须含分享率/做种时限"
+        assert meta["share_limit_action"] == "ModeX" and meta["share_limits_mode"] == "MatchAny", \
+            "恢复元数据必须含分享限制动作与模式(qB 5.3)"
 
 
 def test_guard_recover_backup_readd_pin():
-    """守阵(W9a rb34/37/40/41/42/43/45/46/47/48/49/51/52/53/54/64): 崩溃恢复重加必须以
-    二进制备份数据 + 原保存路径/分类/标签 + 停种 seed_mode 下发(任一丢失=恢复恒失败/数据位置错)"""
+    """守阵(W9a rb34/37/40/41/42/43/45/46/47/48/49/51/52/53/54/64 + R1#94): 崩溃恢复重加必须以
+    二进制备份数据 + 原保存路径/分类/标签 + 停种 seed_mode 下发(任一丢失=恢复恒失败/数据位置错);
+    旧格式备份(元数据缺重加回传面新字段)缺键按 None 透传 —— 库对 None 不发键, wire 与缺省相同,
+    不硬造默认值, 并留 WARNING 点名需人工复核"""
     with tempfile.TemporaryDirectory() as td:
         mgr = make_mgr(FakeConfig())
         client = FakeClient()
@@ -104,7 +137,8 @@ def test_guard_recover_backup_readd_pin():
             "ts": 0,
         }
         adds = _wrap_client(client, "torrents_add", [])
-        mgr.ctx.ops.on_sync_line(True)
+        with capture_ops_logs() as logs:
+            mgr.ctx.ops.on_sync_line(True)
         assert len(adds) == 1, f"崩溃于删除后的种子必须用备份重加: {client.calls}"
         a = adds[0]
         assert a["torrent_files"] == [b"dummy-torrent"], f"必须以二进制 .torrent 重加(文本模式读=恒失败): {a.get('torrent_files')}"
@@ -112,6 +146,16 @@ def test_guard_recover_backup_readd_pin():
         assert a["category"] == "cat" and a["tags"] == "tg", "分类/标签必须回传"
         assert a["is_skip_checking"] is True, "恢复重加必须 seed_mode(跳过校验)"
         assert a["is_stopped"] is True, "恢复重加必须停种"
+        # R1#94 兼容口径: 旧格式缺新字段 -> None 透传(不发键), 不硬造默认值
+        assert a["upload_limit"] is None and a["download_limit"] is None, \
+            f"旧格式缺限速字段应透传 None(库不发键): {a}"
+        assert a["contentLayout"] is None and a["ratio_limit"] is None and a["seeding_time_limit"] is None, \
+            f"旧格式缺布局/分享率限制应透传 None: {a}"
+        assert a["is_sequential_download"] is None and a["is_first_last_piece_priority"] is None, \
+            f"旧格式缺偏好字段应透传 None: {a}"
+        assert a["share_limit_action"] is None and a["shareLimitsMode"] is None, \
+            f"旧格式缺分享限制应透传 None: {a}"
+        assert any("旧格式" in m and "HMISSING"[:8] in m for m in logs), f"旧格式备份应留 WARNING 交人工复核: {logs}"
 
 
 def test_guard_fail_keeps_backup_when_gone():
@@ -134,10 +178,46 @@ def test_guard_fail_keeps_backup_when_gone():
     assert mgr.store.get("HG") is None, "假账快照记录应被撤掉"
 
 
+def test_guard_fail_gone_phase_keeps_backup():
+    """守阵(R1#98): GONE 相位(确认删除)的失败**不清备份** —— 删除是异步的且重试路径刚重发过
+    删除, 此刻 torrents_info 仍看得到种子不代表删除不会在备份清理之后才落地(种子被删而
+    .torrent 恢复凭据已丢)。备份保留 + 失败文案指明备份路径(交对账/用户按账本收尾);
+    对照组: DELETING 前失败(删除尚未发出, 种子确实还在)备份照旧清理(无意义凭据)"""
+    mgr = make_mgr(FakeConfig())
+    client = FakeClient()
+    mgr.client = client
+    t = FakeTorrent(hash="HG1", state="stoppedDL", progress=0.0)
+    seed_store(mgr, [t])
+    client.torrents["HG1"] = t  # 种子仍在客户端(GONE 相位重试耗尽的形态)
+    ops = mgr.ctx.ops
+    job = ops._skip_job_new("HG1", t, "web", False, True)
+    job.phase = SKIP_PHASE_GONE
+    job.backup = ops._backup_torrent(t, b"cred")
+    ops._skip_fail(job, "删除后种子仍在客户端, 放弃跳检")
+    assert "HG1" in mgr.state["skip_check_backup"], "GONE 相位失败不得清备份(删除可能仍会异步落地)"
+    assert os.path.exists(mgr.state["skip_check_backup"]["HG1"]["path"]), "备份文件必须保留(唯一恢复凭据)"
+    assert ".torrent 已备份" in job.error and job.backup in job.error, f"失败文案必须指明备份路径: {job.error!r}"
+    assert mgr.store.get("HG1") is t, "种子仍在客户端: 快照记录照旧保留"
+
+    # 对照组: DELETING 前失败(删除尚未发出, 种子确实还在) -> 备份照旧清理
+    mgr2 = make_mgr(FakeConfig())
+    client2 = FakeClient()
+    mgr2.client = client2
+    t2 = FakeTorrent(hash="HG2", state="stoppedDL", progress=0.0)
+    seed_store(mgr2, [t2])
+    client2.torrents["HG2"] = t2
+    ops2 = mgr2.ctx.ops
+    job2 = ops2._skip_job_new("HG2", t2, "web", False, True)
+    job2.phase = SKIP_PHASE_DELETING
+    job2.backup = ops2._backup_torrent(t2, b"cred2")
+    ops2._skip_fail(job2, "删除种子失败(未删除, 无损失): boom")
+    assert "HG2" not in mgr2.state["skip_check_backup"], "删除未发出的失败(种子确实还在)备份应清理"
+
+
 def test_guard_drive_deadline_fail(monkeypatch):
     """守阵(W9a dr8/dr10/dr11/dr13 + dr9/dr12): 驱动超时必须以 _skip_fail(job, msg) 收敛且
     返回原 job —— 参数错位/裸 return 都会崩在调用侧或让 job 不结算卡死(跳检闸恒闭至重启)"""
-    from auto_qb.core.modules import ops_mod as ops_m
+    from auto_qb.core.modules import ops_skip as ops_s
 
     mgr = make_mgr(FakeConfig())
     client = FakeClient()
@@ -147,19 +227,18 @@ def test_guard_drive_deadline_fail(monkeypatch):
     client.torrents["HD1"] = t
     ops = mgr.ctx.ops
     job = ops._skip_job_new("HD1", t, "web", False, True)
-    monkeypatch.setattr(ops_m, "SKIP_DRIVE_TIMEOUT", 0.05)
+    # _skip_drive 读 ops_skip 的模块全局(R5 拆分后 ops_mod 不再有该名): 补丁须落在消费侧才真生效
+    monkeypatch.setattr(ops_s, "SKIP_DRIVE_TIMEOUT", 0.05)
     ops._skip_step = lambda j: None  # 卡死相位: 永不推进到终态
     ret = ops._skip_drive(job)
     assert ret is job, "必须返回原 job(裸 return None 会在调用侧崩)"
-    assert job.phase == ops_m.SKIP_PHASE_FAILED, "超时必须落到失败终态"
+    assert job.phase == SKIP_PHASE_FAILED, "超时必须落到失败终态"
     assert job.error == "跳检执行超时(客户端未在期限内响应), 备份保留", f"失败文案必须原样: {job.error!r}"
 
 
 def test_guard_step_exception_settles(monkeypatch):
     """守阵(W9a st5/st7/st8 + na2/na4/na5): 相位步进异常必须经 _skip_fail(job, msg) 收敛结算
     —— except 块内的参数变异会直接逃逸成上抛崩 + job 不结算卡死"""
-    from auto_qb.core.modules import ops_mod as ops_m
-
     def boom(_):
         raise RuntimeError("boom")
 
@@ -172,7 +251,7 @@ def test_guard_step_exception_settles(monkeypatch):
     client.torrents["HS"] = t
     ops = mgr.ctx.ops
     job = ops._skip_job_new("HS", t, "web", False, True)
-    job.phase = ops_m.SKIP_PHASE_GONE
+    job.phase = SKIP_PHASE_GONE
     monkeypatch.setattr(ops, "_skip_step_gone", boom)
     ops._skip_step(job)
     assert job.settled and job.result is not None and job.result.is_failed, "handler 异常必须收敛成失败终态"
@@ -188,7 +267,7 @@ def test_guard_step_exception_settles(monkeypatch):
     client2.torrents["HN"] = t2
     ops2 = mgr2.ctx.ops
     job2 = ops2._skip_job_new("HN", t2, "web", False, True)
-    job2.phase = ops_m.SKIP_PHASE_ADDING
+    job2.phase = SKIP_PHASE_ADDING
     job2.data = b"x"
     job2.backup = "p"
     ops2._skip_step(job2)
@@ -276,10 +355,10 @@ def test_guard_drive_backoff_sleeps():
     (退避被跳过=存在性直查热轮询 API 轰炸; 退避归零=窗口内重试风暴)
 
     S3 monkeypatch 收敛(2026-11-05): 旧形态经 `ops_mod.time.sleep` 计数 —— 那是 stdlib
-    time 模块对象的进程级改写; 现改用**真实经过时间下界**验证退避真发生: 4 次重试退避
-    名义合计 170ms(20+50+50+50), Windows 睡眠按 15.6ms 定时器刻度取整有抖动,
-    下界留 60ms 余量不损失判别力(退避跳过/归零当场红), 与 test_qbmanager_w6 的
-    _wait_next 下界同口径, 不再引入任何 time 名寻址。
+    time 模块对象的进程级改写; 现改用**真实经过时间下界**验证退避真发生: 5 次重试退避
+    名义合计 180ms(10+20+50+50+50, R1#97 起首拍 10ms 生效且拍数=表长), 下界余量用
+    platform_tolerance.SLEEP_LOWER_MARGIN_S 单点(>=2 tick, 退避跳过/归零当场红),
+    与 test_qbmanager_w6 的 _wait_next 下界同口径, 不再引入任何 time 名寻址。
     """
     mgr = make_mgr(FakeConfig())
     client = FakeClient()
@@ -293,8 +372,9 @@ def test_guard_drive_backoff_sleeps():
     r = mgr.ctx.ops.skip_check("HASH123", source="web")
     elapsed = time.monotonic() - start
     assert r.is_failed and "删除后种子仍在客户端" in r.message, f"重试耗尽应失败且文案点明: {r}"
-    assert elapsed >= 0.11, f"10~50ms 退避必须真睡(名义合计 130ms, 跳过/归零即红): {elapsed:.3f}s"
-    assert len(dels) == 5, f"初删 + 4 次重试删除: {[d.get('torrent_hashes') for d in dels]}"
+    assert elapsed >= 0.18 - SLEEP_LOWER_MARGIN_S, \
+        f"10~50ms 退避必须真睡(名义合计 180ms, 跳过/归零即红): {elapsed:.3f}s"
+    assert len(dels) == 6, f"初删 + 5 次重试删除(R1#97: 拍数=退避表长): {[d.get('torrent_hashes') for d in dels]}"
     assert all(d["torrent_hashes"] == "HASH123" for d in dels), \
         f"删除(含重试)作用域必须单 hash(不得 None=全库摘登记): {dels}"
     # keep_record 在 facade 消费(不透传 client): 重试删除若丢 keep_record, 快照记录会被当场摘除
