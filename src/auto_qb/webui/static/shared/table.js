@@ -38,12 +38,12 @@
  * 「新增一个表格表面 = 注册一行描述符 + (新行模型才需)一个行渲染器;
  *   表壳 / 交互引擎 / 持久化 / 对齐 CSS 零改动」。
  *
- * ① 描述符(TABLE_DEFS / DRAWER_TABLE_DEFS 各一行; ALL_TABLE_DEFS 聚合, columns.js / sort.js
+ * (1) 描述符(TABLE_DEFS / DRAWER_TABLE_DEFS 各一行; ALL_TABLE_DEFS 聚合, columns.js / sort.js
  *    按 table-id 消费 —— 列态 / grid / 对齐 / 持久化 / 排序 scope 全部 id 驱动):
  *      columns   列定义数组 { key, label, tpl(grid track), sortable, locked, align }
  *                —— 列能力与持久化的唯一事实源; 变体列子集 = 以经典列数组为底裁剪/追加(数据声明)
  *      label     面向用户的表名(列选择器分组标题)
- *      headRef   吸顶表头 ref 名; 表头渲染在**子组件内部**时恒 null → columns.js `_headEl` 走
+ *      headRef   吸顶表头 ref 名; 表头渲染在**子组件内部**时恒 null -> columns.js `_headEl` 走
  *                DOM 兜底(按 `.group-head[data-table="<id>"]` 查, 表头根自带 data-table)
  *      tableRef  行容器 ref 名(行窗口化测量消费); null = 无独立滚动容器
  *      grid      grid-template computed 名(_gridTemplate(id) 出 {gridTemplateColumns})
@@ -52,23 +52,23 @@
  *      sort      { gk, gd, defKey, defDir } —— 根实例排序键/方向 data 字段名 + 三态第三击
  *                恢复目标; gk/gd 指向的字段须在 state.js **显式建字段**(后补属性不进响应式)
  *    [变体表扩展字段, 计划 26-10-12-0527 §3.2, U1 起生效]:
- *      rowModel  行模型名 → 渲染器组件(优先复用经典; 变体专属格新增单份渲染器)
+ *      rowModel  行模型名 -> 渲染器组件(优先复用经典; 变体专属格新增单份渲染器)
  *      features  行为开关 { sort, resize, hide, window }
- *      hostAnchor  Teleport 锚选择器(见 ④)
- * ② 表壳 <aq-table>: props = tableId / cols / sortKey / sortDir / drag / mode("grid"|"thead")。
+ *      hostAnchor  Teleport 锚选择器(见 (4))
+ * (2) 表壳 <aq-table>: props = tableId / cols / sortKey / sortDir / drag / mode("grid"|"thead")。
  *    只渲染表头 + emit("sort", key) —— 行为归调用方: 列头点击接 `setSort(key, tableId)`
  *    (表 id 即 scope, 无视图推断)。thead 模式不挂拖宽/重排/右键(借壳模式, HR 先例)。
- * ③ 行渲染器(aq-*-cells): **纯消费方** —— props = 可见列 cols + 行模型自然名属性(g/m/s/e/t/p/f);
+ * (3) 行渲染器(aq-*-cells): **纯消费方** —— props = 可见列 cols + 行模型自然名属性(g/m/s/e/t/p/f);
  *    内部按 col.key 查表(v-if 链); 回调一律 `$root.xxx`(组件数据只有 props, 根数据走 $root,
  *    复制方法实现会触发 _scan_mixin_wiring 重名守阵); 模板走 xtpl-cells.html 的 x-template
  *    分片 + 三份 index.html manifest 行。
- * ④ 变体表格体锚约定(计划 26-10-12-0527 D1=M1): 变体外壳 dtHtml 在表格区输出空锚
+ * (4) 变体表格体锚约定(计划 26-10-12-0527 D1=M1): 变体外壳 dtHtml 在表格区输出空锚
  *    `<div data-dt-table-anchor="<tableId>"></div>`; drawer.html 以 `<Teleport :to>` 把表壳 +
  *    行渲染器传送进锚内(单一 Vue 应用, 非 createApp 子应用); 锚存在性由挂载机械在变体挂载后
  *    置响应式标志(W7 $nextTick 时序教训面 —— U1 四路径硬闸门: 初开/切页签/软切换/合并双列)。
- * ⑤ 接入 checklist: 描述符一行 → (新行模型才需)渲染器一份 → 列偏好键 = table-id(新增即隔离,
- *    绝不升 COLS_STORE_KEY 版本) → 三皮肤 CSS(对齐吃引擎 colAlignCss, 不手写列宽) →
- *    manifest 行 → 守阵计数锚同轮改版。
+ * (5) 接入 checklist: 描述符一行 -> (新行模型才需)渲染器一份 -> 列偏好键 = table-id(新增即隔离,
+ *    绝不升 COLS_STORE_KEY 版本) -> 三皮肤 CSS(对齐吃引擎 colAlignCss, 不手写列宽) ->
+ *    manifest 行 -> 守阵计数锚同轮改版。
  */
 window.AQ_TABLE_COMPONENT = {
   name: "aq-table",
@@ -114,11 +114,11 @@ window.AQ_MEMBER_CELLS_COMPONENT = {
 
 /* ---------------- P3 行模型单元格渲染器(计划 26-10-11-1722) ----------------
  * 「渲染器注册表」= 下面四个组件 + 上面的 aq-member-cells 的 **app.component 注册块**(app.js 末尾)。
- * 行模型 → 组件单点:
- *   group      → <aq-group-cells>      (辅种组行)
- *   torrent    → <aq-torrent-cells>    (种子页平铺行)
- *   show-ep    → <aq-show-cells>       (追剧剧行) + <aq-ep-cells> (追剧集行; 同一列集两形态)
- *   member     → <aq-member-cells>     (展开明细成员行, P2 已落)
+ * 行模型 -> 组件单点:
+ *   group      -> <aq-group-cells>      (辅种组行)
+ *   torrent    -> <aq-torrent-cells>    (种子页平铺行)
+ *   show-ep    -> <aq-show-cells>       (追剧剧行) + <aq-ep-cells> (追剧集行; 同一列集两形态)
+ *   member     -> <aq-member-cells>     (展开明细成员行, P2 已落)
  * 每份渲染器内部按 `col.key` 查表(v-if 链), 列定义仍单点在 app.js 的 TABLE_DEFS[*].columns。
  * 模板放 tpl/xtpl-cells.html(member 在 xtpl.html, P2 先落) —— 同为 body 注入的 x-template。
  * WARN: 属性名保持各行的自然名(g/m/s/e)而非统一 row —— 分支体从页面模板**逐字搬入**,
@@ -195,7 +195,7 @@ window.AQ_DT_BRIDGE_COMPONENT = {
  * 装配(drawer_templates.js dtTplRows 回调): 显示值 + _raw 原始值(排序走 _sortVal) + 变体
  * 修饰字段(flagToks 徽章数组 / up·down 微条宽度 / bad·lan·hand 行修饰) —— 渲染器只做
  * 声明式呈现, 判据零复制。行级修饰类(bad/lan/hand)不在这里: 走描述符 rowCls 绑 .group-row。
- *   dt07 四卡仪表 → <aq-dt07-cells>   dt08 五区分组 → <aq-dt08-cells>   dt09 密度雷达 → <aq-dt09-cells>
+ *   dt07 四卡仪表 -> <aq-dt07-cells>   dt08 五区分组 -> <aq-dt08-cells>   dt09 密度雷达 -> <aq-dt09-cells>
  * !issue 26-10-20-2231(三族重复收敛): 三变体值格模板合一为 tpl-aq-dt-peer-cells —— dt07 与
  * dt08 原本逐字同(仅 CSS 类名前缀), dt09 密度雷达三处特化(upspeed 占用条 / dlspeed 平铺 /
  * 列模型无 files)。差异经 pfx(类名前缀, 渲染结果与旧逐字同, 不撞三皮肤 CSS) + occ(占用条)
@@ -236,9 +236,9 @@ window.AQ_DT09_CELLS_COMPONENT = {
 };
 
 /* ---------------- U3 变体格渲染器(计划 26-10-12-0527, Tracker 04/05/06) ----------------
- *   dt04 状态卡片栅格 → <aq-dt04-cells>(卡片整体 = 单格满宽, 列头 CSS 隐藏)
- *   dt05 健康分组     → <aq-dt05-cells>(行三形态: 失败处置块/普通行/off 组 chips 合成行)
- *   dt06 增强表格     → <aq-dt06-cells>(8 列, 与经典用户列同范式) */
+ *   dt04 状态卡片栅格 -> <aq-dt04-cells>(卡片整体 = 单格满宽, 列头 CSS 隐藏)
+ *   dt05 健康分组     -> <aq-dt05-cells>(行三形态: 失败处置块/普通行/off 组 chips 合成行)
+ *   dt06 增强表格     -> <aq-dt06-cells>(8 列, 与经典用户列同范式) */
 window.AQ_DT04_CELLS_COMPONENT = {
   name: "aq-dt04-cells",
   props: {
@@ -272,7 +272,7 @@ window.AQ_DT06_CELLS_COMPONENT = {
  * 同范式)。行对象由变体 rowsFn 装配(树聚合判据全在变体, 判据零复制); 行级修饰类
  * (dir/file/sel/is-chk/empty-row)走描述符 rowCls 绑 .group-row; 行级键盘(data-dt-key
  * 身份锚 + tabindex)归桥模板 U4 扩展, 本组件不感知。
- *   dt10 树 + 详情 → <aq-dt10-cells>   dt11 树表批量 → <aq-dt11-cells> */
+ *   dt10 树 + 详情 -> <aq-dt10-cells>   dt11 树表批量 -> <aq-dt11-cells> */
 window.AQ_DT10_CELLS_COMPONENT = {
   name: "aq-dt10-cells",
   props: {

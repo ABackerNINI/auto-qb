@@ -58,7 +58,7 @@ window.AQB_VIEW = {
       try {
         const data = await this.api(`/api/search?q=${encodeURIComponent(q)}`);
         // 请求代际守卫(query 戳, 同 drawer.js _drawerStale 收口式): 落袋前比对当前搜索框
-        // 词 —— a→b 连续输入时 a 的慢响应后到不得把命中集覆写成 a 的(搜索框显示 b、高亮
+        // 词 —— a->b 连续输入时 a 的慢响应后到不得把命中集覆写成 a 的(搜索框显示 b、高亮
         // 集却是 a, 且无轮询自动纠正; issue 26-10-06-0028 F2-03)。清空搜索也随 searchQuery
         // 复位自动失配, 在途旧响应同样丢弃
         if ((this.searchQuery || "").trim() !== q) return;  // 失配弃单不动 pending(新词的 doSearch 已接管)
@@ -161,8 +161,8 @@ window.AQB_VIEW = {
       this.syncNavFocus(mode);
     },
     /* 切页后同步导航焦点(键盘切页旧页签残留高亮框, 用户报): 鼠标点过的页签持有焦点, 键盘切页
-     * 不动焦点, 而 Chromium 在 keydown 分发时把焦点元素重估为 :focus-visible ⇒ 旧页签画出残留
-     * outline。分发期间 matches(":focus-visible") 已翻转(实测探针), 没法用它区分焦点来源 ⇒ 直接
+     * 不动焦点, 而 Chromium 在 keydown 分发时把焦点元素重估为 :focus-visible => 旧页签画出残留
+     * outline。分发期间 matches(":focus-visible") 已翻转(实测探针), 没法用它区分焦点来源 => 直接
      * 维护不变式: 切页后导航焦点要么恰在新活动页签上(点击/Tab+Enter 路径同值, 保留 —— 不打断
      * 键盘 Tab 序), 要么归还 body(鼠标残留焦点)。设置页签无 data-view, 不受影响。 */
     syncNavFocus(mode) {
@@ -213,7 +213,7 @@ window.AQB_VIEW = {
       try { localStorage.setItem("autoqb.ui.view", mode); } catch { /* 持久化失败不影响功能 */ }
       this.restoreExpandState(mode);  // 切回原视图时把展开态还回去(在 lastRid 置空取全量之前, 用旧行验存活性)
       // P1-1: 服务端只回当前视图的数组, 切视图后本地持有的 rid 与新视图的数据不再对应
-      // ⇒ 置空强制下一轮取全量(切页首帧多一次全量, 换来的是之后每轮只传 1/4)
+      // => 置空强制下一轮取全量(切页首帧多一次全量, 换来的是之后每轮只传 1/4)
       this.lastRid = null;
       // fx(S6 后半, plan 26-10-31-2316): 主表三页签方向感知滑动的消费点(flux 专属,
       // flux/fx-mount.js::tabDir), 其它皮肤零调用

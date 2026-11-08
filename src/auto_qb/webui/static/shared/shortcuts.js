@@ -42,17 +42,17 @@
  *   - 可见性判定的**坐标口径**(2026-10-09 收口坐标错位): `_kbViewTop` / `_kbViewBottom` 返回
  *     **视口坐标**(与 getBoundingClientRect 同源, 渲染行直接比); 窗口化的前缀和 y 是**文档
  *     坐标**, 比较时显式加回 window.scrollY。两套坐标混用 = 滚动后渲染行全判「出视口」,
- *     无光标回落退化成跳极值行(↓ 回顶 / ↑ 落底)。
+ *     无光标回落退化成跳极值行(down 回顶 / up 落底)。
  *   - 键鼠衔接(26-09-30-1806 方案 B): 鼠标点击入口(selection.js 五个 on*Click)按所在行回写
  *     kbCursor —— 落光标 ≠ 选中(focus 语义), 键盘从点击处出发; 无光标回落 = 视口就近行
  *     (_kbViewportRow), 不再落极值行。滚动跟随仍只发生在键盘路径(_kbApplyCursor)。
  *   - 起点统一(26-10-02-0608 方案 B): 区间起点(anchor)与光标一样纳入键鼠统一模型 —— 点击落
  *     起点在 selection.js, 键盘侧在 _kbExtend 移动光标**之前**用 _selSeedAnchorFromCursor 落
- *     "手势原点"(无有效起点时才落), 使 Shift+↑↓ 首次扩展即从当前光标起算, 不再从列表首行起。
+ *     "手势原点"(无有效起点时才落), 使 Shift+up/down 首次扩展即从当前光标起算, 不再从列表首行起。
  *     起点解析/写入单点在 selection.js(_selAnchor / _selSetAnchor)。
- *   - 收起语义(2026-10-09): ← 在**成员行**(展开组/展开集的成员)上收起**所属单元**并把光标
- *     带回其行 —— 成员行无自身展开态, 原实现只认 group/show/ep 三种 kind, 光标按 ↓ 进组后
- *     ← 静默无反应(用户报)。父行解析单点 _kbParentRow, 判据复用 selection.js::_memberRangeList
+ *   - 收起语义(2026-10-09): <- 在**成员行**(展开组/展开集的成员)上收起**所属单元**并把光标
+ *     带回其行 —— 成员行无自身展开态, 原实现只认 group/show/ep 三种 kind, 光标按 down 进组后
+ *     <- 静默无反应(用户报)。父行解析单点 _kbParentRow, 判据复用 selection.js::_memberRangeList
  *     (与 _kbRows 渲染同源), 保证"屏幕上的成员行"与"收起目标"不错位。
  *   - 切换语义(2026-10-09, 报告 26-10-09-1731 §03/§04): 6 条「适合」条目(流量图 Ctrl+\ / 统计 \ /
  *     历史 Shift+\ / 详情面板 I / 帮助 Shift+/ / 列选择器 K)由「只打开」升级为「开/关双态」——
@@ -174,7 +174,7 @@ const KB_DEF_RE = /^(Ctrl\+)?(Alt\+)?(Shift\+)?(Meta\+)?[A-Z][A-Za-z0-9]*$/;
  *           | modal(模态层内, 本期无条目, 引擎已留位)。
  *   danger = 危险档(§08 清单): 键盘路径必经确认框, 面板行内标 WARN; 危险档默认键一律二键组合。
  *   run(vm) = 动作出口, 只映射既有方法不另写实现; W5 全波接线完成(E/F/G/H/I 组激活)。
- * A-D 组为第一波(计划 §06 拍板⑤), E-H 第二波接线; 2026-09-30 决策③保留 Shift 族全部进默认表。 */
+ * A-D 组为第一波(计划 §06 拍板(5)), E-H 第二波接线; 2026-09-30 决策(3)保留 Shift 族全部进默认表。 */
 const AQB_SHORTCUT_DEFS = [
   // ---- A · 视图与全局导航 ----
   { id: "view-groups", group: "视图与导航", label: "切到辅种页",
@@ -197,13 +197,13 @@ const AQB_SHORTCUT_DEFS = [
     run: (vm) => vm._kbFocusSearch() },
   { id: "open-stats", group: "视图与导航", label: "统计面板",
     def: "Backslash", scope: "global",
-    run: (vm) => vm._kbToggleStats() },  // 切换语义: 已开 ⇒ closeStats(报告 26-10-09-1731 §03)
+    run: (vm) => vm._kbToggleStats() },  // 切换语义: 已开 => closeStats(报告 26-10-09-1731 §03)
   { id: "open-history", group: "视图与导航", label: "历史流量",
     def: "Shift+Backslash", scope: "global",
-    run: (vm) => vm._kbToggleHistory() },  // 切换语义: 已开 ⇒ closeHistory
+    run: (vm) => vm._kbToggleHistory() },  // 切换语义: 已开 => closeHistory
   { id: "open-qb-traffic", group: "视图与导航", label: "qB 口径流量图",
     def: "Ctrl+Backslash", scope: "global",
-    run: (vm) => vm._kbToggleQbTraffic() },  // 切换语义: 已开同目标 ⇒ 关; 未开走 openQbHistory(内含 qbTrafficOn 门 + 未启用提示)
+    run: (vm) => vm._kbToggleQbTraffic() },  // 切换语义: 已开同目标 => 关; 未开走 openQbHistory(内含 qbTrafficOn 门 + 未启用提示)
   { id: "speed-down", group: "视图与导航", label: "限速(下载方向)",
     def: "KeyL", scope: "list",
     run: (vm) => vm.openSpeedAt(null, "down") },
@@ -220,7 +220,7 @@ const AQB_SHORTCUT_DEFS = [
   { id: "row-expand", group: "光标与导航", label: "展开当前行",
     def: "ArrowRight", scope: "list",
     run: (vm) => vm._kbExpandRow() },
-  // 成员行(展开组/展开集的成员)自身无展开态: ← 改收起**所属单元**并把光标带回其行(_kbParentRow)
+  // 成员行(展开组/展开集的成员)自身无展开态: <- 改收起**所属单元**并把光标带回其行(_kbParentRow)
   { id: "row-collapse", group: "光标与导航", label: "收起当前行",
     def: "ArrowLeft", scope: "list",
     run: (vm) => vm._kbCollapseRow() },
@@ -280,7 +280,7 @@ const AQB_SHORTCUT_DEFS = [
   { id: "act-delete", group: "一级动作", label: "删除所选",
     def: "Shift+KeyD", scope: "list", danger: true,
     run: (vm) => vm._kbDelete() },
-  // ---- E · 次要动作(Shift 族, §08 决策③保留; 单目标动作: 目标解析须唯一 hash, §5.2) ----
+  // ---- E · 次要动作(Shift 族, §08 决策(3)保留; 单目标动作: 目标解析须唯一 hash, §5.2) ----
   { id: "edit-move", group: "次要动作", label: "移动位置",
     def: "Shift+KeyV", scope: "list",
     run: (vm) => vm._kbEditAct("editMove") },
@@ -302,7 +302,7 @@ const AQB_SHORTCUT_DEFS = [
   { id: "col-picker", group: "次要动作", label: "列选择器",
     def: "KeyK", scope: "list",
     run: (vm) => vm.toggleColMenu(null) },  // toggleColMenu 本身即切换函数; 浮层开着时靠自切换白名单放行第二次按键(报告 26-10-09-1731 §04.4)
-  // ---- F · 队列与开关(§08 决策③: F5/F6 保留默认键; 均为单种子命令, 复用右键菜单同链) ----
+  // ---- F · 队列与开关(§08 决策(3): F5/F6 保留默认键; 均为单种子命令, 复用右键菜单同链) ----
   { id: "queue-up", group: "队列与开关", label: "向上移动队列",
     def: "Ctrl+ArrowUp", scope: "list",
     run: (vm) => vm._kbTorrentCmd("queue", () => ({ action: "up" }), "向上移动队列") },
@@ -353,11 +353,11 @@ const AQB_SHORTCUT_DEFS = [
   // ---- H · 面板(W6) ----
   { id: "help-panel", group: "面板", label: "打开快捷键帮助面板",
     def: "Shift+Slash", scope: "global",
-    run: (vm) => vm._kbToggleKbHelp() },  // 切换语义: 已开 ⇒ closeKbHelp(只读速查浮层, 附「前往设置自定义」; 面板内 Esc 关闭归退栈链)
+    run: (vm) => vm._kbToggleKbHelp() },  // 切换语义: 已开 => closeKbHelp(只读速查浮层, 附「前往设置自定义」; 面板内 Esc 关闭归退栈链)
   // ---- I · 默认不绑定空位(可自定义) ----
   { id: "super-seeding", group: "更多动作", label: "超级做种切换",
     def: "", scope: "list", danger: true,
-    run: (vm) => vm._kbTorrentToggle("super-seeding", "super_seeding", "超级做种") },  // 静默改变做种语义故标危险(§08; 切换可逆, 无确认框, 面板标 ⚠)
+    run: (vm) => vm._kbTorrentToggle("super-seeding", "super_seeding", "超级做种") },  // 静默改变做种语义故标危险(§08; 切换可逆, 无确认框, 面板标 WARN:)
   { id: "share-limits", group: "更多动作", label: "分享率限制",
     def: "", scope: "list",
     run: (vm) => vm._kbEditAct("editShareLimits") },
@@ -375,7 +375,7 @@ const AQB_SHORTCUT_DEFS = [
  * 当前模板基准; 空串 = 显式禁用。
  * 语义: load() 保持**同步快照**(引擎在 keydown 里现取, 不 await); 服务端真值由 reload() 异步
  * 拉进来后由调用方失效 _kbTableCache; save() 整份 PUT, 失败返回 {ok:false} 由调用方本地回滚。
- * !两处请求走低层带超时单点 aqbFetch(issue 26-10-16-1303): 裸 fetch 悬挂时 await 永不返回 ⇒
+ * !两处请求走低层带超时单点 aqbFetch(issue 26-10-16-1303): 裸 fetch 悬挂时 await 永不返回 =>
  *   reload 恒不返回 false(启动拉取卡住)、save 恒不返回 {ok:false}(面板永不复位)—— 无提示也不自愈。
  * (先 const 后挂 window: 它是被本文件 _kbTable 直接消费的适配器单例, 不是 Vue mixin 片段 ——
  *  不走 app.mixin, 也别写成 `window.X = {` 字面量形态, 那会被片段接线守阵当漏注入。) */

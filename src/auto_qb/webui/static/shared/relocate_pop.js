@@ -19,7 +19,7 @@
  */
 
 /* 弹窗调度定时器(模块级, 不进响应式 —— hover 链路不为计时器付整树重渲染; 命名与 hr.js
- * 的 hrPopShowT/hrPopHideT 对仗, 顶层 let 撞名守阵(test_overlay_fit_single_point ⑤)零容忍) */
+ * 的 hrPopShowT/hrPopHideT 对仗, 顶层 let 撞名守阵(test_overlay_fit_single_point (5))零容忍) */
 let relPopShowT = 0, relPopHideT = 0;
 /* 全局一次性监听(滚动 / 缩放关弹窗)是否已挂。ESC 不在此挂 —— 走 lifecycle.js 的退栈链
  * (plan S3 拍板「ESC 接 lifecycle 退栈链」), 与 hrPop 的自带 keydown 监听是两条路。 */
@@ -71,7 +71,7 @@ window.AQB_RELOCATE_POP = {
     },
     /* position:fixed 锚定触发矩形: **below 优先**(下方空间不足才翻 above, 与 hrPop 的 above
      * 优先相反 —— 路径列在行内偏下, 下翻是常态), 横向夹取视口(8px 边距, 走 overlay_fit 单点),
-     * 箭头指向触发矩形中心并随翻转换向。行已被轮询重建(windowing/刷新)时矩形为零 →
+     * 箭头指向触发矩形中心并随翻转换向。行已被轮询重建(windowing/刷新)时矩形为零 ->
      * 视为悬停目标已消失, 直接收弹窗(否则会钉在视口左上角)。 */
     _relPopPlace(el, trg) {
       const FIT = window.AQB_OVERLAY_FIT; /* 几何单点(issue 26-10-20-2231), 方法内取别名 */
@@ -104,15 +104,15 @@ window.AQB_RELOCATE_POP = {
     },
     /* ---------------- 弹窗数据组装(全行载荷, 零请求) ----------------
      * relocateView(row) 为 null 时返回 null(与触发判据双保险); 字段来源:
-     *   verdict ← relocateStateText(rel.state)(现状词表, mixed = 「迁移多任务」, 不新造文案);
-     *   phase   ← rel.phase 原始相位串(小字 mono; 组级聚合无 phase → 省略);
-     *   tone    ← relocateView(row).tone(与行内两排/单排着色同一判定, 不重算);
-     *   paths   ← rel.src / rel.dst(组行 dst 是数组: mixed 逐行全标「目标位置」无当前位置行,
+     *   verdict <- relocateStateText(rel.state)(现状词表, mixed = 「迁移多任务」, 不新造文案);
+     *   phase   <- rel.phase 原始相位串(小字 mono; 组级聚合无 phase -> 省略);
+     *   tone    <- relocateView(row).tone(与行内两排/单排着色同一判定, 不重算);
+     *   paths   <- rel.src / rel.dst(组行 dst 是数组: mixed 逐行全标「目标位置」无当前位置行,
      *             非 mixed 回落同 pair 形态, 数据在就给);
-     *   kv      ← 组行才有成员行(pending/total); 别名行仅种子行(member_relocate 有 alias_count,
-     *             组级聚合没有 → 组行省略); 来源 ← relocateOriginText(rel.origin)(组级无 origin
-     *             字段 → 省略, 不落「未知来源」); 更新 ← fmtRelTime 相对时间(format.js 现成);
-     *   reason  ← 仅 rel.state==='failed' 且 rel.reason 非空, 前缀「原因: 」。
+     *   kv      <- 组行才有成员行(pending/total); 别名行仅种子行(member_relocate 有 alias_count,
+     *             组级聚合没有 -> 组行省略); 来源 <- relocateOriginText(rel.origin)(组级无 origin
+     *             字段 -> 省略, 不落「未知来源」); 更新 <- fmtRelTime 相对时间(format.js 现成);
+     *   reason  <- 仅 rel.state==='failed' 且 rel.reason 非空, 前缀「原因: 」。
      */
     assembleRelPop(row) {
       const view = this.relocateView(row);
@@ -131,7 +131,7 @@ window.AQB_RELOCATE_POP = {
         const dsts = isGroup ? (rel.dst || []) : [rel.dst];
         for (const d of dsts) if (d) paths.push(["目标位置", d]);
       }
-      /* kv 行(次序: 成员 → 别名 → 来源 → 更新; 值全部行载荷) */
+      /* kv 行(次序: 成员 -> 别名 -> 来源 -> 更新; 值全部行载荷) */
       const kv = [];
       if (isGroup) {
         if (rel.total > 0) kv.push(["成员", `${rel.pending}/${rel.total} 个成员待收尾`]);

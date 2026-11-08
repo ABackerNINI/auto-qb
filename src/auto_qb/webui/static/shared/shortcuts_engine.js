@@ -92,7 +92,7 @@ Object.assign(window.AQB_SHORTCUTS.methods, {
     /* 光标线性链: 辅种页=组行(+展开组的成员行); 种子页=平铺行; 追剧页=剧/集单元(+展开集的成员行)。
      * 每次移动时现取现定位 —— 轮询整表替换/排序/筛选后身份重定位天然成立, 不需刷新钩子。
      * !成员行入链(2026-10-08 计划 26-10-08-1217, 原注释的「成员行 vNext」在此兑现): 面板三视图
-     *   共用后, 辅种页/追剧页的成员行也要能 ↑↓ 走到 —— 光标 kind=torrent 是 Alt+1~5 双态入口与
+     *   共用后, 辅种页/追剧页的成员行也要能 up/down 走到 —— 光标 kind=torrent 是 Alt+1~5 双态入口与
      *   面板跟随(_kbFollowDrawer)的目标解析依据, 成员行不在链上则这两条路径在两页都走不通。
      *   序 = 父行紧邻其子行(组 -> 其成员 / 集 -> 其版本), 与视觉顺序一致; 成员行 kind=torrent
      *   天然不参与展开语义(_kbExpandRow 对 torrent 无分支), Enter 落在 openTorrentDrawer。 */
@@ -148,7 +148,7 @@ Object.assign(window.AQB_SHORTCUTS.methods, {
       const cur = this.kbCursor ? rows.findIndex((r) => r.kind === this.kbCursor.kind && r.id === this.kbCursor.id) : -1;
       // 光标失效(无光标/刷新换人/切视图/点击的明细行不在链上): 回落**视口就近行**(26-09-30-1806
       // 方案 B) —— 下移落视口内首行, 上移落视口内末行, 一次按键落在眼前, 不再跳极值行(大库上
-      // 即「鼠标在顶部按一下 ↑ 视口跳到底」); 解析不出视口信息才退回旧口径(下移首行/上移末行)。
+      // 即「鼠标在顶部按一下 up 视口跳到底」); 解析不出视口信息才退回旧口径(下移首行/上移末行)。
       // 找得到光标则裁剪夹取(就近步进口径)。
       const idx = cur < 0
         ? this._kbViewportRow(rows, delta)
@@ -156,19 +156,19 @@ Object.assign(window.AQB_SHORTCUTS.methods, {
       if (idx === cur) return;
       this._kbApplyCursor(rows, idx);
     },
-    /* 无光标回落: 视口就近行(报告 26-09-30-1806 方案 B)。↓(delta>0) 落视口内首行, ↑ 落视口内
-     * 末行。两条解析路: ①窗口化视图(group/torrent)用 _rowPre 前缀和换算文档 y(与
-     * _kbScrollRowIntoView 同源, 长度不符视为失效, 沿用 P1-2 退避口径); ②其余情形(追剧页全量
+    /* 无光标回落: 视口就近行(报告 26-09-30-1806 方案 B)。down(delta>0) 落视口内首行, up 落视口内
+     * 末行。两条解析路: (1)窗口化视图(group/torrent)用 _rowPre 前缀和换算文档 y(与
+     * _kbScrollRowIntoView 同源, 长度不符视为失效, 沿用 P1-2 退避口径); (2)其余情形(追剧页全量
      * 渲染 / 小列表不开窗 / 前缀和失效)扫渲染行可见性 —— 视图切换是 v-if, DOM 里只有当前视图。
      * **两路坐标系不同**(前缀和 = 文档坐标, 渲染行 rect = 视口坐标), 见函数内首段注释: 混用会
      * 在滚动后把渲染行全判「出视口」, 退化成跳极值行。
-     * 都解析不出 → 退回旧口径: ↓ 首行 / ↑ 末行(保守, 不猜错)。只读几何, 滚动仍归 _kbApplyCursor。 */
+     * 都解析不出 -> 退回旧口径: down 首行 / up 末行(保守, 不猜错)。只读几何, 滚动仍归 _kbApplyCursor。 */
     _kbViewportRow(rows, delta) {
       /* 坐标系口径(2026-10-09 修坐标错位): 单点 _kbViewTop / _kbViewBottom 返回**视口坐标**
        * (与 getBoundingClientRect 同源) —— 渲染行 rect 直接比它; 而窗口化的**前缀和 y 是文档
        * 坐标**, 比较时必须显式加回 sy(下面单取的滚动量)。旧实现把滚动量一并加进 vTop/vBot
        * 再拿去比 rect —— 只在未滚动时成立, 一旦滚过一屏, 所有渲染行都被判「出视口」,
-       * 无光标回落就退化成「跳极值行」(↓ 回顶 / ↑ 落底; 实测 scrollY=1500 时期望首可见行 →
+       * 无光标回落就退化成「跳极值行」(down 回顶 / up 落底; 实测 scrollY=1500 时期望首可见行 ->
        * 实落 row 0)。两套坐标别混用。 */
       const vTop = this._kbViewTop();     // 视口坐标(顶栏 + 吸顶列头)
       const vBot = this._kbViewBottom();  // 视口坐标(状态栏 / 面板开着时让位面板顶缘)
@@ -218,9 +218,9 @@ Object.assign(window.AQB_SHORTCUTS.methods, {
         ROW_WIN_EST_H[kind === "torrent" ? "torrent" : "group"] || 44;
       /* PageUp / PageDown「一屏」= **可见带**内的行数(2026-10-09 收口): 可见带 = _kbViewTop 到
        * _kbViewBottom(顶栏+吸顶列头 … 固定状态栏, 面板开着再让位面板顶缘), **不是**整窗高 ——
-       * 停靠面板一开可见带只剩一半(实测 739 → 353px, 屏内只剩 6 行), 而按整窗高算的一屏会前进
-       * 12 行 ⇒ 每翻一屏**静默跳过 6 行**(不开面板时行高 71px 也每屏跳 1 行)。
-       * 行高取 _rowH 实测均值(行窗口化维护)→ ROW_WIN_EST_H → 44 兜底, 与窗口化同一口径。 */
+       * 停靠面板一开可见带只剩一半(实测 739 -> 353px, 屏内只剩 6 行), 而按整窗高算的一屏会前进
+       * 12 行 => 每翻一屏**静默跳过 6 行**(不开面板时行高 71px 也每屏跳 1 行)。
+       * 行高取 _rowH 实测均值(行窗口化维护)-> ROW_WIN_EST_H -> 44 兜底, 与窗口化同一口径。 */
       const band = Math.max(0, this._kbViewBottom() - this._kbViewTop());
       const per = Math.max(1, Math.floor(band / est));
       this._kbMove(dir * per);
@@ -342,7 +342,7 @@ Object.assign(window.AQB_SHORTCUTS.methods, {
         if (p && this.expandedShowEp !== c.id) this.expandedShowEp = c.id;
       }
     },
-    /* 成员行(torrent)的所属行解析(← 收起所属单元用): 辅种页 = 展开的组行; 追剧页 = 展开的集行;
+    /* 成员行(torrent)的所属行解析(<- 收起所属单元用): 辅种页 = 展开的组行; 追剧页 = 展开的集行;
      * 种子页平铺行无父行(返回 null)。判据 = 成员落在**当前展开单元**的成员链上 —— 复用
      * selection.js::_memberRangeList 单点(与 _kbRows 渲染同源: memberHashesOf(sortedMembers)),
      * 保证"屏幕上的成员行"与"收起目标"不错位; 不在链上即无父行, 保守不动。
@@ -353,9 +353,9 @@ Object.assign(window.AQB_SHORTCUTS.methods, {
       if (this.viewMode === "shows") return this.expandedShowEp ? { kind: "ep", id: this.expandedShowEp } : null;
       return this.expandedKey ? { kind: "group", id: this.expandedKey } : null;
     },
-    /* ← 收起当前行(注册表 row-collapse)。组/剧/集行 = 收起自身展开态(反向于 _kbExpandRow);
-     * **成员行(torrent)** 无自身展开语义 —— 原实现只认 group/show/ep 三种 kind, 光标按 ↓ 进组后
-     * ← 静默无反应(用户 2026-10-09 报)。改为收起**所属单元**并把光标带回其行: 成员行随收起消失,
+    /* <- 收起当前行(注册表 row-collapse)。组/剧/集行 = 收起自身展开态(反向于 _kbExpandRow);
+     * **成员行(torrent)** 无自身展开语义 —— 原实现只认 group/show/ep 三种 kind, 光标按 down 进组后
+     * <- 静默无反应(用户 2026-10-09 报)。改为收起**所属单元**并把光标带回其行: 成员行随收起消失,
      * 不把光标留在链外(否则下一次移动要落视口就近回落, 观感是"光标丢了")。 */
     _kbCollapseRow() {
       const c = this.kbCursor;
@@ -527,7 +527,7 @@ Object.assign(window.AQB_SHORTCUTS.methods, {
       if (c.kind === "torrent") {
         // 成员行的范围**随视图**取(单点 _memberRangeList): 种子页平铺 / 辅种页展开组 /
         // 追剧页展开集。此前一律 shiftTorrentSel(种子页平铺列表) —— 辅种/追剧页上该列表为空
-        // 或与之无关, 于是成员行 Shift+↑↓ 选不中任何东西(2026-10-09 修)。
+        // 或与之无关, 于是成员行 Shift+up/down 选不中任何东西(2026-10-09 修)。
         this.shiftMemberSel({ hash: c.id });
         return;
       }
@@ -627,8 +627,8 @@ Object.assign(window.AQB_SHORTCUTS.methods, {
       });
     },
     /* 详情面板 I(切换语义, 报告 26-10-09-1731 §04.2): 目标解析同旧(torrent 光标优先, group 光标取
-     * 首成员); 已开着**同一目标**的种子详情形态 ⇒ closeDrawer(再按一下关); 换目标 / 面板关着 /
-     * 开着流量形态 ⇒ 照旧 openTorrentDrawer 打开。与 Alt+1~5(有条件, 待定)分工: I 管面板整体开关,
+     * 首成员); 已开着**同一目标**的种子详情形态 => closeDrawer(再按一下关); 换目标 / 面板关着 /
+     * 开着流量形态 => 照旧 openTorrentDrawer 打开。与 Alt+1~5(有条件, 待定)分工: I 管面板整体开关,
      * Alt+N 管定位页签。 */
     _kbOpenDrawer() {
       if (!this.kbCursor) {
@@ -640,7 +640,7 @@ Object.assign(window.AQB_SHORTCUTS.methods, {
       const hash = this._scopeFirstHash(this._scopeResolve("cursor"));
       if (!hash) return;  // 无目标(组无成员 / 剧集单元等)静默不动作(与原实现同口径)
       if (this.drawer.open && this.drawerIsSeed && this.drawer.hash === hash) {
-        this.closeDrawer();  // 已开同目标 ⇒ 关(切换语义; 换目标仍走下方打开)
+        this.closeDrawer();  // 已开同目标 => 关(切换语义; 换目标仍走下方打开)
         return;
       }
       this.openTorrentDrawer(hash);
@@ -649,7 +649,7 @@ Object.assign(window.AQB_SHORTCUTS.methods, {
      * 6 条「适合」条目由「只打开」升级为「开/关双态」: 再按一次同一键关掉自己打开的东西。
      * 关闭一律复用既有 closeX / closeDrawer(不新造状态); Esc 仍是唯一固定关闭出口, 两者不冲突。
      * **只改键盘 run 路径** —— 鼠标入口(状态栏按钮 / 右键菜单 / 双击)保持原语义(范围守恒)。 */
-    /* 统计面板 \: 已开 ⇒ closeStats */
+    /* 统计面板 \: 已开 => closeStats */
     _kbToggleStats() {
       if (this.statsOpen) {
         this.closeStats();
@@ -657,7 +657,7 @@ Object.assign(window.AQB_SHORTCUTS.methods, {
       }
       return this.openStats();
     },
-    /* 历史流量 Shift+\: 已开 ⇒ closeHistory */
+    /* 历史流量 Shift+\: 已开 => closeHistory */
     _kbToggleHistory() {
       if (this.historyOpen) {
         this.closeHistory();
@@ -665,7 +665,7 @@ Object.assign(window.AQB_SHORTCUTS.methods, {
       }
       return this.openHistory();
     },
-    /* 快捷键帮助 Shift+/: 已开 ⇒ closeKbHelp */
+    /* 快捷键帮助 Shift+/: 已开 => closeKbHelp */
     _kbToggleKbHelp() {
       if (this.kbHelpOpen) {
         this.closeKbHelp();
@@ -673,7 +673,7 @@ Object.assign(window.AQB_SHORTCUTS.methods, {
       }
       this.kbOpenHelp();
     },
-    /* qB 口径流量图 Ctrl+\: 已开着全局流量形态 ⇒ closeDrawer; 否则走 openQbHistory(含 qbTrafficOn
+    /* qB 口径流量图 Ctrl+\: 已开着全局流量形态 => closeDrawer; 否则走 openQbHistory(含 qbTrafficOn
      * 门 + 未启用提示)。同目标 = 关, 未开/换形态仍走原打开语义。 */
     _kbToggleQbTraffic() {
       if (this.qbTrafficOn && this.drawer.open && this.drawerIsTraffic && this.drawer.scope === "global") {

@@ -104,7 +104,7 @@ window.AQB_FEEDBACK = {
     /* 陈述型通知的单点(非 toast 来源): 「本地址还没有列偏好记录」这类**告知**走这里 ——
      * 只进通知面板(未读徽标照计), **不弹任何浮层**。
      * !为什么不用页面浮层(2026-10-09 用户实报): 自绘 fixed 横幅压在页面内容上, 且**每次自动化测试
-     *   都触发**(测试用全新浏览器上下文, 没有"已提示"去重标记) ⇒ 每条截图都被它盖住一截。通知面板
+     *   都触发**(测试用全新浏览器上下文, 没有"已提示"去重标记) => 每条截图都被它盖住一截。通知面板
      *   默认收起、只在状态栏入口留一个未读徽标, 既不占版面也不进截图。今后再加"陈述型"提示一律走
      *   本方法, 不要另起一个 document.createElement + position:fixed。
      * kind 固定 info(它不是错误, 走中性灰点; error/红点留给真故障), source='notice' 与
@@ -158,7 +158,7 @@ window.AQB_FEEDBACK = {
         cls: "",           // 附加类名(按对话框定制宽度/形态, 如重命名走 rename-dialog 宽档);
                            // 空 = 不附加 —— 既有全部对话框零变化(popovers.html 类绑定并入)
         tone: "",          // 语义等级(弹窗语义配色分级, 计划 26-10-19-2341): "" | "error" | "warn";
-                           // 空 = 由 danger 派生(danger→error, 否则 warn) —— 派生值与现状着色一致,
+                           // 空 = 由 danger 派生(danger->error, 否则 warn) —— 派生值与现状着色一致,
                            // 故既有全部调用点零变化; 只在 _openModal 单点派生, 不各写各的
         strip: false,      // 标题区警示条形态(-soft 底 + 左侧 3px 色条 + 圆角); false = 既有框外观
                            // 零变化 —— 仅删除确认框与跳检预检框显式开启(范围守恒 D7)
@@ -212,7 +212,7 @@ window.AQB_FEEDBACK = {
     _openModal(cfg) {
       if (this.modal.visible) this.resolveModal(false);  // 单例: 上一个悬空 Promise 先结算为取消
       /* 语义等级派生单点(计划 26-10-19-2341): 显式 tone 优先, 缺省按 danger 推导 ——
-       * danger→error(现状就是红)、否则 warn(现状就是琥珀), 两种推导都与既有着色一致,
+       * danger->error(现状就是红)、否则 warn(现状就是琥珀), 两种推导都与既有着色一致,
        * 故 17 处既有调用点渲染结果零变化。派生只此一处: 若分散到各调用点, 新增对话框
        * 极易漏传而退化成无色。 */
       const tone = cfg.tone || (cfg.danger ? "error" : "warn");
@@ -250,7 +250,7 @@ window.AQB_FEEDBACK = {
      * 「带 danger-solid 且文案 === extraText」双条件锁定第三钮 —— ok 钮在 danger 框里也带
      * danger-solid, 但文案是 okText, 不会误中。静态类不进 Vue 动态 props, 后续补丁(文案
      * 原位更新等)不回收换上的类; 每次开框重跑一次(v-if 重建后类还原成静态值, 恰好兜底)。
-     * !前提: 本还原只适用「关→开」重建路径 —— _openModal 支持框可见时原地替换(单例先
+     * !前提: 本还原只适用「关->开」重建路径 —— _openModal 支持框可见时原地替换(单例先
      * resolve 旧框再开新框, 同一 tick 内 v-if 不重建), 若 ghost 框可见时被非 ghost 框原地
      * 替换, 换上的 ghost 类会残留 —— 该形态现网不存在(ghost 唯一调用点后续只会开无
      * extraText 的框, v-if 卸载即销毁突变), 若引入此形态需改 Vue 状态驱动类(:class)。
@@ -309,7 +309,7 @@ window.AQB_FEEDBACK = {
       return FIT.probeRight(anchor.getBoundingClientRect().left, menuW);
     },
     /* 右键菜单定位**初值**: 视口边界吸附(菜单尺寸取常量估算, 避免先渲染再测量的抖动)。
-     * ⚠ 常量只是初值 —— 菜单真实高度随分支差一倍以上(批量菜单实测 393px, 此处按 222 估算),
+     * WARN: 常量只是初值 —— 菜单真实高度随分支差一倍以上(批量菜单实测 393px, 此处按 222 估算),
      *   开层后必须再走一跳 _menuFitRefit 按**实测**尺寸重钳位, 否则锚点落在视口下部时菜单底
      *   会越过下缘, 底部菜单项真实点击不可达(issue 26-10-06-1717: Playwright 报
      *   "element is outside of the viewport" 重试到超时)。 */
@@ -376,9 +376,9 @@ window.AQB_FEEDBACK = {
  * 另: 锚点在 350ms 窗口内被 Vue 整个换掉时已脱离文档(rect 全 0), 按记录的指针坐标
  * elementFromPoint 重解析当前锚点, 解析不到就收起 —— 否则浮层会落到视口左上角。
  * 锚定保活(2026-10-07 修): 详情面板 15 变体由轮询数据驱动整帧重建(replaceChildren), tooltip
- * 三条错位路径 —— ①350ms 窗口内锚点被换掉后按旧指针坐标重解析可能中到别的元素(布局移位时
- * 旧坐标下的元素已不是原锚点), 键盘 focusin 路径更是无坐标可依; ②浮层已显示后锚点被 5s 轮询
- * 换成新节点(mouseover 不再触发), 浮层停在旧坐标不跟随; ③重建引发布局移位, 浮层不挪窝。
+ * 三条错位路径 —— (1)350ms 窗口内锚点被换掉后按旧指针坐标重解析可能中到别的元素(布局移位时
+ * 旧坐标下的元素已不是原锚点), 键盘 focusin 路径更是无坐标可依; (2)浮层已显示后锚点被 5s 轮询
+ * 换成新节点(mouseover 不再触发), 浮层停在旧坐标不跟随; (3)重建引发布局移位, 浮层不挪窝。
  * 修法: 定位抽 place() 单点(show 与显示期重定位共用, 夹取/避让同口径) + reacquire() 语义
  * 重解析(data-aq-tip 同文案的新节点里取视口位置离旧矩形最近者 —— 整帧重建的后继与原锚点
  * 同位, 距离≈0; 键盘路径无指针坐标也覆盖) + 浮层可见期间 rAF 帧环(watch/tick)做廉价体检:
@@ -517,8 +517,8 @@ window.AQB_FEEDBACK = {
   /* 显示期锚点监测(2026-10-07): 详情面板 5s 轮询整帧重建, 浮层已显示后锚点被换成新节点
    * (指针不动就没有 mouseover, 浮层停在旧坐标不跟随)或重建引发布局移位。浮层可见期间挂
    * rAF 帧环, 每帧只做两项廉价检查(1 次 getBoundingClientRect + 4 次数值比对, 零 DOM 查询):
-   * ①锚点断链 → reacquire 语义重解析后原位续显; ②rect 漂移超 1px(重建移位/锚点自身内容
-   * 变宽) → 走 place 按新矩形重定位(夹取/避让同口径)。hide 后帧环见 cur 为空自停, 零常驻。 */
+   * (1)锚点断链 -> reacquire 语义重解析后原位续显; (2)rect 漂移超 1px(重建移位/锚点自身内容
+   * 变宽) -> 走 place 按新矩形重定位(夹取/避让同口径)。hide 后帧环见 cur 为空自停, 零常驻。 */
   function watch() {
     if (!raf) raf = requestAnimationFrame(tick);
   }

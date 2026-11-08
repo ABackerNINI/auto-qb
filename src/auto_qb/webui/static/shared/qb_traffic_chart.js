@@ -9,9 +9,9 @@
  * !本文件在 HTML 里必须排在 app.js **之前**; data 字段在 state.js(根选项, 不进 app.mixin,
  *   见 frontend-split 纪律), uPlot vendor 由三主题 tpl-manifest scripts 登记(boot.js 依序放行)。
  *
- * 三挂点(2026-10-04 起全部并入底部详情抽屉, 以 _QB_SCOPES 作用域表为单一描述源): ① global 全局
- * (/api/traffic/qb/global, 状态栏「qB 口径流量图」入口) ② group 分组(/api/traffic/qb/group/{key},
- * 组右键菜单入口; key = 分组视图 g.key, 即 encode_group_key 通道, 前端不自行编码) ③ torrent 单种
+ * 三挂点(2026-10-04 起全部并入底部详情抽屉, 以 _QB_SCOPES 作用域表为单一描述源): (1) global 全局
+ * (/api/traffic/qb/global, 状态栏「qB 口径流量图」入口) (2) group 分组(/api/traffic/qb/group/{key},
+ * 组右键菜单入口; key = 分组视图 g.key, 即 encode_group_key 通道, 前端不自行编码) (3) torrent 单种
  * (/api/traffic/qb/torrent/{hash}, 种子详情抽屉「流量」页签)。全局/分组走流量形态(drawerIsTraffic,
  * W6 起吃 drawer.js 的形态判据单点, scope 记挂点), 单种走种子形态(drawerIsSeed) + drawer.tab ===
  * "traffic"; 三者共用同一抽屉壳、
@@ -61,7 +61,7 @@
  * 全生效): 限速虚线(上下载各一条, 只画落在可视值域内的限速 —— 自动模式下峰值未超限速时线在
  * 顶沿之上, 自然不画)+ 缺口斜纹(null 桶游程铺 45 度斜纹, 画在系列之下)。
  * !2026-10-08 修「缺口斜纹几乎不可分辨」: 斜纹原走 tk.grid(--hairline, alpha 仅 0.05~0.08 的
- * 装饰性 1px 发丝线令牌), 再叠 globalAlpha 0.5 ⇒ 有效不透明度约 3%, 深色底上等于没画(亮主题
+ * 装饰性 1px 发丝线令牌), 再叠 globalAlpha 0.5 => 有效不透明度约 3%, 深色底上等于没画(亮主题
  * 同理)。改走**专用高对比令牌 --qb-gap-hatch**(0.18~0.25), 并去掉多余的 globalAlpha 折半;
  * 几何(斜纹覆盖区间)经逐条线段比对与代数验证**与原式恒等**, 未变。
  * 画布坐标口径见 _qbCanvasScale 注(uPlot 1.6.x ctx 无 transform, 坐标 = 设备像素)。
@@ -187,7 +187,7 @@ const _QB_SCOPES = {
     window: "qbGroupWindow", data: "qbGroupData", loading: "qbGroupLoading", error: "qbGroupError",
     hoverIdx: "qbGroupHoverIdx", hoverLeft: "qbGroupHoverLeft", yaxis: "qbGroupYAxis",
     // key = 分组视图 g.key(服务端 encode_group_key 产物, base64url 天然 URL 安全),
-    // 与 delete_flow/commands 的 /api/groups/${k} 同款原样内插 —— 前端不自行编码(§07 表③)
+    // 与 delete_flow/commands 的 /api/groups/${k} 同款原样内插 —— 前端不自行编码(§07 表(3))
     url: (k, w) => "/api/traffic/qb/group/" + k + "?window=" + w,
     ctx: (t) => t.qbGroupKey,
     // page 守卫与 global 同(drawerVisible 单点): 非主内容页面板不在 DOM, 不拉不画
@@ -326,11 +326,11 @@ function _qbPointsColumns(points) {
 
 /* 重启缝提示判据(plan 26-10-15-0829 P4, 模块级纯函数供 node 单测; 左端口径修订 26-10-16,
  * issue 26-10-16-0954): 「数据链末点早于右沿且重启贴近链末」 -> 返回 { startedAt }, 否则 null。
- * - 数据链末点 = 最后一个非 null 桶; 尾部未观测区存在 ⟺ 末非 null 下标 < n-1(链已到
+ * - 数据链末点 = 最后一个非 null 桶; 尾部未观测区存在 <=> 末非 null 下标 < n-1(链已到
  *   右沿 = 无尾区, 不提示 —— 正常尾桶观测/当前桶未采完都不是缝);
- * - 重启贴近链末 ⟺ meta.server_started_at(后端进程出生时刻, traffic_qb._SERVER_STARTED_AT)
+ * - 重启贴近链末 <=> meta.server_started_at(后端进程出生时刻, traffic_qb._SERVER_STARTED_AT)
  *   ∈ [链末桶前一桶起点 t-interval, 右沿] 内(左端含)。原口径左端 = 链末桶覆盖端 t+interval,
- *   其隐含前提「链末桶晚于重启时刻 ⟹ 链已接续、无误读面」在「重启后首采已入账、随后立即
+ *   其隐含前提「链末桶晚于重启时刻 => 链已接续、无误读面」在「重启后首采已入账、随后立即
  *   进入开放零游程」形态下不成立(实测帧: 重启 04:45:01 -> 首采桶 04:45:02, 04:45:04 起整片
  *   斜纹到右沿却零提示): 首采(恒落在重启后 <= 一个 main_tick)总归进链末桶, 但尾区仍在 ——
  *   「链在重启处断」与「重启后首采桶即链末」在桶粒度上不可分, 左端须放宽一桶宽; 反方向
@@ -400,7 +400,7 @@ window.AQB_QB_TRAFFIC = {
     qbTrafficOn() {
       return !!(this.flags && this.flags.qb_traffic_enabled);
     },
-    /* 全局入口门(P5a): qbTrafficOn 且今日流量面板在(statusbar 挂点本体, plan §07 表①)。 */
+    /* 全局入口门(P5a): qbTrafficOn 且今日流量面板在(statusbar 挂点本体, plan §07 表(1))。 */
     qbHistEntryOn() {
       return !!(this.flags && this.flags.qb_traffic_enabled && this.todayTraffic);
     },
@@ -444,8 +444,8 @@ window.AQB_QB_TRAFFIC = {
     },
     /* 首载空态判据(2026-10-05 修「空态每隔一个轮询周期闪一次」): loading 空态只在**本作用域
      * 尚无任何落袋结果**时接管正文。判据三合一 = 在途 loading + 无数据 + 无错误 ——
-     * ① 空态响应落袋后 data 是非 null 对象(空 points 也是对象, 只有出错才置 null), 续拉不再接管;
-     * ② 错误态落袋后 error 非空, 同样不接管(错误文案由下一次成功落袋清除, 见 _qbLoad);
+     * (1) 空态响应落袋后 data 是非 null 对象(空 points 也是对象, 只有出错才置 null), 续拉不再接管;
+     * (2) 错误态落袋后 error 非空, 同样不接管(错误文案由下一次成功落袋清除, 见 _qbLoad);
      * 已有结果时续拉一律不动正文 —— 图/空态文案/错误文案都是「既有状态」(同 drawer-switch-flicker
      * 的「加载态立即点亮 = 制造新闪烁」)。 */
     qbCurPending() {
@@ -465,7 +465,7 @@ window.AQB_QB_TRAFFIC = {
     },
     /* 缺口悬停文案单点(webui.md「同一口径收成 computed 单点」, 模板只引用不重算):
      * 口径 = **不得替用户归因** —— 系统能观测到的只有「这里有/没有数据」, 为什么没有它不知道。
-     *   - mid(数据链中间的洞): 前后都有观测 ⇒ 「中断」是可观测事实, 三挂点同句;
+     *   - mid(数据链中间的洞): 前后都有观测 => 「中断」是可观测事实, 三挂点同句;
      *   - outside(数据链之外: 链首之前 / 链尾之后 / 全帧无观测): 只陈述「该时段没有这个
      *     对象的数据」, 主语按作用域取(种子态才是「此种子」, 全局态没有种子概念 —— 一律套
      *     「此种子」在全局图上又是一次瞎编)。
@@ -584,7 +584,7 @@ window.AQB_QB_TRAFFIC = {
       }
       return this.openDrawerTraffic("global", "");
     },
-    /* 分组入口(S5b, §07 表③): 入口 = 组右键菜单「qB 口径流量图」(ctx-menus.html, v-if=qbTrafficOn)。
+    /* 分组入口(S5b, §07 表(3)): 入口 = 组右键菜单「qB 口径流量图」(ctx-menus.html, v-if=qbTrafficOn)。
      * key 直用分组视图 g.key(encode_group_key 通道); 组名经 _findGroup 取(decoratedGroups 同 key)。 */
     async openQbGroup(key) {
       if (!this.qbTrafficOn || !key) return;  // fail-closed 双保险(菜单项 v-if 之外的加载路径兜底)
@@ -822,7 +822,7 @@ window.AQB_QB_TRAFFIC = {
       return Math.min(_QB_POLL_MAX_MS, Math.max(_QB_POLL_MIN_MS, s * 1000));
     },
     /* 低频轮询走长驻骨架(polling.js::startPoll 单点, 2026-10-22): 这里只声明差异 ——
-     *   - 节拍 = 采样间隔夹取(_qbPollMs); 骨架每拍重读间隔 ⇒ 换窗跨段(raw <-> hour)自动重排,
+     *   - 节拍 = 采样间隔夹取(_qbPollMs); 骨架每拍重读间隔 => 换窗跨段(raw <-> hour)自动重排,
      *     不再需要单独的 resync 钩子(旧 _qbPollResync 随本轮收敛删除)。
      *   - 守卫 = 图还活跃(def.active); 页面隐藏由骨架恒等守卫兜, 不再手写。
      *   - 在途互斥(loading, 在 _qbLoad finally 归位)+ 悬挂兜底: 骨架统一做 —— 卡死判据就是

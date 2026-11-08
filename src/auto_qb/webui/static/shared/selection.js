@@ -6,7 +6,7 @@
  *
  * !键鼠衔接(报告 26-09-30-1806 方案 B): 五个点击入口(onGroupClick / onMemberClick /
  *   onTorrentClick / onShowClick / onShowEpClick)一律按所在行回写 kbCursor —— 落光标 ≠ 选中
- *   (focus 语义, 与 2026-09-17「普通点击不选中」口径不冲突), 键盘 ↑↓ / 动作键从刚点击的行出发;
+ *   (focus 语义, 与 2026-09-17「普通点击不选中」口径不冲突), 键盘 up/down / 动作键从刚点击的行出发;
  *   Ctrl/Shift+点击在原有选中语义之外同样落光标。点击行必在视口内, 不触发滚动跟随。
  *
  * !起点统一(计划 26-10-02-0608 方案 B): 光标之外, 区间起点(anchor)也纳入键鼠统一模型 ——
@@ -30,7 +30,7 @@
 window.AQB_SELECTION = {
   methods: {
     /* ---------------- 起点(anchor)解析单点(计划 26-10-02-0608 方案 B) ----------------
-     * 起点 = 最近一次"显式落位"的位置: 鼠标普通点击 / Ctrl(⌘)+点击某行, 或键盘 Shift 手势的
+     * 起点 = 最近一次"显式落位"的位置: 鼠标普通点击 / Ctrl(Cmd)+点击某行, 或键盘 Shift 手势的
      * 原点(按下 Shift 前光标所在行)。起点与光标(focus)是**两件事** —— 扩展期间起点不动,
      * 便于多次 Shift 从同一起点扩段(法则 2); 落起点 != 选中, 只写 selAnchor*, 不碰
      * selGroups/selMembers(与 2026-09-17「普通点击不选中」及方案 B「落光标 != 选中」一致)。
@@ -256,14 +256,14 @@ window.AQB_SELECTION = {
       }
       return seen.size;
     },
-    /* ---------------- 多选与批量操作(Ctrl/⌘ 选中, Shift 范围; 普通点击行为不变) ---------------- */
+    /* ---------------- 多选与批量操作(Ctrl/Cmd 选中, Shift 范围; 普通点击行为不变) ---------------- */
     isGroupSelected(g) {
       return this.selGroups.includes(g.key);
     },
     onGroupClick(g, event) {
       if (event.shiftKey) this._selSeedAnchorFromCursor();  // Shift 手势前落起点(必须先于落光标, 否则区间塌成单行)
       this.kbCursor = { kind: "group", id: g.key };  // 点击落光标(≠ 选中, 方案 B 键鼠衔接)
-      // 点击落起点(≠ 选中; 写在修饰键分支之前, 与展开/收起无关 —— 决策点③); Shift 不重置起点(法则 2)
+      // 点击落起点(≠ 选中; 写在修饰键分支之前, 与展开/收起无关 —— 决策点(3)); Shift 不重置起点(法则 2)
       if (!event.shiftKey) this._selSetAnchor("group", g.key);
       this.menu.visible = false;
       if (event.ctrlKey || event.metaKey) {
@@ -298,7 +298,7 @@ window.AQB_SELECTION = {
     },
     onMemberClick(m, event) {
       // 普通点击**不再选中**(用户 2026-09-17 明确: 点击种子不触发选择); 仅修饰键选择:
-      // Ctrl/⌘ 切换单行, Shift 从锚点整段范围
+      // Ctrl/Cmd 切换单行, Shift 从锚点整段范围
       if (event.shiftKey) this._selSeedAnchorFromCursor();  // Shift 手势前落起点(必须先于落光标, 否则区间塌成单行)
       this.kbCursor = { kind: "torrent", id: m.hash };  // 点击落光标(≠ 选中, 方案 B 键鼠衔接): 只写 focus 语义, 不动选择集合
       // 点击落起点(普通点击原为 no-op, 现补起点); Shift 不重置起点(法则 2)
@@ -328,8 +328,8 @@ window.AQB_SELECTION = {
     /* 成员行范围选择的**范围单点**: 随当前视图取成员链 ——
      *   种子页 = 平铺行(filteredTorrents); 辅种页 = 展开组的成员; 追剧页 = 展开集的版本。
      * !此前只在辅种页(展开组)成立(硬编码查 expandedKey), 追剧页集明细行与两页的**键盘**
-     *   Shift+↑↓ 都落空: 键盘路径一律走 shiftTorrentSel(种子页平铺列表), 在辅种/追剧页
-     *   该列表为空(懒加载)或与之无关 ⇒ 范围选不中任何成员。取序与 _kbRows / winMembers 同源
+     *   Shift+up/down 都落空: 键盘路径一律走 shiftTorrentSel(种子页平铺列表), 在辅种/追剧页
+     *   该列表为空(懒加载)或与之无关 => 范围选不中任何成员。取序与 _kbRows / winMembers 同源
      *   (sortedMembers), 保证"屏幕上下 = 选择上下"。 */
     _memberRangeList() {
       if (this.viewMode === "torrents") return this.filteredTorrents.map((x) => x.hash);
@@ -365,11 +365,11 @@ window.AQB_SELECTION = {
      * 单点(三视图共用一份) —— 本文件不再持有 syncTorrentHeadScroll。 */
     /* 单种子行点击: 修饰键语义与明细行一致(Ctrl 切换 / Shift 平铺范围); 普通点击不选中。
      * 另接详情面板跟随(计划 26-10-03-0917 §1.3 相邻预留的鼠标路径): 普通单击与键盘共用
-     * _kbFollowDrawer 同一个挂点, 面板开着点哪行面板就换到哪行 —— 此前只有键盘 ↑↓ 会跟随,
+     * _kbFollowDrawer 同一个挂点, 面板开着点哪行面板就换到哪行 —— 此前只有键盘 up/down 会跟随,
      * 鼠标点了半天面板纹丝不动(割裂感与报告 26-09-30-1806 同源: 两条输入没接同一行状态)。
-     * 三条边界: ① 面板关着**不打开**(开面板仍归双击 / Enter / 右键「详情」, 点一下就弹出
+     * 三条边界: (1) 面板关着**不打开**(开面板仍归双击 / Enter / 右键「详情」, 点一下就弹出
      * 42vh 面板压掉列表, 与「用户硬约束: 列表当前行必须看得清」冲突) —— 挂点自己首行即守卫;
-     * ② Ctrl / Shift 点击是**选择手势**不是「看这一行」, 不跟随(批量圈选 N 行不该让面板逐行翻)。 */
+     * (2) Ctrl / Shift 点击是**选择手势**不是「看这一行」, 不跟随(批量圈选 N 行不该让面板逐行翻)。 */
     onTorrentClick(m, event) {
       if (event.shiftKey) this._selSeedAnchorFromCursor();  // Shift 手势前落起点(必须先于落光标, 否则区间塌成单行)
       this.kbCursor = { kind: "torrent", id: m.hash };  // 点击落光标(≠ 选中, 方案 B 键鼠衔接)
@@ -411,7 +411,7 @@ window.AQB_SELECTION = {
      *   Y = 实际占用 = 按 occ_key 内容单元去重, **单元值 = 该单元选中成员的最大 size**
      *     (最完整副本, 与后端 progress=max / availability=max 同族哲学) —— 同组多站点
      *     副本只算一份; 未归组种子 occ_key = null, 兜成自单元(self:<hash>)。
-     * 三条推论: Y ≤ X 恒成立(单元 max ≤ 单元成员和); X ≠ Y ⇔ 选中了同一单元的 ≥2 个副本;
+     * 三条推论: Y ≤ X 恒成立(单元 max ≤ 单元成员和); X ≠ Y <=> 选中了同一单元的 ≥2 个副本;
      * 只选 1 个副本时 X = Y(不显示 Y)。
      * !单点: 删除确认框的"实际占用"条件行(delete_flow.js::_deleteDetails)复用本函数,
      *   不另写一遍求和(两处各自演化是本项目最常犯的口径漂移)。
@@ -433,7 +433,7 @@ window.AQB_SELECTION = {
     },
     /* ---------------- FX-12: 追剧页选中态与修饰键选择 ----------------
      * 剧行/集行保留"点击 = 展开"的原行为; **修饰键才选中**(与表格一致):
-     * Ctrl/⌘+点击 = 切换该剧/该集全部成员; Shift+点击 = 从锚点单元整段选择。
+     * Ctrl/Cmd+点击 = 切换该剧/该集全部成员; Shift+点击 = 从锚点单元整段选择。
      * "全部成员被选" = selected, "命中但非全选" = partial(indeterminate 语义)。
      */
     _selState(hashes) {

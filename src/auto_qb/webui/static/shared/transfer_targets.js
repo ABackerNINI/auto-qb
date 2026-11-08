@@ -231,7 +231,7 @@ window.AQB_TRANSFER_TARGETS = {
       else delete next.path_map;  // 清空 = 回到"未配置"(键缺失), 不留空列表噪音(见文件头注释)
       this.ttReplace(i, next);
     },
-    /* ↑↓: 表序即优先级(首条命中生效), 只换位置不改内容 */
+    /* up/down: 表序即优先级(首条命中生效), 只换位置不改内容 */
     ttMapMove(i, j, delta) {
       const t = this.ttList[i];
       if (!t) return;

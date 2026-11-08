@@ -47,7 +47,7 @@ Object.assign(window.AQB_SHORTCUTS.methods, {
       return n ? `${n} 条已自定义` : "默认键位";
     },
     /* ---------------- W6: 自定义面板(设置页「快捷键」分区) ----------------
-     * 面板语义(计划 §5.2): 改动先本地生效(即时试用) → 「保存」PUT 落盘; 离开未保存 → 提示。
+     * 面板语义(计划 §5.2): 改动先本地生效(即时试用) -> 「保存」PUT 落盘; 离开未保存 -> 提示。
      * 草稿 = kbDraft(工作副本), 基准 = kbSaved(最近保存的服务端真值); 每次改稿同步进
      * AQB_KEYS(引擎即时生效)并失效 _kbTableCache。 */
     kbPanelEnter() {
@@ -125,7 +125,7 @@ Object.assign(window.AQB_SHORTCUTS.methods, {
     kbIsOverridden(item) {
       return !!(this.kbDraft && this.kbDraft.overrides && Object.prototype.hasOwnProperty.call(this.kbDraft.overrides, item.id));
     },
-    /* danger 条目的确认框标注: 三条确认框兜底动作标注"(有确认框)", 其余(超级做种)只标 ⚠(§08) */
+    /* danger 条目的确认框标注: 三条确认框兜底动作标注"(有确认框)", 其余(超级做种)只标 WARN:(§08) */
     kbHasConfirm(item) {
       return ["act-delete", "act-recheck", "act-reannounce"].includes(item.id);
     },

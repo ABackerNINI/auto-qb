@@ -2,7 +2,7 @@
  * basePollMs/currentPollMs/refresh): W2b 自 app.js 拆出, 全局 mixin 方法域。 */
 /* SSE 断线沿判定(纯函数, 探针真跑, 同 lifecycle.js _errlogReseed 先例): prev 为已持
  * connected 位(undefined=本会话尚未连上过 / true=在连 / false=断线重试期), 返回是否
- * 处于「断线沿」—— 首次断线或 true→false 跳变。重试期内重复 onerror(prev=false)与
+ * 处于「断线沿」—— 首次断线或 true->false 跳变。重试期内重复 onerror(prev=false)与
  * 恢复成功(prev=true)都不是沿, 不发 toast。 */
 function _esDisconnectEdge(prev) {
   return prev !== false;
@@ -19,9 +19,9 @@ window.AQB_POLL = {
   methods: {
     /* ---------------- P2 事件驱动(SSE /api/events) ----------------
      * 目的: 把「命令回执」与「视图版本变更」从轮询改成推送 ——
-     *   前者省掉回执轮询的退避粒度(0→150→300→500ms), 后者省掉 1.5/2/3s 的定时触发。
+     *   前者省掉回执轮询的退避粒度(0->150->300->500ms), 后者省掉 1.5/2/3s 的定时触发。
      * !轮询**保留**作为兜底: 断线 / 首帧 / 浏览器不支持 / 反代缓冲时自动退回, 语义不变。
-     * WARN: EventSource 发不出 Authorization 头 ⇒ 先用带鉴权的 POST /api/events/ticket 换
+     * WARN: EventSource 发不出 Authorization 头 => 先用带鉴权的 POST /api/events/ticket 换
      *   **一次性短时票据**再以 ?ticket= 连流(26-10-02 加固: 查询串不再放长期密钥 ——
      *   反代日志只会留下用完即弃的票据); 本机 skip_local_verify(默认)下换票免密钥。
      */
@@ -80,7 +80,7 @@ window.AQB_POLL = {
       };
       es.onerror = () => {
         // 断线沿(WEBUI 通知 S6, D2 拍板): 以 _esConnected 取沿, 首次断线或
-        // true→false 跳变时发一条 error toast —— 经 toast() 内的 _recordErrorToast
+        // true->false 跳变时发一条 error toast —— 经 toast() 内的 _recordErrorToast
         // 钩子自动进通知(挂机型断线自此可追溯); 重试期内重复 onerror 不重复发。
         if (_esDisconnectEdge(this._esConnected)) {
           this._esConnected = false;
@@ -190,7 +190,7 @@ window.AQB_POLL = {
             const thr = opts.stallMs || AQB_POLL_STALL_MS;
             if (!st.stallAt) st.stallAt = Date.now();
             if (Date.now() - st.stallAt > thr) {
-              st.stallAt = 0;  // 补偿一次即重新计时 ⇒ 一段悬挂只留一条痕
+              st.stallAt = 0;  // 补偿一次即重新计时 => 一段悬挂只留一条痕
               if (opts.onStall) opts.onStall(thr);
               else console.warn(`[poll] ${key}: 上一拍在途超过 ${Math.round(thr / 1000)}s, 视为悬挂, 强制续拉`);
             } else if (opts.mutex) { arm(); return; }
@@ -279,7 +279,7 @@ window.AQB_POLL = {
      * scripts/ui_harness.py + e2e/perf.spec.mjs 的 A/B 量出"窗口化后单轮 refresh 的真实耗时":
      *   1000 种子 143ms | 3000 种子 309ms | 5000 种子 396~501ms
      * 再把每档的**主线程占用率**压到 ~15% 上下(单轮耗时 / 间隔; 分档断言见 e2e/views.spec.mjs), 于是:
-     *   ≤1000 → 1.5s(≈10%)  1000~3000 → 2s(≈15%)  >3000 → 3s(≈17%)
+     *   ≤1000 -> 1.5s(≈10%)  1000~3000 -> 2s(≈15%)  >3000 -> 3s(≈17%)
      * 两个边界条件: 1.**下界 1.5s = 服务端 sync_interval** —— 后端每 1.5s 才刷一次数据,
      *   再快也只是多拿一次"版本未变"的空响应(此时响应体趋近于零, 但不产生新数据);
      * 2.**不是"无变化退避"** —— 那只按 rid 是否变化放慢, 会把行数据新鲜度直接卖掉(见下)。
@@ -294,8 +294,8 @@ window.AQB_POLL = {
     currentPollMs() {
       // 失败退避: 连续失败翻倍至上限 15s(减少服务不可达时的空转)
       if (this.pollFails) return Math.min(15000, this.basePollMs() * 2 ** this.pollFails);
-      // 恒定间隔(按种子量分档), **不做"无变化退避"**: 曾按"视图版本未变"逐步放慢(2s→5s→10s),
-      // 但状态栏的全局速度走 /api/stats(不受 rid 门控, 每轮都刷)⇒ 两个速度来源刷新频率被解耦,
+      // 恒定间隔(按种子量分档), **不做"无变化退避"**: 曾按"视图版本未变"逐步放慢(2s->5s->10s),
+      // 但状态栏的全局速度走 /api/stats(不受 rid 门控, 每轮都刷)=> 两个速度来源刷新频率被解耦,
       // 观感上变成"状态栏正常、种子行滞后"。版本未变时响应体已趋近于零(不回传 groups),
       // 退避省不下什么, 却直接牺牲行数据新鲜度 —— 收益与代价不对等, 故只保留失败退避。
       return this.basePollMs();
@@ -356,7 +356,7 @@ window.AQB_POLL = {
         if (d.groups) payload.groups = d.groups;
         return payload;
       }
-      // full 分支(含未协商的旧服务端响应: 无 full 键 ⇒ 走这里, 行为与 S3 之前逐字节等价)
+      // full 分支(含未协商的旧服务端响应: 无 full 键 => 走这里, 行为与 S3 之前逐字节等价)
       // = 清空重放(R6)。P1-1: 服务端只回当前视图的数组 —— **键不存在时必须保留原引用**,
       // 绝不能 `|| []` 清空(否则每次轮询都把另外两个视图抹成空, 切回去要等一轮全量)。
       if (payload.groups !== undefined) this.groups = payload.groups;
@@ -386,10 +386,10 @@ window.AQB_POLL = {
       try {
         // rid 增量: 带上已持有的视图版本, 服务端版本未变时不回传数组(响应体趋近于零)。
         // P1-1: 同时带上当前视图名, 服务端只回该视图需要的数组(响应体 ≈1/4)。
-        // 切视图时 goView 会把 lastRid 置空 ⇒ 强制取一次全量, 别的视图不会停在旧数据上。
+        // 切视图时 goView 会把 lastRid 置空 => 强制取一次全量, 别的视图不会停在旧数据上。
         // delta=1(plan S4, P-05 定案: 默认开、不加配置键): 声明客户端懂增量协议 ——
         //   服务端 rid 落在时间线窗口内时回增量载荷(full=false), 本地由 applyStateRows
-        //   行级合并; 窗外/降级/切视图后 lastRid 已置空 ⇒ 服务端恒回全量(full=true), 天然兼容。
+        //   行级合并; 窗外/降级/切视图后 lastRid 已置空 => 服务端恒回全量(full=true), 天然兼容。
         const qs = [];
         if (this.lastRid !== null) qs.push(`rid=${this.lastRid}`);
         if (this.viewMode === "torrents") qs.push("view=torrent");
@@ -400,7 +400,7 @@ window.AQB_POLL = {
         const state = await this.api("/api/state" + query);
         this.status = state.status;
         // qB 全局状态(server_state)随 status **恒回传**(与 traffic 同口径: 不受 rid 门控) ——
-        // 状态栏常显统计与"限制速度"取它, 不再单独打 /api/stats ⇒ 每轮只剩 1 条请求,
+        // 状态栏常显统计与"限制速度"取它, 不再单独打 /api/stats => 每轮只剩 1 条请求,
         // 且状态栏与行数据**同源同轮**(不再出现"状态栏新鲜 / 种子行滞后"的错位观测)。
         // S2 速度切预翻转(计划 26-10-30-0610/D8)的对账点单点在这里: server_state 是
         // use_alt_speed_limits 唯一的确认通道(无 SSE cmd/ver/truth 事件), 赋值后立即问一次

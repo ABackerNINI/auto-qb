@@ -9,9 +9,9 @@
  *
  * 读侧数据(菜单子项 = config.web.transfer.targets 中 enabled=true 的目标, D5):
  *   GET /api/config 现拉, 缓存进 trTargets(state.js, 整表替换) —— 菜单渲染只读缓存:
- *     ① 登录后预拉一次(lifecycle.js / auth.js 的 loadWebFlags 调用点旁边);
- *     ② 设置页保存成功后重拉(config_editor.js cfgSave, 与 loadWebFlags 同节奏);
- *     ③ 展开「转移到」子面板时重拉(menu.js openSub 钩子, 收窄外部改配置的陈旧窗)。
+ *     (1) 登录后预拉一次(lifecycle.js / auth.js 的 loadWebFlags 调用点旁边);
+ *     (2) 设置页保存成功后重拉(config_editor.js cfgSave, 与 loadWebFlags 同节奏);
+ *     (3) 展开「转移到」子面板时重拉(menu.js openSub 钩子, 收窄外部改配置的陈旧窗)。
  *   三处都只**刷新缓存**, 渲染永远读 trTargets; 拉取失败保持上次缓存(菜单是瞬态浮层,
  *   不 toast 不打断, 下次展开再试)。目标按 name 寻址(与 POST /api/transfer/run 的
  *   target_id 同口径, 也与 ttTest 一致) —— 无名/未启用的目标不进菜单。

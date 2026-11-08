@@ -82,7 +82,7 @@ window.AQB_STATE = {
       groups: [],
       singles: [],            // 未归组种子(后端与 groups 同快照同门控回传, 供搜索兜底/总数回退)
       torrents: [],           // 种子页数据源: 全量种子平铺数组(SEED_ITEM, 与 groups 同门控回传)
-      shows: { list: [], unrecognized: [] },  // 追剧视图(剧→季→集聚合, 与 groups 同门控回传)
+      shows: { list: [], unrecognized: [] },  // 追剧视图(剧->季->集聚合, 与 groups 同门控回传)
       // 辅种页视图: groups(分组表) | torrents(单种子平铺) | shows(追剧); 列模型/列宽/排序独立, 筛选与搜索共用
       viewMode: initialViewMode(),
       status: {},
@@ -96,7 +96,7 @@ window.AQB_STATE = {
       timeFmt: loadTimeFmt(),
       /* 相对时间时钟(FX-27): 只喂"最近活动"这类相对时间显示(fmtRelTime), 30s 一跳 ——
        * 为什么必须有: 后端 last_activity 按分钟量化且只在**活动发生时**才变, 暂停的种子行对象
-       * 长期不变 ⇒ Vue 不重渲染 ⇒ 相对值会永久停在渲染那一刻("刚刚"挂一整天)。粒度只到分钟,
+       * 长期不变 => Vue 不重渲染 => 相对值会永久停在渲染那一刻("刚刚"挂一整天)。粒度只到分钟,
        * 不必比 30s 更密(更密只会白付整表 patch, 与 P1-2 的窗口化成果相抵)。 */
       nowSec: Math.floor(Date.now() / 1000),
       pendingOps: {},  // P0-3 乐观 UI: hash -> { patch, prev, ts }, 见 isPending/applyOptimistic
@@ -225,7 +225,7 @@ window.AQB_STATE = {
       // 内容页签文件优先级小菜单(复用 .ctx-menu 视觉): 锚定单元格, 视口吸附; index = 文件在种子内的原始下标
       filePrio: { visible: false, x: 0, y: 0, index: -1 },
       serviceDown: false,  // 服务不可达(程序退出): 显示全局横幅, 轮询继续以便恢复后自动接上
-      pollFails: 0,        // 连续失败次数(轮询退避: 2s→4s→8s→15s 上限)
+      pollFails: 0,        // 连续失败次数(轮询退避: 2s->4s->8s->15s 上限)
       // (主轮轮询句柄 pollTimer 已随轮询骨架上提: polling.js 句柄表 _polls["main"])
       lastRid: null,       // 已持有的分组视图版本(服务端 rid); null = 尚未取到(强制全量)
       searchQuery: "",       // 搜索关键字
@@ -284,7 +284,7 @@ window.AQB_STATE = {
       _headObsEl: null,
       _headObs: null,
       _headRaf: 0,
-      // 多选(分组表/明细表): Ctrl/⌘+点击切换, Shift+点击锚点范围; 普通点击行为不变(组=展开)
+      // 多选(分组表/明细表): Ctrl/Cmd+点击切换, Shift+点击锚点范围; 普通点击行为不变(组=展开)
       // 双向联动(2026-10-09, 取代 FX-11 互斥): 组选中 <=> 该组成员全选 —— 两者可同时非空,
       // 写入口单点在 selection.js 的 _selAddGroup/_selDropGroup/_selSyncGroups。
       selGroups: [],          // 选中组 key(其成员必在 selMembers 内)
@@ -328,7 +328,7 @@ window.AQB_STATE = {
       // 设置页保存后/展开子面板时刷新(transferTargetsReload), 渲染只读这里不另拉。
       trTargets: [],
       // 区间起点(anchor)三字段(计划 26-10-02-0608 方案 B 起与光标同属键鼠统一模型):
-      // 由鼠标普通/Ctrl(⌘)点击或键盘 Shift 手势原点落定(落起点 ≠ 选中, 只写这里);
+      // 由鼠标普通/Ctrl(Cmd)点击或键盘 Shift 手势原点落定(落起点 ≠ 选中, 只写这里);
       // **Shift 扩展期间不更新**(便于同一起点多次扩段)。解析/写入单点在 selection.js
       // (_selAnchor 兜底链: 显式锚点 -> 当前光标 -> [group: 展开的组] -> 列表首行 / _selSetAnchor)
       selAnchorGroup: null,   // 分组表 Shift 锚点(组 key)
@@ -355,7 +355,7 @@ window.AQB_STATE = {
       // 纵轴固定模式(2026-10-08): {mode: auto|limit|manual, manual: MiB/s}; 三作用域各自独立
       // 落盘(autoqb.ui.qbYAxisGlobal), 初值函数 qbInitialYAxis 在 qb_traffic_chart.js
       qbHistYAxis: qbInitialYAxis("global"),
-      // qB 口径流量图 · 单种挂点(S5b, plan §07 表②): 种子详情抽屉「流量」页签; 开合由
+      // qB 口径流量图 · 单种挂点(S5b, plan §07 表(2)): 种子详情抽屉「流量」页签; 开合由
       // drawer.kind === "seed" + drawer.tab === "traffic" 表达, 不设独立 open 字段(正文块在 drawer.html)
       qbTorrentWindow: qbInitialWindow("torrent"), // 十三档; 持久化 autoqb.ui.qbWinShared(与组共用)
       qbTorrentData: null,    // 最近一次成功响应(null = 无数据/失败, 空态分支接管)
@@ -364,7 +364,7 @@ window.AQB_STATE = {
       qbTorrentHoverIdx: -1,  // 悬停桶索引(-1 = 无; uPlot setCursor 钩子写回)
       qbTorrentHoverLeft: 0,  // 悬停十字线 px(tooltip 水平定位)
       qbTorrentYAxis: qbInitialYAxis("torrent"),  // 纵轴固定模式(三作用域各自独立: autoqb.ui.qbYAxisTorrent)
-      // qB 口径流量图 · 分组挂点(S5b, §07 表③): 分组形态(与全局同挂抽屉, scope="group"),
+      // qB 口径流量图 · 分组挂点(S5b, §07 表(3)): 分组形态(与全局同挂抽屉, scope="group"),
       // 入口 = 组右键菜单「qB 口径流量图」; key = 分组视图 g.key(encode_group_key 通道)
       qbGroupKey: "",         // 打开时刻锁定的组 key(慢响应不污染下一次打开)
       qbGroupName: "",        // 弹层标题用(经 _findGroup 取, 找不到留空)
@@ -412,7 +412,7 @@ window.AQB_STATE = {
         open: false, path: "", parent: "", roots: [], dirs: [],
         loading: false, error: "", newName: "", busy: false,
       },
-      // 统计面板(FE-2C): /api/stats → {server: qB server_state | null}; 打开时取一次, 卡内可手动刷新
+      // 统计面板(FE-2C): /api/stats -> {server: qB server_state | null}; 打开时取一次, 卡内可手动刷新
       statsOpen: false,
       statsLoading: false,
       statsError: "",
@@ -428,7 +428,7 @@ window.AQB_STATE = {
       },
       // 「站点状态」块折叠态(计划 26-10-02-1936 阶段2): 默认折叠, 「展开」即打开覆盖式全屏弹窗
       // (两态之间无内嵌展开); 不持久化、每次进分区回折叠(同上 logs.open 先例); 取数时机在
-      // hr_status.js hrsToggle(首次展开才拉, 决策点⑤a)。数据本体 hrs 在 hr_status.js mixin data
+      // hr_status.js hrsToggle(首次展开才拉, 决策点(5)a)。数据本体 hrs 在 hr_status.js mixin data
       hrsOpen: false,
       // 限速托管状态(FE-2C D2): /api/speed/mode 展示 + /api/speed/override 临时覆盖
       // ALT-01: altOn/altCurrent 随同一端点回传(备用速度模式 + 备用限速值 KiB/s)
@@ -444,7 +444,7 @@ window.AQB_STATE = {
       // 写入口单点 = dialogs.js::toggleAltSpeed; 对账/清除单点 = polling.js statsServer 赋值处
       // 调 _altOverrideReconcile; 失败/未知绝不留永久假状态(3s 无回执 / 8s 未确认兜底)。
       altOverride: null,
-      speedOpen: false,  // SPD-04: 限速修改浮层(qB 式「点击限速 → 弹窗」, 表单从信息栏收进窗内)
+      speedOpen: false,  // SPD-04: 限速修改浮层(qB 式「点击限速 -> 弹窗」, 表单从信息栏收进窗内)
       // FX-08: 浮层锚点 —— left 由点击坐标算出(状态栏"限制速度"按钮左缘 - 12), dir 为预聚焦方向
       speedAt: { left: 0, dir: "up" },
       // 分类/标签管理对话框(FE-2C2): GET /api/categories|tags 拉列表 + 新建行; 行级改路径/删除走既有确认/输入原语
@@ -677,7 +677,7 @@ window.AQB_STATE = {
      * 视口下部时菜单底越过下缘, 底部项(导出/批量删除)真实点击不可达。
      * 判据用**对象替换**而不是 visible 翻转: 三个菜单的开层入口一律写 `this.X = {…}`
      * (menu.js 的 openMenu/openMemberMenu/openHeadMenu · shows.js 的整集/整剧两入口 ·
-     * drawer.js 的 openFilePrio), 关层与执行动作只改字段(X.visible = false) ⇒ 每次开层恰好
+     * drawer.js 的 openFilePrio), 关层与执行动作只改字段(X.visible = false) => 每次开层恰好
      * 触发一次, 连"菜单还开着又右键另一行"(visible 不变、只是换了对象)也覆盖; 钳位回写的是
      * x/y 字段而非整个对象, 不会自触发。量测在 $nextTick(见 ui_feedback.js::_menuFitRefit)。 */
     menu() {
