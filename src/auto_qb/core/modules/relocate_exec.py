@@ -208,7 +208,7 @@ class ExecMixin:
                 self._fail(job, "verify_mismatch", "目标侧文件数/大小不符")
                 return
             rt["stage"] = "supersede"
-            # S5 未收尾再迁移(D15/D20, 硬约束①「先搬后重定向」): 搬移完成(本拍 verify
+            # S5 未收尾再迁移(D15/D20, 硬约束1「先搬后重定向」): 搬移完成(本拍 verify
             # 过 = 目标数据落位)才允许改道 —— 前任 job 的 journal/spec 条目 {A→B}→{A→C}
             # 重定向 + 别名重建指向新目标。无前任 = 纯查表零动作, 同拍落链(常规迁移的
             # 单步预算口径不变); 有前任且未收敛(重定向失败)留在 supersede stage 下一拍
@@ -583,7 +583,7 @@ class ExecMixin:
     def _supersede_redirect(self, job: RelocateJob, rt: dict) -> bool:
         """supersede 重定向一步(D15 重心): 全部前任改道收敛 = True, 否则 False(下一拍重试)
 
-        顺序钉死(硬约束①/D20): 本 stage 在 moved verify 之后 —— 搬移完成、目标数据落位
+        顺序钉死(硬约束1/D20): 本 stage 在 moved verify 之后 —— 搬移完成、目标数据落位
         才动前任的账与别名。每任前任按「先账后链」两段提交:
         1. 账面改道(提交点): D19 通用补条目 -> spec.dst {A→B}→{A→C} -> journal 记 retarget
            -> job.dst 翻 C(附 plan.superseded_from=B)—— 全幂等, 失败下一拍重放;
@@ -1144,10 +1144,10 @@ class ExecMixin:
         - 路径级已证明(facts.same_fs_proved, D4 组合口径的 D 复查面): E1 无增量, 放行;
         - 指纹缓存(D3: host+port+username+secret; R1#42 起指纹=HMAC+随机盐, 盐存 state
           relocate.probe_salt, 换盐即全缓存失效重探)命中 passed => 放行;
-          命中 failed => blocked(D7① 同指纹不重试);
+          命中 failed => blocked(D7 1 同指纹不重试);
         - 未命中 => run_probe 同步执行(常态 ~1.3s): passed => probe_put(passed) 放行;
-          failed env=False(FS 不可达) => probe_put(failed) + blocked(D7①);
-          failed env=True(环境性) => 不写缓存 + blocked(下次迁移重试, D7②)。
+          failed env=False(FS 不可达) => probe_put(failed) + blocked(D7 1);
+          failed env=True(环境性) => 不写缓存 + blocked(下次迁移重试, D7 2)。
         """
         if len(records) <= 1:
             return None
@@ -1210,14 +1210,14 @@ class ExecMixin:
             self.probe_put(fp, probe.status, probe.evidence)
             return None
         if probe.env:
-            # 环境性失败(网络/凭据/连接中断/本机写探针失败): 与 FS 可达性无关, 不缓存(D7②)
+            # 环境性失败(网络/凭据/连接中断/本机写探针失败): 与 FS 可达性无关, 不缓存(D7 2)
             text = (
                 f"探测环境性失败: {probe.reason}(与 FS 可达性无关, 未缓存, 下次迁移将重试) —— 出路: 排查环境后重试"
                 "(磁盘满/队列满/权限/连接; 容器部署检查 fs.path_map), 或配置 relocate.assume_shared 显式越权"
                 "(未经 auto-qb 验证, 由用户承担)"
             )
         else:
-            # FS 不可达(证读/证写超时): 硬拦 + 缓存失败(D7① 同指纹不重试 —— 探测要真写一次
+            # FS 不可达(证读/证写超时): 硬拦 + 缓存失败(D7 1 同指纹不重试 —— 探测要真写一次
             # 目标盘, 缓存免得每次迁移都白搬一遍探针); 坏缓存可经 probe_put 覆盖写修复
             self.probe_put(fp, probe.status, {**probe.evidence, "reason": probe.reason})
             text = (

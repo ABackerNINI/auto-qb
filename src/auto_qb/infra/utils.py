@@ -593,7 +593,7 @@ def _win_dll(name: str, sigs_of):
     绑 argtypes/restype」流程, 只差 DLL 名与签名清单。取不到返回 None; is_windows
     早退与缓存由调用方(`_win_*` getter)负责 —— 签名必须绑死的理由见 `_win_user32`。
 
-    ⚠ `sigs_of` 是签名清单的**工厂(可调用)**, 不是现成元组 —— 别"顺手"改成直接传
+    WARN: `sigs_of` 是签名清单的**工厂(可调用)**, 不是现成元组 —— 别"顺手"改成直接传
     `_WIN_USER32_SIGNATURES()`: 签名表构造会碰 `ctypes.WINFUNCTYPE`(POSIX 上不存在),
     写成实参就在**进入本函数之前**求值, 于是"`ctypes.windll` 取不到 -> 返回 None"这层
     安全网被绕过, POSIX 上直接抛 `AttributeError`(2026-10-13 Linux CI 4 条红即此;
@@ -620,7 +620,7 @@ def _WIN_KERNEL32_SIGNATURES():
 def _win_user32():
     """user32 句柄(惰性取用 + **逐个绑签名** + 拿不到返回 None)
 
-    ⚠ 签名必须绑死 —— 2026-09-30 实测(同一窗口、同一时刻, 唯一变量是有没有 argtypes):
+    WARN: 签名必须绑死 —— 2026-09-30 实测(同一窗口、同一时刻, 唯一变量是有没有 argtypes):
       未绑 -> `SetWindowPos(hwnd, HWND_TOPMOST, ...)` **ret=0**, Z 序纹丝不动, 且
       `GetLastError()` 仍为 0(典型的"静默无效"); 绑了 -> ret=1, 窗口立刻抬到顶层。
     根因: 不绑 argtypes 时 ctypes 把所有参数按 **32 位 int** 传, 而 `HWND` 与"可插图句柄"
@@ -634,7 +634,7 @@ def _win_user32():
     测试可 monkeypatch 本函数注入假 user32(理由同 `_WIN_USER32_SIGNATURES` 的存在: 真调
     shell API 会把开发机窗口摆弄乱)。
 
-    ⚠ is_windows 早退必须在缓存判定**之前**: 非 Windows 上即便留有陈旧缓存也先返回 None
+    WARN: is_windows 早退必须在缓存判定**之前**: 非 Windows 上即便留有陈旧缓存也先返回 None
     (守阵 test_win_user32_kernel32_non_windows_none 不重置 `_bound_*`, 靠该顺序保证)。
     """
     global _bound_user32
@@ -801,9 +801,9 @@ def _win_match_reused_explorer(hwnds: set, before: set, names: set):
 def _win_wait_explorer(before: set, target: str):
     """等本次打开的资源管理器窗口出现并返回 HWND(超时 None)
 
-    两条策略**每轮都试**(命中就停): ①快照差集 = 本次新建的 Explorer 窗口(最常见);
-    ②按标题在旧窗口里找 = Explorer **复用已有窗口/标签页**导航, 不新建窗口 —— 这是上一轮
-    修复的主要漏网点: 旧实现把②当"新窗口等不到"的兜底放在 2s 超时之后才做一次, 慢于 2s 的
+    两条策略**每轮都试**(命中就停): 1. 快照差集 = 本次新建的 Explorer 窗口(最常见);
+    2. 按标题在旧窗口里找 = Explorer **复用已有窗口/标签页**导航, 不新建窗口 —— 这是上一轮
+    修复的主要漏网点: 旧实现把2当"新窗口等不到"的兜底放在 2s 超时之后才做一次, 慢于 2s 的
     复用导航整个漏掉, 表现为"有概率不置前"。
     两条都不中有两种可能: Shell 还在慢慢建窗(继续轮询到 `_EXPLORER_FG_TIMEOUT`), 或本次
     打开压根没出窗口(PIDL/字符串路线都失败) —— 两者都静默处理, 返回 None 让调用方跳过置前。

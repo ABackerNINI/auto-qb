@@ -58,7 +58,7 @@ ID_FILE_NAME = "tool-id"
 CLAIM_LAUNCHER_WINDOWS = "claim.cmd"
 CLAIM_LAUNCHER_POSIX = "claim.sh"
 
-#: 工具根目录的仓库内默认位置(D10 ②): tool_dir 留空时的兜底(源码态)
+#: 工具根目录的仓库内默认位置(D10 2): tool_dir 留空时的兜底(源码态)
 _DEFAULT_TOOL_DIR_PARTS = ("tools", "global-traffic-monitor")
 
 #: 启动器文件名(D19): 工具侧唯一知道「怎么起」的地方; Windows 用 .cmd, 其余用 .sh
@@ -118,7 +118,7 @@ def endpoint_path() -> str:
 
 
 def default_tool_dir() -> str:
-    """仓库内工具默认安装目录(D10 ②): tool_dir 留空时的兜底(源码态 <仓库根>/tools/...)"""
+    """仓库内工具默认安装目录(D10 2): tool_dir 留空时的兜底(源码态 <仓库根>/tools/...)"""
     return str(Path(__file__).resolve().parents[4].joinpath(*_DEFAULT_TOOL_DIR_PARTS))
 
 
@@ -353,9 +353,9 @@ def fetch_last_spike(timeout: float = SPIKE_TIMEOUT_S) -> tuple[bool, Optional[d
 def resolve_launch_target(conf: Any) -> Optional[LaunchTarget]:
     """D10 拉起解析顺序 -> 目标或 None(未安装)
 
-    ① `tool_exe` 非空且存在 -> 直接执行该可执行文件(显式覆盖 / 编译态逃生门);
-    ② 否则 `tool_dir`(空 = 仓库内默认目录)里的 D19 启动器;
-    ③ 两者都找不到 -> None(UI 报「未安装」并引导写 tool_exe)。
+    1. `tool_exe` 非空且存在 -> 直接执行该可执行文件(显式覆盖 / 编译态逃生门);
+    2. 否则 `tool_dir`(空 = 仓库内默认目录)里的 D19 启动器;
+    3. 两者都找不到 -> None(UI 报「未安装」并引导写 tool_exe)。
 
     auto-qb **不拼 uv、不认识入口名与子命令** —— 那些全部沉在工具侧启动器里(D19)。
     """

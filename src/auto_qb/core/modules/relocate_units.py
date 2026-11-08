@@ -63,7 +63,7 @@ GATE_AUTO_TMM = "auto_tmm"  # 组内有 AutoTMM 成员(fastresume 无 qBt-savePa
 GATE_BACKEND = "backend"  # qB fastresume 存储后端非 Legacy(部署矩阵 E 格: SQLite 无 fastresume 文件, D2/D4 fail-fast 禁用)
 GATE_BT_BACKUP = "bt_backup"  # BT_backup 路径未配置/不可达不可写(部署矩阵 D 格)
 GATE_NESTED = "nested"  # 嵌套目标: 形态分治 R1-R5(计划 26-11-07-1300)—— DIR_ALIAS 内容根互嵌硬拦 / 在途 job 作用域与目标拦 / 嵌旧声明源 confirm / FILE_LINKS 深嵌 note
-GATE_SOURCE_MISSING = "source_missing"  # 源侧三态之缺失: 声明文件原名与 .!qB 孪生都不在(0546 机制①/E2.2 零搬移假成功)
+GATE_SOURCE_MISSING = "source_missing"  # 源侧三态之缺失: 声明文件原名与 .!qB 孪生都不在(0546 机制1/E2.2 零搬移假成功)
 GATE_SOURCE_UNKNOWN = "source_unknown"  # 源侧三态之不可判定: exists 探测判不了(容器映射 miss, 保守拒同 target_unknown 口径)
 
 # job 相位机(计划 26-11-05-0808 S4 相位模型重定义; 主干单向推进, 旁支 terminal):
@@ -329,7 +329,7 @@ class RelocateJob:
 
         逐文件链接/直搬的 scope 只是 save_path(平铺内容根)或组自己的内容根 —— 别名只挂在
         组内文件上, **不会**把落进同目录的别组读写重定向到 T, 故作用域覆盖语义不成立。
-        P7 真机实测(s3 步): 平铺逐文件链接组③ 的 scope = 整个 save_path, 旧实现让
+        P7 真机实测(s3 步): 平铺逐文件链接组3 的 scope = 整个 save_path, 旧实现让
         scope_hit 把同目录别组(A/B)的组键解析到 T —— job 结束后 _buckets 用 S 键查不到,
         退化为「仅本次选中成员」→ 单成员 direct 误判(数据被搬走却不建链接, 组裂);
         finalize_members 同样会把同目录别组一并 setLocation 到 T。两处都靠本谓词收窄。
@@ -347,7 +347,7 @@ class RelocateJob:
         逐文件链接: 只认 landing **恰等于** scope(平铺组的内容根就是 save_path,
         它自己的成员才该并组), 子目录里的别组不命中。
         直搬(direct): **恒不命中** —— 没有建任何别名, 作用域不覆盖任何落点(P7 真机:
-        组② 的直搬 job scope = 恶女目录, 旧逻辑把同目录的组① 也解析到 T, 组键漂移后
+        组2 的直搬 job scope = 恶女目录, 旧逻辑把同目录的组1 也解析到 T, 组键漂移后
         _buckets 查不到组, 误判单成员直搬)。
 
         形态判据优先 alias_kind(落账字段, 历史/测试构造的 job 可能没有 plan), plan.form 兜底。
@@ -455,7 +455,7 @@ class GroupFacts:
     # 组内 AutoTMM 成员 hash(计划 26-11-05-0808 S1): auto_tmm=true 的成员 fastresume 无
     # qBt-savePath 键(N8 实测), 改写收尾对它不生效 => 有即整组拒迁(evaluate_group 闸门)
     auto_tmm_hashes: Tuple[str, ...] = ()
-    # 源侧三态检查(0808 S1 继承 0546 机制①, 逐声明文件、深层天然覆盖): 只收「缺失」与
+    # 源侧三态检查(0808 S1 继承 0546 机制1, 逐声明文件、深层天然覆盖): 只收「缺失」与
     # 「不可判定」两态; .!qB 孪生态并入 qb_temp_entries(复用既有 GATE_QB_TEMP, 不另造闸)
     source_missing_files: Tuple[str, ...] = ()  # 原名与 .!qB 孪生都不在(数据藏走 -> 零搬移假成功, E2.2)
     source_unknown_files: Tuple[str, ...] = ()  # exists 不可判定(容器映射 miss, D2 按 target_unknown 同款保守拒)
@@ -619,7 +619,7 @@ def evaluate_group(facts: GroupFacts) -> dict:
             "): 其 fastresume 无 qBt-savePath 键, 改写收尾不生效 —— 请先在 qB 里改为手动管理或把它移出该组"
         )
 
-    # ---- 源侧三态之缺失/不可判定(0546 机制①; .!qB 孪生态已并入 qb_temp_entries 走上方既有闸) ----
+    # ---- 源侧三态之缺失/不可判定(0546 机制1; .!qB 孪生态已并入 qb_temp_entries 走上方既有闸) ----
     # 缺失 = 数据已不在这两个名字下(qB 搬迁对 stat 不到的源文件忽略并算成功, storage_utils.cpp:151,
     # E2.2 实证零搬移假成功); 不可判定 = 容器映射 miss, 按 target_unknown 同款保守拒(D2)。
     if facts.source_missing_files:

@@ -56,7 +56,7 @@ dev = [
     # 巡检约定单点: memory-bank/testing/flaky-ledger.md「巡检约定」节。
     "pytest-randomly==5.0.0",
     "pytest-xdist==3.8.0",
-    # 格式化: .style.yapf(facebook, 列宽 120)。❗必须**项目内**装 —— 此前 dev.fmt 用 PATH 上的
+    # 格式化: .style.yapf(facebook, 列宽 120)。! 必须**项目内**装 —— 此前 dev.fmt 用 PATH 上的
     # 系统 yapf, 版本/缓存位置都不可控(2026-10-08 排查"yapf 挂住"时的直接诱因之一)。
     # 0.43.0 是当前最新版(PyPI 实查); 版本一升, 它的语法缓存文件名里的版本号也会变。
     "yapf==0.43.0",

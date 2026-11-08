@@ -77,7 +77,7 @@ def probe_bt_backup_reject(path: str) -> str:
 
 def _source_three_states(save_path: str, names: Iterable[str], unwanted: Any,
                          fa: FileAccess) -> Tuple[List[str], List[str], List[str]]:
-    """源侧三态逐声明文件判定(计划 26-11-05-0808 S1 继承 0546 机制①/D2; E2.1/E2.2 实证判据)
+    """源侧三态逐声明文件判定(计划 26-11-05-0808 S1 继承 0546 机制1/D2; E2.1/E2.2 实证判据)
 
     对每个声明名(按 files API 声明路径逐文件 stat, 深层路径天然覆盖 —— 现行 GATE_QB_TEMP
     的内容根**顶层**扫描漏深层孪生, E2.1 漏拦面即此): -> (缺失, 不可判定, .!qB 孪生)
@@ -134,8 +134,8 @@ class PlanMixin:
 
         部署维闸门(计划 26-11-05-0808 S1, 先于分组判定): 后端非 Legacy(E 格)/BT_backup
         未配置或不可达(D 格) => 整个请求一条 blocked 回执(fail-fast, 不做降级双轨 D4)。
-        组级五闸(§3.1 预检行, evaluate_group): AutoTMM/嵌套目标(0546 机制③)/源侧三态
-        (0546 机制①, .!qB 态复用 GATE_QB_TEMP)+ 既有闸门照跑。
+        组级五闸(§3.1 预检行, evaluate_group): AutoTMM/嵌套目标(0546 机制3)/源侧三态
+        (0546 机制1, .!qB 态复用 GATE_QB_TEMP)+ 既有闸门照跑。
         """
         req = [str(h) for h in (hashes or []) if h]
         target = str(location or "").strip()
@@ -333,7 +333,7 @@ class PlanMixin:
         needed = sum(s for _n, s in files)
         hashes = tuple(r.hash for r in records)
 
-        # ---- 源侧三态检查(0808 S1 继承 0546 机制①: 在/.!qB 孪生/缺失/不可判定, 逐声明文件) ----
+        # ---- 源侧三态检查(0808 S1 继承 0546 机制1: 在/.!qB 孪生/缺失/不可判定, 逐声明文件) ----
         # 未勾选(priority=0)文件不参与 —— 它们本就不落盘, 不构成缺失形态(误报防线);
         # 文件表读不到时与 _file_map 同口径空转(缓存热, 二次调用零请求)。
         qb_temp: List[Any] = []  # .!qB 未落定收集面(顶层扫描 + 深层孪生双源; 归属分类见下方 listing 块)
@@ -447,8 +447,8 @@ class PlanMixin:
             if bits and "提权" in " ".join(bits) and not conf.allow_uac:
                 bits.append("配置 relocate.allow_uac=false: 不弹 UAC, 直接拒绝")
             file_err = (
-                "文件级链接不可建: " + "; ".join(bits) + " —— 出路: ①以管理员身份运行 auto-qb"
-                "或开启 Windows 开发者模式 ②换同卷目标走硬链接 ③改用目录别名(需目录专属) ④缩短路径"
+                "文件级链接不可建: " + "; ".join(bits) + " —— 出路: 1. 以管理员身份运行 auto-qb"
+                "或开启 Windows 开发者模式 2. 换同卷目标走硬链接 3. 改用目录别名(需目录专属) 4. 缩短路径"
             )
         if alias_fs.is_unc(target):
             dir_kind = KIND_SYMLINK if cap.dir_symlink.ok else None

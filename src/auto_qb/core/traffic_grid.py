@@ -266,7 +266,7 @@ def group_null_mask(member_obs: list, grid: WindowGrid) -> list:
 
 
 def group_rate_points(member_obs: list, grid: WindowGrid, null_mask: list) -> list:
-    """组速率段(§04.1-②): 桶内 Σ 成员均值; 桶内无行成员按 0 计; null 桶 -> None
+    """组速率段(§04.1-2): 桶内 Σ 成员均值; 桶内无行成员按 0 计; null 桶 -> None
 
     成员速率逐向未知(BucketObs 的 None, 断链桶)按 0 计入和(与无行成员同款); 但**该桶有成员
     观测而全成员该向速率皆未知**时该向出 None —— 组图同样不得把「断链来的未知」画成 0 值孤点
@@ -304,7 +304,7 @@ def group_rate_points(member_obs: list, grid: WindowGrid, null_mask: list) -> li
 
 
 def group_totals_points(member_obs: list, grid: WindowGrid, null_mask: list) -> list:
-    """组累计增量段(§04.1-③): 逐成员先差分(max(0,·) + 重置/基线缺失贡献 0)再求和
+    """组累计增量段(§04.1-3): 逐成员先差分(max(0,·) + 重置/基线缺失贡献 0)再求和
 
     成员某桶增量缺失(无行/重置/基线缺失)按 0 计 —— 宁可少计一桶不出洞; null 桶整桶
     None 且桶链断开(null 桶之后成员基线同样缺失, 与单系列相邻桶口径一致)。
@@ -385,7 +385,7 @@ _V4_SEAM_SPREAD_MIN_S = 60
 
 #: 观测缝停机洞阈值(秒, plan 26-10-15-0829 P2 诚实兜底): 相邻两观测桶点的覆盖缝超过
 #: 本值 = 停机洞 -> 差分断链(delta=None, 宁可丢弃不摊配 —— G2/E2E3 诚实性); <= 本值 =
-#: 重启缝 -> 接缝差按真实跨度摊配回收(P0 实施记录 ②, G3/E2E4 受益)。
+#: 重启缝 -> 接缝差按真实跨度摊配回收(P0 实施记录 2, G3/E2E4 受益)。
 #: !语义锚定(plan §03 P0 实施记录 REC): 摊配分母 = 变化点跨度(可长达整个 z 游程,
 #: 本事故 6.6h), 洞判定分母 = 观测覆盖缝(重启 ~10s)—— 两量分离; 「超 SEAM_NULL_S
 #: 标 null」约束的是后者, 若约束前者则长游程陈旧差永不可摊, 与「两缝一并治理」矛盾。

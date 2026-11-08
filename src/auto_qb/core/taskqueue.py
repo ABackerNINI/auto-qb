@@ -276,8 +276,8 @@ class TaskQueue:
         名额, 组成员数 >= max_tasks 时同 tick 的无关任务一个都轮不到、一路饿到 own_write
         TTL 退出, 速率语义(max_tasks/2s)在该窗口失真。
 
-        两个有界性: ① 让位者本轮**先留在堆外**(由 run_due 在执行批次后回填), 否则
-        next_run=now 的它们会被本轮再次弹出、重复过闸; ② 扫描面以 max_tasks *
+        两个有界性: 1. 让位者本轮**先留在堆外**(由 run_due 在执行批次后回填), 否则
+        next_run=now 的它们会被本轮再次弹出、重复过闸; 2. 扫描面以 max_tasks *
         _DEFER_SCAN_FACTOR 封顶 —— 让位是"跳过"不是"执行", 不能让一轮 tick 把整条队列
         扫穿。max_tasks<=0 表示不限(沿用内部语义, 与 config 侧的 >=1 校验无关)。
         """

@@ -1,4 +1,4 @@
-"""快捷键自定义路由: GET/PUT /api/keys(计划 26-09-28-0354 W6, 决策点⑥).
+"""快捷键自定义路由: GET/PUT /api/keys(计划 26-09-28-0354 W6, 决策点6).
 
 存储单点 auto-qb-data/webui-keys.json(<state_file 同目录, 与 web.token 同寻址规则);
 web 线程独占读写, 与 state.json(主循环单写线程, 黄金法则 5)互不干扰。后端只做**结构层**

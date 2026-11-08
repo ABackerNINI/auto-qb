@@ -22,7 +22,7 @@ from ..context import WebContext
 
 
 def mark_local_present(rows: List[Dict], by_hash: Mapping[str, Any]) -> None:
-    """给明细行追加只读布尔字段 `local_present`(计划 26-10-02-1936 §3.3, 决策点③a) —— join 口径钉在本路由层
+    """给明细行追加只读布尔字段 `local_present`(计划 26-10-02-1936 §3.3, 决策点3a) —— join 口径钉在本路由层
 
     - `local_present` = **本地库存在该种子**(不区分 state 细类): 暂停/异常的 HR 种子仍是
       义务对象, 折进「已删除」会造成「已无义务」错觉; 本地不存在 = 已删除(含本地从未下载的清单行);
@@ -181,15 +181,15 @@ def build_router(ctx: WebContext) -> APIRouter:
 
     @router.get("/api/hr/sites/{site}/entries")
     def api_hr_site_entries(site: str):
-        """站点种子明细(只读; 计划 26-10-01-2216 §7 阶段1, 表① 全量详情表的数据源)
+        """站点种子明细(只读; 计划 26-10-01-2216 §7 阶段1, 表1 全量详情表的数据源)
 
-        决策点②(b): 新端点按站点按需拉 —— 逐种子明细是「打开才需要」的数据, 不进 /api/state
+        决策点2(b): 新端点按站点按需拉 —— 逐种子明细是「打开才需要」的数据, 不进 /api/state
         轮询载荷也不塞进 /api/hr/status 全量响应。校验与 confirm-empty 同款(总开关未启用 400);
         站点未接入是路径层面的不存在, 回 404 并点名已接入清单。数据读取与 --hr-status 同款
         只读口径(store.read_unlocked), 字段全部来自 hr.status.entry_details 单点(含失踪行,
         排序与人话均由后端算好); 站点文件读坏不抛, read_error 原样带出。
         local_present 为响应层追加的只读标记(mark_local_present 单点, 计划 26-10-02-1936
-        决策点③a), entry_details 本体保持纯站点口径。
+        决策点3a), entry_details 本体保持纯站点口径。
         """
         manager.web.touch()
         _require_hr_enabled(manager)
@@ -209,13 +209,13 @@ def build_router(ctx: WebContext) -> APIRouter:
 
     @router.get("/api/hr/history")
     def api_hr_history(limit: int = 300, site: str = ""):
-        """拉取历史时间轴(只读; 计划 26-10-04-0312 §3.4, 表③ 的数据源)
+        """拉取历史时间轴(只读; 计划 26-10-04-0312 §3.4, 表3 的数据源)
 
         校验与 /api/hr/sites/{site}/entries 同款: 总开关未启用 400、取数线程未启动 409;
         site 可选过滤(给了就只回该站; 未接入是路径层面的不存在, 404 点名已接入清单)。
         数据读取与 --hr-status 同款只读口径(逐站 store.read_unlocked 无锁只读): 写入是
         原子替换, 无锁读到的必然是完整一份; 读坏不抛, read_errors{site: err} 原样带出
-        (坏文件本身就是要人看的信息, 表① 同款)。行字段全部来自 hr.status.history_rows
+        (坏文件本身就是要人看的信息, 表1 同款)。行字段全部来自 hr.status.history_rows
         单点 —— 跨站合并 / ts 降序 / 截 limit 与全部人话徽章都由后端算好, 前端只展示。
         limit 钳进 [1, HISTORY_CAP]: 查询参数卫生, 空页与不设防的全量都没意义。
         """

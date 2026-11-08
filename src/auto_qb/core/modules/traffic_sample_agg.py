@@ -218,8 +218,8 @@ class _SampleAggMixin:
         catch-up 重建, 零丢失)。
 
         逐系列隔离(2026-10-13 真机取证): 单系列封口抛错只该影响该系列。此前异常一路上抛到
-        handler, 于是 ①其余系列本轮也不封口 ②`_agg_append` 永不执行 = 全系列 agg 静默停写
-        ③抛点在状态复位之前, 同一错每轮 flush 复现 —— 真机上一个系列抛「逐级聚合无有效
+        handler, 于是 1. 其余系列本轮也不封口 2. `_agg_append` 永不执行 = 全系列 agg 静默停写
+        3. 抛点在状态复位之前, 同一错每轮 flush 复现 —— 真机上一个系列抛「逐级聚合无有效
         覆盖」, 全系列小时行一个多小时没落盘。现在逐系列 catch + 善后(见
         _agg_reset_after_error), 单系列的问题不再放大成全局停写。"""
         for key in list(self._agg_states):

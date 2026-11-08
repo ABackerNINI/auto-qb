@@ -122,7 +122,7 @@ CHANNEL_PAIRING_MODES = ("auto", "on", "off")
 
 
 def _channel_ephemeral_port_range() -> Tuple[int, int]:
-    """OS 临时端口段(计划 §04 S1 ⑥): Windows 49152-65535 / 类 Unix(Linux) 32768-60999
+    """OS 临时端口段(计划 §04 S1 6): Windows 49152-65535 / 类 Unix(Linux) 32768-60999
 
     只用作 discovery_port 的告警判据(V12): 落入段内 = 易与系统临时端口分配相撞
     (Windows 还有 Hyper-V/WSL2 动态排除段, 无监听者也绑不上、随重启漂移)。
@@ -138,7 +138,7 @@ _is_loopback_host = is_loopback_host
 
 
 def _validate_channel_host(value: Any, where: str, errors: List[str]) -> None:
-    """channel.host 校验(S1 ①): 非空且为合法 IPv4/IPv6 字面量或 localhost
+    """channel.host 校验(S1 1): 非空且为合法 IPv4/IPv6 字面量或 localhost
 
     不支持主机名: 扩展侧 normalize 按字面量判私网段, 主机名无法分类(计划 §01 派生口径);
     NAS 部署请直接填 NAS 的内网 IP。
@@ -361,7 +361,7 @@ def _validate_hr_check(spec: dict | None, errors: List[str]) -> None:
                     max_s=3600
                 )
 
-            # ---- 交叉规则(S1 ③⑤⑥): 各键自身格式已由上面各自己报, 这里只在两侧解析成功时比较 ----
+            # ---- 交叉规则(S1 3/5/6): 各键自身格式已由上面各自己报, 这里只在两侧解析成功时比较 ----
 
             def _chan_int(key: str, default: int) -> int | None:
                 if key not in channel:
@@ -377,19 +377,19 @@ def _validate_hr_check(spec: dict | None, errors: List[str]) -> None:
             host_v = raw_host if raw_host else "127.0.0.1"
             pairing_v = str(channel.get("pairing") or "auto").strip().lower()
             token_v = str(channel.get("token") or "").strip()
-            # ③ 两端口相撞(计划 §01 派生口径 + §08 迁移): 用户现产 port:18788 + 默认 discovery 18788 即此形态
+            # 3. 两端口相撞(计划 §01 派生口径 + §08 迁移): 用户现产 port:18788 + 默认 discovery 18788 即此形态
             if port_v and dport_v and port_v == dport_v:
                 errors.append(
                     f"config.hr_check.channel.port: 与 discovery_port({dport_v})相同 —— 两端口不能相同; "
                     "把 port 改 0(推荐: 本端口转作发现端口、数据端口随机), 或把 discovery_port 显式改成别的端口"
                 )
-            # ⑤ 非回环 + 永不配对 + 未配置密钥 = LAN 上无人工关口的密钥分发器, 一道都不许少(V4)
+            # 5. 非回环 + 永不配对 + 未配置密钥 = LAN 上无人工关口的密钥分发器, 一道都不许少(V4)
             if pairing_v == "off" and not _is_loopback_host(host_v) and not token_v:
                 errors.append(
                     f"config.hr_check.channel: host={host_v} 非回环且 pairing=off 且未配置 token —— "
                     "三选一: pairing 改 on/auto、显式配置 token、或把 host 改回回环"
                 )
-            # ⑥ discovery_port 落入 OS 临时端口段 => 告警不阻断(V12; 默认 18788 在段外)
+            # 6. discovery_port 落入 OS 临时端口段 => 告警不阻断(V12; 默认 18788 在段外)
             if dport_v:
                 lo, hi = _channel_ephemeral_port_range()
                 if lo <= dport_v <= hi:

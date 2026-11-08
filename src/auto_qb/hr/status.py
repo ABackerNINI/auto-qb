@@ -86,7 +86,7 @@ HISTORY_KIND_TEXTS = {
     "confirm_empty": "人工对账",
 }
 
-#: 拉取历史 · 触发方式人话(表③ 触发列; 与 service 的 trigger 口径一一对应)
+#: 拉取历史 · 触发方式人话(表3 触发列; 与 service 的 trigger 口径一一对应)
 HISTORY_TRIGGER_TEXTS = {
     "auto": "自动",
     "manual": "立即",
@@ -115,7 +115,7 @@ class LaneStatus:
     lane: str = ""
     status: str = ""
     status_text: str = ""
-    lane_text: str = ""  #: 档位人话(表② 波次表徽章「A 考察中」; 取自 LANE_TEXTS 单点, 计划 26-10-01-2216 §6.2)
+    lane_text: str = ""  #: 档位人话(表2 波次表徽章「A 考察中」; 取自 LANE_TEXTS 单点, 计划 26-10-01-2216 §6.2)
     wave_ts: float = 0.0
     pages: int = 0
     rows: int = 0
@@ -234,7 +234,7 @@ def need_seed_text(seconds: Optional[int]) -> str:
     """还需做种时间, 镜像站点书写形态(「16:57:06」/「9天06:05:11」)方便逐格核对; 缺字段 = -
 
     原是 CLI 报告的私有件(report.py `_need_seed_text`), 随种子明细导出上收为本模块的口径单点
-    (计划 26-10-01-2216 §7 阶段1): CLI 明细表与 WebUI 表① 必须是同一份人话, 不另写第二份。
+    (计划 26-10-01-2216 §7 阶段1): CLI 明细表与 WebUI 表1 必须是同一份人话, 不另写第二份。
     """
     if seconds is None:
         return "-"
@@ -396,12 +396,12 @@ def site_status(site: str, data: HrSiteData, view: HrSiteView, service, now: flo
 
 @dataclass(slots=True)
 class EntryDetail:
-    """单条 HR 种子明细(WebUI 表① 的行; 计划 26-10-01-2216 §3 P0+P1 全集)
+    """单条 HR 种子明细(WebUI 表1 的行; 计划 26-10-01-2216 §3 P0+P1 全集)
 
     数值字段原样透传, 人话(lane_text / need_seed_text / verified_source_text)由后端算好
     —— 前端只展示不重算(契约: 前端消费后端算好字段)。`verified_ts`(放行判定时刻)与
-    `last_seen`(被站点见到时刻)是**两个独立口径**, 分键呈现(决策点④); `remain_seconds`
-    刻意不导出(决策点③ —— 考核窗口倒计时不是还需做种的量, 2026-09-25 误读教训)。
+    `last_seen`(被站点见到时刻)是**两个独立口径**, 分键呈现(决策点4); `remain_seconds`
+    刻意不导出(决策点3 —— 考核窗口倒计时不是还需做种的量, 2026-09-25 误读教训)。
     """
 
     tid: int
@@ -430,14 +430,14 @@ class EntryDetail:
 
 
 def entry_details(data: HrSiteData) -> List[EntryDetail]:
-    """种子明细导出(WebUI 表① 行集; 计划 26-10-01-2216 §7 阶段1) —— 与 CLI 明细表同一套口径
+    """种子明细导出(WebUI 表1 行集; 计划 26-10-01-2216 §7 阶段1) —— 与 CLI 明细表同一套口径
 
     - 排序沿用 CLI 明细表的 key(档位·下载量, report._print_status_rows 同一公式);
     - 行集**含失踪行**(active=False 也导出 —— 「哪些种子已核实/未核实」的全量清单一览是
       issue 本意; CLI 明细表只显示活跃行, 失踪行在界面上靠状态列弱化呈现);
     - verified join 走 data.verified(infohash→放行记录): v1 优先、缺失落 v2(终态冻结给
       v1/v2 各写一条, 观察期出口只写主键 —— 任一命中即该种子的放行记录);
-    - remain_seconds 与 P2 字段(已取/失败记录、本地对照 join)刻意不导出(决策点③ / §8)。
+    - remain_seconds 与 P2 字段(已取/失败记录、本地对照 join)刻意不导出(决策点3 / §8)。
     """
     entries = sorted(data.index.values(), key=lambda e: (e.lane, -(e.downloaded_bytes or 0)))
     out: List[EntryDetail] = []
@@ -492,10 +492,10 @@ class HistoryLane:
 
 @dataclass(slots=True)
 class HistoryRow:
-    """单条拉取历史(WebUI 表③ 的行; 计划 26-10-04-0312 §3.4)
+    """单条拉取历史(WebUI 表3 的行; 计划 26-10-04-0312 §3.4)
 
     数值字段原样透传, 人话(ts_text / elapsed_text / kind_text / trigger_text / result_text /
-    result_tone / 各档 lane_text)全部由后端算好 —— 前端只展示不重算(表① 同款契约)。
+    result_tone / 各档 lane_text)全部由后端算好 —— 前端只展示不重算(表1 同款契约)。
     `result_tone` 是结果徽章色档(ok/warn/dim/err/blue, 直接对应前端 pill 档位);
     `ts`(epoch)与 `ts_text` 并给 —— 排序用原值、展示用文案。
     """
@@ -554,7 +554,7 @@ def _history_lanes(raw_lanes: List[Dict]) -> List[HistoryLane]:
 
 
 def history_rows(datas: Mapping[str, HrSiteData], limit: int, now: float = 0.0) -> List[HistoryRow]:
-    """拉取历史导出(WebUI 表③ 行集; 计划 26-10-04-0312 §3.4) —— 跨站点合并成一条时间轴
+    """拉取历史导出(WebUI 表3 行集; 计划 26-10-04-0312 §3.4) —— 跨站点合并成一条时间轴
 
     - 合并各站点 history、按 ts 降序、截 limit(limit <= 0 回空表, 上限钳制是调用方的
       参数卫生); 站点归属记进行 site 列(历史跨站点成时间轴, 站点列是前端过滤键);

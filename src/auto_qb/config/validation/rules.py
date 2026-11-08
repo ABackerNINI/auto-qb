@@ -388,7 +388,7 @@ def _validate_condition_tree(
     未知组合键(如 all 拼成 al)与未知条件名 fail-fast; 多键/空/非 dict 节点报结构错;
     嵌套深度超 CONDITION_TREE_MAX_DEPTH(compat 单点)拒绝 —— 防递归爆炸, 不限制真实表达力。
 
-    R1① 错误定位回映射: 顶层 all 的孩子序号 = 用户写的扁平列表序号(normalize 保序 1:1 包裹),
+    R1-1 错误定位回映射: 顶层 all 的孩子序号 = 用户写的扁平列表序号(normalize 保序 1:1 包裹),
     报错坐标用「conditions[i]」扁平形; 更深的子树只可能来自用户手写的树形(或 webui 写出的
     规范形态), 坐标按树形如实报出。
     """
@@ -412,7 +412,7 @@ def _validate_condition_tree(
             return
         for i, child in enumerate(children):
             # top + all: 顶层 all 的孩子 = 旧扁平列表条目(normalize 只对列表包 all, 保序 1:1),
-            # 坐标回映射成 conditions[i](R1①); 顶层 any 是用户手写树形, 按树形坐标如实报
+            # 坐标回映射成 conditions[i](R1-1); 顶层 any 是用户手写树形, 按树形坐标如实报
             child_where = f"{where}[{i}]" if (top and key == "all") else f"{where}.{key}[{i}]"
             _validate_condition_tree(child, child_where, errors, gate, depth + 1, top=False)
     elif key == "not":
@@ -459,7 +459,7 @@ def _validate_action_entry(
     normalize_action_entry)翻译后按同一套逻辑校验 —— 这里没有按 legacy 键分支的第二语义,
     只有坐标翻译。
 
-    R1① 错误定位回映射: 报错话术用用户写的扁平坐标 —— 动作名子路径(actions[i].<动作名>)
+    R1-1 错误定位回映射: 报错话术用用户写的扁平坐标 —— 动作名子路径(actions[i].<动作名>)
     与「第 N 个动作」序号话术, 不暴露 params 结构路径。
     伪动作 ignore_next_action_error 键面保留识别(W1/D1 升级检测), params 仍按布尔校验;
     引擎不消费(载入层转未启用时剔除)。

@@ -39,7 +39,7 @@ from ...infra import clock
 from ...infra import file_access
 from .relocate_common import logger
 
-# ---------- 常量单点(计划 §04 P2-⑤: 每步独立短超时, 总预算收敛; 真机实测常态 ~1.3s) ----------
+# ---------- 常量单点(计划 §04 P2-5: 每步独立短超时, 总预算收敛; 真机实测常态 ~1.3s) ----------
 
 TAG_PROBE = "aqb-probe"  # 探测种子隔离标签(R1: tag 隔离 + 启动扫描兜底都按它)
 PROBE_DIR_PREFIX = "aqb-probe-"  # 临时子目录固定前缀(D8: 目录隔离不散落; 残留扫描按前缀认领)

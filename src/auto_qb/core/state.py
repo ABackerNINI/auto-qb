@@ -43,7 +43,7 @@ _EXEC_HISTORY_MAX_ENTRIES = 2000
 # - 每维度环形 _TRACE_KEEP_PER_DIM 条(计划拍板 3–5, 取上界 5: 单条已截断, 总量另有硬上限兜底);
 # - 保留期 _TRACE_KEEP_DAYS 天: trace 的排障现场价值短, 远短于 exec_history 的 30 天;
 # - 全键面总条目上限 _TRACE_MAX_ENTRIES 与单条序列化体积上限 _TRACE_ENTRY_MAX_BYTES 相乘
-#   给出体积硬上界(plan W4 验收②的 1 MiB 红线): 300 x 2 KiB = 600 KiB 字节, 留 JSON 缩进
+#   给出体积硬上界(plan W4 验收2的 1 MiB 红线): 300 x 2 KiB = 600 KiB 字节, 留 JSON 缩进
 #   与键名开销余量; trace 无去重语义, 总量逐出当日记录也参与(见 _prune_rule_traces)。
 _TRACE_KEEP_PER_DIM = 5
 _TRACE_KEEP_DAYS = 7
@@ -371,7 +371,7 @@ class StateService:
         item = {**entry, "ts": now.timestamp(), "date": now.date().isoformat()}
         # 单条体积兜底: 调用方已逐字段截断, 这里对整条序列化**字节量**兜底(中文经 UTF-8
         # 膨胀, 字节口径才对得上磁盘占用); 超限降级为截断存根(保留 verdict 与排序字段) ——
-        # 排障明细价值让位于 1 MiB 红线(plan W4 验收②, 红线是硬保证不是软目标)。
+        # 排障明细价值让位于 1 MiB 红线(plan W4 验收2, 红线是硬保证不是软目标)。
         if len(json.dumps(item, ensure_ascii=False, default=str).encode("utf-8")) > _TRACE_ENTRY_MAX_BYTES:
             item = {
                 "ts": item["ts"],

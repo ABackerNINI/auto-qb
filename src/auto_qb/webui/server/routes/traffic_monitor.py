@@ -242,7 +242,7 @@ def build_router(ctx: WebContext) -> APIRouter:
         """工具 /autostart 代理(写端点): 载荷 = {"action": "install"|"uninstall"}
 
         幂等注册/卸载开机自启; 退出码语义由工具侧承载(200 达成期望态含 no-op /
-        501 平台不支持 / 5xx 命令失败), 本层原样映射。⚠ 工具与 WebUI 必须同机。
+        501 平台不支持 / 5xx 命令失败), 本层原样映射。WARN: 工具与 WebUI 必须同机。
         """
         manager.web.touch()
         action = str((body or {}).get("action") or "").strip()
@@ -282,7 +282,7 @@ def build_router(ctx: WebContext) -> APIRouter:
         finally —— 最终落盘 + 释放锁 + 停控制面 + 删发现指针)。200 原样透传(前端据此提示
         「已通知停止」, 随后指针删除, 状态区自然翻成 not_running); 工具未就绪 -> 502;
         其余非 200 -> 502(工具自己的 4xx/5xx 原样收口, 不猜)。
-        ⚠ 工具与 WebUI 必须同机(控制面是本机回环)。
+        WARN: 工具与 WebUI 必须同机(控制面是本机回环)。
         """
         manager.web.touch()
         base_url, token = _ready_endpoint(manager)

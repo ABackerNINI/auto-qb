@@ -77,7 +77,7 @@ def time_in_range(now: dtime, spec: str) -> bool:
 def is_loopback_host(host: str) -> bool:
     """回环地址判据(计划 26-10-14-1241): localhost 或 IPv4/IPv6 回环字面量(127/8、::1)
 
-    config 校验(S1 ⑤ 危险组合)与 hr 配对门(pairing=auto 的生效逻辑)共用 —— 单点在此,
+    config 校验(S1 5 危险组合)与 hr 配对门(pairing=auto 的生效逻辑)共用 —— 单点在此,
     两处不得各写一份; 无法解析为地址字面量的输入一律按非回环处理(保守)。
     """
     h = str(host or "").strip().lower()

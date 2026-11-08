@@ -795,7 +795,7 @@ def remove_alias(path: str) -> None:
     os.unlink(p)
 
 
-# ---------------------------------------------------------------- 别名重定向(计划 26-11-05-0808 S5, D15: 0247 S6③ 设想从零实现)
+# ---------------------------------------------------------------- 别名重定向(计划 26-11-05-0808 S5, D15: 0247 S6 3 设想从零实现)
 # supersede 重定向的三个原语: 幂等判定(alias_points_to)/ 占用探测(probe_alias_rebuild_busy)/
 # 重定向(retarget_alias: 读旧目标 -> 删旧链接(非递归绝不跟随) -> 按形态建新链接 -> 穿透校验)。
 # 形态分流照 create_dir_alias/create_file_alias 口径: junction/目录 symlink 走目录别名,
@@ -889,7 +889,7 @@ def probe_alias_rebuild_busy(link: str) -> Optional[str]:
 
 
 def retarget_alias(link: str, target: str, kind: Optional[str] = None) -> str:
-    """重定向一条别名到新目标(S5 supersede 单点; D15: 0247 S6③ 设想从零实现)
+    """重定向一条别名到新目标(S5 supersede 单点; D15: 0247 S6 3 设想从零实现)
 
     步骤: 幂等判定 -> 读旧目标(留诊断) -> 删旧链接(remove_alias, 非递归绝不跟随) ->
     按形态建新链接(create_dir_alias/create_file_alias 同口径分流) -> 穿透校验(经新链接

@@ -7,7 +7,7 @@
 // 所以本页一律"先归一化、再落盘", 并把失败逐条翻译成中文可操作提示; 绝不让 Promise 裸抛。
 //
 // 页面形态(2026-09-26 定稿, 风格选型 A「瑞士网格」, 见 memory-bank/plans/26-09-26-0031;
-// 2026-10-16 计划 26-10-15-2357 S4 合并为「① 连接后端」一区; 26-10-16-0214 S1 重排为:
+// 2026-10-16 计划 26-10-15-2357 S4 合并为「1. 连接后端」一区; 26-10-16-0214 S1 重排为:
 // 状态卡 → 发现操作行(一句短说明) → 实例表(真 table, 状态列) → 动作行(重测全部/拉取) + 反馈区
 // → 「说明与排障」折叠区(机制长文) → 手动端点折叠表单):
 //   1. 连接后端(顶部状态总览 → 自动发现 → 当前实例列表 → 折叠的手动端点 → 自测/拉取 + 状态行)
@@ -306,7 +306,7 @@ async function refreshConnFromStorage(syncJson) {
   return got;
 }
 
-// ---------- 顶部「连接状态」总览(计划 26-10-15-2357 S3/Q4②: 不静默) ----------
+// ---------- 顶部「连接状态」总览(计划 26-10-15-2357 S3/Q4 2: 不静默) ----------
 //
 // !为什么需要: 连接失败此前只在「状态栏最后一句」与运行日志里可见 —— 用户不打开页面就零感知(实报
 // 「可能静默失败」)。总览是**常驻一行**: 态 + 实例数 + 上次发现时间/命中端口 + 最近一次发现结果。
@@ -384,7 +384,7 @@ function lastDiscoveryText(last) {
 }
 
 /**
- * 渲染顶部状态卡(计划 26-10-16-0214 S3③): 大状态字 + 指标两行, 数据与判据不变(connStateOf 同源)。
+ * 渲染顶部状态卡(计划 26-10-16-0214 S3 3): 大状态字 + 指标两行, 数据与判据不变(connStateOf 同源)。
  * C6: 重连中/发现失败整卡描边高亮(与 manualEndpoints 的 attn 联动保留)。
  */
 function renderConnOverview(cfg) {
@@ -787,7 +787,7 @@ async function load() {
     setDiscStatus('后端在等配对码: 在后端启动日志/HR 状态卡看 6 位展示码, 填进「配对码」再点「立即发现」');
   }
   renderInstList();
-  renderConnOverview(got); // 顶部「连接状态」总览: 常驻可见, 不打开页面也知道连不连得上(Q4②)
+  renderConnOverview(got); // 顶部「连接状态」总览: 常驻可见, 不打开页面也知道连不连得上(Q4 2)
   syncAdvancedView();
   renderSiteChecks();
   await Promise.all([refreshLogs(), refreshTables()]); // 首次进页面就出日志与两表; 之后后台落盘经 onChanged 自动刷
@@ -890,7 +890,7 @@ async function probeMainInstance() {
 let retestCooldownUntil = 0;
 
 /**
- * 「重测全部」(计划 26-10-16-0214 S3②/R3): 探测统一由后台承载(sendMessage probe-all) ——
+ * 「重测全部」(计划 26-10-16-0214 S3 2/R3): 探测统一由后台承载(sendMessage probe-all) ——
  * 选项页不再直接 fetch(单一写入口 C1), 逐实例只读 GET, 结论落台账后经 storage.onChanged
  * 自动刷进实例表状态列。无实例时给指路空态(V2)。
  */

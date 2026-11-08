@@ -7,7 +7,7 @@
   两道关是 origin 白名单(与数据端点第二道防线同一机制) + 配对码(仅非回环可达时强制, S3);
 - `InstanceRegistry`: 本机实例注册表(平台 app-data 的 instances.json), 心跳 upsert(写时剪枝超龄) + TTL 聚合;
 - 候选表先绑先得(discovery_port 起 +0/+1/+2, C7)+ 绑定失败后台退避重试(占用者退出自动
-  接管, 翻转旧「归属者退出不接管」限制 —— R6)+ 校验期临时端口段告警(S1 ⑥, 在 config 层);
+  接管, 翻转旧「归属者退出不接管」限制 —— R6)+ 校验期临时端口段告警(S1 6, 在 config 层);
 - 发现不可用**永不**影响数据端点: 三个候选全占 ⇒ 明确日志 + 数据端点照常服务(扩展退手动)。
 
 !线程纪律(与 hr/server.py 同款): 发现端点线程只做 HTTP 应答与注册表读写, 不碰任务队列、
@@ -128,7 +128,7 @@ def _read_registry_text(path: str) -> str:
 
 
 class InstanceRegistry:
-    """本机实例注册表(跨进程共享文件): 心跳 upsert + TTL 过滤聚合(S2 ①)
+    """本机实例注册表(跨进程共享文件): 心跳 upsert + TTL 过滤聚合(S2 1)
 
     !写 = 临时文件原子替换(infra.utils.atomic_write); 读容忍(缺文件/坏 JSON ⇒ 当空, 不抛) ——
     注册表是「尽力而为」的发现面, 任何损坏都不该打断数据端点(R5); 多进程并发写由
@@ -168,7 +168,7 @@ class InstanceRegistry:
         """TTL 过滤后的存活实例(缺 endpoint / 缺 token 的残条目一并剔除, 不给扩展半条)
 
         读不到(瞬时拒绝且重试耗尽)时当**空列表**: 只读面, 一次空响应比中断发现安全 ——
-        扩展下一轮再问即可(S2 ③「发现不可用不影响数据端点」)。
+        扩展下一轮再问即可(S2 3「发现不可用不影响数据端点」)。
         """
         with self._lock:
             entries = self._load() or []
@@ -224,7 +224,7 @@ def _replace_url_host(url: str, host: str) -> str:
     """把 URL 的**主机部分**换成请求 Host 头的主机部分(0.0.0.0 自述用)
 
     端口保留条目自己的(那是数据端点的实绑端口 —— Host 头带的是发现端口的端口, 不能跟换);
-    只影响响应文本, 不进任何判据(计划 S2 ④)。
+    只影响响应文本, 不进任何判据(计划 S2 4)。
     """
     if "://" not in url or not host:
         return url
@@ -370,8 +370,8 @@ class HrDiscoveryServer:
         """HTTP 请求 -> (状态码, 响应头, 响应体)。origin 门 + 配对门全在这里, 便于直接钉死。
 
         !它本身就是发 token 的端点, 所以**免 token**(先有鸡还是先有蛋); 两道关:
-        ① origin 白名单(与数据端点第二道防线同一机制, 配了 extension_id 只认那一个);
-        ② 配对码(仅非回环可达时强制, S3)。
+        1. origin 白名单(与数据端点第二道防线同一机制, 配了 extension_id 只认那一个);
+        2. 配对码(仅非回环可达时强制, S3)。
         """
         del body
         origin = _header(headers, ORIGIN_HEADER)
@@ -452,7 +452,7 @@ class HrDiscoveryServer:
             logger.debug(f"HR 取数通道 | 发现端点配对失败(已静默): {detail}, 来源 {source or '未知'}")
 
     def _discover_response(self, headers: Any) -> bytes:
-        """实例聚合(心跳 + TTL 过滤); host=0.0.0.0 时按请求 Host 头替换自述主机部分(S2 ④)"""
+        """实例聚合(心跳 + TTL 过滤); host=0.0.0.0 时按请求 Host 头替换自述主机部分(S2 4)"""
         now = self._now()
         entries = self.registry.alive(ttl=INSTANCE_TTL_S, now=now) if self.registry is not None else []
         wildcard = _is_wildcard_host(self.host)

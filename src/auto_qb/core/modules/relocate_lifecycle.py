@@ -29,7 +29,7 @@ class LifecycleMixin:
         if getattr(self._conf, "enabled", False):
             alias_fs.get_capability(refresh=True)
             n = self._load_jobs()
-            # E1 探测崩溃残留扫描(计划 26-11-04-0055 P2-⑥): add 之后 delete 之前被杀会在用户
+            # E1 探测崩溃残留扫描(计划 26-11-04-0055 P2-6): add 之后 delete 之前被杀会在用户
             # qB 留探测种子+文件, 启动时按 tag 清理(R2); dry-run 不动手(真写, 与相位机同口径)
             swept = 0 if self._dry_run() else sweep_probe_residue(ctx)
             swept_note = f", 启动扫描清理探测残留 {swept} 条" if swept else ""

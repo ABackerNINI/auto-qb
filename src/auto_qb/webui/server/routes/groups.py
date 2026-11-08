@@ -30,7 +30,7 @@ def build_router(ctx: WebContext) -> APIRouter:
         读侧现算
 
         key 收当前指纹 base64url(同 /api/groups/{key} 通道, 畸形 400); 成员集 = 查询时刻
-        store.groups[指纹键](与分组视图/弹层同源同刻, §04.1-①), 聚合 Σ 成员观测面现算
+        store.groups[指纹键](与分组视图/弹层同源同刻, §04.1-1), 聚合 Σ 成员观测面现算
         (3d+ 窗只读成员 agg 文件, M×1; 不再借全局判 null —— 装配单点在 server/traffic_qb.py;
         纯函数口径在 core/traffic_grid.py)。
         """

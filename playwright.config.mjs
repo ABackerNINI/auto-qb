@@ -76,7 +76,7 @@ export default defineConfig({
     /* 端口不再写死: 桩传 --port 0, `wait.stdout` 的正则从启动行捕获实绑端口并注入
      * `process.env.UI_HARNESS_PORT`。url/port 与 wait 互斥 —— 只给 wait。 */
     wait: { stdout: WAIT_STDOUT },
-    /* ❗**不复用**已存在的服务: 多 clone 工作区下复用会连上别的 clone 的残留 harness,
+    /* ! **不复用**已存在的服务: 多 clone 工作区下复用会连上别的 clone 的残留 harness,
      * 于是"全 PASS"验的是旧代码(smoke.md 记的假信心事故)。端口被占时宁可直接失败。 */
     reuseExistingServer: false,
     timeout: 120_000,

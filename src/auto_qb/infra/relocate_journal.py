@@ -390,7 +390,7 @@ def list_spec_jobs(data_dir: str) -> List[str]:
 # S5 扩展(计划 26-11-05-0808 §3.4/D15/D19/D20): supersede 重定向的账面单点
 #
 # armed/rewritten 相位放行再迁移后, 前任 job 的改写账 {A→B} 必须改道 {A→C}(先搬后
-# 重定向, 硬约束①): spec.dst 是 daemon 改写映射的唯一来源(_rewrite_member 读
+# 重定向, 硬约束1): spec.dst 是 daemon 改写映射的唯一来源(_rewrite_member 读
 # spec.src/spec.dst), 改道 = 覆写 spec.dst; journal 记一笔 retarget 供诊断与「旧条目
 # 零残留」核验(N10)。两者都是主循环在线时点的写(qB 在线 ⇒ daemon 不在窗口, 无并发写;
 # §07 串行化行), 读-改-写沿各自单点, 幂等可重放(D20 搬后重试至收敛)。
