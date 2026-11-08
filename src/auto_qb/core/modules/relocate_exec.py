@@ -990,7 +990,7 @@ class ExecMixin:
         conf = self._live_conf()
         items: list = []
         if conf is None or not getattr(conf, "enabled", False):
-            return [self._receipt(req, target, "blocked", "disabled", "整组迁移未启用(配置键 relocate.enabled)")]
+            return [self._receipt(req, target, "blocked", ru.GATE_DISABLED, "整组迁移未启用(配置键 relocate.enabled)")]
         if not req:
             return [self._receipt(req, target, "blocked", "param", "未提供任何 hash")]
         if not target:
@@ -1378,7 +1378,7 @@ class ExecMixin:
         """
         job = self._jobs.get(job_id)
         if job is None:
-            return {"cls": "blocked", "reasons": [{"gate": "gone", "text": f"未找到迁移任务 {job_id}"}]}
+            return {"cls": "blocked", "reasons": [{"gate": ru.GATE_GONE, "text": f"未找到迁移任务 {job_id}"}]}
         if self._dry_run():
             return {
                 "cls": "blocked",

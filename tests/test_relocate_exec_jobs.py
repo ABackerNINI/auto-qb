@@ -24,6 +24,10 @@
 - test_group_facts_gate_inputs_block_gates: 事实包字段丢失/损坏仍拦闸(incomplete/moving/third_party_link/hardlink 四闸) + reparse 非零 tag/缺省 tag 判别
 - test_group_facts_same_fs_free_space_retired: P3 free-space 代理退出 proved(吻合只作参考 note,
   proved/negative 不随它变)
+- test_group_facts_weak_positive_degrades_to_note: 弱证据任何方向都不一锤定音(R1#35)——
+  B′/dst visibility_only 的 positive 不置 same_fs_proved、B′ 级 negative 不置
+  same_fs_negative(降 note 照走执行链一次性强探测, E1 缓存 passed 凭缓存放行);
+  src 侧 D 级 positive 直接证明、D 级 negative 硬拦(判定序两面守阵)
 - test_group_facts_fact_sources_faces: 文件表/目标卷剩余/listing 失败三事实源的单点行为
 - test_group_facts_platform_and_unc_faces: 未证明不撞 platform 闸 + 跨 OS 行拦 multi / cap 崩溃面 / UNC dir 形态 / file_alias_kind 实参
   + 同卷硬链接兜底(same_volume 实参丢失 ⇒ capability_ok 翻假)
@@ -57,7 +61,8 @@ from auto_qb.config.models import RelocateConfig
 
 from auto_qb.core.modules.grouping_mod import group_key_of
 
-from auto_qb.core.modules.relocate_mod import RelocateModule, _native as _mod_native
+from auto_qb.core.modules.relocate_mod import RelocateModule
+from auto_qb.core.modules.relocate_common import _native as _mod_native
 
 from auto_qb.infra import alias_fs as afs
 
@@ -80,7 +85,20 @@ from relocate_exec_support import (
     _spy_spawn,
     _stub_cap,
     _stub_lstat,
+    _stub_probe_pass,
 )
+
+
+@pytest.fixture(autouse=True)
+def _exec_probe_pass(monkeypatch):
+    """执行链 E1 强探测默认放行(issue 26-11-07-0527 R1#35 拆桩面)
+
+    弱证据(B′/visibility_only)positive 不再置 same_fs_proved 后, 多成员组执行链必走
+    一次 run_probe —— FakeClient 替身无列目录端点且 recheck 不推进度, 真跑必然证读超时
+    (实测 10s)判 blocked。本文件用例不关心探测本身(决策表单点在
+    test_relocate_exec_probe_gate.py), 统一经 _stub_probe_pass 放行。
+    """
+    _stub_probe_pass(monkeypatch)
 
 
 def test_cancel_requires_cost_confirmation_then_rolls_back(tmp_path, monkeypatch):
@@ -315,6 +333,110 @@ def test_group_facts_same_fs_free_space_retired(monkeypatch):
     assert "free-space" not in facts3.same_fs_note, facts3.same_fs_note
     v3 = ru.evaluate_group(facts3)
     assert all(r["gate"] != "same_fs" for r in v3["reasons"]), v3
+
+
+def test_group_facts_weak_positive_degrades_to_note(monkeypatch):
+    """弱证据任何方向都不一锤定音(R1#35, issue 26-11-07-0527): 只有 src 侧 D 级
+    (实时 size+mtime 比对)positive 置 same_fs_proved、D 级 negative 置 same_fs_negative;
+    B′(种子元数据 size)与 dst 侧 visibility_only(qB 能列出目标祖先, 证不了共享命名
+    空间)两面正/负都降为 note —— 多成员组照走执行链一次性强探测; E1 缓存 passed 时
+    凭缓存放行。"""
+    from auto_qb.core.modules import relocate_proof as rp_mod
+    from auto_qb.core.modules.relocate_probe import probe_fingerprint
+
+    client = FakeClient()
+    client.files_map["HA"] = [_fake_file("Show/e00.mkv", 64), _fake_file("Show/e01.mkv", 64)]
+    client.files_map["HB"] = client.files_map["HA"]
+
+    def _stub_evidence(src_ev, dst_ev):
+        """path_evidence 判定层替身: src 侧(visibility_only=False)回 src_ev, dst 侧回 dst_ev"""
+        def _fake(ctx, qb_dir, local_dir, files=(), visibility_only=False, sample_k=3):
+            return dst_ev if visibility_only else src_ev
+
+        monkeypatch.setattr(rp_mod, "path_evidence", _fake)
+
+    def _mod():
+        mod = _facts_mod()
+        _fake_fs(monkeypatch, exists=False, scandir_boom=True)
+        _stub_cap(monkeypatch, file_kind="hardlink")
+        return mod
+
+    # 1. src 侧 B′ positive: 不证明 —— note 点名弱证据与强探测去向, 闸门不硬拦多成员组
+    mod = _mod()
+    _stub_evidence(
+        rp_mod.Evidence(rp_mod.POSITIVE, rp_mod.LEVEL_BPRIME, "本机 e00.mkv 的 size 与 qB 元数据相等(弱证据)"),
+        rp_mod.Evidence(rp_mod.UNAVAILABLE, "", "目标链路本机不可读"),
+    )
+    facts = mod._group_facts([_rec("HA"), _rec("HB")], "R:/dst", client)
+    assert facts.same_fs_proved is False and facts.same_fs_negative is False, facts.same_fs_note
+    assert "仅弱证据吻合" in facts.same_fs_note and "B′" in facts.same_fs_note, facts.same_fs_note
+    v = ru.evaluate_group(facts)
+    assert all(r["gate"] != "same_fs" for r in v["reasons"]), v
+    assert any("一次性强探测" in n for n in v["notes"]), v["notes"]
+
+    # 2. dst 侧 visibility_only positive(src 不可判定): 同样只作弱证据
+    mod = _mod()
+    _stub_evidence(
+        rp_mod.Evidence(rp_mod.UNAVAILABLE, "", "qB 列目录端点不可用"),
+        rp_mod.Evidence(rp_mod.POSITIVE, rp_mod.LEVEL_D, "qB 列目录成功, qB 看得见该目录"),
+    )
+    facts2 = mod._group_facts([_rec("HA"), _rec("HB")], "R:/dst", client)
+    assert facts2.same_fs_proved is False and facts2.same_fs_negative is False, facts2.same_fs_note
+    assert "仅弱证据吻合" in facts2.same_fs_note and "visibility_only" in facts2.same_fs_note, facts2.same_fs_note
+
+    # 3. 弱证据 + E1 缓存 passed: 机器级强证明在先, 凭缓存放行(proved=True, note 注明)
+    mod = _mod()
+    mod._ctx.config.qbittorrent = types.SimpleNamespace(
+        host="127.0.0.1", port=8080, username="", password="", api_key=""
+    )
+    mod.probe_put(probe_fingerprint(mod._ctx.config.qbittorrent), "passed", {"method": "e1"})
+    _stub_evidence(
+        rp_mod.Evidence(rp_mod.UNAVAILABLE, "", "qB 列目录端点不可用"),
+        rp_mod.Evidence(rp_mod.POSITIVE, rp_mod.LEVEL_D, "qB 列目录成功, qB 看得见该目录"),
+    )
+    facts3 = mod._group_facts([_rec("HA"), _rec("HB")], "R:/dst", client)
+    assert facts3.same_fs_proved is True, facts3.same_fs_note
+    assert "E1 缓存" in facts3.same_fs_note and "弱证据" in facts3.same_fs_note, facts3.same_fs_note
+
+    # 4. src 侧 D 级 positive(唯一强证据面): 维持直接证明(守阵防收窄过头)
+    mod = _mod()
+    _stub_evidence(
+        rp_mod.Evidence(rp_mod.POSITIVE, rp_mod.LEVEL_D, "代表文件 e00.mkv 的 size+mtime 与本机完全相等"),
+        rp_mod.Evidence(rp_mod.UNAVAILABLE, "", "目标链路本机不可读"),
+    )
+    facts4 = mod._group_facts([_rec("HA"), _rec("HB")], "R:/dst", client)
+    assert facts4.same_fs_proved is True and "D 级" in facts4.same_fs_note, facts4.same_fs_note
+    assert "弱证据" not in facts4.same_fs_note, facts4.same_fs_note
+
+    # 5. src B′ 判负 + dst visibility positive(弱证据互搏): 不判死 —— negative=False,
+    #    note 同时带出「弱证据吻合」与「弱证据判负」两面, 交执行链强探测定夺
+    #    (R1#35 评审: 同机场景 qB<5.0 无列目录端点走 B′, 文件改过 size 判负属正常漂移,
+    #    旧 proved 经 dst 可见性放行结果正确; B′ 判负硬拒会对同机用户失真)
+    mod = _mod()
+    _stub_evidence(
+        rp_mod.Evidence(rp_mod.NEGATIVE, rp_mod.LEVEL_BPRIME, "本机 2 个文件的 size 与 qB 元数据全不等"),
+        rp_mod.Evidence(rp_mod.POSITIVE, rp_mod.LEVEL_D, "qB 列目录成功, qB 看得见该目录"),
+    )
+    facts5 = mod._group_facts([_rec("HA"), _rec("HB")], "R:/dst", client)
+    assert facts5.same_fs_proved is False and facts5.same_fs_negative is False, facts5.same_fs_note
+    assert "仅弱证据吻合" in facts5.same_fs_note and "visibility_only" in facts5.same_fs_note, facts5.same_fs_note
+    assert "弱证据判负" in facts5.same_fs_note and "不作确定性结论" in facts5.same_fs_note, facts5.same_fs_note
+    v5 = ru.evaluate_group(facts5)
+    assert all(r["gate"] != "same_fs" for r in v5["reasons"]), v5
+    assert any("一次性强探测" in n for n in v5["notes"]), v5["notes"]
+
+    # 6. src D 级 negative(唯一决定性判负面): 硬拦不变(same_fs_negative=True + gate blocked)
+    mod = _mod()
+    _stub_evidence(
+        rp_mod.Evidence(rp_mod.NEGATIVE, rp_mod.LEVEL_D, "抽中的 2 个代表文件 size/mtime 与本机全不等"),
+        rp_mod.Evidence(rp_mod.UNAVAILABLE, "", "目标链路本机不可读"),
+    )
+    facts6 = mod._group_facts([_rec("HA"), _rec("HB")], "R:/dst", client)
+    assert facts6.same_fs_proved is False and facts6.same_fs_negative is True, facts6.same_fs_note
+    assert "判负详情" in facts6.same_fs_note, facts6.same_fs_note
+    v6 = ru.evaluate_group(facts6)
+    gate6 = next(r for r in v6["reasons"] if r["gate"] == "same_fs")
+    assert v6["cls"] == "blocked" and gate6["cls"] == "blocked", v6
 
 
 def test_group_facts_fact_sources_faces(monkeypatch):

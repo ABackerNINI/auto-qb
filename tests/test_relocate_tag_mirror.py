@@ -33,14 +33,20 @@ from auto_qb.config.models import RelocateConfig
 
 from helpers import pin_disk_usage, relocate_env
 
-from relocate_exec_support import _bare_mod, _job, _run_ticks, _simulate_moved, _spy_spawn
+from relocate_exec_support import _bare_mod, _job, _run_ticks, _simulate_moved, _spy_spawn, _stub_probe_pass
 
 TAG = "zRelocatePending"
 
 
 def _tag_env(tmp_path, monkeypatch, tag=TAG):
-    """真临时目录 + 已开启标签镜像的 relocate 环境(HA/HB 双成员组, 起步 uploading)"""
+    """真临时目录 + 已开启标签镜像的 relocate 环境(HA/HB 双成员组, 起步 uploading)
+
+    _stub_probe_pass(issue 26-11-07-0527 R1#35 拆桩面): 弱证据 positive 不再置
+    same_fs_proved 后多成员组执行链必走 run_probe, 替身环境真跑必然证读超时 blocked ——
+    标签镜像用例不关心探测本身, 统一放行(决策表单点在 test_relocate_exec_probe_gate.py)。
+    """
     pin_disk_usage(monkeypatch)
+    _stub_probe_pass(monkeypatch)
     mgr, client, src, dst, content, files = relocate_env(tmp_path, state="uploading")
     mgr.config.relocate.pending_tag = tag
     mod = mgr.host.get("relocate")
@@ -64,6 +70,7 @@ def _tag_calls(client, kind):
 def test_pending_tag_default_off_zero_qb_writes(tmp_path, monkeypatch):
     """默认空配置(标签镜像关闭): 全流程到 armed 零 add/remove 请求(黄金法则 2)"""
     pin_disk_usage(monkeypatch)
+    _stub_probe_pass(monkeypatch)  # R1#35 后多成员组执行链必走 run_probe(本用例只关心标签面)
     mgr, client, src, dst, content, files = relocate_env(tmp_path, state="uploading")
     assert mgr.config.relocate.pending_tag == ""
     mod = mgr.host.get("relocate")

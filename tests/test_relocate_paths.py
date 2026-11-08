@@ -29,14 +29,29 @@ S4(26-11-05-0808)退役面: 旧 guardian(finalize_watch)退化路径/CLI/pid 锁
 - test_arm_spec_and_daemon_failure_paths: spec 落盘失败只告警 / daemon 拉起异常被对账吞掉 / 删链接异常计 0
 - test_cancel_close_journal: 撤销把 journal 写成终态
 - test_module_guard_branches
+
+issue 26-11-07-0527 R1#35 拆桩面: 弱证据(B′/visibility_only)positive 不再置
+same_fs_proved, 多成员组执行链必走一次 run_probe —— FakeClient 替身真跑必然证读超时
+blocked; 本文件用例不关心探测本身(决策表单点在 test_relocate_exec_probe_gate.py),
+autouse 夹具统一放行。
 """
 import os
+
+import pytest
 
 from auto_qb.core.modules import relocate_units as ru
 from auto_qb.infra import alias_fs, relocate_journal
 from auto_qb.tools import recycle_daemon as rd
 
 from helpers import pin_disk_usage, relocate_env
+
+from relocate_exec_support import _stub_probe_pass
+
+
+@pytest.fixture(autouse=True)
+def _exec_probe_pass(monkeypatch):
+    """执行链 E1 强探测默认放行(理由见文件头)"""
+    _stub_probe_pass(monkeypatch)
 
 
 def _simulate_moved(mgr, dst, files, content, mover="HA"):

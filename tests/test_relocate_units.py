@@ -75,7 +75,12 @@ W8(R32) S5a 守阵追加(变异测试 classify-units 真洞簇钉面):
 
 覆盖率第三轮 T2b 补测(26-11-05):
 - test_within_empty_scope_guard_via_norm_empty: 空 scope 守卫(归一化空串防御弧, 经 _norm 替身直驱)永不匹配(98->99)
+
+issue 26-11-07-0527 批(R1#25/R1#26):
+- test_gate_ids_stable_strings: GATE_GONE/GATE_DISABLED 稳定字符串契约(统一引用后的单一来源)
+- test_unit_plan_shape_no_fallback_field: RelocateUnitPlan 字段集钉死无 fallback(确认拒绝即不发起, 无回落路径)
 """
+import dataclasses
 import os
 
 from auto_qb.core.modules import relocate_units as ru
@@ -1226,3 +1231,42 @@ def test_evaluate_add_dir_alias_redirects_landing_in_moved_phase():
     assert r["cls"] == ru.CLS_CONFIRM and r["reasons"][0]["gate"] == "alias_scope", r
     assert r["actual_path"].replace("\\", "/").startswith(T), r
     assert r["volume_free"] == 1234
+
+
+# ---------------------------------------------------------------- 闸门 id 与单元计划形状(issue 26-11-07-0527)
+
+
+def test_gate_ids_stable_strings():
+    """GATE_GONE/GATE_DISABLED 稳定字符串契约(R1#25): 回执统一引用常量后, id 仍按值稳定
+    (测试与前端按它断言, 改文案不改 id)"""
+    assert ru.GATE_GONE == "gone" and ru.GATE_DISABLED == "disabled"
+
+
+def test_unit_plan_shape_no_fallback_field():
+    """RelocateUnitPlan 字段集无 fallback(R1#26): 「确认拒绝即不发起迁移、无回落」——
+    字段集钉死, 防回落字段被误读为存在回落路径而回归"""
+    names = [f.name for f in dataclasses.fields(ru.RelocateUnitPlan)]
+    assert names == [
+        "form",
+        "file_count",
+        "content_root",
+        "content_root_rel",
+        "flat",
+        "exclusive",
+        "needs_confirm",
+        "link_count",
+        "link_kind",
+        "reason",
+    ], names
+    u = ru.plan(
+        S,
+        _files(2, prefix=""),
+        8,
+        2000,
+        multi_member=True,
+        content_root_exclusive=True,
+        file_link_kind="hardlink",
+        dir_link_kind="junction",
+    )
+    assert u.form == ru.FORM_FILE_LINKS and u.link_count == 2
+    assert not hasattr(u, "fallback"), "fallback 字段已删: 确认拒绝即不发起, 无回落路径"

@@ -25,7 +25,6 @@ from .relocate_units import (
     same_volume_proof,
 )
 from .relocate_common import (
-    _DISABLED_GATE,
     _QB_TEMP_SUFFIX,
     _native,
     _same_volume_resolved,
@@ -152,7 +151,7 @@ class PlanMixin:
                     "reasons":
                         [
                             {
-                                "gate": _DISABLED_GATE,
+                                "gate": ru.GATE_DISABLED,
                                 "text": "整组迁移未启用(配置键 relocate.enabled) —— 路由层已 fail-closed, 此处为纵深防御"
                             }
                         ],
@@ -274,7 +273,16 @@ class PlanMixin:
         for h in req:
             rec = store.get(h)
             if rec is None:
-                gone_items.append({"hash": h, "cls": CLS_BLOCKED, "reasons": [{"gate": "gone", "text": "种子已不在客户端"}]})
+                gone_items.append(
+                    {
+                        "hash": h,
+                        "cls": CLS_BLOCKED,
+                        "reasons": [{
+                            "gate": ru.GATE_GONE,
+                            "text": "种子已不在客户端"
+                        }]
+                    }
+                )
             else:
                 present[h] = rec
         buckets: dict[Tuple[str, Tuple[str, ...]], List[str]] = {}  # group key -> [hashes](仅本次选中的)
@@ -563,7 +571,10 @@ class PlanMixin:
         判据链(优先级从高到低):
         - assume_shared=true: 用户显式越权直通(note 注明「未经 auto-qb 验证, 由用户承担」);
         - 路径级证据(relocate_proof.path_evidence: D 列目录元数据比对 -> B′ 降级):
-          任一侧 positive => 证明成立; 任一侧 negative => 确定性不共享(优先于 E1 缓存);
+          src 侧 D 级 positive => 证明成立, src 侧 D 级 negative => 确定性不共享(硬拦);
+          B′ 与 dst 侧 visibility_only 两面都是弱证据(证不了「qB 读得到本机盘/共享同一
+          命名空间」), 正/负任何方向都不一锤定音, 降为 note 不参与证明: E1 机器级缓存
+          passed => 凭缓存放行, 否则未证明(待执行链一次性强探测定夺);
         - 两侧都 unavailable: E1 机器级缓存 passed => 凭缓存放行(note 注明路径级复查
           不可用); 否则未证明(negative=False, 待执行链一次性强探测), free-space 代理
           结果只作参考 note 保留(不再参与判定)。
@@ -586,13 +597,29 @@ class PlanMixin:
             dst_ev = rp.Evidence(rp.UNAVAILABLE, "", "目标链路本机不可读, 无法定位可列的最近存在祖先")
         else:
             dst_ev = rp.path_evidence(self._ctx, dst_probe, self._syscall(dst_probe), visibility_only=True)
+        # 强证据只有 src 侧 D 级(实时 size+mtime 逐条比对): positive => 证明成立,
+        # negative => 确定性判负。B′ 级(种子元数据 size)与 dst 侧 visibility_only(qB 能
+        # 列出目标祖先目录, 路径串两侧同名不等于共享同一命名空间)都是弱证据: 任何方向
+        # 都不一锤定音 —— 正/负都降为 note, 交执行链一次性强探测(E1 有指纹缓存, 成本
+        # 有界)定夺, E1 机器级缓存 passed 时凭缓存放行(issue 26-11-07-0527 R1#35)。
+        # dst 侧 visibility_only 永不产 NEGATIVE(列目录成功即 positive), 判负只可能来自 src。
+        if src_ev.status == rp.POSITIVE and src_ev.level == rp.LEVEL_D:
+            return True, False, "同机判定: 源侧路径级证据吻合(D 级)"
+        if src_ev.status == rp.NEGATIVE and src_ev.level == rp.LEVEL_D:
+            return False, True, f"同机判负详情: {src_ev.detail}"
+        # ---- 弱证据汇合面(B′ 正/负与 dst visibility positive 都在这里) ----
+        weak_bits = []
         if rp.POSITIVE in (src_ev.status, dst_ev.status):
             ev, side = (src_ev, "源侧") if src_ev.status == rp.POSITIVE else (dst_ev, "目标侧")
-            weak = "(弱证据: 仅种子元数据 size 比对)" if ev.level == rp.LEVEL_BPRIME else ""
-            return True, False, f"同机判定: {side}路径级证据吻合({ev.level} 级{weak})"
-        if rp.NEGATIVE in (src_ev.status, dst_ev.status):
-            ev = src_ev if src_ev.status == rp.NEGATIVE else dst_ev
-            return False, True, f"同机判负详情: {ev.detail}"
+            weak = ("仅种子元数据 size 比对(B′)" if ev.level == rp.LEVEL_BPRIME else "仅证明 qB 能列出该目录(visibility_only)")
+            weak_bits.append(f"{side}路径级证据仅弱证据吻合({weak})")
+        if src_ev.status == rp.NEGATIVE:  # 走到这里必为 B′ 级(D 级判负已在上方返回)
+            weak_bits.append(f"源侧弱证据判负(仅元数据 size 比对: {src_ev.detail}), 不作确定性结论")
+        if weak_bits:
+            joined = "; ".join(weak_bits)
+            if e1_passed:
+                return True, False, f"同机判定: {joined}, 凭机器级强证明(E1 缓存)放行"
+            return False, False, f"同机判定: {joined} —— 执行迁移时将做一次性强探测(失败将拒绝)"
         # 两侧证据均不可判定: E1 机器级缓存兜底放行, 否则未证明(执行链强探测兜底)
         if e1_passed:
             return True, False, "同机判定: 路径级复查不可用(qB 列目录与元数据比对均不可判定), 凭机器级强证明(E1 缓存)放行"

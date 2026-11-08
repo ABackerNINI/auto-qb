@@ -45,7 +45,8 @@
 - test_relocate_module_precheck_scandir_and_lstat_degraded
 - test_relocate_module_precheck_scandir_missing_root
 - test_relocate_module_same_fs_p3_semantics: P3 同机判据替换预检层 —— D 级 wiring(withMetadata="true"/
-  列内容根)/ B′ 判负硬拦(两条出路, reasons 元素 gate/cls/text 同形, gate id "same_fs")/
+  列内容根)/ D 级判负硬拦(两条出路, reasons 元素 gate/cls/text 同形, gate id "same_fs";
+  R1#35 后 B′ 级判负是弱证据不硬拦, 硬拦守阵由 D 级判负承载)/
   不可判定转 note 不拦 / E1 缓存凭据放行 / assume_shared 直通(note 注明由用户承担)
 - test_relocate_module_start_and_apply_probe_wiring
 - test_relocate_precheck_no_false_dir_link_note
@@ -260,7 +261,7 @@ def test_relocate_volume_free_ancestor_fallback(tmp_path, monkeypatch):
     桩 disk_usage(存在回固定 free / 不存在抛错): 两次独立采样间任何后台写盘都会让
     全等断言偶发红(issue 26-11-02-0413), 钉死后语义不变、采样确定。
     """
-    from auto_qb.core.modules.relocate_mod import _volume_free_resolved
+    from auto_qb.core.modules.relocate_common import _volume_free_resolved
     from auto_qb.infra import file_access as fa_mod
     from auto_qb.infra.file_access import LocalFileAccess
 
@@ -343,7 +344,7 @@ def test_relocate_volume_free_resolved_degenerate(tmp_path, monkeypatch):
     """上溯退化面: 深层全缺失走尽层数上限 / 空目标 / 卷根不动点 => None(覆盖补齐)"""
     import auto_qb.infra.alias_fs as alias_fs
 
-    from auto_qb.core.modules.relocate_mod import _same_volume_resolved, _volume_free_resolved
+    from auto_qb.core.modules.relocate_common import _same_volume_resolved, _volume_free_resolved
     from auto_qb.infra.file_access import LocalFileAccess
 
     fa = LocalFileAccess()
@@ -498,7 +499,9 @@ def test_relocate_module_same_fs_p3_semantics(tmp_path, monkeypatch):
         captured.append((directory_path, with_metadata))
         return [
             {
-                "name": name,
+                # qB 列目录回**条目名**(列的是内容根, 不含目录段; 全相对路径名会让 src 侧
+                # D 比对判负, 弱证据优先序修正后不再被 dst visibility positive 掩盖)
+                "name": name.rsplit("/", 1)[-1],
                 "size": sz,
                 "last_modification_date": mt,
                 "type": "File"
@@ -512,12 +515,25 @@ def test_relocate_module_same_fs_p3_semantics(tmp_path, monkeypatch):
     assert captured[0][0].replace("\\", "/").endswith("Show")  # 列的是内容根, 不是下载根上层
     assert any("D 级" in n for n in item["notes"]), item["notes"]
 
-    # 2. B′ 判负: qB 元数据 size 与本机文件全不等 -> blocked(same_fs, 两条出路)
-    mgr2, client2, src2, dst2, content2, _ = relocate_env(tmp_path / "b", file_count=2, data_dir=False)
-    client2.files_map["HA"] = [_fake_file("Show/e00.mkv", 999), _fake_file("Show/e01.mkv", 999)]
-    client2.files_map["HB"] = list(client2.files_map["HA"])
-    for t in (mgr2.store.by_hash["HA"], mgr2.store.by_hash["HB"]):
-        t._files = None
+    # 2. D 级判负: qB 列目录元数据(size)与本机文件全不等 -> blocked(same_fs, 两条出路)
+    # !R1#35 弱证据收窄: B′ 级判负(种子元数据 size)不再作确定性结论(降 note 交执行链
+    # 强探测定夺, 见 test_group_facts_weak_positive_degrades_to_note); 硬拦守阵换 **D 级**
+    # 判负承载(桩列目录端点回错配 size)。dst 侧 visibility positive(stub 对 dst 同样
+    # 回条目)不得掩盖 src D 级判负 —— 判定序 D 级在先的守阵就在本段。
+    mgr2, client2, src2, dst2, content2, files2 = relocate_env(tmp_path / "b", file_count=2, data_dir=False)
+    mtimes2 = {f.name: (999, 1234567890) for f in files2}  # size 错配(本机真实 64)
+
+    def _dir_content_mismatch(directory_path=None, with_metadata=None, **kw):
+        return [
+            {
+                "name": name.rsplit("/", 1)[-1],
+                "size": sz,
+                "last_modification_date": mt,
+                "type": "File"
+            } for name, (sz, mt) in mtimes2.items()
+        ]
+
+    client2.app_get_directory_content = _dir_content_mismatch
     item2 = mgr2.host.get("relocate").relocate_precheck(["HA", "HB"], dst2)[0]
     assert item2["cls"] == "blocked" and "same_fs" in [r["gate"] for r in item2["reasons"]]
     # 回执 truth 结构(gate/cls/text 同形): gate id 断言用 "same_fs" 不用全文
@@ -525,6 +541,7 @@ def test_relocate_module_same_fs_p3_semantics(tmp_path, monkeypatch):
     assert r2["cls"] == "blocked" and set(r2) >= {"gate", "cls", "text"}, item2["reasons"]
     text2 = r2["text"]
     assert "fs.path_map" in text2 and "assume_shared" in text2
+    assert "判负详情" in " ".join(item2["notes"]), item2["notes"]  # note 带出 D 级判负详情
 
     # 3. 不可判定(D 端点不可用 + B′ 读不到)-> 多成员不再硬拦, note 转执行链强探测
     # !0808 S1 源侧三态起(E2.2): 「声明文件不在盘」会以 source_missing 抢拦 —— 本场景的
@@ -890,7 +907,10 @@ def test_web_relocate_cancel_route(web_env):
 def test_web_relocate_cancel_drain(tmp_path, monkeypatch):
     """drain 级撤销两步走: 未确认(cls=confirm + cost, 数据零变动); 确认(cls=ok,
     set_location 搬回 src + phase=cancelled + journal 落盘)"""
+    from relocate_exec_support import _stub_probe_pass
+
     pin_disk_usage(monkeypatch)
+    _stub_probe_pass(monkeypatch)  # R1#35 后多成员组执行链必走 run_probe(本用例只关心撤销链)
     mgr, client, src, dst, content, _ = relocate_env(tmp_path, file_count=2, data_dir=False)
     mgr.config.data_dir = str(tmp_path / "data")
     mod = mgr.host.get("relocate")

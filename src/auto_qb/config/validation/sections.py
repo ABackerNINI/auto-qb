@@ -8,7 +8,7 @@ from urllib.parse import urlsplit
 
 from ...infra.utils import is_loopback_host, parse_bool, parse_fsize, parse_hr_condition, parse_speed, parse_time
 from .. import site_presets
-from ..models import TRANSFER_FIELD_KEYS
+from ..models import RelocateConfig, TRANSFER_FIELD_KEYS
 from ..schema.fields import (
     LOG_LEVELS,
     NOTIFY_CHANNELS,
@@ -695,7 +695,10 @@ def _validate_relocate(spec: dict | None, errors: List[str]) -> None:
     """relocate 段(整组迁移, 计划 26-10-18-1604 §3.7): 10 键逐一键级校验
 
     阈值分流细节(alias_file_threshold 的 7/8/9 边界、hard_max_links 与目录别名的取舍)
-    由 P2 引擎纯函数表驱动测试覆盖, 本处只做形状与粗范围: 两个 int >= 1; verify 取值域
+    由 P2 引擎纯函数表驱动测试覆盖, 本处只做形状与粗范围: 两个 int >= 1 且
+    alias_file_threshold <= hard_max_links(交叉校验, issue 26-11-07-0527 R1#27 ——
+    plan() 的阈值分支先于 hard_max 检查, threshold > hard_max 时 count < threshold 的
+    组绕过逐文件链接硬上限, 「链接爆炸防护」静默失效); verify 取值域
     单点(RELOCATE_VERIFY_MODES, schema.fields 同源); 两个时间键 > 0; low_space_warn 走
     parse_fsize(二进制单位, YAML 写 10GiB; 0 = 不告警)。
     """
@@ -708,12 +711,33 @@ def _validate_relocate(spec: dict | None, errors: List[str]) -> None:
     for key in ("enabled", "allow_uac", "assume_shared"):
         if key in spec:
             _try(parse_bool, spec[key], f"config.relocate.{key}", errors)
+    parsed_ints: dict = {}
     for key in ("alias_file_threshold", "hard_max_links"):
         if key not in spec:
             continue
         n = _try(int, spec[key], f"config.relocate.{key}(须为整数)", errors)
         if n is not None and n < 1:
             errors.append(f"config.relocate.{key}: 须 >= 1(文件数/链接条数): {spec[key]}")
+        if n is not None:
+            parsed_ints[key] = n
+    # 交叉校验(fail-fast, 黄金法则 4): 两键只配其一(或都没配)时, 另一侧按 models 缺省值
+    # 参与比较 —— 缺省键自身不可能越界; 报错文案同时点名两键与约束关系, 值来自缺省时
+    # 标注来源(用户在 config.yml 里找不到裸数值, 会误以为是自己的配置错写)。
+    if parsed_ints:
+        defaults = RelocateConfig()
+        thr = parsed_ints.get("alias_file_threshold", defaults.alias_file_threshold)
+        mx = parsed_ints.get("hard_max_links", defaults.hard_max_links)
+        if thr > mx:
+            thr_text = (
+                f"alias_file_threshold({thr})"
+                if "alias_file_threshold" in parsed_ints else f"alias_file_threshold(缺省 {thr})"
+            )
+            mx_text = f"hard_max_links({mx})" if "hard_max_links" in parsed_ints else f"hard_max_links(缺省 {mx})"
+            errors.append(
+                f"config.relocate: {thr_text} 不得大于 {mx_text}: "
+                "文件数 < 阈值的组走逐文件链接时不再受硬上限约束(链接爆炸防护失效) —— "
+                "请调低 alias_file_threshold 或调高 hard_max_links"
+            )
     if "verify" in spec:
         mode = str(spec["verify"]).strip().lower()
         if mode not in RELOCATE_VERIFY_MODES:

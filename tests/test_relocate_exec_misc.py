@@ -57,7 +57,8 @@ from auto_qb.config.models import RelocateConfig
 
 from auto_qb.core.modules.grouping_mod import group_key_of
 
-from auto_qb.core.modules.relocate_mod import RelocateModule, _native as _mod_native
+from auto_qb.core.modules.relocate_mod import RelocateModule
+from auto_qb.core.modules.relocate_common import _native as _mod_native
 
 from auto_qb.infra import alias_fs as afs
 
@@ -72,7 +73,20 @@ from relocate_exec_support import (
     _job,
     _spy_spawn,
     _stub_cap,
+    _stub_probe_pass,
 )
+
+
+@pytest.fixture(autouse=True)
+def _exec_probe_pass(monkeypatch):
+    """执行链 E1 强探测默认放行(issue 26-11-07-0527 R1#35 拆桩面)
+
+    弱证据(B′/visibility_only)positive 不再置 same_fs_proved 后, 多成员组执行链必走
+    一次 run_probe —— FakeClient 替身无列目录端点且 recheck 不推进度, 真跑必然证读超时
+    (实测 10s)判 blocked。本文件用例不关心探测本身(决策表单点在
+    test_relocate_exec_probe_gate.py), 统一经 _stub_probe_pass 放行。
+    """
+    _stub_probe_pass(monkeypatch)
 
 
 def test_entry_single_location_disabled_unchanged(tmp_path, monkeypatch):

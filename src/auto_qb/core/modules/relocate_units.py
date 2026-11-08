@@ -169,7 +169,6 @@ class RelocateUnitPlan:
     needs_confirm: bool  # 目录别名必须显式确认「以后新增也落新位置」
     link_count: int  # 预计链接条数(dir_alias=1; file_links=F; 其余 0)
     link_kind: Optional[str]  # 拟用链接形态(junction/symlink/hardlink; direct/reject=None)
-    fallback: str  # 用户拒绝确认后的回落形态(file_links 或 "")
     reason: str  # 自解释文案(为什么是这个形态/为什么拒绝/为什么需确认)
 
 
@@ -205,13 +204,10 @@ def plan(
     # 空文件表先于「单成员组直搬」: 读不到文件表时连「搬什么」都不知道, 不能按 direct 放行
     # (单成员组确实不需要别名, 但空表是事实缺失, 不是「不需要」)
     if count == 0:
-        return RelocateUnitPlan(
-            FORM_REJECT, 0, content_root, rel, flat, exclusive, False, 0, None, "", "文件列表为空, 无法判定内容布局"
-        )
+        return RelocateUnitPlan(FORM_REJECT, 0, content_root, rel, flat, exclusive, False, 0, None, "文件列表为空, 无法判定内容布局")
     if not multi_member:
         return RelocateUnitPlan(
-            FORM_DIRECT, count, content_root, rel, flat, exclusive, False, 0, None, "",
-            "单成员组: qB 直接搬迁, 不需要别名(阈值与链接能力不参与判定)"
+            FORM_DIRECT, count, content_root, rel, flat, exclusive, False, 0, None, "单成员组: qB 直接搬迁, 不需要别名(阈值与链接能力不参与判定)"
         )
 
     # ---- 2. 文件级链接可建性(能力 + 长路径校正) ----
@@ -236,7 +232,7 @@ def plan(
     def _dir_alias_proposal(reason: str) -> RelocateUnitPlan:
         return RelocateUnitPlan(
             FORM_DIR_ALIAS, count, content_root, rel, flat, exclusive, True, 1, dir_link_kind,
-            FORM_FILE_LINKS if file_link_kind is not None else "", reason + " —— 提议目录别名(需确认「该目录以后新增的种子也会落到新位置」; 不确认则拒绝)"
+            reason + " —— 提议目录别名(需确认「该目录以后新增的种子也会落到新位置」; 不确认则拒绝)"
         )
 
     if not file_ok:
@@ -245,14 +241,14 @@ def plan(
             return _dir_alias_proposal(file_reason or "文件级链接不可建")
         why = [r for r in (file_reason, dir_reason if exclusive else "") if r]
         return RelocateUnitPlan(
-            FORM_REJECT, count, content_root, rel, flat, exclusive, False, 0, None, "",
+            FORM_REJECT, count, content_root, rel, flat, exclusive, False, 0, None,
             "拒绝: " + "; ".join(why) + " —— 既不静默留裸奔状态, 也不猜测; 出路: 换同卷目标 / 缩短路径 / 先迁走同目录其它种子"
         )
 
     # ---- 3. 阈值分流 ----
     if count < threshold:
         return RelocateUnitPlan(
-            FORM_FILE_LINKS, count, content_root, rel, flat, exclusive, False, count, file_link_kind, "",
+            FORM_FILE_LINKS, count, content_root, rel, flat, exclusive, False, count, file_link_kind,
             f"文件数 {count} < 阈值 {threshold}: 逐文件链接(对未来种子零影响)"
         )
     if dir_ok:
@@ -264,11 +260,11 @@ def plan(
         if exclusive and dir_link_kind is None:
             why += f", 且目录别名不可用({dir_link_error or '未探测到可用形态'})"
         return RelocateUnitPlan(
-            FORM_REJECT, count, content_root, rel, flat, exclusive, False, 0, None, "",
+            FORM_REJECT, count, content_root, rel, flat, exclusive, False, 0, None,
             f"拒绝: {why} —— 避免链接爆炸; 出路: 换更专属的目标布局 / 提高 hard_max_links"
         )
     return RelocateUnitPlan(
-        FORM_FILE_LINKS, count, content_root, rel, flat, exclusive, False, count, file_link_kind, "",
+        FORM_FILE_LINKS, count, content_root, rel, flat, exclusive, False, count, file_link_kind,
         f"文件数 {count} >= 阈值 {threshold} 但目录别名不适用"
         f"({'平铺布局, 整目录别名不提供' if flat else '目录不专属(含组外文件/杂项)'}): 逐文件链接"
     )
@@ -408,9 +404,12 @@ class GroupFacts:
     - same_volume: 源/目标是否同卷(None = 不可判定, 按跨卷保守处理)。
     - target_free: 目标卷剩余字节(None = 不可判定 ⇒ space 闸门拒绝)。
     - same_fs_proved: 同机证明成立(P3 判据: assume_shared 直通 / E1 机器级缓存 passed /
-      路径级证据任一侧 positive; 计划 26-11-04-0055 §03.1; free-space 代理已退役为提示)。
-    - same_fs_negative: 确定性不共享(路径级证据判负)—— 未证明不再硬拦多成员组(P3 闸门
-      重排, 执行链一次性强探测兜底), 判负仍然硬拦且优先于其它结论。
+      路径级证据 src 侧 D 级 positive; B′/visibility_only 弱证据正/负都不一锤定音, 降
+      note 后照走执行链一次性强探测 —— 计划 26-11-04-0055 §03.1 + issue 26-11-07-0527
+      R1#35; free-space 代理已退役为提示)。
+    - same_fs_negative: 确定性不共享(路径级证据 **src 侧 D 级**判负)—— 未证明不再硬拦
+      多成员组(P3 闸门重排, 执行链一次性强探测兜底), D 级判负仍然硬拦; B′ 级判负是
+      弱证据, 降 note 交执行链强探测定夺, 不进本位(R1#35 同款逻辑)。
     - same_fs_note: 同机判定的告知性 note(assume_shared 越权/E1 凭据放行/判负详情/
       不可判定原因), evaluate_group 原样入 notes。
     - file_link_kind/dir_link_kind: alias_fs 能力探测 + 同卷判定后的可用形态(None = 不可用)。
@@ -436,7 +435,7 @@ class GroupFacts:
     same_volume: Optional[bool] = None
     target_free: Optional[int] = None
     same_fs_proved: bool = False
-    same_fs_negative: bool = False  # P3: 路径级证据判负(确定性不共享)—— 优先于 proved 的硬拦面
+    same_fs_negative: bool = False  # P3: src 侧 D 级判负(确定性不共享)—— 优先于 proved 的硬拦面; B′ 判负不入本位
     same_fs_note: str = ""  # P3: 同机判定告知性 note(assume_shared 越权/E1 凭据/判负详情), 原样入 notes
     capability_ok: bool = True
     capability_reason: str = ""

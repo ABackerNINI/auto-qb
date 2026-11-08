@@ -18,7 +18,8 @@ from auto_qb.config.models import RelocateConfig
 
 from auto_qb.core.modules.grouping_mod import group_key_of
 
-from auto_qb.core.modules.relocate_mod import RelocateModule, _native as _mod_native
+from auto_qb.core.modules.relocate_mod import RelocateModule
+from auto_qb.core.modules.relocate_common import _native as _mod_native
 
 from auto_qb.infra import alias_fs as afs
 
@@ -56,6 +57,24 @@ def _spy_spawn(mod, calls):
     mod._spawn_daemon = lambda *a, **k: calls.append(("daemon", ) + tuple(a))
 
 
+def _stub_probe_pass(monkeypatch):
+    """执行链 E1 强探测替身: 恒 passed(全链用例只要求探测放行, 决策表单点在 test_relocate_exec_probe_gate.py)
+
+    issue 26-11-07-0527 R1#35 后, B′/visibility_only 弱证据不再置 same_fs_proved,
+    多成员组执行链必走一次 run_probe —— 替身环境(FakeClient 无列目录端点且 recheck 不
+    推进度)真跑必然证读超时(实测 10s)判 blocked, 全链用例经本桩放行。
+    """
+    from auto_qb.core.modules import relocate_exec as _rex
+    from auto_qb.core.modules.relocate_probe import ProbeResult
+
+    monkeypatch.setattr(
+        _rex, "run_probe", lambda ctx, src, dst: ProbeResult("passed", "ok", False, {
+            "method": "e1",
+            "stub": True
+        })
+    )
+
+
 def _run_ticks(mod, n=6):
     for _ in range(n):
         mod.on_task_line()
@@ -74,6 +93,7 @@ def _armed_env(tmp_path, monkeypatch, clock=None):
     FakeClock(start=开机后秒数), S3 收敛后不再进程级 patch stdlib time.monotonic)。
     """
     pin_disk_usage(monkeypatch)
+    _stub_probe_pass(monkeypatch)
     mgr, client, src, dst, content, files = relocate_env(tmp_path, state="uploading", clock=clock)
     mod = mgr.host.get("relocate")
     spawned = []

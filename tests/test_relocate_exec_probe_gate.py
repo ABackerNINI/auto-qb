@@ -25,6 +25,10 @@
   短路 blocked(gate same_fs, 文案「qB 连接配置缺失, 无法执行同机探测」), 不触发探测、不写缓存
   (经 _ensure_probe 直测 —— 无 qbittorrent 段的 config 在执行体现在先被部署闸 D 格拦下,
   S1 部署闸在前是正确顺序, 本用例聚焦探测闸自身分支)
+- test_weak_positive_still_probes_and_strong_d_positive_skips: 弱证据任何方向都不短路探测闸
+  —— src B′ positive / dst visibility_only positive / src B′ negative(+dst visibility
+  positive)三种桩面 run_probe 都照走一次(R1#35, issue 26-11-07-0527);
+  src 侧 D 级 positive 维持 same_fs_proved 短路(零探测直接建账)
 """
 
 import types
@@ -304,3 +308,74 @@ def test_fingerprint_change_reprobes(monkeypatch):
     mod._jobs.clear()
     assert mod.relocate_execute(["HA"], "R:/dst3")[0]["cls"] == "started"
     assert len(calls) == 2, calls
+
+
+def test_weak_positive_still_probes_and_strong_d_positive_skips(monkeypatch):
+    """弱证据任何方向都不短路探测闸(R1#35): B′(种子元数据 size)与 dst visibility_only
+    (qB 能列出目标祖先)两面正/负都证不了「qB 与 auto-qb 共享同一命名空间」——
+    same_fs_proved/negative 都不成立, run_probe 照走一次(一次性、有指纹缓存);
+    src 侧 D 级(实时 size+mtime 比对)positive 维持直接证明短路。"""
+    from auto_qb.core.modules import relocate_proof as rp_mod
+
+    # 弱证据(src B′ positive): 预检 proved 不成立 -> 探测闸照走, passed 后正常建账
+    mod, locs = _gate_env(monkeypatch)
+    monkeypatch.setattr(
+        rp_mod,
+        "path_evidence",
+        lambda ctx, qb_dir, local_dir, files=(), visibility_only=False, sample_k=3: rp_mod.
+        Evidence(rp_mod.POSITIVE, rp_mod.LEVEL_BPRIME, "本机 e00.mkv 的 size 与 qB 元数据相等(弱证据)")
+        if not visibility_only else rp_mod.Evidence(rp_mod.UNAVAILABLE, "", "目标链路本机不可读"),
+    )
+    calls = _stub_run_probe(monkeypatch, [_passed()])
+    items = mod.relocate_execute(["HA"], "R:/dst")
+    assert items[0]["cls"] == "started", items
+    assert len(calls) == 1, f"弱证据 positive 必须仍走执行链强探测: {calls}"
+    assert len(locs) == 1, locs
+    fp = probe_fingerprint(mod._ctx.config.qbittorrent)
+    assert mod.probe_get(fp)["status"] == "passed"
+
+    # 强证据(src D 级 positive): 预检已 proved -> 探测闸短路, 零探测直接建账
+    mod2, locs2 = _gate_env(monkeypatch)
+    monkeypatch.setattr(
+        rp_mod,
+        "path_evidence",
+        lambda ctx, qb_dir, local_dir, files=(), visibility_only=False, sample_k=3: rp_mod.
+        Evidence(rp_mod.POSITIVE, rp_mod.LEVEL_D, "代表文件 e00.mkv 的 size+mtime 与本机完全相等")
+        if not visibility_only else rp_mod.Evidence(rp_mod.UNAVAILABLE, "", "目标链路本机不可读"),
+    )
+    calls2 = _stub_run_probe(monkeypatch, [_passed()])
+    items2 = mod2.relocate_execute(["HA"], "R:/dst")
+    assert items2[0]["cls"] == "started", items2
+    assert calls2 == [], "src 侧 D 级 positive 维持 same_fs_proved 短路, 不得重复探测"
+    assert len(locs2) == 1, locs2
+
+    # 弱证据判负(src B′ negative)+ dst visibility positive: 不判死 —— 探测闸照走一次
+    # (R1#35 评审: 同机场景 qB<5.0 走 B′, 文件改过 size 判负属正常漂移, 交 E1 定夺)
+    mod3, locs3 = _gate_env(monkeypatch)
+    monkeypatch.setattr(
+        rp_mod,
+        "path_evidence",
+        lambda ctx, qb_dir, local_dir, files=(), visibility_only=False, sample_k=3: rp_mod.
+        Evidence(rp_mod.POSITIVE, rp_mod.LEVEL_D, "qB 列目录成功, qB 看得见该目录")
+        if visibility_only else rp_mod.Evidence(rp_mod.NEGATIVE, rp_mod.LEVEL_BPRIME, "本机 2 个文件的 size 与 qB 元数据全不等"),
+    )
+    calls3 = _stub_run_probe(monkeypatch, [_passed()])
+    items3 = mod3.relocate_execute(["HA"], "R:/dst")
+    assert items3[0]["cls"] == "started", items3
+    assert len(calls3) == 1, f"src B′ 判负(弱证据)不得硬拦, 执行链强探测定夺: {calls3}"
+    assert len(locs3) == 1, locs3
+
+    # 纯 dst visibility_only positive(src 不可判定): 正证面同样只作弱证据, 照走探测
+    mod4, locs4 = _gate_env(monkeypatch)
+    monkeypatch.setattr(
+        rp_mod,
+        "path_evidence",
+        lambda ctx, qb_dir, local_dir, files=(), visibility_only=False, sample_k=3: rp_mod.
+        Evidence(rp_mod.POSITIVE, rp_mod.LEVEL_D, "qB 列目录成功, qB 看得见该目录")
+        if visibility_only else rp_mod.Evidence(rp_mod.UNAVAILABLE, "", "qB 列目录端点不可用"),
+    )
+    calls4 = _stub_run_probe(monkeypatch, [_passed()])
+    items4 = mod4.relocate_execute(["HA"], "R:/dst")
+    assert items4[0]["cls"] == "started", items4
+    assert len(calls4) == 1, f"dst visibility_only positive 只是弱证据, 必须仍走强探测: {calls4}"
+    assert len(locs4) == 1, locs4

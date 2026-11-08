@@ -11,9 +11,6 @@ from ...infra.file_access import FileAccess
 
 logger = logging.getLogger("auto_qb.core.modules.relocate_mod")
 
-# P2 纵深防御: relocate.enabled=false 时预检的拒收文案(路由层已 403, 这里兜底)
-_DISABLED_GATE = "disabled"
-
 # qB 未完成文件的孪生后缀(单点 utils.QB_INCOMPLETE_SUFFIX / qb_incomplete_twin_path;
 # 组内出现即判「数据未落定」, §3.1 拒绝行)
 _QB_TEMP_SUFFIX = utils.QB_INCOMPLETE_SUFFIX

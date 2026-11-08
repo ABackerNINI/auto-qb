@@ -30,16 +30,6 @@ from ...infra.clock import SYSTEM_CLOCK, Clock
 from ..module import AppContext, BaseModule
 from . import relocate_units as ru
 from .relocate_units import RelocateJob
-from .relocate_common import (
-    _DISABLED_GATE,
-    _LINK_CHUNK,
-    _QB_TEMP_SUFFIX,
-    _native,
-    _same_volume_resolved,
-    _top_children,
-    _volume_free_resolved,
-    logger,
-)
 from .relocate_lifecycle import LifecycleMixin
 from .relocate_plan import PlanMixin
 from .relocate_exec import ExecMixin

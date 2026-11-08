@@ -10,6 +10,9 @@ P1 只做配置面: RelocateConfig + loader + KNOWN_RELOCATE_KEYS 校验 + schem
 - test_relocate_non_bool_aggregates: enabled/allow_uac 非 bool 进聚合, 不打断其它键
 - test_relocate_verify_enum: verify 只接受 size/sample(大小写不敏感), 非法值聚合报错
 - test_relocate_int_bounds: alias_file_threshold/hard_max_links 非整数或 < 1 报错
+- test_relocate_threshold_hard_max_cross_validation: alias_file_threshold > hard_max_links
+  进 fail-fast 聚合(R1#27, issue 26-11-07-0527)—— 文案同时点名两键与约束关系, 值来自
+  缺省时标注「(缺省 N)」来源; 只配其一按 models 缺省参与比较; 恰等/小于合法; 两键缺省不触发
 - test_relocate_time_keys_positive: 两个时间键必须可解析且 > 0
 - test_relocate_low_space_warn_units: low_space_warn 走 parse_fsize(二进制单位; 10G 这种写法拒收)
 - test_relocate_assume_shared_bool: assume_shared(计划 26-11-04-0055 §03.2)缺省 False(保守默认)/
@@ -93,6 +96,28 @@ def test_relocate_int_bounds():
     assert any("config.relocate.alias_file_threshold" in e and ">= 1" in e for e in errors), errors
     errors = _validate({"hard_max_links": "8.5"})
     assert any("config.relocate.hard_max_links" in e and "整数" in e for e in errors), errors
+
+
+def test_relocate_threshold_hard_max_cross_validation():
+    """alias_file_threshold > hard_max_links 交叉校验(R1#27, fail-fast 黄金法则 4):
+    plan() 的阈值分支先于 hard_max 检查 —— threshold > hard_max 时 count < threshold 的组
+    绕过逐文件链接硬上限, 「链接爆炸防护」静默失效, 配置期拦下。文案必须同时点名两键与
+    约束关系; 只配其一按 models 缺省参与比较; 恰等/小于合法; 两键都缺省不触发。"""
+    # 双键非法组合: 聚合一条, 同时点名两键与数值
+    errors = _validate({"alias_file_threshold": 10, "hard_max_links": 5})
+    assert any("alias_file_threshold(10)" in e and "hard_max_links(5)" in e for e in errors), errors
+    assert any("链接爆炸防护失效" in e for e in errors), errors
+    # 只配阈值(3000 > 缺省 hard_max 2000): 同样拦下; 缺省侧文案标注来源(用户配置里没有 2000)
+    errors = _validate({"alias_file_threshold": 3000})
+    assert any("alias_file_threshold(3000)" in e and "hard_max_links(缺省 2000)" in e for e in errors), errors
+    # 只配硬上限(3 < 缺省阈值 8): 文件数 4..7 的组会绕过硬上限, 同样拦下(缺省侧标注来源)
+    errors = _validate({"hard_max_links": 3})
+    assert any("alias_file_threshold(缺省 8)" in e and "hard_max_links(3)" in e for e in errors), errors
+    # 合法边界: 恰等(阈值即上限)与小于都放行
+    assert _validate({"alias_file_threshold": 8, "hard_max_links": 8}) == []
+    assert _validate({"alias_file_threshold": 2, "hard_max_links": 2000}) == []
+    # 两键都缺省: 缺省自身一致(8 <= 2000), 不触发
+    assert _validate({}) == []
 
 
 def test_relocate_time_keys_positive():
