@@ -74,6 +74,15 @@
 > 只做静态扫描, **不在 pytest 内跑 mypy** —— 豁免面外的类型正确性由 `commands run dev.typecheck` 验收(拍板 D3)。
 > 登记来源: issue `26-11-06-0744-docs-guards-mypy-allowlist-unregistered`(守阵 2026-11-06 随 S4 落地但漏登记, 2026-11-07 补登记)。
 
+## infra 依赖纪律 AST 守阵 (26-11-08, issue 26-11-08-0703)
+
+| 守阵 | 钉住的结论 | 红验 |
+|---|---|---|
+| `test_infra_import_discipline.py::test_repo_infra_imports_follow_discipline` | `infra/` 全部 .py 的运行期 import 只允许 stdlib / 三方 / `auto_qb.infra*`; 解析到 `auto_qb` 根包或其余子包(config / core / webui / tray / ...)、爬出根包的相对导入一律红(白名单口径, 以后新增层自动罩住)。TYPE_CHECKING 块按 R4#18 放行, 但例外只许 `auto_qb.config*`, core / 表现层只做标注也不许上行; else 分支与函数内延迟导入照查 | 合成源 9 种上行形态逐条判红 + tmp 目录注入违例文件判红; 真仓 16 文件镜像注入 `from ..config import NotifyConfig` 实测恰好一条红(2026-11-08); **反空转**: 真仓断言文件数 >=10 且扫到 notify.py 的例外节点 |
+| `test_infra_import_discipline.py` 其余 7 例 | 放行面(包内一层相对 / stdlib / 三方 / 绝对自引用) / config 例外不外扩 / TYPE_CHECKING 的 else 仍属运行期 / 延迟导入照查 | 合成源内建, 每条用例本身即红验样本 |
+
+> 判据来源: [计划 26-09-22-2112 §04](../plans/26-09-22-2112-src-layout-restructure-plan.html) 依赖方向表 + `infra/__init__.py:15` 纪律声明; R4#18 把 notify.py 的 config 引用收进 TYPE_CHECKING(运行期零依赖)。用 AST 而非文本: 纪律声明本身就写在 `__init__.py` 的 docstring 里, 文本扫描会假红。
+
 ## 通用纪律
 
 - **红验优先用运行时 monkeypatch 还原旧实现**(不碰工作区), `lru_cache` 记得先 `cache_clear()`。

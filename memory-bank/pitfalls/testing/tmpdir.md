@@ -41,6 +41,10 @@
   `env -u TMPDIR`, 但 `commands run ship.commit` **内部的闸门** `test.quick` 是同 env 子进程,
   于是提交被闸门拦下(rc=4)。为什么没命中: 把「跑测试要清 TMPDIR」记成了「我的 test.* 调用要清」,
   漏了闸门/流水线里的间接调用 —— 处置: **提交也走 `env -u TMPDIR commands run ship.commit`**。
+- **复发**: 5(2026-11-08)—— issue 26-11-08-0703 修复轮首次 `commands run test.one` 直跑 rc=4
+  (本 shell 自带 `TMPDIR=H:\Temp`), 加 `env -u TMPDIR` 前缀后全绿; 其后 `test.full` 从第一次就带前缀。
+  为什么没命中: 开工只读了 pitfalls 总索引与 conventions 总索引, 没进 testing 类索引(路由没到);
+  且把 AGENTS.md「别手工加前缀」读成了不必清 env —— 应把「跑任何 pytest 前先 `env -u TMPDIR`」当固定动作。
 
 ### `--basetemp` 换了目录会让 4 条 sidefx 用例**假红**
 

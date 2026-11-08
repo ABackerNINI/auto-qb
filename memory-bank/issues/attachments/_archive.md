@@ -16,6 +16,7 @@
 - [bug] [alias_fs mount_point 正则 $ 尾换行缺口](../26-11-08-1923-bug-alias-fs-mount-point-regex.html) — alias_fs.py 用 re.match+$ 匹配 mount_point, 串尾恰一个换行可放行, 与 0045/keys.py fullmatch 同族; 输入来自内部 WSL mount 信息, severity 低
 - [bug] [cooldown 浮点 0.0 构造期裸抛 ValueError 绕过 ConfigError 契约](../26-11-08-1923-bug-cooldown-float-zero-contract.html) — rules/base.py 构造期 str(spec.get(cooldown)) 把 YAML 浮点 0.0 变成 '0.0' 后 parse_time 裸抛 ValueError, 绕过 ConfigError 契约; 与 26-11-08-0703 同根残余缝隙, 修前即存在非回归
 - [bug] [_V4_DATE_RE 同款 $ 尾换行缺口](../26-11-08-1923-bug-v4-date-re-tail-newline.html) — traffic_store_common.py _V4_DATE_RE 用 ^...$ 配 re.match, 尾随换行放行, 0045 已修该文件 _INFOHASH_RE 四消费端的旁支残留; 下游 strptime 兜底拒收, severity 低
+- [chore] [test_file_access.py docstring 无效转义触发 SyntaxWarning](../26-11-08-1841-chore-test-file-access-docstring-escape.html) — tests/test_file_access.py:289 docstring 内 \\NAS\share 的 \s 是无效转义序列, 每次导入报 SyntaxWarning; 改 raw docstring 或双写反斜杠即可
 - [bug] [评审闸门 0 行二进制改动绕过基哈希比对](../26-11-08-1701-bug-review-gate-binary-zero-line-bypass.html) — numstat 对二进制计 0 行, count==0 短路使 D6 基比对不生效, 评审后替换/新增二进制可评文件(夹具图片/压缩包)静默放行
 - [bug] [awaitPoll fail 路径不调 onEnd, 与文件头契约存在张力](../26-11-08-1621-bug-awaitpoll-fail-no-onend.html) — polling.js fail()(fn 抛异常 reject)不调 onEnd; 现注册点 tm relaunching fail 时不复位标志 — 需先裁决调用方是否在 reject 分支自清理, 有害才修
 - [bug] [drawer_rows 下载/根路径 wide:true 无条件, 值为空也占整行折行位](../26-11-08-1621-bug-drawer-rows-wide-unconditional.html) — drawer_rows.js:108-109 无条件 wide:true 且 text 兜底「—」, 值空仍占折行位(观感), 02/03 路径段同受影响
@@ -31,7 +32,6 @@
 - [refactor] [kb.new 各族 slug/topic 传参方式不一致, 跨族套用即 rc=1](../26-11-08-1131-refactor-kb-new-arg-unify.html) — issue 族收位置参数 slug、其余族要求 --topic, 跨族套形态即失败(2026-11-08 实踩 2 笔 rc=1); 彻底修=各族统一传参, 轻修=show 按族列签名
 - [docs] [hr/relocate docstring 措辞漂移聚合(fetcher refresh.reason/finalize_face failed 语义/store 行锚)](../26-11-08-0827-docs-hr-relocate-docstring-drift.html) — fetcher.py:74-76 提 refresh.reason 与 v3 字段对不上; relocate_chain.finalize_face docstring 未跟上 failed 入 STOP_PHASES; store.py:806 docstring 内部行锚 :237-244 已漂移
 - [refactor] [小件清理聚合: _WaveContext.alerted 死字段 + 测试 docstring 超宽两行](../26-11-08-0827-refactor-hr-leftover-cleanups.html) — service_common.py _WaveContext.alerted 经 0527-hr #14 修后无写入方成只读死字段; test_torrents_store.py:7/:35 存量 docstring 两行超 120 列
-- [refactor] [infra 依赖纪律「不 import config」无 AST 机械守卫](../26-11-08-0703-refactor-infra-import-discipline-guard.html) — infra/__init__.py:15 声明「不 import config」但无 AST 守阵,R4#18(TYPE_CHECKING 改造)靠评审发现,建议收 AST 守卫测试
 - [test] [test_notify 8 用例 NotifyHandler 只 removeHandler 不 close,每进程泄漏 8 守护线程](../26-11-08-0703-test-test-notify-handler-thread-leak.html) — tests/test_notify.py 8 用例(约 109/127/146/166/186/218/248/309 行)经 _make_handler 建 NotifyHandler 后只 removeHandler 不 close;random-order 洗牌下约 1/3 概率打红其它同名线程断言
 - [bug] [dt_table.js 整模块生产路径零调用: 自称几何单一出口未接线, 实际几何由 columns_grid 平行计算](../26-11-08-0147-bug-dt-table-geometry-unwired.html) — dt_table.js 四皮肤均加载但 DT_TABLE 六口子生产路径零调用, 自称几何单一出口未接线, 实际几何由 columns_grid 平行计算; R4-static 清池拍板暂缓挂账待决(整体退役 vs 真接线)
 - [question] [非 ASCII 符号面宽于 code-style.md 禁用示例: §/→/⇒/≠ 在 src/ 泛在, 口径待拍板](../26-11-08-0044-question-non-ascii-symbol-policy-src.html) — §(131文件)/→(70)/⇒(57)/≠ 在 src/ 泛在, code-style.md 禁令只点名带圈数字等; 需项目拍板口径(全清/豁免清单), 不建议机械全清
@@ -93,7 +93,7 @@
 - [bug] [设置页警示条是伪警示: 只复述 schema 风险文案, 不反映配置健康; 升级失效键无任何提示](../26-09-22-2002-bug-webui-config-health-warning.html) — 首页警示条由『已配置且 schema 带 risk 文案』驱动, 恒亮、静态、与配置健康无关; 且 load_config 对 schema 外键静默忽略, 版本升级后配置项失效无任何提示
 - [chore] [hatch-pet 调付费 OpenAI 图像 API 且无成本提示](../26-09-20-1427-chore-skill-hatch-pet-api-cost.html) — hatch-pet 生成图会直连 api.openai.com 计费接口, skill 未标注费用风险
 
-## Done (459)
+## Done (460)
 
 - [docs] [远端 hr-review4 收尾两条 pitfalls 缺三行头元数据(存量红)](../26-11-08-1048-docs-hr-review4-pitfalls-metadata-missing.html) — e07d2c88 的两条 pitfalls 缺 > 摘要:/> 触发: 头,test_kb_topic_files_have_metadata 恒红阻塞提交闸门
 - [bug] [评审闸门锚点在合并拓扑下树差虚增: 侧分支 trailer 遮蔽主线锚点致提交死锁](../26-11-08-0903-bug-review-anchor-merge-topology.html) — check_review_trace 锚点取平铺 log 最新 trailer, 侧分支(旧基线切出)合并后树差把主线已评工作整支算进本批(~9600 行), 提交被闸门死锁
@@ -106,6 +106,7 @@
 - [bug] [测试文件存量带圈数字违反 code-style 禁字符](../26-11-08-0703-bug-tests-circled-digit-legacy.html) — tests/test_registry_derived.py(7 处)与 tests/test_config_writer_write.py(4 处)docstring/注释存 ①-④,违反 code-style 禁字符(存量,早于 R4 认领)
 - [bug] [auth.py _is_loopback_host 自有字面量集,回环判定三套并存](../26-11-08-0703-bug-webui-auth-loopback-third-set.html) — auth.py:32-37 _is_loopback_host 自有字面量集,与 utils_parse.is_loopback_host 及 infra/utils display_host 折叠锚三套并存(消费面 request.client.host 不同,故独立成条)
 - [bug] [webui fs.py _bare docstring 指向已拆走的 tests/test_web_hr.py](../26-11-08-0703-bug-webui-fs-test-pointer-drift.html) — fs.py _bare docstring 仍指 tests/test_web_hr.py,该文件已随 63f47598(move-only 拆分)拆走,契约断言现落 tests/test_web_hr_fs.py:433-443
+- [refactor] [infra 依赖纪律「不 import config」无 AST 机械守卫](../26-11-08-0703-refactor-infra-import-discipline-guard.html) — infra/__init__.py:15 声明「不 import config」但无 AST 守阵,R4#18(TYPE_CHECKING 改造)靠评审发现,建议收 AST 守卫测试
 - [bug] [R4-static 清池清单外发现汇总(13 子项, 已全部修复)](../26-11-08-0229-bug-r4-static-cleanup-extras.html) — R4 static 主题清池(P01-P16)各批记录的清单外发现 13 子项聚合入池: dialogs 注释失实族/契约层 -1 裸拼/aria-expanded 陈旧/非ASCII注释存量等, 13 子项已全部修复收口(2026-11-08)
 - [refactor] [mypy 后端既有类型债: dev.typecheck 8 errors](../26-11-08-0118-refactor-mypy-backend-typecheck-debt.html) — dev.typecheck 全库 8 errors(relocate_journal.py / alias_fs.py / recycle_daemon.py / webui/relocate_chain.py 四文件), 均为后端既有债, mypy allowlist 守阵在 test.quick 中仍绿(允许清单机制外的新增暴露); 不在 26-11-07-2344 改动面, 2026-11-08 S5 收口排查时发现, 用户拍板入池
 - [bug] [traffic_store_common._INFOHASH_RE 配 re.match, $ 允许串尾恰一个换行(与 R4#34 同族)](../26-11-08-0045-bug-traffic-store-infohash-re-tail-newline.html) — traffic_store_common.py:32 _INFOHASH_RE 配 re.match, 实测串尾恰一个换行放行; 与 R4#34(表行14 已修 keys.py fullmatch)同族; HTTP 层可达性待查, 建议同款 re.fullmatch

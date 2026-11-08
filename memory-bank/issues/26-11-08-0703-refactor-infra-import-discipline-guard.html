@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="legacy-review4">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="infra 依赖纪律「不 import config」无 AST 机械守卫">
 <meta name="issue-summary" content="infra/__init__.py:15 声明「不 import config」但无 AST 守阵,R4#18(TYPE_CHECKING 改造)靠评审发现,建议收 AST 守卫测试">
 <style>
@@ -91,13 +91,14 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-08-0703-refactor-infra-import-discipline-guard</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-08 07:03</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
 
 <section id="s1">
   <h2><span class="no">§01</span>现象</h2>
   <p><code>infra/__init__.py</code> 声明依赖纪律「infra 只被依赖——不 import core / 表现层 / config」,但这条不变量<strong>没有任何机械守卫</strong>(无 AST 扫描测试):R4#18(infra/notify.py 曾 <code>from ..config import NotifyConfig</code> 仅类型标注用)就是靠人工评审发现的——纪律靠记忆维持,后续裁剪/重构一旦引入真实反向依赖,测试面零报警。</p>
+  <p class="hint">复验：2026-11-08 17:50 仍复现 —— <code>tests/</code> 全量无 infra 导入纪律守阵（无 <code>test_*infra*.py</code>，亦无 AST 扫 <code>src/auto_qb/infra/</code> 的用例）；<code>infra/__init__.py:15</code> 纪律声明仍在，<code>notify.py:30-32</code> 的 TYPE_CHECKING 例外仍在（取证 2026-11-08）。</p>
 </section>
 
 <section id="s2">
@@ -118,7 +119,21 @@
   <h2><span class="no">§04</span>状态变更日志</h2>
   <ul>
     <li>2026-11-08 07:03 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    <li>2026-11-08 — 状态 Open → In Progress（kb.status）</li>
+    <li>2026-11-08 — 状态 In Progress → Done（kb.status）</li>
+</ul>
+</section>
+
+<section id="s5">
+  <h2><span class="no">§05</span>实际修法与验证<span class="opt">（修复后补充）</span></h2>
+  <p>新增 <code>tests/test_infra_import_discipline.py</code>(8 例) 作为 AST 守阵,遍历 <code>src/auto_qb/infra/</code> 全部 .py(含嵌套包,<code>rglob</code>),把每条 import 按文件深度解析成全限定名:</p>
+  <ul>
+    <li><strong>运行期</strong>(含函数内延迟导入与 try / with / for 等嵌套体):白名单只许 stdlib / 三方 / <code>auto_qb.infra*</code>;<code>auto_qb</code> 根包本身、其余子包(config / core / webui / tray / ...)与爬出根包的相对导入一律红。</li>
+    <li><strong>TYPE_CHECKING 块</strong>:按 R4#18 既定口径放行(运行期不执行、零依赖),但例外面钉死为只许 <code>auto_qb.config*</code> 类型引用,core / 表现层只做标注也不许上行;<code>if TYPE_CHECKING: ... else: ...</code> 的 else 分支仍按运行期检查。</li>
   </ul>
+  <p><strong>与建议修法不同处</strong>(建议原文保留在 §03):① 用「白名单 = infra」替代 config / core / 表现层黑名单枚举 —— 黑名单会漏掉以后新增的层,也会漏掉 <code>from auto_qb import config</code> / <code>import auto_qb</code> 这类形态(后者可经属性访问绕到任意上游层而不留 import 语句);② TYPE_CHECKING 选择「放行但钉死例外面」而非一并拦或全放行 —— 一并拦会让 notify.py 现状当场红,全放行则 core / 表现层可借类型标注回潮;③ 用 AST 而非文本扫描 —— 纪律声明本身就写在 <code>__init__.py</code> 的 docstring 里,文本扫描会假红。</p>
+  <p><strong>验证</strong>:新增守阵单文件全绿;合成源九种上行形态逐条判红 + 放行面零误报;真仓 16 个 infra 文件镜像注入一条运行期上行导入后恰好一条红、撤注入后零违例(红绿双验,不碰工作区);真仓守阵自带反空转断言(文件数下限 + 扫到 notify.py 的例外节点)。分批评审 1 派 0 发现(<code>review.check</code> 0/0)。全量 <code>commands run test.full</code> 全绿,实测数字只写在 <code>memory-bank/testing/baselines/26-11-08-1825-infra-import-discipline-guard.md</code>,此处不重复。真机验收不适用:本改动是纯静态 AST 守阵,不触发 qB 真执行,也不碰进程 / 注册表 / 真文件系统写入侧。</p>
+  <p class="hint">守阵登记:<code>memory-bank/testing/guards.md</code>「infra 依赖纪律 AST 守阵」段。判据来源:计划 26-09-22-2112 §04 依赖方向表 + <code>infra/__init__.py:15</code>。</p>
 </section>
 
 <footer>
