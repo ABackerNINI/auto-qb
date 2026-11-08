@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="as-int-overflow-gap">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="model._as_int 对 inf/超大值抛 OverflowError(约 30 调用方)">
 <meta name="issue-summary" content="_as_int 只捕 TypeError/ValueError, pages 写 1e999(解析 inf)或裸 Infinity 时 int(inf) 抛 OverflowError 穿透, history_rows 等读路径仍可整体抛错">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-08-0827-bug-as-int-overflow-gap</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-08 08:27</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
@@ -142,11 +142,13 @@ inf）或裸 Infinity（Python json 默认接受）时 int(inf) 抛 OverflowErro
   <h2><span class="no">§07</span>状态变更日志</h2>
   <ul>
     <li>2026-11-08 08:27 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-08 — 状态 Open → Done（kb.status）</li>
+</ul>
   <h3>复验</h3>
-  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <p>复验：2026-11-08 仍复现 —— <code>grep "def _as_int"</code> 命中 <code>src/auto_qb/hr/model.py:85</code>(取证当时 85 行,未漂移),except 元组确为 <code>(TypeError, ValueError)</code>,无 OverflowError。</p>
   <h3>修复后补充</h3>
-  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  <p><strong>实际修法</strong>(与建议修法的第一案一致,一行口径):<code>_as_int</code> 的 except 元组补 <code>OverflowError</code>,坏值同回 <code>default</code>(0),全调用方统一受益。NaN 不需额外处理(<code>int(nan)</code> 本就抛 ValueError,已被既有元组覆盖)。同步两处:<code>status.py</code> <code>_history_lanes</code> 内「inf/超大值仍会抛 OverflowError」的过期注释改如实;测试面 <code>test_hr_status_entry.py::test_history_lanes_dirty_numeric_values_do_not_raise</code> 增 inf/1e999/NaN/-inf 用例 + 文件头测试计划清单同步。</p>
+  <p><strong>验证方式与测试数字</strong>(实测 2026-11-08):<code>commands run test.quick</code> 5779 passed, 2 skipped(44.38s)。</p>
 </section>
 
 <footer>

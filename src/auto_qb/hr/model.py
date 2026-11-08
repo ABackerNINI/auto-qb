@@ -85,7 +85,9 @@ def _as_float(value: Any, default: float = 0.0) -> float:
 def _as_int(value: Any, default: int = 0) -> int:
     try:
         return int(value)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
+        # OverflowError: float('inf')/超大浮点(1e999 等, int(inf) 不属 ValueError 家族);
+        # NaN 走 ValueError。手改坏的站点文件可能写进这类值, 与「读坏不抛」契约一致回 default
         return default
 
 

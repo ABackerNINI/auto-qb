@@ -543,9 +543,8 @@ def _history_lanes(raw_lanes: List[Dict]) -> List[HistoryLane]:
                 status_text=LANE_STATUS_TEXTS.get(status, status),
                 # pages/rows 是 lanes 内层键, HrHistoryEvent.from_json 对它原样透传(model.py 只守
                 # 元素是 dict 这一层) —— 手改坏的站点文件可能是非数字串, 与事件级计数字段同走
-                # _as_int 容错(model 既有口径: 坏值回 0), 非数字串不再抛 ValueError 炸整表;
-                # inf/超大值仍会抛 OverflowError —— 与 model 层 _as_int 同口径
-                #(issue 26-11-07-0527 #15; int/数字串/负数等合法值语义与旧 int() 直转一致)
+                # _as_int 容错(model 既有口径: 坏值回 0), 非数字串/inf/超大浮点不再抛错炸整表
+                #(issue 26-11-07-0527 #15; 26-11-08-0827; int/数字串/负数等合法值语义与旧 int() 直转一致)
                 pages=_as_int(item.get("pages")),
                 rows=_as_int(item.get("rows")),
                 detail=str(item.get("detail") or ""),
