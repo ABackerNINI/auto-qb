@@ -24,6 +24,9 @@
   契约层传输行(做种数/完整下载中/连接)对 qB -1/null 哨兵降级(单值槽 —, 连接上限 -1 译「不限」,
   与 fmtPeersQb/01 英雄行 peerNum/connLimit 同口径), 真值形态逐字不变; 01/02/03 三变体共同消费
   该单点, 电池直跑生产函数不经字符串锚
+- test_r4_drawer_rows_path_wide_conditional: issue 26-11-08-1621 修复回归 —— drawerGeneralSections
+  契约层路径段 下载路径/根路径 wide 改条件式(值非空才 wide:true, 空值/缺失/null 行 wide 不置位
+  按普通行渲染, text 兜底「—」保留, 真值行 wide 与文本透传不变); 沙箱口径与哨兵电池同式
 
 加载口径: columns 域经 webui_helpers.bundle_file("columns.js") 聚合(根 + 五片段清单序, 与拆分前
 同一份代码); 单文件域(selection/sort/format)直接 eval。app.js 以 loadColState 截断切片加载
@@ -1012,3 +1015,50 @@ def test_r4_drawer_general_rows_qb_sentinels():
     """issue 26-11-08-0229 #2 修复回归: 传输行 做种数/完整下载中/连接 对 -1/null 哨兵降级, 真值不变"""
     report = _run_probe(_NODE_DRAWER_ROWS_SENTINEL_PROBE, os.path.join(STATIC_ROOT, "shared", "drawer_rows.js"))
     _assert_battery(report, "drawer 传输行哨兵电池")
+
+
+# issue 26-11-08-1621: 路径段 下载路径/根路径 wide 改条件式(值非空才 wide) ----------------
+# 沙箱口径与哨兵电池同式: drawer_rows.js 自给 AQB_DRAWER 域后 eval, 直跑契约层生产函数。
+_NODE_DRAWER_ROWS_PATH_WIDE_PROBE = r"""
+const fs = require("fs");
+const checks = [];
+const ok = (name, cond) => checks.push([name, !!cond]);
+global.window = { AQB_DRAWER: { methods: {} } };
+try {
+  eval(fs.readFileSync(process.argv[1], "utf8"));  // drawer_rows.js -> AQB_DRAWER.methods
+} catch (e) { ok("drawer_rows.js 加载失败: " + e.message, false); }
+const M = global.window.AQB_DRAWER.methods;
+if (typeof M.drawerGeneralSections !== "function") ok("drawerGeneralSections 未加载", false);
+const mkVm = (detail) => ({
+  drawer: { detail },
+  fmtDuration: (v) => "d" + v, fmtTs: () => "ts", fmtSize: (v) => "s" + v,
+  fmtSizeOrDash: (v) => "s" + v, fmtSpeedOrDash: () => "v", fmtEta: () => "e",
+  relocateStateText: (s) => s, relocateOriginText: (s) => s,
+});
+const pathRow = (detail, label) => {
+  const secs = M.drawerGeneralSections.call(mkVm(detail));
+  const sec = secs.find((s) => s.title === "路径");
+  const r = sec && sec.rows.find((x) => x.label === label);
+  return r || null;
+};
+const DETAIL = { save_path: "S:/save", content_path: "S:/save/c", download_path: "X:/dl", auto_tmm: true };
+
+// 值非空: wide 照常占整行折行位
+ok("下载路径 真值: wide:true 且文本透传", (() => { const r = pathRow(DETAIL, "下载路径"); return r && r.wide === true && r.text === "X:/dl"; })());
+ok("根路径 真值: wide:true 且文本透传", (() => { const r = pathRow(Object.assign({}, DETAIL, { root_path: "R:/root" }), "根路径"); return r && r.wide === true && r.text === "R:/root"; })());
+
+// 值空(修复点, issue 26-11-08-1621): wide 不置位(空值行按普通行渲染), text 兜底「—」保留
+ok("下载路径 空串: wide 不置位且兜底 —", (() => { const r = pathRow(Object.assign({}, DETAIL, { download_path: "" }), "下载路径"); return r && !r.wide && r.text === "—"; })());
+ok("根路径 缺失: wide 不置位且兜底 —", (() => { const r = pathRow(DETAIL, "根路径"); return r && !r.wide && r.text === "—"; })());
+ok("下载路径 null: wide 不置位且兜底 —", (() => { const r = pathRow(Object.assign({}, DETAIL, { download_path: null }), "下载路径"); return r && !r.wide && r.text === "—"; })());
+
+const failed = checks.filter((c) => !c[1]).map((c) => c[0]);
+console.log(JSON.stringify({ ok: checks.length - failed.length, total: checks.length, failed: failed }));
+"""
+
+
+def test_r4_drawer_rows_path_wide_conditional():
+    """issue 26-11-08-1621 修复回归: 路径段 下载路径/根路径 wide 改条件式(值非空才 wide:true,
+    空值行 wide 不置位按普通行渲染, text 兜底「—」保留)"""
+    report = _run_probe(_NODE_DRAWER_ROWS_PATH_WIDE_PROBE, os.path.join(STATIC_ROOT, "shared", "drawer_rows.js"))
+    _assert_battery(report, "drawer 路径行条件 wide 电池")

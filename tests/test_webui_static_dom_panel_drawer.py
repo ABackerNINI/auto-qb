@@ -36,6 +36,11 @@
 - test_drawer_tpl_default_sel
 - test_drawer_tpl_no_table_variants_out_of_scope
 - test_drawer_tpl_render_error_fallback_default
+- test_drawer_tpl_dt02_crow_wide_wrap: drawer 02 标识卡 dt02-crow 行 wide 折行守阵
+  (issue 26-11-08-1621) —— idRows 渲染路径(基础卡 r.act === "copy" 行)必须透传 r.wide 到
+  class(与 secRows 的 .dt02-kv 同语义槽)且变体 CSS 必须含 .dt02-crow.wide .v 折行规则
+  (white-space:normal + word-break:break-all); 修复前 idRows 恒写 class="dt02-crow",
+  40 位哈希被基类 nowrap+ellipsis 截断, wide 契约在该槽位无效果
 
 ## 皮肤档位口径
 - 皮肤清单单点在 webui_helpers._UI_ALL(atlas/prism/console/flux); flux(第四套, plan 26-10-31-2316 S5)
@@ -2917,3 +2922,25 @@ def test_drawer_merge_supply_seq_bump_conditional():
     report = json.loads(proc.stdout.strip().splitlines()[-1])
     assert report["failed"] == [], \
         f"合并补给电池 {report['ok']}/{report['total']} 过, 失败: {report['failed']}"
+
+
+def test_drawer_tpl_dt02_crow_wide_wrap():
+    """drawer 02 标识卡 dt02-crow 行 wide 折行守阵(issue 26-11-08-1621) —— idRows 渲染路径
+    (基础卡 r.act === "copy" 行)必须透传 r.wide 到 class(与 secRows 的 .dt02-kv 同语义槽),
+    且变体 CSS 必须含 .dt02-crow.wide .v 折行规则(white-space:normal + word-break:break-all);
+    修复前 idRows 恒写 class="dt02-crow", 40 位哈希被基类 nowrap+ellipsis 截断, wide 契约在该
+    槽位无效果。数据源锚: drawer_rows.js 信息哈希值 v1/v2 行 wide:true 走本路径。"""
+    text = read_shared("drawer_tpl/02-general-cards-low.js")
+
+    # 1. CSS: wide 折行规则在场(与 .dt02-kv.wide 同语义, 基类 nowrap+ellipsis 的反义)
+    assert ".dt02-crow.wide .v { white-space:normal; word-break:break-all; }" in text, \
+        "02 变体缺 .dt02-crow.wide .v 折行规则(标识卡哈希行 nowrap 截断复发, issue 26-11-08-1621)"
+    # 基类仍在(wide 只覆盖折行两键, 不许顺手抹掉 nowrap 基类); 锚取 .dt02-crow .v 特有的
+    # color:var(--fg-soft) 行尾片段 —— 泛化的 "text-overflow:ellipsis; white-space:nowrap; }"
+    # 会命中 .dt02-kv .v 行, 守不住 crow 基类(评审 26-11-08 发现 6)
+    assert "color:var(--fg-soft); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }" in text, \
+        "02 变体 .dt02-crow .v 基类形态漂移(wide 规则只许反义覆盖, 基类保留)"
+
+    # 2. idRows 渲染路径透传 r.wide(与 secRows 的 ${r.wide ? " wide" : ""} 同式)
+    assert 'class="dt02-crow${r.wide ? " wide" : ""}"' in text, \
+        "02 变体 idRows 路径未透传 r.wide 到 class(标识卡哈希行 wide 契约无效果复发)"

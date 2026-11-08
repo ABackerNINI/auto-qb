@@ -31,7 +31,8 @@
   非脏 kbFullClose 与 kbGuardLeave 非脏早退必须调 kbRecordCancel(修复前残留 document 捕获期
   _kbRecHandler, 下一次任意按键被吞并静默提交成键位绑定); 脏路径确认后经 kbDraftRevert 内含取消;
   导向 webui 自身/覆盖层未开不误取消; kbGuardLeave 非脏早退同时复位 kbFullOpen(issue
-  26-11-08-0229 #11: 展开态不持久化, 修复前残留到下次 hubGo 进 webui)
+  26-11-08-0229 #11: 展开态不持久化, 修复前残留到下次 hubGo 进 webui), 脏路径确认放弃后
+  同样复位 kbFullOpen(issue 26-11-08-1621: 修复前只回滚草稿, 覆盖层残留)
 - test_r4_shortcuts_panel_load_failed_gate: R5#235 —— 面板装载失败态: kbPanelEnter 在 _kbReloadKeys
   失败(quiet=true 无 toast)时置 kbKeysLoadFailed(kbSaved/kbDraft 落默认表), 保存钮据此禁用直堵
   「默认+本次改动」整份覆盖服务端丢 overrides 的路径; 「重新加载」重试成功复位即恢复(退出路径);
@@ -782,10 +783,12 @@ async function battery() {
   vm = mkVm({ kbFullOpen: false });
   ok("覆盖层未开: 不取消", M.kbGuardLeave.call(vm, "hub") === false && vm._cancelCalls() === 0);
 
-  // 脏离开确认后: 回滚路径自带取消
+  // 脏离开确认后: 回滚路径自带取消; 覆盖层展开态随离开收起
+  // (issue 26-11-08-1621: 修复前脏路径只回滚草稿不复位 kbFullOpen, 与非脏早退 :76 同病)
   vm = mkVm({ kbDirty: () => true, hubBack: () => {} });
   await Promise.resolve(M.kbGuardLeave.call(vm, "hub"));
   ok("脏离开: 确认放弃后回滚(内含取消)", vm._reverted === 1 && vm._cancelCalls() === 1);
+  ok("脏离开: 覆盖层展开态收起(kbFullOpen 复位)", vm.kbFullOpen === false);
 
   console.log(JSON.stringify({
     ok: checks.filter((c) => c[1]).length, total: checks.length,

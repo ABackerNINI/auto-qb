@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="webui-0229-followup">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="kbGuardLeave 脏路径离开后 kbFullOpen 覆盖层残留不复位">
 <meta name="issue-summary" content="shortcuts_panel.js kbGuardLeave 脏路径「放弃并离开」只回滚草稿不收覆盖层, 与本轮已修的非脏早退同病">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-08-1621-bug-kb-guard-leave-fullopen</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-08 16:21</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
 
@@ -119,6 +119,17 @@
   <h2><span class="no">§04</span>状态变更日志</h2>
   <ul>
     <li>2026-11-08 16:21 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    <li>2026-11-08 — 复验：锚点仍在（「放弃并离开」确认回调只 <code>kbDraftRevert()</code> + 导航，不复位 <code>kbFullOpen</code>；:76 非脏早退已有复位），仍复现</li>
+    <li>2026-11-08 — 状态 Open → Done（kb.status）</li>
+</ul>
+</section>
+
+<section id="s5">
+  <h2><span class="no">§05</span>修复后补充</h2>
+  <ul>
+    <li>实际修法：照 §03 建议，<code>shortcuts_panel.js</code>「放弃并离开」确认回调在 <code>kbDraftRevert()</code> 之后、导航之前补 <code>this.kbFullOpen = false</code>（与 :76 非脏早退同式，带 issue 号注释）。</li>
+    <li>验证方式：既有 node 电池 <code>test_r4_shortcuts_panel_record_cancel_exits</code>（R5#232）的脏离开场景补一条断言「脏离开确认后 kbFullOpen 复位」，真跑 M.kbGuardLeave 确认回调路径；测试文件头「## 测试计划」条目同步补记。</li>
+    <li>测试数字：commands run test.quick 全绿 —— 5849 passed / 2 skipped / 0 failed（2026-11-08）。</li>
   </ul>
 </section>
 

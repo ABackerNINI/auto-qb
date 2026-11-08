@@ -70,6 +70,10 @@
     ".drawer .dt02-crow .k { flex:none; width:58px; font-size:12px; color:var(--fg-muted); }",
     ".drawer .dt02-crow .v { flex:1; min-width:0; font-family:var(--font-mono, ui-monospace, monospace); font-size:11.5px;",
     "  color:var(--fg-soft); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }",
+    /* 整行长值行(issue 26-11-08-1621, 与 .dt02-kv.wide 同语义槽): 标识卡哈希行走 idRows
+     * 路径(.dt02-crow)不经 secRows, 基类 nowrap+ellipsis 截断 40 位哈希 —— wide 行同样
+     * 改折行展示; .dt02-crow .v 本就左对齐, 无需再调 text-align */
+    ".drawer .dt02-crow.wide .v { white-space:normal; word-break:break-all; }",
     /* 徽章 */
     ".drawer .dt02-chips { display:flex; flex-wrap:wrap; gap:6px; margin:2px 0 8px; }",
     ".drawer .dt02-chip { display:inline-flex; align-items:center; height:22px; padding:0 9px;",
@@ -249,7 +253,8 @@
     /* 标识卡: 哈希 v1/v2(带复制)+ 分块 + magnet(点击按需取, BUG-9 口径) */
     const idRows = [];
     for (const r of (secs["基础"] || { rows: [] }).rows) {
-      if (r.act === "copy") idRows.push(T`<div class="dt02-crow">${r.icon ? icoSvg(r.icon) : ""}<span class="k">${r.label}</span><span class="v">${r.text}</span><button type="button" class="dt02-act" data-act="copy" title="复制${r.label}"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-copy"></use></svg></button></div>`);
+      /* issue 26-11-08-1621: idRows 路径同样透传 r.wide 到 class(哈希行长值折行, CSS 见 .dt02-crow.wide) */
+      if (r.act === "copy") idRows.push(T`<div class="dt02-crow${r.wide ? " wide" : ""}">${r.icon ? icoSvg(r.icon) : ""}<span class="k">${r.label}</span><span class="v">${r.text}</span><button type="button" class="dt02-act" data-act="copy" title="复制${r.label}"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-copy"></use></svg></button></div>`);
     }
     for (const r of (secs["基础"] || { rows: [] }).rows) {
       if (r.label === "区块") idRows.push(kv(r.label, r.text, false, r.icon));

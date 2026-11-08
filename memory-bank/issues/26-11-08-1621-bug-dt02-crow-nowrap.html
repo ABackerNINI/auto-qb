@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="webui-0229-followup">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="drawer 02 标识卡 dt02-crow 行 nowrap 截断长哈希">
 <meta name="issue-summary" content="02 变体 idRows 路径(dt02-crow)不经 secRows 仍 nowrap+ellipsis, 与 09e285f1 已修的 #13 secRows 同病不同槽">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-08-1621-bug-dt02-crow-nowrap</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-08 16:21</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
 
@@ -120,6 +120,17 @@
   <h2><span class="no">§04</span>状态变更日志</h2>
   <ul>
     <li>2026-11-08 16:21 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    <li>2026-11-08 — 复验：锚点全部仍在（<code>.dt02-crow .v</code> 基类 nowrap+ellipsis、wide 规则只写 <code>.dt02-kv.wide .v</code>、<code>idRows.push</code> 恒写 <code>class="dt02-crow"</code>），仍复现</li>
+    <li>2026-11-08 — 状态 Open → Done（kb.status）</li>
+</ul>
+</section>
+
+<section id="s5">
+  <h2><span class="no">§05</span>修复后补充</h2>
+  <ul>
+    <li>实际修法：照 §03 建议，<code>02-general-cards-low.js</code> 在 <code>.dt02-crow .v</code> 基类后补 <code>.dt02-crow.wide .v { white-space:normal; word-break:break-all; }</code>（基类 <code>.v</code> 本就左对齐，未加 text-align）；idRows 渲染路径（<code>r.act === "copy"</code> 行）<code>class</code> 改 <code>dt02-crow${r.wide ? " wide" : ""}</code> 透传 <code>r.wide</code>，与 secRows 的 <code>.dt02-kv</code> 同式。</li>
+    <li>验证方式：新增静态守阵 <code>test_drawer_tpl_dt02_crow_wide_wrap</code>（钉 CSS 折行规则在场 + 基类形态保留 + idRows 透传 <code>r.wide</code>），数据源（drawer_rows.js 信息哈希值 v1/v2 行 <code>wide: true</code>）经该路径落到 class。</li>
+    <li>测试数字：commands run test.quick 全绿 —— 5849 passed / 2 skipped / 0 failed（2026-11-08）。</li>
   </ul>
 </section>
 

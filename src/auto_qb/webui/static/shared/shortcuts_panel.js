@@ -81,6 +81,7 @@ Object.assign(window.AQB_SHORTCUTS.methods, {
         { okText: "放弃并离开", cancelText: "留在此页" }).then((ok) => {
         if (!ok) return;
         this.kbDraftRevert();
+        this.kbFullOpen = false;  // 脏路径离开同样收覆盖层(issue 26-11-08-1621, 与 :76 非脏早退同式): 展开态不持久化, 不能残留到下次 hubGo 进 webui 才复位
         if (target === "hub") this.hubBack();
         else {
           this.hubCloseHelp();

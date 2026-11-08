@@ -199,12 +199,12 @@
     <ul>
       <li>2026-11-07 05:27 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
       <li>26-11-07 聚合入池自存量评审 R4（计划 26-11-05-2335，<code>memory-bank/plans/26-11-05-2335-plan-legacy-code-review-4.html</code>）——本轮纯盘点，状态保持 Open；doc-refs 留空待认领方回填</li>
-      <li>2026-11-08 — 本件 44 行明细处置回写：<strong>40 条修复</strong>（明细行除行 3、行 8 外全部）+ 文档行 13-17，分批落地后随 develop 入库（2026-11-08 推送时远端分叉 rebase 重放 16 提交，现链 <code>da4df75c..f55677af</code>）；行 3（R1#22 建链幂等）拆出独立 issue <a href="26-11-08-1608-bug-legacy-review4-relocate-build-links.html">26-11-08-1608-bug-legacy-review4-relocate-build-links.html</a>，行 8（R1#39 probe 阻塞）经用户拍板本轮不修，维持 Open。分批映射与验证数字见下方「修复后补充」</li>
+      <li>2026-11-08 — 本件 44 行明细处置回写：<strong>42 行修复</strong>（明细行除行 3、行 8 外全部；代码 37 行 + 文档行 13-17 共 5 行），分批落地后随 develop 入库（2026-11-08 推送时远端分叉 rebase 重放 16 提交，现链 <code>da4df75c..f55677af</code>）；行 3（R1#22 建链幂等）拆出独立 issue <a href="26-11-08-1608-bug-legacy-review4-relocate-build-links.html">26-11-08-1608-bug-legacy-review4-relocate-build-links.html</a>，行 8（R1#39 probe 阻塞）经用户拍板本轮不修，维持 Open。分批映射与验证数字见下方「修复后补充」</li>
     </ul>
     <h3>复验</h3>
-    <p>复验：2026-11-08 逐条按符号重定位，43 条中 40 条修复落地（各批评审+终态 test.quick 实证）；行 3/行 8 经用户拍板不修，分别入池/维持 Open。</p>
+    <p>复验：2026-11-08 逐条按符号重定位，44 行明细中 42 行修复落地（代码 37 行 + 文档 5 行；各批评审+终态 test.quick 实证）；行 3/行 8 经用户拍板不修，分别入池/维持 Open。</p>
     <h3>修复后补充</h3>
-    <p>2026-11-08 收口回写——44 行明细全部处置：<strong>40 条修复</strong>（明细行除行 3、行 8 外全部）+ 文档行 13-17，按文件聚类分批落地（每批评审通过后进下一批），推送时 rebase 重放后现链 <code>da4df75c..f55677af</code>。实际修法按批映射：</p>
+    <p>2026-11-08 收口回写——44 行明细全部处置：<strong>42 行修复</strong>（明细行除行 3、行 8 外全部；代码 37 行 + 文档行 13-17 共 5 行），按文件聚类分批落地（每批评审通过后进下一批），推送时 rebase 重放后现链 <code>da4df75c..f55677af</code>。实际修法按批映射：</p>
     <table>
       <tr><th>批</th><th>明细行</th><th>修复面</th></tr>
       <tr><td>B1</td><td>12/43/44</td><td>tvshows 正则回溯/兜底 S1 留痕/多季合包守卫</td></tr>

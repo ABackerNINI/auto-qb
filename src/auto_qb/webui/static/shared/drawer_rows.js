@@ -105,8 +105,10 @@ Object.assign(window.AQB_DRAWER.methods, {
           rows: [
             { icon: "#i-folder-open", label: "保存路径", text: d.save_path || "—", wide: true, act: "open" },
             { icon: "#i-folder", label: "内容路径", text: d.content_path || "—", wide: true, act: "open" },
-            { icon: "#i-folder-open", label: "下载路径", text: d.download_path || "—", wide: true, act: "open" },
-            { icon: "#i-folder", label: "根路径", text: d.root_path || "—", wide: true, act: "open" },
+            /* issue 26-11-08-1621: wide 改条件式 —— 值非空才 wide(占整行折行位), 空值行
+             * (text 兜底「—」保留)按普通行渲染, 不再空占折行位撑高路径段 */
+            { icon: "#i-folder-open", label: "下载路径", text: d.download_path || "—", wide: !!d.download_path, act: "open" },
+            { icon: "#i-folder", label: "根路径", text: d.root_path || "—", wide: !!d.root_path, act: "open" },
             { icon: "#i-sliders", label: "自动种子管理", text: yn(d.auto_tmm) },
             { icon: "#i-play", label: "强制启动", text: yn(d.force_start) },
             { icon: "#i-upload", label: "超级做种", text: yn(d.super_seeding) },

@@ -108,7 +108,7 @@
   <div class="callout">_build_links 建链与落账之间存在崩溃窗口(落账粒度 chunk/200 条,目录别名整条不落账): create_file_alias/create_dir_alias(alias_fs.py:619/629, os.link/os.symlink)对已存在路径抛 FileExistsError,重启后按已落账 link_pos 续建必撞盘上孤儿链接,而失败回滚 _remove_links 只删 job.alias_paths 已落账条目,孤儿留在盘上且永不入账,此后每轮 ACT_REBUILD 都在同一孤儿处失败,attempts 耗尽后 rebuild_exhausted 永久失败需手工清现场(面1/面2 同根因合并;与底册 A-03 根因不同: A-03 是能力性失败,本条是崩溃窗口非幂等重建+回滚范围缺口)(黄金法则#1)</div>
   <p>代码现状佐证(取证 2026-11-08 16:08,行号为现取):</p>
   <ul>
-    <li><code>src/auto_qb/infra/alias_fs.py:619</code> <code>create_dir_alias</code>(os.symlink target_is_directory=True)与 <code>:629</code> <code>create_file_alias</code>(os.link 优先、回落 os.symlink):目标路径已存在时直接抛错,无「已指向 target 则跳过」的幂等探测。</li>
+    <li><code>src/auto_qb/infra/alias_fs.py:610</code> <code>create_dir_alias</code>(os.symlink target_is_directory=True)与 <code>:620</code> <code>create_file_alias</code>(os.link 优先、回落 os.symlink):目标路径已存在时直接抛错,无「已指向 target 则跳过」的幂等探测。</li>
     <li><code>src/auto_qb/core/modules/relocate_exec.py:264</code> <code>_build_links</code>:按 <code>rt["link_pos"]</code> 分 chunk 续建(<code>:287-302</code>),账随 chunk 落——「盘上已建成、账未落」窗口内的链接重启后重复创建即 FileExistsError。</li>
   </ul>
 </section>
@@ -127,7 +127,7 @@
   <h2><span class="no">§04</span>定位锚点</h2>
   <ul>
     <li><code>src/auto_qb/core/modules/relocate_exec.py:264</code>(取证 2026-11-08 16:08)· <code>_build_links</code> · grep <code>_build_links</code> / <code>link_pos</code></li>
-    <li><code>src/auto_qb/infra/alias_fs.py:619</code>(create_dir_alias)/<code>:629</code>(create_file_alias)/<code>:639</code>(alias_kind_of)(取证 2026-11-08 16:08)· grep <code>def create_file_alias</code> / <code>alias_kind_of</code></li>
+    <li><code>src/auto_qb/infra/alias_fs.py:610</code>(create_dir_alias)/<code>:620</code>(create_file_alias)/<code>:630</code>(alias_kind_of)(取证 2026-11-08 16:08;行号 2026-11-08 复验重取)· grep <code>def create_file_alias</code> / <code>alias_kind_of</code></li>
     <li>来源:汇总件 <code>memory-bank/issues/26-11-07-0527-bug-legacy-review4-core.html</code> 明细行 3(路线·批次 R1#22;当时行号 relocate_exec.py:235,锚定 freeze f0883292)</li>
   </ul>
 </section>

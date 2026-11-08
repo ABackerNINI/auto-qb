@@ -107,26 +107,26 @@
 
 <section id="s2">
   <h2><span class="no">§02</span>证据</h2>
-  <p>代码现状(取证 2026-11-08 16:08,行号为现取):</p>
-<pre><code># src/auto_qb/core/modules/relocate_exec.py — relocate_cancel(:1173-1325)守卫序列,无终态检查:
-:1182  job is None            -&gt; blocked
-:1184  dry_run                -&gt; blocked
-:1200  MOVING/WATCHING        -&gt; blocked            (B9 修, R1#24)
-:1228  journal settled 改写   -&gt; blocked
-:1255  cost 未确认            -&gt; confirm
-:1264  同目标链式在途          -&gt; blocked
-:1288  _remove_links 后验残留 -&gt; blocked             (B9 修, R1#23)
-:1317  setLocation(job.src)   (fire-and-forget 回搬)
-:1321  落 PHASE_CANCELLED + alias_paths 清空
-:1323  journal 落 cancelled   :1324 _resume_members
+  <p>代码现状(取证 2026-11-08 16:08;行号 2026-11-08 评审后重取):</p>
+<pre><code># src/auto_qb/core/modules/relocate_exec.py — relocate_cancel(:1376-1528)守卫序列,无终态检查:
+:1385  job is None            -&gt; blocked
+:1387  dry_run                -&gt; blocked
+:1403  MOVING/WATCHING        -&gt; blocked            (B9 修, R1#24)
+:1431  journal settled 改写   -&gt; blocked
+:1458  cost 未确认            -&gt; confirm
+:1467  同目标链式在途          -&gt; blocked
+:1492  _remove_links 后验残留 -&gt; blocked             (B9 修, R1#23)
+:1520  setLocation(job.src)   (fire-and-forget 回搬)
+:1524  落 PHASE_CANCELLED + alias_paths 清空
+:1526  journal 落 cancelled   :1527 _resume_members
 
 # 终态词表与判定:
 # src/auto_qb/core/modules/relocate_units.py:86
 TERMINAL_PHASES = frozenset({PHASE_DONE, PHASE_FAILED, PHASE_CANCELLED})
 # relocate_units.py:323-324
 def is_terminal(self): return self.phase in TERMINAL_PHASES</code></pre>
-  <p>对照:relocate_exec.py:1169 处其它入口有 <code>job.is_terminal</code> 守卫,cancel 无等价检查——对 PHASE_FAILED job 调 cancel 会把已失败的 job 再删一遍链接、再下发一次 setLocation 搬回、并把失败账(相位/last_error)改写为 CANCELLED;对 PHASE_DONE(已 finalized,alias_paths 已清)job 调 cancel 会直落 :1317 对已收尾数据再发起一次搬回。</p>
-  <p>B9 残留校验注释(relocate_exec.py:1281-1287)已载明「验删式不用计数式」的取舍,该校验挡住了残留别名下的 copy-onto-self;但「撤终态」的行为合法性不在其射程内。</p>
+  <p>对照:relocate_exec.py:1211 处其它入口(<code>_start_job</code>)有 <code>not existing.is_terminal</code> 守卫,cancel 无等价检查——对 PHASE_FAILED job 调 cancel 会把已失败的 job 再删一遍链接、再下发一次 setLocation 搬回、并把失败账(相位/last_error)改写为 CANCELLED;对 PHASE_DONE(已 finalized,alias_paths 已清)job 调 cancel 会直落 :1520 对已收尾数据再发起一次搬回。</p>
+  <p>B9 残留校验注释(relocate_exec.py:1484-1490)已载明「验删式不用计数式」的取舍,该校验挡住了残留别名下的 copy-onto-self;但「撤终态」的行为合法性不在其射程内。</p>
 </section>
 
 <section id="s3">
@@ -142,7 +142,7 @@ def is_terminal(self): return self.phase in TERMINAL_PHASES</code></pre>
 <section id="s4">
   <h2><span class="no">§04</span>定位锚点</h2>
   <ul>
-    <li><code>src/auto_qb/core/modules/relocate_exec.py:1173</code>(取证 2026-11-08 16:08)· <code>relocate_cancel</code> · grep <code>def relocate_cancel</code>;守卫序列 :1182/:1184/:1200/:1228,回搬与终态落账 :1317-:1324</li>
+    <li><code>src/auto_qb/core/modules/relocate_exec.py:1376</code>(行号 2026-11-08 复验重取)· <code>relocate_cancel</code> · grep <code>def relocate_cancel</code>;守卫序列 :1385/:1387/:1403/:1431,回搬与终态落账 :1520-:1527</li>
     <li><code>src/auto_qb/core/modules/relocate_units.py:86</code> · <code>TERMINAL_PHASES</code>/<code>is_terminal</code>(:323-324)· grep <code>TERMINAL_PHASES</code></li>
     <li>来源:B9 批实施范围外发现(2026-11-08;B9 对应汇总件 26-11-07-0527-bug-legacy-review4-core.html 行 4/30,提交 9255265e)</li>
   </ul>

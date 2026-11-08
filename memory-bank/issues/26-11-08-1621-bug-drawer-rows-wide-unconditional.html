@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="webui-0229-followup">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="drawer_rows 下载/根路径 wide:true 无条件, 值为空也占整行折行位">
 <meta name="issue-summary" content="drawer_rows.js:108-109 无条件 wide:true 且 text 兜底「—」, 值空仍占折行位(观感), 02/03 路径段同受影响">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-08-1621-bug-drawer-rows-wide-unconditional</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-08 16:21</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
 
@@ -118,6 +118,18 @@
   <h2><span class="no">§04</span>状态变更日志</h2>
   <ul>
     <li>2026-11-08 16:21 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    <li>2026-11-08 — 复验：锚点仍在（<code>drawer_rows.js</code> 下载路径/根路径两行无条件 <code>wide: true</code> 且 text 兜底「—」），仍复现</li>
+    <li>2026-11-08 — 状态 Open → Done（kb.status）</li>
+</ul>
+</section>
+
+<section id="s5">
+  <h2><span class="no">§05</span>修复后补充</h2>
+  <ul>
+    <li>实际修法：取 §03 候选 ①（用户拍板条件 wide）—— <code>drawer_rows.js</code> 下载路径/根路径两行 <code>wide</code> 改 <code>!!d.download_path</code> / <code>!!d.root_path</code>（值非空才 wide:true，空值/null/缺失行 wide 不置位按普通行渲染，text 兜底「—」保留，行不占折行位）。</li>
+    <li>空值场景两变体核验：02 路径行走 <code>secRows</code>（<code>.dt02-kv</code>，<code>r.wide</code> 条件挂类已在线）与 03 走 <code>gridRows</code>（<code>.dt03-item</code>，同式）—— 空值行按普通行渲染，「—」短值在两变体基类下都不溢出不截断。</li>
+    <li>验证方式：新增 node 电池 <code>test_r4_drawer_rows_path_wide_conditional</code>（直跑契约层生产函数：真值行 wide:true 且文本透传不变；空串/缺失/null 行 wide 不置位且兜底「—」）。</li>
+    <li>测试数字：commands run test.quick 全绿 —— 5849 passed / 2 skipped / 0 failed（2026-11-08）。</li>
   </ul>
 </section>
 
