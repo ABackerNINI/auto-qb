@@ -40,7 +40,7 @@
 | W1 | 机械面: check_review_trace.py + review.pack(下限删/判红/基哈希/累计) | Done(2026-11-08, T1=8cee7e11 + T2=84b8da8f) |
 | W2 | 规则面: code-review SKILL.md 重写(触发表/⑤/⑦/反模式) | Done(2026-11-08, T34=960598ef; 接缝终审补 memory-bank SKILL.md 与 my-commit-flow 注册 note 两处副本) |
 | W3 | 测试面: test_review_pkg.py 判红改写 + 新增用例 + 测试计划同步 | Done(2026-11-08, 定向 112; 基线切片归 W4) |
-| W4 | 收尾 DoD: 切片/基线/pitfalls/回写 | Open |
+| W4 | 收尾 DoD: 切片/基线/pitfalls/回写 | Done(2026-11-08, 基线 26-11-08-1713=5783 passed/99%; 坑档 reviewer-subagent-hang-on-long-commands; kb.wrap 切片随会话收口) |
 
 ## 进度日志
 
