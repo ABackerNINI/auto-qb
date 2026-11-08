@@ -305,7 +305,7 @@ const CONFIRM_TRUTH = {
   ok("预检网络异常(非 auth): 放行", (await vm._relocateAddGate()) === true);
 }
 
-// ---- ⑤ 全角逗号 U+FF0C 标签口径(issue 26-11-08-1620): 拆分/尾段/过滤/挑选/载荷五面一致 ----
+// ---- (5) 全角逗号 U+FF0C 标签口径(issue 26-11-08-1620): 拆分/尾段/过滤/挑选/载荷五面一致 ----
 {
   const vm = makeVm();
   vm.addTags = "iso\uFF0Cx86, hd\uFF0C";  // 全角半角混排

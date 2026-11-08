@@ -121,6 +121,7 @@
 </ul>
   <h3>修复后补充</h3>
   <p>实际修法: 冻结条目同步 <code>32→33</code>(<code>tests/_ascii_symbol_frozen.py:417</code>, 用户授权顺手修, 机械面一行)。验证方式: <code>commands run test.quick</code> 全绿(此前唯一红即本条)。<strong>同批连带清理</strong>: 阶段 3 新增 e2e 测试提交消息里 4 处 <code>✨</code>(dingbats 29&gt;冻结 25, 本批自身违规)去 emoji 修复; <code>tests-real/.work</code> 两个 gitignored 实验残留(e8_sim.py/p4.py, 计划 26-11-07-1300 已完结)删除。</p>
+  <p><strong>改道(2026-11-09, 用户拍板「存量退回」)</strong>: 上面的冻结同步作废 —— 多出的第 33 个符号本体是 a35463d4 新增注释里的 <code>⑤</code>(line 308 全角逗号段序号), 按「冻结递减不可逆/新增必修」口径修符号本体 <code>⑤→(5)</code>, 冻结条目退回 <code>32</code>; 其余 3 处存量 <code>⑤</code> 在冻结表内不动。改道原因: 冻结同步等于把新增违规合法化, 与闸门「只拦新增」设计意图相悖。</p>
 </section>
 
 <footer>
