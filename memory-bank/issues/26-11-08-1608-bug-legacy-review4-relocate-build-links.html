@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="legacy-review4-relocate-build-links">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="relocate _build_links 建链与落账间崩溃窗口(孤儿链接撞车 rebuild_exhausted)">
 <meta name="issue-summary" content="_build_links 建链与落账间崩溃窗口: os.link/os.symlink 撞盘上孤儿链接必 FileExistsError, 续建每轮 ACT_REBUILD 同处失败, attempts 耗尽 rebuild_exhausted 永久失败需手工清现场(R4 汇总件行 3 拆出)">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-08-1608-bug-legacy-review4-relocate-build-links</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-08 16:08</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">core</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">R4-core 收尾会话</div></div>
 </div>
@@ -152,11 +152,19 @@
   <ul>
     <li>2026-11-08 16:08 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
     <li>2026-11-08 — 从汇总件 26-11-07-0527-bug-legacy-review4-core.html 明细行 3(R1#22)拆出;用户拍板 2026-11-08 本轮不修,拆出独立认领,fix 原文三案保留待裁决</li>
-  </ul>
+    <li>2026-11-08 — 状态 Open → Done（kb.status）</li>
+    <li>2026-11-08 — 修复入库(用户拍板 ①+③ 组合; 测试 test.quick 5854 passed + 2 skipped, 详见「修复后补充」)</li>
+</ul>
   <h3>复验</h3>
-  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <p>复验：2026-11-08 18:55 <strong>仍复现</strong>(认领轮重跑锚点, 行号现取: <code>relocate_exec.py:264</code> <code>_build_links</code> / <code>alias_fs.py:610</code> <code>create_dir_alias</code> / <code>:620</code> <code>create_file_alias</code> / <code>:630</code> <code>alias_kind_of</code> 全部在位)。修法面补勘两点: ①文件支建链已有幂等跳过(S5 <code>e2c4f3d4</code> 引入, 已指向目标即 skip)——孤儿撞车真窗在<strong>目录别名支</strong>(整条无探测)与<strong>回滚面</strong>(_remove_links 只删 built); ②Python 3.13 实测 junction 的 <code>os.path.islink</code> 判 False(仅 lstat 的 st_reparse_tag 可识别), 既有「真目录占位」支会把指向目标的孤儿别名判非空误杀——修法据此把幂等探测置于占位支<strong>之前</strong>。</p>
   <h3>修复后补充</h3>
-  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  <p><strong>实际修法</strong> = 用户拍板的 ①+③ 组合(建议三案取第 1、3 案; 第 2 案「落账粒度缩到单条」不取——chunk/200 落账粒度保持不动):</p>
+  <ul>
+    <li><strong>① 建链改幂等</strong>(<code>relocate_exec.py:285-294</code> <code>_build_links</code> 目录别名支): 幂等探测(alias_kind_of 命中且 alias_points_to 恰指向目标 ⇒ 视为已建成直接入账)置于「真目录占位」支<strong>之前</strong>(原因见复验②); 指向别处/悬空 = 真冲突, 照旧 create 抛 FileExistsError 走失败路径, 不静默覆盖、不删别人的链接(黄金法则 2)。文件支 S5 起已有同一探测单点(alias_fs.alias_points_to), 本件未另造第二套探测。<em>Phase3 评审修正(major)</em>: 目录支 append 一律去重 —— 目录支不看 link_pos, 最终落账后 _arm 前崩溃的重启续建经 _stage_link 以账面进 rt, 盲 append 会让 alias_paths 翻倍且每次重启复利; 孤儿形态(账空)仍必须 append 入账, 故取「去重」而非「跳过支不 append」。守阵: 幂等续建例补走 _stage_link 生产续建入口的重复执行断言(账面长度恒 1)。</li>
+    <li><strong>③ 失败回滚按 plan 全量清单清理</strong>(新函数 <code>relocate_exec.py:335</code> <code>_rollback_links(job, built)</code>, <code>_build_links</code> 失败路径 <code>:315</code> 改调它): 清理范围从「built(账面条目 + 本拍已建/已遇)」扩为「plan 全量链接清单」——文件形态按 plan.files 逐条扫链接位, dir_alias 形态扫目录别名位; 命中链接且(本拍账面条目 或 恰指向本 job 目标)才删; 指向别处的真冲突保守不删; built 里不在 plan 清单的条目兜底照删(不回退旧实现的删净保证)。<em>取舍</em>: 选「plan 表重扫 + alias_points_to 过滤」而非「账面并集」——孤儿本就无账可并, plan 文件表是本 job 链接位全集的单点(与建链同一 <code>_plan_files</code>/<code>_scope_rel</code> 换算), 目录别名整条不落账也被该清单一并覆盖; 过滤保证只删「我们的」链接, 保守默认不被破坏。</li>
+  </ul>
+  <p><strong>验证方式</strong>: <code>tests/test_relocate_exec_run.py</code> 新增 5 例(真临时盘硬链接 + 真 junction, POSIX 回落目录 symlink、能力缺失 skip): 孤儿幂等续建(含重复执行零副作用)/真冲突保守(alias_partial + attempts+1 + 冲突位原样保留)/回滚全量(账 1 条 + 失败点后孤儿 2 条全清)/目录别名孤儿续建(create 零调用)/目录别名回滚面(指向目标清掉、真冲突不动 + e2e 报错路径)。单文件 47 passed; 相关 relocate/alias 面 8 文件 223 passed; 全量 <code>test.quick</code> 5854 passed + 2 skipped。</p>
+  <p><strong>风险声明</strong>: 崩溃窗口本体(建链后进程真被杀)未真机复现, 以「预置孤儿 + 续建/回滚」等价模拟; 真机 qB 环境下 junction + qB 读链的回归留待真机验证。</p>
 </section>
 
 <footer>

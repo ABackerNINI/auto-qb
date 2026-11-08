@@ -65,6 +65,18 @@
 
 覆盖率第三轮 T2b 补测(26-11-05):
 - test_buckets_group_members_missing_from_by_hash_dropped: 组成员全不在 by_hash -> 该组跳过不进预检(151->146 relocate_plan)
+### 崩溃窗口孤儿幂等续建与回滚全量(issue 26-11-08-1608, 修法 = 幂等探测 + plan 全量回滚)
+- test_build_links_orphan_rebuild_idempotent_file_links: 盘上孤儿链接(已指向目标, 账上无)续建
+  幂等跳过不再 FileExistsError, 账推进到完成; 同 job 经 _stage_link 生产续建入口再跑零副作用且账面无重复(黄金法则 1)
+- test_build_links_conflict_orphan_points_elsewhere_kept: 孤儿位被指向别处的硬链接占据 ->
+  仍走现有报错路径(alias_partial + attempts+1 + last_error), 不删别人的链接(黄金法则 2)
+- test_build_links_failure_rollback_cleans_plan_manifest_orphans: 账上 1 条 + 盘上孤儿 2 条
+  (在失败点之后, 账上无) -> 失败回滚按 plan 全量清单清理, 孤儿也清掉
+- test_build_links_dir_alias_orphan_rebuild_idempotent: 目录别名整条不落账的崩溃窗口 ->
+  孤儿目录别名已指向目标, 续建幂等跳过(create 零调用)完成落账; 经 _stage_link 生产续建入口
+  重复执行零创建且账面长度恒 1(评审 major 守阵: 目录支 append 去重, 防重启复利翻倍)
+- test_rollback_links_cleans_dir_alias_orphan_and_spares_foreign: 目录别名回滚面 ——
+  指向目标的孤儿别名清掉 / 真冲突别名(指向别处)保守不动 + e2e 报错路径
 """
 
 import os
@@ -985,6 +997,239 @@ def test_build_links_faces(tmp_path, monkeypatch):
     assert mod._build_links(job3, {"links": [], "link_pos": 0}) is False
     saved = mod._jobs["j3"]
     assert saved.attempts == 3 and saved.reason == "alias_partial", (saved.attempts, saved.reason)
+
+
+def _make_dir_alias_or_skip(link, target):
+    """真建一条目录别名(Windows junction 免特权 / POSIX 目录 symlink); 建不出则 skip
+
+    环境能力缺失不是代码缺陷(同 test_alias_fs 的准入判据): 只 catch 异常不够, 必须
+    复核 alias_kind_of(重定向层可能"假成功", file-conventions.md)。
+    """
+    kind = afs.KIND_JUNCTION if infra_utils.is_windows() else afs.KIND_SYMLINK
+    try:
+        afs.create_dir_alias(str(link), str(target), kind)
+    except (OSError, NotImplementedError) as e:
+        pytest.skip(f"本环境建不出目录别名({kind}): {e}")
+    if afs.alias_kind_of(str(link)) is None:
+        pytest.skip("目录别名建成但识别不出(宿主重定向层假成功)")
+    return kind
+
+
+def test_build_links_orphan_rebuild_idempotent_file_links(tmp_path, monkeypatch):
+    """崩溃窗口孤儿续建(issue 26-11-08-1608): 盘上孤儿链接(已指向目标, 账上无)幂等跳过
+    不再 FileExistsError, 账推进到完成; 同 job 再跑一遍(ACT_REBUILD 重复执行)零副作用(黄金法则 1)"""
+    mod = _bare_mod(data_dir=str(tmp_path / "data"))
+    src = tmp_path / "src"
+    dst = tmp_path / "dst"
+    rels = ["Show/e%02d.mkv" % i for i in range(4)]
+    for rel in rels:
+        p = dst / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes(b"x" * 64)
+    # 崩溃窗口孤儿: e00 建成指向 dst 但账未落(alias_paths 空)
+    orphan = src / "Show" / "e00.mkv"
+    orphan.parent.mkdir(parents=True, exist_ok=True)
+    afs.create_file_alias(str(orphan), str(dst / "Show" / "e00.mkv"), afs.KIND_HARDLINK)
+    job = _job(
+        phase=ru.PHASE_MOVED,
+        src=str(src),
+        dst=str(dst),
+        plan={
+            "form": ru.FORM_FILE_LINKS,
+            "link_kind": "hardlink",
+            "files": [[r, 64] for r in rels]
+        },
+    )
+    created = []
+    real = afs.create_file_alias
+
+    def _rec(link, target, kind):
+        created.append(link)
+        return real(link, target, kind)
+
+    monkeypatch.setattr(afs, "create_file_alias", _rec)
+    rt = {"links": [], "link_pos": 0}
+    assert mod._build_links(job, rt) is True
+    assert created == [str(src / "Show" / f"e{i:02d}.mkv") for i in range(1, 4)], "孤儿 e00 必须跳过不重建"
+    assert rt["link_pos"] == 4, rt
+    assert len(mod.get_job("j1").alias_paths) == 4, mod.get_job("j1").alias_paths
+
+    # 重复执行走生产续建入口(_stage_link 以账面进 rt, 评审 minor 守阵): 全部已指向目标
+    # => 零创建零副作用, 账面无重复
+    created.clear()
+    saved = mod.get_job("j1")
+    rt2 = {}
+    mod._stage_link(saved, rt2)
+    assert rt2["link_pos"] == 4 and len(rt2["links"]) == 4, rt2
+    assert mod._build_links(saved, rt2) is True
+    assert created == [], "重复执行不得有副作用(黄金法则 1)"
+    assert len(mod.get_job("j1").alias_paths) == 4, mod.get_job("j1").alias_paths
+    assert len(set(mod.get_job("j1").alias_paths)) == 4, "账面不得出现重复条目"
+
+
+def test_build_links_conflict_orphan_points_elsewhere_kept(tmp_path):
+    """真冲突(保守默认): 链接位被指向别处的硬链接占据 -> 仍走现有报错路径(alias_partial +
+    attempts+1 + 账清空), 不静默覆盖、回滚不删别人的链接(黄金法则 2)"""
+    mod = _bare_mod(data_dir=str(tmp_path / "data"))
+    src, dst = tmp_path / "src", tmp_path / "dst"
+    (dst / "Show").mkdir(parents=True)
+    (dst / "Show" / "e00.mkv").write_bytes(b"x" * 64)
+    link = src / "Show" / "e00.mkv"
+    link.parent.mkdir(parents=True)
+    decoy = tmp_path / "decoy.mkv"
+    decoy.write_bytes(b"other data")
+    os.link(str(decoy), str(link))  # 孤儿: 真硬链接但指向别处(nlink>1 => HARDLINK, 不指目标)
+    job = _job(
+        phase=ru.PHASE_MOVED,
+        src=str(src),
+        dst=str(dst),
+        plan={
+            "form": ru.FORM_FILE_LINKS,
+            "link_kind": "hardlink",
+            "files": [["Show/e00.mkv", 64]]
+        },
+    )
+    assert mod._build_links(job, {"links": [], "link_pos": 0}) is False
+    saved = mod.get_job("j1")
+    assert saved.phase == ru.PHASE_ARMED and saved.reason == "alias_partial", (saved.phase, saved.reason)
+    assert saved.attempts == 1 and list(saved.alias_paths) == [], (saved.attempts, saved.alias_paths)
+    assert saved.last_error, "失败必须留 last_error(现有报错路径)"
+    # 冲突孤儿原样保留: 还在、仍指向 decoy(不是本 job 的链接, 保守默认不删)
+    assert afs.alias_kind_of(str(link)) == afs.KIND_HARDLINK
+    assert afs.alias_points_to(str(link), str(decoy)), "回滚不得动指向别处的链接"
+    assert not afs.alias_points_to(str(link), str(dst / "Show" / "e00.mkv"))
+
+
+def test_build_links_failure_rollback_cleans_plan_manifest_orphans(tmp_path, monkeypatch):
+    """回滚全量(issue 26-11-08-1608): 账上 1 条 + 盘上 2 条孤儿(在失败点之后, 账上无) ->
+    失败回滚按 plan 全量清单清理, 孤儿也清掉(旧实现只删 built, 孤儿残留后每轮 ACT_REBUILD 撞车)"""
+    mod = _bare_mod(data_dir=str(tmp_path / "data"))
+    src, dst = tmp_path / "src", tmp_path / "dst"
+    rels = ["Show/e%02d.mkv" % i for i in range(5)]
+    for rel in rels:
+        p = dst / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes(b"x" * 64)
+    # 账面: e00 已落账; 崩溃窗口孤儿: e02/e03 已建成指向 dst 但账上无
+    ledger = src / "Show" / "e00.mkv"
+    ledger.parent.mkdir(parents=True, exist_ok=True)
+    afs.create_file_alias(str(ledger), str(dst / "Show" / "e00.mkv"), afs.KIND_HARDLINK)
+    for i in (2, 3):
+        afs.create_file_alias(
+            str(src / "Show" / f"e{i:02d}.mkv"), str(dst / "Show" / f"e{i:02d}.mkv"), afs.KIND_HARDLINK
+        )
+    job = _job(
+        phase=ru.PHASE_MOVED,
+        src=str(src),
+        dst=str(dst),
+        alias_paths=(str(ledger), ),
+        plan={
+            "form": ru.FORM_FILE_LINKS,
+            "link_kind": "hardlink",
+            "files": [[r, 64] for r in rels]
+        },
+    )
+    monkeypatch.setattr(afs, "create_file_alias", lambda *a, **k: (_ for _ in ()).throw(OSError("权限不足")))
+    # 断点续建形态(_stage_link 断点): link_pos=1(账面 1 条), 首 chunk 的 e01 处即失败
+    rt = {"links": [str(ledger)], "link_pos": 1}
+    assert mod._build_links(job, rt) is False
+    saved = mod.get_job("j1")
+    assert saved.phase == ru.PHASE_ARMED and saved.reason == "alias_partial" and saved.attempts == 1
+    # plan 全量清单清干净: 5 个链接位一个链接都不剩(账面 e00 + 孤儿 e02/e03 全清)
+    for rel in rels:
+        assert afs.alias_kind_of(str(src / rel)) is None, rel
+
+
+def test_build_links_dir_alias_orphan_rebuild_idempotent(tmp_path, monkeypatch):
+    """目录别名整条不落账的崩溃窗口(issue 26-11-08-1608): 孤儿目录别名已指向目标 ->
+    续建幂等跳过(create 零调用)完成落账; 重复执行零副作用(黄金法则 1)"""
+    mod = _bare_mod(data_dir=str(tmp_path / "data"))
+    src, dst = tmp_path / "src", tmp_path / "dst"
+    src.mkdir()
+    dst_show = dst / "Show"
+    dst_show.mkdir(parents=True)
+    (dst_show / "e00.mkv").write_bytes(b"x" * 64)
+    link = src / "Show"
+    kind = _make_dir_alias_or_skip(link, dst_show)  # 崩溃窗口孤儿: 别名已建成, 账未落
+    job = _job(
+        phase=ru.PHASE_MOVED,
+        src=str(src),
+        dst=str(dst),
+        scope=str(link),
+        plan={
+            "form": ru.FORM_DIR_ALIAS,
+            "link_kind": kind,
+            "files": []
+        },
+    )
+    dir_calls = []
+    monkeypatch.setattr(afs, "create_dir_alias", lambda *a, **k: dir_calls.append(a))
+    assert mod._build_links(job, {"links": [], "link_pos": 0}) is True
+    assert dir_calls == [], "孤儿目录别名已指向目标: 必须跳过不重建"
+    assert mod.get_job("j1").alias_paths == (str(link), ), mod.get_job("j1").alias_paths
+    # 重复执行走生产续建入口(评审 major/minor 守阵): _stage_link 以账面进 rt 后再建链,
+    # 幂等跳过不得 append 重复条目 —— 最终落账后 _arm 前崩溃的重启即此形态, 盲 append
+    # 会让 alias_paths 翻倍且每次重启复利
+    saved = mod.get_job("j1")
+    rt2 = {}
+    mod._stage_link(saved, rt2)
+    assert rt2["links"] == [str(link)] and rt2["link_pos"] == 1, rt2
+    assert mod._build_links(saved, rt2) is True
+    assert dir_calls == [], "重复执行仍零创建"
+    assert mod.get_job("j1").alias_paths == (str(link), ), "重复执行账面长度恒 1(黄金法则 1)"
+
+
+def test_rollback_links_cleans_dir_alias_orphan_and_spares_foreign(tmp_path):
+    """目录别名回滚面(issue 26-11-08-1608): 指向目标的孤儿别名(账上无)回滚清掉;
+    真冲突别名(指向别处)e2e 走现有报错路径且回滚保守不动"""
+    mod = _bare_mod(data_dir=str(tmp_path / "data"))
+    src, dst = tmp_path / "src", tmp_path / "dst"
+    src.mkdir()
+    dst.mkdir()
+    # 面1: 孤儿目录别名指向本 job 目标 -> 回滚清掉
+    dst_show = dst / "Show"
+    dst_show.mkdir()
+    (dst_show / "e00.mkv").write_bytes(b"x" * 64)
+    orphan = src / "Show"
+    kind = _make_dir_alias_or_skip(orphan, dst_show)
+    job = _job(
+        phase=ru.PHASE_MOVED,
+        src=str(src),
+        dst=str(dst),
+        scope=str(orphan),
+        plan={
+            "form": ru.FORM_DIR_ALIAS,
+            "link_kind": kind,
+            "files": []
+        },
+    )
+    assert mod._rollback_links(job, []) == 1
+    assert afs.alias_kind_of(str(orphan)) is None, "指向目标的孤儿别名必须清掉"
+    # 面2: 真冲突别名指向别处 -> 回滚保守不动
+    decoy = dst / "Other"
+    decoy.mkdir()
+    (decoy / "f.mkv").write_bytes(b"x" * 8)
+    foreign = src / "Show"
+    kind2 = _make_dir_alias_or_skip(foreign, decoy)
+    assert mod._rollback_links(job, []) == 0
+    assert afs.alias_kind_of(str(foreign)) is not None and afs.alias_points_to(str(foreign), str(decoy))
+    # 面3: e2e —— 真冲突别名让 _build_links 走现有报错路径(幂等探测不误跳过), 回滚后别名仍在
+    job2 = _job(
+        "j2",
+        phase=ru.PHASE_MOVED,
+        src=str(src),
+        dst=str(dst),
+        scope=str(foreign),
+        plan={
+            "form": ru.FORM_DIR_ALIAS,
+            "link_kind": kind2,
+            "files": []
+        },
+    )
+    assert mod._build_links(job2, {"links": [], "link_pos": 0}) is False
+    saved = mod.get_job("j2")
+    assert saved.phase == ru.PHASE_ARMED and saved.reason == "alias_partial" and saved.attempts == 1
+    assert afs.alias_kind_of(str(foreign)) is not None, "真冲突别名不删(保守默认)"
 
 
 def test_scope_rel_faces():

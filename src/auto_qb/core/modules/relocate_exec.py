@@ -276,12 +276,27 @@ class ExecMixin:
                 rel = self._scope_rel(job)
                 link = self._native(job.src, rel)
                 target = self._native(job.dst, rel)
-                if os.path.isdir(link) and not os.path.islink(link):
-                    if os.listdir(link):
-                        raise RuntimeError(f"内容根目录非空({link}), 目录别名建不出来")
-                    os.rmdir(link)  # qB 搬走文件后留下的空目录
-                alias_fs.create_dir_alias(link, target, kind)
-                links.append(link)
+                # 崩溃窗口孤儿(issue 26-11-08-1608): 别名位已建且恰指向目标 = 上次建成而账
+                # 未落(目录别名整条不落账), 幂等跳过(黄金法则 1, 与文件支同一 alias_points_to
+                # 探测单点); 指向别处/悬空 = 真冲突, 照旧 create 抛错(保守默认: 不覆盖不静默)。
+                # 探测必须在「真目录占位」支之前: junction 在 os.path.islink 判假(Python 3.13
+                # 实测, 仅 lstat 的 st_reparse_tag 可识别), 先走占位支会把指向目标的孤儿别名
+                # 当真目录判非空误杀。
+                # append 一律去重(Phase3 评审 major): 目录支不看 link_pos(文件支的账面口径
+                # 保护在这里不成立)—— 最终落账后 _arm 前崩溃的重启续建经 _stage_link 进来时
+                # links 已含账面条目, 盲 append 会账面翻倍且每次重启复利。孤儿形态(账空)仍
+                # 必须 append 入账 —— 不然别名在盘而账面空, 穿透校验与收尾删链都失管。
+                if alias_fs.alias_kind_of(link) is not None and alias_fs.alias_points_to(link, target):
+                    if link not in links:
+                        links.append(link)
+                else:
+                    if os.path.isdir(link) and not os.path.islink(link):
+                        if os.listdir(link):
+                            raise RuntimeError(f"内容根目录非空({link}), 目录别名建不出来")
+                        os.rmdir(link)  # qB 搬走文件后留下的空目录
+                    alias_fs.create_dir_alias(link, target, kind)
+                    if link not in links:
+                        links.append(link)
             else:
                 files = self._plan_files(job)
                 pos = int(rt.get("link_pos") or 0)
@@ -303,8 +318,11 @@ class ExecMixin:
                     self._set_job(replace(job, alias_paths=tuple(links)))  # 逐条落账(崩溃可回滚)
                     return False
         except Exception as e:  # noqa: BLE001 - 链接失败: 零成本回滚 + 交对账重建
-            logger.warning(f"relocate | job {job.job_id}: 建链接失败({e}) —— 删已建 {len(links)} 条链接, 交对账重建(不搬回)")
-            self._remove_links(links)
+            removed = self._rollback_links(job, links)
+            logger.warning(
+                f"relocate | job {job.job_id}: 建链接失败({e}) —— 按 plan 全量清单回滚删链接 {removed} 条"
+                "(含崩溃窗口孤儿), 交对账重建(不搬回)"
+            )
             self._set_job(
                 replace(
                     job,
@@ -319,6 +337,51 @@ class ExecMixin:
             return False
         self._set_job(replace(job, alias_paths=tuple(links)))
         return True
+
+    def _rollback_links(self, job: RelocateJob, built: Iterable[str]) -> int:
+        """建链失败回滚: 按 plan 全量链接清单清理(含崩溃窗口孤儿), 不止已落账条目
+
+        issue 26-11-08-1608: 建链与落账间崩溃窗口会在盘上留下「已建成、账上无」的孤儿
+        链接, 旧实现只删 built(账面条目 + 本拍已建/已遇), 本拍没走到位的孤儿清不掉 ——
+        此后每轮 ACT_REBUILD 撞 FileExistsError 直至 attempts 耗尽 rebuild_exhausted。
+        这里按 plan 文件表(dir_alias 形态 = 目录别名位)重扫全量链接位: 命中链接且
+        (本拍账面条目 或 恰指向本 job 目标(alias_points_to, 与建链幂等探测同一单点))
+        = 我们建的, 一并删; 指向别处 = 真冲突外来链接, 保守默认不动(黄金法则 2, 不删
+        别人的链接, 留给报错路径/人工)。单条失败只告警继续(残余交下一次对账), 返回
+        实际删除条数。
+        """
+        plan = job.plan or {}
+        if plan.get("form") == ru.FORM_DIR_ALIAS:
+            rels = [self._scope_rel(job)]
+        else:
+            rels = [rel for rel, _size in self._plan_files(job)]
+        built_set = {p for p in (built or ()) if p}
+        removed = 0
+        seen = set()
+        for rel in rels:
+            p = self._native(job.src, rel)
+            if p in seen:
+                continue
+            seen.add(p)
+            try:
+                if alias_fs.alias_kind_of(p) is None:
+                    continue
+                if p not in built_set and not alias_fs.alias_points_to(p, self._native(job.dst, rel)):
+                    continue  # 指向别处 = 不是本 job 的链接, 不删(保守默认)
+                alias_fs.remove_alias(p)
+                removed += 1
+            except Exception as e:  # noqa: BLE001 - 单条失败继续(残余交下一次对账/重建)
+                logger.warning(f"relocate | job {job.job_id}: 回滚删链接失败({p}): {e}")
+        # 账面兜底: built 里不在 plan 清单上的条目(plan 不随生命周期变, 理论不出现)也清掉
+        # —— 旧实现保证删净 built, 这里不回退该保证。
+        for p in built_set - seen:
+            try:
+                if alias_fs.alias_kind_of(p) is not None:
+                    alias_fs.remove_alias(p)
+                    removed += 1
+            except Exception as e:  # noqa: BLE001 - 单条失败继续
+                logger.warning(f"relocate | job {job.job_id}: 回滚删链接失败({p}): {e}")
+        return removed
 
     def _penetration_ok(self, job: RelocateJob) -> bool:
         """穿透校验: 经**原路径**逐文件 stat, 大小一致(§4.1)"""
