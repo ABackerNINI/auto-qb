@@ -5,6 +5,8 @@
 
 **Refs:** memory-bank/tasks/26-10-06-memory-bank-dangling-hash-refs.md
 
+- **复发 +1 (2026-11-08, issues-26-11-08-batch-fix 批2)**: 实施子代理把 issue 旧文本里的失效 hash 68ae5221 复制进**生产代码注释与测试 docstring**(新变体: 本坑处置面写的是 KB 文档, 代码注释面未覆盖路由); 评审核实该 hash 全 ref 不可解析(真先例 750cff23)。为什么没命中: 子代理派发提示未路由本坑, 且坑档处置只写了 KB 文档语境。处置补充: **代码注释/测试 docstring 引用先例提交同样优选「文件+函数名」锚, 不写分支期 hash**(dialogs.js:394 既有互指注释即纯函数名形态); 修法两处已改函数名锚。
+
 ### KB 记录的 feature 分支 hash 在合流后悬空
 
 - **触发**: 会话把提交 hash 写进档案 / progress / 计划, 之后该分支 rebase 并回 develop(issue 26-10-06-1904 取证 40 条, 2026-10-06)。
