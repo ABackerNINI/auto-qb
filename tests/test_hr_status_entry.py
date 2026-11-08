@@ -37,6 +37,8 @@
 - test_history_lanes_skips_non_dict_keeps_rest: 脏键(非 dict)跳过不停表
 - test_history_lanes_defaults_and_fallbacks: 缺键走默认(空串/0) + 未知 lane/status 回落原文 + 字段面
 - test_history_rows_stable_tiebreak_and_fallbacks: 同 ts 跨站/同站保持插入序(不按 site 排) + 未知 kind/trigger 回落 + 字段面
+- test_history_lanes_dirty_numeric_values_do_not_raise: lanes 内层 pages/rows 脏值(非数字串/容器)按 _as_int 口径兜 0 不抛, 合法值语义不变(issue 26-11-07-0527 #15)
+- test_history_rows_dirty_lane_values_do_not_raise: 表3 端到端 —— history lanes 内层脏计数经 history_rows 不整体抛错(#15 失败场景)
 
 ### 通道病因可见化(计划 26-10-29-0147 W3/D6)
 """
@@ -462,6 +464,49 @@ def test_history_lanes_defaults_and_fallbacks():
     # 整条缺 lane/status 键: 兜空串(or 右侧占位文本会进展示行)
     empty = _history_lanes([{}])[0]
     assert (empty.lane, empty.lane_text, empty.status, empty.status_text) == ("", "", "", "-"), "缺键兜空串/人话表空串键(不是占位)"
+
+
+def test_history_lanes_dirty_numeric_values_do_not_raise():
+    """lanes 内层 pages/rows 脏值按 _as_int 口径兜 0 不抛(issue 26-11-07-0527 #15): lanes 经
+    HrHistoryEvent.from_json 原样透传, 手改坏的站点文件不得让展示层抛 ValueError; 合法值
+    (int/数字串)语义与旧 int() 直转一致(_as_int 既有口径, 不另造)"""
+    rows = _history_lanes(
+        [
+            {
+                "lane": "A",
+                "status": "ok",
+                "pages": "abc",
+                "rows": "not-a-number"
+            },
+            {
+                "lane": "B",
+                "status": "ok",
+                "pages": "3",
+                "rows": "12"
+            },
+            {
+                "lane": "C",
+                "status": "ok",
+                "pages": 2,
+                "rows": 9
+            },
+            {
+                "lane": "D",
+                "status": "ok",
+                "pages": [],
+                "rows": {}
+            },
+        ]
+    )
+    assert [(r.pages, r.rows) for r in rows] == [(0, 0), (3, 12), (2, 9), (0, 0)]
+
+
+def test_history_rows_dirty_lane_values_do_not_raise():
+    """表3 端到端(#15 失败场景): history 事件 lanes 内层脏计数经 history_rows 不得整体抛错"""
+    data = HrSiteData()
+    data.history = [_ev(1.0, ts=100.0, lanes=[{"lane": "A", "status": "ok", "pages": "oops", "rows": "4"}])]
+    rows = history_rows({"s1": data}, 10, 999.0)
+    assert [(lane.pages, lane.rows) for lane in rows[0].lanes] == [(0, 4)]
 
 
 def _ev(site_ts: float, *, kind="wave", trigger="auto", action="refreshed", ts=None, **kw) -> HrHistoryEvent:

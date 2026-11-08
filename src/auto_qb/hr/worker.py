@@ -155,7 +155,7 @@ class HrWorker:
         self._now = now_fn
         self._anchors_fn = anchors_fn
         #: WebUI 是否活跃(现读回调, 计划 §03.6.1): 决定「通道静默」是**可见告警**还是**只进后端 log**
-        #: —— 有人在用 WebUI 却收不到扩展联系, 就是要提醒的那种状态(用户口径⑤)。None = 无信号。
+        #: —— 有人在用 WebUI 却收不到扩展联系, 就是要提醒的那种状态(用户口径5)。None = 无信号。
         self._web_active_fn = web_active_fn
         self._name = name
         self._cond = threading.Condition()
@@ -171,6 +171,11 @@ class HrWorker:
         self._pacing_key: Dict[str, str] = {}
         self._pacing_at: Dict[str, float] = {}
         self._silence_warned_at = 0.0
+        #: 锚点采集失败的告警节流(纪律同 _note, issue 26-11-07-0527 #19): 上次告警的状态指纹
+        #: ("" = 上轮成功/首轮)与时刻。只由取数线程经 run_once -> _collect_anchors 写 ——
+        #: 与 _note 的节流状态同一写者, 不引入跨线程写点。
+        self._anchors_warn_key = ""
+        self._anchors_warn_at = 0.0
         #: 立即拉取的一次性 force 旗标(计划 26-09-30-0240): None = 无; set = 受理的站点;
         #: 空集 = 全部启用站点。只活在 worker 内存, 不落盘(重启丢失无副作用), run_once 消费即清。
         self._force: Optional[set] = None
@@ -325,10 +330,30 @@ class HrWorker:
         if self._anchors_fn is None:
             return None
         try:
-            return self._anchors_fn() or {}
+            anchors = self._anchors_fn() or {}
         except Exception as e:  # 主循环侧取数失败不该影响刷新
-            logger.warning(f"HR 取数线程获取本地锚点失败(本轮忽略): {e}")
+            self._warn_anchor_failure(e)
             return None
+        # 成功即清失败指纹: 下次失败按「状态变化沿」立即报, 不吃 warn_gap 冷启动
+        self._anchors_warn_key = ""
+        return anchors
+
+    def _warn_anchor_failure(self, error: Exception) -> None:
+        """锚点采集失败的节流告警(纪律同 _note 的 WARNING 分支): 状态变化沿立即报, 持续同态按
+        `channel_silence_warn` 周期提醒, 被去重的轮次落 DEBUG(排障仍看得见每轮在败什么)。
+
+        !取数线程每 poll 一轮都会试一次, 不节流就是分钟级 WARNING => notify 推成系统通知,
+        正是模块 docstring 自述要避免的弹窗轰炸(issue 26-11-07-0527 #19)。状态指纹沿用
+        stable_key(抹掉消息里的数字, 同一根因的重试算同态; 换根因 = 指纹变化 = 立即再报)。
+        """
+        now = self._now()
+        key = stable_key(f"{type(error).__name__}: {error}")
+        if key != self._anchors_warn_key or now - self._anchors_warn_at >= warn_gap_floor(CHANNEL_SILENCE_WARN):
+            self._anchors_warn_key = key
+            self._anchors_warn_at = now
+            logger.warning(f"HR 取数线程获取本地锚点失败(本轮忽略): {error}")
+        else:
+            logger.debug(f"HR 取数线程获取本地锚点失败(同状态不重复告警): {error}")
 
     def _build_views(self, results: List[HrRefreshResult]) -> HrViewSet:
         """本轮视图: 优先用**内存快照**(未落盘时也能反映本轮结果), 其余站点读已落盘数据"""
@@ -393,11 +418,11 @@ class HrWorker:
         !本事件是**端点级**的(扩展连不上端点 ⇒ 任何站点都取不到数), 所以文案里要列出
         **受影响站点** —— 只说「通道静默」而不说"哪些站点的数据在变旧", 用户没法判断后果。
 
-        「该不该出声」依后端**可观测的证据**分档(计划 §03.2 / §03.6.1, 用户口径⑤):
+        「该不该出声」依后端**可观测的证据**分档(计划 §03.2 / §03.6.1, 用户口径5):
         - 有被拒敲门(401/403) ⇒ **可见**: 扩展在跑, 是 token / origin 配错(可定位故障);
         - WebUI 活跃          ⇒ **可见**: 有人在用, 但扩展未在联系 —— 这**正是要提醒的**(不静默);
         - 两者都没有          ⇒ **静默**: 「没人在用」= 预期离线, 不该进前端错误历史。
-        判据**不涉及**「是否同机 / 同源」(用户口径⑤明确免掉), 故无需任何来源比对; 见 events.channel_silent。
+        判据**不涉及**「是否同机 / 同源」(用户口径5明确免掉), 故无需任何来源比对; 见 events.channel_silent。
         """
         endpoint = self.endpoint
         if endpoint is None:

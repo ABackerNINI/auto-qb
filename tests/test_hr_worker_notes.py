@@ -28,6 +28,10 @@
 - test_pacing_class_separates_fetch_interval_gate
 - test_silence_missing_rejected_attr_defaults_zero
 - test_silence_where_after_contact_label: 「上次联系后」分支标签精确(原 test_silence_where_labels_both_branches 拆分)
+
+### 锚点采集失败告警节流(issue 26-11-07-0527 #19)
+- test_anchor_failure_warning_throttled: 状态变化沿立即报 + 持续同态按 warn_gap 周期提醒, 被去重的轮次落 DEBUG
+- test_anchor_warning_rereports_on_state_change_edge: 恢复后再失败/换根因都算状态变化沿, 立即再报
 """
 
 import logging
@@ -521,3 +525,66 @@ def test_silence_event_tag_sets_domain(tmp_path, monkeypatch):
     recs = [r for r in cap.records if "[HR 通道静默]" in r.getMessage()]
     assert len(recs) == 1
     assert getattr(recs[0], DOMAIN_ATTR) == events.DOMAIN_CHANNEL
+
+
+def test_anchor_failure_warning_throttled(tmp_path, caplog):
+    """锚点采集失败的 WARNING 节流(issue 26-11-07-0527 #19): 状态变化沿立即报, 持续同态按
+    channel_silence_warn 周期提醒, 被去重的轮次落 DEBUG —— 取数线程每 poll 一轮都试一次,
+    不节流就是分钟级系统通知(模块 docstring 自述要避免的弹窗轰炸)"""
+    clock = FakeClock()
+    service = _service(tmp_path, FakeFetcher(pages={}, blobs={}), clock=clock)
+
+    def boom():
+        raise RuntimeError("主循环侧取锚点失败(还差 42s)")
+
+    worker = HrWorker(
+        service=service, publisher=HrViewPublisher(), poll_interval=60.0, now_fn=clock.now, anchors_fn=boom
+    )
+    with caplog.at_level(logging.DEBUG, logger="auto_qb.hr.worker"):
+        worker._collect_anchors()  # 首次失败: 立即 WARNING
+        clock.advance(1.0)
+        worker._collect_anchors()  # 同态持续: 只落 DEBUG
+        clock.advance(6 * 3600 + 1)  # 超过一个提醒窗口(CHANNEL_SILENCE_WARN = 6H)
+        worker._collect_anchors()  # 周期提醒一次
+        clock.advance(1.0)
+        worker._collect_anchors()  # 又是同态: DEBUG
+    warns = [r for r in caplog.records if r.levelno == logging.WARNING and "锚点" in r.getMessage()]
+    assert len(warns) == 2, f"变化沿一次 + 周期提醒一次: {[(r.levelname, r.getMessage()) for r in caplog.records]}"
+    debugs = [r for r in caplog.records if r.levelno == logging.DEBUG and "锚点" in r.getMessage()]
+    assert len(
+        debugs
+    ) == 2, f"被去重的轮次仍要留在 DEBUG(排障要看得见每轮在败什么): {[(r.levelname, r.getMessage()) for r in caplog.records]}"
+
+
+def test_anchor_warning_rereports_on_state_change_edge(tmp_path, caplog):
+    """恢复后再失败 = 状态变化沿: 立即报(不吃 warn_gap 冷启动); 同态持续中换根因(指纹变化)同样立即报"""
+    clock = FakeClock()
+    service = _service(tmp_path, FakeFetcher(pages={}, blobs={}), clock=clock)
+    behavior = {"on": False, "mode": "runtime"}
+
+    def provider():
+        if not behavior["on"]:
+            return {}
+        if behavior["mode"] == "runtime":
+            raise RuntimeError("锚点提供者崩了")
+        raise TimeoutError("锚点通道超时")
+
+    worker = HrWorker(
+        service=service, publisher=HrViewPublisher(), poll_interval=60.0, now_fn=clock.now, anchors_fn=provider
+    )
+
+    def warns():
+        return [r for r in caplog.records if r.levelno == logging.WARNING and "锚点" in r.getMessage()]
+
+    with caplog.at_level(logging.DEBUG, logger="auto_qb.hr.worker"):
+        behavior["on"] = True
+        worker._collect_anchors()  # 失败: WARNING 1
+        behavior["on"] = False
+        worker._collect_anchors()  # 成功: 清失败指纹, 无告警
+        behavior["on"] = True
+        worker._collect_anchors()  # 恢复后再失败: 变化沿 -> 立即 WARNING(距上次告警 0s, 不吃 gap)
+        assert len(warns()) == 2, "成功后再失败是状态变化沿, 不得被节流吞掉"
+        behavior["mode"] = "timeout"
+        worker._collect_anchors()  # 换根因: 指纹变化 -> 立即 WARNING
+        assert len(warns()) == 3, "根因变化算状态变化, 不吃节流"
+        assert "锚点通道超时" in warns()[-1].getMessage(), "新根因的告警要能看出换了病因"

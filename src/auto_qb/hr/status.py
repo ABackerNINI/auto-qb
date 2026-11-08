@@ -40,6 +40,7 @@ from .model import (
     LANE_TAGS,
     HrHistoryEvent,
     HrSiteData,
+    _as_int,
     _lane_count_segment,
 )
 from .ratelimit import day_key, next_day_reset, quota_left
@@ -540,8 +541,13 @@ def _history_lanes(raw_lanes: List[Dict]) -> List[HistoryLane]:
                 lane_text=LANE_TEXTS.get(lane, lane),
                 status=status,
                 status_text=LANE_STATUS_TEXTS.get(status, status),
-                pages=int(item.get("pages") or 0),
-                rows=int(item.get("rows") or 0),
+                # pages/rows 是 lanes 内层键, HrHistoryEvent.from_json 对它原样透传(model.py 只守
+                # 元素是 dict 这一层) —— 手改坏的站点文件可能是非数字串, 与事件级计数字段同走
+                # _as_int 容错(model 既有口径: 坏值回 0), 非数字串不再抛 ValueError 炸整表;
+                # inf/超大值仍会抛 OverflowError —— 与 model 层 _as_int 同口径
+                #(issue 26-11-07-0527 #15; int/数字串/负数等合法值语义与旧 int() 直转一致)
+                pages=_as_int(item.get("pages")),
+                rows=_as_int(item.get("rows")),
                 detail=str(item.get("detail") or ""),
             )
         )
@@ -622,7 +628,11 @@ def blocking_reason(view: HrSiteView, data: HrSiteData, stale: bool, site: str =
         return "扩展未授权该站点, 取数请求根本没发出去 —— 打开扩展选项页 → 勾选该站 → 申请权限"
     if view.channel_state == CHANNEL_NETWORK:
         return "扩展到该站点的网络请求失败(站点页面未被访问)—— 查浏览器网络 / 代理 / VPN 规则"
-    if not view.lane_a and not view.lane_terminal and not view.verified:
+    # 「无可判数据」只属于 zero_rows=False 的真没数据形态(issue 26-11-07-0527 #16): zero_rows=True
+    # 时 lane_a/lane_terminal 恒为空, 站点从未有过放行记录(verified 空)恰是最常见的零行站点形态 ——
+    # 若这里放行, 会把波已确证 0 行的站误导去「先让扩展跑一轮取数」(真正出路是下面的零行引导支:
+    # --hr-confirm-empty / 计数自证), 恰是本函数 W3 原则要防的「把人引向错的动作」。
+    if not data.wave.zero_rows and not view.lane_a and not view.lane_terminal and not view.verified:
         return "索引里还没有任何可判数据(先让浏览器扩展跑一轮取数)"
     if data.wave.zero_rows and not data.empty_confirmed_at and not count_attested_empty(data):
         return "结构完好但清单为 0: 不签发放行 —— 需 --hr-confirm-empty 人工对账一次"

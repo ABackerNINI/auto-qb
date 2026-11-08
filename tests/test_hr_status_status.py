@@ -51,6 +51,11 @@
   缺权限/网络不通时既不劝人去「先跑一轮取数」也不劝人「--hr-confirm-empty」; 无病因时旧文案照旧
 - test_channel_state_stale_trace_ignored: `ts <= healthy_ts` 的陈旧痕不生效(恢复后旧痕不许把站点
   卡标红), 且未知 kind / 坏 ts 不猜
+
+### 零行形态先于「无可判数据」(issue 26-11-07-0527 #16)
+- test_blocking_reason_zero_rows_skips_no_data_branch: 分支序修正 —— zero_rows=True 时不落
+  「无可判数据」支(零行站的空索引走 --hr-confirm-empty 引导, 不再循环误导「先跑一轮取数」);
+  打了确认戳也不倒回; zero_rows=False 的空索引文案不变
 """
 
 import json
@@ -681,10 +686,15 @@ def test_blocking_reason_channel_cause_precedes_data_symptoms():
     data.wave.zero_rows = True
     data.wave.lanes = {"A": HrLaneState(lane="A")}  # count_claim=None ⇒ 未计数自证
     data.wave.releases_enabled = True
-    empty = HrSiteView(site="s")  # 索引全空: 「先让扩展跑一轮取数」本该命中
+    empty = HrSiteView(site="s")  # 索引全空
     only_terminal = HrSiteView(site="s", lane_terminal={"h": None})
-    # 阴性对照: 没有通道病因时两句旧文案照旧 —— 证明下面的断言不是「恒返回第一句」
+    # 阴性对照: 没有通道病因时两句旧文案照旧 —— 证明下面的断言不是「恒返回第一句」。
+    # (issue 26-11-07-0527 #16 分支序修正后: zero_rows=True 的空索引走零行引导支, 见
+    # test_blocking_reason_zero_rows_skips_no_data_branch; 「先让扩展跑一轮取数」只属于
+    # zero_rows=False 的真没数据形态)
+    data.wave.zero_rows = False
     assert "先让浏览器扩展跑一轮取数" in blocking_reason(empty, data, False)
+    data.wave.zero_rows = True
     assert "--hr-confirm-empty" in blocking_reason(only_terminal, data, False)
 
     for view in (
@@ -697,6 +707,24 @@ def test_blocking_reason_channel_cause_precedes_data_symptoms():
         assert "--hr-confirm-empty" not in text, "零行对账是数据症状, 不是病因"
     net = blocking_reason(HrSiteView(site="s", channel_state=CHANNEL_NETWORK, lane_terminal={"h": None}), data, False)
     assert "代理" in net and "--hr-confirm-empty" not in net
+
+
+def test_blocking_reason_zero_rows_skips_no_data_branch():
+    """分支序(issue 26-11-07-0527 #16): zero_rows=True 时不落「无可判数据」支 —— 站点从未有过
+    放行记录(verified 空)恰是最常见的零行站点形态, 「先让扩展跑一轮取数」是循环误导(波已在跑
+    且确证 0 行, 真正出路是 --hr-confirm-empty/计数自证), 正是 W3 原则要防的「把人引向错的动作」"""
+    data = HrSiteData()
+    data.wave.zero_rows = True
+    data.wave.lanes = {"A": HrLaneState(lane="A")}  # count_claim=None ⇒ 未计数自证
+    empty = HrSiteView(site="s")  # lane_a/lane_terminal/verified 全空: 最常见的零行站点形态
+    assert blocking_reason(empty, data, False) == "结构完好但清单为 0: 不签发放行 —— 需 --hr-confirm-empty 人工对账一次"
+    # 打上人工对账戳后: 零行引导支让位, 但也不倒回「无可判数据」支(条件面由 zero_rows 单点把住)
+    data.empty_confirmed_at = NOW
+    assert "先让浏览器扩展跑一轮取数" not in blocking_reason(empty, data, False), "已确认零行不是「没取过数」"
+    # 非零行形态(zero_rows=False)的空索引仍走「无可判数据」支, 文案不变
+    data.wave.zero_rows = False
+    data.empty_confirmed_at = 0.0
+    assert blocking_reason(empty, data, False) == "索引里还没有任何可判数据(先让浏览器扩展跑一轮取数)"
 
 
 def _channel_state_of(data: HrSiteData, *, enabled: bool = True, now: float = NOW) -> str:
