@@ -20,6 +20,10 @@
 - test_r4_dt05_tier_sort_missing_last: R5#81(P13) 修复回归 —— 05 ok 组 tier 升序对缺失/非法
   tier 记 9 殿后(与 04/06 的 tierN 兜底同口径), 稳定序保 qB 原序; 修复前折算 0 把 tier 缺失
   tracker 插到所有 tier0 之前必红
+- test_r4_drawer_general_rows_qb_sentinels: issue 26-11-08-0229 #2 修复回归 —— drawerGeneralSections
+  契约层传输行(做种数/完整下载中/连接)对 qB -1/null 哨兵降级(单值槽 —, 连接上限 -1 译「不限」,
+  与 fmtPeersQb/01 英雄行 peerNum/connLimit 同口径), 真值形态逐字不变; 01/02/03 三变体共同消费
+  该单点, 电池直跑生产函数不经字符串锚
 
 加载口径: columns 域经 webui_helpers.bundle_file("columns.js") 聚合(根 + 五片段清单序, 与拆分前
 同一份代码); 单文件域(selection/sort/format)直接 eval。app.js 以 loadColState 截断切片加载
@@ -937,3 +941,58 @@ def test_r4_dt05_tier_sort_missing_last():
         os.path.join(STATIC_ROOT, "shared", "drawer_tpl", "05-trackers-health-groups-low.js"),
     )
     _assert_battery(report, "05 tier 兜底电池")
+
+
+# issue 26-11-08-0229 #2: drawerGeneralSections 契约层传输行 qB -1/null 哨兵守卫(node 电池) --
+# 沙箱口径: drawer_rows.js 是 Object.assign(window.AQB_DRAWER.methods, ...) 片段, 电池自给
+# AQB_DRAWER 域后 eval; this 桩只给 drawerGeneralSections 消费的格式化方法族(恒真值, 不参与
+# 哨兵判据) —— 判据走契约层生产函数(peerNum/connLimit 本尊), 不经字符串锚。
+_NODE_DRAWER_ROWS_SENTINEL_PROBE = r"""
+const fs = require("fs");
+const checks = [];
+const ok = (name, cond) => checks.push([name, !!cond]);
+global.window = { AQB_DRAWER: { methods: {} } };
+try {
+  eval(fs.readFileSync(process.argv[1], "utf8"));  // drawer_rows.js -> AQB_DRAWER.methods
+} catch (e) { ok("drawer_rows.js 加载失败: " + e.message, false); }
+const M = global.window.AQB_DRAWER.methods;
+if (typeof M.drawerGeneralSections !== "function") ok("drawerGeneralSections 未加载", false);
+// this 桩: drawerGeneralSections 消费的格式化族(返回恒真值, 保证非哨兵行正常装配)
+const mkVm = (detail) => ({
+  drawer: { detail },
+  fmtDuration: (v) => "d" + v, fmtTs: () => "ts", fmtSize: (v) => "s" + v,
+  fmtSizeOrDash: (v) => "s" + v, fmtSpeedOrDash: () => "v", fmtEta: () => "e",
+  relocateStateText: (s) => s, relocateOriginText: (s) => s,
+});
+const trRow = (detail, label) => {
+  const secs = M.drawerGeneralSections.call(mkVm(detail));
+  const tr = secs.find((s) => s.title === "传输");
+  const r = tr && tr.rows.find((x) => x.label === label);
+  return r ? r.text : null;
+};
+
+// 场景1 私有种子: num_complete/num_incomplete/connections_limit = -1 是「无数据/不限」哨兵
+// (修复前裸拼渲染 完整/下载中 -1 / -1、连接 8 / -1)
+ok("私有种子: 做种数真值照显", trRow({ num_seeds: 3, num_complete: -1, num_incomplete: -1, connections_count: 8, connections_limit: -1 }, "做种数") === "3");
+ok("私有种子: 完整/下载中哨兵降级 — / —", trRow({ num_seeds: 3, num_complete: -1, num_incomplete: -1, connections_count: 8, connections_limit: -1 }, "完整/下载中") === "— / —");
+ok("私有种子: 连接上限 -1 译「不限」", trRow({ num_seeds: 3, num_complete: -1, num_incomplete: -1, connections_count: 8, connections_limit: -1 }, "连接") === "8 / 不限");
+
+// 场景2 字段缺失(null/undefined): ?? 0 只兜缺失, 守卫后统一降级 —
+ok("缺失字段: 做种数 null 降级 —", trRow({ num_seeds: null, num_complete: null, num_incomplete: null, connections_count: null, connections_limit: null }, "做种数") === "—");
+ok("缺失字段: 完整/下载中降级 — / —", trRow({ num_seeds: null, num_complete: null, num_incomplete: null, connections_count: null, connections_limit: null }, "完整/下载中") === "— / —");
+ok("缺失字段: 连接降级 — / —", trRow({ num_seeds: null, num_complete: null, num_incomplete: null, connections_count: null, connections_limit: null }, "连接") === "— / —");
+
+// 场景3 真值形态逐字不变(守卫不得改动正常数据的显示)
+ok("真值: 做种数照显", trRow({ num_seeds: 3, num_complete: 10, num_incomplete: 5, connections_count: 8, connections_limit: 100 }, "做种数") === "3");
+ok("真值: 完整/下载中照显", trRow({ num_seeds: 3, num_complete: 10, num_incomplete: 5, connections_count: 8, connections_limit: 100 }, "完整/下载中") === "10 / 5");
+ok("真值: 连接照显", trRow({ num_seeds: 3, num_complete: 10, num_incomplete: 5, connections_count: 8, connections_limit: 100 }, "连接") === "8 / 100");
+
+const failed = checks.filter((c) => !c[1]).map((c) => c[0]);
+console.log(JSON.stringify({ ok: checks.length - failed.length, total: checks.length, failed: failed }));
+"""
+
+
+def test_r4_drawer_general_rows_qb_sentinels():
+    """issue 26-11-08-0229 #2 修复回归: 传输行 做种数/完整下载中/连接 对 -1/null 哨兵降级, 真值不变"""
+    report = _run_probe(_NODE_DRAWER_ROWS_SENTINEL_PROBE, os.path.join(STATIC_ROOT, "shared", "drawer_rows.js"))
+    _assert_battery(report, "drawer 传输行哨兵电池")

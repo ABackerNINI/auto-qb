@@ -30,7 +30,8 @@
 - test_r4_shortcuts_panel_record_cancel_exits: R5#232(major) 修复回归 —— 关闭/离开出口摘录制监听:
   非脏 kbFullClose 与 kbGuardLeave 非脏早退必须调 kbRecordCancel(修复前残留 document 捕获期
   _kbRecHandler, 下一次任意按键被吞并静默提交成键位绑定); 脏路径确认后经 kbDraftRevert 内含取消;
-  导向 webui 自身/覆盖层未开不误取消
+  导向 webui 自身/覆盖层未开不误取消; kbGuardLeave 非脏早退同时复位 kbFullOpen(issue
+  26-11-08-0229 #11: 展开态不持久化, 修复前残留到下次 hubGo 进 webui)
 - test_r4_shortcuts_panel_load_failed_gate: R5#235 —— 面板装载失败态: kbPanelEnter 在 _kbReloadKeys
   失败(quiet=true 无 toast)时置 kbKeysLoadFailed(kbSaved/kbDraft 落默认表), 保存钮据此禁用直堵
   「默认+本次改动」整份覆盖服务端丢 overrides 的路径; 「重新加载」重试成功复位即恢复(退出路径);
@@ -764,12 +765,14 @@ async function battery() {
   ok("脏关闭: 确认放弃后回滚(内含取消)", vm._reverted === 1 && vm._cancelCalls() === 1);
   ok("脏关闭: 覆盖层关闭", vm.kbFullOpen === false);
 
-  // 非脏离开 webui 分区(kbGuardLeave 早退): 导航放行且摘录制监听
+  // 非脏离开 webui 分区(kbGuardLeave 早退): 导航放行且摘录制监听, 覆盖层展开态随离开收起
+  // (issue 26-11-08-0229 #11: 修复前 kbFullOpen 残留 true, 复位要等下次 hubGo 进 webui)
   removed.length = 0;
   vm = mkVm();
   const ret = M.kbGuardLeave.call(vm, "hub");
   ok("非脏离开: 守卫放行(return false 不拦导航)", ret === false);
   ok("非脏离开: kbRecordCancel 被调且监听已摘", vm._cancelCalls() === 1 && vm._kbRecHandler === null);
+  ok("非脏离开: 覆盖层展开态收起(kbFullOpen 复位)", vm.kbFullOpen === false);
 
   // 导向 webui 自身(target === "webui"): 仍在面板内, 不应取消
   vm = mkVm();

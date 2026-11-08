@@ -73,6 +73,7 @@ Object.assign(window.AQB_SHORTCUTS.methods, {
       if (this.hub.view !== "webui" || target === "webui" || !this.kbFullOpen) return false;
       if (!this.kbDirty()) {
         this.kbRecordCancel();  // 非脏离开 webui 分区同样摘录制监听(R5#232): 本早退不拦导航, 残留的捕获期 handler 会跟着新页面吞按键
+        this.kbFullOpen = false;  // 非脏早退同样收覆盖层(issue 26-11-08-0229 #11): 展开态不持久化, 不能残留到下次 hubGo 进 webui 才复位
         return false;
       }
       this.confirmDialog("键位改动还未保存",

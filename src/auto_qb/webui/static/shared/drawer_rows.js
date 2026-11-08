@@ -30,6 +30,13 @@ Object.assign(window.AQB_DRAWER.methods, {
       const size = (v) => this.fmtSizeOrDash(v) || "—";
       const yn = (v) => (v ? "是" : "否");
       const lim = (v) => (v === null || v === undefined || v < 0) ? "未设" : (v === 0 ? "不限" : this.fmtDuration(v));
+      /* qB -1/null 哨兵守卫(issue 26-11-08-0229 #2, 与 R5#76/01 英雄行 peerNum/connLimit 同源同口径):
+       * 私有种子 num_complete/num_incomplete/connections_limit = -1 是「无数据/不限」哨兵而非 0,
+       * 裸拼 ?? 0 只兜 null/undefined、-1 直通, 渲染出 完整/下载中 -1 / -1、连接 8 / -1。
+       * 口径照 fmtPeersQb 族: 单值槽负值/缺失降级 —, 连接上限 -1 照实译「不限」。
+       * 本方法是 01/02/03 三变体栅格/卡片行的契约层预格式化单点, 在此守一处即全覆盖。 */
+      const peerNum = (v) => (v === null || v === undefined || v < 0) ? "—" : String(v);
+      const connLimit = (v) => (v === null || v === undefined) ? "—" : (v < 0 ? "不限" : String(v));
       const out = [
         {
           title: "基础",
@@ -64,11 +71,11 @@ Object.assign(window.AQB_DRAWER.methods, {
             { icon: "#i-download", label: "会话已下载", text: size(d.downloaded_session) },
             { icon: "#i-upload", label: "会话已上传", text: size(d.uploaded_session) },
             { icon: "#i-warn", label: "已丢弃", text: size(d.total_wasted) },
-            { icon: "#i-arrow-up", label: "做种数", text: String(d.num_seeds ?? 0) },
+            { icon: "#i-arrow-up", label: "做种数", text: peerNum(d.num_seeds) },
             { icon: "#i-arrow-down", label: "用户", text: String(d.num_leechs ?? 0) },
-            { icon: "#i-globe", label: "完整/下载中", text: `${d.num_complete ?? 0} / ${d.num_incomplete ?? 0}` },
+            { icon: "#i-globe", label: "完整/下载中", text: `${peerNum(d.num_complete)} / ${peerNum(d.num_incomplete)}` },
             { icon: "#i-globe", label: "Tracker 数", text: String(d.trackers_count ?? 0) },
-            { icon: "#i-link", label: "连接", text: `${d.connections_count ?? 0} / ${d.connections_limit ?? 0}` },
+            { icon: "#i-link", label: "连接", text: `${peerNum(d.connections_count)} / ${connLimit(d.connections_limit)}` },
             { icon: "#i-refresh", label: "下次重新汇报", text: dur(d.reannounce_in || d.reannounce, "—") },
             { icon: "#i-x-circle", label: "Tracker 错误", text: yn(d.has_tracker_error) },
             { icon: "#i-warn", label: "Tracker 警告", text: yn(d.has_tracker_warning) },
