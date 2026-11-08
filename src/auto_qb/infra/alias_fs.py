@@ -916,6 +916,10 @@ def retarget_alias(link: str, target: str, kind: Optional[str] = None) -> str:
         if not os.path.isdir(utils.add_long_path_prefix_for_win(target)):
             kind = KIND_SYMLINK
     form = existing or kind
+    if form is None:
+        # 「无现存链接且无 kind」的推断支保证 form 非空; 这里只作类型收窄 + fail-fast
+        # 兜底 —— 绝不带未知形态走到下面删旧链接那一步。
+        raise ValueError(f"重定向无法确定别名形态({link}): 链接不存在且未指定 kind")
     old_target = alias_target(link) if existing in (KIND_JUNCTION, KIND_SYMLINK) else None
     # 目录形态判定(建新链接与穿透校验共用同一谓词): junction 恒目录; symlink 沿用现存
     # 链接的目录性(os.path.isdir 穿透判, 悬空时回落到目标侧判断)。

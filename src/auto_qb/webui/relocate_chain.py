@@ -143,7 +143,8 @@ def finalize_face(job: Mapping, data_dir: str, host: str, port: int, *, now: Opt
     journal = rj.read_journal(data_dir, job_id) or {}
     if str(journal.get("phase") or "") in rj.STOP_PHASES:
         return face
-    rewrites = journal.get("rewrites") if isinstance(journal.get("rewrites"), dict) else {}
+    raw_rewrites = journal.get("rewrites")
+    rewrites = raw_rewrites if isinstance(raw_rewrites, dict) else {}
     face["pending"] = len(rj.pending_members(spec, rewrites))
     key = rj.instance_key(host, port)
     face["daemon_stale"] = rj.daemon_stale(data_dir, key, max_age=ru.DAEMON_HEARTBEAT_MAX_AGE, now=now)

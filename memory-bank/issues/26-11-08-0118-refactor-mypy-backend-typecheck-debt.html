@@ -9,9 +9,9 @@
 <meta name="issue-stamp" content="26-11-08-0118">
 <meta name="issue-type" content="refactor">
 <meta name="doc-topic" content="relocate-status-display">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-08-backend-mypy-typecheck-debt.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="mypy 后端既有类型债: dev.typecheck 8 errors">
 <meta name="issue-summary" content="dev.typecheck 全库 8 errors(relocate_journal.py / alias_fs.py / recycle_daemon.py / webui/relocate_chain.py 四文件), 均为后端既有债, mypy allowlist 守阵在 test.quick 中仍绿(允许清单机制外的新增暴露); 不在 26-11-07-2344 改动面, 2026-11-08 S5 收口排查时发现, 用户拍板入池">
 <style>
@@ -91,23 +91,25 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-08-0118-refactor-mypy-backend-typecheck-debt</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-08 01:18</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
 
 <section id="s1">
   <h2><span class="no">§01</span>现象</h2>
   <p><code>commands run dev.typecheck</code>(mypy, 196 文件)报 <strong>8 errors in 4 files</strong>。均为后端既有类型债, 不在 26-11-07-2344 改动面; mypy allowlist 守阵在 test.quick 中仍绿(即均为允许清单机制外的新增暴露)。取证 2026-11-08, 本地分支 <code>relocate-status-display-v2</code> 基线 <code>5945b248</code> 实测(分支工作树仅改 1 个测试文件, 即分支基线的真实状态)。2026-11-08 S5 收口排查时发现, 用户拍板入池。</p>
+  <p><strong>复验(2026-11-08 18:13, 认领时重跑 <code>commands run dev.typecheck</code>):</strong> 原 8 errors in 4 files 逐条仍复现(行号见 §02); 另新增 <code>src/auto_qb/hr/model.py</code> 4 条同源 <code>union-attr</code>(开工同步快进 112 笔带入的 from_json 形状守卫), 合计 <strong>12 errors in 5 files</strong> / 196 文件。四条新增与原有八条同一根因、同一修法, 且不清零则 typecheck 仍红, 按范围守卫例外「阻塞」一并纳入本批修复。</p>
 </section>
 
 <section id="s2">
   <h2><span class="no">§02</span>位置</h2>
-  <p class="hint">四文件为 dev.typecheck 报错所在; mypy 报错行号未逐条记录, 认领时重跑 <code>commands run dev.typecheck</code> 取行号(防过期原则第 5 条: 先复验)。</p>
+  <p class="hint">四文件为入池时 dev.typecheck 报错所在; 行号于 2026-11-08 18:13 认领复验时逐条取到(防过期原则第 5 条: 先复验), 并补第五文件。行号为取证当时值, 代码漂移后靠符号名重新定位。</p>
   <ul>
-    <li><code>src/auto_qb/infra/relocate_journal.py</code></li>
-    <li><code>src/auto_qb/infra/alias_fs.py</code></li>
-    <li><code>src/auto_qb/tools/recycle_daemon.py</code></li>
-    <li><code>src/auto_qb/webui/relocate_chain.py</code></li>
+    <li><code>src/auto_qb/infra/relocate_journal.py</code>: 221 / 237 <code>assignment</code> · 354 <code>union-attr</code></li>
+    <li><code>src/auto_qb/infra/alias_fs.py</code>: 961 <code>arg-type</code></li>
+    <li><code>src/auto_qb/tools/recycle_daemon.py</code>: 224 / 321 <code>arg-type</code> · 349 <code>union-attr</code></li>
+    <li><code>src/auto_qb/webui/relocate_chain.py</code>: 147 <code>arg-type</code></li>
+    <li><code>src/auto_qb/hr/model.py</code>(复验新增): 458 / 466 / 654 / 655 <code>union-attr</code></li>
   </ul>
   <p>mypy allowlist 机制见 <code>pyproject.toml</code> 的 mypy 配置; 守阵测试 <code>tests/test_mypy_allowlist_guard.py</code>。</p>
 </section>
@@ -121,7 +123,17 @@
   <h2><span class="no">§04</span>状态变更日志</h2>
   <ul>
     <li>2026-11-08 01:18 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-08 — 状态 Open → In Progress（kb.status）</li>
+    <li>2026-11-08 — 状态 In Progress → Done（kb.status）</li>
+</ul>
+</section>
+
+<section id="s5">
+  <h2><span class="no">§05</span>实际修法与验证</h2>
+  <p><strong>根因</strong>: 12 条里 9 条来自同一个反模式 <code>x = d.get(k) if isinstance(d.get(k), dict) else {}</code> —— 条件与取值分支是两次独立调用, mypy 的 isinstance 收窄不传导, 变量类型残留 <code>None</code>, 于是 <code>.items()</code> / <code>.get()</code> 报 <code>union-attr</code>、传给 <code>Dict[str, dict]</code> 形参报 <code>arg-type</code>。另 3 条 = daemon 心跳账 body 被推断成 <code>dict[str, float]</code> 后又写 str 值(2 条) + <code>retarget_alias</code> 的 <code>form</code> 为 <code>str | None</code>(1 条)。</p>
+  <p><strong>实际修法</strong>(与 §03 建议不冲突: 建议即「先复验再逐条取行号」, 已照办): 五文件共 <strong>8 处</strong>反模式赋值改为先取局部变量再 isinstance 收窄(对应上文 9 条报错 —— hr/model.py 的 writer 一处赋值同时消掉 654 / 655 两条; 运行时语义逐字等价, 少一次纯函数 get); 两处 body 加 <code>Dict[str, object]</code> 显式注解; <code>retarget_alias</code> 的 form 加非空守卫收窄(该分支运行时不可达, 兼作 fail-fast 兜底, 既有测试与错误消息零改动)。<strong>不动 <code>pyproject.toml</code> 的 mypy allowlist</strong> —— 守阵冻结豁免只减不增, 加豁免当场判红, 且递减才是主轴。</p>
+  <p><strong>验证</strong>: <code>commands run dev.typecheck</code> → <span class="good">Success: no issues found in 196 source files</span>(仅剩 3 条既有 annotation-unchecked note, 非 error); <code>commands run dev.fmt</code> 后复跑仍零错; <code>commands run test.full</code> 全绿(见 <code>kb.baseline</code>, 切片 26-11-08-1815); <code>tests/test_mypy_allowlist_guard.py</code> 随全量通过; 分批评审全能档只读子代理 0 发现(<code>review.check</code> 0/0)。</p>
+  <p><strong>范围说明</strong>: <code>hr/model.py</code> 四条为复验新出现(入池快照未记), 同源同修法且不修则 typecheck 不归零, 按范围守卫例外「阻塞」纳入, 已在任务档案与回复中点名。代码事实零变更(无接口 / 行为 / 配置键变化), 故知识库主题文档与根 README 零回写; 真机验收不适用(纯类型层面, 运行时行为不变)。档案: <code>memory-bank/tasks/26-11-08-backend-mypy-typecheck-debt.md</code>。</p>
 </section>
 
 <footer>

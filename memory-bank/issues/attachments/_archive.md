@@ -11,7 +11,7 @@
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 - [chore] [版本号双源矛盾: __init__.__version__ 0.2.0 vs pyproject 0.1.0](../26-09-21-1408-chore-version-dual-source.html) — WebUI 顶栏透出与打包元数据已差一个 minor; 建议 pyproject 单源 + 动态读取
 
-## Open (84)
+## Open (83)
 
 - [bug] [评审闸门 0 行二进制改动绕过基哈希比对](../26-11-08-1701-bug-review-gate-binary-zero-line-bypass.html) — numstat 对二进制计 0 行, count==0 短路使 D6 基比对不生效, 评审后替换/新增二进制可评文件(夹具图片/压缩包)静默放行
 - [bug] [awaitPoll fail 路径不调 onEnd, 与文件头契约存在张力](../26-11-08-1621-bug-awaitpoll-fail-no-onend.html) — polling.js fail()(fn 抛异常 reject)不调 onEnd; 现注册点 tm relaunching fail 时不复位标志 — 需先裁决调用方是否在 reject 分支自清理, 有害才修
@@ -35,7 +35,6 @@
 - [refactor] [infra 依赖纪律「不 import config」无 AST 机械守卫](../26-11-08-0703-refactor-infra-import-discipline-guard.html) — infra/__init__.py:15 声明「不 import config」但无 AST 守阵,R4#18(TYPE_CHECKING 改造)靠评审发现,建议收 AST 守卫测试
 - [test] [test_notify 8 用例 NotifyHandler 只 removeHandler 不 close,每进程泄漏 8 守护线程](../26-11-08-0703-test-test-notify-handler-thread-leak.html) — tests/test_notify.py 8 用例(约 109/127/146/166/186/218/248/309 行)经 _make_handler 建 NotifyHandler 后只 removeHandler 不 close;random-order 洗牌下约 1/3 概率打红其它同名线程断言
 - [bug] [dt_table.js 整模块生产路径零调用: 自称几何单一出口未接线, 实际几何由 columns_grid 平行计算](../26-11-08-0147-bug-dt-table-geometry-unwired.html) — dt_table.js 四皮肤均加载但 DT_TABLE 六口子生产路径零调用, 自称几何单一出口未接线, 实际几何由 columns_grid 平行计算; R4-static 清池拍板暂缓挂账待决(整体退役 vs 真接线)
-- [refactor] [mypy 后端既有类型债: dev.typecheck 8 errors](../26-11-08-0118-refactor-mypy-backend-typecheck-debt.html) — dev.typecheck 全库 8 errors(relocate_journal.py / alias_fs.py / recycle_daemon.py / webui/relocate_chain.py 四文件), 均为后端既有债, mypy allowlist 守阵在 test.quick 中仍绿(允许清单机制外的新增暴露); 不在 26-11-07-2344 改动面, 2026-11-08 S5 收口排查时发现, 用户拍板入池
 - [bug] [traffic_store_common._INFOHASH_RE 配 re.match, $ 允许串尾恰一个换行(与 R4#34 同族)](../26-11-08-0045-bug-traffic-store-infohash-re-tail-newline.html) — traffic_store_common.py:32 _INFOHASH_RE 配 re.match, 实测串尾恰一个换行放行; 与 R4#34(表行14 已修 keys.py fullmatch)同族; HTTP 层可达性待查, 建议同款 re.fullmatch
 - [bug] [/api/speed/override 与 /api/speed/alt 的 upload_kib/download_kib 不拦负数](../26-11-08-0044-bug-webui-speed-kib-negative-unchecked.html) — 只过 int_param 不拦负数(torrent_detail.py:124-132 一带; server/common.py:113 int_param 只拦畸形), 负数直达命令层与 qbapi; qbapi set_alt_speed_limits 修好后(批L)负数从静默 no-op 变真下发——与 R4#3/表行4 同族
 - [question] [非 ASCII 符号面宽于 code-style.md 禁用示例: §/→/⇒/≠ 在 src/ 泛在, 口径待拍板](../26-11-08-0044-question-non-ascii-symbol-policy-src.html) — §(131文件)/→(70)/⇒(57)/≠ 在 src/ 泛在, code-style.md 禁令只点名带圈数字等; 需项目拍板口径(全清/豁免清单), 不建议机械全清
@@ -98,7 +97,7 @@
 - [bug] [设置页警示条是伪警示: 只复述 schema 风险文案, 不反映配置健康; 升级失效键无任何提示](../26-09-22-2002-bug-webui-config-health-warning.html) — 首页警示条由『已配置且 schema 带 risk 文案』驱动, 恒亮、静态、与配置健康无关; 且 load_config 对 schema 外键静默忽略, 版本升级后配置项失效无任何提示
 - [chore] [hatch-pet 调付费 OpenAI 图像 API 且无成本提示](../26-09-20-1427-chore-skill-hatch-pet-api-cost.html) — hatch-pet 生成图会直连 api.openai.com 计费接口, skill 未标注费用风险
 
-## Done (451)
+## Done (452)
 
 - [docs] [远端 hr-review4 收尾两条 pitfalls 缺三行头元数据(存量红)](../26-11-08-1048-docs-hr-review4-pitfalls-metadata-missing.html) — e07d2c88 的两条 pitfalls 缺 > 摘要:/> 触发: 头,test_kb_topic_files_have_metadata 恒红阻塞提交闸门
 - [bug] [评审闸门锚点在合并拓扑下树差虚增: 侧分支 trailer 遮蔽主线锚点致提交死锁](../26-11-08-0903-bug-review-anchor-merge-topology.html) — check_review_trace 锚点取平铺 log 最新 trailer, 侧分支(旧基线切出)合并后树差把主线已评工作整支算进本批(~9600 行), 提交被闸门死锁
@@ -108,6 +107,7 @@
 - [bug] [relocate _arm 不重置旧 journal: 终态残留致同 id 再迁移收不到 fastresume 改写](../26-11-08-0827-bug-relocate-arm-journal-reset.html) — job_id=sha1(mover|src|dst) 复用, 再发起时 spec 重写但 journal 残留终态, daemon 因 STOP_PHASES 跳过该 job, 新迁移收不到改写(现靠核验路径偶然收敛, 非已在目标位则悬挂)
 - [test] [e2e move-dialog-fit .move-note 定位器 strict violation: 两提示段共存后两皮肤恒红](../26-11-08-0820-test-e2e-move-note-strict-collision.html) — move-dialog 两个 .move-note 段共存使 e2e move-dialog-fit.spec.mjs:434 strict mode 爆炸(prism/atlas 恒红)
 - [bug] [R4-static 清池清单外发现汇总(13 子项, 已全部修复)](../26-11-08-0229-bug-r4-static-cleanup-extras.html) — R4 static 主题清池(P01-P16)各批记录的清单外发现 13 子项聚合入池: dialogs 注释失实族/契约层 -1 裸拼/aria-expanded 陈旧/非ASCII注释存量等, 13 子项已全部修复收口(2026-11-08)
+- [refactor] [mypy 后端既有类型债: dev.typecheck 8 errors](../26-11-08-0118-refactor-mypy-backend-typecheck-debt.html) — dev.typecheck 全库 8 errors(relocate_journal.py / alias_fs.py / recycle_daemon.py / webui/relocate_chain.py 四文件), 均为后端既有债, mypy allowlist 守阵在 test.quick 中仍绿(允许清单机制外的新增暴露); 不在 26-11-07-2344 改动面, 2026-11-08 S5 收口排查时发现, 用户拍板入池
 - [docs] [hr_ext_stub.py 提示文案未提 port_kill 新 --yes 门](../26-11-07-1216-docs-hr-ext-stub-port-kill-yes-doc.html) — hr_ext_stub.py :27/:205 提示仍写旧口径, 非 python 监听者无 --yes 会被拒杀(rc=1), 按旧文案操作碰壁
 - [bug] [重定向链接位被真文件占据时会删掉真文件(真目录有保护, 真文件没有)](../26-11-07-0748-bug-relocate-retarget-real-file-unlink.html) — retarget_alias 只护真目录(非空拒绝/空则 rmdir), 真文件位落到 remove_alias 的 os.unlink —— 静默删除真实数据
 - [bug] [存量评审 R4·scripts 汇总(major 1/minor 23)](../26-11-07-0536-bug-legacy-review4-scripts.html) — scripts 主题 major 1+minor 23 共 24 条聚合入池,来源存量评审 R4(计划 26-11-05-2335)

@@ -44,10 +44,11 @@
 - [26-10-14-webui-qb-traffic-agg-live-tail](../26-10-14-webui-qb-traffic-agg-live-tail.md) qB 流量图 agg 段活尾合流(S7): 3d+ 视图图尾真空修复
 - [26-10-09-backend-transport-encryption](../26-10-09-backend-transport-encryption.md) 本地通道传输安全调研(WebUI + HR 取数通道)
 
-## Done (309)
+## Done (310)
 
 - [26-11-07-backend-relocate-nested-gate-fix](../26-11-07-backend-relocate-nested-gate-fix.md) relocate 嵌套闸门误拦修正实施
 - [26-11-08-backend-hr-webui-compare-digest-ascii](../26-11-08-backend-hr-webui-compare-digest-ascii.md) issue 26-11-08-0827 compare_digest 非 ASCII 隐患同构两处修复
+- [26-11-08-backend-mypy-typecheck-debt](../26-11-08-backend-mypy-typecheck-debt.md) 清偿 dev.typecheck 后端类型债: 全库 mypy 归零
 - [26-11-08-config-legacy-review4-config-infra-claim](../26-11-08-config-legacy-review4-config-infra-claim.md) 存量评审 R4 config-infra 主题修复批: 36 条六批委派实施与收编
 - [26-11-08-memory-bank-review-no-exemption-loop](../26-11-08-memory-bank-review-no-exemption-loop.md) 评审流程改造: 废除裁量豁免+修复增量强制复评+基哈希闸门
 - [26-11-08-webui-legacy-review4-webui-py-fix](../26-11-08-webui-legacy-review4-webui-py-fix.md) 存量评审 R4 webui-py 主题修复批: 25 条批A-批L 委派实施与收编

@@ -447,8 +447,10 @@ class HrWaveMeta:
     def from_json(cls, raw: Dict[str, Any]) -> "HrWaveMeta":
         # 容器形状守卫(issue 26-11-07-0527 #8): lanes/prev_a_tids 非 dict(手改坏/外部损坏)回空,
         # lanes 的非 dict 值跳过 —— 内层坏形状同样不许让读路径抛 AttributeError
-        lanes = raw.get("lanes") if isinstance(raw.get("lanes"), dict) else {}
-        prev_a_tids = raw.get("prev_a_tids") if isinstance(raw.get("prev_a_tids"), dict) else {}
+        raw_lanes = raw.get("lanes")
+        lanes = raw_lanes if isinstance(raw_lanes, dict) else {}
+        raw_prev_a_tids = raw.get("prev_a_tids")
+        prev_a_tids = raw_prev_a_tids if isinstance(raw_prev_a_tids, dict) else {}
         return cls(
             wave_ts=_as_float(raw.get("wave_ts")),
             healthy_ts=_as_float(raw.get("healthy_ts")),
@@ -645,7 +647,8 @@ class HrSiteData:
         # 容器形状守卫(issue 26-11-07-0527 #8): dict 字段非 dict(旧文件或手改坏)回空, list 字段
         # 的非 dict 元素跳过 —— 坏形状只降级自己那一块, 不许 AttributeError 穿透 store._parse
         # 的坏文件兜底(「站点文件读坏时不抛」契约, status.build_site_statuses)
-        writer = raw.get("writer") if isinstance(raw.get("writer"), dict) else {}
+        raw_writer = raw.get("writer")
+        writer = raw_writer if isinstance(raw_writer, dict) else {}
         data = cls(
             schema_version=_as_int(raw.get("schema_version"), SCHEMA_VERSION),
             revision=_as_int(raw.get("revision")),

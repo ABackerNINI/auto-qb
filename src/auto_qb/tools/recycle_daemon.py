@@ -220,7 +220,8 @@ def _scan_jobs(data_dir: str, host: str, port: int) -> list:
         journal = rj.read_journal(data_dir, job_id) or {}
         if str(journal.get("phase") or "") in rj.STOP_PHASES:
             continue
-        rewrites = journal.get("rewrites") if isinstance(journal.get("rewrites"), dict) else {}
+        raw_rewrites = journal.get("rewrites")
+        rewrites = raw_rewrites if isinstance(raw_rewrites, dict) else {}
         pending = rj.pending_members(spec, rewrites)
         out.append(
             {
@@ -317,7 +318,8 @@ def _process_window(
             journal = rj.read_journal(data_dir, job["job_id"]) or {}
             if str(journal.get("phase") or "") in rj.STOP_PHASES:
                 continue
-            rewrites = journal.get("rewrites") if isinstance(journal.get("rewrites"), dict) else {}
+            raw_rewrites = journal.get("rewrites")
+            rewrites = raw_rewrites if isinstance(raw_rewrites, dict) else {}
             pend = rj.pending_members(job["spec"], rewrites)
             if pend:
                 remaining.append((job, pend))
@@ -344,7 +346,8 @@ def _process_window(
                 spec = rj.read_spec(data_dir, job_id)
                 if not isinstance(spec, dict):
                     break
-                prev = journal.get("rewrites") if isinstance(journal.get("rewrites"), dict) else {}
+                raw_prev = journal.get("rewrites")
+                prev = raw_prev if isinstance(raw_prev, dict) else {}
                 mkey = rj.member_key(member)
                 rec = _rewrite_member(spec, member, prev.get(mkey))
                 if not rj.record_rewrites(data_dir, job_id, {mkey: rec}, ts=now, pid=owner.pid):

@@ -23,7 +23,7 @@
 | perf | 2 |
 | docs | 3 |
 | test | 10 |
-| refactor | 10 |
+| refactor | 9 |
 | feat | 20 |
 | chore | 1 |
 | question | 9 |
@@ -59,7 +59,6 @@
 - [refactor] [infra 依赖纪律「不 import config」无 AST 机械守卫](26-11-08-0703-refactor-infra-import-discipline-guard.html) — infra/__init…
 - [test] [test_notify 8 用例 NotifyHandler 只 removeHandler 不 close,每进程泄漏 8 守护线程](26-11-08-0703-test-test-notify-handler-thread-leak.html) — tests/test_n…
 - [bug] [dt_table.js 整模块生产路径零调用: 自称几何单一出口未接线, 实际几何由 columns_grid 平行计算](26-11-08-0147-bug-dt-table-geometry-unwired.html) — dt_table.js…
-- [refactor] [mypy 后端既有类型债: dev.typecheck 8 errors](26-11-08-0118-refactor-mypy-backend-typecheck-debt.html) — dev.typechec…
 - [bug] [traffic_store_common._INFOHASH_RE 配 re.match, $ 允许串尾恰一个换行(与 R4#34 同族)](26-11-08-0045-bug-traffic-store-infohash-re-tail-newline.html) — traffic_stor…
 - [bug] [/api/speed/override 与 /api/speed/alt 的 upload_kib/download_kib 不拦负数](26-11-08-0044-bug-webui-speed-kib-negative-unchecked.html) — 只过 int_param…
 - [question] [非 ASCII 符号面宽于 code-style.md 禁用示例: §/→/⇒/≠ 在 src/ 泛在, 口径待拍板](26-11-08-0044-question-non-ascii-symbol-policy-src.html) — §(131文件)/→(7…
@@ -125,7 +124,7 @@
 ## Done
 
 
-> 更早的 **451** 条已出本索引 —— 报告仍在 `issues/` 目录(未搬动), 全量清单见 [attachments/_archive.md](attachments/_archive.md).
+> 更早的 **452** 条已出本索引 —— 报告仍在 `issues/` 目录(未搬动), 全量清单见 [attachments/_archive.md](attachments/_archive.md).
 
 ## Dropped
 

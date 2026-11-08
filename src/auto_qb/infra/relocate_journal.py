@@ -216,7 +216,7 @@ def write_daemon_state(
     data_dir: str, key: str, pid: int, *, host: str = "", port: int = 0, ts: Optional[float] = None
 ) -> None:
     """落 daemon 心跳账(pid 抢占与其后的心跳 touch 共用此单点); host/port 仅作诊断字段"""
-    body = {"pid": int(pid), "ts": ts if ts is not None else SYSTEM_CLOCK.now()}
+    body: Dict[str, object] = {"pid": int(pid), "ts": ts if ts is not None else SYSTEM_CLOCK.now()}
     if host:
         body["host"] = str(host)
     if port:
@@ -231,7 +231,7 @@ def touch_daemon_state(data_dir: str, key: str, pid: int, *, ts: Optional[float]
     cur = read_daemon_state(data_dir, key)
     if cur is not None and int(cur.get("pid") or 0) != int(pid):
         return False
-    body = {"pid": int(pid), "ts": ts if ts is not None else SYSTEM_CLOCK.now()}
+    body: Dict[str, object] = {"pid": int(pid), "ts": ts if ts is not None else SYSTEM_CLOCK.now()}
     if cur:
         # 诊断字段随touch保留(claim 时写入的 host/port)
         body["host"] = str(cur.get("host") or "")
@@ -346,7 +346,8 @@ def reset_rewrites(data_dir: str, job_id: str, *, ts: Optional[float] = None) ->
     cur = read_journal(data_dir, job_id) or {}
     if str(cur.get("phase") or "") in STOP_PHASES:
         return -1
-    rewrites = cur.get("rewrites") if isinstance(cur.get("rewrites"), dict) else {}
+    raw_rewrites = cur.get("rewrites")
+    rewrites = raw_rewrites if isinstance(raw_rewrites, dict) else {}
     now = ts if ts is not None else SYSTEM_CLOCK.now()
     body = dict(cur)
     new_rewrites: Dict[str, dict] = {}
