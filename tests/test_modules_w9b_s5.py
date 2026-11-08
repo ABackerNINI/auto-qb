@@ -19,6 +19,9 @@
 - test_s5_maintenance_similar_tags_hash_scope: 相似标签 torrent_hashes 钉死
 - test_s5_maintenance_hr_category_hash_scope: HR 分类 set_category torrent_hashes 钉死
 - test_s5_maintenance_hr_tag_template_resolved: HR 标签/分类模板占位符必须解析(错写面)
+- test_s5_removed_scan_cleans_auto_categories: removed_scan 相位清已删种子 auto_categories 条目(残留面)
+- test_s5_removed_scan_auto_categories_idempotent: 清理幂等重复无副作用 + 键不存在不造键
+- test_s5_removed_scan_auto_categories_seed_alive_not_cleaned: 活种子不清(不广播) + 删除对账端到端清除
 - test_s5_rule_task_construction_pins: 规则任务 Task 构造面(handler/store/interval/torrent)
 - test_s5_rule_task_deleted_torrent_finishes: 种子已删任务消亡(FINISHED)
 - test_s5_rule_task_executes_actions_with_hash: 活种子任务执行动作且 hash 直传
@@ -273,6 +276,51 @@ def test_s5_maintenance_hr_tag_template_resolved():
         mgr.ctx.maintenance.handle_maintenance(tor2, dry_run=False)
         assert ("add_tags", ["HR-3D"], "HM6") in client.tag_hash_calls
         assert ("set_category", "!!HR3D!!", "HM6") in client.tag_hash_calls
+
+
+def test_s5_removed_scan_cleans_auto_categories():
+    """removed_scan 相位: 已删种子的 auto_categories 条目被清, 无关条目不波及(残留面)"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        mgr.state["auto_categories"] = {"HDEL": "AUTO-A", "HKEEP": "AUTO-B"}
+        mgr.events.emit("removed_scan", {"hashes": ["HDEL"], "dry_run": False})
+        assert mgr.state["auto_categories"] == {"HKEEP": "AUTO-B"}, "已删种子条目必须清除且不得波及无关条目"
+
+
+def test_s5_removed_scan_auto_categories_idempotent():
+    """removed_scan 相位清 auto_categories: 幂等重复清理无副作用; 键不存在不造键(黄金法则 1)"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        mgr.events.emit("removed_scan", {"hashes": ["H1"], "dry_run": False})
+        assert "auto_categories" not in mgr.state, "键从未写过时清理点不得把它造出来"
+        mgr.state["auto_categories"] = {"H2": "AUTO-A"}
+        for _ in range(2):  # 重复广播等价一次: 不抛错、条目不复活
+            mgr.events.emit("removed_scan", {"hashes": ["H2", "HX"], "dry_run": False})
+        assert mgr.state["auto_categories"] == {}
+
+
+def test_s5_removed_scan_auto_categories_seed_alive_not_cleaned():
+    """种子仍在的刷新轮不广播 removed_scan: auto_categories 条目原样保留(误清面);
+
+    对照组: 同环境种子删除后条目即被清(端到端: 内核对账 -> removed_scan -> 模块清理)"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        mgr.client = client
+        client.torrents["H1"] = FakeTorrent(hash="H1", name="T1")
+        mgr.config.trackers = {}  # added 管线不认领(匹配不到 tracker), 维护零动作不写 auto_categories
+        mgr.state["auto_categories"] = {"H1": "AUTO-A"}
+        scan_seen = []
+        mgr.events.on("removed_scan", lambda e: scan_seen.append(e.payload))
+        mgr._refresh_torrents(False)  # 首轮: 种子入库
+        mgr._refresh_torrents(False)  # 种子仍在: 无删除
+        assert scan_seen == [], f"种子仍在不得广播 removed_scan: {scan_seen}"
+        assert mgr.state["auto_categories"] == {"H1": "AUTO-A"}, "活种子条目不得被清"
+        # 对照组: 对账发现种子已删 -> 条目清除
+        del client.torrents["H1"]
+        mgr._refresh_torrents(False)
+        assert scan_seen == [{"hashes": ["H1"], "dry_run": False}], f"删除确认载荷契约: {scan_seen}"
+        assert "H1" not in mgr.state["auto_categories"], "对账发现种子已删后条目必须清除"
 
 
 # ============================================================

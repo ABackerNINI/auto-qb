@@ -9,7 +9,8 @@ TagsMixin 全部 + QbManager 本体的 _handle_maintenance + delete_tags 全局�
 !站点 tags 部分的节奏由 maintenance_tag_mode 决定(计划 26-09-27-1438): interval(默认)
   每 interval 执行; on_change 仅添加路径或外部标签变化时重检 —— HR 部分不受影响, 恒按
   interval 节奏。维护任务本身由 rules 模块建任务时经 ctx.maintenance 句柄绑定
-  (plan P5 收口); 逐新增种子的「维护/集数」两步经 torrents_added 相位由本模块执行。
+  (plan P5 收口); 逐新增种子的「维护/集数」两步经 torrents_added 相位由本模块执行;
+  种子删除确认(removed_scan 相位)清 state.auto_categories 残留(issue 26-11-07-0527)。
 !client 经 ctx.api.client **现取**(不缓存): 重连换客户端时 QbApi.bind 同步更新。
 """
 import logging
@@ -80,6 +81,7 @@ class MaintenanceModule(BaseModule):
     def subscribe(self, phases: PhaseRegistry) -> None:
         phases.on("queue_rebuilt", self._on_queue_rebuilt)
         phases.on("torrents_added", self._on_torrent_added)
+        phases.on("removed_scan", self._on_removed_scan)
 
     def _on_queue_rebuilt(self, event: PhaseEvent) -> None:
         """L2 热重载整体重建队列后重新入队(delete_tags* 是 L2 级配置, 重建即按新值生效)"""
@@ -96,6 +98,25 @@ class MaintenanceModule(BaseModule):
         self.handle_maintenance(torrent, dry_run, force_tags=True)
         if self._ctx.config.add_episode_tags.enabled:
             self.add_episode_tags(torrent, dry_run)
+
+    def _on_removed_scan(self, event: PhaseEvent) -> None:
+        """种子删除确认(removed_scan 相位): 清 state.auto_categories 对应 hash 残留
+        (issue 26-11-07-0527 R1#99, 用户拍板「种子消失路径清理」)
+
+        auto_categories 记「该 hash 的分类是本程序自动设置的」(set_category 覆盖判定依据),
+        只在写点自增; 种子删除后条目永不再命中, 长期运行无界残留 —— 在内核唯一的删除确认
+        广播点按 hash 对账清除。选点论证: store._apply 把三条删除通道(增量 torrents_removed /
+        全量对账 / 自删 _pending_removed)收敛进 removed 清单(跳检窗口豁免), removed_scan 单点
+        广播即全覆盖; store 不持 StateService 引用、内核不点名业务(plan §5), 故落在本模块。
+        幂等: pop(h, None) 重复清理无副作用(黄金法则 1); 主循环线程同步广播(黄金法则 5);
+        dry_run 不闸: 删除是 qB 对账观察到的既成事实, 非本程序动作, 清残留只是状态对齐。
+        """
+        auto_categories = self._ctx.state.data.get("auto_categories")
+        if not auto_categories:
+            return  # 该键从未写过: 无残留可清, 也不得造键
+        removed_keys = [h for h in event.payload.get("hashes", []) if auto_categories.pop(h, None) is not None]
+        if removed_keys:
+            logger.debug(f"已清理 {len(removed_keys)} 条 auto_categories 残留(种子已删): {removed_keys}")
 
     def _register_global_tasks(self, ctx: AppContext) -> None:
         """全局标签清理任务自注册(骨架走 BaseModule.register_global_tasks 单点):
@@ -132,14 +153,15 @@ class MaintenanceModule(BaseModule):
         recheck_tags = force_tags or not on_change or torrent.hash in self._ctx.store.external_tag_changes
         if recheck_tags and on_change:
             self._ctx.store.external_tag_changes.discard(torrent.hash)  # 待重检登记消费一次
-        handled = False
+        # 返回值契约 = 任务队列 REQUEUE/FINISHED(种子级任务按 interval 重入队, 种子消亡才
+        # FINISHED), 与「本轮是否有动作」无关 —— 不引入 handled 之类的动作累加(issue 26-11-07-0527 R1#96)
         if recheck_tags:
-            handled |= self.add_tags(torrent, tracker_conf.tags, dry_run)
-            handled |= self.remove_tags(torrent, tracker_conf.remove_tags, dry_run)
+            self.add_tags(torrent, tracker_conf.tags, dry_run)
+            self.remove_tags(torrent, tracker_conf.remove_tags, dry_run)
             if tracker_conf.remove_similar_tags:  # 站点覆盖全局后的值
-                handled |= self.remove_similar_tags(torrent, tracker_conf.tags, dry_run)
+                self.remove_similar_tags(torrent, tracker_conf.tags, dry_run)
         if tracker_conf.hr:  # 站点合并全局默认后的 HR 设置
-            handled |= self.add_hr_tag_or_category(torrent, dry_run)
+            self.add_hr_tag_or_category(torrent, dry_run)
         return REQUEUE
 
     def _apply_tag_changes(

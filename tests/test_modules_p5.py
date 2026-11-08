@@ -106,7 +106,9 @@ def test_kernel_does_not_import_business_packages():
 
 def test_phase_subscription_map():
     """事件两相位(events_removed/events_added)恰 rules 一家; torrents_added 四家按装配序;
-    full_round 两家按装配序(tracker 重匹配先行, rules 任务补建消费其结果, issue 26-10-01-2147)
+    full_round 两家按装配序(tracker 重匹配先行, rules 任务补建消费其结果, issue 26-10-01-2147);
+    removed_scan 两家按装配序(maintenance 清 auto_categories 残留先行, grouping 缺文件扫描随其后,
+    issue 26-11-07-0527)
 
     §4.2 相位表的认领面: torrents_added = tracker → maintenance → grouping → rules
     (装配序 = 相位内消费序, plan §3.3)。组上下文等行为归各自模块测试。
@@ -119,6 +121,7 @@ def test_phase_subscription_map():
         assert [h.__self__.name
                 for h in handlers.get("torrents_added", [])] == ["tracker", "maintenance", "grouping", "rules"]
         assert [h.__self__.name for h in handlers.get("full_round", [])] == ["tracker", "rules"]
+        assert [h.__self__.name for h in handlers.get("removed_scan", [])] == ["maintenance", "grouping"]
 
 
 # ============================================================

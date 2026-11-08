@@ -61,12 +61,13 @@ def test_grouping_ops_on_ctx_and_registered():
 
 
 def test_grouping_phases_wired():
-    """transitions/removed_scan 各恰有 grouping 一个订阅者; post 自 S2 起为 grouping+fuse 两家
+    """transitions 恰有 grouping 一个订阅者; removed_scan 为 grouping+maintenance 两家; post 自 S2 起为 grouping+fuse 两家
 
     订阅在装配点一次性登记(EventBus 持注册期绑定的 handler), 故以登记计数 + emit 返回值
     锁定接线; 行为由本文件其余用例直接验证。torrents_added 相位自 P5 起由四家认领
     (tracker/maintenance/grouping/rules, plan §4.2), 订阅面在 test_modules_p5 锁定。
-    post 相位 S2(计划 26-11-03-0456)追加 fuse(下载保险丝), 故按 phase 给定期望订阅数。
+    post 相位 S2(计划 26-11-03-0456)追加 fuse(下载保险丝); removed_scan 相位自
+    issue 26-11-07-0527 追加 maintenance(清 state.auto_categories 残留), 故按 phase 给定期望订阅数。
     """
     with tempfile.TemporaryDirectory() as td:
         mgr = _mgr(td)
@@ -80,7 +81,7 @@ def test_grouping_phases_wired():
             "removed_scan": ({
                 "hashes": [],
                 "dry_run": True
-            }, 1),
+            }, 2),  # grouping + maintenance(26-11-07-0527)
             "post": ({
                 "dry_run": True
             }, 2),  # grouping + fuse(S2)
@@ -153,7 +154,8 @@ def test_removed_scan_and_post_phases_drive_grouping():
         with mock.patch.object(mod, "_handle_removed_torrents") as removed, \
                 mock.patch.object(mod, "_handle_save_path_changes") as save_path, \
                 mock.patch.object(mod, "_check_download_conflicts") as conflicts:
-            assert mgr.events.emit("removed_scan", {"hashes": ["H1"], "dry_run": False}) == 1
+            # removed_scan 自 26-11-07-0527 起为 grouping+maintenance 两家(后者清 auto_categories 残留)
+            assert mgr.events.emit("removed_scan", {"hashes": ["H1"], "dry_run": False}) == 2
             removed.assert_called_once_with(["H1"], False)
             # post 自 S2 起 grouping+fuse 两家; dry_run=True 时 fuse 零动作
             assert mgr.events.emit("post", {"dry_run": True}) == 2
