@@ -38,6 +38,12 @@ window.AQB_POLL = {
       }
       this._esBusy = false;
       if (!ticket) return;
+      // #7(issue 26-11-08-0229): 落票后复查鉴权态再开流 —— 换票 await 期间可能已登出
+      // (skip_local_verify 下换票免密钥, 票据落下不等于会话仍活); 旧序直接开流, 首个 ver
+      // 事件经 refresh 的 !authOk 门再走 _logout 收口拆流, 残留至多一轮空转(R5#2 的
+      // stopEvents 收口只是收窄)。此处读 authOk(R10-01 鉴权判据单点, 与 onerror 重试守卫
+      // :90 同判据), 只读比较不引入新可变态; 复查点落在 await 恢复之后、开流之前 = 竞态窗口的闭端。
+      if (!this.authOk) return;
       let es = null;
       try {
         es = new EventSource(`/api/events?ticket=${encodeURIComponent(ticket)}`);
@@ -156,8 +162,12 @@ window.AQB_POLL = {
         // 「onEnd: 收摊回调(收敛/耗尽/到点都走)」含 stopPoll 收摊; 漏了会让 onEnd 侧的
         // loading 复位等清理被跳过, 同 key 有界等待被 startPoll/awaitPoll 顶掉即此形态)。
         // 幂等: alive 已置 false, 此后 finish() 的守卫挡住, 不会双调。
-        if (st.onEnd) st.onEnd();
-        const s = st.settle; st.settle = null; s(null);  // awaitPoll: 收摊兑现 null
+        // #8(issue 26-11-08-0229): onEnd 包 try/finally —— onEnd 在 settle 之前调用,
+        // 它同步抛异常会吞掉 settle(调用方 Promise 永久悬挂); finally 保 settle 必达,
+        // 异常语义不变照常上抛。finish() 路径同式, 两路保持同序同口径。
+        try { if (st.onEnd) st.onEnd(); } finally {
+          const s = st.settle; st.settle = null; s(null);  // awaitPoll: 收摊兑现 null
+        }
       }
     },
     startPoll(key, opts) {
@@ -211,9 +221,12 @@ window.AQB_POLL = {
         if (!st.alive) return;
         st.alive = false;
         close();
-        if (opts.onEnd) opts.onEnd();
-        const s = st.settle; st.settle = null;
-        if (s) s(v);
+        // #8(issue 26-11-08-0229): 与 stopPoll 收摊路同式 —— onEnd 包 try/finally,
+        // settle 不被 onEnd 的同步异常吞掉(异常照常上抛, 不额外吞不额外藏)。
+        try { if (opts.onEnd) opts.onEnd(); } finally {
+          const s = st.settle; st.settle = null;
+          if (s) s(v);
+        }
       };
       const fail = (e) => {
         if (!st.alive) return;

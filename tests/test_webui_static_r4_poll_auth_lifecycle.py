@@ -1,8 +1,8 @@
 """test_webui_static_r4_poll_auth_lifecycle 测试计划: 存量评审 R4 static 主题清池 P08 —— 轮询/鉴权/生命周期/视图域 行为修复回归 + 纯逻辑 node 电池
 
 ## 测试计划(每个测试函数一条)
-- test_r4_sse_edge_reconnect_state_machine: R5#14(major) + R5#15 —— SSE 断线沿判定与换票重连状态机 node 电池真跑(兑现 polling.js 文件头「探针真跑」注释契约, 兑现前 tests/ 零命中): _esDisconnectEdge 纯函数三分型(undefined 首断/true->false 跳变/重试期 false 非沿) + startEvents 换票接线(POST /api/events/ticket + ?ticket= 连流) + onopen 回置 + 首断沿恰一条 toast + 重试期重复 onerror 只发一条 toast 不叠重试定时器 + 重连必关旧连接换新票 + ver 驱动 60ms 去抖合并(R5#4 修复回归: 落拍 document.hidden 短路, 后台标签不吃 ver 驱动, 恢复可见照常拉) + stopEvents 归置 _esConnected/_esRetry/_verTimer
-- test_r4_poll_backoff_and_stop_onend: R5#17 + R5#5 —— 轮询失败退避曲线真跑分型(骨架探针把 currentPollMs 桩成常量的绕过面在此补上): pollFails=0..4 序列(1.5s 档 3000/6000/12000/15000 封顶)、大库 3s 档与总量未知 2s 档、refresh 成功清零/失败递增封顶 4/401 分支停轮询+拆推送不续排(R5#2 第二半); stopPoll 对 awaitPoll 收摊走 onEnd 且兑现 null(文件头契约「收敛/耗尽/到点都走」含外部叫停), startPoll 顶掉同 key 有界等待 onEnd 不双调, 收敛路径(finish)与叫停路径互斥不双调
+- test_r4_sse_edge_reconnect_state_machine: R5#14(major) + R5#15 —— SSE 断线沿判定与换票重连状态机 node 电池真跑(兑现 polling.js 文件头「探针真跑」注释契约, 兑现前 tests/ 零命中): _esDisconnectEdge 纯函数三分型(undefined 首断/true->false 跳变/重试期 false 非沿) + startEvents 换票接线(POST /api/events/ticket + ?ticket= 连流) + onopen 回置 + 首断沿恰一条 toast + 重试期重复 onerror 只发一条 toast 不叠重试定时器 + 重连必关旧连接换新票 + ver 驱动 60ms 去抖合并(R5#4 修复回归: 落拍 document.hidden 短路, 后台标签不吃 ver 驱动, 恢复可见照常拉) + stopEvents 归置 _esConnected/_esRetry/_verTimer + 换票 await 期间登出落票后不开流(issue 26-11-08-0229 #7: authOk 复查拦在 EventSource 之前, _esBusy 不残留)
+- test_r4_poll_backoff_and_stop_onend: R5#17 + R5#5 —— 轮询失败退避曲线真跑分型(骨架探针把 currentPollMs 桩成常量的绕过面在此补上): pollFails=0..4 序列(1.5s 档 3000/6000/12000/15000 封顶)、大库 3s 档与总量未知 2s 档、refresh 成功清零/失败递增封顶 4/401 分支停轮询+拆推送不续排(R5#2 第二半); stopPoll 对 awaitPoll 收摊走 onEnd 且兑现 null(文件头契约「收敛/耗尽/到点都走」含外部叫停), startPoll 顶掉同 key 有界等待 onEnd 不双调, 收敛路径(finish)与叫停路径互斥不双调; onEnd 抛异常不吞 settle(issue 26-11-08-0229 #8: stopPoll 与 finish 两路同式 try/finally, settle 必达、异常照常上抛不吞不藏)
 - test_r4_errlog_reseed_probe: R5#16 —— lifecycle.js _errlogReseed node 电池真跑(兑现「探针真跑」注释契约, 兑现前 tests/ 零命中): cursor 0(尚无游标)不判重启 / last<cursor 判重启(seq 进程内只增, 倒退唯一路径是重启归零) / last>=cursor 正常
 - test_r4_logout_settles_modal_and_stops_events: R5#1 + R5#2 —— auth.js _logout 登出收口: 悬空模态先 resolve(false) 再复位(直接丢弃 _modalResolve 会让 confirmDialog/promptDialog 永久 pending, 删除流程在 await 处挂死)、await 侧恢复看到已复位框状态走取消分支、SSE 通道与轮询同口径一并拆(stopEvents 与 _qbTeardown 同收)、无框登出 no-op 不炸
 - test_r4_search_quiet_retry_backoff: R5#236 —— view.js 静默刷新失败重试退避真跑: searchBuilding 残留 true 时失败续查逐次翻倍夹 15s(2s/4s/8s/15s/15s, 与轮询失败退避 currentPollMs 同曲线口径), 服务端宕机不再形成固定 1 req/s 无限循环; 成功一轮计数清零且续查保持 1s 节拍、resetSearch 新会话从零起算
@@ -148,6 +148,27 @@ const ok = (name, cond) => checks.push([name, !!cond]);
   ok("stopEvents 归置 _esConnected(重登后首断仍算首次断线)", ctx._esConnected === undefined);
   ok("归置后连接实例已 close", instances[1].closed === true);
 
+  // 8. #7(issue 26-11-08-0229): 换票 await 期间登出, 落票后复查 authOk 再开流 ——
+  // skip_local_verify 下换票免密钥, 票据落下不等于会话仍活; 旧序落票即开流, 首个 ver
+  // 事件才被 _logout 的 stopEvents 拆除(残留至多一轮空转)。复查点在 await 恢复之后。
+  const baseN = instances.length;
+  const ctx7 = Object.assign({}, P, {
+    authOk: true, _es: null, _esBusy: false, _esRetry: null, _verTimer: null, _esConnected: undefined,
+    toasts: [], toast(msg, kind) { this.toasts.push([kind, msg]); },
+    api() {  // 换票在途: 票据在登出之后才落下(手动放行, 模拟 await 窗口)
+      return new Promise((res) => { this._dropTicket = () => res({ ticket: "TK7" }); });
+    },
+  });
+  const p7 = P.startEvents.call(ctx7);
+  await drain();
+  ctx7.authOk = false;       // await 窗口内 _logout 收口(token 清空 => authOk 翻 false)
+  ctx7._dropTicket();        // 票据落下(免密钥也发票, 旧序此处会开流)
+  await p7;
+  await drain();
+  ok("#7 换票期间登出: 落票后不开流(authOk 复查拦在 EventSource 之前)",
+    instances.length === baseN && ctx7._es === null);
+  ok("#7 落票不开流不残留 _esBusy(重登后 startEvents 可正常重入)", ctx7._esBusy === false);
+
   console.log(JSON.stringify({ ok: checks.filter((c) => c[1]).length, total: checks.length,
     failed: checks.filter((c) => !c[1]).map((c) => c[0]) }));
 })().catch((e) => { console.error(e && e.stack || e); process.exit(1); });
@@ -252,6 +273,34 @@ const ok = (name, cond) => checks.push([name, !!cond]);
   P.stopPoll.call(st3, "n");
   ok("收敛后 stopPoll 不再调 onEnd(alive 守卫)", ended3 === 1);
 
+  // 7. #8(issue 26-11-08-0229): onEnd 抛异常不吞 settle —— stopPoll 与 finish 两路同式
+  // try/finally, settle 必达, 异常语义不变照常上抛(finish 路在上抛处成 unhandled
+  // rejection, 由收集器钉住; 旧序该异常会吞掉 settle, 调用方 Promise 永久悬挂)。
+  const unhandled = [];
+  process.on("unhandledRejection", (e) => unhandled.push(e));
+  const boomStop = new Error("onEnd boom (stopPoll)");
+  let ended7 = 0;
+  const st7 = Object.assign({}, P, { _polls: null });
+  const p7 = P.awaitPoll.call(st7, "j", { ms: () => 5, fn: () => null, until: () => false,
+    onEnd: () => { ended7 += 1; throw boomStop; } });
+  await drain();
+  let stopErr = null;
+  try { P.stopPoll.call(st7, "j"); } catch (e) { stopErr = e; }
+  ok("#8 stopPoll 路: onEnd 异常照常上抛(不吞不藏)", stopErr === boomStop);
+  ok("#8 stopPoll 路: settle 先于异常必达(兑现 null)", (await p7) === null);
+  ok("#8 stopPoll 路: onEnd 恰一次", ended7 === 1);
+  const boomFin = new Error("onEnd boom (finish)");
+  let ended8 = 0;
+  const st8 = Object.assign({}, P, { _polls: null });
+  const p8 = P.awaitPoll.call(st8, "f", { ms: () => 0, max: 9, fn: async () => "ok",
+    until: (v) => !!v, onEnd: () => { ended8 += 1; throw boomFin; } });
+  let v8 = null; let finErr = null;
+  try { v8 = await p8; } catch (e) { finErr = e; }
+  await drain();
+  await new Promise((r) => setImmediate(r));  // unhandledRejection 在事件轮末派发, 让一轮宏任务跑完
+  ok("#8 finish 路: settle 不被 onEnd 异常吞掉(兑现该拍值)", v8 === "ok" && finErr === null);
+  ok("#8 finish 路: onEnd 恰一次且异常上抛成 unhandled rejection(语义不变)",
+    ended8 === 1 && unhandled.includes(boomFin));
   console.log(JSON.stringify({ ok: checks.filter((c) => c[1]).length, total: checks.length,
     failed: checks.filter((c) => !c[1]).map((c) => c[0]) }));
 })().catch((e) => { console.error(e && e.stack || e); process.exit(1); });
