@@ -167,6 +167,8 @@ Object.assign(window.AQB_COLUMNS.methods, {
       let lastWidths = null;  // 拖拽中的最新整页 px(up 时升格为意图)
       const move = (e) => {
         if (!dragged && Math.abs(e.clientX - startX) > RESIZE_DRAG_THRESHOLD) dragged = true;
+        if (!dragged) return;  // 未过阈值不写生效轨: 位移 <=3px 时写入的只是起始快照, 会覆盖微动
+                               // (内存态, 下次窗口变化自愈, 但纯观感上列宽"被定住") —— 过阈值才生效
         const w = Math.max(MIN_COL_PX, Math.round(startVal + e.clientX - startX));
         const next = { ...widths, [key]: `${w}px` };
         if (neighbor) {

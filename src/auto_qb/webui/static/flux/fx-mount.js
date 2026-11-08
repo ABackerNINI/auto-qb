@@ -221,8 +221,8 @@
    * 首个 `:` / `：` / `,` / `，` 之前的**动作短语**(≤14 字、不含括号)当主标题, 其后的剩余当说明。
    * 说明门槛只留 2 字 —— 六轮把生产文案统一成「主标题: 说明」(无分隔符的回执都补了说明句),
    * 说明常常就是一个名字/计数(「已执行: 重命名」「已复制: 名称已写入剪贴板」), 门槛再高会让
-   * 这批条退回去单行, 与「都改成主标题+说明」的口径打架。残留单行 = 说明侧是运行时错误串且
-   * 过短(<2 字), 那是数据现实, 不是样式缺口; 单行条字重由 CSS 基座统一 600, 与标题行同貌。
+   * 这批条退回去单行, 与「都改成主标题+说明」的口径打架。残留单行 = 说明侧 trim 后不足 2 字
+   * (分隔符后的连接空格不算进门槛), 那是数据现实, 不是样式缺口; 单行条字重由 CSS 基座统一 600, 与标题行同貌。
    * 每次 sync 都跑并按 `.toast-t` 是否存在判重: Vue 在 .text 变更时会覆写 span 子节点
    * (hostSetElementText), 标记位会骗人, 按 DOM 现状判才可靠。文本一律 textContent,
    * 不拼 innerHTML —— err.message 里可以是任意字符。 */
@@ -236,7 +236,9 @@
     span.classList.add("toast-txt");                     /* 单行也挂: 让 flex:1 / min-width:0 生效 */
     var text = span.textContent || "";
     var m = TOAST_SPLIT.exec(text);
-    if (!m) return;
+    if (!m || m[2].trim().length < 2) return;  /* 说明侧按 trim 后计长 —— 分隔符后的连接空格
+      (口径是 ": "/", " 接说明)不算进 2 字门槛, 见 webui-fx.md 消息面文字排版(四轮)/toast 文案(六轮);
+      trim 后不足 2 字 = 残留单行, 那是数据现实, 不是样式缺口(issue 26-11-08-0229 #12) */
     span.textContent = "";
     var head = document.createElement("span");
     head.className = "toast-t";

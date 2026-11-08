@@ -169,11 +169,12 @@
   <h2><span class="no">§07</span>状态变更日志</h2>
   <ul>
     <li>2026-11-08 02:29 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    <li>2026-11-08 14:33 — 认领批复验并修复 <strong>#10 / #12</strong>（其余 11 子项仍 Open）</li>
   </ul>
   <h3>复验</h3>
-  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <p>复验：2026-11-08 14:33 #10 / #12 锚点均仍复现（grep <code>THRESHOLD|3px|dragged</code> 命中 columns_persist.js startResize/move，阈值常量 <code>RESIZE_DRAG_THRESHOLD = 3</code> 单点在 app.js:377；grep <code>TOAST_SPLIT</code> 命中 fx-mount.js:229）。其余 11 子项未复验。</p>
   <h3>修复后补充</h3>
-  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  <p><strong>#10（已修 2026-11-08）</strong>：实际修法 = 过阈值才写生效轨 —— move 在 <code>dragged</code> 置真前直接 return，位移 ≤3px 时不再把起始快照写进 colWidths；拖拽其余行为（意图升格 / 落盘 / 拦 click）不动。电池同步：r4 node 电池 colpersist 探针新增 ②-b 微动场景（未过阈值不写生效轨 / 过阈值后照常写 / 升格落盘拦截层照常）。<strong>#12（已修 2026-11-08）</strong>：找到原设计出处 <code>memory-bank/conventions/attachments/webui-fx.md</code>「消息面文字排版」（2026-11-02 四轮）与「toast 文案」（六轮）—— 口径为「说明 ≥2 字」即说明侧本体计长，故裁决改实现而非改注释：shapeToastText 增加 <code>m[2].trim().length &lt; 2</code> 单行门槛（正则本体不动），分隔符后的连接空格不计入 2 字门槛；运行时注释与守阵 <code>_scan_toast_copy_two_part</code> 同步 trim 口径（两者约定「同一条规则，改一处要同步另一处」），生产文案无一命中新门槛。验证：node 电池 + skins 守阵 20 passed；e2e @fast 门禁 316 passed（含 drawer-tables 拖宽 spec）。</p>
 </section>
 
 <footer>

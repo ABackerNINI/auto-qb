@@ -4,14 +4,14 @@
 - test_r4_winmembers_sorted_window_same_source: R5#35(major) 修复回归 —— winMembers/memberPadTop/memberPadBottom 先 sortedMembers 再开窗: 明细列排序激活且成员 >= ROW_WIN_EST_MIN 时, 切片/占位/前缀和(_rowPre.member)与渲染数组同源同序, 键盘行序(shortcuts _kbRows 同走 sortedMembers)与前缀和逐行对齐(修复前 memberWin 按未排序 list 开窗必红)
 - test_r4_groupwin_expand_backoff: R5#57 —— groupWin 退避判据 = 「当前真的有面板」: expandedKey 命中在场组才退避全量; 原组被筛掉/已删与未展开都保持 active 窗口(不得为一个不存在的面板永久退化成全量渲染)
 - test_r4_apply_col_order_boundaries: R5#53 —— applyColOrder 落点折算四类边界: 向后移 at=dropIdx-1 / 向前移原位插入 / 末尾边界兜底 push / 非法输入(隐藏列/越界)no-op; 全程隐藏列相对次序不动且尊重既有 colOrder 头部
-- test_r4_col_persist_intent_merge_and_gates: R5#52(major) + R5#37/R5#38 修复回归 —— 意图升格三层 merge: 拖拽/双击自适应后既有隐藏列 px 仍在、可见列被渲染快照冻结、被拖/适配列被终值覆盖; 纯点击零位移不升格意图不落盘不拦 click(R5#37); 拖拽尾 capture 拦截下一拍自清(R5#38)
+- test_r4_col_persist_intent_merge_and_gates: R5#52(major) + R5#37/R5#38 修复回归 —— 意图升格三层 merge: 拖拽/双击自适应后既有隐藏列 px 仍在、可见列被渲染快照冻结、被拖/适配列被终值覆盖; 纯点击零位移不升格意图不落盘不拦 click(R5#37); 拖拽尾 capture 拦截下一拍自清(R5#38); 微动未过阈值不把起始快照写进生效轨(issue 26-11-08-0229 #10)
 - test_r4_selection_state_machine: R5#51(major) —— AQB_SELECTION 真跑: _selSyncGroups 四态(补选/移出/未知 key 保留/种子页降级: 不补选但降级照做)、_selAnchor 兜底链四态(显式锚点/光标/展开组/首行)、selSizeSummaryOf occ_key 取 max 去重
 - test_r4_load_col_state_seeding: R5#18 —— loadColState 默认隐藏播种三态: 空存储播种 / 仅空 hidden 不播(「刻意全开」合法偏好) / 有任一偏好键不播; 附坏 JSON 走完整流程、locked 列忽略、w 白名单洗净(洗净后三键全缺照播)
 - test_r4_sort_domain: R5#54 —— AQB_SORT 真跑: setSort 三态循环(经典 gk/gd 与 dyn dtSortState 两形态) + _dtStrCompare(IPv4 逐段数值序/端口数值/等值/非 IP localeCompare 回落) + sortedDrawer 空值两方向恒末位与 IPv4 数值序
 - test_r4_format_ladder_family: R5#55 —— format 函数族档位边界: _fmtLadder 梯顶回落(top 命中/缺省/档名写错回落整梯)与字节/速度两族、fmtEta 8640000 哨兵与非正值、fmtDuration 三段进位边界、fmtPeersQb 缺省只显已连接
 - test_r4_fx_mount_toast_split_and_rows_ghost: R5#193 —— flux fx 挂载层 node 电池(fx-mount.js 是 IIFE,
   桩 DOM/BOM 后真跑): TOAST_SPLIT 拆段正则族(主标题+说明两段落地/无分隔符与括号头与超 14 字头与
-  说明不足 2 字单行/全角冒号与逗号分隔/单行也挂 toast-txt)+ toastSync 差分 stamp(rise/队列牌/倒计时
+  说明不足 2 字单行 —— trim 后计长, 分隔符后连接空格不算门槛/全角冒号与逗号分隔/单行也挂 toast-txt)+ toastSync 差分 stamp(rise/队列牌/倒计时
   只归 own 条/danger 原位升级)+ rows 行差分(首轮只建缓存/增删检出排一帧/退场幽灵克隆定格 row-out
   附回原容器/入场行 stamp row-in/无增删不排帧)
 - test_r4_dt05_advice_dispatch: R5#95(P13) —— 05 adviceFor 五类关键词分派经 rowsFn 真跑(失败桶
@@ -348,6 +348,19 @@ ok("纯点击: colW 意图不被污染(页面保持全自动)", c.colW.p.hid ===
 ok("纯点击: 不落盘/不重算/不挂拦截层/不排自清",
    c.persisted.length === 0 && c.recomputed === 0 &&
    byType("click").filter((l) => l.op === "add").length === 0 && timers.length === 0);
+
+// ②-b 微动未过阈值(issue 26-11-08-0229 #10 修复回归): 位移 <=3px 不把起始快照写进生效轨 colWidths
+resetRec();
+c = mkCtx();
+M.startResize.call(c, evAt(100), "p", "a");
+fire("mousemove", { clientX: 102 });          // 位移 2 <= 阈值 3: dragged 仍 false
+ok("微动未过阈值: 生效轨不被起始快照污染", !c.colWidths.p);
+fire("mousemove", { clientX: 220 });          // 位移 120 > 阈值: 过阈值后照常写生效轨
+ok("过阈值后生效轨照常写入", c.colWidths.p && c.colWidths.p.a === "320px" && c.colWidths.p.b === "150px");
+fire("mouseup", {});
+ok("微动后真拖拽: 意图升格/落盘/拦截层照常",
+   c.colW.p.a === "320px" && c.colW.p.hid === "111px" && c.persisted.length === 1 &&
+   byType("click").filter((l) => l.op === "add").length === 1);
 
 // ③ 双击自适应(R5#52 后半): 同一套 merge, 适配列被适配备覆盖、隐藏列 px 仍在
 resetRec();
@@ -715,8 +728,9 @@ const t6 = mkToast("已执行:x", "toast", "id6");                              
 const t7 = mkToast("已执行: 重命名", "toast", "id7");                           // 全角冒号
 const t8 = mkToast("已复制, 名称已写入剪贴板", "toast", "id8");                  // 逗号分隔
 const t9 = mkToast("保存失败: 磁盘已满", "toast error", "id9");                  // danger 原位升级
-const t10 = mkToast("已执行: x", "toast", "id10");  // ": x" 分隔符后的空格计入 {2,} 原始计数(2 字含空格会拆, trim 后单字)
-const toasts = [t1, t2, t3, t4, t5, t6, t7, t8, t9, t10];
+const t10 = mkToast("已执行: x", "toast", "id10");  // 说明侧 trim 后 1 字: 连接空格不算门槛 -> 单行(issue 26-11-08-0229 #12)
+const t11 = mkToast("已复制: 名称 ", "toast", "id11");  // 尾随空格容忍: 说明 trim 后恰 2 字 -> 照拆
+const toasts = [t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11];
 wrap.children.push(...toasts.map((t) => t.n));
 MNT.toastSync(4000, "id1");
 ok("拆段: 半角冒号两段落地(标题+说明)", t1.span.children.length === 2
@@ -732,7 +746,9 @@ ok("残留单行: 无分隔符", t2.span.children.length === 0 && t2.span._class
 ok("残留单行: 头 15 字超上限(拆段退回单行)", t3.span.children.length === 0);
 ok("残留单行: 括号不是分隔符", t5.span.children.length === 0);
 ok("残留单行: 说明不足 2 字(无空格)", t6.span.children.length === 0);
-ok("拆段边界: \": x\" 空格计入 {2,} 原始计数故会拆(现状口径, 改 trim 语义须同步本电池)", t10.span.children.length === 2);
+ok("残留单行: 说明侧 trim 后 1 字(分隔符后连接空格不计入门槛, issue 26-11-08-0229 #12)", t10.span.children.length === 0);
+ok("拆段: 说明 trim 后恰 2 字且带尾随空格照拆", t11.span.children.length === 2
+  && t11.span.children[0].textContent === "已复制" && t11.span.children[1].textContent === "名称");
 ok("单行也挂 toast-txt(flex:1/min-width:0 生效)", t2.span._classes.includes("toast-txt"));
 ok("stamp: 新条 rise + 队列牌(栈内已有多条)", t1.n.attrs["data-fx"] === "rise" && t1.n.attrs["data-fx-queue"] === "");
 ok("stamp: 倒计时只归 own 条(ttl 精确命中 data-id)", t1.n.attrs["data-fx-cd"] === "" && t2.n.attrs["data-fx-cd"] === undefined);
