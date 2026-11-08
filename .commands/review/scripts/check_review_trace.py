@@ -12,21 +12,27 @@ agent 不用填 hash(填错就是假账), 且天然"连坐": 谁漏评, 那笔�
 issue 26-11-08-0903。
 
 ## 判据(顺序即优先级)
-1. 批内改动 0 行(仅记账类/生成物) → 通过(静默)
-2. 实算 < 50 行且未触安全敏感面/红线 → 通过(低于下限, 机械闸门兜住)
-3. 实算 < 50 行但触安全敏感面/红线 → 失败(不论行数都要评)
-4. 提交信息有 `Review:` 行 → 校验(计划 26-11-07-0441): `<N> 行` 必须等于实算(±0); blocker/修/入池 数字齐;
-   `检 P/T` 必填且 0 ≤ P ≤ T、P ≥ 修 + 入池(T=送检发现数, P=引文逐字通过数; 修/入池 只数过检且未被
-   REFUTE 的发现); 实算 > 400 行时必须带 `· 派发 <K>` 且 K ≥ 2(先拆批, `· 分面` 不再是超限通路);
-   超限无派发/缺字段(含缺检)/行数不符 三类失败行尾附可粘贴整行骨架(行数位填实算, `?` 直贴必再判红)
-5. 提交信息有 `Review-Skip: <理由>`(理由 ≥4 字) → 通过(豁免进 git log, 可审计)
-6. 其余 → 失败, 一行原因 + 下一步
-7. 旁路(不判红): `· 齐平 <8hex>` 字段只查格式(计划 26-11-07-0201 落点 3) —— 缺失不问、真值不验;
+1. 批内改动 0 行且未触安全敏感面(仅记账类/生成物, 及 0 行二进制改动 —— numstat 对二进制计 0 行,
+   其基比对同样被此短路) → 通过(静默)
+2. 提交信息有 `Review:` 行 → 校验(计划 26-11-07-0441): `<N> 行` 必须等于实算(±0); blocker/修/入池 数字齐;
+   `检 P/T` 必填且 0 ≤ P ≤ T、P ≥ 修 + 入池 —— 修/入池/检 为**全轮累计**口径(修复循环首轮 + 各修复轮
+   累加申报, 计划 26-11-08-1240 D7; T=送检发现数, P=引文逐字通过数; 修/入池 只数过检且未被 REFUTE 的
+   发现, 判定式对累计数照旧成立); `· 基 <12hex>` 必填(D6): 值与闸门用 review_content.batch_base_hash
+   重算的当前批(锚点→工作树)整批过滤 diff 哈希比对, 不一致 = 评审后有新改动 → 判红, 出路 = 重跑
+   review.pack 取新基并补一轮复评; `· 轮 <R>` 可缺省(缺省 1 = 修复循环轮数, D7), 出现时必须整数 ≥ 1;
+   实算 > 400 行时必须带 `· 派发 <K>` 且 K ≥ 2(先拆批, `· 分面` 不再是超限通路; 派发 K = **首轮**拓扑
+   派遣, 修复轮不计入 —— 累计会稀释容量下界); 超限无派发/缺字段(含缺检缺基)/行数不符 三类失败行尾附
+   可粘贴整行骨架(行数位填实算, `?` 直贴必再判红)
+3. 提交信息有 `Review-Skip:` → 失败(计划 26-11-08-1240 D8: 豁免已退役, 理由长短不再重要) —— 历史
+   trailer 在锚点 walk 与侧分支计数里照旧识别(不追溯重判), 新提交没有免评通道
+4. 其余 → 失败(计划 26-11-08-1240 D9: 50 行下限退役, 可评行数 >0 即必须有 `Review:` trailer,
+   实算恒 0 才静默): 触安全敏感面给敏感面原因(不论行数都要评), 否则给未留痕原因 + 下一步
+5. 旁路(不判红): `· 齐平 <8hex>` 字段只查格式(计划 26-11-07-0201 落点 3) —— 缺失不问、真值不验;
    格式异常打一行 `[warn]` 但 rc=0 放行(R4: 弱字段, 与「行数 ±0」的强校验刻意区分); `· 分面` 同为
    信息字段(0441 D8) —— 任何档位都不判红, 也不再放行超限
 
-> 下限排在 trailer 校验之前: 5 行的小改正文里写一句「Review: 见报告」不该被硬拦「缺 `<N> 行` 声明」
-> —— 低于下限的批本来就没有 trailer 义务(2026-11-06 评审实测)。
+> 下限(50 行)已随 26-11-08-1240 D9 退役: 「5 行小改正文写一句 Review: 见报告」不再是无 trailer 义务
+> 的通路 —— 可评行数 >0 就得写全字段 trailer(小提交与修复增量两条政策缝一并闭合, 2026-11-08 拍板)。
 
 ## 计数面
 - 计入: 代码 + 事实性文档(计划/报告/约定/坑档/README/AGENTS.md)
@@ -54,9 +60,9 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from review_content import _counted, generated_paths  # noqa: E402  (同目录共享模块: 可评路径判定与基哈希, 与 review_pack 单点同源)
+# 同目录共享模块: 可评路径判定与基哈希, 与 review_pack 单点同源
+from review_content import _counted, batch_base_hash, generated_paths  # noqa: E402
 
-FLOOR = 50  # 下限: 低于它不要求评审(未实测, 保守推断; 见 reports/26-11-06-0723)
 CEILING = 400  # 建议上限: 超过先拆批; 确实不可拆的残余批须 `· 派发 <K>` 且 K ≥ 2(计划 26-11-07-0441 D1)
 
 REVIEW_LINE_RE = re.compile(r"^Review:\s*(.+)$", re.M)
@@ -65,14 +71,27 @@ LINES_RE = re.compile(r"(\d+)\s*行")
 COUNT_FIELDS = (
     ("blocker", re.compile(r"blocker\s*(\d+)")), ("修", re.compile(r"修\s*(\d+)")), ("入池", re.compile(r"入池\s*(\d+)"))
 )
-# 检 P/T(0441 落点 2): T = 送检发现数, P = 引文逐字通过数(review.check 判过的条目)。值正则取斜杠形式;
-# `·` 锚定的在场正则只用来区分「缺字段」与「写了但形状不对」(直贴骨架的 `检 ?/?` 不许静默通过)。
+# 修/入池为全轮累计口径(计划 26-11-08-1240 D7): 修复循环首轮 + 各修复轮的修复/入池数累加后申报,
+# 判定式(P ≥ 修 + 入池)对累计数照旧成立 —— 本处正则只管取数, 不区分轮次。
+# 检 P/T(0441 落点 2): T = 送检发现数, P = 引文逐字通过数(review.check 判过的条目), 同为全轮累计。
+# 值正则取斜杠形式; `·` 锚定的在场正则只用来区分「缺字段」与「写了但形状不对」(直贴骨架的
+# `检 ?/?` 不许静默通过)。
 CHECK_RE = re.compile(r"检\s*(\d+)\s*/\s*(\d+)")
 CHECK_PRESENT_RE = re.compile(r"·\s*检")
 # 派发 K(0441 落点 1): 值正则锚定 `·` 前缀(D10: 防正文散文「派发 2 个子代理」过采), 缺省 1;
 # 在场正则同锚 —— 直贴骨架的 `派发 ?` 落「形状不对」判红, 不会按缺省静默通过。
+# 派发 K = **首轮**拓扑派遣数, 修复轮不计入(D7/F4): 修复轮若计入 K, 会掩盖 >400 行批「首轮只派
+# 1 次」的违规、稀释容量下界(发现数 ∝ 派发次数); 修复轮深度由 `· 轮 R` 与累计 检 P/T 反映。
 DISPATCH_RE = re.compile(r"·\s*派发\s*(\d+)")
 DISPATCH_PRESENT_RE = re.compile(r"·\s*派发")
+# 轮 R(计划 26-11-08-1240 D7): 修复循环轮数, 缺省 1; 出现时必须整数 ≥ 1 —— 形状校验同 派发 风格,
+# 直贴骨架的 `轮 ?` / 非数字不许静默通过。
+ROUND_RE = re.compile(r"·\s*轮\s*(\d+)")
+ROUND_PRESENT_RE = re.compile(r"·\s*轮")
+# 基 hash(计划 26-11-08-1240 D6): 整批过滤 diff 哈希(review_content.batch_base_hash 输出的 12 位
+# 小写 hex), 必填; 值与闸门重算的当前批哈希比对, 不一致判红(评审后有新改动 → 重跑 pack 取新基复评)。
+BASE_RE = re.compile(r"·\s*基\s+([0-9a-f]{12})(?![0-9a-f])")
+BASE_PRESENT_RE = re.compile(r"·\s*基")
 
 # 安全敏感面路径标记词 —— 与 .commands/review/scripts/review_pack.py 同源(改一处要改两处, 见该文件同名常量)
 SENSITIVE_PATH_MARKERS = ("state", "credential", "auth", "token", "secret", "password")
@@ -266,26 +285,29 @@ def anchor_commit(root: Path) -> str:
 def _skeleton(count: int) -> str:
     """失败行尾附的可粘贴整行骨架(计划 26-11-07-0441 落点 4/D4)。
 
-    行数位直接填实算值, 其余位是 `?` —— `?` 不是数字, 直接粘贴会被 decide() 的数字正则再判红
-    (blocker/修/入池/检 走原正则, 检/派发 另有形状校验), 失败方向安全。
+    行数位直接填实算值, 其余位是 `?` —— `?` 不是数字/hash, 直接粘贴会被 decide() 的形状校验再判红
+    (blocker/修/入池/检 走原正则, 检/派发/基 另有形状校验), 失败方向安全。
     """
-    return f"可粘贴整行(把 ? 逐一换成实数): Review: <范围> · {count} 行 · blocker ? · 修 ? · 入池 ? · 检 ?/? · 派发 ?"
+    return (f"可粘贴整行(把 ? 逐一换成实数/hash): Review: <范围> · {count} 行 · blocker ? · 修 ? · "
+            "入池 ? · 检 ?/? · 基 ? · 派发 ?")
 
 
-def decide(count: int, sensitive: list[str], message: str) -> tuple[bool, str]:
+def decide(count: int, sensitive: list[str], message: str, base_hash: str | None = None) -> tuple[bool, str]:
     """纯判定: (是否通过, 失败原因/通过说明)。顺序即优先级, 见模块头「判据」。
 
-    下限/安全面排在 trailer 校验**之前**: 5 行的小改正文里写一句「Review: 见报告」不该被硬拦
-    「缺 `<N> 行` 声明」—— 低于下限的批本来就没有 trailer 义务。
+    全轮累计口径(计划 26-11-08-1240 D7): trailer 里的 修/入池/检 P/T 申报的是**本批修复循环所有
+    轮次的累计数**(首轮 + 各修复轮), 判定式不变 —— 下界 P ≥ 修 + 入池 与 0 ≤ P ≤ T 对累计数照旧
+    成立; `· 派发 K` 是**首轮**拓扑派遣数, 修复轮不计入(累计会稀释 >400 行批的容量下界); `· 轮 R`
+    = 修复循环轮数, 缺省 1。
+    base_hash: 闸门按同一套过滤实现(review_content.batch_base_hash)重算的当前批(锚点→工作树)基
+    哈希; 消息带 `Review:` trailer 时 main 恒传入, trailer 的 `· 基` 与它比对, 不一致判红(D6: 评审
+    后有新改动)。None = 不比对(消息无 trailer 的调用面; 单测直调 decide 时不传即跳过比对, 生产
+    面不存在 —— batch_base_hash 算不了会直接 SystemExit(2), 不会静默变 None)。
+    50 行下限已退役(D9): 可评行数 >0 即须 trailer, 实算恒 0(纯记账类/生成物, 及 0 行二进制改动
+    —— numstat 对二进制计 0, 其基比对同样被 count==0 短路)才静默。
     """
     if count == 0 and not sensitive:
-        return True, "仅记账类/生成物改动"
-
-    if count < FLOOR:
-        if sensitive:
-            return False, (f"触碰安全敏感面: {'、'.join(sensitive[:3])} —— 不论行数都要评"
-                           "(code-review skill ①)")
-        return True, f"低于下限 {FLOOR} 行({count} 行)"
+        return True, "可评 0 行(记账类/生成物或纯二进制)改动"
 
     review = REVIEW_LINE_RE.search(message)
     if review:
@@ -323,10 +345,15 @@ def decide(count: int, sensitive: list[str], message: str) -> tuple[bool, str]:
             # 检是必填(0441 落点 2): 缺了判红; 写了但不是合法斜杠数字形状(直贴骨架的 `检 ?/?`)同样判红,
             # 在场正则只用来把措辞说准 —— 两个方向都是红, 不存在静默通过。
             missing.append("检(形状不对, 应为 `检 P/T`)" if CHECK_PRESENT_RE.search(line) else "检")
+        declared_base = BASE_RE.search(line)
+        if declared_base is None:
+            # 基是必填(26-11-08-1240 D6): 缺了判红; 写了但不是 12 位小写 hex(直贴骨架的 `基 ?`)同样判红。
+            missing.append("基(形状不对, 应为 `· 基 <12位hash>`)" if BASE_PRESENT_RE.search(line) else "基")
         if missing:
             return False, (
                 f"`Review:` 行缺字段: {'/'.join(missing)} —— 按 skill ⑦ 的格式补齐; "
-                "检 P/T: T=送检发现数, P=引文逐字通过数(review.check 判过的条目) —— " + _skeleton(count)
+                "检 P/T: T=送检发现数, P=引文逐字通过数(全轮累计); `· 基 <hash>` = review.pack 输出的"
+                "基哈希 —— " + _skeleton(count)
             )
         passed, total = int(check.group(1)), int(check.group(2))
         if passed > total:
@@ -343,20 +370,34 @@ def decide(count: int, sensitive: list[str], message: str) -> tuple[bool, str]:
             # ≤ CEILING 不校验派发数值, 但写了 `派发` 字样就必须是数字形状 —— 否则直贴骨架的 `派发 ?`
             # 会按缺省静默通过(0441 落点 4)。> CEILING 时上面已保证派发合法且 ≥ 2, 走不到这里。
             return False, ("`派发` 字段形状不对(应为 `· 派发 <K>`, K 为数字) —— 骨架里的 `?` 要换成实数 —— " + _skeleton(count))
+        round_field = ROUND_RE.search(line)
+        if ROUND_PRESENT_RE.search(line) and (round_field is None or int(round_field.group(1)) < 1):
+            # 轮 R(26-11-08-1240 D7): 缺省 1, 写了就必须是整数 ≥ 1 —— 直贴骨架的 `轮 ?` 不许静默通过。
+            return False, ("`轮` 字段形状不对(应为 `· 轮 <R>`, R 为整数 ≥ 1, 缺省 1) —— " + _skeleton(count))
+        if base_hash is not None and declared_base.group(1) != base_hash:
+            # 基哈希比对(26-11-08-1240 D6): 闸门重算的当前批哈希与申报不一致 = 评审后工作树又有新改动
+            # —— 补一轮复评, 不许拿旧基蒙混过关。
+            return False, (
+                f"`· 基 {declared_base.group(1)}` ≠ 闸门重算的整批过滤 diff 哈希 {base_hash} —— "
+                "评审后有新改动 —— 重跑 commands run review.pack 取新基并补一轮复评"
+            )
         return True, f"已评审 {count} 行"
 
     skip = SKIP_LINE_RE.search(message)
     if skip:
-        reason = skip.group(1).strip()
-        if len(reason) < 4:
-            return False, "`Review-Skip:` 的理由为空或过短 —— 写清为什么这批不用评(≥4 字), 理由会进 git log"
-        return True, f"豁免: {reason}"
+        # Review-Skip 已退役(26-11-08-1240 D8): 理由长短不再看, 一律判红 —— 历史 trailer 只在锚点
+        # walk / 侧分支计数里照旧识别(anchor_commit / _numstat), 不追溯重判。
+        return False, "Review-Skip: 豁免已退役 —— 没有免评通道, 写 `Review:` 走正常评审(code-review skill)"
+
+    if sensitive:
+        return False, (f"触碰安全敏感面: {'、'.join(sensitive[:3])} —— 不论行数都要评"
+                       "(code-review skill ①)")
 
     return False, (
         f"本批累计 {count} 行待评未留痕 —— 先跑 code-review skill(批次 base = 最近一条 `Review:` 提交), "
-        "再在提交信息里写 `Review: <范围> · <N> 行 · blocker N · 修 N · 入池 N · 检 P/T · 派发 K`"
-        "(检 P/T: T=送检发现数, P=引文逐字通过数; 超 400 行须 `· 派发 2` 起); "
-        "确属免评写 `Review-Skip: <理由>`"
+        "再在提交信息里写 `Review: <范围> · <N> 行 · blocker N · 修 N · 入池 N · 检 P/T · 基 <hash>`"
+        "(检 P/T 全轮累计: T=送检发现数, P=引文逐字通过数; 基 = review.pack 输出的基哈希; "
+        "超 400 行须 `· 派发 2` 起; 50 行下限已退役, 可评行数 >0 一律要评)"
     )
 
 
@@ -413,7 +454,11 @@ def main(argv: list[str] | None = None) -> int:
         # 无消息文件可读、退到 HEAD 消息(0441 落点 4): 手工预览不再静默假装 —— 上一笔是 Skip 时按 HEAD
         # 判会直接报 ok, 至少把实算行数亮出来; 判定不变(仍按 HEAD 的 trailer 判), 复跑轮在更早处已被拦。
         print(f"未给消息文件, 按 HEAD 判, 实算 {count} 行")
-    ok, why = decide(count, sensitive, msg)
+    # 基哈希机检(计划 26-11-08-1240 D6): 消息带 `Review:` trailer 时, 用与 review.pack 同源的过滤实现
+    # 重算当前批(锚点→工作树)哈希, 供 decide 与 trailer 的 `· 基` 比对; 无 trailer 的调用面不算(省一次
+    # git diff) —— count==0 的静默短路与 Skip/未留痕分支都用不到它。
+    batch_hash = batch_base_hash(root, base) if REVIEW_LINE_RE.search(msg) else None
+    ok, why = decide(count, sensitive, msg, base_hash=batch_hash)
     warn = flush_field_warn(msg)
     if warn:
         # 弱校验的让步输出(计划 26-11-07-0201 落点 3): 不改判定, 只提醒字段写坏了 —— 判定仍由 decide 独立给

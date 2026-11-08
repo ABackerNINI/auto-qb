@@ -17,10 +17,9 @@
 - BenignPackTest      无敏感内容的小 diff -> 全能档(纯行数路径); 红线/警告清单仍命中
 - CleanPackTest      干净树 -> +0/-0 且全能; 缺/坏闸门配置 -> 可见降级 + 红线预警"无"; 坏 --base / 非 git --root / 非仓库 cwd -> rc=2; 提交后 HEAD!=base 无后缀且已提交改动仍在范围内
 - CheckTest           PASS(rc=0); 幻觉引文/超窗/缺字段/坏枚举/过短引文/非字符串字段/缺文件 REFUTE(rc=1); 窗口边界与 --window; stdin; 根外与穿越 REFUTE; 快照 root(无 .git)放行; 非 UTF-8 兜底; 行注入单行化; 非 JSON/非数组/非 UTF-8 输入 rc=2; 空数组 rc=0; 元素非对象 rc=1
-- BatchBaseHashTest   基哈希(batch_base_hash, 共享模块 review_content): 同树确定且 12hex; 记账类/生成物变更(含未跟踪)不动哈希; 可评已跟踪/未跟踪变更动哈希; 未跟踪文件序无关(按 path 排序); repo 配置逐颗覆写(diff.context/前缀/颜色/算法/orderFile/excludesFile/quotepath/diff.external...)哈希不漂(env 掐 system+global + -c 逐键压 repo 的回归); 工作树改名按删+增展开(name-only 两条路径/无 rename 段); pathspec 逐字精确(f[1].txt 不 glob 误匹配、分块不重复); pack 输出「基哈希:」行与共享实现同值; generated_paths 优先 gen_all --list 清单(反斜杠归一)
-- TraceDecideTest     评审留痕纯判定: 无待评/低于下限放行; 超限无 trailer 拦; trailer 行数不符/缺字段(含缺检)/缺行数拦; >400 行只认 派发 ≥ 2(分面降级信息字段); 判定矩阵 11 例(计划 26-11-07-0441 §04: 分面无派发红/派发 2 过/派发 1 红含骨架/缺检红/P>T 红/P<修+入池 红含口径/弃条目不计下界红/自洽数过/全干净 0-0 过/骨架直贴红/无分面超限过); Review-Skip 理由过短拦; 触安全敏感面小改仍要评; Review 优先于 Skip; 记账类(含 legacy-review4/)/生成物不计入
-- TraceDecideTest(续) 低于下限时正文里的畸形 Review 段不硬拦
-- TraceGateTest       端到端(临时仓库真跑脚本): 复跑标记跳过且用后即删; 低于下限静默; 超限无 trailer rc=1; trailer 行数相符 rc=0 / 不符 rc=1; 锚点推进(漏评提交被下一批连坐); 评过的提交推进锚点; 提交后复跑不重对行数且 HEAD 回退打「未给消息文件, 实算 N 行」提示(0441 落点 4); 齐平字段弱校验(计划 26-11-07-0201 落点 3): 缺字段/合法 8hex 静默 rc0, 格式异常打 [warn] 一行但 rc0
+- BatchBaseHashTest   基哈希(batch_base_hash, 共享模块 review_content): 同树确定且 12hex; 金值锁规范化格式(固定 fixture 硬编码 12hex, 改钉子必红须显式换金值); 记账类/生成物变更(含未跟踪)不动哈希; 可评已跟踪/未跟踪变更动哈希; 未跟踪文件序无关(按 path 排序); repo 配置逐颗覆写(diff.context/前缀/颜色/算法/orderFile/excludesFile/quotepath/diff.external...)哈希不漂(env 掐 system+global + -c 逐键压 repo 的回归); 工作树改名按删+增展开(name-only 两条路径/无 rename 段); pathspec 逐字精确(f[1].txt 不 glob 误匹配、分块不重复); pack 输出「基哈希:」行与共享实现同值; generated_paths 优先 gen_all --list 清单(反斜杠归一)
+- TraceDecideTest     评审留痕纯判定: 实算恒 0 静默; 可评 >0 无 trailer 拦(50 行下限退役 D9, 各量级一律); Review-Skip 恒红(豁免退役 D8, 理由长短不再重要); trailer 行数不符/缺字段(含缺检缺基)/缺行数拦; >400 行只认 派发 ≥ 2(分面降级信息字段); `· 基` 必填+12hex 形状+与重算基哈希比对(不一致红含「重跑 pack 取新基复评」出路, D6); `· 轮` 缺省 1、出现须整数 ≥1(D7); 判定矩阵 11 例(计划 26-11-07-0441 §04: 分面无派发红/派发 2 过/派发 1 红含骨架/缺检红/P>T 红/P<修+入池 红含口径/弃条目不计下界红/自洽数过/全干净 0-0 过/骨架直贴红/无分面超限过); 触安全敏感面无 trailer 拦(含 0 行)/有有效 trailer 放行; Review 优先于 Skip; 正文畸形 Review 段小批也拦(下限豁免已退役); 记账类(含 legacy-review4/)/生成物不计入
+- TraceGateTest       端到端(临时仓库真跑脚本): 复跑标记跳过且用后即删; 小批无 trailer 红(>0 即评, D9); 仅记账类恒 0 静默; trailer 行数相符+基一致 rc=0 / 行数不符 rc=1; 缺基红 / 基不一致(评审后又改一行)红含重跑出路(D6); Review-Skip 新提交红(D8); 历史 Skip 锚点识别回归(Skip 提交照旧推进锚点, 其后无 trailer 提交连坐滚进, 不追溯); 锚点推进(漏评提交被下一批连坐); 评过的提交推进锚点; 冷启动只算工作树; 合并拓扑两例(0903: 侧支带 trailer 不污染/无 trailer 连坐); 提交后复跑不重对行数且 HEAD 回退打「未给消息文件, 实算 N 行」提示(0441 落点 4); 齐平字段弱校验(计划 26-11-07-0201 落点 3): 缺字段/合法 8hex 静默 rc0, 格式异常打 [warn] 一行但 rc0
 """
 
 from __future__ import annotations
@@ -754,6 +753,17 @@ class BatchBaseHashTest(unittest.TestCase):
         self.assertEqual(self._hash(), self._hash())
         self.assertRegex(self._hash(), r"^[0-9a-f]{12}$")
 
+    def test_golden_value_pins_normalization_format(self):
+        """金值锚定(评审 T2 二轮 minor): 闸门/review.pack/本测试共用 batch_base_hash, 无独立金值时
+        规范化格式一变, 三处同步漂移仍全绿, 历史「已申报的 基」全部误红且无处定位 —— 固定 fixture
+        (已跟踪改动 + 非 ASCII 路径改动 + 未跟踪可评文件, 全部 write_bytes 写 LF)硬编码期望 12hex。
+        金值锁规范化格式: 改任何一颗规范化钉子/整形旗标本用例必红, 须显式换金值才能过。
+        """
+        (self.tmp / "app.py").write_bytes(b"L1\nl2\n\nl4\n")  # 已跟踪改动(基线是 HASH_APP_V1)
+        (self.tmp / "笔记.py").write_bytes("第一行\n改一行\n".encode("utf-8"))  # 非 ASCII 路径进 diff
+        (self.tmp / "fresh_mod.py").write_bytes(b"U = 1\n")  # 未跟踪可评
+        self.assertEqual(self._hash(), "acddd04d541d")
+
     def test_bookkeeping_and_generated_changes_do_not_move_hash(self):
         h0 = self._hash()
         note = self.tmp / "memory-bank" / "tasks" / "note.md"
@@ -929,33 +939,35 @@ def _run_trace(root: Path, msg_file: Path | None = None) -> subprocess.Completed
 
 
 class TraceDecideTest(unittest.TestCase):
-    """评审留痕的纯判定面 —— 判据顺序即优先级(见 check_review_trace 模块头)。"""
+    """评审留痕的纯判定面 —— 判据顺序即优先级(见 check_review_trace 模块头)。
+
+    计划 26-11-08-1240 D8/D9 后的口径: 50 行下限退役(可评行数 >0 一律要 trailer)、Review-Skip 恒红、
+    trailer 增 `· 基 <12hex>`(必填)与 `· 轮 R`(缺省 1)。base_hash 直调不传 = 跳过基哈希比对(生产面
+    main 恒在有 trailer 时传入; 比对逻辑本身由本类 mismatch/match 两例 + TraceGateTest 端到端钉住)。
+    """
     @classmethod
     def setUpClass(cls):
         cls.mod = _load_trace()
 
-    def _decide(self, count: int, msg: str, sensitive=()):
-        return self.mod.decide(count, list(sensitive), msg)
+    def _decide(self, count: int, msg: str, sensitive=(), base_hash: str | None = None):
+        return self.mod.decide(count, list(sensitive), msg, base_hash=base_hash)
 
     def test_no_pending_change_passes(self):
         self.assertTrue(self._decide(0, "")[0])
 
-    def test_below_floor_passes(self):
-        ok, why = self._decide(49, "")
-        self.assertTrue(ok)
-        self.assertIn("低于下限", why)
-
-    def test_above_floor_without_trailer_fails(self):
-        ok, why = self._decide(50, "✨ 改了点东西\n")
-        self.assertFalse(ok)
-        self.assertIn("未留痕", why)
+    def test_reviewable_lines_without_trailer_fail_at_any_size(self):
+        """D9: 50 行下限退役 —— 可评行数 >0 即须 trailer, 1 行/12 行/49 行/50 行/800 行一律拦。"""
+        for count in (1, 12, 49, 50, 800):
+            ok, why = self._decide(count, "✨ 改了点东西\n")
+            self.assertFalse(ok, f"{count} 行无 trailer 应判红")
+            self.assertIn("未留痕", why)
 
     def test_trailer_matching_lines_passes(self):
-        ok, _ = self._decide(120, "Review: S3 增量 · 120 行 · blocker 0 · 修 3 · 入池 1 · 检 4/4\n")
+        ok, _ = self._decide(120, "Review: S3 增量 · 120 行 · blocker 0 · 修 3 · 入池 1 · 检 4/4 · 基 a1b2c3d4e5f6\n")
         self.assertTrue(ok)
 
     def test_trailer_line_mismatch_fails(self):
-        ok, why = self._decide(120, "Review: S3 · 100 行 · blocker 0 · 修 3 · 入池 1\n")
+        ok, why = self._decide(120, "Review: S3 · 100 行 · blocker 0 · 修 3 · 入池 1 · 基 a1b2c3d4e5f6\n")
         self.assertFalse(ok)
         self.assertIn("≠ 实算 120 行", why)
 
@@ -965,13 +977,13 @@ class TraceDecideTest(unittest.TestCase):
         self.assertIn("缺字段", why)
 
     def test_trailer_without_line_count_fails(self):
-        ok, why = self._decide(120, "Review: S3 · blocker 0 · 修 3 · 入池 1\n")
+        ok, why = self._decide(120, "Review: S3 · blocker 0 · 修 3 · 入池 1 · 基 a1b2c3d4e5f6\n")
         self.assertFalse(ok)
         self.assertIn("缺 `<N> 行`", why)
 
     def test_oversize_needs_split_or_facet(self):
         """>400 行只认 `· 派发 ≥ 2`(计划 26-11-07-0441 D1); `· 分面` 降级为信息字段, 不再放行超限(D8)。"""
-        base = "Review: S3 · 800 行 · blocker 0 · 修 3 · 入池 0 · 检 3/3"
+        base = "Review: S3 · 800 行 · blocker 0 · 修 3 · 入池 0 · 检 3/3 · 基 a1b2c3d4e5f6"
         ok, why = self._decide(800, base)
         self.assertFalse(ok)
         self.assertIn("拆批", why)
@@ -981,104 +993,183 @@ class TraceDecideTest(unittest.TestCase):
         self.assertTrue(self._decide(800, base + " · 派发 2")[0])  # 派发 ≥ 2 放行
         self.assertTrue(self._decide(800, base + " · 派发 2 · 分面 · 齐平 a7fb3db7")[0])  # 信息字段并存不碍解析
 
-    # ---- 判定矩阵(计划 26-11-07-0441 §04, 编号照抄) ----
+    # ---- 判定矩阵(计划 26-11-07-0441 §04, 编号照抄; trailer 均含必填的 `· 基`) ----
 
     def test_matrix01_oversize_facet_without_dispatch_red(self):
         """(1) 带 `· 分面` 无 `· 派发`、带 检 3/3, count=800 → 红(D1: 分面不再是超限通路)。"""
-        ok, why = self._decide(800, "Review: S3 · 800 行 · blocker 0 · 修 3 · 入池 0 · 检 3/3 · 分面\n")
+        ok, why = self._decide(800, "Review: S3 · 800 行 · blocker 0 · 修 3 · 入池 0 · 检 3/3 · 基 a1b2c3d4e5f6 · 分面\n")
         self.assertFalse(ok)
         self.assertIn("派发 ≥ 2", why)
 
     def test_matrix02_oversize_dispatch2_without_facet_passes(self):
         """(2) 带 `· 派发 2` 无 `· 分面`、带 检 3/3, count=800 → 过。"""
-        ok, _ = self._decide(800, "Review: S3 · 800 行 · blocker 0 · 修 3 · 入池 0 · 检 3/3 · 派发 2\n")
+        ok, _ = self._decide(800, "Review: S3 · 800 行 · blocker 0 · 修 3 · 入池 0 · 检 3/3 · 基 a1b2c3d4e5f6 · 派发 2\n")
         self.assertTrue(ok)
 
     def test_matrix03_oversize_dispatch1_red_with_skeleton(self):
         """(3) `派发 1`(或两者皆无), count=800 → 红, 失败行含「派发 ≥ 2」与可粘贴骨架。"""
-        ok, why = self._decide(800, "Review: S3 · 800 行 · blocker 0 · 修 3 · 入池 0 · 检 3/3 · 派发 1\n")
+        ok, why = self._decide(800, "Review: S3 · 800 行 · blocker 0 · 修 3 · 入池 0 · 检 3/3 · 基 a1b2c3d4e5f6 · 派发 1\n")
         self.assertFalse(ok)
         self.assertIn("派发 ≥ 2", why)
         self.assertIn("检 ?/?", why)  # 可粘贴骨架在失败行尾
         self.assertIn("派发 ?", why)
-        ok, why = self._decide(800, "Review: S3 · 800 行 · blocker 0 · 修 3 · 入池 0 · 检 3/3\n")  # 两者皆无
+        ok, why = self._decide(800, "Review: S3 · 800 行 · blocker 0 · 修 3 · 入池 0 · 检 3/3 · 基 a1b2c3d4e5f6\n")  # 两者皆无
         self.assertFalse(ok)
         self.assertIn("派发 ≥ 2", why)
 
     def test_matrix04_missing_check_red_under_ceiling(self):
         """(4) count=120 无 `检` → 红(≤400 也要报校验)。"""
-        ok, why = self._decide(120, "Review: S3 · 120 行 · blocker 0 · 修 3 · 入池 1\n")
+        ok, why = self._decide(120, "Review: S3 · 120 行 · blocker 0 · 修 3 · 入池 1 · 基 a1b2c3d4e5f6\n")
         self.assertFalse(ok)
         self.assertIn("缺字段", why)
         self.assertIn("检", why)
 
     def test_matrix05_check_p_gt_t_red(self):
         """(5) `检 3/2` → 红(P > T)。"""
-        ok, why = self._decide(120, "Review: S3 · 120 行 · blocker 0 · 修 0 · 入池 0 · 检 3/2\n")
+        ok, why = self._decide(120, "Review: S3 · 120 行 · blocker 0 · 修 0 · 入池 0 · 检 3/2 · 基 a1b2c3d4e5f6\n")
         self.assertFalse(ok)
         self.assertIn("检 3/2", why)
         self.assertIn("T(送检数)", why)
 
     def test_matrix06_check_p_below_fix_pool_red(self):
         """(6) 修 5 · 入池 2 · 检 6/6 → 红(P < 修+入池)。"""
-        ok, why = self._decide(120, "Review: S3 · 120 行 · blocker 0 · 修 5 · 入池 2 · 检 6/6\n")
+        ok, why = self._decide(120, "Review: S3 · 120 行 · blocker 0 · 修 5 · 入池 2 · 检 6/6 · 基 a1b2c3d4e5f6\n")
         self.assertFalse(ok)
         self.assertIn("6 < 修 5 + 入池 2 = 7", why)
 
     def test_matrix07_refuted_entries_dont_count_red(self):
         """(7) 修 5 · 入池 2 · 检 6/12(6 过 6 弃) → 红, 弃掉的条目不计入下界。"""
-        ok, why = self._decide(120, "Review: S3 · 120 行 · blocker 0 · 修 5 · 入池 2 · 检 6/12\n")
+        ok, why = self._decide(120, "Review: S3 · 120 行 · blocker 0 · 修 5 · 入池 2 · 检 6/12 · 基 a1b2c3d4e5f6\n")
         self.assertFalse(ok)
         self.assertIn("不进这两个数", why)  # 失败行讲清口径: 修/入池 只数过检且未被 REFUTE 的发现
 
     def test_matrix08_consistent_numbers_with_dispatch_passes(self):
         """(8) 修 5 · 入池 2 · 检 8/9 · 派发 2, count=120 → 过。"""
-        ok, _ = self._decide(120, "Review: S3 · 120 行 · blocker 1 · 修 5 · 入池 2 · 检 8/9 · 派发 2\n")
+        ok, _ = self._decide(120, "Review: S3 · 120 行 · blocker 1 · 修 5 · 入池 2 · 检 8/9 · 基 a1b2c3d4e5f6 · 派发 2\n")
         self.assertTrue(ok)
 
     def test_matrix09_all_clean_batch_passes(self):
         """(9) 检 0/0 · 修 0 · 入池 0(全干净批) → 过(D6: 0≤P≤T 且 0≥0+0)。"""
-        ok, _ = self._decide(120, "Review: S3 · 120 行 · blocker 0 · 修 0 · 入池 0 · 检 0/0\n")
+        ok, _ = self._decide(120, "Review: S3 · 120 行 · blocker 0 · 修 0 · 入池 0 · 检 0/0 · 基 a1b2c3d4e5f6\n")
         self.assertTrue(ok)
 
     def test_matrix10_skeleton_paste_red(self):
-        """(10) 骨架直贴(`?` 未替换) → 红 —— 每个 `?` 位都不匹配数字正则, 失败方向安全。"""
-        ok, why = self._decide(120, "Review: <范围> · 120 行 · blocker ? · 修 ? · 入池 ? · 检 ?/? · 派发 ?\n")
+        """(10) 骨架直贴(`?` 未替换) → 红 —— 每个 `?` 位都不匹配数字/hash 形状, 失败方向安全。"""
+        ok, why = self._decide(120, "Review: <范围> · 120 行 · blocker ? · 修 ? · 入池 ? · 检 ?/? · 基 ? · 派发 ?\n")
         self.assertFalse(ok)
         self.assertIn("缺字段", why)
-        half = "Review: S3 · 120 行 · blocker 0 · 修 0 · 入池 0 · 检 ?/? · 派发 ?\n"
+        half = "Review: S3 · 120 行 · blocker 0 · 修 0 · 入池 0 · 检 ?/? · 基 a1b2c3d4e5f6 · 派发 2\n"
         ok, why = self._decide(120, half)  # 只留 `检 ?/?`: 形状校验拦住
         self.assertFalse(ok)
         self.assertIn("检(形状不对", why)
-        ok, why = self._decide(120, half.replace("检 ?/?", "检 0/0"))  # 只留 `派发 ?`: 形状校验拦住
+        half = "Review: S3 · 120 行 · blocker 0 · 修 0 · 入池 0 · 检 0/0 · 基 a1b2c3d4e5f6 · 派发 ?\n"
+        ok, why = self._decide(120, half)  # 只留 `派发 ?`: 形状校验拦住
         self.assertFalse(ok)
         self.assertIn("派发", why)
         self.assertIn("形状不对", why)
+        half = "Review: S3 · 120 行 · blocker 0 · 修 0 · 入池 0 · 检 0/0 · 基 ? · 派发 2\n"
+        ok, why = self._decide(120, half)  # 只留 `基 ?`: 形状校验拦住
+        self.assertFalse(ok)
+        self.assertIn("基(形状不对", why)
 
     def test_matrix11_oversize_dispatch_without_facet_word_passes(self):
         """(11) 检 2/2 · 派发 2(无分面字样), count=800 → 过(无分面字样的正常超限批)。"""
-        ok, _ = self._decide(800, "Review: S3 · 800 行 · blocker 0 · 修 1 · 入池 1 · 检 2/2 · 派发 2\n")
+        ok, _ = self._decide(800, "Review: S3 · 800 行 · blocker 0 · 修 1 · 入池 1 · 检 2/2 · 基 a1b2c3d4e5f6 · 派发 2\n")
         self.assertTrue(ok)
 
-    def test_below_floor_ignores_malformed_trailer(self):
-        """低于下限的批没有 trailer 义务 —— 正文里随手写一句「Review: 见报告」不该被硬拦。"""
-        ok, _ = self._decide(5, "动机: 小改\n\nReview: 见报告\n")
-        self.assertTrue(ok)
+    def test_prose_review_mention_on_small_batch_now_blocks(self):
+        """D9: 下限豁免退役 —— 正文里随手一句「Review: 见报告」被当 trailer 校验, 缺行数声明照拦。"""
+        ok, why = self._decide(5, "动机: 小改\n\nReview: 见报告\n")
+        self.assertFalse(ok)
+        self.assertIn("缺 `<N> 行`", why)
 
-    def test_skip_needs_real_reason(self):
-        self.assertFalse(self._decide(120, "Review-Skip: 改\n")[0])
-        ok, why = self._decide(120, "Review-Skip: 只改了一处文档措辞, 无行为变化\n")
-        self.assertTrue(ok)
-        self.assertIn("豁免", why)
+    def test_review_skip_retired_always_red(self):
+        """D8: 新提交写 Review-Skip 一律判红, 理由长短不再看(历史 trailer 只在锚点 walk 识别)。"""
+        ok, why = self._decide(120, "Review-Skip: 改\n")
+        self.assertFalse(ok)
+        self.assertIn("豁免已退役", why)
+        ok, why = self._decide(120, "Review-Skip: 只改了一处文档措辞, 无行为变化, 风险为零, 无需评审\n")
+        self.assertFalse(ok)  # 理由再充分也红
+        self.assertIn("豁免已退役", why)
+        self.assertIn("Review:", why)  # 失败行给出路: 写 Review: 走正常评审
 
     def test_sensitive_small_change_still_needs_review(self):
         ok, why = self._decide(12, "", sensitive=["src/auto_qb/auth_token.py"])
         self.assertFalse(ok)
         self.assertIn("安全敏感面", why)
 
+    def test_zero_lines_with_sensitive_still_blocks(self):
+        """敏感面命中不论行数都要评: 0 行(如二进制敏感文件)也不能静默放行。"""
+        ok, why = self._decide(0, "", sensitive=["auto-qb-data/state.json"])
+        self.assertFalse(ok)
+        self.assertIn("安全敏感面", why)
+
+    def test_sensitive_with_valid_trailer_passes(self):
+        """敏感面强制的是「必须评」而非「必红」: 有效 trailer = 已评, 放行(下限退役后旧短路随之失效)。"""
+        ok, _ = self._decide(
+            12,
+            "Review: auth · 12 行 · blocker 0 · 修 0 · 入池 0 · 检 0/0 · 基 a1b2c3d4e5f6\n",
+            sensitive=["src/auto_qb/auth_token.py"],
+        )
+        self.assertTrue(ok)
+
     def test_review_wins_over_skip(self):
-        msg = "Review: S3 · 120 行 · blocker 0 · 修 1 · 入池 0 · 检 1/1\nReview-Skip: 随便写写\n"
+        msg = "Review: S3 · 120 行 · blocker 0 · 修 1 · 入池 0 · 检 1/1 · 基 a1b2c3d4e5f6\nReview-Skip: 随便写写\n"
         self.assertTrue(self._decide(120, msg)[0])  # 有真 trailer 时按 trailer 校验, 不被 skip 短路
+
+    # ---- `· 基 <hash>` 机检(计划 26-11-08-1240 D6) ----
+
+    def test_missing_base_field_red(self):
+        """`· 基` 必填: 缺了判红(其余字段齐全也不放行)。"""
+        ok, why = self._decide(120, "Review: S3 · 120 行 · blocker 0 · 修 0 · 入池 0 · 检 0/0\n")
+        self.assertFalse(ok)
+        self.assertIn("缺字段", why)
+        self.assertIn("基", why)
+
+    def test_base_hash_shape_red(self):
+        """`· 基` 值必须 12 位小写 hex: 非 hex / 不足 / 超长(负向 lookahead)都落形状红。"""
+        for bad in ("基 xyz", "基 a1b2c3d4e5f", "基 a1b2c3d4e5f60", "基 A1B2C3D4E5F6"):
+            ok, why = self._decide(120, f"Review: S3 · 120 行 · blocker 0 · 修 0 · 入池 0 · 检 0/0 · {bad}\n")
+            self.assertFalse(ok, bad)
+            self.assertIn("基(形状不对", why)
+
+    def test_base_hash_mismatch_red_with_rerun_hint(self):
+        """申报的 基 与闸门重算值不一致 → 红, 失败行给出路(重跑 pack 取新基 + 补一轮复评)。"""
+        ok, why = self._decide(
+            120,
+            "Review: S3 · 120 行 · blocker 0 · 修 0 · 入池 0 · 检 0/0 · 基 a1b2c3d4e5f6\n",
+            base_hash="0123abcd4567",
+        )
+        self.assertFalse(ok)
+        self.assertIn("a1b2c3d4e5f6", why)
+        self.assertIn("0123abcd4567", why)
+        self.assertIn("重跑", why)
+        self.assertIn("复评", why)
+
+    def test_base_hash_match_passes(self):
+        """申报的 基 与闸门重算值一致 → 放行(比对走 main 传入的重算值, 这里同源注入)。"""
+        ok, _ = self._decide(
+            120,
+            "Review: S3 · 120 行 · blocker 0 · 修 0 · 入池 0 · 检 0/0 · 基 a1b2c3d4e5f6\n",
+            base_hash="a1b2c3d4e5f6",
+        )
+        self.assertTrue(ok)
+
+    # ---- `· 轮 R` 字段(计划 26-11-08-1240 D7) ----
+
+    def test_round_field_optional_defaults_and_shape(self):
+        """`· 轮` 可缺省(缺省 1); 出现时必须整数 ≥ 1 —— 轮 0 / 非数字 / 骨架 `轮 ?` 都判红。"""
+        base = "Review: S3 · 120 行 · blocker 0 · 修 0 · 入池 0 · 检 0/0 · 基 a1b2c3d4e5f6"
+        self.assertTrue(self._decide(120, base)[0])  # 缺省 = 1
+        self.assertTrue(self._decide(120, base + " · 轮 1\n")[0])
+        self.assertTrue(self._decide(120, base + " · 轮 3\n")[0])  # 修复轮数, 与派发无关
+        ok, why = self._decide(120, base + " · 轮 0\n")
+        self.assertFalse(ok)
+        self.assertIn("轮", why)
+        for bad in ("轮 x", "轮 ?"):
+            ok, why = self._decide(120, base + f" · {bad}\n")
+            self.assertFalse(ok, bad)
+            self.assertIn("形状不对", why)
 
     def test_generated_and_bookkeeping_are_not_counted(self):
         self.assertFalse(self._counted("memory-bank/pitfalls/_index.md", set()))
@@ -1096,7 +1187,16 @@ class TraceDecideTest(unittest.TestCase):
 
 
 class TraceGateTest(unittest.TestCase):
-    """端到端: 临时仓库里真跑脚本 —— 验锚点推进(漏评的提交滚进下一批)与退出码。"""
+    """端到端: 临时仓库里真跑脚本 —— 验锚点推进(漏评的提交滚进下一批)与退出码。
+
+    带 `Review:` trailer 的消息文件统一申报与闸门同源现算的 `· 基`(review_content.batch_base_hash,
+    锚点=trace.anchor_commit): 一致才放行 —— 计划 26-11-08-1240 D6; 申报行数按 _append 的实算写。
+    """
+    @classmethod
+    def setUpClass(cls):
+        cls.trace = _load_trace()
+        cls.content = _load_content()
+
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="trace_gate_"))
         self.addCleanup(shutil.rmtree, self.tmp, True)
@@ -1110,6 +1210,10 @@ class TraceGateTest(unittest.TestCase):
         proc = subprocess.run(["git", *args], cwd=self.tmp, capture_output=True, text=True, encoding="utf-8")
         assert proc.returncode == 0, f"git {args}: {proc.stderr}"
         return proc.stdout.strip()
+
+    def _batch_hash(self) -> str:
+        """当前批(锚点→工作树)的基哈希 —— 与闸门同源实现现算(D6: 申报值必须来自它)。"""
+        return self.content.batch_base_hash(self.tmp, self.trace.anchor_commit(self.tmp))
 
     def _commit(self, msg: str) -> None:
         self._git("add", "-A")
@@ -1129,9 +1233,19 @@ class TraceGateTest(unittest.TestCase):
         path.write_text(path.read_text(encoding="utf-8") + add, encoding="utf-8")
         self._n = start + lines
 
-    def test_below_floor_is_silent(self):
+    def test_small_batch_without_trailer_blocks(self):
+        """D9: 50 行下限退役 —— 10 行的小改没有 trailer 也判红(可评行数 >0 一律要评)。"""
         self._append(10)
         proc = _run_trace(self.tmp, self._msg("小改\n"))
+        self.assertEqual(proc.returncode, 1, proc.stdout)
+        self.assertIn("未留痕", proc.stdout)
+
+    def test_zero_reviewable_lines_bookkeeping_only_is_silent(self):
+        """实算恒 0(仅记账类) → 静默通过(D9 后仅剩的静默面)。"""
+        tasks = self.tmp / "memory-bank" / "tasks"
+        tasks.mkdir(parents=True)
+        (tasks / "note.md").write_text("记账\n", encoding="utf-8")
+        proc = _run_trace(self.tmp, self._msg("记账\n"))
         self.assertEqual(proc.returncode, 0, proc.stdout)
         self.assertEqual(proc.stdout.strip(), "")  # v3 契约: 通过即静默
 
@@ -1142,15 +1256,60 @@ class TraceGateTest(unittest.TestCase):
         self.assertIn("未留痕", proc.stdout)
 
     def test_trailer_with_matching_count_passes(self):
+        """行数相符 + `· 基` 与闸门重算一致 → rc=0(D6 一致放行的端到端面)。"""
         self._append(60)
-        proc = _run_trace(self.tmp, self._msg("✨ 改\n\nReview: 本批 · 60 行 · blocker 0 · 修 0 · 入池 0 · 检 0/0\n"))
+        msg = f"✨ 改\n\nReview: 本批 · 60 行 · blocker 0 · 修 0 · 入池 0 · 检 0/0 · 基 {self._batch_hash()}\n"
+        proc = _run_trace(self.tmp, self._msg(msg))
         self.assertEqual(proc.returncode, 0, proc.stdout)
 
     def test_trailer_with_wrong_count_blocks(self):
         self._append(60)
-        proc = _run_trace(self.tmp, self._msg("✨ 改\n\nReview: 本批 · 30 行 · blocker 0 · 修 0 · 入池 0\n"))
+        msg = f"✨ 改\n\nReview: 本批 · 30 行 · blocker 0 · 修 0 · 入池 0 · 检 0/0 · 基 {self._batch_hash()}\n"
+        proc = _run_trace(self.tmp, self._msg(msg))
         self.assertEqual(proc.returncode, 1)
         self.assertIn("≠ 实算", proc.stdout)
+
+    def test_missing_base_hash_blocks(self):
+        """D6: `· 基` 必填 —— 其余字段齐全但缺基, 判红。"""
+        self._append(60)
+        proc = _run_trace(self.tmp, self._msg("✨ 改\n\nReview: 本批 · 60 行 · blocker 0 · 修 0 · 入池 0 · 检 0/0\n"))
+        self.assertEqual(proc.returncode, 1, proc.stdout)
+        self.assertIn("基", proc.stdout)
+
+    def test_base_hash_mismatch_blocks_with_rerun_hint(self):
+        """D6: 评审后工作树又改一行 → 申报的 基 已过期, 闸门重算必不一致 → 判红并给出路。"""
+        self._append(60)
+        stale = self._batch_hash()
+        path = self.tmp / "app.py"
+        path.write_text(path.read_text(encoding="utf-8") + "EXTRA = 1\n", encoding="utf-8")  # 评审后又有新改动
+        msg = f"✨ 改\n\nReview: 本批 · 61 行 · blocker 0 · 修 0 · 入池 0 · 检 0/0 · 基 {stale}\n"
+        proc = _run_trace(self.tmp, self._msg(msg))
+        self.assertEqual(proc.returncode, 1, proc.stdout)
+        self.assertIn(stale, proc.stdout)
+        self.assertIn("重跑", proc.stdout)
+        self.assertIn("复评", proc.stdout)
+
+    def test_review_skip_on_new_commit_blocks(self):
+        """D8: 新提交写 Review-Skip → 判红, 理由再充分也不放行(豁免已退役)。"""
+        self._append(10)
+        proc = _run_trace(self.tmp, self._msg("小改\n\nReview-Skip: 仅措辞微调, 无行为变化, 风险为零\n"))
+        self.assertEqual(proc.returncode, 1, proc.stdout)
+        self.assertIn("豁免已退役", proc.stdout)
+
+    def test_historical_skip_still_anchors_without_retroaction(self):
+        """D8 回归: 历史 Review-Skip 提交在锚点 walk 照旧识别(不追溯重判) —— 它之后的无 trailer
+        提交照常连坐滚进下一批(5+10=15 行); 申报实算 15 行 + 同源 基 → 放行。若锚点没识别 Skip,
+        批会只算工作树 10 行, 行数与哈希都对不上。"""
+        self._append(30)
+        self._commit("✨ 老豁免批\n\nReview-Skip: 历史豁免, 退役前入库\n")
+        skip_sha = self._git("rev-parse", "HEAD")
+        self._append(5)
+        self._commit("无 trailer 的中间提交\n")
+        self._append(10)
+        self.assertEqual(self.trace.anchor_commit(self.tmp), skip_sha)  # Skip 照旧推进锚点
+        msg = f"✨ 新批\n\nReview: 新批 · 15 行 · blocker 0 · 修 0 · 入池 0 · 检 0/0 · 基 {self._batch_hash()}\n"
+        proc = _run_trace(self.tmp, self._msg(msg))
+        self.assertEqual(proc.returncode, 0, proc.stdout)
 
     def test_anchor_advances_so_skipped_commits_roll_forward(self):
         self._append(30)
@@ -1166,19 +1325,22 @@ class TraceGateTest(unittest.TestCase):
         """冷启动(历史里一条 Review: 都没有)时锚点退化为 HEAD —— 只算工作树, 不追溯全历史。
 
         这是有意接受的边界: 追溯全历史会让"第一次提交"要求评审整棵仓库。落地后第一笔带 trailer
-        的提交即建立锚点, 此后一律按锚点滚进。
+        的提交即建立锚点, 此后一律按锚点滚进。申报 20 行 + 同源 基: 若批被错误算成 50(把上一笔
+        已提交的 30 行追溯进来), 行数与哈希都会对不上判红。
         """
         self._append(30)
         self._commit("冷启动前的一笔\n")
         self._append(20)
-        proc = _run_trace(self.tmp, self._msg("冷启动后的一笔\n"))
+        msg = f"✨ 冷启动后的一笔\n\nReview: 冷启动批 · 20 行 · blocker 0 · 修 0 · 入池 0 · 检 0/0 · 基 {self._batch_hash()}\n"
+        proc = _run_trace(self.tmp, self._msg(msg))
         self.assertEqual(proc.returncode, 0, proc.stdout)  # 只算 20 行, 未把前一笔 30 行算进来
 
     def test_reviewed_commit_moves_the_anchor(self):
         self._append(60)
         self._commit("✨ 第一批\n\nReview: 第一批 · 60 行 · blocker 0 · 修 0 · 入池 0\n")
         self._append(5)  # 新一批只有 5 行 —— 锚点已前进, 不该被上一批的行数拖累
-        proc = _run_trace(self.tmp, self._msg("小补\n"))
+        msg = f"✨ 小补\n\nReview: 小补 · 5 行 · blocker 0 · 修 0 · 入池 0 · 检 0/0 · 基 {self._batch_hash()}\n"
+        proc = _run_trace(self.tmp, self._msg(msg))
         self.assertEqual(proc.returncode, 0, proc.stdout)
 
     def test_merge_with_stale_branch_tip_does_not_pollute_the_batch(self):
@@ -1188,8 +1350,8 @@ class TraceGateTest(unittest.TestCase):
         复刻事故形态: 锚点 b3(60 行已评) → 侧分支从 b3 切出、tip 带自己的 trailer、改**独立文件**
         (干净合并, 与 26-11-08 实证的事故同形态) → 主线继续推进(已评 c4) → 合并分支 → 工作树 20 行
         新批。平铺锚点/树差算法下锚点取到主线 c4(比 c5 新), 树差把分支 c5 的 30 行整支重复计入
-        (实算 50 ≥ 下限, 消息无 Review 判红); 修复后实算 = 20(工作树; 干净合并的 remerge-diff = 0),
-        闸门静默放行。
+        (实算 50, 消息无 Review 判红); 修复后实算 = 20(工作树; 干净合并的 remerge-diff = 0),
+        申报 20 行 + 同源 基(锚点=c4)放行 —— 若行数被算成 110, 声明与哈希都会对不上。
         """
         self._append(60)
         self._commit("✨ b3\n\nReview: b3 · 60 行 · blocker 0 · 修 0 · 入池 0\n")
@@ -1201,7 +1363,8 @@ class TraceGateTest(unittest.TestCase):
         self._commit("✨ c4(主线)\n\nReview: 主线 · 60 行 · blocker 0 · 修 0 · 入池 0\n")
         self._git("merge", "--no-edit", "-q", "side")  # 分支侧内容已随 c5 trailer 评过(独立文件, 干净合并)
         self._append(20)  # 本批: 只有工作树 20 行
-        proc = _run_trace(self.tmp, self._msg("新批\n"))
+        msg = f"✨ 新批\n\nReview: 新批 · 20 行 · blocker 0 · 修 0 · 入池 0 · 检 0/0 · 基 {self._batch_hash()}\n"
+        proc = _run_trace(self.tmp, self._msg(msg))
         self.assertEqual(proc.returncode, 0, proc.stdout)
         self.assertNotIn("110", proc.stdout)
 
@@ -1253,19 +1416,23 @@ class TraceGateTest(unittest.TestCase):
     def test_trailer_without_flush_field_passes_silently(self):
         """缺齐平字段 → 完全静默通过(rc=0 无输出), 现行为不变。"""
         self._append(60)
-        proc = _run_trace(self.tmp, self._msg("✨ 改\n\nReview: 本批 · 60 行 · blocker 0 · 修 0 · 入池 0 · 检 0/0\n"))
+        msg = f"✨ 改\n\nReview: 本批 · 60 行 · blocker 0 · 修 0 · 入池 0 · 检 0/0 · 基 {self._batch_hash()}\n"
+        proc = _run_trace(self.tmp, self._msg(msg))
         self.assertEqual(proc.returncode, 0, proc.stdout)
         self.assertEqual(proc.stdout.strip(), "")
 
     def test_trailer_flush_field_valid_passes_silently(self):
         """`· 齐平 <8hex>` 格式合法 → 静默通过(rc=0 无输出); 与 `· 分面`/`· 派发` 并存时行数/字段解析不被后缀破坏。"""
         self._append(60)
-        msg = "✨ 改\n\nReview: 本批 · 60 行 · blocker 0 · 修 0 · 入池 0 · 检 0/0 · 齐平 a7fb3db7\n"
+        msg = f"✨ 改\n\nReview: 本批 · 60 行 · blocker 0 · 修 0 · 入池 0 · 检 0/0 · 基 {self._batch_hash()} · 齐平 a7fb3db7\n"
         proc = _run_trace(self.tmp, self._msg(msg))
         self.assertEqual(proc.returncode, 0, proc.stdout)
         self.assertEqual(proc.stdout.strip(), "")
         self._append(350)  # 凑到 410 行: 超上限必须 派发 ≥ 2(0441 D1) —— 分面/齐平作为信息字段同现不碍解析
-        big = "✨ 改\n\nReview: 本批 · 410 行 · blocker 0 · 修 0 · 入池 0 · 检 0/0 · 派发 2 · 分面 · 齐平 0123abcd\n"
+        big = (
+            f"✨ 改\n\nReview: 本批 · 410 行 · blocker 0 · 修 0 · 入池 0 · 检 0/0 · 基 {self._batch_hash()}"
+            " · 派发 2 · 分面 · 齐平 0123abcd\n"
+        )
         proc = _run_trace(self.tmp, self._msg(big))
         self.assertEqual(proc.returncode, 0, proc.stdout)
         self.assertEqual(proc.stdout.strip(), "")
@@ -1273,14 +1440,14 @@ class TraceGateTest(unittest.TestCase):
     def test_trailer_flush_field_invalid_warns_but_passes(self):
         """格式异常(非 8 位 hex) → 打一行 [warn] 但 rc=0 放行; 绝不因齐平字段判红。"""
         self._append(60)
-        msg = "✨ 改\n\nReview: 本批 · 60 行 · blocker 0 · 修 0 · 入池 0 · 检 0/0 · 齐平 xyz\n"
+        msg = f"✨ 改\n\nReview: 本批 · 60 行 · blocker 0 · 修 0 · 入池 0 · 检 0/0 · 基 {self._batch_hash()} · 齐平 xyz\n"
         proc = _run_trace(self.tmp, self._msg(msg))
         self.assertEqual(proc.returncode, 0, proc.stdout)
         self.assertIn("[warn]", proc.stdout)
         self.assertIn("8位", proc.stdout)
         self.assertNotIn("评审留痕: ", proc.stdout)  # 判红失败行的形状, 不该出现
         # 另一形态: 出现了字段但 hash 缺失/超长, 同样只 warn
-        msg = "✨ 改\n\nReview: 本批 · 60 行 · blocker 0 · 修 0 · 入池 0 · 检 0/0 · 齐平 a7fb3db71\n"
+        msg = f"✨ 改\n\nReview: 本批 · 60 行 · blocker 0 · 修 0 · 入池 0 · 检 0/0 · 基 {self._batch_hash()} · 齐平 a7fb3db71\n"
         proc = _run_trace(self.tmp, self._msg(msg))
         self.assertEqual(proc.returncode, 0, proc.stdout)
         self.assertIn("[warn]", proc.stdout)
