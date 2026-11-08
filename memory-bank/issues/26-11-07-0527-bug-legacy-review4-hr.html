@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-11-07-0527">
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="legacy-review4">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-08-backend-legacy-review4-hr-claim.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="存量评审 R4·hr 汇总(major 4/minor 17)">
 <meta name="issue-summary" content="hr 主题 major 4+minor 17 共 21 条聚合入池,来源存量评审 R4(计划 26-11-05-2335)">
 <title>存量评审 R4·hr 汇总(major 4/minor 17) · bug · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-11-07-0527-bug-legacy-review4-hr</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-07 05:27</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -176,11 +176,12 @@
     <ul>
       <li>2026-11-07 05:27 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
       <li>26-11-07 聚合入池自存量评审 R4（计划 26-11-05-2335，<code>memory-bank/plans/26-11-05-2335-plan-legacy-code-review-4.html</code>）——本轮纯盘点，状态保持 Open；doc-refs 留空待认领方回填</li>
-    </ul>
+      <li>2026-11-08 — 状态 Open → Done（kb.status）</li>
+</ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验：2026-11-08 认领实施时逐条按符号/grep 重定位（明细表行号为 freeze f0883292 当时行号），21 条锚点全部仍可定位；其中 #3 的 guardian 写者面已先期退役（66418c7e），消费者缺口仍复现；其余 20 条均仍复现并当批修复。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><strong>实际修法</strong>：按文件聚类 7 批认领（档案 <code>memory-bank/tasks/26-11-08-backend-legacy-review4-hr-claim.md</code>），每批只读评审过 review.check 后提交；4 条 major 的拍板：#1 双保险（encode+validate_config 限 ASCII）、#3 对账表消费 failed（入 STOP_PHASES+新鲜度锚点三态+陈旧账清理）、#4 置 view_changed=True、#14 登录分支走 _abort_wave 让位收尾；#7 删除死代码；其余按 fix 列首选。与建议修法的改道仅 #16（用加 not zero_rows 条件替代分支前移，评审确认输出等价）。<strong>验证方式</strong>：每批全量 test.quick 提交闸门 + 收口 test.full；<strong>测试数字</strong>：合树 test.full 5779 passed / 2 skipped、覆盖率 99%（2026-11-08）；接缝终审零发现。develop 提交串 7c896731..415677de（7 笔，+1148/-117）。</p>
   </section>
 
   <footer>

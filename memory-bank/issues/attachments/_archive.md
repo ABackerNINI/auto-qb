@@ -11,8 +11,14 @@
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 - [chore] [版本号双源矛盾: __init__.__version__ 0.2.0 vs pyproject 0.1.0](../26-09-21-1408-chore-version-dual-source.html) — WebUI 顶栏透出与打包元数据已差一个 minor; 建议 pyproject 单源 + 动态读取
 
-## Open (72)
+## Open (77)
 
+- [bug] [model._as_int 对 inf/超大值抛 OverflowError(约 30 调用方)](../26-11-08-0827-bug-as-int-overflow-gap.html) — _as_int 只捕 TypeError/ValueError, pages 写 1e999(解析 inf)或裸 Infinity 时 int(inf) 抛 OverflowError 穿透, history_rows 等读路径仍可整体抛错
+- [bug] [hr server 头部读取路径 ConnectionResetError 冒泡 handle_error 打 stderr](../26-11-08-0827-bug-hr-server-header-read-reset.html) — 读体路径已护(#12), 但标准库请求行/头部 readline 路径的连接重置仍走 handle_error 打 traceback, 与『半路断开是常态』意图相悖
+- [bug] [compare_digest str 非 ASCII 隐患同构两处(discovery 配对码/webui auth token)](../26-11-08-0827-bug-hr-webui-compare-digest-ascii.html) — discovery.py:412 与 webui/server/auth.py:183 仍为 str 形态 compare_digest, 非 ASCII 输入抛 TypeError(与 0527-hr #1 已修同构), web.token 校验亦不限字符集
+- [bug] [relocate _arm 不重置旧 journal: 终态残留致同 id 再迁移收不到 fastresume 改写](../26-11-08-0827-bug-relocate-arm-journal-reset.html) — job_id=sha1(mover|src|dst) 复用, 再发起时 spec 重写但 journal 残留终态, daemon 因 STOP_PHASES 跳过该 job, 新迁移收不到改写(现靠核验路径偶然收敛, 非已在目标位则悬挂)
+- [docs] [hr/relocate docstring 措辞漂移聚合(fetcher refresh.reason/finalize_face failed 语义/store 行锚)](../26-11-08-0827-docs-hr-relocate-docstring-drift.html) — fetcher.py:74-76 提 refresh.reason 与 v3 字段对不上; relocate_chain.finalize_face docstring 未跟上 failed 入 STOP_PHASES; store.py:806 docstring 内部行锚 :237-244 已漂移
+- [refactor] [小件清理聚合: _WaveContext.alerted 死字段 + 测试 docstring 超宽两行](../26-11-08-0827-refactor-hr-leftover-cleanups.html) — service_common.py _WaveContext.alerted 经 0527-hr #14 修后无写入方成只读死字段; test_torrents_store.py:7/:35 存量 docstring 两行超 120 列
 - [bug] [cooldown/notify_cooldown_s 文档口径「0 = 不冷却」但校验拒裸 0(与已修 R4#9/#15 同根)](../26-11-08-0703-bug-config-bare-zero-cooldown-keys.html) — example_rules.*.cooldown(schema/rules.py:46 help)与 gtm.notify_cooldown_s(sections.py 注释)宣称 0 = 不冷却,_try_time 拒裸 0,修法可复用 _is_bare_zero/_parse_time_bare_zero_ok
 - [bug] [测试文件存量带圈数字违反 code-style 禁字符](../26-11-08-0703-bug-tests-circled-digit-legacy.html) — tests/test_registry_derived.py(7 处)与 tests/test_config_writer_write.py(4 处)docstring/注释存 ①-④,违反 code-style 禁字符(存量,早于 R4 认领)
 - [bug] [auth.py _is_loopback_host 自有字面量集,回环判定三套并存](../26-11-08-0703-bug-webui-auth-loopback-third-set.html) — auth.py:32-37 _is_loopback_host 自有字面量集,与 utils_parse.is_loopback_host 及 infra/utils display_host 折叠锚三套并存(消费面 request.client.host 不同,故独立成条)
@@ -42,7 +48,6 @@
 - [feat] [回收 daemon 进程名册证为全机口径: 同机多 qB 实例时收尾窗可用性让位 N1(取舍记录+增强方向)](../26-11-07-0528-feat-recycle-daemon-roster-machine-wide.html) — 评审#6 后名册证=全机口径, 同机多 qB 实例(P7 形态)时 daemon 等不到收尾窗直至全部实例退场; 属 N1 零写入铁律优先的显式取舍(已声明, 单实例零影响), 未来兼顾需比映像名更强的实例身份证据
 - [question] [链式再迁移态撤销前任的语义未定稿: supersede 改道后撤销方向三选一待拍板](../26-11-07-0528-question-relocate-supersede-cancel-semantics.html) — supersede 改道态下撤销前任会把共享数据 C→A 搬回而后任仍指向 C(成员断粮); 现仅 cancel_chain 同目标护栏最小面, 前任撤销完整语义(拦/级联/清账出口)待定稿
 - [bug] [存量评审 R4·core 汇总(major 12/minor 31)](../26-11-07-0527-bug-legacy-review4-core.html) — core 主题 major 12+minor 31 共 43 条(R1#81/#82 合并组拆回为 44 行)聚合入池,来源存量评审 R4(计划 26-11-05-2335)
-- [bug] [存量评审 R4·hr 汇总(major 4/minor 17)](../26-11-07-0527-bug-legacy-review4-hr.html) — hr 主题 major 4+minor 17 共 21 条聚合入池,来源存量评审 R4(计划 26-11-05-2335)
 - [test] [GitHub CI WEB UI smoke 全量轮既有红清单待排期清理](../26-11-07-0326-test-ci-smoke-existing-red-backlog.html) — CI 全量 450 例串行下 gtm-alert 双皮肤 4 条失败等既有红; 门禁改造只展示不修, 等排期
 - [refactor] [全库代码/配置残留非 ASCII 图形符号，与 code-style ASCII 禁令冲突](../26-11-06-0756-refactor-ascii-graph-symbol-backlog.html) — 全库扫描命中 395 文件/2358 行禁用图形符号; 剔除功能性数据与第三方示例后项目自身 300 文件/1868 行待分批清偿, 本轮按用户拍板只入池不修
 - [test] [test.pkg 4 条既有红：mutants DEFAULT_DESELECT 指向已拆分消失的测试文件](../26-11-06-0635-test-mutants-deselect-table-drift.html) — commands run test.pkg 恒有 4 条 subtest 红 —— DEFAULT_DESELECT 里 4 个 node id 指向已拆分消失的 tests/test_traffic_store.py / test_qbmanager.py / test_relocate_exec.py；按包收窄闸门不受影响，未修
@@ -86,13 +91,14 @@
 - [bug] [设置页警示条是伪警示: 只复述 schema 风险文案, 不反映配置健康; 升级失效键无任何提示](../26-09-22-2002-bug-webui-config-health-warning.html) — 首页警示条由『已配置且 schema 带 risk 文案』驱动, 恒亮、静态、与配置健康无关; 且 load_config 对 schema 外键静默忽略, 版本升级后配置项失效无任何提示
 - [chore] [hatch-pet 调付费 OpenAI 图像 API 且无成本提示](../26-09-20-1427-chore-skill-hatch-pet-api-cost.html) — hatch-pet 生成图会直连 api.openai.com 计费接口, skill 未标注费用风险
 
-## Done (441)
+## Done (442)
 
 - [bug] [重定向链接位被真文件占据时会删掉真文件(真目录有保护, 真文件没有)](../26-11-07-0748-bug-relocate-retarget-real-file-unlink.html) — retarget_alias 只护真目录(非空拒绝/空则 rmdir), 真文件位落到 remove_alias 的 os.unlink —— 静默删除真实数据
 - [bug] [存量评审 R4·scripts 汇总(major 1/minor 23)](../26-11-07-0536-bug-legacy-review4-scripts.html) — scripts 主题 major 1+minor 23 共 24 条聚合入池,来源存量评审 R4(计划 26-11-05-2335)
 - [bug] [存量评审 R4·static 汇总(major 24/minor 111)](../26-11-07-0536-bug-legacy-review4-static.html) — static 主题 major 24+minor 111 共 135 条聚合入池,来源存量评审 R4(计划 26-11-05-2335)
 - [bug] [存量评审 R4·webui-py 汇总(major 2/minor 23)](../26-11-07-0536-bug-legacy-review4-webui-py.html) — webui-py 主题 major 2+minor 23 共 25 条聚合入池,来源存量评审 R4(计划 26-11-05-2335)
 - [bug] [存量评审 R4·config-infra 汇总(major 2/minor 34)](../26-11-07-0527-bug-legacy-review4-config-infra.html) — config-infra 主题 major 2+minor 34 共 36 条聚合入池,来源存量评审 R4(计划 26-11-05-2335)
+- [bug] [存量评审 R4·hr 汇总(major 4/minor 17)](../26-11-07-0527-bug-legacy-review4-hr.html) — hr 主题 major 4+minor 17 共 21 条聚合入池,来源存量评审 R4(计划 26-11-05-2335)
 - [docs] [guards.md 未登记 test_mypy_allowlist_guard 守阵](../26-11-06-0744-docs-guards-mypy-allowlist-unregistered.html) — 守阵清单缺一行: tests/test_mypy_allowlist_guard.py 从未登记进 guards.md, 违反该文件新增守阵须登记的口径
 - [bug] [review.check --root 快照目录被 .git 存在性检查误拒](../26-11-06-0711-bug-review-check-snapshot-root.html) — 存量评审 R4 的既定用法 review.check --root <快照目录> 被 _resolve_root 的 .git 检查拒收,与命令自身 help 文档矛盾;_verify 实际与 git 无关
 - [chore] [pyproject.toml 存量带圈数字注释与 code-style 非 ASCII 图形符号禁令冲突](../26-11-06-0624-chore-pyproject-circled-number-comments.html) — 配置注释 22 行含带圈数字编号(1)-(18), 禁令要求代码/配置一律 ASCII; 本轮新增注释已用 ASCII, 存量待清

@@ -27,6 +27,7 @@
 | [rebase-conflict-resolve.md](rebase-conflict-resolve.md) | 与远端分叉后 `git rebase origin/develop`, 冲突几乎全落在「双方各追加一行」的档案进度日志、切片 R 行与生成物索引上 —— 追加行要**两边都留**(不是二选一), 撞号的 R 要**顺延**, 生成物**取一侧 + 重跑生成器**, 而用字符串替换… | rebase 冲突, 解冲突, R 编号撞车, 同号 R12, 最后活动 格式坏, 冲突标记残留, 追加行冲突, 生成物取一侧, 提交主题残留在行尾, git rebase --continue |
 | [refs-rename.md](refs-rename.md) | 改文件名或移动文档后必须全仓查引用(坏链不会让任何测试失败); 生成型脚本写路径有两个必踩的坑; 认领链 `doc-refs` 是仓库根相对口径, 且双向是**对等义务**(报告/计划不进 doc-refs, 但基线切片/坑档/档案会被扫); 认领方件必须先落盘再回填 doc-r… | 改名, 移动文档, 重命名, 生成索引, 写链接, 新写切片, 新写基线切片, 相对深度, relative_to, relpath, 认领链, doc-refs, Refs, 单向链, 双向闭环 |
 | [request-boundary.md](request-boundary.md) | 开工先判这一轮是"问答 / 只读"还是"执行任务" —— 把问答当执行任务去做, 是本仓库的**红线**。 | 用户提问, 想延伸排查, 想顺手入池 issue, 想顺手立档, 想 commit |
+| [review-pack-count-vs-gate-count.md](review-pack-count-vs-gate-count.md) | — | — |
 | [scope-qualifier-parenthetical.md](scope-qualifier-parenthetical.md) | 复合命题里的限定括注(如「仅写入计划」「仅记录」「先不实施」)被默认读成只修饰紧邻子句, 其余子句照常实施 —— 拆解出的实施步骤含了用户明确排除的项, 派工被用户当场纠正。括注的修饰范围是**逐项拍板的事实, 不是语法可推断的默认**。 | 括注, 仅写入计划, 仅记录, 先不实施, 拆解任务, 派工范围, 超范围实施, 复合命题, 限定语, 实施计划 |
 | [scripts.md](scripts.md) | 脚本类改动里最容易漏的五件事 —— 冷门分支上的未定义名、STOP 级别一刀切、对固定列宽输出整段 strip、给调用方的输出做过有损摘要(只取末 N 行 / 略过提示都错, 终点是全文透传 + 声明式静默)、**正则匹配 markdown 粗体时用 `[^*]*` 横跨相邻粗体… | 改脚本, 改检查脚本, 预检, 解析 git 输出, 解析命令输出, 改名, 输出摘要, 截断, 略过 N 行, 信息预算, 全文透传, silent_success, token 税, 挑行, 守卫脚本, 正则, 粗体, markdown… |
 | [skills-loading.md](skills-loading.md) | skill 里的脚本路径一律写 `<skill-dir>/scripts/…`; 项目级 skill 只挂 `.codebuddy/skills` 一处。 | 写 skill, 装 skill, skill 不出现, 脚本路径, find_root, 脚本找不到 |

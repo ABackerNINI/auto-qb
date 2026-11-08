@@ -15,4 +15,4 @@
 | [1](_index-1.md) | `annotations-lazy-eval.md` … `free-port-toctou-parallel.md` | 26 |
 | [2](_index-2.md) | `gate-probe-must-not-run-action.md` … `mutmut-mtime-race-stale-trampoline.md` | 26 |
 | [3](_index-3.md) | `mutmut-survived-verdict.md` … `side-effects.md` | 26 |
-| [4](_index-4.md) | `sidefx-diagnostic-probe.md` … `xdist-worker-global-snapshot.md` | 23 |
+| [4](_index-4.md) | `sidefx-diagnostic-probe.md` … `xdist-worker-global-snapshot.md` | 24 |

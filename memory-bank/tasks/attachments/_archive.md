@@ -4,8 +4,9 @@
 > 主索引的已完结区按 8,000 字符预算裁剪(上限 `CLOSED_KEEP` 条), **本文件是全量**(只列 slug 与标题; 摘要全文在档案里)。
 > 每条链接指回 `tasks/` 下的档案原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## In Progress (31)
+## In Progress (32)
 
+- [26-11-08-backend-legacy-review4-hr-claim](../26-11-08-backend-legacy-review4-hr-claim.md) 存量评审 R4·hr 21 条认领修复(0527-hr)
 - [26-11-07-memory-bank-issue-fusion](../26-11-07-memory-bank-issue-fusion.md) create-issue 融合 memory-bank(代码融合+双 SKILL)与 issue 工位机械化
 - [26-11-07-memory-bank-nav-relation-graph](../26-11-07-memory-bank-nav-relation-graph.md) kb.nav 关联文档交互: 抽屉内关系图 (局部环 / 关联泳道 / 全库) + 认领链五态解析
 - [26-09-22-deps-version-management](../26-09-22-deps-version-management.md) 软件版本管理方案（版本号 / Tag / CHANGELOG / 发版流程）

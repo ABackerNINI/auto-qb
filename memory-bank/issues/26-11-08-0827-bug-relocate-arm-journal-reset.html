@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>relocate _arm 不重置旧 journal: 终态残留致同 id 再迁移收不到 fastresume 改写 · bug · 计划外问题</title>
+<meta name="issue-slug" content="relocate-arm-journal-reset">
+<meta name="issue-stamp" content="26-11-08-0827">
+<meta name="issue-type" content="bug">
+<meta name="doc-topic" content="relocate-arm-journal-reset">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="relocate _arm 不重置旧 journal: 终态残留致同 id 再迁移收不到 fastresume 改写">
+<meta name="issue-summary" content="job_id=sha1(mover|src|dst) 复用, 再发起时 spec 重写但 journal 残留终态, daemon 因 STOP_PHASES 跳过该 job, 新迁移收不到改写(现靠核验路径偶然收敛, 非已在目标位则悬挂)">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --mark: #161e26;     /* issue 特有: callout 底色 (plan.html 不用) */
+    --warn-bg: #2a2119;  /* issue 特有: 状态徽标底色 */
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 单栏流式版面: 与 plan.html 同一套 .sheet (封顶 1280px, 侧距 clamp(18~44px)); 旧双栏+粘性目录已删 */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+
+  /* 封面 meta 行: issue 特有, DOM 形态别改 —— 状态徽标 <span class="badge"> 被
+     flip_status (W4) 与 check_status_drift 的 BADGE_RE 机读 (k/v div 结构在判据里) */
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px 28px; font-family: var(--mono); font-size: 11.5px; color: var(--faint); border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta-row .item .k { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .meta-row .item .v { font-size: 13.5px; color: var(--dim); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin: 14px 0; font-size: 14px; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-family: var(--mono); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">计划外问题（未修）· bug</div>
+<h1>relocate _arm 不重置旧 journal: 终态残留致同 id 再迁移收不到 fastresume 改写</h1>
+<p class="lede">job_id=sha1(mover|src|dst) 复用, 再发起时 spec 重写但 journal 残留终态, daemon 因 STOP_PHASES 跳过该 job, 新迁移收不到改写(现靠核验路径偶然收敛, 非已在目标位则悬挂)</p>
+<div class="meta-row">
+  <div class="item"><div class="k">编号</div><div class="v">26-11-08-0827-bug-relocate-arm-journal-reset</div></div>
+  <div class="item"><div class="k">报告时间</div><div class="v">2026-11-08 08:27</div></div>
+  <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
+  <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+</div>
+
+<section id="s1">
+  <h2><span class="no">§01</span>现象与发现场景</h2>
+  <p>实施 issue 26-11-07-0527-bug-legacy-review4-hr #3（对账表消费 journal failed 相位）时，实施子代理在机制核查中发现 pre-existing 缺口：<code>job_id = sha1(mover|src|dst)</code> 同组同目标复用，上一生命周期到达 done/cancelled 终态后<strong>再次发起同 id 迁移</strong>时，<code>_arm</code> 只重写 spec 不重置 journal 文件——盘上残留旧终态账，daemon 因 STOP_PHASES（done/cancelled/failed）跳过该 job，新迁移<strong>收不到 fastresume 改写</strong>；现靠核验路径偶然收敛，若数据并非已在目标位则悬挂。本批的陈旧支（ts &lt; 锚点→清账）只保证「上一世 failed 残留不被误消费」，根治需 arm 侧账重置，按范围守恒入池另题。</p>
+</section>
+
+<section id="s2">
+  <h2><span class="no">§02</span>证据</h2>
+  <p class="hint">S3 实施子代理报告原文（取证 2026-11-08）：</p>
+<pre><code>_arm 不重置旧 journal（pre-existing）: 同 (mover,src,dst) 在 done/cancelled 终态后再发起，
+spec 重写但 journal 残留终态，daemon 因 STOP_PHASES 跳过该 job，新迁移收不到 fastresume
+改写（现靠核验路径偶然收敛；若数据非已在目标位则悬挂）。本改变的陈旧支保证了不误消费，
+但根治需 arm 侧账重置，涉及终态覆盖协议。</code></pre>
+</section>
+
+<section id="s3">
+  <h2><span class="no">§03</span>影响面</h2>
+  <table>
+    <tr><th>维度</th><th>结论</th></tr>
+    <tr><td>触发条件</td><td>同 (mover,src,dst) 先后两次迁移、上一轮已到 done/cancelled 终态</td></tr>
+    <tr><td>影响范围</td><td>relocate 全链：daemon 不认领 → 新迁移无 fastresume 改写，靠核验收敛；数据不在目标位时悬挂</td></tr>
+    <tr><td>严重度</td><td>中（边角场景但可悬挂，需人工介入）</td></tr>
+  </table>
+</section>
+
+<section id="s4">
+  <h2><span class="no">§04</span>定位锚点</h2>
+  <p class="hint">写「符号名 + grep 关键词 + 当时的行号（标取证时间）」—— 代码会漂移，靠符号与 grep 重新定位，行号只是加速项。</p>
+  <ul>
+    <li><code>src/auto_qb/core/modules/relocate_exec.py</code>（取证 2026-11-08）· 符号 <code>_arm</code> · grep <code>def _arm</code></li>
+    <li><code>src/auto_qb/infra/relocate_journal.py</code>（取证 2026-11-08）· 符号 <code>STOP_PHASES</code>/<code>clear_journal</code>（本批新增的主循环清理口可复用/扩展）· grep <code>STOP_PHASES</code></li>
+  </ul>
+</section>
+
+<section id="s5">
+  <h2><span class="no">§05</span>根因<span class="opt">（可选）</span></h2>
+  <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
+  <div class="callout">待查——已排除：非 0527-hr #3 批次引入（pre-existing；该批陈旧支仅保证不误消费）。机制面（_arm 不触 journal + 终态写闸前向合并）已在实施期核清，修复设计时确认终态覆盖协议取舍即可。</div>
+</section>
+
+<section id="s6">
+  <h2><span class="no">§06</span>建议修法<span class="opt">（可选）</span></h2>
+  <p>_arm 时对旧终态 journal 做主循环授权重置：复用/扩展本批新增的 <code>clear_journal</code>（删前留痕、幂等）形态，使 daemon 认领面随新生命周期解除。涉及「终态账可否被新生命周期重置」的协议取舍（与「非终态不得覆盖终态」前向合并的关系），建议单独小计划设计后再动。</p>
+</section>
+
+<section id="s7">
+  <h2><span class="no">§07</span>状态变更日志</h2>
+  <ul>
+    <li>2026-11-08 08:27 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+  </ul>
+  <h3>复验</h3>
+  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <h3>修复后补充</h3>
+  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+</section>
+
+<footer>
+  26-11-08-0827-bug-relocate-arm-journal-reset.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+</footer>
+
+</div>
+</body>
+</html>
