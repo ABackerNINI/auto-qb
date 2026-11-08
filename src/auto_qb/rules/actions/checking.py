@@ -139,8 +139,9 @@ class CheckAction(FullCheckingMixin, SkipCheckingMixin, BaseAction):
         # 窗口内重试只烧 I/O 与 recheck_fails 额度 —— 直接 skip, 一次失败即冷却, 不烧 3 次
         # 失败额度。与 ops 层 3 次/日失败冷却(recheck_fails)分工: 本闸在前(不消耗额度),
         # recheck_fails 在提交点兜底(窗口过期后的重试失败仍被它计数, 3 次/日封顶)。
-        # WEB 源不经决策链(ctx.ops.recheck 直达), 手动排障不受限 —— 记录/清除路径也只认
-        # rule 源失败, WEB 语义不受影响。窗口时长按本动作 spec(recheck_fail_cooldown)取值;
+        # WEB 源不经决策链(ctx.ops.recheck 直达), 手动排障不受限 —— 记录路径只认 rule 源
+        # 失败; 清除路径在校验成功时全来源执行(见 ops_mod SUCCESS 分支), WEB 语义不受影响。
+        # 窗口时长按本动作 spec(recheck_fail_cooldown)取值;
         # 记录 {hash: 失败时刻} 在 state_file(键 RECHECK_COOLDOWN_KEY), 时间戳过期自然失效,
         # 校验通过时 ops 层清除(pop 先例对齐 recheck_fails)。
         cooldown_remain = manager.ctx.ops.recheck_cooldown_remaining(ctx.hash, self.recheck_fail_cooldown)

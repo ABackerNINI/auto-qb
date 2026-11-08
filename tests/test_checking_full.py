@@ -24,6 +24,8 @@
   落盘(窗口闸门不因崩溃失效)
 - test_checking_fail_cooldown_key_absent_uses_default: spec 未配 recheck_fail_cooldown -> 运行时
   取 1h 缺省档(缺省档唯一来源 checking_meta)
+- test_checking_fail_cooldown_window_from_spec: 闸门窗口按动作 spec 取值(fail_cooldown="30M"):
+  窗口内(20min)拦截 / 过窗(40min)放行(40min 在缺省 1h 档仍会拦, 恰好区分窗口来源)
 """
 
 import json
@@ -563,3 +565,30 @@ def test_checking_fail_cooldown_key_absent_uses_default():
     assert action.recheck_fail_cooldown == RECHECK_COOLDOWN_DEFAULT, "键缺省应取 1h 缺省档"
     action2 = CheckAction({"basic_check": "filelist", "recheck_fail_cooldown": "30M"})
     assert action2.recheck_fail_cooldown == 1800.0, "时间串应解析为秒"
+
+
+def test_checking_fail_cooldown_window_from_spec():
+    """闸门窗口按动作 spec 取值(fail_cooldown="30M"): 窗口内(20min)拦截 / 过窗(40min)放行
+
+    make_check_cfg 的 fail_cooldown 参数消费面: 40min 记录在缺省 1h 档下仍会被拦截,
+    过窗放行恰好区分窗口来源是 spec 配置值(1800s)而非缺省档 —— 钉 spec 键面到决策链
+    0.5 的取值链路(时间串解析本身见 test_checking_fail_cooldown_key_absent_uses_default)。
+    """
+    cfg = make_check_cfg(without_mode="full-checking", without_start=True, fail_cooldown="30M")
+    mgr = make_mgr(cfg, with_tq=True)
+    client = CheckingFakeClient()
+    mgr.client = client
+    t = make_target(state="stoppedDL", progress=0.5)  # 满足闸门 0(暂停中未完成)
+    seed_store(mgr, [t])
+    client.torrents["HASH123"] = t
+    # 窗口内(20 分钟前 < 30M): 决策链 0.5 拦截, 不提交 recheck
+    mgr.ctx.state.data.setdefault("recheck_cooldowns", {})["HASH123"] = time.time() - 20 * 60.0
+    mgr.ctx.state.save()
+    process_rule(mgr, client, t, dry_run=False)
+    assert ("recheck", None) not in client.calls, f"窗口内(20min < 30M)应被拦截: {client.calls}"
+    # 过窗(40 分钟前 > 30M): 放行并提交 recheck(缺省 1h 档会仍拦截, 恰好区分窗口来源)
+    mgr.ctx.state.data["recheck_cooldowns"]["HASH123"] = time.time() - 40 * 60.0
+    mgr.ctx.state.save()
+    handled = process_rule(mgr, client, t, dry_run=False)
+    assert handled, f"过窗应放行: {client.calls}"
+    assert ("recheck", None) in client.calls, f"过窗(40min > 30M)应提交 recheck: {client.calls}"

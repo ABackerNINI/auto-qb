@@ -37,7 +37,7 @@ qB `/api/v2/sync/maindata`: rid 与上次一致时只回**变化种子的变化�
 
 单点入口 `ctx.state.*`(StateService; `manager.state` 属性面永久保留, 运行期 dict 是同一对象)。JSON + 原子写(`infra/utils_paths.py` `atomic_write`: tmp + os.replace + 可选 .bak)。
 
-- **主要键**: `exec_history`(`{rule}:{hash}` → ts/date/hour, execute_once/cooldown 去重依据, `record_execution` 写) / `auto_categories`(自动设置过的分类) / `skip_check_day` / `recheck_fails` / `skip_check_backup`(跳检删除前的 .torrent 元数据, 仅失败/崩溃时保留作手动恢复凭据) / `speed_limit_curve` / 各模块自有键。
+- **主要键**: `exec_history`(`{rule}:{hash}` → ts/date/hour, execute_once/cooldown 去重依据, `record_execution` 写) / `auto_categories`(自动设置过的分类) / `skip_check_day` / `recheck_fails` / `recheck_cooldowns`(校验失败冷却窗口 `{hash: 失败时刻}`, rule 源 FAILED 记录, 校验成功全来源清除) / `skip_check_backup`(跳检删除前的 .torrent 元数据, 仅失败/崩溃时保留作手动恢复凭据) / `speed_limit_curve` / 各模块自有键。
 - **load 三态**: dict 可用 / None 不存在(首启, 静默) / 损坏(存在但非法 JSON/非 dict/非法 UTF-8)。损坏时记 WARNING(**原样保留不删**)并回退 `.bak`(每次写盘前复制的上一代内容), 自愈写回主文件(刻意不带 keep_backup —— 防止把损坏内容复制成新 .bak 盖掉唯一好备份); 备份也不可用才返回 `{}`。`OSError` 故意不吞 —— 环境问题不是内容问题。
 - **持久化时机**: 周期 `maybe_flush` + 优雅退出 `save` + 两键写点直落, 全景见 main-loop-queue.md 落盘节。**热重载不重读 state** —— 内存态即真相, 磁盘只有上次快照, 重读等于回滚运行期状态(守阵 `test_apply_new_config_l2_preserves_runtime_state`)。
 - **启动清场**: `cleanup_orphan_tmp` 在 `QbManager.__init__` **持锁之后**调用, 清崩溃遗留的 `<state_file>.<随机>.tmp`; 只认这一个形状, `.bak` 不碰; 无锁只读模式不调用。
