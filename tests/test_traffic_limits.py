@@ -37,6 +37,8 @@
 - test_recorder_guard_throttled_single_warning: (mut-core W2 guard_9/guard_14)节流条数 —— 同天超阈后的 WARNING 恰 1 条(时间戳取不到/存不进会让每轮都刷)
 - test_recorder_observe_non_mapping_state_no_phantom_event: (mut-core W2 obs_7/obs_8)非 Mapping 状态防御 —— 不抛 AttributeError 且不把未知字段当 0 记假事件
 - test_limits_cache_missing_day_zero_open: (mut-core W2 rday_10)缺失天文件零 open —— 缺失哨兵判据失守会白开一次(异常被 OSError 吞, 契约无声破坏)
+- test_recorder_torn_tail_repaired_before_next_append: (issue 26-11-07-0527 R1#54)撕裂尾查补 —— 残片无换行时下一条追加先补 \n, 残片与新事件不并成一行(两条事件都保得住)
+- test_recorder_append_no_prefix_for_new_or_healthy_file: (issue 26-11-07-0527 R1#54)查补前缀边界 —— 新文件无前导换行(无头行存储), 尾部完好多轮追加不多写空行
 """
 import logging
 import os
@@ -765,3 +767,35 @@ def test_events_for_window_adjacent_same_value_dedup_chain(tmp_path):
     _write_day(data_dir, v4_epoch_date_str(ts), f"{ts + 10},3,3\n{ts + 20},3,3\n{ts + 30},4,4\n")
     ev = limits_events_for_window(cache, ts, ts + 3600)
     assert ev == [[ts + 10, 3, 3], [ts + 30, 4, 4]]
+
+
+def test_recorder_torn_tail_repaired_before_next_append(tmp_path):
+    """(issue 26-11-07-0527 R1#54)撕裂尾查补: 残片无换行时, 下一条追加先补换行 —— 残片与
+    新事件不并成一行, 两条事件都保得住(不查补时解析按坏行整行丢弃 = 一次撕裂丢两条)"""
+    data_dir = str(tmp_path)
+    ts = _anchored_ts()
+    date = v4_epoch_date_str(ts)
+    rec = SpeedLimitRecorder(data_dir)
+    rec.observe(_state(1024, 2048), ts)
+    # 模拟崩溃撕裂: 掐掉文件末字节(换行)
+    path = limits_day_path(data_dir, date)
+    raw = open(path, "rb").read()
+    assert raw.endswith(b"\n")
+    with open(path, "wb") as f:
+        f.write(raw[:-1])
+    rec.observe(_state(3072, 2048), ts + 30)  # 值变化 -> 正常事件追加(触发查补)
+    assert _read_day(data_dir, date) == f"{ts},1024,2048\n{ts + 30},3072,2048\n"
+    assert parse_limits_day_text(_read_day(data_dir, date)) == ((ts, 1024, 2048), (ts + 30, 3072, 2048))
+
+
+def test_recorder_append_no_prefix_for_new_or_healthy_file(tmp_path):
+    """(issue 26-11-07-0527 R1#54)查补前缀边界: 新文件不加前导换行(无头行存储, 见模块
+    docstring); 尾部完好时多轮追加也不多写空行"""
+    data_dir = str(tmp_path)
+    ts = _anchored_ts()
+    date = v4_epoch_date_str(ts)
+    rec = SpeedLimitRecorder(data_dir)
+    rec.observe(_state(1024, 2048), ts)
+    assert _read_day(data_dir, date) == f"{ts},1024,2048\n"
+    rec.observe(_state(2048, 4096), ts + 30)
+    assert _read_day(data_dir, date) == f"{ts},1024,2048\n{ts + 30},2048,4096\n"

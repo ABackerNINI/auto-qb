@@ -30,9 +30,10 @@
 - 失败降级: 追加 OSError -> WARNING(节流)+ 本轮不记**不上抛** —— 记录器是观测面, 丢失 =
   事件缺口, 读侧「延续语义」自然兜住; 不因它挂主循环。失败轮**不推进内存基线**(下一轮
   重试, 值不丢; 事件时刻延迟到恢复后首个采样, 误差 <= 停机时长, plan §5 已知边界)。
-- 撕裂尾半行(崩溃残留)读侧跳过(与 traffic_store 坏行豁免同理念); 病态翻转(外部脚本级
-  高频改限速)走**常量阈值 WARNING + 节流**护栏(照 _BAD_LINE_WARN_* 先例, 只告警不删数据
-  —— 删了违背保留对齐语义)。
+- 撕裂尾半行(崩溃残留)读侧丢弃、写侧追加前查补换行(照 traffic_store._ensure_file_prefix
+  先例 —— 不查补则残片与下一条事件并成一行, 解析按坏行整行丢弃, 一次撕裂丢两条事件);
+  病态翻转(外部脚本级高频改限速)走**常量阈值 WARNING + 节流**护栏(照 _BAD_LINE_WARN_*
+  先例, 只告警不删数据 —— 删了违背保留对齐语义)。
 
 【读侧】(D3″): 按窗口日期集合只读涉及天文件(24h 窗常态 3 个 —— 多看一天供合成首事件
 窥前文件末行 carry; 与流量 raw 段同形状), mtime_ns+size 键控解析缓存(照 V4DayCache 形状:
@@ -117,6 +118,22 @@ def parse_limits_day_text(text: str) -> tuple:
     return tuple(events)
 
 
+def _torn_tail_prefix(path: str) -> str:
+    """撕裂尾查补前缀(照 traffic_store._ensure_file_prefix 先例, issue 26-11-07-0527 R1#54):
+    已有文件且尾字节非换行 -> "\\n"(残片不与下一条事件并成一行 —— 并行的行解析按坏行整行
+    丢弃, 一次撕裂等于丢两条事件); 新文件/空文件/尾部完好 -> 空串。本存储无头行无 key 行
+    (见模块 docstring), 不像 v4 那样连头行一起管。单写者纪律(黄金法则 5)下读尾与追加间
+    无第三方写者, 竞态面与 _ensure_file_prefix 同款。
+    """
+    if not os.path.exists(path) or os.path.getsize(path) == 0:
+        return ""
+    with open(path, "rb") as f:
+        f.seek(-1, os.SEEK_END)
+        if f.read(1) != b"\n":
+            return "\n"
+    return ""
+
+
 def _read_day_last_event(data_dir: str, date_str: str) -> Optional[tuple]:
     """读单天文件末条事件(记录器重启去重用; 一次性直读不走缓存): 缺失/空/读失败 = None"""
     try:
@@ -191,13 +208,14 @@ class SpeedLimitRecorder:
             self._last_date = date_str
 
     def _append(self, date_str: str, ts: float, value: tuple) -> bool:
-        """追加一行(open("a") + flush + fsync, 对齐 traffic_store 追加纪律); OSError ->
-        WARNING(节流)返回 False 不上抛(观测面降级, 见模块 docstring); 成功推进护栏计数"""
+        """追加一行(撕裂尾查补 + open("a") + flush + fsync, 对齐 traffic_store 追加纪律);
+        OSError -> WARNING(节流)返回 False 不上抛(观测面降级, 见模块 docstring); 成功推进护栏计数"""
         path = limits_day_path(self._data_dir, date_str)
         line = f"{int(ts)},{int(value[0])},{int(value[1])}\n"
         try:
             os.makedirs(os.path.dirname(path), exist_ok=True)
             with open(path, "a", encoding="utf-8", newline="\n") as f:
+                f.write(_torn_tail_prefix(path))
                 f.write(line)
                 f.flush()
                 os.fsync(f.fileno())

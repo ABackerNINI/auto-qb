@@ -3,7 +3,10 @@
 发现层的唯一事实源是工具写在**用户级平台目录**的指针 endpoint.json(D6):
 
 - `probe()` 读指针 -> 用指针里的 host/port/token_path 发 `GET /status` 探活, 200 才算在跑
-  (D7); **残留指针**(文件在但探活失败)不算就绪、不阻止拉起; pid 仅作展示。
+  (D7); **残留指针**(文件在但探活失败)不算就绪、不阻止拉起; pid 仅作展示。指针是整机
+  共享的用户级文件, 发送前过安全闸(issue 26-11-07-0527): host 限 localhost/回环字面量
+  (parse_pointer 把守 —— 工具侧 fail-fast 只允许回环绑定), token_path 必须钉在指针自报
+  data_dir 内(probe/fetch_last_spike 把守) —— 校验失败视为未就绪, 不读密钥不发请求。
 - `ensure_running()` 缺席时按 D10 解析启动目标(tool_exe 优先, 否则 tool_dir / 仓库内默认目录
   里的 D19 启动器)并 detached 执行 —— **零参数**(自启意图写死在启动器里, D13); 拉起失败按
   D14 **固定 30s 退避**重试; 探活成功即直接订阅(别的实例已拉起也不重复拉)。
@@ -21,6 +24,7 @@ HTTP 与密钥读取复用 `webui.tool_client` 的单点(`call_tool` / `read_tok
 """
 from __future__ import annotations
 
+import ipaddress
 import json
 import logging
 import os
@@ -31,6 +35,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Optional
 
+from ...infra.clock import SYSTEM_CLOCK
 from ...infra.utils import is_windows
 
 logger = logging.getLogger(__name__)
@@ -78,6 +83,15 @@ STEADY_WINDOW_S = 10.0
 
 #: 拉起失败退避(秒, D14): **固定值**不做指数增长 —— 工具起不来多半是配置问题, 不是抖动
 RELAUNCH_BACKOFF_S = 30.0
+
+#: 指针安全闸拒绝告警的最小间隔(秒; 节流, 照 traffic_store._BAD_LINE_WARN_GAP_S 先例):
+#: probe 是订阅线程未就绪态 ~3s 一轮的常驻调用, 被改写的指针是持续态, 不节流等于刷屏
+_SEND_REJECT_WARN_GAP_S = 3600.0
+
+#: 拒绝告警节流表(键 = "host:<host>"(host 闸)或 "<base_url>|<token_path>"(归属闸)
+#: -> 上次 WARNING 时刻): 只增不清, 与 traffic_store._bad_line_warn_ts 同款取舍
+#: (最坏重复告警一次, 无害)
+_send_reject_warn_ts: dict = {}
 
 
 def _platform_data_home() -> str:
@@ -141,8 +155,100 @@ def read_pointer() -> Optional[dict]:
         return None
 
 
+def _host_is_local(host: str) -> bool:
+    """host 是否落回环允许面(issue 26-11-07-0527 R1#65; 双面评审收窄: 删 is_private 分支)
+
+    指针是整机共享的用户级文件, 任何本机进程都能改写; host 不设白名单等于把本地密钥
+    文件内容当凭据发往任意主机。工具侧 gtm/config.py 的 _check_http_host fail-fast 强制
+    回环绑定(127.0.0.0/8 / ::1 / localhost) —— 合法指针的 host 只能是回环/localhost 字面量,
+    允许面因此收窄为回环单点; is_private 会放行可路由出公网的隧道形态(6to4/Teredo/NAT64,
+    实测 64:ff9b::8.8.8.8 的 is_private=False), 对合法形态毫无增量。非字面量主机名一律
+    拒绝 —— 指针只该写地址字面量, 需域名解析才能判定的 host 本身不可信(解析结果可被
+    指向公网, 且解析是探活路径上的新副作用)。
+
+    IPv4-mapped 显式解包后判 is_loopback: 解包委托 CPython 3.12.0 起已在源码(项目解释器
+    3.13.15 实测 mapped 回环 is_loopback=True), 显式解包让判定不随解释器版本漂移。
+    """
+    h = host.strip()
+    if h.startswith("[") and h.endswith("]"):
+        h = h[1:-1]  # base_url 形态的 IPv6 字面量
+    if h.lower() == "localhost":
+        return True
+    try:
+        addr = ipaddress.ip_address(h)
+    except ValueError:
+        return False
+    if isinstance(addr, ipaddress.IPv6Address) and addr.ipv4_mapped is not None:
+        addr = addr.ipv4_mapped  # mapped 回环按内嵌 IPv4 判, 不随版本漂移
+    return addr.is_loopback
+
+
+def _token_path_confined(token_path: str, data_dir: str) -> bool:
+    """token_path 是否钉在指针自报的 data_dir 内(issue 26-11-07-0527 R1#65)
+
+    工具侧恒把密钥写在其数据目录内(server.py: token_path = abspath(data_dir)/monitor.token,
+    指针的 data_dir 字段与它同源), 故以指针 data_dir 为锚做 realpath 前缀判断 —— ..
+    与 symlink 逃逸在解析后现形, normcase 抹平 Windows 大小写/斜杠差异。工具恒写
+    abspath, 相对路径与 data_dir 缺失不在合法形态里, 一律判失败(保守默认, 法则 2)。
+
+    残余面明示(双面评审 4): 锚(data_dir)与被检路径(token_path)同出一指针 —— 指针
+    **全字段改写**(两者同被改)不设防, 本闸只把「任意本地路径」收窄为「自报数据目录内」;
+    跨出本机的外发面由 host 允许面兜底(parse_pointer 回环单点, 改写后的指针最多发往
+    本机回环)。
+    """
+    if not token_path or not data_dir or not os.path.isabs(token_path):
+        return False
+    real = os.path.normcase(os.path.realpath(token_path))
+    base = os.path.normcase(os.path.realpath(data_dir))
+    try:
+        inside = os.path.commonpath([real, base]) == base
+    except ValueError:  # 异盘(Windows C:/D:)等无公共祖先
+        return False
+    return inside and real != base  # 密钥是 data_dir 里的文件, 恰为目录本身不合法
+
+
+def _warn_reject_once(key: str, message: str) -> None:
+    """拒绝类告警节流单点(照 traffic_store._BAD_LINE_WARN_GAP_S 先例): 同键间隔内首条
+    WARNING、其余降 DEBUG —— probe 是订阅线程未就绪态 ~3s 一轮的常驻调用, 被改写的
+    指针是持续态, 不节流等于刷屏(host 闸与 token_path 闸共用同款节流)。
+    """
+    now = SYSTEM_CLOCK.monotonic()  # 叶子函数: 走取时单点(D8), 照 traffic_store._warn_bad_lines 先例
+    last = _send_reject_warn_ts.get(key)
+    if last is None or now - last >= _SEND_REJECT_WARN_GAP_S:
+        _send_reject_warn_ts[key] = now
+        logger.warning(message)
+    else:
+        logger.debug(message)
+
+
+def _send_allowed(ep: ToolEndpoint) -> bool:
+    """HTTP 发送前的密钥归属闸(issue 26-11-07-0527 R1#65): probe / fetch_last_spike 专用
+
+    指针被本机其它进程改写后, token_path 可指向任意本地可读文件 —— 不设闸等于把该
+    文件内容作为 Bearer 凭据发往指针里的 host(跨出本机的文件外发面)。token_path 归属
+    校验失败 -> 节流 WARNING + False, 调用方按「指针缺席」处理: 不读密钥不发请求
+    (host 允许面在 parse_pointer 把守 —— 那里拿的是原始字段, 无需反向拆 base_url;
+    本闸只管需要路径推理的归属面)。归属锚的残余面(全字段改写不设防)见
+    _token_path_confined docstring —— 外发面由回环允许面兜底。
+    """
+    if _token_path_confined(ep.token_path, ep.data_dir):
+        return True
+    _warn_reject_once(
+        f"{ep.base_url}|{ep.token_path}",
+        f"全局流量监视器指针 token_path 不在 data_dir 内"
+        f"(token_path={ep.token_path!r}, data_dir={ep.data_dir!r}): 拒绝发送, 视为未就绪",
+    )
+    return False
+
+
 def parse_pointer(payload: Any) -> Optional[ToolEndpoint]:
-    """指针载荷 -> 端点; schema 未知或关键字段缺失 -> None(只告警, 不猜字段, D6)"""
+    """指针载荷 -> 端点; schema 未知或关键字段缺失 -> None(只告警, 不猜字段, D6)
+
+    host 允许面(issue 26-11-07-0527 R1#65; 双面评审收窄为回环单点): 非 localhost/回环的
+    host 视同缺关键字段 —— 指针被改写后不得把密钥发往非回环主机; 校验失败与缺字段同款
+    = 视为未就绪(WARNING, 照 _warn_reject_once 节流 —— parse_pointer 随订阅线程 ~3s
+    一轮, 持续改写态不节流会刷屏)。
+    """
     if not isinstance(payload, dict):
         return None
     schema = payload.get("schema")
@@ -158,6 +264,12 @@ def parse_pointer(payload: Any) -> Optional[ToolEndpoint]:
     token_path = str(payload.get("token_path") or "").strip()
     if not host or port <= 0 or not token_path:
         logger.warning(f"全局流量监视器指针缺关键字段(host/port/token_path): {payload}")
+        return None
+    if not _host_is_local(host):
+        _warn_reject_once(
+            f"host:{host}",
+            f"全局流量监视器指针 host 不在允许面(localhost/回环): {host!r} —— 不猜字段, 视为未就绪",
+        )
         return None
     try:
         pid = int(payload.get("pid") or 0)
@@ -180,9 +292,15 @@ def discover() -> Optional[ToolEndpoint]:
 
 
 def probe(timeout: float = PROBE_TIMEOUT_S) -> Optional[ToolEndpoint]:
-    """读指针 + 探活(D7): 可达(200) -> 端点, 否则 None(残留指针不算就绪)"""
+    """读指针 + 探活(D7): 可达(200) -> 端点, 否则 None(残留指针不算就绪)
+
+    发送前过密钥归属闸(_send_allowed): 指针被改写时 token_path 指向的本地文件内容
+    不得作为凭据外发(issue 26-11-07-0527), 拒绝轮按「指针缺席」处理。
+    """
     ep = discover()
     if ep is None:
+        return None
+    if not _send_allowed(ep):
         return None
     # 延迟 import: tool_client 顶层要 import 本模块(订阅编排), 顶层互引会成环
     from ...webui.tool_client import ToolUnreachable, call_tool, read_token
@@ -204,12 +322,15 @@ def fetch_last_spike(timeout: float = SPIKE_TIMEOUT_S) -> tuple[bool, Optional[d
     **不拉起进程、不订阅、不写任何状态**(纯读, 供流量快照把告警段带给前端)。
 
     失败矩阵一律 `(False, None)`(绝不抛异常 —— 调用方据此保留旧段, 主界面不受牵连):
-    指针缺失 / 密钥缺失 / 连接失败 / 响应非 JSON / 非 200 / 响应非对象。
+    指针缺失 / 密钥归属闸拒绝(token_path 越界, issue 26-11-07-0527)/ 密钥缺失 / 连接失败 /
+    响应非 JSON / 非 200 / 响应非对象。
     旧工具无 `last_spike` 键或载荷非对象 -> `(True, None)`(可达但无异常, 发布 None 清空段)。
     """
     ep = discover()
     if ep is None:
         logger.debug("全局流量监视器指针缺失: 取不到最近异常(保留上次快照段)")
+        return False, None
+    if not _send_allowed(ep):
         return False, None
     # 延迟 import(与 probe 同因): tool_client 顶层 import 本模块, 顶层互引会成环
     from ...webui.tool_client import ToolUnreachable, call_tool, read_token

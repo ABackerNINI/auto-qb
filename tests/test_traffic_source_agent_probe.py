@@ -52,6 +52,14 @@ S7b 告警取数(计划 26-11-03-1102, 主告知数据链路) ——
   -> (False, None)(前置失败不发请求); 旧工具无键或载荷非对象 -> (True, None)
 - test_fetch_last_spike_has_dedicated_short_timeout (26-11-03 review 修 1): 取数默认超时 =
   SPIKE_TIMEOUT_S(3.0) 且严格小于探活超时 —— 主循环线程同步调用, 挂起连接最多拖 3s
+- test_parse_pointer_rejects_non_local_host (issue 26-11-07-0527 R1#65; 双面评审收窄为
+  回环单点): host 允许面 —— 公网/私网/NAT64 隧道/主机名拒绝(节流 WARNING), localhost/
+  回环/IPv4-mapped 回环字面量放行
+- test_probe_and_fetch_reject_token_path_outside_data_dir (issue 26-11-07-0527 R1#65):
+  密钥归属闸 —— token_path 越界(含 .. 逃逸)不读密钥不发请求, probe None / fetch (False, None)
+- test_probe_allows_loopback_hosts_and_rejects_private (issue 26-11-07-0527 R1#65): 合法
+  指针不误拒 —— localhost/127.0.0.1/[::1] host + data_dir 内密钥(工具写出形态)照常探活;
+  私网 host 收窄后拒绝且零请求(工具侧 fail-fast 只写回环, 私网只会出现在被改写的指针里)
 """
 
 import ast
@@ -188,8 +196,8 @@ def test_probe_requires_pointer_and_200(tmp_path, monkeypatch, probe_env):
     monkeypatch.setattr(tool_client, "call_tool", _down)
     assert agent.probe() is None
 
-    # 密钥文件为空 -> 不发探活请求
-    empty = tmp_path / "empty.token"
+    # 密钥文件为空 -> 不发探活请求(文件须在 data_dir 内过归属闸, 才真正走空密钥分支)
+    empty = tmp_path / "gtm" / "empty.token"
     empty.write_text("", encoding="utf-8")
     write_endpoint_pointer(tmp_path, monkeypatch, token_path=str(empty))
     monkeypatch.setattr(tool_client, "call_tool", lambda *a, **k: (200, {}))
@@ -504,8 +512,8 @@ def test_pointer_warning_paths_and_version_default(tmp_path, monkeypatch):
         assert agent.parse_pointer({"schema": agent.ENDPOINT_SCHEMA}) is None
     assert any(rec.levelno == logging.WARNING and "缺关键字段" in rec.getMessage() for rec in cap.records)
 
-    ep = agent.parse_pointer({"schema": agent.ENDPOINT_SCHEMA, "host": "h", "port": 1, "token_path": "/t"})
-    assert ep is not None and ep.version == "" and ep.base_url == "http://h:1"
+    ep = agent.parse_pointer({"schema": agent.ENDPOINT_SCHEMA, "host": "127.0.0.1", "port": 1, "token_path": "/t"})
+    assert ep is not None and ep.version == "" and ep.base_url == "http://127.0.0.1:1"
 
 
 def test_read_pointer_pins_utf8_encoding(tmp_path, monkeypatch):
@@ -595,8 +603,9 @@ def test_fetch_last_spike_failure_matrix(tmp_path, monkeypatch):
     assert real_fetch_last_spike() == (False, None)
     assert calls == []
 
-    # 密钥缺失 -> 不发请求
-    empty = tmp_path / "empty.token"
+    # 密钥缺失 -> 不发请求(文件须在 data_dir 内过归属闸, 才真正走空密钥分支)
+    empty = tmp_path / "gtm" / "empty.token"
+    empty.parent.mkdir(parents=True, exist_ok=True)
     empty.write_text("", encoding="utf-8")
     write_endpoint_pointer(tmp_path, monkeypatch, token_path=str(empty))
     assert real_fetch_last_spike() == (False, None)
@@ -620,3 +629,80 @@ def test_fetch_last_spike_failure_matrix(tmp_path, monkeypatch):
     for payload in ({"ok": True}, {"last_spike": "oops"}):
         monkeypatch.setattr(tool_client, "call_tool", lambda *a, _p=payload, **k: (200, _p))
         assert real_fetch_last_spike() == (True, None)
+
+
+# ---------- 指针安全闸(issue 26-11-07-0527 R1#65): 改写指针不得把本地文件当凭据外发 ----------
+
+
+def test_parse_pointer_rejects_non_local_host():
+    """host 允许面(双面评审收窄为回环单点): 公网/私网/隧道/主机名拒绝(节流 WARNING);
+    合法形态不误拒
+
+    工具侧 gtm/config.py 的 _check_http_host fail-fast 只允许回环绑定 —— 合法指针 host
+    只能是回环/localhost 字面量; is_private 会放行可路由出公网的隧道形态(NAT64 实测
+    is_private=False), 已删除。IPv4-mapped 显式解包: mapped 回环放行(不随解释器版本
+    漂移), mapped 公网照拒。
+    """
+    agent._send_reject_warn_ts.clear()  # 节流表是模块态: 清掉保证本用例 WARNING 可断言
+    base = {"schema": agent.ENDPOINT_SCHEMA, "port": 8099, "token_path": "/t"}
+    for host in ("8.8.8.8", "1.2.3.4", "192.168.1.5", "10.0.0.1", "gtm.example.com", "64:ff9b::8.8.8.8"):
+        with capture_logs("auto_qb.core.traffic_source.agent") as cap:
+            assert agent.parse_pointer({**base, "host": host}) is None, host
+        assert any(rec.levelno == logging.WARNING and "host 不在允许面" in rec.getMessage() for rec in cap.records), host
+    for host in ("localhost", "LOCALHOST", "127.0.0.1", "[::1]", "::ffff:127.0.0.1", "[::ffff:127.0.0.1]"):
+        assert agent.parse_pointer({**base, "host": host}) is not None, host
+
+
+def test_probe_and_fetch_reject_token_path_outside_data_dir(tmp_path, monkeypatch, probe_env):
+    """密钥归属闸: token_path 越界(他目录 / .. 逃逸)-> 不读密钥不发请求(WARNING 节流)
+
+    指针被改写成指向任意本地可读文件时, 文件内容不再作为 Bearer 凭据外发 —— probe 返回
+    None、fetch_last_spike 返回 (False, None), call_tool 一次都不触发(拒绝发送并告警,
+    保守默认法则 2)。
+    """
+    agent._send_reject_warn_ts.clear()  # 节流表是模块态: 清掉保证本用例 WARNING 可断言
+    _calls, set_tool = probe_env
+    set_tool()
+    outside = tmp_path / "elsewhere" / "secret.txt"
+    outside.parent.mkdir(parents=True, exist_ok=True)
+    outside.write_text("secret-content", encoding="utf-8")
+    escape = str(tmp_path / "gtm" / ".." / "secret.txt")  # .. 逃逸形态(realpath 后出 data_dir)
+    with capture_logs("auto_qb.core.traffic_source.agent") as cap:
+        for bad_token in (str(outside), escape):
+            write_endpoint_pointer(tmp_path, monkeypatch, token_path=bad_token)
+            seen = []
+            monkeypatch.setattr(tool_client, "call_tool", lambda *a, **k: seen.append(a))
+            assert agent.probe() is None, bad_token
+            assert real_fetch_last_spike() == (False, None), bad_token
+            assert seen == [], bad_token
+    assert any(rec.levelno == logging.WARNING and "token_path 不在 data_dir 内" in rec.getMessage() for rec in cap.records)
+
+
+def test_probe_allows_loopback_hosts_and_rejects_private(tmp_path, monkeypatch, probe_env):
+    """合法指针不误拒: localhost / 127.0.0.1 / [::1] host + data_dir 内密钥(工具写出形态
+    token_path = <data_dir>/monitor.token)照常探活; 私网 host 收窄后拒绝且零请求 ——
+    工具侧 fail-fast 只写回环, 私网只会出现在被改写的指针里"""
+    agent._send_reject_warn_ts.clear()  # 节流表是模块态: 与 parse 用例同因, 保证断言确定性
+    _calls, set_tool = probe_env
+    for host in ("localhost", "127.0.0.1", "[::1]"):
+        set_tool()
+        write_endpoint_pointer(tmp_path, monkeypatch, token_path=write_credential_file(tmp_path), host=host)
+        seen = []
+        monkeypatch.setattr(
+            tool_client,
+            "call_tool",
+            lambda base_url, path, method, credential, payload=None, timeout=None:
+            (seen.append(base_url) or (200, {
+                "ok": True
+            })),
+        )
+        assert agent.probe() is not None, host
+        assert seen == [f"http://{host}:8099"], host
+
+    # 私网收窄为拒(双面评审 1): 拒绝轮不发请求
+    set_tool()
+    write_endpoint_pointer(tmp_path, monkeypatch, token_path=write_credential_file(tmp_path), host="192.168.1.5")
+    seen = []
+    monkeypatch.setattr(tool_client, "call_tool", lambda *a, **k: seen.append(a))
+    assert agent.probe() is None
+    assert seen == []

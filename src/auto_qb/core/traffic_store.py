@@ -17,7 +17,9 @@ v4 全部写新目录; 旧 qb-traffic-v3/ 与更早的 qb-traffic/ 原样留存�
     B,<start_epoch>,<interval_s>                        3 列 = 无基线块(仅 n 游程合法)
     B,<start_epoch>,<interval_s>,<dl_base>,<up_base>    5 列 = 基线 = 块内首个带 totals 观测的快照
     r,<dl_rate>,<up_rate>,<dl_delta>,<up_delta>[,<dt_ms>]  delta 相对块基线; 负值 = 坏行(免费校验)
-    z,<run_len>,<dl_delta>,<up_delta>[,<dt_ms>]         零速游程: 占 run_len 个采样槽, 速率恒 (0,0); 块首 z 的 delta = 0
+    z,<run_len>,<dl_delta>,<up_delta>,<dl_endd>,<up_endd>[,<dt_ms>]  零速游程: 占 run_len 个采样槽, 速率恒 (0,0);
+        块首 z 的 delta = 0; 末端对 = 形态 D(plan 26-10-16-1509; 旧 4/5 列行照旧解析, 末端对
+        None 退化), 语义与回滚约束的单点见 traffic_store_codec.py 文件尾 v4 区头注释
     n,<run_len>[,<dt_ms>]                               null 游程: 占 run_len 个采样槽(断连/缺字段), 行型不变
 - 核心不变式: delta 只存在于线格式 —— 内存结构(V4Sample/V4ZeroRun/V4NullRun/V4Block/LiveTail/
   聚合累计器)全部维持绝对 totals; format 序列化时减块基线, parse 以块基线逐行复原
