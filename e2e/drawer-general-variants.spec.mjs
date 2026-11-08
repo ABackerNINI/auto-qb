@@ -20,6 +20,9 @@ import { expectNoDeadClass } from './lib/dt-dead-class.mjs';
  *   row77 → R5#93: 变体切换手势 —— 右键菜单把 general 从 01 切到 02, 断言旧变体根类
  *     (.dt01-wrap)不在场且点击只触发一次动作(剪贴板探针计数; 换变体必须摘旧监听,
  *     否则 wireEvents 的 __dtEvents 在册守卫会让新变体手势全哑)。
+ *   issue 26-11-08-0229: 01/02 折叠手势补 aria-expanded 点击同步断言(核心 H.foldToggle
+ *     单点, 修前点击到重渲之间读屏语义与视觉反向) + 02 补 secRows wide 接线钉(存储卡
+ *     4 路径行挂 .wide 且 .v 折行, 非 wide 行仍 nowrap; 与 03 R5#78 同语义槽)。
  *
  * 数据面: page.route 拦单段 glob(只命中详情端点 /api/torrents/<hash>, 不波及 trackers/files
  * /peers 子路径) + route.fetch() 取真桩
@@ -142,13 +145,17 @@ for (const skin of SKINS) {
       expect(hrText.indexOf('要求做种')).toBeLessThan(hrText.indexOf('要求分享率'));
 
       // ---- R5#91 手势 1: 折叠组头(data-fold) —— 时间组真收拢, 再点展开(来回各一次)
-      // (aria-expanded 只在 secHtml 渲染拍写入, 点击路径仅翻 class —— 清单外已记, 不在此钉)
+      // (aria-expanded 点击同步走核心 H.foldToggle 单点, issue 26-11-08-0229 #3 —— 修前只翻 class)
       const timeSec = wrap.locator('.dt01-sec[data-sec="时间"]');
       await expect(timeSec.locator('[data-fold]')).toHaveAttribute('aria-expanded', 'true');
       await timeSec.locator('[data-fold]').click();
       await expect(timeSec, '折叠后该组挂 .folded').toHaveClass(/folded/);
+      await expect(timeSec.locator('[data-fold]'), '点击拍即同步 aria-expanded(修前要等重渲)')
+        .toHaveAttribute('aria-expanded', 'false');
       await expect(timeSec.locator('.dt01-grid'), '折叠后组体隐藏').toBeHidden();
       await timeSec.locator('[data-fold]').click();
+      await expect(timeSec.locator('[data-fold]'), '再点展开 aria-expanded 回 true')
+        .toHaveAttribute('aria-expanded', 'true');
       await expect(timeSec.locator('.dt01-grid'), '再点展开回原状').toBeVisible();
 
       // ---- R5#91 手势 2: 展开全部字段(details rawOpen) —— summary 点击原生翻转 open
@@ -195,12 +202,27 @@ for (const skin of SKINS) {
       expect(reqText.indexOf('要求做种')).toBeLessThan(reqText.indexOf('要求分享率'));
 
       // ---- 卡片折叠手势: 基础卡头点击 -> .folded, 卡体隐藏; 再点展开
+      // (aria-expanded 点击同步走核心 H.foldToggle 单点, issue 26-11-08-0229 #3 —— 修前只翻 class)
       const card = drawer.locator('.dt02-card[data-card="base"]');
       await card.locator('[data-fold]').click();
       await expect(card, '折叠后该卡挂 .folded').toHaveClass(/folded/);
+      await expect(card.locator('[data-fold]'), '点击拍即同步 aria-expanded(修前要等重渲)')
+        .toHaveAttribute('aria-expanded', 'false');
       await expect(card.locator('.dt02-card-b'), '折叠后卡体隐藏').toBeHidden();
       await card.locator('[data-fold]').click();
+      await expect(card.locator('[data-fold]'), '再点展开 aria-expanded 回 true')
+        .toHaveAttribute('aria-expanded', 'true');
       await expect(card.locator('.dt02-card-b'), '再点展开回原状').toBeVisible();
+
+      // ---- issue 26-11-08-0229 #13: secRows wide 接线(与 03 .dt03-item.wide 同语义槽) ——
+      // 存储与行为卡 4 条路径行(契约恒发 wide:true)挂 .wide 且长值不再 nowrap 截断
+      const storeWide = drawer.locator('.dt02-card[data-card="store"] .dt02-kv.wide');
+      await expect(storeWide, '路径行恰 4 条挂 wide(修前恒 class="dt02-kv")').toHaveCount(4);
+      const wideWs = await storeWide.first().locator('.v').evaluate((el) => getComputedStyle(el).whiteSpace);
+      expect(wideWs, 'wide 行长值折行展示(修前 nowrap 截断)').toBe('normal');
+      const normWs = await drawer.locator('.dt02-card[data-card="time"] .dt02-kv .v').first()
+        .evaluate((el) => getComputedStyle(el).whiteSpace);
+      expect(normWs, '非 wide 行仍 nowrap').toBe('nowrap');
     });
 
     test(`dt03 双栏档案: wrap/side 骨架 + wide 整行接线 + 更多字段 details 手势 @fast (${skin})`, async ({ page }) => {

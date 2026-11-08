@@ -149,6 +149,8 @@
    *   - wireEvents/unwireEvents: 事件委托挂摘成对(宿主元素跨变体复用, 换变体必须摘掉旧监听,
    *     否则新旧变体监听叠加、同一次点击被多个 handler 重复处理)。挂摘都记账在同一张
    *     host.__dtEvents 事件表上, 成对纪律由实现保证, 变体不再各自维护 __dtNNWired 标志;
+   *   - foldToggle: 折叠组头点击翻态(issue 26-11-08-0229 #3, 01/02/03/05/08 消费) ——
+   *     翻 ui.folded 记账 + 容器翻 .folded 类 + 回读类态同步 aria-expanded 三步收口;
    *   - roving/rowFocusKey/rowRestore/rowMove: 行级键盘 roving tabindex(issue 26-10-07-0846,
    *     content 组 dt10/11/12 消费) —— 锚点设置/焦点记账/重建回焦/方向键移焦四步。 */
   /* ---------------- 文件优先级码 -> 中文文案(reg.helpers::PRIO_TEXT/prioText, issue 26-10-29-1340) ----------------
@@ -235,6 +237,17 @@
       if (!host || !host.__dtEvents) return;
       for (var k in host.__dtEvents) host.removeEventListener(k, host.__dtEvents[k]);
       host.__dtEvents = null;
+    },
+    /* ---- 折叠组头点击翻态(issue 26-11-08-0229 #3, 01/02/03/05/08 五变体同族) ----
+     * 历史缺口: 折叠头 aria-expanded 只在渲染拍写入, onClick 只翻 .folded class 不同步
+     * 属性 —— 点击到下一次数据重渲之间读屏语义与视觉相反。本单点把「ui.folded 记账翻转
+     * + 容器翻 class + 回读类态同步 aria-expanded」收口成一步; 容器定位随变体各异
+     * (data-sec/data-card/data-grp)留在调用方, head 是挂 aria-expanded 的 [data-fold] 头。
+     * 键盘 Enter/Space 经变体 keydown 转发 click 委托, 同过本点。 */
+    foldToggle: function (head, container, ui, key) {
+      ui.folded[key] = !ui.folded[key];
+      container.classList.toggle("folded");
+      head.setAttribute("aria-expanded", container.classList.contains("folded") ? "false" : "true");
     },
     /* ---- 行级键盘 roving tabindex(issue 26-10-07-0846, content 组 dt10/11/12 消费) ----
      * 行/块容器 tabindex="-1" 不进 Tab 序(行内原生控件自然参与 Tab), 锚点(选中行或首行)

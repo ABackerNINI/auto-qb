@@ -408,10 +408,8 @@
     if (head) {
       const sec = head.closest("[data-grp]");
       if (sec) {
-        const k = sec.getAttribute("data-grp");
-        ui.folded[k] = !ui.folded[k];
-        /* 折叠只翻 class 不重建(锚元素集合不变, 桥零重挂) */
-        sec.classList.toggle("folded");
+        /* 折叠只翻 class 不重建(锚元素集合不变, 桥零重挂); aria-expanded 同步走单点 */
+        H.foldToggle(head, sec, ui, sec.getAttribute("data-grp"));
       }
       return;
     }

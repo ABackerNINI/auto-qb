@@ -312,11 +312,7 @@
     const foldHead = ev.target.closest("[data-fold]");
     if (foldHead) {
       const sec = foldHead.closest("[data-sec]");
-      if (sec) {
-        const title = sec.getAttribute("data-sec");
-        ui.folded[title] = !ui.folded[title];
-        sec.classList.toggle("folded");
-      }
+      if (sec) H.foldToggle(foldHead, sec, ui, sec.getAttribute("data-sec"));
       return;
     }
     const rawsum = ev.target.closest(".dt01-rawsum");

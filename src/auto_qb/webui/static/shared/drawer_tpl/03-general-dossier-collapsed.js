@@ -368,11 +368,7 @@
     const foldHead = ev.target.closest("[data-fold]");
     if (foldHead) {
       const sec = foldHead.closest("[data-sec]");
-      if (sec) {
-        const id = sec.getAttribute("data-sec");
-        ui.folded[id] = !ui.folded[id];
-        sec.classList.toggle("folded");
-      }
+      if (sec) H.foldToggle(foldHead, sec, ui, sec.getAttribute("data-sec"));
       return;
     }
     const extSum = ev.target.closest(".dt03-ext summary");

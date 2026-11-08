@@ -6,7 +6,7 @@
 - test_drawer_tpl_variant_field_icons: 详情面板变体字段行图标消费守阵(Q2, 报告 26-10-07-0542) —— general 三变体(01/02/03)字段行必须消费 drawerGeneralSections() 行级 icon 数据(sprite `<use href>` 静态引用)且含经典链 icoTone 同表派生 + .ico-t-* 着色 CSS(经典 .f-row 作用域在变体行不命中, 色表须自带); traffic 三变体(13/14/15)KPI/解读行含 sprite 图标引用; 全变体 #i-* 引用不越三皮肤 sprite 既有 symbol 集合(三皮肤集合两两相等)且不引入外部图标库(<img/iconfont/fontawesome/material-icons); shared/tpl/*.html 的 #i-* 引用同规则(26-10-29-1355, 模板与变体同文档载入 shell, 引到缺 symbol = 图标静默空白)
 - test_drawer_tpl_table_variants_scrollleft_restore: 表格型变体横向滚动位自保守阵(P2-2, 报告 26-10-07-0542; 骨架收口 26-10-07-0845) —— 滚动自保单点收口在核心 H.withScroll(纵横两轴成对读写, 恢复次序 scrollLeft 先 scrollTop 后) + dt06/07/08/09 四变体整帧重建都包在 withScroll 回调内 + 变体内分散自保(scroller 直读写/host.parentElement)不得回潮, 任一变体绕开单点或核心两轴不成对即红
 - test_drawer_tpl_trackers_per_tracker_reannounce: 06 变体逐行汇报倒计时真 per-tracker 口径守阵(P-02 升级, issue 26-10-07-0149, 2026-10-09) —— 真口径分支读行级 next_announce 且先减 nowSec(epoch 绝对时间当倒计时是事故根因) + 「全局」标(dt06-gb)只许出现在回退分支(真值行不标全局) + 回退分支仍在(qB < 5.2 无该字段, 保留种子级 detail.reannounce_in 全局近似) + nowSec 计入 sig(否则跳过重建把倒计时冻在上一帧) + 真口径分支不画微条(per-tracker interval 不可得, 不造假) + 调用点传行 t 与 nowSec
-- test_drawer_tpl_a11y_and_fetch_error_states: 变体可访问性 + fetch 失败态区分守阵(P3-4/P3-5, 报告 26-10-07-0542) —— 核心层 drawer-close 钮 aria-label(种子/流量两头部成对) + 纯 div/span 模拟控件 role=button/tabindex=0(01/02/03/05/08 折叠组头含 aria-expanded、07/08/09 排序表头含 aria-sort 升/降/无随态输出、05/06 msg 展开行) + keydown 委托与 click 委托成对挂摘(挂摘纪律收口在核心 wireEvents/unwireEvents 单点, 26-10-07-0845; 变体只声明事件表)且转发前排除原生交互元素(防 Enter 双重触发) + 三 fetcher 失败标记(trackersError/filesError/peersError)显式建字段(初值在 drawer.js)/catch 落/成功清/换目标作废(随 W1 数据层抽离在 drawer_store.js) + 九个 fetch 型变体(04-12)错误态先于空态且文案对齐轮询事实(trackers/peers 5s 轮询可写自动重试, content 无轮询不得虚构承诺)
+- test_drawer_tpl_a11y_and_fetch_error_states: 变体可访问性 + fetch 失败态区分守阵(P3-4/P3-5, 报告 26-10-07-0542) —— 核心层 drawer-close 钮 aria-label(种子/流量两头部成对) + 纯 div/span 模拟控件 role=button/tabindex=0(01/02/03/05/08 折叠组头含 aria-expanded、07/08/09 排序表头含 aria-sort 升/降/无随态输出、05/06 msg 展开行) + keydown 委托与 click 委托成对挂摘(挂摘纪律收口在核心 wireEvents/unwireEvents 单点, 26-10-07-0845; 变体只声明事件表)且转发前排除原生交互元素(防 Enter 双重触发) + 折叠点击 aria-expanded 同步单点 H.foldToggle(核心回读类态 setAttribute, 五变体折叠点击全走单点, issue 26-11-08-0229 #3 —— 修前只翻 class, 点击到重渲之间读屏语义与视觉反向) + 三 fetcher 失败标记(trackersError/filesError/peersError)显式建字段(初值在 drawer.js)/catch 落/成功清/换目标作废(随 W1 数据层抽离在 drawer_store.js) + 九个 fetch 型变体(04-12)错误态先于空态且文案对齐轮询事实(trackers/peers 5s 轮询可写自动重试, content 无轮询不得虚构承诺)
 - test_drawer_tpl_content_row_keyboard_roving: content 组行级键盘 roving tabindex 守阵(issue 26-10-07-0846) —— 核心 helpers 四件套(roving 锚点/rowFocusKey 记账/rowRestore 回焦/rowMove 移焦)单点存在; dt10/11 [data-node] 与 dt12 [data-blk]/[data-row] 行容器 tabindex=-1 不进 Tab 序(整行不加 role=button, 行内原生控件自然参与 Tab)且 CSS 带 :focus-visible 可见焦点; keydown 委托成对挂宿主且只有 ev.target 是行容器自身才接管(行内原生控件键盘行为自持); dt12 自管 DOM 重建前记账/重建后回焦成对(原子换帧打断焦点链, 不回焦一次激活就甩回文档头), 10/11 的 focusKey 死代码已随 R5#111/112 删除(无写入点 rowRestore 恒空转, 在场即回潮); dt12 树图块焦点互联复用悬停 onOver/onOut(focusin/focusout 同语义)
 - test_drawer_tpl_row_after_hook_wiring: 抽屉行级键盘恢复钩子接线守阵(issue 26-11-03-0802) —— 桥表 .group-table 的 @vue:mounted 必须把**页签 key**交给 dtRowAfter(方法内按页签 key 走 dtBridgeDef/_dtSel/REG.get 取描述符与变体条目); 传 table id(dtBridgeTbl 的返回值)会落到 defaultSel=classic 且 REG.get 无此表 ⇒ 描述符恒 null, 10/11 声明的 rowAfterFn(锚换代后 roving 锚点/回焦)永不执行。静态钉模板调用点 + node 真跑 dtRowAfter(tab) 命中 / dtRowAfter(table id) 不命中
 - test_drawer_tpl_variant_no_singleton_shadowing: 变体单点 T/R/H 遮蔽禁令守阵(2026-10-09 用户报障「空间树图选了不显示、换种子回落经典」) —— dt12 layoutMap 曾写 `const W = mapEl.clientWidth, H = mapEl.clientHeight`, 局部 H 把文件头 helpers 单点(reg.helpers)遮蔽成数字, 同函数尾 H.rowFocusKey(...) 对数字取属性抛 TypeError -> 核心 _dtRender catch 把该页签选择复位 classic 并落盘: 树图块只在 layoutMap 绘制故永远空白 + 用户选择跨会话被静默复位。守阵 = 每个变体文件凡声明了 T/R/H 单点(const <N> = reg.dtHtml|dtRaw|helpers), 该名在全文件(单点声明行之外)禁止再被任何声明语句绑定 —— 含多声明符列表(let a = 1, H = 2, 本案根因形态)与解构(const { H } = ...); 未声明单点的名不查(15 号变体无 H 单点, 其局部 H = 22 是合法常量)
@@ -721,6 +721,9 @@ def test_drawer_tpl_a11y_and_fetch_error_states():
     纯 div/span 模拟控件 role="button" tabindex="0": 01/02/03/05/08 折叠组头(含 aria-expanded)
     + 05/06 msg 展开行; keydown 委托与 click 委托成对挂宿主(wire 挂 / destroy 摘)且 Enter/Space
     转发前排除原生 button/summary 等自身发 click 的元素(防双重触发)。
+    issue 26-11-08-0229 #3 增钉: 折叠点击的 aria-expanded 同步收口核心 H.foldToggle 单点
+    (翻 ui.folded 记账 + 容器翻 .folded 类 + 回读类态 setAttribute 三步一步), 五变体折叠
+    点击全走单点 —— 修前 onClick 只翻 class, 点击到下一次重渲之间读屏语义与视觉反向。
     U2(计划 26-10-12-0527)改版: 07/08/09 手搓排序表头退役(D3 排序并引擎 aq-table, 变体文件
     零手搓表头由 test_drawer_table_bridge_wiring ⑪ 钉), 其 aria-sort pin 随载体退役; 07/09
     交互面只剩原生 <button> 筛选 chips(键盘天然可达), 08 折叠组头仍走 P3-4 模拟控件件套。
@@ -747,6 +750,12 @@ def test_drawer_tpl_a11y_and_fetch_error_states():
         and "for (var k in host.__dtEvents) host.removeEventListener(k, host.__dtEvents[k]);" in core, \
         "核心 wireEvents/unwireEvents 挂摘不成对(换变体监听叠加回潮)"
 
+    # 1.6 折叠点击 aria-expanded 同步单点(issue 26-11-08-0229 #3): 核心翻 .folded 类后必须
+    # 回读类态 setAttribute 同步属性(修前只翻 class, 点击到重渲之间读屏语义与视觉反向)
+    assert "foldToggle: function (head, container, ui, key)" in core \
+        and 'setAttribute("aria-expanded", container.classList.contains("folded") ? "false" : "true")' in core, \
+        "核心 foldToggle 单点缺失或不回读类态同步 aria-expanded(读屏语义反向回潮)"
+
     # 2. 纯 div/span 模拟控件 role/tabindex/aria(只盘模拟控件; 原生 button 有 title 充当可访问名不动)
     # U2(计划 26-10-12-0527, D3): 07/08/09 手搓排序表头退役 —— 排序交互/表头/箭头全归引擎 aq-table
     # (xtpl.html tpl-aq-table: col.sortable 走激活单点 headActivate → $root.setSort), 变体文件零手搓
@@ -767,6 +776,9 @@ def test_drawer_tpl_a11y_and_fetch_error_states():
                 f"drawer_tpl/{name}: 折叠组头缺 role=button(P3-4: 纯 div+click 键盘不可达)"
             assert 'aria-expanded="' in text, \
                 f"drawer_tpl/{name}: 折叠组头缺 aria-expanded(读屏不知道折叠态)"
+            # issue 26-11-08-0229 #3: 折叠点击必须经核心 foldToggle 单点同步 aria-expanded
+            assert "H.foldToggle(" in text, \
+                f"drawer_tpl/{name}: 折叠点击未走 H.foldToggle 单点(aria-expanded 点击不同步回潮)"
         # U3(26-10-12-0527): 05/06 的 msg 展开行随表格体重写迁渲染器分片(件套在下方 2.1 钉),
         # 变体侧只保留键盘转发/挂摘纪律 —— data-msg 行在引擎行容器内, 委托经宿主照常命中。
         # 06 外壳已无任何纯 div 模拟控件(其 tabindex 随 msg 迁分片), 05 的折叠组头仍在

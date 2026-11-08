@@ -377,11 +377,9 @@
     if (foldHead) {
       const grp = foldHead.closest("[data-grp]");
       if (grp) {
-        const key = grp.getAttribute("data-grp");
-        ui.folded[key] = !ui.folded[key];
         /* 折叠只翻 class 不重建(锚元素集合不变, 桥零重挂); 折叠态不进 sig(R5#77) ——
-         * 不刷 lastSig 也拍拍常跳过, 与 05 同口径 */
-        grp.classList.toggle("folded");
+         * 不刷 lastSig 也拍拍常跳过, 与 05 同口径; aria-expanded 同步走单点 */
+        H.foldToggle(foldHead, grp, ui, grp.getAttribute("data-grp"));
       }
     }
   }

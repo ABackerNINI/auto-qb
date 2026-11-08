@@ -61,6 +61,10 @@
     ".drawer .dt02-kv .v.is-dim { color:var(--fg-dim); }",
     ".drawer .dt02-kv .v.is-up { color:var(--today-up); }",
     ".drawer .dt02-kv .v.is-hr { color:var(--hr-pending); }",
+    /* 整行长值行(issue 26-11-08-0229 #13, 与 03 .dt03-item.wide 同语义槽): 02 卡体是
+     * flex 列非网格无列可 span —— 同语义落点 = 长值不 nowrap 截断改折行展示, 对齐回左
+     * (多行右对齐不可读; 与 03 wide 的净效果一致) */
+    ".drawer .dt02-kv.wide .v { white-space:normal; word-break:break-all; text-align:left; }",
     /* 标识复制行 */
     ".drawer .dt02-crow { display:flex; align-items:center; gap:6px; padding:3px 0; }",
     ".drawer .dt02-crow .k { flex:none; width:58px; font-size:12px; color:var(--fg-muted); }",
@@ -168,7 +172,11 @@
     </section>`;
   }
 
-  /* 经典分组行 -> 键值行(保留行级 open/copy 动作钮) */
+  /* 经典分组行 -> 键值行(保留行级 open/copy 动作钮)
+   * issue 26-11-08-0229 #13 接线: 数据契约 drawer_rows.js 对哈希/路径/备注等长值行发
+   * wide:true, 在此挂 wide 类(长值折行, CSS 见 .dt02-kv.wide) —— 与 03 变体
+   * .dt03-item.wide(R5#78)同语义槽。02 卡体是 flex 列非网格无列可 span, 同语义落点 =
+   * 长值不再被压三列卡片 nowrap 截断, 改折行展示 */
   function secRows(sec, skip) {
     return sec.rows.filter((r) => !skip || skip.indexOf(r.label) < 0).map((r) => {
       const btn = r.act === "open"
@@ -178,7 +186,7 @@
           : (r.act === "chain"
             ? T`<button type="button" class="dt02-act" data-act="chain" title="查看路径链"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-link"></use></svg></button>`
             : ""));
-      return T`<div class="dt02-kv">${r.icon ? icoSvg(r.icon) : ""}<span class="k">${r.label}</span><span style="min-width:0; display:inline-flex; align-items:center; gap:4px; max-width:100%;"><span class="v" style="text-align:right;">${r.text}</span>${btn ? R(btn) : ""}</span></div>`;
+      return T`<div class="dt02-kv${r.wide ? " wide" : ""}">${r.icon ? icoSvg(r.icon) : ""}<span class="k">${r.label}</span><span style="min-width:0; display:inline-flex; align-items:center; gap:4px; max-width:100%;"><span class="v">${r.text}</span>${btn ? R(btn) : ""}</span></div>`;
     }).join("");
   }
 
@@ -316,11 +324,7 @@
     const foldHead = ev.target.closest("[data-fold]");
     if (foldHead) {
       const cardEl = foldHead.closest("[data-card]");
-      if (cardEl) {
-        const id = cardEl.getAttribute("data-card");
-        ui.folded[id] = !ui.folded[id];
-        cardEl.classList.toggle("folded");
-      }
+      if (cardEl) H.foldToggle(foldHead, cardEl, ui, cardEl.getAttribute("data-card"));
       return;
     }
     const btn = ev.target.closest("[data-act]");
