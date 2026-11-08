@@ -6,7 +6,7 @@
   node vm 真跑 openMetaDialog→metaToggleTag/metaSetCategory 全链: 目标锁定(单种子/组级联展开去重/
   空目标早退)、_metaCommonTags 交集方向(双方都有才留)、共同分类与分歧清空、loadMetaOptions 候选
   并回 metaCommonTags(共同携带标签不在候选也不丢)、metaToggleTag 有则删无则加(bulk 载荷 keys/hashes/
-  tags 与回执失败交集不动)、metaAddNewTags 半角逗号拆分(全角不支持, 清单外已知项) + 先建后打标、
+  tags 与回执失败交集不动)、metaAddNewTags 中英文逗号拆分(issue 0229 #1 修复后口径) + 先建后打标、
   metaSetCategory 先建后设链
   (创建 POST 在 bulk 之前)/清除分类空串直投/已存在只设不建/未变化静默零投递、投递载荷逐字段;
   R5#133: metaBusy 在飞时 metaSetCategory 被入口闸拒绝零投递(与 metaToggleTag 同口径), 新分类创建
@@ -20,7 +20,7 @@
   零投递(不给假反馈); metaBusy 在飞时空串回车被入口闸拒绝(R5#132 x R5#133 交叉)
 - test_r4_dialogs_mgr_crud_battery: R5#144 管理对话框 CRUD 行为面 —— node 电池真跑 openMgr(收筛选
   弹层 + 清态 + loadMgr 拉平)、loadMgr 双分支(标签数组字典序 / 分类字典展开成行 + save_path 缺省
-  空串 + 字典序)、submitMgrTags 半角逗号批量拆分(全角不支持, 清单外已知项; 空段剔除/成功清草稿重拉/
+  空串 + 字典序)、submitMgrTags 中英文逗号批量拆分(issue 0229 #1 修复后口径; 空段剔除/成功清草稿重拉/
   空输入 warn 零投递)、
   submitMgrCategory(名称必填/保存路径可空 = payload 无 save_path 键/路径 trim 随投递/成功清双草稿)、
   mgrBusy 在飞双入口拒绝重复投递
@@ -166,17 +166,17 @@ _NODE_META_CHAIN_BODY = r"""
      vm.toasts.some((t) => t[1] === "error" && t[0].includes("移除标签")));
   vm.waitCmd = async () => ({ ok: true });
 
-  // ---- metaAddNewTags: 逗号拆分 + 先建后打标(现状: split 字符类只有半角逗号, 见报告清单外发现) ----
-  vm.metaNewTags = " x1 , x2,  ";
+  // ---- metaAddNewTags: 逗号拆分 + 先建后打标(issue 0229 #1 修复后: 中英文逗号都拆) ----
+  vm.metaNewTags = " x1 , x2，x3,  ";
   await D.metaAddNewTags.call(vm);
   const tagPost = vm.posts.find((p) => p.url === "/api/tags" && p.body.tags);
-  ok("addNewTags: 半角逗号拆分(全角不支持, 清单外已知项) + 空段剔除后先建定义(POST /api/tags)",
-     JSON.stringify(tagPost.body.tags) === JSON.stringify(["x1", "x2"]));
+  ok("addNewTags: 中英文逗号拆分(全角 U+FF0C 同样切分) + 空段剔除后先建定义(POST /api/tags)",
+     JSON.stringify(tagPost.body.tags) === JSON.stringify(["x1", "x2", "x3"]));
   ok("addNewTags: bulk 打标载荷带全部输入段",
-     lastBulk(vm).action === "add_tags" && JSON.stringify(lastBulk(vm).tags) === JSON.stringify(["x1", "x2"]));
+     lastBulk(vm).action === "add_tags" && JSON.stringify(lastBulk(vm).tags) === JSON.stringify(["x1", "x2", "x3"]));
   ok("addNewTags: 新定义并入候选 + 交集补回 + 草稿清空",
-     vm.metaTags.includes("x1") && vm.metaTags.includes("x2") &&
-     JSON.stringify(vm.metaCommonTags) === JSON.stringify(["alpha", "delta", "x1", "x2"]) && vm.metaNewTags === "");
+     vm.metaTags.includes("x1") && vm.metaTags.includes("x2") && vm.metaTags.includes("x3") &&
+     JSON.stringify(vm.metaCommonTags) === JSON.stringify(["alpha", "delta", "x1", "x2", "x3"]) && vm.metaNewTags === "");
 
   // ---- metaSetCategory: 先建后设链 / 清除 / 已存在 / 未变化 ----
   const catPosts = () => vm.posts.filter((p) => p.url === "/api/categories").length;
@@ -400,13 +400,13 @@ _NODE_MGR_BODY = r"""
        { name: "aa", save_path: "" }, { name: "bb", save_path: "/b" }, { name: "cc", save_path: "" },
      ]));
 
-  // ---- submitMgrTags: 逗号批量拆分(现状: split 字符类只有半角逗号, 见报告清单外发现) ----
+  // ---- submitMgrTags: 逗号批量拆分(issue 0229 #1 修复后: 中英文逗号都拆) ----
   D.openMgr.call(vm, "tag");  // 回到标签面板: _mgrRun 成功链会按 mgrOpen 分支重拉列表
   await flush();
-  vm.mgrNew.tags = " a , b,c,中文, d,, ";
+  vm.mgrNew.tags = " a , b,c，中文，d,, ";
   await D.submitMgrTags.call(vm);
   const tagPost = vm.posts.find((p) => p.url === "/api/tags" && p.body.tags);
-  ok("submitMgrTags: 半角逗号拆分(全角不支持, 清单外已知项) + 空段剔除(载荷 tags 逐字段)",
+  ok("submitMgrTags: 中英文逗号拆分(全角 U+FF0C 同样切分) + 空段剔除(载荷 tags 逐字段)",
      JSON.stringify(tagPost.body.tags) === JSON.stringify(["a", "b", "c", "中文", "d"]));
   ok("submitMgrTags: 成功后清草稿 + 重拉列表(_mgrRun ok 链)", vm.mgrNew.tags === "" && vm.mgrTags.length === 3);
   ok("submitMgrTags: ok toast 带计数", vm.toasts.some((t) => t[1] === "ok" && t[0].includes("已创建 5 个标签")));

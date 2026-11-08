@@ -234,8 +234,8 @@ window.AQB_DIALOGS = {
     },
     async submitMgrTags() {
       if (this.mgrBusy) return;  // 回执等待期防重复投递
-      // 支持中英文逗号分隔批量创建(空段剔除; 与添加种子对话框的标签口径一致)
-      const tags = this.mgrNew.tags.split(/[,,]/).map((t) => t.trim()).filter(Boolean);
+      // 支持中英文逗号分隔批量创建(空段剔除; 添加种子对话框的标签输入仍仅按半角逗号拆分, 口径未对齐)
+      const tags = this.mgrNew.tags.split(/[,\uFF0C]/).map((t) => t.trim()).filter(Boolean);
       if (!tags.length) { this.toast("标签不能为空: 请至少输入一个标签", "warn"); return; }
       await this._mgrRun(async () => {
         await this.api("/api/tags", { method: "POST", body: JSON.stringify({ tags }) });
@@ -391,11 +391,14 @@ window.AQB_DIALOGS = {
       // _metaBulk(_postWaitCmd) 既有收口。
       if (this.metaBusy) return;
       this.metaBusy = true;
-      const tags = this.metaNewTags.split(/[,,]/).map((t) => t.trim()).filter(Boolean);
+      const tags = this.metaNewTags.split(/[,\uFF0C]/).map((t) => t.trim()).filter(Boolean);  // 中英文逗号, 与 submitMgrTags 同口径
       if (!tags.length) { this.toast("标签不能为空: 请至少输入一个标签", "warn"); this.metaBusy = false; return; }
       const fresh = tags.filter((t) => !this.metaTags.includes(t));
       if (fresh.length) {
-        // 新标签定义先入队创建(定义列表/管理对话框可见); 已存在时创建失败不影响后续打标
+        // 新标签定义先入队创建(定义列表/管理对话框可见); 已存在时创建失败不影响后续打标。
+        // fresh 与下方 bulk 载荷均不去重(重复输入段原样投递): 后端链 _cmd_tags(torrent_detail.py)
+        // -> create_tags 命令(commands_config.py) -> qB Web API createTags/addTags 对已存在与
+        // 重复标签幂等(集合语义 no-op 不报错), 重复段无观感副作用, 故入口有意不去重
         try {
           await this.api("/api/tags", { method: "POST", body: JSON.stringify({ tags: fresh }) });
         } catch (e) {
