@@ -19,7 +19,7 @@
 
 | 类型 | 条数 |
 |---|---|
-| bug | 21 |
+| bug | 20 |
 | perf | 2 |
 | docs | 3 |
 | test | 10 |
@@ -46,7 +46,6 @@
 - [bug] [webui fs.py _bare docstring 指向已拆走的 tests/test_web_hr.py](26-11-08-0703-bug-webui-fs-test-pointer-drift.html) — fs.py _bare…
 - [refactor] [infra 依赖纪律「不 import config」无 AST 机械守卫](26-11-08-0703-refactor-infra-import-discipline-guard.html) — infra/__init…
 - [test] [test_notify 8 用例 NotifyHandler 只 removeHandler 不 close,每进程泄漏 8 守护线程](26-11-08-0703-test-test-notify-handler-thread-leak.html) — tests/test_n…
-- [bug] [R4-static 清池清单外发现汇总(13 子项, 修复批记录未修)](26-11-08-0229-bug-r4-static-cleanup-extras.html) — R4 static 主题…
 - [bug] [dt_table.js 整模块生产路径零调用: 自称几何单一出口未接线, 实际几何由 columns_grid 平行计算](26-11-08-0147-bug-dt-table-geometry-unwired.html) — dt_table.js…
 - [refactor] [mypy 后端既有类型债: dev.typecheck 8 errors](26-11-08-0118-refactor-mypy-backend-typecheck-debt.html) — dev.typechec…
 - [bug] [traffic_store_common._INFOHASH_RE 配 re.match, $ 允许串尾恰一个换行(与 R4#34 同族)](26-11-08-0045-bug-traffic-store-infohash-re-tail-newline.html) — traffic_stor…
@@ -114,7 +113,7 @@
 ## Done
 
 
-> 更早的 **450** 条已出本索引 —— 报告仍在 `issues/` 目录(未搬动), 全量清单见 [attachments/_archive.md](attachments/_archive.md).
+> 更早的 **451** 条已出本索引 —— 报告仍在 `issues/` 目录(未搬动), 全量清单见 [attachments/_archive.md](attachments/_archive.md).
 
 ## Dropped
 

@@ -4,16 +4,16 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="color-scheme" content="dark">
-<title>R4-static 清池清单外发现汇总(13 子项, 修复批记录未修) · bug · 计划外问题</title>
+<title>R4-static 清池清单外发现汇总(13 子项, 已全部修复) · bug · 计划外问题</title>
 <meta name="issue-slug" content="r4-static-cleanup-extras">
 <meta name="issue-stamp" content="26-11-08-0229">
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="legacy-review4">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
-<meta name="issue-title" content="R4-static 清池清单外发现汇总(13 子项, 修复批记录未修)">
-<meta name="issue-summary" content="R4 static 主题清池(P01-P16)各批记录的清单外发现 13 子项聚合入池: dialogs 注释失实族/契约层 -1 裸拼/aria-expanded 陈旧/非ASCII注释存量等, 全部未动待认领">
+<meta name="issue-status" content="Done">
+<meta name="issue-title" content="R4-static 清池清单外发现汇总(13 子项, 已全部修复)">
+<meta name="issue-summary" content="R4 static 主题清池(P01-P16)各批记录的清单外发现 13 子项聚合入池: dialogs 注释失实族/契约层 -1 裸拼/aria-expanded 陈旧/非ASCII注释存量等, 13 子项已全部修复收口(2026-11-08)">
 <style>
   :root {
     --bg: #10151a;
@@ -84,14 +84,14 @@
 <body>
 <div class="sheet">
 
-<div class="kicker">计划外问题（未修）· bug</div>
-<h1>R4-static 清池清单外发现汇总(13 子项, 修复批记录未修)</h1>
-<p class="lede">R4 static 主题清池(P01-P16)各批记录的清单外发现 13 子项聚合入池: dialogs 注释失实族/契约层 -1 裸拼/aria-expanded 陈旧/非ASCII注释存量等, 全部未动待认领</p>
+<div class="kicker">计划外问题 · bug</div>
+<h1>R4-static 清池清单外发现汇总(13 子项, 已全部修复)</h1>
+<p class="lede">R4 static 主题清池(P01-P16)各批记录的清单外发现 13 子项聚合入池: dialogs 注释失实族/契约层 -1 裸拼/aria-expanded 陈旧/非ASCII注释存量等, 13 子项已全部修复收口(2026-11-08)</p>
 <div class="meta-row">
   <div class="item"><div class="k">编号</div><div class="v">26-11-08-0229-bug-r4-static-cleanup-extras</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-08 02:29</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">webui-static</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
@@ -170,11 +170,20 @@
   <ul>
     <li>2026-11-08 02:29 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
     <li>2026-11-08 14:33 — 认领批复验并修复 <strong>#10 / #12</strong>（其余 11 子项仍 Open）</li>
-  </ul>
+    <li>2026-11-08 — 状态 Open → Done（kb.status）</li>
+</ul>
   <h3>复验</h3>
   <p>复验：2026-11-08 14:33 #10 / #12 锚点均仍复现（grep <code>THRESHOLD|3px|dragged</code> 命中 columns_persist.js startResize/move，阈值常量 <code>RESIZE_DRAG_THRESHOLD = 3</code> 单点在 app.js:377；grep <code>TOAST_SPLIT</code> 命中 fx-mount.js:229）。其余 11 子项未复验。</p>
+  <p>复验收口（2026-11-08 15:36）：其余 11 子项认领时逐项复验<strong>均仍复现</strong>后修复；13 子项锚点行号相对取证时点均有漂移，全部按符号与 grep 重定位。两处锚点记载如实修正：#11 实际符号在 <code>shared/shortcuts_panel.js</code>（issue 原记 drawer.js 已漂移）；#4 存量实测 <strong>53 文件</strong>（非 §02 所记「src 44 个 .js」口径；e2e .mjs 与 .py 按用户拍板不在范围）、注释符号 <strong>533 处</strong>。</p>
   <h3>修复后补充</h3>
   <p><strong>#10（已修 2026-11-08）</strong>：实际修法 = 过阈值才写生效轨 —— move 在 <code>dragged</code> 置真前直接 return，位移 ≤3px 时不再把起始快照写进 colWidths；拖拽其余行为（意图升格 / 落盘 / 拦 click）不动。电池同步：r4 node 电池 colpersist 探针新增 ②-b 微动场景（未过阈值不写生效轨 / 过阈值后照常写 / 升格落盘拦截层照常）。<strong>#12（已修 2026-11-08）</strong>：找到原设计出处 <code>memory-bank/conventions/attachments/webui-fx.md</code>「消息面文字排版」（2026-11-02 四轮）与「toast 文案」（六轮）—— 口径为「说明 ≥2 字」即说明侧本体计长，故裁决改实现而非改注释：shapeToastText 增加 <code>m[2].trim().length &lt; 2</code> 单行门槛（正则本体不动），分隔符后的连接空格不计入 2 字门槛；运行时注释与守阵 <code>_scan_toast_copy_two_part</code> 同步 trim 口径（两者约定「同一条规则，改一处要同步另一处」），生产文案无一命中新门槛。验证：node 电池 + skins 守阵 20 passed；e2e @fast 门禁 316 passed（含 drawer-tables 拖宽 spec）。</p>
+  <p><strong>#1 / #9（已修 2026-11-08，提交 68ae5221）</strong>：实际修法 = #1 按用户拍板补全角分支而非只改注释——submitMgrTags/metaAddNewTags 两处 split 字符类改 <code>/[,\uFF0C]/</code>（转义写法，代码面零非 ASCII），dialogs.js 失实注释改准；#9 核实后端链（_cmd_tags → create_tags 命令 → qB Web API createTags/addTags）对已存在/重复标签幂等（集合语义 no-op 不报错），按拍板在调用点加幂等依据注释、入口有意不去重。验证：电池断言喂全角逗号（「全角不支持」口径退役），test.one dialogs 两文件 26 passed。<br>
+  <strong>#2 / #11（已修 2026-11-08，提交 f9d4d9d2）</strong>：实际修法 = #2 drawerGeneralSections 契约层单点补 peerNum/connLimit 守卫（与 fmtPeersQb 族口径逐字一致：单值槽负值/缺失降级 —，连接上限 -1 照实译「不限」；01/02/03 三变体共同消费，守一处即全覆盖）；#11 kbGuardLeave 非脏早退路径复位 kbFullOpen（实际符号在 shortcuts_panel.js，见复验收口）。验证：node 电池直跑 drawerGeneralSections 生产函数（-1 哨兵/字段缺失/真值三场景 9 断言，不经字符串锚）+ shortcuts 电池补 kbFullOpen 复位断言，test.one 两电池文件 22 passed。<br>
+  <strong>#3 / #13（已修 2026-11-08，提交 09e285f1）</strong>：实际修法 = #3 抽核心 HELPERS.foldToggle 单点（翻 ui.folded 记账 + 容器翻 class + 回读类态 setAttribute 三步一步），五变体（01/02/03/05/08）onClick 与键盘 Enter/Space 转发委托至此；#13 02 secRows 照 03 同式接 wide——02 卡体是 flex 列非网格无列可 span，同语义落点 = 长值去 nowrap 截断改折行展示，顺带删值格与基类 CSS 逐字重复的内联 text-align:right（内联优先级会挡住 wide 覆盖）。验证：dev.e2e drawer-general-variants 8 passed + drawer-trackers/peers-variant-tables 22 passed（01/02 补 aria 点击同步与 wide 折行断言）；静态守阵 test_webui_static_dom_panel_drawer.py 31 passed。<br>
+  <strong>#5 / #6（已修 2026-11-08，提交 d44b1c61）</strong>：实际修法 = #5 cfgUnitParts 采纳前校验 UNIT_OPTIONS 梯内，表外回落 UNIT_FALLBACK[kind]/opts[0]（只动前端契约层防御，不碰 Python 校验面）；#6 空容器回收只在 tmShutdownTool 调用点做（按 hadSourceSeg 段盘上原存在性分流，3 行）——不增强共享 cfgDelPath，全仓 15+ 调用点多处自管父容器生命周期，自动回收会改共享语义。验证：test.one test_webui_static_r4_config_editor.py + test_webui_static_r4_config_hub.py 共 11 passed（新增 unitDefault 表外回落/梯内胜出/空串回落 3 断言 + 回滚整段回收场景）；dev.e2e traffic-source-switch 6 passed / views 36 passed。<br>
+  <strong>#7 / #8（已修 2026-11-08，提交 b41e3a9e）</strong>：实际修法 = #7 startEvents 落票后、开流前复用既有 authOk 单点（R10-01 鉴权判据，与 onerror 重试守卫同判据）只读复查，不引入新会话代际计数器；#8 stopPoll 与 finish 两路 onEnd 包 try/finally——保持「onEnd 先于 settle」契约序不变，settle 必达且异常语义不变照常上抛。验证：未修版两条新检查复验均红（SSE 探针 25/26、轮询探针 settle 被吞），修后 SSE 探针 26/26、轮询探针 27/27；polling 相关 8 个 static 测试文件 test.one 合计 79 passed；dev.e2e 全量 462 passed + 18 skipped。<br>
+  <strong>#4（已修 2026-11-08，提交 e06bceb9 / 7f67e9ac / 4faa2396，三批）</strong>：实际修法 = 词法级 JS 扫描脚本切注释/字符串/模板/正则 span，只对注释 span 按 code-style.md 替代表机械替换（用户拍板只清 src 的 .js，e2e .mjs 与 .py 不在范围），按 826 行增删超单批 400 行上限拆三批：flux+shared 前段 23 文件 / drawer_tpl 九变体+shared d-m 15 文件 / shared p-z 15 文件。全批收口：<strong>53 文件、注释符号替换 533 处</strong>（→x210、⇒x112、①-⑤x109、↑↓x46、←x28、⚠x9、⌘x6 等）；<strong>字符串字面量 17 处（5 文件 10 行）为用户可见文案豁免未动</strong>（shortcuts.js 方向键显示映射、config_hub.js 引导文案、columns_persist.js 提示文案等）——§02 原记「字符串字面量已证零残留」修正为「注释 533 处已清，字符串字面量 17 处豁免」。验证：53 文件 node --check 全过、注释侧任务扫描类 grep 复扫 0（字面量豁免除外）；test.quick 5781 passed + 2 skipped；e2e @fast 门禁三 shard 112+102+94 = 308 passed。</p>
+  <p class="hint">各子项定向数字为对应提交时点实测；全量兜底 = 本批 <code>commands run test.full</code> 2026-11-08 15:29 实测 <strong>5781 passed + 2 skipped、覆盖率 99%</strong>（基线切片 memory-bank/testing/baselines/26-11-08-1536-r4-static-cleanup-extras.md）。</p>
 </section>
 
 <footer>
