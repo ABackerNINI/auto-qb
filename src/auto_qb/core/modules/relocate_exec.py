@@ -1079,7 +1079,8 @@ class ExecMixin:
         - dry-run: 零副作用承诺(不落探针文件、不动 qB), note「dry-run: 跳过强探测」;
         - assume_shared=true(D7): 用户显式越权, 跳过探测, note 注明「未经 auto-qb 验证, 由用户承担」;
         - 路径级已证明(facts.same_fs_proved, D4 组合口径的 D 复查面): E1 无增量, 放行;
-        - 指纹缓存(D3: host+port+username+secret)命中 passed => 放行;
+        - 指纹缓存(D3: host+port+username+secret; R1#42 起指纹=HMAC+随机盐, 盐存 state
+          relocate.probe_salt, 换盐即全缓存失效重探)命中 passed => 放行;
           命中 failed => blocked(D7① 同指纹不重试);
         - 未命中 => run_probe 同步执行(常态 ~1.3s): passed => probe_put(passed) 放行;
           failed env=False(FS 不可达) => probe_put(failed) + blocked(D7①);
@@ -1114,7 +1115,9 @@ class ExecMixin:
                         }
                     ],
             }
-        fp = probe_fingerprint(qb_conf)
+        # 指纹盐(R1#42): 写路径惰性生成并持久化(换盐 => 旧缓存键全部失效重探); 先于
+        # probe_get/probe_put 取盐, 保证同一闸内读/写同键
+        fp = probe_fingerprint(qb_conf, self.probe_salt_ensure())
         hit = self.probe_get(fp)
         if hit is not None:
             if hit["status"] == "passed":

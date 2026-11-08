@@ -490,7 +490,9 @@ def test_group_facts_weak_positive_degrades_to_note(monkeypatch):
     mod._ctx.config.qbittorrent = types.SimpleNamespace(
         host="127.0.0.1", port=8080, username="", password="", api_key=""
     )
-    mod.probe_put(probe_fingerprint(mod._ctx.config.qbittorrent), "passed", {"method": "e1"})
+    # 预播种带盐: ensure 先生成并持久化盐, plan 只读面读同盐 => 覆盖「带盐预检读」形态
+    # (无盐预播种在 fresh state 下只碰巧覆盖「双方都无盐」退化形态)
+    mod.probe_put(probe_fingerprint(mod._ctx.config.qbittorrent, mod.probe_salt_ensure()), "passed", {"method": "e1"})
     _stub_evidence(
         rp_mod.Evidence(rp_mod.UNAVAILABLE, "", "qB 列目录端点不可用"),
         rp_mod.Evidence(rp_mod.POSITIVE, rp_mod.LEVEL_D, "qB 列目录成功, qB 看得见该目录"),

@@ -561,8 +561,9 @@ def test_relocate_module_same_fs_p3_semantics(tmp_path, monkeypatch):
     assert any("一次性强探测" in n for n in item3["notes"]), item3["notes"]
 
     # 4. E1 缓存 passed: 两侧证据不可判定时凭机器级强证明放行(note 注明)
+    # 预播种带盐: ensure 先生成并持久化盐, plan 只读面读同盐 => 覆盖「带盐预检读」形态
     mod3 = mgr3.host.get("relocate")
-    mod3.probe_put(probe_fingerprint(mgr3.config.qbittorrent), "passed", {"method": "e1"})
+    mod3.probe_put(probe_fingerprint(mgr3.config.qbittorrent, mod3.probe_salt_ensure()), "passed", {"method": "e1"})
     item4 = mod3.relocate_precheck(["HA", "HB"], dst3)[0]
     assert item4["cls"] == "ok" and any("机器级强证明" in n for n in item4["notes"]), item4["notes"]
 

@@ -7,10 +7,19 @@
 探测统一走 ctx.api(QbApi Facade, make_manager 装配), 不裸散 client。
 
 ## 测试计划(每个测试函数一条)
-- test_probe_fingerprint_stable_and_sensitive: 指纹稳定可复现; host/port/username/password/api_key 任一变化即变; password 空时回落 api_key; 双空也稳定; 16 位十六进制
+- test_probe_fingerprint_stable_and_sensitive: 盐化指纹(HMAC-SHA256 截短, 构造逐字节钉死)
+  稳定可复现; host/port/username/password/api_key 任一变化即变; password 空时回落 api_key;
+  双空也稳定; 换盐即全变(R1#42); 16 位十六进制
+- test_probe_salt_roundtrip_and_rotation: 盐惰性生成+持久化 round-trip(只读面无盐返回空串
+  且不写 state; ensure 幂等复用; 丢失重生成); 换盐 => 指纹变键 => 旧缓存失联(R1#42)
+- test_probe_salt_rotation_clears_stale_probe_box: 换盐清箱 —— 升级前遗留形态(箱里有无盐
+  SHA1 旧指纹键、无盐)下 ensure 生成新盐时整箱清空 relocate.probes(R1#42 原爆破面不残留);
+  同盐复用不清箱
 - test_build_probe_torrent_structure: 造种 4KiB/piece 16KiB/单 piece/无 tracker/无私有标志/体积约 102B, hr.bencode.bdecode 回读逐键核对
 - test_probe_full_lifecycle_pass: 全生命通过(读证+写证+清理无残留): status=passed, evidence 齐全, qB 无种子, 两侧临时目录消失, cleanup 记录干净
 - test_probe_add_params_isolated: add 参数钉死: is_stopped=True / autoTMM=False / save_path=src 临时子目录 / tags=aqb-probe / category 空
+- test_probe_ignores_same_tag_user_torrent: 同名 tag 非探针种子不被认领(R1#37): 前缀认领
+  不中 => 按不可见继续轮询, recheck/setLocation/delete 全不落在用户种子上
 - test_probe_read_proof_timeout_failed_no_env: recheck 不进 1.0 => failed + env=False(缓存方向), 探针种子已清
 - test_probe_write_proof_timeout_failed_no_env: dst 不出现(setLocation 无效果) => failed + env=False, 探针种子已清
 - test_probe_write_mismatch_failed_no_env: dst 出现但内容不符 => write_mismatch + env=False, evidence 记 dst_seen
@@ -19,13 +28,16 @@
 - test_probe_torrent_invisible_env: add 受理但种子始终不可见 => failed + env=True
 - test_probe_tag_fallback_delete_on_invisible: add 受理但探测窗口拿不到 hash => finally 按 tag
   补删探测种子(此刻可见则删成; 恒不可见则只告警留证)
+- test_probe_tag_fallback_keeps_user_files_on_same_tag: 同名 tag 补删零动作(R1#38「跳过」案):
+  用户同名 tag 种子不摘记录不删文件(与启动扫描 R1#41 同语义), 探针种子 delete_files=True
 - test_probe_passes_with_namespaced_view: 容器部署命名空间错位(fs.path_map: qB 视角 /qb/... 与
   本机视图不同, FS 实际共享)下 run_probe 仍 passed —— 本机读写侧经 map_to_container 换算
 - test_probe_cleanup_runs_on_every_failure_path: 各阶段中断仍清理(本机写失败/add 拒/读证失败/delete 失败留证+warning 但不改结论)
 - test_probe_timeout_budget_constants: 超时常量单点取值钉住(读 10s/写 10s/清理 5s/轮询 0.25s)
-- test_sweep_probe_residue: 启动扫描清残留(种子+目录), 幂等二次为 0, 非本前缀目录不动
-- test_sweep_residue_tag_only_no_delete_files: tag 命中但种子名/保存路径均不带 aqb-probe 前缀
-  => 只删种子记录, delete_files=False(绝不误删用户数据); 目录侧保留现状
+- test_sweep_probe_residue: 启动扫描清残留(种子+目录), 幂等二次为 0; 同 tag 非探针种子
+  零动作只告警(R1#41), 记录与目录保留
+- test_sweep_residue_tag_only_zero_action: tag 命中但种子名/保存路径均不带 aqb-probe 前缀
+  => 零动作只告警(R1#41: 摘记录也中断做种), 种子记录与数据文件都保留
 - test_start_hook_sweeps_residue: relocate 启动钩子: enabled 时清残留并在日志提及; disabled/dry_run 不动手
 - test_lifecycle_mixin_wires_sweep: LifecycleMixin.start 源码里确实调用 sweep_probe_residue(钩子挂接不回退)
 
@@ -38,7 +50,8 @@
 - test_probe_set_location_rejected_env: setLocation 被拒 => env=True
 - test_probe_write_proof_copy_without_move_mismatch: dst 一致而 src 未消失 => 等到超时定 mismatch
 - test_file_matches_oserror_is_false: 本机文件比对 OSError => 不一致不抛
-- test_cleanup_tag_delete_matrix: 无 hash 清理四支(跳过/补删/补删炸/定位炸)
+- test_cleanup_tag_delete_matrix: 无 hash 清理五支(跳过/认领补删 delete_files=True/
+  同 tag 非探针零动作只告警/补删炸/定位炸)
 - test_cleanup_gone_poll_error_records_and_continues: 消失轮询炸留证继续目录清理
 - test_cleanup_rmtree_failure_and_leftover: 目录清理失败 residue 留证
 - test_sweep_probe_residue_list_error_returns_zero: 扫描列种子炸返回 0 不挡启动
@@ -47,6 +60,7 @@
 """
 
 import hashlib
+import hmac
 import logging
 import os
 import shutil
@@ -159,26 +173,82 @@ def _probe_torrents(client):
 
 
 def test_probe_fingerprint_stable_and_sensitive():
-    """指纹稳定可复现; 任一凭据字段变化即变; password 空回落 api_key; 双空稳定; 16 位十六进制"""
+    """盐化指纹(HMAC-SHA256 截短)稳定可复现且构造逐字节钉死; 任一凭据字段变化即变;
+    password 空回落 api_key; 双空稳定; 换盐即全变; 16 位十六进制(R1#42: 无盐 SHA1 退役)"""
     base = QbittorrentConfig(host="127.0.0.1", port=8080, username="u", password="p")
-    assert rp.probe_fingerprint(base) == rp.probe_fingerprint(
-        QbittorrentConfig(host="127.0.0.1", port=8080, username="u", password="p")
+    assert rp.probe_fingerprint(base, "s1") == rp.probe_fingerprint(
+        QbittorrentConfig(host="127.0.0.1", port=8080, username="u", password="p"), "s1"
     )
-    fp = rp.probe_fingerprint(base)
+    fp = rp.probe_fingerprint(base, "s1")
     assert len(fp) == 16 and all(c in "0123456789abcdef" for c in fp)
+    # 构造钉死: HMAC-SHA256(key=盐, msg="host|port|username|secret") 截短 16 位
+    # (防退化回无盐单轮 SHA1 —— 那正是 R1#42 要修的离线爆破面)
+    raw = "127.0.0.1|8080|u|p"
+    assert fp == hmac.new(b"s1", raw.encode("utf-8"), hashlib.sha256).hexdigest()[:16]
     variants = [
         QbittorrentConfig(host="10.0.0.2", port=8080, username="u", password="p"),
         QbittorrentConfig(host="127.0.0.1", port=8081, username="u", password="p"),
         QbittorrentConfig(host="127.0.0.1", port=8080, username="u2", password="p"),
         QbittorrentConfig(host="127.0.0.1", port=8080, username="u", password="p2"),
     ]
-    changed = {rp.probe_fingerprint(v) for v in variants}
+    changed = {rp.probe_fingerprint(v, "s1") for v in variants}
     assert len(changed) == len(variants) and fp not in changed
     # password 空时回落 api_key(有谁用谁); 两者都空 = 空串, 依旧稳定
-    assert rp.probe_fingerprint(QbittorrentConfig(host="h", port=1, username="u", api_key="k")) == \
-        rp.probe_fingerprint(QbittorrentConfig(host="h", port=1, username="u", password="", api_key="k"))
+    assert rp.probe_fingerprint(QbittorrentConfig(host="h", port=1, username="u", api_key="k"), "s1") == \
+        rp.probe_fingerprint(QbittorrentConfig(host="h", port=1, username="u", password="", api_key="k"), "s1")
     both_empty = QbittorrentConfig(host="h", port=1, username="u")
-    assert rp.probe_fingerprint(both_empty) == rp.probe_fingerprint(QbittorrentConfig(host="h", port=1, username="u"))
+    assert rp.probe_fingerprint(both_empty, "s1") == \
+        rp.probe_fingerprint(QbittorrentConfig(host="h", port=1, username="u"), "s1")
+    # 盐在 key 位: 换盐 => 同配置指纹全变(缓存按指纹键, 换盐 = 旧缓存自然整体失效);
+    # 空盐(只读退化形态)与带盐指纹也必不同键, 不产生假命中
+    assert rp.probe_fingerprint(base, "s2") != fp
+    assert rp.probe_fingerprint(base, "") != fp
+
+
+def test_probe_salt_roundtrip_and_rotation(tmp_path):
+    """盐持久化 round-trip 与换盐缓存键失效(R1#42): 只读面无盐返回空串且不写 state(预检
+    零副作用契约); ensure 惰性生成+落 state+幂等复用+丢失重生成; 换盐 => 指纹变键+整箱清
+    => 旧缓存失联(下次重探)"""
+    mgr = make_manager(os.path.join(str(tmp_path), "state.json"), bare=True)
+    mod = mgr.ctx.relocate
+    # 只读面: 无盐 -> 空串, 且绝不生成(state 不动 —— 盐的惰性生成只在写路径)
+    assert mod.probe_salt() == ""
+    assert "probe_salt" not in mgr.ctx.state.data.get("relocate", {})
+    # ensure: secrets 随机 16 字节 hex(32 字符) + 持久化 + 幂等复用
+    s1 = mod.probe_salt_ensure()
+    assert len(s1) == 32 and all(c in "0123456789abcdef" for c in s1)
+    assert mgr.ctx.state.data["relocate"]["probe_salt"] == s1
+    assert mod.probe_salt() == s1 and mod.probe_salt_ensure() == s1
+    # E1 缓存按指纹键: 换盐(盐丢失重生成同形) => 同配置指纹变键 => 旧缓存自然失联(下次重探)
+    conf = QbittorrentConfig(host="h", port=1, username="u", password="p")
+    fp_a = rp.probe_fingerprint(conf, mod.probe_salt())
+    mod.probe_put(fp_a, "passed", {"method": "e1"})
+    assert mod.probe_get(fp_a)["status"] == "passed"
+    mgr.ctx.state.data["relocate"]["probe_salt"] = ""  # 模拟盐丢失/被清
+    s2 = mod.probe_salt_ensure()
+    assert s2 and s2 != s1  # 重生成新盐
+    assert mgr.ctx.state.data["relocate"]["probes"] == {}  # 换盐清箱: 旧键死条目不残留
+    fp_b = rp.probe_fingerprint(conf, s2)
+    assert fp_b != fp_a and mod.probe_get(fp_b) is None  # 新键未命中 => 下次迁移重探
+
+
+def test_probe_salt_rotation_clears_stale_probe_box(tmp_path):
+    """换盐清箱(R1#42 面B补): 升级前遗留形态(state 箱里只有无盐 SHA1 旧指纹键、无盐)——
+    ensure 生成新盐时整箱清空 relocate.probes: 旧键(原爆破面)不残留、孤儿键不累积,
+    清空仅损失下次重探一次; 同盐复用不清箱(幂等)"""
+    mgr = make_manager(os.path.join(str(tmp_path), "state.json"), bare=True)
+    mod = mgr.ctx.relocate
+    # 升级前遗留形态: probes 箱有无盐 SHA1 指纹键, probe_salt 键尚不存在(旧版本无盐)
+    legacy_fp = "0123456789abcdef"
+    mgr.ctx.state.data["relocate"] = {"probes": {legacy_fp: {"status": "failed", "evidence": {}, "at": 1}}}
+    s = mod.probe_salt_ensure()
+    assert len(s) == 32 and mgr.ctx.state.data["relocate"]["probe_salt"] == s
+    assert mgr.ctx.state.data["relocate"]["probes"] == {}  # 遗留旧键整箱清空
+    assert mod.probe_get(legacy_fp) is None
+    # 同盐复用: 不再清箱(只在生成新盐分支清), 新写条目保留
+    live_fp = rp.probe_fingerprint(QbittorrentConfig(host="h", port=1, username="u", password="p"), s)
+    mod.probe_put(live_fp, "passed", {"method": "e1"})
+    assert mod.probe_salt_ensure() == s and len(mgr.ctx.state.data["relocate"]["probes"]) == 1
 
 
 # ---------- 造种 ----------
@@ -241,6 +311,25 @@ def test_probe_add_params_isolated(tmp_path, fast_timeouts):
     assert client.recheck_hashes_calls == [["HASH123"]]  # 显式 recheck(证读)
     deletes = [call for call in client.calls if call[0] == "delete"]
     assert deletes and deletes[-1][1] is True  # deleteFiles=True 收尾
+
+
+def test_probe_ignores_same_tag_user_torrent(tmp_path, fast_timeouts):
+    """同名 tag 非探针种子不被认领(R1#37): 轮询按前缀认领(_is_probe_torrent), 用户种子
+    按不可见处理(继续轮询等真探针)—— recheck/setLocation/delete 全不落在它身上"""
+    ctx, client, src, dst = _env(tmp_path, client=_SameFsClient())
+    user_dir = os.path.join(src, "user-data")
+    os.makedirs(user_dir)
+    keep = os.path.join(user_dir, "e01.mkv")
+    with open(keep, "w") as f:
+        f.write("keep")
+    client.torrents["USER1"] = FakeTorrent(hash="USER1", name="My Show S01", save_path=user_dir, tags=rp.TAG_PROBE)
+    result = rp.run_probe(ctx, src, dst)
+    # 认领的是探针种子(HASH123), 不是同名 tag 的用户种子
+    assert result.status == "passed" and result.evidence["hash"] == "HASH123"
+    assert client.recheck_hashes_calls == [["HASH123"]]  # recheck 从未落到用户种子
+    assert all(call[1] == result.evidence["dst_dir"] for call in client.calls if call[0] == "set_location")
+    assert client.torrents["USER1"].save_path == user_dir  # 用户种子未被 setLocation 搬走
+    assert "USER1" in client.torrents and os.path.exists(keep)  # 记录与数据原样
 
 
 def test_probe_read_proof_timeout_failed_no_env(tmp_path, fast_timeouts):
@@ -309,6 +398,25 @@ def test_probe_tag_fallback_delete_on_invisible(tmp_path, fast_timeouts, monkeyp
     assert "hash" not in result.evidence  # probe_hash=None, 常规按 hash 删不到
     assert _probe_torrents(client) == []  # 按 tag 补删成功: 探针种子不留残
     assert client.calls[-1] == ("delete", True) and result.evidence["cleanup"]["torrent_deleted"] is True
+
+
+def test_probe_tag_fallback_keeps_user_files_on_same_tag(tmp_path, fast_timeouts, monkeypatch):
+    """同名 tag 补删零动作(R1#38 取「跳过」案): hash 拿不到走按 tag 补删时, 用户同名 tag
+    种子不摘记录不删文件(与启动扫描 R1#41 同语义), 只有探针种子 delete_files=True"""
+    ctx, client, src, dst = _env(tmp_path, client=FakeClient())
+    user_dir = os.path.join(src, "user-data")
+    os.makedirs(user_dir)
+    keep = os.path.join(user_dir, "e01.mkv")
+    with open(keep, "w") as f:
+        f.write("keep")
+    client.torrents["USER1"] = FakeTorrent(hash="USER1", name="My Show S01", save_path=user_dir, tags=rp.TAG_PROBE)
+    monkeypatch.setattr(rp, "PROBE_READ_TIMEOUT_S", 0.0)  # 可见窗口 0: add 受理但拿不到 hash
+    result = rp.run_probe(ctx, src, dst)
+    assert result.status == "failed" and result.reason == "torrent_invisible" and result.env is True
+    deletes = [call for call in client.calls if call[0] == "delete"]
+    assert deletes and all(call[1] for call in deletes)  # 只有认领探针被删且删文件, 用户零动作
+    assert "USER1" in client.torrents  # 零动作: 用户种子记录保留(不摘)
+    assert os.path.exists(keep)  # 数据文件保留
 
 
 def test_probe_passes_with_namespaced_view(tmp_path, fast_timeouts, monkeypatch):
@@ -392,26 +500,31 @@ def _inject_residue(ctx, client, root):
 
 
 def test_sweep_probe_residue(tmp_path):
-    """启动扫描清残留(种子+前缀目录); 幂等二次为 0; 非本前缀目录保守不动"""
+    """启动扫描清残留(种子+前缀目录); 幂等二次为 0; 同 tag 非探针种子零动作只告警(R1#41)"""
     ctx, client, src, dst = _env(tmp_path)
     save_path = _inject_residue(ctx, client, src)
     assert rp.sweep_probe_residue(ctx) == 1
     assert _probe_torrents(client) == [] and not os.path.exists(save_path)
     assert rp.sweep_probe_residue(ctx) == 0  # 幂等
-    # tag 是探测 tag 但 save_path 不带固定前缀(用户自己打了同名 tag 的种子): 只删种子不动目录
+    # tag 是探测 tag 但名/路径都不带固定前缀(用户自己打了同名 tag 的种子): 零动作只告警
+    # (R1#41: 摘记录也会让用户种子静默移出 qB 中断做种) —— 记录与目录全保留, 不计清理数
     other_dir = os.path.join(src, "user-dir")
     os.makedirs(other_dir)
     with open(os.path.join(other_dir, "keep.txt"), "w") as f:
         f.write("keep")
     client.torrents["RES2"] = FakeTorrent(hash="RES2", name="user.bin", save_path=other_dir, tags=rp.TAG_PROBE)
-    assert rp.sweep_probe_residue(ctx) == 1
+    with capture_logs("auto_qb.core.modules.relocate_mod", level=logging.WARNING) as rec:
+        assert rp.sweep_probe_residue(ctx) == 0
+    assert "RES2" in client.torrents  # 种子记录保留(不摘)
     assert os.path.exists(os.path.join(other_dir, "keep.txt"))  # 目录保守未动
-    assert client.calls[-1] == ("delete", False)  # 名不匹配: 只删种子记录, 不 deleteFiles
+    assert any("非探针" in r.getMessage() for r in rec.records)
 
 
-def test_sweep_residue_tag_only_no_delete_files(tmp_path):
-    """tag 命中但种子名/保存路径均不带 aqb-probe 前缀 => 只删种子记录不删文件
-    (delete_files=False, 保守默认: 用户自己打了同名 tag 的种子数据绝不能被误删)"""
+def test_sweep_residue_tag_only_zero_action(tmp_path):
+    """tag 命中但种子名/保存路径均不带 aqb-probe 前缀 => 零动作只告警(R1#41)
+
+    用户自己打了同名 tag 的种子: 摘记录也会让它静默移出 qB(做种中断需重新添加),
+    故种子记录与数据文件都保留, 只 logger.warning 留痕(与认领条目的删文件口径分界)。"""
     ctx, client, src, dst = _env(tmp_path)
     user_dir = os.path.join(src, "user-data")
     os.makedirs(user_dir)
@@ -419,10 +532,12 @@ def test_sweep_residue_tag_only_no_delete_files(tmp_path):
     with open(keep_file, "w") as f:
         f.write("keep")
     client.torrents["RES9"] = FakeTorrent(hash="RES9", name="My Show S01", save_path=user_dir, tags=rp.TAG_PROBE)
-    assert rp.sweep_probe_residue(ctx) == 1
-    assert _probe_torrents(client) == []  # 种子记录已摘(探测 tag 认领)
-    assert os.path.exists(keep_file)  # 数据文件保留(不 deleteFiles)
-    assert client.calls[-1] == ("delete", False)
+    with capture_logs("auto_qb.core.modules.relocate_mod", level=logging.WARNING) as rec:
+        assert rp.sweep_probe_residue(ctx) == 0
+    assert "RES9" in client.torrents  # 种子记录保留(不摘)
+    assert os.path.exists(keep_file)  # 数据文件保留
+    assert all(call[0] != "delete" for call in client.calls)  # 零删除动作
+    assert any("非探针" in r.getMessage() for r in rec.records)
 
 
 def test_start_hook_sweeps_residue(tmp_path, fast_timeouts):
@@ -607,14 +722,27 @@ class _CleanupApi:
 
 
 def test_cleanup_tag_delete_matrix(tmp_path):
-    """无 hash 的清理: 无 hash 条目跳过 / 正常补删 / 补删炸留证 / 定位炸留证, 均不抛"""
+    """无 hash 的清理: 无 hash 条目跳过 / 前缀认领补删 delete_files=True / 同 tag 非探针
+    零动作只告警(R1#38「跳过」案, 与 sweep R1#41 同语义)/ 补删炸留证 / 定位炸留证, 均不抛"""
     ev: dict = {}
-    api = _CleanupApi(tag_rows=[SimpleNamespace(hash=""), SimpleNamespace(hash="T1")])
-    rp._cleanup(api, "", (str(tmp_path / "a"), str(tmp_path / "b")), ev)
-    assert ev["cleanup"]["torrent_deleted"] is True and api.deleted == [(("T1", ), True)]
+    api = _CleanupApi(
+        tag_rows=[
+            SimpleNamespace(hash=""),
+            SimpleNamespace(hash="T1", name="aqb-probe-t.bin"),
+            SimpleNamespace(hash="T2", name="My Show", save_path="R:/Downloads"),
+        ]
+    )
+    with capture_logs("auto_qb.core.modules.relocate_mod", level=logging.WARNING) as rec:
+        rp._cleanup(api, "", (str(tmp_path / "a"), str(tmp_path / "b")), ev)
+    assert ev["cleanup"]["torrent_deleted"] is True
+    assert api.deleted == [(("T1", ), True)]  # 认领条目删文件; T2 零动作(不摘记录)
+    assert any("非探针" in r.getMessage() for r in rec.records)
 
     ev2: dict = {}
-    api2 = _CleanupApi(tag_rows=[SimpleNamespace(hash="T1")], delete_error=RuntimeError("delete refused"))
+    api2 = _CleanupApi(
+        tag_rows=[SimpleNamespace(hash="T1", name="aqb-probe-t.bin")],
+        delete_error=RuntimeError("delete refused"),
+    )
     rp._cleanup(api2, "", (), ev2)
     assert "tag_delete_error" in ev2["cleanup"] and ev2["cleanup"]["torrent_deleted"] is False
 

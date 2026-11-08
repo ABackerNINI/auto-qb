@@ -33,6 +33,7 @@ from .relocate_units import RelocateJob
 from .relocate_lifecycle import LifecycleMixin
 from .relocate_plan import PlanMixin
 from .relocate_exec import ExecMixin
+from .relocate_probe import new_probe_salt
 
 # 同机强探测(E1)结论的合法取值(计划 26-11-04-0055 §03.2); 其余一律按坏条目/未命中处理
 _PROBE_STATUSES = ("passed", "failed")
@@ -136,6 +137,43 @@ class RelocateModule(LifecycleMixin, PlanMixin, ExecMixin, BaseModule):
         """删单条指纹缓存(指纹变更失效/手动清缓存); 本就没有也返回 False, 幂等"""
         box = self._state_probes()
         return box.pop(fingerprint, None) is not None
+
+    def probe_salt(self) -> str:
+        """读指纹盐(只读面): state 无盐返回空串, 绝不在读路径生成/持久化
+
+        预检零副作用契约(本文件头)要求读缓存面不写 state —— 盐的惰性生成只在写路径
+        probe_salt_ensure。无盐计算的指纹与带盐缓存必不同键, 预检按未命中处理(执行闸
+        会经 ensure 面补盐后正常命中/重探), 语义安全。
+        """
+        st = getattr(self._ctx, "state", None) if self._ctx is not None else None
+        data = getattr(st, "data", None)
+        relocate = data.get("relocate") if isinstance(data, dict) else None
+        salt = relocate.get("probe_salt") if isinstance(relocate, dict) else None
+        return salt if isinstance(salt, str) and salt else ""
+
+    def probe_salt_ensure(self) -> str:
+        """读/惰性生成并持久化指纹盐(写路径单点: 执行闸 _ensure_probe 消费)
+
+        盐存 state relocate.probe_salt(与 relocate.probes 缓存同键族): 换盐 => 全部旧指纹
+        键失效 => E1 缓存自然整体重探(语义不变, 生成单点见 relocate_probe.new_probe_salt)。
+        生成新盐分支同时整箱清空 relocate.probes(面 B 补, R1#42): 该时刻箱内全部既有条目
+        按构造必为旧键死条目 —— 含升级前遗留的无盐 SHA1 指纹(原爆破面, 不清则 state 泄露
+        下仍可爆破), 且 probe_drop 无人调用孤儿键只累积不回收; 清空仅损失下次重探一次。
+        state 缺失(上下文不全)返回空串不炸, 与 probe_get 的退化形态一致。
+        """
+        st = getattr(self._ctx, "state", None) if self._ctx is not None else None
+        data = getattr(st, "data", None)
+        if not isinstance(data, dict):
+            return ""
+        relocate = data.setdefault("relocate", {})
+        salt = relocate.get("probe_salt")
+        if not isinstance(salt, str) or not salt:
+            salt = new_probe_salt()
+            relocate["probe_salt"] = salt
+            probes = relocate.get("probes")
+            if isinstance(probes, dict) and probes:
+                probes.clear()
+        return salt
 
     def _persist(self) -> None:
         """job 账写回 state(整段重写: 条数 = 组数, 极小; 周期落盘由 state 服务负责)"""

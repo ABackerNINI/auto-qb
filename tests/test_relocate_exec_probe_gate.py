@@ -145,7 +145,7 @@ def test_first_multi_member_migration_probes_then_starts(monkeypatch):
     assert len(calls) == 1, calls
     assert calls[0]["src"] == "R:/src" and calls[0]["dst"] == "R:/dst", calls
     assert len(locs) == 1 and locs[0]["location"] == "R:/dst", locs
-    fp = probe_fingerprint(mod._ctx.config.qbittorrent)
+    fp = probe_fingerprint(mod._ctx.config.qbittorrent, mod.probe_salt())
     assert mod.probe_get(fp)["status"] == "passed"
     assert len(mod.active_jobs()) == 1
 
@@ -163,7 +163,7 @@ def test_probe_fs_unreachable_blocks_without_job_or_setlocation(monkeypatch):
     assert not mod.active_jobs(), "探测失败不得建账"
     assert locs == [], "探测失败不得下发 setLocation"
     assert len(calls) == 1, calls
-    fp = probe_fingerprint(mod._ctx.config.qbittorrent)
+    fp = probe_fingerprint(mod._ctx.config.qbittorrent, mod.probe_salt())
     hit = mod.probe_get(fp)
     assert hit is not None and hit["status"] == "failed", hit
     assert hit["evidence"]["reason"] == "read_proof_timeout", hit
@@ -196,7 +196,7 @@ def test_env_failure_not_cached_and_retried_next_time(monkeypatch):
     assert "未缓存, 下次迁移将重试" in it["reasons"][-1]["text"], it["reasons"]
     assert "fs.path_map" in it["reasons"][-1]["text"] and "assume_shared" in it["reasons"][-1]["text"], it["reasons"]
     assert "由用户承担" in it["reasons"][-1]["text"], it["reasons"]
-    fp = probe_fingerprint(mod._ctx.config.qbittorrent)
+    fp = probe_fingerprint(mod._ctx.config.qbittorrent, mod.probe_salt())
     assert mod.probe_get(fp) is None, "环境性失败不得写缓存"
     second = mod.relocate_execute(["HA"], "R:/dst")
     assert second[0]["cls"] == "blocked" and len(calls) == 2, (second, calls)
@@ -206,7 +206,7 @@ def test_cached_passed_hits_with_zero_probe_calls(monkeypatch):
     """缓存 passed 命中 => 零 run_probe 调用直接放行(D4: 一次性机器级证明 + 预检 D 复查)"""
     mod, locs = _gate_env(monkeypatch)
     calls = _stub_run_probe(monkeypatch, [_passed()])
-    fp = probe_fingerprint(mod._ctx.config.qbittorrent)
+    fp = probe_fingerprint(mod._ctx.config.qbittorrent, mod.probe_salt_ensure())
     mod.probe_put(fp, "passed", {"method": "e1"})
     items = mod.relocate_execute(["HA"], "R:/dst")
     assert items[0]["cls"] == "started", items
@@ -220,7 +220,7 @@ def test_gate_cached_passed_direct_hit_appends_note(monkeypatch):
     """预检层缓存读失败(证明面不可判定)而执行闸直读缓存 passed => 放行 + note「同机强探测: 命中缓存(指纹 …)」"""
     mod, locs = _gate_env(monkeypatch)
     calls = _stub_run_probe(monkeypatch, [_passed()])
-    fp = probe_fingerprint(mod._ctx.config.qbittorrent)
+    fp = probe_fingerprint(mod._ctx.config.qbittorrent, mod.probe_salt_ensure())
     mod.probe_put(fp, "passed", {"method": "e1"})
     orig = mod.probe_get
     seq = {"n": 0}
@@ -331,7 +331,7 @@ def test_weak_positive_still_probes_and_strong_d_positive_skips(monkeypatch):
     assert items[0]["cls"] == "started", items
     assert len(calls) == 1, f"弱证据 positive 必须仍走执行链强探测: {calls}"
     assert len(locs) == 1, locs
-    fp = probe_fingerprint(mod._ctx.config.qbittorrent)
+    fp = probe_fingerprint(mod._ctx.config.qbittorrent, mod.probe_salt())
     assert mod.probe_get(fp)["status"] == "passed"
 
     # 强证据(src D 级 positive): 预检已 proved -> 探测闸短路, 零探测直接建账

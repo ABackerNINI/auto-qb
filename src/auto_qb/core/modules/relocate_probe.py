@@ -27,6 +27,7 @@ torrents_recheck/torrents_set_location/torrents_delete(delete_files=True)/torren
 (tag= 过滤)), 本文件不裸散 client 调用、不新建连接方式。
 """
 import hashlib
+import hmac
 import os
 import secrets
 import shutil
@@ -68,21 +69,35 @@ class ProbeResult:
     evidence: dict = field(default_factory=dict)
 
 
-# ---------- 指纹(拍板 D3: 失效指纹 = host+port+username+password/api_key 哈希) ----------
+# ---------- 指纹(拍板 D3: 失效指纹 = host+port+username+password/api_key 哈希; R1#42 加盐) ----------
 
 
-def probe_fingerprint(qb_config: Any) -> str:
-    """qB 连接身份指纹: sha1("host|port|username|secret") 十六进制截短 16 位
+def new_probe_salt() -> str:
+    """新指纹盐(生成单点): secrets 随机 16 字节 hex —— 生成策略变化只改这里
+
+    盐存 state(relocate.probe_salt, 与探测缓存 relocate.probes 同键族, 经 RelocateModule.
+    probe_salt/probe_salt_ensure 读写), 不进 config: 跨轮次状态统一进 state_file(黄金法则 3)。
+    换盐(盐丢失/被清后重新生成) => 全部旧指纹键失效 => E1 缓存自然整体重探(语义不变)。
+    """
+    return secrets.token_hex(16)
+
+
+def probe_fingerprint(qb_config: Any, salt: str = "") -> str:
+    """qB 连接身份指纹: HMAC-SHA256(key=盐, msg="host|port|username|secret") hex 截短 16 位
 
     secret 取 password(登录凭据, 首选)或 api_key(5.x Bearer 直连, 备选), 两者有谁用谁,
     都空则空串。任一字段变化 => 指纹变化 => 缓存失效重探(P3 消费)。
+    盐(R1#42): 无盐单轮 SHA1 的指纹值落 state 且随回执 note 外流, 泄露场景下可对弱
+    qB 口令离线爆破; HMAC-SHA256 加随机盐后, 只拿到指纹值(日志/note 面)不可离线
+    爆破 —— 盐只在 state, 不进日志/回执。盐缺省空串(state 缺失或只读面未生成的
+    退化形态): 确定性可复现, 与带盐指纹必不同键, 不产生假命中。
     """
     host = getattr(qb_config, "host", "") or ""
     port = getattr(qb_config, "port", "") or ""
     username = getattr(qb_config, "username", "") or ""
     secret = getattr(qb_config, "password", "") or getattr(qb_config, "api_key", "") or ""
     raw = f"{host}|{port}|{username}|{secret}"
-    return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:16]
+    return hmac.new(salt.encode("utf-8"), raw.encode("utf-8"), hashlib.sha256).hexdigest()[:16]
 
 
 # ---------- 造种(报告 §11.1-1: 单文件 4KiB / piece 16KiB / 手工 bencode / 无 tracker / 非私有) ----------
@@ -156,11 +171,25 @@ def _map_local(path: str) -> str:
         return path
 
 
+def _is_probe_torrent(tor: Any) -> bool:
+    """探针种子认领单点(tag 命中只是「可能」, 前缀确认才认领; R1#37/#38/#41 三处同口径)
+
+    种子名或保存路径尾段带固定前缀 PROBE_DIR_PREFIX 才认领是探测种子(sweep_probe_residue
+    的 ours 双条件收敛于此, 本文件不再有第二套口径): 用户自己打了同名 tag 的种子两条
+    全不中, 一律按非探针处理 —— 不认领、不 recheck/setLocation、不删文件。
+    """
+    if str(getattr(tor, "name", "") or "").startswith(PROBE_DIR_PREFIX):
+        return True
+    save_path = str(getattr(tor, "save_path", "") or "")
+    return os.path.basename(save_path.rstrip("\\/")).startswith(PROBE_DIR_PREFIX)
+
+
 def _await_probe_torrent(api: Any, deadline: float, evidence: dict) -> Any:
     """轮询按 tag 列种子直到探针种子可见(报告实测 add 后 ~0.26s 可见); 超时/异常返回 None
 
     按 tag 而非 hash 定位: add 响应形态跨版本分裂(Web API 2.14.0 前后), 而 tag 是我们
-    自己下发的确定事实; 单一写线程下同 tag 只会有探测种子(启动扫描已清历史残留)。
+    自己下发的确定事实。tag 命中还须经前缀认领(_is_probe_torrent, R1#37): 用户自己打了
+    同名 tag 的种子按不可见处理 —— 继续轮询等真探针出现, 绝不对它 recheck/setLocation。
     """
     while clock.SYSTEM_CLOCK.monotonic() < deadline:
         try:
@@ -169,7 +198,7 @@ def _await_probe_torrent(api: Any, deadline: float, evidence: dict) -> Any:
             evidence["error"] = str(e)
             return None
         for tor in tors:
-            if getattr(tor, "hash", None):
+            if getattr(tor, "hash", None) and _is_probe_torrent(tor):
                 return tor
         time.sleep(PROBE_POLL_INTERVAL_S)
     return None
@@ -231,12 +260,20 @@ def _cleanup(api: Any, torrent_hash: str, dirs: Iterable[str], evidence: dict) -
     info: dict[str, Any] = {"torrent_deleted": False, "torrent_gone": None, "dirs_removed": [], "residue": []}
     deadline = clock.SYSTEM_CLOCK.monotonic() + PROBE_CLEANUP_TIMEOUT_S
     if not torrent_hash:
-        # 种子不可见(add 受理但按 tag 列不出)拿不到 hash: 按 tag 补删(同一写线程下同 tag
-        # 只有探测种子; 此刻仍不可见 = 真没有, 轮询空列表零动作)
+        # 种子不可见(add 受理但按 tag 列不出)拿不到 hash: 按 tag 补删(此刻仍不可见 = 真没有,
+        # 轮询空列表零动作)。认领面与可见性轮询/启动扫描完全同口径(R1#38 取「跳过」案):
+        # 非认领条目(用户自己打了同名 tag 的种子)零动作只告警 —— 摘记录也会让用户种子静默
+        # 移出 qB 中断做种(与 sweep R1#41 同语义), 认领条目才 delete_files=True
         try:
             for tor in api.torrents_info(tag=TAG_PROBE) or []:
                 h = getattr(tor, "hash", None)
                 if not h:
+                    continue
+                if not _is_probe_torrent(tor):
+                    logger.warning(
+                        f"relocate | probe: 补删遇到非探针的 tag={TAG_PROBE} 种子"
+                        f"({getattr(tor, 'name', '') or h}), 跳过不动(保留种子记录与目录)"
+                    )
                     continue
                 try:
                     api.torrents_delete(torrent_hashes=[h], delete_files=True)
@@ -378,12 +415,13 @@ def run_probe(ctx: Any, src: str, dst: str) -> ProbeResult:
 
 
 def sweep_probe_residue(ctx: Any) -> int:
-    """按 tag=TAG_PROBE 列种子, deleteFiles 删除并清理已知前缀的临时目录; 返回清理条数
+    """按 tag=TAG_PROBE 列种子, 前缀认领的探测残留 deleteFiles 删除并清理已知前缀的临时目录
 
     幂等(重复调用二次为 0), 异常一律吞掉只 logger.warning —— 扫描失败绝不能挡启动。
-    deleteFiles 双条件(保守默认): tag 命中只说明"可能"是探测种子, 种子名或保存路径带
-    aqb-probe 固定前缀才认领并删文件 —— 极端(用户自己打了同名 tag 的种子)只删种子记录,
-    绝不 delete_files 误删用户数据; 目录侧同样只清自己命名规律的路径。
+    准入双条件(保守默认, _is_probe_torrent 单点, 与可见性轮询/清理补删同口径): tag 命中
+    只说明"可能"是探测种子, 种子名或保存路径带 aqb-probe 固定前缀才认领并删文件; 未被
+    认领的条目(R1#41: 用户自己打了同名 tag 的种子)零动作只 warning —— 摘记录也会让用户
+    种子静默移出 qB 中断做种, 种子与目录一概不碰; 目录侧同样只清自己命名规律的路径。
     """
     api = getattr(ctx, "api", None)
     if api is None or getattr(api, "client", None) is None:
@@ -397,11 +435,16 @@ def sweep_probe_residue(ctx: Any) -> int:
     for tor in tors:
         t_hash = getattr(tor, "hash", None)
         save_path = getattr(tor, "save_path", "") or ""
-        ours = str(getattr(tor, "name", "") or "").startswith(PROBE_DIR_PREFIX) or \
-            os.path.basename(str(save_path).rstrip("\\/")).startswith(PROBE_DIR_PREFIX)
+        if not _is_probe_torrent(tor):
+            # tag 命中但前缀不认领: 用户自己的种子, 零动手(R1#41), 只告警留痕
+            logger.warning(
+                f"relocate | probe: 启动扫描遇到非探针的 tag={TAG_PROBE} 种子"
+                f"({getattr(tor, 'name', '') or t_hash or '无hash'}), 跳过不动(保留种子记录与目录)"
+            )
+            continue
         try:
             if t_hash:
-                api.torrents_delete(torrent_hashes=[t_hash], delete_files=ours)
+                api.torrents_delete(torrent_hashes=[t_hash], delete_files=True)
         except Exception as e:  # noqa: BLE001 - 单条失败不影响其余条目
             logger.warning(f"relocate | probe: 残留探测种子删除失败 {t_hash}({e})")
             continue

@@ -585,7 +585,7 @@ class PlanMixin:
         qb_conf = getattr(getattr(self._ctx, "config", None), "qbittorrent", None)
         if qb_conf is not None:
             try:
-                e1 = self.probe_get(probe_fingerprint(qb_conf))
+                e1 = self.probe_get(probe_fingerprint(qb_conf, self.probe_salt()))
                 e1_passed = (e1 or {}).get("status") == "passed"
             except Exception:  # noqa: BLE001 - 缓存读失败按未命中(执行链会再探), 不挡预检
                 e1_passed = False
