@@ -2,6 +2,8 @@
 
 code-review skill 的配套脚本(八节规程见 .agents/skills/code-review/SKILL.md):
 - pack:  基线与 HEAD hash / diff 统计与分档提示(>400 行或安全敏感面命中 -> 分面) /
+         基哈希(「base -> 工作树」过滤后 diff 的确定性哈希, 过滤面与提交闸门共用
+         review_content.py 单点, 记账类/生成物变更不影响) /
          文件清单 / 红线与安全敏感面预警。红线清单与 my-commit-flow 闸门同源(读
          .commands/my-commit-flow/.my-commit-flow.toml 的 red_lines / warn_lines),
          这里只做提示, 拦截仍归提交闸门; 闸门配置读不到/解析失败给可见警告并降级。
@@ -27,6 +29,9 @@ import subprocess
 import sys
 import tomllib
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from review_content import batch_base_hash  # noqa: E402  (同目录共享模块: 基哈希的过滤判定与提交闸门单点同源)
 
 SEVERITIES = ("blocker", "major", "minor", "nit")
 RELEVANCES = ("相关", "不相关")
@@ -199,6 +204,9 @@ def cmd_pack(args: argparse.Namespace) -> int:
         f"diff 统计: {files_n} 个已跟踪文件变更, +{ins}/-{dele}" +
         (f", 另有 {len(untracked)} 个未跟踪文件共 {sum(untracked_lines.values())} 行" if untracked else "")
     )
+    # 基哈希(计划 26-11-08-1240 §03 3.3): 「base -> 工作树」过滤后 diff 的确定性哈希 —— 过滤判定与
+    # 提交闸门共用 review_content 单点, 末轮评审后补写记账类/生成物不影响它(不误红, D6/R4)。
+    print(f"基哈希: {batch_base_hash(root, base)}")
     print(f"评审规模: {total} 行 -> 分档: {tier}")
     print(f"安全敏感面: {'; '.join(sensitive_hits) if sensitive_hits else '无'}")
     print(f"红线预警: {'; '.join(red_hits) if red_hits else '无'}" + ("  <-- 出现即停, 移出评审范围并回滚" if red_hits else ""))

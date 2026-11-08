@@ -17,6 +17,7 @@
 - BenignPackTest      无敏感内容的小 diff -> 全能档(纯行数路径); 红线/警告清单仍命中
 - CleanPackTest      干净树 -> +0/-0 且全能; 缺/坏闸门配置 -> 可见降级 + 红线预警"无"; 坏 --base / 非 git --root / 非仓库 cwd -> rc=2; 提交后 HEAD!=base 无后缀且已提交改动仍在范围内
 - CheckTest           PASS(rc=0); 幻觉引文/超窗/缺字段/坏枚举/过短引文/非字符串字段/缺文件 REFUTE(rc=1); 窗口边界与 --window; stdin; 根外与穿越 REFUTE; 快照 root(无 .git)放行; 非 UTF-8 兜底; 行注入单行化; 非 JSON/非数组/非 UTF-8 输入 rc=2; 空数组 rc=0; 元素非对象 rc=1
+- BatchBaseHashTest   基哈希(batch_base_hash, 共享模块 review_content): 同树确定且 12hex; 记账类/生成物变更(含未跟踪)不动哈希; 可评已跟踪/未跟踪变更动哈希; 未跟踪文件序无关(按 path 排序); repo 配置逐颗覆写(diff.context/前缀/颜色/算法/orderFile/excludesFile/quotepath/diff.external...)哈希不漂(env 掐 system+global + -c 逐键压 repo 的回归); 工作树改名按删+增展开(name-only 两条路径/无 rename 段); pathspec 逐字精确(f[1].txt 不 glob 误匹配、分块不重复); pack 输出「基哈希:」行与共享实现同值; generated_paths 优先 gen_all --list 清单(反斜杠归一)
 - TraceDecideTest     评审留痕纯判定: 无待评/低于下限放行; 超限无 trailer 拦; trailer 行数不符/缺字段(含缺检)/缺行数拦; >400 行只认 派发 ≥ 2(分面降级信息字段); 判定矩阵 11 例(计划 26-11-07-0441 §04: 分面无派发红/派发 2 过/派发 1 红含骨架/缺检红/P>T 红/P<修+入池 红含口径/弃条目不计下界红/自洽数过/全干净 0-0 过/骨架直贴红/无分面超限过); Review-Skip 理由过短拦; 触安全敏感面小改仍要评; Review 优先于 Skip; 记账类(含 legacy-review4/)/生成物不计入
 - TraceDecideTest(续) 低于下限时正文里的畸形 Review 段不硬拦
 - TraceGateTest       端到端(临时仓库真跑脚本): 复跑标记跳过且用后即删; 低于下限静默; 超限无 trailer rc=1; trailer 行数相符 rc=0 / 不符 rc=1; 锚点推进(漏评提交被下一批连坐); 评过的提交推进锚点; 提交后复跑不重对行数且 HEAD 回退打「未给消息文件, 实算 N 行」提示(0441 落点 4); 齐平字段弱校验(计划 26-11-07-0201 落点 3): 缺字段/合法 8hex 静默 rc0, 格式异常打 [warn] 一行但 rc0
@@ -43,6 +44,9 @@ SCRIPT = Path(__file__).with_name("review_pack.py")
 LANE_SCRIPT = Path(__file__).with_name("review_lane.py")
 
 APP_V1 = "line one\nline two\nline three\n"
+# 基哈希测试 fixture: 14 行含一个空行(第 3 行), 供 config 漂移测试构造对 context / interHunkContext /
+# suppressBlankEmpty 敏感的两处分离改动(第 1 与第 11 行: U3 下两块 hunk, interHunk=3 合一)。
+HASH_APP_V1 = "l1\nl2\n\nl4\nl5\nl6\nl7\nl8\nl9\nl10\nl11\nl12\nl13\nl14\n"
 
 
 def _load_cfg() -> dict:
@@ -689,6 +693,218 @@ class CheckTest(unittest.TestCase):
         proc = self._check(["not a dict"])  # 元素非对象 -> REFUTE rc=1
         self.assertEqual(proc.returncode, 1)
         self.assertIn("不是 JSON 对象", proc.stdout)
+
+
+CONTENT_SCRIPT = Path(__file__).with_name("review_content.py")
+
+
+def _load_content():
+    spec = importlib.util.spec_from_file_location("review_content_under_test", CONTENT_SCRIPT)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+class BatchBaseHashTest(unittest.TestCase):
+    """基哈希(batch_base_hash): 确定性与过滤一致(计划 26-11-08-1240 §03 3.3)。
+
+    「可评路径」判定与提交闸门(check_review_trace)共用 review_content 同一份实现 —— 抽模块的
+    目的正是让"记账类/生成物不计行"与"记账类/生成物不影响哈希"不分叉。这里在真临时仓库钉住:
+    同一树重复调用同值(含 repo 配置逐颗覆写在场, 抗漂移回归) / 单处可评差异必异值 / 改名按
+    删+增展开 / pathspec 逐字精确不重复计入。
+    """
+    def setUp(self):
+        self._tmpdir = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmpdir.cleanup)
+        self.tmp = Path(self._tmpdir.name)
+        self.mod = _load_content()
+        self.base = self._init_repo()
+
+    def _git(self, *args: str) -> str:
+        proc = subprocess.run(
+            ["git", *args], cwd=self.tmp, capture_output=True, text=True, encoding="utf-8", errors="replace"
+        )
+        assert proc.returncode == 0, f"git {args}: {proc.stderr}"
+        return proc.stdout.strip()
+
+    def _init_repo(self) -> str:
+        """基线仓库: app.py 多行可评(HASH_APP_V1); 笔记.py 可评(非 ASCII 路径, 钉 quotepath 面);
+        tasks/note.md 记账类; pitfalls/_index.md 落 _index 兜底规则(生成物)。
+        ! 可评文件一律 write_bytes 写 LF —— write_text 会按平台翻译成 CRLF, 与 blob(入库归一 LF)
+        只差行尾, 正好用来测 --ignore-cr-at-eol(见 test_crlf_only_worktree_noise_does_not_move_hash)。"""
+        self._git("init")
+        self._git("config", "user.email", "t@example.test")
+        self._git("config", "user.name", "t")
+        (self.tmp / "app.py").write_bytes(HASH_APP_V1.encode("utf-8"))
+        (self.tmp / "笔记.py").write_bytes("第一行\n".encode("utf-8"))
+        tasks = self.tmp / "memory-bank" / "tasks"
+        tasks.mkdir(parents=True)
+        (tasks / "note.md").write_text("记账初版\n", encoding="utf-8")
+        pitfalls = self.tmp / "memory-bank" / "pitfalls"
+        pitfalls.mkdir()
+        (pitfalls / "_index.md").write_text("# 索引\n", encoding="utf-8")
+        self._git("add", "-A")
+        self._git("commit", "-m", "base")
+        return self._git("rev-parse", "HEAD")
+
+    def _hash(self) -> str:
+        return self.mod.batch_base_hash(self.tmp, self.base)
+
+    def test_deterministic_and_12_hex(self):
+        self.assertEqual(self._hash(), self._hash())
+        self.assertRegex(self._hash(), r"^[0-9a-f]{12}$")
+
+    def test_bookkeeping_and_generated_changes_do_not_move_hash(self):
+        h0 = self._hash()
+        note = self.tmp / "memory-bank" / "tasks" / "note.md"
+        note.write_text(note.read_text(encoding="utf-8") + "补写记账\n", encoding="utf-8")  # 已跟踪记账类
+        index = self.tmp / "memory-bank" / "pitfalls" / "_index.md"
+        index.write_text("# 索引\n重排\n", encoding="utf-8")  # 已跟踪生成物(_index 兜底规则)
+        (self.tmp / "memory-bank" / "tasks" / "fresh.md").write_text("新记账\n", encoding="utf-8")  # 未跟踪记账类
+        self.assertEqual(self._hash(), h0)
+
+    def test_reviewable_tracked_change_moves_hash(self):
+        h0 = self._hash()
+        (self.tmp / "app.py").write_text("A = 1\nA = 2\n", encoding="utf-8")
+        self.assertNotEqual(self._hash(), h0)
+
+    def test_new_untracked_reviewable_file_moves_hash(self):
+        h0 = self._hash()
+        (self.tmp / "new_mod.py").write_text("B = 1\n", encoding="utf-8")
+        h1 = self._hash()
+        self.assertNotEqual(h1, h0)
+        (self.tmp / "another.py").write_text("C = 1\n", encoding="utf-8")
+        self.assertNotEqual(self._hash(), h1)
+
+    def test_untracked_order_does_not_matter(self):
+        """两个未跟踪文件创建顺序相反, 哈希必须相同(规范文本按 path 排序, 不依赖目录序)。"""
+        (self.tmp / "b_mod.py").write_text("B = 1\n", encoding="utf-8")
+        (self.tmp / "a_mod.py").write_text("A = 1\n", encoding="utf-8")
+        h_b_first = self._hash()
+        (self.tmp / "a_mod.py").unlink()
+        (self.tmp / "b_mod.py").unlink()
+        (self.tmp / "a_mod.py").write_text("A = 1\n", encoding="utf-8")
+        (self.tmp / "b_mod.py").write_text("B = 1\n", encoding="utf-8")
+        self.assertEqual(self._hash(), h_b_first)
+
+    def test_rename_diff_expands_to_delete_plus_add(self):
+        """工作树改名必须按「删+增」展开进基哈希(--no-renames 口径, 评审二轮 minor)。
+
+        改名与删+增展开的等价树是同一对 tree 对象 —— 纯哈希相等分不出两种表述, 钉的是文本形态
+        本身: name-only 列旧+新两个路径(不是只列新路径), diff 文本含旧路径整段删除与新路径整段
+        新增、不出现 rename 段。将来丢 --no-renames(name-only 或 diff 任一处)本用例变红。
+        """
+        h0 = self._hash()
+        self._git("mv", "app.py", "renamed_app.py")
+        self.assertNotEqual(self._hash(), h0)  # 改名动了可评内容, 哈希必动
+        paths = self.mod._reviewable_tracked_paths(self.tmp, self.base, set())
+        self.assertEqual(paths, [b"app.py", b"renamed_app.py"])  # 删+增两条路径
+        text = self.mod._tracked_diff(self.tmp, self.base, paths)
+        self.assertIn(b"-l1\n", text)  # 旧路径整段删除(不是 rename 配对的精简 hunk)
+        self.assertIn(b"+l1\n", text)  # 新路径整段新增(同内容搬运)
+        self.assertNotIn(b"rename from", text)
+        self.assertNotIn(b"similarity index", text)
+
+    def test_crlf_only_worktree_noise_does_not_move_hash(self):
+        """工作树与 blob 只差行尾 CR 不算可评改动(评审二轮 major 的衍生面)。
+
+        env 隔离把 core.autocrlf 掐成默认(不归一), CRLF 工作树对 LF blob 会被误报成整文件改动
+        —— --ignore-cr-at-eol 在检测与 hunk 两侧压掉: 工作树 CRLF<->LF 互转, 哈希都必须不动。
+        """
+        h_crlf = self._hash()  # setUp 基线里 笔记.py 的 blob 是 LF
+        (self.tmp / "笔记.py").write_bytes("第一行\r\n".encode("utf-8"))  # 工作树转 CRLF: 纯行尾噪音
+        self.assertEqual(self._hash(), h_crlf)
+        (self.tmp / "笔记.py").write_bytes("第一行\n".encode("utf-8"))  # 转回 LF: 同样不算改动
+        self.assertEqual(self._hash(), h_crlf)
+        (self.tmp / "笔记.py").write_bytes("第一行\n真内容变了\n".encode("utf-8"))  # 真内容变更照常动哈希
+        self.assertNotEqual(self._hash(), h_crlf)
+
+    def test_pathspec_literal_no_glob_duplication(self):
+        """pathspec 逐字精确(评审二轮 nit): 文件名里的 [ ] * 不作通配符 —— f[1].txt 只匹配字面名,
+        f1.txt 的 diff 段不因 glob 误匹配跨块重复计入(强制小预算分块后, 无 :(literal) 时
+        f[1].txt 所在块会把 f1.txt 的段再吐一遍)。"""
+        (self.tmp / "f[1].txt").write_bytes(b"bracket\n")
+        (self.tmp / "f1.txt").write_bytes(b"plain\n")
+        self._git("add", "-A")
+        self._git("commit", "-m", "two files")
+        base2 = self._git("rev-parse", "HEAD")
+        (self.tmp / "f[1].txt").write_bytes(b"bracket changed\n")
+        (self.tmp / "f1.txt").write_bytes(b"plain changed\n")
+        paths = self.mod._reviewable_tracked_paths(self.tmp, base2, set())
+        self.assertEqual(sorted(paths), [b"f1.txt", b"f[1].txt"])
+        budget = self.mod.PATHSPEC_CHAR_BUDGET
+        self.mod.PATHSPEC_CHAR_BUDGET = 20  # 强制分块: 两个 pathspec 各占一块(glob 重复才可能跨块发生)
+        try:
+            text = self.mod._tracked_diff(self.tmp, base2, paths)
+        finally:
+            self.mod.PATHSPEC_CHAR_BUDGET = budget
+        self.assertEqual(text.count(b"diff --git"), 2, "glob 误匹配会把同一文件的 diff 段重复计入")
+        self.assertIn(b"+bracket changed\n", text)
+        self.assertIn(b"+plain changed\n", text)
+
+    def test_hash_stable_under_config_overrides(self):
+        """抗配置漂移回归(评审二轮 major): repo 配置(.git/config)逐颗覆写, 基哈希必须不变。
+
+        env 层掐断 system/global, -c 逐键压过 repo —— 漏一颗钉子这里就红。fixture 让每颗钉子
+        「漏了就真的会漂」: 两处分离改动(context/interHunk 敏感) + 空行上下文(suppressBlankEmpty
+        敏感) + 非 ASCII 路径(quotepath 敏感) + 未跟踪可评文件(excludesFile 敏感) + 排序文件
+        (orderFile 敏感) + 属性文件与大文件阈值(attributesFile/bigFileThreshold 敏感)。
+        algorithm/indentHeuristic/renames 靠旗标钉本身, 当前无独立回归用例可证其敏感性
+        (改名用例整文件删增对算法选择不敏感, 哈希断言用例不覆盖分档)。
+        """
+        (self.tmp / "app.py").write_bytes("L1\nl2\n\nl4\nl5\nl6\nl7\nl8\nl9\nl10\nL11\nl12\nl13\nl14\n".encode("utf-8"))
+        (self.tmp / "笔记.py").write_bytes("第一行\n改过\n".encode("utf-8"))
+        (self.tmp / "extra_mod.py").write_bytes(b"U = 1\n")  # 未跟踪可评
+        order_path = self.tmp / "diff-order.txt"
+        order_path.write_bytes("笔记.py\napp.py\n".encode("utf-8"))  # 逆序: 若被应用会重排 diff 段
+        ignore_path = self.tmp / "extra-ignore.txt"
+        ignore_path.write_bytes(b"*.py\n")  # 若被应用会隐藏未跟踪 .py
+        attr_path = self.tmp / "diff-attr.txt"
+        attr_path.write_bytes(b"*.py -diff\n")  # 若被应用会把 app.py 的 hunk 段压成 Binary files 行
+        h_stable = self._hash()
+        for key, value in (
+            ("diff.context", "1"),
+            ("diff.mnemonicPrefix", "true"),
+            ("diff.srcPrefix", "X/"),
+            ("diff.dstPrefix", "Y/"),
+            ("color.ui", "always"),
+            ("diff.algorithm", "histogram"),
+            ("diff.indentHeuristic", "false"),
+            ("diff.noprefix", "true"),
+            ("diff.interHunkContext", "3"),
+            ("diff.suppressBlankEmpty", "true"),
+            ("diff.renames", "true"),
+            ("diff.orderFile", order_path.as_posix()),
+            ("core.quotepath", "true"),
+            ("core.excludesFile", ignore_path.as_posix()),
+            ("core.attributesFile", attr_path.as_posix()),
+            ("core.bigFileThreshold", "1"),
+            ("diff.external", "echo hijacked"),
+        ):
+            self._git("config", key, value)
+            try:
+                self.assertEqual(self._hash(), h_stable, f"repo 配置 {key}={value} 漂移了基哈希(漏钉子)")
+            finally:
+                self._git("config", "--unset", key)
+
+    def test_pack_prints_hash_from_shared_impl(self):
+        """pack 的「基哈希:」行必须与共享实现同值(输出行不做第二套计算)。"""
+        (self.tmp / "app.py").write_text("A = 1\nA = 2\n", encoding="utf-8")
+        proc = _run_script("pack", "--base", self.base, "--root", str(self.tmp))
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        line = _line_of(proc.stdout, "基哈希: ")
+        self.assertRegex(line, r"^基哈希: [0-9a-f]{12}$")
+        self.assertEqual(line, f"基哈希: {self._hash()}")
+
+    def test_generated_paths_prefers_gen_all_listing(self):
+        """gen_all.py --list 在盘时用它的权威清单, 并把反斜杠归一成 /。"""
+        script_dir = self.tmp / ".agents" / "skills" / "memory-bank" / "scripts"
+        script_dir.mkdir(parents=True)
+        (script_dir / "gen_all.py"
+        ).write_text("print('memory-bank/reports/_index.md')\nprint('auto-qb-data\\\\state.json')\n", encoding="utf-8")
+        self.assertEqual(
+            self.mod.generated_paths(self.tmp), {"memory-bank/reports/_index.md", "auto-qb-data/state.json"}
+        )
 
 
 TRACE_SCRIPT = Path(__file__).with_name("check_review_trace.py")

@@ -34,6 +34,8 @@ issue 26-11-08-0903。
   `reports/attachments/legacy-review4/` 整目录 —— R4 存量评审的 findings/manifest/路线小结是被评代码
   的产物, 0441 落点 3/D3) 与 **生成物**(`gen_all.py --list` 的权威清单; 取不到时退回 `_index*.md`
   兜底, 不静默失效成"索引重排也算改动")
+- 判定实现单点在 review_content.py(与 review.pack 的基哈希共用同一份排除面, 计划 26-11-08-1240
+  §03 3.3) —— 本脚本只消费, 不复写判据
 
 ## 安全敏感面
 `red_lines`(读 my-commit-flow 的闸门配置) ∪ 路径标记词(`state` `credential` `auth` `token`
@@ -50,6 +52,9 @@ import re
 import subprocess
 import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from review_content import _counted, generated_paths  # noqa: E402  (同目录共享模块: 可评路径判定与基哈希, 与 review_pack 单点同源)
 
 FLOOR = 50  # 下限: 低于它不要求评审(未实测, 保守推断; 见 reports/26-11-06-0723)
 CEILING = 400  # 建议上限: 超过先拆批; 确实不可拆的残余批须 `· 派发 <K>` 且 K ≥ 2(计划 26-11-07-0441 D1)
@@ -68,17 +73,6 @@ CHECK_PRESENT_RE = re.compile(r"·\s*检")
 # 在场正则同锚 —— 直贴骨架的 `派发 ?` 落「形状不对」判红, 不会按缺省静默通过。
 DISPATCH_RE = re.compile(r"·\s*派发\s*(\d+)")
 DISPATCH_PRESENT_RE = re.compile(r"·\s*派发")
-
-# 记账类: 结构由 check_doc_templates / check_status_drift / gen_active_recent 三道守卫管,
-# 它们的内容不进评审面(否则每笔收尾都会被自己的记账逼出一轮评审)。
-# legacy-review4/ 整目录是 R4 存量评审的 findings/manifest/路线小结 = 被评代码的产物(0441 落点 3/D3),
-# 与 review.lane.verify 的「树净仅该目录内允许落盘」同源; reports/attachments/ 其余件仍是事实性文档, 照旧计行。
-BOOKKEEPING_PREFIXES = (
-    "memory-bank/tasks/",
-    "memory-bank/activeContext/",
-    "memory-bank/testing/baselines/",
-    "memory-bank/reports/attachments/legacy-review4/",
-)
 
 # 安全敏感面路径标记词 —— 与 .commands/review/scripts/review_pack.py 同源(改一处要改两处, 见该文件同名常量)
 SENSITIVE_PATH_MARKERS = ("state", "credential", "auth", "token", "secret", "password")
@@ -109,36 +103,6 @@ def find_root(explicit: str | None) -> Path:
     if proc.returncode != 0:
         raise SystemExit(2)  # 不在 git 仓库: 闸门不适用, 不冒充通过
     return Path(proc.stdout.strip()).resolve()
-
-
-def generated_paths(root: Path) -> set[str]:
-    """生成物权威清单(`gen_all.py --list`); 取不到时退回 `_index` 兜底, 不静默失效成"索引重排也算改动"。"""
-    script = root / ".agents/skills/memory-bank/scripts/gen_all.py"
-    if script.exists():
-        proc = subprocess.run(
-            [sys.executable, str(script), "--list"],
-            cwd=str(root),
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace"
-        )
-        if proc.returncode == 0:
-            return {line.strip().replace("\\", "/") for line in proc.stdout.splitlines() if line.strip()}
-    return set()  # 兜底由 _is_generated 的 _index 规则承担
-
-
-def _is_generated(path: str, gen: set[str]) -> bool:
-    if path in gen:
-        return True
-    name = path.rsplit("/", 1)[-1]
-    return name.startswith("_index") and name.endswith(".md")
-
-
-def _counted(path: str, gen: set[str]) -> bool:
-    if _is_generated(path, gen):
-        return False
-    return not any(path.startswith(p) for p in BOOKKEEPING_PREFIXES)
 
 
 def _count_numstat(root: Path, git_args: list[str], gen: set[str], total: int,
