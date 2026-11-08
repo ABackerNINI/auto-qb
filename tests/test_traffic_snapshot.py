@@ -54,6 +54,14 @@ W7(R31) S5 补测(变异审计真洞守阵, 2026-11-01; 分类与位点见 tmp-a
 覆盖率第三轮 T2b 补测(26-11-05):
 - test_publish_source_without_day_row_tolerates_hw: ok 发布 periods 无 day 行时不炸照常发布, 钳制只在 day 行在场时生效(313->315)
 
+事件高水位三源钳制(issue 26-11-07-0527 R1#64, 2026-11-08):
+- test_publish_event_no_regress_after_higher_file_read: 读盘先立高位 -> 偏低 catch-up 事件不回退
+  (`_hw` 不落盘, 只钳它会漏掉「重启后读盘高位 -> 低事件刷回」; 现 day 行也在钳制源内 + 读盘回种 `_hw`)
+- test_publish_source_seeds_hw_survives_stale_clear: 回种弧 —— stale 清空 periods 后偏低事件钳在回种水位
+- test_publish_event_cross_midnight_row_trusted_only_after_today_publish: 跨午夜(review minor)——
+  视图 day 行无日期归属, 仅 `_hw[今天]` 键在(今天已有过发布)时才入钳制源; 否则昨日总值行会把
+  午夜后的偏低 catch-up 事件钳住且污染 `_hw[今天]`, 读盘回种固化(今日 pill 全天虚高)
+
 ## 事件零读盘补丁(26-10-21, 用户拍板「读盘本身就是副作用, 事件基本无副作用应立即刷新」)
 - test_publish_event_patches_day_row_without_reading: 补丁只改 periods 的 day 行(month/history/limit 段不动),
   ts 推进, 且**一次读盘都没有**(read_source_rows 打桩成 raise)
@@ -414,6 +422,74 @@ def test_publish_event_high_water_clamps_both_paths(tmp_path):
     rows = {r["period"]: (r["up"], r["down"]) for r in mgr.web.traffic_view["periods"]}
     assert rows["day"] == (5000, 6000), "文件派生值低于水位时必须被钳回水位(否则 pill 回退)"
     assert rows["month"] == (1024, 1024), "month 行不钳(事件不携带月累计)"
+
+
+def test_publish_event_no_regress_after_higher_file_read(tmp_path):
+    """读盘先立高位 -> 偏低 catch-up 事件不回退(issue 26-11-07-0527 R1#64): `_hw` 只由
+    事件写入且不落盘, 工具重启后为空 —— 文件读盘(refresh)先发布更高 day 行、随后偏低的
+    catch-up 事件到达时, 修复前只钳 `_hw` 会把 day 行刷回更小值(违反 publish_source/
+    publish_event 自述的「两条发布路径都不让 day 行回退」; 现有用例只覆盖事件先立水位的
+    顺序)。修复后当前 day 行也在钳制源内: 低事件按行取大、无变化不发布(返回 False),
+    `_hw` 同步被读盘当日值回种"""
+    today = date.today()
+    mgr = _mgr(tmp_path, write_dat(tmp_path, [(today, 4096, 5120)]))  # dat 今日行 4KiB/5KiB
+    mod = _mod(mgr)
+    assert mod.refresh() is True
+    rows = {r["period"]: (r["up"], r["down"]) for r in mgr.web.traffic_view["periods"]}
+    assert rows["day"] == (4096, 5120)
+
+    assert mod.publish_event(today.isoformat(), 100, 200) is False, "偏低 catch-up 事件不发布"
+    rows = {r["period"]: (r["up"], r["down"]) for r in mgr.web.traffic_view["periods"]}
+    assert rows["day"] == (4096, 5120), "低事件不许把 day 行刷回更小值(修复前 -> (100, 200))"
+    assert mod._hw == {today.isoformat(): (4096, 5120)}, "读盘当日值已回种 _hw(事件钳制源不缺位)"
+
+
+def test_publish_source_seeds_hw_survives_stale_clear(tmp_path):
+    """回种弧(issue 26-11-07-0527 R1#64): 读盘 ok 分支把 dat 当日值回种 `_hw` —— 之后
+    periods 被清空(stale)再到达的偏低事件也不落事件低值, pill 钳在回种水位, 直到读盘
+    追上(文件真相单点在 dat, `_hw` 只是防回退的镜像)"""
+    today = date.today()
+    mgr = _mgr(tmp_path, write_dat(tmp_path, [(today, 4096, 5120)]))
+    mod = _mod(mgr)
+    assert mod.refresh() is True  # ok 分支回种 _hw = (4096, 5120)
+    mod.publish_source([], SOURCE_STALE)  # periods/history 清空(stale 语义)
+    assert mod.publish_event(today.isoformat(), 100, 200) is True  # 冷启动分支建行, 值钳在水位
+    rows = {r["period"]: (r["up"], r["down"]) for r in mgr.web.traffic_view["periods"]}
+    assert rows["day"] == (4096, 5120), "清空后偏低事件钳在回种水位(修复前 -> (100, 200))"
+
+
+def test_publish_event_cross_midnight_row_trusted_only_after_today_publish(tmp_path, monkeypatch):
+    """跨午夜: 视图 day 行无日期归属, 行值只在「今天已有过发布」(`_hw[今天]` 键在)时才
+    入钳制源(review minor, 2026-11-08)—— 进程跨午夜且新一天首次 refresh 未发生时, 视图
+    day 行仍是昨日总值; 偏低 catch-up 事件恰常在午夜后到达(载荷 = 当日小累计), 修复前被
+    昨日行钳制且 `_hw[今天]` 被写成正日总值, 随后读盘回种 max(dat, _hw) 固化污染(今日
+    pill 全天虚高)。修复后按事件当日小值发布, `_hw` 只记当日值, 读盘回种不虚高"""
+    day1, day2 = date.today(), date.today() + timedelta(days=1)
+    _today = [day1]
+
+    class _FixedToday:
+        @staticmethod
+        def today():
+            return _today[0]
+
+    monkeypatch.setattr(tsm, "date", _FixedToday)  # 钟面日内可控的跨午夜(tsm.date 单点)
+    mgr = _mgr(tmp_path)
+    mod = _mod(mgr)
+    mod.publish_event(day1.isoformat(), 8000, 9000)  # 昨日(day1)事件: 立水位 + 视图 day 行
+    assert mod._hw == {day1.isoformat(): (8000, 9000)}
+    _today[0] = day2  # 跨午夜: 视图 day 行仍是昨日总值, _hw 无今日键, 新一天首次 refresh 未发生
+
+    assert mod.publish_event(day2.isoformat(), 100, 200) is True  # 偏低 catch-up 事件
+    rows = {r["period"]: (r["up"], r["down"]) for r in mgr.web.traffic_view["periods"]}
+    assert rows["day"] == (100, 200), "事件按当日小值发布(修复前被昨日行钳住不发布)"
+    assert mod._hw == {day2.isoformat(): (100, 200)}, "_hw[今天] 不被昨日总值污染(修复前 = (8000, 9000))"
+
+    # 读盘回种弧: dat 今日行小值 —— 回种 max(dat, _hw) 不得固化昨日污染(dat KB 粒度, 取 1024 整倍数)
+    mgr.config.traffic_source.traffic_monitor.dat_path = write_dat(tmp_path, [(day1, 8000, 9000), (day2, 2048, 3072)])
+    assert mod.refresh() is True
+    rows = {r["period"]: (r["up"], r["down"]) for r in mgr.web.traffic_view["periods"]}
+    assert rows["day"] == (2048, 3072), "回种取 dat 当日值(修复前被污染 _hw 钳成 (8000, 9000))"
+    assert mod._hw == {day2.isoformat(): (2048, 3072)}
 
 
 def test_publish_event_ignores_non_today_and_source_off(tmp_path):

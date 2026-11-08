@@ -22,6 +22,14 @@
 - test_agg_reseal_merges_late_credit_keeps_full_coverage: 已封小时被迟到补记重建后再封走**合流**
   (2026-10-13 真机「重封替换丢覆盖」回归)—— 末行 cov 回到整小时、avg 按两段 cov 加权,
   day 累计器同持合流行; 修复前替换语义只留残余(真机日行 cov_s 44712 vs 全量 86400)
+- test_agg_closed_day_reseal_merges_via_closed_stub: 已关日的 hour 迟到重封走**已关日存根**合流
+  (issue 26-11-07-0527 R1#63)—— 日关闭复位累计器后残余行不再替换全量行(hour cov 回 3600,
+  avg/max/totals 合流口径), 日行由存根重建, 背日行不重开日累计器
+- test_agg_month_boundary_reseal_rebuilds_day_and_month_rows: 月界同构面(R1#63)—— 日/月双层
+  同批复位后 hour 迟到重封, hour/day/month 三行全部经存根合流/重建(修复前全塌到残余 cov 1),
+  月行重建不丢其他天(1/30 行原样)
+- test_agg_backdated_reseal_leaves_open_day_accumulator_alone: 背日重封不碰开放日累计器(R1#63
+  修法面)—— 开放日照常自然封口出完整日行, 不被背日行提前级联误关(修复前会写缺日行)
 - test_agg_flush_all_isolates_series_error_and_resets: 逐系列隔离与善后(单系列封口抛错只告警
   该系列 + 重置其累计器, 其余系列照常落盘; 同系列恢复前只告警一次)
 - test_agg_z_n_runs_and_block_gap_vacuum: z 游程槽速率恒 0 + totals 无末端列 = 显式退化(恒快照);
@@ -493,6 +501,123 @@ def test_agg_reseal_merges_late_credit_keeps_full_coverage(tmp_path):
     assert rows[0].dl_avg == int(round((100 * 1838 + 200 * 1762) / 3600)) == 149  # cov 加权, 非任一侧
     assert rows[0].dl_max == 200 and (rows[0].dl_total, rows[0].up_total) == (2000, 3000)
     assert mod._agg_states[key].day_hours[0] == rows[0]  # day 累计器持合流行(逐级链覆盖完整)
+
+
+def _feed_day_last_hour_full(mod, key, day_midnight, rate):
+    """day 的末小时(hour23)灌满 3599s 覆盖(速率 rate, 块首 r + 结算), 信用立在末槽"""
+    h23 = day_midnight + 23 * HOUR_SECONDS
+    mod._agg_feed(key, V4Sample(rate, rate // 2, 1000, 2000), h23, h23, True, 30.0)
+    mod._agg_feed(key, V4Sample(rate + 100, 60, 2000, 3000), h23, h23 + 3599, False, 30.0)
+
+
+def _feed_late_credit_1s(mod, key, day_midnight):
+    """午夜后迟到信用: 结算 [h23+3599, 午夜) = 1s 残余(速率 300), 不触及次日桶"""
+    h23 = day_midnight + 23 * HOUR_SECONDS
+    mid = day_midnight + 86400
+    mod._agg_feed(key, V4Sample(300, 70, 3000, 4000), h23 + 3599, h23 + 3599, False, 30.0)
+    mod._agg_feed(key, V4Sample(300, 70, 3000, 4000), mid, mid, False, 30.0)
+
+
+def test_agg_closed_day_reseal_merges_via_closed_stub(tmp_path):
+    """已关日的 hour 迟到重封走已关日存根合流(issue 26-11-07-0527 R1#63): 日关闭(复位
+    day_epoch/day_hours)后该日 hour 再被迟到信用重封时, 修复前残余行未经 v4_merge_agg
+    直接落盘、解析按「同 epoch 取最后一行」让残余行替换已写全量行(hour cov 3599 -> 1,
+    avg/max 同被腐蚀), 且重启恢复以最后一行为水位不会再重算修复。真机形态: 午夜跨天
+    空闲 z 游程在 00:00 后首个样本封口, 而 flush 恰落在 00:00 与封口记录之间。合流后
+    hour 行 cov 回整小时、avg 按 cov 加权、totals 取后封行; 日行由存根重建(完整重算),
+    开放累计器不被背日行重开"""
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30))
+    mod = mgr.host.get("qb_traffic")
+    key = GLOBAL_SERIES_KEY
+    day1 = int(datetime(2026, 3, 2).timestamp())  # 本地 3 月 2 日 00:00(非月界)
+    h23 = day1 + 23 * HOUR_SECONDS
+    _feed_day_last_hour_full(mod, key, day1, 200)  # hour23 全量 3599s @ 200
+    assert mod._agg_flush_series(key, now=day1 + 86400) is True  # 午夜 flush: hour23 封口 + 日关闭
+    parsed = parse_v4_agg_text(_agg_text(tmp_path, key))
+    assert parsed.hours[0].cov_s == 3599 and parsed.days[0].cov_s == 3599
+    agg = mod._agg_states[key]
+    assert agg.day_epoch is None and agg.closed_day[0] == day1  # 日已关, 存根在
+    assert agg.closed_day[1][0] == parsed.hours[0]  # 存根持已写行(与文件有效行同值)
+
+    _feed_late_credit_1s(mod, key, day1)  # 迟到信用重封 hour23(残余 1s @ 300)
+    assert mod._agg_flush_series(key, now=day1 + 86400 + 60) is True
+    rows = parse_v4_agg_text(_agg_text(tmp_path, key))
+    hour = next(h for h in rows.hours if h.epoch == h23)
+    assert hour.cov_s == 3600  # 合流行(修复前 = 1 残余)
+    assert hour.dl_avg == int(round((200 * 3599 + 300 * 1) / 3600)) == 200  # cov 加权, 非任一侧
+    assert hour.dl_max == 300 and (hour.dl_total, hour.up_total) == (3000, 4000)  # totals 取后封行
+    day = next(d for d in rows.days if d.epoch == day1)
+    assert day.cov_s == 3600 and day.dl_avg == 200  # 日行由存根重建(完整重算), 非残余
+    assert (day.dl_total, day.up_total) == (3000, 4000)  # 级末快照随合流推进
+    assert agg.day_epoch is None  # 背日行不重开日累计器(后续背日重封继续走存根)
+    assert agg.closed_day[1][0] == hour  # 存根同持合流行(再重封时链式合流)
+
+
+def test_agg_month_boundary_reseal_rebuilds_day_and_month_rows(tmp_path):
+    """月界同构面(issue 26-11-07-0527 R1#63): 日关闭与月关闭同批复位两级累计器后, 该日
+    hour 迟到重封 —— 修复前 hour/day/month 三行全被残余行替换(cov 全塌到 1); 修复后
+    hour 走存根合流, 日行由已关日存根重建, 月行由已关月存根重建(其他天(1/30)的行不丢)"""
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30))
+    mod = mgr.host.get("qb_traffic")
+    key = GLOBAL_SERIES_KEY
+    day30 = int(datetime(2026, 1, 30).timestamp())
+    day31 = int(datetime(2026, 1, 31).timestamp())
+    feb1 = int(datetime(2026, 2, 1).timestamp())
+    _feed_day_last_hour_full(mod, key, day30, 100)  # 1/30 末小时 @ 100(与 1/31 异值: 钉月行重建不丢天)
+    mod._agg_flush_series(key, now=day30 + 86400)  # 1/30 日关闭(月仍开放)
+    _feed_day_last_hour_full(mod, key, day31, 200)  # 1/31 末小时 @ 200
+    assert mod._agg_flush_series(key, now=feb1) is True  # 月界 flush: 1/31 日关闭 + 1 月关闭
+    parsed = parse_v4_agg_text(_agg_text(tmp_path, key))
+    assert [d.cov_s for d in parsed.days] == [3599, 3599]
+    assert parsed.months[0].cov_s == 7198  # 两天各 3599
+    agg = mod._agg_states[key]
+    assert agg.day_epoch is None and agg.month_epoch is None  # 日/月双层已复位
+    assert agg.closed_month[0] == v4_month_epoch(day31) and len(agg.closed_month[1]) == 2  # 月存根持两天
+
+    _feed_late_credit_1s(mod, key, day31)  # 迟到信用重封 1/31 的 hour23(残余 1s @ 300)
+    assert mod._agg_flush_series(key, now=feb1 + 60) is True
+    rows = parse_v4_agg_text(_agg_text(tmp_path, key))
+    hour31 = next(h for h in rows.hours if h.epoch == day31 + 23 * HOUR_SECONDS)
+    assert hour31.cov_s == 3600 and hour31.dl_avg == 200  # 合流行(修复前 cov 1)
+    day31_row = next(d for d in rows.days if d.epoch == day31)
+    assert day31_row.cov_s == 3600 and day31_row.dl_avg == 200  # 日行重建(修复前 cov 1)
+    assert next(d for d in rows.days if d.epoch == day30).cov_s == 3599  # 其他天(1/30)不受背日重封影响
+    month = rows.months[0]
+    assert month.cov_s == 3599 + 3600  # 月行重建: 1/30 的 3599 不丢(修复前塌到 1)
+    assert month.dl_avg == int(round((100 * 3599 + 200 * 3600) / (3599 + 3600)))  # 按各天 cov 加权
+    assert month.dl_max == 300  # max 取大(1/31 残余样本抬到 300)
+
+
+def test_agg_backdated_reseal_leaves_open_day_accumulator_alone(tmp_path):
+    """背日重封不碰开放日累计器(issue 26-11-07-0527 R1#63 修法面): 开放日已有封口小时
+    (day_epoch=次日)时, 已关日的迟到重封走存根, 开放累计器不得被复位或提前级联误关
+    (修复前背日行走 _ingest_acc 会把开放日提前关成缺日行); 开放日照常自然封口出完整日行"""
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30))
+    mod = mgr.host.get("qb_traffic")
+    key = GLOBAL_SERIES_KEY
+    day1 = int(datetime(2026, 3, 2).timestamp())
+    day2 = day1 + 86400
+    h23 = day1 + 23 * HOUR_SECONDS
+    _feed_day_last_hour_full(mod, key, day1, 200)
+    mod._agg_flush_series(key, now=day2)  # 午夜 flush: day1 关闭, 存根立
+    _feed_30s(mod, key, day2 + 60, [(300, 70, 3000, 4000)] * 2)  # 次日 hour0 采样(首间隔 61s 真空, 无跨午夜结算)
+    mod._agg_flush_series(key, now=day2 + HOUR_SECONDS + 60)  # hour0 封口 -> 开放日累计器 = day2
+    agg = mod._agg_states[key]
+    assert agg.day_epoch == day2 and len(agg.day_hours) == 1
+
+    _feed_late_credit_1s(mod, key, day1)  # 已关日(day1)的迟到重封
+    assert mod._agg_flush_series(key, now=day2 + HOUR_SECONDS + 120) is True
+    rows = parse_v4_agg_text(_agg_text(tmp_path, key))
+    assert next(h for h in rows.hours if h.epoch == h23).cov_s == 3600  # 存根合流生效
+    assert [d.epoch for d in rows.days] == [day1]  # day2 未被提前误关(修复前此处已多出缺日行)
+    assert agg.day_epoch == day2 and len(agg.day_hours) == 1  # 开放累计器原样
+    # 开放日照常自然封口: day2 行含其全部小时(hour0 60s + hour1 60s, 非提前误关的缺日行)
+    _feed_30s(mod, key, day2 + HOUR_SECONDS + 130, [(300, 70, 3000, 4000)] * 2)
+    mod._agg_flush_series(key, now=day2 + 86400)  # 次日午夜 flush: 日界过了才关日(L263 判据)
+    rows = parse_v4_agg_text(_agg_text(tmp_path, key))
+    day2_row = next(d for d in rows.days if d.epoch == day2)
+    assert day2_row.cov_s == 120  # hour0 60s + hour1 60s
+    assert agg.day_epoch is None  # 自然关闭(非背日级联)
 
 
 def test_agg_flush_all_isolates_series_error_and_resets(tmp_path, monkeypatch):

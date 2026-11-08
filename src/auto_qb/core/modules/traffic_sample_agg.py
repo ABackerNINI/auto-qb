@@ -262,9 +262,13 @@ class _SampleAggMixin:
             self._agg_ingest_hour(agg, v4_hour_agg(h, tuple(samples)), rows)
         if agg.day_epoch is not None and agg.day_hours and v4_day_epoch(now) > agg.day_epoch:
             self._agg_ingest_day(agg, v4_rollup_agg("day", agg.day_epoch, tuple(agg.day_hours)), rows)
+            # 已关日存根(issue R1#63): 关层复位后该日 hour 仍会被迟到信用重封, 存根是
+            # 那时的合流源(_agg_reseal_closed_day); 行表对象随存根移交, 复位行表换新列表
+            agg.closed_day = (agg.day_epoch, agg.day_hours)
             agg.day_epoch, agg.day_hours = None, []
         if agg.month_epoch is not None and agg.month_days and v4_month_epoch(now) > agg.month_epoch:
             rows.append(v4_rollup_agg("month", agg.month_epoch, tuple(agg.month_days)))
+            agg.closed_month = (agg.month_epoch, agg.month_days)  # 已关月存根(同上, 月界同构面)
             agg.month_epoch, agg.month_days = None, []
         wrote = self._agg_append(key, tuple(rows))
         conf = self._ctx.config.qb_traffic
@@ -305,7 +309,9 @@ class _SampleAggMixin:
         """同桶重封的入库行(§04.2): 该 epoch 已在累计器里(小时封口后被迟到的补记重建又再
         封一次)时, 返回与已封行的**合流行**(v4_merge_agg), 否则原样返回本行。落批的必须是
         这个返回值 —— 解析按「同 epoch 取最后一行」, 落残余行等于读侧也只看到残余
-        (2026-10-13 真机: 日行 cov_s 只留残余 44712 vs 全量 86400)。"""
+        (2026-10-13 真机: 日行 cov_s 只留残余 44712 vs 全量 86400)。开放累计器不含该桶
+        (层已关闭/已翻走)时此处不合流 —— 那条路在 _agg_reseal_closed_day(已关层存根,
+        issue R1#63), 由 _agg_ingest_hour 先行分流。"""
         if cur_epoch is None or bucket_epoch_of(row.epoch) != cur_epoch:
             return row
         for h in cur_rows:
@@ -314,26 +320,76 @@ class _SampleAggMixin:
         return row
 
     @staticmethod
+    def _acc_upsert_row(rows: List[V4HourSample], row: V4HourSample) -> None:
+        """累计器/存根行表的「同 epoch 替换, 否则追加」单点(_ingest_acc 同款语义)"""
+        for i, h in enumerate(rows):
+            if h.epoch == row.epoch:
+                rows[i] = row
+                return
+        rows.append(row)
+
+    @staticmethod
+    def _agg_reseal_closed_day(agg: SeriesAgg, row: V4HourSample, rows_out: List[V4HourSample]) -> None:
+        """已关日的 hour 迟到重封(issue 26-11-07-0527 R1#63): 日/月关层复位累计器后, 该日
+        hour 再被迟到信用重封时开放累计器里已无合流源 —— 修复前残余行未经 v4_merge_agg
+        直接落盘, 解析按「同 epoch 取最后一行」让残余行替换已写全量行(cov/avg/max 静默
+        腐蚀; 月界同构面连 day/month 行一起腐蚀), 且重启恢复以最后一行为水位不会再重算
+        修复。真机形态: 午夜跨天空闲 z 游程在 00:00 后首个样本封口, 而 flush 恰落在
+        00:00 与封口记录之间。
+
+        口径: 合流源取**已关日存根**(关层时保留的已写行, 与 agg 文件有效行同值) ——
+        合流后经存根**重建日行**并随本批落盘: 重建是**完整重算**(子行集 = 该日全部有效
+        hour 行), 走替换语义不经 v4_merge_agg(与重启 catch-up 同口径, 合流会重复计);
+        月层按同口径消化重建日行 —— 开放月只替换 month_days 条目(月行尚未写, 随月末
+        封口自然带上), 已关月替换存根条目并重建月行。开放累计器(day_epoch/day_hours)
+        全程不动: 背日行不得级联翻日(否则把开放日提前误关成缺日行)。"""
+        day_epoch, day_rows = agg.closed_day
+        stored = row
+        for i, h in enumerate(day_rows):
+            if h.epoch == row.epoch:
+                stored = v4_merge_agg(h, row)
+                day_rows[i] = stored
+                break
+        else:
+            day_rows.append(row)  # 存根无此小时(此前整点无行/整点为 null): 首写
+        rows_out.append(stored)
+        day_row = v4_rollup_agg("day", day_epoch, tuple(day_rows))
+        rows_out.append(day_row)
+        month_bucket = v4_month_epoch(day_epoch)
+        if agg.month_epoch == month_bucket:
+            _SampleAggMixin._acc_upsert_row(agg.month_days, day_row)
+        elif agg.closed_month is not None and agg.closed_month[0] == month_bucket:
+            month_epoch, month_rows = agg.closed_month
+            _SampleAggMixin._acc_upsert_row(month_rows, day_row)
+            rows_out.append(v4_rollup_agg("month", month_epoch, tuple(month_rows)))
+        # 月层都不匹配(背日超过一个月, 正常信用回溯 <= 24h 到不了): 日行已落盘, 月层不动
+
+    @staticmethod
     def _agg_ingest_hour(agg: SeriesAgg, row: V4HourSample, rows_out: List[V4HourSample]) -> None:
         """完结 hour 行落批 + 并入 day 累计器(严格逐级): 入库行(首封或与已封行合流的重封行)
         随本批落盘(§4.2 完结整小时 append hour 行; 同 epoch 重封 = 追加**合流行**, 解析取
         最后一行 —— 落批必须是合流行, 否则读侧末行仍是残余); 同日追加; 同 epoch 重封与
         累计器旧行合流(v4_merge_agg); 翻日(暂停恢复跨多小时滞留)先级联封前一日再开新累计器。
-        顺带维护 earliest_hour 裁剪判据(§4.5): 运行期才开始产数据的系列(全新安装 global /
-        新种子 / 热重载启用)不经 _recover_series, 判据只能在此初始化 + min 更新, 否则
-        _agg_trim 恒早退、agg.dat 无界增长(26-10-06-0028 C-01)。"""
-        stored = _SampleAggMixin._agg_merge_prev(row, agg.day_epoch, agg.day_hours, v4_day_epoch)
-        rows_out.append(stored)
+        本行属于**已关日**(开放日累计器不是它)时改走已关日存根合流(_agg_reseal_closed_day,
+        issue R1#63), 开放累计器不动。顺带维护 earliest_hour 裁剪判据(§4.5): 运行期才开始
+        产数据的系列(全新安装 global / 新种子 / 热重载启用)不经 _recover_series, 判据只能在
+        此初始化 + min 更新, 否则 _agg_trim 恒早退、agg.dat 无界增长(26-10-06-0028 C-01)。"""
+        day_bucket = v4_day_epoch(row.epoch)
+        if agg.day_epoch != day_bucket and agg.closed_day is not None and agg.closed_day[0] == day_bucket:
+            _SampleAggMixin._agg_reseal_closed_day(agg, row, rows_out)
+        else:
+            stored = _SampleAggMixin._agg_merge_prev(row, agg.day_epoch, agg.day_hours, v4_day_epoch)
+            rows_out.append(stored)
+
+            def cascade(close_epoch: int, close_rows: List[V4HourSample]) -> None:
+                # 前一日随本行翻日封口(其末 hour 已过, 前一日必已完结)
+                _SampleAggMixin._agg_ingest_day(agg, v4_rollup_agg("day", close_epoch, tuple(close_rows)), rows_out)
+
+            agg.day_epoch, agg.day_hours = _SampleAggMixin._ingest_acc(
+                stored, agg.day_epoch, agg.day_hours, v4_day_epoch, cascade
+            )
         if agg.earliest_hour is None or row.epoch < agg.earliest_hour:
             agg.earliest_hour = row.epoch
-
-        def cascade(close_epoch: int, close_rows: List[V4HourSample]) -> None:
-            # 前一日随本行翻日封口(其末 hour 已过, 前一日必已完结)
-            _SampleAggMixin._agg_ingest_day(agg, v4_rollup_agg("day", close_epoch, tuple(close_rows)), rows_out)
-
-        agg.day_epoch, agg.day_hours = _SampleAggMixin._ingest_acc(
-            stored, agg.day_epoch, agg.day_hours, v4_day_epoch, cascade
-        )
 
     @staticmethod
     def _agg_ingest_day(agg: SeriesAgg, row: V4HourSample, rows_out: List[V4HourSample]) -> None:

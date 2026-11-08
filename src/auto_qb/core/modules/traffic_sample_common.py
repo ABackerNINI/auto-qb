@@ -129,6 +129,11 @@ class SeriesAgg:
     速率入账, 崩溃/停机间隙真空(判定单点, 与离线 _agg_credit_day_file 同源)。
     day_epoch/day_hours: 开放日累计器(当日已封口 hour 行); month_epoch/month_days:
     开放自然月累计器(当月已封口 day 行)。严格逐级(§4.1), day 不从 raw 直聚。
+    closed_day/closed_month: **已关层存根**(issue R1#63)—— 最近一次关闭的日/月累计器
+    (epoch, 子行表)。关层复位后该层子行仍会被迟到信用重封(长空闲 z 游程封口最迟
+    ZRUN_FLUSH_S, 信用最多回溯 24h, 恰好只及最近一个已关层), 存根就是那时的合流源
+    与父行重建源; 开新层关层时整体替换, 故每层至多持一份(有界)。不落盘: 重启后
+    恢复水位滤掉已写小时, 背日重封不再发生(catch-up 完整重算, 无需合流)。
     earliest_hour: agg 文件内最老 hour 行 epoch(裁剪判据, §4.5 —— 零常规文件读)。
     """
 
@@ -138,6 +143,8 @@ class SeriesAgg:
     day_hours: list = field(default_factory=list)
     month_epoch: Optional[int] = None
     month_days: list = field(default_factory=list)
+    closed_day: Optional[tuple] = None
+    closed_month: Optional[tuple] = None
     earliest_hour: Optional[int] = None
 
 
