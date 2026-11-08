@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>e2e .mjs 注释残留非 ASCII 图形符号, 0229 #4 原始记载同族扩展面 · refactor · 计划外问题（便签）</title>
+<meta name="issue-slug" content="e2e-mjs-ascii-symbol-backlog">
+<meta name="issue-stamp" content="26-11-08-1621">
+<meta name="issue-type" content="refactor">
+<meta name="doc-topic" content="ascii-graph-symbol-cleanup">
+<meta name="doc-refs" content="memory-bank/issues/26-11-06-0756-refactor-ascii-graph-symbol-backlog.html, memory-bank/issues/26-11-08-0229-bug-r4-static-cleanup-extras.html">
+<meta name="issue-tier" content="light">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="e2e .mjs 注释残留非 ASCII 图形符号, 0229 #4 原始记载同族扩展面">
+<meta name="issue-summary" content="0229 #4 原始记载约 40 个 e2e .mjs 未随本轮 src 批清理; 2026-11-08 复测 58 个文件命中, 修法同 src 批: 提名单+替代表脚本化">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --mark: #161e26;     /* issue 特有: callout 底色 (plan.html 不用) */
+    --warn-bg: #2a2119;  /* issue 特有: 状态徽标底色 */
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 单栏流式版面: 与 plan.html 同一套 .sheet (封顶 1280px, 侧距 clamp(18~44px)); 旧双栏+粘性目录已删 */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+
+  /* 封面 meta 行: issue 特有, DOM 形态别改 —— 状态徽标 <span class="badge"> 被
+     flip_status (W4) 与 check_status_drift 的 BADGE_RE 机读 (k/v div 结构在判据里) */
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px 28px; font-family: var(--mono); font-size: 11.5px; color: var(--faint); border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta-row .item .k { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .meta-row .item .v { font-size: 13.5px; color: var(--dim); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin: 14px 0; font-size: 14px; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-family: var(--mono); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">计划外问题（便签）· refactor</div>
+<h1>e2e .mjs 注释残留非 ASCII 图形符号, 0229 #4 原始记载同族扩展面</h1>
+<p class="lede">0229 #4 原始记载约 40 个 e2e .mjs 未随本轮 src 批清理; 2026-11-08 复测 58 个文件命中, 修法同 src 批: 提名单+替代表脚本化</p>
+<div class="meta-row">
+  <div class="item"><div class="k">编号</div><div class="v">26-11-08-1621-refactor-e2e-mjs-ascii-symbol-backlog</div></div>
+  <div class="item"><div class="k">报告时间</div><div class="v">2026-11-08 16:21</div></div>
+  <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+</div>
+
+<section id="s1">
+  <h2><span class="no">§01</span>现象</h2>
+  <p>e2e 的 .mjs 注释仍存量非 ASCII 图形符号 —— issue 26-11-08-0229 #4 原始记载约 40 个文件, 本轮拍板只清 src/static 未动 e2e; 与 src 批同族扩展面。(来源: 0229 #4 原始记载 + 本批复测, 2026-11-08; nit)</p>
+</section>
+
+<section id="s2">
+  <h2><span class="no">§02</span>位置</h2>
+  <p class="hint">文件 + grep 关键词（比行号稳）；行号要标取证时间。</p>
+  <ul>
+    <li>扫描式(取证 2026-11-08 16:21): <code>grep -rlP '[\x{2190}-\x{21FF}\x{2460}-\x{24FF}\x{25A0}-\x{25FF}\x{2700}-\x{27BF}\x{2B00}-\x{2BFF}\x{1F300}-\x{1FAFF}]' --include='*.mjs' e2e/</code> 本次复测 <strong>58 个文件</strong>命中(0229 #4 原始记载「约 40 个」, 差值或含口径/新增文件, 认领时以扫描单为准)</li>
+    <li>同族关联: <code>memory-bank/issues/26-11-06-0756-refactor-ascii-graph-symbol-backlog.html</code>(全库清偿总单)、<code>26-11-08-1621-refactor-src-py-ascii-symbol-backlog.html</code>(src 侧同批入池)</li>
+  </ul>
+</section>
+
+<section id="s3">
+  <h2><span class="no">§03</span>建议<span class="opt">（可选）</span></h2>
+  <p>修法同 src 批: 扫描提名单 → 按 code-style.md 的 ASCII 替代表脚本化清理 → 分批提交; 可与 src 侧(26-11-08-1621-refactor-src-py-ascii-symbol-backlog)同一批顺手带掉。</p>
+</section>
+
+<section id="s4">
+  <h2><span class="no">§04</span>状态变更日志</h2>
+  <ul>
+    <li>2026-11-08 16:21 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+  </ul>
+</section>
+
+<footer>
+  26-11-08-1621-refactor-e2e-mjs-ascii-symbol-backlog.html · 便签档（light）· 由 create-issue skill 入池；入池不等于已修，改动状态在上面的「状态变更日志」里留痕
+</footer>
+
+</div>
+</body>
+</html>

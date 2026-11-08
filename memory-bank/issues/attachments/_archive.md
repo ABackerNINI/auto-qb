@@ -11,8 +11,16 @@
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 - [chore] [版本号双源矛盾: __init__.__version__ 0.2.0 vs pyproject 0.1.0](../26-09-21-1408-chore-version-dual-source.html) — WebUI 顶栏透出与打包元数据已差一个 minor; 建议 pyproject 单源 + 动态读取
 
-## Open (72)
+## Open (80)
 
+- [bug] [awaitPoll fail 路径不调 onEnd, 与文件头契约存在张力](../26-11-08-1621-bug-awaitpoll-fail-no-onend.html) — polling.js fail()(fn 抛异常 reject)不调 onEnd; 现注册点 tm relaunching fail 时不复位标志 — 需先裁决调用方是否在 reject 分支自清理, 有害才修
+- [bug] [drawer_rows 下载/根路径 wide:true 无条件, 值为空也占整行折行位](../26-11-08-1621-bug-drawer-rows-wide-unconditional.html) — drawer_rows.js:108-109 无条件 wide:true 且 text 兜底「—」, 值空仍占折行位(观感), 02/03 路径段同受影响
+- [bug] [drawer 02 标识卡 dt02-crow 行 nowrap 截断长哈希](../26-11-08-1621-bug-dt02-crow-nowrap.html) — 02 变体 idRows 路径(dt02-crow)不经 secRows 仍 nowrap+ellipsis, 与 09e285f1 已修的 #13 secRows 同病不同槽
+- [bug] [kbGuardLeave 脏路径离开后 kbFullOpen 覆盖层残留不复位](../26-11-08-1621-bug-kb-guard-leave-fullopen.html) — shortcuts_panel.js kbGuardLeave 脏路径「放弃并离开」只回滚草稿不收覆盖层, 与本轮已修的非脏早退同病
+- [question] [issues 索引 11,260 字符超出 8,000 预算, 处置方向待拍板](../26-11-08-1621-question-issues-index-over-budget.html) — memory-bank/issues/_index.md 实测 11,260 字符超出 8,000 预算, 病根 Open 区 74 条; 候选方向(扩分区/归档冷 issue/收紧入池)需人工定 — 8 类无精确对位, 按最贴切的 question(待拍板)入池
+- [refactor] [e2e .mjs 注释残留非 ASCII 图形符号, 0229 #4 原始记载同族扩展面](../26-11-08-1621-refactor-e2e-mjs-ascii-symbol-backlog.html) — 0229 #4 原始记载约 40 个 e2e .mjs 未随本轮 src 批清理; 2026-11-08 复测 58 个文件命中, 修法同 src 批: 提名单+替代表脚本化
+- [refactor] [src 下 103 个 .py 注释残留非 ASCII 图形符号(箭头/几何符等), 0229 #4 同族扩展面](../26-11-08-1621-refactor-src-py-ascii-symbol-backlog.html) — grep 实测 src 103 个 .py 命中(大头 relocate_exec 51 行/relocate_units 50 行/ops_skip 29 行), 修法同 0229 #4: 扫描提名单+code-style.md 替代表脚本化清理
+- [bug] [add_torrent 标签输入仅识别半角逗号, 与 dialogs.js 全角 U+FF0C 口径分叉](../26-11-08-1620-bug-add-torrent-tag-comma.html) — add_torrent.js 四处 split 半角逗号不认全角 U+FF0C; 68ae5221 修 dialogs.js 支持全角后同产品标签输入口径分叉
 - [refactor] [kb.new 各族 slug/topic 传参方式不一致, 跨族套用即 rc=1](../26-11-08-1131-refactor-kb-new-arg-unify.html) — issue 族收位置参数 slug、其余族要求 --topic, 跨族套形态即失败(2026-11-08 实踩 2 笔 rc=1); 彻底修=各族统一传参, 轻修=show 按族列签名
 - [docs] [hr/relocate docstring 措辞漂移聚合(fetcher refresh.reason/finalize_face failed 语义/store 行锚)](../26-11-08-0827-docs-hr-relocate-docstring-drift.html) — fetcher.py:74-76 提 refresh.reason 与 v3 字段对不上; relocate_chain.finalize_face docstring 未跟上 failed 入 STOP_PHASES; store.py:806 docstring 内部行锚 :237-244 已漂移
 - [refactor] [小件清理聚合: _WaveContext.alerted 死字段 + 测试 docstring 超宽两行](../26-11-08-0827-refactor-hr-leftover-cleanups.html) — service_common.py _WaveContext.alerted 经 0527-hr #14 修后无写入方成只读死字段; test_torrents_store.py:7/:35 存量 docstring 两行超 120 列
