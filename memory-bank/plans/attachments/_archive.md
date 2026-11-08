@@ -10,8 +10,9 @@
 - [26-10-10-2001] [计划 · WEBUI 选中 × 触发 一致性](../26-10-10-2001-plan-webui-selection-trigger-parity.html) — `webui-selection-trigger-parity`
 - [26-09-22-2318] [auto-qb 软件版本管理方案 v2 · 版本号 / Tag / CHANGELOG / 机械化发版](../26-09-22-2318-version-management-plan.html) — `deps-version-management`
 
-## Open (3)
+## Open (4)
 
+- [26-11-08-1240] [评审流程改造: 废除裁量豁免 + 修复增量强制复评 + 基哈希机械闸门](../26-11-08-1240-plan-review-no-exemption-loop.html) — `review-no-exemption-loop`
 - [26-11-05-1049] [memory-bank 文档压缩与防回涨分步执行计划(8K 新口径)](../26-11-05-1049-plan-kb-doc-compress.html) — `kb-doc-compress`
 - [26-11-05-0848] [跳检自身失败闸门 G9: WEB case-2 强制 + 规则侧硬 skip 双点同谓词](../26-11-05-0848-plan-skip-check-self-fail-gate-g9.html) — `skip-check-self-fail-gate-g9`
 - [26-11-03-2212] [整组迁移同盘证明误拒：根因与修复计划](../26-11-03-2212-plan-relocate-same-fs-proof.html) — `relocate-same-fs-proof`

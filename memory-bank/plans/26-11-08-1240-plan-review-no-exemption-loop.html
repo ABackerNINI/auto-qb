@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>评审流程改造: 废除裁量豁免 + 修复增量强制复评 + 基哈希机械闸门</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="review-no-exemption-loop">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-08-1240">
+<meta name="doc-updated" content="26-11-08-1306">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-08-memory-bank-review-no-exemption-loop.md">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: review-no-exemption-loop</div>
+<h1>评审流程改造: 废除裁量豁免 + 修复增量强制复评 + 基哈希机械闸门</h1>
+<p class="lede">本篇只回答:怎么把分批评审的两条政策缝——「小提交与修复增量不经评审」——闭合掉:<code>Review-Skip</code> 裁量豁免整体退役、可评行数 &gt;0 必评、每次增改当场复评直到「裁决后零 actionable」,并以基哈希机械闸门把「当场复评」从纪律变成不可绕过。锚点合并拓扑 bug(26-11-08-0903)已修,不在本篇范围。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-08-1240 · <b>doc-updated</b> 26-11-08-1240 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 会话 grilling(2026-11-08):用户提出「豁免审核的提交导致并发提交合并 review」→ 3 轮问答闭合设计树,12 项拍板(§06) · <b>关联</b> issue 26-11-08-0903(已修,出范围)
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<p>用户观察到部分豁免审核的提交与并发工作交错(2026-11-08 会话)。实证澄清:所谓「同时合并 review」事故 = <code>26-11-08-0903</code>——平铺 log 锚点被侧分支 tip(带的是正常 <code>Review:</code> trailer)遮蔽 + 树差把主线已评整支算进本批(实算 9910 行 vs 真实 272),commit <code>a9e1cbcf</code> 已修;<b>废除豁免对它是无效药</b>。真正未闭合的是两条政策缝:</p>
+<ul>
+<li><b>缝① 小提交</b>:累计 &lt;50 行且未触安全面 → 整批跳过(SKILL.md ① 触发表)。</li>
+<li><b>缝② 修复增量</b>:评审发现 → 修复 ≤100 行 → 不强制复评(SKILL.md ⑤「修复后不强制二轮」),trailer 的 <code>检 P/T</code> 覆盖不到这最后一公里。</li>
+</ul>
+<p><b>目标(做到什么算成)</b>:任何可评内容增量在提交前都有对应评审轮次;每轮出口 = 裁决后零 actionable;「改了没复评」由闸门机械拦截,不靠自觉。</p>
+<p><b>设计不变量(本轮不动)</b>:判断与机械分离;评审对象定义(代码 + 事实性文档,生成物/记账类机械排除);能力分档(≤400 全能档 / 敏感面分面 / &gt;400 拆批);pack 前置 sync + 三钉自检;两个已声明残余窗口(④ 评完到提交间远端推进、⑤ remerge 失败冲突解决面)维持声明。</p>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+<p><b>机械面现状</b>:批次锚点 = first-parent 主线最近一条带 <code>Review:</code>/<code>Review-Skip:</code> 的提交(<code>check_review_trace.py:277</code>,两者都推进锚点——豁免提交不会滚进别人的批次);闸门强制 trailer 并校验 <code>检 P/T</code> 下界 <code>P ≥ 修+入池</code>;行数实算含未跟踪文件、记账类/生成物不计入。能力分档:≤400 行全能档 1 派遣 / 触安全面分面 2-3 派遣 / &gt;400 拆批。</p>
+<p><b>痛点证据</b>:</p>
+<ul>
+<li><b>豁免是裁量口</b>:<code>Review-Skip:</code> 仅要求理由 ≥4 字,「确属免评」全靠 agent 自觉;2026-10 以来 27 笔。多 clone 并发时,任何一笔未评小改都与远端工作交错入库。</li>
+<li><b>修复增量缝</b>:⑤ 现行「修复后不强制二轮;&gt;100 行才追加一轮」,≤100 行的修复 diff 无人看过就随批入库。</li>
+<li><b>字面「空 []」不可用</b>:实测发现数 ≈ 派发次数 × 5.6、与批次大小无关(<code>reports/26-11-06-0723-report-review-capacity-experiment.html</code>),原始空数组存在两个失效模式——不终止(nit 底噪循环)与 Goodhart(出口是空数组时,最省力的路是软化 reviewer 提示词,评审质量静默塌方且不可审计)。出口必须落在裁决层。</li>
+</ul>
+
+<h2><span class="no">§03</span>方案总览</h2>
+<p>三条主线 + 一条边界,全部已拍板(结论编号见 §06):</p>
+
+<h3>3.1 豁免退役(D2 / D8 / D9)</h3>
+<ul>
+<li><code>Review-Skip:</code> trailer 退役:新提交写它 → 闸门<b>判红</b>;历史 trailer 在锚点 walk 照旧识别,不追溯。</li>
+<li>闸门下限退役:可评行数 <b>&gt;0 即必须有 <code>Review:</code> trailer</b>;实算恒 0(纯生成物/记账类)才静默。</li>
+<li>对象定义保留:代码 + 事实性文档才可评;生成物(<code>gen_all.py --list</code> 清单)与记账类(任务档案/会话切片/基线切片)机械排除不计行;混合提交只数可评面。</li>
+</ul>
+
+<h3>3.2 修复循环(D3 / D4 / D5 / D10)</h3>
+<ul>
+<li><b>扳机</b>:上一轮评审快照之后,工作树可评内容出现任何新 diff → 必走一轮;<code>dev.fmt</code> 算改动(要格式化就在评审前做,不设「只是格式化」口子);记账/生成物补写不触发。</li>
+<li><b>出口</b>:裁决后零 actionable——refute 弃、计划外入池算闭合、blocker/major/minor 当场修完;nit 不阻塞但留痕(档案 review 行)。轮次不限,直到某轮零 actionable。</li>
+<li><b>载体(形态修正)</b>:修复发生在工作树,轮间无提交对象,对象级增量不可行(<code>git stash create</code> 不含未跟踪文件,弃)。每轮 pack 照旧生成<b>整批过滤 diff</b>(锚点→当前树),评审指令限定「只报新增改动的问题 + 校验上一轮发现未被回退」,上一轮发现清单随包附带——已干净的代码不被重新开庭(意图保住),载体可落地。</li>
+<li><b>接缝终审</b>:收口接缝终审(≤200 行跨批)保留原样;发现处置与批次轮拉齐(相关 blocker/major/minor 修完才收尾,计划外入池);接缝修复引出的新改动照扳机走循环。</li>
+</ul>
+
+<h3>3.3 基哈希机械闸门(D6 / D7)</h3>
+<ul>
+<li>trailer 新增 <code>· 轮 &lt;R&gt;</code>(缺省 1,修复循环轮数)与 <code>· 基 &lt;hash&gt;</code>(= 末轮 pack 输出的整批过滤 diff 哈希);<code>修 / 入池 / 检 P/T</code> 改<b>全轮累计</b>口径,下界 <code>P ≥ 修+入池</code> 照旧成立;<code>派发 K</code> <b>保持首轮拓扑派遣口径、不累计</b>——修复轮派遣若计入 K,会掩盖 &gt;400 行批「首轮只派 1 次」的违规、稀释容量下界(发现数 ∝ 派发次数),修复轮深度已由 <code>轮 R</code> 与累计 <code>检 P/T</code> 反映(P0 评审 F4 修正)。</li>
+<li>提交时闸门按<b>同一套过滤实现</b>重算暂存 diff 哈希,与 <code>· 基</code> 比对:不一致判红 → 补一轮复评取新基;失败行给「重跑 pack 取新基」出路。</li>
+<li><code>review.pack</code> 每次运行输出当前基哈希;过滤实现与实算共用,末轮后补写记账/生成物不影响哈希(不误红)。</li>
+</ul>
+<pre><code>Review: &lt;范围&gt; · &lt;N&gt; 行 · blocker &lt;N&gt; · 修 &lt;N&gt; · 入池 &lt;N&gt; · 检 P/T[ · 轮 R] · 基 &lt;hash&gt;[ · 派发 K][ · 分面][ · 齐平 &lt;远端tip前8位&gt;]</code></pre>
+
+<h3>3.4 派遣与分档边界(D11 / D12)</h3>
+<p>不加轻量档:统一子代理派遣,每轮照走 pack 前置 sync + 三钉;无子代理环境走 ⑧ 降级自查(同 schema、过 <code>review.check</code>、同样留痕),任何环境下都无需豁免逃生门。<b>全能档 400 行阈值与拆批/分面拓扑原样保留</b>——退役的只有 50 行下限,与 400 行上限互不相干。</p>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+<p>顺序 W1→W2→W3 串行(脚本口径先落地,文档跟脚本,不造第二套口径),W4 按 DoD 收尾:</p>
+<table>
+<tr><th>分期</th><th>内容</th><th>验收判据</th></tr>
+<tr><td><b>W1 机械面</b></td><td><code>check_review_trace.py</code>:50 行下限删除(可评 &gt;0 即需 trailer)、新提交 <code>Review-Skip:</code> 判红、<code>· 基</code> 哈希机检、<code>· 轮</code> 与全轮累计字段校验;<code>review.pack</code>:输出整批过滤 diff 哈希(与闸门共用过滤实现)</td><td><code>test_review_pkg.py</code> 存量用例按新口径同步后全绿(W3 再补新增用例)</td></tr>
+<tr><td><b>W2 规则面</b></td><td><code>code-review/SKILL.md</code> <b>全文按新口径扫一遍</b>(含 frontmatter description 的「≥50 行」触发表、② 的「下限 50 行保守推断」条、④ 尾部「&gt;100 行才复评」交叉引用、⑤ 修复循环、⑦ trailer 语法、反模式);仅 ④ 分档表与 ⑧ 降级自查原样保留</td><td><code>check_doc_templates</code> 过;文档口径 = W1 脚本行为,逐条对得上</td></tr>
+<tr><td><b>W3 测试面</b></td><td><code>test_review_pkg.py</code>:skip 用例改判红用例;新增——基哈希不一致判红/一致放行、轮字段缺省与累计下界(<code>P ≥ 修+入池</code> 跨轮)、可评 0 行静默、&gt;0 无 trailer 判红、历史 <code>Review-Skip</code> 锚点识别回归;文件头「测试计划」清单同步</td><td><code>commands run test.full</code> 实测数字誊写进新基线切片</td></tr>
+<tr><td><b>W4 收尾</b></td><td>DoD:切片 <code>kb.wrap</code>、基线切片、新坑入 <code>pitfalls/</code>(如有)、<code>memory-bank/</code> 回写</td><td>常规收尾闸门全过</td></tr>
+</table>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p>无——12 项已在 grilling 会话(2026-11-08)全部拍板,结论见 §06。</p>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+<tr><th>#</th><th>结论</th><th>日期</th></tr>
+<tr><td>D1</td><td>目标 = 政策面闭合缝①(50 行下限)②(修复增量 100 行规则);0903 已修,出范围</td><td>2026-11-08</td></tr>
+<tr><td>D2</td><td>只废<b>裁量豁免</b>,保留<b>对象定义</b>:代码+事实性文档;生成物/记账类机械排除不计行</td><td>2026-11-08</td></tr>
+<tr><td>D3</td><td>出口 = <b>裁决后零 actionable</b>:refute 弃、计划外入池算闭合、blocker/major/minor 当场修完;nit 不阻塞但留痕</td><td>2026-11-08</td></tr>
+<tr><td>D4</td><td>复评载体 = 整批过滤 diff + <b>指令层增量</b>(只报新增改动 + 上一轮清单回退校验);对象级增量不可行,弃 <code>stash create</code></td><td>2026-11-08</td></tr>
+<tr><td>D5</td><td>扳机 = 上轮快照后可评内容任何新 diff;<code>dev.fmt</code> 算改动;记账/生成物补写不触发</td><td>2026-11-08</td></tr>
+<tr><td>D6</td><td><b>基哈希机械闸门</b>:trailer <code>· 基</code> + 提交时重算暂存 diff 哈希比对,不一致判红</td><td>2026-11-08</td></tr>
+<tr><td>D7</td><td>trailer 加 <code>· 轮 R</code>(缺省 1)、<code>· 基</code>;修/入池/检 <b>全轮累计</b>,派发 K 保持首轮拓扑口径(P0 评审 F4 修正);残余窗口 ④⑤ 维持声明</td><td>2026-11-08</td></tr>
+<tr><td>D8</td><td>新提交写 <code>Review-Skip:</code> → 判红;历史 trailer 锚点 walk 照旧识别,不追溯</td><td>2026-11-08</td></tr>
+<tr><td>D9</td><td>闸门下限退役:可评行数 &gt;0 即需 <code>Review:</code> trailer,实算恒 0 才静默</td><td>2026-11-08</td></tr>
+<tr><td>D10</td><td>收口接缝终审保留原样;发现处置与批次轮<b>拉齐</b>;接缝修复的新改动照扳机走循环</td><td>2026-11-08</td></tr>
+<tr><td>D11</td><td>不加轻量档,统一子代理派遣;⑧ 降级自查仅无子代理环境;每轮 pack 前置 sync + 三钉</td><td>2026-11-08</td></tr>
+<tr><td>D12</td><td><b>全能档 400 行阈值与拆批/分面拓扑原样保留</b>(用户追加: 全能档阈值保留);只退役 50 行下限</td><td>2026-11-08</td></tr>
+</table>
+<p class="aside">全部结论来自 grilling 会话逐项拍板(D1–D11 用户「按推荐」,D12 用户追加约束)。</p>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+<tr><th>风险</th><th>触发条件</th><th>对策</th></tr>
+<tr><td>R1 派遣成本上升</td><td>每笔可评提交 ≥1 派遣,修复循环再加轮次;宿主并发上限拒收并发派遣</td><td>拆批上限 400 行控制单轮规模;分面代理逐个串行派遣(既有规程 <code>pitfalls/kb/kb-subagent-concurrency.md</code>)</td></tr>
+<tr><td>R2 Goodhart 软化 reviewer</td><td>为凑「零 actionable」在派遣提示词里压制报告</td><td>出口在裁决层而非原始返回;refute/入池全留痕(trailer 计数下界 <code>P ≥ 修+入池</code> + git log 抽查),软化会显形</td></tr>
+<tr><td>R3 复评循环不终止</td><td>nit/minor 底噪逐轮重现</td><td>nit 不阻塞;复评只看新增改动 + 回退校验,单轮增量有界;上一轮发现清单随包,复现发现直接对号入座</td></tr>
+<tr><td>R4 基哈希误红</td><td>末轮评审后补写记账类/生成物文件</td><td>哈希过滤实现与行数实算<b>共用同一套排除面</b>,补写不改变哈希;误红时按失败行重跑 pack 取新基</td></tr>
+<tr><td>R5 迁移兼容</td><td>存量 <code>Review-Skip</code> trailer / 改造落地瞬间的进行中批次</td><td>生效日只看新批、老 trailer 不追溯不重判(0441 生效日先例);历史 <code>Review-Skip</code> 在锚点 walk 照旧识别</td></tr>
+<tr><td>R6 轮间远端推进</td><td>修复循环期间其它 clone 推送</td><td>每轮 pack 前置 sync + 三钉自检(既有);锚点跳跃后批次 diff 稳定;rebase 冲突解决面归残余声明 ⑤,由下一批与接缝终审兜底</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-08-1240</span> 初版:grilling 会话(2026-11-08)3 轮 12 项拍板落档;归因澄清(0903 合并事故与豁免无关、已由 a9e1cbcf 修复)写入 §01/§02,方案三主线 + 分期 W1-W4。</li>
+  <li><span class="tag">R1 · 26-11-08-1306</span> P0 评审(全能档 1 派遣)4 条 minor 全过引文校验、当场修 4:trailer 示例 <code>[ · 轮 R]</code> 缺省括号对齐;W1 验收改「存量用例按新口径同步后全绿」;W2 改「全文按新口径扫一遍,仅 ④⑧ 原样」(补 description/② 下限条/④ 交叉引用三个漏点);<b>派发 K 改回首轮拓扑口径不累计</b>(F4: 累计会稀释 &gt;400 行批容量下界),修/入池/检 仍全轮累计。</li>
+</ul>
+
+</div>
+</body>
+</html>

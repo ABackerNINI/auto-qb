@@ -17,6 +17,7 @@
 
 ## Open
 
+- [26-11-08-1240] [评审流程改造: 废除裁量豁免 + 修复增量强制复评 + 基哈希机械闸门](26-11-08-1240-plan-review-no-exemption-loop.html) — `review-no-exemption-loop`
 - [26-11-05-1049] [memory-bank 文档压缩与防回涨分步执行计划(8K 新口径)](26-11-05-1049-plan-kb-doc-compress.html) — `kb-doc-compress`
 - [26-11-05-0848] [跳检自身失败闸门 G9: WEB case-2 强制 + 规则侧硬 skip 双点同谓词](26-11-05-0848-plan-skip-check-self-fail-gate-g9.html) — `skip-check-self-fail-gate-g9`
 - [26-11-03-2212] [整组迁移同盘证明误拒：根因与修复计划](26-11-03-2212-plan-relocate-same-fs-proof.html) — `relocate-same-fs-proof`
@@ -61,9 +62,8 @@
 - [26-11-01-2123] [RM08 WebUI 读侧 漂移复测轮排期计划](26-11-01-2123-plan-real-rm08-drift.html) — `real-rm08-drift`
 - [26-11-01-2033] [RM04 辅种与分组 漂移复测轮排期计划](26-11-01-2033-plan-real-machine-rm04-drift-plan.html) — `real-machine-rm04-drift-plan`
 - [26-11-01-1921] [RM02 主循环·调度·持久化 · 真机实测分步计划(漂移复测轮)](26-11-01-1921-plan-real-machine-rm02-drift-plan.html) — `real-machine-rm02-drift-plan`
-- [26-11-01-1031] [RM03 规则引擎 · 真机实测分步计划(漂移复测轮)](26-11-01-1031-plan-real-machine-rm03-drift-plan.html) — `real-machine-rm03-drift-plan`
 
-> 更早的 **184** 条已出本索引 —— 制品仍在 `plans/` 目录(未搬动), 全量清单见 [attachments/_archive.md](attachments/_archive.md).
+> 更早的 **185** 条已出本索引 —— 制品仍在 `plans/` 目录(未搬动), 全量清单见 [attachments/_archive.md](attachments/_archive.md).
 
 ## Dropped
 
