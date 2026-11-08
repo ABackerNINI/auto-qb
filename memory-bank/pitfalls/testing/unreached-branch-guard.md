@@ -27,8 +27,8 @@
 
 ## 静态兜底: 动态测试覆盖不到的分支, 用「名字解析」兜
 
-「未导入的名字只在真机走到那一行才炸」在本仓已复发 **3 次**(`service.py::_freeze_terminal` 的
-`LANE_SATISFIED` 崩整波 / `service.py::channel_state` 的 `CHANNEL_OK` 卡死视图发布 / 
+「未导入的名字只在真机走到那一行才炸」在本仓已复发 **3 次**(`service_wave.py::_freeze_terminal` 的
+`LANE_SATISFIED` 崩整波 / `service_status.py::channel_state` 的 `CHANNEL_OK` 卡死视图发布 / 
 `webui/routes/torrent_cmds.py` 的 `List` 潜伏)。三道守阵各管一段, 缺一不可:
 
 1. `test_all_modules_import`(import-all): 管**导入期**求值(装饰器 / 默认值 / 类体);

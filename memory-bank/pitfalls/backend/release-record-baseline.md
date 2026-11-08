@@ -15,7 +15,7 @@
   `_advance_observation` 没带 ⇒ 后两者签发的放行记录, 在 `resolve_identity` 行 3 立刻被判
   「锚点漂移(本机重下): downloaded 增长」(`anchor_downloaded=0` vs 本地 `downloaded>0`)⇒ 落行 4
   本地兜底。用户看到的是「明明在线核实过, 却显示本地兜底已达标」,**全程零报错**。
-- **处置**: ①把记录的构造收敛成**单点工厂**(本仓 `hr/service.py::_release_record`), 快照在里面
+- **处置**: ①把记录的构造收敛成**单点工厂**(本仓 `hr/service_common.py::_release_record`), 快照在里面
   一次写全 —— 多写入点 + 每个点自己拼 kwargs 就是漏字段的温床; ②消费侧的比对, **基准缺失时
   一律不作废**(本仓 `HrVerified.has_anchor_snapshot` + `drift_reason` 早退): 「无数据可比」
   ≠ 「状态已变」 —— 前者只能保守放行, 硬判漂移会把所有旧记录(早于该字段落盘的)一并作废,

@@ -26,4 +26,4 @@
   宁可少触发, 不再拿配额换假重合。
 - **守阵**: `tests/test_hr_service_rows.py::test_fuzzy_name_match_rejects_noise_only_overlap`(4 条真实
   假重合 + 2 族真命中)、`::test_fuzzy_name_match_unit`(噪声整词不构成判据 / 整名皆噪声不上判据);
-  红验 —— 仅回退 `src/auto_qb/hr/service.py` 即这两条红。
+  红验 —— 仅回退 `src/auto_qb/hr/service_common.py`(`fuzzy_name_match` 现址)即这两条红。

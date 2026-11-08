@@ -77,17 +77,21 @@
   (`test_consecutive_failures_fuse_site` 的 `persisted is True`)。
 ### HR: 频控门槛是「每次请求」—— 一轮内的多请求要么能等、要么会被前面的请求饿死(2026-09-25 实测)
 
-- **触发**: 改 `hr/service.py::_Budget` / `_refresh_locked` / `_do_fetch` 的请求顺序, 或把 `sleeper` 拿掉。
-- **判别**: 门槛口径是「相邻两次**请求**间隔 >= `min_torrent_interval`(抖动只向上)」, 一次刷新内的
-  **所有**请求共用它(页面 A/B/C / 翻页 / 每个 `.torrent` 都算)。而 `_do_fetch` 的顺序是「先页面后下载」
+- **触发**: 改 `hr/service_wave.py::_do_wave` 的波内请求顺序(`_run_pages` 页面轮转, 每页后接
+  `_run_downloads`) / `hr/service_common.py::_Budget` / `hr/service.py::_refresh_locked`, 或把 `sleeper` 拿掉。
+- **判别**: 门槛口径是「相邻两次**请求**间隔 >= `min_interval`(抖动只向上)」, 一次刷新内的
+  **所有**请求共用它(页面 A/B/C / 翻页 / 每个 `.torrent` 都算)。而波内顺序仍是「页面轮转在前,
+  每页取完才轮到 `_run_downloads` 下载」
   ⇒ 只要一轮里只能发出一个请求, 那个名额**永远**给页面, 下载一次也轮不上 —— 用户实测: 一小时内 11 次
   请求全在重抓页面, `.torrent` 一次没取到, 索引 0 个 infohash 键 ⇒ 站点侧判定完全无从下手。
 - **处置**: 三道防护都不要删: ①生产路径**在锁内等满间隔**(`sleeper`; 计划 §8「连分钟级抓取也在锁内」)
-  + 两道上限(单次 300s / 一轮总等待 900s, 超额就让位而不是干等); ②等待必须**可中断**(关停/热重挂要
-  立刻打断, 否则 join 得等它睡完, 期间还持着站点锁); ③**复用轮只补下载**(`_backfill_on_reuse`):
-  数据在有效期内不重抓页面, 但把名额全给待回填的 `.torrent`。守阵:
-  `test_production_round_completes_with_sleeper` · `test_round_wait_budget_gives_up_instead_of_holding_lock` ·
-  `test_reused_round_still_backfills_pending_infohash`。
+  + 两道上限(单次 300s / 一轮总等待 900s —— `service_common.py::PROD_REQUEST_WAIT_MAX` /
+  `PROD_ROUND_WAIT_MAX`, 超额就让位而不是干等); ②等待必须**可中断**(关停/热重挂要
+  立刻打断, 否则 join 得等它睡完, 期间还持着站点锁); ③**下载跨波续排**(`_run_downloads`):
+  本波预算受限没下完的 `.torrent` 留待下波续下(永久层身份缓存去重, 同 tid 不重下)。守阵:
+  `tests/test_hr_runtime_feeder.py::test_production_service_gets_a_sleeper` ·
+  `tests/test_hr_service_wave.py::test_budget_take_gives_up_without_sleeper` ·
+  `tests/test_hr_service_misc.py::test_run_downloads_unit_paths`(预算为 0 时未下完的留待下波)。
 
 ### HR: 扩展侧硬上限触发时必须「让位」而不是「计失败」(2026-09-25 实测)
 

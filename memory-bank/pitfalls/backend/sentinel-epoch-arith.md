@@ -19,7 +19,7 @@
   3. 用真实 epoch 代入手算: 不等式**恒成立**(恒通过)或**恒不成立**(恒拦截), 与数据无关 ——
      即判据已经失去分辨力。测试面若只有「field 非 0」或「另一条分支被短路」的用例, 就盖不住。
 - **处置**: 别在调用处各补一份 `field <= 0` 守卫(三处复制 ⇒ 迟早再漂一次)。**把谓词收成一个纯函数**,
-  在唯一一处显式判死哨兵语义: 本仓 `hr/service.py::_lane_covers_done(st, done, slack=0.0)`
+  在唯一一处显式判死哨兵语义: 本仓 `hr/service_common.py::_lane_covers_done(st, done, slack=0.0)`
   —— 全深度 ⇒ 对任意位置成立; 位置有界档 ⇒ `done` 已知且 `done - slack >= cutoff_done`;
   `cutoff_done <= 0` ⇒ **位置不可证**(保守维持管束, 命中照常)。三处调用方全部改调它。
 - **守阵**: `tests/test_hr_service_misc.py::test_position_proof_cutoff_zero_is_unprovable`
