@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="legacy-review4">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="test_notify 8 用例 NotifyHandler 只 removeHandler 不 close,每进程泄漏 8 守护线程">
 <meta name="issue-summary" content="tests/test_notify.py 8 用例(约 109/127/146/166/186/218/248/309 行)经 _make_handler 建 NotifyHandler 后只 removeHandler 不 close;random-order 洗牌下约 1/3 概率打红其它同名线程断言">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-08-0703-test-test-notify-handler-thread-leak</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-08 07:03</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
@@ -150,11 +150,13 @@
   <h2><span class="no">§07</span>状态变更日志</h2>
   <ul>
     <li>2026-11-08 07:03 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-09 — 状态 Open → Done（kb.status）</li>
+</ul>
   <h3>复验</h3>
-  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <p>复验：2026-11-09 仍复现——grep <code>test_logger.removeHandler(handler)</code> 确认 109/127 两用例 finally 只 removeHandler,146/166/186/218/248/309 六用例直接 emit 连清理都没有,8 处均无 <code>close()</code> 配对。</p>
   <h3>修复后补充</h3>
-  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  <p><strong>实际修法</strong>(与建议修法一致,按实际结构落地):109/127 两用例的 finally 里 <code>removeHandler</code> 后补 <code>handler.close()</code>;146/166/186/218/248/309 六用例(直接 emit、未挂 logger)照挂载型模式把用例体包进 try/finally,finally 里 <code>handler.close()</code> —— 评审指出只在成功路径收线时,断言失败仍会泄漏并级联打红其它用例的同名线程断言,故失败路径也必须收线。<code>NotifyHandler.close()</code> 幂等(哨兵唤醒 + <code>test_notify_close_twice_safe</code> 已覆盖)。</p>
+  <p><strong>验证方式</strong>:①<code>commands run test.full</code> 全量 5869 passed / 2 skipped(162.76s,覆盖率 99%);②进程内直跑 8 个修复用例后统计 <code>auto-qb-notify</code> 线程残留 = 0(逐用例 0.2s 静置采样,修复前该口径为 8)。</p>
 </section>
 
 <footer>

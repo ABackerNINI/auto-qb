@@ -118,6 +118,7 @@ def test_notify_handler_level_filter():
         assert channel.sent[0][1] == "应当通知的 WARNING"
     finally:
         test_logger.removeHandler(handler)
+        handler.close()
 
 
 def test_notify_default_min_level_is_error():
@@ -139,43 +140,50 @@ def test_notify_default_min_level_is_error():
         assert channel.sent[0][1] == "默认配置下应当通知的 ERROR"
     finally:
         test_logger.removeHandler(handler)
+        handler.close()
 
 
 def test_notify_handler_dispatch():
     """ERROR 日志派发并标记 urgent; 消息内容为原始日志消息"""
     handler, channel = _make_handler()
-    record = logging.LogRecord(
-        name="auto_qb.core.mixins.grouping",
-        level=logging.ERROR,
-        pathname="p",
-        lineno=1,
-        msg="文件丢失, 暂停整组: %s",
-        args=("HASH123 [HHan]", ),
-        exc_info=None,
-    )
-    handler.emit(record)
-    assert wait_until(lambda: len(channel.sent) == 1, timeout=2.0, interval=0.01), f"应派发 ERROR 通知: {channel.sent}"
-    title, body, urgent = channel.sent[0]
-    assert title == "auto-qb ERROR"
-    assert body == "文件丢失, 暂停整组: HASH123 [HHan]"
-    assert urgent is True, "ERROR 级别应标记 urgent"
+    try:
+        record = logging.LogRecord(
+            name="auto_qb.core.mixins.grouping",
+            level=logging.ERROR,
+            pathname="p",
+            lineno=1,
+            msg="文件丢失, 暂停整组: %s",
+            args=("HASH123 [HHan]", ),
+            exc_info=None,
+        )
+        handler.emit(record)
+        assert wait_until(lambda: len(channel.sent) == 1, timeout=2.0, interval=0.01), f"应派发 ERROR 通知: {channel.sent}"
+        title, body, urgent = channel.sent[0]
+        assert title == "auto-qb ERROR"
+        assert body == "文件丢失, 暂停整组: HASH123 [HHan]"
+        assert urgent is True, "ERROR 级别应标记 urgent"
+    finally:
+        handler.close()
 
 
 def test_notify_handler_self_loop_guard():
     """notify 模块来源的记录被忽略(防'通知触发通知'自环), 同步不入队"""
     handler, channel = _make_handler()
-    record = logging.LogRecord(
-        name=f"{NOTIFY_LOGGER_PREFIX}.sub",
-        level=logging.ERROR,
-        pathname="p",
-        lineno=1,
-        msg="通知模块自身的日志",
-        args=None,
-        exc_info=None,
-    )
-    handler.emit(record)
-    assert channel.sent == []
-    assert handler._queue.empty(), "防自环记录不应入队"
+    try:
+        record = logging.LogRecord(
+            name=f"{NOTIFY_LOGGER_PREFIX}.sub",
+            level=logging.ERROR,
+            pathname="p",
+            lineno=1,
+            msg="通知模块自身的日志",
+            args=None,
+            exc_info=None,
+        )
+        handler.emit(record)
+        assert channel.sent == []
+        assert handler._queue.empty(), "防自环记录不应入队"
+    finally:
+        handler.close()
 
 
 def test_notify_skips_records_suppressed_from_frontends():
@@ -184,31 +192,34 @@ def test_notify_skips_records_suppressed_from_frontends():
     「连不上浏览器」这类**预期内**的环境态: 既不该进前端错误历史, 也不该弹系统通知。
     """
     handler, channel = _make_handler(min_level="WARNING")
-    silent = logging.LogRecord(
-        name="auto_qb.hr.worker",
-        level=logging.ERROR,  # 即便到 ERROR, 标了静默也不弹
-        pathname="p",
-        lineno=1,
-        msg="通道静默(预期离线)",
-        args=None,
-        exc_info=None,
-    )
-    silent.hr_silent = True
-    handler.emit(silent)
-    assert channel.sent == []
-    assert handler._queue.empty(), "静默记录不应入队"
+    try:
+        silent = logging.LogRecord(
+            name="auto_qb.hr.worker",
+            level=logging.ERROR,  # 即便到 ERROR, 标了静默也不弹
+            pathname="p",
+            lineno=1,
+            msg="通道静默(预期离线)",
+            args=None,
+            exc_info=None,
+        )
+        silent.hr_silent = True
+        handler.emit(silent)
+        assert channel.sent == []
+        assert handler._queue.empty(), "静默记录不应入队"
 
-    visible = logging.LogRecord(
-        name="auto_qb.hr.worker",
-        level=logging.ERROR,
-        pathname="p",
-        lineno=1,
-        msg="站点改版",
-        args=None,
-        exc_info=None,
-    )
-    handler.emit(visible)
-    assert wait_until(lambda: len(channel.sent) == 1, timeout=2.0, interval=0.01), "未打标记录照常派发(向后兼容)"
+        visible = logging.LogRecord(
+            name="auto_qb.hr.worker",
+            level=logging.ERROR,
+            pathname="p",
+            lineno=1,
+            msg="站点改版",
+            args=None,
+            exc_info=None,
+        )
+        handler.emit(visible)
+        assert wait_until(lambda: len(channel.sent) == 1, timeout=2.0, interval=0.01), "未打标记录照常派发(向后兼容)"
+    finally:
+        handler.close()
 
 
 def test_notify_handler_quiet_hours():
@@ -216,24 +227,27 @@ def test_notify_handler_quiet_hours():
     # 23:30 落在 "23:00-08:00" 跨午夜区间内 -> 跳过
     night = datetime(2026, 9, 12, 23, 30)
     handler, channel = _make_handler(quiet_hours="23:00-08:00", now=lambda: night)
-    record = logging.LogRecord(
-        name="auto_qb.test",
-        level=logging.ERROR,
-        pathname="p",
-        lineno=1,
-        msg="夜间错误",
-        args=None,
-        exc_info=None,
-    )
-    handler.emit(record)
-    assert channel.sent == [], "免打扰时段应跳过"
-    assert handler._queue.empty(), "免打扰记录不应入队"
+    try:
+        record = logging.LogRecord(
+            name="auto_qb.test",
+            level=logging.ERROR,
+            pathname="p",
+            lineno=1,
+            msg="夜间错误",
+            args=None,
+            exc_info=None,
+        )
+        handler.emit(record)
+        assert channel.sent == [], "免打扰时段应跳过"
+        assert handler._queue.empty(), "免打扰记录不应入队"
 
-    # 12:00 不在区间 -> 照常派发
-    handler.quiet_hours = "23:00-08:00"
-    handler._now = lambda: datetime(2026, 9, 12, 12, 0)
-    handler.emit(record)
-    assert wait_until(lambda: len(channel.sent) == 1, timeout=2.0, interval=0.01), "时段外应照常派发"
+        # 12:00 不在区间 -> 照常派发
+        handler.quiet_hours = "23:00-08:00"
+        handler._now = lambda: datetime(2026, 9, 12, 12, 0)
+        handler.emit(record)
+        assert wait_until(lambda: len(channel.sent) == 1, timeout=2.0, interval=0.01), "时段外应照常派发"
+    finally:
+        handler.close()
 
 
 def test_notify_quiet_hours_does_not_consume_quota():
@@ -246,36 +260,39 @@ def test_notify_quiet_hours_does_not_consume_quota():
     night = datetime(2026, 9, 12, 23, 30)
     # 上限 1 条: 免打扰期间发 5 条, 配额必须仍是满的
     handler, channel = _make_handler(quiet_hours="23:00-08:00", max_per_hour=1, dedup_window=600.0, now=lambda: night)
-    for i in range(5):
+    try:
+        for i in range(5):
+            handler.emit(
+                logging.LogRecord(
+                    name="auto_qb.test",
+                    level=logging.WARNING,
+                    pathname="p",
+                    lineno=1,
+                    msg=f"夜间消息 {i}",
+                    args=None,
+                    exc_info=None,
+                )
+            )
+        assert channel.sent == []
+        assert handler.throttle._sent_at == [], f"免打扰不该消耗配额: {handler.throttle._sent_at}"
+        assert handler.throttle._dedup_at == {}, f"免打扰不该刷新去重窗口: {handler.throttle._dedup_at}"
+
+        # 免打扰结束: 第一条必须立刻放行(配额与去重窗口都没被夜间那条吃掉)
+        handler.quiet_hours = None
         handler.emit(
             logging.LogRecord(
                 name="auto_qb.test",
                 level=logging.WARNING,
                 pathname="p",
                 lineno=1,
-                msg=f"夜间消息 {i}",
+                msg="夜间消息 0",
                 args=None,
                 exc_info=None,
             )
         )
-    assert channel.sent == []
-    assert handler.throttle._sent_at == [], f"免打扰不该消耗配额: {handler.throttle._sent_at}"
-    assert handler.throttle._dedup_at == {}, f"免打扰不该刷新去重窗口: {handler.throttle._dedup_at}"
-
-    # 免打扰结束: 第一条必须立刻放行(配额与去重窗口都没被夜间那条吃掉)
-    handler.quiet_hours = None
-    handler.emit(
-        logging.LogRecord(
-            name="auto_qb.test",
-            level=logging.WARNING,
-            pathname="p",
-            lineno=1,
-            msg="夜间消息 0",
-            args=None,
-            exc_info=None,
-        )
-    )
-    assert wait_until(lambda: len(channel.sent) == 1, timeout=2.0, interval=0.01), "免打扰结束后应立刻放行(未被配额挡住)"
+        assert wait_until(lambda: len(channel.sent) == 1, timeout=2.0, interval=0.01), "免打扰结束后应立刻放行(未被配额挡住)"
+    finally:
+        handler.close()
 
 
 def test_notify_throttle_dedup_table_evicted():
@@ -307,21 +324,24 @@ def test_notify_throttle_dedup_zero_no_key_recorded():
 def test_notify_handler_throttle_drops():
     """同键重复(去重窗)与超出每小时上限的记录不派发"""
     handler, channel = _make_handler(max_per_hour=2, dedup_window=600.0)
-    for i in range(5):
-        handler.emit(
-            logging.LogRecord(
-                name="auto_qb.test",
-                level=logging.WARNING,
-                pathname="p",
-                lineno=1,
-                msg=f"消息 {i}",
-                args=None,
-                exc_info=None,
+    try:
+        for i in range(5):
+            handler.emit(
+                logging.LogRecord(
+                    name="auto_qb.test",
+                    level=logging.WARNING,
+                    pathname="p",
+                    lineno=1,
+                    msg=f"消息 {i}",
+                    args=None,
+                    exc_info=None,
+                )
             )
-        )
-    assert wait_until(lambda: len(channel.sent) == 2, timeout=2.0, interval=0.01), f"应按上限仅派发 2 条: {channel.sent}"
-    # 节流丢弃发生在 emit 内同步完成(不入派发队列), wait_until 到 2 条即终态 —— 无需观察窗
-    assert len(channel.sent) == 2, "节流后不应再派发"
+        assert wait_until(lambda: len(channel.sent) == 2, timeout=2.0, interval=0.01), f"应按上限仅派发 2 条: {channel.sent}"
+        # 节流丢弃发生在 emit 内同步完成(不入派发队列), wait_until 到 2 条即终态 —— 无需观察窗
+        assert len(channel.sent) == 2, "节流后不应再派发"
+    finally:
+        handler.close()
 
 
 def test_notify_channel_windows_command(monkeypatch):
