@@ -43,6 +43,11 @@
 - test_ensure_thread_concurrent_no_double_start: sync()(主循环线程)与 request_relaunch()(WEB 线程)并发进
   _ensure_thread 只起一条订阅线程(检查+创建段持锁原子判定, R4#19: 无锁时两边同过 is_alive -> 双
   _run 双注册订阅, 先注册的 sub_id 被覆盖后泄漏到工具租约过期; 26-11-07-0536 批I)
+- test_stop_join_race_keeps_replacement_reference: stop 锁外 join 期间 _ensure_thread 起替换线程,
+  join 后同一性判断不匹配不置 None —— 替换线程引用不丢成孤儿(路径①, 26-11-08-0043)
+- test_stop_set_behind_ensure_creation_still_stops_new_thread: stop 置停位与 _ensure_thread 清停位
+  同锁全序化, 落在创建段之后的置停位必被新线程当轮读到收线(路径②, 26-11-08-0043)
+- test_stop_ensure_roundtrip_and_noop_stop: 正常起停往返不变(重启前停位已清); 无线程时 stop no-op
 - test_run_survives_pass_and_unregister_exceptions: 主循环容错(单轮异常不杀线程 / 收线注销异常只记 WARNING)(P2-T2.5)
 - test_clear_error_logs_recovery_info: 失败后恢复补 INFO 且清记忆, 无失败记忆时零日志(P2-T2.5)
   ⚠ 本轮修三处**假绿**(P2-T2.5): `_FAKE_EP.token_path` 是空串, 而 `_register`/`_heartbeat`/`_unregister`
@@ -963,6 +968,135 @@ def test_ensure_thread_concurrent_no_double_start(sub_env, monkeypatch):
         sub.stop()
         wait_until(_reap, interval=0.01)
     assert not _sub_threads(), "订阅线程未收线(清场失败)"
+
+
+# ---------- stop() 与 _ensure_thread 的起停竞态(issue 26-11-08-0043) ----------
+
+
+def test_stop_join_race_keeps_replacement_reference(sub_env):
+    """路径①复放: stop 在锁外 join 期间 _ensure_thread 起了替换线程, join 后不得丢它引用
+
+    交错(全用事件钉死, 不靠 sleep): 旧线程 T1 存活 -> stop 置停位/取引用后卡进 join ->
+    放行 T1 收线 -> 替换线程 T2 经 _ensure_thread 起好(引用已换) -> 才放行 stop 的 join
+    返回做同一性判断。修前 stop 无判据地置 None, 把 T2 引用丢成孤儿(下轮 sync 再起一条
+    = 双订阅双心跳); 修后同一性不匹配不置 None, T2 引用保留、后续 stop 仍能补 join。
+    """
+    _mgr, sub, _tool = sub_env
+    join_entered = threading.Event()  # stop 已进 join(置停位/取引用早已完成)
+    t1_started = threading.Event()
+    t1_release = threading.Event()  # 放行 T1 收线
+    after_join_gate = threading.Event()  # 放行 stop 的 join 返回(T1 已死、同一性判断未做)
+    ensure_started = threading.Event()  # 替换线程已起好
+
+    class _GatedJoinThread(threading.Thread):
+        """join 钩子: 进 join 即发信号; join 返回后(T1 已死)停到 gate 放行 —— 把「T1 已死、
+        stop 还没做同一性判断」这段竞态窗口钉成稳定段(窗口内注入 _ensure_thread)"""
+        def join(self, timeout=None):
+            join_entered.set()
+            super().join(timeout)
+            assert after_join_gate.wait(5.0), "after_join_gate 未放行"
+
+    def _t1_body():
+        t1_started.set()
+        t1_release.wait(5.0)
+
+    t1 = _GatedJoinThread(target=_t1_body, name="gtm-t1-join-race", daemon=True)
+    t1.start()
+    assert t1_started.wait(5.0), "T1 未起"
+    sub._thread = t1  # 手工挂上「正在跑」的旧订阅线程(不经 _ensure_thread, 主体自控)
+
+    try:
+        racer = threading.Thread(target=sub.stop, name="gtm-stop-racer", daemon=True)
+        racer.start()
+        assert join_entered.wait(5.0), "stop 未进 join"
+        t1_release.set()  # T1 收线 -> stop 的 join 本应立刻返回, 被 after_join_gate 拦住
+
+        def _ensure_later():
+            assert wait_until(lambda: not t1.is_alive(), interval=0.001), "T1 未收线"
+            sub._ensure_thread()  # 竞态窗口内: 起替换线程并换掉引用
+            ensure_started.set()
+
+        worker = threading.Thread(target=_ensure_later, name="gtm-ensure-racer", daemon=True)
+        worker.start()
+        assert ensure_started.wait(5.0), "替换线程未起好"
+        replacement = sub._thread
+        assert replacement is not None and replacement is not t1, "替换线程应已换上引用"
+        after_join_gate.set()  # 现在才放行 stop 的同一性判断
+        racer.join(5.0)
+        assert not racer.is_alive(), "stop 未返回"
+        assert sub._thread is replacement and replacement.is_alive(), ("join 期间换上的替换线程引用不得被丢(修前此处已被置 None 成孤儿)")
+    finally:
+        # 清场: 放替换线程收线(在 gate 未放行的失败路径上也能兜住)
+        after_join_gate.set()
+        sub.stop()
+    assert sub._thread is None and not replacement.is_alive(), "清场 stop 应收掉替换线程"
+    assert wait_until(lambda: not _sub_threads(), interval=0.01), "订阅线程未收线(清场失败)"
+
+
+def test_stop_set_behind_ensure_creation_still_stops_new_thread(sub_env, monkeypatch):
+    """路径②复放: stop 的置停位被 _ensure_lock 拦在「检查通过、清停位已做、线程未 start」段后
+
+    修前 stop 的置停位不持锁, 可落进 _ensure_thread 锁内窗口被 clear() 抹掉, 新起线程读不到
+    停位照常运行; 修后置停位与清停位被同一把锁全序化(此处 stopper 必然卡到 ensure 释放锁),
+    新线程 start 之后的置停位必然被它当轮读到收线, 引用随之清干净。
+    """
+    _mgr, sub, _tool = sub_env
+    arrived = threading.Event()  # ensure 已过检查+清停位、卡在造线程(竞态窗口开)
+    gate = threading.Event()  # 放行 ensure 完成创建+start
+    passes = []
+
+    def _pass():
+        passes.append(1)
+        return True
+
+    monkeypatch.setattr(sub, "_pass", _pass)
+    real_thread_cls = threading.Thread
+
+    class _GatedThread(real_thread_cls):
+        """替身线程类: 造线程一步停住, 把「清停位已做、线程未 start」窗口钉成稳定段"""
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            arrived.set()
+            gate.wait(5.0)
+
+    monkeypatch.setattr(threading, "Thread", _GatedThread)
+    # 两个 racer 先用真 Thread 类造好(绕开补丁, 参照上方并发双起用例的手法)
+    racer = real_thread_cls(target=sub._ensure_thread, name="gtm-ensure-racer2", daemon=True)
+    stopper = real_thread_cls(target=sub.stop, name="gtm-stop-racer2", daemon=True)
+    try:
+        racer.start()
+        assert arrived.wait(5.0), "ensure 未抵达创建窗口"
+        stopper.start()  # stop 的置停位此刻被 _ensure_lock 拦住(ensure 持锁造线程)
+        gate.set()
+        racer.join(5.0)
+        stopper.join(5.0)
+        assert not racer.is_alive() and not stopper.is_alive(), "两个 racer 未返回"
+        assert sub._thread is None, "新线程被 stop 停掉后引用应清(同一性匹配)"
+        assert len(passes) <= 1, f"停位必须当轮生效, 实跑 {len(passes)} 轮"
+    finally:
+        gate.set()  # 双保险: 任何路径都放行被卡住的构造
+        sub.stop()
+    assert wait_until(lambda: not _sub_threads(), interval=0.01), "订阅线程未收线(清场失败)"
+
+
+def test_stop_ensure_roundtrip_and_noop_stop(sub_env):
+    """正常起停往返行为不变: ensure 起 -> stop 清(None) -> 再 ensure 重启(停位已清) -> stop 收;
+    无线程时 stop 是 no-op。守住修法不破坏「stop 过再 sync 也复用同一入口」的合法重启。"""
+    _mgr, sub, _tool = sub_env
+    sub.stop()  # 无线程: no-op 不抛
+    assert sub._thread is None
+    sub._ensure_thread()
+    first = sub._thread
+    assert first is not None and first.is_alive()
+    sub.stop()
+    assert sub._thread is None and not first.is_alive(), "stop 应 join 成功并清引用"
+    sub._ensure_thread()
+    assert not sub._stop.is_set(), "重启前停位必须已清(否则新线程直接收线)"
+    second = sub._thread
+    assert second is not None and second is not first and second.is_alive()
+    sub.stop()
+    assert sub._thread is None and not second.is_alive()
+    assert wait_until(lambda: not _sub_threads(), interval=0.01), "订阅线程未收线(清场失败)"
 
 
 def test_run_survives_pass_and_unregister_exceptions(sub_env, monkeypatch):

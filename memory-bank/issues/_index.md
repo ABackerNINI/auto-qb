@@ -19,7 +19,7 @@
 
 | 类型 | 条数 |
 |---|---|
-| bug | 23 |
+| bug | 22 |
 | perf | 2 |
 | docs | 3 |
 | test | 10 |
@@ -58,7 +58,6 @@
 - [question] [非 ASCII 符号面宽于 code-style.md 禁用示例: §/→/⇒/≠ 在 src/ 泛在, 口径待拍板](26-11-08-0044-question-non-ascii-symbol-policy-src.html) — §(131文件)/→(7…
 - [test] [tests/clock.py wait_until 的 desc 调用期求值, f-string 拼最后观测值显示旧值](26-11-08-0044-test-tests-clock-wait-until-desc-eager.html) — wait_until d…
 - [test] [tests-real RM08 基座写 schema_version: 5 已过期——产品迁移 v5→v6 并改写落盘](26-11-08-0044-test-tests-real-rm08-schema-version-stale.html) — RM08 基座 CONF…
-- [bug] [tool_client.stop() 与 _ensure_lock 不同步, 两条竞争路径可致孤儿双订阅](26-11-08-0043-bug-webui-tool-client-stop-race.html) — stop() 全程在锁外…
 - [bug] [/api/torrents/add 的 tags/urls/files_b64 与 file-priority indices 无 isinstance(list)](26-11-08-0043-bug-webui-torrent-add-list-type-guards.html) — torrent_cmds…
 - [bug] [响应体泄敏同族: 详情 rec.to_dict() 透传 magnet_uri, 表达式面 tor.magnet_uri 同](26-11-08-0043-bug-webui-torrent-detail-magnet-leak.html) — /api/torrent…
 - [docs] [effect-confirmation.md 两处陈旧指针(_verdict_reannounce 链接与真值直查红线指向)](26-11-08-0043-docs-effect-confirmation-stale-pointers.html) — _verdict_rea…
@@ -118,7 +117,7 @@
 ## Done
 
 
-> 更早的 **458** 条已出本索引 —— 报告仍在 `issues/` 目录(未搬动), 全量清单见 [attachments/_archive.md](attachments/_archive.md).
+> 更早的 **459** 条已出本索引 —— 报告仍在 `issues/` 目录(未搬动), 全量清单见 [attachments/_archive.md](attachments/_archive.md).
 
 ## Dropped
 

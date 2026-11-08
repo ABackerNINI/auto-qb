@@ -133,10 +133,15 @@ class TrafficMonitorSubscriber:
         self._manager = manager
         self._wake = threading.Event()
         self._stop = threading.Event()
-        # _ensure_thread 的检查+创建互斥(R4#19, issue 26-11-07-0536 批I): 本方法有两条调用
-        # 线程 -- sync() 在主循环线程(module.start/apply), request_relaunch() 在 WEB 线程
-        # (routes/traffic_monitor.py)。无锁时「线程未起/刚收线」窗口里两边可同时通过 is_alive
-        # 检查, 各起一条 _run 双注册订阅(先注册的 sub_id 被覆盖, 泄漏到工具租约过期)。
+        # 订阅线程生命周期互斥(起侧 R4#19, issue 26-11-07-0536 批I; 停侧 issue 26-11-08-0043):
+        # 守护三段临界区 -- _ensure_thread 的「检查+清停位+创建」段、stop() 的「置停位+取线程
+        # 引用」段、stop() join 后的「同一性确认才置 None」段。起侧无锁时 sync()(主循环线程)
+        # 与 request_relaunch()(WEB 线程)可同时通过 is_alive 检查, 各起一条 _run 双注册订阅
+        # (先注册的 sub_id 被覆盖, 泄漏到工具租约过期); 停侧无锁时 stop() 的置停位可落在
+        # _ensure_thread 锁内 clear() 之前被抹掉(新线程读不到停位), join 后置 None 可丢掉
+        # 并发换上的替换线程引用(孤儿双订阅)。锁内只有标志/引用读写与造线程+start -- 无网络
+        # 无 sleep 无长 CPU, 不拖另一条调用线程; join 留在锁外(持锁 join 会与 _ensure_thread
+        # 互卡死), 漏网的引用错位靠同一性判断兜底。
         self._ensure_lock = threading.Lock()
         self._thread: Optional[threading.Thread] = None
         # 工具发现/拉起单点(S16): 状态内聚在它自己身上; UI 可经 self.agent 读状态区
@@ -188,20 +193,33 @@ class TrafficMonitorSubscriber:
         !超时只 WARNING 不阻塞更久 —— 守护线程随进程终灭, 残留订阅由工具侧租约兜底清;
         配对语义要求: `timeout` 必须大于单次控制面调用超时, 否则就是「叫停了还在等」。
 
+        !「置停位+取线程引用」整段持 _ensure_lock(issue 26-11-08-0043): 与 _ensure_thread 的
+        「清停位+起新线程」互斥, 置停位不可能再落在锁内 clear() 之前被抹掉 —— 交错被锁全序化:
+        本方法的置停位若在锁序上晚于对方, 新线程的事件被置位, 当轮收尾即照停(锁外 join 它);
+        若早于, 则那次起线请求在锁序上晚于本次关停, 等价于 stop 之后再 sync 的合法重启
+        (引用不丢, 后续 stop 仍能补 join)。
+
+        !join 在锁外(持锁 join 会与 _ensure_thread 互卡死); join 后回锁内做**同一性判断**才
+        置 None —— join 期间 _ensure_thread 可能已起替换线程并换掉引用, 无判据会把替换线程
+        引用丢成孤儿(双订阅)。
+
         !超时时**不摘线程引用**(与「已退出才置 None」区分开): 摘了就再也没人能 join 它,
         而下一次 sync() 会因「看不到线程」再起一条 —— 变成双订阅双心跳。保留引用后,
         _ensure_thread 见 is_alive 为真不会重起, 后续 stop() 也还能补 join。
         """
-        self._stop.set()
+        with self._ensure_lock:
+            self._stop.set()
+            thread = self._thread
         self._wake.set()
-        thread = self._thread
         if thread is None:
             return
         thread.join(timeout)
         if thread.is_alive():
             logger.warning(f"全局流量监视器订阅线程在 {timeout:g}s 内未退出(守护线程, 随进程终灭)")
             return
-        self._thread = None
+        with self._ensure_lock:
+            if self._thread is thread:
+                self._thread = None
 
     # ---------------- 订阅线程 ----------------
 
@@ -212,6 +230,10 @@ class TrafficMonitorSubscriber:
         「线程未起/刚收线」窗口里两条调用线程(sync() 主循环线程 / request_relaunch() WEB
         线程)各起一条 _run 双注册订阅。锁内只有检查/清标志/造线程/start -- 无网络无 sleep
         无长 CPU, 不拖另一条调用线程; 锁不重入(._run 与控制面动作不取这把锁), 无死锁面。
+
+        !与 stop() 共用这把锁(issue 26-11-08-0043): 本段的「清停位」与 stop 的「置停位」被
+        锁全序化, 置停位不会再交错落在检查通过之后、清停位之前被抹掉; stop 在 join 后的置
+        None 也在锁内做同一性判断, 本方法刚换上的替换线程引用不会被丢成孤儿。
         """
         with self._ensure_lock:
             if self._thread is not None and self._thread.is_alive():

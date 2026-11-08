@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="webui-tool-client-stop-race">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="tool_client.stop() 与 _ensure_lock 不同步, 两条竞争路径可致孤儿双订阅">
 <meta name="issue-summary" content="stop() 全程在锁外(:195-204): join 期间 _ensure_thread 可起替换线程, stop 随后置 None 丢引用成孤儿双订阅; _stop.set() 落在锁内 clear() 之前则新线程看不到停位">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-08-0043-bug-webui-tool-client-stop-race</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-08 00:43</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
@@ -142,11 +142,25 @@
   <h2><span class="no">§07</span>状态变更日志</h2>
   <ul>
     <li>2026-11-08 00:43 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-08 19:03 — 修复完成（置停位过锁 + join 后同一性置 None，见「修复后补充」）</li>
+    <li>2026-11-08 — 状态 Open → Done（kb.status）</li>
+</ul>
   <h3>复验</h3>
-  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <p>复验 2026-11-08 19:03（锚点 37710f5e，分支 fix/issue-batch-26-11-08）——<strong>仍复现</strong>。批I 后现状：<code>_ensure_thread</code> 的「检查+清停位+创建+start」段已整段持 <code>_ensure_lock</code>，但 <code>stop()</code> 三步全在锁外（置停位 / 取引用+join / 置 None）。真实交错时序：</p>
+  <ul>
+    <li><strong>路径①（丢引用成孤儿）</strong>：旧线程 T1 收线 → stop 锁外 join T1 返回 → 同一窗口 <code>_ensure_thread</code> 持锁见 T1 已死，起替换线程 T2 并把 <code>self._thread</code> 换成 T2 → stop 随后无条件 <code>self._thread = None</code> → T2 引用被丢成孤儿（无人能 join，下轮 sync 见「无线程」再起一条 = 双订阅，先注册的 sub_id 泄漏到工具租约过期）。</li>
+    <li><strong>路径②（停位被抹）</strong>：T1 已死 → stop 锁外 <code>_stop.set()</code> → <code>_ensure_thread</code> 持锁已过 is_alive 检查，随后 <code>_stop.clear()</code> 把停位抹掉 → 起替换线程 T2 读不到停位照常运行（stop 语义落空；与①叠合则再丢一次引用）。</li>
+  </ul>
   <h3>修复后补充</h3>
-  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  <p><strong>实际修法</strong>（建议 §06 全盘采纳：标志位过锁 + 同一性判断，未引入代际计数或新并发原语）：stop() 的「置停位+取线程引用」整段挪进 <code>_ensure_lock</code>；join 留锁外（持锁 join 会与 <code>_ensure_thread</code> 互卡死——死锁自查：三段临界区内只有 Event.set / 引用读写 / 造线程+start，<code>_run</code> 与控制面动作全程不取这把锁，无重入无嵌套，<code>Thread.start()</code> 只等线程自举不取锁）；join 成功后回锁内做同一性判断 <code>if self._thread is thread: self._thread = None</code>；超时未退出仍不摘引用（既有口径不变）。</p>
+  <p><strong>交错枚举</strong>（置停位与清停位被同一把锁全序化后）：</p>
+  <ul>
+    <li>置停位在锁序上<strong>晚于</strong> ensure 的清停位+起线：新线程的事件被置位，当轮收尾即照停，stop 锁外 join 它、同一性匹配清引用 —— 路径②闭合；</li>
+    <li>置停位<strong>早于</strong> ensure 的清停位+起线（仅 T1 已死时可达）：那次起线请求在锁序上晚于本次关停，等价于「stop 之后再 sync」的合法重启（<code>_ensure_thread</code> 文档既有口径），引用不丢、后续 stop 可补 join —— 并发的起/停请求以锁序后者赢，这是重启语义下的不可归约残留（不是孤儿面，孤儿双订阅已闭合）；</li>
+    <li>join 期间 ensure 换上替换线程引用：join 后同一性不匹配，不置 None —— 路径①闭合；</li>
+    <li>超时未退出：保留引用待补 join（test_stop_is_bounded_when_tool_hangs 继续守）。</li>
+  </ul>
+  <p>孤儿泄漏面（sub_id 挂到租约过期）随「引用不丢 + 停位必达」闭合：不再存在无主线程持 sub_id 空转的形态。<strong>测试</strong>（<code>commands run test.one -- tests/test_traffic_monitor_client.py</code>）：39 passed（含新增 3 条确定性交错用例 —— 事件 / join 钩子 / 线程构造闸钉死交错，不靠 sleep 碰运气）；变异验证：修前代码跑新增用例 2 failed 1 passed —— 路径①为<strong>确定性 failed</strong>，路径②修前为<strong>概率性 failed</strong>（旧 stop 不取锁，stopper 可在 ensure 换上 T2 引用之后才取旧引用，存在窄通过窗口；实测一例 failed），修后全绿；<code>test.quick</code> 全量 5854 passed 2 skipped。</p>
 </section>
 
 <footer>
