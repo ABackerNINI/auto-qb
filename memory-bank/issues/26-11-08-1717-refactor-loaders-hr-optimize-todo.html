@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="loaders-hr-optimize-todo">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="config/loaders: load_global_hr / load_tracker_hr 的 # TODO: optimize">
 <meta name="issue-summary" content="loaders.py:365/382 两处历史 TODO: HRRule 字段逐键 _get 样板两份, 可收敛(键面驱动或 dataclass 手段)后销 TODO">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-08-1717-refactor-loaders-hr-optimize-todo</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-08 17:17</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
 
@@ -109,15 +109,17 @@
 </section>
 
 <section id="s3">
-  <h2><span class="no">§03</span>建议<span class="opt">（可选）</span></h2>
-  <p class="todo">TODO: 一句话方向；没有就写「待定」。不为填单做分析。</p>
+  <h2><span class="no">§03</span>实际修法与验证</h2>
+  <p>键面驱动收敛（2026-11-09 修）：loaders.py 新增键表 <code>_HR_OUTPUT_FIELDS</code>（6 个输出字段的 键名+解析器 单点）与共用 helper <code>_load_hr_output_fields</code>（回退链：spec → fallback → 字段默认，按键存在性取值，字段默认不再 parse）、<code>_hr_exclude_union</code>（排除表并集）；两函数改从键表取值，两处 <code># TODO: optimize</code> 已销。行为逐字段保持：tri_state '' 覆盖、并集去重保序、字段缺省链、raw 大写形态语义均由既有测试钉住，另补 <code>test_parse_hr_raw_time_uppercase</code>（raw 小写输入归一大写此前无钉）。</p>
+  <p class="hint">验证：<code>commands run test.quick</code> 全绿（5865 passed, 2 skipped，2026-11-09 实测）。</p>
 </section>
 
 <section id="s4">
   <h2><span class="no">§04</span>状态变更日志</h2>
   <ul>
     <li>2026-11-08 17:17 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-09 — 状态 Open → Done（kb.status）</li>
+</ul>
 </section>
 
 <footer>

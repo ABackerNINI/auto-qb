@@ -395,8 +395,8 @@ def test_loader_defaults_tracker_config_keys_absent():
 def test_loader_defaults_tracker_hr_output_chain():
     """load_tracker_hr: 站点段与全局段都没写输出键 -> 回退链末段取 HRRule 字段默认(而非 None)
 
-    变异面: out()/out_bool() 末段 `getattr(d, key)` -> None。bool 分支会当场抛「无效布尔值」
-    (可被别的用例撞见), str 分支静默变 None —— 正是本条要钉的。
+    变异面: _load_hr_output_fields 字段默认末段 `getattr(d, key)` -> None。bool 分支会当场抛
+    「无效布尔值」(可被别的用例撞见), str 分支静默变 None —— 正是本条要钉的。
     """
     rule = load_tracker_hr({"required_seeding_time": "3D"}, {})
     assert rule.add_tag == "" and rule.add_category == ""

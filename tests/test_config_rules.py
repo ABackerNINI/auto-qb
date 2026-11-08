@@ -5,6 +5,7 @@
 - test_parse_hr_spec_missing_required: HR 规范缺必填项报错
 - test_parse_hr_spec_site_overrides_global: 站点 HR 覆盖全局
 - test_parse_hr_spec_condition: HR 规范条件解析
+- test_parse_hr_raw_time_uppercase: required_seeding_time_raw 大写归一(小写输入 -> 原始串大写形态)
 - test_parse_hr_exclude_union: HR 排除表全局∪站点并集(去重保序)
 - test_validate_hr_exclude_errors: HR 排除表校验(未知键/非列表/空串/非法 regex, 全局与站点)
 - test_config_tracker_tags_expand_ignore_case: @tracker_tags:ignore_case 展开附加后缀
@@ -176,6 +177,13 @@ def test_parse_hr_spec_condition():
         assert rule.extra_seeding_time == 0
         rule2 = load_tracker_hr({"required_seeding_time": "1D", "extra_seeding_time": "12H"}, {})
         assert rule2.extra_seeding_time == 12 * 3600
+
+
+def test_parse_hr_raw_time_uppercase():
+    """required_seeding_time_raw 取原始时间串的大写形态(变量替换用, 如 "3D"), 小写输入也归一大写"""
+    rule = load_tracker_hr({"required_seeding_time": "3d"}, {})
+    assert rule.required_seeding_time == 3 * 86400
+    assert rule.required_seeding_time_raw == "3D"
 
 
 def test_parse_hr_exclude_union():

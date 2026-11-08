@@ -364,24 +364,59 @@ def _resolve_hr_site_bindings(hr_check: HrCheckConfig, trackers: Dict[str, Track
         )
 
 
-# TODO: optimize
+# HR 输出字段键表(load_global_hr / load_tracker_hr 共用): (spec 键名, 解析器)。
+# 键面驱动收敛两处逐键 _get/out 样板 —— 键名与 HRRule 字段同名, 新增输出字段只改本表一处;
+# 解析器为 None = 原样透传(str 字段不设解析, tri_state 的 '' 才能原样存活)。
+_HR_OUTPUT_FIELDS: tuple = (
+    ("add_tag", None),
+    ("add_category", None),
+    ("overwrite_category", parse_bool),
+    ("add_tag_for_satisfied", None),
+    ("add_category_for_satisfied", None),
+    ("overwrite_category_for_satisfied", parse_bool),
+)
+
+
+def _load_hr_output_fields(spec: dict, fallback: dict | None, d: HRRule) -> Dict[str, Any]:
+    """HR 输出字段读取(_HR_OUTPUT_FIELDS 键表驱动): 逐键 spec -> fallback -> HRRule 字段默认
+
+    按键存在性取值(不是按真假): 站点键存在且值为 ''(tri_state 三态, v4 起 _strip_none 不剥)
+    时返回 '' 作为合并生效值 = 「覆盖为空」; 消费端(maintenance_mod)对空串按不打标/不设置处理。
+    仅 spec/fallback 命中的值过解析器, 字段默认是解析后空间不再 parse(与 _get 同约定);
+    fallback=None 时跳过中段(load_global_hr 只有 spec -> 字段默认一层)。
+    """
+    values: Dict[str, Any] = {}
+    for key, parse in _HR_OUTPUT_FIELDS:
+        if key in spec:
+            value: Any = spec[key]
+        elif fallback is not None and key in fallback:
+            value = fallback[key]
+        else:
+            value = getattr(d, key)
+            parse = None
+        values[key] = parse(value) if parse else value
+    return values
+
+
+def _hr_exclude_union(global_hr: dict, spec: dict, key: str) -> List[str]:
+    """排除表并集(去重保序): 全局在前站点追加, 剔除空项 —— 站点段只能在全局之上追加"""
+    merged: List[str] = []
+    for item in (*(global_hr.get(key) or ()), *(spec.get(key) or ())):
+        if item and item not in merged:
+            merged.append(item)
+    return merged
+
+
 def load_global_hr(spec: dict) -> HRRule:
+    """解析全局 hr 段: 输出字段(spec -> 字段默认一层) + 排除表(仅本段)"""
     d = HRRule()
     return HRRule(
-        add_tag=_get(spec, "add_tag", d.add_tag),
-        add_category=_get(spec, "add_category", d.add_category),
-        overwrite_category=_get(spec, "overwrite_category", d.overwrite_category, parse_bool),
-        add_tag_for_satisfied=_get(spec, "add_tag_for_satisfied", d.add_tag_for_satisfied),
-        add_category_for_satisfied=_get(spec, "add_category_for_satisfied", d.add_category_for_satisfied),
-        overwrite_category_for_satisfied=_get(
-            spec, "overwrite_category_for_satisfied", d.overwrite_category_for_satisfied, parse_bool
-        ),
+        **_load_hr_output_fields(spec, None, d),
         exclude_tags=list(_get(spec, "exclude_tags", d.exclude_tags)),
         exclude_categories=list(_get(spec, "exclude_categories", d.exclude_categories)),
     )
 
 
-# TODO: optimize
 def load_tracker_hr(spec: dict, global_hr: dict) -> HRRule:
     """解析站点 hr 配置段, 与全局 hr 默认输出设置合并(站点字段优先, 全局兜底, 字段默认兜底全局)
 
@@ -391,24 +426,6 @@ def load_tracker_hr(spec: dict, global_hr: dict) -> HRRule:
     取「全局 ∪ 站点」并集(去重保序) —— 排除只收窄管束面, 站点段只能在全局之上追加,
     覆盖语义会埋「站点段写了就静默丢全局」的陷阱。
     """
-    d = HRRule()
-
-    # 输出设置回退链: 站点 spec -> 全局 hr 段 -> HRRule 字段默认。
-    # 按键存在性取值(不是按真假): 站点键存在且值为 ''(tri_state 三态, v4 起 _strip_none 不剥)
-    # 时返回 '' 作为合并生效值 = 「覆盖为空」; 消费端(maintenance_mod)对空串按不打标/不设置处理。
-    def out(key: str) -> Any:
-        return spec.get(key, global_hr.get(key, getattr(d, key)))
-
-    def out_bool(key: str) -> bool:
-        return parse_bool(spec.get(key, global_hr.get(key, getattr(d, key))))
-
-    def out_union(key: str) -> List[str]:
-        merged: List[str] = []
-        for item in (*(global_hr.get(key) or ()), *(spec.get(key) or ())):
-            if item and item not in merged:
-                merged.append(item)
-        return merged
-
     return HRRule(
         # 原始时间字符串用于变量替换: "3D" / "12H" / "1.5D"
         required_seeding_time=parse_time(spec["required_seeding_time"]),
@@ -416,14 +433,9 @@ def load_tracker_hr(spec: dict, global_hr: dict) -> HRRule:
         required_share_ratio=float(spec.get("required_share_ratio", 0) or 0),
         extra_seeding_time=parse_time(str(spec.get("extra_seeding_time", "0S") or "0S")),
         condition=parse_hr_condition(spec.get("condition", "80%")),
-        add_tag=out("add_tag"),
-        add_category=out("add_category"),
-        overwrite_category=out_bool("overwrite_category"),
-        add_tag_for_satisfied=out("add_tag_for_satisfied"),
-        add_category_for_satisfied=out("add_category_for_satisfied"),
-        overwrite_category_for_satisfied=out_bool("overwrite_category_for_satisfied"),
-        exclude_tags=out_union("exclude_tags"),
-        exclude_categories=out_union("exclude_categories"),
+        **_load_hr_output_fields(spec, global_hr, HRRule()),
+        exclude_tags=_hr_exclude_union(global_hr, spec, "exclude_tags"),
+        exclude_categories=_hr_exclude_union(global_hr, spec, "exclude_categories"),
     )
 
 
