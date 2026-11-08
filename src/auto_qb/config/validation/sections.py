@@ -926,8 +926,12 @@ def _validate_traffic_source(spec: dict | None, errors: List[str]) -> None:
                 if key in tool and not isinstance(tool[key], str):
                     errors.append(f"{tool_where}.{key}: 必须是字符串(路径)")
             if "notify_cooldown_s" in tool:
-                # 0 = 不冷却(合法; 事件号去重仍在); 上限 24H: 过大等于永不刷新历史图
-                _try_time(tool["notify_cooldown_s"], f"{tool_where}.notify_cooldown_s", errors, min_s=0, max_s=86400)
+                # 0 = 不冷却(合法; 事件号去重仍在; 裸 0 特判放行, 同 R4#15 dedup_window);
+                # 上限 24H: 过大等于永不刷新历史图
+                if not _is_bare_zero(tool["notify_cooldown_s"]):
+                    _try_time(
+                        tool["notify_cooldown_s"], f"{tool_where}.notify_cooldown_s", errors, min_s=0, max_s=86400
+                    )
     # enabled=false 时来源已整体停摆(26-10-17-1737 S1/D1): 免检 dat_path —— 关来源本就是
     # "没配好数据源"时的出路; 若仍要求 dat_path, 用户无法从设置页把没配好的来源关掉
     # (保存必败, 且 UI 里找不到能改的地方)。关闭判定取 parse_bool 解析结果(R4#14, 与上面

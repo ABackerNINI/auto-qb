@@ -10,10 +10,11 @@
 - test_validate_default_provider_requires_dat_path: provider=traffic_monitor 时 dat_path 缺失/空/非串 -> 拒绝
 - test_validate_tool_branch_structure: global_traffic_monitor 子块未知键/非串路径被拒; provider=global 时无需 dat_path
 - test_validate_tool_data_dir_key_is_gone: data_dir 已从工具子段删除(R2/D20), 出现即按未知键拒绝
-- test_validate_notify_cooldown_bounds: notify_cooldown_s 须可解析为时间且 0~24H(负/超界拒, 0 合法)
+- test_validate_notify_cooldown_bounds: notify_cooldown_s 须可解析为时间且 0~24H(负/超界拒, 0 合法含裸 0/整数 0, issue 26-11-08-0703)
 - test_validate_refresh_interval_bounds: refresh_interval(A3) 须可解析为时间且 10S~1H(边界含, 9S/2H/非串拒)
 - test_validate_valid_section_ok: 全键合法值一次通过(两来源参数可并存)
 - test_loader_parses_explicit_values: 显式值按类型解析(str/time, 含 A3 的 refresh_interval), 与字段默认不同的值真正进入 Config
+- test_loader_notify_cooldown_bare_zero: notify_cooldown_s 裸 0/整数 0 经 loader 解析为 0.0(校验放行后的运行时闭环, issue 26-11-08-0703)
 - test_loader_defaults_when_absent: 段缺省 -> 全部字段默认
 - test_loader_non_dict_spec_defaults: 段值非字典(如字符串) -> 全默认(不抛)
 - test_loader_blank_provider_falls_back: provider 留空/纯空白 -> 兜底 traffic_monitor
@@ -135,11 +136,15 @@ def test_validate_notify_cooldown_bounds():
         )
 
     assert _tool("0S") == []
+    # 裸 0 = 不冷却(合法, issue 26-11-08-0703): 字符串裸 0 与整数 0(程序内构造)同放行
+    assert _tool("0") == []
+    assert _tool(0) == []
     assert _tool("10M") == []
     assert _tool("24H") == []
     assert any("notify_cooldown_s" in e for e in _tool("-1S"))
     assert any("notify_cooldown_s" in e for e in _tool("48H"))
     assert any("notify_cooldown_s" in e for e in _tool("abc"))
+    assert any("notify_cooldown_s" in e for e in _tool("5"))  # 非零裸数字仍拒(带单位后缀契约不变)
 
 
 def test_validate_refresh_interval_bounds():
@@ -205,6 +210,30 @@ def test_loader_parses_explicit_values():
     assert cfg.global_traffic_monitor.tool_dir == "/probe/gtm"
     assert cfg.global_traffic_monitor.tool_exe == "/probe/gtm/monitor.exe"
     assert cfg.global_traffic_monitor.notify_cooldown_s == 90.0
+
+
+def test_loader_notify_cooldown_bare_zero():
+    """notify_cooldown_s 裸 0/整数 0 经 loader 解析为 0.0(校验放行后的运行时闭环, issue 26-11-08-0703)
+
+    校验侧 _is_bare_zero 放行裸 0 后, loader 若仍走裸 parse_time 会在模型构建期抛裸
+    ValueError —— 与 dedup_window/state_save_interval 同口径走 _parse_time_bare_zero_ok。
+    """
+    assert load_traffic_source_config(
+        {
+            "provider": "global_traffic_monitor",
+            "global_traffic_monitor": {
+                "notify_cooldown_s": "0"
+            }
+        }
+    ).global_traffic_monitor.notify_cooldown_s == 0.0
+    assert load_traffic_source_config(
+        {
+            "provider": "global_traffic_monitor",
+            "global_traffic_monitor": {
+                "notify_cooldown_s": 0
+            }
+        }
+    ).global_traffic_monitor.notify_cooldown_s == 0.0
 
 
 def test_loader_defaults_when_absent():

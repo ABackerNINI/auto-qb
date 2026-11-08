@@ -68,6 +68,7 @@
 - test_validate_traffic_source_enabled_key: enabled 总开关(缺省 True/false 关闭/非布尔报错; false 免检 dat_path 且 expr 门控放行) + no/off/0 等价关闭写法同口径(R4#14/#10), 非 0 数字不算关闭
 - test_validate_traffic_source_gtm_expr_gate: provider=global_traffic_monitor 恒 traffic_configured(R4#11): gtm + 无 dat_path + sys.upload_today expr 规则零报错(回归成判 dat_path 即红)
 - test_validate_notify_dedup_window_bare_zero: notify.dedup_window 裸 0 = 不去重(R4#15): 裸 0/整数 0/0S 放行, 坏格式照拒
+- test_validate_rule_cooldown_bare_zero: example_rules.*.cooldown 裸 0 = 不冷却(issue 26-11-08-0703, 同 R4#15 修法): 裸 0/整数 0/0S 放行, 非零裸数字/坏格式/负值照拒
 - test_validate_checking_section_mode_absent_ok: checking 子段 mode 缺省走 schema 默认(R4#12): {enabled: true} 不报「取值非法: ''」, 显式非法 mode 照拒
 - test_validate_add_episode_tags_unknown_keys: add_episode_tags 未知键 fail-fast(R4#13): 模板键拼错报未知键, 合法键面放行
 - test_validate_value_errors_extended
@@ -688,6 +689,32 @@ def test_validate_notify_dedup_window_bare_zero():
         assert _errs({"notify": {"dedup_window": 0}}) == []  # 整数 0(程序内构造)同样放行
         assert "dedup_window" not in _load_errors(td, "config:\n  notify:\n    dedup_window: 0S\n")
         assert "config.notify.dedup_window" in _load_errors(td, "config:\n  notify:\n    dedup_window: abc\n")
+
+
+def test_validate_rule_cooldown_bare_zero():
+    """example_rules.*.cooldown 裸 0 = 不冷却(合法, issue 26-11-08-0703, 与 R4#15 dedup_window 同构):
+    裸 0/整数 0/0S 放行; 非零裸数字/坏格式/负值照拒(特判只放行 0 本身)"""
+    with tempfile.TemporaryDirectory() as td:
+        assert "cooldown" not in _load_errors(
+            td, "config:\n  example_rules:\n    r1:\n      cooldown: 0\n      actions: []\n"
+        )
+        assert _errs({"example_rules": {"r1": {"cooldown": 0, "actions": []}}}) == []  # 整数 0(程序内构造)同样放行
+        assert "cooldown" not in _load_errors(
+            td, "config:\n  example_rules:\n    r1:\n      cooldown: 0S\n      actions: []\n"
+        )
+        assert "cooldown" not in _load_errors(
+            td, "config:\n  example_rules:\n    r1:\n      cooldown: 10M\n      actions: []\n"
+        )
+        # 非零裸数字无单位/坏格式/负值 -> 格式报错(裸 0 特判只放行 0 本身)
+        assert "config.example_rules.r1.cooldown: 无效时间格式" in _load_errors(
+            td, "config:\n  example_rules:\n    r1:\n      cooldown: 5\n      actions: []\n"
+        )
+        assert "config.example_rules.r1.cooldown: 无效时间格式" in _load_errors(
+            td, "config:\n  example_rules:\n    r1:\n      cooldown: abc\n      actions: []\n"
+        )
+        assert "config.example_rules.r1.cooldown: 无效时间格式" in _load_errors(
+            td, "config:\n  example_rules:\n    r1:\n      cooldown: -5S\n      actions: []\n"
+        )
 
 
 def test_validate_checking_section_mode_absent_ok():

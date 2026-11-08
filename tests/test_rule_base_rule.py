@@ -42,6 +42,8 @@
 - test_rule_enabled_key_read: enabled 键名读取(显式 false 必须停用, 缺省 true)
 - test_rule_once_dedup_with_record: once 有执行记录必须去重(无记录放行)
 - test_rule_cooldown_sub_second_boundary: 0 < cooldown <= 1 秒的冷却同样生效
+- test_rule_cooldown_bare_zero_means_no_cooldown: cooldown 裸 0(整数 0/字符串 "0")= 不冷却,
+  构造期解析为 0.0 不抛错且运行时语义与 0S 一致(issue 26-11-08-0703)
 - test_rule_never_not_deduped: never 有记录仍放行(对照 once 必须去重, 防 !=never 反转)
 - test_rule_cooldown_expired_allows_rerun: C32 守阵 —— cooldown 合取是 and(改 or -> 冷却过期
   也不放行, 规则永久静默)
@@ -1027,6 +1029,24 @@ def test_rule_cooldown_sub_second_boundary():
         assert rule._dedup_allowed(ctx) is False, "0.5S 冷却期内必须去重"
         assert rule.process(ctx) == VERDICT_DEDUPED, "0.5S 冷却期内不得重复执行"
         assert client.calls.count(("add_tags", ["X"])) == 1
+
+
+def test_rule_cooldown_bare_zero_means_no_cooldown():
+    """cooldown 裸 0(整数 0 / 字符串 "0")= 不冷却(issue 26-11-08-0703): 构造期解析为 0.0 不抛错
+
+    校验侧 _is_bare_zero 特判放行裸 0 后, Rule 构造期解析必须同口径(此前走裸 parse_time,
+    裸 0 过了校验却在构造期抛裸 ValueError); 0 = 不冷却语义与 "0S" 写法一致。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        ctx = make_ctx(mgr, FakeTorrent(tags=""), FakeClient())
+        rule_int = Rule("g.cd0", {"actions": [{"add_tags": ["X"]}], "cooldown": 0}, mgr)
+        assert rule_int.cooldown == 0.0, "整数 0(程序内构造)须解析为 0.0"
+        rule_str = Rule("g.cd0s", {"actions": [{"add_tags": ["X"]}], "cooldown": "0"}, mgr)
+        assert rule_str.cooldown == 0.0, "字符串裸 0 须解析为 0.0(与 '0S' 同义)"
+        # 运行时语义: cooldown=0 -> 不冷却, 有执行记录仍放行(与 0S 写法一致)
+        mgr.ctx.state.record_execution("g.cd0", ctx.hash)
+        assert rule_int._dedup_allowed(ctx) is True, "cooldown 裸 0 = 不冷却, 有记录仍放行"
 
 
 def test_rule_never_not_deduped():

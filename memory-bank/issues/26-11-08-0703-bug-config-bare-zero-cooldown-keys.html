@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="legacy-review4">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="cooldown/notify_cooldown_s 文档口径「0 = 不冷却」但校验拒裸 0(与已修 R4#9/#15 同根)">
 <meta name="issue-summary" content="example_rules.*.cooldown(schema/rules.py:46 help)与 gtm.notify_cooldown_s(sections.py 注释)宣称 0 = 不冷却,_try_time 拒裸 0,修法可复用 _is_bare_zero/_parse_time_bare_zero_ok">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-08-0703-bug-config-bare-zero-cooldown-keys</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-08 07:03</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
@@ -150,11 +150,18 @@ _try_time(tool["notify_cooldown_s"], f"{tool_where}.notify_cooldown_s", errors, 
   <h2><span class="no">§07</span>状态变更日志</h2>
   <ul>
     <li>2026-11-08 07:03 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-08 18:03 — 修复完成，状态 <strong>Open → Done</strong></li>
+</ul>
   <h3>复验</h3>
-  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <p>复验（2026-11-08 18:03, HEAD 5cf29636）：仍复现。锚点全部成立（sections.py 行号漂移至 929-930, 其余一致）。经 <code>load_config</code> 真链路实测：<code>cooldown: 0</code> 报「config.example_rules.r1.cooldown: 无效时间格式: 0」; <code>notify_cooldown_s: 0</code> 报「config.traffic_source.global_traffic_monitor.notify_cooldown_s: 无效时间格式: 0」; 两键 <code>0S</code> 写法均放行——与 issue §02 证据一致。</p>
   <h3>修复后补充</h3>
-  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  <p>实际修法与 §06 建议一致（调用点特判, 未给 <code>_try_time</code> 加参数——与既有 R4#9/#15 修法保持同构）:</p>
+  <ul>
+    <li><strong>校验侧</strong>: <code>validation/rules.py</code> cooldown 与 <code>validation/sections.py</code> notify_cooldown_s 两处 <code>_try_time</code> 调用前加 <code>if not _is_bare_zero(...):</code> 放行（与 dedup_window 1161 行的既有写法逐字同构）; <code>_is_bare_zero</code> docstring 覆盖面两键 → 四键。</li>
+    <li><strong>解析侧闭环</strong>: <code>loaders.py</code> notify_cooldown_s 改走 <code>_parse_time_bare_zero_ok</code>（裸 0 → 0.0）; <strong>排查发现 cooldown 的运行时解析不在 config loader 而在 Rule 构造期</strong>（<code>rules/base.py:366</code>）, 同样改走 <code>_parse_time_bare_zero_ok(str(...))</code>（保留原 str() 包裹, 非 0 值行为不变）。</li>
+    <li><strong>消费端结论</strong>: cooldown 消费面在 <code>rules/base.py</code> 去重判定（<code>_dedup_allowed</code>: <code>execute_once=never 且 cooldown&lt;=0</code> 直放; <code>cooldown&gt;0</code> 才进冷却窗口）——裸 0 修后拿到 <code>float 0.0</code> = 不冷却, 与 "0S" 同义; notify_cooldown_s 已于 26-10-21 退役、取值不再被读取, 但 loader 仍解析建模型——修后拿到 <code>float 0.0</code>, 不再裸抛。</li>
+    <li><strong>测试</strong>: 新增 3 例 + 扩 1 例——<code>test_validate_rule_cooldown_bare_zero</code>（config_misc）、<code>test_rule_cooldown_bare_zero_means_no_cooldown</code>（rule_base_rule）、<code>test_loader_notify_cooldown_bare_zero</code>（traffic_monitor）, 并扩 <code>test_validate_notify_cooldown_bounds</code>（裸 0/整数 0 放行、非零裸数字照拒）; 各文件头「测试计划」清单同步。实测: 三文件单跑 73+24+42 passed; 全量 <code>test.full</code> 5850 passed / 2 skipped, 覆盖率 99%。</li>
+  </ul>
 </section>
 
 <footer>

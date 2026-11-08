@@ -207,8 +207,9 @@ def _is_bare_zero(value: Any) -> bool:
     """裸 0 判定(R4#9/#15): 字符串 "0"(含空白)或整数 0, 带单位形("0S")不在内 —— 那本就过 parse_time
 
     parse_time 本体不动(服务全仓多处, 「数值须带单位后缀」契约保持): 特判只收敛在本谓词,
-    供两个文档口径声明「0 = 关闭/不去重」的键的调用路径使用(state_save_interval /
-    notify.dedup_window)。bool 先排除(int 子类, False == 0 恒真): 非数值类型照走
+    供文档口径声明「0 = 关闭/不去重/不冷却」的键的调用路径使用(state_save_interval /
+    notify.dedup_window / example_rules.*.cooldown / gtm.notify_cooldown_s, R4#9/#15 +
+    issue 26-11-08-0703)。bool 先排除(int 子类, False == 0 恒真): 非数值类型照走
     parse_time 的「无效时间格式」报错, 不得被静默当成 0。
     """
     if isinstance(value, bool):

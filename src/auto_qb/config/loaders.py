@@ -56,12 +56,14 @@ def _under(data_dir: str, *parts: str) -> str:
 
 
 def _parse_time_bare_zero_ok(value: Any) -> float:
-    """parse_time 的裸 0 放行包装(R4#9/#15): 仅「0 = 关闭/不去重」文档口径的两个键使用
+    """parse_time 的裸 0 放行包装(R4#9/#15): 「0 = 关闭/不去重/不冷却」文档口径键的 loader 侧解析单点
 
-    校验层(_is_bare_zero)放行裸 0 后, loader 对同键的 parse_time 必须同口径 —— 否则裸 0
-    过了校验却在模型构建期抛裸 ValueError(绕过 load_config「配置问题统一抛 ConfigError」
-    契约, 比修复前的干净校验报错更糟)。判定复用校验层同一谓词(无第二份口径), 非 0 值
-    原样走 parse_time(「数值须带单位后缀」契约不变)。
+    覆盖面(R4#9/#15 + issue 26-11-08-0703 补两键): state_save_interval / notify.dedup_window /
+    example_rules.*.cooldown / gtm.notify_cooldown_s —— 校验层(_is_bare_zero)放行裸 0 后,
+    解析侧对同键的 parse_time 必须同口径 —— 否则裸 0 过了校验却在模型构建期抛裸
+    ValueError(绕过 load_config「配置问题统一抛 ConfigError」契约, 比修复前的干净校验
+    报错更糟)。判定复用校验层同一谓词(无第二份口径), 非 0 值原样走 parse_time
+    (「数值须带单位后缀」契约不变)。
     """
     return 0.0 if _is_bare_zero(value) else parse_time(value)
 
@@ -567,7 +569,8 @@ def load_traffic_source_config(spec: Any) -> TrafficSourceConfig:
     global_traffic_monitor = GlobalTrafficMonitorSourceConfig(
         tool_dir=_tool("tool_dir"),
         tool_exe=_tool("tool_exe"),
-        notify_cooldown_s=_tool("notify_cooldown_s", parse_time),
+        # 裸 0 = 不冷却(校验侧特判放行, issue 26-11-08-0703): 解析同口径走 _parse_time_bare_zero_ok
+        notify_cooldown_s=_tool("notify_cooldown_s", _parse_time_bare_zero_ok),
     )
     # provider 缺省/留空 = traffic_monitor(与校验同口径; 去空白后再兜底)
     provider = str(spec.get("provider") or "").strip() or d.provider

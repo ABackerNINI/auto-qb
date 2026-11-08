@@ -27,7 +27,7 @@ from ..schema.fields import (
     STOP_IF,
     TRIGGERS,
 )
-from .core import _check_regex_patterns, _check_unknown_keys, _try, _try_time
+from .core import _check_regex_patterns, _check_unknown_keys, _is_bare_zero, _try, _try_time
 
 # 规则 spec 已知键(watch_fields 仅 on_torrent_field_changed 触发时机下允许;
 # evaluation 为 W4/D4 占位枚举位: 校验放行 all|first_match, 引擎按 all 处理)
@@ -157,7 +157,9 @@ def _validate_rules(rules_config: dict, errors: List[str], data: Any = None) -> 
                 # 0 会被 TaskQueue._norm_interval 归一化成 1s → 规则决策链每秒全量跑(qB API + CPU)
                 _try_time(spec["interval"], f"{where}.interval", errors, positive=True)
             if "cooldown" in spec:
-                _try_time(spec["cooldown"], f"{where}.cooldown", errors)
+                # 0 = 不冷却(合法, schema help 口径; 裸 0 特判放行, 同 R4#15 dedup_window 的调用点特判)
+                if not _is_bare_zero(spec["cooldown"]):
+                    _try_time(spec["cooldown"], f"{where}.cooldown", errors)
             if "execute_once" in spec and spec["execute_once"] not in EXECUTE_ONCE:
                 errors.append(f"{where}: execute_once 取值非法: '{spec['execute_once']}', 可选: {'/'.join(EXECUTE_ONCE)}")
             if "stop_following_rules_if" in spec and spec["stop_following_rules_if"] not in STOP_IF:
