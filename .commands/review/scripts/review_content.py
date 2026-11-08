@@ -51,7 +51,7 @@ from pathlib import Path
 # 与 review.lane.verify 的「树净仅该目录内允许落盘」同源; reports/attachments/ 其余件仍是事实性文档, 照旧计行。
 BOOKKEEPING_PREFIXES = (
     "memory-bank/tasks/",
-    "memory-bank/activeContext/",
+    "memory-bank/active-context/",
     "memory-bank/testing/baselines/",
     "memory-bank/reports/attachments/legacy-review4/",
 )

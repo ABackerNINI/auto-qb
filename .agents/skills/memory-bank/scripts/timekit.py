@@ -97,7 +97,7 @@ HTML_BLOCK_TAGS = ("code", "pre", "script", "style")
 
 # 需要做文件名日期校验的目录 → 前缀形态
 TASK_DIR = "tasks"
-STAMP_DIRS = ("activeContext", "testing/baselines", "plans", "reports", "issues")
+STAMP_DIRS = ("active-context", "testing/baselines", "plans", "reports", "issues")
 
 # --------------------------------------------------------------------------- 解析工具
 

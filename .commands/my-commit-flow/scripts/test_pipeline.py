@@ -632,7 +632,6 @@ class StaticNameTest(unittest.TestCase):
     # (2026-09-22 目录化重构新增了 4 个; 之前只扫本包自己那 5 个)。
     OTHER_SCRIPTS = (
         ".agents/skills/memory-bank/scripts/_common.py",
-        ".agents/skills/memory-bank/scripts/gen_tasks_index.py",
         ".agents/skills/memory-bank/scripts/gen_kb_index.py",
         ".agents/skills/memory-bank/scripts/check_kb_structure.py",
     )

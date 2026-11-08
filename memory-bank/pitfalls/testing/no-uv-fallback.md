@@ -1,7 +1,6 @@
 # 本 clone 工具 shell 无 uv / 无 R 盘时跑测试的兜底
 
 > 摘要: 包内 `test.*` 任务单点写着 `uv run pytest`, 而**本 clone 的工具 shell 的 PATH 里没有 `uv`**(实测 uv 本体已装在 `C:\Users\<用户>\.local\bin\uv.exe`, 只是不在 PATH) ⇒ 每个测试任务在第一行就失败(`'uv' is not recognized`), 闸门同理; `.commands/test/config.toml` 的 `TMPDIR=R:/Temp/auto-qb/tests` 指向的 **R: 盘本机也不存在**。首选处置 = **本次调用前把该目录前置进 PATH**(包内 task/闸门全线恢复, 实测), 次选 = 用仓库 venv 的 python 直跑 pytest + `TMPDIR` 指到 C 盘临时区。
-> 等级: L1
 > 触发: 跑测试, 提交, 闸门, uv, command not found, .local\bin, PATH, R:/Temp, 驱动器不存在, DriveNotFoundException, 全量, TMPDIR, COVERAGE_FILE, basetemp
 
 **Refs:** memory-bank/tasks/26-10-15-webui-qb-traffic-restart-spike-gap.md, memory-bank/tasks/26-10-16-backend-global-traffic-monitor.md

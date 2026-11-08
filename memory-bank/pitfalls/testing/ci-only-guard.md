@@ -1,7 +1,6 @@
 # CI 另一侧才现形的守阵: 写死平台前缀长度 / 活性阈值绑机器速度
 
 > 摘要: 多类守阵/用例**只在与开发机不同的那一侧 CI job 上现形**, 本机单平台绿不构成"守阵成立"的证据 —— ①跨平台断言把**前缀切片长度写死**(`args[:2]`), nt 侧凑巧成立而 POSIX 侧恒红; ②并发守阵的**活性阈值绑机器速度**("写者写满 300 次…读者必读 >50 次"), 写耗时跨平台差一个量级 ⇒ 快机器上读者根本没读几轮就撞活性断言; ③断言引用**仅一侧存在的模块常量**(POSIX 无 `subprocess.CREATE_NO_WINDOW`); ④测试自起子进程 `print` 中文, **中文 Windows 本机 cp936 绿 / 英文 runner cp1252 红**(`UnicodeEncodeError` 把子进程退出码变成 1); ⑤收 node 探针输出时 `text=True` 让 cp1252 猜 UTF-8 字节(`UnicodeDecodeError` 打死 `_readerthread`, 见 [../ops/console-encoding.md])。五条都不是被测行为破了, 是**守阵/用例自身的平台/速度/码页依赖**。2026-10-22 gtm 子项目 (`tools/global-traffic-monitor`) 双平台 job 实证。
-> 等级: L0
 > 触发: CI 红本机绿, 跨平台断言, os.name, sys.platform, 写死切片长度, 前缀长度, 仅一侧存在的模块常量, CREATE_NO_WINDOW, 活性阈值, 并发守阵, 读次数, flaky, gtm, atomic_write, 双平台 job, cp1252, cp936, 码页, PYTHONIOENCODING, 子进程 print 中文, UnicodeEncodeError, UnicodeDecodeError, charmap, 英文 Windows runner, PytestUnhandledThreadExceptionWarning, proc.stdout None, json.loads NoneType, TimeoutExpired, node 探针, text=True, errors=replace, PYTHONUTF8=0
 
 ### 跨平台断言写死切片长度: nt 侧凑巧成立, POSIX 侧恒红

@@ -1,9 +1,9 @@
 """test_memory_bank_naming 测试计划: Memory Bank 结构守卫测试 (TASK010; 2026-09-18 随任务档案改名同步更新)。
 
 守什么: 知识库的"跨会话连续性"完全依赖 `memory-bank/tasks/` 与入口文件的**结构化约定** —
-一旦索引与档案脱钩 (登记了没文件 / 有文件没登记)、状态分区与档案 `Status` 不一致、
-必备章节缺失, 下次会话就无法从 `tasks/` 续作; 一旦会话纪要回流进 `activeContext.md`,
-该文件会重新膨胀成流水账 (2026-09-17 复盘的真实故障)。这些判定都是纯静态的, 用测试守住成本极低。
+状态分区与档案 `Status` 不一致、必备章节缺失、同专题重复建档, 下次会话就无法从 `tasks/` 续作
+(2026-11-08 重构起 tasks 索引已退役, 「索引与档案脱钩」类守卫随之收缩)。这些判定都是纯静态的,
+用测试守住成本极低。
 
 2026-09-18 起档案命名由 `TASKnnn-<slug>.md` 改为 `YY-MM-DD-<slug>.md`(全局序号在 9 个并行
 worktree 下必然撞号)。本文件在兼容期内同时接受两种命名, 主键一律取"去掉编号 / 日期前缀后的 slug"。
@@ -46,14 +46,6 @@ memory-bank skill 的 `scripts/flip_status.py` / `bump_doc.py`, **进程内 impo
 常驻锚防流水守卫 (检查器 memory-bank skill 的 `scripts/check_mutation_anchor.py`, 2026-10-31 加):
 
 
-kb.tier 分级清理四动作 (2026-10-31 R0, 计划 26-10-31-0534; 实现在 memory-bank skill 的
-`scripts/kb_tier.py`, **进程内 import**, tmp 夹具不碰真实 memory-bank/):
-
-
-CLOSED_KEEP=60 索引出口 (计划 26-10-31-0534 R3/D5/D14, 2026-10-31 加; tasks 主索引的已完结区只留
-最近 60 条, 全量清单另落 `tasks/attachments/_archive.md`, 形态与 issues 侧同款; plans 侧守阵在 test_docs_forms.py):
-
-
 状态漂移守卫 (检查器 memory-bank skill 的 `scripts/check_status_drift.py`, 2026-10-31 加, **进程内
 import**, tmp 夹具不碰真实 memory-bank/; 四档: A 反链x Open / B issue badge vs meta / 异常
 status-unreadable 三档硬拦 rc=1, C 反链x In Progress / D 完成断言两档清单只提示):
@@ -76,15 +68,11 @@ from pathlib import Path
 from kb_test_support import (
     DATE_PREFIX_RE,
     FILE_RE,
-    INDEX,
-    INDEX_ID_RE,
-    LEGACY_PREFIX_RE,
     MB,
     REQUIRED_SECTIONS,
     ROOT,
     SKILL_SCRIPTS,
     STATUS_RE,
-    TASKS,
     _kb_checker,
     _slug_of,
     _task_files,
@@ -92,20 +80,16 @@ from kb_test_support import (
 
 
 def test_slug_is_unique_ignoring_date_prefix() -> None:
-    """并行 worktree 各自立档会产出重复: 同一专题两份档案 (2026-09-18 实测 TASK014/TASK015 逐字节相同)
-    + 索引里重复登记。重复条目在 dict 式解析里会静默覆盖, 双向一致与状态分区两个守卫都发现不了,
-    所以必须单独守。改名后同一专题在不同日期建档会产生不同文件名, 因此比对必须**忽略日期前缀**。"""
+    """并行 worktree 各自立档会产出重复: 同一专题两份档案 (2026-09-18 实测 TASK014/TASK015 逐字节相同)。
+    重复条目在 dict 式解析里会静默覆盖, 双向一致与状态分区两个守卫都发现不了,
+    所以必须单独守。改名后同一专题在不同日期建档会产生不同文件名, 因此比对必须**忽略日期前缀**。
+    (2026-11-08 重构: tasks/_index.md 已删, 索引登记查重随生成器退役一并收缩。)"""
     slugs: dict[str, list[str]] = {}
     for path in _task_files():
         slugs.setdefault(_slug_of(path), []).append(path.name)
     dup_slugs = {slug: names for slug, names in slugs.items() if len(names) > 1}
 
     assert not dup_slugs, f"存在同 slug 的重复任务档案 (同一专题两份, 需合并): {dup_slugs}"
-
-    indexed = INDEX_ID_RE.findall(INDEX.read_text(encoding="utf-8"))
-    dup_ids = sorted({key for key in indexed if indexed.count(key) > 1})
-
-    assert not dup_ids, f"索引中同一档案被重复登记: {dup_ids}"
 
 
 def test_task_file_naming_and_sections() -> None:

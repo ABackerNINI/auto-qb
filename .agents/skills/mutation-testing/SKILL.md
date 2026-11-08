@@ -205,7 +205,7 @@ user-invocable: true
 **三条记录纪律(前两条是机械守卫, 会判红; 第三条靠执行时守)**:
 
 - **切片之外不手抄 `N passed`** —— 回写守卫(判据族 B)只允许测试数字出现在 `testing/baselines/` 切片里;
-  任务档案 / activeContext / 主题文档一律写「见 `kb.baseline`」或指向切片, 否则 `test.quick` 判红。
+  任务档案 / active-context / 主题文档一律写「见 `kb.baseline`」或指向切片, 否则 `test.quick` 判红。
 - **新建的 issue 要填 `doc-refs`** —— 被任务档案的 `Refs` 列出时必须反向声明认领方路径, 否则 `kb.check` 报「认领链单向」。
 - **轮次号先看远端再取** —— 轮次记在**共享档案**里, 多 clone 并行时两个会话可能各挑同一个号(实测 hr 轮与 config 轮
   都用了 R11); 开工前 `git fetch` 看远端档案已到哪一轮, 合流 rebase 时**后到者重编号**(本轮 R11 → R14)。

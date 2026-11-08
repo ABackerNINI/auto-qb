@@ -1,7 +1,6 @@
 # 浏览器冒烟 (Windows 上可做, 长期能力)
 
 > 摘要: `scripts/ui_harness.py` + `e2e/`(@playwright/test)是本仓库覆盖前端渲染的唯一手段; 这里是它的环境坑与验证手法
-> 等级: L1
 > (部分条目源自旧单页冒烟脚本时代 —— 该脚本 2026-10-06 已退役, 判据对 e2e 新轨同样成立)。
 > 触发: 浏览器冒烟, e2e, Playwright, Edge, 白屏, 前端改完, 时序复现, 聚合行状态色, Cannot find module playwright, 修饰键点击, Ctrl+click, 多选失败, site-chip, 点击落点, 落点验证 5 拍未过, 最后拦截者 (null), elementFromPoint, scrollIntoView, 行高于视口, sticky-head 拦截面, 3000 种子, 规模轮, 用例超时, 冒烟整体执行, stash 对照, 归因, 回归, 验错对象, 旧进程, 旧页签, 桩服务死了, 皮肤差异, prism 正常 atlas 异常, 服务端发出的字节, BASE_URL, does not provide an export named, 收集期 SyntaxError, 新增 spec 回潮
 **Refs:** memory-bank/testing/baselines/26-10-29-0348-webui-move-dialog-pick-geometry.md, memory-bank/testing/baselines/26-11-03-1053-ci-e2e-base-url-fix.md

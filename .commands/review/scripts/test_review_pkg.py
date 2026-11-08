@@ -1179,7 +1179,7 @@ class TraceDecideTest(unittest.TestCase):
     def test_generated_and_bookkeeping_are_not_counted(self):
         self.assertFalse(self._counted("memory-bank/pitfalls/_index.md", set()))
         self.assertFalse(self._counted("memory-bank/tasks/26-11-06-x.md", set()))
-        self.assertFalse(self._counted("memory-bank/activeContext/26-11-06-0000-x.md", set()))
+        self.assertFalse(self._counted("memory-bank/active-context/26-11-06-0000-x.md", set()))
         self.assertFalse(self._counted("memory-bank/testing/baselines/26-11-06-0000-x.md", set()))
         self.assertFalse(self._counted("memory-bank/reports/attachments/legacy-review4/route-R1.json", set()))
         self.assertFalse(self._counted("memory-bank/reports/attachments/legacy-review4/route-R1-notes.md", set()))

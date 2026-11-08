@@ -1,7 +1,6 @@
 # 底部锚定的浮层栈做 FLIP: `offsetTop` 恒为 0, 动画静默不播
 
 > 摘要: 底部锚定的浮层栈做 FLIP: `offsetTop` 恒为 0, 动画静默不播
-> 等级: L1
 > 触发: FLIP 队列重排, toast 栈, offsetTop, offsetHeight, 位移动画没效果, getAnimations 为空, 瞬移, 底部锚定, position:fixed bottom, 提示条排队
 
 ### 给「底部锚定」的浮层栈补 FLIP 时, 位置必须用视口坐标量 —— 容器内的 `offsetTop` 对它恒为 0

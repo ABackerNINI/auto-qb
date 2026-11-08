@@ -14,11 +14,7 @@ MB = ROOT / "memory-bank"
 
 TASKS = MB / "tasks"
 
-INDEX = TASKS / "_index.md"
-
 SKILL_SCRIPTS = ROOT / ".agents" / "skills" / "memory-bank" / "scripts"
-
-GEN = SKILL_SCRIPTS / "gen_tasks_index.py"
 
 SKILL = ROOT / ".agents" / "skills" / "memory-bank" / "SKILL.md"
 
@@ -28,20 +24,14 @@ REQUIRED_SECTIONS = ("## 原始请求", "## 思考过程与决策", "## 实现�
 
 # 非 `_index.md` 的生成物 —— 新增一个必须显式登记(详见 test_gen_all_declares_exactly_all_indexes)
 # 分卷页(`_index-<n>.md`)不在此列: 它们按 `_index*.md` 通配, 与主索引同批产出。
-EXTRA_GENERATED = (
-    "memory-bank/issues/attachments/_archive.md",
-    "memory-bank/tasks/attachments/_archive.md",
-    "memory-bank/plans/attachments/_archive.md",
-    "memory-bank/reports/attachments/_archive.md",
-)
+# 2026-11-08 重构: 四个归档清单 `_archive.md` 已随低价值层移除退役, 生成集合收缩后暂无成员。
+EXTRA_GENERATED = ()
 
 DATE_PREFIX_RE = re.compile(r"^\d{2}-\d{2}-\d{2}-")
 
 LEGACY_PREFIX_RE = re.compile(r"^TASK\d{3}-")
 
 FILE_RE = re.compile(r"^(?:TASK\d{3}-|\d{2}-\d{2}-\d{2}-)[a-z0-9]+(?:-[a-z0-9]+)*\.md$")
-
-INDEX_ID_RE = re.compile(r"- \[(TASK\d{3}|\d{2}-\d{2}-\d{2}-[a-z0-9]+(?:-[a-z0-9]+)*)\]")
 
 STATUS_RE = re.compile(r"\*\*Status:\*\* (In Progress|Open|Done|Dropped)")
 
@@ -55,18 +45,6 @@ def _slug_of(path: Path) -> str:
     stem = path.stem
     stem = LEGACY_PREFIX_RE.sub("", stem)
     return DATE_PREFIX_RE.sub("", stem)
-
-
-def _indexed_sections() -> dict[str, str]:
-    sections: dict[str, str] = {}
-    current = ""
-    for line in INDEX.read_text(encoding="utf-8").splitlines():
-        if line.startswith("## "):
-            current = line[3:].strip()
-            continue
-        for key in INDEX_ID_RE.findall(line):
-            sections[key] = current
-    return sections
 
 
 def _kb_checker():
@@ -192,9 +170,9 @@ def _kb_clock():
 
 
 def _p2_fixture(tmp_path: Path) -> Path:
-    """P2 夹具: 最小可跑的 memory-bank (plans / tasks / activeContext / issues)。"""
+    """P2 夹具: 最小可跑的 memory-bank (plans / tasks / active-context / issues)。"""
     mb = tmp_path / "memory-bank"
-    for sub in ("plans", "tasks", "activeContext", "issues"):
+    for sub in ("plans", "tasks", "active-context", "issues"):
         (mb / sub).mkdir(parents=True)
     return mb
 
@@ -252,7 +230,7 @@ x
 
 
 def _write_slice(mb: Path, name: str = "26-10-17-0900-p2-topic.md") -> Path:
-    path = mb / "activeContext" / name
+    path = mb / "active-context" / name
     path.write_text(
         """# P2 冒烟切片
 
@@ -303,102 +281,7 @@ def _p3_family_paths(mb: Path) -> dict[str, Path]:
         "pitfall": mb / "pitfalls" / "kb" / "smoke-pitfall.md",
         "report": next((mb / "reports").glob("*-report-smoke-report.html")),
         "baseline": next((mb / "testing" / "baselines").glob("*-smoke-baseline.md")),
-        "progress": mb / "progress" / "smoke-progress.md",
     }
-
-
-def _kb_tier():
-    if str(SKILL_SCRIPTS) not in sys.path:
-        sys.path.insert(0, str(SKILL_SCRIPTS))
-    import kb_tier
-
-    return kb_tier
-
-
-def _tier_fixture(tmp_path: Path) -> Path:
-    """kb.tier 夹具: 最小可跑的 pitfalls/git/ (只建 kb.tier 扫描的那一层)。"""
-    mb = tmp_path / "memory-bank"
-    (mb / "pitfalls" / "git").mkdir(parents=True)
-    return mb
-
-
-def _tier_pitfall(mb: Path, stem: str, crlf: bool = False) -> Path:
-    """标准坑档夹具: 三行头 + `### ` 条目正文 (含各类链接, 供 migrate 断言)。"""
-    body = (
-        f"# {stem}\n"
-        "\n"
-        "> 摘要: 判据单点一句话。\n"
-        "> 触发: git, sync\n"
-        "\n"
-        "### 旧叙事\n"
-        "\n"
-        "- 判别: 见 [运行口径](../../testing/run.md) 与 [同目录](refs.md)。\n"
-        "- 外链: [文档](https://example.com/a.md) 与 [锚点](#sec) 原样。\n"
-        "- 叙事: 事故时间线。\n"
-    )
-    if crlf:
-        body = body.replace("\n", "\r\n")
-    path = mb / "pitfalls" / "git" / f"{stem}.md"
-    path.write_bytes(body.encode("utf-8"))
-    return path
-
-
-def _closed_keep_module():
-    if str(SKILL_SCRIPTS) not in sys.path:
-        sys.path.insert(0, str(SKILL_SCRIPTS))
-    import gen_tasks_index
-
-    return gen_tasks_index
-
-
-def _issues_index_module():
-    """载入 issues 索引生成器 (进程内 import; 2026-11-07 W1 起与 gen_tasks_index 同目录同 `_common`)。"""
-    if str(SKILL_SCRIPTS) not in sys.path:
-        sys.path.insert(0, str(SKILL_SCRIPTS))
-    import gen_issues_index
-
-    return gen_issues_index
-
-
-def _closed_keep_fixture(tmp_path: Path, done: int = 0, dropped: int = 0, inflight: int = 0) -> tuple[Path, Path]:
-    """CLOSED_KEEP 夹具: `done` 件 Done + `dropped` 件 Dropped + `inflight` 件 In Progress。
-
-    排序键 `**Updated:**` 从 2001-01-01 起逐件递增一天 —— "最近 60 条"才有唯一答案;
-    001 号的摘要超长(> SUMMARY_MAX), "主索引截断 / 归档不截断"的对照正好用它。
-    """
-    from datetime import date, timedelta
-
-    mb = tmp_path / "memory-bank"
-    (mb / "tasks").mkdir(parents=True)
-    n = 0
-    for status, count in (("Done", done), ("Dropped", dropped), ("In Progress", inflight)):
-        for _ in range(count):
-            n += 1
-            slug = f"26-01-01-test-closed-keep-{n:03d}"
-            day = (date(2001, 1, 1) + timedelta(days=n - 1)).isoformat()
-            summary = f"档案 {n:03d} 摘要" + ("x" * 80 if n == 1 else "")
-            (mb / "tasks" / f"{slug}.md").write_text(
-                f"# {slug} - CLOSED_KEEP 档案 {n:03d}\n\n"
-                f"**Status:** {status}\n"
-                f"**Added:** {day}\n"
-                f"**Updated:** {day}\n"
-                f"**Summary:** {summary}\n"
-                f"**Topics:** closed-keep-{n:03d}\n",
-                encoding="utf-8",
-                newline="\n",
-            )
-    return tmp_path, mb
-
-
-def _index_section(text: str, status: str) -> str:
-    """切出主索引单一状态分区的正文(到下一个 `## ` 或文件尾)。"""
-    m = re.search(rf"^## {re.escape(status)}\n\n(.*?)(?=^## |\Z)", text, re.S | re.M)
-    assert m, f"索引缺状态分区 `## {status}`"
-    return m.group(1)
-
-
-def _entry_lines(section: str) -> list[str]:
-    return [line for line in section.splitlines() if line.startswith("- ")]
 
 
 def _status_drift():
@@ -410,9 +293,12 @@ def _status_drift():
 
 
 def _drift_fixture(tmp_path: Path) -> Path:
-    """漂移夹具: 最小可跑的 memory-bank (progress/tasks/issues/plans/reports)。"""
+    """漂移夹具: 最小可跑的 memory-bank (tasks/issues/plans/reports)。
+
+    (2026-11-08 重构 W5: progress/ 目录已全灭, 夹具不再造它。)
+    """
     mb = tmp_path / "memory-bank"
-    for sub in ("progress", "tasks", "issues", "plans", "reports"):
+    for sub in ("tasks", "issues", "plans", "reports"):
         (mb / sub).mkdir(parents=True)
     return mb
 
@@ -434,17 +320,6 @@ def _drift_issue(mb: Path, name: str, status: str | None, badge: str | None = No
     path = mb / "issues" / name
     path.write_text(
         f"<html><head>\n{meta_html}</head><body>{badge_html}{body}</body></html>\n", encoding="utf-8", newline="\n"
-    )
-    return path
-
-
-def _drift_doc(mb: Path, sub: str, name: str, status: str) -> Path:
-    """plan/report 夹具 (doc-status 5 词表)。"""
-    path = mb / sub / name
-    path.write_text(
-        f'<html><head>\n<meta name="doc-status" content="{status}">\n</head><body>x</body></html>\n',
-        encoding="utf-8",
-        newline="\n",
     )
     return path
 

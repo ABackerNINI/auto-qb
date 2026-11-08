@@ -53,7 +53,7 @@ def _cell(text: str) -> str:
     return text.replace("|", "\\|") if text else "—"
 
 
-# 索引行里「一句话 / 触发词」的截断长度 —— 与 `gen_tasks_index.SUMMARY_MAX` 同款病:
+# 索引行里「一句话 / 触发词」的截断长度 —— 同款病 (历史上多个生成器各截各的, 现仅存本生成器):
 # 摘要与触发词**只增不减**, 整条打进索引后索引大小由「元数据写得多长」决定, 而不是由「有几个主题」。
 # 2026-10-11 实测: `pitfalls/web-ui/_index.md` 55 个主题 ⇒ 25,940 撞 `index-auto` cap (25,200),
 # 其中摘要总长 14,868(均值 270!) / 触发词总长 7,378(均值 134) —— 主题数远没到上限, 是元数据顶爆。
@@ -221,9 +221,7 @@ def stale_volume_pages(mb: Path, expected: dict[Path, str]) -> list[Path]:
 
     只认 `_index-<n>.md`(INDEX_VOLUME_RE), 手写的 `_index-notes.md` 之类不在此列 —— 否则会被当残留删掉。
     """
-    return [
-        p for p in sorted(mb.rglob("_index-*.md")) if INDEX_VOLUME_RE.search(p.name) and p not in expected
-    ]
+    return [p for p in sorted(mb.rglob("_index-*.md")) if INDEX_VOLUME_RE.search(p.name) and p not in expected]
 
 
 def main() -> int:

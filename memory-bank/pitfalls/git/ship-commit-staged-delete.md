@@ -1,7 +1,6 @@
 # ship.commit 逐路径 add 撞「已暂存删除」路径 / 零参数全量提交会带进会话目录
 
 > 摘要: ①commit.py 按纪律逐路径 `git add -- <path>`(禁 -A), 对**已暂存的删除**(`D `)必然 pathspec 落空 —— 删除一旦进暂存区, 该路径在工作区与索引里都不复存在, `git add` 无处匹配; ②**零参数 = 全量暂存**, 未被 `.gitignore` 覆盖的会话目录(`.workbuddy/memory/`)会被一并入库, 事后补忽略还会撞 ① 的变体(`git add` 忽略路径直接失败); ③同一全量暂存面还会把**平台工作目录**(后台日志 `.zwork/`、临时证据区 `.zcode-tmp/`)卷进提交, 且**跨会话成双份**(两笔提交各带一份, 合流后都在)。
-> 等级: L1
 > 触发: ship.commit, git add 失败, pathspec did not match, addIgnoredFile, 删除文件, 提交失败, 蒸馏切片, 全量提交, .gitignore, 会话记忆入库, .workbuddy, .zwork, .zcode-tmp, 临时证据入库, 跨会话双份, 提交前扫 status
 
 - **触发**: 本轮删除过已跟踪文件(如按 DoD 蒸馏 activeContext 切片)后跑 `commands run ship.commit`,

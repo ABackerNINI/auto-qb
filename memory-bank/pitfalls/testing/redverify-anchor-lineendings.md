@@ -1,7 +1,6 @@
 # 红验脚本按 LF 拼锚点，在 CRLF 文件上静默匹配不上（且手抄缩进易差 1 空格）
 
 > 摘要: 变异审计的**红验**要靠「把源码某段文本替换成变异体 → 跑目标用例 → 还原」。主仓相当一部分 `.py` 是 **CRLF** 行尾(如 `src/auto_qb/config/schema/__init__.py`), 而红验脚本通常 `read_bytes().decode()` 后直接拿**带 `\n` 的多行字符串**当锚点 —— CRLF 文件里这种锚点 `count == 0`, 替换**根本没发生**, 但脚本若只按「跑完绿不绿」判 KILLED/SURVIVED, 就会把「没变异」的绿当成「变异存活」(假 SURVIVED), 或反过来把空转的探针当通过。第二个同源陷阱: 锚点里的**缩进空格靠手抄**, 极易差 1 个(实测 52 vs 51 字符), 同样静默失配。判别: 红验结果里出现 `ANCHOR-MISS` 就停手; 没有这个兜底时, 表现为「明明写了对的守阵却仍 SURVIVED」。处置: ①锚点先 `replace("\r\n", "\n")` 归一到 LF 空间再匹配、写盘前转回; ②缩进一律用 `" " * N` 拼接, 不手抄; ③锚点 `count != 1` 必须报错停手(数量 >1 说明锚点不唯一, 也不可用)。
-> 等级: L1
 > 触发: 红验, 变异测试, mutmut, apply, 同构变异, 锚点, 锚点失配, ANCHOR-MISS, 源码替换, 还原, CRLF, LF, 行尾, newline, 缩进, 空格数, 差一空格, read_bytes, write_bytes, 假绿, 假存活, 守阵空转, 探针空转, dump 行块, 函数相对行号, hunk 头, qualname, 分隔符字形, docstring 续行, 子进程超时, 解释器漂移, venv 解释器, sys.executable, 假红, 环境坏, 基线复跑, TimeoutExpired, 超时未接住, 脚本崩在中途, 收尾自证被跳过, 守阵挂起, 挂起也算红, 死锁, 非重入锁
 
 **Refs:** memory-bank/tasks/26-10-08-test-mutation-audit.md, memory-bank/testing/baselines/26-10-08-1229-mutants-config-schema-surface.md, memory-bank/testing/baselines/26-10-10-0925-mutants-config-loader-defaults.md, memory-bank/testing/baselines/26-10-10-1408-mutants-hr-service.md, memory-bank/testing/baselines/26-10-10-1458-mutants-hr-serialization.md, memory-bank/testing/baselines/26-10-10-2044-mutants-hr-judgment-core.md, memory-bank/testing/baselines/26-10-15-0927-mutants-hr-channel-server.md, memory-bank/testing/baselines/26-10-16-1016-global-traffic-monitor-s4.md, memory-bank/tasks/26-10-16-backend-global-traffic-monitor.md

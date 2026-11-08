@@ -90,7 +90,7 @@ DEFAULT_MESSAGE_REL = Path(".git") / "COMMIT_MSG_AI.txt"
 # 统一 import 单点超出本轮范围, 计划 26-11-07-0201 R2)。漂移后果: 评审边界提示行多打或少打一行, 不判红。
 BOOKKEEPING_PREFIXES = (
     "memory-bank/tasks/",
-    "memory-bank/activeContext/",
+    "memory-bank/active-context/",
     "memory-bank/testing/baselines/",
     "memory-bank/reports/attachments/legacy-review4/",
 )

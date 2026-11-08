@@ -1,7 +1,6 @@
 # Git 历史整合 (merge / rebase / 重放)
 
 > 摘要: 历史整合(merge/rebase/stash)曾因删除拦截层批量删 `.git/objects` 而被禁 —— 该问题 2026-09-25 已修复, **禁令解除**; 本文件保留作事故档案与恢复手册, 高风险历史整合前仍建议 `cp -a .git <备份>`。**同步一律 `commands run my-commit-flow.sync`(自动快进 / 分叉自动 rebase 保线性), 本文的手工同步配方已退役删除。**
-> 等级: L1
 > 触发: 落后主线要同步, 想跑 git rebase, git merge, 合并, 变基, .git 损坏, 事故恢复
 
 ## ✅ 状态: 禁令已解除 (2026-09-25)

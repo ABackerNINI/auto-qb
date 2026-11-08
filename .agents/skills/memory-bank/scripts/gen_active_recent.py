@@ -1,9 +1,9 @@
-"""会话滚动状态切片阅读器 —— 扫 `memory-bank/activeContext/` 的时间戳切片, 按「最后活动」倒序输出一行摘要。
+"""会话滚动状态切片阅读器 —— 扫 `memory-bank/active-context/` 的时间戳切片, 按「最后活动」倒序输出一行摘要。
 
-名字沿用 `gen_*` 前缀是与 `gen_tasks_index.py` / `gen_kb_index.py` 对齐, 但**本脚本不写任何文件**。
+名字沿用 `gen_*` 前缀是与 `gen_kb_index.py` 对齐, 但**本脚本不写任何文件**。
 
 数据源 (手写的只有切片文件):
-    <mb>/activeContext/YY-MM-DD-HHMM-<slug>.md
+    <mb>/active-context/YY-MM-DD-HHMM-<slug>.md
         # <标题>
         > 摘要: 一句话说清这个会话在做什么
         > 最后活动: YYYY-MM-DD HH:MM      ← 排序键; 缺失则回退文件名时间戳 (= 创建时间); 存在但格式坏 → --check 报红
@@ -27,8 +27,8 @@
 3. **文件名不带 clone 标记** —— 同分钟同名 add/add 概率极低, 撞了改个 slug 重来即可。
    「我上次做到哪」靠 **slug 复用** (同一专题跨会话沿用同一个 slug) 检索 —— 这给出的是
    专题维度的时间线, 比 clone 维度分区信息价值更高。
-4. **activeContext 不含长青职能** —— 定案口径 / 下一步候选 / 待走查 / 历史归档各自有真实归属
-   (根 AGENTS.md · conventions/ · pitfalls/ · 想法.md + progress/roadmap.md · checklists/ · tasks/),
+4. **active-context 不含长青职能** —— 定案口径 / 下一步候选 / 待走查 / 历史归档各自有真实归属
+   (根 AGENTS.md · conventions/ · pitfalls/ · architecture/ · projectbrief.md · tasks/),
    本目录只承载会话滚动状态。所以这里没有 global.md, 也不需要全局索引。
 """
 
@@ -57,7 +57,7 @@ from _common import (  # noqa: E402
     resolve_mb_dir,
 )
 
-# activeContext 切片属 volatile 层 —— 陈旧阈值 = 会话级 (`_common.STALE_DAYS_VOLATILE`)。
+# 会话切片属 volatile 层 —— 陈旧阈值 = 会话级 (`_common.STALE_DAYS_VOLATILE`)。
 # 其它层的阈值 (reference 90 天 / plan·report 不审) 由 nav_data.py 消费同名单点。
 DEFAULT_STALE_DAYS = STALE_DAYS_VOLATILE
 
@@ -151,7 +151,7 @@ def collect(slice_dir: Path, root: Path) -> tuple[list[dict], list[str], list[st
         if len(text) > cap:
             warns.append(
                 f"{rel}: {len(text)} 字符 > 切片 cap {cap} —— **债务**: 不拦提交; 本会话不修, "
-                "转告用户另开会话清理(清理口径: 蒸馏进 progress/ 或任务档案, 不是调 cap)"
+                "转告用户另开会话清理(清理口径: 蒸馏进任务档案, 不是调 cap)"
             )
 
         last, bad_last = parse_last_active(text)
@@ -175,7 +175,7 @@ def collect(slice_dir: Path, root: Path) -> tuple[list[dict], list[str], list[st
         warns.append(
             f"切片数 {len(rows)} 条 >= 上限 {SLICE_COUNT_LIMIT} 条 —— **债务**: 只告警, 不拦提交/收尾; "
             f"处置目标 = 蒸馏到 {SLICE_COUNT_TARGET} 条以内 (一次降到位, 否则刚处理完又立刻超限); "
-            "把 14 天未动的切片蒸馏进 progress/ 或任务档案后删除"
+            "把 14 天未动的切片蒸馏进任务档案后删除"
         )
     return rows, problems, warns
 
@@ -227,7 +227,7 @@ def render(
         basis = f" (字节预算 {byte_budget})" if byte_budget is not None else ""
         total += f" · 显示最近 {len(shown)} 条{basis}, 省略 {omitted} 条 (--all / -n N 看更旧)"
     lines.append(total)
-    lines.append("长青焦点不在这里 —— 「下一步」看 想法.md + progress/roadmap.md, 定案口径看根 AGENTS.md / conventions/ / pitfalls/")
+    lines.append("长青焦点不在这里 —— 「下一步」看 想法.md + plans/ Open, 定案口径看根 AGENTS.md / conventions/ / pitfalls/")
     return "\n".join(lines)
 
 
@@ -247,8 +247,8 @@ def main() -> int:
     slice_dir = mb / SLICE_DIR
 
     if not slice_dir.is_dir():
-        # 尚未目录化 —— 不是错误, 别堵住闸门
-        sys.stderr.write(f"尚无 {slice_dir.name}/ 目录 (仍是单文件 activeContext.md), 本脚本在 W1 目录化后生效\n")
+        # 无切片目录 —— 不是错误, 别堵住闸门
+        sys.stderr.write(f"尚无 {slice_dir.name}/ 目录 (还没有会话切片), 本脚本无数据可扫\n")
         return 0
 
     rows, problems, warns = collect(slice_dir, root)

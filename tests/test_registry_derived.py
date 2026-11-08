@@ -18,16 +18,13 @@ registry 条目按名引用, 派生走延迟访问器)
   (声明零复制: 解析结果就是 config.schema 声明表的同一对象)
 - test_choose_block_entry: choose 编排块入册 —— BLOCK_ENTRIES 有 choose, executor 是
   base.ChooseBlock, 键面按名引用解析 == compat.CHOOSE_KNOWN_KEYS, 文档片段非空
-- test_plugin_doc_fragments_cover_rule_docs: 文档片段派生件一致性 —— (1)全部条目
-  doc_text() 非空(缺省取 schema 声明 help); (2) conditions-and-actions.md 两张表的
-  条目名集合 == registry 全部条件/动作名, 且标题计数(13/12)与注册数一致;
-  (3) rules-and-triggers.md 的 on_torrent_deleted 行提到全部 deleted_ok 派生白名单动作
-- test_demo_new_action_one_place: 演示(验收(1))—— 新增一个哑动作只改 registry 一处
+- test_plugin_doc_fragments_cover_rule_docs: 文档片段派生件一致性 —— 全部条目
+  doc_text() 非空(缺省取 schema 声明 help)。(②③文档侧断言随 2026-11-08 重构退役:
+  rule-system/ 两份参考文档已删, 权威归 schema/ + registry; 蒸馏物在 architecture/rule-engine.md)
+- test_demo_new_action_one_place: 演示(验收①)—— 新增一个哑动作只改 registry 一处
   (注册条目 + 自带 schema 声明), schema 插件表/校验/兼容表/执行分发全链路自动可用;
   对照组: 未声明 deleted_ok 的既有动作仍被 on_torrent_deleted 白名单拒绝(行为不回退)
 """
-from pathlib import Path
-
 from auto_qb.config import schema
 from auto_qb.config.compat import CHOOSE_KNOWN_KEYS
 from auto_qb.config.schema.fields import DELETED_ALLOWED_ACTIONS, FIELD_WATCH_ALLOWED
@@ -35,10 +32,8 @@ from auto_qb.config.validation import rules as validation_rules
 from auto_qb.rules import registry
 from auto_qb.rules.base import ChooseBlock
 
-_RULE_DOCS = Path(__file__).resolve().parents[1] / "memory-bank" / "rule-system"
-
 # ---------------------------------------------------------------------------
-# 双跑守卫(验收(2)): 派生 vs 冻结手写基准, diff 清零
+# 双跑守卫(验收②): 派生 vs 冻结手写基准, diff 清零
 # ---------------------------------------------------------------------------
 
 
@@ -93,58 +88,18 @@ def test_choose_block_entry():
     assert entry.doc.strip()
 
 
-# ---------------------------------------------------------------------------
-# 文档片段派生件一致性(验收(4))
-# ---------------------------------------------------------------------------
-
-
-def _doc_table_names(heading_prefix: str) -> set:
-    """取 md 指定 ## 节内表格的条目名(行首 `| \\`name\\`` 形态)"""
-    text = (_RULE_DOCS / "conditions-and-actions.md").read_text(encoding="utf-8")
-    names, in_section = set(), False
-    for line in text.splitlines():
-        if line.startswith("## "):
-            in_section = line.startswith(heading_prefix)
-            continue
-        if in_section and line.startswith("| `"):
-            names.add(line.split("`")[1])
-    return names
-
-
-def _doc_heading_count(heading_prefix: str) -> int:
-    """取 md 标题里声明的条目数(如 '## 13 种条件' -> 13)"""
-    text = (_RULE_DOCS / "conditions-and-actions.md").read_text(encoding="utf-8")
-    for line in text.splitlines():
-        if line.startswith(heading_prefix):
-            return int(line.split(" ")[1].replace("种", ""))
-    raise AssertionError(f"未找到标题: {heading_prefix}")
-
-
 def test_plugin_doc_fragments_cover_rule_docs():
-    """文档片段派生件与 rule-system 文档一致性: 全条目 doc_text() 非空 + 两张表名集合/计数一致 + 删除触发行覆盖白名单"""
-    # 1. 文档片段派生件: 全部条目非空(缺省取 schema 声明 help —— 声明零复制)
+    """文档片段派生件一致性: 全条目 doc_text() 非空(缺省取 schema 声明 help —— 声明零复制)。
+
+    (2026-11-08 重构收缩: 原②③断言核对 rule-system/ 两份参考文档, 文档已删 ——
+     表名/计数与触发行的权威归 schema/ + registry 本身, 蒸馏物在 architecture/rule-engine.md。)
+    """
     empty = [e.name for e in registry.iter_entries() if not e.doc_text().strip()]
     assert not empty, f"条目缺文档片段: {empty}"
 
-    # 2. conditions-and-actions.md 条件/动作两表与 registry 双向一致
-    cond_doc = _doc_table_names("## 13 种条件")
-    act_doc = _doc_table_names("## 12 种动作")
-    assert cond_doc == set(registry.CONDITIONS
-                          ), (f"conditions-and-actions.md 条件表与 registry 脱节: {cond_doc ^ set(registry.CONDITIONS)}")
-    assert act_doc == set(registry.ACTIONS
-                         ), (f"conditions-and-actions.md 动作表与 registry 脱节: {act_doc ^ set(registry.ACTIONS)}")
-    assert _doc_heading_count("## 13 种条件") == len(registry.CONDITIONS)
-    assert _doc_heading_count("## 12 种动作") == len(registry.ACTIONS)
-
-    # 3. rules-and-triggers.md 触发表 on_torrent_deleted 行覆盖全部 deleted_ok 派生白名单动作
-    text = (_RULE_DOCS / "rules-and-triggers.md").read_text(encoding="utf-8")
-    row = next(l for l in text.splitlines() if l.startswith("| `on_torrent_deleted`"))
-    missing = [n for n in registry.deleted_allowed_actions() if f"`{n}`" not in row]
-    assert not missing, f"rules-and-triggers.md on_torrent_deleted 行缺白名单动作: {missing}"
-
 
 # ---------------------------------------------------------------------------
-# 演示测试(验收(1)): 新增哑动作只改 1 处
+# 演示测试(验收①): 新增哑动作只改 1 处
 # ---------------------------------------------------------------------------
 
 

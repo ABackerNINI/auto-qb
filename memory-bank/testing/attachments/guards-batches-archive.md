@@ -182,7 +182,7 @@
 | `test_actions.py::test_start_stop_idempotent_within_same_tick` (I1 幂等, A2) | 同 tick 二次 stop/start 被 `own_writes` **意图标记**拦下, 且**不写任何假 state 值**(快照逐字不变) | 用假值实现幂等(如回写 `pausedUP`) ⇒ 「逐字不变」红; 去掉幂等门 ⇒ 第二次不 skip 红 |
 
 > A 系两批的语义主线见 [../plans/26-10-13-0540-plan-seed-state-writeback-removal-local-deferral.html](../../plans/26-10-13-0540-plan-seed-state-writeback-removal-local-deferral.html);
-> 口径漂移(「qB 自带 WebUI 1500ms」→ 服务端 `RefreshInterval` 节流)见 [../systemPatterns/main-loop.md](../../systemPatterns/main-loop.md)。
+> 口径漂移(「qB 自带 WebUI 1500ms」→ 服务端 `RefreshInterval` 节流)见 [../architecture/main-loop-queue.md](../../architecture/main-loop-queue.md)(原 systemPatterns/main-loop.md 已随 2026-11-08 重构蒸馏入此)。
 > deferral 纪律(校验类不得对自写 hash 出决策 + 有界性双依据)见 [../pitfalls/backend/concurrency.md](../../pitfalls/backend/concurrency.md)。
 
 ## 知识库结构守卫(19 条)

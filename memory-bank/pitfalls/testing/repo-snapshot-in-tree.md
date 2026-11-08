@@ -1,7 +1,6 @@
 # 仓库快照放进树内
 
 > 摘要: 做只读评审要导出整棵仓库快照时, 快照必须放仓库**外** —— 树内的副本会让"单点定义"守卫扫到散落实现, `test.full` 直接红两条, 而快照目录明明已 gitignore。
-> 等级: L1
 > 触发: 快照, snapshot, git archive, 只读评审, review.lane.start, 批量评审, test-results 放快照, 单点守卫红, test_free_port, test_tmp_bootstrap, 散落
 
 **Refs:** memory-bank/reports/26-11-06-0723-report-review-capacity-experiment.html

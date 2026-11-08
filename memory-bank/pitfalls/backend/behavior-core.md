@@ -1,7 +1,6 @@
 # 行为细节 (易误判为 bug)
 
 > 摘要: 后端一批"看着像 bug 其实是特性"的行为 —— 改之前先确认它是不是有意设计。
-> 等级: L0
 > 触发: 改规则, 改主循环, 改归组, 改缺文件扫描, 改限速, 改状态持久化, 改 web 服务生命周期
 
 **Refs:** memory-bank/issues/26-11-06-0306-test-hr-behavior-core-test-refs.html

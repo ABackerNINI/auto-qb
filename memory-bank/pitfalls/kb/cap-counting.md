@@ -1,7 +1,6 @@
 # cap 字符数口径 / 流水轮转 / 索引膨胀源
 
 > 摘要: 守卫的字符数比编辑器统计**每行多 1**(CRLF); cap 是**字符数**而外部常报**字节数**(中文一字 3 字节 ⇒ 可差 3 倍, 误报出根本不存在的债务); append-only 流水撞 `log` cap 的正解是**轮转**; 外迁到 `attachments/` 时随迁的相对链接要**整体上移一层**(否则 `doc.links` 坏链); 而生成式索引撞 cap 时先查**渲染口径**而不是先搬条目。
-> 等级: L1
 > 触发: 判断文件是否超 cap, 字符数对不上, KB 超 cap, 字节 vs 字符, 债务误报, 单位换算, baseline-history 超 cap, 追加流水, log 档, 轮转, attachments, 外迁附件坏链, 随迁链接, 相对链接上移, doc.links 坏链, tasks/_index 超 cap, 索引膨胀, 新增主题放哪个类, 类索引贴顶, 切片计数超限, SLICE_COUNT_LIMIT, 蒸馏切片
 
 > **cap 现行数值单点** = `.agents/skills/memory-bank/scripts/_common.py` 的 `CAP_POLICY`(当前 `pitfall` / `index-auto` / `log` 均 8,000; 改 cap 只改这一处)。

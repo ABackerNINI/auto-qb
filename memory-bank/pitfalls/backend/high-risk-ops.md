@@ -1,10 +1,9 @@
 # 高风险业务操作
 
 > 摘要: 代码里已有防护的高风险动作 —— 改动时**不得削弱**这些防护; 删种重加、强制汇报、限速覆盖都属于这一类。
-> 等级: L0
 > 触发: 跳检, reannounce, qB 版本兼容, 删除种子, 限速, or 默认值, 死防御, 状态观测
 >
-> 动作本身的**决策链与七道防护**见 [../../rule-system/checking.md](../../rule-system/checking.md)(互指)。
+> 动作本身的**决策链与七道防护**见 [../../architecture/rule-engine.md](../../architecture/rule-engine.md)(原 rule-system/checking.md 已随 2026-11-08 重构蒸馏入此)。
 
 ### 跳检 (skip-checking): 删种重加会丢统计, 内容错误会传垃圾数据 (PT 严令禁止)
 

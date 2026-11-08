@@ -1,7 +1,7 @@
-"""memory-bank 结构检查: cap 策略 / 元数据 / 双向一致 / 无孤儿 / 存根 / 条目字段。
+"""memory-bank 结构检查: cap 策略 / 元数据 / 双向一致 / 无孤儿 / 条目字段。
 
-供 `tests/test_memory_bank.py` 的守卫**在进程内 import** (本项目测试禁止起子进程, `tests/sidefx.py`
-的 POPEN 记账会判越界), 与 `gen_tasks_index.py` 现做法一致。cap 与类枚举常量单点定义在
+供 `tests/test_memory_bank_*.py` 的守卫**在进程内 import** (本项目测试禁止起子进程, `tests/sidefx.py`
+的 POPEN 记账会判越界)。cap 与类枚举常量单点定义在
 `_common.py`, 守卫 import 它, 不手抄。
 
 用法(从仓库根; `<skill-dir>` = 加载 memory-bank skill 时它实际所在的目录):
@@ -27,13 +27,9 @@ from _common import (  # noqa: E402
     CAP_MIN_WARN,
     CAP_POLICY,
     CAP_TASK_FREEZE,
-    EXCLUDED_DIRS,
     INDEX_NAME,
     PITFALL_CLASSES,
     REQUIRED_FIELDS,
-    STUB_CANDIDATES,
-    STUB_CAP,
-    STUB_MARK,
     TOPIC_FILE_RE,
     char_count,
     find_root,
@@ -48,8 +44,9 @@ from _common import (  # noqa: E402
     split_pitfall_entries,
 )
 
-# 默认参与 cap 检查的角色 (易变层与任务档案在迁移完成后才纳入 —— 见 `--all`)
-DEFAULT_ROLES = ("index", "index-auto", "pitfall", "evergreen", "reference", "log", "volatile", "task", "agents")
+# 默认参与 cap 检查的角色 (易变层与任务档案在迁移完成后才纳入 —— 见 `--all`)。
+# (2026-11-08 重构 W5: reference 角色随主体目录退役 + CAP_POLICY 行一并删除, 出列。)
+DEFAULT_ROLES = ("index", "index-auto", "pitfall", "evergreen", "log", "volatile", "task", "agents")
 # `ALL_ROLES` 只是 `DEFAULT_ROLES` 的别名 —— 2026-09-30 前写成 `DEFAULT_ROLES + ("volatile","task")`,
 # 而后两者**已经在** DEFAULT_ROLES 里, 是个重复项。保留名字只是 CLI 可读性, 不再重复枚举。
 ALL_ROLES = DEFAULT_ROLES
@@ -172,8 +169,13 @@ def _cap_candidates(root: Path, mb: Path, roles: tuple[str, ...]) -> list[Path]:
         files.extend(iter_topic_files(directory))
     if (root / "AGENTS.md").is_file():
         files.append(root / "AGENTS.md")
-    if "volatile" in roles and (mb / "activeContext.md").is_file():
-        files.append(mb / "activeContext.md")
+    # conventions / testing / architecture 不在「索引目录」自发现面 (2026-11-08 重构: 前两者的
+    # `_index` 生态退役; architecture 无 `_about.md`), 但它们的主题文件仍是 evergreen 预算面 ——
+    # 显式登记, cap 候选不因目录退役而漏扫 (real-machine.md 等债务行必须继续可发现)。
+    for extra in ("architecture", "conventions", "testing"):
+        directory = mb / extra
+        if directory.is_dir():
+            files.extend(iter_topic_files(directory))
     if "task" in roles:
         files.extend(p for p in sorted((mb / "tasks").glob("*.md")) if not p.name.startswith("_"))
     return sorted(set(files))
@@ -297,62 +299,7 @@ def check_orphan_indexes(root: Path, mb: Path) -> list[str]:
     return problems
 
 
-# --------------------------------------------------------------------------- 7 存根
-
-
-def is_stub(path: Path) -> tuple[bool, str]:
-    """存根判据: ≤2 KB + 含「已迁至」+ 不含正文 (无 `##` 标题、无列表条目)。"""
-    text = path.read_bytes().decode("utf-8")
-    size = len(text)
-    if size > STUB_CAP:
-        return False, f"{size:,} > {STUB_CAP:,} 字符 (存根必须 ≤2 KB)"
-    if STUB_MARK not in text:
-        return False, f"缺「{STUB_MARK}」标记"
-    if re.search(r"^##\s", text, re.MULTILINE):
-        return False, "仍含 `##` 标题 (正文未迁走)"
-    if re.search(r"^\s*[-*]\s+\S", text, re.MULTILINE):
-        return False, "仍含列表条目 (正文未迁走)"
-    return True, ""
-
-
-def check_stubs(root: Path, mb: Path) -> list[str]:
-    """被拆文档的原路径必须是合法存根 (目录已建 = 该文档已迁走)。"""
-    problems: list[str] = []
-    for name in STUB_CANDIDATES:
-        stub = mb / name
-        if not (mb / stub.stem).is_dir():
-            continue  # 该波尚未落地
-        if not stub.is_file():
-            problems.append(f"{_mb_rel(root, stub)} 缺失 —— 目录已建但存根不在, 400+ 处历史引用会断")
-            continue
-        ok, why = is_stub(stub)
-        if not ok:
-            problems.append(f"{_mb_rel(root, stub)} 不是合法存根: {why}")
-    return problems
-
-
-# --------------------------------------------------------------------------- 8 易变层硬顶
-
-
-def check_active_context_cap(root: Path, mb: Path) -> tuple[list[str], list[str]]:
-    """`activeContext.md` ≤24 KB —— 超了就是内容该外迁的信号, 不是「这次先写着」。
-
-    2026-09-30 起与 `check_caps` 同口径: `volatile` 是**预算型**角色, 超限进 warns(债务) 而不是
-    problems —— 违反它只是「易变层读起来贵」, 不是事实源被破坏。
-    """
-    path = mb / "activeContext.md"
-    if not path.is_file():
-        return [f"{_mb_rel(root, path)} 缺失"], []
-    size = char_count(path)
-    cap = CAP_POLICY["volatile"]
-    if size > cap:
-        head = f"{_mb_rel(root, path)} 超 cap: {size:,} > {cap:,} 字符 (角色 volatile)"
-        return [], [f"{DEBT_MARK}{head} —— {trim_hint('volatile', cap)}"
-                    " (不拦提交; 本会话不修, 转告用户另开会话清理)"]
-    return [], []
-
-
-# --------------------------------------------------------------------------- 9 条目字段
+# --------------------------------------------------------------------------- 7 条目字段
 
 
 def check_pitfall_entries(root: Path, mb: Path) -> list[str]:
@@ -378,17 +325,13 @@ def check_pitfall_entries(root: Path, mb: Path) -> list[str]:
 def run_all(root: Path, mb: Path, roles: tuple[str, ...] = DEFAULT_ROLES) -> dict[str, list[str]]:
     """跑全部检查, 返回 {检查名: 问题清单}。"""
     cap_problems, _warns = check_caps(root, mb, roles)
-    # `check_caps` 的 warns 里混装债务与「过小」提示(见 `DEBT_MARK`), 这里只取 problems 侧;
-    # 易变层同口径, 也只贡献 warns
-    ac_problems, _ac_warns = check_active_context_cap(root, mb) if "volatile" in roles else ([], [])
     return {
         "索引是生成物": check_index_regenerated(root, mb),
         "索引双向一致": check_bijection(root, mb),
         "头部元数据": check_metadata(root, mb),
-        "cap 策略(硬规定)": cap_problems + ac_problems,
+        "cap 策略(硬规定)": cap_problems,
         "类名与文件名": check_names(root, mb),
         "无孤儿索引": check_orphan_indexes(root, mb),
-        "存根合法": check_stubs(root, mb),
         "条目三字段": check_pitfall_entries(root, mb),
     }
 
@@ -415,8 +358,6 @@ def main() -> int:
 
     results = run_all(root, mb, roles)
     _, warns = check_caps(root, mb, roles)
-    _, ac_warns = check_active_context_cap(root, mb) if "volatile" in roles else ([], [])
-    warns = warns + ac_warns
     total = sum(len(v) for v in results.values())
 
     print(f"memory-bank 结构检查 (角色: {', '.join(roles)})\n")

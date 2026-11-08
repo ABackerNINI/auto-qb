@@ -31,7 +31,7 @@
 1'. **认领链可跳 (2026-11-07 关联图)**: 每条 ref 必须解析成五态 (ok / ext / repo / basename / dead) ——
    实测 1811 条 ref 里 578 条目标"看起来不存在", 其中 323 条其实是库内非台账件、253 条被归档搬进
    testing/baselines/attachments/、2 条在仓库根下, 真失效 0 条。解析只在导航层做, 不扩 collect() 扫描面
-   (那是 kb.docmap / kb.check / 索引生成的共同消费单点)。
+   (那是 kb.check / 索引生成的共同消费单点)。
 
 另守一条**单点不回归**: nav_data 只许在 collect() 条目上做加法 enrich, 不许改
 gen_doc_map.collect() 本体的键集合 —— 它是闸门/守阵消费单点 (计划 §01 拍板: 消费方零变动)。
@@ -216,7 +216,7 @@ def test_collect_nav_issue_enrich_fields(tmp_path: Path) -> None:
 def test_titles_and_meta_unescaped_in_data_layer(tmp_path: Path) -> None:
     """HTML 源里的实体必须在数据层反转义 (gen_doc_map.collect 的标题 + nav_data enrich 的 meta):
     前端一律 esc() 当纯文本渲染, 数据层再带者 "-&gt;" 就双重转义 (2026-10-31 用户报;
-    口径同 gen_issues_index.meta —— issues/_index.md 因此一直是对的)。"""
+    数据层反转义口径 —— 消费端 (索引/导航) 因此一直是对的)。"""
     mb = _stub_mb(tmp_path)
     (mb / "issues" / "i2.html").write_text(
         ISSUE_HTML.replace('content="stub issue"', 'content="filelock 3.32.6 -&gt; 4.2.5 升级(major)"').replace(

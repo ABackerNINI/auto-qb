@@ -11,8 +11,8 @@
   本命令 **fail-fast**: 每个 --add 目标必须已存在且在 memory-bank 内, 否则整笔拒绝、零写入。
 
 收敛口径同样机器化 (复发 5): `plans/` 与 `reports/` **不作 --add 目标**(冻结制品不进认领链,
-只在正文提及) —— 引用面收到「对方也能写反向声明」的件 (tasks / activeContext / pitfalls /
-testing/baselines / progress / issues)。反向声明自动补: 目标件没有声明则原位补一行
+只在正文提及) —— 引用面收到「对方也能写反向声明」的件 (tasks / active-context / pitfalls /
+testing/baselines / issues)。反向声明自动补: 目标件没有声明则原位补一行
 (HTML meta 插在 doc-updated 后 / md 按锚点链), 幂等。
 
 用法 (从仓库根; `<skill-dir>` = 加载 memory-bank skill 时它实际所在的目录):
@@ -159,7 +159,7 @@ def main(argv: list[str] | None = None) -> int:
     else:
         print("声明已全部在册 —— 幂等, 无改动")
     print("剩余人工 0 项(判断 0 · 条件 0 · 机械 0)")
-    print("NEXT: 若涉及索引可见面变化跑 commands run kb.index; 闸门自证: commands run kb.docmap -- --check")
+    print("NEXT: 闸门自证: commands run kb.check (含认领链双向校验 gen_doc_map --check)")
     return 0
 
 

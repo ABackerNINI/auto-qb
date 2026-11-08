@@ -3,7 +3,7 @@
 计划 26-11-07-0549 D5)。
 
 一次逻辑动作 = 一条命令: 取时 (timekit 单点) / 载体探测 / 词表校验 (单点 import) /
-改状态行 / 自动抬 doc-updated 或 Updated / 重跑索引, 全部派生; 终态提醒内嵌在输出里
+改状态行 / 自动抬 doc-updated 或 Updated, 全部派生; 终态提醒内嵌在输出里
 (Done → 同专题切片迁出 / Summary 收口 / issue 修法·理由·指向), 不必另开一次编辑。
 
 载体与词表 (单点: `_common.DOC_KIND_*` / `DOC_KIND_STATUSES`):
@@ -11,12 +11,14 @@
 - 任务档案 (`tasks/*.md`): `**Status:**` 4 词表, 翻转抬 `**Updated:**` (日期)
 - issue (`issues/*.html`): `issue-status` 5 词表 (与 doc-* 制品同一单点 `DOC_STATUSES`) ——
   状态徽标 + issue-status meta **两处一次改** (徽标锚 = check_status_drift.BADGE_RE, tier B
-  机检的同一份正则, 漏改任一处当轮判红) + 「状态变更日志」节追加一行; 索引重建走 gen_issues_index
-- 会话切片 (`activeContext/*.md`): **无状态** —— 拒绝并指路迁出流程 (切片走 kb.wrap)
+  机检的同一份正则, 漏改任一处当轮判红) + 「状态变更日志」节追加一行
+- 会话切片 (`active-context/*.md`): **无状态** —— 拒绝并指路迁出流程 (切片走 kb.wrap)
 
-幂等与 fail-fast (黄金法则): 同状态翻转 = 幂等无改动 (不追加日志行、不重建索引);
+幂等与 fail-fast (黄金法则): 同状态翻转 = 幂等无改动 (不追加日志行、不抬时间戳);
 词表外值 / 载体不认识 / 缺徽标或 meta / 缺「状态变更日志」节一律 rc=1 拒绝, 且校验全部
 先于写盘 (不落半文件 —— 徽标/meta 只改其一正是 tier B 要抓的病态)。
+(2026-11-08 重构 W3: 翻转后重建索引的步骤已退役 —— 改面四族的 `_index.md` 随低价值层
+移除, kb.status 不再重建任何索引, 见 `_common.rebuild_index` 的收口注记。)
 末尾固定输出「剩余人工 N 项(判断 0 · 条件 b · **机械 0**)」契约 (§5.4 收录断言)。
 
 用法 (从仓库根; `<skill-dir>` = 加载 memory-bank skill 时它实际所在的目录):
@@ -38,21 +40,19 @@ import timekit  # noqa: E402  (时间单点: UTC+8 naive 墙钟, 与 kb.time 同
 from check_status_drift import BADGE_RE  # noqa: E402  (徽标锚单点: 写侧与 tier B 读侧同一份正则)
 from _common import (  # noqa: E402
     DOC_KIND_CN,
-    DOC_KIND_INDEX_SCRIPT,
     DOC_KIND_ISSUE,
     DOC_KIND_PLAN,
     DOC_KIND_SLICE,
     DOC_KIND_STATUSES,
     DOC_KIND_TASK,
+    SLICE_DIR,
     SLICE_FILE_RE,
     TERMINAL_DOC_STATUSES,
-    StatusVocabularyError,
     detect_doc_kind,
     find_root,
     html_meta,
     md_field,
     rel_posix,
-    rebuild_index,
     resolve_doc_path,
     resolve_mb_dir,
     set_html_meta,
@@ -80,7 +80,7 @@ def _same_topic_slices(mb: Path, topic: str) -> list[Path]:
     """同专题切片 (文件名 `<stamp>-<topic>.md`; endswith 精确匹配, 不误伤更长 slug)。"""
     if not topic:
         return []
-    return sorted(p for p in (mb / "activeContext").glob(f"*-{topic}.md") if SLICE_FILE_RE.match(p.name))
+    return sorted(p for p in (mb / SLICE_DIR).glob(f"*-{topic}.md") if SLICE_FILE_RE.match(p.name))
 
 
 def _flip_plan(path: Path, to: str, moment, root: Path, mb: Path) -> tuple[int, list[str], bool]:
@@ -90,7 +90,7 @@ def _flip_plan(path: Path, to: str, moment, root: Path, mb: Path) -> tuple[int, 
     if current is None:
         return _fail(f"{rel_posix(path, root)}: 缺 `doc-status` meta —— 先补上再翻转"), [], False
     if current == to:
-        return 0, [], False  # 幂等: 不抬时间戳、不重建索引 (main 统一打印)
+        return 0, [], False  # 幂等: 不抬时间戳 (main 统一打印)
     text = set_html_meta(text, "doc-status", to)
     text = set_html_meta(text, "doc-updated", moment.strftime("%y-%m-%d-%H%M"))
     text = sync_body_meta(text, "doc-status", to)
@@ -105,7 +105,7 @@ def _flip_plan(path: Path, to: str, moment, root: Path, mb: Path) -> tuple[int, 
         if slices:
             names = ", ".join(rel_posix(p, root) for p in slices)
             hints.append(
-                f"同专题切片 {len(slices)} 份 ({names}) —— 专题已完结, 蒸馏/迁出 activeContext "
+                f"同专题切片 {len(slices)} 份 ({names}) —— 专题已完结, 蒸馏/迁出 active-context "
                 "(只住活切片): 有结论的迁 testing/baselines/ 或专题目录, 无结论的直接删"
             )
         else:
@@ -130,7 +130,7 @@ def _flip_task(path: Path, to: str, moment, root: Path) -> tuple[int, list[str],
     if to in TASK_TERMINAL:
         summary = md_field(text, "Summary") or ""
         hints.append(f"Summary 收口 (裁定 A1: 首次追加进度时精修, 可选不计步): 当前 = 「{summary}」; "
-                     "完结时精修成一句结论 —— 它是索引里的摘要, 空/糙比待提交更伤索引")
+                     "完结时精修成一句结论 —— 空/糙的摘要比待提交更伤续作")
     return 0, hints, True
 
 
@@ -188,7 +188,7 @@ def _flip_issue(path: Path, to: str, moment, root: Path) -> tuple[int, list[str]
     if current is None:
         return _fail(f"{rel_posix(path, root)}: 缺 `issue-status` meta —— 先补上再翻转"), [], False
     if current == to:
-        return 0, [], False  # 幂等: 不追加日志行、不重建索引 (main 统一打印)
+        return 0, [], False  # 幂等: 不追加日志行 (main 统一打印)
     badge = BADGE_RE.search(text)
     if badge is None:
         return _fail(
@@ -200,8 +200,7 @@ def _flip_issue(path: Path, to: str, moment, root: Path) -> tuple[int, list[str]
     if dated is None:
         return _fail(
             f"{rel_posix(path, root)}: 无「状态变更日志」节 (或节内无 ul) —— kb.status 不硬塞: "
-            "补一节 `<h2>状态变更日志</h2>` + `<ul>` 后再翻, 或直改徽标与 issue-status meta 后"
-            "重跑 commands run kb.index"
+            "补一节 `<h2>状态变更日志</h2>` + `<ul>` 后再翻, 或直改徽标与 issue-status meta"
         ), [], False
     # 两处改 + 日志行, 全是内存串操作、写盘在最后 (任一锚缺失都已在上面 fail-fast, 不落半文件):
     # 徽标替换用原文上的位置锚 (BADGE_RE 组 1 的文本 span), 必须最先做; meta 走正则替换; 日志行
@@ -253,15 +252,15 @@ def main(argv: list[str] | None = None) -> int:
     if kind not in DOC_KIND_STATUSES:
         return _fail(
             f"载体不在改面范围: {rel_posix(path, root)} "
-            f"(只认 plans|reports/tasks/activeContext/issues 四类; 当前识别为 {DOC_KIND_CN.get(kind, kind) or '未知'})"
+            f"(只认 plans|reports/tasks/active-context/issues 四类; 当前识别为 {DOC_KIND_CN.get(kind, kind) or '未知'})"
         )
 
-    # --- 词表校验 (fail-fast: 之后假定状态合法; 表外值会让索引静默漏收, 见 doc-status-meta 坑档)
+    # --- 词表校验 (fail-fast: 之后假定状态合法; 词表纪律的活体校验在 gen_doc_map --check)
     statuses = DOC_KIND_STATUSES[kind]
     if args.to not in statuses:
         return _fail(
             f"状态 {args.to!r} 不在 {DOC_KIND_CN[kind]}词表 ({' / '.join(statuses)}) —— "
-            "单点 import, 别凭记忆写; 表外值会让索引静默漏收该件"
+            "单点 import, 别凭记忆写 (词表纪律的活体校验在 gen_doc_map --check)"
         )
 
     moment = timekit.now()
@@ -274,26 +273,13 @@ def main(argv: list[str] | None = None) -> int:
     if rc != 0:
         return rc
     if not changed:
-        print(f"状态已是 {args.to} —— 幂等, 无改动 (不抬时间戳、不追加日志行、不重建索引)")
+        print(f"状态已是 {args.to} —— 幂等, 无改动 (不抬时间戳、不追加日志行)")
         print()
         _print_remaining(0)
         return 0
 
-    # --- 翻转后重建受影响索引 (与 kb.index 同一 build 实现)
-    try:
-        rebuilt = rebuild_index(root, mb, DOC_KIND_INDEX_SCRIPT[kind])
-    except StatusVocabularyError as exc:
-        sys.stderr.write(f"[STOP] 状态已翻, 但索引重建失败 (词表问题必须先修): {exc}\n"
-                         "处置后运行 commands run kb.index 重建索引\n")
-        return 1
-    except ValueError as exc:
-        # 词表外的 ValueError (如 gen_issues_index 对库内既有坏命名抛的) 也不能裸 traceback ——
-        # 行文口径照抄 new_doc.py 建件侧: 状态已翻是事实, 链不能断在静默
-        sys.stderr.write(f"[STOP] 状态已翻, 但索引重建失败: {exc}\n"
-                         "处置后运行 commands run kb.index 重建索引\n")
-        return 1
-    if rebuilt:
-        print("已重建索引: " + ", ".join(rel_posix(p, root) for p in rebuilt))
+    # (2026-11-08 重构 W3: 翻转后重建索引的步骤已退役 —— 改面四族的 `_index.md` 随低价值层
+    # 移除 (D4/D5), kb.status 不再重建任何索引, 也不会重新生已删索引。)
 
     print()
     _print_remaining(len(hints))

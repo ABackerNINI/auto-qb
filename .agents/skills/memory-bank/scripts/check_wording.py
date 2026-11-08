@@ -4,7 +4,7 @@
 ━━ 判据族 A: 待提交断言 (2026-10-07) ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 背景 (自指不可能): `commit` 的 hash 由 tree + parent + author + 时间戳决定 —— 想把它写进
 文件就改变了 tree, hash 随之变化。**一个提交永远无法包含自己的 hash**。而收尾 DoD 要求回写件
-(任务档案 / activeContext 切片)**随主提交一并暂存**, 于是「待提交」必然写在 hash 逻辑上尚不
+(任务档案 / active-context 切片)**随主提交一并暂存**, 于是「待提交」必然写在 hash 逻辑上尚不
 存在的时点 —— 提交一落地, 那句断言当场变成假话。2026-09-27 审计 (reports/26-09-27-1547) 已
 实证这条兜底会失败: 切片停在「等待提交」而提交实际已完成, 切片与计划 meta 双陈旧。
 
@@ -20,11 +20,11 @@
 `testing/baseline.md`, 只是没有守卫, 于是反复违反)。
 
 方案 C (2026-10-08 用户定案): **数字只写切片一处, 其余文档一律引用不手抄** ——
-  ✗ 档案 / activeContext 正文里写「2772 passed」这类裸数字 (必然与切片分叉)
+  ✗ 档案 / active-context 正文里写「2772 passed」这类裸数字 (必然与切片分叉)
   ✓ 写「见 `commands run kb.baseline`」或「与上基线持平」(量级可, 精确值不抄)
 
 守卫判据 (2026-10-08):
-    扫描面   `memory-bank/tasks/*.md` + `memory-bank/activeContext/*.md` (两个滚动更新面)
+    扫描面   `memory-bank/tasks/*.md` + `memory-bank/active-context/*.md` (两个滚动更新面)
              跳过 `_` 开头的生成物 (`tasks/_index.md` 镜像手写件且不可就地修, 源头已扫到)
     判红     三位以上 passed (或 N+M skipped) 这类**裸测试数字**
     豁免①   **带日期前缀的行** —— 历史流水条目自带时点, 是不变日志, 改写反而是篡改历史
@@ -60,7 +60,7 @@ from _common import find_root, rel_posix, resolve_mb_dir  # noqa: E402
 ALLOW_MARK = "<!-- wording:allow -->"
 
 # 扫描面: 两个**滚动更新**面。baselines 是冻结快照, 不入 (见模块 docstring)。
-SCAN_DIRS = ("tasks", "activeContext")
+SCAN_DIRS = ("tasks", "active-context")
 
 # 待提交状态断言 (短语类)。顺序即报错时的分类名。
 PENDING_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
@@ -99,7 +99,7 @@ TEST_NUM_RES: tuple[tuple[str, re.Pattern[str]], ...] = (
 # 存量冻结 (债务制, 同 cap 债务 2026-09-30): 已有手抄**一行不改** (是不可变历史记录),
 # 只保证**不再新增**。实际命中数 ≤ 本常数即放行, 超出即判红 (新增的手抄)。
 # 重算口径: 跑 `--count-numbers` 现算, 数变多说明本轮又手抄了, 数变少说明清理了 (可下调本值)。
-# 2026-10-08 首测 = 394 (扫 tasks/ + activeContext/, 日期行/代码/生成物已豁免)。
+# 2026-10-08 首测 = 394 (扫 tasks/ + active-context/, 日期行/代码/生成物已豁免)。
 FROZEN_TEST_NUM_COUNT = 394
 
 

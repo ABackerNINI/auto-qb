@@ -1,7 +1,6 @@
 # 日志断言的自足采集
 
 > 摘要: caplog 与全局日志状态是跨测试共享的 —— 断言日志要挂模块 logger 自建 handler + 显式 setLevel, 不碰 caplog。
-> 等级: L1
 > 触发: caplog, 日志断言, 日志级别, root handlers, root level, xdist, 偶发, CI 红, setup_logging, make_manager
 
 **Refs:** memory-bank/tasks/26-10-05-test-log-capture-helper.md,memory-bank/tasks/26-10-22-test-log-capture-dup.md

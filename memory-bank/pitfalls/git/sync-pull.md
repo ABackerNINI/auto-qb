@@ -1,7 +1,6 @@
 # Git 同步上游 (fetch / pull / 镜像线)
 
 > 摘要: 开工同步**无豁免(唯一例外: 派生的只读评审子代理)** —— 问答/只读分析轮次也必须先同步; `status -sb` 的 ahead/behind 是快照; 未提交改动 + 行尾会让快进合并被拒(树脏场景两条出路: stash 配方或提交先行 —— 2026-10-04 起 ship.commit 提交先行, 旧「先提交是死锁」作废); 双 UI 镜像线何时该重放。
-> 等级: L1
 > 触发: git fetch, git pull, 同步上游, 落后, 只读轮次, 问答轮次, 开工同步口径, 行尾, 快进合并被拒, 树脏, 重叠, stash, 死锁, keep 分支, 镜像线
 
 **Refs:** memory-bank/tasks/26-09-22-memory-bank-sync-rule-rework-check-started.md

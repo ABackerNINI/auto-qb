@@ -1,7 +1,6 @@
 # 平台与文件系统
 
 > 摘要: Windows / Linux 差异、长路径、稀疏文件、删除拦截层、事件循环断连噪音、批处理与 PATH 条目的写法坑 —— 与宿主环境强相关的一类坑。
-> 等级: L0
 > 触发: 锁文件, 平台差异, Windows, Linux, 长路径, 稀疏文件, 删不掉, 磁盘空间, 回收站, 盘满, WinError 10054, proactor, 断连噪音, asyncio, 批处理, cmd, .cmd, 行尾, CRLF, OEM 码页, PATH, MSYS, Git Bash, HTTPServer, 端口被占, SO_REUSEADDR, allow_reuse_address, getfqdn, 原子写, os.replace, 并发读者, WinError 5, 拒绝访问, 退避重试, 心跳, 实例注册表, 读不到不等于空表, taskkill, MSYS pid, 目录 nlink, st_nlink, 进程表, tasklist, 平台分派, FileNotFoundError, NotADirectoryError, ENOTDIR, 异常类型分流
 
 ### Windows 上 `HTTPServer` 默认的 `allow_reuse_address = 1` 会让「端口被占」检测失效
@@ -52,15 +51,7 @@
 > 前缀 / "同一路径两种写法" / 打开层 Shell PIDL / `shutil.rmtree` 前缀, 四处坑 + 复发记录。
 > 一句话底线不变: 磁盘文件检查走 `add_long_path_prefix_for_win`(`\\?\` 前缀), **新文件访问走同一工具**。
 
-### NTFS 稀疏文件: 只有 `FSCTL_SET_SPARSE` → `SetEndOfFile` 才是稀疏的
-
-- **触发**: 建大文件 / 建测试用树(2026-09-21 实测, 100 文件 × 64 MiB 对照)。
-- **判别**: **正确序列** `CreateFileW` → `DeviceIoControl(h, FSCTL_SET_SPARSE)` →
-  `SetFilePointerEx` + `SetEndOfFile` ⇒ 实占 **0 字节/文件**(仅 MFT ≈205 B), **0.23 ms/文件**(6 万文件 ≈ 14 s)。
-  ❗**三种"看着对"的写法全部满额分配**: ①标记稀疏后再 `os.truncate` —— **truncate 会让稀疏标志失效**,
-  实占整个逻辑大小; ②朴素 `f.seek(n); f.write(b"\0")` —— 非稀疏文件向后扩展时 NTFS 必须让新区域读到 0 ⇒ 满额;
-  ③`fsutil file createnew` 先建再 `sparse setflag` —— **setflag 不回收**已分配的簇(256 MiB 实测先占 166 MB 且不释放)。
-- **处置**: 稀疏建树走 `ctypes` + `DeviceIoControl`, 完整步骤与写满盘的现场见 [attachments/platform-fs-long-evidence.md](attachments/platform-fs-long-evidence.md)。
+NTFS 稀疏文件条目(只有 `FSCTL_SET_SPARSE` → `SetEndOfFile` 才是稀疏的)已外迁: [attachments/26-11-08-platform-fs-sparse-file.md](attachments/26-11-08-platform-fs-sparse-file.md)(26-11-08 cap 清零)。
 
 ### 本机"删除拦截层"只在 D 盘生效, 且 R 盘无回收站
 

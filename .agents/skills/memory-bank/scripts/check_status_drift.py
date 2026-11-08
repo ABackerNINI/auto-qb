@@ -1,49 +1,33 @@
 #!/usr/bin/env python3
-"""Status drift guard: what the progress files claim as done vs what the linked documents say.
+"""Status drift guard: what the status-bearing documents claim vs what they contain.
 
-Purpose (2026-10-31): machine-check the drift between a status enum and the actual
+Purpose (2026-10-31): machine-check the drift between a status field and the actual
 completion state around it.
 Same disease the 2026-09-27 implementation audit (reports/26-09-27-1547) evidenced: a status
 layer asserted something the referenced layer contradicted (slices said "waiting for commit"
-while the commit had already landed; slice and plan meta went stale together). Here the
-claiming layer is the progress whitelist sections ("done" bullets that backlink documents),
-and the referenced layer is the status field itself: tasks `**Status:**`, issues
-`<meta name="issue-status">`, plans/reports `<meta name="doc-status">`. A "done" bullet that
-backlinks an Open document is the doc-status-meta.md failure shape: the status layer is wrong
-(or the claim is) and it must RING, not be silently collected.
+while the commit had already landed; slice and plan meta went stale together). The claiming
+layers checked here: issue cover badge text vs `<meta name="issue-status">`, and tasks/issues
+bodies carrying done-style words while their status field is still Open/In Progress.
+(2026-11-08 重构 W5: the progress backlink tiers A/C were removed together with the
+progress/ directory -- that criteria section had nothing left to scan.)
 
 Data sources / scope:
-  progress   `memory-bank/progress/implemented-*.md` + `progress/known-bugs.md` (the latter
-             only sections whose heading starts with the judgement word "已修复");
-             `roadmap.md` / `suggestions.md` / `evolution.md` and every other progress file
-             are excluded entirely.
-  sections   headings of level >= 2 whose title starts with "已实现" or "已修复" (a trailing
-             emoji/suffix is tolerated -- match by prefix, never by full string; real files
-             decorate the heading). The H1 file title is NOT a section (it describes the
-             file topic, not a completion claim). Links are collected only inside these
-             sections.
-  targets    markdown link targets resolved relative to the source file; only targets that
-             land in `memory-bank/tasks/*.md`, `issues/*.html`, `plans/*.html`,
-             `reports/*.html` count. External URLs, pure anchors, attachments and other
-             families (pitfalls, testing, progress itself) are ignored.
-  status     tasks: `**Status:**` (4-word vocab TASK_STATUSES); issues: `<meta
-             name="issue-status">`; plans/reports: `<meta name="doc-status">` (5-word vocab
-             DOC_STATUSES). Unreadable status (missing field / out-of-vocab value / missing
-             file) is reported as an anomaly and counts as hard fail -- per the
-             doc-status-meta.md pit, a broken status layer must ring, never drop silently.
+  issues     `memory-bank/issues/*.html`: `<meta name="issue-status">` (5-word vocab
+             DOC_STATUSES) vs the cover badge text (tier B); Open/In Progress bodies scanned
+             for done-style words (tier D).
+  tasks      `memory-bank/tasks/*.md`: `**Status:**` (4-word vocab TASK_STATUSES); Open/In
+             Progress bodies scanned for done-style words (tier D).
+  anomalies  an unreadable status layer (issue-status meta missing or out-of-vocab) is
+             reported as an anomaly and counts as hard fail -- per the doc-status-meta.md
+             pit, a broken status layer must ring, never drop silently.
 
-Four output tiers:
-  A (hard fail)  backlink target status == Open: the progress file claims a "done" the
-                 target still calls Open. Hint printed once: flip the target to In Progress
-                 via `commands run kb.status` when the claim is genuinely partial.
+Output tiers:
   B (hard fail)  issue cover badge text != meta issue-status. Boundary: a MISSING badge is
                  NOT a violation (some legacy issues carry no cover badge at all); only
                  badge-present-but-contradicting-meta fails. A parenthetical suffix on the
                  badge (e.g. "Open(常驻)") is treated as consistent with the meta status
                  (display annotation, not a different status).
-  C (list only)  same backlinks, target status == In Progress: printed as a manual-review
-                 list; never affects the exit code. Default output is a single summary
-                 line with row count only -- pass --verbose to unfold the per-row detail.
+  anomalies      issue-status meta missing / out-of-vocab. Hard fail.
   D (list only)  `tasks/*.md` and `issues/*.html` bodies whose status is Open/In Progress
                  and whose text contains a done-style word (已完成|已修复|已落地|已实现|
                  已上线). Exemptions: negation prefixes (未/尚未/没有/没), date-prefixed
@@ -51,45 +35,30 @@ Four output tiers:
                  the exit code. Default output is a single summary line with row count only
                  -- pass --verbose to unfold the per-row detail.
 
-Exit code: 1 iff tier A, tier B or the anomalies are non-empty; otherwise 0. Tiers C/D only
-print.
+Exit code: 1 iff tier B or the anomalies are non-empty; otherwise 0. Tier D only prints.
 
 Usage (from repo root; `<skill-dir>` = the dir the memory-bank skill was loaded from):
     python <skill-dir>/scripts/check_status_drift.py --check    status drift guard, rc 1 on drift
-    python <skill-dir>/scripts/check_status_drift.py --verbose  unfold C/D per-row detail (default is summary lines only)
+    python <skill-dir>/scripts/check_status_drift.py --verbose  unfold D per-row detail (default is summary lines only)
     python <skill-dir>/scripts/check_status_drift.py --safety   smoke probe (is bare run a real action)
 A bare run behaves exactly like `--check`: this checker is pure read-only (no write mode
 exists, so there is nothing a --check gate could distinguish), --check is kept only so
-kb.check can wire it in the same shape as its sibling checkers. Tiers A/B/anomalies always
-print per-row (high confidence); tiers C/D default to summary lines only to keep noise low
+kb.check can wire it in the same shape as its sibling checkers. Tiers B/anomalies always
+print per-row (high confidence); tier D defaults to summary lines only to keep noise low
 when dozens of low-confidence rows are present -- pass --verbose to unfold them.
 
-## 测试计划 (implemented 2026-10-31 in tests/test_memory_bank.py -- entries checked off T2)
+## 测试计划 (implemented 2026-10-31 in tests/test_memory_bank.py -- entries checked off T2;
+## 2026-11-08 重构 W5: progress 反链档 (原 A/C) 随 progress/ 退役删除, 其四条测试同批删除)
 - [x] scripts import cleanly: test_kb_scripts_import_cleanly name list extended with
   "check_status_drift".
-- [x] test_status_drift_sections_are_whitelisted: only level>=2 headings starting with the
-  judgement words (emoji/suffix tolerated) open a link-collecting section; H1 file titles
-  and non-whitelisted sections are ignored; known-bugs.md only honours 已修复 sections.
-- [x] test_status_drift_link_targets_resolved: `../tasks/...` style relative targets resolve to
-  the four families; external/anchor/attachment/other-family links are ignored; a markdown
-  link title after the target does not break parsing; unresolved-in-family targets are
-  reported as anomalies, not crashes (asserted in the anomaly test).
-- [x] test_status_drift_gate_a_flags_open_backlinks: a whitelisted-section link to an Open
-  target yields one `src:line -> target (status: Open)` row plus the kb.status hint; rc == 1.
 - [x] test_status_drift_gate_b_badge_vs_meta: badge text contradicting meta issue-status fails;
   a missing badge is tolerated (documented boundary); an "Open(常驻)" style parenthetical
   suffix matches meta "Open" (missing/out-of-vocab meta is asserted in the anomaly test).
-- [x] test_status_drift_gate_c_never_fails: In Progress backlinks are printed and rc stays 0
-  when only tier C (and D) rows exist. Default mode asserts summary line only; --verbose
-  mode is asserted in a dedicated flag.
 - [x] test_status_drift_gate_d_exemptions: negation prefixes / date lines / fenced code / inline
   code are exempt; a naked done-word in an Open task body is listed; rc unaffected. Default
   mode asserts summary line only; --verbose unfolds per-row detail.
-- [x] test_status_drift_gate_cd_verbose_unfolds: with --verbose, tiers C/D print per-row
-  detail (same body as before the default-summary change); default mode keeps tier A/B
-  unchanged.
-- [x] test_status_drift_anomaly_on_unreadable_status: missing `**Status:**` / status meta or an
-  out-of-vocab value yields an anomaly row and rc == 1 (doc-status-meta.md: ring, not drop).
+- [x] test_status_drift_anomaly_on_unreadable_status: missing / out-of-vocab issue-status meta
+  yields an anomaly row and rc == 1 (doc-status-meta.md: ring, not drop).
 """
 
 from __future__ import annotations
@@ -114,11 +83,9 @@ from _common import (  # noqa: E402
 )
 
 # --------------------------------------------------------------------------- judgement words
-# These Chinese literals ARE the criteria (not comments): section whitelist, done-style
-# assertion words and their negation prefixes. Everything else in this file is ASCII.
+# These Chinese literals ARE the criteria (not comments): done-style assertion words and
+# their negation prefixes. Everything else in this file is ASCII.
 
-SECTION_PREFIXES = ("已实现", "已修复")
-KNOWN_BUGS_ONLY_PREFIX = "已修复"  # known-bugs.md only honours this section prefix
 DONE_WORDS = ("已完成", "已修复", "已落地", "已实现", "已上线")
 DONE_WORD_RE = re.compile("|".join(DONE_WORDS))
 NEGATION_PREFIXES = ("尚未", "没有", "未", "没")
@@ -128,8 +95,6 @@ ACTIVE_STATUSES = (OPEN_STATUS, IN_PROGRESS_STATUS)
 
 # --------------------------------------------------------------------------- parsing rules
 # All regexes below were fixed against real samples (2026-10-31):
-#   section heading : "## " + judgement prefix + "(emoji, notes)"  (suffix is common)
-#   backlink        : "(2026-10-30; plan [..](../plans/..html), archive [..](../tasks/..md))"
 #   issue badge     : '<div class="item"><div class="k">状态</div><div class="v">'
 #                     '<span class="badge">Done</span></div></div>'  (badge class may carry a
 #                     colour variant such as "badge go" / "badge ok"; "badge type" holds the
@@ -138,9 +103,6 @@ ACTIVE_STATUSES = (OPEN_STATUS, IN_PROGRESS_STATUS)
 #   task status     : "**Status:** Done"  (line 3 of the archive head)
 #   html status     : '<meta name="issue-status" content="Done">' / doc-status for plans/reports
 
-HEADING_RE = re.compile(r"^(#{2,6})\s+(.*?)\s*$")  # sections start at level >= 2 (H1 = file title)
-MD_LINK_RE = re.compile(r"\[[^\]]*\]\(\s*([^)\s]+)")  # capture the target, drop an optional title
-SCHEME_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9+.-]*:")  # http(s):, mailto:, ... -> external
 BADGE_RE = re.compile(r'<div class="k">\s*状态\s*</div>\s*<div class="v">\s*<span class="badge[^"]*">([^<]*)</span>')
 INLINE_CODE_RE = re.compile(r"`[^`\n]*`")
 TAG_RE = re.compile(r"<[^>]+>")
@@ -149,119 +111,17 @@ CODE_TAG_RE = re.compile(r"<code\b[^>]*>.*?</code>", re.DOTALL)
 LINE_PREFIX_RE = re.compile(r"^\s*(?:[-*+>|]\s*|\#{1,6}\s*)*\*{0,2}\s*")
 DATE_HEAD_RE = re.compile(r"^(?:\d{4}-\d{2}-\d{2}|\d{2}-\d{2}-\d{2})")
 
-# family dirs (first path component under memory-bank) -> (kind, required suffix)
-FAMILY_BY_DIR = {
-    "tasks": ("task", ".md"),
-    "issues": ("issue", ".html"),
-    "plans": ("plan", ".html"),
-    "reports": ("report", ".html"),
-}
-PROGRESS_DIR = "progress"
-KNOWN_BUGS_NAME = "known-bugs.md"
-IMPLEMENTED_GLOB = "implemented-*.md"
-
-GATE_A_HINT = "确属部分完成 -> commands run kb.status 翻 In Progress 后重跑"
-
-
-@dataclass(frozen=True)
-class Backlink:
-    """One markdown link from a whitelisted progress section into a status-bearing family."""
-
-    src_rel: str  # repo-relative posix path of the progress file
-    lineno: int  # 1-based line of the link occurrence
-    target: Path  # absolute resolved target path
-    kind: str  # FAMILY_BY_DIR kind: task | issue | plan | report
-
 
 def _read(path: Path) -> str:
     return path.read_bytes().decode("utf-8", errors="replace")
 
 
-def iter_whitelisted_lines(lines: list[str], known_bugs_only: bool) -> list[tuple[int, str]]:
-    """Lines inside whitelisted sections as [(lineno, line)].
-
-    A section opens at a level>=2 heading whose title starts with an allowed prefix and
-    closes at the next heading of level <= its own (deeper subsections stay inside).
-    `known_bugs_only` restricts the allowed prefix to "已修复" (known-bugs.md scope).
-    """
-    allowed = (KNOWN_BUGS_ONLY_PREFIX, ) if known_bugs_only else SECTION_PREFIXES
-    out: list[tuple[int, str]] = []
-    level = 0  # 0 = outside any whitelisted section
-    for lineno, line in enumerate(lines, 1):
-        m = HEADING_RE.match(line)
-        if m:
-            this_level = len(m.group(1))
-            title = m.group(2).strip()
-            if level and this_level <= level:
-                level = 0  # close the current section before considering a new one
-            if not level and title.startswith(allowed):
-                level = this_level
-        elif level:
-            out.append((lineno, line))
-    return out
-
-
-def resolve_family_target(raw: str, src: Path, mb: Path) -> tuple[Path, str] | None:
-    """Link target text -> (absolute path, kind) when it lands in a status-bearing family.
-
-    Pure anchors, external URLs and targets outside the four families return None.
-    """
-    target = raw.split("#", 1)[0].strip()
-    if not target or SCHEME_RE.match(target):
-        return None
-    path = (src.parent / target).resolve()
-    try:
-        rel = path.relative_to(mb.resolve())
-    except ValueError:
-        return None
-    parts = rel.parts
-    if len(parts) < 2 or parts[0] not in FAMILY_BY_DIR:
-        return None
-    kind, suffix = FAMILY_BY_DIR[parts[0]]
-    if path.suffix != suffix:
-        return None
-    return path, kind
-
-
-def collect_backlinks(mb: Path) -> tuple[list[Backlink], list[str]]:
-    """Scan progress whitelist sections -> (backlinks, in-family targets that do not exist)."""
-    directory = mb / PROGRESS_DIR
-    backlinks: list[Backlink] = []
-    missing: set[str] = set()
-    if not directory.is_dir():
-        return backlinks, missing
-    sources = sorted(directory.glob(IMPLEMENTED_GLOB))
-    known_bugs = directory / KNOWN_BUGS_NAME
-    if known_bugs.is_file():
-        sources.append(known_bugs)
-    for src in sources:
-        rel = rel_posix(src, mb.parent)
-        known_bugs_only = src.name == KNOWN_BUGS_NAME
-        lines = _read(src).split("\n")
-        seen: set[tuple[str, int, str]] = set()
-        for lineno, line in iter_whitelisted_lines(lines, known_bugs_only):
-            for m in MD_LINK_RE.finditer(line):
-                hit = resolve_family_target(m.group(1), src, mb)
-                if hit is None:
-                    continue
-                target, kind = hit
-                key = (rel, lineno, str(target))
-                if key in seen:
-                    continue
-                seen.add(key)
-                if not target.is_file():
-                    missing.add(f"{rel}:{lineno}: [status-unreadable] target missing: {rel_posix(target, mb.parent)}")
-                    continue
-                backlinks.append(Backlink(src_rel=rel, lineno=lineno, target=target, kind=kind))
-    return backlinks, sorted(missing)
-
-
 def read_status(path: Path, kind: str, cache: dict[str, tuple[str | None, str]]) -> tuple[str | None, str]:
     """(valid status or None, raw value) for a family target; raw "" = field missing.
 
-    Vocab per kind: task -> TASK_STATUSES via `**Status:**`; issue -> issue-status meta;
-    plan/report -> doc-status meta; both metas use DOC_STATUSES. Out-of-vocab raw values are
-    returned as (None, raw) so the caller can report an anomaly instead of guessing.
+    Vocab per kind: task -> TASK_STATUSES via `**Status:**`; issue -> issue-status meta.
+    Out-of-vocab raw values are returned as (None, raw) so the caller can decide instead of
+    guessing (tier D skips them; anomalies are raised by collect_badge_drift).
     """
     key = str(path)
     if key not in cache:
@@ -396,32 +256,18 @@ def collect_done_assertions(mb: Path, cache: dict) -> list[str]:
     return hits
 
 
-def collect_tiers(mb: Path) -> tuple[list[str], list[str], list[str], list[str], list[str]]:
-    """All five tiers in one pass: (gate_a, gate_b, anomalies, gate_c, gate_d).
+def collect_tiers(mb: Path) -> tuple[list[str], list[str], list[str]]:
+    """All tiers in one pass: (gate_b, anomalies, gate_d).
 
-    The single classification point for backlinks -> A/C and unreadable statuses -> anomalies;
-    wrap_session reuses this for its end-of-session drift report (lists only, never fails).
+    The single classification point for badge drift -> B and unreadable statuses ->
+    anomalies; wrap_session reuses this for its end-of-session drift report (lists only,
+    never fails). (2026-11-08 重构 W5: 原 A/C 反链两档随 progress/ 退役删除。)
     """
     cache: dict[str, tuple[str | None, str]] = {}
-
-    # backlinks -> tiers A / C; unreadable statuses and dangling in-family links -> anomalies
-    backlinks, anomalies = collect_backlinks(mb)
-    gate_a: list[str] = []
-    gate_c: list[str] = []
-    for row in backlinks:
-        target_rel = rel_posix(row.target, mb.parent)
-        status, raw = read_status(row.target, row.kind, cache)
-        if status is None:
-            detail = "missing" if not raw else f"out-of-vocab: {raw!r}"
-            anomalies.append(f"{row.src_rel}:{row.lineno}: [status-unreadable] -> {target_rel} ({detail})")
-        elif status == OPEN_STATUS:
-            gate_a.append(f"{row.src_rel}:{row.lineno}: [backlink-x-Open] -> {target_rel} (status: {status})")
-        elif status == IN_PROGRESS_STATUS:
-            gate_c.append(f"{row.src_rel}:{row.lineno}: [backlink-x-InProgress] -> {target_rel} (status: {status})")
-
+    anomalies: list[str] = []
     gate_b = collect_badge_drift(mb, anomalies)
     gate_d = collect_done_assertions(mb, cache)
-    return gate_a, gate_b, anomalies, gate_c, gate_d
+    return gate_b, anomalies, gate_d
 
 
 # --------------------------------------------------------------------------- CLI
@@ -458,7 +304,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--safety", action="store_true", help="smoke probe: is a bare run a real action")
     parser.add_argument("--quiet", action="store_true", help="only print findings (suppress the all-clear line)")
     parser.add_argument(
-        "--verbose", action="store_true", help="unfold per-row detail for C/D (default: summary lines only)"
+        "--verbose", action="store_true", help="unfold per-row detail for D (default: summary lines only)"
     )
     parser.add_argument("--root", help="repo root (default: walk up to .git)")
     parser.add_argument("--mb-dir", help="memory-bank dir (default <root>/memory-bank)")
@@ -474,35 +320,27 @@ def main(argv: list[str] | None = None) -> int:
         sys.stderr.write(f"memory-bank dir not found: {mb}\n")
         return 2
 
-    gate_a, gate_b, anomalies, gate_c, gate_d = collect_tiers(mb)
+    gate_b, anomalies, gate_d = collect_tiers(mb)
 
-    _print_tier("A hard: backlink x Open", gate_a, tail=[f"hint: {GATE_A_HINT}"] if gate_a else None)
     _print_tier("B hard: issue cover badge vs issue-status meta", gate_b)
     _print_tier("anomalies: status unreadable (missing / out-of-vocab)", anomalies)
-    _print_tier(
-        "C list: backlink x In Progress (manual review)",
-        gate_c,
-        summary_only=not args.verbose,
-    )
     _print_tier(
         "D list: done-style words in Open/In Progress bodies (low confidence)",
         gate_d,
         summary_only=not args.verbose,
     )
 
-    hard = len(gate_a) + len(gate_b) + len(anomalies)
+    hard = len(gate_b) + len(anomalies)
     if hard:
         sys.stderr.write(
             f"\nstatus drift guard: {hard} hard finding(s). "
-            "Tier A: a progress whitelist section backlinks a document whose status is Open -- flip it to "
-            "In Progress via `commands run kb.status` if the claim is genuinely partial. "
             "Tier B: issue cover badge contradicts issue-status meta. "
             "Anomalies: a status field is missing or out-of-vocab (doc-status-meta.md: ring, do not drop). "
-            "Tiers C/D are lists only and never fail the exit code.\n"
+            "Tier D is a list only and never fails the exit code.\n"
         )
         return 1
     if not args.quiet:
-        print("status drift guard: no hard drift (tiers A/B/anomalies empty).")
+        print("status drift guard: no hard drift (tiers B/anomalies empty).")
     return 0
 
 

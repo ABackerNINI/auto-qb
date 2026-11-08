@@ -1,7 +1,6 @@
 # 自绘 combobox 收层: 主判据走 @focusout, 且不能同步收(label 转发回焦会闪)
 
 > 摘要: 自绘下拉(combobox)收层判据 —— @focusout 合帧 + label/清空钮/面板根/组件根的 @click.stop 与 @mousedown.prevent、焦点纪律按区域设、净空限高与容器预留、落点归属; 完整多轮取证与教训见 [attachments/combobox-focusout-close-details.md](attachments/combobox-focusout-close-details.md)。
-> 等级: L0
 > 触发: 自绘下拉收起, combobox, focusout, blur 收层, label 转发激活, for 属性回焦, 下拉闪烁重现, 点窗口其它位置不收, 下拉撑变形, 浮层限高, add-pop, 转发 click, 合帧守卫, 开层撤销, label click.stop, label mousedown.prevent, 按住时长, 合帧窗竞态, 人手点击 delay, 清空按钮, 点 x 下拉没了, 过滤词变化重限高, 删字撑变形, 旧页签残留, 资源代际, SPA 静态资源, 强刷, 收层守卫, _popBlurShouldHold, mousedown 记录器, 组合框是表单最后一项, 下拉伸出对话框, 弹窗内滚动, 预留空间, padding-bottom, pop-open, 设定位置弹窗太小, 保存路径下拉显示不全, 需要滚动, 净空为负, 点面板头, 面板头, pop-head, 空态文案, pop-empty, 面板内非交互区, 点一下就消失, 面板自己收了, 面板根 prevent, 区域级不变量, 落点归属, 公共祖先, click target 是祖先, mousedown mouseup 不同元素, 按下与抬起, 组件根 click.stop, 拖选收层, 点一下就关
 **Refs:** memory-bank/tasks/26-10-19-webui-move-dialog-geometry.md, memory-bank/tasks/26-10-29-webui-move-dialog-pick-geometry.md, memory-bank/plans/26-10-29-0041-plan-webui-move-dialog-pick-geometry.html, memory-bank/testing/baselines/26-10-29-0314-webui-move-dialog-pick-geometry.md, memory-bank/testing/baselines/26-10-29-0348-webui-move-dialog-pick-geometry.md
 

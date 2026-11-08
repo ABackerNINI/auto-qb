@@ -36,7 +36,7 @@ issue 26-11-08-0903。
 
 ## 计数面
 - 计入: 代码 + 事实性文档(计划/报告/约定/坑档/README/AGENTS.md)
-- 不计入: **记账类**(`memory-bank/tasks/` `activeContext/` `testing/baselines/`, 以及
+- 不计入: **记账类**(`memory-bank/tasks/` `active-context/` `testing/baselines/`, 以及
   `reports/attachments/legacy-review4/` 整目录 —— R4 存量评审的 findings/manifest/路线小结是被评代码
   的产物, 0441 落点 3/D3) 与 **生成物**(`gen_all.py --list` 的权威清单; 取不到时退回 `_index*.md`
   兜底, 不静默失效成"索引重排也算改动")

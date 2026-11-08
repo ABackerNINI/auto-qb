@@ -1,7 +1,7 @@
 # 协作约定与跨仓库红线
 
 > 📌 本目录通用: 文内带日期的条目为**增量更新**; **若代码与本文冲突, 以代码为准并回写**;
-> 最新易变状态见 [activeContext.md](../activeContext.md)。
+> 最新会话滚动状态见 [active-context/](../active-context/_about.md) 切片(读法 `commands run kb.active`)。
 
 > 摘要: 用户明示的协作约定、跨仓库操作红线、生产配置禁令 —— 动手改协作方式前先读。
 > 触发: 协作约定, 跨仓库, 红线, 授权, 生产配置, 多 clone
@@ -17,11 +17,11 @@
   - 多 AI 并行可能改到同一文件: 提交前在自己 clone 内跑全量测试保证自身改动自洽; 合并冲突交用户主导解决, 不擅自丢弃或覆盖他人改动。
   - 未被要求时**不主动 commit**: 改完留在工作区由用户逐项审核; 被要求"提交"时按 `AGENTS.md`「提交 / PR」一次走完 (含推送), 不再把 commit 与 push 当成两次指令。
 - **会话滚动状态按专题切片, 不写单文件** (2026-09-23 起): 状态写进
-  `memory-bank/activeContext/YY-MM-DD-HHMM-<slug>.md` —— **每个 clone 只写 / 更新自己的切片**
-  (同一专题跨会话沿用同一个 slug, 换专题才新建文件); **不要再往 `activeContext.md` 写状态**,
-  它已降级为 ≤1 KB 存根。读法 `python <agent skill-dir>/scripts/gen_active_recent.py`
+  `memory-bank/active-context/YY-MM-DD-HHMM-<slug>.md` —— **每个 clone 只写 / 更新自己的切片**
+  (同一专题跨会话沿用同一个 slug, 换专题才新建文件); 切片**只写 `active-context/` 目录** ——
+  原 `activeContext.md` 单文件存根已随 2026-11-08 重构删除, 不存在也别重建。读法 `python <agent skill-dir>/scripts/gen_active_recent.py`
   (全量按「最后活动」倒序 + 陈旧标记, 只打印不写文件); 切片 >14 天未动且已完成 → 蒸馏进
-  `progress/` 或任务档案后删除。多 clone 下「全体收尾写同一段」是最热的合并冲突源, 切片把
+  任务档案后删除。多 clone 下「全体收尾写同一段」是最热的合并冲突源, 切片把
   「重写头部」变成「追加自己的文件」, 这是它存在的唯一理由。
   **切片总数上限 120 / 处置目标 80**(`_common.SLICE_COUNT_LIMIT` / `SLICE_COUNT_TARGET` 单点,
   2026-11-03 定): 达到 120 时 `kb.active` / `kb.check` 只打债务行**告警、不拦收尾与提交**; 清理
@@ -46,7 +46,7 @@
   典型场景: 发现"改动在那个 clone 上不生效" ⇒ 如实报告并交由用户决定(让用户自己 `pull`, 或等用户说出「授权」); **不能因为"不改就修不好"就自己 `git apply` / 复制文件过去。**
 - **为什么是硬禁止**(2026-09-21 事故实证, 不是推演): 一次未经授权的跨仓库同步, 连带在对方 clone 里跑了
   `git pull --rebase` ⇒ 工具 shell 的 rebase 毁掉它的 `.git`(refs 目录消失 + 对象丢失,
-  详见 [pitfalls](../pitfalls.md)「`git rebase` 会毁 `.git`」条); 又因 rebase 被 SIGTERM 中断、
+  详见 [pitfalls/git/history-integration.md](../pitfalls/git/history-integration.md) 事故档案); 又因 rebase 被 SIGTERM 中断、
   工作区被 checkout 到中间状态, 事后留下 **13 个文件 / 648 行的残缺状态**需要清理。
   而同样的修复走 Gitee 只需一次提交。⇒ **代价不对称**: 走 Gitee 是零成本, 越界操作是"修一个问题、制造两个事故"。
 - **配套纪律(越界已发生时的止损)**: rebase 中断后**工作区不可信**, 不要想当然用 `reset --mixed` 保留它 ——
@@ -56,5 +56,5 @@
 
 - **🔴 绝对禁止以生产 `config.yml` 或生产 `auto-qb-data/` 启动程序**(含间接形式: 无参数启动 = 默认加载生产 config.yml)
 - 违规后果: AI 启动的实例会在真实数据上执行管理动作(打标签/清理标签/HR 打标/限速), 占用单实例锁致用户无法启动, 并可能误杀用户实例
-- **运行验证一律使用独立临时配置 + 独立 data_dir**(在 `R:/Temp/auto-qb/run-<名>/` 下自建 yml 与 data 目录, 用后清理 —— 临时目录统一走 R 盘, 见 [techContext.md](../techContext.md)「临时目录 / 备份盘约定」)
+- **运行验证一律使用独立临时配置 + 独立 data_dir**(在 `R:/Temp/auto-qb/run-<名>/` 下自建 yml 与 data 目录, 用后清理 —— 临时目录统一走 R 盘, 原 techContext.md「临时目录 / 备份盘约定」已随 2026-11-08 重构移除, `git log -- memory-bank/techContext.md` 可考)
 - 生产环境的启动/停止/验证**仅由用户本人执行**; AI 需要用户提供日志或观察结果

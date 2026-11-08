@@ -1,7 +1,6 @@
 # 工作区写入判据误判既有行为凭据: 该文件对 agent 变成只读(改走人工应用)
 
 > 摘要: 本工作区的写入判据(`artifact_secret_detected`)对**整文件**扫描「形如凭据赋值的字面量」, 命中即拒绝**整个写入** —— 而命中项可能是**既有行**(不在本次改动里)。实测: `src/auto_qb/webui/static/shared/auth.js` 被判命中(键名归一成 `Token`, 实为「把含 Token 的字段复位为空串」那一行), 报出的行号(55 / 83)与磁盘行号对不上, 于是该文件此后**任何** agent 写入都被拒 —— 包括与该行无关的改动; 判据自带口径要求「如实告知用户由其决定, 不要绕过」。
-> 等级: L1
 > 触发: artifact_secret_detected, 写入被拦, 凭据字面量, 误判, 文件写不进去, edit 失败, 安全判据, 明文密钥, 工作区写入, 不要绕过
 
 **Refs:** memory-bank/tasks/26-10-16-webui-chart-fetch-timeout.md, memory-bank/tasks/26-10-16-webui-raw-fetch-timeout.md, memory-bank/tasks/26-10-16-backend-global-traffic-monitor.md

@@ -8,13 +8,7 @@ run     = ["python <skill-dir:memory-bank>/scripts/gen_all.py"]
 timeout = 120
 pin     = true
 when    = "收尾回写知识库后重建索引（不要手改 _index.md）"
-note    = "2026-10-03 起**收成一条**: 四个生成器的集合单点在 memory-bank skill 的 scripts/gen_all.py(它同时是 sync 自动化解白名单的 --list 来源) —— 集合从此只有一处, 不再在包配置里再列一遍; 2026-09-24 的教训(漏项导致报错文案指到跑完仍红的命令)由 gen_all 的 GENERATORS 单点防住"
-
-[tasks."kb.docmap"]
-run     = ["python <skill-dir:memory-bank>/scripts/gen_doc_map.py <args>"]
-timeout = 60
-when    = "查跨形态专题视图: 一件事的全部材料 / 出件前查专题主键（默认活跃专题全行+完结专题名录）"
-note    = "只打印不写文件（_doc-map.md 已退役）; <args> 可传 --topic <key> 下钻 / --all 全量 / --forks 分叉提示 / --check 只校验（已挂进 kb.check）"
+note    = "生成器的集合单点在 memory-bank skill 的 scripts/gen_all.py(它同时是 sync 自动化解白名单的 --list 来源) —— 集合从此只有一处, 不再在包配置里再列一遍; 2026-09-24 的教训(漏项导致报错文案指到跑完仍红的命令)由 gen_all 的 GENERATORS 单点防住; 2026-11-08 重构后生成集合收缩为 pitfalls 索引一家(D5), 其余族的 _index 已退役不再重建"
 
 [tasks."kb.active"]
 run     = ["python <skill-dir:memory-bank>/scripts/gen_active_recent.py <args>"]
@@ -47,7 +41,7 @@ run     = ["python <skill-dir:memory-bank>/scripts/gen_all.py --check",
            "python <skill-dir:memory-bank>/scripts/check_html.py --check"]
 timeout = 120
 when    = "改完知识库先自查，或提交前确认索引自洽"
-note    = "--check 只校验不写；要在回写代码**之后**跑，否则改到一半必然红。2026-10-03 起生成物四条收成 `gen_all.py --check`(集合单点, 同 kb.index); 其余 = gen_doc_map 主键校验(已无物化文件, 2026-09-29 起查孤儿) + activeContext/基线切片校验 + 回写措辞守卫(tasks/ 与 activeContext/ 不得写「待提交」这类时点相对断言, 2026-10-07 加) + **新增面检查(check_doc_templates: 冻结线之后新建的族文件——命名/头部字段/状态词表/无残留 SLOT, 2026-10-17 P1 加; 存量豁免)** + 常驻锚防流水守卫(check_mutation_anchor: 排期锚只记「包/模块·时间·大致成果·指针」, 台账/逐轮日志写回 = 红, 2026-10-31 加) + timekit 日期守卫(文件名/元数据/正文三层, 2026-10-06 加) + 状态漂移守卫(check_status_drift: progress 判据节反链 x Open / issue badge vs meta / status-unreadable 硬拦, C 清单与完成断言只提示, 2026-10-31 加) + HTML 结构守卫(check_html: 闭合标签缺右尖括号静默吞正文类 —— 2026-11-01 两起实测事故, L1 行级正则 + L2 stdlib 解析器残缺名校验双网, script/style 区遮蔽防 JS 字面量误报, 全库 645 件 <2s; 更广的规范级伤害归 kb.html-audit 的 v.Nu 巡检)"
+note    = "--check 只校验不写；要在回写代码**之后**跑，否则改到一半必然红。2026-10-03 起生成物四条收成 `gen_all.py --check`(集合单点, 同 kb.index; 2026-11-08 重构后生成集合收缩为 pitfalls 索引一家); 其余 = gen_doc_map 主键校验(已无物化文件, 2026-09-29 起查孤儿) + active-context/基线切片校验 + 回写措辞守卫(tasks/ 与 active-context/ 不得写「待提交」这类时点相对断言, 2026-10-07 加) + **新增面检查(check_doc_templates: 冻结线之后新建的族文件——命名/头部字段/状态词表/无残留 SLOT, 2026-10-17 P1 加; 存量豁免)** + 常驻锚防流水守卫(check_mutation_anchor: 排期锚只记「包/模块·时间·大致成果·指针」, 台账/逐轮日志写回 = 红, 2026-10-31 加) + timekit 日期守卫(文件名/元数据/正文三层, 2026-10-06 加) + 状态漂移守卫(check_status_drift: issue badge vs meta / status-unreadable 硬拦, 完成断言只提示, 2026-10-31 加; 2026-11-08 重构 W5: progress 判据节反链档随 progress/ 目录退役删除) + HTML 结构守卫(check_html: 闭合标签缺右尖括号静默吞正文类 —— 2026-11-01 两起实测事故, L1 行级正则 + L2 stdlib 解析器残缺名校验双网, script/style 区遮蔽防 JS 字面量误报, 全库 645 件 <2s; 更广的规范级伤害归 kb.html-audit 的 v.Nu 巡检)"
 
 [tasks."kb.html-audit"]
 run     = ["python <skill-dir:memory-bank>/scripts/check_html.py --vnu --all <args>"]
@@ -76,24 +70,18 @@ timeout = 60
 
 [tasks."kb.status"]
 run     = ["python <skill-dir:memory-bank>/scripts/flip_status.py <args>"]
-when    = "翻转文档状态 (计划/报告 doc-status 5 词表 · 档案 **Status:** 4 词表 · issue 徽标+meta 两处): 词表校验/抬时间戳/重建索引全派生, 终态带提醒"
-note    = "词表单点 import(_common), 别凭记忆写 —— 表外值会让 gen_docs_index 静默漏收该件(见 pitfalls/kb/doc-status-meta.md); 切片一律拒绝并指路 kb.wrap; issue 已收编(2026-11-07 W4, 计划 26-11-07-0549): badge+meta 两处一起改+追加状态日志行+重建索引(含归档); 同状态翻转幂等(不抬时间戳不重建索引); 路径三形态(绝对/仓库根相对/mb 相对)都认; 输出带「机械 0」收录断言"
+when    = "翻转文档状态 (计划/报告 doc-status 5 词表 · 档案 **Status:** 4 词表 · issue 徽标+meta 两处): 词表校验/抬时间戳全派生, 终态带提醒"
+note    = "词表单点 import(_common), 别凭记忆写 —— 词表纪律的活体校验挂 kb.check(gen_doc_map --check, 见 pitfalls/kb/doc-status-meta.md); 切片一律拒绝并指路 kb.wrap; issue 已收编(2026-11-07 W4, 计划 26-11-07-0549): badge+meta 两处一起改+追加状态日志行; 同状态翻转幂等(不抬时间戳不追加日志行); 路径三形态(绝对/仓库根相对/mb 相对)都认; 输出带「机械 0」收录断言; 2026-11-08 重构起不再重建索引(改面四族 _index 已退役, D4/D5)"
 timeout = 60
 
 [tasks."kb.bump"]
 run     = ["python <skill-dir:memory-bank>/scripts/bump_doc.py <args>"]
 when    = "文档改版一次落盘: HTML 抬 doc-updated + 变更记录追加 R 行 / 档案抬 Updated / 切片抬最后活动 (note 随参数带入, 不再开一次编辑)"
-note    = "R 行编号 = 段内最大 + 1(只追加, 已有行零触碰; note 自动 HTML 转义); 报告多数无变更记录段 —— 缺段即 fail-fast 指路, 不猜位置硬塞; 进度日志追加仍是 kb.wrap 的活; 输出带「机械 0」收录断言"
+note    = "R 行编号 = 段内最大 + 1(只追加, 已有行零触碰; note 自动 HTML 转义); 报告多数无变更记录段 —— 缺段即 fail-fast 指路, 不猜位置硬塞; 进度日志追加仍是 kb.wrap 的活; 输出带「机械 0」收录断言; 2026-11-08 重构起不再重建索引(改面四族 _index 已退役, D4/D5)"
 timeout = 60
 
 [tasks."kb.wrap"]
 run     = ["python <skill-dir:memory-bank>/scripts/wrap_session.py <args>"]
-when    = "收尾机械面: 抬切片最后活动 + 追加 R 行 / 同专题档案 Updated + 进度日志日期行 / 重建索引"
-note    = "只做机械面(D6: 蒸馏与判断仍是 agent 的活); 切片不存在则按模板建(零 SLOT, 判断剩余 0); 基线数字不自动化(A4)"
-timeout = 60
-
-[tasks."kb.tier"]
-run     = ["python <skill-dir:memory-bank>/scripts/kb_tier.py <args>"]
-when    = "知识库分级清理 L0-L3 (计划 26-10-31-0534): list 列该级文件 / set 头部区第 4 行打标 / migrate L2 叙事外迁 attachments / purge L3 删除(三闸门)"
-note    = "四动作(D15): migrate 与 purge 高危默认 dry-run, purge 强制 --apply 且三闸门(守阵齐全/全仓反向引用清零/头部 > 观察通过: 日期标记)任一不过全或无拒绝; 标记行 > 等级: L<n> 在头部区(首个 ## 之前), 生成器只解析三行头具名字段不受干扰; migrate 原文逐字节搬、相对链接自动加 ../ 一层、写完回读校验行尾; R0 只建能力, 不调用 purge 删真实文件"
+when    = "收尾机械面: 抬切片最后活动 + 追加 R 行 / 同专题档案 Updated + 进度日志日期行"
+note    = "只做机械面(D6: 蒸馏与判断仍是 agent 的活); 切片不存在则按模板建(零 SLOT, 判断剩余 0); 基线数字不自动化(A4); 2026-11-08 重构起不再重建索引(tasks/_index.md 已退役, D4/D5)"
 timeout = 60

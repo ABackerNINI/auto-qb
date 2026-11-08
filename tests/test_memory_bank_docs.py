@@ -1,9 +1,9 @@
 """test_memory_bank_docs 测试计划: Memory Bank 结构守卫测试 (TASK010; 2026-09-18 随任务档案改名同步更新)。
 
 守什么: 知识库的"跨会话连续性"完全依赖 `memory-bank/tasks/` 与入口文件的**结构化约定** —
-一旦索引与档案脱钩 (登记了没文件 / 有文件没登记)、状态分区与档案 `Status` 不一致、
-必备章节缺失, 下次会话就无法从 `tasks/` 续作; 一旦会话纪要回流进 `activeContext.md`,
-该文件会重新膨胀成流水账 (2026-09-17 复盘的真实故障)。这些判定都是纯静态的, 用测试守住成本极低。
+状态分区与档案 `Status` 不一致、必备章节缺失, 下次会话就无法从 `tasks/` 续作
+(2026-11-08 重构: tasks 索引与顶层易变件已删, 相关守卫随宿主文件收缩)。这些判定都是纯静态的,
+用测试守住成本极低。
 
 2026-09-18 起档案命名由 `TASKnnn-<slug>.md` 改为 `YY-MM-DD-<slug>.md`(全局序号在 9 个并行
 worktree 下必然撞号)。本文件在兼容期内同时接受两种命名, 主键一律取"去掉编号 / 日期前缀后的 slug"。
@@ -22,7 +22,6 @@ warn 而不是 problem —— 守住"降级后的严重度仍然正确", 而不�
 - test_kb_files_respect_caps: 原「## 测试计划」条目见 test_memory_bank_naming.py(跨分文件共用同一用例条目, 文案未改)
 - test_kb_pitfall_entries_have_required_fields: pitfalls 条目含 触发 / 判别 / 处置
 - test_doc_forms_decision_tree_declares_form_axis: 决策树带「形态判定 (Form)」列, 三值齐且写明与四工位正交 (2026-11-05 计划 §07 P3)
-- test_kb_active_context_within_cap: `activeContext.md` 是 ≤2 KB 合法存根 (2026-09-23 起滚动状态已迁 `activeContext/`)
 - test_kb_cap_debt_is_discoverable_not_blocking: 造超限文件 → 必须报成 warn(债务) 而不是 problem
 - test_agents_md_cap_is_hard_not_debt: AGENTS.md 超 8,000 仍是 problem(硬规定), 且不出现在债务清单里
 - test_kb_slice_cap_and_count_are_debt_not_blocking: 切片尺寸 / 条数 → warns(债务); 命名 / 三行头仍判红
@@ -73,25 +72,15 @@ memory-bank skill 的 `scripts/flip_status.py` / `bump_doc.py`, **进程内 impo
 - test_mutation_anchor_guard_flags_ledger_log_and_round_numbers: 台账字样 / 白名单外节 / 逐轮流水数字 / 状态日志超限逐类判红; 清白件零误报
 - test_mutation_anchor_guard_is_wired_into_kb_check_and_gate: 守卫已挂进 kb.check 与提交闸门两侧
 
-kb.tier 分级清理四动作 (2026-10-31 R0, 计划 26-10-31-0534; 实现在 memory-bank skill 的
-`scripts/kb_tier.py`, **进程内 import**, tmp 夹具不碰真实 memory-bank/):
-
-
-CLOSED_KEEP=60 索引出口 (计划 26-10-31-0534 R3/D5/D14, 2026-10-31 加; tasks 主索引的已完结区只留
-最近 60 条, 全量清单另落 `tasks/attachments/_archive.md`, 形态与 issues 侧同款; plans 侧守阵在 test_docs_forms.py):
-
 
 状态漂移守卫 (检查器 memory-bank skill 的 `scripts/check_status_drift.py`, 2026-10-31 加, **进程内
-import**, tmp 夹具不碰真实 memory-bank/; 四档: A 反链x Open / B issue badge vs meta / 异常
-status-unreadable 三档硬拦 rc=1, C 反链x In Progress / D 完成断言两档清单只提示):
+import**, tmp 夹具不碰真实 memory-bank/; B issue badge vs meta / 异常 status-unreadable 两档
+硬拦 rc=1, D 完成断言清单只提示; 2026-11-08 重构 W5: 原 A/C 反链两档随 progress/ 目录退役
+删除, 对应四条测试同批删除):
 
-- test_status_drift_sections_are_whitelisted: 判据词前缀开节(标题后缀/emoji 容忍), H1 文件题不是节, 同级/更高级标题关节, 深层子节留在节内; known-bugs.md 只认「已修复」节
-- test_status_drift_link_targets_resolved: 四族(tasks/issues/plans/reports)目标解析; 外链/纯锚点/四族外(pitfalls)/错后缀忽略; 链接带标题不破解析
-- test_status_drift_gate_a_flags_open_backlinks: 已实现节反链→Open 目标 → rc=1 + 漂移行 + 「kb.status 翻 In Progress」提示; roadmap/suggestions/evolution 与 H1 题下的同款反链不触发; 四族外目标不触发
 - test_status_drift_gate_b_badge_vs_meta: badge≠meta 红; badge==meta / 缺失(文档化边界) / 括注后缀「Open(常驻)」过; ASCII 字母后缀「Opened」红
-- test_status_drift_gate_c_never_fails: C+D 清单非空 rc=0 且原文打印 —— C/D 永不拦退出码
 - test_status_drift_gate_d_exemptions: 否定前缀(未/尚未/没有)/日期行/围栏代码/行内代码豁免; Open/In Progress 正文裸完成词列出; Done 正文完成词不列
-- test_status_drift_anomaly_on_unreadable_status: 缺 `**Status:**` / 词表外值 / 反链目标缺失 / issue-status meta 缺失 → status-unreadable 异常, rc=1 (doc-status-meta.md: ring, 不静默丢)
+- test_status_drift_anomaly_on_unreadable_status: issue-status meta 缺失 / 词表外值 → status-unreadable 异常, rc=1 (doc-status-meta.md: ring, 不静默丢)
 - test_status_drift_guard_is_wired_into_kb_check_and_gate: 守卫已挂进 kb.check 与提交闸门两侧(与 test_mutation_anchor_guard_is_wired_into_kb_check_and_gate 同旨)
 
 HTML 结构守卫 (检查器 memory-bank skill 的 `scripts/check_html.py`, 2026-11-01 加, **进程内
@@ -120,12 +109,10 @@ from kb_test_support import (
     SKILL_SCRIPTS,
     _check_html,
     _doc_links_module,
-    _drift_doc,
     _drift_fixture,
     _drift_issue,
     _drift_run,
     _drift_task,
-    _gen_all,
     _kb_checker,
     _mutation_anchor,
     _status_drift,
@@ -174,17 +161,6 @@ def test_doc_forms_decision_tree_declares_form_axis() -> None:
     for word in ("`reference`", "`how-to`", "`explanation`"):
         assert word in text, f"Form 三值缺 {word}"
     assert "正交" in text, "必须写明 Form 与四工位正交 (否则会被误读成第二套目录体系)"
-
-
-def test_kb_active_context_within_cap() -> None:
-    """`activeContext.md` 必须是**合法存根**(≤2 KB + 含「已迁至」+ 无正文), 不是一份被硬顶卡住的正文。
-
-    2026-09-23 目录化后语义变了: 旧的 12 KB「易变层硬顶」已失去对象 —— 滚动状态搬进
-    `activeContext/` 切片, 原路径只留指针。所以改判存根合法性(与 `check_stubs` 同源);
-    那个 12 KB 数字不再是这一层的问题, 切片各自的 cap 见下一条。
-    """
-    ok, why = _kb_checker().is_stub(MB / "activeContext.md")
-    assert ok, f"activeContext.md 不是合法存根: {why}"
 
 
 def test_kb_cap_debt_is_discoverable_not_blocking(tmp_path: Path) -> None:
@@ -241,7 +217,7 @@ def test_kb_slice_cap_and_count_are_debt_not_blocking(tmp_path: Path, monkeypatc
 
     monkeypatch.setattr(gen_active_recent, "SLICE_COUNT_LIMIT", 2)
 
-    slice_dir = tmp_path / "activeContext"
+    slice_dir = tmp_path / "active-context"
     slice_dir.mkdir()
     for i in range(3):
         (slice_dir / f"26-01-0{i + 1}-0000-s{i}.md"
@@ -280,7 +256,7 @@ def test_kb_slice_count_limit_warns_at_120_and_targets_80(tmp_path: Path, monkey
     assert (_common.SLICE_COUNT_LIMIT, _common.SLICE_COUNT_TARGET
            ) == (120, 80), (f"单点常量漂移: {_common.SLICE_COUNT_LIMIT} / {_common.SLICE_COUNT_TARGET}")
 
-    slice_dir = tmp_path / "memory-bank" / "activeContext"
+    slice_dir = tmp_path / "memory-bank" / "active-context"
     slice_dir.mkdir(parents=True)
 
     def write_slices(n: int) -> None:
@@ -389,16 +365,16 @@ def test_check_caps_only_scopes_kb_walk(tmp_path: Path) -> None:
 def test_memory_bank_instructions_match_current_structure() -> None:
     """`applyTo: memory-bank/**` 的规则载体必须与**当前结构**一致。
 
-    为什么值得单独钉: 它只在**编辑 `memory-bank/` 时**注入 —— 不重写的话, 目录化重构后的新结构
-    在改库那一刻**根本不在上下文里**, 于是又会按旧的 8 文件结构去写。2026-09-22 重写前的旧版
+    为什么值得单独钉: 它只在**编辑 `memory-bank/` 时**注入 —— 不重写的话, 重构后的新结构
+    在改库那一刻**根本不在上下文里**, 于是又会按旧结构去写。2026-09-22 重写前的旧版
     还在教「read ALL memory bank files at the start of every task」—— 那正是本库膨胀到 50 万字符的原因。
 
-    2026-09-23 瘦身: 4,213 → 2,486 字符(106 → 55 行)。删掉的四节(cap 分级表 / 三行头模板 / pitfalls 字段 /
-    任务档案格式)**都在 skill 与 `_common.py` 有单点**, 而其中 cap 表是**数值型重复** —— 守卫只钉
-    token 不钉数值, 改了源不会红。所以针列表同步换掉了 `## 原始请求` / `## 进度日志`(那是 skill
-    里「任务档案规范」的内容), 换成 `CAP_POLICY`(证明它指向机器单点而不是自己抄一张表)。
-    WARN: **不要退回成"纯指针"**: 本文件是**自动注入**, 而 skill 是**按需触发**加载 —— 纯指针会让
-    规则从「可见」退化成「可触达」, 而这三条铁律对应的失败模式恰恰是"少做一个动作"。
+    2026-09-23 瘦身: 4,213 → 2,486 字符(106 → 55 行)。
+    2026-11-08 重构 W4: 随 D13 检索纪律换轨收缩为**路由桩**(~35 行) —— 口径唯二单点 =
+    根 AGENTS.md + memory-bank/README.md, 本文件只留检索纪律三步 + 目录一览 + 机检两行;
+    针列表同步换掉 `先索引`(→ `kb.active` 三步) / `CAP_POLICY` / `activeContext.md` / `gen_active_recent.py`,
+    并加**负钉**: 旧口径「先索引」与旧目录名 `activeContext` 不得回潮。
+    WARN: 仍是**自动注入的规则载体**, 不是纯指针 —— 检索纪律这条最贵的失败模式必须在手边。
     """
     path = ROOT / ".github" / "instructions" / "memory-bank.instructions.md"
     assert path.is_file(), "缺少 memory-bank.instructions.md"
@@ -407,18 +383,20 @@ def test_memory_bank_instructions_match_current_structure() -> None:
     # 不能直接查 "read ALL memory bank files": 本文件**引用了这句当反例**并标注废弃,
     # 子串必然存在 —— 第一版守卫就是这么自己把自己判红的(与「os.path.normcase 写在
     # docstring 里当反例」是同一类坑)。改查旧版**祈使句的独有尾巴**。
-    assert "this is not optional" not in text, ("旧版反模式的祈使句回潮了: 必须改成「先索引、后 grep、禁止整读」")
+    assert "this is not optional" not in text, ("旧版反模式的祈使句回潮了: 检索纪律已换轨为 kb.active → README → grep")
     assert "已废弃" in text, "引用旧反模式时必须同时标注它已废弃"
     for needle in (
         "applyTo: 'memory-bank/**'",  # 仍是规则载体(机制本身, 不能外迁)
-        "先索引、后 grep、禁止整读",  # 检索纪律: 最贵的失败模式, 必须在手边
-        "生成物",  # _index.md 不许手改
+        "kb.active",  # 检索纪律第一步(D13 换轨): 最贵的失败模式, 必须在手边
+        "memory-bank/README.md",  # 口径单点之一(库内细路由)
         ".agents/skills/memory-bank/SKILL.md",  # 指向完整规程
-        "CAP_POLICY",  # cap 的机器单点 —— 2026-09-23 瘦身: 不再在这里抄一张会漂移的表
-        "activeContext.md",
-        "gen_active_recent.py",
+        "pitfalls/_index.md",  # 全库唯一幸存生成索引
+        "active-context/",  # 当前目录名(2026-11-08 更名)
     ):
         assert needle in text, f"memory-bank.instructions.md 缺少 `{needle}`"
+    # 负钉: 旧检索口径与旧目录名不得回潮(2026-11-08 D13)。
+    assert "先索引" not in text, "旧检索口径「先索引」回潮了 —— 换轨后应为 kb.active → README → grep 兜底"
+    assert "activeContext" not in text, "旧目录名 activeContext 回潮了 —— 已更名 active-context/"
 
 
 def test_skill_cap_table_matches_cap_policy() -> None:
@@ -502,10 +480,10 @@ def test_timekit_guards_catch_three_layers(tmp_path: Path) -> None:
     timekit = _timekit()
     mb = tmp_path / "memory-bank"
     (mb / "tasks").mkdir(parents=True)
-    (mb / "activeContext").mkdir(parents=True)
+    (mb / "active-context").mkdir(parents=True)
 
     (mb / "tasks" / "99-01-01-future-slug.md").write_text("# t\n> 摘要: x\n> 触发: y\n", encoding="utf-8")
-    (mb / "activeContext" /
+    (mb / "active-context" /
      "26-01-01-0000-bad.md").write_text("# t\n> 摘要: x\n> 最后活动: 2026-01-01 00:0x\n", encoding="utf-8")
     (mb / "tasks" / "26-01-01-slash.md").write_text("# t\n> 摘要: x\n> 触发: y\n正文 2026/01/01\n", encoding="utf-8")
 
@@ -648,8 +626,10 @@ def test_commit_gate_covers_kb_check() -> None:
     (`check_wording --check` 同样漏挂) ⇒ "能判红却不在闸门里": 缺陷静默通过所有提交, 只能靠人
     手动跑 `kb.check` 撞见。根因是闸门的 `[[gates]]` run 清单与 `kb.check` 各自演化 (手抄副本)。
 
-    判据: 取 `kb.check` run 列表里所有 `X.py --check`, 把 `gen_all.py` 展开成它声明的 `GENERATORS`
-    (索引生成器的集合单点), 要求每个都出现在 `.my-commit-flow.toml` 的某个 `[[gates]]` run 里。
+    判据: 取 `kb.check` run 列表里所有 `X.py --check`, 把 `gen_all.py` 展开成它**实际仍重建**的
+    生成器 (2026-11-08 重构起只有 gen_kb_index/pitfalls 一家; GENERATORS 里 tasks/docs/issues
+    三个退役生成器的生成物已删, 不再要求闸门挂载 —— 其脚本本体与展开机制随 W3 一并收缩),
+    要求每个都出现在 `.my-commit-flow.toml` 的某个 `[[gates]]` run 里。
     与 `test_gen_cmd_hints_name_real_tasks` 的"`kb.index` 覆盖面 ⊇ 闸门判红集"同旨, 这里是反方向
     (闸门 ⊇ `kb.check`), 两条合起来钉住"闸门判红的每一条都有人能修、且该跑的都真的在跑"。
     """
@@ -659,9 +639,12 @@ def test_commit_gate_covers_kb_check() -> None:
     checked = set(re.findall(r"([\w_]+\.py) --check", body.group(1)))
     assert checked, "kb.check 的 run 列表里没有 `--check` (写法变了? 同步本守阵)"
 
-    if "gen_all.py" in checked:  # 索引生成器的集合单点: 展开成 GENERATORS 再核对
+    if "gen_all.py" in checked:
+        # 索引生成器集合单点: 展开成 gen_all **实际仍重建**的生成器 —— 2026-11-08 重构后
+        # collect() 只驱动 gen_kb_index(pitfalls); GENERATORS 里 tasks/docs/issues 三个
+        # 退役生成器的生成物已删, 不再要求闸门挂载 (脚本本体随 W3 退役, 展开机制届时一并收缩)。
         checked.discard("gen_all.py")
-        checked |= {script for _skill, script in _gen_all().GENERATORS}
+        checked.add("gen_kb_index.py")
 
     gate_cfg = (ROOT / ".commands" / "my-commit-flow" / ".my-commit-flow.toml").read_text(encoding="utf-8")
     gated = set(re.findall(r"([\w_]+\.py) --check", gate_cfg))
@@ -740,113 +723,6 @@ def test_number_guard_is_green_on_current_kb() -> None:
     )
 
 
-def test_status_drift_sections_are_whitelisted() -> None:
-    """判据词前缀开节 (标题后缀/emoji 容忍), H1 文件题不是节, 同级/更高级标题关节,
-    深层子节留在节内; known-bugs.md 只认「已修复」节 (判据: 只收白名单节内的反链)。"""
-    drift = _status_drift()
-    lines = [
-        "# 已实现 总览",  # H1 文件题不是节 (它描述文件主题, 不是完成断言)
-        "link [a](../tasks/h1.md) under H1",
-        "## 已实现 alpha",
-        "in section [t](../tasks/a.md)",
-        "### 已实现 sub",  # 更深层级: 自身也是白名单节, 但不关外层节
-        "inside sub",
-        "## 待实现 beta",  # 非判据词 + 同级: 关节且不开新节
-        "outside [u](../tasks/b.md)",
-        "## 已修复（gamma）✅",  # 后缀/emoji 容忍 (按前缀匹配, 真实文件会装饰标题)
-        "inside gamma",
-    ]
-
-    assert [n for n, _ in drift.iter_whitelisted_lines(lines, known_bugs_only=False)] == [4, 6, 10]
-    # known-bugs.md 口径: 只认「已修复」节 —— 已实现节不收
-    assert [n for n, _ in drift.iter_whitelisted_lines(lines, known_bugs_only=True)] == [10]
-
-
-def test_status_drift_link_targets_resolved(tmp_path: Path) -> None:
-    """四族目标解析; 外链/纯锚点/四族外(pitfalls)/错后缀忽略; 链接带标题不破解析
-    (判据: 只有落进 tasks/issues/plans/reports 的目标才算完成断言的反链)。"""
-    drift = _status_drift()
-    mb = _drift_fixture(tmp_path)
-    src = mb / "progress" / "implemented-x.md"
-
-    resolve = drift.resolve_family_target
-    assert resolve("../tasks/a.md", src, mb)[1] == "task"
-    assert resolve("../issues/a.html", src, mb)[1] == "issue"
-    assert resolve("../plans/a.html", src, mb)[1] == "plan"
-    assert resolve("../reports/a.html", src, mb)[1] == "report"
-    assert resolve("../tasks/a.md#sec", src, mb)[1] == "task", "锚点剥掉后照常解析"
-    for raw in ("https://example.com/a.md", "#sec", "../pitfalls/git/x.md", "../tasks/a.html", "../../outside.md"):
-        assert resolve(raw, src, mb) is None, raw
-
-    (mb / "tasks" / "a.md").write_text("**Status:** Open\n", encoding="utf-8")
-    (mb / "tasks" / "b.md").write_text("**Status:** Open\n", encoding="utf-8")
-    (mb / "issues" / "a.html").write_text("<html></html>\n", encoding="utf-8")
-    (mb / "progress" / "implemented-x.md").write_text(
-        "# link targets fixture\n"
-        "\n"
-        "## 已实现\n"
-        "\n"
-        "- plain [t](../tasks/a.md)\n"
-        '- title [t](../tasks/a.md "标题")\n'
-        "- anchor [t](../tasks/b.md#sec)\n"
-        "- external [t](https://example.com/a.md)\n"
-        "- pure anchor [t](#sec)\n"
-        "- other family [t](../pitfalls/git/x.md)\n"
-        "- wrong suffix [t](../tasks/a.html)\n"
-        "- issue [t](../issues/a.html)\n",
-        encoding="utf-8",
-    )
-
-    backlinks, missing = drift.collect_backlinks(mb)
-
-    assert [b.target.name for b in backlinks] == ["a.md", "a.md", "b.md", "a.html"], "带标题的链接目标照常解析"
-    assert all(b.kind == "task" for b in backlinks[:3]) and backlinks[3].kind == "issue"
-    assert missing == [], "库内存在的目标不进异常"
-
-
-def test_status_drift_gate_a_flags_open_backlinks(tmp_path: Path) -> None:
-    """A 档硬拦: 已实现节反链→Open 目标 → rc=1 + `src:line -> target (status: Open)` 漂移行
-    + 「kb.status 翻 In Progress」提示; roadmap/suggestions/evolution 与 H1 题下的同款反链
-    不触发; 四族外 (pitfalls) 目标不触发。"""
-    mb = _drift_fixture(tmp_path)
-    _drift_task(mb, "open.md", "Open")
-    _drift_doc(mb, "plans", "open-plan.html", "Open")
-    (mb / "pitfalls" / "git").mkdir(parents=True)
-    (mb / "pitfalls" / "git" / "x.md").write_text("x\n", encoding="utf-8")
-    same_link = "# other progress file\n\n## 已实现\n\n- task [t](../tasks/open.md)\n"
-    for name in ("roadmap.md", "suggestions.md", "evolution.md"):
-        (mb / "progress" / name).write_text(same_link, encoding="utf-8")
-    (mb / "progress" / "implemented-a.md").write_text(
-        "# gate A fixture\n"
-        "\n"
-        "## 已实现 alpha\n"
-        "\n"
-        "- task [t](../tasks/open.md)\n"
-        "- plan [t](../plans/open-plan.html)\n"
-        "- pitfall [p](../pitfalls/git/x.md)\n",
-        encoding="utf-8",
-    )
-    (mb / "progress" / "implemented-h1.md").write_text(
-        "# 已实现 but H1 is a file title\n"
-        "\n"
-        "- [t](../tasks/open.md)\n",
-        encoding="utf-8",
-    )
-
-    rc, out, err = _drift_run(tmp_path, mb)
-
-    assert rc == 1
-    rows = [line for line in out.split("\n") if "[backlink-x-Open]" in line]
-    assert len(rows) == 2, f"只有 implemented-a.md 白名单节里的 2 条反链该触发: {rows}"
-    assert "memory-bank/progress/implemented-a.md:5: [backlink-x-Open] -> memory-bank/tasks/open.md (status: Open)" in rows[
-        0]
-    assert "[backlink-x-Open] -> memory-bank/plans/open-plan.html (status: Open)" in rows[1]
-    assert "hint:" in out and "commands run kb.status" in out, "A 档必须带 kb.status 翻状态提示"
-    for excluded in ("roadmap", "suggestions", "evolution", "implemented-h1", "pitfalls"):
-        assert excluded not in out, f"{excluded} 不得进 A 档"
-    assert "2 hard finding(s)" in err
-
-
 def test_status_drift_gate_b_badge_vs_meta(tmp_path: Path) -> None:
     """B 档硬拦: badge 文本 vs `<meta name="issue-status">` —— 不一致判红 (rc=1);
     badge 缺失不判违规 (文档化边界); 括注后缀「Open(常驻)」与 meta Open 一致;
@@ -867,35 +743,6 @@ def test_status_drift_gate_b_badge_vs_meta(tmp_path: Path) -> None:
     assert "b5-ascii-suffix.html" in rows[1] and "badge='Opened'" in rows[1]
     for tolerated in ("b2-equal", "b3-no-badge", "b4-paren"):
         assert tolerated not in out, f"{tolerated} 不得进 B 档 (缺失/一致/括注后缀都放行)"
-
-
-def test_status_drift_gate_c_never_fails(tmp_path: Path) -> None:
-    """C/D 清单永不拦退出码: 反链x In Progress 与完成断言都进清单, rc=0
-    (清单是人工复核面, 不是闸门; 退出码只听 A/B/异常三档)。
-    默认模式: 只打 summary 行, 不展开条目正文; --verbose 才逐条。"""
-    mb = _drift_fixture(tmp_path)
-    _drift_task(mb, "inflight.md", "In Progress")
-    _drift_task(mb, "open-word.md", "Open", body="- 已完成 首版\n")
-    (mb / "progress" / "implemented-c.md"
-    ).write_text("# gate C fixture\n\n## 已实现\n\n- task [t](../tasks/inflight.md)\n", encoding="utf-8")
-
-    # --- 默认模式: summary only, 条目名不出现在 C/D 段
-    rc, out, _err = _drift_run(tmp_path, mb)
-    assert rc == 0, "C/D 非空不红"
-    assert "no hard drift (tiers A/B/anomalies empty)" in out
-    assert "== C list: backlink x In Progress (manual review): 1 (--verbose to unfold per-row detail) ==" in out
-    assert "== D list: done-style words in Open/In Progress bodies (low confidence): 1 (--verbose to unfold per-row detail) ==" in out
-    # 具体条目正文不应在默认输出里
-    assert "[backlink-x-InProgress]" not in out, "默认模式 C 档不应展开条目"
-    assert "inflight.md" not in out, "默认模式 C 档不应出现文件名"
-    assert "[done-assert]" not in out, "默认模式 D 档不应展开条目"
-    assert "open-word.md" not in out, "默认模式 D 档不应出现文件名"
-
-    # --- --verbose 模式: 逐条展开
-    rc2, out2, _ = _drift_run(tmp_path, mb, extra_args=["--verbose"])
-    assert rc2 == 0
-    assert "[backlink-x-InProgress] -> memory-bank/tasks/inflight.md (status: In Progress)" in out2
-    assert "[done-assert]" in out2 and "open-word.md" in out2, "--verbose 应展开 D 档条目"
 
 
 def test_status_drift_gate_d_exemptions(tmp_path: Path) -> None:
@@ -952,32 +799,21 @@ def test_status_drift_gate_d_exemptions(tmp_path: Path) -> None:
 
 
 def test_status_drift_anomaly_on_unreadable_status(tmp_path: Path) -> None:
-    """异常档硬拦 (rc=1): 缺 `**Status:**` / 词表外值 / 反链目标缺失 / issue-status meta
-    缺失 → status-unreadable 行 (doc-status-meta.md: 状态层坏了必须响铃, 不许静默丢)。"""
+    """异常档硬拦 (rc=1): issue-status meta 缺失 / 词表外值 → status-unreadable 行
+    (doc-status-meta.md: 状态层坏了必须响铃, 不许静默丢; 2026-11-08 重构 W5: 原反链侧
+    的缺 Status/词表外/悬空目标异常随 progress 反链档退役, 本档只剩 badge 驱动的
+    issue-status meta 异常)。"""
     mb = _drift_fixture(tmp_path)
-    _drift_task(mb, "missing-status.md", None)
-    (mb / "tasks" / "bad-vocab.md").write_text("# bad vocab\n\n**Status:** Doing\n", encoding="utf-8")
     _drift_issue(mb, "nostatus.html", None)
-    (mb / "progress" / "implemented-anom.md").write_text(
-        "# anomaly fixture\n"
-        "\n"
-        "## 已实现\n"
-        "\n"
-        "- missing status [t](../tasks/missing-status.md)\n"
-        "- bad vocab [t](../tasks/bad-vocab.md)\n"
-        "- ghost [t](../tasks/ghost.md)\n",
-        encoding="utf-8",
-    )
+    _drift_issue(mb, "bad-vocab.html", "Doing")
 
     rc, out, _err = _drift_run(tmp_path, mb)
 
     assert rc == 1
-    rows = [line for line in out.split("\n") if "[status-unreadable]" in line]
-    assert len(rows) == 4, f"四类异常各一条: {rows}"
-    assert any("target missing: memory-bank/tasks/ghost.md" in row for row in rows), "悬空反链是异常, 不是崩溃"
-    assert any("-> memory-bank/tasks/missing-status.md (missing)" in row for row in rows)
-    assert any("-> memory-bank/tasks/bad-vocab.md (out-of-vocab: 'Doing')" in row for row in rows)
+    rows = [line for line in out.splitlines() if "[status-unreadable]" in line]
+    assert len(rows) == 2, f"两类异常各一条: {rows}"
     assert any("nostatus.html" in row and "issue-status meta missing" in row for row in rows)
+    assert any("bad-vocab.html" in row and "out-of-vocab: 'Doing'" in row for row in rows)
 
 
 def test_status_drift_guard_is_wired_into_kb_check_and_gate() -> None:

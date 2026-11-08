@@ -15,9 +15,9 @@ plan/report 原按文件自身 doc-added 圈面, 缺头部的手写新件整件�
 RM02-RM10 九件无状态计划事故; 文件名永远带创建 stamp, 判新旧不需要文件自己招供)。
 ⚠ 档案族命名只到天 (`YY-MM-DD`), 文件名分不出「当天冻结线之前/之后」—— 口径取
 **文件名日期 ≥ 冻结日**入检查面 (当天既有档案均合规; 这是日期精度下的可行判据)。
-⚠ 分不清新旧的面 (非日期前缀命名的存量 / **无时间戳的坑档与进展件**)
+⚠ 分不清新旧的面 (非日期前缀命名的存量 / **无时间戳的坑档**)
 跳过, 由既有守卫 (docmap 主键 / timekit / check_kb_structure 三行头与坑档三字段 / gen_active_recent)
-兜底 —— 坑档 (`pitfalls/<类>/<主题>.md`) 与进展件 (`progress/<主题>.md`) 命名不带时间戳,
+兜底 —— 坑档 (`pitfalls/<类>/<主题>.md`) 命名不带时间戳,
 **无法与存量区分**, 故不在冻结线扫描面内 (计划 §06「冻结线之后新建」的可判定边界)。
 
 用法 (从仓库根; `<skill-dir>` = 加载 memory-bank skill 时它实际所在的目录):
@@ -135,8 +135,9 @@ def validate_file(path: Path, family: str, label: str | None = None) -> list[str
         for field in ("Added", "Updated", "Summary", "Topics"):
             if field not in fields:
                 problems.append(f"头部区缺 `**{field}:**` 行")
-    elif family in ("pitfall", "progress"):
+    elif family == "pitfall":
         # 三行头 (# 标题 / > 摘要: / > 触发:) —— 与 check_kb_structure 同口径, 这里管新增面
+        # (progress 族已随 2026-11-08 重构删除, 不再有第二支三行头族)
         head = _head_region(text)
         if not re.search(r"^#\s+\S", head, re.MULTILINE):
             problems.append("缺三行头的 `# 标题`")
@@ -212,9 +213,10 @@ def check_new_faces(root: Path, mb: Path) -> tuple[list[str], int]:
                 continue
             checked += 1
             problems += [f"{rel_posix(path, root)}: {p}" for p in validate_file(path, "baseline", path.name)]
-    # ⚠ 坑档 (pitfalls/<类>/<主题>.md) 与进展件 (progress/<主题>.md) 命名**不带时间戳**,
+    # ⚠ 坑档 (pitfalls/<类>/<主题>.md) 命名**不带时间戳**,
     # 无法与存量区分 —— 不在冻结线扫描面 (计划 §06 可判定边界; 既有守卫 check_kb_structure
-    # 兜底三行头与坑档三字段)。它们的头部零 SLOT 由模板契约 + 族注册表同源守阵钉住。
+    # 兜底三行头与坑档三字段)。它的头部零 SLOT 由模板契约 + 族注册表同源守阵钉住。
+    # (progress/ 目录已随 2026-11-08 重构全灭, 原「进展件」扫描豁免随之退役。)
 
     tasks = mb / "tasks"
     if tasks.is_dir():

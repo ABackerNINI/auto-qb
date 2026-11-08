@@ -401,18 +401,18 @@ def test_schema_version_field_default_tracks_versioning():
 
 def test_docs_config_facts_match_code():
     """docs↔代码漂移守卫(issue 26-10-11-0032): configuration.md 的 log.format 示例与
-    models.LoggingConfig 缺省一致(存量漂移已实证); 两份文档的 hr_check 键数表述与
-    KNOWN_HR_CHECK_KEYS 同源(存量漂移 7/8/9 三处各说各话)。docs 侧此前无任何守卫。
+    models.LoggingConfig 缺省一致(存量漂移已实证)、hr_check 键数表述与
+    KNOWN_HR_CHECK_KEYS 同源。docs 侧此前无任何守卫。
+    (2026-11-08 重构: config-reference/keys.md 已删 —— 键面权威归 schema/ + validate_config,
+     其键数表述断言随之收缩。)
     """
     root = Path(__file__).resolve().parents[1]
     cfg_md = (root / "docs" / "configuration.md").read_text(encoding="utf-8")
-    keys_md = (root / "memory-bank" / "config-reference" / "keys.md").read_text(encoding="utf-8")
     from auto_qb.config.models import LoggingConfig
 
     assert LoggingConfig().format in cfg_md, "docs 示例的 log.format 与 models.LoggingConfig 缺省漂移"
     count = len(KNOWN_HR_CHECK_KEYS)
     assert f"({count} 键 = 7 个标量键 + `channel` + `sites`)" in cfg_md, "configuration.md 的 hr_check 键数表述漂移"
-    assert f"全局 {count} 键" in keys_md, "keys.md 的 hr_check 键数表述漂移"
 
 
 def test_schema_payload_is_complete():

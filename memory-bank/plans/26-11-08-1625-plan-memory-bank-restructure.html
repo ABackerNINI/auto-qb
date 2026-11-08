@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>memory-bank 大重构: 低价值层移除与架构分包</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="memory-bank-restructure">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-11-08-1625">
+<meta name="doc-updated" content="26-11-08-1938">
+<meta name="doc-refs" content="">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: memory-bank-restructure</div>
+<h1>memory-bank 大重构: 低价值层移除与架构分包</h1>
+<p class="lede">本篇只回答: memory-bank 怎么按「低价值一律移除、仅保留架构设计类文档」收缩到终态树 —— 哪些删、哪些蒸馏成什么、哪些机器退役、检索纪律怎么换轨。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-08-1625 · <b>doc-updated</b> 26-11-08-1938 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 26-11-08 会话: 用户发起(墓碑充斥 / activeContext·progress 职能混乱 / issues·_index 无用 / 漂移温床目录) → 两轮只读摸底(11 份改造史档案精读 + 全库实测审计, 数字见 §02) → grilling 三轮 17 问拍板 D1–D14(§06)
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<h3>为什么做</h3>
+<p>知识库经过 <a href="26-09-22-1248-memory-bank-dir-refactor-plan.html">09-22 目录化</a>(拆分+墓碑兼容层)、<a href="26-10-31-0534-plan-kb-cleanup-tiers.html">10-31 分级清理</a>(L0–L3, 删除能力就位但 0 件执行)、<a href="26-11-05-1049-plan-kb-doc-compress.html">11-05 8K 压缩</a>(已执行完, cap 债务 45→8)三轮改造, 体量仍是 <b>1,967 个 md / 10.1MB</b>。三轮的共同盲区: 只治「体量与过期」, 从未裁决「哪些文件根本不该存在」。用户 26-11-08 拍板哲学: <b>「代码本身就是最好的文档, 仅保留大的架构设计类文档; 低价值的一律移除; 漂移靠『没有可漂移的文件』根治, 不靠流程与机检」</b>。</p>
+
+<h3>终态(做到什么程度算成)</h3>
+<pre><code>活文档层   README.md(极简路由重写) · projectbrief.md(吸收 productContext+techContext)
+           architecture/(六包: overview / main-loop-queue / data-state / rule-engine / hr-groups / webui)
+           conventions/(7 件协议单点) · pitfalls/(313 件 7 子类 + 8 个 _index 唯一索引例外)
+会话层     active-context/(自 activeContext/ 更名, 90 切片 git mv) + kb.active
+档案层     tasks/ plans/ reports/ issues/ 原样冻结(约 1,200 件); 人的导航入口 kb.nav(保留)
+测试层     testing/(baseline.md + real-machine.md + baselines/ + real-baselines/)
+
+移除层     productContext.md techContext.md(蒸馏并入 projectbrief)
+           checklists/ config-reference/ modules/ rule-system/ systemPatterns/(蒸馏后) progress/(全灭)
+           archive/ · 9 个墓碑/指针桩 · 12+ 个 _index · 5 个 _archive
+机器退役   gen_issues_index / gen_docs_index / tasks 索引生成器 / kb.tier / kb.docmap
+           (kb.index 收缩为只服务 pitfalls; kb.nav 保留 — 数据自算零依赖 _index, D6)</code></pre>
+
+<h3>设计底线/不变量</h3>
+<ul>
+<li><b>git 历史即冷库(D2 总闸)</b>: 工作区不留墓碑、不留无人读的清单类生成物, 该删就删; 删除不再需要逐轮授权 —— 本计划即是授权。</li>
+<li><b>历史件正文零改动维持(D2)</b>: tasks/plans/reports/issues 正文一行不改; 删除导致的死链不修, 兜底 = grep 文件名 + <code>git log -- &lt;旧路径&gt;</code>。唯一例外口径维持 09-23 先例: <b>活文件</b>允许机械路径串修正。</li>
+<li><b>蒸馏三动作(11-05 B3 口径沿用)</b>: 外迁 attachments / 删死段 / 合并邻近件; 禁止压文案。</li>
+<li><b>冻结快照不动</b>: <code>testing/baselines/</code>、<code>real-baselines/</code>、各 attachments 证据链、「当时现场本身就是其职责」。</li>
+<li><b>红线不动</b>: <code>config.yml</code>、<code>auto-qb-data/</code>、其它 clone。</li>
+<li><b>不建流程(D14)</b>: 不加陈旧度机检、不加定期巡检 —— 移除本身就是治理。</li>
+</ul>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+<p>以下全部为 2026-11-08 实测(两轮只读审计 + <code>commands run doc.caps</code>):</p>
+<table>
+<tr><th>痛点</th><th>实测证据</th></tr>
+<tr><td>墓碑/指针桩</td><td>顶层 13 个 md 中 <b>9 个是「已迁至」</b>(8 墓碑 + activeContext.md 指针桩, 各 ≤1KB, 全部落款 09-22); 另 ~27 个活文件正文含「已迁至/已并入/已废弃」字样。体量小, 但每次跟历史引用跳进去都白走一趟。</td></tr>
+<tr><td>索引与归档清单</td><td><b>20 个 _index + 5 个 _archive 共 ~553KB</b>(issues 170K / baselines 277K / tasks 50K / plans 40K / reports 15K)。issues/_index 15.3KB 而 create-issue 协议明写「issue 靠时间戳前缀天然区分(查重)」—— 查重从不依赖它; 541 个 issue 的开放池无 agent 消费者。</td></tr>
+<tr><td>漂移温床目录</td><td>四目录合计 <b>216KB</b>: modules/ 58,999 · systemPatterns/ 61,587 · rule-system/ 45,331 · config-reference/ 50,218 字符。真孤儿: progress/evolution.md(最后改动 09-22)、suggestions.md(10-01)——<b>均不在 README 路由表</b>。_about.md×3 停在 09-22; productContext.md 内容基线停在 09-05。</td></tr>
+<tr><td>progress 职能混杂</td><td>12 个 md 装着 4 种职能: implemented-*×7(复述代码 = 漂移本体)、roadmap、known-bugs(与 issue 池双轨)、activecontext-distilled(会话史温层挂在 progress 名下)。</td></tr>
+<tr><td>假漂移说明</td><td>生成物 _index 的「最后修改日期早」多数是假信号(确定性函数, 主题件没变它就不变); config-reference/_index 停在 10-03 属此类。真漂移判定看内容与代码矛盾(11-03 评审 S5 曾入池 6 条)。</td></tr>
+<tr><td>cap 债务</td><td><code>doc.caps</code> 实测 8 项: 本计划移除层直接消掉 3 项(issues/_index、implemented-webui、config-reference/keys), 剩 5 项(real-machine.md 8,463、pitfalls×2、tasks 档案×2)在 W5 清零。</td></tr>
+<tr><td>体量分布</td><td>全库 1,967 md / 10.1MB, 其中 testing/baselines/ 独占 968 件 / 2.84MB(26.7%, 冻结快照, 不动)。</td></tr>
+</table>
+<p class="aside">检索现状: AGENTS.md 承诺「先索引、后 grep」, 但实际主消费路径是 kb.active(只回溯 11-03 蒸馏后 90 片 ≈ 5 天)+ grep; 索引层的承诺没有被执行兑现 —— 这是 D13 换轨的依据。</p>
+
+<h2><span class="no">§03</span>方案总览</h2>
+<h3>主线</h3>
+<p>五波次串行: <b>W1 蒸馏</b>(先把移除层的原料提炼成终态件)→ <b>W2 移除与更名</b>(git rm + git mv)→ <b>W3 机器退役</b>(生成器/命令/守卫收缩)→ <b>W4 口径重写</b>(AGENTS.md / README / doc-forms / SKILL)→ <b>W5 sweep 与清零</b>(活文件死链 + cap 债务 + 全量验收)。W1 必须先行(W2 删的是 W1 的原料); W3/W4 都必须在 W2 之后(守卫不退役, 删完天天红)。</p>
+<h3>落点</h3>
+<ul>
+<li><b>蒸馏映射</b>: systemPatterns/ 八件(61,587B)+ rule-system/ 五件(45,331B)→ <code>architecture/</code> 六包(≤8K/件, 允许合并到 4 件; 撑不过 2K 的并入 overview, D7)。productContext.md(8,901B)+ techContext.md(6,025B)→ <code>projectbrief.md</code>(≤8K, D8)。蒸馏物落 <b>新名 architecture/</b>, 不复用 systemPatterns.md 墓碑名(D1 拍板, 历史件引用死链按 D2 兜底)。</li>
+<li><b>progress/ 全灭(D9)</b>: implemented-*×7 删(演进叙事由 tasks/plans 原始件承载); known-bugs.md 未修项逐条 <code>kb.new issue</code> 入池后删; roadmap.md 删(职责归 issue/plan, D1); evolution/suggestions/distilled 删。</li>
+<li><b>权威归位(D10)</b>: 配置键权威 = <code>src/auto_qb/config/schema/</code> + <code>validate_config</code>(config-reference/ 删); 找代码位置 = grep/IDE(modules/ 删); 真机走查 = testing/real-machine.md 自带规程(checklists/ 删)。</li>
+<li><b>索引例外面(D5)</b>: pitfalls 8 个 _index 保留 —— grep 需要「已知关键词」, 「改码前扫陷阱」的本质是扫到不知道要 grep 的坑, 25 行触发词表是该动作唯一载体; 其余 12+ 个 _index 与 5 个 _archive 删。</li>
+<li><b>检索纪律换轨(D13)</b>: 「先索引、后 grep」→ <b>「kb.active(最近)→ README 极简路由 → grep 兜底」</b>; AGENTS.md 同步行删除, README 路由表重写为十几行。</li>
+</ul>
+<h3>分期表</h3>
+<p>见 §04。</p>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+<h3>分期表</h3>
+<table>
+<tr><th>波次</th><th>内容</th><th>验收判据</th></tr>
+<tr><td><b>W1</b> 蒸馏合并</td><td>architecture/ 六包 + projectbrief.md 吸收两件; 原件暂不删</td><td>每件 ≤8K; <code>kb.check</code> 绿; 内容覆盖: 逐包核对原件标题无遗漏去向(蒸馏三动作)</td></tr>
+<tr><td><b>W2</b> 移除与更名</td><td>git rm 移除层(§01 终态树); known-bugs/roadmap 无主项先入池; <code>git mv</code> activeContext/ → active-context/(90 切片)</td><td>终态树与 <code>ls</code> 吻合; <code>git status</code> 只含本计划内路径; 入池件有 issue 编号留痕</td></tr>
+<tr><td><b>W3</b> 机器退役</td><td>gen_issues_index / gen_docs_index / gen_tasks_index 调用点退役; kb.tier / kb.docmap 退役; kb.index 收缩 pitfalls; check_kb_structure STUB 段删; check_doc_links 存根豁免撤; gen_all.py 收缩; test_memory_bank_*.py 收缩</td><td>全库 grep 无死调用点; <code>test.full</code> 全绿; 注意 gen_doc_map.check_claim_chain 闸门判据仍被 nav_data 对齐引用 —— 动手前先 grep 调用面</td></tr>
+<tr><td><b>W4</b> 口径重写</td><td>AGENTS.md(检索纪律行/路由表/收尾节引用)、memory-bank/README.md 极简路由、conventions/doc-forms.md(双视图/退役命令行删)、memory-bank + create-issue 双 SKILL.md、.github/instructions/memory-bank.instructions.md(09-22 起遗留, 仍在教旧 8 文件结构 —— 本轮一并了断)</td><td><code>doc.caps</code> AGENTS.md ≤8,000; <code>doc.drift</code> 绿</td></tr>
+<tr><td><b>W5</b> sweep 与清零</td><td>15 个活文件的墓碑引用 sweep; 其余活文件死链 sweep; 5 项 cap 债务清零(real-machine 8,463 / pitfalls backend platform-fs 8,452 / pitfalls testing tmpdir 8,484 / tasks 档案×2 —— tasks 两件按档案族外迁处置)</td><td><code>check_doc_links</code> 全绿; <code>doc.caps --strict</code> rc=0; <code>test.full</code> 实测数字 <code>kb.new baseline</code> 新切片</td></tr>
+</table>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p><b>无待拍板项</b> —— 全部决策已在 grilling 三轮拍完(§06 D1–D14)。</p>
+<p>执行期判断点(非拍板, 按既定默认走):</p>
+<ul>
+<li>architecture/ 最终包数 4–6 件浮动: 蒸馏时哪包撑不过 2K 就并进 overview(D7 默认)。</li>
+<li>known-bugs/roadmap 逐条「有无主」判定: 已有 plan/task 承接的直接删, 无主的 <code>kb.new issue</code> 入池(D9 默认)。</li>
+<li>gen_doc_map.check_claim_chain 闸门归属: 先 grep 调用面再决定随 kb.docmap 退役还是保留为守卫(W3 默认)。</li>
+</ul>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<p>全部拍板于 2026-11-08, grilling 三轮(格式: 问题 → 推荐 → 用户裁决):</p>
+<table>
+<tr><th>#</th><th>结论</th></tr>
+<tr><td>D1</td><td>新计划<b>独立成件</b>, 不吸收 8K 压缩计划 —— 用户指正「8K 计划似乎已完成」, 实测确认(git 链 8dedcd92→fef982ee, 债务 45→8), 上一轮「整份 Open」情报过时。</td></tr>
+<tr><td>D2</td><td><b>删除总闸</b>: git 历史即冷库, 工作区不留墓碑与无人读的清单类生成物; 推翻「引用路径永不失效」与「L3 purge 永不执行(零删除传统)」两条旧默认; 历史件正文零改动维持, 死链 grep + <code>git log -- 路径</code> 兜底。</td></tr>
+<tr><td>D3</td><td>顶层 <b>9 个「已迁至」文件全删</b>(8 墓碑 + activeContext.md 指针桩)+ 15 个活文件引用 sweep + STUB 守卫常量退役; 历史件死链不修。接受唯一实际退化: 历史链接从「跳墓碑再一跳」变成「grep 才能到」。</td></tr>
+<tr><td>D4</td><td><b>issues/_index.md + 5 个 _archive.md 全删</b>; 开放池对 agent 变 write-only 接受(无主 open issue 无人看见是已知代价); 排期锚不受影响(README 直连)。</td></tr>
+<tr><td>D5</td><td><b>pitfalls 8 个 _index 唯一例外保留</b>(触发词聚合 = 改码前扫陷阱载体, grep 替代不了「扫到不知道的坑」); 其余 _index 删; kb.index 收缩为只服务 pitfalls。</td></tr>
+<tr><td>D6</td><td><b>kb.nav 保留</b> —— 用户挑战后实测撤回退役: nav_data.py 自算数据(rglob 扫 meta 头), 与 _index 生态零耦合; 它是四工位档案层(~1,200 件)的人的导航入口。</td></tr>
+<tr><td>D7</td><td><b>architecture/ 分包六件起步</b>(overview / main-loop-queue / data-state / rule-engine / hr-groups / webui), 各 ≤8K, 允许蒸馏时合并(撑不过 2K 并入 overview); 不复用 systemPatterns.md 名。</td></tr>
+<tr><td>D8</td><td><b>projectbrief.md 吸收</b> productContext + techContext 蒸馏物, ≤8K; 六文件 Memory Bank 惯例名仅存 projectbrief。</td></tr>
+<tr><td>D9</td><td><b>progress/ 全灭</b>: implemented-*×7 删; known-bugs 未修项 issue 化后删; roadmap 删(职责已有 issue/plan); evolution/suggestions/distilled 删。</td></tr>
+<tr><td>D10</td><td><b>checklists/ config-reference/ modules/ archive/ 移除</b>; 权威归位: 配置键 → schema/ + validate_config, 代码定位 → grep/IDE。</td></tr>
+<tr><td>D11</td><td><b>activeContext/ → active-context/ 更名</b>(90 切片 git mv; kb.active/守卫/skill 内部路径同步)。</td></tr>
+<tr><td>D12</td><td><b>机器退役清单</b>: gen_issues_index / gen_docs_index / gen_tasks_index / kb.tier / kb.docmap; test_memory_bank_*.py 与双 SKILL 收缩; kb.index、kb.nav、kb.new/status/bump/wrap/active/baseline 保留。</td></tr>
+<tr><td>D13</td><td><b>检索纪律换轨</b>: 「kb.active(最近)→ README 极简路由 → grep 兜底」; AGENTS.md「先索引、后 grep」行删除。</td></tr>
+<tr><td>D14</td><td><b>漂移治理 = 移除, 不是流程</b>: 不建陈旧度机检、不建巡检; conventions/(协议单点)与 pitfalls/(事故驱动)过刀保留。</td></tr>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+<tr><th>#</th><th>风险</th><th>触发条件</th><th>处置</th></tr>
+<tr><td>R1</td><td>历史引用大面积变死(541 issue + 343 task + 245 plan 里的 modules/systemPatterns/config-reference 等路径)</td><td>W2 执行后即刻</td><td>已接受(D2)。日常动作 = grep 文件名; kb.nav 对这些 ref 显示 dead 属预期, 不修历史件。</td></tr>
+<tr><td>R2</td><td>蒸馏丢信息(106KB → ~40KB)</td><td>W1 逐包蒸馏时</td><td>只允许外迁/删死段/合并, 禁止压文案; 每包落「细节出处」指针指向原计划/报告; 原件 git 可考。</td></tr>
+<tr><td>R3</td><td>agent 肌肉记忆残留(路由改了仍去读被删目录)</td><td>W4 发布后</td><td>AGENTS.md/README 同步重写; 墓碑已删不会「接住」旧路由 —— grep 兜底立即暴露, 属可接受摩擦。</td></tr>
+<tr><td>R4</td><td>机器退役不彻底留半死调用</td><td>W3 收尾</td><td>验收 = 全库 grep 无 gen_docs_index/kb.tier/kb.docmap 调用点 + test.full 绿; gen_doc_map.check_claim_chain 闸门先 grep 调用面再动手。</td></tr>
+<tr><td>R5</td><td>active-context 更名撞历史引用(旧切片路径大量出现在 tasks 里)</td><td>W2 执行后</td><td>同 R1 已接受; kb.wrap/kb.active/守卫的内部路径在 W3 同步改, 切片文件名格式不变。</td></tr>
+<tr><td>R6</td><td>cap 债务清零失败(real-machine.md 8,463 已是精简后二次超标)</td><td>W5</td><td>按触顶固定动作: 外迁 attachments → 删死段 → 合并; 仍超则个案豁免三条件(11-05 B0 口径)逐件请拍板。</td></tr>
+<tr><td>R7</td><td>known-bugs/roadmap 入池误判(把已有 plan/task 承接的项重复入池)</td><td>W2 入池前</td><td>逐条先 grep plans/ 与 tasks/ 文件名(topic slug 在命名里)+ <code>kb.nav</code> 台账页核对; 已有承接的直接删, 不重复入池。</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-08-1625</span> 初版。来源: 26-11-08 会话 grilling 三轮(17 问拍板 D1–D14)+ 两轮只读摸底(11 份改造史档案精读 + 全库实测)。要点: 删除总闸「git 历史即冷库」; 移除层四大目录 + progress 全灭 + 9 墓碑 + 17 索引/归档清单; 蒸馏产出 architecture/ 六包与 projectbrief 合并件; 机器退役五组件(kb.nav 经挑战后保留); 检索纪律换轨三步; W1–W5 波次。</li>
+</ul>
+
+</div>
+</body>
+</html>

@@ -20,7 +20,7 @@ tmp-analysis/nav-design/ 三套原型已验证的数据装配逻辑, 计划 26-1
                守卫是绿的 (kb.check 有归档回退), 图会有一半是悬空边。
      ext      : {库外件路径: [声明了它的台账 link]} —— 库外件 (坑档 / 基线 / 切片) 的 Ref 反向边。
                 只扫**已被台账件引用到的**库外件 (有界集合, 实测 ~320 个), 不扩 collect() 的扫描面:
-                那是 kb.docmap / kb.check / 索引生成共同消费的单点, 动它等于改「台账件」的定义。
+                那是 kb.check / 索引生成共同消费的单点, 动它等于改「台账件」的定义。
 输出 {"stamp", "items", "topics", "counts", "ext"} 单个 dict, 可直接 json.dumps; stamp 取数据自带的
 最新 doc-updated / issue-stamp (混格式按字典序取最大, 前缀日期 < 带时分, 同日带时分者胜),
 **stamp 不依赖当前时钟**(纪律同 gen_doc_map); 唯一读时钟的是年龄提示字段, 它只是显示辅助,
@@ -75,7 +75,7 @@ def _enrich_item(item: dict, mb: Path, now: datetime) -> None:
     meta: dict[str, str] = {}
     if path.suffix == ".html":
         # meta 值是 HTML 属性原文 (已转义): 数据层先反转义, 前端 esc() 只转义一次 —— 否则标题/
-        # 摘要里的 "->" 会显示成 "-&gt;" (2026-10-31 用户报; 同 gen_issues_index.meta 的口径)
+        # 摘要里的 "->" 会显示成 "-&gt;" (2026-10-31 用户报; 数据层反转义口径)
         meta = {k: html.unescape(v) for k, v in META_RE.findall(path.read_text(encoding="utf-8"))}
     if item["form"] == "issue":
         item["issue-type"] = meta.get("issue-type", "")

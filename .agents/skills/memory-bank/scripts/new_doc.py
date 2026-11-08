@@ -15,9 +15,10 @@
   `**Refs:**` 行 (md) —— 只动元数据行, 合并为英文逗号列表, 幂等; 杀「单向链闸门红」整类问题。
   目标必须存在且在 memory-bank 内 (fail-fast; 生成物 `_` 前缀文件不作目标)
 - `slice` 族不由本命令建 (拍板: 切片统一由 `kb.wrap` 收尾处理) —— 传了即拒绝并指路
-- **P3 二期四族** (计划 §04): pitfall (`--class` 7 类枚举 + `--triggers`, 头部零 SLOT 契约 ——
+- **P3 二期族** (计划 §04): pitfall (`--class` 7 类枚举 + `--triggers`, 头部零 SLOT 契约 ——
   触发词是路由判断不可派生, 走参数, 裁定 A7 参数分支) / report (出厂即 Done 终态) /
-  baseline (`--total` 由 test.full 实测誊写, 裁定 A4 —— 命令不编造数字) / progress (三行头)
+  baseline (`--total` 由 test.full 实测誊写, 裁定 A4 —— 命令不编造数字)
+  (2026-11-08 重构 W3: progress 族注册已删 —— progress/ 目录全灭 (D9), `kb.new progress` 不再合法)
 - **issue 族** (计划 26-11-07-0549 W3, D4 翻案收编 —— new_issue.py 退役): slug 为位置参数,
   `--type`/`--summary` 必填, `--tier` (默认随 `--type` 经 `TIER_BY_TYPE` 推导) / `--module` /
   `--reporter` / `--topic` 可选 (topic 默认 = slug, doc-topic 主键)。模板按档位选
@@ -33,7 +34,6 @@
     python <skill-dir>/scripts/new_doc.py report --title ".." --topic <kebab> [--refs p1,p2]
     python <skill-dir>/scripts/new_doc.py pitfall --class <7 类之一> --title ".." --topic <slug> --triggers "词, 词"
     python <skill-dir>/scripts/new_doc.py baseline --title ".." --topic <slug> --total "3498 passed + 4 skipped(根)"
-    python <skill-dir>/scripts/new_doc.py progress --title ".." --topic <slug> --triggers "词, 词"
     python <skill-dir>/scripts/new_doc.py --root <dir> --mb-dir <dir> <family> ...   # 覆盖探测
 退出码: 0 成功 / 1 拒绝或校验失败 (原因与下一步打在输出里)
 """
@@ -59,7 +59,6 @@ from _common import (  # noqa: E402
     TIER_BY_TYPE,
     TIERS,
     TYPES,
-    StatusVocabularyError,
     find_root,
     html_meta,
     html_set_refs,
@@ -220,7 +219,7 @@ def _print_remaining(family: str, slots: list[str], tier: str = "") -> None:
         judged = len(slots) + 1
         print(f"剩余人工 {judged} 项(判断 {judged} · 条件 0 · 机械 0)")
         print(f"【判断】按档位填正文 (模板零 SLOT): {ISSUE_NEXT_STEP[tier]}")
-    else:  # P3 二期四族: pitfall / report / baseline / progress (计划 §04, §5.3 口径)
+    else:  # P3 二期族: pitfall / report / baseline (计划 §04, §5.3 口径)
         hints = {
             "pitfall": "条目按「触发/判别/处置」三必填写 (守阵/复发选填); "
                        "触发词已由 --triggers 填入三行头 (裁定 A7 参数分支, 头部零 SLOT)",
@@ -229,7 +228,6 @@ def _print_remaining(family: str, slots: list[str], tier: str = "") -> None:
             "baseline":
                 "--total 已由 test.full 实测誊写 (裁定 A4, 命令不编造数字); "
                 "裸数字只写基线切片这一处 (口径与差值口径见 testing/baseline.md, 不重复口径样板)",
-            "progress": "迁出蒸馏的落点件; 分节与详略自定, 骨架段可裁可增",
         }
         print("剩余人工 1 项(判断 1 · 条件 0 · 机械 0)")
         print(f"【判断】SLOT: {slot_text} (一次编辑填完)")
@@ -242,7 +240,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "family",
         choices=sorted(FAMILIES),
-        help="文档族 (plan / task / issue / pitfall / report / baseline / progress; slice 走 kb.wrap)",
+        help="文档族 (plan / task / issue / pitfall / report / baseline; slice 走 kb.wrap)",
     )
     parser.add_argument(
         "slug",
@@ -298,7 +296,7 @@ def main(argv: list[str] | None = None) -> int:
         "--triggers",
         default="",
         help="触发词 (英文逗号分隔) —— 三行头族的 `> 触发:` 行: 路由判断不可派生, 走参数 "
-        "(裁定 A7 参数分支; 头部区零 SLOT 契约); 仅 pitfall / progress 族",
+        "(裁定 A7 参数分支; 头部区零 SLOT 契约); 仅 pitfall 族",
     )
     parser.add_argument(
         "--total",
@@ -374,8 +372,6 @@ def main(argv: list[str] | None = None) -> int:
                 "pitfall 族必须带 --triggers (触发词是路由判断不可派生, 走参数 —— 裁定 A7 参数分支; "
                 "头部区零 SLOT 契约: 三行头的 `> 触发:` 行由命令填, 不留 SLOT)"
             )
-    if family == "progress" and not args.triggers:
-        return _fail("progress 族必须带 --triggers (三行头必填; 触发词是路由判断不可派生, 裁定 A7 参数分支)")
     if family == "baseline" and not args.total:
         return _fail(
             'baseline 族必须带 --total (test.full 实测输出誊写, 如 "3498 passed + 4 skipped(根)"; '
@@ -444,9 +440,8 @@ def main(argv: list[str] | None = None) -> int:
             "TITLE": args.title,
             "TIME": moment.strftime("%Y-%m-%d %H:%M"),  # `> 基线时间:` 排序键 (回退用文件名前缀)
         }
-    else:  # progress
-        filename = f"{args.topic}.md"
-        values = {"TITLE": args.title, "TRIGGERS": args.triggers}
+    else:  # pragma: no cover - FAMILIES 增族时同步这里 (progress 族已随 2026-11-08 重构删除)
+        return _fail(f"未知族: {family}")
 
     # --- 派生不变量守卫: 拼出的文件名必须合族命名正则 (单点 `_common` 与 check_doc_templates
     # 同源)。SLUG_RE/领域枚举是主闸, 这里防的是「建件端正则与守卫端正则各自演化」的失配 ——
@@ -498,15 +493,12 @@ def main(argv: list[str] | None = None) -> int:
         for line in chained:
             print(f"已双向补链 {line}")
 
-    # --- 建后重建该族索引 (与 kb.index 同一 build 实现)
+    # --- 建后重建该族索引 (2026-11-08 重构 W3: 仅 pitfall 族仍有索引面 = gen_kb_index;
+    #     plan/task/issue/report/baseline 的 index_script 已让位为空串 → 空表, 不再重建)
     try:
         rebuilt = _rebuild_index(spec, root, mb)
-    except StatusVocabularyError as exc:
-        sys.stderr.write(f"[STOP] 文件已建, 但索引重建失败 (词表问题必须先修): {exc}\n"
-                         "处置后运行 commands run kb.index 重建索引\n")
-        return 1
     except ValueError as exc:
-        # gen_issues_index 对库内既有的坏命名/坏状态抛 ValueError —— 文件已建, 链不能断在静默
+        # 防御: 生成器对库内异常数据抛 ValueError —— 文件已建, 失败不能断在静默
         sys.stderr.write(f"[STOP] 文件已建, 但索引重建失败: {exc}\n"
                          "处置后运行 commands run kb.index 重建索引\n")
         return 1

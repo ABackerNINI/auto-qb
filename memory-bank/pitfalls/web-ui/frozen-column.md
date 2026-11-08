@@ -1,7 +1,6 @@
 # 首列吸左固定(冻结列)在本仓表格上的十处非显然约束
 
 > 摘要: 首列吸左(冻结列)在本仓 `.group-row` 表格上的十处非显然约束 —— 表头反向位移、首格不透明合成、边界发丝线、stretch、按面重锚、search-hit 渐层镜像、变体两层结构、过渡同源、状态底叠加; 完整处置步骤与实测证据见 [attachments/frozen-column-constraints.md](attachments/frozen-column-constraints.md)。
-> 等级: L0
 > 触发: 首列吸左, 名称列后阴影, 随机出现阴影, 黑块, box-shadow spread 负值, 落影随行高变, 冻结列, frozen column, sticky 首格, 横向滚动, 表头横向同步, transform 桥接, 首格不透明, 半透明状态底, 双重上色, 左侧色条消失, 过渡中间值, 皮肤 CSS 700 行上限, 残根, 尾字粘连, 状态列被盖住, 吸左边界, is-hscrolled, 边界落影, 徽标漏出, chip 换行, align-items center, align-self stretch, 首格高度, 必现列背景不一致, 异色竖带, 按面重锚, 承光底, dt05-list, 行容器, 外壳类名空转, search-hit 渐层丢失, dtNN-wrap, 动态拼接选择器, 必显列悬停闪竖带, 滑过闪一下又恢复一致, 悬停时首格与其它列不同色, 首格无过渡, transition 不同源, 行板 160ms 首格瞬切, 过渡窗口逐帧采样, 选中行必显列异色竖带, 选中的行名称列与其它列不同色, 半透明状态底替换行底, background 简写换掉行底, 行板承光层变页底, 行底丢失, 合成基准分家
 
 **Refs:** memory-bank/tasks/26-10-06-webui-frozen-first-column.md,memory-bank/tasks/26-10-11-webui-frozen-col-boundary.md,memory-bank/reports/26-10-14-0136-report-webui-detail-table-rebuild-review.html

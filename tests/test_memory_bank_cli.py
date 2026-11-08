@@ -2,8 +2,7 @@
 
 守什么: 知识库的"跨会话连续性"完全依赖 `memory-bank/tasks/` 与入口文件的**结构化约定** —
 一旦索引与档案脱钩 (登记了没文件 / 有文件没登记)、状态分区与档案 `Status` 不一致、
-必备章节缺失, 下次会话就无法从 `tasks/` 续作; 一旦会话纪要回流进 `activeContext.md`,
-该文件会重新膨胀成流水账 (2026-09-17 复盘的真实故障)。这些判定都是纯静态的, 用测试守住成本极低。
+必备章节缺失, 下次会话就无法从 `tasks/` 续作; 同专题重复建档会让续作难以接续 (2026-11-08 重构: tasks 索引与顶层易变件已删, 相关守卫随宿主收缩)。这些判定都是纯静态的, 用测试守住成本极低。
 
 2026-09-18 起档案命名由 `TASKnnn-<slug>.md` 改为 `YY-MM-DD-<slug>.md`(全局序号在 9 个并行
 worktree 下必然撞号)。本文件在兼容期内同时接受两种命名, 主键一律取"去掉编号 / 日期前缀后的 slug"。
@@ -54,13 +53,14 @@ kb.status / kb.bump 与 D4 反向补链 (2026-10-17 P2, 计划 26-10-17-0527; �
 memory-bank skill 的 `scripts/flip_status.py` / `bump_doc.py`, **进程内 import**):
 
 - test_flip_status_flips_bumps_and_fails_fast: 计划/档案翻转 (doc-status / **Status:**) + 自动
-  抬 doc-updated / Updated + 重建索引; issue 翻转 (2026-11-07 W4 收编, 计划 26-11-07-0549 D5)
-  徽标+meta+日志行一次改; 同状态翻转幂等 (不抬戳不重建不追加); 词表外值/切片/未知载体/缺状态行
+  抬 doc-updated / Updated; issue 翻转 (2026-11-07 W4 收编, 计划 26-11-07-0549 D5)
+  徽标+meta+日志行一次改; 同状态翻转幂等 (不抬戳不追加); 词表外值/切片/未知载体/缺状态行
   全 fail-fast; 终态带条件提醒 (切片迁出 / Summary 收口); 输出含「机械 0」
+  (2026-11-08 重构 W3: 翻转后重建索引的断言随索引生态退役删除 —— kb.status 不再重建任何索引)
 - test_flip_status_issue_branch_badge_meta_and_log: issue 分支专项 (W4) —— 徽标+meta 双改
   (类型徽标零触碰) / 状态变更日志追加一行 (缩进对齐已有行, 已有行零触碰) / 幂等同状态零变化 /
   词表外值与缺徽标·缺日志节 fail-fast 不落半文件 / 终态提醒三态 (Done 修法 / Dropped 理由 /
-  Superseded 指向) / 索引按新状态分区 / 红绿双验 (R4): 单改徽标或单改 meta 的病态夹具被
+  Superseded 指向) / 红绿双验 (R4): 单改徽标或单改 meta 的病态夹具被
   check_status_drift tier B 判红 —— 证明实现两处都动、漏一不可
 - test_bump_doc_appends_changelog_and_fails_fast: 计划 R 行追加 (编号 = 段内最大+1, 已有行
   零触碰, note 自动 HTML 转义) + doc-updated 抬; 档案抬 Updated / 切片抬最后活动; 无变更
@@ -77,12 +77,12 @@ memory-bank skill 的 `scripts/flip_status.py` / `bump_doc.py`, **进程内 impo
 实现 = `_common.FAMILIES` 扩行 + `templates/` 四件 + new_doc 分派 + check_doc_templates
 扩扫描面, 进程内 import; 验收: 计划 §07 P3 行):
 
-- test_new_doc_creates_phase2_families: 四族真建冒烟 (tmp 夹具) —— 坑档 `--class` 7 类 +
+- test_new_doc_creates_phase2_families: 三族真建冒烟 (tmp 夹具) —— 坑档 `--class` 7 类 +
   `--triggers`(A7 参数分支, 头部零 SLOT)/ 报告出厂 Done / 基线 `--total` 誊写 + 基线时间
-  排序键 / 进展件三行头; 建后残留 SLOT 判红、填完判绿; 扫描面恰 2 件 (report+baseline);
-  stdout 含「机械 0」收录断言
-- test_new_doc_phase2_family_params_fail_fast: 四族参数校验 —— 坑档缺/坏 `--class`、缺
-  `--triggers`; 进展件缺 `--triggers`; 基线缺 `--total` 全 fail-fast (之后假定输入合法)
+  排序键; 建后残留 SLOT 判红、填完判绿; 扫描面恰 2 件 (report+baseline);
+  stdout 含「机械 0」收录断言 (2026-11-08 重构 W3: progress 族退役, 冒烟随之收缩)
+- test_new_doc_phase2_family_params_fail_fast: 族参数校验 —— 坑档缺/坏 `--class`、缺
+  `--triggers`; 基线缺 `--total` 全 fail-fast (之后假定输入合法)
 - test_pitfall_refs_chain_bidirectionally: D4 反向认领对坑档形态 (md 锚点链的三行头
   分支) —— 坑档正向 `**Refs:**` + 档案目标反向声明, 幂等
 - test_checker_report_mutations_judged_red: 报告族红绿双验 —— 删 doc-status / 词表外值
@@ -101,9 +101,10 @@ new_issue.py 退役, 进程内 import):
 - test_new_doc_creates_issue_family_end_to_end: `kb.new issue` 端到端 (tmp 夹具) ——
   light (docs→light 默认档) / standard (--tier 覆盖与 bug→standard 推导) 各建一件: 命名
   (ISSUE_FILE_RE 完整文件名) / meta (slug/type/tier/status=Open/topic 默认 slug 与显式覆盖) /
-  badge 机读形态 / 索引+归档同批重建; 幂等拒绝 (冻结 timekit.now); --refs 双向补链;
+  badge 机读形态 (2026-11-08 重构 W3: issues 索引已退役, 建后不再重建); 幂等拒绝 (冻结
+  timekit.now); --refs 双向补链;
   末尾 kb.new → kb.status 全链一步 (评审 RB2 1a): 对真建出的 issue 翻 In Progress, 断言
-  badge / meta / 状态变更日志行 / 索引分区四处
+  badge / meta / 状态变更日志行 三处
 - test_new_doc_issue_params_fail_fast: issue 族参数校验 —— 枚举外 --type / 缺 --type /
   缺 --summary / 缺 slug / 坏 slug / 坏 --topic / 其余族传位置 slug 全 fail-fast;
   不提供 --status (出厂恒 Open, 翻状态走 kb.status) 由 argparse 拒未知参数钉住
@@ -127,49 +128,17 @@ new_issue.py 退役, 进程内 import):
 常驻锚防流水守卫 (检查器 memory-bank skill 的 `scripts/check_mutation_anchor.py`, 2026-10-31 加):
 
 
-kb.tier 分级清理四动作 (2026-10-31 R0, 计划 26-10-31-0534; 实现在 memory-bank skill 的
-`scripts/kb_tier.py`, **进程内 import**, tmp 夹具不碰真实 memory-bank/):
-
-- test_kb_tier_set_marks_and_fails_fast: set 插入为头部区第 4 行 (前三行零触碰) / 已有等
-  级行原地改值 / 同值幂等不写盘 / 非法等级与不存在文件与生成物·附件·库外路径 fail-fast /
-  头部区不足 4 行插在头部区末尾 / CRLF 文件插入行保持 \r\n
-- test_kb_tier_list_separates_unmarked: list 列出该等级全部文件 (行数/字符数); 未打标件
-  (无 `> 等级:` 行) 区分呈现 —— L0 视图全列待定件, 其它级只给一行汇总; 非法等级拒绝
-- test_kb_tier_migrate_dry_run_default_and_apply: migrate 默认 dry-run 零写盘; --apply 后
-  正文段逐字节搬 attachments/ (行数与 
- 计数与原文一致, 字节差只允许来自相对链接的
-  `../` 前缀; scheme/根相对/锚点链接不动), 主档留 `> 已外迁:` 指针且摘要判据单点仍在;
-  CRLF 文件整段搬后行尾形态不变; 迁后重跑按指针幂等跳过
-- test_kb_tier_migrate_skips_already_migrated: migrate 幂等闸 —— 主档已带 `> 已外迁:` 指针
-  的文件一律跳过, 即使残留 `## ` 段也不二次外迁、不产生第二份附件、dry-run/--apply 都零写盘
-  (R1 实测: git/ 已迁档会被旧逻辑重复处理)
-- test_kb_tier_purge_gates_all_or_nothing: purge 默认 dry-run 不删; 非 L3 拒绝; 三闸门逐
-  条触发 —— ①无守阵且头部无「无需守阵」②全仓反向引用未清零 ③头部缺 `> 观察通过:` 标
-  记 —— 任一不过全体拒绝 (全或无, 删零个) 且 rc=1; 三闸门全过 + --apply 才真删
-- test_kb_tier_is_registered: kb.tier 已收录进 .commands/kb (收录协议 when/note 必填;
-  与 test_kb_status_and_bump_are_registered 同旨)
-
-CLOSED_KEEP=60 索引出口 (计划 26-10-31-0534 R3/D5/D14, 2026-10-31 加; tasks 主索引的已完结区只留
-最近 60 条, 全量清单另落 `tasks/attachments/_archive.md`, 形态与 issues 侧同款; plans 侧守阵在 test_docs_forms.py):
-
-- test_closed_keep_trims_done_to_60_and_archives_full: Done 62 件 -> 主索引只留最近 60 条 + 隐藏提示; 归档全量(只列 slug 与标题, 不带摘要防链接位移)、链接带 ../ 指回原文; 在办分区不受影响
-- test_closed_keep_boundary_at_60: 第 60/61 条边界 —— 恰 60 条不裁无提示, 第 61 条起裁 1 条出提示
-- test_closed_keep_never_trims_inflight_and_dropped_also_trims: 在办条数再多不裁(只治完结堆积); Dropped 同属完结区一并裁
-- test_closed_keep_archive_same_batch_wiring: rebuild_index(kb.status/kb.bump 落点)主索引与归档同批落盘; 归档落 `tasks/attachments/_archive.md` 且故意不叫 `_index.md`(不套 index-auto cap)
-- test_issues_index_closed_keep_trims_and_archives_full: issues 侧裁剪行为守阵 (2026-11-07 评审 RB2 补,
-  原 test_issues_closed_keep_behavior_unchanged 的行为网接管, 直接钉合并后的单点模块) —— Done 61 件:
-  主索引 Done 区留最近 60 + 隐藏提示、最老一件出索引; 归档全量含 61
-- (2026-11-07 W1 起原 3 条跨 skill 钉住测试处置 —— create-issue 脚本并入 memory-bank skill
-  (计划 26-11-07-0549), 两类去向分开记: **等值装置退役** 2 条 = test_closed_keep_constants_match_issues /
-  test_issues_index_budget_matches_cap_policy (常量与 gen_issues_index 已同源单点, 跨副本等值断言没了
-  对象); **行为网去向** 1 条 = test_issues_closed_keep_behavior_unchanged, 其裁剪/隐藏提示/归档全量
-  断言由上面的 test_issues_index_closed_keep_trims_and_archives_full 接管, 不是删网)
+2026-11-08 重构 W3 机器退役 (计划 26-11-08-1625 D5/D12) 的删测注记 —— 以下守阵随宿主退役,
+无行为可守, 整组删除 (非移入他处):
+- 分级清理四动作 6 条 (脚本本体与 .commands/kb 的对应条目已删; pitfalls 头部 `> 等级:` 行的数据清理归 T8)
+- CLOSED_KEEP 索引出口 5 条 (tasks/plans/reports/issues 的 `_index.md` 与 `_archive.md` 已随
+  低价值层移除, 生成器/rebuild_index 分支/相关常量同批退役)
 
 状态漂移守卫 (检查器 memory-bank skill 的 `scripts/check_status_drift.py`, 2026-10-31 加, **进程内
-import**, tmp 夹具不碰真实 memory-bank/; 四档: A 反链x Open / B issue badge vs meta / 异常
-status-unreadable 三档硬拦 rc=1, C 反链x In Progress / D 完成断言两档清单只提示):
+import**, tmp 夹具不碰真实 memory-bank/; B issue badge vs meta / 异常 status-unreadable 两档
+硬拦 rc=1, D 完成断言清单只提示; 2026-11-08 重构 W5: 原 A/C 反链两档随 progress/ 退役删除):
 
-- test_wrap_reports_status_drift_lists: kb.wrap 尾部打印 C/D 清单(空打「无」), 硬拦非空附「状态漂移硬拦非空…」提示行, wrap 退出码与结果不因此改变
+- test_wrap_reports_status_drift_lists: kb.wrap 尾部打印 D 清单(空打「无」), 硬拦非空附「状态漂移硬拦非空…」提示行, wrap 退出码与结果不因此改变
 
 HTML 结构守卫 (检查器 memory-bank skill 的 `scripts/check_html.py`, 2026-11-01 加, **进程内
 import**; L1 行级正则 + L2 stdlib 解析器残缺标签名校验双网, script/style 区遮蔽防 JS 字面量
@@ -189,25 +158,18 @@ from kb_test_support import (
     ROOT,
     SKILL_SCRIPTS,
     _bump_doc,
-    _closed_keep_fixture,
-    _closed_keep_module,
     _doc_templates,
     _drift_fixture,
+    _drift_issue,
     _drift_task,
-    _entry_lines,
     _fill_slots,
     _flip_status,
     _gen_doc_map,
-    _index_section,
-    _issues_index_module,
     _kb_clock,
-    _kb_tier,
     _new_doc,
     _p2_fixture,
     _p3_family_paths,
     _status_drift,
-    _tier_fixture,
-    _tier_pitfall,
     _wrap,
     _write_issue,
     _write_plan,
@@ -397,7 +359,7 @@ def test_wrap_creates_zero_slot_slice_and_updates(tmp_path: Path) -> None:
         return rc
 
     assert wrap_run("wrap-slug", "本轮做了什么") == 0
-    created = list((mb / "activeContext").glob("*-wrap-slug.md"))
+    created = list((mb / "active-context").glob("*-wrap-slug.md"))
     assert len(created) == 1, f"应建出且只建出一张切片: {created}"
     assert checker.validate_file(
         created[0], "slice"
@@ -490,7 +452,7 @@ def test_wrap_archive_flag_anchors_umbrella_archive(tmp_path: Path) -> None:
     today = timekit.now().strftime("%Y-%m-%d")
     assert f"**Updated:** {today}" in text, "命中的档案应抬 Updated 到今天"
     assert "传锚点" in text, "命中的档案进度日志应追加本轮 did"
-    slice_file = next((mb / "activeContext").glob("*-derived-slice.md"))
+    slice_file = next((mb / "active-context").glob("*-derived-slice.md"))
     assert "**R1(" in slice_file.read_text(encoding="utf-8"), "切片仍按 --topic 抬活动 + 追加 R 行"
 
     # 坏 kebab: 与 --topic 同一 SLUG_RE 校验
@@ -662,9 +624,9 @@ def test_family_registry_matches_templates() -> None:
     assert 'content="report"' in report_tpl, "report 模板的 doc-type 必须与族名一致"
 
     # P3: 三行头族的触发词走 --triggers 参数 (裁定 A7 参数分支; 头部区零 SLOT 契约)
-    for fam in ("pitfall", "progress"):
-        tpl = (templates / fams[fam].template).read_text(encoding="utf-8")
-        assert "> 触发: @@TRIGGERS@@" in tpl, f"{fam} 模板必须留触发词占位 (由 --triggers 填, 头部区不留 SLOT)"
+    # (2026-11-08 重构 W3: progress 族退役, 三行头 --triggers 族只剩 pitfall)
+    tpl = (templates / fams["pitfall"].template).read_text(encoding="utf-8")
+    assert "> 触发: @@TRIGGERS@@" in tpl, "pitfall 模板必须留触发词占位 (由 --triggers 填, 头部区不留 SLOT)"
 
     # P3: baseline 模板 H1 含 --total 占位 + 基线时间占位 (排序键, 回退用文件名前缀)
     baseline_tpl = (templates / fams["baseline"].template).read_text(encoding="utf-8")
@@ -676,7 +638,7 @@ def test_family_registry_matches_templates() -> None:
     assert fams["task"].statuses is _common.TASK_STATUSES
     assert fams["report"].statuses is _common.DOC_STATUSES, "report 与 plan 共用 5 词表单点"
     assert fams["slice"].statuses == (), "切片族无状态词 (三行头不带状态)"
-    for fam in ("pitfall", "baseline", "progress"):
+    for fam in ("pitfall", "baseline"):
         assert fams[fam].statuses == (), f"{fam} 族无状态词"
 
     # 坑档族的子目录选择器 = 7 类枚举单点 (is 身份断言, 同 statuses 纪律)
@@ -693,7 +655,7 @@ def test_family_registry_matches_templates() -> None:
         f"TYPES 每个类型必须有 TIER_BY_TYPE 默认档位: 缺 {sorted(set(_common.TYPES) - set(_common.TIER_BY_TYPE))}"
     assert issue.statuses is _common.DOC_STATUSES, "issue-status 与 doc-* 制品同一 5 词表单点"
     assert issue.default_status == "Open", "issue 出厂恒 Open (翻状态走 kb.status, CLI 不设 --status)"
-    assert issue.index_script == "gen_issues_index", "issue 建后重建 issues 索引 (与归档同批)"
+    assert issue.index_script == "", "issue 索引已随 2026-11-08 重构退役 (D4/D5), 建后不再重建"
     assert issue.ext == ".html" and issue.dir == "issues"
     # ISSUE_FILE_RE 中段从 TYPES 单点拼出 (W3 机制二): 枚举内全部命中, 枚举外拒
     for type_ in _common.TYPES:
@@ -750,7 +712,7 @@ def test_new_doc_templates_lead_with_only_answer_slot() -> None:
 
     fams = _common.FAMILIES
     templates = SKILL_SCRIPTS.parent / "templates"
-    for fam in ("plan", "task", "report", "pitfall", "progress"):
+    for fam in ("plan", "task", "report", "pitfall"):
         text = (templates / fams[fam].template).read_text(encoding="utf-8")
         slots = re.findall(r"<!--\s*SLOT:.*?-->", text, re.S)
         assert slots, f"{fam} 模板不得零 SLOT"
@@ -775,9 +737,10 @@ def test_doc_templates_checker_is_wired() -> None:
 
 
 def test_flip_status_flips_bumps_and_fails_fast(tmp_path: Path) -> None:
-    """kb.status: 计划/档案/issue 翻转 + 抬时间戳 (issue 走日志行留痕) + 重建索引; 幂等不抬戳;
+    """kb.status: 计划/档案/issue 翻转 + 抬时间戳 (issue 走日志行留痕); 幂等不抬戳;
     切片/未知载体/词表外值拒绝全 fail-fast; 终态带条件提醒; 输出含「机械 0」收录断言 (§5.3 / §5.4)。
-    issue 分支的专项 battery (两处改/日志行/幂等/红绿双验) 在 test_flip_status_issue_branch_badge_meta_and_log。"""
+    issue 分支的专项 battery (两处改/日志行/幂等/红绿双验) 在 test_flip_status_issue_branch_badge_meta_and_log。
+    (2026-11-08 重构 W3: 重建索引断言已删 —— 改面四族 _index 退役, kb.status 不再重建任何索引。)"""
     import io
     from contextlib import redirect_stderr, redirect_stdout
 
@@ -794,10 +757,10 @@ def test_flip_status_flips_bumps_and_fails_fast(tmp_path: Path) -> None:
             rc = flip.main(["--root", str(tmp_path), "--mb-dir", str(mb), path, to])
         return rc, out.getvalue(), err.getvalue()
 
-    # --- 计划翻转: 状态 + doc-updated 都抬, 索引重建, 契约输出
+    # --- 计划翻转: 状态 + doc-updated 都抬, 契约输出 (不再重建索引 —— 2026-11-08 W3)
     rc, out, err = run("plans/26-10-17-0900-plan-p2.html", "In Progress")
     assert rc == 0, err
-    assert "doc-status Open → In Progress" in out and "已重建索引" in out and "机械 0" in out, out
+    assert "doc-status Open → In Progress" in out and "已重建索引" not in out and "机械 0" in out, out
     assert out.count("剩余人工") == 1, "契约行只打一次"
     ptext = plan.read_text(encoding="utf-8")
     assert '<meta name="doc-status" content="In Progress">' in ptext
@@ -809,7 +772,7 @@ def test_flip_status_flips_bumps_and_fails_fast(tmp_path: Path) -> None:
     rc, out, err = run("plans/26-10-17-0900-plan-p2.html", "Done")
     assert rc == 0 and "条件 1" in out and "切片" in out and "p2-topic" in out, out
 
-    # --- 同状态幂等: 不抬时间戳不重建索引 (黄金法则: 幂等无副作用)
+    # --- 同状态幂等: 不抬时间戳 (黄金法则: 幂等无副作用)
     before = plan.read_text(encoding="utf-8")
     rc, out, err = run("plans/26-10-17-0900-plan-p2.html", "Done")
     assert rc == 0 and "幂等" in out and "已重建索引" not in out, out
@@ -818,15 +781,15 @@ def test_flip_status_flips_bumps_and_fails_fast(tmp_path: Path) -> None:
     # --- 拒绝面全 fail-fast (原因打在输出里); issue 不再拒收 (W4), 翻转见下方专项断言
     rc, _, err = run("plans/26-10-17-0900-plan-p2.html", "Draft")
     assert rc == 1 and "词表" in err, f"词表外值必须拒绝: {err}"
-    rc, _, err = run("activeContext/26-10-17-0900-p2-topic.md", "Done")
+    rc, _, err = run("active-context/26-10-17-0900-p2-topic.md", "Done")
     assert rc == 1 and "kb.wrap" in err, f"切片无状态, 必须拒绝并指路 kb.wrap: {err}"
     rc, _, err = run("memory-bank/nope.md", "Done")
     assert rc == 1 and "文件不存在" in err, f"不存在的路径必须拒绝: {err}"
 
-    # --- issue 翻转 (W4 收编): 徽标 + meta 两处一致 + 日志行 + 索引重建走 gen_issues_index
+    # --- issue 翻转 (W4 收编): 徽标 + meta 两处一致 + 日志行 (不再重建索引 —— 2026-11-08 W3)
     rc, out, err = run("issues/26-10-17-0900-bug-p2.html", "Done")
     assert rc == 0, err
-    assert "issue-status Open → Done" in out and "已重建索引" in out and "机械 0" in out, out
+    assert "issue-status Open → Done" in out and "已重建索引" not in out and "机械 0" in out, out
     assert "实际修法" in out, "issue 终态 (Done) 应带修法提醒"
     itext = issue.read_text(encoding="utf-8")
     assert '<meta name="issue-status" content="Done">' in itext, "issue-status meta 应改"
@@ -846,9 +809,10 @@ def test_flip_status_flips_bumps_and_fails_fast(tmp_path: Path) -> None:
 
 def test_flip_status_issue_branch_badge_meta_and_log(tmp_path: Path) -> None:
     """kb.status issue 分支专项 (W4, 计划 26-11-07-0549 D5): 徽标+meta 两处一次改 + 状态变更日志
-    追加一行 + 重建走 gen_issues_index; 幂等同状态零变化; 词表外值 / 缺徽标 / 缺日志节 fail-fast
+    追加一行; 幂等同状态零变化; 词表外值 / 缺徽标 / 缺日志节 fail-fast
     不落半文件; 终态提醒三态各自出现; 红绿双验 (计划 R4): 徽标/meta 单改其一的病态夹具被
-    check_status_drift tier B 判红 —— 证明实现两处都动、漏一不可。"""
+    check_status_drift tier B 判红 —— 证明实现两处都动、漏一不可。
+    (2026-11-08 重构 W3: 重建索引断言已删 —— issues/_index.md 退役, kb.status 不再重建任何索引。)"""
     import io
     from contextlib import redirect_stderr, redirect_stdout
 
@@ -869,10 +833,10 @@ def test_flip_status_issue_branch_badge_meta_and_log(tmp_path: Path) -> None:
             rc = drift.main(["--root", str(tmp_path), "--mb-dir", str(mb)])
         return rc, out.getvalue() + err.getvalue()
 
-    # --- Open → In Progress: badge 与 meta 双改 (类型徽标零触碰) + 日志行 + 索引按新状态分区
+    # --- Open → In Progress: badge 与 meta 双改 (类型徽标零触碰) + 日志行 (不再重建索引)
     rc, out, err = run("issues/26-10-17-0900-bug-p2.html", "In Progress")
     assert rc == 0, err
-    assert "issue-status Open → In Progress" in out and "已重建索引" in out and "机械 0" in out, out
+    assert "issue-status Open → In Progress" in out and "已重建索引" not in out and "机械 0" in out, out
     text = issue.read_text(encoding="utf-8")
     assert '<meta name="issue-status" content="In Progress">' in text, "meta 必须同改"
     assert '<span class="badge">In Progress</span>' in text, "状态徽标必须同改"
@@ -880,11 +844,7 @@ def test_flip_status_issue_branch_badge_meta_and_log(tmp_path: Path) -> None:
     today = _kb_clock().strftime("%Y-%m-%d")
     assert f"<li>{today} — 状态 Open → In Progress（kb.status）</li>" in text, "日志行应追加"
     assert text.count("状态变更日志") == 1 and text.count("<li>2026-10-17 — 入池") == 1, "已有日志行零触碰"
-    # 索引分区断言 (评审 RB2): header 恒列全 5 词表, 裸子串断言近乎恒真 —— 按 _index_section +
-    # 条目行钉「分区存在且含本件」(closed_keep 组同款钉法); Open 区不得再留本件 (分区随状态走)
-    index_text = (mb / "issues" / "_index.md").read_text(encoding="utf-8")
-    assert "26-10-17-0900-bug-p2.html" in _index_section(index_text, "In Progress"), "索引 In Progress 分区应含本件"
-    assert "26-10-17-0900-bug-p2.html" not in _index_section(index_text, "Open"), "Open 分区不得再留本件 (已翻走)"
+    # (2026-11-08 重构 W3: 原索引分区断言已删 —— issues/_index.md 退役, 翻转不再重建。)
     # 翻转后 badge vs meta 一致: check_status_drift tier B 对本夹具判绿
     drc, dout = drift_check()
     assert drc == 0 and "badge-vs-meta" not in dout, dout
@@ -913,13 +873,13 @@ def test_flip_status_issue_branch_badge_meta_and_log(tmp_path: Path) -> None:
     badge_only.unlink()
     meta_only.unlink()
 
-    # --- 幂等: 同状态再翻零变化 (不追加日志行 / 不改文件 / 不重建索引)
+    # --- 幂等: 同状态再翻零变化 (不追加日志行 / 不改文件)
     before = issue.read_text(encoding="utf-8")
     rc, out, err = run("issues/26-10-17-0900-bug-p2.html", "In Progress")
     assert rc == 0 and "幂等" in out and "已重建索引" not in out, out
     assert issue.read_text(encoding="utf-8") == before, "幂等翻转不得改文件"
 
-    # --- 词表外值: 拒绝且不改文件 (表外值会让 gen_issues_index 静默漏收, 见 doc-status-meta 坑档)
+    # --- 词表外值: 拒绝且不改文件 (词表纪律的活体校验在 gen_doc_map --check, 见 doc-status-meta 坑档)
     rc, _, err = run("issues/26-10-17-0900-bug-p2.html", "Fixed")
     assert rc == 1 and "词表" in err, f"issue 5 词表外值必须拒绝: {err}"
     assert issue.read_text(encoding="utf-8") == before, "词表拒绝不得改文件"
@@ -980,7 +940,7 @@ def test_bump_doc_appends_changelog_and_fails_fast(tmp_path: Path) -> None:
         return rc, out.getvalue(), err.getvalue()
 
     rc, out, err = run("plans/26-10-17-0900-plan-p2.html", "R1: 加冒烟")
-    assert rc == 0 and "R1" in out and "机械 0" in out and "已重建索引" in out, out
+    assert rc == 0 and "R1" in out and "机械 0" in out and "已重建索引" not in out, out
     ptext = plan.read_text(encoding="utf-8")
     assert '<li><span class="tag">R1 · ' in ptext and "R1: 加冒烟" in ptext
     assert ptext.count("R0 · 26-10-17-0900") == 1, "已有 R 行零触碰"
@@ -1003,14 +963,13 @@ def test_bump_doc_appends_changelog_and_fails_fast(tmp_path: Path) -> None:
     rc, out, err = run("tasks/26-10-17-backend-p2.md", "进展一句")
     assert rc == 0 and "Updated" in out, out
     assert f"**Updated:** {_kb_clock().strftime('%Y-%m-%d')}" in task.read_text(encoding="utf-8")
-    rc, out, err = run("activeContext/26-10-17-0900-p2-topic.md", "进展一句")
+    rc, out, err = run("active-context/26-10-17-0900-p2-topic.md", "进展一句")
     assert rc == 0 and "最后活动" in out, out
     assert f"> 最后活动: {_kb_clock().strftime('%Y-%m-%d %H:%M')}" in slice_.read_text(encoding="utf-8")
 
     # 无变更记录段的件 → fail-fast 指路 (多数报告无段, 不猜位置硬塞)
-    # (reports/ 目录可能已被索引重建创建 —— mkdir(exist_ok=True))
     report = mb / "reports"
-    report.mkdir(exist_ok=True)
+    report.mkdir()
     bad = report / "26-10-17-0900-report-nosec.html"
     bad.write_text(
         '<html><head><meta name="doc-updated" content="26-10-17-0900"></head><body>x</body></html>', encoding="utf-8"
@@ -1051,7 +1010,7 @@ def test_new_doc_refs_auto_chains_bidirectionally(tmp_path: Path) -> None:
         "plan", "--title", "引用计划", "--topic", "refs-plan", "--refs", "memory-bank/tasks/26-10-17-backend-p2.md,"
         "memory-bank/pitfalls/git/sync-pull.md,"
         "memory-bank/issues/26-10-17-0900-bug-p2.html,"
-        "memory-bank/activeContext/26-10-17-0900-p2-topic.md"
+        "memory-bank/active-context/26-10-17-0900-p2-topic.md"
     )
     assert rc == 0, err
     plan = list((mb / "plans").glob("*-plan-refs-plan.html"))
@@ -1059,7 +1018,7 @@ def test_new_doc_refs_auto_chains_bidirectionally(tmp_path: Path) -> None:
     ptext = plan[0].read_text(encoding="utf-8")
     assert '<meta name="doc-refs" content="memory-bank/tasks/26-10-17-backend-p2.md, ' \
            'memory-bank/pitfalls/git/sync-pull.md, memory-bank/issues/26-10-17-0900-bug-p2.html, ' \
-           'memory-bank/activeContext/26-10-17-0900-p2-topic.md">' in ptext, ptext[:600]
+           'memory-bank/active-context/26-10-17-0900-p2-topic.md">' in ptext, ptext[:600]
     plan_rel = f"memory-bank/plans/{plan[0].name}"
     assert f"**Refs:** {plan_rel}" in target_task.read_text(encoding="utf-8")
     assert f"**Refs:** {plan_rel}" in target_pit.read_text(encoding="utf-8")
@@ -1080,7 +1039,8 @@ def test_new_doc_refs_auto_chains_bidirectionally(tmp_path: Path) -> None:
 
     # 坏 refs → fail-fast 且不落半文件 (库外目标用根级 AGENTS.md 探测: 存在但不在 memory-bank 内)
     (tmp_path / "AGENTS.md").write_text("# AGENTS\n", encoding="utf-8")
-    for bad_refs, why in (("tasks/nope.md", "目标不存在"), ("AGENTS.md", "不在 memory-bank 下"), ("tasks/_index.md", "生成物")):
+    (mb / "plans" / "_index.md").write_text("# idx\n", encoding="utf-8")
+    for bad_refs, why in (("tasks/nope.md", "目标不存在"), ("AGENTS.md", "不在 memory-bank 下"), ("plans/_index.md", "生成物")):
         rc, _, err = run("plan", "--title", "坏", "--topic", "bad-refs", "--refs", bad_refs)
         assert rc == 1 and why in err, f"{bad_refs} 必须拒绝 ({why}): {err}"
         assert not list((mb / "plans").glob("*-plan-bad-refs.html")), "fail-fast 不得落半文件"
@@ -1206,7 +1166,6 @@ def test_new_doc_creates_phase2_families(tmp_path: Path) -> None:
     build("pitfall", **{"class": "kb"}, title="冒烟坑标题", topic="smoke-pitfall", triggers="触发词1, 触发词2")
     build("report", title="冒烟报告", topic="smoke-report")
     build("baseline", title="冒烟基线", topic="smoke-baseline", total="3498 passed + 4 skipped(根)")
-    build("progress", title="冒烟进展", topic="smoke-progress", triggers="触发词1")
 
     paths = _p3_family_paths(mb)
 
@@ -1225,14 +1184,13 @@ def test_new_doc_creates_phase2_families(tmp_path: Path) -> None:
     assert baseline_text.startswith("# 3498 passed + 4 skipped(根) —— 冒烟基线")
     assert re.search(r"^> 基线时间: \d{4}-\d{2}-\d{2} \d{2}:\d{2}$", baseline_text, re.MULTILINE)
 
-    # 建后: 残留 SLOT 判红 (坑档/进展件不在扫描面 —— 直接 validate_file)
+    # 建后: 残留 SLOT 判红 (坑档不在扫描面 —— 直接 validate_file)
     assert checker.validate_file(paths["pitfall"], "pitfall"), "坑档建后应残留 SLOT (待填)"
-    assert checker.validate_file(paths["progress"], "progress"), "进展件建后应残留 SLOT (待填)"
     problems, checked = checker.check_new_faces(tmp_path, mb)
     assert checked == 2, f"扫描面应恰好 2 件 (线后 report + baseline): {checked}"
     assert len(problems) == 2, f"report 与 baseline 建后残留 SLOT 应判红: {problems}"
 
-    # 填完: 四族 validate_file 全绿 + 扫描面全绿
+    # 填完: 三族 validate_file 全绿 + 扫描面全绿
     for family, path in paths.items():
         _fill_slots(path)
         assert checker.validate_file(path, family) == [], f"{family} 填完必须绿: {checker.validate_file(path, family)}"
@@ -1265,15 +1223,14 @@ def test_new_doc_phase2_family_params_fail_fast(tmp_path: Path) -> None:
     assert rc == 1 and "7 类" in err, f"坑档坏 --class 必须拒: {err}"
     rc, err = run("pitfall", **{"class": "kb"}, title="x", topic="y")
     assert rc == 1 and "--triggers" in err, f"坑档缺 --triggers 必须拒 (头部零 SLOT 契约): {err}"
-    rc, err = run("progress", title="x", topic="y")
-    assert rc == 1 and "--triggers" in err, f"进展件缺 --triggers 必须拒: {err}"
     rc, err = run("baseline", title="x", topic="y")
     assert rc == 1 and "--total" in err, f"基线缺 --total 必须拒 (裁定 A4): {err}"
 
 
 def test_new_doc_creates_issue_family_end_to_end(tmp_path: Path, monkeypatch) -> None:
     """W3 建件收编 (计划 26-11-07-0549 D4): `kb.new issue` 端到端 —— 建件 → 命名/meta/badge →
-    索引+归档同批重建 → 幂等拒绝 → --topic 默认 slug 与显式覆盖 → --refs 双向补链。
+    幂等拒绝 → --topic 默认 slug 与显式覆盖 → --refs 双向补链。
+    (2026-11-08 重构 W3: issues/_index.md 退役, 原「索引+归档同批重建」断言删除。)
 
     幂等拒绝断言冻结 timekit.now (同 test_new_doc_refuses_slice_and_duplicates 的判据:
     issue 文件名带分钟级戳, 真墙钟跨分钟 = 文件名不同永不撞名的时刻竞态)。
@@ -1318,12 +1275,7 @@ def test_new_doc_creates_issue_family_end_to_end(tmp_path: Path, monkeypatch) ->
     assert '<span class="badge">Open</span>' in text, "状态 badge 机读形态 (check_status_drift tier B)"
     assert "计划外问题（便签）" in text and "现象与发现场景" not in text, "light 档模板 (三段结构, 非 standard 七段)"
     assert "TODO" in text, "正文留 TODO 待按档位填写"
-    # 索引 + 归档同批重建 (gen_issues_index; 与 tasks/plans 侧同批纪律)
-    index = (mb / "issues" / "_index.md").read_text(encoding="utf-8")
-    assert f"- [docs] [冒烟问题标题]({frozen.strftime(timekit.STAMP_FMT)}-docs-smoke-issue.html)" in index, \
-        f"建后索引必须收进本件: {index[:400]}"
-    archive = (mb / "issues" / "attachments" / "_archive.md")
-    assert archive.is_file() and "- [docs] [冒烟问题标题]" in archive.read_text(encoding="utf-8"), "归档索引同批生成"
+    # (2026-11-08 重构 W3: 原「索引 + 归档同批重建」断言已删 —— issues/_index.md 退役, 建后不再重建。)
 
     # ② standard (--tier 显式覆盖 docs 的 light 默认)
     rc, out, err = run("issue", "smoke-std", "--type", "docs", "--tier", "standard", "--title", "标准档", "--summary", "简")
@@ -1376,10 +1328,7 @@ def test_new_doc_creates_issue_family_end_to_end(tmp_path: Path, monkeypatch) ->
     assert '<meta name="issue-status" content="In Progress">' in text, "issue-status meta 应改"
     assert f"<li>{frozen.strftime('%Y-%m-%d')} — 状态 Open → In Progress（kb.status）</li>" in text, \
         "状态变更日志应追加一行"
-    index_text = (mb / "issues" / "_index.md").read_text(encoding="utf-8")
-    moved = f"{frozen.strftime(timekit.STAMP_FMT)}-docs-smoke-issue.html"
-    assert moved in _index_section(index_text, "In Progress"), "索引 In Progress 分区应含本件"
-    assert moved not in _index_section(index_text, "Open"), "Open 分区不得再留本件 (已翻走)"
+    # (2026-11-08 重构 W3: 原索引分区断言已删 —— issues/_index.md 退役, 翻转不再重建。)
 
 
 def test_new_doc_issue_params_fail_fast(tmp_path: Path) -> None:
@@ -1431,7 +1380,7 @@ def test_new_doc_issue_params_fail_fast(tmp_path: Path) -> None:
 def test_checker_scan_face_excludes_issues(tmp_path: Path) -> None:
     """D6 拍板 (计划 26-11-07-0549): issue 入 FAMILIES **不得扩大** check_doc_templates 的
     冻结线扫描面 —— 它按族目录枚举扫描, issues/ 不在面内 (issue 自己的护栏是
-    gen_issues_index 的命名/词表 fail-fast, 不重复建一套)。
+    建件端 FAMILIES 的命名/词表单点已 fail-fast, 不重复建一套)。
 
     钉法: 线后 (stamp > FREEZE_LINE) 且遍体缺陷的 issue 件必须被零触碰 (不计数不报红);
     同目录放一件缺陷 plan 证明扫描面本身没坏 (计 1 件、判红)。"""
@@ -1524,419 +1473,11 @@ def test_checker_report_mutations_judged_red(tmp_path: Path) -> None:
         assert checker.validate_file(report, "report") == [], f"还原「{name}」后必须复绿"
 
 
-def test_kb_tier_set_marks_and_fails_fast(tmp_path: Path) -> None:
-    """kb.tier set: 插入为头部区第 4 行 / 原地改值 / 幂等 / 非法值与坏路径 fail-fast;
-    头部区不足 4 行插在头部区末尾; CRLF 文件插入行保持 CRLF 行尾。"""
-    import io
-    from contextlib import redirect_stderr, redirect_stdout
-
-    tier = _kb_tier()
-    mb = _tier_fixture(tmp_path)
-    pit = _tier_pitfall(mb, "sync-pull")
-
-    def run(*argv: str) -> tuple[int, str, str]:
-        out, err = io.StringIO(), io.StringIO()
-        with redirect_stdout(out), redirect_stderr(err):
-            rc = tier.main(["--root", str(tmp_path), "--mb-dir", str(mb), *argv])
-        return rc, out.getvalue(), err.getvalue()
-
-    # --- 插入为头部区第 4 行, 前三行零触碰 (mb 相对路径形态)
-    rc, out, err = run("set", "pitfalls/git/sync-pull.md", "L2")
-    assert rc == 0, err
-    lines = pit.read_bytes().decode("utf-8").splitlines(keepends=True)
-    assert lines[3] == "> 等级: L2\n", lines[:5]
-    assert lines[0] == "# sync-pull\n" and lines[2].startswith("> 摘要:"), "前三行零触碰"
-
-    # --- 已有等级行 → 原地改值 (行数不变, 其它行不动)
-    rc, out, err = run("set", "pitfalls/git/sync-pull.md", "L0")
-    assert rc == 0 and "L2 -> L0" in out.replace("→", "->"), out
-    lines2 = pit.read_bytes().decode("utf-8").splitlines(keepends=True)
-    assert len(lines2) == len(lines) and lines2[3] == "> 等级: L0\n" and lines2[4] == lines[4]
-
-    # --- 同值幂等: 不写盘
-    before = pit.read_bytes()
-    rc, out, err = run("set", "pitfalls/git/sync-pull.md", "L0")
-    assert rc == 0 and "幂等" in out, out
-    assert pit.read_bytes() == before, "幂等打标不得改文件"
-
-    # --- 非法等级 / 不存在文件 / 生成物 全 fail-fast (拒绝时不得改文件)
-    rc, _, err = run("set", "pitfalls/git/sync-pull.md", "L9")
-    assert rc == 1 and "词表" in err, f"非法等级必须拒绝: {err}"
-    assert pit.read_bytes() == before, "拒绝时不得改文件"
-    rc, _, err = run("set", "pitfalls/git/nope.md", "L2")
-    assert rc == 1 and "文件不存在" in err, err
-    (mb / "pitfalls" / "git" / "_index.md").write_text("# idx\n", encoding="utf-8")
-    rc, _, err = run("set", "pitfalls/git/_index.md", "L2")
-    assert rc == 1 and "生成物" in err, f"生成物必须拒绝: {err}"
-
-    # --- 头部区不足 4 行 → 插在头部区末尾 (首个 ## 之前)
-    short = mb / "pitfalls" / "git" / "short-head.md"
-    short.write_text("# 短头\n\n## 正文\n", encoding="utf-8", newline="\n")
-    rc, _, err = run("set", "pitfalls/git/short-head.md", "L3")
-    assert rc == 0, err
-    assert short.read_text(encoding="utf-8").splitlines() == ["# 短头", "", "> 等级: L3", "## 正文"]
-
-    # --- CRLF 文件: 插入行保持 \r\n (写盘形态不漂移)
-    crlf_pit = _tier_pitfall(mb, "crlf-file", crlf=True)
-    rc, _, err = run("set", "pitfalls/git/crlf-file.md", "L1")
-    assert rc == 0, err
-    assert "> 等级: L1\r\n" in crlf_pit.read_bytes().decode("utf-8")
-
-
-def test_kb_tier_list_separates_unmarked(tmp_path: Path) -> None:
-    """kb.tier list: 列出该等级全部文件 (行数/字符数); 未打标件区分呈现 ——
-    L0 视图全列待定件, 其它级只给一行汇总; 非法等级拒绝。"""
-    import io
-    from contextlib import redirect_stderr, redirect_stdout
-
-    tier = _kb_tier()
-    mb = _tier_fixture(tmp_path)
-    _tier_pitfall(mb, "alpha")
-    _tier_pitfall(mb, "beta")
-    _tier_pitfall(mb, "gamma")
-
-    def run(*argv: str) -> tuple[int, str, str]:
-        out, err = io.StringIO(), io.StringIO()
-        with redirect_stdout(out), redirect_stderr(err):
-            rc = tier.main(["--root", str(tmp_path), "--mb-dir", str(mb), *argv])
-        return rc, out.getvalue(), err.getvalue()
-
-    rc, _, err = run("set", "pitfalls/git/alpha.md", "L3")
-    assert rc == 0, err
-    rc, _, err = run("set", "pitfalls/git/beta.md", "L2")
-    assert rc == 0, err
-
-    # --- L3 视图: 只列 alpha; 未打标件给一行汇总 (不逐件刷屏)
-    rc, out, err = run("list", "--level", "L3")
-    assert rc == 0, err
-    assert "pitfalls/git/alpha.md" in out and "1 件" in out, out
-    assert "行" in out and "字符" in out, "条数/字符数必须呈现"
-    assert "pitfalls/git/beta.md" not in out and "pitfalls/git/gamma.md" not in out, out
-    assert "未打标 1 件" in out, "其它级视图未打标件只给汇总行"
-
-    # --- L0 视图: 未打标件逐件列出 (判据缺失 = 待定, 与已打标 L0 区分)
-    rc, out, err = run("list", "--level", "L0")
-    assert rc == 0, err
-    assert "pitfalls/git/gamma.md" in out and "待定" in out, f"L0 视图必须全列未打标件: {out}"
-
-    # --- 非法等级拒绝
-    rc, _, err = run("list", "--level", "L9")
-    assert rc == 1 and "词表" in err, err
-
-
-def test_kb_tier_migrate_dry_run_default_and_apply(tmp_path: Path) -> None:
-    """kb.tier migrate: 默认 dry-run 零写盘; --apply 后正文段逐字节搬 attachments/
-    (行数与 \r\n 计数与原文一致, 字节差只允许来自相对链接的 ../ 前缀), 主档留指针且
-    摘要判据单点仍在; CRLF 文件行尾形态不变; 迁后重跑跳过 (无正文段)。"""
-    import io
-    from contextlib import redirect_stderr, redirect_stdout
-
-    tier = _kb_tier()
-    mb = _tier_fixture(tmp_path)
-    pit = _tier_pitfall(mb, "old-story")
-    crlf_pit = _tier_pitfall(mb, "old-crlf", crlf=True)
-
-    def run(*argv: str) -> tuple[int, str, str]:
-        out, err = io.StringIO(), io.StringIO()
-        with redirect_stdout(out), redirect_stderr(err):
-            rc = tier.main(["--root", str(tmp_path), "--mb-dir", str(mb), *argv])
-        return rc, out.getvalue(), err.getvalue()
-
-    for name in ("old-story", "old-crlf"):
-        rc, _, err = run("set", f"pitfalls/git/{name}.md", "L2")
-        assert rc == 0, err
-
-    original = pit.read_bytes()
-    orig_text = original.decode("utf-8")
-    orig_body = orig_text[orig_text.index("### "):]
-    crlf_original = crlf_pit.read_bytes()
-    crlf_body = crlf_original.decode("utf-8")[crlf_original.decode("utf-8").index("### "):]
-
-    # --- 默认 dry-run: 只打印, 零写盘
-    rc, out, err = run("migrate", "--level", "L2")
-    assert rc == 0 and "dry-run" in out, out
-    assert not (mb / "pitfalls" / "git" / "attachments").exists(), "dry-run 不得建附件目录"
-    assert pit.read_bytes() == original and crlf_pit.read_bytes() == crlf_original
-
-    # --- --apply: 附件 = 原正文段逐字节 + 相对链接 ../ 前缀 (唯一允许的字节差)
-    rc, out, err = run("migrate", "--level", "L2", "--apply")
-    assert rc == 0, err
-    att_dir = mb / "pitfalls" / "git" / "attachments"
-    att = next(att_dir.glob("old-story-migrated-*.md"))
-    att_bytes = att.read_bytes()
-    att_text = att_bytes.decode("utf-8")
-    assert "(../../../testing/run.md)" in att_text, "已带 ../ 的相对链接要再加一层"
-    assert "(../refs.md)" in att_text, "同目录相对链接加一层 ../"
-    assert "(https://example.com/a.md)" in att_text, "scheme 绝对链接不动"
-    assert "(#sec)" in att_text, "纯锚点不动"
-    # 行尾形态校验: 行数与 \r\n 计数与原文一致; 字节差恰为两处 ../ 前缀 (各 3 字节)
-    assert att_text.count("\r\n") == orig_body.count("\r\n")
-    assert att_text.count("\n") - att_text.count("\r\n") == orig_body.count("\n") - orig_body.count("\r\n")
-    assert len(att_bytes) == len(orig_body.encode("utf-8")) + 6, "字节差必须恰为两处 ../ 前缀"
-    assert "事故时间线" in att_text and "### 旧叙事" in att_text, "叙事段原样在附件"
-
-    # --- CRLF 文件: 整段搬后行尾形态不变
-    crlf_att = next(att_dir.glob("old-crlf-migrated-*.md"))
-    crlf_att_text = crlf_att.read_bytes().decode("utf-8")
-    assert "\r\n" in crlf_att_text and crlf_att_text.count("\r\n") == crlf_body.count("\r\n")
-
-    # --- 主档: 指针行 + 摘要判据单点仍在, 叙事已迁出
-    main_text = pit.read_bytes().decode("utf-8")
-    assert "> 已外迁:" in main_text and f"](attachments/{att.name})" in main_text, "指针指向附件相对路径"
-    assert "判据单点一句话" in main_text, "摘要判据单点必须留在主档可读位置"
-    assert "事故时间线" not in main_text, "叙事段应已迁出"
-
-    # --- 迁后重跑: 主档已带指针, 按幂等闸跳过 (不进外迁清单、零写盘)
-    rc, out, err = run("migrate", "--level", "L2")
-    assert rc == 0 and "幂等跳过" in out, out
-
-
-def test_kb_tier_migrate_skips_already_migrated(tmp_path: Path) -> None:
-    """kb.tier migrate 幂等闸: 主档已带 `> 已外迁:` 指针的文件一律跳过 —— 即使残留
-    `## ` 正文段也不二次外迁、不产生第二份附件 (R1 实测: git/ 已迁档会被旧逻辑重复处理)。"""
-    import io
-    from contextlib import redirect_stderr, redirect_stdout
-
-    tier = _kb_tier()
-    mb = _tier_fixture(tmp_path)
-    # 已迁档形态: 头部 + 指针行 + 残留 `## ` 段 (迁后又手工补写过的极端形态)
-    pit = mb / "pitfalls" / "git" / "migrated-already.md"
-    pit.write_text(
-        "# migrated-already\n"
-        "\n"
-        "> 摘要: 判据单点一句话。\n"
-        "> 等级: L2\n"
-        "> 触发: git, sync\n"
-        "\n"
-        "> 已外迁: 叙事整段迁至 [migrated-already-migrated-26-10-31-0952.md]"
-        "(attachments/migrated-already-migrated-26-10-31-0952.md) (kb.tier migrate 26-10-31-0952)\n"
-        "\n"
-        "## 迁后残留段\n"
-        "\n"
-        "- 迁后又手工补写的内容。\n",
-        encoding="utf-8",
-        newline="\n",
-    )
-    before = pit.read_bytes()
-
-    def run(*argv: str) -> tuple[int, str, str]:
-        out, err = io.StringIO(), io.StringIO()
-        with redirect_stdout(out), redirect_stderr(err):
-            rc = tier.main(["--root", str(tmp_path), "--mb-dir", str(mb), *argv])
-        return rc, out.getvalue(), err.getvalue()
-
-    # --- dry-run: 按指针幂等跳过, 不进外迁清单、不建附件目录、主档零改动
-    rc, out, err = run("migrate", "--level", "L2")
-    assert rc == 0, err
-    assert "幂等跳过" in out and "migrated-already" in out, out
-    assert "将外迁" not in out, "已迁档不得进外迁清单"
-    assert not (mb / "pitfalls" / "git" / "attachments").exists()
-    assert pit.read_bytes() == before
-
-    # --- --apply 也不写盘: 零新附件、主档零改动
-    rc, out, err = run("migrate", "--level", "L2", "--apply")
-    assert rc == 0, err
-    assert "幂等跳过" in out, out
-    assert not (mb / "pitfalls" / "git" / "attachments").exists(), "不得产生第二份附件"
-    assert pit.read_bytes() == before, "主档零改动"
-
-
-def test_kb_tier_purge_gates_all_or_nothing(tmp_path: Path) -> None:
-    """kb.tier purge: 默认 dry-run 不删; 非 L3 拒绝; 三闸门逐条触发 —— ①无守阵且
-    头部无「无需守阵」②全仓反向引用未清零 ③头部缺 `> 观察通过:` 标记 —— 任一不过
-    全体拒绝 (全或无) 且 rc=1; 三闸门全过 + --apply 才真删。"""
-    import io
-    from contextlib import redirect_stderr, redirect_stdout
-
-    tier = _kb_tier()
-    mb = _tier_fixture(tmp_path)
-    names = ("g1-ok", "g2-backref", "g3-no-observe", "g4-no-guard", "g5-no-guard-ok")
-    paths = {n: _tier_pitfall(mb, n) for n in names}
-
-    def run(*argv: str) -> tuple[int, str, str]:
-        out, err = io.StringIO(), io.StringIO()
-        with redirect_stdout(out), redirect_stderr(err):
-            rc = tier.main(["--root", str(tmp_path), "--mb-dir", str(mb), *argv])
-        return rc, out.getvalue(), err.getvalue()
-
-    for n in names:
-        rc, _, err = run("set", f"pitfalls/git/{n}.md", "L3")
-        assert rc == 0, err
-
-    def _head_add(path: Path, line: str) -> None:
-        """头部区等级行后加一行 (夹具的观察通过 / 无需守阵标记)。"""
-        text = path.read_bytes().decode("utf-8")
-        path.write_bytes(text.replace("> 等级: L3\n", f"> 等级: L3\n{line}\n", 1).encode("utf-8"))
-
-    # g1: 守阵 + 观察通过 (应可删); g2: 守阵 + 观察通过但被引用 (闸门2);
-    # g3: 守阵但缺观察通过 (闸门3); g4: 无守阵 (闸门1); g5: 头部「无需守阵」+ 观察通过
-    _head_add(paths["g1-ok"], "> 观察通过: 2026-10-30")
-    _head_add(paths["g2-backref"], "> 观察通过: 2026-10-30")
-    _head_add(paths["g5-no-guard-ok"], "> 无需守阵: 判据进的是文档不是代码")
-    _head_add(paths["g5-no-guard-ok"], "> 观察通过: 2026-10-30")
-    for n in ("g1-ok", "g2-backref", "g3-no-observe"):
-        text = paths[n].read_bytes().decode("utf-8")
-        paths[n].write_bytes(
-            text.replace("### 旧叙事\n", "### 旧叙事\n\n- 处置: 守阵: `tests/test_x.py::test_y`\n", 1).encode("utf-8")
-        )
-    (mb / "README.md").write_text("引用: 见 [g2](pitfalls/git/g2-backref.md)。\n", encoding="utf-8")
-
-    def exists(n: str) -> bool:
-        return paths[n].is_file()
-
-    # --- 非 L3 拒绝 (L0-L2 是保留/降噪/外迁, 不是删除面)
-    rc, _, err = run("purge", "--level", "L2")
-    assert rc == 1 and "只接受" in err, err
-
-    # --- 默认 dry-run: 闸门逐条报告, 一个都不删
-    rc, out, err = run("purge", "--level", "L3")
-    assert all(exists(n) for n in names), "dry-run 不得删文件"
-    assert "闸门2" in out and "g2-backref" in out, out
-    assert "闸门3" in out and "g3-no-observe" in out, out
-    assert "闸门1" in out and "g4-no-guard" in out, out
-
-    # --- --apply 但有闸门未过: 全或无, 连三闸门全过的 g1/g5 也不删, rc=1
-    rc, out, err = run("purge", "--level", "L3", "--apply")
-    assert rc == 1, f"存在闸门未过必须拒绝: {out}"
-    assert all(exists(n) for n in names), "全或无: 一个都不许删"
-    assert "闸门1" in out and "闸门2" in out and "闸门3" in out, out
-
-    # --- 处置: 清反向引用 + 补观察通过 + g4 补「无需守阵」→ 三闸门全过, 真删
-    (mb / "README.md").unlink()
-    _head_add(paths["g3-no-observe"], "> 观察通过: 2026-10-30")
-    _head_add(paths["g4-no-guard"], "> 无需守阵: 判据进的是文档不是代码")
-    _head_add(paths["g4-no-guard"], "> 观察通过: 2026-10-30")
-    rc, out, err = run("purge", "--level", "L3", "--apply")
-    assert rc == 0, f"三闸门全过必须真删: {out}\n{err}"
-    assert not any(exists(n) for n in names), "全部删除"
-
-
-def test_kb_tier_is_registered() -> None:
-    """kb.tier 已收录进 .commands/kb (收录协议: 不接线 = 没人跑; when 与 note 必填)。"""
-    kb_cfg = (ROOT / ".commands" / "kb" / "config.toml").read_text(encoding="utf-8")
-    body = re.search(r'^\[tasks\."kb\.tier"\]\n(.*?)(?=^\[|\Z)', kb_cfg, re.S | re.M)
-    assert body, "kb.tier 未收录进 .commands/kb (收录协议)"
-    assert "kb_tier.py" in body.group(1), "kb.tier 的 run 必须指到 kb_tier.py"
-    assert 'when    = "' in body.group(1), "kb.tier 缺 when (收录协议必填)"
-    assert 'note    = "' in body.group(1), "kb.tier 缺 note (收录协议必填)"
-
-
-def test_closed_keep_trims_done_to_60_and_archives_full(tmp_path: Path) -> None:
-    """阈值语义: Done 62 件 -> 主索引只留**最近 60** 条 + 一行隐藏提示; 归档是全量(只列 slug 与标题)。
-
-    档案原地不动(出口只治索引视图) —— 夹具文件一个不搬, 由"归档里每件都能反查"间接守住。
-    """
-    gen = _closed_keep_module()
-    root, mb = _closed_keep_fixture(tmp_path, done=62, inflight=2)
-
-    rendered = gen.build(root, mb)
-    done_section = _index_section(rendered, "Done")
-    assert len(_entry_lines(done_section)) == 60, "Done 区只保留最近 60 条"
-    assert "closed-keep-062" in done_section and "closed-keep-061" in done_section, "最近两件必须在"
-    assert "closed-keep-001" not in done_section and "closed-keep-002" not in done_section, "最老两件出索引"
-    assert "> 更早的 **2** 条已出本索引" in done_section, "隐藏提示行(形态同 issues 侧)"
-    assert "x" * 80 not in rendered, "主索引摘要按 SUMMARY_MAX 截断"
-
-    inflight_section = _index_section(rendered, "In Progress")
-    assert "closed-keep-063" in inflight_section and "closed-keep-064" in inflight_section, "在办不受影响"
-
-    archive = gen.build_archive(root, mb)
-    assert "closed-keep-001" in archive and "closed-keep-062" in archive, "归档是全量(被主索引隐藏的件也在)"
-    assert "x" * 80 not in archive, "归档行不带摘要 —— Summary 里可能带相对 tasks/ 的链接, 搬进 attachments 会位移成坏链"
-    assert "](../26-01-01-test-closed-keep-001.md)" in archive, "归档链接带 ../ 指回档案原文"
-
-
-def test_closed_keep_boundary_at_60(tmp_path: Path) -> None:
-    """第 60/61 条边界: 恰 60 条不裁、无提示; 第 61 条起裁 1 条并出提示 —— 跟 issues 侧同一口径。"""
-    gen = _closed_keep_module()
-
-    root, mb = _closed_keep_fixture(tmp_path, done=60)
-    rendered = gen.build(root, mb)
-    assert len(_entry_lines(_index_section(rendered, "Done"))) == 60
-    assert "更早的" not in rendered, "恰在阈值内不得出现隐藏提示"
-
-    root, mb = _closed_keep_fixture(tmp_path / "second", done=61)
-    rendered = gen.build(root, mb)
-    assert len(_entry_lines(_index_section(rendered, "Done"))) == 60
-    assert "> 更早的 **1** 条已出本索引" in _index_section(rendered, "Done")
-
-
-def test_closed_keep_never_trims_inflight_and_dropped_also_trims(tmp_path: Path) -> None:
-    """状态过滤: 在办(In Progress / Open)条数再多也不裁 —— 出口只治完结堆积; Dropped 同属完结区一并裁。"""
-    gen = _closed_keep_module()
-    root, mb = _closed_keep_fixture(tmp_path, done=61, dropped=61, inflight=65)
-
-    rendered = gen.build(root, mb)
-    assert len(rendered) <= gen.INDEX_BUDGET, "主索引恒 ≤ 8,000 字符预算"
-    inflight = _index_section(rendered, "In Progress")
-    assert len(_entry_lines(inflight)) == 65, "在办条目不受 CLOSED_KEEP 影响"
-    assert "更早的" not in inflight, "在办区不得出现隐藏提示"
-    for status in ("Done", "Dropped"):
-        section = _index_section(rendered, status)
-        n = len(_entry_lines(section))
-        assert 0 < n < 60, f"{status} 区按 8,000 预算收紧(`CLOSED_KEEP` 只是上限)"
-        assert f"> 更早的 **{61 - n}** 条已出本索引" in section
-
-
-def test_closed_keep_archive_same_batch_wiring(tmp_path: Path) -> None:
-    """归档清单与主索引**同批**落盘: `rebuild_index`(kb.status / kb.bump 的落点)两份都写 ——
-    缺了归档, `gen_all --check` / 生成器自身 `--check` 恒红(同 gen_issues_index 的同批纪律)。"""
-    gen = _closed_keep_module()
-    if str(SKILL_SCRIPTS) not in sys.path:
-        sys.path.insert(0, str(SKILL_SCRIPTS))
-    import _common
-
-    root, mb = _closed_keep_fixture(tmp_path, done=61)
-    written = _common.rebuild_index(root, mb, "gen_tasks_index")
-    assert {p.relative_to(mb).as_posix() for p in written} == {"tasks/_index.md", "tasks/attachments/_archive.md"}
-    archive = mb / "tasks" / "attachments" / "_archive.md"
-    assert archive.is_file(), "归档清单落 `tasks/attachments/`"
-    assert archive.read_text(encoding="utf-8") == gen.build_archive(root, mb)
-    # 命名与落点(计划 §07): 故意不叫 `_index.md` —— 那会被 role_of 套 index-auto 的 8,000 cap
-    assert _common.ARCHIVE_NAME == "_archive.md" and not _common.ARCHIVE_NAME.endswith("_index.md")
-    assert _common.ARCHIVE_REL == "attachments/_archive.md"
-    assert gen.ARCHIVE_REL is _common.ARCHIVE_REL, "生成器用 `_common` 单点, 不另抄一份"
-
-
-def test_issues_index_closed_keep_trims_and_archives_full(tmp_path: Path) -> None:
-    """issues 侧 CLOSED_KEEP 裁剪行为守阵 (评审 RB2 补): 原 test_issues_closed_keep_behavior_unchanged
-    是 gen_issues_index.render 内联裁剪/隐藏提示/归档全量的唯一测试, W1 合并删除后由本条**直接钉
-    合并后的单点模块** —— Done 61 件 -> 主索引 Done 区只留最近 60 条 + 一行隐藏提示, 最老一件出索引;
-    归档全量含 61 (报告原地不动, 出口只治索引视图)。"""
-    gen = _issues_index_module()
-    mb = tmp_path / "memory-bank"
-    issues = mb / "issues"
-    issues.mkdir(parents=True)
-    for n in range(1, 62):
-        (issues / f"26-01-01-{n:04d}-bug-trim-{n:03d}.html").write_text(
-            f'<html><head>\n<meta name="issue-status" content="Done">\n'
-            f'<meta name="issue-stamp" content="26-01-01-{n:04d}">\n'
-            f'<meta name="issue-type" content="bug">\n'
-            f'<meta name="issue-slug" content="trim-{n:03d}">\n'
-            f'<meta name="issue-title" content="裁剪件 {n:03d}">\n'
-            f'<meta name="issue-summary" content="摘要 {n:03d}">\n'
-            f"</head><body>x</body></html>\n",
-            encoding="utf-8",
-            newline="\n",
-        )
-
-    rendered = gen.build(tmp_path, issues)
-    done_section = _index_section(rendered, "Done")
-    assert len(_entry_lines(done_section)) == 60, "Done 区只保留最近 60 条 (CLOSED_KEEP 上限内)"
-    assert "26-01-01-0061" in done_section and "26-01-01-0060" in done_section, "最近两件必须在"
-    assert "26-01-01-0001" not in done_section, "最老一件出索引"
-    assert "> 更早的 **1** 条已出本索引" in done_section, "隐藏提示行 (形态同 tasks 侧)"
-
-    archive = gen.build_archive(tmp_path, issues)
-    archive_done = re.search(r"^## Done \(\d+\)\n\n(.*?)(?=^## |\Z)", archive, re.S | re.M).group(1)
-    assert len(_entry_lines(archive_done)) == 61, "归档是全量 (被主索引隐藏的件也在)"
-    assert "26-01-01-0001" in archive_done and "26-01-01-0061" in archive_done, "归档首尾都在"
-
-
 def test_wrap_reports_status_drift_lists(tmp_path: Path) -> None:
-    """kb.wrap 尾部状态漂移扫描: C/D 清单默认只打计数 (--verbose 展开详情,
-    wrap 自身不带 verbose flag), 空打「无」, 硬拦档 (A/B/异常) 非空附
-    「状态漂移硬拦非空…」提示行 —— 清单只提示, wrap 退出码与结果不因此改变。"""
+    """kb.wrap 尾部状态漂移扫描: D 清单默认只打计数 (--verbose 展开详情,
+    wrap 自身不带 verbose flag), 空打「无」, 硬拦档 (B/异常) 非空附
+    「状态漂移硬拦非空…」提示行 —— 清单只提示, wrap 退出码与结果不因此改变。
+    (2026-11-08 重构 W5: 原 C 反链档随 progress/ 退役删除, 夹具不再造 progress/。)"""
     import io
     from contextlib import redirect_stderr, redirect_stdout
 
@@ -1949,37 +1490,32 @@ def test_wrap_reports_status_drift_lists(tmp_path: Path) -> None:
             rc = wrap.main(["--root", str(base), "--mb-dir", str(mb), "--topic", topic, "--did", did])
         return rc, out.getvalue()
 
-    # --- 无漂移: 两档各打一行「无」, 无硬拦提示, wrap 照常成功
+    # --- 无漂移: D 档打一行「无」, 无硬拦提示, wrap 照常成功
     mb0 = _drift_fixture(tmp_path / "clean")
     rc, out = wrap_run(tmp_path / "clean", mb0, "drift-clean", "无漂移收尾")
     assert rc == 0
     assert "状态漂移扫描 (check_status_drift; 只提示, 不拦截):" in out
-    assert "[C 清单: 反链 x In Progress] 无" in out and "[D 清单: 完成断言] 无" in out
+    assert "[D 清单: 完成断言] 无" in out
+    assert "C 清单" not in out, "C 反链档已随 progress/ 退役, 不应再出现"
     assert "状态漂移硬拦非空" not in out
 
-    # --- C/D 漂移: wrap 输出 summary 行 (不展开条目正文), wrap 仍成功且无硬拦提示
+    # --- D 漂移: wrap 输出 summary 行 (不展开条目正文), wrap 仍成功且无硬拦提示
     mb1 = _drift_fixture(tmp_path / "soft")
     _drift_task(mb1, "inflight.md", "In Progress")
     _drift_task(mb1, "open-word.md", "Open", body="- 已完成 首版\n")
-    (mb1 / "progress" /
-     "implemented-w.md").write_text("# wrap fixture\n\n## 已实现\n\n- task [t](../tasks/inflight.md)\n", encoding="utf-8")
     rc, out = wrap_run(tmp_path / "soft", mb1, "drift-soft", "软漂移收尾")
     assert rc == 0
-    assert "[C 清单: 反链 x In Progress] 1 条" in out
     assert "[D 清单: 完成断言] 1 条" in out
     # wrap 输出不应展开具体条目正文
-    assert "[backlink-x-InProgress]" not in out, "wrap 不应展开 C 档条目"
-    assert "inflight.md" not in out.split("状态漂移扫描")[1] if "状态漂移扫描" in out else False, "wrap C 档段不应出现文件名"
+    assert "open-word.md" not in out, "wrap D 档段不应出现文件名"
     assert "[done-assert]" not in out, "wrap 不应展开 D 档条目"
     assert "状态漂移硬拦非空" not in out
 
-    # --- 硬拦漂移: 附提示行, 但 wrap 退出码与机械面 (建切片) 不受影响
+    # --- 硬拦漂移 (B 档: badge vs meta 矛盾): 附提示行, 但 wrap 退出码与机械面 (建切片) 不受影响
     mb2 = _drift_fixture(tmp_path / "hard")
-    _drift_task(mb2, "open.md", "Open")
-    (mb2 / "progress" / "implemented-h.md"
-    ).write_text("# wrap hard fixture\n\n## 已实现\n\n- task [t](../tasks/open.md)\n", encoding="utf-8")
+    _drift_issue(mb2, "contradict.html", "Open", badge="Done")
     rc, out = wrap_run(tmp_path / "hard", mb2, "drift-hard", "硬漂移收尾")
     assert rc == 0, "清单与提示只提示不失败"
     assert "状态漂移硬拦非空, 先 commands run kb.status 处理(部分完成翻 In Progress)再收尾" in out
-    assert "[C 清单: 反链 x In Progress] 无" in out and "[D 清单: 完成断言] 无" in out
-    assert len(list((mb2 / "activeContext").glob("*-drift-hard.md"))) == 1, "机械面照常完成"
+    assert "[D 清单: 完成断言] 无" in out
+    assert len(list((mb2 / "active-context").glob("*-drift-hard.md"))) == 1, "机械面照常完成"

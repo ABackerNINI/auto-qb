@@ -2,20 +2,22 @@
 """`kb.bump` —— 文档改版的一次落盘 (计划 memory-bank/plans/26-10-17-0527 P2, §03)。
 
 一次逻辑动作 = 一条命令: note 随参数带入, **不为 bump 再开一次编辑** —— 抬时间戳
-(timekit 单点) / 写变更记录行 / 抬 Updated / 抬切片最后活动 / 重跑索引, 全部派生。
+(timekit 单点) / 写变更记录行 / 抬 Updated / 抬切片最后活动, 全部派生。
 
 载体与动作 (单点: `_common.DOC_KIND_*`):
 - 计划 (`plans/*.html`): 抬 `doc-updated` (stamp) + `## 变更记录` 追加 R 行 (编号 = 段内最大 + 1)
 - 报告 (`reports/*.html`): 同上 —— **但多数报告无变更记录段**: 缺段即 fail-fast 并指路
   (直编辑正文 / 补段), 不猜位置硬塞
 - 任务档案 (`tasks/*.md`): 抬 `**Updated:**` (日期)
-- 会话切片 (`activeContext/*.md`): 抬 `> 最后活动:` (严格 YYYY-MM-DD HH:MM)
+- 会话切片 (`active-context/*.md`): 抬 `> 最后活动:` (严格 YYYY-MM-DD HH:MM)
 - issue (`issues/*.html`): 改版有自己的约定 —— 拒绝并指路 (翻状态 W4 起已收编 kb.status, 见
   flip_status; bump 只管改版, 不翻状态)
 
 fail-fast (黄金法则): 载体不认识 / 缺状态行或变更记录段一律 rc=1 (原因与下一步打在输出里);
 HTML 变更记录只追加 li 行, 已有行零触碰。末尾固定输出「剩余人工 0 项(判断 0 · 条件 0 ·
 **机械 0**)」契约 (§5.4 收录断言, §5.3: kb.bump 判断 0 / 条件 0 / 机械 0)。
+(2026-11-08 重构 W3: bump 后重建索引的步骤已退役 —— 改面四族的 `_index.md` 随低价值层
+移除, kb.bump 不再重建任何索引, 见 `_common.rebuild_index` 的收口注记。)
 
 用法 (从仓库根; `<skill-dir>` = 加载 memory-bank skill 时它实际所在的目录):
     python <skill-dir>/scripts/bump_doc.py <path> --note "一句话说清这版改了什么"
@@ -35,16 +37,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import timekit  # noqa: E402  (时间单点: UTC+8 naive 墙钟, 与 kb.time 同源)
 from _common import (  # noqa: E402
     DOC_KIND_CN,
-    DOC_KIND_INDEX_SCRIPT,
     DOC_KIND_ISSUE,
     DOC_KIND_PLAN,
     DOC_KIND_SLICE,
     DOC_KIND_TASK,
-    StatusVocabularyError,
     detect_doc_kind,
     find_root,
     rel_posix,
-    rebuild_index,
     resolve_doc_path,
     resolve_mb_dir,
     set_html_meta,
@@ -169,13 +168,13 @@ def main(argv: list[str] | None = None) -> int:
     kind = detect_doc_kind(path, mb)
     if kind == DOC_KIND_ISSUE:
         return _fail("issue 改版有自己的约定 —— 不在 kb.bump 范围 (翻状态走 commands run kb.status); "
-                     "直改正文后重跑 commands run kb.index")
+                     "改版直接编辑正文")
     if kind == DOC_KIND_SLICE:
         pass  # 切片可 bump: 只抬最后活动 (正文编辑是判断面)
     elif kind not in (DOC_KIND_PLAN, DOC_KIND_TASK):
         return _fail(
             f"载体不在改面范围: {rel_posix(path, root)} "
-            f"(只认 plans|reports/tasks/activeContext/issues 四类; 当前识别为 {DOC_KIND_CN.get(kind, kind) or '未知'})"
+            f"(只认 plans|reports/tasks/active-context/issues 四类; 当前识别为 {DOC_KIND_CN.get(kind, kind) or '未知'})"
         )
 
     moment = timekit.now()
@@ -188,15 +187,8 @@ def main(argv: list[str] | None = None) -> int:
     if rc != 0:
         return rc
 
-    # --- bump 后重建受影响索引 (切片无索引 → 空表; 与 kb.index 同一 build 实现)
-    try:
-        rebuilt = rebuild_index(root, mb, DOC_KIND_INDEX_SCRIPT.get(kind, ""))
-    except StatusVocabularyError as exc:
-        sys.stderr.write(f"[STOP] 已 bump, 但索引重建失败 (词表问题必须先修): {exc}\n"
-                         "处置后运行 commands run kb.index 重建索引\n")
-        return 1
-    if rebuilt:
-        print("已重建索引: " + ", ".join(rel_posix(p, root) for p in rebuilt))
+    # (2026-11-08 重构 W3: bump 后重建索引的步骤已退役 —— 改面四族的 `_index.md` 随低价值层
+    # 移除 (D4/D5), kb.bump 不再重建任何索引, 也不会重新生已删索引。)
 
     print()
     _print_remaining()

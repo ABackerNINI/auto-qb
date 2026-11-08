@@ -1,51 +1,20 @@
-# auto-qb Memory Bank (AI 知识库索引)
+# auto-qb Memory Bank (极简路由)
 
-> 面向 AI 助手的项目知识库。目标: 让 AI 在不重读全部源码的前提下, 快速建立对项目的准确心智模型, 并安全地修改代码。
-> **若代码与本文冲突, 以代码为准并回写更新本文。**
-> **入口链**: 根 [AGENTS.md](../AGENTS.md)(粗路由) → **本文件**(库内细路由) → 各 `_index.md` → 主题文件。
-> ⚠ **检索纪律: 先索引、后 grep、禁止整读**; 不确定关键词时 `grep -rn "<词>" memory-bank/` 兜底。
+> 库内单点路由。**检索纪律: `kb.active`(最近) → 本路由 → grep 兜底**(`grep -rn "<词>" memory-bank/`)。
+> 历史件(`tasks/` `plans/` `reports/` `issues/`)冻结不改 —— 指向已删路径的死链不修, 兜底 = grep 文件名 + `git log -- <旧路径>`。
 
-## 库内细路由 (我要做的事 → 读哪份)
-
-| 我要做的事 | 读 |
+| 我要做的事 | 去哪 |
 |---|---|
-| **改代码前扫陷阱 / 跑 git 命令前** | [pitfalls/_index.md](pitfalls/_index.md) —— 7 类, 按动作选类 |
-| 写 / 跑测试, 查基线数字 | [testing/_index.md](testing/_index.md) —— 最新基线 `commands run kb.baseline`; 口径 [baseline.md](testing/baseline.md) |
-| 查配置键 | [config-reference/_index.md](config-reference/_index.md) |
-| 规则 / 条件 / 动作 | [rule-system/_index.md](rule-system/_index.md) |
-| 架构 / 主循环 / 数据层 / 任务队列 / WEB 运行时 | [systemPatterns/_index.md](systemPatterns/_index.md) |
-| 找功能位置 / 加新模块 | [modules/_index.md](modules/_index.md) |
-| 命名 / 风格 / 协作约定 | [conventions/_index.md](conventions/_index.md) |
-| 项目是什么 / 领域知识 | [productContext.md](productContext.md) · [projectbrief.md](projectbrief.md) |
-| 技术栈 / 环境 / 约束 | [techContext.md](techContext.md) |
-| 已实现 / 规划中 | [progress/_index.md](progress/_index.md) |
-| **现在做到哪 / 上次做到哪** | [activeContext/](activeContext/_about.md) —— 会话滚动状态切片; 读法 `commands run kb.active` |
-| **下一步做什么** | `想法.md`(设计草稿待办) + [progress/roadmap.md](progress/roadmap.md)(规划中) |
-| **真机走查清单** | [checklists/_index.md](checklists/_index.md) —— 做走查时逐条勾 |
-| 跨会话任务档案 (立档 / 查档) | [tasks/_index.md](tasks/_index.md) |
-| 计划外问题池 (8 类 × 两档) | [issues/_index.md](issues/_index.md) |
-| **计划 / 报告 / 一件事的全部材料** | [plans/_index.md](plans/_index.md) · [reports/_index.md](reports/_index.md) · 专题视图 `kb.docmap`(不落盘) · **人的导航页 `kb.nav`(本地服务现算, 顶栏含仅快进拉取; 详情抽屉内嵌关系图, 局部环 / 关联泳道 / 全库三档, 节点可下钻)** |
-| **建制品 / 翻状态 / 改版 / 收尾** | 命令化(一次逻辑动作 = 一条命令 + 一次填空): `kb.new <族>`(计划/档案/报告/issue/基线/坑档/进展件)· `kb.status` · `kb.bump` · `kb.wrap` —— 口径与族清单见 [conventions/doc-forms.md](conventions/doc-forms.md)「创建/更新方式」 |
-| **跑项目命令** | `.commands/` 包(每包一 `config.toml`), 经 `commands` 引擎按 task id 调; 文档不许抄命令(`commands run doc.drift` 判红) |
-| **定期做变异测试审计(测试够不够硬)** | 怎么做 = skill `.agents/skills/mutation-testing/`(四段流程 / 三分类 / 派生计划模板); 命令 = `.commands/mutants/`; 证据 = [reports/26-10-08-0231](reports/26-10-08-0231-report-mutation-testing-feasibility.html); 排期锚 = [issues/26-10-08-0642](issues/26-10-08-0642-test-mutation-audit-standing.html) |
-| **真机实测(常用验收手段: 功能完工即触发, agent 自跑连真实 qB 的写侧 / 真行为; 排期锚兜底巡检)** | 怎么做 = [testing/real-machine.md](testing/real-machine.md)(准入判据 / 硬约束 / 环境守卫 / 免token免鉴权口径 / 种子层 L0-L2 / 切片更新规则 / 漂移判定 / 成熟度 L0-L3); 片表与进度 = 排期锚 [issues/26-10-31-0641](issues/26-10-31-0641-test-real-machine-test-standing.html); 每轮数字 = `testing/real-baselines/` |
+| **改代码前扫陷阱 / 跑 git 前** | [pitfalls/_index.md](pitfalls/_index.md) —— 7 类触发词表, 先扫再动手(全库唯一保留的 `_index`) |
+| **架构设计**(主循环/队列 · 数据与状态 · 规则引擎 · HR 分组 · WEBUI) | [architecture/](architecture/overview.md) 六包, 入口 overview |
+| 项目定位 / 范围 / 领域 | [projectbrief.md](projectbrief.md) |
+| 配置键权威 | 代码单点: `src/auto_qb/config/schema/` + `validate_config`(配置键不再写参考文档, 免漂移) |
+| 测试基线数字 | [testing/baseline.md](testing/baseline.md) + `commands run kb.baseline`(最新基线; 只引用不手抄) |
+| 真机实测 | [testing/real-machine.md](testing/real-machine.md) |
+| 命名 / 风格 / 协作 / 制品协议 | `conventions/` 七件(协议单点; 制品口径入口 [doc-forms.md](conventions/doc-forms.md)) |
+| **现在做到哪 / 上次做到哪** | `commands run kb.active` —— [active-context/](active-context/_about.md) 会话滚动切片 |
+| 计划 / 报告 / 档案 / issue(记录层, 只读) | 人走 `commands run kb.nav`(本地导航页); agent 走 grep |
+| **建件 / 翻状态 / 改版 / 收尾** | 命令化: `kb.new <族>` · `kb.status` · `kb.bump` · `kb.wrap` —— 口径见 [conventions/doc-forms.md](conventions/doc-forms.md)「创建/更新方式」 |
 
-## 生成物 (冲突时**重跑脚本**, 不要手改)
-
-- 各目录的 `_index.md` —— `commands run kb.index` 扫主题文件的三行头元数据生成
-- 分卷页 `_index-<n>.md` —— 主题多到一份 `_index.md` 装不进 8,000 字符时同批生成, 此时主索引退化为分卷路由(见 [pitfalls/web-ui/_index.md](pitfalls/web-ui/_index.md)); 同批重建、同批清残留, 一样不要手改
-- [tasks/_index.md](tasks/_index.md) —— `commands run kb.index` 扫档案 `Status` / `Summary` 生成
-- [issues/_index.md](issues/_index.md) —— `commands run kb.index` 扫报告 `issue-*` meta 生成(生成器在 memory-bank skill)
-- [plans/_index.md](plans/_index.md) / [reports/_index.md](reports/_index.md) —— `gen_docs_index.py`; 专题视图 `kb.docmap` 查询现算不落盘(_doc-map.md 已退役)
-- 新增目录 / 超 cap 的处置见 [memory-bank skill](../.agents/skills/memory-bank/SKILL.md) —— 改目录须同时改本细路由, 少一处守卫就红。
-
-## 一分钟速览
-
-- **项目**: `auto-qb` — 基于 `qbittorrent-api` 的 PT 种子自动化管理工具 (标签/分类/HR 管理、辅种分组与缺文件检查、自定义规则引擎、tracker 级限速、全局限速曲线)。
-- **形态**: 单机长驻 Python 程序, 入口 `python src/auto-qb.py [config.yml]`, 主循环 2s tick, 任务队列驱动。
-- **核心设计**: 所有工作统一为带 interval 的任务进单一时间优先堆; 增量同步 + `TorrentRecord` 独占种子数据; **主循环单线程, 是唯一改队列与 state_file 的线程**(详见 [systemPatterns/](systemPatterns/_index.md))。
-- **测试**: `pytest` + `tests/helpers.py` 全 Fake(无需真实 qBittorrent); 基线数字一条一切片(`commands run kb.baseline`), 勿手抄。
-- **文档**: 根 `README.md` 与 `想法.md` 是上游文档; 本库是代码实况核对版。
-- **制品形态**: 记一件事之前先读 [conventions/doc-forms.md](conventions/doc-forms.md) —— 四工位决策树与协议单点。
-
-> **黄金法则与常用命令: 单点定义在根 [AGENTS.md](../AGENTS.md)** —— 本文件不复述。
+> 黄金法则与常用命令: 单点在根 [AGENTS.md](../AGENTS.md), 本文件不复述。
+> 生成索引只剩 pitfalls 一族(`commands run kb.index` 重建, 不要手改); 新增坑档后重跑 `commands run kb.index`。

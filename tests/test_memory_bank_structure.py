@@ -1,9 +1,9 @@
 """test_memory_bank_structure 测试计划: Memory Bank 结构守卫测试 (TASK010; 2026-09-18 随任务档案改名同步更新)。
 
 守什么: 知识库的"跨会话连续性"完全依赖 `memory-bank/tasks/` 与入口文件的**结构化约定** —
-一旦索引与档案脱钩 (登记了没文件 / 有文件没登记)、状态分区与档案 `Status` 不一致、
-必备章节缺失, 下次会话就无法从 `tasks/` 续作; 一旦会话纪要回流进 `activeContext.md`,
-该文件会重新膨胀成流水账 (2026-09-17 复盘的真实故障)。这些判定都是纯静态的, 用测试守住成本极低。
+必备章节缺失、状态词漂移, 下次会话就无法从 `tasks/` 续作。这些判定都是纯静态的, 用测试守住成本极低。
+(2026-11-08 重构: tasks 索引/归档清单、顶层墓碑与存根机制已退役 —— 索引登记/归档全量/存根合法性/
+activeContext.md 流水账回流等以已删文件为宿主的用例随之收缩。)
 
 2026-09-18 起档案命名由 `TASKnnn-<slug>.md` 改为 `YY-MM-DD-<slug>.md`(全局序号在 9 个并行
 worktree 下必然撞号)。本文件在兼容期内同时接受两种命名, 主键一律取"去掉编号 / 日期前缀后的 slug"。
@@ -16,18 +16,12 @@ warn 而不是 problem —— 守住"降级后的严重度仍然正确", 而不�
 
 ## 测试计划
 
-- test_tasks_index_and_files_are_bijective: 索引登记与档案一致(CLOSED_KEEP 语义) —— 登记键必有档案、**在办必登记**; 完结件允许超出 60 条窗口不出主索引(全量在归档)
-- test_task_status_matches_index_section: 档案 `**Status:**` 与索引所在分区一致(被 CLOSED_KEEP 隐藏的完结件跳过)
-- test_tasks_archive_covers_all_files: 归档索引是全量 —— 每份档案(含被主索引隐藏的)都能在 `tasks/attachments/_archive.md` 查到
-- test_index_has_all_status_sections: 索引保留四个状态分区标题
-- test_index_is_regenerated: `_index.md` == memory-bank skill 的 `gen_tasks_index.py` 生成结果
-- test_active_context_has_no_rolled_up_session_log: 流水账只许住在 `activeContext/` 切片里, `activeContext.md` 本体不得出现 `^- 2026-` 行
 - test_session_protocol_is_exposed_in_always_on_entries: skill 载体存在且含阈值/DoD, `AGENTS.md` 声明阈值并指向 skill (copilot-instructions 2026-10-06 降级为指针后不再受查)
 
 知识库目录化守卫 (检查器在 memory-bank skill 的 `scripts/check_kb_structure.py`, 进程内 import):
 
 - test_kb_index_is_regenerated / test_kb_index_and_files_are_bijective: 索引 == 生成结果; 索引与目录双向一致
-- test_kb_no_orphan_index_dirs / test_kb_stubs_are_valid: 顶层索引都被 README 引用; 被拆文档留合法存根
+- test_kb_no_orphan_index_dirs: 顶层索引都被 README 引用
 - test_kb_active_context_slices_are_valid: 切片命名定宽 / 三行头齐 (结构); 尺寸与条数是**债务**, 不判红
 - test_kb_debt_count_excludes_min_size_hints: CLI 汇总行的「cap 债务 N 项」只数带 `DEBT_MARK` 的行, 「文件过小」提示不计入
 - test_kb_trim_hint_is_fixed_action_not_compress: 触顶口径 = 刚好 ≤ cap + 固定动作(外迁/删死段/合并邻近件), 禁止「压文案」与 50% 收缩 (2026-11-05 计划 §07 P2)
@@ -57,18 +51,12 @@ memory-bank skill 的 `scripts/flip_status.py` / `bump_doc.py`, **进程内 impo
 常驻锚防流水守卫 (检查器 memory-bank skill 的 `scripts/check_mutation_anchor.py`, 2026-10-31 加):
 
 
-kb.tier 分级清理四动作 (2026-10-31 R0, 计划 26-10-31-0534; 实现在 memory-bank skill 的
-`scripts/kb_tier.py`, **进程内 import**, tmp 夹具不碰真实 memory-bank/):
-
 - test_gen_all_declares_exactly_all_indexes: gen_all.py 的产出集合 == 库内全部 `_index.md`(生成物全集单点)
 - test_gen_all_check_is_green: gen_all.py `--check` 在当前库上绿 (磁盘 == 生成结果)
 - test_gen_all_list_matches_outputs: `--list` 声明的路径集合 == collect() 实际产出 (白名单不得多/少)
 - test_generated_indexes_are_lf_only: 生成物字节里无 CR —— 生成器 `write_text` 显式 `newline="
 "`, 防 Windows 上按 os.linesep 落成 CRLF 的"纯行尾噪音"
 - test_gen_cmd_hints_name_real_tasks: 生成物的"怎么重建"提示必须指向真能重建它的命令(`gen_cmd` 按脚本查表 + `kb.index` 覆盖面 ⊇ 闸门判红的生成物集合, 经 gen_all.py 单点收编后按声明核对; 2026-09-24 `_doc-map.md` 报错文案指错命令的机检)
-
-CLOSED_KEEP=60 索引出口 (计划 26-10-31-0534 R3/D5/D14, 2026-10-31 加; tasks 主索引的已完结区只留
-最近 60 条, 全量清单另落 `tasks/attachments/_archive.md`, 形态与 issues 侧同款; plans 侧守阵在 test_docs_forms.py):
 
 
 状态漂移守卫 (检查器 memory-bank skill 的 `scripts/check_status_drift.py`, 2026-10-31 加, **进程内
@@ -92,113 +80,13 @@ from pathlib import Path
 
 from kb_test_support import (
     EXTRA_GENERATED,
-    GEN,
-    INDEX,
-    INDEX_ID_RE,
     MB,
     ROOT,
     SKILL,
     SKILL_SCRIPTS,
-    STATUSES,
-    STATUS_RE,
-    TASKS,
     _gen_all,
-    _indexed_sections,
     _kb_checker,
-    _task_files,
 )
-
-
-def test_tasks_index_and_files_are_bijective() -> None:
-    """索引登记与档案文件的一致性 (CLOSED_KEEP 语义, 计划 26-10-31-0534 R3):
-
-    - 索引登记的每个键都必须有档案(不许登记悬空);
-    - 每份**在办**档案(In Progress / Open)必须登记在索引 —— CLOSED_KEEP 出口只许隐藏完结件,
-      在办永远可见(在办面是索引的常驻价值);
-    - 完结件(Done / Dropped)允许因超出 `CLOSED_KEEP` 窗口不出主索引 —— 全量清单在
-      `tasks/attachments/_archive.md`(test_tasks_archive_covers_all_files 兜底)。
-    """
-    indexed = set(_indexed_sections())
-    on_disk = {path.stem for path in _task_files()}
-
-    dangling = indexed - on_disk
-    assert not dangling, f"索引登记了不存在的档案: {sorted(dangling)}"
-
-    in_flight_missing = {}
-    for path in _task_files():
-        if path.stem in indexed:
-            continue
-        match = STATUS_RE.search(path.read_text(encoding="utf-8"))
-        status = match.group(1) if match else "Open"
-        if status not in ("Done", "Dropped"):
-            in_flight_missing[path.name] = status
-    assert not in_flight_missing, (f"在办档案必须登记进索引(CLOSED_KEEP 只许隐藏完结件): "
-                                   f"{in_flight_missing}")
-
-
-def test_task_status_matches_index_section() -> None:
-    """档案 `**Status:**` 与索引所在分区一致 (CLOSED_KEEP 语义: 被出口隐藏的完结件跳过 ——
-    「哪些件允许不在索引」由 test_tasks_index_and_files_are_bijective 判, 这里只管登记了的)。"""
-    sections = _indexed_sections()
-    for path in _task_files():
-        if path.stem not in sections:
-            continue
-        match = STATUS_RE.search(path.read_text(encoding="utf-8"))
-        assert match, f"{path.name} 缺少 `**Status:**`"
-        assert sections[
-            path.stem
-        ] == match.group(1), (f"{path.name} 档案 Status={match.group(1)} 与索引分区 "
-                              f"`## {sections[path.stem]}` 不一致")
-
-
-def test_tasks_archive_covers_all_files() -> None:
-    """归档索引是**全量**: 每份档案(含被主索引隐藏的完结件)都必须能在
-    `tasks/attachments/_archive.md` 里查到 —— 出口"不丢历史"的底线。"""
-    archive = TASKS / "attachments" / "_archive.md"
-    assert archive.is_file(), "缺 tasks/attachments/_archive.md (跑 `commands run kb.index` 生成)"
-    text = archive.read_text(encoding="utf-8")
-    absent = [path.name for path in _task_files() if path.stem not in text]
-    assert not absent, f"归档清单缺这些档案: {absent}"
-
-
-def test_index_has_all_status_sections() -> None:
-    text = INDEX.read_text(encoding="utf-8")
-    for status in STATUSES:
-        assert f"## {status}" in text, f"_index.md 缺少状态分区 `## {status}`"
-
-
-def test_index_is_regenerated() -> None:
-    """`_index.md` 是生成物: 冲突不再靠人工合并, 而是"任一方重跑一次脚本"。
-    本守卫保证磁盘上的索引确实是脚本产物, 而不是有人手改过。
-
-    **不跑子进程**: 本项目测试禁止启动外部进程 (`tests/sidefx.py` 的 POPEN 记账会判越界),
-    所以这里在进程内 import 生成器并比对渲染结果, 语义与 `--check` 一致。
-    """
-    assert GEN.exists(), "缺少 memory-bank skill 的 scripts/gen_tasks_index.py (索引将无法重建)"
-    assert SKILL_SCRIPTS.is_dir(), "缺少 memory-bank skill 的 scripts/ (生成器将无法加载)"
-    if str(SKILL_SCRIPTS) not in sys.path:
-        sys.path.insert(0, str(SKILL_SCRIPTS))
-    import gen_tasks_index
-
-    rendered = gen_tasks_index.build(ROOT, MB)
-    current = INDEX.read_text(encoding="utf-8")
-
-    assert current == rendered, "请运行 `python .agents/skills/memory-bank/scripts/gen_tasks_index.py` 重建索引"
-
-
-def test_active_context_has_no_rolled_up_session_log() -> None:
-    """滚动状态只许住在 `activeContext/` 切片里 —— `activeContext.md` 本体不得再出现流水账行。
-
-    2026-09-23 语义重定义: 切片**本来就是**流水账(每专题一条时间线), 所以「禁止流水账」这条
-    只对 `activeContext.md` 成立 —— 在切片化之后, 原判据(查 `^- 2026-`)会变成**恒绿**
-    (存根里不可能有这种行), 恒绿的守卫等于没守。切片侧的膨胀风险改由
-    `test_kb_active_context_slices_are_valid` 的 cap 与条数阈值接管。
-    """
-    text = (MB / "activeContext.md").read_text(encoding="utf-8")
-    leaked = [line[:60] for line in text.splitlines() if re.match(r"^- 2026-\d\d-\d\d:", line)]
-
-    assert not leaked, f"activeContext.md 出现流水账纪要行 (应写进 activeContext/ 切片): {leaked}"
-    assert (MB / "activeContext").is_dir(), "activeContext/ 切片目录缺失 —— 滚动状态没有归宿"
 
 
 def test_session_protocol_is_exposed_in_always_on_entries() -> None:
@@ -235,12 +123,6 @@ def test_kb_no_orphan_index_dirs() -> None:
     assert not problems, "\n".join(problems)
 
 
-def test_kb_stubs_are_valid() -> None:
-    """被拆文档的原路径必须是 ≤2 KB 存根 (含「已迁至」、不含正文) —— 护住 400+ 处历史引用。"""
-    problems = _kb_checker().check_stubs(ROOT, MB)
-    assert not problems, "\n".join(problems)
-
-
 def test_kb_active_context_slices_are_valid() -> None:
     """切片命名定宽 / 三行头齐 —— 这两个是**结构**, 坏了就解析不了, 判红。
 
@@ -252,11 +134,11 @@ def test_kb_active_context_slices_are_valid() -> None:
     checker = _kb_checker()
     import gen_active_recent
 
-    slice_dir = MB / "activeContext"
-    assert slice_dir.is_dir(), "缺少 memory-bank/activeContext/ 切片目录"
+    slice_dir = MB / "active-context"
+    assert slice_dir.is_dir(), "缺少 memory-bank/active-context/ 切片目录"
     rows, problems, _warns = gen_active_recent.collect(slice_dir, ROOT)
     assert not problems, "\n".join(problems)
-    assert checker.role_of("memory-bank/activeContext/x.md") == "slice", "切片路径未被 _common.role_of 认成 slice 角色"
+    assert checker.role_of("memory-bank/active-context/x.md") == "slice", "切片路径未被 _common.role_of 认成 slice 角色"
     assert rows, "切片目录是空的 —— 滚动状态没有归宿"
 
 
@@ -282,7 +164,7 @@ def test_kb_active_render_respects_byte_budget() -> None:
     def row(i: int) -> dict:
         when = datetime(2026, 1, 1) + timedelta(days=i)
         return {
-            "rel": f"memory-bank/activeContext/s{i}.md",
+            "rel": f"memory-bank/active-context/s{i}.md",
             "slug": f"topic-{i:02d}",
             "created": when,
             "last": when,
@@ -359,9 +241,9 @@ def test_kb_scripts_import_cleanly() -> None:
     if str(SKILL_SCRIPTS) not in sys.path:
         sys.path.insert(0, str(SKILL_SCRIPTS))
     for name in (
-        "_common", "gen_tasks_index", "gen_kb_index", "gen_docs_index", "gen_all", "check_kb_structure",
-        "gen_active_recent", "gen_baseline_recent", "check_doc_links", "timekit", "check_wording", "new_doc",
-        "wrap_session", "check_doc_templates", "flip_status", "bump_doc", "kb_tier", "check_status_drift"
+        "_common", "gen_kb_index", "gen_all", "check_kb_structure", "gen_active_recent", "gen_baseline_recent",
+        "check_doc_links", "timekit", "check_wording", "new_doc", "wrap_session", "check_doc_templates", "flip_status",
+        "bump_doc", "check_status_drift"
     ):
         path = SKILL_SCRIPTS / f"{name}.py"
         assert path.is_file(), f"缺少 {path.relative_to(ROOT)}"
@@ -429,7 +311,7 @@ def test_gen_cmd_hints_name_real_tasks() -> None:
     """生成物的"怎么重建"提示必须指向**真的能重建它**的命令(2026-09-24 实测缺陷)
 
     原先 `_common.gen_cmd()` 忽略传入的脚本名, 一律返回 `commands run kb.index`, 而 `kb.index`
-    当时只跑 gen_tasks_index + gen_kb_index。于是 `_doc-map.md` / `plans|reports/_index.md` 的报错
+    当时的覆盖面与闸门判红的生成物集合不一致。于是 `_doc-map.md` / `plans|reports/_index.md` 的报错
     文案("请运行 commands run kb.index")**照做一遍仍然是红的** —— 而提交闸门早就把这两条的
     `--check` 挂上了, 形成"闸门能红、却没有一条能修的命令"。
 
@@ -448,7 +330,9 @@ def test_gen_cmd_hints_name_real_tasks() -> None:
     # 1. 调用点全覆盖
     call_sites: set[str] = set()
     for path in sorted(SKILL_SCRIPTS.glob("*.py")):
-        call_sites |= set(re.findall(r'gen_cmd\(\s*root\s*,\s*"([^"]+)"\s*\)', path.read_text(encoding="utf-8")))
+        call_sites |= set(
+            re.findall(r'gen_cmd\(\s*root\s*,\s*["\']([^"\']+)["\']\s*\)', path.read_text(encoding="utf-8"))
+        )
     assert call_sites, "一个 gen_cmd 调用点都没扫到(写法变了? 同步本守阵)"
     missing = sorted(call_sites - set(table))
     assert not missing, (f"这些脚本调了 gen_cmd 却不在 GEN_CMD_BY_SCRIPT 表里: {missing} —— "

@@ -6,8 +6,8 @@
 ## 为什么能整目录拷走
 
 本 skill 是**自足**的: 一切脚本在 `scripts/`, 常量单点 `_common.py`, 不出现项目名、不假定安装深度
-(仓库根靠 `.git` 向上探测)。2026-11-07 起 issue 索引生成器 `gen_issues_index.py` 也已并入本 skill
-(计划 26-11-07-0549 W1, create-issue skill 只留流程文档) —— 生成物集合不再有 skill 外部依赖。
+(仓库根靠 `.git` 向上探测)。2026-11-08 重构后生成器只剩 `gen_kb_index.py`(仅 pitfalls 一族有生成索引,
+其余族的 `_index` 已退役) —— 生成物集合不再有 skill 外部依赖。
 
 时间戳一律 **UTC+8 naive 墙钟**(`scripts/timekit.py` 单点), 与机器时区无关。
 
@@ -16,10 +16,10 @@
 1. **拷 skill 目录**: `.agents/skills/memory-bank/` → 目标项目同名路径, 或用户级
    `~/.workbuddy-ai/skills/memory-bank/`。`scripts/` 整目录带走即可 —— `check_kb_structure.py` /
    `check_doc_links.py` / `timekit.py` / `gen_*.py` / `nav_*.py` 全在里面。
-2. **建 KB 骨架**: 建 `memory-bank/` 与各目录 —— `tasks/` `activeContext/` `plans/` `reports/`
-   `issues/` `pitfalls/<类>/` `testing/baselines/` 等; 每个**索引目录**放一份 `_about.md`(三行头);
+2. **建 KB 骨架**: 建 `memory-bank/` 与各目录 —— `tasks/` `active-context/` `plans/` `reports/`
+   `issues/` `pitfalls/<类>/` `testing/baselines/` 等; 索引目录(现仅 pitfalls)放一份 `_about.md`(三行头);
    手写 `memory-bank/README.md` 细路由(它不被生成, 是路由单点)。
-3. **首次生成**: 跑 `commands run kb.index` 重建全部 `_index.md`。
+3. **首次生成**: 跑 `commands run kb.index` 重建 pitfalls 的 `_index.md`(全库唯一生成索引)。
 
 ## 可选机检 (推荐全挂)
 
@@ -27,7 +27,7 @@
   `check_kb_structure` / `gen_*` / `gen_active_recent` / `check_doc_links` / `timekit`, 不起子进程。
   项目专属的断言(AGENTS.md 8,000 硬上限等)留在项目侧测试里。
 - **命令包**: 建 `.commands/kb/config.toml`(task id: `kb.index` / `kb.check` / `kb.active` /
-  `kb.baseline` / `kb.docmap` / `kb.time` / `kb.nav`), 命令里用 `<skill-dir:memory-bank>` 占位符
+  `kb.baseline` / `kb.new` / `kb.time` / `kb.nav`), 命令里用 `<skill-dir:memory-bank>` 占位符
   —— skill 目录搬家 / 换安装位置时配置零改动。
 - **提交闸门**: 把 `kb.check` 与 `timekit.py --check` 挂进提交前闸门(改 `memory-bank/` 即触发);
   另挂 `check_doc_links.py --quiet`(改名 / 搬家后的坏链只有机检看得见)。

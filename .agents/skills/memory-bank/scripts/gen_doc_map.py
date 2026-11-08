@@ -1,5 +1,9 @@
 """跨形态专题视图查询 CLI (只打印, 不写文件) —— 「一件事的全部材料」入口。
 
+> 注记 (2026-11-08 重构 W3): kb.docmap 视图命令已随 26-11-08 重构退役; 本脚本仅作认领链守卫
+> (gen_doc_map --check, 挂 kb.check 与提交闸门) 与死引用跳过 (RETIRED_REF_ROOTS)。视图打印
+> (无参 / --topic / --all / --forks) 仅存留为只读查询能力, 不再收录为命令。
+
 一行一专题: 列出该专题名下的 issue / 计划 / 报告 / 档案与各自状态。
 2026-09-29 起 `_doc-map.md` 物化视图退役 (写热点 + `index-auto` cap 反复触顶, 复盘见
 pitfalls/kb/cap-counting.md「生成式跨形态视图」条的收口注记), 改为查询时现算 —— 命名沿用
@@ -54,6 +58,23 @@ TASK_REFS_RE = re.compile(r"^\*\*Refs:\*\*[^\S\n]*(.+)$", re.MULTILINE)
 # refs 多目标的唯一合法分隔符是英文逗号; 这些视觉分隔符常见误用, 命中即进报错提示 (issue 26-10-03-0746)
 VISUAL_SEP_RE = re.compile(r"[·、;；|｜]")
 NAME_WRAP = 4000  # 名录折行宽度, 只影响换行 —— 零信息损失 (150→400→4000 三轮收口, 见 git 历史; 折行以专题名为原子, 2026-10-18 修名称被撕断)
+
+# 2026-11-08 重构移除的路径根 (memory-bank 相对; 计划 26-11-08-1625 §01 移除层 + D2「git 历史即冷库」)。
+# 历史件(issues/plans/reports/tasks)的 doc-refs/Refs 指向这些根的引用**不修**(D2: 历史件正文零改动),
+# 认领链校验按「已知死亡」跳过 —— 不算闸门问题 (计划 §07 R1: kb.nav 对这些 ref 显示 dead 属预期)。
+# 兜底不变: 目标字符串仍在 refs 里, 排障用 grep 文件名 + `git log -- <旧路径>`。
+RETIRED_REF_ROOTS = (
+    "progress/",
+    "activeContext/",
+    "checklists/",
+    "config-reference/",
+    "modules/",
+    "rule-system/",
+    "systemPatterns/",
+    "archive/",
+    "productContext.md",
+    "techContext.md",
+)
 
 
 def _utf8_stdout() -> None:
@@ -202,7 +223,7 @@ def render_live(items: list[dict]) -> str:
     out = [
         "# 跨形态专题视图 (查询时现算)",
         "",
-        "> `kb.docmap` [--topic <key> | --all | --check | --forks]; 完结 (Done/Dropped/Superseded) 与单件专题只列名,",
+        "> 本脚本 [--topic <key> | --all | --check | --forks]; 完结 (Done/Dropped/Superseded) 与单件专题只列名,",
         "> 全行见 --topic / --all; 协议见 [doc-forms.md](conventions/doc-forms.md)。",
         "",
         f"## 活跃专题 ({len(live_multi)})",
@@ -224,7 +245,7 @@ def render_all(items: list[dict]) -> str:
     out = [
         "# 文档形态总览 (按专题, 全量)",
         "",
-        "> `kb.docmap --all` —— 等价退役的 `_doc-map.md`; 协议见 [doc-forms.md](conventions/doc-forms.md)。",
+        "> 本脚本 --all —— 等价退役的 `_doc-map.md`; 协议见 [doc-forms.md](conventions/doc-forms.md)。",
         "",
         f"## 跨形态专题 (≥2 件) · {len(multi)}",
         "",
@@ -294,10 +315,11 @@ def check_topic_key_shape(items: list[dict]) -> int:
 def check_status_vocabulary(items: list[dict]) -> int:
     """状态词表校验: `doc-status` / `issue-status` 不在 5 词表 (`_common.DOC_STATUSES`) 即退码 1。
 
-    表外值 (如 `Draft`) 会让 `gen_docs_index` **静默漏收**该件 (不落任何分区) —— 2026-10-16 自
-    pitfalls/kb/doc-status-meta.md 的教训**下沉到提交闸门**: 机检若只活在 pytest, 纯文档轮
-    (`test.quick` 闸门 match 只盯 `src/` `tests/`) 会一路绿灯入库 (与 2026-10-03 认领链下沉同款)。
-    tasks 的 `**Status:**` 是**另一张 4 词表**, 不在此校验范围; 空值 (缺 meta) 由别的守卫管, 跳过。
+    2026-10-16 自 pitfalls/kb/doc-status-meta.md 的教训**下沉到提交闸门**: 机检若只活在 pytest,
+    纯文档轮 (`test.quick` 闸门 match 只盯 `src/` `tests/`) 会一路绿灯入库 (与 2026-10-03 认领链
+    下沉同款)。tasks 的 `**Status:**` 是**另一张 4 词表**, 不在此校验范围; 空值 (缺 meta) 由别的
+    守卫管, 跳过。(原索引静默漏收之害随 2026-11-08 重构索引退役而消失, 本校验仍在: 词表纪律
+    与 nav 数据源仍依赖单点 5 词表。)
     """
     bad = [
         f"{i['form']}: {i['link']} → status={i['status']!r}"
@@ -306,7 +328,7 @@ def check_status_vocabulary(items: list[dict]) -> int:
     if bad:
         sys.stderr.write(
             f"doc-status / issue-status 不在 5 词表 ({' / '.join(DOC_STATUSES)}) 内 —— "
-            "gen_docs_index 会静默漏收该件 (见 pitfalls/kb/doc-status-meta.md):\n"
+            "单点 _common.DOC_STATUSES (见 pitfalls/kb/doc-status-meta.md):\n"
         )
         for b in bad:
             sys.stderr.write(f"  {b}\n")
@@ -344,6 +366,12 @@ def check_duplicate_declarations(mb: Path) -> list[str]:
     return problems
 
 
+def _is_retired_ref(ref: str, mb_rel: str) -> bool:
+    """ref 指向 2026-11-08 重构移除的路径根 → 已知死亡 (判据见 RETIRED_REF_ROOTS)。"""
+    rel = ref[len(mb_rel) + 1:] if ref.startswith(f"{mb_rel}/") else ref
+    return rel.startswith(RETIRED_REF_ROOTS)
+
+
 def check_claim_chain(items: list[dict], root: Path, mb: Path) -> list[str]:
     """认领链双向校验: 声明了 `doc-refs` / `**Refs:**` 的件, 目标必须存在且反向声明本件。
 
@@ -373,6 +401,9 @@ def check_claim_chain(items: list[dict], root: Path, mb: Path) -> list[str]:
                     archived = root / f"{mb_rel}/testing/baselines/attachments" / ref.rsplit("/", 1)[1]
                     if archived.is_file():
                         target = archived
+            if not target.exists() and _is_retired_ref(ref, mb_rel):
+                # 2026-11-08 重构: 目标在已退役根下 —— 历史件不修(D2), 按「已知死亡」跳过 (见 RETIRED_REF_ROOTS)。
+                continue
             if not target.exists():
                 hint = ""
                 if VISUAL_SEP_RE.search(ref):

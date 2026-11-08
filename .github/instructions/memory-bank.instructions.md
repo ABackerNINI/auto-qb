@@ -5,53 +5,35 @@ applyTo: 'memory-bank/**'
 
 # Memory Bank — 编辑本目录时的规则
 
-> 本文件是 `applyTo: memory-bank/**` 的**规则载体**: 只在编辑 `memory-bank/` 时注入, 所以它必须**自足且短**。
-> **单点在别处, 本文件不复述** —— 完整规程(会话开始 / 收尾 DoD 5 步 / 立档阈值 / 档案模板 / cap 分级 /
-> 三行头与 pitfalls 字段规格)全在 [memory-bank skill](../../.agents/skills/memory-bank/SKILL.md);
-> cap 的**机器单点**是该 skill 的 `scripts/_common.py`(`CAP_POLICY`, 守卫 import 它, 别在这里抄一张表);
-> 硬约束(黄金法则 / 红线 / 提交口径)在根 [AGENTS.md](../../AGENTS.md); 库内细路由在
-> [memory-bank/README.md](../../memory-bank/README.md); 闸门清单在 `.commands/my-commit-flow/.my-commit-flow.toml`。
+> 本文件是 `applyTo: memory-bank/**` 的**路由桩**(只在编辑 `memory-bank/` 时注入)。
+> 口径唯二单点: 根 [AGENTS.md](../../AGENTS.md)(粗路由 + 硬约束) · [memory-bank/README.md](../../memory-bank/README.md)(库内细路由);
+> 完整规程(会话两端 / 立档阈值 / cap 分级 / 三行头规格)在 [memory-bank skill](../../.agents/skills/memory-bank/SKILL.md)。
+> 本文件只做路由与结构一览, 不复述任何细则。
 
-## 三条铁律
+## 检索纪律(三步, 2026-11-08 起)
 
-1. **先索引、后 grep、禁止整读。**
-   ❌ 「read ALL memory bank files at the start of every task」是**旧版反模式, 已废弃** ——
-   它正是本库一度涨到 50 万字符、「必读」退化成「不读」、已记的坑被反复重踩的直接原因。
-   ✅ 入口链: `AGENTS.md`(粗路由) → `memory-bank/README.md`(细路由) → `<目录>/_index.md` → 主题文件。
-   关键词不明确时 `grep -rn "<词>" memory-bank/` 兜底 —— 每个主题文件头部都写了 `触发:` 动作词, 就是给 grep 用的。
-2. **生成物一律不要手改。** `_index.md` 冲突只需**重跑生成器**, 不要人工合并两版文本 ——
-   同理 `tasks/_index.md` / `issues/_index.md`; `activeContext.md` 是 ≤2 KB 存根(滚动状态在 `activeContext/`)。
-3. **改完让机检全绿** —— 见末节「收尾」。红了先读判据说的是哪一条, 不要绕过。
+1. `commands run kb.active` —— 最近会话滚动状态
+2. [memory-bank/README.md](../../memory-bank/README.md) 细路由 —— 按任务选目录/文档
+3. `grep -rn "<词>" memory-bank/` —— 兜底(不确定关键词时); **禁止整读**
 
-## 这个目录怎么长
+❌「read ALL memory bank files at the start of every task」是旧版口径, **已废弃**(记录层四工位零索引, 检索只走上面三步)。
+动代码前先扫 `pitfalls/_index.md` —— 全库唯一幸存的生成索引(改码前扫陷阱, grep 替代不了)。
+
+## 当前结构(2026-11-08 重构后)
 
 ```
 memory-bank/
-  README.md              # 库内细路由 (手写)
-  activeContext.md       # ≤2 KB 存根; 滚动状态在下面那个目录里 (勿往存根写状态)
-  activeContext/         # 会话切片 YY-MM-DD-HHMM-<slug>.md; 有独立阅读器, 不生成 _index.md
-  <专题>/                # _about.md(手写) + _index.md(生成物) + <主题>.md(三行头)
-  tasks/                 # 档案 YY-MM-DD-<slug>.md + attachments/ (有独立生成器)
-  issues/  checklists/
+  README.md                        # 库内细路由 (手写, 口径单点之一)
+  active-context/                  # 会话切片 YY-MM-DD-HHMM-<slug>.md (kb.active 读)
+  architecture/                    # 架构六包 (入口 overview.md)
+  conventions/                     # 协议单点 (doc-forms / webui / code-style / collaboration…)
+  pitfalls/                        # 坑档 <类>/<主题>.md; _index.md 是生成物 (kb.index 重建, 勿手改)
+  projectbrief.md                  # 项目定位 / 范围 / 领域
+  issues/ plans/ reports/ tasks/   # 记录层四工位 (历史件冻结; 检索 = grep + kb.nav(人))
+  testing/                         # baseline.md · real-machine.md · baselines/ (冻结快照)
 ```
 
-- 新增**目录** = 建目录 + 写 `_about.md` + 主题文件(三行头) + **重跑生成器** + 在
-  [memory-bank/README.md](../../memory-bank/README.md) 细路由**登记一行** —— 少一处结构守卫就红。
-- 新增**主题文件** = 写文件(三行头) + 重跑生成器。
-- **存根**: 被拆掉的原路径保留 ≤2 KB 存根, 只为兜住历史计划 HTML / issue 报告里的既有引用。
-  ❗**活文档应指向目标文件, 不指向存根** —— 链接存在性由 `scripts/check_doc_links.py` 验,
-  但"指向存根"**不会报错**, 只能靠人守。
+## 改完让机检全绿
 
-## 收尾 (改完 `memory-bank/` 必跑)
-
-```text
-commands run kb.index    # 改了档案 Status / Summary, 或任何主题文件的三行头 (跑 gen_tasks_index.py + gen_kb_index.py + gen_docs_index.py)
-commands run kb.check    # 改了会话切片 (各索引生成器 + docmap 主键 + gen_active_recent.py 等切片校验的 --check)
-commands run doc.links   # 相对链接存在性
-```
-
-- 结构 / cap / 双向一致 / 存根 / 条目字段: `python .agents/skills/memory-bank/scripts/check_kb_structure.py`
-  (还没收进包 —— 它只在整库体检时用, 不是每轮收尾的一环)。
-- 制品目录另有守卫 `tests/test_docs_forms.py`(命名 / meta / 状态词 / dark / 索引自洽 / 认领链), 罩着 `gen_docs_index.py` 生成的 plans/ reports/ 制品; 跨形态专题视图是查询命令 `commands run kb.docmap`(2026-09-29 起 `_doc-map.md` 物化退役, 不落盘), 主键纪律由该测试的 `test_doc_topics_complete` 兜底。
-
-这些命令都已挂 `my-commit-flow` 包的 `[[gates]]`, 提交时会自动跑; 会话级 5 步 DoD 见 skill。
+`commands run kb.check`(切片 / 词表 / 认领链 / 日期守卫) 与 `commands run doc.links`(相对链接),
+均已挂提交闸门; 会话协议与收尾 DoD 见 skill —— 本文件是路由桩, 不是第二套规范。

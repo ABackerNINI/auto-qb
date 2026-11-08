@@ -1,7 +1,6 @@
 # Git ref 核对
 
 > 摘要: ref 核对已内联进 `ship.commit`(静默通过; 只看 commit 输出会被骗, 由脚本兜住; packed-refs 陈旧形态 v5 起自动修复+放行, v7 起自愈静默 —— 失败说明仅 COMMAND_FLOW_DEBUG=1 可见); 本 shell 里 `refs/remotes/*` 的写入会被静默丢弃 —— sync/push 脚本判据因此只认 ls-remote 现查真值。
-> 等级: L1
 > 触发: 提交后核对, ref, packed-refs, 分支被回退, staged 暴增, 上游未设置, 领先落后算不出
 
 ### ref 三处核对已内联进 ship.commit: `HEAD` == `refs/heads/<branch>` == loose ref(packed-refs 仅排障参照)

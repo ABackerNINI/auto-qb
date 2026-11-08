@@ -1,7 +1,6 @@
 # 幽灵包守阵误红: 迁移残壳只剩 __pycache__
 
 > 摘要: 包源码迁走后, 旧目录在 git 里已删但磁盘残留只含 `__pycache__` 的空壳目录 (gitignored 未跟踪, 检出/同步不清掉), 被幽灵包守阵 (test_no_ghost_pkg_dirs) 判红 —— 是环境残留不是代码缺陷, 整目录删除即绿。
-> 等级: L1
 > 触发: 跑 pytest 时 test_src_has_no_ghost_pkg_dirs 红, 报 src/ 下某目录; 或排障时发现某包「还在」但 import 不到。
 
 ### 迁移残壳触红幽灵包守阵 (环境残留, 非代码缺陷)

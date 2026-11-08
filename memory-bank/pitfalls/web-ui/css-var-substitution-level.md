@@ -1,7 +1,6 @@
 # CSS 自定义属性的 var() 代入发生在声明元素, 组件层重挂"原料令牌"追不回已算死的颜色
 
 > 摘要: 把「配方颜色」当供给槽在 :root/preset 层算死(如 `--fx-glow-c: color-mix(... var(--accent-ink) ...)` 写在 html 的 preset 块), 再指望组件层重挂原料令牌(`.bt.danger { --fx-glow-ink: var(--error) }`)换色 —— **必然落空**: var() 的代入发生在**声明该属性的元素**上, --fx-glow-c 在 <html> 层就替换成了 accent 色, 后代元素继承的是**算好的计算值**, 自己重挂 --fx-glow-ink 改变不了任何已算死的下游令牌(2026-11-04 fx 辉光四轮修实测: danger-solid 悬停仍发 accent 青光, getComputedStyle 看 ink=红而 boxShadow=青)。定稿修法: 配色公式从 :root/preset 挪到 `*` 通用层 —— 每个元素用自己的原料令牌现算, preset 只供标量(半径/ink/alpha), 组件层按变体重挂 ink 即时生效。
-> 等级: L1
 > 触发: 主题换色, 按变体换色, danger 换红, 皮肤令牌, preset 配方, 重挂令牌, ink 钩子, getComputedStyle 不一致, 计算值不更新, color-mix 变量, --fx-glow, fx-presets, 组件配方换色
 > 收口: 2026-11-04, fx.css 辉光配色公式落 `*` 通用层(fx-glow-stack 三层荧光配方单点), 供给面标量化
 **Refs:** memory-bank/tasks/26-11-04-webui-fx-glow.md

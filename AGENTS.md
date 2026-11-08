@@ -5,13 +5,13 @@
 
 ## 知识库路由(两层:本文件粗路由→`memory-bank/README.md`细路由)
 
-「按任务读哪份文档」的单点在`memory-bank/README.md`的细路由表(含改代码前/跑git前必读的索引、检索纪律「先索引、后grep、禁止整读」)——本文件不复述,免得两处各自演化。
+「按任务读哪份文档」的单点在`memory-bank/README.md`的细路由表(含改代码前/跑git前必读的pitfalls索引、检索纪律: `commands run kb.active`(最近)→ [README](memory-bank/README.md) 路由 → `grep -rn` 兜底; 禁止整读)——本文件不复述,免得两处各自演化。
 
 ## 会话协议
 
 完整规程(会话开始/收尾DoD/立档阈值4条/任务档案模板)见memory-bank skill(`.agents/skills/memory-bank/SKILL.md`);机械守卫`tests/test_memory_bank_*.py`(四分)。本节只留入口。
 
-- **开始**:①**先同步(硬性,无豁免——问答/只读分析轮次也必须先同步)**——`commands run my-commit-flow.sync`:自动fetch+快进/分叉自动rebase(保线性),结果行「已同步 <hash>」贴进回复,真改写HEAD的步骤(快进/rebase)按「旧hash→新hash」各留一行在它上面;失败一行含原因与步骤(树脏/冲突已自动回滚),照做后重跑,**禁止在落后的分支上工作——只读分析同样禁止**。**只读评审子代理豁免本步**(同步是主会话开工动作;其git状态不动,自检锚=任务提示给的head hash——派遣照抄code-review skill④的三件套);**可写子代理不豁免**(照常同步,或在任务提示里钉死基线)。②看会话滚动状态:`commands run kb.active`列`memory-bank/activeContext/`切片;该读哪份文档走上面的路由。③**只动当前这一个clone**——跨仓库操作**绝对禁止**,须用户显式说「授权」(见「🔴 跨仓库操作」节)。
+- **开始**:①**先同步(硬性,无豁免——问答/只读分析轮次也必须先同步)**——`commands run my-commit-flow.sync`:自动fetch+快进/分叉自动rebase(保线性),结果行「已同步 <hash>」贴进回复,真改写HEAD的步骤(快进/rebase)按「旧hash→新hash」各留一行在它上面;失败一行含原因与步骤(树脏/冲突已自动回滚),照做后重跑,**禁止在落后的分支上工作——只读分析同样禁止**。**只读评审子代理豁免本步**(同步是主会话开工动作;其git状态不动,自检锚=任务提示给的head hash——派遣照抄code-review skill④的三件套);**可写子代理不豁免**(照常同步,或在任务提示里钉死基线)。②看会话滚动状态:`commands run kb.active`列`memory-bank/active-context/`切片;该读哪份文档走上面的路由。③**只动当前这一个clone**——跨仓库操作**绝对禁止**,须用户显式说「授权」(见「🔴 跨仓库操作」节)。
 - **建件与改版**:一律命令化创建(`kb.new <族>` / `kb.status` / `kb.bump` / `kb.wrap`),派生面零手写;族清单与口径见`memory-bank/conventions/doc-forms.md`「创建/更新方式」。
 - **收尾**:每批收尾先跑code-review skill(批次判定见其①,`review.pack`/`review.check`是机械面; 提交闸门强制 `Review:` trailer),然后按skill的DoD:切片`commands run kb.wrap`(机械面;蒸馏与判断仍是agent的活)→达阈值立档`commands run kb.new task`→代码事实变更回写`memory-bank/`与根README→`commands run test.full`并新建基线切片(`kb.new baseline --total ..`,数字从实测誊写)→**新坑按动作写进`pitfalls/<类>/<主题>.md`并重跑`commands run kb.index`**。若这轮踩到**已记的坑**,把该条`复发`+1,并在档案里写一句为什么没命中(路由没到/文件没读/读了没照做)。
 - **冲突裁决**:代码 > `memory-bank/` > 根`README.md` > `想法.md`;漂移以代码为准并回写。
@@ -33,7 +33,7 @@
 3. **状态持久化**:跨轮次状态统一进state_file;优雅退出立即落盘+运行期按state_save_interval周期落盘(配置端下限30s,0=关),非优雅终止丢失窗口≤间隔。
 4. **fail-fast**:配置在`config.validate_config`全量校验并聚合报错;之后的代码假定配置正确。**新配置键必须加进validate_config并同步`src/auto_qb/config/schema/`**(守卫测试会查)。
 5. **单一写线程**:只有主循环线程改任务队列结构与state_file;不引入绕开该假设的并发代码。
-6. **范围守恒**:计划外的代码/文档缺陷**一行都不改**——入池`memory-bank/issues/`(命名/8类类型/档位/`_index.md`登记见create-issue skill `.agents/skills/create-issue/SKILL.md`);**入池不为填单做代码分析**。该不该现在修见scope-guard skill `.agents/skills/scope-guard/SKILL.md`。
+6. **范围守恒**:计划外的代码/文档缺陷**一行都不改**——入池`memory-bank/issues/`(命名/8类类型/档位见create-issue skill `.agents/skills/create-issue/SKILL.md`);**入池不为填单做代码分析**。该不该现在修见scope-guard skill `.agents/skills/scope-guard/SKILL.md`。
 7. **请求边界**:开工先判这一轮是**问答/只读**还是**执行任务**——只是问就**只在回复里作答**,不得入池issue/立档/出计划/改文件/commit push;想延伸排查先问。只有执行任务才适用上面的收尾DoD与立档阈值。
    - **"继续/continue/接着做/你看着办"不构成授权**——只表示"把你手上这一步做完"。四类动作必须**逐项**显式确认:①新建文件②入池issue③认领issue④commit/push。
    - **开工同步不受本条豁免**:问答/只读轮次开工照样先跑`my-commit-flow.sync`(协议硬步骤,只fetch+快进,不扩大本轮动作范围)。

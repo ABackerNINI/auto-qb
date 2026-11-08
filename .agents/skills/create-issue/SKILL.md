@@ -1,18 +1,18 @@
 ---
 name: create-issue
-description: '计划外问题入池: 在 issues 目录生成 HTML 报告(8 类类型 × 便签/标准两档)并在 _index.md 登记类型+简述+链接。USE FOR: 需要把一个暂时不修的问题记成别人能直接开工的记录; 用户说"记个 issue"/"这个问题先记下来"/"创建 issue"/"入池"/"更新 issue 状态"/"issue 修完了"/"issues 索引重建" 时。DO NOT USE FOR: 本次计划内的缺陷 (直接修)、纯答疑、代码评审清单、大改造(走 tasks/ 档案或 memory-bank/plans/ 计划)。判断"该不该现在修"见 scope-guard skill; 本 skill 只负责记。'
+description: '计划外问题入池: 在 issues 目录生成 HTML 报告(8 类类型 × 便签/标准两档; 索引已退役 26-11-08, 查重靠时间戳 slug 与 grep issues/)。USE FOR: 需要把一个暂时不修的问题记成别人能直接开工的记录; 用户说"记个 issue"/"这个问题先记下来"/"创建 issue"/"入池"/"更新 issue 状态"/"issue 修完了" 时。DO NOT USE FOR: 本次计划内的缺陷 (直接修)、纯答疑、代码评审清单、大改造(走 tasks/ 档案或 memory-bank/plans/ 计划)。判断"该不该现在修"见 scope-guard skill; 本 skill 只负责记。'
 user-invocable: true
 ---
 
 # Issue 报告 (issues 池)
 
-把"暂时不修的问题"变成一份**别人不用重新调查就能开工**的记录, 并在索引里留一条 `类型 · 简述 · 链接`。
+把"暂时不修的问题"变成一份**别人不用重新调查就能开工**的记录。
 
 - 什么该入池、什么该当场修 → 见 [scope-guard skill](../scope-guard/SKILL.md)。
 - 本 skill 只负责**记录与状态流转**, 不负责判断修不修。
 - **核心原则: 入池成本与问题重量成正比** —— 文档漂移写三行就够, 复杂缺陷才值得停下来取证。
 - **机械面已收编进 kb 命令包** (2026-11-07, 计划 26-11-07-0549): 建件 `commands run kb.new issue` ·
-  翻状态 `commands run kb.status` · 索引 `commands run kb.index`。本 skill 保留**流程语义**
+  翻状态 `commands run kb.status`。本 skill 保留**流程语义**
   (类型 / 档位 / 防过期 / 认领链 / 反模式), 脚本与模板已并入 memory-bank skill。
 
 ## 类型(8 类, 进文件名第二段)
@@ -51,20 +51,20 @@ user-invocable: true
 ### 1. 建件(一条命令, 派生面零手写)
 
 ```bash
-commands run kb.new issue <slug> --type docs --title "中文标题" --summary "一句话简述(进索引)" \
+commands run kb.new issue <slug> --type docs --title "中文标题" --summary "一句话简述" \
   [--tier light|standard] [--module webui] [--reporter worktree] [--topic <kebab>] [--refs <路径>,<路径>]
 ```
 
 - `<slug>`: 小写英文短横线, 建议 `<领域>-<专题>`(只是建议, 分类职责已交给 type); 兼作 `doc-topic` 默认主键。
-- `--type` / `--summary`: **必填**, type 不在 8 类枚举里直接报错; summary 进 issues 索引行。
+- `--type` / `--summary`: **必填**, type 不在 8 类枚举里直接报错; summary 进封面摘要 meta。
 - `--tier`: 默认由类型推导, 显式覆盖(如 test 失败用例用 standard)。
 - `--topic`: `doc-topic` 跨形态串联主键(默认 = slug)。**多条 issue 属于同一专题时显式指定同一个值**
-  (如 `webui-optimistic-ui` 下挂 3 条), 这样 `commands run kb.docmap` 的专题视图才把它们串成一条线。
+  (如 `webui-optimistic-ui` 下挂 3 条), 这样 `commands run kb.nav` 台账的专题视图才把它们串成一条线。
   不传 = 一题一专题。**该 meta 不可省** —— 缺了该 issue 会从专题视图里静默漏掉
   (守卫 `tests/test_docs_forms.py::test_issue_topics_present` 判红)。
 - 模板同时带空的 `doc-refs` meta(认领链声明位): 与既有计划/档案相关时创建即可填(`--refs`);
   被 tasks 档案认领时**必须填**, 见「修一条 issue 时」第 3 步。
-- 时间戳 / 命名 / 头部字段 / 封面徽标 / `_index.md` 与归档索引重建全由命令派生 ——
+- 时间戳 / 命名 / 头部字段 / 封面徽标全由命令派生 ——
   **不再需要先跑 `commands run kb.time stamp` 取时确认**(那是手写建件时代的步骤): `kb.new` 经 timekit
   单点取时(UTC+8 钉死, 与机器时区无关), 值不对只可能是系统时钟问题; `kb.time` 只剩手写带日期文件时的用途。
 - 产出 `memory-bank/issues/<时间戳>-<类型>-<slug>.html`, 例 `26-09-19-2359-docs-memory-bank-push-rule-drift.html`;
@@ -91,7 +91,7 @@ commands run kb.new issue <slug> --type docs --title "中文标题" --summary "�
 
 ## 状态机
 
-状态写在报告 HTML 的**封面状态徽标**(`<span class="badge">`)与 `<head>` 的 `<meta name="issue-status">`(**两处一起改**, 索引只读 meta), 取值仅五种(2026-09-23 起与四形态统一 5 词表, 见 [doc-forms 约定](../../../memory-bank/conventions/doc-forms.md)):
+状态写在报告 HTML 的**封面状态徽标**(`<span class="badge">`)与 `<head>` 的 `<meta name="issue-status">`(**两处一起改**), 取值仅五种(2026-09-23 起与四形态统一 5 词表, 见 [doc-forms 约定](../../../memory-bank/conventions/doc-forms.md)):
 
 | 状态 | 含义 |
 |---|---|
@@ -102,12 +102,12 @@ commands run kb.new issue <slug> --type docs --title "中文标题" --summary "�
 | `Superseded` | 与他件重复 / 被取代(写明指向哪一条) —— 旧词 `Duplicate` |
 
 改状态的唯一入口: `commands run kb.status <件> <新状态>`(2026-11-07 W4 收编) —— 两处状态一起改、
-追加一行状态变更日志、重建索引(含归档)全由命令派生; 幂等(同状态翻转不抬时间戳不重建索引),
+追加一行状态变更日志全由命令派生; 幂等(同状态翻转不抬时间戳),
 翻进终态(`Done` / `Dropped` / `Superseded`)带提醒, 词表校验单点 import(表外值直接拒绝)。
 
-`_index.md` 是**生成物**(与 `tasks/_index.md` 同款): 按状态分区, 每行 = `类型 · 简述 · 报告链接`, 顶部有 Open 状态的按类型计数表。**不要手改它** —— 多个工作区并行时手改必然冲突, 冲突的解法是重跑
-`commands run kb.index`, 不是人工合并两版文本。
-文件名合规(含合法 type)与状态取值由生成器守卫, 不合规直接报错退出。
+issues 的 `_index.md` 已随 2026-11-08 重构退役(开放池无 agent 消费者): 查重靠时间戳 slug 与
+`grep -rn "<词>" memory-bank/issues/`, 人找 issue 走 `commands run kb.nav`(台账现算, 与索引零耦合)。
+文件名合规(含合法 type)由 `kb.new` 守卫、状态取值由 `kb.status` 词表校验, 不合规直接报错退出。
 
 ## 修一条 issue 时
 
@@ -121,7 +121,7 @@ commands run kb.new issue <slug> --type docs --title "中文标题" --summary "�
    `gen_doc_map --check` 判红; 协议单点见 [doc-forms「认领链」](../../../memory-bank/conventions/doc-forms.md)。
 4. 修完置 `Done`(`commands run kb.status <件> "Done"`), 在报告里补"实际修法 / 验证方式 / 测试数字"; 与"建议修法"不同则保留建议原文并说明改道原因。
 5. 按 `memory-bank` skill 的收尾 DoD 跑测试、回写 `memory-bank/` 主题文档; 需要时同步更新报告正文。
-6. 索引随 `kb.status` 自动重建; 若另手改过报告的标题 / 摘要 meta, 跑 `commands run kb.index` 让索引行同步。
+6. 无索引可重建(26-11-08 退役); 人找 issue 走 `commands run kb.nav`(现算), agent 走 grep。
 
 ## 可移植性(换项目怎么用)
 
@@ -138,8 +138,7 @@ issues 目录固定 `memory-bank/issues`, 独立 `--dir` / `--root` / `--project
 - ❌ 为填满字段去读代码 —— 分析会过期(见防过期原则), 且违背"入池不改码"的初衷。
 - ❌ 轻问题走标准档 —— 文档漂移写 7 段是纯浪费。
 - ❌ 文件名 / 时间戳凭记忆编 —— 必然与真实时间不符, 且与别的文件撞序(走 `kb.new issue` 由命令派生)。
-- ❌ 手改 `_index.md` —— 生成物, 重跑 `commands run kb.index` 即可。
 - ❌ 手工改状态(只改 meta 不改封面徽标, 或反之) —— 两处漂移, 人读的和脚本读的不一致;
-  翻状态一律 `commands run kb.status`, 两处 + 日志行 + 索引一条命令跑齐。
+  翻状态一律 `commands run kb.status`, 两处 + 日志行一条命令跑齐。
 - ❌ 认领 issue 后不填 `doc-refs` —— 认领方的 `Refs` 列了本件就是单向链, 提交闸门判红(见「修一条 issue 时」第 3 步)。
 - ❌ 把大改造塞进 issues —— 那该是 `tasks/` 档案或 `memory-bank/plans/` 计划。

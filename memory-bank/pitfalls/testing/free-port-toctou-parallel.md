@@ -1,7 +1,6 @@
 # `_free_port()` 动态选座不保真 —— 并行 TOCTOU 撞段, 真绑定断言偶发红
 
 > 摘要: 真绑定生命周期用例用 `_free_port()` 探空闲端口当候选表基底, 再连号持段(全占断言要 3 位全空/顺延断言钉精确端口)—— 「探测时空闲 ⇒ 真 bind 时被占」的 TOCTOU 窗在 `-n 8` 并行下关不掉: 另一 worker 同窗选中同段(或其子集), 断言精确端口的用例偶发判红, 单跑/复跑恒绿。计划 26-11-05-0808 实施期 T3/T5/T6/T8c 四轮全量各中一次(`tests/test_hr_discovery.py` 生命周期组), 四次均单跑复绿, 零代码缺陷。
-> 等级: L0
 > 触发: 写真绑定用例, _free_port, 动态端口, 并行偶发红, TOCTOU, 端口被占, xdist 端口冲突, 连号候选表, 全占断言, 单跑恒绿
 **Refs:** memory-bank/tasks/26-11-05-backend-relocate-fastresume-finalize.md
 

@@ -1,7 +1,6 @@
 # 平台差异与打桩 (Windows / Linux)
 
 > 摘要: 「Windows 全绿 / Linux 全红」的**多类根因**与"归错类比不修更危险"的教训 —— 平台相关测试必须以 `monkeypatch` 固定平台; 最隐蔽的两类: **Windows 路径归一化(结尾点/空格被剥、大小写不敏感)让"路径存在性"判据在本机恒真**(2026-10-11 一条坏的相对链接连过三道本机防线、只在 Linux CI 红), 与**给 `os.stat` 打桩在 Windows 对 C 内建的 `os.path.exists` 无效**(2026-11-07 两条预检用例 Linux 上被判「源文件缺失」抢拦); 另记一条**本工具 shell 注入 `PYTHONUTF8=1` 造出的假红**(2026-09-25 已修: 环境揭出引擎码页回退真缺陷, GetACP + 测试钉缝双修)。
-> 等级: L1
 > 触发: CI 红, Linux CI, 平台差异, monkeypatch, WSL, normcase, dir_fd, 平台专属模块, 码页, GBK, cp936, PYTHONUTF8, 假红, 路径归一化, 结尾点, 大小写不敏感, exists, 坏链, 省略号占位, os.stat 桩, os.path.exists, C 内建, nt._path_exists, posixpath, exist_ok
 
 **Refs:** memory-bank/tasks/26-10-04-test-ci-platform.md,memory-bank/tasks/26-10-11-doc-links-strict-check.md

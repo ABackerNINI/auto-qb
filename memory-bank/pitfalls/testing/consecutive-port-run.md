@@ -2,7 +2,6 @@
 
 > 摘要: 「连续 N 个候选端口」类用例(发现端点 base/base+1/base+2)若只用 `_free_port()` 取基址、再自己逐个显式 bind, 后 N-1 位从未被验证: 落进 Windows 动态排除段(Hyper-V/WSL 开机预留, 每次开机不同)或被独占进程占住就抛 WinError 10013/10048 ⇒ 假红。修法两条: ①占位走端口单点 `tests/_test_ports.py::hold_run(n)`(整段逐个真绑并持有, 任一位失败整段丢弃换基址); ②断言写「落在候选表」而不是钉死某个端口号(顺延是正确行为)。
 > 触发: 连号候选端口, base+1, base+2, 排除段, WinError 10013, 10048, _hold_ports, discovery_candidates, 端口单点, hold_run, 假红, netsh excludedportrange
-> 等级: L0
 
 **Refs:** [issue 26-11-06-0330](../../issues/26-11-06-0330-test-hr-discovery-busy-retry-flake.html)
 

@@ -1,7 +1,6 @@
 # xdist 高载下进程内假服已建连被中止(WinError 10053)—— 偶发红先分「主断言段/对照段」
 
 > 摘要: 测试自起 `http.server.ThreadingHTTPServer(("127.0.0.1", 0))` 当假服, test.full(并行 + 覆盖率插桩)高载下, **真客户端打真本地服**的段偶发 `ProtocolError: Connection aborted, ConnectionAbortedError(10053, '你的主机中的软件中止了一个已建立的连接')` —— 0 端口无抢号问题(fixed-port / free-port TOCTOU 两族都不沾), 是**已建立的连接被本机中止**。被测行为的主断言往往此时已全过, 红在末段"机制自证/红验"的对照组; 单跑绿 + 复跑全量绿即定性偶发, 别当回归去修测试。
-> 等级: L0
 > 触发: 10053, ConnectionAbortedError, Connection aborted, 你的主机中的软件中止了一个已建立的连接, ProtocolError, ThreadingHTTPServer, 进程内假服, 本地假服, 真客户端, 对照组, 红验回放, 机制自证, xdist, 并行高载, 偶发红, 单跑绿, urlopen, urllib3
 **Refs:** memory-bank/tasks/26-11-07-test-legacy-review4-scripts-fix.md
 

@@ -1,7 +1,6 @@
 # kb.wrap --did 与档案正文不能带裸测试数字
 
 > 摘要: `commands run kb.wrap --did "..."` 的一句话会同时写进切片 R 行(`**R1(日期):**` 前缀)与档案进度日志行, 两处都不匹配「带日期前缀的行」豁免; 句里带 `213 passed` 这类裸数字会被 kb.check 的 check_wording 判红(判据族 B, 只拦新增)。2026-10-17 当天两个会话各踩一次, 2026-10-22 再犯(--did 路径); 2026-11-05 第 4 次走的是**另一条路径** —— 档案收尾段直接抄数字(SKILL.md DoD 第 4 条「写进本次结论」歧义措辞所致, 当轮已修)。另: 判红时打印的违规行取自**全量命中的扫描序末 N 条**, 常指向无关的存量件 —— 定位新增必须做 HEAD/工作区 `--list-numbers` 清单 diff。
-> 等级: L0
 > 触发: kb.wrap, --did, 裸测试数字, check_wording 判红, R 行不写数字, 收尾回写, 手抄数字判红位置, 末 N 条, 存量还是新增, 清单 diff 定位, 误判入池
 
 **Refs:** memory-bank/tasks/26-10-17-webui-traffic-source-fixes.md

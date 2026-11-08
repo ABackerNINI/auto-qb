@@ -1,7 +1,6 @@
 # 前缀替换的幂等判定别只查目标前缀命中 —— 新旧根互为前缀时目标命中可能是源命中的推论
 
 > 摘要: `core/fastresume.rewrite_save_paths` 初版「先查新根前缀命中 ⇒ already 跳过」在 new_root 是 old_root 真前缀(父方向嵌套, new<old)时误判: 值命中新根前缀只因它命中旧根(旧根以新根开头), 并非「已在新根」⇒ 旧根键值被跳过永不改写; daemon 记 already 出账后核验永不过 ⇒ journal 永久悬挂(D10 收敛公理违反)。收口评审 #1 blocker(2026-11-07, 修复 commit 4f70190f)。
-> 等级: L0
 > 触发: 写前缀替换, 幂等判定, already 跳过, 嵌套根, 新旧路径包含关系, 改写永不生效, 核验永不过, journal 悬挂
 **Refs:** memory-bank/tasks/26-11-05-backend-relocate-fastresume-finalize.md
 

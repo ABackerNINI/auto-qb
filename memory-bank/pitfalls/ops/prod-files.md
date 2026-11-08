@@ -1,7 +1,6 @@
 # 生产文件红线
 
 > 摘要: `config.yml` 与 `auto-qb-data/` 是用户真实生产数据 —— 提交面禁令由 `.commands/my-commit-flow/.my-commit-flow.toml` 的 `red_lines` **机器预检强制执行**(预检与 `commit.py` 直接拒交, 不靠记性); 本条目是人工红线说明: 红线清单、判别与为什么禁碰。
-> 等级: L0
 > 触发: 改配置示例, 新增示例 yml, 提交前扫红线, 整理仓库, 统一格式
 
 ## 人工红线说明

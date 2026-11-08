@@ -1,7 +1,6 @@
 # 分卷索引多一跳: 主索引只给卷号, 定位表在卷页
 
 > 摘要: `pitfalls/{backend,testing,web-ui}` 主索引是分卷路由(只有卷号/主题范围/条数), 定位表在 `_index-<n>.md`; 主索引查不到不等于没有这个坑。
-> 等级: L0
 > 触发: 分卷索引,卷页,主索引找不到,多一跳,pitfalls 索引,卷号定位,CLOSED_KEEP,归档索引,全量清单
 **Refs:** `memory-bank/pitfalls/backend/_index.md` · `memory-bank/pitfalls/testing/_index.md` · `memory-bank/pitfalls/web-ui/_index.md` · `memory-bank/tasks/_index.md` · `memory-bank/tasks/attachments/_archive.md`
 

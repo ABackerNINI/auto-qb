@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
 """`kb.wrap` —— 收尾的机械面 (计划 memory-bank/plans/26-10-17-0527 P1, D6)。
 
-**只做机械面** (切片 / 档案 / 索引 / 清单); 蒸馏与判断仍是 agent 的活:
+**只做机械面** (切片 / 档案 / 清单); 蒸馏与判断仍是 agent 的活:
 - 切片: 不存在则按模板建(**判断剩余 0** —— 模板的可选骨架段在建件时剥掉, 只留三行头 + R0 行;
   `--did` 即合法摘要, 裁定 A6), 存在则抬「最后活动」+ 追加一条带日期的 R 行 (编号 = 现有最大 + 1)
 - 档案: `**Topics:**` 同专题的 tasks/ 档案 → 抬 `**Updated:**` + 进度日志追加一行带日期条目
   (日期属派生面, 裁定 A5 —— 轮内不逐行写日期, 收尾统一带)
-- 索引: 动了档案就重建 `tasks/_index.md` (与 `kb.index` 同一 build 实现)
 - 清单: 末尾输出剩余收尾清单 (基线? 新坑? 债务转告?) —— 收尾知识内嵌, 不必重读 DoD
-- 状态漂移: 尾部跑 check_status_drift 打印 C/D 清单 (空打「无」) —— 只提示不拦截, wrap
+- 状态漂移: 尾部跑 check_status_drift 打印 D 清单 (空打「无」) —— 只提示不拦截, wrap
   退出码不因此改变; 硬拦档 (A/B/异常) 非空时附一行 kb.status 提示
 
 用法 (从仓库根; `<skill-dir>` = 加载 memory-bank skill 时它实际所在的目录):
@@ -30,7 +29,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import timekit  # noqa: E402  (时间单点: UTC+8 naive 墙钟, 与 kb.time 同源)
 from _common import (  # noqa: E402
-    SKILL_DIR, SLICE_FILE_RE, find_root, rel_posix, resolve_mb_dir,
+    SKILL_DIR, SLICE_DIR, SLICE_FILE_RE, find_root, rel_posix, resolve_mb_dir,
 )
 
 SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
@@ -123,7 +122,7 @@ def main(argv: list[str] | None = None) -> int:
     moment = timekit.now()
 
     # --- 切片 (不存在则按模板建; 存在则抬最后活动 + 追加 R 行)
-    slice_dir = mb / "activeContext"
+    slice_dir = mb / SLICE_DIR
     existing = _find_slices(slice_dir, args.topic)
     if existing:
         if len(existing) > 1:
@@ -159,17 +158,11 @@ def main(argv: list[str] | None = None) -> int:
             print(
                 f"[提示] 未找到 Topics == {archive_key} 的档案 (由 --archive 指定) —— 跳过; "
                 f"请从 `grep -h '^\\*\\*Topics:\\*\\*' memory-bank/tasks/*.md | sort -u` 取可用键, "
-                f"切片仍按 --topic {args.topic} 落在 activeContext/"
+                f"切片仍按 --topic {args.topic} 落在 active-context/"
             )
 
-    # --- 索引 (动了档案才需要重建; 切片无索引)
-    if touched:
-        import gen_tasks_index  # noqa: PLC0415
-
-        index = mb / "tasks" / "_index.md"
-        index.parent.mkdir(parents=True, exist_ok=True)
-        index.write_text(gen_tasks_index.build(root, mb), encoding="utf-8", newline="\n")
-        print(f"已重建索引: {rel_posix(index, root)}")
+    # (2026-11-08 重构 W3: 动了档案就重建 tasks/_index.md 的步骤已退役 —— 该索引随低价值层
+    # 移除 (D4/D5), kb.wrap 不再重建任何索引, 也不会重新生已删索引。)
 
     print()
     print("剩余人工 1 项(判断 0 · 条件 1 · 机械 0)")
@@ -181,17 +174,17 @@ def main(argv: list[str] | None = None) -> int:
     print("【可选】切片摘要/档案 Summary 精编 (复杂会话, 不计步)")
 
     # --- 状态漂移扫描 (清单只提示, 不拦截: 不改变 wrap 的退出码与结果)
-    import check_status_drift  # noqa: PLC0415  (同进程 import, 与 gen_tasks_index 同款)
+    import check_status_drift  # noqa: PLC0415  (同进程 import)
 
-    gate_a, gate_b, anomalies, gate_c, gate_d = check_status_drift.collect_tiers(mb)
+    gate_b, anomalies, gate_d = check_status_drift.collect_tiers(mb)
     print()
     print("状态漂移扫描 (check_status_drift; 只提示, 不拦截):")
-    for label, rows in (("C 清单: 反链 x In Progress", gate_c), ("D 清单: 完成断言", gate_d)):
+    for label, rows in (("D 清单: 完成断言", gate_d), ):
         if not rows:
             print(f"  [{label}] 无")
             continue
         print(f"  [{label}] {len(rows)} 条 (--verbose 展开详情)")
-    if gate_a or gate_b or anomalies:
+    if gate_b or anomalies:
         print("状态漂移硬拦非空, 先 commands run kb.status 处理(部分完成翻 In Progress)再收尾")
     return 0
 

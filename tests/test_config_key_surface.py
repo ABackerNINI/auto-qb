@@ -11,8 +11,9 @@
   → 在 config/migrations.py 注册迁移(import 即注册, 纯函数 dict→dict) → 补迁移回归测试
   (参照 test_hr_config.py 的兼容锚写法) → 重生成基线。口径: versioning.py 模块 docstring /
   计划 26-09-26-0506 / pitfalls/backend/schema-stamp-writeback.md。
-- **非破坏变更**(纯新增键): 刻意不造版本, 直接重生成基线(commands run test.keys-update)并回写
-  memory-bank/config-reference/keys.md。
+- **非破坏变更**(纯新增键): 刻意不造版本, 直接重生成基线(commands run test.keys-update)。
+  (2026-11-08 重构: 键面参考文档 keys.md 已随 config-reference/ 移除退役, 权威归
+  src/auto_qb/config/schema/ + validate_config。)
 - 守卫不自动裁决破坏/非破坏(机器判不了语义), 用键面差异 + 报错文案分流路由。
 
 ## 键面口径(生成器 build_config_key_surface 是单点, 再生脚本只是调用方)
@@ -32,12 +33,6 @@
   「消失键(破坏)/纯新增(非破坏)/版本已抬」三种现场分流报错, 文案指路升级流程
 - test_config_migration_chain_complete: MIGRATIONS["config"] 恰好覆盖 1..CURRENT-1 —— 版本表与
   迁移表同步的静态断言(原来只在运行时 migrate() 里 fail-fast, 抬号忘迁移提前到测试期暴露)
-- test_keys_md_covers_key_surface: 键面每个叶键(路径末段, 词边界匹配)在参考文档反引号 span 内有
-  出处 —— 改键忘回写文档当场报。语料 = keys.md + 其规则集段委托的插件参考
-  (rule-system/conditions-and-actions.md), 跟随委托关系不重复维护。插件 spec 内部键(conditions/
-  actions 插件名之下的层级)同样无豁免(issue 26-09-28-1946 清偿): checking spec 逐键参考在
-  conditions-and-actions.md「checking 动作详解」节, 其余插件键在两份文档的 spec 示例 span 内,
-  改键必须同步回写
 - test_loader_probe_table_covers_named_leaf_surface: loader 消费探针表必须恰好覆盖键面命名叶键
   (扣动态段与豁免) —— 新增键不配探针当场红, 逼着补「YAML 显式值」探针; 键在面上但 loader 漏读
   (issue 26-10-06-0027 D-01 形态: 键面/schema/校验五处齐备唯独 loaders 不取值, 三道旧守卫全探不到)
@@ -47,7 +42,6 @@
   loader 消费核对); 探针期望值 ≠ 字段默认值本身也是断言, 防探针退化成与缺省同值的空转核对
 """
 import logging
-import re
 import tempfile
 from pathlib import Path
 
@@ -64,12 +58,6 @@ from auto_qb.infra.versioning import CURRENT_VERSIONS, MIGRATIONS
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BASELINE_PATH = Path(__file__).parent / "fixtures" / "config_key_surface.txt"
-# 出处语料 = keys.md + 它在「规则集段」委托的插件参考(keys.md 只留指针, 插件清单单点在那边,
-# 跟随委托关系合并检查, 避免同一批插件键两处重复维护)
-_DOC_PATHS = (
-    REPO_ROOT / "memory-bank" / "config-reference" / "keys.md",
-    REPO_ROOT / "memory-bank" / "rule-system" / "conditions-and-actions.md",
-)
 
 # 版本章自身不入键面(它归版本链框架管); trackers 顶层键单独按动态段展开
 _EXCLUDED_TOP_KEYS = {"schema_version", "trackers"}
@@ -185,14 +173,12 @@ def test_config_key_surface_matches_baseline():
             "  1) 抬 CURRENT_VERSIONS['config'](src/auto_qb/infra/versioning.py)\n"
             "  2) 在 src/auto_qb/config/migrations.py 注册迁移(import 即注册, 纯函数 dict->dict)\n"
             "  3) 补迁移回归测试(参照 tests/test_hr_config.py 的兼容锚写法)\n"
-            "  4) commands run test.keys-update 重生成基线, 并回写 memory-bank/config-reference/keys.md\n"
+            "  4) commands run test.keys-update 重生成基线\n"
             "口径: versioning.py 模块 docstring / 计划 26-09-26-0506 / pitfalls/backend/schema-stamp-writeback.md"
         )
     else:
-        routing = (
-            "纯新增键 = 非破坏性变更(刻意不造版本, versioning.py 口径):\n"
-            "  commands run test.keys-update 重生成基线, 并回写 memory-bank/config-reference/keys.md"
-        )
+        routing = ("纯新增键 = 非破坏性变更(刻意不造版本, versioning.py 口径):\n"
+                   "  commands run test.keys-update 重生成基线")
     pytest.fail(
         f"配置键面与基线不一致(基线 v{baseline_version} / 当前 v{current_version})\n" + "\n".join(detail) + f"\n处置: {routing}"
     )
@@ -206,22 +192,6 @@ def test_config_migration_chain_complete():
     assert registered == expected, (
         f"config 迁移链与版本表不同步: 版本表 v{current}, 迁移表注册了 {sorted(registered)}, 期望 {sorted(expected)} —— "
         "抬 CURRENT_VERSIONS['config'] 必须同时在 config/migrations.py 注册 v(n-1)->vn 迁移(import 即注册)"
-    )
-
-
-def test_keys_md_covers_key_surface():
-    """键面叶键必须在参考文档反引号 span 内有出处(词边界匹配): 改键忘回写参考文档当场报"""
-    spans: list = []
-    for doc in _DOC_PATHS:
-        spans.extend(re.findall(r"`([^`\n]+)`", doc.read_text(encoding="utf-8")))
-    missing = []
-    for path in sorted(build_config_key_surface()):
-        leaf = path.rsplit(".", 1)[-1]
-        pattern = re.compile(rf"(?<![A-Za-z0-9_]){re.escape(leaf)}(?![A-Za-z0-9_])")
-        if not any(pattern.search(span) for span in spans):
-            missing.append(path)
-    assert not missing, (
-        "键面叶键在参考文档(keys.md + rule-system/conditions-and-actions.md)无出处(改键必须同步回写):\n  " + "\n  ".join(missing)
     )
 
 

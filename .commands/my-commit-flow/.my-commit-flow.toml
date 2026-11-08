@@ -89,22 +89,16 @@ timeout = 300
 note  = "包与引擎的脚本测试: 改哪个包跑哪个包(≥2 包/引擎改动保守整跑) —— test.pkg 本体保留给手工整跑与 scoped 的 --full 转调"
 
 [[gates]]
-match = ["memory-bank/issues/"]
-run   = ["python <skill-dir:memory-bank>/scripts/gen_issues_index.py --check"]
-auto  = true
-timeout = 60
-note  = "issue 索引: skill 路径由预检定位, 找不到即 STOP"
-
-[[gates]]
 match = ["memory-bank/"]
 # 2026-10-11 补两条 (静默红根因, issue 26-10-11-1630): 原清单只有索引生成器 + timekit, 漏了
 #   `gen_baseline_recent --check` 与 `check_wording --check` —— 二者都在 `kb.check` 的 run 列表里
 #   (即"该跑的"), 却没进闸门, 于是"能判红却不在闸门里" = **静默红** (实测: 三份基线切片缺三行头
 #   使 kb.check 第 4 条恒红, 提交照过)。覆盖面从此与 kb.check 对齐, 由
 #   tests/test_memory_bank.py::test_commit_gate_covers_kb_check 钉住 (再漏即红)。
-run   = ["python <skill-dir:memory-bank>/scripts/gen_tasks_index.py --check",
-         "python <skill-dir:memory-bank>/scripts/gen_kb_index.py --check",
-         "python <skill-dir:memory-bank>/scripts/gen_docs_index.py --check",
+# 2026-11-08 重构: 三个制品索引生成器的 --check 移除 (本体与调用点已同批退役) ——
+#   其生成物 (tasks/plans/reports/issues 的 _index.md 与 attachments/_archive.md) 已随低价值层
+#   移除退役 (计划 26-11-08-1625 D4/D5); 索引生成只剩 gen_kb_index 一家 (pitfalls)。
+run   = ["python <skill-dir:memory-bank>/scripts/gen_kb_index.py --check",
          "python <skill-dir:memory-bank>/scripts/gen_doc_map.py --check",
          "python <skill-dir:memory-bank>/scripts/gen_baseline_recent.py --check",
          "python <skill-dir:memory-bank>/scripts/check_wording.py --check",
@@ -115,7 +109,7 @@ run   = ["python <skill-dir:memory-bank>/scripts/gen_tasks_index.py --check",
          "python <skill-dir:memory-bank>/scripts/check_html.py --check"]
 auto  = true
 timeout = 60
-note  = "知识库索引 + 制品索引与专题视图 + 日期守卫 + 基线切片结构 + 回写措辞: 生成物与滚动面都必须自洽 (整目录一条闸门, 不再按子目录各配一条); timekit --check 拦未来日期 / 坏体例 (2026-10-06 加); gen_baseline_recent / check_wording (2026-10-11 加, 补齐 kb.check 覆盖面); check_doc_templates --check (2026-10-17 P1 加: 冻结线之后新建族文件的命名/头部/状态词表/无残留 SLOT, 存量豁免; 2026-10-31 修: plan/report 圈面改文件名 stamp 前缀, 堵「缺 doc-added 手写新件整件逃逸」洞, RM02-RM10 事故); check_mutation_anchor --check (2026-10-31 加: 常驻锚防流水, 台账/逐轮日志写回 = 红); check_status_drift --check (2026-10-31 加: 状态漂移守卫, progress 判据节反链 x Open / issue badge vs meta / status-unreadable 硬拦)"
+note  = "知识库索引 + 制品索引与专题视图 + 日期守卫 + 基线切片结构 + 回写措辞: 生成物与滚动面都必须自洽 (整目录一条闸门, 不再按子目录各配一条; 2026-11-08 起索引生成只剩 gen_kb_index/pitfalls 一家); timekit --check 拦未来日期 / 坏体例 (2026-10-06 加); gen_baseline_recent / check_wording (2026-10-11 加, 补齐 kb.check 覆盖面); check_doc_templates --check (2026-10-17 P1 加: 冻结线之后新建族文件的命名/头部/状态词表/无残留 SLOT, 存量豁免; 2026-10-31 修: plan/report 圈面改文件名 stamp 前缀, 堵「缺 doc-added 手写新件整件逃逸」洞, RM02-RM10 事故); check_mutation_anchor --check (2026-10-31 加: 常驻锚防流水, 台账/逐轮日志写回 = 红); check_status_drift --check (2026-10-31 加: 状态漂移守卫, progress 判据节反链 x Open / issue badge vs meta / status-unreadable 硬拦; 2026-11-08 重构 W5: progress 判据节反链档随 progress/ 目录退役删除)"
 
 [[gates]]
 # HTML 结构守卫(2026-11-01 两起实测事故: 闭合标签少 `>` 被分词器整段吞掉, 其后内容全嵌进未闭合
@@ -132,7 +126,7 @@ timeout = 120
 note  = "HTML 规范级增量检查(v.Nu): 全仓改动 HTML 都查(2026-11-01 起不限 memory-bank); 有 error 即 STOP; 修复后重跑, 或 commands run kb.html-audit 看全库报告"
 
 [[gates]]
-match = ["memory-bank/activeContext/"]
+match = ["memory-bank/active-context/"]
 run   = ["python <skill-dir:memory-bank>/scripts/gen_active_recent.py --check"]
 auto  = true
 timeout = 60
