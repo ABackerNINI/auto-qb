@@ -238,7 +238,7 @@ select option { background: var(--bg-elev); color: var(--fg); }
 .modal-detail-row .d-label { flex: 0 0 62px; color: var(--fg-dim); font: 500 11px/1.6 var(--font-mono);
   letter-spacing: .05em; text-transform: uppercase; }
 /* 弹窗语义配色分级(计划 26-10-19-2341)整组在 shared/console_hub.css —— 三皮肤逐条同,
- * ①②③④ 四级层次连注释一起搬过去了(拆散后各自的特异性论证读不懂)。
+ * 1. 2. 3. 4. 四级层次连注释一起搬过去了(拆散后各自的特异性论证读不懂)。
  * 基线规则组 .modal-title / .modal.danger .modal-title .ico 仍在本套 components.css。 */
 
 .modal-detail-row .d-value { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden;
@@ -264,10 +264,10 @@ select option { background: var(--bg-elev); color: var(--fg); }
  * 为什么不换图标源: toast 模板(`tpl/overlays.html` 的 kind→`<use href>` 映射)与各皮肤 sprite 段
  * 都是**四皮肤共享且逐字相等**的守阵面 —— 换 glyph 会连带改三套旧皮肤(范围守恒禁, 且旧皮肤没有
  * 18px 档, 换过去只会变小脏)。故 flux 只在**渲染层**换漆:
- *   ① `color: transparent` 让 sprite 字形(currentColor 描边)失效 = 藏掉旧字形;
- *   ② `mask` 把「圆环 + 圈内字形」当形状, `background-color: var(--msg-tone)` 上色 —— 语义档
+ *   1. `color: transparent` 让 sprite 字形(currentColor 描边)失效 = 藏掉旧字形;
+ *   2. `mask` 把「圆环 + 圈内字形」当形状, `background-color: var(--msg-tone)` 上色 —— 语义档
  *      单点复用(与 components.css 的 --msg-tone 表同源, 一处着色两处通用, 不另开配色表);
- *   ③ 每档一张 mask(数据 URI 直写, 单点在本块), `.toast.busy` 的 `.spin` 照旧转 = 圈内箭头自转。
+ *   3. 每档一张 mask(数据 URI 直写, 单点在本块), `.toast.busy` 的 `.spin` 照旧转 = 圈内箭头自转。
  * 降级: 不支持 mask 的浏览器**不进本块** → 保留 sprite 字形(仅放大到 18px / stroke 2), 图标仍在,
  * 只是不画圈(能力降级而非信息丢失)。新增 kind 必须在此补一张 mask(守阵同 kind 表一起扫)。 */
 /* 兜底尺寸(同一档视觉重量, 只是不画圆环): 写在 @supports 之前, 支持 mask 时由下面的规则覆盖 */

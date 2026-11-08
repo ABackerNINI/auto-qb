@@ -16,7 +16,7 @@
     .rule { border: 0; border-top: 1px solid rgba(255,255,255,.16); margin: 22px 0; }
     .stepno { float: left; font-size: 30px; font-weight: 300; color: #e8590c; line-height: 1; margin: 2px 16px 0 0; }
     .step { overflow: hidden; }
-    .step h4 { margin: 0 0 12px; font-size: 14px; font-weight: 650; letter-spacing: .02em; }
+    .step h2, .step h3, .step h4 { margin: 0 0 12px; font-size: 14px; font-weight: 650; letter-spacing: .02em; }
     .field { display: grid; grid-template-columns: 88px 1fr; gap: 10px; align-items: center; margin: 0 0 10px; max-width: 620px; }
     .field label { font-size: 12px; color: #97a2aa; }
     input[type=text] {
@@ -74,7 +74,7 @@
     .conn-state.st-bad { border-left-color: #d98a8a; border-color: rgba(217,138,138,.6); }
     .conn-state .cs-main { display: flex; align-items: center; gap: 8px; font-size: 17px; font-weight: 650; }
     .conn-state .cs-meta { font: 12.5px/1.6 Consolas, "Courier New", monospace; color: #97a2aa; margin-top: 3px; }
-    /* 四态色点(实例表状态列 + ③④两表微调, 计划 §3.2/S1 C5) */
+    /* 四态色点(实例表状态列 + 3/4两表微调, 计划 §3.2/S1 C5) */
     .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 6px; }
     .dot-ok { background: #8fc98f; } .dot-warn { background: #e2a86e; }
     .dot-bad { background: #d98a8a; } .dot-none { background: #5a6673; }
@@ -87,7 +87,7 @@
     .sw-frame { display: inline-block; width: 11px; height: 11px; border-radius: 3px; margin: 0 4px -1px 0; border: 2px solid; background: #101214; }
     .sw-none { border-color: #5a6673; } .sw-ok { border-color: #8fc98f; } .sw-warn { border-color: #e2a86e; } .sw-bad { border-color: #d98a8a; }
     details.attn > summary { color: #e8590c; }
-    label.row { display: flex; align-items: center; gap: 8px; margin: 10px 0; font-size: 13px; }
+    label.row, div.row { display: flex; align-items: center; gap: 8px; margin: 10px 0; font-size: 13px; }
     select, input[type=number] {
       background: #101214; color: #eceff1; border: 1px solid rgba(255,255,255,.3);
       padding: 3px 8px; font-size: 12.5px; font-family: inherit;
@@ -130,7 +130,7 @@
   <hr class="rule">
   <div class="step">
     <div class="stepno">1</div>
-    <h4>连接后端(自动发现自愈; 手动指定优先)</h4>
+    <h2>连接后端(自动发现自愈; 手动指定优先)</h2>
     <div class="conn-state" id="connState">
       <div class="cs-main"><span class="dot dot-none" id="connStateDot"></span><span id="connStateText">(读取中…)</span></div>
       <div class="cs-meta" id="connStateMeta"></div>
@@ -173,7 +173,7 @@
   <hr class="rule">
   <div class="step">
     <div class="stepno">2</div>
-    <h4>站点权限(从后端获取, 默认全勾)</h4>
+    <h3>站点权限(从后端获取, 默认全勾)</h3>
     <div id="siteChecks" class="sites"></div>
     <p class="sub" id="sitePermSummary" style="margin:8px 0 0"></p>
     <div class="btnrow">
@@ -214,7 +214,7 @@ https://pt.example.com  →   https://pt.example.com/*</pre>
     <summary>运行日志 · 排障用(逐条完整记录, 默认收起) · 硬上限 · 高级 JSON</summary>
     <h4 style="margin:14px 0 6px;font-size:13px">扩展侧硬上限(第二道闸, 阈值内置 site-caps.js 与后台共用)</h4>
     <pre class="example" id="caps">(载入中…)</pre>
-    <label class="row">
+    <div class="row">
       最多保留 <input type="number" id="logMax" min="10" max="10000" step="10" style="width:90px"> 条(上限 10000, 超出丢最旧)
       　记录 <select id="logLevel">
         <option value="debug">debug(全部, 最详细)</option>
@@ -222,7 +222,7 @@ https://pt.example.com  →   https://pt.example.com/*</pre>
         <option value="warn">warn 及以上</option>
         <option value="error">仅 error</option>
       </select>
-    </label>
+    </div>
     <label class="row">
       显示 <select id="logFilter">
         <option value="debug">全部级别</option>

@@ -160,7 +160,7 @@
   --fx-zoom-from: 1.08;
   --fx-row-h: 44px;
   /* 风格供给面: 毛玻璃开(组件配方消费; 禁用在全屏遮罩/吸顶层, PERF-01)。
-   * glow 开 = S4 拍板的 flux 定制(26-11-01, 计划 §06 待办②): 主 preset glass +
+   * glow 开 = S4 拍板的 flux 定制(26-11-01, 计划 §06 待办2): 主 preset glass +
    * D1-2 glow / D2-5 / D6-5 等 glow 系候选被选, 取 showcase 强制补供口径
    * (.fx-force-glow): 12px 级、色取亮 accent 系。sheen 本就开(白 40%/0.12,
    * D1-3 sheen 被选维持现值), 不另动。

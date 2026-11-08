@@ -74,7 +74,7 @@
  *   · 族面 06/07/09/11: 与行板同 Token(--tbl-face-bg); 悬停同 --bg-hover;
  *     err(06)/bad(07/09) 行底 --error-soft、is-chk(11) 行底 --sel-bg 都是**半透明**
  *     替换(不是层叠), 行的承光底是抽屉卡底 --bg-card ⇒ 首格用「同色 linear-gradient
- *     叠不透明 --bg-card」合成(同主列表 selected 态法, 见 pitfalls/web-ui/frozen-column.md ②);
+ *     叠不透明 --bg-card」合成(同主列表 selected 态法, 见 pitfalls/web-ui/frozen-column.md 2);
  *     empty-row(11 空行)随行透明。
  *   · 04 卡片 / 05 健康分组: 首格不是「列」而是内容根(卡头 .dt04-head / .dt05-rowin),
  *     且两面都不横向滚动(04 group-table overflow:visible; 05 内容根即整行)——

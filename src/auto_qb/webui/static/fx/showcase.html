@@ -1140,7 +1140,7 @@ footer .foot-nav a:hover { color: var(--accent-ink); }
 
   <section id="guide">
     <h2><span class="no">GUIDE</span>guide 合规总览</h2>
-    <p class="sec-note">计划 §01 软约束三条(非守阵, 「候选不淘汰、只标注」): ① 优先动 <code>transform</code>/<code>opacity</code>/<code>filter</code>(filter 限小型元素), 动布局属性的标 layout 警示; ② hover/按下反馈 ≤100ms, 入场 ≤400ms, torrent 行禁全行 stagger; ③ 每个 <code>@keyframes</code> 配 <code>prefers-reduced-motion: reduce</code> 降级块(这条是硬惯例)。下表汇总全部已落卡候选的符合度:</p>
+    <p class="sec-note">计划 §01 软约束三条(非守阵, 「候选不淘汰、只标注」): 1. 优先动 <code>transform</code>/<code>opacity</code>/<code>filter</code>(filter 限小型元素), 动布局属性的标 layout 警示; 2. hover/按下反馈 ≤100ms, 入场 ≤400ms, torrent 行禁全行 stagger; 3. 每个 <code>@keyframes</code> 配 <code>prefers-reduced-motion: reduce</code> 降级块(这条是硬惯例)。下表汇总全部已落卡候选的符合度:</p>
     <table class="guide">
       <tr><th>候选</th><th>属性层</th><th>时效 vs 软约束</th><th>RM 降级</th><th>结论</th></tr>
       <tr><td>D1-1 lift</td><td><span class="good">transform</span> + box-shadow(paint, 小面积)</td><td>hover 80ms / active 60ms -- 符合 ≤100ms</td><td>位移落影压平, 留即时状态</td><td class="good">符合</td></tr>
@@ -1736,7 +1736,7 @@ S4 复验实测(chromium 156 + Edge 156, 1440x960, longtask 全零): 有头 -- D
         rm: "瞬时重排(Chrome 对 RM 自动跳过 VT 动画)",
         src: "chrome.dev view-transitions + FLIP 惯例(aerotwist)",
         states: "新条推入 = 旧条平滑上移; 每次演示推一条。快照范围收敛: 每条 toast 打独立 view-transition-name(root 关默认参与, 页面其余区域不进快照)",
-        adopted: "生产已采用(2026-11-02 八/九轮): flux/fx-mount.js::flipStack 在 toastSync/toastDrop 双钩做视口坐标 FLIP; 与样例的差别 = 不走 VT 快照(插入发生在共享层, flux 挂载层拿不到包裹点), 改为对现存条补 transform / 对自身高度变化补 height 关键帧。九轮补两处: ① 推入侧 —— 栈内新条走 fx-toast-queue-in(从下方一整格起步 + 90ms 延迟), 否则旧条还没让开就同帧叠画(实测 49px / 5 帧); ② 消息侧 —— 「强制重新汇报」的已投递与回执是**两条**独立消息(投递条归档留队列, 回执另起一条), 这样队列里才有东西可重排。RM 下自动降级为无动效"
+        adopted: "生产已采用(2026-11-02 八/九轮): flux/fx-mount.js::flipStack 在 toastSync/toastDrop 双钩做视口坐标 FLIP; 与样例的差别 = 不走 VT 快照(插入发生在共享层, flux 挂载层拿不到包裹点), 改为对现存条补 transform / 对自身高度变化补 height 关键帧。九轮补两处: 1. 推入侧 —— 栈内新条走 fx-toast-queue-in(从下方一整格起步 + 90ms 延迟), 否则旧条还没让开就同帧叠画(实测 49px / 5 帧); 2. 消息侧 —— 「强制重新汇报」的已投递与回执是**两条**独立消息(投递条归档留队列, 回执另起一条), 这样队列里才有东西可重排。RM 下自动降级为无动效"
       },
       sample: ""
     },
@@ -1813,7 +1813,7 @@ S4 复验实测(chromium 156 + Edge 156, 1440x960, longtask 全零): 有头 -- D
         js: "纯 CSS",
         rm: "无动效, 静态同框",
         src: "浏览器通知条 / 系统横幅的顶栏惯例",
-        states: "与底部倒计时条上下夹成一对; ⚠ 非 sticky 条同时存在上下两条色带, 需现场确认不吵"
+        states: "与底部倒计时条上下夹成一对; WARN: 非 sticky 条同时存在上下两条色带, 需现场确认不吵"
       },
       sample: ""
     },

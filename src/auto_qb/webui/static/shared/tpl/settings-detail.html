@@ -157,7 +157,7 @@
                       <p v-if="kbKeysLoading" class="hb-hp">正在读取服务端键位…</p><p v-else-if="kbKeysLoadFailed" class="hb-hp">服务端键位加载失败, 当前显示默认键位; 保存已禁用(避免用默认键位覆盖服务端数据), 点「重新加载」重试成功后恢复。</p>
                       <p class="kb-note">
                         键位存于服务端 webui-keys.json, 所有浏览器共享; 保存后其它标签/浏览器刷新后生效。
-                        浏览器保留键(Ctrl+W/T/N/Q 等)不可绑定; 标 ⚠ 的危险操作触发时有确认框兜底。
+                        浏览器保留键(Ctrl+W/T/N/Q 等)不可绑定; 标 WARN: 的危险操作触发时有确认框兜底。
                       </p>
                       <div v-for="grp in kbGroups()" :key="grp" class="kb-grp">
                         <div class="kb-grp-t">{{ grp }}</div>
@@ -165,7 +165,7 @@
                              :class="{ rec: kbRecId === it.id }">
                           <span class="kb-row-label">
                             {{ kbLabel(it) }}
-                            <span v-if="it.danger" class="kb-danger">⚠ 危险操作{{ kbHasConfirm(it) ? ' (有确认框)' : '' }}</span>
+                            <span v-if="it.danger" class="kb-danger">WARN: 危险操作{{ kbHasConfirm(it) ? ' (有确认框)' : '' }}</span>
                             <span v-if="it.fixed" class="hb-badge on">固定</span>
                           </span>
                           <span class="kb-row-keys">
@@ -218,7 +218,7 @@
                   <aq-bt-backup-editor v-if="b.key === 'config.relocate'"></aq-bt-backup-editor>
                 </div>
                 <!-- M4+合并(2026-09-25): HR 站点状态(只读端点 /api/hr/status) 并入「HR 在线核实」分区页尾,
-                     不再单列首页卡片; 26-10-02-1936 阶段2 起默认折叠, 打开分区不再自动拉数(决策点⑤a),
+                     不再单列首页卡片; 26-10-02-1936 阶段2 起默认折叠, 打开分区不再自动拉数(决策点5a),
                      首次展开才拉(hr_status.js hrsToggle), 之后手动刷新(站点数据小时级节奏, 不轮询) -->
                 <template v-if="hub.view === 'hr_check'">
                   <!-- 站点接入(计划 26-09-27-1318; 绑定改映射制见 26-09-27-1930): 启用的唯一入口 ——
@@ -266,7 +266,7 @@
                       </span>
                     </div>
                   </div>
-                    <!-- 折叠 ⇄ 全屏覆盖层(计划 26-10-02-1936 阶段2, 用户拍板①改判): 「展开」即打开覆盖式
+                    <!-- 折叠 ⇄ 全屏覆盖层(计划 26-10-02-1936 阶段2, 用户拍板1改判): 「展开」即打开覆盖式
                          全屏弹窗(让出顶栏与状态栏), 两态之间没有内嵌展开态 —— 内容区只在覆盖层里可见。
                          实现是同一节点 v-show + fixed 定位, 不做 DOM 搬迁: 本项目是 Vue 3 运行时模板,
                          appendChild 搬 Vue 管理的节点会在重渲染时与锚点插入打架; chips 过滤(laneSel)与
@@ -308,11 +308,11 @@
                             <button class="hb-btn ghost sm" :disabled="hrs.refreshing"
                                     @click="hrsRefresh(s.site)">立即拉取</button>
                           </p>
-                          <!-- 表① 全量详情表(计划 26-10-01-2216 阶段2 + 26-10-02-1936 阶段3): 逐种子清单,
+                          <!-- 表1 全量详情表(计划 26-10-01-2216 阶段2 + 26-10-02-1936 阶段3): 逐种子清单,
                                按站点按需拉一次(hr_status.js loadHrSiteEntries, 打开分区/手动刷新, 不轮询);
                                档位 chips × 已删除种子切换钮前端本地过滤不回后端; 表头三态排序对齐种子页
                                (shared/sort.js 范式: 首点降 → 再点升 → 第三击恢复后端默认序, 空值恒末位);
-                               三列重组(拍板④): 档位徽章 / 核实结论(徽章+来源·时间副行) / 在列(徽章+最近被见到副行);
+                               三列重组(拍板4): 档位徽章 / 核实结论(徽章+来源·时间副行) / 在列(徽章+最近被见到副行);
                                骨架照 .drawer-table 范式(同挂一类);
                                单元格一律不挂原生 title(hr-tooltip-overlap), 名称过长靠 .wrap 换行;
                                人话(lane_text/need_seed_text/verified_source_text)全由后端算好, 前端不重算 -->
@@ -359,11 +359,11 @@
                             <aq-empty v-else :text="hrsEmptyText(s.site)"></aq-empty>
                           </template>
                           <!-- aqb:hr-detail-table:end -->
-                          <!-- 表② 排障视图(计划 26-10-01-2216 阶段3, 拍板①a): 排障性文本(取波/守恒/零行三态/
+                          <!-- 表2 排障视图(计划 26-10-01-2216 阶段3, 拍板1a): 排障性文本(取波/守恒/零行三态/
                                现在不放行/备注/站点文件/配额/时间窗/存量)收进原生 details **默认收起**, 表格化为
                                站点级 kv 行 + 各档波次明细(§5.3); 展开态是临时排障动作, 不进 localStorage 不持久化;
                                数据全来自 /api/hr/status 现有载荷(hrsKvRows 拼行), 无新请求无新定时器;
-                               波次表同挂 .hr-detail-table 继承表① 徽章色义(计划: 阶段3 复用阶段2 骨架与徽章) -->
+                               波次表同挂 .hr-detail-table 继承表1 徽章色义(计划: 阶段3 复用阶段2 骨架与徽章) -->
                           <!-- aqb:hr-diag:begin (守阵 test_frontend_hr_diag_view_wiring 的扫描锚) -->
                           <details class="hrs-diag">
                             <summary>排障视图 · 波次明细与站点诊断</summary>
@@ -407,13 +407,13 @@
                           <!-- aqb:hr-diag:end -->
                         </article>
                       </div>
-                      <!-- 表③ 拉取历史(计划 26-10-04-0312 §3.5): 全局段(历史跨站点成时间轴, 不进 per-site
-                           article), 表② 同款 <details> 折叠范式默认收起; 首次展开才拉一次 /api/hr/history
+                      <!-- 表3 拉取历史(计划 26-10-04-0312 §3.5): 全局段(历史跨站点成时间轴, 不进 per-site
+                           article), 表2 同款 <details> 折叠范式默认收起; 首次展开才拉一次 /api/hr/history
                            (limit=300, @toggle 触发 hrsHistEnsureLoaded), 「刷新」手动重拉, 不轮询不加定时器;
                            站点 chips 由行内站点集合现算 + 「仅看异常」toggle, 纯前端本地过滤不回后端;
                            行点击展开各档明细子行(hrsHistSubText); 人话(ts_text/trigger_text/result_text/
                            result_tone/lane_text/status_text/elapsed_text)全由后端算好, 前端只挑徽章色档
-                           与排版; 展开态不持久化(表② 同款临时排障动作) -->
+                           与排版; 展开态不持久化(表2 同款临时排障动作) -->
                       <!-- aqb:hr-history:begin (守阵 test_frontend_hr_history_wiring 的扫描锚) -->
                       <details class="hrs-diag" @toggle="hrsHistOnToggle($event)">
                         <summary>拉取历史 · 最近取数与波次明细</summary>

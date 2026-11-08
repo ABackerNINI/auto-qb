@@ -238,7 +238,7 @@ select option { background: var(--bg-elev); color: var(--fg); }
 .modal-detail-row .d-label { flex: 0 0 62px; color: var(--fg-dim); font: 500 11px/1.6 var(--font-mono);
   letter-spacing: .05em; text-transform: uppercase; }
 /* 弹窗语义配色分级(计划 26-10-19-2341)整组在 shared/console_hub.css —— 三皮肤逐条同,
- * ①②③④ 四级层次连注释一起搬过去了(拆散后各自的特异性论证读不懂)。
+ * 1. 2. 3. 4. 四级层次连注释一起搬过去了(拆散后各自的特异性论证读不懂)。
  * 基线规则组 .modal-title / .modal.danger .modal-title .ico 仍在本套 components.css。 */
 
 .modal-detail-row .d-value { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden;

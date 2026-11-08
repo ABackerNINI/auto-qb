@@ -17,7 +17,7 @@
          前端陈述型通知(source='notice', kind='info', 中性灰点)。
          Esc 走 lifecycle.js 既有退栈链, 点面板外关闭走其窗口 click 收层名单(面板根与入口钮
          .sb-err 都已 @click.stop, 点内部/入口不会误收)。开面板清未读由 state.js 的
-         errPanelOpen watcher 负责, 这里只绑 UI。⚠ 必须挂在 #app 根层 —— 放进任何
+         errPanelOpen watcher 负责, 这里只绑 UI。WARN: 必须挂在 #app 根层 —— 放进任何
          clip-path / transform 容器, fixed 后代会被裁剪或改包含块(.col-ghost 注释同源坑)。 -->
     <div v-if="errPanelOpen" class="err-panel" role="dialog" aria-label="通知" @click.stop>
       <div class="err-hd">

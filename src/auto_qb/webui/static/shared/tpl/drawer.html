@@ -50,7 +50,7 @@
             <aq-seg v-if="dtMergeTabsOn" :items="dtMergeTabList" :value="dtPair"
                     :on-pick="dtMergeTabPick"></aq-seg>
             <aq-seg v-else :items="dtTabItems" :value="drawer.tab" :on-pick="drawerTab"></aq-seg>
-            <!-- qB 口径流量图 · 单种挂点(S5b, plan 26-10-03-0946 §07 表②): enabled=false 时
+            <!-- qB 口径流量图 · 单种挂点(S5b, plan 26-10-03-0946 §07 表2): enabled=false 时
                  页签不渲染(v-if=qbTrafficOn, fail-closed 门) = 无进入路径即无请求(P5 验收) -->
             <button v-if="qbTrafficOn" :class="{ active: drawer.tab === 'traffic' }" @click="drawerTab('traffic')">流量</button>
           </nav>
@@ -78,8 +78,8 @@
                  根实例上跑 —— 全局 mixin 的 mounted 以 `this.drawer` 守卫剔除了 BaseTransition 假实例,
                  子组件没有根数据); Vue 的 $refs **只在声明它的实例上登记**, 子组件模板里的 ref 不进
                  根 $refs ⇒ 搬进组件后 this.$refs.qbChartHost 恒 undefined, _qbChartBuild 第一行就
-                 早退(**图永远不画, 且无任何报错**)。绕开它只有两条路: ①改图表模块(被本波「uPlot 与
-                 图表模块零改动」停手点禁止); ②在壳与组件之间手搬 $refs(把可验证的机制换成时序约定)。
+                 早退(**图永远不画, 且无任何报错**)。绕开它只有两条路: 1. 改图表模块(被本波「uPlot 与
+                 图表模块零改动」停手点禁止); 2. 在壳与组件之间手搬 $refs(把可验证的机制换成时序约定)。
                  两条都比「宿主留在壳模板」差, 故取后者: **壳就是那个薄包装**(它只包一个 ref 宿主 +
                  空的居中容器), 图表模块零改动、布局类 .dt-traffic-main 与三皮肤 CSS 也零改动。
                  代价 = 五页签里第四个(流量)的正文不住组件层 —— 但它是**共用**的一段(三挂点同一块),

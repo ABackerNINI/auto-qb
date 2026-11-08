@@ -1,7 +1,7 @@
 /* auto-qb WEB UI · 主表横滚(shared, 三皮肤共用): 原生横条隐藏 + 底部紧凑指示条外观
  *
- * 单点地位: 两件事都只在本文件声明 —— ① 隐藏 .group-table 的原生横向滚动条(视觉层);
- * ② 底部指示条 .hscroll-pill 的全部外观。三皮肤(prism/atlas/console)index.html 各挂一条 link,
+ * 单点地位: 两件事都只在本文件声明 —— 1. 隐藏 .group-table 的原生横向滚动条(视觉层);
+ * 2. 底部指示条 .hscroll-pill 的全部外观。三皮肤(prism/atlas/console)index.html 各挂一条 link,
  * 内容逐字共用; 皮肤路径内不得再出现同类规则(计划 26-11-01-0553)。
  *
  * 级联序: link 必须排在本皮肤 views.css **之后**(shell 里 link 序即级联序), 与 shared/row_lang.css

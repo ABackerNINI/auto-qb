@@ -93,10 +93,10 @@ body.drawer-resizing { cursor: ns-resize; user-select: none; }
 .drawer-table tr.virtual td { color: var(--fg-dim); }
 .drawer-table .mono-cell { font-family: var(--font-mono); font-size: 12px; }
 .drawer-table tr.skipped td { color: var(--fg-dim); }
-/* ---------------- HR 明细表①(计划 26-10-01-2216 阶段2) ----------------
+/* ---------------- HR 明细表1(计划 26-10-01-2216 阶段2) ----------------
  * 骨架复用 .drawer-table(模板同挂一类)。档位色义(A=warn 考察中 / B=green 达标 /
  * C=error 未达标 / D=blue 免罪, 计划 §5.4)、失踪行徽章 --paused 弱化、表头过滤栏与排序头
- * 三皮肤逐条同 ⇒ 在 shared/console_hub.css(单点); 本文件只留徽章**底形族**与表②③ 专属件
+ * 三皮肤逐条同 ⇒ 在 shared/console_hub.css(单点); 本文件只留徽章**底形族**与表2/3 专属件
  * (底形三皮肤取值不同: prism --border-soft/--font-mono, atlas·console --border/字面等宽栈)。
  * 色值全取 :root 既有令牌, 不写死 hex。 */
 /* 表头过滤栏(chips + 「数据截至」)在 shared/console_hub.css —— 三皮肤逐条同 */
@@ -117,7 +117,7 @@ body.drawer-resizing { cursor: ns-resize; user-select: none; }
 .hr-detail-table .hr-pres.hr-pres-out { border-color: var(--blue-line); color: var(--blue); }
 /* 排序头 / 排序箭头 / 名称列限宽钩子 在 shared/console_hub.css —— 三皮肤逐条同 */
 
-/* ---------------- HR 表② 排障视图(计划 26-10-01-2216 阶段3) ----------------
+/* ---------------- HR 表2 排障视图(计划 26-10-01-2216 阶段3) ----------------
  * <details> 默认收起(展开态不持久化); 骨架复用 .drawer-table, 波次明细表同挂 .hr-detail-table
  * 继承上面的徽章色义; kv 表键列不换行弱化色, 值列 mono 走模板 .mono-cell;
  * warn/error 值取既有令牌, 不写死 hex。 */
@@ -129,7 +129,7 @@ body.drawer-resizing { cursor: ns-resize; user-select: none; }
 .hr-diag-kv { margin-top: 6px; }
 .hr-diag-kv td:first-child { width: 1%; white-space: nowrap; color: var(--fg-dim); }
 .hr-wave-table { margin-top: 8px; }
-/* ---------------- HR 表③ 拉取历史(计划 26-10-04-0312 §3.5) ----------------
+/* ---------------- HR 表3 拉取历史(计划 26-10-04-0312 §3.5) ----------------
  * 骨架复用 .drawer-table + .hr-detail-table(徽章底形/mono/num 列对齐全继承), chips 行与
  * 「数据截至」复用 shared/console_hub.css 的 .hr-detail-table-bar/.hr-chip/-fresh; 新增件只有: 结果徽章
  * 色档(后端 result_tone 直接映射 .hr-hres-<tone>, ok/warn/dim/err/blue 五档)+ 行点击展开
@@ -324,13 +324,13 @@ body.drawer-resizing { cursor: ns-resize; user-select: none; }
  * 三下拉 + meta 分类同套); 目标/注意行为为新增。成对定义见 atlas/prism(css-perf-parity)。
  * 2026-10-19 几何修(用户报「弹窗太小, 下拉显示不全要滚动」): 组合框是本表单**最后一项**, 向下的
  * 下拉必伸出 .add-dialog-body 底沿被裁(body 是 overflow-y:auto 滚动容器, 伸出还把其 scrollHeight
- * 撑大 = 弹窗体内多出滚动条) ⇒ ①宽度走 --modal-w-add(与添加种子同宽, 路径项 nowrap+ellipsis 多显示);
- * ②开层时根元素挂 .pop-open(模板 :class), body 预留 272px = 下拉整高(面板头 ~46 + 列表 210 + 顶距
+ * 撑大 = 弹窗体内多出滚动条) ⇒ 1. 宽度走 --modal-w-add(与添加种子同宽, 路径项 nowrap+ellipsis 多显示);
+ * 2. 开层时根元素挂 .pop-open(模板 :class), body 预留 272px = 下拉整高(面板头 ~46 + 列表 210 + 顶距
  * 4 + 余量 12) —— 预留后 _fitAddPop 净空 ≈216px > 列表 210 不再限高, 下拉完整落在对话框内; 矮视口
  * modal 自身滚动时 body 收缩、净空变小, 由限高兜底(与添加种子同口径, 见 combobox-focusout-close)。 */
-/* 2026-10-29 二修(用户报「窗口太小」+「点下拉框高度跳变」): ①收层态基线抬到 360px(原实测 243 小个子),
+/* 2026-10-29 二修(用户报「窗口太小」+「点下拉框高度跳变」): 1. 收层态基线抬到 360px(原实测 243 小个子),
  * 动作条 margin-top:auto 钉底, 多出的高度留在 body 与动作条之间 = 呼吸感, 不写任何说明文案;
- * ②开层预留不再 0↔272 硬切 —— padding-bottom 走 200ms 过渡, 高度 360→515 平滑长高、收层平滑回落。
+ * 2. 开层预留不再 0↔272 硬切 —— padding-bottom 走 200ms 过渡, 高度 360→515 平滑长高、收层平滑回落。
  * !body 不能加 flex:1(* { box-sizing: border-box }, padding 会长在固定高度里 -> 内容被挤成滚动条),
  * 高度增长只能靠 body 的 auto 高度随 padding 走。时长与 drawer.js 的 MOVE_POP_SETTLE_MS(240,
  * 过渡结束后重测限高)成对, 改任一边必须同步另一边。

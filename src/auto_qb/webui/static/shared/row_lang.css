@@ -82,7 +82,7 @@ html[data-rowlang="flat"]:not([data-theme="frost"]):not([data-theme="golden"]) .
  * 视觉恒等(页底就是 var(--bg) 平色, body 同源), 但 e2e 同帧守阵(e2e/main-table-pinned-hover/
  * selected)按**计算值**逐帧/逐字比较 —— 行板透明 + 首格不透明的表示分家在 hover 过渡帧必然
  * 错拍(行板 premultiplied 插值出半透明中间色, 首格全程不透明)。行板与首格必须同一表达式
- * (坑档 frozen-column.md ⑩ 口径, 与下方 hover/选中底同批改齐)。 */
+ * (坑档 frozen-column.md 10 口径, 与下方 hover/选中底同批改齐)。 */
 html[data-rowlang="flat"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-row {
   background: var(--bg, #0d1724);
   border: 0;
@@ -104,7 +104,7 @@ html[data-rowlang="flat"]:not([data-theme="frost"]):not([data-theme="golden"]) .
 /* 展开态(阶段 4 状态底重锚, 计划 §04-4): 皮肤原规则(prism views.css:284 / atlas·console
  * components.css)`linear-gradient(--bg-sunken,--bg-sunken), var(--bg-row)` 的合成基色被行板
  * 基础规则压掉, 在此换新承光底重写 —— --bg-sunken 是半透明皮肤令牌(ocean rgba(5,12,24,.5)),
- * 叠 flat 承光底 = 页底 var(--bg)。行板与首格同一表达式(逐字相等, 坑档 frozen-column.md ⑩);
+ * 叠 flat 承光底 = 页底 var(--bg)。行板与首格同一表达式(逐字相等, 坑档 frozen-column.md 10);
  * 底角取直/明细相连等结构性规则留在皮肤原样, 不在此重复。排在本组 :hover 之后(与皮肤
  * views.css 状态序同惯例: 状态规则在 hover 后声明)⇒ 展开行悬停保持下沉底, hover 不冲掉状态底;
  * selected/partial 排其后再取赢(皮肤状态序: selected/partial 在 expanded 之后)。 */
@@ -113,7 +113,7 @@ html[data-rowlang="flat"]:not([data-theme="frost"]):not([data-theme="golden"]) .
 }
 /* 搜索命中(阶段 4): 皮肤原样 = 90deg accent-soft→transparent 46% 渐层 over 行底(prism
  * views.css:441 / atlas components.css:666 / console components.css:639) —— 渐层原样保留,
- * 基色从 --bg-row 换新承光底 var(--bg)。首格同表达式(方向渐层镜像判据: 坑档 frozen-column.md ⑦)。 */
+ * 基色从 --bg-row 换新承光底 var(--bg)。首格同表达式(方向渐层镜像判据: 坑档 frozen-column.md 7)。 */
 html[data-rowlang="flat"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-row.search-hit {
   background: linear-gradient(90deg, var(--accent-soft), transparent 46%), var(--bg, #0d1724);
 }
@@ -134,7 +134,7 @@ html[data-rowlang="flat"]:not([data-theme="frost"]):not([data-theme="golden"]) .
  * 选中/半选在下方显式重申 accent(不靠皮肤 --sel-bar)。成员行(.member-row)左条不在范围, 不动。 */
 
 /* 吸左名称列首格: 不透明且与行板同底(flat 行板 = 页底)。半透明裸值挡不住横滚滑入的兄弟列
- * (坑档 frozen-column.md ②)。hover/选中底 = **color-mix 现算不透明纯色**直接换 background
+ * (坑档 frozen-column.md 2)。hover/选中底 = **color-mix 现算不透明纯色**直接换 background
  * (26-10-30 复验二修): 上一版 ::after opacity 覆盖层在快速 hover 切换下仍与行板错拍 ——
  * opacity 过渡可被提升到合成器独立管线(GPU), 行板 background-color 是主线程逐帧重绘, 两条
  * 动画管线帧错位, 插值路径也不同。本方案两侧过渡**同一个属性** background-color、继承
@@ -151,7 +151,7 @@ html[data-rowlang="flat"]:not([data-theme="frost"]):not([data-theme="golden"]) .
  * (与 color-mix 视觉恒等), 但计算值表示分家(行板半透明 tint / 首格不透明合成色)⇒ e2e 同帧守阵
  * 按计算值逐帧/逐字比较在 atlas 红 6 例; 行板已改用与首格逐字相同的表达式(含基础底 var(--bg)),
  * 本段推导对两侧一体成立, 恒等推导降级为历史备注。
- * ⚠color-mix 坑(上一版实际踩中): 混入**带 alpha** 的颜色(如 rgb(255 255 255 / .12))且不写
+ * WARN:color-mix 坑(上一版实际踩中): 混入**带 alpha** 的颜色(如 rgb(255 255 255 / .12))且不写
  * 权重 ⇒ 权重默认 50%/50%, premultiplied 结果 alpha = .5·.12 + .5·1 = .56 —— 产出半透明色
  * (横滚透底!)且白色实际权重只有一半(着色不足), 名称格恒久与行板不一致。混 tint 必须用
  * **不透明色 + 显式权重**表达「α tint 叠不透明底」。
@@ -212,7 +212,7 @@ html[data-rowlang="flat"]:not([data-theme="frost"]):not([data-theme="golden"]) .
  * 左条两态几何(flat/wave 两组逐字一致):
  * - 未横滚(.group-table 无 .is-hscrolled): 条挂行 ::before, left:1px = 行 padding 沟槽
  *   左缘右让 1px(键盘锚点让位, 见上),
- *   随行在文档流里(横滚时自然随行滚出视野 —— 旧坑档 ③ 形态)。
+ *   随行在文档流里(横滚时自然随行滚出视野 —— 旧坑档 3 形态)。
  * - 横滚(.group-table.is-hscrolled, JS 三处单点打标): 行级沟槽条 content:none 摘除(防 1-2px
  *   滚动时与吸左条并存出双条), 改由吸左首格 ::before 在 left:1px(同键盘锚点让位)出一条
  *   2px 窄条 —— 首格
@@ -303,7 +303,7 @@ html[data-rowlang="wave"]:not([data-theme="frost"]):not([data-theme="golden"]) .
   background: var(--rl-zebra-tint, rgba(255,255,255,.03));
 }
 
-/* 吸左名称列首格: 不透明且与行板同承光底(flat 同口径, 坑档 frozen-column.md ②)。zebra 行
+/* 吸左名称列首格: 不透明且与行板同承光底(flat 同口径, 坑档 frozen-column.md 2)。zebra 行
  * 用「同色 linear-gradient 叠不透明页底」合成, 与行板(zebra tint 半透明叠页底)逐通道一致;
  * 无 hover 首格规则 —— 皮肤 :hover > :first-child((0,3,0))被本条 (0,4,0) 压死, hover 下首格
  * 原底不动(高亮唯一来源是扫层)。无 padding-left 让位(与 flat 同步, 26-10-30 复验四修: 左条
@@ -316,7 +316,7 @@ html[data-rowlang="wave"]:not([data-theme="frost"]):not([data-theme="golden"]) .
 }
 
 /* 展开态/搜索命中(阶段 4 状态底重锚, 计划 §04-4): 与 flat 同口径 —— 状态 tint 叠不透明基色,
- * 行板与首格同一表达式(逐字相等, 坑档 frozen-column.md ⑩⑦); search-hit 渐层保留皮肤原样
+ * 行板与首格同一表达式(逐字相等, 坑档 frozen-column.md 10/7); search-hit 渐层保留皮肤原样
  * (90deg accent-soft→transparent 46%), 基色换页底。zebra 行写三层合成(sunken/命中渐层 + zebra
  * + 页底, 表达式与 selected.rl-zebra 先例同构), 靠 (0,5,0) 特异性取赢普通斑马。排序: 排 zebra
  * 规则之后(声明序压过普通斑马)、selected 之前(皮肤状态序: selected/partial 在 expanded/search-hit
@@ -361,7 +361,7 @@ html[data-rowlang="wave"]:not([data-theme="frost"]):not([data-theme="golden"]) .
 }
 
 /* 选中/半选(计划 D2; expanded/search-hit 见上方阶段 4 块): accent tint **叠页底**合成
- * —— 坑档 frozen-column.md ⑩ 口径, 半透明状态底不许裸写替换行底。zebra 行双 tint 合成
+ * —— 坑档 frozen-column.md 10 口径, 半透明状态底不许裸写替换行底。zebra 行双 tint 合成
  * (sel tint 叠 zebra tint 叠页底), 行板与首格用同一表达式逐字相等, 名称列不出异色竖带。
  * 排在 zebra 之后, 靠 .selected.rl-zebra 更高特异性取赢。 */
 html[data-rowlang="wave"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-row.selected,

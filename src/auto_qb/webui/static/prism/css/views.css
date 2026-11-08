@@ -279,7 +279,7 @@
 .group-row:hover { background: var(--bg-hover); border-color: var(--border-strong); transform: translateY(-1px); }
 /* 展开态 = 结构语言(下沉底色 + 底角取直与明细相连); 选中态 = accent 语言(左条 + 柔底) —— 分家。
  * 半透明下沉底同样**叠在行底**上、不替换行底: 与吸左首格同一个合成基色 `--bg-row`(见
- * pitfalls/web-ui/frozen-column.md ⑩; 旧写法裸 `var(--bg-sunken)` 让页底透上来, 展开行名称列
+ * pitfalls/web-ui/frozen-column.md 10; 旧写法裸 `var(--bg-sunken)` 让页底透上来, 展开行名称列
  * 实测 Δ5/255 atlas、2/255 prism)。 */
 .group-row.expanded { background: linear-gradient(var(--bg-sunken), var(--bg-sunken)), var(--bg-row); border-color: var(--border);
   border-bottom-left-radius: 0; border-bottom-right-radius: 0; }

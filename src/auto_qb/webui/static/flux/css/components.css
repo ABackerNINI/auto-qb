@@ -269,7 +269,7 @@
 .group-row:hover { background: var(--bg-hover); border-color: var(--border-strong); }
 /* 展开态 = 结构语言(下沉底色 + 中性边框), 与选中态的强调色语言分家;
  * 下沉底**叠在行底**上、不替换行底(与吸左首格同一个合成基色 `--bg-row`, 见
- * pitfalls/web-ui/frozen-column.md ⑩) */
+ * pitfalls/web-ui/frozen-column.md 10) */
 .group-row.expanded { background: linear-gradient(var(--bg-sunken), var(--bg-sunken)), var(--bg-row); border-color: var(--border); }
 .group-row.expanded + .detail { margin-top: -6px; }
 .g-name { display: flex; align-items: center; gap: 7px; font-weight: 600; overflow: hidden; white-space: nowrap; }
@@ -485,11 +485,11 @@
 /* ============ 消息面(message surface): 提示条与站内确认框同一套材质 ============
  * 用户报障(2026-11-02): 「强制汇报投递」的提示条与刚点过的确认框像两个产品的控件 —— 提示条停在
  * console fork 时的平面方角老配方(方角 + --bg-card + --shadow-2), 弹窗是 flux 的 glass 语言。
- * 统一口径 = **材质同源, 形态各守其位**: ① 表面 同一 `--msg-surface`(高光渐变单点 + 角色底 `--msg-base`;
+ * 统一口径 = **材质同源, 形态各守其位**: 1. 表面 同一 `--msg-surface`(高光渐变单点 + 角色底 `--msg-base`;
  * 提示条无 blur 走 --bg-elev; 弹窗挂 blur 必走 --bg-card 半透明, 否则 92% 不透明底把 blur 压成不可见;
  * R2 精修只给常驻大型浮层面开毛玻璃, backdrop 预算钉死 4 处);
- * ② 语义 `--msg-tone`(图标) / `--msg-line`(描边) 由 kind 一档一声明, 两处都靠「描边 + 图标」表达等级;
- * ③ 形状**不跟弹窗** —— 用户口径(2026-11-02 二轮): 「消息通知不要切角」。切角是 flux 大面浮层
+ * 2. 语义 `--msg-tone`(图标) / `--msg-line`(描边) 由 kind 一档一声明, 两处都靠「描边 + 图标」表达等级;
+ * 3. 形状**不跟弹窗** —— 用户口径(2026-11-02 二轮): 「消息通知不要切角」。切角是 flux 大面浮层
  * (弹窗/限速浮层)的语言, 通知是**过路小条**, 切角在小面积上读作装饰缺口且会啃掉底部倒计时条
  * 右端; 故 `.toast` 保持方角(radius 令牌本就为 0), 只有材质与语义档同源。**别再"顺手统一"切角** ——
  * 守阵 `_scan_message_surface_parity` 反向钉本条(clip-path 出现在 `.toast` 上即红)。
