@@ -9,9 +9,9 @@
 <meta name="issue-stamp" content="26-11-09-0441">
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="kb-gate-timekit-timeout-flaky">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-09-memory-bank-kb-gate-timekit-timeout.md, memory-bank/plans/26-11-09-0559-plan-memory-bank-kb-gate-timekit-timeout.html">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="In Progress">
 <meta name="issue-title" content="提交闸门 kb 链 timekit --check 满载机超时 60s(嵌套双层执行+资源饥饿, 本会话 4 次)">
 <meta name="issue-summary" content="ship.commit 的 kb 闸门(timeout=60 共享 9 条脚本)连续 4 次在 timekit --check 超 60s 判死; 单跑 4.2s/9 路并发 10.2s 全正常; 进程观测发现双层 commit.py 各起一套 gate, timekit 一深一冻(0 CPU); 复跑可过, 负载相关">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-09-0441-bug-kb-gate-timekit-timeout-flaky</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-09 04:41</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">In Progress</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
@@ -115,6 +115,15 @@
 #   发现两个 timekit 进程并存(不同父进程树) —— commit.py 存在嵌套双层执行
 #   (仓库层 commit.py → Temp\my-commit-flow-*/pack\scripts\commit.py 各起一套 gate);
 #   其中一个 CPU 缓慢增长(0.5s→2.7s→3.3s/10s, 资源饥饿), 另一个恒 0 CPU(冻结)</code></pre>
+<pre><code># 认领轮复验(2026-11-09 05:26, 同一 clone, 04:41 的现场进程仍在):
+#   Win32_Process 采样: clone2 ui_harness.py(uv -> python 两层) + nav_server.py --port 8791 常驻
+#   timekit --check 单跑(冷缓存/有负载): 9.63s / 6.46s / 12.57s (rc=0)
+#   快照 env 对照: plain 4.16s / snapshot-env 4.27s / plain 4.12s (rc=0) => 扫描范围未变
+#   A/B/A: 单跑 4.32/4.32s -> 4 路并发 14.19/14.35/14.35/14.23s -> 单跑 4.28/4.28s
+#   真实 run_gates(4 池) 跑 kb 链 9 条: 全绿, 总墙钟 5.23s, timekit 4.76s(排队 0.47s)
+#   memory-bank 规模: 2838 文件 / 31558188 字节
+#   timekit --check = check_metadata + check_body 各一次全库 rglob 并读全文 + 逐行正则
+#   结论: 60s 判死本轮未复现(负载低于 04:41); 并发放大 3.3 倍已复现</code></pre>
 </section>
 
 <section id="s3">
@@ -133,27 +142,65 @@
     <li><code>.commands/my-commit-flow/.my-commit-flow.toml</code> kb 闸门 <code>timeout = 60</code>(取证 2026-11-09 04:41)· grep <code>timekit.py --check</code></li>
     <li><code>.commands/my-commit-flow/scripts/_pipeline.py</code> <code>run_gates</code>/并发线程池 + <code>run_capture</code> 看门狗(grep <code>GATE_WORKERS</code> / <code>超时 {timeout:.0f}s</code>)</li>
     <li><code>commands run</code> 引擎的 temp-pack 双层执行(grep <code>my-commit-flow-</code> 临时目录 / <code>pack\scripts\commit.py</code>)</li>
+    <li><code>_pipeline.py:489</code> <code>GATE_WORKERS = 4</code> / <code>run_gates</code>(:492 两阶段: 串行展开 → 4 池并发) / <code>run_capture</code>(:97 看门狗, <code>communicate(timeout=...)</code> 超时分支)(取证 2026-11-09 05:26)</li>
+    <li><code>commit.py:477</code> 首轮闸门 / <code>:587</code> 合流后条件复跑 / <code>_snapshot.py:98</code> <code>maybe_respawn</code>(父层 <code>subprocess.call</code> 阻塞, 不进 main)</li>
+    <li><code>timekit.py:221</code> <code>check_metadata</code> 与 <code>:285</code> <code>check_body</code> 各一次 <code>mb.rglob("*")</code> 全库读全文</li>
+    <li>本机同族判据: <code>memory-bank/pitfalls/testing/perf-measurement.md</code>(文件操作固定过路费 / 并发污染下 CPU-IO 型任务膨胀) 与 <code>parallel-run.md</code>(CreateProcess 挂死与 run_capture 的由来)</li>
   </ul>
 </section>
 
 <section id="s5">
   <h2><span class="no">§05</span>根因<span class="opt">（可选）</span></h2>
-  <div class="callout">待查(已排除: timekit 自身慢 —— 单跑/并发/venv python 全 4-10s; 锁 —— 脚本无锁无 stdin; WindowsApps python 存根 —— Popen 实测 4.2s)。候选: ①双层 commit.py 各起一套 gate 并发扫描 + clone2 满载 → 单脚本被拖过 60s(观测到饥饿形态支持); ②某层进程被另一层看门狗杀树波及后 0 CPU 冻结(观测到冻结形态支持); 两者可并存。方向: 认领时先复现(满载机 + 连续提交), 再定 timeout 抬升 / 去重双层 gate / 冻结进程处置。</div>
+  <div class="callout">入池时 (2026-11-09 04:41) 的候选，保留原文：待查(已排除: timekit 自身慢 —— 单跑/并发/venv python 全 4-10s; 锁 —— 脚本无锁无 stdin; WindowsApps python 存根 —— Popen 实测 4.2s)。候选: ①双层 commit.py 各起一套 gate 并发扫描 + clone2 满载 → 单脚本被拖过 60s(观测到饥饿形态支持); ②某层进程被另一层看门狗杀树波及后 0 CPU 冻结(观测到冻结形态支持); 两者可并存。方向: 认领时先复现(满载机 + 连续提交), 再定 timeout 抬升 / 去重双层 gate / 冻结进程处置。</div>
+
+  <h3>认领轮结论 (2026-11-09 05:26)</h3>
+  <p><strong>定性（高置信）</strong>：不是 timekit 自身缺陷，也不是锁 / stdin / 扫描路径 / 快照 env 漂移，而是<strong>固定 60s 超时 × IO-CPU 密集型全库扫描 × 并发放大 × 满载机</strong>的组合。空载下 60s 有十余倍余量；本机对「并发污染下的 CPU/IO 型任务」放大特别狠（同族坑档实测过同一命令 15.94~209.77s 的漂移），余量被吃光后即判死。波动大 ⇒ 复跑可过、负载相关，与「5 投 4 超、第 5 次自过」一致。</p>
+
+  <h3>可直接验证的事实</h3>
+  <ul>
+    <li><strong>工作量</strong>：<code>timekit --check</code> 对 memory-bank 全库（2838 文件 / 31.5 MB）做两轮 <code>rglob</code> 并逐文件 <code>read_bytes()</code> 读全文 + 逐行正则（<code>check_metadata</code> 与 <code>check_body</code> 各一遍）；热缓存单跑稳定 4.1~4.3s，冷缓存 / 有负载 9.6~12.6s。</li>
+    <li><strong>并发放大</strong>：A/B/A 干净对照 —— 单跑 4.32/4.32s → 4 路并发同一脚本 14.19/14.35/14.35/14.23s（3.3 倍）→ 撤掉负载 4.28/4.28s。放大来自并发争用，不是脚本自身变慢。</li>
+    <li><strong>链路结构</strong>：一次提交最多两轮闸门（提交前 + rebase 合入远端后复跑）；kb 链 9 条脚本几乎各自扫全库；真实并发上限 <code>GATE_WORKERS = 4</code>（档案里「9 路并发」是对照组手工实验）；<code>timeout = 60</code> 逐 job 独立计时、固定值、无自适应 / 无重试；失败按提交序收集取 <code>failures[0]</code>，故恒报第 7 条只是排序结果。</li>
+    <li><strong>失败形态</strong>：「超时 60s (进程树已杀)」来自 <code>run_capture</code> 的 <code>communicate(timeout=60)</code> 超时分支 ⇒ 子进程已启动、60s 未退出或管道 EOF 未到，不是 <code>Popen</code> 卡死分支。观测到的「CPU 缓慢增长 / 恒 0 CPU」= 等 IO / 等拦截 / 杀树后未收干净，不是死循环。</li>
+    <li><strong>已排除</strong>：快照 env 改变扫描范围（plain 4.16s vs snapshot-env 4.27s）、锁 / stdin、timekit 自身慢、WindowsApps python 存根（档案既有排除）；真实 <code>run_gates</code> 4 池跑整条 kb 链本轮 5.23s 全绿。</li>
+  </ul>
+
+  <h3>对入池推断的校正</h3>
+  <ul>
+    <li>代码上只有快照副本层跑 <code>main()</code>：<code>commit.py</code> 的 <code>__main__</code> 先 <code>maybe_respawn</code> 复制整包再 <code>subprocess.call</code> 重入，原包父层阻塞等待、不跑闸门 ⇒「双层 commit.py 各起一套 gate」与代码不符。</li>
+    <li>进程观测到的两个 commit.py（不同父进程树）更可能是「连续重跑的两次 ship.commit」；两个 timekit 并存最可能是<strong>上一次超时被 <code>taskkill /F /T</code> 杀树后残留的冻结进程 + 本次重跑新起的进程</strong>，也不排除同机其它 clone 的提交。下次复现请采每个 timekit 的 ParentProcessId 链与创建时刻，判是否同属一个 cmd.exe 树。</li>
+    <li>「9 条脚本共享 timeout = 60」是配置层表述；执行层每条 job 各 60s，且 <code>pool.map</code> 先按配置序提交全部 job，第 7 条 timekit 在 4 池里排到第二波才启动 —— 排队不吃自己的 60s，但排队期间其它全库扫描已把 IO/CPU 打满。</li>
+  </ul>
+
+  <h3>仍待证（需满载机现场，勿当结论）</h3>
+  <ul>
+    <li>冻结进程的确切产生机制（杀树后管道读线程 / 孙进程残留），需进程树快照 + 创建时刻。</li>
+    <li>04:41 那批是否真的触发了合流后第二轮闸门（需当时的步骤行 / 提交日志）。</li>
+    <li>系统层文件拦截是否在该时段重新出现（<code>perf-measurement.md</code> 记为已治好，但当时负载形态异常）。</li>
+  </ul>
 </section>
 
 <section id="s6">
   <h2><span class="no">§06</span>建议修法<span class="opt">（可选）</span></h2>
   <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
-  <p class="todo">TODO / 待定</p>
+  <p class="hint">以下保留入池时的修法方向原文。2026-11-09 grilling 四问已由用户按推荐拍板（D1–D4），方案定稿见 <code>memory-bank/plans/26-11-09-0559-plan-memory-bank-kb-gate-timekit-timeout.html</code>：主线 = 按改动收窄 <code>timekit</code> / <code>check_html</code> + 复跑清单扩面 + 展开长度守卫，不动并发模型与 <code>timeout</code>；本件仍 In Progress、未实施。</p>
+  <ol>
+    <li><strong>分档 timeout</strong>：kb 链 60s → 180/300s，或按脚本类型分档（全库扫描类单独档）。代价：真挂住时失败反馈更慢；只挪阈值，不消除放大。</li>
+    <li><strong>减少重复全库扫描</strong>：9 条脚本各扫一遍 → 合并成一次遍历或聚合 <code>kb.check</code> 单入口（覆盖面由 <code>test_commit_gate_covers_kb_check</code> 守阵钉住）。代价：改脚本与守阵，聚合后失败定位粒度变粗。</li>
+    <li><strong>降并发 / 重型独占池</strong>：全库扫描类 job 不互相并发（这类 <code>GATE_WORKERS</code> 降为 1，或给重型 job 独占池）。代价：闸门墙钟变长但尾部更稳；与计划 26-11-01-0434 方案 B 的并发收益要重新权衡。</li>
+    <li><strong>杀树收尸</strong>：<code>run_capture</code> 超时后显式关管道、join 读线程、登记残留 pid，给出可核查的清理路径。代价：Windows 管道 / 孙进程语义复杂，容易引入新的挂死形态（见 <code>parallel-run.md</code>）。</li>
+    <li><strong>失败重跑入口</strong>：超时给一次自动重跑，或提供「只重跑该闸门」入口，避免整条 ship.commit 重跑又付一整套 gate。代价：与「保守默认」冲突，须显式配置且只对这类超时生效；幂等性要单独论证。</li>
+  </ol>
 </section>
 
 <section id="s7">
   <h2><span class="no">§07</span>状态变更日志</h2>
   <ul>
     <li>2026-11-09 04:41 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-09 — 状态 Open → In Progress（kb.status）</li>
+</ul>
   <h3>复验</h3>
-  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <p>复验：2026-11-09 05:26 <strong>部分复现</strong> —— <code>60s 判死</code>本轮未复现（机器负载低于 04:41：真实 <code>run_gates</code> 4 池跑整条 kb 链 5.23s 全绿、timekit 4.76s），故不能判已消失；但「并发放大」机制已 A/B/A 复现（单跑 4.32s → 4 路并发 14.19~14.35s → 恢复 4.28s），且 04:41 的现场进程（clone2 ui_harness.py / nav_server.py --port 8791）仍在。锚点已重跑：12 条 gates 配置序、<code>GATE_WORKERS = 4</code>、两轮闸门位置与 <code>maybe_respawn</code> 父层语义均与代码一致，未漂移。</p>
   <h3>修复后补充</h3>
   <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
 </section>

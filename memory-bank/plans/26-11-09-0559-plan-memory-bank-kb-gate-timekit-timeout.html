@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>kb 闸门 timekit 超时治理：按改动收窄全库扫描</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="memory-bank-kb-gate-timekit-timeout">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-09-0559">
+<meta name="doc-updated" content="26-11-09-0559">
+<meta name="doc-refs" content="memory-bank/issues/26-11-09-0441-bug-kb-gate-timekit-timeout-flaky.html, memory-bank/tasks/26-11-09-memory-bank-kb-gate-timekit-timeout.md">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: memory-bank-kb-gate-timekit-timeout</div>
+<h1>kb 闸门 timekit 超时治理：按改动收窄全库扫描</h1>
+<p class="lede">本篇只回答「怎么修」：把 kb 闸门里两条全库扫描型脚本按本次改动清单收窄，同时补齐「复跑阶段远端合入文件」与「命令行长度」两个正确性前置漏洞；不动并发模型、不改 <code>timeout</code>、不聚合 wrapper。根因与现场证据的权威在 issue <code>26-11-09-0441</code> §05 与任务档案，本篇只引用不重写。方案经 2026-11-09 grilling 四问拍板（D1–D4，§06），本轮只定稿、不实施。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-09-0559 · <b>doc-updated</b> 26-11-09-0559 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 2026-11-09 会话：issue 26-11-09-0441 认领轮根因结论 → grilling 第一轮 Q1–Q4 用户「按推荐」拍板；上游约束承袭计划 <code>26-11-01-0434</code>（方案 A/D 的改动级先例、D2 并发池 4、「明确不做 wrapper」）
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<p><b>背景。</b><code>ship.commit</code> 的 kb 闸门（<code>.commands/my-commit-flow/.my-commit-flow.toml</code>，9 条脚本、逐 job 固定 <code>timeout = 60</code>）在 2026-11-09 04:41 满载机上连续 4 次把 <code>timekit.py --check</code> 判成 60s 超时，第 5 次复跑自过。认领轮（05:26）把根因收敛为<strong>固定 60s 超时 × IO-CPU 密集型全库扫描 × 并发放大 × 满载机</strong>：空载单跑 4.1~4.3s 有十余倍余量，4 路并发把同一脚本放大到 14.2~14.4s（3.3 倍），冷缓存 / 有负载单跑 9.6~12.6s，余量被吃光即判死；真实 <code>run_gates</code> 4 池跑整链本轮 5.23s 全绿，<strong>60s 判死未复现</strong>，不能判已消失。</p>
+<p><b>目标：</b>把 kb 链两条全库扫描型脚本从「每次提交扫全库」改成「只扫本次改动」——<code>timekit</code> 4.23s → 约 0.4s、<code>check_html</code> 1.69s → 改动级——使 3.3 倍并发放大后仍只有约 1.6s，从工作量侧消掉根因，而不是挪阈值或降并发。算成的标准 = §04 的 S1–S5 验收判据全绿，且复测数字回写本计划。</p>
+<p><b>设计底线（不变量）：</b></p>
+<ul>
+  <li><b>改动清单单点</b>：一律复用预检 <code>changed_files()</code> 与 <code>&lt;changed:GLOB&gt;</code> 展开，<b>闸门脚本不自查 git</b> —— 复跑阶段树已净，自查 git 语义就错。承袭 <code>26-11-01-0434</code> §01 底线 1。</li>
+  <li><b>守阵逐字匹配</b>：<code>tests/test_memory_bank_docs.py::test_commit_gate_covers_kb_check</code> 用正则在闸门配置里找 <code>&lt;脚本&gt;.py --check</code>。每条 run <b>必须保留该前缀</b>，增量参数只加在后面；<code>kb.check</code> 的 run 列表一条不动，它是全量兜底入口。</li>
+  <li><b>无参即全量</b>：<code>timekit</code> / <code>check_html</code> 不带 <code>--files</code> / 显式 paths 时行为逐字不变，<code>kb.check</code> 与手工全量调用不受影响；全量覆盖仍由它兜住。</li>
+  <li><b>不动并发模型与 timeout</b>：<code>GATE_WORKERS = 4</code>（<code>26-11-01-0434</code> D2，<code>_pipeline.py:489</code>）与 <code>timeout = 60</code> 原样；收益只来自减工作量。</li>
+  <li><b>保守回退</b>：展开失败按既有语义 STOP 不降级；改动面判定拿不准时宁可全量跑。</li>
+</ul>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+<p><b>逐条实测与适配性裁定</b>（2026-11-09 05:5x 本机热缓存，python 直跑各脚本 <code>--check</code> 单次，含解释器启动；数字用于量级判断，验收以同口径复测为准）：</p>
+<table>
+<tr><th>#</th><th>脚本</th><th>耗时</th><th>裁定</th><th>依据</th></tr>
+<tr><td>1</td><td><code>gen_kb_index</code></td><td>0.11s</td><td class="bad">不收窄</td><td><code>build_all</code> 重算全库生成物再逐字比对；生成物常不在改动清单里，收窄就漏「索引没重生成」——正是它要拦的</td></tr>
+<tr><td>2</td><td><code>gen_doc_map</code></td><td>0.81s</td><td class="bad">不收窄</td><td>认领链<b>双向</b>校验，目标常是未改动文件；还有「没有任何件声明引用 → 判红」的全量兜底</td></tr>
+<tr><td>3</td><td><code>gen_baseline_recent</code></td><td>0.09s</td><td>不收窄（不值）</td><td>单文件属性，但要动守阵，收益不足 0.1s</td></tr>
+<tr><td>4</td><td><code>check_wording</code></td><td>0.35s</td><td class="bad">不收窄</td><td>族 B 是<b>存量冻结数目制</b>（<code>len(num_hits) &gt; FROZEN_TEST_NUM_COUNT</code>），增量会让「新增手抄」判据恒失效</td></tr>
+<tr><td>5</td><td><code>check_mutation_anchor</code></td><td>0.11s</td><td class="bad">不收窄</td><td>锚文件本身通常未改动（改的是任务档案），收窄 = 守卫无对象</td></tr>
+<tr><td>6</td><td><code>check_doc_templates</code></td><td>0.13s</td><td>不收窄（不值）</td><td>本就是「新增面」语义，但动守阵不抵风险</td></tr>
+<tr><td>7</td><td><code>timekit</code></td><td><b>4.23s</b></td><td class="good">收窄</td><td>文件名 / 元数据 / 正文三层<b>全是单文件属性</b>，不依赖其它文件</td></tr>
+<tr><td>8</td><td><code>check_status_drift</code></td><td>0.38s</td><td>不收窄（不值）</td><td>状态一致性属单文件属性，合计收益小</td></tr>
+<tr><td>9</td><td><code>check_html</code></td><td><b>1.69s</b></td><td class="good">收窄</td><td>L1+L2 结构检查是单文件属性；<code>collect_files()</code> <b>已支持显式文件参数</b>（注释即写「闸门 <code>&lt;changed:&gt;</code> 形态」），闸门也已有 <code>--vnu --strict &lt;changed:**/*.html&gt;</code> 增量行</td></tr>
+</table>
+<p>合计 7.90s；7 + 9 占 5.92s（<b>75%</b>）。其余 7 条要么语义上必须全量，要么合计不足 0.6s。</p>
+<p><b>工作量证据。</b><code>timekit --check</code> 对 memory-bank 全库（2838 文件 / 31.5 MB）做 <code>check_filenames</code> 的目录扫描（约 0.39s 固定成本）+ <code>check_metadata</code> 与 <code>check_body</code> 各一次 <code>mb.rglob("*")</code> 并逐文件读全文 + 逐行正则。单次 <code>rglob</code> 仅 0.03s、<code>_read</code> 占 10%，瓶颈是正文行正则。模拟把扫描面换成 k 个文件：<code>k=1 → 0.36s</code>、<code>k=100 → 0.45s</code>（<strong>4.23 → 约 0.4s</strong>）。顺手的算法优化（两轮 rglob 合一、每文件读一次、无数字行预筛可跳 53.1%）合计仅 -0.8s，只作附带项、不作主线。</p>
+<p><b>放大与排除项。</b>A/B/A 干净对照：单跑 4.32/4.32s → 4 路并发同一脚本 14.19~14.35s → 撤负载 4.28/4.28s；同族坑档 <code>perf-measurement.md</code> 记过同一命令 15.94~209.77s 漂移、<code>parallel-run.md</code> 记过高负载下 <code>CreateProcess</code> / <code>communicate</code> 挂死。快照 env 对照（plain 4.16s / snapshot-env 4.27s / plain 4.12s）已排除「扫描路径被快照环境改变」。本机同族形态见 issue §05。</p>
+<p><b>纯增量必须先补的三个洞：</b></p>
+<ol>
+  <li><b>远端合入漏检</b>：<code>commit.py:587</code> 复跑闸门用的是<b>同一份 <code>present</code> 清单</b>（<code>:579</code> 注释「改动清单也不变」）。远端 rebase 合入的 KB 文件不产生本地 diff ⇒ 纯增量会让「合流后第二轮闸门」对这批文件形同虚设。<code>.my-commit-flow.toml:173-174</code> 的 <code>sync_agent_skills</code> 闸门注释也记过同款形态（从远端 pull 进来的 skill 改动在本地不产生 diff，按路径匹配永远命中不了）。</li>
+  <li><b>命令行长度</b>：<code>&lt;changed:&gt;</code> 经 <code>run_gates</code> 走 <code>shell=True</code>（cmd.exe 8191 上限），平均相对路径 69 字符 ⇒ <b>100 个改动文件约 6856 字符</b>，大批量 KB 提交会截断。</li>
+  <li><b>守阵硬约束</b>：见 §01 底线 2，run 前缀不能改。</li>
+</ol>
+
+<h2><span class="no">§03</span>方案总览</h2>
+<p><b>主线 A（D1）：</b>增量减工作量 + 扩清单补漏 + 长度守卫。减到约 0.5s 后即便 3.3 倍并发放大也只有约 1.6s，根因被消掉；不动并发模型、不改 timeout、不推翻上游 D2。</p>
+<table>
+<tr><th>期</th><th>步</th><th>内容</th><th>定位</th></tr>
+<tr><td>P0</td><td>S1–S3</td><td><code>timekit --files</code> / <code>check_html</code> 显式 paths / 守阵钉</td><td>收益主体（-90%），零正确性风险</td></tr>
+<tr><td>P1</td><td>S4</td><td>复跑清单扩面 + 展开字符上限守卫</td><td><b>P0 的正确性前置</b>：与 P0 同批验收，不得拆开发布（见 §07 R5）</td></tr>
+<tr><td>P2</td><td>条件分支</td><td>分档 timeout（60 → 180/300）；重型 job 独占池</td><td>仅 S5 实测仍触发超时 / 尾部不稳时启用；独占池须用户再拍板（§07 R4）</td></tr>
+</table>
+<p><b>候选方案拷问结果</b>（grilling 第一轮逐条比选，结论已随 D1/D3 拍板）：</p>
+<table>
+<tr><th>候选</th><th>拷问结果</th></tr>
+<tr><td>分档 timeout 60→180/300</td><td>只挪阈值、不消除放大，真挂住时反馈更慢 ⇒ 低风险<b>兜底</b>，降为 P2</td></tr>
+<tr><td>合并扫描 / 聚合 <code>kb.check</code></td><td class="bad">否决</td></tr>
+<tr><td>降并发 / 重型独占池</td><td>直击放大根因，但推翻上游 D2（并发池 4）；D2 注释已把「独占池」列为 R3 预留后手 ⇒ 留作 P2 备选</td></tr>
+<tr><td>杀树收尸 / 失败重跑</td><td>前者治残留不治超时、Windows 管道语义复杂；后者与保守默认冲突、需幂等论证 ⇒ 各自独立立项，不并进本方案</td></tr>
+<tr><td>算法优化（两轮 rglob 合一 / 无数字行预筛）</td><td>实测合计仅 -0.8s ⇒ S1 顺手做，不作主线</td></tr>
+<tr><td>缓存层（按 path/mtime/size/规则版本）</td><td>可保全量覆盖且远端文件自动重扫，但缓存目录有沙箱白名单前例（YAPF 坑）、失效判定复杂 ⇒ 复杂度过高，排除</td></tr>
+<tr><td>清单扩面 + 长度守卫</td><td class="good">不是收益项，是「纯增量」成立的前提 ⇒ 纳入 P1（S4）</td></tr>
+</table>
+<p class="aside">「合并扫描 / 聚合 <code>kb.check</code>」否决理由：与计划 <code>26-11-01-0434</code> 方案 B 拍板的「明确不做 wrapper（守阵逐字匹配 <code>&lt;脚本&gt; --check</code>）」直接冲突，且聚合后失败定位粒度变粗。</p>
+<p><b>明确不做：</b>9 条全收（4 条全量语义硬冲突、3 条合计不足 0.6s，D2）；改 <code>GATE_WORKERS</code> / 改 <code>timeout</code>（D1）；杀树收尸、失败重跑（D3 独立立项），缓存层（§03 判复杂度过高，排除）；本轮实施 S1–S5（D4 只出方案）。</p>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+<p class="aside">本轮只定稿，下列五步<b>均未开工</b>；实施另起指令。P0 与 P1 同批验收。</p>
+<table>
+<tr><th>步</th><th>内容</th><th>验收判据</th></tr>
+<tr><td>S1</td><td><code>timekit.py</code> 加 <code>--files</code>：三层守卫<b>都</b>收窄到传入文件（含 <code>check_filenames</code> 的目录扫描，否则残留 0.39s 固定成本）；无参调用仍全量（兼容 <code>kb.check</code> / 手工）；顺手合并两轮 <code>rglob</code>、每文件读一次、无数字行预筛。闸门 run → <code>timekit.py --check --files &lt;changed:memory-bank/**&gt;</code>，脚本内按后缀过滤</td><td>① 改 1 个 md → <code>≤0.6s</code>；② 无参调用（<code>kb.check</code> 口径）仍全量且判据不变；③ 改动文件种未来日期仍判红；④ <code>test_commit_gate_covers_kb_check</code> 绿</td></tr>
+<tr><td>S2</td><td><code>check_html.py</code> 让 <code>--check</code> 与显式 paths 共存（<code>collect_files(mb, paths or None)</code>）；闸门 run → <code>check_html.py --check &lt;changed:**/*.html&gt;</code></td><td>① 改 1 个 HTML → 只扫它且 L1/L2 判据生效；② 无参仍全量；③ 既有 <code>--vnu --strict &lt;changed:**/*.html&gt;</code> 增量行不受影响；④ 守阵绿</td></tr>
+<tr><td>S3</td><td>守阵：既有 <code>test_commit_gate_covers_kb_check</code> 保持绿（字面串保留，增量参数只加在 <code>--check</code> 后）；新增守阵钉「无参 = 全量」+「增量下改动文件的未来日期仍判红」；<code>kb.check</code> 的 run 列表<b>不动</b></td><td>新增用例红绿双验；<code>kb.check</code> 全绿</td></tr>
+<tr><td>S4</td><td>引擎层补漏：① <code>commit.py:587</code> 复跑阶段把远端合入的 <code>memory-bank/**</code> 并入 <code>ctx['changed']</code>，<b>只作用于 <code>&lt;changed:&gt;</code> 展开</b>，不改 <code>gates_for</code> 命中与暂存清单；② <code>expand_run</code> 加字符上限守卫，超限先改走分片 / 清单文件</td><td>① 模拟 rebase 合入远端 KB 文件（种未来日期）→ 复跑闸门能扫到并判红；② 命中 / 暂存语义用例逐字不变；③ 100+ 改动文件展开不截断；④ 展开失败仍 STOP 不降级</td></tr>
+<tr><td>S5</td><td>收尾：A/B/A 4 路并发复验整链；<code>test.quick</code> + <code>kb.check</code> 全绿；复测数字回写本计划（<code>kb.bump</code> 加 R 行）；按收尾 DoD 处理基线切片；issue 置 <code>Done</code> 并补「实际修法 / 验证方式 / 测试数字」</td><td>DoD 全过，<code>ship.commit</code> 全绿；本计划 <code>doc-status</code> 随实施推进翻 <code>In Progress</code> → <code>Done</code></td></tr>
+</table>
+<p>实施顺序 S1 → S2 → S3（脚本与守阵，可各自独立成提交）；S4 是引擎层改动，与 P0 <b>同批验收</b>；S5 统一收尾。S1/S2 的 run 写法必须让 <code>&lt;脚本&gt;.py --check</code> 字面串保持连续（守阵逐字匹配）。</p>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p>无待拍板项 —— D1–D4 已于 2026-11-09 05:57 由用户「按推荐」全部拍板（迁 §06）。剩余未决项均为<b>带触发条件的执行分支</b>，不是开放决策：P2 两案仅在 S5 实测仍触发超时或尾部不稳时启用（触发条件见 §07 R4）；杀树收尸、失败重跑按 D3 各自独立立项，缓存层按 §03 判「复杂度过高，排除」，均不在本方案内。</p>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+<tr><th>编号</th><th>日期</th><th>结论</th><th>拍板人</th><th>备注</th></tr>
+<tr><td>D1</td><td>2026-11-09</td><td><b>Q1 = A</b>：增量减工作量 + 扩清单补漏 + 长度守卫（P0+P1），P2 仅备选；否决 B（不改覆盖面、独占池 + 分档 timeout）与 C（A+B 全做）</td><td>用户（按推荐）</td><td>减到约 0.5s 后 3.3 倍放大仅约 1.6s；不动并发模型、不改 timeout、不推翻上游 D2</td></tr>
+<tr><td>D2</td><td>2026-11-09</td><td><b>Q2 = 只收窄 7+9</b>（<code>timekit</code> + <code>check_html</code>），不做 9 条全收</td><td>用户（按推荐）</td><td>两条占 5.92s / 75%；其余 7 条要么全量才成立，要么合计不足 0.6s</td></tr>
+<tr><td>D3</td><td>2026-11-09</td><td><b>Q3 = 只把「分档 timeout」列为 P2 兜底</b>；合并扫描 / 降并发 / 杀树收尸 / 失败重跑各自独立立项，不全纳入也不全排除</td><td>用户（按推荐）</td><td>合并扫描与上游方案 B 冲突；杀树 / 重跑治的不是超时；独占池降为 P2 备选</td></tr>
+<tr><td>D4</td><td>2026-11-09</td><td><b>Q4 = 本轮只出方案、零代码改动</b>，结论落本 plan 定稿，实施另起指令</td><td>用户（按推荐）</td><td>grilling 未收敛前不动笔（计划 <code>26-10-17-0527</code> 记过「未续 grilling 轮即动笔」属协议偏离）</td></tr>
+</table>
+<p><b>承袭的上游拍板（不重复拍板）：</b><code>26-11-01-0434</code> D2（并发池上限 4，「pytest 独占池」保留为 R3 处置手段）、D3（全量扫触发面）、D5（存量债务靠 <code>doc.caps --strict</code> 收口）、方案 A/D 的「改动级收窄 + 存量滞后」取舍，以及「明确不做 wrapper」。</p>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+<tr><th>编号</th><th>风险</th><th>触发条件</th><th>对策</th></tr>
+<tr><td>R1</td><td>增量后存量违规滞后（与上游方案 A/D 同款）</td><td>未改动文件里已存在的日期 / 措辞 / 结构违规</td><td>全量覆盖留在 <code>kb.check</code> 与脚本无参调用，清理会话收口；S3 用守阵钉死「无参 = 全量」</td></tr>
+<tr><td>R2</td><td>清单扩面误伤命中 / 暂存语义</td><td>S4① 把远端合入文件写进 <code>ctx['changed']</code> 后被其它消费者读到</td><td>扩面<b>只作用于 <code>&lt;changed:&gt;</code> 展开</b>；<code>gates_for</code> 命中与暂存清单逐字不动；S4 加语义用例</td></tr>
+<tr><td>R3</td><td>长度守卫引入新临时 IO</td><td>大批量 KB 提交触发响应文件 / 分片</td><td>先走分片（仍走命令行），响应文件仅在分片也不够时启用；沙箱白名单有 YAPF 坑前例，上线前做冒烟</td></tr>
+<tr><td>R4</td><td>P2 独占池与上游 D2 拍板冲突</td><td>S5 A/B/A 实测仍触发超时或尾部不稳</td><td>独占池不自动启用，届时由用户再拍板；分档 timeout 同为 P2 兜底且只挪阈值</td></tr>
+<tr><td>R5</td><td>复跑第二轮对远端合入文件漏检</td><td>P0 单独先上、P1 尚未落地</td><td><b>P1 是 P0 的正确性前置，同批验收、不得拆开发布</b>；若确需分期提交，P0 期间复跑阶段对增量 run 回退全量</td></tr>
+<tr><td>R6</td><td>守阵与 cmd.exe 长度上限把增量写法判红 / 截断</td><td>run 前缀被改写，或改动文件数过百</td><td>S1/S2 保留 <code>&lt;脚本&gt;.py --check</code> 连续字面串；S4② 加字符上限守卫；S3 红绿双验</td></tr>
+</table>
+<p class="aside">本方案不处置的三项现场疑点（issue §05「仍待证」）：超时杀树后残留冻结进程的确切机制、04:41 是否真触发合流后第二轮闸门、系统层文件拦截是否在该时段重新出现。它们与本方案并行，需满载机进程树快照 / 当时的步骤行 / 系统层取证；立案与处置不在本计划范围。</p>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-09-0559</span> 初版：2026-11-09 会话 grilling 第一轮 Q1–Q4 用户「按推荐」拍板定稿（D1–D4 见 §06）。收主线 A（P0 增量收窄 + P1 补漏 + P2 备选）、9 条逐条裁定与取证数字（§02）、候选拷问比选（§03）、S1–S5 实施与验收（§04）、R1–R6 风险（§07）；经 <code>kb.new plan --refs</code> 与 issue / 任务档案双向补链。本轮只出方案、零代码改动，S1–S5 未开工。</li>
+</ul>
+
+</div>
+</body>
+</html>
