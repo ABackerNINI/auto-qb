@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="checking-has-reference-bool">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="checking: _find_reference 优化为 has_reference() -&gt; bool 提前返回">
 <meta name="issue-summary" content="checking.py:151 历史 TODO: 决策链只需判『有无参考种子』时仍构建完整参考列表, 改谓词提前返回可省组内扫描">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-08-1717-refactor-checking-has-reference-bool</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-08 17:17</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
 
@@ -117,7 +117,8 @@
   <h2><span class="no">§04</span>状态变更日志</h2>
   <ul>
     <li>2026-11-08 17:17 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-09 — 状态 Open → Done（kb.status）：<code>_find_reference</code> 已改谓词 <code>has_reference() -&gt; bool</code>，三模式与 verified 并集全部首个命中即提前返回；test.quick 5853 过 / 1 失败（预存 ascii 符号闸门，与本件无关）</li>
+</ul>
 </section>
 
 <footer>

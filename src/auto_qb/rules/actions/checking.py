@@ -41,7 +41,7 @@ class CheckAction(FullCheckingMixin, SkipCheckingMixin, BaseAction):
       1.5. 组内其它成员 full-checking 在途 -> 让位等待(组内校验串行, FullCheckingMixin)
       1.6. 组内其它成员校验失败且文件映射一致 -> 结果必然相同, skip(失败推断, FullCheckingMixin;
            记录指向已完成/已删除成员时先自愈清除 —— 假失败不得参与推断)
-      2. 按 basic_check 从同组"已完成且未校验"成员筛选参考种子, 并集内存 verified_references
+      2. 判组内有无参考种子(basic_check 模式首个命中即提前返回, 并集内存 verified_references)
       3. 有参考 -> with_reference 段; 无参考 -> without_reference 段
       4. skip-checking: 同日去重 -> 前置文件存在+大小检查 -> 导出->删除->重加(is_skip_checking,paused)
          -> 确认 -> auto_start(无参考时警告高风险)
@@ -127,8 +127,9 @@ class CheckAction(FullCheckingMixin, SkipCheckingMixin, BaseAction):
         if inferred is not None:
             return inferred
 
-        # 决策链 2: 确定参考种子(basic_check 模式 + 内存 verified_references 并集)
-        reference = self._find_reference(ctx, members)
+        # 决策链 2: 判组内有无参考种子(basic_check 模式谓词 + 内存 verified_references 并集,
+        # 找到首个即提前返回)
+        reference = self.has_reference(ctx, members)
 
         # 决策链 3: 有参考 -> with_reference 段; 无参考 -> without_reference 段
         segment = self.with_reference if reference else self.without_reference
@@ -146,11 +147,10 @@ class CheckAction(FullCheckingMixin, SkipCheckingMixin, BaseAction):
 
         if segment["mode"] == "full-checking":
             return self._execute_full_checking(ctx, segment)
-        return self._execute_skip_checking(ctx, segment, bool(reference))
+        return self._execute_skip_checking(ctx, segment, reference)
 
-    # TODO: 优化为has_reference() -> bool, 提前返回
-    def _find_reference(self, ctx: RuleContext, members: list) -> list:
-        """按 basic_check 模式从组内已完成且未校验成员筛选参考种子, 并集内存 verified_references(排除自身)
+    def has_reference(self, ctx: RuleContext, members: list) -> bool:
+        """判组内有无可用参考种子: 按 basic_check 模式找到首个即提前返回, 并集内存 verified_references
 
         带 skip_checking_tag 标签的种子(跳检成功, 未经哈希校验)一律排除: 其数据可信度仅来自
         文件存在与大小一致, 不能作为其它种子跳检/校验的参考, 防止"未验证"经参考链传播。
@@ -166,9 +166,9 @@ class CheckAction(FullCheckingMixin, SkipCheckingMixin, BaseAction):
         candidates = [
             c for c in grouping._group_reference_candidates(members) if c.hash != ctx.hash and not _is_tagged(c)
         ]
-        refs = []
         if self.basic_check == "filelist":
-            refs = list(candidates)  # 分组已保证文件列表相同, 无需重复对比
+            if candidates:  # 分组已保证文件列表相同, 无需重复对比
+                return True
         elif self.basic_check == "piecehashes":
             # 严格模式: 候选须与目标种子 piece hash 列表完全相同(torrents_piece_hashes API, 无需导出 .torrent)
             try:
@@ -180,25 +180,20 @@ class CheckAction(FullCheckingMixin, SkipCheckingMixin, BaseAction):
                 for cand in candidates:
                     try:
                         if ctx.api.torrents_piece_hashes(cand.hash) == target:
-                            refs.append(cand)
+                            return True
                     except Exception as e:
                         logger.warning(f"获取参考种子 piece hashes 失败({cand.hash}): {e}")
-        else:  # custom: 运行自定义程序判定候选
-            refs = [c for c in candidates if self._run_custom_check(ctx, c)]
-        # 内存 verified_references 并集: 历史 full-checking 通过的种子也可作参考(重启后重新积累)
+        else:  # custom: 运行自定义程序判定候选, 首个通过即提前返回(不再对后续候选发请求)
+            for cand in candidates:
+                if self._run_custom_check(ctx, cand):
+                    return True
+        # 内存 verified_references 并集: 历史 full-checking 通过的组内成员也可作参考(重启后重新
+        # 积累), 排除自身与带标种子(排除语义与候选路径一致)
         by_hash = grouping._group_by_hash()
-        own = ctx.hash
         for h in ctx.manager.store.verified_references:
-            if h in members and h != own and h in by_hash:
-                refs.append(by_hash[h])
-        # 去重(按 hash), 过滤无效与带跳检标签的种子(verified_references 并集在此统一排除)
-        seen, result = set(), []
-        for t in refs:
-            if t is None or t.hash in seen or _is_tagged(t):
-                continue
-            seen.add(t.hash)
-            result.append(t)
-        return result
+            if h in members and h != ctx.hash and h in by_hash and not _is_tagged(by_hash[h]):
+                return True
+        return False
 
     # TODO: 重新设计自定义校验流程
     def _run_custom_check(self, ctx: RuleContext, candidate: Any) -> bool:

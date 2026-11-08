@@ -8,8 +8,12 @@
 - test_move_to: 移动保存路径动作
 - test_reannounce: 重新 announce 动作
 - test_speed_limit_actions: 限速动作(下载/上传/全局)
-- test_find_reference_piecehashes_cand_error: piecehashes 候选拉取异常 -> 忽略候选
-- test_find_reference_dedup: 候选与 verified_references 重合 -> 去重
+- test_has_reference_filelist_states: filelist 谓词两态 —— 有参考/无参考/带标候选排除/verified
+  并集命中(含排除自身)
+- test_has_reference_piecehashes_shortcircuit: piecehashes 首个匹配提前返回(后续候选不再拉取)/
+  无匹配/带标候选不询问
+- test_has_reference_piecehashes_cand_error: piecehashes 候选拉取异常 -> 忽略候选; 目标拉取失败 -> 无参考
+- test_has_reference_custom_shortcircuit: custom 首个通过提前返回短路(后续候选不再请求)/全不通过
 - test_run_custom_check_error: custom 程序执行异常 -> 视为非参考
 - test_speed_limit_fmt_bytes: 小值限速格式化为 B/s
 - test_start_stop_dry_run: start/stop dry-run (P2-a)
@@ -17,13 +21,10 @@
 - test_speed_limit_dry_run_manual_and_same_value_skips: 限速 dry-run / 手动限速不覆盖 / 同值不重设 (P2-a)
 - test_print_details_missing_torrent: print_torrent_details 种子不存在 -> fail (P2-a)
 - test_checking_disabled_segment_skips: checking 未启用段 -> skip 有/无参考两指代 (P2-a)
-- test_checking_verified_reference_union_filters: verified_references 并集过滤(自身/快照外)且去重 (P2-a)
 - test_actions_torrent_hash_scope: 各动作下发 qB 的 torrent_hashes 恒为本种子 hash(置 None = 全库副作用)
 - test_actions_expand_tracker_vars: ${required_seeding_time} 经 tracker_conf 展开(remove_tags/add_category)
 - test_move_to_confirm_gate_skips: 整组迁移 confirm 形态只回 skip 且规则侧 confirm=False
 - test_speed_limit_direction_uses_own_axis: 上传/下载限速各读自己的轴做手动限速闸门
-- test_find_reference_union_membership_and_tagged_ordering: C23 守阵 —— verified 并集只取组内
-  成员, 且带跳检标签的种子不截断后续参考(成员/快照判据 + continue→break)
 - test_start_stop_gate_ignores_group_members_own_write: C31 守阵 —— 起停幂等门只判本 hash
   (group=False), 兄弟成员的自写不得误伤
 - test_print_details_numeric_fields: C46 守阵 —— 进度/分享率/做种时长有值精确、None 显示 "-" 且仍 ok
@@ -279,39 +280,125 @@ def _grouped_mgr(state_file, hashes):
     return mgr
 
 
-def test_find_reference_piecehashes_cand_error():
-    """checking: piecehashes 模式候选拉取异常 -> 忽略该候选, 不崩溃"""
+def test_has_reference_filelist_states():
+    """checking: filelist 谓词两态 —— 有参考 True; 带标候选排除; verified 并集命中组内未带标成员"""
+    with tempfile.TemporaryDirectory() as td:
+        me = FakeTorrent(hash="H1", name="T", state="pausedDL", progress=0.5, tags="")
+        normal = FakeTorrent(hash="H2", name="N", state="stalledUP", tags="")
+        tagged = FakeTorrent(hash="H3", name="K", state="stalledUP", tags="zSkipChecked")
+        verified = FakeTorrent(hash="H4", name="V", state="pausedDL", progress=0.5, tags="")
+        outside = FakeTorrent(hash="H9", name="O", state="stalledUP", tags="")
+        mgr = _grouped_mgr(os.path.join(td, "state.json"), {"H1": me, "H2": normal, "H3": tagged, "H4": verified})
+        mgr.store.by_hash["H9"] = outside  # 在快照里但不在组内
+        # H3=带标候选 / H4=组内 verified(非候选态) / H9=组外 verified / GHOST=不在快照
+        mgr.store.verified_references = {"H3", "H4", "H9", "GHOST"}
+        action = _check_action(basic_check="filelist")
+        ctx = make_ctx(mgr, me, FakeClient())
+        # 有参考: 组内存在已完成且未带标候选
+        assert action.has_reference(ctx, ["H1", "H2", "H3"]) is True
+        # 带标候选被排除, verified 侧(带标 H3/组外 H9/快照外 GHOST)也命中不了 -> 无参考
+        assert action.has_reference(ctx, ["H1", "H3"]) is False, "带标候选与带标/组外/快照外 verified 均被排除"
+        # verified 并集命中: 组内未带标成员(非候选态)经 verified 命中 -> 有参考
+        assert action.has_reference(ctx, ["H1", "H3", "H4"]) is True, "verified 组内成员命中"
+        # 排除自身: verified 只含自身 -> 无参考
+        mgr.store.verified_references = {"H1"}
+        assert action.has_reference(ctx, ["H1", "H3"]) is False, "自身不得作为自己的参考"
+
+
+class _PHClient(FakeClient):
+    """piecehashes 谓词测试替身: 按 hash 返回 piece hashes, bad 集合内的 hash 抛异常"""
+    def __init__(self, hashes=None, bad=()):
+        super().__init__()
+        self.ph_calls = []
+        self._hashes = hashes or {}
+        self._bad = set(bad)
+
+    def torrents_piece_hashes(self, torrent_hashes=None):
+        self.ph_calls.append(torrent_hashes)
+        if torrent_hashes in self._bad:
+            raise RuntimeError("api error")
+        return self._hashes.get(torrent_hashes, [b"a", b"b"])
+
+
+def test_has_reference_piecehashes_shortcircuit():
+    """checking: piecehashes 谓词 —— 首个匹配参考提前返回(后续候选不再拉取); 无匹配/带标候选不询问"""
+    with tempfile.TemporaryDirectory() as td:
+        me = FakeTorrent(hash="H1", name="T", state="pausedDL", progress=0.5, tags="")
+        c1 = FakeTorrent(hash="H2", name="C1", state="stalledUP", tags="")
+        c2 = FakeTorrent(hash="H3", name="C2", state="stalledUP", tags="")
+        tagged = FakeTorrent(hash="H4", name="K", state="stalledUP", tags="zSkipChecked")
+        mgr = _grouped_mgr(os.path.join(td, "state.json"), {"H1": me, "H2": c1, "H3": c2, "H4": tagged})
+        action = _check_action(basic_check="piecehashes")
+        # 首个匹配即提前返回: 第二个候选不再拉取
+        client = _PHClient()
+        mgr.client = client
+        ctx = make_ctx(mgr, me, client)
+        assert action.has_reference(ctx, ["H1", "H2", "H3"]) is True
+        assert client.ph_calls == ["H1", "H2"], "首个匹配即提前返回, 第二个候选不再拉取"
+        # 无匹配: 候选 piece hash 与目标全不同
+        client2 = _PHClient(hashes={"H1": [b"a"], "H2": [b"x"], "H3": [b"y"]})
+        mgr.client = client2
+        ctx2 = make_ctx(mgr, me, client2)
+        assert action.has_reference(ctx2, ["H1", "H2", "H3"]) is False
+        assert client2.ph_calls == ["H1", "H2", "H3"]
+        # 带标候选被排除: 不对其发 piece hashes 请求, 后面的有效候选仍命中
+        client3 = _PHClient(hashes={"H2": [b"x"], "H3": [b"a", b"b"]})
+        mgr.client = client3
+        ctx3 = make_ctx(mgr, me, client3)
+        assert action.has_reference(ctx3, ["H1", "H2", "H3", "H4"]) is True
+        assert "H4" not in client3.ph_calls and "H3" in client3.ph_calls, "带标候选不询问, 未带标候选仍命中"
+
+
+def test_has_reference_piecehashes_cand_error():
+    """checking: piecehashes 候选拉取异常 -> 忽略该候选, 不崩溃; 目标拉取失败 -> 视为无参考"""
     with tempfile.TemporaryDirectory() as td:
         t1 = FakeTorrent(hash="H1", name="T1", state="stalledUP", tags="")
         t2 = FakeTorrent(hash="H2", name="T2", state="stalledUP", tags="")
         mgr = _grouped_mgr(os.path.join(td, "state.json"), {"H1": t1, "H2": t2})
+        action = _check_action(basic_check="piecehashes")
 
-        class BoomClient(FakeClient):
+        class BoomClient(_PHClient):
             def torrents_piece_hashes(self, torrent_hashes=None):
-                self.calls.append(("piece_hashes", torrent_hashes))
-                if torrent_hashes == "H2":
+                self.ph_calls.append(torrent_hashes)
+                if torrent_hashes in self._bad:
                     raise RuntimeError("cand api error")
                 return [b"a", b"b"]
 
-        client = BoomClient()
+        # 候选拉取失败: 该候选忽略, 不崩溃
+        client = BoomClient(bad={"H2"})
+        mgr.client = client
         ctx = make_ctx(mgr, t1, client)
-        action = _check_action(basic_check="piecehashes")
-        refs = action._find_reference(ctx, ["H1", "H2"])
-        assert refs == [], "候选拉取失败不应作为参考"
+        assert action.has_reference(ctx, ["H1", "H2"]) is False, "候选拉取失败不应作为参考"
+        assert client.ph_calls == ["H1", "H2"]
+        # 目标拉取失败: 视为无参考, 候选不再询问
+        client2 = BoomClient(bad={"H1"})
+        mgr.client = client2
+        ctx2 = make_ctx(mgr, t1, client2)
+        assert action.has_reference(ctx2, ["H1", "H2"]) is False
+        assert client2.ph_calls == ["H1"]
 
 
-def test_find_reference_dedup():
-    """checking: 候选与 verified_references 重合 -> 去重"""
+def test_has_reference_custom_shortcircuit():
+    """checking: custom 谓词 —— 首个候选通过即 True 且短路(不再对后续候选发请求); 全不通过 -> False"""
     with tempfile.TemporaryDirectory() as td:
-        t1 = FakeTorrent(hash="H1", name="T1", state="stalledUP", tags="")
-        t2 = FakeTorrent(hash="H2", name="T2", state="stalledUP", tags="")
-        mgr = _grouped_mgr(os.path.join(td, "state.json"), {"H1": t1, "H2": t2})
-        mgr.store.verified_references = {"H2"}
-        client = FakeClient()
-        ctx = make_ctx(mgr, t1, client)
-        action = _check_action(basic_check="filelist")
-        refs = action._find_reference(ctx, ["H1", "H2"])
-        assert [t.hash for t in refs] == ["H2"], "verified 重合应去重"
+        me = FakeTorrent(hash="H1", name="T", state="pausedDL", progress=0.5, tags="")
+        c1 = FakeTorrent(hash="H2", name="C1", state="stalledUP", tags="")
+        c2 = FakeTorrent(hash="H3", name="C2", state="stalledUP", tags="")
+        mgr = _grouped_mgr(os.path.join(td, "state.json"), {"H1": me, "H2": c1, "H3": c2})
+        action = _check_action(basic_check="custom", custom_program="fake_prog")
+        ctx = make_ctx(mgr, me, FakeClient())
+        # 首个候选通过 -> True, 且不再询问第二个候选(短路)
+        with patch("subprocess.run") as run:
+            run.return_value.returncode = 0
+            assert action.has_reference(ctx, ["H1", "H2", "H3"]) is True
+            assert run.call_count == 1, "首个候选通过即短路, 不再对后续候选发请求"
+            assert run.call_args[0][0][1] == "H2"
+        # 全部候选不通过 -> False
+        with patch("subprocess.run") as run:
+            run.return_value.returncode = 1
+            run.return_value.stderr = ""
+            assert action.has_reference(ctx, ["H1", "H2", "H3"]) is False
+            assert run.call_count == 2
 
 
 def test_run_custom_check_error():
@@ -426,20 +513,6 @@ def test_checking_disabled_segment_skips():
         assert result2.is_skipped and "有参考" in result2.message
 
 
-def test_checking_verified_reference_union_filters():
-    """checking: verified_references 并集过滤(排除自身/非组内/已删除)且与候选去重"""
-    with tempfile.TemporaryDirectory() as td:
-        t1 = FakeTorrent(hash="H1", name="T1", state="pausedDL", progress=0.5, tags="")
-        t2 = FakeTorrent(hash="H2", name="T2", state="stalledUP", tags="")
-        mgr = _grouped_mgr(os.path.join(td, "state.json"), {"H1": t1, "H2": t2})
-        mgr.store.verified_references = {"H1", "H2", "GHOST"}  # H1=自身 / GHOST=不在快照
-        client = FakeClient()
-        ctx = make_ctx(mgr, t1, client)
-        action = _check_action(basic_check="filelist")
-        refs = action._find_reference(ctx, ["H1", "H2"])
-        assert [t.hash for t in refs] == ["H2"], "自身排除 / 快照外排除 / 与候选去重"
-
-
 def test_actions_torrent_hash_scope():
     """动作下发 qB 的 torrent_hashes 必须是本种子 hash
 
@@ -536,28 +609,6 @@ def test_speed_limit_direction_uses_own_axis():
         tor.up_limit, tor.dl_limit = manual, 0
         assert DownloadSpeedLimitAction("1000KiB/s").execute(ctx).is_ok, "下载轴空闲 -> 应下发"
         assert ("set_download_limit", 1000 * 1024) in client.calls
-
-
-def test_find_reference_union_membership_and_tagged_ordering():
-    """C23 守阵: 参考集构造 —— verified 并集只取组内成员, 带跳检标签的种子不截断后续参考
-
-    变异: 成员判据反转(`h not in members`)-> 组外种子被当参考; 快照判据反转
-    (`h not in by_hash`)-> 组内 verified 参考丢失; 去重循环 `continue`→`break` ->
-    跳检标签种子之后的有效参考全部丢失(参考链断在第一个未验证种子上)。
-    """
-    with tempfile.TemporaryDirectory() as td:
-        me = FakeTorrent(hash="H1", name="T", state="pausedDL", progress=0.5, tags="")
-        normal = FakeTorrent(hash="H2", name="N", state="stalledUP", tags="")
-        verified = FakeTorrent(hash="H3", name="V", state="pausedDL", progress=0.5, tags="")
-        tagged = FakeTorrent(hash="H4", name="K", state="stalledUP", tags="zSkipChecked")
-        outside = FakeTorrent(hash="H9", name="O", state="stalledUP", tags="")
-        mgr = _grouped_mgr(os.path.join(td, "state.json"), {"H1": me, "H2": normal, "H3": verified, "H4": tagged})
-        mgr.store.by_hash["H9"] = outside  # 在快照里但不在组内
-        # 顺序钉死: 带跳检标签的 verified 参考排在有效参考之前 -> break 变体会把它后面的全吞掉
-        mgr.store.verified_references = ["H4", "H3", "H9"]
-        ctx = make_ctx(mgr, me, FakeClient())
-        refs = _check_action(basic_check="filelist")._find_reference(ctx, ["H1", "H2", "H3", "H4"])
-        assert [t.hash for t in refs] == ["H2", "H3"], f"参考集应只含组内有效参考: {[t.hash for t in refs]}"
 
 
 def test_start_stop_gate_ignores_group_members_own_write():
