@@ -367,13 +367,83 @@ class ExecMixin:
         """成员文件表换算到内容根相对名(自检比对集; 复用 _cr_files 既有换算单点)"""
         return tuple(name for name, _size in self._cr_files(self._plan_files(job), job.scope, job.src))
 
+    def _reset_stale_terminal_journal(self, job: RelocateJob, rt: dict) -> bool:
+        """arm 前重置上一生命周期残留的终态 journal(issue 26-11-08-0827)
+
+        job_id=sha1(mover|src|dst) 同组同目标再发起复用同 id: 上一世 done/cancelled/failed
+        终态账不清, daemon 因 STOP_PHASES 对该 id 退休(scan 剔除 + record_rewrites 拒写),
+        且 write_journal 前向合并拒绝新世非终态记账 —— 新迁移收不到 fastresume 改写(靠核验
+        路径偶然收敛, 数据不在目标位则悬挂)。arm 是新生命周期的收尾链入口, 重置落在这里
+        (对账的陈旧支只覆盖 failed 相位, done/cancelled 残留无裁决面)。
+        守卫 = clear_journal 既有协议(确证属于上一世才删): 盘上相位 ∈ STOP_PHASES 且 ts
+        可解析且早于本生命周期锚点(created_at; _start_job 再发起必重打)。终态互覆与可疑
+        failed 证据的裁决面仍在对账表(_journal_failed_action), arm 侧不裁证据只清残留。
+        返回 False = 有残留但本拍清不成(盘/权限)或锚定不上: 调用方(_arm)必须收口本拍
+        不武装 —— daemon 退休未解除, 武装了也收不到改写; rt["stage"] 保持 arm, 下拍重试。
+        证据契约与 _clear_stale_failed_journal 同款: 含 phase/reason/ts 的证据行在删除
+        **之前**落盘, 结果行删后另记。
+        """
+        journal = relocate_journal.read_journal(self._data_dir(), job.job_id)
+        if journal is None:
+            # 读失败(OSError/坏 JSON 被读单点吞成 None)与「账不存在」不可混淆: 文件在位
+            # 而读不出 = 是否上一世残留无从判读, 保守搁置下拍重试(评审 26-11-08-0827
+            # finding 1, 与 _clear_stale_failed_journal 读失败保守搁置同向); 确认不在才放行
+            if not os.path.exists(relocate_journal.journal_path(self._data_dir(), job.job_id)):
+                return True
+            if not rt.get("journal_terminal_unreadable_warned"):
+                rt["journal_terminal_unreadable_warned"] = True
+                logger.warning(
+                    f"relocate | job {job.job_id}: journal 文件在位但读不出(IO 抖动/坏形?) —— "
+                    "是否上一世终态残留无从判读, 保守不武装, 下拍重试(持续读不出留人工核处)"
+                )
+            return False
+        if str(journal.get("phase") or "") not in relocate_journal.STOP_PHASES:
+            return True  # 非终态(在途生命周期/本世 rebuild 再武装): 不属于本口
+        try:
+            ts_f = float(journal.get("ts"))  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            ts_f = None
+        anchor = float(job.created_at or 0)
+        if ts_f is None or anchor <= 0 or ts_f >= anchor:
+            # 锚定不上: 机制上不可达(终态 job 出 active 集, 本世 _arm 不可再入), 真发生
+            # = 现场存疑 —— 保守不删留人工(黄金法则 2), 绝不把存疑账当残留误删
+            if not rt.get("journal_terminal_suspect_warned"):
+                rt["journal_terminal_suspect_warned"] = True
+                logger.warning(
+                    f"relocate | job {job.job_id}: journal 终相位({journal.get('phase')})但 ts "
+                    f"不早于本生命周期锚点(created_at={anchor}) —— 无法确证属上一世, 保守不清账"
+                    "不武装, 留人工核处(人工出口 = 撤销, journal 终态互覆通道仍开放)"
+                )
+            return False
+        if not rt.get("journal_terminal_clear_evidence_logged"):
+            rt["journal_terminal_clear_evidence_logged"] = True
+            reason = str(journal.get("reason") or "") or "(无 reason 字段)"
+            logger.info(
+                f"relocate | job {job.job_id}: 上一世终态账证据留痕(phase={journal.get('phase')}, "
+                f"reason={reason}, ts={journal.get('ts')}) —— 同 id 再发起, 即将重置(删除前留痕)"
+            )
+        if not relocate_journal.clear_journal(self._data_dir(), job.job_id):
+            if not rt.get("journal_terminal_clear_warned"):
+                rt["journal_terminal_clear_warned"] = True
+                logger.warning(
+                    f"relocate | job {job.job_id}: 上一世终态账重置失败(盘/权限?), 下拍 arm 重试; "
+                    "本拍不武装(journal 仍终态, daemon 尚未解除退休)"
+                )
+            return False
+        logger.info(f"relocate | job {job.job_id}: 已重置上一世终态账 —— daemon 退休随新生命周期解除")
+        return True
+
     def _arm(self, job: RelocateJob, rt: dict) -> None:
         """重归组 + 落账(armed) + 落 arm spec + 确保回收 daemon 在位 + 恢复运行态(S4 新链)
 
         收尾链(S3a/S3b): arm spec(members 双 hash + bt_backup)落盘 -> _ensure_daemon
         判回收 daemon 缺位即重拉(pending 非空 + daemon 缺位/心跳过期) —— 旧 guardian
         spawn 已随 finalize_watch.py 整文件退役。
+        入口先重置上一世残留终态账(_reset_stale_terminal_journal, issue 26-11-08-0827):
+        清不成(盘/权限)或锚定不上则本拍不武装, 下拍重试。
         """
+        if not self._reset_stale_terminal_journal(job, rt):
+            return
         grouping = getattr(self._ctx, "grouping", None)
         if grouping is not None:
             try:

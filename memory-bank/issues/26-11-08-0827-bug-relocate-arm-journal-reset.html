@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="relocate-arm-journal-reset">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="relocate _arm 不重置旧 journal: 终态残留致同 id 再迁移收不到 fastresume 改写">
 <meta name="issue-summary" content="job_id=sha1(mover|src|dst) 复用, 再发起时 spec 重写但 journal 残留终态, daemon 因 STOP_PHASES 跳过该 job, 新迁移收不到改写(现靠核验路径偶然收敛, 非已在目标位则悬挂)">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-08-0827-bug-relocate-arm-journal-reset</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-08 08:27</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
@@ -144,11 +144,13 @@ spec 重写但 journal 残留终态，daemon 因 STOP_PHASES 跳过该 job，新
   <h2><span class="no">§07</span>状态变更日志</h2>
   <ul>
     <li>2026-11-08 08:27 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-08 — 状态 Open → Done（kb.status）</li>
+</ul>
   <h3>复验</h3>
-  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <p>复验: 2026-11-08(认领时点)仍复现 —— 锚点重核一致:<code>def _arm</code>(relocate_exec.py)全程不触 journal;<code>STOP_PHASES</code>/<code>clear_journal</code>(relocate_journal.py)机制面如旧。链路核清:终态账残留 → daemon scan 跳过(recycle_daemon 三处)+ <code>write_journal</code> 前向合并拒新世非终态记账;对账陈旧支(<code>_clear_stale_failed_journal</code>)只覆盖 failed 相位,done/cancelled 残留确无裁决面。</p>
   <h3>修复后补充</h3>
-  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  <p><strong>实际修法</strong>(与建议修法同向, 落点具体化):新增 <code>relocate_exec._reset_stale_terminal_journal</code> 挂 <code>_arm</code> 入口——盘上相位 ∈ STOP_PHASES 且 ts 可解析且早于本世锚点(created_at;<code>_start_job</code> 再发起必重打)才删,复用 <code>clear_journal</code> 主循环专属口(既有协议「确证属上一世残留才删」,不与「非终态不得覆盖终态」前向合并冲突);证据契约与 <code>_clear_stale_failed_journal</code> 同款(删前留痕、删后记结果、rt 门限频)。清不成(盘/权限)、锚定不上(ts 不早于锚点,机制上不可达的存疑态,保守不删留人工)、文件在位但读不出(评审 finding 1:读失败被吞成 None 与账不存在不可混淆)三支一律本拍不武装,下拍原样重试。对账路径既有陈旧支保留不动(纵深防御)。</p>
+  <p><strong>验证方式与测试数字</strong>:test_relocate_exec_reconcile 新增 5 用例(done/cancelled parametrize 清账推进、清败搁置重试、锚定不上保守搁置、在途账不动、读不出搁置)29 passed;全量 5789 passed / 2 skipped,覆盖率 99%(2026-11-08 实测)。</p>
 </section>
 
 <footer>

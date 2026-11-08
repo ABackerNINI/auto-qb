@@ -19,7 +19,7 @@
 
 | 类型 | 条数 |
 |---|---|
-| bug | 22 |
+| bug | 21 |
 | perf | 2 |
 | docs | 3 |
 | test | 10 |
@@ -38,7 +38,6 @@
 ## Open
 
 - [refactor] [kb.new 各族 slug/topic 传参方式不一致, 跨族套用即 rc=1](26-11-08-1131-refactor-kb-new-arg-unify.html) — issue 族收位置参数…
-- [bug] [relocate _arm 不重置旧 journal: 终态残留致同 id 再迁移收不到 fastresume 改写](26-11-08-0827-bug-relocate-arm-journal-reset.html) — job_id=sha1(…
 - [docs] [hr/relocate docstring 措辞漂移聚合(fetcher refresh.reason/finalize_face failed 语义/store 行锚)](26-11-08-0827-docs-hr-relocate-docstring-drift.html) — fetcher.py:7…
 - [refactor] [小件清理聚合: _WaveContext.alerted 死字段 + 测试 docstring 超宽两行](26-11-08-0827-refactor-hr-leftover-cleanups.html) — service_comm…
 - [bug] [cooldown/notify_cooldown_s 文档口径「0 = 不冷却」但校验拒裸 0(与已修 R4#9/#15 同根)](26-11-08-0703-bug-config-bare-zero-cooldown-keys.html) — example_rule…
@@ -115,7 +114,7 @@
 ## Done
 
 
-> 更早的 **449** 条已出本索引 —— 报告仍在 `issues/` 目录(未搬动), 全量清单见 [attachments/_archive.md](attachments/_archive.md).
+> 更早的 **450** 条已出本索引 —— 报告仍在 `issues/` 目录(未搬动), 全量清单见 [attachments/_archive.md](attachments/_archive.md).
 
 ## Dropped
 

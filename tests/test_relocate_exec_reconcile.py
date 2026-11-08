@@ -42,6 +42,17 @@ verify 三动作, 判据面 ru.reconcile 纯函数层在 test_relocate_units)与
 - test_qb_host_port_and_arm_spec_pinned: qB host/port 读配置 + arm spec 关键键值
 ### 武装接线(_arm)
 - test_arm_writes_spec_and_ensures_daemon: arm -> spec 落盘 + ensure_daemon 重拉 + 恢复运行态
+### arm 侧上一世终态账重置(issue 26-11-08-0827)
+- test_arm_resets_stale_terminal_journal_of_previous_life: done/cancelled 残留(ts 早于新
+  created_at)在 _arm 入口清掉(删前证据留痕 + 删后结果行), 武装照常推进(armed + spec + 重拉)
+- test_arm_stale_terminal_clear_failure_parks_and_retries: 清账失败 WARNING 限频一次 +
+  本拍不武装不写 spec 不重拉, 解除后下拍原样重试成
+- test_arm_terminal_journal_not_provable_stale_parks_conservatively: 锚定不上(终态账 ts
+  不早于本世锚点)保守不清账不武装留人工, 绝不把存疑账当残留误删
+- test_arm_keeps_live_nonterminal_journal: 在途非终态账(本世 rebuild 再武装)不属本口,
+  不删不动, 武装照常
+- test_arm_unreadable_journal_parks_and_retries: 文件在位但读不出(读失败被吞成 None,
+  评审 finding 1)与账不存在不可混淆 —— 存疑搁置不武装 WARNING 限频一次, 恢复后下拍重试成
 
 覆盖率缺口清偿(26-11-07, test.full 99.31% -> 99.5% 闸):
 - test_tag_name_without_config_is_empty: relocate 配置段缺席 -> 待收尾标签名空串
@@ -614,6 +625,127 @@ def test_arm_writes_spec_and_ensures_daemon(tmp_path, monkeypatch):
     assert spec is not None and spec["bt_backup"] == str(backup), spec
     assert "ensure_daemon_ts" in rt, "arm 必须立即 ensure daemon(pending 非空 + 无 daemon 账)"
     assert spawned, spawned
+
+
+# ---------------------------------------------------------------- arm 侧上一世终态账重置(issue 26-11-08-0827)
+# job_id=sha1(mover|src|dst) 同组同目标再发起复用同 id: 上一世 done/cancelled 终态账不清,
+# daemon 因 STOP_PHASES 退休 + write_journal 前向合并拒新世记账, 新迁移收不到 fastresume
+# 改写。重置挂 _arm 入口(对账陈旧支只覆盖 failed 相位, done/cancelled 无裁决面), 守卫
+# 复用 clear_journal 既有协议(确证属上一世才删: 相位终态 + ts 早于本世 created_at)。
+
+
+def _arm_reset_env(tmp_path, journal_body, created_at=1000.0):
+    """arm 重置用环境: bt_backup 命中 + 替身 spawn/resume + 可选 journal 落盘。
+    返回 (mod, job, spawned, data_dir, (host, port))。"""
+    data_dir = str(tmp_path / "data")
+    backup = tmp_path / "BT_backup"
+    v1, _v2 = _torrent_fixture(backup, b"m-ok", "R:/src")
+    mod = _s3_mod(tmp_path, backup=backup)
+    host, port = mod._qb_host(), mod._qb_port()
+    mod._ctx.api = types.SimpleNamespace(torrents_resume=lambda **kw: None)
+    spawned = []
+    mod._spawn_daemon = lambda d, h, p: spawned.append((d, h, p))
+    job = _job("j1", phase=ru.PHASE_MOVED, hashes=(v1, ), resume_hashes=(v1, ), created_at=created_at)
+    if journal_body is not None:
+        relocate_journal.write_journal(data_dir, "j1", dict(journal_body))
+    return mod, job, spawned, data_dir, (host, port)
+
+
+@pytest.mark.parametrize("phase", ["done", "cancelled"])
+def test_arm_resets_stale_terminal_journal_of_previous_life(tmp_path, phase):
+    """done/cancelled 残留(ts 早于新 created_at)在 _arm 入口清掉(删前证据留痕 + 删后结果行),
+    武装照常推进 —— 残留不清则 daemon 因 STOP_PHASES 退休, 新迁移收不到 fastresume 改写
+    (数据不在目标位则悬挂, issue 26-11-08-0827)"""
+    mod, job, spawned, data_dir, (host,
+                                  port) = _arm_reset_env(tmp_path, {
+                                      "phase": phase,
+                                      "reason": "old-life",
+                                      "ts": 10.0
+                                  })
+    with capture_logs("auto_qb.core.modules.relocate_mod") as cap:
+        mod._arm(job, {})
+    assert relocate_journal.read_journal(data_dir, "j1") is None, "上一世终态账必须在武装前清掉"
+    saved = mod._jobs["j1"]
+    assert saved.phase == ru.PHASE_ARMED, saved.phase
+    assert spawned == [(data_dir, host, port)], spawned
+    evidence = [m for m in cap.messages if "证据留痕" in m]
+    assert any("j1" in m and phase in m and "old-life" in m and "ts=10.0" in m for m in evidence), cap.messages
+    assert any("已重置上一世终态账" in m for m in cap.messages), cap.messages
+
+
+def test_arm_stale_terminal_clear_failure_parks_and_retries(tmp_path, monkeypatch):
+    """清账失败(盘/权限): WARNING 限频一次 + 本拍不武装(不落账不写 spec 不重拉,
+    journal 仍终态 daemon 未解除退休); 解除后下拍原样重试成(rt["stage"] 保持 arm,
+    stage 机下拍再进 _arm)"""
+    mod, job, spawned, data_dir, _hp = _arm_reset_env(tmp_path, {"phase": "done", "ts": 10.0})
+    real_clear = relocate_journal.clear_journal
+    monkeypatch.setattr(relocate_journal, "clear_journal", lambda d, jid: False)
+    rt = {}
+    with capture_logs("auto_qb.core.modules.relocate_mod") as cap:
+        mod._arm(job, rt)
+        mod._arm(job, rt)
+    assert relocate_journal.read_journal(data_dir, "j1") is not None, "清账失败账不消失"
+    assert "j1" not in mod._jobs, "未清成不得武装"
+    assert relocate_journal.read_spec(data_dir, "j1") is None, "未清成不得写 spec"
+    assert spawned == [], f"未清成不得重拉(journal 仍终态): {spawned}"
+    warns = [m for m in cap.messages if "重置失败" in m]
+    assert len(warns) == 1, f"重置失败 WARNING 限频一次: {warns}"
+    evidence = [m for m in cap.messages if "证据留痕" in m]
+    assert len(evidence) == 1, f"证据留痕行同样限频: {evidence}"
+    # 解除后下拍重试成
+    monkeypatch.setattr(relocate_journal, "clear_journal", real_clear)
+    mod._arm(job, rt)
+    assert relocate_journal.read_journal(data_dir, "j1") is None
+    assert mod._jobs["j1"].phase == ru.PHASE_ARMED
+    assert len(spawned) == 1, spawned
+
+
+def test_arm_terminal_journal_not_provable_stale_parks_conservatively(tmp_path):
+    """锚定不上(终态账 ts 不早于本世 created_at): 保守不清账不武装, WARNING 一次留人工
+    —— 绝不把存疑账当残留误删(黄金法则 2; 机制上不可达, 真发生 = 现场存疑)"""
+    mod, job, spawned, data_dir, _hp = _arm_reset_env(tmp_path, {"phase": "done", "ts": 2000.0})
+    rt = {}
+    with capture_logs("auto_qb.core.modules.relocate_mod") as cap:
+        mod._arm(job, rt)
+        mod._arm(job, rt)
+    j = relocate_journal.read_journal(data_dir, "j1")
+    assert j is not None and j["phase"] == "done", "存疑账不得误删"
+    assert "j1" not in mod._jobs and spawned == [], "锚定不上不武装不重拉"
+    warns = [m for m in cap.messages if "无法确证属上一世" in m]
+    assert len(warns) == 1, f"WARNING 限频一次: {warns}"
+
+
+def test_arm_keeps_live_nonterminal_journal(tmp_path):
+    """在途非终态账(本世 rebuild 再武装的 journal rewritten)不属本口: 不删不动, 武装照常"""
+    mod, job, spawned, data_dir, _hp = _arm_reset_env(tmp_path, {"phase": ru.PHASE_REWRITTEN, "ts": 1500.0})
+    mod._arm(job, {})
+    j = relocate_journal.read_journal(data_dir, "j1")
+    assert j is not None and j["phase"] == ru.PHASE_REWRITTEN, "在途账不得清"
+    assert mod._jobs["j1"].phase == ru.PHASE_ARMED
+    assert len(spawned) == 1, spawned
+
+
+def test_arm_unreadable_journal_parks_and_retries(tmp_path, monkeypatch):
+    """文件在位但读不出(评审 finding 1): 读失败被读单点吞成 None, 与「账不存在」不可混淆
+    —— 存疑搁置不武装(WARNING 限频一次), 读恢复后下拍原样重试成; 账本体不动"""
+    mod, job, spawned, data_dir, _hp = _arm_reset_env(tmp_path, journal_body=None)
+    real_read = relocate_journal.read_journal
+    relocate_journal.write_journal(data_dir, "j1", {"phase": "done", "ts": 10.0})
+    monkeypatch.setattr(relocate_journal, "read_journal", lambda d, jid: None)
+    rt = {}
+    with capture_logs("auto_qb.core.modules.relocate_mod") as cap:
+        mod._arm(job, rt)
+        mod._arm(job, rt)
+    assert "j1" not in mod._jobs and spawned == [], "读不出不武装"
+    assert os.path.exists(relocate_journal.journal_path(data_dir, "j1")), "存疑账本体不动"
+    warns = [m for m in cap.messages if "读不出" in m]
+    assert len(warns) == 1, f"WARNING 限频一次: {warns}"
+    # 读恢复后下拍重试成
+    monkeypatch.setattr(relocate_journal, "read_journal", real_read)
+    mod._arm(job, rt)
+    assert relocate_journal.read_journal(data_dir, "j1") is None, "上一世终态账清掉"
+    assert mod._jobs["j1"].phase == ru.PHASE_ARMED
+    assert len(spawned) == 1, spawned
 
 
 def test_qb_host_port_and_arm_spec_pinned(tmp_path, monkeypatch):
