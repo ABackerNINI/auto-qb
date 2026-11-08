@@ -445,20 +445,20 @@ def test_skip_check_deferred_on_own_write():
     client.torrents["HB"] = hb
     wire_group(mgr, "K", "HA", "HB")
 
-    # ① 目标自身刚被自有停/起
+    # 1. 目标自身刚被自有停/起
     mgr.store.note_own_write("HA")
     r = mgr.ctx.ops.skip_check("HA", source="web")
     assert r.is_skipped and "稍后" in r.message, f"自身命中应让位: {r}"
     assert client.calls == [], f"让位零副作用: {client.calls}"
 
-    # ② 仅同组成员刚被自有停/起(组维度)
+    # 2. 仅同组成员刚被自有停/起(组维度)
     mgr.store.own_writes.clear()
     mgr.store.note_own_write("HB")
     r2 = mgr.ctx.ops.skip_check("HA", source="web")
     assert r2.is_skipped and "稍后" in r2.message, f"同组成员命中应让位: {r2}"
     assert client.calls == [], f"让位零副作用: {client.calls}"
 
-    # ③ 登记清除后不再让位(证明是 deferral 而非永久拒绝)
+    # 3. 登记清除后不再让位(证明是 deferral 而非永久拒绝)
     mgr.store.own_writes.clear()
     r3 = mgr.ctx.ops.skip_check("HA", source="web")
     assert not (r3.is_skipped and "稍后" in r3.message), f"登记清除后不应再让位: {r3}"

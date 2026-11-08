@@ -321,12 +321,12 @@ def cmd_run(args: argparse.Namespace) -> int:
         print(f"global-traffic-monitor: {e}", file=sys.stderr)
         return 1
     if decision.kind == "refuse":
-        # ③ 拷贝件/安装被移动/记录矛盾: 不写任何数据, 注记进指针目录 (auto-qb 状态区展示)
+        # 3. 拷贝件/安装被移动/记录矛盾: 不写任何数据, 注记进指针目录 (auto-qb 状态区展示)
         write_deferred(_note_from("refused", identity, decision))
         print(f"global-traffic-monitor: {decision.message}", file=sys.stderr)
         return 1
     if decision.kind == "relay":
-        # ④ 让位: 代拉注册正主安装后立即退出; 启动器缺失也照常写注记 (原因进 detail)
+        # 4. 让位: 代拉注册正主安装后立即退出; 启动器缺失也照常写注记 (原因进 detail)
         launcher = relay_launch(decision.record.install_path)
         note = _note_from("relayed", identity, decision)
         if launcher is None:
@@ -469,10 +469,10 @@ def _load_config_or_fail(data_dir: str) -> tuple[Config | None, tuple[str, ...]]
     """加载 config.yml (+ config.v2.yml overlay); 校验失败 -> 聚合错误逐条打到 stderr
     并返回 (None, errors).
 
-    顺序 (S6/§07.3, 日志已由调用方挂载): ①既有旧式裸数值的**一次性迁移** (S7/D13:
+    顺序 (S6/§07.3, 日志已由调用方挂载): 1. 既有旧式裸数值的**一次性迁移** (S7/D13:
     D13 之前盘上是 `sample_interval: 5.0`, 现在只认复合串; 只在真有旧值时写);
-    ②`ensure_v2_overlay` 检测/补齐 <data_dir>/config.v2.yml (新键只进 overlay, 主配置
-    零改写 —— 旧版本回滚仍可读; 写盘消息走 INFO 进 gtm.log); ③真正 load_config 合并
+    2. `ensure_v2_overlay` 检测/补齐 <data_dir>/config.v2.yml (新键只进 overlay, 主配置
+    零改写 —— 旧版本回滚仍可读; 写盘消息走 INFO 进 gtm.log); 3. 真正 load_config 合并
     主配置 + overlay 全量校验。overlay 未知键/非法值同样 fail-fast (与主配置同级)。
     """
     path = f"{data_dir}/config.yml"

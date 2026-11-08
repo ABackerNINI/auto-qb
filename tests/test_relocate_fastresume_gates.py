@@ -621,7 +621,7 @@ def test_nested_dir_alias_blocked_group(tmp_path, monkeypatch):
     assert "互嵌" in r["text"] and "正向" in r["text"], r
 
 
-# ---------- 源侧三态(0546 机制①; .!qB 态复用 GATE_QB_TEMP) ----------
+# ---------- 源侧三态(0546 机制1; .!qB 态复用 GATE_QB_TEMP) ----------
 
 
 def test_source_missing_blocks_group(tmp_path, monkeypatch):

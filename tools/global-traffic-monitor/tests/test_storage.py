@@ -265,7 +265,7 @@ def test_atomic_write_raises_after_retry_exhausted(tmp_path, monkeypatch):
 # 语义: 读者必须在**写者活跃的窗口内**完成至少这么多次完整读, 否则守阵是真空过的
 # (读者没跑 / 循环秒退 -> 永远读不到半截内容, 断言恒绿)。
 #
-# ⚠ 不能靠「写者写满 N 次」间接推断读者读够了多少次: 单次 atomic_write_text 的耗时
+# WARN: 不能靠「写者写满 N 次」间接推断读者读够了多少次: 单次 atomic_write_text 的耗时
 # 随机器与文件系统漂移一个量级 (CI ubuntu-latest 上 mkstemp+fsync+replace ~0.1ms,
 # 开发机 Windows 上慢得多) —— 原本「写 300 次期间读者必读 >50 次」的期望在 Linux CI
 # 上实测只有 29 次, 写者早就收工了读者还没读几轮。这是**机器速度依赖的活性阈值**,

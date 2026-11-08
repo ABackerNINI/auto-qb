@@ -24,8 +24,8 @@
    逐通道差 0 (同款缺陷), 但用户知情后选择不动, 所以本条**反着守** (改了就是越界, 停下来问)。
    修法口径仍留在 pitfalls/web-ui/layout-css.md 同名条。
 3'''. **状态色可读**: 状态徽章底色 + 文字色必须一眼可分 (2026-10-05 用户报「open/done 状态底色相近」)。
-   两个坑: ①`.chip{color:var(--dim)}` 与 `.chip.st-*` 同特异性且写在更靠后, 会把状态文字色整个盖掉
-   (改前实测五个状态 chip 文字全是 --dim 灰); ②cyan / green 两个令牌亮度几乎相同, 同透明度时底色
+   两个坑: 1. `.chip{color:var(--dim)}` 与 `.chip.st-*` 同特异性且写在更靠后, 会把状态文字色整个盖掉
+   (改前实测五个状态 chip 文字全是 --dim 灰); 2. cyan / green 两个令牌亮度几乎相同, 同透明度时底色
    实测 #16272b vs #1b2624 肉眼不可分 —— 光换色相没用, 必须靠**明度 (alpha)** 拉开。
 
 1'. **认领链可跳 (2026-11-07 关联图)**: 每条 ref 必须解析成五态 (ok / ext / repo / basename / dead) ——
@@ -148,9 +148,9 @@ def test_collect_nav_targets_four_states(tmp_path: Path) -> None:
 def test_collect_nav_target_guardrails(tmp_path: Path) -> None:
     """两条围栏, 缺任一条都会把"不该能点"的东西说成能点:
 
-    ① 归档回退只对 `memory-bank/testing/baselines/` 开头的 ref 生效 —— 否则台账件被删、attachments
+    1. 归档回退只对 `memory-bank/testing/baselines/` 开头的 ref 生效 —— 否则台账件被删、attachments
        里恰好有同名切片时, 真死链会被标成「归档回退」并链到一份不相干的基线 (守卫仍判红, 页面却绿)。
-    ② 穿越路径 (`memory-bank/../config.yml`) 必须判死, 不能算 `ext` 并生成可点链接 —— 那等于在
+    2. 穿越路径 (`memory-bank/../config.yml`) 必须判死, 不能算 `ext` 并生成可点链接 —— 那等于在
        静态导出件里给红线文件开了一扇门。
     """
     nl = chr(10)

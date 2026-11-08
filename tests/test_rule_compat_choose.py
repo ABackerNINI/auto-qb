@@ -5,15 +5,15 @@ normalize_legacy_rule 是 legacy 规则词汇的唯一容身处: 引擎/校验�
 生产 5 条规则规范化快照(金标准零差异) / 行为零变化的转换等价性 / R1 两条附注
 (错误定位回映射 + 命名透传) / 旧 state 载入回归(exec_history 去重键口径不变)。
 
-⚠ config.yml 是生产红线: 本文件**不 import、不读取**它 —— 生产 5 条规则的 spec 原样
+WARN: config.yml 是生产红线: 本文件**不 import、不读取**它 —— 生产 5 条规则的 spec 原样
 誊写为下方 `_PRODUCTION_RULES_YAML` 夹具(来源注明, 逐字含注释誊写; config.yml 若有
 改动须人工同步此夹具并重审快照)。
 
-⚠ 快照金标准口径(W2-B 重锚定): normalize 自 W2-B 起对每个动作项注入缺省 on_error
+WARN: 快照金标准口径(W2-B 重锚定): normalize 自 W2-B 起对每个动作项注入缺省 on_error
 ({policy: stop, retries: 3, backoff: 60}, schema.fields.ON_ERROR_DEFAULTS 单点)——
 「含缺省字段」与旧行为零变化等价(policy=stop 即现行失败即止), 快照按注入后形态重锚定。
 
-⚠ 快照金标准口径(W3-A 再重锚定): normalize 自 W3-A 起把旧扁平条件列表包成隐式
+WARN: 快照金标准口径(W3-A 再重锚定): normalize 自 W3-A 起把旧扁平条件列表包成隐式
 `all:` 组合树(normalize_conditions 单点; 语义 = 现行 matches 的 all(...)), 各条件的
 行内分组/逗号语义全部留在叶子内(CONDITION_GROUPING_MAP 逐条件映射表), 快照 conditions
 按树形重锚定 —— 叶子逐位不变, 行为零变化。

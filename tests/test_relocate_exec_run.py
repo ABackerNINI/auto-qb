@@ -553,8 +553,8 @@ def test_finish_direct_survives_regroup_and_resume_failure():
 
 
 def test_entry_rule_move_to_confirm_and_empty_reasons(tmp_path, monkeypatch):
-    """规则 move_to 两条边缘回执: ① 预检判 confirm(目录别名需显式确认) -> skip 并指路 WebUI;
-    ② 闸门拒绝但 reasons 为空 -> fail 文案回落「未通过预检」(绝不留空原因)
+    """规则 move_to 两条边缘回执: 1. 预检判 confirm(目录别名需显式确认) -> skip 并指路 WebUI;
+    2. 闸门拒绝但 reasons 为空 -> fail 文案回落「未通过预检」(绝不留空原因)
 
     直接替换模块的 relocate_execute 返回固定 items —— 这两条是**回执文案**面, 预检细节
     已由 relocate_paths 覆盖, 这里只钉「四种 cls 各自怎么说」。
@@ -772,7 +772,7 @@ def test_execute_branches_never_break_multi_group(tmp_path, monkeypatch):
     items = mod.relocate_execute(["HA", "HB", "HC"], dst)
     assert [i["cls"] for i in items] == ["confirm", "started"], items
 
-    # 在途幂等 skip(组A)之后组B 照常(恢复普通能力替身, 免受 ③ 的目录别名提议影响)
+    # 在途幂等 skip(组A)之后组B 照常(恢复普通能力替身, 免受 3 的目录别名提议影响)
     _stub_cap(monkeypatch, file_kind="hardlink")
     mgr, client, mod, src, dst = _env("brk4")
     assert mod.relocate_execute(["HA", "HB"], dst)[0]["cls"] == "started"

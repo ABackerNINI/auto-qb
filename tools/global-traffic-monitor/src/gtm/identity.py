@@ -11,15 +11,15 @@
   - 数据目录 <data>/tool-id         : 这份数据归谁写 (版本血统防线)
 
 启动判定矩阵 (cmd_run 在取单实例锁/绑端口/解析数据目录之前调用):
-  ① 无记录      -> O_EXCL 原子认领 -> 正主路径
-  ② id 同 path同 -> 正主路径
-  ③ id 同 path异 -> 拒绝启动 (拷贝件 / 安装被移动) + 写注记, 人工改记录重认
-  ④ id 异        -> 记录自洽校验 -> 自洽: 代拉正主后立即退出; 矛盾: 写注记退出
+  1 无记录      -> O_EXCL 原子认领 -> 正主路径
+  2 id 同 path同 -> 正主路径
+  3 id 同 path异 -> 拒绝启动 (拷贝件 / 安装被移动) + 写注记, 人工改记录重认
+  4 id 异        -> 记录自洽校验 -> 自洽: 代拉正主后立即退出; 矛盾: 写注记退出
 
 设计纪律 (与指针/锁同族):
   - 认领用 O_EXCL 建文件本身做原子占位 (非 tmp+replace —— replace 会互相覆盖);
     此后记录零自动刷新 (移动/易主/归并全部人工, 计划 D3); 唯一例外是正主启动
-    时补写为空的 data_dir 信息位 (不削弱 ③: 被 ③ 拒绝的进程走不到写文件那步)。
+    时补写为空的 data_dir 信息位 (不削弱 3: 被 3 拒绝的进程走不到写文件那步)。
   - 记录/注记损坏或 schema 未知 -> 一律按「无记录/矛盾」降级并 WARNING, 不猜
     字段 (照 ENDPOINT_SCHEMA 旧例); 永不死锁、不静默。
   - 镜像常量: 文件名与 schema 版本 auto-qb 侧 (core/traffic_source/agent.py)
@@ -97,6 +97,7 @@ class DeferredNote:
 
 # ---------------- 路径单点 (测试按需 monkeypatch 重定向) ----------------
 
+
 def install_id_file() -> str:
     """本安装 ID 文件路径: <install_root>/tool-id (resolve_tool_root 单点)."""
     return os.path.join(resolve_tool_root(), ID_FILE_NAME)
@@ -118,6 +119,7 @@ def deferred_path() -> str:
 
 
 # ---------------- 安装 ID: 生成 / 加载 ----------------
+
 
 def load_or_create_install_id() -> Identity:
     """加载本安装 ID; 缺失 -> 生成 uuid4 并原子落盘 (幂等: 已有原样加载).
@@ -141,10 +143,8 @@ def load_or_create_install_id() -> Identity:
         os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
         atomic_write_text(path, new_id + "\n")
     except OSError as e:
-        raise IdentityError(
-            f"安装 ID 落盘失败 ({path}): {e} —— 安装目录不可写? 没有持久身份的安装"
-            "无法参与正主判定, 请修复安装目录权限后重试"
-        ) from e
+        raise IdentityError(f"安装 ID 落盘失败 ({path}): {e} —— 安装目录不可写? 没有持久身份的安装"
+                            "无法参与正主判定, 请修复安装目录权限后重试") from e
     logger.info("已生成本安装 ID (%s): %s", path, new_id)
     return Identity(install_root=root, install_id=new_id)
 
@@ -163,6 +163,7 @@ def read_id_file(path: str) -> Optional[str]:
 
 
 # ---------------- 正主记录: 读 / 认领 / 补写 ----------------
+
 
 def read_primary() -> Optional[PrimaryRecord]:
     """读 primary.json; 缺失 -> None, 坏 JSON/schema 未知/关键字段缺 -> None + WARNING.
@@ -269,6 +270,7 @@ def fill_primary_data_dir(identity: Identity, data_dir: str) -> None:
 
 # ---------------- 数据归属: 写前校验 (版本血统防线) ----------------
 
+
 def ensure_data_ownership(data_dir: str, identity: Identity) -> None:
     """校验/认领数据归属: <data_dir>/tool-id 缺失 -> 写入本安装 id; 相同 -> 过;
     不同 -> IdentityError (该数据属于其它安装, 拒绝跨版本接管).
@@ -292,6 +294,7 @@ def ensure_data_ownership(data_dir: str, identity: Identity) -> None:
 
 
 # ---------------- 注记: 写 / 清除 (auto-qb 只读展示) ----------------
+
 
 def write_deferred(note: DeferredNote) -> None:
     """写让位/被拒注记 (原子; 失败只 WARNING —— 注记是可见性便利, 不阻断让位)."""
@@ -324,6 +327,7 @@ def clear_deferred() -> None:
 
 # ---------------- 启动判定矩阵 ----------------
 
+
 @dataclass(frozen=True)
 class Decision:
     """一次启动判定的结论: kind + 依据记录 + 人读说明."""
@@ -334,9 +338,9 @@ class Decision:
 
 
 def evaluate_startup(identity: Identity) -> Decision:
-    """按 primary.json 判定本安装该走哪条路 (矩阵 ①②③④, 不动任何状态).
+    """按 primary.json 判定本安装该走哪条路 (矩阵 1/2/3/4, 不动任何状态).
 
-    ③ 拒绝项覆盖「拷贝件」与「安装被移动」两个场景: id 同 (数据认得出我) 但
+    3 拒绝项覆盖「拷贝件」与「安装被移动」两个场景: id 同 (数据认得出我) 但
     path 异 (记录的安装根不是我) —— 放行拷贝件会让两份同 id 数据静默分叉。
     """
     record = read_primary()
@@ -356,7 +360,7 @@ def evaluate_startup(identity: Identity) -> Decision:
 
 
 def _evaluate_relay(identity: Identity, record: PrimaryRecord) -> Decision:
-    """④ 让位分支: 先做记录自洽校验, 自洽才代拉 (矛盾则写注记退出).
+    """4 让位分支: 先做记录自洽校验, 自洽才代拉 (矛盾则写注记退出).
 
     矛盾两种: 记录指向的安装根就是本安装 (记录说我不是我, 自相矛盾); 记录指向
     的安装目录里已有 tool-id 且与记录 id 不符 (记录张冠李戴)。代拉一个坏目标
@@ -428,7 +432,7 @@ def resolve_startup(identity: Identity) -> Decision:
     """cmd_run 的启动判定入口: 矩阵判定 + 认领 (含并发输家重判).
 
     认领竞争: 并发首启的输家拿到 PrimaryRecordExists, 按赢家的记录重新判定
-    (多半转 ④ 让位); 若重新判定仍是「无记录」态, 说明记录文件存在但解析不出
+    (多半转 4 让位); 若重新判定仍是「无记录」态, 说明记录文件存在但解析不出
     来 (schema 未知/损坏/缺字段) —— 不覆盖不猜, IdentityError 交人工。
     """
     decision = evaluate_startup(identity)
@@ -439,12 +443,7 @@ def resolve_startup(identity: Identity) -> Decision:
     except PrimaryRecordExists:
         decision = evaluate_startup(identity)
         if decision.kind == "claim":
-            raise IdentityError(
-                "正主记录存在但无法解析 (schema 未知 / 损坏 / 缺关键字段) —— 不覆盖、不猜字段, "
-                f"请人工检查或删除 {primary_path()} 后重启"
-            )
+            raise IdentityError("正主记录存在但无法解析 (schema 未知 / 损坏 / 缺关键字段) —— 不覆盖、不猜字段, "
+                                f"请人工检查或删除 {primary_path()} 后重启")
         return decision
     return Decision("primary", record, "已认领正主注册, 本安装为正主")
-
-
-

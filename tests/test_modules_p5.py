@@ -718,15 +718,15 @@ def test_rebuild_benchmark_5000_seeds(capsys):
       裸跑数字只作对照, 不要拿裸跑数当基线。
 
     基线重采样流程(人工; 何时 + 如何):
-    - 何时: ①换机器 / 换 Python 大版本; ②本测试在正常机器上稳定红(先重采样排除基线过时,
-      再判断真回归); ③相关代码大改后想复核余量; ④CI runner 规格变更后 CI 档稳定红。
-    - 如何(零脚本): ①`uv run pytest tests/test_modules_p5.py -k rebuild_benchmark -q -rP -n 0`
+    - 何时: 1. 换机器 / 换 Python 大版本; 2. 本测试在正常机器上稳定红(先重采样排除基线过时,
+      再判断真回归); 3. 相关代码大改后想复核余量; 4. CI runner 规格变更后 CI 档稳定红。
+    - 如何(零脚本): 1. `uv run pytest tests/test_modules_p5.py -k rebuild_benchmark -q -rP -n 0`
       连跑 ≥6 次(每次独立进程即冷启动), 从 PASSES 段抓 `[5000-seed benchmark]` 行 ——
       中位数 print 在 capsys.readouterr() 之后, 常规输出被吞, 只有 -rP 能看到; 该命令带
       pytest.ini 默认 --cov, 天然与断言环境同源(想看裸跑对照加 --no-cov);
-      ②取中位, 开发机档阈值 = 中位 × 3-5(向上取整到整数 / 一位小数刻度); CI 档另取
+      2. 取中位, 开发机档阈值 = 中位 × 3-5(向上取整到整数 / 一位小数刻度); CI 档另取
       CI 日志 `[5000-seed benchmark]` 行的最坏值 × 2-3(打印行带档位与所用阈值, 可直接对照);
-      ③连同实测分布 / 采样日期 / 当时 commit 更新 perf_baseline.json, 并同步本 docstring
+      3. 连同实测分布 / 采样日期 / 当时 commit 更新 perf_baseline.json, 并同步本 docstring
       的两档阈值数字。
     """
     with tempfile.TemporaryDirectory() as td:

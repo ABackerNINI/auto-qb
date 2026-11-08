@@ -24,8 +24,8 @@
    逐通道差 0 (同款缺陷), 但用户知情后选择不动, 所以本条**反着守** (改了就是越界, 停下来问)。
    修法口径仍留在 pitfalls/web-ui/layout-css.md 同名条。
 3'''. **状态色可读**: 状态徽章底色 + 文字色必须一眼可分 (2026-10-05 用户报「open/done 状态底色相近」)。
-   两个坑: ①`.chip{color:var(--dim)}` 与 `.chip.st-*` 同特异性且写在更靠后, 会把状态文字色整个盖掉
-   (改前实测五个状态 chip 文字全是 --dim 灰); ②cyan / green 两个令牌亮度几乎相同, 同透明度时底色
+   两个坑: 1. `.chip{color:var(--dim)}` 与 `.chip.st-*` 同特异性且写在更靠后, 会把状态文字色整个盖掉
+   (改前实测五个状态 chip 文字全是 --dim 灰); 2. cyan / green 两个令牌亮度几乎相同, 同透明度时底色
    实测 #16272b vs #1b2624 肉眼不可分 —— 光换色相没用, 必须靠**明度 (alpha)** 拉开。
 
 另守一条**单点不回归**: nav_data 只许在 collect() 条目上做加法 enrich, 不许改
@@ -205,9 +205,9 @@ def test_slash_focuses_search() -> None:
 def test_search_matches_file_name_and_relative_path(tmp_path) -> None:
     """2026-11-03 用户复现: 在 #gq 输入 memory-bank/reports/<file> 无匹配 —— 原匹配串只拼
     title/topic/issue-summary, link 未入索引, 故 basename 与路径都不可搜。本守阵钉三件事:
-    ①basename / mb 内相对路径 / 仓库根相对路径 (memory-bank/<link>) 三种形态命中该文件;
-    ②原有 title / topic / issue-summary 命中行为不变 (加路径只是加法); ③大小写与反斜杠归一;
-    ④台账 / 卡片墙 / 控制台频道三处过滤共用 navSearchText 单点, 不得各拼一份 haystack。
+    1. basename / mb 内相对路径 / 仓库根相对路径 (memory-bank/<link>) 三种形态命中该文件;
+    2. 原有 title / topic / issue-summary 命中行为不变 (加路径只是加法); 3. 大小写与反斜杠归一;
+    4. 台账 / 卡片墙 / 控制台频道三处过滤共用 navSearchText 单点, 不得各拼一份 haystack。
     索引只含上述四类字段, 正文不入 (体积口径)。JS 单点用 node 回放 (与仓库其余 JS 守阵同口径)。"""
     text = SHELL.read_text(encoding="utf-8")
     idx_body = re.search(r"function navSearchText\(i\) \{([^}]*)\n\}", text, re.S)
@@ -272,10 +272,10 @@ def test_search_excluded_matches_hint_computed(tmp_path) -> None:
     """搜索被排除匹配项提示的计算口径 (task 26-11-06-memory-bank-kb-nav-search-ghint, grilling
     两轮拍板)。真实痛点: issues/26-09-30-0052-feat-hr-login-counter-attest 状态 Dropped,
     取消勾选后按完整名搜索 0 结果且无任何提示 —— 勾选过滤在搜索之前 AND, 匹配项被静默吞掉。
-    钉: ①部分 slug (stamp / slug 片段) 与完整名同样命中 (索引本就含 basename, 缺的是可见性);
-    ②总数 = 去重非隐藏被排除匹配数, 括号按原因分计、同件可跨组重复 (Q3b+w1); ③隐藏件独占一桶,
-    不进原因组与总数 (Q10a: 点组名唤不回隐藏件); ④维度按活动视图: 台账三维 / 卡片墙两维 /
-    控制台只显隐藏 (Q8a, 频道搜索不做形态/状态过滤); ⑤空词或无排除无隐藏 → null 不提示。
+    钉: 1. 部分 slug (stamp / slug 片段) 与完整名同样命中 (索引本就含 basename, 缺的是可见性);
+    2. 总数 = 去重非隐藏被排除匹配数, 括号按原因分计、同件可跨组重复 (Q3b+w1); 3. 隐藏件独占一桶,
+    不进原因组与总数 (Q10a: 点组名唤不回隐藏件); 4. 维度按活动视图: 台账三维 / 卡片墙两维 /
+    控制台只显隐藏 (Q8a, 频道搜索不做形态/状态过滤); 5. 空词或无排除无隐藏 → null 不提示。
     场景数据按真实 26-09-30-0052 三兄弟 (2 Dropped + 1 Open) 仿造。node 回放真实 JS。"""
     text = SHELL.read_text(encoding="utf-8")
     dims = _shell_fn(text, "ghintExclDims")
@@ -346,7 +346,7 @@ def test_search_excluded_matches_hint_computed(tmp_path) -> None:
         "S.aStatuses = new Set(KNOWN_ST); S.aForms = new Set(FORM_ORD);\n"
         "S.aTypes = new Set(TYPES.filter(t => t !== 'feat'));\n"
         "S.q = 'feat-hr-login-counter'; run('type_dim');\n"
-        "/* 开关边界 (拍板 Q6③): live/chain/cLive 造成的排除不进提示 —— ghintData 不消费开关;\n"
+        "/* 开关边界 (拍板 Q6-3): live/chain/cLive 造成的排除不进提示 —— ghintData 不消费开关;\n"
         "   若有人给 ghintExclDims 加 live 维, 本场景 (唯一匹配件仅被活跃性挡住) 会给出 total=1 而红 */\n"
         "S.aStatuses = new Set(KNOWN_ST); S.aForms = new Set(FORM_ORD); S.aTypes = new Set(TYPES);\n"
         "S.aLive = true;\n"
@@ -415,13 +415,13 @@ def test_search_excluded_matches_hint_computed(tmp_path) -> None:
 
 def test_search_excluded_hint_ui_wiring() -> None:
     """提示行的 UI 接线单点 (task 26-11-06-memory-bank-kb-nav-search-ghint):
-    ①#ghint 落在 .gsearch 内、视图切换器之前 (搜索框正下方, 不进视图容器), [hidden] 兜底,
+    1. #ghint 落在 .gsearch 内、视图切换器之前 (搜索框正下方, 不进视图容器), [hidden] 兜底,
       CSS 悬浮 (absolute) + 单行省略 (ellipsis), 且 .ghint 不得设 display (会盖掉 [hidden]
-      的 UA 兜底, 同 #gclear 口径); ②renderGhint 挂满三个视图 render 末尾 —— 过滤切换不经
+      的 UA 兜底, 同 #gclear 口径); 2. renderGhint 挂满三个视图 render 末尾 —— 过滤切换不经
       renderCurrent (buildFilterRows onToggle 直呼视图 render), 少挂一处 = 该视图切换过滤后
-      提示不刷新; ③wire() 点击委托 = 勾上对应值并走各视图 saveFilters+重渲染既有链 (拍板
-      Q4a), 五个勾选集都要接; ④计算口径结构: 搜索空即 null、隐藏独占 (isHidden 判定先于维度
-      归组)、维度按活动视图; ⑤文案锚点 (拍板 Q9 w1): 总数锚定 + 按原因分计 + 「N项隐藏」+
+      提示不刷新; 3. wire() 点击委托 = 勾上对应值并走各视图 saveFilters+重渲染既有链 (拍板
+      Q4a), 五个勾选集都要接; 4. 计算口径结构: 搜索空即 null、隐藏独占 (isHidden 判定先于维度
+      归组)、维度按活动视图; 5. 文案锚点 (拍板 Q9 w1): 总数锚定 + 按原因分计 + 「N项隐藏」+
       title 注明分计口径。"""
     text = SHELL.read_text(encoding="utf-8")
     css = _shell_css()
@@ -454,7 +454,7 @@ def test_search_excluded_hint_ui_wiring() -> None:
         "勾回走既有 toggle 链 (落盘+重渲染)"
     )
     data = _shell_fn(text, "ghintData")
-    assert "if (!S.q) return null" in data, "搜索为空永不提示 (拍板 Q6②)"
+    assert "if (!S.q) return null" in data, "搜索为空永不提示 (拍板 Q6-2)"
     assert data.index("isHidden(i.link)") < data.index("ghintExclDims(i)"), "隐藏独占桶: isHidden 判定须先于维度归组 (拍板 Q10a)"
     dims = _shell_fn(text, "ghintExclDims")
     assert 'S.view === "ledger"' in dims and 'S.view === "cards"' in dims and "return []" in dims, (

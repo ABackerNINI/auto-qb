@@ -182,11 +182,11 @@ def test_second_migration_hits_failed_cache_without_reprobe(monkeypatch):
     assert "上次同机探测失败(write_proof_timeout)" in it["reasons"][-1]["text"], it["reasons"]
     assert "已缓存" in it["reasons"][-1]["text"] and "state.relocate.probes" in it["reasons"][-1]["text"], it["reasons"]
     assert "path_map" in it["reasons"][-1]["text"] and "assume_shared" in it["reasons"][-1]["text"], it["reasons"]
-    assert len(calls) == 1, "缓存 failed 命中不得再探(D7① 同指纹不重试)"
+    assert len(calls) == 1, "缓存 failed 命中不得再探(D7-1 同指纹不重试)"
 
 
 def test_env_failure_not_cached_and_retried_next_time(monkeypatch):
-    """env=True 失败 => blocked 但不写缓存, 下次迁移重新探测(D7②)"""
+    """env=True 失败 => blocked 但不写缓存, 下次迁移重新探测(D7-2)"""
     mod, _locs = _gate_env(monkeypatch)
     calls = _stub_run_probe(monkeypatch, [_env_failed("add_rejected"), _env_failed("add_rejected")])
     first = mod.relocate_execute(["HA"], "R:/dst")

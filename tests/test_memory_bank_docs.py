@@ -740,7 +740,7 @@ def test_number_guard_exempts_dated_code_and_reports_only_overflow(tmp_path: Pat
 
 
 def test_number_guard_dated_exemption_does_not_cover_continuation_lines(tmp_path: Path) -> None:
-    """❗已知边界 (2026-10-08): 日期豁免只认**首行**, 多行流水条目的**续行**照常入判。
+    """! 已知边界 (2026-10-08): 日期豁免只认**首行**, 多行流水条目的**续行**照常入判。
 
     这不是缺陷而是判据的已知形态 (见 `pitfalls/kb/scripts.md`): 处置 = 续行内容回避禁写形态
     (流水里写数字改「见 kb.baseline」)。本用例钉住它, 免得有人以为"带日期的整条流水都安全"。
@@ -879,7 +879,7 @@ def test_html_guard_flags_broken_endtag_and_passes_clean() -> None:
 
     26-11-01 两起事故的最小复现形态: 分词器把 `</code): 目标 …。</p` 整段吃进非法尾标签,
     `<code>` 永不闭合, 其后内容全部嵌进它 (issues/26-11-01-0334 s2-s7 掉左栏 /
-    reports/26-10-14-1110:320 同型)。⚠ 正则不许写成单 lookahead: 引擎会把 `</title>`
+    reports/26-10-14-1110:320 同型)。WARN: 正则不许写成单 lookahead: 引擎会把 `</title>`
     回溯成 `</titl`+`e` 穿过否定前瞻而全库误报 (首跑实测, 见脚本内注释)。
     """
     m = _check_html()

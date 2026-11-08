@@ -120,12 +120,12 @@ class Notifier:
     def _emit(self, result: "SampleResult") -> dict[str, object]:
         """发一次事件: 落盘 -> 租约剔除 -> 事件号 +1 -> 派发 (派发在守护线程)。"""
         config = self._config_holder.current
-        # ① 先确保文件已落盘: dat 可能正处节流窗口 (Δ<1MiB 且 <30s), 读者届时必读到新值
+        # 1. 先确保文件已落盘: dat 可能正处节流窗口 (Δ<1MiB 且 <30s), 读者届时必读到新值
         try:
             self._storage.flush()
         except Exception:
             logger.exception("通知前置落盘失败 (仍继续推送: 订阅者亦可慢轮询读到旧值)")
-        # ② 租约懒剔除 (与控制面请求入口同纪律) 后取订阅者快照
+        # 2. 租约懒剔除 (与控制面请求入口同纪律) 后取订阅者快照
         try:
             removed = self._storage.prune_expired_subscribers(self._clock(), config.lease_ttl_s)
             if removed:
@@ -133,7 +133,7 @@ class Notifier:
         except Exception:
             logger.exception("通知前租约剔除失败 (按现有注册表继续)")
         subscribers = self._storage.subscribers
-        # ③ 事件号 +1 (落盘: 重启后接续, 不回到 0)
+        # 3. 事件号 +1 (落盘: 重启后接续, 不回到 0)
         event: dict[str, object] = {
             "event_id": self._storage.bump_event_id(),
             "day": result.day.isoformat(),

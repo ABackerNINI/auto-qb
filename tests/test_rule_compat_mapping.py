@@ -5,15 +5,15 @@ normalize_legacy_rule 是 legacy 规则词汇的唯一容身处: 引擎/校验�
 生产 5 条规则规范化快照(金标准零差异) / 行为零变化的转换等价性 / R1 两条附注
 (错误定位回映射 + 命名透传) / 旧 state 载入回归(exec_history 去重键口径不变)。
 
-⚠ config.yml 是生产红线: 本文件**不 import、不读取**它 —— 生产 5 条规则的 spec 原样
+WARN: config.yml 是生产红线: 本文件**不 import、不读取**它 —— 生产 5 条规则的 spec 原样
 誊写为下方 `_PRODUCTION_RULES_YAML` 夹具(来源注明, 逐字含注释誊写; config.yml 若有
 改动须人工同步此夹具并重审快照)。
 
-⚠ 快照金标准口径(W2-B 重锚定): normalize 自 W2-B 起对每个动作项注入缺省 on_error
+WARN: 快照金标准口径(W2-B 重锚定): normalize 自 W2-B 起对每个动作项注入缺省 on_error
 ({policy: stop, retries: 3, backoff: 60}, schema.fields.ON_ERROR_DEFAULTS 单点)——
 「含缺省字段」与旧行为零变化等价(policy=stop 即现行失败即止), 快照按注入后形态重锚定。
 
-⚠ 快照金标准口径(W3-A 再重锚定): normalize 自 W3-A 起把旧扁平条件列表包成隐式
+WARN: 快照金标准口径(W3-A 再重锚定): normalize 自 W3-A 起把旧扁平条件列表包成隐式
 `all:` 组合树(normalize_conditions 单点; 语义 = 现行 matches 的 all(...)), 各条件的
 行内分组/逗号语义全部留在叶子内(CONDITION_GROUPING_MAP 逐条件映射表), 快照 conditions
 按树形重锚定 —— 叶子逐位不变, 行为零变化。
@@ -31,14 +31,14 @@ normalize_legacy_rule 是 legacy 规则词汇的唯一容身处: 引擎/校验�
 - test_condition_grouping_mapping_freespace: freespace 叶子映射 —— dict{path, amount} 原样,
   取数单点打桩(与 expr 侧 disk_usage_value 同口径)
 - test_condition_tree_depth_limit: 组合树深度上限 —— 嵌套 <=16 层通过, >16 层 fail-fast
-- test_condition_error_location_maps_back_flat: R1① 条件侧坐标回映射 —— 扁平列表条目的
+- test_condition_error_location_maps_back_flat: R1-1 条件侧坐标回映射 —— 扁平列表条目的
   校验错报 conditions[i] 扁平坐标; 深度校验错报 conditions[i].<条件名>; 树形子树按树形
   坐标如实报出
 - test_on_error_mixed_form_normalized: webui 动作卡写出的混合形 {动作键: 值, on_error: {...}}
   经单点漏斗翻译成规范形 {type, params, on_error}(载入链与直达校验器两条路一致)
 - test_normalize_bulk_names_and_keys_passthrough: normalize_legacy_rules 组键/规则键与
-  spec 非 conditions/actions 键零触碰(R1② 命名透传; D1: 原内容不被载入规范化改写)
-- test_action_error_location_maps_back_flat: R1① 错误定位回映射 —— 结构错报「第 N 个动作 +
+  spec 非 conditions/actions 键零触碰(R1-2 命名透传; D1: 原内容不被载入规范化改写)
+- test_action_error_location_maps_back_flat: R1-1 错误定位回映射 —— 结构错报「第 N 个动作 +
   actions[i]」扁平坐标; 深度校验错报 actions[i].<动作名>(不暴露 params 结构路径)
 - test_validator_accepts_normalized_form: 校验器只认规范化形态 —— 直接写 {type, params} 新形
   通过校验且载入零再变换; on_error(W2-B)合法取值通过、非法子键/取值/边界 fail-fast 拒绝
@@ -127,7 +127,7 @@ def test_normalize_idempotent():
 
 def test_normalize_conditions_builds_tree():
     """条件建树(W3-A): 扁平列表包隐式 all; 树形 dict 原样透传; 叶子逐位零触碰; 自身幂等"""
-    # 旧扁平单键 dict 列表 -> {"all": 列表}(序号 1:1 保留, R1① 扁平坐标回映射的依据)
+    # 旧扁平单键 dict 列表 -> {"all": 列表}(序号 1:1 保留, R1-1 扁平坐标回映射的依据)
     flat = [{"size": ">=1MiB"}, {"path": ["/a"]}]
     tree = normalize_conditions(flat)
     assert tree == {"all": flat}, "隐式 all 包裹"
@@ -250,7 +250,7 @@ def test_condition_tree_depth_limit():
 
 
 def test_condition_error_location_maps_back_flat():
-    """R1① 条件侧坐标回映射: 扁平列表条目报 conditions[i]; 树形子树按树形坐标如实报"""
+    """R1-1 条件侧坐标回映射: 扁平列表条目报 conditions[i]; 树形子树按树形坐标如实报"""
     # 扁平列表条目的未知条件 -> conditions[0](不是 conditions.all[0])
     err = _load_errors(
         "config:\n  my_rules:\n    r1:\n"
@@ -324,7 +324,7 @@ def test_on_error_mixed_form_normalized():
 
 
 def test_normalize_bulk_names_and_keys_passthrough():
-    """R1② 命名透传: 组键/规则键与 spec 非 conditions/actions 键零触碰; 输入 spec 不被就地改写"""
+    """R1-2 命名透传: 组键/规则键与 spec 非 conditions/actions 键零触碰; 输入 spec 不被就地改写"""
     spec = {
         "enabled": "true",
         "trigger": "on_torrent_added",
@@ -350,7 +350,7 @@ def test_normalize_bulk_names_and_keys_passthrough():
 
 
 def test_action_error_location_maps_back_flat():
-    """R1① 错误定位回映射: 结构错报「第 N 个动作」+ actions[i]; 深度错报 actions[i].<动作名>"""
+    """R1-1 错误定位回映射: 结构错报「第 N 个动作」+ actions[i]; 深度错报 actions[i].<动作名>"""
     err = _load_errors(
         "config:\n"
         "  my_rules:\n"

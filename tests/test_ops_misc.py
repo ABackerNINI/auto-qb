@@ -97,12 +97,12 @@ def test_g6_stale_snapshot_window_recovered_by_deferral():
     """守阵(A 系 S3 D1): G6「起下载方 D + 跳检同组成员 C」—— 陈旧快照窗口 + deferral 收回
 
     P1 可达性 witness(W1/W2/W3)的机检。三段式:
-      ① **窗口存在**: A1 下 D 自有 resume 后快照仍停 pausedDL ⇒ group_has_downloading 读不到
+      1. **窗口存在**: A1 下 D 自有 resume 后快照仍停 pausedDL ⇒ group_has_downloading 读不到
          下载方(pausedDL 是 is_stopped) ⇒ G6 放行 ⇒ C 被删重加而 D 正写同一物理文件 = 脏数据洗白;
-      ② **deferral 拦下**: own_writes 登记 D(同组) ⇒ skip_check(C) 让位, 零副作用;
-      ③ **保护恢复**: 快照回流落真值 stalledDL ⇒ G6 重新拦下 —— 证明 deferral 是「推迟到新鲜时」
+      2. **deferral 拦下**: own_writes 登记 D(同组) ⇒ skip_check(C) 让位, 零副作用;
+      3. **保护恢复**: 快照回流落真值 stalledDL ⇒ G6 重新拦下 —— 证明 deferral 是「推迟到新鲜时」
          而非「放弃保护」。
-    红验: 去掉 skip_check 入口的 deferral 闸门 -> ②不再让位(且 G6 因陈旧快照放行), 断言红。
+    红验: 去掉 skip_check 入口的 deferral 闸门 -> 2. 不再让位(且 G6 因陈旧快照放行), 断言红。
     """
     mgr = make_mgr(FakeConfig())
     client = FakeClient()
@@ -115,11 +115,11 @@ def test_g6_stale_snapshot_window_recovered_by_deferral():
     client.torrents["HC"] = FakeTorrent(hash="HC", state="pausedDL", progress=0.0)
     wire_group(mgr, "K", "HD", "HC")
 
-    # ① 窗口存在
+    # 1. 窗口存在
     assert mgr.store.group_has_downloading("HC") is False, "陈旧快照(pausedDL=is_stopped)读不到下载方"
     assert not any(g.gate == "G6" for g in mgr.ctx.ops._skip_gates_detail("HC", c_snap)), "陈旧快照下 G6 放行(窗口)"
 
-    # ② 自有 resume D -> 登记 own_writes -> C 的跳检让位(零副作用)
+    # 2. 自有 resume D -> 登记 own_writes -> C 的跳检让位(零副作用)
     mgr.api.torrents_resume(["HD"])
     client.calls.clear()  # resume 自身是预期调用, 只断言其后零副作用
     assert mgr.store.own_write_pending("HC") is True, "同组成员登记应让 C 命中判据"
@@ -127,7 +127,7 @@ def test_g6_stale_snapshot_window_recovered_by_deferral():
     assert r.is_skipped and "稍后" in r.message, f"G6 场景应让位: {r}"
     assert client.calls == [], f"让位零副作用(未删未加): {client.calls}"
 
-    # ③ 回流后保护恢复
+    # 3. 回流后保护恢复
     mgr.store.own_writes.clear()
     mgr.store.by_hash["HD"].state = "stalledDL"  # 同步落真值
     assert mgr.store.group_has_downloading("HC") is True, "回流后 G6 判据恢复"

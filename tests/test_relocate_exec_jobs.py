@@ -398,7 +398,7 @@ def test_cancel_rejected_for_terminal_phases(tmp_path):
 def test_group_facts_gate_inputs_block_gates(monkeypatch):
     """事实包字段丢失/损坏必须仍能拦闸(incomplete/moving/third_party_link/hardlink 四闸)
 
-    盖 classify-mod-a 中危簇①(gf_293/294/329/331~340: progresses/states 丢失 → 闸门漏判)
+    盖 classify-mod-a 中危簇1(gf_293/294/329/331~340: progresses/states 丢失 → 闸门漏判)
     与 gf_284/314/230/232/233/237(第三方链接/硬链接代表文件失真): 任一字段被 None 化/
     键漂移/切片错位, 这里全部当场红。
     """

@@ -75,7 +75,7 @@ def resolve_tool_root() -> Path:
     指向 sys._MEIPASS 临时解包目录, 源码位置定位不了编译后的 exe; 源码态由 __file__
     上溯 (src/gtm/storage.py -> 仓库内的工具根, 即含 pyproject.toml 的目录)。
 
-    ⚠ 源码态假定 src-layout 且以可编辑方式安装 (uv run / uv sync 的默认行为), 此时
+    WARN: 源码态假定 src-layout 且以可编辑方式安装 (uv run / uv sync 的默认行为), 此时
     __file__ 即真实源码路径; 非可编辑安装会让上溯落到 site-packages (本工具的自启/
     拉起身份都从工具目录跑, 不覆盖该形态)。
     """
@@ -231,7 +231,7 @@ def atomic_write_text(path: str, text: str) -> None:
     完整文件。临时文件与失败清理由本函数负责; os.replace 成功时临时文件已不存在,
     不再删除。
 
-    ⚠ Windows 附加竞态 (坑档 platform-fs): os.replace 的目标文件若被读者持句柄
+    WARN: Windows 附加竞态 (坑档 platform-fs): os.replace 的目标文件若被读者持句柄
     (Python open() 不含 FILE_SHARE_DELETE), MoveFileEx 抛 PermissionError
     (WinError 5) —— 读者只短暂持句柄 (开-读-关), 退避重试即可; 持久冲突
     (读家长持/磁盘满) 重试耗尽后抛错, 由调用方容错 (下一节流轮重试)。POSIX 上

@@ -1,7 +1,7 @@
 """正主注册与让位判定守阵 (计划 26-10-20-1316 §03, identity 模块).
 
 同机多安装 (auto-qb A/B 各带一份 gtm) 的身份层: 三处 ID (安装/指针记录/数据) +
-启动判定矩阵 ①②③④ + 让位/被拒注记。全部用例 hermetic: tmp_path 造安装根与指针
+启动判定矩阵 1/2/3/4 + 让位/被拒注记。全部用例 hermetic: tmp_path 造安装根与指针
 目录, monkeypatch 重定向 gtm.identity 的路径单点 (resolve_tool_root/pointer_dir)
 与代拉起单点 (_spawn), 不碰真实安装目录与真实进程。
 
@@ -325,7 +325,7 @@ def test_deferred_write_failure_only_warns(tmp_path, monkeypatch):
     assert not Path(ptr, "deferred.json").exists()
 
 
-# ---------------- 判定矩阵 ①②③④ ----------------
+# ---------------- 判定矩阵 1/2/3/4 ----------------
 
 
 def test_matrix_claim_when_no_record(tmp_path, monkeypatch):

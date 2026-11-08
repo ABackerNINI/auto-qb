@@ -19,9 +19,9 @@ registry 条目按名引用, 派生走延迟访问器)
 - test_choose_block_entry: choose 编排块入册 —— BLOCK_ENTRIES 有 choose, executor 是
   base.ChooseBlock, 键面按名引用解析 == compat.CHOOSE_KNOWN_KEYS, 文档片段非空
 - test_plugin_doc_fragments_cover_rule_docs: 文档片段派生件一致性 —— 全部条目
-  doc_text() 非空(缺省取 schema 声明 help)。(②③文档侧断言随 2026-11-08 重构退役:
+  doc_text() 非空(缺省取 schema 声明 help)。(2/3文档侧断言随 2026-11-08 重构退役:
   rule-system/ 两份参考文档已删, 权威归 schema/ + registry; 蒸馏物在 architecture/rule-engine.md)
-- test_demo_new_action_one_place: 演示(验收①)—— 新增一个哑动作只改 registry 一处
+- test_demo_new_action_one_place: 演示(验收1)—— 新增一个哑动作只改 registry 一处
   (注册条目 + 自带 schema 声明), schema 插件表/校验/兼容表/执行分发全链路自动可用;
   对照组: 未声明 deleted_ok 的既有动作仍被 on_torrent_deleted 白名单拒绝(行为不回退)
 """
@@ -33,7 +33,7 @@ from auto_qb.rules import registry
 from auto_qb.rules.base import ChooseBlock
 
 # ---------------------------------------------------------------------------
-# 双跑守卫(验收②): 派生 vs 冻结手写基准, diff 清零
+# 双跑守卫(验收2): 派生 vs 冻结手写基准, diff 清零
 # ---------------------------------------------------------------------------
 
 
@@ -91,7 +91,7 @@ def test_choose_block_entry():
 def test_plugin_doc_fragments_cover_rule_docs():
     """文档片段派生件一致性: 全条目 doc_text() 非空(缺省取 schema 声明 help —— 声明零复制)。
 
-    (2026-11-08 重构收缩: 原②③断言核对 rule-system/ 两份参考文档, 文档已删 ——
+    (2026-11-08 重构收缩: 原2/3断言核对 rule-system/ 两份参考文档, 文档已删 ——
      表名/计数与触发行的权威归 schema/ + registry 本身, 蒸馏物在 architecture/rule-engine.md。)
     """
     empty = [e.name for e in registry.iter_entries() if not e.doc_text().strip()]
@@ -99,7 +99,7 @@ def test_plugin_doc_fragments_cover_rule_docs():
 
 
 # ---------------------------------------------------------------------------
-# 演示测试(验收①): 新增哑动作只改 1 处
+# 演示测试(验收1): 新增哑动作只改 1 处
 # ---------------------------------------------------------------------------
 
 

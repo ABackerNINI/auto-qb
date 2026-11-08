@@ -16,11 +16,11 @@ POPEN 白名单只放行 node 与临时 wrapper —— 真拉 python 子进程�
                  + 工具 venv site-packages          依赖(psutil/filelock/pyyaml)
 
 场景(原痛点复算, §02 时间线):
-  ① A 的工具起 -> 认领正主, 指针+数据落 A/data
-  ② A 崩溃(SIGKILL/terminate, 留残留指针 —— 与真实崩溃同态)
-  ③ B 先起 -> 读记录(id 异) -> 代拉 A 的启动器后立即退出(让位方绝不自身启动)
-  ④ A 的工具被代拉起来 -> 清注记、写指针、数据继续落 A/data(同一 dat)
-  ⑤ claim 护栏: A 在跑时 B claim -> 拒绝; 停 A 后 B claim -> 成功易主
+  1 A 的工具起 -> 认领正主, 指针+数据落 A/data
+  2 A 崩溃(SIGKILL/terminate, 留残留指针 —— 与真实崩溃同态)
+  3 B 先起 -> 读记录(id 异) -> 代拉 A 的启动器后立即退出(让位方绝不自身启动)
+  4 A 的工具被代拉起来 -> 清注记、写指针、数据继续落 A/data(同一 dat)
+  5 claim 护栏: A 在跑时 B claim -> 拒绝; 停 A 后 B claim -> 成功易主
 """
 from __future__ import annotations
 
@@ -156,48 +156,48 @@ def main() -> int:
     print(f"[e2e] tmp={tmp}")
     print(f"[e2e] A={inst_a}\n[e2e] B={inst_b}\n[e2e] ptr={ptr_root}")
     try:
-        # ① A 先起: 认领正主
+        # 1 A 先起: 认领正主
         procs.append(spawn_tool(inst_a, ptr_root))
         ep = probe_endpoint(ptr_root)
-        assert ep is not None, "① A 的工具未就绪"
-        assert str(inst_a) in json.dumps(ep) or Path(ep["data_dir"]) == inst_a / "data", f"① 数据落点不是 A: {ep}"
-        print(f"[e2e] ① A 已认领正主并就绪: data_dir={ep['data_dir']}")
+        assert ep is not None, "1 A 的工具未就绪"
+        assert str(inst_a) in json.dumps(ep) or Path(ep["data_dir"]) == inst_a / "data", f"1 数据落点不是 A: {ep}"
+        print(f"[e2e] 1 A 已认领正主并就绪: data_dir={ep['data_dir']}")
 
-        # ② A 崩溃(强杀, 留残留指针 —— 与真实崩溃同态)
+        # 2 A 崩溃(强杀, 留残留指针 —— 与真实崩溃同态)
         dead = procs.pop()
         dead.kill()
         dead.wait(timeout=5)
         time.sleep(1.0)
-        print("[e2e] ② A 已崩溃(残留指针留着, 探活失败)")
+        print("[e2e] 2 A 已崩溃(残留指针留着, 探活失败)")
 
-        # ③ B 先起: 应代拉 A 后立即退出(exit 0), 自身不写任何数据
+        # 3 B 先起: 应代拉 A 后立即退出(exit 0), 自身不写任何数据
         proc_b = spawn_tool(inst_b, ptr_root)
         procs.append(proc_b)
         try:
             rc = proc_b.wait(timeout=30)
         except subprocess.TimeoutExpired:
             proc_b.kill()
-            raise AssertionError("③ B 未在 30s 内退出(应代拉后立即退出)")
+            raise AssertionError("3 B 未在 30s 内退出(应代拉后立即退出)")
         out = proc_b.stdout.read() if proc_b.stdout else ""
-        assert rc == 0, f"③ B 退出码 {rc}(应 0), 输出: {out}"
-        print(f"[e2e] ③ B 已让位退出(rc=0): {out.strip().splitlines()[-1] if out.strip() else ''}")
+        assert rc == 0, f"3 B 退出码 {rc}(应 0), 输出: {out}"
+        print(f"[e2e] 3 B 已让位退出(rc=0): {out.strip().splitlines()[-1] if out.strip() else ''}")
 
-        # ④ A 被代拉起: 指针回来, 数据仍落 A/data(同一 dat), 注记被清
+        # 4 A 被代拉起: 指针回来, 数据仍落 A/data(同一 dat), 注记被清
         ep2 = probe_endpoint(ptr_root)
-        assert ep2 is not None, "④ 代拉后 A 的工具未就绪"
-        assert Path(ep2["data_dir"]) == inst_a / "data", f"④ 数据落点漂了: {ep2['data_dir']}"
-        assert (inst_a / "data" / "tool-id").is_file(), "④ A/data 缺数据归属 tool-id"
-        assert not (inst_b / "data").exists(), "④ B 竟然写了数据目录(让位方必须零写入)"
+        assert ep2 is not None, "4 代拉后 A 的工具未就绪"
+        assert Path(ep2["data_dir"]) == inst_a / "data", f"4 数据落点漂了: {ep2['data_dir']}"
+        assert (inst_a / "data" / "tool-id").is_file(), "4 A/data 缺数据归属 tool-id"
+        assert not (inst_b / "data").exists(), "4 B 竟然写了数据目录(让位方必须零写入)"
         note = ptr_root / "global-traffic-monitor" / "deferred.json"
-        assert not note.exists(), "④ 正主成功启动后注记应被清除"
-        print(f"[e2e] ④ A 被代拉起并就绪: data_dir={ep2['data_dir']}(注记已清)")
+        assert not note.exists(), "4 正主成功启动后注记应被清除"
+        print(f"[e2e] 4 A 被代拉起并就绪: data_dir={ep2['data_dir']}(注记已清)")
 
-        # ⑤ claim 护栏: A 在跑 -> B claim 拒绝; 停 A -> B claim 成功易主
+        # 5 claim 护栏: A 在跑 -> B claim 拒绝; 停 A -> B claim 成功易主
         r = run_claim(inst_b, ptr_root)
-        assert r.returncode != 0 and "正在运行" in r.stdout, f"⑤ 运行中 claim 应被拒绝: rc={r.returncode} {r.stdout}"
-        print(f"[e2e] ⑤a A 在跑时 B claim 被拒绝: {r.stdout.strip().splitlines()[-1]}")
+        assert r.returncode != 0 and "正在运行" in r.stdout, f"5 运行中 claim 应被拒绝: rc={r.returncode} {r.stdout}"
+        print(f"[e2e] 5a A 在跑时 B claim 被拒绝: {r.stdout.strip().splitlines()[-1]}")
         code, _ = tool_call(f"http://{ep2['host']}:{ep2['port']}", ep2["token_path"], "/shutdown")
-        assert code == 200, f"⑤ 停 A 失败: {code}"
+        assert code == 200, f"5 停 A 失败: {code}"
         procs.clear()  # A 优雅退出后进程列表清空(下面只 claim, 不再起工具)
         # A 的退出是异步的(最终落盘 -> 释放锁): claim 重试到锁让出来为止(拒绝原因即"正在运行")
         r2 = None
@@ -206,12 +206,12 @@ def main() -> int:
             if r2.returncode == 0:
                 break
             time.sleep(1.0)
-        assert r2 is not None and r2.returncode == 0, f"⑤b 停后 claim 应成功: rc={r2.returncode} {r2.stdout}"
+        assert r2 is not None and r2.returncode == 0, f"5b 停后 claim 应成功: rc={r2.returncode} {r2.stdout}"
         record = json.loads((ptr_root / "global-traffic-monitor" / "primary.json").read_text(encoding="utf-8"))
         assert Path(record["install_path"]) == inst_b and record["id"] == (inst_b / "tool-id").read_text().strip(), \
-            f"⑤b 记录未换成 B: {record}"
-        assert (inst_b / "data" / "tool-id").is_file(), "⑤b claim 后 B/data 应认领数据归属"
-        print(f"[e2e] ⑤b 停 A 后 B claim 成功: 正主={record['install_path']} data={record['data_dir']}")
+            f"5b 记录未换成 B: {record}"
+        assert (inst_b / "data" / "tool-id").is_file(), "5b claim 后 B/data 应认领数据归属"
+        print(f"[e2e] 5b 停 A 后 B claim 成功: 正主={record['install_path']} data={record['data_dir']}")
 
         print("[e2e] PASS: 原场景复算成立(代拉 -> 同一 dat -> claim 护栏两态)")
         return 0

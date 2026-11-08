@@ -295,8 +295,8 @@ def test_new_doc_task_domain_is_longest_prefix_match(tmp_path: Path) -> None:
 
     领域枚举自身可含短横线 (`memory-bank`): 首段切分 `topic.split("-", 1)[0]` 会把
     `memory-bank-xxx` 切出 `memory` —— 枚举里的 `memory-bank` 永远不可达。本测试钉住
-    三类: ① 连字符领域可建 ② 前缀撞名 (`memory-` 开头的非领域) 不得被误收
-    ③ 真坏领域仍 fail-fast; 裸领域 topic (topic == 枚举项) 沿用 P1 行为照收。
+    三类: 1. 连字符领域可建 2. 前缀撞名 (`memory-` 开头的非领域) 不得被误收
+    3. 真坏领域仍 fail-fast; 裸领域 topic (topic == 枚举项) 沿用 P1 行为照收。
     """
     import io
     from contextlib import redirect_stderr, redirect_stdout
@@ -1074,7 +1074,7 @@ def test_p2_full_chain_drill(tmp_path: Path) -> None:
             rc = mod.main(["--root", str(tmp_path), "--mb-dir", str(mb), *argv])
         return rc, out.getvalue(), err.getvalue()
 
-    # ① 先建档案, 再建计划并 --refs 档案 (D4 双向补链)
+    # 1. 先建档案, 再建计划并 --refs 档案 (D4 双向补链)
     rc, _, err = run(new_doc, ["task", "--title", "演练档案", "--topic", "docs-drill"])
     assert rc == 0, err
     task = list((mb / "tasks").glob("*-docs-drill.md"))
@@ -1086,13 +1086,13 @@ def test_p2_full_chain_drill(tmp_path: Path) -> None:
     assert len(plan) == 1
     assert "已双向补链" in out, f"D4 应打印双向补链行: {out}"
 
-    # ② 填空 (agent 的一次编辑)
+    # 2. 填空 (agent 的一次编辑)
     _fill_slots(plan[0])
     _fill_slots(task[0])
     assert checker.validate_file(plan[0], "plan") == [], "填空后计划必须过新增面守卫"
     assert checker.validate_file(task[0], "task") == [], "填空后档案必须过新增面守卫"
 
-    # ③ kb.status 翻转 (终态)
+    # 3. kb.status 翻转 (终态)
     rc, out, err = run(flip, [str(plan[0].relative_to(tmp_path)), "In Progress"])
     assert rc == 0 and "已翻转" in out, out
     rc, out, err = run(flip, [f"memory-bank/plans/{plan[0].name}", "Done"])
@@ -1100,11 +1100,11 @@ def test_p2_full_chain_drill(tmp_path: Path) -> None:
     rc, out, err = run(flip, [task_rel, "Done"])
     assert rc == 0 and "Summary 收口" in out, out
 
-    # ④ kb.bump 改版记录 (计划有变更记录段)
+    # 4. kb.bump 改版记录 (计划有变更记录段)
     rc, out, err = run(bump, [f"memory-bank/plans/{plan[0].name}", "--note", "R1: 演练改版"])
     assert rc == 0 and "R1" in out, out
 
-    # ⑤ 认领链双向机检绿 (计划 §07 P2 验收判据; gen_doc_map.main() 只读 sys.argv,
+    # 5. 认领链双向机检绿 (计划 §07 P2 验收判据; gen_doc_map.main() 只读 sys.argv,
     #    进程内直调它的 check 函数 —— 与既有守卫直调 validate_file 同做法)
     docmap = _gen_doc_map()
     items = docmap.collect(mb)
@@ -1113,7 +1113,7 @@ def test_p2_full_chain_drill(tmp_path: Path) -> None:
     assert docmap.check_topics(items) == 0, "演练件的跨形态主键必须齐"
     assert docmap.check_status_vocabulary(items) == 0, "演练件状态词必须在 5 词表内"
 
-    # ⑥ 红绿双验 (§06): 删掉目标件的反向声明 = 人工造单向链 → 机检必须红 (证明绿不是恒绿);
+    # 6. 红绿双验 (§06): 删掉目标件的反向声明 = 人工造单向链 → 机检必须红 (证明绿不是恒绿);
     #    还原 → 复绿
     ttext = task[0].read_text(encoding="utf-8")
     plan_rel = f"memory-bank/plans/{plan[0].name}"
@@ -1123,7 +1123,7 @@ def test_p2_full_chain_drill(tmp_path: Path) -> None:
     task[0].write_text(ttext, encoding="utf-8")
     assert docmap.check_claim_chain(docmap.collect(mb), tmp_path, mb) == [], "还原后必须复绿"
 
-    # ⑦ 改过的件再过新增面守卫仍绿 (翻转/bump 没破坏形态)
+    # 7. 改过的件再过新增面守卫仍绿 (翻转/bump 没破坏形态)
     assert checker.validate_file(plan[0], "plan") == [], "翻转+bump 后的计划必须仍过守卫"
     assert checker.validate_file(task[0], "task") == [], "翻转后的档案必须仍过守卫"
 
@@ -1259,7 +1259,7 @@ def test_new_doc_creates_issue_family_end_to_end(tmp_path: Path, monkeypatch) ->
             rc = new_doc.main(["--root", str(tmp_path), "--mb-dir", str(mb), *extra])
         return rc, out.getvalue(), err.getvalue()
 
-    # ① light (默认档: docs → light 经 TIER_BY_TYPE 推导, 不传 --tier)
+    # 1. light (默认档: docs → light 经 TIER_BY_TYPE 推导, 不传 --tier)
     rc, out, err = run("issue", "smoke-issue", "--type", "docs", "--title", "冒烟问题标题", "--summary", "一句话简述")
     assert rc == 0, f"kb.new issue 必须建件成功: {err}"
     assert "机械 0" in out, f"输出缺「机械 0」收录断言: {out}"
@@ -1281,7 +1281,7 @@ def test_new_doc_creates_issue_family_end_to_end(tmp_path: Path, monkeypatch) ->
     assert "TODO" in text, "正文留 TODO 待按档位填写"
     # (2026-11-08 重构 W3: 原「索引 + 归档同批重建」断言已删 —— issues/_index.md 退役, 建后不再重建。)
 
-    # ② standard (--tier 显式覆盖 docs 的 light 默认)
+    # 2. standard (--tier 显式覆盖 docs 的 light 默认)
     rc, out, err = run("issue", "smoke-std", "--type", "docs", "--tier", "standard", "--title", "标准档", "--summary", "简")
     assert rc == 0, f"--tier standard 覆盖必须成功: {err}"
     assert "现象 / 证据 / 影响面" in out, f"standard 档 NEXT_STEP 文案口径: {out}"
@@ -1289,7 +1289,7 @@ def test_new_doc_creates_issue_family_end_to_end(tmp_path: Path, monkeypatch) ->
     assert '<meta name="issue-tier" content="standard">' in std
     assert "现象与发现场景" in std and "计划外问题（未修）" in std, "standard 档模板 (七段结构)"
 
-    # ③ bug → standard 默认推导 + --topic 显式覆盖 doc-topic (文件名仍用 slug)
+    # 3. bug → standard 默认推导 + --topic 显式覆盖 doc-topic (文件名仍用 slug)
     rc, _, err = run(
         "issue", "topic-override", "--type", "bug", "--title", "t", "--summary", "s", "--topic", "custom-topic"
     )
@@ -1298,7 +1298,7 @@ def test_new_doc_creates_issue_family_end_to_end(tmp_path: Path, monkeypatch) ->
     assert '<meta name="issue-tier" content="standard">' in bug, "bug 默认档 = standard (TIER_BY_TYPE 推导)"
     assert '<meta name="doc-topic" content="custom-topic">' in bug, "--topic 显式覆盖默认 slug"
 
-    # ④ --refs D4 双向补链对 issue 件照常生效 (issue 为声明方)
+    # 4. --refs D4 双向补链对 issue 件照常生效 (issue 为声明方)
     assert run("task", "--title", "链目标档案", "--topic", "backend-issue-ref")[0] == 0
     task = next((mb / "tasks").glob("*-backend-issue-ref.md"))
     rc, out, err = run(
@@ -1312,11 +1312,11 @@ def test_new_doc_creates_issue_family_end_to_end(tmp_path: Path, monkeypatch) ->
     assert f'<meta name="doc-refs" content="memory-bank/tasks/{task.name}">' in chained, "issue 正向 doc-refs"
     assert f"memory-bank/issues/{chained_path.name}" in task.read_text(encoding="utf-8"), "目标档案反向声明本 issue"
 
-    # ⑤ 幂等拒绝 (冻结时钟下撞同名 —— 同分钟同 slug 同 type)
+    # 5. 幂等拒绝 (冻结时钟下撞同名 —— 同分钟同 slug 同 type)
     rc, _, err = run("issue", "smoke-issue", "--type", "docs", "--title", "t", "--summary", "s")
     assert rc == 1 and "已存在" in err, f"同名重复建必须幂等拒绝: {err}"
 
-    # ⑥ kb.new issue → kb.status 全链 (评审 RB2 1a): 对真建出的 issue 翻 In Progress,
+    # 6. kb.new issue → kb.status 全链 (评审 RB2 1a): 对真建出的 issue 翻 In Progress,
     #    badge / meta / 状态变更日志行 / 索引分区四处断言 —— 防「建件成功但 kb.status 对
     #    新建件 rc=1」的机读锚漂移只靠注册表模板断言兜底
     flip = _flip_status()

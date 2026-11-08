@@ -806,13 +806,13 @@ def test_scope_hit_flat_does_not_cover_subdirs():
 
     旧实现在 scope = save_path(平铺组的内容根)时, 把同目录别组的组键解析到 T ——
     job 结束后 _buckets 用 S 键查不到组, 退化为「仅选中成员」, 单成员 direct 误判
-    (真机实测: 组① 被当单成员直搬, 数据走了却不建链接)。
+    (真机实测: 组1 被当单成员直搬, 数据走了却不建链接)。
     """
     flat = _job(phase=ru.PHASE_MOVING, scope=S, plan={"form": ru.FORM_FILE_LINKS})
     assert flat.scope_hit(S, S) is True  # 平铺组自己的成员(内容根 == save_path)
     assert flat.scope_hit(S, os.path.join(S, "Show")) is False  # 同 save_path 子目录里的别组
     assert flat.scope_covers_dir is False
-    # 直搬: 无别名 => 作用域恒不命中(真机: 组② 直搬 scope=恶女目录, 曾把同目录组① 解析走)
+    # 直搬: 无别名 => 作用域恒不命中(真机: 组2 直搬 scope=恶女目录, 曾把同目录组1 解析走)
     direct = _job(phase=ru.PHASE_MOVING, scope=os.path.join(S, "Show"), alias_kind="", plan={"form": ru.FORM_DIRECT})
     assert direct.scope_hit(S, os.path.join(S, "Show")) is False
     # 目录别名: 作用域覆盖整目录(含子目录), 与旧行为一致

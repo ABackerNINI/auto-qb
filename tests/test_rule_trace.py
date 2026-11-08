@@ -250,7 +250,7 @@ def test_trace_prune_keep_days_and_total_cap():
 
 
 def test_trace_size_redline_stress():
-    """体积红线压测(验收判据②): 近深度上限条件树 x 高频种子, trace 键面总体积 <= 1 MiB
+    """体积红线压测(验收判据2): 近深度上限条件树 x 高频种子, trace 键面总体积 <= 1 MiB
 
     极端构造: 40 个 size 叶子(全命中) 嵌 15 层 all(叶子恰在深度上限 16), 3 条规则 x
     40 种子 = 120 维度各跑 3 轮(共 360 条写入 > 总量上限 300, 逐出生效)。断言:
@@ -350,8 +350,14 @@ def test_trace_prune_ring_fallback_trims_oversized_dim():
         svc = StateService(os.path.join(td, "state.json"))
         today = datetime.now().date().isoformat()
         svc.data["rule_traces"] = {
-            "r:H": [{"verdict": "executed", "date": today, "ts": float(i)}
-                    for i in range(state_mod._TRACE_KEEP_PER_DIM + 2)],
+            "r:H":
+                [
+                    {
+                        "verdict": "executed",
+                        "date": today,
+                        "ts": float(i)
+                    } for i in range(state_mod._TRACE_KEEP_PER_DIM + 2)
+                ],
         }
         svc.record_rule_trace("r2", "H2", {"verdict": "no_match"})
         dim = svc.data["rule_traces"]["r:H"]
