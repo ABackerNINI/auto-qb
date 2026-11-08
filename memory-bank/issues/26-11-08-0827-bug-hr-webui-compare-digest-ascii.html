@@ -9,9 +9,9 @@
 <meta name="issue-stamp" content="26-11-08-0827">
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="hr-webui-compare-digest-ascii">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-08-backend-hr-webui-compare-digest-ascii.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="compare_digest str 非 ASCII 隐患同构两处(discovery 配对码/webui auth token)">
 <meta name="issue-summary" content="discovery.py:412 与 webui/server/auth.py:183 仍为 str 形态 compare_digest, 非 ASCII 输入抛 TypeError(与 0527-hr #1 已修同构), web.token 校验亦不限字符集">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-08-0827-bug-hr-webui-compare-digest-ascii</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-08 08:27</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
@@ -145,11 +145,18 @@
   <h2><span class="no">§07</span>状态变更日志</h2>
   <ul>
     <li>2026-11-08 08:27 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-08 — 状态 Open → Done（kb.status）</li>
+</ul>
   <h3>复验</h3>
-  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <p>复验：2026-11-08 11:35 仍复现 —— <code>discovery.py</code> <code>_pairing_ok</code> 与 <code>auth.py:183</code> 均为 str 形态 compare_digest，<code>web.token</code> 校验仍只验字符串不限字符集。</p>
   <h3>修复后补充</h3>
-  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  <p><strong>实际修法</strong>（按 §06 建议修法执行，无改道）：</p>
+  <ul>
+    <li><code>hr/discovery.py</code> <code>_pairing_ok</code>：given 与展示码/凭证双侧 <code>encode("utf-8")</code> 后比较 —— 展示码/凭证由 HMAC 现导恒为 ASCII，非 ASCII 头值必然不匹配，老实落 401（与 server <code>_token_ok</code> 同款）。</li>
+    <li><code>webui/server/auth.py</code> require_token：token 与 <code>manager.web.token</code> 双侧 UTF-8 编码后比较（同款双保险）。</li>
+    <li><code>validate_config</code>：<code>web.token</code> 加 <code>.isascii()</code> 档（报错文案与 hr_check.channel.token 同形态，非字符串档不串档）；schema groups.py 的 web.token help 同步「仅限 ASCII 字符」。</li>
+  </ul>
+  <p><strong>验证方式与测试数字</strong>：三面各补一条用例（test_hr_discovery 非 ASCII 配对码头 401 / test_web_auth 直调 require_token 匹配放行·不匹配 401 / test_config_misc web.token ASCII 校验四档）；<code>commands run test.full</code> 实测 2026-11-08 11:41：<strong>5782 passed, 2 skipped</strong>，覆盖率 99% —— 详见基线切片 <a href="../testing/baselines/26-11-08-1142-backend-hr-webui-compare-digest-ascii.md">26-11-08-1142-backend-hr-webui-compare-digest-ascii</a>。</p>
 </section>
 
 <footer>

@@ -17,6 +17,7 @@
 - test_oversized_request_line_reaches_app_not_transport_400: 真实 uvicorn 下 >16KB 请求行(组 key 真实形态)必须打到应用层, 不得被传输层判 "Invalid HTTP request received." 回裸 400(分片到达: 头停在未完成态且缓冲已超 16KB —— h11 判非法的确切条件, 一次性完整到达不触发)
 - test_frontend_sse_ticket_wiring: polling.js 换票接线守阵 —— POST /api/events/ticket + ?ticket= 连流 + 重连换新票; ?token 通道不得回潮
 - test_skip_local_verify_default_off: 默认关闭(保守), 本机连接也不免鉴权
+- test_non_ascii_token_encodes_both_sides: 非 ASCII 密钥比较前双侧 UTF-8 编码 —— 匹配放行/不匹配 401(不再 TypeError 兜 500, issue 26-11-08-0827)
 ### T2a 覆盖率第三轮
 - test_sse_ticket_quota_expired_slot_is_recycled: 满额后全部过期 -> 先清过期再判满, 清理释放名额后照常签发(新票不重号)
 """
@@ -68,6 +69,35 @@ def test_api_requires_token(web_env, caplog):
     assert mgr.web.token[:8] not in warns[0].getMessage()
     # 正确密钥放行
     assert client.get("/api/status", headers={_AUTH_HEADER: f"Bearer {mgr.web.token}"}).status_code == 200
+
+
+def test_non_ascii_token_encodes_both_sides(web_env):
+    """非 ASCII 密钥: 比较前双侧按 UTF-8 编码, 匹配放行 / 不匹配落 401(不再 TypeError 兜 500)
+
+    compare_digest 的 str 形态要求双方均为 ASCII; 配置期 ASCII 限集(sections.py)是第一道闸,
+    运行期编码比较是双保险(issue 26-11-08-0827)。直调 require_token 钉死比较面(绕开
+    TestClient 对请求头值的 ASCII 假设), manager 侧直接构造非 ASCII token。
+    """
+    from fastapi import HTTPException
+
+    from auto_qb.webui.server.auth import make_require_token
+
+    mgr, _client = web_env
+    require_token = make_require_token(mgr)
+    mgr.web.token = "密钥-k3y"
+
+    def _req():
+        # 复用既有直调 helper(_auth_request, scope 构造单点); 远端对端免得撞 loopback 免鉴权分支
+        return _auth_request(path="/api/status", client=("203.0.113.9", 50000))
+
+    # 直调时 authorization 是第二个参数(FastAPI Header 注入形态, 见 test_sse_ticket 同款)
+    assert require_token(_req(), "Bearer 密钥-k3y") is None, "匹配的非 ASCII 密钥放行(双侧编码后常数时间比较)"
+    with pytest.raises(HTTPException) as ei:
+        require_token(_req(), "Bearer 别的密钥")
+    assert ei.value.status_code == 401, "不匹配的非 ASCII 密钥落 401(原先 TypeError 兜 500)"
+    with pytest.raises(HTTPException) as ei:
+        require_token(_req(), "Bearer ascii-wrong")
+    assert ei.value.status_code == 401, "ASCII 侧不匹配照旧 401"
 
 
 def test_config_public_endpoint_no_auth(web_env):

@@ -1086,8 +1086,16 @@ def _validate_web(spec: dict | None, errors: List[str]) -> None:
             errors.append("config.web.host: 必须是非空字符串")
     if "port" in spec:
         _try_port(spec["port"], "config.web.port", errors)
-    if "token" in spec and not isinstance(spec["token"], str):
-        errors.append("config.web.token: 必须是字符串")
+    if "token" in spec:
+        raw_token = spec["token"]
+        if not isinstance(raw_token, str):
+            errors.append("config.web.token: 必须是字符串")
+        elif not raw_token.isascii():
+            # 常数时间密钥比较(hmac/secrets.compare_digest)要求两侧均为 ASCII,
+            # 非 ASCII 密钥运行期逐请求失效 —— 必须配置期拦下, 不能放行到运行期
+            # (与 hr_check.channel.token 同形态)
+            errors.append("config.web.token: 含非 ASCII 字符 —— 请改用纯 ASCII 字符"
+                          "(字母/数字/符号; 留空 = 首次启动随机生成)")
     if "skip_local_verify" in spec:
         _try(parse_bool, spec["skip_local_verify"], "config.web.skip_local_verify", errors)
     if "skip_check_menu" in spec:

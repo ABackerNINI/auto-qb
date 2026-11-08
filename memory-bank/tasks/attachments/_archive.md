@@ -44,9 +44,10 @@
 - [26-10-14-webui-qb-traffic-agg-live-tail](../26-10-14-webui-qb-traffic-agg-live-tail.md) qB 流量图 agg 段活尾合流(S7): 3d+ 视图图尾真空修复
 - [26-10-09-backend-transport-encryption](../26-10-09-backend-transport-encryption.md) 本地通道传输安全调研(WebUI + HR 取数通道)
 
-## Done (307)
+## Done (308)
 
 - [26-11-07-backend-relocate-nested-gate-fix](../26-11-07-backend-relocate-nested-gate-fix.md) relocate 嵌套闸门误拦修正实施
+- [26-11-08-backend-hr-webui-compare-digest-ascii](../26-11-08-backend-hr-webui-compare-digest-ascii.md) issue 26-11-08-0827 compare_digest 非 ASCII 隐患同构两处修复
 - [26-11-08-config-legacy-review4-config-infra-claim](../26-11-08-config-legacy-review4-config-infra-claim.md) 存量评审 R4 config-infra 主题修复批: 36 条六批委派实施与收编
 - [26-11-08-webui-legacy-review4-webui-py-fix](../26-11-08-webui-legacy-review4-webui-py-fix.md) 存量评审 R4 webui-py 主题修复批: 25 条批A-批L 委派实施与收编
 - [26-11-05-backend-relocate-fastresume-finalize](../26-11-05-backend-relocate-fastresume-finalize.md) relocate 收尾重构: fastresume 改写收尾 + 未收尾再迁移(S1-S6 全程)

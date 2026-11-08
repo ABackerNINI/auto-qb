@@ -198,7 +198,7 @@ GROUPS: Tuple[Group, ...] = (
                         "访问密钥",
                         "password",
                         default="",
-                        help="登录 WebUI 用的密钥; 留空 = 首次启动随机生成, 存到状态文件同目录(默认即 data_dir)的 web.token; 启动日志只提示文件路径, 密钥内容不打印"
+                        help="登录 WebUI 用的密钥; 仅限 ASCII 字符(含非 ASCII 会被校验拒绝); 留空 = 首次启动随机生成, 存到状态文件同目录(默认即 data_dir)的 web.token; 启动日志只提示文件路径, 密钥内容不打印"
                     ),
                     Field(
                         "skip_local_verify",

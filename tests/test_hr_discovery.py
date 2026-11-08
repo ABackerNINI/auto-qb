@@ -33,6 +33,7 @@ worker 的同族用例占住, 候选轮换是特性而非碰撞。
 - test_pairing_display_code_shape_and_stability
 - test_pairing_flood_limit_silences_per_source
 - test_pairing_gate_three_ways
+- test_pairing_non_ascii_header_falls_401: 非 ASCII 配对码头值双侧 UTF-8 编码后比较, 不匹配落 401(不再 TypeError 走异常面, issue 26-11-08-0827)
 - test_registry_prunes_expired_on_upsert
 - test_registry_read_retries_transient_denial
 - test_registry_read_transient_denial_is_not_empty_table
@@ -313,6 +314,20 @@ def test_pairing_gate_three_ways():
 
     status, _h, _b = _get(srv, {"Origin": ORIGIN, PAIRING_HEADER: pairing_credential(SC)})
     assert status == 200, "HMAC 凭证与展示码等价(无额外状态, 同一密钥现导)"
+
+
+def test_pairing_non_ascii_header_falls_401():
+    """非 ASCII 配对码头值: 比较前双侧按 UTF-8 编码, 不匹配落 401(不再 TypeError 走异常面)
+
+    compare_digest 的 str 形态要求双方均为 ASCII; given 来自发现端点的请求头(用户输入),
+    含非 ASCII 时旧实现抛 TypeError 进调用方异常兜底面 —— 编码后比较与 server._token_ok
+    同款双保险(issue 26-11-08-0827)。展示码/凭证由 HMAC 现导恒为 ASCII, 非 ASCII 头值必然不匹配。
+    """
+    srv = make_discovery()
+    status, _h, body = _get(srv, {"Origin": ORIGIN, PAIRING_HEADER: "配对码abc123"})
+    assert status == 401 and json.loads(body) == {"error": "pairing_invalid"}
+    status, _h, body = _get(srv, {"Origin": ORIGIN, PAIRING_HEADER: pairing_display_code(SC)})
+    assert status == 200, "ASCII 正码照常放行"
 
 
 def test_pairing_auto_branches_by_host():

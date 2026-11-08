@@ -72,6 +72,7 @@
 - test_validate_add_episode_tags_unknown_keys: add_episode_tags 未知键 fail-fast(R4#13): 模板键拼错报未知键, 合法键面放行
 - test_validate_value_errors_extended
 - test_validate_web_errors
+- test_web_token_ascii_only: web.token 字符集限 ASCII(与 hr_check.channel.token 同形态, issue 26-11-08-0827) —— 含非 ASCII 报「ASCII」错并聚合, 纯 ASCII 放行, 非字符串仍报「必须是字符串」不串档
 - test_validate_qbittorrent_str_keys
 - test_validate_fs_path_map_from_to_must_be_string
 - test_fs_path_map_nonscalar_blocks_load
@@ -1327,6 +1328,23 @@ def test_validate_web_errors():
     assert any("config.web.port: 超出范围" in e for e in errors)
     errors = _errs({"web": {"skip_check_menu": "maybe"}})
     assert any("config.web.skip_check_menu" in e for e in errors)
+
+
+def test_web_token_ascii_only():
+    """web.token 字符集限 ASCII: 含非 ASCII 字符报错并聚合(issue 26-11-08-0827)
+
+    与 hr_check.channel.token 同形态(26-11-07-0527 #1): 常数时间密钥比较的 str 形态要求
+    两侧均为 ASCII, 非 ASCII 密钥(如中文)能过旧「必须是字符串」校验, 运行期每个请求在
+    鉴权处抛 TypeError 兜 500 —— 必须配置期拦下; 纯 ASCII 放行, 非字符串不串档。
+    """
+    errors = _errs({"web": {"token": "密钥"}})
+    assert any("config.web.token" in e and "ASCII" in e for e in errors), errors
+    errors = _errs({"web": {"token": "ok中"}})
+    assert any("config.web.token" in e and "ASCII" in e for e in errors), errors
+    assert _errs({"web": {"token": "plain-KEY_42"}}) == []
+    errors = _errs({"web": {"token": 123}})
+    assert any("config.web.token: 必须是字符串" in e for e in errors), errors
+    assert not any("ASCII" in e for e in errors), "非字符串不串档到字符集报错"
 
 
 def test_validate_qbittorrent_str_keys():

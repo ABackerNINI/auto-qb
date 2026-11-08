@@ -406,12 +406,21 @@ class HrDiscoveryServer:
     # ---------- 内部 ----------
 
     def _pairing_ok(self, given: str) -> bool:
-        """常数时间比对展示码与凭证两种等价形态(S3); 密钥未生成 = 永不通过(不该发生)"""
+        """常数时间比对展示码与凭证两种等价形态(S3); 密钥未生成 = 永不通过(不该发生)
+
+        两侧先按 UTF-8 编码成字节再比较: compare_digest 的 str 形态要求双方均为 ASCII,
+        given 来自发现端点的请求头(用户输入), 含非 ASCII 时会在此抛 TypeError 落进调用方
+        异常面 —— 编码后比较让不匹配(含非 ASCII 头值)老老实实落 401(与 server._token_ok 同款)。
+        """
         if not self.pairing_secret:
             return False
-        return secrets.compare_digest(given, pairing_display_code(
-            self.pairing_secret
-        )) or secrets.compare_digest(given, pairing_credential(self.pairing_secret))
+        given_b = given.encode("utf-8")
+        return (
+            secrets.compare_digest(given_b,
+                                   pairing_display_code(self.pairing_secret).encode("utf-8")) or
+            secrets.compare_digest(given_b,
+                                   pairing_credential(self.pairing_secret).encode("utf-8"))
+        )
 
     def _note_pairing_fail(self, source: str, detail: str) -> None:
         """配对失败记账(C3 防枚举): 节流日志 + 每来源 60s 窗口简单计数, 超阈临时静默

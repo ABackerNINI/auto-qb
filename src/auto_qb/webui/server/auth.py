@@ -180,7 +180,10 @@ def make_require_token(manager):
         token = authorization[len(scheme):].strip()
         if not token:
             raise HTTPException(status_code=401, detail="invalid token")
-        if not secrets.compare_digest(token, manager.web.token):
+        # 两侧先按 UTF-8 编码成字节再比较: compare_digest 的 str 形态要求双方均为 ASCII,
+        # 非 ASCII 头值(配置校验已拦, 但运行期不能靠它)会在此抛 TypeError 变 500 —— 编码后
+        # 比较让不匹配(含非 ASCII 头值)老老实实落 401(与 hr server._token_ok 同款双保险)。
+        if not secrets.compare_digest(token.encode("utf-8"), manager.web.token.encode("utf-8")):
             logger.warning("WEB 鉴权失败: 密钥不匹配")
             raise HTTPException(status_code=401, detail="invalid token")
 
