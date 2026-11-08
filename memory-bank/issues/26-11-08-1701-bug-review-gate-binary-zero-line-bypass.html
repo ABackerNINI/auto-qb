@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="review-gate-binary-zero-line-bypass">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="评审闸门 0 行二进制改动绕过基哈希比对">
 <meta name="issue-summary" content="numstat 对二进制计 0 行, count==0 短路使 D6 基比对不生效, 评审后替换/新增二进制可评文件(夹具图片/压缩包)静默放行">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-08-1701-bug-review-gate-binary-zero-line-bypass</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-08 17:01</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">commands</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
@@ -149,11 +149,12 @@ if count == 0 and not sensitive:
   <h2><span class="no">§07</span>状态变更日志</h2>
   <ul>
     <li>2026-11-08 17:01 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-08 — 状态 Open → Done（kb.status）</li>
+</ul>
   <h3>复验</h3>
-  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <p>复验：2026-11-08（认领时点）仍复现 —— <code>decide()</code> 首位 <code>count == 0 and not sensitive</code> 短路在位，本机 git 实测 tracked 二进制替换 numstat 计 <code>-\t-\t</code> 0 行，带不带 trailer 都不落基比对。复验中修正一处取证（§02 哈希行过于悲观）：tracked 二进制替换在 diff 文本里除恒定 <code>Binary files ... differ</code> 标记行外还有 <code>index &lt;旧blob&gt;..&lt;新blob&gt;</code> 行，内容变更<b>会</b>动 <code>batch_base_hash</code>（实测旧/新内容异值）；untracked 二进制照旧按原文字节入哈希 —— 即基比对本身对两类二进制都有效，病灶只在短路可达性。</p>
   <h3>修复后补充</h3>
-  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  <p><b>实际修法</b> = 建议方案 A（用户拍板，与 §06 倾向一致）：<code>check_review_trace.py</code> <code>decide()</code> 的 count==0 静默短路改为仅对<b>无 <code>Review:</code> trailer</b> 的批生效；带 trailer 的 0 行批照走全链校验（<code>· 基</code> 必填 + 与闸门重算的整批过滤 diff 哈希比对，不一致判红给出路）。复验到的 git 行为见上：tracked 替换（index blob 行）与 untracked 新增（原文字节）带 trailer 时都能被 D6 比对判红，一致（评审时点 pack 的基 = 提交时点重算）则放行。<b>残余窗口（如实记录）</b>：0 行批<b>无 trailer</b> 的静默通路按方案 A 有意保留 —— 二进制改动若不写 trailer 仍静默放行；本轮不为它扩机制（tracked 原位替换的哈希面已证可检，真正豁口只剩「不写 trailer」这条人为通路），是否收口留给用户决定。<b>衍生修复</b>：方案 A 撞出一处假红面 —— HEAD 消息（手工预览/复跑面）的 0 行批保持静默：HEAD 上的 trailer 描述的是已入库的上一批，锚点已推进到它，对空批校验历史 trailer 的行数/基是假红；提交面消息恒来自 file/default（commit.py 经 env 递入），不受影响，不开旁路。<b>验证</b>：review 包定向 pytest 117 passed（含新增 5 例：decide 面 2 + 端到端 3）→ <code>test.pkg</code> 全包 404 passed + 15 subtests → <code>test.quick</code> 5855 passed / 2 skipped。<b>声明面同步三处</b>：本脚本模块头判据 1 / decide docstring / main 注释、<code>.commands/review/config.toml</code> review.trace note、code-review SKILL.md 铁律「残余窗口」段（0 行二进制窗口 → 0 行无 trailer 窗口）。</p>
 </section>
 
 <footer>

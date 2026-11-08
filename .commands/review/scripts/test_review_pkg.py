@@ -18,8 +18,8 @@
 - CleanPackTest      干净树 -> +0/-0 且全能; 缺/坏闸门配置 -> 可见降级 + 红线预警"无"; 坏 --base / 非 git --root / 非仓库 cwd -> rc=2; 提交后 HEAD!=base 无后缀且已提交改动仍在范围内
 - CheckTest           PASS(rc=0); 幻觉引文/超窗/缺字段/坏枚举/过短引文/非字符串字段/缺文件 REFUTE(rc=1); 窗口边界与 --window; stdin; 根外与穿越 REFUTE; 快照 root(无 .git)放行; 非 UTF-8 兜底; 行注入单行化; 非 JSON/非数组/非 UTF-8 输入 rc=2; 空数组 rc=0; 元素非对象 rc=1
 - BatchBaseHashTest   基哈希(batch_base_hash, 共享模块 review_content): 同树确定且 12hex; 金值锁规范化格式(固定 fixture 硬编码 12hex, 改钉子必红须显式换金值); 记账类/生成物变更(含未跟踪)不动哈希; 可评已跟踪/未跟踪变更动哈希; 工作树 CRLF 行尾噪音不动哈希(--ignore-cr-at-eol 两侧压掉); 未跟踪文件序无关(按 path 排序); repo 配置逐颗覆写(diff.context/前缀/颜色/算法/orderFile/excludesFile/quotepath/diff.external...)哈希不漂(env 掐 system+global + -c 逐键压 repo 的回归); 工作树改名按删+增展开(name-only 两条路径/无 rename 段); pathspec 逐字精确(f[1].txt 不 glob 误匹配、分块不重复); pack 输出「基哈希:」行与共享实现同值; generated_paths 优先 gen_all --list 清单(反斜杠归一)
-- TraceDecideTest     评审留痕纯判定: 实算恒 0 静默; 可评 >0 无 trailer 拦(50 行下限退役 D9, 各量级一律); Review-Skip 恒红(豁免退役 D8, 理由长短不再重要); trailer 行数不符/缺字段(含缺检缺基)/缺行数拦; >400 行只认 派发 ≥ 2(分面降级信息字段); `· 基` 必填+12hex 形状+与重算基哈希比对(不一致红含「重跑 pack 取新基复评」出路, D6); `· 轮` 缺省 1、出现须整数 ≥1(D7), 与 `· 派发` 同现且值合法放行(形状组合); 判定矩阵 11 例(计划 26-11-07-0441 §04: 分面无派发红/派发 2 过/派发 1 红含骨架/缺检红/P>T 红/P<修+入池 红含口径/弃条目不计下界红/自洽数过/全干净 0-0 过/骨架直贴红/无分面超限过); 触安全敏感面无 trailer 拦(含 0 行)/有有效 trailer 放行; Review 优先于 Skip; 正文畸形 Review 段小批也拦(下限豁免已退役); 记账类(含 legacy-review4/)/生成物不计入
-- TraceGateTest       端到端(临时仓库真跑脚本): 复跑标记短路先于消息/基比对(带 trailer 错基也 rc=0)且用后即删; 无 trailer 红(10 行小批/60 行, >0 即评, D9); 仅记账类恒 0 静默; trailer 行数相符+基一致 rc=0 / 行数不符 rc=1; 敏感面批(路径标记词)带 trailer 且基一致放行(端到端); 缺基红 / 基不一致(评审后又改一行)红含重跑出路(D6); Review-Skip 新提交红(D8); 历史 Skip 锚点识别回归(Skip 提交照旧推进锚点, 其后无 trailer 提交连坐滚进, 不追溯); 锚点推进(漏评提交被下一批连坐); 评过的提交推进锚点; 冷启动只算工作树; 合并拓扑两例(0903: 侧支带 trailer 不污染/无 trailer 连坐); 提交后复跑不重对行数且 HEAD 回退打「未给消息文件, 实算 N 行」提示(0441 落点 4); 齐平字段弱校验(计划 26-11-07-0201 落点 3): 缺字段/合法 8hex 静默 rc0, 格式异常打 [warn] 一行但 rc0
+- TraceDecideTest     评审留痕纯判定: 实算恒 0 静默; 可评 >0 无 trailer 拦(50 行下限退役 D9, 各量级一律); Review-Skip 恒红(豁免退役 D8, 理由长短不再重要); trailer 行数不符/缺字段(含缺检缺基)/缺行数拦; >400 行只认 派发 ≥ 2(分面降级信息字段); `· 基` 必填+12hex 形状+与重算基哈希比对(不一致红含「重跑 pack 取新基复评」出路, D6); `· 轮` 缺省 1、出现须整数 ≥1(D7), 与 `· 派发` 同现且值合法放行(形状组合); 判定矩阵 11 例(计划 26-11-07-0441 §04: 分面无派发红/派发 2 过/派发 1 红含骨架/缺检红/P>T 红/P<修+入池 红含口径/弃条目不计下界红/自洽数过/全干净 0-0 过/骨架直贴红/无分面超限过); 触安全敏感面无 trailer 拦(含 0 行)/有有效 trailer 放行; Review 优先于 Skip; 正文畸形 Review 段小批也拦(下限豁免已退役); 记账类(含 legacy-review4/)/生成物不计入; 0 行批 x trailer(26-11-08-1701 方案 A: 无 trailer 静默保留/带 trailer 走全链 —— 缺字段红/基不一致红含出路/基一致过)
+- TraceGateTest       端到端(临时仓库真跑脚本): 复跑标记短路先于消息/基比对(带 trailer 错基也 rc=0)且用后即删; 无 trailer 红(10 行小批/60 行, >0 即评, D9); 仅记账类恒 0 静默; trailer 行数相符+基一致 rc=0 / 行数不符 rc=1; 敏感面批(路径标记词)带 trailer 且基一致放行(端到端); 缺基红 / 基不一致(评审后又改一行)红含重跑出路(D6); Review-Skip 新提交红(D8); 历史 Skip 锚点识别回归(Skip 提交照旧推进锚点, 其后无 trailer 提交连坐滚进, 不追溯); 锚点推进(漏评提交被下一批连坐); 评过的提交推进锚点; 冷启动只算工作树; 合并拓扑两例(0903: 侧支带 trailer 不污染/无 trailer 连坐); 提交后复跑不重对行数且 HEAD 回退打「未给消息文件, 实算 N 行」提示(0441 落点 4); 齐平字段弱校验(计划 26-11-07-0201 落点 3): 缺字段/合法 8hex 静默 rc0, 格式异常打 [warn] 一行但 rc0; 0 行二进制批 x 基比对(26-11-08-1701 方案 A: tracked 替换带 trailer 旧基红/新基过, untracked 新增带 trailer 同, 纯记账带 trailer 合法过)
 """
 
 from __future__ import annotations
@@ -1113,6 +1113,34 @@ class TraceDecideTest(unittest.TestCase):
         )
         self.assertTrue(ok)
 
+    # ---- 0 行批 x trailer(issue 26-11-08-1701, 方案 A: 短路仅对无 trailer 批生效) ----
+
+    def test_zero_lines_without_trailer_still_silent(self):
+        """0 行纯二进制/记账批无 trailer → 静默放行(既有行为保留, 方案 A 有意不通剿这条通路)。"""
+        ok, why = self._decide(0, "纯二进制替换, 忘了也有意不写 trailer\n")
+        self.assertTrue(ok)
+        self.assertIn("0 行", why)
+
+    def test_zero_lines_with_trailer_walks_full_chain(self):
+        """0 行批带 `Review:` trailer → 不短路, 照走全链: 缺字段红 / 基不一致红 / 齐全+基一致过。"""
+        ok, why = self._decide(0, "Review: 二进制批 · 0 行 · blocker 0 · 修 0\n")
+        self.assertFalse(ok)
+        self.assertIn("缺字段", why)
+        ok, why = self._decide(
+            0,
+            "Review: 二进制批 · 0 行 · blocker 0 · 修 0 · 入池 0 · 检 0/0 · 基 a1b2c3d4e5f6\n",
+            base_hash="0123abcd4567",
+        )
+        self.assertFalse(ok)
+        self.assertIn("重跑", why)
+        self.assertIn("复评", why)
+        ok, _ = self._decide(
+            0,
+            "Review: 二进制批 · 0 行 · blocker 0 · 修 0 · 入池 0 · 检 0/0 · 基 a1b2c3d4e5f6\n",
+            base_hash="a1b2c3d4e5f6",
+        )
+        self.assertTrue(ok)
+
     def test_review_wins_over_skip(self):
         msg = "Review: S3 · 120 行 · blocker 0 · 修 1 · 入池 0 · 检 1/1 · 基 a1b2c3d4e5f6\nReview-Skip: 随便写写\n"
         self.assertTrue(self._decide(120, msg)[0])  # 有真 trailer 时按 trailer 校验, 不被 skip 短路
@@ -1439,6 +1467,51 @@ class TraceGateTest(unittest.TestCase):
         # 落点 4(0441): HEAD 回退不再静默 —— 亮出实算行数(已提交 → 锚点==HEAD → 实算 0), 判定不变
         self.assertIn("未给消息文件", proc.stdout)
         self.assertIn("实算 0 行", proc.stdout)
+
+    # ---- 0 行二进制批 x 基比对(issue 26-11-08-1701, 方案 A): 带 trailer 的 0 行批不走短路 ----
+
+    def test_tracked_binary_replacement_with_trailer_base_mismatch_blocks(self):
+        """tracked 二进制原位替换: numstat 计 0 行, 但批带 trailer 时不短路 —— 替换必改 blob,
+        diff 文本的 `index <旧>..<新>` 行随之变, 基哈希动 → 评审时点的旧基判红并给出路; 新基放行。"""
+        (self.tmp / "img.png").write_bytes(b"PNG\x00old-bytes")
+        self._commit("加 tracked 二进制\n")
+        stale = self._batch_hash()
+        (self.tmp / "img.png").write_bytes(b"PNG\x00REPLACED-bytes")
+        fresh = self._batch_hash()
+        self.assertNotEqual(fresh, stale)  # 前置自证: 二进制替换确实动了基哈希(index blob 行)
+        msg = f"✨ 换图\n\nReview: 换图 · 0 行 · blocker 0 · 修 0 · 入池 0 · 检 0/0 · 基 {stale}\n"
+        proc = _run_trace(self.tmp, self._msg(msg))
+        self.assertEqual(proc.returncode, 1, proc.stdout)
+        self.assertIn(stale, proc.stdout)
+        self.assertIn("重跑", proc.stdout)
+        self.assertIn("复评", proc.stdout)
+        msg = f"✨ 换图\n\nReview: 换图 · 0 行 · blocker 0 · 修 0 · 入池 0 · 检 0/0 · 基 {fresh}\n"
+        proc = _run_trace(self.tmp, self._msg(msg))
+        self.assertEqual(proc.returncode, 0, proc.stdout)
+
+    def test_untracked_binary_with_trailer_caught_by_base(self):
+        """untracked 二进制(闸门按 0 行计、基哈希按原文字节入)带 trailer: 评审时点基 → 加文件后判红; 新基放行。"""
+        stale = self._batch_hash()
+        (self.tmp / "fresh.bin").write_bytes(b"\x00\x01binary payload")
+        msg = f"✨ 加包\n\nReview: 加包 · 0 行 · blocker 0 · 修 0 · 入池 0 · 检 0/0 · 基 {stale}\n"
+        proc = _run_trace(self.tmp, self._msg(msg))
+        self.assertEqual(proc.returncode, 1, proc.stdout)
+        self.assertIn(stale, proc.stdout)
+        msg = f"✨ 加包\n\nReview: 加包 · 0 行 · blocker 0 · 修 0 · 入池 0 · 检 0/0 · 基 {self._batch_hash()}\n"
+        proc = _run_trace(self.tmp, self._msg(msg))
+        self.assertEqual(proc.returncode, 0, proc.stdout)
+
+    def test_zero_line_bookkeeping_with_trailer_passes(self):
+        """0 行批带 trailer 的合法场景不误红(方案 A 已知代价面的正面): 纯记账类改动实算 0 且不入
+        基哈希 → 申报 `0 行` + pack 时点的基与提交时点重算一致 → 放行。"""
+        base_hash = self._batch_hash()
+        tasks = self.tmp / "memory-bank" / "tasks"
+        tasks.mkdir(parents=True)
+        (tasks / "note.md").write_text("记账\n", encoding="utf-8")
+        self.assertEqual(self._batch_hash(), base_hash)  # 记账不入哈希, 两时点一致
+        msg = f"记账\n\nReview: 记账批 · 0 行 · blocker 0 · 修 0 · 入池 0 · 检 0/0 · 基 {base_hash}\n"
+        proc = _run_trace(self.tmp, self._msg(msg))
+        self.assertEqual(proc.returncode, 0, proc.stdout)
 
     # ---- 齐平字段弱校验(计划 26-11-07-0201 落点 3): 不强制存在、不验真值, 只查格式; 异常仅 [warn] 不判红
 

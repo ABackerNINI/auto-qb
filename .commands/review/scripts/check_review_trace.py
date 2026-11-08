@@ -12,8 +12,9 @@ agent 不用填 hash(填错就是假账), 且天然"连坐": 谁漏评, 那笔�
 issue 26-11-08-0903。
 
 ## 判据(顺序即优先级)
-1. 批内改动 0 行且未触安全敏感面(仅记账类/生成物, 及 0 行二进制改动 —— numstat 对二进制计 0 行,
-   其基比对同样被此短路) → 通过(静默)
+1. 批内改动 0 行且未触安全敏感面且消息无 `Review:` trailer(仅记账类/生成物, 及 0 行二进制改动
+   —— numstat 对二进制计 0 行) → 通过(静默); 带 trailer 的 0 行批**不短路**, 照走判据 2 全链
+   校验(含 `· 基` 比对 —— issue 26-11-08-1701: 二进制改动实算恒 0, 基比对是它唯一的机检面)
 2. 提交信息有 `Review:` 行 → 校验(计划 26-11-07-0441): `<N> 行` 必须等于实算(±0); blocker/修/入池 数字齐;
    `检 P/T` 必填且 0 ≤ P ≤ T、P ≥ 修 + 入池 —— 修/入池/检 为**全轮累计**口径(修复循环首轮 + 各修复轮
    累加申报, 计划 26-11-08-1240 D7; T=送检发现数, P=引文逐字通过数; 修/入池 只数过检且未被 REFUTE 的
@@ -304,9 +305,13 @@ def decide(count: int, sensitive: list[str], message: str, base_hash: str | None
     后有新改动)。None = 不比对(消息无 trailer 的调用面; 单测直调 decide 时不传即跳过比对, 生产
     面不存在 —— batch_base_hash 算不了会直接 SystemExit(2), 不会静默变 None)。
     50 行下限已退役(D9): 可评行数 >0 即须 trailer, 实算恒 0(纯记账类/生成物, 及 0 行二进制改动
-    —— numstat 对二进制计 0, 其基比对同样被 count==0 短路)才静默。
+    —— numstat 对二进制计 0)且消息无 `Review:` trailer 才静默; 带 trailer 的 0 行批不短路, 照走
+    全链校验, `· 基` 比对可达(issue 26-11-08-1701: 二进制改动的实算恒 0, 基比对是它唯一的机检面)。
     """
-    if count == 0 and not sensitive:
+    # 0 行静默短路仅对无 trailer 的批生效(issue 26-11-08-1701, 方案 A): 二进制改动经 numstat 实算
+    # 恒 0, 带 `Review:` trailer 的批若在此短路, D6 基比对对它们不可达 —— 评审后替换/新增二进制
+    # 可评文件会静默放行。带 trailer 的 0 行批照走下方全链校验(含 `· 基` 与闸门重算哈希比对)。
+    if count == 0 and not sensitive and not REVIEW_LINE_RE.search(message):
         return True, "可评 0 行(记账类/生成物或纯二进制)改动"
 
     review = REVIEW_LINE_RE.search(message)
@@ -454,9 +459,16 @@ def main(argv: list[str] | None = None) -> int:
         # 无消息文件可读、退到 HEAD 消息(0441 落点 4): 手工预览不再静默假装 —— 上一笔是 Skip 时按 HEAD
         # 判会直接报 ok, 至少把实算行数亮出来; 判定不变(仍按 HEAD 的 trailer 判), 复跑轮在更早处已被拦。
         print(f"未给消息文件, 按 HEAD 判, 实算 {count} 行")
+        if count == 0 and not sensitive:
+            # HEAD 消息的 0 行批保持静默(issue 26-11-08-1701 复评轮补): HEAD 上的 trailer 描述的是
+            # **已入库的上一批**, 锚点已推进到它、本批实算恒 0 —— 拿「声明行数/基 ≠ 实算 0」去校验
+            # 历史 trailer 是假红。真正的提交面消息恒来自 file/default(commit.py 经 env 递入),
+            # 带 trailer 的 0 行批在提交面照走全链校验, 本让步不开旁路。
+            return 0
     # 基哈希机检(计划 26-11-08-1240 D6): 消息带 `Review:` trailer 时, 用与 review.pack 同源的过滤实现
     # 重算当前批(锚点→工作树)哈希, 供 decide 与 trailer 的 `· 基` 比对; 无 trailer 的调用面不算(省一次
-    # git diff) —— count==0 的静默短路与 Skip/未留痕分支都用不到它。
+    # git diff) —— 无 trailer 的 0 行静默短路与 Skip/未留痕分支用不到它; 0 行带 trailer 的批仍要
+    # 算(issue 26-11-08-1701: 此类批不走短路, 基比对必须可达)。
     batch_hash = batch_base_hash(root, base) if REVIEW_LINE_RE.search(msg) else None
     ok, why = decide(count, sensitive, msg, base_hash=batch_hash)
     warn = flush_field_warn(msg)

@@ -19,7 +19,7 @@ note    = "--findings <json文件|-> 必填（- 指 stdin），--root 可指定�
 run     = ["python .commands/review/scripts/check_review_trace.py <args>"]
 timeout = 60
 when    = "提交闸门(每次提交跑): 批内累计改动是否需要评审、`Review:` trailer 声明与实算是否一致"
-note    = "批次 = 最近一条带 Review:/Review-Skip: 的提交 → 当前工作树(锚点现算, 不用填 hash; 历史 Skip 照旧识别, 不追溯)。判据顺序: 实算恒 0(纯记账类/生成物, 及 0 行二进制改动 —— 基比对同样被短路)静默 → Review 行校验(声明行数 == 实算 ±0; blocker/修/入池 数字齐, 修/入池/检 P/T 为全轮累计且 P ≥ 修+入池; `· 基 <12hex>` 必填且与闸门重算的整批过滤 diff 哈希一致 —— 不一致=评审后有新改动, 重跑 review.pack 取新基补一轮复评; `· 轮 R` 缺省 1, 写了须整数 ≥1; >400 行须 `· 派发 ≥2`) → Review-Skip 判红(豁免已退役, 理由长短不再看) → 其余拦下(50 行下限已退役: 可评行数 >0 即需 Review: trailer)。安全敏感面 = red_lines ∪ 路径标记词(与 review_pack 同源), 命中不论行数都要评。stdout 静默即通过; 红给一行原因 + 下一步。⚠ 用裸 python 不用 uv run: 脚本纯 stdlib, 而 uv/console-script 在本仓有 trampoline 坏掉的先例(pitfalls/ops/venv-trampoline-clone-copy.md), 提交闸门不能押在它上面"
+note    = "批次 = 最近一条带 Review:/Review-Skip: 的提交 → 当前工作树(锚点现算, 不用填 hash; 历史 Skip 照旧识别, 不追溯)。判据顺序: 实算恒 0(纯记账类/生成物, 及 0 行二进制改动)且无 Review: trailer 才静默; 带 trailer 的 0 行批不短路照走全链校验, 基比对可达(26-11-08-1701: 二进制改动实算恒 0, 基比对是它唯一的机检面) → Review 行校验(声明行数 == 实算 ±0; blocker/修/入池 数字齐, 修/入池/检 P/T 为全轮累计且 P ≥ 修+入池; `· 基 <12hex>` 必填且与闸门重算的整批过滤 diff 哈希一致 —— 不一致=评审后有新改动, 重跑 review.pack 取新基补一轮复评; `· 轮 R` 缺省 1, 写了须整数 ≥1; >400 行须 `· 派发 ≥2`) → Review-Skip 判红(豁免已退役, 理由长短不再看) → 其余拦下(50 行下限已退役: 可评行数 >0 即需 Review: trailer)。安全敏感面 = red_lines ∪ 路径标记词(与 review_pack 同源), 命中不论行数都要评。stdout 静默即通过; 红给一行原因 + 下一步。⚠ 用裸 python 不用 uv run: 脚本纯 stdlib, 而 uv/console-script 在本仓有 trampoline 坏掉的先例(pitfalls/ops/venv-trampoline-clone-copy.md), 提交闸门不能押在它上面"
 
 [tasks."review.lane.manifest"]
 run     = ["uv run python .commands/review/scripts/review_lane.py manifest <args>"]
