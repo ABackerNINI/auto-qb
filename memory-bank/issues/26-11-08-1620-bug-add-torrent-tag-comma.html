@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="webui-0229-followup">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="add_torrent 标签输入仅识别半角逗号, 与 dialogs.js 全角 U+FF0C 口径分叉">
 <meta name="issue-summary" content="add_torrent.js 四处 split 半角逗号不认全角 U+FF0C; 68ae5221 修 dialogs.js 支持全角后同产品标签输入口径分叉">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-08-1620-bug-add-torrent-tag-comma</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-08 16:20</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
@@ -153,11 +153,12 @@
   <h2><span class="no">§07</span>状态变更日志</h2>
   <ul>
     <li>2026-11-08 16:20 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-08 — 状态 Open → Done（kb.status）</li>
+</ul>
   <h3>复验</h3>
-  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
-  <h3>修复后补充</h3>
-  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  <p>2026-11-08 — 复验: <strong>仍复现</strong>。grep 全命中: <code>add_torrent.js</code> <code>addTags.split(",")</code> 三处(取证时 :228/:253/:705)与 :223 <code>match(/([^,]*)$/)</code>; dialogs.js 先例(:238/:394 <code>[,\uFF0C]</code>)仍在。</p>
+  <h3>修复后补充（2026-11-08 实施完成）</h3>
+  <p><strong>实际修法</strong>: 收敛成小 helper <code>addTagList()</code>(add_torrent.js, 与 <code>addTagCurrent</code> 同区的标签解析单点)—— 三处消费点(已选过滤 addTagFiltered/挑选拼串 pickAddTag/提交载荷 tags)改走单点, split 正则 <code>/[,\uFF0C]/</code> 转义写法(代码面零非 ASCII); :223 <code>addTagCurrent</code> 尾段匹配同步放宽为 <code>/([^,\uFF0C]*)$/</code>, 注释与 helper 互指。<strong>取舍</strong>: 建议给了 helper 或注释互指两选, 本文件三处同式表达式且已有 <code>addTagCurrent</code> 小解析 helper 先例, helper 更贴本文件风格且单点注释能防第四处分叉, 故选 helper; dialogs.js 侧先例(两处 split)未动, 不扩范围。<strong>验证</strong>: <code>tests/test_webui_static_r4_addtorrent.py</code> 落点预检电池加块⑤五面断言(addTagList 拆分 / addTagCurrent 尾段 / addTagFiltered 剔除 / pickAddTag 追加 / 提交载荷多签, 输入全角半角混排), 文件头「测试计划」同步; <code>test.quick</code> 全绿 5849 passed, 2 skipped。</p>
 </section>
 
 <footer>

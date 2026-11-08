@@ -2,7 +2,7 @@
 
 ## 测试计划(每个测试函数一条)
 - test_r4_sse_edge_reconnect_state_machine: R5#14(major) + R5#15 —— SSE 断线沿判定与换票重连状态机 node 电池真跑(兑现 polling.js 文件头「探针真跑」注释契约, 兑现前 tests/ 零命中): _esDisconnectEdge 纯函数三分型(undefined 首断/true->false 跳变/重试期 false 非沿) + startEvents 换票接线(POST /api/events/ticket + ?ticket= 连流) + onopen 回置 + 首断沿恰一条 toast + 重试期重复 onerror 只发一条 toast 不叠重试定时器 + 重连必关旧连接换新票 + ver 驱动 60ms 去抖合并(R5#4 修复回归: 落拍 document.hidden 短路, 后台标签不吃 ver 驱动, 恢复可见照常拉) + stopEvents 归置 _esConnected/_esRetry/_verTimer + 换票 await 期间登出落票后不开流(issue 26-11-08-0229 #7: authOk 复查拦在 EventSource 之前, _esBusy 不残留)
-- test_r4_poll_backoff_and_stop_onend: R5#17 + R5#5 —— 轮询失败退避曲线真跑分型(骨架探针把 currentPollMs 桩成常量的绕过面在此补上): pollFails=0..4 序列(1.5s 档 3000/6000/12000/15000 封顶)、大库 3s 档与总量未知 2s 档、refresh 成功清零/失败递增封顶 4/401 分支停轮询+拆推送不续排(R5#2 第二半); stopPoll 对 awaitPoll 收摊走 onEnd 且兑现 null(文件头契约「收敛/耗尽/到点都走」含外部叫停), startPoll 顶掉同 key 有界等待 onEnd 不双调, 收敛路径(finish)与叫停路径互斥不双调; onEnd 抛异常不吞 settle(issue 26-11-08-0229 #8: stopPoll 与 finish 两路同式 try/finally, settle 必达、异常照常上抛不吞不藏)
+- test_r4_poll_backoff_and_stop_onend: R5#17 + R5#5 —— 轮询失败退避曲线真跑分型(骨架探针把 currentPollMs 桩成常量的绕过面在此补上): pollFails=0..4 序列(1.5s 档 3000/6000/12000/15000 封顶)、大库 3s 档与总量未知 2s 档、refresh 成功清零/失败递增封顶 4/401 分支停轮询+拆推送不续排(R5#2 第二半); stopPoll 对 awaitPoll 收摊走 onEnd 且兑现 null(文件头契约「收敛/耗尽/到点都走」含外部叫停), startPoll 顶掉同 key 有界等待 onEnd 不双调, 收敛路径(finish)与叫停路径互斥不双调; onEnd 抛异常不吞 settle(issue 26-11-08-0229 #8: stopPoll 与 finish 两路同式 try/finally, settle 必达、异常照常上抛不吞不藏); fail 路(fn 抛异常 reject)不走 onEnd、句柄表归置(issue 26-11-08-1621 契约定案: 清理归调用方, 文件头注释已写明)
 - test_r4_errlog_reseed_probe: R5#16 —— lifecycle.js _errlogReseed node 电池真跑(兑现「探针真跑」注释契约, 兑现前 tests/ 零命中): cursor 0(尚无游标)不判重启 / last<cursor 判重启(seq 进程内只增, 倒退唯一路径是重启归零) / last>=cursor 正常
 - test_r4_logout_settles_modal_and_stops_events: R5#1 + R5#2 —— auth.js _logout 登出收口: 悬空模态先 resolve(false) 再复位(直接丢弃 _modalResolve 会让 confirmDialog/promptDialog 永久 pending, 删除流程在 await 处挂死)、await 侧恢复看到已复位框状态走取消分支、SSE 通道与轮询同口径一并拆(stopEvents 与 _qbTeardown 同收)、无框登出 no-op 不炸
 - test_r4_search_quiet_retry_backoff: R5#236 —— view.js 静默刷新失败重试退避真跑: searchBuilding 残留 true 时失败续查逐次翻倍夹 15s(2s/4s/8s/15s/15s, 与轮询失败退避 currentPollMs 同曲线口径), 服务端宕机不再形成固定 1 req/s 无限循环; 成功一轮计数清零且续查保持 1s 节拍、resetSearch 新会话从零起算
@@ -301,6 +301,22 @@ const ok = (name, cond) => checks.push([name, !!cond]);
   ok("#8 finish 路: settle 不被 onEnd 异常吞掉(兑现该拍值)", v8 === "ok" && finErr === null);
   ok("#8 finish 路: onEnd 恰一次且异常上抛成 unhandled rejection(语义不变)",
     ended8 === 1 && unhandled.includes(boomFin));
+
+  // 8. #1621(issue 26-11-08-1621): fail 路(fn 抛异常 -> reject)不走 onEnd, 清理归调用方 ——
+  // 契约注释单点在 polling.js 文件头; 现调用面要么 fn 全吞错(tmLoad 经 _panelLoad, fail 分支
+  // 不可达), 要么刻意上抛 401 统一收口(commands.js _pollCmd), 都无 onEnd 侧清理面, 故 fail
+  // 不调 onEnd 是定案口径而非缺陷。此处把契约钉住, 防行为静默漂移而注释失真。
+  const boomFn = new Error("fn boom");
+  let ended9 = 0;
+  const st9 = Object.assign({}, P, { _polls: null });
+  const p9 = P.awaitPoll.call(st9, "z", { ms: () => 0, fn: () => { throw boomFn; },
+    until: () => false, onEnd: () => { ended9 += 1; } });
+  let fnErr = null;
+  try { await p9; } catch (e) { fnErr = e; }
+  await drain();
+  ok("#1621 fail 路: fn 异常原样 reject(不吞不换型)", fnErr === boomFn);
+  ok("#1621 fail 路: 不走 onEnd(清理归调用方, 文件头契约注释已写明)", ended9 === 0);
+  ok("#1621 fail 路: 句柄表归置", st9._polls.z === null);
   console.log(JSON.stringify({ ok: checks.filter((c) => c[1]).length, total: checks.length,
     failed: checks.filter((c) => !c[1]).map((c) => c[0]) }));
 })().catch((e) => { console.error(e && e.stack || e); process.exit(1); });

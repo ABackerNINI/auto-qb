@@ -144,7 +144,11 @@ window.AQB_POLL = {
      *     max     number                  拍数上限
      *     deadline() => bool              时间上限(true = 到点收摊)
      *     stop    () => bool              外部叫停(赛跑落败方)
-     *     onEnd   () => void              收摊回调(收敛/耗尽/到点都走)
+     *     onEnd   () => void              收摊回调(收敛/耗尽/到点都走; fn 抛出的 reject 路径
+     *                                     不走 —— 清理归调用方: 现调用面要么 fn 全吞错
+     *                                     (tmLoad 经 _panelLoad, fail 分支不可达), 要么
+     *                                     刻意上抛 401 统一收口(commands.js _pollCmd),
+     *                                     都无 onEnd 侧清理面。issue 26-11-08-1621)
      *   key 传 null = 不入表(并发命令回执轮询各走各的, 不能互相顶掉); 非空 key = 先停后起。
      *
      * 恒等守卫(写死在骨架里, 调用方一律不再手写): document.hidden —— 后台标签不拉数。

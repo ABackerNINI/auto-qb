@@ -15,7 +15,9 @@
   (verdict 行表: 落点提示/请求路径/实际落点/目标卷剩余 GiB 换算) + 确认放行后提交载荷逐字段核对
   (files_b64 去 dataURL 前缀/urls 逐行 trim/save_path/category/tags/paused 取反/四开关透传);
   confirm+弹窗取消 = 预检 false 零提交; 非 confirm(cls==="ok")与回执失败 = 放行不弹窗;
-  预检抛 auth = false 且零 error toast(401 由 _logout 收口); 网络异常 = 放行
+  预检抛 auth = false 且零 error toast(401 由 _logout 收口); 网络异常 = 放行; 全角逗号
+  U+FF0C 标签口径五面一致(addTagList 拆分/addTagCurrent 尾段/addTagFiltered 剔除/pickAddTag
+  追加/提交载荷多签, issue 26-11-08-1620, 与 dialogs.js submitMgrTags/metaAddNewTags 同口径)
 - test_r4_add_esc_stack_battery: R5#141 Esc 逐层退栈(FIX-07) —— 目录浏览器层最优先(dirBrowse 开着
   时 cat/tag 菜单同开只收目录浏览器)、其次分类/标签下拉两菜单同收且 Hi 复位、其次路径面板、
   全关才关窗; addSubmitting=true 时 closeAddTorrent 拒绝误关(回执等待期退栈不可关窗)。
@@ -301,6 +303,35 @@ const CONFIRM_TRUTH = {
   ok("auth: 零 error toast(前端不重复报)", !vm.toasts.some((t) => t.kind === "error"));
   vm.apiShouldThrow = new Error("网络断了");
   ok("预检网络异常(非 auth): 放行", (await vm._relocateAddGate()) === true);
+}
+
+// ---- ⑤ 全角逗号 U+FF0C 标签口径(issue 26-11-08-1620): 拆分/尾段/过滤/挑选/载荷五面一致 ----
+{
+  const vm = makeVm();
+  vm.addTags = "iso\uFF0Cx86, hd\uFF0C";  // 全角半角混排
+  ok("#1620 addTagList: 全角逗号拆出多个标签(与半角同口径)",
+     JSON.stringify(vm.addTagList()) === JSON.stringify(["iso", "x86", "hd"]));
+  vm.addTags = "iso\uFF0Cx";
+  ok("#1620 addTagCurrent: 尾段按最后一个逗号(含全角)取片段", vm.addTagCurrent() === "x");
+  vm.addTags = "iso\uFF0Cx86,";
+  vm.addTagOptions = ["iso", "x86", "hd"];
+  ok("#1620 addTagFiltered: 全角串已选照常剔除",
+     JSON.stringify(vm.addTagFiltered()) === JSON.stringify(["hd"]));
+  vm.addTags = "iso\uFF0Cx86";
+  vm.pickAddTag("hd");
+  ok("#1620 pickAddTag: 全角串上追加不重复",
+     JSON.stringify(vm.addTagList()) === JSON.stringify(["iso", "x86", "hd"]));
+  // 提交载荷: 全角逗号串不再整串当一个标签提交
+  const vm2 = makeVm();
+  vm2.addSavePath = "/downloads/req";
+  vm2.addFiles = [{ name: "Ubuntu.torrent", size: 1, __b64: "QUE=" }];
+  vm2.addTags = "iso\uFF0Cx86";
+  vm2.apiReply["/api/relocate/precheck-add"] = { cmd_id: "g1" };
+  vm2.cmdResult = { ok: true, truth: { cls: "ok" } };
+  await vm2.submitAddTorrent();
+  const addCall2 = vm2.apiCalls.find((c) => c[0] === "/api/torrents/add");
+  ok("#1620 提交载荷: 全角逗号串拆成多签", !!addCall2
+     && JSON.stringify(JSON.parse(addCall2[1].body).tags) === JSON.stringify(["iso", "x86"]));
 }
 """
 

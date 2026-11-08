@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="webui-0229-followup">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="awaitPoll fail 路径不调 onEnd, 与文件头契约存在张力">
 <meta name="issue-summary" content="polling.js fail()(fn 抛异常 reject)不调 onEnd; 现注册点 tm relaunching fail 时不复位标志 — 需先裁决调用方是否在 reject 分支自清理, 有害才修">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-08-1621-bug-awaitpoll-fail-no-onend</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-08 16:21</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
@@ -156,11 +156,18 @@ this.awaitPoll("tm", {
   <h2><span class="no">§07</span>状态变更日志</h2>
   <ul>
     <li>2026-11-08 16:21 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-08 — 状态 Open → Done（kb.status）</li>
+</ul>
   <h3>复验</h3>
-  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
-  <h3>修复后补充</h3>
-  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  <p>2026-11-08 — 复验: <strong>仍复现</strong>。锚点全命中: <code>polling.js</code> <code>const fail = (e)</code>(取证时 :231)确不调 onEnd; 注册点 <code>config_hub_tm.js:156</code>/<code>:225</code> 两处 <code>awaitPoll("tm"</code>。复验时另核出第三调用面 <code>commands.js:224</code>(<code>_pollCmd</code>, key 传 null), issue 原文未列, 裁决一并核对。</p>
+  <h3>修复后补充（2026-11-08 实施完成）</h3>
+  <p><strong>裁决结论: 裁决 B —— 无确证有害, fail 行为零改动, 只把契约写明</strong>。三个调用面逐一核对:</p>
+  <ul>
+    <li><code>config_hub_tm.js:156</code>(tmPollSettle): <code>fn: () =&gt; this.tmLoad()</code>, 而 <code>tmLoad</code> 整体包在 <code>_panelLoad</code>(dialogs.js:137, catch 全吞落错误槽不 rethrow)里 ⇒ <strong>fail 分支在该注册点不可达</strong>; <code>onEnd</code>(复位 <code>tm.relaunching</code>)在所有可达收摊路(finish/stopPoll)都走, 标志不会悬挂。</li>
+    <li><code>config_hub_tm.js:225</code>(tmPollShutdown): 同一个 fn(tmLoad), 无 onEnd、无标志面, fail 同样不可达。</li>
+    <li><code>commands.js:224</code>(_pollCmd): fn 自带 try/catch, 仅对 <code>e.auth</code>(401)重抛 —— reject 是<strong>刻意上抛给统一收口</strong>(Promise.race → waitCmd 调用方 catch), 该处无 onEnd 注册、无清理面; reject 路径跳过的 <code>_cancelCmdWait</code> 由 waiter 自身 timeout 自清(有界, 非永久泄漏)。</li>
+  </ul>
+  <p><strong>实际修法</strong>: <code>polling.js</code> 文件头 awaitPoll opts 契约注释在 <code>onEnd</code> 行(:147)补「fn 抛出的 reject 路径不走 onEnd, 清理归调用方」并写明两个现有调用面的归类依据, 消除与「收敛/耗尽/到点都走」的张力。行为零改动 ⇒ 仅有的三处调用面无回归风险。<strong>验证</strong>: 既有电池 <code>tests/test_webui_static_r4_poll_auth_lifecycle.py</code> 加三支契约固化断言(fn 异常原样 reject / 不走 onEnd / 句柄表归置), 文件头「测试计划」同步; <code>test.quick</code> 全绿 5849 passed, 2 skipped。</p>
 </section>
 
 <footer>

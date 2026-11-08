@@ -220,12 +220,19 @@ window.AQB_ADD = {
       return this.addCatOptions.filter((c) => c.toLowerCase().includes(q));
     },
     addTagCurrent() {
-      const m = this.addTags.match(/([^,]*)$/);  // 从简: 只按最后一个逗号后的片段过滤
+      // 从简: 只按最后一个逗号(中/英, 口径与 addTagList 同)后的片段过滤
+      const m = this.addTags.match(/([^,\uFF0C]*)$/);
       return (m ? m[1] : "").trim();
+    },
+    /* 标签输入拆分单点: 中英文逗号都认(全角写 \uFF0C 转义, 代码面零非 ASCII), 与 dialogs.js
+     * submitMgrTags/metaAddNewTags 同口径。三处消费点(已选过滤/挑选拼串/提交载荷)
+     * 共用; 新增消费点一律走这里, 别再手写 split(三处口径分叉曾是 issue 26-11-08-1620)。 */
+    addTagList() {
+      return this.addTags.split(/[,\uFF0C]/).map((t) => t.trim()).filter(Boolean);
     },
     addTagFiltered() {
       const q = this.addTagCurrent().toLowerCase();
-      const picked = new Set(this.addTags.split(",").map((t) => t.trim()).filter(Boolean));
+      const picked = new Set(this.addTagList());
       return this.addTagOptions.filter((t) => !picked.has(t) && (!q || t.toLowerCase().includes(q)));
     },
     pickAddCat(name) {
@@ -250,7 +257,7 @@ window.AQB_ADD = {
       }
     },
     pickAddTag(tag) {
-      const parts = this.addTags.split(",").map((t) => t.trim()).filter(Boolean);
+      const parts = this.addTagList();
       if (!parts.includes(tag)) parts.push(tag);
       this.addTags = parts.join(", ") + ", ";  // 尾随逗号: 便于继续挑选下一个
       this.addTagMenu = false;
@@ -702,7 +709,7 @@ window.AQB_ADD = {
           urls: this.addUrls.split("\n").map((u) => u.trim()).filter(Boolean),
           save_path: this.addSavePath.trim(),
           category: this.addCategory.trim(),
-          tags: this.addTags.split(",").map((t) => t.trim()).filter(Boolean),
+          tags: this.addTagList(),  // 拆分单点 addTagList(中英文逗号, issue 26-11-08-1620)
           paused: !this.addStart,  // DLG-03: 「添加后开始」勾选 = 立即开始; 默认不勾 = paused 添加
           skip_checking: this.addSkipCheck,
           sequential: this.addSequential,
