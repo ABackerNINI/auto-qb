@@ -262,6 +262,15 @@ ACTION_PLUGINS: Tuple[Plugin, ...] = (
                 placeholder="C:/tools/check.bat",
             ),
             Field(
+                "custom_basic_check_timeout",
+                "自定义程序超时",
+                "time",
+                default="10M",
+                unit_default="M",
+                show_if=("basic_check", "custom"),
+                help="单次调用自定义校验程序的最长等待; 超时强制结束并把该候选视为非参考(缺省 600s), 不可关闭",
+            ),
+            Field(
                 "with_reference",
                 "有参考种子",
                 "object",

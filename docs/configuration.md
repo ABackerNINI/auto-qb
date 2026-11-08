@@ -867,7 +867,8 @@ config:
   - `filelist`：分组已保证文件列表与大小一致，候选直接作为参考（最宽松）
   - `piecehashes`：额外对比双方每个数据块的 hash 列表完全相同（不读取实际文件）；直接转种有效，重新制作且块大小不同的种子无效（较严格）
   - `custom`：运行外部程序判定（参数 `<候选hash> <保存路径>`，返回码 0 即视为参考，需配 `custom_basic_check_program_path`）
-    - ❗**容器部署不可用**：该程序不在镜像里，`FileNotFoundError` 被吞掉后每个候选都判为「非参考」并刷一条 WARNING。容器内请改用 `filelist` / `piecehashes`（同组文件一致性由分组保证，与能否读到磁盘无关）
+    - 单次执行最长等待默认 600s（10 分钟），可用 `custom_basic_check_timeout` 调整（时间串写法，如 `600S` / `10M`，必须为正）；超时会把程序强制结束，该候选视为非参考（记 WARNING），超时保险丝不可关闭
+    - ❗**容器部署不可用**：该程序不在镜像里，`FileNotFoundError` 等执行失败按 WARNING 记日志后每个候选都判为「非参考」（超时同此处理；其它异常记 ERROR）。容器内请改用 `filelist` / `piecehashes`（同组文件一致性由分组保证，与能否读到磁盘无关）
   - 此外，历史上全量校验通过的种子会记入内存参考集，同样可作参考（程序重启后重新积累）
 - 确定参考后按段执行（`with_reference` / `without_reference` 两段均可独立 `enabled: false` 关闭）：
   - **有参考种子**：`full-checking` 为 qB 自带全量哈希校验 __<font color="green">安全</font>__；`skip-checking` 跳检 __<font color="orange">风险相对可控</font>__

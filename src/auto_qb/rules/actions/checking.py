@@ -6,6 +6,7 @@ plan 26-09-30-0109 P2'): full-checking 提交+轮询在 ctx.ops.recheck, 跳检�
 ctx.ops.skip_check; 组内串行化闸门(决策链 1.5)与失败推断闸门(1.6)留在 FullCheckingMixin。
 """
 import logging
+import subprocess
 from typing import Any
 
 from ...infra import utils
@@ -16,6 +17,10 @@ from .skip_checking import SkipCheckingMixin
 
 logger = logging.getLogger(__name__)
 
+# custom 程序单次执行超时缺省(C27 超时保险丝的缺省档; schema 侧同值写作 "10M"): 超时保险丝
+# 必须无条件存在(变异测试真洞 #32/#35), 可配置只调档位, 不提供「关掉」语义
+CUSTOM_CHECK_TIMEOUT_DEFAULT = 600.0
+
 
 @register_action(validator="checking")
 class CheckAction(FullCheckingMixin, SkipCheckingMixin, BaseAction):
@@ -25,6 +30,7 @@ class CheckAction(FullCheckingMixin, SkipCheckingMixin, BaseAction):
       - basic_check(必填): filelist(已完成且未校验的同组种子, 宽松) | piecehashes(同前且 piece
         hash 列表相同, 相对严格) | custom(运行 custom_basic_check_program_path 程序判定)
       - custom_basic_check_program_path: basic_check=custom 时必填; 参数: <种子hash> <保存路径>
+      - custom_basic_check_timeout: custom 程序单次执行超时(时间串, 缺省 600s), 超时该候选视为非参考
       - with_reference / without_reference: 各含 mode(skip-checking|full-checking) + auto_start(默认 false)
 
     跳检标签名不在 spec 配置(全局统一, 校验层已列为 spec 未知键): 运行时经 ctx 读全局
@@ -60,6 +66,12 @@ class CheckAction(FullCheckingMixin, SkipCheckingMixin, BaseAction):
         # spec 合法性(dict/已知键/basic_check/段结构/mode)由 config 校验阶段保证, 此处直接解析
         self.basic_check = str(spec["basic_check"])
         self.custom_program = str(spec.get("custom_basic_check_program_path") or "")
+        # custom 程序超时(时间串如 "10M"/"600S", parse_time): 格式/正值由 config 校验期
+        # fail-fast(_validate_checking_action_spec), 此处直接解析; 键缺省 = 600s 缺省档
+        timeout_raw = spec.get("custom_basic_check_timeout")
+        self.custom_timeout = (
+            utils.parse_time(timeout_raw) if timeout_raw not in (None, "") else CUSTOM_CHECK_TIMEOUT_DEFAULT
+        )
         self.with_reference = self._parse_section(spec, "with_reference")
         self.without_reference = self._parse_section(spec, "without_reference")
 
@@ -195,21 +207,35 @@ class CheckAction(FullCheckingMixin, SkipCheckingMixin, BaseAction):
                 return True
         return False
 
-    # TODO: 重新设计自定义校验流程
     def _run_custom_check(self, ctx: RuleContext, candidate: Any) -> bool:
-        """运行自定义 basic_check 程序判定候选是否为参考种子, 参数: <候选hash> <候选保存路径>"""
-        import subprocess
+        """运行自定义 basic_check 程序判定候选是否为参考种子, 参数: <候选hash> <候选保存路径>
+
+        判据不变: rc==0 即参考(输出不参与判定)。错误面三分类(对齐 core/traffic_source/agent
+        run_claim 形制): 超时 / OSError(程序缺失、不可执行等环境性失败, 如容器未装程序) ->
+        WARNING 视为非参考(可自愈, 不按错误刷屏); 其它异常 -> ERROR; 非零 rc -> INFO(程序正常
+        给出「非参考」结论)。timeout 恒传 subprocess.run(C27 守阵: 超时保险丝必须无条件存在,
+        挂死的外部程序不得无限阻塞规则线程)。
+        """
         try:
             r = subprocess.run(
                 [self.custom_program, candidate.hash, candidate.save_path],
                 capture_output=True,
                 text=True,
-                timeout=600,
+                timeout=self.custom_timeout,
             )
-            if r.returncode == 0:
-                return True
-            logger.info(f"自定义校验判定非参考({candidate.hash[:8]}): rc={r.returncode} {r.stderr.strip()[:200]}")
+        except subprocess.TimeoutExpired:
+            logger.warning(
+                f"自定义校验程序超时(配置 {self.custom_timeout:g}s 未结束, {self.custom_program} "
+                f"候选 {candidate.hash[:8]}), 视为非参考"
+            )
+            return False
+        except OSError as e:
+            logger.warning(f"自定义校验程序执行失败({self.custom_program} 候选 {candidate.hash[:8]}): {e}, 视为非参考")
             return False
         except Exception as e:
             logger.error(f"自定义校验程序执行异常({candidate.hash[:8]}): {e}")
             return False
+        if r.returncode == 0:
+            return True
+        logger.info(f"自定义校验判定非参考({candidate.hash[:8]}): rc={r.returncode} {r.stderr.strip()[:200]}")
+        return False

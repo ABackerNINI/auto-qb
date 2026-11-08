@@ -45,7 +45,13 @@ RULE_KNOWN_KEYS = {
 }
 
 # checking 动作 spec 已知键与取值域(skip_checking_tag 为全局配置, 不按规则覆盖, 故列为未知键)
-CHECKING_ACTION_KNOWN_KEYS = {"basic_check", "custom_basic_check_program_path", "with_reference", "without_reference"}
+CHECKING_ACTION_KNOWN_KEYS = {
+    "basic_check",
+    "custom_basic_check_program_path",
+    "custom_basic_check_timeout",
+    "with_reference",
+    "without_reference",
+}
 
 # checking 动作子段(with_reference / without_reference)已知键(与 schema CHECKING_SECTION_FIELDS 同键面;
 # 26-10-06-0028 D-02: 子段嵌套两层拼错概率不低, 未知键必须 fail-fast 而非运行时静默缺省)
@@ -251,6 +257,10 @@ def _validate_checking_action_spec(value: Any, where: str, errors: List[str], ga
         errors.append(f"{where}: basic_check 取值非法: '{value['basic_check']}', 可选: {list(CHECKING_BASIC)}")
     if value.get("basic_check") == "custom" and not str(value.get("custom_basic_check_program_path") or "").strip():
         errors.append(f"{where}: basic_check=custom 时必须配置 custom_basic_check_program_path")
+    # 超时保险丝的档位(运行时缺省 600s): 时间串 + 正值; 0/负数/坏格式在此 fail-fast,
+    # 不给运行时留「timeout=0 立即超时」或裸数字误写秒数的暗面(relocate.move_stall_timeout 同形制)
+    if "custom_basic_check_timeout" in value:
+        _try_time(value["custom_basic_check_timeout"], f"{where}.custom_basic_check_timeout", errors, positive=True)
     for seg in ("with_reference", "without_reference"):
         if seg not in value:
             continue

@@ -21,6 +21,8 @@
 - test_validate_checking_action_spec: checking 动作 spec 深度校验聚合报错(非dict/缺键/非法值/段/未知键);
   守阵(26-10-06-0028 D-02)——with_reference/without_reference 子段键面 fail-fast(enabeld/autostart 拼错报未知键,
   enabled 非布尔报错, 全键面合法不报)
+- test_validate_checking_custom_timeout_key: checking 的 custom_basic_check_timeout 合法时间串放行;
+  负数/坏格式/0 fail-fast 拒绝(超时保险丝只可调档不可关掉)
 - test_validate_rule_refs: tracker.rules 引用必须 @ 开头且目标存在; 重复引用判重(尾随空白归一判重/畸形只报格式错不叠加/合法配置原样保序不去重)
 - test_validate_regex_patterns: 非法 regex: 模式报错
 - test_validate_condition_and_remove_tags_regex: tags/category/trackers 条件与 remove_tags 动作非法 regex: fail-fast
@@ -36,7 +38,7 @@
 - test_validate_schema_version_shape: validate_config 形状校验(须为整数/须>=1, 防御层)
 - test_validate_web_ctx_menu_errors: web.ctx_menu 布局坏形状全类型报错(非字典/支级非字典/order·hidden 非字符串数组/sub 非字典/未知层键/sep token 格式错, 计划 26-10-20-0024 W1)
 - test_validate_web_ctx_menu_pass_shapes: web.ctx_menu 合法形态不报错(空字典/全层齐全/未知支名容忍)
-- test_validate_string_keys_exact_case: 校验器「按字符串键名取值」判据必须大小写精确(dat_path/period/download_curve/custom_basic_check_program_path 等被改大写后须走未知键/默认分支)
+- test_validate_string_keys_exact_case: 校验器「按字符串键名取值」判据必须大小写精确(dat_path/period/download_curve/custom_basic_check_program_path/custom_basic_check_timeout 等被改大写后须走未知键/默认分支)
 - test_validate_short_circuit_pairs_differing_truth: 短路运算符(and/or)语义钉住 —— 用两操作数取不同真值的输入(traffic_source 空列表/非 list, curves 项单键判定, 规则集绑定, removed 触发白名单)
 - test_validate_nested_section_shapes_and_unparsable_intervals: 嵌套段形状守卫(traffic_source.global_traffic_monitor 非字典停在该层) + qb_traffic 时间串不可解析时范围比较整段跳过(只报解析错)
 - test_strip_none_list_branch_and_key_case: _strip_none 列表分支(None/空串项剔除 + 列表内嵌 dict 的站点 tri_state 叶保留) + state_file 键名精确性
@@ -396,6 +398,33 @@ def test_validate_checking_action_spec():
         assert "with_reference: 未知键 ['autostart', 'enabeld']" in err, err
         assert "without_reference.enabled: 无效布尔值: maybe" in err, err
         assert "rule8" not in err and "rule12" not in err, err  # 合法 spec(含子段全键面)不报错
+
+
+def test_validate_checking_custom_timeout_key():
+    """custom_basic_check_timeout: 合法时间串放行; 负数/坏格式/0 在 config 校验期 fail-fast 拒绝
+    (超时保险丝只可调档不可关掉 —— 0/负值会在运行期变成「立即超时」或绕过保险丝语义)"""
+    with tempfile.TemporaryDirectory() as td:
+        base = (
+            "config:\n"
+            "  example_rules:\n"
+            "    r1:\n"
+            "      actions:\n"
+            "        - checking:\n"
+            "            basic_check: custom\n"
+            "            custom_basic_check_program_path: /bin/verify\n"
+        )
+        # 合法时间串(含人话形式)放行
+        assert _load_errors(td, base + "            custom_basic_check_timeout: 10M\n") == ""
+        assert _load_errors(td, base + "            custom_basic_check_timeout: 600S\n") == ""
+        # 负数: 不满足时间串形状, 报无效格式(坐标含键名)
+        err = _load_errors(td, base + "            custom_basic_check_timeout: -5S\n")
+        assert "custom_basic_check_timeout" in err and "无效时间格式" in err, err
+        # 非时间串照拒
+        err = _load_errors(td, base + "            custom_basic_check_timeout: soon\n")
+        assert "custom_basic_check_timeout" in err and "无效时间格式" in err, err
+        # 0(关掉保险丝的写法)按正时间校验拒绝
+        err = _load_errors(td, base + "            custom_basic_check_timeout: 0S\n")
+        assert "custom_basic_check_timeout" in err and "必须为正时间" in err, err
 
 
 def test_validate_rule_refs():
@@ -1541,6 +1570,17 @@ def test_validate_string_keys_exact_case():
         )
         assert "CUSTOM_BASIC_CHECK_PROGRAM_PATH" in err, err
         assert "basic_check=custom 时必须配置 custom_basic_check_program_path" in err, err
+
+        # --- rules: checking 动作 custom_basic_check_timeout 大小写(同 program_path 形制)
+        timeout_ok = custom_ok.replace(
+            "custom_basic_check_program_path: /bin/verify",
+            "custom_basic_check_program_path: /bin/verify\n            custom_basic_check_timeout: 10M",
+        )
+        # 精确拼写 -> 合法键, 值过正时间校验, 零报错
+        assert _load_errors(td, timeout_ok) == ""
+        # 大写键名 -> 未知键报错(不得被静默当成未配置放行)
+        err = _load_errors(td, timeout_ok.replace("custom_basic_check_timeout: 10M", "CUSTOM_BASIC_CHECK_TIMEOUT: 10M"))
+        assert "未知键 ['CUSTOM_BASIC_CHECK_TIMEOUT']" in err, err
 
 
 def test_validate_short_circuit_pairs_differing_truth():

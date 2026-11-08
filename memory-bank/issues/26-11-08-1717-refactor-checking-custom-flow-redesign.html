@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="checking-custom-flow-redesign">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="checking: 自定义(custom)校验流程重新设计">
 <meta name="issue-summary" content="checking.py:203 历史 TODO: _run_custom_check 以子进程调外部程序(参数 hash+save_path, 600s 超时)判参考种子, 流程粗糙需重设计">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-08-1717-refactor-checking-custom-flow-redesign</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-08 17:17</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
 
@@ -109,15 +109,22 @@
 </section>
 
 <section id="s3">
-  <h2><span class="no">§03</span>建议<span class="opt">（可选）</span></h2>
-  <p class="todo">TODO: 一句话方向；没有就写「待定」。不为填单做分析。</p>
+  <h2><span class="no">§03</span>实际修法<span class="opt">（方案 B, 用户拍板 2026-11-09）</span></h2>
+  <ul>
+    <li><strong>超时可配置</strong>：checking 动作级新 spec 键 <code>custom_basic_check_timeout</code>（时间串如 <code>10M</code>/<code>600S</code>），缺省 600s；登记链五处齐备（schema Field / <code>CHECKING_ACTION_KNOWN_KEYS</code> / <code>_validate_checking_action_spec</code> 正时间校验 / 运行时 <code>parse_time</code> 解析 / docs）+ 键面基线重生成（v6, 198→199 键）。</li>
+    <li><strong>判据不变</strong>：rc==0 即参考，输出不参与判定。</li>
+    <li><strong>错误面三分类</strong>（对齐 <code>core/traffic_source/agent.py</code> run_claim 形制）：<code>TimeoutExpired</code> → WARNING（含程序路径/候选 hash/实际配置超时值/「视为非参考」）；<code>OSError</code>（含 FileNotFoundError）→ WARNING（顺带校正 docs/configuration.md 把 error 误写成 WARNING 的漂移——代码现在真的是 WARNING 了）；其它异常 → ERROR；非零 rc 维持 INFO。不新增计数位（短路 + dedup 闸已兜底）。</li>
+    <li><strong>超时保险丝保持无条件</strong>：timeout 恒传 <code>subprocess.run</code>（C27 守阵改断言为「== action 解析值, 缺省 600」；校验期 0/负数/坏格式 fail-fast，键只可调档不可关掉）。</li>
+  </ul>
+  <p><strong>验证</strong>：<code>commands run test.quick</code> 全绿 —— 5859 passed, 2 skipped（59.78s）；新增 5 用例（超时解析/超时 WARNING/OSError WARNING/其它异常 ERROR/config 校验拒绝非法值）+ 大小写守阵扩展，rc0/rc1、短路守阵、OSError→False 守阵保持。</p>
 </section>
 
 <section id="s4">
   <h2><span class="no">§04</span>状态变更日志</h2>
   <ul>
     <li>2026-11-08 17:17 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-09 — 状态 Open → Done（kb.status）：按用户拍板方案 B 重设计 —— 新增 spec 键 <code>custom_basic_check_timeout</code>（缺省 600s，登记链五处齐备）、判据不变（rc==0）、错误面三分类（超时/OSError→WARNING，其它→ERROR，非零 rc→INFO）、超时保险丝保持无条件传 subprocess.run；test.quick 5859 passed / 2 skipped，详见 §03</li>
+</ul>
 </section>
 
 <footer>

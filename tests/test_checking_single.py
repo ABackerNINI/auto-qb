@@ -3,6 +3,7 @@
 ## 测试计划(每个测试函数一条)
 - test_checking_config_missing_section: with/without 段缺省合法(默认不启用)
 - test_checking_config_defaults: 缺省配置项取默认值
+- test_checking_config_custom_timeout: custom_basic_check_timeout 时间串解析为秒/缺省 600/非 custom 提供不报错
 - test_checking_paused_completed_reference: 暂停已完成亦是参考种子(is_complete 判定)
 - test_checking_complete_no_repeat: 完成种子反复触发不重复校验(bug 回归)
 - test_checking_piecehashes_same: piecehashes 一致 -> 跳检
@@ -14,10 +15,17 @@
 - test_checking_verified_references_not_persisted: verified 参考不持久化(仅内存)
 - test_checking_dry_run: dry-run 不发送请求
 - test_checking_action_deferred_on_own_write: 决策链入口让位(A 系 S2 D-3): 目标或其组刚被自有停/起(快照未回流) -> 本轮不出决策
-- test_run_custom_check_carries_timeout: C27 守阵 —— 自定义校验 subprocess 必须带 timeout=600
+- test_run_custom_check_carries_timeout: C27 守阵 —— 自定义校验 subprocess 必须带 timeout(action 解析值, 缺省 600)
+- test_run_custom_check_timeout_classified_warning: 自定义校验超时 -> WARNING(含程序路径/候选hash/配置超时值/视为非参考)且视为非参考
+- test_run_custom_check_oserror_classified_warning: OSError(含 FileNotFoundError) -> WARNING 且视为非参考
+- test_run_custom_check_unexpected_exception_classified_error: 其它异常 -> ERROR 且不崩溃
 """
 
 import json
+
+import logging
+
+import subprocess
 
 import os
 
@@ -45,7 +53,7 @@ from auto_qb.rules.checking_meta import PieceCheckingStates, PollVerdict, is_pie
 
 from auto_qb.core.taskqueue import FINISHED, PENDING, REQUEUE, TaskQueue
 
-from helpers import drive_skip, FakeClient, FakeConfig, FakeTorrent, make_ctx, make_manager, seed_store
+from helpers import capture_logs, drive_skip, FakeClient, FakeConfig, FakeTorrent, make_ctx, make_manager, seed_store
 
 from checking_support import (
     CheckingFakeClient,
@@ -91,6 +99,22 @@ def test_checking_config_defaults():
     assert a.without_reference["auto_start"] is False
     assert a.custom_program == "/ignored/check.exe"  # 不报错且保留
     assert a.basic_check == "filelist"
+
+
+def test_checking_config_custom_timeout():
+    """测试: custom_basic_check_timeout 时间串经 parse_time 解析为秒; 缺省 600; 非 custom 提供该键不报错"""
+    a = CheckAction(
+        {
+            "basic_check": "custom",
+            "custom_basic_check_program_path": "prog",
+            "custom_basic_check_timeout": "90S"
+        }
+    )
+    assert a.custom_timeout == 90.0, "时间串应解析为秒(90S -> 90.0)"
+    b = CheckAction({"basic_check": "custom", "custom_basic_check_program_path": "prog"})
+    assert b.custom_timeout == 600, "缺省应为 600s(C27 超时保险丝缺省档)"
+    c = CheckAction({"basic_check": "filelist", "custom_basic_check_timeout": "90S"})  # 非 custom, 不报错
+    assert c.custom_timeout == 90.0
 
 
 def test_checking_paused_completed_reference():
@@ -303,9 +327,58 @@ def test_checking_action_deferred_on_own_write():
 
 
 def test_run_custom_check_carries_timeout():
-    """C27 守阵: 自定义校验程序必须带 timeout=600(去掉 -> 挂死的外部程序无限阻塞规则线程)"""
+    """C27 守阵: 自定义校验 subprocess 必须带 timeout(action 解析值, 缺省 600) —— 重设计后超时
+    保险丝仍须无条件传给 subprocess.run(去掉 -> 挂死的外部程序无限阻塞规则线程)"""
     action = CheckAction({"basic_check": "custom", "custom_basic_check_program_path": "prog"})
     tor = FakeTorrent(hash="C1", name="C", state="stalledUP")
     with patch("subprocess.run", return_value=SimpleNamespace(returncode=0, stderr="")) as run:
         assert action._run_custom_check(None, tor) is True
-    assert run.call_args.kwargs["timeout"] == 600, f"缺超时保险丝: {run.call_args}"
+    assert run.call_args.kwargs["timeout"] == action.custom_timeout == 600, f"缺超时保险丝: {run.call_args}"
+
+
+def test_run_custom_check_timeout_classified_warning():
+    """测试: 自定义校验超时 -> WARNING(含程序路径/候选 hash/实际配置超时值/「视为非参考」)且判非参考"""
+    action = CheckAction(
+        {
+            "basic_check": "custom",
+            "custom_basic_check_program_path": "prog",
+            "custom_basic_check_timeout": "30S"
+        }
+    )
+    tor = FakeTorrent(hash="C1ABCD", name="C", state="stalledUP")
+    with patch("subprocess.run", side_effect=subprocess.TimeoutExpired(cmd="prog", timeout=30)):
+        with capture_logs("auto_qb.rules.actions.checking") as cap:
+            assert action._run_custom_check(None, tor) is False, "超时候选应视为非参考"
+    warns = [r for r in cap.records if r.levelno == logging.WARNING]
+    assert len(warns) == 1, cap.text
+    assert not any(r.levelno >= logging.ERROR for r in cap.records), cap.text
+    msg = warns[0].getMessage()
+    for token in ("prog", "C1ABCD", "30", "视为非参考"):
+        assert token in msg, msg
+
+
+def test_run_custom_check_oserror_classified_warning():
+    """测试: 自定义校验 OSError(含 FileNotFoundError, 如容器缺程序) -> WARNING 且判非参考(不崩溃)"""
+    action = CheckAction({"basic_check": "custom", "custom_basic_check_program_path": "prog"})
+    tor = FakeTorrent(hash="C1ABCD", name="C", state="stalledUP")
+    with patch("subprocess.run", side_effect=OSError("no prog")):
+        with capture_logs("auto_qb.rules.actions.checking") as cap:
+            assert action._run_custom_check(None, tor) is False, "执行失败候选应视为非参考"
+    warns = [r for r in cap.records if r.levelno == logging.WARNING]
+    assert len(warns) == 1, cap.text
+    assert not any(r.levelno >= logging.ERROR for r in cap.records), cap.text
+    msg = warns[0].getMessage()
+    for token in ("prog", "C1ABCD", "视为非参考"):
+        assert token in msg, msg
+
+
+def test_run_custom_check_unexpected_exception_classified_error():
+    """测试: 其它异常 -> ERROR(非环境性失败, 要按错误让人看见)且不崩溃、判非参考"""
+    action = CheckAction({"basic_check": "custom", "custom_basic_check_program_path": "prog"})
+    tor = FakeTorrent(hash="C1ABCD", name="C", state="stalledUP")
+    with patch("subprocess.run", side_effect=ValueError("boom")):
+        with capture_logs("auto_qb.rules.actions.checking") as cap:
+            assert action._run_custom_check(None, tor) is False, "异常候选应视为非参考(不向上抛)"
+    errs = [r for r in cap.records if r.levelno >= logging.ERROR]
+    assert len(errs) == 1, cap.text
+    assert "boom" in errs[0].getMessage(), errs[0].getMessage()
