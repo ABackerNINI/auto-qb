@@ -18,11 +18,11 @@ registry 条目按名引用, 派生走延迟访问器)
   (声明零复制: 解析结果就是 config.schema 声明表的同一对象)
 - test_choose_block_entry: choose 编排块入册 —— BLOCK_ENTRIES 有 choose, executor 是
   base.ChooseBlock, 键面按名引用解析 == compat.CHOOSE_KNOWN_KEYS, 文档片段非空
-- test_plugin_doc_fragments_cover_rule_docs: 文档片段派生件一致性 —— ①全部条目
-  doc_text() 非空(缺省取 schema 声明 help); ② conditions-and-actions.md 两张表的
+- test_plugin_doc_fragments_cover_rule_docs: 文档片段派生件一致性 —— (1)全部条目
+  doc_text() 非空(缺省取 schema 声明 help); (2) conditions-and-actions.md 两张表的
   条目名集合 == registry 全部条件/动作名, 且标题计数(13/12)与注册数一致;
-  ③ rules-and-triggers.md 的 on_torrent_deleted 行提到全部 deleted_ok 派生白名单动作
-- test_demo_new_action_one_place: 演示(验收①)—— 新增一个哑动作只改 registry 一处
+  (3) rules-and-triggers.md 的 on_torrent_deleted 行提到全部 deleted_ok 派生白名单动作
+- test_demo_new_action_one_place: 演示(验收(1))—— 新增一个哑动作只改 registry 一处
   (注册条目 + 自带 schema 声明), schema 插件表/校验/兼容表/执行分发全链路自动可用;
   对照组: 未声明 deleted_ok 的既有动作仍被 on_torrent_deleted 白名单拒绝(行为不回退)
 """
@@ -38,7 +38,7 @@ from auto_qb.rules.base import ChooseBlock
 _RULE_DOCS = Path(__file__).resolve().parents[1] / "memory-bank" / "rule-system"
 
 # ---------------------------------------------------------------------------
-# 双跑守卫(验收②): 派生 vs 冻结手写基准, diff 清零
+# 双跑守卫(验收(2)): 派生 vs 冻结手写基准, diff 清零
 # ---------------------------------------------------------------------------
 
 
@@ -94,7 +94,7 @@ def test_choose_block_entry():
 
 
 # ---------------------------------------------------------------------------
-# 文档片段派生件一致性(验收④)
+# 文档片段派生件一致性(验收(4))
 # ---------------------------------------------------------------------------
 
 
@@ -144,7 +144,7 @@ def test_plugin_doc_fragments_cover_rule_docs():
 
 
 # ---------------------------------------------------------------------------
-# 演示测试(验收①): 新增哑动作只改 1 处
+# 演示测试(验收(1)): 新增哑动作只改 1 处
 # ---------------------------------------------------------------------------
 
 

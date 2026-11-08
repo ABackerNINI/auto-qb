@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="legacy-review4">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="webui fs.py _bare docstring 指向已拆走的 tests/test_web_hr.py">
 <meta name="issue-summary" content="fs.py _bare docstring 仍指 tests/test_web_hr.py,该文件已随 63f47598(move-only 拆分)拆走,契约断言现落 tests/test_web_hr_fs.py:433-443">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-08-0703-bug-webui-fs-test-pointer-drift</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-08 07:03</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
 
@@ -115,10 +115,29 @@
 </section>
 
 <section id="s4">
-  <h2><span class="no">§04</span>状态变更日志</h2>
+  <h2><span class="no">§04</span>复验</h2>
+  <ul>
+    <li>复验时间:2026-11-08 17:25(HEAD <code>a2fcb961</code>)</li>
+    <li><code>tests/test_web_hr.py</code> 确认不存在(<code>ls</code> 报 No such file);<code>tests/test_web_hr_fs.py</code> 存在</li>
+    <li>契约用例符号:<code>test_fs_path_helpers_strip_long_path_prefix_before_compare</code>(取证 :420-445),含 <code>_bare</code> 剥前缀/无前缀原样返回/UNC 形态还原/<code>_fs_real</code> 归一断言</li>
+  </ul>
+</section>
+
+<section id="s5">
+  <h2><span class="no">§05</span>修复后补充</h2>
+  <ul>
+    <li>实际修法:<code>fs.py</code> <code>_bare</code> docstring 尾句的「tests/test_web_hr.py」改为「tests/test_web_hr_fs.py::test_fs_path_helpers_strip_long_path_prefix_before_compare」(带用例符号)</li>
+    <li>验证方式:<code>commands run test.one -- tests/test_web_hr_fs.py</code> 7 passed, 1 skipped;定点用例单独复跑 1 passed;纯注释改动,零行为影响</li>
+    <li>格式化:改动 .py 已过 <code>commands run dev.fmt</code></li>
+  </ul>
+</section>
+
+<section id="s6">
+  <h2><span class="no">§06</span>状态变更日志</h2>
   <ul>
     <li>2026-11-08 07:03 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-08 17:25 — 修复完成，状态 Open → Done（kb.status）</li>
+</ul>
 </section>
 
 <footer>

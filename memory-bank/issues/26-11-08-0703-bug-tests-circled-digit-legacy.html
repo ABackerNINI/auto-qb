@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="legacy-review4">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="测试文件存量带圈数字违反 code-style 禁字符">
 <meta name="issue-summary" content="tests/test_registry_derived.py(7 处)与 tests/test_config_writer_write.py(4 处)docstring/注释存 ①-④,违反 code-style 禁字符(存量,早于 R4 认领)">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-08-0703-bug-tests-circled-digit-legacy</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-08 07:03</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
 
@@ -115,10 +115,29 @@
 </section>
 
 <section id="s4">
-  <h2><span class="no">§04</span>状态变更日志</h2>
+  <h2><span class="no">§04</span>复验</h2>
+  <ul>
+    <li>复验时间:2026-11-08 17:25(HEAD <code>a2fcb961</code>)</li>
+    <li>处数核对:grep 带圈数字区间字符(①-⑮/⓪),<code>tests/test_registry_derived.py</code> 实测 7 处、<code>tests/test_config_writer_write.py</code> 实测 4 处——与报告数一致</li>
+    <li>修复后复验:两文件 grep 均为 0 处</li>
+  </ul>
+</section>
+
+<section id="s5">
+  <h2><span class="no">§05</span>修复后补充</h2>
+  <ul>
+    <li>实际修法:按 <code>code-style.md</code> 替代表改 ASCII——行内枚举 ①→<code>(1)</code>/②→<code>(2)</code>/③→<code>(3)</code>/④→<code>(4)</code>、「验收①」→「验收(1)」等,序号语义不变;共 11 处(7+4)</li>
+    <li>验证方式:<code>commands run test.one</code> 跑两文件——<code>tests/test_registry_derived.py</code> 9 passed,<code>tests/test_config_writer_write.py</code> 36 passed;纯注释/docstring 改动,零行为影响</li>
+    <li>格式化:三份改动 .py 均过 <code>commands run dev.fmt</code></li>
+  </ul>
+</section>
+
+<section id="s6">
+  <h2><span class="no">§06</span>状态变更日志</h2>
   <ul>
     <li>2026-11-08 07:03 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-08 17:25 — 修复完成，状态 Open → Done（kb.status）</li>
+</ul>
 </section>
 
 <footer>

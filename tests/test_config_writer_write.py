@@ -31,7 +31,7 @@
 - test_write_tree_rebuilds_doc_from_non_mapping_file: 磁盘文件是非映射 YAML 时以空文档重建
 - test_write_tree_roundtrip_list_of_dicts_and_plain_int: 映射列表按 BaseLoader 语义比较; 数字字符串写原生标量
 - test_write_tree_backup_relative_path: 备份路径无父目录 -> 跳过 makedirs 分支, 备份照常产生
-- test_write_tree_roundtrip_preserves_site_explicit_empty: ruamel round-trip 保留站点 ''(report 待核实项①实测)
+- test_write_tree_roundtrip_preserves_site_explicit_empty: ruamel round-trip 保留站点 ''(report 待核实项(1)实测)
 - test_stamp_schema_version_uses_root_key_and_overwrites: 盖章读 ROOT_KEY 段(非硬编码 None)且无条件覆盖旧版本; 根键非 config 时静默跳过
 - test_validate_tree_temp_file_roundtrip: _validate_tree 临时文件 dumps 后可读(delete=False 契约)+ finally 清理; 失败路径同样清理
 - test_validate_tree_finally_guard_skips_none_tmp_path: finally 守卫是短路与(and 写成 or 会把原始 OSError 掩盖成 stat(None) 的 TypeError)
@@ -591,7 +591,7 @@ def test_write_tree_backup_relative_path(tmp_path, monkeypatch):
 
 
 def test_write_tree_roundtrip_preserves_site_explicit_empty(tmp_path):
-    """ruamel round-trip 保留站点 ''(report 26-10-03-0504 待核实项①实测): 写盘 -> 读回仍为 ''
+    """ruamel round-trip 保留站点 ''(report 26-10-03-0504 待核实项(1)实测): 写盘 -> 读回仍为 ''
 
     write_tree -> ruamel dump 把 '' 写成带引号标量(add_tag: ''), BaseLoader 读回 '' ——
     「覆盖为空」这一稀疏条目在写盘链路无损, WebUI 保存不会把它洗成键缺失。
@@ -613,8 +613,8 @@ def test_write_tree_roundtrip_preserves_site_explicit_empty(tmp_path):
 def test_stamp_schema_version_uses_root_key_and_overwrites():
     """盖章必须**读 ROOT_KEY 段**(不是硬编码 None)且**无条件覆盖**旧版本值
 
-    _stamp_schema_version 的两条同构变异: ①`cfg = tree.get(ROOT_KEY)` 改成 `tree.get(None)`
-    ②整句删掉 —— 前者让 cfg 恒为 None 从而静默不盖章, 后者同理。守阵: 用缺 config 段的树
+    _stamp_schema_version 的两条同构变异: (1)`cfg = tree.get(ROOT_KEY)` 改成 `tree.get(None)`
+    (2)整句删掉 —— 前者让 cfg 恒为 None 从而静默不盖章, 后者同理。守阵: 用缺 config 段的树
     (跳过)与带旧版本的 config 段(必须被改成当前版本)两侧夹住。
     """
     from auto_qb.config.writer import _stamp_schema_version
