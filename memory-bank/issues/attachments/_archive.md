@@ -11,8 +11,9 @@
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 - [chore] [版本号双源矛盾: __init__.__version__ 0.2.0 vs pyproject 0.1.0](../26-09-21-1408-chore-version-dual-source.html) — WebUI 顶栏透出与打包元数据已差一个 minor; 建议 pyproject 单源 + 动态读取
 
-## Open (83)
+## Open (84)
 
+- [bug] [评审闸门 0 行二进制改动绕过基哈希比对](../26-11-08-1701-bug-review-gate-binary-zero-line-bypass.html) — numstat 对二进制计 0 行, count==0 短路使 D6 基比对不生效, 评审后替换/新增二进制可评文件(夹具图片/压缩包)静默放行
 - [bug] [awaitPoll fail 路径不调 onEnd, 与文件头契约存在张力](../26-11-08-1621-bug-awaitpoll-fail-no-onend.html) — polling.js fail()(fn 抛异常 reject)不调 onEnd; 现注册点 tm relaunching fail 时不复位标志 — 需先裁决调用方是否在 reject 分支自清理, 有害才修
 - [bug] [drawer_rows 下载/根路径 wide:true 无条件, 值为空也占整行折行位](../26-11-08-1621-bug-drawer-rows-wide-unconditional.html) — drawer_rows.js:108-109 无条件 wide:true 且 text 兜底「—」, 值空仍占折行位(观感), 02/03 路径段同受影响
 - [bug] [drawer 02 标识卡 dt02-crow 行 nowrap 截断长哈希](../26-11-08-1621-bug-dt02-crow-nowrap.html) — 02 变体 idRows 路径(dt02-crow)不经 secRows 仍 nowrap+ellipsis, 与 09e285f1 已修的 #13 secRows 同病不同槽

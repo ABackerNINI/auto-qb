@@ -19,7 +19,7 @@
 
 | 类型 | 条数 |
 |---|---|
-| bug | 28 |
+| bug | 29 |
 | perf | 2 |
 | docs | 3 |
 | test | 10 |
@@ -37,6 +37,7 @@
 
 ## Open
 
+- [bug] [评审闸门 0 行二进制改动绕过基哈希比对](26-11-08-1701-bug-review-gate-binary-zero-line-bypass.html) — numstat 对二进制…
 - [bug] [awaitPoll fail 路径不调 onEnd, 与文件头契约存在张力](26-11-08-1621-bug-awaitpoll-fail-no-onend.html) — polling.js f…
 - [bug] [drawer_rows 下载/根路径 wide:true 无条件, 值为空也占整行折行位](26-11-08-1621-bug-drawer-rows-wide-unconditional.html) — drawer_rows.…
 - [bug] [drawer 02 标识卡 dt02-crow 行 nowrap 截断长哈希](26-11-08-1621-bug-dt02-crow-nowrap.html) — 02 变体 idRows…

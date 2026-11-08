@@ -37,9 +37,9 @@
 | 步 | 内容 | 状态 |
 |---|---|---|
 
-| W1 | 机械面: check_review_trace.py + review.pack(下限删/判红/基哈希/累计) | Open |
-| W2 | 规则面: code-review SKILL.md 重写(触发表/⑤/⑦/反模式) | Open |
-| W3 | 测试面: test_review_pkg.py 判红改写 + 新增用例 + 测试计划同步 | Open |
+| W1 | 机械面: check_review_trace.py + review.pack(下限删/判红/基哈希/累计) | Done(2026-11-08, T1=8cee7e11 + T2=84b8da8f) |
+| W2 | 规则面: code-review SKILL.md 重写(触发表/⑤/⑦/反模式) | Done(2026-11-08, T34=960598ef; 接缝终审补 memory-bank SKILL.md 与 my-commit-flow 注册 note 两处副本) |
+| W3 | 测试面: test_review_pkg.py 判红改写 + 新增用例 + 测试计划同步 | Done(2026-11-08, 定向 112; 基线切片归 W4) |
 | W4 | 收尾 DoD: 切片/基线/pitfalls/回写 | Open |
 
 ## 进度日志
@@ -47,3 +47,11 @@
 ### R0 · 立档 (2026-11-08)
 
 grilling 3 轮闭合设计树(12 项拍板,D1-D12)→ 计划档落成 `plans/26-11-08-1240-plan-review-no-exemption-loop.html`(10 SLOT 填毕,双链回指本档案)→ 本档案立档(阈值 #4:已产出计划文档)。W1-W4 未开工。
+
+### R1 · 实施 (2026-11-08, 本地分支 review-no-exemption-loop, 全程 --no-push)
+
+- **P0 计划档** e40f9566: 评审 1 轮 4 送检 4 过检 修 4(含派发 K 改回首轮拓扑口径, 计划 R1 同步)。
+- **T1 机械面** 8cee7e11: review_content.py 共享单点(可评过滤+batch_base_hash, 双层配置隔离 13 颗钉+literal pathspec+--ignore-cr-at-eol)+ pack 基哈希输出; 评审 2 轮 7 送检 5 过检 修 5+1 自发(write_bytes); 4 钉变异自证全红。
+- **T2 闸门规则** 84b8da8f: 下限退役/Review-Skip 判红/·基 必填现算比对/·轮 缺省 1/累计口径注释; 敏感面语义随下限退役修正为「强制评非必红」; 金值用例锁规范化(--unified=1 变异红); 评审 2 轮 4 送检 4 过检 修 4; **已知窗口如实声明: 0 行二进制改动基比对被短路**(用户批准入池: 26-11-08-1701)。
+- **T34 规则文档+测试终扫** 960598ef: SKILL.md 全文新口径 + 测试计划 5 处漂移修正 + 3 缺口用例; 评审 2 轮 1 送检 1 过检 修 1(残余窗口口径补二进制窗)→ 复评空 [] 出口。
+- **接缝终审**(4 送检 4 过检): 2 major 第三/四份旧口径副本(.my-commit-flow.toml 注册 note/memory-bank SKILL.md 第 0 步)+ 1 minor 档案 stale + 1 nit pack --base 措辞, 全修; 计划 R2 回写三处口径级偏差。

@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>评审闸门 0 行二进制改动绕过基哈希比对 · bug · 计划外问题</title>
+<meta name="issue-slug" content="review-gate-binary-zero-line-bypass">
+<meta name="issue-stamp" content="26-11-08-1701">
+<meta name="issue-type" content="bug">
+<meta name="doc-topic" content="review-gate-binary-zero-line-bypass">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="评审闸门 0 行二进制改动绕过基哈希比对">
+<meta name="issue-summary" content="numstat 对二进制计 0 行, count==0 短路使 D6 基比对不生效, 评审后替换/新增二进制可评文件(夹具图片/压缩包)静默放行">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --mark: #161e26;     /* issue 特有: callout 底色 (plan.html 不用) */
+    --warn-bg: #2a2119;  /* issue 特有: 状态徽标底色 */
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 单栏流式版面: 与 plan.html 同一套 .sheet (封顶 1280px, 侧距 clamp(18~44px)); 旧双栏+粘性目录已删 */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+
+  /* 封面 meta 行: issue 特有, DOM 形态别改 —— 状态徽标 <span class="badge"> 被
+     flip_status (W4) 与 check_status_drift 的 BADGE_RE 机读 (k/v div 结构在判据里) */
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px 28px; font-family: var(--mono); font-size: 11.5px; color: var(--faint); border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta-row .item .k { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .meta-row .item .v { font-size: 13.5px; color: var(--dim); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin: 14px 0; font-size: 14px; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-family: var(--mono); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">计划外问题（未修）· bug</div>
+<h1>评审闸门 0 行二进制改动绕过基哈希比对</h1>
+<p class="lede">numstat 对二进制计 0 行, count==0 短路使 D6 基比对不生效, 评审后替换/新增二进制可评文件(夹具图片/压缩包)静默放行</p>
+<div class="meta-row">
+  <div class="item"><div class="k">编号</div><div class="v">26-11-08-1701-bug-review-gate-binary-zero-line-bypass</div></div>
+  <div class="item"><div class="k">报告时间</div><div class="v">2026-11-08 17:01</div></div>
+  <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">涉及模块</div><div class="v">commands</div></div>
+  <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+</div>
+
+<section id="s1">
+  <h2><span class="no">§01</span>现象与发现场景</h2>
+  <p>评审流程改造(计划 26-11-08-1240)T2 批次评审时, reviewer 审计「0 行/复跑标记能否逃过基比对」提出; 接缝终审与用户确认后入池。与平台/配置无关——numstat 对二进制计 0 行是 git 语义, count==0 短路是闸门判定序的既有结构。发现时已在闸门模块头、.commands/review/config.toml note、code-review SKILL.md 铁律三处如实声明(未扩大行为), 本 issue 记录的是<b>行为闭合</b>。</p>
+</section>
+
+<section id="s2">
+  <h2><span class="no">§02</span>证据</h2>
+  <p class="hint">贴原文（报错 / 日志 / 命令输出），不转述；附取证时间，让读者自己判断新鲜度。</p>
+<pre><code># 判定序(check_review_trace.py decide(), 取证 2026-11-08 17:01):
+if count == 0 and not sensitive:
+    return True, "可评 0 行(记账类/生成物或纯二进制)改动"   # 短路: 基比对(:377 附近)不可达
+# 实算: numstat 对二进制文件计 0 行(git diff --numstat 输出形如 "-	-	文件路径" 三列, 二进制行列是两个连字符)
+# 哈希: tracked 二进制在 git diff 只出恒定 "Binary files a/x and b/x differ" 标记行 → 内容变更不动哈希;
+#       untracked 二进制经 review_content.py _untracked_reviewable/read_bytes 按原文字节入哈希(例外), 但同落 count==0 短路
+# 净效果: 评审后替换/新增二进制可评文件 → 实算 0 → 静默放行, 带不带 trailer 都不走基比对</code></pre>
+</section>
+
+<section id="s3">
+  <h2><span class="no">§03</span>影响面</h2>
+  <table>
+    <tr><th>维度</th><th>结论</th></tr>
+    <tr><td>触发条件</td><td>批次含二进制可评文件的新增/替换(如测试夹具图片/压缩包)且批内无其它可评文本改动 → 实算恒 0, 必现</td></tr>
+    <tr><td>影响范围</td><td>评审闸门(check_review_trace)的基哈希机检对此类改动失效; 行数实算与 SKILL.md 口径不受影响; 文本改动面无影响</td></tr>
+    <tr><td>严重度</td><td>低-中(窗口面窄: 本仓二进制可评文件稀少; 但属「评完到提交」机械绑定的真实漏洞, 且静默无告警)</td></tr>
+  </table>
+</section>
+
+<section id="s4">
+  <h2><span class="no">§04</span>定位锚点</h2>
+  <p class="hint">写「符号名 + grep 关键词 + 当时的行号（标取证时间）」—— 代码会漂移，靠符号与 grep 重新定位，行号只是加速项。</p>
+  <ul class="todo">
+    <li><code>.commands/review/scripts/check_review_trace.py:309</code>(取证 2026-11-08 17:01)· <code>count == 0 and not sensitive</code> 短路 · grep "count == 0"</li>
+    <li><code>.commands/review/scripts/check_review_trace.py</code> · <code>_numstat</code>(二进制计 0 行的来源)· grep "numstat"</li>
+    <li><code>.commands/review/scripts/review_content.py:233-256</code>· <code>_untracked_reviewable</code>/<code>read_bytes</code>(untracked 原文字节入哈希例外)· grep "_untracked_reviewable"</li>
+  </ul>
+</section>
+
+<section id="s5">
+  <h2><span class="no">§05</span>根因<span class="opt">（可选）</span></h2>
+  <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
+  <div class="callout">根因明确(见 §02 判定序): git numstat 对二进制计 0 行 + 闸门 count==0 首位短路, 二者叠加使 D6 基比对不可达。已排除: 记账类/生成物排除面(无关, 污染源在二进制语义); review_content 哈希实现(其 tracked 二进制恒定标记行与 untracked 原文字节行为各自正确, 问题只在比对可达性)。</div>
+</section>
+
+<section id="s6">
+  <h2><span class="no">§06</span>建议修法<span class="opt">（可选）</span></h2>
+  <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
+  <p>候选方案(接缝终审提出方向, 未做取舍): <b>A. 带 trailer 时无条件比对基</b>——count==0 短路仅对无 trailer 批生效; 代价: 0 行批带 trailer 的合法场景(纯记账+二进制混合批)需确认不误红; <b>B. numstat 对二进制按固定行数计(如计 1 行或按字节数折算)</b>——动实算口径, 波及 trailer 行数语义与既有测试, 代价大; <b>C. 维持声明不入行为</b>——接受窗口(现状三处声明即此方案, issue 即为把 C 显式化为「已决策可改」)。倾向 A(改动最小、口径不动), 待认领时复验 git 各版本 numstat 行为后定。</p>
+</section>
+
+<section id="s7">
+  <h2><span class="no">§07</span>状态变更日志</h2>
+  <ul>
+    <li>2026-11-08 17:01 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+  </ul>
+  <h3>复验</h3>
+  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <h3>修复后补充</h3>
+  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+</section>
+
+<footer>
+  26-11-08-1701-bug-review-gate-binary-zero-line-bypass.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+</footer>
+
+</div>
+</body>
+</html>

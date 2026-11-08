@@ -7,7 +7,7 @@ confirmed = true
 run     = ["uv run python .commands/review/scripts/review_pack.py pack <args>"]
 timeout = 120
 when    = "code-review skill ③ 评审包：每批收尾、派遣评审子代理之前"
-note    = "--base <rev> 必填（任务起点：任务第一个 commit 的 parent / 多会话任务=上次收口 commit，拿不准问用户）。输出基线与 HEAD hash、diff 统计与 400 行分档提示、文件清单、红线/安全敏感面预警 —— 红线清单与 my-commit-flow 闸门同源（读 .commands/my-commit-flow/.my-commit-flow.toml 的 red_lines/warn_lines，缺文件给可见警告不静默降级）。输出含基哈希（=整批过滤 diff 哈希，提交闸门据此与 trailer 的 `· 基` 比对，评审后有新改动会判红）。分档与预警是提示不是闸门，拦截仍归提交闸门"
+note    = "--base <rev> 必填（= 上一条带 `Review:` 的提交，即闸门锚点；拿不准问用户）。输出基线与 HEAD hash、diff 统计与 400 行分档提示、文件清单、红线/安全敏感面预警 —— 红线清单与 my-commit-flow 闸门同源（读 .commands/my-commit-flow/.my-commit-flow.toml 的 red_lines/warn_lines，缺文件给可见警告不静默降级）。输出含基哈希（=整批过滤 diff 哈希，提交闸门据此与 trailer 的 `· 基` 比对，评审后有新改动会判红）。分档与预警是提示不是闸门，拦截仍归提交闸门"
 
 [tasks."review.check"]
 run     = ["uv run python .commands/review/scripts/review_pack.py check <args>"]
