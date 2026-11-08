@@ -1479,13 +1479,13 @@ class TraceGateTest(unittest.TestCase):
         (self.tmp / "img.png").write_bytes(b"PNG\x00REPLACED-bytes")
         fresh = self._batch_hash()
         self.assertNotEqual(fresh, stale)  # 前置自证: 二进制替换确实动了基哈希(index blob 行)
-        msg = f"✨ 换图\n\nReview: 换图 · 0 行 · blocker 0 · 修 0 · 入池 0 · 检 0/0 · 基 {stale}\n"
+        msg = f"换图\n\nReview: 换图 · 0 行 · blocker 0 · 修 0 · 入池 0 · 检 0/0 · 基 {stale}\n"
         proc = _run_trace(self.tmp, self._msg(msg))
         self.assertEqual(proc.returncode, 1, proc.stdout)
         self.assertIn(stale, proc.stdout)
         self.assertIn("重跑", proc.stdout)
         self.assertIn("复评", proc.stdout)
-        msg = f"✨ 换图\n\nReview: 换图 · 0 行 · blocker 0 · 修 0 · 入池 0 · 检 0/0 · 基 {fresh}\n"
+        msg = f"换图\n\nReview: 换图 · 0 行 · blocker 0 · 修 0 · 入池 0 · 检 0/0 · 基 {fresh}\n"
         proc = _run_trace(self.tmp, self._msg(msg))
         self.assertEqual(proc.returncode, 0, proc.stdout)
 
@@ -1493,11 +1493,11 @@ class TraceGateTest(unittest.TestCase):
         """untracked 二进制(闸门按 0 行计、基哈希按原文字节入)带 trailer: 评审时点基 → 加文件后判红; 新基放行。"""
         stale = self._batch_hash()
         (self.tmp / "fresh.bin").write_bytes(b"\x00\x01binary payload")
-        msg = f"✨ 加包\n\nReview: 加包 · 0 行 · blocker 0 · 修 0 · 入池 0 · 检 0/0 · 基 {stale}\n"
+        msg = f"加包\n\nReview: 加包 · 0 行 · blocker 0 · 修 0 · 入池 0 · 检 0/0 · 基 {stale}\n"
         proc = _run_trace(self.tmp, self._msg(msg))
         self.assertEqual(proc.returncode, 1, proc.stdout)
         self.assertIn(stale, proc.stdout)
-        msg = f"✨ 加包\n\nReview: 加包 · 0 行 · blocker 0 · 修 0 · 入池 0 · 检 0/0 · 基 {self._batch_hash()}\n"
+        msg = f"加包\n\nReview: 加包 · 0 行 · blocker 0 · 修 0 · 入池 0 · 检 0/0 · 基 {self._batch_hash()}\n"
         proc = _run_trace(self.tmp, self._msg(msg))
         self.assertEqual(proc.returncode, 0, proc.stdout)
 

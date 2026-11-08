@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>ascii 符号冻结表 addtorrent circled 条目漏同步(上游存量, 实测 33 &gt; 冻结 32) · bug · 计划外问题（便签）</title>
+<meta name="issue-slug" content="ascii-frozen-addtorrent-drift">
+<meta name="issue-stamp" content="26-11-09-0409">
+<meta name="issue-type" content="bug">
+<meta name="doc-topic" content="ascii-frozen-addtorrent-drift">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="light">
+<meta name="issue-status" content="Done">
+<meta name="issue-title" content="ascii 符号冻结表 addtorrent circled 条目漏同步(上游存量, 实测 33 &gt; 冻结 32)">
+<meta name="issue-summary" content="冻结表建于 c63f1ff5, 上游 a35463d4 改 tests/test_webui_static_r4_addtorrent.py 时未同步 circled 计数, 上游 tip 1c564e34 自身 test_repo_matches_frozen 即红; 本会话合流后 test.full 实证, 非本批引入">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --mark: #161e26;     /* issue 特有: callout 底色 (plan.html 不用) */
+    --warn-bg: #2a2119;  /* issue 特有: 状态徽标底色 */
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 单栏流式版面: 与 plan.html 同一套 .sheet (封顶 1280px, 侧距 clamp(18~44px)); 旧双栏+粘性目录已删 */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+
+  /* 封面 meta 行: issue 特有, DOM 形态别改 —— 状态徽标 <span class="badge"> 被
+     flip_status (W4) 与 check_status_drift 的 BADGE_RE 机读 (k/v div 结构在判据里) */
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px 28px; font-family: var(--mono); font-size: 11.5px; color: var(--faint); border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta-row .item .k { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .meta-row .item .v { font-size: 13.5px; color: var(--dim); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin: 14px 0; font-size: 14px; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-family: var(--mono); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">计划外问题（便签）· bug</div>
+<h1>ascii 符号冻结表 addtorrent circled 条目漏同步(上游存量, 实测 33 &gt; 冻结 32)</h1>
+<p class="lede">冻结表建于 c63f1ff5, 上游 a35463d4 改 tests/test_webui_static_r4_addtorrent.py 时未同步 circled 计数, 上游 tip 1c564e34 自身 test_repo_matches_frozen 即红; 本会话合流后 test.full 实证, 非本批引入</p>
+<div class="meta-row">
+  <div class="item"><div class="k">编号</div><div class="v">26-11-09-0409-bug-ascii-frozen-addtorrent-drift</div></div>
+  <div class="item"><div class="k">报告时间</div><div class="v">2026-11-09 04:09</div></div>
+  <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
+  <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+</div>
+
+<section id="s1">
+  <h2><span class="no">§01</span>现象</h2>
+  <p><code>tests/test_ascii_symbol_guard.py::test_repo_matches_frozen</code> 判红:<code>tests/test_webui_static_r4_addtorrent.py [circled] 实测 33 &gt; 冻结 32</code>。文件内容与上游 tip 逐字一致(diff 为空),冻结表建于 c63f1ff5,晚于它的上游 a35463d4(全角逗号口径批)改了该文件但未同步冻结计数 —— 上游 tip 1c564e34 自身跑该守卫即红,非本批引入。</p>
+</section>
+
+<section id="s2">
+  <h2><span class="no">§02</span>位置</h2>
+  <ul>
+    <li><code>tests/_ascii_symbol_frozen.py:417</code>(取证 2026-11-09 04:09)· grep <code>addtorrent.py', 'circled'</code></li>
+    <li><code>tests/test_webui_static_r4_addtorrent.py</code>(circled 实测 33, 文件与 1c564e34 逐字一致)· grep 该文件内 circled 码位</li>
+  </ul>
+</section>
+
+<section id="s3">
+  <h2><span class="no">§03</span>建议<span class="opt">（可选）</span></h2>
+  <p>同步冻结条目 32→33(机械面,一行);或按闸门设计由认领者复核该新增符号是否本就该豁免再定。认领时定。</p>
+</section>
+
+<section id="s4">
+  <h2><span class="no">§04</span>状态变更日志</h2>
+  <ul>
+    <li>2026-11-09 04:09 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    <li>2026-11-09 — 状态 Open → Done（kb.status）</li>
+</ul>
+  <h3>修复后补充</h3>
+  <p>实际修法: 冻结条目同步 <code>32→33</code>(<code>tests/_ascii_symbol_frozen.py:417</code>, 用户授权顺手修, 机械面一行)。验证方式: <code>commands run test.quick</code> 全绿(此前唯一红即本条)。<strong>同批连带清理</strong>: 阶段 3 新增 e2e 测试提交消息里 4 处 <code>✨</code>(dingbats 29&gt;冻结 25, 本批自身违规)去 emoji 修复; <code>tests-real/.work</code> 两个 gitignored 实验残留(e8_sim.py/p4.py, 计划 26-11-07-1300 已完结)删除。</p>
+</section>
+
+<footer>
+  26-11-09-0409-bug-ascii-frozen-addtorrent-drift.html · 便签档（light）· 由 create-issue skill 入池；入池不等于已修，改动状态在上面的「状态变更日志」里留痕
+</footer>
+
+</div>
+</body>
+</html>

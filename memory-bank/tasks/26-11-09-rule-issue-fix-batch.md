@@ -26,10 +26,11 @@
 
 ## 实现计划
 
-- S1: alias_fs mount_point 与 _V4_DATE_RE 两消费端改 `re.fullmatch`(照 7d39da4c 修 _INFOHASH_RE 先例),各补尾换行回归测试,f42fe5db。
-- S2: `_is_bare_zero` 扩 (int,float)(bool 先行排除)+ base.py cooldown 解析去 `str()` 包裹配套;0.0 视为不冷却、非零浮点照拒;四键口径核对零变化,ad5a628b。
-- S3: check_review_trace decide() 首位加 `not REVIEW_LINE_RE.search(message)`,带 trailer 的 0 行批走全链基比对;衍生修复: HEAD 消息来源 0 行批静默让步(提交后复跑不对空批校验历史 trailer);声明面 4 处 + code-review SKILL.md「残余窗口」段同步,53cc9831。
+- S1: alias_fs mount_point 与 _V4_DATE_RE 两消费端改 `re.fullmatch`(照 7d39da4c 修 _INFOHASH_RE 先例),各补尾换行回归测试,c7b861dd。
+- S2: `_is_bare_zero` 扩 (int,float)(bool 先行排除)+ base.py cooldown 解析去 `str()` 包裹配套;0.0 视为不冷却、非零浮点照拒;四键口径核对零变化,57fa89f6。
+- S3: check_review_trace decide() 首位加 `not REVIEW_LINE_RE.search(message)`,带 trailer 的 0 行批走全链基比对;衍生修复: HEAD 消息来源 0 行批静默让步(提交后复跑不对空批校验历史 trailer);声明面 4 处 + code-review SKILL.md「残余窗口」段同步,b0a91263。
 - S4: 接缝终审 + test.full 全量 + 快进合回本地 develop。
+- S5(2026-11-09): 提交推送时远端已落 memory-bank 大重构(4cc002a2, 索引机器退役/activeContext 更名), rebase 四笔解 DU 冲突(旧 issues/tasks 索引生成物接受上游删除), 终树以重构后生成器重建自洽(kb.index 零 diff + kb.check 绿); hash 重写映射: f42fe5db→c7b861dd / ad5a628b→57fa89f6 / 53cc9831→b0a91263。
 
 ## 子任务状态表
 

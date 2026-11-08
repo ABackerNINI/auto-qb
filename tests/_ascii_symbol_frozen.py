@@ -414,7 +414,7 @@ FROZEN: dict[tuple[str, str], int] = {
     ('tests/test_webui_static_dom_panel_gtm_alert.py', 'circled'): 12,
     ('tests/test_webui_static_dom_panel_misc.py', 'circled'): 67,
     ('tests/test_webui_static_dom_panel_traffic.py', 'circled'): 23,
-    ('tests/test_webui_static_r4_addtorrent.py', 'circled'): 32,
+    ('tests/test_webui_static_r4_addtorrent.py', 'circled'): 33,
     ('tests/test_webui_static_r4_dialogs.py', 'circled'): 5,
     ('tests/test_webui_static_r4_drawer.py', 'circled'): 66,
     ('tests/test_webui_static_r4_node_batteries.py', 'circled'): 37,
