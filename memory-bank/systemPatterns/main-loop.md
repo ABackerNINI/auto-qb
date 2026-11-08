@@ -6,7 +6,7 @@
 ## 主循环 (core/qbmanager.py)
 
 ```python
-run(dry_run, stop_event=None, pause_event=None):        # qbmanager.py:458
+run(dry_run, stop_event=None, pause_event=None):        # qbmanager.py:500
     materialize_schema_migration()   # 配置 schema 启动物化(磁盘落后才写; dry-run 只探测)
     lifecycle_ready = False          # 启动期完成闸(2026-11-03): 失败启动不落空态 state
     try:
@@ -44,23 +44,24 @@ run(dry_run, stop_event=None, pause_event=None):        # qbmanager.py:458
             ctx.state.save()             # 优雅退出落盘
         lock.release()                   # 任何路径都释放(含启动期 fail-fast)
 
-_sync_line(dry_run, flush=True):         # 同步线 (sync_interval, 默认 1.5s) —— 只刷快照不跑任务
-    _refresh_torrents(dry_run)           # 刷新快照 + 相位广播(见下节, :901 起)
-    host.run_sync_line(force)            # (:804) 同步线收尾=视图发布; 判据在 webui/module.py:216
+_sync_line(dry_run, flush=True, force=False):  # 同步线 (sync_interval, 默认 1.5s) —— 只刷快照不跑任务
+    _refresh_torrents(dry_run)           # 刷新快照 + 相位广播(见下节, :944 起)
+    host.run_sync_line(force)            # (:858) 同步线收尾=视图发布; 判据在 webui/module.py:216
 
-_task_line(dry_run):                     # 任务线 (main_tick, 默认 2s)
-    task_queue.run_due(dry_run, now, max_tasks)      # (:817) 到期任务执行
-    host.run_task_line(force)            # (:817) 任务线收尾三步 = webui/module.py:205-225:
+_task_line(dry_run, force=False):        # 任务线 (main_tick, 默认 2s)
+    task_queue.run_due(dry_run, now, max_tasks,      # (:872) 到期任务执行; defer_gate=D-1 让位闸门
+                       defer_gate=self._own_write_defer_gate)   # (:876; 闸实现 :881, 口径见 taskqueue.md)
+    host.run_task_line(force)            # (:879) 任务线收尾三步 = webui/module.py:205-225:
                                          # 错误原因预取 -> 视图发布 -> 搜索索引推进
 
-_tick = _sync_line(flush=False) + _task_line()       # 完整一轮; 两线同拍时视图只重建一次
+_tick(dry_run, force=False) = _sync_line(dry_run, flush=False) + _task_line(dry_run, force=force)   # (:899) 完整一轮; 两线同拍时视图只重建一次
 ```
 
 > 已外迁: 启动期 fail-fast / 主循环与表现层边界 / 分层节拍 / 微步线 / 节流与等待 / 命令线唤醒 / 连接管理 → [attachments/main-loop-details.md](attachments/main-loop-details.md)
 
 `run_due` 内部: 先快照到期任务再逐个执行 (异常捕获内联; 执行中途重新入队的任务留到下一轮), 收尾:
 - handler 返回 **FINISHED** → 任务消亡, kind=="check" 释放在途校验标记 (典型: 种子已删除, 由 handler 的删除守卫判定)。
-- handler 返回 **REQUEUE** → 按 `task.interval` 重新入队 (`next_run = now + interval`), **默认重置断点** (下一轮从头执行; 断点续跑只经子任务 `add_task(origin, keep_progress=True)` 路径)。
+- handler 返回 **REQUEUE** → `_requeue` (taskqueue.py:313) 重新入队, 两分支: 默认按 `task.interval` (`next_run = now + interval`) 且**重置断点** (下一轮从头执行); handler 已挂 `task.retry_delay` 时改按 backoff 推迟到期 (`next_run = now + retry_delay`) 且**保留断点** (从失败动作续跑, 跳过条件评估与去重 —— 重走全流程会被 cooldown/execute_once 拦下, plan 26-11-01-0106 W2/R3)。断点续跑两条路: 队列内 retry backoff (上) 与子任务 `add_task(origin, keep_progress=True)`。
 
 ### 每轮 `_refresh_torrents` 的数据流 (理解本项目的关键)
 
