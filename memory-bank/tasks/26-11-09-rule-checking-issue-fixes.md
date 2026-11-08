@@ -18,7 +18,7 @@
 
 ## 思考过程与决策
 
-- 四批各自独立成提交(05ef90b9 / 0df16210 / 643caf51 / c7742273), 每批带 Review trailer, 单批评审零 actionable 后进下一批。
+- 四批各自独立成提交(90800340 / 14eca766 / 31545ea5 / cc72389d, 推送 rebase 重放后新链 hash), 每批带 Review trailer, 单批评审零 actionable 后进下一批。
 - 批2 自定义校验取方案 B(用户拍板): 超时可配置(动作级 spec 键 custom_basic_check_timeout, 缺省 600s)但不提供关闭语义, C27 超时保险丝不消失; 错误面三分类(TimeoutExpired/OSError -> WARNING 视为非参考, 其它异常 -> ERROR)对齐 traffic_source agent 形制。
 - 批3 冷却窗口记一次(用户拍板口径): 记录点在 ops 层轮询 FAILED 判定仅 rule 源, 闸门在决策链 0.5(一次失败即冷却, 不烧 recheck_fails 额度), 两机制并存互不替代; 窗口值走动作 spec 键 recheck_fail_cooldown(缺省 1H, 正时间校验, 不可关闭), ops 层记录/清除不消费窗口值。
 - 批4 loaders 选键表驱动而非 dataclass 手段: 解析职责留在 loaders, models 保持纯字段定义; 回退链与原 _get 逐路径等价。
@@ -32,10 +32,10 @@
 
 | 步 | 内容 | 状态 |
 |---|---|---|
-| T1 | 批1: checking 谓词化 has_reference(05ef90b9) | Done(2026-11-09) |
-| T2 | 批2: 自定义校验重设计 + custom_basic_check_timeout(0df16210) | Done(2026-11-09) |
-| T3 | 批3: 校验失败冷却窗口 + recheck_fail_cooldown(643caf51) | Done(2026-11-09) |
-| T4 | 批4: loaders HRRule 键表驱动收敛(c7742273) | Done(2026-11-09) |
+| T1 | 批1: checking 谓词化 has_reference(90800340) | Done(2026-11-09) |
+| T2 | 批2: 自定义校验重设计 + custom_basic_check_timeout(14eca766) | Done(2026-11-09) |
+| T3 | 批3: 校验失败冷却窗口 + recheck_fail_cooldown(31545ea5) | Done(2026-11-09) |
+| T4 | 批4: loaders HRRule 键表驱动收敛(cc72389d) | Done(2026-11-09) |
 | T5 | 接缝终审 2 minor 过检修复 + 回写 + 基线 + 收口提交 | Done(2026-11-09) |
 
 ## 进度日志
