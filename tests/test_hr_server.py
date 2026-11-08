@@ -74,6 +74,10 @@
   匹配的放行 / 不匹配的落 401, 不再 TypeError 兜成 500(配置期 ASCII 校验的双保险面)
 - test_http_mid_body_disconnect_contained: 客户端声明 Content-Length 后半路断开 -> 读侧与写侧
   同口径按 debug 记, 不冒泡成 handle_error 的 stderr traceback, 线程存活后续请求照常
+
+### issue 26-11-08-0827: 头读路径断连兜底
+- test_http_mid_header_disconnect_contained: 请求行/头部读取中途 RST -> _EndpointServer.handle_error
+  覆写后按 debug 记(与读体/写侧同口径), 不落默认 stderr traceback, 线程存活后续请求照常
 """
 import io
 import json
@@ -1019,6 +1023,34 @@ def test_http_mid_body_disconnect_contained(monkeypatch):
             ), "读侧断开必须被按 debug 记(否则已冒泡成 handle_error)"
         assert "Exception occurred during processing" not in stderr.getvalue(
         ), "handle_error 不该被触发(它会往 stderr 打 traceback)"
+        assert handle.started, "端点线程必须还活着"
+        assert _http("GET", handle.port, API_TASKS, token=TOKEN)[0] == 200, "后续请求照常"
+    finally:
+        server.stop()
+
+
+def test_http_mid_header_disconnect_contained(monkeypatch):
+    """客户端在请求行/头部发送中途 RST 断开: 标准库 readline 路径的连接异常冒泡到
+    _EndpointServer.handle_error, 覆写后按 debug 记不落默认 stderr traceback;
+    线程存活, 后续请求照常(issue 26-11-08-0827 —— #12 只护了读体没护头读)。
+
+    确定性: 发不带 \r\n 结尾的半个请求行, 服务端停在 readline 里等剩余字节, 再 RST 关闭
+    —— 阻塞/续读中的 readline 吃 ConnectionResetError, 落点正是本条修的头读路径。
+    """
+    stderr = io.StringIO()
+    monkeypatch.setattr(sys, "stderr", stderr)
+    server = make_server()
+    handle = server.start()
+    try:
+        with capture_logs("auto_qb.hr.server") as cap:
+            raw = socket.create_connection(("127.0.0.1", handle.port), timeout=5)
+            raw.sendall(b"POST /api/hr/result HTTP/1.1")  # 无 \r\n: 头读停在这一行等剩余
+            raw.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, struct.pack("ii", 1, 0))
+            raw.close()  # SO_LINGER(1,0) = RST 关闭
+            assert wait_until(
+                lambda: any("连接在请求处理中断开" in m for m in cap.messages), timeout=2.0
+            ), "头读路径断开必须被 handle_error 按 debug 记(否则已落默认 stderr traceback)"
+        assert "Exception occurred during processing" not in stderr.getvalue(), "断开是常态不是故障, 不该往 stderr 打 traceback"
         assert handle.started, "端点线程必须还活着"
         assert _http("GET", handle.port, API_TASKS, token=TOKEN)[0] == 200, "后续请求照常"
     finally:

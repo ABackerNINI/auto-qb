@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="hr-server-header-read-reset">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="hr server 头部读取路径 ConnectionResetError 冒泡 handle_error 打 stderr">
 <meta name="issue-summary" content="读体路径已护(#12), 但标准库请求行/头部 readline 路径的连接重置仍走 handle_error 打 traceback, 与『半路断开是常态』意图相悖">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-08-0827-bug-hr-server-header-read-reset</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-08 08:27</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
@@ -129,7 +129,7 @@ handle_error 打 stderr traceback —— 属标准库请求行/头解析路径�
 <section id="s5">
   <h2><span class="no">§05</span>根因<span class="opt">（可选）</span></h2>
   <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
-  <div class="callout">待查——形态已确证（标准库头读路径无连接异常兜底），机制随认领核（覆写 handle_error 或子类化 server 的取舍）。</div>
+  <div class="callout">已核（2026-11-08 修复时）：机制 = 标准库 <code>BaseHTTPRequestHandler.handle_one_request</code> 只捕 <code>TimeoutError</code>，请求行/头解析路径的 <code>ConnectionResetError</code> 一路冒过 <code>handle()</code> 落到 <code>ThreadingHTTPServer</code> 继承的 <code>BaseServer.handle_error</code> 默认实现（<code>traceback.print_exc</code> 打 stderr）。取舍按 §06 第一案：在 <code>_EndpointServer</code>（server 与 discovery 共用单点）覆写 <code>handle_error</code>，不另子类化。</div>
 </section>
 
 <section id="s6">
@@ -141,11 +141,15 @@ handle_error 打 stderr traceback —— 属标准库请求行/头解析路径�
   <h2><span class="no">§07</span>状态变更日志</h2>
   <ul>
     <li>2026-11-08 08:27 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-08 — 状态 Open → In Progress（kb.status）</li>
+    <li>2026-11-08 — 状态 In Progress → Done（kb.status）</li>
+</ul>
   <h3>复验</h3>
-  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <p>复验：2026-11-08（认领开工时）仍复现 —— grep <code>handle_error</code> 确认 <code>_EndpointServer</code> 无覆写，头读路径连接异常仍走默认 traceback 实现。</p>
   <h3>修复后补充</h3>
-  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  <p><strong>实际修法</strong>（与 §06 建议第一案一致，未改道）：<code>src/auto_qb/hr/server.py</code> 的 <code>_EndpointServer</code> 覆写 <code>handle_error</code> —— <code>sys.exc_info()[1]</code> 为 (ConnectionError, OSError)（与读体 <code>_dispatch</code>/写侧 <code>_safe_respond</code> 同口径）时按 debug 记「连接在请求处理中断开」静默返回，其余异常照旧 <code>super().handle_error</code> 不吞真实故障。server 与 discovery 共用该类，一处覆盖全部端点。</p>
+  <p><strong>验证方式</strong>：新增 <code>tests/test_hr_server.py::test_http_mid_header_disconnect_contained</code> —— 发不带 <code>\r\n</code> 结尾的半个请求行让服务端停在 readline，再 SO_LINGER(1,0) RST 关闭，断言 debug 日志出现、stderr 无 <code>Exception occurred during processing</code>、端点线程存活、后续请求照常（与 #12 读体用例同款确定性手法）。</p>
+  <p><strong>测试数字</strong>：2026-11-08 <code>test.one -- tests/test_hr_server.py -q</code> 全文件 58 条全绿（含本条与既有 <code>test_http_mid_body_disconnect_contained</code>），副作用台账越界 0 条；全量见收尾基线切片。</p>
 </section>
 
 <footer>

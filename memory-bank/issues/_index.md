@@ -19,7 +19,7 @@
 
 | 类型 | 条数 |
 |---|---|
-| bug | 24 |
+| bug | 23 |
 | perf | 2 |
 | docs | 3 |
 | test | 11 |
@@ -37,7 +37,6 @@
 
 ## Open
 
-- [bug] [hr server 头部读取路径 ConnectionResetError 冒泡 handle_error 打 stderr](26-11-08-0827-bug-hr-server-header-read-reset.html) — 读体路径已护(#12),…
 - [bug] [compare_digest str 非 ASCII 隐患同构两处(discovery 配对码/webui auth token)](26-11-08-0827-bug-hr-webui-compare-digest-ascii.html) — discovery.py…
 - [bug] [relocate _arm 不重置旧 journal: 终态残留致同 id 再迁移收不到 fastresume 改写](26-11-08-0827-bug-relocate-arm-journal-reset.html) — job_id=sha1(…
 - [docs] [hr/relocate docstring 措辞漂移聚合(fetcher refresh.reason/finalize_face failed 语义/store 行锚)](26-11-08-0827-docs-hr-relocate-docstring-drift.html) — fetcher.py:7…
@@ -117,7 +116,7 @@
 ## Done
 
 
-> 更早的 **446** 条已出本索引 —— 报告仍在 `issues/` 目录(未搬动), 全量清单见 [attachments/_archive.md](attachments/_archive.md).
+> 更早的 **447** 条已出本索引 —— 报告仍在 `issues/` 目录(未搬动), 全量清单见 [attachments/_archive.md](attachments/_archive.md).
 
 ## Dropped
 

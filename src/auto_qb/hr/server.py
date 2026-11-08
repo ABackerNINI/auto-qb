@@ -23,6 +23,7 @@
 import json
 import logging
 import secrets
+import sys
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -82,6 +83,17 @@ class _EndpointServer(ThreadingHTTPServer):
         host, port = self.server_address[:2]
         self.server_name = host
         self.server_port = port
+
+    def handle_error(self, request: Any, client_address: Any) -> None:  # noqa: A003 (基类签名)
+        """连接级异常兜底: 客户端在**请求行/头部读取路径**(标准库 readline)半路断开时
+        ConnectionResetError 会冒到这里 —— 读体(_dispatch)与写响应(_safe_respond)都按
+        「断开是常态不是故障」记 debug, 头读路径同口径, 不该落成默认实现的 stderr traceback。
+        其余异常照旧走默认(不吞真实故障)。"""
+        exc = sys.exc_info()[1]
+        if isinstance(exc, (ConnectionError, OSError)):
+            logger.debug(f"HR 端点 | 连接在请求处理中断开(客户端已断开): {exc!r}, 来源 {client_address}")
+            return
+        super().handle_error(request, client_address)
 
 
 class RejectThrottle:
