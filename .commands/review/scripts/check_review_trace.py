@@ -7,6 +7,9 @@
 批次范围 = **最近一条带 `Review:` / `Review-Skip:` 的提交 → 当前工作树**。锚点从 git 历史现算,
 agent 不用填 hash(填错就是假账), 且天然"连坐": 谁漏评, 那笔提交就滚进下一批, 由下一批被迫覆盖
 ——「不留免评节点」是这条规则的全部意义。冷启动(历史里一条都没有)时起点退化为 HEAD, 只算工作树。
+锚点与计数都**走主线(first-parent)**、批次行数**逐笔累计**(合并提交取对第一父母的差): 合并拓扑下
+树差 ≠ 新增提交, 侧分支 trailer 也不遮蔽主线 —— 详见 anchor_commit / _numstat 的 docstring 与
+issue 26-11-08-0903。
 
 ## 判据(顺序即优先级)
 1. 批内改动 0 行(仅记账类/生成物) → 通过(静默)
@@ -138,8 +141,9 @@ def _counted(path: str, gen: set[str]) -> bool:
     return not any(path.startswith(p) for p in BOOKKEEPING_PREFIXES)
 
 
-def _numstat(root: Path, base: str, gen: set[str]) -> tuple[int, list[str]]:
-    """`base` → 工作树 的改动行数(增+删)与被计数的路径清单。
+def _count_numstat(root: Path, git_args: list[str], gen: set[str], total: int,
+                   files: list[str]) -> tuple[int, list[str]]:
+    """跑一条 numstat 类 git 命令并把结果累计进 (total, files)。
 
     `--no-renames`: numstat 默认把改名写成 `a/{b => c}/d` 合成串, 既不是真实路径、也不匹配任何
     前缀 —— 移进记账目录的改名会被当普通改动计入, 生成物的 `{_index.md => _index-1.md}` 也绕开
@@ -147,10 +151,9 @@ def _numstat(root: Path, base: str, gen: set[str]) -> tuple[int, list[str]]:
     `core.quotepath=off`: 默认 ON 时非 ASCII 路径被八进制转义加引号, `root / path` 不存在 →
     整批漏计(与 _pipeline.changed_files 同款坑)。
     """
-    proc = _git(root, "-c", "core.quotepath=off", "diff", "--numstat", "--no-renames", base)
+    proc = _git(root, "-c", "core.quotepath=off", *git_args)
     if proc.returncode != 0:
         raise SystemExit(2)
-    total, files = 0, []
     for line in proc.stdout.splitlines():
         parts = line.split("\t")
         if len(parts) < 3:
@@ -163,6 +166,52 @@ def _numstat(root: Path, base: str, gen: set[str]) -> tuple[int, list[str]]:
             continue
         total += int(add) + int(delete)
     return total, files
+
+
+def _numstat(root: Path, base: str, gen: set[str]) -> tuple[int, list[str]]:
+    """`base` 之后的主线提交逐笔 + 侧分支无 trailer 提交 + 工作树 的改动行数(增+删)与路径清单。
+
+    为什么逐笔不整段树差: base..HEAD 之间含合并提交时(跨 clone 分支流合流的常态), 树差
+    `git diff base` 量的是「两棵树的差」而不是「新增了哪些提交」—— 被合并分支的已评内容
+    会整支算进本批(2026-11-08 实证, 详见 issue 26-11-08-0903)。逐笔口径:
+      普通提交 = `git diff <sha>^ <sha>`(自身改动);
+      合并提交 = `git show --remerge-diff`(自动合并结果 vs 实际合并结果 = 纯冲突解决面 ——
+                 分支侧内容已随分支自己的 trailer 评过, 第一父母树差/combined diff 都会把它们
+                 重复计入; 实证 0469bf0c: 第一父母差 53 文件, remerge 只剩 2 个生成物);
+                 remerge 失败(旧 git / 特殊提交)按 0 计。
+      侧分支提交 = base..HEAD 全集里不在 first-parent 路径上的那部分: 带 Review/Review-Skip
+                 trailer 的(已评)排除; **无 trailer 的按自身 diff 计入** —— 连坐承诺(漏评滚进
+                 下一批)对侧分支同样成立: 裸 git commit / 漏写 trailer 的提交落在侧分支再被
+                 干净合并, 若只算主线+remerge 会整类漏计(评审二轮 major, 假绿通路)。
+    工作树部分 = `git diff HEAD`(已暂存未提交 + 未暂存)。
+    """
+    total, files = 0, []
+    mainline = _git(root, "rev-list", "--first-parent", f"{base}..HEAD").stdout.split()
+    seen = set(mainline)
+    side = [s for s in _git(root, "rev-list", f"{base}..HEAD").stdout.split() if s not in seen]
+    for sha in mainline:
+        total, files = _commit_numstat(root, sha, gen, total, files)
+    for sha in side:
+        body = _git(root, "log", "-1", "--format=%B", sha).stdout
+        if REVIEW_LINE_RE.search(body) or SKIP_LINE_RE.search(body):
+            continue  # 侧分支自带 trailer = 已评, 不计入
+        total, files = _commit_numstat(root, sha, gen, total, files)
+    return _count_numstat(root, ["diff", "--numstat", "--no-renames", "HEAD"], gen, total, files)
+
+
+def _commit_numstat(root: Path, sha: str, gen: set[str], total: int, files: list[str]) -> tuple[int, list[str]]:
+    """单笔提交的改动行数: 普通提交 = 与父母的差; 合并提交 = remerge(冲突解决面, 失败按 0 计)。"""
+    parents = _git(root, "rev-list", "--parents", "-1", sha).stdout.split()
+    if len(parents) > 2:  # 合并提交(sha + ≥2 父母)
+        args = ["show", "--remerge-diff", "--numstat", "--format=", "--no-renames", sha]
+    else:
+        args = ["diff", "--numstat", "--no-renames", f"{sha}^", sha]
+    try:
+        return _count_numstat(root, args, gen, total, files)
+    except SystemExit:
+        if len(parents) > 2:
+            return total, files  # remerge 失败的合并提交按 0 计(见 _numstat docstring)
+        raise
 
 
 def _untracked(root: Path, gen: set[str]) -> tuple[int, list[str]]:
@@ -225,16 +274,22 @@ def message_text(root: Path, explicit: str | None) -> tuple[str, str]:
 
 
 def anchor_commit(root: Path) -> str:
-    """最近一条带 `Review:` / `Review-Skip:` 的提交; 一条都没有时退回 HEAD(冷启动只算工作树)。
+    """主线(first-parent 路径)上最近一条带 `Review:` / `Review-Skip:` 的提交; 一条都没有时退回
+    HEAD(冷启动只算工作树)。
 
-    ❗**不设扫描窗口**: 曾经用 `-200` 提速, 结果"上一条 trailer 在第 201 笔"时静默退回 HEAD ——
+    ❗不设扫描窗口: 曾经用 `-200` 提速, 结果"上一条 trailer 在第 201 笔"时静默退回 HEAD ——
     整段累计批被丢弃且无任何提示, 正好与"漏评提交滚进下一批"的连坐机制相反(2026-11-06 评审实测)。
     几千笔提交的 message 全量解析也就几百 KB, 不值得为它换一个静默失效点。
+    ❗必须 --first-parent: 侧分支 tip 自带 trailer 时(跨 clone 分支流的常态), 平铺 log 按提交时间
+    会取到它 —— 而侧分支常从旧基线切出, 配合 _numstat 的树差会把主线在分支切出之后的全部已评
+    工作整支算进「本批」(2026-11-08 实证: config-infra 分支 tip 80df0b9a 遮蔽主线锚点 70bba719,
+    实算虚增 ~9600 行, 提交被死锁; 详见 issue 26-11-08-0903)。侧分支的提交已随它自己的 trailer
+    评审过, 不该由主线锚点承担。
     """
     head = _git(root, "rev-parse", "HEAD").stdout.strip()
     if not head:
         return ""
-    proc = _git(root, "log", "--format=%H%x1f%B%x1e")
+    proc = _git(root, "log", "--first-parent", "--format=%H%x1f%B%x1e")
     for rec in proc.stdout.split("\x1e"):
         if "\x1f" not in rec:
             continue
@@ -282,11 +337,15 @@ def decide(count: int, sensitive: list[str], message: str) -> tuple[bool, str]:
                 )
         declared = LINES_RE.search(line)
         if not declared:
-            return False, (f"`Review:` 行缺 `<N> 行` 声明(实算 {count} 行) —— 按 code-review skill ⑦ 的格式补齐"
-                           " —— " + _skeleton(count))
+            return False, (
+                f"`Review:` 行缺 `<N> 行` 声明(实算 {count} 行) —— 按 code-review skill ⑦ 的格式补齐"
+                " —— " + _skeleton(count)
+            )
         if int(declared.group(1)) != count:
-            return False, (f"`Review:` 声明 {declared.group(1)} 行 ≠ 实算 {count} 行 —— "
-                           "数字必须是提交那一刻实测的, 改对再提交 —— " + _skeleton(count))
+            return False, (
+                f"`Review:` 声明 {declared.group(1)} 行 ≠ 实算 {count} 行 —— "
+                "数字必须是提交那一刻实测的, 改对再提交 —— " + _skeleton(count)
+            )
         fixed: dict[str, int] = {}
         missing = []
         for name, rx in COUNT_FIELDS:
@@ -301,23 +360,25 @@ def decide(count: int, sensitive: list[str], message: str) -> tuple[bool, str]:
             # 在场正则只用来把措辞说准 —— 两个方向都是红, 不存在静默通过。
             missing.append("检(形状不对, 应为 `检 P/T`)" if CHECK_PRESENT_RE.search(line) else "检")
         if missing:
-            return False, (f"`Review:` 行缺字段: {'/'.join(missing)} —— 按 skill ⑦ 的格式补齐; "
-                           "检 P/T: T=送检发现数, P=引文逐字通过数(review.check 判过的条目) —— "
-                           + _skeleton(count))
+            return False, (
+                f"`Review:` 行缺字段: {'/'.join(missing)} —— 按 skill ⑦ 的格式补齐; "
+                "检 P/T: T=送检发现数, P=引文逐字通过数(review.check 判过的条目) —— " + _skeleton(count)
+            )
         passed, total = int(check.group(1)), int(check.group(2))
         if passed > total:
             return False, (f"`检 {passed}/{total}`: P(过检数) > T(送检数) —— 通过的条目不可能多于送检的, "
                            "数字写反了 —— " + _skeleton(count))
         lower = fixed["修"] + fixed["入池"]
         if passed < lower:
-            return False, (f"`检 {passed}/{total}`: P(过检数) {passed} < 修 {fixed['修']} + 入池 {fixed['入池']}"
-                           f" = {lower} —— 修/入池 只数过检且未被 REFUTE 的发现(自发顺手修、被 REFUTE 弃掉的"
-                           "条目不进这两个数), 口径对不上就改数 —— " + _skeleton(count))
+            return False, (
+                f"`检 {passed}/{total}`: P(过检数) {passed} < 修 {fixed['修']} + 入池 {fixed['入池']}"
+                f" = {lower} —— 修/入池 只数过检且未被 REFUTE 的发现(自发顺手修、被 REFUTE 弃掉的"
+                "条目不进这两个数), 口径对不上就改数 —— " + _skeleton(count)
+            )
         if DISPATCH_PRESENT_RE.search(line) and not DISPATCH_RE.search(line):
             # ≤ CEILING 不校验派发数值, 但写了 `派发` 字样就必须是数字形状 —— 否则直贴骨架的 `派发 ?`
             # 会按缺省静默通过(0441 落点 4)。> CEILING 时上面已保证派发合法且 ≥ 2, 走不到这里。
-            return False, ("`派发` 字段形状不对(应为 `· 派发 <K>`, K 为数字) —— 骨架里的 `?` 要换成实数 —— "
-                           + _skeleton(count))
+            return False, ("`派发` 字段形状不对(应为 `· 派发 <K>`, K 为数字) —— 骨架里的 `?` 要换成实数 —— " + _skeleton(count))
         return True, f"已评审 {count} 行"
 
     skip = SKIP_LINE_RE.search(message)

@@ -106,21 +106,24 @@
       <div v-else-if="col.key === 'last_activity'" class="g-stat" :title="$root.cellTimeHint(g.last_activity, 'last_activity')">{{ $root.cellTime(g.last_activity, 'last_activity') }}</div>
       <!-- 保存路径(2026-09-17): 组级取首位成员值(与路径筛选器同口径) -->
       <!-- 选中下划线(f-on)挂文字包裹层 .sp-body(同种子页口径): 挂单元格 div 会随列宽(行是 grid) -->
-      <!-- P1 迁移展示(plan 26-11-07-2344 S2, 取代 26-11-04-1042 文字徽章): 位于路径列但**独立于
-           路径筛选**。pair = 着色 A→B 两排(上排当前位置/下排目标位置 + 右缘弧形箭头), one = 单排
-           仅状态着色。零点击(plan D9): 无任何按钮语义、原生 title 不写迁移状态 —— 详情真相在
+      <!-- P1 迁移展示(plan 26-11-07-2344 S2, 取代 26-11-04-1042 文字徽章): pair = 着色 A→B 两排
+           (上排当前位置/下排目标位置 + 右缘弧形箭头)**替换**单排路径(A 排承载同一值, 原路径行
+           隐藏 —— R3 缺口修正), one = 单排仅状态着色。R3 D16(D9 修订 = 零导航点击): A/B 排路径
+           chip 可点 = 切换路径筛选(显示值即筛选值, toggle 语义), 仍不开抽屉/链浮窗; 详情真相在
            悬停浮窗(relocate_pop.js, 本单元格挂触发), 展示判定单点 $root.relocateView。 -->
       <div v-else-if="col.key === 'save_path'" class="g-save-path"
            :class="{ 'has-relpair': !!$root.relocateView(g) && $root.relocateView(g).mode === 'pair' }" :title="g.save_path"
            @mouseenter="$root.relPopEnter($event, g)" @mouseleave="$root.relPopLeave">
-        <span class="sp-body f-cell"
+        <span v-if="!$root.relocateView(g) || $root.relocateView(g).mode !== 'pair'" class="sp-body f-cell"
               :class="[{ 'f-on': $root.isFilterOn('pathFilter', g.save_path) }, $root.relocateView(g) && $root.relocateView(g).mode === 'one' ? 'rel-tone-' + $root.relocateView(g).tone : '']"
               @click.stop="$root.filterFromChip('path', g.save_path)">{{ g.save_path || '' }}</span>
         <span v-if="$root.relocateView(g) && $root.relocateView(g).mode === 'pair'" class="rel-pair"
               :class="'rel-tone-' + $root.relocateView(g).tone">
           <span class="rel-pcol">
-            <span class="rel-pa">{{ $root.relocateView(g).a }}</span>
-            <span class="rel-pb">{{ $root.relocateView(g).b }}</span>
+            <span class="rel-pa f-cell" :class="{ 'f-on': $root.isFilterOn('pathFilter', $root.relocateView(g).a) }"
+                  @click.stop="$root.filterFromChip('path', $root.relocateView(g).a)">{{ $root.relocateView(g).a }}</span>
+            <span class="rel-pb f-cell" :class="{ 'f-on': $root.isFilterOn('pathFilter', $root.relocateView(g).b) }"
+                  @click.stop="$root.filterFromChip('path', $root.relocateView(g).b)">{{ $root.relocateView(g).b }}</span>
           </span>
           <svg class="rel-arc" viewBox="0 0 14 36" aria-hidden="true"><path d="M4 4 C 12 9.5 12 26.5 4 32" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M8.6 31.6 L4 32 L6.2 27.9" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </span>
@@ -205,20 +208,22 @@
       </div>
       <!-- 保存路径: 选中下划线(f-on)必须挂**文字**包裹层 .sp-body —— 挂单元格 div 会随列宽
            (行是 grid, 单元格被拉满列宽), 与 .m-dur 的 .dur-body 同一教训 -->
-      <!-- P1 迁移展示(plan 26-11-07-2344 S2): 与组行 save_path 分支完全对称 —— pair 两排/one
-           单排着色/零点击(无按钮语义, title 不写迁移状态), 判定单点 $root.relocateView,
-           浮窗在 relocate_pop.js(本单元格挂触发)。 -->
+      <!-- P1 迁移展示(plan 26-11-07-2344 S2 + R3): 与组行 save_path 分支完全对称 —— pair 两排
+           **替换**单排路径(原路径行隐藏)/one 单排着色; A/B 排 chip 可点筛选(D16, 不开抽屉/
+           链浮窗, title 不写迁移状态), 判定单点 $root.relocateView, 浮窗在 relocate_pop.js。 -->
       <div v-else-if="col.key === 'save_path'" class="g-save-path"
            :class="{ 'has-relpair': !!$root.relocateView(m) && $root.relocateView(m).mode === 'pair' }" :title="m.save_path"
            @mouseenter="$root.relPopEnter($event, m)" @mouseleave="$root.relPopLeave">
-        <span class="sp-body f-cell"
+        <span v-if="!$root.relocateView(m) || $root.relocateView(m).mode !== 'pair'" class="sp-body f-cell"
               :class="[{ 'f-on': $root.isFilterOn('pathFilter', m.save_path) }, $root.relocateView(m) && $root.relocateView(m).mode === 'one' ? 'rel-tone-' + $root.relocateView(m).tone : '']"
               @click.stop="$root.filterFromChip('path', m.save_path)">{{ m.save_path || '' }}</span>
         <span v-if="$root.relocateView(m) && $root.relocateView(m).mode === 'pair'" class="rel-pair"
               :class="'rel-tone-' + $root.relocateView(m).tone">
           <span class="rel-pcol">
-            <span class="rel-pa">{{ $root.relocateView(m).a }}</span>
-            <span class="rel-pb">{{ $root.relocateView(m).b }}</span>
+            <span class="rel-pa f-cell" :class="{ 'f-on': $root.isFilterOn('pathFilter', $root.relocateView(m).a) }"
+                  @click.stop="$root.filterFromChip('path', $root.relocateView(m).a)">{{ $root.relocateView(m).a }}</span>
+            <span class="rel-pb f-cell" :class="{ 'f-on': $root.isFilterOn('pathFilter', $root.relocateView(m).b) }"
+                  @click.stop="$root.filterFromChip('path', $root.relocateView(m).b)">{{ $root.relocateView(m).b }}</span>
           </span>
           <svg class="rel-arc" viewBox="0 0 14 36" aria-hidden="true"><path d="M4 4 C 12 9.5 12 26.5 4 32" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M8.6 31.6 L4 32 L6.2 27.9" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </span>

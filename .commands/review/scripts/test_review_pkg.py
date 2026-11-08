@@ -27,6 +27,7 @@ from __future__ import annotations
 import argparse
 import fnmatch
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -704,7 +705,11 @@ def _run_trace(root: Path, msg_file: Path | None = None) -> subprocess.Completed
     args = [sys.executable, str(TRACE_SCRIPT), "--root", str(root)]
     if msg_file is not None:
         args += ["--message-file", str(msg_file)]
-    return subprocess.run(args, capture_output=True, text=True, encoding="utf-8", errors="replace")
+    # !剥掉消息文件 env(POST_MARKER 同款陷阱的 env 变量版): 闸门在 commit.py 里跑 pytest 时
+    # 子进程会继承 COMMIT_FLOW_MSG_FILE, 嵌套的 trace 探针误读真实提交消息 → 「按 HEAD 判」
+    # 提示与消息来源断言全歪(2026-11-08 pkg.scoped 实测)。探针的消息来源必须只由参数决定。
+    env = {k: v for k, v in os.environ.items() if k != "COMMIT_FLOW_MSG_FILE"}
+    return subprocess.run(args, capture_output=True, text=True, encoding="utf-8", errors="replace", env=env)
 
 
 class TraceDecideTest(unittest.TestCase):
@@ -959,6 +964,51 @@ class TraceGateTest(unittest.TestCase):
         self._append(5)  # 新一批只有 5 行 —— 锚点已前进, 不该被上一批的行数拖累
         proc = _run_trace(self.tmp, self._msg("小补\n"))
         self.assertEqual(proc.returncode, 0, proc.stdout)
+
+    def test_merge_with_stale_branch_tip_does_not_pollute_the_batch(self):
+        """合并拓扑(issue 26-11-08-0903): 侧分支 tip 带 trailer 且基线旧时, 锚点不遮蔽主线、
+        树差不把分支已评内容算进本批 —— 逐笔计数只算主线新增 + 工作树。
+
+        复刻事故形态: 锚点 b3(60 行已评) → 侧分支从 b3 切出、tip 带自己的 trailer、改**独立文件**
+        (干净合并, 与 26-11-08 实证的事故同形态) → 主线继续推进(已评 c4) → 合并分支 → 工作树 20 行
+        新批。平铺锚点/树差算法下锚点取到主线 c4(比 c5 新), 树差把分支 c5 的 30 行整支重复计入
+        (实算 50 ≥ 下限, 消息无 Review 判红); 修复后实算 = 20(工作树; 干净合并的 remerge-diff = 0),
+        闸门静默放行。
+        """
+        self._append(60)
+        self._commit("✨ b3\n\nReview: b3 · 60 行 · blocker 0 · 修 0 · 入池 0\n")
+        self._git("checkout", "-b", "side")
+        (self.tmp / "side.py").write_text("S = 1\n" * 30, encoding="utf-8")
+        self._commit("✨ c5(侧分支)\n\nReview: 侧分支 · 30 行 · blocker 0 · 修 0 · 入池 0\n")
+        self._git("checkout", "master")
+        self._append(60)
+        self._commit("✨ c4(主线)\n\nReview: 主线 · 60 行 · blocker 0 · 修 0 · 入池 0\n")
+        self._git("merge", "--no-edit", "-q", "side")  # 分支侧内容已随 c5 trailer 评过(独立文件, 干净合并)
+        self._append(20)  # 本批: 只有工作树 20 行
+        proc = _run_trace(self.tmp, self._msg("新批\n"))
+        self.assertEqual(proc.returncode, 0, proc.stdout)
+        self.assertNotIn("110", proc.stdout)
+
+    def test_untrailered_side_commit_rolled_into_next_batch(self):
+        """连坐对侧分支同样成立(评审二轮 major): 无 trailer 的侧分支提交被干净合并后,
+        其内容必须按自身 diff 计入下一批 —— 不允许「主线+remerge」口径把它整类漏计(假绿)。
+
+        与上一条同拓扑, 唯一差异: 侧分支 c5 不写 trailer。修复后实算 = 30(侧支自身 diff)
+        + 20(工作树) = 50 ≥ 下限, 无 trailer 判红。
+        """
+        self._append(60)
+        self._commit("✨ b3\n\nReview: b3 · 60 行 · blocker 0 · 修 0 · 入池 0\n")
+        self._git("checkout", "-b", "side")
+        (self.tmp / "side.py").write_text("S = 1\n" * 30, encoding="utf-8")
+        self._commit("漏评的侧分支提交\n")
+        self._git("checkout", "master")
+        self._append(60)
+        self._commit("✨ c4(主线)\n\nReview: 主线 · 60 行 · blocker 0 · 修 0 · 入池 0\n")
+        self._git("merge", "--no-edit", "-q", "side")
+        self._append(20)
+        proc = _run_trace(self.tmp, self._msg("新批\n"))
+        self.assertEqual(proc.returncode, 1, proc.stdout)
+        self.assertIn("50 行", proc.stdout)
 
     def test_post_marker_skips_recheck_and_is_consumed(self):
         """合流复跑(commit.py 写的 `.git/review_trace_post`)不再对行数, 且标记用后即删。

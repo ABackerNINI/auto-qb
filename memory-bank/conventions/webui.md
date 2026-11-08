@@ -1,7 +1,7 @@
 # WEB UI 产出口径与令牌
 
 > 摘要: 菜单/入口分层、令牌分工、按钮体系、悬浮提示、选中摘要口径、fx 动效库与 flux 皮肤、HTML dark 主题、迁移状态展示 —— 前端产出口径的唯一出处。各主题已外迁到 `attachments/webui-*.md`, 见下方主题地图。
-> 触发: WEB UI 约定, 菜单分层, 令牌, 主题, dark, HTML 产出, tooltip, 悬浮提示, 选中摘要, occ_key, 实际占用, fx, 动效, data-fx, flux, 皮肤, preset, reduced-motion, 迁移状态, rel-pair, relocate_pop, --path-src
+> 触发: WEB UI 约定, 菜单分层, 令牌, 主题, dark, HTML 产出, tooltip, 悬浮提示, 选中摘要, occ_key, 实际占用, fx, 动效, data-fx, flux, 皮肤, preset, reduced-motion, 迁移状态, rel-pair, relocate_pop, --path-src, _pathPositions, 位置集
 **Refs:** memory-bank/issues/26-10-20-2231-refactor-fe-css-rule-family-dup.html, memory-bank/plans/26-10-31-2316-plan-webui-fx-skin.html
 
 ## 写 WebUI 前必读(硬规则)
@@ -32,8 +32,9 @@
 
 ## 迁移状态展示口径(路径列)
 
-- **行内两排 A→B 着色**: 状态唯一载体 = 颜色(当前位置/目标位置两排按态着 accent/warn/error), 无底形无边框无药丸; done/cancelled 回落单排; 判定单点 `decorate.js::relocateView(row)`, 指纹签名同步含 src。
+- **行内两排 A→B 着色**: 状态唯一载体 = 颜色(当前位置/目标位置两排按态着 accent/warn/error), 无底形无边框无药丸; done/cancelled 回落单排; 判定单点 `decorate.js::relocateView(row)`, 指纹签名同步含 src。pair 模式**替换**单排路径(A 排承载同一值, 原路径行隐藏)。
+- **路径 chip 点击筛选(R3 D16, 修订原 D9 零点击)**: A/B 排带 `.f-cell`(cursor+hover)+ 各自独立 `.f-on`, 点击 = `filterFromChip('path', a/b)`(显示值即筛选值, toggle 语义); 仍不开抽屉/链浮窗, 详情走悬停浮窗。
+- **路径筛选 = 位置集匹配(R3 D17)**: 匹配与选项计数同一单点 `decorate.js::_pathPositions(r)` —— save_path 恒参与, 进行中三态(moving/pending_finalize/failed)的迁移 src/dst 并入「保存位置」; done/cancelled 历史位置不参与(迁移完成即退出匹配, 既定推论)。消费点四处(filters.js _facetPick/组级谓词/虚拟行谓词 + hr.js _memberPass)禁止各写 save_path 判断。
 - **悬停浮窗**: 详情走 `shared/relocate_pop.js`(调度与 hrPop 同参: enter 120ms / leave 160ms / 移入浮窗不关 / teleport body / ESC 退栈); 数据全来自行载荷, 零新请求。
-- **零点击**: 行内无按钮语义、无原生 title(防与浮窗叠影); 链拓扑深看走抽屉内入口。
 - **皮肤自适应单点**: 状态圆点/端点圆角 = `calc(var(--radius-sm) / 2)` 一条规则四皮肤自适应, 不写皮肤分支; 浮窗「当前位置」行用 `--path-src` 固定色令牌(四皮肤令牌表各定值), 不随状态色。
 - **视觉规格单点**: `memory-bank/plans/attachments/relocate-status-display-v2-mockup.html`(四皮肤可切换、交互可点)。

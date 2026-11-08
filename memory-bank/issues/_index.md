@@ -22,7 +22,7 @@
 | bug | 25 |
 | perf | 2 |
 | docs | 4 |
-| test | 10 |
+| test | 11 |
 | refactor | 7 |
 | feat | 20 |
 | chore | 1 |
@@ -43,6 +43,7 @@
 - [bug] [relocate _arm 不重置旧 journal: 终态残留致同 id 再迁移收不到 fastresume 改写](26-11-08-0827-bug-relocate-arm-journal-reset.html) — job_id=sha1(…
 - [docs] [hr/relocate docstring 措辞漂移聚合(fetcher refresh.reason/finalize_face failed 语义/store 行锚)](26-11-08-0827-docs-hr-relocate-docstring-drift.html) — fetcher.py:7…
 - [refactor] [小件清理聚合: _WaveContext.alerted 死字段 + 测试 docstring 超宽两行](26-11-08-0827-refactor-hr-leftover-cleanups.html) — service_comm…
+- [test] [e2e move-dialog-fit .move-note 定位器 strict violation: 两提示段共存后两皮肤恒红](26-11-08-0820-test-e2e-move-note-strict-collision.html) — move-dialog…
 - [bug] [cooldown/notify_cooldown_s 文档口径「0 = 不冷却」但校验拒裸 0(与已修 R4#9/#15 同根)](26-11-08-0703-bug-config-bare-zero-cooldown-keys.html) — example_rule…
 - [bug] [测试文件存量带圈数字违反 code-style 禁字符](26-11-08-0703-bug-tests-circled-digit-legacy.html) — tests/test_r…
 - [bug] [auth.py _is_loopback_host 自有字面量集,回环判定三套并存](26-11-08-0703-bug-webui-auth-loopback-third-set.html) — auth.py:32-3…
@@ -118,7 +119,7 @@
 ## Done
 
 
-> 更早的 **442** 条已出本索引 —— 报告仍在 `issues/` 目录(未搬动), 全量清单见 [attachments/_archive.md](attachments/_archive.md).
+> 更早的 **444** 条已出本索引 —— 报告仍在 `issues/` 目录(未搬动), 全量清单见 [attachments/_archive.md](attachments/_archive.md).
 
 ## Dropped
 

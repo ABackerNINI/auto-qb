@@ -51,6 +51,9 @@ const RELOCATE_STATE_TEXT = {
 const RELOCATE_TONE = { moving: "moving", pending_finalize: "pending", failed: "failed", mixed: "mixed" };
 const RELOCATE_FILTER_ANY = "有过迁移";
 const RELOCATE_ORIGIN_TEXT = { web: "WebUI", rule: "规则", unknown: "未知来源" };
+/* 进行中三态(plan 26-11-07-2344 R3 D17): 位置集匹配(_pathPositions)与行内两排展示
+ * (relocateView pair)共用同一 active 边界 —— 行内显示 B 排的行, 其 dst 才参与路径匹配。 */
+const RELOCATE_ACTIVE_STATES = new Set(["moving", "pending_finalize", "failed"]);
 
 function _groupRelocateSig(r) {
   if (!r) return "";
@@ -136,7 +139,8 @@ window.AQB_DECORATE = {
      * 组行(有 members)读 g.relocate(后端聚合, 不取首成员推断 —— P0 纪律); 种子行读 m.relocate。
      * 两排判定: 组级 src 非空且 dst 恰 1 个 -> pair(a=src, b=dst[0]); mixed 恒单排(组内多任务
      * 状态不一致, 一对路径表达不了); 种子行 src/dst 均非空 -> pair, 任一缺失 -> one。
-     * 零点击(plan D9): 本方法不携带任何行为, 模板不给它挂 click/title。 */
+     * 零导航点击(plan D9, R3 D16 修订): A/B 排路径 chip 可点 = 切换路径筛选(显示值即筛选值),
+     * 仍不开抽屉/链浮窗; 本方法本身不携带任何行为, 点击行为在模板层。 */
     relocateView(row) {
       const rel = row && row.relocate;
       if (!rel) return null;
@@ -171,6 +175,24 @@ window.AQB_DECORATE = {
       const out = [];
       for (const r of row.members || [row]) {
         for (const b of this._relocatePick(r)) if (!out.includes(b)) out.push(b);
+      }
+      return out;
+    },
+    /* 路径筛选位置集(plan 26-11-07-2344 R3 D17): 路径筛选的匹配与选项计数的**同一单点** ——
+     * save_path 恒参与; 进行中三态(moving/pending_finalize/failed)的迁移标注把 src/dst 并入
+     * 「保存位置」(D16: 行内 A/B 排路径 chip 点击筛的就是这个口径, 不新增筛选维度);
+     * done/cancelled 的历史 src/dst 不参与 —— 迁移完成即回落纯 save_path(该行不再命中
+     * 迁移期点出的 src/dst 值, 是 D17 active 边界的既定推论)。消费点四四处: filters.js
+     * _facetPick(选项计数)/组级谓词/虚拟行谓词 + hr.js _memberPass, 全部走本方法, 禁止
+     * 各自再写 save_path 判断(漂移 = 计数里存在的值筛不出来, R5#36 同源教训)。 */
+    _pathPositions(r) {
+      const out = [(r && r.save_path) || ""];
+      const rel = r && r.relocate;
+      if (rel && RELOCATE_ACTIVE_STATES.has(rel.state)) {
+        if (rel.src && !out.includes(rel.src)) out.push(rel.src);
+        for (const d of Array.isArray(rel.dst) ? rel.dst : [rel.dst]) {
+          if (d && !out.includes(d)) out.push(d);
+        }
       }
       return out;
     },

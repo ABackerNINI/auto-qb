@@ -256,7 +256,8 @@ window.AQB_STATE = {
       siteFilter: [],
       hrFilter: [],          // H&R 筛选(不能删/考核未通过/可删/疑似辅种; 与其它多选筛选器同形, 口径见 _hrBuckets)
       hrSrcFilter: [],       // HR 来源筛选(在线核实/本地兜底/策略; 口径见 hr.js hrSrcOptions)
-      // 迁移状态筛选(plan 26-11-04-1042 P1): 与路径筛**互不影响** —— 路径筛仍按 qB save_path,
+      // 迁移状态筛选(plan 26-11-04-1042 P1): 与路径筛**维度独立** —— 路径筛匹配面 = 位置集
+      // (save_path + 进行中三态 src/dst, 单点 decorate.js::_pathPositions, R3 D17);
       // 本筛选只读 relocate 标注(moving/pending_finalize/failed/有过迁移; 口径见 decorate.js _relocateBuckets)
       relocateFilter: [],
       filterMenu: "",         // 当前展开的筛选弹层: "" | "tag" | "category" | "site" | "hr" | "hr-src" | "relocate" | "path"

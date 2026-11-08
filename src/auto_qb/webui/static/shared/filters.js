@@ -33,7 +33,9 @@ window.AQB_FILTERS = {
     /* ------------------------------------------- 筛选(状态/路径/标签/分类/站点)与搜索清除 */
     /* 一行的候选值(标签/分类/站点/路径) —— 组行取**全体成员值**, 种子行取自身。
      * 组内同一值只算一次(计数口径见 _facetOptions: 组视图 = 含该值的**组数**, 不是成员总数)。
-     * 空值(未设分类/站点)不计入选项 —— 与改造前 `_memberValueOptions` 的口径一致。 */
+     * 空值(未设分类/站点)不计入选项 —— 与改造前 `_memberValueOptions` 的口径一致。
+     * 路径 = 位置集单点 _pathPositions(plan 26-11-07-2344 R3 D17: save_path + 进行中三态
+     * 的迁移 src/dst), 与匹配谓词同源 —— 选项里存在的值, 谓词必能筛出来。 */
     _facetPick(row, kind) {
       const rows = row.members || [row];
       const out = [];
@@ -41,7 +43,7 @@ window.AQB_FILTERS = {
         if (kind === "tag") out.push(...(r.tags || []));
         else if (kind === "category" && r.category) out.push(r.category);
         else if (kind === "site" && r.site) out.push(r.site);
-        else if (kind === "path") out.push(r.save_path || "");
+        else if (kind === "path") out.push(...this._pathPositions(r));
         else if (kind === "relocate") out.push(...this._relocatePick(r));
       }
       return out;
@@ -167,7 +169,8 @@ window.AQB_FILTERS = {
         // HR 来源副筛选(在线核实/本地兜底/策略): 结论来自优先级链哪一档 —— "只看本地兜底"
         // 正是最需要等在线核实结果的一批种子(计划 webui-hr-safety-display §5 P3)
         { kind: "hr-src", label: "HR 来源", icon: "i-hr", options: this.hrSrcOptions, selected: this.hrSrcFilter, field: "hrSrcFilter" },
-        // 迁移状态(plan 26-11-04-1042 P1): 独立筛选器, **不改路径筛语义** —— 路径仍按 qB save_path
+        // 迁移状态(plan 26-11-04-1042 P1): 与路径筛**维度独立** —— 路径筛的匹配面已并入
+        // 进行中迁移 src/dst(位置集单点 decorate.js::_pathPositions, plan 26-11-07-2344 R3 D17)
         { kind: "relocate", label: "迁移状态", icon: "i-refresh", options: this.relocateOptions, selected: this.relocateFilter, field: "relocateFilter" },
         { kind: "path", label: "路径", icon: "i-folder-open", options: this.pathOptions, selected: this.pathFilter, field: "pathFilter" },
       ];
@@ -213,11 +216,11 @@ window.AQB_FILTERS = {
         base = base.filter((g) => this.relocateFilter.some((b) => this._relocateBuckets(g).includes(b)));
       }
       if (this.pathFilter.length) {
-        // 谓词与选项计数**同侧成员级**(R4 存量评审 R5#36): _facetPick 对组行按每个成员的
-        // save_path 枚举选项并计数, 谓词若只比对组级 save_path(=首成员路径), 组内路径不一时
-        // 选非首成员路径会把计数里存在的组静默滤出 —— tag/category/site 都是成员级谓词,
-        // path 收齐同口径(组内任一成员路径命中即保留整组); 空值兜 "" 与选项/虚拟行分支一致
-        base = base.filter((g) => g.members.some((m) => this.pathFilter.includes(m.save_path || "")));
+        // 谓词与选项计数**同侧成员级**(R4 存量评审 R5#36), 且同走位置集单点 _pathPositions
+        // (plan 26-11-07-2344 R3 D17: save_path + 进行中三态的迁移 src/dst, 与行内 A/B 排
+        // chip 点击同一口径; done/cancelled 历史位置不参与): 组内任一成员位置命中即保留整组;
+        // 空值兜 "" 在单点内保证, 与选项/虚拟行分支一致
+        base = base.filter((g) => g.members.some((m) => this.pathFilter.some((v) => this._pathPositions(m).includes(v))));
       }
       if (this.tagFilter.length) {
         base = base.filter((g) => g.members.some((m) => (m.tags || []).some((t) => this.tagFilter.includes(t))));
@@ -258,7 +261,7 @@ window.AQB_FILTERS = {
         if (this.hrFilter.length && !this.hrFilter.includes(this._hrBucketMember(r))) continue;
         if (this.hrSrcFilter.length && !this.hrSrcFilter.includes(this._hrSrcBucketMember(r))) continue;
         if (this.relocateFilter.length && !this.relocateFilter.some((b) => this._relocateBuckets(r).includes(b))) continue;
-        if (this.pathFilter.length && !this.pathFilter.includes(r.save_path || "")) continue;
+        if (this.pathFilter.length && !this.pathFilter.some((v) => this._pathPositions(r).includes(v))) continue;
         if (this.tagFilter.length && !(r.tags || []).some((t) => this.tagFilter.includes(t))) continue;
         if (this.categoryFilter.length && !this.categoryFilter.includes(r.category || "")) continue;
         if (this.siteFilter.length && !this.siteFilter.includes(r.site)) continue;

@@ -505,14 +505,15 @@ html[data-rowlang="wave"]:not([data-theme="frost"]):not([data-theme="golden"]) .
  * flux·console 直角皮肤冲突/点击连开抽屉三坑)。
  * 结构(xtpl-cells.html 两组 save_path 分支对称): pair = .rel-pair(块宽 fit-content) >
  * .rel-pcol 纵排(.rel-pa 上排当前位置暗 / .rel-pb 下排目标位置亮)+ .rel-arc 右缘弧形箭头
- * (方向语义); one = 单排, tone 类只给 .sp-body 路径文字着色。状态唯一载体 = 颜色
- * (.rel-tone-*, 无底形无边框无药丸, 圆角语言冲突从根上消解), 零点击 —— 无任何按钮语义、
- * 无原生迁移 title, 详情真相在悬停浮窗(relocate_pop.js, 后续任务)。
- * 宽度: has-relpair 时单元格转 flex, 路径文字 flex:1 min-width:0 保左右省略, pair 块
- * flex:0 0 auto 不被长路径挤出列外; 列宽模板不动, 行高按需增长仅限两排行。颜色一律吃皮肤
- * 语义令牌(warn/error/accent 三族名集由 token parity 守阵), 不写皮肤分支。 */
+ * (方向语义), **替换**单排路径(A 排承载同一值, 原路径行隐藏 —— R3 缺口修正); one = 单排,
+ * tone 类只给 .sp-body 路径文字着色。状态唯一载体 = 颜色(.rel-tone-*, 无底形无边框无药丸,
+ * 圆角语言冲突从根上消解)。R3 D16(D9 修订 = 零导航点击): A/B 排带 .f-cell(四皮肤同款
+ * cursor:pointer + hover 底色)+ 各自独立 .f-on 选中底线, 点击 = 切换路径筛选 —— 仍不开
+ * 抽屉/链浮窗, 详情真相在悬停浮窗(relocate_pop.js)。
+ * 宽度: has-relpair 时单元格转 flex, pair 块 flex:0 0 auto 不被长路径挤出列外(pa/pb 各自
+ * overflow 省略); 列宽模板不动, 行高按需增长仅限两排行。颜色一律吃皮肤语义令牌
+ * (warn/error/accent 三族名集由 token parity 守阵), 不写皮肤分支。 */
 .rl-scope .g-save-path.has-relpair { display: flex; align-items: center; gap: 6px; overflow: hidden; }
-.rl-scope .g-save-path.has-relpair .sp-body { flex: 1 1 auto; min-width: 0; }
 .rl-scope .rel-pair { display: flex; width: fit-content; max-width: 100%; align-items: stretch; gap: 4px; flex: 0 0 auto; }
 .rl-scope .rel-pcol { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .rl-scope .rel-pa, .rl-scope .rel-pb {

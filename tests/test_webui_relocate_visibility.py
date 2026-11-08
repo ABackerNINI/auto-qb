@@ -12,10 +12,10 @@
 - test_relocate_null_when_disabled_or_no_jobs: relocate 关 / 无 job(含旧 state 无 relocate 段) => relocate 字段 null
 - test_view_build_does_not_probe_filesystem_or_iterate_jobs: 列表构建期不 lstat/stat/readlink/islink, 不遍历 _jobs
 - test_decorate_fingerprint_includes_relocate: decorate.js 成员/组 relocate 签名进指纹且槽位长度同步
-- test_p1_pair_rendered_in_path_cells: 组行/种子行路径列渲染 .rel-pair 两排 A→B(rel-pcol+rel-arc), 零点击(无 button/relocateOpen), tone 经 relocateView
+- test_p1_pair_rendered_in_path_cells: 组行/种子行路径列渲染 .rel-pair 两排 A→B(rel-pcol+rel-arc), pair 隐藏原单排路径行(R3), A/B 排 f-cell 可点筛选+f-on 独立(D16), 无按钮语义, tone 经 relocateView
 - test_p1_pair_state_mapping_node: node 探针验证 relocateView 矩阵(pair/one/null)+ 指纹 src 值变化必须变签名
-- test_p1_filter_semantics_and_path_filter_untouched: 迁移状态筛走 facetRows/_facetOptions, 路径筛按 save_path(谓词成员级与计数同侧, R4 存量评审 R5#36)
-- test_p1_filter_behavior_node: node 探针真跑 filteredGroups/relocateOptions —— 组内或、跨筛与、路径筛叠加、清空重置
+- test_p1_filter_semantics_and_path_filter_untouched: 迁移状态筛走 facetRows/_facetOptions, 路径筛按位置集(save_path + 进行中三态 src/dst, R3 D17; 谓词与计数同一 _pathPositions 单点, 成员级)
+- test_p1_filter_behavior_node: node 探针真跑 filteredGroups/relocateOptions —— 组内或、跨筛与、路径筛位置集(dst/src 命中与 done 不命中)、清空重置
 - test_p1_detail_section_and_endpoint_projection: 详情端点带 relocate; 无 job 时详情段整段不渲染
 - test_p1_detail_endpoint_passes_relocate: 真实 /api/torrents/{hash} 端点: 有 job 回传 relocate 投影, 无 job 为 null, save_path 不变
 """
@@ -298,18 +298,30 @@ def _static(name: str) -> str:
 
 
 def test_p1_pair_rendered_in_path_cells():
-    """行内迁移展示 = 着色 A→B 两排 + 右缘弧形箭头(plan 26-11-07-2344 S2/S4), 徽章全撤"""
+    """行内迁移展示 = 着色 A→B 两排 + 右缘弧形箭头(plan 26-11-07-2344 S2/S4 + R3 D16), 徽章全撤"""
     cells = _static("shared/tpl/xtpl-cells.html")
     # 两排结构: 组行与种子行两个 save_path 分支各有 .rel-pair(rel-pcol 纵排 + 右缘弧形箭头)
     assert cells.count('class="rel-pair"') == 2, "组行与种子行路径列都要有两排 A→B 展示"
     assert cells.count('class="rel-pcol"') == 2, "pair 内部必须是纵排列(rel-pcol > rel-pa + rel-pb)"
-    assert cells.count('class="rel-pa"') == 2 and cells.count('class="rel-pb"') == 2
+    assert cells.count('class="rel-pa f-cell"') == 2 and cells.count('class="rel-pb f-cell"') == 2, \
+        "A/B 排必须带 f-cell(四皮肤同款 cursor:pointer + hover 底色)"
     assert cells.count('class="rel-arc"') == 2, "弧形箭头(方向语义)每分支一个"
-    # 零点击(plan D9): 不再有任何按钮语义, 旧徽标连开抽屉的坑③从根上消失
+    # pair 模式隐藏原单排路径行(R3 实施缺口修正): A 排(当前位置)已承载该值, 不再重复渲染;
+    # one/无标注回落仍走原 .sp-body 单排(sp-body 恒在, 由 mode !== 'pair' 守住 pair 隐藏)
+    assert cells.count("mode !== 'pair'") == 2, "pair 模式必须隐藏原单排路径行(A 排已承载同一值)"
+    # R3 D16(D9 修订 = 零导航点击, 路径 chip 筛选保留): A/B 排点击 = 切换路径筛选,
+    # 显示值即筛选值(所见即所筛), f-on 下划线两排各自独立挂 isFilterOn
+    for rowvar in ("g", "m"):
+        for ab in ("a", "b"):
+            assert f"filterFromChip('path', $root.relocateView({rowvar}).{ab})" in cells, \
+                f"{rowvar} 行 {ab} 排必须可点切换路径筛选"
+            assert f"isFilterOn('pathFilter', $root.relocateView({rowvar}).{ab})" in cells, \
+                f"{rowvar} 行 {ab} 排必须独立挂 f-on 选中态"
+    # 无按钮语义(旧徽标连开抽屉的坑③不回归): chip 点击只筛路径, 不开抽屉/链浮窗
     assert "rel-badge" not in cells, "文字徽章已撤, 两排结构取代"
     assert "relocateBadge" not in cells and "relocateOpen" not in cells
     assert "'has-rel'" not in cells, "旧 has-rel 绑定已改 has-relpair"
-    assert 'type="button"' not in cells, "零点击口径: 路径列不得有任何按钮语义"
+    assert 'type="button"' not in cells, "路径列不得有任何按钮语义(点击仅筛选)"
     # 展示口径单点: tone 类经 relocateView 拼接, 模板不写状态字面量
     assert "$root.relocateView(" in cells, "pair/one 判定与 tone 必须走 relocateView 单点"
     assert "'rel-tone-' +" in cells, "tone 类必须经 relocateView().tone 拼接"
@@ -408,10 +420,18 @@ def test_p1_filter_semantics_and_path_filter_untouched():
     assert "this.relocateFilter.length" in filters, "迁移状态筛选必须进入筛选激活判定/应用分支"
     assert '_relocateBuckets(g)' in filters and '_relocateBuckets(r)' in filters
     assert '_relocateBuckets(m)' in _static("shared/hr.js"), "展开组成员也要吃迁移状态筛选"
-    # 路径筛选保持 qB save_path 语义不变(用户已拍板); 谓词成员级与 _facetPick 计数同侧
-    # (R4 存量评审 R5#36: 组内路径不一时只比对组级 save_path 会把整组静默滤出)
-    assert "g.members.some((m) => this.pathFilter.includes(m.save_path || \"\"))" in filters
-    assert "this.pathFilter.includes(r.save_path || \"\")" in filters
+    # 路径筛 = 位置集匹配(plan 26-11-07-2344 R3 D17): save_path 恒参与; 进行中三态(moving/
+    # pending_finalize/failed)的迁移标注把 src/dst 并入「保存位置」—— 行内 A/B 排 chip 点击
+    # 筛的就是同一口径, 不新增筛选维度; done/cancelled 历史位置不参与(回落纯 save_path)。
+    # 谓词与 _facetPick 计数必须同一单点 _pathPositions, 且成员级与计数同侧
+    # (R4 存量评审 R5#36 口径延续: 组内任一成员位置命中即保留整组)
+    assert "_pathPositions(r)" in filters, "选项计数(_facetPick)必须走位置集单点"
+    assert "g.members.some((m) => this.pathFilter.some((v) => this._pathPositions(m).includes(v)))" in filters, \
+        "组级谓词必须成员级走位置集单点"
+    assert "this.pathFilter.some((v) => this._pathPositions(r).includes(v))" in filters, \
+        "虚拟行谓词必须走位置集单点"
+    assert "this.pathFilter.some((v) => this._pathPositions(m).includes(v))" in _static("shared/hr.js"), \
+        "成员级谓词(_memberPass)必须走位置集单点"
     assert "filterFromChip('path', g.save_path)" in _static("shared/tpl/xtpl-cells.html")
     assert "filterFromChip('path', m.save_path)" in _static("shared/tpl/xtpl-cells.html")
 
@@ -425,10 +445,10 @@ vm.runInContext(fs.readFileSync(process.argv[2],'utf8'),sandbox);  // filters.js
 const M=sandbox.window.AQB_FILTERS.methods, C=sandbox.window.AQB_FILTERS.computed;
 const D=sandbox.window.AQB_DECORATE.methods;
 const groups=[
-  {key:'g1',save_path:'R:/a',members:[{hash:'H1',save_path:'R:/a',relocate:{state:'moving'}},{hash:'H2',save_path:'R:/a'}]},
-  {key:'g2',save_path:'R:/a',members:[{hash:'H3',save_path:'R:/a',relocate:{state:'pending_finalize'}}]},
-  {key:'g3',save_path:'R:/b',members:[{hash:'H4',save_path:'R:/b',relocate:{state:'moving'}}]},
-  {key:'g4',save_path:'R:/a',members:[{hash:'H5',save_path:'R:/a',relocate:{state:'done'}}]},
+  {key:'g1',save_path:'R:/a',members:[{hash:'H1',save_path:'R:/a',relocate:{state:'moving',src:'R:/a',dst:'R:/x'}},{hash:'H2',save_path:'R:/a'}]},
+  {key:'g2',save_path:'R:/a',members:[{hash:'H3',save_path:'R:/a',relocate:{state:'pending_finalize',src:'R:/a',dst:'R:/x'}}]},
+  {key:'g3',save_path:'R:/b',members:[{hash:'H4',save_path:'R:/b',relocate:{state:'moving',src:'R:/c',dst:'R:/y'}}]},
+  {key:'g4',save_path:'R:/a',members:[{hash:'H5',save_path:'R:/a',relocate:{state:'done',src:'R:/a',dst:'R:/x'}}]},
   // R4 存量评审 R5#36: 组内路径不一(组级 save_path = 首成员路径) —— 谓词与 _facetPick 计数
   // 必须同侧成员级: 选非首成员路径(R:/b)不得把计数里存在的 g5 静默滤出
   {key:'g5',save_path:'R:/a',members:[{hash:'H6',save_path:'R:/a'},{hash:'H7',save_path:'R:/b'}]},
@@ -443,6 +463,8 @@ process.stdout.write(JSON.stringify({
   multi:ids(C.filteredGroups.call(ctx({relocateFilter:['迁移中','待收尾']}))),
   andPath:ids(C.filteredGroups.call(ctx({relocateFilter:['迁移中'],pathFilter:['R:/a']}))),
   pathOnly:ids(C.filteredGroups.call(ctx({pathFilter:['R:/a']}))),
+  pathDst:ids(C.filteredGroups.call(ctx({pathFilter:['R:/x']}))),
+  pathSrc:ids(C.filteredGroups.call(ctx({pathFilter:['R:/c']}))),
   pathNonFirst:ids(C.filteredGroups.call(ctx({pathFilter:['R:/b']}))),
   cleared:ids(C.filteredGroups.call(ctx({relocateFilter:[],pathFilter:[]}))),
   options:C.relocateOptions.call(ctx({})),
@@ -454,7 +476,7 @@ process.stdout.write(JSON.stringify({
 
 
 def test_p1_filter_behavior_node():
-    """行为面: 迁移状态筛 = 组内或 / 跨筛与 / 路径筛保持 save_path / 清空可重置"""
+    """行为面: 迁移状态筛 = 组内或 / 跨筛与 / 路径筛位置集(D17)/ 清空可重置"""
     node = shutil.which("node")
     if not node:
         return
@@ -476,7 +498,11 @@ def test_p1_filter_behavior_node():
     assert out["moving"] == ["g1", "g3"], "组内任一成员迁移中即保留整组(或语义)"
     assert out["multi"] == ["g1", "g2", "g3"], "同一筛选器多选 = 或; done 组不命中"
     assert out["andPath"] == ["g1"], "迁移状态与路径筛为且; 路径筛仍按 save_path"
-    assert out["pathOnly"] == ["g1", "g2", "g4", "g5"], "路径筛语义不受迁移状态筛影响(用户已拍板)"
+    assert out["pathOnly"] == ["g1", "g2", "g4", "g5"], "纯 save_path 匹配不受迁移状态筛影响"
+    # 位置集匹配(plan R3 D17): 进行中三态(moving/pending_finalize/failed)的 src/dst 并入
+    # 「保存位置」; done 的历史 src/dst 不参与(g4 的 dst 与 g1/g2 同为 R:/x 却不命中)
+    assert out["pathDst"] == ["g1", "g2"], "进行中三态的 dst 命中; done 组的 dst 不参与"
+    assert out["pathSrc"] == ["g3"], "进行中三态的 src 命中(与 save_path 不同值的 src 也参与)"
     # R4 存量评审 R5#36: 谓词成员级与 _facetPick 计数同侧 —— 组内路径不一时选非首成员路径,
     # 计数里存在的组不得被静默滤出(修复前 g5 只比对组级 R:/a 会被滤掉, 本行必红)
     assert out["pathNonFirst"] == ["g3", "g5"], "选组内非首成员路径: 计数存在的组必须保留"
@@ -489,7 +515,19 @@ def test_p1_filter_behavior_node():
             "value": "R:/b",
             "count": 2
         },
-    ], "路径选项计数 = 含该路径的组数(成员级枚举)"
+        {
+            "value": "R:/x",
+            "count": 2
+        },
+        {
+            "value": "R:/c",
+            "count": 1
+        },
+        {
+            "value": "R:/y",
+            "count": 1
+        },
+    ], "路径选项 = 位置集计数(组视图 = 含该位置的组数; 进行中 src/dst 参与, done 不参与)"
     assert out["cleared"] == ["g1", "g2", "g3", "g4", "g5"]
     assert out["options"] == [
         {

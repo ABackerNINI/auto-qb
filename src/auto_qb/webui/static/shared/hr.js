@@ -272,7 +272,7 @@ window.AQB_HR = {
      * (状态/路径/标签/分类/站点/H&R/HR来源; 多选筛选器内为或, 筛选器之间为且) */
     _memberPass(m) {
       if (this.kindFilter && m.kind !== this.kindFilter) return false;
-      if (this.pathFilter.length && !this.pathFilter.includes(m.save_path || "")) return false;
+      if (this.pathFilter.length && !this.pathFilter.some((v) => this._pathPositions(m).includes(v))) return false;
       if (this.tagFilter.length && !(m.tags || []).some((t) => this.tagFilter.includes(t))) return false;
       if (this.categoryFilter.length && !this.categoryFilter.includes(m.category || "")) return false;
       if (this.siteFilter.length && !this.siteFilter.includes(m.site)) return false;

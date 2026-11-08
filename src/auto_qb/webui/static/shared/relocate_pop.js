@@ -32,8 +32,8 @@ window.AQB_RELOCATE_POP = {
   },
   methods: {
     /* ---------------- 触发调度(参数与 hr.js hrPopEnter/Leave/KeepOpen 逐条对齐) ----------------
-     * 触发面 = 组行/种子行 save_path 单元格整体(xtpl-cells.html 两组分支, 既有 click 筛选与
-     * title 绑定全保留, 零点击不变 —— 浮窗只吃 hover)。trg 必须在事件回调里同步捕获
+     * 触发面 = 组行/种子行 save_path 单元格整体(xtpl-cells.html 两组分支; 浮窗只吃 hover,
+     * chip 点击只筛路径不碰浮窗 —— R3 D16 零导航点击口径)。trg 必须在事件回调里同步捕获
      * (timer 里 currentTarget 已失效)。 */
     relPopEnter(ev, row) {
       const trg = ev && ev.currentTarget;
