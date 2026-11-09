@@ -846,8 +846,8 @@ class TorrentStore:
 
         !**不含 `state`**(A 系 26-10-13-0540 S1): state 是唯一由 qB 同步权威驱动的字段,
         不再由写方法合成回写 —— 自有停/起/暂停/恢复的 state 变化靠下一轮真实 delta 被看见
-        (`_apply` 的 `state_changed`/`dirty_groups`/`view_changed` 三条通路天然覆盖,
-        见 `:237-244`)。快照语义收敛为「严格 = 最近一次同步的应用结果」。口径见坑档
+        (`_apply` 的 `state_changed`/`dirty_groups`/`view_changed` 三条通路天然覆盖)。
+        快照语义收敛为「严格 = 最近一次同步的应用结果」。口径见坑档
         `pitfalls/backend/concurrency.md`「QbApi 写方法必须同步 store」的 state 特例。
         """
         hashes = [torrent_hashes] if isinstance(torrent_hashes, str) else list(torrent_hashes or [])

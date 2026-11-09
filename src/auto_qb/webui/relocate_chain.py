@@ -118,7 +118,8 @@ def finalize_face(job: Mapping, data_dir: str, host: str, port: int, *, now: Opt
       前端照显不重判。三者只在 window 内有意义(前段相位零悬挂)。
     只对新链 spec(spec 带 bt_backup 字段)取证: 无 bt_backup 的 job 不走 fastresume 改写
     (S1 五闸应已拦下), pending 恒 0 防误导。journal 已终态 ⇒ pending 恒 0
-    (已收口/已取消, 反馈面不再悬)。本函数只读 spec/journal 文件(原子写读侧安全),
+    (已收口/已取消/已失败 —— failed 也在 STOP_PHASES, daemon 对该 job_id 退休, 反馈面不再悬)。
+    本函数只读 spec/journal 文件(原子写读侧安全),
     零主循环访问、零 state.json 触碰(D13 账本契约的读侧对称)。
     """
     from ..core.modules import relocate_units as ru  # 局部导入(与 build_alias_index 同款)

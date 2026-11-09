@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="hr-relocate-docstring-drift">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="hr/relocate docstring 措辞漂移聚合(fetcher refresh.reason/finalize_face failed 语义/store 行锚)">
 <meta name="issue-summary" content="fetcher.py:74-76 提 refresh.reason 与 v3 字段对不上; relocate_chain.finalize_face docstring 未跟上 failed 入 STOP_PHASES; store.py:806 docstring 内部行锚 :237-244 已漂移">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-08-0827-docs-hr-relocate-docstring-drift</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-08 08:27</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">docs</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
 
@@ -119,7 +119,9 @@
   <h2><span class="no">§04</span>状态变更日志</h2>
   <ul>
     <li>2026-11-08 08:27 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-09 — 状态 Open → Done（kb.status）</li>
+</ul>
+  <p class="hint">修复后补充（2026-11-09）：三处均按 §03 建议落实 —— ① <code>fetcher.HrLoginExpired</code> docstring 改指 <code>data.history</code> 登录失效事件（service_wave 登录失效路径写 wave.notes 一条 note，并注明 v3 无独立 refresh.reason 面）；② <code>finalize_face</code> docstring 括号补「已失败 —— failed 也在 STOP_PHASES，daemon 对该 job_id 退休」；③ <code>update_torrent_fields</code> docstring 删漂移行锚 <code>:237-244</code>，只留 <code>_apply</code> 三通路符号引用。零行为改动；py_compile 通过，全量测试 5876 passed + 2 skipped（覆盖 99%），只读评审零发现（检 0/0）。</p>
 </section>
 
 <footer>

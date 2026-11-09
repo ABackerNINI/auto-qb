@@ -71,9 +71,10 @@ class HrLoginExpired(HrFetchError):
       「连续失败达阈值, 熔断至 …」, 而真正的动作要求(「去登录」)被埋掉; 反过来, 熔断冷却还会让
       用户登录完继续白等一个冷却周期才恢复。
 
-    故 service 对它: **不计失败、不推进熔断**, 只报一次 WARNING(文案直接给动作), 并把原因写进
-    站点文件的 `refresh.reason`(失败路径里唯一持久可见的痕迹) —— 不碰 fetched_at / 覆盖证明 /
-    新鲜度基准, 所以证据链不会被动。
+    故 service 对它: **不计失败、不推进熔断**, 只报一次 WARNING(文案直接给动作); 痕迹落站点
+    数据的 `data.history` 登录失效事件(wave.notes 一条 note, 由 service_wave 登录失效路径写入
+    —— v3 字段无独立 refresh.reason 面) —— 不碰 fetched_at / 覆盖证明 / 新鲜度基准, 所以证据链
+    不会被动。
     """
 
 
