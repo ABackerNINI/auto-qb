@@ -37,7 +37,7 @@
 - test_request_refresh_notes_when_no_fetchable_sites: 线程在跑但无可取数站点 => 「没有可取数站点」
 - test_request_refresh_notes_when_named_site_not_fetchable: 点名不在可取数集合 => 如实文案
 - test_sleeper_interrupt_during_wait_message_is_precise
-  不绑共享固定端口 18788-18790 —— 防「并行占满 ⇒ 发现 WARNING 污染 INFO 断言」复发
+  不绑共享固定端口 18788-18795 —— 防「并行占满 ⇒ 发现 WARNING 污染 INFO 断言」复发
 """
 
 import logging

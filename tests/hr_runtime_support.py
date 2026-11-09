@@ -48,7 +48,7 @@ def make_config(
     enabled=True,
     channel=False,
     port=0,
-    # !discovery_port 默认 0(发现关)而不是模型默认 18788: 候选端口 18788-18790 是**固定**的,
+    # !discovery_port 默认 0(发现关)而不是模型默认 18788: 候选端口 18788-18795 是**固定**的,
     # 并行(-n 8)下多个 worker 与用户真实实例(实测正占着 18788)会把它们占满 ⇒
     # HrDiscoveryServer.start() 记 WARNING「全部被占」⇒ 污染本文件「生命周期消息只记 INFO」
     # 一族断言(issue 26-10-16-0348 实报偶发判红)。发现服务的行为单测在 test_hr_discovery.py

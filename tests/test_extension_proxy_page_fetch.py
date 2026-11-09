@@ -377,7 +377,8 @@ def test_discovery_helpers_behave():
     if not got:
         return  # 没装 node: 与其它前端守阵同口径静默跳过
     assert got["apiDiscover"] == API_DISCOVER and got["defaultPort"] == DISCOVERY_DEFAULT_PORT
-    assert got["cands"] == ["http://192.168.1.10:18788", "http://192.168.1.10:18789", "http://192.168.1.10:18790"]
+    assert got["cands"] == [f"http://192.168.1.10:{18788 + i}" for i in range(8)], \
+        "候选表与后端同源: 18788 起连号 8 个(计划 26-11-10-0515 S2/D6)"
     assert got["candsCap"] == ["http://192.168.1.10:65534", "http://192.168.1.10:65535"], "上限 65535 截断(与后端同源)"
     assert got["candsBad"] == []
     assert got["url"] == f"http://192.168.1.10:18788{API_DISCOVER}", "去尾斜杠拼路径(不出现双斜杠)"
@@ -468,7 +469,7 @@ def test_merge_instances_discovered_set_replaced():
 
 
 def test_background_discovery_flow():
-    """真跑 background.js 的发现流程 —— 三候选并行探测(命中次位)/ 配对码随头上来 / 合并落盘 +
+    """真跑 background.js 的发现流程 —— 八候选并行探测(命中次位)/ 配对码随头上来 / 合并落盘 +
     清等待标记 / 401 pairing_required 置标记 / 异形应答按「非本服务」忽略 / 全未命中明确报告(退手动)"""
     node = _node()
     if not node:
@@ -486,7 +487,7 @@ def test_background_discovery_flow():
     got = json.loads(proc.stdout)
     assert got["hit"]["ok"] is True and got["hit"]["merged"] == 2, got["hit"]
     discover_calls = [c for c in got["hitCalls"] if c[0].endswith(API_DISCOVER)]
-    assert len(discover_calls) == 3, f"三个候选并行探测: {got['hitCalls']}"
+    assert len(discover_calls) == 8, f"八个候选并行探测(计划 26-11-10-0515 S2/D6): {got['hitCalls']}"
     assert all(c[1] == "123456" for c in discover_calls), "配对码随 X-Hr-Pairing 上来"
     assert [e["endpoint"] for e in got["instances"]] == ["http://192.168.1.10:5001", "http://192.168.1.10:5002"]
     assert all(e["source"] == "discovered" for e in got["instances"]), "合并条目标「自动」"
@@ -517,11 +518,11 @@ def test_discovery_triggers_on_any_failure():
     if not trace:
         return
     a, b, c, d, e = (trace[k] for k in ("aDiscovers", "bDiscovers", "cDiscovers", "dDiscovers", "eDiscovers"))
-    assert a == 3, f"1 死 1 活(旧口径不触发)也要跑一轮发现: {a}"
+    assert a == 8, f"1 死 1 活(旧口径不触发)也要跑一轮发现(每轮 = 候选表 8 个并行探测): {a}"
     assert b == a, f"60s 内不重复发现(节流): {a} -> {b}"
     assert c == b, f"全 401 不该触发发现(端点有应答, 距上次 70s: 误判为失败就会开火): {b} -> {c}"
-    assert d == c + 3, f"同钟位正对照: 真失败必须开火(否则上一轮的「没开火」说明不了什么): {c} -> {d}"
-    assert e == d + 3, f"实例清单为空也要按周期发现(R1): {d} -> {e}"
+    assert d == c + 8, f"同钟位正对照: 真失败必须开火(否则上一轮的「没开火」说明不了什么): {c} -> {d}"
+    assert e == d + 8, f"实例清单为空也要按周期发现(R1): {d} -> {e}"
 
 
 def test_discovery_snapshot_is_structured():
@@ -535,13 +536,10 @@ def test_discovery_snapshot_is_structured():
     assert got["ok"] is True and got["port"] == "18788" and got["merged"] == 3, got
     assert got["reason"] == "" and got["answered"] is True and got["at"] > 0, got
     cands = got["candidates"]
-    assert [c["url"] for c in cands] == [
-        "http://127.0.0.1:18788",
-        "http://127.0.0.1:18789",
-        "http://127.0.0.1:18790",
-    ], f"逐候选结果要按候选表顺序落(记 base 而非拼好路径的 URL: 选项页按端口报结论): {cands}"
-    assert cands[0]["note"] == "" and cands[1]["note"] == "HTTP 404" and cands[2]["note"] == "HTTP 404", \
-        f"每个候选都要带自己的结论(选项页据此渲染「18789 连接失败 / 18790 异形应答」这类文案): {cands}"
+    assert [c["url"] for c in cands] == [f"http://127.0.0.1:{18788 + i}" for i in range(8)], \
+        f"逐候选结果要按候选表顺序落(记 base 而非拼好路径的 URL: 选项页按端口报结论): {cands}"
+    assert cands[0]["note"] == "" and all(c["note"] == "HTTP 404" for c in cands[1:]), \
+        f"每个候选都要带自己的结论(选项页据此渲染「18789 连接失败 / 18795 异形应答」这类文案): {cands}"
 
 
 def test_instance_health_ledger_records_per_instance():

@@ -154,7 +154,7 @@
     <details id="helpTroubleshoot">
       <summary>说明与排障(端口机制 / 配对码 / 徽标图例 / 排查指路)</summary>
       <p class="sub" id="badgeLegend" style="margin-top:8px"><b>浏览器工具栏</b>的扩展图标<b>状态色外框</b>(常驻, 非本页元素): <span class="sw-frame sw-none"></span>未配置(无外框) · <span class="sw-frame sw-ok"></span>连接正常(绿框) · <span class="sw-frame sw-warn"></span>重连中(橙框) · <span class="sw-frame sw-bad"></span>发现失败(红框, 图标角标补 <code>!</code>) · <span class="sw-frame sw-bad"></span>站点未授权(红框, 图标角标补 <code>!</code> —— 端点通但站点权限没给, 取数一定全失败, 回第 2 步授权) —— 悬停图标有中文结论, 点图标即回本页。</p>
-      <p class="sub">后端 hr_check.channel.discovery_port 默认 18788(被占自动顺延 18789/18790, 本扩展会并行探测整张候选表); 命中后实例自动并入上方列表, token 免手抄。发现地址与配对码随「立即发现」一起保存。</p>
+      <p class="sub">后端 hr_check.channel.discovery_port 默认 18788(被占自动顺延连号 8 个 18788-18795, 本扩展会并行探测整张候选表); 命中后实例自动并入上方列表, token 免手抄。发现地址与配对码随「立即发现」一起保存。</p>
       <p class="sub">后端 port 配 0(默认)时端口随机且经发现自动分发; 显式配端口时多实例必须不同 —— 后端启动日志会打一行「HR 取数通道端点已启动: http://127.0.0.1:&lt;端口&gt;」, 端口以那行为准。</p>
       <p class="sub">配对码: 仅跨机/开启配对时需要 —— 取后端启动日志或 HR 状态卡里的 6 位展示码; 同机零配置不需要。</p>
       <p class="sub">排查指路: 实例表「状态」列悬停可见逐实例结论(色点: 绿=正常 / 橙=连败中 / 红=token 或来源被拒 / 灰=还没轮过), 点「重测全部」立即探一遍; 更多细节见底部折叠区「运行日志」。</p>

@@ -425,10 +425,10 @@ def test_shared_dir_guidance_message_is_precise(tmp_path, caplog):
 
 
 def test_channel_runtime_leaves_discovery_unbound(tmp_path):
-    """本文件的 channel 用例必须默认关发现: 不绑共享固定端口 18788-18790(issue 26-10-16-0348)
+    """本文件的 channel 用例必须默认关发现: 不绑共享固定端口 18788-18795(issue 26-10-16-0348)
 
     发现候选端口是固定连号(discovery_candidates): 并行(-n 8)下多个 worker 加上用户真实实例
-    (实测正占着 18788)会把三个候选占满 ⇒ HrDiscoveryServer.start() 记 WARNING「全部被占」
+    (实测正占着 18788)会把八个候选占满 ⇒ HrDiscoveryServer.start() 记 WARNING「全部被占」
     ⇒ 污染「生命周期/热重载消息只记 INFO」一族断言(该 issue 的两条偶发判红即此)。
     发现服务的行为单测在 test_hr_discovery.py(自选 _free_port 基底), 本文件没有一条测发现。
     """

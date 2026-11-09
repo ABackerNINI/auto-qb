@@ -25,6 +25,7 @@ worker 的同族用例占住, 候选轮换是特性而非碰撞。
 
 - test_candidates_consecutive_and_cap
 - test_default_registry_path_platform_shape
+- test_registry_per_clone_files_mutually_invisible
 - test_discover_aggregates_and_filters
 - test_heartbeat_loop_runs_until_stopped
 - test_heartbeat_once_registers_and_survives_registry_failure
@@ -65,6 +66,7 @@ worker 的同族用例占住, 候选轮换是特性而非碰撞。
 - test_status_snapshot_reports_listening_and_candidates: 自检快照(未监听 note / 监听态字段)
 """
 import builtins
+import hashlib
 import json
 import logging
 import os
@@ -148,7 +150,7 @@ def _get(srv, headers, path=API_DISCOVER):
 
 
 def test_candidates_consecutive_and_cap():
-    assert discovery_candidates(18788) == [18788, 18789, 18790]
+    assert discovery_candidates(18788) == [18788, 18789, 18790, 18791, 18792, 18793, 18794, 18795]
     assert discovery_candidates(65534) == [65534, 65535], "上限 65535 截断"
     assert discovery_candidates(65535) == [65535]
     assert discovery_candidates(0) == [], "0 = 关闭发现, 不产生候选(运行期不会走到, 防御性)"
@@ -224,8 +226,10 @@ def test_registry_read_retries_transient_denial(tmp_path, monkeypatch):
 
 
 def test_default_registry_path_platform_shape():
-    p = default_registry_path()
-    assert os.path.basename(p) == "instances.json"
+    entry_id = "ab12cd34ef56"
+    p = default_registry_path(entry_id)
+    assert os.path.basename(p) == f"{entry_id}.json", "登记簿文件名 = <entry_id>.json(计划 26-11-10-0515 S1 按 clone 拆分)"
+    assert os.path.basename(p) != "instances.json", "旧共享文件名不再是任何派生结果(遗留不读不删不迁移)"
     assert "auto-qb-hr" in p
 
 
@@ -260,8 +264,53 @@ def test_hr_registry_path_is_isolated_from_real_file(_isolated_hr_registry):
 
     from auto_qb.hr.discovery import default_registry_path as real_path
 
-    assert hr_runtime.default_registry_path() == _isolated_hr_registry
-    assert _isolated_hr_registry != real_path(), "临时路径不得与真实 app-data 路径重合"
+    assert hr_runtime.default_registry_path("0" * 12) == _isolated_hr_registry
+    assert _isolated_hr_registry != real_path("0" * 12), "临时路径不得与真实 app-data 路径重合"
+
+
+def test_registry_per_clone_files_mutually_invisible(tmp_path, monkeypatch):
+    """登记簿按 clone 物理拆分(计划 26-11-10-0515 S1/D3): 不同 data_dir 的 registry 各自读写各自文件
+
+    !隔离是**文件层面的物理事实**, 不是代码里一道需被遵守的过滤: entry_id = sha1(data_dir)[:12]
+    派生 per-clone 文件后, 两个 registry(不同 data_dir)互不可见 —— 一方的条目物理上不在另一方的
+    文件里, 发现响应也随之天然只含本 clone 条目。旧共享文件名 instances.json 不再可派生。
+    """
+    import auto_qb.hr.discovery as discovery_mod
+
+    # 平台分支钉到 win32 + LOCALAPPDATA 指向临时目录: 走真实 default_registry_path 派生,
+    # 但底座落在 tmp(绝不写用户真实 app-data)
+    monkeypatch.setattr(discovery_mod.sys, "platform", "win32")
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    data_dir_a, data_dir_b = str(tmp_path / "clone-a"), str(tmp_path / "clone-b")
+    id_a = hashlib.sha1(data_dir_a.encode("utf-8")).hexdigest()[:12]
+    id_b = hashlib.sha1(data_dir_b.encode("utf-8")).hexdigest()[:12]
+    path_a, path_b = default_registry_path(id_a), default_registry_path(id_b)
+    assert os.path.basename(path_a) == f"{id_a}.json" and os.path.basename(path_b) == f"{id_b}.json"
+    assert path_a != path_b, "不同 data_dir 派生不同文件"
+    assert all(os.path.basename(p) != "instances.json" for p in (path_a, path_b))
+
+    now = 1000.0
+    reg_a, reg_b = InstanceRegistry(path_a), InstanceRegistry(path_b)
+    reg_a.upsert(entry_id=id_a, name="clone-a", endpoint="http://127.0.0.1:1", token="k1", ts=now)
+    reg_b.upsert(entry_id=id_b, name="clone-b", endpoint="http://127.0.0.1:2", token="k2", ts=now)
+
+    assert [e["id"] for e in reg_a.alive(ttl=INSTANCE_TTL_S, now=now)] == [id_a], "a 只看得见自己"
+    assert [e["id"] for e in reg_b.alive(ttl=INSTANCE_TTL_S, now=now)] == [id_b], "b 只看得见自己"
+    raw_a = json.loads((tmp_path / "auto-qb-hr" / f"{id_a}.json").read_text(encoding="utf-8"))
+    raw_b = json.loads((tmp_path / "auto-qb-hr" / f"{id_b}.json").read_text(encoding="utf-8"))
+    assert [e["id"] for e in raw_a] == [id_a] and [e["id"] for e in raw_b] == [id_b], "文件层面物理隔离"
+
+    # 发现响应同理: 两台发现服务各自聚合自己的登记簿, 响应互不含对方条目
+    # (聚合走真实时钟的 TTL 过滤 ⇒ 条目 ts 用真实时刻再刷一轮心跳, upsert 同 id 覆盖)
+    now_real = time.time()
+    reg_a.upsert(entry_id=id_a, name="clone-a", endpoint="http://127.0.0.1:1", token="k1", ts=now_real)
+    reg_b.upsert(entry_id=id_b, name="clone-b", endpoint="http://127.0.0.1:2", token="k2", ts=now_real)
+    srv_a = make_discovery(registry=reg_a, entry_id=id_a, pairing="off")
+    srv_b = make_discovery(registry=reg_b, entry_id=id_b, pairing="off")
+    for srv, own_id, other_id in ((srv_a, id_a, id_b), (srv_b, id_b, id_a)):
+        _status, _h, body = _get(srv, {"Origin": ORIGIN})
+        ids = [e["id"] for e in json.loads(body)["instances"]]
+        assert ids == [own_id], f"发现响应只含本 clone 条目: {ids}(不得出现 {other_id})"
 
 
 # ---------- 2. 发现路由 ----------
@@ -425,14 +474,14 @@ def test_startup_log_separates_endpoint_url(caplog):
 
 
 def test_start_all_busy_returns_false_and_retries():
-    base, holds = _hold_run(3)  # 连号三位一起占住: 单点整段自验, base+1/+2 落排除段/被独占都不进这段
+    base, holds = _hold_run(8)  # 连号八位一起占住: 单点整段自验, +1..+7 落排除段/被独占都不进这段
     candidates = discovery_candidates(base)
-    assert candidates == [base, base + 1, base + 2], "占住的正是候选表三位(连号语义)"
+    assert candidates == [base + i for i in range(8)], "占住的正是候选表八位(连号语义)"
     srv = make_discovery(port=base)
     srv.retry_min_s = 0.05
     srv.retry_max_s = 0.1
     try:
-        assert srv.start() is False, "三候选全占 ⇒ 不抛、返回 False(数据端点照常的语义)"
+        assert srv.start() is False, "候选全占 ⇒ 不抛、返回 False(数据端点照常的语义)"
         assert not srv.started
         holds[0].close()  # 释放首位: 占用者退出
         assert wait_until(lambda: srv.started, timeout=5.0), "后台退避重试在占用者退出后接管(R6 翻转)"
@@ -582,7 +631,7 @@ def _isolate_registry(monkeypatch, tmp_path) -> None:
     """把 runtime 命名空间的注册表路径单点指到 tmp: 测试不得写真实 app-data 注册表"""
     import auto_qb.hr.runtime as rt
 
-    monkeypatch.setattr(rt, "default_registry_path", lambda: str(tmp_path / "instances.json"))
+    monkeypatch.setattr(rt, "default_registry_path", lambda entry_id: str(tmp_path / f"{entry_id}.json"))
 
 
 def test_runtime_builds_and_starts_discovery(tmp_path, monkeypatch):
@@ -598,6 +647,9 @@ def test_runtime_builds_and_starts_discovery(tmp_path, monkeypatch):
     assert runtime.start() is True
     try:
         assert runtime.discovery is not None and runtime.discovery.started
+        # registry 文件必须由与心跳同源的 entry_id 派生(per-clone 拆分的接线一致性, 评审 minor
+        # 2026-11-10): 若 runtime 里两处各用一套表达式, 此断言先行红掉, 不等「旧条目成孤儿」才暴露。
+        assert os.path.basename(runtime.discovery.registry.path) == f"{runtime.discovery.entry_id}.json"
         # 实绑落在候选表内即可: 基底是"取号那一刻"的空闲端口, 高机载/并行下可能被别的 worker
         # 抢先绑走 ⇒ 顺延 base+1 是**正确行为**(issue 26-11-06-0330 同族); 钉死 == base 才是假红源。
         assert runtime.discovery.bound_port in discovery_candidates(base), \
@@ -673,7 +725,7 @@ def test_runtime_non_loopback_pairing_full_flow(tmp_path, caplog, monkeypatch):
 
 def test_runtime_discovery_bind_failure_keeps_data_endpoint(tmp_path, caplog, monkeypatch):
     _isolate_registry(monkeypatch, tmp_path)
-    base, holds = _hold_run(3)  # 连号三位整段占住(单点自验, base+1/+2 落排除段不进这段)
+    base, holds = _hold_run(8)  # 连号八位整段占住(单点自验, +1..+7 落排除段不进这段)
     cfg = make_config(tmp_path, enabled=True, channel=True)
     cfg.hr_check.channel.discovery_port = base
     runtime = HrRuntime(_FakeManager(cfg))
@@ -751,10 +803,10 @@ def test_default_registry_path_posix_shape(monkeypatch):
 
     monkeypatch.setattr(discovery_mod.sys, "platform", "linux")
     monkeypatch.setenv("XDG_DATA_HOME", "/xdg-root")
-    assert default_registry_path() == os.path.join("/xdg-root", "auto-qb-hr", "instances.json")
+    assert default_registry_path("ab12cd34ef56") == os.path.join("/xdg-root", "auto-qb-hr", "ab12cd34ef56.json")
     monkeypatch.delenv("XDG_DATA_HOME", raising=False)
-    assert default_registry_path() == os.path.join(
-        os.path.expanduser("~"), ".local", "share", "auto-qb-hr", "instances.json"
+    assert default_registry_path("ab12cd34ef56") == os.path.join(
+        os.path.expanduser("~"), ".local", "share", "auto-qb-hr", "ab12cd34ef56.json"
     ), "XDG 缺省回落 ~/.local/share"
 
 

@@ -5,10 +5,11 @@
 - `GET /api/hr/discover`: 返回本机全部存活实例的数据端点与 token —— 扩展只配一个发现地址
   就能拿到全部实例(「token 自动分发」); 它本身就是发 token 的, 所以**免 token**,
   两道关是 origin 白名单(与数据端点第二道防线同一机制) + 配对码(仅非回环可达时强制, S3);
-- `InstanceRegistry`: 本机实例注册表(平台 app-data 的 instances.json), 心跳 upsert(写时剪枝超龄) + TTL 聚合;
-- 候选表先绑先得(discovery_port 起 +0/+1/+2, C7)+ 绑定失败后台退避重试(占用者退出自动
+- `InstanceRegistry`: 本机实例注册表(平台 app-data 的 auto-qb-hr/<entry_id>.json, 计划 26-11-10-0515 S1
+  按 clone 物理拆分), 心跳 upsert(写时剪枝超龄) + TTL 聚合;
+- 候选表先绑先得(discovery_port 起连号 8 个, C7/D6)+ 绑定失败后台退避重试(占用者退出自动
   接管, 翻转旧「归属者退出不接管」限制 —— R6)+ 校验期临时端口段告警(S1 6, 在 config 层);
-- 发现不可用**永不**影响数据端点: 三个候选全占 ⇒ 明确日志 + 数据端点照常服务(扩展退手动)。
+- 发现不可用**永不**影响数据端点: 候选全占 ⇒ 明确日志 + 数据端点照常服务(扩展退手动)。
 
 !线程纪律(与 hr/server.py 同款): 发现端点线程只做 HTTP 应答与注册表读写, 不碰任务队列、
 state_file 与站点文件; 后台重试线程只做绑定尝试与端点启停 —— 单一写线程假设不破。
@@ -44,11 +45,13 @@ API_DISCOVER = "/api/hr/discover"
 PAIRING_HEADER = "X-Hr-Pairing"
 #: 发现端口默认值(用户现产 18788 转正为发现端口; 数据端口默认 0 = 随机, 计划 §01 派生口径)
 DISCOVERY_DEFAULT_PORT = 18788
-#: 候选表大小(C7): 固定连号 3 个, 不加配置键; 扩展并行探测同一张表
-DISCOVERY_CANDIDATES = 3
-#: 实例注册表目录/文件名(C5): 平台 app-data 下的 auto-qb-hr/instances.json
+#: 候选表大小(C7/D6): 固定连号 8 个, 不加配置键; 扩展并行探测同一张表
+DISCOVERY_CANDIDATES = 8
+#: 实例注册表目录/文件形态(C5 + 计划 26-11-10-0515 S1/D3): 平台 app-data 下的
+#: auto-qb-hr/<entry_id>.json —— 按 clone 物理拆分(每 clone 只写只读自己的文件);
+#: 旧共享文件 instances.json 遗留不读不删不迁移(P3)
 REGISTRY_DIRNAME = "auto-qb-hr"
-REGISTRY_FILENAME = "instances.json"
+REGISTRY_FILENAME_SUFFIX = ".json"
 #: 心跳间隔 / 条目 TTL(C1): 发现失败有手动退路, 不需要更激进的 TTL
 HEARTBEAT_INTERVAL_S = 30.0
 INSTANCE_TTL_S = 120.0
@@ -66,7 +69,7 @@ PAIRING_FAIL_LIMIT_PER_MIN = 5
 
 
 def discovery_candidates(discovery_port: int) -> List[int]:
-    """发现端口候选表(C7): discovery_port 起连号 3 个(+0/+1/+2), 上限 65535 截断
+    """发现端口候选表(C7/D6): discovery_port 起连号 8 个(+0..+7), 上限 65535 截断
 
     推导与扩展侧 discovery.js 的 discoveryCandidates **同源**(协议守阵双向钉住):
     后端按表「先绑先得」顺延, 扩展按表「并行探测」。
@@ -77,9 +80,12 @@ def discovery_candidates(discovery_port: int) -> List[int]:
     return [p for p in (base + i for i in range(DISCOVERY_CANDIDATES)) if 1 <= p <= 65535]
 
 
-def default_registry_path() -> str:
-    """实例注册表路径(C5): 平台 app-data 的 auto-qb-hr/instances.json
+def default_registry_path(entry_id: str) -> str:
+    """实例注册表路径(C5 + 计划 26-11-10-0515 S1/D3): 平台 app-data 的 auto-qb-hr/<entry_id>.json
 
+    按 clone 物理拆分: entry_id = sha1(data_dir)[:12](runtime 算), 同 data_dir 重启复用同一文件,
+    不同 data_dir 各自一份 —— 发现响应天然只含本 clone 条目(文件里物理上没有别家的条目)。
+    旧共享文件 instances.json 遗留**不读不删不迁移**(P3, 连提示都不打)。
     Windows = %LOCALAPPDATA%; 类 Unix = XDG_DATA_HOME(~/.local/share 兜底)。
     !不得放云同步盘(与 hr_check.shared_dir 同一条纪律: 锁与原子替换都不保证)。
     """
@@ -87,7 +93,7 @@ def default_registry_path() -> str:
         base = os.environ.get("LOCALAPPDATA") or os.path.join(os.path.expanduser("~"), "AppData", "Local")
     else:
         base = os.environ.get("XDG_DATA_HOME") or os.path.join(os.path.expanduser("~"), ".local", "share")
-    return os.path.join(base, REGISTRY_DIRNAME, REGISTRY_FILENAME)
+    return os.path.join(base, REGISTRY_DIRNAME, f"{entry_id}{REGISTRY_FILENAME_SUFFIX}")
 
 
 def _entry_fresh(entry: Dict[str, Any], *, now: float, ttl: float) -> bool:

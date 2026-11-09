@@ -414,19 +414,22 @@ class HrRuntime:
         """发现服务: channel.enabled + discovery_port != 0 才建(与数据端点同 host 同线程模型)
 
         发现不可用不影响数据端点: 绑定失败 = 明确日志 + 后台退避重试(占用者退出自动接管);
-        三个候选全占 ⇒ 数据端点照常服务, 扩展退手动配置(R2/S2)。
+        候选全占 ⇒ 数据端点照常服务, 扩展退手动配置(R2/S2)。
         """
         conf = self.global_conf.channel
         if conf.discovery_port == 0:
             return None
+        entry_id = self._registry_entry_id()
         return HrDiscoveryServer(
             host=conf.host,
             port=conf.discovery_port,
-            entry_id=self._registry_entry_id(),
+            entry_id=entry_id,
             entry_name=instance_id(),
             endpoint_fn=self._data_endpoint_url,
             token=self.token,
-            registry=InstanceRegistry(default_registry_path()),
+            # 登记簿按 clone 拆分(计划 26-11-10-0515 S1): 文件名由 entry_id = sha1(data_dir)[:12]
+            # 派生, 每 clone 只写只读自己的文件 —— 发现响应天然只含本 clone 条目
+            registry=InstanceRegistry(default_registry_path(entry_id)),
             pairing=conf.pairing,
             pairing_secret=self._pairing_secret(),
             extension_id=conf.extension_id,

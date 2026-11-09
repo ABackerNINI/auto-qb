@@ -25,7 +25,7 @@ function withPort(base, port) {
 }
 
 /**
- * 候选表(C7): base 起连号 3 个(+0/+1/+2), 上限 65535 截断 —— 推导与后端
+ * 候选表(C7/D6): base 起连号 8 个(+0..+7), 上限 65535 截断 —— 推导与后端
  * hr.discovery.discovery_candidates 同源(后端「先绑先得」顺延, 扩展「并行探测」同表)。
  */
 function discoveryCandidates(base) {
@@ -38,7 +38,7 @@ function discoveryCandidates(base) {
   const start = Number(url.port);
   if (!Number.isFinite(start) || start < 1) return [];
   const out = [];
-  for (let i = 0; i < 3; i += 1) {
+  for (let i = 0; i < 8; i += 1) {
     const p = start + i;
     if (p < 1 || p > 65535) continue;
     out.push(withPort(base, p));

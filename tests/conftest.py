@@ -55,8 +55,9 @@ win32 = PowerShell 调 WinRT toast / linux = `notify-send` / darwin = `osascript
 
 ## 4. HR 实例注册表 (2026-10-16 用户实报「发现产生很多无关条目」)
 
-**背景**: `hr.runtime._build_discovery()` 经 `InstanceRegistry(default_registry_path())` 把本实例
-心跳登记进**用户真实 app-data**(`%LOCALAPPDATA%/auto-qb-hr/instances.json`)。条目 id 是
+**背景**: `hr.runtime._build_discovery()` 经 `InstanceRegistry(default_registry_path(entry_id))` 把本实例
+心跳登记进**用户真实 app-data**(计划 26-11-10-0515 S1 起 = `%LOCALAPPDATA%/auto-qb-hr/<entry_id>.json`
+按 clone 拆分; 旧共享文件 instances.json 已退役)。条目 id 是
 `sha1(config.data_dir)[:12]`, 而测试的 `data_dir` 是**每个用例唯一的 `tmp_path`** ⇒ 每个用例都算
 「一个全新实例」, upsert 的去重键对不上, 只能新增 —— 实测跑一次 `test_hr_runtime.py` 就往真实
 文件追加 **24 条**死条目(端口随机 / token 随机 / 永不再心跳)。累积到 684 条后, 扩展「立即发现」
@@ -311,9 +312,11 @@ def _isolated_hr_registry(tmp_path_factory):
     """
     from auto_qb.hr import runtime as hr_runtime
 
-    path = str(tmp_path_factory.mktemp("hr-registry") / "instances.json")
+    path = str(tmp_path_factory.mktemp("hr-registry") / "registry.json")
     real = hr_runtime.default_registry_path
-    hr_runtime.default_registry_path = lambda: path
+    # 签名随 per-clone 拆分(计划 26-11-10-0515 S1): default_registry_path(entry_id) —— 拦下
+    # entry_id 参数, 整个会话仍指到同一个临时文件(隔离面不变)
+    hr_runtime.default_registry_path = lambda entry_id: path
     try:
         yield path
     finally:
