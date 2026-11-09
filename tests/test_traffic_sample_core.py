@@ -34,10 +34,10 @@
 - test_clock_rollback_clamped_dt_min_1: 时钟回拨单调钳制 dt_ms = max(1, 实测) >= 1
 - test_interval_change_hot_reload_new_block_and_effective_interval: 热重载改采样率即时生效(§3.5):
   _effective_interval 更新 + 旧块落盘(旧 interval) + 新块带新 interval(新旧数据分块各有 interval)
-- test_interval_mismatch_ceils_and_warns_once: 运行期失配(D5): 向上取整到下一倍数(_effective_interval=取整值) +
-  告警一次(防重复), 配置再变记忆复位; 不拒采
-- test_interval_decimal_match_kept_not_ceiled: 整数倍匹配的小数档(1.5 配 main_tick=1.5)原样生效 ——
-  _effective_interval/块头 B 行均 1.5, 失配告警不触发, 同块零漂移(2026-10-05 修复)
+- test_interval_change_multiplier_direct_and_no_warn: 运行期改倍数(main_tick=2, 倍数 3 -> 5):
+  生效间隔直乘 6 -> 10 + 关块重开, 全程无失配告警(倍数语义, D10 无取整/记忆复位)
+- test_interval_decimal_blockhead_when_main_tick_fractional: 倍数=1 配 main_tick=1.5 -> 生效
+  1.5s —— _effective_interval/块头 B 行均 1.5, 同块零漂移(小数秒块头覆盖)
 - test_day_boundary_cut: 跨天切块(00:00 硬切, §3.3): 23:59 块落旧日期文件 + 00:00 新块新日期文件, 各带正确块头
 - test_day_boundary_seals_open_run: 跨天封游程: 游程不跨天(00:00 样本先封旧游程); 块首单槽游程不写 dt
 - test_stop_flushes_all_and_seals_open_runs: stop() 钩子(§3.4): 封全部开放游程 + 全量 flush; 幂等
@@ -78,8 +78,8 @@ P1-T1.2 守卫与容错簇(计划 26-10-20-2101, 覆盖率缺口清偿):
   部分行(avg 0 / cov 3600, 内存行不落盘)+ 当日 day 行 + 当月 month 行; 累计器本体不动(副本语义)
 - test_live_tail_idle_run_publishes_zero_hour_rows_end_to_end: 端到端 —— 先一笔非零(立信用)再
   一路空闲, z 游程未封口时活尾快照已带 0 值 hour 行(整小时 avg 0 / cov 3600), 3d+ 不再画「无采样」
-- test_apply_interval_without_main_tick_uses_raw_interval: main_tick 未配置(0) -> 生效间隔
-  = sample_interval 原值(不取整, 无失配告警)
+- test_apply_interval_without_main_tick_falls_back_to_floor: main_tick 未配置(0) -> 直乘 0 由
+  块头下限兜底为 1.0s(无告警)
 - test_close_blocks_for_interval_change_skips_runless_and_unopened: 改间隔关块只封「有开放块」
   的游程与缓冲 —— 无缓冲的游程 / 未开块的 shell 缓冲零操作(不误封、不误 flush)
 - test_torrent_active_missing_fields_takes_null_run: 活跃种子缺字段 -> n 游程(不写 0 不吞样本)
@@ -207,7 +207,7 @@ from clock import FakeClock
 
 def test_sample_task_registered_when_enabled(tmp_path):
     """采样**不进队列**: enabled=true / enabled=false / 键组缺省(None) 三种情形启动后队列零任务"""
-    for qb in (QbTraffic(enabled=True, sample_interval=45), QbTraffic(enabled=False), None):
+    for qb in (QbTraffic(enabled=True, sample_interval_multiplier=45), QbTraffic(enabled=False), None):
         mgr = _mgr_with_traffic(tmp_path, qb)
         mgr.host.get("qb_traffic").start(mgr.ctx, dry_run=False)
         assert mgr.task_queue._fast == [], (qb, [t.name for t in mgr.task_queue._fast])
@@ -219,8 +219,8 @@ def test_sample_not_starved_by_immediate_task_backlog(tmp_path, monkeypatch):
     (实测 7/7 复现 37~55s 静默, 1.5s 档丢约 36 轮)。判据走真实任务线入口, 排水未完成期间
     每一拍都必须采到。"""
     clock = FakeClock()
-    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30), clock=clock)
-    mgr.config.main_tick = 30.0  # 采样节拍 = 1 个主循环拍(每拍都该采到)
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=1), clock=clock)
+    mgr.config.main_tick = 30.0  # 采样节拍 = 1 个主循环拍(每拍都该采到): 1 x 30 = 30s 生效
     mgr.store.server_state = server_state()
     mod = mgr.host.get("qb_traffic")
     mod.start(mgr.ctx, dry_run=False)
@@ -238,8 +238,8 @@ def test_sample_clock_line_gate_and_hot_reload_enable(tmp_path, monkeypatch):
     """时钟线到期闸门 + 启停: 未到 effective interval 不重复采; 停用零采样; 热重载
     enabled=true **不经 queue_rebuilt 相位**即开采(采样已与队列解耦)"""
     clock = FakeClock()
-    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30), clock=clock)
-    mgr.config.main_tick = 2.0  # 时钟线每 2s 一拍, 采样间隔 30s -> 闸门只在到点放行
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=15), clock=clock)
+    mgr.config.main_tick = 2.0  # 时钟线每 2s 一拍, 15 x 2 = 30s 生效 -> 闸门只在到点放行
     mgr.store.server_state = server_state()
     mod = mgr.host.get("qb_traffic")
     mod.start(mgr.ctx, dry_run=False)
@@ -266,7 +266,7 @@ def test_sample_clock_line_gate_and_hot_reload_enable(tmp_path, monkeypatch):
 # ---------- 采样语义(P1 验收判据) ----------
 def test_sampling_runs_on_caller_thread(tmp_path, monkeypatch):
     """单写线程不变式: 采样在调用时钟线钩子的线程(= 主循环线程)内同步完成, 模块不创建线程"""
-    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30))
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=30))
     mgr.store.server_state = server_state()
     mod = mgr.host.get("qb_traffic")
     mod.start(mgr.ctx, dry_run=False)
@@ -286,7 +286,7 @@ def test_sampling_runs_on_caller_thread(tmp_path, monkeypatch):
 
 def test_first_sample_only_establishes_baseline(tmp_path):
     """首个采样只立基线不出增量(首窗 null); 次轮增量 = cur - last(§03.4)"""
-    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30))
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=30))
     mgr.store.server_state = server_state()
     mod = mgr.host.get("qb_traffic")
     _run_sample(mgr)  # 采样体无返回值(已非队列 handler; issue 26-10-16-0954)
@@ -305,7 +305,7 @@ def test_first_sample_only_establishes_baseline(tmp_path):
 
 def test_counter_rollback_records_reset_no_negative(tmp_path):
     """模拟 qB 重启(计数器回落): 不产负增量、增量记 null、基线更新为 cur、INFO 记重置"""
-    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30))
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=30))
     mgr.store.server_state = server_state()
     mod = mgr.host.get("qb_traffic")
     _run_sample(mgr)  # 立基线
@@ -323,7 +323,7 @@ def test_counter_rollback_records_reset_no_negative(tmp_path):
 def test_disconnect_produces_null_point(tmp_path):
     """qB 断连(store.client None) -> 全局记 n 游程槽 + latest 镜像 null 点、单种本轮不采样、
     基线不推进(§03.5; v3 落盘形态为 n 游程, 断连期历史照常随 flush 落盘)"""
-    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30))
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=30))
     mgr.store.server_state = server_state()
     seed_store(mgr, [active_torrent()])
     mod = mgr.host.get("qb_traffic")
@@ -341,7 +341,7 @@ def test_disconnect_produces_null_point(tmp_path):
 
 def test_missing_fields_produce_null_point_not_zero(tmp_path):
     """server_state 缺字段 / 显式 None -> 该轮 null 处理(不写 0)且基线不推进(§03.5)"""
-    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30))
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=30))
     mod = mgr.host.get("qb_traffic")
     # 降级路径: server_state 为 None
     mgr.store.server_state = None
@@ -364,7 +364,7 @@ def test_missing_fields_produce_null_point_not_zero(tmp_path):
 def test_torrent_active_filter_zero_rows_when_idle(tmp_path):
     """活跃过滤(v3 §3.2 口径): 活跃(dlspeed>0 or upspeed>0)照常产 r; 空闲种子零 r
     —— 从未传输者(数据门拦截)连游程都不开, latest 无其采样点"""
-    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30))
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=30))
     mgr.store.server_state = server_state()
     seed_store(
         mgr,
@@ -401,7 +401,7 @@ def test_enabled_true_persists_under_data_dir(tmp_path, monkeypatch):
     """enabled=true: 采样点落 v3 天文件 <data_dir>/qb-traffic-v4/{global,torrents/<h>}/<date>.dat
     (头行 v3 + key 行 + B 块头 + r 行); 时钟整间隔步进 -> 零漂移零 dt 行; 会话快照列不落盘"""
     clock = FakeClock()
-    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30), clock=clock)
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=30), clock=clock)
     mgr.store.server_state = server_state()
     seed_store(mgr, [active_torrent()])
     mod = mgr.host.get("qb_traffic")
@@ -441,7 +441,7 @@ def test_flush_driver_interval_and_deferred_first_round(tmp_path, monkeypatch):
     flush_interval 才全系列批量落盘; v4 关块谓词(flush ∧ has_r_row)下带 r 行的块随
     flush 关闭, 之后的记录开新块(每块块头恰写一次)"""
     clock = FakeClock()
-    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30, flush_interval=60), clock=clock)
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=30, flush_interval=60), clock=clock)
     mgr.store.server_state = server_state()
     mod = mgr.host.get("qb_traffic")
     _run_sample(mgr)  # t0: r 进缓冲; 首轮只记 flush 时点
@@ -470,7 +470,7 @@ def test_global_idle_run_stays_open_across_flush_and_seals_on_resume(tmp_path, m
     内存(N4 天级保险闸, 600s 不再常态触发), 空闲段不落盘; 恢复传输(非 z 事件)封口,
     z 游程成为新块首(基线 = 该快照, delta = 0); 恢复 r 行 delta <= flush 窗 x 速率"""
     clock = FakeClock()
-    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30), clock=clock)
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=30), clock=clock)
     mgr.store.server_state = server_state()
     mod = mgr.host.get("qb_traffic")
     _run_sample(mgr)  # t0: 活跃 -> r 记录进缓冲
@@ -502,7 +502,7 @@ def test_torrent_idle_run_snapshot_fixed_at_open(tmp_path, monkeypatch):
     空闲期两个不同 totals 的零样本不刷新快照(§3.4 沿用); 形态 D: 末端列落封口触发
     样本的读数(路径 1, 冻结列不受影响)"""
     clock = FakeClock()
-    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30), clock=clock)
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=30), clock=clock)
     mgr.store.server_state = server_state()
     rec = active_torrent("HASH123", downloaded=5_000_000, uploaded=3_000_000)
     seed_store(mgr, [rec])
@@ -539,7 +539,7 @@ def test_torrent_idle_run_snapshot_fixed_at_open(tmp_path, monkeypatch):
 def test_never_transferred_torrent_zero_files_runs_entries(tmp_path, monkeypatch):
     """从未传输的种子: 零文件、零游程(数据门 = 目录判定 + 进程内缓存, §3.2)"""
     clock = FakeClock()
-    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30), clock=clock)
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=30), clock=clock)
     mgr.store.server_state = server_state()
     seed_store(mgr, [FakeTorrent(hash="NEVER")])  # 全零速且从无流量
     mod = mgr.host.get("qb_traffic")
@@ -554,7 +554,7 @@ def test_never_transferred_torrent_zero_files_runs_entries(tmp_path, monkeypatch
 def test_nonzero_arrival_seals_z_before_raw_same_round(tmp_path, monkeypatch):
     """触发 (1): 非零样本到达同轮先封 z 游程再出 r —— buffer 记录序 = 文件序 = 时间序"""
     clock = FakeClock()
-    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30), clock=clock)
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=30), clock=clock)
     mgr.store.server_state = server_state()
     rec = active_torrent("HASH123")
     seed_store(mgr, [rec])
@@ -583,7 +583,7 @@ def test_disconnect_seals_run_before_null_r2(tmp_path, monkeypatch):
     """触发 (2)(R2): null 到达先封开放 z 游程再记 n 游程 —— z 覆盖不横跨断连期
     (把「未知」虚标成「观测到 0」的 v3 形态 = z 与 n 各占各的槽)"""
     clock = FakeClock()
-    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30), clock=clock)
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=30), clock=clock)
     mgr.store.server_state = server_state()
     mod = mgr.host.get("qb_traffic")
     _run_sample(mgr)  # t0: 活跃
@@ -612,7 +612,7 @@ def test_zero_run_requires_valid_totals_snapshot(tmp_path, monkeypatch):
     """零样本读数口径: 开 z 游程需要合法 totals 快照 —— totals 缺失的零样本不开新游程
     (空闲不出 null 槽); 已开游程的零样本只推进 last_seen 无需重读 totals"""
     clock = FakeClock()
-    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30), clock=clock)
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=30), clock=clock)
     mgr.store.server_state = server_state()
     rec = active_torrent("HASH123")
     seed_store(mgr, [rec])
@@ -642,7 +642,7 @@ def test_global_always_opens_run_vs_torrent_gated(tmp_path, monkeypatch):
     """两系列零样本纪律对照(§3.2): 全局恒开游程(无数据门); 单种目录判定门拦截
     (从未传输不开游程不建文件)"""
     clock = FakeClock()
-    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30), clock=clock)
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=30), clock=clock)
     mgr.store.server_state = _idle_state()
     seed_store(mgr, [FakeTorrent(hash="NEVER")])
     mod = mgr.host.get("qb_traffic")
@@ -660,7 +660,7 @@ def test_restart_loses_at_most_one_open_run(tmp_path, monkeypatch):
     """崩溃/重启语义: 重建 sampler 实例 -> 内存游程与缓冲消失(丢 <=1 个未封口游程, 纯零
     信息), 已落盘块不受影响; 零样本按纪律重新开游程(重启后首个封口游程成为新块首)"""
     clock = FakeClock()
-    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30), clock=clock)
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=30), clock=clock)
     mgr.store.server_state = server_state()
     mod = mgr.host.get("qb_traffic")
     _run_sample(mgr)  # t0: 活跃 -> r 进缓冲
@@ -690,7 +690,7 @@ def test_restart_loses_at_most_one_open_run(tmp_path, monkeypatch):
 def test_zero_samples_do_not_touch_baselines_or_latest(tmp_path, monkeypatch):
     """零样本不动 baselines/latest(§3.4): 基线只在 r 采样点推进, 镜像冻结在最后活跃点"""
     clock = FakeClock()
-    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30), clock=clock)
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=30), clock=clock)
     mgr.store.server_state = server_state()
     rec = active_torrent("HASH123")
     seed_store(mgr, [rec])
@@ -715,7 +715,7 @@ def test_zero_samples_do_not_touch_baselines_or_latest(tmp_path, monkeypatch):
 def test_dry_run_no_disk_but_memory_runs_advance(tmp_path, monkeypatch):
     """dry_run: 全程零落盘; 缓冲与游程内存照常推进, flush 触发静默跳过写(记录照常清空)"""
     clock = FakeClock()
-    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30, flush_interval=60), clock=clock)
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=30, flush_interval=60), clock=clock)
     mgr.store.server_state = server_state()
     mod = mgr.host.get("qb_traffic")
     _run_sample(mgr, dry_run=True)  # t0: 活跃(仅内存)
@@ -742,7 +742,7 @@ def test_dry_run_no_disk_but_memory_runs_advance(tmp_path, monkeypatch):
 def test_clock_rollback_clamped_dt_min_1(tmp_path, monkeypatch):
     """时钟回拨(§2.3): 单调钳制 dt_ms = max(1, 实测) —— 回拨行 dt_ms 恒 >= 1, 链不产负推进"""
     clock = FakeClock()
-    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30), clock=clock)
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=30), clock=clock)
     mgr.store.server_state = server_state()
     mod = mgr.host.get("qb_traffic")
     _run_sample(mgr)  # t0
@@ -764,12 +764,12 @@ def test_interval_change_hot_reload_new_block_and_effective_interval(tmp_path, m
     !节拍表达已随 issue 26-10-16-0954 从「回写 task.interval」改为时钟线自持
     (_next_sample_at), 故断言 _effective_interval(节拍与块头共用同一单点)"""
     clock = FakeClock()
-    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30), clock=clock)
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=30), clock=clock)
     mgr.store.server_state = server_state()
     mod = mgr.host.get("qb_traffic")
     mod.handle_traffic_sample(dry_run=False)  # t0: r 进缓冲(interval 30)
     clock.advance(30)
-    mgr.config.qb_traffic.sample_interval = 10
+    mgr.config.qb_traffic.sample_interval_multiplier = 10
     mod.handle_traffic_sample(dry_run=False)  # t0+30: 检测变化 -> 关旧块 + 记新节拍
     assert mod._effective_interval == 10  # A3: 现读生效
     assert mod._next_sample_at == clock.now() + 10  # 下一到期点随新节拍推进
@@ -786,40 +786,38 @@ def test_interval_change_hot_reload_new_block_and_effective_interval(tmp_path, m
     assert [type(r) for r in parsed.blocks[1].records] == [V4Sample, V4Sample]
 
 
-def test_interval_mismatch_ceils_and_warns_once(tmp_path, monkeypatch):
-    """运行期失配(D5): 向上取整到下一倍数(main_tick=2 配 3s -> 4s, _effective_interval=取整值)
-    + 告警一次(防重复); 配置再变记忆复位; 不拒采"""
-    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=3))
-    mgr.config.main_tick = 2.0  # FakeConfig 缺省 1.0; 显式置 2 构造失配场景
+def test_interval_change_multiplier_direct_and_no_warn(tmp_path, monkeypatch):
+    """运行期改倍数(main_tick=2 配倍数 3 -> 5): 生效间隔直乘 3x2=6 -> 5x2=10 并触发关块重开,
+    全程无失配告警 —— 倍数语义下失配数学上不可能(D10 已删旧取整/告警/记忆复位)"""
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=3))
+    mgr.config.main_tick = 2.0  # FakeConfig 缺省 1.0; 显式置 2 观察直乘口径
     mgr.store.server_state = server_state()
     mod = mgr.host.get("qb_traffic")
     with capture_logs("auto_qb.core.modules.traffic_sample_mod") as cap:
         mod.handle_traffic_sample(dry_run=False)  # 不拒采
-    assert mod._effective_interval == 4  # ceil(3/2) x 2 = 4(颗粒变粗不断线)
-    assert "取整" in cap.text and "整数倍" in cap.text  # 恰一次告警
+    assert mod._effective_interval == 6  # 3 x 2, 无取整
+    assert "取整" not in cap.text and "整数倍" not in cap.text  # 无失配告警
+    mgr.config.qb_traffic.sample_interval_multiplier = 5  # 5 x 2 = 10
     with capture_logs("auto_qb.core.modules.traffic_sample_mod") as cap2:
         mod.handle_traffic_sample(dry_run=False)
-    assert "取整" not in cap2.text  # 同一失配不重复告警
-    # 配置变化 -> 记忆复位: 新失配再告警一次
-    mgr.config.qb_traffic.sample_interval = 5  # ceil(2.5) x 2 = 6
-    with capture_logs("auto_qb.core.modules.traffic_sample_mod") as cap3:
-        mod.handle_traffic_sample(dry_run=False)
-    assert mod._effective_interval == 6 and "取整" in cap3.text
+    assert mod._effective_interval == 10  # 直乘生效
+    assert "取整" not in cap2.text and "整数倍" not in cap2.text  # 改倍数同样不告警
+    assert "采样率变化" in cap2.text  # 生效值变化 -> 关块重开留痕
 
 
-def test_interval_decimal_match_kept_not_ceiled(tmp_path, monkeypatch):
-    """整数倍匹配的小数档原样生效(2026-10-05 修复): main_tick=1.5 配 1.5s ->
-    _effective_interval == 1.5(不再被整数秒口径静默抬到 2), 块头 interval_s == 1.5(B 行写
-    1.5), 失配告警不触发; 同块两记录标称 1.5s 推进零漂移(r 行不写显式 dt)"""
+def test_interval_decimal_blockhead_when_main_tick_fractional(tmp_path, monkeypatch):
+    """小数秒块头覆盖(倍数=1 配 main_tick=1.5): 生效间隔 = 1 x 1.5 = 1.5 ——
+    _effective_interval == 1.5, 块头 interval_s == 1.5(B 行如实带小数), 同块两记录标称
+    1.5s 推进零漂移(r 行不写显式 dt); 倍数语义无失配概念故无告警"""
     clock = FakeClock()
-    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=1.5), clock=clock)
-    mgr.config.main_tick = 1.5  # FakeConfig 缺省 1.0; 显式对齐构造匹配小数档
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=1), clock=clock)
+    mgr.config.main_tick = 1.5  # FakeConfig 缺省 1.0; 显式构造小数秒生效间隔
     mgr.store.server_state = server_state()
     mod = mgr.host.get("qb_traffic")
     with capture_logs("auto_qb.core.modules.traffic_sample_mod") as cap:
         mod.handle_traffic_sample(dry_run=False)  # t0: 块首 r
     assert mod._effective_interval == 1.5
-    assert "取整" not in cap.text  # 整数倍匹配: 失配告警不触发
+    assert "取整" not in cap.text  # 倍数语义: 无取整告警
     clock.advance(1.5)
     mod.handle_traffic_sample(dry_run=False)  # t0+1.5: 同块续写
     _flush(mod)
@@ -836,7 +834,7 @@ def test_day_boundary_cut(tmp_path, monkeypatch):
     """跨天切块(00:00 硬切, 本地时区, §3.3): 跨界记录使旧块落旧日期文件、新记录开新块落
     新日期文件 —— 23:59 块与 00:00 新块各带正确块头(interval 不变)"""
     clock = FakeClock(start=_local_epoch(23, 59, 50))
-    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30), clock=clock)
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=30), clock=clock)
     mgr.store.server_state = server_state()
     mod = mgr.host.get("qb_traffic")
     t_before = clock.now()
@@ -860,7 +858,7 @@ def test_day_boundary_seals_open_run(tmp_path, monkeypatch):
     """跨天封游程(块不跨天的必要触发): 00:00 样本先封旧日游程(记录入旧块), 本样本开新
     游程; 封口后换型记录跨天 -> 旧块落盘 + 单槽游程成为新块首(不写 dt, 无引导间隔)"""
     clock = FakeClock(start=_local_epoch(23, 59, 20))
-    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30), clock=clock)
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=30), clock=clock)
     mgr.store.server_state = server_state()
     mod = mgr.host.get("qb_traffic")
     t_before = clock.now()
@@ -890,7 +888,7 @@ def test_day_boundary_seals_open_run(tmp_path, monkeypatch):
 def test_stop_flushes_all_and_seals_open_runs(tmp_path, monkeypatch):
     """stop() 钩子(§3.4): 封全部开放游程 + 全量 flush(优雅退出零丢失); 幂等(重复调用零副作用)"""
     clock = FakeClock()
-    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30, flush_interval=10**9), clock=clock)
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=30, flush_interval=10**9), clock=clock)
     mgr.store.server_state = server_state()
     mod = mgr.host.get("qb_traffic")
     _run_sample(mgr)  # t0: 活跃 -> r 进缓冲
@@ -914,7 +912,7 @@ def test_zrun_end_anchor_tracked_reading_on_stop(tmp_path, monkeypatch):
     """形态 D 封口路径 3(无样本在手 = stop()): 末端锚点 = 游程内最后一条零样本读数
     (全局系列每轮现读 totals, 跟踪字段随读刷新); 冻结列不变, 末端列落盘该读数"""
     clock = FakeClock()
-    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30, flush_interval=10**9), clock=clock)
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=30, flush_interval=10**9), clock=clock)
     mgr.store.server_state = server_state()
     mod = mgr.host.get("qb_traffic")
     _run_sample(mgr)  # t0: 活跃 -> r 进缓冲
@@ -934,7 +932,7 @@ def test_zrun_end_anchor_tracked_reading_on_interval_change(tmp_path, monkeypatc
     """形态 D 封口路径 4(采样间隔热重载关块): 关块前封开放游程, 末端锚点 = 跟踪的最后
     零样本读数; 旧块以旧 interval 落盘、新数据新块新 interval(A3 口径不变)"""
     clock = FakeClock()
-    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30), clock=clock)
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=30), clock=clock)
     mgr.store.server_state = server_state()
     mod = mgr.host.get("qb_traffic")
     _run_sample(mgr)  # t0: 活跃 -> 开块
@@ -942,7 +940,7 @@ def test_zrun_end_anchor_tracked_reading_on_interval_change(tmp_path, monkeypatc
         mgr.store.server_state = _idle_state(alltime_dl=10_000_000 + i * 400, alltime_ul=20_000_000 + i * 200)
         clock.advance(30)
         _run_sample(mgr)
-    mgr.config.qb_traffic.sample_interval = 10  # 热重载: 下一轮关块
+    mgr.config.qb_traffic.sample_interval_multiplier = 10  # 热重载: 下一轮关块
     clock.advance(30)
     _run_sample(mgr)  # t0+90: 检测变化 -> 封游程 + 旧块落盘
     assert mod._effective_interval == 10
@@ -957,7 +955,7 @@ def test_zrun_end_anchor_tracked_reading_on_interval_change(tmp_path, monkeypatc
 def test_stop_dry_run_short_circuit(tmp_path, monkeypatch):
     """stop() dry_run 短路: 不落盘不建目录(观测写盘属真实副作用)"""
     clock = FakeClock()
-    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30), clock=clock)
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=30), clock=clock)
     mgr.store.server_state = server_state()
     mod = mgr.host.get("qb_traffic")
     mod.start(mgr.ctx, dry_run=True)
@@ -969,7 +967,7 @@ def test_stop_dry_run_short_circuit(tmp_path, monkeypatch):
 def test_agg_hour_degenerate_equal_interval_matches_v2(tmp_path):
     """dt_i ≡ interval_s 退化(§4.1 验收): 等间隔无漂移序列产出的 hour 行与等间隔均值
     公式 round(Σrate/n)(v2 纯活跃桶口径)逐列一致(对照钉住), 且等于 v4_hour_agg 标称输入"""
-    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30))
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=30))
     mod = mgr.host.get("qb_traffic")
     key = GLOBAL_SERIES_KEY
     h0 = _AGG_H0
@@ -994,7 +992,7 @@ def test_stop_seals_aggregates_and_dry_run_short_circuit(tmp_path, monkeypatch):
     # rollup_window 裁剪(C-01 修复后运行期新建系列裁剪生效, 数据降级进 day 行) —— 本用例
     # 验的是封口语义, 与裁剪无关, 故注入时钟。注入须先于模块构造(缺省钟构造期解析)
     clock = FakeClock(start=base + 2 * HOUR_SECONDS)
-    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30), clock=clock)
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=30), clock=clock)
     mod = mgr.host.get("qb_traffic")
     key = GLOBAL_SERIES_KEY
     obs = [(100, 50, 1, 2), (200, 60, 3, 4), (300, 70, 5, 6)]
@@ -1006,7 +1004,7 @@ def test_stop_seals_aggregates_and_dry_run_short_circuit(tmp_path, monkeypatch):
     mod.stop()  # 幂等: 无新行
     assert _agg_text(tmp_path, key) == text
     # dry_run: stop() 短路, 零落盘; 累计器内存照常推进
-    mgr2 = _mgr_with_traffic(tmp_path / "dry", QbTraffic(enabled=True, sample_interval=30), clock=clock)
+    mgr2 = _mgr_with_traffic(tmp_path / "dry", QbTraffic(enabled=True, sample_interval_multiplier=30), clock=clock)
     mod2 = mgr2.host.get("qb_traffic")
     mod2.start(mgr2.ctx, dry_run=True)
     mod2._agg_feed(key, V4Sample(100, 50, 1, 2), base, base, True, 30.0)
@@ -1058,7 +1056,7 @@ def test_v4_idle_block_stays_open_single_b_row_and_live_tail_identity(tmp_path, 
     主文件零写入, 封口后天文件恰 1 条 B 行 + 1 条长 z 行; 跨 flush 开放 z 游程的
     LiveTail 复原与落盘重算恒等(块首封口形态); 恢复传输后 r 行 delta <= flush 窗 x 速率"""
     clock = FakeClock()
-    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30, flush_interval=600), clock=clock)
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=30, flush_interval=600), clock=clock)
     mgr.store.server_state = server_state(dl_info_speed=1024, up_info_speed=512)  # 全局保持活跃(隔离单种面)
     seed_store(mgr, [active_torrent("HASH123")])
     st = TrafficV4Store(str(tmp_path))  # 数据门: 预置系列目录含 .dat(有过历史数据)
@@ -1104,7 +1102,7 @@ def test_v4_non_z_seal_midnight_materializes_idle_b_z_batch(tmp_path, monkeypatc
     """7. 非 z 事件封口(v4 §04 用例 7): 长空闲段恰 1 条长 z 行, 00:00 物化进当日天文件
     (B + z 一批 append, 空闲期主文件零写入); 次日 LiveTail 开放游程跨天接力与落盘重算恒等"""
     clock = FakeClock(start=_local_epoch(23, 57, 40))
-    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30, flush_interval=10**9), clock=clock)
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=30, flush_interval=10**9), clock=clock)
     mgr.store.server_state = server_state()
     mod = mgr.host.get("qb_traffic")
     t_before = clock.now()
@@ -1150,7 +1148,7 @@ def test_v4_crash_restart_idle_window_is_vacuum(tmp_path, monkeypatch):
     「在场证明」—— 重启 catch-up 后空闲段 cov_s 缺失, hour 行 avg 不被零速稀释(无偏)"""
     base_t = _local_epoch(10, 0, 0)
     clock = FakeClock(start=base_t)
-    mgr1 = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30), clock=clock)
+    mgr1 = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=30), clock=clock)
     mgr1.store.server_state = server_state()
     mod1 = mgr1.host.get("qb_traffic")
     _run_sample(mgr1)  # 10:00:00: 活跃 r(rate 1024/2048)
@@ -1160,7 +1158,7 @@ def test_v4_crash_restart_idle_window_is_vacuum(tmp_path, monkeypatch):
         clock.advance(30)
         _run_sample(mgr1)
     # 崩溃: 无 stop(), 模块实例直接丢弃(开放游程与内存信用随之消失)
-    mgr2 = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30), clock=clock)
+    mgr2 = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=30), clock=clock)
     mod2 = mgr2.host.get("qb_traffic")
     clock.advance(30)  # 10:10:30
     mod2.start(mgr2.ctx, dry_run=False)  # 重启恢复: catch-up 从天文件 raw 补算(空闲段无 raw)
@@ -1181,7 +1179,7 @@ def test_pending_agg_rows_skips_empty_and_zero_coverage_buckets(tmp_path):
     """活尾 pending 行(S7): 空桶不留行 / 零有效覆盖桶 ValueError 逐一跳过(不出行 = null
     语义, 与 _agg_flush_series 同); 无子行时 day/month 两级同样不出行; 合法桶照常产
     hour 行并由它逐级上卷"""
-    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30))
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=30))
     mod = mgr.host.get("qb_traffic")
     agg = mod._agg_state(GLOBAL_SERIES_KEY)
     agg.pending[_AGG_H0] = []  # 空桶(全 null 覆盖的小时)
@@ -1229,7 +1227,7 @@ def test_pending_agg_rows_idle_z_run_fills_tail_hours(tmp_path):
     内存行不落盘)+ 当日 day 行 + 当月 month 行; 累计器本体不动(合成只进 pending 副本)"""
     from auto_qb.core.modules.traffic_sample_mod import OpenRun, _pending_agg_rows
 
-    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30))
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=30))
     mod = mgr.host.get("qb_traffic")
     agg = mod._agg_state(GLOBAL_SERIES_KEY)
     h0 = v4_day_epoch(_AGG_H0) + 2 * HOUR_SECONDS  # 当日 02:00 起, 8 小时不跨本地日界
@@ -1255,7 +1253,7 @@ def test_live_tail_idle_run_publishes_zero_hour_rows_end_to_end(tmp_path, monkey
     d0 = v4_day_epoch(_AGG_H0)
     h0 = d0 + 2 * HOUR_SECONDS
     clock = FakeClock(start=h0)
-    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30, flush_interval=600), clock=clock)
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=30, flush_interval=600), clock=clock)
     mgr.store.server_state = server_state(dl_info_speed=100, up_info_speed=50, alltime_dl=1000, alltime_ul=2000)
     mod = mgr.host.get("qb_traffic")
     _run_sample(mgr)  # t=h0: r 记录(立信用, 尚无游程)
@@ -1278,20 +1276,19 @@ def test_live_tail_idle_run_publishes_zero_hour_rows_end_to_end(tmp_path, monkey
     assert [r.epoch for r in tail.pending_agg if r.kind == "day"] == [d0]
 
 
-def test_apply_interval_without_main_tick_uses_raw_interval(tmp_path):
-    """main_tick 未配置(0 / 缺省)-> 生效间隔 = sample_interval 原值: 不做倍数取整也不告警
-    (取整语义只在主循环节拍存在时成立)"""
-    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30))
+def test_apply_interval_without_main_tick_falls_back_to_floor(tmp_path):
+    """main_tick 未配置(0)-> 直乘为 0, 块头 interval_s 下限兜底到 1.0s(无告警)"""
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=30))
     mgr.config.main_tick = 0.0
     mod = mgr.host.get("qb_traffic")
-    assert mod._apply_interval(mgr.config.qb_traffic) == 30.0
-    assert mod._effective_interval == 30.0  # 首轮只立基线, 不开关块
+    assert mod._apply_interval(mgr.config.qb_traffic) == 1.0  # max(1.0, 30 x 0)
+    assert mod._effective_interval == 1.0  # 首轮只立基线, 不开关块
 
 
 def test_close_blocks_for_interval_change_skips_runless_and_unopened(tmp_path):
     """改间隔关块(§3.5): 只封「有开放块」的游程与缓冲 —— 无缓冲的开放游程不封(将成为新块
     首记录), 未开块的 shell 缓冲不 flush(零记录零块状态, 关块无对象)"""
-    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30))
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=30))
     mod = mgr.host.get("qb_traffic")
     run_only, shell = "torrent:RUNONLY", "torrent:SHELL"
     mod._open_runs[run_only] = ts_mod.OpenRun(
@@ -1328,7 +1325,7 @@ def test_torrent_active_missing_fields_takes_null_run(tmp_path, monkeypatch):
     """活跃种子关键字段缺失(活跃过滤已过) -> n 游程槽(不写 0 不吞样本): 缓冲里零记录,
     游程记 n; DEBUG 留痕说明本轮按 null 处理"""
     clock = FakeClock()
-    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30), clock=clock)
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=30), clock=clock)
     mgr.store.server_state = server_state()
     seed_store(mgr, [active_torrent("HASH123", uploaded=None)])
     mod = mgr.host.get("qb_traffic")
@@ -1345,7 +1342,7 @@ def test_torrent_zero_speed_readings_drift_defensive_raw_row(tmp_path, monkeypat
     """零速过滤与字段读数口径漂移的防御支: 过滤判零但读数非零 -> 按 r 记录处理(绝不把活跃
     读数吞进游程, 否则该段速率永久丢失)"""
     clock = FakeClock()
-    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30), clock=clock)
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=30), clock=clock)
     mgr.store.server_state = server_state()
     seed_store(mgr, [_FlipSpeedTorrent()])
     mod = mgr.host.get("qb_traffic")
@@ -1377,7 +1374,7 @@ def test_parser_never_emits_zero_slot_block():
 def test_stop_early_return_when_disabled_or_no_data_dir(tmp_path):
     """stop() 前置闸(§3.4): qb_traffic 段缺失 / data_dir 为空 -> 零操作(不封游程不 flush);
     dry_run 短路由 test_stop_dry_run_short_circuit 钉住"""
-    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30))
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=30))
     mod = mgr.host.get("qb_traffic")
     mod._persistence_on = True
     mod._open_runs[GLOBAL_SERIES_KEY] = ts_mod.OpenRun(
@@ -1393,7 +1390,7 @@ def test_stop_early_return_when_disabled_or_no_data_dir(tmp_path):
     mgr.config.qb_traffic = None
     mod.stop()
     assert GLOBAL_SERIES_KEY in mod._open_runs  # 段缺失: 零操作
-    mgr.config.qb_traffic = QbTraffic(enabled=True, sample_interval=30)
+    mgr.config.qb_traffic = QbTraffic(enabled=True, sample_interval_multiplier=30)
     mgr.config.data_dir = ""
     mod.stop()
     assert GLOBAL_SERIES_KEY in mod._open_runs  # data_dir 为空: 零操作
@@ -1568,7 +1565,7 @@ def test_w5_dry_run_full_chain_zero_write(tmp_path, monkeypatch):
     # data_dir 先于模块构造注入: _limits_rec 构造期取值(observe 的 persistence_on 面才可达)
     mgr = make_manager(str(tmp_path / "state.json"), data_dir=str(tmp_path), clock=clock)
     mgr.client = FakeClient()
-    mgr.config.qb_traffic = QbTraffic(enabled=True, sample_interval=30, flush_interval=60, rollup_window=60.0)
+    mgr.config.qb_traffic = QbTraffic(enabled=True, sample_interval_multiplier=30, flush_interval=60, rollup_window=60.0)
     st = TrafficV4Store(str(tmp_path))
     st.append_agg_rows(GLOBAL_SERIES_KEY, (AggRow("hour", h0 - 10800, 7, 9, 3, 4, 500, 600, 3600), ))
     day = v4_epoch_date_str(clock.now())
@@ -1699,7 +1696,7 @@ def test_w5_interval_change_closes_idle_block(tmp_path, monkeypatch):
         clock.advance(30)
         _run_sample(mgr)
     mod._seal_run(GLOBAL_SERIES_KEY)  # 封 z1 -> 纯空闲块(块首 z, 无 r 行)
-    mgr.config.qb_traffic = QbTraffic(enabled=True, sample_interval=45, flush_interval=10**9)
+    mgr.config.qb_traffic = QbTraffic(enabled=True, sample_interval_multiplier=45, flush_interval=10**9)
     mgr.store.server_state = _idle_state(alltime_dl=5_000_300, alltime_ul=3_000_100)
     for _ in range(2):  # 改间隔后空闲(45s 档)
         clock.advance(45)
@@ -1725,7 +1722,7 @@ def test_w5_interval_change_audit_log_and_first_round_silent(tmp_path, monkeypat
     with capture_logs("auto_qb.core.modules.traffic_sample_mod") as cap1:
         _run_sample(mgr)
     assert "采样率变化" not in cap1.text  # 首轮只立基线: 无虚假「变化」INFO
-    mgr.config.qb_traffic = QbTraffic(enabled=True, sample_interval=45, flush_interval=10**9)
+    mgr.config.qb_traffic = QbTraffic(enabled=True, sample_interval_multiplier=45, flush_interval=10**9)
     with capture_logs("auto_qb.core.modules.traffic_sample_mod") as cap2:
         clock.advance(30)
         _run_sample(mgr)
@@ -1757,7 +1754,7 @@ def test_w5_live_tail_interval_change_reset_window_uses_effective(tmp_path, monk
     _run_sample(mgr)  # 首轮 r: 开块 interval=30
     buf = mod._buffers[GLOBAL_SERIES_KEY]
     assert buf.start_epoch is not None and buf.interval_s == 30.0
-    mgr.config.qb_traffic = QbTraffic(enabled=True, sample_interval=45, flush_interval=10**9)
+    mgr.config.qb_traffic = QbTraffic(enabled=True, sample_interval_multiplier=45, flush_interval=10**9)
     mgr.store.server_state = _idle_state(alltime_dl=5_000_000, alltime_ul=3_000_000)
     clock.advance(30)
     _run_sample(mgr)  # 改间隔: 关块复位 -> 本轮 z 游程无块

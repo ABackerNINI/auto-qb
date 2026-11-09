@@ -112,7 +112,7 @@ def _v4_series_dir(tmp_path, infohash: str):
 
 # ---------- 配置键全链(§06) ----------
 def _cfg_dict(qb_traffic_spec, main_tick=None) -> dict:
-    """配置 dict 样例; main_tick 可选(v3 下限语义: sample_interval >= main_tick 硬校验要现取它)"""
+    """配置 dict 样例; main_tick 可选(倍数语义下生效秒 = multiplier x main_tick, 校验要现取它)"""
     top = {
         "qbittorrent": {
             "host": "127.0.0.1",
@@ -215,8 +215,11 @@ def _dat_text(tmp_path, key: str, date: str):
     return open(v4_day_file_path(str(tmp_path), key, date), encoding="utf-8").read()
 
 
-def _drive_full_day(tmp_path, monkeypatch, sample_interval: int, day0: int):
+def _drive_full_day(tmp_path, monkeypatch, multiplier: int, day0: int):
     """全局系列模拟一整天采样流经采样模块 + store(假时钟), 返回 (模块, open 计数 dict)。
+
+    采样档位以倍数表达(sample_interval_multiplier); 测试 FakeConfig.main_tick=1.0, 故生效
+    间隔秒数 = 倍数本身(参数 2 -> 2s 档, 30 -> 30s 档)。
 
     flush_interval=600 -> 恰 144 个 flush 时点/天(86400/600), 24 个整点小时封口; 末次
     采样恰在午夜: 跨天硬切把当天最后一段落盘(第 144 次天文件 append), 次日首样本随
@@ -224,7 +227,7 @@ def _drive_full_day(tmp_path, monkeypatch, sample_interval: int, day0: int):
     "rb" 读不计。"""
     clock = FakeClock(start=day0)  # 构造期注入(S3 monkeypatch 收敛; 不再经 stdlib time 名寻址)
     mgr = _mgr_with_traffic(
-        tmp_path, QbTraffic(enabled=True, sample_interval=sample_interval, flush_interval=600), clock=clock
+        tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=multiplier, flush_interval=600), clock=clock
     )
     mgr.store.server_state = server_state(dl_info_speed=1024, up_info_speed=512)
     mod = mgr.host.get("qb_traffic")
@@ -246,8 +249,8 @@ def _drive_full_day(tmp_path, monkeypatch, sample_interval: int, day0: int):
         return real_open(file, mode, *a, **kw)
 
     monkeypatch.setattr("builtins.open", counting_open)
-    for i in range(86400 // sample_interval + 1):  # 含午夜样本(t = day0+86400, 属次日)
-        clock.freeze(day0 + i * sample_interval)
+    for i in range(86400 // multiplier + 1):  # 含午夜样本(t = day0+86400, 属次日)
+        clock.freeze(day0 + i * multiplier)
         mod.handle_traffic_sample(dry_run=False)
     return mod, counts
 
@@ -321,6 +324,6 @@ def _w5_ts(*args) -> float:
 
 def _w5_mgr(tmp_path, monkeypatch, clock, **conf_kw):
     """W5 守阵公共装配: 固定时钟 + 30s 采样档(键可覆盖)"""
-    kw = {"enabled": True, "sample_interval": 30, "flush_interval": 10**9}
+    kw = {"enabled": True, "sample_interval_multiplier": 30, "flush_interval": 10**9}
     kw.update(conf_kw)
     return _mgr_with_traffic(tmp_path, QbTraffic(**kw), clock=clock)
