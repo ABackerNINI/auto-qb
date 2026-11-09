@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>dt_table 真接线: 几何单点函数级委托 + 渲染自查, HR 三表第二轮立项</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="dt-table-wiring">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-10-0027">
+<meta name="doc-updated" content="26-11-10-0027">
+<meta name="doc-refs" content="memory-bank/issues/26-11-08-0147-bug-dt-table-geometry-unwired.html">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: dt-table-wiring</div>
+<h1>dt_table 真接线: 几何单点函数级委托 + 渲染自查, HR 三表第二轮立项</h1>
+<p class="lede">本篇只回答: dt_table.js 从「已加载零调用」的死模块变为全仓表格几何的单一生产者, 怎么接、怎么验、失控怎么停 —— HR 三表统一交互仅立项(第二轮), 不在本篇展开。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-10-0027 · <b>doc-updated</b> 26-11-10-0027 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> issue 26-11-08-0147(R4-static 挂账待决) · 2026-11-10 会话 grilling 两轮 8 问拍板 · 只读探查事实清单(c39ab3b7..HEAD)
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<p><strong>背景</strong>: dt_table.js 自 26-10-13-0811 W1 落地起生产零调用(issue 26-11-08-0147)。根因链: W1 停手点只做 node 电池自测(计划内)→ W2 起「接内核」被 <code>--tbl-pad-x/--tbl-gap</code> CSS 变量方案实质替代(修几何靠变量收敛而非调用内核)→ 守阵与 parity e2e 的验收口径恰好都覆盖不到「调用链是否存在」→ 测试全绿关单把未接线固化; 次日(26-10-14)复查否定后代码冻结, 双口径(DT_TABLE 死口子 vs <code>columns_grid._gridTemplate/colAlignCss</code> 平行计算)存续至今。</p>
+<p><strong>目标一句</strong>: <code>DT_TABLE.layout()</code> 成为全仓表格几何字符串(轨道串/对齐)的单一生产者, <code>assertLayout()</code> 进入生产渲染自查; 现网渲染输出逐面等价、零行为差。</p>
+<p><strong>做到什么程度算成</strong>: §04 三波判据全绿 + 用户终验四面(06/09/10/11)通过; HR 三表不进本轮(第二轮立项, 方向已拍板 D7)。</p>
+<p><strong>设计底线/不变量</strong>:</p>
+<ul>
+  <li><strong>几何等价不变量</strong>: 委托前后 gridTemplate 与 aligns 逐面相等 —— 由等价性探针先证后改, 探针红 = 停手, 不是修到红变绿。</li>
+  <li><strong>保守默认</strong>(黄金法则 2): assertLayout 不一致只 <code>console.error</code> 不打断渲染。</li>
+  <li><strong>判据前置</strong>: 验收清单在本篇写死交用户过目(10-14「判据自设+零用户验收」翻车的对症)。</li>
+  <li><strong>例外明文化</strong>(D4): 不接口子在例外清单点名, 守阵钉住「清单之外零旁路」。</li>
+</ul>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+<ul>
+  <li><strong>零调用</strong>: <code>window.DT_TABLE</code> 六口子(<code>src/auto_qb/webui/static/shared/dt_table.js:117-127</code>), 全仓 grep 生产仅定义处命中; 四皮肤 index.html 均同时加载 columns_grid.js 与 dt_table.js(flux :188/:197, prism :181/:192, console :180/:191, atlas :176/:187)。</li>
+  <li><strong>实际几何链</strong>: app.js 列定义 <code>{key,label,tpl,sortable,locked,align}</code>(<code>app.js:209-303</code>, DRAWER_TABLE_DEFS 注册 :496-612) → <code>columns_grid._visibleCols/_gridTemplate</code>(<code>columns_grid.js:47-50</code>, <code>colWidths[page][key] || c.tpl</code> 拼轨) + <code>colAlignCss</code>(<code>columns_computed.js:65-79</code>, 注入 <code>&lt;style id="col-align-css"&gt;</code>) → 每表一对 computed(:139-189) → 表壳 <code>:style="$root.gridStyle(tableId)"</code>(<code>tpl/xtpl.html:224/373</code>) + 桥 Teleport(<code>xtpl.html:330-383</code>, 锚保活 <code>H.anchFill</code> drawer_templates.js:299-308)。</li>
+  <li><strong>输入端今天仍对得上</strong>: <code>layout(cols, widths)</code> 消费 <code>key/tpl|width/align</code>(dt_table.js:41-68; label 仅进 checkLabels 的 L3 路径)与列定义同名词可直接喂; <code>colWidths[page]</code> 与 widths 参同构(键→CSS 长度)。</li>
+  <li><strong>守阵缺口</strong>: node 电池只喂合成列(<code>tests/test_webui_static_dom_panel_drawer.py:1822-1864</code> 手写 <code>{key:"a"...}</code>), 从不喂真实列定义 —— 生产零调用时无后果, 接线后必补。</li>
+  <li><strong>同步可行性</strong>: c39ab3b7..HEAD 五路径(columns_grid.js/columns_computed.js/dt_table.js/dt_table.css/drawer_tpl/)实测 39 笔(HEAD f905b7b7 时点), 无一触碰几何契约(-S 实证: 仅大文件拆分 20a74274 move-only 触及 _gridTemplate/colAlignCss; 性能波 e6b02991 只加窗口化 content-visibility/_rowWindow); 经典三张 26-10-14 已整体退役(391b3337), 全部表面走同一链 —— <strong>接线面比 0811 设计时更小</strong>; flux 皮肤 fork console 零专属列, 接源头自动覆盖。</li>
+  <li><strong>语义例外</strong>: HR 三表(hr_status.js:104-140)均无 tpl/align 字段, layout() 对它们只能出全默认轨道 —— hrDetail 借 <code>&lt;aq-table mode="thead"&gt;</code>(settings-detail.html:338), hrWave/hrKv 走原生 table/v-for(settings-detail.html:372/:381-389); 三表不接, 第二轮改造(D7)。</li>
+</ul>
+
+<h2><span class="no">§03</span>方案总览</h2>
+<p><strong>主线(拍板 D1/D2): 函数级单点委托</strong> —— <code>columns_grid._gridTemplate</code> 与 <code>colAlignCss</code> 内部改为委托 <code>DT_TABLE.layout()</code>(轨道串与 aligns 从同一个返回值取), 删除旁路拼接。调用方(主视图 computed + 抽屉桥)与 DOM <strong>零改动</strong>, 全部表格面(含主列表、含 flux)立即单点。被否决的备选: B 链路级直调(绕开 columns_grid 几何函数, 回归面 8 面×4 皮肤, 增量收益不值)、C 只接抽屉面(把双口径洗成白名单的名义接线)。</p>
+<p><strong>渲染自查(D3)</strong>: <code>assertLayout</code> 常驻生产渲染 —— 三处 O(1) 计数(grid 轨道数/列头格数/首行子格数), 不一致 <code>console.error</code>(含 tableId 与三方计数)不打断; 未挂载豁免保留。挂载点(桥 Teleport 完成后 / 主视图渲染后)W1 首日实证选定, 不设拍板。</p>
+<p><strong>本轮接线范围(D6)</strong>: 只接 <code>layout + assertLayout</code> 两个口子。<code>checkLabels</code> 已有测试侧消费(kernel 守阵 L3 全仓扫描), 留原地不算死口子; <code>registerCell/cellOf</code>(单元格注册表)挂账 HR 第二轮 —— 那一轮要动单元格渲染, 顺势接最省, 去留届时裁决。</p>
+<p><strong>例外清单(D4)</strong>: HR 三表(hrDetail/hrWave/hrKv) + 04 卡片形态面 = 已裁决例外, 不接; 守阵断言「清单之外的表面零旁路几何」。</p>
+<p><strong>分期</strong>: W1 等价性探针+委托 → W2 渲染自查+例外守阵 → W3 e2e 语义+终验收单; 每波一笔提交(止损 D8)。</p>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+<table>
+  <tr><th>波</th><th>内容</th><th>验收判据</th></tr>
+  <tr>
+    <td><strong>W1</strong><br>等价性探针<br>+ 函数级委托</td>
+    <td>① 先立探针守阵: 对 ALL_TABLE_DEFS 全部列定义(+colWidths 抽样), 断言 <code>_gridTemplate</code> 现役输出 ≡ <code>DT_TABLE.layout</code> 输出、colAlignCss 的 aligns ≡ <code>layout().aligns</code>。<strong>探针先绿再动委托</strong>; 探针红 = 轨道语义冲突 = 触发停手条款。② <code>_gridTemplate/colAlignCss</code> 改内部委托 DT.layout, 删旁路拼接。③ node 电池增喂真实列定义样本(DRAWER_TRACKER_COLUMNS/PEERS 等), 堵合成列缺口。</td>
+    <td>探针守阵绿; test.quick 绿; <strong>parity/face-bg e2e 语义未变仍全绿 —— 这是最强的「零行为差」实证</strong>; dev.run --dry-run 冒烟。</td>
+  </tr>
+  <tr>
+    <td><strong>W2</strong><br>渲染自查<br>+ 例外清单守阵</td>
+    <td>① assertLayout 挂载点接入生产渲染(W1 实证锚点; 窗口化面的计数语义一并验证)。② 新守阵: 例外清单存在性断言 —— HR 三表/04 之外零旁路几何; kernel 守阵口径更新(layout/assertLayout 标注「已接线」)。</td>
+    <td>新守阵红绿双验(故意旁路 → 红, 还原 → 绿); test.quick 绿。</td>
+  </tr>
+  <tr>
+    <td><strong>W3</strong><br>e2e 语义更新<br>+ 终验收单</td>
+    <td>① parity e2e 注释与口径更新(比对对象从「两处一致」改述为「钉住单点输出」), face-bg 不动。② issue 26-11-08-0147 翻状态 + memory-bank 回写(几何单点事实) + 基线切片 + 收尾 DoD(code-review skill 全程)。</td>
+    <td>test.full 全绿; <strong>用户终验: 06/09/10/11 四面肉眼过一遍, 用户点头才关单(D5)</strong>。</td>
+  </tr>
+</table>
+<p><strong>止损(D8)</strong>: 每波一笔提交, 任一波回归红且当日无法定位 → 回滚该笔; 探针红或发现轨道语义结构性冲突 → <strong>当场停手回报, 不自选改道</strong>(含不偷偷升级成链路级 B 方案), 由用户重新拍板。</p>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p>无 —— grilling 两轮 8 问已全部拍板(26-11-10), 结论见 §06。W1 首日的 assertLayout 挂载点属实证细节, 不设拍板。</p>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<p class="hint">2026-11-10, grilling 会话, 用户逐项拍板:</p>
+<table>
+  <tr><th>#</th><th>结论</th></tr>
+  <tr><td>D1</td><td>方案方向 = <strong>真接线</strong>(整体退役否决); 口径单点与渲染自查两条收益都要</td></tr>
+  <tr><td>D2</td><td>接线深度 = <strong>A 函数级单点</strong>(_gridTemplate/colAlignCss 内部委托); B 链路级直调、C 只接抽屉均否决</td></tr>
+  <tr><td>D3</td><td>assertLayout = <strong>常驻生产</strong>, console.error 不打断渲染; 诊断开关方案否决</td></tr>
+  <tr><td>D4</td><td>例外清单明文化(HR 三表 + 04 卡片形态), 守阵钉「清单外零旁路」</td></tr>
+  <tr><td>D5</td><td>验收 = <strong>机器判据前置写死 + 用户终验四面(06/09/10/11)</strong>; 纯机器判据否决(10-14 教训)</td></tr>
+  <tr><td>D6</td><td>本轮范围 = <strong>layout + assertLayout</strong>; checkLabels 留测试侧; registerCell/cellOf 挂账 HR 第二轮</td></tr>
+  <tr><td>D7</td><td>HR 三表纳入改造、统一交互(拖宽/拖序/右键隐藏/持久化), 方向 = <strong>A 迁 aq-table grid 链路</strong>(补 tpl/align 字段, 注册进同款机制); B 原生表外挂行为否决(再造双口径)。第二轮改造, 本轮仅立项不展开</td></tr>
+  <tr><td>D8</td><td>止损 = 逐提交回滚 + 停手条款(语义冲突不自选改道)</td></tr>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+  <tr><th>#</th><th>风险</th><th>触发条件</th><th>处置</th></tr>
+  <tr><td>R1</td><td>轨道语义冲突: <code>_gridTemplate</code> 现役拼轨与 <code>layout().trackOf</code> 在 _colsOmitEmpty/锁定列/缺省宽度交互上有未发现语义差</td><td>W1 探针红</td><td>停手回报(D8), 不改代码硬凑、不自选改道</td></tr>
+  <tr><td>R2</td><td>aligns 委托致 colAlignCss 规则漂移</td><td>parity e2e 逐列 text-align/left 差判据红</td><td>回滚该笔提交, 定位后重做</td></tr>
+  <tr><td>R3</td><td>assertLayout 误报刷屏或生产开销超预期</td><td>W2 上线后 console 异常量异常</td><td>误报当日定位, 否则回滚挂载笔、姿态重议(开关化备选)</td></tr>
+  <tr><td>R4</td><td>窗口化渲染(content-visibility/_rowWindow, e6b02991)下 assertLayout 首行样本不具代表性</td><td>W1 挂载点实证发现窗口化面计数语义不成立</td><td>该面豁免并入例外清单并回报用户, 不静默放宽</td></tr>
+  <tr><td>R5</td><td>HR 三表被顺手误接(超范围)</td><td>实施中</td><td>例外清单守阵存在性断言 + scope-guard 纪律; 发现即停</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-10-0027</span> 初版: 源 issue 26-11-08-0147(R4-static 清池唯一挂账待决项); 2026-11-10 会话 grilling 两轮 8 问, 用户拍板真接线(§06 D1-D8); 事实面由只读探查代理摸底(六口子签名/几何链路/c39ab3b7..HEAD 38 笔不碰几何契约/守阵缺口), 关键引文见 §02。</li>
+</ul>
+
+</div>
+</body>
+</html>
