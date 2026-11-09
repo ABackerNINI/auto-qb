@@ -7,9 +7,9 @@
 <title>评审流程改造: 废除裁量豁免 + 修复增量强制复评 + 基哈希机械闸门</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="review-no-exemption-loop">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-11-08-1240">
-<meta name="doc-updated" content="26-11-08-1701">
+<meta name="doc-updated" content="26-11-10-0016">
 <meta name="doc-refs" content="memory-bank/tasks/26-11-08-memory-bank-review-no-exemption-loop.md">
 <style>
   :root {
@@ -75,7 +75,7 @@
 <h1>评审流程改造: 废除裁量豁免 + 修复增量强制复评 + 基哈希机械闸门</h1>
 <p class="lede">本篇只回答:怎么把分批评审的两条政策缝——「小提交与修复增量不经评审」——闭合掉:<code>Review-Skip</code> 裁量豁免整体退役、可评行数 &gt;0 必评、每次增改当场复评直到「裁决后零 actionable」,并以基哈希机械闸门把「当场复评」从纪律变成不可绕过。锚点合并拓扑 bug(26-11-08-0903)已修,不在本篇范围。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-08-1240 · <b>doc-updated</b> 26-11-08-1240 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-11-08-1240 · <b>doc-updated</b> 26-11-10-0016 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 会话 grilling(2026-11-08):用户提出「豁免审核的提交导致并发提交合并 review」→ 3 轮问答闭合设计树,12 项拍板(§06) · <b>关联</b> issue 26-11-08-0903(已修,出范围)
 </div>
 
@@ -166,7 +166,7 @@
 <tr><td>R4 基哈希误红</td><td>末轮评审后补写记账类/生成物文件</td><td>哈希过滤实现与行数实算<b>共用同一套排除面</b>,补写不改变哈希;误红时按失败行重跑 pack 取新基</td></tr>
 <tr><td>R5 迁移兼容</td><td>存量 <code>Review-Skip</code> trailer / 改造落地瞬间的进行中批次</td><td>生效日只看新批、老 trailer 不追溯不重判(0441 生效日先例);历史 <code>Review-Skip</code> 在锚点 walk 照旧识别</td></tr>
 <tr><td>R6 轮间远端推进</td><td>修复循环期间其它 clone 推送</td><td>每轮 pack 前置 sync + 三钉自检(既有);锚点跳跃后批次 diff 稳定;rebase 冲突解决面归残余声明 ⑤,由下一批与接缝终审兜底</td></tr>
-<tr><td>R7 0 行二进制窗口</td><td>评审后新增/替换二进制可评文件(夹具图片/压缩包)——numstat 计 0 行,count==0 短路使基比对不生效,静默放行</td><td>已如实声明(闸门模块头/config note/SKILL.md 铁律三处);闭合属设计变更(如带 trailer 时无条件比对基),已批准入池(<code>26-11-08-1701</code>),后续会话认领修复</td></tr>
+<tr><td>R7 0 行二进制窗口</td><td>评审后新增/替换二进制可评文件(夹具图片/压缩包)——numstat 计 0 行,count==0 短路使基比对不生效,静默放行</td><td>已如实声明(闸门模块头/config note/SKILL.md 铁律三处);闭合属设计变更,已批准入池(<code>26-11-08-1701</code>)并由该 issue 认领修复翻 Done(<code>b0a91263</code>,方案 A: 带 trailer 的 0 行批无条件走基比对);残余窗口按方案 A 有意保留 —— <b>0 行批无 trailer 的静默通路</b>,是否收口留给用户决定,属计划外设计变更,不阻塞 W1-W4 收口(§10 R3 同步)</td></tr>
 </table>
 
 <h2><span class="no">§10</span>变更记录</h2>
@@ -174,6 +174,7 @@
   <li><span class="tag">R0 · 26-11-08-1240</span> 初版:grilling 会话(2026-11-08)3 轮 12 项拍板落档;归因澄清(0903 合并事故与豁免无关、已由 a9e1cbcf 修复)写入 §01/§02,方案三主线 + 分期 W1-W4。</li>
   <li><span class="tag">R1 · 26-11-08-1306</span> P0 评审(全能档 1 派遣)4 条 minor 全过引文校验、当场修 4:trailer 示例 <code>[ · 轮 R]</code> 缺省括号对齐;W1 验收改「存量用例按新口径同步后全绿」;W2 改「全文按新口径扫一遍,仅 ④⑧ 原样」(补 description/② 下限条/④ 交叉引用三个漏点);<b>派发 K 改回首轮拓扑口径不累计</b>(F4: 累计会稀释 &gt;400 行批容量下界),修/入池/检 仍全轮累计。</li>
   <li><span class="tag">R2 · 26-11-08</span> 接缝终审回写三项口径级偏差:①敏感面判据随下限退役改序——旧版「&lt;50 行+敏感面」排在 trailer 校验之前(带有效 trailer 也必红),新版语义=<b>强制评而非必红</b>(有效 trailer 放行,0 行敏感面仍拦),SKILL.md ① 已同步;②「实算恒 0 才静默」的静默面实含 <b>0 行二进制窗口</b>(numstat 计 0+count==0 短路使基比对不生效;tracked 二进制 diff 仅恒定标记行、untracked 按原文字节入哈希例外)——已按用户批准入池(<code>26-11-08-1701</code>),§07 同步;③实施期发现的两处计划外旧口径副本(my-commit-flow 注册 note/memory-bank SKILL.md 第 0 步)已随接缝终审修掉。T1 的实现细节(root 签名/13 颗配置钉/literal pathspec)属 D6 口径内,不回写,单点见 review_content.py 模块头。</li>
+  <li><span class="tag">R3 · 26-11-10-0016</span> 收尾裁定: 计划实施面全部落地, doc-status Open → Done。复核判据: W1/W2/W3 三笔实施提交已在 develop 历史(b8895a77 共享过滤模块 + review.pack 基哈希输出 / bd8c5b79 下限退役 + Review-Skip 判红 + 基哈希机检 / 14ee0877 code-review SKILL.md 全文新口径 + 测试终扫), 0fc3003b 接缝终审清掉两处旧口径副本; W4 收尾基线切片 26-11-08-1713 实测 5783 passed + 2 skipped / 99%; 任务档案 memory-bank/tasks/26-11-08-memory-bank-review-no-exemption-loop.md 的 W1-W4 全 Done、Status=Done; §07 R7 遗留窗口(0 行二进制批基比对短路)已由 issue 26-11-08-1701 认领修复并翻 Done(b0a91263, 方案 A), §07 对策列已同步回写; 该 issue 如实保留的「0 行批无 trailer 静默通路」残余窗口按用户决定暂不收口, 属计划外设计变更, 不阻塞本计划收口。本轮零代码改动, 不新增基线切片。</li>
 </ul>
 
 </div>
