@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>relocate 启动日志「恢复在途 job N 条」计数含终态, 文案误导 · bug · 计划外问题（便签）</title>
+<meta name="issue-slug" content="relocate-startup-log-inflight-count">
+<meta name="issue-stamp" content="26-11-10-0327">
+<meta name="issue-type" content="bug">
+<meta name="doc-topic" content="relocate-startup-log-inflight-count">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="light">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="relocate 启动日志「恢复在途 job N 条」计数含终态, 文案误导">
+<meta name="issue-summary" content="启动日志「恢复在途 job {n} 条」的 n 来自 _load_jobs() 整箱恢复, 计数含终态 job, 与「在途」文案不符, 长期部署热启用几乎必然多报 —— 运维读日志会误判存在在途迁移; 修法方向: 计数改为非终态数, 或文案改「恢复 job N 条(含终态 M)」">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --mark: #161e26;     /* issue 特有: callout 底色 (plan.html 不用) */
+    --warn-bg: #2a2119;  /* issue 特有: 状态徽标底色 */
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 单栏流式版面: 与 plan.html 同一套 .sheet (封顶 1280px, 侧距 clamp(18~44px)); 旧双栏+粘性目录已删 */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+
+  /* 封面 meta 行: issue 特有, DOM 形态别改 —— 状态徽标 <span class="badge"> 被
+     flip_status (W4) 与 check_status_drift 的 BADGE_RE 机读 (k/v div 结构在判据里) */
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px 28px; font-family: var(--mono); font-size: 11.5px; color: var(--faint); border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta-row .item .k { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .meta-row .item .v { font-size: 13.5px; color: var(--dim); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin: 14px 0; font-size: 14px; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-family: var(--mono); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">计划外问题（便签）· bug</div>
+<h1>relocate 启动日志「恢复在途 job N 条」计数含终态, 文案误导</h1>
+<p class="lede">启动日志「恢复在途 job {n} 条」的 n 来自 _load_jobs() 整箱恢复, 计数含终态 job, 与「在途」文案不符, 长期部署热启用几乎必然多报 —— 运维读日志会误判存在在途迁移; 修法方向: 计数改为非终态数, 或文案改「恢复 job N 条(含终态 M)」</p>
+<div class="meta-row">
+  <div class="item"><div class="k">编号</div><div class="v">26-11-10-0327-bug-relocate-startup-log-inflight-count</div></div>
+  <div class="item"><div class="k">报告时间</div><div class="v">2026-11-10 03:27</div></div>
+  <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+</div>
+
+<section id="s1">
+  <h2><span class="no">§01</span>现象</h2>
+  <p>启动日志「恢复在途 job {n} 条」的 n 是 <code>_load_jobs()</code> 的返回值 —— 整箱恢复不过滤终态, 计数含终态 job, 与「在途」文案不符; 长期部署热启用几乎必然多报。生产实测(取证 2026-11-10 00:34:48, 生产进程 26586): 报「恢复在途 job 2 条」, 实际在途 0 条(2 条均终态 done/failed)。误导面: 运维读日志会误判存在在途迁移。上下文: 计划 <code>memory-bank/plans/26-11-10-0230-plan-relocate-listing-false-negative.html</code> §01 范围外发现(D6)入池(拍板记录 §06 D6)。</p>
+</section>
+
+<section id="s2">
+  <h2><span class="no">§02</span>位置</h2>
+  <p class="hint">文件 + grep 关键词（比行号稳）；行号要标取证时间。</p>
+  <ul>
+    <li><code>src/auto_qb/core/modules/relocate_lifecycle.py:36</code>（取证 2026-11-10 03:27）· grep <code>恢复在途 job</code> —— 启动日志 f-string; <code>:31</code> n = self._load_jobs()</li>
+    <li><code>src/auto_qb/core/modules/relocate_lifecycle.py:97</code> · grep <code>计数含终态</code> —— 注释自认「_load_jobs 整箱恢复, 计数含终态 job(终态永久留账)」; 同处热启用回执已改口「恢复 job N 条」不写「在途」, 启动日志是仅存的误导面</li>
+  </ul>
+</section>
+
+<section id="s3">
+  <h2><span class="no">§03</span>建议<span class="opt">（可选）</span></h2>
+  <p>两选一: 计数改为非终态 job 数(与「在途」语义对齐), 或文案改「恢复 job N 条(含终态 M)」—— 与热启用回执口径(:97)对齐即可。</p>
+</section>
+
+<section id="s4">
+  <h2><span class="no">§04</span>状态变更日志</h2>
+  <ul>
+    <li>2026-11-10 03:27 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+  </ul>
+</section>
+
+<footer>
+  26-11-10-0327-bug-relocate-startup-log-inflight-count.html · 便签档（light）· 由 create-issue skill 入池；入池不等于已修，改动状态在上面的「状态变更日志」里留痕
+</footer>
+
+</div>
+</body>
+</html>
