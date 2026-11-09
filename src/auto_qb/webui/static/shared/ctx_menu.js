@@ -155,7 +155,9 @@
       { id: "sep:s2", kind: "sep" },
       { id: "copy-name", label: "复制名称", icon: { cls: "ico-copy", use: "#i-copy" }, act: (vm) => vm.copyTorrentInfo("name") },
       { id: "copy-hash", label: "复制哈希", icon: { cls: "ico-copy", use: "#i-copy" }, act: (vm) => vm.copyTorrentInfo("hash") },
-      { id: "copy-magnet", label: "复制 magnet", icon: { cls: "ico-copy", use: "#i-copy" }, act: (vm) => vm.copyTorrentInfo("magnet") },
+      // copy-magnet 已退役(issue 26-11-09-0639): magnet_uri 入库即掩码(26-11-08-0043), 复制出的
+      // 是 tr= 已掩的废链接; 用户拍板移除入口而非加端点回原文。存量布局里的 copy-magnet id 由
+      // ctxMergeLayout 当未知 id 忽略(换版本不丢布局)。
     ],
   };
 

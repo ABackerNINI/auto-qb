@@ -756,9 +756,9 @@ class FakeTorrent:
 
         !没有这个方法时桩服务的详情端点 `/api/torrents/{hash}` **恒 500**
         (`'FakeTorrent' object has no attribute 'to_dict'`, 2026-09-19 实测), 于是整条依赖详情的
-        链路在冒烟里从未被覆盖: 详情抽屉、限速/分享率/移动/重命名对话框、以及"复制磁力"
-        (magnet_uri 只在详情里 —— 轮询载荷按需取详情口径已不含它, issue E-04 P-06;
-        见 drawer.js copyTorrentInfo)。
+        链路在冒烟里从未被覆盖: 详情抽屉、限速/分享率/移动/重命名对话框(magnet_uri 只在详情里
+        —— 轮询载荷按需取详情口径已不含它, issue E-04 P-06; "复制磁力"前端入口后退役,
+        issue 26-11-09-0639, 字段仍随详情导出供掩码口径覆盖)。
         与真实现同口径(快照/非快照分则, pitfalls/testing/stub-bypass-apply.md): 导出单点 =
         compat._SNAPSHOT_FIELDS(桩构造器恒全量赋值, 含扩展快照字段 magnet_uri 等);
         **非快照字段不进导出** —— 桩改走真 store._apply 后, _apply 会给记录补挂

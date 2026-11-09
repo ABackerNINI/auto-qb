@@ -109,10 +109,9 @@ class RowMixin:
             "priority": r.priority,
             # magnet_uri 刻意不在轮询载荷(issue E-04, P-06 拍板): 契约口径 = 只在用户显式
             # 动作时才需要的字段不进每轮响应体(magnet 添加型库为 MB 级增量, 坑档
-            # contract-api); "复制磁力"经 /api/torrents/{hash} 按需取一次详情(drawer.js
-            # copyTorrentInfo), 该端点 to_dict() 全字段兜底 —— 注意详情里的 magnet_uri 已是
-            # 入库掩码值(apply_delta 单点, issue 26-11-08-0043), 复制出的是掩码版(入口
-            # 移除/改造为后续任务)。
+            # contract-api)。曾有"复制磁力"经 /api/torrents/{hash} 按需取详情消费该端点,
+            # 入口已移除(issue 26-11-09-0639: 详情里 magnet_uri 已是入库掩码值, apply_delta
+            # 单点, issue 26-11-08-0043, 复制出的是掩码废链接); 端点 to_dict() 全字段兜底口径不变。
             # infohash_v1 已并入 _member_view 透传段(2026-10-12, 与 infohash_v2 同源 —— 种子页
             # 不再单独重述, 守阵 issue webui-seed-view-restate-dup 钉两边同名字段等值)。
             "private": r.private,

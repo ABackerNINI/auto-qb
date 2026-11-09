@@ -181,7 +181,7 @@ const vmWith = (ctxMenu, flagOver) => stubVm({
 const EXPECT = {
   multi: { order: ["resume", "pause", "reannounce", "sep:d1", "recheck", "skip_check", "limits", "move", "meta", "export", "transfer", "sep:d2", "delete"], hidden: [], sub: { order: [], hidden: [] } },
   episode: { order: ["resume", "pause", "reannounce", "sep:d1", "open-path", "transfer", "sep:d2", "delete"], hidden: [], sub: { order: [], hidden: [] } },
-  member: { order: ["resume", "pause", "reannounce", "sep:d1", "info", "sep:d2", "limits", "move", "rename", "meta", "sep:d3", "recheck", "skip_check", "export", "open-path", "transfer", "sep:d4", "sub-more", "sep:d5", "delete"], hidden: [], sub: { order: ["queue-top", "queue-up", "queue-down", "queue-bottom", "sep:s1", "super-seeding", "force-start", "auto-tmm", "share-limits", "sep:s2", "copy-name", "copy-hash", "copy-magnet"], hidden: [] } },
+  member: { order: ["resume", "pause", "reannounce", "sep:d1", "info", "sep:d2", "limits", "move", "rename", "meta", "sep:d3", "recheck", "skip_check", "export", "open-path", "transfer", "sep:d4", "sub-more", "sep:d5", "delete"], hidden: [], sub: { order: ["queue-top", "queue-up", "queue-down", "queue-bottom", "sep:s1", "super-seeding", "force-start", "auto-tmm", "share-limits", "sep:s2", "copy-name", "copy-hash"], hidden: [] } },
   group: { order: ["resume", "pause", "reannounce", "sep:d1", "recheck", "skip_check", "limits", "move", "meta", "export", "sep:d2", "open-path", "qb-traffic", "transfer", "sep:d3", "delete"], hidden: [], sub: { order: [], hidden: [] } },
 };
 for (const b of ["multi", "episode", "member", "group"]) {
@@ -194,7 +194,7 @@ for (const b of ["multi", "episode", "member", "group"]) {
 checks.push(["一级计数 45 项 + 12 线", nItem === 45 && nSep === 12]);
 let sItem = 0, sSep = 0;
 for (const t of EXPECT.member.sub.order) { if (t.indexOf("sep:") === 0) sSep++; else sItem++; }
-checks.push(["次级计数 11 项 + 2 线", sItem === 11 && sSep === 2]);
+checks.push(["次级计数 10 项 + 2 线", sItem === 10 && sSep === 2]);  // copy-magnet 退役(issue 26-11-09-0639): 11 -> 10
 
 // ---- 2. 注册表完整性
 for (const b of R.CTX_BRANCHES) {

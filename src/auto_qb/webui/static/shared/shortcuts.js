@@ -296,9 +296,8 @@ const AQB_SHORTCUT_DEFS = [
   { id: "copy-hash", group: "次要动作", label: "复制哈希",
     def: "Shift+KeyH", scope: "list",
     run: (vm) => vm._kbEditAct("copyTorrentInfo", "hash") },
-  { id: "copy-magnet", group: "次要动作", label: "复制 magnet",
-    def: "Shift+KeyG", scope: "list",
-    run: (vm) => vm._kbEditAct("copyTorrentInfo", "magnet") },
+  // copy-magnet(Shift+KeyG)已退役(issue 26-11-09-0639): magnet_uri 入库即掩码(26-11-08-0043),
+  // 复制出的是 tr= 已掩的废链接, 与右键菜单入口同批移除。
   { id: "col-picker", group: "次要动作", label: "列选择器",
     def: "KeyK", scope: "list",
     run: (vm) => vm.toggleColMenu(null) },  // toggleColMenu 本身即切换函数; 浮层开着时靠自切换白名单放行第二次按键(报告 26-10-09-1731 §04.4)

@@ -3,12 +3,12 @@
  * 设计稿: resources/detail-panel-templates/02-general-cards-low.html(low 档; 收起/矮/高三档
  * 语义全部收进本变体 —— 收起 = 核心摘要条(summary 走核心内置默认), 矮/高 = 卡片列自适应滚动)。
  * 数据: 基础/传输/时间/路径分组行直接吃 drawerGeneralSections() 预格式化结果; 卡片为纯前端
- * 聚类(基础 + 传输/标识 + 元信息/存储), 磁力复制走 _editDetail 按需取(BUG-9 先例口径:
- * magnet_uri 不进轮询载荷); 回收未展示字段(tags/category/site/限速/优先级/热度等)。
+ * 聚类(基础 + 传输/标识 + 元信息/存储), 回收未展示字段(tags/category/site/限速/优先级/热度等)。
+ * (磁力复制已退役, issue 26-11-09-0639: magnet_uri 入库即掩码, 复制出的是废链接。)
  * 字段行消费行级 icon 数据(sprite `<use href>` 静态引用, 着色复用经典链 icoTone 派生表,
  * 色值在变体 CSS 里按行类重定作用域 —— 经典的 .f-row .ico-t-* 选择器在变体行不命中;
- * 仅消费分组行自带的 icon, 卡片自建的元信息/磁力行无该数据不补; Q2, 报告 26-10-07-0542)。
- * 动作: 卡片折叠(纯前端)/打开目录/复制/磁力复制。渐进字段: 有则渲染、无则整行/整徽章省略。
+ * 仅消费分组行自带的 icon, 卡片自建的元信息行无该数据不补; Q2, 报告 26-10-07-0542)。
+ * 动作: 卡片折叠(纯前端)/打开目录/复制。渐进字段: 有则渲染、无则整行/整徽章省略。
  * 渲染纪律: dtHtml 全量转义(dtRaw 只用于拼接本变体 dtHtml 产出的预转义片段), replaceChildren
  * 原子换帧, 数据未变(整份 detail 序列化比对)跳过重建, 滚动位置/折叠态自保。
  * 自包含: 删除本文件 + 三份 index.html 各去 1 行 manifest 即整体退役, 其它零接触。
@@ -250,7 +250,7 @@
     if (d.private) chipsOut.push(T`<span class="dt02-chip" title="private">私有站点</span>`);
     const chipsHtml = chipsOut.length ? T`<div class="dt02-chips">${R(chipsOut.join(""))}</div>` : "";
 
-    /* 标识卡: 哈希 v1/v2(带复制)+ 分块 + magnet(点击按需取, BUG-9 口径) */
+    /* 标识卡: 哈希 v1/v2(带复制)+ 分块(magnet 行已退役, issue 26-11-09-0639) */
     const idRows = [];
     for (const r of (secs["基础"] || { rows: [] }).rows) {
       /* issue 26-11-08-1621: idRows 路径同样透传 r.wide 到 class(哈希行长值折行, CSS 见 .dt02-crow.wide) */
@@ -259,7 +259,8 @@
     for (const r of (secs["基础"] || { rows: [] }).rows) {
       if (r.label === "区块") idRows.push(kv(r.label, r.text, false, r.icon));
     }
-    idRows.push(T`<div class="dt02-crow" title="magnet_uri"><span class="k">magnet</span><span class="v">点击按钮按需获取(不进轮询载荷)</span><button type="button" class="dt02-act" data-act="magnet" title="复制 magnet 链接"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-copy"></use></svg></button></div>`);
+    // magnet 行已退役(issue 26-11-09-0639): magnet_uri 入库即掩码(26-11-08-0043), 复制出的是
+    // tr= 已掩的废链接; 用户拍板移除入口而非加端点回原文。
 
     /* 元信息卡: 徽章 + 回收字段(tracker/优先级/热度/已完成量/限速/其它汇报错误) */
     const metaRows = [];
@@ -342,13 +343,6 @@
     }
     if (act === "chain") {
       ctx.relChainOpen(ctx.drawer.hash, btn);
-      return;
-    }
-    if (act === "magnet") {
-      /* 磁力按需取(BUG-9 先例口径): _editDetail 在抽屉已开时直接复用 detail, 连请求都不发 */
-      ctx._editDetail(ctx.drawer.hash).then((dd) => {
-        if (dd && dd.magnet_uri) ctx.copyText(dd.magnet_uri, " magnet 链接");
-      });
       return;
     }
     const row = btn.closest(".dt02-crow, .dt02-kv");

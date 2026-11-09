@@ -124,29 +124,21 @@ Object.assign(window.AQB_DRAWER.methods, {
       }
     },
     /* 复制种子信息: 目标 hash 显式传入, 缺省回落 menu.hash(S3/M3: 键盘路径 _kbEditAct 传 (field, h),
-     * 不再借道菜单状态) */
-    async copyTorrentInfo(field, h = "") {
+     * 不再借道菜单状态)。只剩 name/hash 两用(复制 magnet 入口已退役, issue 26-11-09-0639:
+     * magnet_uri 入库即掩码(26-11-08-0043), 复制出的是 tr= 已掩的废链接)。 */
+    copyTorrentInfo(field, h = "") {
       this.menu.visible = false;
       const hash = h || this.menu.hash;
       const m = this.memberByHash.get(hash);
       if (!m) return;
-      let value = field === "name" ? m.name
+      const value = field === "name" ? m.name
         : field === "hash" ? (m.infohash_v1 || m.hash)
           : "";
-      /* magnet_uri **不在任何轮询载荷里**(issue E-04, P-06 拍板: 后端 _seed_view 已去掉;
-       * 契约口径 = 只在用户显式动作时才需要的字段不进每 1.5~3s 一轮的响应体 —— magnet
-       * 添加型库为 MB 级增量): "复制磁力"点的时候**按需取一次详情**(复用 _editDetail:
-       * 抽屉已开则连请求都不发)。曾因索引条目没有该字段 100% 落到"该种子没有 magnet
-       * 链接"(BUG-9), 按需详情即当时的修法。 */
-      if (field === "magnet") {
-        const d = await this._editDetail(hash);
-        value = (d && d.magnet_uri) || "";
-      }
       if (!value) {
-        this.toast("无法复制: 该种子没有 magnet 链接", "warn");
+        this.toast("无法复制: 该字段为空", "warn");
         return;
       }
-      const label = field === "name" ? "种子名" : field === "hash" ? "信息哈希" : "magnet 链接";
+      const label = field === "name" ? "种子名" : "信息哈希";
       this._copyText(value, label);
     },
 });

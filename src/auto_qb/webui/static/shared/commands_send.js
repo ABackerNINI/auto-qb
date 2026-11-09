@@ -351,7 +351,7 @@ Object.assign(window.AQB_COMMANDS.methods, {
     copyText(text, label) {
       return this._copyText(text, label);
     },
-    /* 右键菜单复制项: field = name | hash | magnet(数据取 memberByHash 的 SEED_ITEM 完整字段) */
+    /* 右键菜单复制项: field = name | hash(magnet 已退役, issue 26-11-09-0639; 数据取 memberByHash 的 SEED_ITEM 完整字段) */
     /* 导出 .torrent(种子页右键 R2 补遗): fetch 字节 -> blob 下载(Bearer 走 header, 不能用 a href 直链;
      * 不能用 this.api —— 它固定 resp.json(), 而这里是二进制流; 下载核心抽在 _exportDownload,
      * 多选导出(W4)共用同一套, 本方法只补单选的 toast 语义) */

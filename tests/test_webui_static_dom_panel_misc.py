@@ -403,7 +403,8 @@ def test_frontend_ctx_submenu_single_entry_and_hover_close():
          会一直挂在屏幕上。修法挂**父项**的 mouseleave 延迟收起(子面板上再挂一条会在
          "从面板回到父项"时误收起), 延迟只为跨过父项与面板之间那 4px 缝隙。
       3. **复制族并成第二个子面板**: 一级出现两个"更多"入口, 用户得先选"该进哪个"。
-         CTX-06 把 复制名称/哈希/magnet 并入「更多操作」末尾。
+         CTX-06 把 复制名称/哈希/magnet 并入「更多操作」末尾(magnet 项后退役,
+         issue 26-11-09-0639: magnet_uri 入库即掩码, 复制出的是废链接)。
          (2026-11-07 口径修订, 存量评审 R5#30: 「转移到」动态入口(计划 26-10-31-0306)是第二个
          合法次级入口 —— 骨架仍单份, 静态骨架 has-sub 份数不再冒充一级入口计数, 入口数改从
          AQB_CTX_MENU_REG 渲染层计数(下方 node 电池)。)
@@ -463,11 +464,13 @@ def test_frontend_ctx_submenu_single_entry_and_hover_close():
         report = json.loads(proc.stdout.strip().splitlines()[-1])
         assert report["failed"] == [], \
             f"ctx submenu 渲染层计数 {report['ok']}/{report['total']} 过, 失败: {report['failed']}"
-    # 「更多操作」文案 + 复制族三项: W3 起在注册表单点(次级定义段; 模板只渲染 it.label)
+    # 「更多操作」文案 + 复制族两项(magnet 项已退役, issue 26-11-09-0639): W3 起在注册表单点(次级定义段; 模板只渲染 it.label)
     reg = open(os.path.join(STATIC_ROOT, "shared", "ctx_menu.js"), encoding="utf-8").read()
     assert 'label: "更多操作"' in reg, "注册表缺「更多操作」父项文案(sub-more 定义)"
-    for kind in ("name", "hash", "magnet"):
+    for kind in ("name", "hash"):
         assert f'vm.copyTorrentInfo("{kind}")' in reg, (f"注册表次级缺 copyTorrentInfo('{kind}') —— 复制项必须并进「更多操作」(CTX-06)")
+    assert 'id: "copy-magnet"' not in reg and 'copyTorrentInfo("magnet")' not in reg, \
+        "copy-magnet 不得以活项回潮(issue 26-11-09-0639)"
 
     # 3. 收起的两个方法必须存在且挂在延迟上(同步收起 = 鼠标进不去子面板)
     menu = open(os.path.join(STATIC_ROOT, "shared", "menu.js"), encoding="utf-8").read()

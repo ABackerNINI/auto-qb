@@ -8,9 +8,9 @@
  * (drawerGeneralSections() 预格式化结果); 右栏 = 归属徽章/标识(复制)/出处备注/限速配额/更多字段。
  * 字段行消费行级 icon 数据(sprite `<use href>` 静态引用, 着色复用经典链 icoTone 派生表,
  * 色值在变体 CSS 里按行类重定作用域 —— 经典的 .f-row .ico-t-* 选择器在变体行不命中;
- * 仅消费分组行自带的 icon, 右栏自建的限速/扩展/磁力行无该数据不补; Q2, 报告 26-10-07-0542)。
- * 动作: 打开目录/复制/磁力复制(_editDetail 按需取, BUG-9 先例口径)。渐进字段: 有则渲染、
- * 无则整行/整徽章省略。
+ * 仅消费分组行自带的 icon, 右栏自建的限速/扩展行无该数据不补; Q2, 报告 26-10-07-0542)。
+ * 动作: 打开目录/复制。渐进字段: 有则渲染、无则整行/整徽章省略。
+ * (磁力复制已退役, issue 26-11-09-0639: magnet_uri 入库即掩码, 复制出的是废链接。)
  * 渲染纪律: dtHtml 全量转义(dtRaw 只用于拼接本变体 dtHtml 产出的预转义片段), replaceChildren
  * 原子换帧, 数据未变(整份 detail 序列化比对)跳过重建, 滚动位置/折叠态自保。
  * 自包含: 删除本文件 + 三份 index.html 各去 1 行 manifest 即整体退役, 其它零接触。
@@ -290,12 +290,12 @@
     const chipsHtml = chipsOut.length
       ? T`<div class="dt03-side-sub">归属</div><div class="dt03-chips">${R(chipsOut.join(""))}</div>` : "";
 
-    /* 标识: 哈希 v1/v2 + magnet(按需取) + 分块 */
+    /* 标识: 哈希 v1/v2 + 分块(magnet 行已退役, issue 26-11-09-0639: magnet_uri 入库即掩码,
+     * 复制出的是废链接; 用户拍板移除入口而非加端点回原文) */
     const idRows = [];
     for (const r of (secs["基础"] || { rows: [] }).rows) {
       if (r.act === "copy") idRows.push(crow(r.label, r.text, "copy", "", r.icon));
     }
-    idRows.push(crow("magnet", "点击按钮按需获取", "magnet", "magnet 链接"));
     for (const r of (secs["基础"] || { rows: [] }).rows) {
       if (r.label === "区块") idRows.push(sideKv(r.label, r.text, "", r.icon));
     }
@@ -387,13 +387,6 @@
     }
     if (act === "chain") {
       ctx.relChainOpen(ctx.drawer.hash, btn);
-      return;
-    }
-    if (act === "magnet") {
-      /* 磁力按需取(BUG-9 先例口径): _editDetail 在抽屉已开时直接复用 detail, 连请求都不发 */
-      ctx._editDetail(ctx.drawer.hash).then((dd) => {
-        if (dd && dd.magnet_uri) ctx.copyText(dd.magnet_uri, " magnet 链接");
-      });
       return;
     }
     const row = btn.closest(".dt03-crow, .dt03-item");

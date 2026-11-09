@@ -86,7 +86,8 @@ class TorrentRecord:
     # ---- 元数据 ----
     # tr= 内嵌 announce URL(私站含 passkey): 入库即掩码(apply_delta 单点之二, issue
     # 26-11-08-0043) —— 槽内只有 tr= 掩码值, 原文不落快照; 详情 to_dict / 表达式面
-    # tor.magnet_uri 全走本槽。前端「复制 magnet」因此拿到的是掩码版(改造后续任务)。
+    # tor.magnet_uri 全走本槽。前端「复制 magnet」入口已移除(issue 26-11-09-0639),
+    # 槽内掩码值不再有前端消费方(掩码语义本身见 issue 26-11-08-0043)。
     magnet_uri: str = ""
     infohash_v1: str = ""
     infohash_v2: str = ""

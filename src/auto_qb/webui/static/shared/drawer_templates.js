@@ -41,7 +41,8 @@
  *             hrStateLine / hrSiteLine。
  *   调(动作):   drawerCmd(action[, body, okText]) / trackerAdd / trackerRemove /
  *             setFilePriority / openFilePrio / openTargetPath / copyText / qbSetWindow;
- *             需要详情原始字段(如 magnet_uri)时走 _editDetail(hash)(按需单发, 不进轮询载荷)。
+ *             需要详情原始字段(如 tracker)时走 _editDetail(hash)(按需单发, 不进轮询载荷;
+ *             magnet_uri 不再被任何前端路径消费 —— 复制 magnet 入口已退役, issue 26-11-09-0639)。
  *   禁: 不触碰面板几何(dock/动画/高度/drawerPanelStyle)、轮询生命周期(_startDrawerPoll 族)、
  *       路由/视图状态; 不直接发请求(动作一律走现有方法链, 回执/toast 由其自带)。
  *   DOM: host 子树归变体自管, Vue 零感知(模板只渲染空 host 元素, 显隐只走 host 自身 v-show)。

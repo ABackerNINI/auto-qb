@@ -9,9 +9,9 @@
 <meta name="issue-stamp" content="26-11-09-0639">
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="webui-copy-magnet-masked-degrade">
-<meta name="doc-refs" content="memory-bank/issues/26-11-08-0043-bug-webui-torrent-detail-magnet-leak.html, memory-bank/tasks/26-11-09-backend-magnet-uri-ingest-mask.md">
+<meta name="doc-refs" content="memory-bank/issues/26-11-08-0043-bug-webui-torrent-detail-magnet-leak.html, memory-bank/tasks/26-11-09-backend-magnet-uri-ingest-mask.md, memory-bank/testing/baselines/26-11-09-2344-copy-magnet-entry-removal.md, memory-bank/tasks/26-11-09-webui-copy-magnet-entry-removal.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="复制 magnet 出掩码废链接: 入口移除/改造待做 (26-11-08-0043 后续)">
 <meta name="issue-summary" content="26-11-08-0043 落地后 magnet_uri 槽位只存 tr= 掩码值, 前端三处复制 magnet 入口复制出掩码废链接(私站无法 announce); 用户拍板口径从紧, 入口移除或改造为独立任务">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-09-0639-bug-webui-copy-magnet-masked-degrade</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-09 06:39</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
@@ -145,11 +145,14 @@
   <h2><span class="no">§07</span>状态变更日志</h2>
   <ul>
     <li>2026-11-09 06:39 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-09 — 状态 Open → In Progress（kb.status）</li>
+    <li>2026-11-09 — 状态 In Progress → Done（kb.status）</li>
+</ul>
   <h3>复验</h3>
-  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <p>复验：2026-11-09（HEAD 706e360c 工作区）仍复现 —— 四处锚点全部在位：<code>drawer_files.js</code> <code>copyTorrentInfo</code> magnet 分支、02/03 模板 <code>act === "magnet"</code> handler、<code>ctx_menu.js</code> copy-magnet 项、<code>shortcuts.js</code> Shift+KeyG。</p>
   <h3>修复后补充</h3>
-  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  <p><strong>实际修法</strong>：用户拍板候选 ①「移除入口」（非 ② 专用端点）。三处入口同批下线：ctx_menu.js 删 copy-magnet 菜单项、shortcuts.js 删 Shift+KeyG 快捷键、02/03 抽屉模板删 magnet 标识行与 <code>act === "magnet"</code> handler；<code>copyTorrentInfo</code> 收窄为 name/hash 两用（去 magnet 分支与 <code>_editDetail</code> 按需取数，去 async）。生产 <code>config.yml</code> 存量布局里的 copy-magnet id 不动（红线文件），由 <code>ctxMergeLayout</code> 当未知 id 忽略（换版本不丢布局口径），无校验风险。</p>
+  <p><strong>验证方式</strong>：受影响守阵（test_webui_ctx_menu_registry / test_webui_static_dom_panel_misc / test_web_shortcuts_engine）13 passed —— 含 EXPECT 次级序去 copy-magnet、次级计数 11→10 项、复制族三项改两项 + copy-magnet 活项零回潮断言；全量 <code>commands run test.quick</code> <strong>5876 passed, 2 skipped</strong>（50.45s）。</p>
 </section>
 
 <footer>
