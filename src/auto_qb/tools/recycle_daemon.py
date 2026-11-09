@@ -242,8 +242,9 @@ def _rewrite_member(spec: dict, member: dict, prev: Optional[dict]) -> dict:
     - unchanged 且有键 already -> already(已在目标值: 幂等重放证据 —— 出账, 否则重放
       永不收敛, 违反黄金法则 1)
     - unchanged 且纯 unmatched(含无任何路径键) -> unmatched(确定性无操作: 全部路径键
-      都不命中旧根, 含 N10 相对路径形态 —— 重放无意义; 真错向由主循环重启后逐成员
-      save_path 核验兜住(S4), 账留逐键明细供诊断) —— 出账
+      都不命中旧根; 相对形态键已按 profile base 解析改写(issue 26-11-07-2336), 落到
+      unmatched = 解析失败或解析后不命中旧新根 —— 重放无意义; 真错向由主循环重启后
+      逐成员 save_path 核验兜住(S4), 账留逐键明细供诊断) —— 出账
     - not_found / FastresumeError/ValueError/OSError -> not_found/failed: 不出账,
       fails 计数承前累计 +1(每失败一次进一账), 窗口内随拍重试(D8)、下一窗口重放
     """

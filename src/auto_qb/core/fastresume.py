@@ -12,8 +12,16 @@
   前缀替换保住各自风味, 禁止重推导路径串; 同一根路径两种分隔符写法都可能出现在键值里
   (实验脚手架 fr.py _variants 思路), 新值按命中变体的风味转写。
 - 前缀边界: 命中必须落在路径分量边界(等值或后随分隔符), 防 R:\\data 误吞 R:\\database。
-- 相对路径纪律(N10): 跨卷 setLocation 可能把 lt save_path 写成 CWD 相对路径(qBt 键保持
-  绝对)—— 不匹配即跳过, 绝不自行重推导绝对路径。
+- 相对路径纪律(N10, E2c 修定 —— issue 26-11-07-2336): qB 便携 profile 部署(application.cpp:
+  portableModeEnabled 恒开, 或 --relative-fastresume-paths 显式开启)把与 profile basePath
+  同盘符的三路径键写成**basePath 相对形态**(bencoderesumedatastorage 三键统一过
+  Profile::toPortablePath; Windows 只对与 basePath 同盘符的绝对路径相对化, profile_p.cpp)。
+  只认绝对形态时同盘部署整条收尾链静默失效(改写跳过 -> 成员滞留旧根 -> job 恒 rewritten)。
+  修定口径: base 由 bt_backup 单点推导(profile_base_of, qB 源码 CustomProfile 布局
+  BT_backup = basePath/data/BT_backup => basePath = 上两级), 相对键解析出绝对形态后进
+  既有前缀管道; **解析失败/不命中旧新根仍原样跳过** —— 保守纪律不破(不指鹿为马),
+  base 推导错位只造成「照旧跳过」, 不产生错改写(产物恒为新根绝对形态, 不依赖 base)。
+  装版 qB(DefaultProfile)相对化不开启(NoConvertConverter), 绝对形态走既有管道。
 - 拒载形态(N6): 坏 bencode 落盘 = 重启后种子静默消失(仅一行 INFO)—— 往返自校验不过
   绝不落盘, 这是保命而不是健壮性。
 - 写盘原子性: 与 qB 侧 QSaveFile 同规格 tmp+replace+fsync。
@@ -158,7 +166,7 @@ class RewriteOutcome:
 
     rewritten: Tuple[str, ...] = ()
     already: Tuple[str, ...] = ()  # 已是目标值, 幂等跳过(黄金法则 1)
-    unmatched: Tuple[str, ...] = ()  # 前缀不命中(含 N10 相对路径形态), 原样保留
+    unmatched: Tuple[str, ...] = ()  # 前缀不命中(含相对形态解析失败/解析后不命中旧新根), 原样保留
 
 
 def _flip_seps(p: str) -> str:
@@ -171,6 +179,83 @@ def _prefix_match(value: bytes, prefix: bytes) -> bool:
     if not value.startswith(prefix):
         return False
     return len(value) == len(prefix) or value[len(prefix):len(prefix) + 1] in (b"\\", b"/")
+
+
+# ---------------------------------------------------------------------------
+# 相对形态解析(qB 便携 profile 口径, issue 26-11-07-2336; 全纯字符串跨平台 ——
+# 测试在 Linux CI 上以 Windows 形态路径为字节样本, 禁用 os.path)
+# ---------------------------------------------------------------------------
+
+
+def _split_absolute(p: str) -> Optional[Tuple[str, str, List[str]]]:
+    """绝对路径 -> (根头不含尾分隔符, 根分隔符, 根下分量表); 非绝对/无法解析 -> None。
+
+    三种根形态: 盘符(D:, 分隔符 \\)/UNC(\\\\host\\share, 分隔符 \\)/POSIX 根("", 分隔符 /)。
+    分量切分: 盘符/UNC 根按两种分隔符统一切(混合风味 tolerated); POSIX 根只按 / 切
+    (反斜杠是 POSIX 合法文件名字符, 原样保留在分量里), 空段(重复/尾部分隔符)一律丢弃。
+    """
+    if not p:
+        return None
+    if p.startswith("\\\\"):  # UNC: \\host\share\... (share 不可少, 少于两段判无法解析)
+        segs = [s for s in p[2:].replace("/", "\\").split("\\") if s]
+        if len(segs) < 2:
+            return None
+        return ("\\\\" + segs[0] + "\\" + segs[1], "\\", segs[2:])
+    if len(p) >= 2 and p[1] == ":" and p[0].isascii() and p[0].isalpha():  # 盘符头
+        return (p[:2], "\\", [s for s in p[2:].replace("/", "\\").split("\\") if s])
+    if p.startswith("/"):  # POSIX 绝对
+        return ("", "/", [s for s in p.split("/") if s])
+    return None
+
+
+def _relative_form(v: str) -> bool:
+    """相对形态判定(qB Path::isAbsolute 的反向口径): 无盘符头且不以分隔符开头。"""
+    if not v:
+        return False
+    if len(v) >= 2 and v[1] == ":" and v[0].isascii() and v[0].isalpha():
+        return False
+    return v[0] not in "\\/"
+
+
+def _resolve_relative(rel: str, base: str) -> str:
+    """把相对形态键按 base(qB profile basePath)解析成绝对形态; 无法解析返回 ""。
+
+    语义对齐 qB fromPortablePath(basePath / rel, profile_p.cpp): rel 逐段解释, "."/空段
+    丢弃, ".." 上弹; 上弹越过 base 根(盘符/UNC 头/POSIX 根)判无法解析 -> ""。产物分隔符
+    = base 根分隔符(盘符/UNC -> 反斜杠, POSIX -> 正斜杠), 即部署平台语义分隔符 —— rel
+    自身风味只进切段(两种分隔符统一切), 不进产物(Qt 双风味都收, 产物须能与旧根变体
+    纯字节前缀匹配); POSIX 上反斜杠是合法文件名字符, 误判成上弹时解析结果不命中旧根 ->
+    调用方照旧跳过, 保守面不破。
+    """
+    root, root_sep, base_segs = _split_absolute(base) or (None, None, None)
+    if root is None:
+        return ""
+    out = list(base_segs)
+    for seg in rel.replace("\\", "/").split("/"):
+        if seg in ("", "."):
+            continue
+        if seg == "..":
+            if not out:
+                return ""  # 越出根: 无法解析(保守跳过)
+            out.pop()
+            continue
+        out.append(seg)
+    return root + root_sep + root_sep.join(out) if out else root + root_sep
+
+
+def profile_base_of(backup_dir: str) -> str:
+    """BT_backup 目录 -> qB profile basePath; 形态不足/非绝对 -> ""(相对键照旧跳过)。
+
+    qB 源码 CustomProfile 布局(profile_p.cpp): basePath = <root>/qBittorrent,
+    dataLocation = basePath/data, BT_backup = basePath/data/BT_backup —— 即 basePath 恒为
+    BT_backup 上两级(--profile 与 portable 同构)。DefaultProfile(装版)相对化不开启,
+    本推导不会被用到; 用户配错 BT_backup 时推导出的 base 解析不命中旧根, 照旧跳过。
+    """
+    root, _root_sep, segs = _split_absolute(str(backup_dir or "")) or (None, None, None)
+    if root is None or len(segs) < 2:
+        return ""
+    sep = "/" if root == "" else "\\"
+    return root + sep + sep.join(segs[:-2]) if segs[:-2] else root
 
 
 def _rewrite_pairs(old: str, new: str) -> List[Tuple[bytes, bytes]]:
@@ -191,8 +276,11 @@ def _rewrite_pairs(old: str, new: str) -> List[Tuple[bytes, bytes]]:
     return pairs
 
 
-def rewrite_save_paths(val: Dict[bytes, BValue], old_root: str,
-                       new_root: str) -> Tuple[Dict[bytes, BValue], RewriteOutcome]:
+def rewrite_save_paths(val: Dict[bytes, BValue],
+                       old_root: str,
+                       new_root: str,
+                       *,
+                       profile_base: str = "") -> Tuple[Dict[bytes, BValue], RewriteOutcome]:
     """双键前缀替换: save_path + qBt-savePath(+qBt-downloadPath 在场时), 逐键在原串上做。
 
     - 纯函数: 不改入参, 返回浅拷贝改写(只换顶层 bytes 值, 嵌套值共享不动)。
@@ -201,7 +289,11 @@ def rewrite_save_paths(val: Dict[bytes, BValue], old_root: str,
       新根是旧根前缀(嵌套 new<old, 目标=源祖先), 值虽也命中新根前缀但那是旧根命中的
       必然推论, 旧根命中优先 => 产物!=原值必改写(否则旧根键值被 already 误判永不改写,
       daemon 记 already 出账后核验永不过, journal 永久悬挂, 违反 D10)。
-    - 不匹配即跳过(unmatched): 含 N10 相对路径形态 —— 绝不自行重推导绝对路径。
+    - 相对形态(profile_base 在场且值非绝对): 先按 qB 便携口径解析成绝对形态再进管道
+      (E2c 修定, 见模块 docstring「相对路径纪律」); 解析失败/解析结果不命中旧新根 =>
+      原样跳过(unmatched), 绝不重推导指鹿为马。profile_base 空 = 相对键一律跳过
+      (N10 原口径, 旧链调用面行为不变)。
+    - 不匹配即跳过(unmatched): 原样保留。
     - old/new 为空或等值(字节面) => ValueError(fail-fast, 调用方契约错误); 仅分隔符风味
       不同的新旧根视为同一路径, 全键 unmatched 原样返回(无差异可改)。
     """
@@ -219,6 +311,15 @@ def rewrite_save_paths(val: Dict[bytes, BValue], old_root: str,
         v = out.get(key)
         if not isinstance(v, bytes):
             continue
+        if profile_base:
+            v_str = v.decode("utf-8", "replace")
+            if _relative_form(v_str):
+                resolved = _resolve_relative(v_str, profile_base)
+                if resolved:
+                    # 解析成功: 以绝对形态进入下方管道 —— 命中旧根走改写, 命中新根判
+                    # already, 都不命中落 unmatched(与绝对形态不命中同口径)。out 只在
+                    # rewritten 分支写回, unmatched/already 保持原相对值零触碰。
+                    v = resolved.encode("utf-8")
         new_hit = any(_prefix_match(v, np) for np in new_prefixes)
         old_hit = None
         for ov, nv in pairs:
@@ -345,12 +446,15 @@ def retarget(backup_dir: Union[str, Path], hash_v1: str, hash_v2: str, old_root:
     - 双键无一改写(全部 already/unmatched)-> unchanged, 不落盘不建 .bak(黄金法则 1,
       幂等重放零副作用)。
     - 坏样本 -> FastresumeError 上抛(绝不落盘, N6); 调用方记日志并保留 .bak 供回滚。
+    - 相对形态键: profile base 由 backup_dir 单点推导(profile_base_of, qB 便携布局
+      basePath = BT_backup 上两级)后按 E2c 修定口径解析改写; 推导不出(base 空)时相对键
+      照旧跳过(N10 原口径)。
     """
     fr = locate_fastresume(backup_dir, hash_v1, hash_v2)
     if fr is None:
         return RetargetReport("not_found")
     val = load_fastresume(fr)
-    new_val, outcome = rewrite_save_paths(val, old_root, new_root)
+    new_val, outcome = rewrite_save_paths(val, old_root, new_root, profile_base=profile_base_of(str(backup_dir)))
     if not outcome.rewritten:
         return RetargetReport("unchanged", str(fr), (), outcome.already, outcome.unmatched)
     save_fastresume(fr, new_val)

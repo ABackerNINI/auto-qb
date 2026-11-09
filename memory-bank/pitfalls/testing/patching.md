@@ -33,6 +33,16 @@
   ② `winreg` 用 `setitem(sys.modules, "winreg", 替身)`(替身要给 `setattr` 覆盖的入口留占位, 否则撞
   "属性必须已存在"); ③ Windows 路径语义用显式 `ntpath`; ④ 真值改用 `tmp_path` 这类跨平台真实存在的路径。
   **判据**: 改完必须在 **Linux 容器**里跑全量(见 [attachments/patching-local-linux-repro.md](attachments/patching-local-linux-repro.md)), 与 Windows 侧**两侧都绿**才算完。
+- **复发** +1 —— fastresume 相对键修复批(issue 26-11-07-2336, 2026-11-10): 两个新增 e2e 用例的
+  期望值把「改写产物后缀分隔符」硬编码成反斜杠拼接(`new_root + "\\member"`), 而 `new_root`
+  来自宿主 `tmp_path` 派生 —— Windows 本机全绿, Linux CI 必红(评审轮1 blocker 2 条抓住)。
+  (为什么没命中: 实现侧刻意做了「产物分隔符 = base 根分隔符」的跨平台设计, 写断言时却又按
+  本机风味手拼期望 —— 上面复发条目形态④「真值断言写死 Windows 盘符」的姊妹形态(分隔符写死)
+  没被路由到**断言期望值构造**上; 同批其它用例用硬编码 Windows 字节样本恰好避开, 独这两条
+  用了 tmp_path 派生路径混搭硬拼风味。)
+  **处置**: 期望值分隔符随宿主形态选(`"\\" if not new_root.startswith("/") else "/"`);
+  教训泛化: **实现跨平台 ≠ 断言跨平台** —— 期望值里的分隔符/盘符/归一化与实现侧一样受
+  判别法约束, tmp_path 派生路径与硬编码风味串**不可混拼**。
 
 ### 判别法: 六类"本机绿不算绿"
 

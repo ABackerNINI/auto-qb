@@ -33,6 +33,8 @@ relocate_journal S3 扩展段)+ 回收 daemon 主体(D12 简化形制)的竞态�
 daemon 主体:
 - test_rewrite_member_status_mapping: retarget 三态 + not_found/异常到记账 status 的映射表;
   fails 承前累计(失败 +1, 成功保值)
+- test_rewrite_member_relative_keys_resolved_via_profile_base: 相对形态键经 spec.bt_backup
+  推导 base 解析改写(E2c/issue 26-11-07-2336)—— rewritten 出账 + 产物落盘 + 重放 already
 - test_scan_jobs_filters_instance_optin_and_terminal: 实例字面过滤/bt_backup opt-in(旧链
   spec 不碰)/终态剔除/残缺 spec 剔除/翻相 flag
 - test_owner_beat_throttles_touch: 心跳 10s 节流(D12); 被退位自检在 touch 之前; 记录消失
@@ -461,6 +463,41 @@ def test_rewrite_member_status_mapping(tmp_path):
     h_same = _member_fixture(backup, b"m-same", old_root)
     same = rd._rewrite_member({"bt_backup": str(backup), "src": old_root, "dst": old_root}, {"hash_v1": h_same}, None)
     assert same["status"] == "failed" and "无改写差异" in same["error"]
+
+
+def test_rewrite_member_relative_keys_resolved_via_profile_base(tmp_path):
+    # E2c 接线(issue 26-11-07-2336): spec.bt_backup 嵌套布局自动推导 profile base,
+    # 相对形态键改写出账 rewritten(同盘部署收尾链恢复收敛)
+    backup = tmp_path / "prof" / "qB" / "data" / "BT_backup"
+    backup.mkdir(parents=True)
+    old_root = str(tmp_path / "prof" / "src")
+    new_root = str(tmp_path / "prof" / "dst")
+    spec = {"bt_backup": str(backup), "src": old_root, "dst": new_root}
+    info = {b"name": b"m-rel", b"piece length": 16384, b"pieces": b"\x00" * 20, b"length": 1}
+    torrent = frmod.bencode({b"announce": b"http://tracker.example/ann", b"info": info})
+    v1, _, _ = compute_infohashes(torrent)
+    val = {
+        b"save_path": rb"..\src",  # base = <tmp>\prof\qB -> 上弹一段即旧根
+        b"qBt-savePath": b"../src/member",
+        b"qBt-name": b"m-rel",
+        b"completed": 1,
+    }
+    (backup / f"{v1}.torrent").write_bytes(torrent)
+    fp = backup / f"{v1}.fastresume"
+    fp.write_bytes(frmod.bencode(val))
+
+    rec = rd._rewrite_member(spec, {"hash_v1": v1}, None)
+    assert rec["status"] == "rewritten" and set(rec["keys"]) == {"save_path", "qBt-savePath"}
+    back = frmod.load_fastresume(fp)
+    assert back[b"save_path"] == new_root.encode("utf-8")
+    # 产物后缀分隔符 = base 根分隔符(随宿主 tmp_path 风味, Linux CI 下为正斜杠)
+    sep = "\\" if not new_root.startswith("/") else "/"
+    assert back[b"qBt-savePath"] == (new_root + sep + "member").encode("utf-8")
+    # 重放: 改写产物(绝对新根)重跑 => already 出账, 字节零变化(黄金法则 1)
+    fp_bytes = fp.read_bytes()
+    rec2 = rd._rewrite_member(spec, {"hash_v1": v1}, None)
+    assert rec2["status"] == "already" and "save_path" in rec2["keys"]
+    assert fp.read_bytes() == fp_bytes
 
 
 def test_scan_jobs_filters_instance_optin_and_terminal(tmp_path):

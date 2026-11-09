@@ -8,8 +8,10 @@
 - 定位: v1 直查优先 -> v2 直查 -> .torrent 对现算 infohash 兜底匹配(混合/v2 不猜命名);
 - 双键改写: lt save_path(反斜杠)与 qBt 键(正斜杠)逐键前缀替换保风味(N1 实测字节);
   qBt-downloadPath 独立前缀替换(不抄 save_path 新值); 分量边界(防 R:\\data 吞
-  R:\\database); 幂等(已是目标值跳过, 黄金法则 1); N10 相对路径「不匹配即跳过」绝不
-  重推导绝对路径; AutoTMM 形态(无 qBt 两键, N8: 55 vs 57 键);
+  R:\\database); 幂等(已是目标值跳过, 黄金法则 1); 相对路径双口径(E2c 修定, issue
+  26-11-07-2336): 无 base 时「不匹配即跳过」绝不重推导(N10 原口径, 旧链兼容), 带
+  profile base 时解析命中才改写、不命中/越根原样跳过(保守纪律不破); AutoTMM 形态
+  (无 qBt 两键, N8: 55 vs 57 键);
 - 安全三件套: 往返自校验不过绝不落盘(N6 拒载形态) / .bak 备份与回滚(D7: 覆盖回原名) /
   tmp+replace+fsync 原子写(无临时残留);
 - retarget 单成员一步到位: written / unchanged(零落盘) / not_found / 坏样本上抛。
@@ -39,7 +41,18 @@
   祖先)旧根键值必改写不被新根前缀命中误判 already(D10); 新根下但旧根外的值仍 already;
   改写产物重跑 already 幂等
 - test_rewrite_relative_save_path_skipped: N10 形态 —— lt save_path 为 CWD 相对路径 ->
-  unmatched 原样保留(输出无任何重推导的绝对路径), qBt 键照改
+  unmatched 原样保留(输出无任何重推导的绝对路径), qBt 键照改; 无 base = 旧链兼容面
+- test_rewrite_relative_resolved_via_profile_base_rewritten: E2c 形态(issue 26-11-07-2336)
+  —— 便携 profile 三路径键 basePath 相对形态, base 单点推导后解析改写; 反斜杠/正斜杠
+  相对键/等值与根下命中/产物=新根绝对形态(base 根分隔符风味); 产物重跑全键 already 幂等
+- test_rewrite_relative_unmatched_faces: 解析不命中旧新根/上弹越出根/profile_base 空
+  (旧链兼容)/无点相对形态命中 —— 各支产物面与 unmatched 记账
+- test_rewrite_relative_posix_faces: POSIX 部署形态(base = BT_backup 上两级)正斜杠相对键
+  改写 + 旧根=base 子目录的上弹等值命中
+- test_profile_base_of_faces: qB CustomProfile 布局恒 = BT_backup 上两级(盘符/POSIX/
+  正斜杠配置值/尾分隔符); 形态不足(少于两段)/非绝对路径 -> ""; 恰两段 -> 根头
+- test_retarget_relative_keys_end_to_end: E2c 全链 —— BT_backup 嵌套布局自动推导 base,
+  相对键改写落盘(双键新值 + .bak), 同参重放 unchanged 字节零变化
 - test_rewrite_autotmm_form: N8 形态 —— 无 qBt-savePath/qBt-downloadPath 键, 仅
   save_path 进 rewritten, 其余键原样, 不抛
 - test_rewrite_fail_fast_on_bad_roots: 空 old/new 与 old==new -> ValueError; 仅风味
@@ -318,6 +331,118 @@ def test_rewrite_relative_save_path_skipped():
     assert out[b"save_path"] == b"downloads\\iso"  # 原样保留, 绝不重推导绝对路径
     assert oc.rewritten == ("qBt-savePath", )
     assert out[b"qBt-savePath"] == b"T:/pt/member"
+
+
+def test_rewrite_relative_resolved_via_profile_base_rewritten():
+    # E2c 形态(issue 26-11-07-2336): 便携 profile 部署三路径键写 basePath 相对形态,
+    # base 单点推导传入后解析改写; 产物 = 新根绝对形态, 分隔符随 base 根风味
+    base = r"C:\Programs\qBittorrent-testing\profile\qBittorrent"
+    old = r"C:\Users\demo\src"
+    new = r"D:\data\dst"
+    val = {
+        b"save_path": rb"..\..\..\..\Users\demo\src",  # 反斜杠相对键, 等值命中旧根
+        b"qBt-savePath": b"../../../../Users/demo/src/member",  # 正斜杠相对键, 根下命中
+        b"qBt-downloadPath": rb"..\..\..\..\Users\demo\src\dl",  # 反斜杠相对键, 根下命中
+    }
+    out, oc = frmod.rewrite_save_paths(val, old, new, profile_base=base)
+    assert oc.rewritten == ("save_path", "qBt-savePath", "qBt-downloadPath") and oc.unmatched == ()
+    assert out[b"save_path"] == rb"D:\data\dst"
+    assert out[b"qBt-savePath"] == rb"D:\data\dst\member"
+    assert out[b"qBt-downloadPath"] == rb"D:\data\dst\dl"
+    # 幂等重放: 产物(绝对新根)重跑全键 already 且 dict 相等(黄金法则 1)
+    twice, oc2 = frmod.rewrite_save_paths(out, old, new, profile_base=base)
+    assert oc2.rewritten == () and oc2.already == ("save_path", "qBt-savePath", "qBt-downloadPath")
+    assert twice == out
+
+
+def test_rewrite_relative_unmatched_faces():
+    base = r"C:\Programs\qBittorrent-testing\profile\qBittorrent"
+    old = r"C:\Users\demo\src"
+    new = r"D:\data\dst"
+    # 解析结果指到旧新根之外 -> unmatched, 原相对值保留(保守纪律: 不指鹿为马)
+    out, oc = frmod.rewrite_save_paths({b"save_path": rb"..\..\..\..\Users\demo\other"}, old, new, profile_base=base)
+    assert oc.unmatched == ("save_path", )
+    assert out[b"save_path"] == rb"..\..\..\..\Users\demo\other"
+    # 上弹越出根(4 段 base 不够弹 6) -> 无法解析, unmatched 原样
+    out2, oc2 = frmod.rewrite_save_paths(
+        {b"save_path": rb"..\..\..\..\..\..\Users\demo\src"}, old, new, profile_base=base
+    )
+    assert oc2.unmatched == ("save_path", ) and out2[b"save_path"].startswith(b"..")
+    # profile_base 空(推导不出/旧链调用面) -> 相对键照旧跳过, 绝对键照改(向后兼容 N10)
+    val3 = {b"save_path": rb"..\..\..\..\Users\demo\src", b"qBt-savePath": b"C:/Users/demo/src/x"}
+    out3, oc3 = frmod.rewrite_save_paths(val3, old, new)
+    assert oc3.unmatched == ("save_path", ) and out3[b"save_path"] == rb"..\..\..\..\Users\demo\src"
+    assert oc3.rewritten == ("qBt-savePath", ) and out3[b"qBt-savePath"] == b"D:/data/dst/x"
+    # 无点相对形态(目标在 base 之内)同样可解析: 旧根 = base, 相对键解析为旧根下子目录
+    out4, oc4 = frmod.rewrite_save_paths({b"save_path": b"src"}, r"C:\data", r"D:\dst", profile_base=r"C:\data")
+    assert oc4.rewritten == ("save_path", ) and out4[b"save_path"] == rb"D:\dst\src"
+
+
+def test_rewrite_relative_posix_faces():
+    # POSIX 部署形态: base = BT_backup 上两级, 相对键正斜杠; 产物 = POSIX 绝对新根
+    out, oc = frmod.rewrite_save_paths(
+        {
+            b"save_path": b"../data/src",
+            b"qBt-savePath": b"../data/src/m"
+        },
+        "/home/u/data/src",
+        "/mnt/dst",
+        profile_base="/home/u/qb"
+    )
+    assert oc.rewritten == ("save_path", "qBt-savePath") and oc.unmatched == ()
+    assert out[b"save_path"] == b"/mnt/dst" and out[b"qBt-savePath"] == b"/mnt/dst/m"
+    # 旧根 = base 子目录: 上弹一段等值命中(base=C:\\data\\src, 相对键 .. 解析回 C:\\data)
+    out2, oc2 = frmod.rewrite_save_paths({b"save_path": b".."}, r"C:\data", r"D:\dst", profile_base=r"C:\data\src")
+    assert oc2.rewritten == ("save_path", ) and out2[b"save_path"] == rb"D:\dst"
+
+
+def test_profile_base_of_faces():
+    # qB CustomProfile 布局(profile_p.cpp: BT_backup = basePath/data/BT_backup)恒 = 上两级
+    assert frmod.profile_base_of(r"C:\Programs\qBittorrent-testing\profile\qBittorrent\data\BT_backup") \
+        == r"C:\Programs\qBittorrent-testing\profile\qBittorrent"
+    assert frmod.profile_base_of(r"D:\x\prof\qB\data\BT_backup\\") == r"D:\x\prof\qB"  # 尾分隔符 tolerated
+    assert frmod.profile_base_of("/home/u/qb/data/BT_backup") == "/home/u/qb"
+    # 形态不足(少于根下两段)/非绝对/空 -> ""(调用面按无 base 处理, 相对键照旧跳过)
+    assert frmod.profile_base_of(r"D:\BT_backup") == ""
+    assert frmod.profile_base_of("relative/path/BT_backup") == ""
+    assert frmod.profile_base_of("") == ""
+    assert frmod.profile_base_of(r"\\unc\share") == ""  # UNC 仅 host+share, 无法下探两级
+    # 恰两段 = 推导到根头(解析面自然裁决命中与否, 不判错)
+    assert frmod.profile_base_of(r"D:\data\BT_backup") == "D:"
+
+
+def test_retarget_relative_keys_end_to_end(tmp_path):
+    # E2c 全链(issue 26-11-07-2336): BT_backup 嵌套布局自动推导 base, 相对键改写落盘
+    backup = tmp_path / "prof" / "qB" / "data" / "BT_backup"
+    backup.mkdir(parents=True)
+    old_root = str(tmp_path / "prof" / "src")
+    new_root = str(tmp_path / "prof" / "dst")
+    tb = _torrent_bytes(b"relmember")
+    v1, v2, _ = compute_infohashes(tb)
+    val = {
+        b"save_path": rb"..\src",  # base = <tmp>\prof\qB -> 上弹一段即旧根
+        b"qBt-savePath": b"../src/member",
+        b"qBt-name": b"relmember",
+        b"completed": 1,
+    }
+    (backup / f"{v1}.torrent").write_bytes(tb)
+    p = backup / f"{v1}.fastresume"
+    p.write_bytes(frmod.bencode(val))
+
+    rep = frmod.retarget(backup, v1, v2, old_root, new_root)
+    assert rep.status == "written"
+    assert set(rep.rewritten) == {"save_path", "qBt-savePath"}
+    back = frmod.load_fastresume(p)
+    assert back[b"save_path"] == new_root.encode("utf-8")
+    # 产物后缀分隔符 = base 根分隔符(随宿主 tmp_path 风味, Linux CI 下为正斜杠)
+    sep = "\\" if not new_root.startswith("/") else "/"
+    assert back[b"qBt-savePath"] == (new_root + sep + "member").encode("utf-8")
+    assert frmod.backup_path_of(p).is_file()  # .bak 在场
+    # 幂等重放: unchanged 且字节零变化(黄金法则 1)
+    fp_bytes = p.read_bytes()
+    rep2 = frmod.retarget(backup, v1, v2, old_root, new_root)
+    assert rep2.status == "unchanged" and rep2.already == ("save_path", "qBt-savePath")
+    assert p.read_bytes() == fp_bytes
 
 
 def test_rewrite_autotmm_form():
