@@ -41,6 +41,13 @@ const BASE_PATCH = {
   connections_count: 8, connections_limit: 100,
   infohash_v1: 'a'.repeat(40), infohash_v2: 'b'.repeat(64),
   save_path: 'R:\\Downloads\\Set000\\Some.Show.S01E01.1080p.WEB-DL.x265-GROUP0',
+  /* issue 26-11-08-1621 起「下载路径 / 根路径」的 wide 是条件式(值非空才整行折行)。
+   * 桩不给这两个字段会让 dt02 路径 wide 行 4→2、dt03 wide 行 7→5 —— 下方断言验的是
+   * 「有值场景」的正向接线, 故四个路径行必须都给非空值; 空值负向面由
+   * tests/test_webui_static_r4_node_batteries.py 的 node battery 覆盖, 不在此重复。 */
+  content_path: 'R:\\Downloads\\Set000\\Some.Show.S01E01.1080p.WEB-DL.x265-GROUP0\\ep01.mkv',
+  download_path: 'R:\\Downloads\\Incomplete',
+  root_path: 'R:\\Downloads\\Set000',
   site: 'hhanclub', category: 'tv', tags: 'HR,Free', private: true,
   up_limit: 0, dl_limit: 0,
   hr_triggered: false, hr_satisfied: false, hr_excluded: false,
@@ -172,7 +179,7 @@ for (const skin of SKINS) {
       await expect(page.locator('.toast-wrap .toast').first(), '复制有 toast 回执').toContainText('已复制');
     });
 
-    test(`dt02 六卡聚类: 卡片数/磁力钮 + HR 单源文案 + 卡片折叠手势 @fast (${skin})`, async ({ page }) => {
+    test(`dt02 六卡聚类: 卡片数/磁力入口下线 + HR 单源文案 + 卡片折叠手势 @fast (${skin})`, async ({ page }) => {
       collectRuntimeErrors(page);
       presetGeneralVariant(page, '02');
       await stubDetail(page, { ...BASE_PATCH, ...HR_TRIGGERED_OK });
@@ -192,8 +199,11 @@ for (const skin of SKINS) {
       for (const id of ('base time xfer id meta store').split(' ')) {
         await expect(drawer.locator(`.dt02-card[data-card="${id}"]`), `卡 ${id} 在场`).toBeVisible();
       }
-      await expect(drawer.locator('[data-act="magnet"]'), '磁力钮在场(标识卡)').toHaveCount(1);
-      await expect(drawer.locator('.dt02-card[data-card="id"]')).toContainText('magnet');
+      // ---- 复制 magnet 入口已下线(issue 26-11-09-0639): magnet_uri 入库即 tr= 掩码,
+      // 复制出私站无法 announce 的废链接。此处钉住「入口不得回潮」, 与 ctx_menu_registry 守阵同口径。
+      await expect(drawer.locator('[data-act="magnet"]'), '磁力钮不得回潮(标识卡)').toHaveCount(0);
+      await expect(drawer.locator('.dt02-card[data-card="id"]'), '标识卡不再渲染 magnet 行')
+        .not.toContainText('magnet');
 
       // ---- R5#79: HR 达标徽章单源文案(修前 02 渲染「已触发 · 已达标」= 红)
       await expect(drawer.locator('.dt02-hr-badge')).toHaveText('HR 已触发 · 已达标');
@@ -240,7 +250,7 @@ for (const skin of SKINS) {
       const side = drawer.locator('.dt03-side');
       await expect(side, '右 252px 元信息栏在场').toBeVisible();
       await expect(side).toContainText('元信息');
-      await expect(side.locator('[data-act="magnet"]'), '右栏磁力钮(按需取)在场').toHaveCount(1);
+      await expect(side.locator('[data-act="magnet"]'), '右栏磁力钮不得回潮(入口已下线)').toHaveCount(0);
 
       // ---- R5#78: wide 类接线 —— 数据契约发 wide:true 的哈希/路径行挂 .wide 且整行 span
       // (基础: 哈希 v1/v2/备注 3 条; 路径: 保存/内容/下载/根 4 条 —— 契约行恒发, 共 7)

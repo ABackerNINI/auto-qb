@@ -19,7 +19,18 @@
   ③ 消费点三处: `_kbScrollRowIntoView` 的**渲染行 rect 路径**与**窗口化前缀和路径**、无光标回落 `_kbViewportRow`。渲染行那个 `scrollIntoView` 禁令照旧(见 `hover-keynav-fight`)。
 - **守阵**: `tests/test_web_shortcuts_cursor.py::test_kb_view_band_single_points`(静态: 两个单点在且被三处消费、上界不得再裸写 `_headH`/下界不得裸用 `innerHeight`)+ `e2e/kbd-scroll-band.spec.mjs`(真浏览器 @fast, 双皮肤: `End` 落末行不被状态栏盖 / `Home` 落首行不被列头盖, 且断言光标确实落在极值行 —— 否则"没被遮"可能只是光标没走到极值, 断言退化成恒真)。红验: 把 `shortcuts.js` 临时退回 HEAD 版, 新 e2e 双皮肤双双转红(已还原)。
 - **家族关系**: 本坑与 `dock-panel.md`(下界漏面板)、`hover-keynav-fight.md`(跟随禁用 scrollIntoView)是同一族 —— **凡"这个元素看得见吗"都要问"它上面/下面压着什么"**。新增消费点时先 grep `_kbViewTop|_kbViewBottom`, 别再手写边界算式。
-- **复发**: 0
+- **复发**: 1
+  - ① 2026-11-10 GitHub CI 双皮肤稳定红: `e2e/kbd-scroll-band.spec.mjs:102` 的 `End` 落末行,
+    CI 报「光标行=838~891(h53), 状态栏顶=866, 被遮 25~31px」, 本地 Windows 隔离跑与
+    整片 `shard 2/3`(102 例)全绿 —— 排除顺序污染, 是 Linux runner 字体/时序差异。
+    **新形态**: 边界单点本身没错, 错在 `_kbScrollRowIntoView` 的**落定时机** —— 它在
+    `$nextTick` 里执行, 而窗口化重渲可能还没把目标行挂进 DOM; 此时 `el` 缺失, 前缀和又与
+    当前列表长度失配, 旧码按 P1-2 退避**静默放弃且不再补**, 末行就一直停在状态栏背后。
+    **处置**: 抽 `reveal()` 按真实 DOM 矩形校正, 用 `revealWhenRendered(deadline)` 在 1s
+    时间窗内跨帧重试到目标行出现(单次 rAF 仍会扑空, 评审轮 1 抓出), 估算行高分支同样补一次;
+    边界落值仍只取一次复用, 静态守阵「单点」纪律不动。**为什么没命中**: 本条原有判别只覆盖
+    「边界算式写错」, 没覆盖「算式对但执行时机早于 DOM 落定」; 本地不复现时容易误判成
+    runner flaky 而走放宽阈值(掩盖), 正确动作是查滚动链路的时序假设。
 
 ### 同族第二处: 翻页的「一屏」不是整窗高 (2026-10-09 第二轮, 用户指令「修复 _kbMovePage 的问题」, 已修)
 

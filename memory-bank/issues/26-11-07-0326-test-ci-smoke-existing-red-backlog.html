@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-11-07-0326">
 <meta name="issue-type" content="test">
 <meta name="doc-topic" content="github-ci-smoke-gate">
-<meta name="doc-refs" content="memory-bank/plans/26-11-07-0452-plan-github-ci-smoke-gate.html">
+<meta name="doc-refs" content="memory-bank/plans/26-11-07-0452-plan-github-ci-smoke-gate.html, memory-bank/tasks/26-11-10-test-github-ci-e2e-red-fix.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="GitHub CI WEB UI smoke 全量轮既有红清单待排期清理">
 <meta name="issue-summary" content="CI 全量 450 例串行下 gtm-alert 双皮肤 4 条失败等既有红; 门禁改造只展示不修, 等排期">
 <title>GitHub CI WEB UI smoke 全量轮既有红清单待排期清理 · test · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-11-07-0326-test-ci-smoke-existing-red-backlog</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-07 03:26</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -197,11 +197,17 @@ cancelled 93 / failure 7 / success 0; 最后一次 success 2026-10-30T20:29Z -> 
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-11-07 03:26 — 入池，状态 <strong>Open</strong>（计划外，未修，等排期）。来源：本轮 CI 门禁改造会话拍板「既有红这轮展示不解决，挂一个 issue 等排期」；本轮不改这些用例、不认领、不置 In Progress。</li>
-    </ul>
+      <li>2026-11-10 — 状态 Open → In Progress（kb.status）</li>
+      <li>2026-11-10 — 状态 In Progress → Done（kb.status）</li>
+</ul>
     <h3>复验</h3>
-    <p>认领后先重跑「定位锚点」并重取日志，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」，再决定归因方向。</p>
+    <p><strong>复验：2026-11-10 CI 侧仍复现。</strong><code>gh run list --status failure --limit 3</code> 取到 42644651849（daily / 77b649fc）、42636692779（full-smoke / 6fba3de1）、42636669213（daily / 6fba3de1），并按 job 补取当前 HEAD run 42650924397 的日志，失败集合固定为四组：<code>gtm-alert.spec.mjs:83</code>（reload 后 <code>seenTs</code> 读 <code>vm.traffic.gtm_anomaly</code> 恒 null，5s 超时）、<code>kbd-scroll-band.spec.mjs:102</code>（End 落末行仍被状态栏遮 25~31px）、<code>perf.spec.mjs:361</code> W5（实测 4 拍 &gt; 固定上界 3）、<code>drawer-general-variants.spec.mjs:175/228</code>（磁力钮 0 个、wide 行 2/5）。</p>
+    <p>本地隔离跑前三组分别 2 / 2 / 2 passed，按 CI 分片口径整片 <code>shard 2/3</code> = <strong>102 passed</strong> 全绿 —— <strong>排除「全量顺序状态污染」</strong>（本文 05 节原列的两个未排除假设之一），归因到 Linux runner 与本地 Windows 的环境差异。另核实 15:50 那次 daily 「绿」是<strong>假绿</strong>：提交只改 tests-real，未命中 gate 白名单，三个分片全 <code>skipped</code>，aggregate 照 <code>success|skipped</code> 判绿；失败从未消失，只是没跑。</p>
     <h3>修复后补充</h3>
-    <p>修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因，同时把 <code>flaky-ledger.md</code> 对应条目翻状态留去向。</p>
+    <p><strong>实际修法</strong>（用户 2026-11-10 显式指派「认领并真修全部 4 组」，覆盖本文原「只展示不修、等排期」拍板）：① <code>gtm-alert</code> 给 reload 后等轮询落地的 <code>expect.poll</code> 显式 20s，断言仍严格 <code>toBe(ts)</code> —— 修的是默认 5s 等待窗口不足，不是放宽断言；② <code>perf W5</code> 注入 <code>window.__tickT0</code> 与 <code>window.__pollMs = vm.basePollMs()</code>，拍数上界由固定 <code>&lt;=3</code> 改为 <code>ceil(elapsed / pollMs) + 1</code>，从测量层消掉「交互窗恒 4.4s」的假设（600 种子档真实节拍 1500ms，旧注释写 2000ms 亦已订正）；③ <code>kbd-scroll-band</code> 改产品侧 <code>_kbScrollRowIntoView</code>：抽 <code>reveal()</code> 按真实 DOM 矩形校正，<code>revealWhenRendered(deadline)</code> 在 1s 时间窗跨帧重试到目标行渲染，修窗口化重渲晚于 <code>$nextTick</code> 时旧码静默放弃滚动；④ <code>drawer-general-variants</code> / <code>menus</code> / <code>optimistic</code> 同步 <code>76deeb7d</code> 复制 magnet 入口下线后的过期断言（改钉「入口不得回潮」而非删断言），并给 <code>BASE_PATCH</code> 补 <code>content_path</code> / <code>download_path</code> / <code>root_path</code> 三个非空路径值，对齐 <code>26-11-08-1621</code> 的「值非空才 wide」口径。</p>
+    <p><strong>验证方式 / 测试数字</strong>：<code>env -u TMPDIR -u TEMP -u TMP commands run test.full</code> 全绿（实测数字见 <code>kb.baseline</code> / 基线切片 <code>26-11-10-0121</code>，205.90s，TOTAL 99%）；静态守阵 <code>test_kb_view_band_single_points</code> 1 passed；目标 e2e：drawer 4 / gtm 2 / kbd 6 / perf W5 2 / menus 2 / optimistic 2 全 passed；6 个 JS 文件 <code>node --check</code> 全过；两分片并行回归 222 例各有 1 条无关偶发红，串行单跑分别 2 / 6 passed。分批评审两轮：轮 1 两条 major（硬编码 2000ms 与真实档不符、单次 rAF 仍会扑空）当场修完，轮 2 零 actionable。</p>
+    <p><strong>与建议修法的差异（改道原因）</strong>：06 节原建议「放宽 CI 上的节拍容差或把量具迁到固定规格 runner」。本轮<strong>未采用</strong>——按 CI 分档放宽只放宽上界、未从测量层消除抢占放大，会让真回归检测力下降；改用「按实测窗口与真实节拍归一」在消掉假红的同时保留检测力（前端若把轮询加倍，标称值不变而实测拍数翻倍仍会撞线）。06 节「不采用 skip / continue-on-error / --grep 排除 / 放宽 retry 等掩盖式处置」的口径<strong>全程遵守</strong>。去向：<a href="../testing/flaky-ledger.md">flaky-ledger.md</a> 已追加本轮条目；坑档复发见 <code>pitfalls/testing/timing-tolerance.md</code>（③）、<code>pitfalls/web-ui/scroll-visible-band.md</code>（①）、<code>pitfalls/testing/tmpdir.md</code>（⑧）；任务档案 <a href="../tasks/26-11-10-test-github-ci-e2e-red-fix.md">26-11-10-test-github-ci-e2e-red-fix.md</a>。</p>
+    <p><strong>遗留</strong>：<code>kbd-scroll-band</code> 在 Windows 本地不复现，产品侧补正只能由下一轮 Linux CI 确认；提交后须回看 <code>smoke (@fast) shard 2/3</code>。</p>
   </section>
 
   <footer>

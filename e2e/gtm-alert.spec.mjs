@@ -70,10 +70,13 @@ async function injectAnomaly(page, current) {
   });
 }
 
-/** 等页面真的采纳了某个 ts(轮询是异步的, 直接断言 DOM 会赌时长)。 */
+/** 等页面真的采纳了某个 ts(轮询是异步的, 直接断言 DOM 会赌时长)。
+ *  timeout 显式 20s: reload 之后首次 /api/state 轮询落地在共享 runner 上可能超过
+ *  expect.poll 的默认 5s(2026-11-09 GitHub CI 三次稳定复现: reload 后读到的恒是 null)。
+ *  这是等**真实数据落地**, 不是放宽断言 —— 断言仍是严格 toBe(ts), 不认近似值、不放宽 retry。 */
 const seenTs = (page) => expect.poll(
   () => readInst(page, 'vm.traffic && vm.traffic.gtm_anomaly ? vm.traffic.gtm_anomaly.ts : null'),
-  { message: '服务端告警段已随轮询落到 vm.traffic' },
+  { message: '服务端告警段已随轮询落到 vm.traffic', timeout: 20_000 },
 );
 
 for (const skin of SKINS) {

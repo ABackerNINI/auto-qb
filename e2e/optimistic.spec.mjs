@@ -551,31 +551,33 @@ for (const skin of SKINS) {
         expect(t.released, '快照同意后覆盖必须收工(不留假状态)').toBe(0);
       });
 
-      test('BUG-9: 辅种页复制磁力不再恒失败', async ({ page }) => {
-        // "复制磁力"要真写剪贴板, headless 默认会拒 —— 旧脚本 context 级 permissions 同款
+      test('BUG-9: 辅种页复制信息两用(name)可用 / magnet 分支已退役', async ({ page }) => {
+        // 复制要真写剪贴板, headless 默认会拒 —— 旧脚本 context 级 permissions 同款
         await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
         await openApp(page, skin);
-        // magnet_uri **只**在种子页的平铺 SEED_ITEM 里, 成员索引(groups/singles)不带该字段
-        // ⇒ 修复前在辅种页恒提示"该种子没有 magnet 链接"(与种子是否真有磁力无关)。
-        // 断言刻意避开剪贴板实现差异: 只验"不再弹失败提示"; 注入 vm.menu + 直调
-        // copyTorrentInfo(菜单开合 DOM 路径已由 menus 批的 CTX-06 覆盖) —— D4 第1/2类。
+        /* 收窄口径(issue 26-11-09-0639): copyTorrentInfo 只剩 name/hash 两用, 复制 magnet
+         * 入口整体下线。原用例直调已退役的 'magnet' 分支, 如今只会落到「字段为空」的兜底
+         * toast, 断言 not.toBe(旧失败提示) 恒真 = 假绿守阵。改为验正向两用: 辅种页成员索引
+         * 不带 magnet_uri, 但 name 仍在, 复制必须给出真实回执 —— D4 第1/2类。 */
         const r = await page.evaluate(`(async () => {
           const vm = ${INST};
           const g = vm.groups.find((x) => (x.members || []).length);
           if (!g) return { err: 'no group' };
           const h = g.members[0].hash;
-          const idxHasMagnet = 'magnet_uri' in (vm.memberByHash.get(h) || {});
+          const m = vm.memberByHash.get(h) || {};
+          const idxHasMagnet = 'magnet_uri' in m;
           vm.menu = { visible: true, hash: h, key: null };
-          await vm.copyTorrentInfo('magnet');
-          return { idxHasMagnet };
+          await vm.copyTorrentInfo('name');
+          return { idxHasMagnet, hasName: !!m.name };
         })()`);
         expect(r.err, '辅种页有带成员的组').toBeUndefined();
         expect(r.idxHasMagnet, '前置自证: 索引确不带 magnet_uri(否则本断言空过)').toBe(false);
+        expect(r.hasName, '前置自证: 成员索引带 name(否则两用分支空过)').toBe(true);
         const lastToast = () => readInst(page,
           `(() => { const t = (vm.toasts || []).slice(-1)[0]; return t ? t.kind + '|' + t.text : null; })()`);
-        await expect.poll(lastToast, { message: '复制磁力应弹出回执 toast(而不是静默)', timeout: 5_000 }).toBeTruthy();
+        await expect.poll(lastToast, { message: '复制 name 应弹出回执 toast(而不是静默)', timeout: 5_000 }).toBeTruthy();
         const toast = /** @type {string} */ (await lastToast());
-        expect(toast.split('|').slice(1).join('|'), `toast=${toast}`).not.toBe('该种子没有 magnet 链接');
+        expect(toast.split('|').slice(1).join('|'), `toast=${toast}`).toContain('已复制: 种子名');
       });
     });
 

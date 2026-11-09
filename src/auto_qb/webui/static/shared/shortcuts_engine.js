@@ -282,24 +282,50 @@ Object.assign(window.AQB_SHORTCUTS.methods, {
         const sel = r.kind === "group" || r.kind === "show" || r.kind === "ep"
           ? `[data-key="${CSS.escape(r.id)}"]`
           : `[data-hash="${CSS.escape(r.id)}"]`;
-        const el = document.querySelector(sel);
         const vTop = this._kbViewTop();     // 顶栏 + 吸顶列头(列头盖住列表首行, 2026-10-09 报障)
         const vBot = this._kbViewBottom();  // 状态栏 + 面板开着时让位面板顶缘(W4 几何走查)
-        if (el) {
+        /* 用真实 DOM 矩形校正落点。抽成局部函数是为了在下一帧复用: 共享 runner 上
+         * $nextTick 可能早于窗口化重渲(目标行还没进 DOM), 或前缀和用的是估算行高而实测
+         * 行高随字体/平台变化 —— 两种情形都会让首次落点停在状态栏背后。下一帧用真实
+         * 矩形再校正一次即可, 不靠猜(P1-2 退避口径: 不确定时不滚, 但不能就此不补)。
+         * 边界沿用本次单点落值, 不二次读 _kbViewTop/_kbViewBottom(单点纪律)。 */
+        const reveal = () => {
+          const el = document.querySelector(sel);
+          if (!el) return false;
           const rect = el.getBoundingClientRect();
           if (rect.top < vTop + 4) window.scrollBy(0, rect.top - vTop - 8);
           else if (rect.bottom > vBot - 4) window.scrollBy(0, rect.bottom - vBot + 8);
+          return true;
+        };
+        /* 跨帧重试: 窗口化重渲未必一帧落定(共享 runner 上尤其慢), 单次 rAF 仍可能扑空,
+         * 那就等于旧码被换掉的「静默放弃」。在 1s 时间窗内持续等到目标行进 DOM 再校正;
+         * 到点仍不出现按 P1-2 退避放弃, 不无限排队, 也不猜位置。 */
+        const revealWhenRendered = (deadline) => {
+          if (reveal()) return;
+          if (performance.now() < deadline) requestAnimationFrame(() => revealWhenRendered(deadline));
+        };
+        const revealNext = () => {
+          const deadline = performance.now() + 1000;
+          requestAnimationFrame(() => revealWhenRendered(deadline));
+        };
+        if (document.querySelector(sel)) {
+          reveal();
           return;
         }
-        // 窗口化把该行折叠了: 用前缀和算它的文档 y。前缀和与当前列表不同源(长度不符)则放弃
-        // 本次滚动 —— 宁可暂时看不见, 也不能滚到错位处(P1-2 的退避口径)。
+        // 窗口化把该行折叠了: 用前缀和算它的文档 y。前缀和与当前列表不同源(长度不符)时
+        // 不滚到错位处(P1-2 退避), 但下一帧重渲落定后要用真实 DOM 补一次, 否则末行会
+        // 一直压在固定状态栏背后(2026-11-09 GitHub CI 双皮肤稳定复现 25~31px 遮挡)。
         const kind = r.kind === "torrent" ? "torrent" : r.kind === "group" ? "group" : null;
         const pre = kind && this._rowPre && this._rowPre[kind];
-        if (!pre || pre.length !== rows.length + 1) return;
+        if (!pre || pre.length !== rows.length + 1) {
+          revealNext();
+          return;
+        }
         const y = pre[idx] + (this._winTop[kind] || 0);
         const h = pre[idx + 1] - pre[idx];
         if (y < window.scrollY + vTop + 4) window.scrollTo(0, y - vTop - 8);
         else if (y + h > window.scrollY + vBot - 4) window.scrollTo(0, y + h - vBot + 8);
+        revealNext();  // 估算行高与实测行高的偏差由后续帧补正
       });
     },
     /* 显式打开路径的行让位(2026-10-03 报障: 双击列表最后几行, 停靠面板一开把被点行盖住) ——

@@ -514,9 +514,11 @@ for (const skin of SKINS) {
         await more.hover();
         await expect(page.locator('.ctx-sub')).toBeVisible({ timeout: 3_000 });
         const panel = ((await page.locator('.ctx-sub').textContent()) || '').replace(/\s+/g, ' ');
-        for (const t of ['复制名称', '复制哈希', '复制 magnet']) {
+        // 复制族只剩 name/hash 两项(copy-magnet 已退役, issue 26-11-09-0639)
+        for (const t of ['复制名称', '复制哈希']) {
           expect(panel, `复制族并入「更多操作」面板: ${panel.slice(0, 90)}`).toContain(t);
         }
+        expect(panel, '复制 magnet 不得回潮(入口已下线)').not.toContain('复制 magnet');
         // CTX-04: `.ctx-item:hover .ico` 是后代选择器, 而 .ctx-sub 是父项的 DOM 后代 ⇒ hover
         // 父项会把整个子面板图标刷成 --fg-muted(修之前的恒红形态)。判据: 悬停父项时子面板
         // 首项图标(.ico-queue)的 computed color 仍是语义色(--teal)。页面内比对 var() 的解析值

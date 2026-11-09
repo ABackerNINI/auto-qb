@@ -16,7 +16,7 @@
   1.8ms 仍会抖)。**不要**为对称加挂钟上界: 负载合法拉长等待, 上界会制造新的假红模式。相关: 同根双 issue
   [26-09-20-0952](../../issues/26-09-20-0952-test-mainloop-tick-timing-flaky.html) /
   [26-09-22-2052](../../issues/26-09-22-2052-test-throttle-test-sleep-tolerance.html)(2026-09-28 修复关闭)。
-- **复发**: 2
+- **复发**: 3
   - ① 2026-10-05 CI 假红: `tests/test_traffic_grid_group.py::test_group_50_members_correct_and_time_bound`
     的**挂钟上界** `elapsed < 3.0` 在 windows-latest 实测 4.01s(同一负载本机插桩中位 ~1.26s) —— 正是上面
     「不要为对称加挂钟上界」形态的**首次真兑现**(上界零容差, 合法负载直接撞线)。处置: 计时改
@@ -48,6 +48,16 @@
   - **新增判据**: 性能上界守阵换 CPU 时间前, 先量当前平台 `time.process_time` 的最小刻度;
     刻度 >= 被测量量级(Windows 15.625ms vs 亚毫秒)即不可用; 且当同一测试函数要跨 OS 跑时,
     须按**两 OS 交集**选口径, 不能拿一侧的刻度下结论, 也不能拿另一侧的高精度反证。
+  - ③ 2026-11-10 CI 假红: `e2e/perf.spec.mjs:361` W5「主表轮询节拍不被放大」把**不定长交互窗**
+    当成固定 4.4s, 用绝对拍数上界 `ticks.length <= 3` —— 40 步匀速滚动 + 多段 settle 在
+    ubuntu-latest 共享 runner 上被拉长, 正常节拍也累出 4 拍 => 稳定假红(本地 3 拍贴边过)。
+    **处置不是放宽到 4 也不是按 CI 分档**, 而是从测量层消掉假设: 注入时记 `window.__tickT0`
+    与 `window.__pollMs = vm.basePollMs()`, 读取时按 `ceil(elapsed / pollMs) + 1` 归一上界
+    (600 种子档真实节拍是 **1500ms**, 旧注释写 2000ms 也是漂移)。前端若把轮询加倍,
+    `basePollMs()` 标称值不变而实测拍数翻倍, 仍会撞线 —— 检测力不靠固定窗口。
+    **为什么没命中**: ①② 都挂在 Python 侧挂钟/CPU 时间守阵, 本条是 JS 侧「窗口内事件计数」,
+    词面「节拍 / 拍数」不在本条 `触发` 视野; 评审轮 1 又抓出初版硬编码 2000ms 与真实档不符,
+    说明「放宽上界」类修法必须先问分母(节拍/窗口)是不是常量。
 - **守阵**: `tests/test_qbmanager_*.py` `test_run_loop_throttles_without_stop_event` 断言处注释写明余量依据;
   改守阵判据时先读该注释再动数字。性能**上界**形态的守阵见 `tests/test_traffic_grid_*.py`
   `test_group_50_members_correct_and_time_bound`(CPU 时间口径, 余量依据同样写在注释 / docstring 里)。

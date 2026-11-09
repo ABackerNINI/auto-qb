@@ -52,6 +52,11 @@
   (本 clone 的 shell 自带 `TMPDIR=C:\Users\…\AppData\Local\Temp`), `TMPDIR=` 清空后过, 其后全带前缀。
   为什么没命中: AGENTS.md 测试节与失败行都写了判据, 但开工没把「跑任何 pytest 前先清 TMPDIR」
   当固定动作 —— 又一次证明该动作要放在跑测试的第一条命令里, 不是踩到 rc=4 再补。
+- **复发**: 8(2026-11-10)—— 修复 GitHub CI 四组 e2e 既有红收尾, `commands run test.full` 直跑 1.0s
+  rc=4(本 shell 自带 `TMPDIR=H:\Temp`), `env -u TMPDIR -u TEMP -u TMP` 后全绿; 其后所有
+  pytest / test.full 均带前缀。为什么没命中: 开工按协议同步 + 读 kb.active 切片, 但没进
+  testing 类索引, 直到失败行打出自检配方才想起 —— 与复发 3/5/6/7 同款「收尾顺手跑全量」形态;
+  本轮还额外确认 `ship.commit` 内部闸门同 env, 提交也要带前缀(复发 4)。
 
 ### `--basetemp` 换了目录会让 4 条 sidefx 用例**假红**
 

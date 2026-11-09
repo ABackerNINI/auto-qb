@@ -18,6 +18,9 @@
 | `tests/test_hr_discovery.py` 生命周期层真绑定用例 —— `-n 8` 全量并行下偶发端口碰撞 | 端口/资源 | Done | 已修(2026-11-06): 断言改「落在候选表」+ 占位收敛 `hold_run`(三条同形一起), 去向 [26-11-06-0330](../issues/26-11-06-0330-test-hr-discovery-port-collision.html) | 2026-11-05 |
 | `tests/test_hr_discovery.py::test_start_all_busy_returns_false_and_retries` —— ~~疑似 timing flake~~ 经随机序巡检证据修正为端口/资源(10013 排除段拒绝) | 端口/资源 | Done | 已修(2026-11-06): 端口单点 `tests/_test_ports.py::hold_run` 整段自验替代「只验基址」, 守阵 +2; 去向 [26-11-06-0330](../issues/26-11-06-0330-test-hr-discovery-busy-retry-flake.html) | 2026-11-05 |
 | `tests/test_webui_static_r4_static_batteries.py::test_r4_shortcuts_engine_table_and_keydown` 及同源 node 电池 —— `-n 8` 下共享临时 bundle 被并发截断, 偶发假红(单跑恒绿) | 并发/竞态 | Done | 已修(2026-11-09): 三处落点掺 `os.getpid()` + 两例守阵; 去向 [26-11-08-1955](../issues/26-11-08-1955-test-xdist-js-bundle-temp-race.html) | 2026-11-09 |
+| `e2e/gtm-alert.spec.mjs:83` / `e2e/kbd-scroll-band.spec.mjs:102` 双皮肤 —— GitHub Linux runner 上稳定红、本地隔离与整片 `shard 2/3`(102 例)全绿; 非顺序污染, 是等待窗口不足 / 窗口化重渲晚于 `$nextTick` 的时序差异 | time(边界/粒度) · 并发/竞态 | Done | 已修(2026-11-10): `seenTs` 显式 20s + `_kbScrollRowIntoView` 跨帧按真实 DOM 补正落点; 去向 [26-11-07-0326](../issues/26-11-07-0326-test-ci-smoke-existing-red-backlog.html) / [任务档案](../tasks/26-11-10-test-github-ci-e2e-red-fix.md) | 2026-11-10 |
+| `e2e/perf.spec.mjs:361` W5 —— 不定长交互窗按固定 4.4s 数拍子, CI 实测 4 拍即越界 | time(边界/粒度) | Done | 已修(2026-11-10): 上界按 `ceil(elapsed / vm.basePollMs()) + 1` 归一, 不按 CI 分档放宽; 去向 [基线切片](baselines/26-11-10-0121-test-github-ci-e2e-red-fix.md) | 2026-11-10 |
+| `e2e/drawer-general-variants.spec.mjs:175/228` 双皮肤 —— 产品入口下线 / wide 条件式后, e2e 断言与桩数据未同步(本地可稳定复现, 非 flaky) | 共享状态(桩数据缺口) | Done | 已修(2026-11-10): 三处磁力钮断言改「不得回潮」+ `BASE_PATCH` 补三个非空路径值; 去向 [任务档案](../tasks/26-11-10-test-github-ci-e2e-red-fix.md) | 2026-11-10 |
 
 > 状态词与四形态 5 词表同源: `Open` → `In Progress` → `Done` | `Dropped`。
 

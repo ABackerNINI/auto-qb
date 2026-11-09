@@ -393,6 +393,8 @@ for (const skin of SKINS) {
           vm.refresh = function (...a) { window.__ticks.push(performance.now()); return orig.apply(this, a); };
         }
         window.__ticks = [];
+        window.__tickT0 = performance.now();  // 交互窗实测起点(拍数上界按窗口归一, 见下方断言)
+        window.__pollMs = vm.basePollMs();    // 本档真实轮询间隔(按种子量分档 1500/2000/3000), 不手抄
         window.__lt = [];
         if (window.__po) window.__po.disconnect();
         window.__po = new PerformanceObserver((l) => { for (const e of l.getEntries()) window.__lt.push(Math.round(e.duration)); });
@@ -432,17 +434,28 @@ for (const skin of SKINS) {
       expect(after.first, `主表渲染窗首行不变: ${before.first} -> ${after.first}`).toBe(before.first);
       expect(after.last, `主表渲染窗末行不变: ${before.last} -> ${after.last}`).toBe(before.last);
 
-      /* 轮询节拍: 交互窗(~4.4s)内主表 refresh 恰为节拍数(3000 种子档 2000ms → 2 拍, 余量 ±1) ——
-       * >=1 证节拍不被抽屉交互拖累, <=3 证抽屉交互不放大轮询(计划: 「互不放大, 用数字确认」)。 */
-      const ticks = await page.evaluate('window.__ticks');
-      expect(ticks.length, `主表轮询节拍不被放大/拖累(交互窗实测 ${ticks.length} 拍; 2000ms 档期望 2±1)`).toBeLessThanOrEqual(3);
+      /* 轮询节拍: 交互窗内主表 refresh 的**拍数密度**按 vm.basePollMs() 本档节拍核 ——
+       * >=1 证节拍不被抽屉交互拖累, 上界按实测窗口长归一证抽屉交互不放大轮询
+       * (计划: 「互不放大, 用数字确认」)。 */
+      const { ticks, elapsed, pollMs } = await page.evaluate(
+        `(() => ({ ticks: window.__ticks || [], elapsed: performance.now() - window.__tickT0,
+                    pollMs: window.__pollMs }))()`);
+      /* 交互窗不是定长: 40 步匀速滚动 + 多段 settle 在共享 runner 上会被拉长, 固定「<=3 拍」
+       * 把合法的长窗口读成「轮询被放大」(2026-11-09 CI 实测 4 拍即越界, 本地 3 拍贴边过)。
+       * 拍数上界按**实测窗口 / 本档真实节拍**归一: pollMs 取 vm.basePollMs()(按种子量分档,
+       * 600 档是 1500ms 而非旧注释写的 2000ms), +1 为窗口边界取整余量。前端若真把轮询
+       * 节拍加倍, basePollMs 标称值不变而实测拍数翻倍, 仍会撞线 —— 检测力不依赖固定窗口。 */
+      const tickBudget = Math.ceil(elapsed / pollMs) + 1;
+      expect(ticks.length,
+        `主表轮询节拍不被放大/拖累(交互窗实测 ${Math.round(elapsed)}ms / ${ticks.length} 拍; ${pollMs}ms 档上限 ${tickBudget} 拍)`)
+        .toBeLessThanOrEqual(tickBudget);
       expect(ticks.length, '主表轮询节拍在抽屉交互期间续跑(至少 1 拍)').toBeGreaterThanOrEqual(1);
 
       /* 主线程灾难冻结粗界(同 W4 K2 口径 500ms; 精细分布进档案不钉数)。 */
       const lt = await page.evaluate('window.__lt || []');
       expect(Math.max(0, ...lt), `同屏交互无灾难冻结帧(实测 longtask ${lt.join('/') || '无'})`).toBeLessThan(500);
       console.log(`      [W5 同屏 ${skin}] 主表窗口 ${before.n} 行(${(before.first || '').slice(0, 8)}…${(before.last || '').slice(0, 8)}…) 交互前后逐字段恒等 | ` +
-        `轮询 ${ticks.length} 拍/4.4s | longtask ${lt.join('/') || '无'}`);
+        `轮询 ${ticks.length} 拍/${(elapsed / 1000).toFixed(1)}s(上限 ${tickBudget}) | longtask ${lt.join('/') || '无'}`);
     });
   });
 }
