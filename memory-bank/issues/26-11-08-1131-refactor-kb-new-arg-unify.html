@@ -9,9 +9,9 @@
 <meta name="issue-stamp" content="26-11-08-1131">
 <meta name="issue-type" content="refactor">
 <meta name="doc-topic" content="kb-new-arg-unify">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-09-memory-bank-kb-new-arg-unify.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="kb.new 各族 slug/topic 传参方式不一致, 跨族套用即 rc=1">
 <meta name="issue-summary" content="issue 族收位置参数 slug、其余族要求 --topic, 跨族套形态即失败(2026-11-08 实踩 2 笔 rc=1); 彻底修=各族统一传参, 轻修=show 按族列签名">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-08-1131-refactor-kb-new-arg-unify</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-08 11:31</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
 
@@ -111,13 +111,19 @@
 <section id="s3">
   <h2><span class="no">§03</span>建议</h2>
   <p>首选(彻底修):各族统一 slug 传参方式(全位置参数或全 <code>--topic</code>,取哪个由实施时按兼容面定,改完同步 doc-forms 族表与 create-issue/memory-bank skill 里的示例)。轻修(不统一则做):<code>commands show kb.new</code> 注意行按族分列签名,消除跨族套用的迷惑面。另:<code>--total</code> 收字符串摘要(非裸数字)的形态示例已存在于 doc-forms 族表与 <code>new_doc.py</code> 的 <code>--help</code>/baseline 族失败行,统一时顺带核对多处示例一致即可。</p>
+  <h3>修复后补充</h3>
+  <p><strong>实际修法</strong>(2026-11-09,认领档案 <code>memory-bank/tasks/26-11-09-memory-bank-kb-new-arg-unify.md</code>):选「全位置参数」方向(兼容面分析:issue 族位置参数是最近肌肉记忆且 skill 示例全按它写,反向改兼容面更差)——主键<strong>位置参数与 <code>--topic</code> 两形态全族等价</strong>,是加法不是改法:<code>new_doc.py</code> 删非 issue 族「不接受位置参数」拒收分支,主键解析改 <code>--topic or 位置参数</code>(同给异值 fail-fast 歧义拒,同值幂等);issue 族位置缺省时 <code>--topic</code> 兼作 slug(位置给足时仍是 doc-topic 覆盖,W3 行为不变);docstring 用法行/argparse help/失败行文案同步(task 族领域枚举失败行形式中立,评审 minor);轻修面一并兑现——<code>commands show kb.new</code> 注意行首段即两形态等价事实。</p>
+  <p><strong>验证方式</strong>:①七形态冒烟(实踩形态 <code>kb.new plan/baseline &lt;slug&gt;</code> 位置单传转绿、原 <code>--topic</code> 形态保持、同给异值 rc=1 歧义拒、issue 仅 <code>--topic</code> 兼作 slug、task 领域校验照走);②守阵翻正 + 新增 <code>test_new_doc_key_arg_unified_positional</code>(tests/test_memory_bank_cli.py,CLI 守阵 26 用例绿);③<code>commands run test.full</code> 终跑全量绿,数字见基线切片 <code>testing/baselines/26-11-09-0742-kb-new-arg-unify.md</code>。</p>
+  <p><strong>顺带核对</strong>(§03 尾项):<code>--total</code> 示例多处形态一致(doc-forms 泛形 "N passed + M skipped" 与 <code>new_doc.py</code> help/失败行具体例同为字符串摘要形态),无需改。</p>
 </section>
 
 <section id="s4">
   <h2><span class="no">§04</span>状态变更日志</h2>
   <ul>
     <li>2026-11-08 11:31 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-09 — 状态 Open → In Progress（kb.status）</li>
+    <li>2026-11-09 — 状态 In Progress → Done（kb.status）</li>
+</ul>
 </section>
 
 <footer>

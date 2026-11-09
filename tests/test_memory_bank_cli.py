@@ -106,8 +106,12 @@ new_issue.py 退役, 进程内 import):
   末尾 kb.new → kb.status 全链一步 (评审 RB2 1a): 对真建出的 issue 翻 In Progress, 断言
   badge / meta / 状态变更日志行 三处
 - test_new_doc_issue_params_fail_fast: issue 族参数校验 —— 枚举外 --type / 缺 --type /
-  缺 --summary / 缺 slug / 坏 slug / 坏 --topic / 其余族传位置 slug 全 fail-fast;
+  缺 --summary / 缺 slug / 坏 slug / 坏 --topic / 位置 + --topic 异值全 fail-fast;
   不提供 --status (出厂恒 Open, 翻状态走 kb.status) 由 argparse 拒未知参数钉住
+- test_new_doc_key_arg_unified_positional: 传参统一 (issue 26-11-08-1131) —— 主键位置参数
+  与 --topic 两形态全族等价: 非 issue 族位置单传可建 (plan/baseline, 原「不接受位置参数」
+  拒收面翻正) / 同给同值幂等放行 / 异值拒 (fail-fast); issue 缺位置 --topic 兼作 slug,
+  位置给足时 --topic 仍是 doc-topic 覆盖 (W3 行为不变)
 - test_checker_scan_face_excludes_issues (D6 拍板钉): issue 入 FAMILIES 不得扩大
   check_doc_templates 的冻结线扫描面 —— 线后遍体缺陷的 issue 件零触碰 (不计数不报红),
   同目录缺陷 plan 件照常判红 (证明扫描面本身没坏)
@@ -1333,7 +1337,9 @@ def test_new_doc_creates_issue_family_end_to_end(tmp_path: Path, monkeypatch) ->
 
 def test_new_doc_issue_params_fail_fast(tmp_path: Path) -> None:
     """issue 族参数 fail-fast (黄金法则: 之后假定输入合法): 枚举外 --type / 缺 --type /
-    缺 --summary / 缺 slug / 坏 slug / 坏 --topic / 其余族传位置 slug 全拒。
+    缺 --summary / 缺 slug / 坏 slug / 坏 --topic / 位置 + --topic 异值全拒。
+    (传参统一 issue 26-11-08-1131: 非 issue 族位置参数已放行, 原「不接受位置参数」拒收改为
+    异值歧义拒 —— 见 test_new_doc_key_arg_unified_positional。)
     另钉 W3 行为差: 不提供 --status (出厂恒 Open, 翻状态 W4 起走 kb.status) —— argparse 拒未知参数。"""
     import io
     from contextlib import redirect_stderr, redirect_stdout
@@ -1361,7 +1367,7 @@ def test_new_doc_issue_params_fail_fast(tmp_path: Path) -> None:
     rc, err = run("issue", "some-slug", "--type", "docs", "--title", "t", "--summary", "s", "--topic", "Bad_Topic")
     assert rc == 1 and "kebab" in err, f"坏 --topic 必须拒: {err}"
     rc, err = run("plan", "positional-slug", "--title", "t", "--topic", "ok-topic")
-    assert rc == 1 and "不接受位置参数" in err, f"非 issue 族传位置 slug 必须拒 (指路 --topic): {err}"
+    assert rc == 1 and "歧义" in err, f"非 issue 族位置 + --topic 异值必须拒 (主键不可歧义): {err}"
 
     import pytest
 
@@ -1375,6 +1381,60 @@ def test_new_doc_issue_params_fail_fast(tmp_path: Path) -> None:
                 str(mb), "issue", "some-slug", "--type", "docs", "--title", "t", "--summary", "s", "--status", "Done"
             ]
         )
+
+
+def test_new_doc_key_arg_unified_positional(tmp_path: Path, monkeypatch) -> None:
+    """传参统一 (issue 26-11-08-1131): 主键**位置参数与 --topic 两形态全族等价**, 跨族套形态
+    不再 rc=1 —— 非 issue 族位置单传可建 (实踩面: kb.new baseline <slug>); 同给同值幂等放行;
+    异值拒 (fail-fast: 主键不可歧义); issue 缺位置 --topic 兼作 slug, 位置给足时 --topic 仍是
+    doc-topic 覆盖 (W3 既有行为不变)。"""
+    import io
+    from contextlib import redirect_stderr, redirect_stdout
+
+    new_doc = _new_doc()
+    import timekit  # 必须在 helper 之后 —— helper 负责把 SKILL_SCRIPTS 插进 sys.path
+    frozen = timekit.now()
+    monkeypatch.setattr(timekit, "now", lambda: frozen)
+    mb = tmp_path / "memory-bank"
+    mb.mkdir()
+
+    def run(*extra: str) -> tuple[int, str]:
+        err = io.StringIO()
+        with redirect_stdout(io.StringIO()), redirect_stderr(err):
+            rc = new_doc.main(["--root", str(tmp_path), "--mb-dir", str(mb), *extra])
+        return rc, err.getvalue()
+
+    # 非 issue 族位置单传 (原「不接受位置参数」拒收面翻正; baseline 是 2026-11-08 实踩形态)
+    rc, err = run("plan", "uni-pos-plan", "--title", "t")
+    assert rc == 0, f"plan 位置单传必须可建: {err}"
+    plan_html = next((mb / "plans").glob("*plan-uni-pos-plan.html"))
+    assert '<meta name="doc-topic" content="uni-pos-plan">' in plan_html.read_text(encoding="utf-8")
+
+    rc, err = run("baseline", "uni-pos-base", "--title", "t", "--total", "1 passed")
+    assert rc == 0, f"baseline 位置单传必须可建 (issue 实踩形态): {err}"
+    assert list((mb / "testing" / "baselines").glob("*uni-pos-base.md"))
+
+    # 同给同值: 两形态等价, 幂等放行
+    rc, err = run("report", "uni-same-key", "--title", "t", "--topic", "uni-same-key")
+    assert rc == 0, f"同值位置 + --topic 必须幂等放行: {err}"
+
+    # 同给异值: 主键不可歧义, fail-fast
+    rc, err = run("plan", "uni-a", "--title", "t", "--topic", "uni-b")
+    assert rc == 1 and "歧义" in err, f"异值位置 + --topic 必须拒: {err}"
+
+    # issue 缺位置: --topic 兼作 slug (文件名第三段 = doc-topic = 同值, 与默认主键口径一致)
+    rc, err = run("issue", "--topic", "uni-topic-slug", "--type", "docs", "--title", "t", "--summary", "s")
+    assert rc == 0, f"issue 仅 --topic (兼作 slug) 必须可建: {err}"
+    issue_html = next((mb / "issues").glob("*docs-uni-topic-slug.html"))
+    assert '<meta name="doc-topic" content="uni-topic-slug">' in issue_html.read_text(encoding="utf-8")
+
+    # issue 位置给足: --topic 仍是 doc-topic 覆盖 (W3 既有行为, 不被统一改写)
+    rc, err = run(
+        "issue", "uni-pos-slug", "--topic", "uni-override", "--type", "docs", "--title", "t", "--summary", "s"
+    )
+    assert rc == 0, f"issue 位置 slug + --topic 覆盖 (既有形态) 必须保留: {err}"
+    text = next((mb / "issues").glob("*docs-uni-pos-slug.html")).read_text(encoding="utf-8")
+    assert '<meta name="doc-topic" content="uni-override">' in text
 
 
 def test_checker_scan_face_excludes_issues(tmp_path: Path) -> None:

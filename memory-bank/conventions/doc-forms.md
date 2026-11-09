@@ -111,6 +111,10 @@ issue 被认领 → 两侧都记引用 (issue 的 `doc-refs` ↔ 档案的 `**Re
 | 改版落盘 | `commands run kb.bump <path> --note ".."` | 抬 doc-updated + 变更记录追加 R 行 (档案抬 Updated / 切片抬最后活动) |
 | 收尾机械面 | `commands run kb.wrap --topic <slug> --did ".."` | 切片抬活动 + R 行 / 档案 Updated + 进度日志日期行 (D6: 蒸馏与判断仍是 agent 的活) |
 
+- **专题主键两形态全族等价** (issue 26-11-08-1131, 2026-11-09): 表内 `--topic` 均可用**位置参数**
+  替代 (issue 族位置 = slug, 其余族位置 = 专题主键), 跨族套形态不再 rc=1 —— 非 issue 族同给异值
+  即拒 (fail-fast); issue 族缺位置时 `--topic` 兼作 slug, 位置给足时 `--topic` 仍是 doc-topic
+  覆盖 (默认 = slug 不变)。
 - 命令建后留 `<!-- SLOT: -->` 填空标记 (判断面), **头部区零 SLOT** (机器字段由命令填); 填完前
   新增面守卫 (冻结线之后新建件) 判红 (坑档 / 进展件命名无时间戳, 不在扫描面, 由既有守卫兜底)。
 - `--refs` 走 D4 双向补链: 目标件自动反向声明, 只动元数据行, 幂等 (见上「认领链」)。

@@ -59,7 +59,7 @@ note    = "stream 前台长跑: 输出直连终端(timeout 不生效), Ctrl-C �
 [tasks."kb.new"]
 run     = ["python <skill-dir:memory-bank>/scripts/new_doc.py <args>"]
 when    = "新建计划/任务档案/issue: 一次逻辑动作 = 一条命令 + 一次填空(时间戳/命名/头部/SLOT/索引全派生; issue 零 SLOT, 切片走 kb.wrap)"
-note    = "建后必填 SLOT(守卫拦残留); issue 族 2026-11-07 收编(计划 26-11-07-0549 W3, new_issue.py 退役): slug 位置参数 + --type/--title/--summary 必填, --tier/--module/--reporter/--topic 可选, 出厂恒 Open(翻状态走 kb.status), 模板零 SLOT 按档位填正文; --refs 走 D4 双向补链(2026-10-17 P2: 目标件自动反向声明, 只动元数据行, 幂等); 目标已存在即 rc=1; 档案撞名按 slug 查重(含跨 clone ../auto-qb-*/)"
+note    = "传参统一(issue 26-11-08-1131): 专题主键位置参数与 --topic 两形态全族等价, 跨族套形态不再 rc=1 —— 非 issue 族同给异值即拒, issue 缺位置时 --topic 兼作 slug、位置给足时 --topic 仍是 doc-topic 覆盖; 建后必填 SLOT(守卫拦残留); issue 族 2026-11-07 收编(计划 26-11-07-0549 W3, new_issue.py 退役): slug 位置参数 + --type/--title/--summary 必填, --tier/--module/--reporter/--topic 可选, 出厂恒 Open(翻状态走 kb.status), 模板零 SLOT 按档位填正文; --refs 走 D4 双向补链(2026-10-17 P2: 目标件自动反向声明, 只动元数据行, 幂等); 目标已存在即 rc=1; 档案撞名按 slug 查重(含跨 clone ../auto-qb-*/)"
 timeout = 60
 
 [tasks."kb.ref"]

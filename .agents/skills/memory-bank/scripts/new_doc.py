@@ -25,16 +25,22 @@
   (`FamilySpec.template_by_tier`), 模板零 SLOT —— 剩余人工 = 按档位填正文 (NEXT_STEP 文案口径
   沿用退役的 new_issue.py)。**不提供 --status**: 出厂恒 Open (spec.default_status), 翻状态走
   kb.status (W4 收编); `--dir`/`--project`/`--at` 等可移植性参数随 new_issue.py 一并退役 (D2)
+- **传参统一** (issue 26-11-08-1131, 2026-11-09): 专题主键**位置参数与 --topic 两形态全族等价**,
+  跨族套形态不再 rc=1 —— 非 issue 族位置参数 = 专题主键 (同给异值即拒 fail-fast, 同值幂等);
+  issue 族位置 slug 为正, 缺位置时 --topic 兼作 slug
 - 建后末尾固定输出「剩余人工 N 项(判断 a · 条件 b · **机械 0**)」契约 (§5.4 收录断言)
 
 用法 (从仓库根; `<skill-dir>` = 加载 memory-bank skill 时它实际所在的目录):
-    python <skill-dir>/scripts/new_doc.py plan --title ".." --topic <kebab> [--refs p1,p2]
-    python <skill-dir>/scripts/new_doc.py task --title ".." --topic <领域>-<专题> [--refs p1,p2]
+    python <skill-dir>/scripts/new_doc.py plan [<topic>] --title ".." [--refs p1,p2]
+    python <skill-dir>/scripts/new_doc.py task [<topic>] --title ".." [--refs p1,p2]   # <topic> = <领域>-<专题>
     python <skill-dir>/scripts/new_doc.py issue <slug> --type <8 类之一> --title ".." --summary ".." [--tier light|standard] [--module ".."] [--reporter ".."] [--topic <kebab>] [--refs p1,p2]
-    python <skill-dir>/scripts/new_doc.py report --title ".." --topic <kebab> [--refs p1,p2]
-    python <skill-dir>/scripts/new_doc.py pitfall --class <7 类之一> --title ".." --topic <slug> --triggers "词, 词"
-    python <skill-dir>/scripts/new_doc.py baseline --title ".." --topic <slug> --total "3498 passed + 4 skipped(根)"
+    python <skill-dir>/scripts/new_doc.py report [<topic>] --title ".." [--refs p1,p2]
+    python <skill-dir>/scripts/new_doc.py pitfall [<slug>] --class <7 类之一> --title ".." --triggers "词, 词"
+    python <skill-dir>/scripts/new_doc.py baseline [<slug>] --title ".." --total "3498 passed + 4 skipped(根)"
     python <skill-dir>/scripts/new_doc.py --root <dir> --mb-dir <dir> <family> ...   # 覆盖探测
+传参统一 (issue 26-11-08-1131): 专题主键**位置参数与 --topic 两形态全族等价**, 跨族套形态不再 rc=1
+—— 非 issue 族同给异值即拒 (fail-fast); issue 族位置 slug 为正, 缺位置时 --topic 兼作 slug,
+给足位置时 --topic 是 doc-topic 覆盖 (既有合法形态)。
 退出码: 0 成功 / 1 拒绝或校验失败 (原因与下一步打在输出里)
 """
 
@@ -246,13 +252,16 @@ def main(argv: list[str] | None = None) -> int:
         "slug",
         nargs="?",
         default="",
-        help="issue 族的 slug (文件名第三段; doc-topic 默认主键, 例: webui-cols-drift) —— 仅 issue 族接受, 其余族用 --topic",
+        help="主键位置参数 (全族接受, 与 --topic 两形态等价, issue 26-11-08-1131): "
+        "issue 族 = slug (文件名第三段兼 doc-topic 默认主键, 例: webui-cols-drift); "
+        "其余族 = 专题主键 —— 同给异值即拒 (fail-fast)",
     )
     parser.add_argument("--title", required=True, help="制品标题 (档案族的 Summary 预填, 裁定 A1)")
     parser.add_argument(
         "--topic",
         default="",
-        help="专题主键: plan/report=kebab; task=<领域>-<专题>; 其余族=<slug>; issue 族可选 (默认 = slug)",
+        help="专题主键 (与位置参数两形态等价): plan/report=kebab; task=<领域>-<专题>; 其余族=<slug>; "
+        "issue 族可选 (doc-topic 覆盖, 默认 = slug; 缺位置参数时兼作 slug)",
     )
     parser.add_argument(
         "--type",
@@ -316,9 +325,6 @@ def main(argv: list[str] | None = None) -> int:
             '用 commands run kb.wrap --topic <slug> --did ".." (不存在则按模板建, 存在则抬最后活动)'
         )
 
-    if family != "issue" and args.slug:
-        return _fail(f"{family} 族不接受位置参数 slug (专题主键用 --topic 传): {args.slug!r}")
-
     root = Path(args.root).resolve() if args.root else find_root()
     mb = resolve_mb_dir(root, args.mb_dir)
 
@@ -327,9 +333,15 @@ def main(argv: list[str] | None = None) -> int:
     tier = ""  # 档位选模板族 (issue) 的推导档位; 其余族空串
     if family == "issue":
         # W3 (计划 26-11-07-0549): issue 族参数校验 —— slug 位置参数 + --type/--summary 必填
+        # 传参统一 (issue 26-11-08-1131): 位置缺省时 --topic 兼作 slug (文件名第三段 = doc-topic,
+        # 与默认主键口径一致); 位置给足时 --topic 仍是 doc-topic 覆盖 (既有合法形态, 守阵钉住)
+        if not args.slug and args.topic:
+            args.slug = args.topic
         if not args.slug:
-            return _fail("issue 族必须带 <slug> 位置参数 (小写英文短横线, 例: webui-cols-drift) "
-                         "—— 文件名第三段兼 doc-topic 默认主键")
+            return _fail(
+                "issue 族必须带 <slug> (位置参数; 缺位置时也可用 --topic 兼作) "
+                "(小写英文短横线, 例: webui-cols-drift) —— 文件名第三段兼 doc-topic 默认主键"
+            )
         if not SLUG_RE.match(args.slug):
             return _fail(f"slug 不合规: {args.slug!r} (要求小写英文短横线, 例 webui-cols-drift)")
         if args.topic and not SLUG_RE.match(args.topic):
@@ -353,10 +365,18 @@ def main(argv: list[str] | None = None) -> int:
                 "(否则档位推不出, 模板选不了; 修完重跑本命令)"
             )
     else:
+        # 传参统一 (issue 26-11-08-1131): 专题主键位置参数与 --topic 两形态等价 (跨族套形态不再 rc=1)
+        # —— 同给异值即拒 (fail-fast: 主键不可歧义), 同值幂等放行
+        if args.slug and args.topic and args.slug != args.topic:
+            return _fail(
+                f"{family} 族位置参数与 --topic 同时给出且值不同, 专题主键不可歧义: "
+                f"{args.slug!r} vs {args.topic!r} —— 二选一 (两形态等价)"
+            )
+        args.topic = args.topic or args.slug
         if not args.topic:
-            return _fail(f"{family} 族必须带 --topic (专题主键)")
+            return _fail(f"{family} 族必须带专题主键 (位置参数或 --topic 均可)")
         if not SLUG_RE.match(args.topic):
-            return _fail(f"--topic 必须是 kebab (小写英文数字 + 短横线): {args.topic!r}")
+            return _fail(f"专题主键必须是 kebab (小写英文数字 + 短横线): {args.topic!r}")
 
     # --- P3 二期族参数校验 (fail-fast, 之后假定输入合法)
     if family == "pitfall":
@@ -392,7 +412,10 @@ def main(argv: list[str] | None = None) -> int:
         # (`memory-bank`), 首段切分会让它永远不可达 (P1 缺陷, P2 补)
         domain = match_domain(args.topic)
         if domain is None:
-            return _fail(f"--topic 首段必须是领域枚举之一 ({', '.join(TASK_DOMAINS)}): 现为 {args.topic.split('-', 1)[0]!r}")
+            return _fail(
+                f"专题主键首段必须是领域枚举之一 ({', '.join(TASK_DOMAINS)}): "
+                f"现为 {args.topic.split('-', 1)[0]!r} (位置参数或 --topic 传入均可)"
+            )
         filename = f"{moment.strftime('%y-%m-%d')}-{args.topic}.md"
         values = {
             "STEM": Path(filename).stem,
