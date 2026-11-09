@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="ascii-graph-symbol-cleanup">
 <meta name="doc-refs" content="memory-bank/issues/26-11-06-0756-refactor-ascii-graph-symbol-backlog.html, memory-bank/issues/26-11-08-0229-bug-r4-static-cleanup-extras.html">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="e2e .mjs 注释残留非 ASCII 图形符号, 0229 #4 原始记载同族扩展面">
 <meta name="issue-summary" content="0229 #4 原始记载约 40 个 e2e .mjs 未随本轮 src 批清理; 2026-11-08 复测 58 个文件命中, 修法同 src 批: 提名单+替代表脚本化">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-08-1621-refactor-e2e-mjs-ascii-symbol-backlog</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-08 16:21</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
 
@@ -118,7 +118,9 @@
   <h2><span class="no">§04</span>状态变更日志</h2>
   <ul>
     <li>2026-11-08 16:21 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-09 — 状态 Open → Done（kb.status）</li>
+    <li>2026-11-09 — 关闭说明: <code>e2e/</code> 下 <code>.mjs</code> 扫描面符号已在 B01-B13 清偿批次清零, 全仓复扫 <code>actual={}</code> / <code>findings=[]</code>; 替换依 <code>memory-bank/conventions/code-style.md</code> 表 C, 闸门 <code>tests/test_ascii_symbol_guard.py</code> 13 用例全绿; 计划 <code>memory-bank/plans/26-11-08-1906-plan-ascii-graph-symbol-cleanup.html</code>（doc-status Done）收口</li>
+</ul>
 </section>
 
 <footer>

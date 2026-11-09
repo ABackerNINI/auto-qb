@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="ascii-graph-symbol-cleanup">
 <meta name="doc-refs" content="memory-bank/issues/26-11-06-0756-refactor-ascii-graph-symbol-backlog.html, memory-bank/issues/26-11-08-0229-bug-r4-static-cleanup-extras.html">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="src 下 103 个 .py 注释残留非 ASCII 图形符号(箭头/几何符等), 0229 #4 同族扩展面">
 <meta name="issue-summary" content="grep 实测 src 103 个 .py 命中(大头 relocate_exec 51 行/relocate_units 50 行/ops_skip 29 行), 修法同 0229 #4: 扫描提名单+code-style.md 替代表脚本化清理">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-08-1621-refactor-src-py-ascii-symbol-backlog</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-08 16:21</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
 
@@ -119,7 +119,9 @@
   <h2><span class="no">§04</span>状态变更日志</h2>
   <ul>
     <li>2026-11-08 16:21 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-09 — 状态 Open → Done（kb.status）</li>
+    <li>2026-11-09 — 关闭说明: <code>src/</code> 下 103 个 <code>.py</code> 的符号已在 B01-B13 清偿批次清零（大头 <code>relocate_exec</code> / <code>relocate_units</code> / <code>ops_skip</code>）, 全仓复扫 <code>actual={}</code> / <code>findings=[]</code>; 口径按 D1: 表 B 豁免箭头 / <code>§</code> / 数学符后判据单一化, 闸门 <code>tests/test_ascii_symbol_guard.py</code> 13 用例全绿; 计划 <code>memory-bank/plans/26-11-08-1906-plan-ascii-graph-symbol-cleanup.html</code>（doc-status Done）收口</li>
+</ul>
 </section>
 
 <footer>
