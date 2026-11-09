@@ -10,12 +10,12 @@
 
 **冻结线 = 实施日 stamp 常量** (`FREEZE_LINE`): 之前 = 存量, 一律豁免 (先例: doc-forms 51 份
 旧命名豁免 / `check_wording` 的 FROZEN 常数 —— 防漂移靠守卫拦新增, 不回头改存量)。
-⚠ **圈面判据 = 文件名自身** (stamp 前缀 / 日期前缀), **不读文件内部任何 meta** (26-10-31 修:
+WARN: **圈面判据 = 文件名自身** (stamp 前缀 / 日期前缀), **不读文件内部任何 meta** (26-10-31 修:
 plan/report 原按文件自身 doc-added 圈面, 缺头部的手写新件整件逃逸 —— 豁免自噬「越缺字段越查不到」,
 RM02-RM10 九件无状态计划事故; 文件名永远带创建 stamp, 判新旧不需要文件自己招供)。
-⚠ 档案族命名只到天 (`YY-MM-DD`), 文件名分不出「当天冻结线之前/之后」—— 口径取
+WARN: 档案族命名只到天 (`YY-MM-DD`), 文件名分不出「当天冻结线之前/之后」—— 口径取
 **文件名日期 ≥ 冻结日**入检查面 (当天既有档案均合规; 这是日期精度下的可行判据)。
-⚠ 分不清新旧的面 (非日期前缀命名的存量 / **无时间戳的坑档**)
+WARN: 分不清新旧的面 (非日期前缀命名的存量 / **无时间戳的坑档**)
 跳过, 由既有守卫 (docmap 主键 / timekit / check_kb_structure 三行头与坑档三字段 / gen_active_recent)
 兜底 —— 坑档 (`pitfalls/<类>/<主题>.md`) 命名不带时间戳,
 **无法与存量区分**, 故不在冻结线扫描面内 (计划 §06「冻结线之后新建」的可判定边界)。
@@ -213,7 +213,7 @@ def check_new_faces(root: Path, mb: Path) -> tuple[list[str], int]:
                 continue
             checked += 1
             problems += [f"{rel_posix(path, root)}: {p}" for p in validate_file(path, "baseline", path.name)]
-    # ⚠ 坑档 (pitfalls/<类>/<主题>.md) 命名**不带时间戳**,
+    # WARN: 坑档 (pitfalls/<类>/<主题>.md) 命名**不带时间戳**,
     # 无法与存量区分 —— 不在冻结线扫描面 (计划 §06 可判定边界; 既有守卫 check_kb_structure
     # 兜底三行头与坑档三字段)。它的头部零 SLOT 由模板契约 + 族注册表同源守阵钉住。
     # (progress/ 目录已随 2026-11-08 重构全灭, 原「进展件」扫描豁免随之退役。)

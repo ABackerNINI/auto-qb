@@ -195,7 +195,7 @@ def trim_hint(role: str, cap: int) -> str:
                 "它是 IDE 注入入口, 超了尾部被截断)")
     if role == "log":
         # `log` 是 append-only, 超了不是"该删", 而是"该轮转" —— 把切到哪、搬到哪写进消息。
-        # ❌ 只搬"最老的一条": 最老条目大小不受控, 下次追加立刻又触顶。
+        # [X] 只搬"最老的一条": 最老条目大小不受控, 下次追加立刻又触顶。
         return (f"它是 append-only 流水, 按设计会一直长: 从**最老一端**轮转到 ≤ {cap:,} 字符, "
                 "外迁同目录 `attachments/` 并原位留一行指针 (禁止压文案)")
     return (f"触顶固定动作: 外迁 `attachments/` → 删除死段 → 合并邻近件 (目标 ≤ {cap:,} 字符; "
@@ -215,13 +215,13 @@ def check_caps(root: Path,
                mb: Path,
                roles: tuple[str, ...] = DEFAULT_ROLES,
                only: set[str] | None = None) -> tuple[list[str], list[str]]:
-    """每个文件 ≤ 其角色的 cap。返回 (问题, 警告) —— ⚠ 警告里**混装两类**, 用 `split_warns` 分。
+    """每个文件 ≤ 其角色的 cap。返回 (问题, 警告) —— WARN: 警告里**混装两类**, 用 `split_warns` 分。
 
     严重度**在源码单点决定**, 两个消费者 (pytest / `doc.caps`) 都不再各判一次 (2026-09-30):
     - 角色 ∈ `HARD_CAP_ROLES`(只有 `agents` = AGENTS.md)→ **problems**(硬规定, 超了仍拦提交);
     - 其余角色的尺寸超限 → **warns 里的债务行**(带 `DEBT_MARK`: 不拦提交, 提交时派生输出 + 转告用户);
     - 下限 `CAP_MIN_WARN` 的「过小」→ **warns 里的提示行**(不带标记, 只是建议)。
-    ❗返回的是 (问题, 警告) 而不是 (问题, 债务) —— 别拿 `len(warns)` 当债务数。
+    ! 返回的是 (问题, 警告) 而不是 (问题, 债务) —— 别拿 `len(warns)` 当债务数。
 
     `only`(2026-11-01, 计划 26-11-01-0434 方案 D): 只算这些仓库根相对路径 —— 候选仍全量枚举
     (便宜), 不在集内的跳过 `char_count`(读取才是大头); None = 全量, 既有消费者不变。
@@ -374,7 +374,7 @@ def main() -> int:
             # 债务与「过小」提示**分开贴标签** —— 都打 [WARN] 会让几十条建议看起来像几十笔欠债
             print(f"  [{'WARN' if line.startswith(DEBT_MARK) else '提示'}] {line}")
     print(f"\n共 {total} 项不通过。" if total else "\n全部通过。")
-    # ❗债务数**只数带 `DEBT_MARK` 的行**(分类走 `split_warns` 单点) —— 拿 `len(warns)` 会把
+    # ! 债务数**只数带 `DEBT_MARK` 的行**(分类走 `split_warns` 单点) —— 拿 `len(warns)` 会把
     # 「文件过小」的建议一起算成欠债, 于是这一行恒报常数、永不清零(2026-10-06 实测 ~40 项 vs 真实 0)。
     if debts:
         print(f"cap 债务 {len(debts)} 项 —— 不拦提交; 本会话不修, 转告用户另开会话清理。")

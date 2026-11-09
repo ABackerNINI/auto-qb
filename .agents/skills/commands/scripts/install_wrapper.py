@@ -9,8 +9,8 @@
     cmd.exe   : 搜 cwd(唯一例外)
 
 ⇒ 只有落到 **PATH 目录**才叫"真正实现"。本脚本两处都写(默认):
-  ① 仓库根  —— `./commands`(Git Bash/POSIX) + `commands.cmd`(cmd.exe cwd 优先); 随平台生成, 已 gitignore
-  ② PATH 目录(`~/bin` 或 `~/.local/bin`) —— **项目无关**: 从 `$PWD` 向上找 `.commands/`, 任意项目可用
+   1. 仓库根  —— `./commands`(Git Bash/POSIX) + `commands.cmd`(cmd.exe cwd 优先); 随平台生成, 已 gitignore
+   2. PATH 目录(`~/bin` 或 `~/.local/bin`) —— **项目无关**: 从 `$PWD` 向上找 `.commands/`, 任意项目可用
 
 用法:
     python <skill-dir:commands>/scripts/install_wrapper.py            # cwd + PATH 两处都装(幂等)
@@ -80,7 +80,7 @@ fi
 exec python "$engine" "$@"
 """
 
-# ❗批处理的写法约束(实测踩过): `rem` 行里不出现**引号 / 括号 / 反引号**, 消息不用 `1>&2` ——
+# ! 批处理的写法约束(实测踩过): `rem` 行里不出现**引号 / 括号 / 反引号**, 消息不用 `1>&2` ——
 # 带这些字符的 rem 版实测**静默退出 2 且无任何输出**(同一份逻辑换成干净 rem 就正常),
 # 而 cmd 的解析细节不值得在这里赌; 保持"最小批处理特征集", 能一眼看出它做什么。
 # 消息一律 ASCII: cmd 按 OEM 码页(本机 GBK)读批处理, 中文会变 mojibake。
@@ -150,7 +150,7 @@ def repo_root(start: Path) -> Path | None:
 def norm_path(text: str) -> str:
     """PATH 条目 → 可比较的绝对路径。
 
-    ❗Git Bash 下 `os.environ["PATH"]` 是 **MSYS 风格**(`/c/Users/x/bin`), 而 `Path.home()` 给的是
+    ! Git Bash 下 `os.environ["PATH"]` 是 **MSYS 风格**(`/c/Users/x/bin`), 而 `Path.home()` 给的是
     `C:\\Users\\x` —— 直接比会**永远不相等**(实测: `~/bin` 明明在 PATH 上, 却被判成"不在 PATH 上")。
     `/usr/bin` 这类 MSYS 内部路径与 Windows 目录不可比, 归一成空串跳过。
     """
@@ -218,7 +218,7 @@ def write_one(path: Path, text: str, dry_run: bool, force: bool) -> str:
     if dry_run:
         return f"+ 将写入: {path}"
     path.parent.mkdir(parents=True, exist_ok=True)
-    # ❗`.cmd` 必须 CRLF: cmd.exe 按 CRLF 切行, LF 文件会被整段拆错(实测报 "'exist' 不是内部或外部命令")
+    # ! `.cmd` 必须 CRLF: cmd.exe 按 CRLF 切行, LF 文件会被整段拆错(实测报 "'exist' 不是内部或外部命令")
     path.write_text(text, encoding="utf-8", newline="\r\n" if path.suffix == ".cmd" else "\n")
     if os.name != "nt":
         path.chmod(0o755)  # 执行位: 少了它就只能 `sh ./commands`

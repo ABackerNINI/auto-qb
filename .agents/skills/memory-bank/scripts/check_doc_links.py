@@ -15,7 +15,7 @@
 判据:
 - 只查**相对**链接(跳过 `http(s)://` / `mailto:` / 纯锚点 `#x`)。
 - 目标存在即通过; 不存在则报"坏链"。
-- ❗**存在性按 Linux 口径判**(组件级 `listdir` 精确比对, 见 `link_exists`), **不用 `Path.exists()`**:
+- ! **存在性按 Linux 口径判**(组件级 `listdir` 精确比对, 见 `link_exists`), **不用 `Path.exists()`**:
   Win32 会静默剥掉结尾的点/空格且大小写不敏感 ⇒ `kb/...` 被判成"存在"(实际塌成父目录 `kb/`)、
   `Cap.md` 能命中 `cap.md` —— 坏链在**本机恒绿**, 只在 Linux CI 红。2026-10-11 一条真坏链
   连过三道本机防线(doc.links 闸门 / test.quick 闸门 / 手工 test.full), 根因就是这个:
@@ -86,7 +86,7 @@ def _is_literal_name(name: str) -> bool:
 def link_exists(base: pathlib.Path, rel: str, cache: dict[str, frozenset[str]]) -> bool:
     """相对目标是否存在 —— **组件级精确比对**, 即 Linux / CI 的口径。
 
-    ❗别退回 `(base / rel).exists()`: 实测 Windows 上 `(kb / "...").exists()` 为 `True`
+    ! 别退回 `(base / rel).exists()`: 实测 Windows 上 `(kb / "...").exists()` 为 `True`
     (Win32 把结尾的点剥掉, 路径塌成 `kb/`), 而 `os.listdir(kb)` 里根本没有 `...` ——
     同一行判据在两套文件系统语义下答案相反, 坏链于是**本机恒绿、只在 Linux CI 红**。
     同族还有大小写不敏感(本机 `cap-counting.MD` 也判存在)。

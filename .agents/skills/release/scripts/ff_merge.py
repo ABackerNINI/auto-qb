@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """快进合并(release skill · 通用件): 把工作分支的发版提交快进推到发布分支。
 
-计划 26-09-22-2318 v2 §6.2 步骤⑤。实现取「显式 ref 推送」路径:
+计划 26-09-22-2318 v2 §6.2 步骤 5。实现取「显式 ref 推送」路径:
     git push <remote> <from_tip>:refs/heads/<to_branch>
 服务端天然拒绝非快进 —— 本地不 checkout、不产生 merge commit, 发布分支与工作分支上
 是同一个 commit(hash 溯源不分叉)。前置校验用 ls-remote 现查远端真值 + merge-base

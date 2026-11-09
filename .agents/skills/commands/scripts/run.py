@@ -218,7 +218,7 @@ def _extra(args: argparse.Namespace) -> list[str]:
 def _kill_tree(pid: int) -> None:
     """连孙子一起杀 —— `shell=True` 下直接子进程是 cmd.exe, 真正干活的工具是它的孙子。
 
-    ❗`subprocess.run(timeout=)` 超时只 kill **直接子进程**(cmd.exe), 孙子(yapf / uv / git)
+    ! `subprocess.run(timeout=)` 超时只 kill **直接子进程**(cmd.exe), 孙子(yapf / uv / git)
       会被留成**孤儿**: 继续 100% CPU 烧着、还占着管道读端, 父进程即便"超时返回"也可能卡在
       communicate 的 join 上(2026-10-08 实报: yapf 在沙箱里挂住, 闸门超时后 yapf 仍在跑且一直
       写磁盘)。与 my-commit-flow `_pipeline._kill_tree` 同款处置, 判据单点见
@@ -232,7 +232,7 @@ def _kill_tree(pid: int) -> None:
 
 def _shell(cmd: str, timeout: int, env: dict[str, str] | None = None) -> tuple[bool, str]:
     full = {**os.environ, **_CHILD_ENV, **(env or {})}
-    # ❗不用 subprocess.run(timeout=): 它超时只杀直接子进程(见 _kill_tree)。用 Popen 拿 pid,
+    # ! 不用 subprocess.run(timeout=): 它超时只杀直接子进程(见 _kill_tree)。用 Popen 拿 pid,
     #   到点杀整棵树并收尸; 然后**照旧上抛 TimeoutExpired** —— cmd_run 靠它打「超时指名卡住的命令」。
     proc = subprocess.Popen(
         cmd,
@@ -257,7 +257,7 @@ def _shell(cmd: str, timeout: int, env: dict[str, str] | None = None) -> tuple[b
 def _local_codepage() -> str:
     """本地码页回退编码 —— 必须是原生子进程的真实输出编码, 不随 Python 的 UTF-8 模式变。
 
-    ❗不能用 `locale.getpreferredencoding(False)`: PYTHONUTF8=1 / -X utf8 下它返回
+    ! 不能用 `locale.getpreferredencoding(False)`: PYTHONUTF8=1 / -X utf8 下它返回
     'utf-8' 而非码页, GBK 回退整条静默失效(2026-09-25 实测, 守阵
     test_decode_falls_back_to_local_codepage 假红)。原生子进程不吃 PYTHONUTF8,
     Windows 上恒按系统 ANSI 码页输出, 所以直接问系统要 (GetACP)。
@@ -270,10 +270,10 @@ def _local_codepage() -> str:
 
 
 def _decode(raw: bytes | None) -> str:
-    """把子进程输出解成文本 —— ❗不假定它是 UTF-8。
+    """把子进程输出解成文本 —— ! 不假定它是 UTF-8。
 
-    顺序: ① UTF-8 (子进程已被 `_CHILD_ENV` 强制, 也是 git / uv 这类工具的原生编码)
-    ② 本地码页 (非 Python 子进程仍可能按 cp936 输出中文) ③ 兜底 replace, 永不抛。
+    顺序: 1) UTF-8 (子进程已被 `_CHILD_ENV` 强制, 也是 git / uv 这类工具的原生编码)
+    2) 本地码页 (非 Python 子进程仍可能按 cp936 输出中文) 3) 兜底 replace, 永不抛。
     按 UTF-8 硬解历史事故: 中文变 U+FFFD 且**静默** —— 退出码照旧 0, 只是人读不了。
     """
     data = raw or b""
@@ -405,7 +405,7 @@ def main(argv: list[str] | None = None) -> int:
     p_add.add_argument("--note", default="", help="环境陷阱判据: 为什么必须这么写")
     p_add.add_argument("--doc", default="", help="包内深读文档的相对路径(排障才读, 不进常规路径)")
     p_add.add_argument("--timeout", type=int, default=0)
-    p_add.add_argument("--pin", action="store_true", help="标 ★(高频命令记号; 平铺视图下仅作视觉锚点)")
+    p_add.add_argument("--pin", action="store_true", help="标 *(高频命令记号; 平铺视图下仅作视觉锚点)")
     p_add.add_argument("--risky", action="store_true", help="高风险: run 时先打印命令")
     p_add.add_argument("--write", action="store_true", help="真的落盘(默认只打印)")
 

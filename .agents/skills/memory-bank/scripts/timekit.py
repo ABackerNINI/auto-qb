@@ -431,7 +431,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--mb-dir", help="memory-bank 目录 (默认 <root>/memory-bank)")
     args = parser.parse_args(argv)
 
-    # ❗必须在任何动作之前: 冒烟闸门用 `--safety` 探活。本脚本无参 = 只打印, 属 read-only-default,
+    # ! 必须在任何动作之前: 冒烟闸门用 `--safety` 探活。本脚本无参 = 只打印, 属 read-only-default,
     #   所以它会**留在**冒烟名单里, 随后被 `<脚本> --help` 跑一次 (argparse 天然支持)。
     if args.safety:
         print("read-only-default")

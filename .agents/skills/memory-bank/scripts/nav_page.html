@@ -172,11 +172,11 @@
     padding: 1px 7px; border-radius: 8px; border: 1px solid var(--hair-2); color: var(--dim); white-space: nowrap;
   }
   /* 状态徽章: 底色 + 文字色都写在状态选择器上。
-     ⚠ 文字色必须落在这里 —— 与 .chip 同特异性 (0,1,0), 而 .chip{color:var(--dim)} 在文档里更靠后,
+     WARN: 文字色必须落在这里 —— 与 .chip 同特异性 (0,1,0), 而 .chip{color:var(--dim)} 在文档里更靠后,
        只靠上面 .st-* 那条会被它盖掉 (2026-10-05 实测: 五个状态 chip 文字全掉成 --dim 灰, 状态色白给)。
      底色分三层, 台账 chip 与控制台 rs 同一套: Open / In Progress 实底(待关注) > Done 弱绿底(已收口)
        > Dropped / Superseded 无底(出局)。
-     ⚠ Open(cyan) 与 Done(绿) 的令牌同亮度, 同样 12% 透明度时实测底色 #16272b / #1b2624 肉眼不可分 ——
+     WARN: Open(cyan) 与 Done(绿) 的令牌同亮度, 同样 12% 透明度时实测底色 #16272b / #1b2624 肉眼不可分 ——
        光换色相没用, 必须同时拉开**明度**与**底/边/字三条通道**; 反之 Done 压得太暗又会与无底的
        Dropped / Superseded 撞车, 所以 Done 取中间档 (.14), 靠"有底 vs 无底"与出局态分开。 */
   .chip.st-Open { color: var(--cyan); border-color: rgba(86,200,215,.55); background: rgba(86,200,215,.24); }
@@ -247,9 +247,9 @@
      表头于是读不出"这是一行表头", 只剩一条 hairline。--paper-3 也不够: 与数据行差 26 过了判据,
      但与紧挨其上的 .toolbar (--paper) 只差 19 (<20) ⇒ 表头会看着像工具栏的延伸, 变成"几乎一样
      但不是"的观感。--chrome 同时满足两条轴: 与数据行差 39 / 与工具栏差 32。
-     ⚠ 表头文字随底色从 --faint 抬到 --dim —— 10px 大字距的标签在 --chrome 上对比度只有 2.97:1
+     WARN: 表头文字随底色从 --faint 抬到 --dim —— 10px 大字距的标签在 --chrome 上对比度只有 2.97:1
        (原 --bg 上是 4.09:1), 抬到 --dim 后 5.36:1。
-     ⚠ sticky 底色必须**不透明** (数据行从它下面滚过), --chrome 是不透明值, 别换成带 alpha 的。
+     WARN: sticky 底色必须**不透明** (数据行从它下面滚过), --chrome 是不透明值, 别换成带 alpha 的。
      置顶专区表头 (.pinzone thead th) 是克隆本行 thead 来的, 底色另有一条规则显式对齐到同一枚
      --chrome (见下方 .pinzone thead th 注释) —— 两个同款表头必须长得一样。 */
   #v-ledger thead th {
@@ -323,7 +323,7 @@
   #v-ledger tbody tr.pin-row:hover { background: var(--cyan-soft); }
   /* 多选行 (Ctrl/Shift 手势, 计划 26-10-31-0143): 写在 .pin-row 之后 —— 同特异性靠源序,
      专区行被多选时 msel 底色要盖过 pin-row 的强调底, 否则专区里看不出选中。
-     ⚠ 色相**分家** (2026-10-31 验收反馈, 照 auto-qb views.css R10-07 同款坑型): 首版 msel 用
+     WARN: 色相**分家** (2026-10-31 验收反馈, 照 auto-qb views.css R10-07 同款坑型): 首版 msel 用
      cyan 降透明度, 与单击预览 tr.sel 满亮 cyan 只差明度 —— 实测"容易搞混"。现 msel 走专用
      靛蓝族 (--msel-*) 满亮度左条 (多选 = 批量目标, 该是最醒目态), 与 sel 的 cyan 彻底分家。 */
   #v-ledger tbody tr.msel { background: var(--msel-bg); box-shadow: inset 2px 0 0 var(--msel-bar); }
@@ -347,9 +347,9 @@
 
   /* ============ 视图 A: 隐藏 (hide) 专区 + 工具栏开关 ============ */
   /* 隐藏区与置顶专区同构 (克隆主表 thead + 复用 ledgerCells), 但三处刻意不同:
-     ①默认折叠 —— 点工具栏「隐藏区」按钮才展开 (需求: 点击按钮才能查看);
-     ②停在主表**下方** (管理区不与内容区抢位置), 分隔用上缘 border-top;
-     ③强调色走 amber (隐藏 = 暂离视野), 与 pin 的 cyan 区分。 */
+     1. 默认折叠 —— 点工具栏「隐藏区」按钮才展开 (需求: 点击按钮才能查看);
+     2. 停在主表**下方** (管理区不与内容区抢位置), 分隔用上缘 border-top;
+     3. 强调色走 amber (隐藏 = 暂离视野), 与 pin 的 cyan 区分。 */
   .hidzone {
     flex: none; background: var(--paper-2); border-top: 1px solid var(--hair-2);
     max-height: 42vh; overflow-y: auto; scrollbar-gutter: stable;
@@ -1953,7 +1953,7 @@ function wire() {
   document.addEventListener("keydown", slashFocus);
   /* Ctrl+A 全选 (计划 26-10-31-0143, 拍板 D11): 台账视图 + 非输入态 = 全选主表当前可见行;
      输入框 / 下拉内不劫 (正常全选文本), 控制台 / 卡片墙不劫 (留浏览器默认)。
-     全选不落锚点 (下一次 Shift 兜底解析到被点行)。⚠ 监听调用点与函数名不得含 Esc 关键词
+     全选不落锚点 (下一次 Shift 兜底解析到被点行)。WARN: 监听调用点与函数名不得含 Esc 关键词
      —— 守阵 test_esc_retreat_chain_single_point 数 document-level Esc 链必须恰一处。 */
   function selectAllVisible(e) {
     if (e.key !== "a" && e.key !== "A") return;

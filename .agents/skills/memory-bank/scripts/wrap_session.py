@@ -168,7 +168,7 @@ def main(argv: list[str] | None = None) -> int:
     print("剩余人工 1 项(判断 0 · 条件 1 · 机械 0)")
     print(
         "【条件】涉码轮 → commands run test.full, 数字誊写新基线切片 (裁定 A4; "
-        "⚠档案/切片正文一律「全绿(见 kb.baseline)」不抄数字 —— 判据族 B 只拦新增); "
+        "WARN:档案/切片正文一律「全绿(见 kb.baseline)」不抄数字 —— 判据族 B 只拦新增); "
         "踩到新坑 → 写 pitfalls/<类>/<主题>.md; cap 债务转告用户另开会话清理"
     )
     print("【可选】切片摘要/档案 Summary 精编 (复杂会话, 不计步)")

@@ -28,7 +28,7 @@ W3C 官方校验器 v.Nu (vnu.jar, ~32MB, 不进仓库): 落点 `<root>/.tools/v
     --vnu --all        全库巡检 (实测 645 件 ~9s) —— 默认**只报告不拦** (存量 320 条 error
                        属债务, 清理走专门会话), `--strict` 才 rc=1。
 
-⚠ Vue 模板分片不送 v.Nu (2026-11-02): `src/auto_qb/webui/static/shared/tpl/*.html` 是 Vue
+WARN: Vue 模板分片不送 v.Nu (2026-11-02): `src/auto_qb/webui/static/shared/tpl/*.html` 是 Vue
 模板片段 (由 boot.js 按 tpl-manifest 聚合成页面), 里面的 `v-if` / `@click` / `:class` 是指令
 不是 HTML 属性 —— v.Nu 按 HTML 文档语义校验, 必然逐条报 `Attribute "…" not allowed`。
 实测首次提交改分片时 22 条 error 全属此类 (同批 showcase.html 零 error)。故 run_vnu 先按

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""回写守卫 (两个判据族): ①时点相对的「待提交」措辞 ②KB 正文手抄测试数字。
+"""回写守卫 (两个判据族): 1) 时点相对的「待提交」措辞 2) KB 正文手抄测试数字。
 
 ━━ 判据族 A: 待提交断言 (2026-10-07) ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 背景 (自指不可能): `commit` 的 hash 由 tree + parent + author + 时间戳决定 —— 想把它写进
@@ -9,8 +9,8 @@
 实证这条兜底会失败: 切片停在「等待提交」而提交实际已完成, 切片与计划 meta 双陈旧。
 
 口径 (单点在 skill 的「收尾 DoD」): 回写件**不写时间相对的待提交断言** ——
-  ✗ 待提交 / 未提交(状态) / 等用户「提交」指令 / 等显式指令
-  ✓ 时不变措辞: 「随本专题入库」(提交前=将要, 提交后=已); 或直接省去 —— git 状态自证,
+  x 待提交 / 未提交(状态) / 等用户「提交」指令 / 等显式指令
+  [x] 时不变措辞: 「随本专题入库」(提交前=将要, 提交后=已); 或直接省去 —— git 状态自证,
      hash 需要时用 `git log --grep <专题键>` 找回 (坑档 pitfalls/kb/commit-hash-refs.md 同旨)。
 
 ━━ 判据族 B: 手抄测试数字 (2026-10-08, 方案 C) ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -20,19 +20,19 @@
 `testing/baseline.md`, 只是没有守卫, 于是反复违反)。
 
 方案 C (2026-10-08 用户定案): **数字只写切片一处, 其余文档一律引用不手抄** ——
-  ✗ 档案 / active-context 正文里写「2772 passed」这类裸数字 (必然与切片分叉)
-  ✓ 写「见 `commands run kb.baseline`」或「与上基线持平」(量级可, 精确值不抄)
+  x 档案 / active-context 正文里写「2772 passed」这类裸数字 (必然与切片分叉)
+  [x] 写「见 `commands run kb.baseline`」或「与上基线持平」(量级可, 精确值不抄)
 
 守卫判据 (2026-10-08):
     扫描面   `memory-bank/tasks/*.md` + `memory-bank/active-context/*.md` (两个滚动更新面)
              跳过 `_` 开头的生成物 (`tasks/_index.md` 镜像手写件且不可就地修, 源头已扫到)
     判红     三位以上 passed (或 N+M skipped) 这类**裸测试数字**
-    豁免①   **带日期前缀的行** —— 历史流水条目自带时点, 是不变日志, 改写反而是篡改历史
-    豁免②   **围栏 / 行内代码** —— 元讨论里必须能**引述** (`2772 passed` 在反引号里 = 引述)
-    豁免③   行内 `<!-- wording:allow -->` 标记
+    豁免 1   **带日期前缀的行** —— 历史流水条目自带时点, 是不变日志, 改写反而是篡改历史
+    豁免 2   **围栏 / 行内代码** —— 元讨论里必须能**引述** (`2772 passed` 在反引号里 = 引述)
+    豁免 3   行内 `<!-- wording:allow -->` 标记
     存量冻结 已有违规**冻结为债务**: 数目不得增加 (`frozen_counts`), 只拦**新增**手抄 ——
              与 cap 债务制 (2026-09-30) 同构: 存量是历史记录, 一行不改, 只保证不再恶化。
-    ❗已知边界 日期豁免**只认首行**: 多行流水条目的**续行**不以日期开头, 照常入判 (见
+    ! 已知边界 日期豁免**只认首行**: 多行流水条目的**续行**不以日期开头, 照常入判 (见
              `pitfalls/kb/scripts.md`) —— 处置 = 续行回避禁写形态 (写数字改「见 kb.baseline」)。
 
 **不扫 `testing/baselines/`**: 它是数字的**唯一事实源**, 当然要写数字。
@@ -71,7 +71,7 @@ PENDING_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
 )
 
 # 粗体状态标记: `**未提交**` / `**本轮代码未提交**` / `**未 commit**` / `**未入库**`。
-# ❗必须是**配对好的粗体段内容**里含它 —— 用 `\*\*[^*\n]*未…[^*\n]*\*\*` 会从上一个粗体的
+# ! 必须是**配对好的粗体段内容**里含它 —— 用 `\*\*[^*\n]*未…[^*\n]*\*\*` 会从上一个粗体的
 # 收尾横跨到下一个粗体的开头 (中间恰好没有 `*`), 把普通行文里的「未入库」误判成状态标记
 # (2026-10-07 首跑实测: 26-09-21-webui-filter-data-and-color-flicker.md:19 误报)。
 BOLD_SPAN_RE = re.compile(r"\*\*([^*\n]+)\*\*")
@@ -232,7 +232,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--mb-dir", help="memory-bank 目录 (默认 <root>/memory-bank)")
     args = parser.parse_args(argv)
 
-    # ❗必须在任何动作之前: 冒烟闸门用 `--safety` 探活。本脚本无参 = 只打印, 属 read-only-default。
+    # ! 必须在任何动作之前: 冒烟闸门用 `--safety` 探活。本脚本无参 = 只打印, 属 read-only-default。
     if args.safety:
         print("read-only-default")
         return 0
@@ -252,7 +252,7 @@ def main(argv: list[str] | None = None) -> int:
         actual = count_test_numbers(root, mb)
         print(f"手抄测试数字实测 {actual} 处 (存量冻结 FROZEN_TEST_NUM_COUNT = {FROZEN_TEST_NUM_COUNT})")
         if actual > FROZEN_TEST_NUM_COUNT:
-            print(f"⚠ 超出 {actual - FROZEN_TEST_NUM_COUNT} 处 —— 本轮新增了手抄; 清理后可将常数下调到 {actual}")
+            print(f"WARN: 超出 {actual - FROZEN_TEST_NUM_COUNT} 处 —— 本轮新增了手抄; 清理后可将常数下调到 {actual}")
         return 0
 
     problems = collect_violations(root, mb)

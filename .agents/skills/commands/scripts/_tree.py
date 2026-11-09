@@ -4,7 +4,7 @@
 多轮往返的 token 成本远大于列表本身变长 —— 而全树实测才 ~30 行, 平铺没有成本。
 `list <包路径>` 保留为**聚焦**视图(只看某个子树, 同样递归铺开)。
 
-★ = pin 标记(高频命令记号), 仅作视觉锚点 —— 平铺下每条命令本来就可见, 不再有"浮到父级"行为。
+* = pin 标记(高频命令记号), 仅作视觉锚点 —— 平铺下每条命令本来就可见, 不再有"浮到父级"行为。
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))  # 允许 `python scrip
 from _config import ConfigError, Pack, Task, Tree  # noqa: E402
 
 W_ID = 30
-STAR = "★ "  # pin: 高频命令记号
+STAR = "* "  # pin: 高频命令记号
 
 
 def resolve(tree: Tree, path: str) -> Pack | None:

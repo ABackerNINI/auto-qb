@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """建 Release 页(release skill · 通用件): gitee 主线 + github 镜像, 各尝试一次不重试。
 
-计划 26-09-22-2318 v2 §6.2 步骤⑧(拍板 §09-14):
+计划 26-09-22-2318 v2 §6.2 步骤 8(拍板 §09-14):
 - gitee: API 需个人 token(环境变量, 默认 GITEE_TOKEN); 未配置 = 降级过渡
   (「tag + CHANGELOG 即发布口径」), 打 WARN 不失败, token 配好后补建;
 - github: 镜像, 尝试一次, 失败只报告不重试不回滚主线;

@@ -43,7 +43,7 @@ GENERATORS = (("memory-bank", "gen_kb_index.py"), )
 # 「无参即真动作」的生成器 —— **同步的生成物自动化解只准碰这一类**。
 # 判据是"无参即真动作"(碰巧当前也是"纯确定性"): 这类脚本的默认动作就是重建全部生成物,
 # 所以「任取一侧 + 重跑 + 自证」在构造上收敛(生成器是纯函数, 只读工作树里的手写文件)。
-# ❗新增一个无参即重建的生成器却忘了登记 → 它的冲突**不会被自动化解**, 表现是与现状一致的
+# ! 新增一个无参即重建的生成器却忘了登记 → 它的冲突**不会被自动化解**, 表现是与现状一致的
 #   失败行(保守侧, 不猜不丢内容); 多登记一个非无参即动作的 → 冲突时**静默丢手写内容**,
 #   这才是危险方向, 所以登记前先问「无参跑一次, 它是不是把全部生成物都写了一遍」。
 PARAMETERLESS_ACTION_GENERATORS = frozenset({"gen_all.py"})
@@ -90,7 +90,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--mb-dir", help="memory-bank 目录 (默认 <root>/memory-bank)")
     args = parser.parse_args(argv)
 
-    # ❗必须在任何动作之前: 冒烟闸门会给脚本加 `--help` 探活, 而"无参即真动作"的脚本若
+    # ! 必须在任何动作之前: 冒烟闸门会给脚本加 `--help` 探活, 而"无参即真动作"的脚本若
     #   把陌生参数当无参处理, 就会**真的重建一遍**(闸门在只读检查阶段写文件)。
     #   本脚本自己就是这一类, 这里的 --safety / --help 答案只来自常量, 不碰文件系统。
     if args.safety:
@@ -120,7 +120,7 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         return 0
 
-    # ❗newline="\n" 必须显式给: write_text 的 newline 默认 None ⇒ 按 os.linesep 翻换行, Windows 上把
+    # ! newline="\n" 必须显式给: write_text 的 newline 默认 None ⇒ 按 os.linesep 翻换行, Windows 上把
     #   `\n` 写成 CRLF —— 生成物落进仓库就是一批"纯行尾噪音"的 modified(坑档 pitfalls/git/editing-traps.md)。
     #   本脚本的立身前提是"生成器是纯函数、不读环境", 落盘这一下读 os.linesep 就把前提破坏了。
     for path, want in outputs.items():

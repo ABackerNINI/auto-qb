@@ -1,4 +1,4 @@
-"""kb 包配置守阵 —— 闸门 `test.pkg.scoped` 要求改包必带自测(issue 26-11-01-0921, 方案①)。
+"""kb 包配置守阵 —— 闸门 `test.pkg.scoped` 要求改包必带自测(issue 26-11-01-0921, 方案 1)。
 
 背景: test.pkg.scoped(计划 26-11-01-0434 方案 C)对改动包跑 `pytest .commands/<包>`,
 包内没有任何 test_*.py 时 pytest 收集为空 → 退出码 5 → 闸门 FAIL(fail-closed, 无豁免路径)。
@@ -24,7 +24,7 @@ import unittest
 from pathlib import Path
 
 PKG = Path(__file__).resolve().parents[1]  # .commands/kb/scripts/ → .commands/kb/
-ROOT = PKG.parents[1]                      # → 仓库根
+ROOT = PKG.parents[1]  # → 仓库根
 
 _spec = importlib.util.spec_from_file_location(
     "_commands_engine_config_kbpkg",

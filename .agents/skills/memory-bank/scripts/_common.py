@@ -105,9 +105,9 @@ SLICE_COUNT_TARGET = 80
 
 # 计划 / 报告 (`doc-status`) 与 issue (`issue-status`) 共用的 5 词表 —— **单点定义**
 # (gen_doc_map 校验 / flip_status 词表 / check_doc_templates 都 import 这里, 不手抄)。
-# ⚠ 表外值 (如 `Draft`) 会让 `gen_doc_map --check` (提交闸门) 判红 —— 校验单点在
+# WARN: 表外值 (如 `Draft`) 会让 `gen_doc_map --check` (提交闸门) 判红 —— 校验单点在
 #   `gen_doc_map.check_status_vocabulary` (见 pitfalls/kb/doc-status-meta.md)。
-# ⚠ 与 tasks/ 档案的 4 词表 (`**Status:**` = In Progress/Open/Done/Dropped) **不同**, 别互相套用。
+# WARN: 与 tasks/ 档案的 4 词表 (`**Status:**` = In Progress/Open/Done/Dropped) **不同**, 别互相套用。
 DOC_STATUSES = ("In Progress", "Open", "Done", "Dropped", "Superseded")
 
 # 完结态 (`DOC_STATUSES` 子集): gen_doc_map 轮转用 —— 专题「有未完结件」才算活跃。
@@ -163,7 +163,7 @@ PITFALL_CLASSES = ("git", "web-ui", "backend", "testing", "ops", "kb", "docs")
 TOPIC_FILE_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*\.md$")
 
 # 会话切片文件名: 定宽 `YY-MM-DD-HHMM-<slug>` —— 前缀定宽才能保证**字典序 == 时间序**
-# (写成 `26-9-3-34` 立刻乱序)。⚠ 与 tasks/ 档案「不带时分、同天同专题必撞同路径」的故意设计
+# (写成 `26-9-3-34` 立刻乱序)。WARN: 与 tasks/ 档案「不带时分、同天同专题必撞同路径」的故意设计
 # **意图相反**: 那边靠撞名暴露重复, 这边靠带时分避撞名 —— 所以两者必须分目录, 别混。
 SLICE_FILE_RE = re.compile(r"^\d{2}-\d{2}-\d{2}-\d{4}-[a-z0-9]+(?:-[a-z0-9]+)*\.md$")
 
@@ -194,7 +194,7 @@ TASK_DOMAINS = ("webui", "backend", "rule", "memory-bank", "docs", "test", "deps
 def match_domain(topic: str) -> str | None:
     """`--topic` 的领域段 = **最长前缀匹配**的枚举项 (枚举自身可含短横线, 如 `memory-bank`)。
 
-    ⚠ P1 缺陷 (P2 补, 26-10-17): 旧实现 `topic.split("-", 1)[0]` 把 `memory-bank-xxx`
+    WARN: P1 缺陷 (P2 补, 26-10-17): 旧实现 `topic.split("-", 1)[0]` 把 `memory-bank-xxx`
     的首段切出 `memory` —— 枚举里的 `memory-bank` 永远不可达。领域段自定最长, 匹配规则
     只能最长前缀 (`d + "-"` 或 topic == d, 保留 P1 的裸领域照收行为), 不能首段切分。
     """
@@ -205,11 +205,11 @@ def match_domain(topic: str) -> str | None:
 
 
 # 任务档案 4 词表 —— **单点**: `kb.status` / `check_doc_templates` 都 import 这里。
-# ⚠ 与 HTML 制品的 5 词表 (`DOC_STATUSES`) **不同**, 别互相套用 (doc-forms 状态词节同款警告)。
+# WARN: 与 HTML 制品的 5 词表 (`DOC_STATUSES`) **不同**, 别互相套用 (doc-forms 状态词节同款警告)。
 TASK_STATUSES = ("In Progress", "Open", "Done", "Dropped")
 
 # 命名正则 (单点: `new_doc` 建件 / `check_doc_templates` 判新增面都 import 这里, 不手抄)。
-# ⚠ 切片用的 `SLICE_FILE_RE` 已在上方 (带时分避撞名); 档案用 `TASK_FILE_RE` (不带时分、
+# WARN: 切片用的 `SLICE_FILE_RE` 已在上方 (带时分避撞名); 档案用 `TASK_FILE_RE` (不带时分、
 # 同天同专题必撞同路径 = 靠撞名暴露重复)。两者意图相反, 必须分目录, 别混。
 # 基线切片与切片同款命名 (带时分), 所以直接用 `SLICE_FILE_RE` —— 同一份正则两种载体,
 # 目录不同 (testing/baselines/ vs active-context/) 即不混。
@@ -346,7 +346,7 @@ FAMILIES: dict[str, FamilySpec] = {
 # (`kb.status` / `kb.bump` 的同一份; 与建面 `FAMILIES` 分工 —— 那边管「建」, 这里管「改」)。
 # 探测 = memory-bank 相对路径的目录前缀 + 扩展名, 收集口径与 `gen_doc_map.collect()` 同源
 # (plans/reports/tasks/issues 四形态), 外加 active-context 切片 (切片不进 docmap, 但 kb.bump 抬它)。
-# ⚠ 只认 memory-bank 下的文件 —— 别处的路径一律 "" (防命令改错文件, 调用方拒绝并指路)。
+# WARN: 只认 memory-bank 下的文件 —— 别处的路径一律 "" (防命令改错文件, 调用方拒绝并指路)。
 
 DOC_KIND_PLAN = "plan"  # plans|reports/*.html —— 5 词表 (`doc-status`), 翻转抬 doc-updated
 DOC_KIND_TASK = "task"  # tasks/*.md —— 4 词表 (`**Status:**`), 翻转抬 **Updated:**
@@ -418,8 +418,8 @@ def resolve_doc_path(raw: str, root: Path, mb: Path) -> Path:
     """用户传入的文档路径 → 绝对路径 (`kb.status` / `kb.bump` / `kb.new --refs` 共用)。
 
     接受三种形态, 按序解析 (跨形态视图输出的是 mb 相对链接, 用户照抄最自然):
-    ① 绝对路径 (原样); ② 仓库根相对 (`memory-bank/plans/...`); ③ mb 相对 (`plans/...`)。
-    三种都不存在时退回 ② 的解析 —— 报错文案按仓库根相对展示, 与其它命令一致。
+    1) 绝对路径 (原样); 2) 仓库根相对 (`memory-bank/plans/...`); 3) mb 相对 (`plans/...`)。
+    三种都不存在时退回第 2 项的解析 —— 报错文案按仓库根相对展示, 与其它命令一致。
     """
     cand = Path(raw)
     if cand.is_absolute():
@@ -476,7 +476,7 @@ def char_count(path: Path) -> int:
 
 
 # 各生成脚本对应的**重建/校验**命令(task id 单点定义在 `.commands/kb/` 包里)。
-# ❗必须写"真的能重建 / 校验这个脚本产出"的那条 —— 指错命令比不给提示更费时间(照做一遍还是红的;
+# ! 必须写"真的能重建 / 校验这个脚本产出"的那条 —— 指错命令比不给提示更费时间(照做一遍还是红的;
 #   2026-09-24 实测过"报错文案指向跑完仍红的命令"的缺陷形态)。
 # 2026-11-08 重构 W3: 生成集合收缩为 pitfalls 索引一家(D5), 表里只留幸存的重建/校验入口。
 # 守阵: `tests/test_memory_bank_structure.py::test_gen_cmd_hints_name_real_tasks` —— 钉住
@@ -498,7 +498,7 @@ def gen_cmd(root: Path, script: str) -> str:
     而"哪一份才是生效的那份"并不写在命令旁边 —— 见 `scripts/check_command_drift.py`
     (那条机检会把手抄形态直接判红)。
 
-    ❗按脚本查表(`GEN_CMD_BY_SCRIPT`), **不要**退化成"所有脚本返回同一句":
+    ! 按脚本查表(`GEN_CMD_BY_SCRIPT`), **不要**退化成"所有脚本返回同一句":
     脚本产出不同 ⇒ 修它的命令就不同。未知脚本退回 `kb.index`(它是"重建全部生成物"的总入口,
     至少不会指到一条无用的命令)。
     """
@@ -569,7 +569,7 @@ def read_meta(path: Path) -> Meta:
 
 # --------------------------------------------------------------------------- 元数据行读写
 # (`kb.status` / `kb.bump` / `kb.new --refs` 反向补链共用 —— **只动元数据行, 正文零触碰**)。
-# ⚠ 缺目标行一律 fail-fast (返回 None), **不猜插入位置** —— 猜位置会静默改坏文件形态。
+# WARN: 缺目标行一律 fail-fast (返回 None), **不猜插入位置** —— 猜位置会静默改坏文件形态。
 
 HTML_META_READ = '<meta name="{name}" content="([^"]*)">'
 
@@ -747,7 +747,7 @@ def iter_indexed_dirs(mb: Path) -> list[Path]:
 
     `tasks/` `issues/` 有自己的生成器, 且没有 `_about.md` —— 天然不在结果里;
     仍显式排除 `EXCLUDED_DIRS` 以免将来误加 `_about.md` 后冲突。
-    ⚠ 排除按 **mb 相对路径的首段**判(2026-11-08): `EXCLUDED_DIRS` 里有 `testing`/`conventions`
+    WARN: 排除按 **mb 相对路径的首段**判(2026-11-08): `EXCLUDED_DIRS` 里有 `testing`/`conventions`
     这类与 pitfalls 子类同名的顶层目录 —— 按 `directory.name` 判会把 `pitfalls/testing/`
     这类**嵌套类目录**误排掉(实测: 其分卷页当场被判「过期」)。`attachments` 例外: 它是
     约定俗成的证据链目录名, 任一层级出现都排除(至今无一带 `_about.md`, 纯防御)。

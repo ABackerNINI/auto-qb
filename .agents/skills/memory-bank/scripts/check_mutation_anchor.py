@@ -11,10 +11,10 @@ core 行计划指针落后)。2026-10-31 蒸馏改版: 台账与逐轮日志整�
 本守卫钉住改版结果, 防止后续轮次又把逐轮报告写回来:
 
     扫描面   memory-bank/issues/ 下文件名以 `test-mutation-audit-standing.html` 结尾的常驻锚
-    判据①   全文禁出现「轮次台账」—— 轮次明细的事实源是任务档案 + 基线切片, 锚里重建该节 = 回归
-    判据②   h2 节白名单 —— 新增节 (如再立台账/日志节) = 红; 要加节必须有意识地改本白名单
-    判据③   状态变更日志 ≤ 8 条且单条 ≤ 300 字符 —— 状态翻转/结构性修订留一行, 逐轮报告写回 = 红
-    判据④   全文禁逐轮流水形态: 「存活 N → M」对差 / 「红验 N/M」逐轮红验数字 / 「复发 +N」
+    判据 1   全文禁出现「轮次台账」—— 轮次明细的事实源是任务档案 + 基线切片, 锚里重建该节 = 回归
+    判据 2   h2 节白名单 —— 新增节 (如再立台账/日志节) = 红; 要加节必须有意识地改本白名单
+    判据 3   状态变更日志 ≤ 8 条且单条 ≤ 300 字符 —— 状态翻转/结构性修订留一行, 逐轮报告写回 = 红
+    判据 4   全文禁逐轮流水形态: 「存活 N → M」对差 / 「红验 N/M」逐轮红验数字 / 「复发 +N」
              坑复发计数 —— 这些只在基线切片、任务档案与坑档里记 (§04/§05 的方法论表述不带数字, 不受影响)
 
 用法 (从仓库根; `<skill-dir>` = 加载 memory-bank skill 时它实际所在的目录):
@@ -37,7 +37,7 @@ from _common import find_root, rel_posix, resolve_mb_dir  # noqa: E402
 
 ANCHOR_GLOB = "*-test-mutation-audit-standing.html"
 
-# 判据②: h2 节白名单 (蒸馏改版后的 8 节)。新增节必须显式改这里 —— 这是 poka-yoke 而非灵活优先。
+# 判据 2: h2 节白名单 (蒸馏改版后的 8 节)。新增节必须显式改这里 —— 这是 poka-yoke 而非灵活优先。
 ALLOWED_SECTIONS = {
     "这个锚是干什么的",
     "为什么不进提交闸门",
@@ -49,14 +49,14 @@ ALLOWED_SECTIONS = {
     "状态变更日志",
 }
 
-# 判据①: 该字符串的出现即代表台账节被重建 (正文引用它时换措辞, 如「逐轮台账」)。
+# 判据 1: 该字符串的出现即代表台账节被重建 (正文引用它时换措辞, 如「逐轮台账」)。
 ROUND_LEDGER_MARK = "轮次台账"
 
-# 判据③: 状态变更日志体量上限。状态翻转/结构性修订 = 一行; 千字逐轮报告 = 流水。
+# 判据 3: 状态变更日志体量上限。状态翻转/结构性修订 = 一行; 千字逐轮报告 = 流水。
 MAX_LOG_ENTRIES = 8
 MAX_LOG_ENTRY_CHARS = 300
 
-# 判据④: 逐轮流水形态 (锚里不记, 记录面在基线切片 / 任务档案 / 坑档)。
+# 判据 4: 逐轮流水形态 (锚里不记, 记录面在基线切片 / 任务档案 / 坑档)。
 ROUND_ARTIFACT_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("存活对差", re.compile(r"存活\s*[\d,]{1,7}\s*→\s*[\d,]{1,7}")),
     ("逐轮红验数字", re.compile(r"红验\s*\d")),
@@ -132,7 +132,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--mb-dir", help="memory-bank 目录 (默认 <root>/memory-bank)")
     args = parser.parse_args(argv)
 
-    # ❗必须在任何动作之前: 冒烟闸门用 `--safety` 探活。本脚本无参 = 只打印, 属 read-only-default。
+    # ! 必须在任何动作之前: 冒烟闸门用 `--safety` 探活。本脚本无参 = 只打印, 属 read-only-default。
     if args.safety:
         print("read-only-default")
         return 0

@@ -25,28 +25,28 @@ note    = "需真实 qBittorrent; 一律先 --dry-run 观察, 确认无误再去
 run     = ["uv run yapf -i <args>"]
 timeout = 60
 when    = "格式化改过的 py 文件（.style.yapf: facebook 风格, 列宽 120）"
-note    = "用**项目内** yapf(pyproject dev 依赖组, 0.43.0), 不再用 PATH 上的系统 yapf。⚠ 沙箱约束: yapf 把语法 pickle 缓存在 `%LOCALAPPDATA%\\Google\\YAPF\\Cache`(platformdirs 的 Win32 已知文件夹 API 决定, **环境变量改不动**), 该目录不在工具 shell 沙箱白名单 ⇒ 每次跑都刷一批被拒的临时文件; 实测**多数时候仍 <1s 正常跑完**, 但 2026-10-08 观察到过挂死(100% 单核 + 持续写磁盘) ⇒ timeout 60s + 引擎超时杀整棵树兜底。彻底消除: 把该缓存目录加进沙箱白名单。根因见 memory-bank/pitfalls/testing/sandbox-tool-cache.md"
+note    = "用**项目内** yapf(pyproject dev 依赖组, 0.43.0), 不再用 PATH 上的系统 yapf。WARN: 沙箱约束: yapf 把语法 pickle 缓存在 `%LOCALAPPDATA%\\Google\\YAPF\\Cache`(platformdirs 的 Win32 已知文件夹 API 决定, **环境变量改不动**), 该目录不在工具 shell 沙箱白名单 ⇒ 每次跑都刷一批被拒的临时文件; 实测**多数时候仍 <1s 正常跑完**, 但 2026-10-08 观察到过挂死(100% 单核 + 持续写磁盘) ⇒ timeout 60s + 引擎超时杀整棵树兜底。彻底消除: 把该缓存目录加进沙箱白名单。根因见 memory-bank/pitfalls/testing/sandbox-tool-cache.md"
 doc     = "../../memory-bank/pitfalls/testing/sandbox-tool-cache.md"
 
 [tasks."dev.typecheck"]
 run     = ["uv run mypy <args>"]
 timeout = 120
 when    = "静态类型检查（mypy）: 全库错误分级清单；清债/补注解/收紧配置后复查"
-note    = "配置单点在 pyproject [tool.mypy]（计划 26-11-05-0635 S1 接入; **独立任务不进提交闸门**, 该计划 D3）。无 <args> 时按配置 files=[src/auto_qb] 全库跑, 也可 `-- <文件>` 定向。增量缓存落仓库根 .mypy_cache/(已 gitignore)。⚠ 沙箱约束与 yapf 同族(会写自己的缓存目录) ⇒ timeout 120s + 引擎超时杀整棵树兜底(参照 memory-bank/pitfalls/testing/sandbox-tool-cache.md); 本仓实测缓存落仓库根(沙箱可写), 冷跑 6.6s / 1044 错 / 194 文件, 远不到超时。S1 接入期错误数不限(rc=1 属预期, 引擎会标 FAILED 但不影响任何闸门), S4 豁免面外清零后自然归绿"
+note    = "配置单点在 pyproject [tool.mypy]（计划 26-11-05-0635 S1 接入; **独立任务不进提交闸门**, 该计划 D3）。无 <args> 时按配置 files=[src/auto_qb] 全库跑, 也可 `-- <文件>` 定向。增量缓存落仓库根 .mypy_cache/(已 gitignore)。WARN: 沙箱约束与 yapf 同族(会写自己的缓存目录) ⇒ timeout 120s + 引擎超时杀整棵树兜底(参照 memory-bank/pitfalls/testing/sandbox-tool-cache.md); 本仓实测缓存落仓库根(沙箱可写), 冷跑 6.6s / 1044 错 / 194 文件, 远不到超时。S1 接入期错误数不限(rc=1 属预期, 引擎会标 FAILED 但不影响任何闸门), S4 豁免面外清零后自然归绿"
 doc     = "../../memory-bank/pitfalls/testing/sandbox-tool-cache.md"
 
 [tasks."dev.harness"]
 run     = ["uv run python scripts/ui_harness.py <args>"]
 timeout = 900
 when    = "起常驻桩服务（手动开浏览器看；启动行打印实绑 URL；**不跑断言** —— 断言在 dev.e2e）"
-note    = "必须 uv run —— 裸 python 会缺 qbittorrentapi。端口默认 0 = 由脚本取号, 从启动行取 http://127.0.0.1:<实端口>/; 排障时可显式 --port 具体口。⚠ 本命令是**阻塞常驻**(uvicorn 起后不返回, timeout 900s), 别当冒烟闸门跑; 要断言用 dev.e2e(Playwright 自带 webServer 起/收桩)"
+note    = "必须 uv run —— 裸 python 会缺 qbittorrentapi。端口默认 0 = 由脚本取号, 从启动行取 http://127.0.0.1:<实端口>/; 排障时可显式 --port 具体口。WARN: 本命令是**阻塞常驻**(uvicorn 起后不返回, timeout 900s), 别当冒烟闸门跑; 要断言用 dev.e2e(Playwright 自带 webServer 起/收桩)"
 doc     = "../../memory-bank/pitfalls/testing/harness-is-stub-server.md"
 
 [tasks."dev.e2e"]
 run     = ["uv run python scripts/e2e_selfcheck.py", "npx playwright test <args>"]
 timeout = 2700
 when    = "改前端后跑 WEB UI 真浏览器冒烟（e2e/ 全量集; 桩服务由 webServer 自动起）"
-note    = "前置自检已挂 run 列表首条(2026-10-31, issue 26-10-31-2226-feat-e2e-smoke-env-selfcheck): node_modules/@playwright/test 缺失、E2E_PORT 残留(旧覆盖已取消, 设置即报错)、8099 残留桩告警, 自检不过不进 spec, 修复动作在 NEXT: 行; 单跑: commands run dev.e2e-check。timeout=2700s: 2026-11-03 全量 440 例实测 21.9m ≈ 1314s(本机 CI=true 故失败重试 1 次) —— 旧 1200s(2026-10-16 280 例 654s, 约 1.8×) 已被引擎到点强杀; 本次按 ≈2× 实测抬到 2700s, 与 `.github/workflows/playwright.yml` 的 job timeout 40m 同轮抬高(历史链路 360s→600s→1200s; 套件再涨就拆轮或与 CI 分工, 别再靠调数字顶)。日常门禁跑 fast 子集: npm run test:e2e:fast（--grep @fast, 分钟级）; 本 task 是全量。收尾已由 e2e/global-teardown.mjs 兜底, 工具 shell 里也能跑完并退出(Windows 上 Playwright 自带的 taskkill 走 spawnSync + 管道 stdio, 本机必 EBUSY, 不兜会用例全 PASS 但命令永不退出、桩端口残留; 根因与实测见 doc); **端口由脚本取号**: 桩恒传 --port 0 由 OS 分配, Playwright webServer.wait 从启动行捕获实绑端口并经 UI_HARNESS_PORT 回传给 spec —— 无需人工干预、无需预知端口; 设置 E2E_PORT 会直接报错(旧固定口覆盖已取消); reuseExistingServer=false 保留作纵深防御, 别改成复用; 模式矩阵 env 参数化(计划 26-10-06-0708 S0): E2E_CMD_RESULT=ok|error|hang / E2E_SKIP_CHECK=on|off / E2E_HR_SCENE=on|empty|off / E2E_TORRENTS=N, 默认 ok/on/on/300, 改动的参数才传给桩命令; S7 矩阵轮六行(串行人跑, 每轮独立起桩): ①commands run dev.e2e ②E2E_CMD_RESULT=error commands run dev.e2e ③E2E_CMD_RESULT=hang commands run dev.e2e ④E2E_SKIP_CHECK=off commands run dev.e2e ⑤E2E_HR_SCENE=empty commands run dev.e2e(或 off) ⑥E2E_TORRENTS=3000 commands run dev.e2e"
+note    = "前置自检已挂 run 列表首条(2026-10-31, issue 26-10-31-2226-feat-e2e-smoke-env-selfcheck): node_modules/@playwright/test 缺失、E2E_PORT 残留(旧覆盖已取消, 设置即报错)、8099 残留桩告警, 自检不过不进 spec, 修复动作在 NEXT: 行; 单跑: commands run dev.e2e-check。timeout=2700s: 2026-11-03 全量 440 例实测 21.9m ≈ 1314s(本机 CI=true 故失败重试 1 次) —— 旧 1200s(2026-10-16 280 例 654s, 约 1.8×) 已被引擎到点强杀; 本次按 ≈2× 实测抬到 2700s, 与 `.github/workflows/playwright.yml` 的 job timeout 40m 同轮抬高(历史链路 360s→600s→1200s; 套件再涨就拆轮或与 CI 分工, 别再靠调数字顶)。日常门禁跑 fast 子集: npm run test:e2e:fast（--grep @fast, 分钟级）; 本 task 是全量。收尾已由 e2e/global-teardown.mjs 兜底, 工具 shell 里也能跑完并退出(Windows 上 Playwright 自带的 taskkill 走 spawnSync + 管道 stdio, 本机必 EBUSY, 不兜会用例全 PASS 但命令永不退出、桩端口残留; 根因与实测见 doc); **端口由脚本取号**: 桩恒传 --port 0 由 OS 分配, Playwright webServer.wait 从启动行捕获实绑端口并经 UI_HARNESS_PORT 回传给 spec —— 无需人工干预、无需预知端口; 设置 E2E_PORT 会直接报错(旧固定口覆盖已取消); reuseExistingServer=false 保留作纵深防御, 别改成复用; 模式矩阵 env 参数化(计划 26-10-06-0708 S0): E2E_CMD_RESULT=ok|error|hang / E2E_SKIP_CHECK=on|off / E2E_HR_SCENE=on|empty|off / E2E_TORRENTS=N, 默认 ok/on/on/300, 改动的参数才传给桩命令; S7 矩阵轮六行(串行人跑, 每轮独立起桩): 1) commands run dev.e2e 2) E2E_CMD_RESULT=error commands run dev.e2e 3) E2E_CMD_RESULT=hang commands run dev.e2e 4) E2E_SKIP_CHECK=off commands run dev.e2e 5) E2E_HR_SCENE=empty commands run dev.e2e(或 off) 6) E2E_TORRENTS=3000 commands run dev.e2e"
 doc     = "../../memory-bank/pitfalls/testing/playwright-teardown.md"
 
 [tasks."dev.e2e-check"]

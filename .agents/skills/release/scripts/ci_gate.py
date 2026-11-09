@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """CI 全绿门(release skill · 通用件): tag 前核验发版提交的 GitHub CI 全绿。
 
-计划 26-09-22-2318 v2 §6.2 步骤⑥(拍板 §09-12): master run 全绿才准打 tag;
+计划 26-09-22-2318 v2 §6.2 步骤 6(拍板 §09-12): master run 全绿才准打 tag;
 红 → 停手报告, 不静默跳过。轮询走无鉴权 GitHub check-runs API(公开仓, 60 req/h 限额,
 30s 间隔 20 分钟 ≈ 40 次在限额内); gh CLI 缺席不阻塞(本机已实证未装)。
 

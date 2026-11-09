@@ -2,7 +2,7 @@
 """执行 bump(release skill · 通用件): bump-my-version 改版本文件 + 刷新打包元数据。
 
 前置: 决策器 suggest_bump.py 已出提案、agent 已完成改判(留痕在 CHANGELOG/commit body)。
-本脚本只做机械三件事(计划 26-09-22-2318 v2 §6.2 步骤③):
+本脚本只做机械三件事(计划 26-09-22-2318 v2 §6.2 步骤 3):
     1. 净树校验(脏树拒跑 —— bump 只发生在闸门前、测试后的干净基线上);
     2. bump-my-version bump <kind>(版本文件编辑单点, commit/tag 一律由其配置禁用);
     3. uv sync 刷新 editable 元数据(bump 与 sync 之间 dist-info 烤旧号, 评审 R1-F4)。

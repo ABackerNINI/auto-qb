@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """打发布 tag(release skill · 通用件): 锚定发版提交 + 显式 ref 推送 + ls-remote 核验。
 
-计划 26-09-22-2318 v2 §6.2 步骤⑦。拍板口径:
+计划 26-09-22-2318 v2 §6.2 步骤 7。拍板口径:
 - tag 名恒 v<major>.<minor>.<patch>, 不带 hash(hash 溯源走显示层/BUILD_ID 侧车);
 - 推送一律显式 ref, 推完 ls-remote --tags 核验(本 shell ref 写入有静默丢弃先例);
 - 幂等重入: tag 已存在时校验指向而非重建。

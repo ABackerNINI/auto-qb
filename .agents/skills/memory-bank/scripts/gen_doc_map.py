@@ -26,7 +26,7 @@ pitfalls/kb/cap-counting.md「生成式跨形态视图」条的收口注记), �
 轮转口径 (「生成器内轮转完结专题」): 状态 ∈ TERMINAL_STATUSES 为完结。默认视图只给**活跃多件
 专题**全行; 全完结专题退成名录, 单件专题永远只列名 (无跨形态材料可对照, 详见各形态 `_index.md`)
 —— 视图大小跟着**活工作**走, 不跟历史总量走。未知 / 缺失状态一律按**活跃**算 (宁多展示不漏活口)。
-⚠ 不生成任何依赖当前时钟的内容; 判新旧读条目自带的时间戳, 不靠脚本。
+WARN: 不生成任何依赖当前时钟的内容; 判新旧读条目自带的时间戳, 不靠脚本。
 """
 from __future__ import annotations
 
@@ -99,7 +99,7 @@ def _task_stamp(name: str, updated: str) -> str:
 
 
 def _date_stamp(stamp: str) -> str:
-    """展示戳截到日期精度 (2026-09-28 口径, 见 pitfalls/kb/cap-counting.md「两个出口」处置①):
+    """展示戳截到日期精度 (2026-09-28 口径, 见 pitfalls/kb/cap-counting.md「两个出口」处置 1):
     与任务档案行本就一致; 时分仍留在链接指向的文件名里, 零信息损失。
     只在确为 `NN-NN-NN-NNNN` 形态时截断, 异常格式原样保留。"""
     return stamp[:8] if re.fullmatch(r"\d{2}-\d{2}-\d{2}-\d{4}", stamp or "") else stamp
