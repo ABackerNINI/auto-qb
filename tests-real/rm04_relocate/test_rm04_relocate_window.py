@@ -216,7 +216,7 @@ def _write_cfg(case: Path, web_port: int) -> Path:
     cfg = case / "config.yml"
     cfg.write_text(
         f"""config:
-    schema_version: 6
+    schema_version: 7
     qbittorrent:
         host: 127.0.0.1
         port: {instances.SECONDARY}
@@ -255,8 +255,8 @@ def _write_cfg(case: Path, web_port: int) -> Path:
         raise AssertionError(f"配置未指向副实例 {instances.SECONDARY}, 拒跑: {cfg}")
     if f"port: {instances.PRIMARY}" in text:
         raise AssertionError(f"配置指向了 {instances.PRIMARY}(真实种子), 拒跑: {cfg}")
-    if "schema_version: 6" not in text:
-        raise AssertionError(f"配置缺 schema_version: 6(会触发迁移改写), 拒跑: {cfg}")
+    if "schema_version: 7" not in text:
+        raise AssertionError(f"配置缺 schema_version: 7(会触发迁移改写), 拒跑: {cfg}")
     return cfg
 
 

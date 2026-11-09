@@ -1,7 +1,7 @@
 # 连号候选端口只验基址 —— base+1/+2 落排除段即 10013 假红
 
-> 摘要: 「连续 N 个候选端口」类用例(发现端点 base/base+1/base+2)若只用 `_free_port()` 取基址、再自己逐个显式 bind, 后 N-1 位从未被验证: 落进 Windows 动态排除段(Hyper-V/WSL 开机预留, 每次开机不同)或被独占进程占住就抛 WinError 10013/10048 ⇒ 假红。修法两条: ①占位走端口单点 `tests/_test_ports.py::hold_run(n)`(整段逐个真绑并持有, 任一位失败整段丢弃换基址); ②断言写「落在候选表」而不是钉死某个端口号(顺延是正确行为)。
-> 触发: 连号候选端口, base+1, base+2, 排除段, WinError 10013, 10048, _hold_ports, discovery_candidates, 端口单点, hold_run, 假红, netsh excludedportrange
+> 摘要: 「连续 N 个候选端口」类用例(发现端点 base/base+1/base+2)若只用 `_free_port()` 取基址、再自己逐个显式 bind, 后 N-1 位从未被验证: 落进 Windows 动态排除段(Hyper-V/WSL 开机预留, 每次开机不同)或被独占进程占住就抛 WinError 10013/10048 ⇒ 假红。修法两条: ①占位走端口单点 `tests/_test_ports.py::hold_run(n)`(整段逐个真绑并持有, 任一位失败整段丢弃换基址); ②断言写「落在候选表」而不是钉死某个端口号(顺延是正确行为)。**守阵用例本体同理**: 控制流断言不得架在真实端口底板上(issue 26-11-10-0456)。
+> 触发: 连号候选端口, base+1, base+2, 排除段, WinError 10013, 10048, _hold_ports, discovery_candidates, 端口单点, hold_run, 假红, netsh excludedportrange, 守阵用例假红, 断言写死重试次数, 真实端口底板, 纯合成 socket
 
 **Refs:** [issue 26-11-06-0330](../../issues/26-11-06-0330-test-hr-discovery-busy-retry-flake.html)
 
@@ -33,10 +33,17 @@
     或 base+1 落排除段时, 服务顺延到候选表下一位是**正确行为**。断言落在
     `bound_port in discovery_candidates(base)`(或 `[1:]`)这种**语义**上; 钉死具体端口号 =
     把环境噪声写成判据。`_free_port()` 的 TOCTOU 只能压不能消, 别指望它替断言兜底。
+- **守阵用例本体也不许把真实端口环境当判据** (issue 26-11-10-0456): 验证 `hold_run`「整段丢弃换基址」
+  控制流的用例若用真实 socket 当底板、只在某一位注入 10013, 那么除注入点外的 bind 都走真实网络 ——
+  并行 worker 抢口 / 排除段会让 `hold_run` 多重试一轮, `assert attempt == 2` 被环境噪声打红;
+  反方向第一次尝试若因真实端口失败, 注入根本不触发, 用例还会**假绿**。处置: 控制流守阵一律用
+  **纯合成 socket**(端口由桩分配、零真实 bind), 断言只认桩内可确定的尝试次数 / 归属 / 关闭状态;
+  真绑与持有的语义另留一条用真实 socket 的用例覆盖, 两用例分工不重叠。确定性复验两条: 让所有真实
+  bind 一律拒绝 ⇒ 用例仍绿且真实 bind 次数为 0; 把 `hold_run` 换成「吞掉被拒位」的坏实现 ⇒ 用例必须判红。
 - **守阵**: `tests/test_free_port.py::test_hold_run_returns_bindable_run`(连号+持有+释放后可绑)、
-  `::test_hold_run_discards_run_whose_offset_is_refused`(整段有一位被拒 ⇒ 整段丢弃换基址)、
+  `::test_hold_run_discards_run_whose_offset_is_refused`(整段有一位被拒 ⇒ 整段丢弃换基址, 纯桩)、
   `tests/test_hr_discovery.py::test_start_all_busy_returns_false_and_retries`(真实消费方)。
-- **复发**: 0
+- **复发**: 1
 - **同族**: [fixed-port-test-collision.md](fixed-port-test-collision.md) —— 另一半: 夹具沿用**模型默认固定端口**
   导致并行撞端口 / 污染 WARNING 断言(那件的解是默认关掉发现端口, 不是换端口);
   [../ops/port-kill-prod-instance.md](../ops/port-kill-prod-instance.md) —— 10013 的**生产侧**误判:

@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="test-free-port-hold-run-flake">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="test_hold_run_discards_run_whose_offset_is_refused 全量并发下偶发红(单跑绿)">
 <meta name="issue-summary" content="test_free_port 守阵用例在 test.quick 全量并发下偶发判红, 同轮单跑 6 passed 全绿; 端口争用类偶发红, 非稳定红">
 <style>
@@ -84,14 +84,14 @@
 <body>
 <div class="sheet">
 
-<div class="kicker">计划外问题（未修）· test</div>
+<div class="kicker">计划外问题 · test · 已修收档</div>
 <h1>test_hold_run_discards_run_whose_offset_is_refused 全量并发下偶发红(单跑绿)</h1>
 <p class="lede">test_free_port 守阵用例在 test.quick 全量并发下偶发判红, 同轮单跑 6 passed 全绿; 端口争用类偶发红, 非稳定红</p>
 <div class="meta-row">
   <div class="item"><div class="k">编号</div><div class="v">26-11-10-0456-test-test-free-port-hold-run-flake</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-10 04:56</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
@@ -171,11 +171,35 @@ $ commands run test.one -- tests/test_free_port.py
   <h2><span class="no">§07</span>状态变更日志</h2>
   <ul>
     <li>2026-11-10 04:56 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-10 — 状态 Open → Done（kb.status）</li>
+</ul>
   <h3>复验</h3>
-  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <p>2026-11-10 06:02 认领复验：<code>commands run test.one -- tests/test_free_port.py</code> 单跑
+    <code>6 passed</code>（绿），与入池时「同轮单跑 6 passed」一致 —— 稳定红排除，抖动只在全量并发下出现。
+    用不落盘的内联探针做<strong>确定性复现</strong>（不靠并行运气）：把底层真实 socket 的 bind 在第二次尝试的
+    第三位注入 <code>OSError(10048)</code>（模拟并行 worker 抢口），修复前的用例立刻判红
+    <code>AssertionError: 第一位被拒 ⇒ 必须换基址重来一次</code>（tests/test_free_port.py:145），
+    证实「并发下多一轮重试 ⇒ 断言打红」。</p>
   <h3>修复后补充</h3>
-  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  <p><strong>实际修法</strong>：只改
+    <code>tests/test_free_port.py::test_hold_run_discards_run_whose_offset_is_refused</code> 一个用例，
+    不动 <code>tests/_test_ports.py::hold_run</code>（「任一位失败整段丢弃换基址重试」是正确设计）。
+    旧用例用 <code>_Proxy</code> 代理<strong>真实 socket</strong>：除第一次尝试第二位注入的 10013 外，
+    所有 bind 都走真实网络，于是「恰好 2 次尝试」的断言把环境噪声（并行 worker 抢口 / Windows 排除段）
+    写成了判据；更隐蔽的是第一次尝试若因真实端口失败，注入根本不触发，用例反而假绿。
+    改为<strong>纯合成 socket</strong>（<code>_FakeSock</code>）：端口由桩分配（每次尝试不同基址）、不创建真实
+    socket、不做真实 bind，注入点按「尝试内序号」定位；断言保留并加强（拒绝必须落在第一次尝试第二位、
+    返回段不得来自被丢弃的第一次尝试、被拒段全关、返回段仍持有）。真绑/持有语义仍由
+    <code>test_hold_run_returns_bindable_run</code> 用真实 socket 覆盖，两用例分工不重叠。</p>
+  <p><strong>与 §06 建议修法的改道原因</strong>：§06 示例方向是改 <code>hold_run</code> 的取号/重试窗口
+    （测试基建实现侧），但确定性复现证明红在<strong>用例断言</strong>而非 <code>hold_run</code> 行为 ——
+    后者在并发下多重试一轮正是设计意图。故改测试不改实现，建议原文保留。</p>
+  <p><strong>验证方式 / 数字</strong>：红绿双验 + 确定性探针 —— ①修复前：上述抢口注入 ⇒ 判红；
+    ②修复后：把注入改成「所有真实 bind 一律拒绝」，用例仍绿且真实 socket bind 次数为 <code>0</code>；
+    ③机制红验：把 <code>hold_run</code> 换成「吞掉被拒位、不整段丢弃」的坏实现，用例判红 ⇒ 断言不是假绿；
+    ④<code>test.one -- tests/test_free_port.py</code> 6 passed（副作用台账 BIND 由 21 条降到 15 条，越界 0）；
+    ⑤<code>commands run test.quick</code> 全量并发全绿、<code>commands run test.full</code> 全绿
+    （实测数字见 <code>kb.baseline</code> 最新切片）。真机不适用（纯桩可验，不涉 qB 真执行）。</p>
 </section>
 
 <footer>

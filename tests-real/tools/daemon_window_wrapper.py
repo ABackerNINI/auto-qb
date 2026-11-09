@@ -1,11 +1,11 @@
 """测试侧回收 daemon wrapper(E2c 复验收编; 用户授权的实例级开窗判据旁路)。
 
 授权(两层, 各自独立成立, 均 2026-11-10 经 AskUserQuestion):
-① 源会话层 —— 2336 E2c 复验(clone1): 明示选择「授权测试侧实例级旁路」—— 全机名册
+[1] 源会话层 —— 2336 E2c 复验(clone1): 明示选择「授权测试侧实例级旁路」—— 全机名册
   判据在多实例测试机上让 daemon 永不开窗(生产实例 26586/16585 在跑且有活跃连接, 实验
   绝对不可碰), 而目标测试实例已下线且其 BT_backup 与生产完全隔离; 本文件即收编自该实验
   的 scratch 原件(见下收编说明), 该层授权是其出处。
-② 本任务层 —— 计划 26-11-10-0230 S4 真机闭环(本仓): 明示选择「授权旁路(推荐)」,
+[2] 本任务层 —— 计划 26-11-10-0230 S4 真机闭环(本仓): 明示选择「授权旁路(推荐)」,
   权威记录 = tests-real/.work/relocate-rlfn-e2e/evidence/authorization.md。
 判据与旁路配方见 memory-bank/pitfalls/testing/relocate-window-machine-roster.md; 消费方 =
 计划 26-11-10-0230 的 S4 真机闭环(环境1)。收编说明: 原件在 E2c 实验 scratch(tests-real/
@@ -47,9 +47,13 @@ def _qb_paths() -> list[str] | None:
     """带镜像路径枚举 qbittorrent.exe; 探测失败返回 None(调用方保守判「在场」)。"""
     try:
         r = subprocess.run(
-            ["powershell", "-NoProfile", "-Command",
-             "Get-Process qbittorrent -ErrorAction SilentlyContinue | ForEach-Object { $_.Path }"],
-            capture_output=True, text=True, timeout=20,
+            [
+                "powershell", "-NoProfile", "-Command",
+                "Get-Process qbittorrent -ErrorAction SilentlyContinue | ForEach-Object { $_.Path }"
+            ],
+            capture_output=True,
+            text=True,
+            timeout=20,
         )
     except Exception as e:  # noqa: BLE001 — 探测异常按保守面
         _log(f"probe error: {e!r}")
@@ -69,8 +73,10 @@ def patch() -> None:
         test_present = [p for p in paths if p.lower().startswith(TEST_PREFIX)]
         refused = bool(port) and rd._port_refused(host or "127.0.0.1", port)
         verdict = (not test_present) and refused
-        _log(f"instance_scoped: all_qb={len(paths)} test_qb={len(test_present)} "
-             f"test_paths={test_present!r} port={port} refused={refused} => absent={verdict}")
+        _log(
+            f"instance_scoped: all_qb={len(paths)} test_qb={len(test_present)} "
+            f"test_paths={test_present!r} port={port} refused={refused} => absent={verdict}"
+        )
         return verdict
 
     rd._proc_absent = instance_scoped

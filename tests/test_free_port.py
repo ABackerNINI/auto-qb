@@ -6,7 +6,7 @@
 - test_retry_on_occupied_candidate: 占住首个候选 → 重试后拿到另一个可用端口
 - test_exhausted_raises: 候选全被抢(monkeypatch) → RuntimeError 响亮失败
 - test_hold_run_returns_bindable_run: `hold_run(3)` 返回连号三位、当场真占住、放掉后仍可绑
-- test_hold_run_discards_run_whose_offset_is_refused: 整段有一位被拒(10013 同形) ⇒ 整段丢弃换基址, 不交坏段
+- test_hold_run_discards_run_whose_offset_is_refused: 纯合成 socket 注入 10013, 整段有一位被拒 ⇒ 整段丢弃换基址, 不交坏段(不碰真实端口, 断言不受并行抢口影响)
 """
 from __future__ import annotations
 
@@ -104,33 +104,40 @@ def test_hold_run_discards_run_whose_offset_is_refused(monkeypatch):
     第一次尝试的**第二位** bind 抛 10013(与 base+1 落 Windows 排除段同形); 若实现只验基址,
     坏段就会原样返回, 调用方显式 bind 时炸(issue 26-11-06-0330)。断言落在「丢弃」这个动作上:
     第一次尝试建出来的 socket 必须全部被关掉, 返回的必须是第二次尝试的完整段。
+
+    这里用**纯合成 socket**: 除注入点外不再走真实网络。旧版把真实 socket 当底板, 全量并行下
+    别的 worker 抢口 / 排除段会让 hold_run 多重试一轮, 「恰好 2 次尝试」的断言被环境噪声打红
+    (issue 26-11-10-0456); 更隐蔽的是第一次尝试若因真实端口失败, 注入根本不触发, 用例会假绿。
+    真绑/持有语义由 test_hold_run_returns_bindable_run 用真实 socket 覆盖, 两用例分工不重叠。
     """
-    real_socket = tp.socket.socket
-    state = {"attempt": 0, "binds": 0}
+    state = {"attempt": 0, "seq": 0}
     attempts: dict[int, list] = {}
 
-    class _Proxy:
-        """socket 代理: 记录归属尝试, 并在指定 bind 上注入 10013。"""
+    class _FakeSock:
+        """合成 socket: 端口由桩分配, 不创建真实 socket、不做真实 bind。"""
         def __init__(self):
-            self.real = real_socket()
+            self.port: int | None = None
             self.closed = False
 
         def bind(self, addr):
-            if addr[1] == 0:  # 取号 socket: 新一次尝试开始
+            if addr[1] == 0:  # 取号 socket: 新一次尝试开始, 桩分配确定性基址(每次不同)
                 state["attempt"] += 1
+                state["seq"] = 0
+                self.port = 41000 + state["attempt"] * 10
+            else:
+                self.port = addr[1]
+            state["seq"] += 1
             attempts.setdefault(state["attempt"], []).append(self)
-            state["binds"] += 1
-            # 取号(offset 无) + 基址(offset 0) + 第二位(offset 1) 之后 ⇒ 在第二位被拒
-            if state["attempt"] == 1 and state["binds"] == 3:
+            # 取号(seq 1) + 基址(seq 2) + 第二位(seq 3) ⇒ 在第二位被拒
+            if state["attempt"] == 1 and state["seq"] == 3:
                 raise OSError(10013, "以一种访问权限不允许的方式做了一个访问套接字的尝试")
-            self.real.bind(addr)
+            return None
 
         def getsockname(self):
-            return self.real.getsockname()
+            return ("127.0.0.1", self.port)
 
         def close(self):
             self.closed = True
-            self.real.close()
 
         def __enter__(self):
             return self
@@ -139,10 +146,12 @@ def test_hold_run_discards_run_whose_offset_is_refused(monkeypatch):
             self.close()
             return False
 
-    monkeypatch.setattr(tp.socket, "socket", _Proxy)
+    monkeypatch.setattr(tp.socket, "socket", _FakeSock)
     base, socks = tp.hold_run(3)
     try:
-        assert state["attempt"] == 2, "第一位被拒 ⇒ 必须换基址重来一次"
+        assert state["attempt"] == 2, "第二位被拒 ⇒ 必须整段丢弃并换基址重来一次"
+        assert len(attempts[1]) == 3, "拒绝必须落在第一次尝试的第二位(取号/基址/第二位)"
+        assert not any(s in attempts[1] for s in socks), "返回的段不能来自被丢弃的第一次尝试(不交坏段)"
         assert [s.getsockname()[1] for s in socks] == [base, base + 1, base + 2]
         assert all(s.closed for s in attempts[1]), "被拒那段的 socket 必须整段关掉(不泄漏、不交坏段)"
         assert not any(s.closed for s in socks), "返回的段必须仍然持有"
