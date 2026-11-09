@@ -9,9 +9,9 @@
 <meta name="issue-stamp" content="26-11-07-1216">
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="check-context-caps-porcelain-quote">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/testing/baselines/26-11-10-0051-quote-path-fix.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="porcelain_paths 不解 git C 风格引号路径, 非 ASCII rename 静默漏检">
 <meta name="issue-summary" content="check_context_caps.py porcelain_paths 对 quotePath 转义路径不 unquote, 非 ASCII rename 行「改动命中」判定静默漏检">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-07-1216-bug-check-context-caps-porcelain-quote</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-07 12:16</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">scripts</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
@@ -148,11 +148,15 @@
   <h2><span class="no">§07</span>状态变更日志</h2>
   <ul>
     <li>2026-11-07 12:16 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-10 — 状态 Open → In Progress（kb.status）</li>
+    <li>2026-11-10 — 状态 In Progress → Done（kb.status）</li>
+</ul>
   <h3>复验</h3>
-  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <p>复验：2026-11-10 仍复现（head <code>f905b7b7</code>）——<code>porcelain_paths</code> docstring 局限段在，<code>changed_files()</code> 的 git 调用未带 <code>-c core.quotePath=false</code>，与锚点一致。</p>
   <h3>修复后补充</h3>
-  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  <p><strong>实际修法</strong>：按建议修法走单点——<code>changed_files()</code> 改调 <code>git -c core.quotePath=false status --porcelain</code>（全脚本唯一 status 调用面），<code>porcelain_paths</code> 解析逻辑不动（不 unquote，复刻 git C 转义规则易漂移）；docstring 局限段改写为「调用方统一关 quotePath + 残余边界」（路径本身含引号/反斜杠/控制字符时 git 在 quotePath=false 下仍会加引号，现仓无此类路径）。</p>
+  <p><strong>验证方式</strong>：新用例 <code>tests/test_legacy_review4_scripts.py::test_changed_files_disables_quote_path</code>——wire 面 monkeypatched subprocess 钉死命令行逐字含 <code>-c core.quotePath=false</code>（回潮成旧形态立刻红）；机制红验用默认 quotePath=true 下 git 真实输出的八进制转义 rename 行穿过解析面，断言两侧真实路径都不在集合（钉住漏检机制）。红验形式与建议的「真 git 临时仓」不同道：tests/sidefx.py 台账把 POPEN 记越界且白名单不放行 git，用例不得真弹 git 进程，故以「命令行逐字钉死 + 转义形态照实构造」等效覆盖。</p>
+  <p><strong>测试数字</strong>：<code>commands run test.quick</code> 5877 passed / 2 skipped（2026-11-10 实测）；新用例在内定向 <code>test.one</code> 7 passed，sidefx 越界 0。</p>
 </section>
 
 <footer>

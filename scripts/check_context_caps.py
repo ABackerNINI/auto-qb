@@ -124,9 +124,12 @@ def porcelain_paths(text: str) -> set[str]:
     状态列第二位若是数字(评分形态 `R90 old -> new`; 常规 porcelain v1 不出评分, 防御性
     兼容), 路径起点右移一位 -- 常规 XY 两列后必是空格, 第二位不可能是数字, 不误伤。
 
-    局限: 路径含非 ASCII/特殊字符时 git 默认 C 风格引号转义(rename 行形如 `R  "\\350..." ->
-    "docs/..."`), partition 后入集的是带引号转义串, 对不上真实路径, 「改动命中」静默漏检(与
-    改动前同结果, 无回归); quotePath 改进道(`git -c core.quotePath=false`)不做, 留待入池裁决。
+    引号路径: 非 ASCII 路径在 git 默认 core.quotePath=true 下输出 C 风格转义(rename 行形如
+    `R  "\\350..." -> "docs/..."`), partition 后入集的是带引号转义串, 对不上真实路径 --
+    所以调用方(`changed_files`)统一走 `git -c core.quotePath=false`, 本函数按"输入已是
+    未转义路径"假设解析。残余边界: 路径本身含引号/反斜杠/控制字符时 git 在 quotePath=false
+    下仍会加引号(git 的 quote_c_style 逻辑), 解析侧不 unquote(复刻 C 转义规则易漂移), 这类
+    路径仍会对不上真实路径 -- 现仓无此类路径, 属已知残余局限(issue 26-11-07-1216 修主场景)。
     """
     out: set[str] = set()
     for line in text.splitlines():
@@ -145,8 +148,14 @@ def porcelain_paths(text: str) -> set[str]:
 
 
 def changed_files() -> set[str]:
-    """本次改动到的文件(仓库根相对路径, 已暂存与未暂存都算)。"""
-    return porcelain_paths(git("status", "--porcelain"))
+    """本次改动到的文件(仓库根相对路径, 已暂存与未暂存都算)。
+
+    `-c core.quotePath=false`: git 默认把含非 ASCII 字符的路径按 C 风格八进制转义输出
+    (`R  "\\350..." -> ...`), 转义串对不上真实路径, 「改动命中」判定会静默漏检 -- 关掉
+    转义让 stdout 直接出真实 UTF-8 路径(git() 已按 utf-8 解码), 解析侧不用复刻转义规则。
+    issue 26-11-07-1216。
+    """
+    return porcelain_paths(git("-c", "core.quotePath=false", "status", "--porcelain"))
 
 
 def char_count(path: Path) -> int:

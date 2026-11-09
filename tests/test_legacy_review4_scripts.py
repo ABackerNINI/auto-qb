@@ -38,6 +38,7 @@ the kill path never actually runs in tests, only decisions and refusal wiring.
 - test_porcelain_modified_path_with_arrow_not_split: 非 rename 行(状态位无 R/C)路径里含 " -> " 不被误拆 -- 分流必须看状态位, 不能只看 " -> "
 - test_porcelain_blank_and_short_lines_ignored: 空文本 / 空行 / 纯空白行返回空集, 不产伪路径
 - test_porcelain_paths_red_on_whole_string_regression: **红验** -- 旧实现(整串塞入)下 rename 两侧路径都不在集合里, 证明绿判据能区分新旧实现, 不是恒绿
+- test_changed_files_disables_quote_path (issue 26-11-07-1216): changed_files() 发出的命令行必须逐字含 `git -c core.quotePath=false status --porcelain`(monkeypatched subprocess, 不真弹 git -- sidefx 台账禁 POPEN); 机制红验: 默认 quotePath=true 下 git 真实输出的 C 风格转义形态穿过解析面后真实路径不在集合(静默漏检机制钉住)
 - test_e2e_selfcheck_missing_option_value_prints_usage_rc2 (P4 表#6): --blocking/--warn 写在最后一个参数 -> 打印含用法提示的错误行并退 2, 不抛 IndexError; 红验: 旧解析循环逐字重放, 缺值必 IndexError
 - test_e2e_selfcheck_parse_port_args_normal_values (P4 表#6): 正常取值/缺省/多值串解析不回归, 未知参数仍走报错行; parse_port_args 为生产 main 真实调用点
 - test_ui_harness_site_alerts_needs_four_torrents (P4 表#23): 2/3 条种子整段跳过注入不崩, 4 条放行且倒数第 4/第 3 注入生效; 红验: 旧守卫(len<2)逐字重放, 2 条时 torrents[-4] 必 IndexError
@@ -151,6 +152,42 @@ def test_porcelain_paths_red_on_whole_string_regression():
     # 旧实现: 两侧都不在, 只塞进整串 -- 这就是回潮时的红面
     assert old_impl == {"AGENTS.md -> docs/AGENTS.md"}
     assert "AGENTS.md" not in old_impl and "docs/AGENTS.md" not in old_impl
+
+
+# ------------------------------------------- issue 26-11-07-1216: quotePath 引号路径漏检
+def test_changed_files_disables_quote_path(monkeypatch):
+    """issue 26-11-07-1216: changed_files() 必须走 `git -c core.quotePath=false status --porcelain`。
+
+    非 ASCII 路径在 git 默认 core.quotePath=true 下按 C 风格八进制转义输出(`R  "\\346..." ->
+    ...`), 转义串对不上真实路径, 「改动命中」判定静默漏检 -- 与改动前整串入集同结果, 无回归。
+    修法是单点改 git 调用(解析侧不 unquote, 复刻 C 转义规则易漂移), 所以:
+    wire 面 -- monkeypatched subprocess 钉死命令行逐字形态(回潮成旧形态立刻红);
+    机制红验 -- 默认配置下 git 真实输出的转义形态穿过解析面, 真实路径不在集合。
+
+    不真弹 git: sidefx 台账把 POPEN 记越界, 白名单不放行 git -- subprocess 全程 monkeypatch。
+    """
+    calls = []
+
+    def _recording_run(cmd, **kw):
+        calls.append(cmd)
+        return SimpleNamespace(returncode=0, stdout="")
+
+    monkeypatch.setattr(mod.subprocess, "run", _recording_run)
+    mod.changed_files()
+    assert calls == [["git", "-c", "core.quotePath=false", "status", "--porcelain"]], \
+        f"命令行必须逐字带 -c core.quotePath=false: {calls}"
+
+    # 机制红验: git 默认配置(core.quotePath=true)下, `git mv docs/旧文档.md docs/新位置.md`
+    # 的 rename 行真实输出形态(八进制转义照实构造) -- 穿过解析面后两侧真实路径都不在集合,
+    # 这就是「改动命中」判定静默漏检的机制面; 命令行回潮丢 -c 时 changed_files 就产出这种文本
+    escaped_text = (
+        'R  "docs/\\346\\227\\247\\346\\226\\207\\346\\241\\243.md" -> "docs/\\346\\226\\260\\344\\275\\215\\347\\275\\256.md"\n'
+    )
+    parsed = mod.porcelain_paths(escaped_text)
+    assert parsed and all(("\\" in p or '"' in p) for p in parsed), \
+        f"转义形态穿过解析面必须残留转义串(证明判据不是恒绿): {sorted(parsed)}"
+    assert "docs/旧文档.md" not in parsed and "docs/新位置.md" not in parsed, \
+        f"quotePath 未关时真实路径静默漏检(与 issue 自述一致): {sorted(parsed)}"
 
 
 # --------------------------------------------------------------------------- P4 表#6: e2e_selfcheck 参数解析

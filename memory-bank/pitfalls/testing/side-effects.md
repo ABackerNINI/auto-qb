@@ -34,7 +34,7 @@
   - **过滤临时目录别只信 `abspath` 前缀** —— Windows 长路径前缀 `\\?\` 会**绕过**前缀过滤(`abspath` 不剥它),
     曾把 157 条临时目录内删除全判成越界。
 - **处置**: 新增测试前先对照七类; 新出现的副作用确认必须后**到 `tests/sidefx.py` 的放行清单登记**。
-- **复发**: 1 (2026-11-03: 新写的 WebUI 启动失败用例只验异常文案、未注入端口占用者探针替身 ⇒ Linux CI 真跑 `ss -ltnp`; 本机 Windows 被通知器守卫偶然挡住 `powershell` 而假绿 —— 本规则的判别面此前没覆盖「生产旁路诊断探针」这一形态, 机制细节见 [sidefx-diagnostic-probe.md](sidefx-diagnostic-probe.md); 这次的正确处置是**注入替身消除**, 不是登记放行)
+- **复发**: 2 (2026-11-10: 修 issue 26-11-07-1216 的守卫用例初版为追求"真 git 临时仓"红验, 用 subprocess 真弹 7 个 git 进程 ⇒ test.one 当场 9 条 POPEN 越界; 为什么没命中: 动手前只读了 issue 与目标脚本、没对照本文件七类清单 —— 「新增测试先对照七类」这条处置没有独立路由入口, 埋在坑档正文里; 正确处置与上次同款: monkeypatch `subprocess.run` 消除, 不是登记放行) (2026-11-03: 新写的 WebUI 启动失败用例只验异常文案、未注入端口占用者探针替身 ⇒ Linux CI 真跑 `ss -ltnp`; 本机 Windows 被通知器守卫偶然挡住 `powershell` 而假绿 —— 本规则的判别面此前没覆盖「生产旁路诊断探针」这一形态, 机制细节见 [sidefx-diagnostic-probe.md](sidefx-diagnostic-probe.md); 这次的正确处置是**注入替身消除**, 不是登记放行)
 
 ### 动作一旦带真实文件副作用(落盘 + 删除), 测试侧 `state_file` 必须是**真实临时路径**
 
