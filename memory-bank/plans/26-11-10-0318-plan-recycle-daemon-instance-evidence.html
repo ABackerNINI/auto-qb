@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="recycle-daemon-instance-evidence">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-10-0318">
+<meta name="doc-updated" content="26-11-10-0318">
+<meta name="doc-refs" content="memory-bank/issues/26-11-07-0528-feat-recycle-daemon-roster-machine-wide.html, memory-bank/plans/26-11-05-0808-plan-relocate-fastresume-finalize.html, memory-bank/tasks/26-11-05-backend-relocate-fastresume-finalize.md, memory-bank/tasks/26-11-10-backend-recycle-daemon-instance-evidence.md">
+<meta name="doc-title" content="recycle daemon 实例级下线证据链: owner 死证 + 新面孔无害化, P7 多实例形态收尾窗解卡 (issue 26-11-07-0528)">
+<title>recycle daemon 实例级下线证据链 · plan · memory-bank</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --ok: #8fc98f;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 36px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.18; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 66ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 13.5px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 80ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 80ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 80ch; }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout.ok { border-left-color: var(--ok); }
+  .hint { color: var(--faint); font-size: 13px; max-width: 80ch; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">§01</span>目标与设计原则</a>
+    <a href="#s2"><span class="no">§02</span>现状与痛点</a>
+    <a href="#s3"><span class="no">§03</span>方案总览</a>
+    <a href="#s4"><span class="no">§04</span>实施步骤</a>
+    <a href="#s5"><span class="no">§05</span>待拍板清单</a>
+    <a href="#s6"><span class="no">§06</span>拍板记录</a>
+    <a href="#s7"><span class="no">§07</span>风险与对策</a>
+    <a href="#s10"><span class="no">§10</span>变更记录</a>
+    <div class="toc-foot">
+      plan · Open · 单文件 HTML(dark)<br>
+      认领后按 §04 波次推进
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">PLAN · memory-bank · doc-topic: recycle-daemon-instance-evidence</div>
+    <h1>recycle daemon 实例级下线证据链: owner 死证 + 新面孔无害化, P7 多实例形态收尾窗解卡</h1>
+    <p class="lede">本篇只回答: 同机多 qB 实例(P7)下, daemon 如何用「实例级进程证据」把收尾窗从「等全机 qB 退场」解卡为「目标实例死亡即可收尾」, 且 N1 铁律(qB 运行期零写入)一条不放; 怎么观测、怎么判、退化怎么走、哪些场景明确不修。</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">doc-added</div><div class="v">26-11-10-0318</div></div>
+      <div class="item"><div class="k">来源</div><div class="v">issue <a href="../issues/26-11-07-0528-feat-recycle-daemon-roster-machine-wide.html">26-11-07-0528</a>(feat, Open)</div></div>
+      <div class="item"><div class="k">决策</div><div class="v">2026-11-10 会话 grilling 三轮拍板(§06)</div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open · 待认领</span></div></div>
+      <div class="item"><div class="k">上游计划</div><div class="v"><a href="26-11-05-0808-plan-relocate-fastresume-finalize.html">26-11-05-0808</a>(Done)</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">§01</span>目标与设计原则</h2>
+    <p><strong>背景</strong>: 0808 计划交付的 recycle daemon(<code>src/auto_qb/tools/recycle_daemon.py</code>)进窗判据里, 进程证是<strong>全机口径</strong>——进程名册(tasklist//proc/ps)只出映像名, 分不出实例; 名册见<strong>任一</strong> qB 进程即判「进程在」。同机多实例形态(P7 真机实测: 日常库在跑、目标测试库已死待收尾)下, daemon 永等不到窗口, 直至全部实例退场。该取舍已显式声明并挂账为 issue <a href="../issues/26-11-07-0528-feat-recycle-daemon-roster-machine-wide.html">26-11-07-0528</a>(N1 优先的显式取舍, 单实例零影响)。</p>
+    <p><strong>目标一句</strong>: 给 daemon 补一条<strong>实例级证据链</strong>(owner 死证 + 新面孔无害化 + 端口拒连), 让 P7 形态下「目标实例死亡」即可开窗收尾, 单实例部署窗口开启不晚于现状, N1 铁律不放一条口子。</p>
+    <p><strong>做到什么程度算成</strong>: §04 三波判据全绿; P7 形态真机验证(目标死 + 日常活, 窗口开启并完成改写); 单实例回归等价; issue 0528 收口 + pitfalls P7 专档立档。</p>
+    <p><strong>设计底线/不变量</strong>:</p>
+    <ul>
+      <li><strong>N1 铁律不动摇</strong>: 任何进窗与逐成员落盘都要求「目标 profile 的 qB 进程不存在」的证据; 证据链每一档都必须<strong>严于或等于</strong>现状某条已在跑的路径(现状名册探测失败时已允许端口单证进窗——本方案的证据严格强于它)。</li>
+      <li><strong>竞争面精确定义</strong>: N1 的竞争 = <strong>同 profile</strong> 实例对同一 BT_backup 目录 fastresume 的运行期重写。不同 profile 实例不加载这些文件, 不构成竞争。全机口径的病根 = 把非竞争者(其它实例)也当竞争者挡窗。</li>
+      <li><strong>保守退化</strong>(黄金法则 2): 观测记录缺失或观测通道故障 → 原样退回全机口径(现状判据), 告警留痕不静默; 弱证据配 30s 稳定期, 强证据(进程级)才配立即进窗。</li>
+      <li><strong>默认开、零配置键</strong>(拍板 D5): 无 validate_config 触碰, 行为随代码走。</li>
+      <li><strong>账本契约不碰</strong>: journal/daemon.json 语义不变, 绝不碰 state.json(D13); 观测状态走独立 obs 文件。</li>
+      <li><strong>零新依赖</strong>: 不引 psutil, 观测通道与现有名册同款手搓子进程/proc 风格。</li>
+    </ul>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">§02</span>现状与痛点</h2>
+    <ul>
+      <li><strong>现状判据</strong>: 进窗 = 三证——进程不在(证一, <code>_proc_absent</code> <code>recycle_daemon.py:114</code>) + 端口拒连(证二, <code>_port_refused</code> <code>:55</code>) + 稳定 30s(证三, <code>STABLE_WINDOW</code> <code>:142</code>, <code>run</code> <code>:410-414</code> down_since 计时); 逐成员落盘前瞬时复验证一+证二(<code>:337</code>)。证一内部: 名册可用时「名册无 qB AND 端口拒连」合取; 名册<strong>见任一 qB</strong> ⇒ 一票否决。</li>
+      <li><strong>痛点(P7)</strong>: 进程名册只有映像名, 跨平台尽力而为, 分不出实例。目标实例已死、同机另一实例在跑 ⇒ 名册永远见 qB ⇒ 证一永不成立 ⇒ 收尾改写无限期延迟。issue 0528 以「显式取舍」记录, 未来增强方向挂账「需比映像名更强的实例身份证据——设计题」。</li>
+      <li><strong>issue 原候选思路的洞(本次推演结论)</strong>:
+        <ul>
+          <li><em>朴素端口归属记录</em>(趁端口可达记下 owner pid, pid 死即进窗): 堵不住「目标重启、新身已创建但 WebUI 端口未绑」的<strong>尾部间隙</strong>——彼时 owner 死证为真、端口证为真, 但同 profile 新实例的 BT 引擎已在运行, 落盘即 N1 破。(注: 新身<strong>完全未创建</strong>的死亡间隙落盘是安全的——写时无 qB 在运行, 新身起来读到的就是改写件, 走 N4 别名加载自洽; 危险的只是「已创建未绑端口」的尾部。)</li>
+          <li><em>WebUI 身份凭据</em>: 实例活着才可验, 死后死无对证——issue 判须与落盘侧证据组合(独立不充分)。</li>
+        </ul>
+      </li>
+      <li><strong>现状已有降级路径</strong>: 名册探测命令异常 ⇒ 空名册 ⇒ 退端口单证 + warning(<code>:137</code>)。这条路径的证据强度<strong>弱于</strong>本方案的实例级证据——这是 D5「默认开」的正当性锚点之一。</li>
+      <li><strong>daemon 形态</strong>: 主循环自动重拉(<code>relocate_exec.py:19</code> <code>_DAEMON_MODULE</code> 声明拉起目标, <code>_spawn_daemon</code>(:1683)detached, <code>ACT_ENSURE_DAEMON</code>), CLI 仅 <code>--data-dir/--host/--port/--stable/--poll/...</code>, 无配置键; 常驻形态(grilling 拍板 D3)。</li>
+    </ul>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">§03</span>方案总览</h2>
+    <p><strong>主线(拍板 D1/D2): 实例级证据链 = owner 死证 + 新面孔无害化 + 端口拒连, 证据成立即立即进窗</strong>; 观测由 daemon 自维护并持久化, 缺失即退回现状。三层证据链:</p>
+    <table>
+      <tr><th>层</th><th>触发条件</th><th>进窗判据</th><th>稳定期</th></tr>
+      <tr>
+        <td><strong>L1 实例级</strong>(新增)</td>
+        <td>owner 观测记录有效 且 观测通道健康</td>
+        <td>owner 已死(pid 消失 / pid 在但 create_time 不匹配 / pid 在但映像非 qB) AND 端口拒连 AND 无未决新面孔</td>
+        <td><strong>无</strong>(立即, 拍板 D2)</td>
+      </tr>
+      <tr>
+        <td><strong>L2 全机口径</strong>(现状保留)</td>
+        <td>无 owner 记录 / 观测通道故障</td>
+        <td>全机名册无 qB AND 端口拒连(现 <code>_proc_absent</code> 原样)</td>
+        <td>30s(保留, 弱证据配稳定期)</td>
+      </tr>
+      <tr>
+        <td><strong>L3 端口单证</strong>(现状降级, 不动)</td>
+        <td>L2 名册探测也失败</td>
+        <td>端口拒连单证 + warning 留痕</td>
+        <td>30s(保留)</td>
+      </tr>
+    </table>
+
+    <h3>§03.1 观测面(每 poll, pending 非空时维护)</h3>
+    <ul>
+      <li><strong>O1 owner 归属</strong>: 端口可达(<code>create_connection</code> 成功)时, 从 LISTENING 表归属该端点的 owner pid, <strong>交叉校验映像名含 qbittorrent</strong>(非 qB 服务占端口 ⇒ 不记录, 保守), 再取 create_time 统一换算为 epoch 秒, 记 <code>{pid, ct, ts}</code> 持久化。Windows: <code>netstat -ano -p tcp</code> 解析 LISTENING 行(按本地端口匹配, 0.0.0.0 通配监听同算); create_time 用 PowerShell <code>Get-Process</code> 的 <code>StartTime.ToFileTimeUtc()</code>(单次调用批量取全机 qB 进程)。Linux: <code>/proc/net/tcp{,6}</code>(st==0A)端口→inode → <code>/proc/&lt;pid&gt;/fd/socket:[inode]</code> 归属; create_time = <code>/proc/stat</code> btime + <code>/proc/&lt;pid&gt;/stat</code> starttime/HZ。</li>
+      <li><strong>O2 全机 qB 身份枚举</strong>: 每 poll 枚举全机 qB 进程的 <code>(pid, create_time)</code> 集合(Windows 用同一 PowerShell 调用顺带取映像名; Linux 扫 <code>/proc/*/comm</code> + stat)。它驱动新面孔状态机。</li>
+      <li><strong>通道纪律</strong>: 解析失败/超时(10s)⇒ 本拍观测不可用 ⇒ 走 L2/L3, warning 节流留痕(60s 一次, 不刷屏)。解析器不硬赌输出格式——解析不出就退, 宁可保守。</li>
+    </ul>
+
+    <h3>§03.2 新面孔状态机(堵「同 profile 新实例已创建未绑端口」尾部)</h3>
+    <p>owner 死后出现的 qB 进程分不清「目标 profile 新身」还是「别的实例新身」; 但它们有一个硬差异——<strong>目标 profile 的实例终将监听我们的 host:port, 别的不会</strong>。状态机按此收敛:</p>
+    <table>
+      <tr><th>观测到的 qB 进程(非 owner)</th><th>判定</th><th>对窗口的作用</th></tr>
+      <tr><td><code>ct &lt; owner.ts_last_seen</code></td><td>零赌注吸收: 它在 owner 存活期间创建。若同 profile, 与 owner 双开被单实例锁/WebUI 端口冲突排挤——该论证以单实例锁开启为前提, 用户关锁双开属 §07 R4 原理性残余, 不在本行覆盖域</td><td>无害, 永不挡</td></tr>
+      <tr><td><code>ct ≥ ts_last_seen</code> 且监听我们端口</td><td>就是 owner(复活或换身)⇒ owner 记录更新</td><td>端口证自然失败, 挡(正确: 目标活着)</td></tr>
+      <tr><td><code>ct ≥ ts_last_seen</code>, 监听集稳定 <code>NEW_FACE_SETTLE=30s</code> 且不含我们端口</td><td>吸收(写进 obs 文件 absorbed 清单)——WebUI 绑定是启动早期动作, 30s 不绑即非目标 profile(有界赌注, 见 §07 R3/R4)</td><td>吸收后无害; 场景 Y(日常实例重启)代价约 33s</td></tr>
+      <tr><td><code>ct ≥ ts_last_seen</code>, 未 settle</td><td><strong>未决</strong>——可能是目标新身(已创建未绑端口)</td><td><strong>挡</strong>, 直到绑定我们端口(转 owner)或被吸收或消失</td></tr>
+    </table>
+    <p class="hint">settle 计时(first_seen/监听集指纹)只在内存, daemon 重启即重置(settle 重算, 代价 30s); absorbed 清单持久化, 重启后继续有效。absorbed 成员从名册消失即移出(死进程无威胁, 文件不膨胀)。</p>
+
+    <h3>§03.3 L1 进窗判据(精确语义)</h3>
+    <pre><code>进窗(L1) ⇔
+  1. owner 记录存在, 且 owner 已死:
+       pid 无进程  OR  pid 在但 create_time != 记录值  OR  pid 在但映像名非 qbittorrent
+     (后两条 = PID 复用防御: 被别的程序/别的 qB 实例复用都判「原实例已死」)
+  2. 端口拒连(_port_refused 原样)
+  3. 新面孔状态机: 无未决成员(§03.2)
+  4. 1+2+3 同时成立 ⇒ 立即进窗, 无 down_since 计时(拍板 D2)
+
+逐成员落盘前瞬时复验 = 1+2+3 全套现读现判(升级现状的两证复验;
+这是「立即进窗」安全性的必要条件——复验粒度必须与进窗判据同级)</code></pre>
+    <div class="callout ok"><strong>场景 X 论证(目标重启, 拍板 D2 的安全性根基)</strong>: owner 死、新身完全未起时落盘——写时无任何 qB 进程运行, N1 字面(运行期零写入)与深层(与 qB 秒级重写竞争)均不触发; 新身起来读到的是改写后 fastresume, 走 N4 别名加载, journal 已逐成员记账, 主循环重启后 save_path 核验兜底(S4), 全链自洽。新身<strong>已创建未绑端口</strong>的尾部由状态机未决态挡住。比现状(30s 稳定期)窗口更早开, 但每一拍的安全前提不弱于现状。</div>
+
+    <h3>§03.4 观测持久化(obs 文件)</h3>
+    <ul>
+      <li>路径: <code>&lt;data_dir&gt;/relocate/obs-&lt;instance_key&gt;.json</code>(与 spec/journal/daemon.json 同目录同家族); helper 进 <code>relocate_journal.py</code>(read/write, 原子写, 对齐 daemon-state helper 风格)。</li>
+      <li>schema: <code>{schema_version: 1, host, port, owner: {pid, ct, ts} | null, absorbed: [{pid, ct, ts}], ts}</code>。</li>
+      <li>写时机: 状态变更即写(owner 换身/吸收/清出), 频率低; daemon 重启后 owner/absorbed 恢复——覆盖「daemon 停机期间目标死亡」的判定(记录仍是有效的死证)。</li>
+      <li>daemon.json 不动(watcher 归属与心跳语义不混); state.json 不碰(D13 契约不变)。</li>
+    </ul>
+    <p><strong>被否决的备选</strong>: 人工放行标记文件(每窗人工介入, 常驻形态下摩擦大)、profile 指纹(读目标 qBittorrent.ini 与进程对照——依赖 qB 内部布局与 cmdline 可见性, 脆)、psutil(新依赖, 违背零依赖风格)。远程端点 host 分类——事实裁决不修(拍板 D4, 同机判定是迁移链硬闸, 远程端点走不到收尾)。</p>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">§04</span>实施步骤</h2>
+    <table>
+      <tr><th>波</th><th>内容</th><th>验收判据</th></tr>
+      <tr>
+        <td><strong>W1</strong><br>观测通道 + 状态机纯逻辑</td>
+        <td>① <code>relocate_journal.py</code> 加 obs 文件 helper(读写/原子写/路径单点)。② <code>recycle_daemon.py</code> 加观测通道函数族: LISTENING 归属(Windows netstat 解析 / Linux procnet+fd)、全机 qB (pid, ct) 枚举(PowerShell / /proc)、epoch 换算; 解析容错与 10s 超时。③ 新增 <code>_Observation</code> 状态机类(owner/absorbed/未决集维护 + §03.3 判据纯函数), 常量 <code>NEW_FACE_SETTLE=30.0</code>。④ 单测全桩化(通道样例输出桩 / /proc 假树), 先立判据守阵再接线。</td>
+        <td>判据纯函数单测绿(清单落点 = W2 ⑤ 的测试文件头「## 测试计划」); <code>commands run test.quick</code> 绿; netstat/PowerShell 通道在本机实测解析成功(中英文输出都过)。</td>
+      </tr>
+      <tr>
+        <td><strong>W2</strong><br>判据接线 + 场景测试</td>
+        <td>① <code>run</code>/<code>_process_window</code>/<code>_window_open</code> 接 L1/L2/L3 三层: 有观测走 L1 立即判据, 无记录/通道故障退 L2(30s 保留)+warning 节流。② 逐成员落盘前复验升级为 §03.3 全套。③ <code>_proc_absent</code> docstring 更新(标注 L2 语义与增强路径指引)。④ <code>tests/test_recycle_daemon.py</code>: <code>_stub_qb</code> 适配观测注入面 + 场景测试(场景 X 立即落盘 / 场景 Y settle 吸收 / PID 复用两向 / 未决挡窗 / obs 重启重载 / 通道失败退 L2)。⑤ 测试文件头「## 测试计划」清单同步。</td>
+        <td>场景测试全绿; 既有 recycle daemon 测试回归绿(行为等价面: 单实例窗口时序不晚于现状); warning 节流有测试钉住。</td>
+      </tr>
+      <tr>
+        <td><strong>W3</strong><br>P7 真机验证 + 回写收口</td>
+        <td>① 真机 P7 形态验证: 同机日常实例在跑, 目标实例死 ⇒ daemon 开窗完成改写; 目标复活 ⇒ qb_back 放弃; 全机名册通道故障注入 ⇒ 退 L2。② 回写: issue 0528 状态变更(复验行 + 修复后补充: 实际修法/验证方式/测试数字) + docstring + pitfalls P7 专档(竞争面定义/证据链边界/改 WebUI 端口须同步 config 警示) + <code>kb.index</code> 重跑 + 基线切片 + 收尾 DoD(code-review skill 全程)。</td>
+        <td>P7 三场景真机实测过; <code>commands run test.full</code> 全绿且新建基线切片(数字实测誊写); issue 0528 翻收口; 用户终验点头。</td>
+      </tr>
+    </table>
+    <p><strong>止损</strong>: 每波一笔提交; W1 通道实测解析失败且无法可靠解析 ⇒ 当场停手回报(观测通道是 L1 的地基, 解析不可靠 = 方案不成立, 不自选改道); 任一波回归红当日无法定位 ⇒ 回滚该笔。</p>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">§05</span>待拍板清单</h2>
+    <div class="callout ok">无待拍板项——2026-11-10 会话 grilling 三轮全部收敛(§06); 实现细节(解析器形态/常量数值微调/测试桩形态)属执行层, 认领人按 §03/§04 处置。</div>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">§06</span>拍板记录</h2>
+    <table>
+      <tr><th>#</th><th>拍板</th><th>内容与理由</th></tr>
+      <tr><td><strong>D1</strong></td><td>实装实例级证据链</td><td>三档(实装/人工放行/维持现状)中拍板实装: P7 是真机常态形态(日常库+测试库同机), 常驻 daemon 下每窗都撞, 长期摩擦大。</td></tr>
+      <tr><td><strong>D2</strong></td><td>进程级证据成立即<strong>立即进窗</strong></td><td>用户裁决原文方向:「既然有进程级观测, 连续 30s 稳定就降级——如果进程表面确实退出了, 就立即收尾」。落地为: L1 无稳定期; 30s 保留给 L2/L3 弱证据路径(弱证据配稳定期); 逐成员复验升级为全套 L1 证据(安全性必要条件, §03.3); 场景 X 论证见 §03.3 callout。</td></tr>
+      <tr><td><strong>D3</strong></td><td>按 daemon 常驻形态设计</td><td>主循环 <code>ACT_ENSURE_DAEMON</code> 自动重拉、daemon 长期在跑; 观测文件持久化, 冷启动无记录仅发生在首次部署/清数据(一次性, 走 L2 等目标下次上线即解锁)。</td></tr>
+      <tr><td><strong>D4</strong></td><td>远程端点 host 分类<strong>不修</strong>(非目标)</td><td>第二轮 grilling 提出「非本机端点被本地名册误挡」; 用户反问后事实核查: 迁移链有硬性同机判定(<code>relocate_plan.py:557</code> <code>_same_fs_proof</code>, D 级路径证据/E1 强探测/assume_shared 三选一), 远程 qB 走不到收尾——误挡仅在 assume_shared 越权形态理论上可及, 被产品判据刻意排除。按范围守恒不扩代码面, 方案仅留非目标声明。</td></tr>
+      <tr><td><strong>D5</strong></td><td>默认开, 零配置键</td><td>L1 每一档都严于现状某条已在跑的路径(名册故障时现状已允许端口单证); 真要钉回旧行为, git 回滚比配置旋钮诚实。不触发黄金法则 4(validate_config 无新键)。</td></tr>
+    </table>
+    <p class="hint">grilling 轮次: 第一轮 Q1(目标档位)/Q2(证据链主形态, 含朴素 pid 方案尾部洞的推演)/Q3(部署形态); 第二轮 Q4(伴生缺陷范围)/Q5(配置开关); 第三轮 Q4 事实翻案(同机判定硬闸)后共识确认。</p>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">§07</span>风险与对策</h2>
+    <table>
+      <tr><th>#</th><th>风险</th><th>定性</th><th>对策</th></tr>
+      <tr><td><strong>R1</strong></td><td>观测通道开销/挂起: 每 poll 由 1 个子进程(tasklist)增至 3 个左右(netstat + PowerShell + 名册), PowerShell 约 100-500ms</td><td>低——常驻 daemon、poll 5s、判据路径本就轻</td><td>全部子进程 10s 超时; 失败即退 L2/L3 保守判据; 通道失败告警节流 60s。</td></tr>
+      <tr><td><strong>R2</strong></td><td>netstat/PowerShell 输出解析脆(语言版本/格式漂移)</td><td>低</td><td>解析器不硬赌: 解析不出=观测不可用=退回 L2, 不产生假证据; W1 在本机实测中英文输出; LISTENING 状态字各语言版一致的假设在 W1 验证, 不成立则换通道再评。</td></tr>
+      <tr><td><strong>R3</strong></td><td>settle 30s 是有界赌注: 若目标新身 WebUI 绑定 &gt; 30s, 会被误吸收进窗</td><td>低——qB WebUI 监听绑定在启动早期(秒级), 30s 为 10 倍量级余量</td><td>常量独立(<code>NEW_FACE_SETTLE</code>)可调; 常量数值与依据写进代码注释与 pitfalls 专档; 误吸收前提(目标待收尾期间重启且绑定超 30s)本身罕见。</td></tr>
+      <tr><td><strong>R4</strong></td><td>配置漂移残余: 用户改目标 profile 的 WebUI 端口且不同步 config——新身永不绑我们端口, settle 后被吸收, 暴露。同 profile 异常双开(用户关单实例锁)同属此类「外部不可区分」残余</td><td>极低——需「改端口/双开」与「该实例有待收尾 journal」双重巧合</td><td>无零赌注堵法(外部观测原理上分不出), 诚实定性为方案边界: pitfalls P7 专档写明「改 WebUI 端口须同步 config.yml 与 bt_backup 表」警示; 不为极低概率复杂化判据。</td></tr>
+      <tr><td><strong>R5</strong></td><td>立即进窗语义变化(去掉 30s 全局稳定期)的回归风险</td><td>低——单实例下 qB 真死时窗口提前 ≈30s 开启, 判据面更强(进程级死证)</td><td>场景 X 论证(§03.3)+ 场景测试钉住; L2/L3 路径 30s 保留, 单实例回归测试比对窗口时序不晚于现状。</td></tr>
+    </table>
+  </section>
+
+  <section id="s10">
+    <h2><span class="no">§10</span>变更记录</h2>
+    <ul>
+      <li>2026-11-10 03:18 — 立档(Open): grilling 三轮收敛后成文; 承接 issue 26-11-07-0528 的「未来增强方向」挂账, 拍板 D1-D5 见 §06。</li>
+    </ul>
+  </section>
+
+  <footer>
+    26-11-10-0318-plan-recycle-daemon-instance-evidence.html · plan · 单文件 HTML(dark) · 状态随推进在 §10 留痕; 认领后先复验 issue 0528 锚点(<code>_proc_absent</code> docstring / <code>_window_open</code> / <code>run</code> 判据段)
+  </footer>
+
+</div>
+</body>
+</html>
