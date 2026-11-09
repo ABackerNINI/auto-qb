@@ -98,9 +98,42 @@ daemon 主体:
 - test_proc_absent_dual_evidence_and_roster_fallback: 证一判定(评审 #6)—— 名册可用时
   「进程不在 AND 端口拒连」合取(名册见 qB + 端口拒连 = 不进窗, WebUI 不可达 != 进程
   不在)/ 名册无 qB + 拒连成立 / 名册不可用退端口单证但告警降级 / 无端口退名册单证
+
+观测面(W1a, 计划 26-11-10-0318 §03.1/§03.4; obs 账 helper + 观测通道函数族, 全桩化):
+- test_obs_write_read_roundtrip_and_full_replace: obs 账写读回环(schema_version 写侧强制钉上/
+  ts 缺省挂钟); 新写入即全量替换 —— host/port 换实例后旧 owner/absorbed 零继承
+- test_obs_read_missing_or_bad_shape_is_none: 缺文件/schema_version 不符(含 bool 冒充 1)/
+  host 非空 str 闸/port 正 int 闸/owner 或 absorbed 形不符(混型反例 pid="4242"/pid=True/
+  ct="1e3")/absorbed 缺失/ts 非正数值/整文件非 dict => None(半残记录不冒充证据, 保守退全机口径)
+- test_obs_write_failure_is_false: 盘故障(OSError)=> False 不抛(daemon 节拍不因观测账中断)
+- test_filetime_to_epoch_known_value: FILETIME(1601 起 100ns ticks)-> epoch 秒与 datetime 锚点互证
+- test_owner_pid_from_netstat_zh_en_and_wildcard: netstat 解析中英文样例各一; 0.0.0.0 通配/
+  具体地址同算, [::] IPv6 行独立 pid+端口断言(解析回归可判红); 非 LISTENING/UDP 行/表头/
+  端口不合跳过; encoding=utf-8+errors=replace+timeout=10 钉法断言
+- test_owner_pid_from_netstat_ambiguous_or_garbage_is_none: 归属不唯一 => None+warning(不猜);
+  乱码输出(解码失败等效形态)=> 无匹配行 => None
+- test_owner_pid_from_procnet_fake_tree: Linux LISTENING 归属(假 /proc): st==0A 端口->inode->
+  fd socket 链接归属; tcp6 缺失只当该表无监听; 非监听行/端口不合跳过; 归属不唯一 => None
+- test_listening_owner_pid_dispatch_and_exception_is_none: 分派(nt->netstat/posix->procnet)+
+  归属不成功(None 支)与通道异常 => None+warning(证据语义: None=观测不可用, 绝不当 owner 死证)
+- test_qb_processes_from_powershell_parse_and_conservative_drops: PowerShell 解析(pid|name|
+  filetime -> ct 换算, 映像名小写); StartTime 不可读/pid 非数值/映像名空条目剔除且聚合判 None
+  (部分清单不冒充全量); 形制外行/缺健康标记 => None; 标记+零数据 => {}(健康零观测); 钉法断言
+- test_qb_processes_from_proc_fake_tree: Linux O2(假 /proc 树): comm 含 qbittorrent 收录 +
+  btime/starttime/SC_CLK_TCK 换算; 读时已消失的 pid(FileNotFoundError)整体忽略; comm/stat 身份
+  不可得 => 聚合判 None
+- test_qb_processes_from_proc_broken_btime_or_hz_is_none: 病树变体 —— /proc/stat OSError/
+  btime 行缺失/sysconf 桩抛/HZ<=0 => None + warning「枚举不可用」(绝不产假 ct)
+- test_qb_processes_dispatch_timeout_and_healthy_empty: O2 分派: 子进程超时/命令缺失 => None+
+  warning(观测不可用退 L2); posix 分派透传; 健康零观测({})不判不可用
+- test_observe_owner_cross_check_and_channel_none: O1 交叉校验: 归属 pid 映像名含 qbittorrent
+  才记 {pid, ct, ts}; 非 qB 占端口/映像名漂移/枚举通道 None/归属不成功 => None+warning(不记录)
 """
+import builtins
+import io
 import logging
 import os
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest import mock
 
@@ -1229,3 +1262,603 @@ def test_spec_unreadable_mid_window_skips_job_without_stale_rewrite(tmp_path, mo
     rw = rj.read_rewrites(data_dir, "job-1")
     assert not rw, "零改写零落账: 绝不拿旧快照改写(下一窗口按新账重放)"
     assert not (rj.read_journal(data_dir, "job-1") or {}), "零建账(从未落过改写记录)"
+
+
+# ---------------------------------------------------------------------------
+# 观测面(W1a, 计划 26-11-10-0318 §03.1/§03.4): obs 账 helper + 观测通道函数族
+# 全桩化: 不起真进程、不回连真端口; netstat/PowerShell 用样例输出桩, /proc 用假树
+# ---------------------------------------------------------------------------
+
+LOG_RD = "auto_qb.tools.recycle_daemon"
+
+# 中文 Windows netstat 实测样例(数据行恒 ASCII, 表头本地化; 04:07 本机探针逐列核对;
+# [::] IPv6 行给独立端口+pid —— 同端口同 pid 会与 v4 行合并, IPv6 行解析破坏不可判红)
+NETSTAT_ZH = (
+    "\n"
+    "活动连接\n"
+    "\n"
+    "  协议  本地地址          外部地址        状态           PID\n"
+    "  TCP    0.0.0.0:36596         0.0.0.0:0              LISTENING       12345\n"
+    "  TCP    127.0.0.1:36596       127.0.0.1:52341        ESTABLISHED     12345\n"
+    "  TCP    [::]:36597            [::]:0                 LISTENING       7777\n"
+    "  TCP    0.0.0.0:135           0.0.0.0:0              LISTENING       9876\n"
+)
+NETSTAT_EN = (
+    "\n"
+    "Active Connections\n"
+    "\n"
+    "  Proto  Local Address          Foreign Address        State           PID\n"
+    "  TCP    192.168.1.5:36596      0.0.0.0:0              LISTENING       12345\n"
+    "  TCP    192.168.1.5:36598      192.168.1.5:443        TIME_WAIT       0\n"
+    "  UDP    0.0.0.0:5353           *:*                                    5678\n"
+)
+
+
+def _stub_stdout(monkeypatch, stdout):
+    """subprocess.run 桩: 只回给定 stdout(returncode=0), 不起真进程; 返回记录最近一次
+    调用 kwargs 的 dict, 供断言编码/超时钉法(encoding/errors/timeout 回归防线)"""
+    calls = {}
+
+    def _run(*args, **kwargs):
+        calls.clear()
+        calls.update(kwargs)
+        return mock.MagicMock(returncode=0, stderr="", stdout=stdout)
+
+    monkeypatch.setattr(rd.subprocess, "run", _run)
+    return calls
+
+
+def _stub_proc_open(monkeypatch, mapping):
+    """builtins.open 桩: 命中 mapping 的路径回 StringIO(或抛 mapping 里的异常实例),
+    其余走真 open(仿 test_names_from_proc_tolerates_unreadable_comm 的重定向造法)"""
+    real_open = open
+
+    def _open(path, *a, **kw):
+        p = str(path).replace("\\", "/")
+        if p in mapping:
+            v = mapping[p]
+            if isinstance(v, BaseException):
+                raise v
+            return io.StringIO(v)
+        return real_open(path, *a, **kw)
+
+    monkeypatch.setattr(builtins, "open", _open)
+
+
+def test_obs_write_read_roundtrip_and_full_replace(tmp_path):
+    d = str(tmp_path)
+    payload = {
+        "host": "127.0.0.1",
+        "port": 8080,
+        "owner": {
+            "pid": 4242,
+            "ct": 100.0,
+            "ts": 110.0
+        },
+        "absorbed": [{
+            "pid": 7,
+            "ct": 90.0,
+            "ts": 105.0
+        }],
+        "ts": 120.0,
+    }
+    assert rj.write_obs(d, "k", payload) is True
+    st = rj.read_obs(d, "k")
+    assert st["schema_version"] == rj.OBS_SCHEMA_VERSION == 1, "schema_version 写侧强制钉上"
+    assert st["host"] == "127.0.0.1" and st["port"] == 8080 and st["ts"] == 120.0
+    assert st["owner"] == {"pid": 4242, "ct": 100.0, "ts": 110.0}
+    assert st["absorbed"] == [{"pid": 7, "ct": 90.0, "ts": 105.0}]
+    # ts 缺省取挂钟(SYSTEM_CLOCK 单点); 路径与 daemon.json 同家族(实例键复用)
+    assert rj.write_obs(d, "k2", {"host": "h", "port": 2, "owner": None, "absorbed": []}) is True
+    st2 = rj.read_obs(d, "k2")
+    assert isinstance(st2["ts"], float) and st2["ts"] > 0
+    assert rj.obs_path(d, rj.instance_key("127.0.0.1", 8080)).endswith("obs-127.0.0.1_8080.json")
+    # 新写入即全量替换: host/port 换实例 => 旧 owner/absorbed 零继承(注释语义, 这里钉行为)
+    assert rj.write_obs(d, "k", {"host": "10.0.0.9", "port": 9999, "owner": None, "absorbed": [], "ts": 200.0}) is True
+    st = rj.read_obs(d, "k")
+    assert st["host"] == "10.0.0.9" and st["port"] == 9999 and st["ts"] == 200.0
+    assert st["owner"] is None and st["absorbed"] == []
+
+
+def test_obs_read_missing_or_bad_shape_is_none(tmp_path):
+    """缺文件/schema_version 不符(含 bool 冒充 1)/host 非空 str 闸/port 正 int 闸/owner 或
+    absorbed 形不符(混型反例: pid="4242"/pid=True/ct="1e3"/ts=True)/absorbed 键缺失/ts 非正
+    数值/整文件非 dict => None(半残记录不冒充证据, 保守退全机口径)"""
+    d = str(tmp_path)
+    assert rj.read_obs(d, "none") is None, "缺文件 => None"
+    rj.write_obs(d, "ok", {"host": "h", "port": 1, "owner": None, "absorbed": [], "ts": 1.0})
+    assert rj.read_obs(d, "ok") is not None
+    # int 形 ct/ts 与 float 形同收(严格判型排的是混型, 不是 int)
+    rj.write_obs(
+        d, "ok2", {
+            "host": "h",
+            "port": 1,
+            "owner": {
+                "pid": 4,
+                "ct": 1,
+                "ts": 2
+            },
+            "absorbed": [{
+                "pid": 5,
+                "ct": 1.5,
+                "ts": 2.5
+            }],
+            "ts": 3
+        }
+    )
+    assert rj.read_obs(d, "ok2") is not None
+    bad_bodies = [
+        {
+            "schema_version": 99,
+            "host": "h",
+            "port": 1,
+            "owner": None,
+            "absorbed": [],
+            "ts": 1.0
+        },  # 版本不符
+        {
+            "schema_version": True,
+            "host": "h",
+            "port": 1,
+            "owner": None,
+            "absorbed": [],
+            "ts": 1.0
+        },  # 版本 bool 冒充 1
+        {
+            "host": "h",
+            "port": 1,
+            "owner": None,
+            "absorbed": [],
+            "ts": 1.0
+        },  # 版本缺失
+        {
+            "schema_version": 1,
+            "port": 1,
+            "owner": None,
+            "absorbed": [],
+            "ts": 1.0
+        },  # host 缺失
+        {
+            "schema_version": 1,
+            "host": "",
+            "port": 1,
+            "owner": None,
+            "absorbed": [],
+            "ts": 1.0
+        },  # host 空串
+        {
+            "schema_version": 1,
+            "host": 5,
+            "port": 1,
+            "owner": None,
+            "absorbed": [],
+            "ts": 1.0
+        },  # host 非str
+        {
+            "schema_version": 1,
+            "host": "h",
+            "owner": None,
+            "absorbed": [],
+            "ts": 1.0
+        },  # port 缺失
+        {
+            "schema_version": 1,
+            "host": "h",
+            "port": 0,
+            "owner": None,
+            "absorbed": [],
+            "ts": 1.0
+        },  # port 非正
+        {
+            "schema_version": 1,
+            "host": "h",
+            "port": "8080",
+            "owner": None,
+            "absorbed": [],
+            "ts": 1.0
+        },  # port 数值串混型
+        {
+            "schema_version": 1,
+            "host": "h",
+            "port": 1,
+            "owner": {
+                "pid": "4242",
+                "ct": 1.0,
+                "ts": 1.0
+            },
+            "absorbed": [],
+            "ts": 1.0
+        },  # pid 数值串
+        {
+            "schema_version": 1,
+            "host": "h",
+            "port": 1,
+            "owner": {
+                "pid": True,
+                "ct": 1.0,
+                "ts": 1.0
+            },
+            "absorbed": [],
+            "ts": 1.0
+        },  # pid bool 冒充 1
+        {
+            "schema_version": 1,
+            "host": "h",
+            "port": 1,
+            "owner": {
+                "pid": 4242,
+                "ct": "1e3",
+                "ts": 1.0
+            },
+            "absorbed": [],
+            "ts": 1.0
+        },  # ct 数值串
+        {
+            "schema_version": 1,
+            "host": "h",
+            "port": 1,
+            "owner": {
+                "pid": 4242,
+                "ct": 1.0,
+                "ts": True
+            },
+            "absorbed": [],
+            "ts": 1.0
+        },  # entry ts bool
+        {
+            "schema_version": 1,
+            "host": "h",
+            "port": 1,
+            "owner": {
+                "pid": 0,
+                "ct": 1.0,
+                "ts": 1.0
+            },
+            "absorbed": [],
+            "ts": 1.0
+        },  # pid 非正
+        {
+            "schema_version": 1,
+            "host": "h",
+            "port": 1,
+            "owner": "junk",
+            "absorbed": [],
+            "ts": 1.0
+        },  # owner 非dict
+        {
+            "schema_version": 1,
+            "host": "h",
+            "port": 1,
+            "owner": None,
+            "absorbed": ["junk"],
+            "ts": 1.0
+        },  # absorbed 成员形不符
+        {
+            "schema_version": 1,
+            "host": "h",
+            "port": 1,
+            "owner": None,
+            "absorbed": [],
+            "ts": "x"
+        },  # ts 非数值
+        {
+            "schema_version": 1,
+            "host": "h",
+            "port": 1,
+            "owner": None,
+            "absorbed": [],
+            "ts": "120.0"
+        },  # 顶层 ts 数值串混型
+        {
+            "schema_version": 1,
+            "host": "h",
+            "port": 1,
+            "owner": None,
+            "absorbed": [],
+            "ts": True
+        },  # 顶层 ts bool
+        {
+            "schema_version": 1,
+            "host": "h",
+            "port": 1,
+            "owner": None,
+            "ts": 1.0
+        },  # absorbed 键缺失(非本链产物)
+    ]
+    for i, body in enumerate(bad_bodies):
+        rj._write_json(rj.obs_path(d, f"bad{i}"), body)
+        assert rj.read_obs(d, f"bad{i}") is None, body
+    rj._write_json(rj.obs_path(d, "lst"), [1, 2])  # 整文件非 dict
+    assert rj.read_obs(d, "lst") is None
+
+
+def test_obs_write_failure_is_false(tmp_path, monkeypatch):
+    """盘故障 => False 不抛(观测持久化 best-effort, 调用方告警留痕后继续)"""
+    def _boom(path, fn):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(rj, "_write_json", _boom)
+    assert rj.write_obs(str(tmp_path), "k", {"owner": None, "absorbed": [], "ts": 1.0}) is False
+
+
+def test_filetime_to_epoch_known_value():
+    dt = datetime(2022, 6, 18, 5, 6, 40, tzinfo=timezone.utc)
+    ft = int((dt - datetime(1601, 1, 1, tzinfo=timezone.utc)).total_seconds() * 10**7)
+    assert rd._filetime_to_epoch(ft) == dt.timestamp() == (ft - rd._FILETIME_1601_TO_EPOCH_TICKS) / 10**7
+
+
+def test_owner_pid_from_netstat_zh_en_and_wildcard(monkeypatch):
+    """netstat 解析中英文样例各一: LISTENING 行本地端口归属(0.0.0.0 通配/具体地址同算),
+    [::] IPv6 行独立 pid+端口断言(解析回归可判红); ESTABLISHED/TIME_WAIT/UDP 行/表头/
+    端口不合一律跳过; 子进程钉法(encoding=utf-8 + errors=replace + timeout=10)钉死"""
+    calls = _stub_stdout(monkeypatch, NETSTAT_ZH)
+    assert rd._owner_pid_from_netstat(36596) == 12345, "通配行归属; 同端口 ESTABLISHED 行跳过"
+    assert calls["encoding"] == "utf-8" and calls["errors"] == "replace" and calls["timeout"] == 10, "钉法回归防线"
+    assert rd._owner_pid_from_netstat(36597) == 7777, "[::] IPv6 行独立归属(端口按最后一个 ':' 取)"
+    assert rd._owner_pid_from_netstat(135) == 9876
+    assert rd._owner_pid_from_netstat(9999) is None
+    calls_en = _stub_stdout(monkeypatch, NETSTAT_EN)
+    assert rd._owner_pid_from_netstat(36596) == 12345
+    assert calls_en["encoding"] == "utf-8" and calls_en["errors"] == "replace" and calls_en["timeout"] == 10
+    assert rd._owner_pid_from_netstat(36598) is None, "TIME_WAIT 不算监听"
+    assert rd._owner_pid_from_netstat(5353) is None, "UDP 行(4 列)跳过"
+
+
+def test_owner_pid_from_netstat_ambiguous_or_garbage_is_none(monkeypatch, caplog):
+    # 归属不唯一(同端口两个 LISTENING pid)=> None + warning(不猜)
+    _stub_stdout(
+        monkeypatch,
+        "  TCP    0.0.0.0:8080    0.0.0.0:0    LISTENING    100\n"
+        "  TCP    10.0.0.2:8080    0.0.0.0:0    LISTENING    200\n",
+    )
+    with caplog.at_level(logging.WARNING, logger=LOG_RD):
+        assert rd._owner_pid_from_netstat(8080) is None
+    assert any("归属不唯一" in r.message for r in caplog.records), caplog.text
+    # 乱码输出(解码失败的等效形态: 数据行全部不成形)=> 无匹配行 => None, 不产假证据
+    _stub_stdout(monkeypatch, "\ufffd\ufffd\ufffd \ufffd\ufffd\nrandom garbage line\n")
+    assert rd._owner_pid_from_netstat(8080) is None
+
+
+def test_owner_pid_from_procnet_fake_tree(monkeypatch, caplog):
+    """Linux LISTENING 归属(假 /proc): st==0A 行端口->inode, /proc/<pid>/fd socket 链接归属;
+    tcp6 缺失只当该表无监听; st==01(非监听)行不贡献 inode; 归属不唯一 => None + warning"""
+    tcp = (
+        "  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode\n"
+        "   0: 00000000:1F90 00000000:0000 0A 00000000:00000000 00:00000000 00000000     0        0 12345 1 0\n"
+        "   1: 00000000:1F91 00000000:0000 0A 00000000:00000000 00:00000000 00000000     0        0 12346 1 0\n"
+        "   2: 0100007F:1F90 0200007F:CEAA 01 00000000:00000000 00:00000000 00000000     0        0 12347 1 0\n"
+    )
+    _stub_proc_open(monkeypatch, {"/proc/net/tcp": tcp, "/proc/net/tcp6": OSError(2, "no tcp6")})
+    # 单一归属: 8080 -> inode 12345 -> pid 42; 8081 -> inode 12346 -> pid 44; fd 目录打不开的
+    # pid 无从归属(逐项跳过); 非 socket fd 与已消失 fd 不贡献归属; /proc 根清单含非数字项
+    links = {"/proc/42/fd/5": "socket:[12345]", "/proc/42/fd/6": "pipe:[999]", "/proc/44/fd/9": "socket:[12346]"}
+
+    def _listdir(p):
+        if p == "/proc":
+            return ["1", "self", "42", "43", "44"]
+        try:
+            return {"/proc/42/fd": ["5", "6"], "/proc/44/fd": ["9", "gone"]}[p.replace("\\", "/")]
+        except KeyError:
+            raise OSError(2, f"no fd dir {p}")
+
+    def _readlink(p):
+        p = p.replace("\\", "/")
+        if p.endswith("/gone"):
+            raise OSError(2, f"fd vanished {p}")
+        try:
+            return links[p]
+        except KeyError:
+            raise OSError(2, f"no link {p}")
+
+    monkeypatch.setattr(rd.os, "listdir", _listdir)
+    monkeypatch.setattr(rd.os, "readlink", _readlink)
+    assert rd._owner_pid_from_procnet(8080) == 42
+    assert rd._owner_pid_from_procnet(8081) == 44
+    assert rd._owner_pid_from_procnet(8082) is None, "表中无该端口监听"
+    # 归属不唯一: 两个 pid 链到同一 inode => None + warning(不猜)
+    monkeypatch.setattr(rd.os, "readlink", lambda p: "socket:[12345]")
+    with caplog.at_level(logging.WARNING, logger=LOG_RD):
+        assert rd._owner_pid_from_procnet(8080) is None
+    assert any("归属不唯一" in r.message for r in caplog.records), caplog.text
+
+
+def test_listening_owner_pid_dispatch_and_exception_is_none(monkeypatch, caplog):
+    """LISTENING 归属分派(nt -> netstat 支 / 非 nt -> procnet 支); 归属不成功(无监听行/
+    归属不唯一)与通道异常 => None + warning(证据语义: None = 观测不可用, 调用方退 L2,
+    绝不当 owner 死证)"""
+    monkeypatch.setattr(rd.os, "name", "nt")
+    monkeypatch.setattr(rd, "_owner_pid_from_netstat", lambda port: 5555)
+    assert rd._listening_owner_pid(8080) == 5555
+    monkeypatch.setattr(rd.os, "name", "posix")
+    monkeypatch.setattr(rd, "_owner_pid_from_procnet", lambda port: 6666)
+    assert rd._listening_owner_pid(8080) == 6666
+    # 归属不成功(解析侧无监听行/归属不唯一)=> None + warning「未归属成功」
+    monkeypatch.setattr(rd, "_owner_pid_from_procnet", lambda port: None)
+    with caplog.at_level(logging.WARNING, logger=LOG_RD):
+        assert rd._listening_owner_pid(8080) is None
+    assert any("未归属成功" in r.message for r in caplog.records), caplog.text
+    # 通道异常 => None + warning(观测不可用)
+    caplog.clear()
+
+    def _boom(port):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(rd, "_owner_pid_from_procnet", _boom)
+    with caplog.at_level(logging.WARNING, logger=LOG_RD):
+        assert rd._listening_owner_pid(8080) is None
+    assert any("观测不可用" in r.message for r in caplog.records), caplog.text
+
+
+def test_qb_processes_from_powershell_parse_and_conservative_drops(monkeypatch, caplog):
+    """PowerShell 枚举解析: 数据行 pid|name|filetime -> {pid: {name, ct}}(映像名小写);
+    StartTime 不可读/pid 非数值/映像名空条目剔除且聚合判 None(部分清单不冒充全量); 形制外
+    的行/缺健康标记 => None; 标记+零数据 => {}(健康零观测, 非 None); 钉法钉死"""
+    calls = _stub_stdout(
+        monkeypatch,
+        "4212|qbittorrent|133000000000000000\r\n8804|qBittorrentEnhanced|133000000100000000\r\nqb-obs-end\r\n"
+    )
+    assert rd._qb_processes_from_powershell() == {
+        4212: {
+            "name": "qbittorrent",
+            "ct": 1655526400.0
+        },
+        8804: {
+            "name": "qbittorrentenhanced",
+            "ct": 1655526410.0
+        },
+    }
+    assert calls["encoding"] == "utf-8" and calls["errors"] == "replace" and calls["timeout"] == 10, "钉法回归防线"
+    # StartTime 不可读(空 filetime): 该条目剔除, 聚合判不可用
+    _stub_stdout(monkeypatch, "4212|qbittorrent|\r\n8804|qbittorrent|133000000100000000\r\nqb-obs-end\r\n")
+    with caplog.at_level(logging.WARNING, logger=LOG_RD):
+        assert rd._qb_processes_from_powershell() is None
+    assert any("StartTime" in r.message for r in caplog.records), caplog.text
+    # 形制外的行混入(解析器不硬赌输出格式)=> 聚合判不可用
+    caplog.clear()
+    _stub_stdout(monkeypatch, "Get-Process : error text\r\n4212|qbittorrent|133000000000000000\r\nqb-obs-end\r\n")
+    assert rd._qb_processes_from_powershell() is None
+    # 第二剔除支: pid 非数值 / 映像名空 —— 条目剔除 + 聚合判不可用
+    caplog.clear()
+    _stub_stdout(monkeypatch, "abc|qbittorrent|133000000000000000\r\nqb-obs-end\r\n")
+    assert rd._qb_processes_from_powershell() is None
+    assert any("pid/映像名" in r.message for r in caplog.records), caplog.text
+    caplog.clear()
+    _stub_stdout(monkeypatch, "4212||133000000000000000\r\nqb-obs-end\r\n")
+    assert rd._qb_processes_from_powershell() is None
+    assert any("pid/映像名" in r.message for r in caplog.records), caplog.text
+    # 缺健康标记(管线半途而废)=> None(区分「通道故障」与「健康零观测」)
+    caplog.clear()
+    _stub_stdout(monkeypatch, "4212|qbittorrent|133000000000000000\r\n")
+    assert rd._qb_processes_from_powershell() is None
+    assert any("健康标记" in r.message for r in caplog.records), caplog.text
+    # 通道健康且全机无 qB => {}(有效观测, 不是 None)
+    _stub_stdout(monkeypatch, "\r\nqb-obs-end\r\n")
+    assert rd._qb_processes_from_powershell() == {}
+
+
+def test_qb_processes_from_proc_fake_tree(monkeypatch, caplog):
+    """Linux O2(假 /proc 树): comm 含 qbittorrent 收录, ct = btime + starttime/SC_CLK_TCK;
+    读时已消失的 pid(FileNotFoundError)整体忽略不算枚举不完整; comm/stat 身份不可得 =>
+    聚合判 None(部分清单不冒充全量)"""
+    healthy_stat = "100 (qbittorrent) S " + " ".join(["0"] * 18) + " 2000000 0 0"
+
+    def _fake(monkeypatch, comm, stat):
+        mapping = {"/proc/stat": "cpu 1 2 3\nbtime 1000000000\nintr 1\n"}
+        for pid, c in comm.items():
+            mapping[f"/proc/{pid}/comm"] = c
+        for pid, s in stat.items():
+            mapping[f"/proc/{pid}/stat"] = s
+        monkeypatch.setattr(rd.os, "listdir", lambda p: ["1", "self", "100", "200", "300"])
+        _stub_proc_open(monkeypatch, mapping)
+        monkeypatch.setattr(rd.os, "sysconf", lambda name: 100, raising=False)
+
+    # 健康树: qbittorrent 收录 + ct 换算; 无关 comm(systemd/self)与非数字项跳过
+    _fake(monkeypatch, {1: "systemd\n", "self": "python\n", 100: "qbittorrent\n"}, {100: healthy_stat})
+    assert rd._qb_processes_from_proc() == {100: {"name": "qbittorrent", "ct": 1000020000.0}}
+    # 读时已消失(pid 300 stat FileNotFoundError): 死进程无威胁, 条目整体忽略, 聚合仍可用
+    _fake(
+        monkeypatch, {
+            100: "qbittorrent\n",
+            300: "qbittorrent\n"
+        }, {
+            100: healthy_stat,
+            300: FileNotFoundError(2, "gone")
+        }
+    )
+    assert rd._qb_processes_from_proc() == {100: {"name": "qbittorrent", "ct": 1000020000.0}}
+    # stat 身份不可得(pid 200 PermissionError): 剔除 + 聚合判不可用
+    _fake(
+        monkeypatch, {
+            100: "qbittorrent\n",
+            200: "qbittorrent\n"
+        }, {
+            100: healthy_stat,
+            200: PermissionError(13, "denied")
+        }
+    )
+    with caplog.at_level(logging.WARNING, logger=LOG_RD):
+        assert rd._qb_processes_from_proc() is None
+    assert any("starttime" in r.message.lower() for r in caplog.records), caplog.text
+    # comm 不可读(pid 200 PermissionError): 无法判是否 qB => 同款聚合不可用
+    caplog.clear()
+    _fake(monkeypatch, {100: "qbittorrent\n", 200: PermissionError(13, "denied")}, {100: healthy_stat})
+    assert rd._qb_processes_from_proc() is None
+    assert any("comm" in r.message for r in caplog.records), caplog.text
+
+
+def test_qb_processes_from_proc_broken_btime_or_hz_is_none(monkeypatch, caplog):
+    """病树变体: /proc/stat 读不到(btime OSError)/ btime 行缺失(sysconf 桩抛/返 0 同款)
+    => None + warning「枚举不可用」(基线量缺失时 (pid, ct) 换算无从谈起, 观测不可用,
+    绝不产假 ct)"""
+    monkeypatch.setattr(rd.os, "listdir", lambda p: ["100"])
+    # btime 文件 OSError
+    _stub_proc_open(monkeypatch, {"/proc/stat": OSError(13, "denied")})
+    with caplog.at_level(logging.WARNING, logger=LOG_RD):
+        assert rd._qb_processes_from_proc() is None
+    assert any("枚举不可用" in r.message for r in caplog.records), caplog.text
+    # btime 行缺失(StopIteration)
+    caplog.clear()
+    _stub_proc_open(monkeypatch, {"/proc/stat": "cpu 1 2 3\n"})
+    with caplog.at_level(logging.WARNING, logger=LOG_RD):
+        assert rd._qb_processes_from_proc() is None
+    assert any("枚举不可用" in r.message for r in caplog.records), caplog.text
+    # sysconf 桩抛(平台无 SC_CLK_TCK 等价物)
+    caplog.clear()
+    _stub_proc_open(monkeypatch, {"/proc/stat": "btime 1000000000\n"})
+
+    def _no_sysconf(name):
+        raise AttributeError("no sysconf")
+
+    monkeypatch.setattr(rd.os, "sysconf", _no_sysconf, raising=False)
+    with caplog.at_level(logging.WARNING, logger=LOG_RD):
+        assert rd._qb_processes_from_proc() is None
+    assert any("枚举不可用" in r.message for r in caplog.records), caplog.text
+    # HZ <= 0
+    caplog.clear()
+    monkeypatch.setattr(rd.os, "sysconf", lambda name: 0, raising=False)
+    with caplog.at_level(logging.WARNING, logger=LOG_RD):
+        assert rd._qb_processes_from_proc() is None
+    assert any("枚举不可用" in r.message for r in caplog.records), caplog.text
+
+
+def test_qb_processes_dispatch_timeout_and_healthy_empty(monkeypatch, caplog):
+    """O2 分派: 子进程超时/命令缺失 => None + warning(观测不可用, 调用方退 L2, 绝不产假
+    证据); posix 分派透传 proc 支; 健康零观测({})不判不可用"""
+    monkeypatch.setattr(rd.os, "name", "nt")
+
+    def _raise(exc):
+        def _run(*a, **kw):
+            raise exc
+
+        return _run
+
+    with caplog.at_level(logging.WARNING, logger=LOG_RD):
+        monkeypatch.setattr(rd.subprocess, "run", _raise(rd.subprocess.TimeoutExpired(cmd="powershell", timeout=10)))
+        assert rd._qb_processes() is None, "超时 => 观测不可用"
+        monkeypatch.setattr(rd.subprocess, "run", _raise(FileNotFoundError(2, "no powershell")))
+        assert rd._qb_processes() is None, "命令缺失 => 观测不可用"
+    assert caplog.text.count("观测不可用") >= 2, caplog.text
+    monkeypatch.setattr(rd.os, "name", "posix")
+    monkeypatch.setattr(rd, "_qb_processes_from_proc", lambda: {})
+    assert rd._qb_processes() == {}, "健康零观测透传(不判不可用)"
+
+
+def test_observe_owner_cross_check_and_channel_none(monkeypatch, caplog):
+    """O1 交叉校验: 归属 pid 的映像名含 qbittorrent(大小写不敏感)才记录 {pid, ct, ts};
+    非 qB 服务占端口/名册映像名漂移/枚举通道故障/归属不成功 => None + 不记录(保守面)"""
+    monkeypatch.setattr(rd, "_listening_owner_pid", lambda port: 4242)
+    qb = {4242: {"name": "qBittorrent", "ct": 100.0}}
+    assert rd._observe_owner(8080, qb, 500.0) == {"pid": 4242, "ct": 100.0, "ts": 500.0}
+    # 非 qB 占端口(全机 qB 名册无此 pid)=> 不记录 + warning
+    monkeypatch.setattr(rd, "_listening_owner_pid", lambda port: 7)
+    with caplog.at_level(logging.WARNING, logger=LOG_RD):
+        assert rd._observe_owner(8080, qb, 500.0) is None
+    assert any("不记录 owner" in r.message for r in caplog.records), caplog.text
+    # 名册成员映像名漂移(不含 qbittorrent)=> 不记录(带与保守)
+    monkeypatch.setattr(rd, "_listening_owner_pid", lambda port: 4242)
+    assert rd._observe_owner(8080, {4242: {"name": "chrome", "ct": 100.0}}, 500.0) is None
+    # 枚举通道故障(None)=> 直接 None(没有名册就没有证据)
+    assert rd._observe_owner(8080, None, 500.0) is None
+    # 归属不成功 => None
+    monkeypatch.setattr(rd, "_listening_owner_pid", lambda port: None)
+    assert rd._observe_owner(8080, qb, 500.0) is None

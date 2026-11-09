@@ -460,3 +460,93 @@ def pending_members(spec: dict, rewrites: Dict[str, dict]) -> List[dict]:
         if str(rec.get("status") or "") not in REWRITE_SETTLED:
             out.append(m)
     return out
+
+
+# --------------------------------------------------------------------------
+# S6 扩展(计划 26-11-10-0318 §03.4): 实例级观测账(obs 文件)
+#
+# recycle daemon 的实例级证据链(观测面 O1/O2, 该计划 W1)自维护的持久化观测状态:
+# owner 死证(LISTENING 归属 + 映像名交叉校验的 {pid, ct, ts})与新面孔 absorbed 清单。
+# 与同目录 daemon.json 的分工: daemon.json 是 watcher 归属与心跳(谁在看), obs 是进程
+# 观测结论(看到了什么)—— 语义不混(D13 账本契约不动, state.json 一概不碰)。写时机 =
+# 状态变更即写(owner 换身/吸收/清出, 频率低); 读侧缺失/坏形一律按「无有效观测」退回
+# 全机口径(保守退化, 黄金法则 2)。
+# --------------------------------------------------------------------------
+
+# obs 账 schema 版本(计划 §03.4 钉死: {schema_version, host, port, owner, absorbed, ts};
+# ct = create_time epoch 秒, ts = 观测时刻)
+OBS_SCHEMA_VERSION = 1
+
+
+def obs_path(data_dir: str, key: str) -> str:
+    """观测账路径: <data_dir>/relocate/obs-<instance_key>.json(与 spec/journal/daemon.json
+    同目录同家族, 复用 SUBDIR/instance_key 家族)"""
+    return os.path.join(relocate_dir(data_dir), f"obs-{key}.json")
+
+
+def _obs_pos_num(v: object) -> bool:
+    """正数值严格判型: int/float 且非 bool(bool 是 int 子类, True/False 不得冒充 1/0)
+    且 >0; 混型(数值字符串等)一律不符 —— 观测账是证据面, 判型从宽等于放行半残记录"""
+    return not isinstance(v, bool) and isinstance(v, (int, float)) and v > 0
+
+
+def _obs_entry_ok(entry: object) -> bool:
+    """obs 单条进程记录形校验(严格判型): {pid, ct, ts} 且 pid 为正 int、ct/ts 为正数值"""
+    if not isinstance(entry, dict):
+        return False
+    pid = entry.get("pid")
+    if isinstance(pid, bool) or not isinstance(pid, int) or pid <= 0:
+        return False
+    return _obs_pos_num(entry.get("ct")) and _obs_pos_num(entry.get("ts"))
+
+
+def read_obs(data_dir: str, key: str) -> Optional[dict]:
+    """读观测账; 缺文件/schema_version 不符/形不符 => None(保守: 无有效记录 = 调用方
+    退回全机口径, 绝不把半残记录当证据用)
+
+    形校验(计划 §03.4 schema, 全部严格判型): owner 为 None 或 {pid, ct, ts} 实记录;
+    absorbed 为其清单(缺失也判废 —— 我们自己的写方恒带该键, 缺键即非本链产物); host 为
+    非空 str、port 为正 int(与 absorbed 缺键同口径, 非 本链写方产物判废); schema_version
+    为 int 且非 bool; 顶层 ts 为正数值; 未知新字段放行(前向兼容, 与 S3 写方契约同口径)。
+    """
+    st = _read_json(obs_path(data_dir, key))
+    if st is None:
+        return None
+    sv = st.get("schema_version")
+    if isinstance(sv, bool) or not isinstance(sv, int) or sv != OBS_SCHEMA_VERSION:
+        return None
+    host = st.get("host")
+    if not isinstance(host, str) or not host.strip():
+        return None
+    port = st.get("port")
+    if isinstance(port, bool) or not isinstance(port, int) or port <= 0:
+        return None
+    owner = st.get("owner")
+    if owner is not None and not _obs_entry_ok(owner):
+        return None
+    absorbed = st.get("absorbed")
+    if not isinstance(absorbed, list) or not all(_obs_entry_ok(e) for e in absorbed):
+        return None
+    if not _obs_pos_num(st.get("ts")):
+        return None
+    return st
+
+
+def write_obs(data_dir: str, key: str, payload: dict) -> bool:
+    """写观测账(原子写, 复用 _write_json 家族); 返回是否落盘(False = 盘故障, 调用方
+    告警留痕后继续 —— 观测持久化是 best-effort, 缺失即退回全机口径, 不中断 daemon 节拍)
+
+    **新写入即全量替换**: 不读旧账不合并 —— 已存记录的 host/port 与本次不一致时**同样
+    直接覆盖**。理由: obs 账语义 =「实例 (host, port) 的当前观测」, 文件按实例键分家;
+    键内 host/port 变化 = 调用方换了实例身份, owner/absorbed 都是按实例归属的, 旧观测
+    整体作废, 继承才是错。schema_version 由本函数强制钉上(写侧不可能漏, 读侧不必猜);
+    ts 缺省取当前挂钟(SYSTEM_CLOCK 单点), 调用方可显式传观测时刻。
+    """
+    body = dict(payload or {})
+    body["schema_version"] = OBS_SCHEMA_VERSION
+    body.setdefault("ts", SYSTEM_CLOCK.now())
+    try:
+        _write_json(obs_path(data_dir, key), body)
+    except OSError:
+        return False
+    return True

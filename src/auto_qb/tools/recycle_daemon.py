@@ -31,11 +31,12 @@ setLocation/取消/再迁移只在 qB 在线时可达;两侧写不同文件(job 
 import argparse
 import logging
 import os
+import re
 import socket
 import subprocess
 import sys
 import time
-from typing import Optional
+from typing import Dict, Optional
 
 from ..core import fastresume
 from ..infra import relocate_journal as rj
@@ -147,6 +148,289 @@ def _window_open(host: str, port: int) -> bool:
     进窗时要求一次, 见 run)。名册现读不用快照: qB 可能在任何毫秒起身 —— N1 铁律的
     守门粒度 = 每次落盘之前(与 guardian run 循环同款两证合取)。"""
     return _proc_absent(_qb_process_names(), host, port) and _port_refused(host, port)
+
+
+# ---------------------------------------------------------------- 实例级观测通道(计划 26-11-10-0318 §03.1, W1)
+# O1 owner 归属(LISTENING 表解析 + qB 映像名交叉校验 => {pid, ct, ts})与 O2 全机 qB
+# 身份枚举(pid + create_time; 驱动新面孔状态机, 状态机本体是 W1b 的活)。证据语义铁律:
+# 解析不出/超时/通道异常 = 本拍观测不可用 => 返回 None/空 + warning 留痕, 调用方必须退回
+# L2 全机口径(_proc_absent), 绝不产生假证据(宁可不进窗, 不许假进窗)。零新依赖(禁
+# psutil), 子进程一律 10s 超时; warning 节流(60s 一次, 不刷屏)属 W2 接线面的职责。
+
+# Windows FILETIME 纪元差: 1601-01-01 与 1970-01-01 之间的 100ns ticks(epoch 换算单点)
+_FILETIME_1601_TO_EPOCH_TICKS = 116444736000000000
+# /proc/<pid>/fd/* 读链接的 socket 形制(Linux LISTENING 归属用)
+_SOCKET_LINK_RE = re.compile(r"^socket:\[(\d+)\]$")
+# PowerShell 输出的健康标记行: 单次调用的管线走完才会输出, 缺它 = 管线半途而废 => 观测
+# 不可用(区分「通道健康且全机无 qB({})」与「通道故障(None)」的唯一凭据)
+_PS_QB_END_MARK = "qb-obs-end"
+
+# 单次 PowerShell 调用批量取全机 qB 进程的 Id/ProcessName/StartTime(O1 的 ct 与 O2 的
+# 枚举共用这一口, 计划 §03.1)。枚举形态: Get-Process 无参全量 + Where-Object 按映像名
+# 过滤 —— 零匹配是**正常空管线**(语义即「健康零观测」), 不像 -Name 无匹配那样产生被
+# SilentlyContinue 吞掉的命令级错误、把「健康零观测」与「命令失败」搅在一起。命令级真
+# 失败在解析侧**不可读成 {}**: 管线与健康标记行整体包进外层 try, 任何终止型失败
+# (语句终止/script 终止/-ErrorAction Stop 升级都算 —— PS 语句终止默认只中止当前管线、
+# 脚本会继续走后续语句, 实测 2026-11-10)都被 catch 吞掉且**跳过标记行**, 解析侧见不到
+# 标记一律 None(见 _qb_processes_from_powershell)。输出编码显式钉 UTF-8
+# (pitfalls/ops/console-encoding.md: PS 管道输出按控制台码页编码, 中文 Windows = GBK ——
+# 启动后第一句锁 [Console]::OutputEncoding, try/catch 兜无控制台场景; 数据行恒 ASCII
+# (pid|name|filetime), 钉码失败也不损解析, 解码失败/异形输出由「无健康标记 => None」兜底)。
+# StartTime 逐进程容错: 读不到(权限/已退出)该条目输出空 filetime, 由解析侧剔除 ——
+# 聚合侧部分清单不冒充全量。
+_PS_QB_SCRIPT = (
+    "$ErrorActionPreference='SilentlyContinue';"
+    "try { [Console]::OutputEncoding=[System.Text.Encoding]::UTF8 } catch {};"
+    "try {"
+    "Get-Process | Where-Object { $_.ProcessName -like '*qbittorrent*' } | ForEach-Object {"
+    "$ft=''; try { $ft=[string]$_.StartTime.ToFileTimeUtc() } catch {};"
+    "'{0}|{1}|{2}' -f $_.Id,$_.ProcessName,$ft };"
+    f"'{_PS_QB_END_MARK}'"
+    "} catch {}"
+)
+
+
+def _filetime_to_epoch(ft: int) -> float:
+    """Windows FILETIME(1601-01-01 起的 100ns ticks)=> epoch 秒"""
+    return (ft - _FILETIME_1601_TO_EPOCH_TICKS) / 10**7
+
+
+def _owner_pid_from_netstat(port: int) -> Optional[int]:
+    """Windows: netstat -ano -p tcp 的 LISTENING 行归属目标端口 => owner pid | None
+
+    解析口径: TCP 数据行恒五列(协议 本地地址 外部地址 状态 PID), 状态字各语言版一致为
+    英文 LISTENING(计划 §07 R2 的假设, W1 本机实测中英文输出; 不成立则解析不出 => None
+    退 L2, 不产假证据); 0.0.0.0 通配监听与具体地址监听同算, 本地端口按最后一个 ':' 取
+    (兼容 [::]:port 的 IPv6 形)。编码: 数据行恒 ASCII, 表头本地化文本按 UTF-8+replace
+    解出的乱码不影响解析(pitfalls/ops/console-encoding.md 的「显式声明不靠 locale」口径)。
+    归属不唯一(同端口多个 LISTENING pid)=> None + warning(不猜)。
+    """
+    out = subprocess.run(
+        ["netstat", "-ano", "-p", "tcp"],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=10,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+    )
+    pids = set()
+    for line in (out.stdout or "").splitlines():
+        parts = line.split()
+        if len(parts) != 5 or parts[0].upper() != "TCP" or parts[3].upper() != "LISTENING":
+            continue  # 表头/空行/标题行/UDP 行/非监听行: 一律跳过
+        local_port = parts[1].rsplit(":", 1)[-1]
+        if not local_port.isdigit() or int(local_port) != int(port) or not parts[4].isdigit():
+            continue
+        pids.add(int(parts[4]))
+    if len(pids) > 1:
+        logger.warning("端口 %s 的 LISTENING 归属不唯一(%s), 不猜归属", port, sorted(pids))
+        return None
+    return next(iter(pids)) if pids else None
+
+
+def _owner_pid_from_procnet(port: int) -> Optional[int]:
+    """Linux: /proc/net/tcp{,6}(st==0A)端口 => socket inode => /proc/<pid>/fd 归属
+    => owner pid | None。tcp6 缺失常见(未启用 IPv6), 只当该表无监听; /proc/<pid>/fd
+    扫不动(权限/进程消失)逐项跳过; 归属不唯一 => None + warning(不猜)。"""
+    inodes = set()
+    for table in ("/proc/net/tcp", "/proc/net/tcp6"):
+        try:
+            with open(table, "r", encoding="utf-8") as f:
+                rows = f.read().splitlines()[1:]  # 首行表头
+        except OSError:
+            continue
+        for row in rows:
+            cols = row.split()
+            # 列制: sl local rem st ... inode(第 10 列); 列数不足/st 非 0A(LISTENING)/端口不合跳过
+            if len(cols) < 10 or cols[3].upper() != "0A":
+                continue
+            local = cols[1].rsplit(":", 1)
+            try:
+                if len(local) == 2 and int(local[1], 16) == int(port):
+                    inodes.add(int(cols[9]))
+            except ValueError:
+                continue
+    if not inodes:
+        return None
+    pids = set()
+    for pid in os.listdir("/proc"):
+        if not pid.isdigit():
+            continue
+        try:
+            fds = os.listdir(f"/proc/{pid}/fd")
+        except OSError:
+            continue  # 权限/已消失: 无从归属, 跳过
+        for fd in fds:
+            try:
+                m = _SOCKET_LINK_RE.match(os.readlink(f"/proc/{pid}/fd/{fd}"))
+            except OSError:
+                continue
+            if m and int(m.group(1)) in inodes:
+                pids.add(int(pid))
+    if len(pids) > 1:
+        logger.warning("端口 %s 的 /proc socket 归属不唯一(%s), 不猜归属", port, sorted(pids))
+        return None
+    return next(iter(pids)) if pids else None
+
+
+def _listening_owner_pid(port: int) -> Optional[int]:
+    """LISTENING 归属分派(O1 前半; 单点 dispatch, 与 _qb_process_names 同款平台分叉)。
+
+    证据语义: 返回 None = 观测不可用(端口无监听行/归属不唯一/通道异常), 调用方必须退回
+    L2 全机口径, 绝不当 owner 死证用。O1 只在端口可达时调用(计划 §03.1)—— 可达而无
+    监听行本身就是通道异常, 一律 warning 留痕。
+    """
+    try:
+        owner = _owner_pid_from_netstat(port) if os.name == "nt" else _owner_pid_from_procnet(port)
+    except Exception:  # noqa: BLE001 - 归属不出: 保守(观测不可用, 不产假证据)
+        logger.warning("端口 %s LISTENING 归属通道异常, 本拍观测不可用", port, exc_info=True)
+        return None
+    if owner is None:
+        logger.warning("端口 %s LISTENING 未归属成功(无监听行或归属不唯一), 本拍 owner 观测不可用", port)
+    return owner
+
+
+def _qb_processes_from_powershell() -> Optional[Dict[int, dict]]:
+    """Windows: 单次 PowerShell 批量枚举全机 qB 进程(O2)=> {pid: {name, ct}} | None
+
+    证据语义: 返回 None = 观测不可用, 调用方必须退回 L2 全机口径; {} = 通道健康且全机无
+    qB 进程(有效观测)。{} 与 None 的分界 = 健康标记行(_PS_QB_SCRIPT 里管线+标记整体包
+    try): Where-Object 零匹配走正常空管线 ⇒ 标记在 ⇒ {}(健康零观测); 任何终止型失败
+    (语句终止/script 终止/输出截断/启动失败)⇒ 标记不在 ⇒ None —— 命令级真失败与健康
+    零观测在解析侧不可混。**部分清单不冒充全量**: 任何条目身份不完整(StartTime 不可读
+    等)或出现形制外的行, 聚合整体判不可用 —— 新面孔状态机拿不完整的 (pid, ct) 集会把
+    在跑的 qB 当「不存在」, 那是假证据方向, 宁可整拍退 L2(黄金法则 2; 被剔除条目已逐条
+    warning 留痕, per-process 容错在剔除这一层, 计划 §03.1)。
+    """
+    out = subprocess.run(
+        ["powershell", "-NoProfile", "-NonInteractive", "-Command", _PS_QB_SCRIPT],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=10,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+    )
+    procs: Dict[int, dict] = {}
+    dropped = 0
+    healthy = False
+    for line in (out.stdout or "").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        if line == _PS_QB_END_MARK:
+            healthy = True
+            continue
+        parts = line.split("|")
+        if len(parts) != 3:
+            dropped += 1
+            logger.warning("PowerShell qB 枚举输出行形制异常(%r), 该条目剔除", line[:80])
+            continue
+        pid, name, ft = (p.strip() for p in parts)
+        if not pid.isdigit() or not name:
+            dropped += 1
+            logger.warning("PowerShell qB 枚举条目 pid/映像名异常(%r), 该条目剔除", line[:80])
+            continue
+        if not ft.isdigit():
+            dropped += 1
+            logger.warning("qB 进程 pid=%s 的 StartTime 不可读, 该条目剔除(部分清单不冒充全量)", pid)
+            continue
+        procs[int(pid)] = {"name": name.lower(), "ct": _filetime_to_epoch(int(ft))}
+    if not healthy:
+        logger.warning("PowerShell qB 枚举输出缺健康标记(%s), 本拍观测不可用", _PS_QB_END_MARK)
+        return None
+    if dropped:
+        return None
+    return procs
+
+
+def _qb_processes_from_proc() -> Optional[Dict[int, dict]]:
+    """Linux: /proc/*/comm 含 qbittorrent + /proc/<pid>/stat starttime 换算 epoch 秒(O2)
+    => {pid: {name, ct}} | None。create_time = /proc/stat btime + starttime/SC_CLK_TCK。
+    逐项容错分两向: comm/stat 读时进程已消失(FileNotFoundError)= 死进程无威胁, 条目整体
+    忽略不算枚举不完整; 其余 OSError/解析失败 = 身份不可得, 条目剔除且**聚合判不可用**
+    (部分清单不冒充全量, 与 PowerShell 支同口径)。"""
+    try:
+        with open("/proc/stat", "r", encoding="utf-8") as f:
+            btime = next(int(cols[1]) for cols in (ln.split() for ln in f) if cols and cols[0] == "btime")
+        hz = os.sysconf("SC_CLK_TCK")
+    except (OSError, StopIteration, ValueError, IndexError, AttributeError) as e:
+        # AttributeError = 本平台无 os.sysconf(Windows): 与 /proc 缺失同按「枚举不可用」保守
+        logger.warning("/proc/stat btime 或 SC_CLK_TCK 不可得(%s), 全机 qB 枚举不可用", e)
+        return None
+    if hz <= 0:
+        logger.warning("SC_CLK_TCK 非法(%s), 全机 qB 枚举不可用", hz)
+        return None
+    procs: Dict[int, dict] = {}
+    dropped = 0
+    for pid in os.listdir("/proc"):
+        if not pid.isdigit():
+            continue
+        try:
+            with open(f"/proc/{pid}/comm", "r", encoding="utf-8") as f:
+                name = f.read().strip().lower()
+        except FileNotFoundError:
+            continue  # 进程刚退出: 死进程无威胁, 条目整体忽略
+        except OSError:
+            dropped += 1
+            logger.warning("pid=%s 的 comm 不可读, 该条目剔除(部分清单不冒充全量)", pid)
+            continue
+        if "qbittorrent" not in name:
+            continue
+        try:
+            with open(f"/proc/{pid}/stat", "r", encoding="utf-8") as f:
+                # comm 字段可含空格/括号: 按最后一个 ')' 切尾, starttime(字段 22)在尾段
+                # 第 19 个(字段 3 起计), 见 proc(5)
+                tail = f.read().rsplit(")", 1)[1].split()
+            starttime = int(tail[19])
+        except FileNotFoundError:
+            continue  # 进程刚退出: 同上, 条目整体忽略
+        except (OSError, IndexError, ValueError) as e:
+            dropped += 1
+            logger.warning("pid=%s 的 starttime 不可得(%s), 该条目剔除(部分清单不冒充全量)", pid, e)
+            continue
+        procs[int(pid)] = {"name": name, "ct": btime + starttime / hz}
+    if dropped:
+        return None
+    return procs
+
+
+def _qb_processes() -> Optional[Dict[int, dict]]:
+    """全机 qB 进程身份枚举(O2; 单点 dispatch, 与 _qb_process_names 同款平台分叉与容错)。
+
+    证据语义: 返回 None = 观测不可用(通道异常/枚举不完整), 调用方必须退回 L2 全机口径;
+    {} = 通道健康且全机无 qB 进程(有效观测, 名册空的强证)。每 poll 至多取一次并与
+    _observe_owner 共用(单次 PowerShell 调用面, 计划 §03.1)。
+    """
+    try:
+        if os.name == "nt":
+            return _qb_processes_from_powershell()
+        return _qb_processes_from_proc()
+    except Exception:  # noqa: BLE001 - 枚举不出: 保守(观测不可用, 不产假证据)
+        logger.warning("全机 qB 身份枚举通道异常, 本拍观测不可用", exc_info=True)
+        return None
+
+
+def _observe_owner(port: int, qb_processes: Optional[Dict[int, dict]], now: float) -> Optional[dict]:
+    """O1: 端口 LISTENING 归属 + qB 映像名交叉校验 => owner 记录 {pid, ct, ts} | None
+
+    前后两半(计划 §03.1): 归属 pid 的映像名必须含 qbittorrent(大小写不敏感)才记录 ——
+    非 qB 服务占端口的保守面(不记录, 绝不把别人的监听当 owner 证据)。证据语义: 返回
+    None = 本拍未取得 owner 记录(观测通道不可用/端口无监听行/占用者非 qB/身份不完整),
+    调用方一律退回 L2 全机口径, 绝不当 owner 死证用。qb_processes 传 None(枚举通道故障)
+    => 直接 None —— 交叉校验没有名册就没有证据。
+    """
+    if qb_processes is None:
+        return None
+    pid = _listening_owner_pid(port)
+    if pid is None:
+        return None
+    ident = qb_processes.get(pid)
+    if ident is None or "qbittorrent" not in str(ident.get("name") or "").lower():
+        logger.warning("端口 %s 的 LISTENING 归属 pid=%s 非全机 qB 名册成员, 不记录 owner(非 qB 服务占端口的保守面)", port, pid)
+        return None
+    return {"pid": pid, "ct": float(ident["ct"]), "ts": float(now)}
 
 
 class _Owner:
