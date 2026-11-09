@@ -188,7 +188,7 @@ class AppProc:
     def pid(self) -> int:
         """**启动器**的 pid(Popen 拿到的那个)。
 
-        ⚠️ 不等于跑代码那个进程的 pid: uv 在 Windows 上给 venv 的 `Scripts/python.exe` 是个
+        WARN: 不等于跑代码那个进程的 pid: uv 在 Windows 上给 venv 的 `Scripts/python.exe` 是个
         47KB 启动器(基解释器 91KB), 它 CreateProcess 出真解释器再等着 —— 所以 `Popen.pid`
         与产品日志/锁 meta 里的 pid **不是同一个**。要真 pid 用 `real_pid()`。
         """

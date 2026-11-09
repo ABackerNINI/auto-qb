@@ -272,16 +272,16 @@ def test_rm08_10_groups_contract():
 def test_rm08_11_negative_empty_and_no_glue():
     """[RM08-11] 负向对照(L3): 空场 sites/groups 双空数组 + 已配置域不粘合两缺失域
 
-    前置: 副实例在线空库。腿① trackers 配 ["127.0.0"](双向包含匹配覆盖全部 127.0.0.x announce
-      域) + RM08-10 同款场景; 腿② trackers 配 X=127.0.1.5, 场景种A=[X,127.0.0.21]
+    前置: 副实例在线空库。腿 1 trackers 配 ["127.0.0"](双向包含匹配覆盖全部 127.0.0.x announce
+      域) + RM08-10 同款场景; 腿 2 trackers 配 X=127.0.1.5, 场景种A=[X,127.0.0.21]
       种B=[X,127.0.0.22](P/Q 缺失且从不同现)。
     副作用: 副实例两腿各加 3/2 枚 real-fake 假种子(全程 paused); 两份产品进程先后起停;
       只读 GET。
     回滚: 各腿删自造种子(连数据) + 产品进程 taskkill /F /T + 临时目录清场。
     失败判据: 空场 sites/groups 出现 null/缺键/非 list(向后兼容破) / 空场计数失真 /
-      腿② 出现同时含 P 与 Q 的组(已配置域参与粘合, D1 语义破) / 任一红验故意错位断言不红。
+      腿 2 出现同时含 P 与 Q 的组(已配置域参与粘合, D1 语义破) / 任一红验故意错位断言不红。
     """
-    # 腿① 空场: 配置已覆盖全部 announce 域名
+    # 腿 1 空场: 配置已覆盖全部 announce 域名
     _d1, qb1, _seeds1 = build_scene("rm08_11a", SCENE_MERGE)
     try:
         with product_case_grp("rm08_11a", tracker_entry_block("rm08_cover", "127.0.0")) as (case, port, _proc):
@@ -293,11 +293,11 @@ def test_rm08_11_negative_empty_and_no_glue():
             assert sm["torrents"] == 3 and sm["domains"] == 4, \
                 f"空场计数失真: torrents={sm['torrents']} domains={sm['domains']}"
             must_be_red(lambda: _wrong_expect_site(sm, H_A), "空场(设计域应在 sites)")
-            base.metric("RM08-11① 空场 sites=[] groups=[] torrents=3 domains=4")
+            base.metric("RM08-11.1 空场 sites=[] groups=[] torrents=3 domains=4")
     finally:
         base.rm_all_fakes(qb1)
 
-    # 腿② 不粘合: X 已配置, P/Q 缺失且从不同现(D1 拍板语义的真机验证)
+    # 腿 2 不粘合: X 已配置, P/Q 缺失且从不同现(D1 拍板语义的真机验证)
     P, Q, X = "127.0.0.21", "127.0.0.22", "127.0.1.5"
     _d2, qb2, _seeds2 = build_scene("rm08_11b", [
         ("rm08grp-pa.bin", [X, P]),
@@ -307,7 +307,7 @@ def test_rm08_11_negative_empty_and_no_glue():
         with product_case_grp("rm08_11b", tracker_entry_block("rm08_glue", X)) as (case, port, _proc):
             sm = base.web_req(port, "GET", "/api/sites/missing")
             assert sm["torrents"] == 2 and sm["domains"] == 3, \
-                f"腿②计数漂移: torrents={sm['torrents']} domains={sm['domains']}"
+                f"腿 2 计数漂移: torrents={sm['torrents']} domains={sm['domains']}"
             assert {s["domain"] for s in sm["sites"]} == {P, Q}, \
                 f"缺失面应恰 P/Q(X 已配置不进 sites): {sm['sites']}"
             groups = sm["groups"]
@@ -316,7 +316,7 @@ def test_rm08_11_negative_empty_and_no_glue():
             glued = [g for g in groups if {P, Q} <= set(g["domains"])]
             assert not glued, f"红验命中: 已配置域 X 把 P/Q 粘合了: {glued} —— D1 语义破"
             must_be_red(lambda: _wrong_expect_glued(groups, P, Q), "不粘合(P/Q 应同组)")
-            base.metric(f"RM08-11② 不粘合 groups={sorted(g['domains'] for g in groups)}")
+            base.metric(f"RM08-11.2 不粘合 groups={sorted(g['domains'] for g in groups)}")
     finally:
         base.rm_all_fakes(qb2)
 

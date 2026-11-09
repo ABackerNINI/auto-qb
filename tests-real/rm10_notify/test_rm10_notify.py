@@ -154,7 +154,7 @@ def send_attempts(emit_fn, window: float = ATTEMPT_WINDOW_S) -> int:
 
     emit_fn 放进后台线程与采样并发: handler 路径的派发是异步的(emit 立即返回, powershell
     在 drain 线程跑), 但 notify_fatal 是**同步** send(子进程随调用出现并退出)—— 不并发采样
-    就会在采样开始前错过它(首轮实测 RM10-08① 假红 0 的根因)。
+    就会在采样开始前错过它(首轮实测 RM10-08 第 1 项 假红 0 的根因)。
     handler 派发线程逐条 subprocess.run(串行, 不重叠)⇒ 每次尝试 = 恰一个新 pid。
     """
     base = _ps_pids()
@@ -357,7 +357,7 @@ def build_guardian_scene(
     """RM10-05/06/07 共享基座: dst 真文件 + alias_fs 产品同款通道建 junction + spec 落盘。
 
     files = 磁盘真文件 [(rel, size)]; spec_files = spec 里声明的清单(缺省与 files 一致;
-    RM10-06① 故意错位时单独给)。返回 (data_dir, dst, alias_paths)。job_id 一律 rm10-* 前缀。
+    RM10-06 第 1 项 故意错位时单独给)。返回 (data_dir, dst, alias_paths)。job_id 一律 rm10-* 前缀。
     """
     d = case_dir(case.name)
     data_dir = d / "data"
@@ -441,13 +441,13 @@ def test_rm10_02_export_negative():
     out_dry = case / "export-dry.yml"
     out_m = case / "export-missing.yml"
 
-    # ① dry-run: 日志照打「已导出」但输出文件必须不存在(写路径零触碰)
+    # 1. dry-run: 日志照打「已导出」但输出文件必须不存在(写路径零触碰)
     r = app.run_cli([str(cfg), "--export-yaml", str(out_dry), "--dry-run"], timeout=120)
     assert r.returncode == 0, f"dry-run 导出非 0: {r.stderr[-500:]}"
     assert "已导出" in (r.stdout + r.stderr), "dry-run 轮缺「已导出」日志"
     assert not out_dry.exists(), "dry_run 轮输出文件出现 —— 写侧失守"
 
-    # ② only-missing: 骨架只含 config.trackers 键(无其它段回显), 已配域不出现
+    # 2. only-missing: 骨架只含 config.trackers 键(无其它段回显), 已配域不出现
     r = app.run_cli([str(cfg), "--export-yaml", str(out_m), "--only-missing"], timeout=120)
     assert r.returncode == 0, f"only-missing 导出非 0: {r.stderr[-500:]}"
     data = yaml.safe_load(out_m.read_text(encoding="utf-8"))
@@ -456,13 +456,13 @@ def test_rm10_02_export_negative():
     assert keys == {"trackers", "schema_version"}, f"骨架应只含 trackers+schema_version(版本章), 实际 {keys}"
     assert not (exported_domains(data) & CONFIGURED_DOMAINS), "骨架混入已配域"
 
-    # ③ 同参数双跑 → 输出字节级一致(idempotent, tracker 名不漂移)
+    # 3. 同参数双跑 → 输出字节级一致(idempotent, tracker 名不漂移)
     first = out_m.read_bytes()
     r = app.run_cli([str(cfg), "--export-yaml", str(out_m), "--only-missing"], timeout=120)
     assert r.returncode == 0
     assert out_m.read_bytes() == first, "双跑输出字节漂移(tracker 名/序不稳定)"
 
-    # 红验(计划 §03 L3): ①期望域名集错一位 → 对照断言必须红; ②摘掉 dry_run 判断 → 零写断言必须红
+    # 红验(计划 §03 L3): 第 1 项期望域名集错一位 → 对照断言必须红; 第 2 项摘掉 dry_run 判断 → 零写断言必须红
     aggregated = qb_aggregated_domains()
     expected_missing = exporter.find_missing_domains(aggregated, CONFIGURED_DOMAINS)
     try:
@@ -611,7 +611,7 @@ def test_rm10_04_notify_pipeline():
     """[RM10-04] 通知管线进程级: 发送尝试计数(档位/免打扰/去重/enabled 门)
 
     前置: .work/rm10/ 临时数据目录; 采样窗口 ≥ TIMEOUT_S(10s)防误判; 各子步间重挂 handler
-      清 throttle 态。⚠ 本条桌面会弹 ≤4 条真实 toast(实测 2 条: 子步①④各 1, 计划 §05 预申报)。
+      清 throttle 态。WARN: 本条桌面会弹 ≤4 条真实 toast(实测 2 条: 子步 1/4 各 1, 计划 §05 预申报)。
     副作用: 桌面 toast ≤4 条; PowerShell 子进程 ≤4 个(自然退出); 无持久物。
     回滚: unmount handler(close 路径), 校验 auto_qb logger 零残留 handler。
     失败判据: ERROR 零尝试 / WARNING 出尝试 / 免打扰出尝试 / 双发 2 次 / enabled=False 仍尝试。
@@ -619,26 +619,26 @@ def test_rm10_04_notify_pipeline():
     base_cfg = dict(min_level="ERROR", max_per_hour=3, dedup_window=60.0)
 
     try:
-        # ① ERROR → 恰 1 次发送尝试
+        # 1. ERROR → 恰 1 次发送尝试
         h1 = mount(NotifyConfig(enabled=True, **base_cfg))
         assert h1 is not None
         n1 = send_attempts(lambda: PROBE_LOGGER.error("rm10-04 ERROR probe A"))
         unmount(h1)
         assert n1 == 1, f"ERROR 应恰 1 次发送尝试, 实际 {n1}"
 
-        # ② WARNING(min_level=ERROR)→ 零尝试
+        # 2. WARNING(min_level=ERROR)→ 零尝试
         h2 = mount(NotifyConfig(enabled=True, **base_cfg))
         n2 = send_attempts(lambda: PROBE_LOGGER.warning("rm10-04 WARNING probe B"))
         unmount(h2)
         assert n2 == 0, f"WARNING 不应触发发送尝试, 实际 {n2}"
 
-        # ③ quiet_hours 覆盖当前时刻(00:00-23:59 全天, 分钟粒度端点含)→ ERROR 零尝试
+        # 3. quiet_hours 覆盖当前时刻(00:00-23:59 全天, 分钟粒度端点含)→ ERROR 零尝试
         h3 = mount(NotifyConfig(enabled=True, quiet_hours="00:00-23:59", **base_cfg))
         n3 = send_attempts(lambda: PROBE_LOGGER.error("rm10-04 quiet probe C"))
         unmount(h3)
         assert n3 == 0, f"免打扰时段不应触发发送尝试, 实际 {n3}"
 
-        # ④ 同源消息双发 → 仍恰 1(dedup)
+        # 4. 同源消息双发 → 仍恰 1(dedup)
         h4 = mount(NotifyConfig(enabled=True, **base_cfg))
 
         def _double():
@@ -649,8 +649,8 @@ def test_rm10_04_notify_pipeline():
         unmount(h4)
         assert n4 == 1, f"同源双发应恰 1 次尝试(dedup), 实际 {n4}"
 
-        # ⑤ 红验(计划 §04 L3 双对照之一): enabled=False 不挂载 → ERROR 零尝试
-        #    (①「ERROR 必有尝试」+ ⑤「关开关必零」成对: 摘掉 enabled 门, ⑤必红; 管线断, ①必红)
+        # 5. 红验(计划 §04 L3 双对照之一): enabled=False 不挂载 → ERROR 零尝试
+        #    (第 1 项「ERROR 必有尝试」+ 第 5 项「关开关必零」成对: 摘掉 enabled 门, 第 5 项必红; 管线断, 第 1 项必红)
         assert mount(NotifyConfig(enabled=False, **base_cfg)) is None, "enabled=False 不应挂载 handler"
         n5 = send_attempts(lambda: PROBE_LOGGER.error("rm10-04 disabled probe E"))
         assert n5 == 0, f"enabled=False 仍触发发送尝试({n5}) —— 开关失守"
@@ -724,16 +724,16 @@ def test_rm10_05_guardian_removed():
 def test_rm10_06_guardian_negative():
     """[RM10-06] guardian 负向对照: verify_mismatch 零删链 / 终态挡删 stopped
 
-    前置: 同 RM10-05 基座两路; ②路先 write_journal(phase=done) 再 run。
-    副作用: 同 RM10-05(①路别名必须存活; ②路别名必须存活)。
+    前置: 同 RM10-05 基座两路; 回路 2 先 write_journal(phase=done) 再 run。
+    副作用: 同 RM10-05(回路 1 别名必须存活; 回路 2 别名必须存活)。
     回滚: purge_tree 整 case 目录。
-    失败判据: ①路删了任何链接(红验本体) / 结论错 / 终态被心跳覆盖 / ②路动了别名。
+    失败判据: 回路 1 删了任何链接(红验本体) / 结论错 / 终态被心跳覆盖 / 回路 2 动了别名。
     """
     from auto_qb.tools import finalize_watch
 
     case = case_dir("rm10_06")
 
-    # ① spec.files 故意错 size → verify_mismatch, 一个链接都不删(保守默认, 黄金法则 2 真机红验)
+    # 1. spec.files 故意错 size → verify_mismatch, 一个链接都不删(保守默认, 黄金法则 2 真机红验)
     job_a = GUARDIAN_JOB.format("06a")
     data_a, dst_a, aliases_a = build_guardian_scene(
         case,
@@ -750,14 +750,14 @@ def test_rm10_06_guardian_negative():
         clock=_StepClock(0.3),
         sleep=lambda _s: time.sleep(0.01)
     )
-    assert r_a == "verify_mismatch", f"①路结论应 verify_mismatch, 实际 {r_a}"
+    assert r_a == "verify_mismatch", f"回路 1 结论应 verify_mismatch, 实际 {r_a}"
     ja = read_journal(str(data_a), job_a) or {}
-    assert str(ja.get("phase")) == "failed" and str(ja.get("reason")) == "verify_mismatch", f"①路 journal: {ja}"
+    assert str(ja.get("phase")) == "failed" and str(ja.get("reason")) == "verify_mismatch", f"回路 1 journal: {ja}"
     assert all(alias_fs.alias_kind_of(a) == alias_fs.KIND_JUNCTION for a in aliases_a), \
         "红验命中: verify_mismatch 路删了链接 —— 保守默认失守"
-    assert (dst_a / "f1.bin").stat().st_size == 1024, "①路 dst 被误碰"
+    assert (dst_a / "f1.bin").stat().st_size == 1024, "回路 1 dst 被误碰"
 
-    # ② 三证凑齐前预写 journal 终态 phase=done → stopped, 零删除, 终态未被心跳覆盖(前向合并)
+    # 2. 三证凑齐前预写 journal 终态 phase=done → stopped, 零删除, 终态未被心跳覆盖(前向合并)
     job_b = GUARDIAN_JOB.format("06b")
     data_b, dst_b, aliases_b = build_guardian_scene(case, job_b, n_alias=3)
     assert write_journal(str(data_b), job_b, {"phase": "done", "reason": "external"}), "预写终态失败"
@@ -770,10 +770,10 @@ def test_rm10_06_guardian_negative():
         clock=_StepClock(0.3),
         sleep=lambda _s: time.sleep(0.01)
     )
-    assert r_b == "stopped", f"②路结论应 stopped, 实际 {r_b}"
+    assert r_b == "stopped", f"回路 2 结论应 stopped, 实际 {r_b}"
     jb = read_journal(str(data_b), job_b) or {}
     assert str(jb.get("phase")) == "done", f"终态被心跳覆盖: {jb.get('phase')!r}"
-    assert all(alias_fs.alias_kind_of(a) == alias_fs.KIND_JUNCTION for a in aliases_b), "②路动了别名"
+    assert all(alias_fs.alias_kind_of(a) == alias_fs.KIND_JUNCTION for a in aliases_b), "回路 2 动了别名"
 
     metric("RM10-06 verify_mismatch零删链=ok 终态挡删=ok")
     purge_tree(case)
@@ -794,14 +794,14 @@ def test_rm10_07_guardian_params_mutex():
 
     case = case_dir("rm10_07")
 
-    # ① 空 data_dir → no_spec(零动作: pid/journal 都不该出现)
+    # 1. 空 data_dir → no_spec(零动作: pid/journal 都不该出现)
     empty = case / "empty_data"
     empty.mkdir(parents=True, exist_ok=True)
     assert finalize_watch.run(str(empty), GUARDIAN_JOB.format("07a")) == "no_spec"
     assert not Path(pid_path(str(empty), GUARDIAN_JOB.format("07a"))).exists(), "no_spec 却动了 pid 锁"
     assert not Path(journal_path(str(empty), GUARDIAN_JOB.format("07a"))).exists(), "no_spec 却写了 journal"
 
-    # ② 先 acquire_pid 占锁再 run → already_running(单 guardian 不变量); 第二实例零动作
+    # 2. 先 acquire_pid 占锁再 run → already_running(单 guardian 不变量); 第二实例零动作
     job_b = GUARDIAN_JOB.format("07b")
     data_b, dst_b, aliases_b = build_guardian_scene(case, job_b, n_alias=2)
     assert acquire_pid(str(data_b), job_b), "预占 pid 锁失败"
@@ -814,7 +814,7 @@ def test_rm10_07_guardian_params_mutex():
     finally:
         release_pid(str(data_b), job_b)
 
-    # ③ spec 就绪 + qB「在跑」面(哑监听 socket, accept 线程随连随关)→ max_wait 到期 timeout、
+    # 3. spec 就绪 + qB「在跑」面(哑监听 socket, accept 线程随连随关)→ max_wait 到期 timeout、
     #    零删除、armed 心跳已落盘。!listen backlog 不 accept 会失真: 首个探测连接占满 backlog(1)
     #    后, guardian 后续探测全部拒连 ⇒ 它看到的就是「qB 已退」按设计删链(首轮实测假红根因:
     #    timeout 期望变成 removed)—— 产品三证逻辑无缺陷, 哑 socket 必须真应答连接。
@@ -835,7 +835,7 @@ def test_rm10_07_guardian_params_mutex():
         spec_c["port"] = live_port
         spec_path_c.write_text(json.dumps(spec_c, ensure_ascii=False), encoding="utf-8")
         r_c = finalize_watch.run(str(data_c), job_c, heartbeat=0.2, stable=0.5, poll=0.1, max_wait=1.0)
-        assert r_c == "timeout", f"③路结论应 timeout, 实际 {r_c}"
+        assert r_c == "timeout", f"回路 3 结论应 timeout, 实际 {r_c}"
         jc = read_journal(str(data_c), job_c) or {}
         assert str(jc.get("phase")) == "armed", f"timeout 路缺 armed 心跳: {jc.get('phase')!r}"
         assert all(alias_fs.alias_kind_of(a) == alias_fs.KIND_JUNCTION for a in aliases_c), "timeout 路删了链接"
@@ -844,7 +844,7 @@ def test_rm10_07_guardian_params_mutex():
         acceptor.join(timeout=3)
         dummy.close()
 
-    # ④ CLI 形状: 缺 --data-dir/--job → argparse 非 0
+    # 4. CLI 形状: 缺 --data-dir/--job → argparse 非 0
     r = subprocess.run(
         [str(app.PY), "-m", "auto_qb.tools.finalize_watch"],
         capture_output=True,
@@ -868,27 +868,27 @@ def test_rm10_07_guardian_params_mutex():
 def test_rm10_08_notify_fatal(monkeypatch):
     """[RM10-08] notify_fatal 致命旁路: 直发恰 1 次 / 防自环 / 不放大
 
-    前置: .work/rm10/ 临时目录; 采样窗口同 RM10-04。⚠ 本条桌面会弹 ≤2 条真实 toast(实测 1 条:
-    子步①, 计划 §05 预申报)。
+    前置: .work/rm10/ 临时目录; 采样窗口同 RM10-04。WARN: 本条桌面会弹 ≤2 条真实 toast(实测 1 条:
+    子步 1, 计划 §05 预申报)。
     副作用: 桌面 toast ≤2 条; PowerShell 子进程 ≤2 个(自然退出); 无持久物。
     回滚: 无持久物; unmount handler 校验零残留。
     失败判据: 直发零尝试或多次 / 自环 logger 触发尝试 / notify_fatal 异常逃逸。
     """
     try:
-        # ① 直发恰 1 次, 且不受 max_per_hour=0 影响(旁路语义: 不过 handler/节流)
+        # 1. 直发恰 1 次, 且不受 max_per_hour=0 影响(旁路语义: 不过 handler/节流)
         n1 = send_attempts(
             lambda: notify.notify_fatal("rm10-08 fatal probe", NotifyConfig(enabled=True, max_per_hour=0))
         )
         assert n1 == 1, f"notify_fatal 应恰 1 次发送尝试, 实际 {n1}"
 
-        # ② 防自环: 挂真 handler 后经 auto_qb.notify 前缀 logger emit → 零尝试(NOTIFY_LOGGER_PREFIX 门)
+        # 2. 防自环: 挂真 handler 后经 auto_qb.notify 前缀 logger emit → 零尝试(NOTIFY_LOGGER_PREFIX 门)
         h = mount(NotifyConfig(enabled=True, min_level="ERROR", max_per_hour=20, dedup_window=60.0))
         assert h is not None
         n2 = send_attempts(lambda: logging.getLogger("auto_qb.notify.rm10probe").error("rm10-08 selfloop probe"))
         unmount(h)
         assert n2 == 0, f"自环 logger 触发了发送尝试({n2}) —— NOTIFY_LOGGER_PREFIX 门失守"
 
-        # ③ cli.py 顶层异常出口形状: PlatformChannel 构造失败 → notify_fatal 吞掉不放大, 进程存活
+        # 3. cli.py 顶层异常出口形状: PlatformChannel 构造失败 → notify_fatal 吞掉不放大, 进程存活
         class _BoomChannel:
             def __init__(self, *a, **k):
                 raise OSError("rm10 probe: channel refuse")

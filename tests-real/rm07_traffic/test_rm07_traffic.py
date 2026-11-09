@@ -409,7 +409,7 @@ def test_rm07_02_source_refresh_three_states():
         port = web_port_of(cfg)
         req = web_client(port)
 
-        # ---- ① 总开关关: INFO off 文案 + 零 WARNING 零读盘 + periods/history 清空
+        # ---- 1. 总开关关: INFO off 文案 + 零 WARNING 零读盘 + periods/history 清空
         wait_until(lambda: "来源总开关关闭(traffic_source.enabled=false), 发布 off 快照" in p.log(), 20, "off 态缺「来源总开关关闭」INFO")
         wait_until(lambda: traffic_view(port).get("state") == "off", 15, "顶层 state 未翻 off")
         view = traffic_view(port)
@@ -420,7 +420,7 @@ def test_rm07_02_source_refresh_three_states():
         assert traffic_history(port)["history"] == [], "off 态 history 未清空"
         assert count_log(case, r"读取流量数据失败") == 0, "off 态仍打了读取失败 WARNING(总开关未拦读盘)"
 
-        # ---- ② 开关开 + dat 缺失: WARNING 带路径 + stale + 历史/累计清空
+        # ---- 2. 开关开 + dat 缺失: WARNING 带路径 + stale + 历史/累计清空
         resp = put_config(port, lambda c: c["traffic_source"].__setitem__("enabled", True))
         assert resp.get("applied") is True, f"PUT 未应用: {resp}"
         assert not resp.get("restart_required"), f"traffic_source 段被划 R 级(新事实): {resp}"
@@ -435,7 +435,7 @@ def test_rm07_02_source_refresh_three_states():
         assert zeroed == {"day": (0, 0), "month": (0, 0)}, f"stale 态 periods 未归零: {view['periods']}"
         assert traffic_history(port)["history"] == [], "stale 态未清 history"
 
-        # ---- ③ 指向本地 dat: ok + history/periods 与造行一致(KB×1024) + 坏行 WARNING
+        # ---- 3. 指向本地 dat: ok + history/periods 与造行一致(KB×1024) + 坏行 WARNING
         resp = put_config(
             port, lambda c: c["traffic_source"]["traffic_monitor"].__setitem__("dat_path", dat_a.as_posix())
         )
@@ -694,7 +694,7 @@ def test_rm07_06_curve_short_circuit_three_ways(global_limits):
     port = None
     p = None
     try:
-        # ---- ① curve.enabled=false: publish disabled, 不读 dat 不写 qB(偏好原值)
+        # ---- 1. curve.enabled=false: publish disabled, 不读 dat 不写 qB(偏好原值)
         set_global_limit_bytes(qb, "down", 1024 * 1024)
         cfg = write_cfg(
             case,
@@ -720,7 +720,7 @@ def test_rm07_06_curve_short_circuit_three_ways(global_limits):
         p.stop()
         p = None
 
-        # ---- ② traffic_source.enabled=false: 曲线任务 REQUEUE 零发布, 来源模块发 off
+        # ---- 2. traffic_source.enabled=false: 曲线任务 REQUEUE 零发布, 来源模块发 off
         cfg = write_cfg(
             case, web=True, extra=traffic_source_section(enabled=False, dat_path=dat.as_posix()) + CURVE_MANUAL
         )
@@ -735,7 +735,7 @@ def test_rm07_06_curve_short_circuit_three_ways(global_limits):
         p.stop()
         p = None
 
-        # ---- ③ --dry-run + 全配置: 零 qB 写(dry-run 不启 WEB, 经进程边界 + 日志观测, §2.7)
+        # ---- 3. --dry-run + 全配置: 零 qB 写(dry-run 不启 WEB, 经进程边界 + 日志观测, §2.7)
         set_global_limit_bytes(qb, "down", 1024 * 1024)
         cfg = write_cfg(case, web=True, extra=traffic_source_section(dat_path=dat.as_posix()) + CURVE_MANUAL)
         p = app.start(cfg, case, dry_run=True, graceful_after=15)
@@ -903,7 +903,7 @@ def test_rm07_08_l2_transfer_sampling(primary, secondary, tracker, workdir, glob
 def test_rm07_09_sample_interval_ratio_and_reblock():
     """[RM07-09] 采样间隔配比与关块重开: 非整倍 → WARNING+取整生效; 热改 interval → 关块重开; 装载期负向
 
-    前置: 三组配置变体(各自独立起停); ①③ 零种子, ② 零种子。
+    前置: 三组配置变体(各自独立起停); 1./3. 零种子, 2. 零种子。
     副作用: 产品起停 ×2 + run_cli ×3; v4 采样文件落临时 data_dir。
     回滚: 删临时目录。
     失败判据: 非整倍无 WARNING(D5 告警记忆缺失); 取整未生效(块头 interval_s != ceil 值);
@@ -912,22 +912,22 @@ def test_rm07_09_sample_interval_ratio_and_reblock():
     case = case_dir("rm07_09")
     p = None
     try:
-        # ---- ① 非整倍(3S vs main_tick 2S): WARNING 恰一次 + 生效值 ceil=4s 落在块头
+        # ---- 1. 非整倍(3S vs main_tick 2S): WARNING 恰一次 + 生效值 ceil=4s 落在块头
         cfg = write_cfg(case, web=False, main_tick="2S", extra=qb_traffic_section(sample="3S", flush="60S"))
         p = app.start(cfg, case, graceful_after=20)
-        assert p.wait(80) == 0, f"① 未优雅退出:\n{p.log()[-600:]}"
+        assert p.wait(80) == 0, f"1. 未优雅退出:\n{p.log()[-600:]}"
         assert "非 main_tick 2s 整数倍" in p.log(), "非整倍配比无 WARNING(D5 告警缺失)"
         assert "实际节拍取整为 4s" in p.log(), "WARNING 未给出取整生效值"
         time.sleep(0.2)
         assert count_log(case, r"非 main_tick 2s 整数倍") == 1, "同配对 WARNING 重复多次(只告一次失守)"
         gf = day_file(case / "data", "global")
-        assert gf.is_file(), f"① 全局天文件未落盘: {sorted((case / 'data').rglob('*.dat'))}"
+        assert gf.is_file(), f"1. 全局天文件未落盘: {sorted((case / 'data').rglob('*.dat'))}"
         parsed = parse_day(gf)
         assert parsed.blocks and all(b.interval_s == 4.0 for b in parsed.blocks
                                     ), (f"块头 interval_s != 生效值 4s: {[b.interval_s for b in parsed.blocks]}")
         assert parsed.bad_lines == 0
 
-        # ---- ② 运行期热改 sample_interval(4S→6S): 触发关块重开, 新数据分块带新 interval。
+        # ---- 2. 运行期热改 sample_interval(4S→6S): 触发关块重开, 新数据分块带新 interval。
         # 实测语义(2026-10-31): 纯空闲系列的开放 z 游程**从不形成盘上旧块**(记录只在封口时
         # append, _append_record 才开块)—— 切 interval 时「无开放块的开放游程不封, 将成为
         # 新块首记录」(traffic_sample_mod._close_blocks_for_interval_change docstring 原文),
@@ -943,9 +943,9 @@ def test_rm07_09_sample_interval_ratio_and_reblock():
         assert resp.get("applied") is True, f"PUT 未应用: {resp}"
         assert not resp.get("restart_required"), f"qb_traffic 段被划 R 级(新事实, 如实记): {resp}"
         wait_until(lambda: "流量采样 | 采样率变化 -> 6s: 关闭全部现块, 新数据分块带新 interval" in p.log(), 20, "热改 interval 后缺关块重开日志")
-        assert p.wait(80) == 0, f"② 未优雅退出:\n{p.log()[-600:]}"
+        assert p.wait(80) == 0, f"2. 未优雅退出:\n{p.log()[-600:]}"
         gf = day_file(case / "data", "global")
-        assert gf.is_file(), "② 全局天文件未落盘"
+        assert gf.is_file(), "2. 全局天文件未落盘"
         parsed = parse_day(gf)
         assert parsed.bad_lines == 0, f"切 interval 后文件出现坏行: bad={parsed.bad_lines}"
         assert [b.interval_s for b in parsed.blocks] == [
@@ -954,7 +954,7 @@ def test_rm07_09_sample_interval_ratio_and_reblock():
         zruns = [r for b in parsed.blocks for r in b.records if not isinstance(r, V4Sample)]
         assert zruns and zruns[0].run_len >= 8, f"z 游程未无缝横跨全程(切源前后断链): {zruns[:2]}"
 
-        # ---- ③ 装载期负向: 非法配比必须 validate_config 聚合报错(RM03-05 同款观测法)
+        # ---- 3. 装载期负向: 非法配比必须 validate_config 聚合报错(RM03-05 同款观测法)
         negatives = [
             ("flush_interval < 60s", qb_traffic_section(sample="4S", flush="30S"), "2S"),
             ("sample_interval > 600s", qb_traffic_section(sample="700S", flush="60S"), "2S"),
@@ -981,7 +981,7 @@ def test_rm07_10_tool_status_endpoint_five_states():
     """[RM07-10] 工具状态端点: GET /api/traffic/monitor/status 恒 200 + 五态语义 + 结构完整(按实况定档)
 
     前置: 基座 + WebUI 起(非 dry-run); provider=traffic_monitor 缺省(enabled=false 仍照查)。
-          ⚠ 环境实况(2026-10-31): 本机装有 gtm v0.1.0 且在跑(发现指针指向另一 clone
+          WARN: 环境实况(2026-10-31): 本机装有 gtm v0.1.0 且在跑(发现指针指向另一 clone
           D:\\Projects\\auto-qb 的数据目录, autostart 已注册, uptime 天级)—— 冻结计划的
           「未安装 → not_installed」前提在本机为假, 按「按实况定档, 不硬凹」改为双分支断言:
           ready 分支验就绪态载荷全貌(工具 /status 回显), 不可达分支验五态 + reachable=false。
@@ -1092,7 +1092,7 @@ def test_rm07_11_alt_speed_real_dispatch(global_limits):
               (主档 prefs 镜像 up_limit/dl_limit 被改, 与主速度互不触碰语义破); 回执非 ok
               (命令线断); 修复后 set 回读≠目标或 /api/speed/mode 读侧与 qB 权威面不一致
               (读路径断)。
-    ⚠ 观测面事实(探针实测): /transfer/{upload,download}Limit 是**模式相关**面 —— 返回
+    WARN: 观测面事实(探针实测): /transfer/{upload,download}Limit 是**模式相关**面 —— 返回
     当前生效档(模式 1 时回 alt 档值), 跨 toggle 比较无意义; 主档的可靠观测 = prefs
     up_limit/dl_limit 镜像(实测与 transfer PUT 实时同步)。隔离断言按镜像; 生效档对照按
     saved_mode 分支: 模式 0 生效档=主档, set 后不变; 模式 1 生效档=alt 档, set 落地后
@@ -1123,7 +1123,7 @@ def test_rm07_11_alt_speed_real_dispatch(global_limits):
     preset_landed = poll_until(
         lambda: qb.prefs().get("alt_up_limit") == preset_up and qb.prefs().get("alt_dl_limit") == preset_dl, 8
     )
-    active_up0 = global_limit_bytes(qb, "up")  # 当前生效档(模式 1 时 = alt 档预置后值; 仅腿① 同模式对照用)
+    active_up0 = global_limit_bytes(qb, "up")  # 当前生效档(模式 1 时 = alt 档预置后值; 仅腿 1 同模式对照用)
     active_down0 = global_limit_bytes(qb, "down")
     p = None
     set_verdict = "ok"
@@ -1133,7 +1133,7 @@ def test_rm07_11_alt_speed_real_dispatch(global_limits):
         assert p.wait_web(40), f"WEB 没起来:\n{p.log()[-600:]}"
         port = web_port_of(cfg)
 
-        # ---- 腿① set 真下发: /api/speed/alt → app/setPreferences alt_*(bytes/s) → qB 回读精确命中
+        # ---- 腿 1 set 真下发: /api/speed/alt → app/setPreferences alt_*(bytes/s) → qB 回读精确命中
         rec = wait_cmd_ok(port, "/api/speed/alt", {"upload_kib": 64, "download_kib": 128})
         assert rec["status"] == "ok", f"speed_alt_set 回执非 ok: {rec}"
         assert "WEB UI | 备用速度限制设置: 上 64 / 下 128 KiB/s" in p.log(), "缺 ALT set 命令日志"
@@ -1164,10 +1164,10 @@ def test_rm07_11_alt_speed_real_dispatch(global_limits):
         else:
             # 按实况定档: qB 侧键可用(预置已落)而产品下发不动 = 产品调用面缺陷; 预置也没落 =
             # qB 5.2 对 alt_* 键本身静默失效(准入要验的另一种实况)。两态都不在本条硬红 ——
-            # 证据链记进 skip 文案, 两腿跑完后统一落档(腿②不因腿①阻断)。
+            # 证据链记进 skip 文案, 两腿跑完后统一落档(腿 2 不因腿 1 阻断)。
             set_verdict = "qb_silent" if not preset_landed else "product_noop"
 
-        # ---- 腿② toggle 真翻转(独立 transfer 端点路径, 不因腿①定档而跳过):
+        # ---- 腿 2 toggle 真翻转(独立 transfer 端点路径, 不因腿 1 定档而跳过):
         #      /api/speed/alt/toggle → transfer/toggleSpeedLimitsMode → 模式翻转
         rec = wait_cmd_ok(port, "/api/speed/alt/toggle", None)
         assert rec["status"] == "ok", f"speed_alt_toggle 回执非 ok: {rec}"

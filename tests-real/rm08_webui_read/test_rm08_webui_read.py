@@ -29,17 +29,17 @@ auth 形参 scoped 切到 skip_local_verify=false + 显式 web.token(Bearer 鉴�
 其余用例实例维持 loopback 免鉴权零改动。
 
 与计划判据的实况修正(执行时以实况为准记录, 均非产品缺陷, 详见用例 docstring):
-- RM08-01②/④ 零回传拍: status(traffic/server/totals 恒回传段)由 /api/state 路由层包在
+- RM08-01 第 2/4 项 零回传拍: status(traffic/server/totals 恒回传段)由 /api/state 路由层包在
   ensure_state 结果**之外** —— 零回传拍实际形态 = {status, rid, updated:false}, 数组键缺席
   是门控本体; 计划「零回传拍也不丢 traffic/server/totals」与实码一致, 字节界据此按实况定。
-- RM08-02⑤ show 视图: 计划 spec 写「show ∉ _DELTA_VIEWS 恒全量」, 但实码 S9b 已把 show
+- RM08-02 第 5 项 show 视图: 计划 spec 写「show ∉ _DELTA_VIEWS 恒全量」, 但实码 S9b 已把 show
   纳入增量矩阵(runtime.py `_DELTA_VIEWS = {group, torrent, show}`, 计划 §02 锚点表自身
-  也这么记)—— 计划内部矛盾, ⑤按实码契约断言并在基线切片记账, 不入池缺陷。
-- RM08-07⑤ 坏票负向: 上轮 skip_local_verify=true 下 auth.py 的 loopback 免鉴权先于票据闸
+  也这么记)—— 计划内部矛盾, 第 5 项按实码契约断言并在基线切片记账, 不入池缺陷。
+- RM08-07 第 5 项 坏票负向: 上轮 skip_local_verify=true 下 auth.py 的 loopback 免鉴权先于票据闸
   返回, 记 BLOCKED 子项; 本轮(2026-11-01 漂移复测轮 D2)已按解锁路径兑现 —— 该用例的产品
   实例 scoped 改 skip_local_verify=false + web.token 显式配置, 请求带 Bearer, 坏票/无票/
   错票负向补齐(升 L3), 其余 7 条实例维持 loopback 免鉴权零改动。
-- RM08-02② 窗口洁净: 计划「delta.upsert 恰含变更行」的新鲜入库场景下, 错峰 check 完成的
+- RM08-02 第 2 项 窗口洁净: 计划「delta.upsert 恰含变更行」的新鲜入库场景下, 错峰 check 完成的
   派生变更会落在基线邻代(upsert 混入内容与当前视图一致的邻代行, 复现两轮)—— 判据放宽为
   「变更行在 + 窗口全部行内容现取一致 + removed 空」, 恰单行形态在基线切片记账。
 - RM08-08 造法: 计划的「删文件 + recheck → missingFiles」在 qB 5.2.3 实测不成立(三条路径
@@ -376,7 +376,7 @@ def _add_retry(qb, raw: bytes, savepath: str, ih: str, *, paused: bool = False) 
 def rm_all_fakes(qb, *, batch: int = 200) -> list[str]:
     """删光本实例里 real-fake 标签的种子(连数据; 大库按 200 枚/批分批调 /torrents/delete)。
 
-    ⚠ qB 多 hash 分隔符是 `|` 不是 `,`(guard.pause 同款; RM09 逐个删没踩到这个坑)。
+    WARN: qB 多 hash 分隔符是 `|` 不是 `,`(guard.pause 同款; RM09 逐个删没踩到这个坑)。
     """
     gone = []
     tagged = [t for t in qb.torrents() if TAG in _tags_of(t)]
@@ -444,7 +444,7 @@ ARRAYS = {"groups", "singles", "shows", "torrents"}
 def assert_zero_return(r: dict, rid: int) -> None:
     """零回传拍形态: updated:false 且**不回任何视图数组**(状态/版本键外只有恒回传 status 段)。
 
-    实码口径(首轮实测, 计划 §03 RM08-01④ 同款): /api/state 路由层把 status(traffic/server/
+    实码口径(首轮实测, 计划 §03 RM08-01 第 4 项 同款): /api/state 路由层把 status(traffic/server/
     totals 恒回传段)**包在 ensure_state 结果之外** —— 零回传分支= {status, rid, updated:false},
     ensure_state 自身只回 {rid, updated}。数组键缺席是 rid 门控的本体断言。
     """
@@ -499,7 +499,7 @@ def test_rm08_01_merge_endpoint_and_rid_gating(clean_fakes):
             wait_state(qb, h, "stalledUP", desc="无 announce 假种子应纯本地做种")
         wait_in_store(port, *hs)
 
-        # ① 首拍(rid 缺省): status(含 traffic/server/totals)+ torrents 数组 + rid + updated:true
+        # 1. 首拍(rid 缺省): status(含 traffic/server/totals)+ torrents 数组 + rid + updated:true
         r1 = web_req(port, "GET", "/api/state?view=torrent")
         assert r1["updated"] is True, f"首拍应 updated:true: {sorted(r1)}"
         assert len(r1["torrents"]) == 3, f"首拍 torrents 行数不对: {len(r1['torrents'])}"
@@ -507,14 +507,14 @@ def test_rm08_01_merge_endpoint_and_rid_gating(clean_fakes):
         b_full = jlen(r1)
         rid = r1["rid"]
 
-        # ② 同 rid 二连拍 → 零回传: 不回任何视图数组; status 恒回传段照在(实码路由层包装,
-        #    计划 RM08-01④ 同款口径); 字节界按实况放宽到 50%(3 枚种子下 status 段占比高)
+        # 2. 同 rid 二连拍 → 零回传: 不回任何视图数组; status 恒回传段照在(实码路由层包装,
+        #    计划 RM08-01 第 4 项 同款口径); 字节界按实况放宽到 50%(3 枚种子下 status 段占比高)
         r2 = rid_poll(port, rid)
         assert_zero_return(r2, rid)
         assert {"traffic", "server", "totals"} <= set(r2["status"]), f"零回传拍缺恒回传段: {sorted(r2['status'])}"
         assert jlen(r2) < b_full * 0.50, f"零回传拍字节未显著小于全量: {jlen(r2)} vs {b_full}"
 
-        # ③ qB API 直调暂停 1 枚 → 等 sync 拍 → 同 rid 拍 updated:true(版本推进)
+        # 3. qB API 直调暂停 1 枚 → 等 sync 拍 → 同 rid 拍 updated:true(版本推进)
         qb.pause(hs[0])
         wait_state(qb, hs[0], "stoppedUP", desc="qB 直调暂停")
         r3 = wait_updated(port, rid)
@@ -522,7 +522,7 @@ def test_rm08_01_merge_endpoint_and_rid_gating(clean_fakes):
                                             } <= set(r3["status"]), (f"updated 拍缺视图数组或恒回传段: {sorted(r3)}")
         assert r3["rid"] != rid, "updated 拍 rid 未推进"
 
-        # ④ 恒回传段与视图数据同轮同源(状态栏口径): totals 为 dict 且 server/traffic 非空结构
+        # 4. 恒回传段与视图数据同轮同源(状态栏口径): totals 为 dict 且 server/traffic 非空结构
         assert isinstance(r3["status"]["totals"], dict) and set(r3["status"]["totals"]) == {
             "dlspeed", "upspeed"
         }, (f"totals 形状不对: {r3['status']['totals']}")
@@ -538,11 +538,11 @@ def test_rm08_02_delta_negotiation(clean_fakes):
     失败判据: 未协商请求也回了 full/delta 键(协商闸破, 老前端把增量当全量吃会四数组 undefined
               白屏, 高优); 增量载荷行内容与当前视图不一致(R1 现取破); 变更行缺失或
               removed/upsert 串位(R5 让位破); 窗外不回落全量(R3/R10 破)。
-    判据实况修正(计划 §03 ②, 详见模块 docstring): 「恰含变更行」放宽为「变更行在 + 窗口
+    判据实况修正(计划 §03 第 2 项, 详见模块 docstring): 「恰含变更行」放宽为「变更行在 + 窗口
               全部行内容现取一致」—— 新鲜入库种子的错峰 check 派生变更落在基线邻代(复现
               两轮, 行内容与当前视图一致), 恰单行只在注入后静置 ≥60s 才确定, 不值这个成本。
-    判据实况修正(计划 §03 spec ⑤ vs 实码, 详见模块 docstring): S9b 起 show ∈ _DELTA_VIEWS,
-    ⑤按实码契约断言「view=show&delta=1 归约形态合法」(顶层无全量数组 + delta 桶按
+    判据实况修正(计划 §03 spec 第 5 项 vs 实码, 详见模块 docstring): S9b 起 show ∈ _DELTA_VIEWS,
+    第 5 项按实码契约断言「view=show&delta=1 归约形态合法」(顶层无全量数组 + delta 桶按
     VIEW_ARRAYS["show] 裁剪), 计划漂移在基线切片记账, 不入池缺陷。
     """
     with product_case("rm08_02") as (case, port, _proc):
@@ -552,7 +552,7 @@ def test_rm08_02_delta_negotiation(clean_fakes):
             settle(qb, h)
         wait_in_store(port, *hs)
 
-        # ① 协商首拍: full:true 全量(无 delta/removed 键, R10 全量分支口径)
+        # 1. 协商首拍: full:true 全量(无 delta/removed 键, R10 全量分支口径)
         r1 = rid_poll(port, -1, delta=True)
         assert r1["updated"] is True and r1.get("full") is True, f"协商首拍应 full:true: {sorted(r1)}"
         assert len(r1["torrents"]) == 3 and "delta" not in r1 and "removed" not in r1, f"协商全量拍形状不对: {sorted(r1)}"
@@ -561,7 +561,7 @@ def test_rm08_02_delta_negotiation(clean_fakes):
         # 且 pending_ver 门控会让存量脏在零回传拍之后才补发 —— 旧 rid 会让窗口混入未变更行。
         rid0 = wait_quiesced_rid(port)
 
-        # ② 变更代: delta=1 复拍 → full:false + delta.torrents 恰含变更行(行内容 == 当前全量同 hash 行)
+        # 2. 变更代: delta=1 复拍 → full:false + delta.torrents 恰含变更行(行内容 == 当前全量同 hash 行)
         qb.pause(hs[0])
         wait_state(qb, hs[0], "stoppedUP", desc="增量触发变更")
         r2 = wait_updated(port, rid0, delta=True)
@@ -570,7 +570,7 @@ def test_rm08_02_delta_negotiation(clean_fakes):
         upsert = r2["delta"].get("torrents") or []
         up_hashes = [row["hash"] for row in upsert]
         assert hs[0] in up_hashes, f"delta.upsert 未含变更行: {up_hashes}"
-        # 「恰含变更行」按窗口实况放宽(计划 §03 ② 的窗口洁净前提在新鲜入库种子上不成立,
+        # 「恰含变更行」按窗口实况放宽(计划 §03 第 2 项 的窗口洁净前提在新鲜入库种子上不成立,
         # 见模块 docstring 实况注): 错峰 check 完成的派生变更会落在基线邻代 —— 承载性判据
         # 改为「变更行在 + 窗口内全部 upsert 行内容 == 当前全量视图同 hash 行(R1 现取)」。
         cur = {t["hash"]: t for t in flat_rows(port)}
@@ -580,19 +580,19 @@ def test_rm08_02_delta_negotiation(clean_fakes):
         metric(f"[rm08-02] 窗口 upsert 行数 {len(upsert)}(变更行 1 + 邻代残留 {len(upsert) - 1})")
         assert jlen(r2) * 2 < b_full, f"增量拍字节应显著小于全量拍: {jlen(r2)} vs {b_full}"
 
-        # ③ 窗外对照(红验): rid=0(缺省/0)与 rid=未来(>ver)都必回落全量(R3)
+        # 3. 窗外对照(红验): rid=0(缺省/0)与 rid=未来(>ver)都必回落全量(R3)
         for stale in (0, r2["rid"] + 10**6):
             r3 = rid_poll(port, stale, delta=True)
             assert r3.get("full") is True and "delta" not in r3 and len(
                 r3["torrents"]
             ) == 3, (f"窗外 rid={stale} 未回落全量(R3 破): {sorted(r3)}")
 
-        # ④ 未协商对照(红验): 同请求去 delta=1 → 历史形状(无 full/delta/removed 键, P-01 兼容闸)
+        # 4. 未协商对照(红验): 同请求去 delta=1 → 历史形状(无 full/delta/removed 键, P-01 兼容闸)
         r4 = rid_poll(port, -1)
         assert "full" not in r4 and "delta" not in r4 and "removed" not in r4, (f"未协商请求竟带协商键(S3 闸破, 高优): {sorted(r4)}")
         assert r4["updated"] is True and len(r4["torrents"]) == 3, f"未协商全量形状不对: {sorted(r4)}"
 
-        # ⑤ view=show&delta=1: S9b 起 show 进增量矩阵(计划判据漂移, 按实码契约断言)
+        # 5. view=show&delta=1: S9b 起 show 进增量矩阵(计划判据漂移, 按实码契约断言)
         qb.resume(hs[0])
         wait_state(qb, hs[0], "stalledUP", desc="show 对照前置恢复")
         rid5 = wait_quiesced_rid(port)
@@ -621,30 +621,30 @@ def test_rm08_03_view_arrays_payload(clean_fakes):
             settle(qb, h)
         wait_in_store(port, *hs)
 
-        # ① view=torrent → 只含 torrents 键
+        # 1. view=torrent → 只含 torrents 键
         rt = web_req(port, "GET", "/api/state?view=torrent")
         assert ARRAYS & set(rt) == {"torrents"}, f"view=torrent 分片键不对: {ARRAYS & set(rt)}"
         assert len(rt["torrents"]) == 3, f"torrents 行数不对: {len(rt['torrents'])}"
 
-        # ② view=group → groups+singles(未归组 ⇒ groups 空属预期: 归组管线不归本片面)
+        # 2. view=group → groups+singles(未归组 ⇒ groups 空属预期: 归组管线不归本片面)
         rg = web_req(port, "GET", "/api/state?view=group")
         assert ARRAYS & set(rg) == {"groups", "singles"}, f"view=group 分片键不对: {ARRAYS & set(rg)}"
         assert len(
             rg["singles"]
         ) == 3 and rg["groups"] == [], (f"group 视图形状不对: singles={len(rg['singles'])} groups={len(rg['groups'])}")
 
-        # ③ view=show → 三件套(缺成员索引 = 追剧页永久空表, BUG-8 同款)
+        # 3. view=show → 三件套(缺成员索引 = 追剧页永久空表, BUG-8 同款)
         rs = web_req(port, "GET", "/api/state?view=show")
         assert ARRAYS & set(rs) == {"shows", "groups", "singles"}, f"view=show 分片键不对: {ARRAYS & set(rs)}"
         assert isinstance(rs["shows"], dict) and "list" in rs["shows"], f"shows 非剧聚合结构: {type(rs['shows'])}"
 
-        # ④ 缺省/未知 view → 四份全回(保守默认; 未知值不得 500)
+        # 4. 缺省/未知 view → 四份全回(保守默认; 未知值不得 500)
         rd = web_req(port, "GET", "/api/state")
         assert ARRAYS <= set(rd), f"缺省 view 未回四份: {ARRAYS & set(rd)}"
         rb = web_req(port, "GET", "/api/state?view=bogus")
         assert ARRAYS <= set(rb), f"未知 view 未回退四份: {ARRAYS & set(rb)}"
 
-        # ⑤ 字节量级: 分片严格更小(门控生效)。计划 40% 界(≈1/4 口径)受 status 恒回传段支配,
+        # 5. 字节量级: 分片严格更小(门控生效)。计划 40% 界(≈1/4 口径)受 status 恒回传段支配,
         #    在 3 枚种子的小库下实测 66%(status ≈ 数组总量的一半)—— 该界移到 RM08-04 的大库
         #    载荷上断言(≈1/4 是大库性质), 此处记实测比供基线切片誊写。
         assert jlen(rt) < jlen(rd), f"view=torrent 字节未小于全量(分片失效): {jlen(rt)} vs {jlen(rd)}"
@@ -868,7 +868,7 @@ def test_rm08_07_sse_and_aux_endpoints(clean_fakes):
     失败判据: 12s 内零心跳帧(keepalive 破, 连着的客户端被判不活跃 → 主循环停组装视图 → 自锁,
               高优); hello 前泄漏载荷; 连流期间变更后既无推送帧也无版本推进(连接饿死);
               sites/missing 计数与实例种子数不符。
-    升档兑现(2026-11-01 漂移轮 D2, 上轮 BLOCKED 子项⑤解锁): skip_local_verify=false 后票据闸
+    升档兑现(2026-11-01 漂移轮 D2, 上轮 BLOCKED 子项 5 解锁): skip_local_verify=false 后票据闸
     可达 —— 坏票/无票连流请求必须拒收(401 族)且流不建立, 回 200 即红; 错 Bearer 对照同口径。
     """
     with product_case("rm08_07", auth="rm08-07-bearer-drift-token") as (case, port, _proc):
@@ -877,11 +877,11 @@ def test_rm08_07_sse_and_aux_endpoints(clean_fakes):
         settle(qb, h)
         wait_in_store(port, h)
 
-        # ① 换票: {ticket, ttl}(30s; auth 实例下 POST 需 Bearer, web_req 自动携带)
+        # 1. 换票: {ticket, ttl}(30s; auth 实例下 POST 需 Bearer, web_req 自动携带)
         tk = web_req(port, "POST", "/api/events/ticket")
         assert tk.get("ticket") and tk.get("ttl") == 30, f"ticket 回执形状不对: {tk}"
 
-        # ② 连流收 hello(首帧即 hello, 不得先泄漏载荷; 好票 ?ticket= 连流免 Bearer)
+        # 2. 连流收 hello(首帧即 hello, 不得先泄漏载荷; 好票 ?ticket= 连流免 Bearer)
         conn, sresp = _sse_connect(port, tk["ticket"])
         try:
             assert sresp.getheader(
@@ -891,11 +891,11 @@ def test_rm08_07_sse_and_aux_endpoints(clean_fakes):
             assert hello and hello.get("event") == "hello", f"首帧应为 hello: {hello}"
             assert hello.get("data", {}).get("ok") is True, f"hello 载荷不对: {hello}"
 
-            # ③ 空闲期读 ≥12s(WEB_VIEW_TTL=10s)→ 至少 1 条 keepalive(保活 + touch 自证活跃)
+            # 3. 空闲期读 ≥12s(WEB_VIEW_TTL=10s)→ 至少 1 条 keepalive(保活 + touch 自证活跃)
             keepalives = _count_keepalives(conn, sresp, seconds=12)
             assert keepalives >= 1, f"{12}s 内零心跳帧(keepalive 破, 自锁面, 高优)"
 
-            # ④ 连流期间触发一次变更(暂停假种子)→ 流上收到 ver 帧(视图版本推送)或复拍版本推进
+            # 4. 连流期间触发一次变更(暂停假种子)→ 流上收到 ver 帧(视图版本推送)或复拍版本推进
             rid0 = web_req(port, "GET", "/api/state?view=torrent")["rid"]
             qb.pause(h)
             wait_state(qb, h, "stoppedUP", desc="SSE 变更触发")
@@ -906,10 +906,10 @@ def test_rm08_07_sse_and_aux_endpoints(clean_fakes):
         finally:
             conn.close()
 
-        # ⑤ 坏票/无票负向(升档兑现, 红验): 票据闸必须拒收且流不建立 —— 回 200 即红。
+        # 5. 坏票/无票负向(升档兑现, 红验): 票据闸必须拒收且流不建立 —— 回 200 即红。
         #    注意显式 token="" 压掉 auth 实例的自动 Bearer: 带**正确** Bearer 时票据闸本就
         #    不拦(auth.py: 票据消费失败落回 Bearer 校验, 有效密钥放行)—— 负向测的是
-        #    「无有效凭证」路径, 与探针②口径一致。
+        #    「无有效凭证」路径, 与探针 2 口径一致。
         code, p = web_err(port, "GET", "/api/events?ticket=forged-ticket-rm08-drift", token="")
         assert code in (401, 403), f"坏票应拒收(401/403 族), 实际 {code}: {p}"
         code, p = web_err(port, "GET", "/api/events", token="")
@@ -918,7 +918,7 @@ def test_rm08_07_sse_and_aux_endpoints(clean_fakes):
         code, p = web_err(port, "GET", "/api/state?view=torrent", token="rm08-07-wrong-bearer")
         assert code in (401, 403), f"错 Bearer 应拒收, 实际 {code}: {p}"
 
-        # ⑥ sites/missing(只读扫描): 计数与实例种子数一致; trackers 空 + 假种子无 announce
+        # 6. sites/missing(只读扫描): 计数与实例种子数一致; trackers 空 + 假种子无 announce
         #    ⇒ domains=0, sites=[](无缺失域可报, 结构与计数口径断言)
         sm = web_req(port, "GET", "/api/sites/missing")
         n_fake = len([t for t in qb.torrents() if TAG in _tags_of(t)])
@@ -1106,14 +1106,14 @@ def test_rm08_04_large_library_first_frame(clean_fakes):
         wait_until(lambda: len(flat_rows(port)) >= n, 120, f"flat 视图未吞满 {n} 枚(注入耗时 {inject_s:.1f}s)")
         assert qb.connection_status() != "disconnected", "注入后 qB 断连(实例压垮, 环境问题)"
 
-        # ① 首帧(rid=-1&view=torrent): 端点耗时(上界 2s 宽松界)与响应字节, 记实测数
+        # 1. 首帧(rid=-1&view=torrent): 端点耗时(上界 2s 宽松界)与响应字节, 记实测数
         t1 = time.perf_counter()
         r1 = web_req(port, "GET", "/api/state?rid=-1&view=torrent")
         dt1 = time.perf_counter() - t1
         assert dt1 < 2.0, f"大库首帧耗时超上界: {dt1:.3f}s(1200 枚)"
         assert len(r1["torrents"]) == n, f"行数 != 注入数: {len(r1['torrents'])} != {n}"
         b1 = jlen(r1)
-        # 计划 RM08-03⑤ 的 40% 界(≈1/4 口径)按库形态修正: 本库全是**未归组**假种子 ⇒
+        # 计划 RM08-03 第 5 项 的 40% 界(≈1/4 口径)按库形态修正: 本库全是**未归组**假种子 ⇒
         # groups/shows 数组恒空, 四数组全量 ≈ singles+torrents 两份 ≈ 2.2× torrent 视图
         # (实测 1200 枚 62%); 「≈1/4」只在 groups 有货的库形态成立。断言钉无归组库的
         # 收敛下限 70%, 实测比打印供基线切片誊写。
@@ -1121,7 +1121,7 @@ def test_rm08_04_large_library_first_frame(clean_fakes):
         assert b1 < b_all * 0.70, f"大库 view=torrent 字节未收敛: {b1} vs 全量 {b_all}"
         metric(f"[rm08-04] 字节比 view=torrent/无view = {b1 / b_all:.2f}({b1}/{b_all}B, {n} 枚未归组)")
 
-        # ② 第二拍原 rid → 零回传(大库下 status 段占比趋零, 5% 界成立), 耗时/字节趋近零
+        # 2. 第二拍原 rid → 零回传(大库下 status 段占比趋零, 5% 界成立), 耗时/字节趋近零
         t2 = time.perf_counter()
         r2 = rid_poll(port, r1["rid"])
         dt2 = time.perf_counter() - t2
@@ -1350,7 +1350,7 @@ def test_rm08_09_content_thousand_files(clean_fakes):
         settle(qb, ih)
         wait_in_store(port, ih, timeout=60)
 
-        # ① files 数据面: 行数 + payload 字节 + 冷/热两次端点耗时(qB -> 产品 -> JSON 序列化)
+        # 1. files 数据面: 行数 + payload 字节 + 冷/热两次端点耗时(qB -> 产品 -> JSON 序列化)
         t0 = time.perf_counter()
         files1 = web_req(port, "GET", f"/api/torrents/{ih}/files")
         dt1 = time.perf_counter() - t0
@@ -1368,7 +1368,7 @@ def test_rm08_09_content_thousand_files(clean_fakes):
         web_req(port, "GET", f"/api/torrents/{ih}")
         dt3 = time.perf_counter() - t2
 
-        # ② 真实写链路: POST files/priority -> /api/cmd 回执 ok -> files 回读 priority 生效
+        # 2. 真实写链路: POST files/priority -> /api/cmd 回执 ok -> files 回读 priority 生效
         t3 = time.perf_counter()
         queued = web_req(port, "POST", f"/api/torrents/{ih}/files/priority", {"indices": [0], "priority": 7})
         cmd_id = queued.get("cmd_id")
@@ -1385,7 +1385,7 @@ def test_rm08_09_content_thousand_files(clean_fakes):
         after = web_req(port, "GET", f"/api/torrents/{ih}/files")
         assert after[0]["priority"] == 7, f"priority 未生效: {after[0].get('priority')}"
 
-        # ③ 真产品前端量具: 首帧 / 常驻 DOM / 折叠展开 / 乐观 vs 旧路径可见延迟 / longtask
+        # 3. 真产品前端量具: 首帧 / 常驻 DOM / 折叠展开 / 乐观 vs 旧路径可见延迟 / longtask
         ui = _ui_probe(case, port, "rm08k_1000f")
         if "blocked" in ui:
             metric(f"[rm08-09] 前端量具 BLOCKED: {ui['blocked']} | 数据面已采, DOM/可见延迟待补")
@@ -1495,7 +1495,7 @@ def test_rm08_14_tracker_error_site_alert(clean_fakes):
           reason 原文); **先造场后起产品** —— 2 枚带数据假种子 RUNNING(真 announce, 流量只到
           本机伪 tracker 零外连): 种A→ok 健康对照, 种B→bad 主角; 等到 qB 侧报错可见
           (status 4/5/6 + msg 原文)且种A tracker working 后才起产品。
-    ⚠ 定序依据(首跑实测): 产品的 tracker 健康扫描按 TTL 分档 —— 健康(无报错)观测一次后
+    WARN: 定序依据(首跑实测): 产品的 tracker 健康扫描按 TTL 分档 —— 健康(无报错)观测一次后
       进 TRACKER_HEALTH_TTL(600s)全库轮转档。若产品首观测抢在种子首次 announce 之前,
       记录落进健康档, 报错要 ~10 分钟后才被复查到(用例超时内永远不亮)。同场景复跑
       亮/不亮各半的 flake 即此竞态; 先造场后起产品消掉它。

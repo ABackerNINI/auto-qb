@@ -8,7 +8,7 @@ W1-A 两键退场(stop_following_rules_if / ignore_next_action_error 载入转�
 代码实况落刀点(计划给意图, 这里按 src 实况):
 - 规则集 = config 段下**以 `_rules` 结尾的顶层键**(loaders.py:629), tracker 条目
   `rules: ["@rm03_rules"]` 引用; tracker 绑定是规则面的前置死门 —— 假种子必须带本机死端口
-  announce(http://<本机IP>:1/announce, §2.9 第①条), 匹配按 hostname 不含端口(utils.match_tracker_confs);
+  announce(http://<本机IP>:1/announce, §2.9 第 1 条), 匹配按 hostname 不含端口(utils.match_tracker_confs);
 - 规则动作日志锚点: 「规则[名] <log_repr> | 动作[名] 成功/失败」(base.py:654/676);
   条件求值出错 = ERROR「本条规则本轮跳过(条件求值出错)」(base.py:718, 同因 300s 节流;
   旧话术「停止后续规则」已随 W1 退役 —— per-rule 任务模型里不存在「后续规则」链);
@@ -84,7 +84,7 @@ def _tags_of(t) -> set[str]:
 def _add_retry(qb, raw: bytes, savepath: str, ih: str) -> None:
     """加种子, 409 双义处理(qB 5.2 重复 infohash 返回 409 Conflict)。
 
-    同 infohash 旧副本在场时**一律删掉重加, 绝不收养**(§2.9 第②条: 收养把上轮预打标/
+    同 infohash 旧副本在场时**一律删掉重加, 绝不收养**(§2.9 第 2 条: 收养把上轮预打标/
     预暂停状态带进本跑, 触发源永不触发 → 假 FAIL 自续)。"""
     from lib.qb import QbError
     for attempt in range(4):

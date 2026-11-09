@@ -6,7 +6,7 @@ tracker 匹配三分流(RM05-01)· 热重载重绑(RM05-02)· tracker 单种限�
 delete_tags_if_has_no_torrents 使用中对照(RM05-06)· 站点档案派生装载期正负向(RM05-07)。
 
 代码实况落刀点(计划给意图, 这里按 src 实况):
-- 假种子 announce 指本机死端口 http://<本机IP>:1/announce(§2.9 第①条), 匹配按 hostname
+- 假种子 announce 指本机死端口 http://<本机IP>:1/announce(§2.9 第 1 条), 匹配按 hostname
   不含端口(utils.match_tracker_confs, config dict 书写顺序返回, 不排序); 负向种子用
   127.0.0.1 hostname(本机死端口, 零 DNS 零外连); conf=None 的种子整条 added 管线跳过是预期;
 - 多匹配「第一个」= match_tracker_confs 按 config dict 顺序取 confs[0](tracker_mod.py:92
@@ -85,7 +85,7 @@ def _tags_of(t) -> set[str]:
 def _add_retry(qb, raw: bytes, savepath: str, ih: str) -> None:
     """加种子, 409 双义处理(qB 5.2 重复 infohash 返回 409 Conflict)。
 
-    同 infohash 旧副本在场时**一律删掉重加, 绝不收养**(§2.9 第②条: 收养把上轮预打标/
+    同 infohash 旧副本在场时**一律删掉重加, 绝不收养**(§2.9 第 2 条: 收养把上轮预打标/
     预暂停状态带进本跑, 触发源永不触发 → 假 FAIL 自续)。预打标用例(RM05-04/05/06)尤其如此。"""
     from lib.qb import QbError
     for attempt in range(4):
@@ -298,7 +298,7 @@ def test_rm05_01_match_three_way_split():
 
     前置: 测试配置 trackers 双条目同域(书写序 zz-hit 在前、aa-second 在后 —— 故意让字母序
           与书写序相反, 若实现按名字序取「第一个」会立刻红); 3 枚假种子在产品启动前入库:
-          A/C announce=本机IP(双匹配), B announce=127.0.0.1(零匹配, §2.9 第①条预期负向)。
+          A/C announce=本机IP(双匹配), B announce=127.0.0.1(零匹配, §2.9 第 1 条预期负向)。
     副作用: 副实例 加 3 假种子; A/C 被打 rm05-hit。
     回滚: real.seed.rm --all + 清 rm05-* 标签定义 + 删用例目录; 收尾核 副实例 无残留。
     失败判据: A 未被打标(匹配语义分叉); B 也被打 rm05-*(死门失效, 负向必须能红);
@@ -634,8 +634,8 @@ def test_rm05_05_delete_tags_global_and_tracker_tags_ref():
         #      (种子级 add_tags 隐式重建定义), 与全局删除在同一节拍内成对发生(先删后打),
         #      干净窗亚秒级, 外部采样不可稳定观测 —— 且这是 schema delete_tags risk 文案明载的
         #      预期「互相打架」, 非缺陷。断言改走四件机械可观测事实:
-        #      ① 命中集 == 预期三元(上面已断) ② 孤儿标签永久消失(torrents_delete_tags
-        #      真删定义+摘种子的存在性证明, 无人重建) ③ 对照标签全采样恒在 ④ 删除行跨节拍重复。
+        #      1. 命中集 == 预期三元(上面已断) 2. 孤儿标签永久消失(torrents_delete_tags
+        #      真删定义+摘种子的存在性证明, 无人重建) 3. 对照标签全采样恒在 4. 删除行跨节拍重复。
         n0 = count_anchor(case, r"彻底删除标签: \[")
         wait_until(lambda: count_anchor(case, r"彻底删除标签: \[") >= n0 + 2, 20, "删除日志未跨 ≥3 节拍重复出现(全局任务没有每轮入队)")
         samples = []
@@ -749,7 +749,7 @@ def test_rm05_07_site_preset_binding_loadtime():
               仍红记 FAIL); 负向静默通过(校验漏网 —— 高优 FAIL); 产品在校验失败时仍起了
               主循环(fail-fast 破坏); hr_check.enabled=false 下出现对真实站点的取数尝试。
     """
-    # ---- 正向①: 精确域绑定(档案 tracker_domain pt.btschool.club == 用户 domains)
+    # ---- 正向 1: 精确域绑定(档案 tracker_domain pt.btschool.club == 用户 domains)
     case1, cfg1 = _site_cfg(
         "rm05_07_pos_exact",
         {"rm05bt": {
@@ -762,7 +762,7 @@ def test_rm05_07_site_preset_binding_loadtime():
             "enabled": True
         }},
     )
-    # ---- 正向②: 子域容错(用户配主域 btschool.club, 档案域 pt.btschool.club endswith ".btschool.club")
+    # ---- 正向 2: 子域容错(用户配主域 btschool.club, 档案域 pt.btschool.club endswith ".btschool.club")
     case2, cfg2 = _site_cfg(
         "rm05_07_pos_sub",
         {"rm05bt": {
@@ -775,7 +775,7 @@ def test_rm05_07_site_preset_binding_loadtime():
             "enabled": True
         }},
     )
-    # ---- 负向③: domains 只有本机IP(绑 0)
+    # ---- 负向 3: domains 只有本机IP(绑 0)
     case3, cfg3 = _site_cfg(
         "rm05_07_neg_zero",
         {"rm05fake": {
@@ -785,7 +785,7 @@ def test_rm05_07_site_preset_binding_loadtime():
             "enabled": True
         }},
     )
-    # ---- 负向④: 两个条目都配 pt.btschool.club(绑 2)
+    # ---- 负向 4: 两个条目都配 pt.btschool.club(绑 2)
     case4, cfg4 = _site_cfg(
         "rm05_07_neg_ambig",
         {
@@ -806,7 +806,7 @@ def test_rm05_07_site_preset_binding_loadtime():
             "enabled": True
         }},
     )
-    # ---- 负向⑤: 未登记档案 id
+    # ---- 负向 5: 未登记档案 id
     case5, cfg5 = _site_cfg(
         "rm05_07_neg_unknown",
         {"rm05bt": {

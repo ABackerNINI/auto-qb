@@ -40,7 +40,7 @@ choose 编辑器保存通道 PUT /api/config 服务端规范形语义(RM09-11, �
   W1-B)不复测(D2); 保存成功投递 reload_config 热重载(机制本身归 RM02-04 引用)。
   与 RM03-11 的「不测三遍」切分(D6): RM03-11 测规则层热重载语义(分支求值/首中短路/default
   兜底/无 default 空操作/装载期嵌套拒绝), RM09-11 只测保存通道交付链(规范形 → 校验/400/落盘
-  → 热重载后「PUT 的树被引擎吃到」), ② 只证首中分支打标落 qB 的交付链证据, 求值对照零复测。
+  → 热重载后「PUT 的树被引擎吃到」), 第 2 项只证首中分支打标落 qB 的交付链证据, 求值对照零复测。
 
 跑法: `commands run real.suite -- --slice RM09 --yes`(不要裸 pytest)。真实种子全程非活跃;
 假种子一律 real-fake 标签(死端口 announce http://<本机IP>:1/announce, 零外连); 删除/移动/重命名
@@ -502,7 +502,7 @@ def test_rm09_02_delete_two_modes(clean_fakes):
         wait_in_store(port, ih_a, ih_b)
         assert file_a.is_file() and file_b.is_file(), "加种子后数据文件应已在盘上"
 
-        # ① delete_files=false: 种子消失, 数据还在(防「真删用户数据」语义破的关键红验)
+        # 1. delete_files=false: 种子消失, 数据还在(防「真删用户数据」语义破的关键红验)
         r1 = post_cmd(port, f"/api/torrents/{ih_a}/delete", {"delete_files": False})
         assert r1["delete_files"] is False, f"delete 回执未回显 delete_files: {r1}"
         rc1 = wait_cmd(port, r1["cmd_id"], desc="delete(false) 回执")
@@ -510,7 +510,7 @@ def test_rm09_02_delete_two_modes(clean_fakes):
         wait_until(lambda: qb.torrent(ih_a) is None, 30, "删除后 qB info 仍含该 hash(删除未生效)")
         assert file_a.is_file(), "delete_files=false 连数据一起删了(高危语义破)"
 
-        # ② delete_files=true: 种子消失且数据真被 qB 删
+        # 2. delete_files=true: 种子消失且数据真被 qB 删
         r2 = post_cmd(port, f"/api/torrents/{ih_b}/delete", {"delete_files": True})
         assert r2["delete_files"] is True, f"delete 回执未回显 delete_files: {r2}"
         rc2 = wait_cmd(port, r2["cmd_id"], desc="delete(true) 回执")
@@ -547,17 +547,17 @@ def test_rm09_03_bulk_mixed_and_gates(clean_fakes):
         wait_state(qb, h1, "stoppedUP", desc="bulk pause 成员1")
         wait_state(qb, h2, "stoppedUP", desc="bulk pause 成员2(经组键展开)")
 
-        # 负向红验①: action=limits 两方向全空 → 路由层 400 拒收, 不入队(无 cmd_id)
+        # 负向红验 1: action=limits 两方向全空 → 路由层 400 拒收, 不入队(无 cmd_id)
         code1, p1 = web_err(port, "POST", "/api/torrents/bulk", {"action": "limits"})
         assert code1 == 400, f"limits 全空应 400: {code1} {p1}"
         assert "至少提供" in str(p1.get("detail", "")), f"400 detail 文案不对: {p1}"
 
-        # 负向红验②: dl_limit=-1 → 400(「不能为负数」)
+        # 负向红验 2: dl_limit=-1 → 400(「不能为负数」)
         code2, p2 = web_err(port, "POST", "/api/torrents/bulk", {"action": "limits", "dl_limit": -1})
         assert code2 == 400, f"负限速应 400: {code2} {p2}"
         assert "不能为负数" in str(p2.get("detail", "")), f"400 detail 文案不对: {p2}"
 
-        # 负向红验③: 含不存在 hash → 正常入队, 聚合回执带 skip 计数, 其余目标不连坐
+        # 负向红验 3: 含不存在 hash → 正常入队, 聚合回执带 skip 计数, 其余目标不连坐
         for h in (h1, h2):  # 先用 qB 原生恢复, 让本步的 pause 动作有真状态可断
             qb.resume(h)
         wait_state(qb, h1, "stalledUP", desc="skip 前置恢复1")
@@ -580,7 +580,7 @@ def test_rm09_04_reannounce_three_states(clean_fakes):
     回滚: real-fake 种子删净; 伪 tracker 停机; 产品停机清内存账。
     失败判据: 活跃+死端口回了成功语义(检查 announce 是否真死端口); 可达 tracker 强制汇报不落 ok;
               暂停种子也进确认跟踪; 三前缀互串(分档逻辑分叉); 回执永不写(pending 泄漏)。
-    注: 旧③「死端口行窗内二次 -> 推迟」在任何诚实判定下不可满足(min_announce 发送时即赋值、
+    注: 旧第 3 项「死端口行窗内二次 -> 推迟」在任何诚实判定下不可满足(min_announce 发送时即赋值、
     无响应不改写, 死端口行 min 恒在过去, 推迟分支不可达; 首跑实测落 error=再次被拒的诚实标签),
     推迟与 ok 两态改由伪 tracker 成功行承载(plan 26-10-31-2354 步3)。
     """
@@ -598,7 +598,7 @@ def test_rm09_04_reannounce_three_states(clean_fakes):
         wait_in_store_state(port, h_active, "stalledUP")
         wait_in_store(port, h_active, h_paused)
 
-        # ① 活跃 + 死端口 announce → tracker 拒绝: 「失败: tracker 未接受汇报(not working)」
+        # 1. 活跃 + 死端口 announce → tracker 拒绝: 「失败: tracker 未接受汇报(not working)」
         r1 = post_cmd(port, f"/api/torrents/{h_active}/reannounce")
         rc1 = wait_cmd(port, r1["cmd_id"], timeout=50, desc="reannounce(活跃) 回执")  # 确认窗最长 30s + 余量
         assert rc1["status"] == "error", f"活跃+死端口应落失败桶: {rc1}"
@@ -608,13 +608,13 @@ def test_rm09_04_reannounce_three_states(clean_fakes):
         reasons1 = [str(r.get("reason", "")) for r in rc1.get("truth", {}).get("results", [])]
         assert any(s.startswith(RC_FAIL_PREFIX) for s in reasons1), f"逐目标原因缺失败前缀: {rc1}"
 
-        # ② 暂停种子 → 非活跃前置闸(不发指令): 「未确认: 种子非活跃…」
+        # 2. 暂停种子 → 非活跃前置闸(不发指令): 「未确认: 种子非活跃…」
         r2 = post_cmd(port, f"/api/torrents/{h_paused}/reannounce")
         rc2 = wait_cmd(port, r2["cmd_id"], timeout=20, desc="reannounce(暂停) 回执")
         assert rc2["status"] == "warn", f"暂停种子应落未确认桶(warn): {rc2}"
         assert rc2.get("error", "") == RC_UNCONFIRMED_PREFIX + REANNOUNCE_INACTIVE_SKIP, f"非活跃文案不对: {rc2}"
 
-        # ③ 成功 ok 回执 + 窗内推迟: 旧期望「死端口行窗内二次 -> 推迟」在任何诚实判定下不可满足
+        # 3. 成功 ok 回执 + 窗内推迟: 旧期望「死端口行窗内二次 -> 推迟」在任何诚实判定下不可满足
         # (min_announce 发送时即赋值、无响应不改写, 死端口行 min 恒过去, 推迟分支不可达; 首跑实测
         # 落 error=再次被拒的诚实标签)。改用本地伪 tracker 成功行验两条: ok 回执(前跳正证据全链路)
         # 与推迟早回执(D1, min 在未来)。
@@ -632,7 +632,7 @@ def test_rm09_04_reannounce_three_states(clean_fakes):
                 ]
 
             wait_until(lambda: any(t.get("status") == 2 for t in tracker_rows()), 30, "伪 tracker 行未转 working")
-            # ③ 前跳幅度 = 本轮强制汇报与上次 announce 的发送间隔, 需 > TOL=3s 才算成功证据
+            # 3. 前跳幅度 = 本轮强制汇报与上次 announce 的发送间隔, 需 > TOL=3s 才算成功证据
             wait_until(lambda: time.time() - tr_ok.announces[-1]["ts"] > 5, 15, "距上次 announce 间隔不足")
             r_ok = post_cmd(port, f"/api/torrents/{h_ok}/reannounce")
             rc_ok = wait_cmd(port, r_ok["cmd_id"], timeout=50, desc="reannounce(伪 tracker) 回执")
@@ -641,7 +641,7 @@ def test_rm09_04_reannounce_three_states(clean_fakes):
             # 窗内二次: min_e = 上次成功响应的 min_interval(1800s) 在未来 -> 「已受理: 推迟至」早回执
             r4 = post_cmd(port, f"/api/torrents/{h_ok}/reannounce")
             rc4 = wait_cmd(port, r4["cmd_id"], timeout=20, desc="reannounce(窗内二次) 回执")
-            # 聚合 error = 计数文案开头(同①), 前缀断言咬包含 + truth.results 逐目标 reason
+            # 聚合 error = 计数文案开头(同第 1 项), 前缀断言咬包含 + truth.results 逐目标 reason
             assert rc4["status"] == "warn" and RC_DEFERRED_PREFIX in str(rc4.get("error", "")
                                                                         ), (f"窗内二次 reannounce 应落「已受理: 推迟至」: {rc4}")
             reasons4 = [str(r.get("reason", "")) for r in rc4.get("truth", {}).get("results", [])]
@@ -665,7 +665,7 @@ def test_rm09_05_move_rename_renamefs(clean_fakes):
         settle(qb, h)
         wait_in_store(port, h)
 
-        # ① location: 目标目录预建 → qB 真搬(单成员恒 FORM_DIRECT, 锚点= save_path 与文件)
+        # 1. location: 目标目录预建 → qB 真搬(单成员恒 FORM_DIRECT, 锚点= save_path 与文件)
         dst = case / "moved"
         dst.mkdir(parents=True, exist_ok=True)
         r1 = post_cmd(port, f"/api/torrents/{h}/location", {"location": str(dst)})
@@ -675,13 +675,13 @@ def test_rm09_05_move_rename_renamefs(clean_fakes):
         assert (dst / "rm09epack" / "a.bin").is_file(), "新目录里没有数据文件(qB 没真搬)"
         wait_until(lambda: not (src / "rm09epack" / "a.bin").exists(), 30, "旧目录数据残留(qB 搬迁未收尾)")
 
-        # ② rename: qB 显示名真变
+        # 2. rename: qB 显示名真变
         r2 = post_cmd(port, f"/api/torrents/{h}/rename", {"name": "rm09e-renamed"})
         rc2 = wait_cmd(port, r2["cmd_id"], desc="rename 回执")
         assert rc2["status"] == "ok", f"rename 回执非 ok: {rc2}"
         wait_until(lambda: (qb.torrent(h) or {}).get("name") == "rm09e-renamed", 30, "qB name 未变")
 
-        # ③ rename-fs: 文件名真变(torrents/files 回读)
+        # 3. rename-fs: 文件名真变(torrents/files 回读)
         r3 = post_cmd(
             port, f"/api/torrents/{h}/rename-fs", {
                 "old_path": "rm09epack/a.bin",
@@ -739,12 +739,12 @@ def test_rm09_06_group_commands(clean_fakes):
         wait_state(qb, h1, "stalledUP", desc="组 resume 成员1")
         wait_state(qb, h2, "stalledUP", desc="组 resume 成员2")
 
-        # 负向①: 畸形 key(非法 base64) → 路由层 400 拒收
+        # 负向 1: 畸形 key(非法 base64) → 路由层 400 拒收
         code1, p1 = web_err(port, "POST", "/api/groups/not-a-valid-key!!/pause")
         assert code1 == 400, f"畸形组 key 应 400: {code1} {p1}"
         assert "分组标识无效" in str(p1.get("detail", "")), f"400 detail 文案不对: {p1}"
 
-        # 负向②: 形状合法但不存在的 key → 按计划「只要不是静默成功」
+        # 负向 2: 形状合法但不存在的 key → 按计划「只要不是静默成功」
         bogus = base64.urlsafe_b64encode(json.dumps(["rm09-no-such-group", []]).encode()).decode("ascii")
         r3 = post_cmd(port, f"/api/groups/{bogus}/pause")
         rc3 = wait_cmd(port, r3["cmd_id"], desc="不存在组 pause 回执")
@@ -820,7 +820,7 @@ def test_rm09_08_keys_roundtrip(clean_fakes):
         assert back == doc, f"写后读不一致: {back}"
         assert keys_file.is_file() and json.loads(keys_file.read_text(encoding="utf-8")) == doc, "keys 文件真值与回读不符"
 
-        # 负向①: 归一化串不符(小写/多段) → 422 且磁盘零触碰
+        # 负向 1: 归一化串不符(小写/多段) → 422 且磁盘零触碰
         snap = keys_file.read_bytes()
         code1, p1 = web_err(
             port, "PUT", "/api/keys", {
@@ -834,7 +834,7 @@ def test_rm09_08_keys_roundtrip(clean_fakes):
         assert code1 == 422, f"非法归一化串应 422: {code1} {p1}"
         assert keys_file.read_bytes() == snap, "422 拒收竟触碰了磁盘(高优)"
 
-        # 负向②: schema_version 不识别 → 422
+        # 负向 2: schema_version 不识别 → 422
         code2, _p2 = web_err(
             port, "PUT", "/api/keys", {
                 "schema_version": 2,
@@ -935,10 +935,10 @@ def test_rm09_11_choose_save_channel(clean_fakes):
     default 兜底/无 default 空操作/装载期嵌套拒绝; 本条只测 WebUI 保存通道交付链 ——
     编辑器写全规范形({type, params, on_error} / choose 编排块)经 PUT /api/config 的服务端
     语义(结构校验与启动同路径 / 400 逐字文案 / 落盘规范形 / 热重载投递后「PUT 的树被引擎
-    吃到」)。分支求值语义本条零断言: ② 只证首中分支打标落 qB 的交付链证据(种子先于 PUT
+    吃到」)。分支求值语义本条零断言: 第 2 项只证首中分支打标落 qB 的交付链证据(种子先于 PUT
     入列且彼时树里无规则, 打标只可能来自本次 PUT 交付), 对照集归 RM03-11 引用不复测。
 
-    前置: 基座 + 1 枚 256KiB 假种子(死端口 announce 归 rm09fake domains, 先于 ① 入列);
+    前置: 基座 + 1 枚 256KiB 假种子(死端口 announce 归 rm09fake domains, 先于第 1 项入列);
           负向腿落盘前配置文件字节快照。
     副作用: 用例内 PUT 临时配置树四次(两次 applied 两次 400 拒收); 热重载重建规则任务;
             假种子被打 rm09-cho-small 标签(choose 首中分支)。
@@ -953,43 +953,59 @@ def test_rm09_11_choose_save_channel(clean_fakes):
         qb = clean_fakes
         cfg_path = case / "config.yml"
 
-        # 前置: 种子先入列(此时配置树里无任何 *_rules 段, ② 的打标只可能来自 ① 的 PUT 交付)
+        # 前置: 种子先入列(此时配置树里无任何 *_rules 段, 第 2 项的打标只可能来自第 1 项的 PUT 交付)
         h = fake_one(qb, case, "rm09i.bin", sub="src")
         settle(qb, h)
         wait_state(qb, h, "stalledUP", desc="前置假种子应纯本地做种")
         wait_in_store(port, h)
 
-        # ---- ① 正向: GET 树 → 注入全规范形 choose 规则树(tracker 引用一并)→ PUT applied
+        # ---- 1. 正向: GET 树 → 注入全规范形 choose 规则树(tracker 引用一并)→ PUT applied
         #      → 落盘 YAML 规范形 → GET 回读一致
         tree = web_req(port, "GET", "/api/config")["tree"]
         tree["config"]["trackers"]["rm09fake"]["rules"] = ["@rm09_rules"]
         tree["config"]["rm09_rules"] = {
-            "c11choose": {
-                "trigger": "interval",
-                "actions": [
-                    {
-                        "choose": [
+            "c11choose":
+                {
+                    "trigger":
+                        "interval",
+                    "actions":
+                        [
                             {
-                                "when": {"size": "<=1MiB"},
-                                "then": [
-                                    {
-                                        "type": "add_tags",
-                                        "params": ["rm09-cho-small"],
-                                        "on_error": {"policy": "stop", "retries": "3", "backoff": "60"},
-                                    }
-                                ],
+                                "choose":
+                                    [
+                                        {
+                                            "when": {
+                                                "size": "<=1MiB"
+                                            },
+                                            "then":
+                                                [
+                                                    {
+                                                        "type": "add_tags",
+                                                        "params": ["rm09-cho-small"],
+                                                        "on_error": {
+                                                            "policy": "stop",
+                                                            "retries": "3",
+                                                            "backoff": "60"
+                                                        },
+                                                    }
+                                                ],
+                                        }
+                                    ],
+                                "default":
+                                    [
+                                        {
+                                            "type": "add_tags",
+                                            "params": ["rm09-cho-default"],
+                                            "on_error": {
+                                                "policy": "continue",
+                                                "retries": "0",
+                                                "backoff": "5"
+                                            },
+                                        }
+                                    ],
                             }
                         ],
-                        "default": [
-                            {
-                                "type": "add_tags",
-                                "params": ["rm09-cho-default"],
-                                "on_error": {"policy": "continue", "retries": "0", "backoff": "5"},
-                            }
-                        ],
-                    }
-                ],
-            }
+                }
         }
         resp = web_req(port, "PUT", "/api/config", {"tree": tree})
         assert resp.get("applied") is True, f"PUT 回执 applied 非 true: {resp}"
@@ -1015,37 +1031,51 @@ def test_rm09_11_choose_save_channel(clean_fakes):
         assert back["choose"][0]["then"][0]["type"] == "add_tags", f"GET 回读与落盘不一致: {back}"
         assert back["choose"][0]["then"][0]["on_error"]["policy"] == "stop", f"GET 回读缺 on_error: {back}"
 
-        # ---- ② 交付链: 热重载后 choose 规则真作用(首中分支打标落 qB)—— 只证「PUT 的树被
+        # ---- 2. 交付链: 热重载后 choose 规则真作用(首中分支打标落 qB)—— 只证「PUT 的树被
         #      引擎吃到」; 分支求值/首中短路/default 兜底语义归 RM03-11 引用不复测(D6)
         wait_until(lambda: "rm09-cho-small" in _tags_of(qb.torrent(h) or {}), 90, "PUT 热重载交付链断: 首中分支未打标")
 
-        # ---- ③ 红验: 负向 400 逐字文案 + 磁盘字节零触碰(嵌套 choose / 未知动作名)
+        # ---- 3. 红验: 负向 400 逐字文案 + 磁盘字节零触碰(嵌套 choose / 未知动作名)
         snap = cfg_path.read_bytes()
 
         tree3 = web_req(port, "GET", "/api/config")["tree"]
         tree3["config"]["rm09_rules"] = {
-            "c11bad": {
-                "trigger": "interval",
-                "actions": [
-                    {
-                        "choose": [
+            "c11bad":
+                {
+                    "trigger":
+                        "interval",
+                    "actions":
+                        [
                             {
-                                "when": {"size": "<=1MiB"},
-                                "then": [
-                                    {
-                                        "choose": [
-                                            {
-                                                "when": {"size": "<=1MiB"},
-                                                "then": [{"type": "add_tags", "params": ["rm09-bad"]}],
-                                            }
-                                        ]
-                                    }
-                                ],
+                                "choose":
+                                    [
+                                        {
+                                            "when": {
+                                                "size": "<=1MiB"
+                                            },
+                                            "then":
+                                                [
+                                                    {
+                                                        "choose":
+                                                            [
+                                                                {
+                                                                    "when": {
+                                                                        "size": "<=1MiB"
+                                                                    },
+                                                                    "then":
+                                                                        [{
+                                                                            "type": "add_tags",
+                                                                            "params": ["rm09-bad"]
+                                                                        }],
+                                                                }
+                                                            ]
+                                                    }
+                                                ],
+                                        }
+                                    ]
                             }
-                        ]
-                    }
-                ],
-            }
+                        ],
+                }
         }
         code1, p1 = web_err(port, "PUT", "/api/config", {"tree": tree3})
         assert code1 == 400, f"嵌套 choose 应 400 拒收: {code1} {p1}"
@@ -1054,22 +1084,32 @@ def test_rm09_11_choose_save_channel(clean_fakes):
 
         tree4 = web_req(port, "GET", "/api/config")["tree"]
         tree4["config"]["rm09_rules"] = {
-            "c11bad2": {"trigger": "interval", "actions": [{"type": "no_such_action", "params": {}}]}
+            "c11bad2": {
+                "trigger": "interval",
+                "actions": [{
+                    "type": "no_such_action",
+                    "params": {}
+                }]
+            }
         }
         code2, p2 = web_err(port, "PUT", "/api/config", {"tree": tree4})
         assert code2 == 400, f"未知动作名应 400 拒收: {code2} {p2}"
         assert "未知动作 'no_such_action'" in str(p2.get("detail", "")), f"400 逐字文案不对: {p2}"
         assert cfg_path.read_bytes() == snap, "未知动作 400 竟触碰了磁盘(高优)"
 
-        # ---- ④ 红验/徽标数据源(D2): 退役键经 PUT 保存通道键面保留不拒收(applied + 落盘保留
+        # ---- 4. 红验/徽标数据源(D2): 退役键经 PUT 保存通道键面保留不拒收(applied + 落盘保留
         #      + GET 树保留)—— 徽标 DOM 渲染/卡脚提示交互引用 e2e/静态守阵(W1-B)不复测
         tree5 = web_req(port, "GET", "/api/config")["tree"]
         tree5["config"]["rm09_rules"] = {
-            "c11retired": {
-                "trigger": "interval",
-                "stop_following_rules_if": "always",
-                "actions": [{"type": "ignore_next_action_error", "params": "true"}],
-            }
+            "c11retired":
+                {
+                    "trigger": "interval",
+                    "stop_following_rules_if": "always",
+                    "actions": [{
+                        "type": "ignore_next_action_error",
+                        "params": "true"
+                    }],
+                }
         }
         resp4 = web_req(port, "PUT", "/api/config", {"tree": tree5})
         assert resp4.get("applied") is True, f"退役键竟被保存通道拒收: {resp4}"

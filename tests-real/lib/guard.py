@@ -33,7 +33,7 @@ class GuardError(RuntimeError):
 def listening_pid(port: int) -> int | None:
     """按端口反查监听进程 PID(Windows netstat; 只用于白名单端口)。
 
-    ⚠ 中文 Windows 的 netstat / powershell 输出是 GBK 代码页 —— 用默认 utf-8 解会
+    WARN: 中文 Windows 的 netstat / powershell 输出是 GBK 代码页 —— 用默认 utf-8 解会
     UnicodeDecodeError 并把守卫打成"崩了", 所以显式按 gbk 解并容错。
     """
     out = subprocess.run(

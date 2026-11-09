@@ -365,18 +365,18 @@ def test_rm10_11_only_missing_merge_positive():
     out_dry = d / "export-dry.yml"
     out = d / "export-missing.yml"
     try:
-        # ① dry-run: 日志照打「已导出」但输出文件必须不存在(§2.9 同款零写判据)
+        # 1. dry-run: 日志照打「已导出」但输出文件必须不存在(§2.9 同款零写判据)
         r = app.run_cli([str(cfg), "--export-yaml", str(out_dry), "--only-missing", "--dry-run"], timeout=120)
         assert r.returncode == 0, f"dry-run 导出非 0: rc={r.returncode}\nstdout={r.stdout[-600:]}\nstderr={r.stderr[-600:]}"
         assert "已导出" in (r.stdout + r.stderr), "dry-run 轮缺「已导出」日志"
         assert not out_dry.exists(), "dry_run 轮输出文件出现 —— 写侧失守"
 
-        # ② only_missing 正向
+        # 2. only_missing 正向
         r = app.run_cli([str(cfg), "--export-yaml", str(out), "--only-missing"], timeout=120)
         assert r.returncode == 0, f"only_missing 导出非 0: rc={r.returncode}\nstdout={r.stdout[-600:]}\nstderr={r.stderr[-600:]}"
         data = yaml.safe_load(out.read_text(encoding="utf-8"))
 
-        # ③ 骨架形状: 只含 trackers + schema_version, 已配域不出现
+        # 3. 骨架形状: 只含 trackers + schema_version, 已配域不出现
         assert set(data) == {"config"}, f"顶层多余段: {set(data)}"
         assert set(data["config"]) == {
             "trackers", "schema_version"
@@ -384,7 +384,7 @@ def test_rm10_11_only_missing_merge_positive():
         assert data["config"]["schema_version"] == CURRENT_VERSIONS["config"]
         assert CONFIGURED_DOMAIN not in {x for d in entry_domains(data).values() for x in d}, "骨架混入已配域"
 
-        # ④ 合并组 + 单元素组 + 设计域定界
+        # 4. 合并组 + 单元素组 + 设计域定界
         assert_merged_entry_shape(data)
         assert_single_entry_shape(data)
         assert_designed_domains_scoped(data)
@@ -440,11 +440,11 @@ def test_rm10_12_append_mode_merge():
 def test_rm10_13_split_trackers_red():
     """[RM10-13] --split-trackers 配合校验红验(L3) + split/合并产物键面对照
 
-    前置: 同 RM10-11 场景; ①腿零 qB 依赖(argparse 层)。
+    前置: 同 RM10-11 场景; 腿 1 零 qB 依赖(argparse 层)。
     副作用: 同 RM10-11(两轮落盘: 合并一轮 + split 一轮)。
     回滚: 删自造种子(连数据) + purge case 目录。
-    失败判据: ①缺 --export-yaml 时 rc==0 或报错文案缺失(配合校验失守, 红验不红即产品缺陷) /
-      ②split 产物出现 ≥2 元素条目(回归成合并) / 某设计域无专属条目(拆分漏域) /
+    失败判据: 腿 1 缺 --export-yaml 时 rc==0 或报错文案缺失(配合校验失守, 红验不红即产品缺陷) /
+      腿 2 split 产物出现 ≥2 元素条目(回归成合并) / 某设计域无专属条目(拆分漏域) /
       对照腿合并产物无 3 元素条目 / 故意错位的红验断言不红。
     """
     d, qb, seeds, _savepath = build_scene("rm10_13")
@@ -452,13 +452,13 @@ def test_rm10_13_split_trackers_red():
     out_m = d / "export-merged.yml"
     out_s = d / "export-split.yml"
     try:
-        # ① 红验: 缺 --export-yaml → argparse 非 0 + parser.error 文案
+        # 1. 红验: 缺 --export-yaml → argparse 非 0 + parser.error 文案
         r = app.run_cli([str(cfg), "--split-trackers"], timeout=60)
         assert r.returncode != 0, f"缺 --export-yaml 却 rc=0 —— 配合校验失守\nstdout={r.stdout[-400:]}"
         combined = r.stdout + r.stderr
         assert SPLIT_ERR_TEXT in combined, f"报错文案缺失: 期望含 {SPLIT_ERR_TEXT!r}\n{combined[-500:]}"
 
-        # ② 同批种子: 合并产物 vs split 产物键面对照
+        # 2. 同批种子: 合并产物 vs split 产物键面对照
         r = app.run_cli([str(cfg), "--export-yaml", str(out_m), "--only-missing"], timeout=120)
         assert r.returncode == 0, f"合并导出非 0: {r.stderr[-500:]}"
         merged = yaml.safe_load(out_m.read_text(encoding="utf-8"))

@@ -80,7 +80,7 @@ SETTLED = {
     "stalledUP", "stalledDL", "pausedUP", "pausedDL", "stoppedUP", "stoppedDL", "missingFiles", "error", "moving"
 }
 
-# 假种子 announce 指本机死端口(零外连, §2.9 第①条); 匹配按 hostname 不含端口。
+# 假种子 announce 指本机死端口(零外连, §2.9 第 1 条); 匹配按 hostname 不含端口。
 FAKE_HOST = local_host()
 ANNOUNCE_IP = f"http://{FAKE_HOST}:1/announce"
 
@@ -99,7 +99,7 @@ def _tags_of(t) -> set[str]:
 
 
 def _add_retry(qb, raw: bytes, savepath: str, ih: str) -> None:
-    """加种子, 409 双义处理(qB 5.2 重复 infohash 返回 409 Conflict; §2.9 第②条: 绝不收养)。"""
+    """加种子, 409 双义处理(qB 5.2 重复 infohash 返回 409 Conflict; §2.9 第 2 条: 绝不收养)。"""
     from lib.qb import QbError
     for _attempt in range(4):
         try:
@@ -510,7 +510,7 @@ class HrStub:
     def drive(self, answer, *, max_seconds: float = 90.0, quiet_s: float = 12.0, poll: float = 0.3) -> list[dict]:
         """轮询拉任务并回传, 直到波静默(quiet_s 无新任务)或超时; 返回本轮见过的任务列表。
 
-        answer(task) -> dict(ok/body/status/error/kind) | None(None = 不回传, RM06-05② 用)。"""
+        answer(task) -> dict(ok/body/status/error/kind) | None(None = 不回传, RM06-05 第 2 项用)。"""
         deadline = time.monotonic() + max_seconds
         last_task_ts: float | None = None
         seen: list[dict] = []
@@ -879,14 +879,14 @@ def test_rm06_04_miss_lane_release_and_contrast():
 def test_rm06_05_error_paths_login_and_timeout():
     """[RM06-05] 三态判定·错误侧: 登录页回传 → HrLoginExpired 分档 + 超时不回传 → 失败分档且锁释放
 
-    前置: 基座 + 1 假种子 ×2 段; ①② 各自独立临时目录(独立 data_dir); ② request_timeout 配小(8S)。
+    前置: 基座 + 1 假种子 ×2 段; 步骤 1/2 各自独立临时目录(独立 data_dir); 步骤 2 request_timeout 配小(8S)。
     副作用: 1 假种子 ×2; 临时目录内站点文件。
     回滚: real.seed.rm --all + 删临时目录 ×2。
     失败判据: 登录页被当正常页面解析(分档失明, 站点数据被污染); 超时后站点锁永久持住(下一波收不到
               任务 —— request_timeout 要防的事故); 超时未计入失败/中断(记账漏); 断言等满默认 180s(测试侧配置漏)。
     """
     qb = qbfake()
-    # ---------- ① 登录页回传 ----------
+    # ---------- 1. 登录页回传 ----------
     case1 = case_dir("rm06_05a")
     p1 = None
     try:
@@ -932,7 +932,7 @@ def test_rm06_05_error_paths_login_and_timeout():
         cleanup_rm06_defs(qbfake())
         purge_tree(case1)
 
-    # ---------- ② 超时不回传 ----------
+    # ---------- 2. 超时不回传 ----------
     case2 = case_dir("rm06_05b")
     p2 = None
     try:

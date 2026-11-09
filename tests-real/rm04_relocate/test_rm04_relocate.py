@@ -776,7 +776,7 @@ def test_rm04_05_same_volume_relocate_dir_alias():
 
     前置: relocate.enabled=true + alias_file_threshold: 1; 两枚带数据多文件假种子(子目录
           布局, 同文件列表同内容异 piece_len)在 RAM 落点(R: 盘缺席时退 .work/rm04/ram/)成组;
-          dst = 用例目录 dst(与本机唯一可写卷 C: 同卷 —— 真跨卷半边 BLOCKED, 计划 §04③)。
+          dst = 用例目录 dst(与本机唯一可写卷 C: 同卷 —— 真跨卷半边 BLOCKED, 计划 §04 第 3 项)。
     同卷证明解锁(造法校准, 探针实测): qB 副实例默认 save_path 指向不存在的 R: 盘 ⇒
           free_space_on_disk 恒 -1 ⇒ same_volume_proof 必败 ⇒ 多成员组被 GATE_SAME_FS 拒;
           用例临时把 56590 的 save_path 改指 C: 现存目录(qB 立即报出 C: 真值), 测毕逐字还原。

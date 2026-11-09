@@ -245,7 +245,7 @@ def fake_seed(qb, name: str, size: int, savepath, salt: str, piece_len: int = to
 
 
 def _add_retry(qb, raw: bytes, savepath: str, ih: str, *, skip_checking: bool = False, paused: bool = False) -> None:
-    """加种子, 409 双义处理(重复 infohash 一律删旧重加, 绝不收养, §2.9 第②条)。"""
+    """加种子, 409 双义处理(重复 infohash 一律删旧重加, 绝不收养, §2.9 第 2 条)。"""
     for attempt in range(4):
         try:
             _add_raw(qb, raw, savepath, ih, skip_checking=skip_checking, paused=paused)
