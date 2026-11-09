@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="coverage-uplift-3">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="qbmanager 补刷新闸用例断言窗口局限, 变异三型全存活">
 <meta name="issue-summary" content="P2 红验对 qbmanager.py 619/624 补刷新闸注入三型变异全部存活: 用例观察窗在第 4 轮 KI 退出前, 重置节拍的可观测分歧落在窗后; 留待 mutants 审计兜底">
 <title>qbmanager 补刷新闸用例断言窗口局限, 变异三型全存活 · test · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-11-05-0200-test-qbmanager-refresh-gate-assertion-window</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-05 02:00</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -90,13 +90,15 @@
   <section id="s3">
     <h2><span class="no">03</span>建议<span class="opt">（可选）</span></h2>
     <p>待 mutants(mutmut/pytest-gremlins)定期审计兜底——把 qbmanager 补刷新闸列入变异审计提名清单,由审计轮决定是改用例窗口还是记等价变异;本件不单独改。</p>
+    <p><strong>修复后补充(2026-11-10, 与建议改道:未等审计轮,按用户指令直接单独修)</strong>——实际修法:不动产品代码,新增用例 <code>tests/test_qbmanager_loop.py::test_run_refresh_gate_reset_beat_observable_window</code>,把观察窗从第 4 轮 KI 拉长到第 6 轮,让补刷新闸(现 <code>qbmanager.py:637,642</code>,取证时 619/624,行号漂移)「重设 next_sync_at」的后果——下一次按点同步时刻的偏移——落进窗内。节拍表 <code>steps=[0.7,1.0,0.6,1.2,1.2]</code> / 命令驱动序列 <code>(T,T,F,T,F,T)</code> / moved 恒假,由临时模拟器逐世界验证:正确世界轨迹 <code>t s s t s K</code>(sync=[0.7,1.7,3.5],3 次 tick),4 个变异世界 <code>or-&gt;and</code>x2 / <code>if True</code>x2 的 sync 时刻表均与正确世界不同 = 全杀(另加 moved 求值计数断言兜住双行同时注入的世界),且各世界都能到第 3 次 _tick 正常 KI 退出(不挂死),最小闸门裕度 0.2s 无浮点刀锋判据。验证方式:W0 单跑绿;四型变异对 <code>qbmanager.py:637/642</code> 逐一 sed 注入后跑该用例,4/4 红(1 failed),跑完即还原。测试数字:整文件 <code>tests/test_qbmanager_loop.py</code> 17 passed(原 T2b 用例原样保留,白刷语义不丢)。</p>
   </section>
 
   <section id="s4">
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-11-05 02:00 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-    </ul>
+      <li>2026-11-10 — 状态 Open → Done（kb.status）</li>
+</ul>
   </section>
 
   <footer>

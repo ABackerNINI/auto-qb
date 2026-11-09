@@ -19,6 +19,7 @@
 
 覆盖率第三轮 T2b 补测(26-11-05):
 - test_run_cmd_driven_sync_not_by_time_keeps_next_sync: tick 到期而同步时间未到的命令轮, 白刷不重设 next_sync_at(619->633; 假时钟直驱)
+- test_run_refresh_gate_reset_beat_observable_window: 补刷新闸(637/642)重设节拍的可观测分歧必须落进用例观察窗内(26-11-05-0200; 假时钟直驱)
 """
 
 import json
@@ -418,3 +419,71 @@ def test_run_cmd_driven_sync_not_by_time_keeps_next_sync(monkeypatch):
         mgr.run(dry_run=False)
         assert mgr._tick.call_count == 3, "命令轮(614 支)恰好三轮后 KI 退出"
         assert sync_times == [1_800_000_001.8, 1_800_000_003.0], sync_times
+
+
+# ---------- 补刷新闸观察窗收口(26-11-05-0200): 重设节拍的分歧落进窗内 ----------
+
+
+def test_run_refresh_gate_reset_beat_observable_window(monkeypatch):
+    """(26-11-05-0200)补刷新闸(637/642 的 `if sync_due_by_time or self._sync_moved()`)
+    重设同步节拍的可观测分歧必须落在用例观察窗内 —— 上一版 T2b 的窗止于第 4 轮 KI 退出前,
+    闸门改写 next_sync_at 的后果(下一次按点同步的时刻后移)永远落在退出之后, P2 红验注入
+    三型变异(`if True`x2 / `or`->`and`)全部存活。本用例把窗拉长到第 6 轮: 节拍表经变异
+    模拟器逐世界验证(裸 float 累加口径, 最小闸门裕度 0.2s 无刀锋判据), 4 个变异世界的
+    sync 时刻表都与正确世界不同 = 全杀。
+
+    轮次表(相对 T0, sync_interval=1.5, main_tick=2.0, 每轮都有 run_command_line 之外的
+    命令驱动由 cmds 序列控制; moved 恒假 = 与被 lambda 掉的 _sync_line 同口径的白刷):
+      R1 t=0.0  cmd=T  tick#1(双 due)  闸: by_time 真 -> 重设 next_sync=1.5
+      R2 t=0.7  cmd=T  命令驱动 sync   闸: by_time 假+moved 假 -> 不重设(白刷, T2b 语义)
+      R3 t=1.7  cmd=F  按点 sync        闸: by_time 真 -> 重设 next_sync=3.2
+      R4 t=2.3  cmd=T  tick#2          闸: by_time 假+moved 假 -> 不重设 <- 若被 `if True`
+                  改写则重设到 3.8, R5 的按点同步(3.5>=3.2)当场消失 = 分歧进窗
+      R5 t=3.5  cmd=F  按点 sync        闸: by_time 真 -> 重设 next_sync=5.0
+      R6 t=4.7  cmd=T  tick#3 -> KI
+    假时钟 + _wait_next 步进直驱(与 T2b 同款), 期望值按与时钟一致的累加顺序书写(浮点逐位相等)。
+    """
+    from auto_qb.core import qbmanager as qbm
+
+    clock = FakeClock(start=1_800_000_000.0)  # 2027 年附近: 避开 Windows 1970 邻域 timestamp OSError 坑
+    monkeypatch.setattr(qbm, "SYSTEM_CLOCK", clock)  # 构造前替换(缺省钟在构造期解析模块属性)
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        mgr.connect = mock.Mock(return_value=True)
+        mgr.config.sync_interval = 1.5
+        mgr.config.main_tick = 2.0
+
+        steps = iter([0.7, 1.0, 0.6, 1.2, 1.2])  # 各轮推进量: 0.7 / 1.7 / 2.3 / 3.5 / 4.7(R6 KI)
+
+        def _fake_wait(stop_event, wake_event, timeout):
+            clock.advance(next(steps, 1.0))
+            return False
+
+        monkeypatch.setattr(qbm, "_wait_next", _fake_wait)
+        # 命令驱动序列(逐轮): R1..R6; R3/R5 无命令 -> 只有按点同步可驱动 sync 分支,
+        # 正是"重设节拍是否被闸门放行"的可观测面
+        mgr.host.run_command_line = mock.Mock(side_effect=[True, True, False, True, False, True])
+        mgr._tick = mock.Mock(side_effect=[None, None, KeyboardInterrupt()])
+        mgr._task_line = mock.Mock()  # 防御性: 轮次表设计保证任何世界都不进任务分支
+        sync_times = []
+        mgr._sync_line = lambda dry_run, flush=True, force=False: sync_times.append(clock.now())
+        moved_seq = iter([False, False])
+
+        def _fake_moved():
+            return next(moved_seq, False)
+
+        mgr._sync_moved = mock.Mock(side_effect=_fake_moved)
+        # 恒假: 快照零变化(白刷口径), 与被 lambda 掉的 _sync_line 一致。留 Mock 是为了数
+        # 闸门对它的求值次数: 正确世界仅 R2/R4 两道闸(其余轮 by_time 短路)恰调 2 次;
+        # 双行同时 or->and 注入的世界(单行注入各自可被 sync_times 杀, 双行下 next_sync_at
+        # 恒 0 -> 每轮 by_time 恒真, 线选择与 sync/tick 计数都同正确世界, 闸门结局的分歧
+        # 跨 R1/R3/R5 且横跨 tick/sync 两分支)每道闸都求值 = 5 次, 下面的 call_count 断言把它也杀掉。
+        mgr.run(dry_run=False)
+        t_r2 = 1_800_000_000.0 + 0.7
+        t_r3 = t_r2 + 1.0
+        t_r5 = t_r3 + 0.6 + 1.2  # R5 时刻; 本式末位 +1.2 是 R4 的等待步(steps[3], 落到 3.5),
+        # steps 末位(第 5 个)1.2 才是 R6 的推进(落到 4.7, 其后第 3 次 _tick 即 KI), 不计入本式
+        assert mgr._tick.call_count == 3, "恰三次 _tick(第 3 次抛 KI 退出)"
+        assert sync_times == [t_r2, t_r3, t_r5], sync_times
+        assert mgr._task_line.call_count == 0, "轮次表内不得误入任务分支"
+        assert mgr._sync_moved.call_count == 2, "正确世界恰 R2/R4 两道闸求值 moved(其余轮 by_time 短路)"
