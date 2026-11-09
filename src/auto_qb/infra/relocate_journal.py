@@ -15,6 +15,7 @@ journal 写入一律原子写(tmp + fsync + os.replace)。旧 guardian 的 per-j
 daemon 用实例级 daemon.json 心跳; 进程探测单点 _alive 由 daemon_stale 继续消费)。
 """
 import json
+import math
 import os
 import re
 from typing import Dict, List, Optional
@@ -486,8 +487,17 @@ def obs_path(data_dir: str, key: str) -> str:
 
 def _obs_pos_num(v: object) -> bool:
     """正数值严格判型: int/float 且非 bool(bool 是 int 子类, True/False 不得冒充 1/0)
-    且 >0; 混型(数值字符串等)一律不符 —— 观测账是证据面, 判型从宽等于放行半残记录"""
-    return not isinstance(v, bool) and isinstance(v, (int, float)) and v > 0
+    且有限正数(float 侧 math.isfinite 拒 inf/nan —— 1e999 这类字面量经 JSON `Infinity`
+    往返变 inf, 只查 >0 会放行; int 侧巨 int 转 float 溢出(如 10**400)与 inf 同判废);
+    混型(数值字符串等)一律不符 —— 观测账是证据面, 判型从宽等于放行半残记录"""
+    if isinstance(v, bool) or not isinstance(v, (int, float)):
+        return False
+    try:
+        if not math.isfinite(v):
+            return False
+    except OverflowError:
+        return False  # 巨 int 转 float 溢出: 与 inf 同判废(T2 评审 minor)
+    return v > 0
 
 
 def _obs_entry_ok(entry: object) -> bool:

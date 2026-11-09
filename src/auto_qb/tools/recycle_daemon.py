@@ -151,8 +151,10 @@ def _window_open(host: str, port: int) -> bool:
 
 
 # ---------------------------------------------------------------- 实例级观测通道(计划 26-11-10-0318 §03.1, W1)
-# O1 owner 归属(LISTENING 表解析 + qB 映像名交叉校验 => {pid, ct, ts})与 O2 全机 qB
-# 身份枚举(pid + create_time; 驱动新面孔状态机, 状态机本体是 W1b 的活)。证据语义铁律:
+# O1 owner 归属(LISTENING 表解析 + qB 映像名交叉校验 => {pid, ct, ts})、O2 全机 qB 身份
+# 枚举(pid + create_time)与 O3 全机 LISTENING 映射(W1b: 归属与 §03.2 监听集指纹共用的
+# 读取底座, 每 poll 至多一次读取喂两个消费面); 消费这些观测的判据状态机本体在文件后段
+# (W1b 的 _Observation)。证据语义铁律:
 # 解析不出/超时/通道异常 = 本拍观测不可用 => 返回 None/空 + warning 留痕, 调用方必须退回
 # L2 全机口径(_proc_absent), 绝不产生假证据(宁可不进窗, 不许假进窗)。零新依赖(禁
 # psutil), 子进程一律 10s 超时; warning 节流(60s 一次, 不刷屏)属 W2 接线面的职责。
@@ -195,16 +197,42 @@ def _filetime_to_epoch(ft: int) -> float:
     return (ft - _FILETIME_1601_TO_EPOCH_TICKS) / 10**7
 
 
-def _owner_pid_from_netstat(port: int) -> Optional[int]:
-    """Windows: netstat -ano -p tcp 的 LISTENING 行归属目标端口 => owner pid | None
+def _listening_map_netstat(text: str) -> Optional[Dict[int, frozenset]]:
+    """netstat 输出纯解析 => {pid: 监听本地端口集}(只取 LISTENING 行, 通配/具体/[::] 同算)
 
-    解析口径: TCP 数据行恒五列(协议 本地地址 外部地址 状态 PID), 状态字各语言版一致为
-    英文 LISTENING(计划 §07 R2 的假设, W1 本机实测中英文输出; 不成立则解析不出 => None
-    退 L2, 不产假证据); 0.0.0.0 通配监听与具体地址监听同算, 本地端口按最后一个 ':' 取
-    (兼容 [::]:port 的 IPv6 形)。编码: 数据行恒 ASCII, 表头本地化文本按 UTF-8+replace
-    解出的乱码不影响解析(pitfalls/ops/console-encoding.md 的「显式声明不靠 locale」口径)。
-    归属不唯一(同端口多个 LISTENING pid)=> None + warning(不猜)。
+    解析口径与单端口归属同款(计划 §07 R2 的假设: TCP 数据行恒五列, 状态字各语言版一致
+    为英文 LISTENING, W1 本机实测中英文输出); 本地端口按最后一个 ':' 取, 兼容 [::]:port
+    的 IPv6 形; 非 LISTENING 行/列数不合/端口非数字逐行跳过, 不产假条目。证据语义(通道
+    健康标记, T2 评审按 §07 R2「解析不出就退」收紧): **零条 LISTENING 行解析成功**(空
+    输出/表头孤行/整包乱码/TCP 前缀行在而状态字或列数全不合)=> None + warning —— 真实
+    Windows 机器恒有监听套接字(RPC/SMB 等), 零解析成功 = 格式漂移嫌疑; 没有这个标记,
+    「整包乱码 => 人人空监听集 => 未决成员 30s 假 settle 吸收」正是假证据方向(黄金法则
+    2), 宁可整拍退 L2。类型签名保留 Optional, {} 不再产出。
     """
+    ports_by_pid: Dict[int, set] = {}
+    for line in text.splitlines():
+        parts = line.split()
+        if not parts or parts[0].upper() != "TCP":
+            continue
+        if len(parts) != 5 or parts[3].upper() != "LISTENING" or not parts[4].isdigit():
+            continue
+        local_port = parts[1].rsplit(":", 1)[-1]
+        if not local_port.isdigit():
+            continue
+        ports_by_pid.setdefault(int(parts[4]), set()).add(int(local_port))
+    if not ports_by_pid:
+        logger.warning("netstat 输出无任何 LISTENING 行解析成功, 全机 LISTENING 映射不可用(格式漂移嫌疑)")
+        return None
+    return {pid: frozenset(ports) for pid, ports in ports_by_pid.items()}
+
+
+def _listening_map_windows() -> Optional[Dict[int, frozenset]]:
+    """Windows: 一次 netstat -ano -p tcp 读取 => 全机 LISTENING 映射(归属与指纹共用底座)。
+
+    子进程钉法(encoding=utf-8 + errors=replace + timeout=10 + CREATE_NO_WINDOW)与单端口
+    归属同款(pitfalls/ops/console-encoding.md 的「显式声明不靠 locale」口径: 数据行恒
+    ASCII, 表头本地化文本按 UTF-8+replace 解出的乱码不影响解析)。子进程异常(超时/命令
+    缺失)向上抛, 由 _listening_map dispatch 兜底。"""
     out = subprocess.run(
         ["netstat", "-ano", "-p", "tcp"],
         capture_output=True,
@@ -214,75 +242,135 @@ def _owner_pid_from_netstat(port: int) -> Optional[int]:
         timeout=10,
         creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
     )
-    pids = set()
-    for line in (out.stdout or "").splitlines():
-        parts = line.split()
-        if len(parts) != 5 or parts[0].upper() != "TCP" or parts[3].upper() != "LISTENING":
-            continue  # 表头/空行/标题行/UDP 行/非监听行: 一律跳过
-        local_port = parts[1].rsplit(":", 1)[-1]
-        if not local_port.isdigit() or int(local_port) != int(port) or not parts[4].isdigit():
-            continue
-        pids.add(int(parts[4]))
-    if len(pids) > 1:
-        logger.warning("端口 %s 的 LISTENING 归属不唯一(%s), 不猜归属", port, sorted(pids))
-        return None
-    return next(iter(pids)) if pids else None
+    return _listening_map_netstat(out.stdout or "")
 
 
-def _owner_pid_from_procnet(port: int) -> Optional[int]:
-    """Linux: /proc/net/tcp{,6}(st==0A)端口 => socket inode => /proc/<pid>/fd 归属
-    => owner pid | None。tcp6 缺失常见(未启用 IPv6), 只当该表无监听; /proc/<pid>/fd
-    扫不动(权限/进程消失)逐项跳过; 归属不唯一 => None + warning(不猜)。"""
-    inodes = set()
-    for table in ("/proc/net/tcp", "/proc/net/tcp6"):
+def _listening_map_proc() -> Optional[Dict[int, frozenset]]:
+    """Linux: /proc/net/tcp(+tcp6 best-effort)st==0A 行端口->inode => /proc/<pid>/fd
+    socket 链接归组 => {pid: 监听端口集}。一次表读 + 一次 fd 扫描同时喂端口归属(O1)与
+    监听集指纹(§03.2 settle)两个消费面。
+
+    证据语义: /proc/net/tcp 不可读 => None(v4 主表缺席时把全体 pid 判成空监听集是假证据
+    方向); tcp6 缺失常见(未启用 IPv6), 只当该表无监听(与单端口归属同口径 —— 该畸形下
+    IPv6-only 监听不进指纹, 但「绑我们端口」的方向另有端口证与归属通道兜底)。fd 目录打
+    不开(权限/进程消失)的 pid 无从归组, 不进映射(跨用户 fd 不可见形态的已知边界: 该
+    形态下 owner 归属同样不可得, L1 无 owner 记录不会开窗)。零条 LISTENING 行解析成功
+    (表全不可读之外, 行在而 st 全非 0A/列制全不合)=> None + warning(T2 评审按 §07 R2
+    「解析不出就退」收紧: 真实 Linux 机器恒有监听套接字, 零解析成功 = 格式漂移嫌疑);
+    {} 仅在 fd 全不可见角落可产出(LISTENING 行解析成功而 fd 扫描零归组 —— 全体监听者
+    跨用户/权限不可见的跨用户边界, 行为安全)。"""
+    inode_port: Dict[int, int] = {}
+    for i, table in enumerate(("/proc/net/tcp", "/proc/net/tcp6")):
         try:
             with open(table, "r", encoding="utf-8") as f:
                 rows = f.read().splitlines()[1:]  # 首行表头
         except OSError:
-            continue
+            if i == 0:
+                logger.warning("/proc/net/tcp 不可读, 全机 LISTENING 映射不可用")
+                return None
+            continue  # tcp6 缺失常见: 只当该表无监听
         for row in rows:
             cols = row.split()
-            # 列制: sl local rem st ... inode(第 10 列); 列数不足/st 非 0A(LISTENING)/端口不合跳过
+            # 列制: sl local rem st ... inode(第 10 列); 列数不足/st 非 0A(LISTENING)/解析失败跳过
             if len(cols) < 10 or cols[3].upper() != "0A":
                 continue
             local = cols[1].rsplit(":", 1)
             try:
-                if len(local) == 2 and int(local[1], 16) == int(port):
-                    inodes.add(int(cols[9]))
+                inode_port[int(cols[9])] = int(local[1], 16)
             except ValueError:
                 continue
-    if not inodes:
+    if not inode_port:
+        logger.warning("/proc/net/tcp{,6} 无任何 LISTENING 行解析成功, 全机 LISTENING 映射不可用(格式漂移嫌疑)")
         return None
-    pids = set()
+    pids_ports: Dict[int, set] = {}
     for pid in os.listdir("/proc"):
         if not pid.isdigit():
             continue
         try:
             fds = os.listdir(f"/proc/{pid}/fd")
         except OSError:
-            continue  # 权限/已消失: 无从归属, 跳过
+            continue  # 权限/已消失: 无从归组, 跳过
         for fd in fds:
             try:
                 m = _SOCKET_LINK_RE.match(os.readlink(f"/proc/{pid}/fd/{fd}"))
             except OSError:
                 continue
-            if m and int(m.group(1)) in inodes:
-                pids.add(int(pid))
+            port = inode_port.get(int(m.group(1))) if m else None
+            if port is not None:
+                pids_ports.setdefault(int(pid), set()).add(port)
+    return {pid: frozenset(ports) for pid, ports in pids_ports.items()}
+
+
+def _listening_map() -> Optional[Dict[int, frozenset]]:
+    """全机 LISTENING 映射单点 dispatch(O3; 与 _qb_process_names 同款平台分叉)。O1 端口
+    归属与 §03.2 监听集指纹的共用底座 —— W2a 接线每 poll 至多调用一次, 两个消费面都从
+    这一份派生, 不重复起子进程(计划 §07 R1 预算「3 个左右」)。证据语义: None = 本拍观测
+    不可用(通道异常/解析不出/零条 LISTENING 解析成功的格式漂移嫌疑, T2 评审收紧), 调用
+    方退 L2 全机口径, 且未决成员本拍不得 settle 吸收; {} 仅 Linux 支的 fd 全不可见角落
+    可产出(LISTENING 行解析成功而 fd 扫描零归组, 跨用户边界, 行为安全)—— {} 与 None
+    在 tick 的分叉承载语义(settle 走不走), 维护者勿当 {} 不可达。"""
+    try:
+        if os.name == "nt":
+            return _listening_map_windows()
+        return _listening_map_proc()
+    except Exception:  # noqa: BLE001 - 解析不出: 保守(观测不可用, 不产假证据)
+        logger.warning("全机 LISTENING 映射通道异常, 本拍观测不可用", exc_info=True)
+        return None
+
+
+def _owner_pid_from_map(listen_map: Dict[int, frozenset], port: int) -> Optional[int]:
+    """从全机 LISTENING 映射派生端口归属(判据与单端口归属同款: 同端口多 pid 归属不唯一
+    => None + warning, 不猜)。"""
+    pids = {pid for pid, ports in listen_map.items() if int(port) in ports}
     if len(pids) > 1:
-        logger.warning("端口 %s 的 /proc socket 归属不唯一(%s), 不猜归属", port, sorted(pids))
+        logger.warning("端口 %s 的 LISTENING 归属不唯一(%s), 不猜归属", port, sorted(pids))
         return None
     return next(iter(pids)) if pids else None
 
 
-def _listening_owner_pid(port: int) -> Optional[int]:
+def _owner_pid_from_netstat(port: int) -> Optional[int]:
+    """Windows: netstat -ano -p tcp 的 LISTENING 行归属目标端口 => owner pid | None
+
+    W1b 起内部经 _listening_map_windows 的全机映射派生(与监听集指纹共用一次 netstat
+    读取)。返回值判据与 W1a 直读一致(解析不出/归属不唯一 => None 不猜); 唯一新增可观测
+    面(T2 评审声明): 输出零条 LISTENING 解析成功时映射侧多一条「格式漂移嫌疑」warning
+    (健康标记收紧)。行解析/容错口径见 _listening_map_netstat; 通道异常向上抛(由
+    _listening_owner_pid 兜底)。"""
+    listen_map = _listening_map_windows()
+    if listen_map is None:
+        return None
+    return _owner_pid_from_map(listen_map, port)
+
+
+def _owner_pid_from_procnet(port: int) -> Optional[int]:
+    """Linux: /proc/net/tcp{,6}(st==0A)端口 => socket inode => /proc/<pid>/fd 归属
+    => owner pid | None。W1b 起内部经 _listening_map_proc 的全机映射派生(与监听集指纹
+    共用一次表读 + fd 扫描)。与 W1a 直读实现的两处可观测偏差(T2 评审声明, 返回值判据
+    不变): 偏差一 —— 归属不唯一的警告文本统一为「端口 %s 的 LISTENING 归属不唯一」
+    (旧文本为「/proc socket 归属不唯一」); 偏差二 —— /proc/net/tcp 主表不可读 => 判
+    通道不可用 None(旧实现跳过续读 tcp6 —— 该角落实际不可达, 且指纹面要求保守读法)。
+    归属不唯一 => None + warning(不猜); 其余异常向上抛(由 _listening_owner_pid 兜底)。"""
+    listen_map = _listening_map_proc()
+    if listen_map is None:
+        return None
+    return _owner_pid_from_map(listen_map, port)
+
+
+def _listening_owner_pid(port: int, listen_map: Optional[Dict[int, frozenset]] = None) -> Optional[int]:
     """LISTENING 归属分派(O1 前半; 单点 dispatch, 与 _qb_process_names 同款平台分叉)。
+
+    listen_map 传入(W2a 每 poll 共用的那份全机映射)时不另起子进程, 直接从映射派生 ——
+    归属与监听集指纹一次读取喂两个消费面(计划 §07 R1 预算); 缺省(None)按旧路径自取。
 
     证据语义: 返回 None = 观测不可用(端口无监听行/归属不唯一/通道异常), 调用方必须退回
     L2 全机口径, 绝不当 owner 死证用。O1 只在端口可达时调用(计划 §03.1)—— 可达而无
     监听行本身就是通道异常, 一律 warning 留痕。
     """
     try:
-        owner = _owner_pid_from_netstat(port) if os.name == "nt" else _owner_pid_from_procnet(port)
+        if listen_map is not None:
+            owner = _owner_pid_from_map(listen_map, port)
+        else:
+            owner = _owner_pid_from_netstat(port) if os.name == "nt" else _owner_pid_from_procnet(port)
     except Exception:  # noqa: BLE001 - 归属不出: 保守(观测不可用, 不产假证据)
         logger.warning("端口 %s LISTENING 归属通道异常, 本拍观测不可用", port, exc_info=True)
         return None
@@ -412,18 +500,24 @@ def _qb_processes() -> Optional[Dict[int, dict]]:
         return None
 
 
-def _observe_owner(port: int, qb_processes: Optional[Dict[int, dict]], now: float) -> Optional[dict]:
+def _observe_owner(
+    port: int,
+    qb_processes: Optional[Dict[int, dict]],
+    now: float,
+    listen_map: Optional[Dict[int, frozenset]] = None
+) -> Optional[dict]:
     """O1: 端口 LISTENING 归属 + qB 映像名交叉校验 => owner 记录 {pid, ct, ts} | None
 
     前后两半(计划 §03.1): 归属 pid 的映像名必须含 qbittorrent(大小写不敏感)才记录 ——
-    非 qB 服务占端口的保守面(不记录, 绝不把别人的监听当 owner 证据)。证据语义: 返回
-    None = 本拍未取得 owner 记录(观测通道不可用/端口无监听行/占用者非 qB/身份不完整),
-    调用方一律退回 L2 全机口径, 绝不当 owner 死证用。qb_processes 传 None(枚举通道故障)
-    => 直接 None —— 交叉校验没有名册就没有证据。
+    非 qB 服务占端口的保守面(不记录, 绝不把别人的监听当 owner 证据)。listen_map 传入
+    (W2a 每 poll 共用的那份全机映射)时不另起子进程, 归属从映射派生; 缺省按旧路径自取。
+    证据语义: 返回 None = 本拍未取得 owner 记录(观测通道不可用/端口无监听行/占用者非 qB/
+    身份不完整), 调用方一律退回 L2 全机口径, 绝不当 owner 死证用。qb_processes 传 None
+    (枚举通道故障)=> 直接 None —— 交叉校验没有名册就没有证据。
     """
     if qb_processes is None:
         return None
-    pid = _listening_owner_pid(port)
+    pid = _listening_owner_pid(port, listen_map)
     if pid is None:
         return None
     ident = qb_processes.get(pid)
@@ -431,6 +525,260 @@ def _observe_owner(port: int, qb_processes: Optional[Dict[int, dict]], now: floa
         logger.warning("端口 %s 的 LISTENING 归属 pid=%s 非全机 qB 名册成员, 不记录 owner(非 qB 服务占端口的保守面)", port, pid)
         return None
     return {"pid": pid, "ct": float(ident["ct"]), "ts": float(now)}
+
+
+# ---------------------------------------------------------------- 实例级判据面(计划 26-11-10-0318 §03.2/§03.3, W1b)
+# 消费上方观测通道的纯逻辑状态机: owner 记录维护 + 新面孔四行转移 + L1 进窗判据 + obs 载荷
+# 出入。纯逻辑铁律: 时钟显式注入、零 I/O —— 每拍观测(名册/owner 候选/监听集指纹)由 tick
+# 参数喂入(W2a 接线), 本类不读文件、不起子进程、不落盘(落盘时机归 W2a: tick 返回 True =
+# 持久面变更 => write_obs(to_payload(now)), §03.4「状态变更即写」)。
+
+# §03.2 未决 settle 界。有界赌注(§07 R3): qB WebUI 监听绑定是启动早期动作(秒级), 30s
+# 不绑即非目标 profile —— 30s 为 10 倍量级余量; 独立常量可调, 数值依据见计划 §07 R3 与
+# pitfalls P7 专档(W3 立)。
+NEW_FACE_SETTLE = 30.0
+
+
+def _roster_ct(ident: dict) -> Optional[float]:
+    """名册条目(_qb_processes 契约形 {name, ct})的 create_time 读取; 读不出 => None,
+    调用方按「身份不完整」保守处置(不开安全口子)。"""
+    try:
+        return float(ident["ct"])
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+class _Observation:
+    """实例级观测状态机(§03.2/§03.3): owner 死证维护 + 新面孔无害化 + L1 进窗判据持有者。
+
+    证据语义: owner 记录 = 最后一次确认「绑我们 host:port 的 qB 实例」({pid, ct, ts},
+    ts = 最后存活时刻); owner 死后出现的 qB 进程分不清「目标 profile 新身」还是「别的
+    实例新身」, 但目标 profile 的实例终将监听我们的端口, 别的不会 —— 四行转移按此收敛
+    (见 tick)。场景 X 论证(目标重启间隙立即进窗的安全性根基, 拍板 D2)见计划 §03.3
+    callout: 新身完全未起时落盘无 qB 运行、无竞争; 「已创建未绑端口」的尾部由未决态挡住。
+
+    字段分两面(§03.2 hint):
+    - 持久面 owner/absorbed: 对齐 obs schema, 经 to_payload/from_payload 出入 obs 文件,
+      daemon 重启后恢复 —— 覆盖「daemon 停机期间目标死亡」的判定(记录仍是有效死证)。
+      owner 死亡时记录保留(它就是死证), 只有复活/换身才覆盖;
+    - 内存面 pending(pid -> {ct, first_seen, fp}): 未决成员的 settle 计时与监听集指纹,
+      重启即弃 —— settle 重算, 代价 NEW_FACE_SETTLE(计划明钉), 换来不把跨重启的观察间隙
+      当「稳定」证据; 名册条目 ct 读不出的面同样停在未决(真挡, 不参与 settle)。
+
+    tick 契约(W2a 每 poll; 本波只定契约不接线):
+        changed = obs.tick(roster, owner_cand, listen_map, now)
+      roster      _qb_processes() 结果; None = 名册通道不可用 => 本拍整拍不可判, 状态机
+                  不动(也不清 absorbed —— 不能把「看不见」当「消失」), 恒返回 False;
+      owner_cand  端口可达(非拒连)时 _observe_owner(port, roster, now, listen_map) 的
+                  结果, 拒连时恒传 None; None = 本拍无人绑我们端口或归属不可得;
+      listen_map  _listening_map() 结果, 每 poll 至多取一次(归属与指纹共用); None =
+                  指纹通道不可用 => 本拍不得 settle 吸收(未决成员计时重置, 继续挡窗);
+      返回 True   持久面变更(owner 建档/换身/吸收/清出)=> 调用方应 write_obs 落盘;
+                  owner 在位续证的 ts 刷新只在内存, 不触发落盘(§03.4 写时机 = 变更即写,
+                  频率低)。
+
+    判据契约(W2a 每 poll, 与 tick 同一份 roster):
+        verdict = obs.l1_open(roster, refused)
+      True    L1 证据链齐(owner 死 + 端口拒连 + 无未决)=> 立即进窗, 无稳定期(拍板 D2);
+      False   不成立(含无 owner 记录 => L1 不适用, 调用方退 L2);
+      None    roster 为 None, 本拍不可判 —— 与「不成立」可区分, 调用方退 L2 并留痕。
+    """
+    def __init__(self, host: str, port: int):
+        self.host = str(host)
+        self.port = int(port)
+        self.owner: Optional[dict] = None  # {pid, ct, ts}: 持久面
+        self.absorbed: list = []  # [{pid, ct, ts}]: 持久面
+        self.pending: Dict[int, dict] = {
+        }  # pid -> {ct, first_seen, fp}: 内存面(settle 计时; ct=None = 身份读不出的真挡面, 不参与 settle)
+
+    def tick(
+        self,
+        roster: Optional[Dict[int, dict]],
+        owner_cand: Optional[dict],
+        listen_map: Optional[Dict[int, frozenset]],
+        now: float,
+    ) -> bool:
+        """喂一拍观测并推进 §03.2 四行转移; 返回持久面是否变更(落盘时机见类 docstring)。
+
+        行一阈值(同域, T2 评审 major 修正): 零赌注吸收只认 ct < owner.ct —— ct 与
+        owner.ct 同为 OS create_time 域, 同域比较消钟差(旧实现比 owner.ts 属混域比,
+        时钟步进/回拨可把目标新身误判 ct<ts 即时吸收、旁路未决挡窗, N1 暴露)。ct 落在
+        [owner.ct, ts_last) 的 gap 带改走未决 settle 管道(30s 指纹稳定后吸收, 场景 Y
+        代价 ~33s 计划已定价, 方向只会更保守、从不开安全口子); ct >= ts_last 原新面孔
+        逻辑不变。已知残余: 时钟回拨跨越 owner 创建边界的角落(回拨后新身 ct 落到
+        owner.ct 之前被即时吸收)—— 外部观测原理上堵不死, 记 W3b pitfalls P7 专档与
+        计划 §03.2 行一加固注记(编排方收口)。
+        行序取舍: 行二(绑端口转 owner)先于行一判 —— 绑我们端口是目标实例唯一外部可验证
+        的身份信号; 即时吸收阈值锚在 owner.ct, 行二的 ts 刷新不移动它, gap 面在两序下
+        都走 settle(最终一致, 测试钉死)。「ct < owner.ct 却绑着端口」只剩关锁双开角落
+        (§07 R4), 该角落里端口证本就挡窗, 按 owner 记账两向都不开安全口子。行一(零赌注
+        吸收)不需要指纹通道(listen_map=None 照常生效); 行三(settle 吸收)必须有指纹证据,
+        通道不可用一律退回未决; 名册条目 ct 读不出的面进未决真挡(无有效 ct 写不进合法
+        absorbed 条目, 绝不自动吸收)。
+        """
+        if roster is None:
+            return False  # 名册不可用: 整拍不可判, 不动持久面(不把「看不见」当「消失」)
+        now = float(now)
+        changed = False
+        # 行二: 绑我们端口的 qB 就是 owner(复活/换身/在位续证)
+        if owner_cand is not None:
+            cand_pid = int(owner_cand["pid"])
+            cand_ct = float(owner_cand["ct"])
+            cur = self.owner
+            if cur is None or int(cur["pid"]) != cand_pid or float(cur["ct"]) != cand_ct:
+                self.owner = {"pid": cand_pid, "ct": cand_ct, "ts": now}  # 建档/复活/换身: 覆盖旧记录
+                changed = True
+                self.pending.pop(cand_pid, None)  # 升格 owner: 未决出队
+                if any(int(e["pid"]) == cand_pid for e in self.absorbed):
+                    self.absorbed = [e for e in self.absorbed if int(e["pid"]) != cand_pid]
+                    changed = True  # 绑回端口: 它是 owner, 出 absorbed
+            else:
+                cur["ts"] = now  # 在位续证: 只刷内存 ts, 不触发落盘(§03.4 写时机)
+        # 消失清出(先清后分类): (pid, ct) 不在名册 = 旧进程已死 —— 死进程无威胁, absorbed
+        # 清出(文件不膨胀)/未决出队; pid 在而 ct 不等 = PID 被复用, 旧条目同样清出, 新面孔
+        # 按下一循环重走分类; 名册条目身份读不出时不当消失(保守)。
+        kept = []
+        for e in self.absorbed:
+            ident = roster.get(int(e["pid"]))
+            ct = _roster_ct(ident) if ident is not None else None
+            if ident is not None and (ct is None or ct == float(e["ct"])):
+                kept.append(e)  # 同进程仍在
+            else:
+                changed = True  # 消失/PID 复用: 旧进程已死, 清出
+        self.absorbed = kept
+        for p, pst in list(self.pending.items()):
+            ident = roster.get(p)
+            if ident is None:
+                del self.pending[p]  # 消失: 出队(重现按新面孔重算)
+            else:
+                ct = _roster_ct(ident)
+                if ct is not None and ct != pst["ct"]:
+                    del self.pending[p]  # PID 复用: 旧未决出队
+        # 逐面分类(四行的行一/行三/行四; 行二已在上面处理)
+        owner_pid = int(self.owner["pid"]) if self.owner else None
+        owner_ct = float(self.owner["ct"]) if self.owner else None
+        for pid, ident in roster.items():
+            ct = _roster_ct(ident)
+            if owner_pid is not None and pid == owner_pid and ct == owner_ct:
+                continue  # owner 本尊在位
+            if ct is None:
+                # 名册条目身份读不出: 进未决真挡 —— 无有效 ct 写不进合法 absorbed 条目,
+                # 绝不自动 settle 吸收, 直到从名册消失或绑端口转 owner(喂入面防御; 契约上
+                # _qb_processes 不产这种条目)
+                if pid not in self.pending:
+                    self.pending[pid] = {"ct": None, "first_seen": now, "fp": None}
+                continue
+            if any(int(e["pid"]) == pid and float(e["ct"]) == ct for e in self.absorbed):
+                continue  # 已吸收(同 pid 同 ct): 留到消失清出
+            if owner_ct is not None and ct < owner_ct:
+                # 行一: 零赌注吸收(同域阈值: ct 与 owner.ct 同为 OS create_time 域, 混域比
+                # owner.ts 已废 —— 时钟步进/回拨可把目标新身误判即时吸收旁路未决挡窗)。该面
+                # 证得早于 owner 实例本身存在, 若同 profile 与 owner 双开被单实例锁/WebUI
+                # 端口冲突排挤(§03.2; 用户关锁双开属 §07 R4 原理性残余)
+                self.absorbed.append({"pid": int(pid), "ct": ct, "ts": now})
+                self.pending.pop(pid, None)
+                changed = True
+                continue
+            # gap 带 [owner.ct, ts_last) 与 ct >= ts_last 同走未决 settle 管道(行三/行四):
+            # 前者旧实现被混域零赌注即时吸收, 现改 30s 指纹稳定后吸收(更保守); 绑我们端口
+            # 的面已在行二升格(或尚无 owner 记录)
+            fp = listen_map.get(int(pid), frozenset()) if listen_map is not None else None
+            st = self.pending.get(pid)
+            if st is None or st["ct"] != ct:
+                self.pending[pid] = {"ct": ct, "first_seen": now, "fp": fp}  # 新未决
+                continue
+            if fp is None or fp != st["fp"]:
+                st["first_seen"] = now  # 指纹通道不可用/指纹变了: settle 重算(不把观察间隙当稳定)
+                st["fp"] = fp
+                continue
+            if now - st["first_seen"] < NEW_FACE_SETTLE:
+                continue  # 行四: 未决(挡窗), 直到转 owner/被吸收/消失
+            if self.port in fp:
+                continue  # 指纹含我们端口: 绑定证据已在, 不 settle(行二未命中 = 归属没跟上, 保守挡)
+            # 行三: 指纹稳定 NEW_FACE_SETTLE 且不含我们端口 => 吸收(§07 R3 有界赌注)
+            del self.pending[pid]
+            self.absorbed.append({"pid": int(pid), "ct": ct, "ts": now})
+            changed = True
+        return changed
+
+    def l1_open(self, roster: Optional[Dict[int, dict]], refused: bool) -> Optional[bool]:
+        """L1 进窗判据(计划 §03.3 精确语义; 纯读, 不动状态)。
+
+        进窗(L1) ⇔ 1. owner 记录存在且 owner 已死 —— pid 无进程 / pid 在但 create_time
+        不等 / pid 在但映像名非 qbittorrent(后两条 = PID 复用防御: 被别的程序/别的 qB
+        实例复用都判「原实例已死」); 2. 端口拒连(_port_refused 原样); 3. 无未决成员
+        (§03.2)。三者同时成立 ⇒ 立即进窗, 无 down_since 计时(拍板 D2)。
+
+        返回: True = 进窗; False = 不成立(含无 owner 记录 —— L1 不适用, 调用方退 L2);
+        None = roster 为 None(名册通道不可用), 本拍不可判 —— 与「不成立」可区分, 调用方
+        退 L2 并按通道故障留痕(W2a 接线面职责)。名册条目身份不完整 = 无法证明死亡 =>
+        按不成立(开窗是危险方向, 死证必须证得, 不许默认)。
+        """
+        if roster is None:
+            return None
+        if self.owner is None or not self._owner_dead(roster):
+            return False
+        if not refused or self.pending:
+            return False
+        return True
+
+    def _owner_dead(self, roster: Dict[int, dict]) -> bool:
+        """owner 死证三形态(§03.3)。形态三对 _qb_processes 名册结构性不可达(名册只收
+        映像名含 qbittorrent 的进程), 保留为判据完整性/PID 复用防御(直接喂非过滤名册时
+        生效)。"""
+        o = self.owner or {}
+        ident = roster.get(int(o.get("pid") or 0))
+        if ident is None:
+            return True  # 形态一: pid 无进程
+        ct = _roster_ct(ident)
+        if ct is None:
+            return False  # 身份不完整: 无法证明死亡(保守)
+        if ct != float(o.get("ct") or 0.0):
+            return True  # 形态二: ct 不等(PID 复用 => 原实例已死)
+        if "qbittorrent" not in str(ident.get("name") or "").lower():
+            return True  # 形态三: 映像名非 qB(PID 被别的程序复用)
+        return False
+
+    def to_payload(self, now: float) -> dict:
+        """持久面快照 => obs schema 载荷(计划 §03.4: {host, port, owner, absorbed, ts};
+        schema_version 由 write_obs 写侧强制钉上, 这里不出)。内存面(pending)不进载荷 ——
+        重启即弃, settle 重算(代价 NEW_FACE_SETTLE, 计划明钉)。"""
+        return {
+            "host": self.host,
+            "port": self.port,
+            "owner": dict(self.owner) if self.owner else None,
+            "absorbed": [dict(e) for e in self.absorbed],
+            "ts": float(now),
+        }
+
+    @classmethod
+    def from_payload(cls, payload: object, host: str, port: int) -> Optional["_Observation"]:
+        """obs 载荷 => 状态机实例(daemon 重启恢复面); **坏形整体弃 => 返回 None**(不抛 ——
+        与 read_obs 保守语义同款: 半残记录不冒充证据, 调用方按无记录冷启动退 L2)。
+
+        校验走 read_obs 同款严格判型(rj._obs_entry_ok 单点, 不复刻判型防漂移): owner 为
+        None 或 {pid, ct, ts} 实记录、absorbed 为其清单(缺键也判废 —— 非本链产物)、host
+        为非空 str 且与本实例字面相等、port 为正 int 且相等(obs 文件按实例键分家, 键内
+        身份不符 = 跨实例污染, 拒载)。顶层 ts 只入文件不入状态(read_obs 已闸), 不在此校验。
+        """
+        if not isinstance(payload, dict):
+            return None
+        h = payload.get("host")
+        if not isinstance(h, str) or not h.strip() or h != str(host):
+            return None
+        p = payload.get("port")
+        if isinstance(p, bool) or not isinstance(p, int) or int(p) != int(port):
+            return None
+        owner = payload.get("owner")
+        if owner is not None and not rj._obs_entry_ok(owner):
+            return None
+        absorbed = payload.get("absorbed")
+        if not isinstance(absorbed, list) or not all(rj._obs_entry_ok(e) for e in absorbed):
+            return None
+        inst = cls(host, port)
+        inst.owner = dict(owner) if owner is not None else None
+        inst.absorbed = [dict(e) for e in absorbed]
+        return inst  # pending 恒空: settle 重算(重启即弃, §03.2 hint)
 
 
 class _Owner:

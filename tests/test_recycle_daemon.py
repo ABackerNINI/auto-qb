@@ -104,7 +104,8 @@ daemon 主体:
   ts 缺省挂钟); 新写入即全量替换 —— host/port 换实例后旧 owner/absorbed 零继承
 - test_obs_read_missing_or_bad_shape_is_none: 缺文件/schema_version 不符(含 bool 冒充 1)/
   host 非空 str 闸/port 正 int 闸/owner 或 absorbed 形不符(混型反例 pid="4242"/pid=True/
-  ct="1e3")/absorbed 缺失/ts 非正数值/整文件非 dict => None(半残记录不冒充证据, 保守退全机口径)
+  ct="1e3")/absorbed 缺失/ts 非正数值/整文件非 dict/ct=1e999(inf)与 ct=10**400(巨 int
+  溢出, T2 评审)非有限值反例 => None(半残记录不冒充证据, 保守退全机口径)
 - test_obs_write_failure_is_false: 盘故障(OSError)=> False 不抛(daemon 节拍不因观测账中断)
 - test_filetime_to_epoch_known_value: FILETIME(1601 起 100ns ticks)-> epoch 秒与 datetime 锚点互证
 - test_owner_pid_from_netstat_zh_en_and_wildcard: netstat 解析中英文样例各一; 0.0.0.0 通配/
@@ -128,6 +129,52 @@ daemon 主体:
   warning(观测不可用退 L2); posix 分派透传; 健康零观测({})不判不可用
 - test_observe_owner_cross_check_and_channel_none: O1 交叉校验: 归属 pid 映像名含 qbittorrent
   才记 {pid, ct, ts}; 非 qB 占端口/映像名漂移/枚举通道 None/归属不成功 => None+warning(不记录)
+
+判据面(W1b, 计划 26-11-10-0318 §03.2/§03.3; 全机 LISTENING 映射底座 + _Observation 状态机,
+全替身/时钟显式注入/零 I/O; T2 评审修正: 行一同域阈值/gap 带走 settle/缺 ct 面真挡/健康
+标记收紧/T2 nit 5-7):
+- test_listening_map_netstat_groups_pid_ports: 全机映射解析 —— pid 归组(通配/具体/[::] 同算,
+  同 pid 多端口合并); ESTABLISHED/TIME_WAIT/UDP 行与表头不进映射; 健康标记(零条 LISTENING
+  解析成功 => None+warning, T2 收紧)—— 空输出/表头孤行/整包乱码/TCP 前缀行在而状态字或
+  列数全不合都在此列(防「乱码 => 人人空集 => 假 settle 吸收」)
+- test_listening_map_windows_and_dispatch: Windows 映射通道子进程钉法(encoding/errors/
+  timeout/creationflags)+ dispatch(nt/posix)+ 通道异常 => None+warning(观测不可用)
+- test_listening_map_proc_fake_tree: Linux 全机映射(假 /proc): inode->pid 归组/同 pid 多监听
+  合并/tcp6 缺失只当该表无监听/tcp 主表不可读 => None+warning/表在而零条 LISTENING 解析
+  (st 全非 0A)=> None+warning 且不扫 fd(T2 收紧, 不再 {})/
+  REUSEPORT 两 pid 同端口 => 都进映射且归属判不唯一
+- test_owner_pid_from_map_consistent_with_single_port_fns: 同源一致性 —— 同一份输出下, 映射
+  派生归属与 W1a 单端口归属函数逐端口结论一致(netstat/procnet 各一, 含不唯一两边同 None)
+- test_listening_owner_pid_injected_map_no_subprocess: 注入映射的归属面不起子进程(subprocess
+  下毒); 端口无主/归属不唯一 => None+warning(与自取路径同语义)
+- test_observe_owner_injected_map_matches_self_fetch: 注入映射的候选面不起子进程且与自取路径
+  (同一输出)结论一致 —— W2a 每 poll 一次读取喂「归属+指纹」两消费面的接线契约
+- test_observation_zero_bet_absorb_row1: §03.2 行一 零赌注吸收(同域阈值, T2 major 修正)——
+  ct < owner.ct 的非 owner 面直接进 absorbed(OS create_time 同域比消钟差, 持久面变更,
+  不需要指纹通道); owner 本尊/已吸收面不重复; 名册 None 整拍不动
+- test_observation_gap_band_goes_settle_and_order_invariant: 行一 gap 带 [owner.ct, ts_last)
+  走未决 settle 管道(T2 major 修正: 旧混域零赌注即时吸收已废); 行序钉死 —— 行二在位续证
+  刷 ts 不移动锚(owner.ct), gap 面两序最终一致走 settle 绝不即时吸收; 指纹通道断只滞留未决
+- test_observation_unreadable_ct_face_parks_pending: 名册条目 ct 读不出的面进未决真挡(T2
+  minor/nit)—— 不自动 settle 吸收(写不进合法 absorbed 条目)/absorbed 保留/l1 挡窗/身份
+  恢复重走分类/绑端口升格出队/从名册消失出队
+- test_observation_port_bind_becomes_owner_row2: §03.2 行二 绑端口转 owner —— 复活/换身/PID
+  复用三向都更新 owner 记录(未决出队/误吸面出 absorbed); 在位续证只刷内存 ts 不触发落盘
+- test_observation_owner_record_survives_death: owner 死亡(pid 从名册消失)时记录保留(它就是
+  死证), 只有复活/换身才覆盖; 名册 {} 零持久面变更
+- test_observation_settle_absorb_row3_and_reset: §03.2 行三 settle 吸收 —— 指纹稳定 30s 且不含
+  我们端口才吸收; 指纹变了/通道不可用 => settle 重算; 空指纹(已创建未绑端口)受同一有界赌注
+  (R3); 指纹含我们端口永不 settle
+- test_observation_pending_blocks_and_leaves_on_disappear_row4: §03.2 行四 未决挡 L1(死证+
+  拒连已齐也不开); 从名册消失即出队(重现全新计时); PID 复用(同 pid 异 ct)出队重算
+- test_observation_absorbed_release_and_pid_reuse: absorbed 消失移出(持久面变更 => 落盘时机,
+  payload 不含死者); PID 复用不继承吸收身份(旧条目清出 + 新面孔重走未决/settle)
+- test_observation_l1_open_truth_table: §03.3 真值表 —— owner 死三形态 × 端口拒连 × 未决成员;
+  无 owner 记录 => False(L1 不适用); 名册 None => None(本拍不可判, 与「不成立」可区分);
+  名册 {} + owner 记录 => 死证成立(立即进窗)
+- test_observation_payload_roundtrip_and_bad_shape_is_none: to_payload->from_payload 回环幂等;
+  owner/absorbed 恢复、未决清空(settle 重算); 坏 payload(host/port 不符或混型/owner 或
+  absorbed 形不符/absorbed 缺键/非 dict)=> None 保守弃不抛
 """
 import builtins
 import io
@@ -1499,6 +1546,30 @@ def test_obs_read_missing_or_bad_shape_is_none(tmp_path):
             "port": 1,
             "owner": {
                 "pid": 4242,
+                "ct": 1e999,
+                "ts": 1.0
+            },
+            "absorbed": [],
+            "ts": 1.0
+        },  # ct = 1e999 => inf(JSON Infinity 往返): 非有限值拒收(T1 复评遗留, W1b 补)
+        {
+            "schema_version": 1,
+            "host": "h",
+            "port": 1,
+            "owner": {
+                "pid": 4242,
+                "ct": 10**400,
+                "ts": 1.0
+            },
+            "absorbed": [],
+            "ts": 1.0
+        },  # ct 巨 int(转 float 溢出): 与 inf 同判废(T2 评审 minor)
+        {
+            "schema_version": 1,
+            "host": "h",
+            "port": 1,
+            "owner": {
+                "pid": 4242,
                 "ct": 1.0,
                 "ts": True
             },
@@ -1845,20 +1916,590 @@ def test_qb_processes_dispatch_timeout_and_healthy_empty(monkeypatch, caplog):
 
 def test_observe_owner_cross_check_and_channel_none(monkeypatch, caplog):
     """O1 交叉校验: 归属 pid 的映像名含 qbittorrent(大小写不敏感)才记录 {pid, ct, ts};
-    非 qB 服务占端口/名册映像名漂移/枚举通道故障/归属不成功 => None + 不记录(保守面)"""
-    monkeypatch.setattr(rd, "_listening_owner_pid", lambda port: 4242)
+    非 qB 服务占端口/名册映像名漂移/枚举通道故障/归属不成功 => None + 不记录(保守面)。
+    桩签名带 listen_map 形参(W1b 给 _listening_owner_pid 扩了共用映射注入面, 缺省 None)"""
+    monkeypatch.setattr(rd, "_listening_owner_pid", lambda port, listen_map=None: 4242)
     qb = {4242: {"name": "qBittorrent", "ct": 100.0}}
     assert rd._observe_owner(8080, qb, 500.0) == {"pid": 4242, "ct": 100.0, "ts": 500.0}
     # 非 qB 占端口(全机 qB 名册无此 pid)=> 不记录 + warning
-    monkeypatch.setattr(rd, "_listening_owner_pid", lambda port: 7)
+    monkeypatch.setattr(rd, "_listening_owner_pid", lambda port, listen_map=None: 7)
     with caplog.at_level(logging.WARNING, logger=LOG_RD):
         assert rd._observe_owner(8080, qb, 500.0) is None
     assert any("不记录 owner" in r.message for r in caplog.records), caplog.text
     # 名册成员映像名漂移(不含 qbittorrent)=> 不记录(带与保守)
-    monkeypatch.setattr(rd, "_listening_owner_pid", lambda port: 4242)
+    monkeypatch.setattr(rd, "_listening_owner_pid", lambda port, listen_map=None: 4242)
     assert rd._observe_owner(8080, {4242: {"name": "chrome", "ct": 100.0}}, 500.0) is None
     # 枚举通道故障(None)=> 直接 None(没有名册就没有证据)
     assert rd._observe_owner(8080, None, 500.0) is None
     # 归属不成功 => None
-    monkeypatch.setattr(rd, "_listening_owner_pid", lambda port: None)
+    monkeypatch.setattr(rd, "_listening_owner_pid", lambda port, listen_map=None: None)
     assert rd._observe_owner(8080, qb, 500.0) is None
+
+
+# ---------------------------------------------------------------------------
+# 判据面(W1b, 计划 26-11-10-0318 §03.2/§03.3): 全机 LISTENING 映射底座 + _Observation
+# 状态机。全替身、时钟显式注入: 不起真进程、不回连真端口、零 I/O —— 状态机输入(名册/
+# owner 候选/指纹映射)直接喂构造值, 落盘时机契约靠 tick 返回值钉住
+# ---------------------------------------------------------------------------
+
+# 全机映射解析样例(W1a 单端口样例之外的扩展形制): pid 100 双端口监听(通配+具体),
+# pid 200 IPv6 行与 pid 100 同端口(归属不唯一样态), pid 300 只出现在 ESTABLISHED/
+# TIME_WAIT 行(不得混进监听集), UDP 行与表头不贡献
+NETSTAT_MAP_EN = (
+    "\n"
+    "Active Connections\n"
+    "\n"
+    "  Proto  Local Address          Foreign Address        State           PID\n"
+    "  TCP    0.0.0.0:8080           0.0.0.0:0              LISTENING       100\n"
+    "  TCP    10.0.0.2:8081          0.0.0.0:0              LISTENING       100\n"
+    "  TCP    [::]:8080              [::]:0                 LISTENING       200\n"
+    "  TCP    10.0.0.2:8080          10.0.0.2:443           ESTABLISHED     300\n"
+    "  TCP    10.0.0.2:9000          10.0.0.9:443           TIME_WAIT       300\n"
+    "  UDP    0.0.0.0:5353           *:*                                    400\n"
+)
+NETSTAT_MAP_ZH = (
+    "\n"
+    "活动连接\n"
+    "\n"
+    "  协议  本地地址          外部地址        状态           PID\n"
+    "  TCP    0.0.0.0:8080          0.0.0.0:0              LISTENING       100\n"
+)
+
+
+def _ident(ct: float, name: str = "qbittorrent") -> dict:
+    """名册条目构造(_qb_processes 契约形 {name, ct})"""
+    return {"name": name, "ct": float(ct)}
+
+
+def _owner_record(pid: int, ct: float, ts: float) -> dict:
+    """owner 记录构造({pid, ct, ts}, 与 obs schema 对齐)"""
+    return {"pid": int(pid), "ct": float(ct), "ts": float(ts)}
+
+
+def _seed_owner(obs, now: float = 500.0, pid: int = 100, ct: float = 100.0):
+    """经候选命中给状态机建档 owner(契约路径, 不直改字段)"""
+    obs.tick({pid: _ident(ct)}, {"pid": pid, "ct": ct}, None, now)
+
+
+def test_listening_map_netstat_groups_pid_ports(caplog):
+    """全机 LISTENING 映射解析: pid 归组(通配/具体/[::] 同算, 同 pid 多端口合并);
+    ESTABLISHED/TIME_WAIT/UDP 行与表头不进映射; 健康标记(T2 评审收紧): 零条 LISTENING
+    解析成功 —— 空输出/表头孤行/整包乱码/TCP 前缀行在而状态字或列数全不合 => None +
+    warning(格式漂移嫌疑, §07 R2「解析不出就退」), 防「乱码 => 人人空监听集 => 假 settle 吸收」"""
+    assert rd._listening_map_netstat(NETSTAT_MAP_EN) == {100: frozenset({8080, 8081}), 200: frozenset({8080})}
+    assert rd._listening_map_netstat(NETSTAT_MAP_ZH) == {100: frozenset({8080})}, "中文表头样例同解析"
+    with caplog.at_level(logging.WARNING, logger=LOG_RD):
+        assert rd._listening_map_netstat("") is None
+        assert rd._listening_map_netstat("Active Connections\n\n") is None, "表头孤行 => 通道不可用"
+        assert rd._listening_map_netstat("\ufffd\ufffd\ufffd \ufffd\ufffd\nrandom garbage\n") is None, "乱码不产假映射"
+        # TCP 前缀行在而状态字/列数全不合(T2 评审新增输入类): 零 LISTENING 解析成功 => None
+        assert rd._listening_map_netstat(
+            "  TCP    0.0.0.0:8080    0.0.0.0:0    SYN_SENT    100\n"
+            "  TCP    only-three-cols\n"
+        ) is None, "TCP 行在而零 LISTENING 解析 => 格式漂移嫌疑"
+    assert any("格式漂移" in r.message for r in caplog.records), caplog.text
+
+
+def test_listening_map_windows_and_dispatch(monkeypatch, caplog):
+    """Windows 映射通道: 子进程钉法(encoding=utf-8 + errors=replace + timeout=10 +
+    creationflags=CREATE_NO_WINDOW)钉死; dispatch(nt -> windows / posix -> proc);
+    通道异常 => None + warning(观测不可用)"""
+    calls = _stub_stdout(monkeypatch, NETSTAT_MAP_EN)
+    assert rd._listening_map_windows() == {100: frozenset({8080, 8081}), 200: frozenset({8080})}
+    assert calls["encoding"] == "utf-8" and calls["errors"] == "replace" and calls["timeout"] == 10, "钉法回归防线"
+    assert calls["creationflags"] == getattr(rd.subprocess, "CREATE_NO_WINDOW", 0), "钉法第 4 项(T2 评审 nit 6)"
+    monkeypatch.setattr(rd.os, "name", "nt")
+    assert rd._listening_map() == {100: frozenset({8080, 8081}), 200: frozenset({8080})}
+    monkeypatch.setattr(rd.os, "name", "posix")
+    monkeypatch.setattr(rd, "_listening_map_proc", lambda: {7: frozenset({80})})
+    assert rd._listening_map() == {7: frozenset({80})}, "posix 分派透传"
+
+    def _boom():
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(rd, "_listening_map_proc", _boom)
+    with caplog.at_level(logging.WARNING, logger=LOG_RD):
+        assert rd._listening_map() is None
+    assert any("观测不可用" in r.message for r in caplog.records), caplog.text
+
+
+def test_listening_map_proc_fake_tree(monkeypatch, caplog):
+    """Linux 全机映射(假 /proc): 表 st==0A 行端口->inode, /proc/<pid>/fd socket 链接归组
+    (同 pid 多监听合并); tcp6 缺失只当该表无监听; tcp 主表不可读 => None + warning(v4
+    主表缺席不许把全员判成空集); 表在而零条 LISTENING 解析成功(st 全非 0A)=> None +
+    warning(格式漂移嫌疑, T2 评审收紧)且不再扫 fd; REUSEPORT 两 pid 同端口 => 两 pid
+    都进映射、归属判不唯一"""
+    tcp = (
+        "  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode\n"
+        "   0: 00000000:1F90 00000000:0000 0A 00000000:00000000 00:00000000 00000000     0        0 111 1 0\n"
+        "   1: 00000000:1F91 00000000:0000 0A 00000000:00000000 00:00000000 00000000     0        0 222 1 0\n"
+        "   2: 00000000:1F90 00000000:0000 0A 00000000:00000000 00:00000000 00000000     0        0 333 1 0\n"
+        "   3: 0100007F:1F90 0200007F:CEAA 01 00000000:00000000 00:00000000 00000000     0        0 444 1 0\n"
+    )
+    links = {"/proc/5/fd/3": "socket:[111]", "/proc/6/fd/7": "socket:[222]", "/proc/6/fd/9": "socket:[333]"}
+
+    def _listdir(p):
+        if p == "/proc":
+            return ["1", "self", "5", "6", "9"]
+        try:
+            return {"/proc/5/fd": ["3"], "/proc/6/fd": ["7", "9"]}[p.replace("\\", "/")]
+        except KeyError:
+            raise OSError(2, f"no fd dir {p}")
+
+    def _readlink(p):
+        try:
+            return links[p.replace("\\", "/")]
+        except KeyError:
+            raise OSError(2, f"no link {p}")
+
+    monkeypatch.setattr(rd.os, "listdir", _listdir)
+    monkeypatch.setattr(rd.os, "readlink", _readlink)
+    _stub_proc_open(monkeypatch, {"/proc/net/tcp": tcp, "/proc/net/tcp6": OSError(2, "no tcp6")})
+    assert rd._listening_map_proc() == {5: frozenset({8080}), 6: frozenset({8080, 8081})}, \
+        "inode 111/333 同端口(8080)归到两 pid; 444 非 0A 行不贡献; pid 9 无 fd 目录跳过"
+    assert rd._owner_pid_from_map(rd._listening_map_proc(), 8080) is None, "REUSEPORT 两 pid => 归属不唯一不猜"
+    assert rd._owner_pid_from_map(rd._listening_map_proc(), 8081) == 6
+    # tcp 主表不可读 => None + warning(假证据方向防守)
+    _stub_proc_open(monkeypatch, {"/proc/net/tcp": OSError(13, "denied")})
+    with caplog.at_level(logging.WARNING, logger=LOG_RD):
+        assert rd._listening_map_proc() is None
+    assert any("映射不可用" in r.message for r in caplog.records), caplog.text
+    # 表在而零条 LISTENING 解析成功(行在而 st 全非 0A) => None + warning(格式漂移嫌疑)且不再扫 fd
+    _stub_proc_open(
+        monkeypatch, {
+            "/proc/net/tcp":
+                "  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode\n"
+                "   0: 00000000:1F90 0200007F:CEAA 01 00000000:00000000 00:00000000 00000000     0        0 444 1 0\n"
+        }
+    )
+
+    def _no_scan(p):
+        raise AssertionError("零 LISTENING 解析成功时不得扫 /proc/<pid>/fd")
+
+    monkeypatch.setattr(rd.os, "listdir", _no_scan)
+    with caplog.at_level(logging.WARNING, logger=LOG_RD):
+        assert rd._listening_map_proc() is None, "零 LISTENING 解析成功 => 格式漂移嫌疑(T2 评审收紧)"
+    assert any("格式漂移" in r.message for r in caplog.records), caplog.text
+
+
+def test_owner_pid_from_map_consistent_with_single_port_fns(monkeypatch):
+    """同源一致性: 同一份输出下, 全机映射派生的归属与 W1a 单端口归属函数逐端口结论一致
+    (含不唯一 => 两边同 None + 不猜); netstat/procnet 各验一遍"""
+    calls = _stub_stdout(monkeypatch, NETSTAT_MAP_EN)
+    m = rd._listening_map_netstat(NETSTAT_MAP_EN)
+    for port in (8080, 8081, 9000, 5353, 9999):
+        assert rd._owner_pid_from_netstat(port) == rd._owner_pid_from_map(m, port), f"netstat port {port}"
+    assert rd._owner_pid_from_netstat(8080) is None and rd._owner_pid_from_netstat(8081) == 100
+    assert calls["timeout"] == 10, "单端口函数内部复用映射读取, 钉法不变"
+    # procnet 同源
+    tcp = (
+        "  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode\n"
+        "   0: 00000000:1F90 00000000:0000 0A 00000000:00000000 00:00000000 00000000     0        0 111 1 0\n"
+        "   1: 00000000:1F91 00000000:0000 0A 00000000:00000000 00:00000000 00000000     0        0 222 1 0\n"
+    )
+    links = {"/proc/5/fd/3": "socket:[111]", "/proc/6/fd/7": "socket:[222]"}
+
+    def _listdir(p):
+        if p == "/proc":
+            return ["5", "6"]
+        try:
+            return {"/proc/5/fd": ["3"], "/proc/6/fd": ["7"]}[p.replace("\\", "/")]
+        except KeyError:
+            raise OSError(2, f"no fd dir {p}")
+
+    monkeypatch.setattr(rd.os, "listdir", _listdir)
+    monkeypatch.setattr(rd.os, "readlink", lambda p: links.get(p.replace("\\", "/"), "pipe:[1]"))
+    _stub_proc_open(monkeypatch, {"/proc/net/tcp": tcp, "/proc/net/tcp6": OSError(2, "no tcp6")})
+    m2 = rd._listening_map_proc()
+    assert m2 == {5: frozenset({8080}), 6: frozenset({8081})}
+    for port in (8080, 8081, 8082):
+        assert rd._owner_pid_from_procnet(port) == rd._owner_pid_from_map(m2, port), f"procnet port {port}"
+
+
+def test_listening_owner_pid_injected_map_no_subprocess(monkeypatch, caplog):
+    """注入映射的归属面: 不起子进程(subprocess.run 下毒也不炸); 端口无主/归属不唯一 =>
+    None + warning(与自取路径同语义)"""
+    def _poison(*a, **kw):
+        raise AssertionError("注入映射后不得再起子进程")
+
+    monkeypatch.setattr(rd.subprocess, "run", _poison)
+    m = {100: frozenset({8080}), 200: frozenset({8081})}
+    assert rd._listening_owner_pid(8080, m) == 100
+    assert rd._listening_owner_pid(8081, m) == 200
+    with caplog.at_level(logging.WARNING, logger=LOG_RD):
+        assert rd._listening_owner_pid(8082, m) is None, "端口无主 => 观测不可用"
+        assert rd._listening_owner_pid(8080, {100: frozenset({8080}), 200: frozenset({8080})}) is None
+    assert any("未归属成功" in r.message for r in caplog.records), caplog.text
+    assert any("归属不唯一" in r.message for r in caplog.records), caplog.text
+
+
+def test_observe_owner_injected_map_matches_self_fetch(monkeypatch):
+    """候选面同源一致性: 注入映射的 _observe_owner 不起子进程, 且与自取路径(桩同一
+    netstat 输出)结论一致 —— W2a 每 poll 一次读取喂「归属 + 指纹」两消费面的接线契约"""
+    def _poison(*a, **kw):
+        raise AssertionError("注入映射后不得再起子进程")
+
+    qb = {100: {"name": "qBittorrent", "ct": 100.0}}
+    monkeypatch.setattr(rd.subprocess, "run", _poison)
+    assert rd._observe_owner(8081, qb, 500.0, listen_map={100: frozenset({8081})}) == _owner_record(100, 100.0, 500.0)
+    # 自取路径(桩同一输出)与注入路径结论一致
+    calls = _stub_stdout(monkeypatch, NETSTAT_MAP_EN)
+    assert rd._observe_owner(8081, qb, 500.0) == _owner_record(100, 100.0, 500.0)
+    assert calls["timeout"] == 10
+
+
+def test_observation_zero_bet_absorb_row1():
+    """§03.2 行一(同域阈值, T2 评审 major 修正): ct < owner.ct 的非 owner 面直接进
+    absorbed(即时吸收, 不需要指纹通道)—— ct 与 owner.ct 同为 OS create_time 域, 同域
+    比较消钟差; owner 本尊与已吸收面不重复处理; 名册 None 整拍不可判、持久面不动"""
+    obs = rd._Observation(HOST, PORT)
+    _seed_owner(obs, now=500.0, pid=100, ct=100.0)
+    roster = {100: _ident(100.0), 200: _ident(50.0), 300: _ident(90.0)}
+    assert obs.tick(roster, None, None, 505.0) is True, "50/90 早于 owner 实例本身 => 零赌注吸收"
+    assert obs.owner == _owner_record(100, 100.0, 500.0), "owner 记录不动"
+    assert obs.absorbed == [{"pid": 200, "ct": 50.0, "ts": 505.0}, {"pid": 300, "ct": 90.0, "ts": 505.0}]
+    assert obs.pending == {}, "零赌注面不经未决"
+    assert obs.tick(roster, None, None, 510.0) is False, "已吸收(同 pid 同 ct)不重复, 持久面零变更"
+    assert obs.tick(None, None, None, 520.0) is False, "名册 None => 整拍不动"
+    assert len(obs.absorbed) == 2 and obs.owner is not None
+
+
+def test_observation_gap_band_goes_settle_and_order_invariant():
+    """行一 gap 带 [owner.ct, ts_last)(T2 评审 major 修正): 旧实现被混域零赌注即时吸收,
+    现改走未决 settle 管道(30s 指纹稳定后吸收, 场景 Y 代价 ~33s 计划已定价)。行序钉死:
+    行二在位续证把 ts 刷到 now 后, gap 面仍走 settle —— 即时吸收阈值锚在 owner.ct(不被
+    ts 刷新移动), 无论行一/行二谁先判, gap 面最终一致走 settle, 绝不即时吸收"""
+    obs = rd._Observation(HOST, PORT)
+    _seed_owner(obs, now=500.0, pid=100, ct=100.0)
+    # 行二在位续证: ts 500 -> 590(阈值若锚 ts 会被刷走, 锚 owner.ct 不动)
+    assert obs.tick({100: _ident(100.0)}, {"pid": 100, "ct": 100.0}, None, 590.0) is False
+    roster = {100: _ident(100.0), 200: _ident(300.0)}  # ct 300 落在 [owner.ct=100, ts_last=590) gap 带
+    assert obs.tick(roster, None, {200: frozenset({8081})}, 600.0) is False, "gap 面: 进未决, 不即时吸收"
+    assert obs.absorbed == [] and obs.pending[200]["ct"] == 300.0
+    assert obs.tick(roster, None, {200: frozenset({8081})}, 625.0) is False, "未满 30s 挡窗"
+    assert obs.tick(roster, None, {200: frozenset({8081})}, 631.0) is True, "稳定 31s => settle 吸收"
+    assert obs.absorbed == [{"pid": 200, "ct": 300.0, "ts": 631.0}] and obs.pending == {}
+    # 指纹通道不可用时 gap 面同样只滞留未决(更保守, 从不开安全口子)
+    obs2 = rd._Observation(HOST, PORT)
+    _seed_owner(obs2, now=500.0, pid=100, ct=100.0)
+    assert obs2.tick({100: _ident(100.0), 200: _ident(300.0)}, None, None, 600.0) is False
+    assert obs2.absorbed == [] and 200 in obs2.pending, "gap 面 + 无指纹证据 => 滞留未决挡窗"
+
+
+def test_observation_unreadable_ct_face_parks_pending():
+    """名册条目 ct 读不出的面(T2 评审 minor 3/nit 7): 进未决真挡 —— 无有效 ct 写不进
+    合法 absorbed 条目, 绝不自动 settle 吸收; absorbed 保留不被扰动; 挡 L1; 直到从名册
+    消失(出队)、身份恢复(重走分类)或绑端口转 owner(升格出队)"""
+    obs = rd._Observation(HOST, PORT)
+    _seed_owner(obs, now=500.0, pid=100, ct=100.0)
+    obs.tick({100: _ident(100.0), 300: _ident(50.0)}, None, None, 505.0)  # 300 零赌注吸收(ct < owner.ct)
+    roster = {100: _ident(100.0), 200: {"name": "qbittorrent"}, 300: _ident(50.0)}  # 200 缺 ct 键
+    assert obs.tick(roster, None, None, 600.0) is False, "缺 ct 面进未决(内存面), 持久面不变"
+    assert obs.absorbed == [{"pid": 300, "ct": 50.0, "ts": 505.0}], "absorbed 保留"
+    assert obs.pending[200] == {"ct": None, "first_seen": 600.0, "fp": None}, "缺 ct 面: 真挡不吸收"
+    assert obs.l1_open(roster, True) is False, "缺 ct 面挡窗"
+    # 身份恢复(补回可读 ct): 旧未决出队, 按真实身份重走分类
+    assert obs.tick(
+        {
+            100: _ident(100.0),
+            200: _ident(600.0),
+            300: _ident(50.0)
+        }, None, {200: frozenset({8081})}, 610.0
+    ) is False
+    assert obs.pending[200]["ct"] == 600.0, "身份恢复 => 重走分类"
+    # 绑端口转 owner: 升格出队(旧 owner 面按零赌注吸收 —— 早于新 owner 实例存在)
+    roster_ok = {100: _ident(100.0), 200: _ident(600.0), 300: _ident(50.0)}
+    assert obs.tick(roster_ok, {"pid": 200, "ct": 600.0}, None, 620.0) is True
+    assert obs.owner == _owner_record(200, 600.0, 620.0) and obs.pending == {}
+    assert {e["pid"] for e in obs.absorbed} == {100, 300}, "旧 owner 面 + 早于新 owner 的面都归零赌注"
+    # 从名册消失: 出队
+    obs2 = rd._Observation(HOST, PORT)
+    _seed_owner(obs2)
+    obs2.tick({200: {"name": "qbittorrent"}}, None, None, 600.0)
+    assert 200 in obs2.pending
+    assert obs2.tick({}, None, None, 610.0) is False and obs2.pending == {}
+
+
+def test_observation_port_bind_becomes_owner_row2():
+    """§03.2 行二: ct >= ts 且绑我们端口(= owner 候选命中)=> 复活/换身/PID 复用三向都转
+    owner(持久面变更、未决出队、误吸面出 absorbed); 同 pid 同 ct = 在位续证: 只刷内存
+    ts, 不触发落盘(§03.4 写时机 = 变更即写, 频率低)"""
+    obs = rd._Observation(HOST, PORT)
+    _seed_owner(obs)
+    # 复活/换身: 新 pid 绑端口 => owner 记录覆盖(旧死证被新身接替)
+    assert obs.tick({200: _ident(600.0)}, {"pid": 200, "ct": 600.0}, None, 600.0) is True
+    assert obs.owner == _owner_record(200, 600.0, 600.0)
+    # 换身前在未决集的面, 升格即出队
+    obs2 = rd._Observation(HOST, PORT)
+    _seed_owner(obs2)
+    assert obs2.tick({200: _ident(600.0)}, None, {200: frozenset({9999})}, 590.0) is False, "先进未决"
+    assert 200 in obs2.pending
+    assert obs2.tick({200: _ident(600.0)}, {"pid": 200, "ct": 600.0}, {200: frozenset({9999})}, 600.0) is True
+    assert obs2.owner == _owner_record(200, 600.0, 600.0) and obs2.pending == {}
+    # PID 复用: 同 pid 异 ct 绑端口 => owner 的 ct 换新(死证基线跟着换)
+    obs3 = rd._Observation(HOST, PORT)
+    _seed_owner(obs3)
+    assert obs3.tick({100: _ident(700.0)}, {"pid": 100, "ct": 700.0}, None, 600.0) is True
+    assert obs3.owner == _owner_record(100, 700.0, 600.0)
+    # 在位续证: 同 pid 同 ct 候选命中 => ts 内存刷新但不触发落盘
+    obs4 = rd._Observation(HOST, PORT)
+    _seed_owner(obs4)
+    assert obs4.tick({100: _ident(100.0)}, {"pid": 100, "ct": 100.0}, None, 590.0) is False
+    assert obs4.owner == _owner_record(100, 100.0, 590.0), "ts 刷新在内存"
+    # 早于 owner 实例的面(ct < owner.ct)被零赌注吸收后绑回端口(R3/R4 角落): 出 absorbed 转 owner
+    obs5 = rd._Observation(HOST, PORT)
+    _seed_owner(obs5, now=500.0, pid=100, ct=100.0)
+    assert obs5.tick({200: _ident(50.0)}, None, None, 505.0) is True, "零赌注吸收(ct < owner.ct)"
+    assert obs5.tick({200: _ident(50.0)}, {"pid": 200, "ct": 50.0}, None, 600.0) is True
+    assert obs5.owner == _owner_record(200, 50.0, 600.0) and obs5.absorbed == []
+
+
+def test_observation_owner_record_survives_death():
+    """owner 死亡(owner pid 从名册消失)时 owner 记录保留 —— 它就是死证, 只有复活/换身
+    才覆盖; 名册 {} 时零持久面变更(不吸收不清出)"""
+    obs = rd._Observation(HOST, PORT)
+    _seed_owner(obs)
+    assert obs.tick({}, None, None, 600.0) is False, "名册空: 零持久面变更"
+    assert obs.owner == _owner_record(100, 100.0, 500.0), "死证保留"
+    assert obs.tick({200: _ident(600.0)}, {"pid": 200, "ct": 600.0}, None, 610.0) is True
+    assert obs.owner == _owner_record(200, 600.0, 610.0), "只有复活/换身才覆盖"
+
+
+def test_observation_settle_absorb_row3_and_reset():
+    """§03.2 行三: 监听集指纹稳定 NEW_FACE_SETTLE 且不含我们端口 => 吸收(持久面变更);
+    指纹变了/通道不可用 => settle 重算(不把观察间隙当稳定); 空指纹(已创建未绑端口)受
+    同一有界赌注(R3); 指纹含我们端口永不 settle(绑定证据已在, 行二未命中 = 归属没跟上,
+    保守挡)"""
+    assert rd.NEW_FACE_SETTLE == 30.0, "常量数值与 §03.2/§07 R3 一致"
+    obs = rd._Observation(HOST, PORT)
+    _seed_owner(obs)
+    roster = {100: _ident(100.0), 200: _ident(600.0)}
+    fp = frozenset({8081, 9090})
+    assert obs.tick(roster, None, {200: fp}, 600.0) is False, "新面孔进未决(内存面, 非落盘时机)"
+    assert obs.pending[200]["first_seen"] == 600.0
+    assert obs.tick(roster, None, {200: fp}, 620.0) is False, "未满 30s 仍未决(挡窗)"
+    assert obs.tick(roster, None, {200: fp}, 631.0) is True, "稳定 31s => settle 吸收"
+    assert obs.absorbed == [{"pid": 200, "ct": 600.0, "ts": 631.0}] and obs.pending == {}
+    # 指纹变了重算: 变更拍重置 first_seen
+    obs2 = rd._Observation(HOST, PORT)
+    _seed_owner(obs2)
+    roster2 = {100: _ident(100.0), 200: _ident(600.0)}
+    assert obs2.tick(roster2, None, {200: frozenset({8081})}, 600.0) is False
+    assert obs2.tick(roster2, None, {200: frozenset({8081, 9090})}, 620.0) is False, "指纹变了 => 重算"
+    assert obs2.pending[200]["first_seen"] == 620.0
+    assert obs2.tick(roster2, None, {200: frozenset({8081, 9090})}, 645.0) is False, "重算后 25s 仍未决"
+    assert obs2.tick(roster2, None, {200: frozenset({8081, 9090})}, 651.0) is True, "重算后满 31s => 吸收"
+    # 空指纹(已创建未绑端口)按同一有界赌注 settle —— §03.2 尾部赌注的本体
+    obs3 = rd._Observation(HOST, PORT)
+    _seed_owner(obs3)
+    roster3 = {100: _ident(100.0), 200: _ident(600.0)}
+    assert obs3.tick(roster3, None, {200: frozenset()}, 600.0) is False
+    assert obs3.tick(roster3, None, {200: frozenset()}, 631.0) is True, "空集稳定 31s => 吸收(R3)"
+    # 指纹含我们端口: 永不 settle
+    obs4 = rd._Observation(HOST, PORT)
+    _seed_owner(obs4)
+    roster4 = {100: _ident(100.0), 200: _ident(600.0)}
+    ours = frozenset({PORT, 8081})
+    for t in (600.0, 700.0, 800.0):
+        assert obs4.tick(roster4, None, {200: ours}, t) is False
+    assert 200 in obs4.pending and obs4.absorbed == []
+    # 指纹通道不可用(None): 计时重置, 无证据不吸收
+    obs5 = rd._Observation(HOST, PORT)
+    _seed_owner(obs5)
+    roster5 = {100: _ident(100.0), 200: _ident(600.0)}
+    assert obs5.tick(roster5, None, {200: frozenset({8081})}, 600.0) is False
+    assert obs5.tick(roster5, None, None, 610.0) is False, "通道断 => 计时重置"
+    assert obs5.pending[200]["first_seen"] == 610.0
+    assert obs5.tick(roster5, None, {200: frozenset({8081})}, 620.0) is False, "证据恢复 => 从头计时"
+    assert obs5.pending[200]["first_seen"] == 620.0
+    assert obs5.tick(roster5, None, {200: frozenset({8081})}, 651.0) is True, "稳定 31s => 吸收"
+
+
+def test_observation_pending_blocks_and_leaves_on_disappear_row4():
+    """§03.2 行四: 未决成员挡 L1(owner 死证 + 端口拒连已齐也不开); 从名册消失即出队
+    (重现按新面孔重算, settle 重来); PID 复用(同 pid 异 ct)同样出队重算"""
+    obs = rd._Observation(HOST, PORT)
+    _seed_owner(obs)
+    roster = {100: _ident(100.0), 200: _ident(600.0)}
+    assert obs.tick(roster, None, {200: frozenset({8081})}, 600.0) is False
+    assert obs.l1_open(roster, True) is False, "未决挡窗(死证/拒连已齐)"
+    assert obs.l1_open(roster, False) is False
+    assert obs.tick({100: _ident(100.0)}, None, None, 610.0) is False, "面 200 消失 => 出队(内存面)"
+    assert obs.pending == {}
+    assert obs.l1_open({100: _ident(100.0)}, True) is False, "owner 在位, L1 仍不开"
+    assert obs.l1_open({}, True) is True, "owner 死 + 拒连 + 无未决 => 立即进窗"
+    assert obs.tick(roster, None, {200: frozenset({8081})}, 700.0) is False, "重现: 全新计时"
+    assert obs.pending[200]["first_seen"] == 700.0
+    # PID 复用: 同 pid 异 ct => 旧未决出队, 新面孔重进
+    obs2 = rd._Observation(HOST, PORT)
+    _seed_owner(obs2)
+    obs2.tick({100: _ident(100.0), 200: _ident(600.0)}, None, {200: frozenset({8081})}, 600.0)
+    obs2.tick({100: _ident(100.0), 200: _ident(999.0)}, None, {200: frozenset({8081})}, 610.0)
+    assert obs2.pending[200] == {"ct": 999.0, "first_seen": 610.0, "fp": frozenset({8081})}
+
+
+def test_observation_absorbed_release_and_pid_reuse():
+    """absorbed 成员从名册消失即移出(持久面变更 => 落盘时机, payload 不含死者); pid 被
+    复用(ct 不等)时旧条目同样清出、新面孔重新分类(N1 关键面: 复用者不得继承吸收身份)"""
+    obs = rd._Observation(HOST, PORT)
+    _seed_owner(obs, now=500.0, pid=100, ct=100.0)
+    obs.tick({100: _ident(100.0), 200: _ident(50.0)}, None, None, 505.0)  # 零赌注吸收(ct < owner.ct)
+    assert obs.absorbed == [{"pid": 200, "ct": 50.0, "ts": 505.0}]
+    assert obs.tick({100: _ident(100.0)}, None, None, 600.0) is True, "死者清出 = 持久面变更"
+    assert obs.absorbed == []
+    restored = rd._Observation.from_payload(obs.to_payload(600.0), HOST, PORT)
+    assert restored is not None and restored.absorbed == [], "payload 不含死者"
+    # PID 复用: 吸收身份不得继承
+    obs2 = rd._Observation(HOST, PORT)
+    _seed_owner(obs2, now=500.0, pid=100, ct=100.0)
+    obs2.tick({100: _ident(100.0), 200: _ident(50.0)}, None, None, 505.0)
+    assert obs2.tick({100: _ident(100.0), 200: _ident(900.0)}, None, {200: frozenset({8081})}, 600.0) is True
+    assert obs2.absorbed == [], "复用者不继承吸收身份"
+    assert obs2.pending[200]["ct"] == 900.0, "复用者按新面孔走未决/settle"
+
+
+def test_observation_l1_open_truth_table():
+    """§03.3 真值表: owner 死三形态(pid 无进程 / ct 不等 / 映像名非 qB)× 端口拒连 ×
+    未决成员; 无 owner 记录 => False(L1 不适用); 名册 None => None(本拍不可判, 与
+    「不成立」可区分); 名册 {} + owner 记录 => 死证成立(立即进窗, 无稳定期)"""
+    obs = rd._Observation(HOST, PORT)
+    assert obs.l1_open({}, True) is False, "无 owner 记录: L1 不适用"
+    assert obs.l1_open(None, True) is None, "名册 None => 本拍不可判"
+    _seed_owner(obs)
+    alive = {100: _ident(100.0)}
+    dead_absent = {200: _ident(600.0)}
+    dead_ct = {100: _ident(999.0)}
+    dead_name = {100: {"name": "chrome", "ct": 100.0}}
+    assert obs.l1_open(alive, True) is False, "owner 在位: 死证不成立"
+    assert obs.l1_open(alive, False) is False
+    for roster, tag in ((dead_absent, "pid无进程"), (dead_ct, "ct不等"), (dead_name, "映像非qB")):
+        assert obs.l1_open(roster, True) is True, f"死证[{tag}] + 拒连 + 无未决 => 立即进窗"
+        assert obs.l1_open(roster, False) is False, f"死证[{tag}] + 端口在服 => 不成立"
+    # 未决成员一票挡窗(l1_open 纯读, 不清未决)
+    assert obs.tick(dead_absent, None, {200: frozenset({8081})}, 600.0) is False
+    assert obs.l1_open(dead_absent, True) is False, "未决挡窗"
+    assert obs.l1_open({}, True) is False, "名册 {} 也不清未决(纯读)"
+    assert obs.tick({}, None, None, 700.0) is False, "面 200 消失 => 未决出队(内存面, 非落盘变更)"
+    assert obs.pending == {}
+    assert obs.l1_open({}, True) is True, "名册 {} + owner 记录 => 死证成立 => 立即进窗"
+    assert obs.l1_open({}, False) is False
+    assert obs.l1_open(None, True) is None
+
+
+def test_observation_payload_roundtrip_and_bad_shape_is_none():
+    """序列化: to_payload -> from_payload 回环幂等; owner/absorbed 恢复、未决清空(settle
+    重算, §03.2 hint); 坏 payload(非 dict/host 不符或非 str/port 不符或 bool 或数值串/
+    owner 或 absorbed 形不符/absorbed 缺键)=> None 保守弃, 不抛"""
+    obs = rd._Observation(HOST, PORT)
+    _seed_owner(obs, now=500.0, pid=100, ct=100.0)
+    obs.tick({100: _ident(100.0), 200: _ident(50.0)}, None, None, 505.0)  # absorbed(零赌注: ct < owner.ct)
+    obs.tick(
+        {
+            100: _ident(100.0),
+            200: _ident(50.0),
+            300: _ident(600.0)
+        }, None, {300: frozenset({8081})}, 600.0
+    )  # pending(200 仍在名册, 不清出)
+    payload = obs.to_payload(610.0)
+    assert payload == {
+        "host": HOST,
+        "port": PORT,
+        "owner": _owner_record(100, 100.0, 500.0),
+        "absorbed": [{
+            "pid": 200,
+            "ct": 50.0,
+            "ts": 505.0
+        }],
+        "ts": 610.0,
+    }
+    obs2 = rd._Observation.from_payload(payload, HOST, PORT)
+    assert obs2 is not None
+    assert obs2.owner == obs.owner and obs2.absorbed == obs.absorbed
+    assert obs2.pending == {}, "未决不持久: 重启 settle 重算"
+    assert rd._Observation.from_payload(obs2.to_payload(610.0), HOST, PORT).to_payload(610.0) == payload, "回环幂等"
+    bads = [
+        None,
+        [1, 2],
+        {},
+        {
+            "host": "10.0.0.9",
+            "port": PORT,
+            "owner": None,
+            "absorbed": []
+        },  # host 不符(跨实例拒载)
+        {
+            "host": HOST,
+            "port": PORT + 1,
+            "owner": None,
+            "absorbed": []
+        },  # port 不符
+        {
+            "host": HOST,
+            "port": True,
+            "owner": None,
+            "absorbed": []
+        },  # port bool 冒充 1
+        {
+            "host": HOST,
+            "port": str(PORT),
+            "owner": None,
+            "absorbed": []
+        },  # port 数值串
+        {
+            "host": "",
+            "port": PORT,
+            "owner": None,
+            "absorbed": []
+        },  # host 空串
+        {
+            "host": 5,
+            "port": PORT,
+            "owner": None,
+            "absorbed": []
+        },  # host 非 str
+        {
+            "host": HOST,
+            "port": PORT,
+            "owner": "junk",
+            "absorbed": []
+        },  # owner 非 dict
+        {
+            "host": HOST,
+            "port": PORT,
+            "owner": {
+                "pid": "1",
+                "ct": 1.0,
+                "ts": 1.0
+            },
+            "absorbed": []
+        },  # owner 混型
+        {
+            "host": HOST,
+            "port": PORT,
+            "owner": None,
+            "absorbed": "junk"
+        },  # absorbed 非 list
+        {
+            "host": HOST,
+            "port": PORT,
+            "owner": None,
+            "absorbed": ["junk"]
+        },  # absorbed 成员形不符
+        {
+            "host": HOST,
+            "port": PORT,
+            "owner": None
+        },  # absorbed 缺键(非本链产物)
+    ]
+    for body in bads:
+        assert rd._Observation.from_payload(body, HOST, PORT) is None, body
+    ok = rd._Observation.from_payload(
+        {
+            "host": HOST,
+            "port": PORT,
+            "owner": None,
+            "absorbed": [],
+            "ts": 1.0
+        }, HOST, PORT
+    )
+    assert ok is not None and ok.owner is None and ok.absorbed == [] and ok.pending == {}, "合法冷态载荷可载"
