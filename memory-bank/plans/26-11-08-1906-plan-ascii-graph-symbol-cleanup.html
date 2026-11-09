@@ -9,8 +9,8 @@
 <meta name="doc-topic" content="ascii-graph-symbol-cleanup">
 <meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-11-08-1906">
-<meta name="doc-updated" content="26-11-09-2114">
-<meta name="doc-refs" content="">
+<meta name="doc-updated" content="26-11-09-2142">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-09-docs-ascii-symbol-cleanup.md">
 <style>
   :root {
     --bg: #10151a;
@@ -75,7 +75,7 @@
 <h1>非 ASCII 图形符号存量清偿与机械闸门</h1>
 <p class="lede">本篇只回答: 5 件同族 issue 的符号口径怎么定、存量怎么分批清偿、以及用什么机械闸门防回潮。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-08-1906 · <b>doc-updated</b> 26-11-09-2114 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-11-08-1906 · <b>doc-updated</b> 26-11-09-2142 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 2026-11-08 grilling 第 1 轮 D1-D6 逐项拍板(用户「按推荐」); 承接 issue 26-11-06-0756 / 26-11-08-0043 / 26-11-08-0044 / 26-11-08-1621 两份, 以及 0229 修复批与 0624 措辞样板。§02 实测基线 HEAD <code>f674ce4a</code>; 冻结清单基线在提交前重取于 <code>4cff729d</code>(§10 R1), 其后齐平到 <code>2543a603</code> 复验数值未变(R2)。存量清偿完成于 <code>4eab5203</code>(B13 最后一批) + 守阵补强 <code>0c7d2d6e</code>(B15): 存量 2178 处清零, <code>FROZEN</code> 归零。
 </div>
 
@@ -194,6 +194,7 @@
   <li><span class="tag">R1 · 26-11-08-2020</span> 提交前同步: 远端develop 由 <code>f674ce4a</code> 推进 10 笔到 <code>4cff729d</code>(含 <code>4cc002a2</code> memory-bank 大重构, 索引生成物层已移除, 故本轮无 <code>_index.md</code> 改动)。冻结清单按新 HEAD 机械重取: <strong>313 单元 / 2200 处 → 309 单元 / 2178 处</strong>。重取时守阵如实判红 9 条, 逐条归因: 远端 <code>918bf219</code> / <code>4cc002a2</code> 清偿使 4 条冻结目标失效、3 处计数下降、1 条归零须撤下; <code>cb9ae719</code>(issue 0043 修复)在 <code>tests/test_traffic_monitor_client.py</code> 新写 4 处带圈数字, 远端 <code>_common.py</code> 新增 1 处 <code>⚠</code> 注释。<strong>按 D5「存量源码零改动」, 这 5 处属闸门上线前既有代码, 一律登记入基线、不代改他人源码</strong>, 归入 S2 清偿面。计划内所有存量数字同步到新基线。D5 的「不提交」约束由用户显式说「提交」解除; 存量清偿与 issue 认领 / 翻状态仍未解锁。</li>
   <li><span class="tag">R2 · 26-11-08-2145</span> 提交评审轮: 首轮分面 3 派(正确性 / 安全与基建 / 测试缺口与文档事实)共报 1 major + 3 minor, 引文逐字校验 4/4 通过, 全部当场修完。<strong>major = 扫描面白名单漂移</strong>: 初版靠 <code>ROOT_FILES</code> 枚举根级文件, 漏掉 <code>hatch_build.py</code> / <code>.github/workflows/*.yml</code> / <code>.vscode/*.json</code>, 与规范「覆盖文件」声明静默不符 —— 改为 <code>collect_files</code> 按后缀自动收集根级候选(17 个文件进入扫描面), <code>.github</code> / <code>.vscode</code> 纳入 <code>SCAN_ROOTS</code>, 红线产品配置 <code>config.yml</code> 走 <code>EXCLUDE_FILES</code> 显式排除(只读不纳管), 并新增 <code>test_scan_surface_covers_declared_scope</code> 钉住覆盖声明一致性。按新口径重生成冻结清单<strong>零变化</strong>(仍 309 单元 / 2178 处); 守阵现为 <strong>12 个 test 对 12 条 <code>## 测试计划</code></strong>。另修 3 条 minor: <code>doc-updated</code> 抬到本轮、守阵 docstring 的初冻结数字改为现值、meta 基线补当前提交基线。同期远端再推进 2 笔(<code>42692a37</code> / <code>2543a603</code>), 已重新齐平, 守阵与全量复验全绿。</li>
   <li><span class="tag">R3 · 26-11-09-2114</span> <strong>存量清偿完成 + 守阵补强, 计划转终态</strong>: <strong>(1) 存量清偿完成</strong>: S2-S5 分 13 批落地(B01-B13), 266 文件 / 309 单元 / <strong>2178 处 → 0</strong>; <code>FROZEN</code> 归零为 <code>{}</code>(变量与类型注解保留, 冻结机制未拆)。每批独立提交、独立 <code>test.quick</code>, 批次表见 §04。<strong>(2) <code>options.html</code> 两处 v.Nu 存量 error</strong>: <code>label.row</code> 含两个可交互后代 + <code>h4</code> 紧跟 <code>h1</code> 跳级, 用户拍板「修 2 条 error 后清偿」; 修前实测只提 L133 会连锁触发 L176 新 error, 最终用 <code>h1-h2-h3-h4</code> 连续链 + CSS 选择器扩展(<code>.step h2/h3/h4</code>、<code>label.row, div.row</code>)解决, 视觉不变、rc=0。<strong>(3) <code>commit.py</code> 与 <code>test_commit.py</code> 的断言耦合</strong>: <code>commit.py</code> 原 6 处 <code>print(f"⚠ 已包含: ...")</code> 的输出前缀被 <code>test_commit.py:849</code> 的断言字面量钉住, 按表 C 的 <code>⚠→WARN:</code> 同步改生产输出与断言字面量(现值: <code>commit.py</code> 6 处均为 <code>WARN: 已包含</code>, 断言侧亦为 <code>WARN: 已包含: 想法.md</code>; 另 L25 docstring 措辞同改), 语义不变; <code>test_commit.py</code> 仍在 <code>EXCLUDE_FILES</code>(理由: gitmoji 是被断言数据), 其内其余 42 处 gitmoji 一字未动。<strong>(4) 闸门并发内存瓶颈</strong>: 闸门 <code>_pipeline.py:489</code> 的 <code>GATE_WORKERS = 4</code> × <code>pytest -n 8</code> 峰值 32 worker, 打满 12GB 内存致 <code>timekit --check</code> 从 4s 涨到 45-60s 撞超时、node battery 偶发 flake; 处置为运行时 monkeypatch <code>_pipeline.GATE_WORKERS = 1</code> 后调 <code>commit.main(['--no-push'])</code>, <strong>零文件改动</strong>, <code>_pipeline.py:489</code> 至今仍是 <code>4</code>。<strong>(5) B14 只读验证批 + B15 守阵补强</strong>: B14 实测发现 <code>test_scan_excludes_exempt_paths</code> 在 <code>FROZEN = {}</code> 后近乎失能(第一循环零迭代、第二循环对空 dict 恒真), 但豁免机制仍由 <code>test_repo_matches_frozen</code> 间接兜底(内存实验: 清空 <code>EXEMPT_CELLS</code> 后立刻暴露 6 单元 / 24 处); 用户拍板补掉 → B15 给 <code>_count_text</code> 加可选 <code>exempt</code> 形参(默认走 <code>EXEMPT_CELLS</code>, 生产路径不变)+ 新增 <code>test_count_text_skips_exempt_cells_per_class</code>, 守阵 <strong>12 → 13</strong>; 同批按 B14 全量 diff 核对结果补齐表 C(<code>✗→x</code>、<code>✨→直接删除</code>、<code>🚀/🔍/📦→*</code>、圈号 <code>1.</code>/<code>1)</code>/裸数字变体), 并声明表 C 为「参考」非强制。<strong>(6) 全量验证</strong>: <code>dev.fmt</code> rc=0 无重排; <code>test.quick</code> 5856 passed / 2 skipped; 全量 <code>test.full</code> 与覆盖率数字见 <code>memory-bank/testing/baselines/</code> 最新切片(按 AGENTS.md「测试基线数字只写一处」, 本文件不手抄)。</li>
+  <li><span class="tag">R4 · 26-11-09-2142</span> 补 doc-refs 认领链: 收尾档案 26-11-09-docs-ascii-symbol-cleanup 反向声明本计划</li>
 </ul>
 
 </div>

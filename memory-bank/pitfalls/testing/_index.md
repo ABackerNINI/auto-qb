@@ -12,7 +12,7 @@
 
 | 卷 | 主题范围 | 条数 |
 |---|---|---|
-| [1](_index-1.md) | `annotations-lazy-eval.md` … `free-port-toctou-parallel.md` | 26 |
-| [2](_index-2.md) | `frozen-allowlist-baseline-drift.md` … `mutation-revert-git-checkout.md` | 26 |
-| [3](_index-3.md) | `mutmut-mtime-race-stale-trampoline.md` … `sandbox-tool-cache.md` | 26 |
-| [4](_index-4.md) | `sandbox-venv-in-workspace.md` … `xdist-worker-global-snapshot.md` | 26 |
+| [1](_index-1.md) | `annotations-lazy-eval.md` … `gate-concurrency-memory-timeout.md` | 27 |
+| [2](_index-2.md) | `gate-probe-must-not-run-action.md` … `mutmut-survived-verdict.md` | 27 |
+| [3](_index-3.md) | `mypy-config-cwd.md` … `sidefx-diagnostic-probe.md` | 27 |
+| [4](_index-4.md) | `sidefx-import-time-temp-roots.md` … `xdist-worker-global-snapshot.md` | 24 |
