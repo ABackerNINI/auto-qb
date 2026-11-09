@@ -258,7 +258,7 @@ def test_migrate_v5_finalize_timeout_idempotent():
 
 def test_migrate_v5_residual_through_load_config(tmp_path):
     """验收判据: v5 旧配置带 finalize_timeout 残留 -> load_config 全链路不炸(迁移先清键再校验),
-    其余 relocate 配置照常生效; 已清洗的树再过一遍版本迁移 = 已是 v6, 零迁移(幂等)"""
+    其余 relocate 配置照常生效; 已清洗的树再过一遍版本迁移 = 已是当前版本, 零迁移(幂等)"""
     probe = {
         "config":
             {
@@ -277,10 +277,10 @@ def test_migrate_v5_residual_through_load_config(tmp_path):
     # 迁移函数直跑复核: 残留键被清洗且产出 note(不依赖 load 内部日志)
     out, notes = _migrate_v5_to_v6({"relocate": {"finalize_timeout": "45d"}})
     assert out == {"relocate": {}} and len(notes) == 1
-    # 已清洗(已是 v6 形状)再迁移: 幂等零 desc
+    # 已清洗(已是当前版本形状)再迁移: 幂等零 desc
     from auto_qb.infra.versioning import migrate
 
-    cleaned = {"schema_version": 6, "relocate": {"enabled": "true"}}
+    cleaned = {"schema_version": 7, "relocate": {"enabled": "true"}}
     data, desc = migrate("config", cleaned)
     assert desc == "" and "finalize_timeout" not in data["relocate"]
 

@@ -93,8 +93,6 @@ from auto_qb.core.traffic_store import (
 
 from helpers import FakeClient, FakeTorrent, active_torrent, capture_logs, make_manager, seed_store, server_state
 
-from webui_helpers import _enable_qb_traffic, _qb_v4
-
 from traffic_sample_support import (
     _PW_KEY,
     _cfg_dict,
