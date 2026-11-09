@@ -37,6 +37,18 @@ app_get_directory_content(响应形状按报告 26-11-03-2306 §8.1 实测: with
 - test_link_follow_name_filter: names 过滤到本组文件(无关条目不进比对) / 过滤后无条目 unavailable
   / 空 names 不过滤(既有 D 级语义)
 - test_link_follow_no_client_unavailable: 客户端缺失 / 客户端无该方法(qB<5.0 替身) -> unavailable
+### 链接对象判别(计划 26-11-10-0230 §03.1: qB Windows 列目录不解析文件级 symlink -> 运行时F假阴性)
+- test_link_follow_link_object_entry_skipped: 事故形态(qB 条目=src 链接自身 lstat, size=0/mtime=链接
+  创建时刻)与 dst 真文件不符 -> 修后 skipped/unavailable(detail 写明真伪不可判); 现行代码判
+  negative —— 红验起步(生产 26586 事故形态)
+- test_link_follow_resolved_target_still_positive: 目标态(qB 条目==dst 真身, 链接被解析/POSIX 口径)
+  -> positive 不回归
+- test_link_follow_neither_target_nor_link_negative: 两不符态(qB 条目与 dst 和源侧链接对象都不符)
+  -> negative 不回归(真失败判定力保留)
+- test_link_follow_mixed_link_object_and_true_mismatch_negative: 混合抽样(链接对象条目+真不符条目)
+  -> negative(存在真不符即判负, 原语义; 真不符条目源侧无链接 lstat 失败按保守不等)
+- test_d_precheck_branch_ignores_link_object_form: 预检 D 级常规支(不传 name_filter)不触发判别 ->
+  链接对象形态条目仍按不等判 negative(改动面收窄: path_evidence 语义零改动)
 ### 真实 qbittorrentapi 容器形态(issue 26-11-04-0504, 真机 D/F 恒失效回归)
 - test_d_real_directory_content_list_positive: 真实 DirectoryContentList(UserList 子类)承载 dict 条目,
   元数据相等 -> positive(级 D); 改前因容器判形态异常 -> unavailable(B′ 降级)故红
@@ -393,6 +405,77 @@ def test_link_follow_no_client_unavailable():
     assert ev.status == rp.UNAVAILABLE and "客户端不可用" in ev.detail, ev
     ev = rp.link_follow_evidence(_ctx(_plain_client()), "qbsrc", "nowhere")
     assert ev.status == rp.UNAVAILABLE and ev.level == "", ev
+
+
+# ---------- 链接对象判别(计划 26-11-10-0230 §03.1: qB Windows 列目录不解析文件级 symlink) ----------
+
+
+def _link_case(tmp_path, size=5691):
+    """造「src 内容根 = 文件级 symlink -> dst 真文件」现场(生产 26586 事故形态)
+
+    qB 条目按本机链接自身 lstat 预制(size=0, mtime=链接创建时刻) —— 与真机
+    app/getDirectoryContent 三视角实测逐字一致(计划 §02.2); dst 真文件 size/mtime
+    与链接对象元数据必然不同。返回 (qB 条目, dst 真身 size, dst 根, src 根)。
+    """
+    dst_root = tmp_path / "dst"
+    src_root = tmp_path / "src"
+    dst_root.mkdir()
+    src_root.mkdir()
+    target = _make_file(dst_root, "big.mkv", size)
+    link = os.path.join(str(src_root), "big.mkv")
+    os.symlink(os.path.abspath(target), link)  # 本环境实测可建真实 symlink(需开发者模式/管理员)
+    st = os.lstat(link)
+    return _entry("big.mkv", st.st_size, int(st.st_mtime)), size, str(dst_root), str(src_root)
+
+
+def test_link_follow_link_object_entry_skipped(tmp_path):
+    """链接对象态(事故形态): qB 条目=src 链接自身 lstat 且与 dst 真文件不符 -> skipped(unavailable,
+    detail 写明真伪不可判); 现行代码拿它与 dst 比对永不等判 negative —— 假阴性, 红验起步"""
+    entry, _dst_size, dst_root, src_root = _link_case(tmp_path)
+    ev = rp.link_follow_evidence(_ctx(_DirClient([entry])), src_root, dst_root, names=["big.mkv"])
+    assert ev.status == rp.UNAVAILABLE, ev
+    assert "链接对象" in ev.detail and "真伪不可判" in ev.detail, ev
+
+
+def test_link_follow_resolved_target_still_positive(tmp_path):
+    """目标态: qB 条目 == dst 真身元数据(qB 解析了链接/POSIX 口径) -> positive 不回归"""
+    _entry_link, dst_size, dst_root, src_root = _link_case(tmp_path)
+    ev = rp.link_follow_evidence(
+        _ctx(_DirClient([_entry("big.mkv", dst_size, MT)])), src_root, dst_root, names=["big.mkv"]
+    )
+    assert ev.status == rp.POSITIVE and ev.level == rp.LEVEL_D, ev
+
+
+def test_link_follow_neither_target_nor_link_negative(tmp_path):
+    """两不符态: qB 条目与 dst 真身和源侧链接对象都不符 -> negative 不回归(真失败判定力保留)"""
+    _entry_link, dst_size, dst_root, src_root = _link_case(tmp_path)
+    ev = rp.link_follow_evidence(
+        _ctx(_DirClient([_entry("big.mkv", dst_size + 999, MT + 99)])), src_root, dst_root, names=["big.mkv"]
+    )
+    assert ev.status == rp.NEGATIVE and ev.level == rp.LEVEL_D, ev
+
+
+def test_link_follow_mixed_link_object_and_true_mismatch_negative(tmp_path):
+    """混合抽样: 链接对象条目 + 真不符条目 -> negative(存在「与 dst 和链接对象都不符」即判负,
+    原语义不变); 真不符条目源侧无该文件(lstat 失败)按保守不等处理"""
+    link_entry, _dst_size, dst_root, src_root = _link_case(tmp_path)
+    _make_file(dst_root, "c.mkv", 200)
+    ev = rp.link_follow_evidence(
+        _ctx(_DirClient([link_entry, _entry("c.mkv", 999, MT + 7)])),
+        src_root,
+        dst_root,
+        names=["big.mkv", "c.mkv"],
+        sample_k=3,
+    )
+    assert ev.status == rp.NEGATIVE and ev.level == rp.LEVEL_D, ev
+
+
+def test_d_precheck_branch_ignores_link_object_form(tmp_path):
+    """预检 D 级常规支(不传 name_filter)不触发判别: 链接对象形态条目仍按不等判 negative
+    (改动面收窄 —— path_evidence 常规支语义零改动, 计划 §01 不变量)"""
+    link_entry, _dst_size, dst_root, src_root = _link_case(tmp_path)
+    ev = rp.path_evidence(_ctx(_DirClient([link_entry])), src_root, dst_root)
+    assert ev.status == rp.NEGATIVE and ev.level == rp.LEVEL_D, ev
 
 
 # ---------- 真实 qbittorrentapi 返回容器形态(issue 26-11-04-0504 回归) ----------

@@ -161,6 +161,25 @@ def _int_of(v: Any) -> Optional[int]:
         return None
 
 
+def _link_object_hit(qb_dir: str, name: Any, size: Any, mtime: Optional[int]) -> bool:
+    """链接对象判别(计划 26-11-10-0230 §03.1): qB 条目 (size, mtime) 与源侧同相对路径
+    条目的链接自身 lstat 双字段一致?(事故根因: qB Windows 列目录对文件级 symlink 返回
+    链接对象自身元数据(size=0, mtime=链接创建时刻)不解析目标, 拿它比对 dst stat 永不等
+    -> 运行时F自检假阴性)
+
+    源侧定位: qb_dir(qB 视角内容根)经 file_access.map_to_container 单点换算 syscall 路径
+    (与 _local_listing 同款), 逐条目 os.lstat; 长路径前缀走 utils.add_long_path_prefix_for_win
+    单点(与 relocate_exec._alias_live 同款)。size 用与 dst 比对同一原始值(不经数值化 ——
+    判别要求精确形态才触发, 畸形形态本就不该命中); lstat 失败(OSError)按「不等」保守处理,
+    保留真失败判定力。
+    """
+    try:
+        st = os.lstat(_prefixed(os.path.join(_syscall(qb_dir), str(name))))
+    except OSError:
+        return False
+    return st.st_size == size and mtime is not None and int(st.st_mtime) == mtime
+
+
 # ---------- D 级: qB 列目录元数据比对 ----------
 
 
@@ -177,7 +196,10 @@ def _d_evidence(
     visibility_only(dst 侧): 列目录成功即 positive(哪怕空目录/纯字符串列表) ——
     只证明「qB 看得见该目录」, 不做内容比对。
     name_filter(链接跟随自检用): 内容根相对文件名集合, 过滤 qB 条目到本组文件
-    (免得抽样踩进同目录无关条目); None = 不过滤(既有调用点行为不变)。
+    (免得抽样踩进同目录无关条目); None = 不过滤(既有调用点行为不变)。传了 name_filter
+    (唯一调用方 link_follow_evidence)才启用链接对象判别: dst 比对失配的条目补源侧
+    lstat 探测(见 _link_object_hit), qB 条目与链接自身双字段一致记「链接对象不可判」,
+    抽样全部不可判 => unavailable(调用方按 skipped 处理)。
     """
     try:
         entries = client.app_get_directory_content(directory_path=qb_dir, with_metadata=WITH_METADATA)
@@ -206,7 +228,11 @@ def _d_evidence(
     ]
     if not comparable:
         return _unavailable("qB 条目剔除目录后无可比文件, 无法判定")
+    # 链接对象判别只在链接跟随自检支生效(link_follow_evidence 是唯一传 name_filter 的调用方;
+    # 预检 D 级常规支不传 => 语义零改动, 计划 26-11-10-0230 §01 改动面收窄)
+    link_probe = name_filter is not None
     checked = 0
+    link_object = 0  # 抽中条目里「qB 条目 == 源侧链接自身 lstat」(链接对象态)的条数
     for e in _sample(comparable, sample_k):
         name = e.get("name")
         size, mtime = e.get("size"), _int_of(e.get("last_modification_date"))
@@ -214,7 +240,14 @@ def _d_evidence(
         checked += 1
         if hit is not None and mtime is not None and hit[0] == size and hit[1] == mtime:
             return Evidence(POSITIVE, LEVEL_D, f"代表文件 {name} 的 size+mtime 与本机完全相等")
+        if link_probe and _link_object_hit(qb_dir, name, size, mtime):
+            link_object += 1  # 链接对象态: 列目录语义未解析链接, 该条不可判
     detail = "; ".join(str(e.get("name")) for e in _sample(comparable, sample_k)[:3])
+    if link_probe and link_object == checked:
+        # 抽样全部为链接对象态: 既证不了「链接被 qB 跟随」也证不了失败 => unavailable
+        # (调用方 _qb_side_check 按 skipped 处理, 不 fail 不挡武装)。真失败漏判的代价
+        # D1 拍板接受, 下游由缺文件联动(整组暂停+MISSING)/errored 兜底。
+        return _unavailable(f"qB 列目录未解析文件级 symlink(条目=链接对象元数据), 真伪不可判({detail})")
     return Evidence(NEGATIVE, LEVEL_D, f"抽中的 {checked} 个代表文件 size/mtime 与本机全不等({detail})")
 
 
@@ -287,9 +320,12 @@ def link_follow_evidence(
     链接建成后 qB 经 src 原路径读到的就是 dst 的数据 —— 列 src 内容根(qB 视角, 即
     计划期 content_root_of 的产物)带元数据, 与本机 dst 侧同相对路径文件的 stat 比对
     (抽样语义与 D 级一致): 任一代表文件 size+mtime 完全相等 => positive(链接被 qB
-    跟随); 抽中代表文件全不等 => negative(链接未被跟随); 端点 404/400/权限/
-    qB<5.0(纯字符串列表)/客户端缺失/本机 dst 不可读 => unavailable(调用方跳过
-    qB 侧部分, 行为与无自检一致)。
+    跟随); 存在与 dst 和源侧链接对象都不符的代表 => negative(链接未被跟随, 真失败,
+    原语义); 抽中代表全为「链接对象态」(qB Windows 列目录对文件级 symlink 返回链接
+    对象自身元数据不解析目标, 与源侧 lstat 双字段一致, 计划 26-11-10-0230 §03.1) =>
+    unavailable(真伪不可判, 调用方按 skipped 处理不挡武装; 漏判真失败的代价 D1 拍板
+    接受, 下游由缺文件联动/errored 兜底); 端点 404/400/权限/qB<5.0(纯字符串列表)/
+    客户端缺失/本机 dst 不可读 => unavailable(调用方跳过 qB 侧部分, 行为与无自检一致)。
 
     只做 D 级、不降级 B′: B′ 比的是种子元数据 size(非实时 FS), 与「链接是否被
     跟随」无关。names 是内容根相对文件名集合(把 qB 条目过滤到本组文件, 免得抽样
