@@ -14,14 +14,22 @@
 - test_backup_versioned_relative_backup_dir: 备份目录为空串(相对裸文件名) -> 跳过建目录, 直写 CWD
 - test_migrate_config_3_4_removes_explicit_empty: v3→v4 迁移单测 —— 9 键作用域内显式置空移除 + 逐键 notes(非空值/无关站点不误杀)
 - test_migrate_config_3_4_idempotent: v3→v4 迁移幂等 —— 移除后重放无变更无 notes(崩溃重放安全)
-- test_materialize_v3_removes_explicit_empty_with_warning: v3 文件物化 —— 作用域 '' 移除落盘当前版本(v3→v6) + 每键 WARNING(caplog)
-- test_materialize_v4_site_empty_untouched: v4 文件站点 '' = 覆盖为空(v4 起的合法语义), v4→v6 迁移不误杀
+- test_materialize_v3_removes_explicit_empty_with_warning: v3 文件物化 —— 作用域 '' 移除落盘当前版本(v3→v7) + 每键 WARNING(caplog)
+- test_materialize_v4_site_empty_untouched: v4 文件站点 '' = 覆盖为空(v4 起的合法语义), v4→v7 迁移不误杀
 - test_materialize_passes_config_path_to_migration: 物化调迁移函数传真实 config_path(不是 None) —— spy 卡实参
 - test_backup_versioned_creates_parent_and_relative_forms: backup_versioned 按 dirname 建父目录(exist_ok=True 幂等), 嵌套目录不存在也落盘
 - test_reject_stale_version_guards_non_dict_cfg: 版本闸门对非映射 config 段走「版本缺失」拒绝, 不崩在属性访问上
 - test_reject_stale_version_message_carries_both_versions: 闸门错误消息须同时带两个版本号并指路刷新(整段换 None 会丢排障线索)
 - test_fallback_readonly_skips_version_key_but_covers_others: readonly 回退跳过 schema_version、continue 而非 break、其余键按点路径回退
 - test_materialize_unknown_host_old_key_dropped
+- test_migrate_config_6_7_exact_roundtrip: v6→v7 精确还原(1.5S/1.5S -> 1 倍), 旧键消失, 单条 note
+- test_migrate_config_6_7_seconds_to_multiplier: 30S/2S -> 15 倍; main_tick 缺失兜默认 2.0 同值
+- test_migrate_config_6_7_clamped_to_effective_seconds_cap: 600S/7S -> 85 倍(595s <= 600s), note 明示钳制
+- test_migrate_config_6_7_rounds_up: 非整除向上取整 7S/2S -> 4 倍(8s)
+- test_migrate_config_6_7_no_legacy_key_untouched: 无旧键不动、零 note、零 diff(D9 不补写)
+- test_migrate_config_6_7_idempotent: 连跑两次, 第二次零 diff(裸 dict)
+- test_migrate_config_6_7_main_tick_over_cap: main_tick 700S -> 倍数 1 且 note 写明上限不可满足
+- test_migrate_config_6_7_unparsable_legacy_value_kept: 旧值不可解析 -> 旧键保留 + 一条 note 指路手改
 """
 
 import copy
@@ -53,12 +61,12 @@ def test_materialize_migrates_and_backups(tmp_path):
 
     desc, backup = materialize_schema_migration(path, str(data_dir))
 
-    assert desc == "v1→v6"
+    assert desc == "v1→v7"
     assert backup == str(data_dir / "config.yml.v1.bak")
     with open(backup, encoding="utf-8") as f:
         assert f.read() == LEGACY_V1, "备份 = 迁移前原样(字节级)"
     text = _text(path)
-    assert "schema_version: 6" in text, "磁盘落当前版本章"
+    assert "schema_version: 7" in text, "磁盘落当前版本章"
     assert "hr_page_url" not in text, "旧键随迁移消失"
     cfg = load_config(path)  # 物化后的磁盘必须能原样通过加载
     assert cfg.trackers["BTSchool"].hr_check is not None
@@ -71,7 +79,7 @@ def test_materialize_idempotent_and_noop(tmp_path):
     data_dir = tmp_path / "data"
     path = _make(tmp_path, LEGACY_V1)
     desc, _ = materialize_schema_migration(path, str(data_dir))
-    assert desc == "v1→v6"
+    assert desc == "v1→v7"
     text_after = _text(path)
 
     desc2, backup2 = materialize_schema_migration(path, str(data_dir))
@@ -93,7 +101,7 @@ def test_materialize_unknown_host_old_key_dropped(tmp_path):
 
     desc, backup = materialize_schema_migration(path, str(data_dir))
 
-    assert desc == "v1→v6"
+    assert desc == "v1→v7"
     text = _text(path)
     assert "hr_check" not in text, "陌生 host 的旧键随 v3 迁移删除"
     cfg = load_config(path)
@@ -107,7 +115,7 @@ def test_materialize_dry_run_probe(tmp_path):
 
     desc, backup = materialize_schema_migration(path, str(data_dir), write=False)
 
-    assert desc == "v1→v6" and backup == ""
+    assert desc == "v1→v7" and backup == ""
     assert _text(path) == LEGACY_V1, "dry-run 不落盘"
     assert not data_dir.exists()
 
@@ -133,7 +141,7 @@ def test_reject_stale_version_non_integer_shape_passes_gate():
 def test_materialize_bad_version_wraps_config_error(tmp_path):
     """磁盘 schema_version 形状非法 -> SchemaVersionError 包装为 ConfigError(报清文件与原因)"""
     data_dir = tmp_path / "data"
-    path = _make(tmp_path, BASE.replace("schema_version: 6", "schema_version: abc"))
+    path = _make(tmp_path, BASE.replace("schema_version: 7", "schema_version: abc"))
     with pytest.raises(ConfigError, match="schema 版本问题"):
         materialize_schema_migration(path, str(data_dir))
     assert not data_dir.exists(), "探测阶段失败不应产生备份目录"
@@ -368,7 +376,7 @@ def test_migrate_config_3_4_idempotent():
 
 
 def test_materialize_v3_removes_explicit_empty_with_warning(tmp_path, caplog):
-    """v3 文件物化: 作用域内 '' 移除并落盘当前版本(v3→v4→v5→v6), 每个被移除键一条 WARNING(用户拍板: 日志必须可见)"""
+    """v3 文件物化: 作用域内 '' 移除并落盘当前版本(v3→v4→v5→v6→v7), 每个被移除键一条 WARNING(用户拍板: 日志必须可见)"""
     import logging
 
     data_dir = tmp_path / "data"
@@ -377,10 +385,10 @@ def test_materialize_v3_removes_explicit_empty_with_warning(tmp_path, caplog):
     with caplog.at_level(logging.WARNING, logger="auto_qb.config.loaders"):
         desc, backup = materialize_schema_migration(path, str(data_dir))
 
-    assert desc == "v3→v6"
+    assert desc == "v3→v7"
     assert backup == str(data_dir / "config.yml.v3.bak")
     text = _text(path)
-    assert "schema_version: 6" in text
+    assert "schema_version: 7" in text
     assert "add_tag: ''" not in text and "remove_similar_tags: ''" not in text \
         and "overwrite_category: ''" not in text, "作用域内的 '' 全部移除"
     assert "add_tag: zB" in text, "非空值不误杀"
@@ -393,14 +401,14 @@ def test_materialize_v3_removes_explicit_empty_with_warning(tmp_path, caplog):
 
 
 def test_materialize_v4_site_empty_untouched(tmp_path):
-    """v4 文件的站点 '' = 覆盖为空(v4 起的合法语义): v4→v6 迁移不得误杀, 站点 '' 原样保留, 加载后生效值 = ''"""
+    """v4 文件的站点 '' = 覆盖为空(v4 起的合法语义): v4→v7 迁移不得误杀, 站点 '' 原样保留, 加载后生效值 = ''"""
     data_dir = tmp_path / "data"
     path = _make(tmp_path, V4_SITE_EMPTY)
 
     desc, backup = materialize_schema_migration(path, str(data_dir))
-    assert desc == "v4→v6" and backup == str(data_dir / "config.yml.v4.bak")
+    assert desc == "v4→v7" and backup == str(data_dir / "config.yml.v4.bak")
     text = _text(path)
-    assert "schema_version: 6" in text
+    assert "schema_version: 7" in text
     assert "add_tag: ''" in text, "v4 的站点 '' 不得被迁移移除"
     cfg = load_config(path)
     assert cfg.trackers["A"].hr.add_tag == "", "覆盖为空生效(不回退全局 zGlobal)"
@@ -426,7 +434,7 @@ def test_materialize_passes_config_path_to_migration(tmp_path, monkeypatch):
 
     monkeypatch.setattr(writer_mod, "migrate_config_schema", spy)
     desc, _ = writer_mod.materialize_schema_migration(path, str(data_dir))
-    assert desc == "v1→v6"
+    assert desc == "v1→v7"
     assert seen == [path], "迁移函数必须收到真实 config_path(传 None 会让迁移无法定位文件)"
 
 
@@ -509,3 +517,90 @@ def test_fallback_readonly_skips_version_key_but_covers_others():
     _fallback_readonly_fields(tree2, old_tree2)
     assert tree2["config"]["data_dir"] == "disk-dir", "命中版本键后不得中断后续 readonly 键的回退"
     assert tree2["config"]["schema_version"] == 999, "版本键必须留给盖章/校验层, 不回退"
+
+
+def test_migrate_config_6_7_exact_roundtrip():
+    """v6→v7 精确还原: 旧 1.5S + main_tick 1.5S -> 1 倍(生效 1.5s 与原值一致), 旧键消失, 单条 note"""
+    from auto_qb.config.migrations import _migrate_config_6_7
+
+    cfg = {"main_tick": "1.5S", "qb_traffic": {"sample_interval": "1.5S", "enabled": True}}
+    out, notes = _migrate_config_6_7(cfg)
+
+    assert out["qb_traffic"] == {"sample_interval_multiplier": 1, "enabled": True}, "同段其余键原样保留"
+    assert "sample_interval" not in out["qb_traffic"], "旧键删除(新口径下它是未知键)"
+    assert len(notes) == 1, "每个旧键一条 note"
+    assert notes[0].startswith("config.qb_traffic.sample_interval -> ")
+    assert "1 倍" in notes[0] and "1.5s" in notes[0], notes[0]
+
+
+def test_migrate_config_6_7_seconds_to_multiplier():
+    """v6→v7: 30S + main_tick 2S -> 15 倍; main_tick 缺席兜 2.0(models 同源); 版本链注册可串行"""
+    from auto_qb.config.migrations import _migrate_config_6_7
+
+    out, _ = _migrate_config_6_7({"main_tick": "2S", "qb_traffic": {"sample_interval": "30S"}})
+    assert out["qb_traffic"] == {"sample_interval_multiplier": 15}
+
+    out2, _ = _migrate_config_6_7({"qb_traffic": {"sample_interval": "30S"}})
+    assert out2["qb_traffic"] == {"sample_interval_multiplier": 15}, "main_tick 缺失兜 2.0"
+
+    from auto_qb.infra.versioning import migrate
+
+    chained, desc = migrate("config", {"schema_version": 6, "main_tick": "2S", "qb_traffic": {"sample_interval": "30S"}})
+    assert desc == "v6→v7" and chained["qb_traffic"]["sample_interval_multiplier"] == 15, "迁移必须已注册进版本链"
+
+
+def test_migrate_config_6_7_clamped_to_effective_seconds_cap():
+    """v6→v7 钳制: 600S + main_tick 7S -> 85 倍(85x7=595s <= 600s), note 明示被钳制"""
+    from auto_qb.config.migrations import _migrate_config_6_7
+
+    out, notes = _migrate_config_6_7({"main_tick": "7S", "qb_traffic": {"sample_interval": "600S"}})
+    assert out["qb_traffic"]["sample_interval_multiplier"] == 85
+    assert len(notes) == 1 and "钳制" in notes[0] and "595s" in notes[0], notes
+
+
+def test_migrate_config_6_7_rounds_up():
+    """v6→v7 非整除向上取整: 7S + main_tick 2S -> 4 倍(生效 8s, 采样更密不丢数据点)"""
+    from auto_qb.config.migrations import _migrate_config_6_7
+
+    out, _ = _migrate_config_6_7({"main_tick": "2S", "qb_traffic": {"sample_interval": "7S"}})
+    assert out["qb_traffic"]["sample_interval_multiplier"] == 4
+
+
+def test_migrate_config_6_7_no_legacy_key_untouched():
+    """v6→v7 D9: 未设旧键 -> 不动、零 note、零 diff(不补写新键, 默认变更由升级行为本身承担)"""
+    from auto_qb.config.migrations import _migrate_config_6_7
+
+    cfg = {"main_tick": "2S", "qb_traffic": {"sample_interval_multiplier": 5}}
+    before = copy.deepcopy(cfg)
+    result = _migrate_config_6_7(cfg)
+    assert not isinstance(result, tuple), "无旧键时返回裸 dict(框架两种形态都接受)"
+    assert cfg == before, "零副作用(不补写、不改值)"
+
+
+def test_migrate_config_6_7_idempotent():
+    """v6→v7 幂等: 连跑两次, 第二次零 diff(崩溃重放安全)"""
+    from auto_qb.config.migrations import _migrate_config_6_7
+
+    out1, _ = _migrate_config_6_7({"main_tick": "2S", "qb_traffic": {"sample_interval": "30S"}})
+    snapshot = copy.deepcopy(out1)
+    result2 = _migrate_config_6_7(out1)
+    assert result2 == out1 == snapshot, "第二次应无可迁移项, 原样返回"
+
+
+def test_migrate_config_6_7_main_tick_over_cap():
+    """v6→v7: main_tick 700S(超 600s 上限) -> floor 为 0, 倍数兜 1, note 写明该配置下上限不可满足"""
+    from auto_qb.config.migrations import _migrate_config_6_7
+
+    out, notes = _migrate_config_6_7({"main_tick": "700S", "qb_traffic": {"sample_interval": "30S"}})
+    assert out["qb_traffic"]["sample_interval_multiplier"] == 1
+    assert len(notes) == 1 and "超过 600s" in notes[0] and "不可满足" in notes[0], notes
+
+
+def test_migrate_config_6_7_unparsable_legacy_value_kept():
+    """v6→v7: 旧值不可解析 -> 旧键原地保留(不猜用户意图) + 一条 note 指路手改; 随后由校验层 fail-fast"""
+    from auto_qb.config.migrations import _migrate_config_6_7
+
+    cfg = {"main_tick": "2S", "qb_traffic": {"sample_interval": "abc"}}
+    out, notes = _migrate_config_6_7(cfg)
+    assert out["qb_traffic"] == {"sample_interval": "abc"}, "旧键保留, 不写入新键"
+    assert len(notes) == 1 and "无法解析" in notes[0] and "手工" in notes[0], notes

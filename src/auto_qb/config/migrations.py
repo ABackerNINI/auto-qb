@@ -28,10 +28,21 @@ v4→v5(计划 26-10-17-0339 S15, 全局流量来源合并): 曲线段内联数�
 v5→v6(计划 26-11-07-0708 S4, 退役键清洗): relocate.finalize_timeout 随旧「setLocation 收尾,
 超时判 failed」链退役后已无任何消费者 —— loaders 只读显式键, 残留本无害, 但校验层对未知键
 fail-fast, 迁移先把残留键清洗掉(幂等), 逐键产出一条 note 经 migrate_with_notes 落成 WARNING。
+
+v6→v7(计划 26-11-10-0252 S2, 采样间隔键演进): qb_traffic.sample_interval(秒值, 接受时间串)
+换成 qb_traffic.sample_interval_multiplier(int 倍数, 倍数 x main_tick = 生效秒数)。旧键在新口径
+下是未知键, 校验层 fail-fast, 故迁移先换算: main_tick 从同一 config 树现读(缺失/不可解析兜
+2.0, 与 models.Config.main_tick 同源), 倍数 = ceil(旧秒/main_tick) 后钳到 v7 有效秒上限
+floor(600/main_tick) 且下限 1(D8); 换算与被钳制均逐键一条 note。旧值不可解析时**保留旧键不动**
+(不猜测用户意图), 只交一条 note —— 随后由校验层以未知键/解析错 fail-fast, 不静默曲解(D1)。
+未设旧键的配置不动(D9): 默认值由 30s 变为 1 倍即 1 x main_tick, 该行为变更由升级行为本身承担,
+迁移不补写新键(补写会把「用户显式选了 1 倍」与「沿默认」混为一谈)。
 """
+from math import ceil, floor
 from typing import Any, Dict, List, Tuple
 from urllib.parse import urlparse
 
+from ..infra.utils import parse_time
 from ..infra.versioning import MIGRATIONS
 from . import site_presets
 from .schema.trackers import HR_OUTPUT_FIELDS
@@ -337,3 +348,68 @@ def _migrate_config_5_6(cfg: dict) -> dict | Tuple[dict, List[str]]:
 
 
 MIGRATIONS["config"][5] = _migrate_config_5_6
+
+# ---- v6→v7: qb_traffic 采样间隔键演进 sample_interval(秒) -> sample_interval_multiplier(倍数)(计划 26-11-10-0252) ----
+
+#: main_tick 缺失/不可解析时的兜底(秒), 与 models.Config.main_tick 字段默认同值
+_DEFAULT_MAIN_TICK_S = 2.0
+
+#: v7 有效采样秒数上限(倍数 x main_tick <= 本值)。刻意在本模块冻结一份快照而非 import
+#: validation.sections.SAMPLE_INTERVAL_MAX_S —— 迁移是历史快照, 校验上限日后若调整不应回头
+#: 改写已完成版本的历史换算结果。
+_V7_SAMPLE_INTERVAL_MAX_S = 600.0
+
+
+def _migrate_config_6_7(cfg: dict) -> dict | Tuple[dict, List[str]]:
+    """v6→v7: qb_traffic.sample_interval(秒值) 换算为 sample_interval_multiplier(int 倍数)
+
+    - 旧键缺席(qb_traffic 非字典 / 无 sample_interval) -> 原样返回裸 dict, 零副作用(D9:
+      未设旧键者不补写新键, 默认由 30s 变为 1 x main_tick 属升级行为本身的行为变更)。
+    - 旧值解析失败 -> 旧键原地保留 + 一条 note(不猜测用户意图; 校验层随后以未知键 fail-fast,
+      符合 D1「不静默曲解」)。
+    - 换算(D8): mult = max(1, min(ceil(旧秒/main_tick), floor(600/main_tick))) —— 非整除向上
+      取整(采样更密, 不丢数据点); 超出 v7 有效秒上限时钳到 floor, main_tick > 600s 时 floor 为 0,
+      由 max(1, ...) 兜成 1 并在 note 里明说该配置下上限不可满足。
+    - 幂等: 旧键删除后重放即走「旧键缺席」分支, 零 diff。
+    """
+    qbt = cfg.get("qb_traffic")
+    if not isinstance(qbt, dict) or "sample_interval" not in qbt:
+        return cfg
+    old_raw = qbt["sample_interval"]
+    try:
+        old_s = parse_time(old_raw)
+    except (TypeError, ValueError):
+        return cfg, [
+            f"config.qb_traffic.sample_interval: 旧值 {old_raw!r} 无法解析为时间, 旧键保留未改动, "
+            "请手工改为 config.qb_traffic.sample_interval_multiplier(int 倍数, 生效秒数 = 倍数 x main_tick)"
+        ]
+
+    main_tick = _DEFAULT_MAIN_TICK_S
+    raw_tick = cfg.get("main_tick")
+    if raw_tick is not None:
+        try:
+            main_tick = parse_time(raw_tick)
+        except (TypeError, ValueError):
+            main_tick = _DEFAULT_MAIN_TICK_S
+    if main_tick <= 0:  # 空串经 parse_time 得 0: 不做除数, 回退默认(校验层随后会报 main_tick 非法)
+        main_tick = _DEFAULT_MAIN_TICK_S
+
+    wanted = ceil(old_s / main_tick)
+    cap = floor(_V7_SAMPLE_INTERVAL_MAX_S / main_tick)
+    mult = max(1, min(wanted, cap))
+    qbt["sample_interval_multiplier"] = int(mult)
+    del qbt["sample_interval"]
+
+    note = (
+        "config.qb_traffic.sample_interval -> config.qb_traffic.sample_interval_multiplier: "
+        f"旧值 {old_raw!r}({old_s:g}s) 按 main_tick={main_tick:g}s 换算为 {mult} 倍"
+        f"(实际生效 {mult * main_tick:g}s)"
+    )
+    if cap < 1:
+        note += "; main_tick 超过 600s, v7 的有效秒上限在该配置下不可满足, 倍数置 1"
+    elif wanted > cap:
+        note += f"; 原换算 {wanted} 倍超出 v7 有效秒上限(600s), 已钳制到 {mult} 倍"
+    return cfg, [note]
+
+
+MIGRATIONS["config"][6] = _migrate_config_6_7
