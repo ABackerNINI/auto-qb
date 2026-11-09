@@ -2,6 +2,7 @@
 
 > 摘要: 计划 26-11-10-0230 S1-S3 批实测: 5890 passed, 2 skipped (177.50s), 覆盖率 99% (26210 stmts / 45 miss)
 > 基线时间: 2026-11-10 03:51
+**Refs:** memory-bank/tasks/26-11-10-backend-relocate-listing-false-negative.md
 
 ## 验收数字
 

@@ -8,7 +8,7 @@
 > RM04 用例沉淀升档不在本切片范围(另一子任务)。产品 src/ 零 diff。
 > 基线时间: 2026-11-10 04:33-04:38
 > 基线 commit: 7f0e07c0
-**Refs:** memory-bank/plans/26-11-10-0230-plan-relocate-listing-false-negative.html · memory-bank/pitfalls/testing/relocate-window-machine-roster.md · tests-real/tools/daemon_window_wrapper.py
+**Refs:** memory-bank/plans/26-11-10-0230-plan-relocate-listing-false-negative.html · memory-bank/pitfalls/testing/relocate-window-machine-roster.md · tests-real/tools/daemon_window_wrapper.py, memory-bank/tasks/26-11-10-backend-relocate-listing-false-negative.md
 
 ## 01 验收数字
 

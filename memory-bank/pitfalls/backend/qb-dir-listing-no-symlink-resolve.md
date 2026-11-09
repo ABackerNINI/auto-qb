@@ -2,7 +2,7 @@
 
 > 摘要: qB(Windows, 5.2.3 实测)目录列举对文件级 symlink 返回 reparse point 自身元数据(size=0/mtime=建链时刻), 不解析目标 —— 凡拿「列目录元数据」当「qB 能否经链接读数据」代理的判定必假阴性; 修复 = 链接对象判别(qB 条目 == 链接自身 lstat 双字段一致 → 不可判, skipped); 设计教训: 列目录语义 ≠ 打开读语义, 列举跟随行为跨平台/跨形态不一致, 证据通道要按形态分别验证。
 > 触发: getDirectoryContent, 列目录, symlink, 链接跟随, 运行时F, 假阴性, 链接对象
-**Refs:** memory-bank/plans/26-11-10-0230-plan-relocate-listing-false-negative.html
+**Refs:** memory-bank/plans/26-11-10-0230-plan-relocate-listing-false-negative.html, memory-bank/tasks/26-11-10-backend-relocate-listing-false-negative.md
 
 ## 本篇只回答
 

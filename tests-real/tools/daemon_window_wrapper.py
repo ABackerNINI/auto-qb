@@ -1,10 +1,14 @@
 """测试侧回收 daemon wrapper(E2c 复验收编; 用户授权的实例级开窗判据旁路)。
 
-授权: 用户 2026-11-10 经 AskUserQuestion 明示选择「授权测试侧实例级旁路」—— 全机名册
-判据在多实例测试机上让 daemon 永不开窗(生产实例 26586/16585 在跑且有活跃连接, 实验
-绝对不可碰), 而目标测试实例已下线且其 BT_backup 与生产完全隔离。判据与旁路配方见
-memory-bank/pitfalls/testing/relocate-window-machine-roster.md; 消费方 = 计划
-26-11-10-0230 的 S4 真机闭环(环境1)。收编说明: 原件在 E2c 实验 scratch(tests-real/
+授权(两层, 各自独立成立, 均 2026-11-10 经 AskUserQuestion):
+① 源会话层 —— 2336 E2c 复验(clone1): 明示选择「授权测试侧实例级旁路」—— 全机名册
+  判据在多实例测试机上让 daemon 永不开窗(生产实例 26586/16585 在跑且有活跃连接, 实验
+  绝对不可碰), 而目标测试实例已下线且其 BT_backup 与生产完全隔离; 本文件即收编自该实验
+  的 scratch 原件(见下收编说明), 该层授权是其出处。
+② 本任务层 —— 计划 26-11-10-0230 S4 真机闭环(本仓): 明示选择「授权旁路(推荐)」,
+  权威记录 = tests-real/.work/relocate-rlfn-e2e/evidence/authorization.md。
+判据与旁路配方见 memory-bank/pitfalls/testing/relocate-window-machine-roster.md; 消费方 =
+计划 26-11-10-0230 的 S4 真机闭环(环境1)。收编说明: 原件在 E2c 实验 scratch(tests-real/
 .work/e2c_recheck/, gitignored, real.seed clean 可清), 2026-11-10 收编入库耐久化,
 唯一改动 = 决策留痕落点移到 gitignored 的 .work/tools-daemon-wrapper/(原版写 scratch
 内 evidence/)。

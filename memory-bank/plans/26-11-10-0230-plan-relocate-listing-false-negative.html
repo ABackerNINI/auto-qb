@@ -7,10 +7,10 @@
 <title>relocate 运行时F自检假阴性修复: qB 列目录不解析文件级 symlink(附现场恢复 runbook)</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="relocate-listing-false-negative">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-11-10-0230">
-<meta name="doc-updated" content="26-11-10-0230">
-<meta name="doc-refs" content="memory-bank/pitfalls/backend/qb-dir-listing-no-symlink-resolve.md">
+<meta name="doc-updated" content="26-11-10-0628">
+<meta name="doc-refs" content="memory-bank/pitfalls/backend/qb-dir-listing-no-symlink-resolve.md, memory-bank/tasks/26-11-10-backend-relocate-listing-false-negative.md">
 <style>
   :root {
     --bg: #10151a;
@@ -75,7 +75,7 @@
 <h1>relocate 运行时F自检假阴性修复: qB 列目录不解析文件级 symlink(附现场恢复 runbook)</h1>
 <p class="lede">本篇只回答: relocate 运行时 F 自检(qB 侧链接跟随自检)为何在 <code>file_links+symlink</code> 形态必假阴性、如何以「链接对象判别」精确修复而不回退真失败判定力,以及假阴性已造成的现场(Blood 组裂两组 + 历史失败账)如何收敛 —— 真机验证只在测试 qB,生产零动作,恢复走 runbook 由用户执行。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-10-0230 · <b>doc-updated</b> 26-11-10-0230 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-11-10-0230 · <b>doc-updated</b> 26-11-10-0628 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 2026-11-10 生产现场取证会话(26586 部署 job jr-a2ce556d0165)只读分析 + grilling 两轮 9 问拍板(D1-D9);关联 issue 26-11-07-2336(引用不认领, D9)
 </div>
 
@@ -197,6 +197,7 @@
 <h2><span class="no">§10</span>变更记录</h2>
 <ul>
 <li><span class="tag">R0 · 26-11-10-0230</span> 初版: 2026-11-10 生产现场取证(26586 job jr-a2ce556d0165)→ 根因双链(运行时F自检假阴性 / 终态退出解析登记表致裂组)→ grilling 两轮 9 问拍板 D1-D9 → 本计划入库(Open),实施等显式开工。只读评审 1 轮 4 发现全修(major=盘位事实: 本机即 D盘机,.work 在 D:,拓扑改钉 src=R:/dst=.work(D:) 并重评估 2336 暴露;minor=real.seed 命令名/RM04 族号/风险表同步),引文过检 4/4。齐平时段并行事实并入: 2336 被并行会话修复翻 Done(引用面对齐);坑档 relocate-window-machine-roster 落地(生产常驻 → daemon 离线窗永不开),<strong>S4 测试接缝旁路经用户授权(2026-11-10)</strong>,evidence 留痕执行。评审轮 2 出 2 发现(major=参考实现指针悬空于 gitignored scratch): wrapper 收编入库 <code>tests-real/tools/daemon_window_wrapper.py</code>(LOG 移 .work, 其余逐字保留 E2c 实证版),计划/坑档指针同改;坑档悬空指针修并入批经用户拍板「直接修」。引文过检累计 6/6。</li>
+  <li><span class="tag">R1 · 26-11-10-0617</span> S0-S5 实施完成(见任务档案 backend-relocate-listing-false-negative); 实施期两项裁断回写: A8 断言二分(新 patch 行或在位健康 patched watcher, RM04-20 docstring)与 A10 recheck 轮询窗尽力观测说明(同处); 真机拓扑/旁路配方以 R0 既有表述为准</li>
 </ul>
 
 </div>
