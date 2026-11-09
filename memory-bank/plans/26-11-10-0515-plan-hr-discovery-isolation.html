@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>HR 发现通道多 clone 与多环境隔离(登记簿拆分+环境带+显式裁决)</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="hr-discovery-isolation">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-10-0515">
+<meta name="doc-updated" content="26-11-10-0515">
+<meta name="doc-refs" content="memory-bank/issues/26-11-03-0315-bug-hr-discovery-multi-clone-isolation.html">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: hr-discovery-isolation</div>
+<h1>HR 发现通道多 clone 与多环境隔离(登记簿拆分+环境带+显式裁决)</h1>
+<p class="lede">本篇只回答: HR 发现通道在同机多 clone 与「测试世界/生产世界同机共存」两种场景下的混串怎么修 —— 用三个装置(登记簿按 clone 物理拆分、测试带隔离、扩展显式裁决)把错误状态从结构上变得不可表达,而不是靠文档约定或人工记忆(记忆路线已在本篇 §06 D1 拍板否决)。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-10-0515 · <b>doc-updated</b> 26-11-10-0515 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 2026-11-10 grilling 会话三轮拷问(用户逐项拍板,见 §06)× <a href="../issues/26-11-03-0315-bug-hr-discovery-multi-clone-isolation.html">issue 26-11-03-0315</a>;事实取证 = 同日两轮只读子代理报告(后端发现机制 / 扩展与测试面,锚点见 §02);前序: <a href="26-11-03-0316-plan-test-port-zero.html">26-11-03-0316 test-port-zero</a> 明确把发现口 18788 排除在外、把发现口改动指向发现口 issue 0315(另案),经其认领链至本篇
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+
+<h3>背景</h3>
+<p>同机 ≥2 个 clone 启用 HR 通道时,所有 clone 共写同一份用户级登记簿,发现响应返回全机实例清单(含 token),扩展取首个命中并遍历全部实例通信 —— 跨 clone 混串(issue 26-11-03-0315)。同时测试世界的验收桩默认绑生产带 18788,日常浏览器的生产扩展会发现它 —— 测试/生产互相可见。历史上固定口还被生产实例长期占用,引发过测试 flake(0115,已被 0330 修复收档)与误杀事故(<code>pitfalls/ops/port-kill-prod-instance.md</code>)。</p>
+
+<h3>目标(做到什么程度算成)</h3>
+<ol>
+<li>任何 <code>/api/hr/discover</code> 响应只含本 clone 的实例与 token —— 与 clone 数、机器数、未来新增多少个无关;</li>
+<li>生产扩展在<strong>默认配置</strong>下不可能发现/连上测试世界的任何东西,反向亦然;跨带只剩「人工显式填地址」这一条路;</li>
+<li>扩展在未经显式选择时不服务任何 clone;恰好一份应答时自动服务(单实例用户零感知);</li>
+<li>公开单实例用户与现有生产部署:<strong>零配置变化、零迁移动作</strong>。</li>
+</ol>
+
+<h3>三条硬性质(每个决定对它们负责)</h3>
+<ul>
+<li><strong>P1 零记忆</strong>: 新 clone、新机器、未来加多少个 —— 任何时刻不存在「需要有人记得去做」的动作;</li>
+<li><strong>P2 显性失败</strong>: 出问题必须是「显眼地不工作、亮着等你裁决」,绝不「悄悄干错活」;</li>
+<li><strong>P3 单实例零配置不倒退</strong>: 公开用户「装好即用」保持原样。</li>
+</ul>
+
+<h3>设计底线/不变量</h3>
+<ul>
+<li>发现协议结构不动: 端点路径、门序(origin→配对→GET)、心跳 30s/TTL 120s 语义全部保留;</li>
+<li>兼容口径「只加不改」(§06 D8): 新旧双端任意搭配不得坏,兼容矩阵见 §03;</li>
+<li>不引入 native messaging、不做跨机发现(26-10-14 两份报告的结论维持,路线 B 缓行);</li>
+<li>公开默认 18788 一字不动;新增配置键必须同步 <code>schema/hr.py</code> + <code>validate_config</code> + 键面守阵(黄金法则 4);</li>
+<li>测试世界与生产世界的分界是<strong>端口带</strong>,不是人的自觉 —— 凡工具链起的东西一律测试带(§06 D4/D5)。</li>
+</ul>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+
+<h3>机制现状(取证 2026-11-10)</h3>
+<table>
+<tr><th>面</th><th>现状</th><th>锚点(当时行号)</th></tr>
+<tr><td>发现口</td><td>默认 18788;候选表 = discovery_port 起连号 <strong>3</strong> 个,不加配置键;全忙 → 数据端点照常 + 60~600s 退避重试</td><td><code>src/auto_qb/hr/discovery.py:45-77, 320-331</code></td></tr>
+<tr><td>登记簿</td><td>用户级共享 <code>%LOCALAPPDATA%\auto-qb-hr\instances.json</code>;条目 <code>{id, name, endpoint, token, ts}</code>;<code>id = sha1(data_dir)[:12]</code> 稳定,<code>name = uuid4().hex[:12]</code> 每次启动随机且无其它消费点;心跳 30s,TTL 120s 靠其它写者剪枝,无显式反注册</td><td><code>discovery.py:50-54, 80-90, 144-165</code> · <code>runtime.py:435-437</code> · <code>store.py:41-43</code></td></tr>
+<tr><td>发现响应</td><td>免 token + origin 门 + 配对门(非回环强制);聚合登记簿<strong>全部</strong>条目返回 <code>{id, name, endpoint, token}</code> + <code>server_time</code> —— 无任何归属字段</td><td><code>discovery.py:364-404, 454-473</code></td></tr>
+<tr><td>扩展探测</td><td>并行探测 3 个候选,<code>probes.find(p =&gt; p.ok)</code> 取首个命中;<code>mergeInstances</code> 合并键 = endpoint、<strong>丢弃 id</strong>、发现集每轮整批重建(空集例外保留);存储条目只剩 <code>{name, endpoint, token, source}</code></td><td><code>background-support.js:90-104</code> · <code>discovery.js:31-47, 82-105</code></td></tr>
+<tr><td>扩展外呼</td><td>拉模型,无站点→实例路由: pollAll / requestBackendRefresh / probeAll <strong>遍历全部实例</strong>;选项页 fetchSites / probeMainInstance 固定取 <code>[0]</code>;manifest host_permissions 已是回环任意端口通配</td><td><code>background.js:223-259, 137-181, 403-416</code> · <code>options.js:437-452, 845-850</code> · <code>manifest.json:11-15</code></td></tr>
+<tr><td>测试世界</td><td>pytest 动态端口 + 守卫禁绑 18788 字面 + 运行期用例强制关发现(已隔离);扩展 JS 测试在 Node 跑、chrome API 全 mock;<strong>验收桩 <code>hr_ext_stub.py</code> 发现口默认 18788</strong> —— 生产带</td><td><code>tests/hr_runtime_support.py:51-53</code> · <code>tests/test_flaky_timing_guards.py:259-296</code> · <code>scripts/hr_ext_stub.py:197</code></td></tr>
+</table>
+
+<h3>痛点</h3>
+<ul>
+<li><strong>混串</strong>: 扩展把多个 clone 的实例混列并逐个轮询、健康账混记;生产实例实测正占 18788(<code>pitfalls/ops/port-kill-prod-instance.md</code>),dev clone 落 18789/18790,混串进行时;</li>
+<li><strong>身份缺失</strong>: endpoint 每次重启随机(port=0)、id 被 merge 丢弃、name 是随机乱码 —— 扩展今天无法跨重启稳定识别同一实例;</li>
+<li><strong>测试-生产互见</strong>: 桩在生产带可被生产扩展发现合并;生产实例占口曾致测试 flake(0115,已收档)与「先杀后问」误杀事故;</li>
+<li><strong>容量</strong>: 候选仅 3 个,第 4 个 clone 无发现服务;一旦响应隔离落地,绑不到候选口的 clone 直接隐形 —— 容量从「列表少一项」变成「实体消失」,必须先扩(§06 D6)。</li>
+</ul>
+
+<h2><span class="no">§03</span>方案总览</h2>
+
+<p>三个装置,彼此独立、三层防御(从内到外兜底):<strong>装置一</strong>让混串在协议层不可表达,<strong>装置三</strong>让跨世界误连在默认配置下不可达,<strong>装置二</strong>让「服务谁」永远经过显式裁决。</p>
+
+<h3>装置一 · 协议隔离(后端)</h3>
+<p>登记簿按 clone 拆分: <code>%LOCALAPPDATA%\auto-qb-hr\&lt;sha1(data_dir)[:12]&gt;.json</code>,每 clone 只写、只读自己的文件;发现响应天然只含本 clone 实例(文件里物理上没有别家的条目)。写入/心跳/TTL 剪枝逻辑不动;旧共享文件 <code>instances.json</code> 遗留不读不删、不迁移(P3 备选见 §05)。顺带消掉多进程共写一份 JSON 的读改写竞态。</p>
+
+<h3>装置二 · 显式裁决(扩展)</h3>
+<p>探测<strong>全部 8 个候选口</strong>、收集所有应答(弃 find-first);每份应答 = 一个干净 clone。</p>
+<pre><code>生产clone ── 发现@18788-18795 ──应答──▶ 只含生产实例(带标签)
+测试桩   ── 测试带 28788     ──应答──▶ 只含自己(仅测试扩展可达)
+
+扩展: 应答恰 1 份 ──────────▶ 自动服务(持久化,单实例用户零感知)
+      应答 ≥2 份且无选择 ────▶ 一个都不服务 + 选项页横幅「请选择」
+      已选 clone 消失 ───────▶ 服务空转 + 显眼提示,绝不自动落到别家</code></pre>
+<p>选择按<strong>标签</strong>记(独立存储键,抗 <code>parseInstances</code> 三键重建与发现集整批替换);新 clone 上线 = 多一份候选答案躺在列表里,不是新污染源、不是新的「要记得去关」。</p>
+
+<h3>装置三 · 环境带(工具链)</h3>
+<p>测试带 = <strong>28788-28795</strong>(生产带 18788-18795 的镜像,避开 Windows/Linux 临时端口段)。<code>hr_ext_stub.py</code> 默认口 18788→28788;<code>dev.run</code> 注入测试带(机制见待拍板 P1);pytest/CI 维持现状(已隔离)。验收规程: 独立浏览器 profile 加载同一份 unpacked 扩展(= 测试扩展,存储天然独立),发现地址填 <code>http://127.0.0.1:28788</code>。生产扩展与公开默认 18788 零改动(§06 D4/D5: 「默认值翻转」路线被 agent 起桩实态否决)。</p>
+
+<h3>参数定案</h3>
+<ul>
+<li>候选口 3→8(双侧常量 + 协议守阵同步,§06 D6);</li>
+<li>标签键 <code>hr_check.channel.name</code>,默认回落 data_dir 目录名 —— dev clone 目录名天然互异,真实多实例用户目录名撞车时显式设键(§06 D7);</li>
+<li>已知限制: 第 9 个 clone 无发现服务(数据端点不受影响),文档一句带过。</li>
+</ul>
+
+<h3>兼容矩阵(只加不改)</h3>
+<table>
+<tr><th>搭配</th><th>行为</th><th>评估</th></tr>
+<tr><td>新后端 + 新扩展</td><td>目标态: 响应单 clone + 标签 + 显式裁决</td><td class="good">设计目标</td></tr>
+<tr><td>新后端 + 旧扩展</td><td>旧扩展敲 18788-18790(8 口表的前缀,兼容),拿到单 clone 响应,自动服务它敲到的那个</td><td class="wr">过渡态: 不再混串,但无选择界面;严格优于现状</td></tr>
+<tr><td>旧后端 + 新扩展</td><td>旧后端响应仍聚合全机;新扩展视为一份含 N 实例的 legacy 应答 —— 恰 1 份应答时按现状服务(等价今天),≥2 份(如另有新后端 clone)时进裁决</td><td class="wr">退化为现状,不更差</td></tr>
+<tr><td>旧后端 + 旧扩展</td><td>现状</td><td>不变</td></tr>
+</table>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+
+<table>
+<tr><th>步</th><th>内容</th><th>验收判据</th></tr>
+<tr>
+<td><span class="tag">S1</span> 登记簿按 clone 拆分</td>
+<td><code>default_registry_path()</code> 改为按 <code>entry_id = sha1(data_dir)[:12]</code> 派生 per-clone 文件(<code>runtime.py:429</code> 构造点把 entry_id 传进去);读写/TTL 剪枝逻辑不动;旧 <code>instances.json</code> 遗留不读不删。同 data_dir 重启复用同一条目的 upsert 语义保持</td>
+<td>路径形态测试改断言含 id 段;两 registry(不同 data_dir)互不可见;registry 族既有测试全绿;真机两 clone 各自响应只含自己</td>
+</tr>
+<tr>
+<td><span class="tag">S2</span> 候选口 3→8</td>
+<td><code>DISCOVERY_CANDIDATES = 8</code>(<code>discovery.py:47</code>);扩展 <code>discovery.js:31-47</code> 循环上限 3→8;双侧协议守阵同步(65535 截断语义不变)</td>
+<td><code>test_candidates_consecutive_and_cap</code> 断言 18788..18795;扩展侧 <code>test_extension_proxy_page_fetch:380</code> 候选表断言同步;双侧全绿</td>
+</tr>
+<tr>
+<td><span class="tag">S3</span> 标签键</td>
+<td>新键 <code>hr_check.channel.name</code>(默认空,回落 data_dir 目录名): <code>schema/hr.py</code> + <code>models.py</code> + <code>validation/sections.py</code>(白名单 +1)+ 键面 fixture + <code>loaders.py</code> 透传;<code>runtime.py</code> 心跳 <code>entry_name</code> 从 <code>instance_id()</code> 换成标签;<code>store.instance_id()</code> 实现时核其它调用点,无则退役</td>
+<td>默认值/校验/键面测试绿(<code>test_hr_config_defaults</code>、<code>test_config_key_surface</code>);两 clone 心跳后登记簿 name 可读互异;发现响应携带标签</td>
+</tr>
+<tr>
+<td><span class="tag">S4</span> 扩展裁决面</td>
+<td><code>runDiscovery</code> 收集全部命中;新存储键 <code>activeNames</code>(独立于 instances,抗三键重建);5 条外呼路径按选择过滤(pollAll / requestBackendRefresh / probeAll / 选项页两处 <code>[0]</code> 改取首个被服务实例);唯一应答且无选择 → 自动服务并持久化;多应答且无选择 → 零服务 + 选项页横幅「请选择」;实例表加名称列 + 行级服务开关(§06 D2,不做分组视觉)</td>
+<td>node 族: 多命中收集 / 5 路径过滤 / 自动规则 / 持久化 / 横幅接线;选项页表头守阵随新增列更新;旧 merge 整 dict 相等断言按新口径更新(仅当条目形状变化)</td>
+</tr>
+<tr>
+<td><span class="tag">S5</span> 工具链注入测试带</td>
+<td><code>hr_ext_stub.py</code> 默认口 18788→28788(帮助文案同步);<code>dev.run</code> 注入测试带(机制待拍板 P1,硬要求: 对 config 语义零侵入,留显式豁免口);守卫扩展: <code>tests/</code> 禁绑 28788 字面(<code>test_flaky_timing_guards.py</code>,桩脚本在 scripts/ 不受限)</td>
+<td>桩起在 28788;生产扩展默认配置探测不到桩(人工核);守阵绿</td>
+</tr>
+<tr>
+<td><span class="tag">S6</span> 文档与规程</td>
+<td><code>extensions/hr-fetch-proxy/README.md</code> 验收节改「独立 profile + 28788」流程;选项页文案核对(placeholder 18788 是生产默认,保留);排障表述核对(docs/configuration.md:229 与 extensions/hr-fetch-proxy/README.md:64 两处,「顺延 +1/+2」→「+1..+7」;主 README 无此表述);已知限制(第 9 个 clone)一句入文档</td>
+<td>文档守阵(如有)绿;按新规程人工走一遍验收流程</td>
+</tr>
+<tr>
+<td><span class="tag">S7</span> 收尾</td>
+<td>issue 26-11-03-0315: 开工翻 In Progress、修完翻 Done + 「修复后补充」(实际修法/验证/数字);<code>commands run test.full</code> 全绿后 <code>kb.new baseline</code>(数字实测誊写);hr 发现机制事实变更回写 memory-bank 主题文档;踩到新坑则 <code>kb.new pitfall</code> + <code>kb.index</code></td>
+<td>提交闸门全绿(含 <code>gen_doc_map --check</code> 双向链);基线切片落盘</td>
+</tr>
+</table>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<table>
+<tr><th>编号</th><th>问题</th><th>默认(推荐)</th><th>备选</th></tr>
+<tr><td><span class="tag">P1</span></td><td><code>dev.run</code> 注入测试带的实现机制</td><td>对 config 语义零侵入的实现(实现时在 env 覆盖 / 临时物化配置 / CLI 覆盖三者中选最不侵入者),并留显式豁免参数</td><td>不改 dev.run,dev 侧实例靠装置一/二兜底</td></tr>
+<tr><td><span class="tag">P2</span></td><td>手动添加的实例是否受裁决开关约束</td><td>不受 —— 手动 = 显式动作,恒服务(与现有「手动优先」语义一致);裁决只管发现来的条目</td><td>手动也纳入选择面(一致但多一步设置)</td></tr>
+<tr><td><span class="tag">P3</span></td><td>旧共享 <code>instances.json</code> 的处置</td><td>遗留不迁移不清理(结构隔离后无人读它,清理属锦上添花)</td><td>升级后检测到旧文件存在时打一行 INFO 提示可手工删</td></tr>
+</table>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+<tr><th>编号</th><th>结论</th><th>日期</th></tr>
+<tr><td><span class="tag">D1</span></td><td>修法中心 = 归属信息 + 显式裁决,发现拓扑不动;「随机端口 / 换发现方式(native messaging 等)」作为修法机制<strong>否决</strong> —— 登记簿共享下打哪个口都返回全机清单,买不到隔离</td><td>2026-11-10</td></tr>
+<tr><td><span class="tag">D2</span></td><td>扩展终态 = 全部列出 + 标签 + 显式裁决;规则: 唯一应答自动服务、多应答零服务亮灯等选、选择记住、已选消失不自动改投;UI 降级为名称列 + 行级开关,不做分组视觉(一 clone ≈ 一行,分组是装饰)</td><td>2026-11-10</td></tr>
+<tr><td><span class="tag">D3</span></td><td>登记簿按 clone 拆分文件,发现响应物理隔离(「确实要隔离」)—— 隔离是文件层面的物理事实,不是代码里一道需被遵守的过滤</td><td>2026-11-10</td></tr>
+<tr><td><span class="tag">D4</span></td><td>测试世界住 28788 测试带;生产扩展零改动;验收走独立 profile 测试扩展;pytest/CI 维持现状</td><td>2026-11-10</td></tr>
+<tr><td><span class="tag">D5</span></td><td>dev 实态 = agent 自动起桩 → 工具链注入路线;<code>dev.run</code> 纳入注入;「默认值翻转(公开默认改测试带)」否决 —— 公开默认 18788 一字不动</td><td>2026-11-10</td></tr>
+<tr><td><span class="tag">D6</span></td><td>候选口 3→8(用户预期 clone 还会增加,一次留足;保持「不加配置键」原则)</td><td>2026-11-10</td></tr>
+<tr><td><span class="tag">D7</span></td><td>标签键 <code>hr_check.channel.name</code>,默认回落 data_dir 目录名;name 语义从「进程随机 uuid」改为「工作区标签」,响应结构零变化</td><td>2026-11-10</td></tr>
+<tr><td><span class="tag">D8</span></td><td>兼容口径只加不改,双端同仓同发不背交叉兼容包袱;同日 issue 0115 收档 Done(被 26-11-06-0330 修复覆盖)</td><td>2026-11-10</td></tr>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+<tr><th>风险</th><th>触发条件</th><th>处置</th></tr>
+<tr><td>单应答自动服务的赌注落空</td><td>多 clone 机器上生产实例停机,dev clone 成唯一应答 → 扩展自动服务 dev</td><td>接受并显式声明: 唯一=正确在单实例场景恒真,多实例场景被裁决分支拦住;名称列让当前服务对象显眼可见,可随时改选</td></tr>
+<tr><td>Windows 排除段吞掉候选带部分端口</td><td>18788-18795 部分落进开机预留段(<code>netsh excludedportrange</code>,每次开机不同,<code>pitfalls/testing/consecutive-port-run.md</code>)</td><td>绑定顺延逻辑已有(<code>_try_bind</code> 逐个试),扩展对无应答口天然容忍;极端全吞 = 发现不可用但数据端点照常(现有语义不变)</td></tr>
+<tr><td>旧扩展 + 新后端自动服务任意单 clone</td><td>多 clone 机器上扩展未升级</td><td>过渡态,严格优于混串现状;随扩展升级自然收敛,不做兼容代码</td></tr>
+<tr><td>dev.run 注入改变真机验证的发现口</td><td>用户想显式验证生产带发现行为</td><td>P1 落地时留显式豁免参数;豁免是「故意的」,不属遗漏类</td></tr>
+<tr><td>桩的 28788 被占/落排除段</td><td>开机预留段恰含 28788 或残留桩进程</td><td>现有报错 + <code>port_kill</code> 提示路径;人工 <code>--discovery-port</code> 换口(验收规程写明)</td></tr>
+<tr><td>测试世界误用生产带(回归)</td><td>后续改动把 18788 或 28788 字面绑进 tests/</td><td>守卫测试扩展双向禁绑(18788 与 28788),S5 落地</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-10-0515</span> 初版。2026-11-10 grilling 三轮拍板(D1-D8)成文: 三装置(登记簿按 clone 拆分 / 测试带 28788 / 扩展显式裁决)+ 候选口 3→8 + 标签键;事实取证来自同日两轮只读子代理(后端发现机制 / 扩展与测试面全锚点);同日 0115 收档 Done(被 0330 修复覆盖),0315 认领链已双向声明。</li>
+</ul>
+
+</div>
+</body>
+</html>

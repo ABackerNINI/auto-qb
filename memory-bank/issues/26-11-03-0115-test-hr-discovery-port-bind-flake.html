@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="hr-discovery-port-bind-flake">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="Windows 并行全量测试偶发 WinError 10013：_free_port / _hold_ports 抢端口">
 <meta name="issue-summary" content="HR discovery 并行用例端口抢占偶发红，单跑均绿；与本轮 CSS 改动无关">
 <title>Windows 并行全量测试偶发 WinError 10013：_free_port / _hold_ports 抢端口 · test · 计划外问题</title>
@@ -95,14 +95,14 @@
   </nav>
 
   <header class="cover">
-    <div class="kicker">计划外问题（未修）· test</div>
+    <div class="kicker">计划外问题 · test · 已修收档（修法由 26-11-06-0330 承接）</div>
     <h1>Windows 并行全量测试偶发 WinError 10013：_free_port / _hold_ports 抢端口</h1>
     <p class="lede">HR discovery 并行用例端口抢占偶发红，单跑均绿；与本轮 CSS 改动无关</p>
     <div class="meta-row">
       <div class="item"><div class="k">编号</div><div class="v">26-11-03-0115-test-hr-discovery-port-bind-flake</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-03 01:15</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">testing</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -173,11 +173,12 @@ commands run test.one -- tests/test_hr_discovery.py::test_runtime_discovery_bind
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-11-03 01:15 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-10 — 状态 Open → Done（kb.status）</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>2026-11-10 复核：锚点已漂移 —— <code>_hold_ports</code> 符号已不存在，由端口单点 <code>tests/_test_ports.py::hold_run</code>（整段逐位 bind 自验）替代；原两用例（test_start_all_busy_returns_false_and_retries / test_runtime_discovery_bind_failure_keeps_data_endpoint）并行全量下已稳定。不再单独复跑旧 traceback。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p>实际修法（由 issue <code>memory-bank/issues/26-11-06-0330-test-hr-discovery-busy-retry-flake.html</code> 的修复工作承接，本件随其收口，未单独动工）：根因改判 —— 10013 是 Windows 端口排除段（Hyper-V/WSL 开机预留，每次开机区间不同）拒绝，不是纯时序竞态（见 <code>memory-bank/pitfalls/testing/consecutive-port-run.md</code>）。修法为端口单点 <code>tests/_test_ports.py::hold_run</code>：bind(0) 取基址后对候选段逐位真绑自验且不释放，任一位失败整段丢弃换基址 —— 同时消除「先探空再绑定」TOCTOU 与排除段误踩。验证：2026-11-06 落地后并行全量多次全绿（基线切片 <code>memory-bank/testing/baselines/26-11-06-0453-consecutive-port-run.md</code>），flaky-ledger 对应行已标「已修（2026-11-06）」。与本件 §06 三候选的关系：①「失败换下一候选」被 hold_run「整段失败换基址」吸收；②③（xdist 切分 / 串行标记）未采纳。</p>
   </section>
 
   <footer>
