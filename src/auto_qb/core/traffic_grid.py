@@ -81,7 +81,8 @@ DAY_SECONDS = 86400
 #: 点位真值在 points[].t —— 前端按真值落点, 等距重建只兜底空槽位置, §05.3「月长(按行间隔)」)
 MONTH_NOMINAL_S = 30 * DAY_SECONDS
 
-#: 24h 窗栅格宽的兜底值(qb_traffic 缺省 = 未启用时的空态 meta; 与配置缺省 30S 同值)
+#: 24h 窗栅格宽的兜底值(qb_traffic 缺省 = 未启用时的空态 meta; 沿用旧版配置缺省 30S,
+#: 新键默认 1 倍 main_tick 后它只兜空态, 见计划 26-11-10-0252 D11)
 DEFAULT_SAMPLE_INTERVAL_S = 30.0
 
 
@@ -94,10 +95,12 @@ def effective_sample_interval(multiplier: int, main_tick: float) -> float:
     """
     return float(multiplier) * float(main_tick)
 
+
 #: raw 段窗桶数上限(计划 26-10-07-2127 S3, §03 万桶级治理裁决): raw 桶宽 = max(ceil(采样间隔),
 #: ceil(span/上限)) —— 高频采样(如生产现况 1.5s)下 24h 窗本可达数万桶(JSON 传输 MB 级 +
 #: uPlot 万点级重渲染 + 后端每拍全量重展开), 按时间桶加宽收敛到 <=2880。上限取 2880 = 30s
-#: 采样下 24h 视图桶数(默认配置数学恒等, 零回归面); 桶内按覆盖秒加权(v4_grid_obs), 与 totals
+#: 采样下 24h 视图桶数(旧 30s 默认下数学恒等, 零回归面; 新键默认 1 倍 main_tick 时由本上限
+#: 加宽到 30s 桶); 桶内按覆盖秒加权(v4_grid_obs), 与 totals
 #: 通道字节守恒 —— 方案 B 的「附带收益」不因加宽丢失。业界同型先例: RRDtool CF=AVERAGE ·
 #: qB GUI SpeedPlotView Averager(1s->144s 分桶)· Deluge stats 多级桶 · Grafana $__rate_interval。
 MAX_RAW_BUCKETS = 2880

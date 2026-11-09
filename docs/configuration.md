@@ -659,13 +659,13 @@ for day in sorted(set(tm) & set(gtm)):
 config:
     qb_traffic:
         enabled: true          # 功能总开关（默认 false）
-        sample_interval: 30S   # 采样间隔（须 >= 主循环节拍 main_tick，上限 10M）
+        sample_interval_multiplier: 1   # main_tick 整数倍数，int >= 1，默认 1 = 跟随主循环节拍
         flush_interval: 10M    # 批量落盘周期（60S~1H，整数秒；默认 10M）
         raw_window: 24H        # 高分辨率采样行保留窗（1H~90D）
         rollup_window: 30D     # 小时均值行保留窗 + 系列淘汰龄（7D 起，无上限）
 ```
 
-- `sample_interval`：也是 24h 流量图的曲线颗粒，越小曲线越细但存储体量线性增长。下限为硬校验——低于 `main_tick` 的间隔启动时直接拒绝（采样任务由主循环节拍驱动，更细的间隔无法被调度）；不是 `main_tick` 整数倍只是精度损耗（运行期告警一次），校验不拒绝。
+- `sample_interval_multiplier`：采样间隔写成 `main_tick` 的**整数倍数**（`int >= 1`，默认 `1` = 跟随主循环节拍，即 `1 × main_tick`）。生效间隔 = `倍数 × main_tick` 秒，硬校验上限 `600s`（倍数本身无独立上限）——有效秒数超限启动时直接拒绝。整数倍数语义下不再存在「非整倍」失配，原「下限 `main_tick` / 非整倍运行期告警」口径随之退役。它同时是 24h 流量图的曲线颗粒，倍数越小曲线越细但存储体量线性增长。**升级行为变更**：旧版未显式配置 `sample_interval` 的存量默认是 30s，现改为 `1 × main_tick`（缺省 `main_tick = 2.0s` 即 2s，raw 行数约增至 15×，视图桶数因 `MAX_RAW_BUCKETS` 封顶不变）；要回到旧密度可显式写 `15`（`15 × 2s = 30s`）。旧秒值键 `sample_interval` 已退役（硬切）：残留按未知键启动即拒绝，存量配置由 config v6→v7 升级链自动换算为等价倍数。
 - `flush_interval`：采样点先入内存缓冲，每过一个落盘周期单次批量追加写盘；越大写盘越少，但断电 / 强杀等非优雅终止时最多丢失该窗口内的采样点（默认 10 分钟）。
 
 ## 整组迁移（relocate）

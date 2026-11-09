@@ -38,9 +38,6 @@ class _SampleBlocksMixin:
         main_tick = float(getattr(self._ctx.config, "main_tick", 0.0) or 0.0)
         effective = effective_sample_interval(multiplier, main_tick)
         effective = max(1.0, effective)  # 块头 interval_s 同下限(配置校验已保证, main_tick<=0 兜底)
-        signature = (multiplier, main_tick)
-        if signature != self._interval_signature:
-            self._interval_signature = signature  # 配置对变化: 生效值变化即触发关块重开
         if self._effective_interval is None:
             self._effective_interval = effective  # 进程首轮: 只立基线不开关块
         elif effective != self._effective_interval:

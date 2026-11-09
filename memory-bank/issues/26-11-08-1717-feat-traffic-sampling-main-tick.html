@@ -11,9 +11,9 @@
 <meta name="doc-topic" content="traffic-sampling-main-tick">
 <meta name="doc-refs" content="memory-bank/plans/26-11-10-0252-plan-traffic-sample-interval.html">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="流量图采样间隔演进: 默认 30s 改 1×main_tick 哨兵 + 设置按倍数">
-<meta name="issue-summary" content="默认采样 30s 改哨兵 0 语义『跟随 main_tick』+ 设置仅能按 main_tick 倍数(配置语义从秒值改倍数); 前置 MAX_RAW_BUCKETS=2880 已实施(core/traffic_grid.py); 实施时按黄金法则 4 四处登记(models/validation 白名单/schema Field/守卫测试)">
+<meta name="issue-summary" content="默认采样 30s 改 1×main_tick(int 倍数, 默认 1 = 跟随, 无哨兵) + 设置按 main_tick 倍数(配置语义从秒值改倍数, 旧键硬切退役); 前置 MAX_RAW_BUCKETS=2880 已实施(core/traffic_grid.py); 已按计划 26-11-10-0252 落地(v6→v7 升级链 + 生效间隔单点)">
 <style>
   :root {
     --bg: #10151a;
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-08-1717-feat-traffic-sampling-main-tick</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-08 17:17</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">feat</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
@@ -146,11 +146,17 @@ MAX_RAW_BUCKETS = 2880</code></pre>
   <h2><span class="no">§07</span>状态变更日志</h2>
   <ul>
     <li>2026-11-08 17:17 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    <li>2026-11-10 — 状态 Open → In Progress（kb.status）</li>
+    <li>2026-11-10 — 状态 In Progress → Done（kb.status）</li>
   </ul>
   <h3>复验</h3>
-  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <p>复验：2026-11-10 — 已消失。新键 <code>qb_traffic.sample_interval_multiplier</code>（int &gt;= 1，默认 1 = 1×main_tick）取代旧秒值键，旧键残留按未知键启动即拒绝。</p>
   <h3>修复后补充</h3>
-  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  <p><strong>实际修法</strong>（计划 D1/D3/D4/D5/D6/D10）：新键 <code>qb_traffic.sample_interval_multiplier</code>（int &gt;= 1，默认 <code>1</code> = 1×main_tick）；旧秒值键 <code>sample_interval</code> 硬切退役，残留按未知键 fail-fast，不静默换算。生效间隔收敛到单点 <code>core/traffic_grid.effective_sample_interval(multiplier, main_tick)</code>，采样器与 webui 同调；校验 <code>倍数 × main_tick ≤ 600s</code>，倍数本身无独立上限；删旧计划 26-10-04-1957 裁决 D5 的失配取整 + 运行期告警（整数倍语义下数学上不可能失配）。</p>
+  <p><strong>与原建议不同</strong>：否决「哨兵 0 = 跟随 main_tick」——默认 <code>1</code> 即跟随，哨兵在默认 1 下失去存在理由（D4）；配置语义由秒值改整数倍数（D5），不保留兼容 shim（D1）。</p>
+  <p><strong>升级链</strong>：config v6→v7，换算 <code>max(1, min(ceil(旧秒/main_tick), floor(600/main_tick)))</code>，<code>main_tick</code> 同树现读（缺省 2.0），钳制 / 不可满足各有 WARNING note；未设旧键者不补写（D9）——默认 30s → 1×main_tick 是明示的升级行为变更，raw 行数约 15×，视图桶数因 <code>MAX_RAW_BUCKETS</code> 封顶不变，显式写 15 倍可回旧密度。</p>
+  <p><strong>验证方式 / 数字</strong>：<code>commands run test.full</code> → 5900 passed, 2 skipped（基线 5883 → 5900，+17）；基线切片 <code>memory-bank/testing/baselines/26-11-10-0601-test-traffic-sample-interval-multiplier.md</code>。</p>
+  <p><strong>落地指向</strong>：计划 <code>memory-bank/plans/26-11-10-0252-plan-traffic-sample-interval.html</code>（Done）；提交分支 <code>feat/traffic-sample-interval-multiplier</code>。</p>
 </section>
 
 <footer>

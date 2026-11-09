@@ -7,9 +7,9 @@
 <title>流量图采样间隔演进: 旧秒值键退役改整数倍数新键(配置升级v6-v7)</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="traffic-sample-interval">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-11-10-0252">
-<meta name="doc-updated" content="26-11-10-0252">
+<meta name="doc-updated" content="26-11-10-0604">
 <meta name="doc-refs" content="memory-bank/issues/26-11-08-1717-feat-traffic-sampling-main-tick.html">
 <style>
   :root {
@@ -75,7 +75,7 @@
 <h1>流量图采样间隔演进: 旧秒值键退役改整数倍数新键(配置升级v6-v7)</h1>
 <p class="lede">本篇只回答: 怎么把 <code>qb_traffic</code> 采样间隔从「秒值」语义演进到「main_tick 整数倍数」语义——旧键退役、新键 <code>sample_interval_multiplier</code> 走配置升级链 v6→v7 保行为换算、运行时抽生效间隔纯函数单点; 且升级除一项明示的默认变更外不改变存量用户的实际采样节拍。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-10-0252 · <b>doc-updated</b> 26-11-10-0252 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-11-10-0252 · <b>doc-updated</b> 26-11-10-0604 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> grilling 会话(2026-11-10, 11 项逐条拍板见 §06) · 承接 issue <code>26-11-08-1717-feat-traffic-sampling-main-tick</code>(progress/roadmap D6 定案方向的立项落地)
 </div>
 

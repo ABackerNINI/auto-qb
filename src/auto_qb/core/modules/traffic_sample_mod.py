@@ -251,8 +251,6 @@ class TrafficSampleModule(_SampleAggMixin, _SampleBlocksMixin, BaseModule):
         # 下一次采样到期点(时钟线钩子 on_task_line 的闸门判据; None = 首拍即采)
         # issue 26-10-16-0954: 采样已不在队列里, 到期判定自持(原先由 TaskQueue.next_run 承担)
         self._next_sample_at: Optional[float] = None
-        # 配置对签名 (multiplier, main_tick): 生效值变化时关块重开(旧块落盘, 新块带新 interval)
-        self._interval_signature: Optional[tuple] = None
         # 单种数据门缓存(§3.2): 已确认有数据 / 确认无数据的系列键(零稳态目录 IO)
         self._has_data: set = set()
         self._no_data: set = set()

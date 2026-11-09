@@ -4,8 +4,8 @@
 - test_effective_sample_interval_pure_multiplication: 纯函数直乘 —— (1, 2.0)=2.0 / (15, 2.0)=30.0 / (85, 7.0)=595.0, 无取整
 - test_apply_interval_beat_is_multiplier_times_main_tick: 采样器节拍 = multiplier x main_tick(小数 main_tick 亦直乘,
   旧失配 ceil + 告警语义已删, D10)
-- test_apply_interval_main_tick_hot_change_closes_blocks: main_tick 热改 -> 生效值变化 -> 关块重开(签名 (multiplier,
-  main_tick) 联动); multiplier 热改同判
+- test_apply_interval_main_tick_hot_change_closes_blocks: main_tick 热改 -> 生效值变化 -> 关块重开(生效值比较驱动);
+  multiplier 热改同判
 - test_apply_interval_first_round_only_sets_baseline: 进程首轮只立基线不关块; 同配置重复调用不关块
 - test_webui_raw_bucket_width_follows_effective_interval: webui raw 段栅格桶宽 = 生效间隔(与采样器同调单点)
 - test_webui_disabled_empty_state_keeps_default_30s: 未启用空态仍走 DEFAULT_SAMPLE_INTERVAL_S=30.0(D11 保留)
@@ -57,14 +57,13 @@ def test_apply_interval_beat_is_multiplier_times_main_tick(tmp_path):
     mod = _mgr_with_traffic(tmp_path, main_tick=2.0, multiplier=15).host.get("qb_traffic")
     conf = mod._ctx.config.qb_traffic
     assert mod._apply_interval(conf) == 30.0
-    assert mod._interval_signature == (15, 2.0)
 
     mod2 = _mgr_with_traffic(tmp_path / "b", main_tick=1.5, multiplier=1).host.get("qb_traffic")
     assert mod2._apply_interval(mod2._ctx.config.qb_traffic) == 1.5
 
 
 def test_apply_interval_main_tick_hot_change_closes_blocks(tmp_path, monkeypatch):
-    """main_tick / multiplier 热改 -> 生效值变化 -> 关块重开(签名 (multiplier, main_tick))"""
+    """main_tick / multiplier 热改 -> 生效值变化 -> 关块重开(生效值比较驱动, 无独立签名状态)"""
     mgr = _mgr_with_traffic(tmp_path, main_tick=2.0, multiplier=1)
     mod = mgr.host.get("qb_traffic")
     conf = mgr.config.qb_traffic
@@ -76,7 +75,6 @@ def test_apply_interval_main_tick_hot_change_closes_blocks(tmp_path, monkeypatch
     mgr.config.main_tick = 7.0  # 仅 main_tick 热改
     assert mod._apply_interval(conf) == 7.0
     assert calls == [True]
-    assert mod._interval_signature == (1, 7.0)
 
     mgr.config.qb_traffic = QbTraffic(enabled=True, sample_interval_multiplier=3)  # 仅倍数热改
     assert mod._apply_interval(mgr.config.qb_traffic) == 21.0
