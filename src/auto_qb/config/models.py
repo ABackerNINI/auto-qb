@@ -416,16 +416,19 @@ class GlobalSpeedLimitCurve:
 class QbTraffic:
     """qB 口径流量采样(plan 26-10-03-0946 方案C §06)
 
-    采样器按 sample_interval 周期读内存快照(零新增 qB 请求)产出全局/单种两系列采样点,
-    供 qB 口径流量图消费(方案C: 采样点逐系列落 dat 文件, 由存储阶段接手)。
+    采样器按生效间隔(sample_interval_multiplier * main_tick 秒)周期读内存快照(零新增 qB 请求)
+    产出全局/单种两系列采样点, 供 qB 口径流量图消费(方案C: 采样点逐系列落 dat 文件, 由存储阶段接手)。
     enabled: 功能总开关; False(缺省) = 不建任务不建目录零文件(保守默认, 黄金法则 2)
-    sample_interval: 采样间隔(秒), 校验下限 = main_tick(硬校验, v3 计划 26-10-04-1957 §06.1)、上限 600s;
-        也是 24h 视图的栅格宽
+    sample_interval_multiplier: 采样间隔 = main_tick 的整数倍数(int >= 1), 默认 1 = 1 * main_tick
+        (跟随主循环节拍); 相对旧秒值键 sample_interval 默认 30s 的变更是本切片明示的行为变更
+        (计划 26-11-10-0252 D7/D9)。校验口径: int >= 1 且有效秒数 multiplier * main_tick <= 600
+        (硬校验, 倍数本身无独立上限); 生效间隔也是 24h 视图的栅格宽。旧秒值键 sample_interval 已
+        退役(硬切 D1; 存量配置由迁移链 config v6->v7 保行为换算, 终态程序其余部分零旧键分支)。
     flush_interval: 缓冲批量落盘周期(秒, v3 新键), 校验 60-3600s 整数秒; 崩溃丢失窗口 <= 该值
-    配比口径(v4 计划 26-10-05-2200 裁决 N2): delta 收益依赖 flush_interval 远大于 sample_interval
-        (块内 >= 约 20 行才能吃满块头基线 delta 收益)。缺省 30S/10M = 块内 20 行恰在界上, 30s 档
-        B 行占比约 5%(收益缩水但不影响正确性); 不加 validate_config 硬约束(保守默认, 升级前
-        合法配置不得被拒)。
+    配比口径(v4 计划 26-10-05-2200 裁决 N2): delta 收益依赖 flush_interval 远大于生效间隔
+        (sample_interval_multiplier * main_tick 秒; 块内 >= 约 20 行才能吃满块头基线 delta 收益)。
+        默认 1 倍时生效间隔 = main_tick, 块内行数随 main_tick 变化; 不加 validate_config 硬约束
+        (保守默认, 升级前合法配置不得被拒)。
     raw_window: raw 段(高分辨率采样行)保留窗(秒), 校验边界 1h-90d(26-10-04 自 72h 放宽)
     rollup_window: hour 段(小时均值)保留窗 + 系列淘汰龄 两义合一(秒, v3 26-10-04-1957 §06.1);
         校验边界 7d 起无上限(26-10-04 取消 90d 上限, 足够久即等效永久)。原「聚合补算窗口
@@ -433,7 +436,7 @@ class QbTraffic:
         (plan 26-10-12-2010, 见 core/modules/traffic_sample_mod.py §4.3)
     """
     enabled: bool = False
-    sample_interval: float = 30.0  # 秒; YAML 原始缺省 "30S"
+    sample_interval_multiplier: int = 1  # main_tick 整数倍数; 默认 1 = 1 * main_tick
     flush_interval: float = 600.0  # 秒; YAML 原始缺省 "10M"
     raw_window: float = 86400.0  # 秒; YAML 原始缺省 "24H"
     rollup_window: float = 2592000.0  # 秒; YAML 原始缺省 "30D"

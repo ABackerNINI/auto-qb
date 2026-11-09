@@ -378,10 +378,10 @@ _LOADER_PROBES = {
     "hr_check.channel.token": ("probe-ch-token", "probe-ch-token"),
     "hr_check.channel.extension_id": ("a" * 32, "a" * 32),  # 32 位 Chrome 扩展 id(a~p)
     "hr_check.channel.request_timeout": ("240S", 240.0),
-    # qb_traffic 段(探针值须过校验: sample >= main_tick(3S) 且 <= 600s; flush 60-3600 整数秒;
-    # raw 1h-90d; rollup >= 7d)
+    # qb_traffic 段(探针值须过校验: sample_interval_multiplier 整数 >= 1 且有效秒数 <= 600s;
+    # flush 60-3600 整数秒; raw 1h-90d; rollup >= 7d)
     "qb_traffic.enabled": ("true", True),
-    "qb_traffic.sample_interval": ("40S", 40.0),
+    "qb_traffic.sample_interval_multiplier": ("15", 15),
     "qb_traffic.flush_interval": ("150S", 150.0),
     "qb_traffic.raw_window": ("2H", 7200.0),
     "qb_traffic.rollup_window": ("8D", 691200.0),

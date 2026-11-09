@@ -140,7 +140,7 @@ qb_traffic.enabled
 qb_traffic.flush_interval
 qb_traffic.raw_window
 qb_traffic.rollup_window
-qb_traffic.sample_interval
+qb_traffic.sample_interval_multiplier
 qbittorrent
 qbittorrent.api_key
 qbittorrent.host

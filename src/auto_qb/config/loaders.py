@@ -494,21 +494,22 @@ def load_qb_traffic(spec: dict | None) -> Optional[QbTraffic]:
     先验证再解析: 结构/键/数值合法性由 validation._validate_qb_traffic 在 fail-fast 校验
     阶段聚合完成, 此处仅做转换, 可假定配置正确(不含任何检查)。缺省键走 QbTraffic 默认值。
     配置样式:
-        enabled: false             # 功能总开关(缺省 false; false = 不建任务不建目录零文件)
-        sample_interval: 30S       # 采样间隔(>= main_tick, 上限 600s)
-        flush_interval: 10M        # 缓冲批量落盘周期(60S~1H, 整数秒)
-        raw_window: 24H            # raw 段保留窗(1h-90d)
-        rollup_window: 30D         # hour 段保留窗(7d 起, 无上限)
-    配比口径(v4 计划 26-10-05-2200 裁决 N2): flush_interval 远大于 sample_interval(块内 >= 约
-        20 行)才能吃满块头基线 delta 收益; 缺省 30S/10M = 块内 20 行恰在界上, 30s 档 B 行占比
-        约 5%(收益缩水但不影响正确性), 故不做校验约束。
+        enabled: false                  # 功能总开关(缺省 false; false = 不建任务不建目录零文件)
+        sample_interval_multiplier: 1   # 采样间隔 = 1 * main_tick(默认; int >= 1; 有效秒数 <= 600s)
+        flush_interval: 10M             # 缓冲批量落盘周期(60S~1H, 整数秒)
+        raw_window: 24H                 # raw 段保留窗(1h-90d)
+        rollup_window: 30D              # hour 段保留窗(7d 起, 无上限)
+    配比口径(v4 计划 26-10-05-2200 裁决 N2): delta 收益依赖 flush_interval 远大于生效间隔
+        (sample_interval_multiplier * main_tick 秒; 块内 >= 约 20 行才能吃满块头基线 delta 收益)。
+        默认 1 倍时生效间隔 = main_tick, 块内行数随 main_tick 变化, 故不做校验约束。
     """
     if spec is None:
         return None
     d = QbTraffic()
     return QbTraffic(
         enabled=_get(spec, "enabled", d.enabled, parse_bool),
-        sample_interval=_get(spec, "sample_interval", d.sample_interval, parse_time),
+        # 严格 int: BaseLoader 标量串按 int(串)解析, 拒 "1.5"/"30S" 等旧秒值残留(D1/D5, fail-fast)
+        sample_interval_multiplier=_get(spec, "sample_interval_multiplier", d.sample_interval_multiplier, int),
         flush_interval=_get(spec, "flush_interval", d.flush_interval, parse_time),
         raw_window=_get(spec, "raw_window", d.raw_window, parse_time),
         rollup_window=_get(spec, "rollup_window", d.rollup_window, parse_time),

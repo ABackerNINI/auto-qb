@@ -11,7 +11,7 @@
 - test_validate_exact_boundaries: 闭区间**端点逐值**钉住(端口/log.max_bytes/notify/max_tasks/qb_traffic 采样·落盘·保留窗/曲线阈值严格递增) —— 池内旧用例取远离边界的值, 端点位移类变异全靠这条
 - test_validate_exact_boundaries_size_and_window_tail: 端点用例的三处补缺 —— log.max_bytes **逐字节**两端(1MiB±1B / 1GiB±1B) + raw_window 上界两端(90D/91D) + flush_interval 须整数秒的**拦截侧**
 - test_validate_schema_version_lower_endpoint: schema_version 下界端点(1 合法 / 0 非法)
-- test_validate_qb_traffic_main_tick_crosscheck: sample_interval 与同一份配置的 main_tick 交叉校验(main_tick 取自当前配置而非模型默认; 边界 `>=` 相等合法)
+- test_validate_qb_traffic_main_tick_crosscheck: sample_interval_multiplier 与同一份配置的 main_tick 交叉校验(main_tick 取自当前配置而非模型默认; 边界 `>=` 相等合法)
 - test_validate_integer_and_str_list_guards: integer=True 拒小数 / 字符串列表空白项报错 / state_file 空白串报错(拦截侧语义)
 - test_validate_fs_reports_all_entries: fs.path_map 逐条报错不被前一条非法截断(continue 而非 break)
 - test_validate_rule_spec: 规则 spec 键/取值域/未知条件动作/多键项报错
@@ -45,7 +45,7 @@
 - test_validate_nested_section_shapes_and_unparsable_intervals: 嵌套段形状守卫(traffic_source.global_traffic_monitor 非字典停在该层) + qb_traffic 时间串不可解析时范围比较整段跳过(只报解析错)
 - test_strip_none_list_branch_and_key_case: _strip_none 列表分支(None/空串项剔除 + 列表内嵌 dict 的站点 tri_state 叶保留) + state_file 键名精确性
 - test_validate_rule_refs_single_char_and_short_circuit: 规则引用 @ 后仅 1 字符仍是格式合法(钉住 r[1:] 而非 r[2:])
-- test_validate_qb_traffic_positive_boundary: sample_interval 正时间下界(0 报"必须为正时间", 1 报"须 >= main_tick")
+- test_validate_qb_traffic_positive_boundary: sample_interval_multiplier 正时间下界(0 报"必须为正时间", 1 报"须 >= main_tick")
 - test_validate_gslc_interval_key_exact: global_speed_limit_curve.interval 键名精确性 + 值校验(positive)
 - test_validate_fs_reports_all_entries_after_skip_branches: fs.path_map 空 from/归一后为空/空 to 条目不得中断后续条目校验(continue 而非 break)
 - test_validate_fs_prefix_ambiguity_keeps_scanning: fs.path_map 前缀歧义自比须 continue(非 break)、命中后只 break 内层(非 return)
@@ -1183,9 +1183,9 @@ def test_validate_exact_boundaries():
         def qbt(section):
             return _load_errors(td, "config:\n  qb_traffic:\n" + section)
 
-        # --- qb_traffic.sample_interval 上界端点 600s / flush_interval 两端 / 两个保留窗下界
-        assert qbt("    sample_interval: 600S\n") == ""
-        assert "须 <= 600s" in qbt("    sample_interval: 601S\n")
+        # --- qb_traffic.sample_interval_multiplier 上界端点 600s / flush_interval 两端 / 两个保留窗下界
+        assert qbt("    sample_interval_multiplier: 600S\n") == ""
+        assert "须 <= 600s" in qbt("    sample_interval_multiplier: 601S\n")
         assert qbt("    flush_interval: 60S\n") == ""
         assert qbt("    flush_interval: 3600S\n") == ""
         assert "config.qb_traffic.flush_interval: 须 >= 60s" in qbt("    flush_interval: 59S\n")
@@ -1252,18 +1252,18 @@ def test_validate_schema_version_lower_endpoint():
 
 
 def test_validate_qb_traffic_main_tick_crosscheck():
-    """qb_traffic.sample_interval 与**同一份配置**的 main_tick 交叉校验(采样节奏不细于主循环节拍)
+    """qb_traffic.sample_interval_multiplier 与**同一份配置**的 main_tick 交叉校验(采样节奏不细于主循环节拍)
 
     钉住两件事: 1. main_tick 取自当前配置(而非模型默认); 2. 边界是 `>=`(相等合法)。
     """
     with tempfile.TemporaryDirectory() as td:
-        # main_tick=60S 时 sample_interval 30S 必须报错(若取模型默认 2s 则不报 -> 变异存活)
-        err = _load_errors(td, "config:\n  main_tick: 60S\n  qb_traffic:\n    sample_interval: 30S\n")
-        assert "config.qb_traffic.sample_interval: 须 >= main_tick(60s)" in err, err
+        # main_tick=60S 时 sample_interval_multiplier 30S 必须报错(若取模型默认 2s 则不报 -> 变异存活)
+        err = _load_errors(td, "config:\n  main_tick: 60S\n  qb_traffic:\n    sample_interval_multiplier: 30S\n")
+        assert "config.qb_traffic.sample_interval_multiplier: 须 >= main_tick(60s)" in err, err
         # 相等合法(>= 而非 >)
-        assert _load_errors(td, "config:\n  main_tick: 30S\n  qb_traffic:\n    sample_interval: 30S\n") == ""
+        assert _load_errors(td, "config:\n  main_tick: 30S\n  qb_traffic:\n    sample_interval_multiplier: 30S\n") == ""
         # 大于 main_tick 合法
-        assert _load_errors(td, "config:\n  main_tick: 10S\n  qb_traffic:\n    sample_interval: 30S\n") == ""
+        assert _load_errors(td, "config:\n  main_tick: 10S\n  qb_traffic:\n    sample_interval_multiplier: 30S\n") == ""
 
 
 def test_validate_integer_and_str_list_guards():
@@ -1756,7 +1756,7 @@ def test_validate_nested_section_shapes_and_unparsable_intervals():
 
     1. `traffic_source.global_traffic_monitor` 非字典 -> 报「必须是字典」并停在该层
       (不继续取 tool_dir/tool_exe, 否则标量上取 in 判据语义漂移);
-    2. `qb_traffic.sample_interval` 不可解析 -> 只报解析错, **范围比较整段跳过**
+    2. `qb_traffic.sample_interval_multiplier` 不可解析 -> 只报解析错, **范围比较整段跳过**
       (`if seconds is not None:` 假弧) —— 否则 None 参与比较会叠出假错或直接 TypeError。
     """
     with tempfile.TemporaryDirectory() as td:
@@ -1768,8 +1768,8 @@ def test_validate_nested_section_shapes_and_unparsable_intervals():
         )
         assert "config.traffic_source.global_traffic_monitor: 必须是字典" in _load_errors(td, bad_tool)
 
-        err = _load_errors(td, "config:\n  qb_traffic:\n    sample_interval: nonsense\n")
-        assert "config.qb_traffic.sample_interval" in err, err
+        err = _load_errors(td, "config:\n  qb_traffic:\n    sample_interval_multiplier: nonsense\n")
+        assert "config.qb_traffic.sample_interval_multiplier" in err, err
         assert "须为正时间" not in err and "须 <= 600s" not in err and "须 >= main_tick" not in err, err
 
 
@@ -1848,16 +1848,16 @@ def test_validate_rule_refs_single_char_and_short_circuit():
 
 
 def test_validate_qb_traffic_positive_boundary():
-    """qb_traffic.sample_interval 正时间下界: 0 报"必须为正时间", 1 报"须 >= main_tick"
+    """qb_traffic.sample_interval_multiplier 正时间下界: 0 报"必须为正时间", 1 报"须 >= main_tick"
 
     变异面: `if seconds <= 0` 改 `< 0`(mutmut_48, 0 漏判) / 改 `<= 1`(mutmut_49, 1 误判)。
     默认 main_tick=2.0, 故 1S 合法走到"须 >= main_tick"分支 —— 两条断言分别钉住 0 与 1。
     """
     with tempfile.TemporaryDirectory() as td:
-        assert "config.qb_traffic.sample_interval: 必须为正时间: 0S" in _load_errors(
-            td, "config:\n  qb_traffic:\n    sample_interval: 0S\n"
+        assert "config.qb_traffic.sample_interval_multiplier: 必须为正时间: 0S" in _load_errors(
+            td, "config:\n  qb_traffic:\n    sample_interval_multiplier: 0S\n"
         )
-        err = _load_errors(td, "config:\n  qb_traffic:\n    sample_interval: 1S\n")
+        err = _load_errors(td, "config:\n  qb_traffic:\n    sample_interval_multiplier: 1S\n")
         assert "必须为正时间" not in err, err  # 1S > 0, 不得误报"必须为正时间"
         assert "须 >= main_tick(2s)" in err, err
 
