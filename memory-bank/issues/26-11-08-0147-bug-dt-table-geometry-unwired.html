@@ -157,7 +157,7 @@ fix:   几何出口真正接到 DT.layout 并让 assertLayout 进渲染自查,�
   <h3>复验</h3>
   <p>复验: 2026-11-10 计划 <code>26-11-10-0027</code> W1 开工时等价性探针实测——原「平行计算」链 <code>columns_grid._gridTemplate/colAlignCss</code> 现役输出与 <code>DT_TABLE.layout</code> 输出对 ALL_TABLE_DEFS 全部列定义逐面相等(13 表真实列定义), 「零调用」锚点 grep <code>DT_TABLE</code> src/ 已命中调用方(委托已接线), 现象消失。</p>
   <h3>修复后补充</h3>
-  <p>实际修法: 走「建议修法·真接线」方向, 按计划 <code>memory-bank/plans/26-11-10-0027-plan-dt-table-wiring.html</code>(grilling 两轮 8 问拍板 D1-D8)三笔落地——<strong>acc496d1</strong> 等价性探针守阵(13 表真实列定义, 先证后改) · <strong>f0e9800f</strong> 真接线(<code>_gridTemplate/colAlignCss</code> 内部委托 <code>DT_TABLE.layout</code>, 删旁路拼接; 调用方与 DOM 零改动) · <strong>e22d89f2</strong> <code>assertLayout</code> 常驻生产渲染自查(三处 O(1) 计数, 不一致 console.error 不打断) + D4 例外清单守阵(HR 三表 + 04 卡片形态, 清单外零旁路)。W3 收尾: parity e2e 口径改述为「钉住单点输出不变」。</p>
+  <p>实际修法: 走「建议修法·真接线」方向, 按计划 <code>memory-bank/plans/26-11-10-0027-plan-dt-table-wiring.html</code>(grilling 两轮 8 问拍板 D1-D8)三笔落地——<strong>342c78a6</strong> 等价性探针守阵(13 表真实列定义, 先证后改) · <strong>d8da56bd</strong> 真接线(<code>_gridTemplate/colAlignCss</code> 内部委托 <code>DT_TABLE.layout</code>, 删旁路拼接; 调用方与 DOM 零改动) · <strong>99de839c</strong> <code>assertLayout</code> 常驻生产渲染自查(三处 O(1) 计数, 不一致 console.error 不打断) + D4 例外清单守阵(HR 三表 + 04 卡片形态, 清单外零旁路)。W3 收尾: parity e2e 口径改述为「钉住单点输出不变」。</p>
   <p>验证方式与测试数字: 等价性探针(逐面断言现役拼轨 ≡ DT_TABLE.layout 输出)绿; test.full 实测数字见 memory-bank/testing/baselines/ 最新切片(本件关单批 W3 收尾所立); parity / face-bg e2e 语义未变仍全绿 = 零行为差实证。遗留: 用户终验四面(06/09/10/11)待真机肉眼过(plan D5, 通过才关计划); HR 三表统一交互为第二轮立项(plan D7), 不在本件范围。</p>
 </section>
 

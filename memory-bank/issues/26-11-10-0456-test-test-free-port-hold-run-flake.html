@@ -98,9 +98,9 @@
 
 <section id="s1">
   <h2><span class="no">§01</span>现象与发现场景</h2>
-  <p>2026-11-10 合并远端 develop 后的当期任务（计划 26-11-10-0027 dt_table 真接线，merge <code>e91cc0c5</code>）
+  <p>2026-11-10 合并远端 develop 后的当期任务（计划 26-11-10-0027 dt_table 真接线，merge <code>4ac25079</code>）
     收尾跑 <code>commands run test.quick</code> 全量时撞见 1 个失败用例。环境：Windows + Git Bash，
-    develop @ <code>e91cc0c5</code>。</p>
+    develop @ <code>4ac25079</code>。</p>
   <p>该用例文件来自远端推进的端口单点重构（master <code>b357948e</code>「单测端口分配收敛单点:
     _free_port 五处复制归一并加回绑重试」、feat/webui-fastresume-settings <code>099ae067</code>
     「端口单点新增 hold_run 整段自验 + 断言改落在候选表」），经远端 develop（<code>eee97f5b</code>）进来；
@@ -110,7 +110,8 @@
 <section id="s2">
   <h2><span class="no">§02</span>证据</h2>
   <p class="hint">贴原文（报错 / 日志 / 命令输出），不转述；附取证时间，让读者自己判断新鲜度。</p>
-<pre><code># 取证 2026-11-10, develop @ e91cc0c5, Windows + Git Bash
+  <p>注: 原合并节点 e91cc0c5(树=五波+回填)经 ship 同步分叉 rebase 重放被压平, 五波 hash 随之改写, 本文证据锚统一取树等价提交 4ac25079。</p>
+<pre><code># 取证 2026-11-10, develop @ 4ac25079, Windows + Git Bash
 
 # 同一轮全量(并发):
 $ commands run test.quick
@@ -137,7 +138,7 @@ $ commands run test.one -- tests/test_free_port.py
   <h2><span class="no">§04</span>定位锚点</h2>
   <p class="hint">写「符号名 + grep 关键词 + 当时的行号（标取证时间）」—— 代码会漂移，靠符号与 grep 重新定位，行号只是加速项。</p>
   <ul>
-    <li><code>tests/test_free_port.py:101</code>（取证 2026-11-10, develop @ e91cc0c5）·
+    <li><code>tests/test_free_port.py:101</code>（取证 2026-11-10, develop @ 4ac25079）·
       符号 <code>test_hold_run_discards_run_whose_offset_is_refused</code> ·
       grep <code>hold_run_discards</code></li>
     <li><code>tests/_test_ports.py:38</code>（同上）· 符号 <code>def hold_run</code>（端口单点本体）·
