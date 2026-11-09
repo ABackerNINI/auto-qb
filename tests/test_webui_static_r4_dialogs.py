@@ -302,7 +302,7 @@ _NODE_META_ENTER_BODY = r"""
     return vm;
   }
 
-  // ① 清空输入框 + 回车 = 提交「无分类」: 空串回退经 onEnter 落到 metaSetCategory("")
+  // 1. 清空输入框 + 回车 = 提交「无分类」: 空串回退经 onEnter 落到 metaSetCategory("")
   {
     const vm = mkMetaVm();
     const e = ev("Enter");
@@ -315,7 +315,7 @@ _NODE_META_ENTER_BODY = r"""
     ok("清空回车: 回车被吃(preventDefault)", e.prevented === 1);
   }
 
-  // ② 非空手输回车: 照常提交(先建后设; onEnter 接管回退分支不破坏非空路径)
+  // 2. 非空手输回车: 照常提交(先建后设; onEnter 接管回退分支不破坏非空路径)
   {
     const vm = mkMetaVm();
     vm.metaCatInput = "新分类";
@@ -325,7 +325,7 @@ _NODE_META_ENTER_BODY = r"""
        vm.posts.some((p) => p.url === "/api/categories") && lastBulk(vm).category === "新分类");
   }
 
-  // ③ 高亮项回车: 走 onPick 单次投递(选中路径不吃回退值, 不重复投递)
+  // 3. 高亮项回车: 走 onPick 单次投递(选中路径不吃回退值, 不重复投递)
   {
     const vm = mkMetaVm();
     vm.metaCatMenu = true; vm.metaCatHi = 0;
@@ -335,7 +335,7 @@ _NODE_META_ENTER_BODY = r"""
        bulkPosts(vm).length === 1 && lastBulk(vm).category === "a");
   }
 
-  // ④ 已是无分类(metaCat="" 无分歧)再清空回车: 未变化静默零投递(不给假反馈)
+  // 4. 已是无分类(metaCat="" 无分歧)再清空回车: 未变化静默零投递(不给假反馈)
   {
     const vm = mkMetaVm();
     vm.metaCat = ""; vm.metaCatDiff = false;
@@ -344,7 +344,7 @@ _NODE_META_ENTER_BODY = r"""
     ok("已无分类再清空回车: 未变化静默返回(零投递)", bulkPosts(vm).length === 0);
   }
 
-  // ⑤ metaBusy 在飞: 空串回车被入口闸拒绝(R5#132 x R5#133 交叉, 双击/竞态下不并发第二发)
+  // 5. metaBusy 在飞: 空串回车被入口闸拒绝(R5#132 x R5#133 交叉, 双击/竞态下不并发第二发)
   {
     const vm = mkMetaVm();
     vm.metaBusy = true;

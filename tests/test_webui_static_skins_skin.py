@@ -142,10 +142,10 @@ def test_frontend_template_split_wiring():
                 problems.append(f"{ui}: 清单挂了不存在的分片 {part['src']}(boot fetch 404 = 整页停在错误占位)")
                 continue
             n = open(path, encoding="utf-8").read().count("\n")
-            # 单分片体量上限默认 400; settings-detail.html 是 HR 表①(计划 26-10-01-2216 阶段2,
-            # 拍板②b 按站点明细表)的落点, 391 -> 435 行属功能增长不是拆分回潮, 单独点名给例外额度
+            # 单分片体量上限默认 400; settings-detail.html 是 HR 表 1(计划 26-10-01-2216 阶段2,
+            # 拍板 2b 按站点明细表)的落点, 391 -> 435 行属功能增长不是拆分回潮, 单独点名给例外额度
             # (其余分片仍钉 400); 26-10-02-1936 阶段2 折叠头 + 覆盖式全屏覆盖层再涨 454 -> 473,
-            # 额度提到 500; 26-10-04-0312 S4 表③ 拉取历史(全局 <details> 段)再涨 482 -> 539,
+            # 额度提到 500; 26-10-04-0312 S4 表 3 拉取历史(全局 <details> 段)再涨 482 -> 539,
             # 额度提到 560 —— 该分片下次再长应把 speed/keys 等视图拆成独立分片 —— 切割须过
             # 等价性验证(pitfalls/web-ui/frontend-split.md), 不得顺手抽文件
             # 26-10-18(计划 26-10-17-1737 S6/S7)曾给 settings.html 开 440 的例外: 「全局流量来源」卡
@@ -650,16 +650,17 @@ def test_frontend_fx_wiring():
     dialogs_css = open(os.path.join(STATIC_ROOT, "flux", "css", "dialogs.css"), encoding="utf-8").read()
     assert re.search(
         r"\.drawer-enter-from\s*\{[^}]*translateY\(100%\)", dialogs_css
-    ), ("flux dialogs.css 面板入场不是底部上滑(translateY(100%)) -- F7e 动效①落点缺失, "
+    ), ("flux dialogs.css 面板入场不是底部上滑(translateY(100%)) -- F7e 动效 1 落点缺失, "
         "回退到 translateY(-16px) 微移即用户口径不兑现")
     assert re.search(
         r"\.drawer-enter-active\s*\{[^}]*var\(--fx-dur-panel\)[^}]*var\(--fx-ease-out\)", dialogs_css, re.S
     ), ("flux dialogs.css 面板入场时长/缓动未消费 fx 骨令牌(--fx-dur-panel/--fx-ease-out) -- "
         "令牌化单点纪律(改时长只动 fx.css)")
-    assert re.search(r"html\.fx-glide\s*\{\s*scroll-behavior:\s*smooth", mount_css
-                    ), ("fx-mount.css 缺上推过渡(html.fx-glide 的 scroll-behavior: smooth) -- F7e 动效②落点缺失, "
-                        "原版让位滚动回退成瞬时跳变")
-    assert "fx-glide" in mount_js, ("fx-mount.js 缺 fx-glide 窗口挂/摘(动效②的作用域开关) -- 平滑滚动作用域失控(罩全程 = "
+    assert re.search(
+        r"html\.fx-glide\s*\{\s*scroll-behavior:\s*smooth", mount_css
+    ), ("fx-mount.css 缺上推过渡(html.fx-glide 的 scroll-behavior: smooth) -- F7e 动效 2 落点缺失, "
+        "原版让位滚动回退成瞬时跳变")
+    assert "fx-glide" in mount_js, ("fx-mount.js 缺 fx-glide 窗口挂/摘(动效 2 的作用域开关) -- 平滑滚动作用域失控(罩全程 = "
                                     "键盘滚动手感漂移, 或恒不生效)")
 
 

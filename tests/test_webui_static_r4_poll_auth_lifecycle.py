@@ -77,12 +77,12 @@ const checks = [];
 const ok = (name, cond) => checks.push([name, !!cond]);
 
 (async () => {
-  // ① 沿判定纯函数(R5#15 注释契约: 探针真跑)
+  // 1. 沿判定纯函数(R5#15 注释契约: 探针真跑)
   ok("沿判定: undefined(本会话尚未连上)是沿=发 toast", _esDisconnectEdge(undefined) === true);
   ok("沿判定: true->false 跳变是沿", _esDisconnectEdge(true) === true);
   ok("沿判定: 重试期重复 onerror(prev=false)不是沿", _esDisconnectEdge(false) === false);
 
-  // ② startEvents: 换票接线 + 连流
+  // 2. startEvents: 换票接线 + 连流
   const ticketCalls = [];
   const ctx = Object.assign({}, P, {
     authOk: true, _es: null, _esBusy: false, _esRetry: null, _verTimer: null, _esConnected: undefined,
@@ -99,7 +99,7 @@ const ok = (name, cond) => checks.push([name, !!cond]);
   ok("_es 持当前连接", ctx._es === instances[0]);
   ok("连接期零 toast(断线提示只在断线沿)", ctx.toasts.length === 0);
 
-  // ③ onopen 恢复回置; onerror 首断(沿): 恰一条 toast + 关旧连接 + 排 3s 重试
+  // 3. onopen 恢复回置; onerror 首断(沿): 恰一条 toast + 关旧连接 + 排 3s 重试
   const es1 = instances[0];
   es1.onopen();
   ok("onopen 回置 _esConnected(不发恢复噪音)", ctx._esConnected === true && ctx.toasts.length === 0);
@@ -108,13 +108,13 @@ const ok = (name, cond) => checks.push([name, !!cond]);
   ok("旧连接必关(一次性票据重连必失效)", es1.closed === true && ctx._es === null);
   ok("重试定时器已排(3s, 与 EventSource 默认重连同拍)", timers.has(ctx._esRetry) && timers.get(ctx._esRetry).ms === 3000);
 
-  // ④ 重试期重复 onerror: 不重复 toast、不叠重试定时器(R5#14 钉的行为)
+  // 4. 重试期重复 onerror: 不重复 toast、不叠重试定时器(R5#14 钉的行为)
   es1.onerror();
   es1.onerror();
   ok("重试期重复 onerror 只发一条 toast", ctx.toasts.length === 1);
   ok("重复 onerror 不叠重试定时器", [...timers.values()].filter((t) => t.ms === 3000).length === 1);
 
-  // ⑤ 重连: 必关旧连接换新票(R5#14 钉的行为)
+  // 5. 重连: 必关旧连接换新票(R5#14 钉的行为)
   fireTimer(ctx._esRetry);
   await drain();
   ok("重连第二次换票", ticketCalls.length === 2);
@@ -122,7 +122,7 @@ const ok = (name, cond) => checks.push([name, !!cond]);
   ok("重连仍走 ?ticket= 换票通道", instances[1].url.indexOf("?ticket=TK2") >= 0);
   ok("重试定时器归置", ctx._esRetry === null);
 
-  // ⑥ ver 驱动: 60ms 去抖合并; 落拍 document.hidden 短路(R5#4)
+  // 6. ver 驱动: 60ms 去抖合并; 落拍 document.hidden 短路(R5#4)
   const es2 = instances[1];
   es2.emit("ver");
   ok("ver 排 60ms 去抖", timers.has(ctx._verTimer) && timers.get(ctx._verTimer).ms === 60);
@@ -142,7 +142,7 @@ const ok = (name, cond) => checks.push([name, !!cond]);
   await drain();
   ok("恢复可见 ver 照常拉(补拉由 visibilitychange 负责, 电池只钉 ver 路径)", ctx.refreshes === 2);
 
-  // ⑦ stopEvents 归置(R5#14: 断线沿状态位随连接会话归置)
+  // 7. stopEvents 归置(R5#14: 断线沿状态位随连接会话归置)
   ctx.stopEvents();
   ok("stopEvents 关连接清句柄", ctx._es === null && ctx._esRetry === null && ctx._verTimer === null);
   ok("stopEvents 归置 _esConnected(重登后首断仍算首次断线)", ctx._esConnected === undefined);
@@ -189,7 +189,7 @@ const checks = [];
 const ok = (name, cond) => checks.push([name, !!cond]);
 
 (async () => {
-  // ① currentPollMs 真跑分型(R5#17: 骨架探针把 currentPollMs 桩成常量的绕过面, 这里真跑)
+  // 1. currentPollMs 真跑分型(R5#17: 骨架探针把 currentPollMs 桩成常量的绕过面, 这里真跑)
   const mk = (torrents, fails) => Object.assign({}, P, {
     status: typeof torrents === "number" ? { torrents } : {},
     pollFails: fails,
@@ -203,7 +203,7 @@ const ok = (name, cond) => checks.push([name, !!cond]);
   ok("大库 base 3000: 退避 3 已封顶 15000", P.currentPollMs.call(mk(4000, 3)) === 15000);
   ok("总量未知 base 2000(不冒进): 退避 1 = 4000", P.currentPollMs.call(mk(undefined, 1)) === 4000);
 
-  // ② refresh 真跑: 成功清零 / 失败递增封顶(曲线的进位端)
+  // 2. refresh 真跑: 成功清零 / 失败递增封顶(曲线的进位端)
   const okCtx = Object.assign({}, P, {
     status: {}, serviceDown: true, pollFails: 3,
     api: async () => ({ updated: false, status: { torrents: 100 } }),
@@ -224,7 +224,7 @@ const ok = (name, cond) => checks.push([name, !!cond]);
   ok("失败轮 pollFails 递增且封顶 4", failCtx.pollFails === 4 && failCtx.serviceDown === true);
   ok("失败后仍续排(错误风暴由轮询退避吸收)", failCtx.scheduleNextN === 1);
 
-  // ③ 401 分支(R5#2 修法第二半): stopPolling + stopEvents, 不再续排
+  // 3. 401 分支(R5#2 修法第二半): stopPolling + stopEvents, 不再续排
   const err = new Error("unauthorized"); err.auth = true;
   const authCtx = Object.assign({}, P, {
     status: {}, serviceDown: false, pollFails: 0,
@@ -239,7 +239,7 @@ const ok = (name, cond) => checks.push([name, !!cond]);
   ok("401: 停轮询 + 拆推送(与 _logout 同口径)", authCtx.calls.join(",") === "stopPolling,stopEvents");
   ok("401: 不再续排下一拍且不置 serviceDown", !authCtx.calls.includes("scheduleNext") && authCtx.serviceDown === false);
 
-  // ④ stopPoll 对 awaitPoll 收摊(R5#5): 兑现 null + onEnd 恰一次
+  // 4. stopPoll 对 awaitPoll 收摊(R5#5): 兑现 null + onEnd 恰一次
   let ended = 0;
   const st1 = Object.assign({}, P, { _polls: null });
   const p1 = P.awaitPoll.call(st1, "k", { ms: () => 5, fn: () => null, until: () => false,
@@ -252,7 +252,7 @@ const ok = (name, cond) => checks.push([name, !!cond]);
   P.stopPoll.call(st1, "k");
   ok("重复 stopPoll 不双调 onEnd", ended === 1);
 
-  // ⑤ startPoll 顶掉同 key 有界等待: onEnd 也走(loading 复位不再被跳过), 不双调
+  // 5. startPoll 顶掉同 key 有界等待: onEnd 也走(loading 复位不再被跳过), 不双调
   let ended2 = 0;
   const st2 = Object.assign({}, P, { _polls: null });
   const p2 = P.awaitPoll.call(st2, "m", { ms: () => 5, fn: () => null, until: () => false,
@@ -264,7 +264,7 @@ const ok = (name, cond) => checks.push([name, !!cond]);
   P.stopPoll.call(st2, "m");
   ok("顶掉场景 onEnd 不双调", ended2 === 1);
 
-  // ⑥ 正常收敛路径(finish)onEnd 恰一次, 与叫停路径互斥
+  // 6. 正常收敛路径(finish)onEnd 恰一次, 与叫停路径互斥
   let ended3 = 0;
   const st3 = Object.assign({}, P, { _polls: null });
   const v3 = await P.awaitPoll.call(st3, "n", { ms: () => 0, max: 9, fn: async () => "ok",
@@ -368,7 +368,7 @@ const mk = () => Object.assign({}, A, {
 });
 
 (async () => {
-  // ① 悬空模态结算(R5#1): 先 resolve(false) 再复位框
+  // 1. 悬空模态结算(R5#1): 先 resolve(false) 再复位框
   let resolved = 0, resolvedWith;
   const c1 = mk();
   c1._modalResolve = (v) => { resolved += 1; resolvedWith = v; };
@@ -379,16 +379,16 @@ const mk = () => Object.assign({}, A, {
   ok("登出收口: 遮罩+凭证+受保护数据清空", c1.authRequired === true && c1.token === ""
     && c1.groups.length === 0 && c1.toasts.length === 0);
 
-  // ② SSE 通道一并拆(R5#2): 与 stopPolling/_qbTeardown 同口径
+  // 2. SSE 通道一并拆(R5#2): 与 stopPolling/_qbTeardown 同口径
   ok("_logout 调 stopEvents(与 stopPolling/_qbTeardown 同收)",
     c1.calls.includes("stopEvents") && c1.calls.includes("stopPolling") && c1.calls.includes("_qbTeardown"));
 
-  // ③ 无悬空模态: no-op 不炸
+  // 3. 无悬空模态: no-op 不炸
   const c2 = mk();
   A._logout.call(c2);
   ok("无框登出 no-op 不炸", c2.modal.visible === false && c2.calls.includes("stopEvents"));
 
-  // ④ await 侧恢复(microtask): 看到的是已复位框状态, 删除流程走取消分支不再挂死
+  // 4. await 侧恢复(microtask): 看到的是已复位框状态, 删除流程走取消分支不再挂死
   let saw = null;
   const c3 = mk();
   c3._modalResolve = (v) => { Promise.resolve().then(() => { saw = [v, c3.modal.visible]; }); };

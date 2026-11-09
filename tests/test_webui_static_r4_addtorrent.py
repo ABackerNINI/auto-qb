@@ -125,7 +125,7 @@ const releaseHold = () => {
   }
 };
 
-// ---- ① 闸前置: 落点预检网络往返窗口内 addSubmitting 已置位(修复前该窗口恒 false) ----
+// ---- 1. 闸前置: 落点预检网络往返窗口内 addSubmitting 已置位(修复前该窗口恒 false) ----
 {
   const vm = makeVm();
   vm.addSavePath = "/downloads/a";
@@ -149,7 +149,7 @@ const releaseHold = () => {
   ok("预检取消: 零提交", vm.apiCalls.every((c) => c[0] !== "/api/torrents/add"));
 }
 
-// ---- ② 双击并发: 读文件窗口内第二次 submitAddTorrent 被闸挡下, 恰好一次 POST ----
+// ---- 2. 双击并发: 读文件窗口内第二次 submitAddTorrent 被闸挡下, 恰好一次 POST ----
 {
   const vm = makeVm();
   vm.addSavePath = "";  // 空 savePath 跳过预检(直达读文件段)
@@ -169,7 +169,7 @@ const releaseHold = () => {
   ok("成功回执关窗", vm.addOpen === false);
 }
 
-// ---- ③ FileReader 读失败: 异常照旧向上传播(保留原行为), 闸复位 ----
+// ---- 3. FileReader 读失败: 异常照旧向上传播(保留原行为), 闸复位 ----
 {
   const vm = makeVm();
   vm.addSavePath = "";
@@ -185,7 +185,7 @@ _NODE_SUBMIT_GATE_PROBE = _COMMON_PRELUDE + _IIFE_OPEN + _SUBMIT_GATE_BODY + _II
 
 # R5#131 修复回归: dirMkdir 用回执 created 跳新目录 --------------------------------------------
 _MKDIR_RECEIPT_BODY = r"""
-// ① 正常创建: 回执 {created, existed:false} -> loadDir 落到 created(修复前 r.path 恒 undefined)
+// 1. 正常创建: 回执 {created, existed:false} -> loadDir 落到 created(修复前 r.path 恒 undefined)
 {
   const vm = makeVm();
   vm.dirBrowse = { open: true, path: "/downloads", parent: "", roots: [], dirs: [], loading: false, error: "", newName: "新目录", busy: false };
@@ -197,7 +197,7 @@ _MKDIR_RECEIPT_BODY = r"""
   ok("ok toast 文案带新目录名", vm.toasts.some((t) => t.kind === "ok" && t.text.indexOf("新目录") >= 0));
 }
 
-// ② 幂等已存在回执({created, existed:true})同样跳进该目录
+// 2. 幂等已存在回执({created, existed:true})同样跳进该目录
 {
   const vm = makeVm();
   vm.dirBrowse = { open: true, path: "/downloads", parent: "", roots: [], dirs: [], loading: false, error: "", newName: "dup", busy: false };
@@ -206,7 +206,7 @@ _MKDIR_RECEIPT_BODY = r"""
   ok("幂等已存在回执同样跳进该目录", vm.dirBrowse.path === "/downloads/dup");
 }
 
-// ③ mkdir 失败: 不跳目录, error toast, busy 复位
+// 3. mkdir 失败: 不跳目录, error toast, busy 复位
 {
   const vm = makeVm();
   vm.dirBrowse = { open: true, path: "/downloads", parent: "", roots: [], dirs: [], loading: false, error: "", newName: "x", busy: false };
@@ -230,7 +230,7 @@ const CONFIRM_TRUTH = {
   volume_free: 3 * 1024 * 1024 * 1024,
 };
 
-// ---- ① cls==="confirm" + 弹窗确认: 放行提交, 弹窗行表与提交载荷逐字段核对 ----
+// ---- 1. cls==="confirm" + 弹窗确认: 放行提交, 弹窗行表与提交载荷逐字段核对 ----
 {
   const vm = makeVm();
   vm.addSavePath = "/downloads/req";
@@ -264,7 +264,7 @@ const CONFIRM_TRUTH = {
   ok("提交 waitCmd 不带预检 20s(用默认轮询)", vm.waitCalls.some((w) => w[0] === "c1" && w[1] === undefined));
 }
 
-// ---- ② cls==="confirm" + 弹窗取消: 预检 false, 零提交 ----
+// ---- 2. cls==="confirm" + 弹窗取消: 预检 false, 零提交 ----
 {
   const vm = makeVm();
   vm.addSavePath = "/downloads/req";
@@ -278,7 +278,7 @@ const CONFIRM_TRUTH = {
   ok("confirm+取消: 零提交(取消 = 零副作用)", vm.apiCalls.every((c) => c[0] !== "/api/torrents/add"));
 }
 
-// ---- ③ 非 confirm(cls==="ok")与回执失败: 放行不弹窗(预检不构成闸门) ----
+// ---- 3. 非 confirm(cls==="ok")与回执失败: 放行不弹窗(预检不构成闸门) ----
 {
   const vm = makeVm();
   vm.addSavePath = "/downloads/req";
@@ -293,7 +293,7 @@ const CONFIRM_TRUTH = {
   ok("truth 缺失: 放行", (await vm._relocateAddGate()) === true);
 }
 
-// ---- ④ 预检抛 auth: false 且零 error toast(401 由 _logout 收口); 网络异常: 放行 ----
+// ---- 4. 预检抛 auth: false 且零 error toast(401 由 _logout 收口); 网络异常: 放行 ----
 {
   const vm = makeVm();
   vm.addSavePath = "/downloads/req";
@@ -339,7 +339,7 @@ _NODE_RELOCATE_GATE_PROBE = _COMMON_PRELUDE + _IIFE_OPEN + _RELOCATE_GATE_BODY +
 
 # R5#141: Esc 逐层退栈(FIX-07) ------------------------------------------------------------------
 _ESC_STACK_BODY = r"""
-// ① 目录浏览器层最优先: dirBrowse 与 cat/tag 菜单同开, 只收目录浏览器(退栈顺序)
+// 1. 目录浏览器层最优先: dirBrowse 与 cat/tag 菜单同开, 只收目录浏览器(退栈顺序)
 {
   const vm = makeVm();
   vm.addOpen = true;
@@ -351,7 +351,7 @@ _ESC_STACK_BODY = r"""
   ok("第一层: 对话框保持打开", vm.addOpen === true);
 }
 
-// ② 分类/标签下拉层: 两菜单同收 + Hi 复位, 对话框保持
+// 2. 分类/标签下拉层: 两菜单同收 + Hi 复位, 对话框保持
 {
   const vm = makeVm();
   vm.addOpen = true;
@@ -362,7 +362,7 @@ _ESC_STACK_BODY = r"""
   ok("第二层: 对话框保持打开", vm.addOpen === true);
 }
 
-// ③ 路径面板层: 收面板 + Hi 复位
+// 3. 路径面板层: 收面板 + Hi 复位
 {
   const vm = makeVm();
   vm.addOpen = true;
@@ -372,7 +372,7 @@ _ESC_STACK_BODY = r"""
   ok("第三层: 对话框保持打开", vm.addOpen === true);
 }
 
-// ④ 全关 -> 关窗
+// 4. 全关 -> 关窗
 {
   const vm = makeVm();
   vm.addOpen = true;
@@ -381,7 +381,7 @@ _ESC_STACK_BODY = r"""
   ok("第四层: 子层一并关闭", vm.dirBrowse.open === false);
 }
 
-// ⑤ addSubmitting=true: 回执等待期 Esc 拒绝误关
+// 5. addSubmitting=true: 回执等待期 Esc 拒绝误关
 {
   const vm = makeVm();
   vm.addOpen = true;
@@ -420,7 +420,7 @@ function mkCtx(over) {
 }
 const v = makeVm();  // comboKeydown 只经 this 走 _hiScroll(listRef 非空时), 其余全在 ctx
 
-// ① IME 组词守卫: isComposing / keyCode 229 零接管
+// 1. IME 组词守卫: isComposing / keyCode 229 零接管
 {
   const { ctx, st } = mkCtx();
   v.comboKeydown(ctx, ev("ArrowDown", { isComposing: true }));
@@ -429,7 +429,7 @@ const v = makeVm();  // comboKeydown 只经 this 走 _hiScroll(listRef 非空时
   ok("IME keyCode 229: 回车零接管", st.picks.length === 0 && st.enters.length === 0);
 }
 
-// ② 取模环绕: 尾->首 / 首->尾(面板开着)
+// 2. 取模环绕: 尾->首 / 首->尾(面板开着)
 {
   const { ctx, st } = mkCtx();
   st.open = true; st.hi = 2;
@@ -440,7 +440,7 @@ const v = makeVm();  // comboKeydown 只经 this 走 _hiScroll(listRef 非空时
   ok("ArrowUp 环绕: 首(0)->尾(2)", st.hi === 2);
 }
 
-// ③ 关层方向键先开层(openOnArrow=true), 首击落位区分上下
+// 3. 关层方向键先开层(openOnArrow=true), 首击落位区分上下
 {
   const { ctx, st } = mkCtx();
   v.comboKeydown(ctx, ev("ArrowDown"));
@@ -450,7 +450,7 @@ const v = makeVm();  // comboKeydown 只经 this 走 _hiScroll(listRef 非空时
   ok("关层 ArrowUp: 先开层且落末项", st.open === true && st.hi === 2);
 }
 
-// ④ openOnArrow=false(保存路径面板形态): 关层不接管任何键
+// 4. openOnArrow=false(保存路径面板形态): 关层不接管任何键
 {
   const { ctx, st } = mkCtx({ openOnArrow: false });
   const e = ev("ArrowDown");
@@ -458,7 +458,7 @@ const v = makeVm();  // comboKeydown 只经 this 走 _hiScroll(listRef 非空时
   ok("保存路径面板关层: 方向键不接管(preventDefault 不调)", st.open === false && e.prevented === 0);
 }
 
-// ⑤ Enter 选中高亮项 / enterFallback 落地(onEnter 优先) / 空串仅带 onEnter 放行(=无分类), null 不落地
+// 5. Enter 选中高亮项 / enterFallback 落地(onEnter 优先) / 空串仅带 onEnter 放行(=无分类), null 不落地
 {
   const { ctx, st } = mkCtx();
   st.open = true; st.hi = 1;
@@ -487,7 +487,7 @@ const v = makeVm();  // comboKeydown 只经 this 走 _hiScroll(listRef 非空时
   ok("无 enterFallback: 回车不吃(preventDefault 不调)", e.prevented === 0);
 }
 
-// ⑥ Esc 只收面板(stopPropagation 冒泡交 Esc 退栈链), 未开时零动作
+// 6. Esc 只收面板(stopPropagation 冒泡交 Esc 退栈链), 未开时零动作
 {
   const { ctx, st } = mkCtx();
   st.open = true; st.hi = 1;
@@ -500,7 +500,7 @@ const v = makeVm();  // comboKeydown 只经 this 走 _hiScroll(listRef 非空时
   ok("Esc 面板未开: 零动作", e2.prevented === 0 && e2.stopped === 0 && st.open === false);
 }
 
-// ⑦ 滚动跟随: listRef 非空时 ArrowDown 调 _hiScroll(listRef)
+// 7. 滚动跟随: listRef 非空时 ArrowDown 调 _hiScroll(listRef)
 {
   const { ctx } = mkCtx({ listRef: "addCatList" });
   v.comboKeydown(ctx, ev("ArrowDown"));
@@ -517,7 +517,7 @@ const noLoad = { loadAddOptions() {} };  // 未开窗分支会触发 openAddTorr
 
 // ---- _addIngestFiles ----
 
-// ① 同名同大小去重: 已在列表的同名同大小文件不重复入列, 新文件照常补入
+// 1. 同名同大小去重: 已在列表的同名同大小文件不重复入列, 新文件照常补入
 {
   const vm = makeVm(noLoad);
   vm.addOpen = true;
@@ -527,7 +527,7 @@ const noLoad = { loadAddOptions() {} };  // 未开窗分支会触发 openAddTorr
   ok("混合场景(有新增)不误报「已在列表」", vm.toasts.length === 0);
 }
 
-// ② 纯重复: toast「文件已在列表中」
+// 2. 纯重复: toast「文件已在列表中」
 {
   const vm = makeVm();
   vm.addOpen = true;
@@ -537,7 +537,7 @@ const noLoad = { loadAddOptions() {} };  // 未开窗分支会触发 openAddTorr
   ok("纯重复 toast 提示已在列表", vm.toasts.some((t) => t.kind === "warn" && t.text.indexOf("文件已在列表中") >= 0));
 }
 
-// ③ 非 .torrent 忽略: 零开窗零入列 + warn toast
+// 3. 非 .torrent 忽略: 零开窗零入列 + warn toast
 {
   const vm = makeVm(noLoad);
   vm._addIngestFiles([torrent("a.txt", 1), torrent("b.zip", 2)]);
@@ -546,7 +546,7 @@ const noLoad = { loadAddOptions() {} };  // 未开窗分支会触发 openAddTorr
   ok("全非种子: warn toast「不是 .torrent 文件」", vm.toasts.some((t) => t.kind === "warn" && t.text.indexOf("不是 .torrent") >= 0));
 }
 
-// ④ 混合进料: picks 入列 + 忽略计数 toast
+// 4. 混合进料: picks 入列 + 忽略计数 toast
 {
   const vm = makeVm(noLoad);
   vm.addOpen = true;
@@ -555,7 +555,7 @@ const noLoad = { loadAddOptions() {} };  // 未开窗分支会触发 openAddTorr
   ok("混合进料: 忽略计数 toast(2 个)", vm.toasts.some((t) => t.kind === "warn" && t.text.indexOf("2 个") >= 0));
 }
 
-// ⑤ 未开窗先开窗再填: 先 openAddTorrent(清空)再 push —— 两文件都在(顺序错了会被清掉)
+// 5. 未开窗先开窗再填: 先 openAddTorrent(清空)再 push —— 两文件都在(顺序错了会被清掉)
 {
   const vm = makeVm(noLoad);
   vm._addIngestFiles([torrent("a.torrent", 1), torrent("b.torrent", 2)]);
@@ -565,7 +565,7 @@ const noLoad = { loadAddOptions() {} };  // 未开窗分支会触发 openAddTorr
 
 // ---- _addIngestLinks ----
 
-// ⑥ uri-list 注释行过滤(# 标题行不进链接域)
+// 6. uri-list 注释行过滤(# 标题行不进链接域)
 {
   const vm = makeVm(noLoad);
   vm.addOpen = true;
@@ -575,7 +575,7 @@ const noLoad = { loadAddOptions() {} };  // 未开窗分支会触发 openAddTorr
   ok("uri-list: 拖链接自动展开链接域", vm.addShowUrls === true);
 }
 
-// ⑦ 追加不覆盖已输入
+// 7. 追加不覆盖已输入
 {
   const vm = makeVm();
   vm.addOpen = true;
@@ -585,7 +585,7 @@ const noLoad = { loadAddOptions() {} };  // 未开窗分支会触发 openAddTorr
   ok("追加不覆盖: 旧输入在前, 新链接换行追加", vm.addUrls === "magnet:?xt=old\nmagnet:?xt=a\nhttps://x.example/y");
 }
 
-// ⑧ 纯非链接文本: 零动作
+// 8. 纯非链接文本: 零动作
 {
   const vm = makeVm(noLoad);
   const dt = { getData: () => "hello world\nnot a link" };
@@ -593,7 +593,7 @@ const noLoad = { loadAddOptions() {} };  // 未开窗分支会触发 openAddTorr
   ok("纯非链接文本: 零开窗零写入", vm.addOpen === false && vm.addUrls === "" && vm.addShowUrls === false);
 }
 
-// ⑨ 链接进料未开窗: 先开窗再填
+// 9. 链接进料未开窗: 先开窗再填
 {
   const vm = makeVm(noLoad);
   const dt = { getData: () => "magnet:?xt=a" };
@@ -603,7 +603,7 @@ const noLoad = { loadAddOptions() {} };  // 未开窗分支会触发 openAddTorr
 
 // ---- _addDragDrop 分流 ----
 
-// ⑩ 空 FileList 走链接通道(files 判定 length)
+// 10. 空 FileList 走链接通道(files 判定 length)
 {
   const vm = makeVm(noLoad);
   vm.addOpen = true;

@@ -115,7 +115,7 @@ const sorted = M.sortedMembers.call(c, list);
 ok("场景有效: 排序真的打乱了原序(否则本电池空转)",
    JSON.stringify(sorted.map((m) => m.hash)) !== JSON.stringify(list.map((m) => m.hash)));
 
-// ① 渲染切片 = 在排序序上开窗的切片(窗口与前缀和同一数组)
+// 1. 渲染切片 = 在排序序上开窗的切片(窗口与前缀和同一数组)
 const w = M.memberWin.call(c, sorted);
 const rendered = M.winMembers.call(c, list);
 const want = sorted.slice(w.start, w.end);
@@ -123,7 +123,7 @@ ok("winMembers 切片与渲染数组同序(排序激活下窗口按 sortedMember
    w.active && want.length < N &&
    JSON.stringify(rendered.map((m) => m.hash)) === JSON.stringify(want.map((m) => m.hash)));
 
-// ② 前缀和按排序序逐行累积(_rowPre.member 供键盘视口换算文档 y, 必须与 _kbRows 同序)
+// 2. 前缀和按排序序逐行累积(_rowPre.member 供键盘视口换算文档 y, 必须与 _kbRows 同序)
 const pre = c._rowPre.member;
 let preOk = !!pre && pre.length === N + 1 && pre[0] === 0;
 if (preOk) {
@@ -133,19 +133,19 @@ if (preOk) {
 }
 ok("_rowPre.member 前缀和按排序后行高累积(修复前按未排序序累积必红)", preOk);
 
-// ③ 占位与排序序窗口一致(调用点同步传排序后数组)
+// 3. 占位与排序序窗口一致(调用点同步传排序后数组)
 const padTop = M.memberPadTop.call(c, list);
 const padBottom = M.memberPadBottom.call(c, list);
 ok("memberPadTop 与排序序窗口一致", padTop > 0 && Math.abs(padTop - w.padTop) < 1e-9);
 ok("memberPadBottom 与排序序窗口一致", padBottom > 0 && Math.abs(padBottom - w.padBottom) < 1e-9);
 
-// ④ 键盘视口回落取行不岔: 前缀和第 i 行 = 键盘行序(shortcuts 同走 sortedMembers)第 i 行
+// 4. 键盘视口回落取行不岔: 前缀和第 i 行 = 键盘行序(shortcuts 同走 sortedMembers)第 i 行
 const kb = c.memberHashesOf(sorted);
 ok("前缀和与键盘行序逐行对齐(切片首行 + 窗口末行)",
    M._rowKeyOf.call(c, "member", sorted[w.start]) === "member:" + kb[w.start] &&
    M._rowKeyOf.call(c, "member", sorted[w.end - 1]) === "member:" + kb[w.end - 1]);
 
-// ⑤ 排序未激活/窗口关闭 = 原行为(零差异回退)
+// 5. 排序未激活/窗口关闭 = 原行为(零差异回退)
 const c2 = mkCtx();
 c2.detailSortKey = "";
 c2.rowWin = false;
@@ -193,17 +193,17 @@ const mkCtx = (expandedKey) => Object.assign({}, M, {
 const checks = [];
 const ok = (name, cond) => checks.push([name, !!cond]);
 
-// ① 展开组在场: 退避全量(.detail 高度不定, 窗口的"第 i 行在 pre[i]"假设失效)
+// 1. 展开组在场: 退避全量(.detail 高度不定, 窗口的"第 i 行在 pre[i]"假设失效)
 const wOn = C.groupWin.call(mkCtx("g150"));
 ok("expandedKey 命中在场组 -> 退避 off 全量(end=n, 占位 0)",
    wOn.active === false && wOn.end === N && wOn.padTop === 0 && wOn.padBottom === 0);
-// ② 展开态跨视图带回后原组已被筛掉/已删: 不为一个不存在的面板退避, 保持 active 窗口
+// 2. 展开态跨视图带回后原组已被筛掉/已删: 不为一个不存在的面板退避, 保持 active 窗口
 const wGone = C.groupWin.call(mkCtx("gone"));
 ok("expandedKey 指向不在场的组 -> active 窗口(不误退避)", wGone.active === true);
-// ③ 未展开: active 窗口
+// 3. 未展开: active 窗口
 const wOff = C.groupWin.call(mkCtx(""));
 ok("expandedKey 空 -> active 窗口", wOff.active === true);
-// ④ 窗口切片与占位合理(②③的窗口是真窗口, 不是退到另一边)
+// 4. 窗口切片与占位合理(2/3 的窗口是真窗口, 不是退到另一边)
 ok("active 窗口切片是严格子集且占位非零", wOff.end - wOff.start < N && wOff.padTop > 0 && wOff.padBottom > 0);
 console.log(JSON.stringify({
   ok: checks.filter((c) => c[1]).length, total: checks.length,
@@ -239,23 +239,23 @@ const orderOf = (c) => c.colOrder.p;
 const checks = [];
 const ok = (name, cond) => checks.push([name, !!cond]);
 
-// ① 向后移: a(vis 0) 拖到 dropIdx 2(c 之前) -> 移除自身后 at=1, 插在 b 与 c 之间
+// 1. 向后移: a(vis 0) 拖到 dropIdx 2(c 之前) -> 移除自身后 at=1, 插在 b 与 c 之间
 let c = mkCtx();
 M.applyColOrder.call(c, "p", "a", 2);
 ok("向后移: dropIdx 2 -> [b,a,c,d,e](隐藏列相对次序不动)", JSON.stringify(orderOf(c)) === JSON.stringify(["b", "a", "c", "d", "e"]));
 ok("落库即持久化该页", c.persisted.length === 1 && c.persisted[0] === "p");
 
-// ② 向前移: e(vis 3) 拖到 dropIdx 0 -> 移除自身后 at=0, 插在最前
+// 2. 向前移: e(vis 3) 拖到 dropIdx 0 -> 移除自身后 at=0, 插在最前
 c = mkCtx();
 M.applyColOrder.call(c, "p", "e", 0);
 ok("向前移: dropIdx 0 -> [e,a,b,c,d]", JSON.stringify(orderOf(c)) === JSON.stringify(["e", "a", "b", "c", "d"]));
 
-// ③ 末尾边界: a 拖到 dropIdx 4(== 可视列数) -> 跳隐藏列计 seen 后仍插不进, 兜底 push 到末尾
+// 3. 末尾边界: a 拖到 dropIdx 4(== 可视列数) -> 跳隐藏列计 seen 后仍插不进, 兜底 push 到末尾
 c = mkCtx();
 M.applyColOrder.call(c, "p", "a", 4);
 ok("末尾边界: dropIdx=vis.length -> [b,c,d,e,a](兜底 push)", JSON.stringify(orderOf(c)) === JSON.stringify(["b", "c", "d", "e", "a"]));
 
-// ④ 非法输入一律 no-op: 负 dropIdx / 越界 / 隐藏列自身(可视空间里找不到)
+// 4. 非法输入一律 no-op: 负 dropIdx / 越界 / 隐藏列自身(可视空间里找不到)
 c = mkCtx();
 M.applyColOrder.call(c, "p", "a", -1);
 M.applyColOrder.call(c, "p", "a", 5);
@@ -263,7 +263,7 @@ M.applyColOrder.call(c, "p", "d", 1);
 ok("非法输入(负/越界/隐藏列)no-op(colOrder 不写)", !c.colOrder.p || c.colOrder.p.length === 0);
 ok("非法输入不触发持久化", c.persisted.length === 0);
 
-// ⑤ 尊重既有 colOrder 头部(_orderedKeys): 自定义序 e d c b a(d 隐藏) 下, a(vis 3) 移到 0
+// 5. 尊重既有 colOrder 头部(_orderedKeys): 自定义序 e d c b a(d 隐藏) 下, a(vis 3) 移到 0
 c = mkCtx(["e", "d", "c", "b", "a"]);
 M.applyColOrder.call(c, "p", "a", 0);
 ok("既有自定义序下向前移 -> [a,e,d,c,b]", JSON.stringify(orderOf(c)) === JSON.stringify(["a", "e", "d", "c", "b"]));
@@ -319,7 +319,7 @@ const resetRec = () => { listeners.length = 0; timers.length = 0; };
 const checks = [];
 const ok = (name, cond) => checks.push([name, !!cond]);
 
-// ① 拖拽意图升格三层 merge(R5#52): {colW 旧值(含隐藏列) ∪ 渲染快照 ∪ 拖拽终值}
+// 1. 拖拽意图升格三层 merge(R5#52): {colW 旧值(含隐藏列) ∪ 渲染快照 ∪ 拖拽终值}
 let c = mkCtx();
 M.startResize.call(c, evAt(100), "p", "a");   // 注册 move/up; startVal = 200
 fire("mousemove", { clientX: 220 });          // 位移 120 > 阈值 3 -> dragged=true, w = max(56, 320) = 320
@@ -342,7 +342,7 @@ const evFlags = { stopped: false, prevented: false };
 clickAdds[0].fn({ stopPropagation: () => { evFlags.stopped = true; }, preventDefault: () => { evFlags.prevented = true; } });
 ok("拦截层 stopPropagation+preventDefault 且拦完即注销", evFlags.stopped && evFlags.prevented);
 
-// ② 纯点击零位移(R5#37 修复回归): 不升格意图/不落盘/不拦 click
+// 2. 纯点击零位移(R5#37 修复回归): 不升格意图/不落盘/不拦 click
 resetRec();
 c = mkCtx();
 M.startResize.call(c, evAt(100), "p", "a");
@@ -352,7 +352,7 @@ ok("纯点击: 不落盘/不重算/不挂拦截层/不排自清",
    c.persisted.length === 0 && c.recomputed === 0 &&
    byType("click").filter((l) => l.op === "add").length === 0 && timers.length === 0);
 
-// ②-b 微动未过阈值(issue 26-11-08-0229 #10 修复回归): 位移 <=3px 不把起始快照写进生效轨 colWidths
+// 2-b 微动未过阈值(issue 26-11-08-0229 #10 修复回归): 位移 <=3px 不把起始快照写进生效轨 colWidths
 resetRec();
 c = mkCtx();
 M.startResize.call(c, evAt(100), "p", "a");
@@ -365,7 +365,7 @@ ok("微动后真拖拽: 意图升格/落盘/拦截层照常",
    c.colW.p.a === "320px" && c.colW.p.hid === "111px" && c.persisted.length === 1 &&
    byType("click").filter((l) => l.op === "add").length === 1);
 
-// ③ 双击自适应(R5#52 后半): 同一套 merge, 适配列被适配备覆盖、隐藏列 px 仍在
+// 3. 双击自适应(R5#52 后半): 同一套 merge, 适配列被适配备覆盖、隐藏列 px 仍在
 resetRec();
 c = mkCtx();
 const headEl = { children: [{ scrollWidth: 400 }], parentElement: { querySelectorAll: () => [] } };
@@ -413,20 +413,20 @@ const checks = [];
 const ok = (name, cond) => checks.push([name, !!cond]);
 
 // --- _selSyncGroups 四态 ---
-// ① 补选: 成员凑齐 -> 组入选(成员 -> 组方向)
+// 1. 补选: 成员凑齐 -> 组入选(成员 -> 组方向)
 let c = mkCtx({ selMembers: ["h1", "h2"], selGroups: [] });
 M._selSyncGroups.call(c);
 ok("回扫补选: 组内成员全选 -> 组入选", JSON.stringify(c.selGroups) === JSON.stringify(["A"]));
-// ② 移出: 撤到不全 -> 组移出
+// 2. 移出: 撤到不全 -> 组移出
 c = mkCtx({ selMembers: ["h1"], selGroups: ["A", "B"] });
 M._selSyncGroups.call(c);
 ok("回扫移出: 撤掉一个成员 -> 不完整的组移出", c.selGroups.length === 0);
-// ③ 未知 key 保留: 虚拟行/已消失的组不在回扫面里, 一律保留
+// 3. 未知 key 保留: 虚拟行/已消失的组不在回扫面里, 一律保留
 c = mkCtx({ selMembers: ["h1", "h2"], selGroups: ["A", "Z", "u-h9"] });
 M._selSyncGroups.call(c);
 ok("不可解析的 key(未知组/虚拟行)保留不清理",
    c.selGroups.includes("Z") && c.selGroups.includes("u-h9") && c.selGroups.includes("A"));
-// ④ 种子页降级: 不补选(decoratedGroups 只是冻结快照)但降级照做(不残留组 key 卷进批量载荷)
+// 4. 种子页降级: 不补选(decoratedGroups 只是冻结快照)但降级照做(不残留组 key 卷进批量载荷)
 c = mkCtx({ viewMode: "torrents", selMembers: ["h1", "h2"], selGroups: [] });
 M._selSyncGroups.call(c);
 ok("种子页: 凑齐的组不补选(用户心智是我选了这些种子)", c.selGroups.length === 0);
@@ -436,13 +436,13 @@ ok("种子页: 不完整的组仍降级移出(撤选残留组 key 会卷进批�
 
 // --- _selAnchor 兜底链(组) ---
 c = mkCtx({ selAnchorGroup: "g2" });
-ok("起点兜底链①: 显式锚点在列表内 -> 用它", M._selAnchor.call(c, "group", ["g1", "g2", "g3"]) === "g2");
+ok("起点兜底链 1: 显式锚点在列表内 -> 用它", M._selAnchor.call(c, "group", ["g1", "g2", "g3"]) === "g2");
 c = mkCtx({ selAnchorGroup: "gX", kbCursor: { kind: "group", id: "g3" } });
-ok("起点兜底链②: 锚点失效 -> 当前光标", M._selAnchor.call(c, "group", ["g1", "g2", "g3"]) === "g3");
+ok("起点兜底链 2: 锚点失效 -> 当前光标", M._selAnchor.call(c, "group", ["g1", "g2", "g3"]) === "g3");
 c = mkCtx({ selAnchorGroup: "gX", kbCursor: { kind: "torrent", id: "h1" }, expandedKey: "g1" });
-ok("起点兜底链③: 光标不在此列表 -> 当前展开的组", M._selAnchor.call(c, "group", ["g1", "g2", "g3"]) === "g1");
+ok("起点兜底链 3: 光标不在此列表 -> 当前展开的组", M._selAnchor.call(c, "group", ["g1", "g2", "g3"]) === "g1");
 c = mkCtx({});
-ok("起点兜底链④: 全缺 -> 列表首行", M._selAnchor.call(c, "group", ["g1", "g2", "g3"]) === "g1");
+ok("起点兜底链 4: 全缺 -> 列表首行", M._selAnchor.call(c, "group", ["g1", "g2", "g3"]) === "g1");
 c = mkCtx({});
 ok("空列表 -> null(调用方按无起点处理)", M._selAnchor.call(c, "group", []) === null);
 // 成员 kind: 光标 kind=torrent 映射 member(键鼠统一模型)
@@ -498,7 +498,7 @@ const setStore = (pages) => {
 const checks = [];
 const ok = (name, cond) => checks.push([name, !!cond]);
 
-// ① 空存储: 每页播种 = 本表列 key 与 DEFAULT_HIDDEN_KEYS 的交集
+// 1. 空存储: 每页播种 = 本表列 key 与 DEFAULT_HIDDEN_KEYS 的交集
 setStore({});
 let out = LC();
 let seedOk = true;
@@ -511,7 +511,7 @@ for (const p of PAGES) {
 ok("空存储: 从无偏好的页按 DEFAULT_HIDDEN_KEYS 交集播种", seedOk && anyDefault);
 ok("空存储: order/w 全空", Object.keys(out.order).length === 0 && Object.keys(out.w).length === 0);
 
-// ② 仅空 hidden: 该页不播(「刻意全开」是合法偏好), 未定制过的页照播
+// 2. 仅空 hidden: 该页不播(「刻意全开」是合法偏好), 未定制过的页照播
 setStore({ group: { hidden: [] } });
 out = LC();
 ok("仅空 hidden 的页不播(刻意全开不被默认值覆盖)", JSON.stringify(out.hidden.group || []) === "[]");
@@ -519,7 +519,7 @@ const torrentDefaults = defaultsOf("torrent");
 ok("未定制过的页照常播种(提前 return 会把默认隐藏列全放出来)", torrentDefaults.length > 0 &&
    JSON.stringify(out.hidden.torrent || []) === JSON.stringify(torrentDefaults));
 
-// ③ 有任一偏好键(哪怕只定制了 order): 该页不播; locked 列即使被写进存储也忽略
+// 3. 有任一偏好键(哪怕只定制了 order): 该页不播; locked 列即使被写进存储也忽略
 const lk = lockedKey("torrent");  // torrent 表的 locked 列 = "name"
 setStore({ torrent: { hidden: [lk, "amount_left"] }, group: { order: ["name"] } });
 out = LC();
@@ -527,7 +527,7 @@ ok("仅定制 order 的页不播(三键全缺才播)", !out.hidden.group && out.
 ok("存储里的 locked 列被忽略, 非 locked 默认隐藏列保留",
    !(out.hidden.torrent || []).includes(lk) && (out.hidden.torrent || []).includes("amount_left"));
 
-// ④ w 白名单洗净: 只收合法列 key 的 "<num>px"; 洗净后三键全缺照播
+// 4. w 白名单洗净: 只收合法列 key 的 "<num>px"; 洗净后三键全缺照播
 setStore({ torrent: { w: { name: "120px", bogus: "50px", size: "1.5px", eta: "0px" } } });
 out = LC();
 ok("w 白名单: 非法 key/小数 px 丢弃, 合法 <num>px 收下",
@@ -537,7 +537,7 @@ setStore({ detail: { w: { bogus: "50px", size: "1.5px" } } });
 out = LC();
 ok("w 全被洗净 = 三键全缺 -> 该页照播(坏数据也走完整流程)", JSON.stringify(out.hidden.detail || []) === JSON.stringify(defaultsOf("detail")));
 
-// ⑤ 坏 JSON: 归空意图 + 播种照常(与空存储同形)
+// 5. 坏 JSON: 归空意图 + 播种照常(与空存储同形)
 store = { autoqb_cols_v5: "{broken" };
 out = LC();
 ok("坏 JSON: 走完整流程, 播种不缺席", JSON.stringify(out.hidden.torrent || []) === JSON.stringify(defaultsOf("torrent")));
@@ -569,7 +569,7 @@ const mkCtx = (over) => Object.assign({}, M, {
 const checks = [];
 const ok = (name, cond) => checks.push([name, !!cond]);
 
-// ① 经典三态: 新键降序 -> 同键升序 -> 第三击回默认
+// 1. 经典三态: 新键降序 -> 同键升序 -> 第三击回默认
 let c = mkCtx();
 M.setSort.call(c, "name");
 ok("三态一击: 新键降序", c.sortKey === "name" && c.sortDir === -1);
@@ -578,7 +578,7 @@ ok("三态二击: 同键升序", c.sortKey === "name" && c.sortDir === 1);
 M.setSort.call(c, "name");
 ok("三态三击: 恢复默认(最近添加降序)", c.sortKey === "added_on" && c.sortDir === -1);
 
-// ② dyn 形态(dtSortState 映射): 同一三态循环, 单元懒建
+// 2. dyn 形态(dtSortState 映射): 同一三态循环, 单元懒建
 c = mkCtx();
 M.setSort.call(c, "size", "d0");
 ok("dyn 一击: 新键降序(cell 懒建保响应式)",
@@ -588,14 +588,14 @@ ok("dyn 二击: 同键升序", c.dtSortState.d0.dir === 1);
 M.setSort.call(c, "size", "d0");
 ok("dyn 三击: 回默认键", c.dtSortState.d0.key === "added_on" && c.dtSortState.d0.dir === -1);
 
-// ③ _dtStrCompare: IPv4(+可选端口)逐段数值序; 端口数值; 等值 0; 非 IP localeCompare 回落
+// 3. _dtStrCompare: IPv4(+可选端口)逐段数值序; 端口数值; 等值 0; 非 IP localeCompare 回落
 const cmp = (a, b) => M._dtStrCompare(a, b);
 ok("IPv4 段内数值序: 10.10.2.3 < 10.10.10.1(字典序会排反)", cmp("10.10.2.3:51413", "10.10.10.1:80") < 0);
 ok("端口按数值比较: 8080 > 443", cmp("1.2.3.4:8080", "1.2.3.4:443") > 0);
 ok("等值 -> 0", cmp("1.2.3.4", "1.2.3.4") === 0);
 ok("非 IP 回落 localeCompare", cmp("b", "a") > 0 && cmp("a", "b") < 0);
 
-// ④ sortedDrawer: 空值两方向恒末位(不反转) + IPv4 数值序 + 数值走 _raw 侧
+// 4. sortedDrawer: 空值两方向恒末位(不反转) + IPv4 数值序 + 数值走 _raw 侧
 const rows = [
   { id: 1, _raw: { addr: "1.2.3.10" } },
   { id: 2, _raw: { addr: "1.2.3.9" } },

@@ -106,7 +106,7 @@ const mkCtx = (res) => {
 const warnOf = (c) => c.toasts.filter((t) => t.kind === "warn").map((t) => t.msg).join(" | ");
 
 (async () => {
-  // ① 输入 -2 三维: 透传 -2(用全局), 不再有任何哨兵改写
+  // 1. 输入 -2 三维: 透传 -2(用全局), 不再有任何哨兵改写
   let c = mkCtx({ ratio: "-2", time: "-2", inactive: "-2" });
   await c.editShareLimits();
   ok("输入 -2 三维透传 -2(回执语义=用全局, 不再写 -1 永不限制)",
@@ -115,21 +115,21 @@ const warnOf = (c) => c.toasts.filter((t) => t.kind === "warn").map((t) => t.msg
   ok("投递端点与目标正确", c.posts[0].action === "share-limits" && c.posts[0].hash === "H1");
   ok("输入 -2 无校验告警", warnOf(c) === "");
 
-  // ② 其它值透传原值: 小时 x3600 转秒, 分享率原值
+  // 2. 其它值透传原值: 小时 x3600 转秒, 分享率原值
   c = mkCtx({ ratio: "1.5", time: "24", inactive: "0" });
   await c.editShareLimits();
   ok("常规值透传原值(1.5 / 24h=86400s / 0 原样)",
      c.posts.length === 1 && JSON.stringify(c.posts[0].body) === JSON.stringify({
        ratio_limit: 1.5, seeding_time_limit: 86400, inactive_seeding_time_limit: 0 }));
 
-  // ③ 混合: 空 = 不修改, -2 哨兵只落在有值维度
+  // 3. 混合: 空 = 不修改, -2 哨兵只落在有值维度
   c = mkCtx({ ratio: "", time: "-2", inactive: "3.5" });
   await c.editShareLimits();
   ok("空维度不投递, -2 只落在有值维度(3.5h=12600s)",
      c.posts.length === 1 && JSON.stringify(c.posts[0].body) === JSON.stringify({
        seeding_time_limit: -2, inactive_seeding_time_limit: 12600 }));
 
-  // ④ 校验域 [-2, 0..] 之外拒收(照现行校验形态: 负数只放行 -2): 零投递 + warn
+  // 4. 校验域 [-2, 0..] 之外拒收(照现行校验形态: 负数只放行 -2): 零投递 + warn
   for (const [field, val, re] of [
     ["ratio", "-1", /分享率无效.*-2/], ["ratio", "-3", /分享率无效/],
     ["time", "-1", /时长无效.*-2/], ["inactive", "abc", /时长无效/],
@@ -139,12 +139,12 @@ const warnOf = (c) => c.toasts.filter((t) => t.kind === "warn").map((t) => t.msg
     ok(`域外值拒收: ${field}=${val}(零投递 + 文案钉 -2)`, c.posts.length === 0 && re.test(warnOf(c)));
   }
 
-  // ⑤ 全空 = 不修改: 零投递
+  // 5. 全空 = 不修改: 零投递
   c = mkCtx({ ratio: "", time: "", inactive: "" });
   await c.editShareLimits();
   ok("全空输入零投递(未作修改提示)", c.posts.length === 0 && /未作修改/.test(c.toasts.map((t) => t.msg).join("|")));
 
-  // ⑥ 文案与占位符钉 -2(用户可见面与后端 docstring 同语义)
+  // 6. 文案与占位符钉 -2(用户可见面与后端 docstring 同语义)
   c = mkCtx(null);
   await c.editShareLimits();
   const opts = c.opened[0];
@@ -153,7 +153,7 @@ const warnOf = (c) => c.toasts.filter((t) => t.kind === "warn").map((t) => t.msg
      opts && opts.fields.length === 3 && opts.fields.every((f) => /-2 = 全局/.test(f.placeholder)) &&
      !/-1/.test(opts.body) && opts.fields.every((f) => !/-1/.test(f.placeholder)));
 
-  // ⑦ 取消(res=null): 零投递
+  // 7. 取消(res=null): 零投递
   c = mkCtx(null);
   await c.editShareLimits();
   ok("取消零投递", c.posts.length === 0);
@@ -214,7 +214,7 @@ const mkCtx = ({ confirm = {}, receipt = {}, known = ["H1"], apiFail = false,
 (async () => {
   const OKCONFIRM = { checks: { reannounce: false, delete_files: false } };
 
-  // ① 回执 ok + hash 未变 + memberByHash 仍列被删 hash(主轮询未落地) -> 必收(修复前红:
+  // 1. 回执 ok + hash 未变 + memberByHash 仍列被删 hash(主轮询未落地) -> 必收(修复前红:
   //    旧判据 !memberByHash.get() 为假 => 不收, 抽屉停在已删种子上)
   let c = mkCtx({ confirm: OKCONFIRM, receipt: { ok: true }, known: ["H1"] });
   c.drawerDel();
@@ -224,46 +224,46 @@ const mkCtx = ({ confirm = {}, receipt = {}, known = ["H1"], apiFail = false,
   ok("bulk 删除载荷齐全", c.posts.length === 1 && c.posts[0].body.action === "delete" &&
      c.posts[0].body.hashes.join() === "H1" && c.posts[0].body.delete_files === false);
 
-  // ② 回执 ok + 期间用户换了 drawer 目标 -> 不收(判据 hash 必须是调用点捕获的被删 hash)
+  // 2. 回执 ok + 期间用户换了 drawer 目标 -> 不收(判据 hash 必须是调用点捕获的被删 hash)
   c = mkCtx({ confirm: OKCONFIRM, receipt: { ok: true }, known: ["H1"] });
   c.waitCmd = async () => { c.drawer.hash = "H2"; return { ok: true }; };
   c.drawerDel();
   await settle();
   ok("回执 ok+已换目标 -> 不收新目标的抽屉", c.closed === 0 && c.drawer.hash === "H2");
 
-  // ③ 回执失败 -> 不收
+  // 3. 回执失败 -> 不收
   c = mkCtx({ confirm: OKCONFIRM, receipt: { ok: false, error: "qB 拒绝" }, known: ["H1"] });
   c.drawerDel();
   await settle();
   ok("回执失败 -> 不收(且报删除未完全成功)",
      c.closed === 0 && /删除未完全成功/.test(c.toasts.map((t) => t.msg).join("|")));
 
-  // ④ 抽屉已关 -> 不收(回执慢于手动关面板)
+  // 4. 抽屉已关 -> 不收(回执慢于手动关面板)
   c = mkCtx({ confirm: OKCONFIRM, receipt: { ok: true }, known: ["H1"] });
   c.waitCmd = async () => { c.drawer.open = false; return { ok: true }; };
   c.drawerDel();
   await settle();
   ok("回执到达时抽屉已关 -> 不收", c.closed === 0);
 
-  // ⑤ 回执 ok + memberByHash 已移除(轮询先落地) -> 照样收(判据只认回执, 不读成员表)
+  // 5. 回执 ok + memberByHash 已移除(轮询先落地) -> 照样收(判据只认回执, 不读成员表)
   c = mkCtx({ confirm: OKCONFIRM, receipt: { ok: true }, known: [] });
   c.drawerDel();
   await settle();
   ok("回执 ok+成员表已移除 -> 收", c.closed === 1);
 
   // ---- _deleteFlow 回执契约(delTorrent 的返回来源) ----
-  // ⑥ 用户取消确认框 -> false
+  // 6. 用户取消确认框 -> false
   c = mkCtx({ confirm: null, known: ["H1"] });
   ok("取消确认框 -> delTorrent false", await c.delTorrent("H1") === false && c.posts.length === 0);
-  // ⑦ 汇报前置失败 -> false(保守口径不放宽)
+  // 7. 汇报前置失败 -> false(保守口径不放宽)
   c = mkCtx({ confirm: { checks: { reannounce: true, delete_files: true } }, known: ["H1"] });
   c.reannouncePlan = () => ({ keys: ["g1"], hashes: [], skipped: 0 });
   c._reannounceAll = async () => false;
   ok("汇报前置失败 -> false 零删除投递", await c.delTorrent("H1") === false && c.posts.length === 0);
-  // ⑧ 发送异常 -> false
+  // 8. 发送异常 -> false
   c = mkCtx({ confirm: OKCONFIRM, receipt: { ok: true }, known: ["H1"], apiFail: true });
   ok("发送异常 -> false", await c.delTorrent("H1") === false && c.closed === 0);
-  // ⑨ 未知目标(找不到成员) -> falsy
+  // 9. 未知目标(找不到成员) -> falsy
   c = mkCtx({ known: [], singles: [] });
   ok("未知目标 -> falsy 不投递", !(await c.delTorrent("H1")) && c.posts.length === 0);
 })().then(() => {
@@ -300,12 +300,12 @@ const m1 = mkMember();
 const m2 = mkMember({ hash: "h2", kind: "downloading", size: 200, site: "s2", save_path: "R:/c" });
 const g = mkGroup([m1, m2], { state: "mixed", pending: 1, total: 2, job_ids: ["j1"], dst: ["R:/b"], updated_at: 9 });
 
-// ① 未脏行必命中 + 长度不变量
+// 1. 未脏行必命中 + 长度不变量
 const fp = B(g);
 ok("未脏行 build->hit 命中", H(g, fp) === true);
 ok("fp 长度不变量 n*8+3(与 build 槽清单逐字对应)", fp.length === 2 * 8 + 3);
 
-// ② 逐槽必失配(成员 8 列值槽 + save_path); 每槽配对还原(值槽换引用, relocate 是原地改值
+// 2. 逐槽必失配(成员 8 列值槽 + save_path); 每槽配对还原(值槽换引用, relocate 是原地改值
 // 槽 —— 签名槽的还原必须写回原字段值, 只还原引用不够)
 const relSnap = JSON.parse(JSON.stringify(m1.relocate));
 const snap = { kind: m1.kind, size: m1.size, category: m1.category, site: m1.site, tags: m1.tags,
@@ -332,7 +332,7 @@ mutAndMiss("槽: 成员 relocate.armed_at",
            () => setRel("armed_at", 99), () => setRel("armed_at", relSnap.armed_at));
 mutAndMiss("槽: 首成员 save_path", () => { m1.save_path = "R:/q"; }, () => { m1.save_path = snap.save_path; });
 
-// ③ 结构面: members 引用 / 成员数增减 / 组 relocate 签名
+// 3. 结构面: members 引用 / 成员数增减 / 组 relocate 签名
 const membersRef = g.members;
 g.members = [m1, m2];
 ok("槽: members 引用被换(内容相等也失配, 引用槽)", H(g, fp) === false);
@@ -352,12 +352,12 @@ ok("槽: 组 relocate.pending", H(g, fp) === false);
 g.relocate = rel;
 ok("组 relocate 还原复命中", H(g, fp) === true);
 
-// ④ 重算回填后再往返: 改值 -> 新 fp -> 命中(缓存回填口径)
+// 4. 重算回填后再往返: 改值 -> 新 fp -> 命中(缓存回填口径)
 m1.kind = "error";
 const fp2 = B(g);
 ok("失配重算后的新指纹对自身往返命中", H(g, fp2) === true && H(g, fp) === false);
 
-// ⑤ 边界: 无 relocate(签名空串)/空成员组
+// 5. 边界: 无 relocate(签名空串)/空成员组
 const gPlain = mkGroup([mkMember({ relocate: undefined })], null);
 ok("无 relocate 字段照常往返命中", H(gPlain, B(gPlain)) === true);
 const gEmpty = mkGroup([], null);
@@ -542,29 +542,29 @@ const mkMoveCtx = (script) => {
 const msgs = (c) => c.toasts.map((t) => t.msg).join("|");
 
 (async () => {
-  // ① 完整确认回路: 首发零副作用 "confirm" -> 收框 -> 确认 -> confirm=true 重发 -> 成功收口
+  // 1. 完整确认回路: 首发零副作用 "confirm" -> 收框 -> 确认 -> confirm=true 重发 -> 成功收口
   let c = mkMoveCtx({ first: "confirm", gate: true, second: true });
   await c.submitMoveDialog();
-  ok("回路①: 两次投递(首发无 confirm, 重发带 confirm=true)",
+  ok("回路 1: 两次投递(首发无 confirm, 重发带 confirm=true)",
      c.posts.length === 2 && c.posts[0].confirm === false && c.posts[1].confirm === true &&
      c.posts[1].location === "R:/dst" && c.posts.every((p) => p.via === "single"));
-  ok("回路①: 确认框只开一次, 成功后框收不再重开", c.gates === 1 && c.moveOpen === false);
-  ok("回路①: 在途回执被消费清空", c._pendingRelocateConfirm === null && c.moveBusy === false);
+  ok("回路 1: 确认框只开一次, 成功后框收不再重开", c.gates === 1 && c.moveOpen === false);
+  ok("回路 1: 在途回执被消费清空", c._pendingRelocateConfirm === null && c.moveBusy === false);
 
-  // ② 取消: 确认框 false -> 不重发, 带原路径重开
+  // 2. 取消: 确认框 false -> 不重发, 带原路径重开
   c = mkMoveCtx({ first: "confirm", gate: false, second: true });
   await c.submitMoveDialog();
-  ok("回路②: 取消只投递一次(零副作用不重发)", c.posts.length === 1 && c.posts[0].confirm === false);
-  ok("回路②: 带原路径重开设定位置框", c.moveOpen === true && c.movePathInput === "R:/dst");
+  ok("回路 2: 取消只投递一次(零副作用不重发)", c.posts.length === 1 && c.posts[0].confirm === false);
+  ok("回路 2: 带原路径重开设定位置框", c.moveOpen === true && c.movePathInput === "R:/dst");
 
-  // ③ 再 confirm 仍 "confirm"(后端仍在等确认): warn + 重开, 不误报成功
+  // 3. 再 confirm 仍 "confirm"(后端仍在等确认): warn + 重开, 不误报成功
   c = mkMoveCtx({ first: "confirm", gate: true, second: "confirm" });
   await c.submitMoveDialog();
-  ok("回路③: 二发仍 confirm -> warn + 重开(两次投递)",
+  ok("回路 3: 二发仍 confirm -> warn + 重开(两次投递)",
      c.posts.length === 2 && c.moveOpen === true &&
      /迁移未发起.*仍在等确认/.test(msgs(c)));
 
-  // ④ 一次成功不经确认框; ⑤ 批量路径走 _bulkEditPost
+  // 4. 一次成功不经确认框; 5. 批量路径走 _bulkEditPost
   c = mkMoveCtx({ first: true, gate: true, second: true });
   await c.submitMoveDialog();
   ok("一次成功: 单次投递 + 收框(确认框不开)", c.posts.length === 1 && c.gates === 0 && c.moveOpen === false);
@@ -573,7 +573,7 @@ const msgs = (c) => c.toasts.map((t) => t.msg).join("|");
   await c.submitMoveDialog();
   ok("批量目标走 _bulkEditPost", c.posts.length === 1 && c.posts[0].via === "bulk");
 
-  // ⑥ 空路径拒发
+  // 6. 空路径拒发
   c = mkMoveCtx({ first: true, gate: true, second: true });
   c.movePathInput = "   ";
   await c.submitMoveDialog();
@@ -598,18 +598,18 @@ const clamp = (px, vh) => DM._drawerClampHeight.call(Object.assign({}, DM), px, 
 const checks = [];
 const ok = (name, cond) => checks.push([name, !!cond]);
 
-// ① 240 下界(vh=1000: max=700)
+// 1. 240 下界(vh=1000: max=700)
 ok("px<240 提到下界 240", clamp(100, 1000) === 240 && clamp(0, 1000) === 240 && clamp(-50, 1000) === 240);
 ok("区间内原值返回", clamp(500, 1000) === 500 && clamp(700, 1000) === 700);
-// ② 70vh 上界
+// 2. 70vh 上界
 ok("px>max 压到 70vh 上界", clamp(1000, 1000) === 700 && clamp(99999, 1000) === 700);
 ok("上界随视口取整(round(vh*0.7)): 999*0.7=699.3 -> 699", clamp(99999, 999) === 699);
-// ③ 极小视口: 70vh<240 时 min/max 互换, 区间保持合法且不越过 70vh 红线
+// 3. 极小视口: 70vh<240 时 min/max 互换, 区间保持合法且不越过 70vh 红线
 ok("vh=342(max=239): 上下界同为 239, 两侧输入夹到同一值",
    clamp(100, 342) === 239 && clamp(5000, 342) === 239);
 ok("vh=200(max=140): px 双向夹到 140", clamp(50, 200) === 140 && clamp(1000, 200) === 140);
 ok("vh=343(max=240): 恰在 240 红线上, 双向夹 240", clamp(100, 343) === 240 && clamp(1000, 343) === 240);
-// ④ 取整(落盘值不带亚像素尾数)
+// 4. 取整(落盘值不带亚像素尾数)
 ok("亚像素输入取整", clamp(500.4, 1000) === 500 && clamp(500.6, 1000) === 501);
 console.log(JSON.stringify({
   ok: checks.filter((c) => c[1]).length, total: checks.length,
@@ -659,89 +659,89 @@ const ok = (name, cond) => checks.push([name, !!cond]);
   const opener = anchorOf({ left: 600, top: 60, width: 200, bottom: 100 });
   const c1 = mkCtx();
   c1.relChainOpen("A", opener);
-  ok("① 开浮窗: open/hash/subtitle/loading 置位", c1.relChain.open === true && c1.relChain.hash === "A" &&
+  ok("1. 开浮窗: open/hash/subtitle/loading 置位", c1.relChain.open === true && c1.relChain.hash === "A" &&
      c1.relChain.loading === true && c1.relChain.subtitle === "A");
-  ok("① 取数 URL 只带 hash(客户端零探测, 服务端派生起点)", c1.calls.length === 1 &&
+  ok("1. 取数 URL 只带 hash(客户端零探测, 服务端派生起点)", c1.calls.length === 1 &&
      c1.calls[0] === "/api/relocate/chain?hash=A");
-  ok("① seq 自增", c1.relChain.seq >= 1);
+  ok("1. seq 自增", c1.relChain.seq >= 1);
   const sc = listeners.find((l) => l.t === "scroll");
   const rz = listeners.find((l) => l.t === "resize");
-  ok("① 全局监听已挂: scroll capture + resize", !!sc && sc.cap === true && !!rz);
+  ok("1. 全局监听已挂: scroll capture + resize", !!sc && sc.cap === true && !!rz);
 
   c1.relChainOpen("A", opener);
-  ok("① 同 hash 再开即关(开/关翻转) + 焦点回落触发钮", c1.relChain.open === false && opener.focusCalls === 1);
+  ok("1. 同 hash 再开即关(开/关翻转) + 焦点回落触发钮", c1.relChain.open === false && opener.focusCalls === 1);
   c1.relChainOpen("A", opener);
-  ok("① 关后再开重开浮窗", c1.relChain.open === true && c1.relChain.hash === "A");
+  ok("1. 关后再开重开浮窗", c1.relChain.open === true && c1.relChain.hash === "A");
 
-  // ② A 慢响应落袋不覆写 B(seq 代际守卫)
+  // 2. A 慢响应落袋不覆写 B(seq 代际守卫)
   const seqBefore = c1.relChain.seq;
   c1.relChainOpen("B", opener);
-  ok("② 换 hash 重开: hash=B, loading, seq 再自增",
+  ok("2. 换 hash 重开: hash=B, loading, seq 再自增",
      c1.relChain.hash === "B" && c1.relChain.loading === true && c1.relChain.seq > seqBefore);
   const aRes = c1.pending[c1.pending.length - 2].res;   // A 的响应(B 之前挂起的那笔)
   aRes({ nodes: [{ path: "A-chain" }], cached: false });
   await settle();
-  ok("② A 慢响应被 seq 守卫丢弃: data 不被旧响应覆写",
+  ok("2. A 慢响应被 seq 守卫丢弃: data 不被旧响应覆写",
      c1.relChain.data === null && c1.relChain.loading === true && c1.relChain.hash === "B");
-  ok("② B 的取数已发出", c1.calls[c1.calls.length - 1] === "/api/relocate/chain?hash=B");
+  ok("2. B 的取数已发出", c1.calls[c1.calls.length - 1] === "/api/relocate/chain?hash=B");
   c1.pending[c1.pending.length - 1].res({ nodes: [{ path: "B-chain" }], cached: true });
   await settle();
-  ok("② B 响应落袋: data= B, loading 收口", c1.relChain.data && c1.relChain.data.nodes[0].path === "B-chain" &&
+  ok("2. B 响应落袋: data= B, loading 收口", c1.relChain.data && c1.relChain.data.nodes[0].path === "B-chain" &&
      c1.relChain.loading === false && c1.relChain.data.cached === true);
 
-  // ③ 关闭后到达的响应同样丢弃(代际 + open 双守卫)
+  // 3. 关闭后到达的响应同样丢弃(代际 + open 双守卫)
   c1.relChainClose();
   c1.relChainOpen("C", opener);
   c1.relChainClose();
   c1.pending[c1.pending.length - 1].res({ nodes: [{ path: "C-chain" }] });
   await settle();
-  ok("③ 关闭后响应不落袋", c1.relChain.data === null && c1.relChain.open === false);
+  ok("3. 关闭后响应不落袋", c1.relChain.data === null && c1.relChain.open === false);
 
-  // ⑤ 滚动即关(capture; 浮窗内部滚动/浮窗自身不关) + resize 即关
+  // 5. 滚动即关(capture; 浮窗内部滚动/浮窗自身不关) + resize 即关
   c1.relChainOpen("A", opener);
   const focusBefore = opener.focusCalls;
   sc.fn({ target: { nodeType: 1 } });
-  ok("⑤ 外部滚动即关(强制收口, 不回焦)", c1.relChain.open === false && opener.focusCalls === focusBefore);
+  ok("5. 外部滚动即关(强制收口, 不回焦)", c1.relChain.open === false && opener.focusCalls === focusBefore);
   c1.relChainOpen("A", opener);
   sc.fn({ target: popInner });
-  ok("⑤ 浮窗内部滚动不关(长链滚得动)", c1.relChain.open === true);
+  ok("5. 浮窗内部滚动不关(长链滚得动)", c1.relChain.open === true);
   sc.fn({ target: pop });
-  ok("⑤ 目标即浮窗自身不关", c1.relChain.open === true);
+  ok("5. 目标即浮窗自身不关", c1.relChain.open === true);
   rz.fn();
-  ok("⑤ resize 即关", c1.relChain.open === false);
+  ok("5. resize 即关", c1.relChain.open === false);
 
-  // ⑥ refresh: loading 中不重取; 空闲时带 refresh=1
+  // 6. refresh: loading 中不重取; 空闲时带 refresh=1
   c1.relChainOpen("A", opener);
   c1.relChainRefresh();
-  ok("⑥ loading 中不重取", c1.calls.filter((u) => u.includes("refresh=1")).length === 0);
+  ok("6. loading 中不重取", c1.calls.filter((u) => u.includes("refresh=1")).length === 0);
   c1.pending[c1.pending.length - 1].res({ nodes: [] });
   await settle();
   c1.relChainRefresh();
-  ok("⑥ 空闲刷新带 refresh=1", c1.calls[c1.calls.length - 1] === "/api/relocate/chain?hash=A&refresh=1");
+  ok("6. 空闲刷新带 refresh=1", c1.calls[c1.calls.length - 1] === "/api/relocate/chain?hash=A&refresh=1");
 
-  // ---- ④ relChainPlace 四向定位(独立 ctx) ----
+  // ---- 4. relChainPlace 四向定位(独立 ctx) ----
   const c2 = mkCtx();
   c2.relChain.open = true;
   c2.relChain.hash = "A";
   c2.relChainPlace(anchorOf({ left: 600, width: 200, top: 60, bottom: 100 }));
-  ok("④ 锚下方: left=r.right-width, top=r.bottom+8",
+  ok("4. 锚下方: left=r.right-width, top=r.bottom+8",
      c2.relChain.left === 340 && c2.relChain.top === 108 && c2.relChain.width === 460);
   c2.relChainPlace(anchorOf({ left: 0, width: 50, top: 300, bottom: 340 }));
-  ok("④ 左越界夹到 pad", c2.relChain.left === 8);
+  ok("4. 左越界夹到 pad", c2.relChain.left === 8);
   c2.relChainPlace(anchorOf({ left: 900, width: 200, top: 60, bottom: 100 }));
-  ok("④ 右越界夹到 vw-width-pad", c2.relChain.left === 1024 - 460 - 8);
+  ok("4. 右越界夹到 vw-width-pad", c2.relChain.left === 1024 - 460 - 8);
   c2.relChainPlace(anchorOf({ left: 600, width: 200, top: 380, bottom: 392 }));
-  ok("④ 下方放得下不翻面", c2.relChain.top === 400);
+  ok("4. 下方放得下不翻面", c2.relChain.top === 400);
   sandbox.window.innerHeight = 400;   // 极矮视口: top+360 超界 -> 翻到锚上方
   c2.relChainPlace(anchorOf({ left: 600, width: 200, top: 380, bottom: 392 }));
-  ok("④ 下方放不下翻上方(max(pad, r.top-360))", c2.relChain.top === 20);
+  ok("4. 下方放不下翻上方(max(pad, r.top-360))", c2.relChain.top === 20);
   sandbox.window.innerHeight = 800;
   c2.relChainPlace(null);
-  ok("④ 无锚居中", c2.relChain.left === Math.max(8, (1024 - 460) / 2) &&
+  ok("4. 无锚居中", c2.relChain.left === Math.max(8, (1024 - 460) / 2) &&
      c2.relChain.top === Math.max(8, (800 - 400) / 2));
   c2.relChain.open = false;
   c2.relChainPlace(anchorOf({ left: 600, width: 200, bottom: 100 }));
-  ok("④ 关着不定位(零写入)", c2.relChain.left === Math.max(8, (1024 - 460) / 2) &&
+  ok("4. 关着不定位(零写入)", c2.relChain.left === Math.max(8, (1024 - 460) / 2) &&
      c2.relChain.top === Math.max(8, (800 - 400) / 2));
 })().then(() => {
   console.log(JSON.stringify({

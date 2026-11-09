@@ -5,7 +5,7 @@
 - test_frontend_search_pending_no_collapse: 搜索待响应期空命中集不得接管列表(2026-10-07 修详情面板/流量图搜索跳动) —— view.js searchPending 生命周期(输入武装防抖即置位/doSearch 直达入口补武装/resetSearch 清除/落袋且过代际守卫后清除) + filters.js _searchGateActive 单点(待响应且命中集未落袋 = 门不生效, 两个派生 filteredTorrents/filteredGroups 都走它; 渐进输入命中集非空仍按旧集过滤) + 三皮肤 .layout min-height: calc(100vh - var(--head-h)) 撑满首屏(停靠面板 sticky 锚点与列表长短无关, 筛到短列表不再脱锚跳)
 - test_frontend_hr_safety_wiring: 删除安全档位前端接线守阵 —— hr.js 的 token 映射表与后端 resolve.py 的 SRC_* 常量逐字一致、做种时长列每套 UI 2 处换绑 hrDurClass/hrSrcClass(计划 26-10-11-1722 P2 起明细成员单元格收敛为单份 <aq-member-cells> 渲染器, 触发面 3→2, 该渲染器由辅种页/追剧页共用)+ 挂 hrSrcFull/hrSrcHalf 底线与 hrPopEnter 触发 + 来源与已排除文案都走 hrDurHint 进 title(行内不留 chip) + 弹窗单例 DOM 每套 UI 恰一份、三套 CSS 的 hr-warn/hr-line/hr-pop 成对定义、js 引用的 m.hr_* 字段都在后端 hr_view_fields 键集里(字段打错 = 页面静默空白)
 - test_frontend_site_alert_icon_wiring: 站点 chip 改色表达守阵(计划 26-10-19-2206 S4, 取代 26-10-19-2007 的两槽口径) —— 站点问题走**颜色**(缺配置橙底+虚线下边 / tracker 报错红底)、命令结果走**图标**且固定放站点名之后: 三皮肤样式键集相等(含 reduced-motion 降级/搜索命中让出底色/明细行染色)/模板三处 cell 只剩一个图标槽且 tooltip 挂整块 chip/旧图标类 `.sa` 零残留/token->符号单点只含命令结果四种
-- test_drawer_tpl_variant_interaction_single_point: 变体交互单点定型守阵(计划 26-10-12-0527 U5①) —— drawer_tpl/*.js 全目录扫 ui.sort(手搓排序状态机不允许在任何变体复活); 凡声明 tableId+rowsFn(桥表格变体)的文件**声明即受检**, 另强制零表格容器列宽 grid(列宽唯一来源 = 引擎列集 computed; 版式 grid 卡片/双栏/图例是 D5 保留面) —— 未来新变体接引擎即自动落入本守阵, 无需改守阵, 即「定型」之义
+- test_drawer_tpl_variant_interaction_single_point: 变体交互单点定型守阵(计划 26-10-12-0527 U5 1) —— drawer_tpl/*.js 全目录扫 ui.sort(手搓排序状态机不允许在任何变体复活); 凡声明 tableId+rowsFn(桥表格变体)的文件**声明即受检**, 另强制零表格容器列宽 grid(列宽唯一来源 = 引擎列集 computed; 版式 grid 卡片/双栏/图例是 D5 保留面) —— 未来新变体接引擎即自动落入本守阵, 无需改守阵, 即「定型」之义
 - test_frontend_search_auto_refresh_wiring: 搜索自动更新接线守阵(plan 26-11-03-0120) —— 服务端 search_rev 单点/触发面(增删+全量轮+name/category/save_path/tags)/state 恒回传/search 响应先在快照前取 rev + 前端常量定值(2000ms/3000ms)/doSearch(quiet) 不武装 pending/落袋版本对齐/轮询触发点与冷却/续查用独立定时器 + 共享 topbar 提示每套皮肤恰好一份(零复制)
 - test_frontend_search_uncovered_deduped: 虚拟行只兜底"真正未归组且仍在命中集"的种子(2026-11-03 issue 26-11-03-0254) —— filteredGroups 追加 searchUncovered 前必须用渲染时未过滤的 this.groups 现算 groupedNow, 且「已不在命中集」「已归组」两道闸排在 facet 过滤与 kept.push 之前; 虚拟行只允许 filteredGroups 消费一处, filteredTorrents 不得引入
 
@@ -41,7 +41,7 @@ from webui_helpers import (
 
 
 def test_drawer_tpl_variant_interaction_single_point():
-    """变体交互单点定型守阵(计划 26-10-12-0527 U5①)。
+    """变体交互单点定型守阵(计划 26-10-12-0527 U5 1)。
 
     判据**按声明识别(声明即受检)**: drawer_tpl/*.js 全目录扫 ui.sort —— 手搓排序状态机
     (ui.sortKey/ui.sortDir)不允许在任何变体复活; 凡声明 tableId+rowsFn(桥表格变体)的文件
@@ -69,7 +69,7 @@ def test_drawer_tpl_variant_interaction_single_point():
         "10-content-tree-detail-tall.js",
         "11-content-treegrid-batch-low.js",
     }
-    # 表格容器选择器族(⑪ 同口径): 引擎行/列头容器 + 旧手搓表格容器命名族(.dtNN-list 等版式
+    # 表格容器选择器族(11 同口径): 引擎行/列头容器 + 旧手搓表格容器命名族(.dtNN-list 等版式
     # 类不在此族 —— 04 的 .group-table 卡片栅格与 07 的 .group-table 表壳栅格是 D5 保留面)
     colgrid_sel = re.compile(r"\.group-head|\.group-row|\.dt\d\d-(?:h|r|head|row|gcols)\b")
 
@@ -406,13 +406,13 @@ def test_frontend_site_alert_icon_wiring():
 
     通道分工: 站点问题(缺配置 / tracker 报错)走**颜色**, 命令结果走**图标**(固定放站点名之后)。
     三件事必须同时成立, 缺一条就是"pytest 全绿但界面废掉":
-      ① 三皮肤样式**键集合相等**(漏一套 = 某皮肤下 chip 不变色/图标没颜色, 只在一套皮肤上看得见);
+      1. 三皮肤样式**键集合相等**(漏一套 = 某皮肤下 chip 不变色/图标没颜色, 只在一套皮肤上看得见);
          缺配置的虚线底边(非颜色通道, D4)与搜索命中"让出底色改描边"(D6)同属可读性契约, 一并钉住;
-      ② 站点 chip 骨架收敛为单点组件 <aq-site-chip>(issue 26-10-20-2231 / R23-B-09, 此前种子页/
+      2. 站点 chip 骨架收敛为单点组件 <aq-site-chip>(issue 26-10-20-2231 / R23-B-09, 此前种子页/
          组行/集行各抄一份 11 行骨架、torrent 版还漏 search-hit): 单点模板里**一个**图标槽
          (命令结果), 三处调用点都走它, tooltip 挂整块 chip; 旧图标类(`.sa` / `sa-<token>`)
          必须零残留 —— 残留 = 某个视图还在画第二个图标;
-      ③ 图标 token -> 符号映射单点在 commands.js(模板里不得出现第二份 `#i-xxx` 映射),
+      3. 图标 token -> 符号映射单点在 commands.js(模板里不得出现第二份 `#i-xxx` 映射),
          且该表**只含命令结果四种 token**(站点问题不该再有图标)。
     """
     CMD_TOKENS = ("pending", "ok", "warn", "error")
@@ -469,7 +469,7 @@ def test_frontend_site_alert_icon_wiring():
             f"{_UI_ALL[0]}-{ui}={sorted(base - per_skin[ui])} / {ui}-{_UI_ALL[0]}={sorted(per_skin[ui] - base)}"
         )
 
-    # ② 站点 chip 骨架单点(issue 26-10-20-2231 / R23-B-09): 组件模板一个图标槽, 三处调用点都走它
+    # 2. 站点 chip 骨架单点(issue 26-10-20-2231 / R23-B-09): 组件模板一个图标槽, 三处调用点都走它
     tpl = open(os.path.join(STATIC_ROOT, "shared", "tpl", "xtpl-cells.html"), encoding="utf-8").read()
     assert 'id="tpl-aq-site-chip"' in tpl, "xtpl-cells.html 缺 #tpl-aq-site-chip 单点模板(site-chip 三份回潮?)"
     assert tpl.count("<aq-site-chip ") == 3, "站点 chip 必须恰三处调用点(种子页/组行/集行)且都走单点组件(调用点必带 :m prop, 故标签后一定有空格; 注释里的字面提及不计)"
@@ -484,7 +484,7 @@ def test_frontend_site_alert_icon_wiring():
     for seg in re.findall(r"<svg[^>]*class=\"ico sx\"[^>]*>", tpl):
         assert ":title" not in seg, "命令结果图标不再单独挂 title(触发面已放大到整块 chip)"
 
-    # ③ token -> 符号单点: 命令结果符号一律经 alertIconHref 取, 不得内联第二份映射
+    # 3. token -> 符号单点: 命令结果符号一律经 alertIconHref 取, 不得内联第二份映射
     # (单点模板 × 1 槽 = 1 次; 模板里既有的 #i-warn/#i-caret 属于别的语义, 不在此列)
     assert tpl.count("$root.alertIconHref(") == 1, "命令结果图标必须经 alertIconHref 单点取符号"
     cmds = read_shared("commands.js")
