@@ -26,7 +26,13 @@ def listening_pids(port: int) -> set:
         f"$c = Get-NetTCPConnection -LocalPort {port} -State Listen -ErrorAction SilentlyContinue; "
         "if ($c) { $c.OwningProcess | Select-Object -Unique | ForEach-Object { $_.ToString() } }"
     )
-    r = subprocess.run(["powershell", "-NoProfile", "-Command", ps], capture_output=True, text=True)
+    r = subprocess.run(
+        ["powershell", "-NoProfile", "-Command", ps],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
     return {int(x) for x in r.stdout.split() if x.strip().isdigit()}
 
 
@@ -139,7 +145,13 @@ def main(argv: list) -> int:
                 print(f"[port-kill] {port}: pid {pid} -> REFUSED: {why}")
                 rc = 1
                 continue
-            k = subprocess.run(["taskkill", "/F", "/PID", str(pid)], capture_output=True, text=True)
+            k = subprocess.run(
+                ["taskkill", "/F", "/PID", str(pid)],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+            )
             detail = "killed" if k.returncode == 0 else "kill-failed: " + (k.stderr or k.stdout).strip()
             print(f"[port-kill] {port}: pid {pid} -> {detail}")
             rc |= k.returncode

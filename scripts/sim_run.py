@@ -811,7 +811,14 @@ def main(argv=None) -> int:
             if i:
                 lf.write(f"\n===== phase {i + 1} (新进程, 复用 state_file) =====\n")
             proc = subprocess.Popen(
-                cmd, stdout=lf, stderr=subprocess.STDOUT, text=True, creationflags=flags, env=child_env
+                cmd,
+                stdout=lf,
+                stderr=subprocess.STDOUT,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                creationflags=flags,
+                env=child_env,
             )
             if web_th and i == 0:
                 web_th.start()

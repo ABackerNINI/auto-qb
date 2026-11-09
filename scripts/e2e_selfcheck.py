@@ -79,7 +79,13 @@ def _proc_info(pid: int) -> tuple[str, str]:
         f"$p = Get-CimInstance Win32_Process -Filter 'ProcessId = {pid}' -ErrorAction SilentlyContinue; "
         "if ($p) { Write-Output ($p.Name + '|' + $p.CommandLine) }"
     )
-    r = subprocess.run(["powershell", "-NoProfile", "-Command", ps], capture_output=True, text=True)
+    r = subprocess.run(
+        ["powershell", "-NoProfile", "-Command", ps],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
     out = (r.stdout or "").strip()
     if "|" in out:
         name, _, cmdline = out.partition("|")

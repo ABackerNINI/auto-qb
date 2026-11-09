@@ -48,6 +48,10 @@
   首次 `commands run test.one` 又直跑 rc=4(本 shell 仍自带 `TMPDIR=H:\Temp`), `env -u TMPDIR` 后过;
   本轮其后所有 pytest 均带前缀。为什么没命中: 开工按「先索引后 grep」读了总索引/README, 但定位焦点在
   前端 node 电池, 没顺着 testing 类索引点开本文件 —— 跨专题时最容易漏的固定动作。
+- **复发**: 7(2026-11-10)—— issue 26-11-07-1216 修复轮首次 `commands run test.quick` 直跑 rc=4
+  (本 clone 的 shell 自带 `TMPDIR=C:\Users\…\AppData\Local\Temp`), `TMPDIR=` 清空后过, 其后全带前缀。
+  为什么没命中: AGENTS.md 测试节与失败行都写了判据, 但开工没把「跑任何 pytest 前先清 TMPDIR」
+  当固定动作 —— 又一次证明该动作要放在跑测试的第一条命令里, 不是踩到 rc=4 再补。
 
 ### `--basetemp` 换了目录会让 4 条 sidefx 用例**假红**
 

@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="port-kill-subprocess-encoding">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="port_kill.py 存量子进程未钉 encoding(cp1252 同病)">
 <meta name="issue-summary" content="port_kill.py 两处 subprocess.run text=True 缺 encoding/errors, 守卫只扫 tests/ 不含 scripts/, CI 不红但同病">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-07-1216-bug-port-kill-subprocess-encoding</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-07 12:16</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">scripts</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
@@ -156,11 +156,14 @@ for p in sorted(TESTS.rglob("*.py")):    # 只扫 tests/**，scripts/ 不在范�
   <h2><span class="no">§07</span>状态变更日志</h2>
   <ul>
     <li>2026-11-07 12:16 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-10 — 状态 Open → In Progress（kb.status）</li>
+    <li>2026-11-10 — 状态 In Progress → Done（kb.status）</li>
+</ul>
   <h3>复验</h3>
-  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <p>复验：2026-11-10（head <code>f905b7b7</code>）仍复现 —— <code>:29</code> / <code>:142</code> 两处仍旧写法，守卫仍只 rglob <code>tests/**</code>。</p>
   <h3>修复后补充</h3>
-  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  <p><strong>实际修法</strong>（建议 ①+② 全落地，且扩面时多抓出 3 处同病一并钉码）：① 5 处 <code>subprocess</code> 文本调用补 <code>encoding="utf-8"</code> + <code>errors="replace"</code> —— 本件 <code>port_kill.py</code> :29 / :142，同病 <code>e2e_selfcheck.py</code> _proc_info、<code>hr_fetch_experiment.py</code> _kill_profile_browsers、<code>sim_run.py</code> Popen（重定向子进程 stdout 进 log，与 log 文件本身的 utf-8+replace 口径对齐）；② <code>test_repo_text_subprocess_calls_pin_utf8</code> 扫描面 <code>tests/</code> → <code>tests/ + scripts/</code>（未发现 GBK 豁免场景：存量 <code>sync_agent_skills.py</code> 的 GBK 输出通道本就走 utf-8+replace 容错，无需逐文件豁免清单）。字节模式调用（taskkill 回读 / Popen DEVNULL 等）不在守阵口径，未动。</p>
+  <p><strong>验证方式</strong>：守卫扩面后 <code>test_repo_text_subprocess_calls_pin_utf8</code> 亮红抓出 <code>sim_run.py:813</code>（单行 grep 漏扫的多行调用），钉码后转绿；全量实测数字见基线切片 <code>26-11-10-0044-port-kill-encoding-guard-scripts</code>（<code>commands run kb.baseline</code> 最新，数字不在此手抄）；只读子代理评审两轮，首轮 0 条、复轮 3 条 minor（均为文档计数/口径漂移，当场修）。</p>
 </section>
 
 <footer>

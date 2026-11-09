@@ -18,7 +18,10 @@
   `_readerthread` 打死, 管道再没人读, 子进程卡在写管道上 → `TimeoutExpired`; stdout 侧则是
   `proc.stdout is None` → `json.loads(None)` 报 `NoneType` / `.strip()` 报 `AttributeError`,
   表象离根因很远, 别当成 JS 探针死循环去调超时。
-- **复发**: +2; 最近 (2026-11-07, R4 scripts 批): 批内新测试红验回放又一处 `text=True` 缺 encoding/errors
+- **复发**: +3; 最近 (2026-11-10, issue 26-11-07-1216 修复批): 守阵 2026-11-06 落地时扫描面只 rglob `tests/**`,
+  `scripts/` 存量 5 处同病长期漏扫(CI 不红但同病); 本批把扫描面扩成 `tests/ + scripts/` 并钉码,
+  扩面守卫当场抓出单行 grep 漏掉的多行调用 `sim_run.py:813` —— **静态守卫的扫描面本身也要随目录面走全**。
+  上次 +1 (2026-11-07, R4 scripts 批): 批内新测试红验回放又一处 `text=True` 缺 encoding/errors
   —— 为何没命中: 任务书未列该坑/路由没到; 守阵机检当场兜住(首跑红补钉即绿)。
   上次 +1 (2026-11-06, CI `windows-latest` cp1252 一次红 6 条 node 探针): 为什么没命中 ——
   坑档早就写了, 但 `处置` 把 `errors="replace"` 写成括号里的“可加”, 全仓 12 处 `text=True` 漏声明、
