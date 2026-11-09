@@ -23,9 +23,9 @@ _TORRENT_FIELDS = ("dlspeed", "upspeed", "downloaded", "uploaded", "downloaded_s
 #: 防溢出保险闸(正常空闲段任何路径都不应触闸, 触闸即测试 bug); 模块常量非配置键
 ZRUN_FLUSH_S = 86400
 
-#: 游程样本数上限(N4 天级保险闸, 同上): = ceil(86400 / sample_interval) 在 sample_interval
-#: >= 1s(配置校验下限 + _apply_interval max(1.0) 钳制)下的上界, 保证游程跨度不超天级
-#: dt_ms 口径; 模块常量非配置键
+#: 游程样本数上限(N4 天级保险闸, 同上): = ceil(86400 / 生效间隔) 在生效间隔
+#: (= multiplier * main_tick, >= 1s: 配置校验下限 + _apply_interval max(1.0) 钳制)下的上界,
+#: 保证游程跨度不超天级 dt_ms 口径; 模块常量非配置键
 ZRUN_CAP_SAMPLES = 86400
 
 #: 单系列缓冲槽数上限(Q3 保险闸, plan 26-10-04-1957 §3.1): r 记录占 1 槽, 游程占 run_len

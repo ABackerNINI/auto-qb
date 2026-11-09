@@ -84,6 +84,16 @@ MONTH_NOMINAL_S = 30 * DAY_SECONDS
 #: 24h 窗栅格宽的兜底值(qb_traffic 缺省 = 未启用时的空态 meta; 与配置缺省 30S 同值)
 DEFAULT_SAMPLE_INTERVAL_S = 30.0
 
+
+def effective_sample_interval(multiplier: int, main_tick: float) -> float:
+    """生效采样间隔单点: multiplier * main_tick(秒)。采样器与 webui 栅格同调(D10)
+
+    配置键 qb_traffic.sample_interval_multiplier 是 main_tick 的整数倍数(plan 26-11-10-0252
+    D3/D5), 生效秒值 = 直乘, 无取整无告警(倍数语义下失配数学上不可能, D10)。采样器的块头
+    interval 与 webui raw 段窗桶宽都经本函数取同一值, 两处不得各自换算。
+    """
+    return float(multiplier) * float(main_tick)
+
 #: raw 段窗桶数上限(计划 26-10-07-2127 S3, §03 万桶级治理裁决): raw 桶宽 = max(ceil(采样间隔),
 #: ceil(span/上限)) —— 高频采样(如生产现况 1.5s)下 24h 窗本可达数万桶(JSON 传输 MB 级 +
 #: uPlot 万点级重渲染 + 后端每拍全量重展开), 按时间桶加宽收敛到 <=2880。上限取 2880 = 30s

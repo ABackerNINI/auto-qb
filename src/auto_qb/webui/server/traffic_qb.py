@@ -122,11 +122,17 @@ class QbTrafficChartApi:
         return conf is not None and bool(conf.enabled) and bool(self._manager.config.data_dir)
 
     def _grid(self, window: str) -> tg.WindowGrid:
-        """当前时刻的时间栅格; raw 段窗(1m-24h)桶宽 = 采样间隔(未启用/缺省兜底 30s),
+        """当前时刻的时间栅格; raw 段窗(1m-24h)桶宽 = 生效采样间隔(未启用/缺省兜底 30s),
         hour 段窗(3d/7d/30d)恒 3600s, day 段窗(6mo/1y)= 本地日界 86400s;
         month 段窗(all)栅格由数据面定, 此处只出空 buckets 兜底形(空态 meta 用)"""
         conf = self._conf()
-        sample = conf.sample_interval if conf is not None else tg.DEFAULT_SAMPLE_INTERVAL_S
+        if conf is not None:
+            # 生效间隔单点(D10): 与采样器同调, raw 段桶宽 = multiplier * main_tick 秒
+            sample = tg.effective_sample_interval(
+                conf.sample_interval_multiplier, getattr(self._manager.config, "main_tick", 0.0) or 0.0
+            )
+        else:
+            sample = tg.DEFAULT_SAMPLE_INTERVAL_S  # 未启用空态兜底(D11 保留 30s)
         if tg.WINDOW_SPECS[window][1] == "month":
             return tg.build_month_grid((), SYSTEM_CLOCK.now())  # 请求处理叶子走取时单点(挂钟)
         return tg.build_grid(window, SYSTEM_CLOCK.now(), sample)

@@ -131,16 +131,13 @@ qbmanager 的 finally 与 state.save 顺序不改。
 - dry_run: 累计器与水位封口内存照常推进; agg append 与裁剪/淘汰写操作静默跳过;
   stop() 聚合封口随 dry_run 短路; start() 恢复(catch-up 有写)dry_run 整体跳过。
 
-C1 生效与热重载联动(§3.5): 采样体每轮现读 sample_interval 与 main_tick, 失配向上取整
-到 main_tick 下一倍数 + 告警一次(D5: logger.warning + 已告警记忆防重复, 配置变化时记忆
-复位), 不拒采; 整数倍匹配的小数档(1.5s 配 main_tick=1.5s)原样生效 —— 块头 interval_s
-允许小数秒(2026-10-05 起; 修复小数档被整数秒口径静默抬到下一整秒)。
-检测 sample_interval 变化 -> 记新的 effective interval + 关闭全部现块(旧块落盘, 新块带新
-interval —— 新旧数据分块各有 interval); main_tick 每轮现读无需联动。
+C1 生效与热重载联动(§3.5): 采样体每轮现读 sample_interval_multiplier 与 main_tick,
+生效间隔 = 倍数直乘 main_tick 秒(traffic_grid.effective_sample_interval 单点, 无取整无告警
+—— 倍数语义下失配数学上不可能, plan 26-11-10-0252 D10); 块头 interval_s 允许小数秒。
+检测生效间隔变化 -> 记新的 effective interval + 关闭全部现块(旧块落盘, 新块带新 interval
+—— 新旧数据分块各有 interval); multiplier 与 main_tick 每轮现读, 任一变化同走本联动。
 !issue 26-10-16-0954: 节拍不再靠「回写 task.interval」表达(采样已不在队列里), 改由时钟线
-钩子按 effective interval 自持到期判定 —— 量化口径(ceil 到 main_tick 倍数)与块头 interval_s
-语义逐字不变, 故读侧消费口径(栅格桶宽/窗口切分, 见 pitfalls/backend/task-interval-tick-
-quantization.md)不受影响。
+钩子按 effective interval 自持到期判定。
 
 生命周期判定(S3 的 v2 注册表面)已随 S5 删除: v3 冻结语义 = 删种即不再产新块(不在
 by_hash 本就无采样), 文件留存到按龄删除(淘汰属 S2b)。
@@ -249,14 +246,13 @@ class TrafficSampleModule(_SampleAggMixin, _SampleBlocksMixin, BaseModule):
         self._v4store: Optional[TrafficV4Store] = None
         # flush 驱动时点(None = 进程首轮只记时不 flush)
         self._last_flush: Optional[float] = None
-        # 当前生效采样间隔(浮点秒, C1 失配归倍数后; 块头 interval 列口径, 允许小数秒)
+        # 当前生效采样间隔(浮点秒, = multiplier * main_tick; 块头 interval 列口径, 允许小数秒)
         self._effective_interval: Optional[float] = None
         # 下一次采样到期点(时钟线钩子 on_task_line 的闸门判据; None = 首拍即采)
         # issue 26-10-16-0954: 采样已不在队列里, 到期判定自持(原先由 TaskQueue.next_run 承担)
         self._next_sample_at: Optional[float] = None
-        # 失配告警记忆键(sample_interval, main_tick): 配置对变化时复位(同配对只告警一次, D5)
+        # 配置对签名 (multiplier, main_tick): 生效值变化时关块重开(旧块落盘, 新块带新 interval)
         self._interval_signature: Optional[tuple] = None
-        self._ratio_warned: bool = False
         # 单种数据门缓存(§3.2): 已确认有数据 / 确认无数据的系列键(零稳态目录 IO)
         self._has_data: set = set()
         self._no_data: set = set()

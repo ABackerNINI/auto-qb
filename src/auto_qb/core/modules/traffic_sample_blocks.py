@@ -1,10 +1,10 @@
 """traffic_sample_mod 拆分件: 采样/块/刷新域 mixin(R5 move-only, 计划 26-11-02-2342 §07)。"""
 import logging
-import math
 from collections.abc import Iterable, Mapping
 from typing import Any, Callable, Optional
 
 from ...torrents import TorrentStore
+from ..traffic_grid import effective_sample_interval
 from ..traffic_store import TrafficV4Store, V4Sample, V4NullRun, V4ZeroRun, v4_block_slots
 
 from .traffic_sample_common import (
@@ -25,32 +25,22 @@ class _SampleBlocksMixin:
     # ---------- C1 生效与热重载联动(§3.5) ----------
 
     def _apply_interval(self, conf: Any) -> float:
-        """采样间隔现读与联动(C1, §3.5): 返回本轮生效间隔(失配向上取整到 main_tick 下一倍数
-        + 告警一次(D5), 不拒采; 整数倍匹配的小数档(如 1.5s 配 main_tick=1.5s)原样生效不
-        取整 —— 块头 interval_s 允许小数秒(2026-10-05 起; 修复 1.5/1.5 被整数秒口径静默
-        抬到 2s)。
-        sample_interval 变化 -> 关闭全部现块(旧块落盘, 新块带新 interval —— 新旧数据分块各有
-        interval, A3 根因闭合)+ 记新 effective; main_tick 每轮现读。调用方(采样体)据此把
-        下一次到期点推为 now + 返回值 —— issue 26-10-16-0954 起节拍由时钟线自持, 不再经
-        「回写 task.interval」表达(采样已不在队列里), 量化口径逐字不变。"""
+        """采样间隔现读与联动(C1, §3.5): 返回本轮生效间隔 = multiplier * main_tick(秒)
+
+        配置键 sample_interval_multiplier 是 main_tick 的整数倍数(plan 26-11-10-0252 D3/D5),
+        生效值经 traffic_grid.effective_sample_interval 单点直乘 —— 无取整、无失配告警(倍数
+        语义下失配数学上不可能, D10 删旧 D5 的 ceil + 告警); 块头 interval_s 允许小数秒。
+        multiplier 或 main_tick 任一热改 -> 生效值变化 -> 关闭全部现块(旧块落盘, 新块带新
+        interval —— 新旧数据分块各有 interval, A3 根因闭合)+ 记新 effective; main_tick 每轮
+        现读。调用方(采样体)据此把下一次到期点推为 now + 返回值 —— issue 26-10-16-0954 起
+        节拍由时钟线自持, 不再经「回写 task.interval」表达(采样已不在队列里)。"""
+        multiplier = int(conf.sample_interval_multiplier)
         main_tick = float(getattr(self._ctx.config, "main_tick", 0.0) or 0.0)
-        sample_interval = float(conf.sample_interval)
-        if main_tick > 0:
-            multiple = math.ceil(sample_interval / main_tick - 1e-9)
-            effective = multiple * main_tick  # 整数倍时恰等于配置值; 失配向上取整
-        else:
-            effective = sample_interval
-        effective = max(1.0, effective)  # 块头 interval_s 同下限(配置校验已保证, 防御)
-        signature = (sample_interval, main_tick)
+        effective = effective_sample_interval(multiplier, main_tick)
+        effective = max(1.0, effective)  # 块头 interval_s 同下限(配置校验已保证, main_tick<=0 兜底)
+        signature = (multiplier, main_tick)
         if signature != self._interval_signature:
-            self._interval_signature = signature  # 配置对变化: 告警记忆复位(新失配新告警)
-            self._ratio_warned = False
-        if main_tick > 0 and abs(effective - sample_interval) > 1e-9 and not self._ratio_warned:
-            logger.warning(
-                f"流量采样 | sample_interval {sample_interval:g}s 非 main_tick {main_tick:g}s 整数倍, "
-                f"实际节拍取整为 {effective:g}s(颗粒变粗不断线, 本失配只告警一次)"
-            )
-            self._ratio_warned = True
+            self._interval_signature = signature  # 配置对变化: 生效值变化即触发关块重开
         if self._effective_interval is None:
             self._effective_interval = effective  # 进程首轮: 只立基线不开关块
         elif effective != self._effective_interval:
