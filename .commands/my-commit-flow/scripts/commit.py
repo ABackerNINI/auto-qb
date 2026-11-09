@@ -341,32 +341,41 @@ def _remote_side_via_remote_tip(cfg: dict, old_head: str) -> tuple[int, list[str
     return _count_and_paths(base, tip)
 
 
-def _rebase_merged_kb(root: Path, old_head: str, new_head: str) -> list[str] | None:
-    """rebase 前后两棵树的差异里, `memory-bank/**` 且工作区仍存在的路径 —— **只喂 `<changed:>` 展开**。
+def _rebase_merged_paths(root: Path, old_head: str, new_head: str) -> list[str] | None:
+    """rebase 前后两棵树的差异里, `memory-bank/**` **与全仓 HTML** 且工作区仍存在的路径 ——
+    **只喂 `<changed:>` 展开**。
 
     为什么(计划 26-11-09-0559 §02 洞 1): 远端 rebase 合入的文件**不产生本地 diff**(HEAD 已经跟着
     往前走了), 纯增量闸门(`--files <changed:memory-bank/**>`)对这批文件形同虚设 —— 而「合流后
     第二轮闸门」恰恰是唯一还能扫到它们的那一轮。
 
+    为什么带 `*.html`(2026-11-09 终审 minor): HTML 闸门(S2)已从 `memory-bank/**` 放开到全仓
+    `<changed:**/*.html>`, 远端合入的 `src/**` · `resources/**` 等非 KB HTML 同样不产生本地 diff;
+    只取 KB 会让它们在复跑第二轮继续漏扫。git pathspec 的 `*.html` 自带跨目录语义(任意层级,
+    含根目录), 与 `<changed:**/*.html>` 的匹配面一致; 仍由 `<changed:>` 的 glob 自行收窄
+    (喂进来的 HTML 不会让 `memory-bank/**` 闸门多扫)。
+
     判据用「rebase 前后的 tree diff」而不是远端侧推导(同文件的 `_remote_side`): 零网络、对象都在
-    本地对象库、**两棵树的净差异**天然把远端带进来的 KB 文件全收进来; 本地提交在 rebase 后是重放,
+    本地对象库、**两棵树的净差异**天然把远端带进来的文件全收进来; 本地提交在 rebase 后是重放,
     内容不变 ⇒ 不会把本地改动重复计入(与 present 相交时由 `changed_for_expand` 去重)。删除件按
     `exists()` 滤掉(与 `present` 同口径 —— 闸门脚本只消费仍存在的文件)。
     None = diff 取不到: 调用方按「改动面拿不准宁可全量跑」兜底(计划 §01 底线 5)。
     """
-    proc = git_run("-c", "core.quotepath=off", "diff", "--name-only", old_head, new_head, "--", "memory-bank/")
+    proc = git_run(
+        "-c", "core.quotepath=off", "diff", "--name-only", old_head, new_head, "--", "memory-bank/", "*.html"
+    )
     if proc.returncode != 0:
         return None
     return [p for p in (line.strip() for line in (proc.stdout or "").splitlines()) if p and (root / p).exists()]
 
 
-def _tracked_kb_paths(root: Path) -> list[str]:
-    """HEAD 里 `memory-bank/**` 的全部跟踪路径 —— 扩面判定拿不准时的**全量兜底**清单。
+def _tracked_scan_paths(root: Path) -> list[str]:
+    """HEAD 里 `memory-bank/**` 与全仓 HTML 的全部跟踪路径 —— 扩面判定拿不准时的**全量兜底**清单。
 
     宁可多扫不可漏扫(计划 §01 底线 5): 全量跑只是慢(与收窄前的行为等价), 漏扫则是「合流后的树
     没人验」。取不到(ls-tree 非 0)返回空表 —— 那时闸门退回只扫本批改动, 与未扩面时一致。
     """
-    proc = git_run("-c", "core.quotepath=off", "ls-tree", "-r", "--name-only", "HEAD", "--", "memory-bank/")
+    proc = git_run("-c", "core.quotepath=off", "ls-tree", "-r", "--name-only", "HEAD", "--", "memory-bank/", "*.html")
     if proc.returncode != 0:
         return []
     return [p for p in (line.strip() for line in (proc.stdout or "").splitlines()) if p and (root / p).exists()]
@@ -610,17 +619,19 @@ def main(argv: list[str] | None = None) -> int:
             step(steps, "快照: 上游改动了本包 → 本次仍按启动版本运行, 重跑以采用新版本")
         # 6b 复跑闸门: 规则仍是**启动版本那份** cfg —— 快照语义下不重取配置(那正是撕裂的来源);
         #    复跑要验的是"合并后的树" = 本批改动 + 远端合入的文件。
-        #    扩面(计划 26-11-09-0559 §04 S4-1): 远端 rebase 合入的 KB 文件不产生本地 diff, 纯增量
-        #    闸门(`--files <changed:...>`)扫不到它们 —— 合流后的第二轮是唯一还能扫到的那一轮。
+        #    扩面(计划 26-11-09-0559 §04 S4-1): 远端 rebase 合入的 KB / 全仓 HTML 不产生本地 diff,
+        #    纯增量闸门(`--files <changed:...>`)扫不到它们 —— 合流后的第二轮是唯一还能扫到的那一轮。
         #    扩面只进 ctx 的独立键 `changed_extra`, 只影响 `<changed:>` 展开: present /
-        #    gates_for 命中 / 暂存清单逐字不动(§07 R2)。拿不准(diff 取不到)→ memory-bank 全量,
-        #    宁可多扫不可漏扫(§01 底线 5), 并如实登记一行。
-        merged_kb = _rebase_merged_kb(root, sha_full, head_now)
-        if merged_kb is None:
-            merged_kb = _tracked_kb_paths(root)
-            step(steps, "复跑闸门: 远端合入面取不到(rebase 前后 diff 失败) → "
-                 f"memory-bank 全量参与 <changed:> 展开({len(merged_kb)} 个文件)")
-        ctx_rerun = dict(ctx, changed_extra=merged_kb)
+        #    gates_for 命中 / 暂存清单逐字不动(§07 R2)。拿不准(diff 取不到)→ memory-bank + 全仓
+        #    HTML 全量, 宁可多扫不可漏扫(§01 底线 5), 并如实登记一行。
+        merged_paths = _rebase_merged_paths(root, sha_full, head_now)
+        if merged_paths is None:
+            merged_paths = _tracked_scan_paths(root)
+            step(
+                steps, "复跑闸门: 远端合入面取不到(rebase 前后 diff 失败) → "
+                f"memory-bank 全量 + 全仓 HTML 参与 <changed:> 展开({len(merged_paths)} 个文件)"
+            )
+        ctx_rerun = dict(ctx, changed_extra=merged_paths)
         #    ❗阶段标记: 评审留痕闸门(review.trace)按"锚点→工作树"算行数, 复跑时 rebase 进来的远端
         #    提交会被算进本批 → 假红。**用文件标记, 不用环境变量**: 闸门里会跑 pytest, 子进程继承
         #    env —— 实测 `COMMIT_FLOW_GATE_PHASE` 传下去后, 包里"跑闸门脚本并断言它判红"的自测全部

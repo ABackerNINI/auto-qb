@@ -20,9 +20,13 @@
                                           S4-1(计划 26-11-09-0559): 远端合入的 KB 文件不产生本地 diff
                                           → 复跑 `<changed:>` 展开面必须扩到它(第一轮没有 / 第二轮有,
                                           闸门据此判红); 本批文件不被挤掉
+- test_post_rebase_rerun_scans_non_kb_html
+                                          S4-1 扩面补洞: 远端合入的 memory-bank 外 HTML 同样无本地
+                                          diff → 第二轮 `<changed:**/*.html>` 能扫到; `<changed:
+                                          memory-bank/**>` 不因它多扫(glob 自行收窄)
 - test_post_rebase_rerun_falls_back_to_full_kb
                                           S4-1兜底(§01 底线 5): rebase 前后 diff 取不到 → memory-bank
-                                          全量参与 `<changed:>` 展开 + 如实登记一行, 不静默漏扫
+                                          + 全仓 HTML 全量参与 `<changed:>` 展开 + 如实登记一行, 不静默漏扫
 - test_post_rebase_gate_red_blocks_push   真仓: 复跑红 → 推送未完成 + 修复指引, 不推送, 登记评审边界行(未过措辞)
 - test_post_rebase_gate_dirty_amends      真仓: 复跑的 fmt 类闸门又改文件 → amend 折进未推送 tip
 - test_post_rebase_pack_changed_leaves_hint 真仓: 合流改动了本包 → 登记一行「仍按启动版本运行, 重跑以采用新版本」
@@ -748,9 +752,68 @@ def test_post_rebase_rerun_scans_remote_merged_kb(repo, tmp_path, monkeypatch, c
     assert "日期在未来" in out  # 判红证据(复跑那一轮真的扫到了远端文件)
 
 
+def test_post_rebase_rerun_scans_non_kb_html(repo, tmp_path, monkeypatch, capsys):
+    """S4-1 扩面补洞(2026-11-09 终审 minor): HTML 闸门已是全仓 `<changed:**/*.html>`, 远端 rebase
+    合入的 `memory-bank/**` 之外 HTML(如 `resources/x.html`)同样不产生本地 diff —— 复跑扩面必须
+    把它带进 `<changed:**/*.html>`, 否则唯一能扫到它的一轮仍漏扫。
+
+    同时钉住收窄: 同一个扩面喂给 `<changed:memory-bank/**>` 时不会因它多扫(glob 自行收窄) ——
+    扩面只放宽"候选清单", 不改变各占位符的匹配面。
+    """
+    probe = repo / "html_probe.py"
+    probe.write_text(
+        "import sys\n"
+        "tag = sys.argv[1]\n"
+        "args = [a.replace('\\\\', '/') for a in sys.argv[2:]]\n"
+        "with open(f'.git/gate_{tag}.txt', 'a', encoding='utf-8') as fh:\n"
+        "    fh.write(' '.join(args) + '\\n')\n",
+        encoding="utf-8",
+    )
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-m", "stub html probe")  # 探针先进 base
+    _git(repo, "push", "origin", "develop")
+    cfg = dict(_CFG_ALLOW)
+    cfg["gates"] = [
+        {
+            "match": [".html"],
+            "run":
+                [
+                    f'"{sys.executable}" html_probe.py all <changed:**/*.html>',
+                    f'"{sys.executable}" html_probe.py kb <changed:memory-bank/**>',
+                ],
+            "auto": True,
+            "timeout": 30,
+            "note": "html 闸门",
+        }
+    ]
+    monkeypatch.setattr(commit_mod, "load_config", lambda: (cfg, PKG / ".my-commit-flow.toml"))
+    monkeypatch.setattr(push_mod, "run_push", lambda steps=None: (True, "推送成功 abcdef01"))
+    _write_msg(repo)
+    local_html = repo / "memory-bank" / "plans" / "26-11-09-0900-local.html"
+    local_html.parent.mkdir(parents=True)
+    local_html.write_text("<html></html>\n", encoding="utf-8")  # 本批改动 → 闸门命中
+    (repo / "x.txt").write_text("x\n", encoding="utf-8")
+    _push_remote_commit(repo, tmp_path, "resources/x.html", "<html></html>\n")
+    rc = commit_mod.main([])
+    out = capsys.readouterr().out
+    assert rc == 0
+
+    all_rounds = (repo / ".git" / "gate_all.txt").read_text(encoding="utf-8").splitlines()
+    kb_rounds = (repo / ".git" / "gate_kb.txt").read_text(encoding="utf-8").splitlines()
+    assert len(all_rounds) == 2 and len(kb_rounds) == 2, (all_rounds, kb_rounds, out)
+    # 第一轮: 远端 HTML 还没进来
+    assert "resources/x.html" not in all_rounds[0] and "26-11-09-0900-local.html" in all_rounds[0]
+    # 第二轮: 复跑扩面把 memory-bank 之外的远端 HTML 带进全仓 HTML 占位符
+    assert "resources/x.html" in all_rounds[1]
+    assert "26-11-09-0900-local.html" in all_rounds[1]  # 本批改动没被挤掉
+    # 收窄不变: 同一个扩面不会让 memory-bank/** 多扫
+    assert all("resources/x.html" not in line for line in kb_rounds)
+    assert "26-11-09-0900-local.html" in kb_rounds[1]
+
+
 def test_post_rebase_rerun_falls_back_to_full_kb(repo, tmp_path, monkeypatch, capsys):
-    """S4-1兜底(计划 §01 底线 5): rebase 前后 diff 取不到 = 改动面拿不准 → memory-bank 全量参与
-    `<changed:>` 展开(宁可多扫不可漏扫), 并如实登记一行, 不静默漏扫。"""
+    """S4-1兜底(计划 §01 底线 5): rebase 前后 diff 取不到 = 改动面拿不准 → memory-bank +
+    全仓 HTML 全量参与 `<changed:>` 展开(宁可多扫不可漏扫), 并如实登记一行, 不静默漏扫。"""
     kb = repo / "memory-bank" / "plans" / "26-11-09-0800-plan-y.html"
     kb.parent.mkdir(parents=True)
     kb.write_text("<html></html>\n", encoding="utf-8")
@@ -764,7 +827,7 @@ def test_post_rebase_rerun_falls_back_to_full_kb(repo, tmp_path, monkeypatch, ca
         return [], [], 0
 
     monkeypatch.setattr(commit_mod, "run_gates", _gates)
-    monkeypatch.setattr(commit_mod, "_rebase_merged_kb", lambda *a: None)  # 模拟 diff 判据取不到
+    monkeypatch.setattr(commit_mod, "_rebase_merged_paths", lambda *a: None)  # 模拟 diff 判据取不到
     monkeypatch.setattr(push_mod, "run_push", lambda steps=None: (True, "推送成功 abcdef01"))
     _write_msg(repo)
     (repo / "x.txt").write_text("x\n", encoding="utf-8")
@@ -773,7 +836,7 @@ def test_post_rebase_rerun_falls_back_to_full_kb(repo, tmp_path, monkeypatch, ca
     out = capsys.readouterr().out
     assert calls[0] == []  # 第一轮不扩面
     assert calls[1] == ["memory-bank/plans/26-11-09-0800-plan-y.html"]  # 兜底 = 全量跟踪的 KB 文件
-    assert "远端合入面取不到" in out and "memory-bank 全量参与 <changed:> 展开" in out
+    assert "远端合入面取不到" in out and "memory-bank 全量 + 全仓 HTML 参与 <changed:> 展开" in out
 
 
 def test_post_rebase_pack_changed_leaves_hint(repo, tmp_path, monkeypatch, capsys):

@@ -29,7 +29,7 @@
 
 - **命令固定就标 `auto = true`** —— 由预检**真的执行**, 红了即 STOP(退出码 1); 只有需要人读输出做判断的才留 `auto = false`(只打印)。判据: 闸门存在的意义是不让步, 执行权留在记忆里等于没装。
 - **占位符由预检展开**: `<root>` / `<skill-dir:NAME>` / `<changed:GLOB>` / `<each:GLOB>`; 展开不了即 **STOP, 不降级成打印**(降级 = "看起来跑过了")。自造占位符不会被猜。
-- **kb 闸门按改动收窄 (2026-11-09, 计划 26-11-09-0559)**: kb 链的 `timekit.py --check --files <changed:memory-bank/**>` 与 `check_html.py --check <changed:**/*.html>` 只扫本次改动; 脚本无参调用与 `kb.check` 仍全量兜底(守阵钉住「无参=全量」)。复跑阶段 rebase 合入的 `memory-bank/**` 经 `ctx["changed_extra"]` 并入 `<changed:>` 展开, `<each:>` / 命中判定 / 暂存清单不受影响; 展开后超 8191 字符先分片, 分片仍超限即 STOP。
+- **kb 闸门按改动收窄 (2026-11-09, 计划 26-11-09-0559)**: kb 链的 `timekit.py --check --files <changed:memory-bank/**>` 与 `check_html.py --check <changed:**/*.html>` 只扫本次改动; 脚本无参调用与 `kb.check` 仍全量兜底(守阵钉住「无参=全量」)。复跑阶段 rebase 合入的 `memory-bank/**` 与**全仓 HTML**(含 `src/**`、`resources/**` 等非 KB 路径)经 `ctx["changed_extra"]` 并入 `<changed:>` 展开, `<each:>` / 命中判定 / 暂存清单不受影响。`<changed:>` 展开后超 8191 字符: 逐文件检查类闸门(缺省 `shard = true`)先分片, 分片仍超限即 STOP; 聚合语义闸门(配置显式 `shard = false`, 如 `test.pkg.scoped` 要按完整包集合判「≥2 包整跑」)不分片, 超限直接 STOP。
 - **未知键 / `timeout` 非法 → STOP**: 闸门很贵, 拼错键让它静默失效比报错坏得多。代价: 新增配置键必须先加进 `KEY_DEFAULTS` / `GATE_KEYS`。
 - **测试跑两次, 不是一次**: ① 改完代码、**回写知识库之前** ② `commit.py` 内部提交前。第一次必须在回写之前 —— 测试带文档守卫(会读 `memory-bank/`), 回写后跑会分不清红的是代码还是文档。S6 推送前由 `push.py` 内嵌 `--no-auto` 只核状态(脏 / 上游 / 红线 / 镜像), 不跑闸门。
 - **格式化类闸门必须在逐路径暂存之前**: 格式化会让已 staged 文件与 index 不一致, 必须重新 `add`。

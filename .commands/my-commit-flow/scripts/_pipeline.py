@@ -435,6 +435,9 @@ def _chunk_args(files: list[str], budget: int) -> list[str]:
     只给 `<changed:>` 用 —— 它是唯一随改动面**线性增长**的占位符(`<each:>` 是复制命令, 单条
     长度与文件数无关)。budget <= 0 时退化成"一个文件一段": 单条仍可能超上限, 由 expand_run
     末尾的硬守卫判 STOP(不截断、不降级)。
+
+    只在闸门**允许分片**时调用(见 expand_run 的 `allow_shard` 判据): 聚合语义闸门
+    (声明 `shard = false`)收到的是单条全量命令, 走不到这里。
     """
     chunks: list[str] = []
     cur: list[str] = []
@@ -484,7 +487,7 @@ def _safe_files(files: list[str], root) -> tuple[list[str], list[str]]:
     return safe, skipped
 
 
-def expand_run(cmd: str, ctx: dict) -> tuple[list[str], str | None]:
+def expand_run(cmd: str, ctx: dict, allow_shard: bool = True) -> tuple[list[str], str | None]:
     """展开一条 `run`, 返回 (命令列表, 跳过原因); 展开不了抛 `ExpandError`。
 
     顺序固定: `<each:>` → `<changed:>` → `<skill-dir:>` / `<root>` → **残留检查** / 长度守卫。
@@ -494,6 +497,14 @@ def expand_run(cmd: str, ctx: dict) -> tuple[list[str], str | None]:
     `<changed:>` 展开后是一条命令, 所以文件多到超 `CMD_LINE_BUDGET` 时**分片**成多条
     (每条仍是同一条模板 + 文件子集, 顺序与内容不变); 分片后仍超 `CMD_LINE_LIMIT` → `ExpandError`
     (STOP, 不截断不降级)。`<each:>` 是复制命令, 单条长度与文件数无关, 不分片。
+
+    **哪些闸门分片**(显式声明, 不按文件名猜 —— 改名即静默失效的规则不能用):
+    - 默认 `allow_shard = True` = **逐文件检查类**闸门(`<changed:>` 只是把一组文件喂给同一次检查,
+      拆开跑与合跑语义等价, 如 timekit / check_html / check_command_drift --files)。
+    - 配置里标 `shard = false` = **聚合语义**闸门: 一次调用要看到**完整**文件集合才能判
+      (如 `test.pkg.scoped -- <changed:.commands/**>` 要按全局包集合决定「≥2 包整跑」,
+      拆片会逐片重算、语义失效且多片 pytest -n 8 同池并发)。这类闸门展开后超限**直接
+      ExpandError STOP**, 不分片、不截断、不降级。
     """
     cmds = [cmd]
 
@@ -526,7 +537,8 @@ def expand_run(cmd: str, ctx: dict) -> tuple[list[str], str | None]:
             fixed = c.replace(m.group(0), "")
             reserve = PLACEHOLDER_RESERVE if PLACEHOLDER_RE.search(fixed) else 0
             budget = max(CMD_LINE_BUDGET - len(fixed) - reserve, 0)
-            expanded.extend(c.replace(m.group(0), chunk) for chunk in _chunk_args(files, budget))
+            chunks = _chunk_args(files, budget) if allow_shard else [" ".join(_quote(f) for f in files)]
+            expanded.extend(c.replace(m.group(0), chunk) for chunk in chunks)
         cmds = expanded
 
     resolved: list[str] = []
@@ -550,8 +562,14 @@ def expand_run(cmd: str, ctx: dict) -> tuple[list[str], str | None]:
     for c in resolved:
         # 分片后仍超上限 = 单条命令本身就装不下(cmd.exe 会静默截断尾部路径): 宁可 STOP。
         if len(c) > CMD_LINE_LIMIT:
-            raise ExpandError(f"展开后命令行 {len(c)} 字符, 超过单条上限 {CMD_LINE_LIMIT}"
-                              " —— 分片后仍超限: 缩小提交范围, 或把该 run 拆成多条闸门")
+            if allow_shard:
+                raise ExpandError(f"展开后命令行 {len(c)} 字符, 超过单条上限 {CMD_LINE_LIMIT}"
+                                  " —— 分片后仍超限: 缩小提交范围, 或把该 run 拆成多条闸门")
+            raise ExpandError(
+                f"展开后命令行 {len(c)} 字符, 超过单条上限 {CMD_LINE_LIMIT}"
+                " —— 该闸门声明 shard = false(聚合语义, 要看到完整文件集合, 不可分片): "
+                "缩小提交范围, 或用一条不依赖完整集合的逐文件检查替代"
+            )
     return resolved, None
 
 
@@ -574,6 +592,8 @@ def run_gates(hits: list[dict], ctx: dict) -> tuple[list[tuple[str, str, int, fl
     - `<each:>` / `<changed:>` 无匹配文件 → **按设计静默跳过**(它们只盯本次改动)。
     - `<changed:>` 长命令被分片时, 每条子命令是**独立 job**(同上限、同 timeout, 顺序为文件序):
       失败定位与取 failures[0] 的语义不变, 只是 ran 计的是分片条数。
+      声明 `shard = false` 的聚合语义闸门**不分片**: 单条超限直接走展开失败(rc=-2 STOP),
+      不会降级成"跑若干半截聚合检查"(语义在拆片时已经失真)。
 
     执行模型(2026-11-01, 计划 26-11-01-0434 方案 B): 两阶段 —— 先**串行展开**全部命中闸门
     (顺序 = 配置序; 冒烟摘除的 print 只发生在这里), 再把展开出的命令按提交序丢进线程池并发跑
@@ -587,9 +607,12 @@ def run_gates(hits: list[dict], ctx: dict) -> tuple[list[tuple[str, str, int, fl
     for gate in hits:
         note = gate.get("note", "(无 note)")
         timeout = int(gate.get("timeout", 600))
+        # shard 是**显式**分片开关(默认 True = 逐文件检查类); false = 聚合语义闸门,
+        # `<changed:>` 保持单条, 超限即展开失败 STOP。判据写在 expand_run 的 docstring。
+        allow_shard = bool(gate.get("shard", True))
         for cmd in gate.get("run", []):
             try:
-                cmds, skip = expand_run(cmd, ctx)
+                cmds, skip = expand_run(cmd, ctx, allow_shard=allow_shard)
             except ExpandError as exc:
                 failures.append((note, cmd, -2, 0.0, str(exc)))
                 continue

@@ -85,7 +85,8 @@ GENERATED_KEY_TYPES = {
 # 一个 [[gates]] 条目允许出现的键。出现在配置里的其它键一律 STOP ——
 # gate 级原样透传、不做键过滤, `auto` 拼成 `auto_run` 会**静默**退回 "只打印":
 # 你以为闸门自动跑了, 其实一条没跑, 输出里连痕迹都没有。见 draft_issues 的注释。
-GATE_KEYS = {"match", "run", "note", "auto", "timeout"}
+# `shard`(可选, 默认 true): false = 聚合语义闸门, `<changed:>` 不分片, 超命令行上限即 STOP。
+GATE_KEYS = {"match", "run", "note", "auto", "timeout", "shard"}
 
 # <skill-dir:NAME> 的候选位置 —— 按此顺序找, 第一个存在的即命中。
 # 项目级在前(同一份 skill 的 .codebuddy 版本是 .agents 的 junction), 用户级兜底。
@@ -499,6 +500,11 @@ def config_problems(cfg: dict, path: Path | None = None) -> list[tuple[str, str]
         timeout = gate.get("timeout", 600)
         if isinstance(timeout, bool) or not isinstance(timeout, int) or timeout <= 0:
             problems.append(("STOP", f"gate「{note}」的 timeout 非法: {timeout!r}(正整数秒)"))
+        # shard 写错类型会让「聚合语义闸门不分片」这一保护静默失效(比如写成字符串 "false" 仍是
+        # 真值 —— 于是继续分片), 与 timeout 同级 STOP。
+        shard = gate.get("shard", True)
+        if not isinstance(shard, bool):
+            problems.append(("STOP", f"gate「{note}」的 shard 非法: {shard!r}(true / false)"))
 
     # 生成物自动化解三键的类型: 写错(如 auto_resolve_generated = 1)会让化解路径行为异常, 停手。
     for key, want in GENERATED_KEY_TYPES.items():

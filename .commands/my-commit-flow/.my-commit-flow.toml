@@ -47,7 +47,10 @@ generated_regen_cmd = "python <skill-dir:memory-bank>/scripts/gen_all.py"
 #   <each:GLOB>       按匹配文件把这条 run 复制成多条命令(条数上限 each_limit)
 #   <each:GLOB|--with-safety>  同上, 但先问每个脚本的 `--safety` 探针, 把「无参即真动作」
 #                     的脚本摘出去(如 --help 会真的同步 / 推送的 sync.py / push.py)
-# 未知键 / timeout 非法 → STOP: 闸门很贵, 拼错键让它静默失效比报错坏得多。
+# 闸门级可选键 `shard`(缺省 true): true = 逐文件检查类, `<changed:>` 超命令行预算自动分片;
+#   false = 聚合语义闸门(一次调用要看到完整文件集合才能判), `<changed:>` 保持单条, 超限即
+#   STOP(不分片、不截断、不降级)。
+# 未知键 / timeout 非法 / shard 非布尔 → STOP: 闸门很贵, 拼错键让它静默失效比报错坏得多。
 # ---------------------------------------------------------------------------
 
 [[gates]]
@@ -85,6 +88,10 @@ match = [".commands/", ".agents/skills/commands/"]
 run   = ["python <skill-dir:commands>/scripts/run.py run test.pkg.scoped -- <changed:.commands/**>",
          "python <skill-dir:commands>/scripts/run.py run test.pkg.scoped --full -- <changed:.agents/skills/commands/**>"]
 auto  = true
+# 聚合语义闸门: test.pkg.scoped 要按**完整**包集合决定「受影响包 ≥2 → 整跑」, 拆成多片会让
+# 每片各自重算(单包结论被当成全局结论), 且多片 pytest -n 8 会在同一资源池并发。故不分片,
+# 展开后超单条上限即 STOP(缩小本次提交范围)。
+shard = false
 timeout = 300
 note  = "包与引擎的脚本测试: 改哪个包跑哪个包(≥2 包/引擎改动保守整跑) —— test.pkg 本体保留给手工整跑与 scoped 的 --full 转调"
 

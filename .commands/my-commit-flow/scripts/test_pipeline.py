@@ -15,11 +15,13 @@ classify_merge_probe)随检查表一起删除 —— 同步行分类改由 test_
 - GlobMatchTest                <changed:>/<each:> 的 GLOB 语义(**/ 跨目录)
 - ExpandTest                   占位符四类 + 展开失败 + each_limit + 空格引号
                                + 复跑扩面只喂 <changed:>(changed_extra 去重保序 / <each:> 不读)
-                               + 长度守卫(<changed:> 超预算分片不丢件 / 分片后仍超限 ExpandError)
+                               + 长度守卫(<changed:> 超预算分片不丢件 / 分片后仍超限 ExpandError /
+                                 shard=false 聚合闸门不分片, 超限 STOP)
 - RunGatesTest                 闸门执行: 全过静默 / 失败留末 20 行 / 超时 / 人工闸门不执行 /
                                展开失败不降级 / 无匹配**静默**跳过(v2 的那条 WARN 已废) /
                                并发执行(方案 B): 失败按提交序确定 / ran 计数 / 展开失败排在执行失败前 /
-                               分片执行不截断(参数全到) / 长度守卫失败 rc=-2 不降级
+                               分片执行不截断(参数全到) / 长度守卫失败 rc=-2 不降级 /
+                               聚合闸门 shard=false 在 100+ 文件时单条 STOP
 - GateScopingConfigTest        闸门收窄形态(计划 26-11-01-0434): drift 三条(--files/--full)/ caps 三条
                                (--files)/ test.pkg 两条(scoped) 逐字钉死 + 脚本侧参数在位
 - GitRetryTest                 git 命令: 单次 20s 超时 + 有界重试(网络子命令失败即重试 / 非幂等本地写
@@ -45,6 +47,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import tomllib
 import unittest
 from pathlib import Path
 
@@ -175,6 +178,27 @@ class ExpandTest(unittest.TestCase):
             _pipeline.expand_run("python p.py --files <changed:memory-bank/**>", ctx(self.root, [huge]))
         self.assertIn("超过单条上限", str(raised.exception))
 
+    def test_no_shard_keeps_single_command_and_stops_when_over_limit(self) -> None:
+        """聚合语义闸门显式 `shard = false`: `<changed:>` 不分片 —— 装得下就一条,
+        装不下就 STOP(而不是拆成多片、让每片都看不到完整集合)。"""
+        files = [f".commands/pkg{i}/scripts/{'x' * 50}-{i:03d}.py" for i in range(150)]
+        with self.assertRaises(_pipeline.ExpandError) as raised:
+            _pipeline.expand_run(
+                "python p.py run test.pkg.scoped -- <changed:.commands/**>",
+                ctx(self.root, files),
+                allow_shard=False,
+            )
+        self.assertIn("shard = false", str(raised.exception))
+        # 装得下时仍是一条完整命令(不是被 "优化" 成多片)
+        small = files[:3]
+        cmds, _ = _pipeline.expand_run(
+            "python p.py run test.pkg.scoped -- <changed:.commands/**>",
+            ctx(self.root, small),
+            allow_shard=False,
+        )
+        self.assertEqual(len(cmds), 1)
+        self.assertTrue(all(f in cmds[0] for f in small))
+
 
 class RunGatesTest(unittest.TestCase):
     """v3 契约: 闸门全过**静默**(没有 PASS 行), 失败才说话; 无匹配文件是按设计跳过, 不是 WARN。"""
@@ -292,6 +316,18 @@ class RunGatesTest(unittest.TestCase):
         self.assertIn("超过单条上限", failures[0][4])
         self.assertEqual((manual, ran), ([], 0))  # 不降级: 既不打印也不执行半截命令
 
+    def test_aggregate_gate_not_sharded_stops_over_limit(self) -> None:
+        """闸门级显式 `shard = false`: 100+ 文件也不拆片 —— 单条超限直接 rc=-2 STOP,
+        一条都不执行(聚合语义在拆片时已失真, 跑半截比不跑更坏)。"""
+        files = [f".commands/pkg{i:03d}/scripts/{'z' * 50}-{i:03d}.py" for i in range(150)]
+        gate = self._gate("python p.py run test.pkg.scoped -- <changed:.commands/**>")
+        gate["shard"] = False
+        failures, manual, ran = _pipeline.run_gates([gate], ctx(self.root, files))
+        self.assertEqual(len(failures), 1)
+        self.assertEqual(failures[0][2], -2)  # 展开失败
+        self.assertIn("shard = false", failures[0][4])
+        self.assertEqual((manual, ran), ([], 0))  # 没有执行任何分片
+
 
 class GateScopingConfigTest(unittest.TestCase):
     """闸门配置的**按改动收窄形态**(计划 memory-bank/plans/26-11-01-0434, 2026-11-01 落地)。
@@ -329,6 +365,14 @@ class GateScopingConfigTest(unittest.TestCase):
             '"python <skill-dir:commands>/scripts/run.py run test.pkg.scoped --full -- <changed:.agents/skills/commands/**>"',
         ):
             self.assertIn(frag, self.text, f"test.pkg 闸门缺 run 行: {frag}")
+
+    def test_pkg_gate_is_declared_no_shard(self) -> None:
+        """聚合语义闸门必须**显式**声明 shard = false —— 否则 100+ 改动文件时会被拆成多片,
+        每片只看到局部包集合, 「受影响包 ≥2 → 整跑」静默失效。"""
+        gates = tomllib.loads(self.text)["gates"]
+        pkg = [g for g in gates if any("test.pkg.scoped" in r for r in g.get("run", []))]
+        self.assertEqual(len(pkg), 1, "test.pkg.scoped 闸门应只有一条")
+        self.assertIs(pkg[0].get("shard"), False)
 
     def test_scoped_modes_exist_in_scripts(self) -> None:
         # 只钉旗标名本身, 不钉 argparse 写法 —— yapf 会把多行 add_argument 重排(实测 2026-11-01);
@@ -772,6 +816,16 @@ class ConfigProblemsTest(unittest.TestCase):
     def test_bad_timeout_is_stop(self) -> None:
         problems = self._problems(self.BASE + '[[gates]]\nmatch = ["src/"]\nrun = ["x"]\ntimeout = 0\n')
         self.assertTrue(any(lvl == "STOP" and "timeout" in msg for lvl, msg in problems))
+
+    def test_valid_shard_false_is_not_stop(self) -> None:
+        """`shard` 是合法的闸门键(聚合语义闸门显式声明不分片), 不能被当未知键停手。"""
+        problems = self._problems(self.BASE + '[[gates]]\nmatch = ["src/"]\nrun = ["x"]\nauto = true\nshard = false\n')
+        self.assertFalse([p for p in problems if p[0] == "STOP"])
+
+    def test_bad_shard_type_is_stop(self) -> None:
+        # "false" 是非空字符串(真值) —— 会让「聚合闸门不分片」静默失效, 必须 STOP
+        problems = self._problems(self.BASE + '[[gates]]\nmatch = ["src/"]\nrun = ["x"]\nshard = "false"\n')
+        self.assertTrue(any(lvl == "STOP" and "shard" in msg for lvl, msg in problems))
 
     def test_bad_auto_resolve_type_is_stop(self) -> None:
         # 1 不是 bool —— 按错类型动作会让化解路径静默失效, 必须 STOP
