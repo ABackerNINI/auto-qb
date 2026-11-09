@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="webui-views-dead-imports-residue">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="views.py 另 3 个零使用死导入(Dict/TrackerStatus/VIRTUAL_TRACKER_PREFIXES)">
 <meta name="issue-summary" content="批H 清 7 个死导入后仍余 3 个零使用: Dict(:15)/TrackerStatus(:17)/VIRTUAL_TRACKER_PREFIXES(:20, 体内只用 _VIRTUAL_TRACKER_PREFIXES); 已核实无经 views 模块的消费者">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-08-0043-refactor-webui-views-dead-imports-residue</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-08 00:43</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
 
@@ -112,11 +112,19 @@
   <p>删除 3 个死导入(与批H 同款核法: 本文件体内零使用 + 无经 views 模块的外部消费者)。</p>
 </section>
 
+<section id="s5">
+  <h2><span class="no">§05</span>修复后补充</h2>
+  <p><strong>实际修法</strong>(2026-11-10, 与建议一致): 删 3 个死导入——<code>views.py:15</code> typing 行去掉 <code>Dict</code>、<code>:17</code> qbittorrentapi 行去掉 <code>TrackerStatus</code>(<code>TorrentState</code> 在用保留)、整行删 <code>:20</code> 的 <code>from ..infra.utils import VIRTUAL_TRACKER_PREFIXES</code>(体内只用 views_common 的 <code>_VIRTUAL_TRACKER_PREFIXES</code>)。复验通过: 体内 grep 三名字仅余 import 行自身; 外部消费者(<code>qbmanager.py</code>/<code>runtime_views.py</code>/<code>__init__.py</code>/tests)只取 <code>WebviewMixin</code>/<code>VIEW_ARRAYS</code>/<code>_parse_query</code>/<code>_SHOW_STATE_RANK</code>/<code>_SHOW_STATE_RANK_LAST</code>/<code>_ETA_SENTINEL</code>, 无经 views 取这三个名字的。</p>
+  <p><strong>验证方式</strong>: <code>commands run test.quick</code> 全绿 —— 5876 passed + 2 skipped(与最新基线切片一致)。</p>
+</section>
+
 <section id="s4">
   <h2><span class="no">§04</span>状态变更日志</h2>
   <ul>
     <li>2026-11-08 00:43 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-10 — 状态 Open → In Progress（kb.status）</li>
+    <li>2026-11-10 — 状态 In Progress → Done（kb.status）</li>
+</ul>
 </section>
 
 <footer>

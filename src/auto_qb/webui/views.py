@@ -12,12 +12,11 @@
 - self.client               qB 原始客户端(搜索索引拉取文件列表用)
 - self.web                  WebUIRuntime(快照 / 脏标记 / 搜索索引 / 命令投递)
 """
-from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, List, Optional, Tuple
 
-from qbittorrentapi import TorrentState, TrackerStatus
+from qbittorrentapi import TorrentState
 
 from ..hr.resolve import safety_display
-from ..infra.utils import VIRTUAL_TRACKER_PREFIXES
 from ..torrents import TorrentRecord
 
 if TYPE_CHECKING:
