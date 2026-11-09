@@ -27,6 +27,15 @@
 - test_r4_drawer_rows_path_wide_conditional: issue 26-11-08-1621 修复回归 —— drawerGeneralSections
   契约层路径段 下载路径/根路径 wide 改条件式(值非空才 wide:true, 空值/缺失/null 行 wide 不置位
   按普通行渲染, text 兜底「—」保留, 真值行 wide 与文本透传不变); 沙箱口径与哨兵电池同式
+- test_r4_dt_table_layout_geometry_equivalence: dt_table 几何等价性探针(计划 26-11-10-0027 W1(1),
+  「先证后改」) —— 对 ALL_TABLE_DEFS 全部 13 张表的真实列定义(全列有 tpl 前提显式钉住)× 5 类
+  colWidths/列态场景(无覆盖/单列覆盖/全列覆盖/隐藏一列(其固化宽不漏轨)/自定义列序), 断言现役
+  columns_grid._gridTemplate 轨道串 ≡ DT_TABLE.layout().gridTemplate(逐字符)、colAlignCss 实测
+  CSS 的 text-align 序列 ≡ layout().aligns(逐列; 每一面两侧消费同一份列定义与宽度输入); 页数实算
+  钉 13, 五类场景逐类存在性断言(scene 标签落袋 —— 条件类的触发前提回归致静默消失即红)。探针红
+  = 轨道语义冲突 = 计划 R1 停手条款(failed 项带两侧输出全文, 不改生产代码凑绿); 探针绿是 W1(2)
+  委托改造的前置证据。沙箱口径: app.js 截断切片 + columns 域聚合同一 eval + dt_table.js require。
+  node 电池真跑(无 node 静默跳过)
 
 加载口径: columns 域经 webui_helpers.bundle_file("columns.js") 聚合(根 + 五片段清单序, 与拆分前
 同一份代码); 单文件域(selection/sort/format)直接 eval。app.js 以 loadColState 截断切片加载
@@ -1064,3 +1073,127 @@ def test_r4_drawer_rows_path_wide_conditional():
     空值行 wide 不置位按普通行渲染, text 兜底「—」保留)"""
     report = _run_probe(_NODE_DRAWER_ROWS_PATH_WIDE_PROBE, os.path.join(STATIC_ROOT, "shared", "drawer_rows.js"))
     _assert_battery(report, "drawer 路径行条件 wide 电池")
+
+
+# 计划 26-11-10-0027 W1(1): dt_table 几何等价性探针 -----------------------------------------
+# 「先证后改」: 委托改造(W1(2) 动 _gridTemplate/colAlignCss 内部)之前, 先用**真实列定义**证明
+# 现役拼轨(columns_grid._gridTemplate)与内核(DT_TABLE.layout)输出逐面相等。探针红 = 轨道
+# 语义冲突 = 计划 R1 停手条款(不改生产代码、不改断言凑绿、不自选改道, 冲突明细在 failed 项
+# 里带两侧全文输出)。
+# 沙箱口径: app.js 以 loadColState 截断切片(与 _app_head_source 同口径, createApp 接线段不进
+# 沙箱) + columns 域聚合文本(bundle_file("columns.js"), 与拆分前同一份代码)并入**同一次 eval**
+# —— columns 方法体按裸名引用 app.js 列模型常量(TABLE_COLUMNS/ALL_TABLE_DEFS), 生产里两段
+# <script> 共享同一全局词法作用域, 合并 eval 与之同构; dt_table.js 单文件 require(只依赖
+# global.window)。三份源消费同一份真实列定义与宽度输入。
+_NODE_DT_LAYOUT_EQUIV_PROBE = r"""
+const fs = require("fs");
+global.Vue = { createApp: () => ({}) };   // app.js 头部 `const { createApp } = Vue;`
+global.window = {};
+let store = {};
+global.localStorage = {
+  getItem: (k) => (k in store ? store[k] : null),
+  setItem: (k, v) => { store[k] = String(v); },
+  removeItem: (k) => { delete store[k]; },
+};
+const checks = [];
+// 第三位 = 场景类标签(scene): 供循环后的逐类存在性断言, 条件场景静默消失即红
+const ok = (name, cond, scene) => checks.push([name, !!cond, scene || ""]);
+// 相等断言: 失败时把两侧输出全文挂进检查名(探针红即停手, 明细要能直接进报告做逐字符 diff)
+const okEq = (name, a, b, scene) => checks.push([a === b ? name : name + " | 现役=" + JSON.stringify(a) + " layout=" + JSON.stringify(b), a === b, scene || ""]);
+
+require(process.argv[2]);
+const DT = global.window.DT_TABLE;
+ok("dt_table.js 加载出 window.DT_TABLE.layout", !!DT && typeof DT.layout === "function");
+
+const appSrc = fs.readFileSync(process.argv[3], "utf8");
+const marker = "const initialColState = loadColState();";
+const cut = appSrc.indexOf(marker);
+ok("app.js 找到截断锚(装载体裁未漂移)", cut > 0);
+const headSrc = appSrc.slice(0, cut);
+const colsSrc = fs.readFileSync(process.argv[1], "utf8");
+eval(headSrc + "\n" + colsSrc + "\n;globalThis.__X__ = { TC: TABLE_COLUMNS, DEFS: ALL_TABLE_DEFS, PAGES: ALL_TABLE_PAGES, W: window.AQB_COLUMNS };");
+const TC = globalThis.__X__.TC;
+const PAGES = globalThis.__X__.PAGES;
+const M = globalThis.__X__.W.methods;
+const C = globalThis.__X__.W.computed;
+ok("columns 域加载出 _visibleCols/_gridTemplate", typeof M._visibleCols === "function" && typeof M._gridTemplate === "function");
+ok("columns 域加载出 colAlignCss", typeof C.colAlignCss === "function");
+ok("表注册表非空(ALL_TABLE_PAGES 与 ALL_TABLE_DEFS 同构)", PAGES.length > 0 && PAGES.length === Object.keys(globalThis.__X__.DEFS).length);
+
+// 前提钉: 两侧在「列定义缺 tpl」时回退语义不同(_gridTemplate 落空串, layout 落 DEFAULT_TRACK)
+// —— 真实列定义必须全列声明 tpl, 否则等价性不成立, 本条先把这一前提显式化
+let noTpl = [];
+for (const p of PAGES) for (const c of (TC[p] || [])) if (!c || !c.tpl) noTpl.push(p + "/" + (c ? c.key : "?"));
+ok("全部真实列定义都声明 tpl(双链回退语义分叉的前提不存在)", noTpl.length === 0);
+
+const mkCtx = (widths, hidden, order) => Object.assign({}, M, {
+  colHidden: hidden || {},
+  colOrder: order || {},
+  colWidths: widths || {},
+});
+// colAlignCss 产出的是 CSS 文本, align 藏在 text-align 里 —— 按 [data-table=page] 锚解析出逐列序列
+const cssAlignsOf = (css, page) => {
+  const re = new RegExp(':where\\(\\[data-table="' + page + '"\\]\\) > :nth-child\\((\\d+)\\) \\{ text-align: (\\w+);', "g");
+  const byIdx = [];
+  let m;
+  while ((m = re.exec(css))) byIdx.push([parseInt(m[1], 10), m[2]]);
+  byIdx.sort((a, b) => a[0] - b[0]);
+  return byIdx.map((x) => x[1]);
+};
+
+let pagesChecked = 0;
+let colFaceChecks = 0;
+for (const p of PAGES) {
+  const defs = TC[p] || [];
+  if (!defs.length) { ok("[" + p + "] TABLE_COLUMNS 有列定义", false); continue; }
+  // 场景 = colWidths 抽样(无覆盖/单列覆盖/全列覆盖) + 列态抽样(隐藏一列/自定义列序),
+  // 每一面两侧消费**同一份**列定义与宽度输入
+  const allW = {};
+  for (const c of defs) allW[c.key] = "77px";
+  const scens = [
+    { tag: "无覆盖", scene: "plain", widths: null, hidden: null, order: null },
+    { tag: "单列覆盖", scene: "single", widths: { [defs[0].key]: "123px" }, hidden: null, order: null },
+    { tag: "全列覆盖", scene: "full", widths: allW, hidden: null, order: null },
+  ];
+  const unlock = defs.find((c) => !c.locked);
+  if (unlock) {
+    // 隐藏一列: 该列的固化宽不得漏进轨道串(两侧都只对可见列取宽), 另留一列覆盖验混合态
+    scens.push({ tag: "隐藏一列", scene: "hidden", widths: { [unlock.key]: "321px", [defs[0].key]: "123px" }, hidden: [unlock.key], order: null });
+  }
+  if (defs.length > 1) scens.push({ tag: "自定义列序", scene: "reorder", widths: null, hidden: null, order: defs.map((c) => c.key).slice().reverse() });
+  for (const s of scens) {
+    const ctx = mkCtx(s.widths ? { [p]: s.widths } : {}, s.hidden ? { [p]: s.hidden } : {}, s.order ? { [p]: s.order } : {});
+    const cols = M._visibleCols.call(ctx, p);
+    const lay = DT.layout(cols, s.widths || {});
+    const gt = M._gridTemplate.call(ctx, p);
+    okEq("[" + p + "/" + s.tag + "] 轨道串逐字符相等", gt, lay.gridTemplate, s.scene);
+    const cssAligns = cssAlignsOf(C.colAlignCss.call(ctx), p);
+    okEq("[" + p + "/" + s.tag + "] aligns 逐列相等", JSON.stringify(cssAligns), JSON.stringify(lay.aligns), s.scene);
+    if (cssAligns.length !== cols.length) ok("[" + p + "/" + s.tag + "] colAlignCss 规则数=可见列数(解析完整性)", false, s.scene);
+    colFaceChecks += cols.length;
+  }
+  pagesChecked += 1;
+}
+ok("覆盖面: 全部表都过场景(实算 13 张, 现跑 " + pagesChecked + ")", pagesChecked === PAGES.length && pagesChecked === 13);
+// 场景类逐类存在性(评审 minor 修复): 隐藏一列/自定义列序是条件场景, 触发前提(unlock 查找/多列
+// 判定)回归会让该类静默消失而列面总量下限照绿 —— 五类各自断言 checks 里有落袋项, 任一类坍缩即红
+for (const sc of ["plain", "single", "full", "hidden", "reorder"]) {
+  ok("覆盖面: 场景类存在(scene:" + sc + " 有检查项落袋)", checks.some((c) => c[2] === sc));
+}
+ok("覆盖面: 列面样本量(" + colFaceChecks + " 列次, >=120)", colFaceChecks >= 120);
+const failed = checks.filter((c) => !c[1]).map((c) => c[0]);
+console.log(JSON.stringify({ ok: checks.length - failed.length, total: checks.length, failed: failed, pages: pagesChecked, colFaces: colFaceChecks }));
+"""
+
+
+def test_r4_dt_table_layout_geometry_equivalence():
+    """计划 26-11-10-0027 W1(1) 等价性探针: 现役 _gridTemplate 轨道串与 colAlignCss 对齐序列
+    ≡ DT_TABLE.layout 输出(ALL_TABLE_DEFS 真实列定义全量 + colWidths/列态抽样场景)。
+    探针红 = 轨道语义冲突 = 计划 R1 停手条款。"""
+    report = _run_probe(
+        _NODE_DT_LAYOUT_EQUIV_PROBE,
+        bundle_file("columns.js"),
+        os.path.join(STATIC_ROOT, "shared", "dt_table.js"),
+        os.path.join(STATIC_ROOT, "shared", "app.js"),
+    )
+    _assert_battery(report, "dt_table 几何等价性探针")
