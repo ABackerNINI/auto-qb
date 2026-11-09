@@ -180,7 +180,7 @@ from traffic_store_support import (
 def test_all_persist_writes_on_caller_thread(tmp_path, monkeypatch):
     """单写线程不变式: 全部 v4 批量落盘(TrafficV4Store.append_records)发生在调时钟线钩子
     的线程(= 主循环线程)内, 模块不建线程(黄金法则 5)"""
-    mgr = _mgr(tmp_path, QbTraffic(enabled=True, sample_interval=30))
+    mgr = _mgr(tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=30))
     mgr.store.server_state = server_state()
     seed_store(mgr, [active_torrent()])
     mod = mgr.host.get("qb_traffic")

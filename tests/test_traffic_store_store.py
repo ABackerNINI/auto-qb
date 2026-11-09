@@ -157,7 +157,7 @@ def test_restart_continuity_appends_without_truncation(tmp_path, monkeypatch):
     fixed = H1 + 100.0
     clock = FakeClock(start=fixed)  # 构造期注入(S3 monkeypatch 收敛)
     # 第一段运行: 一轮采样(r 记录随 flush 落盘)
-    mgr = _mgr(tmp_path, QbTraffic(enabled=True, sample_interval=30), clock=clock)
+    mgr = _mgr(tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=30), clock=clock)
     mgr.store.server_state = server_state()
     seed_store(mgr, [active_torrent()])
     mod = mgr.host.get("qb_traffic")
@@ -168,7 +168,7 @@ def test_restart_continuity_appends_without_truncation(tmp_path, monkeypatch):
     tpath = v4_day_file_path(str(tmp_path), "torrent:HASH123", v4_epoch_date_str(fixed))
     assert len(_read_text(gpath).splitlines()) == 4  # 头 + key + B + 1 行
     # 重启: 全新 manager(同 data_dir), 计数器推进
-    mgr2 = _mgr(tmp_path, QbTraffic(enabled=True, sample_interval=30), clock=clock)
+    mgr2 = _mgr(tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=30), clock=clock)
     mgr2.store.server_state = server_state(alltime_dl=10_001_000, alltime_ul=20_002_000)
     seed_store(mgr2, [active_torrent(downloaded=5_000_700, uploaded=3_000_400)])
     mod2 = mgr2.host.get("qb_traffic")
@@ -187,7 +187,7 @@ def test_handler_writes_v4_only_no_legacy_side_effects(tmp_path, monkeypatch):
     qb-traffic-v3/(各代退役删除或 R2 留存不读); 断连轮全局 n 游程照常推进; stop() 后
     n 游程封口落 v4 天文件"""
     clock = FakeClock(start=H1 + 100.0)  # 构造期注入(S3 monkeypatch 收敛)
-    mgr = _mgr(tmp_path, QbTraffic(enabled=True, sample_interval=30), clock=clock)
+    mgr = _mgr(tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=30), clock=clock)
     mgr.store.server_state = server_state()
     seed_store(mgr, [active_torrent()])
     mod = mgr.host.get("qb_traffic")
@@ -207,7 +207,7 @@ def test_handler_writes_v4_only_no_legacy_side_effects(tmp_path, monkeypatch):
 
 def test_handler_dry_run_persists_nothing(tmp_path):
     """dry_run 全程零文件: start 跳过对账, handler 不落盘不封口(观测写盘属真实副作用)"""
-    mgr = _mgr(tmp_path, QbTraffic(enabled=True, sample_interval=30))
+    mgr = _mgr(tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=30))
     mgr.store.server_state = server_state()
     seed_store(mgr, [active_torrent()])
     mod = mgr.host.get("qb_traffic")
@@ -221,7 +221,7 @@ def test_handler_deleted_torrent_no_new_records(tmp_path, monkeypatch):
     """删种冻结语义(§04.5 沿用): 删种即不再产新块/新记录(不在 by_hash 本就无采样) ——
     已有缓冲随 flush 落盘收尾, 后续轮零新增记录, 无 index 注册表动作"""
     clock = FakeClock(start=H1 + 100.0)  # 构造期注入(S3 monkeypatch 收敛)
-    mgr = _mgr(tmp_path, QbTraffic(enabled=True, sample_interval=30), clock=clock)
+    mgr = _mgr(tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=30), clock=clock)
     mgr.store.server_state = server_state()
     seed_store(mgr, [active_torrent()])
     mod = mgr.host.get("qb_traffic")
@@ -244,7 +244,7 @@ def test_handler_readded_torrent_keeps_history(tmp_path, monkeypatch):
     """重加续写: 同 hash 重加(活跃, 计数器推进) -> 新记录接在原块续写(同文件, 历史
     保留); 断采间隔由累积漂移判据如实写成显式 dt; 重加后计数器回落由既有判重置兜底"""
     clock = FakeClock(start=H1 + 100.0)  # 构造期注入(S3 monkeypatch 收敛)
-    mgr = _mgr(tmp_path, QbTraffic(enabled=True, sample_interval=30), clock=clock)
+    mgr = _mgr(tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=30), clock=clock)
     mgr.store.server_state = server_state()
     seed_store(mgr, [active_torrent()])
     mod = mgr.host.get("qb_traffic")
@@ -268,7 +268,7 @@ def test_handler_readded_torrent_keeps_history(tmp_path, monkeypatch):
 def test_handler_dry_run_skips_store_construction(tmp_path, monkeypatch):
     """dry_run 不构造任何存储层(零触盘, 观测写盘属真实副作用); 删种轮同样零存储动作"""
     clock = FakeClock(start=H1 + 100.0)  # 构造期注入(S3 monkeypatch 收敛)
-    mgr = _mgr(tmp_path, QbTraffic(enabled=True, sample_interval=30), clock=clock)
+    mgr = _mgr(tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=30), clock=clock)
     mgr.store.server_state = server_state()
     seed_store(mgr, [active_torrent()])
     mod = mgr.host.get("qb_traffic")

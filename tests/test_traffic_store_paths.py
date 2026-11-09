@@ -167,7 +167,7 @@ from traffic_store_support import (
 def test_empty_data_dir_persists_nothing(tmp_path, monkeypatch):
     """data_dir 为空(防御: 真实配置恒非空, loaders 默认 auto-qb-data) -> 零文件零目录零泄漏"""
     monkeypatch.chdir(tmp_path)  # CWD 钉到 tmp: 断言无相对路径泄漏
-    mgr = _mgr(tmp_path, QbTraffic(enabled=True, sample_interval=30), data_dir=False)
+    mgr = _mgr(tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=30), data_dir=False)
     mgr.store.server_state = server_state()
     seed_store(mgr, [active_torrent()])
     mod = mgr.host.get("qb_traffic")

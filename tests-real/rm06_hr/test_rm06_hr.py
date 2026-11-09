@@ -254,7 +254,7 @@ def write_cfg(
     request_timeout_s: int = 20,
     hr_check_enabled: bool = True
 ) -> Path:
-    """生成临时配置(schema_version: 6, 直连 副实例 空库; 计划 §03 基座口径)。
+    """生成临时配置(schema_version: 7, 直连 副实例 空库; 计划 §03 基座口径)。
 
     - trackers 恰 1 条目: domains=[站点档案 tracker 域]+[本机 IP] —— 域名交集派生站点绑定
       (loaders._resolve_hr_site_bindings), 本机 IP 使假种子(announce=本机IP:1)进匹配管线;
@@ -274,7 +274,7 @@ def write_cfg(
     if add_tag_satisfied:
         entry["hr"]["add_tag_for_satisfied"] = add_tag_satisfied
     cfg: dict = {
-        "schema_version": 6,
+        "schema_version": 7,
         "qbittorrent": {
             "host": "127.0.0.1",
             "port": instances.SECONDARY,

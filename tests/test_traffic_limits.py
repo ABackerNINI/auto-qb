@@ -367,7 +367,7 @@ def test_module_wiring_sample_global_observes(web_env, monkeypatch):
     from auto_qb.core.modules.traffic_sample_mod import TrafficSampleModule
 
     mgr, _client = web_env
-    mgr.config.qb_traffic = SimpleNamespace(enabled=True, sample_interval=30)
+    mgr.config.qb_traffic = SimpleNamespace(enabled=True, sample_interval_multiplier=30)
     data_dir = str(mgr.config.data_dir)
     ctx = SimpleNamespace(config=mgr.config, store=SimpleNamespace(by_hash={}), web=None, host=None)
     mod = TrafficSampleModule(ctx)

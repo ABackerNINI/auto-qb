@@ -182,14 +182,14 @@ def write_cfg(case: Path,
               extra: dict | None = None,
               *,
               web: tuple[int, int] | None = None) -> tuple[Path, int | None]:
-    """生成临时配置(schema_version: 6, 直连 副实例)。
+    """生成临时配置(schema_version: 7, 直连 副实例)。
 
     trackers = {条目名: spec}(dict 插入序 = YAML 书写序 = 匹配优先序, 键序敏感的 RM05-01 依赖此);
     extra = 顶层键合并(delete_tags / remove_similar_tags / hr_check / ruleset 等);
     web = (enabled, port) 或 None。返回 (配置路径, web_port|None)。"""
     web_port = None
     cfg: dict = {
-        "schema_version": 6,
+        "schema_version": 7,
         "qbittorrent": {
             "host": "127.0.0.1",
             "port": instances.SECONDARY,
@@ -226,8 +226,8 @@ def write_cfg(case: Path,
         raise AssertionError(f"配置指向了 {instances.PRIMARY}(真实种子), 拒跑: {path}")
     if f"port: {instances.SECONDARY}" not in text:
         raise AssertionError(f"配置没指向副实例(空库草稿本), 拒跑: {path}")
-    if "schema_version: 6" not in text:
-        raise AssertionError(f"配置缺 schema_version: 6(会触发迁移改写), 拒跑: {path}")
+    if "schema_version: 7" not in text:
+        raise AssertionError(f"配置缺 schema_version: 7(会触发迁移改写), 拒跑: {path}")
     return path, web_port
 
 
@@ -737,7 +737,7 @@ def test_rm05_06_delete_tags_if_has_no_torrents():
 
 
 def _site_cfg(case_name: str, trackers: dict, sites: dict) -> tuple[Path, Path]:
-    """RM05-07 专用: 最小站点派生配置(schema_version: 6, hr_check.enabled 全局恒 false)。"""
+    """RM05-07 专用: 最小站点派生配置(schema_version: 7, hr_check.enabled 全局恒 false)。"""
     case = case_dir(case_name)
     extra = {"hr_check": {"enabled": False, "sites": sites}}
     cfg, _ = write_cfg(case, trackers, extra)

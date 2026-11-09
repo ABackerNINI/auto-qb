@@ -93,7 +93,7 @@ from traffic_sample_support import (
 
 def test_disabled_at_runtime_handler_noop(tmp_path):
     """运行期关闭(L0 换对象): 采样体入口现读判据 -> 短路不采样不动内存(与队列无关)"""
-    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30))
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=30))
     mgr.store.server_state = server_state()
     mod = mgr.host.get("qb_traffic")
     mod.start(mgr.ctx, dry_run=False)

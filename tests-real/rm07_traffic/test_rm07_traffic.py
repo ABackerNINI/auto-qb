@@ -3,7 +3,7 @@
 验证面对准冻结计划 plans/26-10-31-1605-plan-real-RM07.html §03 的十条 spec + R4 评审补真机门(R4#13):
 未配流量源启动观察项收口(RM07-01)· 来源刷新三态 off/stale/ok(RM07-02)· 切源即刷新(RM07-03)·
 限速曲线主链+改档对照(RM07-04)· 全局限速手动保护+退出恢复(RM07-05)· 曲线任务短路三路(RM07-06)·
-qB 口径采样+重启尖峰缺口(RM07-07)· L2 互传真实速率聚合(RM07-08)· 采样间隔配比与关块重开(RM07-09)·
+qB 口径采样+重启尖峰缺口(RM07-07)· L2 互传真实速率聚合(RM07-08)· 采样间隔倍数与关块重开(RM07-09)·
 工具状态端点五态(RM07-10)· ALT 备用限速真下发 set+toggle(RM07-11)。
 
 代码实况落刀点(计划给意图, 这里按 src 实况):
@@ -23,8 +23,9 @@ qB 口径采样+重启尖峰缺口(RM07-07)· L2 互传真实速率聚合(RM07-0
   变了立刻投递 refresh_traffic 命令)。
 - v4 采样文件(traffic_store.py §01): `<data_dir>/qb-traffic-v4/{global,torrents/<ih>}/<YYYY-MM-DD>.dat`;
   断言一律 parse_v4_day_text 读回(store 口径), 不咬文件二进制。
-- 采样节拍: sample_interval 非 main_tick 整数倍 → ceil 取整 + WARNING 一次(D5); 变更 interval →
-  关块重开(新旧块各有 interval_s); 块头 B 行 interval_s = **生效值**(ceil 后), 可从文件读回。
+- 采样节拍: sample_interval_multiplier 是 main_tick 的整数倍数, 生效秒数 = 直乘(无取整、无失配
+  告警 —— 计划 26-11-10-0252 D10 删旧 D5 语义); 变更倍数或 main_tick → 关块重开(新旧块各有
+  interval_s); 块头 B 行 interval_s = **生效值**, 可从文件读回。
 - 工具状态端点(traffic_monitor.py:206): 恒 200 + 结构化五态; 未就绪写端点 502。
 - ALT 备用限速(RM07-11): 值面 = app/preferences alt_up_limit/alt_dl_limit(bytes/s,
   qbapi.set_alt_speed_limits 增量写); 模式面 = transfer 端点(GET speedLimitsMode /
@@ -44,7 +45,7 @@ qB 口径采样+重启尖峰缺口(RM07-07)· L2 互传真实速率聚合(RM07-0
 
 跑法: `commands run real.suite -- --slice RM07 --yes`(不要裸 pytest)。真实种子全程非活跃;
 假种子一律 real-fake 标签(死端口 announce, 零外连); 产品 data_dir 指用例临时目录, 不碰
-auto-qb-data/; 配置一律 tests-real 派生 + schema_version: 6。
+auto-qb-data/; 配置一律 tests-real 派生 + schema_version: 7。
 """
 from __future__ import annotations
 
@@ -122,7 +123,7 @@ def assert_no_crash(case: Path) -> None:
 
 CONFIG_TEMPLATE = """\
 config:
-    schema_version: 6
+    schema_version: 7
     qbittorrent:
         host: 127.0.0.1
         port: {qb_port}
@@ -148,7 +149,7 @@ config:
 
 
 def write_cfg(case: Path, *, web: bool = False, main_tick: str = "2S", extra: str = "") -> Path:
-    """生成临时配置(schema_version: 6, 只指 副实例 空库)。extra = 顶层段 YAML 文本(顶格书写,
+    """生成临时配置(schema_version: 7, 只指 副实例 空库)。extra = 顶层段 YAML 文本(顶格书写,
     这里统一缩进 4 格挂到 config: 之下 —— 段落必须嵌在 config 键组内, 根节点只认 config)。"""
     data_dir = (case / "data").as_posix()
     cfg = case / "config.yml"
@@ -167,8 +168,8 @@ def write_cfg(case: Path, *, web: bool = False, main_tick: str = "2S", extra: st
     text = cfg.read_text(encoding="utf-8")
     if f"port: {instances.PRIMARY}" in text:
         raise AssertionError(f"配置指向了 {instances.PRIMARY}(真实种子), 拒跑: {cfg}")
-    if "schema_version: 6" not in text:
-        raise AssertionError(f"配置缺 schema_version: 6(会触发迁移改写), 拒跑: {cfg}")
+    if "schema_version: 7" not in text:
+        raise AssertionError(f"配置缺 schema_version: 7(会触发迁移改写), 拒跑: {cfg}")
     return cfg
 
 
@@ -183,7 +184,17 @@ def traffic_source_section(enabled: bool = True, dat_path: str = "", refresh: st
     )
 
 
-def qb_traffic_section(sample: str = "4S", flush: str = "60S") -> str:
+def qb_traffic_section(multiplier: int = 2, flush: str = "60S") -> str:
+    """qb_traffic 段 YAML: 采样间隔键是 main_tick 的整数倍数(计划 26-11-10-0252 D3),
+    生效秒数 = multiplier x main_tick; 本片 main_tick 恒 2S, 故 2 倍 = 4s 档。"""
+    return ("qb_traffic:\n"
+            "    enabled: true\n"
+            f"    sample_interval_multiplier: {multiplier}\n"
+            f"    flush_interval: {flush}\n")
+
+
+def qb_traffic_legacy_section(sample: str = "4S", flush: str = "60S") -> str:
+    """已退役的旧秒值键写法(装载期负向用): 出现即按未知键拒, 不做静默换算。"""
     return ("qb_traffic:\n"
             "    enabled: true\n"
             f"    sample_interval: {sample}\n"
@@ -777,7 +788,7 @@ def test_rm07_07_qb_traffic_sample_restart_gap():
     p = None
     try:
         ih = fake_seed(qb, "rm07c7.bin", 256 * 1024, WORK / "rm07_07", "rm07c7")
-        cfg = write_cfg(case, web=False, main_tick="2S", extra=qb_traffic_section(sample="4S", flush="60S"))
+        cfg = write_cfg(case, web=False, main_tick="2S", extra=qb_traffic_section(multiplier=2, flush="60S"))
         data_dir = case / "data"
 
         # ---- 第一轮: 采样跑 ~75s(≥1 个 flush 窗), graceful 退出 → stop 钩子封游程 + 落盘
@@ -841,7 +852,7 @@ def test_rm07_08_l2_transfer_sampling(primary, secondary, tracker, workdir, glob
         tracker.peers = [(local_host(), seed_port)]
         primary.add_torrent(raw, savepath=str(src), paused=False, infohash_hint=ih)
         secondary.add_torrent(raw, savepath=str(dst), paused=False, infohash_hint=ih)
-        cfg = write_cfg(case, web=True, extra=qb_traffic_section(sample="4S", flush="60S"))
+        cfg = write_cfg(case, web=True, extra=qb_traffic_section(multiplier=2, flush="60S"))
         p = app.start(cfg, case)
         assert p.wait_web(40), f"WEB 没起来:\n{p.log()[-600:]}"
         port = web_port_of(cfg)
@@ -906,49 +917,48 @@ def test_rm07_08_l2_transfer_sampling(primary, secondary, tracker, workdir, glob
 # ================================================================ RM07-09
 
 
-def test_rm07_09_sample_interval_ratio_and_reblock():
-    """[RM07-09] 采样间隔配比与关块重开: 非整倍 → WARNING+取整生效; 热改 interval → 关块重开; 装载期负向
+def test_rm07_09_sample_interval_multiplier_and_reblock():
+    """[RM07-09] 采样间隔倍数与关块重开: 倍数直乘生效; 热改倍数 → 关块重开; 装载期负向
 
     前置: 三组配置变体(各自独立起停); 1./3. 零种子, 2. 零种子。
     副作用: 产品起停 ×2 + run_cli ×3; v4 采样文件落临时 data_dir。
     回滚: 删临时目录。
-    失败判据: 非整倍无 WARNING(D5 告警记忆缺失); 取整未生效(块头 interval_s != ceil 值);
-              关块重开后旧块尾部数据丢/坏行(封口分叉); 非法配置被静默接受(fail-fast 破, 高优 FAIL)。
+    失败判据: 生效秒数 != 倍数 x main_tick(块头 interval_s 与倍数脱钩); 旧 D5 取整/失配告警
+              仍在(计划 26-11-10-0252 D10 已删该语义); 关块重开后旧块尾部数据丢/坏行(封口分叉);
+              非法配置被静默接受(fail-fast 破, 高优 FAIL)。
     """
     case = case_dir("rm07_09")
     p = None
     try:
-        # ---- 1. 非整倍(3S vs main_tick 2S): WARNING 恰一次 + 生效值 ceil=4s 落在块头
-        cfg = write_cfg(case, web=False, main_tick="2S", extra=qb_traffic_section(sample="3S", flush="60S"))
+        # ---- 1. 倍数直乘(2 x main_tick 2S = 4s): 无失配告警, 生效值 4s 落在块头
+        cfg = write_cfg(case, web=False, main_tick="2S", extra=qb_traffic_section(multiplier=2, flush="60S"))
         p = app.start(cfg, case, graceful_after=20)
         assert p.wait(80) == 0, f"1. 未优雅退出:\n{p.log()[-600:]}"
-        assert "非 main_tick 2s 整数倍" in p.log(), "非整倍配比无 WARNING(D5 告警缺失)"
-        assert "实际节拍取整为 4s" in p.log(), "WARNING 未给出取整生效值"
-        time.sleep(0.2)
-        assert count_log(case, r"非 main_tick 2s 整数倍") == 1, "同配对 WARNING 重复多次(只告一次失守)"
+        assert "非 main_tick" not in p.log(), "倍数语义下不应再有失配告警(D10 已删)"
         gf = day_file(case / "data", "global")
         assert gf.is_file(), f"1. 全局天文件未落盘: {sorted((case / 'data').rglob('*.dat'))}"
         parsed = parse_day(gf)
         assert parsed.blocks and all(b.interval_s == 4.0 for b in parsed.blocks
-                                    ), (f"块头 interval_s != 生效值 4s: {[b.interval_s for b in parsed.blocks]}")
+                                    ), (f"块头 interval_s != 2 x main_tick 2s = 4s: "
+                                        f"{[b.interval_s for b in parsed.blocks]}")
         assert parsed.bad_lines == 0
 
-        # ---- 2. 运行期热改 sample_interval(4S→6S): 触发关块重开, 新数据分块带新 interval。
+        # ---- 2. 运行期热改倍数(2→3, 生效 4S→6S): 触发关块重开, 新数据分块带新 interval。
         # 实测语义(2026-10-31): 纯空闲系列的开放 z 游程**从不形成盘上旧块**(记录只在封口时
         # append, _append_record 才开块)—— 切 interval 时「无开放块的开放游程不封, 将成为
         # 新块首记录」(traffic_sample_mod._close_blocks_for_interval_change docstring 原文),
         # 所以 L1 零流量下盘上只有一个 interval=6s 的块、z 游程无缝横跨全程。「旧块封口」面
         # 需要块内有真记录(r 行), 归 RM07-08 的 L2 真流量同面, 本条如实按空态口径断言。
         shutil.rmtree(case / "data", ignore_errors=True)
-        cfg = write_cfg(case, web=True, main_tick="2S", extra=qb_traffic_section(sample="4S", flush="60S"))
+        cfg = write_cfg(case, web=True, main_tick="2S", extra=qb_traffic_section(multiplier=2, flush="60S"))
         p = app.start(cfg, case, graceful_after=55)
         assert p.wait_web(40), f"WEB 没起来:\n{p.log()[-600:]}"
         port = web_port_of(cfg)
         time.sleep(10)  # 旧节拍(4S)先跑 ~10s
-        resp = put_config(port, lambda c: c["qb_traffic"].__setitem__("sample_interval", "6S"))
+        resp = put_config(port, lambda c: c["qb_traffic"].__setitem__("sample_interval_multiplier", 3))
         assert resp.get("applied") is True, f"PUT 未应用: {resp}"
         assert not resp.get("restart_required"), f"qb_traffic 段被划 R 级(新事实, 如实记): {resp}"
-        wait_until(lambda: "流量采样 | 采样率变化 -> 6s: 关闭全部现块, 新数据分块带新 interval" in p.log(), 20, "热改 interval 后缺关块重开日志")
+        wait_until(lambda: "流量采样 | 采样率变化 -> 6s: 关闭全部现块, 新数据分块带新 interval" in p.log(), 20, "热改倍数后缺关块重开日志")
         assert p.wait(80) == 0, f"2. 未优雅退出:\n{p.log()[-600:]}"
         gf = day_file(case / "data", "global")
         assert gf.is_file(), "2. 全局天文件未落盘"
@@ -962,9 +972,10 @@ def test_rm07_09_sample_interval_ratio_and_reblock():
 
         # ---- 3. 装载期负向: 非法配比必须 validate_config 聚合报错(RM03-05 同款观测法)
         negatives = [
-            ("flush_interval < 60s", qb_traffic_section(sample="4S", flush="30S"), "2S"),
-            ("sample_interval > 600s", qb_traffic_section(sample="700S", flush="60S"), "2S"),
-            ("sample_interval < main_tick", qb_traffic_section(sample="1S", flush="60S"), "2S"),
+            ("flush_interval < 60s", qb_traffic_section(multiplier=2, flush="30S"), "2S"),
+            ("multiplier x main_tick > 600s", qb_traffic_section(multiplier=301, flush="60S"), "2S"),
+            ("multiplier < 1", qb_traffic_section(multiplier=0, flush="60S"), "2S"),
+            ("旧秒值键 sample_interval 已退役", qb_traffic_legacy_section(sample="4S", flush="60S"), "2S"),
         ]
         for i, (label, extra, main_tick) in enumerate(negatives):
             ncase = case / f"neg_{i}"

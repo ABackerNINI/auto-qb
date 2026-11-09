@@ -242,7 +242,7 @@ def case_dir(name: str) -> Path:
 
 CONFIG_TEMPLATE = """\
 config:
-    schema_version: 6
+    schema_version: 7
     qbittorrent:
         host: 127.0.0.1
         port: {qb_port}
@@ -279,7 +279,7 @@ def write_cfg(case: Path,
               cross_group: bool = False,
               relocate: bool = False,
               alias_threshold: int = 8) -> tuple[Path, int]:
-    """生成临时配置(schema_version: 6, 直连副实例(SECONDARY), WEB 必开 —— 本片断言全走产品 WEB 只读端点)。
+    """生成临时配置(schema_version: 7, 直连副实例(SECONDARY), WEB 必开 —— 本片断言全走产品 WEB 只读端点)。
 
     product data_dir 指用例临时目录: journal/spec/pid/state 随目录清理, 不碰仓库根 auto-qb-data/。
     返回 (配置路径, web端口)。"""
@@ -300,8 +300,8 @@ def write_cfg(case: Path,
     text = cfg.read_text(encoding="utf-8")
     if f"port: {instances.PRIMARY}" in text:
         raise AssertionError(f"配置指向了 {instances.PRIMARY}(真实种子), 拒跑: {cfg}")
-    if "schema_version: 6" not in text:
-        raise AssertionError(f"配置缺 schema_version: 6(会触发迁移改写), 拒跑: {cfg}")
+    if "schema_version: 7" not in text:
+        raise AssertionError(f"配置缺 schema_version: 7(会触发迁移改写), 拒跑: {cfg}")
     return cfg, web_port
 
 

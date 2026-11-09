@@ -239,7 +239,7 @@ def test_api_traffic_qb_raw_rate_basis_delta_per_w_totals_unchanged(web_env):
 
     mgr, client = web_env
     auth = _auth(mgr)
-    _enable_qb_traffic(mgr)
+    _enable_qb_traffic(mgr, sample_interval_multiplier=15)  # main_tick=2.0 -> 15 x 2 = 30s 生效(与种子块 30s 桶宽一致)
     store = _qb_v4(mgr)
     now = int(time.time())
     b0 = ((now - 240) // 30) * 30  # 5m 窗内, 远离窗首/窗尾栅格边缘(种子外扩区无数据)
@@ -297,7 +297,7 @@ def test_api_traffic_qb_raw_seed_extension_window_start_baseline(web_env):
 
     mgr, client = web_env
     auth = _auth(mgr)
-    _enable_qb_traffic(mgr)
+    _enable_qb_traffic(mgr, sample_interval_multiplier=15)  # main_tick=2.0 -> 15 x 2 = 30s 生效(与种子块 30s 桶宽一致)
     store = _qb_v4(mgr)
     now = int(time.time())
     first = (now - 300) - ((now - 300) % 30)  # 5m 窗栅格首桶(floor 对齐)
@@ -330,7 +330,7 @@ def test_api_traffic_qb_raw_seed_vacuum_chain_break_and_recover(web_env):
 
     mgr, client = web_env
     auth = _auth(mgr)
-    _enable_qb_traffic(mgr)
+    _enable_qb_traffic(mgr, sample_interval_multiplier=15)  # main_tick=2.0 -> 15 x 2 = 30s 生效(与种子块 30s 桶宽一致)
     store = _qb_v4(mgr)
     now = int(time.time())
     first = (now - 300) - ((now - 300) % 30)
@@ -379,7 +379,7 @@ def test_api_traffic_qb_raw_seed_vacuum_null_1s_edge_band(web_env, monkeypatch):
 
     mgr, client = web_env
     auth = _auth(mgr)
-    _enable_qb_traffic(mgr)
+    _enable_qb_traffic(mgr, sample_interval_multiplier=15)  # main_tick=2.0 -> 15 x 2 = 30s 生效(与种子块 30s 桶宽一致)
     store = _qb_v4(mgr)
     fixed = 1_800_000_000.0  # 30 的整倍 -> 5m 窗栅格对齐(确定性几何)
 

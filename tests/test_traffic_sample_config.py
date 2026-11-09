@@ -7,9 +7,10 @@
 - test_qb_traffic_config_partial_falls_back_to_defaults: 部分键缺省回退 QbTraffic 默认值
 - test_qb_traffic_config_rejects_bad_section: 段非 dict / 未知键 / enabled 非布尔
 - test_qb_traffic_config_bounds_matrix: 各时间/布尔键边界矩阵(1.5S 需 main_tick 配合 / 60S~1H / 1H~90D / 7D~无上限 恰好压线收, 压线外拒)
-- test_qb_traffic_sample_interval_below_main_tick_rejected: 下限硬校验(26-10-04-1957 §06.1) ——
-  sample_interval < main_tick 加载期拒(1.5s 档在 main_tick=2s 下被拒), 恰等于压线收
-- test_qb_traffic_sample_interval_multiple_mismatch_not_an_error: 裁决 D5 —— 非 main_tick 整数倍校验层不报错
+- test_qb_traffic_sample_interval_multiplier_below_one_rejected: 倍数下限(int >= 1) —— 0 拒,
+  1 = 1 倍 main_tick 收(倍数语义下生效间隔恒 >= main_tick, 原「< main_tick」不可能)
+- test_qb_traffic_legacy_sample_interval_key_rejected: 旧秒值键 sample_interval 已退役(计划
+  26-11-10-0252 D1 硬切) —— 出现即按未知键拒, 不做静默换算
 - test_qb_traffic_flush_interval_bounds: flush_interval —— dataclass 缺省 600 /
   60~3600s 整数秒压线收 / 越界与非整数秒与坏格式聚合报错
 
@@ -126,29 +127,32 @@ def test_qb_traffic_config_absent_means_disabled(tmp_path):
 
 
 def test_qb_traffic_config_parses_sample(tmp_path):
-    """完整样例解析: enabled 布尔化 + 各时间键换算成秒(含 v3 新键 flush_interval)"""
+    """完整样例解析: enabled 布尔化 + 各时间键换算成秒(含 v3 新键 flush_interval)
+
+    采样间隔键是整数倍数(计划 26-11-10-0252): 30 倍 x 缺省 main_tick 2s = 60s 生效。
+    """
     cfg = _load(
         tmp_path, {
             "enabled": "true",
-            "sample_interval": "1M",
+            "sample_interval_multiplier": 30,
             "flush_interval": "10M",
             "raw_window": "48H",
             "rollup_window": "60D",
         }
     ).qb_traffic
     assert cfg.enabled is True
-    assert cfg.sample_interval == 60.0
+    assert cfg.sample_interval_multiplier == 30
     assert cfg.flush_interval == 600.0
     assert cfg.raw_window == 48 * 3600.0
     assert cfg.rollup_window == 60 * 86400.0
 
 
 def test_qb_traffic_config_partial_falls_back_to_defaults(tmp_path):
-    """部分键缺省回退默认值(30S/10M/24H/30D, enabled 缺省 false)"""
+    """部分键缺省回退默认值(1 倍 main_tick / 10M / 24H / 30D, enabled 缺省 false)"""
     cfg = _load(tmp_path, {"enabled": "true"}).qb_traffic
     assert cfg.enabled is True
     d = QbTraffic()
-    assert cfg.sample_interval == d.sample_interval == 30.0
+    assert cfg.sample_interval_multiplier == d.sample_interval_multiplier == 1
     assert cfg.flush_interval == d.flush_interval == 600.0
     assert cfg.raw_window == d.raw_window == 86400.0
     assert cfg.rollup_window == d.rollup_window == 30 * 86400.0
@@ -164,18 +168,22 @@ def test_qb_traffic_config_rejects_bad_section():
 
 
 def test_qb_traffic_config_bounds_matrix():
-    """边界矩阵: 恰好压线合法(含等价秒数), 压线外拒绝; 各时间键独立校验"""
-    # 合法: 上下边界恰好压线(1.5S 需 main_tick <= 1.5s 才过下限硬校验 / 1H~90D / 7D~无上限)
+    """边界矩阵: 恰好压线合法(含等价秒数), 压线外拒绝; 各键独立校验
+
+    采样间隔是 main_tick 的整数倍数(计划 26-11-10-0252 D3/D6): 倍数下限 1, 有效秒数上限 600s
+    (缺省 main_tick=2s 时 300 倍恰好 600s 压线收, 301 倍 602s 拒)。
+    """
+    # 合法: 上下边界恰好压线(1 倍 main_tick / 300 倍 x 2s = 600s / 1H~90D / 7D~无上限)
     ok = validate_config(
         _cfg_dict(
             {
                 "enabled": "true",
-                "sample_interval": "1.5S",
+                "sample_interval_multiplier": 1,
                 "flush_interval": "10M",
                 "raw_window": "1H",
                 "rollup_window": "7D",
             },
-            main_tick="1S",  # 1.5S >= main_tick: 下限语义自证(默认 main_tick=2 时 1.5S 已非法, 见下方专项用例)
+            main_tick="1S",  # 1 倍 = 1s 生效(倍数语义下恒 >= main_tick, 无需再比下限)
         )
     )
     assert ok == [], ok
@@ -183,7 +191,7 @@ def test_qb_traffic_config_bounds_matrix():
         _cfg_dict(
             {
                 "enabled": "false",
-                "sample_interval": "10M",
+                "sample_interval_multiplier": 300,  # 300 x 缺省 main_tick 2s = 600s 恰好压上边界
                 "flush_interval": "1H",  # 3600s 恰好压上边界
                 "raw_window": "90D",
                 "rollup_window": "36500D",  # 保留窗无上限: 100 年也合法(等效永久保留)
@@ -191,9 +199,9 @@ def test_qb_traffic_config_bounds_matrix():
         )
     )
     assert ok == [], ok
-    # 越界: 各键压线外一秒即拒
-    bad = validate_config(_cfg_dict({"sample_interval": "601S"}))
-    assert any("sample_interval" in e for e in bad), bad
+    # 越界: 各键压线外即拒
+    bad = validate_config(_cfg_dict({"sample_interval_multiplier": 301}))  # 301 x 2s = 602s > 600s
+    assert any("sample_interval_multiplier" in e and "600" in e for e in bad), bad
     bad = validate_config(_cfg_dict({"raw_window": "30M"}))
     assert any("raw_window" in e for e in bad), bad
     bad = validate_config(_cfg_dict({"raw_window": "91D"}))
@@ -202,20 +210,26 @@ def test_qb_traffic_config_bounds_matrix():
     assert any("rollup_window" in e for e in bad), bad
 
 
-def test_qb_traffic_sample_interval_below_main_tick_rejected():
-    """v3 下限语义(plan 26-10-04-1957 §06.1): sample_interval < main_tick 加载期硬拒
+def test_qb_traffic_sample_interval_multiplier_below_one_rejected():
+    """倍数下限(计划 26-11-10-0252 D3): int >= 1, 0 拒; 1 = 1 倍 main_tick 收
 
-    回归锚: 1.5s 档在校验放宽时曾合法, main_tick=2s 下必须被拒(采样任务由主循环节拍驱动)。
+    倍数语义下生效间隔恒 >= main_tick, 原「采样间隔 < main_tick」在配置面数学上不可能 ——
+    该下限用例随旧秒值键一并退役, 改守倍数自身的整数下限。
     """
-    errors = validate_config(_cfg_dict({"sample_interval": "1.5S"}, main_tick="2S"))
-    assert any("sample_interval" in e and "main_tick" in e for e in errors), errors
-    # 压线即合法: 恰等于 main_tick 收
-    assert validate_config(_cfg_dict({"sample_interval": "2S"}, main_tick="2S")) == []
+    errors = validate_config(_cfg_dict({"sample_interval_multiplier": 0}, main_tick="2S"))
+    assert any("sample_interval_multiplier" in e and ">= 1" in e for e in errors), errors
+    # 压线即合法: 恰 1 倍收
+    assert validate_config(_cfg_dict({"sample_interval_multiplier": 1}, main_tick="2S")) == []
 
 
-def test_qb_traffic_sample_interval_multiple_mismatch_not_an_error():
-    """裁决 D5: 非 main_tick 整数倍只是精度损耗, 校验层不报错(告警落采样模块检测点, S4 不落)"""
-    assert validate_config(_cfg_dict({"sample_interval": "3S"}, main_tick="2S")) == []
+def test_qb_traffic_legacy_sample_interval_key_rejected():
+    """旧秒值键 sample_interval 已退役(D1 硬切): 出现即按未知键拒, 不做静默换算
+
+    存量配置由迁移链 v6->v7 保行为换算; 终态校验层零旧键分支, 旧写法必须是硬错而非被
+    曲解成倍数(30S 若被 int() 吃掉就变 30 倍, 静默放大 30 倍间隔)。
+    """
+    errors = validate_config(_cfg_dict({"sample_interval": "30S"}, main_tick="2S"))
+    assert any("未知键" in e and "sample_interval" in e for e in errors), errors
 
 
 def test_qb_traffic_flush_interval_bounds():
