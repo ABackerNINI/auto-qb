@@ -3,9 +3,9 @@
 ## 测试计划(每个测试函数一条)
 
 - test_frontend_ctx_submenu_single_entry_and_hover_close: 右键次级菜单守阵 —— 次级入口由注册表声明、渲染层计数(「更多操作」+「转移到」, 模板骨架单份; 原 CTX-06 单入口断言随「转移到」入口过期, R5#30)、移出父项后延迟收起(CTX-05)、hover 图标规则必须限定直接子级且压特异性否则整片子面板变灰(CTX-04)
-- test_frontend_reannounce_inactive_gate_wiring: 非活跃种子禁强制汇报(qB 口径)入口接线守阵(2026-10-10; 2026-10-17 扩段删除链, issue 26-10-17-1703) —— qB 的 Force reannounce 仅在种子活跃时可用(commit aa189a7 关闭 issue #12080: isPaused/isChecking/isQueued 时 setEnabled(false)), 本项目沿用同一判据(暂停/停止·排队·校验中·错误/文件丢失): ①判定单点 decorate.js 的 REANNOUNCE_BLOCKED_STATES 必含 paused*/stopped*/queued*/checking*/error/missingFiles/**moving** 且**读 qB 原始 state**(kind 现 7 档, 排队仍被归进 downloading/seeding ⇒ 单看 kind 判不出排队; moving 虽自成第 7 档, 后端却不在任何 state_enum 谓词集合里 ⇒ 后端同须判 state 串); ②右键菜单 ctx-menus.html 四支(多选/整集/单种子/单组)的强制汇报项都挂 reannounceMenuGate(); ③行为层两道 —— _actCore 的 reannounce 前置闸门(早于乐观补丁/POST) + _kbAct 的 reannounce 分支先于 confirmDialog("先问确定再回不行"是坏体感); ④详情面板 tracker 页签 04/05/06 三个变体的 data-act=report 钮挂 drawerReannounceGate() + 各变体 .is-gated CSS(压过 base :hover, 含 05 失败区 .dt05-fail 的 (0,4,0) 覆盖) + drawer.js torrentCmd 兜底; ⑤投递收敛 —— 闸门(集合级全有全无, 与 qB oneCanForceReannounce 一致)只管「允不允许」, 放行后「发给谁」由 reannouncePlan 单点收敛为活跃子集(混选时 qB 引擎对非活跃目标静默空转, 照集合全量投递会让 tracker 确认层白等 item deadline 后落假「未确认」, 把一次干净的成功报成部分失败), 回执体现跳过数, 空投递必须显式收口(不得落成功分支报「成功 0 个目标」), 且前后端判据表(REANNOUNCE_BLOCKED_STATES)逐项同表; ⑥删除链(唯一漏接入口的修复) —— _deleteFlow 按 reannouncePlan 收敛 + 全非活跃时闸门禁用复选框(popovers.html is-gated 类/标题/点击短路三件 + .opt-pill.is-gated 三套 CSS 成套压过 :hover)+ _reannounceAll 的 skip 桶(非活跃 warn 降级为跳过不挡删除, 推迟中/error 维持不放行)+ 后端 REANNOUNCE_INACTIVE_SKIP 文案含「非活跃」(前端文本判据锚点)。行为语义由同批 node 电池真跑(判定表 + 投递计划 + 删除闸门 + skip 桶分型)。键盘与详情面板是右键之外的两条绕行路径, 任一入口被摘除即红
-- test_frontend_api_request_timeout: 前端请求级超时守阵(issue 26-10-16-0954-bug-webui-chart-fetch-no-timeout 方案 #1, 2026-10-16) —— `_request` 旧的裸 `fetch(path, { ...options, headers })` 无超时: 连接静默失效时 await 永不返回, 调用方 finally 整条失效(流量图 loading 卡死⇒轮询守卫把自己挡死; polling.js::refresh 更是永久停表), 界面上也无任何提示。四层静态锚: ①常量单点 AQB_FETCH_TIMEOUT_S/MS(毫秒值由秒值派生, 不手抄两份); ②fetch 必须带 `signal: ctl.signal`(裸 fetch 不得回潮); ③AbortError 必须翻译(超时/取消分型 + timeout 标记); ④`finally` 必须 `clearTimeout(timer)` 且跨文件不变式 `_QB_LOAD_STALL_MS >= AQB_FETCH_TIMEOUT_MS`(兜底不得早于请求级超时)。行为面 node 电池真跑(无 node 静默跳过): 桩 fetch + 手动触发定时器, 六型 —— 悬挂→「请求超时(15s)」+ timeout 标记 + 定时器已清 / 成功值透传且定时器清 / 401 仍走 auth 分支(_logout + auth 标记) / 非 2xx 文案照旧 / 已 abort 的外部 signal → 「请求已取消」不冒充超时 / - test_frontend_raw_fetch_timeout_single_point: 前端裸 fetch 零回潮 + 低层带超时单点守阵(issue 26-10-16-1303-bug-webui-raw-fetch-bypass-no-timeout, 2026-10-16) —— 5 处请求有意或历史地绕开 auth.js::_request(它已有请求级超时), 直接裸 fetch 且无 signal: 启动分片装载 / 免鉴权判定 / 导出下载 / 快捷键密钥读写 x2; 连接静默失效时 await 永不返回 ⇒ 各有收尾动作停在中途(白屏 / 停在“验证中” / 回执停在“进行中” / 密钥面板 loading 不复位)。修法 = 低层单点 shared/fetch_low.js(aqbFetch: AbortController + 15s + AbortError 翻译, **原始 Response** 透传不解析), 四处改调它; boot.js 在清单脚本之前执行(用不了单点), 自带等价内联超时(10s, 阻塞首屏 ⇒ 早失败)。四层静态锚: ①单点常量在且与 auth.js 请求级超时同值(同口径两处实现, 只改一边即红); ②**裸 fetch 零回潮**(全 shared 除 vendor 外, 出现调用点 fetch( 的文件只允许单点自身 / auth.js / boot.js); ③boot.js 内联件齐(常量 10s + AbortController + signal 透传 + clearTimeout + AbortError 翻译); ④四旁路调用点全改调单点 + lifecycle 采纳行的等价格式(字段名与空值占位各一个常量; 回潮成字面成员赋值会让该文件对本仓 agent 只读)。行为面 node 电池真跑(无 node 静默跳过): 单点七型(悬挂→「请求超时(15s)」+ timeout 标记 / 原始 Response 透传不解析 / 非 abort 错误上抛 / 外部取消不冒充超时 / method+headers 透传 / 定时器清理)与 boot.js 白屏悬挂五项(信号在 / 10s 定时器在 / 悬挂→可读失败文案 / 定时器清掉)
-- test_frontend_poll_skeleton_single_point: 长驻/有界轮询骨架单点守阵(issue 26-10-20-2231, 2026-10-22) —— 同一份「启停 + 守卫 + 在途悬挂兜底 + 代际守卫」此前写了三份(主轮 setTimeout 链 / 抽屉 setInterval / 流量图 setInterval), 停止条件五处手写, 且**抽屉侧漏了悬挂兜底**(同一类「loading 卡死⇒面板永久冻结」缺陷只修了流量图一边, 本件的实质缺陷面)。收敛后: ①骨架三口子 startPoll/stopPoll/awaitPoll 在 polling.js + 阈值常量 AQB_POLL_STALL_MS(30s = 请求级超时 15s 的两倍余量); ②抽屉/流量两侧只声明差异(ms/guard/stall/mutex/onStall), 裸 setInterval 零残留; ③document.hidden 守卫单点在骨架里, shared/ 内除骨架与 lifecycle 的 visibilitychange 事件响应外不得再有散点; ④三条有界等待(_pollCmd / tmPollSettle / tmPollShutdown)一律经 awaitPoll, 手写 ++pollGen 代际守卫与 setTimeout 递归不得回潮。行为面 node 电池真跑(无 node 静默跳过): chain 在途不排下一拍(不堆叠请求) / 悬挂超阈值补偿一次且重新计时 / 退避曲线与旧 _pollCmd 逐项等价(0,150,300,500,500 与 500,1000,1000) / 拍数上限与截止时间收摊兑现 null / 同名先停后起(旧链兑现 null) / 外部叫停 / fn 抛出即 reject / 页面隐藏恒等守卫
+- test_frontend_reannounce_inactive_gate_wiring: 非活跃种子禁强制汇报(qB 口径)入口接线守阵(2026-10-10; 2026-10-17 扩段删除链, issue 26-10-17-1703) —— qB 的 Force reannounce 仅在种子活跃时可用(commit aa189a7 关闭 issue #12080: isPaused/isChecking/isQueued 时 setEnabled(false)), 本项目沿用同一判据(暂停/停止·排队·校验中·错误/文件丢失): 1. 判定单点 decorate.js 的 REANNOUNCE_BLOCKED_STATES 必含 paused*/stopped*/queued*/checking*/error/missingFiles/**moving** 且**读 qB 原始 state**(kind 现 7 档, 排队仍被归进 downloading/seeding ⇒ 单看 kind 判不出排队; moving 虽自成第 7 档, 后端却不在任何 state_enum 谓词集合里 ⇒ 后端同须判 state 串); 2. 右键菜单 ctx-menus.html 四支(多选/整集/单种子/单组)的强制汇报项都挂 reannounceMenuGate(); 3. 行为层两道 —— _actCore 的 reannounce 前置闸门(早于乐观补丁/POST) + _kbAct 的 reannounce 分支先于 confirmDialog("先问确定再回不行"是坏体感); 4. 详情面板 tracker 页签 04/05/06 三个变体的 data-act=report 钮挂 drawerReannounceGate() + 各变体 .is-gated CSS(压过 base :hover, 含 05 失败区 .dt05-fail 的 (0,4,0) 覆盖) + drawer.js torrentCmd 兜底; 5. 投递收敛 —— 闸门(集合级全有全无, 与 qB oneCanForceReannounce 一致)只管「允不允许」, 放行后「发给谁」由 reannouncePlan 单点收敛为活跃子集(混选时 qB 引擎对非活跃目标静默空转, 照集合全量投递会让 tracker 确认层白等 item deadline 后落假「未确认」, 把一次干净的成功报成部分失败), 回执体现跳过数, 空投递必须显式收口(不得落成功分支报「成功 0 个目标」), 且前后端判据表(REANNOUNCE_BLOCKED_STATES)逐项同表; 6. 删除链(唯一漏接入口的修复) —— _deleteFlow 按 reannouncePlan 收敛 + 全非活跃时闸门禁用复选框(popovers.html is-gated 类/标题/点击短路三件 + .opt-pill.is-gated 三套 CSS 成套压过 :hover)+ _reannounceAll 的 skip 桶(非活跃 warn 降级为跳过不挡删除, 推迟中/error 维持不放行)+ 后端 REANNOUNCE_INACTIVE_SKIP 文案含「非活跃」(前端文本判据锚点)。行为语义由同批 node 电池真跑(判定表 + 投递计划 + 删除闸门 + skip 桶分型)。键盘与详情面板是右键之外的两条绕行路径, 任一入口被摘除即红
+- test_frontend_api_request_timeout: 前端请求级超时守阵(issue 26-10-16-0954-bug-webui-chart-fetch-no-timeout 方案 #1, 2026-10-16) —— `_request` 旧的裸 `fetch(path, { ...options, headers })` 无超时: 连接静默失效时 await 永不返回, 调用方 finally 整条失效(流量图 loading 卡死⇒轮询守卫把自己挡死; polling.js::refresh 更是永久停表), 界面上也无任何提示。四层静态锚: 1. 常量单点 AQB_FETCH_TIMEOUT_S/MS(毫秒值由秒值派生, 不手抄两份); 2. fetch 必须带 `signal: ctl.signal`(裸 fetch 不得回潮); 3. AbortError 必须翻译(超时/取消分型 + timeout 标记); 4. `finally` 必须 `clearTimeout(timer)` 且跨文件不变式 `_QB_LOAD_STALL_MS >= AQB_FETCH_TIMEOUT_MS`(兜底不得早于请求级超时)。行为面 node 电池真跑(无 node 静默跳过): 桩 fetch + 手动触发定时器, 六型 —— 悬挂→「请求超时(15s)」+ timeout 标记 + 定时器已清 / 成功值透传且定时器清 / 401 仍走 auth 分支(_logout + auth 标记) / 非 2xx 文案照旧 / 已 abort 的外部 signal → 「请求已取消」不冒充超时 / - test_frontend_raw_fetch_timeout_single_point: 前端裸 fetch 零回潮 + 低层带超时单点守阵(issue 26-10-16-1303-bug-webui-raw-fetch-bypass-no-timeout, 2026-10-16) —— 5 处请求有意或历史地绕开 auth.js::_request(它已有请求级超时), 直接裸 fetch 且无 signal: 启动分片装载 / 免鉴权判定 / 导出下载 / 快捷键密钥读写 x2; 连接静默失效时 await 永不返回 ⇒ 各有收尾动作停在中途(白屏 / 停在“验证中” / 回执停在“进行中” / 密钥面板 loading 不复位)。修法 = 低层单点 shared/fetch_low.js(aqbFetch: AbortController + 15s + AbortError 翻译, **原始 Response** 透传不解析), 四处改调它; boot.js 在清单脚本之前执行(用不了单点), 自带等价内联超时(10s, 阻塞首屏 ⇒ 早失败)。四层静态锚: 1. 单点常量在且与 auth.js 请求级超时同值(同口径两处实现, 只改一边即红); 2. **裸 fetch 零回潮**(全 shared 除 vendor 外, 出现调用点 fetch( 的文件只允许单点自身 / auth.js / boot.js); 3. boot.js 内联件齐(常量 10s + AbortController + signal 透传 + clearTimeout + AbortError 翻译); 4. 四旁路调用点全改调单点 + lifecycle 采纳行的等价格式(字段名与空值占位各一个常量; 回潮成字面成员赋值会让该文件对本仓 agent 只读)。行为面 node 电池真跑(无 node 静默跳过): 单点七型(悬挂→「请求超时(15s)」+ timeout 标记 / 原始 Response 透传不解析 / 非 abort 错误上抛 / 外部取消不冒充超时 / method+headers 透传 / 定时器清理)与 boot.js 白屏悬挂五项(信号在 / 10s 定时器在 / 悬挂→可读失败文案 / 定时器清掉)
+- test_frontend_poll_skeleton_single_point: 长驻/有界轮询骨架单点守阵(issue 26-10-20-2231, 2026-10-22) —— 同一份「启停 + 守卫 + 在途悬挂兜底 + 代际守卫」此前写了三份(主轮 setTimeout 链 / 抽屉 setInterval / 流量图 setInterval), 停止条件五处手写, 且**抽屉侧漏了悬挂兜底**(同一类「loading 卡死⇒面板永久冻结」缺陷只修了流量图一边, 本件的实质缺陷面)。收敛后: 1. 骨架三口子 startPoll/stopPoll/awaitPoll 在 polling.js + 阈值常量 AQB_POLL_STALL_MS(30s = 请求级超时 15s 的两倍余量); 2. 抽屉/流量两侧只声明差异(ms/guard/stall/mutex/onStall), 裸 setInterval 零残留; 3. document.hidden 守卫单点在骨架里, shared/ 内除骨架与 lifecycle 的 visibilitychange 事件响应外不得再有散点; 4. 三条有界等待(_pollCmd / tmPollSettle / tmPollShutdown)一律经 awaitPoll, 手写 ++pollGen 代际守卫与 setTimeout 递归不得回潮。行为面 node 电池真跑(无 node 静默跳过): chain 在途不排下一拍(不堆叠请求) / 悬挂超阈值补偿一次且重新计时 / 退避曲线与旧 _pollCmd 逐项等价(0,150,300,500,500 与 500,1000,1000) / 拍数上限与截止时间收摊兑现 null / 同名先停后起(旧链兑现 null) / 外部叫停 / fn 抛出即 reject / 页面隐藏恒等守卫
 
 ## 皮肤档位口径
 - 皮肤清单单点在 webui_helpers._UI_ALL(atlas/prism/console/flux); flux(第四套, plan 26-10-31-2316 S5)
@@ -157,13 +157,13 @@ def test_frontend_reannounce_inactive_gate_wiring():
     downloading/seeding, 单看 kind 会把排队种子当活跃放行。
 
     四个面逐项钉住(键盘与详情面板是右键之外的两条绕行路径, 少接一处即形同虚设):
-      ①判定单点 decorate.js:两张表 + 读 state + 多目标任一活跃即可用(qB oneCanForceReannounce);
-      ②右键菜单四支的置灰钩子成对(W3 计划 26-10-20-0024 起在注册表 ctx_menu.js:
+      1. 判定单点 decorate.js:两张表 + 读 state + 多目标任一活跃即可用(qB oneCanForceReannounce);
+      2. 右键菜单四支的置灰钩子成对(W3 计划 26-10-20-0024 起在注册表 ctx_menu.js:
          四支各一条 dyn: "reannounce" + ctxRenderItem 求值单点, 模板统一消费 it.gated/it.title);
-      ③行为层:_actCore 的 reannounce 前置(早于乐观补丁/POST)+ _kbAct 的先拦后确认;
-      ④详情面板:04/05/06 重报钮挂 drawerReannounceGate() + 各变体 .is-gated CSS + torrentCmd 兜底;
-      ⑤投递收敛:reannouncePlan 单点 + 跳过文案 + 空投递收口 + 前后端判据表逐项同表;
-      ⑥删除链(issue 26-10-17-1703): _deleteFlow 按计划收敛 + 全非活跃闸门禁用复选框(popovers
+      3. 行为层:_actCore 的 reannounce 前置(早于乐观补丁/POST)+ _kbAct 的先拦后确认;
+      4. 详情面板:04/05/06 重报钮挂 drawerReannounceGate() + 各变体 .is-gated CSS + torrentCmd 兜底;
+      5. 投递收敛:reannouncePlan 单点 + 跳过文案 + 空投递收口 + 前后端判据表逐项同表;
+      6. 删除链(issue 26-10-17-1703): _deleteFlow 按计划收敛 + 全非活跃闸门禁用复选框(popovers
          is-gated/标题/点击短路三件 + CSS 成套)+ _reannounceAll 的 skip 桶(非活跃 warn 降级)。
     """
     shared = os.path.join(STATIC_ROOT, "shared")
@@ -173,7 +173,7 @@ def test_frontend_reannounce_inactive_gate_wiring():
     drawer_js = read_shared("drawer.js")
     menus = open(os.path.join(shared, "tpl", "ctx-menus.html"), encoding="utf-8").read()
 
-    # ① 判定单点: qB 原始 state 串全覆盖 + 读 state(不是 kind)+ 多目标"任一活跃即可用"
+    # 1. 判定单点: qB 原始 state 串全覆盖 + 读 state(不是 kind)+ 多目标"任一活跃即可用"
     for st in (
         "pausedDL",
         "pausedUP",
@@ -195,7 +195,7 @@ def test_frontend_reannounce_inactive_gate_wiring():
     assert re.search(r"rows\.some\(\(r\) => !this\.reannounceBlocked\(r\)\)", deco), \
         "多目标判据未按「任一活跃即可用」写(qB oneCanForceReannounce 口径)"
 
-    # ② 右键菜单四支: 置灰钩子逐支成对。W3(计划 26-10-20-0024)起比对面搬到注册表 ——
+    # 2. 右键菜单四支: 置灰钩子逐支成对。W3(计划 26-10-20-0024)起比对面搬到注册表 ——
     #    四支各一条 dyn: "reannounce", 求值单点在 ctx_menu.js ctxRenderItem; 模板统一
     #    :class/:title 消费 it.gated/it.title(逐项直写时期是四段重复的 reannounceMenuGate() 调用)
     reg = open(os.path.join(shared, "ctx_menu.js"), encoding="utf-8").read()
@@ -212,7 +212,7 @@ def test_frontend_reannounce_inactive_gate_wiring():
     assert "REANNOUNCE_BLOCKED_STATES" in reg, \
         "ctx_menu.js 缺 qB 判据说明注释(口径单点指向 decorate.js)"
 
-    # ③ 行为层: _actCore 前置闸门(早于乐观补丁) + _kbAct 先拦后确认
+    # 3. 行为层: _actCore 前置闸门(早于乐观补丁) + _kbAct 先拦后确认
     assert "async _guardReannounce(t)" in cmds or "_guardReannounce(t) {" in cmds, \
         "commands.js 缺 _guardReannounce 闸门"
     assert 'if (action === "reannounce" && !this._guardReannounce({ keys, hashes })) return;' in cmds, \
@@ -228,7 +228,7 @@ def test_frontend_reannounce_inactive_gate_wiring():
     assert kb_txt.index("_guardReannounce(") < kb_txt.index("confirmDialog("), \
         "键盘路径必须先拦再确认(先问「确定?」再回「不行」是坏体感)"
 
-    # ④ 详情面板: 三变体的重报钮 + 各变体 .is-gated CSS + torrentCmd 兜底(W7 恢复注: 变体层
+    # 4. 详情面板: 三变体的重报钮 + 各变体 .is-gated CSS + torrentCmd 兜底(W7 恢复注: 变体层
     #    随 W5 越权退役曾一并退场, W7 恢复后该断言面原样回归; U3(26-10-12-0527)改版: 置灰
     #    绑定随表格体重写迁渲染器分片(`:class="{ 'is-gated': !p.gatedOk }"`), 判据单点
     #    (rowsFn 装配读 drawerReannounceGate)与置灰 CSS 仍在变体文件)
@@ -250,7 +250,7 @@ def test_frontend_reannounce_inactive_gate_wiring():
     assert "_guardReannounce({ keys: [], hashes: [target] })" in drawer_js, \
         "drawer.js torrentCmd 缺强制汇报兜底(详情面板行为层)"  # 2026-10-10(S3): 目标形参 hash -> target(显式传参, 缺省回落 menu.hash)
 
-    # ⑤ 投递收敛: 闸门管"允不允许"(集合级全有全无, qB 口径), 计划管"发给谁"(只发活跃)
+    # 5. 投递收敛: 闸门管"允不允许"(集合级全有全无, qB 口径), 计划管"发给谁"(只发活跃)
     assert "reannouncePlan(t) {" in deco, "decorate.js 缺投递收敛单点 reannouncePlan"
     assert "this.reannouncePlan({ keys, hashes })" in cmds, \
         "_actCore 未按 reannouncePlan 收敛投递集合 —— 混选会对非活跃目标发指令, 确认层随后白等窗口报「未确认」"
@@ -280,7 +280,7 @@ def test_frontend_reannounce_inactive_gate_wiring():
     assert js_states == set(_PY_BLOCKED_STATES), \
         f"前后端非活跃判据表不一致(前端 {sorted(js_states)} / 后端 {sorted(_PY_BLOCKED_STATES)})"
 
-    # ⑦ 删除链(issue 26-10-17-1703): 六个删除入口汇入 _deleteFlow, 是本专题「一条'不允许'
+    # 7. 删除链(issue 26-10-17-1703): 六个删除入口汇入 _deleteFlow, 是本专题「一条'不允许'
     #    必须接全部入口」清单中唯一漏接的入口 —— 默认勾选的「删除前强制重新汇报」对非活跃种子
     #    请求照发 -> 后端第二道闸 warn -> _reannounceAll warn 不放行 -> 删除被整体中止。
     #    修法两层: 闸门层(全非活跃禁用复选框) + 投递层(reannouncePlan 收敛), 加 D4/D6 的
@@ -320,7 +320,7 @@ def test_frontend_reannounce_inactive_gate_wiring():
     assert "非活跃" in _PY_INACTIVE_SKIP, \
         f"后端 REANNOUNCE_INACTIVE_SKIP 文案漂移(前端文本判据锚点失效): {_PY_INACTIVE_SKIP}"
 
-    # ⑥ 判定语义真跑(node 电池, 无 node 静默跳过 —— 与 _DT_DENSITY_NODE_PROBE 同口径):
+    # 6. 判定语义真跑(node 电池, 无 node 静默跳过 —— 与 _DT_DENSITY_NODE_PROBE 同口径):
     #    "接线在"不等于"判得对", qB 状态表本身必须真跑一遍(排队那一条是判据存在的理由);
     #    删除链(issue 26-10-17-1703)的闸门与 skip 桶同批真跑。
     node = shutil.which("node")
@@ -452,7 +452,8 @@ def test_frontend_ctx_submenu_single_entry_and_hover_close():
     node = shutil.which("node")
     if node:
         proc = subprocess.run(
-            [node, "-e", _NODE_CTX_SUBMENU_COUNT_PROBE, os.path.join(STATIC_ROOT, "shared", "ctx_menu.js")],
+            [node, "-e", _NODE_CTX_SUBMENU_COUNT_PROBE,
+             os.path.join(STATIC_ROOT, "shared", "ctx_menu.js")],
             capture_output=True,
             text=True,
             encoding="utf-8",
@@ -504,7 +505,7 @@ const aborter = (opts) => new Promise((res, rej) => {  // 悬挂桩: 被 abort �
   if (opts && opts.signal) opts.signal.addEventListener("abort", fail);
 });
 (async () => {
-  // ① 悬挂: 信号透传 + 排出 15s 定时器 + 手动触发 => 「请求超时(15s)」+ timeout 标记 + 定时器清掉
+  // 1. 悬挂: 信号透传 + 排出 15s 定时器 + 手动触发 => 「请求超时(15s)」+ timeout 标记 + 定时器清掉
   let lastOpts = null;
   global.fetch = (path, opts) => { lastOpts = opts; return aborter(opts); };
   const p = A._request.call(mkInst(), "/api/state", {}, "");
@@ -515,29 +516,29 @@ const aborter = (opts) => new Promise((res, rej) => {  // 悬挂桩: 被 abort �
   checks.push(["悬挂被兜成「请求超时(15s)」", !!(out.err && out.err.message === "请求超时(15s)")]);
   checks.push(["超时打 timeout 标记", !!(out.err && out.err.timeout === true)]);
   checks.push(["finally 清掉定时器", cleared === 1]);
-  // ② 成功路径: 值透传 + 定时器清掉
+  // 2. 成功路径: 值透传 + 定时器清掉
   global.fetch = () => Promise.resolve({ status: 200, ok: true, json: async () => ({ hello: 1 }) });
   captured = null;
   cleared = 0;
   out = await A._request.call(mkInst(), "/api/state", {}, "").then((v) => ({ ok: v }), (e) => ({ err: e }));
   checks.push(["成功路径值透传", !!(out.ok && out.ok.hello === 1)]);
   checks.push(["成功路径清掉定时器", cleared === 1]);
-  // ③ 401 照旧: _logout + auth 标记(不被超时翻译吞掉)
+  // 3. 401 照旧: _logout + auth 标记(不被超时翻译吞掉)
   global.fetch = () => Promise.resolve({ status: 401, ok: false, json: async () => ({}) });
   const inst = mkInst();
   out = await A._request.call(inst, "/api/state", {}, "").then((v) => ({ ok: v }), (e) => ({ err: e }));
   checks.push(["401 仍走 auth 分支(_logout + auth 标记)", !!(out.err && out.err.auth === true && inst.loggedOut)]);
-  // ④ 非 2xx 照旧: 带 detail 的错误文案
+  // 4. 非 2xx 照旧: 带 detail 的错误文案
   global.fetch = () => Promise.resolve({ status: 500, ok: false, json: async () => ({ detail: "boom" }) });
   out = await A._request.call(mkInst(), "/api/state", {}, "").then((v) => ({ ok: v }), (e) => ({ err: e }));
   checks.push(["HTTP 错误文案照旧", !!(out.err && out.err.message === "boom" && out.err.timeout !== true)]);
-  // ⑤ 外部取消: 已 abort 的 signal 不冒充超时
+  // 5. 外部取消: 已 abort 的 signal 不冒充超时
   const ac = new AbortController();
   ac.abort();
   global.fetch = (path, opts) => aborter(opts);
   out = await A._request.call(mkInst(), "/api/state", { signal: ac.signal }, "").then((v) => ({ ok: v }), (e) => ({ err: e }));
   checks.push(["外部取消 → 「请求已取消」(不冒充超时)", !!(out.err && out.err.message === "请求已取消" && out.err.timeout === false)]);
-  // ⑥ 非 abort 的网络错误原样上抛
+  // 6. 非 abort 的网络错误原样上抛
   global.fetch = () => Promise.reject(new TypeError("Failed to fetch"));
   out = await A._request.call(mkInst(), "/api/state", {}, "").then((v) => ({ ok: v }), (e) => ({ err: e }));
   checks.push(["网络错误原样上抛", !!(out.err && out.err.message === "Failed to fetch")]);
@@ -556,11 +557,11 @@ def test_frontend_api_request_timeout():
     AbortController + 15s 上限, 悬挂被翻译成一次**可报的失败**, `finally` / 错误态路径照常执行。
 
     本守阵钉四层, 任一层被拆即红:
-      ① 常量单点 `AQB_FETCH_TIMEOUT_S/MS`(毫秒值由秒值派生, 两处手抄迟早分叉);
-      ② fetch 必须带 `signal: ctl.signal`(裸 fetch 不得回潮 —— 那正是本 issue 的根因形态);
-      ③ AbortError 必须翻译(超时 / 取消分型 + `timeout` 标记), 否则用户看到的是
+      1. 常量单点 `AQB_FETCH_TIMEOUT_S/MS`(毫秒值由秒值派生, 两处手抄迟早分叉);
+      2. fetch 必须带 `signal: ctl.signal`(裸 fetch 不得回潮 —— 那正是本 issue 的根因形态);
+      3. AbortError 必须翻译(超时 / 取消分型 + `timeout` 标记), 否则用户看到的是
          "The operation was aborted";
-      ④ `finally` 必须 `clearTimeout(timer)`; 且跨文件不变式: 轮询悬挂兜底阈值不得早于请求级超时
+      4. `finally` 必须 `clearTimeout(timer)`; 且跨文件不变式: 轮询悬挂兜底阈值不得早于请求级超时
          (`AQB_POLL_STALL_MS >= AQB_FETCH_TIMEOUT_MS`) —— 否则正常在途请求会被当成悬挂。
          (阈值 2026-10-22 随骨架从 qb_traffic_chart.js 上提到 polling.js, 抽屉侧自此同口径)
     行为面走 node 电池真跑(无 node 静默跳过): 桩 fetch + 手动触发定时器, 六型。
@@ -779,12 +780,12 @@ def test_frontend_raw_fetch_timeout_single_point():
     内联超时(10s, 它阻塞整个首屏 ⇒ 早失败)。
 
     本守阵钉四层, 任一层被拆即红:
-      ① 单点常量在且与 auth.js 的请求级超时同值(同一条口径的两处实现, 只改一边即红);
-      ② **裸 fetch 零回潮**: 全 shared(除 vendor)里出现调用点 `fetch(` 的文件只允许三个 ——
+      1. 单点常量在且与 auth.js 的请求级超时同值(同一条口径的两处实现, 只改一边即红);
+      2. **裸 fetch 零回潮**: 全 shared(除 vendor)里出现调用点 `fetch(` 的文件只允许三个 ——
          单点自身 / auth.js(自家 signal + 超时) / boot.js(清单之前, 自带内联超时);
-      ③ boot.js 内联件齐(常量 10s + AbortController + signal 透传 + clearTimeout + AbortError 翻译);
-      ④ 四个旁路调用点全部改调单点(lifecycle 1 / commands 1 / shortcuts 2);
-      ⑤ lifecycle 采纳行的等价形态: 字段名走 AQB_TOKEN_FIELD 常量、空值占位走 AQB_BLANK 空串
+      3. boot.js 内联件齐(常量 10s + AbortController + signal 透传 + clearTimeout + AbortError 翻译);
+      4. 四个旁路调用点全部改调单点(lifecycle 1 / commands 1 / shortcuts 2);
+      5. lifecycle 采纳行的等价形态: 字段名走 AQB_TOKEN_FIELD 常量、空值占位走 AQB_BLANK 空串
          (token 字段**恒为字符串** —— 导出下载会无条件插值它, 置 null 会拼出 "Bearer null")。
     行为面走 node 电池真跑(无 node 静默跳过): 单点七型 + boot.js 白屏悬挂五项。
     """
@@ -793,7 +794,7 @@ def test_frontend_raw_fetch_timeout_single_point():
     auth_js = open(os.path.join(shared, "auth.js"), encoding="utf-8").read()
     boot_js = open(os.path.join(shared, "boot.js"), encoding="utf-8").read()
 
-    # ① 单点常量: 秒值单点 + 毫秒派生 + 与 auth.js 同值(同口径的两处实现)
+    # 1. 单点常量: 秒值单点 + 毫秒派生 + 与 auth.js 同值(同口径的两处实现)
     m_low = re.search(r"^const AQB_FETCH_LOW_TIMEOUT_S = (\d+);", low, re.M)
     assert m_low, "fetch_low.js 缺超时秒值单点(低层带超时 fetch 的阈值)"
     assert "const AQB_FETCH_LOW_TIMEOUT_MS = AQB_FETCH_LOW_TIMEOUT_S * 1000;" in low, \
@@ -807,7 +808,7 @@ def test_frontend_raw_fetch_timeout_single_point():
     assert 'e.name === "AbortError"' in low and "err.timeout = timedOut" in low, \
         "低层单点必须翻译 AbortError(超时/取消分型 + timeout 标记)"
 
-    # ② 裸 fetch 零回潮(允许清单三条: 单点自身 / auth.js / boot.js)
+    # 2. 裸 fetch 零回潮(允许清单三条: 单点自身 / auth.js / boot.js)
     allowed = {"fetch_low.js", "auth.js", "boot.js"}
     offenders = {}
     for dirpath, _dirs, files in os.walk(shared):
@@ -825,7 +826,7 @@ def test_frontend_raw_fetch_timeout_single_point():
     assert not offenders, \
         f"裸 fetch 回潮(新增旁路未走低层单点 shared/fetch_low.js::aqbFetch): {offenders}"
 
-    # ③ boot.js 内联件(它在清单脚本之前执行, 用不了单点)
+    # 3. boot.js 内联件(它在清单脚本之前执行, 用不了单点)
     m_boot = re.search(r"var BOOT_PART_TIMEOUT_MS = (\d+);", boot_js)
     assert m_boot, "boot.js 缺分片装载超时常量(白屏路径的悬挂兜底)"
     assert int(m_boot.group(1)) == 10000, \
@@ -833,7 +834,7 @@ def test_frontend_raw_fetch_timeout_single_point():
     for piece in ("new AbortController()", "signal: ctl.signal", "clearTimeout(timer)", 'name === "AbortError"'):
         assert piece in boot_js, f"boot.js 内联超时缺件: {piece}"
 
-    # ④ 四个旁路调用点全部改调单点
+    # 4. 四个旁路调用点全部改调单点
     life = open(os.path.join(shared, "lifecycle.js"), encoding="utf-8").read()
     cmds = read_shared("commands.js")
     keys = read_shared("shortcuts.js")
@@ -841,7 +842,7 @@ def test_frontend_raw_fetch_timeout_single_point():
     assert "aqbFetch(`/api/torrents/${hash}/export`" in cmds, "commands.js 导出下载未走低层单点"
     assert keys.count('aqbFetch("/api/keys"') == 2, "shortcuts.js 密钥读写两处都必须走低层单点"
 
-    # ⑤ lifecycle 采纳行的等价形态(本轮经工作区写入判据误判, 属主授权做形态等价改写 —— 语义不变)
+    # 5. lifecycle 采纳行的等价形态(本轮经工作区写入判据误判, 属主授权做形态等价改写 —— 语义不变)
     assert re.search(r"^const AQB_BLANK = \"\";", life, re.M), \
         "lifecycle.js 缺空密钥占位常量 —— token 字段被导出下载无条件插值成 Bearer 头, 置 null 会拼出 \"Bearer null\""
     assert life.count("AQB_TOKEN_FIELD") >= 2, \
@@ -869,9 +870,9 @@ def test_frontend_raw_fetch_timeout_single_point():
                 f"{label}电池 {report['ok']}/{report['total']} 过, 失败: {report['failed']}"
 
 
-# node 电池(issue 26-10-20-2231): 加载真实 polling.js, 真跑骨架三口子 —— ①chain 在途不排下一拍
-# (不堆叠请求) ②卡死判据持续为真 -> 超阈值补偿一次并重新计时 ③有界等待: 退避曲线与旧 _pollCmd 逐项
-# 等价 / 拍数上限 / 截止时间 / 同名先停后起 / 外部叫停 / fn 抛出即 reject ④页面隐藏恒等守卫。
+# node 电池(issue 26-10-20-2231): 加载真实 polling.js, 真跑骨架三口子 —— 1. chain 在途不排下一拍
+# (不堆叠请求) 2. 卡死判据持续为真 -> 超阈值补偿一次并重新计时 3. 有界等待: 退避曲线与旧 _pollCmd 逐项
+# 等价 / 拍数上限 / 截止时间 / 同名先停后起 / 外部叫停 / fn 抛出即 reject 4. 页面隐藏恒等守卫。
 # 定时器全部桩住(只记节拍、手动放拍), 时钟可整体前移 —— 免得真睡 30s。无 node 静默跳过。
 _NODE_POLL_SKELETON_PROBE = r"""
 const fs = require("fs");
@@ -894,7 +895,7 @@ const fire = async () => { const f = beats.shift(); if (f) f(); await flush(); }
 const mk = (over) => Object.assign({ authOk: true, calls: 0, currentPollMs: () => 1500 }, over || {});
 
 (async () => {
-  // ① 主轮 chain: 上一拍没落定前不排下一拍(不堆叠请求; setInterval 形态在这里会堆)
+  // 1. 主轮 chain: 上一拍没落定前不排下一拍(不堆叠请求; setInterval 形态在这里会堆)
   let inflight = 0, maxInflight = 0, release = null;
   let t = mk();
   t.refresh = () => { inflight += 1; maxInflight = Math.max(maxInflight, inflight);
@@ -913,7 +914,7 @@ const mk = (over) => Object.assign({ authOk: true, calls: 0, currentPollMs: () =
   checks.push(["stopPoll 摘句柄", !t._polls.main]);
   beats = []; sleeps = [];   // 丢掉上一节遗留的待放拍(各节独立对账)
 
-  // ② 悬挂兜底: 卡死判据持续为真 -> 记起点 -> 超阈值补偿一次 -> 重新计时(痕只一条)
+  // 2. 悬挂兜底: 卡死判据持续为真 -> 记起点 -> 超阈值补偿一次 -> 重新计时(痕只一条)
   let stuck = true, unstuck = 0;
   t = mk();
   t.startPoll = P.startPoll;
@@ -933,7 +934,7 @@ const mk = (over) => Object.assign({ authOk: true, calls: 0, currentPollMs: () =
   await fire();
   checks.push(["卡死判据转假后不再补偿", unstuck === 1]);
 
-  // ③ 有界等待: 退避曲线与旧 _pollCmd 逐项等价(首拍 firstMs, 之后 0->150 起跳、翻倍夹 cap)
+  // 3. 有界等待: 退避曲线与旧 _pollCmd 逐项等价(首拍 firstMs, 之后 0->150 起跳、翻倍夹 cap)
   const curve = async (firstMs, capMs, maxBeats) => {
     sleeps = []; beats = [];
     const inst = mk();
@@ -980,7 +981,7 @@ const mk = (over) => Object.assign({ authOk: true, calls: 0, currentPollMs: () =
   old = await p1;
   checks.push(["同名先停后起: 旧链兑现 null(代际守卫内建)", old === null]);
 
-  // ④ 页面隐藏: 骨架恒等守卫(调用方不再手写)
+  // 4. 页面隐藏: 骨架恒等守卫(调用方不再手写)
   beats = []; sleeps = [];
   const vis = mk();
   vis.startPoll = P.startPoll;
@@ -1008,11 +1009,11 @@ def test_frontend_poll_skeleton_single_point():
 
     收敛形态: 骨架三口子 `startPoll` / `stopPoll` / `awaitPoll` 落在 polling.js, 各轮询只声明
     差异(ms / guard / stall / mutex / onStall / chain)。本守阵钉四层, 任一层被拆即红:
-      ① 骨架三口子在 + 阈值常量 `AQB_POLL_STALL_MS`(30000 = 请求级超时 15s 的两倍余量);
-      ② 三处启停一律经骨架 —— 抽屉/流量两侧裸 `setInterval` 零残留, 主轮走 `startPoll("main")`;
-      ③ 停止条件单点: `document.hidden` 只许出现在骨架里(另一处是 lifecycle 的 visibilitychange
+      1. 骨架三口子在 + 阈值常量 `AQB_POLL_STALL_MS`(30000 = 请求级超时 15s 的两倍余量);
+      2. 三处启停一律经骨架 —— 抽屉/流量两侧裸 `setInterval` 零残留, 主轮走 `startPoll("main")`;
+      3. 停止条件单点: `document.hidden` 只许出现在骨架里(另一处是 lifecycle 的 visibilitychange
          事件响应, 那是"停表"不是"每拍判据"), 散点回潮即红;
-      ④ 三条有界等待(_pollCmd / tmPollSettle / tmPollShutdown)一律经 `awaitPoll`, 手写的
+      4. 三条有界等待(_pollCmd / tmPollSettle / tmPollShutdown)一律经 `awaitPoll`, 手写的
          `++pollGen` 代际守卫与 setTimeout 递归不得回潮。
     行为面走 node 电池真跑(无 node 静默跳过), 见 _NODE_POLL_SKELETON_PROBE。
     """
@@ -1024,13 +1025,13 @@ def test_frontend_poll_skeleton_single_point():
     cmd_js = read_shared("commands.js")
     state_js = open(os.path.join(shared, "state.js"), encoding="utf-8").read()
 
-    # ① 骨架三口子 + 阈值常量
+    # 1. 骨架三口子 + 阈值常量
     for name in ("startPoll(key, opts)", "stopPoll(key)", "awaitPoll(key, opts)"):
         assert f"    {name} {{" in poll_js, f"polling.js 缺骨架方法 {name}(启停 / 有界等待单点)"
     assert "const AQB_POLL_STALL_MS = 30000;" in poll_js, \
         "polling.js 缺悬挂兜底阈值常量 AQB_POLL_STALL_MS(30000 = 请求级超时 15s 的两倍余量)"
 
-    # ② 三处启停一律经骨架(裸定时器零残留)
+    # 2. 三处启停一律经骨架(裸定时器零残留)
     assert 'this.startPoll("main"' in poll_js and 'this.stopPoll("main")' in poll_js, \
         "主轮启停未走骨架(旧形态 pollTimer / 裸 setTimeout 链不得回潮)"
     assert 'this.startPoll("drawer", {' in store_js and 'this.stopPoll("drawer")' in store_js, \
@@ -1040,7 +1041,7 @@ def test_frontend_poll_skeleton_single_point():
     for name, js in (("drawer_store.js", store_js), ("qb_traffic_chart.js", chart_js)):
         assert "setInterval(" not in js, f"{name} 裸 setInterval 回潮(轮询启停收口到骨架)"
 
-    # ③ 停止条件单点: document.hidden 只许在骨架(每拍判据)与 lifecycle 的可见性事件响应里
+    # 3. 停止条件单点: document.hidden 只许在骨架(每拍判据)与 lifecycle 的可见性事件响应里
     hidden_files = sorted(
         n for n in os.listdir(shared) if n.endswith(".js") and os.path.isfile(os.path.join(shared, n)) and
         "document.hidden" in open(os.path.join(shared, n), encoding="utf-8").read()
@@ -1048,7 +1049,7 @@ def test_frontend_poll_skeleton_single_point():
     assert hidden_files == ["lifecycle.js", "polling.js"], \
         f"document.hidden 散点回潮(应为骨架 polling.js + lifecycle 的 visibilitychange 停表): {hidden_files}"
 
-    # ④ 有界等待一律经 awaitPoll, 旧形态不得回潮
+    # 4. 有界等待一律经 awaitPoll, 旧形态不得回潮
     assert "this.awaitPoll(null, {" in cmd_js, \
         "commands.js::_pollCmd 未走 awaitPoll 单点(旧退避 while + stop 标志不得回潮)"
     # 曲线本身写在调用点(骨架只认 ms(n, prev) 回调), 必须与旧实现逐项等价

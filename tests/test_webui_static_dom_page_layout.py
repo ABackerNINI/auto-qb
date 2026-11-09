@@ -53,16 +53,16 @@
   不回潮; 首访路径边界二条(issue 26-11-02-0902 二轮空档2): _winMeasured=false 时 n=199 走
   off(全量渲染) / n=200 走估算开窗(active) —— 门控被误改成恒窗口/恒 off 时必有一条红
 - test_frontend_row_window_sig_and_ctn_sync_guard: 行窗失效签名守阵(2026-11-02 关抽屉/切页卡死
-  取证) —— ① _measureRowH 行高签名不含 viewMode(含则每次切页作废三 kind 行高 + 翻 _winMeasured,
+  取证) —— 1. _measureRowH 行高签名不含 viewMode(含则每次切页作废三 kind 行高 + 翻 _winMeasured,
   返回该视图全量渲染量齐, 3000 行实测 5.8~8.4s 长任务 = 「切标签页卡死几秒」; _winResize/列集合
-  两真变化因子必须在); ② _winCtnSync 的 drawer.open 守卫先于 clientWidth 读取(收场动画 .drawer
+  两真变化因子必须在); 2. _winCtnSync 的 drawer.open 守卫先于 clientWidth 读取(收场动画 .drawer
   转 absolute, .drawer-body clientWidth 1894->1918 是过渡假象, 采信即假 bump 共享 _winResize →
   下一拍全量重渲 5.6s 长任务 = 「关抽屉后卡死; 能滚不能点」)
 
 ## 皮肤档位口径
 - 皮肤清单单点在 webui_helpers._UI_ALL(atlas/prism/console/flux); flux(第四套, plan 26-10-31-2316 S5)
-  fork 自 console, 按 _UI_ALL 枚举的接线守阵随常量自动收编; 单独点名的三套成对面(HR 表②/全屏弹窗/
-  表③)已显式加 flux 档。
+  fork 自 console, 按 _UI_ALL 枚举的接线守阵随常量自动收编; 单独点名的三套成对面(HR 表 2/全屏弹窗/
+  表 3)已显式加 flux 档。
 """
 
 import base64
@@ -567,9 +567,9 @@ def test_frontend_keyed_list_toggle_deletes_key_when_emptied():
 
     现象(2026-10-10 报障, notify.channels 是当时唯一用上该 kind 的字段): toggleKey 把最后
     一项 splice 掉后仍 `cfgSetPath(path, [])` —— 两个后果同源:
-    ① 空列表与"键缺失"**不同构**, 而脏标记是全树 JSON 对比(cfgDirty), 于是「勾选再取消」
+    1. 空列表与"键缺失"**不同构**, 而脏标记是全树 JSON 对比(cfgDirty), 于是「勾选再取消」
        之后照样提示"有改动还没保存", 界面上却看不出任何差异(用户无从自救);
-    ② 空列表过不了后端校验(config.notify.channels: 必须是非空列表), 保存必败 —— 报错里还
+    2. 空列表过不了后端校验(config.notify.channels: 必须是非空列表), 保存必败 —— 报错里还
        带一个临时文件路径, 用户看不到是哪一项有问题。
 
     定稿口径 = 与同文件 cfgItemRemove 一致: 清空即 cfgDelPath(删键 = 回到"未配置"), 勾选再
@@ -595,9 +595,9 @@ def test_frontend_password_field_ignores_autofill():
     input, cfgDirty 立即为真; 加守卫后仍为假, 而聚焦后键入照旧写树)。
 
     钉三件, 缺一件都复发:
-      ① 模板密码分支必须 autocomplete="new-password" —— 从源头劝退凭据自动填充;
-      ② 模板必须走 setSecret($event), 不得直连 set() —— 直连就是把自动填充当用户编辑;
-      ③ setSecret 必须按「是否焦点」判据: 未聚焦不写树并回填显示值, 聚焦才写。
+      1. 模板密码分支必须 autocomplete="new-password" —— 从源头劝退凭据自动填充;
+      2. 模板必须走 setSecret($event), 不得直连 set() —— 直连就是把自动填充当用户编辑;
+      3. setSecret 必须按「是否焦点」判据: 未聚焦不写树并回填显示值, 聚焦才写。
     """
     for skin in _UI_ALL:
         html = _ui_aggregate(skin)

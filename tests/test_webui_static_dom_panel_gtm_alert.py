@@ -3,13 +3,13 @@
 ## 测试计划(每个测试函数一条)
 
 - test_frontend_gtm_alert_banner_single_source: 主告知常驻横幅的静态契约(计划 26-11-03-1102 S7c / D5) ——
-  ① `shared/tpl/statusbar.html` 含 `.sb-gtm-alert` 组且 `v-if="gtmAlert"` **不在** `v-if="todayTraffic"` 的
-  template 分支里(常驻可见, 不依赖今日流量); ② DOM 顺序钉死:`sb-gtm-alert` 必须出现在 `.sb-stats` 之前;
-  ③ 交互两件套在模板里(点横幅 `showGtmAlert()`, `×` `ackGtmAlert()`), 模板本身不碰 localStorage;
-  ④ 判空/24h/ack 单点在 `dialogs.js`(`gtmAnomaly()` / `gtmAlert()` / `GTM_ACK_KEY="gtm.spike.ack"` /
-  `GTM_ALERT_TTL_MS = 24 * 3600 * 1000`), ack 只写本机; ⑤ 模板与样式都是 shared 单点 —— 四套皮肤
+  1. `shared/tpl/statusbar.html` 含 `.sb-gtm-alert` 组且 `v-if="gtmAlert"` **不在** `v-if="todayTraffic"` 的
+  template 分支里(常驻可见, 不依赖今日流量); 2. DOM 顺序钉死:`sb-gtm-alert` 必须出现在 `.sb-stats` 之前;
+  3. 交互两件套在模板里(点横幅 `showGtmAlert()`, `×` `ackGtmAlert()`), 模板本身不碰 localStorage;
+  4. 判空/24h/ack 单点在 `dialogs.js`(`gtmAnomaly()` / `gtmAlert()` / `GTM_ACK_KEY="gtm.spike.ack"` /
+  `GTM_ALERT_TTL_MS = 24 * 3600 * 1000`), ack 只写本机; 5. 模板与样式都是 shared 单点 —— 四套皮肤
   (`webui_helpers._UI_ALL`)全部引用 `/shared/tpl/statusbar.html`, 皮肤目录里既没有同族模板, 也不得重复
-  定义 `.sb-gtm-alert` / `.sb-gtm-main` / `.sb-gtm-ack` 三个类名; ⑥ 窄屏纪律: 横幅 `flex: 0 1 auto` +
+  定义 `.sb-gtm-alert` / `.sb-gtm-main` / `.sb-gtm-ack` 三个类名; 6. 窄屏纪律: 横幅 `flex: 0 1 auto` +
   `min-width: 0` + 文案 ellipsis, 不挤压右侧 `.sb-speed`(flex: 0 0 auto)。
 - test_frontend_gtm_alert_helper_matrix: `gtmAnomaly()` 判空矩阵与 24h 边界的行为面(node 电池真跑,
   无 node 静默跳过) —— 键缺失 / null / 非对象(含数组) / 缺 ts / ts 不可解析 / items 为空 / items 无一条
@@ -137,24 +137,24 @@ def test_frontend_gtm_alert_banner_single_source():
     js = _read(_DIALOGS)
     css = _read(_CSS)
 
-    # ① 常驻组与 v-if, 且不在 todayTraffic 的 template 分支内(不依赖今日流量)
+    # 1. 常驻组与 v-if, 且不在 todayTraffic 的 template 分支内(不依赖今日流量)
     assert 'class="sb-item sb-gtm-alert"' in tpl, "statusbar 缺常驻横幅组(.sb-item.sb-gtm-alert)"
     assert 'v-if="gtmAlert"' in tpl, "横幅必须由 gtmAlert 驱动(v-if)"
     m = re.search(r'v-if="todayTraffic"(.*?)</template>', tpl, re.S)
     assert m, "statusbar 的 todayTraffic 分支结构变了(守阵需同步)"
     assert "sb-gtm-alert" not in m.group(1), "横幅落在 todayTraffic 分支内 -> 无今日流量时告警不可见"
 
-    # ② DOM 顺序: 必须在 .sb-stats 之前(告警优先于统计摘要)
+    # 2. DOM 顺序: 必须在 .sb-stats 之前(告警优先于统计摘要)
     i_alert = tpl.index("sb-gtm-alert")
     i_stats = tpl.index('<span class="sb-stats">')
     assert i_alert < i_stats, "横幅必须排在 .sb-stats 之前"
 
-    # ③ 交互两件套 + 模板不碰 localStorage
+    # 3. 交互两件套 + 模板不碰 localStorage
     assert 'class="sb-gtm-ack"' in tpl and "ackGtmAlert()" in tpl, "缺 × 消警按钮/接线"
     assert "showGtmAlert()" in tpl, "点横幅看完整文案的接线缺失"
     assert "localStorage" not in tpl_code, "模板不得直接读写 localStorage(单点应在 dialogs.js)"
 
-    # ④ 判定与 ack 单点
+    # 4. 判定与 ack 单点
     for anchor in ("gtmAnomaly()", "gtmAlert()", "ackGtmAlert()", "showGtmAlert()"):
         assert anchor in js, f"dialogs.js 缺 {anchor}"
     assert 'GTM_ACK_KEY = "gtm.spike.ack"' in js, "本机 ack 键必须与计划/测试矩阵一致"
@@ -162,7 +162,7 @@ def test_frontend_gtm_alert_banner_single_source():
     assert "localStorage.setItem(GTM_ACK_KEY, a.ts)" in js, "ack 必须只写本机(键值 = ts)"
     assert "gtm_anomaly" in js, "gtmAnomaly 必须从 traffic.gtm_anomaly 取数"
 
-    # ⑤ 共享来源: 四皮肤都引用同一 statusbar 模板; 皮肤目录零重复模板/样式
+    # 5. 共享来源: 四皮肤都引用同一 statusbar 模板; 皮肤目录零重复模板/样式
     for skin in _UI_ALL:
         shell = _read(os.path.join(STATIC_ROOT, skin, "index.html"))
         assert "/shared/tpl/statusbar.html" in shell, f"{skin} 未引用 shared statusbar 模板"
@@ -180,7 +180,7 @@ def test_frontend_gtm_alert_banner_single_source():
     for cls in (".sb-gtm-alert {", ".sb-gtm-main {", ".sb-gtm-ack {"):
         assert cls in css, f"shared/console_hub_controls.css 缺 {cls} 规则"
 
-    # ⑥ 窄屏: 只吃剩余空间 + 文案省略, 不挤压速度组
+    # 6. 窄屏: 只吃剩余空间 + 文案省略, 不挤压速度组
     assert "flex: 0 1 auto" in css and "min-width: 0" in css, "横幅必须允许收缩(min-width: 0)"
     assert "max-width: min(440px, 46vw)" in css, "横幅缺窄屏宽度上限"
     assert "text-overflow: ellipsis" in css, "横幅文案缺省略号(窄屏会撑破状态栏)"

@@ -20,7 +20,7 @@
 - test_frontend_combo_hiscroll_never_scrolls_ancestors: 下拉高亮滚动跟随「只滚菜单内部」守阵(2026-10-29 八修, 用户报「选中新路径后再点下拉框, 弹窗里的文字从上往下滑一次」)—— _hiScroll 禁用 scrollIntoView(它把**所有可滚祖先**一起滚: 开层过渡期 .add-dialog-body 的 scrollHeight 比 clientHeight 大 166px, 于是整段文案被滚走再弹回, 实测 body.scrollTop 0→166→83→18→0; 输入框为空时 hi=-1 无 [data-hi="1"] 故只有"选过路径"才看得见); 必须逐级向上以**菜单根为界**手动差值调 scrollTop(box.contains(n) + 到 box 即 break), 剥注释后不得出现 scrollIntoView 字面量(注释里讲禁令不算违规)。行为面由 e2e/move-dialog-fit.spec.mjs 逐帧采样 body.scrollTop 恒 0 + 文案 top 极差 ≤2px 钉
 - test_frontend_add_options_recent_order: 添加种子三候选「最近使用」排序守阵(2026-10-09 用户动议: 保存路径/分类/标签按最近使用排序) —— 口径 = 由种子记录派生(非本机存储): 「最近使用」= 该值下种子 added_on 最大值, 数据面**跨视图自取数** `_addRecencyRows`(与 filters.js::facetRows 同族; 添加入口是顶栏常驻而 /api/state 按 viewMode 裁剪阵列, 直读 this.torrents 会在默认辅种页拿到空表 ⇒ 排序静默退化成字母序, 2026-10-09 e2e 首跑实测) ⇒ 零新存储; node 真跑 _addOrderByRecent(最近使用降序 -> 未用过落末尾并按字母序 -> 表空/表 null/值未命中一律退化纯字母序 + 纯函数不改入参)与 _addNormPath(与后端 infra/utils.path_normalize 同口径; 两侧不同径则 /api/paths 已归一路径与取数行的 qB 原文 save_path 对不上, 时间表恒不命中 ⇒ 静默退化成纯字母序); 静态钉接线(三候选都过 _addOrderByRecent 单点 + pick 不得再内联 .sort + _addRecencyMaps 经 _addRecencyRows 现算且三键齐全 + 路径键过 _addNormPath + _addRecencyRows 按 viewMode 分支且三来源齐全)
 - test_frontend_busy_skeleton_single_point: busy+try+反馈+finally 骨架单点守阵(issue 26-10-20-2231) —— dialogs.js 三 helper 在册(_mgrRun 管理对话框写操作 / _panelLoad 面板加载与 tm 槽回执 / _postWaitCmd POST+waitCmd 三态 toast)+ 19 处调用点接线数对账(dialogs 14: mgr 5 + 面板加载 5 + POST 4; config_hub 5: tm 族 4 槽 + 一键导入)+ finally 复位保底住在单点内(漏 finally = 面板永久转圈)+ 裸 busy 置位反向断言(再手抄 = 破单点, 回潮即红)
-- test_overlay_fit_single_point: 浮层「贴边留白 + 视口夹取」几何单点守阵(issue 26-10-20-2231) —— ①单点模块 shared/overlay_fit.js 四入口(EDGE=8 / clampAxis / probeRight / probeLeft / fitInViewport)在三份 tpl-manifest 同点登记且装载序在首个消费方 config_hub.js 之前(漏登记/序错 = 运行时取别名 undefined); ②七消费文件接线数逐文件对账(ui_feedback 7 / menu 5 / config_hub 4 / hr 3 / drawer 2 / columns 3 / dialogs 1, 全部经 FIT 别名); ③手写夹取式零残留(8/12 字面量夹取 / PAD / margin=8 / EDGE=8 回潮即红); ④12px 两处(hubAsk / speed-pop)显式命名传参 + 注释在位; ⑤顶层 const/let 跨文件撞名零容忍(实测事故: 经典脚本顶层 let/const 是全局词法环境, 七文件同写顶层 const FIT 致后六文件 SyntaxError、mixin 静默不注册、整页崩而静态守阵全绿; 跨文件别名只许方法内取或包 IIFE); 行为面 node 电池(四入口七型 + 与旧手写式四种书写网格代数等价), 真实浏览器几何由 e2e/menus.spec.mjs CTX-fit 左右缘盯
+- test_overlay_fit_single_point: 浮层「贴边留白 + 视口夹取」几何单点守阵(issue 26-10-20-2231) —— 1. 单点模块 shared/overlay_fit.js 四入口(EDGE=8 / clampAxis / probeRight / probeLeft / fitInViewport)在三份 tpl-manifest 同点登记且装载序在首个消费方 config_hub.js 之前(漏登记/序错 = 运行时取别名 undefined); 2. 七消费文件接线数逐文件对账(ui_feedback 7 / menu 5 / config_hub 4 / hr 3 / drawer 2 / columns 3 / dialogs 1, 全部经 FIT 别名); 3. 手写夹取式零残留(8/12 字面量夹取 / PAD / margin=8 / EDGE=8 回潮即红); 4. 12px 两处(hubAsk / speed-pop)显式命名传参 + 注释在位; 5. 顶层 const/let 跨文件撞名零容忍(实测事故: 经典脚本顶层 let/const 是全局词法环境, 七文件同写顶层 const FIT 致后六文件 SyntaxError、mixin 静默不注册、整页崩而静态守阵全绿; 跨文件别名只许方法内取或包 IIFE); 行为面 node 电池(四入口七型 + 与旧手写式四种书写网格代数等价), 真实浏览器几何由 e2e/menus.spec.mjs CTX-fit 左右缘盯
 - test_frontend_move_dialog_combobox_wiring
 - test_frontend_pop_item_a11y_contract: .pop-item 三分类 a11y 契约守阵(issue 26-10-29-1335, R23-A-09) ——
   选择式 combobox(单组件 <aq-combo-input>): 输入框 role=combobox + :aria-expanded + aria-autocomplete=list +
@@ -81,9 +81,9 @@ def test_removed_redundant_tooltips_stay_removed():
         ("shared/tpl/statusbar.html", ("点击修改", "数据状态")),
         # B 组 · 顶栏页签: 与可见文字同义(图标+「分组」/「种子」)
         ("shared/tpl/topbar.html", ("按分组展示", "全部种子一行一条")),
-        # D 组 · 抽屉关闭钮: ✕ 自明, Esc 快捷键在帮助浮层有正式清单
+        # D 组 · 抽屉关闭钮: x 自明, Esc 快捷键在帮助浮层有正式清单
         ("shared/tpl/drawer.html", ("关闭(Esc)", "关闭（Esc）")),
-        # E 组 · 对话框族关闭钮: 关闭钮的 ✕ 自明
+        # E 组 · 对话框族关闭钮: 关闭钮的 x 自明
         ("shared/tpl/dialogs.html", ('title="关闭"', )),
         ("shared/tpl/dialogs-mgr.html", ('title="关闭"', )),
         ("shared/tpl/popovers.html", ('title="关闭"', )),
@@ -182,7 +182,7 @@ def test_recheck_confirm_wired_all_mouse_entries():
     shortcuts = read_shared("shortcuts.js")
     text = "全量重读磁盘并校验完整性, 大库上耗时长且不可中断。"
 
-    # ① 共用 helper 单点: 调用形态(标题/okText)与文案逐字沿键盘路径原样
+    # 1. 共用 helper 单点: 调用形态(标题/okText)与文案逐字沿键盘路径原样
     m = re.search(r"async _recheckConfirm\(what\)\s*\{(.*?)\n    \},", cmds, re.S)
     assert m, "commands.js 找不到 _recheckConfirm(改名或挪走了? 同步本守阵)"
     helper = m.group(1)
@@ -191,12 +191,12 @@ def test_recheck_confirm_wired_all_mouse_entries():
     )
     assert text in helper, "共用 helper 丢失键盘路径既有文案(重新校验确认框文案必须逐字保留)"
 
-    # ② 共用文案字符串只此一份(三入口共用, 防各抄一份漂移)
+    # 2. 共用文案字符串只此一份(三入口共用, 防各抄一份漂移)
     for name, src in (("commands.js", cmds), ("drawer.js", drawer), ("shortcuts.js", shortcuts)):
         assert src.count(text) == (1 if name == "commands.js" else
                                    0), (f"{name} 内联了重新校验确认文案 —— 共用文案只允许存在 commands.js _recheckConfirm 一份")
 
-    # ③ 批量通道(bulkAct): 批量右键(ctxAct)入口, recheck 先确认后投递, 取消零副作用。
+    # 3. 批量通道(bulkAct): 批量右键(ctxAct)入口, recheck 先确认后投递, 取消零副作用。
     #    分支按**整行活性**锚定(精确缩进 + if/await/if(!ok) 结构) —— 注释包裹、短路禁用、
     #    挪出确认调用都会破坏匹配而变红; 裸字符串包含判定拦不住这些摘除形态(红验实测)。
     m = re.search(r"async bulkAct\(action\)\s*\{(.*?)\n    \},", cmds, re.S)
@@ -210,7 +210,7 @@ def test_recheck_confirm_wired_all_mouse_entries():
         re.M,
     ), "bulkAct 的 recheck 确认分支被摘除/改写 —— 批量右键重新校验恢复裸奔(计划 26-10-05-0314 S3; 接入点改写须同步本守阵)"
 
-    # ④ 单选通道(torrentCmd): 单选右键与抽屉内命令入口, 只拦 recheck 其它命令不受影响
+    # 4. 单选通道(torrentCmd): 单选右键与抽屉内命令入口, 只拦 recheck 其它命令不受影响
     # 2026-10-10(S3): 签名加第 4 参 hash(显式传参, 抽屉/键盘路径不再写 menu.hash 借道)
     m = re.search(
         r"async torrentCmd\(action, body = null, okText = \"\", hash = \"\"\)\s*\{(.*?)\n    \},", drawer, re.S
@@ -225,7 +225,7 @@ def test_recheck_confirm_wired_all_mouse_entries():
         re.M,
     ), "torrentCmd 的 recheck 确认分支被摘除/改写 —— 单选右键/抽屉重新校验恢复裸奔(计划 26-10-05-0314 S3; 接入点改写须同步本守阵)"
 
-    # ⑤ 键盘通道(_kbAct): 改调共用 helper(整行活性锚定), 不得再内联确认框文案
+    # 5. 键盘通道(_kbAct): 改调共用 helper(整行活性锚定), 不得再内联确认框文案
     m = re.search(r"async _kbAct\(action\)\s*\{(.*?)\n    \},", shortcuts, re.S)
     assert m, "shortcuts.js 找不到 _kbAct(改名或挪走了? 同步本守阵)"
     assert re.search(
@@ -256,7 +256,7 @@ def test_skip_check_dialog_precheck_wired():
     tpl = open(os.path.join(STATIC_ROOT, "shared", "tpl", "popovers.html"), encoding="utf-8").read()
     drawer = read_shared("drawer.js")
 
-    # ① _modalInit 三字段(缺省值即零变化契约: 改默认/删字段/改名都红)
+    # 1. _modalInit 三字段(缺省值即零变化契约: 改默认/删字段/改名都红)
     m = re.search(r"_modalInit\(\)\s*\{\s*return\s*\{(.*?)\n      \};", ui, re.S)
     assert m, "ui_feedback.js 找不到 _modalInit(改名或挪走了? 同步本守阵)"
     init = m.group(1)
@@ -267,7 +267,7 @@ def test_skip_check_dialog_precheck_wired():
     assert re.search(r"^        verdict: null,\s+// ", init, re.M), \
         "_modalInit 缺 verdict: null 声明(三分流渲染区) —— 预检对话框状态机失锚"
 
-    # ② 模板: 确认钮 :disabled 绑定(整钮块锚定 —— 绑定挪出 modalOk 钮或改静态值即红)
+    # 2. 模板: 确认钮 :disabled 绑定(整钮块锚定 —— 绑定挪出 modalOk 钮或改静态值即红)
     m = re.search(r'<button ref="modalOk"[\s\S]*?</button>', tpl)
     assert m, "popovers.html 找不到 modalOk 确认钮(模板重构? 同步本守阵)"
     assert ':disabled="modal.okDisabled"' in m.group(0), \
@@ -284,7 +284,7 @@ def test_skip_check_dialog_precheck_wired():
     assert re.search(r'<button v-if="modal\.extraText" class="bt danger-solid" @click="resolveModal\(\'extra\'\)">', tpl), \
         "第三钮(extraText 通道)被改写 —— S4 强制钮必须复用既有 danger-solid 破坏性分支"
 
-    # ③ 两入口均交棒 _skipCheckDialog, 且方法体内不再自带 _openModal(确认框被取代)
+    # 3. 两入口均交棒 _skipCheckDialog, 且方法体内不再自带 _openModal(确认框被取代)
     #    skipCheckMulti 现带可选 targets(单组右键 skipCheckGroup 复用同一状态机, 2026-10-09),
     #    故签名按"可选参"收 —— 只钉"入口存在且交棒"这一语义, 不钉参数表。
     for name in ("skipCheckTorrent", "skipCheckMulti"):
@@ -295,7 +295,7 @@ def test_skip_check_dialog_precheck_wired():
         assert "_openModal" not in m.group(1), \
             f"{name} 仍自带 _openModal 确认框 —— 旧 danger 确认框应被预检对话框取代"
 
-    # ④ _skipCheckDialog: 进框即禁用 + busy + 固定警示区 + 触发预检(调 _skipPrecheck)
+    # 4. _skipCheckDialog: 进框即禁用 + busy + 固定警示区 + 触发预检(调 _skipPrecheck)
     m = re.search(r"async _skipCheckDialog\(hashes, exec\)\s*\{(.*?)\n    \},", drawer, re.S)
     assert m, "drawer.js 找不到 _skipCheckDialog(S4 状态机被改名/挪走? 同步本守阵)"
     dlg = re.sub(r"//[^\n]*", "", m.group(1))  # 剥行注释后锚定代码结构(注释改写不红, 代码突变必红)
@@ -321,7 +321,7 @@ def test_skip_check_dialog_verdict_render():
     """
     drawer = read_shared("drawer.js")
 
-    # ① 状态机六态分支: 逐分支提取语句清单(剥注释滤空行后)与期望逐一比对 ——
+    # 1. 状态机六态分支: 逐分支提取语句清单(剥注释滤空行后)与期望逐一比对 ——
     #    摘除/新增/改写任一语句(如降级分支删掉解锁行、blocked 分支漏收强制钮)即红
     m = re.search(r"async _skipPrecheck\(seq, mid, hashes, warnRows\)\s*\{(.*?)\n    \},", drawer, re.S)
     assert m, "drawer.js 找不到 _skipPrecheck(S4 状态机被改名/挪走? 同步本守阵)"
@@ -365,7 +365,7 @@ def test_skip_check_dialog_verdict_render():
     assert pre.count("后端闸门仍会在执行时拦截") == 2, \
         "降级文案「后端闸门仍会在执行时拦截」应恰好覆盖 非 ok 回执 与 请求异常 两分支"
 
-    # ② 确认/强制两路径的提交口径(_skipCheckDialog 分派 + _skipExec 端点载荷)
+    # 2. 确认/强制两路径的提交口径(_skipCheckDialog 分派 + _skipExec 端点载荷)
     m = re.search(r"async _skipCheckDialog\(hashes, exec\)\s*\{(.*?)\n    \},", drawer, re.S)
     assert m, "drawer.js 找不到 _skipCheckDialog"
     dlg = re.sub(r"//[^\n]*", "", m.group(1))
@@ -383,7 +383,7 @@ def test_skip_check_dialog_verdict_render():
     assert "...(force ? { force: true } : {})" in exe, \
         "批量强制路径缺 force: true 透传(S2: 提供才入载荷)"
 
-    # ③ 分组展示: 计数行 + 上限截断(5 + 等 X 个)
+    # 3. 分组展示: 计数行 + 上限截断(5 + 等 X 个)
     m = re.search(r"_skipVerdictRows\(results\)\s*\{(.*?)\n    \},", drawer, re.S)
     assert m, "drawer.js 找不到 _skipVerdictRows"
     rows = re.sub(r"//[^\n]*", "", m.group(1))
@@ -408,25 +408,25 @@ def test_modal_identity_stamp_landing_guard():
     drawer = read_shared("drawer.js")
     ui = open(os.path.join(STATIC_ROOT, "shared", "ui_feedback.js"), encoding="utf-8").read()
 
-    # ① _openModal 发戳: mid 自增必须随 modal 字面量一同创建(后补属性不进 Vue 响应的旧坑)
+    # 1. _openModal 发戳: mid 自增必须随 modal 字面量一同创建(后补属性不进 Vue 响应的旧坑)
     m = re.search(r"_openModal\(cfg\)\s*\{(.*?)\n    \},", ui, re.S)
     assert m, "ui_feedback.js 找不到 _openModal(改名或挪走了? 同步本守阵)"
     assert re.search(
         r"this\.modal = \{[^}]*mid: \(this\._modalSeq = \(this\._modalSeq \|\| 0\) \+ 1\)", m.group(1)
     ), "_openModal 未随框发自增身份戳 mid —— 异步落框守卫失锚(F1-01)"
 
-    # ② 守卫单点: visible + mid 双比对(mid 缺省/框已关/被新框取代一律失配)
+    # 2. 守卫单点: visible + mid 双比对(mid 缺省/框已关/被新框取代一律失配)
     m = re.search(r"_modalIsCurrent\(mid\)\s*\{(.*?)\n    \},", ui, re.S)
     assert m, "ui_feedback.js 找不到 _modalIsCurrent(守卫单点被摘除? 同步本守阵)"
     body = re.sub(r"//[^\n]*", "", m.group(1))
     assert "this.modal.visible" in body and "this.modal.mid === mid" in body, \
         "_modalIsCurrent 必须同时复核 visible 与 mid(缺一不可)"
 
-    # ③ 交棒: _skipCheckDialog 发预检时携带本框身份戳
+    # 3. 交棒: _skipCheckDialog 发预检时携带本框身份戳
     assert "this._skipPrecheck(seq, this.modal.mid, hashes, warnRows)" in drawer, \
         "_skipCheckDialog 未把 modal 身份戳交棒 _skipPrecheck(F1-01)"
 
-    # ④ 落袋守卫: seq 代际 + _modalIsCurrent, 且在首处 this.modal 写之前
+    # 4. 落袋守卫: seq 代际 + _modalIsCurrent, 且在首处 this.modal 写之前
     m = re.search(r"async _skipPrecheck\(seq, mid, hashes, warnRows\)\s*\{(.*?)\n    \},", drawer, re.S)
     assert m, "drawer.js 找不到 _skipPrecheck(签名被改? 同步本守阵)"
     pre = re.sub(r"//[^\n]*", "", m.group(1))
@@ -934,10 +934,10 @@ def test_frontend_ctx_menu_refit_by_measured_size():
     锚点落在视口下部时菜单底越过下缘, 底部项(标签分类/导出/批量删除)真实点击不可达
     (Playwright 报 "element is outside of the viewport" 重试到超时)。这类几何缺陷 pytest
     跑不出来, 故这里只钉**接线**; 行为面由 e2e/menus.spec.mjs 的 CTX-fit test 兜底:
-      ①_menuFit 必须按 offsetWidth/offsetHeight 实测算(把常量改大一号那种"修法"再犯即红);
-      ②三个菜单容器(行右键/表头右键/文件优先级)各有 ref, 且与三个 state 对象各自的
+      1. _menuFit 必须按 offsetWidth/offsetHeight 实测算(把常量改大一号那种"修法"再犯即红);
+      2. 三个菜单容器(行右键/表头右键/文件优先级)各有 ref, 且与三个 state 对象各自的
         开层 watcher 里的 (stateKey, refName) 一一对上 —— 漏一处 = 那个菜单静默不钳位;
-      ③watcher 必须在 $nextTick 里量(同步量到的是开层前的 DOM)。
+      3. watcher 必须在 $nextTick 里量(同步量到的是开层前的 DOM)。
     """
     import re
 
@@ -1090,7 +1090,7 @@ def test_frontend_add_combo_label_clear_mask_and_refit():
     #    **公共祖先**(.add-input-row / 面板 / 整行) —— 那一层没人挡就冒泡到 lifecycle 的 window 收层名单
     #    ⇒ 面板点一下就关。无焦点时最易踩: 面板在按住期间才挂载, DOM 在按下与抬起之间变化, 抬起落点被
     #    改写的机会就在那一段(两皮肤输入行差 2px + drop-in 从 -4px 起 = 皮肤差异的来源)。
-    #    ⚠ 只许挂在组件根: 挂到更外层(对话框)会把"点对话框别处收层"一起废掉。
+    #    WARN: 只许挂在组件根: 挂到更外层(对话框)会把"点对话框别处收层"一起废掉。
     row_tag = re.search(r'<div class="add-input-row"[^>]*>', tpl_body)
     assert row_tag, "组件模板找不到输入行根(.add-input-row)(改名或挪走了? 同步本守阵)"
     assert "@click.stop" in row_tag.group(0), \
@@ -1229,10 +1229,10 @@ def test_frontend_move_dialog_combobox_wiring():
          movePathMenu 挂 .pop-open 类 + 三皮肤成对的开层预留(padding-bottom 272px)与
          860 宽档(--modal-w-add)规则, 下拉完整落在对话框内、弹窗体零新增滚动。
       6. 二修(2026-10-29 用户报「点下拉选项就触发移动」+「窗口太小, 点下拉高度跳变」):
-         ①点选候选只回填(moveApplyPath 体内不得出现 submitMoveDialog), 移动只由按钮/手输回车发起;
-         ②手输回车仍提交 —— 键盘单点回退分支走 (ctx.onEnter || ctx.onPick)(v), 只有 move 传钩子;
-         ③空路径按钮置灰; ④打开只聚焦不展开(openMoveDialog 置 moveSuppressOpen, openMovePathMenu
-         首行消费); ⑤三皮肤成对: 收层态基线 min-height 360px + 动作条 margin-top:auto 钉底 +
+         1. 点选候选只回填(moveApplyPath 体内不得出现 submitMoveDialog), 移动只由按钮/手输回车发起;
+         2. 手输回车仍提交 —— 键盘单点回退分支走 (ctx.onEnter || ctx.onPick)(v), 只有 move 传钩子;
+         3. 空路径按钮置灰; 4. 打开只聚焦不展开(openMoveDialog 置 moveSuppressOpen, openMovePathMenu
+         首行消费); 5. 三皮肤成对: 收层态基线 min-height 360px + 动作条 margin-top:auto 钉底 +
          padding-bottom 200ms 过渡(替掉 0↔272 硬切), 过渡后 settle(MOVE_POP_SETTLE_MS=240)重测限高。
       7. 三修(2026-10-29 用户报「点下拉框, 下拉框出现后自动弹回」): 遮罩默认 align-items:center,
          开层增高上下对半扩 ⇒ 输入行连同刚展开的面板整体上移 77px, 面板顶到光标底下(再点一下即
@@ -1749,17 +1749,17 @@ console.log(JSON.stringify({ ok: checks.filter((c) => c[1]).length, total: check
 
 def test_overlay_fit_single_point():
     """浮层「贴边留白 + 视口夹取」几何单点守阵(issue 26-10-20-2231) ——
-    ① 单点模块 shared/overlay_fit.js 在盘且四入口齐全(EDGE=8 / clampAxis / probeRight /
+    1. 单点模块 shared/overlay_fit.js 在盘且四入口齐全(EDGE=8 / clampAxis / probeRight /
        probeLeft / fitInViewport), 三份 tpl-manifest 同点登记且装载序在首个消费方
        config_hub.js 之前(漏登记或序错 = 消费方取别名拿到 undefined, 开层即抛);
-    ② 七个消费文件全部经 FIT 别名走单点, 接线数逐文件对账(ui_feedback 7 / menu 5 /
+    2. 七个消费文件全部经 FIT 别名走单点, 接线数逐文件对账(ui_feedback 7 / menu 5 /
        config_hub 4 / hr 3 / drawer 2 / columns 3 / dialogs 1);
-    ③ 手写夹取式零残留(8/12 字面量夹取、PAD、margin=8、EDGE=8 等回潮即红);
-    ④ 12px 两处(hubAsk / speed-pop)显式命名传参 + 注释在位(不是默默手写字面量);
-    ⑤ 顶层 const/let 跨文件撞名零容忍(本轮实测事故: 七文件各写顶层 const FIT, 经典
+    3. 手写夹取式零残留(8/12 字面量夹取、PAD、margin=8、EDGE=8 等回潮即红);
+    4. 12px 两处(hubAsk / speed-pop)显式命名传参 + 注释在位(不是默默手写字面量);
+    5. 顶层 const/let 跨文件撞名零容忍(本轮实测事故: 七文件各写顶层 const FIT, 经典
        脚本顶层 let/const 是全局词法环境, 后六个文件 SyntaxError、mixin 静默不注册、
        整页崩且静态守阵全绿 —— 跨文件别名只许方法内取或包 IIFE);
-    ⑥ 行为面 node 电池: 四入口七型 + 与旧手写式网格代数等价(无 node 静默跳过);
+    6. 行为面 node 电池: 四入口七型 + 与旧手写式网格代数等价(无 node 静默跳过);
     真实浏览器几何由 e2e/menus.spec.mjs 的 CTX-fit 左右缘诸例盯。"""
     shared = os.path.join(STATIC_ROOT, "shared")
     fit_js = open(os.path.join(shared, "overlay_fit.js"), encoding="utf-8").read()

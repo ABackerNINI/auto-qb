@@ -10,8 +10,8 @@
 
 ## 皮肤档位口径
 - 皮肤清单单点在 webui_helpers._UI_ALL(atlas/prism/console/flux); flux(第四套, plan 26-10-31-2316 S5)
-  fork 自 console, 按 _UI_ALL 枚举的接线守阵随常量自动收编; 单独点名的三套成对面(HR 表②/全屏弹窗/
-  表③)已显式加 flux 档。
+  fork 自 console, 按 _UI_ALL 枚举的接线守阵随常量自动收编; 单独点名的三套成对面(HR 表 2/全屏弹窗/
+  表 3)已显式加 flux 档。
 """
 
 import base64
@@ -142,7 +142,7 @@ def test_frontend_dir_browse_and_search_stale_guard():
     at = open(os.path.join(STATIC_ROOT, "shared", "add_torrent.js"), encoding="utf-8").read()
     vw = open(os.path.join(STATIC_ROOT, "shared", "view.js"), encoding="utf-8").read()
 
-    # ① loadDir: 发请求即记 path 戳
+    # 1. loadDir: 发请求即记 path 戳
     m = re.search(r"async loadDir\(path\)\s*\{(.*?)\n    \},", at, re.S)
     assert m, "add_torrent.js 找不到 loadDir(改名或挪走了? 同步本守阵)"
     body = re.sub(r"//[^\n]*", "", m.group(1))
@@ -154,7 +154,7 @@ def test_frontend_dir_browse_and_search_stale_guard():
     assert "if (this._dirReqPath === reqPath) this.dirBrowse.loading = false;" in body, \
         "loadDir finally 未按戳守卫 —— 过期请求会闪一帧\"加载完\"假象(新在途请求持有 loading)"
 
-    # ② doSearch: 落袋前比对当前搜索词
+    # 2. doSearch: 落袋前比对当前搜索词
     # quiet 参数(plan 26-11-03-0120 F2): 静默刷新复用同一落袋路径, 签名容忍可选参
     m = re.search(r"async doSearch\([^)]*\)\s*\{(.*?)\n    \},", vw, re.S)
     assert m, "view.js 找不到 doSearch(改名或挪走了? 同步本守阵)"

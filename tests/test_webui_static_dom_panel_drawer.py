@@ -22,9 +22,9 @@
 - test_frontend_drawer_open_switch_no_empty_flash: 详情面板显式换目标不闪空态守阵(2026-10-07 报障「切换种子时用户页闪'暂无已连接用户'」) —— openTorrentDrawer 已开(种子形态)重入分支先于重建副作用(同目标短路零副作用, 与 openDrawerTraffic 同口径 -> 换目标交棒 _switchDrawerTarget 软切换: 保留旧数据 + 160ms 延迟遮罩, 与键盘跟随同链路) + 冷启动重建(面板关着/流量形态换形)初值页签 loading 与空列表同帧置位(trackers/files/peers 三 flag 按 initialTab 落真, 详情在途窗口渲染加载态而非空态, 经典链与变体同免), 任一锚被拆或次序倒置即红
 - test_drawer_peers_speed_keys_normalized: 抽屉 peers 速度键名适配守阵(2026-10-10 用户报障「种子详情用户页上下行始终为 0」) —— 真 qB sync/torrentPeers 的对端速度字段是 dl_speed / up_speed(与列表侧 torrents/info 的 dlspeed / upspeed 不同名), 前端全部 peers 消费点(经典表 drawerPeerRows + 变体 07/08/09 的 peerList 直读原始对端对象)统一按 dlspeed / upspeed 取名 ⇒ 落袋单点 _fetchDrawerPeers 必须过 _drawerNormPeers 补键(否则取不到值 → 上下行恒 0); 双形态(dict/数组)同归一; 桩服务 scripts/ui_harness.py 合成对端速度键名也必须与真 qB 同形(否则冒烟「看得见速度」而真机恒 0, 测假)
 - test_drawer_tpl_trackers_card_uniform_height: 04「状态卡片栅格」卡片同排等高 + 虚拟合并卡去描述守阵(2026-10-10 用户报障「虚拟条目卡片高度与其它的不一致」) —— 口径(用户拍板「同排等高」)= 栅格 .dt04-grid 走 align-items:stretch(同排卡片自动齐平, 虚拟卡与同排实体卡恒等高) + 虚拟合并卡移除设计稿 footer 长描述只留 head + chips; 静态钉 .dt04-grid 必 stretch 且 align-items:start 不得回潮 + 描述文案(私有 tracker 种子…)不得回潮 + virtualCardHtml 内不得再现 dt04-vnote(实体『未启用』卡的短注仍用该类, 禁连类一起删)+ 卡片必须填满栅格格(width:auto 必配, 2026-10-12 用户报障「真实 tracker 卡与虚拟卡之间/虚拟卡后方有长空隙」根治: 引擎行容器继承三皮肤经典表 width:fit-content, grid 下不参与 stretch ⇒ 卡片收缩到内容宽, 两列卡片间 ~700px 永久空洞 + 卡宽随内容漂移)
-- test_drawer_list_switch_no_loading_flash_wiring: 抽屉三列表(peers/trackers/files)软切换「不闪」守阵(2026-10-13 用户报障「种子详情用户页切换种子时『暂无已连接用户』闪烁」) —— 真根因(逐帧实测, 探针序列 `E→L→E`): 软切换保留的是**上一个目标的已落袋结果**, 而**空列表(没有对端/没有 tracker)是种子的常态**, 但三列表 fetcher 一律置 loading, 模板门 `loading && 无行` 把这份既有空态顶掉一帧换成「正在加载…」再换回 ⇒ 看起来就是空态在闪。修法 = 换目标窗口(`_drawerSoftSwitch`)内**不置**列表 loading 门(`_drawerListLoadingOn` = `!silent && !this._drawerSoftSwitch`), 保留旧结果直到被新结果取代。!**不得**改成「空响应视为未就绪→延迟渲染/重拉」—— 那会把常态的空推迟(首版固定 1s 重拉被用户否掉:「种子的常态就是没有对端」; 后端对空响应还有 1s 短缓存, 重拉只拿回空包)。本守阵钉静态接线与关键次序(行为回归由 e2e/drawer-switch-no-flash.spec.mjs 逐帧采样: 空态全程在 + 无「正在加载…」+ 无重试请求): ①门抑制单点判据; ②三 fetcher 的 loading 置位都经该单点(直写即回潮); ③标记须在 _loadDrawerTab **之前**置位(三 fetcher 在其内 await 前同步读); ④_stopDrawerPoll **不得**清标记(它在 `_loadDrawerTab→_startDrawerPoll` 途中被调用, 清了等于置前失效); ⑤_drawerSwitchEnd 必须清标记(否则粘住); ⑥旧「延迟重拉」机制(_drawerGraceHold/_DRAWER_GRACE_DELAYS/_drawerPeerCount)不得回潮
-- test_dt_table_kernel_single_point: 详情面板表格内核守阵(计划 26-10-13-0811 W1; 用户 2026-10-13 报八项表格症状, 归三个根因簇, 本守阵解簇 A「几何与列被多处各算一遍且零校验」) —— ①三份 manifest 都登记 shared/dt_table.js 且文件在盘上; ②window.DT_TABLE 六口子齐全(layout/assertLayout/checkLabels/registerCell/cellOf/hasArrow); ③几何单一出口: 轨道串/对齐/列键同一个返回值里出来且 gridTemplate 恒等于 tracks.join(" ")(调用方再拼一次就是新事实源, 即红) + 固化宽度覆盖生效; ④L3 列名守卫: 列定义的 label 字段零方向符(扫 app.js 列定义单点 + drawer_tpl 全部变体), 「↑ 占用」不得回潮(密度雷达表头多箭头的出处) + 方向符号只能由排序态单点渲染(表壳 .arrow); ⑤渲染即自查: assertLayout 三处计数(网格轨道/列头格/数据行子格)必须相等, 不相等即报(视觉表现正是「速度列下方异常横带」与「多列内容挤在一起」), 未挂载/未渲染不算不一致(面板没开不得满屏报错); ⑥L2 落点: 单元格渲染器未登记即抛(不许渲染空白)。node 电池真跑 ③⑤⑥(无 node 静默跳过)
-- test_drawer_variant_skeleton_single_point: 抽屉变体渲染器族三族重复收敛守阵(issue 26-10-20-2231) —— ①三态空帧单点 H.emptyFrame 在核心 HELPERS(has 闸 + loading→err→empty 优先级 + err 进 title 走 esc)且 04-12 九件桥变体各 1 处接线(槽类名/空态文案逐件对账), 内联三态块零残留(「正在加载…」态帧不得回潮; 01/02/03 裸空态形状不同刻意不收编, 接线数钉 0); ②peers 判据单点 reg.peers 五件(FLAG_META/flagTokens/isBad/bucketOf/isLanIp)在核心 + TPL_REG 挂载 + 07/08/09 经 const P 消费, 本地副本零残留(反向断言); ③dt 值格模板合一: 单一 tpl-aq-dt-peer-cells(类名经 pfx prop 计算, 渲染结果与旧逐字同; dt09 密度雷达特化经 occ prop) + table.js 三组件同名不变共享模板且 pfx/occ 默认值各表自己 + 旧三模板 id 零残留(双模板副本回潮即红)
+- test_drawer_list_switch_no_loading_flash_wiring: 抽屉三列表(peers/trackers/files)软切换「不闪」守阵(2026-10-13 用户报障「种子详情用户页切换种子时『暂无已连接用户』闪烁」) —— 真根因(逐帧实测, 探针序列 `E→L→E`): 软切换保留的是**上一个目标的已落袋结果**, 而**空列表(没有对端/没有 tracker)是种子的常态**, 但三列表 fetcher 一律置 loading, 模板门 `loading && 无行` 把这份既有空态顶掉一帧换成「正在加载…」再换回 ⇒ 看起来就是空态在闪。修法 = 换目标窗口(`_drawerSoftSwitch`)内**不置**列表 loading 门(`_drawerListLoadingOn` = `!silent && !this._drawerSoftSwitch`), 保留旧结果直到被新结果取代。!**不得**改成「空响应视为未就绪→延迟渲染/重拉」—— 那会把常态的空推迟(首版固定 1s 重拉被用户否掉:「种子的常态就是没有对端」; 后端对空响应还有 1s 短缓存, 重拉只拿回空包)。本守阵钉静态接线与关键次序(行为回归由 e2e/drawer-switch-no-flash.spec.mjs 逐帧采样: 空态全程在 + 无「正在加载…」+ 无重试请求): 1. 门抑制单点判据; 2. 三 fetcher 的 loading 置位都经该单点(直写即回潮); 3. 标记须在 _loadDrawerTab **之前**置位(三 fetcher 在其内 await 前同步读); 4. _stopDrawerPoll **不得**清标记(它在 `_loadDrawerTab→_startDrawerPoll` 途中被调用, 清了等于置前失效); 5. _drawerSwitchEnd 必须清标记(否则粘住); 6. 旧「延迟重拉」机制(_drawerGraceHold/_DRAWER_GRACE_DELAYS/_drawerPeerCount)不得回潮
+- test_dt_table_kernel_single_point: 详情面板表格内核守阵(计划 26-10-13-0811 W1; 用户 2026-10-13 报八项表格症状, 归三个根因簇, 本守阵解簇 A「几何与列被多处各算一遍且零校验」) —— 1. 三份 manifest 都登记 shared/dt_table.js 且文件在盘上; 2. window.DT_TABLE 六口子齐全(layout/assertLayout/checkLabels/registerCell/cellOf/hasArrow); 3. 几何单一出口: 轨道串/对齐/列键同一个返回值里出来且 gridTemplate 恒等于 tracks.join(" ")(调用方再拼一次就是新事实源, 即红) + 固化宽度覆盖生效; 4. L3 列名守卫: 列定义的 label 字段零方向符(扫 app.js 列定义单点 + drawer_tpl 全部变体), 「↑ 占用」不得回潮(密度雷达表头多箭头的出处) + 方向符号只能由排序态单点渲染(表壳 .arrow); 5. 渲染即自查: assertLayout 三处计数(网格轨道/列头格/数据行子格)必须相等, 不相等即报(视觉表现正是「速度列下方异常横带」与「多列内容挤在一起」), 未挂载/未渲染不算不一致(面板没开不得满屏报错); 6. L2 落点: 单元格渲染器未登记即抛(不许渲染空白)。node 电池真跑 3./5.6. (无 node 静默跳过)
+- test_drawer_variant_skeleton_single_point: 抽屉变体渲染器族三族重复收敛守阵(issue 26-10-20-2231) —— 1. 三态空帧单点 H.emptyFrame 在核心 HELPERS(has 闸 + loading→err→empty 优先级 + err 进 title 走 esc)且 04-12 九件桥变体各 1 处接线(槽类名/空态文案逐件对账), 内联三态块零残留(「正在加载…」态帧不得回潮; 01/02/03 裸空态形状不同刻意不收编, 接线数钉 0); 2. peers 判据单点 reg.peers 五件(FLAG_META/flagTokens/isBad/bucketOf/isLanIp)在核心 + TPL_REG 挂载 + 07/08/09 经 const P 消费, 本地副本零残留(反向断言); 3. dt 值格模板合一: 单一 tpl-aq-dt-peer-cells(类名经 pfx prop 计算, 渲染结果与旧逐字同; dt09 密度雷达特化经 occ prop) + table.js 三组件同名不变共享模板且 pfx/occ 默认值各表自己 + 旧三模板 id 零残留(双模板副本回潮即红)
 - test_drawer_prio_text_single_point: 文件优先级码 -> 中文文案表单点守阵(issue 26-10-29-1340) —— 五份内联表(4 份含 legacy 4 档 + setFilePriority 那份缺 4 回退 String(p))收口成核心层 HELPERS.PRIO_TEXT 全键表 + 带回退取文 prioText(p, dash) 挂 reg.helpers; 守阵 = shared/ 递归扫五键表字面仅 1 处(全仓唯一硬约束) + drawer.js 两处(setFilePriority 回执 String(p) 兜底 / drawerFileRows 显示「正常」兜底, 方法内经 window.AQB_DRAWER_TPL_REG 取别名)与 10/11/12(H.prioText 消费)接线 + PRIO_LABEL/本地字面零残留 + node 真跑可达域 p∈{0,1,6,7} 新旧逐字同与 4 档补测 prioText(4, "4")==="高"(ctx-menus.html 静态菜单项文案属自身呈现不在表内, issue 范围外不改; 行为等价 e2e 盯 drawer-content-variant-tables)
 - test_drawer_tracker_bucket_text_single_point: tracker 五桶文案表单点守阵(issue 26-10-29-1343) —— 04/05/06 三变体各持一份的桶文案(04/06 BUCKET{text,sev} 两份 + 05 GROUPS{text,cnt} 一份 + 04 PILLS 与 05 计数条内联字面, 共 5 处两形状)收口成核心层 TRACKERS(TRACKER_BUCKETS 全列 text/sev/order/cnt + TRACKER_BUCKET_ORDER 处理序数组, 05 分区顺序与 04/06 sev 升序同源写一次)挂 reg.trackers(reg.peers 同类判据命名空间); 守阵 = 核心表全列逐字钉住 + 桶文案词「未联系」drawer_tpl/ 零命中且核心层恰 1 处 + 三变体 TK 接线与本地 BUCKET/GROUPS/胶囊 text/tip 桶名字面零残留(cls/tip/色族/各版式桶序是呈现语义留各自文件) + node 真跑 text/sev/cnt 与旧表逐字对账(sev 0/1/2/3/9 不动 = 排序权值等价; 变体私有 bucketOf 三份属 R21-B-05/C-05 不在本项; 行为等价 e2e 盯 drawer-trackers-variant-tables / drawer-trackers-reannounce)
 - test_drawer_content_file_tree_single_point: content 目录树构建/聚合单点守阵(issue 26-10-29-1343) —— 10/12 各持一份的 newDir/buildTree/aggregate/findNode 四件收口成核心 CONTENT(buildFileTree/findNode)挂 reg.content(reg.peers/reg.trackers 同类「按页签判据命名空间」, 不落 helpers —— 那里只住跨页签骨架机制); 统一节点模型「dirs + 标量 av」(目录 = 子树最低可用性, undefined/null 同为无值 —— 旧 12 把 null 当值聚合、旧 10 的 Infinity 哨兵会渲染出 "Infinity", 均属无判据漂移, 以单点为准); 守阵 = drawer_tpl/ 四函数定义零命中 + 10/12 FT 接线数逐件对账(10: buildFileTree 4 处/findNode 2 处; 12: 各 1 处) + 旧模型字面零残留(minAv/布尔对/裸 availability 叶子字段; 11 的 derive 扁平表第三算法不在本项, 自有模型不查) + 11 头注声明口径以 buildFileTree 为准 + node 真跑语义电池: 新旧三实现(新单点/旧 10/旧 12)对 fixture 组(嵌套两层/根单文件/size 缺失/availability null·负数·小数·零/空目录段/空名回退)逐节点归一化 JSON 全等(旧 10 布尔对 -> av、旧 12 null -> 无值、dirs 统一现算), 另钉 findNode 四态与新节点键集纯净; 行为等价 e2e 盯 drawer-content-variant-tables / drawer-content-dt11-sticky
@@ -472,9 +472,9 @@ def test_drawer_tpl_trackers_card_uniform_height():
     「未启用」的实体卡(真浏览器实测 69px)与虚拟卡(100px)高度不一致。口径(用户拍板「同排
     等高」): 栅格走 align-items:stretch, 同排卡片自动齐平(虚拟卡与其同排实体卡恒等高, 无需
     给虚拟卡任何特判); 虚拟合并卡的描述行整个移除, 只留 head + chips。静态钉四件事:
-    ①stretch 机制在且 align-items:start 不得回潮; ②描述文案不得回潮; ③虚拟合并卡装配
+    1. stretch 机制在且 align-items:start 不得回潮; 2. 描述文案不得回潮; 3. 虚拟合并卡装配
     (virtualRowOf, U3 起为 rowsFn 合成行)内不得再出现 dt04-vnote(实体『未启用』卡的同名
-    短注是另一回事, 别顺手连类一起删); ④卡片必须填满栅格格(width:auto 必配)——
+    短注是另一回事, 别顺手连类一起删); 4. 卡片必须填满栅格格(width:auto 必配)——
     2026-10-12 用户报障「真实 tracker 卡与虚拟卡之间/虚拟卡后方有长空隙」根治: 引擎行容器
     被三皮肤经典表 CSS 继承 width:fit-content(与 min-width:100% 成对, 经典 flex 列容器里
     靠 min-width 兜底成整行宽); 本栅格是 grid + min-width:0, fit-content 直接生效 ⇒ 卡片
@@ -617,38 +617,38 @@ def test_drawer_tpl_trackers_per_tracker_reannounce():
     """06 变体逐行汇报倒计时真 per-tracker 口径守阵(P-02 升级, issue 26-10-07-0149, 2026-10-09) ——
 
     逐行倒计时从「种子级 detail.reannounce_in 全局近似」升级为「行级 next_announce(qB 5.2+ 随
-    /trackers 透传, Unix epoch 秒)减 now」。钉住: ①真口径分支读行级 t.next_announce 且先减
-    nowSec(epoch 是绝对时间不是倒计时, 直接当剩余秒数是已记录的事故根因); ②「全局」标(dt06-gb)
-    只许出现在回退分支 —— 真口径行不得带它; ③回退分支仍在(qB < 5.2 无该字段, 保留旧全局近似);
-    ④sig 只含结构态(加载/失败/空态), nowSec 与数据**不进** sig(U4 26-10-12-2253 复发根治:
+    /trackers 透传, Unix epoch 秒)减 now」。钉住: 1. 真口径分支读行级 t.next_announce 且先减
+    nowSec(epoch 是绝对时间不是倒计时, 直接当剩余秒数是已记录的事故根因); 2. 「全局」标(dt06-gb)
+    只许出现在回退分支 —— 真口径行不得带它; 3. 回退分支仍在(qB < 5.2 无该字段, 保留旧全局近似);
+    4. sig 只含结构态(加载/失败/空态), nowSec 与数据**不进** sig(U4 26-10-12-2253 复发根治:
     旧口径 nowSec 进 sig ⇒ 5s 轮询每拍必整帧重建 ⇒ anchFill 换锚位时锚被移动(换父节点)
     ⇒ Teleport 表格整树重排, 80 对端实测 56-75ms longtask/拍 = 用户所报「表格闪烁, 数据
     随闪烁刷新」); 倒计时新鲜度改走桥响应式 —— nowSec 在 rowsFn 内现读, 每拍随
     drawer.trackers 新数组引用重算, 粒度恒 5s 与旧设计一致(nowSec 进 sig 从来不产生更细
-    粒度: _dtNotify 只随数据落袋触发), 壳上工具条注走 paintHtml 原地回填; ⑤真口径分支
-    不画微条(per-tracker interval 不可得, 分母不存在, 不造假); ⑥调用点 nextOf 必须拿到行
+    粒度: _dtNotify 只随数据落袋触发), 壳上工具条注走 paintHtml 原地回填; 5. 真口径分支
+    不画微条(per-tracker interval 不可得, 分母不存在, 不造假); 6. 调用点 nextOf 必须拿到行
     t 与 nowSec。
     U3(26-10-12-0527)改版: 判据(nextOf/rowOf/rowsFn)与 sig 口径仍在变体文件, 「全局」标与
     微条的呈现随表格体重写迁渲染器分片(xtpl-cells-dt.html tpl-aq-dt06-cells) —— 呈现锚同轮
     迁移, 判据锚不放宽。"""
     vdir = os.path.join(STATIC_ROOT, "shared", "drawer_tpl")
     text = open(os.path.join(vdir, "06-trackers-table-collapsed.js"), encoding="utf-8").read()
-    # ① 真口径: 读行级 next_announce + 先减 now
+    # 1. 真口径: 读行级 next_announce + 先减 now
     assert "t.next_announce" in text, "06 逐行倒计时未读行级 next_announce(P-02 真口径回退)"
     assert "Math.round(na - nowSec)" in text, "06 未以 epoch 减 nowSec 得剩余(epoch 当倒计时 = 事故根因)"
     # 真口径分支 = nextOf 里回退行(const d = ...)之前的那段
     real_branch = text[text.index("function nextOf"):text.index("const d = (ctx.drawer")]
-    # ②「全局」标只在回退分支(呈现已迁分片: 判据侧 nextOf 真口径分支不出「全局」字样;
+    # 2. 「全局」标只在回退分支(呈现已迁分片: 判据侧 nextOf 真口径分支不出「全局」字样;
     #   .dt06-gb 的着色 CSS 留在变体注入层, 不在此限)
     assert "全局" not in real_branch, "06 真口径行仍算「全局」标(真值不该标全局)"
-    # ③ 回退分支仍在(呈现侧在分片, 全局分支带 dt06-gb 且只此一处)
+    # 3. 回退分支仍在(呈现侧在分片, 全局分支带 dt06-gb 且只此一处)
     frag = open(os.path.join(STATIC_ROOT, "shared", "tpl", "xtpl-cells-dt.html"), encoding="utf-8").read()
     sec06 = frag.split('id="tpl-aq-dt06-cells"', 1)[-1].split("</script>", 1)[0]
     assert "dt06-gb" in sec06, "06 回退分支(全局近似)被删(qB < 5.2 无 next_announce 会整列空白)"
     real_frag = sec06[sec06.index("kind === 'real'"):sec06.index('v-else class="dt06-next"')]
     assert "dt06-gb" not in real_frag, "06 真口径行仍带「全局」标(真值不该标全局)"
     assert "detail.reannounce_in" in text, "06 回退分支未用种子级 detail.reannounce_in"
-    # ④ sig 结构态(U4 26-10-12-2253): nowSec/数据不进 sig; 倒计时走 rowsFn 每拍现读 + 壳上回填
+    # 4. sig 结构态(U4 26-10-12-2253): nowSec/数据不进 sig; 倒计时走 rowsFn 每拍现读 + 壳上回填
     sig_lines = [l for l in text.splitlines() if l.strip().startswith("const sig =")]
     assert len(sig_lines) == 1, "06 const sig 定位漂移(守阵按单行定位, 同步本守阵)"
     for bad in ("nowSec", "Date.now", "reannounce", "next_announce"):
@@ -660,11 +660,11 @@ def test_drawer_tpl_trackers_per_tracker_reannounce():
         "06 nowSec 不在 rowsFn 内(每拍重算路径断)"
     assert 'H.paintHtml(host, ".dt06-toolbar", toolbarHtml(ctx, ts, d))' in text, \
         "06 跳过重建分支未原地回填工具条(数据拍工具条注陈旧)"
-    # ⑤ 真口径分支不画微条(变体判据侧不出 bar; 分片微条只随 global 分支)
+    # 5. 真口径分支不画微条(变体判据侧不出 bar; 分片微条只随 global 分支)
     assert "bar" not in real_branch, "06 真口径行仍算微条(per-tracker interval 不可得, 属造假)"
     assert "dt06-tbar" in sec06 and "dt06-tbar" not in real_frag, \
         "06 微条呈现漂移(只许在回退分支)"
-    # ⑥ 调用点传参
+    # 6. 调用点传参
     assert "nextOf(ctx, t, nowSec)" in text, "06 nextOf 调用点未传行 t / nowSec(真口径拿不到数据)"
 
 
@@ -679,14 +679,14 @@ def test_drawer_tpl_data_beat_no_anchor_move():
 
     修复口径: sig 收窄为结构态(加载/失败/空态/在场分组集/折叠态), 数据拍 skipUnchanged
     命中后只对**不含锚**的壳上子树原地回填, 行走桥响应式(rowsFn 每拍随 drawer.trackers
-    新数组引用重算)。守阵钉住六个轮询变体(04/05/06/07/08/09): ①sig 块不含数据口径标识
-    (nowSec/Date.now/reannounce/next_announce/JSON.stringify 整包序列化); ②原地回填先于
-    首个整帧重建调用点(file order —— 回填必须在"跳过"路径上); ③skip 路径含原地回填
-    (H.paintHtml 或受比对的 textContent/innerHTML 直写); ④核心 paintHtml 判空 + 同值
+    新数组引用重算)。守阵钉住六个轮询变体(04/05/06/07/08/09): 1. sig 块不含数据口径标识
+    (nowSec/Date.now/reannounce/next_announce/JSON.stringify 整包序列化); 2. 原地回填先于
+    首个整帧重建调用点(file order —— 回填必须在"跳过"路径上); 3. skip 路径含原地回填
+    (H.paintHtml 或受比对的 textContent/innerHTML 直写); 4. 核心 paintHtml 判空 + 同值
     跳过(空选择器不炸, 同值不写)。"""
     vdir = os.path.join(STATIC_ROOT, "shared", "drawer_tpl")
     core = open(os.path.join(STATIC_ROOT, "shared", "drawer_templates.js"), encoding="utf-8").read()
-    # ④ 核心回填 helper: 判空 + 同值跳过
+    # 4. 核心回填 helper: 判空 + 同值跳过
     assert "paintHtml: function (host, sel, html)" in core, \
         "核心缺 paintHtml helper(数据拍原地回填单点漂移)"
     assert "if (el && el.innerHTML !== html) el.innerHTML = html;" in core, \
@@ -698,7 +698,7 @@ def test_drawer_tpl_data_beat_no_anchor_move():
         text = open(os.path.join(vdir, name), encoding="utf-8").read()
         assert "H.skipUnchanged(host, ui, sig)" in text, \
             f"drawer_tpl/{name}: 缺 skipUnchanged 跳过重建路径"
-        # ① sig 块 = const sig 起至首个分号结尾行(含续行)
+        # 1. sig 块 = const sig 起至首个分号结尾行(含续行)
         lines = text.splitlines()
         start = next(i for i, l in enumerate(lines) if l.strip().startswith("const sig ="))
         sig_block = []
@@ -710,12 +710,12 @@ def test_drawer_tpl_data_beat_no_anchor_move():
         for bad in ("nowSec", "Date.now", "reannounce", "next_announce", "JSON.stringify"):
             assert bad not in sig_text, \
                 f"drawer_tpl/{name}: sig 含数据口径 {bad}(每拍整帧重建移动锚 = 表格重排, 复发根因)"
-        # ③ skip 路径含原地回填(paintHtml 或受比对直写)
+        # 3. skip 路径含原地回填(paintHtml 或受比对直写)
         fill_at = min(
             [text.index(m) for m in ("H.paintHtml(", ".textContent !== ", ".innerHTML !== ") if m in text] or [-1]
         )
         assert fill_at >= 0, f"drawer_tpl/{name}: 无原地回填手段(数据拍只能整帧重建)"
-        # ② 回填先于首个整帧重建调用点(在"跳过"路径上)
+        # 2. 回填先于首个整帧重建调用点(在"跳过"路径上)
         assert text.index("H.skipUnchanged") < fill_at < text.index("host.replaceChildren"), \
             f"drawer_tpl/{name}: 原地回填不在 skip 分支与首个整帧重建之间(数据拍仍走重建)"
 
@@ -730,7 +730,7 @@ def test_drawer_tpl_a11y_and_fetch_error_states():
     (翻 ui.folded 记账 + 容器翻 .folded 类 + 回读类态 setAttribute 三步一步), 五变体折叠
     点击全走单点 —— 修前 onClick 只翻 class, 点击到下一次重渲之间读屏语义与视觉反向。
     U2(计划 26-10-12-0527)改版: 07/08/09 手搓排序表头退役(D3 排序并引擎 aq-table, 变体文件
-    零手搓表头由 test_drawer_table_bridge_wiring ⑪ 钉), 其 aria-sort pin 随载体退役; 07/09
+    零手搓表头由 test_drawer_table_bridge_wiring 11 钉), 其 aria-sort pin 随载体退役; 07/09
     交互面只剩原生 <button> 筛选 chips(键盘天然可达), 08 折叠组头仍走 P3-4 模拟控件件套。
     三个列表 fetcher 失败标记(trackersError/filesError/peersError)成功落袋即清、换目标作废;
     九个 fetch 型变体(04/05/06/07/08/09/10/11/12)空列表先判错误态再判空态, trackers/peers
@@ -764,7 +764,7 @@ def test_drawer_tpl_a11y_and_fetch_error_states():
     # 2. 纯 div/span 模拟控件 role/tabindex/aria(只盘模拟控件; 原生 button 有 title 充当可访问名不动)
     # U2(计划 26-10-12-0527, D3): 07/08/09 手搓排序表头退役 —— 排序交互/表头/箭头全归引擎 aq-table
     # (xtpl.html tpl-aq-table: col.sortable 走激活单点 headActivate → $root.setSort), 变体文件零手搓
-    # 排序表头由 test_drawer_table_bridge_wiring ⑪ 钉死。引擎 .h-cell 是 click 表头, 与主视图各表同款
+    # 排序表头由 test_drawer_table_bridge_wiring 11 钉死。引擎 .h-cell 是 click 表头, 与主视图各表同款
     # 同形态; 引擎级表头 a11y 件套(role=columnheader / aria-sort / tabindex / keydown)已于 2026-10-12
     # 补课 —— 计划 26-10-12-2330 方案 C(issue 26-10-12-0800), 落表壳组件单点, 守阵
     # test_frontend_table_head_a11y(本段只盘变体侧模拟控件, 引擎侧归那条)。
@@ -871,7 +871,7 @@ def test_drawer_tpl_a11y_and_fetch_error_states():
 def test_drawer_tpl_content_row_keyboard_roving():
     """content 组行级键盘 roving tabindex 守阵(issue 26-10-07-0846) ——
     dt10/11 可点击行 [data-node] 与 dt12 树图块 [data-blk]/体积榜行 [data-row] 原为纯 div+click,
-    键盘/读屏不可达(修复轮 P3-4 缩围转来的已记未做项)。按 issue 建议候选① roving tabindex 落地:
+    键盘/读屏不可达(修复轮 P3-4 缩围转来的已记未做项)。按 issue 建议候选 1 roving tabindex 落地:
     核心 helpers 四件套单点(roving 锚点/rowFocusKey 记账/rowRestore 回焦/rowMove 移焦);
     行容器 tabindex=-1 不进 Tab 序(行内原生控件自然参与 Tab; 整行不加 role=button —— 行内已含
     原生控件, 嵌套交互语义反而更糟, 入池报告根因段口径); :focus-visible 焦点可见; keydown 委托
@@ -1479,16 +1479,16 @@ def test_drawer_peers_speed_keys_normalized():
     变体 07/08/09 的 peerList 直读原始对端对象)统一按 dlspeed / upspeed 取名, 故落袋单点
     _fetchDrawerPeers 必须过 _drawerNormPeers 做键名适配(补 dlspeed / upspeed), 否则取不到值
     → 上下行恒 0(用户报障)。本守阵钉三件事:
-    ① _drawerNormPeers 存在且 dl_speed/up_speed 两键映射齐全、dict/数组双形态同归一;
-    ② peers 落袋必须走该单点(直存 qB 原始响应 ⇒ 原始键名漏进消费点);
-    ③ 桩服务 scripts/ui_harness.py 合成对端的速度键名也是 qB 原始 dl_speed / up_speed
+    1. _drawerNormPeers 存在且 dl_speed/up_speed 两键映射齐全、dict/数组双形态同归一;
+    2. peers 落袋必须走该单点(直存 qB 原始响应 ⇒ 原始键名漏进消费点);
+    3. 桩服务 scripts/ui_harness.py 合成对端的速度键名也是 qB 原始 dl_speed / up_speed
        —— 曾按 dlspeed / upspeed 造假数据, 冒烟「看得见速度」而真机恒 0(测假逃逸本 bug)。
     """
     shared = os.path.join(STATIC_ROOT, "shared")
     drawer_js = read_shared("drawer.js")
     store_js = open(os.path.join(shared, "drawer_store.js"), encoding="utf-8").read()  # W1: 数据/行为层
 
-    # ① 键名适配单点
+    # 1. 键名适配单点
     norm = re.search(r"_drawerNormPeers\(resp\) \{(.*?)\n    \},", store_js, re.S)
     assert norm, "drawer_store.js 缺 _drawerNormPeers(qB 对端速度键名适配单点; 缺则上下行恒 0)"
     nb = norm.group(1)
@@ -1499,7 +1499,7 @@ def test_drawer_peers_speed_keys_normalized():
     assert "Array.isArray(r.peers)" in nb and "Object.entries(r.peers)" in nb, \
         "_drawerNormPeers 必须同时覆盖 peers 的 dict 与数组双形态(真 qB 恒 dict)"
 
-    # ② 落袋单点走适配(直存 r 即漏原始键名)。2026-10-13 软切换宽限引入 norm 局部量
+    # 2. 落袋单点走适配(直存 r 即漏原始键名)。2026-10-13 软切换宽限引入 norm 局部量
     #    (首个空响应「未就绪」时保留旧数据不落袋, 见下条守阵), 故断言形改为「归一结果才是落袋值」。
     #    R21-A-01(2026-10-21): 归一外置到差异表 peers 条目(norm(vm, r)), 落袋在唯一骨架 —— 两处各钉一半。
     skel, ftable = _drawer_fetch_parts(store_js)
@@ -1517,7 +1517,7 @@ def test_drawer_peers_speed_keys_normalized():
     assert "_dtMergeRows(" in skel, \
         "落袋未走引用稳定合并(W5/L5: 整组换数组 = 行重建, 速度格节点身份不保)"
 
-    # ③ 桩保真: 合成对端的键名必须与真 qB 同形(dl_speed / up_speed)
+    # 3. 桩保真: 合成对端的键名必须与真 qB 同形(dl_speed / up_speed)
     harness = (Path(__file__).resolve().parents[1] / "scripts" / "ui_harness.py").read_text(encoding="utf-8")
     assert '"dl_speed": dl_speed,' in harness and '"up_speed": up_speed,' in harness, \
         "ui_harness 合成 peer 的速度键必须用 qB 原始 dl_speed / up_speed(用 dlspeed/upspeed 即测假, 真机恒 0)"
@@ -1533,20 +1533,20 @@ def test_drawer_list_switch_no_loading_flash_wiring():
     `loading = true`, 模板门 `loading && 无行` 就把这份既有的空态顶掉一帧换成「正在加载…」, 数据(空)
     回来再换回 ⇒ 用户看到「『暂无已连接用户』闪烁」(临时探针实测序列 `E→L→E`)。
     修法 = 换目标窗口(`_drawerSoftSwitch`)内**不置**列表 loading 门(`_drawerListLoadingOn`), 保留那份
-    旧结果直到被新结果取代。⚠ **不得**改成「空响应视为未就绪 → 延迟渲染/重拉」: 那会把常态的空推迟
+    旧结果直到被新结果取代。WARN: **不得**改成「空响应视为未就绪 → 延迟渲染/重拉」: 那会把常态的空推迟
     (首版固定 1s 重拉被用户否掉 —— 「种子的常态就是没有对端」, 且后端对空响应还有 1s 短缓存)。
     行为回归由 e2e/drawer-switch-no-flash.spec.mjs 逐帧采样值守(空态全程在 + 无「正在加载…」+ 无重试
     请求); 本守阵只钉静态接线与关键次序, 防机制被无声拆除。
     """
     store_js = open(os.path.join(STATIC_ROOT, "shared", "drawer_store.js"), encoding="utf-8").read()
 
-    # ① 门抑制单点: 判据 = 非静默 且 不在软切换窗口
+    # 1. 门抑制单点: 判据 = 非静默 且 不在软切换窗口
     m = re.search(r"_drawerListLoadingOn\(silent\) \{(.*?)\n    \},", store_js, re.S)
     assert m, "drawer_store.js 找不到 _drawerListLoadingOn(改名或挪走了? 同步本守阵)"
     assert "return !silent && !this._drawerSoftSwitch;" in m.group(1), \
         "门抑制判据不符(应 = 非静默 且 不在软切换窗口)"
 
-    # ② 三列表的 loading 置位必须都经该单点(直写 `if (!silent) xxxLoading = true` = 软切换时门会闪)
+    # 2. 三列表的 loading 置位必须都经该单点(直写 `if (!silent) xxxLoading = true` = 软切换时门会闪)
     #    R21-A-01(2026-10-21): 置位动作收在唯一骨架里, 字段名由差异表 loadingKey 给 ——
     #    表里缺哪个源, 那个源就退回「直写」或干脆不置门, 故这里逐个字段钉表 + 骨架只此一处写法。
     skel, ftable = _drawer_fetch_parts(store_js)
@@ -1558,7 +1558,7 @@ def test_drawer_list_switch_no_loading_flash_wiring():
         assert f'loadingKey: "{flag}"' in ftable, \
             "差异表缺 %s 的 loading 门字段(该源不经门抑制单点, 软切换时门会闪)" % flag
 
-    # ③ 标记置位必须在 _loadDrawerTab **之前**(三 fetcher 在其内 await 前同步读它)
+    # 3. 标记置位必须在 _loadDrawerTab **之前**(三 fetcher 在其内 await 前同步读它)
     sw = re.search(r"_switchDrawerTarget\(hash\) \{(.*?)\n    \},", store_js, re.S)
     assert sw, "drawer_store.js 找不到 _switchDrawerTarget(改名或挪走了? 同步本守阵)"
     sb = sw.group(1)
@@ -1568,13 +1568,13 @@ def test_drawer_list_switch_no_loading_flash_wiring():
     assert i_flag < i_load, \
         "软切换标记必须在 _loadDrawerTab **之前**置位(置后 = 本次 fetcher 读不到, 门照闪)"
 
-    # ④ _stopDrawerPoll **不得**清该标记(它在 _loadDrawerTab→_startDrawerPoll 途中被调用)
+    # 4. _stopDrawerPoll **不得**清该标记(它在 _loadDrawerTab→_startDrawerPoll 途中被调用)
     stop = re.search(r"_stopDrawerPoll\(\) \{(.*?)\n    \},", store_js, re.S)
     assert stop, "drawer_store.js 找不到 _stopDrawerPoll(改名或挪走了? 同步本守阵)"
     assert "this._drawerSoftSwitch =" not in stop.group(1), \
         "_stopDrawerPoll 赋值/清空了 _drawerSoftSwitch —— 它会在 _loadDrawerTab→_startDrawerPoll 途中被调用, 等于置前失效, 门照闪"
 
-    # ⑤ 落定/打断必须清标记(否则标记粘住, 此后切页签不再置 loading); 且"延迟渲染空态"类机制不得回潮
+    # 5. 落定/打断必须清标记(否则标记粘住, 此后切页签不再置 loading); 且"延迟渲染空态"类机制不得回潮
     end = re.search(r"_drawerSwitchEnd\(\) \{(.*?)\n    \},", store_js, re.S)
     assert end, "drawer_store.js 找不到 _drawerSwitchEnd(改名或挪走了? 同步本守阵)"
     assert "this._drawerSoftSwitch = false;" in end.group(1), \
@@ -1751,13 +1751,13 @@ def test_drawer_fetcher_skeleton_single_point():
     (端点 url / 归一 norm / 目标状态键 key / 空值形状 rows+pack, 外加 loading 门字段 / 失败标记 /
     通知时机)。本守阵钉四件事:
 
-    ① 骨架只有一份、`await this.api(` 全层只有一处, 四个具名入口必须是**单行薄壳**(自带请求 = 又一份
+    1. 骨架只有一份、`await this.api(` 全层只有一处, 四个具名入口必须是**单行薄壳**(自带请求 = 又一份
       次序; 薄壳里写第二行 = 差异项没进表);
-    ② `this._drawerStale(hash, seq)` 全层恰 4 处(骨架成功/异常/finally 三路 + `_drawerDone` 一处),
+    2. `this._drawerStale(hash, seq)` 全层恰 4 处(骨架成功/异常/finally 三路 + `_drawerDone` 一处),
       多一处即回潮;
-    ③ 差异表四源齐全、每源字段逐项在位(端点/归一/状态键/空值形状/loadingKey/errKey), 且端点字面量
+    3. 差异表四源齐全、每源字段逐项在位(端点/归一/状态键/空值形状/loadingKey/errKey), 且端点字面量
       只许出现在表里(骨架与薄壳都不认 `/api/torrents/`);
-    ④ 有 node 时真跑 37 项行为电池 —— 同一电池对**收敛前的四份实现**同样 37/37 全绿(实测), 所以它证明
+    4. 有 node 时真跑 37 项行为电池 —— 同一电池对**收敛前的四份实现**同样 37/37 全绿(实测), 所以它证明
       的是「行为不变」, 不是「形态变成这样」。电池覆盖: 四源成功/空载荷/鉴权/静默/失败、软切换窗口与
       silent 都不置门、引用稳定合并(行对象身份)、三张行键口径、peers 键名适配、过期代际与换目标丢弃、
       失败也登记落定。
@@ -1765,7 +1765,7 @@ def test_drawer_fetcher_skeleton_single_point():
     store_js = open(os.path.join(STATIC_ROOT, "shared", "drawer_store.js"), encoding="utf-8").read()
     skel, ftable = _drawer_fetch_parts(store_js)
 
-    # ① 骨架单份 + 具名入口只许是薄壳
+    # 1. 骨架单份 + 具名入口只许是薄壳
     assert len(re.findall(r"async _fetchDrawerSource\(", store_js)) == 1, \
         "取数骨架出现多份(落地次序又分裂了)"
     assert store_js.count("await this.api(") == 1, \
@@ -1777,13 +1777,13 @@ def test_drawer_fetcher_skeleton_single_point():
         assert len(lines) == 1 and "this._fetchDrawerSource(" in lines[0], \
             f"{fn} 不再是单行薄壳(任何额外逻辑都应进 _DT_FETCH 表或骨架, 不许在各入口各写一份)"
 
-    # ② stale 判点收敛
+    # 2. stale 判点收敛
     assert skel.count("this._drawerStale(hash, seq)") == 3, \
         "骨架必须成功/异常/finally 三路都过 _drawerStale(任一路缺失 = 慢响应覆盖新目标)"
     assert store_js.count("this._drawerStale(hash, seq)") == 4, \
         "stale 判点应恰为骨架 3 路 + _drawerDone 1 处(多出来的 = 又有一份落地次序)"
 
-    # ③ 差异表字段齐全 + 端点单点
+    # 3. 差异表字段齐全 + 端点单点
     assert len(re.findall(r"^  (\w+): \{", ftable, re.M)) == 4, "差异表条目数不是 4(多源少源都要同步本守阵)"
     for src in ("detail", "trackers", "files", "peers"):
         entry = re.search(rf"\n  {src}: \{{(.*?)\n  \}},", ftable, re.S)
@@ -1802,7 +1802,7 @@ def test_drawer_fetcher_skeleton_single_point():
         "四个端点应只在差异表各声明一次(散回骨架/入口 = 端点双份)"
     assert "/api/torrents/" not in skel, "骨架里出现端点字面量(它不该认识具体数据源)"
 
-    # ④ 有 node 时真跑行为电池(无 node 静默跳过, 不引入 skip)
+    # 4. 有 node 时真跑行为电池(无 node 静默跳过, 不引入 skip)
     node = shutil.which("node")
     if node:
         proc = subprocess.run(
@@ -1871,13 +1871,13 @@ def test_dt_table_kernel_single_point():
     且没有任何一处做一致性校验」—— 表现是表头错位 / 多出的横带 / 内容挤成一堆 / 对齐不一致 /
     列名自带方向符号再叠一个排序箭头。本守阵钉内核这条解:
 
-    ① 三份 manifest 都登记 dt_table.js 且文件在盘上(缺一份 = 该皮肤整块功能静默消失);
-    ② 四个对外口子齐全(layout / assertLayout / checkLabels / registerCell);
-    ③ 几何单一出口 —— 轨道串 / 对齐 / 列键**同一个返回值**里出来, 且 gridTemplate 恒等于
+    1. 三份 manifest 都登记 dt_table.js 且文件在盘上(缺一份 = 该皮肤整块功能静默消失);
+    2. 四个对外口子齐全(layout / assertLayout / checkLabels / registerCell);
+    3. 几何单一出口 —— 轨道串 / 对齐 / 列键**同一个返回值**里出来, 且 gridTemplate 恒等于
        tracks.join(" ")(调用方不许再自己拼一次, 拼了就又是一处事实源);
-    ④ L3 守卫 —— 列名是纯文案, 方向符号只能由排序态单点渲染(表壳 .arrow); 全仓列定义的
+    4. L3 守卫 —— 列名是纯文案, 方向符号只能由排序态单点渲染(表壳 .arrow); 全仓列定义的
        label 字段零方向符, 用户报的「密度雷达占用表头前多一个箭头」不得回潮;
-    ⑤ 渲染即自查 —— assertLayout 三处计数(轨道 / 列头格 / 数据行子格)必须相等, 不相等就是
+    5. 渲染即自查 —— assertLayout 三处计数(轨道 / 列头格 / 数据行子格)必须相等, 不相等就是
        「多一格 / 少一列」, 而它的视觉表现正是「速度列下方有异常横带」与「多列内容挤在一起」;
        未挂载/未渲染一律不算不一致(面板没开时不得满屏报错)。
     """
@@ -1885,19 +1885,19 @@ def test_dt_table_kernel_single_point():
     js_path = os.path.join(shared, "dt_table.js")
     assert os.path.isfile(js_path), "shared/dt_table.js 不在盘上(内核失踪)"
 
-    # ① 三皮肤清单登记(与 qb_traffic_chart.js 同款纪律)
+    # 1. 三皮肤清单登记(与 qb_traffic_chart.js 同款纪律)
     for ui in _UI_ALL:
         mf = _ui_manifest(ui)
         assert "/shared/dt_table.js" in mf["scripts"], f"{ui} 清单缺 dt_table.js(该皮肤无内核)"
 
     js = open(js_path, encoding="utf-8").read()
 
-    # ② 对外口子
+    # 2. 对外口子
     for port in ("layout:", "assertLayout:", "checkLabels:", "registerCell:", "cellOf:", "hasArrow:"):
         assert port in js, f"dt_table.js 缺对外口子 {port}(内核契约不全)"
     assert "window.DT_TABLE" in js, "dt_table.js 未挂 window.DT_TABLE(调用方取不到)"
 
-    # ④ L3: 列定义的 label 字段零方向符(扫列定义单点 app.js + 变体文件)
+    # 4. L3: 列定义的 label 字段零方向符(扫列定义单点 app.js + 变体文件)
     arrow_re = re.compile(r"[\u2190-\u21ff\u25b2\u25bc\u25c0-\u25ff\u2b00-\u2bff\u27a1\u2b05\u2b06\u2b07]")
     app_js = _app_bundle_text()
     for m in re.finditer(r'label:/s*"([^"]*)"', app_js):
@@ -1916,7 +1916,7 @@ def test_dt_table_kernel_single_point():
             assert not arrow_re.search(m.group(1)), \
                 f"{name} 的列名 {m.group(1)!r} 自带方向符号(与排序箭头叠加)"
 
-    # ③⑤ 有 node 时真跑电池(无 node 静默跳过, 不引入 skip)
+    # 3./5. 有 node 时真跑电池(无 node 静默跳过, 不引入 skip)
     node = shutil.which("node")
     if node:
         proc = subprocess.run(
@@ -1961,13 +1961,13 @@ def test_drawer_tpl_no_table_variants_out_of_scope():
 
 def test_drawer_variant_skeleton_single_point():
     """抽屉变体渲染器族三族重复收敛守阵(issue 26-10-20-2231) ——
-    ① 三态空帧单点 H.emptyFrame: 核心 HELPERS 在册(has 闸 + loading→err→empty
+    1. 三态空帧单点 H.emptyFrame: 核心 HELPERS 在册(has 闸 + loading→err→empty
        优先级 + err 进 title 走 esc)+ 04-12 九件桥变体各 1 处接线(槽类名/空态文案
        逐件对账)+ 内联三态块零残留(「正在加载…」态帧回潮即红); general 三件的裸空态
        (无槽无文案 + lastSig 记账)形状不同, 刻意不收编(接线数钉 0);
-    ② peers 判据单点 reg.peers: 五件(FLAG_META/flagTokens/isBad/bucketOf/isLanIp)
+    2. peers 判据单点 reg.peers: 五件(FLAG_META/flagTokens/isBad/bucketOf/isLanIp)
        在核心 + TPL_REG 挂载 + 07/08/09 经 const P 消费 + 本地副本零残留;
-    ③ dt 值格模板合一: 单一 tpl-aq-dt-peer-cells(类名经 pfx prop 计算, 渲染结果与
+    3. dt 值格模板合一: 单一 tpl-aq-dt-peer-cells(类名经 pfx prop 计算, 渲染结果与
        旧逐字同; dt09 密度雷达特化经 occ prop) + table.js 三组件同名不变共享模板且
        pfx/occ 默认值各表自己 + 旧三模板 id 零残留。
     行为等价(空帧三态 DOM/dt 单元格 DOM)由 e2e 盯(drawer-peers-columns /
@@ -1977,7 +1977,7 @@ def test_drawer_variant_skeleton_single_point():
     cells = open(os.path.join(shared, "tpl", "xtpl-cells.html"), encoding="utf-8").read()
     table = open(os.path.join(shared, "table.js"), encoding="utf-8").read()
 
-    # ---- ① 三态空帧单点(04-12 九件桥变体的 27 块 → 9 处接线 + 1 个 helper) ----
+    # ---- 1. 三态空帧单点(04-12 九件桥变体的 27 块 → 9 处接线 + 1 个 helper) ----
     m = re.search(r"emptyFrame: function \(host, o\) \{.*?\n    \},", core, re.S)
     assert m, "drawer_templates.js 缺三态空帧单点 emptyFrame(改名或挪走了? 同步本守阵)"
     body = m.group(0)
@@ -2006,7 +2006,7 @@ def test_drawer_variant_skeleton_single_point():
         v = open(os.path.join(shared, "drawer_tpl", name + ".js"), encoding="utf-8").read()
         assert "H.emptyFrame(" not in v, f"{name} 不应接 emptyFrame(裸空态是变体记账, 形状不同)"
 
-    # ---- ② peers 判据单点(07/08/09 各手抄一份 → 核心层 reg.peers) ----
+    # ---- 2. peers 判据单点(07/08/09 各手抄一份 → 核心层 reg.peers) ----
     for token in (
         "FLAG_META: {",
         "flagTokens: function (p)",
@@ -2028,7 +2028,7 @@ def test_drawer_variant_skeleton_single_point():
         ):
             assert gone not in v, f"{name} 又出现 peers 判据本地副本 {gone}(应走 reg.peers 单点)"
 
-    # ---- ③ dt 值格模板合一(dt07≡dt08 逐字同, dt09 三处特化 → pfx/occ 两 prop) ----
+    # ---- 3. dt 值格模板合一(dt07≡dt08 逐字同, dt09 三处特化 → pfx/occ 两 prop) ----
     assert 'id="tpl-aq-dt-peer-cells"' in cells, "xtpl-cells.html 缺 peers 共用值格模板"
     for gone in ('id="tpl-aq-dt07-cells"', 'id="tpl-aq-dt08-cells"', 'id="tpl-aq-dt09-cells"'):
         assert gone not in cells, f"xtpl-cells.html 残留旧分片 {gone}(已合一, 回潮 = 双模板副本)"
@@ -2052,20 +2052,20 @@ def test_drawer_variant_skeleton_single_point():
 
 def test_drawer_prio_text_single_point():
     """文件优先级码 -> 中文文案表单点守阵(issue 26-10-29-1340) ——
-    ① 字面表全仓唯一(硬约束): shared/ 递归扫五键表字面仅核心层 PRIO_TEXT 1 处;
-    ② 取文函数带回退参数: prioText 内部查表缺键回落 dash, 与 PRIO_TEXT 一并挂 reg.helpers
+    1. 字面表全仓唯一(硬约束): shared/ 递归扫五键表字面仅核心层 PRIO_TEXT 1 处;
+    2. 取文函数带回退参数: prioText 内部查表缺键回落 dash, 与 PRIO_TEXT 一并挂 reg.helpers
        (dur/size 同族「带回退小工具」通道); 表含 legacy 4 档(「高」);
-    ③ 五处消费接线: drawer.js 两处(setFilePriority 回执 String(p) 兜底 / drawerFileRows 显示
+    3. 五处消费接线: drawer.js 两处(setFilePriority 回执 String(p) 兜底 / drawerFileRows 显示
        「正常」兜底, 方法内经 window.AQB_DRAWER_TPL_REG 取别名, FIT 先例)+ 10/11/12 各经
        H.prioText 消费, 本地 PRIO_LABEL 与字面表零残留;
-    ④ node 真跑(无 node 静默跳过): p∈{0,1,6,7} 可达域新旧输出逐字同(旧内联表作对账基准),
+    4. node 真跑(无 node 静默跳过): p∈{0,1,6,7} 可达域新旧输出逐字同(旧内联表作对账基准),
        4 档补测 prioText(4, "4") === "高"(旧 setFilePriority 表缺 4 会打「4」, 收敛后绿)。
     行为等价由 e2e 盯(drawer-content-variant-tables)。"""
     shared = os.path.join(STATIC_ROOT, "shared")
     core = open(os.path.join(shared, "drawer_templates.js"), encoding="utf-8").read()
     drawer_js = read_shared("drawer.js")
 
-    # ---- ① 字面表全仓唯一 ----
+    # ---- 1. 字面表全仓唯一 ----
     LITERAL = '{ 0: "不下载", 1: "正常", 4: "高", 6: "高", 7: "最高" }'
     hits = []
     for root, _dirs, files in os.walk(shared):
@@ -2079,13 +2079,13 @@ def test_drawer_prio_text_single_point():
                 hits.append(os.path.relpath(p, shared).replace("\\", "/"))
     assert hits == ["drawer_templates.js"], f"优先级文案表字面回潮(应仅核心层 1 处): {hits}"
 
-    # ---- ② 核心层: 全键表 + 带回退取文 ----
+    # ---- 2. 核心层: 全键表 + 带回退取文 ----
     assert f"var PRIO_TEXT = {LITERAL};" in core, \
         "核心层缺 PRIO_TEXT 全键表(缺 legacy 4 档 = setFilePriority 回执打码原文的旧坑回潮)"
     assert "prioText: function (p, dash)" in core, "核心层缺带回退参数的 prioText 取文函数"
     assert "PRIO_TEXT: PRIO_TEXT," in core, "HELPERS 未随表挂出 PRIO_TEXT(消费方取不到表面)"
 
-    # ---- ③ 五处消费接线, 本地副本零残留 ----
+    # ---- 3. 五处消费接线, 本地副本零残留 ----
     assert "prioText(p, String(p))" in drawer_js, "drawer.js setFilePriority 回执未接 prioText(兜底码原文)"
     assert 'window.AQB_DRAWER_TPL_REG.helpers.prioText(p, "正常")' in drawer_js, \
         "drawer.js drawerFileRows 显示未接 prioText(兜底「正常」)"
@@ -2095,7 +2095,7 @@ def test_drawer_prio_text_single_point():
         assert "H.prioText(" in v, f"{name} 未接 H.prioText 单点"
         assert "PRIO_LABEL" not in v, f"{name} 残留本地 PRIO_LABEL(应走 reg.helpers::prioText)"
 
-    # ---- ④ node 真跑: 可达域等价 + 4 档补测 ----
+    # ---- 4. node 真跑: 可达域等价 + 4 档补测 ----
     node = shutil.which("node")
     if not node:
         return
@@ -2140,19 +2140,19 @@ console.log(JSON.stringify({ total: checks.length, ok: checks.filter((c) => c[1]
 
 def test_drawer_tracker_bucket_text_single_point():
     """tracker 五桶文案表单点守阵(issue 26-10-29-1343) ——
-    ① 桶文案/桶集单源: 核心 TRACKERS(TRACKER_BUCKETS 全列 text/sev/order/cnt 逐字钉住 +
+    1. 桶文案/桶集单源: 核心 TRACKERS(TRACKER_BUCKETS 全列 text/sev/order/cnt 逐字钉住 +
        TRACKER_BUCKET_ORDER)挂 reg.trackers(reg.peers 同类判据命名空间);
-    ② 桶文案词唯一: 「未联系」(只在桶文案出现的词)在 drawer_tpl/ 零命中、核心层表内恰 1 处
+    2. 桶文案词唯一: 「未联系」(只在桶文案出现的词)在 drawer_tpl/ 零命中、核心层表内恰 1 处
        (drawer.js 的 drawerTrackerStatus 状态码表是另一张表, 不在本项范围);
-    ③ 04/05/06 各经 reg.trackers 消费(TK 别名), 本地 BUCKET/GROUPS 字面与 04 PILLS 的
+    3. 04/05/06 各经 reg.trackers 消费(TK 别名), 本地 BUCKET/GROUPS 字面与 04 PILLS 的
        text/tip 桶名字面零残留(cls/tip/色族/各版式桶序是呈现语义, 留各自文件);
-    ④ node 真跑(无 node 静默跳过): text/sev/cnt 与旧表逐字对账, sev 权值 0/1/2/3/9 不动
+    4. node 真跑(无 node 静默跳过): text/sev/cnt 与旧表逐字对账, sev 权值 0/1/2/3/9 不动
        (04/06 排序权值等价), order 与 TRACKER_BUCKET_ORDER 下标同源。
     行为等价由 e2e 盯(drawer-trackers-variant-tables / drawer-trackers-reannounce)。"""
     shared = os.path.join(STATIC_ROOT, "shared")
     core = open(os.path.join(shared, "drawer_templates.js"), encoding="utf-8").read()
 
-    # ---- ① 核心层单源表(全列逐字钉住) ----
+    # ---- 1. 核心层单源表(全列逐字钉住) ----
     for row in (
         'err: { text: "未工作", sev: 0, order: 0, cnt: "正在拖后腿 · 优先处理" }',
         'warn: { text: "未联系", sev: 1, order: 1, cnt: "可用但需关注" }',
@@ -2165,7 +2165,7 @@ def test_drawer_tracker_bucket_text_single_point():
         "TRACKER_BUCKET_ORDER 漂了(05 分区顺序与 04/06 sev 升序同源)"
     assert "trackers: TRACKERS," in core, "TPL_REG 未挂 trackers 命名空间(变体经 reg.trackers 消费)"
 
-    # ---- ② 桶文案词唯一 ----
+    # ---- 2. 桶文案词唯一 ----
     tpl_dir = os.path.join(shared, "drawer_tpl")
     for fn in os.listdir(tpl_dir):
         if not fn.endswith(".js"):
@@ -2174,7 +2174,7 @@ def test_drawer_tracker_bucket_text_single_point():
         assert "未联系" not in v, f"drawer_tpl/{fn} 出现桶文案字面「未联系」(应读 reg.trackers 单点)"
     assert core.count("未联系") == 1, "核心层桶文案字面应恰 1 处(TRACKER_BUCKETS 表内)"
 
-    # ---- ③ 三变体接线, 本地副本零残留 ----
+    # ---- 3. 三变体接线, 本地副本零残留 ----
     for name, gone in (
         ("04-trackers-status-cards-tall", ('const BUCKET = {', 'text: "工作"', 'tip: "工作 = 绿"')),
         ("05-trackers-health-groups-low", ("const GROUPS = [", 'cnt: "正在拖后腿 · 优先处理"')),
@@ -2185,7 +2185,7 @@ def test_drawer_tracker_bucket_text_single_point():
         for g in gone:
             assert g not in v, f"{name} 又出现桶表本地副本 {g!r}(应读 reg.trackers 单点)"
 
-    # ---- ④ node 真跑: text/sev/cnt/order 与旧表逐字对账 ----
+    # ---- 4. node 真跑: text/sev/cnt/order 与旧表逐字对账 ----
     node = shutil.which("node")
     if not node:
         return
@@ -2239,15 +2239,15 @@ console.log(JSON.stringify({ total: checks.length, ok: checks.filter((c) => c[1]
 
 def test_drawer_content_file_tree_single_point():
     """content 目录树构建/聚合单点守阵(issue 26-10-29-1343) ——
-    ① 核心单点: CONTENT(buildFileTree/findNode)在核心层并挂 TPL_REG.content
+    1. 核心单点: CONTENT(buildFileTree/findNode)在核心层并挂 TPL_REG.content
        (reg.peers/reg.trackers 同类「按页签判据命名空间」; 不落 helpers —— 那里只住
        跨页签骨架机制, 树构建只有 content 组消费);
-    ② 单点唯一性: drawer_tpl/ 全体 function buildTree/aggregate/newDir/findNode 零命中;
-    ③ 接线与零残留: 10/12 各 const FT = reg.content; 一处 + FT.buildFileTree/FT.findNode
+    2. 单点唯一性: drawer_tpl/ 全体 function buildTree/aggregate/newDir/findNode 零命中;
+    3. 接线与零残留: 10/12 各 const FT = reg.content; 一处 + FT.buildFileTree/FT.findNode
        调用数逐件对账(10: 4/2 —— rowsFn/render/onClick 优先级段/onClick 折叠全收;
        12: 1/1) + 旧模型字面零残留(minAv/布尔对/裸 availability 叶子字段; 11 的 derive
        扁平表是第三算法不在本项, 自有 stats 模型不查)+ 11 头注声明口径以 buildFileTree 为准;
-    ④ node 语义电池(等价性主证据, 无 node 静默跳过): 新旧三实现(新单点/旧 10/旧 12)
+    4. node 语义电池(等价性主证据, 无 node 静默跳过): 新旧三实现(新单点/旧 10/旧 12)
        对 fixture 组逐节点归一化 JSON 全等 —— 归一只做两件已裁定的事: 旧 10 的布尔对
        (hasAv/minAv)换算成标量 av、旧 12 的 null 值归一成无值(单一哨兵 undefined 的
        语义收敛, 见核心 CONTENT 头注); dirs 统一按聚合公式现算(旧 12 无该字段)。
@@ -2256,7 +2256,7 @@ def test_drawer_content_file_tree_single_point():
     core = open(os.path.join(shared, "drawer_templates.js"), encoding="utf-8").read()
     tpl_dir = os.path.join(shared, "drawer_tpl")
 
-    # ---- ① 核心单点(模型取两份并集 + 标量 av 单一哨兵) ----
+    # ---- 1. 核心单点(模型取两份并集 + 标量 av 单一哨兵) ----
     assert "buildFileTree: function (files)" in core, "核心层缺 content 目录树单点 buildFileTree"
     assert "findNode: function (n, path)" in core, "核心层缺 findNode(应随树单点一并导出)"
     assert "content: CONTENT," in core, "TPL_REG 未挂 content 命名空间(变体经 reg.content 消费)"
@@ -2266,7 +2266,7 @@ def test_drawer_content_file_tree_single_point():
     ):
         assert shape in core, f"核心树节点模型形状漂了: {shape}(dirs 恒有 / null 同为无值)"
 
-    # ---- ② 单点唯一性: 变体层四函数定义零命中 ----
+    # ---- 2. 单点唯一性: 变体层四函数定义零命中 ----
     for fn in sorted(os.listdir(tpl_dir)):
         if not fn.endswith(".js"):
             continue
@@ -2274,7 +2274,7 @@ def test_drawer_content_file_tree_single_point():
         for gone in ("function buildTree", "function aggregate", "function newDir", "function findNode"):
             assert gone not in v, f"drawer_tpl/{fn} 又出现树构建本地副本 {gone!r}(应走 reg.content 单点)"
 
-    # ---- ③ 接线逐件对账 + 旧模型零残留 ----
+    # ---- 3. 接线逐件对账 + 旧模型零残留 ----
     for name, ft_calls, fn_calls in (
         ("10-content-tree-detail-tall", 4, 2),
         ("12-content-space-treemap-collapsed", 1, 1),
@@ -2290,7 +2290,7 @@ def test_drawer_content_file_tree_single_point():
     v11 = open(os.path.join(tpl_dir, "11-content-treegrid-batch-low.js"), encoding="utf-8").read()
     assert "buildFileTree" in v11, "11 头注缺「口径以核心 buildFileTree 为准」声明(第三算法未并入, 口径须对齐)"
 
-    # ---- ④ node 语义电池: 新旧三实现逐节点 JSON 全等 ----
+    # ---- 4. node 语义电池: 新旧三实现逐节点 JSON 全等 ----
     node = shutil.which("node")
     if not node:
         return
@@ -2456,7 +2456,7 @@ const avNew = (n) => n.av;
 const avOld10 = (n) => (n.hasAv ? n.minAv : undefined);
 const avOld12 = (n) => n.av; /* 入参已无 null, 直传 */
 
-/* ---- fixture 组(issue 验证手段②: 嵌套两层/根单文件/size 缺失/null·负数·小数/空目录段/空名) ---- */
+/* ---- fixture 组(issue 验证手段 2: 嵌套两层/根单文件/size 缺失/null·负数·小数/空目录段/空名) ---- */
 const FIXTURES = [
   { name: "嵌套两层+根单文件+零/负/小数可用性", files: [
     { name: "tv/Show/S01E01.mkv", size: 1073741824, progress: 0.5, priority: 1, availability: 2.5 },
@@ -2546,18 +2546,18 @@ console.log(JSON.stringify({ total: checks.length, ok: checks.filter((c) => c[1]
 
 def test_drawer_tpl_row_memoization_and_cheap_sig():
     """千级文件列表止血守阵(计划 26-11-02-0351 W1) ——
-    ① sig 廉价指纹: 10/11/12 三变体 JSON.stringify(files) 零回潮(引用相等 O(1) 快路 + 引用变
+    1. sig 廉价指纹: 10/11/12 三变体 JSON.stringify(files) 零回潮(引用相等 O(1) 快路 + 引用变
        O(F) 数值滚动指纹); filesSig 收口核心 helpers 单点(R5#113: 原为 10/11 各一份、12 漏随
        W1 收口仍全量 stringify, 抽 reg 单点三件共用消复制), 三件一律经 H.filesSig 消费;
-    ② 行对象按 path 记忆化: 两变体各持模块级 rowMem(path -> 输入快照 + 上轮行对象), 行装配
+    2. 行对象按 path 记忆化: 两变体各持模块级 rowMem(path -> 输入快照 + 上轮行对象), 行装配
        (rowOf/dirRowOf/fileRowOf)命中即复用 —— 桥 keyed diff 对引用相等行跳渲; _cls 挂行
        对象, 勾选/折叠/选中态必须进快照失效面(漏键 = 染色停旧值);
-    ③ dt11 O(D×F) 装配冗余消除: stats.ck 随 derive 单遍前缀归并落账, dirRowOf 不再
+    3. dt11 O(D×F) 装配冗余消除: stats.ck 随 derive 单遍前缀归并落账, dirRowOf 不再
        subtreeFiles 每目录全表 filter、chkStateOf 不再双算(全文件只剩定义 + toggleSet +
        master 三处);
-    ④ CSS: dt_table.css content-visibility:auto + contain-intrinsic-size 覆盖 dt10/dt11
+    4. CSS: dt_table.css content-visibility:auto + contain-intrinsic-size 覆盖 dt10/dt11
        行容器(定值 = 各自行高 29px/27px, 屏外行渲染税立收);
-    ⑤ node 电池(无 node 静默跳过): 同一份数据二次派生全行引用相等 / 改一文件 progress 仅
+    5. node 电池(无 node 静默跳过): 同一份数据二次派生全行引用相等 / 改一文件 progress 仅
        该行+祖先目录链为新对象 / 选中与勾选翻转只重装配该行+祖先链且 _cls 正确翻转 / 折叠
        目录行重装配且子树不再 emit / dt11 目录聚合(大小/进度/文件数/最低可用性)与核心
        buildFileTree 口径逐项相等。行为等价 e2e 盯 dt-live-update。"""
@@ -2568,7 +2568,7 @@ def test_drawer_tpl_row_memoization_and_cheap_sig():
     v11 = open(os.path.join(tpl_dir, "11-content-treegrid-batch-low.js"), encoding="utf-8").read()
     v12 = open(os.path.join(tpl_dir, "12-content-space-treemap-collapsed.js"), encoding="utf-8").read()
 
-    # ---- ① sig 廉价指纹(计划验收机检点: JSON.stringify(files) 零回潮; R5#113 起指纹函数
+    # ---- 1. sig 廉价指纹(计划验收机检点: JSON.stringify(files) 零回潮; R5#113 起指纹函数
     #      收口核心单点, 变体侧钉消费接线 —— 在文件里复刻第三份即红) ----
     assert "filesSig: function" in core, "核心 helpers 缺 filesSig 单点(R5#113 收口被拆回)"
     for name, v in (
@@ -2577,12 +2577,12 @@ def test_drawer_tpl_row_memoization_and_cheap_sig():
     ):
         assert "JSON.stringify(files)" not in v, f"{name}: sig 仍全量序列化 files(W1 廉价指纹回潮)"
         assert "H.filesSig(files)" in v, f"{name}: sig 未走核心 filesSig 廉价指纹单点"
-    # ---- ② 记忆化: 模块级缓存 + 命中快照(命名避开 T/R/H 单点; 12 自管 DOM 无桥行, 不在此列) ----
+    # ---- 2. 记忆化: 模块级缓存 + 命中快照(命名避开 T/R/H 单点; 12 自管 DOM 无桥行, 不在此列) ----
     for name, v in (("10-content-tree-detail-tall", v10), ("11-content-treegrid-batch-low", v11)):
         assert "const rowMem = new Map()" in v, f"{name}: 缺模块级行记忆化缓存 rowMem"
         assert "rowMem.clear()" in v, f"{name}: 记忆化缓存无清空路径(换种子/卸载)"
 
-    # ---- ③ dt11 O(D×F) 消除: subtreeFiles 只剩定义 + toggleRow/onChange 两交互点;
+    # ---- 3. dt11 O(D×F) 消除: subtreeFiles 只剩定义 + toggleRow/onChange 两交互点;
     #      chkStateOf 只剩定义 + toggleSet + master 三处; 勾选计数随 derive 落 stats.ck ----
     assert v11.count("subtreeFiles(") == 3, \
         f"11: subtreeFiles 调用面漂了(应 3 处 = 定义 + toggleRow + onChange; dirRowOf 全表 filter 应已退役, 实测 {v11.count('subtreeFiles(')})"
@@ -2590,14 +2590,14 @@ def test_drawer_tpl_row_memoization_and_cheap_sig():
         f"11: chkStateOf 调用面漂了(应 3 处 = 定义 + toggleSet + master; dirRowOf 双算应已退役, 实测 {v11.count('chkStateOf(')})"
     assert "ck: 0" in v11 and "if (isCk) s.ck++;" in v11, "11: 勾选计数未随 derive 单遍落 stats.ck"
 
-    # ---- ④ CSS: content-visibility 规则在位(行高定值与各面行高对齐) ----
+    # ---- 4. CSS: content-visibility 规则在位(行高定值与各面行高对齐) ----
     css = open(os.path.join(shared, "dt_table.css"), encoding="utf-8").read()
     assert "content-visibility: auto" in css, "dt_table.css 缺 content-visibility:auto(W1 屏外行渲染税)"
     for lst, h in ((".dt10-list .group-row", "29px"), (".dt11-list .group-row", "27px")):
         assert f".drawer-body {lst}" in css, f"dt_table.css 缺 {lst} 选择器"
         assert f"contain-intrinsic-size: auto {h}" in css, f"dt_table.css 缺 {lst} 的 contain-intrinsic-size 定值 {h}"
 
-    # ---- ⑤ node 电池: 两变体 rowsFn 真跑(记忆化引用相等 / 失效面 / 聚合口径) ----
+    # ---- 5. node 电池: 两变体 rowsFn 真跑(记忆化引用相等 / 失效面 / 聚合口径) ----
     node = shutil.which("node")
     if not node:
         return
@@ -2847,43 +2847,43 @@ if (!m) {
     _startDrawerPoll() { this.polled += 1; },
     drawerPeerRows() { return []; },
   }, over);
-  // ① 双源都有数据(「已有数据不重发」): 不 bump 代际、零补发
+  // 1. 双源都有数据(「已有数据不重发」): 不 bump 代际、零补发
   let vm = mkInst({ drawer: { open: true, tab: "general", hash: "HA", detail: { name: "x" },
                               loading: false, files: [{ index: 0 }], filesLoading: false } });
   store._drawerMergeSupply.call(vm);
   push("双源都有数据: 代际不前进", vm._drawerLoadSeq === 5);
   push("双源都有数据: 零补发", vm.fetched.length === 0);
-  // ② 双源都在途(loading 门持有, issue 本体场景): 不 bump —— 在飞取数(旧 seq)不被打成 stale
+  // 2. 双源都在途(loading 门持有, issue 本体场景): 不 bump —— 在飞取数(旧 seq)不被打成 stale
   vm = mkInst({ drawer: { open: true, tab: "general", hash: "HA", detail: null,
                           loading: true, files: [], filesLoading: true } });
   store._drawerMergeSupply.call(vm);
   push("双源都在途: 代际不前进(在飞取数不被孤儿化)", vm._drawerLoadSeq === 5);
   push("双源都在途: 零补发", vm.fetched.length === 0);
-  // ③ 单源缺口: 代际恰好前进一次, 只补缺的那源且带新代际
+  // 3. 单源缺口: 代际恰好前进一次, 只补缺的那源且带新代际
   vm = mkInst({ drawer: { open: true, tab: "general", hash: "HA", detail: { name: "x" },
                           loading: false, files: [], filesLoading: false } });
   store._drawerMergeSupply.call(vm);
   push("单源缺口: 代际恰好前进一次", vm._drawerLoadSeq === 6);
   push("单源缺口: 只补 files 且带新代际", vm.fetched.length === 1 && vm.fetched[0][0] === "files" && vm.fetched[0][1] === 6);
-  // ④ 双源都缺: 代际只 bump 一次, 两源同代际(与旧口径一致)
+  // 4. 双源都缺: 代际只 bump 一次, 两源同代际(与旧口径一致)
   vm = mkInst();
   store._drawerMergeSupply.call(vm);
   push("双源都缺: 代际恰好前进一次", vm._drawerLoadSeq === 6);
   push("双源都缺: detail+files 同代际补发", vm.fetched.map((f) => f[0]).join(",") === "files,detail" && vm.fetched[0][1] === 6);
-  // ⑤ tp 对双源在途: 不 bump、零补发, 但页签轮询照常起(轮询与代际无关, 不得因早退丢起轮)
+  // 5. tp 对双源在途: 不 bump、零补发, 但页签轮询照常起(轮询与代际无关, 不得因早退丢起轮)
   vm = mkInst({ drawer: { open: true, tab: "trackers", hash: "HA", trackers: [],
                           trackersLoading: true, peersLoading: false }, peerRows: [1, 2] });
   vm.drawerPeerRows = function () { return this.peerRows; };
   store._drawerMergeSupply.call(vm);
   push("tp 双源在途: 代际不前进", vm._drawerLoadSeq === 5);
   push("tp 双源在途: 零补发且轮询照常起", vm.fetched.length === 0 && vm.polled === 1);
-  // ⑥ tp 对有缺口: 代际恰好前进一次, 两源同代际 + 轮询照常起
+  // 6. tp 对有缺口: 代际恰好前进一次, 两源同代际 + 轮询照常起
   vm = mkInst({ drawer: { open: true, tab: "peers", hash: "HA", trackers: [],
                           trackersLoading: false, peersLoading: false } });
   store._drawerMergeSupply.call(vm);
   push("tp 有缺口: 代际恰好前进一次且两源同代际", vm._drawerLoadSeq === 6 && vm.fetched.length === 2 && vm.fetched.every((f) => f[1] === 6));
   push("tp 有缺口: 轮询照常起", vm.polled === 1);
-  // ⑦ 合并关: 代际与取数都不动(既有早退守卫仍在)
+  // 7. 合并关: 代际与取数都不动(既有早退守卫仍在)
   vm = mkInst({ dtSplitOn: false });
   store._drawerMergeSupply.call(vm);
   push("合并关: 代际与取数都不动", vm._drawerLoadSeq === 5 && vm.fetched.length === 0);
