@@ -40,6 +40,7 @@ import sys
 import time
 import urllib.parse
 from pathlib import Path
+from typing import Callable
 
 import pytest
 import yaml
@@ -226,8 +227,13 @@ def write_cfg(case: Path, trackers: dict, rule_sets: dict, *, web: bool = True) 
     return path
 
 
-def wait_until(fn, timeout: float, desc: str, interval: float = 0.4):
-    """轮询到 fn() 为真值并返回它; 超时抛 AssertionError 带最后一次观测。"""
+def wait_until(fn, timeout: float, desc: str | Callable[[], str], interval: float = 0.4):
+    """轮询到 fn() 为真值并返回它; 超时抛 AssertionError 带最后一次观测。
+
+    desc 支持 str 或惰性 callable(超时构造报错时才求值): 调用点拼带「最后观测值」的
+    f-string desc 必须传 lambda —— str 在调用期求值, 超时报错里显示的是等待前的旧值
+    而非超时时刻实况(issue 26-11-08-0044, RM07-11 首版踩过)。
+    """
     deadline = time.time() + timeout
     last = None
     while time.time() < deadline:
@@ -235,7 +241,7 @@ def wait_until(fn, timeout: float, desc: str, interval: float = 0.4):
         if last:
             return last
         time.sleep(interval)
-    raise AssertionError(f"等待超时({timeout}s): {desc}; 最后观测: {last}")
+    raise AssertionError(f"等待超时({timeout}s): {desc() if callable(desc) else desc}; 最后观测: {last}")
 
 
 def settle(qb, ih: str, timeout: float = 30.0) -> dict:
@@ -472,7 +478,10 @@ def test_rm03_03_speed_limits_and_manual_odd_skip():
             lambda: (qb.torrent(ha) or {}).get("dl_limit") == 64 * 1024 and
             (qb.torrent(ha) or {}).get("up_limit") == 128 * 1024,
             25,
-            f"甲限速回读不符: dl={(qb.torrent(ha) or {}).get('dl_limit')} up={(qb.torrent(ha) or {}).get('up_limit')}",
+            lambda: (
+                f"甲限速回读不符: dl={(qb.torrent(ha) or {}).get('dl_limit')}"
+                f" up={(qb.torrent(ha) or {}).get('up_limit')}"
+            ),
         )
         # ---- 乙: 奇数 KiB 手动限速必须原样(负向红验, ≥3 节拍窗口)
         time.sleep(9)
@@ -543,12 +552,12 @@ def test_rm03_04_var_replacement_with_and_without_hr():
 
         wait_until(
             lambda: "keep-3D" in _tags_of(qb.torrent(ha) or {}), 25,
-            f"甲标签未替换出 keep-3D: {sorted(_tags_of(qb.torrent(ha) or {}))}"
+            lambda: (f"甲标签未替换出 keep-3D: {sorted(_tags_of(qb.torrent(ha) or {}))}")
         )
         wait_until(
             lambda: "keep-${required_seeding_time}" in _tags_of(qb.torrent(hb) or {}),
             15,
-            f"乙标签不是字面原文(无 hr 被替换/丢失): {sorted(_tags_of(qb.torrent(hb) or {}))}",
+            lambda: (f"乙标签不是字面原文(无 hr 被替换/丢失): {sorted(_tags_of(qb.torrent(hb) or {}))}"),
         )
         # HR 模块牵动检查(计划 §08 风险 7): 带了 hr 配置, 若 HR 面对假种子发起动作, 日志必留痕
         log = log_text(case)

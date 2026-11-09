@@ -45,6 +45,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
+from typing import Callable
 
 import pytest
 import yaml
@@ -169,11 +170,16 @@ def case_dir(name: str) -> Path:
     return d
 
 
-def wait_until(fn, timeout: float, desc: str, interval: float = 0.4):
+def wait_until(fn, timeout: float, desc: str | Callable[[], str], interval: float = 0.4):
     """轮询到 fn() 为真值并返回它; 超时抛 AssertionError 带最后一次观测。
 
     fn 抛异常视同「还没就绪」继续轮询(启动竞态实况 2026-10-31 RM06-05: 端点启动行比 WEB 行
-    晚 ~1ms, 首轮 fn 内 assert 直接炸掉会假红); 超时消息带最后一个异常。"""
+    晚 ~1ms, 首轮 fn 内 assert 直接炸掉会假红); 超时消息带最后一个异常。
+
+    desc 支持 str 或惰性 callable(超时构造报错时才求值): 调用点拼带「最后观测值」的
+    f-string desc 必须传 lambda —— str 在调用期求值, 超时报错里显示的是等待前的旧值
+    而非超时时刻实况(issue 26-11-08-0044, RM07-11 首版踩过)。
+    """
     deadline = time.time() + timeout
     last = None
     last_exc: Exception | None = None
@@ -186,7 +192,7 @@ def wait_until(fn, timeout: float, desc: str, interval: float = 0.4):
             return last
         time.sleep(interval)
     tail = f"; 最后异常: {last_exc}" if last_exc is not None else ""
-    raise AssertionError(f"等待超时({timeout}s): {desc}; 最后观测: {last}{tail}")
+    raise AssertionError(f"等待超时({timeout}s): {desc() if callable(desc) else desc}; 最后观测: {last}{tail}")
 
 
 def settle(qb, ih: str, timeout: float = 30.0) -> dict:
@@ -770,7 +776,7 @@ def test_rm06_03_hit_lane_a_tagging():
         # ---- 管束打标: 考察中绝对权威 → 维护管线把 rm06-hr 打上种子(qB API 回读, strip 口径)
         wait_until(
             lambda: HR_TAG in _tags_of(qb.torrent(ih) or {}), 30,
-            f"考察中种子未被打 {HR_TAG}: {sorted(_tags_of(qb.torrent(ih) or {}))}"
+            lambda: (f"考察中种子未被打 {HR_TAG}: {sorted(_tags_of(qb.torrent(ih) or {}))}")
         )
         tags = _tags_of(qb.torrent(ih) or {})
         assert SAT_TAG not in tags, f"达标标签不该被打(做种 0s < required): {sorted(tags)}"
@@ -851,7 +857,7 @@ def test_rm06_04_miss_lane_release_and_contrast():
         assert releases_1 >= 1, "无「未列出」放行日志(对账签发面未发生)"
         wait_until(
             lambda: HR_TAG in _tags_of(qb.torrent(ih_hit) or {}), 30,
-            f"对照乙未被打 {HR_TAG}: {sorted(_tags_of(qb.torrent(ih_hit) or {}))}"
+            lambda: (f"对照乙未被打 {HR_TAG}: {sorted(_tags_of(qb.torrent(ih_hit) or {}))}")
         )
         # 甲在站点数据到位前会被行 4 本地兜底保守打标(maintenance_mod「其余全量纳入」), 打标先于
         # 放行证据; RELEASED 的语义是「不打标维持现状」不摘标 —— 故甲的放行判据咬 verified 记录,
@@ -1105,7 +1111,7 @@ def test_rm06_07_exclude_table_dynamic_switch():
         force_wave(60)
         wait_until(
             lambda: HR_TAG in _tags_of(qb.torrent(ih_hit) or {}), 30,
-            f"对照乙未被打 {HR_TAG}(排除表误伤受管种子?): {sorted(_tags_of(qb.torrent(ih_hit) or {}))}"
+            lambda: (f"对照乙未被打 {HR_TAG}(排除表误伤受管种子?): {sorted(_tags_of(qb.torrent(ih_hit) or {}))}")
         )
         tids_1 = stub.torrent_tids()
         assert 601 in tids_1, f"波 1 缺 601 身份下载任务(A 档行无条件): {tids_1}"

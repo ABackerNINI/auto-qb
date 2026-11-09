@@ -44,6 +44,7 @@ import time
 import urllib.parse
 import urllib.request
 from pathlib import Path
+from typing import Callable
 
 import pytest
 import yaml
@@ -230,8 +231,13 @@ def write_cfg(case: Path,
     return path, web_port
 
 
-def wait_until(fn, timeout: float, desc: str, interval: float = 0.4):
-    """轮询到 fn() 为真值并返回它; 超时抛 AssertionError 带最后一次观测。"""
+def wait_until(fn, timeout: float, desc: str | Callable[[], str], interval: float = 0.4):
+    """轮询到 fn() 为真值并返回它; 超时抛 AssertionError 带最后一次观测。
+
+    desc 支持 str 或惰性 callable(超时构造报错时才求值): 调用点拼带「最后观测值」的
+    f-string desc 必须传 lambda —— str 在调用期求值, 超时报错里显示的是等待前的旧值
+    而非超时时刻实况(issue 26-11-08-0044, RM07-11 首版踩过)。
+    """
     deadline = time.time() + timeout
     last = None
     while time.time() < deadline:
@@ -239,7 +245,7 @@ def wait_until(fn, timeout: float, desc: str, interval: float = 0.4):
         if last:
             return last
         time.sleep(interval)
-    raise AssertionError(f"等待超时({timeout}s): {desc}; 最后观测: {last}")
+    raise AssertionError(f"等待超时({timeout}s): {desc() if callable(desc) else desc}; 最后观测: {last}")
 
 
 def settle(qb, ih: str, timeout: float = 30.0) -> dict:
@@ -336,11 +342,11 @@ def test_rm05_01_match_three_way_split():
         # ---- A/C: 命中(多匹配降级用书写序第一个)→ 只打 rm05-hit
         wait_until(
             lambda: "rm05-hit" in _tags_of(qb.torrent(ha) or {}), 25,
-            f"A 未被打 rm05-hit: {sorted(_tags_of(qb.torrent(ha) or {}))}"
+            lambda: (f"A 未被打 rm05-hit: {sorted(_tags_of(qb.torrent(ha) or {}))}")
         )
         wait_until(
             lambda: "rm05-hit" in _tags_of(qb.torrent(hc) or {}), 15,
-            f"C 未被打 rm05-hit: {sorted(_tags_of(qb.torrent(hc) or {}))}"
+            lambda: (f"C 未被打 rm05-hit: {sorted(_tags_of(qb.torrent(hc) or {}))}")
         )
         # ---- 多匹配 WARNING 必须出现, 且一行里同时点出两个条目(降级是「都能匹配」的前提下取第一个)
         wait_until(
@@ -401,7 +407,7 @@ def test_rm05_02_hot_reload_rebind():
         assert p.wait_log("启动 qB 管理器", 40), f"产品没起来:\n{p.log()[-800:]}"
         wait_until(
             lambda: "rm05-v1" in _tags_of(qb.torrent(h) or {}), 25,
-            f"v1 标签未打上(v1 匹配/维护面不成立): {sorted(_tags_of(qb.torrent(h) or {}))}"
+            lambda: (f"v1 标签未打上(v1 匹配/维护面不成立): {sorted(_tags_of(qb.torrent(h) or {}))}")
         )
 
         # ---- 经 PUT /api/config 把该条目 tags 改为 [rm05-v2](trackers 段变 → TrackerModule.apply)
@@ -431,7 +437,7 @@ def test_rm05_02_hot_reload_rebind():
         wait_until(
             lambda: "rm05-v2" in _tags_of(qb.torrent(h) or {}),
             25,
-            f"重绑后新节拍未打 rm05-v2(存量记录未真重绑): {sorted(_tags_of(qb.torrent(h) or {}))}",
+            lambda: (f"重绑后新节拍未打 rm05-v2(存量记录未真重绑): {sorted(_tags_of(qb.torrent(h) or {}))}"),
         )
         # 新节拍不再打 v1(新 conf 的 tags 只有 v2); v1 残留允许(计划写死不断言旧标被清)
         tags = _tags_of(qb.torrent(h) or {})
@@ -485,7 +491,10 @@ def test_rm05_03_tracker_speed_limit_and_manual_skip():
             lambda: (qb.torrent(ha) or {}).get("dl_limit") == 64 * 1024 and
             (qb.torrent(ha) or {}).get("up_limit") == 128 * 1024,
             25,
-            f"甲限速回读不符: dl={(qb.torrent(ha) or {}).get('dl_limit')} up={(qb.torrent(ha) or {}).get('up_limit')}",
+            lambda: (
+                f"甲限速回读不符: dl={(qb.torrent(ha) or {}).get('dl_limit')}"
+                f" up={(qb.torrent(ha) or {}).get('up_limit')}"
+            ),
         )
         # ---- 乙: 加完立即预置奇数 KiB(抢在产品下个同步拍之前), added 管线读到奇数 → skip
         hb = fake_seed(qb, "rm05c3b.bin", 256 * 1024, savepath, "rm05c3-b")
@@ -556,7 +565,7 @@ def test_rm05_04_seed_tags_family():
         wait_until(
             lambda: _tags_of(qb.torrent(h) or {}) == {TAG, "rm05-keep", "RM05-SIM"},
             25,
-            f"终态 tags 不符: {sorted(_tags_of(qb.torrent(h) or {}))}",
+            lambda: (f"终态 tags 不符: {sorted(_tags_of(qb.torrent(h) or {}))}"),
         )
         time.sleep(7)  # 再等 ≥2 节拍: 稳态不回退(regex 不会把 rm05-keep/RM05-SIM/real-fake 删掉)
         tags = _tags_of(qb.torrent(h) or {})
@@ -628,7 +637,7 @@ def test_rm05_05_delete_tags_global_and_tracker_tags_ref():
         wait_until(
             lambda: last_matched_set() == {"rm05-g1", "rm05-g2", "rm05-orphan-a"},
             20,
-            f"删除命中集不是预期三元(@tracker_tags 展开/regex 分叉): {last_matched_set()}",
+            lambda: (f"删除命中集不是预期三元(@tracker_tags 展开/regex 分叉): {last_matched_set()}"),
         )
         # ---- 跨 ≥3 节拍观测。实测事实(首轮采样两次证实): 维护管线每 interval 重打 g1/g2
         #      (种子级 add_tags 隐式重建定义), 与全局删除在同一节拍内成对发生(先删后打),

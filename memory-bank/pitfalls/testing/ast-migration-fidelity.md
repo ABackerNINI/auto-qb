@@ -1,7 +1,7 @@
 # 逐行迁移的保真坑: ast 求值串改写内容 / 生成模块自我 import / 分批重写清空前批产物
 
 > 摘要: 机械拆分/迁移文件时, **AST 只给结构, 内容必须从源行取** —— `ast.get_docstring` 返回的是**求值后**的字符串(转义已解开), 拿它写回会把 `\\p{L}` 吃成 `\p{L}`(内容被静默改写 + 触发 SyntaxWarning); 另一头, 生成共享模块时若把「跨文件共享名」原样写进该模块自己的 `from X import ...`, 会撞自我 import(模块尚未初始化完)。**分批**迁移还有第三面: 无条件重写「共享模块」会在后续批把它清空(闭包只按**当前**源算, 前批搬出的块已不在源里) ⇒ 打爆已迁文件的 import。三处都**测试全绿或仅收集期现形**, 只有逐行对照 / `--collect-only` / 演练副本才拦得住。
-> 触发: 拆分文件, 迁移脚本, 逐行搬移, ast.get_docstring, 求值串, 转义被吃, `\\p`, SyntaxWarning, 生成模块, 自我 import, 循环 import, 行守恒, 保真校验, 分批迁移, 批模式, 共享模块被清空, 增量迁移, expect 计数, 全量 vs 当前源
+> 触发: 拆分文件, 迁移脚本, 逐行搬移, ast.get_docstring, 求值串, 转义被吃, `\\p`, SyntaxWarning, 生成模块, 自我 import, 循环 import, 行守恒, 保真校验, 分批迁移, 批模式, 共享模块被清空, 增量迁移, expect 计数, 全量 vs 当前源, AST 机械改写, col_offset, 切片错位, get_source_segment, 活值判别, 递归深扫
 
 ### `ast.get_docstring` 是求值串, 不是源文本 (S2 踩到)
 
@@ -22,3 +22,9 @@
 - **判别**: 共享件在**首个**持有它们的批次(S3)已随源搬出, 之后各批的**当前源**里已无这些块 ⇒ 归属闭包为空 ⇒ 批 2 把 `webui_helpers.py` 由 437 行**清成只剩 3 行头**; 收集期报 `ImportError: cannot import name '_make_web_manager' from 'webui_helpers'`(conftest 与已迁文件全废)。注意校验 1–4 与内容/行守恒**全绿**(它们只看「本批搬走的块」), 单靠跑校验器拦不住。
 - **处置**: 共享模块**仅当本批确有共享块时**才写出(否则沿用既有文件)—— 与「全量一次性写出」的既定口径一致。判据: 演练副本必须**整份 `tests/` 复制**并让依赖路径常量(`STATIC_ROOT` = `dirname(dirname(__file__))/src/...`)解析到真 `src/`(Windows 用 `mklink /J` junction; 清理时 `rmdir` 摘链接, **勿 `rm -rf`** —— 会跟入删真 `src/`)。同族: 任何「按当前状态重算全量」的生成步骤, 在增量场景都要先判「本批是否真的有内容」。
 - **伴生**: 工具的源侧计数闸(`--expect-fn/--expect-entries`)若钉在**计划全量**(329/312), 首批之后必红 —— 它是**当前源**口径, 应填「全量 − 已迁」(S4 = 308/291 = 329/312 − 21)。
+
+### AST 节点位置切片在含 CJK 行上错位 / 活值判别只看顶层漏嵌套调用 (26-11-09 踩到)
+
+- **触发**: 对源码做 AST 定位的**机械改写**(把 tests-real 全部 `wait_until` 调用点的活值 f-string desc 包 lambda, issue 26-11-08-0044), 用 `node.col_offset/end_col_offset` 当字符下标去切 `str` 源行; 或写判别式扫描(「desc 内嵌函数调用 = 活值需惰性」)只查插值表达式**顶层**节点。
+- **判别**: f-string 节点的 `col_offset/end_col_offset` 在含中文的行是 **UTF-8 字节偏移**而非字符下标 —— 每个 3 字节中文字符偏 2(2 字节字符偏 1), 并非固定偏一位, 拿它切 `str` 行必错位; 改写后 `compile` 全绿也可能插入位置静默错位。判别式扫描还有两个静默漏判面: 只查插值**顶层**节点会漏列表推导内嵌调用(`qb.torrent(h)` 在推导里被判静态); `node.func.id` 只命中直连名, **`M.wait_until` / `base.wait_until` 等 Attribute 形态整类漏掉**(26-11-09 第 3 轮评审抓出, 全部靠评审人核兜住)。
+- **处置**: 定位一律 **`ast.get_source_segment(src, node)`** 取原文(内部已做位置换算, 实测可靠), 再按「该行内唯一子串」替换, 不用 col_offset 手切; token 级需求用 `tokenize`(位置恒为字符偏移)。判别式扫描**递归深扫**(`any(isinstance(n, ast.Call) for n in ast.walk(插值节点))`), 不看顶层; 匹配调用点时同时覆盖直连名与 Attribute 形态(`getattr(func, "attr", None) == "wait_until"` 兜住 `M.wait_until`)。判据: `compile` 过不等于位置正确 —— 机械改写必须逐改写点对照原文等价性(git diff 逐 hunk 人核), 批量转换前先在单文件上演练。

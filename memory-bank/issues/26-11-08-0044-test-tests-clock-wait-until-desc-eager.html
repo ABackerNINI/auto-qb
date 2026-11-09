@@ -9,9 +9,9 @@
 <meta name="issue-stamp" content="26-11-08-0044">
 <meta name="issue-type" content="test">
 <meta name="doc-topic" content="tests-clock-wait-until-desc-eager">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-09-test-wait-until-lazy-desc.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="tests/clock.py wait_until 的 desc 调用期求值, f-string 拼最后观测值显示旧值">
 <meta name="issue-summary" content="wait_until desc 是调用期求值, 调用点拼 f-string 带「最后观测值」显示调用前旧值(RM07-11 首版踩过); 建议基座加惰性 desc(callable 支持)">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-08-0044-test-tests-clock-wait-until-desc-eager</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-08 00:44</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
 
@@ -103,20 +103,25 @@
 <section id="s2">
   <h2><span class="no">§02</span>位置</h2>
   <ul>
-    <li><code>tests/clock.py</code>· 符号 wait_until(取证 2026-11-08)· grep <code>wait_until</code></li>
+    <li><span class="bad">原报位置 <code>tests/clock.py</code> 有误(复验 2026-11-09 更正): 该文件 wait_until 无 desc 参数, 其调用点的消息由 <code>assert</code> 承载 —— assert 消息表达式只在失败时求值, 天然惰性, 无本缺陷。</span></li>
+    <li>真实位置: <code>tests-real/rm*/</code> 下 9 份各自复制的 <code>wait_until(fn, timeout, desc: str, interval)</code>(8 份标准 + rm06 异常容忍变体; rm04_relocate_visibility 经 <code>M.wait_until</code> 复用 rm04 份)· desc 为 str, 调用期求值(取证 2026-11-09)· grep <code>def wait_until(fn, timeout: float, desc: str</code></li>
   </ul>
 </section>
 
 <section id="s3">
   <h2><span class="no">§03</span>建议<span class="opt">（可选）</span></h2>
   <p>基座加惰性 desc(desc 支持 callable, 超时报错时才调用)。</p>
+  <h3>修复后补充(2026-11-09)</h3>
+  <p><strong>实际修法</strong>(与建议同向): ① 9 份基座 <code>desc: str</code> → <code>desc: str | Callable[[], str]</code>, 报错行改 <code>{desc() if callable(desc) else desc}</code> —— callable 只在超时构造报错时才求值, str 调用点零漂移; ② AST 全量扫 193 处调用点, 把 desc 内嵌活值(f-string 里含函数调用, 如 <code>qb.torrent()</code> / <code>speed_limits_mode(qb)</code> / <code>rglob()</code> / <code>last_matched_set()</code>)的 19 处改传 <code>lambda: (f"…")</code>; 静态值 f-string(<code>ih[:8]</code> / <code>path</code> 等不可变量)保持 str 不动, <code>sorted(want)</code>(纯局部值)2 处同样不动(<code>rm10:219</code> 与 <code>rm08_missing_groups:184</code>)。首轮扫描按 f-string 插值顶层节点判活值, 评审抓出列表推导内嵌 <code>qb.torrent(h)</code> 的漏判 1 处(rm04_relocate:1736, 现树行号), 复查改用递归深扫(f-string 内任意深度出现调用即活值)后仅剩上述刻意豁免点。</p>
+  <p><strong>验证方式</strong>: 9 文件 py_compile 全过; 独立复刻新函数体自证三态 —— str desc 照常报错 / callable desc 报错带超时时刻实况(观测计数 n=12 为终值而非初值)/ 快路径命中不触发 callable 求值。tests-real 是真机轨(需真实 qB 副实例), 不在本轮跑; 真机轮按既有节奏复跑即覆盖。改动 9 文件 110+/45-。</p>
 </section>
 
 <section id="s4">
   <h2><span class="no">§04</span>状态变更日志</h2>
   <ul>
     <li>2026-11-08 00:44 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-09 — 状态 Open → Done（kb.status）</li>
+</ul>
 </section>
 
 <footer>

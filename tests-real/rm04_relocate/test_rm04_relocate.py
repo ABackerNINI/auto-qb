@@ -40,6 +40,7 @@ import sys
 import time
 import urllib.request
 from pathlib import Path
+from typing import Callable
 
 import pytest
 
@@ -316,8 +317,13 @@ def web_req(port: int, method: str, path: str, body: dict | None = None) -> dict
         return json.loads(r.read().decode("utf-8"))
 
 
-def wait_until(fn, timeout: float, desc: str, interval: float = 0.4):
-    """轮询到 fn() 为真值并返回它; 超时抛 AssertionError 带最后一次观测。"""
+def wait_until(fn, timeout: float, desc: str | Callable[[], str], interval: float = 0.4):
+    """轮询到 fn() 为真值并返回它; 超时抛 AssertionError 带最后一次观测。
+
+    desc 支持 str 或惰性 callable(超时构造报错时才求值): 调用点拼带「最后观测值」的
+    f-string desc 必须传 lambda —— str 在调用期求值, 超时报错里显示的是等待前的旧值
+    而非超时时刻实况(issue 26-11-08-0044, RM07-11 首版踩过)。
+    """
     deadline = time.time() + timeout
     last = None
     while time.time() < deadline:
@@ -325,7 +331,7 @@ def wait_until(fn, timeout: float, desc: str, interval: float = 0.4):
         if last:
             return last
         time.sleep(interval)
-    raise AssertionError(f"等待超时({timeout}s): {desc}; 最后观测: {last}")
+    raise AssertionError(f"等待超时({timeout}s): {desc() if callable(desc) else desc}; 最后观测: {last}")
 
 
 def settle(qb, ih: str, timeout: float = 30.0) -> dict:
@@ -867,7 +873,7 @@ def test_rm04_05_same_volume_relocate_dir_alias():
         # ---- qB 侧: save_path 变 dst + dst 数据 size 对齐
         wait_until(
             lambda: norm((qb.torrent(h1) or {}).get("save_path")) == norm(dst), 60,
-            f"mover save_path 未变 dst: {(qb.torrent(h1) or {}).get('save_path')}"
+            lambda: (f"mover save_path 未变 dst: {(qb.torrent(h1) or {}).get('save_path')}")
         )
         for rel, size in files:
             f = dst / rel
@@ -1492,7 +1498,7 @@ def test_rm04_10_qbtemp_narrow_foreign_allowed_own_blocked():
 
         wait_until(
             lambda: norm((qb.torrent(h1) or {}).get("save_path")) == norm(dst), 90,
-            f"qB 侧 G1 save_path 未变 dst: {(qb.torrent(h1) or {}).get('save_path')}"
+            lambda: (f"qB 侧 G1 save_path 未变 dst: {(qb.torrent(h1) or {}).get('save_path')}")
         )
         dst_g1 = dst / "rm04c10_g1.bin"
         wait_until(lambda: dst_g1.is_file() and dst_g1.stat().st_size == size, 30, f"dst 侧 G1 数据未对齐: {dst_g1}")
@@ -1726,7 +1732,11 @@ def test_rm04_14_webui_confirm_loop_ui():
         # ---- 文件系统双向取证: qB 侧漂移 + dst 落地 + src 内容根 junction + 穿透可读
         moved = wait_until(
             lambda: next((h for h in (h1a, h2a) if norm((qb.torrent(h) or {}).get("save_path")) == norm(dst_a)), None),
-            90, f"qB 侧无成员 save_path 变 dst: {[(h[:8], (qb.torrent(h) or {}).get('save_path')) for h in (h1a, h2a)]}"
+            90,
+            lambda: (
+                f"qB 侧无成员 save_path 变 dst: "
+                f"{[(h[:8], (qb.torrent(h) or {}).get('save_path')) for h in (h1a, h2a)]}"
+            )
         )
         other = h2a if moved == h1a else h1a
         for rel, size in files_a:

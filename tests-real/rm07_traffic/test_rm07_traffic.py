@@ -59,6 +59,7 @@ import urllib.parse
 import urllib.request
 from datetime import date
 from pathlib import Path
+from typing import Callable
 
 import pytest
 
@@ -90,8 +91,13 @@ def case_dir(name: str) -> Path:
     return d
 
 
-def wait_until(fn, timeout: float, desc: str, interval: float = 0.4):
-    """轮询到 fn() 为真值并返回它; 超时抛 AssertionError 带最后一次观测。"""
+def wait_until(fn, timeout: float, desc: str | Callable[[], str], interval: float = 0.4):
+    """轮询到 fn() 为真值并返回它; 超时抛 AssertionError 带最后一次观测。
+
+    desc 支持 str 或惰性 callable(超时构造报错时才求值): 调用点拼带「最后观测值」的
+    f-string desc 必须传 lambda —— str 在调用期求值, 超时报错里显示的是等待前的旧值
+    而非超时时刻实况(issue 26-11-08-0044, RM07-11 首版踩过)。
+    """
     deadline = time.time() + timeout
     last = None
     while time.time() < deadline:
@@ -99,7 +105,7 @@ def wait_until(fn, timeout: float, desc: str, interval: float = 0.4):
         if last:
             return last
         time.sleep(interval)
-    raise AssertionError(f"等待超时({timeout}s): {desc}; 最后观测: {last}")
+    raise AssertionError(f"等待超时({timeout}s): {desc() if callable(desc) else desc}; 最后观测: {last}")
 
 
 def log_text(case: Path) -> str:
@@ -873,7 +879,7 @@ def test_rm07_08_l2_transfer_sampling(primary, secondary, tracker, workdir, glob
 
         # ---- flush(≤60s)后: 单种系列天文件落盘, dl_total 累计 ≥ payload; 全局系列出非零 r 行
         tf = day_file(case / "data", "torrent", ih)
-        wait_until(lambda: tf.is_file(), 120, f"单种系列天文件未落盘: {sorted((case / 'data').rglob('*.dat'))}")
+        wait_until(lambda: tf.is_file(), 120, lambda: (f"单种系列天文件未落盘: {sorted((case / 'data').rglob('*.dat'))}"))
         tparsed = parse_day(tf)
         assert tparsed.bad_lines == 0, f"单种天文件坏行: {tparsed.bad_lines}"
         tsamples = samples_of(tparsed)
@@ -1173,7 +1179,7 @@ def test_rm07_11_alt_speed_real_dispatch(global_limits):
         assert rec["status"] == "ok", f"speed_alt_toggle 回执非 ok: {rec}"
         wait_until(
             lambda: speed_limits_mode(qb) != saved_mode, 15,
-            f"toggle 后模式未翻转(仍 {speed_limits_mode(qb)}, 原 {saved_mode}; toggle 端点断)"
+            lambda: (f"toggle 后模式未翻转(仍 {speed_limits_mode(qb)}, 原 {saved_mode}; toggle 端点断)")
         )
         mode_view = web_client(port)("GET", "/api/speed/mode")
         assert mode_view["alt_on"] == (not saved_mode), f"toggle 后读侧 alt_on 未翻转: {mode_view['alt_on']}"
