@@ -5,11 +5,14 @@ D1 把「图形符号」收窄为装饰性 / 状态性象形字符 (表 A), 中�
 箭头 U+2190-21FF / 章节符与数学符) 明确豁免 —— 此前只给示例 + 「等」兜底, 评审按宽口径
 判红与规范相左, issue 26-11-08-0044 长期 Open。D2/D3 定闸门形态与载体。
 
-设计不变量: 存量 309 单元 / 2178 处(基线 4cff729d, 2543a603 复验未变)一次清不完 (用户 2026-11-06 拍板「先入池等排期」),
-故闸门**带病上岗**: 冻结清单全登记, 只拦新增。key = (文件, 字符类) -> 命中处数:
+设计不变量: 存量 309 单元 / 2178 处已于 2026-11-09 经 13 批全部清偿 (2178 处 -> 0), 冻结清单现为空 FROZEN = {}。
+闸门形态仍是「冻结清单 + 递减不红」, 从「带病上岗」转为**纯只拦新增**: 机制保留, 未来若确有整批既有符号需登记,
+仍走同一入口。key = (文件, 字符类) -> 命中处数:
 - 实测 > 冻结 -> 红 (新引入 / 超量); 部分递减 (0 < 实测 < 冻结) 不红;
 - 某类清光后**必须同步撤下冻结条目**, 否则回加会被放过 —— 撤下后回加当场红, 递减不可逆;
 - 冻结条目目标文件消失即红 (死条目); 排除面三张表每条带理由且目标须真实存在。
+三条判据 (新增/超量判红、目标失效判红、已归零须撤下) 继续有效。空清单下 test_repo_matches_frozen 是承重项:
+任何新表 A 字符 count > 0 即红。
 与 tests/test_mypy_allowlist_guard.py 同一口径: 摩擦是有意的, 逼每条新豁免留下理由。
 
 排除面: 整目录 (第三方设计骨架 / 参考资源)、整文件 (功能性数据: gitmoji 映射表与断言数据;
@@ -18,12 +21,13 @@ D1 把「图形符号」收窄为装饰性 / 状态性象形字符 (表 A), 中�
 整目录不在扫描面。
 
 检出能力由合成源红验内建: 字符类归属、新增 / 部分递减 / 撤条目后回加 / 归零未撤 /
-死条目各有断言, 扫描或对账逻辑退化即红。本守阵与数据模块自身不得含表 A 字面字符
+死条目、局部豁免粒度各有断言, 扫描或对账逻辑退化即红。本守阵与数据模块自身不得含表 A 字面字符
 (合成样本一律 chr() 构造), 由 test_guard_sources_have_no_literal_ban_symbols 钉住。
 
 ## 测试计划(每个测试函数一条)
 
 - test_count_text_detects_ban_classes_and_spares_semantic_symbols: 合成文本里带圈 / 杂项 / Dingbats / 几何块各计 1, 箭头 / 章节符 / 数学符零命中
+- test_count_text_skips_exempt_cells_per_class: 局部豁免 (文件, 类) 整类跳过; 换文件同类与同文件它类照常计数
 - test_findings_reject_new_or_increased_symbol: 干净文件新增符号与冻结单元超量都判红
 - test_findings_allow_partial_reduction: 实测少于冻结但未归零 -> 零 finding (递减不红)
 - test_findings_reject_re_add_after_entry_removed: 清光并撤下冻结条目后回加同一符号 -> 判红 (递减不可逆)
@@ -34,7 +38,7 @@ D1 把「图形符号」收窄为装饰性 / 状态性象形字符 (表 A), 中�
 - test_scan_surface_covers_declared_scope: 规范覆盖文件后缀全在扫描面, 根级与 .github/.vscode 候选不漏扫, 红线配置显式排除
 - test_code_style_table_is_single_source: code-style.md 表 A 的码位 token 集合与闸门常量双向相等
 - test_guard_sources_have_no_literal_ban_symbols: 守阵与冻结数据模块自身零表 A 字面字符 (防自指)
-- test_repo_matches_frozen: 真仓实测对冻结清单零 finding (带病上岗基线)
+- test_repo_matches_frozen: 真仓实测对冻结清单零 finding (空清单下任何新增即红, 承重项)
 """
 
 from __future__ import annotations
@@ -70,14 +74,15 @@ Cell = tuple[str, str]
 # ---- 扫描 -------------------------------------------------------------------------------------------
 
 
-def _count_text(rel: str, text: str) -> Counter[Cell]:
+def _count_text(rel: str, text: str, exempt: dict[Cell, str] | None = None) -> Counter[Cell]:
     """按表 A 逐字符归类计数; 局部豁免单元 (文件, 类) 整类跳过。"""
+    skip = EXEMPT_CELLS if exempt is None else exempt
     out: Counter[Cell] = Counter()
     for ch in text:
         cp = ord(ch)
         for name, ranges in BAN_CLASSES.items():
             if any(a <= cp <= b for a, b in ranges):
-                if (rel, name) not in EXEMPT_CELLS:
+                if (rel, name) not in skip:
                     out[(rel, name)] += 1
                 break
     return out
@@ -140,6 +145,14 @@ def test_count_text_detects_ban_classes_and_spares_semantic_symbols() -> None:
             ("synthetic.py", "geometric"): 1,
         }
     )
+
+
+def test_count_text_skips_exempt_cells_per_class() -> None:
+    """局部豁免按 (文件, 类) 粒度整类跳过: 换文件同类、同文件它类都必须照常计数。"""
+    exempt = {("synthetic.py", "dingbats"): "合成豁免: 验证 (文件, 类) 粒度的整类跳过分支"}
+    text = chr(0x2728) + chr(0x2460)
+    assert _count_text("synthetic.py", text, exempt) == Counter({("synthetic.py", "circled"): 1})
+    assert _count_text("other.py", text, exempt) == Counter({("other.py", "dingbats"): 1, ("other.py", "circled"): 1})
 
 
 def test_findings_reject_new_or_increased_symbol() -> None:
