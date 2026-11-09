@@ -15,7 +15,14 @@
 - test_remote_moved_rebases_before_push   真仓: 远端前移 → 提交后 rebase 保线性, 结果行报改写后的新 hash(上方留 rebase 步骤行)
 - test_head_rewrite_trace_ends_at_result_hash  步骤链不变量: 链尾 == 结果行 hash · 相邻两步首尾相接 · 顺序在结果行上面
 - test_remote_conflict_reports_partial    真仓: 同文件冲突 → rebase 自动回滚 → 提交成功(未推送) + 冲突模板
-- test_post_rebase_gates_rerun_on_diverge 真仓: rebase 合入远端 → 闸门复跑一轮(共两轮, 同一清单)
+- test_post_rebase_gates_rerun_on_diverge 真仓: rebase 合入远端 → 闸门复跑一轮(共两轮, 同一份清单)
+- test_post_rebase_rerun_scans_remote_merged_kb
+                                          S4-1(计划 26-11-09-0559): 远端合入的 KB 文件不产生本地 diff
+                                          → 复跑 `<changed:>` 展开面必须扩到它(第一轮没有 / 第二轮有,
+                                          闸门据此判红); 本批文件不被挤掉
+- test_post_rebase_rerun_falls_back_to_full_kb
+                                          S4-1兜底(§01 底线 5): rebase 前后 diff 取不到 → memory-bank
+                                          全量参与 `<changed:>` 展开 + 如实登记一行, 不静默漏扫
 - test_post_rebase_gate_red_blocks_push   真仓: 复跑红 → 推送未完成 + 修复指引, 不推送, 登记评审边界行(未过措辞)
 - test_post_rebase_gate_dirty_amends      真仓: 复跑的 fmt 类闸门又改文件 → amend 折进未推送 tip
 - test_post_rebase_pack_changed_leaves_hint 真仓: 合流改动了本包 → 登记一行「仍按启动版本运行, 重跑以采用新版本」
@@ -685,6 +692,88 @@ def test_post_rebase_gate_dirty_amends(repo, tmp_path, monkeypatch, capsys):
     assert "formatted" in _git(repo, "show", "HEAD:x.txt")  # 闸门改动折进了 tip
     # amend 又挪了一次 tip —— 结果行的 hash 与 rebase 那行末端不同, 必须有一条步骤行接上
     assert re.search(r"闸门复跑: 合流后闸门改了 1 个文件 → amend [0-9a-f]{8}→[0-9a-f]{8}", out), out
+
+
+def test_post_rebase_rerun_scans_remote_merged_kb(repo, tmp_path, monkeypatch, capsys):
+    """S4-1(计划 26-11-09-0559 §04): rebase 合入的远端 KB 文件**不产生本地 diff** —— 复跑阶段必须把它
+    并进 `<changed:>` 的展开面, 否则纯增量闸门在唯一能扫到它的那一轮（合流后第二轮)漏扫。
+
+    现场模拟: 本批改一个 KB 文件(闸门命中) + 远端推入另一个「未来日期」KB 文件(本地无 diff);
+    闸门脚本按收到 `<changed:memory-bank/**>` 展开后的清单判红(冒充 timekit 的未来日期守卫)。
+    断言: 第一轮只见本批文件 / 第二轮扩面含远端文件 / 判红走「合并远端后复跑」出口。
+    """
+    probe = repo / "kb_probe.py"
+    probe.write_text(
+        "import sys\n"
+        "target = 'memory-bank/plans/26-11-09-0700-plan-x.html'\n"
+        "args = [a.replace('\\\\', '/') for a in sys.argv[1:]]\n"
+        "with open('.git/gate_args.txt', 'a', encoding='utf-8') as fh:\n"  # .git 下不弄脏工作树
+        "    fh.write(' '.join(args) + '\\n')\n"
+        "if target in args:\n"
+        "    print(f'{target}: 日期在未来')\n"
+        "    sys.exit(2)\n",
+        encoding="utf-8",
+    )
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-m", "stub kb probe")  # 探针先进 base(否则会被当本批改动暂存进提交)
+    _git(repo, "push", "origin", "develop")
+    cfg = dict(_CFG_ALLOW)
+    cfg["gates"] = [
+        {
+            "match": ["memory-bank/"],
+            "run": [f'"{sys.executable}" kb_probe.py <changed:memory-bank/**>'],
+            "auto": True,
+            "timeout": 30,
+            "note": "kb 闸门",
+        }
+    ]
+    monkeypatch.setattr(commit_mod, "load_config", lambda: (cfg, PKG / ".my-commit-flow.toml"))
+    monkeypatch.setattr(push_mod, "run_push", _must_not_push)
+    _write_msg(repo)
+    local_kb = repo / "memory-bank" / "plans" / "26-11-09-0650-local.html"
+    local_kb.parent.mkdir(parents=True)
+    local_kb.write_text("<html></html>\n", encoding="utf-8")  # 本批改动 → 闸门命中
+    (repo / "x.txt").write_text("x\n", encoding="utf-8")
+    _push_remote_commit(repo, tmp_path, "memory-bank/plans/26-11-09-0700-plan-x.html", "<html></html>\n")
+    rc = commit_mod.main([])
+    out = capsys.readouterr().out
+    assert rc == 0
+    rounds = (repo / ".git" / "gate_args.txt").read_text(encoding="utf-8").splitlines()
+    assert len(rounds) == 2, (rounds, out)  # 提交前一轮(本批命中) + 合流后复跑一轮
+    assert "26-11-09-0700-plan-x.html" not in rounds[0]  # 第一轮: 远端文件还没进来
+    assert "26-11-09-0650-local.html" in rounds[0]
+    assert "26-11-09-0700-plan-x.html" in rounds[1]  # 复跑扩面: 不产生本地 diff 的远部件也在展开面里
+    assert "26-11-09-0650-local.html" in rounds[1]  # 本批改动没被挤掉
+    assert "推送未完成: 闸门「kb 闸门」未过(合并远端后复跑" in out
+    assert "日期在未来" in out  # 判红证据(复跑那一轮真的扫到了远端文件)
+
+
+def test_post_rebase_rerun_falls_back_to_full_kb(repo, tmp_path, monkeypatch, capsys):
+    """S4-1兜底(计划 §01 底线 5): rebase 前后 diff 取不到 = 改动面拿不准 → memory-bank 全量参与
+    `<changed:>` 展开(宁可多扫不可漏扫), 并如实登记一行, 不静默漏扫。"""
+    kb = repo / "memory-bank" / "plans" / "26-11-09-0800-plan-y.html"
+    kb.parent.mkdir(parents=True)
+    kb.write_text("<html></html>\n", encoding="utf-8")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-m", "kb base")
+    _git(repo, "push", "origin", "develop")
+    calls = []
+
+    def _gates(hits, ctx):
+        calls.append(list(ctx.get("changed_extra") or []))
+        return [], [], 0
+
+    monkeypatch.setattr(commit_mod, "run_gates", _gates)
+    monkeypatch.setattr(commit_mod, "_rebase_merged_kb", lambda *a: None)  # 模拟 diff 判据取不到
+    monkeypatch.setattr(push_mod, "run_push", lambda steps=None: (True, "推送成功 abcdef01"))
+    _write_msg(repo)
+    (repo / "x.txt").write_text("x\n", encoding="utf-8")
+    _push_remote_commit(repo, tmp_path, "b.txt", "b\n")
+    assert commit_mod.main([]) == 0
+    out = capsys.readouterr().out
+    assert calls[0] == []  # 第一轮不扩面
+    assert calls[1] == ["memory-bank/plans/26-11-09-0800-plan-y.html"]  # 兜底 = 全量跟踪的 KB 文件
+    assert "远端合入面取不到" in out and "memory-bank 全量参与 <changed:> 展开" in out
 
 
 def test_post_rebase_pack_changed_leaves_hint(repo, tmp_path, monkeypatch, capsys):

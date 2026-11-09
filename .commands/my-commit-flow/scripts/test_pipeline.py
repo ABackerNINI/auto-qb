@@ -14,9 +14,12 @@ classify_merge_probe)随检查表一起删除 —— 同步行分类改由 test_
 ## 测试计划
 - GlobMatchTest                <changed:>/<each:> 的 GLOB 语义(**/ 跨目录)
 - ExpandTest                   占位符四类 + 展开失败 + each_limit + 空格引号
+                               + 复跑扩面只喂 <changed:>(changed_extra 去重保序 / <each:> 不读)
+                               + 长度守卫(<changed:> 超预算分片不丢件 / 分片后仍超限 ExpandError)
 - RunGatesTest                 闸门执行: 全过静默 / 失败留末 20 行 / 超时 / 人工闸门不执行 /
                                展开失败不降级 / 无匹配**静默**跳过(v2 的那条 WARN 已废) /
-                               并发执行(方案 B): 失败按提交序确定 / ran 计数 / 展开失败排在执行失败前
+                               并发执行(方案 B): 失败按提交序确定 / ran 计数 / 展开失败排在执行失败前 /
+                               分片执行不截断(参数全到) / 长度守卫失败 rc=-2 不降级
 - GateScopingConfigTest        闸门收窄形态(计划 26-11-01-0434): drift 三条(--files/--full)/ caps 三条
                                (--files)/ test.pkg 两条(scoped) 逐字钉死 + 脚本侧参数在位
 - GitRetryTest                 git 命令: 单次 20s 超时 + 有界重试(网络子命令失败即重试 / 非幂等本地写
@@ -131,6 +134,47 @@ class ExpandTest(unittest.TestCase):
         cmds, _ = _pipeline.expand_run("yapf -i <changed:*.py>", ctx(self.root, ["src/a b.py"]))
         self.assertEqual(cmds, ['yapf -i "src/a b.py"'])
 
+    def test_changed_extra_only_feeds_changed_placeholder(self) -> None:
+        """复跑扩面(计划 26-11-09-0559 §04 S4-1)只喂 `<changed:>`: 远端合入的文件不产生本地 diff,
+        纯增量闸门扫不到它们。`<each:>` 不读扩面(冒烟只对本地改过的脚本有意义), 重复项去重。"""
+        merged = {
+            "root": self.root,
+            "changed": ["x.py"],
+            "changed_extra": ["memory-bank/a.md", "memory-bank/b.md"],
+            "each_limit": 99,
+        }
+        cmds, skip = _pipeline.expand_run("python p.py --files <changed:memory-bank/**>", merged)
+        self.assertIsNone(skip)
+        self.assertEqual(cmds, ["python p.py --files memory-bank/a.md memory-bank/b.md"])
+        cmds, skip = _pipeline.expand_run("python <each:memory-bank/**> --help", merged)
+        self.assertEqual(cmds, [])  # 扩面不进 <each:>
+        self.assertIn("无匹配文件", skip or "")
+        # 与基础清单相交时只出现一次(远端改了本批同一文件)
+        dedupe = dict(merged, changed=["memory-bank/a.md"], changed_extra=["memory-bank/a.md", "memory-bank/b.md"])
+        cmds, _ = _pipeline.expand_run("python p.py --files <changed:memory-bank/**>", dedupe)
+        self.assertEqual(cmds, ["python p.py --files memory-bank/a.md memory-bank/b.md"])
+
+    def test_changed_expansion_shards_over_length_budget(self) -> None:
+        """S4-2: `<changed:>` 展开后是一条命令行 —— 超预算必须分片, 且一段都不能丢(计划 §02 洞 2)。"""
+        files = [f"memory-bank/plans/26-11-09-0559-{'x' * 40}-{i:03d}.html" for i in range(150)]
+        cmds, skip = _pipeline.expand_run(
+            "python <skill-dir:memory-bank>/scripts/timekit.py --check --files <changed:memory-bank/**>",
+            ctx(self.root, files),
+        )
+        self.assertIsNone(skip)
+        self.assertGreater(len(cmds), 1, "150 条约 77 字符的路径必须分片, 否则 cmd.exe 会截断")
+        self.assertTrue(all(len(c) <= _pipeline.CMD_LINE_LIMIT for c in cmds), [len(c) for c in cmds])
+        delivered = [f for c in cmds for f in c.split(" --files ", 1)[1].split(" ")]
+        self.assertEqual(sorted(delivered), sorted(files))  # 内容逐字不变: 只切分, 不丢不改
+        self.assertEqual(len(delivered), len(set(delivered)))
+
+    def test_over_limit_single_arg_is_expand_error(self) -> None:
+        """分片后仍超上限 = 单条命令本身装不下 → ExpandError(STOP), 绝不交给 shell 被静默截断。"""
+        huge = "memory-bank/" + "x" * 9000 + ".md"
+        with self.assertRaises(_pipeline.ExpandError) as raised:
+            _pipeline.expand_run("python p.py --files <changed:memory-bank/**>", ctx(self.root, [huge]))
+        self.assertIn("超过单条上限", str(raised.exception))
+
 
 class RunGatesTest(unittest.TestCase):
     """v3 契约: 闸门全过**静默**(没有 PASS 行), 失败才说话; 无匹配文件是按设计跳过, 不是 WARN。"""
@@ -216,6 +260,37 @@ class RunGatesTest(unittest.TestCase):
         gates = [self._gate(PY + ' -c "pass"', note=f"g{i}") for i in range(5)]
         _, _, ran = _pipeline.run_gates(gates, ctx(self.root, []))
         self.assertEqual(ran, 5)
+
+    def test_changed_shards_execute_without_truncation(self) -> None:
+        """S4-2 执行面: 分片的每条子命令都真的跑到了, 参数一个不少(不是只测展开字符串)。"""
+        probe = self.root / "probe.py"
+        probe.write_text(
+            "import sys\nwith open('out.txt', 'a', encoding='utf-8') as fh:\n    fh.write(' '.join(sys.argv[1:]) + '\\n')\n",
+            encoding="utf-8",
+        )
+        files = [f"batch/f{i:03d}-{'y' * 60}.md" for i in range(120)]
+        gate = self._gate(f'"{PY}" probe.py <changed:*.md>')
+        failures, _, ran = _pipeline.run_gates([gate], {"root": self.root, "changed": files, "each_limit": 99})
+        self.assertEqual(failures, [])
+        self.assertGreater(ran, 1, "120 条约 72 字符的路径必须分片执行")
+        got = (self.root / "out.txt").read_text(encoding="utf-8").split()
+        self.assertEqual(sorted(got), sorted(files))  # 全部到达, 无截断
+
+    def test_over_limit_expand_failure_stops_gate(self) -> None:
+        """S4-2: 长度守卫失败仍走「展开失败 = rc -2 STOP」, 不降级成打印/跳过。"""
+        huge = "memory-bank/" + "x" * 9000 + ".md"
+        failures, manual, ran = _pipeline.run_gates(
+            [self._gate("python p.py --files <changed:memory-bank/**>")],
+            {
+                "root": self.root,
+                "changed": [huge],
+                "each_limit": 99
+            },
+        )
+        self.assertEqual(len(failures), 1)
+        self.assertEqual(failures[0][2], -2)
+        self.assertIn("超过单条上限", failures[0][4])
+        self.assertEqual((manual, ran), ([], 0))  # 不降级: 既不打印也不执行半截命令
 
 
 class GateScopingConfigTest(unittest.TestCase):

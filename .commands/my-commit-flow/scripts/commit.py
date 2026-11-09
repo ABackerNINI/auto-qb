@@ -31,7 +31,9 @@
      同步拿 HEAD 当真值, ref 丢了会把旧 tip 当成本地提交) → 落稳即消费消息文件
   6. 内部同步(run_sync): 齐平即 no-op; 分叉自动 rebase 保线性 —— 冲突 / 断网自动回滚后按
      「推送未完成」停下要人
-  7. rebase 真合入了远端提交(HEAD 改写) → 按**同一份清单**复跑一轮(合并后的树才算数); fmt 类闸门若又
+  7. rebase 真合入了远端提交(HEAD 改写) → 复跑一轮(合并后的树才算数): 闸门命中与暂存仍按本批
+     改动(present)算, 但 `<changed:>` 的展开面**扩到本批 + 远端合入的 memory-bank/** 文件
+     (远端文件不产生本地 diff, 纯增量会漏扫它们; 计划 26-11-09-0559 §04 S4-1); fmt 类闸门若又
      改了文件 → 逐路径 add + commit --amend 折进未推送的 tip(与 sync.py 生成物收尾同款)。规则仍是
      **启动版本那份** —— 快照语义下不重取配置(那正是撕裂的来源); 合流若改动了本包, 登记一行提示重跑;
      复跑过后再登记一行「评审边界」—— 组合树只过了测试闸门, 评审未覆盖远端合入(计划 26-11-07-0201)
@@ -339,6 +341,37 @@ def _remote_side_via_remote_tip(cfg: dict, old_head: str) -> tuple[int, list[str
     return _count_and_paths(base, tip)
 
 
+def _rebase_merged_kb(root: Path, old_head: str, new_head: str) -> list[str] | None:
+    """rebase 前后两棵树的差异里, `memory-bank/**` 且工作区仍存在的路径 —— **只喂 `<changed:>` 展开**。
+
+    为什么(计划 26-11-09-0559 §02 洞 1): 远端 rebase 合入的文件**不产生本地 diff**(HEAD 已经跟着
+    往前走了), 纯增量闸门(`--files <changed:memory-bank/**>`)对这批文件形同虚设 —— 而「合流后
+    第二轮闸门」恰恰是唯一还能扫到它们的那一轮。
+
+    判据用「rebase 前后的 tree diff」而不是远端侧推导(同文件的 `_remote_side`): 零网络、对象都在
+    本地对象库、**两棵树的净差异**天然把远端带进来的 KB 文件全收进来; 本地提交在 rebase 后是重放,
+    内容不变 ⇒ 不会把本地改动重复计入(与 present 相交时由 `changed_for_expand` 去重)。删除件按
+    `exists()` 滤掉(与 `present` 同口径 —— 闸门脚本只消费仍存在的文件)。
+    None = diff 取不到: 调用方按「改动面拿不准宁可全量跑」兜底(计划 §01 底线 5)。
+    """
+    proc = git_run("-c", "core.quotepath=off", "diff", "--name-only", old_head, new_head, "--", "memory-bank/")
+    if proc.returncode != 0:
+        return None
+    return [p for p in (line.strip() for line in (proc.stdout or "").splitlines()) if p and (root / p).exists()]
+
+
+def _tracked_kb_paths(root: Path) -> list[str]:
+    """HEAD 里 `memory-bank/**` 的全部跟踪路径 —— 扩面判定拿不准时的**全量兜底**清单。
+
+    宁可多扫不可漏扫(计划 §01 底线 5): 全量跑只是慢(与收窄前的行为等价), 漏扫则是「合流后的树
+    没人验」。取不到(ls-tree 非 0)返回空表 —— 那时闸门退回只扫本批改动, 与未扩面时一致。
+    """
+    proc = git_run("-c", "core.quotepath=off", "ls-tree", "-r", "--name-only", "HEAD", "--", "memory-bank/")
+    if proc.returncode != 0:
+        return []
+    return [p for p in (line.strip() for line in (proc.stdout or "").splitlines()) if p and (root / p).exists()]
+
+
 def review_boundary_line(
     cfg: dict,
     root: Path,
@@ -576,7 +609,18 @@ def main(argv: list[str] | None = None) -> int:
         if pack_touched(sha_full, head_now):
             step(steps, "快照: 上游改动了本包 → 本次仍按启动版本运行, 重跑以采用新版本")
         # 6b 复跑闸门: 规则仍是**启动版本那份** cfg —— 快照语义下不重取配置(那正是撕裂的来源);
-        #    复跑要验的只是"合并后的树", 改动清单也不变(仍是本次提交的那批)。
+        #    复跑要验的是"合并后的树" = 本批改动 + 远端合入的文件。
+        #    扩面(计划 26-11-09-0559 §04 S4-1): 远端 rebase 合入的 KB 文件不产生本地 diff, 纯增量
+        #    闸门(`--files <changed:...>`)扫不到它们 —— 合流后的第二轮是唯一还能扫到的那一轮。
+        #    扩面只进 ctx 的独立键 `changed_extra`, 只影响 `<changed:>` 展开: present /
+        #    gates_for 命中 / 暂存清单逐字不动(§07 R2)。拿不准(diff 取不到)→ memory-bank 全量,
+        #    宁可多扫不可漏扫(§01 底线 5), 并如实登记一行。
+        merged_kb = _rebase_merged_kb(root, sha_full, head_now)
+        if merged_kb is None:
+            merged_kb = _tracked_kb_paths(root)
+            step(steps, "复跑闸门: 远端合入面取不到(rebase 前后 diff 失败) → "
+                 f"memory-bank 全量参与 <changed:> 展开({len(merged_kb)} 个文件)")
+        ctx_rerun = dict(ctx, changed_extra=merged_kb)
         #    ❗阶段标记: 评审留痕闸门(review.trace)按"锚点→工作树"算行数, 复跑时 rebase 进来的远端
         #    提交会被算进本批 → 假红。**用文件标记, 不用环境变量**: 闸门里会跑 pytest, 子进程继承
         #    env —— 实测 `COMMIT_FLOW_GATE_PHASE` 传下去后, 包里"跑闸门脚本并断言它判红"的自测全部
@@ -584,7 +628,7 @@ def main(argv: list[str] | None = None) -> int:
         post_marker = root / ".git" / "review_trace_post"
         post_marker.write_text(sha_full, encoding="utf-8")
         try:
-            failures_r, _manual_r, _ran_r = run_gates(gates_for(present, cfg["gates"]), ctx)
+            failures_r, _manual_r, _ran_r = run_gates(gates_for(present, cfg["gates"]), ctx_rerun)
         finally:
             post_marker.unlink(missing_ok=True)
         if failures_r:

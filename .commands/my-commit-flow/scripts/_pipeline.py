@@ -364,6 +364,17 @@ class ExpandError(RuntimeError):
     """占位符展开失败 —— 调用方必须转成失败, **不降级**成"打印给人"。"""
 
 
+# ------------------------------------------------------------------ 命令行长度守卫
+# `<changed:>` 展开后拼进**一条完整命令行**: run_gates 走 shell=True(cmd.exe), 单条上限 8191 字符。
+# 仓库相对路径平均约 69 字符 ⇒ 100 个改动文件约 6856 字符, 大批量 KB 提交会被 cmd.exe **静默截断**
+# 成半截命令(末尾路径丢掉, 且 rc 看着正常), 计划 26-11-09-0559 §02 洞 2。
+# 处置: 超限**先分片**(仍走命令行, 把一条 run 拆成多条文件子集, 内容不丢不改), 分片仍不够才谈
+# 清单文件 / 响应文件 —— 本轮不做响应文件(沙箱白名单有 YAPF 坑前例, 见该计划 §07 R3)。
+CMD_LINE_LIMIT = 8191  # cmd.exe 单条上限(含命令本体)
+CMD_LINE_BUDGET = 7000  # 分片预算: 给 `cmd /c` 前缀 + 路径前缀留约 1.2k 余量
+PLACEHOLDER_RESERVE = 400  # 模板里还剩 `<root>` / `<skill-dir:...>` 时再留的余量(单个远小于它)
+
+
 def _quote(path: str) -> str:
     return path if not re.search(r"\s", path) else f'"{path}"'
 
@@ -393,6 +404,53 @@ def _glob_match(path: str, pattern: str) -> bool:
 
 def match_changed(changed: list[str], pattern: str) -> list[str]:
     return sorted(p for p in changed if _glob_match(p, pattern))
+
+
+def changed_for_expand(ctx: dict) -> list[str]:
+    """`<changed:>` 的展开面 = 本批改动 + ctx["changed_extra"](复跑阶段远端合入的补集)。
+
+    为什么要有这个键(计划 26-11-09-0559 §02 洞 1): 远端 rebase 合入的文件**不产生本地 diff**
+    (HEAD 已经跟着往前走了), 纯增量闸门(`--files <changed:...>`)对这批文件形同虚设 ——
+    「合流后第二轮闸门」扫不到它们, 而它恰恰是唯一能扫到的那一轮。
+
+    扩面**只**喂 `<changed:>`: 不进 `<each:>`(冒烟只对本地改过的脚本有意义)、不进
+    `gates_for` 的命中判定(命中仍按 present 算)、不进暂存清单 —— 三者读的都是 `ctx["changed"]`
+    本身(计划 §07 R2: 扩面误伤命中 / 暂存语义)。去重保序: 已在基础清单里的路径不重复加。
+    """
+    extra = ctx.get("changed_extra") or []
+    if not extra:
+        return ctx["changed"]
+    merged = list(ctx["changed"])
+    seen = set(merged)
+    for path in extra:
+        if path not in seen:
+            seen.add(path)
+            merged.append(path)
+    return merged
+
+
+def _chunk_args(files: list[str], budget: int) -> list[str]:
+    """把文件清单切成若干「空格分隔」段, 每段让整条命令落在字符预算内(顺序与内容逐字不变)。
+
+    只给 `<changed:>` 用 —— 它是唯一随改动面**线性增长**的占位符(`<each:>` 是复制命令, 单条
+    长度与文件数无关)。budget <= 0 时退化成"一个文件一段": 单条仍可能超上限, 由 expand_run
+    末尾的硬守卫判 STOP(不截断、不降级)。
+    """
+    chunks: list[str] = []
+    cur: list[str] = []
+    size = 0
+    for path in files:
+        piece = _quote(path)
+        cost = len(piece) + (1 if cur else 0)
+        if cur and size + cost > budget:
+            chunks.append(" ".join(cur))
+            cur, size = [], 0
+            cost = len(piece)
+        cur.append(piece)
+        size += cost
+    if cur:
+        chunks.append(" ".join(cur))
+    return chunks
 
 
 def _safe_files(files: list[str], root) -> tuple[list[str], list[str]]:
@@ -429,9 +487,13 @@ def _safe_files(files: list[str], root) -> tuple[list[str], list[str]]:
 def expand_run(cmd: str, ctx: dict) -> tuple[list[str], str | None]:
     """展开一条 `run`, 返回 (命令列表, 跳过原因); 展开不了抛 `ExpandError`。
 
-    顺序固定: `<each:>` → `<changed:>` → `<skill-dir:>` / `<root>` → **残留检查**。
-    最后一步是关键: 还剩下尖括号说明占位符名拼错或没被认出来 —— 那时必须停手,
+    顺序固定: `<each:>` → `<changed:>` → `<skill-dir:>` / `<root>` → **残留检查** / 长度守卫。
+    残留检查是关键: 还剩下尖括号说明占位符名拼错或没被认出来 —— 那时必须停手,
     而不是把带尖括号的命令交给 shell(那会静默变成一条没人看得懂的失败命令)。
+
+    `<changed:>` 展开后是一条命令, 所以文件多到超 `CMD_LINE_BUDGET` 时**分片**成多条
+    (每条仍是同一条模板 + 文件子集, 顺序与内容不变); 分片后仍超 `CMD_LINE_LIMIT` → `ExpandError`
+    (STOP, 不截断不降级)。`<each:>` 是复制命令, 单条长度与文件数无关, 不分片。
     """
     cmds = [cmd]
 
@@ -454,11 +516,18 @@ def expand_run(cmd: str, ctx: dict) -> tuple[list[str], str | None]:
         cmds = [c.replace(m.group(0), _quote(f)) for f in files for c in cmds]
 
     for m in CHANGED_RE.finditer(cmd):
-        files = match_changed(ctx["changed"], m.group(1))
+        files = match_changed(changed_for_expand(ctx), m.group(1))
         if not files:
             return [], f"无匹配文件: <changed:{m.group(1)}>"
-        joined = " ".join(_quote(f) for f in files)
-        cmds = [c.replace(m.group(0), joined) for c in cmds]
+        expanded: list[str] = []
+        for c in cmds:
+            # 预算按**这条模板**算: 模板去掉占位符后的长度 + 未展开占位符的余量, 剩下的全给清单。
+            # 无匹配 / 单段放得下时 _chunk_args 只返回一段, 展开结果与旧实现逐字相同。
+            fixed = c.replace(m.group(0), "")
+            reserve = PLACEHOLDER_RESERVE if PLACEHOLDER_RE.search(fixed) else 0
+            budget = max(CMD_LINE_BUDGET - len(fixed) - reserve, 0)
+            expanded.extend(c.replace(m.group(0), chunk) for chunk in _chunk_args(files, budget))
+        cmds = expanded
 
     resolved: list[str] = []
     for c in cmds:
@@ -478,6 +547,11 @@ def expand_run(cmd: str, ctx: dict) -> tuple[list[str], str | None]:
                 f"无法展开的占位符: {leftover.group(0)}"
                 "(只认 <root> / <skill-dir:NAME> / <changed:GLOB> / <each:GLOB> / <each:GLOB|--with-safety>)"
             )
+    for c in resolved:
+        # 分片后仍超上限 = 单条命令本身就装不下(cmd.exe 会静默截断尾部路径): 宁可 STOP。
+        if len(c) > CMD_LINE_LIMIT:
+            raise ExpandError(f"展开后命令行 {len(c)} 字符, 超过单条上限 {CMD_LINE_LIMIT}"
+                              " —— 分片后仍超限: 缩小提交范围, 或把该 run 拆成多条闸门")
     return resolved, None
 
 
@@ -498,6 +572,8 @@ def run_gates(hits: list[dict], ctx: dict) -> tuple[list[tuple[str, str, int, fl
     - manual: 非自动闸门的展开命令(不执行; 调用方决定要不要提示 —— 本仓库配置里没有这类)。
     - ran: 真正执行过的命令条数。
     - `<each:>` / `<changed:>` 无匹配文件 → **按设计静默跳过**(它们只盯本次改动)。
+    - `<changed:>` 长命令被分片时, 每条子命令是**独立 job**(同上限、同 timeout, 顺序为文件序):
+      失败定位与取 failures[0] 的语义不变, 只是 ran 计的是分片条数。
 
     执行模型(2026-11-01, 计划 26-11-01-0434 方案 B): 两阶段 —— 先**串行展开**全部命中闸门
     (顺序 = 配置序; 冒烟摘除的 print 只发生在这里), 再把展开出的命令按提交序丢进线程池并发跑
