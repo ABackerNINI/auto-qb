@@ -26,3 +26,4 @@
   动作只读根坑档索引、未进 ops 类, 且本档「task id 多数已绕开裸 exe」的说法与本仓两条命令
   实际展开不符, 事前无提醒; 按处置①删 `pytest.exe` / `yapf.exe` 后定点重装两包即愈, 重跑
   `dev.fmt` 恢复、`test.full` 继续全量)。
+- **复发**: 3(2026-11-09, kb 闸门 S1-S5 实施轮)—— 同款 `uv trampoline failed to canonicalize script path` 在实施子代理开工跑测试/闸门时判红, 按处置① `uv sync --reinstall-package <pkg>` 定点重装后恢复。**为什么没命中**: 开工自检未先逐个探 console script, 首个踩坑动作即跑测试/闸门(与上一条同款漏执行)。

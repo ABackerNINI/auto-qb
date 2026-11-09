@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="kb-gate-timekit-timeout-flaky">
 <meta name="doc-refs" content="memory-bank/tasks/26-11-09-memory-bank-kb-gate-timekit-timeout.md, memory-bank/plans/26-11-09-0559-plan-memory-bank-kb-gate-timekit-timeout.html">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="In Progress">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="提交闸门 kb 链 timekit --check 满载机超时 60s(嵌套双层执行+资源饥饿, 本会话 4 次)">
 <meta name="issue-summary" content="ship.commit 的 kb 闸门(timeout=60 共享 9 条脚本)连续 4 次在 timekit --check 超 60s 判死; 单跑 4.2s/9 路并发 10.2s 全正常; 进程观测发现双层 commit.py 各起一套 gate, timekit 一深一冻(0 CPU); 复跑可过, 负载相关">
 <style>
@@ -84,14 +84,14 @@
 <body>
 <div class="sheet">
 
-<div class="kicker">计划外问题（未修）· bug</div>
+<div class="kicker">计划外问题（已修）· bug</div>
 <h1>提交闸门 kb 链 timekit --check 满载机超时 60s(嵌套双层执行+资源饥饿, 本会话 4 次)</h1>
 <p class="lede">ship.commit 的 kb 闸门(timeout=60 共享 9 条脚本)连续 4 次在 timekit --check 超 60s 判死; 单跑 4.2s/9 路并发 10.2s 全正常; 进程观测发现双层 commit.py 各起一套 gate, timekit 一深一冻(0 CPU); 复跑可过, 负载相关</p>
 <div class="meta-row">
   <div class="item"><div class="k">编号</div><div class="v">26-11-09-0441-bug-kb-gate-timekit-timeout-flaky</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-09 04:41</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">In Progress</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
@@ -183,7 +183,7 @@
 <section id="s6">
   <h2><span class="no">§06</span>建议修法<span class="opt">（可选）</span></h2>
   <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
-  <p class="hint">以下保留入池时的修法方向原文。2026-11-09 grilling 四问已由用户按推荐拍板（D1–D4），方案定稿见 <code>memory-bank/plans/26-11-09-0559-plan-memory-bank-kb-gate-timekit-timeout.html</code>：主线 = 按改动收窄 <code>timekit</code> / <code>check_html</code> + 复跑清单扩面 + 展开长度守卫，不动并发模型与 <code>timeout</code>；本件仍 In Progress、未实施。</p>
+  <p class="hint">以下保留入池时的修法方向原文。2026-11-09 grilling 四问已由用户按推荐拍板（D1–D4），方案定稿见 <code>memory-bank/plans/26-11-09-0559-plan-memory-bank-kb-gate-timekit-timeout.html</code>：主线 = 按改动收窄 <code>timekit</code> / <code>check_html</code> + 复跑清单扩面 + 展开长度守卫，不动并发模型与 <code>timeout</code>；本件已按该方案实施完成并翻 Done（实际修法与验证见 §07「修复后补充」）。</p>
   <ol>
     <li><strong>分档 timeout</strong>：kb 链 60s → 180/300s，或按脚本类型分档（全库扫描类单独档）。代价：真挂住时失败反馈更慢；只挪阈值，不消除放大。</li>
     <li><strong>减少重复全库扫描</strong>：9 条脚本各扫一遍 → 合并成一次遍历或聚合 <code>kb.check</code> 单入口（覆盖面由 <code>test_commit_gate_covers_kb_check</code> 守阵钉住）。代价：改脚本与守阵，聚合后失败定位粒度变粗。</li>
@@ -198,11 +198,14 @@
   <ul>
     <li>2026-11-09 04:41 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
     <li>2026-11-09 — 状态 Open → In Progress（kb.status）</li>
+    <li>2026-11-09 — 状态 In Progress → Done（kb.status）</li>
 </ul>
   <h3>复验</h3>
   <p>复验：2026-11-09 05:26 <strong>部分复现</strong> —— <code>60s 判死</code>本轮未复现（机器负载低于 04:41：真实 <code>run_gates</code> 4 池跑整条 kb 链 5.23s 全绿、timekit 4.76s），故不能判已消失；但「并发放大」机制已 A/B/A 复现（单跑 4.32s → 4 路并发 14.19~14.35s → 恢复 4.28s），且 04:41 的现场进程（clone2 ui_harness.py / nav_server.py --port 8791）仍在。锚点已重跑：12 条 gates 配置序、<code>GATE_WORKERS = 4</code>、两轮闸门位置与 <code>maybe_respawn</code> 父层语义均与代码一致，未漂移。</p>
   <h3>修复后补充</h3>
-  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  <p><strong>实际修法</strong>（按 plan 26-11-09-0559 主线 A；<code>GATE_WORKERS=4</code> 与逐 job <code>timeout=60</code> 均未改）：① <code>timekit.py</code> 新增 <code>--files</code>，文件名/元数据/正文三层收窄到传入文件，无参仍全量兜底；顺手合并两轮 <code>rglob</code>、每文件只读一次、无数字行预筛；闸门第 7 条改 <code>timekit.py --check --files &lt;changed:memory-bank/**&gt;</code>。② <code>check_html.py --check</code> 接受显式 paths（无参仍全量 902 件），闸门第 9 条改 <code>check_html.py --check &lt;changed:**/*.html&gt;</code>；两条 run 的 <code>&lt;脚本&gt;.py --check</code> 字面串保留，守阵逐字匹配不破。③ <code>_pipeline.py</code> 新增 <code>changed_extra</code> 只并入 <code>&lt;changed:&gt;</code> 展开（<code>&lt;each:&gt;</code>、命中判定、暂存清单不动），并按 8191 字符上限分片、分片仍超限 <code>ExpandError</code> → rc=-2 STOP；<code>commit.py</code> 复跑阶段把 rebase 合入的 <code>memory-bank/**</code> 并入 <code>changed_extra</code>。与建议修法的差异：未采用分档 timeout / 合并扫描 / 降并发 / 杀树收尸 / 失败重跑，理由见 plan §03 候选拷问与 D1–D3。</p>
+  <p><strong>验证方式</strong>：同机热缓存 A/B/A —— 空载全量 → 单件增量 → 4 路并发增量 → 撤负载复测；<code>timekit</code> 由约 3.2~3.4s 降到约 0.13~0.24s、<code>check_html</code> 由约 1.8s 降到约 0.17s，4 路并发放大约 1.4~1.5 倍；真实 <code>run_gates</code> 4 池跑整链 15 条 job 全绿、墙钟约 7~8s，最长 job 为 HTML v.Nu 增量（约 6~7s，<code>timeout=120</code>），<strong>60s 判死与尾部不稳均未复现，P2 未启用</strong>。守阵新增 3 条（无参=全量 / timekit 增量下未来日期仍判红 / check_html 增量只扫给定件），引擎新增 7 条用例（复跑清单扩面、长度守卫与分片、命中/暂存语义不变）。</p>
+  <p><strong>测试数字</strong>：<code>commands run test.full</code> 与 <code>commands run test.quick</code> 均全绿，<code>commands run kb.check</code> 全绿；具体数字见 <code>commands run kb.baseline</code> 最新切片（本轮新建）。<code>test.full</code> 首跑出现已立档偶发红 <code>tests/test_legacy_review4_scripts.py::test_qb_capture_dry_true_zero_requests</code>（进程内假服已建连被中止族），单跑该 nodeid 绿、全量复跑绿，按坑档 <code>pitfalls/testing/inproc-server-conn-abort.md</code> 处置。</p>
 </section>
 
 <footer>

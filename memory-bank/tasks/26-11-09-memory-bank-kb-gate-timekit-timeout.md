@@ -1,9 +1,9 @@
 # 26-11-09-memory-bank-kb-gate-timekit-timeout — 提交闸门 kb 链 timekit 超时 60s 根因分析
 
-**Status:** In Progress
+**Status:** Done
 **Added:** 2026-11-09
 **Updated:** 2026-11-09
-**Summary:** 认领 issue 26-11-09-0441，复验并定位 ship.commit 的 kb 闸门 timekit --check 60s 超时：固定超时 × 全库扫描 × 并发放大 × 满载机
+**Summary:** 认领 issue 26-11-09-0441 并定位 kb 闸门 timekit --check 60s 超时（固定超时 × 全库扫描 × 并发放大 × 满载机）；按 plan 26-11-09-0559 S1–S5 实施增量收窄 + 复跑清单扩面 + 展开分片，A/B/A 复验通过、P2 未启用
 **Topics:** memory-bank-kb-gate-timekit-timeout
 **Refs:** memory-bank/issues/26-11-09-0441-bug-kb-gate-timekit-timeout-flaky.html, memory-bank/plans/26-11-09-0559-plan-memory-bank-kb-gate-timekit-timeout.html
 
@@ -36,8 +36,8 @@
 4. 量化并发放大：A/B/A 对照（单跑 → 4 路并发 → 单跑）。
 5. 把结论与证据落进 issue §02/§04/§05/§06/§07。
 6. 待办（需满载机现场）：超时杀树后残留冻结进程的进程树快照、两轮闸门是否同时触发的日志取证。
-7. 已定（2026-11-09）：修法选型落 `memory-bank/plans/26-11-09-0559-plan-memory-bank-kb-gate-timekit-timeout.html` —— 按改动收窄 `timekit` / `check_html` + 复跑清单扩面 + 展开长度守卫；分档 timeout 与独占池仅 P2 备选；本轮零代码改动。
-8. 待办（实施另起指令）：按 plan §04 的 S1–S5 执行与验收，P0 与 P1 同批，不拆开发布。
+7. 已定（2026-11-09）：修法选型落 `memory-bank/plans/26-11-09-0559-plan-memory-bank-kb-gate-timekit-timeout.html` —— 按改动收窄 `timekit` / `check_html` + 复跑清单扩面 + 展开长度守卫；分档 timeout 与独占池仅 P2 备选。
+8. 已实施（2026-11-09）：按 plan §04 的 S1–S5 执行并验收，P0 与 P1 同批未拆开发布；A/B/A 复测未触发 P2，计划与 issue 均翻 Done。
 
 ## 子任务状态表
 
@@ -50,7 +50,7 @@
 | 5 | 根因结论与修法方向落 issue | Done(2026-11-09) |
 | 6 | 满载机残留冻结进程取证 | Open |
 | 7 | 修法拍板（plan 定稿 D1–D4） | Done(2026-11-09) |
-| 8 | 按 plan §04 S1–S5 实施与验收 | Open |
+| 8 | 按 plan §04 S1–S5 实施与验收 | Done(2026-11-09) |
 
 ## 进度日志
 
@@ -62,3 +62,15 @@
 
 - 2026-11-09 06:02 grilling 四问按推荐拍板, 新建 plan 26-11-09-0559 定稿(D1-D4): 按改动收窄 timekit/check_html + 复跑清单扩面 + 展开长度守卫, P2 仅备选; 任务档案判断面与 issue 06 段同步指向; 零代码改动, 随本专题入库
 - review: 全能档 1 个只读 reviewer, 修复循环 3 轮 —— 首轮 5 条发现(major 1 / minor 3 / nit 1)引文校验 5/5 通过、裁定全相关、blocker 0、修 5、入池 0; R2/R3 零发现, 6 处修订逐项核验未回退; 评审期间远端推进 1 笔带 Review: 提交, 重新 sync 后按新锚点重取末轮基哈希, 发现不作废。
+
+- 2026-11-09 08:20 实施轮 S1-S5 落地并复验: timekit/check_html 按改动增量、复跑清单扩面与展开分片; A/B/A 与整链 4 池全绿, P2 未触发; 计划与 issue 翻 Done, 基线切片已建
+
+### R1 · 实施与收尾 (2026-11-09)
+
+按 plan §04 完成 S1–S5，P0 与 P1 同批验收、未拆开发布；A/B/A 复测与真实 4 池整链均未触发 P2，分档 timeout 与独占池不启用。
+
+- **代码面**：`timekit --files` 三层收窄（无参仍全量）；`check_html --check` 接受显式 paths；两条闸门 run 改增量且保留 `<脚本> --check` 字面串；`_pipeline` 的 `changed_extra` 只并入 `<changed:>`，8191 字符分片、分片仍超限 STOP；`commit` 复跑阶段并入 rebase 合入的 `memory-bank/**`。
+- **守阵/用例**：`tests/test_memory_bank_docs.py` 新增三条（无参=全量 / 增量下未来日期仍判红 / 增量只扫给定件）；my-commit-flow 包新增七条（复跑扩面、长度守卫与分片、命中/暂存语义不变）。
+- **复验**：空载全量 → 单件增量 → 4 路并发 → 撤负载的 A/B/A，以及真实 `run_gates` 4 池整链全绿；数字见 plan §02「实施轮复测」与最新基线切片。
+- **坑**：`test.full` 首跑命中已立档偶发红 `test_legacy_review4_scripts.py::test_qb_capture_dry_true_zero_requests`（进程内假服已建连被中止族；首跑仅留 tail 未捕完整 traceback，依据 = 红点 nodeid + 单跑绿 + 全量复跑绿）。**为什么没命中**：本轮检索面是「kb 闸门 / timekit」，进程内假服族不在开工路由面内，首个踩坑动作就是跑全量。处置按 `pitfalls/testing/inproc-server-conn-abort.md`：复跑取绿，不改测试不加无脑重试。
+- **收尾**：计划 §02/§04/§05/§10 回写并翻 Done；issue 翻 Done 并补「实际修法 / 验证方式 / 测试数字」；基线切片新建；坑档复发登记（inproc-server-conn-abort / venv-trampoline-clone-copy / uv-trampoline-broken）；`conventions/process.md` 回写闸门增量口径。

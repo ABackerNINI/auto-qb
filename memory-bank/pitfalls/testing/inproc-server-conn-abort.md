@@ -21,3 +21,4 @@
 - **同族辨析**: [parallel-run.md](parallel-run.md)「偶发红: 自选端口的用例」是 bind 前 TOCTOU 抢号
   (指纹 ConnectionRefused / 打到别人的服); [fixed-port-test-collision.md](fixed-port-test-collision.md)
   是固定端口撞号 —— 本条三者机制都不同: 连接**已建立**后才被中止, 指纹是 10053, 别混。
+- **复发**: 1(2026-11-09, kb 闸门 S5 收尾轮) —— `test.full` 首跑红在同一 nodeid(5,871 passed + 1 failed), 单跑该 nodeid 绿、全量复跑绿; 首跑只留 tail 未捕到完整 traceback, 按「红点 nodeid + 单跑绿 + 复跑绿」归入本族。**为什么没命中**: 本轮检索面是 kb 闸门 / timekit, 进程内假服族不在开工路由面内, 首个踩坑动作就是跑全量。

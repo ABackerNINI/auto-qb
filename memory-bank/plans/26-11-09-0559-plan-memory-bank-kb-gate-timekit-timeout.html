@@ -7,9 +7,9 @@
 <title>kb 闸门 timekit 超时治理：按改动收窄全库扫描</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="memory-bank-kb-gate-timekit-timeout">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-11-09-0559">
-<meta name="doc-updated" content="26-11-09-0559">
+<meta name="doc-updated" content="26-11-09-0820">
 <meta name="doc-refs" content="memory-bank/issues/26-11-09-0441-bug-kb-gate-timekit-timeout-flaky.html, memory-bank/tasks/26-11-09-memory-bank-kb-gate-timekit-timeout.md">
 <style>
   :root {
@@ -73,9 +73,9 @@
 
 <div class="kicker">PLAN · memory-bank · doc-topic: memory-bank-kb-gate-timekit-timeout</div>
 <h1>kb 闸门 timekit 超时治理：按改动收窄全库扫描</h1>
-<p class="lede">本篇只回答「怎么修」：把 kb 闸门里两条全库扫描型脚本按本次改动清单收窄，同时补齐「复跑阶段远端合入文件」与「命令行长度」两个正确性前置漏洞；不动并发模型、不改 <code>timeout</code>、不聚合 wrapper。根因与现场证据的权威在 issue <code>26-11-09-0441</code> §05 与任务档案，本篇只引用不重写。方案经 2026-11-09 grilling 四问拍板（D1–D4，§06），本轮只定稿、不实施。</p>
+<p class="lede">本篇只回答「怎么修」：把 kb 闸门里两条全库扫描型脚本按本次改动清单收窄，同时补齐「复跑阶段远端合入文件」与「命令行长度」两个正确性前置漏洞；不动并发模型、不改 <code>timeout</code>、不聚合 wrapper。根因与现场证据的权威在 issue <code>26-11-09-0441</code> §05 与任务档案，本篇只引用不重写。方案经 2026-11-09 grilling 四问拍板（D1–D4，§06）；S1–S5 已于同日实施并完成 A/B/A 复验，复测数字见 §02「实施轮复测」。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-09-0559 · <b>doc-updated</b> 26-11-09-0559 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-11-09-0559 · <b>doc-updated</b> 26-11-09-0820 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 2026-11-09 会话：issue 26-11-09-0441 认领轮根因结论 → grilling 第一轮 Q1–Q4 用户「按推荐」拍板；上游约束承袭计划 <code>26-11-01-0434</code>（方案 A/D 的改动级先例、D2 并发池 4、「明确不做 wrapper」）
 </div>
 
@@ -114,6 +114,13 @@
   <li><b>命令行长度</b>：<code>&lt;changed:&gt;</code> 经 <code>run_gates</code> 走 <code>shell=True</code>（cmd.exe 8191 上限），平均相对路径 69 字符 ⇒ <b>100 个改动文件约 6856 字符</b>，大批量 KB 提交会截断。</li>
   <li><b>守阵硬约束</b>：见 §01 底线 2，run 前缀不能改。</li>
 </ol>
+<p><b>实施轮复测（2026-11-09，同机热缓存，口径同上、含解释器启动；闸门实际解释器 = <code>.venv</code> python）：</b></p>
+<table>
+<tr><th>脚本</th><th>空载全量</th><th>空载增量</th><th>4 路并发增量</th><th>撤负载后增量</th><th>并发放大</th></tr>
+<tr><td><code>timekit --check</code></td><td>3.21~3.36s</td><td>0.134~0.235s</td><td>0.200~0.232s</td><td>0.134~0.235s</td><td>约 1.5 倍</td></tr>
+<tr><td><code>check_html --check</code></td><td>1.76~1.86s</td><td>0.168~0.173s</td><td>0.220~0.248s</td><td>0.169~0.192s</td><td>约 1.4 倍</td></tr>
+</table>
+<p><b>整链墙钟</b>（真实 <code>run_gates</code> 4 池，改动面 = 本计划 + issue + 任务档案）：15 条 job 全绿，墙钟 7.1~8.0s；最长 job 是 HTML v.Nu 增量（6.4~7.4s，<code>timeout=120</code>），<code>timekit</code> 增量 0.31s、<code>check_html</code> 增量 0.18s。<b>60s 判死与尾部不稳均未复现，P2 未启用。</b>基线口径的全量数字见最新基线切片（<code>commands run kb.baseline</code>）。</p>
 
 <h2><span class="no">§03</span>方案总览</h2>
 <p><b>主线 A（D1）：</b>增量减工作量 + 扩清单补漏 + 长度守卫。减到约 0.5s 后即便 3.3 倍并发放大也只有约 1.6s，根因被消掉；不动并发模型、不改 timeout、不推翻上游 D2。</p>
@@ -138,19 +145,19 @@
 <p><b>明确不做：</b>9 条全收（4 条全量语义硬冲突、3 条合计不足 0.6s，D2）；改 <code>GATE_WORKERS</code> / 改 <code>timeout</code>（D1）；杀树收尸、失败重跑（D3 独立立项），缓存层（§03 判复杂度过高，排除）；本轮实施 S1–S5（D4 只出方案）。</p>
 
 <h2><span class="no">§04</span>实施步骤</h2>
-<p class="aside">本轮只定稿，下列五步<b>均未开工</b>；实施另起指令。P0 与 P1 同批验收。</p>
+<p class="aside">S1–S5 已于 2026-11-09 实施完成，P0 与 P1 同批验收（未拆开发布）；下列判据逐项复核通过，复测数字见 §02「实施轮复测」与最新基线切片。</p>
 <table>
 <tr><th>步</th><th>内容</th><th>验收判据</th></tr>
 <tr><td>S1</td><td><code>timekit.py</code> 加 <code>--files</code>：三层守卫<b>都</b>收窄到传入文件（含 <code>check_filenames</code> 的目录扫描，否则残留 0.39s 固定成本）；无参调用仍全量（兼容 <code>kb.check</code> / 手工）；顺手合并两轮 <code>rglob</code>、每文件读一次、无数字行预筛。闸门 run → <code>timekit.py --check --files &lt;changed:memory-bank/**&gt;</code>，脚本内按后缀过滤</td><td>① 改 1 个 md → <code>≤0.6s</code>；② 无参调用（<code>kb.check</code> 口径）仍全量且判据不变；③ 改动文件种未来日期仍判红；④ <code>test_commit_gate_covers_kb_check</code> 绿</td></tr>
 <tr><td>S2</td><td><code>check_html.py</code> 让 <code>--check</code> 与显式 paths 共存（<code>collect_files(mb, paths or None)</code>）；闸门 run → <code>check_html.py --check &lt;changed:**/*.html&gt;</code></td><td>① 改 1 个 HTML → 只扫它且 L1/L2 判据生效；② 无参仍全量；③ 既有 <code>--vnu --strict &lt;changed:**/*.html&gt;</code> 增量行不受影响；④ 守阵绿</td></tr>
 <tr><td>S3</td><td>守阵：既有 <code>test_commit_gate_covers_kb_check</code> 保持绿（字面串保留，增量参数只加在 <code>--check</code> 后）；新增守阵钉「无参 = 全量」+「增量下改动文件的未来日期仍判红」；<code>kb.check</code> 的 run 列表<b>不动</b></td><td>新增用例红绿双验；<code>kb.check</code> 全绿</td></tr>
-<tr><td>S4</td><td>引擎层补漏：① <code>commit.py:587</code> 复跑阶段把远端合入的 <code>memory-bank/**</code> 并入 <code>ctx['changed']</code>，<b>只作用于 <code>&lt;changed:&gt;</code> 展开</b>，不改 <code>gates_for</code> 命中与暂存清单；② <code>expand_run</code> 加字符上限守卫，超限先改走分片 / 清单文件</td><td>① 模拟 rebase 合入远端 KB 文件（种未来日期）→ 复跑闸门能扫到并判红；② 命中 / 暂存语义用例逐字不变；③ 100+ 改动文件展开不截断；④ 展开失败仍 STOP 不降级</td></tr>
+<tr><td>S4</td><td>引擎层补漏：① <code>commit.py</code> 复跑阶段把远端合入的 <code>memory-bank/**</code> 并入 <code>ctx['changed_extra']</code>，<b>只作用于 <code>&lt;changed:&gt;</code> 展开</b>，不改 <code>gates_for</code> 命中与暂存清单；② <code>expand_run</code> 加字符上限守卫，超限先改走分片 / 清单文件</td><td>① 模拟 rebase 合入远端 KB 文件（种未来日期）→ 复跑闸门能扫到并判红；② 命中 / 暂存语义用例逐字不变；③ 100+ 改动文件展开不截断；④ 展开失败仍 STOP 不降级</td></tr>
 <tr><td>S5</td><td>收尾：A/B/A 4 路并发复验整链；<code>test.quick</code> + <code>kb.check</code> 全绿；复测数字回写本计划（<code>kb.bump</code> 加 R 行）；按收尾 DoD 处理基线切片；issue 置 <code>Done</code> 并补「实际修法 / 验证方式 / 测试数字」</td><td>DoD 全过，<code>ship.commit</code> 全绿；本计划 <code>doc-status</code> 随实施推进翻 <code>In Progress</code> → <code>Done</code></td></tr>
 </table>
 <p>实施顺序 S1 → S2 → S3（脚本与守阵，可各自独立成提交）；S4 是引擎层改动，与 P0 <b>同批验收</b>；S5 统一收尾。S1/S2 的 run 写法必须让 <code>&lt;脚本&gt;.py --check</code> 字面串保持连续（守阵逐字匹配）。</p>
 
 <h2><span class="no">§05</span>待拍板清单</h2>
-<p>无待拍板项 —— D1–D4 已于 2026-11-09 05:57 由用户「按推荐」全部拍板（迁 §06）。剩余未决项均为<b>带触发条件的执行分支</b>，不是开放决策：P2 两案仅在 S5 实测仍触发超时或尾部不稳时启用（触发条件见 §07 R4）；杀树收尸、失败重跑按 D3 各自独立立项，缓存层按 §03 判「复杂度过高，排除」，均不在本方案内。</p>
+<p>无待拍板项 —— D1–D4 已于 2026-11-09 05:57 由用户「按推荐」全部拍板（迁 §06）。S5 实测未触发 P2：4 路并发增量与真实 <code>run_gates</code> 4 池整链均未出现 60s 超时或尾部不稳，故分档 timeout 与独占池两案不启用，仅作后续条件分支保留（触发条件见 §07 R4）；杀树收尸、失败重跑按 D3 各自独立立项，缓存层按 §03 判「复杂度过高，排除」，均不在本方案内。</p>
 
 <h2><span class="no">§06</span>拍板记录</h2>
 <table>
@@ -177,6 +184,7 @@
 <h2><span class="no">§10</span>变更记录</h2>
 <ul>
   <li><span class="tag">R0 · 26-11-09-0559</span> 初版：2026-11-09 会话 grilling 第一轮 Q1–Q4 用户「按推荐」拍板定稿（D1–D4 见 §06）。收主线 A（P0 增量收窄 + P1 补漏 + P2 备选）、9 条逐条裁定与取证数字（§02）、候选拷问比选（§03）、S1–S5 实施与验收（§04）、R1–R6 风险（§07）；经 <code>kb.new plan --refs</code> 与 issue / 任务档案双向补链。本轮只出方案、零代码改动，S1–S5 未开工。</li>
+  <li><span class="tag">R1 · 26-11-09-0820</span> 实施轮 S1-S5 全部落地: timekit --files 三层收窄 / check_html 显式 paths / 3 条守阵 / 复跑清单扩面 + 8191 字符分片 / 7 条引擎用例; A-B-A 复测 timekit 3.2-3.4s→0.13-0.24s、check_html 1.8s→0.17s, 4 路并发约 1.4-1.5 倍, 整链 4 池 15 job 全绿 7.1-8.0s, 60s 判死未复现 P2 未启用; test.full 与 kb.check 全绿</li>
 </ul>
 
 </div>

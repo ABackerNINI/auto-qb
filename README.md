@@ -249,7 +249,7 @@ auto-qb 是**微内核 + 插件式模块**结构(2026-09 内核化重构落地):
 
 ## 开发测试
 
-想参与开发或验证行为?测试全部使用替身,不连真实 qBittorrent,可随时全量运行。当前用例规模与最近一次全量结果见 `commands run kb.baseline`(基线数字唯一来源,此处不手抄):
+想参与开发或验证行为?测试全部使用替身,不连真实 qBittorrent,可随时全量运行。提交前 `commands run ship.commit` 会跑代码与知识库闸门(日期守卫 / HTML 结构守卫等按本次改动增量执行);当前用例规模与最近一次全量结果见 `commands run kb.baseline`(基线数字唯一来源,此处不手抄):
 
 ```text
 commands run env.sync                              # 同步依赖(含开发/测试依赖)
