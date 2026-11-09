@@ -8,18 +8,18 @@ import { clickRow, ctxItem, openApp } from './lib/gestures.mjs';
  * 设定位置对话框守阵 —— 几何(2026-10-19 首修) + 提交语义与过渡(2026-10-29 二修)。
  *
  * 缺陷机理(首修): 保存路径组合框是本表单的**最后一项**, 而下拉朝下开(`.add-pop { top: calc(100% + 4px) }`)
- * ⇒ 整条菜单必然伸到 `.add-dialog-body`(overflow-y:auto 滚动容器)底沿之外: ①被 body 裁掉,
- * 伸出部分还把 body 的 scrollHeight 撑大(实测 123→383); ②`_fitAddPop` 的净空算式量的是「输入行 →
+ * ⇒ 整条菜单必然伸到 `.add-dialog-body`(overflow-y:auto 滚动容器)底沿之外: 1) 被 body 裁掉,
+ * 伸出部分还把 body 的 scrollHeight 撑大(实测 123→383); 2) `_fitAddPop` 的净空算式量的是「输入行 →
  * body 可见底沿」, 行贴底沿时净空为负, `avail > 0` 门恒不生效 ⇒ 限高兜底也失效。修法 = 根元素按
  * movePathMenu 挂 `.pop-open` + 三皮肤 body 预留 padding-bottom 272px。
  *
  * 二修(2026-10-29 用户报「点下拉框中的选项就触发移动」+「窗口太小, 点下拉框高度跳变」):
- * ①**点选只回填**: 移动只由「设定位置」按钮或手输回车发起(moveApplyPath 不再调 submitMoveDialog);
- * ②**窗口基线 360px**: 收层态原实测 243px(一句说明 + 一个输入框 = 小个子), 三皮肤 min-height 抬到
+ * 1. **点选只回填**: 移动只由「设定位置」按钮或手输回车发起(moveApplyPath 不再调 submitMoveDialog);
+ * 2. **窗口基线 360px**: 收层态原实测 243px(一句说明 + 一个输入框 = 小个子), 三皮肤 min-height 抬到
  *    `min(360px, calc(100vh - 120px))`, 动作条 margin-top:auto 钉底;
- * ③**高度走过渡**: 预留改 `transition: padding-bottom 200ms`(原先 0↔272 硬切 = 一次开/收跳 272px),
+ * 3. **高度走过渡**: 预留改 `transition: padding-bottom 200ms`(原先 0↔272 硬切 = 一次开/收跳 272px),
  *    高度 360→515 平滑长高、收层平滑回落;
- * ④**打开不自动展开**: 只聚焦(openMoveDialog 置 moveSuppressOpen), 点输入框/方向键才展开 ——
+ * 4. **打开不自动展开**: 只聚焦(openMoveDialog 置 moveSuppressOpen), 点输入框/方向键才展开 ——
  *    否则「第一眼」是开层态, 一按 Esc 就塌回小窗口, 跳变被放大成两次。
  *
  * 三修(2026-10-29 用户报「点下拉框, 下拉框出现后自动弹回」): 二修把增长交给了 padding 过渡, 但遮罩是
@@ -64,17 +64,17 @@ import { clickRow, ctxItem, openApp } from './lib/gestures.mjs';
  *
  * 断言口径(量 containment 不量位移 —— 居中弹窗增高时上下对半扩, 量推下量只有真实增量一半,
  * 见 pitfalls/web-ui/dialog-measure):
- *   ①打开即收层态: 下拉未展开、高度 ≥ 基线 360、body 零滚动(overflowY 仍 auto)、空路径按钮置灰;
- *   ②点输入框展开: ResizeObserver 采样到**严格介于基线与终值之间的中间高度**(证明是过渡不是瞬跳),
+ *   1. 打开即收层态: 下拉未展开、高度 ≥ 基线 360、body 零滚动(overflowY 仍 auto)、空路径按钮置灰;
+ *   2. 点输入框展开: ResizeObserver 采样到**严格介于基线与终值之间的中间高度**(证明是过渡不是瞬跳),
  *     终值增量 > 120px, 下拉完整落在框内、列表未被限高截断、前 6 项真实可点; **输入行屏坐标不动**;
  *     逐帧无滚动条(overflowY 恒 hidden / 占位宽恒 0);
- *   ③Esc 收层: 高度平滑回落到基线(±8px), body 仍零滚动且**离场全过程无滚动条**, 收完回到 auto;
- *   ④点选候选: 对话框仍在 + 输入框回填 + **零写请求**; 点「设定位置」才发一次写请求并关窗;
- *   ⑤同一屏幕点连点两次: 面板仍在、输入框未被回填(三修回归门);
- *   ⑥点面板头: 面板仍在、输入框未被改写, 且面板没被"冻住"(随后点候选仍能回填并收起);
- *   ⑦按下与抬起落在不同元素(行内留白 / 候选行): 面板仍在、输入框未被回填; 而**真点到组件外**
+ *   3. Esc 收层: 高度平滑回落到基线(±8px), body 仍零滚动且**离场全过程无滚动条**, 收完回到 auto;
+ *   4. 点选候选: 对话框仍在 + 输入框回填 + **零写请求**; 点「设定位置」才发一次写请求并关窗;
+ *   5. 同一屏幕点连点两次: 面板仍在、输入框未被回填(三修回归门);
+ *   6. 点面板头: 面板仍在、输入框未被改写, 且面板没被"冻住"(随后点候选仍能回填并收起);
+ *   7. 按下与抬起落在不同元素(行内留白 / 候选行): 面板仍在、输入框未被回填; 而**真点到组件外**
  *     (上方文案)仍必须收层 —— 防 `@click.stop` 挂得过宽把"点空白收层"一起废掉;
- *   ⑧选中候选后再点下拉: 逐帧 `body.scrollTop` 恒 0、说明文案屏坐标极差 ≤2px; 且高亮项仍在列表
+ *   8. 选中候选后再点下拉: 逐帧 `body.scrollTop` 恒 0、说明文案屏坐标极差 ≤2px; 且高亮项仍在列表
  *     可视区内(反向守门: 滚动跟随不许被"修死")。
  */
 
@@ -266,7 +266,7 @@ for (const skin of SKINS) {
       await expect(dlg).toBeVisible();
       await settleAnim(dlg);
 
-      // —— ① 打开即收层态(2026-10-29 二修): 不自动展开 + 基线 360 + 空路径按钮置灰
+      // —— 1. 打开即收层态(2026-10-29 二修): 不自动展开 + 基线 360 + 空路径按钮置灰
       const closed0 = await geom(page);
       expect(closed0.popOpen, '打开对话框不应自动展开下拉(否则第一眼开层态, 一按 Esc 就塌 = 跳变)').toBe(false);
       expect(closed0.w, '设定位置对话框宽度(860 宽档, 与添加种子同宽)').toBe(860);
@@ -275,7 +275,7 @@ for (const skin of SKINS) {
       expect(closed0.bodyOverflowY, '收层态 body 仍可滚(矮视口兜底, 四修只关开层期)').toBe('auto');
       expect(closed0.btnDisabled, '空路径时「设定位置」按钮应置灰(按钮是唯一鼠标提交路径)').toBe(true);
 
-      // —— ② 点输入框展开: 高度必须是**过渡**过来的(采到中间态), 终值含 272 预留
+      // —— 2. 点输入框展开: 高度必须是**过渡**过来的(采到中间态), 终值含 272 预留
       await samplerOn(page);
       await sbSamplerOn(page);  // 四修: 逐帧记 body 滚动条状态(过渡期面板伸出 body = 闪滚动条)
       await page.locator('#move-path').click();
@@ -311,7 +311,7 @@ for (const skin of SKINS) {
         expect(h.isItem, `下拉第 ${i} 项应真实可点(不被动作条/遮罩盖住)`).toBe(true);
       }
 
-      // —— ③ Esc 只收下拉不关对话框: 高度平滑回落到基线; 收层全过程同样不得出现滚动条(五修)
+      // —— 3. Esc 只收下拉不关对话框: 高度平滑回落到基线; 收层全过程同样不得出现滚动条(五修)
       await sbSamplerOn(page);  // 面板离场淡出期间仍在 DOM 里撑高度, 而 .pop-open 已摘
       await page.keyboard.press('Escape');
       await expect(pop).toBeHidden();

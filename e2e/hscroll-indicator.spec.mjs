@@ -7,10 +7,10 @@ import { collectRuntimeErrors, installRuntimeErrorGuard } from './lib/errors.mjs
  * 主表横滚指示条的行为面守阵(计划 26-11-01-0553 S5; 实现 = shared/hscroll.css + shared/columns.js)。
  *
  * **钉的是什么**: 原生横条被彻底隐藏后, 底部胶囊(300x5, hover 7)是唯一的横向可达入口 ——
- * ①窄窗下列真的溢出时原生条**不占条槽**(否则每行底部白丢 10px 且胶囊与条槽叠在一起); ②隐藏条槽后
- * 仍能横滚; ③指针伸到内容区底部 24px 热区带内胶囊才淡入(常态零痕迹); ④拖胶囊真的改 `scrollLeft`,
+ * 1) 窄窗下列真的溢出时原生条**不占条槽**(否则每行底部白丢 10px 且胶囊与条槽叠在一起); 2) 隐藏条槽后
+ * 仍能横滚; 3) 指针伸到内容区底部 24px 热区带内胶囊才淡入(常态零痕迹); 4) 拖胶囊真的改 `scrollLeft`,
  * 且**表头跟着同步**(R2: 拖动是程序化写 scrollLeft, 只信"scroll 事件会触发"的推断不够);
- * ⑤宽窗无溢出时热区内也不出现; ⑥召唤范围(纵向不含状态栏 / 横向只认胶囊邻域 / Shift+滚轮也召唤)。
+ * 5) 宽窗无溢出时热区内也不出现; 6) 召唤范围(纵向不含状态栏 / 横向只认胶囊邻域 / Shift+滚轮也召唤)。
  *
  * **为什么静态守阵(S4, tests/test_webui_static_skins.py)不够**: 那条只能读源码文本 —— 它看得出
  * `display: none` 在不在、link 挂没挂, 但看不出**几何是否真的生效**: `::-webkit-scrollbar{display:none}`
@@ -37,7 +37,7 @@ import { collectRuntimeErrors, installRuntimeErrorGuard } from './lib/errors.mjs
  * **显式前置断言**: 视口漂了(列模型加列、媒体查询改行宽)会红在这里, 而不是静默退化成空过。
  *
  * **实测环境注意(本 spec 的红绿双验结论)**: 本仓库的 headless Chromium 用 **overlay 滚动条** ——
- * `offsetHeight - clientHeight` 在"原生条可见"时实测同样是 0, 故计划 S5 ① 的那条几何断言在当前环境
+ * `offsetHeight - clientHeight` 在"原生条可见"时实测同样是 0, 故计划 S5 第 1 条的那条几何断言在当前环境
  * 永远不会红(换成经典滚动条的环境才有效)。真正的非空过证据是紧随其后的计算样式断言
  * (`::-webkit-scrollbar` 的 computed `display` / `scrollbar-width`): 删掉 hscroll.css 的隐藏规则
  * 会立刻变 `inline` / `thin`, 实测红绿双验过。
@@ -139,9 +139,9 @@ for (const skin of SKINS) {
     installRuntimeErrorGuard(test);
 
     /* ---------- 1. 无条槽 + 仍可横滚 + 热区淡入(三视图) ----------
-     * 各段独立: ①/①'条槽(几何 + 计算样式) ②可滚(能力) ③淡入(触发链)。
-     * 删掉 hscroll.css 的隐藏规则只红 ①'; 把 .group-table 的 overflow-x 改成 hidden 只红 ②;
-     * 删掉 _hscrollBind/_hscrollHot 只红 ③。 */
+     * 各段独立: 1)/1'条槽(几何 + 计算样式) 2) 可滚(能力) 3) 淡入(触发链)。
+     * 删掉 hscroll.css 的隐藏规则只红 1'; 把 .group-table 的 overflow-x 改成 hidden 只红 2;
+     * 删掉 _hscrollBind/_hscrollHot 只红 3。 */
     for (const v of VIEWS) {
       test(`无条槽 + 可横滚 + 热区淡入: ${v.label} @fast (${skin})`, async ({ page }) => {
         collectRuntimeErrors(page);
@@ -154,25 +154,25 @@ for (const skin of SKINS) {
         expect(geo.sw, `${v.label} 窄窗前置: 列未溢出(${geo.sw} <= ${geo.cw}) —— 本用例验不到任何东西, ` +
           '视口还要更窄(或列模型变窄了)').toBeGreaterThan(geo.cw);
 
-        // ① 无条槽(几何面, 计划 S5 的验收口径): offsetHeight - clientHeight 就是横向条槽高,
+        // 1. 无条槽(几何面, 计划 S5 的验收口径): offsetHeight - clientHeight 就是横向条槽高,
         //    经典滚动条下隐藏失败时是全局 ::-webkit-scrollbar 的 10px。
-        //    ⚠ 本 headless Chromium 用的是 **overlay 滚动条**: 不占条槽 ⇒ 这条差值在"有原生条"时
-        //    实测也是 0(单独验过), 单靠它在当前环境永远不会红。故紧接着补 ①' 作为同一件事的
+        //    WARN: 本 headless Chromium 用的是 **overlay 滚动条**: 不占条槽 ⇒ 这条差值在"有原生条"时
+        //    实测也是 0(单独验过), 单靠它在当前环境永远不会红。故紧接着补 1' 作为同一件事的
         //    非空过证据(否则这条就只是安慰剂 —— 留着是因为换成经典滚动条的环境/浏览器时它才是有牙齿的)。
         expect(geo.oh - geo.ch, `${v.label} 原生横条仍占条槽: offsetHeight(${geo.oh}) - clientHeight(${geo.ch}) ` +
           `= ${geo.oh - geo.ch}px(应为 0; 10 = 全局 ::-webkit-scrollbar 高度, 说明隐藏规则没生效)`).toBe(0);
 
-        // ①' hide 规则真的命中这个元素(计算值, 不是源码文本): 静态守阵只能证明"文件里有这行",
+        // 1' hide 规则真的命中这个元素(计算值, 不是源码文本): 静态守阵只能证明"文件里有这行",
         //    证明不了它没被更高特异性的规则压掉、也证明不了本皮肤真的链到了 hscroll.css。
         expect(geo.webkitBarDisplay, `${v.label} .group-table 的原生条仍在绘制(::-webkit-scrollbar 计算 display=` +
           `${geo.webkitBarDisplay}, 应为 none)`).toBe('none');
         expect(geo.scrollbarWidth, `${v.label} scrollbar-width 计算值=${geo.scrollbarWidth}(应为 none)`).toBe('none');
 
-        // ② 仍可横滚: 隐藏的是"条", 不是"能力"(单独再断一次 —— 别让它被上面的前置断言吞掉)
+        // 2. 仍可横滚: 隐藏的是"条", 不是"能力"(单独再断一次 —— 别让它被上面的前置断言吞掉)
         expect(geo.sw, `${v.label} 隐藏条槽后失去横滚能力: scrollWidth(${geo.sw}) <= clientWidth(${geo.cw})`)
           .toBeGreaterThan(geo.cw);
 
-        // ③ 热区淡入。先确认热区外零痕迹(胶囊可能压根不存在 —— 它是溢出判定后才惰性建的 DOM)
+        // 3. 热区淡入。先确认热区外零痕迹(胶囊可能压根不存在 —— 它是溢出判定后才惰性建的 DOM)
         const hot = await hotSpot(page);
         expect(hot.sbH, `${v.label} 量不到 .statusbar 高度(${hot.sbH}) —— 热区公式失效, 落点无意义`)
           .toBeGreaterThan(0);
@@ -250,7 +250,7 @@ for (const skin of SKINS) {
     });
 
     /* ---------- 3. 宽窗负例(仅辅种表) ----------
-     * D10: 常态下不给任何"可横滚"提示。负例最怕空过, 故 ①把"确实不溢出"写成前置 ②注入一次性
+     * D10: 常态下不给任何"可横滚"提示。负例最怕空过, 故 1) 把"确实不溢出"写成前置 2) 注入一次性
      * mousemove 计数, 证明热区事件真的到过 document(否则"没出现"只是因为指针压根没动)。 */
     test(`宽窗无溢出: 热区内也不出现指示条 @fast (${skin})`, async ({ page }) => {
       collectRuntimeErrors(page);

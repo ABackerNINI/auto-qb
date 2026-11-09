@@ -9,7 +9,7 @@ import { collectRuntimeErrors, installRuntimeErrorGuard } from './lib/errors.mjs
  * **报障面** = 三个主表 × 每个皮肤(辅种 / 种子 / 追剧; 必显列 = locked 的首列, 也是吸左首格)。
  * **根因**: `.group-row.selected { background: var(--sel-bg) }` 把行底**替换**成半透明 tint(而不是叠在
  * 行底上) ⇒ 行板实际露出的是页底 `--bg`, 而首格镜像按 `var(--bg-row)` 合成(坑档
- * pitfalls/web-ui/frozen-column.md ②⑥ 的按面重锚口径) —— 两侧承光底分家, 选中行名称列成了整列
+ * pitfalls/web-ui/frozen-column.md 第 2/6 项的按面重锚口径) —— 两侧承光底分家, 选中行名称列成了整列
  * 异色竖带。真浏览器逐像素实测: atlas Δ9/255、prism Δ5/255, 未选中行 Δ0。
  * **修法**: 行底不被状态替换 —— `linear-gradient(tint, tint), var(--bg-row)`, 与首格同一个合成表达式
  * ⇒ 两侧计算背景逐字节相等(声明式契约由

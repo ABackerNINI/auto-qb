@@ -13,14 +13,14 @@ import { expectNoDeadClass } from './lib/dt-dead-class.mjs';
  * 列模型**(对齐靠模板里手挂的 .num 类), 所以拖宽/排序/右键隐藏这四件在面板里**一件都没有**;
  * 接壳后它们全部来自 columns.js 这一套引擎(表头 <aq-table grid> 渲出的 .h-cell 挂 resizer /
  * 排序 click / contextmenu)。这套接线有三种**静默**坏法, 静态守阵一个都抓不住:
- *   ① 表头的 ref 拿不到 —— 表头在**页签组件**模板里, 根实例 $refs 取不到它; 若 columns.js 的
+ *   1. 表头的 ref 拿不到 —— 表头在**页签组件**模板里, 根实例 $refs 取不到它; 若 columns.js 的
  *      `_headEl` 没有 DOM 兜底(按 `.group-head[data-table=…]` 查), 拖宽会**毫无反应**(不报错);
- *   ② 排序 scope 落错表 —— 表壳列头若把 scope 传成 undefined, `setSort` 会按**当前视图**解析,
+ *   2. 排序 scope 落错表 —— 表壳列头若把 scope 传成 undefined, `setSort` 会按**当前视图**解析,
  *      于是点抽屉列头排的是主视图, 抽屉自己的箭头永远不出现;
- *   ③ 列偏好没进同一份 v5 载荷 —— 隐藏的列刷新后自己回来。
- * 三条的真实手势就是本 spec 的①~④, ⑤ 钉"隐藏之后有地方能恢复"(抽屉表在列选择器里必须成组出现)。
+ *   3. 列偏好没进同一份 v5 载荷 —— 隐藏的列刷新后自己回来。
+ * 三条的真实手势就是本 spec 的第 1~4 步, 第 5 步钉"隐藏之后有地方能恢复"(抽屉表在列选择器里必须成组出现)。
  *
- * ⑥ 行键盘在面板内可用(W2 验收的第四件) —— 这条**不是**"面板自己吃 ↑↓", 而是方案A(计划
+ * 6. 行键盘在面板内可用(W2 验收的第四件) —— 这条**不是**"面板自己吃 ↑↓", 而是方案A(计划
  * 26-10-03-0917 §3.2)定下的反身语义: 停靠面板是种子列表的**附属**不是浮层, 所以面板开着时
  * **列表行键盘必须保持存活**(scope 恒 "list"、drawer.open 不在 _kbOverlayBusy 名单), 面板再
  * 经 _kbFollowDrawer(200ms 防抖)跟着换目标。重写渲染层时这两处(渲染 vs 键位)分属不同文件,
@@ -79,7 +79,7 @@ for (const skin of SKINS) {
       // 滚动), 面板里会盖住列表上方的工具条 —— 抽屉作用域把它改回 static(三皮肤成对)。
       expect(await head.evaluate((el) => getComputedStyle(el).position)).toBe('static');
 
-      // ① 拖宽: 拖首列把手 +60px → 首列**生效宽度**写进 grid 模板(表头与行同取 gridStyle 一个引用)。
+      // 1. 拖宽: 拖首列把手 +60px → 首列**生效宽度**写进 grid 模板(表头与行同取 gridStyle 一个引用)。
       // 这一条同时证明 `_headEl` 的 DOM 兜底成立 —— 拿不到表头元素时 startResize 第一行就 return,
       // 表现为"拖了完全没反应"(无报错, 静态守阵也看不见)。
       const firstTrack = () => head.evaluate((el) => parseFloat(getComputedStyle(el).gridTemplateColumns));
@@ -91,7 +91,7 @@ for (const skin of SKINS) {
       await page.mouse.up();
       expect(await firstTrack(), `拖宽后首列轨道应加宽(拖前 ${before}px)`).toBeGreaterThan(before + 30);
 
-      // ② 排序: 点「tier」列头 → 该格出现排序箭头。箭头是 `v-if="sortKey === col.key"` 渲的, 而
+      // 2. 排序: 点「tier」列头 → 该格出现排序箭头。箭头是 `v-if="sortKey === col.key"` 渲的, 而
       // sortKey 来自**本表**的 dyn 排序态(`${DRAWER_TABLE_DEFS}.sort.dyn`, dtSortState 映射) ——
       // scope 若落回主视图, 本表箭头恒不出现(这条断言即失配)。
       const tierCell = cells.nth(2);
@@ -102,7 +102,7 @@ for (const skin of SKINS) {
       // 行序也真的按它排(数据桩里 tier 值不唯一, 只断言"渲染出来了"以免绑死桩内容)
       await expect(drawer.locator('.group-row[data-table="drawerTrackerV06"]').first()).toBeVisible();
 
-      // ③ 右键隐藏: 表头右键 → 菜单(逐列"隐藏「X」") → 点击 → 该列出表。
+      // 3. 右键隐藏: 表头右键 → 菜单(逐列"隐藏「X」") → 点击 → 该列出表。
       // !表头**独占右键**: 面板把"模板选择"的右键入口挂在 .drawer-body 上, 表头在里面 —— 列头
       // 若不拦冒泡就同时弹出模板菜单。故这里顺带钉住"模板菜单没被带出来"(变体候选是各页签
       // 模板菜单才有的项, 足以判别)。
@@ -115,7 +115,7 @@ for (const skin of SKINS) {
       await expect(head.locator('.h-cell.hc-tier')).toHaveCount(0);
       await expect(cells).toHaveCount(7);
 
-      // ④ 持久化: 刷新 → 重开抽屉 → 仍是 7 列(列偏好落在**与主视图同一份** v5 载荷的独立 page 子树
+      // 4. 持久化: 刷新 → 重开抽屉 → 仍是 7 列(列偏好落在**与主视图同一份** v5 载荷的独立 page 子树
       // 下 —— 新增 page 是向后兼容扩展, COLS_STORE_KEY 不升版本)
       await page.reload({ waitUntil: 'domcontentloaded' });
       await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 15_000 });
@@ -126,7 +126,7 @@ for (const skin of SKINS) {
       await expect(head2.locator('.h-cell')).toHaveCount(7);
       await expect(head2.locator('.h-cell.hc-tier')).toHaveCount(0);
 
-      // ⑤ 恢复入口: 列选择器必须把**当前选中变体表**也列成组(「Tracker 表·增强表格」)。这是与
+      // 5. 恢复入口: 列选择器必须把**当前选中变体表**也列成组(「Tracker 表·增强表格」)。这是与
       // 计划 §07 括注的**有意偏差**(它说"不进 TABLE_PAGES 否则列选择器多出分组")—— 但右键
       // 隐藏是不可逆动作, 选择器不给入口就只能改 localStorage 才能把列找回来。变体表的过滤口径:
       // 带 variantTab 的表只在对应变体被选中时进选择器(26-10-12-0527 U1)。
@@ -202,7 +202,7 @@ for (const skin of SKINS) {
       // 死类守阵(坑档 esc-attr-quote-dead-class): 变体(dtHtml 字符串 DOM)态全文档零「类名含引号」
       await expectNoDeadClass(page, '变体 04 挂载态');
 
-      // 右键**行**(不是表头 —— 表头 @contextmenu.prevent.stop 独占, 见用例一 ③)
+      // 右键**行**(不是表头 —— 表头 @contextmenu.prevent.stop 独占, 见用例一 第 3 步)
       await cardRow.click({ button: 'right' });
       const menu = page.locator('.ctx-menu');
       await expect(menu).toBeVisible({ timeout: 5_000 });

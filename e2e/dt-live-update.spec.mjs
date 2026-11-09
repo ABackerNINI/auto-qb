@@ -324,7 +324,7 @@ for (const skin of SKINS) {
         { message: '探针攒够基线采样帧(与旧 80ms 睡等同量级: 4ms 间隔 x 20)' })
         .toBeGreaterThan(20); // 攒基线采样
 
-      // 点击①: 优先级徽章 → 小菜单 → 最高(POST files/priority → 静默补拉 → 整帧换帧)
+      // 点击 1: 优先级徽章 → 小菜单 → 最高(POST files/priority → 静默补拉 → 整帧换帧)
       const badge = anchor.locator('.group-row').nth(21).locator('.dt10-pbadge');
       await expect(badge, '中部文件行徽章在视口内(点击不触发自动滚动)').toBeVisible();
       await badge.click();
@@ -333,7 +333,7 @@ for (const skin of SKINS) {
       await menu.locator('.ctx-item', { hasText: '最高' }).click();
       await measureWindow(300); // 数据回路窗口内持续采样(量具观察窗, 见 measureWindow 注)
 
-      // 点击②: 行选中(rerender 整帧换帧 + 右详情变化)
+      // 点击 2: 行选中(rerender 整帧换帧 + 右详情变化)
       await anchor.locator('.group-row').nth(22).click();
       await measureWindow(1600); // 覆盖换帧后的全部余波(量具观察窗, 见 measureWindow 注)
 
@@ -491,10 +491,10 @@ for (const skin of SKINS) {
 
     /* W3(计划 26-11-02-0351)窗口化量具: 千文件桩下 content 变体 11 挂 window:"drawerContent"
      * (滚动源 = .drawer-body 容器型描述符, 桥切片消费)。三判据:
-     *   ① 常驻 DOM 行数 << 数据行数(1000 文件 + 目录行) —— 渲染基数收口(千行 keyed diff 的
+     *   1. 常驻 DOM 行数 << 数据行数(1000 文件 + 目录行) —— 渲染基数收口(千行 keyed diff 的
      *      残留 longtask 面随基数消失, #10/#11 的预算断言为伴证);
-     *   ② 占位撑住总高: 滚到底末行进窗且可见(滚动条长度与「滚到底」契约, BUG-1 家族);
-     *   ③ 键盘 ↓ 跨窗: 焦点移出已渲染块端沿时先滚动后回焦(dtWinKbd 前缀和换算), 焦点行在
+     *   2. 占位撑住总高: 滚到底末行进窗且可见(滚动条长度与「滚到底」契约, BUG-1 家族);
+     *   3. 键盘 ↓ 跨窗: 焦点移出已渲染块端沿时先滚动后回焦(dtWinKbd 前缀和换算), 焦点行在
      *      DOM 且可见 —— 回焦目标必须在重渲后的窗内(kbd-cursor-collapse-dangling 家族)。 */
     test(`#12 千文件窗口化: 常驻 DOM 行数 << 数据行数 + 滚到底不塌陷 + 键盘跨窗回焦 @fast (${skin})`, async ({ page }) => {
       test.setTimeout(60_000); // 千行桩首渲 + 滚动/键盘遍历, 30s 默认太紧(时间预算, 非睡等)
@@ -514,17 +514,17 @@ for (const skin of SKINS) {
       // 占位件在场 = 窗口化已激活(全量首轮量行高 → 收窗, 量齐前不给占位)
       await expect(anchor.locator('.row-pad').first(), '窗口化占位件在场(量齐后收窗)').toBeAttached({ timeout: 10_000 });
 
-      // ① 常驻 DOM 行数 << 数据行数(视口窗 + OVERSCAN 10×2, 300 是回归上界不是刻度)
+      // 1. 常驻 DOM 行数 << 数据行数(视口窗 + OVERSCAN 10×2, 300 是回归上界不是刻度)
       const domRows = await anchor.locator('.group-row[data-table="drawerContentV11"]').count();
       expect(domRows, `常驻 DOM 行数远小于数据行数(实测 ${domRows}, 数据 1001)`).toBeLessThan(300);
 
-      // ② 滚到底: 末行进窗且可见(占位撑总高, 滚到底够得着)
+      // 2. 滚到底: 末行进窗且可见(占位撑总高, 滚到底够得着)
       const body = drawer.locator('.drawer-body');
       await body.evaluate((el) => { el.scrollTop = el.scrollHeight; });
       await expect(anchor.locator('.group-row[data-dt-key="D/f0999 - file.mkv"]'),
         '滚到底末行进窗且可见(占位总高 == 全量渲染高度)').toBeVisible({ timeout: 10_000 });
 
-      // ③ 键盘跨窗: 回顶, 焦点落首行, 连按 ↓ 越过窗底沿 —— 目标行先被滚进窗再回焦
+      // 3. 键盘跨窗: 回顶, 焦点落首行, 连按 ↓ 越过窗底沿 —— 目标行先被滚进窗再回焦
       await body.evaluate((el) => { el.scrollTop = 0; });
       await awaitWindowSettled(page, anchor);  // 旧 400ms 睡等: 窗口重算(合帧 rAF + 重渲)落定的显式化
       await anchor.locator('.group-row[data-dt-key="D/f0000 - file.mkv"]').focus();

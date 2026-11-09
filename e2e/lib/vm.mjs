@@ -8,7 +8,7 @@
  *   · 无头页里 Vue 实例**不在 window 上**(模块作用域), 只能经 evaluate 操作。
  *
  * D4 断言翻译守则(计划 26-10-06-0708 §3.5, 本 lib 四件统一遵守):
- *   · evaluate 只允许两类: ①注入/复原桩态 ②vm 内部时序探针 —— 本文件的读数属第②类
+ *   · evaluate 只允许两类: 1) 注入/复原桩态 2) vm 内部时序探针 —— 本文件的读数属第2类
  *     (vm 埋点/内部字段没有 DOM 之外的取径); 凡有真实 UI 路径的交互一律 locator 手势, 不得借道 vm;
  *   · 修饰键/行点击落点纪律: 行左缘 position:{x:8,y:8} 避开 .site-chip 等交互后代;
  *   · 阈值数字(P1-2/P1-3 预算、2500~6000ms 窗口、轮询分档期望值)逐字保留。
@@ -40,7 +40,7 @@ export async function readInst(page, expr) {
 }
 
 /**
- * 在页面里执行一段以 vm 为前提的语句块(注入/复原桩态用 —— D4 允许的第①类 evaluate)。
+ * 在页面里执行一段以 vm 为前提的语句块(注入/复原桩态用 —— D4 允许的第1类 evaluate)。
  *
  * @param {import('@playwright/test').Page} page
  * @param {string} body —— 页面内执行的语句, `vm` 已绑定根实例, 如 `"vm.hrsHist.badOnly = false;"`。

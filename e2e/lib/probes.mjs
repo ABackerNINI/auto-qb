@@ -2,16 +2,16 @@
 /**
  * 乐观态时序探针(armPending / armClick / readPending) —— 从旧单页冒烟脚本(S7 退役) L83–117
  * **照搬移植**(计划 26-10-06-0708 §3.4 D3), 包装成 page 级 install/read 两段式:
- *   ① install: 点击前 `armPending(page, sel?)` 装记录器(+ 可选 `armClick(page, handle)` 定时刻基准)
- *   ② act:     真实手势触发(Playwright click / 右键)
- *   ③ read:    事后 `readPending(page)` 问"它**曾经**出现过吗 / 什么时候消失的"
+ *   1. install: 点击前 `armPending(page, sel?)` 装记录器(+ 可选 `armClick(page, handle)` 定时刻基准)
+ *   2. act:     真实手势触发(Playwright click / 右键)
+ *   3. read:    事后 `readPending(page)` 问"它**曾经**出现过吗 / 什么时候消失的"
  *
  * 为什么必须"记录器"而不是"事后再数 .is-pending"(照搬旧脚本原注释, 2026-09-19 定):
  * 真值对齐修好之前, pending 要挂满 3s 兜底 ⇒ "等 120ms 再数一次 .is-pending"这种采样稳过;
  * 修好之后 pending 只活 100~300ms, 事后再采样恒为 0 ⇒ 那些断言会**集体恒红**(不是回归, 是度量方式失效)。
  *
  * D4 断言翻译守则(计划 26-10-06-0708 §3.5, 本 lib 四件统一遵守):
- *   · evaluate 只允许两类: ①注入/复原桩态 ②vm 内部时序探针 —— 本文件属第②类(MutationObserver +
+ *   · evaluate 只允许两类: 1) 注入/复原桩态 2) vm 内部时序探针 —— 本文件属第2类(MutationObserver +
  *     10ms 采样在页面内跑, Node 侧装不上; 时序窗口 2500~6000ms 是断言语义, 原样保留);
  *   · 修饰键/行点击落点纪律: 行左缘 position:{x:8,y:8} 避开 .site-chip 等交互后代;
  *   · 阈值数字逐字保留(含本文件 readPending 消费侧的窗口判据, 由使用批自带)。

@@ -70,8 +70,8 @@ import { readInst } from './lib/vm.mjs';
  *    .col-menu-item 全局下标取项 —— 空存储下 items[3]=总上传 / items[5]=总大小 / 种子页段
  *    items=大小, 新轨定位语义相同且不随分区内容漂移)。拖宽手势 mouse.move/down/up **逐字照搬**
  *    (含 +5 起手 / +60px 步进 6)。
- *  · evaluate 保留处(均为 D4 允许的两类): ①守阵 1 的 F3 visibilitychange 模拟 —— 标签冻结/恢复
- *    是浏览器行为, 无真实 UI 路径(旧脚本同款); ②守阵 4 的 v4 载荷注入 —— 桩态注入; ③vm 内部
+ *  · evaluate 保留处(均为 D4 允许的两类): 1) 守阵 1 的 F3 visibilitychange 模拟 —— 标签冻结/恢复
+ *    是浏览器行为, 无真实 UI 路径(旧脚本同款); 2) 守阵 4 的 v4 载荷注入 —— 桩态注入; 3) vm 内部
  *    字段读数(colW/colHidden/_visibleCols/tableDefs) —— 列意图态没有 DOM 之外的取径。
  *  · 装饰性固定睡等(400/600/500/300/200) 全部换成 expect / expect.poll 显式等待:
  *    跨标签 storage 事件传播(旧 600ms)→ poll 等对方 vm 采纳了具体键; Escape 收弹层(旧 200ms)→
@@ -133,7 +133,7 @@ async function dragCol(pg) {
   }).toBeGreaterThan(0);
 }
 
-/** vm 意图态读数(evaluate 第②类: 列意图态没有 DOM 之外的取径)。 */
+/** vm 意图态读数(evaluate 第2类: 列意图态没有 DOM 之外的取径)。 */
 const colState = (pg) => readInst(pg, '({ w: vm.colW, h: vm.colHidden })');
 
 for (const skin of SKINS) {
@@ -203,7 +203,7 @@ for (const skin of SKINS) {
       await colToggle(page, '辅种表', '总上传', true);   // A 再改一次(旧 items[3] = uploaded)
 
       /* F3 补漏: 模拟 B 被冻结后恢复可见(hidden -> visible 各派发一次) —— evaluate 保留:
-       * 标签冻结/恢复是浏览器行为, 无真实 UI 路径(旧脚本同款, D4 第①类桩态注入)。 */
+       * 标签冻结/恢复是浏览器行为, 无真实 UI 路径(旧脚本同款, D4 第1类桩态注入)。 */
       await pb.evaluate(`Object.defineProperty(document, "hidden", { value: true, configurable: true });
         document.dispatchEvent(new Event("visibilitychange"));
         Object.defineProperty(document, "hidden", { value: false, configurable: true });
@@ -285,7 +285,7 @@ for (const skin of SKINS) {
       const errors = collectRuntimeErrors(page);
       await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
       await rowsReady(page);
-      /* 注入 v4 旧载荷(桩态注入, D4 第①类 evaluate; 旧脚本同款逐字)。新 context 无 v5 残留,
+      /* 注入 v4 旧载荷(桩态注入, D4 第1类 evaluate; 旧脚本同款逐字)。新 context 无 v5 残留,
        * removeItem 保留只为与旧脚本逐字同款(幂等)。 */
       await page.evaluate(() => {
         localStorage.removeItem("autoqb_cols_v5");

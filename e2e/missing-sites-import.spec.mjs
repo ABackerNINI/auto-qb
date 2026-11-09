@@ -14,9 +14,9 @@ import { openApp } from './lib/gestures.mjs';
  * 可重复执行的回归。
  *
  * 三分支(代码单点 src/auto_qb/webui/static/shared/config_hub_tracker.js::hubImportSites):
- *   ① sites 空            → 「无需导入」toast, 不弹框;
- *   ② 无 >=2 域名组        → 两钮 confirmDialog(okText=导入), 逐域名各填一条;
- *   ③ 存在 >=2 域名组      → 三钮 confirmThreeDialog(ok=合并导入 / extra=拆分导入 ghost / 取消),
+ *   1. sites 空            → 「无需导入」toast, 不弹框;
+ *   2. 无 >=2 域名组        → 两钮 confirmDialog(okText=导入), 逐域名各填一条;
+ *   3. 存在 >=2 域名组      → 三钮 confirmThreeDialog(ok=合并导入 / extra=拆分导入 ghost / 取消),
  *                            Enter 默认 = 合并(键=groups[i].name); 拆分 = 逐域名旧路径。
  * 两条分支都只填编辑器待审 —— 全程不得 PUT /api/config(保存是用户显式动作), 本 spec 逐条计数。
  *
@@ -26,14 +26,14 @@ import { openApp } from './lib/gestures.mjs';
  * 旧断言名 → 本 spec 映射:
  *   tests/test_web_backend_misc_sites.py::test_frontend_sites_import_wiring
  *     (静态子串 confirmThreeDialog( / trackers[g.name] = g.entry / 三钮模板)
- *     → 本 spec 的分支选型(② 两钮 vs ③ 三钮)、ghost 类、默认焦点与填入 pill 行为断言;
+ *     → 本 spec 的分支选型(分支 2 两钮 vs 分支 3 三钮)、ghost 类、默认焦点与填入 pill 行为断言;
  *       静态断言仍保留(改字即红的低成本第一层), 本 spec 是行为层回归。
  */
 
-/** 分支①: 后端无可导入站点(sites 空, groups 可缺省)。 */
+/** 分支 1: 后端无可导入站点(sites 空, groups 可缺省)。 */
 const EMPTY = { sites: [] };
 
-/** 分支②: 全单元素组 —— groups 与 sites 一一对应, 不存在 >=2 域名组合并路径。 */
+/** 分支 2: 全单元素组 —— groups 与 sites 一一对应, 不存在 >=2 域名组合并路径。 */
 const SINGLE = {
   sites: [
     { name: 'e2e_alpha_io', domain: 'e2e.alpha.io', entry: { domains: ['e2e.alpha.io'] } },
@@ -46,7 +46,7 @@ const SINGLE = {
 };
 
 /**
- * 分支③: 一个 >=2 域名组 + 一个单域名组。组名刻意与全部 sites 名不同 ——
+ * 分支 3: 一个 >=2 域名组 + 一个单域名组。组名刻意与全部 sites 名不同 ——
  * 合并后 pill = 组名, 拆分后 pill = 逐域名名, 两种结果集合可分辨(否则同名会让断言互相冒充)。
  */
 const MULTI = {
@@ -106,7 +106,7 @@ for (const skin of SKINS) {
   test.describe(`缺失站点导入三路径 ${skin}`, () => {
     installRuntimeErrorGuard(test);
 
-    test(`① 无可导入站点: 无需导入 toast, 不弹框 @fast (${skin})`, async ({ page }) => {
+    test(`1. 无可导入站点: 无需导入 toast, 不弹框 @fast (${skin})`, async ({ page }) => {
       const puts = trackConfigPuts(page);
       await page.route('**/api/sites/missing', (route) => route.fulfill({ json: EMPTY }));
       const importBtn = await openTrackers(page, skin);
@@ -122,7 +122,7 @@ for (const skin of SKINS) {
       expect(puts, '导入不得落盘: 全程零 PUT /api/config').toEqual([]);
     });
 
-    test(`② 全单域名组: 两钮确认(Enter)按域名填入 @fast (${skin})`, async ({ page }) => {
+    test(`2. 全单域名组: 两钮确认(Enter)按域名填入 @fast (${skin})`, async ({ page }) => {
       const puts = trackConfigPuts(page);
       await page.route('**/api/sites/missing', (route) => route.fulfill({ json: SINGLE }));
       const importBtn = await openTrackers(page, skin);
@@ -147,7 +147,7 @@ for (const skin of SKINS) {
       expect(puts, '导入不得落盘: 全程零 PUT /api/config').toEqual([]);
     });
 
-    test(`③ 多域名组: 三钮 + 拆分 ghost + Enter 默认合并 @fast (${skin})`, async ({ page }) => {
+    test(`3. 多域名组: 三钮 + 拆分 ghost + Enter 默认合并 @fast (${skin})`, async ({ page }) => {
       const puts = trackConfigPuts(page);
       await page.route('**/api/sites/missing', (route) => route.fulfill({ json: MULTI }));
       const importBtn = await openTrackers(page, skin);
@@ -174,7 +174,7 @@ for (const skin of SKINS) {
       expect(puts, '导入不得落盘: 全程零 PUT /api/config').toEqual([]);
     });
 
-    test(`③ 多域名组: 拆分导入逐域名填入 @fast (${skin})`, async ({ page }) => {
+    test(`3. 多域名组: 拆分导入逐域名填入 @fast (${skin})`, async ({ page }) => {
       const puts = trackConfigPuts(page);
       await page.route('**/api/sites/missing', (route) => route.fulfill({ json: MULTI }));
       const importBtn = await openTrackers(page, skin);

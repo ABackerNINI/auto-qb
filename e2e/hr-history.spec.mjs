@@ -5,15 +5,15 @@ import { requireMode } from './lib/mode.mjs';
 import { collectRuntimeErrors, installRuntimeErrorGuard } from './lib/errors.mjs';
 
 /**
- * HR 拉取历史表③(S5 批, 计划 26-10-06-0708 §3.3/§04 S5; 源头计划 26-10-04-0312 S5) ——
+ * HR 拉取历史表 3(S5 批, 计划 26-10-06-0708 §3.3/§04 S5; 源头计划 26-10-04-0312 S5) ——
  * 承接旧单页冒烟脚本(S7 退役, git 历史可查)的**块G**。行号为取证时点值(计划 §2.2), 已按 grep 锚点复核
  * (2026-10-06, 删块前; S1–S4 已删块A/F/C/E/D, 行号较计划漂移):
  *
- * 块G grep 锚点: `HR 拉取历史表③(计划 26-10-04-0312 S5): 桩 --hr-scene on(默认)起盘` 起,
+ * 块G grep 锚点: `HR 拉取历史表 3(计划 26-10-04-0312 S5): 桩 --hr-scene on(默认)起盘` 起,
  * 至该 `if (HR_SCENE === "on")` 块收尾止(删块前 L344–410; 计划取证 L1725–1790)。
- * 内含 4 个旧 add() 名(+1 失败兜底): HR表③: 首次展开懒加载, 五形态行齐 / HR表③: 五档徽章各一
- * 且 result_tone 类落上 / HR表③: 仅看异常本地过滤生效(defer+通道不可用) / HR表③: 行展开明细
- * 子行可见(完成行三档) / (兜底) HR表③: 桩走查断言组。
+ * 内含 4 个旧 add() 名(+1 失败兜底): HR表 3: 首次展开懒加载, 五形态行齐 / HR表 3: 五档徽章各一
+ * 且 result_tone 类落上 / HR表 3: 仅看异常本地过滤生效(defer+通道不可用) / HR表 3: 行展开明细
+ * 子行可见(完成行三档) / (兜底) HR表 3: 桩走查断言组。
  *
  * 模式门控(计划 §3.2 D1): 与旧脚本同构 —— 整组只在 hr-scene **on** 跑(行数断言在 empty/off
  * 场景不成立: 桩 --hr-scene empty/off 下行集为空/未启用), requireMode 按当前 env 整组跳过,
@@ -21,15 +21,15 @@ import { collectRuntimeErrors, installRuntimeErrorGuard } from './lib/errors.mjs
  *
  * ── 对账映射表(旧断言名 → 新 test 名; 旧块 add() 调用点 4 处/皮肤) ──
  *  旧 add() 行号(删块前 grep 实测)      旧断言名                                        新去向下落
- *  L370  HR表③: 首次展开懒加载, 五形态行齐                              → 首次展开懒加载 + 五形态徽章
+ *  L370  HR表 3: 首次展开懒加载, 五形态行齐                              → 首次展开懒加载 + 五形态徽章
  *                                                                (1 test 2 断言: 行数 5 与徽章档位同属
  *                                                                 "首次展开渲染正确"这一时刻的观察)
- *  L380  HR表③: 五档徽章各一且 result_tone 类落上                      → 同上
- *  L388  HR表③: 仅看异常本地过滤生效(defer+通道不可用)                 → 仅看异常过滤 + 行展开明细
+ *  L380  HR表 3: 五档徽章各一且 result_tone 类落上                      → 同上
+ *  L388  HR表 3: 仅看异常本地过滤生效(defer+通道不可用)                 → 仅看异常过滤 + 行展开明细
  *                                                                (1 test 2 断言: 共享同一 arrange, 过滤
  *                                                                 复原与行展开是同一现场里的连续动作)
- *  L395  HR表③: 行展开明细子行可见(完成行三档)                         → 同上
- *  L404  HR表③: 桩走查断言组(catch 兜底, ok=false)                     → **不迁移**: 失败兜底分支, 新轨
+ *  L395  HR表 3: 行展开明细子行可见(完成行三档)                         → 同上
+ *  L404  HR表 3: 桩走查断言组(catch 兜底, ok=false)                     → **不迁移**: 失败兜底分支, 新轨
  *                                                                定位器/断言拿不到目标直接红
  *  另: 旧收尾总检「无 console.error / pageerror」→ installRuntimeErrorGuard afterEach。
  *  计数口径: 块G add() 4 处/皮肤(实跑; 兜底 1 处仅失败时出现) → 新 2 test/皮肤 ——
@@ -55,7 +55,7 @@ import { collectRuntimeErrors, installRuntimeErrorGuard } from './lib/errors.mjs
  * ── D4 断言翻译守则落地说明(计划 §3.5) ──
  *  · 交互全部真实手势(对旧块 vm 直调的升级, 均有真实 UI 路径): 进 HR 分区 = 点设置页 hub 的
  *    「HR 在线核实」卡片(旧 vm.hubGo("hr_check")); 站点状态全屏弹层 = 点分区头部「展开」钮
- *    (旧 vm.hrsToggle()); 表③ 首次展开 = 点「拉取历史」summary(旧点 details 元素本体, 收敛到
+ *    (旧 vm.hrsToggle()); 表 3 首次展开 = 点「拉取历史」summary(旧点 details 元素本体, 收敛到
  *    summary —— 原生 details 只有 summary 命中才触发 @toggle); 仅看异常 = 点 chip(旧同款真实
  *    点击, 只是取元素方式从 evaluate 换成 locator); 行展开 = 点首行(旧同款)。
  *  · 旧块收尾的 vm.hrsCollapse()/vm.hubBack()/localStorage 清理**不再需要** —— 每 test 独立
@@ -68,7 +68,7 @@ import { collectRuntimeErrors, installRuntimeErrorGuard } from './lib/errors.mjs
  *    expect 自动等待 / toHaveCount 覆盖同语义。
  */
 
-/** 进设置页 → HR 分区 → 开站点状态全屏弹层 → 首次展开表③(懒加载) → 等行渲染。
+/** 进设置页 → HR 分区 → 开站点状态全屏弹层 → 首次展开表 3(懒加载) → 等行渲染。
  *  块G 所有用例的共同 arrange(旧脚本真实手势链, vm 直调已全部换成 locator 手势)。 */
 async function openHrHistoryTable(page, skin) {
   collectRuntimeErrors(page);
@@ -88,35 +88,35 @@ async function openHrHistoryTable(page, skin) {
     .click();
   await expect(page.locator('.hr-full-modal')).toBeVisible({ timeout: 10_000 });
 
-  // 表③ = 弹层里 summary 带「拉取历史」的 details(表② 同类但文案不同); 真实点开 summary,
+  // 表 3 = 弹层里 summary 带「拉取历史」的 details(表 2 同类但文案不同); 真实点开 summary,
   // @toggle -> hrsHistOnToggle -> 首次 fetch /api/hr/history(limit=300) —— 懒加载链路本体
   await page.locator('.hr-full-modal details.hrs-diag summary', { hasText: '拉取历史' }).click();
   await expect(page.locator('.hr-full-modal .hr-hist-row').first()).toBeVisible({ timeout: 10_000 });
 }
 
 for (const skin of SKINS) {
-  test.describe(`皮肤 ${skin}(块G: HR 拉取历史表③)`, () => {
+  test.describe(`皮肤 ${skin}(块G: HR 拉取历史表 3)`, () => {
     /* 整组只在 hr-scene on 跑(桩 --hr-scene empty/off 下行集为空/未启用, 行数断言不成立)。 */
     requireMode(test, { hrScene: 'on' });
     installRuntimeErrorGuard(test);
 
-    test('HR表③: 首次展开懒加载, 五形态行齐; 五档徽章各一且 result_tone 类落上', async ({ page }) => {
+    test('HR表 3: 首次展开懒加载, 五形态行齐; 五档徽章各一且 result_tone 类落上', async ({ page }) => {
       await openHrHistoryTable(page, skin);
       const rows = page.locator('.hr-full-modal .hr-hist-row');
       /* 首次展开懒加载: 点 summary 前行不存在(上面的 arrange 里 toBeVisible 已验出现),
        * 这里钉行数 —— 桩 on 场景五形态各一行, 恰好 5。 */
-      await expect(rows, 'HR表③: 首次展开懒加载, 五形态行齐(恰好 5 行)').toHaveCount(5);
+      await expect(rows, 'HR表 3: 首次展开懒加载, 五形态行齐(恰好 5 行)').toHaveCount(5);
 
       /* 五档徽章各一: 徽章类 hr-hres-<tone> 落上(桩契约: ok|warn|dim|err|blue 各 1)。 */
       for (const tone of ['ok', 'warn', 'dim', 'err', 'blue']) {
         await expect(
           page.locator('.hr-full-modal .hr-hist-row .hr-hres.hr-hres-' + tone),
-          `HR表③: 五档徽章各一且 result_tone 类落上(hr-hres-${tone})`,
+          `HR表 3: 五档徽章各一且 result_tone 类落上(hr-hres-${tone})`,
         ).toHaveCount(1);
       }
     });
 
-    test('HR表③: 仅看异常本地过滤生效(defer+通道不可用) + 行展开明细子行可见(完成行三档)', async ({ page }) => {
+    test('HR表 3: 仅看异常本地过滤生效(defer+通道不可用) + 行展开明细子行可见(完成行三档)', async ({ page }) => {
       await openHrHistoryTable(page, skin);
       const rows = page.locator('.hr-full-modal .hr-hist-row');
       await expect(rows).toHaveCount(5);
@@ -124,7 +124,7 @@ for (const skin of SKINS) {
       // 仅看异常: 点 chip(纯前端本地过滤, 不回后端 —— 旧同款真实点击, locator 化)
       await page.locator('.hr-full-modal .hr-chip', { hasText: '仅看异常' }).click();
       /* 桩契约: 异常行恰 2 条(defer + 通道不可用)。旧块 250ms 后读数, expect 自动等待覆盖同语义。 */
-      await expect(rows, 'HR表③: 仅看异常本地过滤生效(defer+通道不可用, 恰 2 行)').toHaveCount(2);
+      await expect(rows, 'HR表 3: 仅看异常本地过滤生效(defer+通道不可用, 恰 2 行)').toHaveCount(2);
 
       // 复原全量行集: 再点一次 chip(旧 vm.hrsHist.badOnly = false 注入的真实手势等价)
       await page.locator('.hr-full-modal .hr-chip', { hasText: '仅看异常' }).click();
@@ -135,7 +135,7 @@ for (const skin of SKINS) {
       const sub = page.locator('.hr-full-modal .hr-hist-sub');
       await expect(sub).toBeVisible({ timeout: 5_000 });
       const subText = (await sub.innerText()).trim();
-      expect(subText, `HR表③: 行展开明细子行可见(完成行三档), 实得 "${subText.slice(0, 70)}"`)
+      expect(subText, `HR表 3: 行展开明细子行可见(完成行三档), 实得 "${subText.slice(0, 70)}"`)
         .toContain('A 考察中');
       expect(subText, '明细子行波次文案(3 页 / 96 行)').toContain('3 页 / 96 行');
     });

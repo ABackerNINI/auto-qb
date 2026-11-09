@@ -10,7 +10,7 @@ import { requireMode } from './lib/mode.mjs';
  * 可能回增量载荷(full=false + delta/removed 桶), refresh() 经 polling.js applyStateRows
  * 行级合并。本文件只做**冒烟**(内容等价由 S5 镜子兜底):
  *   1. 真实手势(右键暂停)触发的真值轮**确实是增量轮**(full=false)且渲染正确(行变真值态);
- *   2. applyStateRows 行级语义的页面内直测(D4 第①类注入桩态): upsert 替换/追加 + removed
+ *   2. applyStateRows 行级语义的页面内直测(D4 第1类注入桩态): upsert 替换/追加 + removed
  *      剔除 + 未脏行对象引用恒等(DoD 的 === 断言)+ 数组新实例 + lastRid 置空走 full 恢复;
  *   3. 分组视图整组暂停: 组桶(groups)经增量轮渲染正确。
  *   4. S7 装饰记忆化(plan 26-10-07-0414): decorate.js decoratedGroups 的 WeakMap 层 ——
@@ -21,7 +21,7 @@ import { requireMode } from './lib/mode.mjs';
  * 种子总数, 打破 views.spec 的 `filteredTorrents.length === TORRENTS` 精确断言)。
  *
  * 探针说明(armDeltaProbe): 包装 vm.applyStateRows 记录每轮 {full, rid, delta 桶键} ——
- * vm 方法直调/包装属 D4 守则第②类(vm 内部行为没有 DOM 之外的取径, optimistic.spec T6/T7
+ * vm 方法直调/包装属 D4 守则第2类(vm 内部行为没有 DOM 之外的取径, optimistic.spec T6/T7
  * 同款先例); 交互本身(右键 → 菜单 → 暂停)一律真实手势。
  *
  * 为什么「行变色」不能单独当增量渲染判据: 乐观补丁(P0-3)在点击后立刻就把行 kind 改成
@@ -158,7 +158,7 @@ for (const skin of SKINS) {
       }
       expect(target, '存在未暂停的行').toBeTruthy();
       const targetHash = await target.getAttribute('data-hash');
-      /* 旁观者 = 数据里第一个非目标行: 只当「未脏行引用恒等」的见证, 不参与任何操作(vm 探针, 第②类) */
+      /* 旁观者 = 数据里第一个非目标行: 只当「未脏行引用恒等」的见证, 不参与任何操作(vm 探针, 第2类) */
       expect(await withVm(page, `
         window.__bystander = vm.torrents.find((r) => r.hash !== ${JSON.stringify(targetHash)});
         return !!window.__bystander;
@@ -193,7 +193,7 @@ for (const skin of SKINS) {
     test('applyStateRows 行级语义直测: upsert 替换/追加 + removed 剔除 + 数组新实例 + 置空走 full 恢复', async ({ page }) => {
       await gotoTorrents(page, skin);  // 种子视图: vm.torrents 才有数据(view=group 的全量不含 torrents)
       await armDeltaProbe(page);
-      /* 注入桩态直调合并入口(D4 第①类): 构造合成 delta 载荷(替换/追加/删除/未脏见证)。
+      /* 注入桩态直调合并入口(D4 第1类): 构造合成 delta 载荷(替换/追加/删除/未脏见证)。
        * 身份断言用 marker 字段而不是 `===`: vm 读出的行是响应式代理, 载荷行是裸对象 ——
        * 「合并后该行只剩载荷实例」由「只有载荷实例带 marker」等价表达(未脏行见证走
        * includes, Vue 对数组 includes 做了 toRaw 回退, 代理与裸对象都能命中)。 */
@@ -287,12 +287,12 @@ for (const skin of SKINS) {
 
     test('S7 装饰记忆化: 未脏组行装饰结果引用恒等(未重算) + 脏行重算且与无记忆化逐字段一致', async ({ page }) => {
       await openApp(page, skin);  // 默认落在分组视图, vm.groups 有数据
-      /* 单次页内事务(D4 第①类注入 + 第②类读数, S4 直测同款; 一笔完成免轮询竞态):
+      /* 单次页内事务(D4 第1类注入 + 第2类读数, S4 直测同款; 一笔完成免轮询竞态):
        * 引用比较必须在页内做 —— withVm 返回值过结构化克隆, 出页面即失对象身份。
-       * 步骤: ①快照各行装饰结果引用 → ②注入合成 delta(第 0 组脏=整行新对象, 第 1 组未脏
-       * = 引用原样, applyStateRows 的既有口径) → ③对**合并后**的每组用 vm 自带同源纯方法
+       * 步骤: 1) 快照各行装饰结果引用 → 2) 注入合成 delta(第 0 组脏=整行新对象, 第 1 组未脏
+       * = 引用原样, applyStateRows 的既有口径) → 3) 对**合并后**的每组用 vm 自带同源纯方法
        * (_aggStatus/_commonTags/_commonCategory)做无记忆化现算, 与缓存结果逐字段比 + 键集
-       * 形状比(原行键 + 5 个派生键, 无多余/缺失) → ④返回全部断言。 */
+       * 形状比(原行键 + 5 个派生键, 无多余/缺失) → 4) 返回全部断言。 */
       const r = await withVm(page, `
         const snap = { deco: {}, arr: vm.decoratedGroups };
         for (const d of snap.arr) snap.deco[d.key] = d;

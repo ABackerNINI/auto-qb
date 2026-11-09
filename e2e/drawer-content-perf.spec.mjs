@@ -101,13 +101,13 @@ for (const skin of SKINS) {
         collectRuntimeErrors(page);
         const { anchor } = await openK(page);
 
-        // ① 常驻 DOM 行数 << 1001(视口窗 + OVERSCAN 10×2; 300 是回归上界不是刻度, 同 #12)
+        // 1. 常驻 DOM 行数 << 1001(视口窗 + OVERSCAN 10×2; 300 是回归上界不是刻度, 同 #12)
         const domRows = await anchor.locator(`.group-row[data-table="${v.table}"]`).count();
         expect(domRows, `常驻 DOM 行数远小于数据行数(实测 ${domRows}, 数据 1001)`).toBeLessThan(300);
         const domNodes = await page.evaluate((tid) =>
           document.querySelector(`[data-dt-table-anchor="${tid}"]`).getElementsByTagName('*').length, v.table);
 
-        // ② rowsFn 直测(dtTplRows → 变体 rowsFn, 记忆化热态 = 千级常驻代价): 20 次采样取最大。
+        // 2. rowsFn 直测(dtTplRows → 变体 rowsFn, 记忆化热态 = 千级常驻代价): 20 次采样取最大。
         //    全量装配判据: 返回行数必须 == 1001(窗口化收的是渲染基数, 行装配仍是全量虚表)。
         const bench = await page.evaluate(`(() => {
           const vm = ${INST};
@@ -122,7 +122,7 @@ for (const skin of SKINS) {
         })()`);
         expect(bench.n, 'rowsFn 装配的是全量虚表(1001 = 1 目录 + 1000 文件)').toBe(1001);
         expect(bench.max, `rowsFn 千级热态单次耗时 <25ms(实测 max ${bench.max}ms / mean ${bench.mean}ms; 20 次采样, 记忆化命中)`).toBeLessThan(25);
-        // ③ 节点数只进档案不钉数(皮肤/列数差异大), 实测数字在断言消息里随报告带走
+        // 3. 节点数只进档案不钉数(皮肤/列数差异大), 实测数字在断言消息里随报告带走
         expect(domNodes, `首渲常驻 DOM 节点数(实测 ${domNodes}, 全量渲染 ≈ 千行 × 每行 10+ 格)`).toBeLessThan(12_000);
         console.log(`      [K1 dt${v.id} ${skin}] 常驻 DOM 行数 ${domRows} / 节点数 ${domNodes} / rowsFn max ${bench.max}ms mean ${bench.mean}ms (n=20)`);
       });
@@ -213,7 +213,7 @@ for (const skin of SKINS) {
           `padH ${padH0}->${padH1}px(折叠)->${padH2}px(展开) | 行数 常驻→折叠 ${foldRows}→展开 ${unfoldRows} | ` +
           `滚动 maxGap ${sweep.maxGap}ms, >100ms 帧 ${sweep.drops}/${sweep.n}`);
 
-        // 滚到底不塌陷: 末行进窗且可见(占位撑住总高, 同 #12 ②)
+        // 滚到底不塌陷: 末行进窗且可见(占位撑住总高, 同 #12 第 2 项)
         const body = drawer.locator('.drawer-body');
         await body.evaluate((el) => { el.scrollTop = el.scrollHeight; });
         await expect(anchor.locator('.group-row[data-dt-key="D/f0999 - file.mkv"]'),

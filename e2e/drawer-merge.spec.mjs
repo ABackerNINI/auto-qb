@@ -214,9 +214,9 @@ for (const skin of SKINS) {
        * 修法: teleport 的目标存在性判据(dtBridgeTargetOn)放进**桥组件自己的渲染拍** —— 与 teleport
        * 的 mount 同拍, 拿到的才是真值。
        * 断言口径(两层, 都不借道 vm):
-       *   ①零运行期错误 —— patch 中断必留 console.error, 是本缺陷最直接的证据(installRuntimeErrorGuard
+       *   1. 零运行期错误 —— patch 中断必留 console.error, 是本缺陷最直接的证据(installRuntimeErrorGuard
        *     会在 afterEach 兜底; 这里逐点提前断言, 让失败落在具体步骤上);
-       *   ②内容不丢 —— 关合并后单栏当前页签的桥变体表格行仍在; 再开合并时双列与右列桥表行都回来。 */
+       *   2. 内容不丢 —— 关合并后单栏当前页签的桥变体表格行仍在; 再开合并时双列与右列桥表行都回来。 */
       collectRuntimeErrors(page);
       await page.setViewportSize(WIDE);
       await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
@@ -229,9 +229,9 @@ for (const skin of SKINS) {
       const noErr = (where) => expect(collectRuntimeErrors(page),
         `${where}: 合并态换代不得抛运行期错误(Teleport 目标缺失 ⇒ patch 中断 ⇒ 内容消失)`).toEqual([]);
       /* 2026-10-14(经典渲染链退役后同轮加固):
-       * ① 右键目标用**.dt-col-head**(列标签, 在变体宿主之外)而非列元素本身 —— 列中心在变体态
+       * 1. 右键目标用**.dt-col-head**(列标签, 在变体宿主之外)而非列元素本身 —— 列中心在变体态
        *    会命中桥表 `.group-head`(列头 @contextmenu.stop 独占右键)而弹出列菜单, 取不到模板项;
-       * ② 点完菜单项后等菜单**离场**(pop 过渡期间旧菜单仍在 DOM, 与下一次右键的新菜单并存会撞
+       * 2. 点完菜单项后等菜单**离场**(pop 过渡期间旧菜单仍在 DOM, 与下一次右键的新菜单并存会撞
        *    strict mode violation: 两个 .ctx-menu)。 */
       const settle = () => expect(page.locator('.ctx-menu')).toHaveCount(0, { timeout: 5_000 });
       const pick = async (col, label) => {

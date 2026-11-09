@@ -58,7 +58,7 @@ const readBand = (page) =>
 
 /**
  * 读一次「一屏」相关的三个量: 光标行号 / 可见带 / 屏内可见行数。
- * vm 内部读数属 D4 允许的第②类(filteredTorrents 与 kbCursor 没有 DOM 之外的取径; 可见带是
+ * vm 内部读数属 D4 允许的第2类(filteredTorrents 与 kbCursor 没有 DOM 之外的取径; 可见带是
  * 两个内部单点); 行号取列表顺序里的下标, 与 _kbMove 的前进量同口径。
  */
 const readPageState = (page) =>

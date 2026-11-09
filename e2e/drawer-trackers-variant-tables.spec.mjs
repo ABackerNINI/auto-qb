@@ -310,14 +310,14 @@ for (const skin of SKINS) {
       });
       await expect.poll(() => ticks, '等下一个数据拍真到达(抽屉轮询 1.5/2/3s 档)').toBeGreaterThan(0);
 
-      // ①err 组空⇒原地切 dt05-hide(整节仍就位: 锚仍在 DOM, 不是旧口径的整节缺席)
+      // 1) err 组空⇒原地切 dt05-hide(整节仍就位: 锚仍在 DOM, 不是旧口径的整节缺席)
       await expect(errSec, 'err 组空 → 原地切 dt05-hide').toHaveClass(/dt05-hide/);
       await expect(errSec.locator('[data-dt-table-anchor="drawerTrackerV05"]'),
         '空组锚元素仍在 DOM(display:none, 五组恒在场)').toHaveCount(1);
-      // ②徽章计数原地回填: ok 2→3, err 1→0(隐藏组同样回填)
+      // 2) 徽章计数原地回填: ok 2→3, err 1→0(隐藏组同样回填)
       await expect(okSec.locator('.dt05-badge'), 'ok 组徽章计数原地回填').toContainText('工作 3');
       await expect(errSec.locator('.dt05-badge'), 'err 组徽章计数原地回填(0)').toContainText('未工作 0');
-      // ③元素身份不变(skip 分支只动不含锚的子树; 整帧重建即红)
+      // 3) 元素身份不变(skip 分支只动不含锚的子树; 整帧重建即红)
       const kept = await drawer.locator('.dt05-wrap').evaluate((wrap) => {
         const q = (sel) => wrap.querySelector(sel);
         const errS = q('[data-grp="err"]');

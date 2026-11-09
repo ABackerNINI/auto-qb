@@ -111,10 +111,10 @@ for (const skin of SKINS) {
     /* 04 状态卡片栅格 —— 非网格形态, 不适用「三处计数」表格规格(W3 探针实测:
      * 列头被变体有意隐藏, 容器两列卡片栅格, 行是 display:block 卡片)。本规格钉的是
      * 卡片形态本身不回潮成表格、栅格不塌:
-     *   ① 列头 display:none(变体声明, 不许以「修对齐」之名复活);
-     *   ② 行容器 display:block(卡片), 不是 grid 行;
-     *   ③ 容器 .group-table 两列栅格(栅格数 = 变体声明, 塌成单列/三列即红);
-     *   ④ 卡内块结构 dt04-head/dt04-stats 存在(head 必须, stats 必须, msg 可选)。 */
+     *   1. 列头 display:none(变体声明, 不许以「修对齐」之名复活);
+     *   2. 行容器 display:block(卡片), 不是 grid 行;
+     *   3. 容器 .group-table 两列栅格(栅格数 = 变体声明, 塌成单列/三列即红);
+     *   4. 卡内块结构 dt04-head/dt04-stats 存在(head 必须, stats 必须, msg 可选)。 */
     test(`drawerTrackerV04 卡片形态规格: 列头隐藏 + 行是卡片 + 容器两列栅格 (${skin})`, async ({ page }) => {
       collectRuntimeErrors(page);
       await page.addInitScript(
@@ -160,8 +160,8 @@ for (const skin of SKINS) {
      * name 格内 paddingLeft, 与「树缩进是单元格渲染器」的计划口径一致)。2026-10-14 复查
      * 修法(26-10-14-0136 §02): tgl/prio 两列已收编进 name 格(折叠钮在格首随缩进 = 层级,
      * 徽章在格尾右对齐 = 不占列), 行由 5 轨变 3 轨。规格钉:
-     *   ① 列头 display:none(声明); ② 行轨道 3 段 + 3 格; ③ 树缩进存在(子层 paddingLeft>0);
-     *   ④ 交互件在 name 格内(dt10-tgl/dt10-pbadge 且是 .dt10-n 的后代)。 */
+     *   1. 列头 display:none(声明); 2. 行轨道 3 段 + 3 格; 3. 树缩进存在(子层 paddingLeft>0);
+     *   4. 交互件在 name 格内(dt10-tgl/dt10-pbadge 且是 .dt10-n 的后代)。 */
     test(`drawerContentV10 树形态规格: 列头隐藏 + 行 3 格 3 轨道 + 树缩进 + 交互件在 name 格 (${skin})`, async ({ page }) => {
       collectRuntimeErrors(page);
       await page.addInitScript(

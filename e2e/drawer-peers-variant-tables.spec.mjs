@@ -202,8 +202,8 @@ for (const skin of SKINS) {
     /* R5#77 修复回归(P13): 08 结构 sig 曾把折叠态算进去, 而 onClick 折叠只翻 class 不刷
      * lastSig —— 每次折叠后下一个数据拍 sig 必失配 = 整帧 replaceChildren 重建(2026-10-18
      * 根治的那类重建回潮, 与 05「折叠态不进 sig、数据拍照常跳过」口径相反)。修后折叠态不进
-     * sig: 折叠后喂一拍**变了计数**的数据, 断言 ①折叠态保持 ②组头计数原地更新(证明数据拍
-     * 真走了 skip 分支的内联回填, 排除「啥都没发生」的假绿) ③section/ghead/锚元素身份不变
+     * sig: 折叠后喂一拍**变了计数**的数据, 断言 1) 折叠态保持 2) 组头计数原地更新(证明数据拍
+     * 真走了 skip 分支的内联回填, 排除「啥都没发生」的假绿) 3) section/ghead/锚元素身份不变
      * (重建 = 新 section = __p13keep 记账标记丢失即红; 锚本体 anchFill 本就保活, 真正的
      * 重建探针是 section/ghead)。 */
     test(`dt08 折叠后数据拍零重建(折叠态不进 sig): 组头计数原地更新 + 元素身份不变 @fast (${skin})`, async ({ page }) => {
@@ -245,10 +245,10 @@ for (const skin of SKINS) {
       });
       await expect.poll(() => ticks, '等下一个数据拍真到达').toBeGreaterThan(0);
 
-      // ①折叠态保持(折叠自保) ②组头计数原地回填 3→4(skip 分支内联直写, 数据拍真跑了)
+      // 1) 折叠态保持(折叠自保) 2) 组头计数原地回填 3→4(skip 分支内联直写, 数据拍真跑了)
       await expect(take, '折叠态不因数据拍丢失').toHaveClass(/folded/);
       await expect(take.locator('.dt08-gcnt'), '组头计数原地回填(数据拍真走了 skip 分支)').toHaveText('4');
-      // ③元素身份不变(折叠态进 sig = 本拍整帧重建, 修复前必红)
+      // 3) 元素身份不变(折叠态进 sig = 本拍整帧重建, 修复前必红)
       const kept = await take.evaluate((sec) => {
         const head = sec.querySelector('.dt08-ghead');
         const anchor = sec.querySelector('[data-dt-table-anchor="drawerPeerV08"]');

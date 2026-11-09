@@ -50,7 +50,7 @@ test.describe('设置页 · WebUI 卡右键菜单定制(W4)', () => {
         return route.fulfill({ json: { changes: ['web.ctx_menu'], restart_required: [] } });
       });
 
-      /* ---------- ① 进设置 → 「WebUI」卡: 新卡在, 定制块在, 四支 tab ---------- */
+      /* ---------- 1. 进设置 → 「WebUI」卡: 新卡在, 定制块在, 四支 tab ---------- */
       await openApp(page, skin);
       await page.locator('nav.tabs-right button').first().click();
       await expect(page.locator('.hb-grid .hb-card').first()).toBeVisible({ timeout: 20_000 });
@@ -71,7 +71,7 @@ test.describe('设置页 · WebUI 卡右键菜单定制(W4)', () => {
       /* 跳检开关同卡(D6): 「常规」里的那块已 hidden, 这里必须在 */
       await expect(page.locator('.hb-blk', { hasText: '跳检开关' })).toHaveCount(1);
 
-      /* ---------- ② 取消勾选「详细信息」→ 保存: 载荷形状(隐藏但保留槽位) ---------- */
+      /* ---------- 2. 取消勾选「详细信息」→ 保存: 载荷形状(隐藏但保留槽位) ---------- */
       const actbar = page.locator('.hb-actbar');
       await expect(actbar).toContainText('已与磁盘同步', { timeout: 20_000 });
       const infoRow = secTop.locator('.ctx-custom-row', { hasText: '详细信息' });
@@ -85,7 +85,7 @@ test.describe('设置页 · WebUI 卡右键菜单定制(W4)', () => {
       expect(member.order, '隐藏项被从 order 里删掉了(隐藏必须保留槽位, 否则勾回来不归位)').toContain('info');
       expect(member.order).toHaveLength(20);
 
-      /* ---------- ③ 不刷新页面, 右键菜单当场少一项(D8 热应用) ---------- */
+      /* ---------- 3. 不刷新页面, 右键菜单当场少一项(D8 热应用) ---------- */
       await tab(page, 'torrents').click();
       await expect(page.locator('.torrent-row').first()).toBeVisible({ timeout: 15_000 });
       await clickRow(page, page.locator('.torrent-row').nth(0), { button: 'right' });
@@ -94,7 +94,7 @@ test.describe('设置页 · WebUI 卡右键菜单定制(W4)', () => {
       expect(textsHot.some((t) => t.includes('重命名…')), '隐藏一项把相邻项也带走了 —— 布局解析错位').toBe(true);
       await page.keyboard.press('Escape');
 
-      /* ---------- ④ 「恢复默认」→ 保存: 项回来(D16 直接写草稿, 无二次确认框) ---------- */
+      /* ---------- 4. 「恢复默认」→ 保存: 项回来(D16 直接写草稿, 无二次确认框) ---------- */
       /* 回设置: hub.view 记得上次停在「WebUI」, 所以多半直接落回定制页; 万一被复位到首页,
          才走"点卡进去"那条路 —— 两条都不做特殊等待, 免得把"回得去"这件事写死在断言里 */
       await page.locator('nav.tabs-right button').first().click();

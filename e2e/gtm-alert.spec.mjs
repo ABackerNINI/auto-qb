@@ -12,11 +12,11 @@ import { readInst } from './lib/vm.mjs';
  * 断言只落在横幅本身, 不受桩数据差异干扰。
  *
  * T32 五条判据(逐条对应计划 §11 测试矩阵):
- *   ① T1 注入 -> 横幅常驻可见(短版含 nic/dir/人类可读速率);
- *   ② 点 ×(本机 ack)-> 立即隐藏, localStorage["gtm.spike.ack"] = T1;
- *   ③ 刷新页面 -> 仍隐藏(T1 已被 ack); 换成 T2 -> 自动重显(短版多方向追加 +N);
- *   ④ 超 TTL 的 ts(T4=25h 前)-> 判空隐藏(守 GTM_ALERT_TTL_MS 的负向面);
- *   ⑤ 降级面: items 为空 -> 整段不渲染, 且速度组/通知入口等既有状态栏元素不受影响。
+ *   1. T1 注入 -> 横幅常驻可见(短版含 nic/dir/人类可读速率);
+ *   2. 点 ×(本机 ack)-> 立即隐藏, localStorage["gtm.spike.ack"] = T1;
+ *   3. 刷新页面 -> 仍隐藏(T1 已被 ack); 换成 T2 -> 自动重显(短版多方向追加 +N);
+ *   4. 超 TTL 的 ts(T4=25h 前)-> 判空隐藏(守 GTM_ALERT_TTL_MS 的负向面);
+ *   5. 降级面: items 为空 -> 整段不渲染, 且速度组/通知入口等既有状态栏元素不受影响。
  *
  * 皮肤口径: 与既有冒烟轨一致, SKINS = prism|atlas(模板与 CSS 都是 shared 单点,
  * 双皮肤覆盖即验"三皮肤/四皮肤共享同一来源"的运行时表现)。
@@ -89,18 +89,18 @@ for (const skin of SKINS) {
       const shortText = banner.locator('.sb-gtm-main .val');
 
       await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
-      /* ① 常驻可见: 不依赖 todayTraffic 的 v-if 分支(该桩默认有今日流量, 但判据是元素本身) */
+      /* 1. 常驻可见: 不依赖 todayTraffic 的 v-if 分支(该桩默认有今日流量, 但判据是元素本身) */
       await expect(banner).toBeVisible({ timeout: 30_000 });
       await expect(shortText).toContainText('以太网 上行');
       await expect(shortText).toContainText('GiB/s');
 
-      /* ② 点 × -> 本机消警(写 localStorage, 不写服务端) */
+      /* 2. 点 × -> 本机消警(写 localStorage, 不写服务端) */
       await banner.locator('.sb-gtm-ack').click();
       await expect(banner).toHaveCount(0);
       expect(await page.evaluate(() => localStorage.getItem('gtm.spike.ack')), 'ack 键值必须是当前 ts')
         .toBe(T1);
 
-      /* ③ 刷新后仍隐藏:T1 已在 ack 里, 先确认新载荷真的到了再断言(不赌"页面还没加载完") */
+      /* 3. 刷新后仍隐藏:T1 已在 ack 里, 先确认新载荷真的到了再断言(不赌"页面还没加载完") */
       await page.reload({ waitUntil: 'domcontentloaded' });
       await seenTs(page).toBe(T1);
       await expect(banner).toHaveCount(0);
@@ -111,12 +111,12 @@ for (const skin of SKINS) {
       await expect(banner).toBeVisible();
       await expect(shortText).toContainText('+1');
 
-      /* ④ 超 TTL(25h 前)的异常 -> 判空隐藏: 负向面, 与 ① 的"窗内必显"互为对照 */
+      /* 4. 超 TTL(25h 前)的异常 -> 判空隐藏: 负向面, 与第 1 步的"窗内必显"互为对照 */
       anomaly = spike(T4, [ITEM_UP]);
       await seenTs(page).toBe(T4);
       await expect(banner).toHaveCount(0);
 
-      /* ⑤ 降级: items 为空 = 无异常 -> 整段不渲染; 其它状态栏元素照常 */
+      /* 5. 降级: items 为空 = 无异常 -> 整段不渲染; 其它状态栏元素照常 */
       anomaly = spike(T3, []);
       await seenTs(page).toBe(T3);
       await expect(banner).toHaveCount(0);

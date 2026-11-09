@@ -74,7 +74,7 @@ import { armClick, armPending, readPending } from './lib/probes.mjs';
  *    拆出后: 右缘支锚点贴滚动容器右缘(真实右键, clientX≈1426)断言右缘 ≤ 视口宽-8; 左缘支
  *    锚点 clientX=2(合成 contextmenu —— 真实手势结构上到不了, 见该支注释)断言左缘 ≥ 8。
  *  旧多选注入(vm.selMembers = …)在旧块里是取"已知选中集合"的手段; 新轨一律真实 Ctrl+click
- *  (D4 守则: 有真实 UI 路径的交互不借道 vm), 选中集合用 readInst 读数自证(第②类)。
+ *  (D4 守则: 有真实 UI 路径的交互不借道 vm), 选中集合用 readInst 读数自证(第2类)。
  *
  * ── 对账实跑数字(五步对账 §5.1 × on/off 双轮, 2026-10-06 S4 批实测回填) ──
  *  · 步骤1 新 spec: 默认(on) commands run dev.e2e 全量 56 passed / 8 skipped(1.2m; 本 spec
@@ -83,8 +83,8 @@ import { armClick, armPending, readPending } from './lib/probes.mjs';
  *    off 组 6 passed + on 组 14 skipped)。本 spec 单文件首跑 23.2s(14 passed / 6 skipped)。
  *  · 步骤2 旧脚本同参数轮(适配版): 桩 8232(off)/8233(on)/8234(error) --torrents 300 --ui both。
  *    两处临时对账脚手架(仅工作树, 已随删段一并消失, grep「临时对账脚手架」零残留):
- *    ①W4 导出段两块中和(存量 elementHandle.click 30s 超时会中断该皮肤整段, 让其后段可达);
- *    ②W2 的 armClick 依赖块C 的 armPending 预置 window.__p, S3 删块C 后前置消失 ⇒ 点击时
+ *    1) W4 导出段两块中和(存量 elementHandle.click 30s 超时会中断该皮肤整段, 让其后段可达);
+ *    2) W2 的 armClick 依赖块C 的 armPending 预置 window.__p, S3 删块C 后前置消失 ⇒ 点击时
  *    pageerror「Cannot set properties of undefined (setting 't0')」污染收尾总检(此前被 W4
  *    超时掩盖), 适配按块C 原样预置 __p:
  *    - on 轮:  58 项 56 PASS / 2 FAIL —— 失败仅「顶栏三视图按钮存在」×2(S2 删块残留的悬空
@@ -119,11 +119,11 @@ import { armClick, armPending, readPending } from './lib/probes.mjs';
  *  · 交互真实手势: 页签/菜单项/对话框按钮走 locator.click; 行点击(左键/修饰键/右键)走
  *    clickRow() 的 page.mouse —— 对冲写法沿用 multiselect-shows.spec(宽行居中滚动把行左缘
  *    落点滚出裁剪面的 flaky 机理与 5 拍 arrange, 见该文件头)。
- *  · evaluate 保留处(均有注释): ①readInst 读 vm 内部字段(selMembers/selGroups/selHashSet/
- *    decoratedGroups/toasts —— 无 DOM 之外的取径, 第②类); ②CTX-04 色探针在页面内比对
+ *  · evaluate 保留处(均有注释): 1) readInst 读 vm 内部字段(selMembers/selGroups/selHashSet/
+ *    decoratedGroups/toasts —— 无 DOM 之外的取径, 第2类); 2) CTX-04 色探针在页面内比对
  *    var(--teal)/var(--fg-muted) 的 computed 解析值(对照 smoke.md Dark Reader 纪律: 颜色
- *    断言读自定义属性的解析结果, 不读裸 computed 背景); ③W2 的 armPending+armClick 按
- *    旧 W2 用法原样移植(第②类时序探针; 旧脚本本段只钉 t0 不消费 —— 限速走 bulk 合单
+ *    断言读自定义属性的解析结果, 不读裸 computed 背景); 3) W2 的 armPending+armClick 按
+ *    旧 W2 用法原样移植(第2类时序探针; 旧脚本本段只钉 t0 不消费 —— 限速走 bulk 合单
  *    无乐观贴片, 保持同口径不新增断言)。
  *  · 阈值/语义性等待的**时长**逐字保留、机制 S4 后半显式化(S4 计划 26-11-05-0118): CTX-05
  *    移出后 450ms 内必须收起(收起延迟 ~180ms, 时长收紧即断言, toHaveCount 上限同值);
@@ -204,7 +204,7 @@ for (const skin of SKINS) {
         const item = ctxItem(page, '速度限制…');
         await expect(item).toBeVisible({ timeout: 5_000 });
         const { hits, off } = bulkTap(page);
-        // 旧 W2 用法原样移植(第②类时序探针): armClick 依赖 armPending 预置的 window.__p;
+        // 旧 W2 用法原样移植(第2类时序探针): armClick 依赖 armPending 预置的 window.__p;
         // 旧脚本本段只钉 t0 不消费时序(限速走 bulk 合单、无乐观贴片), 同口径不新增断言。
         await armPending(page);
         await armClick(page, await item.elementHandle());
@@ -520,7 +520,7 @@ for (const skin of SKINS) {
         // CTX-04: `.ctx-item:hover .ico` 是后代选择器, 而 .ctx-sub 是父项的 DOM 后代 ⇒ hover
         // 父项会把整个子面板图标刷成 --fg-muted(修之前的恒红形态)。判据: 悬停父项时子面板
         // 首项图标(.ico-queue)的 computed color 仍是语义色(--teal)。页面内比对 var() 的解析值
-        // (smoke.md Dark Reader 纪律: 颜色断言读自定义属性解析结果; evaluate 第②类读数)。
+        // (smoke.md Dark Reader 纪律: 颜色断言读自定义属性解析结果; evaluate 第2类读数)。
         const probe = await page.evaluate(`(() => {
           const el = document.querySelector(".ctx-sub .ico-queue");
           if (!el) return null;

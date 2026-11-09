@@ -13,8 +13,8 @@ import { collectRuntimeErrors, installRuntimeErrorGuard } from './lib/errors.mjs
  * 修法 = 后端三态回执(ok/warn/error, commands.py::_cmd_add_torrents)+ 前端按 r.status 分流。
  *
  * 注入手法(page.route, 与仓库既有的回执/载荷注入同口径):
- *   ① 拦 POST /api/torrents/add —— 命令不进真队列(不会真加种子), 回一个约定 cmd_id;
- *   ② 拦 GET /api/cmd/{cmd_id} —— 供出注定的回执。SSE 侧没有该 cmd_id 的事件,
+ *   1. 拦 POST /api/torrents/add —— 命令不进真队列(不会真加种子), 回一个约定 cmd_id;
+ *   2. 拦 GET /api/cmd/{cmd_id} —— 供出注定的回执。SSE 侧没有该 cmd_id 的事件,
  *      waitCmd 的轮询路径确定性拿到它(不与事件路径赛跑)。
  * 后端三态回执的语义由单测钉(test_web_admin / test_web_longtail), 本 spec 钉**前端反应**;
  * 且 error(全拒)必须反向留窗 —— 那一份文件/链接原样没进 qB, 留窗才能改完重提。

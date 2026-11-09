@@ -130,7 +130,7 @@ export async function openMenuTexts(page) {
 
 /**
  * Ctrl+click 选中前 N 个已渲染行(行窗口化 ~26 行, 300 种子下前 N 行恒在窗口内),
- * 返回选中集合权威读数(vm.selMembers, evaluate 第②类)。
+ * 返回选中集合权威读数(vm.selMembers, evaluate 第2类)。
  * @param {import('@playwright/test').Page} page
  * @param {number} n
  * @returns {Promise<string[]>}
