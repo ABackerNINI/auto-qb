@@ -1,7 +1,7 @@
-# testing — 测试 / 冒烟 / 仿真纪律 · 卷 1/4
+# testing — 测试 / 冒烟 / 仿真纪律 · 卷 1/5
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `annotations-lazy-eval.md` … `free-port-toctou-parallel.md`(共 27 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `annotations-lazy-eval.md` … `fakeclock-migration-missed-forms.md`(共 22 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
@@ -30,8 +30,3 @@
 | [event-handler-mock.md](event-handler-mock.md) | `mock.patch.object(模块实例, "_on_xxx")` 拦不住 EventBus 已注册的相位 handler —— 注册期捕获的是绑定方法对象, patch 换的是实例属性, 总线里的引用不变; 守相位接线用「订阅计数 + emit 返回值」, 守行为直调真… | EventBus, 相位, subscribe, mock.patch.object, handler 断言, assert_called_once, P5 守阵 |
 | [fake-config-shared-mutables.md](fake-config-shared-mutables.md) | helpers 的 `FakeConfig` 段对象是类属性(dataclass/dict/list), 任一测试原地改 | FakeConfig, 类属性, 测试隔离, xdist 分布, 偶发失败, make_manager, 原地改配置 |
 | [fakeclock-migration-missed-forms.md](fakeclock-migration-missed-forms.md) | 把多套旧假钟批量迁到统一假钟(tests/clock.py)时, 按类名/替换表机械改最易漏两类形态 —— 直接调用旧假钟实例的 `clock()` 方法形(新假钟 API 是 `now()`/`monotonic()`, 类名相同但方法名不同), 与绕过属性、位置参数直构旧类的… | 假钟迁移, 旧假钟, tests/clock.py, clock() 调用形, 位置参数直构, 直构位, _FixedClock, 迁移漏改, 裸取时残留, 批量替换 |
-| [fixed-port-test-collision.md](fixed-port-test-collision.md) | 测试夹具不覆盖「固定端口 + 连号候选表」的服务端口(`HrChannelConfig.discovery_port` 模型默认 **18788**, 候选表 18788/18789/18790 也是写死的), `-n 8` 并行下多个 worker 同时绑、再叠加本机**真实实… | 加 hr runtime 测试, 发现端口, discovery_port, 固定端口, 18788, 并行偶发红, WARNING 污染 INFO 断言, caplog 断言偶发, 端口被占, 真实实例占端口, xdist 端口冲突, m… |
-| [flaky-midnight-daycount.md](flaky-midnight-daycount.md) | 用例喂 `observe(ts+i)` 循环(i 到阈值+30)拿 `ts = int(time.time())` 时, 距本地零点 &lt;循环跨度秒的跑必红 —— 生产代码按天重置计数是**正确**语义, 用例未固定「同一天」致阈值永不达, 告断言红。修法锚循环起点当日 00… | flaky, 跨零点, 距零点, 必红时段, 按天计数, 阈值永不达, 循环 ts+i, 跨天清零, v4_day_epoch, 86400, 当日 00:01, 正午锚点, 按日文件, 秒精度, 分钟精度, 冻结时钟, 固定 epoch,… |
-| [flaky-minute-stamp-dup.md](flaky-minute-stamp-dup.md) | 用例对文件名带分钟级戳 (`%y-%m-%d-%H%M`) 的制品做「重复建幂等拒绝」断言时, 两次真调用跨分钟边界 ⇒ 派生文件名不同 ⇒ `exists()` 永不命中 ⇒ 拒绝分支永不触发, CI 偶发红本机绿 —— 生产幂等语义 (同路径拒绝) 正确, 是用例没钉住「同路… | flaky, 分钟戳, 时间戳命名, 幂等, 重复建, 跨分钟, timekit, monkeypatch, 冻结时钟, CI 偶发红, 时刻相关, exists 查重 |
-| [flaky-random-salt-hash-identity.md](flaky-random-salt-hash-identity.md) | 随机盐逐位映射下非 hex 短假 hash 可恒等 —— 脱敏断言假红 | flaky, 偶发红, 假红, 随机盐, os.urandom, infohash, 假 hash, 恒等映射, 非 hex, 短 hash, 40 位 hex, 脱敏, 夹具, 1/16, 16^-40 |
-| [free-port-toctou-parallel.md](free-port-toctou-parallel.md) | 真绑定生命周期用例用 `_free_port()` 探空闲端口当候选表基底, 再连号持段(全占断言要 3 位全空/顺延断言钉精确端口)—— 「探测时空闲 ⇒ 真 bind 时被占」的 TOCTOU 窗在 `-n 8` 并行下关不掉: 另一 worker 同窗选中同段(或其子集),… | 写真绑定用例, _free_port, 动态端口, 并行偶发红, TOCTOU, 端口被占, xdist 端口冲突, 连号候选表, 全占断言, 单跑恒绿 |

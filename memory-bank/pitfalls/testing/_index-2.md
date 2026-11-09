@@ -1,13 +1,18 @@
-# testing — 测试 / 冒烟 / 仿真纪律 · 卷 2/4
+# testing — 测试 / 冒烟 / 仿真纪律 · 卷 2/5
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `frozen-allowlist-baseline-drift.md` … `mutation-revert-git-checkout.md`(共 27 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `fixed-port-test-collision.md` … `importlib-sys-modules-dataclass.md`(共 22 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
 
 | 主题 | 一句话 | 触发词 |
 |---|---|---|
+| [fixed-port-test-collision.md](fixed-port-test-collision.md) | 测试夹具不覆盖「固定端口 + 连号候选表」的服务端口(`HrChannelConfig.discovery_port` 模型默认 **18788**, 候选表 18788/18789/18790 也是写死的), `-n 8` 并行下多个 worker 同时绑、再叠加本机**真实实… | 加 hr runtime 测试, 发现端口, discovery_port, 固定端口, 18788, 并行偶发红, WARNING 污染 INFO 断言, caplog 断言偶发, 端口被占, 真实实例占端口, xdist 端口冲突, m… |
+| [flaky-midnight-daycount.md](flaky-midnight-daycount.md) | 用例喂 `observe(ts+i)` 循环(i 到阈值+30)拿 `ts = int(time.time())` 时, 距本地零点 &lt;循环跨度秒的跑必红 —— 生产代码按天重置计数是**正确**语义, 用例未固定「同一天」致阈值永不达, 告断言红。修法锚循环起点当日 00… | flaky, 跨零点, 距零点, 必红时段, 按天计数, 阈值永不达, 循环 ts+i, 跨天清零, v4_day_epoch, 86400, 当日 00:01, 正午锚点, 按日文件, 秒精度, 分钟精度, 冻结时钟, 固定 epoch,… |
+| [flaky-minute-stamp-dup.md](flaky-minute-stamp-dup.md) | 用例对文件名带分钟级戳 (`%y-%m-%d-%H%M`) 的制品做「重复建幂等拒绝」断言时, 两次真调用跨分钟边界 ⇒ 派生文件名不同 ⇒ `exists()` 永不命中 ⇒ 拒绝分支永不触发, CI 偶发红本机绿 —— 生产幂等语义 (同路径拒绝) 正确, 是用例没钉住「同路… | flaky, 分钟戳, 时间戳命名, 幂等, 重复建, 跨分钟, timekit, monkeypatch, 冻结时钟, CI 偶发红, 时刻相关, exists 查重 |
+| [flaky-random-salt-hash-identity.md](flaky-random-salt-hash-identity.md) | 随机盐逐位映射下非 hex 短假 hash 可恒等 —— 脱敏断言假红 | flaky, 偶发红, 假红, 随机盐, os.urandom, infohash, 假 hash, 恒等映射, 非 hex, 短 hash, 40 位 hex, 脱敏, 夹具, 1/16, 16^-40 |
+| [free-port-toctou-parallel.md](free-port-toctou-parallel.md) | 真绑定生命周期用例用 `_free_port()` 探空闲端口当候选表基底, 再连号持段(全占断言要 3 位全空/顺延断言钉精确端口)—— 「探测时空闲 ⇒ 真 bind 时被占」的 TOCTOU 窗在 `-n 8` 并行下关不掉: 另一 worker 同窗选中同段(或其子集),… | 写真绑定用例, _free_port, 动态端口, 并行偶发红, TOCTOU, 端口被占, xdist 端口冲突, 连号候选表, 全占断言, 单跑恒绿 |
 | [frozen-allowlist-baseline-drift.md](frozen-allowlist-baseline-drift.md) | 「带病上岗」冻结清单守阵(ASCII 图形符号闸门)假设树 == 清单基线, 只拦新增; 清单生成与闸门执行之间存在提交窗, 期间其它提交引入的新符号未登记, 会让与本批无关的提交闸门预存判红(干净基线同样复现)。 | 冻结清单, ASCII 守阵, 图形符号, test_ascii_symbol_guard, 预存判红, 提交闸门, 基线漂移, 带病上岗 |
 | [gate-concurrency-memory-timeout.md](gate-concurrency-memory-timeout.md) | 提交闸门 `ship.commit` 把闸门命令放进 4 线程池并发, 而 pytest 类闸门自身又用 `-n 8` —— 峰值 4×8 = 32 worker 打满内存, 表现为 **`timekit --check` 超时 / node battery flake** 这类… | 提交闸门超时, timekit --check 超时, 闸门红, 假红, node battery flake, 内存打满, 换页, GATE_WORKERS, ship.commit 五连红 |
 | [gate-probe-must-not-run-action.md](gate-probe-must-not-run-action.md) | `parse_args(argv or [])` 在 CLI 直跑时把真实 `sys.argv` 整个丢掉 —— 冒烟闸门加的 `--help` 被当"无参", 于是 `sync.py --help` **真跑一次同步**、`push.py --help` **真推一次推送**;… | 冒烟闸门, --help, --safety, parse_args, argv or [], 陌生参数被当无参, 闸门真跑动作, 真推送, sync.py --help, push.py --help, 探测与动作同形, `<each:>… |
@@ -25,13 +30,3 @@
 | [hr-registry-pollution.md](hr-registry-pollution.md) | 测试期 `hr.runtime` 的注册表路径必须被 conftest 重定向到临时目录 —— 用例的 `data_dir` 是每例唯一的 `tmp_path`, 不隔离就是**每个用例往用户真实 `%LOCALAPPDATA%/auto-qb-hr/instances.json… | 加 hr runtime 测试, 发现端点测试, 扩展发现列表出现无关实例, 主实例连不上 Failed to fetch, instances.json 无界增长, 写 app-data, 注册表条目堆积, 测试污染用户数据 |
 | [iab-click-rerender-flake.md](iab-click-rerender-flake.md) | 用 IAB 浏览器 (Playwright surface) 对 kb.nav 这类「动作即整段重渲染 innerHTML」的单文件页做冒烟时, 多个 locator 动作挤在一个 cell 里连打 (间隔 ≤150ms), 后继动作可能报 `Timeout waiting fo… | 冒烟中 locator click 超时; 想断定「功能有 bug」之前; 冒烟脚本连续动作 (右键菜单 → 开关按钮 → 专区内按钮) 后继点击超时。 |
 | [importlib-sys-modules-dataclass.md](importlib-sys-modules-dataclass.md) | importlib 就地加载 future-annotations dataclass 模块, 不先注册 sys.modules 会在 3.13 上炸 NoneType | importlib, spec_from_file_location, exec_module, sys.modules, dataclass, NoneType, 3.13, 就地加载, 守阵加载引擎, find_skill_dir |
-| [inproc-server-conn-abort.md](inproc-server-conn-abort.md) | 测试自起 `http.server.ThreadingHTTPServer(("127.0.0.1", 0))` 当假服, test.full(并行 + 覆盖率插桩)高载下, **真客户端打真本地服**的段偶发 `ProtocolError: Connection aborted… | 10053, ConnectionAbortedError, Connection aborted, 你的主机中的软件中止了一个已建立的连接, ProtocolError, ThreadingHTTPServer, 进程内假服, 本地假服,… |
-| [log-capture.md](log-capture.md) | caplog 与全局日志状态是跨测试共享的 —— 断言日志要挂模块 logger 自建 handler + 显式 setLevel, 不碰 caplog。 | caplog, 日志断言, 日志级别, root handlers, root level, xdist, 偶发, CI 红, setup_logging, make_manager |
-| [manager-builder-single-point.md](manager-builder-single-point.md) | 测试构造单点参数面不足导致内联旁路 | 内联构造, make_manager, 单点旁路, 装配样板, FakeConfig, QbManager, 段覆盖, 测试构造器, builder |
-| [manager-connect-stub.md](manager-connect-stub.md) | QbManager.run() 主循环用例里把 `connect` mock 成 `return True` 却不给 `mgr.client` 落值, 在断连稳态守卫(26-10-31-1029)生效后会让请求线被整段静默跳过 —— 用例不报错, 断言以「线没跑」的形态假红/假绿… | 写或改 run() 主循环测试, mock/替换 connect; 或改断连守卫判据后跑主循环用例 |
-| [monotonic-warn-sentinel.md](monotonic-warn-sentinel.md) | `time.monotonic()` 的 0 点是**机器开机时刻**(Linux `CLOCK_MONOTONIC` / Windows `GetTickCount64`), 不是"很久以前" —— 拿 `0.0` 当「从未告警」哨兵时, 节流判据 `now - 0.0 >=… | CI 红, 本机绿, 平台无关的 CI 红, caplog 断言 False, 告警没打出来, 首次告警被吞, 节流, throttle, 哨兵, sentinel, time.monotonic, uptime, 全新 VM, 日志断言,… |
-| [mutants-mirror-dirty-worktree.md](mutants-mirror-dirty-worktree.md) | `mutants.run` / `mutants.verify` 是**就地改源码**的(`mutmut apply` 把变异体写进镜像 `src/`), 正常路径跑完会还原。但上一轮被**中断**(超时被杀 / `TaskStop` / 崩)时, 变异体可能**留在镜像工作树里… | 变异测试, mutmut, 镜像残留, 工作树脏, apply 未还原, 中断, TaskStop, 超时被杀, --no-refresh, git status 判净, stat 缓存, 同长度替换, git diff 看不出, git… |
-| [mutants-shared-mirror.md](mutants-shared-mirror.md) | 变异测试镜像默认是 `~/auto-qb-mut`, **多会话共用**; 而 `mutants.run` 每次都 `rm -rf mutants mutmut-cache.db`。并行会话一开跑, 就会把你**正在跑**的 `mutants/<pkg>/*.meta` 一起删掉… | 多 clone 并行, 共享镜像, 并行会话, rm -rf mutants, FileNotFoundError, .meta 被删, mutmut 崩, only_mutate 被改, 专用镜像, --mirror, --childre… |
-| [mutants-wsl-shell.md](mutants-wsl-shell.md) | 本机 WSL(`Ubuntu-26.04`, 登录壳实为 zsh 5.9)里 `cd X && cmd` 会真的在 X 下执行, 但 **`$PWD` 与 `$(...)` 命令替换仍报 WSL 的启动目录**(即调用方的 Windows cwd 映射成的 `/mnt/d/...… | WSL, wsl.exe, bash -lc, zsh, 命令替换, $(), $PWD, cd 不生效, 相对路径读错, mutants.status, mutmut=no, 镜像目录, 路径漂移 |
-| [mutation-pool-artifact.md](mutation-pool-artifact.md) | 窄池跑出来的存活清单, 相当一部分是「相关测试不在池里」的**假存活** —— 同一目标同一套变异, 只把池从 1 个测试文件换到 5 个, 存活数 97 → 70(−27%); 一个被判成 SURVIVED 的变异, 拿**全套件**手工改一次其实是被杀死的。判一个存活变异是不… | 变异测试, mutmut, pytest-gremlins, 存活变异, 杀死率, 选择池, 假存活, 等价变异, 真洞, 机器提名手工确认, 变异审计 |
-| [mutation-revert-git-checkout.md](mutation-revert-git-checkout.md) | 红绿双验做突变时, 用 `git checkout -- <file>` 还原文件会把**本轮尚未提交的全部改动**一起冲掉 —— 突变注入的 sed 与手头未提交的实现在同一个工作区文件里, checkout 不区分。防御: 精确反向 Edit 重放突变(或 `git stas… | 红绿双验, 变异测试, 突变, 判红, git checkout 还原, 冲掉未提交, 工作区回退, sed 注入 |
