@@ -87,7 +87,7 @@ KNOWN_TRANSFER_TARGET_KEYS = {
 KNOWN_NOTIFY_KEYS = {"enabled", "min_level", "quiet_hours", "max_per_hour", "dedup_window", "channels"}
 
 # qb_traffic(qB 口径流量采样, plan 26-10-03-0946 §06; flush_interval 为 v3 新键, 计划 26-10-04-1957 §06.1)
-KNOWN_QB_TRAFFIC_KEYS = {"enabled", "sample_interval", "flush_interval", "raw_window", "rollup_window"}
+KNOWN_QB_TRAFFIC_KEYS = {"enabled", "sample_interval_multiplier", "flush_interval", "raw_window", "rollup_window"}
 
 # traffic_source(全局流量来源, 计划 26-10-17-0339 S15; 26-10-17-1737 S1 增 enabled 总开关):
 # 一键切换取数数据源; provider 决定生效来源(两来源参数可并存, 但只有 provider 指向的那个参与取数, D1 严格互斥)
@@ -103,6 +103,10 @@ KNOWN_TRAFFIC_SOURCE_TOOL_KEYS = {"tool_dir", "tool_exe", "notify_cooldown_s"}
 # (fsync 风暴), 上限防崩溃丢失窗口过大; 须为整数秒(游标/块头时间戳按整秒粒度推算)
 FLUSH_INTERVAL_MIN_S = 60.0
 FLUSH_INTERVAL_MAX_S = 3600.0
+
+# qb_traffic.sample_interval_multiplier 的有效秒数上限(计划 26-11-10-0252 D6): 倍数本身无独立上限,
+# 只约束 multiplier x main_tick <= 600s —— 原「防视图颗粒过粗」口径; MAX_RAW_BUCKETS 只封桶数不封颗粒
+SAMPLE_INTERVAL_MAX_S = 600.0
 
 # hr_check(HR 在线核实, v3 15 键口径, 计划 26-09-28-1932 §6.1 + 26-09-30-0240); 站点级与全局共用区分两套键集
 # channel 段 8 键(去端口+跨机, 计划 26-10-14-1241 S1): host / port(0=随机) / discovery_port(0=关) / pairing 新增
@@ -1181,12 +1185,15 @@ def _validate_notify(spec: dict | None, errors: List[str]) -> None:
 def _validate_qb_traffic(spec: dict | None, errors: List[str], main_tick: float | None = None) -> None:
     """校验 config.qb_traffic 段(qB 口径流量采样, plan 26-10-03-0946 方案C §06); 未配置(None)合法 = 不启用
 
-    边界依据(§06 表; v3 计划 26-10-04-1957 §06.1 修订): sample_interval 下限 = main_tick(硬校验,
-    main_tick 从同一份 config 现取 —— 采样任务由主循环节拍驱动, 比 tick 还细的间隔调度上不可实现;
-    上限 600 防视图颗粒过粗); flush_interval 60-3600s 整数秒(v3 新键: 缓冲批量落盘周期, 缺省 600);
-    raw_window 1h-90d(原 72h 上限防单文件超体量, 用户接受体量换 3 个月高分辨率);
-    rollup_window 7d 起、无上限(原 90d 上限取消 —— 设得足够久即等效永久保留)。
-    「main_tick 整数倍」不在本层校验(裁决 D5): 失配只是精度损耗不致错误行为, 告警落采样模块检测点。
+    sample_interval_multiplier(计划 26-11-10-0252 D3/D4/D5/D6): 整数倍数 int >= 1, 生效秒数 =
+    倍数 x main_tick(main_tick 从同一份 config 现取); 倍数本身无独立上限, 但有效秒数须 <= 600s
+    (原「防视图颗粒过粗」口径; main_tick 写坏返回 None 时跳过上限校验, 其格式错误已由本层另行记入)。
+    旧秒值键 sample_interval 已退役(D1 硬切): 不兼容、不静默换算, 出现即按未知键拒绝。
+    类型层先挡 bool/float: bool 是 int 子类(int(True)=1 会静默放行), float 交给 int() 会截断
+    (1.5 -> 1), 都必须报错而非曲解(D5 只收整数倍)。
+    flush_interval 60-3600s 整数秒(缓冲批量落盘周期, 缺省 600); raw_window 1h-90d(原 72h 上限防
+    单文件超体量, 用户接受体量换 3 个月高分辨率); rollup_window 7d 起、无上限(原 90d 上限取消
+    —— 设得足够久即等效永久保留)。
     """
     if spec is None:
         return
@@ -1196,17 +1203,29 @@ def _validate_qb_traffic(spec: dict | None, errors: List[str], main_tick: float 
     _check_unknown_keys(spec, KNOWN_QB_TRAFFIC_KEYS, "config.qb_traffic", errors)
     if "enabled" in spec:
         _try(parse_bool, spec["enabled"], "config.qb_traffic.enabled", errors)
-    if "sample_interval" in spec:
-        seconds = _try(parse_time, spec["sample_interval"], "config.qb_traffic.sample_interval", errors)
-        if seconds is not None:
-            if seconds <= 0:
-                errors.append(f"config.qb_traffic.sample_interval: 必须为正时间: {spec['sample_interval']}")
-            elif seconds > 600:
-                errors.append("config.qb_traffic.sample_interval: 须 <= 600s")
-            elif main_tick is not None and seconds < main_tick:
+    if "sample_interval_multiplier" in spec:
+        raw = spec["sample_interval_multiplier"]
+        where = "config.qb_traffic.sample_interval_multiplier"
+        mult: int | None = None
+        if isinstance(raw, bool):
+            errors.append(f"{where}: 须为整数倍数(int >= 1), 不接受布尔值: {raw}")
+        elif isinstance(raw, float):
+            errors.append(f"{where}: 须为整数倍数(int >= 1), 不接受浮点值(写 1 而非 1.0): {raw}")
+        else:
+            try:
+                mult = int(raw)
+            except (TypeError, ValueError):
+                # 旧秒值键的残值("30S"/"1.5")在此拦下: 倍数语义下静默曲解比报错危险(D1 硬切)
+                errors.append(f"{where}: 须为整数倍数(int >= 1): {raw}(旧秒值写法已退役, 如 main_tick=2s 时 30s 写 15)")
+            else:
+                if mult < 1:
+                    errors.append(f"{where}: 须 >= 1(1 = 1 倍 main_tick): {raw}")
+        if mult is not None and main_tick is not None:
+            effective_s = mult * main_tick
+            if effective_s > SAMPLE_INTERVAL_MAX_S:
                 errors.append(
-                    f"config.qb_traffic.sample_interval: 须 >= main_tick({_fmt_s(main_tick)}s)"
-                    f"(采样节奏不细于主循环节拍): {spec['sample_interval']}"
+                    f"{where}: 有效采样间隔 {mult} x main_tick({_fmt_s(main_tick)}s)"
+                    f" = {_fmt_s(effective_s)}s 超过上限 {_fmt_s(SAMPLE_INTERVAL_MAX_S)}s"
                 )
     if "flush_interval" in spec:
         seconds = _try(parse_time, spec["flush_interval"], "config.qb_traffic.flush_interval", errors)

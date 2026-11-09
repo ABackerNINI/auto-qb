@@ -270,10 +270,10 @@ def _check_regex_patterns(patterns: list, where: str, errors: List[str]) -> None
 
 
 def _current_main_tick(cfg: dict) -> float | None:
-    """从同一份 config 现取 main_tick 秒值(qb_traffic.sample_interval 下限硬校验用, 计划 26-10-04-1957 §06.1)
+    """从同一份 config 现取 main_tick 秒值(qb_traffic 有效采样间隔上限校验用, 计划 26-11-10-0252 D6)
 
     缺省走 models.Config.main_tick 的默认值(延迟导入防环); main_tick 自身写坏时返回 None,
-    交叉校验跳过 —— 主 tick 的格式/范围错误已由 validate_config 记进 errors, 不缺这一条。
+    上限校验跳过 —— 主 tick 的格式/范围错误已由 validate_config 记进 errors, 不缺这一条。
     """
     if "main_tick" not in cfg:
         from ..models import Config

@@ -11,7 +11,7 @@
 - test_validate_exact_boundaries: 闭区间**端点逐值**钉住(端口/log.max_bytes/notify/max_tasks/qb_traffic 采样·落盘·保留窗/曲线阈值严格递增) —— 池内旧用例取远离边界的值, 端点位移类变异全靠这条
 - test_validate_exact_boundaries_size_and_window_tail: 端点用例的三处补缺 —— log.max_bytes **逐字节**两端(1MiB±1B / 1GiB±1B) + raw_window 上界两端(90D/91D) + flush_interval 须整数秒的**拦截侧**
 - test_validate_schema_version_lower_endpoint: schema_version 下界端点(1 合法 / 0 非法)
-- test_validate_qb_traffic_main_tick_crosscheck: sample_interval_multiplier 与同一份配置的 main_tick 交叉校验(main_tick 取自当前配置而非模型默认; 边界 `>=` 相等合法)
+- test_validate_qb_traffic_main_tick_crosscheck: sample_interval_multiplier 的有效秒上限用**同一份配置**的 main_tick 换算(main_tick 取自当前配置而非模型默认; 10x60s=600s 压线合法, 11x60s=660s 超限且报错含换算值; main_tick 写坏时跳过上限校验)
 - test_validate_integer_and_str_list_guards: integer=True 拒小数 / 字符串列表空白项报错 / state_file 空白串报错(拦截侧语义)
 - test_validate_fs_reports_all_entries: fs.path_map 逐条报错不被前一条非法截断(continue 而非 break)
 - test_validate_rule_spec: 规则 spec 键/取值域/未知条件动作/多键项报错
@@ -42,10 +42,10 @@
 - test_validate_web_ctx_menu_pass_shapes: web.ctx_menu 合法形态不报错(空字典/全层齐全/未知支名容忍)
 - test_validate_string_keys_exact_case: 校验器「按字符串键名取值」判据必须大小写精确(dat_path/period/download_curve/custom_basic_check_program_path/custom_basic_check_timeout 等被改大写后须走未知键/默认分支)
 - test_validate_short_circuit_pairs_differing_truth: 短路运算符(and/or)语义钉住 —— 用两操作数取不同真值的输入(traffic_source 空列表/非 list, curves 项单键判定, 规则集绑定, removed 触发白名单)
-- test_validate_nested_section_shapes_and_unparsable_intervals: 嵌套段形状守卫(traffic_source.global_traffic_monitor 非字典停在该层) + qb_traffic 时间串不可解析时范围比较整段跳过(只报解析错)
+- test_validate_nested_section_shapes_and_unparsable_intervals: 嵌套段形状守卫(traffic_source.global_traffic_monitor 非字典停在该层) + qb_traffic 倍数无法解析为整数时上限换算整段跳过(只报类型/解析错)
 - test_strip_none_list_branch_and_key_case: _strip_none 列表分支(None/空串项剔除 + 列表内嵌 dict 的站点 tri_state 叶保留) + state_file 键名精确性
 - test_validate_rule_refs_single_char_and_short_circuit: 规则引用 @ 后仅 1 字符仍是格式合法(钉住 r[1:] 而非 r[2:])
-- test_validate_qb_traffic_positive_boundary: sample_interval_multiplier 正时间下界(0 报"必须为正时间", 1 报"须 >= main_tick")
+- test_validate_qb_traffic_multiplier_int_forms: 倍数整数形态判据(文件侧 1/15/"15" 合法, 0/-1 走下界, "1.5"/"30S" 走解析错; 程序侧 1.5 浮点与 True 布尔在类型层拒, 不得被 int() 截断/放行)
 - test_validate_gslc_interval_key_exact: global_speed_limit_curve.interval 键名精确性 + 值校验(positive)
 - test_validate_fs_reports_all_entries_after_skip_branches: fs.path_map 空 from/归一后为空/空 to 条目不得中断后续条目校验(continue 而非 break)
 - test_validate_fs_prefix_ambiguity_keeps_scanning: fs.path_map 前缀歧义自比须 continue(非 break)、命中后只 break 内层(非 return)
@@ -1183,9 +1183,10 @@ def test_validate_exact_boundaries():
         def qbt(section):
             return _load_errors(td, "config:\n  qb_traffic:\n" + section)
 
-        # --- qb_traffic.sample_interval_multiplier 上界端点 600s / flush_interval 两端 / 两个保留窗下界
-        assert qbt("    sample_interval_multiplier: 600S\n") == ""
-        assert "须 <= 600s" in qbt("    sample_interval_multiplier: 601S\n")
+        # --- qb_traffic.sample_interval_multiplier 有效秒上界端点(默认 main_tick=2s: 300 倍 = 600s 合法,
+        #     301 倍 = 602s 超限) / flush_interval 两端 / 两个保留窗下界
+        assert qbt("    sample_interval_multiplier: 300\n") == ""
+        assert "301 x main_tick(2s) = 602s 超过上限 600s" in qbt("    sample_interval_multiplier: 301\n")
         assert qbt("    flush_interval: 60S\n") == ""
         assert qbt("    flush_interval: 3600S\n") == ""
         assert "config.qb_traffic.flush_interval: 须 >= 60s" in qbt("    flush_interval: 59S\n")
@@ -1252,18 +1253,21 @@ def test_validate_schema_version_lower_endpoint():
 
 
 def test_validate_qb_traffic_main_tick_crosscheck():
-    """qb_traffic.sample_interval_multiplier 与**同一份配置**的 main_tick 交叉校验(采样节奏不细于主循环节拍)
+    """qb_traffic.sample_interval_multiplier 的有效秒上限用**同一份配置**的 main_tick 换算
 
-    钉住两件事: 1. main_tick 取自当前配置(而非模型默认); 2. 边界是 `>=`(相等合法)。
+    钉住两件事: 1. main_tick 取自当前配置(而非模型默认 2s —— 取默认则 11 倍仅 22s 不报错);
+    2. 上限是闭区间(10 x 60s = 600s 合法, 11 x 60s = 660s 超限), 报错文案含换算值。
     """
     with tempfile.TemporaryDirectory() as td:
-        # main_tick=60S 时 sample_interval_multiplier 30S 必须报错(若取模型默认 2s 则不报 -> 变异存活)
-        err = _load_errors(td, "config:\n  main_tick: 60S\n  qb_traffic:\n    sample_interval_multiplier: 30S\n")
-        assert "config.qb_traffic.sample_interval_multiplier: 须 >= main_tick(60s)" in err, err
-        # 相等合法(>= 而非 >)
-        assert _load_errors(td, "config:\n  main_tick: 30S\n  qb_traffic:\n    sample_interval_multiplier: 30S\n") == ""
-        # 大于 main_tick 合法
-        assert _load_errors(td, "config:\n  main_tick: 10S\n  qb_traffic:\n    sample_interval_multiplier: 30S\n") == ""
+        err = _load_errors(td, "config:\n  main_tick: 60S\n  qb_traffic:\n    sample_interval_multiplier: 11\n")
+        assert "config.qb_traffic.sample_interval_multiplier" in err, err
+        assert "11 x main_tick(60s) = 660s 超过上限 600s" in err, err
+        # 相等合法(<= 而非 <)
+        assert _load_errors(td, "config:\n  main_tick: 60S\n  qb_traffic:\n    sample_interval_multiplier: 10\n") == ""
+        # main_tick 写坏 -> 上限校验跳过(只报 main_tick 自身错误, 不叠假错也不 TypeError)
+        bad_tick = _load_errors(td, "config:\n  main_tick: nonsense\n  qb_traffic:\n    sample_interval_multiplier: 301\n")
+        assert "config.main_tick" in bad_tick, bad_tick
+        assert "config.qb_traffic.sample_interval_multiplier" not in bad_tick, bad_tick
 
 
 def test_validate_integer_and_str_list_guards():
@@ -1756,8 +1760,8 @@ def test_validate_nested_section_shapes_and_unparsable_intervals():
 
     1. `traffic_source.global_traffic_monitor` 非字典 -> 报「必须是字典」并停在该层
       (不继续取 tool_dir/tool_exe, 否则标量上取 in 判据语义漂移);
-    2. `qb_traffic.sample_interval_multiplier` 不可解析 -> 只报解析错, **范围比较整段跳过**
-      (`if seconds is not None:` 假弧) —— 否则 None 参与比较会叠出假错或直接 TypeError。
+    2. `qb_traffic.sample_interval_multiplier` 无法解析为整数 -> 只报类型/解析错, **上限换算整段跳过**
+      (倍数解析失败时不得再拿 None 参与 main_tick 乘法比较, 否则叠出假错或直接 TypeError)。
     """
     with tempfile.TemporaryDirectory() as td:
         bad_tool = (
@@ -1770,7 +1774,7 @@ def test_validate_nested_section_shapes_and_unparsable_intervals():
 
         err = _load_errors(td, "config:\n  qb_traffic:\n    sample_interval_multiplier: nonsense\n")
         assert "config.qb_traffic.sample_interval_multiplier" in err, err
-        assert "须为正时间" not in err and "须 <= 600s" not in err and "须 >= main_tick" not in err, err
+        assert "超过上限" not in err and "须 >= 1" not in err, err
 
 
 def test_validate_gslc_interval_key_exact():
@@ -1847,19 +1851,37 @@ def test_validate_rule_refs_single_char_and_short_circuit():
         assert "规则引用必须以 @ 开头" not in err, err
 
 
-def test_validate_qb_traffic_positive_boundary():
-    """qb_traffic.sample_interval_multiplier 正时间下界: 0 报"必须为正时间", 1 报"须 >= main_tick"
+def test_validate_qb_traffic_multiplier_int_forms():
+    """qb_traffic.sample_interval_multiplier 的整数形态判据(计划 26-11-10-0252 D4/D5)
 
-    变异面: `if seconds <= 0` 改 `< 0`(mutmut_48, 0 漏判) / 改 `<= 1`(mutmut_49, 1 误判)。
-    默认 main_tick=2.0, 故 1S 合法走到"须 >= main_tick"分支 —— 两条断言分别钉住 0 与 1。
+    文件侧(BaseLoader 标量全为字符串, 与生产加载同路): 1 / 15 / "15" 合法(与 loader 的 int(str) 一致);
+    0 与 -1 走下界; "1.5" 与 "30S"(旧秒值残值)走解析错 —— 前者尤其不得被 int() 静默截断成 1。
+    程序侧(validate_config 直接收 Python 值, 即 webui PUT 的路径): 1.5 浮点走类型层拒; True 布尔走
+    类型层拒 —— bool 是 int 子类, 不先挡就会 int(True)=1 静默放行。
     """
+    from auto_qb.config.validation import validate_config
+
     with tempfile.TemporaryDirectory() as td:
-        assert "config.qb_traffic.sample_interval_multiplier: 必须为正时间: 0S" in _load_errors(
-            td, "config:\n  qb_traffic:\n    sample_interval_multiplier: 0S\n"
-        )
-        err = _load_errors(td, "config:\n  qb_traffic:\n    sample_interval_multiplier: 1S\n")
-        assert "必须为正时间" not in err, err  # 1S > 0, 不得误报"必须为正时间"
-        assert "须 >= main_tick(2s)" in err, err
+        def qbt(v):
+            return _load_errors(td, "config:\n  qb_traffic:\n    sample_interval_multiplier: %s\n" % v)
+
+        assert qbt("1") == ""
+        assert qbt("15") == ""
+        assert qbt('"15"') == ""
+        assert "须 >= 1(1 = 1 倍 main_tick): 0" in qbt("0")
+        assert "须 >= 1(1 = 1 倍 main_tick): -1" in qbt("-1")
+        assert "须为整数倍数(int >= 1): 1.5" in qbt("1.5")
+        err = qbt('"30S"')
+        assert "须为整数倍数(int >= 1): 30S" in err, err
+        assert "旧秒值写法已退役" in err, err
+
+        def direct(v):
+            return " | ".join(validate_config({"config": {"qb_traffic": {"sample_interval_multiplier": v}}}))
+
+        assert direct(1) == ""
+        assert direct(15) == ""
+        assert "不接受浮点值" in direct(1.5)
+        assert "不接受布尔值" in direct(True)
 
 
 def test_validate_fs_reports_all_entries_after_skip_branches():

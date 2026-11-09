@@ -714,11 +714,16 @@ GROUPS: Tuple[Group, ...] = (
                 fields=(
                     Field("enabled", "启用", "bool", default="false", help="功能总开关; false(缺省) = 不建采样任务不建目录零文件(保守默认)"),
                     Field(
-                        "sample_interval",
-                        "采样间隔",
-                        "time",
-                        default="30S",
-                        help="流量采样周期(须 >= 主循环节拍 main_tick, 上限 10 分钟): 也是 24h 视图的曲线颗粒; 越小曲线越细, 但存储体量线性增长(默认 30 秒下 24 小时约 2880 行)"
+                        "sample_interval_multiplier",
+                        "采样间隔倍数",
+                        "int",
+                        default="1",
+                        min=1,
+                        help="流量采样周期 = 本倍数 x 主循环节拍 main_tick, 也是 24h 视图的曲线颗粒; "
+                        "默认 1 = 1 倍(跟随主循环节拍, 不再是旧版的固定 30 秒); "
+                        "有效秒数 倍数 x main_tick 须 <= 600s, 倍数本身无独立上限; "
+                        "存储: main_tick 默认 2s 时 1 倍 = 2s, raw 行数约为旧 30s 的 15 倍"
+                        "(视图桶数受 MAX_RAW_BUCKETS 封顶, 不变); 想回到旧 30s 密度可显式配 15",
                     ),
                     Field(
                         "flush_interval",
