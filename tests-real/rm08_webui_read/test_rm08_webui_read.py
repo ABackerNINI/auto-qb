@@ -16,8 +16,9 @@ error_reason 数据面 missingFiles 分支(RM08-08)。
 (interval=86400S 任务线全关 · sync_interval=1.5S 同步线照常 · 规则集零段 · grouping 只读归组 ·
 web.enabled + skip_local_verify: true 回环免密钥), 连 副实例(空库草稿本)直接 HTTP 拉读侧端点,
 逐条「端点载荷 + qB API 对照」两级断言。为什么不 Popen scripts/dev_webui.py 本体: 它是给人用的
-一键脚本(自动开浏览器/交互式 CLI/生成的配置缺 schema_version: 5 会走迁移改写/日志路径与
-lib/app.py 的 wait_web 判据不合), 用例按它的 CONFIG_TMPL 语义生成同款最小配置(schema_version: 5)
+一键脚本(自动开浏览器/交互式 CLI/生成的配置缺 schema_version 会走迁移改写/日志路径与
+lib/app.py 的 wait_web 判据不合), 用例按它的 CONFIG_TMPL 语义生成同款最小配置(schema_version: 6,
+与产品现行版本对齐 —— 写旧版本必走迁移改写+版本号备份, issue 26-11-08-0044)
 后用 `python -m auto_qb` 起 —— 与 dev_webui.py 内部 `cli_main()` 完全等价。收尾一律 taskkill
 /F /T 杀整棵进程树(§2.7: 不带 /T 只杀 uv 启动器, 孤儿继续持端口)。RM08-05 的腿A(主实例 侧)
 是本片唯一的 主实例 面产品实例: 配置经空凭据直连(主实例已免鉴权, 免token口径 2026-11-04;
@@ -141,7 +142,7 @@ def case_dir(name: str) -> Path:
 
 CONFIG_TEMPLATE = """\
 config:
-    schema_version: 5
+    schema_version: 6
     qbittorrent:
         host: 127.0.0.1
         port: {qb_port}
@@ -189,7 +190,7 @@ def write_cfg(case: Path,
               api_key: str,
               auth: str = "",
               trackers_block: str = "") -> tuple[Path, int]:
-    """生成 dev.webui 同款最小配置(schema_version: 5; 任务线全关, 同步线 1.5S, 回环免密钥)。
+    """生成 dev.webui 同款最小配置(schema_version: 6; 任务线全关, 同步线 1.5S, 回环免密钥)。
 
     auth 非空(RM08-07 升档, scoped 只影响该用例实例): skip_local_verify=false + 显式
     web.token —— 请求必须带 Bearer, 环票闸可达, 坏票/无票负向可断言(D2)。
@@ -219,8 +220,8 @@ def write_cfg(case: Path,
     else:
         if f"port: {qb_port}" not in text:
             raise AssertionError(f"配置未指向 {qb_port}, 拒跑: {cfg}")
-    if "schema_version: 5" not in text:
-        raise AssertionError(f"配置缺 schema_version: 5(会触发迁移改写), 拒跑: {cfg}")
+    if "schema_version: 6" not in text:
+        raise AssertionError(f"配置缺 schema_version: 6(会触发迁移改写), 拒跑: {cfg}")
     return cfg, web_port
 
 

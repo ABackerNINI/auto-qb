@@ -182,14 +182,14 @@ def write_cfg(case: Path,
               extra: dict | None = None,
               *,
               web: tuple[int, int] | None = None) -> tuple[Path, int | None]:
-    """生成临时配置(schema_version: 5, 直连 副实例)。
+    """生成临时配置(schema_version: 6, 直连 副实例)。
 
     trackers = {条目名: spec}(dict 插入序 = YAML 书写序 = 匹配优先序, 键序敏感的 RM05-01 依赖此);
     extra = 顶层键合并(delete_tags / remove_similar_tags / hr_check / ruleset 等);
     web = (enabled, port) 或 None。返回 (配置路径, web_port|None)。"""
     web_port = None
     cfg: dict = {
-        "schema_version": 5,
+        "schema_version": 6,
         "qbittorrent": {
             "host": "127.0.0.1",
             "port": instances.SECONDARY,
@@ -226,8 +226,8 @@ def write_cfg(case: Path,
         raise AssertionError(f"配置指向了 {instances.PRIMARY}(真实种子), 拒跑: {path}")
     if f"port: {instances.SECONDARY}" not in text:
         raise AssertionError(f"配置没指向副实例(空库草稿本), 拒跑: {path}")
-    if "schema_version: 5" not in text:
-        raise AssertionError(f"配置缺 schema_version: 5(会触发迁移改写), 拒跑: {path}")
+    if "schema_version: 6" not in text:
+        raise AssertionError(f"配置缺 schema_version: 6(会触发迁移改写), 拒跑: {path}")
     return path, web_port
 
 
@@ -341,12 +341,12 @@ def test_rm05_01_match_three_way_split():
 
         # ---- A/C: 命中(多匹配降级用书写序第一个)→ 只打 rm05-hit
         wait_until(
-            lambda: "rm05-hit" in _tags_of(qb.torrent(ha) or {}), 25,
-            lambda: (f"A 未被打 rm05-hit: {sorted(_tags_of(qb.torrent(ha) or {}))}")
+            lambda: "rm05-hit" in _tags_of(qb.torrent(ha) or {}), 25, lambda:
+            (f"A 未被打 rm05-hit: {sorted(_tags_of(qb.torrent(ha) or {}))}")
         )
         wait_until(
-            lambda: "rm05-hit" in _tags_of(qb.torrent(hc) or {}), 15,
-            lambda: (f"C 未被打 rm05-hit: {sorted(_tags_of(qb.torrent(hc) or {}))}")
+            lambda: "rm05-hit" in _tags_of(qb.torrent(hc) or {}), 15, lambda:
+            (f"C 未被打 rm05-hit: {sorted(_tags_of(qb.torrent(hc) or {}))}")
         )
         # ---- 多匹配 WARNING 必须出现, 且一行里同时点出两个条目(降级是「都能匹配」的前提下取第一个)
         wait_until(
@@ -406,8 +406,8 @@ def test_rm05_02_hot_reload_rebind():
         p = app.start(cfg, case)
         assert p.wait_log("启动 qB 管理器", 40), f"产品没起来:\n{p.log()[-800:]}"
         wait_until(
-            lambda: "rm05-v1" in _tags_of(qb.torrent(h) or {}), 25,
-            lambda: (f"v1 标签未打上(v1 匹配/维护面不成立): {sorted(_tags_of(qb.torrent(h) or {}))}")
+            lambda: "rm05-v1" in _tags_of(qb.torrent(h) or {}), 25, lambda:
+            (f"v1 标签未打上(v1 匹配/维护面不成立): {sorted(_tags_of(qb.torrent(h) or {}))}")
         )
 
         # ---- 经 PUT /api/config 把该条目 tags 改为 [rm05-v2](trackers 段变 → TrackerModule.apply)
@@ -491,10 +491,9 @@ def test_rm05_03_tracker_speed_limit_and_manual_skip():
             lambda: (qb.torrent(ha) or {}).get("dl_limit") == 64 * 1024 and
             (qb.torrent(ha) or {}).get("up_limit") == 128 * 1024,
             25,
-            lambda: (
-                f"甲限速回读不符: dl={(qb.torrent(ha) or {}).get('dl_limit')}"
-                f" up={(qb.torrent(ha) or {}).get('up_limit')}"
-            ),
+            lambda:
+            (f"甲限速回读不符: dl={(qb.torrent(ha) or {}).get('dl_limit')}"
+             f" up={(qb.torrent(ha) or {}).get('up_limit')}"),
         )
         # ---- 乙: 加完立即预置奇数 KiB(抢在产品下个同步拍之前), added 管线读到奇数 → skip
         hb = fake_seed(qb, "rm05c3b.bin", 256 * 1024, savepath, "rm05c3-b")
@@ -738,7 +737,7 @@ def test_rm05_06_delete_tags_if_has_no_torrents():
 
 
 def _site_cfg(case_name: str, trackers: dict, sites: dict) -> tuple[Path, Path]:
-    """RM05-07 专用: 最小站点派生配置(schema_version: 5, hr_check.enabled 全局恒 false)。"""
+    """RM05-07 专用: 最小站点派生配置(schema_version: 6, hr_check.enabled 全局恒 false)。"""
     case = case_dir(case_name)
     extra = {"hr_check": {"enabled": False, "sites": sites}}
     cfg, _ = write_cfg(case, trackers, extra)

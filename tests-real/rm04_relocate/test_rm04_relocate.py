@@ -242,7 +242,7 @@ def case_dir(name: str) -> Path:
 
 CONFIG_TEMPLATE = """\
 config:
-    schema_version: 5
+    schema_version: 6
     qbittorrent:
         host: 127.0.0.1
         port: {qb_port}
@@ -279,7 +279,7 @@ def write_cfg(case: Path,
               cross_group: bool = False,
               relocate: bool = False,
               alias_threshold: int = 8) -> tuple[Path, int]:
-    """生成临时配置(schema_version: 5, 直连副实例(SECONDARY), WEB 必开 —— 本片断言全走产品 WEB 只读端点)。
+    """生成临时配置(schema_version: 6, 直连副实例(SECONDARY), WEB 必开 —— 本片断言全走产品 WEB 只读端点)。
 
     product data_dir 指用例临时目录: journal/spec/pid/state 随目录清理, 不碰仓库根 auto-qb-data/。
     返回 (配置路径, web端口)。"""
@@ -300,8 +300,8 @@ def write_cfg(case: Path,
     text = cfg.read_text(encoding="utf-8")
     if f"port: {instances.PRIMARY}" in text:
         raise AssertionError(f"配置指向了 {instances.PRIMARY}(真实种子), 拒跑: {cfg}")
-    if "schema_version: 5" not in text:
-        raise AssertionError(f"配置缺 schema_version: 5(会触发迁移改写), 拒跑: {cfg}")
+    if "schema_version: 6" not in text:
+        raise AssertionError(f"配置缺 schema_version: 6(会触发迁移改写), 拒跑: {cfg}")
     return cfg, web_port
 
 
@@ -872,8 +872,8 @@ def test_rm04_05_same_volume_relocate_dir_alias():
 
         # ---- qB 侧: save_path 变 dst + dst 数据 size 对齐
         wait_until(
-            lambda: norm((qb.torrent(h1) or {}).get("save_path")) == norm(dst), 60,
-            lambda: (f"mover save_path 未变 dst: {(qb.torrent(h1) or {}).get('save_path')}")
+            lambda: norm((qb.torrent(h1) or {}).get("save_path")) == norm(dst), 60, lambda:
+            (f"mover save_path 未变 dst: {(qb.torrent(h1) or {}).get('save_path')}")
         )
         for rel, size in files:
             f = dst / rel
@@ -1497,8 +1497,8 @@ def test_rm04_10_qbtemp_narrow_foreign_allowed_own_blocked():
         )
 
         wait_until(
-            lambda: norm((qb.torrent(h1) or {}).get("save_path")) == norm(dst), 90,
-            lambda: (f"qB 侧 G1 save_path 未变 dst: {(qb.torrent(h1) or {}).get('save_path')}")
+            lambda: norm((qb.torrent(h1) or {}).get("save_path")) == norm(dst), 90, lambda:
+            (f"qB 侧 G1 save_path 未变 dst: {(qb.torrent(h1) or {}).get('save_path')}")
         )
         dst_g1 = dst / "rm04c10_g1.bin"
         wait_until(lambda: dst_g1.is_file() and dst_g1.stat().st_size == size, 30, f"dst 侧 G1 数据未对齐: {dst_g1}")
@@ -1732,11 +1732,9 @@ def test_rm04_14_webui_confirm_loop_ui():
         # ---- 文件系统双向取证: qB 侧漂移 + dst 落地 + src 内容根 junction + 穿透可读
         moved = wait_until(
             lambda: next((h for h in (h1a, h2a) if norm((qb.torrent(h) or {}).get("save_path")) == norm(dst_a)), None),
-            90,
-            lambda: (
-                f"qB 侧无成员 save_path 变 dst: "
-                f"{[(h[:8], (qb.torrent(h) or {}).get('save_path')) for h in (h1a, h2a)]}"
-            )
+            90, lambda:
+            (f"qB 侧无成员 save_path 变 dst: "
+             f"{[(h[:8], (qb.torrent(h) or {}).get('save_path')) for h in (h1a, h2a)]}")
         )
         other = h2a if moved == h1a else h1a
         for rel, size in files_a:

@@ -45,7 +45,7 @@ choose 编辑器保存通道 PUT /api/config 服务端规范形语义(RM09-11, �
 跑法: `commands run real.suite -- --slice RM09 --yes`(不要裸 pytest)。真实种子全程非活跃;
 假种子一律 real-fake 标签(死端口 announce http://<本机IP>:1/announce, 零外连); 删除/移动/重命名
 只对自造种子; 产品非 dry-run 起完整主程序(WEB 命令线挂在主循环命令线上), data_dir 指用例临时
-目录, 配置一律 tests-real 派生 + schema_version: 5。
+目录, 配置一律 tests-real 派生 + schema_version: 6。
 """
 from __future__ import annotations
 
@@ -153,7 +153,7 @@ def wait_until(fn, timeout: float, desc: str | Callable[[], str], interval: floa
 
 CONFIG_TEMPLATE = """\
 config:
-    schema_version: 5
+    schema_version: 6
     qbittorrent:
         host: 127.0.0.1
         port: {qb_port}
@@ -182,7 +182,7 @@ config:
 
 
 def write_cfg(case: Path, *, grouping: bool = True) -> tuple[Path, int]:
-    """生成临时配置(schema_version: 5, 直连 副实例 空库, WEB 必开 —— 命令消费挂在完整主循环上)。"""
+    """生成临时配置(schema_version: 6, 直连 副实例 空库, WEB 必开 —— 命令消费挂在完整主循环上)。"""
     cfg = case / "config.yml"
     web_port = app.free_port()
     cfg.write_text(
@@ -198,8 +198,8 @@ def write_cfg(case: Path, *, grouping: bool = True) -> tuple[Path, int]:
     text = cfg.read_text(encoding="utf-8")
     if f"port: {instances.PRIMARY}" in text:
         raise AssertionError(f"配置指向了 {instances.PRIMARY}(真实种子), 拒跑: {cfg}")
-    if "schema_version: 5" not in text:
-        raise AssertionError(f"配置缺 schema_version: 5(会触发迁移改写), 拒跑: {cfg}")
+    if "schema_version: 6" not in text:
+        raise AssertionError(f"配置缺 schema_version: 6(会触发迁移改写), 拒跑: {cfg}")
     return cfg, web_port
 
 

@@ -184,10 +184,10 @@ def fake_seed(
 
 
 def write_cfg(case: Path, trackers: dict, rule_sets: dict, *, web: bool = True) -> Path:
-    """生成临时配置(schema_version: 5, 直连副实例)。rule_sets = {规则集名: {规则名: spec}},
+    """生成临时配置(schema_version: 6, 直连副实例)。rule_sets = {规则集名: {规则名: spec}},
     经 yaml.safe_dump 落盘(键序 = 插入序, 规则执行顺序随定义序)。"""
     cfg: dict = {
-        "schema_version": 5,
+        "schema_version": 6,
         "qbittorrent": {
             "host": "127.0.0.1",
             "port": instances.SECONDARY,
@@ -222,8 +222,8 @@ def write_cfg(case: Path, trackers: dict, rule_sets: dict, *, web: bool = True) 
         raise AssertionError(f"配置指向了 {instances.PRIMARY}(真实种子), 拒跑: {path}")
     if f"port: {instances.SECONDARY}" not in text:
         raise AssertionError(f"配置没指向副实例(空库草稿本), 拒跑: {path}")
-    if "schema_version: 5" not in text:
-        raise AssertionError(f"配置缺 schema_version: 5(会触发迁移改写), 拒跑: {path}")
+    if "schema_version: 6" not in text:
+        raise AssertionError(f"配置缺 schema_version: 6(会触发迁移改写), 拒跑: {path}")
     return path
 
 
@@ -478,10 +478,9 @@ def test_rm03_03_speed_limits_and_manual_odd_skip():
             lambda: (qb.torrent(ha) or {}).get("dl_limit") == 64 * 1024 and
             (qb.torrent(ha) or {}).get("up_limit") == 128 * 1024,
             25,
-            lambda: (
-                f"甲限速回读不符: dl={(qb.torrent(ha) or {}).get('dl_limit')}"
-                f" up={(qb.torrent(ha) or {}).get('up_limit')}"
-            ),
+            lambda:
+            (f"甲限速回读不符: dl={(qb.torrent(ha) or {}).get('dl_limit')}"
+             f" up={(qb.torrent(ha) or {}).get('up_limit')}"),
         )
         # ---- 乙: 奇数 KiB 手动限速必须原样(负向红验, ≥3 节拍窗口)
         time.sleep(9)
@@ -551,8 +550,8 @@ def test_rm03_04_var_replacement_with_and_without_hr():
         assert p.wait_log("加载规则 1 条(启用 1 条)", 40), f"规则没加载上:\n{p.log()[-800:]}"
 
         wait_until(
-            lambda: "keep-3D" in _tags_of(qb.torrent(ha) or {}), 25,
-            lambda: (f"甲标签未替换出 keep-3D: {sorted(_tags_of(qb.torrent(ha) or {}))}")
+            lambda: "keep-3D" in _tags_of(qb.torrent(ha) or {}), 25, lambda:
+            (f"甲标签未替换出 keep-3D: {sorted(_tags_of(qb.torrent(ha) or {}))}")
         )
         wait_until(
             lambda: "keep-${required_seeding_time}" in _tags_of(qb.torrent(hb) or {}),

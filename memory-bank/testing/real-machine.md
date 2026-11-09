@@ -66,7 +66,7 @@ qB 5.2 API 差异已封装在 `lib/qb.py`; 诊断入口 `tests-real/tools/diag_l
 
 ### 2.6 产品进程(`tests-real/lib/app.py`)
 
-- `--dry-run` **不启 WEB**(WEB 类用例不带 dry-run); Windows 外部 SIGTERM=强杀, 优雅退出只能进程内 `signal.raise_signal` 或 `start(graceful_after=N)`; 配置必写 `schema_version: 5`(否则走迁移改写配置); 断言真 pid 用 `real_pid()`, 杀产品进程照 §2.2。
+- `--dry-run` **不启 WEB**(WEB 类用例不带 dry-run); Windows 外部 SIGTERM=强杀, 优雅退出只能进程内 `signal.raise_signal` 或 `start(graceful_after=N)`; 配置必写 `schema_version: <产品现行版, 见 infra.versioning.CURRENT_VERSIONS>`(写旧版本/缺失都走启动物化迁移; **非 dry-run** 实例才改写落盘+留版本号备份, dry-run 只内存迁移; 守卫 tests/test_real_schema_version_guard.py 会红, 详见 pitfalls/testing/base-schema-version-staleness.md); 断言真 pid 用 `real_pid()`, 杀产品进程照 §2.2。
 - GUI 依赖解释器带 Tk(`tkinter` 不在 `uv.lock`, `env.sync` 全绿≠能跑界面): 判据 `python -c "import customtkinter"`。
 
 ### 2.7 分片陷阱速查(造法细节看用例 docstring 与切片计划)

@@ -44,7 +44,7 @@ qB 口径采样+重启尖峰缺口(RM07-07)· L2 互传真实速率聚合(RM07-0
 
 跑法: `commands run real.suite -- --slice RM07 --yes`(不要裸 pytest)。真实种子全程非活跃;
 假种子一律 real-fake 标签(死端口 announce, 零外连); 产品 data_dir 指用例临时目录, 不碰
-auto-qb-data/; 配置一律 tests-real 派生 + schema_version: 5。
+auto-qb-data/; 配置一律 tests-real 派生 + schema_version: 6。
 """
 from __future__ import annotations
 
@@ -122,7 +122,7 @@ def assert_no_crash(case: Path) -> None:
 
 CONFIG_TEMPLATE = """\
 config:
-    schema_version: 5
+    schema_version: 6
     qbittorrent:
         host: 127.0.0.1
         port: {qb_port}
@@ -148,7 +148,7 @@ config:
 
 
 def write_cfg(case: Path, *, web: bool = False, main_tick: str = "2S", extra: str = "") -> Path:
-    """生成临时配置(schema_version: 5, 只指 副实例 空库)。extra = 顶层段 YAML 文本(顶格书写,
+    """生成临时配置(schema_version: 6, 只指 副实例 空库)。extra = 顶层段 YAML 文本(顶格书写,
     这里统一缩进 4 格挂到 config: 之下 —— 段落必须嵌在 config 键组内, 根节点只认 config)。"""
     data_dir = (case / "data").as_posix()
     cfg = case / "config.yml"
@@ -167,8 +167,8 @@ def write_cfg(case: Path, *, web: bool = False, main_tick: str = "2S", extra: st
     text = cfg.read_text(encoding="utf-8")
     if f"port: {instances.PRIMARY}" in text:
         raise AssertionError(f"配置指向了 {instances.PRIMARY}(真实种子), 拒跑: {cfg}")
-    if "schema_version: 5" not in text:
-        raise AssertionError(f"配置缺 schema_version: 5(会触发迁移改写), 拒跑: {cfg}")
+    if "schema_version: 6" not in text:
+        raise AssertionError(f"配置缺 schema_version: 6(会触发迁移改写), 拒跑: {cfg}")
     return cfg
 
 
@@ -1178,8 +1178,8 @@ def test_rm07_11_alt_speed_real_dispatch(global_limits):
         rec = wait_cmd_ok(port, "/api/speed/alt/toggle", None)
         assert rec["status"] == "ok", f"speed_alt_toggle 回执非 ok: {rec}"
         wait_until(
-            lambda: speed_limits_mode(qb) != saved_mode, 15,
-            lambda: (f"toggle 后模式未翻转(仍 {speed_limits_mode(qb)}, 原 {saved_mode}; toggle 端点断)")
+            lambda: speed_limits_mode(qb) != saved_mode, 15, lambda:
+            (f"toggle 后模式未翻转(仍 {speed_limits_mode(qb)}, 原 {saved_mode}; toggle 端点断)")
         )
         mode_view = web_client(port)("GET", "/api/speed/mode")
         assert mode_view["alt_on"] == (not saved_mode), f"toggle 后读侧 alt_on 未翻转: {mode_view['alt_on']}"

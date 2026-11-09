@@ -226,7 +226,7 @@ def build_scene(case_name: str) -> tuple[Path, object, dict, Path]:
 
 EXPORT_CONFIG_TEMPLATE = """\
 config:
-    schema_version: 5
+    schema_version: 6
     qbittorrent:
         host: 127.0.0.1
         port: {secondary_port}

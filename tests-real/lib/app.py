@@ -13,8 +13,9 @@
    退出码 1, `finally` 一行都不跑, 日志里没有收尾。真正的 SIGTERM handler(`cli._sigterm_to_keyboardinterrupt`)
    只能用**进程内** `signal.raise_signal(SIGTERM)` 触发(见 `graceful_after`), 或者在 Linux 上从外部发。
    Ctrl+C 那条路也不行: 子进程没有控制台, `CTRL_C_EVENT` 投递不到。
-3. **配置必须写 `schema_version: 5`** —— 否则每次启动都走 v1→v5 迁移; 非 dry-run 时还会**改写**
-   配置文件并留备份, 把临时目录搅浑。
+3. **配置必须写 `schema_version: 6`(产品现行版本, infra.versioning.CURRENT_VERSIONS)** —— 写旧
+   版本/缺失都走版本迁移; 非 dry-run 时还会**改写**配置文件并留版本号备份, 把临时目录搅浑。
+   (原口径「必写 5 避免迁移改写」已过期: 产品 v5→v6 迁移上线的瞬间 5 就不再是免迁版本。)
 
 安全口径: 生成的配置**只指向副实例**(空库, env_registry 当前环境的 SECONDARY), 端口不走参数;
 用例开头可 `assert_cfg_target()` 复核, 防止手滑把产品进程指到主实例(PRIMARY)的真实种子上。
@@ -41,7 +42,7 @@ WEB_START_TIMEOUT = 30.0
 
 CONFIG_TEMPLATE = """\
 config:
-    schema_version: 5
+    schema_version: 6
     qbittorrent:
         host: 127.0.0.1
         port: {qb_port}

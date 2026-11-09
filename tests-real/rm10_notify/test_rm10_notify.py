@@ -172,7 +172,7 @@ def pkg_handlers() -> list:
 
 EXPORT_CONFIG_TEMPLATE = """\
 config:
-    schema_version: 5
+    schema_version: 6
     qbittorrent:
         host: 127.0.0.1
         port: {primary_port}

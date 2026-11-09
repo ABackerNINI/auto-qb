@@ -202,9 +202,9 @@ def tracker_conf_entry(domains: list[str], rules: bool = True) -> dict:
 
 
 def write_cfg(case: Path, trackers: dict, rule_sets: dict, *, grouping_enabled: bool = False) -> Path:
-    """生成临时配置(schema_version: 5, 直连副实例)。rule_sets = {规则集名: {规则名: spec}}。"""
+    """生成临时配置(schema_version: 6, 直连副实例)。rule_sets = {规则集名: {规则名: spec}}。"""
     cfg: dict = {
-        "schema_version": 5,
+        "schema_version": 6,
         "qbittorrent": {
             "host": "127.0.0.1",
             "port": instances.SECONDARY,
@@ -236,8 +236,8 @@ def write_cfg(case: Path, trackers: dict, rule_sets: dict, *, grouping_enabled: 
         raise AssertionError(f"配置指向了 {instances.PRIMARY}(真实种子), 拒跑: {path}")
     if f"port: {instances.SECONDARY}" not in text:
         raise AssertionError(f"配置没指向副实例(空库草稿本), 拒跑: {path}")
-    if "schema_version: 5" not in text:
-        raise AssertionError(f"配置缺 schema_version: 5(会触发迁移改写), 拒跑: {path}")
+    if "schema_version: 6" not in text:
+        raise AssertionError(f"配置缺 schema_version: 6(会触发迁移改写), 拒跑: {path}")
     return path
 
 

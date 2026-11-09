@@ -254,7 +254,7 @@ def write_cfg(
     request_timeout_s: int = 20,
     hr_check_enabled: bool = True
 ) -> Path:
-    """生成临时配置(schema_version: 5, 直连 副实例 空库; 计划 §03 基座口径)。
+    """生成临时配置(schema_version: 6, 直连 副实例 空库; 计划 §03 基座口径)。
 
     - trackers 恰 1 条目: domains=[站点档案 tracker 域]+[本机 IP] —— 域名交集派生站点绑定
       (loaders._resolve_hr_site_bindings), 本机 IP 使假种子(announce=本机IP:1)进匹配管线;
@@ -274,7 +274,7 @@ def write_cfg(
     if add_tag_satisfied:
         entry["hr"]["add_tag_for_satisfied"] = add_tag_satisfied
     cfg: dict = {
-        "schema_version": 5,
+        "schema_version": 6,
         "qbittorrent": {
             "host": "127.0.0.1",
             "port": instances.SECONDARY,
@@ -775,8 +775,8 @@ def test_rm06_03_hit_lane_a_tagging():
 
         # ---- 管束打标: 考察中绝对权威 → 维护管线把 rm06-hr 打上种子(qB API 回读, strip 口径)
         wait_until(
-            lambda: HR_TAG in _tags_of(qb.torrent(ih) or {}), 30,
-            lambda: (f"考察中种子未被打 {HR_TAG}: {sorted(_tags_of(qb.torrent(ih) or {}))}")
+            lambda: HR_TAG in _tags_of(qb.torrent(ih) or {}), 30, lambda:
+            (f"考察中种子未被打 {HR_TAG}: {sorted(_tags_of(qb.torrent(ih) or {}))}")
         )
         tags = _tags_of(qb.torrent(ih) or {})
         assert SAT_TAG not in tags, f"达标标签不该被打(做种 0s < required): {sorted(tags)}"
@@ -856,8 +856,8 @@ def test_rm06_04_miss_lane_release_and_contrast():
         releases_1 = count_anchor(case, r"本波签发「未列出」放行")
         assert releases_1 >= 1, "无「未列出」放行日志(对账签发面未发生)"
         wait_until(
-            lambda: HR_TAG in _tags_of(qb.torrent(ih_hit) or {}), 30,
-            lambda: (f"对照乙未被打 {HR_TAG}: {sorted(_tags_of(qb.torrent(ih_hit) or {}))}")
+            lambda: HR_TAG in _tags_of(qb.torrent(ih_hit) or {}), 30, lambda:
+            (f"对照乙未被打 {HR_TAG}: {sorted(_tags_of(qb.torrent(ih_hit) or {}))}")
         )
         # 甲在站点数据到位前会被行 4 本地兜底保守打标(maintenance_mod「其余全量纳入」), 打标先于
         # 放行证据; RELEASED 的语义是「不打标维持现状」不摘标 —— 故甲的放行判据咬 verified 记录,
@@ -1110,8 +1110,8 @@ def test_rm06_07_exclude_table_dynamic_switch():
         # ---- 波 1(启动 auto 波, 锚点可能尚未同步): A 档行 601 无条件下载; 被排除的甲绝不被驱动
         force_wave(60)
         wait_until(
-            lambda: HR_TAG in _tags_of(qb.torrent(ih_hit) or {}), 30,
-            lambda: (f"对照乙未被打 {HR_TAG}(排除表误伤受管种子?): {sorted(_tags_of(qb.torrent(ih_hit) or {}))}")
+            lambda: HR_TAG in _tags_of(qb.torrent(ih_hit) or {}), 30, lambda:
+            (f"对照乙未被打 {HR_TAG}(排除表误伤受管种子?): {sorted(_tags_of(qb.torrent(ih_hit) or {}))}")
         )
         tids_1 = stub.torrent_tids()
         assert 601 in tids_1, f"波 1 缺 601 身份下载任务(A 档行无条件): {tids_1}"

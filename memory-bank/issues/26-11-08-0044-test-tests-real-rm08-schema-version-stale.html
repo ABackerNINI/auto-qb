@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="tests-real-rm08-schema-version-stale">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="tests-real RM08 基座写 schema_version: 5 已过期——产品迁移 v5→v6 并改写落盘">
 <meta name="issue-summary" content="RM08 基座 CONFIG_TEMPLATE/write_cfg 写 schema_version: 5, 产品现在迁移 v5→v6 并改写落盘(每用例实例留 config.yml.v5.bak); 「必写 5 避免迁移改写」口径已过期; 现有断言只查写入前文本所以不红">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-08-0044-test-tests-real-rm08-schema-version-stale</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-08 00:44</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
 
@@ -110,13 +110,15 @@
 <section id="s3">
   <h2><span class="no">§03</span>建议<span class="opt">（可选）</span></h2>
   <p>基座改写 6(与产品现行 schema 对齐)或显式声明迁移容忍(断言面覆盖迁移后落盘形态)。</p>
+  <p><strong>修复后补充(2026-11-10)</strong>: 实际修法 = 走第一方案, 用户拍板扩面全 tests-real 一次改净 —— 13 文件基座字面量/断言/docstring 5→6(lib/app.py + RM02~RM10)。验证: 产品单点实测 v5 → 迁移 <code>v5→v6</code> + 留 <code>config.yml.v5.bak</code>(正是本 issue 的副作用), v6 → 零 IO; v6 配置过 load_config 全量校验。防复发 = 新增 <code>tests/test_real_schema_version_guard.py</code>(扫基座字面量断言 == CURRENT_VERSIONS, rm09 keys 域豁免), 反证改回 5 守卫即红。坑档 pitfalls/testing/base-schema-version-staleness.md。</p>
 </section>
 
 <section id="s4">
   <h2><span class="no">§04</span>状态变更日志</h2>
   <ul>
     <li>2026-11-08 00:44 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-10 — 状态 Open → Done（kb.status）</li>
+</ul>
 </section>
 
 <footer>
