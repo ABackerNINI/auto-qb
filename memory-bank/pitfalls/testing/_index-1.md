@@ -1,7 +1,7 @@
 # testing — 测试 / 冒烟 / 仿真纪律 · 卷 1/4
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `annotations-lazy-eval.md` … `gate-concurrency-memory-timeout.md`(共 27 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `annotations-lazy-eval.md` … `frozen-allowlist-baseline-drift.md`(共 27 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
@@ -34,4 +34,4 @@
 | [flaky-minute-stamp-dup.md](flaky-minute-stamp-dup.md) | 用例对文件名带分钟级戳 (`%y-%m-%d-%H%M`) 的制品做「重复建幂等拒绝」断言时, 两次真调用跨分钟边界 ⇒ 派生文件名不同 ⇒ `exists()` 永不命中 ⇒ 拒绝分支永不触发, CI 偶发红本机绿 —— 生产幂等语义 (同路径拒绝) 正确, 是用例没钉住「同路… | flaky, 分钟戳, 时间戳命名, 幂等, 重复建, 跨分钟, timekit, monkeypatch, 冻结时钟, CI 偶发红, 时刻相关, exists 查重 |
 | [flaky-random-salt-hash-identity.md](flaky-random-salt-hash-identity.md) | 随机盐逐位映射下非 hex 短假 hash 可恒等 —— 脱敏断言假红 | flaky, 偶发红, 假红, 随机盐, os.urandom, infohash, 假 hash, 恒等映射, 非 hex, 短 hash, 40 位 hex, 脱敏, 夹具, 1/16, 16^-40 |
 | [free-port-toctou-parallel.md](free-port-toctou-parallel.md) | 真绑定生命周期用例用 `_free_port()` 探空闲端口当候选表基底, 再连号持段(全占断言要 3 位全空/顺延断言钉精确端口)—— 「探测时空闲 ⇒ 真 bind 时被占」的 TOCTOU 窗在 `-n 8` 并行下关不掉: 另一 worker 同窗选中同段(或其子集),… | 写真绑定用例, _free_port, 动态端口, 并行偶发红, TOCTOU, 端口被占, xdist 端口冲突, 连号候选表, 全占断言, 单跑恒绿 |
-| [gate-concurrency-memory-timeout.md](gate-concurrency-memory-timeout.md) | 提交闸门 `ship.commit` 把闸门命令放进 4 线程池并发, 而 pytest 类闸门自身又用 `-n 8` —— 峰值 4×8 = 32 worker 打满内存, 表现为 **`timekit --check` 超时 / node battery flake** 这类… | 提交闸门超时, timekit --check 超时, 闸门红, 假红, node battery flake, 内存打满, 换页, GATE_WORKERS, ship.commit 五连红 |
+| [frozen-allowlist-baseline-drift.md](frozen-allowlist-baseline-drift.md) | 「带病上岗」冻结清单守阵(ASCII 图形符号闸门)假设树 == 清单基线, 只拦新增; 清单生成与闸门执行之间存在提交窗, 期间其它提交引入的新符号未登记, 会让与本批无关的提交闸门预存判红(干净基线同样复现)。 | 冻结清单, ASCII 守阵, 图形符号, test_ascii_symbol_guard, 预存判红, 提交闸门, 基线漂移, 带病上岗 |
