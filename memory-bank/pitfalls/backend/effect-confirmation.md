@@ -33,13 +33,13 @@
   `defer_receipt` / `flush_truths`(改种子状态的命令回执**立即**写 —— 只表示「命令已执行」,
   真值经 flush_truths 直查 qB, 落地了才另走 truth 事件推送, 超时不推; 旧「扣住回执等真值
   落地再发」语义 2026-09-20 D2 已废弃); 同文件 `check_pending` +
-  [commands.py](../../../src/auto_qb/webui/commands.py) `_verdict_reannounce`(reannounce 只发指令
+  [commands_torrents.py](../../../src/auto_qb/webui/commands_torrents.py) `_verdict_reannounce`(:30, 取证 2026-11-10; move-only 自 commands.py 切出, 计划 26-11-02-2342 §07 R5; reannounce 只发指令
   并登记确认跟踪, 回执由消解等待判定表纯函数对照 baseline 核实后给出 —— updating 恒不构成成功证据,
   成功凭 working 转换/epoch 前跳, 失败凭 status 4/5/6+msg; 结论 ∈ confirmed/rejected/pending,
   pending 落 warn 第三态诚实标签不混入「失败」 —— 发出 ≠ 成功; plan 26-10-05-0923 落地、
   26-10-31-2354 改消解等待模型见下方复发条, 判据方向事故详见 [announce-epoch-semantics](announce-epoch-semantics.md));
   [src/auto_qb/core/modules/ops_mod.py](../../../src/auto_qb/core/modules/ops_mod.py) skip_check R2 实时
-  复核 + `_poll_until`(动手前对 qB 短间隔直查确认); 同 webui/runtime.py WEB 命令真值直查红线(取不到就
+  复核 + `_poll_until`(动手前对 qB 短间隔直查确认); 同 [runtime_commands.py](../../../src/auto_qb/webui/runtime_commands.py) `:370` `_affected_truth` WEB 命令真值直查红线(取证 2026-11-10, 红线原文在 :380-381; 取不到就
   返回 None 不回落快照 —— 回落会把「读不到」伪装成「读到了旧值」)。本次修复点: 同文件 `OpsModule.recheck`
   —— poll_verdict 门控(S1/P0) + poll 闭包证据门控状态机(S2a/P0) + 宽限耗尽仲裁直查(S2b/P0) + 提交点
   R1 实时复核与 live 基线(S3/P1)。

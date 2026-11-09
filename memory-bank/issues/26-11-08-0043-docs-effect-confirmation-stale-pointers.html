@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="effect-confirmation-stale-pointers">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="effect-confirmation.md 两处陈旧指针(_verdict_reannounce 链接与真值直查红线指向)">
 <meta name="issue-summary" content="_verdict_reannounce 链接指 commands.py 实际在 commands_torrents.py(:30); :44「真值直查红线」指 webui/runtime.py 实际已迁 runtime_commands.py:370(move-only 拆分后)">
 <style>
@@ -91,13 +91,14 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-08-0043-docs-effect-confirmation-stale-pointers</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-08 00:43</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">docs</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
 
 <section id="s1">
   <h2><span class="no">§01</span>现象</h2>
   <p>memory-bank/pitfalls/backend/effect-confirmation.md 存在两处陈旧指针(26-11-07-0536 批E/表行11 只回写了 defer_receipt 描述段, 两处文件指针未改): ① <code>_verdict_reannounce</code> 的链接指 commands.py, 实际该符号在 commands_torrents.py(:30); ② :44「真值直查红线」指 webui/runtime.py, 实际已迁 runtime_commands.py:370(move-only 拆分后)。按图索骥会找不到符号。</p>
+  <p><strong>复验 2026-11-10 01:15：两处陈旧指针仍复现；§03 建议的其中一条路径已失效，需按当前代码树改道。</strong>锚点重跑（取证 2026-11-10, 行号均为当时值）：<code>grep -rn "_verdict_reannounce" src/</code> → 定义在 <code>src/auto_qb/webui/commands_torrents.py:30</code>（TorrentsMixin 静态方法, 文件头注明「move-only 自 commands.py 切出」），<code>commands.py</code> 本体零命中；<code>grep -rn "真值直查" src/</code> → <code>src/auto_qb/webui/runtime_commands.py:370</code> 的 <code>_affected_truth</code> docstring「直查 qB, 不读同步快照」, <code>:380-381</code>「取不到就返回 None（不回落快照）」, <code>:398</code> 失败日志, <code>runtime.py</code> 本体零命中。两文件 <code>commands.py</code> / <code>runtime.py</code> 仍在（分别是命令处理器门面与运行时门面），但符号已迁出，故「文件存在」不等于「按指针能找到符号」。另：<code>src/auto_qb/webui/server/routes/runtime_commands.py</code> 在当前树不存在（该目录下无此文件），§03 建议的这一路径本身已过期，实际修法见 03 节「修复后补充」。坑档范本区首行链接原已指向 <code>runtime_commands.py</code>（批E 回写时顺带改过），陈旧的是 ① <code>commands.py</code> 链接与 ② <code>runtime.py</code> 行文这两处。</p>
 </section>
 
 <section id="s2">
@@ -110,13 +111,21 @@
 <section id="s3">
   <h2><span class="no">§03</span>建议<span class="opt">（可选）</span></h2>
   <p>两处指针改指现文件(_verdict_reannounce → commands_torrents.py:30; 真值直查红线 → src/auto_qb/webui/server/routes/runtime_commands.py:370), 行号标注取证时间。</p>
+  <h3>修复后补充（2026-11-10 03:27）</h3>
+  <p><strong>实际修法：</strong>只改 <code>memory-bank/pitfalls/backend/effect-confirmation.md</code>「库内既有范本」段的两处指针，产品代码 / 测试 / 配置零改动。① 第 36 行链接 <code>[commands.py]</code> → <code>[commands_torrents.py](../../../src/auto_qb/webui/commands_torrents.py)</code>，并在符号后补 <code>:30</code>、取证时间 <code>2026-11-10</code> 与迁出出处（move-only 自 commands.py 切出，计划 26-11-02-2342 §07 R5）；② 第 42 行行文 <code>同 webui/runtime.py WEB 命令真值直查红线</code> → <code>同 [runtime_commands.py] :370 _affected_truth WEB 命令真值直查红线</code>，补红线原文位置 <code>:380-381</code> 与取证时间。范本区其余描述（<code>defer_receipt</code> / <code>flush_truths</code> / <code>check_pending</code> / <code>ops_mod.py</code> 段）逐字未动 —— 首行链接原已指向 <code>runtime_commands.py</code>，无需再改。</p>
+  <p><strong>与建议的改道原因：</strong>建议里的 <code>src/auto_qb/webui/server/routes/runtime_commands.py</code> 在当前代码树不存在（该目录下无此文件），系入池时的路径自身过期；复验 <code>grep -rn "真值直查" src/</code> 实测红线在 <code>src/auto_qb/webui/runtime_commands.py:370</code> 的 <code>_affected_truth</code>（docstring「直查 qB, 不读同步快照」，<code>:380-381</code> 为「取不到就返回 None（不回落快照）」，<code>:398</code> 为失败日志），故按当前代码树改指该路径并按现行行号标注。<code>commands_torrents.py:30</code> 一条与建议一致。建议原文按 create-issue skill 口径保留在上一段。</p>
+  <p><strong>验证方式：</strong>① 锚点重跑（见 01 节复验行），两个链接目标文件均真实存在、符号与行号对得上；② 全库 <code>git grep</code> 验收：目标坑档内旧指针 <code>commands.py</code> 链接与 <code>webui/runtime.py</code> 行文零残留；其余命中在 issues / plans / tasks / baselines 等冻结件里，按 <code>pitfalls/docs/drift.md</code>「记的是当时是什么样」口径一律未改；③ <code>commands run kb.check</code> 全绿（主键 / 状态词表 / 认领链 / 回写守卫 / 日期守卫 / check_html 907 件，2026-11-10 04:34 复测）；④ 本 issue HTML 标签平衡机检 BALANCED（压栈 / 弹栈，未闭合栈与乱序闭合均空）；⑤ 全量 <code>commands run test.full</code> 全绿。</p>
+  <p><strong>测试数字（2026-11-10 提交前齐平后组合树实测）：</strong><code>5886 passed, 2 skipped in 142.82s (0:02:22)</code>；覆盖率 <code>TOTAL 26198 stmts / 45 miss / 9134 branch / 57 partial / 99%</code>。基线切片 <code>26-11-10-0327-effect-confirmation-stale-pointers</code>（见 <code>kb.baseline</code>）；本轮开工同步又快进 2 笔（391f133a→eee97f5b，远端新增 <code>tests/test_qbmanager_loop.py</code> 守卫用例），故在 HEAD eee97f5b 的组合树重跑后以本组数字为准。纯文档指针修正，不涉 qB 真执行 / 真文件系统 / 进程 / 注册表 —— 真机不适用（纯静态可验）。</p>
+  <p class="hint">范围守恒：验收时另发现 <code>memory-bank/pitfalls/backend/announce-epoch-semantics.md:12</code> 仍写「判定单点 <code>webui/commands.py::_verdict_reannounce</code>」，属同类陈旧指针但原在本 issue 范围外，本件收口时仅点名、未修未入池。2026-11-10 04:34 用户显式授权「一起修」（scope-guard 例外 3：用户当场扩范围），故随本批一并改指 <code>commands_torrents.py:30</code> 并标取证时间与 move-only 出处（见 <code>memory-bank/pitfalls/backend/announce-epoch-semantics.md</code>）；既已修完，不再另建 Open issue（避免留下已解决的待办件）。本件 <code>doc-refs</code> 保持空：认领来源是用户直接指派，未立任务档案、未出计划，无认领方需反向声明，<code>kb.check</code> 认领链闭环 OK。</p>
 </section>
 
 <section id="s4">
   <h2><span class="no">§04</span>状态变更日志</h2>
   <ul>
     <li>2026-11-08 00:43 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-10 — 状态 Open → In Progress（kb.status）</li>
+    <li>2026-11-10 — 状态 In Progress → Done（kb.status）</li>
+</ul>
 </section>
 
 <footer>
