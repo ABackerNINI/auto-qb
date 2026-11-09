@@ -383,20 +383,20 @@ def test_qb_traffic_shortcuts() -> None:
     """流量图三入口快捷键(2026-10-05): 打开全局图 / 流量页签 Alt+5 / 窗口前后切换 [ ]
 
     注册表是键位单一事实源, 前端无 JS 测试框架 —— 漏接线只表现为"按了没反应"(静默)。逐条钉:
-    ① open-qb-traffic: 视图与导航 / global / Ctrl+Backslash / run _kbToggleQbTraffic(切换语义:
+    1. open-qb-traffic: 视图与导航 / global / Ctrl+Backslash / run _kbToggleQbTraffic(切换语义:
        已开同目标 ⇒ closeDrawer; 未开走 openQbHistory 内含 qbTrafficOn 门 + 未启用提示, 键盘入口
        不许静默无反应);
-    ② drawer-tab-traffic: 详情面板组 / list / Alt+Digit5 / run _kbDrawerTab("traffic"), 且
+    2. drawer-tab-traffic: 详情面板组 / list / Alt+Digit5 / run _kbDrawerTab("traffic"), 且
        _kbDrawerTab 内补流量门控(qbTrafficOn false 提示后忽略, 不许切到无按钮的隐形页签 ——
        页签按钮 v-if=qbTrafficOn 不渲染);
-    ③ traffic-win-prev/next: 新「流量图」组 / global / [ ] / **when 条件绑定 qbTrafficActive**
+    3. traffic-win-prev/next: 新「流量图」组 / global / [ ] / **when 条件绑定 qbTrafficActive**
        (仅流量图可见时消费键位) / run qbCycleWindow(±1); 引擎必须在 preventDefault **之前**
        分流 when(假则不消费, 键位留给浏览器 —— 否则无流量图时 [ / ] 被无谓吞掉)。"""
     items = {it["id"]: it for it in _registry()}
     eng = _read("shortcuts.js")
     chart = _read("qb_traffic_chart.js")
 
-    # ① 打开全局流量图(状态栏入口的键盘对应; 2026-10-09 起为切换语义, 见 test_shortcut_toggle_semantics)
+    # 1. 打开全局流量图(状态栏入口的键盘对应; 2026-10-09 起为切换语义, 见 test_shortcut_toggle_semantics)
     it = items["open-qb-traffic"]
     assert it["group"] == "视图与导航" and it["scope"] == "global", "open-qb-traffic 应 视图与导航 / global"
     assert it["def"] == "Ctrl+Backslash", "open-qb-traffic 默认键必须是 Ctrl+Backslash"
@@ -404,7 +404,7 @@ def test_qb_traffic_shortcuts() -> None:
     assert "if (!this.qbTrafficOn) {" in chart and "功能未启用: qB 口径流量图" in chart, \
         "openQbHistory 必须补未启用提示(键盘入口不能静默无反应)"
 
-    # ② 详情面板流量页签(Alt+1-4 的第五档)
+    # 2. 详情面板流量页签(Alt+1-4 的第五档)
     it = items["drawer-tab-traffic"]
     assert it["group"] == "详情面板" and it["scope"] == "list", "drawer-tab-traffic 应 详情面板 / list"
     assert it["def"] == "Alt+Digit5", "drawer-tab-traffic 默认键必须是 Alt+Digit5"
@@ -417,7 +417,7 @@ def test_qb_traffic_shortcuts() -> None:
     assert gate < tb.index('if (this.drawer.open && this.drawerIsSeed)'), "流量门控必须先于开态切页(未启用不得切到隐形页签)"
     assert "功能未启用: qB 口径流量图" in tb, "流量页签未启用必须 toast 提示后忽略, 不许静默"
 
-    # ③ 窗口前后切换(when 条件绑定 + 端点夹取, 见 test_webui_static_dom_page.py 的持久化守阵)
+    # 3. 窗口前后切换(when 条件绑定 + 端点夹取, 见 test_webui_static_dom_page.py 的持久化守阵)
     for tid, key, delta in (("traffic-win-prev", "BracketLeft", "-1"), ("traffic-win-next", "BracketRight", "1")):
         it = items[tid]
         assert it["group"] == "流量图" and it["scope"] == "global", f"{tid} 应 流量图 / global"
@@ -441,20 +441,20 @@ def test_drawer_tab_shortcuts_merge_remap() -> None:
     病根: R3 把页签栏收敛成 [常规&内容][Tracker&用户](+流量) 后, 注册表五档(Alt+1..5)未随动,
     按 Alt+3 名义上是「用户页」却落在收起的页签上。修法 = 合并态按**位次**重排到三张可见页签,
     未合并(dtMergeTabsOn false)保持五档原样。逐条钉住不变量:
-    ① 位次表 KB_MERGE_TAB_REMAP: 1->general / 2->trackers / 3->traffic, 4/5 停用(null);
-    ② _kbDrawerTab 消费该表且重排在流量门控**之前**(第 3 档 remap 成 traffic 后仍要过 qbTrafficOn 门);
-    ③ 判据单点 _kbMergeTabsOn 读 dtMergeTabsOn computed(与页签栏 v-if 同一判据, 不自造第二套);
-    ④ 帮助浮层 / 设置页快捷键文案经 kbLabel 随态改写, 未合并回落注册表静态 label。"""
+    1. 位次表 KB_MERGE_TAB_REMAP: 1->general / 2->trackers / 3->traffic, 4/5 停用(null);
+    2. _kbDrawerTab 消费该表且重排在流量门控**之前**(第 3 档 remap 成 traffic 后仍要过 qbTrafficOn 门);
+    3. 判据单点 _kbMergeTabsOn 读 dtMergeTabsOn computed(与页签栏 v-if 同一判据, 不自造第二套);
+    4. 帮助浮层 / 设置页快捷键文案经 kbLabel 随态改写, 未合并回落注册表静态 label。"""
     eng = _read("shortcuts.js")
 
-    # ① 位次表: 前 3 档落三张可见页签, 4/5 停用(null)
+    # 1. 位次表: 前 3 档落三张可见页签, 4/5 停用(null)
     remap = re.search(r"const KB_MERGE_TAB_REMAP = \{(.*?)\};", eng, re.S)
     assert remap, "shortcuts.js 找不到 KB_MERGE_TAB_REMAP(合并态位次重排表)"
     body = remap.group(1)
     for frag in ('general: "general"', 'trackers: "trackers"', 'peers: "traffic"', "content: null", "traffic: null"):
         assert frag in body, f"KB_MERGE_TAB_REMAP 缺位次映射片段: {frag}"
 
-    # ② _kbDrawerTab 消费重排表, 且先于流量门控
+    # 2. _kbDrawerTab 消费重排表, 且先于流量门控
     dtab = re.search(r"_kbDrawerTab\(tab\) \{(.*?)\n    \},", eng, re.S)
     assert dtab, "shortcuts.js 找不到 _kbDrawerTab"
     tb = dtab.group(1)
@@ -463,12 +463,12 @@ def test_drawer_tab_shortcuts_merge_remap() -> None:
     assert tb.index("KB_MERGE_TAB_REMAP[tab]") < tb.index('tab === "traffic" && !this.qbTrafficOn'), \
         "合并态重排必须先于流量门控(第 3 档 remap 成 traffic 后仍要过 qbTrafficOn 门)"
 
-    # ③ 判据单点
+    # 3. 判据单点
     helper = re.search(r"_kbMergeTabsOn\(\) \{(.*?)\n    \},", eng, re.S)
     assert helper and "this.dtMergeTabsOn" in helper.group(1), \
         "_kbMergeTabsOn 必须读 dtMergeTabsOn(与页签栏 v-if 同一判据, 不许自造第二套)"
 
-    # ④ 文案随态: 两处模板改用 kbLabel; kbLabel 只改写详情面板组 + 随合并态
+    # 4. 文案随态: 两处模板改用 kbLabel; kbLabel 只改写详情面板组 + 随合并态
     for rel in ("tpl/popovers.html", "tpl/settings-detail.html"):
         assert "{{ kbLabel(it) }}" in _read(rel), f"{rel} 快捷键文案未走 kbLabel(合并态与页签栏对不上)"
     kb_label = re.search(r"kbLabel\(item\) \{(.*?)\n    \},", eng, re.S)
@@ -484,24 +484,24 @@ def test_shortcut_toggle_semantics() -> None:
     """切换语义(2026-10-09, 报告 26-10-09-1731 §03/§04): 6 条「适合」条目开/关双态
 
     注册表是键位单一事实源, 前端无 JS 测试框架 —— 切换逻辑只表现为"再按没反应"(静默)。逐条钉:
-    ① 四条浮层/抽屉条目 run 指向 _kbToggle*(不再是只打开): open-stats -> _kbToggleStats /
+    1. 四条浮层/抽屉条目 run 指向 _kbToggle*(不再是只打开): open-stats -> _kbToggleStats /
        open-history -> _kbToggleHistory / open-qb-traffic -> _kbToggleQbTraffic /
        help-panel -> _kbToggleKbHelp;
-    ② 详情面板 I 的 run 仍是 _kbOpenDrawer, 但方法体含「已开同目标 ⇒ closeDrawer」切换分支;
-    ③ 列选择器 K 的 run 仍是 toggleColMenu(本身即切换);
-    ④ 引擎自切换白名单 KB_SELF_TOGGLE_OVERLAY: 四条浮层 id -> 状态字段, 浮层开着时放行第二次
+    2. 详情面板 I 的 run 仍是 _kbOpenDrawer, 但方法体含「已开同目标 ⇒ closeDrawer」切换分支;
+    3. 列选择器 K 的 run 仍是 toggleColMenu(本身即切换);
+    4. 引擎自切换白名单 KB_SELF_TOGGLE_OVERLAY: 四条浮层 id -> 状态字段, 浮层开着时放行第二次
        按键(否则被 _kbOverlayBusy 闸门吞掉);
-    ⑤ 切换只改键盘 run 路径, 鼠标入口(状态栏按钮 / 右键菜单 / 双击)保持原语义。"""
+    5. 切换只改键盘 run 路径, 鼠标入口(状态栏按钮 / 右键菜单 / 双击)保持原语义。"""
     items = {it["id"]: it for it in _registry()}
     eng = _read("shortcuts.js")
 
-    # ① 四条 run 改指切换分支
+    # 1. 四条 run 改指切换分支
     assert items["open-stats"]["runs"] == ["_kbToggleStats"], "open-stats 必须走切换分支(已开⇒关)"
     assert items["open-history"]["runs"] == ["_kbToggleHistory"], "open-history 必须走切换分支"
     assert items["open-qb-traffic"]["runs"] == ["_kbToggleQbTraffic"], "open-qb-traffic 必须走切换分支"
     assert items["help-panel"]["runs"] == ["_kbToggleKbHelp"], "help-panel 必须走切换分支"
 
-    # ②③ 详情面板 / 列选择器 run 不变(前者方法内含切换, 后者本身即切换)
+    # 2./3. 详情面板 / 列选择器 run 不变(前者方法内含切换, 后者本身即切换)
     assert items["act-detail"]["runs"] == ["_kbOpenDrawer"], "详情面板 I 仍走 _kbOpenDrawer(方法内含切换分支)"
     assert items["col-picker"]["runs"] == ["toggleColMenu"], "列选择器 K 仍走 toggleColMenu(本身即切换)"
 
@@ -529,7 +529,7 @@ def test_shortcut_toggle_semantics() -> None:
     assert 'this.drawerIsSeed && this.drawer.hash === hash' in od.group(1), \
         "详情面板 I 只在种子形态同目标时关(流量形态/换目标仍打开; 形态判据走 drawerIsSeed 单点)"
 
-    # ④ 引擎自切换白名单: 四条浮层 id -> 状态字段; 浮层打开时放行第二次按键
+    # 4. 引擎自切换白名单: 四条浮层 id -> 状态字段; 浮层打开时放行第二次按键
     assert "const KB_SELF_TOGGLE_OVERLAY = {" in eng, "缺自切换白名单(报告 §07.1)"
     for iid, field in (
         ("open-stats", "statsOpen"), ("open-history", "historyOpen"), ("help-panel", "kbHelpOpen"),
@@ -647,8 +647,8 @@ def test_settings_panel_section() -> None:
     for needle, what in (
         ('class="hr-full-mask"', "遮罩(点遮罩关闭路径)"),
         ('class="hr-full-modal"', "全屏面板"),
-        ("kbFullClose()", "关闭动作(✕ 与遮罩两路复用)"),
-        ('aria-label="关闭"', "✕ 关闭钮可访问名"),
+        ("kbFullClose()", "关闭动作(x 与遮罩两路复用)"),
+        ('aria-label="关闭"', "x 关闭钮可访问名"),
         ('v-show="kbFullOpen"', "显隐挂 kbFullOpen(折叠 ⇄ 全屏覆盖层)"),
     ):
         assert needle in frag, f"键位覆盖层缺 {what}(应有 `{needle}`)"

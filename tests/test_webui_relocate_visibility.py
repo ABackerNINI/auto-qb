@@ -317,7 +317,7 @@ def test_p1_pair_rendered_in_path_cells():
                 f"{rowvar} 行 {ab} 排必须可点切换路径筛选"
             assert f"isFilterOn('pathFilter', $root.relocateView({rowvar}).{ab})" in cells, \
                 f"{rowvar} 行 {ab} 排必须独立挂 f-on 选中态"
-    # 无按钮语义(旧徽标连开抽屉的坑③不回归): chip 点击只筛路径, 不开抽屉/链浮窗
+    # 无按钮语义(旧徽标连开抽屉的坑 3 不回归): chip 点击只筛路径, 不开抽屉/链浮窗
     assert "rel-badge" not in cells, "文字徽章已撤, 两排结构取代"
     assert "relocateBadge" not in cells and "relocateOpen" not in cells
     assert "'has-rel'" not in cells, "旧 has-rel 绑定已改 has-relpair"
@@ -328,7 +328,7 @@ def test_p1_pair_rendered_in_path_cells():
     assert "rel-tone-moving" not in cells and "rel-tone-failed" not in cells, "模板不写状态字面量"
 
     css = _static("shared/row_lang.css")
-    assert ".rl-scope .rel-badge" not in css, "999px 药丸样式已撤(flux/console 直角皮肤冲突的坑②)"
+    assert ".rl-scope .rel-badge" not in css, "999px 药丸样式已撤(flux/console 直角皮肤冲突的坑 2)"
     assert ".g-save-path.has-relpair" in css, "has-relpair 同款 flex 布局(路径文字 flex:1 min-width:0 保省略)"
     assert ".rl-scope .rel-pair" in css and ".rl-scope .rel-pcol" in css
     assert ".rl-scope .rel-pa" in css and ".rl-scope .rel-pb" in css and ".rl-scope .rel-arc" in css

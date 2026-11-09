@@ -2,9 +2,9 @@
 
 ## 背景
 ctx-menus.html 四支菜单从静态模板直写改为注册表单点(shared/ctx_menu.js) + 布局数据(web.ctx_menu,
-经 /api/webui/flags 下发)驱动。本文件守阵注册表层: ①合并语义(补尾/显隐槽位/跨层双向/
-分隔线一等公民/次级空不显示入口/未知 id 容忍/门控串联)node 真跑; ②模板消费形态(W3 起四支
-v-for 消费 ctxItems/ctxSubItems, 判据链与子面板交互原样); ③接线守阵(manifest/mixin/挂载面)。
+经 /api/webui/flags 下发)驱动。本文件守阵注册表层: 1. 合并语义(补尾/显隐槽位/跨层双向/
+分隔线一等公民/次级空不显示入口/未知 id 容忍/门控串联)node 真跑; 2. 模板消费形态(W3 起四支
+v-for 消费 ctxItems/ctxSubItems, 判据链与子面板交互原样); 3. 接线守阵(manifest/mixin/挂载面)。
 
 ## 测试计划(每个测试函数一条)
 - test_ctx_menu_template_consumes_registry: 模板消费守阵(W3 + 2026-10-22 骨架单点) —— 支名
@@ -27,9 +27,9 @@ v-for 消费 ctxItems/ctxSubItems, 判据链与子面板交互原样); ③接线
 - test_ctx_custom_write_shape_passes_config_contract: 契约闭环守阵(W5) —— node 真跑定制面板的
   **写路径**(真 vm 桩上调 cmToggleHidden/cmMoveLevel/cmAddSep/cmMoveStep; R5#28 起加跑拖拽
   cmDropAt/cmDropTail 与 cmDelSep/cmResetBranch), 产出的布局必须
-  ①只写动过的那一支 ②支级/次级键集合 == 后端 _CTX_BRANCH_KEYS/_CTX_LAYER_KEYS ③过
-  validate_config 零错误 ④隐藏留槽位 / 跨层双向 / 用户线 sep:uN / 同层换位生效
-  ⑤拖拽落点三形态(同层向后回退一格/同层向前原位/跨层按目标 idx 插入)+ 表尾追加 + 删线无残迹 + 恢复默认两层同回
+  1. 只写动过的那一支 2. 支级/次级键集合 == 后端 _CTX_BRANCH_KEYS/_CTX_LAYER_KEYS 3. 过
+  validate_config 零错误 4. 隐藏留槽位 / 跨层双向 / 用户线 sep:uN / 同层换位生效
+  5. 拖拽落点三形态(同层向后回退一格/同层向前原位/跨层按目标 idx 插入)+ 表尾追加 + 删线无残迹 + 恢复默认两层同回
 - test_ctx_menu_wiring: 接线守阵 —— 三份 manifest 成对登记 ctx_menu.js 且装载序
   menu.js < ctx_menu.js < app.js; app.js mixin 行在; REG/mixin 双挂载面在文件里
 """
@@ -176,7 +176,7 @@ const vmWith = (ctxMenu, flagOver) => stubVm({
   flags: Object.assign({ skip_check_menu: true, qb_traffic_enabled: true }, flagOver || {}, ctxMenu ? { ctx_menu: ctxMenu } : {}),
 });
 
-// ---- ① 默认布局硬编码钉(与静态模板四支 + 次级逐位平移; 改此项 = 默认菜单形态漂移, 必须显式 review)
+// ---- 1. 默认布局硬编码钉(与静态模板四支 + 次级逐位平移; 改此项 = 默认菜单形态漂移, 必须显式 review)
 // transfer(计划 26-10-31-0306 T6): 四支各一项「转移到」, 同位次 = 删除线前(D5 一级项 + 动态子面板)
 const EXPECT = {
   multi: { order: ["resume", "pause", "reannounce", "sep:d1", "recheck", "skip_check", "limits", "move", "meta", "export", "transfer", "sep:d2", "delete"], hidden: [], sub: { order: [], hidden: [] } },
@@ -196,7 +196,7 @@ let sItem = 0, sSep = 0;
 for (const t of EXPECT.member.sub.order) { if (t.indexOf("sep:") === 0) sSep++; else sItem++; }
 checks.push(["次级计数 11 项 + 2 线", sItem === 11 && sSep === 2]);
 
-// ---- ② 注册表完整性
+// ---- 2. 注册表完整性
 for (const b of R.CTX_BRANCHES) {
   const defs = R.CTX_ITEM_DEFS[b];
   const idl = defs.map((d) => d.id);
@@ -218,7 +218,7 @@ checks.push(["次级默认仅 member", eq(Object.keys(R.CTX_SUB_ITEM_DEFS), ["me
   checks.push(["同支两层 token 不撞名", subIds.every((s) => topIds.indexOf(s) < 0)]);
 }
 
-// ---- ③ 无 cfg = 默认布局渲染(flags 全开): 渲染 id 序 == 默认 order
+// ---- 3. 无 cfg = 默认布局渲染(flags 全开): 渲染 id 序 == 默认 order
 {
   const vm = stubVm();
   for (const b of R.CTX_BRANCHES) {
@@ -227,7 +227,7 @@ checks.push(["次级默认仅 member", eq(Object.keys(R.CTX_SUB_ITEM_DEFS), ["me
   checks.push(["member 次级无 cfg 渲染 == 默认 sub order", eq(ids(M.methods.ctxSubItems.call(vm, "member")), R.DEFAULT_CTX_LAYOUT.member.sub.order)]);
 }
 
-// ---- ④ 补尾: 用户序只有两项 -> 其余按定义序追加(不丢项)
+// ---- 4. 补尾: 用户序只有两项 -> 其余按定义序追加(不丢项)
 {
   const vm = vmWith({ member: { order: ["resume", "pause"], hidden: [] } });
   const got = ids(M.methods.ctxItems.call(vm, "member"));
@@ -235,7 +235,7 @@ checks.push(["次级默认仅 member", eq(Object.keys(R.CTX_SUB_ITEM_DEFS), ["me
   checks.push(["补尾: 其余按定义序", eq(got.slice(2), R.DEFAULT_CTX_LAYOUT.member.order.slice(2))]);
 }
 
-// ---- ⑤ 隐藏槽位保留 + 取消隐藏归位
+// ---- 5. 隐藏槽位保留 + 取消隐藏归位
 {
   const cfg = { member: { order: R.DEFAULT_CTX_LAYOUT.member.order.slice(), hidden: ["export", "sep:d3"] } };
   const merged = R.ctxMergeLayout("member", cfg);
@@ -248,7 +248,7 @@ checks.push(["次级默认仅 member", eq(Object.keys(R.CTX_SUB_ITEM_DEFS), ["me
   checks.push(["取消隐藏即归位", eq(ids(M.methods.ctxItems.call(vm, "member")), R.DEFAULT_CTX_LAYOUT.member.order)]);
 }
 
-// ---- ⑥ 跨层双向: rename 入次级 / queue-top 入一级; 补尾不得把对层认领的项拽回
+// ---- 6. 跨层双向: rename 入次级 / queue-top 入一级; 补尾不得把对层认领的项拽回
 {
   const cfg = { member: {
     order: R.DEFAULT_CTX_LAYOUT.member.order.filter((t) => t !== "rename").concat(["queue-top"]),
@@ -264,7 +264,7 @@ checks.push(["次级默认仅 member", eq(Object.keys(R.CTX_SUB_ITEM_DEFS), ["me
   checks.push(["跨层: 无重复渲染", top.filter((t) => sub.indexOf(t) >= 0).length === 0]);
 }
 
-// ---- ⑦ 分隔线一等公民: 用户添加 / 删除(隐藏)/ token 分配
+// ---- 7. 分隔线一等公民: 用户添加 / 删除(隐藏)/ token 分配
 {
   const cfg = { group: { order: R.DEFAULT_CTX_LAYOUT.group.order.slice(), hidden: [] } };
   cfg.group.order.splice(2, 0, "sep:u1");   // 在第三项后插一条用户线
@@ -280,7 +280,7 @@ checks.push(["次级默认仅 member", eq(Object.keys(R.CTX_SUB_ITEM_DEFS), ["me
   checks.push(["全删线不报错", ids(M.methods.ctxItems.call(vm, "group")).every((t) => t.indexOf("sep:") < 0)]);
 }
 
-// ---- ⑧ D7: 次级为空(全隐藏/全移走)不渲染「更多操作」父项
+// ---- 8. D7: 次级为空(全隐藏/全移走)不渲染「更多操作」父项
 {
   const vmAllHidden = vmWith({ member: { order: R.DEFAULT_CTX_LAYOUT.member.order.slice(), hidden: [], sub: { order: R.DEFAULT_CTX_LAYOUT.member.sub.order.slice(), hidden: R.DEFAULT_CTX_LAYOUT.member.sub.order.slice() } } });
   checks.push(["次级全隐藏 -> 无父项", ids(M.methods.ctxItems.call(vmAllHidden, "member")).indexOf("sub-more") < 0]);
@@ -293,7 +293,7 @@ checks.push(["次级默认仅 member", eq(Object.keys(R.CTX_SUB_ITEM_DEFS), ["me
   checks.push(["次级只剩线 -> 无父项(线是结构不撑入口)", ids(M.methods.ctxItems.call(vmSepOnly, "member")).indexOf("sub-more") < 0]);
 }
 
-// ---- ⑨ 未知 id 容忍(换版本不丢布局): 幽灵项忽略; sep token 一等公民(格式合法即渲染)
+// ---- 9. 未知 id 容忍(换版本不丢布局): 幽灵项忽略; sep token 一等公民(格式合法即渲染)
 {
   const vm = vmWith({ group: { order: ["ghost-item", "resume", "sep:u9"], hidden: [] } });
   const got = ids(M.methods.ctxItems.call(vm, "group"));
@@ -305,7 +305,7 @@ checks.push(["次级默认仅 member", eq(Object.keys(R.CTX_SUB_ITEM_DEFS), ["me
   checks.push(["支级畸形回落默认", eq(ids(M.methods.ctxItems.call(vmBad, "group")), R.DEFAULT_CTX_LAYOUT.group.order)]);
 }
 
-// ---- ⑩ 门控串联: flags 关 = v-if 不渲染(槽位在布局里保留)
+// ---- 10. 门控串联: flags 关 = v-if 不渲染(槽位在布局里保留)
 {
   const vmOff = vmWith(null, { skip_check_menu: false, qb_traffic_enabled: false });
   checks.push(["skip_check 门控关不渲染", ids(M.methods.ctxItems.call(vmOff, "group")).indexOf("skip_check") < 0]);
@@ -316,13 +316,13 @@ checks.push(["次级默认仅 member", eq(Object.keys(R.CTX_SUB_ITEM_DEFS), ["me
   checks.push(["门控开即渲染", ids(M.methods.ctxItems.call(vmOn, "group")).indexOf("skip_check") >= 0 && ids(M.methods.ctxItems.call(vmOn, "group")).indexOf("qb-traffic") >= 0]);
 }
 
-// ---- ⑪ 结构项防嵌套: sub-more 进次级用户序不渲染(不可嵌套)
+// ---- 11. 结构项防嵌套: sub-more 进次级用户序不渲染(不可嵌套)
 {
   const vm = vmWith({ member: { order: R.DEFAULT_CTX_LAYOUT.member.order.filter((t) => t !== "sub-more"), hidden: [], sub: { order: ["sub-more", "queue-top"], hidden: [] } } });
   checks.push(["次级不渲染 submenu 父项", ids(M.methods.ctxSubItems.call(vm, "member")).indexOf("sub-more") < 0]);
 }
 
-// ---- ⑫ 动态 label 与置灰 title
+// ---- 12. 动态 label 与置灰 title
 {
   /* 计划 26-10-20-0145: 四支的 启动/停止/删除 已统一为「动词 + 灰色 N 个种子」——
    * label 里不再有 scope 词(批量/该种子/整组/整剧/整集), 于是 episode 支不再按 scope 变文案,
@@ -345,11 +345,11 @@ checks.push(["次级默认仅 member", eq(Object.keys(R.CTX_SUB_ITEM_DEFS), ["me
   checks.push(["可用态 title 恒空串(非 null)", okItem.gated === false && okItem.title === ""]);
 }
 
-// ---- ⑭ 动词族灰色后缀(计划 26-10-20-0145 D1/D3)
+// ---- 14. 动词族灰色后缀(计划 26-10-20-0145 D1/D3)
 {
   /* 只有 启动/停止/删除 三项带 note(值 = ctxSeedCount + " 个种子"); 其余项一律空 —
    * note 空字符串时模板 v-if 不渲染 span, 所以"没给 note"与"给了空串"在渲染层等价,
-   * 第⑮条用 items 全表扫一遍防"顺手给别的项也挂后缀"。 */
+   * 第 15 条用 items 全表扫一遍防"顺手给别的项也挂后缀"。 */
   const VERBS = ["resume", "pause", "delete"];
   let bad = [];
   for (const b of R.CTX_BRANCHES) {
@@ -365,7 +365,7 @@ checks.push(["次级默认仅 member", eq(Object.keys(R.CTX_SUB_ITEM_DEFS), ["me
   checks.push(["分隔线项 note 恒空(不炸模板)", seps.every((i) => i.note === "")]);
 }
 
-// ---- ⑯ 动态 submenu「转移到」(计划 26-10-31-0306 T6): 父项走注册表(布局可定制), 子项由 vm 单点供给
+// ---- 16. 动态 submenu「转移到」(计划 26-10-31-0306 T6): 父项走注册表(布局可定制), 子项由 vm 单点供给
 {
   const sent = [{ id: "transfer:QB2", kind: "item", label: "QB2", act: () => {} }];
   const vmProv = stubVm({ ctxTransferMenuItems: () => sent });
@@ -386,7 +386,7 @@ checks.push(["次级默认仅 member", eq(Object.keys(R.CTX_SUB_ITEM_DEFS), ["me
   checks.push(["transfer 可经布局隐藏且槽位保留", ids(M.methods.ctxItems.call(vmHide, "member")).indexOf("transfer") < 0 && mergedHide.order.indexOf("transfer") >= 0]);
 }
 
-// ---- ⑬ ctxRun 分派: 调注册表 act 并透传 vm
+// ---- 13. ctxRun 分派: 调注册表 act 并透传 vm
 {
   let seen = null;
   const vm = stubVm();
@@ -398,7 +398,7 @@ checks.push(["次级默认仅 member", eq(Object.keys(R.CTX_SUB_ITEM_DEFS), ["me
   checks.push(["ctxRun 对空/sep 静默", seen === vm]);
 }
 
-// ---- ⑭ 静态名成对(W4 定制面板用): label 是函数 => labelText 必须给(面板没有菜单上下文)
+// ---- 14. 静态名成对(W4 定制面板用): label 是函数 => labelText 必须给(面板没有菜单上下文)
 {
   const bad = [];
   for (const branch of R.CTX_BRANCHES) {

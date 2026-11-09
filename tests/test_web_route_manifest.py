@@ -98,8 +98,8 @@ _GOLDEN_ROUTES = {
     ("GET", "/newui"),
     ("GET", "/newui/{rest:path}"),
     ("GET", "/api/hr/status"),  # M4: HR 站点级状态快照(只读; 与 --hr-status 同一口径)
-    ("GET", "/api/hr/sites/{site}/entries"),  # 种子明细(计划 26-10-01-2216 §7 阶段1; 决策点②b 按站点按需拉)
-    ("GET", "/api/hr/history"),  # 拉取历史时间轴(计划 26-10-04-0312 §3.4; 表③ 数据源, 跨站合并)
+    ("GET", "/api/hr/sites/{site}/entries"),  # 种子明细(计划 26-10-01-2216 §7 阶段1; 决策点 2b 按站点按需拉)
+    ("GET", "/api/hr/history"),  # 拉取历史时间轴(计划 26-10-04-0312 §3.4; 表 3 数据源, 跨站合并)
     ("GET", "/api/sites/missing"),  # 站点导入: 未配置站点扫描(只读; 与 --export-yaml --only-missing 同口径)
     ("GET", "/api/webui/flags"),  # R2 跳检菜单开关(计划 26-10-02-1955 W1): 前端功能旗标(登录后, 读实时配置)
     ("GET", "/api/traffic/monitor/status"),  # 全局流量监视器工具联动(计划 26-10-16-0541 S6): 工具 /status 代理(只读, 恒 200 空态)
@@ -163,9 +163,9 @@ def test_route_cmd_passthrough_single_point():
     routes/* 的单行透传端点此前成对逐字同(仅命令名 / 字段名不同): 载荷构造(取参 / 清洗 /
     投递)收敛到形状 helper 后, 端点本身应只剩「路径 -> 命令」一行声明。
     静态(AST, 三文件 routes/{torrent_cmds,groups,torrent_detail}.py):
-      ① 八个形状 helper 各定义恰好一次(torrent_cmds 四 + groups 一 + torrent_detail 三);
-      ② 21 个收敛端点的函数体(可带 docstring)必须恰是一行形状 helper 调用;
-      ③ 任何端点体不得再出现 issue 点名的三种逐字形状 —— `_enqueue(<str>, <行内 dict>)`
+      1. 八个形状 helper 各定义恰好一次(torrent_cmds 四 + groups 一 + torrent_detail 三);
+      2. 21 个收敛端点的函数体(可带 docstring)必须恰是一行形状 helper 调用;
+      3. 任何端点体不得再出现 issue 点名的三种逐字形状 —— `_enqueue(<str>, <行内 dict>)`
          且 dict 为 {"hash": X} / {"hash": X, "enable": X} / {"key": _group_key_param(X)}。
     行为等值不由本守阵保 —— 既有表驱动用例逐端点钉 (cmd, payload):
     test_web_commands.py::test_api_torrent_write_endpoints_enqueue(15 端点)、
@@ -229,7 +229,7 @@ def test_route_cmd_passthrough_single_point():
             assert isinstance(call, ast.Call) and isinstance(call.func, ast.Name) and call.func.id in helpers, (
                 f"{fname}:{ep} 应调用形状单点 {sorted(helpers)}(现 {ast.dump(call)[:80]})—— mechanics 不得在端点体重抄"
             )
-        # ③ 逐字形状 Ban: 端点(非 helper)return _enqueue(<str>, <行内 dict>) 且命中点名形状
+        # 3. 逐字形状 Ban: 端点(非 helper)return _enqueue(<str>, <行内 dict>) 且命中点名形状
         for fn in nested:
             if fn.name in helpers:
                 continue

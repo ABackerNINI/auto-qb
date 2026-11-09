@@ -156,9 +156,9 @@ def test_frontend_notice_push_wired() -> None:
     """陈述型通知 _recordNotice 的接线(colums.js 空存储提示的出口, 2026-10-09 改道)
 
     该提示原先是运行时插进 body 的 fixed 横幅: 压页面内容 + **每次自动化测试都触发**(测试用全新
-    浏览器上下文, 没有"已提示"去重标记) ⇒ 每张截图都被盖一截。出口改通知面板后, 判据 = ①进
-    _errHistory(与 toast / 后端同列, cap 同单点); ②计未读(面板收起时入口徽标提示有话要说);
-    ③**不碰 DOM**(再建浮层 = 本坑复发)。
+    浏览器上下文, 没有"已提示"去重标记) ⇒ 每张截图都被盖一截。出口改通知面板后, 判据 = 1. 进
+    _errHistory(与 toast / 后端同列, cap 同单点); 2. 计未读(面板收起时入口徽标提示有话要说);
+    3. **不碰 DOM**(再建浮层 = 本坑复发)。
     """
     fb = _read("ui_feedback.js")
     rec = _fn_body(fb, "_recordNotice(text)")

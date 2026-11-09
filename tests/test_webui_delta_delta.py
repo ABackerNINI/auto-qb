@@ -89,7 +89,7 @@ def test_timeline_appends_per_publish_and_truncates():
 def test_same_tick_upsert_removed_cancel():
     """同拍同视图 upsert/removed 交叉抵消(R5): 落代前分视图两清, 不给客户端又删又发同一行
 
-    removed hash 须带组键(否则按 R11 直接本代 full, 走不到抵消段) —— 用例 ⑤ 专测该分支。
+    removed hash 须带组键(否则按 R11 直接本代 full, 走不到抵消段) —— 用例 5 专测该分支。
     """
     store = make_store("H1")
     store.member_to_key["H3"] = ("R:\\D", )
@@ -311,7 +311,7 @@ def test_error_reason_refresh_row_level_upsert():
 def test_site_alert_refresh_row_level_upsert():
     """站点健康(site_alert)变化按行级归约: 与 error_reason 共用同一登记口, 本代即到 delta 客户端
 
-    计划 26-10-19-2007 S2 验收③④: 字段变化进 torrent 桶、组成员变化进 group 桶、不降级 full。
+    计划 26-10-19-2007 S2 验收 3/4: 字段变化进 torrent 桶、组成员变化进 group 桶、不降级 full。
     """
     store = make_store("H1")
     store.member_to_key["H1"] = ("R:\\D", )
@@ -495,7 +495,7 @@ def test_reduce_delta_upsert_removed_normal():
 def test_reduce_delta_cross_gen_removed_yields_to_upsert():
     """R5 跨代版(S3): 后改回的行让位回 upsert; 抵消后 upsert 行已不在当前视图 -> 防御性 full
 
-    删除代必须键可解析(member_to_key 查得到)否则按 R11 本代 full, 走不到归约(S2 用例 ⑤ 专测)。
+    删除代必须键可解析(member_to_key 查得到)否则按 R11 本代 full, 走不到归约(S2 用例 5 专测)。
     """
     # 先删后加: removed 让位于后续 upsert -> 回 delta 行, 不回 removed
     store, rt, rid = _baseline_rid(("H1", "H2"))

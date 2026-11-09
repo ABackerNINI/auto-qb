@@ -276,13 +276,13 @@ def test_relocate_volume_free_ancestor_fallback(tmp_path, monkeypatch):
     base = os.path.join(str(tmp_path), "existing-lib")
     os.makedirs(base)
     free_base = fa.disk_usage(base).free
-    # ① 已存在叶子: 原语义不变(自身卷)
+    # 1. 已存在叶子: 原语义不变(自身卷)
     assert _volume_free_resolved(fa, base) == free_base
-    # ② 叶子未建: 祖先卷(新建目录将落的卷, junction/挂载点语义下同为该卷)
+    # 2. 叶子未建: 祖先卷(新建目录将落的卷, junction/挂载点语义下同为该卷)
     assert _volume_free_resolved(fa, os.path.join(base, "NEW", "Show")) == free_base
-    # ③ 裸名无分隔符: 无卷可判 -> None
+    # 3. 裸名无分隔符: 无卷可判 -> None
     assert _volume_free_resolved(fa, "bare-name") is None
-    # ④ 空串/None 入参: -> None
+    # 4. 空串/None 入参: -> None
     assert _volume_free_resolved(fa, "") is None
 
 
@@ -306,11 +306,11 @@ def test_relocate_module_space_gate_ancestor_and_missing(tmp_path, monkeypatch):
 
     monkeypatch.setattr(fa_mod.LocalFileAccess, "disk_usage", flaky)
     mgr.store.server_state = {"free_space_on_disk": 500_000_000}
-    # ① 叶子未建(dst 存在): 祖先卷解析 => 无 space 闸门, 可迁移
+    # 1. 叶子未建(dst 存在): 祖先卷解析 => 无 space 闸门, 可迁移
     item = mgr.host.get("relocate").relocate_precheck(["HA", "HB"], os.path.join(dst, "NEWLIB", "Show"))[0]
     assert "space" not in [r["gate"] for r in item["reasons"]], item["reasons"]
     assert item["cls"] == "ok", (item["cls"], item["reasons"])
-    # ② 整卷不可达: 上溯全失败 => space 闸门照旧硬拦(真不可判定, 保守默认不破)
+    # 2. 整卷不可达: 上溯全失败 => space 闸门照旧硬拦(真不可判定, 保守默认不破)
     item2 = mgr.host.get("relocate").relocate_precheck(["HA", "HB"], "VOL-MISSING:/newlib/Show")[0]
     assert "space" in [r["gate"] for r in item2["reasons"]], item2["reasons"]
     assert item2["cls"] == "blocked"

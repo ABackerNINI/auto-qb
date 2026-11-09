@@ -9,20 +9,20 @@
 - test_api_state_status_carries_server_state: status.server(state)恒回传不受 rid 门控(状态栏与行数据同源同轮)
 - test_api_torrent_detail_endpoint: /api/torrents/{hash} 全字段详情(to_dict+site+HR); 未知 hash 404; magnet_uri 只外发 tr= 掩码值(issue 26-11-08-0043)
 - test_api_torrent_subresources: /api/torrents/{hash}/trackers|files|peers 透传(trackers 例外: url 已 mask, plan 26-10-07-0055 S3); 未知 404/断连 503
-- test_api_torrent_trackers_masked_response: 守阵① API 外发(plan 26-10-07-0055 S4) —— trackers 响应 url 一律 mask(凭据原文不外发, 缺席断言不写死参数名), mask 保留 scheme://host+path+参数名, 虚拟条目透传, 两次请求逐字节一致; 红验: 路由改回透传
+- test_api_torrent_trackers_masked_response: 守阵 1 API 外发(plan 26-10-07-0055 S4) —— trackers 响应 url 一律 mask(凭据原文不外发, 缺席断言不写死参数名), mask 保留 scheme://host+path+参数名, 虚拟条目透传, 两次请求逐字节一致; 红验: 路由改回透传
 - test_tracker_snapshot_masked_at_ingestion: 入库泄敏单点(issue 26-11-07-0536 批B) —— tracker 槽位只落 mask 值(原文 passkey 不进快照; 空值不掩/虚拟条目透传/同 host 不同凭据 mask 互异/重复灌同原文不产生假变化); 红验: apply_delta 临时去掉 mask_tracker_url
-- test_api_torrent_detail_tracker_masked: 守阵⑥ 详情响应外发(issue 26-11-07-0536 批B) —— /api/torrents/{hash} 的 torrent.tracker 为 mask 值(host/path/参数名保留), 凭据原文不在响应体; 红验: 同入库点去掩码
-- test_tracker_masked_in_state_and_groups_rows: 守阵⑦ 行视图外发(issue 26-11-07-0536 批B) —— /api/state 的 groups/singles/torrents 行与 /api/groups 成员行的 tracker 一律 mask 值, 凭据原文不在载荷; 红验: 同入库点去掩码
+- test_api_torrent_detail_tracker_masked: 守阵 6 详情响应外发(issue 26-11-07-0536 批B) —— /api/torrents/{hash} 的 torrent.tracker 为 mask 值(host/path/参数名保留), 凭据原文不在响应体; 红验: 同入库点去掩码
+- test_tracker_masked_in_state_and_groups_rows: 守阵 7 行视图外发(issue 26-11-07-0536 批B) —— /api/state 的 groups/singles/torrents 行与 /api/groups 成员行的 tracker 一律 mask 值, 凭据原文不在载荷; 红验: 同入库点去掩码
 - test_api_readonly_endpoints_short_cache: P1-4 只读端点短缓存(窗口内合并 / 写命令后失效 / 断连仍 503)
 - test_api_torrent_peers_endpoint: /api/torrents/{hash}/peers 走 sync_torrent_peers(torrent_hash=..)整包透传(404/503)
 - test_api_stats_endpoint: /api/stats 透出 store.server_state(未同步时 null)
 - test_api_enqueue_wakes_main_loop: 投递用户命令唤醒主循环; 反向守卫——自投递命令须登记进 SELF_POSTED_COMMANDS(防自激)
 - test_cmd_trackers_log_sanitized: tracker 移除日志只写脱敏主地址 —— 任意命名的凭据全文都不进日志(不按参数名黑名单), 主地址仍在(S3 后入参为 mask 值)
 - test_cmd_remove_tracker_mask_roundtrip: S3 删除改道 —— remove_tracker 收 mask 值当场重取原文比对, 恰 1 命中 qB 收原文; 0/多命中报「未找到该 tracker」且零写调用
-- test_cmd_remove_tracker_same_host_distinct_passkeys: 守阵② 写路径同 host 区分(plan 26-10-07-0055 S4) —— 同 host 两条不同 passkey mask 互异(R8), 传 A 的 mask qB 恰收一次 remove 且 urls==A 原文(B 不受影响); 红验: 删除临时改回直传
-- test_tracker_edit_offline_route_and_static: 守阵③ 编辑下线(plan 26-10-07-0055 S2/S4) —— POST trackers/edit 不落到处理器(404/405; 根挂 StaticFiles 兜 405) + 路由表白名单复核 + static/ 遍历 grep "trackers/edit" 零命中(金清单行由 test_web_route_manifest_frozen 钉); 红验: 临时加回路由/写回字样
-- test_trackers_baseline_keys_are_raw_urls: 守阵④ 基线 key 为原文(plan 26-10-07-0055 S4) —— _trackers_baseline 的 dict key == fake client 原文 url, 同 host 两条不同 passkey key 互异且各行 epoch 字段对号; 红验: 基线临时切 mask
-- test_torrent_detail_trackers_route_mask_canary: 守阵⑤ 静态扫 canary(plan 26-10-07-0055 S4) —— torrent_detail.py 源码含 mask_tracker_entry 引用且钉在 trackers 端点 _cached_read 取数 lambda 上(mask 先于缓存写入); 红验: 同守阵① 改回透传
+- test_cmd_remove_tracker_same_host_distinct_passkeys: 守阵 2 写路径同 host 区分(plan 26-10-07-0055 S4) —— 同 host 两条不同 passkey mask 互异(R8), 传 A 的 mask qB 恰收一次 remove 且 urls==A 原文(B 不受影响); 红验: 删除临时改回直传
+- test_tracker_edit_offline_route_and_static: 守阵 3 编辑下线(plan 26-10-07-0055 S2/S4) —— POST trackers/edit 不落到处理器(404/405; 根挂 StaticFiles 兜 405) + 路由表白名单复核 + static/ 遍历 grep "trackers/edit" 零命中(金清单行由 test_web_route_manifest_frozen 钉); 红验: 临时加回路由/写回字样
+- test_trackers_baseline_keys_are_raw_urls: 守阵 4 基线 key 为原文(plan 26-10-07-0055 S4) —— _trackers_baseline 的 dict key == fake client 原文 url, 同 host 两条不同 passkey key 互异且各行 epoch 字段对号; 红验: 基线临时切 mask
+- test_torrent_detail_trackers_route_mask_canary: 守阵 5 静态扫 canary(plan 26-10-07-0055 S4) —— torrent_detail.py 源码含 mask_tracker_entry 引用且钉在 trackers 端点 _cached_read 取数 lambda 上(mask 先于缓存写入); 红验: 同守阵 1 改回透传
 - test_optimistic_rollback_and_settle_use_truth_not_stale_prev: 守阵(report 26-10-11-2017 §6.4) 静态扫 commands.js —— _expirePending 回滚目标为 truthSnapshot 现值(缺失才退 op.prev)、_optimisticSettled 按 action 用"已离开命令前状态"判据(与服务端 _truth_landed 同谓词)、_snapshotTruth 顺带保鲜 op.prev
 - test_affected_truth_reads_qb_directly_not_sync_snapshot
 - test_cmd_timing_is_logged_without_browser
@@ -401,7 +401,7 @@ def test_api_torrent_subresources(web_env):
 
 
 def test_api_torrent_trackers_masked_response(web_env):
-    """守阵① API 外发(plan 26-10-07-0055 S4): trackers 响应 url 一律 mask
+    """守阵 1 API 外发(plan 26-10-07-0055 S4): trackers 响应 url 一律 mask
 
     红验方式(S4b 照做): 把 torrent_detail.py 的 api_torrent_trackers 路由临时改回
     裸透传(去掉 mask_tracker_entry) -> 本组必红。
@@ -498,7 +498,7 @@ def test_tracker_snapshot_masked_at_ingestion():
 
 
 def test_api_torrent_detail_tracker_masked(web_env):
-    """守阵⑥ 详情响应外发(issue 26-11-07-0536 批B): /api/torrents/{hash} 的 torrent.tracker 一律 mask
+    """守阵 6 详情响应外发(issue 26-11-07-0536 批B): /api/torrents/{hash} 的 torrent.tracker 一律 mask
 
     详情端点经 rec.to_dict() 全字段透传, tracker 字段随快照槽位入库即掩码 —— 响应里
     host/path/参数名可辨, passkey 等凭据值(hash16)不可回原文。
@@ -524,7 +524,7 @@ def test_api_torrent_detail_tracker_masked(web_env):
 
 
 def test_tracker_masked_in_state_and_groups_rows(tmp_path):
-    """守阵⑦ 行视图外发(issue 26-11-07-0536 批B): /api/state 行与 /api/groups 行的 tracker 一律 mask
+    """守阵 7 行视图外发(issue 26-11-07-0536 批B): /api/state 行与 /api/groups 行的 tracker 一律 mask
 
     行视图构造单点 _member_view(组行 members 与 singles 共用)+ _seed_view(种子页平铺)
     都从 rec.tracker 槽位取数 —— 入库掩码后行载荷零原文。groups 行经 store.groups 手工
@@ -997,7 +997,7 @@ def test_cmd_remove_tracker_mask_roundtrip():
 
 
 def test_cmd_remove_tracker_same_host_distinct_passkeys():
-    """守阵② 写路径同 host 区分(plan 26-10-07-0055 S4): 同 host 两条 tracker(不同 passkey)
+    """守阵 2 写路径同 host 区分(plan 26-10-07-0055 S4): 同 host 两条 tracker(不同 passkey)
     mask 互异, 传 A 的 mask 删除 -> qB 收到且仅收到 A 的**原文**, B 不受影响
 
     红验方式(S4b 照做): _cmd_remove_tracker 临时改回直传(把入参 mask 值原样传给
@@ -1030,7 +1030,7 @@ def test_cmd_remove_tracker_same_host_distinct_passkeys():
 
 
 def test_tracker_edit_offline_route_and_static(web_env):
-    """守阵③ 编辑下线(plan 26-10-07-0055 S2/S4): tracker 编辑功能三层全无
+    """守阵 3 编辑下线(plan 26-10-07-0055 S2/S4): tracker 编辑功能三层全无
 
     红验方式(S4b 照做): 临时加回 POST /api/torrents/{hash}/trackers/edit 路由(或把
     "trackers/edit" 字样写回 static/ 任意文件) -> 本组必红。
@@ -1069,7 +1069,7 @@ def test_tracker_edit_offline_route_and_static(web_env):
 
 
 def test_trackers_baseline_keys_are_raw_urls():
-    """守阵④ 基线 key 为原文(plan 26-10-07-0055 S4): _trackers_baseline 的 dict key
+    """守阵 4 基线 key 为原文(plan 26-10-07-0055 S4): _trackers_baseline 的 dict key
     必须是 fake client 的**原文** url, 不是 mask
 
     红验方式(S4b 照做): _trackers_baseline 临时切到 mask_tracker_url 做 key ->
@@ -1116,16 +1116,16 @@ def test_trackers_baseline_keys_are_raw_urls():
 
 
 def test_torrent_detail_trackers_route_mask_canary():
-    """守阵⑤ 静态扫 canary(plan 26-10-07-0055 S4): torrent_detail.py 的 trackers 路由
+    """守阵 5 静态扫 canary(plan 26-10-07-0055 S4): torrent_detail.py 的 trackers 路由
     源码必须引用 mask_tracker_entry —— 有人改回裸透传即红(延续 issue 26-09-21-1408 守阵做法)
 
-    红验方式(S4b 照做): 同守阵① —— 路由临时改回透传(删掉 mask_tracker_entry 引用) ->
-    本组必红。运行时守阵①兜运行行为, 本 canary 兜源码形态(连缓存 lambda 一起钉)。
+    红验方式(S4b 照做): 同守阵 1 —— 路由临时改回透传(删掉 mask_tracker_entry 引用) ->
+    本组必红。运行时守阵 1 兜运行行为, 本 canary 兜源码形态(连缓存 lambda 一起钉)。
     """
     src_path = os.path.join(os.path.dirname(STATIC_ROOT), "server", "routes", "torrent_detail.py")
     src = Path(src_path).read_text(encoding="utf-8")
     assert "mask_tracker_entry" in src, \
-        "torrent_detail.py 不再引用 mask_tracker_entry —— trackers 路由被改回裸透传? 同步守阵①"
+        "torrent_detail.py 不再引用 mask_tracker_entry —— trackers 路由被改回裸透传? 同步守阵 1"
     # 钉在 trackers 端点的取数 lambda 上(不是仅在文件里 import 一下): 缓存写入必须已 mask
     assert re.search(r"_cached_read\(\s*\n?\s*f?\"trackers:\{hash\}\".*mask_tracker_entry", src, re.S), \
         "trackers 端点的 _cached_read 取数 lambda 里没有 mask_tracker_entry —— mask 必须先于缓存写入"

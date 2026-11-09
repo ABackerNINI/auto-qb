@@ -219,7 +219,7 @@ def test_chain_cache_ttl_refresh_and_capacity(web_env, tmp_path):
     assert value == {"n": 1} and hit is False
     value, hit = cache.get("k", _load)
     assert value == {"n": 1} and hit is True
-    cache._clock.advance(11.0)  # TTL 过期语义走注入假钟(判据②), 不真睡等过期
+    cache._clock.advance(11.0)  # TTL 过期语义走注入假钟(判据 2), 不真睡等过期
     value, hit = cache.get("k", _load)
     assert value == {"n": 2} and hit is False, "TTL 过期后必须重探"
     cache.get("x", _load)

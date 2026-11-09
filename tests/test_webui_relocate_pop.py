@@ -84,7 +84,7 @@ def test_webui_relocate_pop_wiring():
     pop_code = re.sub(r"/\*.*?\*/", "", pop_js, flags=re.S)
     pop_code = re.sub(r"//[^\n]*", "", pop_code)
     assert "fetch(" not in pop_code and "/api/" not in pop_code, \
-        "浮窗数据全行载荷零请求(plan 不变量②): 不得出现 fetch//api"
+        "浮窗数据全行载荷零请求(plan 不变量 2): 不得出现 fetch//api"
 
     # 4. app.js 混入 + 四皮肤 script 清单引入且排在 app.js 之前(文件序不变量, relocate_pop.js 头注)
     app_js = _read("app.js")

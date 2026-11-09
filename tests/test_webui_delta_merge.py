@@ -321,9 +321,9 @@ def test_s9a_show_row_callable_matches_full_view():
     """S9a 单剧可调用等价: _build_show_row(剧键, 成员集) == 全量 _build_shows_view 同剧行逐字段
 
     全量路径已改为「分类分桶 -> 逐剧调用」(plan 26-10-07-0414 S9a), 本用例两头钉:
-    ①边界语义不因搬动走样 —— 季级 gaps/covered(索引兑底 range + 整包 has_pack)、
+    1. 边界语义不因搬动走样 —— 季级 gaps/covered(索引兑底 range + 整包 has_pack)、
     剧名频次众数、集行状态 _SHOW_STATE_RANK 归并、unrecognized 折叠、日期型 None 季桶、
-    pending 接线; ②单剧可调用只凭 (剧键, 成员集) 即复现全量该行(无隐式上下文依赖,
+    pending 接线; 2. 单剧可调用只凭 (剧键, 成员集) 即复现全量该行(无隐式上下文依赖,
     S9b 局部重算的衔接面)。成员集按 tvshows 直算独立重放分类(不走 _parse_show_member),
     防同源互证。
     """
@@ -695,9 +695,9 @@ def test_agg_show_node_hr_counts_and_show_row_empty_title():
 def test_build_shows_view_row_none_guard_and_pending_no_repost():
     """T2a2 清偿: _build_shows_view 的行剔除防御弧与全量路径 pending 兑底接线
 
-    ① 单剧可调用回 None(空成员集口径, S9b 旧行剔除依据) -> 该剧行不进视图不炸 ——
+    1. 单剧可调用回 None(空成员集口径, S9b 旧行剔除依据) -> 该剧行不进视图不炸 ——
        全量路径分桶成员恒非空, 防御弧用确定性替身(实例属性覆盖)直驱;
-    ② 全量路径 pending 接线: 季包索引未覆盖 -> 登记 shows_pending; 索引已建成(非 None)
+    2. 全量路径 pending 接线: 季包索引未覆盖 -> 登记 shows_pending; 索引已建成(非 None)
        且无脏 -> 不重复投递 build_search_index(与 S9b 局部路径同一防自激口径, 见 T2a 局部版)。
     """
     import queue as _queue
@@ -711,14 +711,14 @@ def test_build_shows_view_row_none_guard_and_pending_no_repost():
     rt = _delta_runtime(store)
     host = rt._host
 
-    # ① 防御弧: 行可调用回 None -> 行被跳过
+    # 1. 防御弧: 行可调用回 None -> 行被跳过
     host._build_show_row = lambda key, members: None  # 确定性替身: 只考察视图层的剔除口径
     view = host._build_shows_view()
     assert view["list"] == [] and view["unrecognized"] == [], "None 行不入视图"
     assert rt.shows_pending is True, "季包索引未覆盖: pending 登记与行剔除互不影响"
     del host._build_show_row  # 还原类方法查找
 
-    # ② pending 接线: 索引已建成且无脏 -> 只登记不投递(清掉①基线代投递的建索引命令再考察)
+    # 2. pending 接线: 索引已建成且无脏 -> 只登记不投递(清掉第 1 条基线代投递的建索引命令再考察)
     while True:
         try:
             rt.commands.get_nowait()

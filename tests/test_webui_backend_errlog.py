@@ -139,7 +139,7 @@ def test_errlog_requires_token():
 def test_suppressed_records_skipped():
     """只进后端 log 的记录(hr_silent)不入环 —— 通道/环境层的静默子类(如「浏览器关着」)
 
-    「连不上浏览器这类只打后端 log, 不发到前端错误历史」的落点(计划 26-10-09-0821 §03.2/D2①)。
+    「连不上浏览器这类只打后端 log, 不发到前端错误历史」的落点(计划 26-10-09-0821 §03.2/D2 1)。
     未打标的记录行为不变(向后兼容), 可见子类(WEBUI 活跃 / 被拒敲门)也照样入环。
     """
     rt = _runtime()
@@ -207,8 +207,8 @@ def test_attach_idempotent():
 if __name__ == "__main__":  # pragma: no cover
     pytest.main([__file__])
 
-
 # ---------- T2a 覆盖率第三轮: 流量快照出口形状与采集器静默兜底 ----------
+
 
 def test_public_traffic_view_shapes():
     """轮询流量快照出口: falsy 视图原样返回(无键可摘); 常规视图浅拷贝摘 history,
@@ -226,6 +226,6 @@ def test_public_traffic_view_shapes():
 def test_emit_swallows_poisoned_record():
     """emit 全程静默兜底: 记录文案插值炸(坏格式参数)不得逃逸, 错误环零污染"""
     rt = _runtime()
-    poisoned = _record(logging.WARNING, "bad %d", args=("not-a-number",))
+    poisoned = _record(logging.WARNING, "bad %d", args=("not-a-number", ))
     WebErrLogHandler(rt).emit(poisoned)  # 不得抛(收集器永不干扰业务日志)
     assert len(rt.err_log_ring) == 0 and rt.err_log_seq == 0

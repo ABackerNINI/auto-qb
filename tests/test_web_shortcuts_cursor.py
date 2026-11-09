@@ -35,7 +35,7 @@ Delete 直连注册表外, 均为已拍板的口径, 逐条落断言。W5 局部
   与其成员 hash 同时在集合里, 直接相加会数两遍) / _bulkTargets 剔除已被选中组覆盖的成员 hash
 - test_sel_visual_parity_and_site_cell: 成员行选中视觉与种子页种子行同形(三皮肤 CSS 成对:
   .member-row.selected 与 .group-row.selected 同一 tint 令牌(`--sel-bg`)且同吃左色条规则; 两条规则
-  自 2026-10-20 拆分 —— 组行有吸左首格须合成在不透明 `--bg-row` 上(frozen-column ⑩), 成员行无首格
+  自 2026-10-20 拆分 —— 组行有吸左首格须合成在不透明 `--bg-row` 上(frozen-column 10), 成员行无首格
   保持裸柔底) + 成员行「站点」列去掉代表状态的
   方框(groups.html / shows.html 两处模板无 <i class="dot"> + 三皮肤无 .m-site .dot 死规则)
 - test_esc_collapse_returns_cursor_to_parent: Esc 收展开兜底档把键盘光标**退回被收起的父行**
@@ -133,7 +133,7 @@ def test_shift_anchor_unified() -> None:
     光标落起点), 落点逐 kind(group/member/unit)覆盖 —— 辅种页成员行的光标只解析得出 member
     kind(_selContext 只回当前视图主 kind, 辅种页恒为 group, 单 kind 落点覆盖不到)。"""
     sel = _read("selection.js")
-    # ① 五入口普通/Ctrl 路径落起点, 写在修饰键分支之前, 且排除 Shift 分支(法则 2)
+    # 1. 五入口普通/Ctrl 路径落起点, 写在修饰键分支之前, 且排除 Shift 分支(法则 2)
     for fn, write in [
         ("onGroupClick", 'this._selSetAnchor("group", g.key)'),
         ("onMemberClick", 'this._selSetAnchor("member", m.hash)'),
@@ -151,7 +151,7 @@ def test_shift_anchor_unified() -> None:
         line = next(ln for ln in body.splitlines() if "_selSetAnchor" in ln)
         assert "event.shiftKey" in line and "!" in line, (f"{fn} 落起点必须排除 Shift 分支(法则 2: 否则 Shift+点击只选目标单行, M1 回归)")
         assert write in body, f"{fn} 落起点值不对(起点 id 形态漂移: {write})"
-    # ①b 鼠标 Shift 分支前先落手势原点(2026-10-19 报障: Esc 清选择后再次 Shift 连选塌成单行):
+    # 1b. 鼠标 Shift 分支前先落手势原点(2026-10-19 报障: Esc 清选择后再次 Shift 连选塌成单行):
     #    五入口必须先 _selSeedAnchorFromCursor() 再改写 kbCursor —— 顺序反了 _selAnchor 兜底链的
     #    「当前光标」一环读到的是刚点的行, 区间塌成单行(不以光标为起点)
     for fn in ("onGroupClick", "onMemberClick", "onTorrentClick", "onShowClick", "onShowEpClick"):
@@ -164,7 +164,7 @@ def test_shift_anchor_unified() -> None:
         assert 0 <= seed_at < cursor_at, (f"{fn} 必须先落起点再改写光标(顺序反了区间塌成单行: Esc 后 Shift 连选不以光标为起点)")
         seed_line = next(ln for ln in body.splitlines() if "_selSeedAnchorFromCursor" in ln)
         assert "event.shiftKey" in seed_line, (f"{fn} 手势前落起点必须限 Shift(普通/Ctrl 路径由 _selSetAnchor 显式落起点)")
-    # ② 四处消费者统一走单点解析, 不再出现裸 list[0] 兜底
+    # 2. 四处消费者统一走单点解析, 不再出现裸 list[0] 兜底
     for fn, call in [
         ("shiftGroupSel", 'this._selAnchor("group", list)'),
         ("shiftMemberSel", 'this._selAnchor("member", list)'),
@@ -176,7 +176,7 @@ def test_shift_anchor_unified() -> None:
         body = m.group(1)
         assert call in body, f"{fn} 未走起点单点解析 {call}(四处各写兜底 = 口径漂移源)"
         assert "list[0]" not in body, f"{fn} 仍残留裸 list[0] 兜底(起点脱节根因)"
-    # ③ 起点解析单点: 兜底链齐全 + 落起点不碰选中集合
+    # 3. 起点解析单点: 兜底链齐全 + 落起点不碰选中集合
     anchor = re.search(r"_selAnchor\(kind, list\) \{(.*?)\n    \},", sel, re.S)
     assert anchor, "缺 _selAnchor(起点解析单点)"
     ab = anchor.group(1)
@@ -192,7 +192,7 @@ def test_shift_anchor_unified() -> None:
     )
     sb = setter.group(1)
     assert "selGroups" not in sb and "selMembers" not in sb, ("_selSetAnchor 不得触碰选中集合(与 2026-09-17「普通点击不选中」冲突)")
-    # ④ 键盘手势原点: 先落起点再移动光标, 且已有有效起点不动(法则 2)
+    # 4. 键盘手势原点: 先落起点再移动光标, 且已有有效起点不动(法则 2)
     eng = _read("shortcuts.js")
     ext = re.search(r"_kbExtend\(delta\) \{(.*?)\n    \},", eng, re.S)
     assert ext, "shortcuts.js 找不到 _kbExtend(键盘 Shift 扩展落点)"
@@ -206,7 +206,7 @@ def test_shift_anchor_unified() -> None:
     seedb = seed.group(1)
     assert "ctx.ids.includes(this[field])" in seedb, ("已有有效起点必须不动(法则 2: 同一起点多次 Shift 扩展)")
     assert "this[field] = fromCursor" in seedb, "无有效起点时必须以当前光标落起点"
-    # ④b 手势原点落点必须逐 kind 覆盖(2026-10-19): 辅种页成员行的光标只解析得出 member kind
+    # 4b. 手势原点落点必须逐 kind 覆盖(2026-10-19): 辅种页成员行的光标只解析得出 member kind
     #  (_selContext 只回当前视图主 kind, 辅种页恒为 group, 单 kind 落点覆盖不到 => 成员行
     #  Shift 手势取不到原点, 区间塌成单行); 鼠标五入口同样吃本方法(改写 kbCursor 之前)
     assert "_memberRangeList()" in seedb, ("_selSeedAnchorFromCursor 必须覆盖 member kind(辅种页成员行 Shift 手势取不到原点)")
@@ -405,7 +405,7 @@ def test_sel_group_member_linkage() -> None:
     打断(选种子时把已选中的组整段抹掉)。本守阵钉"单点在不在 / 变更点吃没吃 / 消费端去不去重"。"""
     sel = _read("selection.js")
 
-    # ① 单一写入口三件套
+    # 1. 单一写入口三件套
     for fn, needle, why in [
         ("_groupHashes", "memberHashesOf", "取 hash 必须经 memberHashesOf 单点(裸取会字符串化)"),
         ("_selAddGroup", "this.selGroups = [...this.selGroups, k]", "组 key 必须写入"),
@@ -419,7 +419,7 @@ def test_sel_group_member_linkage() -> None:
         assert m, f"selection.js 找不到 {fn}(双向联动写入口被改名/搬走? 同步本守阵)"
         assert needle in m.group(1), f"{fn} {why}"
 
-    # ② 组侧入口吃单点(toggleGroupSel/shiftGroupSel 不得再手写 selGroups/selMembers)
+    # 2. 组侧入口吃单点(toggleGroupSel/shiftGroupSel 不得再手写 selGroups/selMembers)
     for fn in ("toggleGroupSel", "shiftGroupSel"):
         m = re.search(rf"{fn}\([^)]*\) \{{(.*?)\n    \}},", sel, re.S)
         assert m, f"selection.js 找不到 {fn}"
@@ -429,7 +429,7 @@ def test_sel_group_member_linkage() -> None:
     toggle = re.search(r"toggleGroupSel\(g\) \{(.*?)\n    \},", sel, re.S).group(1)
     assert "this._selDropGroup(g.key)" in toggle, "toggleGroupSel 取消侧必须走 _selDropGroup(成员一并撤出)"
 
-    # ③ 成员侧变更点全部回扫(成员全选 => 组入选)
+    # 3. 成员侧变更点全部回扫(成员全选 => 组入选)
     for fn in ("toggleMemberSel", "shiftMemberSel", "shiftTorrentSel", "_toggleUnit", "_extendUnit"):
         m = re.search(rf"{fn}\([^)]*\) \{{(.*?)\n    \}},", sel, re.S)
         assert m, f"selection.js 找不到 {fn}"
@@ -437,7 +437,7 @@ def test_sel_group_member_linkage() -> None:
         assert "this._selSyncGroups()" in body, f"{fn} 缺 _selSyncGroups 回扫(成员全选 => 组入选 断链)"
         assert "this.selGroups = []" not in body, f"{fn} 不得再清空 selGroups(会打断成员->组联动)"
 
-    # ④ 消费端
+    # 4. 消费端
     gst = re.search(r"groupSelState\(g\) \{(.*?)\n    \},", sel, re.S)
     assert gst, "selection.js 找不到 groupSelState(组行选中态)"
     gb = gst.group(1)
@@ -473,7 +473,7 @@ def test_sel_visual_parity_and_site_cell() -> None:
     本守阵钉: 三皮肤里 .member-row.selected 与 .group-row.selected **用同一个 tint 令牌**
     (`var(--sel-bg, var(--accent-soft))`, 各写一份色值会随主题漂移)且同吃左色条规则;
     两条规则自 2026-10-20 起**拆开写**(组行有吸左首格, 底色要合成在不透明 --bg-row 上;
-    成员行没有首格、底由明细面板承光, 保持裸柔底 —— 见 pitfalls/web-ui/frozen-column.md ⑩),
+    成员行没有首格、底由明细面板承光, 保持裸柔底 —— 见 pitfalls/web-ui/frozen-column.md 10),
     故这里不再要求“选择器并列同一条规则”。另钉 .member-row 保持 position: relative(左色条 ::before
     的定位前提)。
     「站点」列: 成员行站点格只剩站点名文本(状态由「状态」列表达), 渲染器与三皮肤都不得再挂
@@ -482,7 +482,7 @@ def test_sel_visual_parity_and_site_cell() -> None:
         views = (STATIC / ui / "css" / "views.css").read_text(encoding="utf-8")
         # 成员行选中与组行/种子行**同一 tint 令牌**(2026-10-20 起两条规则拆开: 组行/种子行有吸左
         # 首格, 底色必须合成在不透明 --bg-row 上(否则选中行名称列成异色竖带, 见
-        # pitfalls/web-ui/frozen-column.md ⑩); 成员行没有首格、承光底是明细面板 .detail
+        # pitfalls/web-ui/frozen-column.md 10); 成员行没有首格、承光底是明细面板 .detail
         # (--bg-sunken), 保持裸柔底。钉的是「同一令牌 + 同一形状」, 不是「同一条规则文本」。)
         row_sel = re.search(r"\.group-row\.selected \{([^}]*)\}", views)
         mem_sel = re.search(r"\.member-row\.selected \{([^}]*)\}", views)

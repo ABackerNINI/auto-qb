@@ -203,7 +203,7 @@ def test_frontend_show_if_applies_to_sections():
     """B2/D16: `show_if` 对 object 段(group)与可选段(section)同样生效
 
     修前 `visible()` 对非叶子恒 true —— schema 在 object 段上挂的 provider 条件形同虚设, 只能靠
-    模板手写过滤。这里钉两件事: ①短路分支已删; ②来源两个子段的显隐由 show_if 而不是手工挑 key。
+    模板手写过滤。这里钉两件事: 1. 短路分支已删; 2. 来源两个子段的显隐由 show_if 而不是手工挑 key。
     """
     js = _shared("config_editor.js")
     hub = _shared("config_hub.js")

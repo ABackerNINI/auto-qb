@@ -1,11 +1,11 @@
 """test_webui_trigger_registry 测试计划: 触发点登记表与作用域一致性守阵(计划 26-10-10-2001 S2)
 
 口径单点 = `memory-bank/conventions/webui-scope.md`(专题 webui-selection-trigger-parity)。
-登记表单点 = `static/shared/triggers.js` 的 `TRIGGER_DEFS`。本文件是「三张网」的第①张(静态守阵)。
+登记表单点 = `static/shared/triggers.js` 的 `TRIGGER_DEFS`。本文件是「三张网」的第 1 张(静态守阵)。
 
 本守阵要解决的问题: 现状把「动谁」拆在 7 个目标解析点 + 7 个动作出口 + 1 个平行变体判定上,
 互不引用, 于是「选中 A 却动了 B」这类**静默作用对象偏移**既不被现有断言覆盖, 也没有声明可查。
-把触发点收进一张声明表之后, 新增功能要么走统一出口(网②自动罩), 要么登记进表(本文件强制)。
+把触发点收进一张声明表之后, 新增功能要么走统一出口(网 2 自动罩), 要么登记进表(本文件强制)。
 
 ## 测试计划(每个测试函数一条)
 - test_trigger_registry_shape: 登记表自身形状 —— 必填字段齐、id 唯一、枚举值在词表内、

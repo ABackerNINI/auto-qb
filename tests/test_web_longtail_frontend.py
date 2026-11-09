@@ -80,9 +80,9 @@ def test_aq_tip_anchor_watch_and_reacquire_wired():
     """aq-tip 锚定保活守阵(2026-10-07 用户报「详情面板 tooltip 位置不正确」)
 
     详情面板 15 变体由轮询数据驱动整帧重建(replaceChildren), tooltip 三条错位路径:
-    ①350ms 窗口内锚点被换掉后按旧指针坐标重解析可能中到别的元素(布局移位), 键盘 focusin
-    路径无坐标; ②浮层已显示后锚点被 5s 轮询换成新节点(mouseover 不再触发), 浮层停旧坐标;
-    ③重建引发布局移位, 浮层不跟随。修法单点在 shared/ui_feedback.js: 定位抽 place() 单点 +
+    1. 350ms 窗口内锚点被换掉后按旧指针坐标重解析可能中到别的元素(布局移位), 键盘 focusin
+    路径无坐标; 2. 浮层已显示后锚点被 5s 轮询换成新节点(mouseover 不再触发), 浮层停旧坐标;
+    3. 重建引发布局移位, 浮层不跟随。修法单点在 shared/ui_feedback.js: 定位抽 place() 单点 +
     reacquire() 语义重解析(先于指针坐标回退) + watch/tick rAF 帧环廉价体检。本守阵读 JS
     源码钉住结构与次序(剥行注释后锚定, 注释改写不红、代码突变必红), 任一环被重构摘除即红:
     1. enter 记录锚点矩形基准 curRect, hide 作废(键盘路径无坐标, 全靠矩形基准重解析);
@@ -94,7 +94,7 @@ def test_aq_tip_anchor_watch_and_reacquire_wired():
     """
     ui = open(os.path.join(STATIC_ROOT, "shared", "ui_feedback.js"), encoding="utf-8").read()
 
-    # ① 矩形基准的记/废成对
+    # 1. 矩形基准的记/废成对
     assert re.search(r"^  let curRect = null;", ui, re.M), \
         "ui_feedback.js 缺 curRect 矩形基准状态(语义重解析/漂移检测失锚, 同步本守阵)"
     assert re.search(r"curRect = target\.getBoundingClientRect\(\);", ui), \
@@ -103,7 +103,7 @@ def test_aq_tip_anchor_watch_and_reacquire_wired():
     assert m and "curRect = null" in m.group(1), \
         "hide 未作废 curRect 基准(悬空基准会污染下一次悬浮的重解析)"
 
-    # ② reacquire: 语义扫描先于指针回退, 回退有 NaN 门
+    # 2. reacquire: 语义扫描先于指针回退, 回退有 NaN 门
     m = re.search(r"function reacquire\(\)\s*\{(.*?)\n  \}", ui, re.S)
     assert m, "ui_feedback.js 找不到 reacquire(锚点被重建换掉后的语义重解析单点被摘? 同步本守阵)"
     acq = re.sub(r"//[^\n]*", "", m.group(1))
@@ -114,11 +114,11 @@ def test_aq_tip_anchor_watch_and_reacquire_wired():
     assert i_ptr != -1, \
         "reacquire 缺指针坐标回退(2026-10-04 收口口径: 语义解析不到才按指针重解析)"
     assert i_sem < i_ptr, \
-        "reacquire 指针回退先于语义解析 —— 布局移位时旧坐标下的元素已不是原锚点(路径③复发)"
+        "reacquire 指针回退先于语义解析 —— 布局移位时旧坐标下的元素已不是原锚点(路径 3 复发)"
     assert re.search(r"Number\.isFinite\(curX\)", acq), \
         "指针回退缺 Number.isFinite(curX) 门 —— 键盘路径 NaN 坐标会传给 elementFromPoint"
 
-    # ③ show 断链走 reacquire; 定位单点 place + 显示期监测 watch 成对
+    # 3. show 断链走 reacquire; 定位单点 place + 显示期监测 watch 成对
     m = re.search(r"function show\(anchor\)\s*\{(.*?)\n  \}", ui, re.S)
     assert m, "ui_feedback.js 找不到 show(改名或挪走了? 同步本守阵)"
     sh = re.sub(r"//[^\n]*", "", m.group(1))
@@ -131,14 +131,14 @@ def test_aq_tip_anchor_watch_and_reacquire_wired():
     assert re.search(r"curRect = \{ left: r\.left, top: r\.top", ui), \
         "place 未在定位时刷新 curRect 基准(漂移检测失准)"
 
-    # ④ tick 帧环: 可见期才运转, 断链/漂移两分支齐备, 每帧路径零全文档查询
+    # 4. tick 帧环: 可见期才运转, 断链/漂移两分支齐备, 每帧路径零全文档查询
     m = re.search(r"function tick\(\)\s*\{(.*?)\n  \}", ui, re.S)
     assert m, "ui_feedback.js 找不到 tick(rAF 帧环主体被摘? 同步本守阵)"
     tick = re.sub(r"//[^\n]*", "", m.group(1))
     assert 'classList.contains("on")' in tick and "cur" in tick, \
         "tick 缺可见性守卫(cur + .on) —— 浮层收起后帧环空转烧帧"
     assert "isConnected" in tick, \
-        "tick 缺锚点存活检查 —— 浮层显示后锚点被重建换掉不再跟随(路径②复发)"
+        "tick 缺锚点存活检查 —— 浮层显示后锚点被重建换掉不再跟随(路径 2 复发)"
     assert "reacquire()" in tick, "tick 断链分支未走语义重解析"
     for axis in ("left", "top", "width", "height"):
         assert f"curRect.{axis}" in tick, f"tick 漂移检测缺 {axis} 轴比对(重建移位/内容变宽不重定位)"
