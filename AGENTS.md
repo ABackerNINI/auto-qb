@@ -18,6 +18,7 @@
 
 ## 产出口径
 
+- **项目定位:要上线的真实生产项目**——不是单人玩具/自用脚本。兼容性、迁移路径、报错文案、默认值变更、错误处理一律按生产标准评估;禁止以「单人项目够用了」为由降级方案。
 - **计划 / 报告**:计划用`delivery-artifact` skill、放`memory-bank/plans/`且**一律单文件HTML**(出现`.md`即违规);报告(审计/故障取证/可行性分析)放`memory-bank/reports/`。四工位决策树与`doc-*`协议见`memory-bank/conventions/doc-forms.md`。
 - **HTML一律dark主题**:规格与文件命名见`memory-bank/conventions/webui.md`「HTML 文档一律 dark 主题」。
 - **测试基线数字只写一处**:权威在`memory-bank/testing/baselines/`最新切片,其余一律引用不手抄(`commands run kb.baseline`);口径与守卫见`memory-bank/testing/baseline.md`。

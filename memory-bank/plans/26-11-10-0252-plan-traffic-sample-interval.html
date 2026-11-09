@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>流量图采样间隔演进: 旧秒值键退役改整数倍数新键(配置升级v6-v7)</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="traffic-sample-interval">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-10-0252">
+<meta name="doc-updated" content="26-11-10-0252">
+<meta name="doc-refs" content="memory-bank/issues/26-11-08-1717-feat-traffic-sampling-main-tick.html">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: traffic-sample-interval</div>
+<h1>流量图采样间隔演进: 旧秒值键退役改整数倍数新键(配置升级v6-v7)</h1>
+<p class="lede">本篇只回答: 怎么把 <code>qb_traffic</code> 采样间隔从「秒值」语义演进到「main_tick 整数倍数」语义——旧键退役、新键 <code>sample_interval_multiplier</code> 走配置升级链 v6→v7 保行为换算、运行时抽生效间隔纯函数单点; 且升级除一项明示的默认变更外不改变存量用户的实际采样节拍。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-10-0252 · <b>doc-updated</b> 26-11-10-0252 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> grilling 会话(2026-11-10, 11 项逐条拍板见 §06) · 承接 issue <code>26-11-08-1717-feat-traffic-sampling-main-tick</code>(progress/roadmap D6 定案方向的立项落地)
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<p><b>背景</b>: 采样间隔演进(roadmap D6)方向定过案但从未立项, issue 26-11-08-1717 承接。前置依赖「raw 桶数上限 <code>MAX_RAW_BUCKETS=2880</code>」已实施(<code>src/auto_qb/core/traffic_grid.py:93</code>)——24h 视图桶数已封顶, 本切片加细采样只涨存储不涨视图。</p>
+<p><b>目标</b>(做到什么程度算成):</p>
+<ul>
+  <li>配置语义: <code>qb_traffic.sample_interval_multiplier</code>(<code>int ≥ 1</code>, 默认 <code>1</code> = 1×main_tick 即「跟随主循环节拍」); 旧秒值键 <code>sample_interval</code> 退役, 程序其余部分零旧键分支。</li>
+  <li>升级保真: 已设旧键的存量配置经迁移 v6→v7 保行为换算(细则以 §06 D8 为准: 非整除向上取整、贴上限冲突钳到 <code>floor(600/main_tick)</code>, 逐键 WARNING); 唯一行为变更 = 未设旧键者默认 30s → 1×main_tick(明示, 见 D9)。</li>
+  <li>运行时: 生效间隔解析抽纯函数单点, 采样器与 webui 同调; 旧计划 26-10-04-1957 裁决 D5 的「失配取整+告警」逻辑整体删除。</li>
+  <li>测试: 全量测试绿 + 基线切片; 迁移/校验/采样三面单测覆盖。</li>
+</ul>
+<p><b>设计底线/不变量</b>:</p>
+<ul>
+  <li>黄金法则 4: 新键四处登记(models / validation 白名单 / schema Field / 守卫测试)。</li>
+  <li>fail-fast: 非法形态(0/负/小数/旧 time 串残留)不可表达——校验层报错, 不静默曲解。</li>
+  <li>项目定位=要上线的真实生产项目: 迁移路径、报错文案、默认值变更按生产标准评估, 不以「够用了」降级。</li>
+  <li>红线: <code>config.yml</code>(生产, 现含 <code>sample_interval: 1.5S</code>)不碰——升级在用户跑程序时由迁移链自动完成。</li>
+</ul>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+<p><b>现状</b>(取证 2026-11-10):</p>
+<ul>
+  <li>配置: <code>sample_interval: float = 30.0</code> 秒值, models 默认 30(<code>src/auto_qb/config/models.py:436</code>); 校验下限=main_tick(硬)、上限 600s(<code>src/auto_qb/config/validation/sections.py:1181</code>); 「main_tick 整数倍」不在校验层(旧计划 26-10-04-1957 裁决 D5)。</li>
+  <li>运行时: <code>_apply_interval</code> 每轮现读 <code>(sample_interval, main_tick)</code> 签名, 失配向上取整到 main_tick 下一倍数 + 告警一次(<code>src/auto_qb/core/modules/traffic_sample_blocks.py:32-52</code>); 节拍已挂时钟线自持(issue 26-10-16-0954 起), 间隔变化关块重开。</li>
+  <li>webui: 24h 栅格兜底 <code>DEFAULT_SAMPLE_INTERVAL_S=30.0</code>, <code>traffic_qb.py:129</code> 直接读 <code>conf.sample_interval</code>; <code>MAX_RAW_BUCKETS=2880</code> 已封顶视图桶数。</li>
+</ul>
+<p><b>痛点</b>:</p>
+<ul>
+  <li>默认 30s 与主循环节拍脱钩: main_tick 调了采样不跟, 配置值与生效值是两套口径。</li>
+  <li>失配取整是隐式行为: 配置写 7s、实际跑 8s, 靠运行时 WARNING 兜, 校验层不拦。</li>
+  <li>生效间隔两处消费(采样器/webui 栅格)各自解释, 无单点——哨兵/倍数类语义演进每加一处都要人肉对齐。</li>
+</ul>
+
+<h2><span class="no">§03</span>方案总览</h2>
+<p><b>主线</b>: 新键硬切 + 配置升级链 + 运行时单点, 三层各自独立可验:</p>
+<ol>
+  <li><b>配置层</b>: <code>sample_interval_multiplier</code>(int ≥ 1, 默认 1)替代旧键; 无哨兵(默认 1 已表达「跟随」, poka-yoke: 非法形态不可表达); 上限口径=有效秒数 <code>multiplier × main_tick ≤ 600</code> 硬校验(main_tick 同 config 现取, <code>_current_main_tick</code> 管道已有), 倍数本身无独立上限。</li>
+  <li><b>升级链</b>: <code>CURRENT_VERSIONS["config"]</code> 6→7; 迁移函数 <code>_migrate_config_6_7</code> 保行为换算(见 D8), 幂等, note 经 <code>migrate_with_notes</code> 落 WARNING。</li>
+  <li><b>运行时</b>: 纯函数 <code>effective_sample_interval(multiplier, main_tick) = multiplier × main_tick</code> 落 <code>core/traffic_grid.py</code>(webui 已 import tg, 采样器可加同源 import, 无环); <code>_apply_interval</code> 重写为直乘, 删取整/<code>_ratio_warned</code> 告警(倍数语义下失配数学上不可能); webui <code>traffic_qb.py:129</code> 改调单点。</li>
+</ol>
+<p><b>分期</b>: 单切片一次落地, 无分期表; 步骤顺序见 §04。</p>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+<table>
+  <tr><th>#</th><th>内容</th><th>验收判据</th></tr>
+  <tr>
+    <td>S1</td>
+    <td><b>配置层换键</b>: models.py 字段替换(<code>sample_interval: float = 30.0</code> → <code>sample_interval_multiplier: int = 1</code>, docstring 重写含默认变更与有效秒上限口径); loaders.py 解析改 int(严格: BaseLoader 标量串按 <code>int(str)</code>, 拒 "1.5"/"30S")+ <code>:498</code> 示例注释更新; validation/sections.py <code>KNOWN_QB_TRAFFIC_KEYS</code> 换键 + <code>_validate_qb_traffic</code> 规则重写(<code>int ≥ 1</code>; <code>multiplier × main_tick ≤ 600</code>; 删旧「正时间/≥main_tick」规则); schema/groups.py Field(<code>kind: time→int</code>, default 1, help 重写: 默认变更 + 存储增长提示 + 显式配 15 倍回旧密度的出路); impact.py 若列该键同步。</td>
+    <td>黄金法则 4 守卫测试过; validate_config 单测: 合法 <code>1/15</code> 过, <code>0/-1/1.5/"30S"</code> 报错文案各自命中; 超有效秒上限报错含换算值。</td>
+  </tr>
+  <tr>
+    <td>S2</td>
+    <td><b>升级链 v6→v7</b>: <code>infra/versioning.py</code> config 6→7; <code>config/migrations.py</code> 新增 <code>_migrate_config_6_7</code>: 同树现读 <code>main_tick</code>(缺省兜 models 默认 2.0), 旧键存在 → <code>新键 = max(1, ceil(旧秒/main_tick))</code> 写入、删旧键、逐键 note; 旧键不存在 → 不动(默认变更见 D9, 迁移 docstring 写明)。</td>
+    <td>迁移单测: <code>1.5S</code>+main_tick 1.5 → 1(精确还原); <code>"30S"</code>+main_tick 2 → 15; <code>600S</code>+main_tick 7 → 钳 85(595s ≤ 600, note 明示); 缺键不动; 幂等重跑零 diff; note 数与键数一致。</td>
+  </tr>
+  <tr>
+    <td>S3</td>
+    <td><b>运行时单点</b>: <code>core/traffic_grid.py</code> 加 <code>effective_sample_interval(multiplier, main_tick)</code>; <code>traffic_sample_blocks._apply_interval</code> 重写(签名比较改 <code>(multiplier, main_tick)</code>, 删 ceil/告警/<code>_ratio_warned</code>, 关块联动保留); <code>webui/server/traffic_qb.py:129</code> 改调单点(未启用空态仍走 <code>DEFAULT_SAMPLE_INTERVAL_S=30.0</code>, 不动)。</td>
+    <td>采样器单测: 节拍 = multiplier×main_tick; main_tick 热改触发关块重开(签名联动); webui 栅格 meta 桶宽单测; 全库 grep <code>sample_interval</code>(除新键/迁移/测试)零残留。</td>
+  </tr>
+  <tr>
+    <td>S4</td>
+    <td><b>测试面收口</b>: 新键登记守卫测试; tests-real 基座 schema_version 同步 7(对齐 <code>38fa8690</code> 先例); 迁移链测试补 v6→v7 节点。</td>
+    <td><code>commands run test.full</code> 全绿, 数字从实测誊写基线切片(<code>kb.new baseline --total ..</code>)。</td>
+  </tr>
+  <tr>
+    <td>S5</td>
+    <td><b>文档回写</b>: 代码事实变更回写 <code>memory-bank/</code> 与根 README(若提及该键); issue 状态流转(认领需用户显式确认, 黄金法则 7③)。</td>
+    <td>kb.wrap 切片 + 收尾 DoD 完成。</td>
+  </tr>
+</table>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p>无——全部决策已在 grilling 会话(2026-11-10)逐条拍板, 结论见表 §06。</p>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+  <tr><th>#</th><th>结论</th><th>日期</th></tr>
+  <tr><td>D1</td><td>新键硬切、不兼容旧键(否决「保留键改语义」——旧值 <code>"30S"</code> 在倍数语义下会被静默曲解, 兼容 shim 比硬切危险)</td><td>2026-11-10</td></tr>
+  <tr><td>D2</td><td>走配置升级链(否决硬拒让用户手改/过渡告警)——库内 <code>infra/versioning.py</code> + <code>config/migrations.py</code> 单点现成</td><td>2026-11-10</td></tr>
+  <tr><td>D3</td><td>键名 <code>qb_traffic.sample_interval_multiplier</code>(与旧键对仗、报错/检索互不混淆)</td><td>2026-11-10</td></tr>
+  <tr><td>D4</td><td>无哨兵: 规则一条 <code>int ≥ 1</code>; 默认 1 = 1×main_tick 即「跟随」(哨兵 0 在默认 1 下失去存在理由)</td><td>2026-11-10</td></tr>
+  <tr><td>D5</td><td>只收整数倍数, 不允许小数倍</td><td>2026-11-10</td></tr>
+  <tr><td>D6</td><td>倍数无独立上限; 保留有效秒数硬校验 <code>multiplier × main_tick ≤ 600</code>(原「防视图颗粒过粗」口径, MAX_RAW_BUCKETS 只封桶数不封颗粒)</td><td>2026-11-10</td></tr>
+  <tr><td>D7</td><td>默认 <code>1</code>(models 30.0 → 1)</td><td>2026-11-10</td></tr>
+  <tr><td>D8</td><td>迁移保行为换算并钳到 v7 硬校验内: <code>max(1, min(ceil(旧秒/main_tick), floor(600/main_tick)))</code>, main_tick 从同一 config 树现读(缺省兜 2.0), 逐键 note(生产 <code>1.5S</code>/1.5 → 1 精确还原; <code>"30S"</code>/2 → 15 精确还原; 非整除向上取整且 note 明示; 贴上限冲突如 <code>600S</code>+main_tick 7 → 钳 85=595s, note 写明节拍被钳制; main_tick &gt; 600 时 floor=0 分支兜底取 1, note 写明 v7 上限在该 main_tick 下不可满足)</td><td>2026-11-10</td></tr>
+  <tr><td>D9</td><td>未设旧键的存量不补写: 默认 30s → 1×main_tick 是本切片明示的升级行为变更(迁移 docstring + schema help 写明; 补写会把旧默认焊死在存量配置里, 与演进目标背道而驰)</td><td>2026-11-10</td></tr>
+  <tr><td>D10</td><td>删旧计划 26-10-04-1957 裁决 D5 的失配取整+告警(倍数语义下数学上不可能失配; 非本表 D5); 抽纯函数单点 <code>effective_sample_interval</code>, 采样器与 webui 同调</td><td>2026-11-10</td></tr>
+  <tr><td>D11</td><td>接受新默认存储 ~15×(raw 行数, 视图桶数不变); <code>DEFAULT_SAMPLE_INTERVAL_S=30.0</code> 保留仅作 webui 未启用空态兜底</td><td>2026-11-10</td></tr>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+  <tr><th>风险</th><th>触发条件</th><th>处置</th></tr>
+  <tr><td>生产 config 的 <code>1.5S</code> 升级后节拍漂移</td><td>首次启动触发 v6→v7</td><td>D8 换算下 1.5/1.5 → 1 精确还原; 迁移单测固化该形态; 红线不碰文件</td></tr>
+  <tr><td>非整除换算节拍变粗(如 7S/main_tick 2 → 4×=8s)</td><td>旧值非 main_tick 整除</td><td>逐键 WARNING 写明旧值/新倍数/生效秒; 用户可显式改倍数微调</td></tr>
+  <tr><td>旧键残留(迁移被绕过的路径, 如手工编辑配置回灌)</td><td>校验层收到 <code>sample_interval</code></td><td>白名单不含旧键 → fail-fast 报未知键, 不静默曲解</td></tr>
+  <tr><td>设置页控件形态回归</td><td>Field kind time→int 后 webui 渲染</td><td>设置页按 schema 渲染自动跟随; e2e 设置页断言覆盖(config_hub 既有真浏览器桩面)</td></tr>
+  <tr><td>用户对默认存储增长有异议</td><td>升级后 raw 体量上涨(仅未设旧键者)</td><td>schema help + 迁移 docstring 双处写明; 显式配 15 倍回旧密度的出路写进 help</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-10-0252</span> 初版: 来源 grilling 会话(2026-11-10)对 issue 26-11-08-1717 的 11 项逐条拍板(D1-D11), 方案三层(配置/升级链/运行时)+ 五步实施(S1-S5); 附带口径修正「项目定位=要上线的真实生产项目」已钉入 AGENTS.md 产出口径节。</li>
+  <li><span class="tag">R1 · 26-11-10</span> 评审修复(1 major + 1 nit): D8 迁移换算补钳制规则(评审反例 <code>600S</code>+main_tick 7 → ceil 86×7=602 违反 v7 硬校验, 改钳 <code>floor(600/main_tick)</code> 并覆盖 main_tick&gt;600 边界), S2 验收补贴上限单测形态; 「D5」撞号消除(旧计划 26-10-04-1957 裁决 D5 与本表 D5 区分)。</li>
+</ul>
+
+</div>
+</body>
+</html>
