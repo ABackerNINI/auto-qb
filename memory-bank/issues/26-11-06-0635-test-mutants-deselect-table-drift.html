@@ -9,9 +9,9 @@
 <meta name="doc-topic" content="mutation-audit">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="test.pkg 4 条既有红：mutants DEFAULT_DESELECT 指向已拆分消失的测试文件">
-<meta name="issue-summary" content="commands run test.pkg 恒有 4 条 subtest 红 —— DEFAULT_DESELECT 里 4 个 node id 指向已拆分消失的 tests/test_traffic_store.py / test_qbmanager.py / test_relocate_exec.py；按包收窄闸门不受影响，未修">
+<meta name="issue-summary" content="commands run test.pkg 恒有 4 条 subtest 红 —— DEFAULT_DESELECT 里 4 个 node id 指向已拆分消失的 tests/test_traffic_store.py / test_qbmanager.py / test_relocate_exec.py；已由提交 0967985a 更新为拆分后新路径，test.pkg 转绿">
 <title>test.pkg 4 条既有红：mutants DEFAULT_DESELECT 指向已拆分消失的测试文件 · test · 计划外问题</title>
 <style>
   :root {
@@ -95,14 +95,14 @@
   </nav>
 
   <header class="cover">
-    <div class="kicker">计划外问题（未修）· test</div>
+    <div class="kicker">计划外问题（已修）· test</div>
     <h1>test.pkg 4 条既有红：mutants DEFAULT_DESELECT 指向已拆分消失的测试文件</h1>
-    <p class="lede">commands run test.pkg 恒有 4 条 subtest 红 —— DEFAULT_DESELECT 里 4 个 node id 指向已拆分消失的 tests/test_traffic_store.py / test_qbmanager.py / test_relocate_exec.py；按包收窄闸门不受影响，未修</p>
+    <p class="lede">commands run test.pkg 恒有 4 条 subtest 红 —— DEFAULT_DESELECT 里 4 个 node id 指向已拆分消失的 tests/test_traffic_store.py / test_qbmanager.py / test_relocate_exec.py；已由提交 0967985a 更新为拆分后新路径，test.pkg 转绿</p>
     <div class="meta-row">
       <div class="item"><div class="k">编号</div><div class="v">26-11-06-0635-test-mutants-deselect-table-drift</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-06 06:35</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">.commands/mutants</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">clone2/agent</div></div>
     </div>
@@ -170,11 +170,14 @@ AssertionError: False is not true : tests/test_traffic_store.py::test_v4_parse_s
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-11-06 06:35 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-06 09:35 — 提交 <code>0967985a</code>（分批评审改造批）以 scope-guard 例外 1「不修则本次交付跑不起来」计划外修复本件 4 条悬空路径，未及时翻状态</li>
+      <li>2026-11-10 — 状态 Open → Done（kb.status）：复验修复已生效，补记收口</li>
     </ul>
     <h3>复验</h3>
     <p>入池前已复验：2026-11-06 06:31 重跑 <code>commands run test.pkg</code>，<strong>仍复现</strong>（<code>4 failed, 328 passed, 11 subtests passed in 170.90s</code>，原文见 §02）；三个 <code>.py</code> 路径仍不存在。认领时按防过期原则第 5 条再重跑一次锚点并补记。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><strong>实际修法</strong>（2026-11-10 收口核实）：与建议修法一致但已在更早的批次落地 —— 提交 <code>0967985a</code>（2026-11-06 09:35，分批评审改造批）以 scope-guard 例外 1 顺手修掉：4 条 node id 逐条更新为拆分后的新路径 <code>tests/test_traffic_store_codec.py::test_v4_parse_skeleton_single_point</code>、<code>tests/test_qbmanager_loop.py::test_periodic_flush_is_wired_in_run_loop</code>、<code>tests/test_qbmanager_query.py::test_qbmanager_source_has_no_web_state_fields</code>、<code>tests/test_relocate_exec_misc.py::test_spawn_args_pinned</code>；只改路径，未动 deselect 语义，无条目退役。该批提交信息已点名本件所涉缺陷（DEFAULT_DESELECT 4 条悬空路径），但未提本件编号，且当时未翻状态、遗留 Open 至今。</p>
+    <p><strong>验证方式与数字</strong>（2026-11-10）：① 4 个新路径与函数 <code>grep -c</code> 各命中 1 处，均存在；② 重跑复现命令 <code>commands run test.pkg</code> 转绿 —— <code>417 passed, 15 subtests passed in 40.99s</code>（修复前 4 failed），原 4 条 <code>DeselectTableTest::test_default_deselect_entries_exist</code> subtest 红全部消除；<code>DeselectTableTest</code> 双向守阵随包全量通过。</p>
   </section>
 
   <footer>
