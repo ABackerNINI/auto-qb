@@ -52,3 +52,4 @@
 - **撤终态拒撤**: `relocate_cancel` 对终态 job(FAILED/DONE/CANCELLED)恒 blocked(gate=`cancel_terminal`), 失败账不被覆盖、已收尾数据不再被搬回; 回迁走反向再迁移。
 - **撤销回搬 fire-and-forget 豁免**: 对放行相位(MOVED/ARMED)的回搬在 `setLocation(src)` 下发后立即落 CANCELLED 并 `_resume_members`, 回搬过程脱离 job 跟踪 —— 回搬中断则数据分居 src/dst 无账可对。残余风险**拍板接受**(B9 已在拒撤守卫注释注明不取对账轮询方案, 不为此引入对账状态机); 边界: 仅撤销回搬, 迁移本体不豁免。
 - **建链幂等**: `_build_links` 对盘上已存在且恰指向目标的别名/链接跳过入账(崩溃窗口孤儿可续建), 失败回滚 `_rollback_links` 按 plan 全量清单清理孤儿; 真冲突(指向别处)保守报错不删。
+- **裂组口径**: 终态(failed/done/cancelled)job 退出 `resolve_physical` 登记表(TERMINAL_PHASES)→ 组键物理解析第 1 层断供; file_links 形态不改目录 realpath(第 2/3 层不并组)→ 真失败期间组视图可能按 save_path 分行(设计内, 现场保留语义的一部分; 「qB 列目录不解析文件级 symlink」类假阴性已修, 见 plans/26-11-10-0230-plan-relocate-listing-false-negative.html)。运行时F自检对「qB 列目录返回链接对象元数据」判 skipped(2026-11-10, `relocate_proof._link_object_hit`), file_links+symlink 假阴性消除。

@@ -13,4 +13,4 @@
 | 卷 | 主题范围 | 条数 |
 |---|---|---|
 | [1](_index-1.md) | `alias-links.md` … `page-scraping.md` | 26 |
-| [2](_index-2.md) | `platform-fs.md` … `windows-relocate-traps.md` | 25 |
+| [2](_index-2.md) | `platform-fs.md` … `windows-relocate-traps.md` | 26 |

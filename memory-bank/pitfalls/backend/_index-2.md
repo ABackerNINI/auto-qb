@@ -1,7 +1,7 @@
 # backend — 后端 / qB / 平台 · 卷 2/2
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `platform-fs.md` … `windows-relocate-traps.md`(共 25 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `platform-fs.md` … `windows-relocate-traps.md`(共 26 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
@@ -12,6 +12,7 @@
 | [prefix-rewrite-nested-root.md](prefix-rewrite-nested-root.md) | `core/fastresume.rewrite_save_paths` 初版「先查新根前缀命中 ⇒ already 跳过」在 new_root 是 old_root 真前缀(父方向嵌套, new<old)时误判: 值命中新根前缀只因它命中旧根(旧根以新根开头), 并非「已在新根… | 写前缀替换, 幂等判定, already 跳过, 嵌套根, 新旧路径包含关系, 改写永不生效, 核验永不过, journal 悬挂 |
 | [qb-api.md](qb-api.md) | qB 版本差异、`sync/maindata` 增量语义、`torrents/add` 的响应形态与选项缺省语义、`TorrentRecord` 的唯一所有权 —— 改数据层前必读。 | 改 qbapi, 改 store, 改 TorrentRecord, 改 apply_sync, 加种子字段, 全局限速, qB 状态, 添加种子, torrents/add, 添加后开始, stopped, autoTMM, 自动种子管理… |
 | [qb-content-path-semantics.md](qb-content-path-semantics.md) | qB Web API 的 `content_path` 报的是**逻辑完成形态**的路径 —— 单文件种子在文件尚未落盘、或启用了「未完成文件加 .!qB 扩展名」时, 该路径在磁盘上**不存在**, qB 不会报空也不会报后缀名。对它做存在性分流时若写「非目录即文件」(`isd… | content_path, root_path, open-path, open_path, 单文件种子, 下载中, 未落盘, .!qB, 未完成扩展名, 目标文件不存在, 打开目标文件夹失败, 定位选中, select, 解析顺序, 辅种… |
+| [qb-dir-listing-no-symlink-resolve.md](qb-dir-listing-no-symlink-resolve.md) | qB(Windows, 5.2.3 实测)目录列举对文件级 symlink 返回 reparse point 自身元数据(size=0/mtime=建链时刻), 不解析目标 —— 凡拿「列目录元数据」当「qB 能否经链接读数据」代理的判定必假阴性; 修复 = 链接对象判别(qB… | getDirectoryContent, 列目录, symlink, 链接跟随, 运行时F, 假阴性, 链接对象 |
 | [qb-fastresume-edit.md](qb-fastresume-edit.md) | 改 qB 的 BT_backup fastresume 有四条铁律 —— ①qB 在线时写入必被秒级覆盖(pause/start/标签等 ~20 类操作挂 `deferredRequestResumeData`, 实测 0.5s), 只能写 qB 下线窗口; ②save path… | fastresume, BT_backup, qBt-savePath, save_path, 改路径, relocate 收尾 |
 | [qbmanager-retired-names.md](qbmanager-retired-names.md) | QbManager 上抽新方法/加新属性时, 命名会撞**别名冻结守阵**(`tests/test_qbmanager_alias_freeze.py`)——退役旧名(分诊清单 `26-10-01-0350-plan-web-state-alias-disposal.triage… | qbmanager, 抽方法, 抽私有方法, 重构命名, _load_state, 退役名, alias_freeze, 复活, 分诊清单, QbManager 新方法 |
 | [release-record-baseline.md](release-record-baseline.md) | 一份凭据(放行/授权/豁免记录)若靠「与签发时的状态快照比对」来判断是否失效, 快照就是 | 放行记录, verified, 签发, 锚点, 快照, 漂移, drift, 永续有效, 永久记录, 凭据, 三处写入点, 签发即作废 |
