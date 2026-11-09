@@ -6,7 +6,8 @@
 
 FROZEN 由只读全库扫描生成: key = (仓库根相对路径, 字符类), value = 该类在该文件的命中处数。
 带病上岗 —— 存量全登记, 只拦新增; 部分递减不红, 但清光一类后必须同步撤下该条目
-(否则回加会被放过), 由 test_repo_matches_frozen 强制。
+(否则回加会被放过), 由 test_repo_matches_frozen 强制。2026-11-09 存量全量清偿完毕后本表已归零
+(空字典), 机制保留: 后续任何新增直接判红, 不再走冻结。
 
 生成口径就是本模块的 SCAN_* / EXCLUDE_* / EXEMPT_CELLS 常量, 与守阵 scan() 同源。
 本文件与守阵均不得出现表 A 的字面字符 —— 合成红验一律用 chr() / U+XXXX 文字描述构造。
@@ -124,29 +125,4 @@ EXEMPT_CELLS: dict[tuple[str, str], str] = {
 }
 
 # ---- 冻结清单 (机械生成, 勿手改) ----
-FROZEN: dict[tuple[str, str], int] = {
-    ('.commands/my-commit-flow/.my-commit-flow.toml', 'dingbats'): 6,
-    ('.commands/my-commit-flow/.my-commit-flow.toml', 'misc_symbol'): 4,
-    ('.commands/my-commit-flow/scripts/_pipeline.py', 'circled'): 13,
-    ('.commands/my-commit-flow/scripts/_pipeline.py', 'dingbats'): 8,
-    ('.commands/my-commit-flow/scripts/_ship_config.py', 'misc_symbol'): 2,
-    ('.commands/my-commit-flow/scripts/commit.py', 'circled'): 4,
-    ('.commands/my-commit-flow/scripts/commit.py', 'dingbats'): 1,
-    ('.commands/my-commit-flow/scripts/commit.py', 'misc_symbol'): 8,
-    ('.commands/my-commit-flow/scripts/push.py', 'dingbats'): 1,
-    ('.commands/my-commit-flow/scripts/sync.py', 'circled'): 5,
-    ('.commands/my-commit-flow/scripts/sync.py', 'dingbats'): 1,
-    ('.commands/my-commit-flow/scripts/test_pipeline.py', 'circled'): 2,
-    ('.commands/my-commit-flow/scripts/test_pipeline.py', 'dingbats'): 1,
-    ('.commands/my-commit-flow/scripts/test_snapshot.py', 'circled'): 4,
-    ('.commands/my-commit-flow/scripts/test_sync.py', 'circled'): 3,
-    ('.commands/release/config.toml', 'circled'): 8,
-    ('.commands/review/config.toml', 'circled'): 2,
-    ('.commands/review/config.toml', 'misc_symbol'): 1,
-    ('.commands/review/scripts/check_review_trace.py', 'circled'): 6,
-    ('.commands/review/scripts/check_review_trace.py', 'dingbats'): 2,
-    ('.commands/review/scripts/review_pack.py', 'circled'): 3,
-    ('.commands/review/scripts/test_review_pkg.py', 'dingbats'): 25,
-    ('.commands/test/config.toml', 'dingbats'): 1,
-    ('.commands/test/scripts/linux_ci.py', 'circled'): 2,
-}
+FROZEN: dict[tuple[str, str], int] = {}

@@ -122,7 +122,7 @@ def git(*args: str) -> str:
     **只去掉末尾换行, 不能整段 strip()** —— 否则 `git status --porcelain` 首行的首列空格
     (表示"无暂存改动")会被吃掉, 进而把路径首字符也带歪, 红线匹配会静默放行。
 
-    ⚠ 与 `_pipeline.run_git` 的分工: 这里查的是本地 ref / config, 重试没有意义, 超时只为兜住
+    WARN: 与 `_pipeline.run_git` 的分工: 这里查的是本地 ref / config, 重试没有意义, 超时只为兜住
     "挂死"这一种意外; 网络命令(push / fetch / ls-remote)一律走 `_pipeline.run_git`(20s × 3 次)。
     """
     try:
@@ -382,7 +382,7 @@ def render_template(root: Path) -> str:
         "",
         'branch = ""                    # 留空 = 跟当前分支',
         f"main_candidates = {arr(names or ['origin'])}",
-        "# ⚠ main_host_mark 取的是 `git remote -v` 里的**第一个**远端 —— 若它其实是镜像, 这里就填错了, 请核对",
+        "# WARN: main_host_mark 取的是 `git remote -v` 里的**第一个**远端 —— 若它其实是镜像, 这里就填错了, 请核对",
         f'main_host_mark  = "{main_mark}"   # 主线 URL 特征; 留空 = 按候选名顺序取第一个存在的',
         f'mirror          = "{names[1] if len(names) > 1 else ""}"',
         f'mirror_host_mark = "{mirror_mark}"',

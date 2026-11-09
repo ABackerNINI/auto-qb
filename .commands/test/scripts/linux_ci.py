@@ -5,8 +5,8 @@
 
 **配方与两个必踩点**(单点在 [pitfalls/testing/patching.md](../../../memory-bank/pitfalls/testing/patching.md)
 「Docker 等价复现」节, 本文件不复述理由):
-① **不要删容器内 `/work/.git`** —— `test_commands_engine` 的 `find_root()` 靠向上找 `.git`, 删了多 5 条假红;
-② 先删宿主的 Windows `.venv` 再由 `uv sync` 重建(否则 Linux 上拿到 Windows 二进制)。
+1. **不要删容器内 `/work/.git`** —— `test_commands_engine` 的 `find_root()` 靠向上找 `.git`, 删了多 5 条假红;
+2. 先删宿主的 Windows `.venv` 再由 `uv sync` 重建(否则 Linux 上拿到 Windows 二进制)。
 
 镜像钉 `python3.12`(与 CI 矩阵的 3.12 对齐; 3.13 用 `<args>` 换镜像即可)。
 输出全文透传 —— 平台差异排查要看的是 FAILED 明细与覆盖率行, 不是只有结论。

@@ -6,20 +6,20 @@ confirmed = true
 [tasks."review.pack"]
 run     = ["uv run python .commands/review/scripts/review_pack.py pack <args>"]
 timeout = 120
-when    = "code-review skill ③ 评审包：每批收尾、派遣评审子代理之前"
+when    = "code-review skill 第 3 步 评审包：每批收尾、派遣评审子代理之前"
 note    = "--base <rev> 必填（= 上一条带 `Review:` 的提交，即闸门锚点；拿不准问用户）。输出基线与 HEAD hash、diff 统计与 400 行分档提示、文件清单、红线/安全敏感面预警 —— 红线清单与 my-commit-flow 闸门同源（读 .commands/my-commit-flow/.my-commit-flow.toml 的 red_lines/warn_lines，缺文件给可见警告不静默降级）。输出含基哈希（=整批过滤 diff 哈希，提交闸门据此与 trailer 的 `· 基` 比对，评审后有新改动会判红）。分档与预警是提示不是闸门，拦截仍归提交闸门"
 
 [tasks."review.check"]
 run     = ["uv run python .commands/review/scripts/review_pack.py check <args>"]
 timeout = 120
-when    = "code-review skill ⑤ 产出裁决：reviewer 交回 findings JSON 后、采信任何一条之前"
+when    = "code-review skill 第 5 步 产出裁决：reviewer 交回 findings JSON 后、采信任何一条之前"
 note    = "--findings <json文件|-> 必填（- 指 stdin），--root 可指定仓库根（默认 cwd）。逐条校验：字段齐全（file/line/quote/severity/claim/relevance/fix）、severity/relevance 枚举合法、quote 与源码逐字比对（单行内连续片段 ≥4 字符，行号允许 ±3 邻近，--window 可调）。REFUTE 的发现直接弃、不复核；rc=0 全部通过 / rc=1 存在被弃条目 / rc=2 用法或环境错误。存量评审 R4 用法：--root <快照目录>（路线会话的 review.lane.start 产物），引文对快照逐字比对"
 
 [tasks."review.trace"]
 run     = ["python .commands/review/scripts/check_review_trace.py <args>"]
 timeout = 60
 when    = "提交闸门(每次提交跑): 批内累计改动是否需要评审、`Review:` trailer 声明与实算是否一致"
-note    = "批次 = 最近一条带 Review:/Review-Skip: 的提交 → 当前工作树(锚点现算, 不用填 hash; 历史 Skip 照旧识别, 不追溯)。判据顺序: 实算恒 0(纯记账类/生成物, 及 0 行二进制改动)且无 Review: trailer 才静默; 带 trailer 的 0 行批不短路照走全链校验, 基比对可达(26-11-08-1701: 二进制改动实算恒 0, 基比对是它唯一的机检面) → Review 行校验(声明行数 == 实算 ±0; blocker/修/入池 数字齐, 修/入池/检 P/T 为全轮累计且 P ≥ 修+入池; `· 基 <12hex>` 必填且与闸门重算的整批过滤 diff 哈希一致 —— 不一致=评审后有新改动, 重跑 review.pack 取新基补一轮复评; `· 轮 R` 缺省 1, 写了须整数 ≥1; >400 行须 `· 派发 ≥2`) → Review-Skip 判红(豁免已退役, 理由长短不再看) → 其余拦下(50 行下限已退役: 可评行数 >0 即需 Review: trailer)。安全敏感面 = red_lines ∪ 路径标记词(与 review_pack 同源), 命中不论行数都要评。stdout 静默即通过; 红给一行原因 + 下一步。⚠ 用裸 python 不用 uv run: 脚本纯 stdlib, 而 uv/console-script 在本仓有 trampoline 坏掉的先例(pitfalls/ops/venv-trampoline-clone-copy.md), 提交闸门不能押在它上面"
+note    = "批次 = 最近一条带 Review:/Review-Skip: 的提交 → 当前工作树(锚点现算, 不用填 hash; 历史 Skip 照旧识别, 不追溯)。判据顺序: 实算恒 0(纯记账类/生成物, 及 0 行二进制改动)且无 Review: trailer 才静默; 带 trailer 的 0 行批不短路照走全链校验, 基比对可达(26-11-08-1701: 二进制改动实算恒 0, 基比对是它唯一的机检面) → Review 行校验(声明行数 == 实算 ±0; blocker/修/入池 数字齐, 修/入池/检 P/T 为全轮累计且 P ≥ 修+入池; `· 基 <12hex>` 必填且与闸门重算的整批过滤 diff 哈希一致 —— 不一致=评审后有新改动, 重跑 review.pack 取新基补一轮复评; `· 轮 R` 缺省 1, 写了须整数 ≥1; >400 行须 `· 派发 ≥2`) → Review-Skip 判红(豁免已退役, 理由长短不再看) → 其余拦下(50 行下限已退役: 可评行数 >0 即需 Review: trailer)。安全敏感面 = red_lines ∪ 路径标记词(与 review_pack 同源), 命中不论行数都要评。stdout 静默即通过; 红给一行原因 + 下一步。WARN: 用裸 python 不用 uv run: 脚本纯 stdlib, 而 uv/console-script 在本仓有 trampoline 坏掉的先例(pitfalls/ops/venv-trampoline-clone-copy.md), 提交闸门不能押在它上面"
 
 [tasks."review.lane.manifest"]
 run     = ["uv run python .commands/review/scripts/review_lane.py manifest <args>"]

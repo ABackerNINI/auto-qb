@@ -33,7 +33,7 @@
 - test_gate_failure_blocks_commit         闸门红 → 提交失败 + 闸门名 + 失败输出, 不产生提交
 - test_push_failure_is_partial            推送未完成 → 退出码仍 0 + 补推提示; 消息文件照常消费
 - test_no_push_skips_sync_and_push        --no-push 不同步不推送(离线可用), 一行注明未推送
-- test_warn_lines_note_on_success         warn_lines 命中 → 成功路径附一行 ⚠(唯一例外, D5)
+- test_warn_lines_note_on_success         warn_lines 命中 → 成功路径附一行 WARN:(唯一例外, D5)
 - test_message_kept_on_commit_fail        git commit 失败 → 消息文件保留
 - test_message_kept_on_verify_fail        ref 核对失败且 HEAD 消息与文件不匹配(ref 真丢) → 消息文件保留
 - test_message_consumed_on_verify_fail_when_head_matches
@@ -998,7 +998,7 @@ def test_warn_lines_note_on_success(repo, monkeypatch, capsys):
     rc = commit_mod.main([])
     out = capsys.readouterr().out
     assert rc == 0
-    assert any(l.startswith("⚠ 已包含: 想法.md") for l in out.splitlines())  # 成功路径唯一例外(D5)
+    assert any(l.startswith("WARN: 已包含: 想法.md") for l in out.splitlines())  # 成功路径唯一例外(D5)
 
 
 def test_message_kept_on_commit_fail(repo, monkeypatch, capsys):

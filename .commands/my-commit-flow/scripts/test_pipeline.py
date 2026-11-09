@@ -471,7 +471,7 @@ class GitRetryTest(unittest.TestCase):
         self.assertEqual(_pipeline._subcommand(["-c", "a=b"]), "")
 
     def test_subcommand_skips_git_executable(self) -> None:
-        """❗`run_git` 传的是**完整 argv**(首元素是 `git`) —— 不跳它就把子命令读成 "git",
+        """! `run_git` 传的是**完整 argv**(首元素是 `git`) —— 不跳它就把子命令读成 "git",
         三档判据全部失效、重试静默失效(2026-10-06 实写时踩到)。"""
         self.assertEqual(_pipeline._subcommand(["git", "push", "gitee", "develop"]), "push")
         self.assertEqual(_pipeline._subcommand(["git.exe", "commit", "-F", "m"]), "commit")
@@ -597,7 +597,7 @@ class SmokeSafetyTest(unittest.TestCase):
     """闸门冒烟只给脚本加 `--help` —— 而 `--help` 未必被脚本认。
 
     2026-10-03 实测: `sync.py --help` 把陌生参数当无参, **真的同步了一次**; `push.py --help`
-    同款, 那会真的推。修复两头: ①展开支持 `|--with-safety` 过滤; ②本用例机检**配置里那两条
+    同款, 那会真的推。修复两头: 1) 展开支持 `|--with-safety` 过滤; 2) 本用例机检**配置里那两条
     冒烟闸门确实带了过滤** —— 少了它, 下一个写"无参即真动作"的人会再踩一次(且是静默的)。
     """
     CONFIG = Path(__file__).resolve().parent.parent / ".my-commit-flow.toml"

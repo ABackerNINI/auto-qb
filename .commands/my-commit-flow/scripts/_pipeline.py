@@ -39,11 +39,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _ship_config import CONFIG_NAME, ConfigMissing, config_problems, find_root, find_skill_dir, init_config, load_config  # noqa: E402
 
 # ------------------------------------------------------------------ 子进程防挂死
-# ❗Windows 上 `subprocess.run(capture_output=True)` 会**无限挂住**, 两种入口都实测到过
+# ! Windows 上 `subprocess.run(capture_output=True)` 会**无限挂住**, 两种入口都实测到过
 #   (2026-10-03 定位, 见 memory-bank/pitfalls/testing/parallel-run.md):
-#   ① `_winapi.CreateProcess`(即 `Popen.__init__`)在大量 spawn / 高负载下不再返回
+#   1. `_winapi.CreateProcess`(即 `Popen.__init__`)在大量 spawn / 高负载下不再返回
 #      —— 本机 4 个 clone 同时跑测试时, 约第 800 次 spawn 起概率性永久阻塞;
-#   ② `communicate()` 里 join 读线程: git 的**孙进程**继承了管道写端且不退出时, 读端永远
+#   2. `communicate()` 里 join 读线程: git 的**孙进程**继承了管道写端且不退出时, 读端永远
 #      等不到 EOF —— 此时连 `subprocess.run(timeout=…)` 也救不了(timeout 只杀直接子进程,
 #      `communicate()` 仍阻塞在 join)。
 #   处置: 全程跑在**看门狗线程**里, 硬截止到点就 `taskkill /F /T` 整棵进程树 + 关掉我们这端
@@ -56,18 +56,18 @@ GIT_TIMEOUT = float(os.environ.get("COMMAND_FLOW_GIT_TIMEOUT", "20"))
 
 # ------------------------------------------------------------------ git 命令: 单次超时 + 有界重试
 # 动机(2026-10-06 用户指出): Gitee 会间歇性卡住(不报错, 就是不返回) —— 旧行为要等满 120s 才被杀,
-# 于是「提交成功(未推送)」+ 手工 `ship.push` 成了常态。修法两件: ①单次超时 20s;
-# ②失败后**有界重试**, 全部尝试都失败才判失败(重试层对 push / pull / fetch 等所有 git 命令生效)。
+# 于是「提交成功(未推送)」+ 手工 `ship.push` 成了常态。修法两件: 1) 单次超时 20s;
+# 2) 失败后**有界重试**, 全部尝试都失败才判失败(重试层对 push / pull / fetch 等所有 git 命令生效)。
 #
 # 为什么不是「任何非 0 都重试」: 有些调用的**非 0 是正常答案**(`cat-file -e` 判路径在不在 HEAD、
 # `merge-tree` 判能否干净合流), 盲重试会把正常答案拖成 3 倍耗时; 而网络子命令的失败签名五花八门
 # (网关 502 / 代理重置 / TLS 抖动), 靠签名白名单必然漏。所以分三档(判据单点: `_retryable`):
-#   ① 网络子命令(推 / 拉 / 取) —— **失败即重试**: 签名靠不住, 而它们**幂等**(fetch / ls-remote 只读;
+#   1. 网络子命令(推 / 拉 / 取) —— **失败即重试**: 签名靠不住, 而它们**幂等**(fetch / ls-remote 只读;
 #      push 同 ref 重推是 no-op 或 "up-to-date") ⇒ 重试永远安全, 还能顺手救回「推成功但被判失败」。
-#   ② 非幂等的本地写(commit / rebase / merge / reset …) —— **只给超时, 不给重试**:
+#   2. 非幂等的本地写(commit / rebase / merge / reset …) —— **只给超时, 不给重试**:
 #      超时被杀 ≠ 没执行完; 再跑一次轻则把 "nothing to commit" 当成失败, 重则 amend 又挪一次 hash
 #      把步骤链写坏(v3.1 的 旧hash→新hash 就对不上了)。
-#   ③ 其余(只读查询 + 幂等写) —— 只在**可能自愈**的失败上重试: 超时(rc=-1)或命中瞬时签名。
+#   3. 其余(只读查询 + 幂等写) —— 只在**可能自愈**的失败上重试: 超时(rc=-1)或命中瞬时签名。
 GIT_ATTEMPTS = int(os.environ.get("COMMAND_FLOW_GIT_ATTEMPTS", "3"))
 GIT_RETRY_BACKOFF = float(os.environ.get("COMMAND_FLOW_GIT_RETRY_BACKOFF", "1"))
 
@@ -78,7 +78,7 @@ NON_IDEMPOTENT_SUBCOMMANDS = frozenset(
         "revert", "stash", "tag", "update-ref", "branch", "worktree", "clean"
     }
 )
-# 瞬时网络失败的已知签名 —— 只作第③档的补充判据(网络子命令不靠它, 见上)。
+# 瞬时网络失败的已知签名 —— 只作第 3 档的补充判据(网络子命令不靠它, 见上)。
 TRANSIENT_MARKS = (
     "Recv failure", "Connection was reset", "Could not resolve host", "Failed to connect", "Connection timed out",
     "Operation timed out", "The remote end hung up", "remote end hung up", "early EOF", "RPC failed",
@@ -138,7 +138,7 @@ def run_capture(
             box["err"] = f"超时 {timeout:.0f}s (进程树已杀)"
             if proc is not None:
                 box["pid"] = proc.pid
-                # ❗必须**真的收尸**: 只记下 pid 不杀, 子进程会继续活着占着 cwd 与管道
+                # ! 必须**真的收尸**: 只记下 pid 不杀, 子进程会继续活着占着 cwd 与管道
                 # (调用方 tearDown 立刻 rmtree 临时目录 → WinError 32; 实测 2026-10-03)。
                 # `subprocess.run` 在这里内部会 kill(), 裸 Popen 得自己做 —— 连孙子一起杀
                 # 再 wait() 掉进程, Windows 上 cwd 锁才真正释放。
@@ -167,7 +167,7 @@ def run_capture(
 def _subcommand(args) -> str:
     """从 git argv 里取子命令 —— 跳过开头的可执行名与 `-c k=v` / 其余前缀旗标。
 
-    ❗必须吃掉开头的 `git`: `run_git` 拿到的是**完整 argv**(首元素是可执行名), 不跳它就会永远
+    ! 必须吃掉开头的 `git`: `run_git` 拿到的是**完整 argv**(首元素是可执行名), 不跳它就会永远
     把子命令读成 "git" ⇒ 三档判据全部失效 —— `push` 被当成本地只读命令, 非 0 不再重试,
     恰好把本功能**静默修没**(2026-10-06 实写时踩到, 由 GitRetryTest 的 push / commit 两条守住)。
     """
@@ -298,14 +298,14 @@ def changed_files(with_safety: bool = False) -> tuple[list[str], list[str]]:
     供 `<each:GLOB|--with-safety>` 的展开把危险脚本剔除 —— **闸门冒烟不做「只挑文件名」的静态
     规则**: 判据留在只有脚本自己知道的地方(见 `_is_parameterless_action` 所在的 gen 脚本)。
 
-    ❗必须带 `-uall`: 默认模式下**未跟踪目录只报一条 `?? <dir>/`**, 于是 `<each:GLOB>` 之类
+    ! 必须带 `-uall`: 默认模式下**未跟踪目录只报一条 `?? <dir>/`**, 于是 `<each:GLOB>` 之类
     按文件的展开**匹配不到新加的文件** —— 新增脚本拿不到冒烟, 且是静默的。
 
-    ❗`--with-safety` 必须走 `-z`(2026-10-03): 危险脚本的状态字符挂在**整段末尾**, 非 -z 形态
+    ! `--with-safety` 必须走 `-z`(2026-10-03): 危险脚本的状态字符挂在**整段末尾**, 非 -z 形态
     下 rename 记录的 `old -> new` 里 new 之后才是它 —— 用普通行解析会把状态字符切成名单的一部分。
     """
     staged, unstaged = [], []
-    # ❗必须关 quotepath(2026-09-29 实测): 默认 ON 时非 ASCII 文件名被八进制转义加引号
+    # ! 必须关 quotepath(2026-09-29 实测): 默认 ON 时非 ASCII 文件名被八进制转义加引号
     #   (`?? "\346..."`), 解析出的路径不存在 → exists()=False → 按"已暂存删除"被静默跳过
     #   → 什么都没暂存, commit 报 "nothing added"。off 后路径为原始 UTF-8, 解析才对得上。
     if with_safety:
@@ -345,7 +345,7 @@ def hit(files: list[str], patterns) -> list[str]:
 def gates_for(files: list[str], gates: list[dict]) -> list[dict]:
     """命中的闸门 —— 返回完整 dict(auto / timeout 在里头, 后面要靠它们决定"跑不跑")。
 
-    ❗`match` 里含空串 = **每次提交都命中**, 哪怕本次改动清单为空。`hit()` 靠 startswith 匹配,
+    ! `match` 里含空串 = **每次提交都命中**, 哪怕本次改动清单为空。`hit()` 靠 startswith 匹配,
     空清单上恒为 False —— 于是"每次提交跑"的闸门在**纯删除提交**上静默不跑(commit.py 传给它的
     `present` 只收工作区仍存在的路径): 删 500 行可零评审入库(2026-11-06 评审实测)。
     """
@@ -478,7 +478,7 @@ def _safe_files(files: list[str], root) -> tuple[list[str], list[str]]:
         # 把超时收成 rc=-1(不抛), 所以判据必须显式带上 rc(2026-10-03, 改错会静默放行)。
         proc = run_capture([sys.executable, str(full), "--safety"], cwd=root, timeout=10)
         out = f"{proc.stdout or ''}\n{proc.stderr or ''}"
-        # 摘掉(不安全)判据: ①脚本自认「无参即真动作」, 或 ②探针没跑通(rc != 0 —— 超时 /
+        # 摘掉(不安全)判据: 1) 脚本自认「无参即真动作」, 或 2) 探针没跑通(rc != 0 —— 超时 /
         # 起不来 / 脚本报错)。只有「跑通且没自认危险」才留下冒烟。
         if proc.returncode != 0 or "action-without-args" in out:
             skipped.append(rel)
@@ -676,14 +676,14 @@ def config_stops(cfg: dict, src: Path) -> list[str]:
 
 
 # ------------------------------------------------------------------ 步骤登记(v3.1「改写留痕」)
-# ❗为什么要有它: 一次命令内部 HEAD 会被改写多次(提交 → 内部 rebase → 闸门改后 amend → 推送再同步),
+# ! 为什么要有它: 一次命令内部 HEAD 会被改写多次(提交 → 内部 rebase → 闸门改后 amend → 推送再同步),
 #   而 v3 只吐终值那一个 hash —— 执行者看到 hash 与印象不符就跑去查原因(2026-10-06 用户指出)。
 #   v3.1 的补法不是推翻它: **只补"真发生了"的步骤**, 绝不回到 v2 的检查表(那版一次成功 76 行)。
 #
 # 登记纪律(三条, 违反即重新引入噪音或新的疑惑):
-#   ① 改写 HEAD 的步骤**必须**登记, 且带 `旧hash→新hash` —— 相邻两步首尾同值 ⇒ 任何 hash 变化都可回溯;
-#   ② 没发生的步骤**一律不登记**(齐平 / 闸门复跑无改动 = 静默), 输出"跑了但什么都没做"本身就是噪音;
-#   ③ 登记(发生在动作内部, 按时间顺序)与打印(只在最终结果行之前, 由入口做)分离 ——
+#   1. 改写 HEAD 的步骤**必须**登记, 且带 `旧hash→新hash` —— 相邻两步首尾同值 ⇒ 任何 hash 变化都可回溯;
+#   2. 没发生的步骤**一律不登记**(齐平 / 闸门复跑无改动 = 静默), 输出"跑了但什么都没做"本身就是噪音;
+#   3. 登记(发生在动作内部, 按时间顺序)与打印(只在最终结果行之前, 由入口做)分离 ——
 #      步骤行打在结果行**上面**, 结果行本身逐字不动(它才是要贴进回复 / 档案的那个值)。
 #
 # 传递方式: 显式列表 `steps`, 由入口持有(sync / commit / push 的 main), 逐层透传给内部动作。

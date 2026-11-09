@@ -3,7 +3,7 @@ name      = "release"
 when      = "发版管线：触发词「发版」后的机械化执行（规程与判断点见 release skill；口径见 conventions/release.md）"
 confirmed = true
 
-# ① 提案：gitmoji 决策器人读输出（agent 改判留痕的输入）
+# 1. 提案：gitmoji 决策器人读输出（agent 改判留痕的输入）
 # 版本文件/正则走脚本默认（[tool.hatch.version].path + __version__ dunder 行）——
 # 引擎 shell 拼接下「含空格又含双引号」的参数无法安全过境，故不在 run 里传正则。
 [tasks."release.suggest"]
@@ -12,42 +12,42 @@ timeout = 120
 when    = "发版轮起点：机器按 gitmoji 决策表算提案（相对最近 v<数字> tag 的 delta）"
 note    = "<args> 可加 --json / --emit-changelog / --from-ref / --major（major 仅人工拍板放行）；提案≠拍板：agent 可改判但必须留痕（CHANGELOG 注记 + commit body 一句原因）"
 
-# ② 执行 bump：净树校验 → bump-my-version 改 __version__ 单行 → env.sync 刷元数据
+# 2. 执行 bump：净树校验 → bump-my-version 改 __version__ 单行 → env.sync 刷元数据
 [tasks."release.bump"]
 run     = ["uv run python .agents/skills/release/scripts/apply_bump.py --repo . --kind <args>"]
 timeout = 300
 when    = "拍板定档后执行（agent 追加 patch|minor|major）"
 note    = "bump-my-version 配置 commit/tag=false（守阵钉死）；只改文件，提交走 ship.commit 闸门"
 
-# ③ 构建 wheel：源根构建带 git 上下文（build hook 注 BUILD_ID 侧车）
+# 3. 构建 wheel：源根构建带 git 上下文（build hook 注 BUILD_ID 侧车）
 [tasks."release.build"]
 run     = ["uv build --wheel"]
 timeout = 300
 when    = "tag 前或建 Release 页前构建发布件"
 note    = "!不要用全量 `uv build`——它是 sdist→wheel 两段式，wheel 从解压 tarball 构建（无 .git），BUILD_ID 静默缺失"
 
-# ④ 快进合并：工作分支 -> 发布分支（显式 ref 推送，服务端拒非快进）
+# 4. 快进合并：工作分支 -> 发布分支（显式 ref 推送，服务端拒非快进）
 [tasks."release.merge"]
 run     = ["uv run python .agents/skills/release/scripts/ff_merge.py --repo . --to-branch master --remote <args>"]
 timeout = 300
 when    = "发版提交推上 gitee develop 之后"
-note    = "agent 追加远端名：先 gitee（主线）后 github（发版轮必须成功非静默，SKILL ⑤ 两跑）；分叉即停手要人（拍板 §09-10）；发布分支与工作分支同 commit，hash 溯源不分叉"
+note    = "agent 追加远端名：先 gitee（主线）后 github（发版轮必须成功非静默，SKILL 第 5 步 两跑）；分叉即停手要人（拍板 §09-10）；发布分支与工作分支同 commit，hash 溯源不分叉"
 
-# ⑤ CI 全绿门：tag 前核验发版提交的 GitHub check-runs 全绿
+# 5. CI 全绿门：tag 前核验发版提交的 GitHub check-runs 全绿
 [tasks."release.ci-gate"]
 run     = ["uv run python .agents/skills/release/scripts/ci_gate.py --gh-repo ABackerNINI/auto-qb <args>"]
 timeout = 1800
 when    = "release.merge 之后、release.tag 之前（拍板 §09-12）"
 note    = "红 -> 停 tag 前，修复后重走（管线可重入）；无鉴权 API 60 req/h 限额；gh CLI 缺席不阻塞"
 
-# ⑥ 打 tag：锚发版提交 + 显式 ref 推送 + ls-remote 核验
+# 6. 打 tag：锚发版提交 + 显式 ref 推送 + ls-remote 核验
 [tasks."release.tag"]
 run     = ["uv run python .agents/skills/release/scripts/tag_release.py --repo . --remotes gitee,github <args>"]
 timeout = 600
 when    = "ci-gate 全绿后（agent 追加 --tag v<major>.<minor>.<patch>）"
 note    = "tag 名不带 hash；幂等重入（已存在则校验指向而非重建）"
 
-# ⑦ Release 页：gitee 主线 + github 镜像，各尝试一次
+# 7. Release 页：gitee 主线 + github 镜像，各尝试一次
 [tasks."release.page"]
 run     = ["uv run python .agents/skills/release/scripts/release_page.py --gitee-repo ABacker/auto-qb --github-repo ABackerNINI/auto-qb <args>"]
 timeout = 300

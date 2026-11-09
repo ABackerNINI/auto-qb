@@ -85,7 +85,7 @@ def run_push(steps: list[str] | None = None) -> tuple[bool, str]:
 def main(argv: list[str] | None = None) -> int:
     import argparse
 
-    # ❗参数入口的判据(2026-10-03, 与 sync.py 同源):
+    # ! 参数入口的判据(2026-10-03, 与 sync.py 同源):
     #   `argv is None` = CLI 直跑 → 吃真实 sys.argv; 显式空表([]) = 测试裸调的动作入口。
     #   旧 `argv or []` 把 CLI 的 sys.argv 整个丢掉, `push.py --help` 会**真的推一次**。
     # (教训链: verify_ref.py 2026-09-22 → sync.py 2026-09-28 → 2026-10-03 定性为

@@ -237,7 +237,7 @@ def test_ahead_only_is_noop(env, monkeypatch):
 
 
 def test_no_steps_when_nothing_happened(env, monkeypatch):
-    """登记纪律②: 没发生的步骤一律不报 —— 齐平时零步骤行(run_sync 直接 return, 出口还差一圈麻烦)。"""
+    """登记纪律第 2 条: 没发生的步骤一律不报 —— 齐平时零步骤行(run_sync 直接 return, 出口还差一圈麻烦)。"""
     monkeypatch.chdir(env.a)
     steps: list[str] = []
     ok, line = sync_mod.run_sync(steps)
@@ -246,7 +246,7 @@ def test_no_steps_when_nothing_happened(env, monkeypatch):
 
 
 def test_step_line_traces_head_rewrite(env, monkeypatch):
-    """登记纪律① + ③: 改写 HEAD 的步骤必带 旧hash→新hash, 链尾 == 结果行 hash, 完事儿。"""
+    """登记纪律第 1 条 + 第 3 条: 改写 HEAD 的步骤必带 旧hash→新hash, 链尾 == 结果行 hash, 完事儿。"""
     monkeypatch.chdir(env.a)
     _push_remote_commit(env, "b.txt", "b\n")
     old = _git(env.a, "rev-parse", "HEAD")[:8]

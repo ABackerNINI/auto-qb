@@ -1,7 +1,7 @@
 """提交闸门的评审留痕检查 —— 「这一批要不要评、评过没有、声明与实算是否一致」。
 
 挂点: `.commands/my-commit-flow/.my-commit-flow.toml` 的 [[gates]] (每次提交跑, 无待评改动即静默)。
-设计口径单点: `.agents/skills/code-review/SKILL.md` ①(触发) / ②(批次与容量) / ⑦(留痕)。
+设计口径单点: `.agents/skills/code-review/SKILL.md` 1)(触发) / 2)(批次与容量) / 7)(留痕)。
 
 ## 为什么是"锚点法"而不是"自报 base"
 批次范围 = **最近一条带 `Review:` / `Review-Skip:` 的提交 → 当前工作树**。锚点从 git 历史现算,
@@ -261,10 +261,10 @@ def anchor_commit(root: Path) -> str:
     """主线(first-parent 路径)上最近一条带 `Review:` / `Review-Skip:` 的提交; 一条都没有时退回
     HEAD(冷启动只算工作树)。
 
-    ❗不设扫描窗口: 曾经用 `-200` 提速, 结果"上一条 trailer 在第 201 笔"时静默退回 HEAD ——
+    ! 不设扫描窗口: 曾经用 `-200` 提速, 结果"上一条 trailer 在第 201 笔"时静默退回 HEAD ——
     整段累计批被丢弃且无任何提示, 正好与"漏评提交滚进下一批"的连坐机制相反(2026-11-06 评审实测)。
     几千笔提交的 message 全量解析也就几百 KB, 不值得为它换一个静默失效点。
-    ❗必须 --first-parent: 侧分支 tip 自带 trailer 时(跨 clone 分支流的常态), 平铺 log 按提交时间
+    ! 必须 --first-parent: 侧分支 tip 自带 trailer 时(跨 clone 分支流的常态), 平铺 log 按提交时间
     会取到它 —— 而侧分支常从旧基线切出, 配合 _numstat 的树差会把主线在分支切出之后的全部已评
     工作整支算进「本批」(2026-11-08 实证: config-infra 分支 tip 80df0b9a 遮蔽主线锚点 70bba719,
     实算虚增 ~9600 行, 提交被死锁; 详见 issue 26-11-08-0903)。侧分支的提交已随它自己的 trailer
@@ -329,7 +329,7 @@ def decide(count: int, sensitive: list[str], message: str, base_hash: str | None
         declared = LINES_RE.search(line)
         if not declared:
             return False, (
-                f"`Review:` 行缺 `<N> 行` 声明(实算 {count} 行) —— 按 code-review skill ⑦ 的格式补齐"
+                f"`Review:` 行缺 `<N> 行` 声明(实算 {count} 行) —— 按 code-review skill 第 7 步的格式补齐"
                 " —— " + _skeleton(count)
             )
         if int(declared.group(1)) != count:
@@ -356,7 +356,7 @@ def decide(count: int, sensitive: list[str], message: str, base_hash: str | None
             missing.append("基(形状不对, 应为 `· 基 <12位hash>`)" if BASE_PRESENT_RE.search(line) else "基")
         if missing:
             return False, (
-                f"`Review:` 行缺字段: {'/'.join(missing)} —— 按 skill ⑦ 的格式补齐; "
+                f"`Review:` 行缺字段: {'/'.join(missing)} —— 按 skill 第 7 步的格式补齐; "
                 "检 P/T: T=送检发现数, P=引文逐字通过数(全轮累计); `· 基 <hash>` = review.pack 输出的"
                 "基哈希 —— " + _skeleton(count)
             )
@@ -396,7 +396,7 @@ def decide(count: int, sensitive: list[str], message: str, base_hash: str | None
 
     if sensitive:
         return False, (f"触碰安全敏感面: {'、'.join(sensitive[:3])} —— 不论行数都要评"
-                       "(code-review skill ①)")
+                       "(code-review skill 第 1 步)")
 
     return False, (
         f"本批累计 {count} 行待评未留痕 —— 先跑 code-review skill(批次 base = 最近一条 `Review:` 提交), "

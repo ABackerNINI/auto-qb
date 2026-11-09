@@ -135,7 +135,7 @@ def consume_message_file(msg_file: Path, root: Path) -> None:
         except OSError as exc:
             last = exc
             time.sleep(0.2 * (attempt + 1))
-    print(f"⚠ 消息文件删除失败({last}); 请手动删除 {msg_file}, 避免下次提交误读旧消息")
+    print(f"WARN: 消息文件删除失败({last}); 请手动删除 {msg_file}, 避免下次提交误读旧消息")
 
 
 def head_message() -> str:
@@ -147,10 +147,10 @@ def head_message() -> str:
 def message_matches_head(msg_file: Path) -> bool:
     """消息文件内容 == HEAD 提交消息 → 这条消息已经随一次提交落库(残留判定单点)。
 
-    两个消费点: ①ref 核对失败出口 —— HEAD 消息与本文件一致说明分支 ref 已指向本次提交,
+    两个消费点: 1) ref 核对失败出口 —— HEAD 消息与本文件一致说明分支 ref 已指向本次提交,
     核对红是其它两处滞后(packed-refs 落后, 2026-10-07 实证)的误报, 提交已落稳就该消费,
     不留「已入库消息」的残骸(修复 26-10-07: 残留会一直躺到下次提交覆盖, 期间可被当现状误读);
-    ②入口残留扫描 —— 上次落库后消息文件因任何路径漏删时, 下次 ship.commit 自愈, 并拦住
+    2) 入口残留扫描 —— 上次落库后消息文件因任何路径漏删时, 下次 ship.commit 自愈, 并拦住
     「旧消息被当新提交的消息复用」。判不匹配时宁可保留不误删(修好重跑还能用同一份消息)。
     """
     head = head_message()
@@ -298,8 +298,8 @@ def _remote_side(old_head: str, new_head: str) -> tuple[int, list[str]] | None:
     rsha 为什么这样取(计划 26-11-07-0201 落点 2 授权自定, 不按「先 ls-remote」走): rebase 刚把本地
     提交重放到远端 tip(rsha)上 —— new_head 历史 = 本地重放 M 笔 + rsha 及其祖先, 其中
     M = merge-base(old_head, new_head)..old_head 的笔数, 于是 rev-list 第 M+1 笔就是 rsha。好处:
-    ①零网络 —— ship.commit 的网络时刻刚在 sync 过完, 提交热路径不再添一次 ls-remote 等待;
-    ②免疫竞态 —— sync 与查询之间别的 clone 又推了一笔时, ls-remote 拿到的新 tip 对象还没 fetch,
+    1) 零网络 —— ship.commit 的网络时刻刚在 sync 过完, 提交热路径不再添一次 ls-remote 等待;
+    2) 免疫竞态 —— sync 与查询之间别的 clone 又推了一笔时, ls-remote 拿到的新 tip 对象还没 fetch,
     merge-base 直接失败; 本地推导只用已落对象库的历史。
     可靠性钉一道校验: 重放提交的 subject 序列必须与重放前逐条一致 —— rebase 会丢弃与远端 patch
     全同 / 合并后变空的本地提交, 那时第 M+1 笔会数偏, 校验不过就退回 ls-remote 旁证。
@@ -498,7 +498,7 @@ def main(argv: list[str] | None = None) -> int:
         for line in report.fixed:
             print(f"已自动修正: {line}")
     for line in report.warnings:
-        print(f"⚠ 提交信息: {line}")
+        print(f"WARN: 提交信息: {line}")
     if report.violations:
         for vid, detail in report.violations:
             print(f"  - [{vid}] {detail}")  # ASCII 前缀: 代码打印面禁图形符号(code-style 约束)
@@ -584,7 +584,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.no_push:  # 纯本地提交: 不同步不推送(离线可用), 合流留给补推时的 ship.push
         emit(steps, f"提交成功 {sha}(未推送 —— 补推: commands run ship.push)")
         if warn_files:
-            print(f"⚠ 已包含: {'、'.join(warn_files)} —— 确认是有意的")
+            print(f"WARN: 已包含: {'、'.join(warn_files)} —— 确认是有意的")
         return 0
 
     # 5 内部同步(提交先行, 2026-10-04): 树已净 —— 齐平 no-op / 分叉自动 rebase 恒可自动;
@@ -597,7 +597,7 @@ def main(argv: list[str] | None = None) -> int:
         emit(steps, f"提交成功 {sha}(未推送)")
         print(f"推送未完成: 同步失败{sep}{sync_line} —— 补推: commands run ship.push")
         if warn_files:
-            print(f"⚠ 已包含: {'、'.join(warn_files)} —— 确认是有意的")
+            print(f"WARN: 已包含: {'、'.join(warn_files)} —— 确认是有意的")
         return 0
 
     # 6 rebase 真合入了远端提交(HEAD 改写) → 闸门按同一份清单复跑一轮 —— 合并后的树才算数(检查项一个不删);
@@ -632,7 +632,7 @@ def main(argv: list[str] | None = None) -> int:
                 f"memory-bank 全量 + 全仓 HTML 参与 <changed:> 展开({len(merged_paths)} 个文件)"
             )
         ctx_rerun = dict(ctx, changed_extra=merged_paths)
-        #    ❗阶段标记: 评审留痕闸门(review.trace)按"锚点→工作树"算行数, 复跑时 rebase 进来的远端
+        #    ! 阶段标记: 评审留痕闸门(review.trace)按"锚点→工作树"算行数, 复跑时 rebase 进来的远端
         #    提交会被算进本批 → 假红。**用文件标记, 不用环境变量**: 闸门里会跑 pytest, 子进程继承
         #    env —— 实测 `COMMIT_FLOW_GATE_PHASE` 传下去后, 包里"跑闸门脚本并断言它判红"的自测全部
         #    拿到 0(齐红)。标记在 finally 删; 进程被杀导致残留时, 闸门脚本读到即消费(最多漏检一次)。
@@ -654,7 +654,7 @@ def main(argv: list[str] | None = None) -> int:
             for line in tail.splitlines():
                 print(f"    {line}")
             if warn_files:
-                print(f"⚠ 已包含: {'、'.join(warn_files)} —— 确认是有意的")
+                print(f"WARN: 已包含: {'、'.join(warn_files)} —— 确认是有意的")
             return 0
         st_r, un_r = changed_files()
         dirty_r = [p for p in st_r + un_r if (root / p).exists()]
@@ -666,7 +666,7 @@ def main(argv: list[str] | None = None) -> int:
                 emit(steps, f"提交成功 {head_now[:8]}(未推送)")
                 print(f"推送未完成: git add 失败 {path} —— {err[-1] if err else 'git 非 0'} —— 补推: commands run ship.push")
                 if warn_files:
-                    print(f"⚠ 已包含: {'、'.join(warn_files)} —— 确认是有意的")
+                    print(f"WARN: 已包含: {'、'.join(warn_files)} —— 确认是有意的")
                 return 0
         if dirty_r:
             before = head_now
@@ -677,7 +677,7 @@ def main(argv: list[str] | None = None) -> int:
                 emit(steps, f"提交成功 {head_now[:8]}(未推送)")
                 print(f"推送未完成: 闸门改动 amend 失败 —— {detail[-1] if detail else 'git 非 0'} —— 补推: commands run ship.push")
                 if warn_files:
-                    print(f"⚠ 已包含: {'、'.join(warn_files)} —— 确认是有意的")
+                    print(f"WARN: 已包含: {'、'.join(warn_files)} —— 确认是有意的")
                 return 0
             head_now = git_run("rev-parse", "HEAD").stdout.strip()
             # 闸门复跑改了文件 → amend 又挪了一次 tip: 不登记的话, 成功行的 hash 第三次失真
@@ -706,7 +706,7 @@ def main(argv: list[str] | None = None) -> int:
         sha = git_run("rev-parse", "HEAD").stdout.strip()[:8]
         emit(steps, f"提交成功 {sha}")
     if warn_files:
-        print(f"⚠ 已包含: {'、'.join(warn_files)} —— 确认是有意的")
+        print(f"WARN: 已包含: {'、'.join(warn_files)} —— 确认是有意的")
     return 0
 
 

@@ -28,11 +28,11 @@ each_limit = 99                 # <each:GLOB> 的展开条数上限(超了说明
 # 生成物冲突自动化解(计划 memory-bank/plans/26-10-03-1544):
 # 同步时若冲突 / 重叠**全部**落在可重跑的生成物上, 自动「任取一侧 + 重跑生成器 + 自证」,
 # 无需人工; 只要有一个手写文件参与, 行为与不配这三个键时逐字一致(该失败就失败)。
-# ⚠ 三个键必须同时加进 _ship_config.KEY_DEFAULTS, 否则会被按「顶层未知键」STOP。
+# WARN: 三个键必须同时加进 _ship_config.KEY_DEFAULTS, 否则会被按「顶层未知键」STOP。
 # ---------------------------------------------------------------------------
 auto_resolve_generated = true
 # 白名单来源: 打印生成器负责的全部路径(一行一个, 仓库相对)。
-# ⚠ **列错 = 静默丢内容**: 多一个其实不是生成物的路径, 冲突时就会把它当生成物丢弃(自证也救不回);
+# WARN: **列错 = 静默丢内容**: 多一个其实不是生成物的路径, 冲突时就会把它当生成物丢弃(自证也救不回);
 #   少一个则该冲突化解不了。唯一权威来源是生成器自己的 `--list`(集合单点 gen_all.py)。
 generated_list_cmd  = "python <skill-dir:memory-bank>/scripts/gen_all.py --list"
 # 重跑命令(自证 = 同一命令加 `--check`); 两步都走现成的 <skill-dir:NAME> 占位符解析。
@@ -55,9 +55,9 @@ generated_regen_cmd = "python <skill-dir:memory-bank>/scripts/gen_all.py"
 
 [[gates]]
 match = ["src/", "tests/"]
-# ❗不在这里抄命令 —— 走 `commands` 引擎的 `dev.fmt`(yapf 只在包里定义一处)。
+# ! 不在这里抄命令 —— 走 `commands` 引擎的 `dev.fmt`(yapf 只在包里定义一处)。
 #   改动清单由预检算(它才是"本次改了哪些文件"的权威), 经 `<changed:>` 展开后当 `<args>` 传给 task。
-# ⚠ 2026-10-08: yapf 的语法缓存目录 `%LOCALAPPDATA%\Google\YAPF\Cache` 不在 agent 沙箱白名单里
+# WARN: 2026-10-08: yapf 的语法缓存目录 `%LOCALAPPDATA%\Google\YAPF\Cache` 不在 agent 沙箱白名单里
 #   —— 每次跑都会刷一批被拒的临时 pickle(判据见 memory-bank/pitfalls/testing/sandbox-tool-cache.md)。
 #   实测**多数时候仍能在 <1s 内正常跑完**, 但当天确实观察到过挂死(100% 单核 + 持续写磁盘):
 #   故 timeout 收到 60s, 且引擎超时点会**杀整棵进程树**(不再是留孤儿继续烧)。
@@ -69,7 +69,7 @@ note  = "格式化: 只碰本次改过的 py 文件(经 commands 引擎调 dev.f
 
 [[gates]]
 match = ["src/", "tests/"]
-# ❗不在这里抄命令 —— 走 `commands` 引擎的 `test.quick`。命令只有一处定义(在 `.commands/test/`),
+# ! 不在这里抄命令 —— 走 `commands` 引擎的 `test.quick`。命令只有一处定义(在 `.commands/test/`),
 #   抄一份到这里就是第 N+1 处副本, 而"哪份才是生效的那份"不写在命令旁边(见 commands SKILL.md 初衷)。
 #   TMPDIR / cmd.exe 写法 / 引号这些陷阱跟着 task 走, 由包自持, 这里看不见也不需要看见。
 run   = ["python <skill-dir:commands>/scripts/run.py run test.quick"]
@@ -78,7 +78,7 @@ timeout = 900
 note  = "全量测试(跳覆盖率报表): 经 commands 引擎跑 test.quick, 红了即 STOP"
 
 [[gates]]
-# ❗这些脚本测试**不在 pytest 的 testpaths(tests/) 里** —— 不挂这条就永远没人跑,
+# ! 这些脚本测试**不在 pytest 的 testpaths(tests/) 里** —— 不挂这条就永远没人跑,
 #   等于"改了包却没有任何机检消费"(实测: 一条与 rebase 禁令相撞的旧文案在包里躺了很久)。
 # 2026-11-01 起按包收窄(计划 26-11-01-0434 方案 C): 一条拆两条 —— 改包文件由 test.pkg.scoped
 # 按 <changed:> 归并受影响包, 单包只跑该包、≥2 包保守整跑(D4); 引擎目录(.agents/skills/commands/)
@@ -149,11 +149,11 @@ note  = "相对链接存在性: 改名 / 搬家后的坏链不会让任何测试
 [[gates]]
 # 两处都扫: `.agents/skills/`(仍是通用 skill 的家) 与 `.commands/`(包内脚本 ——
 # my-commit-flow 的脚本就从前者迁到了后者)。
-# ❗`|--with-safety`(2026-10-03 修): 冒烟只给脚本加 `--help`, 而 `--help` 未必被脚本认 ——
+# ! `|--with-safety`(2026-10-03 修): 冒烟只给脚本加 `--help`, 而 `--help` 未必被脚本认 ——
 #   把陌生参数当无参处理时, 无参数=真动作的脚本会被**真跑一次**: `sync.py --help` 真的同步,
 #   `push.py --help` 真的推送(推送顺序固定, 尤其禁止)。所以 --with-safety 让展开先问每个
 #   脚本自己的 `--safety` 探针, 把「无参即真动作」的摘出去(摘掉会在输出里写明, 不是静默丢)。
-#   ⚠ 这条闸门**不配 auto = true** 也能兜住 —— 展开是统一入口(run.py 与 commit 闸门共用)。
+#   WARN: 这条闸门**不配 auto = true** 也能兜住 —— 展开是统一入口(run.py 与 commit 闸门共用)。
 match = [".agents/skills/", ".commands/"]
 run   = ["python <each:.agents/skills/**/scripts/*.py|--with-safety> --help",
          "python <each:.commands/**/scripts/*.py|--with-safety> --help"]
@@ -166,7 +166,7 @@ note  = "脚本冒烟: 改了哪个跑哪个(<each:> 把一条 run 复制成多�
 # 为什么 match 是空串(每次提交都跑): 触发条件不是"改了哪些文件", 而是**批内累计未评改动量** ——
 #   锚点从 git 历史现算(最近一条带 Review:/Review-Skip: 的提交), 谁漏评谁的提交滚进下一批。
 #   按路径匹配永远命中不了"这一笔含可评增量"这种事(下限已退役, 任何可评增量都需留痕)。
-# ❗不在这里抄命令 —— 走 commands 引擎的 review.trace(单点定义在 .commands/review/config.toml)。
+# ! 不在这里抄命令 —— 走 commands 引擎的 review.trace(单点定义在 .commands/review/config.toml)。
 #   该 task 用裸 python 而非 uv run: 脚本纯 stdlib, 而 uv/console-script 在本仓有 trampoline 坏掉的先例
 #   (pitfalls/ops/venv-trampoline-clone-copy.md), 提交闸门不能押在它上面。
 match = [""]
@@ -195,7 +195,7 @@ note  = "skill 链接同步(幂等): 拉取来的改动靠每次提交兜一次"
 #     只报告不拦; agent 读到输出后在回复里提醒用户另开会话清理。
 # `memory-bank/` 也在 match 里: 债务是**编辑知识库时**欠下的, 只在改 AGENTS.md / skill 时跑
 # 的话, 触发点等于没接线(G2 要求"提交时必然可见")。
-# ❗闸门只用**默认模式**: `--strict` 是清理会话的收口开关(债务非空即 rc=1), 挂进闸门等于
+# ! 闸门只用**默认模式**: `--strict` 是清理会话的收口开关(债务非空即 rc=1), 挂进闸门等于
 #   把债务重新变成提交前置条件 —— 那正是本计划要取消的东西。
 # 2026-11-01 起按改动收窄(计划 26-11-01-0434 方案 D, 拍板 D5): 一条拆三条, <changed:> 无匹配
 # 即静默跳过; 硬规定语义不变(AGENTS.md 超限且改动命中仍 STOP); 债务只算本次改动的文件 ——

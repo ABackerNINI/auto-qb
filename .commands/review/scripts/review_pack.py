@@ -195,7 +195,7 @@ def cmd_pack(args: argparse.Namespace) -> int:
     warn_hits = _hit_rules(all_paths, warn_rules)
 
     total = ins + dele + sum(untracked_lines.values())
-    # 分档两判据与 skill ③/D14 一致: 行数超限 或 触安全敏感面 -> 分面
+    # 分档两判据与 skill 第 3 步/D14 一致: 行数超限 或 触安全敏感面 -> 分面
     tier = "分面 (2-3 个: 正确性 / 安全 / 测试缺口)" if total > TIER_LIMIT or sensitive_hits else "全能 (1 个子代理)"
 
     print(f"基线: {base}")
@@ -288,7 +288,7 @@ def cmd_check(args: argparse.Namespace) -> int:
     except (json.JSONDecodeError, RecursionError, ValueError) as exc:
         _die(f"findings 不是合法 JSON: {exc}")
     if not isinstance(findings, list):
-        _die("findings 必须是 JSON 数组(skill ④ schema)")
+        _die("findings 必须是 JSON 数组(skill 第 4 步 schema)")
 
     passed: dict[str, int] = dict.fromkeys(SEVERITIES, 0)
     refuted = 0
@@ -311,7 +311,7 @@ def cmd_check(args: argparse.Namespace) -> int:
         f" (blocker {passed['blocker']} / major {passed['major']} / minor {passed['minor']} / nit {passed['nit']})"
     )
     if refuted:
-        print("被弃条目不进入裁决; 引文约定的单行连续片段与 ±%d 行邻近窗口见 code-review skill ④" % args.window)
+        print("被弃条目不进入裁决; 引文约定的单行连续片段与 ±%d 行邻近窗口见 code-review skill 第 4 步" % args.window)
     return 1 if refuted else 0
 
 
