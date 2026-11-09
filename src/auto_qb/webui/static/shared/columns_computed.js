@@ -68,8 +68,11 @@ Object.assign(window.AQB_COLUMNS, {
       // 抽屉表头根带 data-table="drawer*"、行容器同挂, 故与主视图同一条注入路径。
       for (const page of ALL_TABLE_PAGES) {
         const cols = this._visibleCols(page);
+        // 对齐序列几何单点委托 DT_TABLE.layout(计划 26-11-10-0027 W1(2)): aligns 与轨道串出自
+        // 同一个内核返回值, 本处不再旁路读列定义的 align 字段。
+        const aligns = window.DT_TABLE.layout(cols).aligns;
         for (let i = 0; i < cols.length; i++) {
-          const align = cols[i].align || "left";
+          const align = aligns[i];
           const just = align === "right" ? "flex-end" : align === "center" ? "center" : "flex-start";
           out.push(`:where([data-table="${page}"]) > :nth-child(${i + 1}) { text-align: ${align}; justify-content: ${just}; }`);
           if (align === "right") out.push(`:where([data-table="${page}"]) > :nth-child(${i + 1}) .arrow { order: -1; }`);

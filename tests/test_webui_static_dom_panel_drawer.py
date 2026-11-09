@@ -23,7 +23,10 @@
 - test_drawer_peers_speed_keys_normalized: 抽屉 peers 速度键名适配守阵(2026-10-10 用户报障「种子详情用户页上下行始终为 0」) —— 真 qB sync/torrentPeers 的对端速度字段是 dl_speed / up_speed(与列表侧 torrents/info 的 dlspeed / upspeed 不同名), 前端全部 peers 消费点(经典表 drawerPeerRows + 变体 07/08/09 的 peerList 直读原始对端对象)统一按 dlspeed / upspeed 取名 ⇒ 落袋单点 _fetchDrawerPeers 必须过 _drawerNormPeers 补键(否则取不到值 → 上下行恒 0); 双形态(dict/数组)同归一; 桩服务 scripts/ui_harness.py 合成对端速度键名也必须与真 qB 同形(否则冒烟「看得见速度」而真机恒 0, 测假)
 - test_drawer_tpl_trackers_card_uniform_height: 04「状态卡片栅格」卡片同排等高 + 虚拟合并卡去描述守阵(2026-10-10 用户报障「虚拟条目卡片高度与其它的不一致」) —— 口径(用户拍板「同排等高」)= 栅格 .dt04-grid 走 align-items:stretch(同排卡片自动齐平, 虚拟卡与同排实体卡恒等高) + 虚拟合并卡移除设计稿 footer 长描述只留 head + chips; 静态钉 .dt04-grid 必 stretch 且 align-items:start 不得回潮 + 描述文案(私有 tracker 种子…)不得回潮 + virtualCardHtml 内不得再现 dt04-vnote(实体『未启用』卡的短注仍用该类, 禁连类一起删)+ 卡片必须填满栅格格(width:auto 必配, 2026-10-12 用户报障「真实 tracker 卡与虚拟卡之间/虚拟卡后方有长空隙」根治: 引擎行容器继承三皮肤经典表 width:fit-content, grid 下不参与 stretch ⇒ 卡片收缩到内容宽, 两列卡片间 ~700px 永久空洞 + 卡宽随内容漂移)
 - test_drawer_list_switch_no_loading_flash_wiring: 抽屉三列表(peers/trackers/files)软切换「不闪」守阵(2026-10-13 用户报障「种子详情用户页切换种子时『暂无已连接用户』闪烁」) —— 真根因(逐帧实测, 探针序列 `E→L→E`): 软切换保留的是**上一个目标的已落袋结果**, 而**空列表(没有对端/没有 tracker)是种子的常态**, 但三列表 fetcher 一律置 loading, 模板门 `loading && 无行` 把这份既有空态顶掉一帧换成「正在加载…」再换回 ⇒ 看起来就是空态在闪。修法 = 换目标窗口(`_drawerSoftSwitch`)内**不置**列表 loading 门(`_drawerListLoadingOn` = `!silent && !this._drawerSoftSwitch`), 保留旧结果直到被新结果取代。!**不得**改成「空响应视为未就绪→延迟渲染/重拉」—— 那会把常态的空推迟(首版固定 1s 重拉被用户否掉:「种子的常态就是没有对端」; 后端对空响应还有 1s 短缓存, 重拉只拿回空包)。本守阵钉静态接线与关键次序(行为回归由 e2e/drawer-switch-no-flash.spec.mjs 逐帧采样: 空态全程在 + 无「正在加载…」+ 无重试请求): 1. 门抑制单点判据; 2. 三 fetcher 的 loading 置位都经该单点(直写即回潮); 3. 标记须在 _loadDrawerTab **之前**置位(三 fetcher 在其内 await 前同步读); 4. _stopDrawerPoll **不得**清标记(它在 `_loadDrawerTab→_startDrawerPoll` 途中被调用, 清了等于置前失效); 5. _drawerSwitchEnd 必须清标记(否则粘住); 6. 旧「延迟重拉」机制(_drawerGraceHold/_DRAWER_GRACE_DELAYS/_drawerPeerCount)不得回潮
-- test_dt_table_kernel_single_point: 详情面板表格内核守阵(计划 26-10-13-0811 W1; 用户 2026-10-13 报八项表格症状, 归三个根因簇, 本守阵解簇 A「几何与列被多处各算一遍且零校验」) —— 1. 三份 manifest 都登记 shared/dt_table.js 且文件在盘上; 2. window.DT_TABLE 六口子齐全(layout/assertLayout/checkLabels/registerCell/cellOf/hasArrow); 3. 几何单一出口: 轨道串/对齐/列键同一个返回值里出来且 gridTemplate 恒等于 tracks.join(" ")(调用方再拼一次就是新事实源, 即红) + 固化宽度覆盖生效; 4. L3 列名守卫: 列定义的 label 字段零方向符(扫 app.js 列定义单点 + drawer_tpl 全部变体), 「↑ 占用」不得回潮(密度雷达表头多箭头的出处) + 方向符号只能由排序态单点渲染(表壳 .arrow); 5. 渲染即自查: assertLayout 三处计数(网格轨道/列头格/数据行子格)必须相等, 不相等即报(视觉表现正是「速度列下方异常横带」与「多列内容挤在一起」), 未挂载/未渲染不算不一致(面板没开不得满屏报错); 6. L2 落点: 单元格渲染器未登记即抛(不许渲染空白)。node 电池真跑 3./5.6. (无 node 静默跳过)
+- test_dt_table_kernel_single_point: 详情面板表格内核守阵(计划 26-10-13-0811 W1; 用户 2026-10-13 报八项表格症状, 归三个根因簇, 本守阵解簇 A「几何与列被多处各算一遍且零校验」) —— 1. 三份 manifest 都登记 shared/dt_table.js 且文件在盘上; 2. window.DT_TABLE 六口子齐全(layout/assertLayout/checkLabels/registerCell/cellOf/hasArrow); 3. 几何单一出口: 轨道串/对齐/列键同一个返回值里出来且 gridTemplate 恒等于 tracks.join(" ")(调用方再拼一次就是新事实源, 即红) + 固化宽度覆盖生效; 4. L3 列名守卫: 列定义的 label 字段零方向符(扫 app.js 列定义单点 + drawer_tpl 全部变体), 「↑ 占用」不得回潮(密度雷达表头多箭头的出处) + 方向符号只能由排序态单点渲染(表壳 .arrow); 5. 渲染即自查: assertLayout 三处计数(网格轨道/列头格/数据行子格)必须相等, 不相等即报(视觉表现正是「速度列下方异常横带」与「多列内容挤在一起」), 未挂载/未渲染不算不一致(面板没开不得满屏报错); 6. L2 落点: 单元格渲染器未登记即抛(不许渲染空白); 7. 真实列定义增喂(计划 26-11-10-0027 W1(3),
+堵合成列缺口): app.js 截断切片拿 TABLE_COLUMNS 全 13 表真实列 + DRAWER_TRACKER/PEERS 原始列集
+喂 layout —— 全列声明 tpl 前提钉住、轨道逐列取 tpl、aligns 缺省 left、keys 随列序、固化宽覆盖首列
+其余仍 tpl。node 电池真跑 3./5./6./7. (无 node 静默跳过)
 - test_drawer_variant_skeleton_single_point: 抽屉变体渲染器族三族重复收敛守阵(issue 26-10-20-2231) —— 1. 三态空帧单点 H.emptyFrame 在核心 HELPERS(has 闸 + loading→err→empty 优先级 + err 进 title 走 esc)且 04-12 九件桥变体各 1 处接线(槽类名/空态文案逐件对账), 内联三态块零残留(「正在加载…」态帧不得回潮; 01/02/03 裸空态形状不同刻意不收编, 接线数钉 0); 2. peers 判据单点 reg.peers 五件(FLAG_META/flagTokens/isBad/bucketOf/isLanIp)在核心 + TPL_REG 挂载 + 07/08/09 经 const P 消费, 本地副本零残留(反向断言); 3. dt 值格模板合一: 单一 tpl-aq-dt-peer-cells(类名经 pfx prop 计算, 渲染结果与旧逐字同; dt09 密度雷达特化经 occ prop) + table.js 三组件同名不变共享模板且 pfx/occ 默认值各表自己 + 旧三模板 id 零残留(双模板副本回潮即红)
 - test_drawer_prio_text_single_point: 文件优先级码 -> 中文文案表单点守阵(issue 26-10-29-1340) —— 五份内联表(4 份含 legacy 4 档 + setFilePriority 那份缺 4 回退 String(p))收口成核心层 HELPERS.PRIO_TEXT 全键表 + 带回退取文 prioText(p, dash) 挂 reg.helpers; 守阵 = shared/ 递归扫五键表字面仅 1 处(全仓唯一硬约束) + drawer.js 两处(setFilePriority 回执 String(p) 兜底 / drawerFileRows 显示「正常」兜底, 方法内经 window.AQB_DRAWER_TPL_REG 取别名)与 10/11/12(H.prioText 消费)接线 + PRIO_LABEL/本地字面零残留 + node 真跑可达域 p∈{0,1,6,7} 新旧逐字同与 4 档补测 prioText(4, "4")==="高"(ctx-menus.html 静态菜单项文案属自身呈现不在表内, issue 范围外不改; 行为等价 e2e 盯 drawer-content-variant-tables)
 - test_drawer_tracker_bucket_text_single_point: tracker 五桶文案表单点守阵(issue 26-10-29-1343) —— 04/05/06 三变体各持一份的桶文案(04/06 BUCKET{text,sev} 两份 + 05 GROUPS{text,cnt} 一份 + 04 PILLS 与 05 计数条内联字面, 共 5 处两形状)收口成核心层 TRACKERS(TRACKER_BUCKETS 全列 text/sev/order/cnt + TRACKER_BUCKET_ORDER 处理序数组, 05 分区顺序与 04/06 sev 升序同源写一次)挂 reg.trackers(reg.peers 同类判据命名空间); 守阵 = 核心表全列逐字钉住 + 桶文案词「未联系」drawer_tpl/ 零命中且核心层恰 1 处 + 三变体 TK 接线与本地 BUCKET/GROUPS/胶囊 text/tip 桶名字面零残留(cls/tip/色族/各版式桶序是呈现语义留各自文件) + node 真跑 text/sev/cnt 与旧表逐字对账(sev 0/1/2/3/9 不动 = 排序权值等价; 变体私有 bucketOf 三份属 R21-B-05/C-05 不在本项; 行为等价 e2e 盯 drawer-trackers-variant-tables / drawer-trackers-reannounce)
@@ -1859,6 +1862,54 @@ const bad2 = DT.assertLayout({ querySelectorAll: () => ({ length: 1 }) }, { chil
 ck("少一列头即报", bad2.some((p) => /列头格数 1 != 列数 2/.test(p)));
 ck("未挂载不算不一致", DT.assertLayout(null, null, cols).length === 0);
 
+/* W1(3)(计划 26-11-10-0027): 增喂**真实列定义** —— 既有电池只喂合成列 {key:"a"...}, 内核
+ * 生产零调用时代无后果, 接线后必须证明吃真实表列也对。沙箱口径与 r4 等价性探针同式:
+ * app.js 截断切片(loadColState 之前)拿列定义单点(TABLE_COLUMNS 全 13 表 + DRAWER_TRACKER/
+ * PEERS 原始列集)。前提钉: 真实列定义全列声明 tpl —— 缺 tpl 时内核落缺省轨道而旧拼轨落
+ * 空串, 该分叉前提不存在才谈等价。 */
+const fs = require("fs");
+global.Vue = { createApp: () => ({}) };
+let store2 = {};
+global.localStorage = {
+  getItem: (k) => (k in store2 ? store2[k] : null),
+  setItem: (k, v) => { store2[k] = String(v); },
+  removeItem: (k) => { delete store2[k]; },
+};
+const appSrc = fs.readFileSync(process.argv[2], "utf8");
+const marker = "const initialColState = loadColState();";
+const cut = appSrc.indexOf(marker);
+ck("app.js 找到截断锚(装载体裁未漂移)", cut > 0);
+eval(appSrc.slice(0, cut) + "\n;globalThis.__COLS__ = { PAGES: ALL_TABLE_PAGES, TC: TABLE_COLUMNS, TRK: DRAWER_TRACKER_COLUMNS, PEER: DRAWER_PEER_COLUMNS };");
+const PAGES = globalThis.__COLS__.PAGES;
+const TC = globalThis.__COLS__.TC;
+ck("真实表注册非空(ALL_TABLE_PAGES)", Array.isArray(PAGES) && PAGES.length > 0);
+let realTables = 0;
+for (const p of PAGES) {
+  const rcols = TC[p] || [];
+  if (!rcols.length) { ck("[" + p + "] TABLE_COLUMNS 有真实列定义", false); continue; }
+  const noTpl = rcols.filter((c) => !c || !c.tpl).map((c) => c.key);
+  ck("[" + p + "] 全列声明 tpl(缺省轨道分支生产不可达)", noTpl.length === 0);
+  const rlay = DT.layout(rcols);
+  ck("[" + p + "] count=列数", rlay.count === rcols.length);
+  ck("[" + p + "] gridTemplate=tracks 拼接(单一出口)", rlay.gridTemplate === rlay.tracks.join(" "));
+  ck("[" + p + "] 轨道逐列取 tpl", rlay.tracks.every((t, i) => t === rcols[i].tpl));
+  ck("[" + p + "] aligns 逐列同列定义(缺省 left)", rlay.aligns.every((a, i) => a === (rcols[i].align || "left")));
+  ck("[" + p + "] keys 随列序", rlay.keys.every((k, i) => k === rcols[i].key));
+  const wlay = DT.layout(rcols, { [rcols[0].key]: "99px" });
+  ck("[" + p + "] 固化宽覆盖首列且其余仍 tpl",
+     wlay.tracks[0] === "99px" && (rcols.length < 2 || wlay.tracks[1] === rcols[1].tpl));
+  realTables++;
+}
+ck("覆盖面: 真实表全部过(实算 " + realTables + " = ALL_TABLE_PAGES " + PAGES.length + ")", realTables === PAGES.length && realTables >= 13);
+/* 任务点名的两个原始列集(trackers/peers 变体表列的底料)单独过一遍 */
+for (const pair of [["DRAWER_TRACKER_COLUMNS", globalThis.__COLS__.TRK], ["DRAWER_PEER_COLUMNS", globalThis.__COLS__.PEER]]) {
+  const arr = pair[1] || [];
+  const lay = DT.layout(arr);
+  ck(pair[0] + " 非空且 count=列数", arr.length > 0 && lay.count === arr.length);
+  ck(pair[0] + " 轨道逐列取 tpl", lay.tracks.every((t, i) => t === arr[i].tpl));
+  ck(pair[0] + " aligns 逐列同列定义", lay.aligns.every((a, i) => a === (arr[i].align || "left")));
+}
+
 const failed = checks.filter((c) => !c.ok).map((c) => c.name);
 console.log(JSON.stringify({ ok: checks.length - failed.length, total: checks.length, failed: failed }));
 """
@@ -1920,7 +1971,8 @@ def test_dt_table_kernel_single_point():
     node = shutil.which("node")
     if node:
         proc = subprocess.run(
-            [node, "-e", _NODE_DT_TABLE_PROBE, js_path],
+            [node, "-e", _NODE_DT_TABLE_PROBE, js_path,
+             os.path.join(shared, "app.js")],
             capture_output=True,
             text=True,
             encoding="utf-8",

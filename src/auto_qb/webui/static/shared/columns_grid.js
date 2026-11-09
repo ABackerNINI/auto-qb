@@ -43,10 +43,13 @@ Object.assign(window.AQB_COLUMNS.methods, {
       if (!rows.length) return cols;
       return cols.filter((c) => !c.omitEmpty || rows.some((r) => r && r[c.key]));
     },
-    /* 列模板: 有 px 覆盖用覆盖值, 否则用默认模板(仅首次渲染会出现这种混合态) */
+    /* 列模板: 几何单点委托 DT_TABLE.layout(计划 26-11-10-0027 W1(2), 拍板 D1/D2)—— 轨道串
+     * 从内核同一个返回值取(gridTemplate = tracks.join(" ")), 本处不再旁路拼接。轨道取序
+     * 固化宽 > tpl > width > 缺省轨道; 真实列定义全列声明 tpl(等价性探针钉住该前提),
+     * 缺 tpl 的缺省轨道分支在生产输入面上不可达。dt_table.js 在四皮肤清单里先于本文件
+     * 之后的首次调用(渲染期 computed)加载, 无初始化时序问题。 */
     _gridTemplate(page) {
-      const w = this.colWidths[page] || {};
-      return this._visibleCols(page).map((c) => w[c.key] || c.tpl).join(" ");
+      return window.DT_TABLE.layout(this._visibleCols(page), this.colWidths[page] || {}).gridTemplate;
     },
     /* 从列头行(真正的 grid 容器)读取**当前渲染**的列宽 px; 列数不符(渲染未完成)返回 null。
      * !2026-10-18(用户报障「用户表格隐藏一列其它列坍塌」根治): 逐 token 严格校验
