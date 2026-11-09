@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="issues-index-over-budget">
 <meta name="doc-refs" content="memory-bank/issues/26-11-08-0229-bug-r4-static-cleanup-extras.html">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="issues 索引 11,260 字符超出 8,000 预算, 处置方向待拍板">
 <meta name="issue-summary" content="memory-bank/issues/_index.md 实测 11,260 字符超出 8,000 预算, 病根 Open 区 74 条; 候选方向(扩分区/归档冷 issue/收紧入池)需人工定 — 8 类无精确对位, 按最贴切的 question(待拍板)入池">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-08-1621-question-issues-index-over-budget</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-08 16:21</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">question</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
 
@@ -119,7 +119,11 @@
   <h2><span class="no">§04</span>状态变更日志</h2>
   <ul>
     <li>2026-11-08 16:21 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-10 — 状态 Open → Done（kb.status）</li>
+</ul>
+  <h3>处置说明</h3>
+  <p><strong>实际处置</strong>：三个候选方向之外走了第四条路 —— <code>memory-bank/issues/_index.md</code> 已随 2026-11-08 memory-bank 大重构（commit <code>4cc002a2</code>）整体退役（开放池无 agent 消费者），超预算的对象不复存在，问题消解，未动 cap。</p>
+  <p><strong>验证方式</strong>：2026-11-10 复验（head <code>5529b9f8</code>）—— <code>memory-bank/issues/_index.md</code> 不存在；查重改走时间戳 slug + <code>grep issues/</code>，人找 issue 走 <code>commands run kb.nav</code>（现算，与索引零耦合）；退役口径已回写 create-issue skill。</p>
 </section>
 
 <footer>

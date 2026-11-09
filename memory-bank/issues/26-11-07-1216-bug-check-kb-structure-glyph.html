@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="check-kb-structure-glyph">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="check_kb_structure.py 运行时输出含图形符号(违反 code-style 代码禁令)">
 <meta name="issue-summary" content="skill 侧 check_kb_structure.py 运行时提示行含 -&gt;类符号(trim_hint 返回串/print 列表符), 经提交闸门终端输出">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-07-1216-bug-check-kb-structure-glyph</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-07 12:16</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">skills</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
@@ -155,11 +155,15 @@
   <h2><span class="no">§07</span>状态变更日志</h2>
   <ul>
     <li>2026-11-07 12:16 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-10 — 状态 Open → Done（kb.status）</li>
+</ul>
   <h3>复验</h3>
-  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <p>2026-11-10 复验（head <code>5529b9f8</code>）：现象已消失 —— 按 <code>memory-bank/conventions/code-style.md</code> 表 A 全部码位区间（判据单点，不在此手抄枚举）扫描零残留。</p>
   <h3>修复后补充</h3>
-  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  <p><strong>实际修法</strong>（由 B12 <code>40ea94d1</code> 2026-11-09 存量清偿，非本件认领路径）：表 A 禁用类逐处替换 —— ❌→<code>[X]</code>（:198）、⚠→<code>WARN:</code>（:218）、❗→<code>!</code>（:224/:377，行号基准 = head <code>5529b9f8</code> 快照），同批连带全仓 30 文件 126 处。</p>
+  <p><strong>改道说明</strong>：建议修法中「箭头→<code>-&gt;</code>」部分已被口径改判作废 —— code-style.md D1 口径（2026-11-08）把箭头 <code>U+2190-21FF</code>（→ ⇒ ↔）归表 B 豁免（机械换 <code>-&gt;</code> 会合并数据流/推导两类语义）；<code>·</code> 不落表 A 任何区间，属中文行文语义标点不归该节管。剩余 :71 ⇒ / :116 ↔ / :188/:201 → / :221-223 → / :368 · 均为豁免类，非违规。</p>
+  <p><strong>守卫面缺口已补</strong>：<code>tests/test_ascii_symbol_guard.py</code> 表 A 派生判据覆盖 .agents/skills/** 与 .commands/**（冻结清单 + 递减不红），2026-11-09 存量清零后为纯拦新增。</p>
+  <p><strong>验证方式</strong>：2026-11-10 表 A 码位扫描零残留；B12 批实测守阵 12 passed（见 <code>40ea94d1</code> 提交信息）。</p>
 </section>
 
 <footer>
