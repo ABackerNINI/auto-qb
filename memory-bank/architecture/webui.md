@@ -1,7 +1,7 @@
 # WEB UI 运行时
 
-> 摘要: FastAPI 装配单点与启动 fail-fast、皮肤目录即 URL 与静态契约、线程边界(读快照 + 投命令)、视图发布与版本门控、truth 通道、响应性设计要点、图形化配置编辑器骨架。
-> 触发: WEB UI, webui, FastAPI, create_app, 路由, 皮肤, 静态, 线程边界, 视图发布, group_view_ver, truth, 回执, 乐观 UI, 响应性, 窗口化, 配置编辑器, schema, writer
+> 摘要: FastAPI 装配单点与启动 fail-fast、皮肤目录即 URL 与静态契约、线程边界(读快照 + 投命令)、视图发布与版本门控、truth 通道、响应性设计要点、表格几何单点(dt_table)、图形化配置编辑器骨架。
+> 触发: WEB UI, webui, FastAPI, create_app, 路由, 皮肤, 静态, 线程边界, 视图发布, group_view_ver, truth, 回执, 乐观 UI, 响应性, 窗口化, 表格几何, dt_table, DT_TABLE, columns_grid, gridTemplate, 配置编辑器, schema, writer
 
 ## 装配单点与启动 (webui/server/factory.py, webui/module.py)
 
@@ -32,6 +32,13 @@
 - **行窗口化只减 DOM 行数不改布局模型**(上下占位撑高度, 列对齐与列宽协议保持有效); 行高逐行实测 + 前缀和 + 二分(行高不齐, 等高假设会漂); 展开的组在可见集合里时窗口退避全量。
 - **搜索索引**: 种子名匹配即时扫 store, 文件列表匹配靠索引(文件 API 只在主循环线程); 按 hash 增量维护 + 单次限流预算, 未拉完下一 tick 续建。
 - 前端纪律: 页面隐藏停轮询恢复即刷; setTimeout 链式续排不堆叠请求; **只做失败退避**, 不做「无变化退避」。
+
+## 表格几何单点 (webui/static/shared/dt_table.js + columns_grid.js)
+
+- **`DT_TABLE.layout()` 是全仓表格几何字符串(轨道串 / aligns)的单一生产者**(计划 plans/26-11-10-0027-plan-dt-table-wiring.html, 2026-11-10 接线): `columns_grid._gridTemplate` 与 `colAlignCss` **内部委托**该单点取轨道串与对齐, 旁路拼接已删; 调用方(主视图 computed + 抽屉桥)与 DOM 零改动, 全部表格面(含主列表、含 flux)同一链。新增/改表格几何逻辑只改 dt_table.layout 一处 —— **禁止再造平行计算**。
+- **`assertLayout()` 常驻生产渲染自查**(拍板 D3): 三处 O(1) 计数(grid 轨道数 / 列头格数 / 首行子格数), 不一致 `console.error`(含 tableId 与三方计数)**不打断渲染**(保守默认); 未挂载豁免。
+- **D4 例外清单(明文化)**: HR 三表(hrDetail / hrWave / hrKv, 无 tpl/align 字段)+ 04 卡片形态面不接几何单点; 守阵钉「清单之外零旁路」。HR 三表统一交互(拖宽/拖序/右键隐藏/持久化)为第二轮立项(拍板 D7, 方向迁 aq-table grid 链路), 届时补 tpl/align 字段后纳入同一单点。
+- 守阵: node 电池等价性探针(`tests/test_webui_static_r4_node_batteries.py::test_r4_dt_table_layout_geometry_equivalence`, 13 表 136 列 + colWidths 五类场景, 断言现役拼轨 ≡ DT_TABLE.layout 输出) + e2e `dt-table-layout-parity.spec.mjs`(语义 = **钉住单点输出不变**)与 `dt-table-face-bg.spec.mjs`。
 
 ## 图形化配置编辑器 (webui/static/shared/ + config/writer.py)
 

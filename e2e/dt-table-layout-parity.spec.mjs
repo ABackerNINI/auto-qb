@@ -24,6 +24,12 @@ import { collectRuntimeErrors, installRuntimeErrorGuard } from './lib/errors.mjs
  *
  * 本守阵只钉**当前已达标**的面 —— 不是放宽容忍, 而是「先立规格、未达标的按波次修到绿再纳入」;
  * 已达标面一旦回潮(多一格 / 差一点)立刻红。
+ *
+ * 口径更新(计划 26-11-10-0027 W1 委托落地 / W3 改述): 表格几何(轨道串 / aligns)已单点到
+ * DT_TABLE.layout —— columns_grid._gridTemplate / colAlignCss 内部委托该单点, 旁路拼接已删。
+ * 本守阵因此不再是「两处计算一致」的 parity 比对(几何只剩一处产出), 语义改为**钉住单点输出不变**:
+ * 下面断言的轨道数 / 计数 / 对齐 / text-align 全部出自 DT_TABLE.layout 的生产输出,
+ * 单点实现回归(轨道漂移 / 对齐漂移)即红。
  */
 
 const TAB_TEXT = { trackers: 'Tracker', peers: '用户', content: '内容' };
