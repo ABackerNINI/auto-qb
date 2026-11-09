@@ -44,13 +44,13 @@
   _ensure_thread 只起一条订阅线程(检查+创建段持锁原子判定, R4#19: 无锁时两边同过 is_alive -> 双
   _run 双注册订阅, 先注册的 sub_id 被覆盖后泄漏到工具租约过期; 26-11-07-0536 批I)
 - test_stop_join_race_keeps_replacement_reference: stop 锁外 join 期间 _ensure_thread 起替换线程,
-  join 后同一性判断不匹配不置 None —— 替换线程引用不丢成孤儿(路径①, 26-11-08-0043)
+  join 后同一性判断不匹配不置 None —— 替换线程引用不丢成孤儿(路径 1, 26-11-08-0043)
 - test_stop_set_behind_ensure_creation_still_stops_new_thread: stop 置停位与 _ensure_thread 清停位
-  同锁全序化, 落在创建段之后的置停位必被新线程当轮读到收线(路径②, 26-11-08-0043)
+  同锁全序化, 落在创建段之后的置停位必被新线程当轮读到收线(路径 2, 26-11-08-0043)
 - test_stop_ensure_roundtrip_and_noop_stop: 正常起停往返不变(重启前停位已清); 无线程时 stop no-op
 - test_run_survives_pass_and_unregister_exceptions: 主循环容错(单轮异常不杀线程 / 收线注销异常只记 WARNING)(P2-T2.5)
 - test_clear_error_logs_recovery_info: 失败后恢复补 INFO 且清记忆, 无失败记忆时零日志(P2-T2.5)
-  ⚠ 本轮修三处**假绿**(P2-T2.5): `_FAKE_EP.token_path` 是空串, 而 `_register`/`_heartbeat`/`_unregister`
+  WARN: 本轮修三处**假绿**(P2-T2.5): `_FAKE_EP.token_path` 是空串, 而 `_register`/`_heartbeat`/`_unregister`
     第一步都是 `read_token(...)` —— 「不可达 / 200 缺 id / 注销不可达」三类断言实际走的是
     「密钥不可读」早退分支, 目标分支从未执行。已改用 `_ep_with_token(tmp_path)`(真读得到密钥的端点),
     并补 `tool.paths()` 断言确保请求真的发出。
@@ -974,7 +974,7 @@ def test_ensure_thread_concurrent_no_double_start(sub_env, monkeypatch):
 
 
 def test_stop_join_race_keeps_replacement_reference(sub_env):
-    """路径①复放: stop 在锁外 join 期间 _ensure_thread 起了替换线程, join 后不得丢它引用
+    """路径 1 复放: stop 在锁外 join 期间 _ensure_thread 起了替换线程, join 后不得丢它引用
 
     交错(全用事件钉死, 不靠 sleep): 旧线程 T1 存活 -> stop 置停位/取引用后卡进 join ->
     放行 T1 收线 -> 替换线程 T2 经 _ensure_thread 起好(引用已换) -> 才放行 stop 的 join
@@ -1034,7 +1034,7 @@ def test_stop_join_race_keeps_replacement_reference(sub_env):
 
 
 def test_stop_set_behind_ensure_creation_still_stops_new_thread(sub_env, monkeypatch):
-    """路径②复放: stop 的置停位被 _ensure_lock 拦在「检查通过、清停位已做、线程未 start」段后
+    """路径 2 复放: stop 的置停位被 _ensure_lock 拦在「检查通过、清停位已做、线程未 start」段后
 
     修前 stop 的置停位不持锁, 可落进 _ensure_thread 锁内窗口被 clear() 抹掉, 新起线程读不到
     停位照常运行; 修后置停位与清停位被同一把锁全序化(此处 stopper 必然卡到 ensure 释放锁),

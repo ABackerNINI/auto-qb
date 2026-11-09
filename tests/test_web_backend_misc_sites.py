@@ -231,9 +231,9 @@ def test_frontend_sites_import_wiring():
     两套 UI 的站点 pill 行都必须挂「⤓ 导入缺失站点」按钮并调用 config_hub.js 的
     hubImportSites —— 漏一套那套 UI 就没有入口; 防重入标志 hub.importing 必须存在。
     M4(2026-11-04): 后端 /api/sites/missing 已带 groups(共现合并组, 组数可为 0), 前端
-    三分支自适应 —— ①sites 空 -> 现状 toast; ②不存在 >=2 域名的组(groups 缺省/为空/全单
+    三分支自适应 —— 1. sites 空 -> 现状 toast; 2. 不存在 >=2 域名的组(groups 缺省/为空/全单
     元素) -> 现状 confirmDialog 逐域名导入(路径零变化, 抽成 _hubImportPerDomain 单点,
-    分支②与「拆分导入」共用一份不留拷贝); ③存在 >=2 域名的组 -> confirmThreeDialog
+    分支 2 与「拆分导入」共用一份不留拷贝); 3. 存在 >=2 域名的组 -> confirmThreeDialog
     三钮(ok=合并导入[Enter 默认·推荐] / extra=拆分导入[extraStyle:"ghost" —— 拆分不是
     破坏性动作] / cancel=取消)。合并模式键 = groups[i].name、值 = groups[i].entry
     (entry.domains 已含组内全域名), 同名键跳过语义与逐域名路径一致。
@@ -241,20 +241,20 @@ def test_frontend_sites_import_wiring():
     hub_js = read_shared("config_hub.js")  # 聚合含 config_hub_tracker.js(hubImportSites 落点)
     assert "async hubImportSites()" in hub_js, "config_hub.js 缺 hubImportSites 方法"
     assert "this.hub.importing" in hub_js, "缺防重入标志 hub.importing"
-    # 分支①: sites 空 -> 现状 toast(不变)
-    assert "没有发现未配置的站点" in hub_js, "缺「无需导入」空态提示(分支①被改坏?)"
-    # 分支②/拆分共用逐域名单点(不留两份拷贝); 逐域名键 = sites[i].name
+    # 分支 1: sites 空 -> 现状 toast(不变)
+    assert "没有发现未配置的站点" in hub_js, "缺「无需导入」空态提示(分支 1 被改坏?)"
+    # 分支 2/拆分共用逐域名单点(不留两份拷贝); 逐域名键 = sites[i].name
     assert "async _hubImportPerDomain(sites)" in hub_js, \
-        "缺逐域名导入单点(分支②与拆分导入必须共用一份, 各抄一份 = 行为漂移温床)"
+        "缺逐域名导入单点(分支 2 与拆分导入必须共用一份, 各抄一份 = 行为漂移温床)"
     assert "trackers[s.name] = s.entry" in hub_js, "逐域名模式键必须是 sites[i].name"
     assert "Object.prototype.hasOwnProperty.call(trackers, s.name)" in hub_js, \
         "逐域名判重必须只认自有键(防 constructor/__proto__ 继承属性误判已存在)"
     assert hub_js.count("_hubImportPerDomain(sites)") >= 3, \
-        "分支②与 extra 分支都要调逐域名单点(方法定义 + 两处调用)"
-    # 分支③闸门: 只有存在 >=2 域名的组才引导(D4: 会真实合并才弹框, 否则空转)
+        "分支 2 与 extra 分支都要调逐域名单点(方法定义 + 两处调用)"
+    # 分支 3 闸门: 只有存在 >=2 域名的组才引导(D4: 会真实合并才弹框, 否则空转)
     assert "some((g) => (g.domains || []).length >= 2)" in hub_js, \
         "缺多域名组闸门(缺了 = 全单域名场景也弹三钮, 现状路径被无谓改写)"
-    assert 'confirmThreeDialog(' in hub_js, "缺三钮弹窗入口(分支③)"
+    assert 'confirmThreeDialog(' in hub_js, "缺三钮弹窗入口(分支 3)"
     assert 'okText: "合并导入"' in hub_js and 'extraText: "拆分导入"' in hub_js, \
         "三钮文案错(合并=ok 且 Enter 默认推荐, 拆分=extra)"
     assert 'extraStyle: "ghost"' in hub_js, \

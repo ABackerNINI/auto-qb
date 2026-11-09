@@ -7,9 +7,9 @@
 orchestrator.gate_verdict 同口径); export 可用性与目标连通性后置到执行段失败分类。
 改写路径预览的前端映射 trMapSavePath 必须与 orchestrator.map_save_path 逐位同语义
 (§07 风险 1 的肉眼可查防线, 映射配错 = 目标 recheck 得 0%)。本文件守阵三层:
-①映射语义/状态门判据用**后端真函数/真值**对账(node 真跑前端实现, python 侧跑后端单点)
-②node 真 vm 桩跑 transferOpen 全链(预检排除/弹窗行表/执行载荷/结算三件套/单飞闸)
-③静态接线(mixin 注入 / manifest 装载序 / 顶层声明无撞名 / 字段标签不抄第二份)。
+1. 映射语义/状态门判据用**后端真函数/真值**对账(node 真跑前端实现, python 侧跑后端单点)
+2. node 真 vm 桩跑 transferOpen 全链(预检排除/弹窗行表/执行载荷/结算三件套/单飞闸)
+3. 静态接线(mixin 注入 / manifest 装载序 / 顶层声明无撞名 / 字段标签不抄第二份)。
 
 ## 测试计划(每个测试函数一条)
 - test_tf_map_save_path_parity: 前端 trMapSavePath ↔ 后端 orchestrator.map_save_path
@@ -213,7 +213,7 @@ const out = {};
 /* 结果条 = 最近推入的一条(统一收后: 进行中条先归档留在数组里, 结果另起一条) */
 const lastToast = () => vm.toasts[vm.toasts.length - 1] || null;
 
-// ---- ① 目标侧拦下: 不存在 / 未启用 -> toast error, 不开弹窗不投递
+// ---- 1. 目标侧拦下: 不存在 / 未启用 -> toast error, 不开弹窗不投递
 let vm = makeVm();
 vm.trTargets = [];
 await vm.transferOpen("副种机", ["h-ok"]);
@@ -223,7 +223,7 @@ vm.trTargets[0].enabled = "false";
 await vm.transferOpen("副种机", ["h-ok"]);
 out.disabled = { toasts: vm.toasts.length, modal: vm.modalCfg, api: vm.apiCalls.length };
 
-// ---- ② 预检排除: hash 失效 + 下载管线态进 skips; 弹窗行表含将跳过/字段/路径预览/跳检警示
+// ---- 2. 预检排除: hash 失效 + 下载管线态进 skips; 弹窗行表含将跳过/字段/路径预览/跳检警示
 vm = makeVm();
 vm.confirmRes = { checks: { keep_source: false } };
 vm.cmdResult = { ok: true, truth: { results: [
@@ -249,7 +249,7 @@ out.settleOk = {
   cleared: vm.cleared,
 };
 
-// ---- ②b 纯全成(无预检排除): toast ok 档 + 删源口径文案
+// ---- 2b 纯全成(无预检排除): toast ok 档 + 删源口径文案
 vm = makeVm();
 vm.confirmRes = { checks: { keep_source: false } };
 vm.cmdResult = { ok: true, truth: { results: [
@@ -258,18 +258,18 @@ vm.cmdResult = { ok: true, truth: { results: [
 await vm.transferOpen("副种机", ["h-ok"]);
 out.settlePure = { toast: lastToast() };
 
-// ---- ③ 全被排除: toast 收口, 不开弹窗不投递
+// ---- 3. 全被排除: toast 收口, 不开弹窗不投递
 vm = makeVm();
 await vm.transferOpen("副种机", ["h-dl", "h-gone"]);
 out.allExcluded = { toasts: vm.toasts.length, modal: vm.modalCfg, api: vm.apiCalls.length };
 
-// ---- ④ 取消 = 零副作用
+// ---- 4. 取消 = 零副作用
 vm = makeVm();
 vm.confirmRes = null;
 await vm.transferOpen("副种机", ["h-ok"]);
 out.cancelled = { api: vm.apiCalls.length, icons: Object.keys(vm.icons).length };
 
-// ---- ⑤ keep_source 勾选: 载荷带 keep_source, 结算不清选中集; 部分失败 toast error
+// ---- 5. keep_source 勾选: 载荷带 keep_source, 结算不清选中集; 部分失败 toast error
 vm = makeVm();
 vm.confirmRes = { checks: { keep_source: true } };
 vm.cmdResult = { ok: true, truth: { results: [
@@ -284,7 +284,7 @@ out.keepSource = {
   cleared: vm.cleared,
 };
 
-// ---- ⑥ 全跳过(部分成功 + 跳过): toast timeout 档
+// ---- 6. 全跳过(部分成功 + 跳过): toast timeout 档
 vm = makeVm();
 vm.confirmRes = { checks: { keep_source: false } };
 vm.cmdResult = { ok: true, truth: { results: [
@@ -294,7 +294,7 @@ vm.cmdResult = { ok: true, truth: { results: [
 await vm.transferOpen("副种机", ["h-ok", "h-up"]);
 out.partialSkip = { toast: lastToast(), iconUp: vm.icons["h-up"] };
 
-// ---- ⑦ truth 缺失: ok 回执无 results -> 全批 warn(不谎称成功); 命令失败 -> 全批 error
+// ---- 7. truth 缺失: ok 回执无 results -> 全批 warn(不谎称成功); 命令失败 -> 全批 error
 vm = makeVm();
 vm.confirmRes = { checks: { keep_source: false } };
 vm.cmdResult = { ok: true, truth: {} };
@@ -306,14 +306,14 @@ vm.cmdResult = { ok: false, error: "转移目标未启用: 副种机" };
 await vm.transferOpen("副种机", ["h-ok"]);
 out.cmdFail = { icons: vm.icons, toast: lastToast() };
 
-// ---- ⑧ 发送失败: 撤 pending 图标 + toast error
+// ---- 8. 发送失败: 撤 pending 图标 + toast error
 vm = makeVm();
 vm.confirmRes = { checks: { keep_source: false } };
 vm.apiShouldThrow = true;
 await vm.transferOpen("副种机", ["h-ok"]);
 out.sendFail = { icons: vm.icons, toast: lastToast(), running: vm._transferRunning };
 
-// ---- ⑨ 单飞闸: 执行中重复 transferOpen 直接返回(不开弹窗不投递)
+// ---- 9. 单飞闸: 执行中重复 transferOpen 直接返回(不开弹窗不投递)
 vm = makeVm();
 vm._transferRunning = true;
 await vm.transferOpen("副种机", ["h-ok"]);
@@ -332,11 +332,11 @@ def test_tf_open_flow_vm_probe():
         return
     rep = _run_node(node, _NODE_FLOW_PROBE, _TT_JS, _TF_JS)
 
-    # ---- ① 目标侧拦下
+    # ---- 1. 目标侧拦下
     assert rep["noTarget"] == {"toasts": 1, "modal": None, "api": 0}, rep["noTarget"]
     assert rep["disabled"]["toasts"] == 1 and not rep["disabled"]["modal"] and rep["disabled"]["api"] == 0
 
-    # ---- ② 预检排除 + 明细行表: 只投递放行的 h-ok; 弹窗四类行齐备
+    # ---- 2. 预检排除 + 明细行表: 只投递放行的 h-ok; 弹窗四类行齐备
     pc = rep["precheck"]
     assert pc["apiPaths"][0] == "/api/transfer/run", pc["apiPaths"]
     # 结算后的列表态刷新走真实现 transferTargetsReload(经 api 拉 /api/config) —— 桩被
@@ -353,20 +353,20 @@ def test_tf_open_flow_vm_probe():
     assert "不动任何数据文件" in pc["bodyText"], "弹窗文案必须体现「转移只移任务不动数据」"
     assert pc["tone"] == "warn" and pc["strip"] is True and pc["wide"] is True
 
-    # ---- ② 结算: 行内图标 + toast(预检排除的 2 个计入跳过数 -> timeout 档) + 清选中集
+    # ---- 2. 结算: 行内图标 + toast(预检排除的 2 个计入跳过数 -> timeout 档) + 清选中集
     so = rep["settleOk"]
     assert so["icons"]["h-ok"]["kind"] == "ok", so["icons"]
     assert so["toast"]["kind"] == "timeout" and "成功 1, 跳过 2" in so["toast"]["text"], so["toast"]
     assert so["cleared"] == 1, so
-    # ---- ②b 纯全成: ok 档 + 删源口径文案
+    # ---- 2b 纯全成: ok 档 + 删源口径文案
     assert rep["settlePure"]["toast"]["kind"] == "ok", rep["settlePure"]["toast"]
     assert "数据文件未动" in rep["settlePure"]["toast"]["text"], rep["settlePure"]["toast"]
 
-    # ---- ③ 全被排除 / ④ 取消零副作用
+    # ---- 3. 全被排除 / 4. 取消零副作用
     assert rep["allExcluded"]["toasts"] == 1 and not rep["allExcluded"]["modal"] and rep["allExcluded"]["api"] == 0
     assert rep["cancelled"]["api"] == 0 and not rep["cancelled"]["icons"]
 
-    # ---- ⑤ keep_source: 载荷透传 + 部分失败 error toast + 不清选中集
+    # ---- 5. keep_source: 载荷透传 + 部分失败 error toast + 不清选中集
     ks = rep["keepSource"]
     assert ks["body"]["keep_source"] is True, ks["body"]
     assert ks["icons"]["h-ok"]["kind"] == "ok" and ks["icons"]["h-up"]["kind"] == "error", ks["icons"]
@@ -374,22 +374,22 @@ def test_tf_open_flow_vm_probe():
     assert ks["toast"]["kind"] == "error" and "失败 1" in ks["toast"]["text"], ks["toast"]
     assert ks["cleared"] == 0, "keep_source 勾选时不得清选中集(源任务保留)"
 
-    # ---- ⑥ 部分跳过: timeout 档 + 跳过图标 warn
+    # ---- 6. 部分跳过: timeout 档 + 跳过图标 warn
     assert rep["partialSkip"]["toast"]["kind"] == "timeout", rep["partialSkip"]["toast"]
     assert rep["partialSkip"]["iconUp"]["kind"] == "warn"
 
-    # ---- ⑦ truth 缺失两兜底都不谎称成功
+    # ---- 7. truth 缺失两兜底都不谎称成功
     assert rep["noTruth"]["icons"]["h-ok"]["kind"] == "warn", rep["noTruth"]["icons"]
     assert rep["noTruth"]["toast"]["kind"] == "timeout"
     assert rep["cmdFail"]["icons"]["h-ok"]["kind"] == "error", rep["cmdFail"]["icons"]
     assert rep["cmdFail"]["toast"]["kind"] == "error" and "未启用" in rep["cmdFail"]["toast"]["text"]
 
-    # ---- ⑧ 发送失败: pending 撤下(图标清空) + 单飞闸复位
+    # ---- 8. 发送失败: pending 撤下(图标清空) + 单飞闸复位
     assert rep["sendFail"]["icons"]["h-ok"]["kind"] == "", rep["sendFail"]["icons"]
     assert rep["sendFail"]["toast"]["kind"] == "error"
     assert rep["sendFail"]["running"] is False
 
-    # ---- ⑨ 单飞闸
+    # ---- 9. 单飞闸
     assert rep["singleFlight"] == {"modal": None, "api": 0}, rep["singleFlight"]
 
 

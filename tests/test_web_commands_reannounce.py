@@ -1,9 +1,9 @@
 """test_web_commands_reannounce 测试计划: Web 命令执行 (_drain_web_commands) 与强制汇报确认
 
 ## 测试计划(每个测试函数一条)
-- test_verdict_reannounce_epoch_matrix: epoch 判定矩阵(消解等待模型 plan 26-10-31-2354: updating/status3 恒 pending ②已废/③前跳 ==TOL 边界 pending/基线 status 0/1 行极值不触发/③″ 0/1/4/5/6->2 confirmed/④′ 4/5/6+msg rejected 且先于③″③判, 空 msg 不判败; 事故 26-10-31-1740)
-- test_verdict_reannounce_legacy_matrix: legacy 判定矩阵(基线行无 epoch 字段 -> ③″/④′ 生效, ②在途直证已废 -> updating/status3 pending, 前跳判据不参与)
-- test_verdict_reannounce_min_window_guard: updating 不构成成功证据(D2 废除②): min 未来/过期/缺失/0 下 updating 与 status3 一律 pending; min 只余③ reason 佐证与 item 级 deadline 用途
+- test_verdict_reannounce_epoch_matrix: epoch 判定矩阵(消解等待模型 plan 26-10-31-2354: updating/status3 恒 pending 2 已废/3 前跳 ==TOL 边界 pending/基线 status 0/1 行极值不触发/3" 0/1/4/5/6->2 confirmed/4' 4/5/6+msg rejected 且先于 3"/3 判, 空 msg 不判败; 事故 26-10-31-1740)
+- test_verdict_reannounce_legacy_matrix: legacy 判定矩阵(基线行无 epoch 字段 -> 3"/4' 生效, 2 在途直证已废 -> updating/status3 pending, 前跳判据不参与)
+- test_verdict_reannounce_min_window_guard: updating 不构成成功证据(D2 废除 2): min 未来/过期/缺失/0 下 updating 与 status3 一律 pending; min 只余 3 reason 佐证与 item 级 deadline 用途
 - test_trackers_baseline_shape_and_epoch_mode: baseline 形状回归 {url: {status, updating, next, min}} + epoch_mode 字段存在性探测(虚拟行排除)
 - test_reannounce_receipt_truth_results_contract: 逐目标回执契约(计划 26-10-19-2007 D6/S5) —— truth.results 长度 == 目标 hash 数/status 取值域/ok 桶 reason 可空, 聚合文案逐字不变
 - test_reannounce_receipt_prefix_contract: D4=warn 前缀文案契约(三前缀常量钉死, 改文案必红; 机器分流依据 = status 三值)
@@ -46,35 +46,35 @@ def _epoch_tracker(url="u", status=2, updating=False, next_announce=10_000, min_
 
 
 def test_verdict_reannounce_epoch_matrix():
-    """epoch 判定矩阵(消解等待模型, plan 26-10-31-2354): updating/status3 恒 pending(②已废),
-    ③前跳=confirmed(==TOL 边界=pending, 基线 status 0/1 行不判), ③″ 变 working=confirmed,
-    ④′ 4/5/6+msg=rejected(空 msg 不判败, 先于③″③判), 其余 pending"""
+    """epoch 判定矩阵(消解等待模型, plan 26-10-31-2354): updating/status3 恒 pending(2 已废),
+    3 前跳=confirmed(==TOL 边界=pending, 基线 status 0/1 行不判), 3" 变 working=confirmed,
+    4' 4/5/6+msg=rejected(空 msg 不判败, 先于 3"/3 判), 其余 pending"""
     from auto_qb.core.qbmanager import QbManager
 
     f = QbManager._verdict_reannounce
     base = {"u": {"status": 2, "updating": False, "next": 10_000, "min": 5_000}}
     kw = dict(t0=9_000, tol=3.0, now=20_000)
-    # ② 已废(D2): updating/status==3 恒 pending, 不再是任何意义上的成功证据
+    # 2 已废(D2): updating/status==3 恒 pending, 不再是任何意义上的成功证据
     assert f([_epoch_tracker(updating=True)], base, **kw) == ("", "")
     assert f([_epoch_tracker(status=3)], base, **kw) == ("", "")
-    # ③ 主判据: 前跳 > TOL -> confirmed; ==TOL 边界不触发
+    # 3 主判据: 前跳 > TOL -> confirmed; ==TOL 边界不触发
     assert f([_epoch_tracker(next_announce=10_004)], base, **kw)[0] == "confirmed"
     state, reason = f([_epoch_tracker(next_announce=10_504, min_announce=6_000)], base, **kw)
     assert state == "confirmed" and "epoch 前跳 +504s" in reason and "min 同前跳" in reason, "min 同向前跳作佐证"
     assert f([_epoch_tracker(next_announce=10_003)], base, **kw) == ("", ""), "==TOL 边界 -> pending"
     assert f([_epoch_tracker(next_announce=10_001)], base, **kw) == ("", ""), "跳幅 <= TOL -> pending"
     assert f([_epoch_tracker()], base, **kw) == ("", ""), "无变化继续等待"
-    # ③ 判定域限基线 status>=2: 基线未联系行(status 0/1)带极值 next 不触发假前跳
+    # 3 判定域限基线 status>=2: 基线未联系行(status 0/1)带极值 next 不触发假前跳
     for b_status in (0, 1):
         b = {"u": {"status": b_status, "updating": False, "next": 10_000, "min": 5_000}}
         assert f([_epoch_tracker(status=1, next_announce=999_999)], b, **kw) == ("", ""), f"基线 status={b_status} 行不判前跳"
-    # ③″(新, D6): 从未联系/曾失败行转 working -> confirmed(失败路径产不出 working, 强正证据)
+    # 3"(新, D6): 从未联系/曾失败行转 working -> confirmed(失败路径产不出 working, 强正证据)
     for b_status in (0, 1, 4, 5, 6):
         b = {"u": {"status": b_status, "updating": False, "next": 10_000, "min": 5_000}}
         assert f([_epoch_tracker(status=2)], b, **kw) == ("confirmed", "tracker 状态转为 working"), f"基线 {b_status} -> 2"
-    # 基线已是 working: ③″ 不触发(成功证据走 ③ 前跳)
+    # 基线已是 working: 3" 不触发(成功证据走 3 前跳)
     assert f([_epoch_tracker()], base, **kw) == ("", "")
-    # ④′ tracker 拒绝: 4/5/6+msg -> rejected(逐行先于③″③判, 防失败退避前跳被误判成功)
+    # 4' tracker 拒绝: 4/5/6+msg -> rejected(逐行先于 3"/3 判, 防失败退避前跳被误判成功)
     for st in (4, 5, 6):
         assert f([_epoch_tracker(status=st, msg="tracker message", next_announce=99_999)], base,
                  **kw) == ("rejected", "失败: tracker 未接受汇报(not working): tracker message"), f"status{st}+msg"
@@ -85,14 +85,14 @@ def test_verdict_reannounce_epoch_matrix():
 
 
 def test_verdict_reannounce_legacy_matrix():
-    """legacy 判定矩阵(消解等待模型, plan 26-10-31-2354 D3): 基线行无 epoch 字段 -> ③″变 working/
-    ④′拒绝生效; ②在途直证已废 -> updating/status3 恒 pending; 前跳判据不参与"""
+    """legacy 判定矩阵(消解等待模型, plan 26-10-31-2354 D3): 基线行无 epoch 字段 -> 3" 变 working/
+    4' 拒绝生效; 2 在途直证已废 -> updating/status3 恒 pending; 前跳判据不参与"""
     from auto_qb.core.qbmanager import QbManager
 
     f = QbManager._verdict_reannounce
     base = {"u": {"status": 1, "updating": None, "next": None, "min": None}}  # 行无 epoch 字段
     kw = dict(t0=9_000, tol=3.0, now=20_000)
-    # ② 已废(D3): 在途不再判成功, 落 pending 等消解/超时(当前行用非 working 态, 免混入③″)
+    # 2 已废(D3): 在途不再判成功, 落 pending 等消解/超时(当前行用非 working 态, 免混入 3")
     assert f([_epoch_tracker(status=3)], base, **kw) == ("", "")
     assert f([_epoch_tracker(status=1, updating=True)], base, **kw) == ("", "")
     assert f([_epoch_tracker(status=2)], base, **kw) == ("confirmed", "tracker 状态转为 working")
@@ -101,20 +101,20 @@ def test_verdict_reannounce_legacy_matrix():
     assert f([_epoch_tracker(status=1, next_announce=99_999)], base, **kw) == ("", "")
     assert f([_epoch_tracker(status=1)], base, **kw) == ("", ""), "基线 1 -> 1 无结论"
     b2 = {"u": {"status": 2, "updating": None, "next": None, "min": None}}
-    assert f([_epoch_tracker(status=2)], b2, **kw) == ("", ""), "基线已是 working -> ③″ 不触发"
+    assert f([_epoch_tracker(status=2)], b2, **kw) == ("", ""), '基线已是 working -> 3" 不触发'
     assert f([_epoch_tracker(status=4)], base, **kw) == ("", ""), "status4 空 msg 不武断判败"
 
 
 def test_verdict_reannounce_min_window_guard():
-    """updating 不构成成功证据(plan 26-10-31-2354 D2 废除②): min 未来/过期/缺失/0 下 updating
-    与 status3 一律 pending; min_announce 的剩余用途只有 ③ reason 佐证与 item 级 deadline。
+    """updating 不构成成功证据(plan 26-10-31-2354 D2 废除 2): min 未来/过期/缺失/0 下 updating
+    与 status3 一律 pending; min_announce 的剩余用途只有 3 reason 佐证与 item 级 deadline。
     min 缺失/为 0 支即事故 26-10-31-1740(+1ms 假 ok)的回归锚"""
     from auto_qb.core.qbmanager import QbManager
 
     f = QbManager._verdict_reannounce
     base = {"u": {"status": 2, "updating": False, "next": 100_000, "min": 200_000}}
     kw = dict(t0=190_000, tol=3.0)
-    # 旧断言「min 过期后 updating 直证」已随②废除翻转(D2, 语义变更重写非弱化): 在途从来不是
+    # 旧断言「min 过期后 updating 直证」已随 2 废除翻转(D2, 语义变更重写非弱化): 在途从来不是
     # 成功证据 —— tracker 中途死掉的场景(min 过期+updating)旧断言正是假 ok 源
     assert f([_epoch_tracker(updating=True)], base, now=150_000, **kw) == ("", ""), "min 未过期: 假瞬态"
     assert f([_epoch_tracker(status=3)], base, now=199_999, **kw) == ("", "")

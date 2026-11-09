@@ -144,7 +144,7 @@ def test_v4_seam_spread_live_tail_restart_no_spike():
 
 
 def test_v4_seam_spread_disk_vacuum_recovers_delta():
-    """(P2)磁盘缝摊配(P0 实施记录 ② 反事实形态; issue 26-10-16-0954 修复轮改口径):
+    """(P2)磁盘缝摊配(P0 实施记录 2 反事实形态; issue 26-10-16-0954 修复轮改口径):
     块间真空 null 标记 present(渲染断线)但缝 <= _V4_SEAM_NULL_S 时台阶跨标记按真实跨度
     摊配回收 —— 修复前陈旧差被静默丢出 totals 通道; 覆盖份额口径: span=129 > cov=122 ->
     Σ(rate x w) = step x cov // span = 244/122(未覆盖的 7s 停机秒不归因, 整除构造);

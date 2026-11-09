@@ -41,7 +41,7 @@ def test_view_fields_derived_from_snapshot():
 
     静态: view.py 里 `_SNAPSHOT_FIELD_SET - _VIEW_EXCLUDED_FIELDS` 只允许出现一次(派derive 接线);
     含: 缺口 ⊆ 快照(拼不错/陈旧即红)。行为: 缺口字段不置脏, 快照其余全进脏判定。
-    红验: ① 自抄 61 项 literal 回(行为不变)即静态红; ② 缺口拼不错即含红; ③ 手抄漏一字段即行为红。
+    红验: 1. 自抄 61 项 literal 回(行为不变)即静态红; 2. 缺口拼不错即含红; 3. 手抄漏一字段即行为红。
     """
     from pathlib import Path
 

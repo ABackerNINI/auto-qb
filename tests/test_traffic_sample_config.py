@@ -17,7 +17,7 @@
 
 启动恢复按需读集(plan 26-10-12-2010, 读集下界 now - rollup_window -> agg 水位所在日):
 
-v4 定约用例(plan 26-10-05-2200 §04 表 ③⑤⑥⑦, B2 落地):
+v4 定约用例(plan 26-10-05-2200 §04 表 3/5/6/7, B2 落地):
 
 时钟/落盘纪律: 需要确定时刻的用例经 monkeypatch 把模块 SYSTEM_CLOCK 换成统一假钟(tests/clock.py FakeClock)逐轮推进; flush 时点
 除专项驱动用例外用 mod._flush_all_series() 直调(绕开驱动计时, 驱动时序由专项用例钉住)。

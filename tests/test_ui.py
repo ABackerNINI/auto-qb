@@ -392,7 +392,7 @@ def _winreg_or_stub(monkeypatch):
     """取 winreg: Windows 上真模块; POSIX 上注入替身模块(被测代码的 `import winreg` 命中 sys.modules)。
 
     替身只提供被测分支引用到的常量 —— CreateKeyEx / OpenKey 由各用例自己覆盖。
-    见 pitfalls/testing/patching.md ③(平台专属模块导入用 `setitem(sys.modules, …)` 处置)。
+    见 pitfalls/testing/patching.md 3(平台专属模块导入用 `setitem(sys.modules, …)` 处置)。
     """
     try:
         import winreg

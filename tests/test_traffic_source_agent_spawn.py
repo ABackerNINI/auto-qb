@@ -82,17 +82,17 @@ from traffic_source_agent_support import (
 
 def test_resolve_launch_target_order(tmp_path):
     """tool_exe(存在)优先 -> tool_dir 里启动器 -> 都没有 = None"""
-    # ③ tool_dir 留空 -> 兜底仓库内默认目录(真启动器存在)
+    # 3. tool_dir 留空 -> 兜底仓库内默认目录(真启动器存在)
     t0 = agent.resolve_launch_target(_conf())
     assert t0 is not None and t0.is_exe is False and os.path.basename(t0.path) == _LAUNCHER
 
-    # ② tool_dir 指定临时目录里的启动器
+    # 2. tool_dir 指定临时目录里的启动器
     (tmp_path / _LAUNCHER).write_text("", encoding="utf-8")
     t1 = agent.resolve_launch_target(_conf(tool_dir=str(tmp_path)))
     assert t1 is not None and t1.is_exe is False
     assert t1.path == os.path.join(str(tmp_path), _LAUNCHER)
 
-    # ① tool_exe 存在 -> 直接执行(优先于启动器)
+    # 1. tool_exe 存在 -> 直接执行(优先于启动器)
     exe = tmp_path / "gtm-exe"
     exe.write_text("", encoding="utf-8")
     t2 = agent.resolve_launch_target(_conf(tool_dir=str(tmp_path), tool_exe=str(exe)))
@@ -103,7 +103,7 @@ def test_resolve_launch_target_order(tmp_path):
     t3 = agent.resolve_launch_target(_conf(tool_dir=str(tmp_path), tool_exe=str(tmp_path / "nope")))
     assert t3 is not None and t3.is_exe is False
 
-    # ③' 两者都解析不到 -> None(未安装)
+    # 3'. 两者都解析不到 -> None(未安装)
     empty = tmp_path / "empty"
     empty.mkdir()
     assert agent.resolve_launch_target(_conf(tool_dir=str(empty))) is None

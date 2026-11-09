@@ -2,7 +2,7 @@
 
 ## 测试计划(每个测试函数一条)
 - test_api_hr_site_entries_full_fields: 种子明细端点(计划 26-10-01-2216 §7 阶段1)200 全字段 —— 行键面 = §3 P0+P1 全集
-- test_api_hr_site_entries_local_present: 明细行 local_present 本地库 join(计划 26-10-02-1936 §3.3 决策点③a) ——
+- test_api_hr_site_entries_local_present: 明细行 local_present 本地库 join(计划 26-10-02-1936 §3.3 决策点 3a) ——
   v1 命中/仅 v2 命中/大小写差异命中 -> True, 本地不存在 -> False(未做种)
 - test_api_hr_site_entries_verified_two_states: verified 有/无两态同表(无记录→未核实; 有记录→verified_ts+source 原值+人话)
 - test_api_hr_site_entries_empty_site: 站点已接入但没有 HR 行 -> 200 + 空数组(前端空态)
@@ -17,7 +17,7 @@
 - test_api_hr_history_read_error_reported_not_raised: 站点文件读坏不抛 —— read_errors{site: err} 带出, rows 剔掉坏站
 - test_api_state_excludes_hr_entry_details: 体积守卫 —— 种子明细键不得进 /api/state 轮询载荷(计划 §8)
 - test_hr_user_visible_texts_no_graduation_wording: 否定守阵 —— 用户可见文案来源(hr status/resolve/events 字符串常量)「毕业」零残留
-  (注释保留域术语, 决策点②); 无事实分支与带事实分支同文「在线·已达标」(testhr_view_fields_three_state 内钉)
+  (注释保留域术语, 决策点 2); 无事实分支与带事实分支同文「在线·已达标」(testhr_view_fields_three_state 内钉)
 - test_api_hr_refresh_single_site_and_no_runtime: refresh 指定单站受理 + hr 门面缺席回 409
 - test_api_hr_confirm_empty: 人工对账戳端点(缺 site/未启用/未接入 400, 成功 ok, 写入失败 409)
 - test_api_events_sse_stream_lifecycle: SSE 生成器整块(hello 帧/事件帧/keepalive 心跳/终结退订;
@@ -130,7 +130,7 @@ def test_api_hr_site_entries_full_fields(web_env, tmp_path):
 
 
 def test_api_hr_site_entries_local_present(web_env, tmp_path):
-    """local_present 本地库 join(计划 26-10-02-1936 §3.3, 决策点③a): 明细端点每行带只读标记
+    """local_present 本地库 join(计划 26-10-02-1936 §3.3, 决策点 3a): 明细端点每行带只读标记
 
     真实 join 用例(端点级): v1 精确命中 / 仅 v2 命中 / 大小写差异命中 -> True;
     本地不存在 -> False(未做种, 含本地从未下载的清单行)。join 键口径单点在
@@ -317,7 +317,7 @@ def test_api_hr_history_limit_clamped(web_env, tmp_path):
 
 
 def test_api_hr_history_read_error_reported_not_raised(web_env, tmp_path):
-    """站点文件读坏不抛: read_errors{site: err} 原样带出, rows 剔掉坏站(表① 同款只读口径)"""
+    """站点文件读坏不抛: read_errors{site: err} 原样带出, rows 剔掉坏站(表 1 同款只读口径)"""
     mgr, client = web_env
     svc = _hr_status_env(mgr, tmp_path)
     auth = {_AUTH_HEADER_KEY: f"Bearer {mgr.web.token}"}
@@ -330,7 +330,7 @@ def test_api_hr_history_read_error_reported_not_raised(web_env, tmp_path):
 
 
 def test_api_state_excludes_hr_entry_details(web_env):
-    """体积守卫: 种子明细键不得进 /api/state 轮询载荷(计划 §8) —— 明细只随表①按站点按需拉"""
+    """体积守卫: 种子明细键不得进 /api/state 轮询载荷(计划 §8) —— 明细只随表 1 按站点按需拉"""
     mgr, client = web_env
     auth = {_AUTH_HEADER_KEY: f"Bearer {mgr.web.token}"}
     text = json.dumps(client.get("/api/state", headers=auth).json(), ensure_ascii=False)
@@ -342,7 +342,7 @@ def test_hr_user_visible_texts_no_graduation_wording():
     """否定守阵(计划 26-10-02-1936 §3.5): 用户可见文案来源「毕业」零残留
 
     扫 hr/status.py(SOURCE_TEXTS 等)· hr/resolve.py(放行依据文案表 / safety_display 人话)·
-    hr/events.py(告警行)的**字符串常量**(AST 层取, 注释天然不在其列 —— 注释按决策点②
+    hr/events.py(告警行)的**字符串常量**(AST 层取, 注释天然不在其列 —— 注释按决策点 2
     保留「毕业」域术语, grep 可溯源)。前端静态文案归阶段 2-3 守阵, 不在此。
     """
     import ast
@@ -512,9 +512,9 @@ def test_frontend_hr_status_fields_match_backend():
     }
     # 锚点必须指向合并块自身: v-if 只在「HR 在线核实」分区模板块这一处出现, 重复出现说明块被复制
     # (2026-09-27 起块内含「站点接入」+「站点状态」两个块, 扫描窗放大到 8000 字符; 26-10-01 阶段2
-    # 表① 又带入嵌套 <template v-for> 明细表 —— 单找第一个 </template> 会切在明细表收口、丢掉块尾
+    # 表 1 又带入嵌套 <template v-for> 明细表 —— 单找第一个 </template> 会切在明细表收口、丢掉块尾
     # 字段覆盖, 故改按模板嵌套深度找**锚点自己的配对收口**, 窗口只作半残兜底: 阶段3 放大到 16000,
-    # 26-10-04-0312 S4 表③ 拉取历史全局段再涨(实测块 18.2k 字符)放大到 32000)
+    # 26-10-04-0312 S4 表 3 拉取历史全局段再涨(实测块 18.2k 字符)放大到 32000)
     anchor = "hub.view === 'hr_check'"
     for ui in _UI_ALL:
         html = _ui_aggregate(ui)
@@ -570,7 +570,7 @@ def test_api_hr_status_reports_site_state(web_env, tmp_path):
     assert site["pending_infohash"] == 0 and site["backfill_ratio"] == 1.0
     assert site["managed"] == 0 and site["keys"] == 2, "行名不粗配本地名 → 考察中命中 0; 身份键在终态档占 v1/v2 两个"
     assert all(l["status"] == "ok" for l in site["lanes"]), "三档波次状态全有效"
-    # 表② 波次表档位徽章人话(计划 26-10-01-2216 §6.2 mockup「A 考察中」形态): 曾因 LaneStatus
+    # 表 2 波次表档位徽章人话(计划 26-10-01-2216 §6.2 mockup「A 考察中」形态): 曾因 LaneStatus
     # 缺字段渲染为空(幻键), 修后逐档钉值 + 钉「取自 LANE_TEXTS 单点」双断言
     from auto_qb.hr.model import FETCH_LANES
     from auto_qb.hr.status import LANE_TEXTS

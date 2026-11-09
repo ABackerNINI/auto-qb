@@ -51,23 +51,23 @@
 
 启动恢复按需读集(plan 26-10-12-2010, 读集下界 now - rollup_window -> agg 水位所在日):
 
-v4 定约用例(plan 26-10-05-2200 §04 表 ③⑤⑥⑦, B2 落地):
-- test_v4_idle_block_stays_open_single_b_row_and_live_tail_identity: ⑥ 空闲块不关 —— 纯空闲系列
+v4 定约用例(plan 26-10-05-2200 §04 表 3/5/6/7, B2 落地):
+- test_v4_idle_block_stays_open_single_b_row_and_live_tail_identity: 6. 空闲块不关 —— 纯空闲系列
   (数据门有数据 + 零速)主文件零写入, 封口后恰 1 条 B 行 + 1 条长 z 行; 跨 flush 开放 z 游程的
   LiveTail 复原与落盘重算恒等; 恢复传输后 r 行 delta <= flush 窗 x 速率
-- test_v4_non_z_seal_midnight_materializes_idle_b_z_batch: ⑦ 非 z 事件封口 —— 长空闲段恰 1 条长 z 行,
+- test_v4_non_z_seal_midnight_materializes_idle_b_z_batch: 7. 非 z 事件封口 —— 长空闲段恰 1 条长 z 行,
   00:00 物化进当日天文件(B + z 一批 append); 次日 LiveTail 开放游程跨天接力与落盘重算恒等
-- test_v4_crash_restart_idle_window_is_vacuum: ⑦ 崩溃重启该时段 = 真空 —— 空闲段 cov_s 缺失,
+- test_v4_crash_restart_idle_window_is_vacuum: 7. 崩溃重启该时段 = 真空 —— 空闲段 cov_s 缺失,
   hour 行 avg 不被零速稀释(无偏)
 
 时钟/落盘纪律: 需要确定时刻的用例经构造期 clock=FakeClock 注入(采样模块经 qbmanager 装配链透传, S3 后不再按模块换假钟)逐轮推进; flush 时点
 除专项驱动用例外用 mod._flush_all_series() 直调(绕开驱动计时, 驱动时序由专项用例钉住)。
 
 形态 D 封口末端锚点(plan 26-10-16-1509 §04, z 行扩列; 五条封口路径):
-- test_torrent_idle_run_snapshot_fixed_at_open: 路径 ① 末端列 = 封口触发样本读数(冻结列不变)
-- test_zrun_end_anchor_tracked_reading_on_stop: 路径 ③ 无样本在手 -> 末端锚点 = 游程内最后
+- test_torrent_idle_run_snapshot_fixed_at_open: 路径 1 末端列 = 封口触发样本读数(冻结列不变)
+- test_zrun_end_anchor_tracked_reading_on_stop: 路径 3 无样本在手 -> 末端锚点 = 游程内最后
   一条零样本读数(跟踪字段)
-- test_zrun_end_anchor_tracked_reading_on_interval_change: 路径 ④ 改间隔关块同口径
+- test_zrun_end_anchor_tracked_reading_on_interval_change: 路径 4 改间隔关块同口径
 
 P1-T1.2 守卫与容错簇(计划 26-10-20-2101, 覆盖率缺口清偿):
 - test_pending_agg_rows_skips_empty_and_zero_coverage_buckets: 活尾 pending 行 —— 空桶不留行 /
@@ -500,7 +500,7 @@ def test_global_idle_run_stays_open_across_flush_and_seals_on_resume(tmp_path, m
 def test_torrent_idle_run_snapshot_fixed_at_open(tmp_path, monkeypatch):
     """单种动过->停: z 记录 totals 快照固定在开启时刻(首个零样本的 all-time 对);
     空闲期两个不同 totals 的零样本不刷新快照(§3.4 沿用); 形态 D: 末端列落封口触发
-    样本的读数(路径 ①, 冻结列不受影响)"""
+    样本的读数(路径 1, 冻结列不受影响)"""
     clock = FakeClock()
     mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30), clock=clock)
     mgr.store.server_state = server_state()
@@ -528,7 +528,7 @@ def test_torrent_idle_run_snapshot_fixed_at_open(tmp_path, monkeypatch):
     z = mod._buffers[rel_key].records[1]  # 同块续写: [r(t0), z, r(t0+120)]
     assert isinstance(z, V4ZeroRun) and z.run_len == 3
     assert (z.dl_total, z.up_total) == (5_000_500, 3_000_200)  # 快照 = 首零样本对, 非后续零样本
-    assert (z.dl_total_end, z.up_total_end) == (5_001_000, 3_000_600)  # 形态 D 末端列 = 封口触发样本(路径 ①)
+    assert (z.dl_total_end, z.up_total_end) == (5_001_000, 3_000_600)  # 形态 D 末端列 = 封口触发样本(路径 1)
     assert rel_key not in mod._open_runs
     _flush(mod)
     parsed = _v4_read(tmp_path, rel_key, clock.now())
@@ -911,7 +911,7 @@ def test_stop_flushes_all_and_seals_open_runs(tmp_path, monkeypatch):
 
 
 def test_zrun_end_anchor_tracked_reading_on_stop(tmp_path, monkeypatch):
-    """形态 D 封口路径 ③(无样本在手 = stop()): 末端锚点 = 游程内最后一条零样本读数
+    """形态 D 封口路径 3(无样本在手 = stop()): 末端锚点 = 游程内最后一条零样本读数
     (全局系列每轮现读 totals, 跟踪字段随读刷新); 冻结列不变, 末端列落盘该读数"""
     clock = FakeClock()
     mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30, flush_interval=10**9), clock=clock)
@@ -931,7 +931,7 @@ def test_zrun_end_anchor_tracked_reading_on_stop(tmp_path, monkeypatch):
 
 
 def test_zrun_end_anchor_tracked_reading_on_interval_change(tmp_path, monkeypatch):
-    """形态 D 封口路径 ④(采样间隔热重载关块): 关块前封开放游程, 末端锚点 = 跟踪的最后
+    """形态 D 封口路径 4(采样间隔热重载关块): 关块前封开放游程, 末端锚点 = 跟踪的最后
     零样本读数; 旧块以旧 interval 落盘、新数据新块新 interval(A3 口径不变)"""
     clock = FakeClock()
     mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30), clock=clock)
@@ -1054,7 +1054,7 @@ def test_v4_write_io_full_day_30s_interval(tmp_path, monkeypatch):
 
 
 def test_v4_idle_block_stays_open_single_b_row_and_live_tail_identity(tmp_path, monkeypatch):
-    """⑥ 空闲块不关(v4 §04 用例 ⑥): 纯空闲系列(数据门有数据 + 零速)跨 flush 时点
+    """6. 空闲块不关(v4 §04 用例 6): 纯空闲系列(数据门有数据 + 零速)跨 flush 时点
     主文件零写入, 封口后天文件恰 1 条 B 行 + 1 条长 z 行; 跨 flush 开放 z 游程的
     LiveTail 复原与落盘重算恒等(块首封口形态); 恢复传输后 r 行 delta <= flush 窗 x 速率"""
     clock = FakeClock()
@@ -1101,7 +1101,7 @@ def test_v4_idle_block_stays_open_single_b_row_and_live_tail_identity(tmp_path, 
 
 
 def test_v4_non_z_seal_midnight_materializes_idle_b_z_batch(tmp_path, monkeypatch):
-    """⑦ 非 z 事件封口(v4 §04 用例 ⑦): 长空闲段恰 1 条长 z 行, 00:00 物化进当日天文件
+    """7. 非 z 事件封口(v4 §04 用例 7): 长空闲段恰 1 条长 z 行, 00:00 物化进当日天文件
     (B + z 一批 append, 空闲期主文件零写入); 次日 LiveTail 开放游程跨天接力与落盘重算恒等"""
     clock = FakeClock(start=_local_epoch(23, 57, 40))
     mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30, flush_interval=10**9), clock=clock)
@@ -1146,7 +1146,7 @@ def test_v4_non_z_seal_midnight_materializes_idle_b_z_batch(tmp_path, monkeypatc
 
 
 def test_v4_crash_restart_idle_window_is_vacuum(tmp_path, monkeypatch):
-    """⑦ 崩溃重启该时段 = 真空(v4 §04 用例 ⑦): 开放 z 游程是空闲期唯一副本, 崩溃即丢
+    """7. 崩溃重启该时段 = 真空(v4 §04 用例 7): 开放 z 游程是空闲期唯一副本, 崩溃即丢
     「在场证明」—— 重启 catch-up 后空闲段 cov_s 缺失, hour 行 avg 不被零速稀释(无偏)"""
     base_t = _local_epoch(10, 0, 0)
     clock = FakeClock(start=base_t)

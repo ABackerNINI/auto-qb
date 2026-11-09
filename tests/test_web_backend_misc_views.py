@@ -717,7 +717,7 @@ def test_site_alert_priority_and_virtual_tracker(tmp_path):
     from helpers import FakeTorrent, make_manager, seed_store
 
     mgr = make_manager(str(tmp_path / "state.json"))
-    # ① 缺站点配置 + 同时有报错 -> 缺配置优先(配置缺失时连报错文本都不可信)
+    # 1. 缺站点配置 + 同时有报错 -> 缺配置优先(配置缺失时连报错文本都不可信)
     no_conf = FakeTorrent(
         hash="HA",
         name="A",
@@ -725,9 +725,9 @@ def test_site_alert_priority_and_virtual_tracker(tmp_path):
         tracker="https://tracker.unknown.net/announce.php",
         tracker_health_msg="拒绝"
     )
-    # ② 纯 DHT(无真实 tracker URL): 不报缺配置
+    # 2. 纯 DHT(无真实 tracker URL): 不报缺配置
     dht_only = FakeTorrent(hash="HB", name="B", state="stalledUP", tracker="** [DHT] **")
-    # ③ 报错文本超长 -> 截断到 SITE_ALERT_MSG_MAX
+    # 3. 报错文本超长 -> 截断到 SITE_ALERT_MSG_MAX
     long_msg = "x" * (web_view.SITE_ALERT_MSG_MAX + 50)
     conf = FakeTorrent(hash="HC", name="C", state="stalledUP", tracker="https://tracker.hhanclub.net/announce.php")
     conf.tracker_conf = object()  # 已匹配站点(只判 None)

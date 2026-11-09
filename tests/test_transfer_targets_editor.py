@@ -5,8 +5,8 @@
 地址/凭据/启用/字段集/转移后状态/跳检/路径映射), 编辑直接落 cfg.tree.config.web.transfer
 (整对象替换, 脏标记/保存/放弃走全局 actbar), 行为层在 shared/transfer_targets.js,
 模板在 shared/tpl/transfer-targets.html(x-template 组件, traffic-card.html 同范式)。
-本文件守阵三层: ①字段集单点与后端契约逐位对账 ②node 真跑**写路径**喂后端 validate_config
-(两端对"合法目标"的认定必须一致) ③静态接线(manifest 装载序 / mixin+component / 挂载面 /
+本文件守阵三层: 1. 字段集单点与后端契约逐位对账 2. node 真跑**写路径**喂后端 validate_config
+(两端对"合法目标"的认定必须一致) 3. 静态接线(manifest 装载序 / mixin+component / 挂载面 /
 密码遮显三件套 / saveError 展示 / CSS 成对)。
 
 ## 测试计划(每个测试函数一条)
@@ -79,12 +79,12 @@ Object.defineProperty(vm, "ttList", { get() { return M.computed.ttList.call(vm);
 
 const out = {};
 
-// ---- ① 新建模板默认
+// ---- 1. 新建模板默认
 vm.ttAdd();
 out.template = vm.cfg.tree.config.web.transfer.targets[0];
 out.editAfterAdd = vm.trTgt.edit;
 
-// ---- ② 逐字段编辑写回
+// ---- 2. 逐字段编辑写回
 vm.ttSet(0, "name", "副种机");
 vm.ttSet(0, "type", "qb");
 vm.ttSet(0, "base_url", "http://127.0.0.1:8081");
@@ -95,7 +95,7 @@ vm.ttSet(0, "after_state", "paused");
 vm.ttSetField(0, "super_seeding", true);
 out.patched = vm.cfg.tree.config.web.transfer.targets[0];
 
-// ---- ③ 路径映射: 加两行 -> 改值 -> 换位 -> 删一行
+// ---- 3. 路径映射: 加两行 -> 改值 -> 换位 -> 删一行
 vm.ttMapAdd(0);
 vm.ttMapAdd(0);
 vm.ttMapSet(0, 0, "from", "/downloads");
@@ -107,7 +107,7 @@ out.mapAfterMove = vm.cfg.tree.config.web.transfer.targets[0].path_map;
 vm.ttMapDel(0, 0);       // 删掉首位(换位后的原次条) -> 剩一条
 out.mapOne = vm.cfg.tree.config.web.transfer.targets[0].path_map;
 
-// ---- ④ 密码/API Key: 非焦点 input 一律不写树; 焦点键入写树
+// ---- 4. 密码/API Key: 非焦点 input 一律不写树; 焦点键入写树
 const elFake = {};
 global.document = { activeElement: {} };   // 焦点在别处 = 自动填充形态
 vm.ttSecret({ target: elFake }, 0);        // activeElement !== el -> 不写
@@ -122,7 +122,7 @@ vm.ttSecret({ target: elFake }, 0, "api_key");   // 显式指键 -> 写 api_key
 out.apiKeyAfterTyped = vm.cfg.tree.config.web.transfer.targets[0].api_key;
 delete global.document;
 
-// ---- ⑤ 删除确认: 拒绝 = 不动; 确认 = 移行且编辑器下标随动
+// ---- 5. 删除确认: 拒绝 = 不动; 确认 = 移行且编辑器下标随动
 asyncOk.v = false;
 vm.ttRemove(0).then(() => {
   out.denied = vm.cfg.tree.config.web.transfer.targets.length;
@@ -131,11 +131,11 @@ vm.ttRemove(0).then(() => {
   vm.ttRemove(0).then(() => {
     out.confirmed = vm.cfg.tree.config.web.transfer || null;
     out.editAfterRemove = vm.trTgt.edit;
-    // ---- ⑥ 空表删键: 最后一个目标删掉 = transfer 键整段消失(不写空列表)
+    // ---- 6. 空表删键: 最后一个目标删掉 = transfer 键整段消失(不写空列表)
     vm.ttAdd();
     vm.ttRemove(0).then(() => {
       out.emptyTree = vm.cfg.tree.config.web;
-      // ---- ⑦ 测试连接: 脏树拒发 / 干净树走 cmd 管线(ok 与 error 两态)
+      // ---- 7. 测试连接: 脏树拒发 / 干净树走 cmd 管线(ok 与 error 两态)
       vm.ttAdd();
       vm.ttSet(0, "name", "未保存机");
       vm.cfgDirty = true;
@@ -225,7 +225,7 @@ def test_tt_write_shape_passes_config_contract():
     from auto_qb.config.models import default_transfer_fields
     from auto_qb.config.validation import validate_config
 
-    # ---- ① 新建模板默认(与 default_transfer_fields 逐键一致; 启用/跳检/状态按计划拍板)
+    # ---- 1. 新建模板默认(与 default_transfer_fields 逐键一致; 启用/跳检/状态按计划拍板)
     tpl = rep["template"]
     assert tpl["enabled"] == "false", "新建目标默认未启用(保守默认, 黄金法则 2)"
     assert tpl["skip_check"] == "true" and tpl["after_state"] == "keep"
@@ -234,7 +234,7 @@ def test_tt_write_shape_passes_config_contract():
     assert tpl["fields"] == expect_fields, f"新建模板 fields != 后端 default_transfer_fields: {tpl['fields']}"
     assert rep["editAfterAdd"] == 0, "新增后应展开该行编辑器"
 
-    # ---- ② 编辑写回的整树过 validate_config 零错误
+    # ---- 2. 编辑写回的整树过 validate_config 零错误
     tree = {"config": {"web": {"transfer": {"targets": [dict(rep["patched"], path_map=rep["mapOne"])]}}}}
     assert validate_config(tree) == [], f"编辑器真写路径产出过不了后端校验: {validate_config(tree)}"
     t = tree["config"]["web"]["transfer"]["targets"][0]
@@ -250,19 +250,19 @@ def test_tt_write_shape_passes_config_contract():
     }], (f"映射 ↑↓ 换位语义不对: {rep['mapAfterMove']}")
     assert rep["mapOne"] == [{"from": "/downloads", "to": "/data"}], f"映射删除语义不对: {rep['mapOne']}"
 
-    # ---- ③ 密码/API Key 遮显防线: 非焦点 input 不写树, 焦点键入写树(自动填充坑档同款判据)
+    # ---- 3. 密码/API Key 遮显防线: 非焦点 input 不写树, 焦点键入写树(自动填充坑档同款判据)
     assert rep["secretAfterUnfocused"] == "", "非焦点 input 事件把值写进了树(自动填充会凭空造脏)"
     assert rep["secretAfterTyped"] == "s3cret", "焦点键入未写树"
     assert rep["apiKeyAfterUnfocused"] == "", "API Key 框非焦点 input 把值写进了树(同款防线失效)"
     assert rep["apiKeyAfterTyped"] == "tok-xyz", "API Key 焦点键入未写到 api_key 键"
 
-    # ---- ④ 删除确认 + 编辑器下标随动 + 空表删键
+    # ---- 4. 删除确认 + 编辑器下标随动 + 空表删键
     assert rep["denied"] == 1, "确认框拒绝后目标被删了(删除必须先确认)"
     assert rep["confirmed"] is None, "确认删除后 transfer 段应整段消失(空表删键)"
     assert rep["editAfterRemove"] == -1, "删掉展开中的目标后编辑器应收起"
     assert "transfer" not in rep["emptyTree"], "空 targets 不许写空列表(键缺失 == 未配置, 全树 JSON 对比才同构)"
 
-    # ---- ⑤ 测试连接: 未保存拒发 / 已保存走 POST /api/transfer/test, ok/error 两态回显
+    # ---- 5. 测试连接: 未保存拒发 / 已保存走 POST /api/transfer/test, ok/error 两态回显
     assert rep["testDirtyBlocked"] is True, "脏树(有未保存改动)仍发了测试请求 —— 后端按名字找目标, 未保存找不到"
     assert rep["apiPaths"] == ["/api/transfer/test", "/api/transfer/test"], rep["apiPaths"]
     assert rep["testOk"] == {"name": "已存机", "ok": True, "text": "qBittorrent 5.1.0"}, rep["testOk"]

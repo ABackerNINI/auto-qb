@@ -78,8 +78,8 @@ def test_bulk_optimistic_actions_have_truth_channel():
     出口会被一并切断(§4.3: 前端 resolveOptimistic 成功时设 hold=true 等真值事件, 而批量路径永远
     等不到 ⇒ 8 秒兜底回滚到"点击那一刻的旧值")。
 
-    本用例按乐观白名单遍历断言: 每个动作都 ① 不在延迟回执族 ② 走完 drain 后登记待推真值
-    ③ 回执由 drain 写。**新增乐观动作(前端 _optimisticPatch 加分支)时必须同步进来** —— 这就是
+    本用例按乐观白名单遍历断言: 每个动作都 1. 不在延迟回执族 2. 走完 drain 后登记待推真值
+    3. 回执由 drain 写。**新增乐观动作(前端 _optimisticPatch 加分支)时必须同步进来** —— 这就是
     "白名单加了新动作、真值出口没跟上"这类回归的机械守卫。
     """
     from auto_qb.webui.commands import _OPTIMISTIC_BULK_ACTIONS, is_deferred_receipt

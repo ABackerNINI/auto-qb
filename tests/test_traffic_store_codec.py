@@ -913,33 +913,33 @@ def test_v4_bad_line_warn_torn_exemption_and_gate_boundaries(tmp_path, caplog, m
     def _warns() -> list:
         return [r for r in caplog.records if "坏行" in r.getMessage()]
 
-    # ① 撕裂尾恰豁免 1 行: 中段 1 坏行 + 尾部半行(豁免) -> 有效坏行 1 < 2, 不告
+    # 1. 撕裂尾恰豁免 1 行: 中段 1 坏行 + 尾部半行(豁免) -> 有效坏行 1 < 2, 不告
     _write("2026-10-01", head + ["r,1,1,1,1"] * 34 + ["garbage", "torn_half"], trailing_newline=False)
     with caplog.at_level(logging.WARNING, logger="auto_qb.core.traffic_store"):
         parsed = store.read_day("global", "2026-10-01")
     assert parsed.bad_lines == 2 and parsed.torn_tail is True
     assert not _warns(), "撕裂尾豁免后有效坏行 1 < 2(豁免不得失效)"
-    # ② 豁免不加倍: 中段 2 坏行 + 尾部半行 -> 有效坏行 2 且 2/39 > 5% -> 告警恰一次
+    # 2. 豁免不加倍: 中段 2 坏行 + 尾部半行 -> 有效坏行 2 且 2/39 > 5% -> 告警恰一次
     caplog.clear()
     _write("2026-10-02", head + ["r,1,1,1,1"] * 34 + ["garbage1", "garbage2", "torn_half"], trailing_newline=False)
     with caplog.at_level(logging.WARNING, logger="auto_qb.core.traffic_store"):
         parsed2 = store.read_day("global", "2026-10-02")
     assert parsed2.bad_lines == 3 and parsed2.torn_tail is True
     assert len(_warns()) == 1, "豁免后有效坏行 2 超阈告警(豁免不得加倍)"
-    # ③ 单行坏行(1/10 = 10% > 5%): 行数闸拦下不告
+    # 3. 单行坏行(1/10 = 10% > 5%): 行数闸拦下不告
     caplog.clear()
     _write("2026-10-03", head + ["r,1,1,1,1"] * 7 + ["garbage"])
     with caplog.at_level(logging.WARNING, logger="auto_qb.core.traffic_store"):
         parsed3 = store.read_day("global", "2026-10-03")
     assert parsed3.bad_lines == 1 and parsed3.data_lines == 10
     assert not _warns(), "单行坏行不告(行数闸)"
-    # ④ 占比闸: 2/100 = 2% <= 5% 不告
+    # 4. 占比闸: 2/100 = 2% <= 5% 不告
     caplog.clear()
     _write("2026-10-04", head + ["r,1,1,1,1"] * 96 + ["garbage1", "garbage2"])
     with caplog.at_level(logging.WARNING, logger="auto_qb.core.traffic_store"):
         store.read_day("global", "2026-10-04")
     assert not _warns(), "占比 2% <= 5% 不告"
-    # ⑤ 占比恰等边界: 2/40 = 5.0% 恰压线不告(超阈为严格大于)
+    # 5. 占比恰等边界: 2/40 = 5.0% 恰压线不告(超阈为严格大于)
     caplog.clear()
     _write("2026-10-05", head + ["r,1,1,1,1"] * 36 + ["garbage1", "garbage2"])
     with caplog.at_level(logging.WARNING, logger="auto_qb.core.traffic_store"):

@@ -483,7 +483,7 @@ def test_store_update_state_snapshot_from_by_hash():
 
     A 系 26-10-13-0540 S1 起 `update_torrent_fields` 无 `state=` 形参(合成回写整段删除):
     自家停/起的 state 只经下一轮真实 delta 进快照。本守阵钉住两侧契约:
-    ① 同步落地 -> 快照跟随; ② 客户端侧照常翻暂停轴 -> 同轮快照**不动**, 须等下一轮同步。
+    1. 同步落地 -> 快照跟随; 2. 客户端侧照常翻暂停轴 -> 同轮快照**不动**, 须等下一轮同步。
     """
     client = FakeClient()
     client.torrents["H1"] = FakeTorrent(hash="H1", state="stalledUP")
@@ -509,7 +509,7 @@ def test_store_update_state_snapshot_from_by_hash():
 
 
 def test_own_writes_evicted_on_state_sync():
-    """守阵(A 系 S2): 自有写登记在「同步应用到该 hash 新 state」时逐出 —— deferral 解除路径①
+    """守阵(A 系 S2): 自有写登记在「同步应用到该 hash 新 state」时逐出 —— deferral 解除路径 1
 
     红验: 去掉 _apply 里 `if "state" in changed` 分支的 own_writes.pop -> 状态回流后登记残留, 断言红。
     """
@@ -597,10 +597,10 @@ def _state_write_sites(source: str) -> list:
 
     用 AST 而非正则: 正则会把 docstring 里的 `source.state="stale"` 当成写点(实测
     traffic_source/reader.py 就有一例), 也会漏掉多目标/换行的赋值。三条形态与 A 系 S1 守阵一一对应:
-      ① `.state = ...`(属性赋值, 合成回写必然是给记录 state 赋值);
-      ② `setattr(obj, "state", ...)`(等价的间接赋值);
-      ③ `update_torrent_fields(..., state=...)`(该形参已删, 残留即回写通道复活)。
-    判据④(调用点): `apply_delta(...)` 只允许出现在 store.py / record.py —— 历史漏网形态
+      1. `.state = ...`(属性赋值, 合成回写必然是给记录 state 赋值);
+      2. `setattr(obj, "state", ...)`(等价的间接赋值);
+      3. `update_torrent_fields(..., state=...)`(该形参已删, 残留即回写通道复活)。
+    判据 4(调用点): `apply_delta(...)` 只允许出现在 store.py / record.py —— 历史漏网形态
     `tor.apply_delta(live[0])` 绕过前三条, 只有按调用点白名单才拦得住。
     """
     hits = []
@@ -672,7 +672,7 @@ def test_state_write_scanner_detects_synthetic_writes():
     }
     for name, src in samples.items():
         assert _state_write_sites(src), f"{name} 形态未被检出"
-    # 判据④: apply_delta 调用(历史漏网形态 —— 它绕过了前三条)
+    # 判据 4: apply_delta 调用(历史漏网形态 —— 它绕过了前三条)
     assert _apply_delta_calls("def f(tor, live):\n    tor.apply_delta(live[0])\n"), "apply_delta 调用未被检出"
     assert not _state_write_sites('def f(x):\n    """说明: 落 x.state="stale" 标记"""\n'), "docstring 同形文本不应命中"
 

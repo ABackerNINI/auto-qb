@@ -281,10 +281,10 @@ def test_long_path_prefix_relative_path(tmp_path, monkeypatch):
 
 
 def test_atomic_write_failure_cleanup_arcs(tmp_path, monkeypatch):
-    """atomic_write 失败清理的两条边缘: ① 临时文件已不在时不删(少一次无谓 IO);
-    ② 删临时文件本身失败(占用/权限)只吞掉, **绝不掩盖原始异常**
+    """atomic_write 失败清理的两条边缘: 1. 临时文件已不在时不删(少一次无谓 IO);
+    2. 删临时文件本身失败(占用/权限)只吞掉, **绝不掩盖原始异常**
 
-    ① 对应 `os.replace` 已成功后的形态; ② 对应 Windows 上杀毒/索引器短暂占用临时文件的形态 ——
+    1. 对应 `os.replace` 已成功后的形态; 2. 对应 Windows 上杀毒/索引器短暂占用临时文件的形态 ——
     清理是尽力而为, 调用方要看到的永远是「写盘中断」这个真原因。
     """
     target = str(tmp_path / "out.txt")
@@ -292,13 +292,13 @@ def test_atomic_write_failure_cleanup_arcs(tmp_path, monkeypatch):
     def _boom(f):
         raise RuntimeError("写盘中断")
 
-    # ① exists 恒假 -> `if os.path.exists(tmp_path)` 假弧, 直接 re-raise
+    # 1. exists 恒假 -> `if os.path.exists(tmp_path)` 假弧, 直接 re-raise
     monkeypatch.setattr(os.path, "exists", lambda p: False)
     with pytest.raises(RuntimeError, match="写盘中断"):
         utils.atomic_write(target, _boom)
     monkeypatch.undo()
 
-    # ② 删不掉 -> OSError 吞掉, 原始异常照抛
+    # 2. 删不掉 -> OSError 吞掉, 原始异常照抛
     def _remove_boom(p):
         raise OSError(13, "locked")
 
@@ -307,5 +307,5 @@ def test_atomic_write_failure_cleanup_arcs(tmp_path, monkeypatch):
         utils.atomic_write(target, _boom)
     monkeypatch.undo()
 
-    for leaked in tmp_path.iterdir():  # ② 故意删不掉, 手工清残骸
+    for leaked in tmp_path.iterdir():  # 2. 故意删不掉, 手工清残骸
         leaked.unlink()

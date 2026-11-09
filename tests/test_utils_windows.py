@@ -966,7 +966,7 @@ def test_win_reuse_and_wait_explorer(monkeypatch):
     """复用窗口按标题匹配(含本地化后缀); 差集新窗口优先; 超时 None; 置前重试封顶
 
     `_win_reuse_title_candidates` 用 `os.path` 拆**Windows 形态**的 target(调用点只在 Windows)
-    ⇒ 按 pitfalls/testing/patching.md ④ 固定语义: 只把 utils 模块内的 `os` 换成 `ntpath`
+    ⇒ 按 pitfalls/testing/patching.md 4 固定语义: 只把 utils 模块内的 `os` 换成 `ntpath`
     (纯字符串模块, 两平台同语义), 不动全局 os.path。否则 POSIX 上反斜杠不是分隔符, 盘根断言必红。
     """
     monkeypatch.setattr(utils, "os", SimpleNamespace(path=ntpath))

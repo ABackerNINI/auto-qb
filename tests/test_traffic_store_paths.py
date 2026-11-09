@@ -296,12 +296,12 @@ def test_v4_write_text_payload_cleanup_paths(tmp_path, monkeypatch):
     def _remove_locked(p):
         raise OSError(13, "locked")
 
-    # ① PermissionError + 删 tmp 自身抛 OSError(被吞): 退避重试耗尽 -> 放弃, 原文件完好
+    # 1. PermissionError + 删 tmp 自身抛 OSError(被吞): 退避重试耗尽 -> 放弃, 原文件完好
     monkeypatch.setattr("auto_qb.core.traffic_store.os.replace", _always_locked)
     monkeypatch.setattr("auto_qb.core.traffic_store.os.remove", _remove_locked)
     assert traffic_store_module._write_text_payload(str(target), "new\n") is False
     assert target.read_text(encoding="utf-8") == "old\n"
-    # ② PermissionError + tmp 已不在(上一轮删过): 跳过删除照常退避, 结果同上
+    # 2. PermissionError + tmp 已不在(上一轮删过): 跳过删除照常退避, 结果同上
     real_exists = os.path.exists
     monkeypatch.setattr(
         "auto_qb.core.traffic_store.os.path.exists",
@@ -310,10 +310,10 @@ def test_v4_write_text_payload_cleanup_paths(tmp_path, monkeypatch):
     assert traffic_store_module._write_text_payload(str(target), "new\n") is False
     assert target.read_text(encoding="utf-8") == "old\n"
     monkeypatch.undo()
-    for leaked in tmp_path.glob("*.tmp"):  # ①② 故意留下的 tmp 残骸(删除被拦/被跳过的路径)
+    for leaked in tmp_path.glob("*.tmp"):  # 1/2 故意留下的 tmp 残骸(删除被拦/被跳过的路径)
         leaked.unlink()
 
-    # ③ 非 PermissionError 异常: 清理 tmp 后原样上抛(不静默吞掉真故障)
+    # 3. 非 PermissionError 异常: 清理 tmp 后原样上抛(不静默吞掉真故障)
     def _boom(src, dst):
         raise RuntimeError("disk on fire")
 
@@ -322,7 +322,7 @@ def test_v4_write_text_payload_cleanup_paths(tmp_path, monkeypatch):
         traffic_store_module._write_text_payload(str(target), "new\n")
     assert target.read_text(encoding="utf-8") == "old\n"
     assert [p.name for p in tmp_path.iterdir()] == ["agg.dat"]  # tmp 已清理(不留残骸)
-    # ④ 异常路径下删 tmp 自身失败: OSError 被吞不掩盖主因, 主因照常上抛
+    # 4. 异常路径下删 tmp 自身失败: OSError 被吞不掩盖主因, 主因照常上抛
     monkeypatch.setattr("auto_qb.core.traffic_store.os.remove", _remove_locked)
     with pytest.raises(RuntimeError, match="disk on fire"):
         traffic_store_module._write_text_payload(str(target), "new\n")
@@ -330,7 +330,7 @@ def test_v4_write_text_payload_cleanup_paths(tmp_path, monkeypatch):
     monkeypatch.setattr("auto_qb.core.traffic_store.os.remove", real_remove)
     for leaked in tmp_path.glob("*.tmp"):
         leaked.unlink()
-    # ⑤ 异常路径下 tmp 已不在(前一轮删过): 跳过删除直接上抛
+    # 5. 异常路径下 tmp 已不在(前一轮删过): 跳过删除直接上抛
     monkeypatch.setattr(
         "auto_qb.core.traffic_store.os.path.exists",
         lambda p: False if str(p).endswith(".tmp") else real_exists(p),

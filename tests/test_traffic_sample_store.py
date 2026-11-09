@@ -75,17 +75,17 @@
 - test_read_side_no_poll_when_traffic_tab_closed: 「不打开 = 0 请求」—— 前端轮询门控单点
   (关抽屉/形态切换/登出 -> _qbPollStop clearInterval, 重开幂等不叠加)
 
-v4 定约用例(plan 26-10-05-2200 §04 表 ③⑤⑥⑦, B2 落地):
-- test_v4_counter_reset_forces_block_reopen: ③ 计数器重置强制关块 —— 重置后块内负 delta 不出现,
+v4 定约用例(plan 26-10-05-2200 §04 表 3/5/6/7, B2 落地):
+- test_v4_counter_reset_forces_block_reopen: 3. 计数器重置强制关块 —— 重置后块内负 delta 不出现,
   新块基线 = 重置后 totals(首记录 delta = 0)
-- test_v4_cross_block_settlement_online_offline_same_source: ⑤ 跨块覆盖结算两路同源 —— 在线 _agg_feed
+- test_v4_cross_block_settlement_online_offline_same_source: 5. 跨块覆盖结算两路同源 —— 在线 _agg_feed
   与离线 _agg_credit_day_file 复用判定单点, 对连续边界/崩溃间隙/00:00 跨天边界产出逐桶一致 cov_s
 
 时钟/落盘纪律: 需要确定时刻的用例经构造期 clock=FakeClock 注入(采样模块经 qbmanager 装配链透传, S3 后不再按模块换假钟)逐轮推进; flush 时点
 除专项驱动用例外用 mod._flush_all_series() 直调(绕开驱动计时, 驱动时序由专项用例钉住)。
 
 形态 D 封口末端锚点(plan 26-10-16-1509 §04, z 行扩列; 五条封口路径):
-- test_zrun_cap_safety_valve_seals_at_day_level: 路径 ⑤ 保险闸封口同样写末端对
+- test_zrun_cap_safety_valve_seals_at_day_level: 路径 5 保险闸封口同样写末端对
 - test_zrun_end_anchor_counter_reset_degrades_to_open: 游程内计数器重置 -> 末端按开启快照
   退化(末端列 delta 非负, 文件零坏行)
 
@@ -253,7 +253,7 @@ def test_zrun_cap_safety_valve_seals_at_day_level(tmp_path, monkeypatch):
     parsed = _v4_read(tmp_path, GLOBAL_SERIES_KEY, day0 + ZRUN_CAP_SAMPLES - 1)
     z = parsed.blocks[0].records[0]
     assert isinstance(z, V4ZeroRun) and z.run_len == ZRUN_CAP_SAMPLES
-    assert (z.dl_total_end, z.up_total_end) == (10_000_000, 20_000_000)  # 形态 D 路径 ⑤ 同样写末端对(此几何下 = 开启快照)
+    assert (z.dl_total_end, z.up_total_end) == (10_000_000, 20_000_000)  # 形态 D 路径 5 同样写末端对(此几何下 = 开启快照)
     slots = v4_block_slots(parsed.blocks[0])
     assert len(slots) == ZRUN_CAP_SAMPLES
     span = slots[-1].ts - slots[0].ts  # 块首游程: [首零样本, 第 86400 零样本] 端点含
@@ -1163,9 +1163,9 @@ def test_live_tail_pending_agg_published_and_cleared_by_seal(tmp_path, monkeypat
     assert [r for r in tail.pending_agg if r.kind == "hour"]  # agg 面未封口照常发布(修复前整个键消失)
 
 
-# ---------- v4 定约用例(plan 26-10-05-2200 §04 表 ③⑤⑥⑦, B2 落地) ----------
+# ---------- v4 定约用例(plan 26-10-05-2200 §04 表 3/5/6/7, B2 落地) ----------
 def test_v4_counter_reset_forces_block_reopen(tmp_path, monkeypatch):
-    """③ 计数器重置强制关块(v4 §01 关块状态机): 重置(cur < 块内最近 totals)后块内负
+    """3. 计数器重置强制关块(v4 §01 关块状态机): 重置(cur < 块内最近 totals)后块内负
     delta 不出现, 新块基线 = 重置后 totals(首记录 delta = 0); 旧块以重置前观测收尾"""
     clock = FakeClock()
     mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30, flush_interval=10**9), clock=clock)
@@ -1197,7 +1197,7 @@ def test_v4_counter_reset_forces_block_reopen(tmp_path, monkeypatch):
 
 
 def test_v4_cross_block_settlement_online_offline_same_source(tmp_path):
-    """⑤ 跨块覆盖结算两路同源(v4 §01「覆盖结算」): 在线 _agg_feed 与离线
+    """5. 跨块覆盖结算两路同源(v4 §01「覆盖结算」): 在线 _agg_feed 与离线
     _agg_credit_day_file 复用同一判定单点 v4_block_gap_continuous —— 对同一 v4 天文件
     (连续边界 / 崩溃间隙 / 00:00 跨天边界)产出逐桶一致 cov_s; 间隙真空两侧同形不虚记"""
     mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30))

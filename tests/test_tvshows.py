@@ -429,7 +429,7 @@ class TestFiles:
             "第2季(1080p)",
             "Season 02 [1080p]",
             "2nd Season 1080p",
-            "Show S02 Complete",  # 剧名 + 季标记 + 后缀: 放宽后的有意行为(issue §06 ②显式写明)
+            "Show S02 Complete",  # 剧名 + 季标记 + 后缀: 放宽后的有意行为(issue §06 2 显式写明)
             "Show.S02.Complete",  # 点分隔同上
         ],
     )
