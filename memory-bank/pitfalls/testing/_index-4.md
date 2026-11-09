@@ -1,7 +1,7 @@
 # testing — 测试 / 冒烟 / 仿真纪律 · 卷 4/4
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `sidefx-diagnostic-probe.md` … `xdist-worker-global-snapshot.md`(共 25 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `sidefx-diagnostic-probe.md` … `xdist-worker-global-snapshot.md`(共 26 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
@@ -21,6 +21,7 @@
 | [test-lock-path-injection.md](test-lock-path-injection.md) | 工具侧 `Storage` 的默认锁锚点(S12/D8)从 `data_dir` 迁到用户级指针目录(`%LOCALAPPDATA%/global-traffic-monitor/instance.lock` 等) —— 于是 `Storage(str(tmp_path))` 后… | 加/改工具侧测试, Storage, acquire_lock, 真实用户目录, PermissionError WinError 5, 拒绝访问, AppData, LOCALAPPDATA, global-traffic-monitor… |
 | [test-plan-docstring-sections.md](test-plan-docstring-sections.md) | test_plan_docstring_guard 只审计 docstring 主「## 测试计划」段, 用例条目写进其它同级小节不进审计面, 首次全量才被点名 | 测试计划, docstring 守卫, test_plan_docstring_guard, 用例清单, 同级小节 |
 | [tests-real-qb-api-traps.md](tests-real-qb-api-traps.md) | 手工压测/relocate 取证直接打 qB WebAPI 时的五类坑 —— 短 hash 静默 200、renameFolder 账面级假成功(ENOENT 也算成功且零日志)、addTrackers 参数是单数 hash、FakeTracker 的 peer 表是构造时静态注… | tests-real, 手工压测, renameFolder, renameFile, addTrackers, FakeTracker, 短hash, 静默200, bencode decode, 真机实验, relocate 取证, 内… |
+| [tests-real-retirement-blindspot.md](tests-real-retirement-blindspot.md) | tests-real 不在 pytest testpaths, 全量全绿不等于 tests-real 可收集; 退役/改签名产品组件时 grep 面必须含 tests-real/, 否则同组件的 tests-real 用例 import 即炸且全量发现不了。 | 退役, 组件退役, 改签名, 删模块, tests-real, testpaths, 全量全绿, 收集不到, import 失败, finalize_watch, acquire_pid, collect-only, 真机片, 同步退役 |
 | [time-tick-collapse-strict-advance.md](time-tick-collapse-strict-advance.md) | 挂钟严格推进断言的本机粒度坍缩: 背靠背 time.time() 同值(判别须追基线值来源 —— 活钟读数才中招, 夹具常量天然稳, 2026-10-22 实证误报一例) | ts 推进, time.time 同值, 背靠背, 粒度坍缩, 严格大于断言, 递增假钟, monkeypatch time, flaky, traffic_view, _publish |
 | [timing-tolerance.md](timing-tolerance.md) | 挂钟计时断言的两个假红面 —— ①**下界**零容差: Windows 等待原语按 15.6ms 定时器刻度取整, 50ms 等待实测可提前到 46.8ms(3 刻度); ②**上界**零容差: 合法负载 / CI 抢占直接撞线(2026-10-05 实测)。守阵余量一律以"被守… | 计时断言, 挂钟, elapsed, sleep 精度, 定时器刻度, 假红, 节流守阵, 节拍, Event.wait, 抖动, flaky, 耗时上界, 性能上界, CPU 时间, process_time, 并行 worker, xd… |
 | [tmpdir.md](tmpdir.md) | 临时目录必须在 `tempfile.gettempdir()` 之下、覆盖率文件不能留仓库根、`TMPDIR` 不设收尾会崩, 别手工加前缀。 | 跑全量, basetemp, TMPDIR, 临时目录, 覆盖率文件, pytest-current, 耗时, 手工跑子集, R 盘缺席, 回落 TEMP, 快照守阵, 自举, auto-qb-tests, 外部 TMPDIR 拒收, rc… |

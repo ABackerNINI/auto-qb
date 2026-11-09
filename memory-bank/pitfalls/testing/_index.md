@@ -15,4 +15,4 @@
 | [1](_index-1.md) | `annotations-lazy-eval.md` … `frozen-allowlist-baseline-drift.md` | 27 |
 | [2](_index-2.md) | `gate-concurrency-memory-timeout.md` … `mutmut-mtime-race-stale-trampoline.md` | 27 |
 | [3](_index-3.md) | `mutmut-survived-verdict.md` … `side-effects.md` | 27 |
-| [4](_index-4.md) | `sidefx-diagnostic-probe.md` … `xdist-worker-global-snapshot.md` | 25 |
+| [4](_index-4.md) | `sidefx-diagnostic-probe.md` … `xdist-worker-global-snapshot.md` | 26 |

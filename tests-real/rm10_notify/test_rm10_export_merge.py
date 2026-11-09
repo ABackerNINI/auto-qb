@@ -18,7 +18,7 @@ announce 全部 127.x IP 字面量 + 死端口 :1: _hosts_of 取 urlparse().host
 IP 形态 gen_default_tag 返回空标签是已知正确行为(exporter.py:72 isdigit 分支), tags 断言按此写。
 
 跑法: `commands run real.run -- --case RM10-11 --yes` 单跑; 整片 `real.suite -- --slice RM10 --yes`
-(会连同 RM10 既有 8 条一起跑; 只跑本文件可 `uv run pytest tests-real/rm10_notify/test_rm10_export_merge.py -q --no-cov`)。
+(会连同 RM10 既有 5 条一起跑; 只跑本文件可 `uv run pytest tests-real/rm10_notify/test_rm10_export_merge.py -q --no-cov`)。
 收尾: real.seed.rm --all + real.seed.clean 清自造种子与 .work 残留。
 """
 from __future__ import annotations

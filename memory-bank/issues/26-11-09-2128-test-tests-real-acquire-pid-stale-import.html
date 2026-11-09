@@ -9,9 +9,9 @@
 <meta name="issue-stamp" content="26-11-09-2128">
 <meta name="issue-type" content="test">
 <meta name="doc-topic" content="tests-real-acquire-pid-stale-import">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-09-test-rm10-guardian-tests-retire.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="tests-real/rm10_notify 过期导入 acquire_pid: 符号已随 S4 退役, import 即失败">
 <meta name="issue-summary" content="tests-real/rm10_notify/test_rm10_notify.py 仍 from auto_qb.infra.relocate_journal import acquire_pid, 该符号已随 S4 退役; tests-real/ 不在 pytest testpaths 致全量全绿也发现不了; develop 既存非本分支引入">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-09-2128-test-tests-real-acquire-pid-stale-import</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-09 21:28</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">发现者</div><div class="v">B09/agent</div></div>
 </div>
 
@@ -115,13 +115,21 @@
 <section id="s3">
   <h2><span class="no">§03</span>建议<span class="opt">（可选）</span></h2>
   <p>改用 <code>relocate_journal</code> 现行 API, 或移除该 import 与 3 处引用 —— 需先确认该测试原意是验什么（预占 pid 锁 / 单 guardian 不变量语义）。<strong>本轮不修</strong>: 属范围守卫下不跨模块修无关缺陷。</p>
+  <p><strong>实际修法</strong>（认领后核 decide: 退役而非改用现行 API —— RM10-05/06/07 三条用例测的是 <code>finalize_watch</code>, 该组件已随 S4a 66418c7e 整文件退役(同步退役了 <code>tests/test_finalize_watch.py</code>, 漏了 tests-real 侧); 接替面 recycle_daemon 已有 <code>tests/test_recycle_daemon.py</code> 单测覆盖。「改用现行 API」无从谈起, 对齐 S4a「测试面同步退役」决定退役三条用例）:</p>
+  <ul>
+    <li>删 RM10-05/06/07 三条用例及其独占面（<code>_StepClock</code> / <code>_journal_watch</code> / <code>_accept_loop</code> / <code>build_guardian_scene</code> / <code>GUARDIAN_JOB</code> / <code>dead_port</code>; <code>import json</code> / <code>import socket</code> / <code>alias_fs</code> / <code>guard</code> / relocate_journal 全部符号导入）, 模块 docstring 八条→五条并记退役依据与接替面指针</li>
+    <li><code>_ps_pids</code> docstring 指针 <code>finalize_watch._names_from_tasklist</code> → 随迁后的 <code>recycle_daemon._names_from_tasklist</code></li>
+    <li>活用例 RM10-01/02/03/04/08 与其 helper 零改动</li>
+  </ul>
+  <p><strong>验证方式</strong>: <code>uv run pytest tests-real/rm10_notify/test_rm10_notify.py --collect-only</code> 收集 <strong>5 条</strong>不再 import 失败（修复前该文件模块级 import 即炸, 整文件无法收集）; AST 查无未用导入; <code>dev.fmt</code> 过。档案: <a href="../tasks/26-11-09-test-rm10-guardian-tests-retire.md">26-11-09-test-rm10-guardian-tests-retire</a>。</p>
 </section>
 
 <section id="s4">
   <h2><span class="no">§04</span>状态变更日志</h2>
   <ul>
     <li>2026-11-09 21:28 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-09 — 状态 Open → Done（kb.status）</li>
+</ul>
 </section>
 
 <footer>

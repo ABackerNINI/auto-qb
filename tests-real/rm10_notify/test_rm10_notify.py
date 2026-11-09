@@ -1,17 +1,16 @@
-"""RM10 通知·外部集成 —— 八条真机用例(通知通道 AUMID 注册表面 / 日志→通知管线 / notify_fatal 致命旁路 / YAML 模板导出 / guardian 删链 RM04 遗留收口)。
+"""RM10 通知·外部集成 —— 五条真机用例(通知通道 AUMID 注册表面 / 日志→通知管线 / notify_fatal 致命旁路 / YAML 模板导出)。
 
-验证面对准冻结计划 plans/26-10-31-1922-plan-real-RM10.html §03 的八条 spec:
+验证面对准冻结计划 plans/26-10-31-1922-plan-real-RM10.html §03 的 spec(RM10-05/06/07 guardian 删链
+三条已随 S4a finalize_watch.py 整文件退役而退役, 见 66418c7e 与 issue 26-11-09-2128; 接替面
+recycle_daemon 由 tests/test_recycle_daemon.py 单测覆盖):
 导出正向与真实 qB 域名集对照(RM10-01)· 导出负向对照 dry-run 零写/only-missing 骨架/双跑幂等(RM10-02)·
 AUMID 注册表面键值逐字/幂等/legacy .lnk 清理/回退路径(RM10-03)· 通知管线进程级发送尝试计数
-(档位/节流/免打扰/去重/enabled 门, RM10-04)· guardian 删链正向三证→verify→removing→removed(RM10-05)·
-guardian 负向 verify_mismatch 零删链/终态挡删 stopped(RM10-06)· guardian 参数与互斥面
-no_spec/already_running/timeout + CLI 形状(RM10-07)· notify_fatal 直发恰 1 次/防自环/不放大(RM10-08)。
+(档位/节流/免打扰/去重/enabled 门, RM10-04)· notify_fatal 直发恰 1 次/防自环/不放大(RM10-08)。
 
 驱动形态(计划 §01): 真 CLI(仅 RM10-01/02, `python -m auto_qb <tests-real 派生配置> --export-yaml …`,
 exporter 原样重读 config_path —— 配置一律本片派生件, 红线 config.yml 零触碰)· 进程内直调
 (RM10-03/04/08: NotifyConfig/PlatformChannel/setup_notify/notify_fatal 直驱真实代码路径, 真注册表写
-+ 真 PowerShell 子进程)· finalize_watch.run 短参直调(RM10-05/06/07: heartbeat/stable/poll/max_wait
-全注入, spec 落 <data_dir>/relocate/<job>.spec.json, qB 用死端口/哑 socket 本地构造, 不碰任何真 qB)。
++ 真 PowerShell 子进程)。
 
 外发红线在本片的兑现(计划 §05 预申报): toast 是系统本地通知, 全片真实 toast 弹出 ≤6 条
 (RM10-04 ≤4 实测 2 + RM10-08 ≤2 实测 1), 全部为进程级断言的物理副产物; 零 Webhook/邮件渠道
@@ -21,16 +20,14 @@ tests-real/.work/rm10/, 收尾整目录删; AUMID 注册表键按开跑前存在
 
 跑法: `commands run real.suite -- --slice RM10 --yes`(官方一轮); 单跑
 `commands run real.run -- --case RM10-nn --yes`。解析一律 strip, 幂等: 各条自建临时物落
-.work/rm10/ 前缀目录自清, guardian job_id 一律 rm10-* 前缀防撞。
+.work/rm10/ 前缀目录自清。
 """
 from __future__ import annotations
 
-import json
 import logging
 import os
 import re
 import shutil
-import socket
 import subprocess
 import sys
 import threading
@@ -42,7 +39,7 @@ import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from lib import app, guard, instances  # noqa: E402
+from lib import app, instances  # noqa: E402
 
 pytestmark = [
     pytest.mark.skipif(
@@ -54,23 +51,13 @@ WORK = Path(__file__).resolve().parents[1] / ".work" / "rm10"
 
 from auto_qb.config import NotifyConfig  # noqa: E402
 from auto_qb.core import exporter  # noqa: E402
-from auto_qb.infra import alias_fs, notify  # noqa: E402
-from auto_qb.infra.relocate_journal import (  # noqa: E402
-    acquire_pid,
-    journal_path,
-    pid_path,
-    read_journal,
-    release_pid,
-    write_journal,
-    write_spec,
-)
+from auto_qb.infra import notify  # noqa: E402
 from auto_qb.infra.utils import extract_tracker_hostnames  # noqa: E402
 from auto_qb.infra.versioning import CURRENT_VERSIONS  # noqa: E402
 
 PROBE_LOGGER = logging.getLogger("auto_qb.rm10probe")  # 防 self-loop 探针(不得以 auto_qb.notify 开头)
 PKG_LOGGER = logging.getLogger("auto_qb")
 ATTEMPT_WINDOW_S = 12.0  # 发送尝试采样窗: ≥ PlatformChannel.TIMEOUT_S(10s), 防慢派发误判零尝试
-GUARDIAN_JOB = "rm10-{}"  # guardian job_id 一律 rm10-* 前缀(计划幂等口径, 防撞生产 job)
 
 # ---------------------------------------------------------------- 通用小件
 
@@ -123,16 +110,11 @@ def case_dir(name: str) -> Path:
     return d
 
 
-def dead_port() -> int:
-    """探空死端口: 本会话不复用(lib/app.free_port 记账), 与白名单端口及 BT 监听端口(guard.BT_LISTEN_PORTS)零重叠。"""
-    return app.free_port()
-
-
 # ---------------------------------------------------------------- 通知面(进程表采样)
 
 
 def _ps_pids() -> set:
-    """当前进程表里的 powershell.exe pid 集(tasklist CSV, 与 finalize_watch._names_from_tasklist 同款采样)。"""
+    """当前进程表里的 powershell.exe pid 集(tasklist CSV, 与 recycle_daemon._names_from_tasklist 同款采样)。"""
     r = subprocess.run(
         ["tasklist", "/NH", "/FO", "CSV"],
         capture_output=True,
@@ -286,104 +268,6 @@ def assert_domain_sets_match(actual: set, expected: set) -> None:
     missing = expected - actual
     extra = actual - expected
     assert not missing and not extra, f"域名集不符: 多出={sorted(extra)} 缺失={sorted(missing)}"
-
-
-# ---------------------------------------------------------------- guardian 面
-
-
-class _StepClock:
-    """假时钟: 每次 +step(注入 finalize_watch.run 的 clock)。step=0.25 时, 第 4 轮 stable=0.5 凑齐。"""
-    def __init__(self, step: float = 0.25):
-        self.t = -step
-        self.step = step
-
-    def __call__(self) -> float:
-        self.t += self.step
-        return self.t
-
-
-def _journal_watch(jp: Path, stop: threading.Event, sink: dict) -> None:
-    """紧轮询 journal 原文(原子替换, 读到的都是完整内容), 记录出现过的相位与 removing/removed 快照。
-
-    removing→removed 之间只有 _delete_links 的执行时间(≈N×0.25ms), 必须毫秒级轮询才抓得住中间相位;
-    这是对「journal 相位链 armed→removing→removed」唯一不碰产品代码的观测法。结果写进 sink:
-    {"seen": set, "removing": dict|None, "removed": dict|None}。
-    """
-    while not stop.is_set():
-        try:
-            raw = jp.read_bytes()
-        except OSError:
-            time.sleep(0.0005)
-            continue
-        if b'"armed"' in raw:
-            sink["seen"].add("armed")
-        if b'"removing"' in raw:
-            sink["seen"].add("removing")
-            if sink["removing"] is None:
-                try:
-                    sink["removing"] = json.loads(raw)
-                except Exception:
-                    pass
-        if b'"removed"' in raw:
-            sink["seen"].add("removed")
-            if sink["removed"] is None:
-                try:
-                    sink["removed"] = json.loads(raw)
-                except Exception:
-                    pass
-
-
-def _accept_loop(sock: socket.socket, stop: threading.Event) -> None:
-    """哑监听 socket 的应答循环: accept 到连接立即关闭(保持端口「可连」, 不占 backlog)。"""
-    while not stop.is_set():
-        try:
-            conn, _ = sock.accept()
-            conn.close()
-        except OSError:
-            if stop.is_set():
-                return
-            time.sleep(0.02)
-
-
-def build_guardian_scene(
-    case: Path,
-    job: str,
-    *,
-    n_alias: int = 3,
-    files: list | None = None,
-    spec_files: list | None = None,
-    port: int | None = None
-) -> tuple[Path, Path, list]:
-    """RM10-05/06/07 共享基座: dst 真文件 + alias_fs 产品同款通道建 junction + spec 落盘。
-
-    files = 磁盘真文件 [(rel, size)]; spec_files = spec 里声明的清单(缺省与 files 一致;
-    RM10-06 第 1 项 故意错位时单独给)。返回 (data_dir, dst, alias_paths)。job_id 一律 rm10-* 前缀。
-    """
-    d = case_dir(case.name)
-    data_dir = d / "data"
-    dst = d / "dst"
-    (dst / "sub").mkdir(parents=True, exist_ok=True)
-    disk_files = list(files or [("f1.bin", 1024), ("sub/f2.bin", 2048)])
-    for rel, size in disk_files:
-        p = dst / rel
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_bytes(b"r" * size)
-    files_spec = [[rel, size] for rel, size in (spec_files or disk_files)]
-    aliases = []
-    target = str(dst)
-    for i in range(n_alias):
-        link = d / f"alias_{i:03d}"
-        alias_fs.create_dir_alias(str(link), target, alias_fs.KIND_JUNCTION)
-        aliases.append(str(link))
-    spec = {
-        "files": files_spec,
-        "dst": str(dst),
-        "alias_paths": aliases,
-        "host": "127.0.0.1",
-        "port": port if port is not None else dead_port(),
-    }
-    write_spec(str(data_dir), job, spec)
-    return data_dir, dst, aliases
 
 
 # ================================================================ RM10-01
@@ -661,205 +545,6 @@ def test_rm10_04_notify_pipeline():
             PKG_LOGGER.removeHandler(h)
             h.close()
     assert not pkg_handlers(), "收尾后 auto_qb logger 仍有残留 handler"
-
-
-# ================================================================ RM10-05
-
-
-def test_rm10_05_guardian_removed():
-    """[RM10-05] guardian 删链正向(RM04 遗留): 三证 → verify → removing → removed
-
-    前置: 死端口经探空确认(app.free_port 会话不复用); 别名用 alias_fs 产品同款通道建
-      (junction, 判 kind 才算数); job_id 前缀 rm10-; 零 qB 参与(spec 指死端口)。
-    副作用: 建/删 .work 内 300 条 junction 与小文件; 写 spec/journal/pid 文件。
-    回滚: purge_tree 整 case 目录(链接安全删法, 绝不递归删穿)。
-    失败判据: 结论非 removed / 相位链缺失或乱序 / 链接未删 / dst 文件被误碰 / qb_down_evidence 缺字段。
-    """
-    from auto_qb.tools import finalize_watch
-
-    case = case_dir("rm10_05")
-    job = GUARDIAN_JOB.format("05")
-    data_dir, dst, aliases = build_guardian_scene(case, job, n_alias=300)
-    assert all(alias_fs.alias_kind_of(a) == alias_fs.KIND_JUNCTION for a in aliases), "别名未以 junction 落地"
-    jp = Path(journal_path(str(data_dir), job))
-    stop = threading.Event()
-    sink = {"seen": set(), "removing": None, "removed": None}
-    watcher = threading.Thread(target=_journal_watch, args=(jp, stop, sink), daemon=True)
-    watcher.start()
-    try:
-        # 假时钟: 每轮 +0.25 ⇒ 第 4 轮 stable=0.5 凑齐动手; sleep 注入让出 GIL 给 watcher
-        result = finalize_watch.run(
-            str(data_dir),
-            job,
-            heartbeat=0.2,
-            stable=0.5,
-            poll=0.1,
-            clock=_StepClock(0.25),
-            sleep=lambda _s: time.sleep(0.01)
-        )
-    finally:
-        stop.set()
-        watcher.join(timeout=5)
-    seen = sink["seen"]
-    removing_snap = sink["removing"]
-    removed_snap = sink["removed"]
-
-    assert result == "removed", f"结论应 removed, 实际 {result}"
-    assert {"armed", "removing", "removed"} <= seen, f"journal 相位链不全: {seen}"
-    assert removing_snap and set((removing_snap.get("qb_down_evidence") or {})) == \
-        {"proc_absent", "port_refused", "stable_secs"}, f"removing 缺 qb_down_evidence 三字段: {removing_snap}"
-    assert removed_snap and (removed_snap.get("checks") or {}).get("links_removed") == len(aliases), \
-        f"removed.checks.links_removed 应为 {len(aliases)}: {removed_snap}"
-    final = read_journal(str(data_dir), job) or {}
-    assert str(final.get("phase")) == "removed", f"journal 终相应 removed: {final.get('phase')!r}"
-    assert all(alias_fs.alias_kind_of(a) is None for a in aliases), "junction 未被真删"
-    assert (dst / "f1.bin").stat().st_size == 1024 and (dst / "sub" / "f2.bin").stat().st_size == 2048, "dst 文件被误碰"
-    metric(f"RM10-05 removed 相位链={'/'.join(sorted(seen))} 别名={len(aliases)} dst完整=ok")
-    purge_tree(case)
-
-
-# ================================================================ RM10-06
-
-
-def test_rm10_06_guardian_negative():
-    """[RM10-06] guardian 负向对照: verify_mismatch 零删链 / 终态挡删 stopped
-
-    前置: 同 RM10-05 基座两路; 回路 2 先 write_journal(phase=done) 再 run。
-    副作用: 同 RM10-05(回路 1 别名必须存活; 回路 2 别名必须存活)。
-    回滚: purge_tree 整 case 目录。
-    失败判据: 回路 1 删了任何链接(红验本体) / 结论错 / 终态被心跳覆盖 / 回路 2 动了别名。
-    """
-    from auto_qb.tools import finalize_watch
-
-    case = case_dir("rm10_06")
-
-    # 1. spec.files 故意错 size → verify_mismatch, 一个链接都不删(保守默认, 黄金法则 2 真机红验)
-    job_a = GUARDIAN_JOB.format("06a")
-    data_a, dst_a, aliases_a = build_guardian_scene(
-        case,
-        job_a,
-        n_alias=5,
-        spec_files=[("f1.bin", 999), ("sub/f2.bin", 2048)],  # 磁盘 f1.bin 实际 1024, spec 故意错位
-    )
-    r_a = finalize_watch.run(
-        str(data_a),
-        job_a,
-        heartbeat=0.2,
-        stable=0.5,
-        poll=0.1,
-        clock=_StepClock(0.3),
-        sleep=lambda _s: time.sleep(0.01)
-    )
-    assert r_a == "verify_mismatch", f"回路 1 结论应 verify_mismatch, 实际 {r_a}"
-    ja = read_journal(str(data_a), job_a) or {}
-    assert str(ja.get("phase")) == "failed" and str(ja.get("reason")) == "verify_mismatch", f"回路 1 journal: {ja}"
-    assert all(alias_fs.alias_kind_of(a) == alias_fs.KIND_JUNCTION for a in aliases_a), \
-        "红验命中: verify_mismatch 路删了链接 —— 保守默认失守"
-    assert (dst_a / "f1.bin").stat().st_size == 1024, "回路 1 dst 被误碰"
-
-    # 2. 三证凑齐前预写 journal 终态 phase=done → stopped, 零删除, 终态未被心跳覆盖(前向合并)
-    job_b = GUARDIAN_JOB.format("06b")
-    data_b, dst_b, aliases_b = build_guardian_scene(case, job_b, n_alias=3)
-    assert write_journal(str(data_b), job_b, {"phase": "done", "reason": "external"}), "预写终态失败"
-    r_b = finalize_watch.run(
-        str(data_b),
-        job_b,
-        heartbeat=0.2,
-        stable=0.5,
-        poll=0.1,
-        clock=_StepClock(0.3),
-        sleep=lambda _s: time.sleep(0.01)
-    )
-    assert r_b == "stopped", f"回路 2 结论应 stopped, 实际 {r_b}"
-    jb = read_journal(str(data_b), job_b) or {}
-    assert str(jb.get("phase")) == "done", f"终态被心跳覆盖: {jb.get('phase')!r}"
-    assert all(alias_fs.alias_kind_of(a) == alias_fs.KIND_JUNCTION for a in aliases_b), "回路 2 动了别名"
-
-    metric("RM10-06 verify_mismatch零删链=ok 终态挡删=ok")
-    purge_tree(case)
-
-
-# ================================================================ RM10-07
-
-
-def test_rm10_07_guardian_params_mutex():
-    """[RM10-07] guardian 参数与互斥面: no_spec / already_running / timeout + CLI 形状
-
-    前置: 哑监听 socket 用例内自起自关(本机回环临时端口, 非白名单实例端口); 死端口探空。
-    副作用: .work 内 spec/journal/pid 文件; 哑 socket 短暂监听。
-    回滚: purge_tree 整 case 目录; 关 socket; release_pid。
-    失败判据: 结论串错 / 占锁下第二实例仍动手 / timeout 路删了链接或无 armed 心跳 / argparse 退出码 0。
-    """
-    from auto_qb.tools import finalize_watch
-
-    case = case_dir("rm10_07")
-
-    # 1. 空 data_dir → no_spec(零动作: pid/journal 都不该出现)
-    empty = case / "empty_data"
-    empty.mkdir(parents=True, exist_ok=True)
-    assert finalize_watch.run(str(empty), GUARDIAN_JOB.format("07a")) == "no_spec"
-    assert not Path(pid_path(str(empty), GUARDIAN_JOB.format("07a"))).exists(), "no_spec 却动了 pid 锁"
-    assert not Path(journal_path(str(empty), GUARDIAN_JOB.format("07a"))).exists(), "no_spec 却写了 journal"
-
-    # 2. 先 acquire_pid 占锁再 run → already_running(单 guardian 不变量); 第二实例零动作
-    job_b = GUARDIAN_JOB.format("07b")
-    data_b, dst_b, aliases_b = build_guardian_scene(case, job_b, n_alias=2)
-    assert acquire_pid(str(data_b), job_b), "预占 pid 锁失败"
-    try:
-        assert finalize_watch.run(str(data_b), job_b, heartbeat=0.2, stable=0.5, poll=0.1,
-                                  clock=_StepClock(0.3), sleep=lambda _s: time.sleep(0.01)) == "already_running", \
-            "占锁下第二实例未让位"
-        assert all(alias_fs.alias_kind_of(a) == alias_fs.KIND_JUNCTION for a in aliases_b), "占锁路动了别名"
-        assert Path(pid_path(str(data_b), job_b)).exists(), "占锁路误清了持锁者的 pid 文件"
-    finally:
-        release_pid(str(data_b), job_b)
-
-    # 3. spec 就绪 + qB「在跑」面(哑监听 socket, accept 线程随连随关)→ max_wait 到期 timeout、
-    #    零删除、armed 心跳已落盘。!listen backlog 不 accept 会失真: 首个探测连接占满 backlog(1)
-    #    后, guardian 后续探测全部拒连 ⇒ 它看到的就是「qB 已退」按设计删链(首轮实测假红根因:
-    #    timeout 期望变成 removed)—— 产品三证逻辑无缺陷, 哑 socket 必须真应答连接。
-    job_c = GUARDIAN_JOB.format("07c")
-    data_c, dst_c, aliases_c = build_guardian_scene(case, job_c, n_alias=2)
-    dummy = socket.socket()
-    stop_accept = threading.Event()
-    acceptor = threading.Thread(target=_accept_loop, args=(dummy, stop_accept), daemon=True)
-    try:
-        dummy.bind(("127.0.0.1", 0))
-        dummy.listen(8)
-        dummy.settimeout(0.2)
-        acceptor.start()
-        live_port = dummy.getsockname()[1]
-        assert live_port not in (*guard.WHITELIST_PORTS, *guard.BT_LISTEN_PORTS), f"哑 socket 端口撞禁用面: {live_port}"
-        spec_path_c = data_c / "relocate" / f"{job_c}.spec.json"
-        spec_c = json.loads(spec_path_c.read_text(encoding="utf-8"))
-        spec_c["port"] = live_port
-        spec_path_c.write_text(json.dumps(spec_c, ensure_ascii=False), encoding="utf-8")
-        r_c = finalize_watch.run(str(data_c), job_c, heartbeat=0.2, stable=0.5, poll=0.1, max_wait=1.0)
-        assert r_c == "timeout", f"回路 3 结论应 timeout, 实际 {r_c}"
-        jc = read_journal(str(data_c), job_c) or {}
-        assert str(jc.get("phase")) == "armed", f"timeout 路缺 armed 心跳: {jc.get('phase')!r}"
-        assert all(alias_fs.alias_kind_of(a) == alias_fs.KIND_JUNCTION for a in aliases_c), "timeout 路删了链接"
-    finally:
-        stop_accept.set()
-        acceptor.join(timeout=3)
-        dummy.close()
-
-    # 4. CLI 形状: 缺 --data-dir/--job → argparse 非 0
-    r = subprocess.run(
-        [str(app.PY), "-m", "auto_qb.tools.finalize_watch"],
-        capture_output=True,
-        text=True,
-        cwd=str(app.ROOT),
-        timeout=60,
-        env={
-            **os.environ, "PYTHONIOENCODING": "utf-8"
-        }
-    )
-    assert r.returncode != 0, "缺参应 argparse 非 0"
-    assert "--data-dir" in (r.stderr + r.stdout), "缺参报错未提示 --data-dir"
-
-    metric("RM10-07 no_spec/already_running/timeout/CLI形状 全对")
-    purge_tree(case)
 
 
 # ================================================================ RM10-08

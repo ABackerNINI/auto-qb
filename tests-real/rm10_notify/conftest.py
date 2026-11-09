@@ -1,8 +1,8 @@
 """RM10 片内基座: 只做「环境还活着 + 真实种子没被点着」的只读核验(与 RM01/RM08/RM09 同口径)。
 
 不挂 `tests-real/conftest.py` 的 `env` fixture: 那套会**暂停**两实例的全部种子并起看门狗 ——
-RM10 的八条只有 RM10-01/02 连 主实例(真实 qB, 只读扫描 tracker 域名), 其余六条全是进程本地面
-(注册表/子进程/journal/别名), 零种子依赖。这里只读: 端口白名单 + 实例在线 + 主实例 的
+RM10 的五条只有 RM10-01/02 连 主实例(真实 qB, 只读扫描 tracker 域名), 其余三条全是进程本地面
+(注册表/子进程), 零种子依赖。这里只读: 端口白名单 + 实例在线 + 主实例 的
 真实种子必须仍在非活跃态。
 """
 from __future__ import annotations
@@ -26,8 +26,8 @@ _SERIAL_LOCK = Path(__file__).resolve().parents[1] / ".work" / "rm10" / "serial.
 
 @pytest.fixture(autouse=True)
 def serial():
-    """跨进程串行: RM10-01/02 起真 CLI 连 qB, RM10-03/04/08 写 HKCU 注册表 + 弹 toast,
-    RM10-05/06/07 建 junction 与占探空端口 —— 并行跑会互相污染观测窗(进程表采样/journal 相位链)。
+    """跨进程串行: RM10-01/02 起真 CLI 连 qB, RM10-03/04/08 写 HKCU 注册表 + 弹 toast ——
+    并行跑会互相污染观测窗(进程表采样)。
 
     `pytest.ini` 的 addopts 是 `-n 8`, 默认 `--dist load` 下 `xdist_group` 标记**不生效**
     (RM01 实测), 直跑 pytest 会互相抢资源; 官方跑法 `real.suite` 传 `-n 0` 本就没问题,
