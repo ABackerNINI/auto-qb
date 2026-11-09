@@ -4,7 +4,8 @@
 (check_hr_condition 第一行 `if not self.tracker_conf.hr: return False`), 故必须在配置期拦下。
 
 v3 收敛: 判定语义硬编码(四行判定表), 配置只留「用户身份类」事实 —— 全局 6 键 +
-channel 8 键(26-10-14-1241 去端口+跨机: host/port:0/discovery_port/pairing 三新键) +
+channel 9 键(26-10-14-1241 去端口+跨机: host/port:0/discovery_port/pairing 三新键;
+26-11-10-0515 S3/D7 + name 标签键: 空 = 回落 data_dir 目录名) +
 sites 条目 4 键(enabled/tracker/refresh_interval/idle_refresh_interval,
 末者为稳态降频间隔, 计划 26-10-05-0555 S1, 拍板默认 24H 默认启用)。旧 v2 键 26 个由
 config v2→v3 迁移(config/migrations.py)一次性删除或改名, 无常驻兼容层。绑定机制不变

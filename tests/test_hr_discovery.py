@@ -24,6 +24,8 @@ worker 的同族用例占住, 候选轮换是特性而非碰撞。
 ## 测试计划(每个测试函数一条)
 
 - test_candidates_consecutive_and_cap
+- test_channel_entry_name_fallback_and_label: channel_entry_name 纯函数面(26-11-10-0515 S3/D7): 显式 name 优先 / 空(含纯空白串)回落 data_dir 目录名(剥尾分隔符, 根目录防御弧)
+- test_two_clone_heartbeat_labels_distinct_or_explicit: 两 clone 场景(26-11-10-0515 S3 验收): 不同 data_dir 均空标签 -> 心跳后登记簿 name = 各自目录名(互异); 显式标签 -> 心跳写配置值; 发现响应字段集 {id, name, endpoint, token} 零变化
 - test_default_registry_path_platform_shape
 - test_registry_per_clone_files_mutually_invisible
 - test_discover_aggregates_and_filters
@@ -882,3 +884,64 @@ def test_retry_loop_exits_immediately_when_stop_preset(monkeypatch):
     srv._retry_stop.set()
     srv._retry_loop()
     assert srv.bound_port == 0 and not srv.started, "预置 stop: 未绑定未启动, 干净退出"
+
+
+# ---------- 6. S3 标签键(计划 26-11-10-0515 S3/D7) ----------
+
+
+def test_channel_entry_name_fallback_and_label():
+    """channel_entry_name 纯函数面(S3/D7): 显式 name 优先, 空回落 data_dir 目录名(剥尾分隔符)"""
+    from auto_qb.hr.runtime import channel_entry_name
+
+    assert channel_entry_name("clone-dev", "/data/auto-qb-prod") == "clone-dev", "非空 = 用配置标签"
+    assert channel_entry_name("  clone-dev  ", "/data/auto-qb-prod") == "clone-dev", "两侧空白剥掉"
+    assert channel_entry_name("   ", "/data/auto-qb-prod") == "auto-qb-prod", "纯空白 = 视同未配置回落"
+    assert channel_entry_name("", "/data/auto-qb-prod") == "auto-qb-prod", "空 = 回落 data_dir 目录名"
+    assert channel_entry_name("", "/data/auto-qb-prod/") == "auto-qb-prod", "尾分隔符不影响回落"
+    assert channel_entry_name("", "D:" + os.sep + "data" + os.sep + "auto-qb-prod" + os.sep) == "auto-qb-prod", \
+        "Windows 尾分隔符同上"
+    assert channel_entry_name("", "/") == "/", "根目录剥空 = 原样返回(防御弧, 不给空名)"
+    assert channel_entry_name(None, "/data/x") == "x", "name 缺失(非字符串)也走回落"
+
+
+def test_two_clone_heartbeat_labels_distinct_or_explicit(tmp_path, monkeypatch):
+    """两 clone 场景(S3 验收): 不同 data_dir 都不配 name -> 心跳后各自登记簿 name = 各自目录名(互异);
+    配了 name -> 心跳写配置值。发现响应结构零变化: 实例字段集还是 {id, name, endpoint, token},
+    只是 name 的来源从「进程随机 uuid」换成本标签(响应由 registry alive 条目直出, 这里端到端验证)。
+    """
+    from auto_qb.hr.runtime import channel_entry_name
+
+    reg_dir = tmp_path / "registry"
+    reg_dir.mkdir()
+    _isolate_registry(monkeypatch, reg_dir)
+    clone_a, clone_b = tmp_path / "auto-qb-dev", tmp_path / "auto-qb-prod"
+    cfg_a = make_config(clone_a, enabled=True, channel=True)
+    cfg_a.hr_check.channel.discovery_port = 18788  # 只建对象不起端点: 本测不绑定候选口
+    cfg_b = make_config(clone_b, enabled=True, channel=True)
+    cfg_b.hr_check.channel.discovery_port = 18788
+    cfg_c = make_config(clone_a, enabled=True, channel=True)  # 同 data_dir: entry_id 同 a(覆盖其条目)
+    cfg_c.hr_check.channel.discovery_port = 18788
+    cfg_c.hr_check.channel.name = " workspace-x "
+    servers = []
+    names = {}
+    for key, cfg in (("a", cfg_a), ("b", cfg_b), ("c", cfg_c)):
+        rt = HrRuntime(_FakeManager(cfg))
+        srv = rt._build_discovery()
+        assert srv is not None
+        # 心跳要写出可被发现响应采纳的条目: 自述端点与 token 由测试注入(生产由端点/resolve_token 提供)
+        srv.token = "t" * 48
+        srv.endpoint_fn = lambda: "http://127.0.0.1:51001"
+        srv._heartbeat_once()
+        servers.append(srv)
+        names[key] = srv.entry_name
+    assert names["a"] == "auto-qb-dev" and names["b"] == "auto-qb-prod", "空标签各自回落 data_dir 目录名"
+    assert names["a"] != names["b"], "两 clone 心跳后登记簿 name 可读互异"
+    assert names["c"] == "workspace-x", "显式标签剥空白后生效"
+    # 登记簿落盘内容与响应直出一致(a 与 c 同 entry_id: c 的心跳覆盖 a 的条目)
+    raw_c = json.loads((reg_dir / f"{servers[2].entry_id}.json").read_text(encoding="utf-8"))
+    assert [e["name"] for e in raw_c] == ["workspace-x"], "心跳写进登记簿的就是标签值"
+    status, _h, body = _get(servers[2], {"Origin": ORIGIN})
+    assert status == 200
+    payload = json.loads(body)
+    assert set(payload["instances"][0]) == {"id", "name", "endpoint", "token"}, "响应结构零变化"
+    assert payload["instances"][0]["name"] == "workspace-x", "发现响应携带标签"

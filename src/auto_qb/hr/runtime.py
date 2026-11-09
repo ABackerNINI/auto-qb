@@ -14,6 +14,7 @@
 """
 import hashlib
 import logging
+import os
 import threading
 from dataclasses import dataclass
 from typing import Iterable, Mapping, Optional, Sequence, Tuple
@@ -44,6 +45,21 @@ logger = logging.getLogger(__name__)
 
 #: 中断检查的粒度(秒): 睡够这么长就回头看一眼是否该叫停 —— 关停响应的上限
 _SLEEP_SLICE = 1.0
+
+
+def channel_entry_name(name: str, data_dir: str) -> str:
+    """发现条目展示名(计划 26-11-10-0515 S3/D7): `hr_check.channel.name` 非空用之, 空则回落 data_dir 目录名
+
+    name 语义从旧「进程随机 uuid」(store.instance_id, 每次启动变) 改为「工作区标签」: 跨重启
+    稳定、人可读 —— dev clone 目录名天然互异, 多实例目录撞车时才需显式设键。发现响应结构
+    零变化(字段还是 {id, name, endpoint, token}, 只是 name 来源换了)。
+    """
+    label = str(name).strip() if name else ""  # None 等 falsy 一并按「未配置」回落, 不产出 "None" 标签
+    if label:
+        return label
+    # 尾分隔符先剥再取 basename(Windows 盘根 "/"、"D:\\" 两形态), 剥完为空 = 根目录, 原样返回
+    base = os.path.basename(str(data_dir).rstrip("\\/"))
+    return base if base else str(data_dir)
 
 
 @dataclass(slots=True)
@@ -424,7 +440,7 @@ class HrRuntime:
             host=conf.host,
             port=conf.discovery_port,
             entry_id=entry_id,
-            entry_name=instance_id(),
+            entry_name=channel_entry_name(conf.name, self.config.data_dir),
             endpoint_fn=self._data_endpoint_url,
             token=self.token,
             # 登记簿按 clone 拆分(计划 26-11-10-0515 S1): 文件名由 entry_id = sha1(data_dir)[:12]

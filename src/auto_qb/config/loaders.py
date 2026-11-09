@@ -227,6 +227,8 @@ def load_hr_check_config(spec: Any) -> HrCheckConfig:
     channel = HrChannelConfig(
         enabled=_get(channel_spec, "enabled", channel_default.enabled, parse_bool)
         if isinstance(channel_spec, dict) else channel_default.enabled,
+        name=_get(channel_spec, "name", channel_default.name)
+        if isinstance(channel_spec, dict) else channel_default.name,
         host=_get(channel_spec, "host", channel_default.host)
         if isinstance(channel_spec, dict) else channel_default.host,
         port=_get(channel_spec, "port", channel_default.port, int)

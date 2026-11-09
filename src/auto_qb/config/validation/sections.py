@@ -109,9 +109,11 @@ FLUSH_INTERVAL_MAX_S = 3600.0
 SAMPLE_INTERVAL_MAX_S = 600.0
 
 # hr_check(HR 在线核实, v3 15 键口径, 计划 26-09-28-1932 §6.1 + 26-09-30-0240); 站点级与全局共用区分两套键集
-# channel 段 8 键(去端口+跨机, 计划 26-10-14-1241 S1): host / port(0=随机) / discovery_port(0=关) / pairing 新增
+# channel 段 9 键(去端口+跨机, 计划 26-10-14-1241 S1: host / port(0=随机) / discovery_port(0=关) / pairing;
+# + name 实例标签, 计划 26-11-10-0515 S3/D7: 空 = 回落 data_dir 目录名)
 KNOWN_HR_CHANNEL_KEYS = {
     "enabled",
+    "name",
     "host",
     "port",
     "discovery_port",
@@ -324,6 +326,9 @@ def _validate_hr_check(spec: dict | None, errors: List[str]) -> None:
             _check_unknown_keys(channel, KNOWN_HR_CHANNEL_KEYS, "config.hr_check.channel", errors)
             if "enabled" in channel:
                 _try(parse_bool, channel["enabled"], "config.hr_check.channel.enabled", errors)
+            if "name" in channel and not isinstance(channel["name"], str):
+                # 实例标签(计划 26-11-10-0515 S3/D7): 发现响应 name 的来源; 留空回落 data_dir 目录名
+                errors.append("config.hr_check.channel.name: 必须是字符串")
             if "host" in channel:
                 _validate_channel_host(channel["host"], "config.hr_check.channel.host", errors)
             if "port" in channel:

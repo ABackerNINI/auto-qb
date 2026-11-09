@@ -371,6 +371,8 @@ _LOADER_PROBES = {
     "hr_check.shared_dir": ("/probe-hr-shared", "/probe-hr-shared"),
     "hr_check.reuse_window": ("3H", 10800.0),
     "hr_check.channel.enabled": ("true", True),
+    # name 标签键(计划 26-11-10-0515 S3/D7): 默认空 = 回落 data_dir 目录名, 探针用非空标签
+    "hr_check.channel.name": ("zHrCloneProbe", "zHrCloneProbe"),
     "hr_check.channel.host": ("192.168.1.10", "192.168.1.10"),
     "hr_check.channel.port": ("18788", 18788),
     "hr_check.channel.discovery_port": ("18790", 18790),

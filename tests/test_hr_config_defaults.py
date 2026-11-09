@@ -4,7 +4,8 @@
 (check_hr_condition 第一行 `if not self.tracker_conf.hr: return False`), 故必须在配置期拦下。
 
 v3 收敛: 判定语义硬编码(四行判定表), 配置只留「用户身份类」事实 —— 全局 6 键 +
-channel 8 键(26-10-14-1241 去端口+跨机: host/port:0/discovery_port/pairing 三新键) +
+channel 9 键(26-10-14-1241 去端口+跨机: host/port:0/discovery_port/pairing 三新键;
+26-11-10-0515 S3/D7 + name 标签键: 空 = 回落 data_dir 目录名) +
 sites 条目 4 键(enabled/tracker/refresh_interval/idle_refresh_interval,
 末者为稳态降频间隔, 计划 26-10-05-0555 S1, 拍板默认 24H 默认启用)。旧 v2 键 26 个由
 config v2→v3 迁移(config/migrations.py)一次性删除或改名, 无常驻兼容层。绑定机制不变
@@ -40,6 +41,7 @@ config v2→v3 迁移(config/migrations.py)一次性删除或改名, 无常驻�
 - test_channel_lan_off_without_token_rejected: 5. 非回环 + pairing=off + 无 token 必须拦(V4); 配 token / 回环 / pairing=auto 三档放行
 - test_channel_discovery_port_ephemeral_warns_not_blocks: 6. discovery_port 落入 OS 临时端口段只告警不阻断(V12); 段值按平台取(Windows 49152-65535 / 类 Unix 32768-60999), dport=0 整段跳过
 - test_channel_token_ascii_only: token 含非 ASCII 字符报「ASCII」错(常数时间密钥比较要求两侧均为 ASCII, 非 ASCII 密钥旧校验放行、运行期逐请求 TypeError 兜 500 —— 必须配置期拦下); 纯 ASCII 放行, 非字符串仍报「必须是字符串」
+- test_channel_name_type_and_passthrough: channel.name 标签键(26-11-10-0515 S3/D7)非字符串报「必须是字符串」+ 显式值经 loader 透传(默认空)
 """
 
 import logging
@@ -78,6 +80,7 @@ def test_defaults_when_absent(tmp_path):
     assert cfg.hr_check.shared_dir == ""
     assert cfg.hr_check.reuse_window == 2 * 3600.0
     assert cfg.hr_check.channel.enabled is False
+    assert cfg.hr_check.channel.name == "", "标签键默认空(计划 26-11-10-0515 S3/D7): 空 = 回落 data_dir 目录名"
     assert cfg.hr_check.channel.host == "127.0.0.1"
     assert cfg.hr_check.channel.port == 0, "去端口(计划 26-10-14-1241): 默认交 OS 随机"
     assert cfg.hr_check.channel.discovery_port == 18788
@@ -103,6 +106,7 @@ def test_global_section_parsed(tmp_path):
                         "channel":
                             {
                                 "enabled": "true",
+                                "name": "auto-qb-dev",
                                 "port": "8899",
                                 "token": "abc",
                                 "extension_id": "a" * 32,
@@ -121,6 +125,7 @@ def test_global_section_parsed(tmp_path):
     assert hr_check.shared_dir == "//nas/share"
     assert hr_check.reuse_window == 3 * 3600.0
     assert (hr_check.channel.enabled, hr_check.channel.port, hr_check.channel.token) == (True, 8899, "abc")
+    assert hr_check.channel.name == "auto-qb-dev", "标签键透传(计划 26-11-10-0515 S3/D7)"
     assert hr_check.channel.extension_id == "a" * 32
     assert hr_check.channel.request_timeout == 90.0
 
@@ -669,3 +674,21 @@ def test_loaders_non_dict_specs_return_defaults():
         assert load_site_hr_check_config(bad) == SiteHrCheckConfig(), bad
         assert load_fs_config(bad) == FsConfig(), bad
         assert load_relocate_config(bad) == RelocateConfig(), bad
+
+
+def test_channel_name_type_and_passthrough():
+    """channel.name 标签键(26-11-10-0515 S3/D7): 非字符串拦下 + 显式值经 loader 透传
+
+    name 语义 = 工作区标签(发现响应 name 字段的来源), 留空 = 回落 data_dir 目录名(回落
+    逻辑在 hr/runtime.channel_entry_name, 单测在 test_hr_discovery); 这里只钉配置链两端。
+    """
+    errors = _validate({"hr_check": {"channel": {"name": 123}}})
+    assert any("config.hr_check.channel.name: 必须是字符串" in e for e in errors), errors
+    assert _validate({"hr_check": {"channel": {"name": "auto-qb-dev"}}}) == []
+    assert _validate({"hr_check": {"channel": {"name": ""}}}) == [], "空 = 默认回落, 合法"
+    from auto_qb.config.loaders import load_hr_check_config
+
+    cfg = load_hr_check_config({"channel": {"name": "auto-qb-dev"}})
+    assert cfg.channel.name == "auto-qb-dev"
+    assert load_hr_check_config({}).channel.name == "", "整段缺省 = 标签空(回落 data_dir 目录名)"
+    assert load_hr_check_config({"channel": "not-a-dict"}).channel.name == "", "段形状非字典早退回默认"

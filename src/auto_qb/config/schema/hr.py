@@ -23,6 +23,15 @@ HR_CHECK_CHANNEL_FIELDS: Tuple[Field, ...] = (
         "多通道不会双倍访问站点(同站点靠文件锁 + 复用窗)",
     ),
     Field(
+        "name",
+        "实例标签",
+        "str",
+        default="",
+        placeholder="auto-qb-dev",
+        help="多实例同机时扩展侧用来区分 clone 的工作区标签(发现响应的 name 字段); "
+        "留空 = 回落 data_dir 目录名(多 clone 目录名天然互异, 目录撞车时才需显式设键); 改后需重启生效",
+    ),
+    Field(
         "host",
         "监听地址",
         "str",
