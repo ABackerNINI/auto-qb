@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>relocate run_probe 同步阻塞主循环(FS 不可达单次探测约 25s+, 整库监控同期停滞) · bug · 计划外问题</title>
+<meta name="issue-slug" content="legacy-review4-relocate-probe-blocking">
+<meta name="issue-stamp" content="26-11-10-0638">
+<meta name="issue-type" content="bug">
+<meta name="doc-topic" content="legacy-review4-relocate-probe-blocking">
+<meta name="doc-refs" content="memory-bank/issues/26-11-07-0527-bug-legacy-review4-core.html">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="relocate run_probe 同步阻塞主循环(FS 不可达单次探测约 25s+, 整库监控同期停滞)">
+<meta name="issue-summary" content="run_probe 证读/证写/清理轮询用 time.sleep 同步阻塞, 且经 relocate_exec._ensure_probe 在主循环线程执行: FS 不可达时单次探测阻塞约 25s+, 整库监控与其它模块任务线同期停滞, 与 on_task_line 单步零阻塞纪律矛盾(R4 汇总件 26-11-07-0527 行 8 拆出)">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --mark: #161e26;     /* issue 特有: callout 底色 (plan.html 不用) */
+    --warn-bg: #2a2119;  /* issue 特有: 状态徽标底色 */
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 单栏流式版面: 与 plan.html 同一套 .sheet (封顶 1280px, 侧距 clamp(18~44px)); 旧双栏+粘性目录已删 */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+
+  /* 封面 meta 行: issue 特有, DOM 形态别改 —— 状态徽标 <span class="badge"> 被
+     flip_status (W4) 与 check_status_drift 的 BADGE_RE 机读 (k/v div 结构在判据里) */
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px 28px; font-family: var(--mono); font-size: 11.5px; color: var(--faint); border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta-row .item .k { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .meta-row .item .v { font-size: 13.5px; color: var(--dim); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin: 14px 0; font-size: 14px; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-family: var(--mono); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">计划外问题（未修）· bug</div>
+<h1>relocate run_probe 同步阻塞主循环(FS 不可达单次探测约 25s+, 整库监控同期停滞)</h1>
+<p class="lede">run_probe 证读/证写/清理轮询用 time.sleep 同步阻塞, 且经 relocate_exec._ensure_probe 在主循环线程执行: FS 不可达时单次探测阻塞约 25s+, 整库监控与其它模块任务线同期停滞, 与 on_task_line 单步零阻塞纪律矛盾(R4 汇总件 26-11-07-0527 行 8 拆出)</p>
+<div class="meta-row">
+  <div class="item"><div class="k">编号</div><div class="v">26-11-10-0638-bug-legacy-review4-relocate-probe-blocking</div></div>
+  <div class="item"><div class="k">报告时间</div><div class="v">2026-11-10 06:38</div></div>
+  <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">涉及模块</div><div class="v">relocate</div></div>
+  <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+</div>
+
+<section id="s1">
+  <h2><span class="no">§01</span>现象与发现场景</h2>
+  <p>源自存量评审 R4 的代码盘点（计划 <code>memory-bank/plans/26-11-05-2335-plan-legacy-code-review-4.html</code>，取证 2026-11-07），非运行时撞见。原为汇总件 <a href="26-11-07-0527-bug-legacy-review4-core.html">26-11-07-0527-bug-legacy-review4-core.html</a> 明细行 8（R1#39，面1/面2 同报合并），2026-11-10 经用户拍板拆出独立认领。</p>
+  <p>触发条件：relocate 迁移（手工或规则自动迁移共用）执行到探测步骤，且 src/dst 侧文件系统不可达或 qB HTTP 响应慢——探测的证读/证写/清理三段轮询全部走 <code>time.sleep</code> 同步等待。</p>
+</section>
+
+<section id="s2">
+  <h2><span class="no">§02</span>证据</h2>
+  <p class="hint">R4 评审明细行 8 原文（静态读码证据，取证 2026-11-07）：</p>
+<pre><code>run_probe 的证读/证写/清理轮询用 time.sleep 同步阻塞, 且经 relocate_exec._ensure_probe
+(relocate_exec.py:707, 规则自动迁移共用)在主循环线程执行: FS 不可达时单次探测阻塞主循环
+约 25s+(10s 证读+10s 证写+5s 清理, 另加各 qB HTTP 超时), 整库监控与其它模块任务线同期
+停滞, 与 on_task_line 自述「单步零阻塞」纪律矛盾(面1/面2 同报合并)</code></pre>
+</section>
+
+<section id="s3">
+  <h2><span class="no">§03</span>影响面</h2>
+  <table>
+    <tr><th>维度</th><th>结论</th></tr>
+    <tr><td>触发条件</td><td>relocate 探测执行（<code>_ensure_probe</code> 为规则自动迁移共用入口）+ FS 不可达 / qB HTTP 慢；探测本身每次迁移都会走，FS 正常时代价小、故障时代价放大</td></tr>
+    <tr><td>影响范围</td><td>主循环线程被占死 → <strong>整库监控与其它模块任务线同期停滞</strong>（单次最长约 25s+ 轮询另加各 qB HTTP 超时）；与 <code>on_task_line</code> 自述「单步零阻塞」纪律矛盾</td></tr>
+    <tr><td>严重度</td><td class="bad">高</td></tr>
+  </table>
+</section>
+
+<section id="s4">
+  <h2><span class="no">§04</span>定位锚点</h2>
+  <ul>
+    <li><code>src/auto_qb/core/modules/relocate_probe.py:174</code> · <code>run_probe</code> · grep <code>time.sleep</code>（relocate_probe.py）（取证 2026-11-07，R4；行号为当时值）</li>
+    <li><code>src/auto_qb/core/modules/relocate_exec.py:707</code> · <code>_ensure_probe</code>（主循环线程调用链，规则自动迁移共用）· grep <code>_ensure_probe</code>（取证 2026-11-07，R4；行号为当时值）</li>
+  </ul>
+</section>
+
+<section id="s5">
+  <h2><span class="no">§05</span>根因<span class="opt">（可选）</span></h2>
+  <div class="callout">探测被设计成同步轮询（证读/证写/清理三段 <code>time.sleep</code> 等待），而调用链 <code>_ensure_probe</code> 落在主循环线程执行——阻塞面是设计使然，非偶发竞态。（R4 评审判定，2026-11-07）</div>
+</section>
+
+<section id="s6">
+  <h2><span class="no">§06</span>建议修法<span class="opt">（可选）</span></h2>
+  <p>fix 原文两案保留待裁决（R1#39）：</p>
+  <ul>
+    <li>把探测改为<strong>跨 tick 分步推进的相位状态机</strong>；或</li>
+    <li>移到<strong>独立线程</strong>执行并经主循环消费结论（保持单一写线程约束，黄金法则#5）。</li>
+  </ul>
+</section>
+
+<section id="s7">
+  <h2><span class="no">§07</span>状态变更日志</h2>
+  <ul>
+    <li>2026-11-10 06:38 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    <li>2026-11-10 — 从汇总件 <a href="26-11-07-0527-bug-legacy-review4-core.html">26-11-07-0527-bug-legacy-review4-core.html</a> 明细行 8（R1#39）拆出；此前 2026-11-08 用户拍板「本轮不修」，2026-11-10 改为拆出独立认领，fix 原文两案保留待裁决</li>
+  </ul>
+  <h3>复验</h3>
+  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <h3>修复后补充</h3>
+  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+</section>
+
+<footer>
+  26-11-10-0638-bug-legacy-review4-relocate-probe-blocking.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+</footer>
+
+</div>
+</body>
+</html>

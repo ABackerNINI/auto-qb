@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-11-07-0527">
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="legacy-review4">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/issues/26-11-10-0638-bug-legacy-review4-relocate-probe-blocking.html">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="存量评审 R4·core 汇总(major 12/minor 31)">
 <meta name="issue-summary" content="core 主题 major 12+minor 31 共 43 条(R1#81/#82 合并组拆回为 44 行)聚合入池,来源存量评审 R4(计划 26-11-05-2335)">
 <title>存量评审 R4·core 汇总(major 12/minor 31) · bug · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-11-07-0527-bug-legacy-review4-core</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-07 05:27</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -110,7 +110,7 @@
 
   <section id="s1">
     <h2><span class="no">01</span>现象与发现场景</h2>
-    <p>本件为<strong>存量代码评审 R4</strong>（计划 26-11-05-2335，memory-bank/plans/26-11-05-2335-plan-legacy-code-review-4.html）五路线（R1–R5）findings 按主题聚合后的 <strong>core 主题汇总件</strong>：聚合口径取 severity ∈ {major, minor} 的存活条目共 <strong>43 条</strong>（major 12 / minor 31；nit 不入池），分布于 25 个文件（路线分布 R1 43）。取证与校验口径：全部条目锚定 freeze <code>f0883292</code>（git archive 快照，行号为当时行号），落盘前逐条过 <code>review.check</code> 逐字引文校验；聚合数据面单点 <code>memory-bank/reports/attachments/legacy-review4/aggregate.json</code>。R1#81/R1#82 曾按 (file,quote,line) 键完全一致机械合并（dedup 记录标注「入池时可拆回」），两 claim 各指一缺陷面（解散不清理计数 / 计数不落盘），入池时拆回两行并注「合并组拆回」，故明细表 44 行 = 43 条 + 拆回 1 行。本件为纯盘点入池，状态保持 Open，不被认领修。</p>
+    <p>本件为<strong>存量代码评审 R4</strong>（计划 26-11-05-2335，memory-bank/plans/26-11-05-2335-plan-legacy-code-review-4.html）五路线（R1–R5）findings 按主题聚合后的 <strong>core 主题汇总件</strong>：聚合口径取 severity ∈ {major, minor} 的存活条目共 <strong>43 条</strong>（major 12 / minor 31；nit 不入池），分布于 25 个文件（路线分布 R1 43）。取证与校验口径：全部条目锚定 freeze <code>f0883292</code>（git archive 快照，行号为当时行号），落盘前逐条过 <code>review.check</code> 逐字引文校验；聚合数据面单点 <code>memory-bank/reports/attachments/legacy-review4/aggregate.json</code>。R1#81/R1#82 曾按 (file,quote,line) 键完全一致机械合并（dedup 记录标注「入池时可拆回」），两 claim 各指一缺陷面（解散不清理计数 / 计数不落盘），入池时拆回两行并注「合并组拆回」，故明细表 44 行 = 43 条 + 拆回 1 行。本件为纯盘点入池（入池时状态保持 Open，后续 42 行修复 + 行 3/行 8 拆出独立认领，见状态变更日志，现状态 <strong>Done</strong>）。</p>
   </section>
 
   <section id="s2">
@@ -200,9 +200,10 @@
       <li>2026-11-07 05:27 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
       <li>26-11-07 聚合入池自存量评审 R4（计划 26-11-05-2335，<code>memory-bank/plans/26-11-05-2335-plan-legacy-code-review-4.html</code>）——本轮纯盘点，状态保持 Open；doc-refs 留空待认领方回填</li>
       <li>2026-11-08 — 本件 44 行明细处置回写：<strong>42 行修复</strong>（明细行除行 3、行 8 外全部；代码 37 行 + 文档行 13-17 共 5 行），分批落地后随 develop 入库（2026-11-08 推送时远端分叉 rebase 重放 16 提交，现链 <code>da4df75c..f55677af</code>）；行 3（R1#22 建链幂等）拆出独立 issue <a href="26-11-08-1608-bug-legacy-review4-relocate-build-links.html">26-11-08-1608-bug-legacy-review4-relocate-build-links.html</a>，行 8（R1#39 probe 阻塞）经用户拍板本轮不修，维持 Open。分批映射与验证数字见下方「修复后补充」</li>
-    </ul>
+      <li>2026-11-10 — 状态 Open → Done（kb.status）。行 8（R1#39 probe 阻塞）拆出独立 issue <a href="26-11-10-0638-bug-legacy-review4-relocate-probe-blocking.html">26-11-10-0638-bug-legacy-review4-relocate-probe-blocking.html</a>（与行 3 拆出同模式）——至此 44 行明细全部处置（42 修复 + 行 3/行 8 各拆出独立认领），实际修法与验证数字见「修复后补充」</li>
+</ul>
     <h3>复验</h3>
-    <p>复验：2026-11-08 逐条按符号重定位，44 行明细中 42 行修复落地（代码 37 行 + 文档 5 行；各批评审+终态 test.quick 实证）；行 3/行 8 经用户拍板不修，分别入池/维持 Open。</p>
+    <p>复验：2026-11-08 逐条按符号重定位，44 行明细中 42 行修复落地（代码 37 行 + 文档 5 行；各批评审+终态 test.quick 实证）；行 3/行 8 经用户拍板不修，分别入池/维持 Open。2026-11-10 行 8 亦拆出独立认领（<a href="26-11-10-0638-bug-legacy-review4-relocate-probe-blocking.html">26-11-10-0638</a>），本件处置闭环。</p>
     <h3>修复后补充</h3>
     <p>2026-11-08 收口回写——44 行明细全部处置：<strong>42 行修复</strong>（明细行除行 3、行 8 外全部；代码 37 行 + 文档行 13-17 共 5 行），按文件聚类分批落地（每批评审通过后进下一批），推送时 rebase 重放后现链 <code>da4df75c..f55677af</code>。实际修法按批映射：</p>
     <table>
