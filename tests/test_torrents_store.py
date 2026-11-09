@@ -4,7 +4,8 @@
 - test_store_refresh_first_round: 首轮全部视为新增, removed 为空
 - test_store_refresh_diff: 次轮增删检测
 - test_store_refresh_keeps_records: 已存在记录对象跨 tick 保留(惰性缓存存活)
-- test_store_refresh_cleans_cache_on_remove: 删除种子的记录回收, 缓存清理- test_store_restore_torrent: restore_torrent 恢复删除前记录(对象身份+幂等)
+- test_store_refresh_cleans_cache_on_remove: 删除种子的记录回收, 缓存清理
+- test_store_restore_torrent: restore_torrent 恢复删除前记录(对象身份+幂等)
 - test_store_queries: get/__contains__/all/hashes/__len__
 - test_store_trackers_lazy: 记录级 trackers_info/tracker_urls 惰性拉取+缓存
 - test_store_files_lazy: 记录级 files 惰性拉取+缓存
@@ -32,7 +33,8 @@
 - test_store_reset_runtime_keeps_group_index: reset_runtime 不清 groups/group_sizes/member_to_key(D1=B)
 - test_store_reset_runtime_no_regroup_cost: reset 不触发 O(N) 重归组(不拉文件表/不标脏组)
 - test_store_view_changed_on_membership
-- test_store_apply_removed_yields_to_same_round_patch: 增量轮同 hash 同现 patches+removed 时 patch 赢(26-10-11-2045 防御), 纯 removed 照常 pop
+- test_store_apply_removed_yields_to_same_round_patch: 增量轮同 hash 同现 patches+removed 时 patch 赢(26-10-11-2045 防御),
+  纯 removed 照常 pop
 """
 
 from dataclasses import MISSING, fields as dc_fields

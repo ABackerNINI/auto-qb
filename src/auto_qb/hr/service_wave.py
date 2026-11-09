@@ -778,7 +778,7 @@ class WaveMixin:
         )
         # 本波产生处已打过 WARNING/ERROR(页面失败/改版/防伪/零行/计数对不平) ⇒ worker 状态层只记 INFO 不重复
         result.alerted = bool(
-            wave.had_error or wave.parse_problem or not retention_ok or depth_broken or wave.alerted or
+            wave.had_error or wave.parse_problem or not retention_ok or depth_broken or
             (zero_rows and not confirmed_empty)
         )
         result.reason = " ; ".join(notes)

@@ -275,11 +275,6 @@ class _WaveContext:
         self.parse_problem = False
         self.budget_limited = False
         self.had_error = False
-        #: 本波**产生处**已经打过 WARNING/ERROR(登录失效等): `_finish_wave` 末尾重算 `alerted`
-        #: 时要把这条算进去, 否则 worker 状态层会重复记一遍。此前这个信号是靠「零行波」间接
-        #: 得到的(登录波三档无数据 ⇒ zero_rows=True ⇒ alerted=True); 零行判据收紧成「全档有效」
-        #: 后(计划 26-10-29-0147 D4)那条间接路径断了, 故显式化。
-        self.alerted = False
         self.notes: List[str] = []
 
     def seen_rows(self) -> Mapping[int, HrEntry]:

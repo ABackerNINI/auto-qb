@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="hr-leftover-cleanups">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="小件清理聚合: _WaveContext.alerted 死字段 + 测试 docstring 超宽两行">
 <meta name="issue-summary" content="service_common.py _WaveContext.alerted 经 0527-hr #14 修后无写入方成只读死字段; test_torrents_store.py:7/:35 存量 docstring 两行超 120 列">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-08-0827-refactor-hr-leftover-cleanups</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-08 08:27</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
 
@@ -112,13 +112,15 @@
 <section id="s3">
   <h2><span class="no">§03</span>建议<span class="opt">（可选）</span></h2>
   <p>删 <code>alerted</code> 死字段并同步注释面（先 grep 确认读取面为零）；超宽两行顺手断行。均为零行为改动。</p>
+  <div class="callout"><strong>修复后补充（2026-11-09）</strong>：按建议执行，三处改动——① <code>service_common.py</code> 删 <code>_WaveContext.__init__</code> 的 <code>self.alerted = False</code> 与 4 行失真注释；② <code>service_wave.py</code> <code>_finish_wave</code> 摘掉恒 False 的 <code>wave.alerted or</code> 析取项（唯一读取方，grep 全仓证实无其它读取/写入残留）；③ <code>test_torrents_store.py</code> 第 7 行两条被粘住的测试项拆回两条、第 35 行断行。验证：<code>test.full</code> 5871 passed / 2 skipped，覆盖率 99%；只读评审零发现（检 0/0）。</div>
 </section>
 
 <section id="s4">
   <h2><span class="no">§04</span>状态变更日志</h2>
   <ul>
     <li>2026-11-08 08:27 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-09 — 状态 Open → Done（kb.status）</li>
+</ul>
 </section>
 
 <footer>
