@@ -26,7 +26,16 @@
 - test_dt_table_kernel_single_point: 详情面板表格内核守阵(计划 26-10-13-0811 W1; 用户 2026-10-13 报八项表格症状, 归三个根因簇, 本守阵解簇 A「几何与列被多处各算一遍且零校验」) —— 1. 三份 manifest 都登记 shared/dt_table.js 且文件在盘上; 2. window.DT_TABLE 六口子齐全(layout/assertLayout/checkLabels/registerCell/cellOf/hasArrow); 3. 几何单一出口: 轨道串/对齐/列键同一个返回值里出来且 gridTemplate 恒等于 tracks.join(" ")(调用方再拼一次就是新事实源, 即红) + 固化宽度覆盖生效; 4. L3 列名守卫: 列定义的 label 字段零方向符(扫 app.js 列定义单点 + drawer_tpl 全部变体), 「↑ 占用」不得回潮(密度雷达表头多箭头的出处) + 方向符号只能由排序态单点渲染(表壳 .arrow); 5. 渲染即自查: assertLayout 三处计数(网格轨道/列头格/数据行子格)必须相等, 不相等即报(视觉表现正是「速度列下方异常横带」与「多列内容挤在一起」), 未挂载/未渲染不算不一致(面板没开不得满屏报错); 6. L2 落点: 单元格渲染器未登记即抛(不许渲染空白); 7. 真实列定义增喂(计划 26-11-10-0027 W1(3),
 堵合成列缺口): app.js 截断切片拿 TABLE_COLUMNS 全 13 表真实列 + DRAWER_TRACKER/PEERS 原始列集
 喂 layout —— 全列声明 tpl 前提钉住、轨道逐列取 tpl、aligns 缺省 left、keys 随列序、固化宽覆盖首列
-其余仍 tpl。node 电池真跑 3./5./6./7. (无 node 静默跳过)
+其余仍 tpl。node 电池真跑 3./5./6./7. (无 node 静默跳过); 8. 已接线断言(计划 26-11-10-0027
+W2(1), 拍板 D3): layout 与 assertLayout 均**已接线**进生产 —— W1 教训(26-10-13-0811 W1 只做
+node 电池自测, 「调用链是否存在」无守阵, 生产零调用被测试全绿固化成双口径)的对症面: 静态钉
+lifecycle.js updated() 调 _assertLayouts(主视图四面) + 桥模板 .group-table @vue:mounted/
+@vue:updated 挂 dtAssertLayout(桥九变体面) + columns_grid._assertLayoutPair 消费
+DT_TABLE.assertLayout; node 电池增钉 assertLayout 第 4 参 tableId 的摘要行(有问题时首行 =
+[tableId] 轨道 X / 列头 Y / 行格 Z vs 列数 C, 生产 console.error 消息含表 id 与三方计数),
+per-metric 明细不动(旧正则继续钉); 轨道数按**括号深度**计数(挂载首日 parity e2e 实证:
+display:none 表头的 computed 是指定形, 裸空白切分把一个 minmax 数成两轨 —— 08 分组空组
+10 轨数成 17/V10 三轨数成 4), 指定形与 px 形都计准。node 电池真跑 3./5./6./7./8.
 - test_drawer_variant_skeleton_single_point: 抽屉变体渲染器族三族重复收敛守阵(issue 26-10-20-2231) —— 1. 三态空帧单点 H.emptyFrame 在核心 HELPERS(has 闸 + loading→err→empty 优先级 + err 进 title 走 esc)且 04-12 九件桥变体各 1 处接线(槽类名/空态文案逐件对账), 内联三态块零残留(「正在加载…」态帧不得回潮; 01/02/03 裸空态形状不同刻意不收编, 接线数钉 0); 2. peers 判据单点 reg.peers 五件(FLAG_META/flagTokens/isBad/bucketOf/isLanIp)在核心 + TPL_REG 挂载 + 07/08/09 经 const P 消费, 本地副本零残留(反向断言); 3. dt 值格模板合一: 单一 tpl-aq-dt-peer-cells(类名经 pfx prop 计算, 渲染结果与旧逐字同; dt09 密度雷达特化经 occ prop) + table.js 三组件同名不变共享模板且 pfx/occ 默认值各表自己 + 旧三模板 id 零残留(双模板副本回潮即红)
 - test_drawer_prio_text_single_point: 文件优先级码 -> 中文文案表单点守阵(issue 26-10-29-1340) —— 五份内联表(4 份含 legacy 4 档 + setFilePriority 那份缺 4 回退 String(p))收口成核心层 HELPERS.PRIO_TEXT 全键表 + 带回退取文 prioText(p, dash) 挂 reg.helpers; 守阵 = shared/ 递归扫五键表字面仅 1 处(全仓唯一硬约束) + drawer.js 两处(setFilePriority 回执 String(p) 兜底 / drawerFileRows 显示「正常」兜底, 方法内经 window.AQB_DRAWER_TPL_REG 取别名)与 10/11/12(H.prioText 消费)接线 + PRIO_LABEL/本地字面零残留 + node 真跑可达域 p∈{0,1,6,7} 新旧逐字同与 4 档补测 prioText(4, "4")==="高"(ctx-menus.html 静态菜单项文案属自身呈现不在表内, issue 范围外不改; 行为等价 e2e 盯 drawer-content-variant-tables)
 - test_drawer_tracker_bucket_text_single_point: tracker 五桶文案表单点守阵(issue 26-10-29-1343) —— 04/05/06 三变体各持一份的桶文案(04/06 BUCKET{text,sev} 两份 + 05 GROUPS{text,cnt} 一份 + 04 PILLS 与 05 计数条内联字面, 共 5 处两形状)收口成核心层 TRACKERS(TRACKER_BUCKETS 全列 text/sev/order/cnt + TRACKER_BUCKET_ORDER 处理序数组, 05 分区顺序与 04/06 sev 升序同源写一次)挂 reg.trackers(reg.peers 同类判据命名空间); 守阵 = 核心表全列逐字钉住 + 桶文案词「未联系」drawer_tpl/ 零命中且核心层恰 1 处 + 三变体 TK 接线与本地 BUCKET/GROUPS/胶囊 text/tip 桶名字面零残留(cls/tip/色族/各版式桶序是呈现语义留各自文件) + node 真跑 text/sev/cnt 与旧表逐字对账(sev 0/1/2/3/9 不动 = 排序权值等价; 变体私有 bucketOf 三份属 R21-B-05/C-05 不在本项; 行为等价 e2e 盯 drawer-trackers-variant-tables / drawer-trackers-reannounce)
@@ -996,7 +1005,10 @@ def test_drawer_tpl_row_after_hook_wiring():
     永不执行。静态钉模板调用点 + node 真跑(rAF 语义等价: 传 tab 命中, 传 table id 不命中)。"""
     shared = os.path.join(STATIC_ROOT, "shared")
     bridge = open(os.path.join(shared, "tpl", "xtpl.html"), encoding="utf-8").read()
-    assert '@vue:mounted="$root.dtRowAfter(tab, $event)"' in bridge, \
+    # 2026-11-10(计划 26-11-10-0027 W2(1)): 同一钩子上追挂了渲染自查 dtAssertLayout(语义独立,
+    # 见 test_dt_table_kernel_single_point 第 8 条), 本守阵的字面锚随行更新 —— dtRowAfter 仍
+    # 收页签 key 的语义不变。
+    assert '@vue:mounted="$root.dtRowAfter(tab, $event); $root.dtAssertLayout(tab, $event)"' in bridge, \
         "桥表 @vue:mounted 未把页签 key 交给 dtRowAfter(传 table id 会让描述符恒 null, rowAfterFn 永不执行)"
     assert "$root.dtRowAfter($root.dtBridgeTbl(tab)" not in bridge, \
         "桥表 @vue:mounted 又把 dtBridgeTbl(tab)(table id)传给 dtRowAfter(参数语义错位回潮, issue 26-11-03-0802)"
@@ -1857,10 +1869,40 @@ global.window.getComputedStyle = () => ({ gridTemplateColumns: "10px 20px" });
 const head = { querySelectorAll: () => ({ length: 2 }) };
 ck("一致时零问题", DT.assertLayout(head, { children: { length: 2 } }, cols).length === 0);
 const bad = DT.assertLayout(head, { children: { length: 3 } }, cols);
-ck("多一格即报", bad.length === 1 && /子格数 3 != 列数 2/.test(bad[0]));
+/* W2(1) 起有问题时首行是 [tableId] 摘要(缺省参占位 [?]), per-metric 明细随后 —— 长度 1 变 2 */
+ck("多一格即报", bad.length === 2 && /^\[\?\] /.test(bad[0]) && /子格数 3 != 列数 2/.test(bad[1]));
 const bad2 = DT.assertLayout({ querySelectorAll: () => ({ length: 1 }) }, { children: { length: 2 } }, cols);
 ck("少一列头即报", bad2.some((p) => /列头格数 1 != 列数 2/.test(p)));
 ck("未挂载不算不一致", DT.assertLayout(null, null, cols).length === 0);
+
+/* W2(1)(计划 26-11-10-0027): tableId 摘要行 —— 有问题时首行 = [tableId] 轨道 X / 列头 Y /
+ * 行格 Z vs 列数 C(生产 console.error 消息须含表 id 与三方计数, 挂载点传第 4 参);
+ * per-metric 明细消息不动(上面旧正则钉着)。一致时零问题零摘要。 */
+const badT = DT.assertLayout(head, { children: { length: 3 } }, cols, "drawerPeerV07");
+ck("摘要行置首且含 tableId 与三方计数",
+   /^\[drawerPeerV07\] 轨道 2 \/ 列头 2 \/ 行格 3 vs 列数 2$/.test(badT[0]));
+ck("per-metric 明细仍在摘要之后", badT.some((p) => /子格数 3 != 列数 2/.test(p)));
+ck("缺省 tableId 摘要占位 ?", DT.assertLayout(head, { children: { length: 3 } }, cols)[0].startsWith("[?] "));
+ck("一致时不加摘要", DT.assertLayout(head, { children: { length: 2 } }, cols, "x").length === 0);
+
+/* W2(1) 挂载首日实证补钉: 轨道数按**括号深度**计数 —— display:none 表头(08 分组空组/列头
+ * CSS 隐藏面)的 computed 是**指定形**, 一个 minmax(a, b) 会被裸空白切分多计一轨(实测 08 十轨
+ * 数成 17、V10 三轨数成 4), 有盒表头的 px 形态两者一致。指定形与 px 形都必须计准。 */
+const cols3 = [{ key: "a", tpl: "1fr" }, { key: "b" }, { key: "c" }];
+const head3 = { querySelectorAll: () => ({ length: 3 }) };
+const row3 = { children: { length: 3 } };
+global.window.getComputedStyle = () => ({ gridTemplateColumns: "minmax(0px, 1fr) 78px 128px" });
+ck("指定形: minmax 整体一轨(隐藏表头实测形态)", DT.assertLayout(head3, row3, cols3).length === 0);
+global.window.getComputedStyle = () => ({ gridTemplateColumns: "197.45px 78px 128px" });
+ck("px 形: 逐轨一 tokens(有盒表头实测形态)", DT.assertLayout(head3, row3, cols3).length === 0);
+global.window.getComputedStyle = () => ({ gridTemplateColumns: "minmax(0px, 1fr) 78px" });
+const badSpec = DT.assertLayout(head3, row3, cols3);
+ck("指定形少一轨仍报(计数不是放水)", badSpec.some((p) => /网格轨道数 2 != 列数 3/.test(p)));
+global.window.getComputedStyle = () => ({ gridTemplateColumns: "none" });
+const badNone = DT.assertLayout(head3, { children: { length: 0 } }, []);
+ck("none = 零轨道(轨道指标不误报; 列头 3 vs 0 仍如实报)",
+   badNone.length === 2 && badNone.some((p) => /列头格数 3 != 列数 0/.test(p))
+   && badNone.every((p) => !/网格轨道数/.test(p)));
 
 /* W1(3)(计划 26-11-10-0027): 增喂**真实列定义** —— 既有电池只喂合成列 {key:"a"...}, 内核
  * 生产零调用时代无后果, 接线后必须证明吃真实表列也对。沙箱口径与 r4 等价性探针同式:
@@ -1930,7 +1972,14 @@ def test_dt_table_kernel_single_point():
        label 字段零方向符, 用户报的「密度雷达占用表头前多一个箭头」不得回潮;
     5. 渲染即自查 —— assertLayout 三处计数(轨道 / 列头格 / 数据行子格)必须相等, 不相等就是
        「多一格 / 少一列」, 而它的视觉表现正是「速度列下方有异常横带」与「多列内容挤在一起」;
-       未挂载/未渲染一律不算不一致(面板没开时不得满屏报错)。
+       未挂载/未渲染一律不算不一致(面板没开时不得满屏报错);
+    8. 已接线(计划 26-11-10-0027 W2(1), 拍板 D3 = 常驻生产) —— layout 与 assertLayout 都有
+       生产消费点: lifecycle.js updated() -> _assertLayouts(主视图四面), 桥模板 .group-table
+       @vue:mounted/@vue:updated -> dtAssertLayout(桥九变体面), 两者汇入 columns_grid.
+       _assertLayoutPair 单点(豁免面/消息口径收一处), 不一致只 console.error 不打断渲染;
+       assertLayout 第 4 参 tableId 出摘要行([tableId] 轨道 X / 列头 Y / 行格 Z vs 列数 C)。
+       本条是「零调用回潮即红」的机械面 —— 26-10-13-0811 的教训(W1 只自测不接线, 守阵与
+       e2e 恰好都盖不到调用链, 双口径存活)。
     """
     shared = os.path.join(STATIC_ROOT, "shared")
     js_path = os.path.join(shared, "dt_table.js")
@@ -1947,6 +1996,31 @@ def test_dt_table_kernel_single_point():
     for port in ("layout:", "assertLayout:", "checkLabels:", "registerCell:", "cellOf:", "hasArrow:"):
         assert port in js, f"dt_table.js 缺对外口子 {port}(内核契约不全)"
     assert "window.DT_TABLE" in js, "dt_table.js 未挂 window.DT_TABLE(调用方取不到)"
+
+    # 8. 已接线断言(计划 26-11-10-0027 W2(1), 拍板 D3): assertLayout 必须有生产消费点 ——
+    #    W1 教训(「调用链是否存在」零守阵, 零调用被测试全绿固化)的对症面。挂载点两个,
+    #    与计划 §03 点名的两个时机一一对应:
+    #    a. 主视图四面 -> 根实例 updated()(lifecycle.js) -> _assertLayouts(ref 在场才查);
+    #    b. 抽屉桥九变体面 -> 桥模板 .group-table @vue:mounted/@vue:updated -> dtAssertLayout
+    #       (桥是独立组件, 抽屉列态变更不触发根重渲, 根 updated() 盖不住)。
+    lc = open(os.path.join(shared, "lifecycle.js"), encoding="utf-8").read()
+    assert "this._assertLayouts();" in lc, \
+        "lifecycle.js updated() 未调 _assertLayouts(主视图四面渲染自查脱线 = assertLayout 回到零调用)"
+    cg = open(os.path.join(shared, "columns_grid.js"), encoding="utf-8").read()
+    for frag in ("_assertLayouts(", "_assertLayoutPair(", "DT.assertLayout(", "ASSERT_SKIP_FACES"):
+        assert frag in cg, f"columns_grid.js 缺渲染自查件 {frag}(挂载链断裂)"
+    dtpl = open(os.path.join(shared, "drawer_templates.js"), encoding="utf-8").read()
+    assert "dtAssertLayout(tab, vnode)" in dtpl, \
+        "drawer_templates.js 缺桥面自查口 dtAssertLayout(桥 Teleport 完成后无人自查)"
+    assert "this._assertLayoutPair(tid, head, row)" in dtpl, \
+        "dtAssertLayout 未委托 columns_grid._assertLayoutPair 单点(消息/豁免口径分叉)"
+    xtpl = open(os.path.join(shared, "tpl", "xtpl.html"), encoding="utf-8").read()
+    assert '@vue:mounted="$root.dtRowAfter(tab, $event); $root.dtAssertLayout(tab, $event)"' in xtpl, \
+        "桥模板 .group-table 的 @vue:mounted 未挂 dtAssertLayout(锚换代拍自查脱线)"
+    assert '@vue:updated="$root.dtAssertLayout(tab, $event)"' in xtpl, \
+        "桥模板 .group-table 的 @vue:updated 未挂 dtAssertLayout(桥 patch 拍自查脱线)"
+    assert "function assertLayout(headEl, rowEl, cols, tableId)" in js, \
+        "assertLayout 签名缺 tableId 第 4 参(生产消息无法带表 id 与三方计数摘要)"
 
     # 4. L3: 列定义的 label 字段零方向符(扫列定义单点 app.js + 变体文件)
     arrow_re = re.compile(r"[\u2190-\u21ff\u25b2\u25bc\u25c0-\u25ff\u2b00-\u2bff\u27a1\u2b05\u2b06\u2b07]")

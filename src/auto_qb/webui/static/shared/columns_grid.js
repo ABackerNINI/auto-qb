@@ -3,6 +3,19 @@
  * 只搬方法定义, 实现逐行未改; 根文件已定义该域, 本片段在其后原地扩充(Object.assign)。
  * 加载序 = 四套皮肤 index.html 清单里紧跟根文件之后(与拆分前同一迭代替换序)。
  */
+/* 渲染自查的面级豁免(计划 26-11-10-0027 W2(1), D4 例外清单的 assert 侧落点): 这些面的
+ * 「数据行子格数 == 列数」计数语义不成立, assertLayout 对它们豁免 —— 逐面写明原因, 不静默放宽:
+ *   drawerTrackerV04  04 卡片形态面: 行是卡片(display:block, 卡内 header/stats/msg 三块)非
+ *                     列状数据, 行子格数与列数(1)无等值语义; 表头也被变体有意隐藏
+ *                     (parity e2e 另有「卡片形态规格」守阵钉它, 不回潮成表格)。
+ *   drawerStubV0      桥验证 fixture(?dtstub 查询参数才注册, 生产零观感): 行模型 peer 的
+ *                     渲染器 aq-peer-cells 已随经典链整体退役, 行是空壳 —— 它只验证
+ *                     「锚 -> Teleport -> 引擎手势」挂载链, 不验证值格。 */
+var ASSERT_SKIP_FACES = {
+  drawerTrackerV04: "04 卡片形态面(D4 例外): 行是卡片非列状数据, 行子格数与列数无等值语义",
+  drawerStubV0: "桥验证 fixture(?dtstub 测试专用): 行渲染器已随经典链退役, 行恒空壳",
+};
+
 Object.assign(window.AQB_COLUMNS.methods, {
 
     /* ------------------------------------------------ 列状态(宽/隐/自适应) */
@@ -50,6 +63,60 @@ Object.assign(window.AQB_COLUMNS.methods, {
      * 之后的首次调用(渲染期 computed)加载, 无初始化时序问题。 */
     _gridTemplate(page) {
       return window.DT_TABLE.layout(this._visibleCols(page), this.colWidths[page] || {}).gridTemplate;
+    },
+    /* ---------------- 渲染自查挂载(计划 26-11-10-0027 W2(1), 拍板 D3 = 常驻生产) ----------------
+     * assertLayout 进生产渲染: 每个在场表格面在「渲染完成」后做三处 O(1) 计数(网格轨道数 /
+     * 列头格数 / 首个数据行子格数), 不一致 console.error(消息含 tableId 与三方计数)但**不打断
+     * 渲染**。挂载点实证选定(两个, 与计划 §03 点名的两个时机一一对应):
+     *   主视图四面(group/detail/torrent/show) -> 根实例 updated()(lifecycle.js):
+     *     Vue 的 updated 钩子是**后置队列**(post-flush cbs), 触发时同一次 flush 里的子组件
+     *     (aq-table / 桥)都已 patch 完 —— 即「主视图渲染后」的严格语义。表头经 def.headRef
+     *     取 ref(v-if 未渲染的视图 ref 不在场 = 零 DOM 扫描), 行在表头父容器内按
+     *     data-table 现查(容器作用域, 只走到首个匹配)。
+     *   抽屉桥九变体面(drawerStubV0/07/08/09/04/05/06/10/11) -> 桥模板 .group-table 的
+     *     @vue:mounted / @vue:updated 钩子(dtAssertLayout, xtpl.html tpl-aq-dt-bridge):
+     *     桥是独立组件, 列宽/隐藏等抽屉列态变更不触发根重渲, 根 updated() 盖不住;
+     *     .group-table 的 vnode 钩子恰在「Teleport 完成后 / 每次桥 patch 后」触发, 拿到的
+     *     $event.el 就是行容器 —— 表头/行都在同一座锚内, 配对零 document 扫描。
+     * 开销: 每面 O(1)(一次 computed 样式读 + 两个 childElement 计数; computed 读的强制布局
+     * 与同拍 _measureRowH 的读取合流, 不新增布局趟)。R4 窗口化面: 窗口只切行不切格, 任一
+     * 渲染行的子格数都等于列数, 计数语义在窗口化下成立(e2e parity/face-bg 实证零误报)。
+     * 豁免语义: 表头/行未渲染(面不在场/空态)一律不算不一致 —— 与内核「未挂载豁免」同口径;
+     * 面级豁免见 ASSERT_SKIP_FACES, 行级豁免见 _assertLayoutPair 的 empty-row 分支。 */
+    _assertLayouts() {
+      if (typeof document === "undefined") return;
+      const DT = window.DT_TABLE;
+      if (!DT || typeof DT.assertLayout !== "function") return;
+      for (const id of Object.keys(ALL_TABLE_DEFS)) {
+        const def = ALL_TABLE_DEFS[id];
+        /* 抽屉桥面(headRef 恒 null)的挂载点在桥模板钩子, 不在此逐面扫 DOM */
+        if (!def || !def.headRef) continue;
+        const ref = this.$refs[def.headRef];
+        if (!(Array.isArray(ref) ? ref.length : ref)) continue;  /* 视图 v-if 未渲染 */
+        const headEl = this._headEl(id);
+        if (!headEl) continue;
+        const parent = headEl.parentElement;
+        const rowEl = parent
+          ? parent.querySelector('.group-row[data-table="' + id + '"], .member-row[data-table="' + id + '"]')
+          : null;
+        this._assertLayoutPair(id, headEl, rowEl);
+      }
+    },
+    /* 单面配对自查: headEl + 首个数据行 -> DT_TABLE.assertLayout; 有问题 console.error 不打断。
+     * rowEl 允许 null(空态/未渲染 = 豁免); empty-row(10/11 筛选空的占位行, 单格提示非列状
+     * 数据)同样豁免 —— 行级豁免与面级豁免(ASSERT_SKIP_FACES)分开记, 各自写明原因。 */
+    _assertLayoutPair(tableId, headEl, rowEl) {
+      if (typeof document === "undefined") return;
+      if (ASSERT_SKIP_FACES[tableId]) return;
+      if (!headEl || !rowEl) return;
+      if (rowEl.classList && rowEl.classList.contains("empty-row")) return;
+      const DT = window.DT_TABLE;
+      if (!DT || typeof DT.assertLayout !== "function") return;
+      const problems = DT.assertLayout(headEl, rowEl, this.visibleColsOf(tableId), tableId);
+      if (problems.length) {
+        console.error("[dt_table.assertLayout] " + problems.join("; ")
+          + " —— 三处计数不一致(多一格/少一列类缺陷), 渲染未打断(D3 常驻自查)");
+      }
     },
     /* 从列头行(真正的 grid 容器)读取**当前渲染**的列宽 px; 列数不符(渲染未完成)返回 null。
      * !2026-10-18(用户报障「用户表格隐藏一列其它列坍塌」根治): 逐 token 严格校验

@@ -36,6 +36,23 @@
   = 轨道语义冲突 = 计划 R1 停手条款(failed 项带两侧输出全文, 不改生产代码凑绿); 探针绿是 W1(2)
   委托改造的前置证据。沙箱口径: app.js 截断切片 + columns 域聚合同一 eval + dt_table.js require。
   node 电池真跑(无 node 静默跳过)
+- test_r4_dt_table_exception_list_geometry_guard: dt_table 例外清单守阵(计划 26-11-10-0027
+  W2(2), 拍板 D4; 评审 2 三条 minor 当场修后口径) —— 清单(HR 三表 hrDetail/hrWave/hrKv +
+  04 卡片形态面)之外零旁路几何:
+  1. camelCase 产物(gridTemplateColumns)白名单恰两件(内核 assertLayout 读 / 引擎
+  _renderedWidths 读), 之外零命中; table.js **不在白名单**而是双向钉死(原文提及恰 1 处 =
+  契约头注文档仍在 + 掩码后零命中 = 提及确在块注释内, 代码产物零放行 —— 白名单死条目会把
+  真实旁路放行成恒绿); 2. columns_computed 每条恰 _gridTemplate 单点委托形共 13 条且 id 集
+  与 app.js ALL_TABLE_DEFS 键互对(新表漏接单点 computed 即红); 3. kebab 声明
+  (grid-template-columns)命中表面容器(.group-head/.group-row/.group-table/.detail-head/
+  .h-cell/data-table)的规则恰 = D4 例外清单 1 条(04 的 .dt04-list .group-table 两列卡片栅格),
+  且 .js 侧钉「选择器与首条声明同行」惯例(命中行必自带 { —— 多行规则形即红不静默逃逸,
+  .css/.html 侧保留规则解析双轨); 4. 例外条目存在性(04 规则本体 + HR 三表注册 +
+  HR/settings 面零 grid 几何的未接线状态); 5. 单点完整性(_gridTemplate 委托 DT_TABLE.layout
+  且无 .join 拼轨回潮 + colAlignCss 取 layout().aligns); 6. assert 侧豁免清单本体钉死
+  (columns_grid.ASSERT_SKIP_FACES 键集恰 {drawerTrackerV04, drawerStubV0} +
+  _assertLayoutPair 含 empty-row 行级豁免字面 —— 豁免被删 = 04 面刷 console.error 噪声, 即红)。
+  node 电池真跑(无 node 静默跳过)
 
 加载口径: columns 域经 webui_helpers.bundle_file("columns.js") 聚合(根 + 五片段清单序, 与拆分前
 同一份代码); 单文件域(selection/sort/format)直接 eval。app.js 以 loadColState 截断切片加载
@@ -1197,3 +1214,222 @@ def test_r4_dt_table_layout_geometry_equivalence():
         os.path.join(STATIC_ROOT, "shared", "app.js"),
     )
     _assert_battery(report, "dt_table 几何等价性探针")
+
+
+# W2(2)(计划 26-11-10-0027, 拍板 D4): 例外清单守阵 —— 清单之外零旁路几何 ---------------
+_NODE_DT_EXC_LIST_PROBE = r"""
+const fs = require("fs");
+const path = require("path");
+const ROOT = process.argv[1];
+const checks = [];
+const ok = (name, cond) => checks.push([name, !!cond, ""]);
+
+/* 表面容器的判定 token: 命中即「引擎表格面的几何」(表头/行容器/格), 它们的轨道串只许出自
+ * 单点(gridStyle 内联)或 D4 例外清单; 未命中 = 变体外壳的版式栅格(卡片阵/双栏 wrap 等),
+ * 与表格列几何无关, 不在本守阵语义内。 */
+const TABLE_TOKEN = /\.group-(head|row|table)|\.detail-head|\.h-cell|data-table/;
+const rel = (p) => path.relative(ROOT, p).split("\\").join("/");
+
+function walk(dir, out) {
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    const p = path.join(dir, e.name);
+    if (e.isDirectory()) walk(p, out);
+    else if (/\.(js|html|css)$/.test(e.name)) out.push(p);
+  }
+  return out;
+}
+const files = walk(ROOT, []);
+ok("扫描面非空(静态目录在盘)", files.length > 100);
+
+/* 块注释剥离(跨行): 注释里的提及(components.css 有「此处不写 grid-template-columns 以免
+ * 误导」的纪律注)不是代码事实, 不进判定 —— 只 mask 块注释 /*..*／, 行注释不动(不冒 URL 误伤)。 */
+function maskBlockComments(lines) {
+  const out = [];
+  let inBlock = false;
+  for (const ln of lines) {
+    let s = "", rest = ln;
+    while (rest.length) {
+      if (!inBlock) {
+        const a = rest.indexOf("/*");
+        if (a < 0) { s += rest; break; }
+        s += rest.slice(0, a);
+        rest = rest.slice(a + 2);
+        inBlock = true;
+      } else {
+        const b = rest.indexOf("*/");
+        if (b < 0) { rest = ""; break; }
+        inBlock = false;
+        rest = rest.slice(b + 2);
+      }
+    }
+    out.push(s);
+  }
+  return out;
+}
+
+/* 1. camelCase 生产者(gridTemplateColumns, JS 内联样式产物与 computed 读取):
+ *    白名单恰两件(内核/引擎 computed 读), table.js 不在白名单、双向钉死(见下), 之外零命中
+ *    —— 新旁路产物(手拼轨道串写 style)即红。 */
+const camByFile = {};
+for (const f of files) {
+  const masked = maskBlockComments(fs.readFileSync(f, "utf8").split(/\r?\n/));
+  masked.forEach((ln, i) => {
+    if (ln.indexOf("gridTemplateColumns") >= 0) (camByFile[rel(f)] || (camByFile[rel(f)] = [])).push({ n: i + 1, ln: ln });
+  });
+}
+const CAMEL_ALLOW = {
+  /* dt_table.js: assertLayout 的 computed 读(自查, 非产物) */
+  "shared/dt_table.js": 1,
+  /* columns_grid.js: _renderedWidths 的 computed 读(列宽引擎, 非产物) */
+  "shared/columns_grid.js": 1,
+  /* !table.js 刻意**不在**白名单: 它对 gridTemplateColumns 的唯一提及是对外契约头注里的
+   * 文档性提及(块注释内), maskBlockComments 后本文件命中应为 0 —— 放进白名单会让
+   * 「恰好 1 处真实代码旁路产物」借文档提及的壳恒绿(评审 2 #1 死条目), 故双向钉死如下。 */
+};
+for (const f of Object.keys(camByFile)) {
+  if (f === "shared/columns_computed.js") continue;  /* 单点 computed 家族, 下一节逐条对形 */
+  const allow = CAMEL_ALLOW[f];
+  ok("[camel] " + f + " 命中恰 " + allow + " 处(实得 " + (camByFile[f].length) + ")",
+     allow !== undefined && camByFile[f].length === allow);
+}
+ok("[camel] 两个 computed 读位仍在(内核/引擎没被搬走)",
+   camByFile["shared/dt_table.js"] && camByFile["shared/dt_table.js"].length === 1 &&
+   camByFile["shared/columns_grid.js"] && camByFile["shared/columns_grid.js"].length === 1);
+/* table.js 双向钉(评审 2 #1): 原文提及恰 1 处(契约头注文档仍在, 被顺手删注释也红) +
+ * 掩码后零命中(提及确在块注释内 —— table.js 出现任何**代码**产物本条即红, 无白名单可借)。 */
+const tblRaw = fs.readFileSync(path.join(ROOT, "shared", "table.js"), "utf8");
+ok("[camel] table.js 原文提及恰 1 处(契约头注文档仍在)",
+   tblRaw.split("gridTemplateColumns").length - 1 === 1);
+ok("[camel] table.js 掩码后零命中(文档提及确在块注释内, 代码产物零放行)",
+   !camByFile["shared/table.js"]);
+
+/* 2. columns_computed.js: 每条都恰是单点委托形 this._gridTemplate("<id>"), id 集与 app.js
+ *    表注册表(ALL_TABLE_DEFS 键)逐一互对 —— 新表注册了却没接单点 computed / 旁路 computed 即红。 */
+const ccHits = camByFile["shared/columns_computed.js"] || [];
+const ids = [];
+for (const h of ccHits) {
+  const m = h.ln.match(/return \{ gridTemplateColumns: this\._gridTemplate\("(\w+)"\) \};/);
+  if (m) ids.push(m[1]);
+}
+ok("[computed] 每条都是单点委托形(实得 " + ids.length + "/" + ccHits.length + " 条)",
+   ids.length === ccHits.length && ccHits.length === 13);
+const appSrc = fs.readFileSync(path.join(ROOT, "shared", "app.js"), "utf8");
+ok("[computed] id 集与表注册表互对(逐 id 是 ALL_TABLE_DEFS 键)",
+   ids.length === 13 && ids.every((id) => new RegExp("^  " + id + ": \{", "m").test(appSrc)));
+const gridKeys = appSrc.match(/grid: "\w+"/g) || [];
+ok("[app] 每表恰一对 computed(grid: 恰 13 处, 实得 " + gridKeys.length + ")", gridKeys.length === 13);
+
+/* 3. kebab 声明(grid-template-columns, CSS 规则面): 命中表面 token 的规则只许是 D4 例外
+ *    清单条目 —— 现清单恰 1 条(04 卡片形态面: 引擎行容器被变体覆写成两列卡片栅格);
+ *    新表面旁路(含未来变体把别的面的行容器覆写成栅格)即红。 */
+const D4_EXCEPTIONS = [
+  { f: "shared/drawer_tpl/04-trackers-status-cards-tall.js", token: ".dt04-list .group-table",
+    why: "04 卡片形态面: 行容器两列卡片栅格(非列状数据, D4 例外)" },
+];
+const surfHits = [];
+const jsMultiline = [];  /* .js 命中行不带 { 的多行规则形(非常规, 见下) */
+for (const f of files) {
+  const r = rel(f);
+  const lines = maskBlockComments(fs.readFileSync(f, "utf8").split(/\r?\n/));
+  lines.forEach((ln, i) => {
+    if (ln.indexOf("grid-template-columns") < 0) return;
+    if (/\.js$/.test(r)) {
+      /* .js(CSS 字符串): 机制一致性取舍(评审 2 #2) —— 选择器-配对大括号解析在 .js 侧会被
+       * 代码大括号与非 CSS 字符串(querySelector 选择器等)拼出幻影规则, 故不复制 .css/.html
+       * 的规则解析, 改把「选择器与首条声明同行」的 drawer_tpl CSS 字符串惯例**钉成断言**:
+       * 命中行必须自带 {。多行规则形(选择器行/声明行分离)不是静默逃逸而是本断言红 ——
+       * 要么回到单行惯例, 要么显式改本守阵(与 .css/.html 解析对齐)。12 处既有命中全合规。 */
+      if (ln.indexOf("{") < 0) jsMultiline.push(r + ":" + (i + 1));
+      const win = [lines[i - 1] || "", ln, lines[i + 1] || ""].join("\n");
+      if (TABLE_TOKEN.test(win)) surfHits.push({ f: r, n: i + 1, ctx: win });
+      return;
+    }
+    /* .css/.html(真样式表): 前后一行窗口 + 整段规则解析(选择器到配对大括号), 双轨都算命中面。 */
+    const win = [lines[i - 1] || "", ln, lines[i + 1] || ""].join("\n");
+    if (TABLE_TOKEN.test(win)) surfHits.push({ f: r, n: i + 1, ctx: win });
+  });
+  if (/\.(css|html)$/.test(r)) {
+    const cssText = lines.join("\n");
+    const re = /([^{}]*)\{([^{}]*)\}/g;
+    let m;
+    while ((m = re.exec(cssText))) {
+      if (m[2].indexOf("grid-template-columns") >= 0 && TABLE_TOKEN.test(m[1] + m[2])) {
+        if (!surfHits.some((h) => h.f === r && h.ctx.indexOf(m[2].trim()) >= 0)) {
+          surfHits.push({ f: r, n: 0, ctx: (m[1] + "{" + m[2] + "}").slice(-200) });
+        }
+      }
+    }
+  }
+}
+ok("[kebab-js] 惯例钉死: .js 命中行必自带 {(多行规则形即红, 实得 " +
+   (jsMultiline.join(" | ") || "无") + ")", jsMultiline.length === 0);
+ok("[kebab] 表面几何规则恰 " + D4_EXCEPTIONS.length + " 条 = D4 例外清单(实得 " +
+   surfHits.map((h) => h.f + ":" + h.n).join(" | ") + ")",
+   surfHits.length === D4_EXCEPTIONS.length &&
+   D4_EXCEPTIONS.every((e) => surfHits.some((h) => h.f === e.f && h.ctx.indexOf(e.token) >= 0)));
+
+/* 4. D4 例外清单存在性: 清单点名的东西必须真实在盘(条目漂移即红, 防「例外清空了守阵却照绿」)
+ *    a. 04 卡片栅格条目本体(.dt04-list .group-table 两列栅格)在 04 变体里恰 1 处;
+ *    b. HR 三表(hrDetail/hrWave/hrKv)注册表在盘且零 grid 几何(未接线的例外状态被钉住)。 */
+const f04 = fs.readFileSync(path.join(ROOT, "shared", "drawer_tpl", "04-trackers-status-cards-tall.js"), "utf8");
+const l04 = f04.split(/\r?\n/).filter((ln) => ln.indexOf("group-table") >= 0 && ln.indexOf("grid-template-columns") >= 0);
+ok("[D4] 04 条目在盘(.dt04-list .group-table 两列卡片栅格恰 1 处)",
+   l04.length === 1 && /\.dt04-list \.group-table/.test(l04[0]) && /repeat\(2, minmax\(0, 1fr\)\)/.test(l04[0]));
+const hrSrc = fs.readFileSync(path.join(ROOT, "shared", "hr_status.js"), "utf8");
+for (const id of ["hrDetail", "hrWave", "hrKv"]) {
+  ok("[D4] HR 例外条目在盘: HR_TABLE_DEFS." + id, new RegExp("^  " + id + ": \{", "m").test(hrSrc));
+}
+ok("[D4] HR 三表零 grid 几何(未接线状态被钉住, 顺手误接即红)",
+   !/gridTemplateColumns|grid-template-columns/.test(hrSrc));
+const setDetail = fs.readFileSync(path.join(ROOT, "shared", "tpl", "settings-detail.html"), "utf8");
+ok("[D4] hrDetail 借壳形态在(settings-detail thead 模式)", setDetail.indexOf('table-id="hrDetail"') >= 0);
+ok("[D4] settings-detail 零 grid 几何(HR 面无旁路)", !/gridTemplateColumns|grid-template-columns/.test(setDetail));
+
+/* 5. 单点完整性: _gridTemplate 委托 DT_TABLE.layout 且无旁路拼接; colAlignCss 对齐取自
+ *    layout().aligns —— 委托松开 = W1 成果回退。 */
+const cgSrc = fs.readFileSync(path.join(ROOT, "shared", "columns_grid.js"), "utf8");
+ok("[单点] _gridTemplate 委托 DT_TABLE.layout(旁路 .map/.join 拼轨零回潮)",
+   /_gridTemplate\(page\) \{\s*\n\s*return window\.DT_TABLE\.layout\(this\._visibleCols\(page\), this\.colWidths\[page\] \|\| \{\}\)\.gridTemplate;/.test(cgSrc) &&
+   !/_gridTemplate\(page\) \{[\s\S]{0,400}\.join\(/.test(cgSrc));
+const ccSrc = fs.readFileSync(path.join(ROOT, "shared", "columns_computed.js"), "utf8");
+ok("[单点] colAlignCss 对齐序列取自 DT_TABLE.layout().aligns", /DT_TABLE\.layout\(/.test(ccSrc));
+
+/* 6. assert 侧豁免清单本体(D4 的 assert 落点, 评审 2 #3): 几何例外之外还有一层 —— 渲染自查
+ *    对计数语义不成立的面/行的豁免(ASSERT_SKIP_FACES 两键 + empty-row 行级豁免)。豁免被删
+ *    不会让几何变错, 但 04 面将每拍刷 console.error 噪声(e2e 运行期错误守阵全红), 故豁免
+ *    清单本体也钉死: 键集恰两键、行级豁免字面在 _assertLayoutPair —— 删豁免即红, 与
+ *    「例外明文化」同纪律(例外只许显式改, 不许静默消失)。 */
+const mSkip = cgSrc.match(/var ASSERT_SKIP_FACES = \{([\s\S]*?)\};/);
+const skipKeys = mSkip
+  ? (mSkip[1].match(/^\s*(\w+):/gm) || []).map((s) => s.trim().replace(/:$/, ""))
+  : [];
+ok("[assert豁免] ASSERT_SKIP_FACES 键集恰 {drawerTrackerV04, drawerStubV0}(实得 " +
+   skipKeys.join(",") + ")",
+   skipKeys.length === 2 && skipKeys.indexOf("drawerTrackerV04") >= 0 &&
+   skipKeys.indexOf("drawerStubV0") >= 0);
+ok("[assert豁免] empty-row 行级豁免仍在 _assertLayoutPair(删占位行豁免即红)",
+   /contains\("empty-row"\)/.test(cgSrc));
+
+const failed = checks.filter((c) => !c[1]).map((c) => c[0]);
+console.log(JSON.stringify({ ok: checks.length - failed.length, total: checks.length, failed: failed }));
+"""
+
+
+def test_r4_dt_table_exception_list_geometry_guard():
+    """计划 26-11-10-0027 W2(2), 拍板 D4: dt_table 例外清单守阵 —— 清单之外零旁路几何。
+
+    例外清单(D4 拍板明文化, 本守阵是其机械面):
+      - HR 三表(hrDetail/hrWave/hrKv, 计划 §02 语义例外: 无 tpl/align 字段, 第二轮 D7 改造):
+        不接单点, 本电池钉「注册表在盘 + 零 grid 几何」的未接线状态;
+      - 04 卡片形态面(drawerTrackerV04): 引擎行容器被变体有意覆写成两列卡片栅格
+        (行是卡片非列状数据, parity e2e 另有「卡片形态规格」守阵), 例外条目 = 该 CSS 规则恰 1 处。
+    断言六节: camelCase 产物白名单(恰两件; table.js 双向钉死 —— 原文提及恰 1 处 + 掩码后
+    零命中, 白名单死条目会把真实代码旁路放行成恒绿)/ columns_computed 每条恰单点委托形
+    且 id 集与 app.js 表注册表互对 / kebab 声明中命中表面容器的规则恰 = D4 例外清单(.js 侧
+    另钉「选择器与首条声明同行」惯例断言 —— 多行规则形即红不静默逃逸; .css/.html 侧保留
+    规则解析双轨)/ 例外条目存在性(04 本体 + HR 三表注册与零几何)/ 单点完整性(_gridTemplate
+    委托 + 无拼轨回潮)/ assert 侧豁免清单本体(ASSERT_SKIP_FACES 键集恰两键 + empty-row
+    行级豁免字面在 _assertLayoutPair —— 豁免被删即 04 面刷噪声, 删豁免即红)。
+    node 电池真跑(无 node 静默跳过)。"""
+    report = _run_probe(_NODE_DT_EXC_LIST_PROBE, STATIC_ROOT)
+    _assert_battery(report, "dt_table 例外清单守阵")

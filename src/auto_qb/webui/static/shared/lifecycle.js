@@ -361,6 +361,11 @@ window.AQB_LIFECYCLE = {
     // P1-2: 行高/容器偏移都只在签名变化时量(见 _measureRowH / _ensureWinTop), 不是每渲染一次
     this._measureRowH();
     this._ensureWinTop();
+    // 渲染自查(计划 26-11-10-0027 W2(1), 拍板 D3 常驻): 主视图四面三处 O(1) 计数, 不一致只
+    // console.error 不打断渲染; ref 不在场(视图未渲染)零 DOM 扫描。updated 是后置队列 —— 到
+    // 这里时同批 flush 的子组件(aq-table)都已 patch 完, 即「主视图渲染后」。抽屉桥九变体面
+    // 走桥模板自己的渲染钩子(dtAssertLayout), 不在此覆盖(桥是独立组件, 抽屉列态变更不触发根重渲)。
+    this._assertLayouts();
   },
   methods: {
     /* ------------------------------------- 通知 S3(后端条目合并与补拉, 见文件头块注释) */

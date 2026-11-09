@@ -356,7 +356,8 @@
       <div v-if="seg.rows.length" class="group-table"
            @scroll="$root.syncHeadScroll($event, $root.dtBridgeTbl(tab))"
            @keydown="$root.dtWinKbd($event, tab)"
-           @vue:mounted="$root.dtRowAfter(tab, $event)">
+           @vue:mounted="$root.dtRowAfter(tab, $event); $root.dtAssertLayout(tab, $event)"
+           @vue:updated="$root.dtAssertLayout(tab, $event)">
         <!-- W3 行窗口化(计划 26-11-02-0351): 窗表(drawerContent 两变体)上下各一个
              <aq-row-pad> 撑住被折叠行的合计高(与主表三列表同一份占位件, table.js 收敛单点);
              非窗表 dtWinPad 恒 0(v-if 挡住不渲染)= 不开窗逐字节等价。占位是 .group-table 的

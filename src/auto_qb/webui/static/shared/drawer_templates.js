@@ -1061,6 +1061,22 @@
         var el = vnode && vnode.el ? vnode.el : vnode;
         try { e.rowAfterFn(el); } catch (err) { /* 渲染后回调不阻断渲染 */ }
       },
+      /* 渲染自查(计划 26-11-10-0027 W2(1), 拍板 D3 常驻): 桥九变体面的 assertLayout 挂载点。
+       * 桥模板 .group-table 的 @vue:mounted / @vue:updated 钩子把 vnode 交进来 —— 该元素是
+       * Teleport 完成后的行容器本体, 表头与行同在它所属的那座锚里(data-dt-table-anchor),
+       * 配对全程锚作用域, 零 document 扫描; 面级/行级豁免与消息口径都在
+       * columns_grid._assertLayoutPair 单点。异常吞掉不阻断渲染链(与 dtRowAfter 同纪律)。 */
+      dtAssertLayout(tab, vnode) {
+        var tid = this.dtBridgeTbl(tab);
+        if (!tid) return;
+        var el = vnode && vnode.el ? vnode.el : vnode;
+        if (!el || typeof el.closest !== "function") return;
+        var anchor = el.closest("[data-dt-table-anchor]");
+        if (!anchor) return;
+        var head = anchor.querySelector('.group-head[data-table="' + tid + '"]');
+        var row = el.querySelector('.group-row[data-table="' + tid + '"]');
+        try { this._assertLayoutPair(tid, head, row); } catch (err) { /* 渲染后回调不阻断渲染 */ }
+      },
       /* 右键菜单模板选择落点: 目标页签取 dtMenuTab(右键命中区域), 白名单外脏值忽略(守阵口径同
        * readSel); 合法即落盘 + 重挂, 并收菜单。菜单已开, 无「回落显示值」回写口(那是原生 select
        * 的 value 回写), 故脏值直接 return。 */
