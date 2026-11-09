@@ -134,7 +134,7 @@ def pytest_configure(config):
     autostart 注册表后端、relocate_journal、traffic_sample 等。这些行在 Linux 上**跑不到**, 也不该
     为它们编假测试 —— 于是 ubuntu CI 在 `--cov-fail-under=99` 下**恒红**(实测
     `FAIL Required test coverage of 99% not reached. Total coverage: 98.74%`), 而同一阈值对
-    Windows 是有效卡口。⇒ 分档: Windows 仍按 99 卡, 其余平台按 98.5 卡(实测值向下取整留 ~0.24pt
+    Windows 是有效卡口。⇒ 分档: Windows 仍按 99.5 卡, 其余平台按 99.0 卡(实测值向下取整留 ~0.24pt
     余量)。口径与 `tools/global-traffic-monitor` 的「双 OS 阈值取较低者」一致。
 
     !闸值单点: 阈值**不再写进** `pytest.ini` 的 addopts(写死就两侧共用), 只在这里定。显式传
