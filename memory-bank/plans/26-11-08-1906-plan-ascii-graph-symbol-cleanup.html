@@ -7,9 +7,9 @@
 <title>非 ASCII 图形符号存量清偿与机械闸门</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="ascii-graph-symbol-cleanup">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-11-08-1906">
-<meta name="doc-updated" content="26-11-08-2145">
+<meta name="doc-updated" content="26-11-09-2114">
 <meta name="doc-refs" content="">
 <style>
   :root {
@@ -75,8 +75,8 @@
 <h1>非 ASCII 图形符号存量清偿与机械闸门</h1>
 <p class="lede">本篇只回答: 5 件同族 issue 的符号口径怎么定、存量怎么分批清偿、以及用什么机械闸门防回潮。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-08-1906 · <b>doc-updated</b> 26-11-08-2145 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
-  <b>来源</b> 2026-11-08 grilling 第 1 轮 D1-D6 逐项拍板(用户「按推荐」); 承接 issue 26-11-06-0756 / 26-11-08-0043 / 26-11-08-0044 / 26-11-08-1621 两份, 以及 0229 修复批与 0624 措辞样板。§02 实测基线 HEAD <code>f674ce4a</code>; 冻结清单基线在提交前重取于 <code>4cff729d</code>(§10 R1), 其后齐平到 <code>2543a603</code> 复验数值未变(R2)。当前提交基线 = <code>2543a603</code>。
+  <b>doc-added</b> 26-11-08-1906 · <b>doc-updated</b> 26-11-09-2114 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 2026-11-08 grilling 第 1 轮 D1-D6 逐项拍板(用户「按推荐」); 承接 issue 26-11-06-0756 / 26-11-08-0043 / 26-11-08-0044 / 26-11-08-1621 两份, 以及 0229 修复批与 0624 措辞样板。§02 实测基线 HEAD <code>f674ce4a</code>; 冻结清单基线在提交前重取于 <code>4cff729d</code>(§10 R1), 其后齐平到 <code>2543a603</code> 复验数值未变(R2)。存量清偿完成于 <code>4eab5203</code>(B13 最后一批) + 守阵补强 <code>0c7d2d6e</code>(B15): 存量 2178 处清零, <code>FROZEN</code> 归零。
 </div>
 
 <h2><span class="no">§01</span>目标与设计原则</h2>
@@ -104,28 +104,49 @@
 <h2><span class="no">§03</span>方案总览</h2>
 <p>主线: <strong>口径(D1) → 判据(规范表 A/B/C) → 闸门(D2/D3) → 分批清偿 → 冻结清单归零</strong>。闸门只从表 A 派生, 表 B 的语义符号不判红, 从根上消掉 0044 的「无定案」。几何块 <code>U+25A0-25FF</code> 是装饰性状态灯而非数学符, 收口时归入表 A(禁用); 实测扫描面内零命中, 归位不改动存量。</p>
 <table>
-  <tr><th>分期</th><th>内容</th><th>产出判据</th><th>依赖</th></tr>
-  <tr><td>S0</td><td>拍板口径 + 修订 <code>code-style.md</code> 三张表</td><td>D1-D6 落 §06; 规范表 A 码位可机检</td><td>—</td></tr>
-  <tr><td>S1</td><td>闸门落地: 冻结清单 + 递减不红 + 红绿双验</td><td><code>test_ascii_symbol_guard.py</code> 进 <code>test.full</code> 全绿; 309 单元登记</td><td>S0</td></tr>
-  <tr><td>S2</td><td>根配置 + <code>src/</code> 表 A + 0043 带圈数字第二片</td><td>复扫该批零命中; 断言两侧成对改后测试绿</td><td>S1</td></tr>
-  <tr><td>S3</td><td><code>tests/</code> + <code>tests-real/</code>(占冻结量 1322 / 2178)</td><td>守阵 docstring 编号体系同步; <code>test.full</code> 绿</td><td>S1</td></tr>
-  <tr><td>S4</td><td><code>e2e/</code> + <code>.commands/</code> + <code>.agents/</code> + <code>tools/</code></td><td>分批 diff 超阈值走 code-review 复查轮</td><td>S1</td></tr>
-  <tr><td>S5</td><td>复扫归零 + 冻结清单清空 + issue 翻 Done + 基线切片</td><td>闸门在空清单下仍绿; 5 件 issue 全部终态</td><td>S2-S4</td></tr>
+  <tr><th>分期</th><th>内容</th><th>产出判据</th><th>依赖</th><th>状态</th></tr>
+  <tr><td>S0</td><td>拍板口径 + 修订 <code>code-style.md</code> 三张表</td><td>D1-D6 落 §06; 规范表 A 码位可机检</td><td>—</td><td class="good">已落地</td></tr>
+  <tr><td>S1</td><td>闸门落地: 冻结清单 + 递减不红 + 红绿双验</td><td><code>test_ascii_symbol_guard.py</code> 进 <code>test.full</code> 全绿; 309 单元登记</td><td>S0</td><td class="good">已落地</td></tr>
+  <tr><td>S2</td><td>根配置 + <code>src/</code> 表 A + 0043 带圈数字第二片</td><td>复扫该批零命中; 断言两侧成对改后测试绿</td><td>S1</td><td class="good">已落地</td></tr>
+  <tr><td>S3</td><td><code>tests/</code> + <code>tests-real/</code>(占冻结量 1322 / 2178)</td><td>守阵 docstring 编号体系同步; <code>test.full</code> 绿</td><td>S1</td><td class="good">已落地</td></tr>
+  <tr><td>S4</td><td><code>e2e/</code> + <code>.commands/</code> + <code>.agents/</code> + <code>tools/</code></td><td>分批 diff 超阈值走 code-review 复查轮</td><td>S1</td><td class="good">已落地</td></tr>
+  <tr><td>S5</td><td>复扫归零 + 冻结清单清空 + issue 翻 Done + 基线切片</td><td>闸门在空清单下仍绿; 5 件 issue 全部终态</td><td>S2-S4</td><td class="good">已落地</td></tr>
 </table>
 <p class="aside">决策表: D1 口径 · D2 闸门形态 · D3 载体 · D4 WebUI 豁免 · D5 动作边界 · D6 落地顺序, 全部见 §06。S2-S5 的批次大小与提交时序不在本轮范围(§05)。</p>
 
 <h2><span class="no">§04</span>实施步骤与验收判据</h2>
-<h3>本轮已落地(S0 / S1, 2026-11-08)</h3>
+<h3>已落地(S0-S5, 2026-11-08 ~ 2026-11-09)</h3>
 <table>
   <tr><th>#</th><th>内容</th><th>验收判据</th><th>实测</th></tr>
   <tr><td>1</td><td>改 <code>code-style.md</code>: 表 A 禁用类 / 表 B 豁免类 / 表 C 替代表, 声明为闸门单一事实源</td><td>码位区间可机检; <code>test_code_style_table_is_single_source</code> 绿</td><td class="good">绿</td></tr>
   <tr><td>2</td><td>写 <code>tests/_ascii_symbol_frozen.py</code>: 判据常量 + 三张排除表 + 冻结清单</td><td>309 单元 / 2178 处, 机械生成; 每条豁免带理由</td><td class="good">309 / 2178</td></tr>
-  <tr><td>3</td><td>写 <code>tests/test_ascii_symbol_guard.py</code>: 全库扫描 + 冻结对账 + 12 条用例(R2 新增覆盖声明一致性 1 条)</td><td>单跑全绿; <code>## 测试计划</code> 清单逐条对齐</td><td class="good">12 passed</td></tr>
+  <tr><td>3</td><td>写 <code>tests/test_ascii_symbol_guard.py</code>: 全库扫描 + 冻结对账 + 13 条用例(R2 覆盖声明一致性 1 条 + B15 局部豁免粒度 1 条)</td><td>单跑全绿; <code>## 测试计划</code> 清单逐条对齐</td><td class="good">13 passed</td></tr>
   <tr><td>4</td><td>红绿双验: 注入 <code>①</code> / 只含 <code>→ ⇒ § ≠</code> / 恢复</td><td>红(rc=1, 报「新增/超量 tests/_ascii_probe_tmp.py [circled]: 实测 1 &gt; 冻结 0」) / 绿 / 绿</td><td class="good">1 / 0 / 0</td></tr>
   <tr><td>5</td><td><code>dev.fmt</code> + <code>test.quick</code> + <code>test.full</code></td><td>全量全绿、覆盖率过闸(实测数字以 <code>commands run kb.baseline</code> 为准, 不手抄)</td><td class="good">绿</td></tr>
   <tr><td>6</td><td>评审修复: 扫描面改根级自动收集 + <code>.github</code> / <code>.vscode</code>, <code>config.yml</code> 走 <code>EXCLUDE_FILES</code> 显式排除; 新增 <code>test_scan_surface_covers_declared_scope</code></td><td>规范「覆盖文件」后缀全在扫描面; 根级新增文件不再靠白名单枚举; 冻结清单数值不变(309 / 2178)</td><td class="good">绿</td></tr>
 </table>
-<h3>后续 S2-S5 的清偿口径</h3>
+
+<h4>存量清偿批次 (S2-S5, 2026-11-08 ~ 2026-11-09)</h4>
+<table>
+  <tr><th>批</th><th>范围</th><th>提交</th><th>文件</th><th>单元</th><th>处数</th><th>备注</th></tr>
+  <tr><td>B01</td><td>根配置 + <code>src/</code></td><td><code>63f65292</code></td><td>30</td><td>31</td><td>103</td><td>—</td></tr>
+  <tr><td>B02</td><td><code>webui/static</code></td><td><code>57ffa710</code></td><td>27</td><td>30</td><td>129</td><td>—</td></tr>
+  <tr><td>B03</td><td><code>tests/</code> 分段</td><td><code>e0d0bad5</code></td><td>24</td><td>24</td><td>109</td><td>—</td></tr>
+  <tr><td>B04</td><td><code>tests/</code> 分段</td><td><code>4f77a16f</code></td><td>27</td><td>29</td><td>162</td><td>—</td></tr>
+  <tr><td>B05</td><td><code>tests/</code> 分段</td><td><code>416e46c0</code></td><td>24</td><td>25</td><td>192</td><td>—</td></tr>
+  <tr><td>B06</td><td><code>tests/</code> 分段</td><td><code>ddf3eab5</code></td><td>18</td><td>19</td><td>129</td><td>—</td></tr>
+  <tr><td>B07</td><td><code>tests/</code> 分段</td><td><code>4db0dac1</code></td><td>7</td><td>11</td><td>310</td><td>—</td></tr>
+  <tr><td>B08</td><td><code>tests/</code> 分段</td><td><code>5bd12988</code></td><td>9</td><td>10</td><td>304</td><td>—</td></tr>
+  <tr><td>B09</td><td><code>tests-real/</code></td><td><code>7d9dd9e6</code></td><td>13</td><td>17</td><td>178</td><td>—</td></tr>
+  <tr><td>B10</td><td><code>e2e/</code> 分段</td><td><code>87d477e4</code></td><td>27</td><td>29</td><td>194</td><td>—</td></tr>
+  <tr><td>B11</td><td><code>e2e/</code> 分段</td><td><code>a4f8688c</code></td><td>15</td><td>17</td><td>129</td><td>—</td></tr>
+  <tr><td>B12</td><td><code>.agents/</code> + <code>.commands/</code> 分段</td><td><code>067b4017</code></td><td>30</td><td>44</td><td>126</td><td>—</td></tr>
+  <tr><td>B13</td><td><code>.agents/</code> + <code>.commands/</code> 分段</td><td><code>4eab5203</code></td><td>18</td><td>24</td><td>113</td><td>最后一批; <code>FROZEN</code> 归零</td></tr>
+  <tr><td>B15</td><td>守阵补强</td><td><code>0c7d2d6e</code></td><td>2</td><td>—</td><td>—</td><td>补第 13 条单测 + 表 C 补齐</td></tr>
+</table>
+<p class="aside">B01-B13 处数合计 = 2178, 与 §01 / §02 的冻结量一致。B14 为只读验证批, 零文件改动、无提交, 故不入表。</p>
+
+<h3>S2-S5 清偿口径(已执行, 留作复查基准)</h3>
 <ul>
   <li><strong>替代表</strong>按规范表 C 逐行替换; 带圈数字优先(1972 处, 占冻结量 90%), 沿用 0624 的 <code>1.</code> / <code>N.</code> / <code>块 N</code> 措辞样板。语义箭头一律不动。</li>
   <li><strong>WebUI 可见文案</strong>(<code>✕</code> 关闭图标 5 文件 12 处)按 D4 豁免, 已登记为 <code>EXEMPT_CELLS</code>, 清偿时跳过。</li>
@@ -172,6 +193,7 @@
   <li><span class="tag">R0 · 26-11-08-1906</span> 初版: grilling 第 1 轮 D1-D6 拍板成案; 同轮落地 S0/S1(规范三张表 + 冻结数据 + 闸门守阵 + 红绿双验), 存量源码零改动。</li>
   <li><span class="tag">R1 · 26-11-08-2020</span> 提交前同步: 远端develop 由 <code>f674ce4a</code> 推进 10 笔到 <code>4cff729d</code>(含 <code>4cc002a2</code> memory-bank 大重构, 索引生成物层已移除, 故本轮无 <code>_index.md</code> 改动)。冻结清单按新 HEAD 机械重取: <strong>313 单元 / 2200 处 → 309 单元 / 2178 处</strong>。重取时守阵如实判红 9 条, 逐条归因: 远端 <code>918bf219</code> / <code>4cc002a2</code> 清偿使 4 条冻结目标失效、3 处计数下降、1 条归零须撤下; <code>cb9ae719</code>(issue 0043 修复)在 <code>tests/test_traffic_monitor_client.py</code> 新写 4 处带圈数字, 远端 <code>_common.py</code> 新增 1 处 <code>⚠</code> 注释。<strong>按 D5「存量源码零改动」, 这 5 处属闸门上线前既有代码, 一律登记入基线、不代改他人源码</strong>, 归入 S2 清偿面。计划内所有存量数字同步到新基线。D5 的「不提交」约束由用户显式说「提交」解除; 存量清偿与 issue 认领 / 翻状态仍未解锁。</li>
   <li><span class="tag">R2 · 26-11-08-2145</span> 提交评审轮: 首轮分面 3 派(正确性 / 安全与基建 / 测试缺口与文档事实)共报 1 major + 3 minor, 引文逐字校验 4/4 通过, 全部当场修完。<strong>major = 扫描面白名单漂移</strong>: 初版靠 <code>ROOT_FILES</code> 枚举根级文件, 漏掉 <code>hatch_build.py</code> / <code>.github/workflows/*.yml</code> / <code>.vscode/*.json</code>, 与规范「覆盖文件」声明静默不符 —— 改为 <code>collect_files</code> 按后缀自动收集根级候选(17 个文件进入扫描面), <code>.github</code> / <code>.vscode</code> 纳入 <code>SCAN_ROOTS</code>, 红线产品配置 <code>config.yml</code> 走 <code>EXCLUDE_FILES</code> 显式排除(只读不纳管), 并新增 <code>test_scan_surface_covers_declared_scope</code> 钉住覆盖声明一致性。按新口径重生成冻结清单<strong>零变化</strong>(仍 309 单元 / 2178 处); 守阵现为 <strong>12 个 test 对 12 条 <code>## 测试计划</code></strong>。另修 3 条 minor: <code>doc-updated</code> 抬到本轮、守阵 docstring 的初冻结数字改为现值、meta 基线补当前提交基线。同期远端再推进 2 笔(<code>42692a37</code> / <code>2543a603</code>), 已重新齐平, 守阵与全量复验全绿。</li>
+  <li><span class="tag">R3 · 26-11-09-2114</span> <strong>存量清偿完成 + 守阵补强, 计划转终态</strong>: <strong>(1) 存量清偿完成</strong>: S2-S5 分 13 批落地(B01-B13), 266 文件 / 309 单元 / <strong>2178 处 → 0</strong>; <code>FROZEN</code> 归零为 <code>{}</code>(变量与类型注解保留, 冻结机制未拆)。每批独立提交、独立 <code>test.quick</code>, 批次表见 §04。<strong>(2) <code>options.html</code> 两处 v.Nu 存量 error</strong>: <code>label.row</code> 含两个可交互后代 + <code>h4</code> 紧跟 <code>h1</code> 跳级, 用户拍板「修 2 条 error 后清偿」; 修前实测只提 L133 会连锁触发 L176 新 error, 最终用 <code>h1-h2-h3-h4</code> 连续链 + CSS 选择器扩展(<code>.step h2/h3/h4</code>、<code>label.row, div.row</code>)解决, 视觉不变、rc=0。<strong>(3) <code>commit.py</code> 与 <code>test_commit.py</code> 的断言耦合</strong>: <code>commit.py</code> 原 6 处 <code>print(f"⚠ 已包含: ...")</code> 的输出前缀被 <code>test_commit.py:849</code> 的断言字面量钉住, 按表 C 的 <code>⚠→WARN:</code> 同步改生产输出与断言字面量(现值: <code>commit.py</code> 6 处均为 <code>WARN: 已包含</code>, 断言侧亦为 <code>WARN: 已包含: 想法.md</code>; 另 L25 docstring 措辞同改), 语义不变; <code>test_commit.py</code> 仍在 <code>EXCLUDE_FILES</code>(理由: gitmoji 是被断言数据), 其内其余 42 处 gitmoji 一字未动。<strong>(4) 闸门并发内存瓶颈</strong>: 闸门 <code>_pipeline.py:489</code> 的 <code>GATE_WORKERS = 4</code> × <code>pytest -n 8</code> 峰值 32 worker, 打满 12GB 内存致 <code>timekit --check</code> 从 4s 涨到 45-60s 撞超时、node battery 偶发 flake; 处置为运行时 monkeypatch <code>_pipeline.GATE_WORKERS = 1</code> 后调 <code>commit.main(['--no-push'])</code>, <strong>零文件改动</strong>, <code>_pipeline.py:489</code> 至今仍是 <code>4</code>。<strong>(5) B14 只读验证批 + B15 守阵补强</strong>: B14 实测发现 <code>test_scan_excludes_exempt_paths</code> 在 <code>FROZEN = {}</code> 后近乎失能(第一循环零迭代、第二循环对空 dict 恒真), 但豁免机制仍由 <code>test_repo_matches_frozen</code> 间接兜底(内存实验: 清空 <code>EXEMPT_CELLS</code> 后立刻暴露 6 单元 / 24 处); 用户拍板补掉 → B15 给 <code>_count_text</code> 加可选 <code>exempt</code> 形参(默认走 <code>EXEMPT_CELLS</code>, 生产路径不变)+ 新增 <code>test_count_text_skips_exempt_cells_per_class</code>, 守阵 <strong>12 → 13</strong>; 同批按 B14 全量 diff 核对结果补齐表 C(<code>✗→x</code>、<code>✨→直接删除</code>、<code>🚀/🔍/📦→*</code>、圈号 <code>1.</code>/<code>1)</code>/裸数字变体), 并声明表 C 为「参考」非强制。<strong>(6) 全量验证</strong>: <code>dev.fmt</code> rc=0 无重排; <code>test.quick</code> 5856 passed / 2 skipped; 全量 <code>test.full</code> 与覆盖率数字见 <code>memory-bank/testing/baselines/</code> 最新切片(按 AGENTS.md「测试基线数字只写一处」, 本文件不手抄)。</li>
 </ul>
 
 </div>

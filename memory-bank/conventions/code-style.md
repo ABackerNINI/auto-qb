@@ -24,7 +24,7 @@
 - **覆盖文件**: `.py` `.js` `.cjs` `.mjs` `.ts` `.yml` `.yaml` `.html` `.css` `.json` `.toml` `.ini` `.cfg` `.sh` 等源码与配置; 含注释、字符串字面量、日志模板、CSS 内容。
 - **文档放行**: `.md` 与交付用 `*.html` (计划 / 报告 / issue) 是富文本展示层, 不在终端渲染, **可自由使用这些符号**; 本项目 AGENTS.md / memory-bank 即如此。
 - **排除面 (闸门 `EXCLUDE_*` / `EXEMPT_CELLS` 表逐条带理由)**: 功能性数据 (gitmoji 映射表 / 被断言数据 / 判定字典键)、逐字镜像与历史快照、第三方设计骨架与参考资源、WebUI 可见文案 (`✕` 关闭图标, 延续 0229 先例)。数据 / 测试夹具 (`.pyc`) 与已 gitignore 的运行数据按内容需要保留。**订正 2026-11-08**: 旧稿「编码守阵字面量 U+FFFD / U+FE0F」在 `tests/test_commands_engine.py` 已以 `\ufffd` 转义存在 (本身合规), 该类撤下; 仅 `.agents/skills/commands/scripts/run.py` 描述 GBK 乱码的逐字引文按局部豁免保留。
-- **机械闸门 (D2/D3)**: `tests/test_ascii_symbol_guard.py` 从表 A 派生判据, 冻结清单 + 递减不红 (存量带病上岗, 只拦新增); 冻结数据在 `tests/_ascii_symbol_frozen.py`。`test_code_style_table_is_single_source` 双向校验本节表 A 与闸门常量, 只改一侧当场红。
+- **机械闸门 (D2/D3)**: `tests/test_ascii_symbol_guard.py` 从表 A 派生判据, 冻结清单 + 递减不红机制**保留**(未来若确有一整批既有符号需要登记, 仍走同一入口); 冻结数据在 `tests/_ascii_symbol_frozen.py`。**2026-11-09 存量已清零, 冻结清单为空, 闸门实际形态是纯只拦新增**(未登记的 key 冻结值视为 0, 实测 > 0 即红; 递减机制留作将来登记既有整批时复用)。守阵现 13 条用例对 13 条 `## 测试计划`。`test_code_style_table_is_single_source` 双向校验本节表 A 与闸门常量, 只改一侧当场红。
 
 ## 函数设计原则 (用户明示)
 
