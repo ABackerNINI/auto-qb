@@ -20,9 +20,9 @@ import { withVm } from './lib/vm.mjs';
  * 与设定位置/添加种子同档, ctx 菜单相邻两编辑框同宽)。静态接线由
  * test_frontend_rename_dialog_width_wiring 钉。
  *
- * 断言口径: ①对话框 860 宽档; ②真实长名(97 字符)注入后输入框零裁剪
- * (scrollWidth <= clientWidth)且输入框有足够宽(≥800px); ③预填的当前名同样
- * 不裁; ④点取消零提交(不误发 rename POST)。
+ * 断言口径: 1) 对话框 860 宽档; 2) 真实长名(97 字符)注入后输入框零裁剪
+ * (scrollWidth <= clientWidth)且输入框有足够宽(≥800px); 3) 预填的当前名同样
+ * 不裁; 4) 点取消零提交(不误发 rename POST)。
  */
 
 /**
@@ -69,14 +69,14 @@ for (const skin of SKINS) {
       await expect(dlg).toBeVisible();
       await settleAnim(dlg);
 
-      // —— ① 宽档: 860(--modal-w-add, 与设定位置/添加种子同档; 旧缺陷态 520 基档)
+      // —— 1. 宽档: 860(--modal-w-add, 与设定位置/添加种子同档; 旧缺陷态 520 基档)
       let m = await geom(page);
       expect(m.w, '重命名对话框宽度(860 宽档; 旧缺陷态骑 520 基档)').toBe(860);
 
-      // —— ② 预填的当前名不裁(桩名 43 字符, 旧态也恰好不裁 —— 这条只防更宽的回归)
+      // —— 2. 预填的当前名不裁(桩名 43 字符, 旧态也恰好不裁 —— 这条只防更宽的回归)
       expect(m.clip, '预填的当前种子名不得被输入框裁掉').toBeLessThanOrEqual(0);
 
-      // —— ③ 真实长名(97 字符)零裁剪: 旧态 520 档裁 223px; 注入 = D4 第①类桩态
+      // —— 3. 真实长名(97 字符)零裁剪: 旧态 520 档裁 223px; 注入 = D4 第1类桩态
       //     (名称由详情 API 预填, 桩名太短不暴露缺陷, 注入模拟真实长名种子)
       await withVm(page, 'vm.modal.fields[0].value = ' + JSON.stringify(LONG_NAME) + ';');
       await expect.poll(async () => (await geom(page)).value).toBe(LONG_NAME);
@@ -84,7 +84,7 @@ for (const skin of SKINS) {
       expect(m.inputW, '输入框宽(860 档减内外边距; 旧态仅 474)').toBeGreaterThanOrEqual(800);
       expect(m.clip, `97 字符真实长名不得被裁(旧缺陷态裁 ${695 - 472}px)`).toBeLessThanOrEqual(0);
 
-      // —— ④ 取消零提交: 不误发 rename POST(改的是显示名, 误提交即脏数据)
+      // —— 4. 取消零提交: 不误发 rename POST(改的是显示名, 误提交即脏数据)
       const posts = [];
       page.on('request', (r) => {
         if (r.method() === 'POST' && /\/api\/torrents\/[^/]+\/rename(\?|$)/.test(r.url())) posts.push(r.url());

@@ -77,7 +77,7 @@ for (const skin of SKINS) {
       await expect(noConf.first(), '缺站点配置的 chip 应染橙底').toBeVisible({ timeout: 30_000 });
       await expect(tracker.first(), 'tracker 报错的 chip 应染红底').toBeVisible({ timeout: 15_000 });
 
-      // ① 底色 == 皮肤令牌(不是散写色值): 缺配置 --warn-soft / 报错 --error-soft
+      // 1. 底色 == 皮肤令牌(不是散写色值): 缺配置 --warn-soft / 报错 --error-soft
       const [warnSoft, errorSoft] = [
         parseRgb(await token(page, '--warn-soft')),
         parseRgb(await token(page, '--error-soft')),
@@ -88,13 +88,13 @@ for (const skin of SKINS) {
       expect(sameColor(bgTracker, errorSoft), `报错 chip 底色应 == --error-soft(实际 ${JSON.stringify(bgTracker)})`).toBe(true);
       expect(sameColor(bgNoConf, bgTracker), 'R4: 橙底与红底必须可区分(同值即两态撞脸)').toBe(false);
 
-      // ② D4 非颜色通道: 缺配置恒带虚线下边框(灰度/色盲下与实底红可区分), 报错不带
+      // 2. D4 非颜色通道: 缺配置恒带虚线下边框(灰度/色盲下与实底红可区分), 报错不带
       expect(await noConf.first().evaluate((el) => getComputedStyle(el).borderBottomStyle),
         '缺配置 chip 必须带虚线下边框(D4 非颜色通道)').toBe('dashed');
       expect(await tracker.first().evaluate((el) => getComputedStyle(el).borderBottomStyle),
         '报错 chip 不该有虚线底边(那是缺配置的专属通道)').not.toBe('dashed');
 
-      // ③ 站点问题零图标 + tooltip 挂整块 chip(不再是 11px 图标可触发)
+      // 3. 站点问题零图标 + tooltip 挂整块 chip(不再是 11px 图标可触发)
       expect(await noConf.first().locator('svg').count(), '站点问题不再走图标(改走底色)').toBe(0);
       expect(await tracker.first().locator('svg').count(), '站点问题不再走图标(改走底色)').toBe(0);
       // title 在落 DOM 时被 ui_feedback.js 迁成 data-aq-tip(原生气泡退役), 断言后者
@@ -195,7 +195,7 @@ for (const skin of SKINS) {
       }
 
       // 聚合 toast 文案与改动前逐字一致(成功/失败/未确认三桶 + 首条原因)
-      // ⚠ 时序(2026-11-02 九轮): 回执条是**另起的一条**(投递条归档成「已投递」留在队列里),
+      // WARN: 时序(2026-11-02 九轮): 回执条是**另起的一条**(投递条归档成「已投递」留在队列里),
       //   且投递条有 900ms 最短展示保护 —— 行图标在回执处理的中途就落了, 所以读 vm.toasts 之前
       //   必须等"回执条落定", 不能假定行图标就位时它已经在数组里。
       const toastText = () => readInst(page, 'vm.toasts.map((t) => t.text).join("\\n")');

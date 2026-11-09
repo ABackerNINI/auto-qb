@@ -9,9 +9,9 @@ import { collectRuntimeErrors, installRuntimeErrorGuard } from './lib/errors.mjs
  * 静态守阵 `test_frontend_table_head_a11y` 只能钉 markup(role/tabindex/aria-sort/keydown 在不在);
  * 本 spec 钉**键盘真按下去**的行为 —— click-only 的 `.h-cell` 加了 role/tabindex 后, 若 keydown
  * 转发没接上激活单点, 静态守阵全绿而键盘用户按了毫无反应(纯静默)。三条:
- *   ① 语义与可达: 列头是 `columnheader`; 可排序列才进 Tab 序(`tabindex="0"`), Tab 进得去;
- *   ② 键盘触发: Enter → 该列 `aria-sort="descending"`(三态首击降序)+ 箭头点亮; Space → 翻 ascending;
- *   ③ 全域同源: 抽屉变体表(drawerTrackerV06)同一组件, 键盘同样可用(引擎一处受益全域)。
+ *   1. 语义与可达: 列头是 `columnheader`; 可排序列才进 Tab 序(`tabindex="0"`), Tab 进得去;
+ *   2. 键盘触发: Enter → 该列 `aria-sort="descending"`(三态首击降序)+ 箭头点亮; Space → 翻 ascending;
+ *   3. 全域同源: 抽屉变体表(drawerTrackerV06)同一组件, 键盘同样可用(引擎一处受益全域)。
  * thead 模式(设置页 HR 详情表)的 `<th>` 结构由静态守阵钉; 其 `$emit('sort')` 运行时路径随 HR 表
  * 既有 e2e/静态用例覆盖, 本 spec 不重复铺 HR 场景的长前置。
  */
@@ -33,11 +33,11 @@ for (const skin of SKINS) {
       const nSortable = await sortable.count();
       expect(nSortable, '分组表应有可排序列').toBeGreaterThan(0);
 
-      // ① 语义载体 = columnheader(不是 button); 可排序列才进 Tab 序(不可排序列不设 tabindex)
+      // 1. 语义载体 = columnheader(不是 button); 可排序列才进 Tab 序(不可排序列不设 tabindex)
       await expect(cells.first()).toHaveAttribute('role', 'columnheader');
       await expect(groupHead(page).locator('.h-cell.sortable[tabindex="0"]'), '可排序列全部可聚焦').toHaveCount(nSortable);
 
-      // ② 键盘: 聚焦一列(取第 2 个可排序列, 避开默认排序键以免与初始态混淆)
+      // 2. 键盘: 聚焦一列(取第 2 个可排序列, 避开默认排序键以免与初始态混淆)
       const target = sortable.nth(Math.min(1, nSortable - 1));
       await target.focus();
       await expect(target, '列头可被键盘聚焦').toBeFocused();

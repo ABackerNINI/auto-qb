@@ -11,10 +11,10 @@ import { armScopeAudit, readScopeRing, expectScopeRingClean, injectScopeDeviatio
  * 触发点 × 选中态 一致性参数化矩阵(计划 26-10-10-2001 S5, 第三张网之「真浏览器矩阵」)。
  *
  * 用户动议的四类场景逐位落地, 每条断言**三层**(计划 §5.4):
- *   ① 下发载荷 —— 拦截 POST, 比对目标集合与期望闭包(真实 UI 手势驱动, 不借道 vm 注入动作;
- *      evaluate 只用第①类注入桩态 / 第②类读内部埋点, D4 守则见 lib/vm.mjs 头注);
- *   ② 审计环为空 —— scope_ring.expectScopeRingClean(载荷对 ≠ 还要"说谎为零");
- *   ③ 作用域与文案 —— 菜单容器 data-kind / data-count 明示分支与种子数(计划 26-10-20-0145 起
+ *   1. 下发载荷 —— 拦截 POST, 比对目标集合与期望闭包(真实 UI 手势驱动, 不借道 vm 注入动作;
+ *      evaluate 只用第1类注入桩态 / 第2类读内部埋点, D4 守则见 lib/vm.mjs 头注);
+ *   2. 审计环为空 —— scope_ring.expectScopeRingClean(载荷对 ≠ 还要"说谎为零");
+ *   3. 作用域与文案 —— 菜单容器 data-kind / data-count 明示分支与种子数(计划 26-10-20-0145 起
  *      文案统一成「动词 + 灰色 N 个种子」, 分支不再能靠文案辨), toast 报同一口径的「(N 个种子)」
  *      (C5 口径甲: 选中 N 项右键 = 对全部生效, 但界面明示)。
  *

@@ -106,9 +106,9 @@ import { ctxItemById, ctxMenuScope } from './lib/gestures.mjs';
  * ── D4 断言翻译守则落地说明(计划 §3.5) ──
  *  · 交互真实手势: 页签/菜单项走 locator.click; 行点击(左键/修饰键/右键)走 clickRow() 的
  *    page.mouse —— 同为受信输入事件(与 locator.click 同一输入管线), 且落点可验可断言。
- *  · evaluate 保留处(均有注释): ①armPending/readPending(vm 内部时序探针, 第②类,
- *    lib/probes.mjs); ②readInst 读 vm 内部字段(selMembers/selGroups/pendingOps/viewMode/
- *    memberByHash.size —— 无 DOM 之外的取径, 第②类); ③clickRow 的滚动 arrange 与落点验证
+ *  · evaluate 保留处(均有注释): 1) armPending/readPending(vm 内部时序探针, 第2类,
+ *    lib/probes.mjs); 2) readInst 读 vm 内部字段(selMembers/selGroups/pendingOps/viewMode/
+ *    memberByHash.size —— 无 DOM 之外的取径, 第2类); 3) clickRow 的滚动 arrange 与落点验证
  *    —— 滚动位置是测试环境状态而非被测行为(上面的 flaky 归因), 属"注入/复原测试态"的
  *    引申, 特此注明接受评审。
  *  · 等待语义: 旧「等乐观回落 3400/900/600ms」类 settle sleep 在"每 test 独立 context +
@@ -242,7 +242,7 @@ for (const skin of SKINS) {
       for (let i = 0; i < N; i++) {
         await clickRow(page, rows.nth(i), { modifiers: ['Control'] });
       }
-      // vm 内部字段读数(evaluate 第②类): 选中集合权威在 selMembers, DOM 只渲染 selected 类。
+      // vm 内部字段读数(evaluate 第2类): 选中集合权威在 selMembers, DOM 只渲染 selected 类。
       const picked = await readInst(page, 'vm.selMembers.length');
       expect(picked, `Ctrl+click ${N} 行后选中数`).toBe(N);
 
@@ -394,12 +394,12 @@ for (const skin of SKINS) {
       await expect(epRows.first()).toBeVisible({ timeout: 8_000 });
       expect(await epRows.count(), '集行至少 2 行(多选前提)').toBeGreaterThanOrEqual(2);
 
-      // ⚠存量 flaky 所在位置(计划 §2.4 / pitfalls/testing/smoke.md): 集行 Ctrl+click 的落点
+      // WARN: 存量 flaky 所在位置(计划 §2.4 / pitfalls/testing/smoke.md): 集行 Ctrl+click 的落点
       // 被 sticky-head/header.topbar 交替拦截。机理已由本批 trace 归因(宽行居中滚动, 见文件头),
       // 对冲在 clickRow 的 arrange 里 —— 若这里仍红, 是对冲失效的新形态, 带 trace 走 issue。
       await clickRow(page, epRows.nth(0), { modifiers: ['Control'] });
       await clickRow(page, epRows.nth(1), { modifiers: ['Control'] });
-      // vm 内部字段读数(evaluate 第②类): 两集的成员 hash 都进 selMembers(单元 = 整集全部版本)
+      // vm 内部字段读数(evaluate 第2类): 两集的成员 hash 都进 selMembers(单元 = 整集全部版本)
       const selN = await readInst(page, 'vm.selMembers.length');
       expect(selN, `Ctrl+click 两集后 selMembers=${selN}(两集成员均入选)`).toBeGreaterThan(0);
 
@@ -444,7 +444,7 @@ for (const skin of SKINS) {
       const rows = page.locator('.torrent-row');
       await expect(rows.first()).toBeVisible({ timeout: 15_000 });
 
-      // 先取 DOM 前两行 data-hash, 再经 memberByHash 取回产品的 size/occ_key(evaluate 第②类)
+      // 先取 DOM 前两行 data-hash, 再经 memberByHash 取回产品的 size/occ_key(evaluate 第2类)
       const hashes = await rows.evaluateAll((els) => els.slice(0, 2).map((el) => el.getAttribute('data-hash') || ''));
       const pair = JSON.parse(await readInst(page,
         `JSON.stringify(${JSON.stringify(hashes)}.map((h) => vm.memberByHash.get(h)).filter(Boolean)` +
@@ -472,7 +472,7 @@ for (const skin of SKINS) {
         await expect(sum, '未归组种子(X=Y)不得出现「实际占用」(假去重回归)').not.toContainText('实际占用');
       }
 
-      // vm 侧同源读数(evaluate 第②类): 算法单点 selectedSize 与 UI 文本一致
+      // vm 侧同源读数(evaluate 第2类): 算法单点 selectedSize 与 UI 文本一致
       const vmSum = JSON.parse(await readInst(page, 'JSON.stringify(vm.selectedSize)'));
       expect(vmSum.total, `selectedSize.total=${vmSum.total}`).toBe(expTotal);
       expect(vmSum.occupy, `selectedSize.occupy=${vmSum.occupy}`).toBe(expOccupy);
@@ -547,7 +547,7 @@ for (const skin of SKINS) {
       await expect(page.locator('.show-row').first()).toBeVisible({ timeout: 15_000 });
       const rows = await page.locator('.show-row').count();
       expect(rows, `追剧页行数(${rows} 行)`).toBeGreaterThan(0);
-      // vm 内部字段读数(evaluate 第②类): memberByHash 索引规模 —— 0 行的根因探针(索引空 ⇒ 行空)
+      // vm 内部字段读数(evaluate 第2类): memberByHash 索引规模 —— 0 行的根因探针(索引空 ⇒ 行空)
       const idx = await readInst(page, 'vm.memberByHash.size');
       expect(idx, `成员索引规模 memberByHash.size=${idx}(为 0 即 P1-1 按视图回传又犯了)`).toBeGreaterThan(0);
     });

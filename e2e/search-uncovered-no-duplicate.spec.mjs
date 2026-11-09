@@ -5,7 +5,7 @@
  *   真实组行 + u-<hash> 虚拟行; 若 search_rev 不变(归组关系变化不触发), 一直挂到手动重搜。
  * 根因: searchUncovered 只是 doSearch 落袋那一刻的快照, filteredGroups 渲染期无条件追加。
  * 修复: filteredGroups 用**渲染时的未过滤 this.groups** 现算 groupedNow(与 doSearch 的 grouped
- *   同一口径), 追加前过两道闸 —— ①已不在命中集(!hits.has) ②已在当前真实组内(groupedNow.has)。
+ *   同一口径), 追加前过两道闸 —— 1) 已不在命中集(!hits.has) 2) 已在当前真实组内(groupedNow.has)。
  *
  * 复现手法(受桩能力边界约束, 与计划初稿的构造不同, 但打的是同一根因):
  *   · 桩的合成种子全部已归组(150 组 × 2), 且 add_torrent 的新种子也会立刻分进自己的组 =>
@@ -19,10 +19,10 @@
  *     这正是 issue 里"滞留到手动搜索"的形态。
  *
  * 四条场景 = 该根因的四个可观测面(每条三皮肤):
- *   ① 首轮种子页搜索 -> 切辅种页: 同一 hash 只出一条真实组行(核心);
- *   ② 搜索叠加分类筛选 -> 切辅种页: 两道闸与 facet 语义顺序正确, 命中组仍保留、不重复;
- *   ③ 命中种子被删除: ≤1 个搜索刷新增量周期内行消失, 且虚拟行不得滞留;
- *   ④ 搜索后视图往返(种子 -> 辅种 -> 种子 -> 辅种): 幂等, 不得每次都把旧快照再画一遍。
+ *   1. 首轮种子页搜索 -> 切辅种页: 同一 hash 只出一条真实组行(核心);
+ *   2. 搜索叠加分类筛选 -> 切辅种页: 两道闸与 facet 语义顺序正确, 命中组仍保留、不重复;
+ *   3. 命中种子被删除: ≤1 个搜索刷新增量周期内行消失, 且虚拟行不得滞留;
+ *   4. 搜索后视图往返(种子 -> 辅种 -> 种子 -> 辅种): 幂等, 不得每次都把旧快照再画一遍。
  *
  * 数据面: 运行期增删种子走 `/__harness__/add_torrent` / `/__harness__/remove_torrent`
  * (仅测试端点, scripts/ui_harness.py), 实现复用生产 `QbManager._refresh_torrents`。
@@ -43,7 +43,7 @@ const SEARCH_INPUT = 'input[placeholder="搜索种子或文件名..."]';
 const TOKEN_PAIR0 = 'x265-GROUP0';
 
 /**
- * 渲染结果体检读数(断言「同一 hash 不得出现两次」的权威口径, evaluate 第②类):
+ * 渲染结果体检读数(断言「同一 hash 不得出现两次」的权威口径, evaluate 第2类):
  * 遍历 filteredGroups 全体的 members 计 hash 出现次数 —— 真实组行与虚拟行都在 filteredGroups 里,
  * DOM 是窗口化子集, 只数 visibleGroups 会漏掉窗口外的重复。
  */

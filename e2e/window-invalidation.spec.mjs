@@ -7,9 +7,9 @@ import { INST } from './lib/vm.mjs';
 /**
  * 行窗失效签名守阵(2026-11-02 关抽屉/切页卡死取证, 报告 26-11-02-0339 计划 26-11-02-0351 后续):
  * 两个根因各钉一条, 红验数字取自修复前同桩(3000 种子)实测:
- *  ①切页全量重渲: _measureRowH 的 _rowHSig 签名含 viewMode —— 每次切页把三 kind 行高全表作废,
+ *  1. 切页全量重渲: _measureRowH 的 _rowHSig 签名含 viewMode —— 每次切页把三 kind 行高全表作废,
  *    返回种子页走一轮全量渲染量齐, 实测 5.8~8.4s 长任务(用户「切标签页卡死几秒」)。
- *  ②关抽屉假 bump: 收场动画 .drawer 转 absolute(.drawer-leave-active), .drawer-body clientWidth
+ *  2. 关抽屉假 bump: 收场动画 .drawer 转 absolute(.drawer-leave-active), .drawer-body clientWidth
  *    跳 1894->1918, RO 逐帧触发 _winCtnSync 假 bump 共享的 _winResize ⇒ 下一拍 updated 钩子按签名
  *    失配作废主表行高, 3000 行全量重渲实测 5.6s 长任务(用户「关抽屉后卡死; 能滚不能点」——
  *    滚轮走合成器不进主线程, 鼠标事件被长任务饿死; 关闭前后 elementFromPoint 均干净, 无残留遮罩)。
@@ -24,7 +24,7 @@ const SKINS3 = ['prism', 'atlas', 'flux'];
 /** 灾难冻结粗界(同 perf W4/W5 口径 500ms; 修复前实测 5.6~8.4s, 判别力充分)。 */
 const FREEZE_MS = 500;
 
-/** longtask 探针(第②类时序探针, perf.spec 同款)。 */
+/** longtask 探针(第2类时序探针, perf.spec 同款)。 */
 const INSTALL_LT = `(() => {
   window.__lt = [];
   if (window.__po) window.__po.disconnect();

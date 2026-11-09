@@ -77,11 +77,11 @@ import { armClick, armPending, readPending } from './lib/probes.mjs';
  * ── D4 断言翻译守则落地说明(计划 §3.5) ──
  *  · 交互真实手势: 行右键/菜单项点击走 clickRow()/locator.click(clickRow 对冲写法沿用
  *    multiselect-shows.spec —— 宽行居中滚动把行左缘落点滚出裁剪面的 flaky 机理, 见该文件头)。
- *  · evaluate 保留处(均有注释): ①armPending/armClick/readPending(vm 内部时序探针, 第②类);
- *    ②T2/T3/hang 的页面内采样器(旧 __m/__t/__h 原样移植, 第②类); ③T4 注入选中集合 + 清选
+ *  · evaluate 保留处(均有注释): 1) armPending/armClick/readPending(vm 内部时序探针, 第2类);
+ *    2) T2/T3/hang 的页面内采样器(旧 __m/__t/__h 原样移植, 第2类); 3) T4 注入选中集合 + 清选
  *    (N=60 真实 Ctrl+click 不可行, 选中集合升级链路已由 multiselect-shows 用真实手势在 N=5
- *    验过 —— 注入桩态属第①类); ④T6/T7 直调 vm(旧脚本注释明言"刻意直调, 本条测的是时序",
- *    第②类); ⑤T3 的 vm.refresh() 真值预对齐(第①类注入/复原桩态)。
+ *    验过 —— 注入桩态属第1类); 4) T6/T7 直调 vm(旧脚本注释明言"刻意直调, 本条测的是时序",
+ *    第2类); 5) T3 的 vm.refresh() 真值预对齐(第1类注入/复原桩态)。
  *  · 阈值数字逐字保留: 补丁先于 POST 800ms 注入/400ms 预算、值覆盖 80(ok)|0(error)~1000ms、
  *    压暗 <250ms、批量峰值下界 min(picked,60)*0.8、1500ms 请求观察窗、hang 三连
  *    appear<500 / 消失 2500~6000ms / 6.5s 采样窗 —— 这些是回归基准, 不是等待。
@@ -307,7 +307,7 @@ for (const skin of SKINS) {
         await clickRow(page, /** @type {import('@playwright/test').Locator} */ (target), { button: 'right' });
         const item = ctxItemById(page, 'pause');
         await expect(item).toBeVisible({ timeout: 5_000 });
-        // vm 内部时序探针(D4 第②类, 旧 __m 原样移植): MutationObserver 抓 .is-pending 首现
+        // vm 内部时序探针(D4 第2类, 旧 __m 原样移植): MutationObserver 抓 .is-pending 首现
         await page.evaluate(`(() => {
           window.__m = { t0: null, dom: null };
           if (window.__mo2) window.__mo2.disconnect();
@@ -347,7 +347,7 @@ for (const skin of SKINS) {
         const FLOOR = CMD_RESULT === 'error' ? 0 : 80;
         // !挑目标**之前**先与服务端真值对齐一次(旧同款): 前面的用例暂停过的行, 前端要等下一轮
         // 轮询才在 DOM 反映 —— 不对齐会挑到"服务端已 paused"的行 ⇒ pending 瞬间清, 断言恒绿
-        // 却什么都没测到。vm.refresh 属注入/复原桩态类 evaluate(D4 第①类)。
+        // 却什么都没测到。vm.refresh 属注入/复原桩态类 evaluate(D4 第1类)。
         await withVm(page, 'return vm.refresh && vm.refresh();');
         await awaitRowClassesSettled(page); // 旧 400ms 睡等「等 ver 去抖 + DOM 落地」→ poll 等行色稳态
         const target = await pausableRow(page, '.torrent-row');
@@ -362,7 +362,7 @@ for (const skin of SKINS) {
         await clickRow(page, /** @type {import('@playwright/test').Locator} */ (target), { button: 'right' });
         const item = ctxItemById(page, 'pause');
         await expect(item).toBeVisible({ timeout: 5_000 });
-        // vm 内部时序探针(D4 第②类, 旧 __t 原样移植): 压暗走 MutationObserver; 值覆盖
+        // vm 内部时序探针(D4 第2类, 旧 __t 原样移植): 压暗走 MutationObserver; 值覆盖
         // (pendingOps 是响应式对象、DOM 上看不见)只能 4ms 定时采样 —— 4ms 远小于 error
         // 回滚 ~21ms, 不至漏采整个起落。
         await page.evaluate(`(() => {
@@ -424,7 +424,7 @@ for (const skin of SKINS) {
         await tab(page, 'torrents').click();
         await expect(page.locator('.torrent-row').first()).toBeVisible({ timeout: 15_000 });
         const N = 60;
-        // 注入选中集合(D4 第①类): N=60 的真实 Ctrl+click 不可行; 选中集合的升级/合单链路
+        // 注入选中集合(D4 第1类): N=60 的真实 Ctrl+click 不可行; 选中集合的升级/合单链路
         // 已由 multiselect-shows.spec 用真实手势在 N=5 验过, 这里只验合单规模。
         const picked = await withVm(page,
           `vm.selGroups = []; vm.selMembers = vm.filteredTorrents.slice(0, ${N}).map((r) => r.hash); return vm.selMembers.length;`);
@@ -468,7 +468,7 @@ for (const skin of SKINS) {
           expect(p.peak, `峰值 pendingOps ${p.peak}(@${p.peakT === null ? '-' : p.peakT + 'ms'}) / 目标 ${picked}`)
             .toBeGreaterThanOrEqual(Math.min(picked, N) * 0.8);
         }
-        // 清掉选择, 免得影响后续用例(注入态复原, D4 第①类)
+        // 清掉选择, 免得影响后续用例(注入态复原, D4 第1类)
         await withVm(page, 'return vm.clearSelection && vm.clearSelection();');
       });
 
@@ -514,7 +514,7 @@ for (const skin of SKINS) {
         // torrents/info 直查, 比自己的 /sync/maindata 快照新 ≤1.5s。若真值事件一到就把
         // pendingOps 删掉, 这 1.5s 内任何一次视图发布都会带着命令前的 kind 打回行色。
         // 刻意直调 vm.applyOptimistic/resolveOptimistic/onTruthEvent(不经右键菜单): 本条测的
-        // 是"时序", 菜单与点击时序已由前面用例覆盖 —— vm 内部时序探针(D4 第②类, 旧原样移植)。
+        // 是"时序", 菜单与点击时序已由前面用例覆盖 —— vm 内部时序探针(D4 第2类, 旧原样移植)。
         const t = await page.evaluate(`(() => {
           const vm = ${INST};
           // 挑一个"成员状态一致且非暂停"的组(前面的用例已暂停过大量行)
@@ -558,7 +558,7 @@ for (const skin of SKINS) {
         // magnet_uri **只**在种子页的平铺 SEED_ITEM 里, 成员索引(groups/singles)不带该字段
         // ⇒ 修复前在辅种页恒提示"该种子没有 magnet 链接"(与种子是否真有磁力无关)。
         // 断言刻意避开剪贴板实现差异: 只验"不再弹失败提示"; 注入 vm.menu + 直调
-        // copyTorrentInfo(菜单开合 DOM 路径已由 menus 批的 CTX-06 覆盖) —— D4 第①/②类。
+        // copyTorrentInfo(菜单开合 DOM 路径已由 menus 批的 CTX-06 覆盖) —— D4 第1/2类。
         const r = await page.evaluate(`(async () => {
           const vm = ${INST};
           const g = vm.groups.find((x) => (x.members || []).length);
@@ -599,7 +599,7 @@ for (const skin of SKINS) {
         expect(hash, '行带 data-hash').toBeTruthy();
         const before = sCls((await rowLoc.getAttribute('class')) || '');
 
-        // vm/DOM 时序探针(D4 第②类, 旧 __h 原样移植): 10ms 采样钉住目标行的 is-pending 与状态色
+        // vm/DOM 时序探针(D4 第2类, 旧 __h 原样移植): 10ms 采样钉住目标行的 is-pending 与状态色
         await page.evaluate(`(() => {
           const H = ${JSON.stringify(hash)};
           window.__h = { t0: null, rows: [] };

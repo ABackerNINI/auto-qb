@@ -11,7 +11,7 @@ import { readInst } from './lib/vm.mjs';
  * 连选时不会以光标为起点」(2026-10-19 提单, 本轮修)。
  *
  * 根因链(取证与修复见本轮守阵 tests/test_web_shortcuts.py::test_shift_anchor_unified
- * 与坑档 memory-bank/pitfalls/web-ui/overlays.md §起点③):
+ * 与坑档 memory-bank/pitfalls/web-ui/overlays.md §起点第 3 项):
  *   1. Esc 走退栈链兜底 clearSelection() —— 清 selAnchor* 是**选中状态语义, 不是缺陷**
  *      (锚点与选中集合同属"选择", 一起清合理; 光标 kbCursor **不清**, 故 Esc 后光标
  *      仍指向最后选中的种子 = 用户原话);
@@ -32,7 +32,7 @@ import { readInst } from './lib/vm.mjs';
  *
  * 断言口径: 交互走真实鼠标手势(clickRow 的 CDP 输入管线 + 5 拍落点验证, 机理见
  * lib/gestures.mjs 头注); 判据双轨 —— DOM(.selected 类, 与用户所见一致) +
- * vm 内部字段(selMembers / selAnchorMember / kbCursor, evaluate 第②类,
+ * vm 内部字段(selMembers / selAnchorMember / kbCursor, evaluate 第2类,
  * e2e/lib/vm.mjs)。Shift 分支是**并集**语义(selection.js::shiftTorrentSel:
  * 锚点→目标区间并入现有选中, 不取消已选) —— 故 Esc 后区间从空集起算, 计数即区间宽。
  */
@@ -76,35 +76,35 @@ for (const skin of SKINS) {
         els.slice(0, 5).map((el) => el.getAttribute('data-hash') || ''));
       expect(hashes.every(Boolean), '前 5 行均有 data-hash').toBe(true);
 
-      // ① 普通点击 row0: 落光标 + 落起点(普通点击不选中, 用户 2026-09-17 口径)
+      // 1. 普通点击 row0: 落光标 + 落起点(普通点击不选中, 用户 2026-09-17 口径)
       await clickRow(page, rows.nth(0));
       expect(await selCount(page, '.torrent-row.selected'), '普通点击不选中').toBe(0);
       expect(await readInst(page, 'vm.kbCursor.id'), '普通点击把光标落到 row0').toBe(hashes[0]);
 
-      // ② Shift+点击 row2: 从起点 row0 扩到 row2 = 3 行
+      // 2. Shift+点击 row2: 从起点 row0 扩到 row2 = 3 行
       await clickRow(page, rows.nth(2), { modifiers: ['Shift'] });
       expect(await selCount(page, '.torrent-row.selected'), 'Shift+点 row2 = 选 row0..2').toBe(3);
       expect(await selN(page), 'selMembers 与 DOM 同宽').toBe(3);
 
-      // ③ Shift+点击 row4: 同一起点再扩(法则 2: 扩展期间起点不动) = 0..4 共 5 行
+      // 3. Shift+点击 row4: 同一起点再扩(法则 2: 扩展期间起点不动) = 0..4 共 5 行
       await clickRow(page, rows.nth(4), { modifiers: ['Shift'] });
       expect(await selCount(page, '.torrent-row.selected'), '法则 2: Shift 不重置起点, 仍从 row0 扩').toBe(5);
 
-      // ④ Esc 清选择(退栈链兜底): 选中清空, **锚点清空**, 但光标保留在 row4
+      // 4. Esc 清选择(退栈链兜底): 选中清空, **锚点清空**, 但光标保留在 row4
       //    —— "光标指向最后一个选择的种子"是用户原话, 这里把它钉成 arrange 事实
       await page.keyboard.press('Escape');
       expect(await selCount(page, '.torrent-row.selected'), 'Esc 后选中清空').toBe(0);
       expect(await readInst(page, 'vm.selAnchorMember'), 'Esc 清锚点(选中状态语义, 非缺陷)').toBeNull();
       expect(await readInst(page, 'vm.kbCursor.id'), 'Esc 不动光标: 仍指向最后点击的 row4').toBe(hashes[4]);
 
-      // ⑤ 核心断言(修复前恒红): Esc 后 Shift+点击 row1 —— 起点缺失, 兜底链必须取到
+      // 5. 核心断言(修复前恒红): Esc 后 Shift+点击 row1 —— 起点缺失, 兜底链必须取到
       //    **手势前光标**(row4), 区间 = row1..row4 = 4 行。修复前兜底读到的是改写后的
       //    光标(row1) ⇒ from==to ⇒ 只选 1 行。
       await clickRow(page, rows.nth(1), { modifiers: ['Shift'] });
       expect(await selCount(page, '.torrent-row.selected'), 'Esc 后 Shift 连选必须以光标 row4 为起点(row1..4 = 4 行)').toBe(4);
       expect(await selN(page), 'selMembers 同宽(4)').toBe(4);
 
-      // ⑥ 收尾: 起点已被手势前光标补上, 再 Shift+点 row3 仍从 row4 起(锚点未被 Shift 重置)
+      // 6. 收尾: 起点已被手势前光标补上, 再 Shift+点 row3 仍从 row4 起(锚点未被 Shift 重置)
       await clickRow(page, rows.nth(3), { modifiers: ['Shift'] });
       expect(await selCount(page, '.torrent-row.selected'), '补上的起点不被 Shift 重置: row3..4 并入 = 仍 4 行').toBe(4);
       expect(await readInst(page, 'vm.selAnchorMember'), '起点仍是手势前光标 row4(法则 2)').toBe(hashes[4]);
@@ -127,20 +127,20 @@ for (const skin of SKINS) {
       const mHashes = await mRows.evaluateAll((els) =>
         els.slice(0, 2).map((el) => el.getAttribute('data-hash') || ''));
 
-      // ① 普通点击成员 row0(不选中, 只落光标); 落点走第二格(.m-site 是筛选格, 见 memberPoint)
+      // 1. 普通点击成员 row0(不选中, 只落光标); 落点走第二格(.m-site 是筛选格, 见 memberPoint)
       await clickRow(page, mRows.nth(0), { point: await memberPoint(mRows.nth(0)) });
       expect(await selCount(page, '.member-row.selected'), '普通点击成员不选中').toBe(0);
 
-      // ② Shift+点击成员 row1: 从 row0 扩到 row1 = 2 行
+      // 2. Shift+点击成员 row1: 从 row0 扩到 row1 = 2 行
       await clickRow(page, mRows.nth(1), { modifiers: ['Shift'], point: await memberPoint(mRows.nth(1)) });
       expect(await selCount(page, '.member-row.selected'), 'Shift+点成员 row1 = 选 row0..1').toBe(2);
 
-      // ③ Esc: 清选中 + 清锚点, 光标保留在成员 row1
+      // 3. Esc: 清选中 + 清锚点, 光标保留在成员 row1
       await page.keyboard.press('Escape');
       expect(await selCount(page, '.member-row.selected'), 'Esc 后成员选中清空').toBe(0);
       expect(await readInst(page, 'vm.kbCursor.id'), 'Esc 后光标仍指成员 row1').toBe(mHashes[1]);
 
-      // ④ 核心断言(泛化修复前恒红): Esc 后 Shift+点击成员 row0 —— 起点缺失须兜底到
+      // 4. 核心断言(泛化修复前恒红): Esc 后 Shift+点击成员 row0 —— 起点缺失须兜底到
       //    手势前光标(成员 row1) ⇒ 区间 row0..1 = 2 行。修复前只选 row0 单行。
       await clickRow(page, mRows.nth(0), { modifiers: ['Shift'], point: await memberPoint(mRows.nth(0)) });
       expect(await selCount(page, '.member-row.selected'), 'Esc 后成员行 Shift 连选以光标 row1 为起点(0..1 = 2 行)').toBe(2);

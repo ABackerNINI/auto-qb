@@ -14,12 +14,12 @@ import { withVm } from './lib/vm.mjs';
  *
  * pytest 侧钉的是**静态面**(后端分类 / 前后端两张 rank 表一致 / 命令闸门前后端同表 / CSS
  * 令牌 parity); 本用例钉的是**渲染面** —— 那四处各自 drills:
- *   ①行状态文案「移动中」+ 行类 `.s-moving`(走 kind 渲染);
- *   ②分布条与筛选 chip 出现 moving(distSegments 的 order 漏了 ⇒ 既统计不到也筛不到);
- *   ③点击 chip 能按 moving 筛(`kindFilter` 路径);
- *   ④CSS 真算出色值(三皮肤各有一套 `.k-*` / `.s-*`, 漏一套就掉回默认色 —— 只能靠浏览器验)。
+ *   1. 行状态文案「移动中」+ 行类 `.s-moving`(走 kind 渲染);
+ *   2. 分布条与筛选 chip 出现 moving(distSegments 的 order 漏了 ⇒ 既统计不到也筛不到);
+ *   3. 点击 chip 能按 moving 筛(`kindFilter` 路径);
+ *   4. CSS 真算出色值(三皮肤各有一套 `.k-*` / `.s-*`, 漏一套就掉回默认色 —— 只能靠浏览器验)。
  *
- * 桩态注入(D4 第①类 evaluate, 走 withVm 单点): 桩服务 ui_harness._STATES 不含 moving
+ * 桩态注入(D4 第1类 evaluate, 走 withVm 单点): 桩服务 ui_harness._STATES 不含 moving
  * (为此给桩加一个模式维度不划算), 我们把**末行**改成 moving —— 合成数据里 added_on 最大者
  * 排在最前(见 ui_harness._inject_site_alerts 的同款取位注释), 保证在首屏窗口内可见。
  * !桩的轮询每 2s 用服务端数据复原 ⇒ 注入后立刻断言, 不在这中间加长等待。
@@ -63,18 +63,18 @@ for (const skin of SKINS) {
       const row = page.locator(`.torrent-row[data-hash="${hash}"]`);
       await expect(row, '注入的 moving 行应落在首屏窗口内').toBeVisible({ timeout: 5_000 });
 
-      // ① 行类名 + 状态列文案: 此前这里是「其他」
+      // 1. 行类名 + 状态列文案: 此前这里是「其他」
       await expect(row).toHaveClass(/s-moving/, { timeout: 5_000 });
       await expect(row.locator('.state-text')).toHaveText('移动中', { timeout: 5_000 });
 
-      // ② 分布条 + 筛选 chip(distSegments order 的产物 —— 缺表 = 统计/筛选双瞎)
+      // 2. 分布条 + 筛选 chip(distSegments order 的产物 —— 缺表 = 统计/筛选双瞎)
       const seg = page.locator('.dist-bar span.k-moving');
       await expect(seg, '分布条应出现 moving 段').toHaveCount(1, { timeout: 5_000 });
       const chip = page.locator('.dist-legend button.dist-chip.k-moving');
       await expect(chip, '状态筛选器应出现「移动中」可选项').toHaveCount(1, { timeout: 5_000 });
       await expect(chip).toContainText('移动中');
 
-      // ③ 点击 chip 按 moving 筛选: 筛完之后留下的应是这一类行
+      // 3. 点击 chip 按 moving 筛选: 筛完之后留下的应是这一类行
       await chip.click();
       await expect(chip).toHaveClass(/active/, { timeout: 5_000 });
       const shown = page.locator('.torrent-row');
@@ -82,7 +82,7 @@ for (const skin of SKINS) {
       await expect(page.locator(`.torrent-row[data-hash="${hash}"]`)).toBeVisible();
       await chip.click();  // 复原取消筛选(后续门控与 companion 用例不受影响)
 
-      // ④ 配色: .k-moving 的计算色必须等于 --violet 令牌(不是落回默认前景色)
+      // 4. 配色: .k-moving 的计算色必须等于 --violet 令牌(不是落回默认前景色)
       //    2026-11-02 起 moving 从 --blue 拆出为紫(与 checking 拆分同批, 见各皮肤「状态色令牌」段)
       const [ token, computed ] = await page.evaluate(() => {
         const root = getComputedStyle(document.documentElement);
@@ -97,7 +97,7 @@ for (const skin of SKINS) {
           .toEqual(a.map((n) => Math.round(n)));
       }
 
-      // ⑤ 进度条填充 = 行状态色(2026-11-02): --st 声明在行元素上靠继承下发,
+      // 5. 进度条填充 = 行状态色(2026-11-02): --st 声明在行元素上靠继承下发,
       //    静态守阵只能钉「规则里写了 var(--st)」, 继承是否真到位只有浏览器能证。
       //    先钉条存在(列被隐藏就红, 不许静默跳过), 再比对计算背景色。
       const fill = row.locator('.m-progress .bar > i');

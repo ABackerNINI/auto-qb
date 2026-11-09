@@ -56,11 +56,11 @@ import { INST, readInst } from './lib/vm.mjs';
  *    (旧脚本删段前全轮 1m26s), 按计划不做预防性优化。
  *
  * ── D4 断言翻译守则落地说明(计划 §3.5) ──
- *  · evaluate 保留处(均有注释, 全部属允许两类): ①longtask PerformanceObserver + gbr 计数器 +
+ *  · evaluate 保留处(均有注释, 全部属允许两类): 1) longtask PerformanceObserver + gbr 计数器 +
  *    A/B bench 直调 vm.rowWin/lastRid/refresh —— 量的是"渲染管线占了主线程多久/强制布局几次",
- *    这些度量点只在页面内部, 且被测对象就是 vm 的渲染行为本身(第②类时序探针, 旧块原样移植);
- *    ②占位总高的 rowWin 开关对照 —— rowWin 没有 UI 开关, 开/关两侧必须同一帧序列读数(第①类
- *    注入/复原桩态, 旧块同款); ③末行视口可见性的 getBoundingClientRect 读数(第②类, 视口相交
+ *    这些度量点只在页面内部, 且被测对象就是 vm 的渲染行为本身(第2类时序探针, 旧块原样移植);
+ *    2) 占位总高的 rowWin 开关对照 —— rowWin 没有 UI 开关, 开/关两侧必须同一帧序列读数(第1类
+ *    注入/复原桩态, 旧块同款); 3) 末行视口可见性的 getBoundingClientRect 读数(第2类, 视口相交
  *    没有 locator 之外的取径)。
  *  · 阈值数字逐字保留(回归基准, 不是实现细节): rounds=3、gbrBudget = 窗口行数×(rounds+2)+20、
  *    占位总高 Δ<50px、滚动塌陷 Δ<200px、行窗口化判据 tRows < tTotal×0.5(EXPECT_N>500 才有判别力)。
@@ -144,7 +144,7 @@ for (const skin of SKINS) {
       test.setTimeout(90_000); // 3+3 轮全量/窗口化 bench(每轮一次全量 refresh), 30s 默认太紧
       await gotoTorrents(page, skin);
 
-      /* 窗口行数(窗口化默认开)与数据总数: P1-3 预算的输入。vm 内部字段读数(evaluate 第②类)。 */
+      /* 窗口行数(窗口化默认开)与数据总数: P1-3 预算的输入。vm 内部字段读数(evaluate 第2类)。 */
       const tRows = await page.locator('.torrent-row').count();
       const tTotal = await readInst(page, 'vm.filteredTorrents.length');
       expect(tRows, '窗口行数 > 0(种子视图有数据)').toBeGreaterThan(0);
@@ -153,7 +153,7 @@ for (const skin of SKINS) {
        * 强制全量重渲染 N 轮, 用 PerformanceObserver(longtask) 量"主线程被占住多久" ——
        * 这才是"不跟手"的真身: renderMs 只测同步赋值, Vue 的 DOM patch 发生在之后的
        * 调度里, 埋点抓不到; longtask(>50ms 的任务)能把整表替换的真实阻塞量出来。
-       * 行窗口化(P1-2)的收益就体现在这个数字上。(旧块原样移植 —— 第②类时序探针)
+       * 行窗口化(P1-2)的收益就体现在这个数字上。(旧块原样移植 —— 第2类时序探针)
        */
       await page.evaluate(`(() => {
         window.__lt = [];
@@ -178,7 +178,7 @@ for (const skin of SKINS) {
       /*
        * A/B 放在同一次运行里: 先关窗口跑 N 轮(= 改动前的全量渲染), 再开窗口跑 N 轮。
        * 只看长任务不够 —— 网络两边一样大, 差的是 CPU 段; 故两个都记。
-       * 直调 vm.rowWin/lastRid/refresh 属第②类时序探针: 被测对象就是渲染管线,
+       * 直调 vm.rowWin/lastRid/refresh 属第2类时序探针: 被测对象就是渲染管线,
        * 走 UI 手势(切页签)量的是另一件事, 与旧块口径不一致。
        */
       const rounds = 3;
@@ -268,7 +268,7 @@ for (const skin of SKINS) {
        * "滚动前后"各读一次 scrollHeight, 而那个读点发生在还原 rowWin 之后 ⇒ 两次量的都是
        * 窗口化高度, 恒等成立。正是这个读数时机让 prism 的行间距硬编码(6px vs 实际 5px)造成的
        * +2973px 偏差一路溜到提交(BUG-1 / TEST-2)。
-       * rowWin 没有 UI 开关, 开/关两侧同一帧序列读数 —— 第①类注入/复原(旧块原样移植)。
+       * rowWin 没有 UI 开关, 开/关两侧同一帧序列读数 —— 第1类注入/复原(旧块原样移植)。
        */
       const hCmp = await page.evaluate(`(async () => {
         const vm = ${INST};
@@ -310,7 +310,7 @@ for (const skin of SKINS) {
       await awaitMainSettled(page);  // 旧 400ms 睡等: 贴底补行 settle 的显式化
       const after = await page.evaluate('document.documentElement.scrollHeight');
       const lastHash = await page.$$eval('.torrent-row', (ns) => (ns.length ? ns[ns.length - 1].getAttribute('data-hash') : null));
-      /* 末行视口相交读数(getBoundingClientRect, 第②类): locator 的 isVisible 不含视口相交语义。 */
+      /* 末行视口相交读数(getBoundingClientRect, 第2类): locator 的 isVisible 不含视口相交语义。 */
       const lastVisible = await page.evaluate(() => {
         const ns = document.querySelectorAll('.torrent-row');
         if (!ns.length) return false;
@@ -383,8 +383,8 @@ for (const skin of SKINS) {
       await page.evaluate('window.scrollTo(0, document.documentElement.scrollHeight * 0.5)');
       await awaitMainSettled(page);
 
-      /* 快照①: 主表窗口(滚动位 + 渲染窗首末行 + 常驻行数); 挂轮询 tick 与 longtask 探针。
-       * vm.refresh 实例属性影子化计数(第①类注入; 节拍链 fn 走 this.refresh 命中影子)。 */
+      /* 快照 1: 主表窗口(滚动位 + 渲染窗首末行 + 常驻行数); 挂轮询 tick 与 longtask 探针。
+       * vm.refresh 实例属性影子化计数(第1类注入; 节拍链 fn 走 this.refresh 命中影子)。 */
       await page.evaluate(`(() => {
         const vm = ${INST};
         if (!window.__refreshPatched) {
@@ -425,7 +425,7 @@ for (const skin of SKINS) {
       await tgl.click();
       await awaitMainSettled(page);  // 旧 400ms 睡等: 展开后主表窗口重算 settle 的显式化
 
-      /* 快照②: 主表窗口必须逐字段不变(抽屉滚动/折叠不漂移主表文档型窗口)。 */
+      /* 快照 2: 主表窗口必须逐字段不变(抽屉滚动/折叠不漂移主表文档型窗口)。 */
       const after = await snap();
       expect(after.sy, `主表滚动位不漂移: ${before.sy} -> ${after.sy}`).toBe(before.sy);
       expect(after.n, `主表常驻行数不变: ${before.n} -> ${after.n}`).toBe(before.n);

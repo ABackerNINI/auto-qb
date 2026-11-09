@@ -46,7 +46,7 @@ import { readInst } from './lib/vm.mjs';
  *    注入等 evaluate 在新轨道**不再需要**(每条 test 独立 context, 天然隔离, 无现场要还原)。
  *  · evaluate 保留处均为 vm 内部字段读数(expandedKey / viewMode / filteredTorrents / renderMs /
  *    totalDl / tagOptions / currentPollMs)—— 这些埋点与视图态没有 DOM 之外的取径, 属 D4 允许的
- *    第②类; 各处注释标明。
+ *    第2类; 各处注释标明。
  *  · 装饰性睡等(400/700/300/150…)已全部换成 expect 自动等待 / expect.poll(S4 后半收口,
  *    计划 26-11-05-0118): 渲染健康「跨一个轮询周期再看错误」的 2000ms 是断言语义本身, 走
  *    Node 侧 observeWindow; 几何守卫的 300ms → poll 等对齐量具测空。
@@ -109,7 +109,7 @@ for (const skin of SKINS) {
       /* force:true —— 页面每 2s 整表重渲染会抢走点击(smoke.md), 旧脚本同款纪律。 */
       await gRow.click({ force: true });
       await expect(page.locator('.detail').first()).toBeVisible({ timeout: 5_000 });
-      /* vm 内部字段读数(evaluate 第②类): expandedKey 无 DOM 之外的取径。 */
+      /* vm 内部字段读数(evaluate 第2类): expandedKey 无 DOM 之外的取径。 */
       expect(await readInst(page, 'vm.expandedKey'), '展开分组: 明细面板出现').toBe(gKey);
 
       await tab(page, 'torrents').click(); // 切种子页
@@ -140,7 +140,7 @@ for (const skin of SKINS) {
       /* 键盘切到种子页 —— 复现残留框的关键一步(修法 = goView 后 syncNavFocus 归还焦点)。 */
       await page.keyboard.press('2');
       await expect(page.locator('.torrent-row').first()).toBeVisible({ timeout: 15_000 });
-      /* vm 内部字段读数(evaluate 第②类): viewMode。 */
+      /* vm 内部字段读数(evaluate 第2类): viewMode。 */
       expect(await readInst(page, 'vm.viewMode'), '键盘切页后视图态').toBe('torrents');
       const stale = await page.evaluate(() =>
         [...document.querySelectorAll('nav.tabs [data-view]')]
@@ -157,13 +157,13 @@ for (const skin of SKINS) {
       await tab(page, 'torrents').click();
       await expect(page.locator('.torrent-row').first()).toBeVisible({ timeout: 15_000 });
       const tRows = await page.locator('.torrent-row').count();
-      /* vm 内部字段读数(evaluate 第②类): filteredTorrents 是窗口化数据源, 行窗口化 ⇒ DOM 行 ≤ 数据。 */
+      /* vm 内部字段读数(evaluate 第2类): filteredTorrents 是窗口化数据源, 行窗口化 ⇒ DOM 行 ≤ 数据。 */
       const tTotal = await readInst(page, 'vm.filteredTorrents.length');
       expect(tRows, `切到种子视图有数据: DOM ${tRows} 行 / 数据 ${tTotal} 条`).toBeGreaterThan(0);
       expect(tRows, 'DOM 行数不超过数据条数(行窗口化)').toBeLessThanOrEqual(tTotal);
       expect(tTotal, '种子总数与桩服务一致').toBe(TORRENTS);
 
-      /* vm 内部埋点(evaluate 第②类): renderMs 只在 vm 上。 */
+      /* vm 内部埋点(evaluate 第2类): renderMs 只在 vm 上。 */
       const renderMs = await readInst(page, 'vm.renderMs');
       expect(renderMs, `单轮 renderMs 埋点可读(${renderMs}ms)`).toEqual(expect.any(Number));
     });
@@ -177,7 +177,7 @@ for (const skin of SKINS) {
 
       /* issue 26-09-20-1646: 状态栏是跨视图的常驻显示, 旧实现在前端对 groups 求和而种子页不回
        * groups ⇒ 恒 0 或冻结旧值。所以断言写成「等于服务端 status.totals 真值」而不是「≠ 0」。
-       * vm 内部字段读数(evaluate 第②类): status.totals / totalDl 的数值口径在 vm 上。 */
+       * vm 内部字段读数(evaluate 第2类): status.totals / totalDl 的数值口径在 vm 上。 */
       const wantDl = await readInst(page, 'vm.status && vm.status.totals ? vm.status.totals.dlspeed : null');
       expect(wantDl, '桩服务 status.totals.dlspeed 非零(合成种子自带速度)').toBeGreaterThan(0);
       await expect.poll(() => readInst(page, 'vm.totalDl'), {
@@ -198,8 +198,8 @@ for (const skin of SKINS) {
       /* 2026-09-21 用户报「种子页筛选器无数据」: 筛选弹层选项原先遍历 groups 计算, 而种子页按
        * 视图分片不回 groups ⇒ 标签/分类/站点/路径恒空。判据两层缺一不可: 1.选项非空 + 弹层 DOM
        * 真渲染出项 2.计数 = 种子数(只判非空会被"仍按组算"的错误口径蒙过去)。
-       * vm 内部字段读数(evaluate 第②类): filterDefs/tagOptions 的计数口径在 vm 上。 */
-      /* vm 内部字段读数(evaluate 第②类, 走 readInst 的 INST 单点): filterDefs/tagOptions 的
+       * vm 内部字段读数(evaluate 第2类): filterDefs/tagOptions 的计数口径在 vm 上。 */
+      /* vm 内部字段读数(evaluate 第2类, 走 readInst 的 INST 单点): filterDefs/tagOptions 的
        * 计数口径只在 vm 上, DOM 只能看到渲染结果。 */
       const opts = await readInst(page, `(() => {
         const tag = vm.tagOptions[0];
@@ -238,7 +238,7 @@ for (const skin of SKINS) {
       await expect(page.locator('.hb-grid .hb-card').first()).toBeVisible({ timeout: 20_000 });
       await page.locator('.hb-grid .hb-card').first().click(); // 进第一个分区(真实手势)
 
-      /* vm 内部字段读数(evaluate 第②类): page/hub.view/cfg.schema 是纯内存态, 无 DOM 之外的
+      /* vm 内部字段读数(evaluate 第2类): page/hub.view/cfg.schema 是纯内存态, 无 DOM 之外的
        * 取径; 面包屑分区名走 DOM。 */
       const READ = `({ page: vm.page, hub: vm.hub.view, schema: !!vm.cfg.schema,
         crumb: (document.querySelector('.hb-crumb .cb-now') || {}).textContent || '' })`;
@@ -348,7 +348,7 @@ for (const skin of SKINS) {
 
       /* 档位来自实测单轮 refresh 耗时(1000:143ms / 3000:309ms / 5000:~400ms), 目的是把主线程
        * 占用率压在 ~15%。断言它, 免得"改了半天的渲染优化"被一个写死的 1s 轮询重新拖垮。
-       * vm 内部方法读数(evaluate 第②类): currentPollMs 只在 vm 上; 阈值逐字保留。 */
+       * vm 内部方法读数(evaluate 第2类): currentPollMs 只在 vm 上; 阈值逐字保留。 */
       const want = TORRENTS > 3000 ? 3000 : TORRENTS > 1000 ? 2000 : 1500;
       await expect.poll(() => readInst(page, 'vm.currentPollMs()'), {
         message: `${TORRENTS} 种子 → 轮询 ${want}ms(失败退避翻倍态也算不达标)`,

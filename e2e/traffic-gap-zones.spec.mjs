@@ -14,9 +14,9 @@ import { readInst } from './lib/vm.mjs';
  * 事故与修法(2026-10-30, 用户报「不符合实际情况」):
  *   旧实现对所有 null 桶一律出「无采样 · 程序未运行或 qB 断联」—— 判据**只有一条**
  *   (这一格是 null), 于是把三种完全不同成因的东西合并成同一种说法:
- *     ① 数据链首之前(种子刚添加 / 更早就没这个对象的数据)   → 系统只知道"没有数据";
- *     ② 数据链中间的洞(前后都有观测)                        → 「中断」才是可观测事实;
- *     ③ 数据链尾之后(种子已删 / 已停)                       → 同理只知道"没有数据"。
+ *     1. 数据链首之前(种子刚添加 / 更早就没这个对象的数据)   → 系统只知道"没有数据";
+ *     2. 数据链中间的洞(前后都有观测)                        → 「中断」才是可观测事实;
+ *     3. 数据链尾之后(种子已删 / 已停)                       → 同理只知道"没有数据"。
  *   修法 = 先按 chain bounds 判区段(_qbChainBounds/_qbGapZone, 纯函数已由 node 电池覆盖),
  *   再由 qbCurGapText 按「区段 × 作用域」出句: mid 三挂点统一「采样中断 · 该时段无数据」;
  *   outside 只陈述「该时段没有**这个对象**的数据」, 主语按作用域取 —— 种子态才是「此种子」,
@@ -106,7 +106,7 @@ async function stubFlags(page) {
  * 桶 index -> 鼠标落点 px: **两点标定**而非按公式推 —— uPlot 的 x 尺取值域、纵轴槽宽、
  * 设备像素比都不是本 spec 该猜的东西; 标定等于在这**张**图上实测量:
  *   左探头 -> idx_a, 右探头 -> idx_b; 等距栅格下 (idx, px) 严格线性 => 目标 px 一解即得。
- * 落点后回读 hoverIdx 断言命中(D4 第②类 evaluate: 这是「我点在哪一桶」的唯一权威读数 ——
+ * 落点后回读 hoverIdx 断言命中(D4 第2类 evaluate: 这是「我点在哪一桶」的唯一权威读数 ——
  * 光看 tooltip 的时刻会因刻度与 fmtTime 粒度分不清相邻桶)。
  *
  * !参考盒必须是 **.u-over**(uPlot 的鼠标交互层, 实测 1298xN 宿主上它是 x+84 起、宽 1273
@@ -171,24 +171,24 @@ test.describe('种子流量图 · 缺口悬停分区段(不再是「一律断联
       const drawer = await openTorrentTraffic(page);
       const tip = tipLines(drawer);
 
-      /* ① 链首之前 —— 用户报障的那一处: 旧文案在这里断言成「程序未运行或 qB 断联」 */
+      /* 1. 链首之前 —— 用户报障的那一处: 旧文案在这里断言成「程序未运行或 qB 断联」 */
       await hoverBucket(page, drawer, 'qbTorrentHoverIdx', mid(LEAD));
       await expect(tip).toContainText('该时段无此种子数据');
       await expect(tip, '缺口文案仍在归因"为什么没有数据" —— 报障口径复辟').not.toContainText('断联');
       await expect(tip).not.toContainText('程序未运行');
 
-      /* ② 对照组: 有观测的常规桶出速率行 —— 证明 ① 的结论不是"tooltip 恒显缺口文案" */
+      /* 2. 对照组: 有观测的常规桶出速率行 —— 证明第 1 步的结论不是"tooltip 恒显缺口文案" */
       await hoverBucket(page, drawer, 'qbTorrentHoverIdx', mid(HEAD));
       await expect(tip).toContainText('上传');
       await expect(tip).toContainText('下载');
       await expect(tip).not.toContainText('该时段无此种子数据');
 
-      /* ③ 数据链中间的洞 —— 前后都有观测, 只有这里谈得上「中断」 */
+      /* 3. 数据链中间的洞 —— 前后都有观测, 只有这里谈得上「中断」 */
       await hoverBucket(page, drawer, 'qbTorrentHoverIdx', mid(MID));
       await expect(tip).toContainText('采样中断 · 该时段无数据');
       await expect(tip, '链中洞被误判成链外(chain bounds 判据失灵)').not.toContainText('该时段无此种子数据');
 
-      /* ④ 链尾之后 —— 与 ① 同源的另一半(旧实现同样把它说成断联) */
+      /* 4. 链尾之后 —— 与第 1 步同源的另一半(旧实现同样把它说成断联) */
       await hoverBucket(page, drawer, 'qbTorrentHoverIdx', mid(TRAIL));
       await expect(tip).toContainText('该时段无此种子数据');
       await expect(tip).not.toContainText('采样中断');
