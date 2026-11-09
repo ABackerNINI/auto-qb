@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>relocate 运行时F自检假阴性修复: qB 列目录不解析文件级 symlink(附现场恢复 runbook)</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="relocate-listing-false-negative">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-10-0230">
+<meta name="doc-updated" content="26-11-10-0230">
+<meta name="doc-refs" content="">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: relocate-listing-false-negative</div>
+<h1>relocate 运行时F自检假阴性修复: qB 列目录不解析文件级 symlink(附现场恢复 runbook)</h1>
+<p class="lede">本篇只回答: relocate 运行时 F 自检(qB 侧链接跟随自检)为何在 <code>file_links+symlink</code> 形态必假阴性、如何以「链接对象判别」精确修复而不回退真失败判定力,以及假阴性已造成的现场(Blood 组裂两组 + 历史失败账)如何收敛 —— 真机验证只在测试 qB,生产零动作,恢复走 runbook 由用户执行。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-10-0230 · <b>doc-updated</b> 26-11-10-0230 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 2026-11-10 生产现场取证会话(26586 部署 job jr-a2ce556d0165)只读分析 + grilling 两轮 9 问拍板(D1-D9);关联 issue 26-11-07-2336(引用不认领, D9)
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<p><strong>背景</strong>: 2026-11-10 00:36 生产 26586 对 Blood.The.Last.Vampire 辅种组(8 颗共享同一 5.69GB mkv 的跨站辅种)整组移动 H:→I:,65 秒后被运行时 F 自检判 <code>failed</code>(qb_side_check_failed),组视图裂成两组。数据与做种全程无损。历史失败账 <code>jr-82f6dee7620d</code>(11-05 move_stalled)一并纳入处置(D3)。</p>
+<p><strong>目标</strong>:</p>
+<ul>
+<li>自检对「qB 列目录返回链接对象元数据」形态精确判 <code>skipped</code>,不再假阴性;真失败判定力不回退。</li>
+<li>假阴性的两个现场后果收敛: 裂组定性为设计边界并回写口径;Blood 组恢复路径写入 runbook(用户执行)。</li>
+<li>范围外发现(终态留账无清理出口 / 启动计数文案)入池,不扩本计划范围(D3/D6)。</li>
+</ul>
+<p><strong>设计底线 / 不变量</strong>:</p>
+<ul>
+<li><strong>保守默认</strong>: 判别只在「qB 条目元数据与源侧链接自身 <code>lstat</code> 逐字段一致」这一精确形态触发;其余一切形态判定语义逐字节不变。</li>
+<li><strong>改动面收窄</strong>: 只动链接跟随自检支(<code>link_follow_evidence</code> → <code>_d_evidence</code> 的 <code>name_filter</code> 分支);迁移预检 D 级路径证据(<code>path_evidence</code> 常规支)零改动。</li>
+<li><strong>失败处置路径不变</strong>: 真失败仍 <code>failed</code> 终态 + 现场保留(不删链不搬回,relocate_exec 既有语义)。</li>
+<li><strong>真机验证硬约束</strong>(用户拍板 D5): 只碰环境1 白名单测试实例(<code>real.*</code> guard 口径),生产 26586 零触碰。</li>
+</ul>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+<h3>2.1 现场时间线(生产 26586,auto-qb 日志)</h3>
+<p>00:36:05 迁移发起(8 成员,形态 <code>file_links</code>,mover 35711db2)→ qB 搬迁 5.69GB 完成 → 00:37:08 建链 1 条文件级 symlink(<code>H:\...\Blood...mkv → I:\...\Blood...mkv</code>)→ 本机穿透校验过 → 00:37:10 <code>_qb_side_check</code> NEGATIVE → <code>failed</code>,恢复 8 成员运行态,现场保留。job 账(phase=failed, reason=qb_side_check_failed)与链接至今留存。</p>
+<h3>2.2 三视角元数据实测(2026-11-10 只读)</h3>
+<table>
+<tr><th>视角</th><th>size</th><th>mtime</th><th>读法</th></tr>
+<tr><td>qB <code>app/getDirectoryContent</code> 列 H: 内容根</td><td><span class="bad">0</span></td><td><span class="bad">1794242228</span></td><td>qB 视角(自检实际拿到的东西)</td></tr>
+<tr><td>本机 <code>lstat</code> H: symlink 本身</td><td>0</td><td>1794242228</td><td>与 qB 条目逐字一致 → qB 报的是链接对象</td></tr>
+<tr><td>本机 <code>stat</code> H:(穿透)/ <code>stat</code> I: / qB 列 I:</td><td class="good">5691143274</td><td class="good">1789747190</td><td>三处一致(对照组)</td></tr>
+</table>
+<p><strong>结论</strong>: qB 5.2.3(Windows)目录列举对文件级 symlink 返回 reparse point 自身元数据,不解析目标(FindFirstFile 语义)。<code>_d_evidence</code>(<code>relocate_proof.py:210-218</code>)拿「列目录元数据」当「qB 能否经链接读数据」的代理 → 抽中条目与 dst stat 全不等 → NEGATIVE → <code>_step_moved</code>(<code>relocate_exec.py:240-247</code>)按「链接可能未被 qB 跟随」判 failed。判定语义没错,错在证据通道。</p>
+<h3>2.3 为什么 26-11-04 上线以来首跑即中</h3>
+<p>11-04 Mrs.Doubtfire(dir_alias+junction,465 文件 ≥ 阈值 8)自检被 name_filter(文件名含子路径,匹配不上浅层目录条目)过滤成 skipped(日志「qB 侧列目录未见本组文件」)。本计划修复的自检自 <a class="cm">26-11-04-0055 P4</a> 上线以来,本次 file_links(1 文件 &lt; 阈值,顶层文件名可匹配)是第一次真比对,即撞假阴性。</p>
+<h3>2.4 裂组链(设计边界,被假阴性触发)</h3>
+<p>job 转 <code>failed</code> ∈ <code>TERMINAL_PHASES</code>(<code>relocate_units.py:86</code>)→ <code>resolve_physical</code> <code>if job.is_terminal: continue</code>(<code>relocate_units.py:1059-1067</code>)→ 组键物理解析第 1 层(活跃 job 登记表)断供;<code>file_links</code> 不改目录 realpath(第 2 层只认 save_path 本身是目录级链接,<code>grouping_mod.py:194-224</code>),第 3 层文件级链接只打标记不并组 → mover(save_path=I:)与 7 颗(save_path=H:)组键分裂,组视图两行。job 活跃期间第 1 层兜着,组不裂;失败的瞬间裂开。</p>
+<h3>2.5 现场真值与历史账</h3>
+<ul>
+<li>8 颗全部 <code>stalledUP</code> 正常做种: mover save_path=<code>I:\PT\LongSeeding\HDHome</code>(真数据);7 颗 save_path=<code>H:\PT\LongSeeding\HDHome</code>(读经 symlink→I:)。<strong>H: symlink 是 7 颗的读通道,收敛前不可删</strong>。</li>
+<li>历史账 <code>jr-82f6dee7620d</code>(11-05, 待删→待删/测试, 搬进自身子目录)move_stalled: 用户手动重校验+resume+删 1 颗重加救回;现 3 颗在 <code>I:\待删</code> 正常做种,「待删\测试」已空(0 文件 0 目录),无 MISSING 残留。账面 failed 永久留账(设计: 失败现场可见)。</li>
+<li>关联 issue <a class="cm">26-11-07-2336</a>(同盘部署 fastresume 相对键 → daemon 改写跳过 → 恒 rewritten): <strong>不同根因</strong>,同属「收尾链在特定部署形态静默失效」家族。本计划引用不认领(D9)。<strong>拍板后事实变化(2026-11-10, 并行会话)</strong>: 2336 已修复并翻 Done —— fastresume 相对键按 profile base(= BT_backup 上两级)解析改写,真机 E2c 复验 6/6 PASS;本计划「不并入修」的原判已 moot,引用面同步更新,src=R: 拓扑口径保留(仍最简稳妥)。生产 26586 复核: 290 颗 save_path 分布 I: 131 / H: 159,<strong>零 D: 同盘</strong>,2336 形态本就不命中(16585 为另一实例,不在范围)。</li>
+<li>关联坑档 <code>pitfalls/testing/relocate-window-machine-roster.md</code>(并行会话同日落): daemon 离线窗判据 = <strong>全机 qbittorrent.exe 名册</strong>,本机生产 16585/26586 常驻在跑 → 实验期离线窗永不开;产品自留测试接缝旁路(实验内 <code>_spawn_daemon</code> 测试替换)需用户显式授权 —— <strong>已授权(2026-11-10)</strong>,见 §3.3。</li>
+</ul>
+
+<h2><span class="no">§03</span>方案总览</h2>
+<h3>3.1 主线: 链接对象判别(D1=(a))</h3>
+<p>链接跟随自检比对失配时,补一步源侧 <code>lstat</code>:qB 条目 (size, mtime) 与源侧同相对路径条目的链接自身 <code>lstat</code> 一致 → 该条记 inconclusive(列目录语义未解析链接,真伪不可判)。汇总口径:</p>
+<table>
+<tr><th>qB 条目 vs 本机</th><th>判定</th><th>处置</th></tr>
+<tr><td>与 dst stat 一致(size+mtime)</td><td class="good">POSITIVE</td><td>照常武装(原语义,不变)</td></tr>
+<tr><td>抽样全部 inconclusive</td><td class="wr">skipped</td><td>不 fail 不挡武装;rt 记排查笔 + 日志一行(修复生效第一证据)</td></tr>
+<tr><td>与 dst / 链接对象都不符</td><td class="bad">NEGATIVE</td><td>真失败,原语义不变(failed 终态 + 现场保留)</td></tr>
+</table>
+<ul>
+<li><strong>源侧定位</strong>: <code>qb_dir</code>=job.scope(qB 视角)经 <code>file_access.map_to_container</code> 单点换算 syscall 路径,逐条目 <code>os.lstat</code>;长路径前缀走 <code>utils.add_long_path_prefix_for_win</code> 单点(与 <code>_alias_live</code> 同款)。lstat 失败(OSError)按现行「不等」处理(保守,保留真失败判定)。</li>
+<li><strong>兼容面</strong>: dir_alias+junction(列举返回目标侧真实条目,路径穿越时 OS 解析)与 file_links+硬链接(条目即同 inode 数据,size/mtime 与 dst 一致)均不命中判别形态,原语义;POSIX qB 列举 stat 跟随 symlink → 与 dst 一致 → POSITIVE,判别不触发。</li>
+<li><strong>已知代价(D1 拍板接受)</strong>: qB 条目=链接对象时无法区分「列目录语义不解析」与「qB 真读不到」→ symlink 形态自检对真失败降为不可判(skipped)。兜底 = 成员读失败由缺文件联动(整组暂停+MISSING)/errored 状态下游抓取。</li>
+</ul>
+<h3>3.2 测试面</h3>
+<p>单测红绿(stub qB 客户端列目录返回):①链接对象元数据(size=0/mtime=链接时刻)→ 现行代码判 NEGATIVE(红验)→ 修复后 skipped(绿);②目标元数据 → POSITIVE 不回归;③两者都不符 → NEGATIVE 不回归。守阵落位 <code>tests/test_relocate_proof*</code> 系(现行 relocate 证据电池)。</p>
+<h3>3.3 真机闭环(D7=(a),环境1)</h3>
+<ul>
+<li><code>real.up</code>(36595,qB 5.2.3 与生产同版本)→ <code>real.guard</code>。</li>
+<li><code>real.seed</code> 造 2 颗共享同一文件的假种子(real-fake 只是标签名,不是命令;src <code>R:/qbt-fake/...</code>,dst=<code>tests-real/.work/...</code> —— 本机即环境1 D盘机,.work 在 D:,与 clone 同盘)。文件数 1 &lt; 阈值 8 → 自动走 <code>file_links+symlink</code>(src≠dst 异盘,复现事故形态)。<strong>2336 暴露重评估</strong>(本机真实盘位): qB CWD=D:;种子落位 src=R: 时 qB 保存键为绝对形态 → daemon 改写可达(2336 不触);dst 落 D: 后成员保存键变相对形态属 2336 领域,但本 job 只需一轮改写即收敛、此后无再改写需求,不受影响。</li>
+<li>发起整组迁移 → 断言自检 skipped(不再假阴性)→ 武装 → <code>real.down</code> 优雅退出窗(daemon 改写 fastresume)→ <code>real.up</code> → 全员 save_path==dst → 删链门删净别名 → job done + 组不裂。<strong>离线窗旁路已授权(2026-11-10, 用户拍板)</strong>: 本机生产 16585/26586 常驻在跑,全机名册判据下窗永不开 —— 按 <code>pitfalls/testing/relocate-window-machine-roster.md</code> 走产品自留测试接缝: 实验进程内替换 <code>relocate_exec._spawn_daemon</code>(docstring 明示「测试替换本方法」),wrapper 仅在其进程内把名册窄化为 <code>D:\Programs\qBittorrent-testing*</code> 镜像前缀,端口拒连 + 30s 稳定窗两证保持产品原样;盘上产品代码零改动,生产实例零触碰;参考实现 <code>tests-real/tools/daemon_window_wrapper.py</code>(已收编入库耐久化,自 E2c 复验版收编 6/6 同款,决策留痕落 gitignored 的 <code>tests-real/.work/tools-daemon-wrapper/</code>);授权记录落实验 evidence 目录留痕。</li>
+<li>用例按 RM04(归组迁移用例族 <code>tests-real/rm04_relocate/</code>;RM05 是 tracker_tags,不是本族)口径沉淀升档,结论记 <code>testing/real-baselines/</code>。</li>
+</ul>
+<h3>3.4 文档回写</h3>
+<p><code>architecture/hr-groups.md</code> 整组迁移节补一句「终态即退出解析登记表 → 真失败期间组视图可能按 save_path 分行(设计内,假阴性修复后本类裂组消失)」;pitfalls 新坑档(qB 列目录不解析文件级 symlink,凡「列目录当跟随读代理」的判定都要防这形态)→ <code>kb.index</code> 重建。</p>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+<table>
+<tr><th>#</th><th>内容</th><th>验收判据</th></tr>
+<tr><td>S0</td><td>入池两件(create-issue 便签档, D3/D6): ② 终态 job 永久留账无清理出口(state.json relocate.jobs 无界增长);③ relocate 启动日志「恢复在途 job N 条」计数含终态、文案误导(<code>relocate_lifecycle.py:97</code> 注释自认)</td><td>两件 issue 入池,状态 Open;不认领不排期</td></tr>
+<tr><td>S1</td><td>单测红验: 新增三态用例(链接对象/目标/两不符)</td><td>用例落位;现行代码下用例①判 NEGATIVE(红)</td></tr>
+<tr><td>S2</td><td>修复实施: <code>relocate_proof.py</code> 链接对象判别支</td><td>三态用例全绿(红转绿);既有 relocate 电池零回归</td></tr>
+<tr><td>S3</td><td>全量 <code>test.full</code> + 基线切片</td><td>全绿;数字实测誊写进 <code>kb.new baseline</code>(不手抄不预填)</td></tr>
+<tr><td>S4</td><td>真机闭环(§3.3,环境1)</td><td>job done + 组归一 + 别名删净 + skipped 日志留痕 + real-baselines 切片;环境不可用则 BLOCKED 明示理由</td></tr>
+<tr><td>S5</td><td>回写: hr-groups.md 口径句 + pitfalls 新坑档 + <code>kb.index</code></td><td><code>kb.check</code> 绿;新坑档触发词收录(列目录/getDirectoryContent/symlink/链接跟随/运行时F)</td></tr>
+<tr><td>S6</td><td>收尾: code-review 批次评审(修复+文档)+ 任务档案;提交等显式「提交」指令走 ship</td><td>评审裁决后零 actionable;Review: trailer 闸门过</td></tr>
+</table>
+<h3>4.1 附录: 生产恢复 runbook(执行者=用户,D8=(a))</h3>
+<div class="aside">
+<p><strong>前置</strong>(不满足不执行): 修复已随 develop 入库,且生产 clone(auto-qb-long-seeding)已更新并重启 auto-qb。前置不满足就重发 = 再吃一次假阴性失败账(无数据风险,但账面又添一笔 failed)。</p>
+<ol>
+<li>WebUI 选 Blood 组(8 颗)→ 右键「移动位置」→ <code>H:\PT\LongSeeding\HDHome</code> → 确认执行。同组同目标幂等;job 复用 <code>jr-a2ce556d0165</code>,新生命周期自动清陈旧失败账。</li>
+<li>预期链: 自检 skipped(修复生效第一证据,日志可见)→ 武装收尾 → 等一次 qB 退出窗(daemon 改写 7 颗 fastresume;<strong>开窗条件 = 全机 qbittorrent.exe 全部退出</strong> —— 本机另有 16585 生产实例,需一并退出再重启,判据见 <code>pitfalls/testing/relocate-window-machine-roster.md</code>)→ qB 重启 → 全员 save_path=I: → 删链门删 H: symlink → job done。</li>
+<li>收敛判据: relocate 视图 job=done;组视图 8 颗归一单组(save_path 全 I:);<code>H:\...\Blood...mkv</code> symlink 已删。</li>
+<li><strong>红线</strong>: 收敛前不得手删 H: symlink(7 颗断粮 → 缺文件联动整组暂停);期间组视图「mover 单独一行」为设计内表现,不处理;若卡 rewritten(不应发生,生产跨盘)按 issue 26-11-07-2336 排查路径走。</li>
+</ol>
+</div>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p>无 —— 拍板已在本会话 grilling 两轮收敛,结论迁 §06。</p>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+<tr><th>#</th><th>拍板(2026-11-10)</th></tr>
+<tr><td>D1</td><td>修法 = (a) 精确 skipped 判别(qB 条目 == 链接对象 lstat);否决整体跳过(b)与换证据通道(c, qB 无单文件 stat 端点)</td></tr>
+<tr><td>D2</td><td>裂组接受为设计;hr-groups.md 回写口径;<strong>不</strong>把 failed 终态纳入组键解析(失败账 dst 不可信,强并组有误归风险)</td></tr>
+<tr><td>D3</td><td>历史账 jr-82f6dee7620d 账面不动(盘面已净);终态留账清理出口与启动计数文案两件入池</td></tr>
+<tr><td>D4</td><td>Blood 组恢复 = 修完重发同迁移(H:→I:);全链已验证路径(幂等建链/收尾/删链门)</td></tr>
+<tr><td>D5</td><td>真机验证只做且<strong>只在测试 qB</strong>(硬约束,用户明示);生产 26586 零触碰</td></tr>
+<tr><td>D6</td><td>入池清单: ②③ 入池;假阴性本体计划内直修;裂组显示(设计内)不入池仅文档回写</td></tr>
+<tr><td>D7</td><td>验证深度 = (a) 完整闭环: 环境1 real.seed 跨盘拓扑(src R: → dst .work/D:),自检 skipped → 武装 → 收尾 → done 收敛</td></tr>
+<tr><td>D8</td><td>生产恢复落 runbook(§4.1),用户执行;auto-qb 任务面对生产零动作</td></tr>
+<tr><td>D9</td><td>issue 26-11-07-2336 保持 Open 不动;计划引用 + 验证拓扑跨盘避开;生产 26586 同盘复核结论(零 D: 同盘)留 §02.5 <span class="cm">(拍板后事实变化 2026-11-10: 2336 已由并行会话修复翻 Done —— 相对键 profile base 解析改写 + E2c 复验 6/6;「不并入修」原判已 moot,引用面同步,src=R: 拓扑口径保留)</span></td></tr>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+<tr><th>风险</th><th>触发条件</th><th>处置</th></tr>
+<tr><td>symlink 形态自检对真失败降为不可判(skipped 放走「qB 真读不到」)</td><td>qB 条目=链接对象元数据且链接实际断链/权限拒绝</td><td>D1 拍板接受;下游兜底 = 缺文件联动(整组暂停+MISSING)/errored;runbook 收敛判据核 save_path 全员到位</td></tr>
+<tr><td>判别误触发</td><td>目标文件 size=0 且 mtime 恰等于链接自身 lstat(巧合)</td><td>size+mtime 双字段同时相等才判,概率≈0;lstat 失败按现行不等处理(保守保留 NEGATIVE 判定)</td></tr>
+<tr><td>真机验证撞 2336(收尾恒 rewritten 污染验证结论)</td><td>src 与 qB CWD(D:)同盘 —— qB 保存键写相对形态,daemon 改写跳过</td><td>拓扑钉死 src=R:/dst=.work(D:): src 必须异于 qB CWD 盘(保存键绝对,dst 同盘可接受 —— 本 job 只需一轮改写)。<span class="cm">补充(2026-11-10): 2336 已由并行会话修复 Done(相对键 profile base 解析改写),本风险整体弱化,src=R: 口径仍保留作最简稳妥面</span></td></tr>
+<tr><td>daemon 离线窗不开,真机实验卡死在等窗</td><td>本机生产 16585/26586 任一在跑 —— 全机 qbittorrent.exe 名册判据判「进程在」</td><td><strong>旁路已授权(2026-11-10, 用户拍板)</strong>: 实验进程内 <code>_spawn_daemon</code> 测试替换 + wrapper 名册窄化(<code>D:\Programs\qBittorrent-testing*</code> 前缀),两证(端口拒连+30s 稳定窗)保持产品原样,盘上产品代码零改动,生产零触碰;参考 <code>tests-real/tools/daemon_window_wrapper.py</code>(收编入库版);授权记录落实验 evidence 留痕</td></tr>
+<tr><td>生产重发再吃一次假阴性失败账</td><td>修复未更新到生产就重发</td><td>runbook 前置条件写死;假阴性失败本身无数据风险(现场保留语义)</td></tr>
+<tr><td>修复引入回归</td><td>判别支影响既有 POSITIVE/NEGATIVE 路径</td><td>三态单测守阵钉死语义;回滚 = revert <code>relocate_proof.py</code> + 对应单测单文件</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+<li><span class="tag">R0 · 26-11-10-0230</span> 初版: 2026-11-10 生产现场取证(26586 job jr-a2ce556d0165)→ 根因双链(运行时F自检假阴性 / 终态退出解析登记表致裂组)→ grilling 两轮 9 问拍板 D1-D9 → 本计划入库(Open),实施等显式开工。只读评审 1 轮 4 发现全修(major=盘位事实: 本机即 D盘机,.work 在 D:,拓扑改钉 src=R:/dst=.work(D:) 并重评估 2336 暴露;minor=real.seed 命令名/RM04 族号/风险表同步),引文过检 4/4。齐平时段并行事实并入: 2336 被并行会话修复翻 Done(引用面对齐);坑档 relocate-window-machine-roster 落地(生产常驻 → daemon 离线窗永不开),<strong>S4 测试接缝旁路经用户授权(2026-11-10)</strong>,evidence 留痕执行。评审轮 2 出 2 发现(major=参考实现指针悬空于 gitignored scratch): wrapper 收编入库 <code>tests-real/tools/daemon_window_wrapper.py</code>(LOG 移 .work, 其余逐字保留 E2c 实证版),计划/坑档指针同改;坑档悬空指针修并入批经用户拍板「直接修」。引文过检累计 6/6。</li>
+</ul>
+
+</div>
+</body>
+</html>
