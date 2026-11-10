@@ -144,15 +144,19 @@ def test_notify_channels_hidden_from_ui_but_kept_in_contract():
     (不进 UI 渲染), **不是**从 schema 摘字段。
 
     四面(少一条就会以另一种方式复发; hidden 声明面后来扩到五处, 26-11-11-0259 S1 随顶层
-    bt_backup 表退役回落四处 —— 见下方断言文案):
+    bt_backup 表退役回落四处, S4 编辑器重写又随 relocate.bt_backup 专用编辑器接管回到五处 ——
+    见下方断言文案):
     1. schema 的 notify 子字段里**仍有** channels 且 hidden=True —— 键面守卫
        (test_config_key_surface)以 schema 为键面单点, 直接摘字段会被判成"删键"(破坏性变更:
        抬版本 + 注册迁移), 而本次根本没有改配置契约;
-    2. hidden 的声明面 = channels + web.ctx_menu + web.skip_check_menu 三处 —— 该标记是「键合法
-       但通用编辑树渲染不了」的专用口: channels 是 UI 表达不出有效差异(见报障 2026-10-10);
-       ctx_menu 是设置页新卡「WebUI」的客户端块编辑(计划 26-10-20-0024, 结构是数据不是 UI
-       元数据); skip_check_menu 是同一个新卡里的开关(W4 D6: 与 ctx_menu 定制块同卡迁入,
-       作为后续 webui 设置的新家)。别拿它藏别的字段(藏了等于配置项静默消失, 用户再也改不到);
+    2. hidden 的声明面 = channels + web.ctx_menu + web.skip_check_menu + relocate.bt_backup
+       四处 —— 该标记是「键合法但通用编辑树不渲染(专用编辑面接管)」的专用口: channels 是 UI
+       表达不出有效差异(见报障 2026-10-10); ctx_menu 是设置页新卡「WebUI」的客户端块编辑
+       (计划 26-10-20-0024, 结构是数据不是 UI 元数据); skip_check_menu 是同一个新卡里的开关
+       (W4 D6: 与 ctx_menu 定制块同卡迁入, 作为后续 webui 设置的新家); relocate.bt_backup 是
+       设置页「整组迁移」块专用编辑器(单路径输入 + 自动探测按钮, 计划 26-11-11-0259 S4)接管
+       —— 不打 hidden 则通用行与专用编辑器同键双输入框。别拿它藏别的字段(藏了等于配置项
+       静默消失, 用户再也改不到);
     3. KNOWN_NOTIFY_KEYS 仍有 channels —— 存量配置里已落盘的这个键必须仍然合法, 从校验层
        摘掉 = 老配置启动即报"未知键"(比原报障严重得多);
     4. 校验仍接受 `- platform: {}`、仍拒绝空列表 —— 前者是存量配置形态, 后者是本次报障的
@@ -174,12 +178,13 @@ def test_notify_channels_hidden_from_ui_but_kept_in_contract():
                 walk(f.fields or ())
 
         walk((top, ))
-    assert sorted(hidden) == ["channels", "ctx_menu", "skip_check_menu", "transfer"], (
-        f"hidden 声明面变了({sorted(hidden)}) —— 合法隐藏键只有四处: "
+    assert sorted(hidden) == ["bt_backup", "channels", "ctx_menu", "skip_check_menu", "transfer"], (
+        f"hidden 声明面变了({sorted(hidden)}) —— 合法隐藏键只有五处: "
         "channels(UI 表达不出差异, 见报障 2026-10-10) / web.ctx_menu(设置页新卡「WebUI」客户端块编辑, 计划 26-10-20-0024) / "
         "web.skip_check_menu(同卡迁入的跳检开关, W4 D6) / web.transfer(种子转移 targets 列表结构, "
-        "设置页「WebUI」卡目标编辑器承担, 计划 26-10-31-0306 W1)。"
-        "bt_backup 原 hidden 整体段已随计划 26-11-11-0259 S1 退役(收编为 relocate.bt_backup 标量)"
+        "设置页「WebUI」卡目标编辑器承担, 计划 26-10-31-0306 W1) / relocate.bt_backup(「整组迁移」块"
+        "专用编辑器接管: 单路径输入 + 自动探测按钮, 计划 26-11-11-0259 S4; 不打 hidden = 同键双输入框)。"
+        "原顶层 bt_backup hidden 整体段已随 26-11-11-0259 S1 退役(收编为 relocate.bt_backup 标量)"
     )
 
     assert "channels" in KNOWN_NOTIFY_KEYS, "KNOWN_NOTIFY_KEYS 丢了 channels —— 存量配置里的该键会变成'未知键'"

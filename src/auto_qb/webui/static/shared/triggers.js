@@ -317,6 +317,10 @@ const TRIGGER_DEFS = {
       "scope": "none", "why": "设置页种子转移目标的连通性探测(计划 26-10-31-0306 W1/T5): 面板动作按目标名发给后端, 与选中/锚点无关"
     },
     {
+      "file": "bt_backup_editor.js", "fn": "bbProbeRun", "ep": "/api/relocate/bt_backup_probe",
+      "scope": "none", "why": "设置页 BT_backup 自动探测(计划 26-11-11-0259 S4, D3 读法2: 按钮显式触发唯一入口): 配置辅助面只读探测, 零配置写; 与选中/锚点无关"
+    },
+    {
       "file": "transfer_flow.js", "fn": "_transferExec", "ep": "/api/transfer/run",
       "scope": "sel|anchor", "why": "种子转移批次执行(计划 26-10-31-0306 W4/T7): hashes 来自右键菜单作用域快照(_ctxScope 闭包), 确认弹窗预检后才投递"
     }

@@ -516,12 +516,16 @@ GROUPS: Tuple[Group, ...] = (
                     # bt_backup(计划 26-11-11-0259 S1 收编, 原顶层 bt_backup 表退役): 单实例标量。
                     # qB 的 WebAPI 不暴露 BT_backup 路径, 也不可跨文件系统读取 —— 本程序与 qB 同机
                     # 时可推导/探测, 远程 qB 须手写(计划 §2.3 可探测性矩阵)。
+                    # S4 起打 hidden(语义 = 组件接管渲染, 与 web.transfer/ctx_menu 同款): 设置页
+                    # 「整组迁移」块内嵌专用编辑器(单路径输入 + 自动探测按钮 + 证据展示)是唯一
+                    # 编辑面; 不打 hidden 则通用编辑树与本编辑器同键双输入框。
                     Field(
                         "bt_backup",
                         "BT_backup 目录",
                         "path",
                         default="",
                         grey_if=("enabled", "true"),
+                        hidden=True,
                         help="qB 的 BT_backup 目录(fastresume 收尾改写用): 留空 = fastresume 收尾未启用; "
                         "可在设置页自动探测; qB 与本程序不同文件系统时须手写",
                     ),
