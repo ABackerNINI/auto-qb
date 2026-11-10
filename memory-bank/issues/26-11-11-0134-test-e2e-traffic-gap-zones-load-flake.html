@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="e2e-traffic-gap-zones-load-flake">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="e2e traffic-gap-zones [atlas] 全量并发偶红(负载型 flaky)">
 <meta name="issue-summary" content="e2e/traffic-gap-zones.spec.mjs:203 [atlas] 全量并发下偶红、单跑即绿; @fast 门禁(318 全绿)含它且通过 —— 负载型 flaky, 登记 flaky 台账">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-11-0134-test-e2e-traffic-gap-zones-load-flake</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-11 01:34</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
 
@@ -111,13 +111,21 @@
 
 <section id="s3">
   <h2><span class="no">§03</span>建议<span class="opt">（可选）</span></h2>
-  <p>待定 —— 按台账口径先归因(retry 不是修复): 多轮采样定位等待窗口/并发争用点, 再决定修法; 归因后回填 <a href="../testing/flaky-ledger.md">台账</a> 本条状态。</p>
+  <p>~~待定 —— 按台账口径先归因(retry 不是修复): 多轮采样定位等待窗口/并发争用点, 再决定修法; 归因后回填 <a href="../testing/flaky-ledger.md">台账</a> 本条状态。~~</p>
+  <p><b>实际修法(2026-11-11, 只修测试竞态闭合, 生产代码不动)</b>: 根因是按键行(<code>page.keyboard.press('Control+Backslash')</code>, 修前 <code>:208</code> / 修后 <code>:216</code>)与 boot 期一次性 <code>loadWebFlags()</code>(<code>lifecycle.js:439-451</code>, 单发无重试; 初值 fail-closed <code>qbTrafficOn=false</code>)竞态 —— <code>openApp</code>(<code>e2e/lib/gestures.mjs:114-118</code>)只等 <code>.group-row</code> 可见不等 flags 落袋; <code>qb_traffic_enabled</code> 未生效时 <code>Ctrl+\</code> 走 <code>openQbHistory</code>(<code>qb_traffic_chart.js:580-583</code>)的 fail-closed 门只弹 toast「功能未启用」不开抽屉, 抽屉可见断言(修前 <code>:210</code> / 修后 <code>:218</code>)必红。修法 = <code>openApp</code> 之后、按键之前补一行显式等待(项目既有 <code>readInst</code> + <code>expect.poll</code> 习语, <code>e2e/lib/vm.mjs</code>):</p>
+  <pre><code>await expect.poll(() =&gt; readInst(page, 'vm.qbTrafficOn'), {
+  message: 'flags 未落袋(qb_traffic_enabled 未生效) —— Ctrl+\\ 会被 fail-closed 门吞掉',
+  timeout: 15_000,
+}).toBe(true);</code></pre>
+  <p>该等待落在全局图 describe 分支内, 双皮肤(prism/atlas)经 <code>for (const skin of SKINS)</code> 循环共用一处; 孪生用例(种子页签入口)走 <code>v-if="qbTrafficOn"</code> 的页签按钮(<code>drawer.html:55</code>), 有 Playwright 隐式等待, 无需同款补丁 —— 读代码确认后未动。</p>
 </section>
 
 <section id="s4">
   <h2><span class="no">§04</span>状态变更日志</h2>
   <ul>
     <li>2026-11-11 01:34 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    <li>2026-11-11 — 复验归因: 全量两轮 488 passed / 0 failed 未复现; 机制经取证脚本<b>确定性复现</b>(+700ms flags 延迟 6/6 红) —— 改判根因类目为「async-wait/时序(flags 单发 fail-closed × 键盘入口无等待), 已量化复现并修复」, <a href="../testing/flaky-ledger.md">台账</a>同步改判</li>
+    <li>2026-11-11 — 已修, 状态 <strong>Done</strong>: 修法 = <code>Ctrl+\</code> 按键前补 <code>expect.poll(vm.qbTrafficOn)</code> 显式等 flags 落袋(15s, 双皮肤共用一处; 详见 §03)。验证 = <code>commands run dev.e2e -- e2e/traffic-gap-zones.spec.mjs</code> 单跑 4 passed; 负载复验 <code>--repeat-each 10</code> 40 passed(1.9m) + <code>--repeat-each 20</code> 80 passed(3.3m), 三轮 0 failed。只改 <code>e2e/traffic-gap-zones.spec.mjs</code> 一处, 生产代码(lifecycle.js/shortcuts_engine.js 等)未动</li>
   </ul>
 </section>
 

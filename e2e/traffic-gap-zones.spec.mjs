@@ -204,6 +204,14 @@ test.describe('全局流量图 · 链外文案主语不写「此种子」', () =
       await stubFlags(page);
       await stubQbTraffic(page, ['**/api/traffic/qb/global*']);
       await openApp(page, skin);
+      /* 等 flags 落袋(issue 26-11-11-0134): openApp 只等 .group-row 可见, 而加载期一次性
+       * loadWebFlags()(单发无重试, 初值 fail-closed)与这里的按键是竞态 —— qbTrafficOn 尚未
+       * 翻 true 时 Ctrl+\ 会被 openQbHistory 的门吞掉只弹 toast, 用例必红。显式等总门生效
+       * 再按键; 双皮肤(prism/atlas)共用本分支, 一处等待两处覆盖。 */
+      await expect.poll(() => readInst(page, 'vm.qbTrafficOn'), {
+        message: 'flags 未落袋(qb_traffic_enabled 未生效) —— Ctrl+\\ 会被 fail-closed 门吞掉',
+        timeout: 15_000,
+      }).toBe(true);
       /* Ctrl+Backslash = 全局 qB 流量图入口(shortcuts open-qb-traffic 同 target 切换语义) */
       await page.keyboard.press('Control+Backslash');
       const drawer = page.locator('.drawer-dock > .drawer');
