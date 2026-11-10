@@ -5,7 +5,7 @@
 **Updated:** 2026-11-11
 **Summary:** recycle daemon 实例级下线证据链(P7 多实例收尾窗解卡): grilling 拍板(D1-D5) → 计划 26-11-10-0318 → 四波实装(W1a 观测面/W1b 判据面/W2a 接线/W2b 场景测试, 评审全程零回归) → 真机 P7 三场景 3/3 PASS 零产品缺陷 → 回写收口, 已 Done
 **Topics:** backend-recycle-daemon-instance-evidence
-**Refs:** memory-bank/issues/26-11-07-0528-feat-recycle-daemon-roster-machine-wide.html, memory-bank/plans/26-11-10-0318-plan-recycle-daemon-instance-evidence.html, memory-bank/pitfalls/backend/recycle-daemon-p7-evidence-chain.md, memory-bank/testing/baselines/26-11-11-0225-backend-recycle-daemon-instance-evidence.md
+**Refs:** memory-bank/issues/26-11-07-0528-feat-recycle-daemon-roster-machine-wide.html, memory-bank/plans/26-11-10-0318-plan-recycle-daemon-instance-evidence.html, memory-bank/pitfalls/backend/recycle-daemon-p7-evidence-chain.md, memory-bank/testing/baselines/26-11-11-0225-backend-recycle-daemon-instance-evidence.md, memory-bank/testing/baselines/26-11-11-0359-recycle-daemon-combine-tree.md
 
 ## 本篇只回答
 
@@ -37,6 +37,8 @@ P7 形态(同机多 qB 实例, 目标已死日常在跑)下 recycle daemon 收�
 | 3 | W1: obs helper + 观测通道 + `_Observation` 状态机 + 单测 | Done(2026-11-10, fbcf4117 + a3c0fc1e) |
 | 4 | W2: 三层判据接线 + 逐成员复验升级 + 场景测试 | Done(2026-11-10, 2ca40f43 + 76c056ee) |
 | 5 | W3: P7 真机三场景验证 + 回写收口(issue 0528/docstring/pitfalls P7 专档) | Done(2026-11-11, 真机 3/3 PASS + 回写全套) |
+
+注: 2026-11-11 合流 rebase 后提交对象重写——fbcf4117→1f36dd18, a3c0fc1e→3fd8092c, 2ca40f43→eba5ba3b, 76c056ee→972d7cd5, 202c807e→2a26dd65, f3356c1f→9ae076de; 表中旧 hash 为 pre-rebase 引用, 新 hash 见 git log。
 
 ## 进度日志
 

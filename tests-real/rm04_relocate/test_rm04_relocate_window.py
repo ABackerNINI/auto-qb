@@ -23,7 +23,8 @@ memory-bank/testing/real-baselines/26-11-10-0435-real-relocate-rlfn-e2e.md 的 1
   方法」), 让 daemon 经 tests-real/tools/daemon_window_wrapper.py 拉起(收编入库版, 判据/边界见其
   docstring);
 - wrapper 仅在 daemon 进程内把名册窄化为 D:\\Programs\\qBittorrent-testing* 镜像前缀(生产实例
-  不计入), 端口拒连 + 30s 稳定窗两证保持产品原样; 盘上产品代码零改动; 决策留痕
+  不计入), 端口拒连 + 30s 稳定窗对 L2/L3 层保持产品原样; L1 路径无稳定期(见
+  daemon_window_wrapper docstring L1 注记); 盘上产品代码零改动; 决策留痕
   tests-real/.work/tools-daemon-wrapper/daemon_wrapper.log。
 
 拓扑钉死(计划 §03.3 + §07 风险表): src = R:/qbt-fake/rm04/rm04_20/src(R: 内存盘, 与 qB CWD D:

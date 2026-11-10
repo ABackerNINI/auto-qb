@@ -22,6 +22,12 @@
 - daemon 其余全链(scan/journal/rewrite/record/宽限退出/pid 抢占)全走产品原码;
 - 每次决策留痕见 LOG; PowerShell 探测异常 => 保守判「测试 qB 在场」(不开窗), 与产品
   「判不出=保守」口径一致。
+
+L1 注记(2026-11-11 起, L1 实例级证据链上线, 计划 26-11-10-0318): 本 wrapper 旁路只作用于
+L2/L3 全机口径层(`_proc_absent` 两调用点); L1 路径(_observe_poll → _l1_window_open, 读
+_qb_processes/_port_refused)不经 `_proc_absent` 且无稳定期——wrapper 环境下 L1 证据链齐时
+窗可先于 30s 稳定窗开启; 功能仍安全(L1 对非目标面孔走零赌注吸收/30s settle, 保守向;
+wrapper 窄化仍约束 L2/L3 退化层)。
 """
 import subprocess
 import sys

@@ -13,6 +13,8 @@ TOTAL                                                26638     50   9320     61 
 
 (实测时点: HEAD 76c056ee + 本批回写工作树, `commands run test.full` 2026-11-11 02:25; 较上一基线 26-11-10-0132 的 5883: +56 = recycle daemon W1a/W1b/W2a/W2b 四波新用例与守阵, 2 skipped 为存量 skip 不变; 本轮 W3b 为纯知识库回写, 零代码改动, 数字与 W2b 收口实测一致)
 
+注: 2026-11-11 合流 rebase 后提交对象重写——fbcf4117→1f36dd18, a3c0fc1e→3fd8092c, 2ca40f43→eba5ba3b, 76c056ee→972d7cd5, 202c807e→2a26dd65, f3356c1f→9ae076de; 文中旧 hash 为 pre-rebase 引用, 新 hash 见 git log。
+
 ## 本改动面
 
 - **本轮(W3b 回写收口)零代码改动**——只有知识库面: issue 26-11-07-0528 翻 Done(复验行+修复后补充), 计划 26-11-10-0318 翻 Done(§10 实装收口行+§03.2 评审加固注记), 新建坑档 pitfalls/backend/recycle-daemon-p7-evidence-chain.md, 既有坑档 relocate-window-machine-roster.md 追加 L1 上线段, 任务档案 26-11-10-backend-recycle-daemon-instance-evidence 翻 Done(R1-R4 进度日志), kb.index 重建。

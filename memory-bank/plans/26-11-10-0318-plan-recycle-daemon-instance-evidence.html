@@ -9,7 +9,7 @@
 <meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-11-10-0318">
 <meta name="doc-updated" content="26-11-11-0213">
-<meta name="doc-refs" content="memory-bank/issues/26-11-07-0528-feat-recycle-daemon-roster-machine-wide.html, memory-bank/plans/26-11-05-0808-plan-relocate-fastresume-finalize.html, memory-bank/tasks/26-11-05-backend-relocate-fastresume-finalize.md, memory-bank/tasks/26-11-10-backend-recycle-daemon-instance-evidence.md, memory-bank/pitfalls/backend/recycle-daemon-p7-evidence-chain.md, memory-bank/testing/baselines/26-11-11-0225-backend-recycle-daemon-instance-evidence.md">
+<meta name="doc-refs" content="memory-bank/issues/26-11-07-0528-feat-recycle-daemon-roster-machine-wide.html, memory-bank/plans/26-11-05-0808-plan-relocate-fastresume-finalize.html, memory-bank/tasks/26-11-05-backend-relocate-fastresume-finalize.md, memory-bank/tasks/26-11-10-backend-recycle-daemon-instance-evidence.md, memory-bank/pitfalls/backend/recycle-daemon-p7-evidence-chain.md, memory-bank/testing/baselines/26-11-11-0225-backend-recycle-daemon-instance-evidence.md, memory-bank/testing/baselines/26-11-11-0359-recycle-daemon-combine-tree.md">
 <meta name="doc-title" content="recycle daemon 实例级下线证据链: owner 死证 + 新面孔无害化, P7 多实例形态收尾窗解卡 (issue 26-11-07-0528)">
 <title>recycle daemon 实例级下线证据链 · plan · memory-bank</title>
 <style>
@@ -264,6 +264,7 @@
     <ul>
       <li>2026-11-10 03:18 — 立档(Open): grilling 三轮收敛后成文; 承接 issue 26-11-07-0528 的「未来增强方向」挂账, 拍板 D1-D5 见 §06。</li>
       <li>2026-11-11 — 实装收口(Done): §04 四波全落地——W1a 观测面 fbcf4117(obs helper+通道函数族, 本机解析实测)/W1b 判据面 a3c0fc1e(_Observation 状态机+L1 判据; 评审 major 加固见 §03.2 注记)/W2a 接线 2ca40f43(三层分派+复验同级+告警 60s 节流)/W2b 六场景 7 测试 76c056ee; 全量全绿(评审全程零回归, 数字权威见 kb.baseline 切片 26-11-11-0225); W3a 真机 P7 三场景 3/3 PASS 零产品缺陷(S1 死亡→开窗+首写 2.63s vs S3b 退 L2 后 37.54s 同机对照; S2 复活 qb_back 零落盘; S3 通道故障退 L2 节流留痕, 证据根 tests-real/.work/p7_w3a/); W3b 回写收口(issue 0528 翻 Done + 本计划 + pitfalls P7 专档)。</li>
+      <li>2026-11-11 — 注: 2026-11-11 合流 rebase 后提交对象重写——fbcf4117→1f36dd18, a3c0fc1e→3fd8092c, 2ca40f43→eba5ba3b, 76c056ee→972d7cd5, 202c807e→2a26dd65, f3356c1f→9ae076de; 上述收口行内旧 hash 为 pre-rebase 引用, 新 hash 见 git log。</li>
     </ul>
   </section>
 

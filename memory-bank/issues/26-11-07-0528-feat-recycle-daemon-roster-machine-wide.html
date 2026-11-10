@@ -7,7 +7,7 @@
 <meta name="issue-stamp" content="26-11-07-0528">
 <meta name="issue-type" content="feat">
 <meta name="doc-topic" content="relocate-fastresume-finalize">
-<meta name="doc-refs" content="memory-bank/plans/26-11-05-0808-plan-relocate-fastresume-finalize.html, memory-bank/tasks/26-11-05-backend-relocate-fastresume-finalize.md, memory-bank/tasks/26-11-10-backend-recycle-daemon-instance-evidence.md, memory-bank/plans/26-11-10-0318-plan-recycle-daemon-instance-evidence.html, memory-bank/pitfalls/backend/recycle-daemon-p7-evidence-chain.md, memory-bank/testing/baselines/26-11-11-0225-backend-recycle-daemon-instance-evidence.md">
+<meta name="doc-refs" content="memory-bank/plans/26-11-05-0808-plan-relocate-fastresume-finalize.html, memory-bank/tasks/26-11-05-backend-relocate-fastresume-finalize.md, memory-bank/tasks/26-11-10-backend-recycle-daemon-instance-evidence.md, memory-bank/plans/26-11-10-0318-plan-recycle-daemon-instance-evidence.html, memory-bank/pitfalls/backend/recycle-daemon-p7-evidence-chain.md, memory-bank/testing/baselines/26-11-11-0225-backend-recycle-daemon-instance-evidence.md, memory-bank/testing/baselines/26-11-11-0359-recycle-daemon-combine-tree.md">
 <meta name="issue-tier" content="standard">
 <meta name="issue-status" content="Done">
 <meta name="issue-title" content="回收 daemon 进程名册证为全机口径: 同机多 qB 实例时收尾窗可用性让位 N1(取舍记录+增强方向)">
@@ -181,7 +181,7 @@ def _proc_absent(names: tuple, host: str = "", port: int = 0) -> bool:
     <h3>修复后补充</h3>
     <p><strong>实际修法</strong>（2026-11-11 收口核实）：采纳建议修法候选①方向（owner 端口归属探测 → 实例级死证）并补足其推演洞（「新身已创建未绑端口」尾部间隙），按计划 <a href="../plans/26-11-10-0318-plan-recycle-daemon-instance-evidence.html">26-11-10-0318</a> 四波实装<strong>实例级下线证据链</strong>：W1a 观测面（obs 文件 helper + LISTENING 归属/全机 qB (pid, create_time) 枚举通道函数族，本机解析实测）；W1b 判据面（<code>_Observation</code> 状态机 + L1 判据纯函数；评审 major 加固——零赌注吸收阈值由混域 <code>ct&lt;ts_last</code> 升级为同域 <code>ct&lt;owner.ct</code>，gap 带 <code>[owner.ct, ts_last)</code> 改走 30s settle 管道，时钟回拨跨 owner 创建边界为已知残余）；W2a 三层分派接线（L1 立即进窗 / L2 全机口径 30s 保留 / L3 端口单证不动 + 逐成员落盘前复验升级为同级全套 <code>unclassified_faces</code> + 告警 60s 节流）；W2b 六场景 7 测试。语义：owner 死证 + 新面孔无害化 + 端口拒连三条件成立即立即进窗（无稳定期）；无 owner 记录/观测通道故障保守退回 L2 全机口径（本件记录的现状判据原样保留为退化路径），绝不产生假证据。细节与边界（竞争面定义/settle 有界赌注/配置漂移警示/可观测性缺口）单点在坑档 <a href="../pitfalls/backend/recycle-daemon-p7-evidence-chain.md">recycle-daemon-p7-evidence-chain</a>。</p>
     <p><strong>验证方式</strong>：① 评审矩阵多轮（W1b major 加固为评审发现并落地，全程零 actionable 收口）；② 六场景桩测试（立即进窗/settle 吸收/PID 复用两向/未决挡窗/obs 重启重载/通道失败退 L2）防塌缩断言钉住；③ 真机 P7 三场景 3/3 PASS、零产品缺陷（证据根 <code>tests-real/.work/p7_w3a/</code>，gitignored）——S1 目标死+日常活：owner 建档后死亡→开窗+首写 2.63s（无 30s 稳定期，双成员 rewritten 键字节核验过），与 S3b 通道故障退 L2 后首写 37.54s（=30s 稳定期+对齐）<strong>同机对照</strong>；S2 目标复活：窗顶复验不过（refused=false+未分类面）⇒ qb_back 零落盘，再停后重放收敛；S3 通道故障注入⇒「退 L2 全机口径」告警 60s 节流留痕（62.4s 实测），L2 下 110s 零开窗（复现本件记录的 P7 痛点形态）。</p>
-    <p><strong>测试数字</strong>：全量全绿（评审全程零回归）；数字权威在 <code>kb.baseline</code> 最新基线切片（<a href="../testing/baselines/26-11-11-0225-backend-recycle-daemon-instance-evidence.md">26-11-11-0225</a>）。</p>
+    <p><strong>测试数字</strong>：全量全绿（评审全程零回归）；数字权威在 <code>kb.baseline</code>（实装批切片 <a href="../testing/baselines/26-11-11-0225-backend-recycle-daemon-instance-evidence.md">26-11-11-0225</a>；合流组合树切片见 <a href="../testing/baselines/26-11-11-0359-recycle-daemon-combine-tree.md">26-11-11-0359</a>）。</p>
   </section>
 
   <footer>

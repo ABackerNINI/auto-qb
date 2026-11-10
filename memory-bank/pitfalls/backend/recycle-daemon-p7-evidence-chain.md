@@ -3,7 +3,7 @@
 > 摘要: 同 profile 实例才是 N1 竞争者, 全机口径病根在此; L1 实例级证据链(owner 死证+新面孔无害化+端口拒连)成立即立即进窗, settle 30s 是有界赌注; 已知残余(时钟回拨跨 owner 创建边界/改 WebUI 端口不同步 config/同 profile 异常双开/qb_back 可观测性缺口)与通道解析纪律(None=不可用退 L2, 绝不产假证据)。
 > 触发: P7, 多实例, 实例级证据链, owner 死证, 新面孔, settle, 零赌注吸收, L1 判据, 立即进窗, 全机口径, recycle daemon, 收尾窗, qb_back 可观测性, WebUI 端口改
 
-**Refs:** memory-bank/plans/26-11-10-0318-plan-recycle-daemon-instance-evidence.html, memory-bank/issues/26-11-07-0528-feat-recycle-daemon-roster-machine-wide.html, memory-bank/tasks/26-11-10-backend-recycle-daemon-instance-evidence.md, memory-bank/pitfalls/testing/relocate-window-machine-roster.md, memory-bank/testing/baselines/26-11-11-0225-backend-recycle-daemon-instance-evidence.md
+**Refs:** memory-bank/plans/26-11-10-0318-plan-recycle-daemon-instance-evidence.html, memory-bank/issues/26-11-07-0528-feat-recycle-daemon-roster-machine-wide.html, memory-bank/tasks/26-11-10-backend-recycle-daemon-instance-evidence.md, memory-bank/pitfalls/testing/relocate-window-machine-roster.md, memory-bank/testing/baselines/26-11-11-0225-backend-recycle-daemon-instance-evidence.md, memory-bank/testing/baselines/26-11-11-0359-recycle-daemon-combine-tree.md
 
 ## 本篇只回答
 
