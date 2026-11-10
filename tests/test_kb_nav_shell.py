@@ -49,6 +49,7 @@ gen_doc_map.collect() 本体的键集合 —— 它是闸门/守阵消费单点 
 - test_filter_state_not_reseeded_on_poll: derive() 不得读写筛选器持久化 (与 pin 同源: 轮询不得洗掉用户筛选)
 - test_restore_filters_seeds_known_statuses: 还原筛选器时已知状态 (KNOWN_ST) 先并入 statusSeeded 台账 (否则刷新后首轮 derive 把取消的已知状态加回)
 - test_filter_mutations_persist: 各筛选入口 (台账四组 / 排序 / 双搜索 / 卡片三组) 均落盘, 少一处即该筛选刷新后仍旧重置
+- test_ledger_sort_has_updated_default: 排序新增「更新时间」档且为默认 (updated option 置顶 / S.sort 出厂默认 updated / SORT_KEYS 含 updated+stamp / cmp 有 updated 比较器 / ledgerCells cellStamp 跟随排序档; 2026-11-10 用户要求)
 - test_shell_has_pin_zone_and_ctxmenu: 置顶骨架在位 (#pinZone / #ctxMenu / PINS_KEY / contextmenu 监听)
 - test_pin_state_not_reseeded_by_derive: derive() 不碰 pins; S.pins = loadPins() 全壳唯一 (轮询不得洗掉 pin)
 - test_pinned_rendered_in_both_zones: 同一份 pin 状态被专区渲染 (pinZoneItems) 与共用行模板 (isPinned) 双处消费
@@ -361,6 +362,28 @@ def test_filter_mutations_persist() -> None:
     assert "S.aChain = !S.aChain; saveFilters();" in text, "台账「关联」筛选落盘缺失"
     assert text.count("saveFilters();") >= 12, \
         f"筛选落盘点偏少 (期望 >=12): {text.count('saveFilters();')}"
+
+
+def test_ledger_sort_has_updated_default() -> None:
+    """排序档 (2026-11-10 用户要求): 台账必须有「更新时间」档且为默认 —— option 置顶、
+    S.sort 出厂默认 updated、SORT_KEYS 含 updated (否则 localStorage 里的 updated 存档会被
+    还原校验拒掉)、cmp 表有 updated 比较器。只加 option 不改默认 = 「默认更新时间」落空;
+    旧值 stamp 必须仍在 SORT_KEYS 与 option 里 (老用户已存偏好不得失效)。"""
+    text = SHELL.read_text(encoding="utf-8")
+    sel = re.search(r'<select id="sort">(.*?)</select>', text, re.S)
+    assert sel, "排序下拉不见了? 控件搬家要同步本守阵"
+    at_updated = sel.group(1).find('value="updated"')
+    at_stamp = sel.group(1).find('value="stamp"')
+    assert at_updated >= 0 and at_stamp >= 0, "缺 updated / stamp 档 (旧值 stamp 必须保留, 老用户存档兼容)"
+    assert at_updated < at_stamp, "updated (更新时间) 必须是第一档"
+    keys = re.search(r"const SORT_KEYS = \[(.*?)\]", text, re.S)
+    assert keys and '"updated"' in keys.group(1) and '"stamp"' in keys.group(1), \
+        "SORT_KEYS 必须同时含 updated 与 stamp (还原校验按它放行 localStorage 存档)"
+    assert 'sort: "updated"' in text, "S.sort 出厂默认必须是 updated (用户要求默认更新时间)"
+    cmp = re.search(r"const cmp = \{(.*?)\}\[S\.sort\]", text, re.S)
+    assert cmp and "updated:" in cmp.group(1), "cmp 表必须有 updated 比较器"
+    assert 'S.sort === "updated" ? (i["doc-updated"] || i.stamp) : i.stamp' in text, \
+        "ledgerCells 的 cellStamp 必须跟随排序档 (更新时间序下时间戳列显 doc-updated, 否则列与排序对不上)"
 
 
 def test_shell_has_pin_zone_and_ctxmenu() -> None:

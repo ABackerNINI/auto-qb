@@ -721,7 +721,8 @@
       <div class="toolbar">
         <div class="sort">排序
           <select id="sort">
-            <option value="stamp">时间 新-旧</option>
+            <option value="updated">更新时间 新-旧</option>
+            <option value="stamp">创建时间 新-旧</option>
             <option value="form">形态 issue-task</option>
             <option value="status">状态 活跃-完结</option>
             <option value="topic">专题 A-Z</option>
@@ -850,7 +851,9 @@ const PINS_KEY = "mb-nav-pins";
 const PIN_COLLAPSE_KEY = "mb-nav-pin-collapsed";   // 置顶区折叠态 (纯前端偏好, 同 PINS_KEY): "1" = 收起
 const HIDDEN_KEY = "mb-nav-hidden";   // 隐藏条目 (纯前端偏好, 同 pin): 隐藏区数据落点
 const FILTERS_KEY = "mb-nav-filters";   // 筛选器 / 选择类状态 (纯前端偏好, 刷新后不丢)
-const SORT_KEYS = ["stamp", "form", "status", "topic"];
+/* 排序键 (2026-11-10 用户要求加更新时间序): updated = doc-updated (数据层 enrich, md 档案回落
+   stamp), 默认档; stamp = 条目戳 (doc-added / issue-stamp / 文件名前缀) 即创建时间。 */
+const SORT_KEYS = ["updated", "stamp", "form", "status", "topic"];
 const PULL_HEADER = "X-Nav-Action";   // 拉取的 CSRF 自定义头: 跨站 fetch 带它会先发 OPTIONS 预检, 服务不答即被浏览器拦下
 /* 图钉图标 (内联 SVG, 无外链图标库): 空心 = 未 pin; 实心由 .pinbtn.on 的 CSS fill 控制 */
 const PIN_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 17v5M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></svg>';
@@ -872,7 +875,7 @@ const S = {
   q: "",
   /* A 台账 */
   aForms: new Set(FORM_ORD), aStatuses: new Set(KNOWN_ST), aTypes: new Set(TYPES),
-  aLive: false, aChain: false, sort: "stamp", sel: null,
+  aLive: false, aChain: false, sort: "updated", sel: null,
   /* 多选 (Ctrl/Shift 手势, 计划 26-10-31-0143): 纯会话态不落盘 (同 sel 口径) —— multi = link
      数组 (入栈序), multiAnchor = Shift 扩段锚点 (普通/Ctrl 点击落锚, Shift 不动锚点, 可从同一
      起点多次扩段 —— auto-qb selection.js 法则 2)。derive() 绝不触碰 (同 pin 坑型, 否则 30s
@@ -1302,6 +1305,9 @@ function aFiltered() {
     list = list.filter(i => navSearchText(i).includes(q));
   }
   const cmp = {
+    /* updated = doc-updated 新-旧 (缺回落 stamp); 同戳再按创建戳新-旧, 兜底形态序 */
+    updated: (a, b) => (b["doc-updated"] || b.stamp).localeCompare(a["doc-updated"] || a.stamp) ||
+      b.stamp.localeCompare(a.stamp) || FORM_ORD_N[a.form] - FORM_ORD_N[b.form],
     stamp: (a, b) => b.stamp.localeCompare(a.stamp) || FORM_ORD_N[a.form] - FORM_ORD_N[b.form],
     form: (a, b) => FORM_ORD_N[a.form] - FORM_ORD_N[b.form] || b.stamp.localeCompare(a.stamp),
     status: (a, b) => (ST_ORD_N[stOf(a)] != null ? ST_ORD_N[stOf(a)] : 9) - (ST_ORD_N[stOf(b)] != null ? ST_ORD_N[stOf(b)] : 9) || b.stamp.localeCompare(a.stamp),
@@ -1320,11 +1326,15 @@ function ledgerCells(i, n, pinMark, hidMark) {
     ? '<button class="unhidebtn" data-unhide="' + esc(i.link) + '" title="恢复到列表 (取消隐藏)">' + UNHIDE_SVG + "</button>"
     : (pinMark ? '<span class="pin-mark" title="已置顶">' + PIN_SVG + "</span>" : n + 1);
   const pinned = isPinned(i.link);
+  /* 时间戳列跟随排序档 (2026-11-10): 更新时间序下显 doc-updated (缺回落 stamp), 否则列与排序
+     对不上看起来像 bug; 创建戳挪进 title 不丢信息 */
+  const cellStamp = S.sort === "updated" ? (i["doc-updated"] || i.stamp) : i.stamp;
+  const stampTitle = cellStamp !== i.stamp ? ' title="创建 ' + esc(i.stamp) + '"' : "";
   const pinBtn = hidMark ? "" :
     '<button class="pinbtn' + (pinned ? " on" : "") + '" data-pin="' + esc(i.link) + '" title="' + (pinned ? "取消置顶" : "置顶到专区") + '">' + PIN_SVG + "</button>";
   return `
       <td class="idx">${idx}</td>
-      <td class="stamp">${esc(i.stamp)}</td>
+      <td class="stamp"${stampTitle}>${esc(cellStamp)}</td>
       <td class="formc"><span class="fbadge fc-${i.form}">${FORM_CN[i.form]}</span></td>
       <td class="statc"><span class="chip ${stCls(stOf(i))}">${esc(stOf(i))}</span></td>
       <td class="typec">${i.form === "issue" && i["issue-type"] ? '<span class="chip">' + esc(i["issue-type"]) + "</span>" : ""}</td>
