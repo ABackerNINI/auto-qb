@@ -1703,9 +1703,9 @@ class ExecMixin:
         已随 finalize_watch.py 退役, daemon 拉起走 _ensure_daemon)
 
         规格经文件传(Unicode 路径不经命令行):
-        - bt_backup: bt_backup_path_of(当前 qB 实例查表); 查不中 = 该实例 fastresume 收尾
-          功能未启用 ⇒ **不写字段**(S1 五闸本应拦下该形态 —— 这里防御性降级并告警,
-          job 停在 armed 等人工, 绝不静默丢收尾);
+        - bt_backup: bt_backup_path_of(relocate.bt_backup 标量现读, 计划 26-11-11-0259 S1);
+          未配置 = fastresume 收尾功能未启用 ⇒ **不写字段**(S1 五闸本应拦下该形态 ——
+          这里防御性降级并告警, job 停在 armed 等人工, 绝不静默丢收尾);
         - members: S3a 成员清单(arm_members_of, hash_v2 经 <hash>.torrent 现算, 取不到
           留空)。新链 daemon 以此为 pending 账底。S5(D19)追加 plan.extra_members:
           supersede 补条目成员(被搬离根上的前任成员)并入改写清单, 不进本 job 的
@@ -1739,7 +1739,7 @@ class ExecMixin:
         if not backup:
             logger.warning(
                 f"relocate | job {job.job_id}: bt_backup 未配置, fastresume 改写收尾不会发生 —— "
-                "job 停在 armed(别名维持、成员经别名可读), 请检查 bt_backup 配置"
+                "job 停在 armed(别名维持、成员经别名可读), 请检查 config.relocate.bt_backup 配置"
             )
         return True
 

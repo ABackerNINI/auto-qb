@@ -18,9 +18,9 @@ L2 全机口径 = 三证(进程不在 + 端口拒连 + 稳定 STABLE_WINDOW, 判
 回升 = 本轮放弃, 无害(N4 实证自愈: 成员经别名正常加载, journal 待重放, 下一窗口重放)。
 半途崩溃/退位/回升都留下一致账态(逐成员即改即记账, 原子写), 下一窗口按账重放。
 
-发现面: 扫 <data_dir>/relocate/*.spec.json 中属于本实例(host/port 字面相等, 与
-bt_backup_path_of 同口径)且带 bt_backup 字段(新链 spec 必带 —— S1 五闸保证 armed 前
-bt_backup 已配置)的 job;pending 口径单点在
+发现面: 扫 <data_dir>/relocate/*.spec.json 中属于本实例(host/port 字面相等, 不做
+localhost/127.0.0.1 智能匹配)且带 bt_backup 字段(新链 spec 必带 —— S1 五闸保证 armed 前
+config.relocate.bt_backup 已配置, 26-11-11-0259 S1 起为单实例标量)的 job;pending 口径单点在
 relocate_journal.pending_members = 已记账(spec 成员清单)且 journal.rewrites 未收口
 (REWRITE_SETTLED 之外)的成员。
 

@@ -312,7 +312,7 @@ def test_bt_backup_gate_unconfigured(tmp_path, monkeypatch):
     assert it["cls"] == "blocked" and it["hashes"] == ["HA"], it
     r = it["reasons"][0]
     assert r["gate"] == "bt_backup", r
-    assert "config.bt_backup" in r["text"] and "127.0.0.1:16585" in r["text"], r
+    assert "config.relocate.bt_backup" in r["text"] and "127.0.0.1:16585" in r["text"], r
 
 
 def test_bt_backup_gate_unreachable(tmp_path, monkeypatch):

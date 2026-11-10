@@ -62,7 +62,7 @@ def probe_bt_backup_reject(path: str) -> str:
     """
     p = str(path or "").strip()
     if not p:
-        return "BT_backup 路径为空(config.bt_backup 配了空值)"
+        return "BT_backup 路径为空(config.relocate.bt_backup 配了空值)"
     full = utils.add_long_path_prefix_for_win(p)
     if not os.path.isdir(full):
         return (
@@ -237,7 +237,7 @@ class PlanMixin:
                 "BT_backup fastresume 文件, 改写收尾链整体不可用 —— 请在 qB 设置里把「恢复数据存储」切回 "
                 "Legacy 后重试(部署矩阵 E 格 fail-fast 禁用, 不做降级双轨)"
             )
-        # ---- D 格: BT_backup 目录可达可写(路径表按当前 qB 实例查, 查表口径单点 bt_backup_path_of) ----
+        # ---- D 格: BT_backup 目录可达可写(relocate.bt_backup 标量现读, 读键口径单点 bt_backup_path_of) ----
         conf_root = getattr(self._ctx, "config", None)
         path = bt_backup_path_of(conf_root) if conf_root is not None else ""
         if not path:
@@ -245,9 +245,10 @@ class PlanMixin:
             host = getattr(qb, "host", "?") if qb is not None else "?"
             port = getattr(qb, "port", "?") if qb is not None else "?"
             return self._deployment_block(
-                hashes, ru.GATE_BT_BACKUP, f"当前 qB 实例({host}:{port})未在配置键 config.bt_backup 声明 BT_backup 路径: fastresume "
-                f"收尾功能未启用 —— 请在配置文件 bt_backup 段按 {{\"{host}:{port}\": \"<BT_backup 目录>\"}} "
-                "声明后重试(整键缺省 = 功能不启用, 不影响其它功能)"
+                hashes, ru.GATE_BT_BACKUP,
+                f"当前 qB 实例({host}:{port})未配置 BT_backup 路径(配置键 config.relocate.bt_backup 为空): "
+                f"fastresume 收尾功能未启用 —— 请在配置文件 relocate 段把 bt_backup 填为本实例 qB 的 "
+                "<BT_backup 目录> 后重试(留空 = 功能不启用, 不影响其它功能)"
             )
         reject = probe_bt_backup_reject(path)
         if reject:

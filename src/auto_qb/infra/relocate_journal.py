@@ -197,8 +197,10 @@ def instance_key(host: str, port: int) -> str:
     """qB 实例键: (host, port) 的文件名安全形制 —— daemon 心跳文件命名与对账分组的单点。
 
     Windows 文件名禁冒号 => ':' 与其它非 [A-Za-z0-9._-] 字符一律折叠为 '_'(IPv6 主机
-    同样适用)。折叠不可逆: 实例身份判定一律以 (host, port) 原值字面相等为准(与
-    bt_backup_path_of 同口径, 不做 localhost/127.0.0.1 智能匹配), 键只作文件名与分组。
+    同样适用)。折叠不可逆: 实例身份判定一律以 (host, port) 原值字面相等为准, 不做
+    localhost/127.0.0.1 智能匹配 —— 旧顶层 bt_backup 按实例查键的口径已随计划
+    26-11-11-0259 S1 收编为 relocate.bt_backup 标量, 本键不再服务配置查表, 只作文件
+    命名与分组。
     """
     raw = f"{str(host or '').strip()}_{int(port or 0)}"
     return re.sub(r"[^A-Za-z0-9._-]", "_", raw)

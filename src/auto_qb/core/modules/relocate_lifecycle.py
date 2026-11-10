@@ -67,9 +67,9 @@ class LifecycleMixin:
     def apply(self, old: "Config", new: "Config") -> ApplyResult:
         """段相等短路; 段变化 = 换对象即生效(enabled 开时重探链接能力)
 
-        认领面含 bt_backup(计划 26-11-05-0808 S1): 预检部署闸经 bt_backup_path_of 现读
-        ctx.config(L0, 无缓存), 段变化换对象即生效 —— 这里只做「变化可感知」的回执,
-        不换缓存。relocate 与 bt_backup 两段独立比较, 任一变化即 reloaded。
+        认领 relocate 单段即全覆盖(bt_backup 已收编为 relocate.bt_backup 段内标量, 计划
+        26-11-11-0259 S1): 预检部署闸经 bt_backup_path_of 现读 ctx.config(L0, 无缓存),
+        段变化换对象即生效 —— 这里只做「变化可感知」的回执, 不换缓存。
         热启用(enabled 假 -> 真)与 start() 的启用分支同口径: 补一次 _load_jobs +
         sweep_probe_residue(非 dry-run 才动手) ——
         以 disabled 启动后热启用的会话, state 里的历史在途 job(崩溃/停用期残留)不恢复
@@ -78,11 +78,8 @@ class LifecycleMixin:
         在途 job 的运行期账 _rt, 无谓回到恢复判据)。
         """
         relocate_changed = getattr(old, "relocate", None) != getattr(new, "relocate", None)
-        bt_backup_changed = getattr(old, "bt_backup", None) != getattr(new, "bt_backup", None)
-        if not relocate_changed and not bt_backup_changed:
+        if not relocate_changed:
             return ApplyResult(self.name)
-        if bt_backup_changed and not relocate_changed:
-            return ApplyResult(self.name, "reloaded", "bt_backup 路径表已更新(部署闸现读, 下轮预检即生效)")
         was_enabled = bool(getattr(getattr(old, "relocate", None), "enabled", False))
         self._conf = getattr(new, "relocate", None)
         enabled = bool(getattr(self._conf, "enabled", False))
