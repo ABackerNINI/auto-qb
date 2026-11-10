@@ -7,6 +7,7 @@
 - test_frontend_shell_sprite_login_parity: 各皮肤 index.html shell 内联段守阵(issue 26-10-20-2231; S5 收编 flux) —— sprite 段(80 行/67 symbol)逐字相等(manifest 已被 split_wiring 钉死, 本守阵补上 sprite 与 login)+ #app+login 段(注释/空行归一后, 皮肤说明注释为合法差异不参与比对)相等; symbol 数下限防"sprite 整体外提成共享文件后各份同时消失、相等断言恒真"; 失败信息提示"改图标/改登录遮罩须各皮肤同步"
 - test_frontend_button_system_paired: 按钮体系(.bt)迁移守阵 —— ce-btn/ce-icon 全语料零残留、.bt 六变体各套 CSS 成对定义(atlas/prism/console/flux, S5 收编 flux)、atlas/prism 模板 bt 用量逐类相等、双色令牌(on-accent/on-accent-ink/on-error)星图 :root + 棱镜五主题成对声明
 - test_frontend_fx_wiring: fx 动效库挂行守阵(计划 26-10-31-2316 S6 前半 + 后半) —— shared/fx 三件只挂 flux: flux shell 恰挂 fx.css/fx-presets.css 各一次(head link, 级联序排本皮肤全部 CSS 之后)与 fx.js 一次(shell 静态 script, 不进 tpl-manifest —— 四套清单守阵钉逐项相等), S6 后半追加 flux 专属挂载面 fx-mount.css(link, 排 fx 三件之后)与 fx-mount.js(script)恰一次、三旧皮肤对 /shared/fx/ 与 fx-mount 零引用(D14 隔离反向钉)、flux <html> 带 data-fx-preset="glass"(S4 主 preset 拍板)、fx.js REGISTRY.effects 逐名能在 fx.css 找到 [data-fx~="名"] 规则且 presets 逐名能在 fx-presets.css 找到配方块(漏 CSS = audit 放行但样式静默不生效; 2026-11-03 用户要求移除 flux 右键强调动效 ⇒ row-flash/D4-3 连同 keyframes/RM 降级/注册项退役, 注册表 26 名); R1 精修(26-10-31-2316 §06)追加回归钉: fx-mount.css 不得复活行板 :hover gradient 叠底(B2 行板/首格悬停管线分家)/fx-mount.js 滚动干预三符号(ensureFocusedVisible/scheduleReveal/revealFocusedRow)反向钉不在档(F7c: R3 精修退役 R1 B3 自定义回拉, 滚动单点交还 shortcuts.js 原版逻辑; F7d: 落定回执链路钉 —— fx-mount.js transitionend/兜底定时器/单发守卫 + state.js dock 第二参重入原版 _kbScrollRowIntoView; F7e(R5 精修): push 位移本体弃用反向钉(fx-mount.css/js 零 push 载体/--fx-push-y 规则, 打点实证 scrollY=0 时位移把聚焦行推出视野且滚动不可恢复) + 两段动效落点钉(dialogs.css 面板底部上滑 translateY(100%) 消费 --fx-dur-panel/--fx-ease-out, fx-mount.css 面板开着 scroll-behavior:smooth 的 :has 作用域), 缺一即回退到「聚焦行终位被推出视野」的 D3-4 三轮报障缺陷; R5#179: dock(true) 须真武装 armSettle 兜底定时器(此前零调用, 回执丢失场景 fx-glide 恒驻留))
+- test_frontend_fx_site_chip_shape_layering: flux 站点 chip 形状分层守阵(计划 26-11-10-0921 W2) —— fx-mount.css 的 html[data-fx-preset] .site-chip 本体规则体必须含 clip-path: none(本体重新持裁剪 = box-shadow 辉光被整圈裁掉, 用户报「辉光仅显示一侧或两侧」回归) + .site-chip::before 规则体含切角 polygon(3px 0, ...) 逐字(3px 微切角视觉 = R3「逐字恢复」拍板); components.css:332 本体 clip-path 被覆盖而非删除的事实不设防(700 行体量断言只限净增行, 钉不住减行删除), 级联正确性由同批 W2 e2e 主判据(computed clipPath === 'none')兜底
 - test_frontend_console_square_radius: console 方角口径守阵(R1 精修 B1, 用户报「console 详情模板/文字元素出现圆角」) —— console/style.css 的 --radius-lg/--radius/--radius-sm 三令牌全 0px + console 自有 CSS 与 console 实际加载的四件共享面(row_lang/dt_table/hscroll/console_hub)的 border-radius 声明值全量白名单(0/999px 胶囊/小值/50%/var(--radius*)/inherit, 现存值盘点后冻结): flux 意图的圆角 16/10/6 写进共享面 = 三皮肤同时回归, 新值入列必须显式改白名单(有意识决策)
 - test_frontend_tpl_ctl_bits_single_source
 
@@ -662,6 +663,54 @@ def test_frontend_fx_wiring():
         "原版让位滚动回退成瞬时跳变")
     assert "fx-glide" in mount_js, ("fx-mount.js 缺 fx-glide 窗口挂/摘(动效 2 的作用域开关) -- 平滑滚动作用域失控(罩全程 = "
                                     "键盘滚动手感漂移, 或恒不生效)")
+
+
+def test_frontend_fx_site_chip_shape_layering():
+    """flux 站点 chip 形状分层守阵(计划 26-11-10-0921 W2): 切角在 ::before 绘制层, 本体不持 clip-path
+
+    W1(399bdb2e)把 .site-chip 的 3px 微切角从本体挪到 ::before 绘制层(控件层 clip-path
+    会把 box-shadow 外发光整圈裁掉 = 用户报「辉光仅显示一侧或两侧」的根因), 本体 clip-path
+    覆盖为 none。两个静默回归形态(缺一 = W1 修复回退而 pytest 无感):
+      1. 本体重新持有 clip-path(删掉 none 覆盖或改回 polygon)= 切角裁发光回归 ——
+         fx-mount 媒体块内三种 chip 共用的 --fx-glow-stack 再次被裁成两侧;
+      2. ::before 的切角 polygon 漂移/丢失 = R3「逐字恢复」拍板被推翻(3px 微切角视觉消失)。
+    覆盖链如实口径: components.css:332 的本体 clip-path 仍单点存在(被 fx-mount 链尾
+    none 覆盖), 但「被覆盖而非删除」这一面**不设防** —— 700 行体量断言只限单 CSS 净增行,
+    删掉该 clip-path 行是减行、恒绿且视觉等价, 钉不住删除; 级联正确性(none 真赢 components.css:332)
+    由同批 W2 e2e 主判据(computed clipPath === 'none')兜底。
+    """
+
+    mount_css = open(os.path.join(STATIC_ROOT, "flux", "css", "fx-mount.css"), encoding="utf-8").read()
+    # 注释先剥再逐条规则收集(手法对齐 widget 守阵 _selectors, 避免注释里的示例被当成规则);
+    # 本体选择器有两组同名候选(媒体块内的辉光过渡组 / 文件尾形状分层组), 按
+    # 逗号拆分归一后精确匹配, 不把 .site-chip::before / .sa-* 等误收进本体。
+    # any() 为存在性断言(只防删行/改值, 不防日后追加第三条同名规则重赢级联),
+    # 级联胜负由同批 e2e 主判据(computed clipPath === 'none')仲裁
+    css = re.sub(r"/\*.*?\*/", "", mount_css, flags=re.S)
+    main_bodies, before_bodies = [], []
+    for mo in re.finditer(r"(?m)^\s*([^{}@/][^{}]*)\{([^}]*)\}", css):
+        for sel in mo.group(1).split(","):
+            sel = " ".join(sel.split())
+            if sel == "html[data-fx-preset] .site-chip":
+                main_bodies.append(mo.group(2))
+            elif sel == "html[data-fx-preset] .site-chip::before":
+                before_bodies.append(mo.group(2))
+    # 1. 本体不持 clip-path: 形状分层规则必须显式 clip-path: none(缺行/改回 polygon 均红)
+    assert any(re.search(r"clip-path\s*:\s*none\b", " ".join(b.split())) for b in main_bodies), (
+        "fx-mount.css 的 html[data-fx-preset] .site-chip 本体规则缺 clip-path: none —— 本体重新持有"
+        "裁剪时 box-shadow 辉光被整圈裁掉(「辉光仅显示一侧或两侧」回归, 计划 26-11-10-0921 W2 判据 1)"
+    )
+    # 2. 切角在 ::before 绘制层, polygon 逐字(白空格归一比对: 源文件按行宽折行)
+    POLYGON = ("polygon(3px 0, 100% 0, 100% calc(100% - 3px), "
+               "calc(100% - 3px) 100%, 0 100%, 0 3px)")
+    assert before_bodies, (
+        "fx-mount.css 缺 html[data-fx-preset] .site-chip::before 规则 —— 切角绘制层整块丢失"
+        "(3px 微切角视觉消失, 计划 26-11-10-0921 W2 判据 2)"
+    )
+    assert any(POLYGON in " ".join(b.split()) for b in before_bodies), (
+        "fx-mount.css 的 .site-chip::before 规则体缺切角 polygon(3px 0, ...) —— 3px 微切角视觉"
+        "漂移/丢失(R3「逐字恢复」拍板被推翻, 计划 26-11-10-0921 W2 判据 2)"
+    )
 
 
 def test_frontend_console_square_radius():
