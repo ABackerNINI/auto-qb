@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>整组移动 BT_backup 收编: 单实例标量化 + 设置页自动探测</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="relocate-bt-backup-scalar-probe">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-11-0259">
+<meta name="doc-updated" content="26-11-11-0347">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-11-backend-relocate-bt-backup-probe.md">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: relocate-bt-backup-scalar-probe</div>
+<h1>整组移动 BT_backup 收编: 单实例标量化 + 设置页自动探测</h1>
+<p class="lede">本篇只回答: 怎么把顶层 <code>bt_backup: {host:port: 路径}</code> 多实例表收编成单实例标量 <code>relocate.bt_backup</code>(v7→v8 迁移一次性搬运), 并给 fastresume 收尾补一个<strong>设置页按钮显式触发</strong>的 BT_backup 自动探测(候选扫描 + hash 自证)——运行时零隐式探测, 配置留空 = 功能未启用。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-11-0259 · <b>doc-updated</b> 26-11-11-0347 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 会话 grilling 2026-11-11 三轮九问拍板(§06 D1-D9) · qB/libtorrent 源码取证(Explore 子代理只读, qB v5.3.0 dev 8182ae07 + libtorrent 2.1.2.0, D:\Projects\Else) · 本机只读探测实测 · 血缘: <a href="26-11-05-0808-plan-relocate-fastresume-finalize.html">计划 26-11-05-0808</a>(bt_backup 表的出生计划)
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<h3>1.1 背景与动机</h3>
+<p>计划 <code>26-11-05-0808</code> S1 把 <code>bt_backup</code> 做成顶层多实例表(键 = qB 连接身份 <code>host:port</code>, 值 = BT_backup 目录)。但唯一查表口 <code>bt_backup_path_of</code>(<code>config/models.py:649</code>)只按当前 <code>qbittorrent</code> 段身份查——<strong>表里的第二个条目永远无人消费</strong>; webui 因此要渲染键值表编辑器、校验器要逐键验端口, 全部服务于一个不存在的第二维度。本机生产 <code>config.yml</code> 与示例 <code>minimal.yml</code> 实测均无此键(grep 零命中) → 改形状零存量负担。</p>
+<h3>1.2 目标与「算成」标准</h3>
+<ul>
+  <li><strong>G1 配置形状</strong>: 顶层 <code>bt_backup</code> 表退役; fastresume 收尾依赖收编为 <code>relocate.bt_backup: "&lt;路径&gt;"</code> 标量, 留空 = 未启用(现状语义原样保留)。</li>
+  <li><strong>G2 升级</strong>: <code>schema_version</code> v7→v8, 迁移链一次性搬运旧键; <strong>不做</strong>长期双形状兼容读法。</li>
+  <li><strong>G3 自动探测</strong>: 设置页「自动探测」按钮为唯一入口——后端候选扫描(多平台 × 多安装模式, qB 源码取证背书)+ hash 自证; 单一命中回填草稿, <strong>用户确认保存才落明路径</strong>(审计轨迹)。</li>
+  <li><strong>G4 运行时零探测</strong>: <code>relocate_plan</code>/<code>relocate_exec</code> 等运行面只读键, 无任何隐式探测(D3 读法2)。</li>
+  <li><strong>G5 验收</strong>: 全量测试绿 + 真机按钮命中本机 <code>%LOCALAPPDATA%\qBittorrent\BT_backup</code> 并走通一次整组迁移 fastresume 收尾。</li>
+</ul>
+<h3>1.3 设计底线 / 不变量</h3>
+<ul>
+  <li><strong>显式 &gt; 推断</strong>: <code>relocate.bt_backup</code> 非空 = 完全跳过探测; 手动键是探测猜不中形态(自定义 profile、远程 qB)的唯一兜底。</li>
+  <li><strong>保守默认</strong>: 歧义 / 未命中 / SQLite 存储模式一律<strong>不猜不写</strong>, 只展示证据(D5)。</li>
+  <li><strong>只读探测</strong>: 探测零写盘、零 state、零缓存(黄金法则 1/3/5); 运行面单一写线程不受影响。</li>
+  <li><strong>fail-fast</strong>: schema 校验聚合不变(黄金法则 4); 新键进 <code>relocate</code> 段校验并同步 <code>schema/groups.py</code>(守卫测试会查)。</li>
+  <li><strong>范围守恒</strong>: 取证中发现的超范围风险(SQLite 运行时防护等)只记 §07 开放项, 不顺手修(黄金法则 6)。</li>
+</ul>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+<h3>2.1 现行代码事实(2026-11-11 只读探查, file:line 引文)</h3>
+<table>
+  <tr><th>面</th><th>落点</th><th>现状</th><th>去向</th></tr>
+  <tr><td rowspan="2">models</td><td><code>config/models.py:620-622</code></td><td>顶层 <code>bt_backup: Dict[str, str]</code> 表</td><td>删字段</td></tr>
+  <tr><td><code>config/models.py:649-662</code></td><td><code>bt_backup_path_of</code> 查表单点(鸭子类型, 消费方传整配置)</td><td>改读 <code>relocate.bt_backup</code> 标量, <strong>签名不变</strong></td></tr>
+  <tr><td>loaders</td><td><code>config/loaders.py:545-550, 746</code></td><td><code>load_bt_backup_config</code> 表加载 + 绑定</td><td>退役 → 标量绑定</td></tr>
+  <tr><td>validation</td><td><code>config/validation/core.py:31</code> · <code>sections.py:783-806</code></td><td>顶层键清单含 <code>bt_backup</code>; <code>_validate_bt_backup</code> 逐键验 host:port + 端口 1-65535</td><td>键清单摘除; 校验改标量(空 = 合法未启用)</td></tr>
+  <tr><td>schema</td><td><code>config/schema/groups.py:51-64, 439</code></td><td>顶层条目 + help; relocate 段 help 引「顶层 bt_backup 键」</td><td>顶层条目删; relocate 段增键 + help 重写</td></tr>
+  <tr><td>认领面</td><td><code>core/modules/relocate_mod.py:77-79</code></td><td><code>sections() = ("relocate", "bt_backup")</code> 两键捆绑认领(P6 守阵)</td><td>收单 <code>("relocate",)</code></td></tr>
+  <tr><td rowspan="3">运行面<br>(只改口径)</td><td><code>core/modules/relocate_plan.py:240-242</code></td><td>D 格 BT_backup 可达可写闸, <code>bt_backup_path_of</code> 现读</td><td>语义不变, 注释改标量口径</td></tr>
+  <tr><td><code>core/modules/relocate_exec.py:1706-1715</code></td><td>arm 时 spec.bt_backup 由 <code>bt_backup_path_of</code> 生成</td><td>同上</td></tr>
+  <tr><td><code>relocate_lifecycle.py:70</code> · <code>infra/relocate_journal.py:200</code> · <code>tools/recycle_daemon.py:19</code></td><td>注释提及查表口径</td><td>注释同步</td></tr>
+  <tr><td rowspan="2">WEB</td><td><code>static/shared/bt_backup_editor.js</code> + <code>tpl/bt-backup-editor.html</code> + <code>app.js:916,947</code></td><td>多行键值表编辑器(读映射→整对象替换写回)</td><td>重写: 单路径输入 + 探测按钮; 四皮肤 index.html 挂载同名脚本不变</td></tr>
+  <tr><td><code>webui/server/routes/relocate_chain.py:64,110,135</code></td><td>现有两端点, <code>ctx.require_client()</code> 取 qB client(断连 503)</td><td>新增 <code>POST /api/relocate/bt_backup_probe</code>(断连降级不 503)</td></tr>
+  <tr><td rowspan="2">升级链</td><td><code>infra/versioning.py:36</code></td><td><code>"config": 7</code></td><td>→ 8</td></tr>
+  <tr><td><code>config/migrations.py:363-415</code></td><td><code>_migrate_config_6_7</code> 为模板; note 经 <code>migrate_with_notes</code> 落 WARNING 单点</td><td>新增 <code>_migrate_config_7_8</code></td></tr>
+</table>
+<h3>2.2 qB/libtorrent 源码机制表(2026-11-11 取证, qB v5.3.0 dev 8182ae07 / libtorrent 2.1.2.0)</h3>
+<ul>
+  <li><strong>构造唯一</strong>: <code>src/base/bittorrent/sessionimpl.cpp:1476,1482</code> = <code>specialFolderLocation(SpecialFolder::Data) / "BT_backup"</code>; 全库 grep 证实<strong>无任何 ini 键可改道</strong>(<code>TorrentBackupDirectory</code> 是 .torrent 另存备份功能, 与此无关)。WebAPI 全部 controller <strong>无路径端点</strong>。</li>
+  <li><strong>Data 目录解析</strong>(<code>profile_p.cpp:87-109</code>): Windows/macOS = Qt <code>AppLocalDataLocation</code>(+后缀); Linux = <code>$XDG_DATA_HOME|~/.local/share</code>, 带 legacy 回退 <code>.../data/qBittorrent[_&lt;name&gt;]</code>(≤4.2.x 布局, 4.3.0 起 1c7bfcac4 改)。</li>
+  <li><strong>Windows</strong>: <code>%LOCALAPPDATA%\qBittorrent[_&lt;name&gt;]\BT_backup</code>, <strong>无 data\ 中间层</strong>(4.0.0 起未变; 与本机实测吻合——我方早先「带 data 层」的假设被源码证伪)。</li>
+  <li><strong>便携</strong>(<code>application.cpp:333-335</code>): exe 目录下存在 <code>profile/</code> 且未给 <code>--profile</code> → BT_backup = <code>&lt;exeDir&gt;/profile/qBittorrent[_&lt;name&gt;]/data/BT_backup</code>(<code>profile_p.cpp:130-139</code> CustomProfile 布局)。</li>
+  <li><strong>自定义</strong>: <code>--profile &lt;dir&gt;</code>(<code>cmdoptions.cpp:320</code>)或环境变量 <code>QBT_PROFILE</code>(<code>:435-436</code>) → <code>&lt;dir&gt;/qBittorrent[_&lt;name&gt;]/data/BT_backup</code>;<code>&lt;dir&gt;</code> 任意 → <strong>外部不可静态探测</strong>, 手动键兜底。</li>
+  <li><strong>--configuration</strong>(<code>cmdoptions.cpp:321</code>): 各路径追加 <code>_&lt;name&gt;</code> 后缀; 后缀可从配置目录枚举佐证(win <code>%APPDATA%\qBittorrent*</code>, linux <code>~/.config/qBittorrent*</code>, mac <code>~/Library/Preferences/qBittorrent_*.ini</code>)。</li>
+  <li><strong>文件命名</strong>(<code>bencoderesumedatastorage.cpp:123,434-445,483</code>; <code>infohash.cpp:83-90</code>): <code>^40hex\.fastresume$</code> + 伴生 <code>&lt;id&gt;.torrent</code>(v1-only 种子也有); <code>&lt;id&gt;</code> = TorrentID = libtorrent <code>get_best()</code>: 有 v2 取 sha256 前 20 字节 hex(4.5.0 起 7a539d989), 否则 v1 sha1; <strong>4.4.x hybrid 用 v1</strong>。<code>queue</code> 文件(每行一个 40hex)是强结构标记。</li>
+  <li><strong>SQLite 模式</strong>(<code>sessionimpl.cpp:627</code> 默认 Legacy): <code>ResumeDataStorageType=SQLite</code> 时 <code>torrents.db</code> 在 Data 根(<code>:1464</code>), BT_backup 只剩迁移残留 → <strong>fastresume 改写对它无效</strong>; WebAPI 可读 <code>resume_data_storage_type</code>(<code>appcontroller.cpp:400</code>)。</li>
+</ul>
+<h3>2.3 可探测性矩阵(外部程序视角)</h3>
+<table>
+  <tr><th>安装形态</th><th>Windows / Linux / macOS 候选</th><th>结论</th></tr>
+  <tr><td>默认 profile</td><td>win <code>%LOCALAPPDATA%\qBittorrent[_s]\BT_backup</code>; linux <code>$XDG_DATA_HOME|~/.local/share</code> + legacy <code>.../data/</code> 双候选; mac <code>~/Library/Application Support/qBittorrent[_s]\BT_backup</code></td><td class="good">可推导; 后缀枚举配置目录得出, 新旧并存的歧义交给 hash 自证消歧</td></tr>
+  <tr><td>便携</td><td><code>&lt;exeDir&gt;/profile/qBittorrent[_s]/data/BT_backup</code></td><td class="wr">可探测, 前提 = 定位 qB exe(进程枚举, 无 psutil 依赖 → win 用 PowerShell CIM 一次性查询, posix 读 <code>/proc/&lt;pid&gt;/exe</code>)</td></tr>
+  <tr><td><code>--configuration &lt;name&gt;</code></td><td>同默认 profile, 后缀 <code>_&lt;name&gt;</code> 由配置目录枚举覆盖</td><td class="good">可推导</td></tr>
+  <tr><td><code>--profile</code> / <code>QBT_PROFILE</code></td><td><code>&lt;dir&gt;/.../data/BT_backup</code>, dir 任意</td><td class="bad">不可静态探测 → <code>relocate.bt_backup</code> 手动键兜底</td></tr>
+  <tr><td>远程 qB(跨机)</td><td>—</td><td class="bad">文件系统不可见, 探测恒落空 → 手动键 + 文案明示</td></tr>
+</table>
+<h3>2.4 本机实测(2026-11-11, 只读)</h3>
+<p><code>%APPDATA%\qBittorrent\qBittorrent.ini</code> 存在(默认 profile); <code>%LOCALAPPDATA%\qBittorrent\BT_backup</code> 含大量 <code>40hex.fastresume</code> → 候选推导与源码一致, <strong>探测对本机生产直接有效</strong>(G5 真机验收的前提成立)。</p>
+
+<h2><span class="no">§03</span>方案总览</h2>
+<h3>3.1 主线</h3>
+<p>三层, 运行面零逻辑变化: <strong>①配置面</strong>——顶层表退役, <code>relocate.bt_backup</code> 标量(D1), <code>bt_backup_path_of</code> 改纯读键(签名不变, 两个消费方零改); <strong>②探测后端</strong>——新纯函数模块 <code>src/auto_qb/infra/bt_backup_probe.py</code>(候选推导 / 资格判定 / 自证 / 裁决, import 纪律落在 infra 白名单内, qB 事实由调用方以原语传入), <code>routes/relocate_chain.py</code> 新端点包装; <strong>③编辑器</strong>——表编辑器重写为单路径输入 + 探测按钮(D3 读法2: 按钮是探测唯一入口)。</p>
+<h3>3.2 探测裁决口径(verdict 五态)</h3>
+<table>
+  <tr><th>verdict</th><th>判定</th><th>前端行为</th></tr>
+  <tr><td><code>hit</code></td><td>候选<strong>恰一个</strong>合格(含 <code>^40hex\.fastresume$</code> 或 <code>queue</code>); qB 在线时 hash 交集 ≥1 即加分自证, 离线标注「未自证」</td><td>回填草稿 + 展示证据; 用户保存才落盘</td></tr>
+  <tr><td><code>ambiguous</code></td><td>多个候选合格且 hash 自证不能消歧(多候选 hash 命中, 或全靠结构自证)</td><td>只列全部候选明细; 配置一字不动(D5 拒不猜测)</td></tr>
+  <tr><td><code>miss</code></td><td>零合格候选</td><td>列已扫描候选 + 提示写手动键</td></tr>
+  <tr><td><code>unusable-sqlite</code></td><td>qB prefs <code>resume_data_storage_type=SQLite</code> → BT_backup 非主存储, fastresume 改写无效(取证 §2.2 末条)</td><td>标「不可用」+ 指向 qB 设置; 不回填</td></tr>
+  <tr><td><code>manual-set</code></td><td><code>relocate.bt_backup</code> 已非空(显式 &gt; 推断)</td><td>提示「已手动配置, 按钮仅供核对」</td></tr>
+</table>
+<p><strong>判定顺序(短路, 防态重叠吞警示)</strong>: <code>unusable-sqlite</code> 先于 <code>manual-set</code> —— 已手动配置但后端非 Legacy 时仍须示警「不可用」, 不被「仅供核对」吞掉; 其余按命中裁决。</p>
+<p>hash 自证: qB <code>/torrents/info</code> 的 <code>infohash_v1/v2</code> 按 <code>get_best()</code> 规则算 TorrentID(<strong>v1 与 v2 截断双算</strong>, 兜 4.4.x hybrid v1 命名差异, R2), 与候选目录 <code>^40hex\.fastresume$</code> 文件名求交。</p>
+<h3>3.3 迁移口径(v7→v8)</h3>
+<p><code>_migrate_config_7_8</code>: 旧顶层 <code>bt_backup</code> 表<strong>恰一条非空条目</strong> → 搬成 <code>relocate.bt_backup</code> + note(经 <code>migrate_with_notes</code> WARNING 单点); <strong>多于一条或全空</strong> → 删键 + note 提示重配(不猜, D7); 旧键缺失 → 仅抬版本号。无兼容读法(D2): 校验器/加载器只认新形状, 旧形状只存在于迁移入口。</p>
+<h3>3.4 分期</h3>
+<table>
+  <tr><th>步</th><th>内容</th><th>依赖</th></tr>
+  <tr><td>S1</td><td>配置面标量化(models/loaders/validation/schema)</td><td>—</td></tr>
+  <tr><td>S2</td><td>升级链 v7→v8 + tests-real 版本 bump</td><td>S1</td></tr>
+  <tr><td>S3</td><td>探测后端 <code>infra/bt_backup_probe.py</code> + 合成矩阵单测</td><td>—(与 S1/S2 可并行)</td></tr>
+  <tr><td>S4</td><td>端点 + 编辑器 UI 重写</td><td>S1, S3</td></tr>
+  <tr><td>S5</td><td>运行面口径(认领收单 + 注释同步)</td><td>S1</td></tr>
+  <tr><td>S6</td><td>全量测试 + 真机验收(G5)</td><td>S1-S5</td></tr>
+  <tr><td>S7</td><td>收尾回写(pitfalls/architecture/档案/基线)</td><td>S6</td></tr>
+</table>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+<table>
+  <tr><th>步</th><th>内容</th><th>验收判据</th></tr>
+  <tr>
+    <td><strong>S1</strong><br>配置面</td>
+    <td><code>models</code>: <code>RelocateConfig</code> 增 <code>bt_backup: str = ""</code>; <code>Config.bt_backup</code> 删; <code>bt_backup_path_of</code>(models.py:649)改读 <code>relocate.bt_backup</code>(strip, 签名/鸭子类型不变)。<code>loaders</code>: <code>load_bt_backup_config</code> 退役, :746 绑定改标量。<code>validation</code>: core.py:31 顶层键摘除; <code>_validate_bt_backup</code> 改标量(非字符串才报错; 空串 = 未启用合法, 显式空格 strip 为空亦然)。<code>schema/groups.py</code>: 顶层条目删, relocate 段增键 + help(「留空 = fastresume 收尾未启用; 可在设置页自动探测; qB 与本程序不同文件系统时须手写」)。</td>
+    <td><code>test_config_schema</code>/<code>test_config_key_surface</code> 绿; schema/groups 同步守卫绿; 旧形状 YAML 直接进校验器 = 结构化报错(无兼容读法的反证用例)</td>
+  </tr>
+  <tr>
+    <td><strong>S2</strong><br>升级链</td>
+    <td><code>infra/versioning.py:36</code> config 7→8; <code>config/migrations.py</code> 新增 <code>_migrate_config_7_8</code>(口径 §3.3); tests-real <strong>14 文件</strong>(13 个测试片 + <code>tests-real/lib/app.py</code>)<code>schema_version</code> 字面量 7→8(<code>test_real_schema_version_guard.py</code> 自动跟随)。</td>
+    <td>迁移单测四形态: 无键 / 恰一条非空(搬) / 多条(删+note) / 全空(删+note); 反证: v7 树装载走迁移后校验绿且 note 落 WARNING</td>
+  </tr>
+  <tr>
+    <td><strong>S3</strong><br>探测后端</td>
+    <td>新 <code>src/auto_qb/infra/bt_backup_probe.py</code>: <code>candidates(platform)</code>(§2.3 矩阵; 后缀枚举配置目录; 便携 exe 定位 = win PowerShell <code>Get-CimInstance</code> 一次性子查询/posix <code>/proc</code> readlink, 失败=证据行, <strong>不新增依赖</strong>); <code>qualify</code>(<code>^40hex\.fastresume$</code> 或 <code>queue</code>); <code>verify</code>(hash 交集, v1+v2trunc 双算); <code>verdict</code>(§3.2 五态)。qB 事实(hashes/storage_type/online)由调用方以原语传入。</td>
+    <td>tmpdir 合成矩阵单测: 默认/便携/多后缀歧义/linux legacy 双候选/空目录不资格/SQLite 注入/离线降级; 零真实网络零真实 qB; 子进程调用钉 UTF-8 + 超时守护(R6)</td>
+  </tr>
+  <tr>
+    <td><strong>S4</strong><br>端点+UI</td>
+    <td><code>routes/relocate_chain.py</code> 新 <code>POST /api/relocate/bt_backup_probe</code>: 断连降级(hashes 空 + offline 标注, 不 503); 编辑器 <code>bt_backup_editor.js</code>/<code>tpl/bt-backup-editor.html</code> 重写: 单路径输入(placeholder「留空 = 未启用, 可点自动探测」)+ 按钮 + 证据展示区; <code>app.js:916,947</code> 头注释同步(读法2 口径)。</td>
+    <td><code>test_bt_backup_editor</code> 改版绿; 端点用例: hit/ambiguous/miss/unusable-sqlite/manual-set 五态各一, 另加 offline 断连降级用例(标注未自证); api 面守卫绿</td>
+  </tr>
+  <tr>
+    <td><strong>S5</strong><br>运行面</td>
+    <td><code>relocate_mod.py:79</code> sections() → <code>("relocate",)</code>; relocate_plan/relocate_exec 注释改标量口径; relocate_lifecycle.py:70 / relocate_journal.py:200 / recycle_daemon.py:19 注释同步; P6 认领完备守阵对应更新。</td>
+    <td>认领面守阵绿; relocate 全族测试绿(gates/exec/reconcile/run)</td>
+  </tr>
+  <tr>
+    <td><strong>S6</strong><br>全量+真机</td>
+    <td><code>commands run test.full</code>; 真机: 设置页按钮 → 命中 <code>%LOCALAPPDATA%\qBittorrent\BT_backup</code> → 回填保存 → RM04-21 形态整组迁移真机走通 fastresume 收尾。</td>
+    <td>全量绿 + 基线切片; 真机回填与迁移结果人工目检(G5, 人工步)</td>
+  </tr>
+  <tr>
+    <td><strong>S7</strong><br>收尾回写</td>
+    <td><code>pitfalls/backend/qb-fastresume-edit.md</code> 补键形状 v8 口径行; fastresume 收尾口径所在 architecture 主题文档实施时核认后回写; 代码事实变更核对根 README。</td>
+    <td>kb.check 绿; 档案 <code>kb.new task</code> + 基线切片 <code>kb.new baseline</code>(数字实测誊写)</td>
+  </tr>
+</table>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p>无——全部决策已在 grilling 中拍板(§06)。实施中若撞见新的待拍板项(含 §07 开放项), 按 scope-guard 停手, 不扩大本轮范围。</p>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+  <tr><th>编号</th><th>日期</th><th>结论</th><th>来源</th></tr>
+  <tr><td>D1</td><td>26-11-11</td><td>配置形状: 内嵌 <code>relocate.bt_backup</code> 标量, 顶层表退役——单实例语义固化进 schema; 认领面收单</td><td>grilling Q1</td></tr>
+  <tr><td>D2</td><td>26-11-11</td><td>兼容: 配置升级路线 v7→v8 迁移链, 不做长期双形状兼容读法</td><td>grilling Q2</td></tr>
+  <tr><td>D3</td><td>26-11-11</td><td>探测入口: <strong>仅设置页按钮显式触发</strong>(读法2); 无运行时隐式探测; 草稿留空 = 功能未启用(与现状一致, 保守默认零破)</td><td>grilling Q3 + Q7 澄清</td></tr>
+  <tr><td>D4</td><td>26-11-11</td><td>候选集: 多平台 × 多安装模式 × 便携, 推导式以 qB 源码取证为准(§2.2/§2.3); <code>--profile</code> 自定义不静态探测 → 手动键兜底</td><td>grilling Q4 + 取证报告</td></tr>
+  <tr><td>D5</td><td>26-11-11</td><td>歧义/失败: 拒不猜测, 只列证据, 配置一字不动</td><td>grilling Q5/Q9</td></tr>
+  <tr><td>D6</td><td>26-11-11</td><td>交付: 计划单文件 HTML, 拍板轮零代码, 实施等显式开工</td><td>grilling Q6</td></tr>
+  <tr><td>D7</td><td>26-11-11</td><td>迁移旧键处置: 恰一条非空 → 搬运 + note; 多条/全空 → 删 + note(不猜)</td><td>grilling Q8/Q9</td></tr>
+  <tr><td>D8</td><td>26-11-11</td><td>SQLite 存储模式: 探测 verdict 标「不可用」(unusable-sqlite), 与运行面<strong>既有 E 格预检</strong>同口径 —— relocate_plan.py:225-239 现读 <code>resume_data_storage_type</code>, 非 Legacy fail-closed 结构化拒绝(26-11-05-0808 S1 落地); <strong>无开放项</strong></td><td>取证新增, 按已拍板保守口径落; R1 轮修正定性(初版误判为缺口)</td></tr>
+  <tr><td>D9</td><td>26-11-11</td><td><code>bt_backup_path_of</code> 语义 = 纯读键, 签名不变(派生自 D1/D3, 消费方零改)</td><td>grilling 派生</td></tr>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+  <tr><th>#</th><th>风险</th><th>触发条件</th><th>处置</th></tr>
+  <tr><td>R1</td><td>SQLite resume 存储: BT_backup 非主存储, fastresume 改写无效</td><td>qB 切 <code>ResumeDataStorageType=SQLite</code>(WebAPI 可读, 取证 §2.2 末条)</td><td>双保险, 均已有落点: 运行面 E 格预检(<code>relocate_plan.py:225-239</code>, 非 Legacy fail-closed) + 探测 verdict = <code>unusable-sqlite</code>(S3/S4 已含) —— <strong>无缺口无开放项</strong></td></tr>
+  <tr><td>R2</td><td>qB 4.4.x hybrid 用 v1 hash 命名(4.5.0 起 v2 截断)</td><td>老 qB + hybrid 种子做 hash 自证</td><td>TorrentID 双算(v1 + v2trunc)求交(§3.2); 结构自证兜底</td></tr>
+  <tr><td>R3</td><td>远程 qB / 跨机部署: 文件系统不可见</td><td>auto-qb 与 qB 不同文件系统</td><td>探测恒落空属预期; 文案明示探测覆盖面, 引导手动键(help 文案 S1 已含)</td></tr>
+  <tr><td>R4</td><td>多 configuration 并存(多实例 qB 同机)</td><td>配置目录枚举出多个 <code>qBittorrent[_s]</code></td><td>拒不猜测列候选(D5); hash 自证消歧, 不能消歧 = <code>ambiguous</code></td></tr>
+  <tr><td>R5</td><td>wmic 已从新版 Win11 移除</td><td>便携 exe 定位走 PowerShell CIM 而非 wmic</td><td>定位失败 = 证据行说明, 降级手动键; 不抛栈</td></tr>
+  <tr><td>R6</td><td>子进程编码坑(cp1252 前科, issue 26-11-07-1216)</td><td>PowerShell 子进程调用</td><td>钉 UTF-8 + 超时守护(S3 验收已含); 用例覆盖</td></tr>
+  <tr><td>R7</td><td>探测误命中写错路径</td><td>候选目录结构巧合</td><td>资格判定需 <code>^40hex\.fastresume$</code> 或 <code>queue</code>; 歧义拒绝; 且按钮只回填<strong>草稿</strong>, 用户保存才落盘——误写配置不可能</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-11-0259</span> 初版: grilling 三轮九问拍板(D1-D9) + qB/libtorrent 源码取证(Explore 子代理只读) + 本机只读实测。要点: 顶层 bt_backup 表退役 → <code>relocate.bt_backup</code> 标量; v7→v8 搬迁迁移(D7); 设置页按钮探测五态裁决(§3.2, 按钮唯一入口 D3 读法2); 运行面零逻辑变化只改读键口径; SQLite 存储模式列为新发现风险(§07 R1)。</li>
+  <li><span class="tag">R1 · 26-11-11-0329</span> 评审轮 1 六条 minor 全修: versioning 行号 37→36(§2.1/§3.4 两处); verdict 判定顺序钉 unusable-sqlite 先于 manual-set(防态重叠吞警示); tests-real 13→14 文件(补 <code>tests-real/lib/app.py</code>); 端点用例清单纠正(offline 是标注非 verdict, 第五态 = manual-set); <strong>D8/R1 定性修正</strong> —— 运行面 SQLite 防护已存在(relocate_plan.py:225-239 E 格 fail-closed), 撤「开放项」表述; R6 坑档引文改指 issue 26-11-07-1216。</li>
+  <li><span class="tag">R2 · 26-11-11-0347</span> 提交闸门(vNu)拦出 §3.1 一处未闭合 <code>code</code> 标签(误写成 <code>&lt;/strong&gt;</code>), 已修正 —— 内容零变化, 纯合规修复。同轮发现本 shell 的 grep 对含 <code>/</code> 模式静默零命中(MSYS 参数改写, 险些误判「闭合标签全缺」), 坑面扩进 <code>pitfalls/ops/msys-container-path.md</code> 复发 2。</li>
+</ul>
+
+</div>
+</body>
+</html>
