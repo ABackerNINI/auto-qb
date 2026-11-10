@@ -47,6 +47,7 @@ async function readConfig() {
     siteOrigins: [],
     discoveryAddress: DEFAULT_DISCOVERY_ADDRESS,
     pairingCode: '',
+    servedVerdict: null, // 服务裁决快照(runDiscovery 每轮写; 三条外呼路径消费面据此过滤)
   });
   return {
     enabled: Boolean(got.enabled),
@@ -54,6 +55,7 @@ async function readConfig() {
     siteOrigins: Array.isArray(got.siteOrigins) ? got.siteOrigins : [],
     discoveryAddress: String(got.discoveryAddress || '').trim(),
     pairingCode: String(got.pairingCode || '').trim(),
+    servedVerdict: got.servedVerdict && typeof got.servedVerdict === 'object' ? got.servedVerdict : null,
   };
 }
 
@@ -136,9 +138,11 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
  */
 async function requestBackendRefresh() {
   const conf = await readConfig();
-  if (!conf.enabled || !conf.instances.length) return 0;
+  // 消费面过滤(S4a 裁决): 外呼只打服务集(手动恒在; 发现条目按 servedVerdict) —— 存储全量留给选项页
+  const serveList = servedInstancesOf(conf.instances, conf.servedVerdict);
+  if (!conf.enabled || !serveList.length) return 0;
   let total = 0;
-  for (const inst of conf.instances) {
+  for (const inst of serveList) {
     const label = inst.name || inst.endpoint || '(未命名)';
     const base = safeEndpoint(inst.endpoint);
     if (!base) continue;
@@ -224,8 +228,14 @@ async function pollAll(trigger) {
   let endpoints = null;
   try {
     const conf = await readConfig();
-    endpoints = conf.instances.map((e) => String((e && e.endpoint) || ''));
-    log('info', '轮询', `轮询开始(${trigger || '定时'}): ${conf.instances.length} 个实例`, { 扩展启用: conf.enabled ? '是' : '否' });
+    endpoints = conf.instances.map((e) => String((e && e.endpoint) || '')); // 台账剪枝看全量(裁决翻面不丢历史)
+    // 消费面过滤(S4a 裁决): 只轮询服务集(手动恒在; 发现条目按 servedVerdict) ——
+    // needsSelection / ambiguous / selectedMissing / noAnswer 态这里只剩手动条目, 不混轮任何 clone
+    const serveList = servedInstancesOf(conf.instances, conf.servedVerdict);
+    log('info', '轮询', `轮询开始(${trigger || '定时'}): ${serveList.length} 个实例`, {
+      扩展启用: conf.enabled ? '是' : '否',
+      裁决: conf.servedVerdict && conf.servedVerdict.state ? conf.servedVerdict.state : '(未裁决)',
+    });
     if (!conf.enabled) return;
     if (!conf.instances.length) {
       await noteStatus({ text: '未配置实例端点(打开选项页填写)' });
@@ -234,7 +244,7 @@ async function pollAll(trigger) {
     }
     const lines = [];
     let failCount = 0;
-    for (const inst of conf.instances) {
+    for (const inst of serveList) {
       try {
         const outcome = await pollInstance(inst);
         lines.push(outcome.line);
@@ -402,9 +412,12 @@ async function probeInstance(inst) {
  */
 async function probeAll() {
   const conf = await readConfig();
-  const endpoints = conf.instances.map((e) => String((e && e.endpoint) || ''));
+  const endpoints = conf.instances.map((e) => String((e && e.endpoint) || '')); // 台账剪枝看全量
+  // 消费面过滤(S4a 裁决): 只探测服务集(手动恒在; 发现条目按 servedVerdict) —— 未被服务的
+  // 发现条目不进探测结果(选项页列表仍列全量, 行级开关接线属 T4)
+  const serveList = servedInstancesOf(conf.instances, conf.servedVerdict);
   const results = [];
-  for (const inst of conf.instances) {
+  for (const inst of serveList) {
     try {
       results.push(await probeInstance(inst));
     } catch (e) {

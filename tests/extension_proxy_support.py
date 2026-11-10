@@ -677,8 +677,371 @@ def discovery_helpers_trace() -> dict:
     return _DISCOVERY_HELPERS_TRACE
 
 
-#: 真跑 background.js 的发现流程: 三候选并行探测(命中次位)/ 配对码随头上来 / 合并落盘 /
-#: 401 pairing_required 置标记 / 异形应答按「非本服务」忽略 / 全未命中明确报告(退手动, 不静默)。
+#: 真跑 discovery.js 的裁决状态机 adjudicateInstances(计划 26-11-10-0515 装置二/S4a, 纯函数):
+#: 六态真值表 + P2 手动恒服务 + D8 兼容粒度(应答份)+ 标签回落与去重。
+_NODE_RUN_ADJUDICATE = """
+const fs = require('fs');
+const src = fs.readFileSync(process.argv[1], 'utf8');
+const mod = new Function(src + '\\nreturn {adjudicateInstances, answerLabelNames, instanceLabel, servedInstancesOf};')();
+const M = [{ name: 'm', endpoint: 'http://127.0.0.1:6001', token: 'km' }];
+const P = [{ id: 'p', name: 'prod', endpoint: 'http://127.0.0.1:5001', token: 'k1' }];
+const D = [{ id: 'd', name: 'dev', endpoint: 'http://127.0.0.1:5002', token: 'k2' }];
+const out = {};
+// 唯一应答 + 无选择 -> auto: 手动置顶 + 整份照收, 选择 = 应答唯一标签(待持久化)
+out.auto = mod.adjudicateInstances([{ port: '18788', instances: P }], [], M);
+// D8 legacy 行: 旧后端聚合全机 = 一份含 N 实例的应答, 恰 1 份照收全部(等价今天);
+// 但标签去重后 >1 -> selection 空(不持久化, 下轮重新裁决 —— 旧 uuid 不被 pin)
+out.legacy = mod.adjudicateInstances([{ port: '18788', instances: [P[0], D[0]] }], [], []);
+// 两份应答 + 无选择 -> needsSelection: 一个都不服务(只手动), 无选择可持久化
+out.needsSel = mod.adjudicateInstances(
+  [{ port: '18788', instances: P }, { port: '18789', instances: D }], [], M
+);
+// 有选择 -> 只服务所选标签的应答(另一份不进服务集)
+out.selected = mod.adjudicateInstances(
+  [{ port: '18788', instances: P }, { port: '18789', instances: D }], ['prod'], M
+);
+// 撞名歧义: 两份应答都带所选标签(两 clone 撞名 / legacy 应答含同名条) -> 不允许以
+// 「用户已选择」名义静默全服务, 只打手动, 选择原样保留, 绝不改投
+out.ambiguous = mod.adjudicateInstances(
+  [{ port: '18788', instances: P },
+   { port: '18789', instances: [{ id: 'p2', name: 'prod', endpoint: 'http://127.0.0.1:5011', token: 'kx' }] }],
+  ['prod'], M
+);
+// 所选 clone 消失 -> selectedMissing: 服务空转(只手动), 绝不自动改投别家, 选择原样保留
+out.selMissing = mod.adjudicateInstances([{ port: '18789', instances: D }], ['prod'], M);
+// 零应答 + 有选择: 同为空转
+out.noAnswerSel = mod.adjudicateInstances([], ['prod'], M);
+// 零应答 + 无选择: noAnswer
+out.noAnswer = mod.adjudicateInstances(null, null, null);
+// 缺 name 的实例按 endpoint 当标签(与持久化同一把钥匙)
+out.labelFallback = mod.adjudicateInstances(
+  [{ port: '18788', instances: [{ endpoint: 'http://127.0.0.1:5009', token: 't' }] }], [], []
+);
+// 空 instances 的应答不算一份候选(没有可服务实体), 不把 1 份真应答顶成 needsSelection
+out.emptyAnswer = mod.adjudicateInstances(
+  [{ port: '18788', instances: [] }, { port: '18789', instances: D }], [], M
+);
+// 与手动同端点的发现条目让位(Q8 手动整条胜延伸到服务面): 不重复进服务集
+out.manCollide = mod.adjudicateInstances(
+  [{ port: '18788', instances: [{ id: 'x', name: 'm2', endpoint: 'http://127.0.0.1:6001', token: 'k9' }] }], [], M
+);
+// 同一份应答内 endpoint 重复 -> 服务集去重保首个(对齐 mergeInstances, 计数不虚高 —— 评审轮 2 修 3a)
+out.dupEps = mod.adjudicateInstances(
+  [{ port: '18788', instances: [
+    { id: 'a1', name: 'a', endpoint: 'http://127.0.0.1:5021', token: 't1' },
+    { id: 'a2', name: 'b', endpoint: 'http://127.0.0.1:5021', token: 't2' },
+  ] }],
+  [], []
+);
+// 缺 token 的手动条目: 消费面 isManualEntry 现判放行, 服务集**原样透传**同口径(计数不虚低 —— 修 3b)
+out.tokenlessManual = mod.adjudicateInstances([{ port: '18788', instances: P }], [], [
+  { name: 'm3', endpoint: 'http://127.0.0.1:6003' },
+]);
+// 同一 clone 多条目同标签 -> 标签去重; 缺 name 缺 endpoint 的废条不给标签
+out.labels = mod.answerLabelNames([
+  { name: 'nas', endpoint: 'a' }, { name: 'nas', endpoint: 'b' }, { endpoint: 'c' }, { name: '  ' },
+]);
+// 消费面过滤 servedInstancesOf: 裁决快照缺失 = 升级瞬态, 退化全量(等价升级前);
+// needsSelection/空 discovered = 只手动; selected = 手动 + 白名单端点; 手动按 isManualEntry
+// 现判(裁决轮间隙新加的手动条目照常服务); 顺序保持存储原序
+const STORE = [
+  M[0],
+  { name: 'd1', endpoint: 'http://127.0.0.1:5001', token: 'k1', source: 'discovered' },
+  { name: 'd2', endpoint: 'http://127.0.0.1:5002', token: 'k2', source: 'discovered' },
+  { name: 'm2', endpoint: 'http://127.0.0.1:6002', token: 'km2' },
+];
+out.wireFallback = mod.servedInstancesOf(STORE, null);
+out.wireNeeds = mod.servedInstancesOf(STORE, { state: 'needsSelection', discovered: [] });
+out.wireSelected = mod.servedInstancesOf(STORE, { state: 'selected', discovered: ['http://127.0.0.1:5001'] });
+out.wireLegacyVerdict = mod.servedInstancesOf(STORE, {});
+process.stdout.write(JSON.stringify(out));
+"""
+
+_ADJUDICATE_TRACE: dict = {}
+
+
+def adjudicate_trace() -> dict:
+    """跑一次 node 拿裁决状态机的全部断言点(缓存: 裁决规则多条用例共用同一次 node 运行)"""
+    if _ADJUDICATE_TRACE:
+        return _ADJUDICATE_TRACE
+    node = _node()
+    if not node:
+        return {}
+    proc = _run_node([node, "-e", _NODE_RUN_ADJUDICATE, str(DISCOVERY_JS)])
+    assert proc.returncode == 0, f"node 执行 discovery.js 裁决状态机失败: {proc.stderr.strip()}"
+    _ADJUDICATE_TRACE.update(json.loads(proc.stdout))
+    return _ADJUDICATE_TRACE
+
+
+#: 真跑 background.js 的发现裁决流程(S4a): 两 clone 各占一个候选口应答 —— 多命中收集(不再 find-first)/
+#: needsSelection 零服务零持久化 / 按选择服务 / 所选消失空转且 activeNames 抗发现集整批替换 /
+#: 清除选择回 auto 并持久化 / 手动条目恒服务 / D8 legacy 应答(旧后端聚合全机)恰 1 份整份自动服务。
+_NODE_RUN_DISCOVERY_VERDICT = """
+const fs = require('fs');
+const vm = require('vm');
+const noop = { addListener() {} };
+const store = { enabled: true, logLevel: 'debug', discoveryAddress: 'http://127.0.0.1:18788' };
+let mode = 'two';   // two = 两 clone 各占一口 | devOnly = 只剩 dev | prodOnly | legacy = 旧后端聚合全机
+const CLONE_P = { instances: [{ id: 'p', name: 'prod', endpoint: 'http://127.0.0.1:5001', token: 'k1' }] };
+const CLONE_D = { instances: [{ id: 'd', name: 'dev', endpoint: 'http://127.0.0.1:5002', token: 'k2' }] };
+const LEGACY = { instances: [
+  { id: 'l1', name: 'old1', endpoint: 'http://127.0.0.1:5003', token: 'k3' },
+  { id: 'l2', name: 'old2', endpoint: 'http://127.0.0.1:5004', token: 'k4' },
+] };
+const chrome = {
+  alarms: { create() {}, onAlarm: noop },
+  runtime: { onInstalled: noop, onStartup: noop, onMessage: noop },
+  permissions: { onAdded: noop },
+  storage: { onChanged: noop, local: {
+    get: (defaults) => { const out = {}; for (const k of Object.keys(defaults || {})) out[k] = (k in store) ? store[k] : defaults[k]; return Promise.resolve(out); },
+    set: (obj) => { Object.assign(store, obj); return Promise.resolve(); },
+  } },
+};
+const sandbox = { chrome, importScripts: () => {}, console, setTimeout, clearTimeout, Date, Promise, JSON, URL,
+  fetch: async (url) => {
+    const u = String(url);
+    if (!u.endsWith('/api/hr/discover')) return { ok: true, status: 200, json: async () => ({ tasks: [] }) };
+    const port = Number(new URL(u).port);
+    const hit = (body) => ({ status: 200, json: async () => body });
+    const miss = () => ({ status: 404, json: async () => ({}) });
+    if (mode === 'two') {
+      if (port === 18788) return hit(CLONE_P);
+      if (port === 18789) return hit(CLONE_D);
+      return miss();
+    }
+    if (mode === 'devOnly') return port === 18789 ? hit(CLONE_D) : miss();
+    if (mode === 'prodOnly') return port === 18788 ? hit(CLONE_P) : miss();
+    if (mode === 'legacy') return port === 18788 ? hit(LEGACY) : miss();
+    return miss();
+  } };
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync(process.argv[2], 'utf8'), sandbox);   // normalize.js
+vm.runInContext(fs.readFileSync(process.argv[3], 'utf8'), sandbox);   // discovery.js
+vm.runInContext(fs.readFileSync(process.argv[4], 'utf8'), sandbox);   // site-caps.js
+vm.runInContext(fs.readFileSync(process.argv[1], 'utf8'), sandbox);   // background.js
+const endpoints = () => (store.instances || []).map((e) => e.endpoint);
+const snap = (v) => JSON.parse(JSON.stringify(v));
+(async () => {
+  const out = {};
+  store.instances = [{ name: 'm1', endpoint: 'http://127.0.0.1:6001', token: 'km' }];   // 手动条目
+  // r1: 两份应答 + 无选择 -> needsSelection: 发现条目全落库(选项页要列全), 但服务集只手动、不持久化选择
+  out.r1 = await sandbox.runDiscovery('t');
+  out.r1Endpoints = endpoints();
+  out.r1Active = snap(store.activeNames === undefined ? null : store.activeNames);
+  out.r1Snapshot = snap(store.lastDiscovery || null);
+  // r2: 按选择 prod 服务 -> 服务集 = 手动 + prod
+  store.activeNames = ['prod'];
+  out.r2 = await sandbox.runDiscovery('t');
+  out.r2Active = snap(store.activeNames);
+  out.r2Snapshot = snap(store.lastDiscovery || null);
+  // r3: 所选 prod 消失(只剩 dev) -> selectedMissing 空转; prod 条目被发现集整批替换剪除,
+  //     但 activeNames 纹丝不动(独立存储键, 抗整批替换 = S4a 硬要求)
+  mode = 'devOnly';
+  out.r3 = await sandbox.runDiscovery('t');
+  out.r3Endpoints = endpoints();
+  out.r3Active = snap(store.activeNames);
+  out.r3Snapshot = snap(store.lastDiscovery || null);
+  // r4: 用户清除选择 -> 回无选择分支: 单份应答 auto, 选择持久化为该应答的全部标签
+  store.activeNames = [];
+  out.r4 = await sandbox.runDiscovery('t');
+  out.r4Active = snap(store.activeNames);
+  out.r4Snapshot = snap(store.lastDiscovery || null);
+  // r5: 选择 dev + 两份应答 -> 只服务 dev 一份(prod 不进服务集)
+  mode = 'two';
+  out.r5 = await sandbox.runDiscovery('t');
+  out.r5Active = snap(store.activeNames);
+  out.r5Snapshot = snap(store.lastDiscovery || null);
+  // r6(D8 legacy 行): 清选择后单份 legacy 应答(聚合全机 2 实例) -> auto 整份照收并持久化两个标签
+  mode = 'legacy';
+  store.activeNames = [];
+  out.r6 = await sandbox.runDiscovery('t');
+  out.r6Endpoints = endpoints();
+  out.r6Active = snap(store.activeNames);
+  out.r6Snapshot = snap(store.lastDiscovery || null);
+  process.stdout.write(JSON.stringify(out));
+})();
+"""
+
+_DISCOVERY_VERDICT_TRACE: dict = {}
+
+
+def discovery_verdict_trace() -> dict:
+    """跑一次 node 拿发现裁决流程的全部断言点(缓存: 多条用例共用同一次 node 运行)"""
+    if _DISCOVERY_VERDICT_TRACE:
+        return _DISCOVERY_VERDICT_TRACE
+    node = _node()
+    if not node:
+        return {}
+    proc = _run_node(
+        [
+            node, "-e", _NODE_RUN_DISCOVERY_VERDICT,
+            background_bundle(),
+            str(NORMALIZE_JS),
+            str(DISCOVERY_JS),
+            str(SITE_CAPS_JS)
+        ]
+    )
+    assert proc.returncode == 0, f"node 跑 background.js 的发现裁决流程失败: {proc.stderr.strip()}"
+    _DISCOVERY_VERDICT_TRACE.update(json.loads(proc.stdout))
+    return _DISCOVERY_VERDICT_TRACE
+
+
+#: 真跑 background.js 的**外呼消费面接线**(S4a 评审必修 1): pollAll / requestBackendRefresh /
+#: probeAll 三条路径只打「裁决后服务集」(servedInstancesOf + 每轮落盘的 servedVerdict)——
+#: needsSelection 态全轮询(含测试世界 clone)是 T3 提交态的回归, 这里钉死: 存储发现条目仍全量
+#: (选项页列全), 三条外呼在 needsSelection / selectedMissing 态只打手动条目, selected 态打
+#: 手动 + 所选 clone; 裁决快照 served 数与真实外呼数同源一致。
+_NODE_RUN_SERVED_WIRING = """
+const fs = require('fs');
+const vm = require('vm');
+const noop = { addListener() {} };
+const EP_M = 'http://127.0.0.1:6001';    // 手动条目
+const EP_P = 'http://127.0.0.1:5001';    // clone prod(候选口 18788)
+const EP_D = 'http://127.0.0.1:5002';    // clone dev(候选口 18789)
+const store = { enabled: true, logLevel: 'debug', discoveryAddress: 'http://127.0.0.1:18788' };
+let mode = 'two';   // two = 两 clone 各占一口 | devOnly = 只剩 dev | prodOnly | empty = 200 + instances:[]
+const CLONE_P = { instances: [{ id: 'p', name: 'prod', endpoint: EP_P, token: 'k1' }] };
+const CLONE_D = { instances: [{ id: 'd', name: 'dev', endpoint: EP_D, token: 'k2' }] };
+let dataFetches = [];
+let onMessageFn = null;
+const chrome = {
+  alarms: { create() {}, onAlarm: noop },
+  runtime: {
+    onInstalled: noop, onStartup: noop,
+    onMessage: { addListener: (fn) => { onMessageFn = fn; } },
+  },
+  permissions: { onAdded: noop },
+  action: { onClicked: { addListener() {} } },
+  storage: { onChanged: noop, local: {
+    get: (defaults) => { const out = {}; for (const k of Object.keys(defaults || {})) out[k] = (k in store) ? store[k] : defaults[k]; return Promise.resolve(out); },
+    set: (obj) => { Object.assign(store, obj); return Promise.resolve(); },
+  } },
+};
+const sandbox = { chrome, importScripts: () => {}, console, setTimeout, clearTimeout, Date, Promise, JSON, URL,
+  fetch: async (url, opts) => {
+    const u = String(url);
+    if (u.endsWith('/api/hr/discover')) {
+      const port = Number(new URL(u).port);
+    if (mode === 'two') {
+      if (port === 18788) return { status: 200, json: async () => CLONE_P };
+      if (port === 18789) return { status: 200, json: async () => CLONE_D };
+      return { status: 404, json: async () => ({}) };
+    }
+    if (mode === 'empty') {
+      // 单 clone 重启、registry 未热身: 端点有应答(200)但 instances 空
+      return port === 18788 ? { status: 200, json: async () => ({ instances: [] }) } : { status: 404, json: async () => ({}) };
+    }
+    if (mode === 'prodOnly') return port === 18788 ? { status: 200, json: async () => CLONE_P } : { status: 404, json: async () => ({}) };
+    return port === 18789 ? { status: 200, json: async () => CLONE_D } : { status: 404, json: async () => ({}) };
+    }
+    dataFetches.push(u);
+    if (u.endsWith('/api/hr/refresh')) return { ok: true, status: 200, json: async () => ({ requested: ['a', 'b'] }) };
+    if (u.startsWith(EP_D)) return { ok: false, status: 401, json: async () => ({}) };   // dev 探测/轮询给行级红
+    return { ok: true, status: 200, json: async () => ({ tasks: [], next_poll_s: 60 }) };
+  } };
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync(process.argv[2], 'utf8'), sandbox);   // normalize.js
+vm.runInContext(fs.readFileSync(process.argv[3], 'utf8'), sandbox);   // discovery.js
+vm.runInContext(fs.readFileSync(process.argv[4], 'utf8'), sandbox);   // site-caps.js
+vm.runInContext(fs.readFileSync(process.argv[1], 'utf8'), sandbox);   // background.js
+const eps = () => dataFetches.map((u) => u.split('/api/')[0]);
+const labels = (resp) => (resp.results || []).map((r) => String(r.line || '').split(':')[0]);
+const snap = (v) => JSON.parse(JSON.stringify(v));
+(async () => {
+  const out = {};
+  store.instances = [{ name: 'm1', endpoint: EP_M, token: 'km' }];
+  // 阶段 1: 两份应答 + 无选择 -> needsSelection: 三条外呼都只打手动, 发现条目全量落库但零外呼
+  await sandbox.runDiscovery('t');
+  out.state = store.servedVerdict && store.servedVerdict.state;
+  out.storedEndpoints = (store.instances || []).map((e) => e.endpoint);   // 全量落库(选项页列全)
+  out.verdictDiscovered = store.servedVerdict && store.servedVerdict.discovered;
+  dataFetches = [];
+  await sandbox.pollAll('t');
+  out.pollNeeds = eps();
+  dataFetches = [];
+  await sandbox.requestBackendRefresh();
+  out.refreshNeeds = eps();
+  let probeResp = null;
+  onMessageFn({ type: 'probe-all' }, {}, (r) => { probeResp = r; });
+  for (let i = 0; i < 400 && probeResp === null; i += 1) await new Promise((r) => setTimeout(r, 5));
+  out.probeNeeds = labels(probeResp);
+  // 阶段 2: 选择 prod -> selected: 轮询/探测/立即拉取都打 手动 + prod, 不碰 dev; 快照 served 数一致
+  dataFetches = [];
+  store.activeNames = ['prod'];
+  const r2 = await sandbox.runDiscovery('t');
+  out.state2 = r2.verdict;
+  out.servedSnapshot = snap(store.lastDiscovery || {}).served;
+  out.verdictDiscovered2 = store.servedVerdict && store.servedVerdict.discovered;
+  dataFetches = [];
+  await sandbox.pollAll('t');
+  out.pollSelected = eps();
+  dataFetches = [];
+  await sandbox.requestBackendRefresh();
+  out.refreshSelected = eps();
+  out.refreshTotal = await sandbox.requestBackendRefresh();
+  probeResp = null;
+  onMessageFn({ type: 'probe-all' }, {}, (r) => { probeResp = r; });
+  for (let i = 0; i < 400 && probeResp === null; i += 1) await new Promise((r) => setTimeout(r, 5));
+  out.probeSelected = labels(probeResp);
+  // 阶段 3: 所选 prod 消失(只剩 dev) -> selectedMissing: 三条外呼回落到只打手动(绝不改投 dev)
+  mode = 'devOnly';
+  const r3 = await sandbox.runDiscovery('t');
+  out.state3 = r3.verdict;
+  dataFetches = [];
+  await sandbox.pollAll('t');
+  out.pollMissing = eps();
+  dataFetches = [];
+  await sandbox.requestBackendRefresh();
+  out.refreshMissing = eps();
+  // 阶段 4(评审轮 2 修 1): 空应答击穿 C1 消费面 —— 先恢复单 clone auto 白名单, 再打
+  // 「200 + instances:[]」(registry 未热身的重启瞬间): 落库面 C1 保留 prevDiscovered, 消费面
+  // 白名单**沿用上轮**, 轮询不断(真死了也有失败可触发「失败即发现」, 自愈链路完整), 不清成停服
+  mode = 'prodOnly';
+  store.activeNames = [];
+  const rp = await sandbox.runDiscovery('t');
+  out.stateAutoP = rp.verdict;
+  out.discAutoP = store.servedVerdict && store.servedVerdict.discovered;
+  mode = 'empty';
+  const re = await sandbox.runDiscovery('t');
+  out.stateEmpty = re.verdict;
+  out.discEmpty = store.servedVerdict && store.servedVerdict.discovered;
+  out.snapshotEmpty = snap(store.lastDiscovery || {}).served;
+  dataFetches = [];
+  await sandbox.pollAll('t');
+  out.pollEmpty = eps();
+  process.stdout.write(JSON.stringify(out));
+})();
+"""
+
+_SERVED_WIRING_TRACE: dict = {}
+
+
+def served_wiring_trace() -> dict:
+    """跑一次 node 拿外呼消费面接线的全部断言点(缓存: 多条用例共用同一次 node 运行)"""
+    if _SERVED_WIRING_TRACE:
+        return _SERVED_WIRING_TRACE
+    node = _node()
+    if not node:
+        return {}
+    proc = _run_node(
+        [
+            node, "-e", _NODE_RUN_SERVED_WIRING,
+            background_bundle(),
+            str(NORMALIZE_JS),
+            str(DISCOVERY_JS),
+            str(SITE_CAPS_JS)
+        ]
+    )
+    assert proc.returncode == 0, f"node 跑 background.js 的外呼消费面接线失败: {proc.stderr.strip()}"
+    _SERVED_WIRING_TRACE.update(json.loads(proc.stdout))
+    return _SERVED_WIRING_TRACE
+
+
+#: 真跑 background.js 的发现流程: 八候选并行探测(命中次位)/ 配对码随头上来 / 合并落盘 +
+#: 清等待标记 / 401 pairing_required 置标记 / 异形应答按「非本服务」忽略 / 全未命中明确报告(退手动)。
+#: !S4a 起应答全部收集进裁决 —— 桩只让次候选(18789)应答: 一个 clone 只绑一个口, 这是真实拓扑;
+#:   多命中 + 裁决的专测在 _NODE_RUN_DISCOVERY_VERDICT(若让 7 个口全答同一份, 会被如实判成
+#:   needsSelection, 那不是本用例要钉的东西)。
 _NODE_RUN_DISCOVERY_FLOW = """
 const fs = require('fs');
 const vm = require('vm');
@@ -705,7 +1068,7 @@ const sandbox = { chrome, importScripts: () => {}, console, setTimeout, clearTim
     if (mode === 'down') throw new TypeError('Failed to fetch');
     if (mode === 'pairing') return { status: 401, json: async () => ({ error: 'pairing_required' }) };
     if (mode === 'weird') return { status: 200, json: async () => ({ html: '<html>not-us</html>' }) };
-    if (mode === 'ok-second' && Number(new URL(url).port) === 18788) return { status: 404, json: async () => ({}) };
+    if (mode === 'ok-second' && Number(new URL(url).port) !== 18789) return { status: 404, json: async () => ({}) };
     return { status: 200, json: async () => DISCOVER_BODY };
   } };
 vm.createContext(sandbox);
@@ -718,6 +1081,8 @@ vm.runInContext(fs.readFileSync(process.argv[1], 'utf8'), sandbox);   // backgro
   out.hit = await sandbox.runDiscovery('测试');
   out.hitCalls = calls.slice();
   out.instances = JSON.parse(JSON.stringify(store.instances || []));
+  out.activeNames = JSON.parse(JSON.stringify(store.activeNames === undefined ? null : store.activeNames));
+  out.snapshot = JSON.parse(JSON.stringify(store.lastDiscovery || null));
   out.pairingCleared = store.pairingNeeded;
   calls = []; mode = 'pairing';
   store.pairingNeeded = false;
@@ -865,6 +1230,28 @@ const snap = (v) => JSON.parse(JSON.stringify(v));
   out.hasOnClicked = typeof onClicked === 'function';
   if (onClicked) await onClicked();
   out.opened = opened;
+  // 评审轮 2 修 2: anyOk 按**服务集**算 —— 停服条目(第二个 clone 上线 -> needsSelection 把原
+  // clone 停服)的健康台账冻结, 按全量算徽标恒亮「连接正常」, 与 P2「显性失败: 亮着等选」矛盾。
+  // 同一份冻结 ok 台账: 白名单不含它 -> 不得亮 ok(回落 reconnecting); 白名单含它 -> 照常 ok。
+  const FROZEN_D = { name: 'd', endpoint: 'http://127.0.0.1:9003', token: 'k', source: 'discovered' };
+  const FROZEN_H = { 'http://127.0.0.1:9003': { ok: true, at: 1, note: '', state: 'ok', failStreak: 0 } };
+  out.verdictBadgeFrozen = sandbox.badgeStateOf({
+    instances: [FROZEN_D],
+    discoveryAddress: 'http://127.0.0.1:18788',
+    instanceHealth: FROZEN_H,
+    servedVerdict: { state: 'needsSelection', discovered: [] },
+  });
+  out.verdictBadgeSelected = sandbox.badgeStateOf({
+    instances: [FROZEN_D],
+    discoveryAddress: 'http://127.0.0.1:18788',
+    instanceHealth: FROZEN_H,
+    servedVerdict: { state: 'selected', discovered: ['http://127.0.0.1:9003'] },
+  });
+  out.verdictBadgeNoVerdict = sandbox.badgeStateOf({
+    instances: [FROZEN_D],
+    discoveryAddress: 'http://127.0.0.1:18788',
+    instanceHealth: FROZEN_H,
+  });
   process.stdout.write(JSON.stringify(out));
 })();
 """
@@ -1059,7 +1446,14 @@ function objKeys(src, name) {
 }
 const bg = fs.readFileSync(process.argv[1], 'utf8');
 const opt = fs.readFileSync(process.argv[2], 'utf8');
-const badgeFn = new Function(grab(bg, 'badgeStateOf') + '\\nreturn badgeStateOf;')();
+const disc = fs.readFileSync(process.argv[3], 'utf8');
+// badgeStateOf(评审轮 2 修 2 起)经 servedInstancesOf/isManualEntry 按服务集算 anyOk —— 两函数
+// 定义在 discovery.js(importScripts 序在 support 之前), 切出函数体单独跑时要把依赖一并带上
+const badgeFn = new Function(
+  grab(disc, 'isManualEntry') + '\\n' +
+  grab(disc, 'servedInstancesOf') + '\\n' +
+  grab(bg, 'badgeStateOf') + '\\nreturn badgeStateOf;'
+)();
 const connFn = new Function(grab(opt, 'connStateOf') + '\\nreturn connStateOf;')();
 const A = 'http://127.0.0.1:9001';
 const cases = [

@@ -36,6 +36,36 @@
 - test_background_discovery_flow: 真跑 background.js 发现流程 —— 三候选并行探测(命中次位, V11)/ 配对码随
   X-Hr-Pairing 上来 / 合并落盘 + 清 pairingNeeded / 401 pairing_required 置标记(选项页提示输入配对码)/
   全未命中明确报告(退手动, 不静默)
+### 多 clone 发现裁决轮(计划 26-11-10-0515 S4a 装置二 + 评审收口): 全命中收集 + 显式裁决状态机 + 外呼接线
+- test_adjudication_state_machine: 真跑 discovery.js::adjudicateInstances **六态**真值表 —— 唯一应答
+  无选择 = auto(手动置顶 + 整份照收 + 选择=应答唯一标签)/ >=2 份无选择 = needsSelection(一个都不
+  服务)/ 有选择只服务所选标签的应答 / 多份应答撞所选标签 = ambiguous(只打手动, 不以「已选择」名义
+  静默全服务, 评审必修 2)/ 所选消失 = selectedMissing 空转绝不自动改投 / 零应答 = noAnswer/
+  P2 手动条目恒在服务集(与手动同端点的发现条目让位, Q8 延伸到服务面)/ D8 兼容粒度 = 应答份不是
+  实例条(legacy 聚合全机恰 1 份整份照收, 但标签 >1 不给持久化选择 —— 评审必修 3, 旧 uuid 不被 pin)/
+  缺 name 按 endpoint 当标签(与持久化同一把钥匙)/ 空 instances 应答不算一份候选 + 消费面过滤
+  servedInstancesOf(快照缺失退化全量 = 升级瞬态等价升级前; 白名单过滤; 手动现判恒过)+
+  计数口径(评审轮 2 修 3): 同一份应答 endpoint 重复去重保首个不虚高 / 缺 token 手动条目原样透传
+  与消费面同一把尺不虚低
+- test_outbound_paths_follow_verdict 追加(评审轮 2): 空 instances 应答 -> C1 消费面对齐, 白名单沿用
+  上轮、轮询不断(自愈触发器靠真实失败仍可触发); 沿用轮 served 计数与真实外呼一致
+- test_badge_reflects_connection_state 追加(评审轮 2 修 2): anyOk 按**服务集**算 —— needsSelection
+  停服的原 clone 即便健康台账冻结 ok, 徽标也不得亮「连接正常」(回落 reconnecting); 白名单内的
+  同一份台账照常 ok; 快照缺失(升级瞬态)退化全量行为不变
+- test_discovery_collects_all_hits_and_adjudicates: 真跑 background.js 发现裁决流程 —— 两 clone 各占
+  一候选口全命中收集(不再 find-first, 发现条目全落库供选项页列全但服务集只手动)/ needsSelection
+  不持久化 / 按选择服务(另一份不进服务集)/ 所选消失 = selectedMissing 空转且 prod 条目被整批替换
+  剪除而 activeNames 纹丝不动(独立存储键抗 mergeInstances 整批替换 + options 三键重建)/ 清除选择回
+  auto 并持久化 / 手动恒服务(每轮服务集都含)/ D8 legacy 行(必修 3): 整份 auto 照收但标签 >1 不写
+  activeNames, 下轮重新裁决
+- test_outbound_paths_follow_verdict: 真跑 background.js **外呼消费面接线**(评审必修 1)—— pollAll /
+  requestBackendRefresh / probeAll 三条路径只打裁决后服务集(servedInstancesOf + 每轮落盘的
+  servedVerdict): needsSelection/selectedMissing 态三条路径都只打手动(不混轮任何发现 clone, 修掉
+  T3 提交态「needsSelection 全轮询含测试世界」的回归)/ selected 态打 手动 + 所选 clone 不碰另一份/
+  存储发现条目仍全量(落库面不变, 选项页列全)/ 快照 served 数与真实外呼数同源一致
+- 兼容矩阵四行(计划 §03/D8 只加不改)的落点: 新+新 = 上面三测; 旧+新 = legacy 行(同上测的 legacy
+  分支); 新+旧与旧+旧 = 旧扩展不在本仓, 属后端侧行为(S1 按 clone 拆分 + S3 标签已各自有测), node 侧
+  无可测对象 —— 本面只钉新扩展对各种应答形态的裁决与消费行为
 ### 连接自愈轮(计划 26-10-15-2357 S1/S2): 合并语义翻转 + 自愈触发 + 徽标 + 台账
 - 合并语义翻转(Q1/Q2/Q8/C1): 旧断言「同端点被发现覆盖 / 只增不减」是被本计划翻转的旧语义, 随计划更新
   而非守阵松动 —— 手动条目 = 高优先级(整条胜 + 置顶 + 永不自动删), 发现集 = 租约(整批替换, 空集除外)。
@@ -118,6 +148,9 @@ from extension_proxy_support import (
     NORMALIZE_JS,
     OPTIONS_HTML,
     OPTIONS_JS,
+    adjudicate_trace,
+    discovery_verdict_trace,
+    served_wiring_trace,
     PAGE_WITH_TABLE,
     SITE_CAPS_JS,
     _DISCOVERY_HELPERS_TRACE,
@@ -470,7 +503,10 @@ def test_merge_instances_discovered_set_replaced():
 
 def test_background_discovery_flow():
     """真跑 background.js 的发现流程 —— 八候选并行探测(命中次位)/ 配对码随头上来 / 合并落盘 +
-    清等待标记 / 401 pairing_required 置标记 / 异形应答按「非本服务」忽略 / 全未命中明确报告(退手动)"""
+    清等待标记 / 401 pairing_required 置标记 / 异形应答按「非本服务」忽略 / 全未命中明确报告(退手动)
+    S4a 补钉: 唯一应答无选择 = auto 整份照收, 快照带裁决态与命中端口表。
+    !桩应答含 2 个不同标签实例(= legacy 聚合形态): 按评审必修 3 **不持久化** activeNames
+    (标签 >1 不 pin, 下轮重新裁决)—— 单标签 auto 持久化的专测在 test_discovery_collects_...(r4)。"""
     node = _node()
     if not node:
         return  # 没装 node: 与其它前端守阵同口径静默跳过
@@ -486,15 +522,199 @@ def test_background_discovery_flow():
     assert proc.returncode == 0, f"node 跑 background.js 的发现流程失败: {proc.stderr.strip()}"
     got = json.loads(proc.stdout)
     assert got["hit"]["ok"] is True and got["hit"]["merged"] == 2, got["hit"]
+    assert got["hit"]["verdict"] == "auto", f"唯一应答无选择 = 自动服务(裁决态可观测): {got['hit']}"
     discover_calls = [c for c in got["hitCalls"] if c[0].endswith(API_DISCOVER)]
     assert len(discover_calls) == 8, f"八个候选并行探测(计划 26-11-10-0515 S2/D6): {got['hitCalls']}"
     assert all(c[1] == "123456" for c in discover_calls), "配对码随 X-Hr-Pairing 上来"
     assert [e["endpoint"] for e in got["instances"]] == ["http://192.168.1.10:5001", "http://192.168.1.10:5002"]
     assert all(e["source"] == "discovered" for e in got["instances"]), "合并条目标「自动」"
+    assert got["activeNames"] is None, \
+        (f"legacy 聚合应答(2 实例 2 标签)auto 照收但**不持久化**选择(评审必修 3, 旧 uuid 不被 pin): "
+         f"{got['activeNames']}")
+    assert got["snapshot"]["verdict"] == "auto" and got["snapshot"]["served"] == 2, got["snapshot"]
+    assert got["snapshot"]["port"] == "18789" and got["snapshot"]["ports"] == ["18789"], got["snapshot"]
     assert got["pairingCleared"] is False, "命中后清配对等待标记"
     assert got["pair"]["ok"] is False and got["pair"]["reason"] == "pairing_required" and got["pairFlag"] is True
     assert got["weird"]["ok"] is False and got["weird"]["reason"] == "no-hit", "异形应答 = 非本服务, 忽略"
     assert got["down"]["ok"] is False and got["down"]["reason"] == "no-hit", "连接失败不静默(日志 + 状态行)"
+
+
+def test_adjudication_state_machine():
+    """真跑 discovery.js::adjudicateInstances(计划 26-11-10-0515 装置二/S4a, 纯函数)—— 六态真值表 +
+    P2 手动恒服务 + D8 兼容粒度(裁决粒度 = 应答份, 不是实例条)+ 消费面过滤 servedInstancesOf
+
+    !find-first 时代「多候选同时应答取最先成功者」被本计划废止: 应答全部收集, 服务谁由裁决定。
+    """
+    got = adjudicate_trace()
+    if not got:
+        return  # 没装 node: 与其它前端守阵同口径静默跳过
+    auto = got["auto"]
+    assert auto["state"] == "auto", auto
+    assert [e["endpoint"] for e in auto["served"]] == [
+        "http://127.0.0.1:6001",
+        "http://127.0.0.1:5001",
+    ], "auto 服务集 = 手动(恒在前, P2) + 唯一应答的全部实例"
+    assert auto["selection"] == ["prod"], "auto 态给出待持久化的选择 = 该应答的唯一标签(调用方写 activeNames)"
+    legacy = got["legacy"]
+    assert legacy["state"] == "auto" and len(legacy["served"]) == 2, legacy
+    assert legacy["selection"] == [], \
+        ("D8 兼容行: 旧后端聚合全机 = 一份含 N 实例的 legacy 应答, 恰 1 份整份照收(等价今天); "
+         "但标签去重后 >1(旧后端随机 uuid)-> selection 空**不持久化**(评审必修 3: uuid 被 pin "
+         "则升级后 selectedMissing 恒态且无 UI 可清), 下轮重新裁决")
+    needs = got["needsSel"]
+    assert needs["state"] == "needsSelection", needs
+    assert [e["endpoint"] for e in needs["served"]] == ["http://127.0.0.1:6001"], \
+        ">=2 份应答且无选择 -> 发现条目一个都不服务, 只剩手动(P2)"
+    assert needs["selection"] == [], "needsSelection 态不得替用户做选择(不持久化)"
+    sel = got["selected"]
+    assert sel["state"] == "selected", sel
+    assert [e["endpoint"] for e in sel["served"]] == [
+        "http://127.0.0.1:6001",
+        "http://127.0.0.1:5001",
+    ], "有选择 -> 只服务所选标签的应答(dev 那份不进服务集)"
+    amb = got["ambiguous"]
+    assert amb["state"] == "ambiguous" and [e["endpoint"] for e in amb["served"]] == ["http://127.0.0.1:6001"], \
+        ("评审必修 2: 多份应答都带所选标签(两 clone 撞名 / legacy 应答含同名条)-> 不允许以"
+         "「用户已选择」名义静默全服务(= 混串), 只打手动、不改投、不清选择")
+    assert amb["selection"] == ["prod"], "ambiguous 保留现有选择(等用户改选或撞名消除, 机器不替用户动)"
+    miss = got["selMissing"]
+    assert miss["state"] == "selectedMissing" and [e["endpoint"] for e in miss["served"]] == ["http://127.0.0.1:6001"], \
+        "所选 clone 消失 -> 服务空转(只手动), 绝不自动改投别家"
+    assert miss["selection"] == ["prod"], "空转也不动现有选择(用户没改, 机器不改)"
+    assert got["noAnswerSel"]["state"] == "selectedMissing", "零应答 + 有选择: 同为空转(所选标签不在本轮应答里)"
+    assert got["noAnswer"]["state"] == "noAnswer" and got["noAnswer"]["served"] == [], "零应答 + 无选择 = noAnswer"
+    fb = got["labelFallback"]
+    assert fb["state"] == "auto" and fb["selection"] == ["http://127.0.0.1:5009"], \
+        "缺 name 的实例按 endpoint 当标签 —— 与持久化同一把钥匙, 两处推导必须共用"
+    empty = got["emptyAnswer"]
+    assert empty["state"] == "auto" and [e["endpoint"] for e in empty["served"]] == [
+        "http://127.0.0.1:6001",
+        "http://127.0.0.1:5002",
+    ], "空 instances 的应答不算一份候选(没有可服务实体), 不把唯一真应答顶成 needsSelection"
+    mc = got["manCollide"]
+    assert [e["endpoint"] for e in mc["served"]] == ["http://127.0.0.1:6001"], \
+        "与手动同端点的发现条目让位(Q8 手动整条胜延伸到服务面): 不重复进服务集"
+    dup = got["dupEps"]
+    assert dup["state"] == "auto" and [e["endpoint"] for e in dup["served"]] == ["http://127.0.0.1:5021"], \
+        "评审轮 2 修 3a: 同一份应答内 endpoint 重复 -> 服务集去重保首个(对齐 mergeInstances, 计数不虚高)"
+    assert dup["selection"] == [], \
+        "同 endpoint 异名两条 = 标签去重后 2 个(退化 legacy 口径): 服务去重保首个, 选择不 pin"
+    tm = got["tokenlessManual"]
+    assert [e["endpoint"] for e in tm["served"]] == ["http://127.0.0.1:6003", "http://127.0.0.1:5001"], \
+        "评审轮 2 修 3b: 缺 token 的手动条目**原样透传**进服务集 —— 消费面 isManualEntry 现判放行, 计数同一把尺不虚低"
+    assert got["labels"] == ["nas", "c"], "标签集去重保序(同 clone 多条目同标签); 空白标签不收"
+    # 消费面过滤(评审必修 1 的纯函数半边; 三条外呼路径的实际接线另有真跑守阵)
+    assert [e["name"] for e in got["wireFallback"]] == ["m", "d1", "d2", "m2"], \
+        "裁决快照缺失(升级后首轮发现之前)退化全量 = 等价升级前行为, 首轮发现落地即收敛"
+    assert [e["name"] for e in got["wireNeeds"]] == ["m", "m2"], \
+        "needsSelection/空 discovered: 只有手动条目外呼 —— 发现条目全量在存储, 但不进消费面"
+    assert [e["name"] for e in got["wireSelected"]] == ["m", "d1", "m2"], \
+        "selected: 手动 + 白名单端点的发现条目; 手动按 isManualEntry 现判(裁决轮间隙新加的也服务), 顺序保持存储原序"
+    assert [e["name"] for e in got["wireLegacyVerdict"]] == ["m", "d1", "d2", "m2"], "空 verdict 对象 = 缺 state, 同退化全量"
+
+
+def test_discovery_collects_all_hits_and_adjudicates():
+    """真跑 background.js 的发现裁决流程(S4a)—— 两 clone 各占一个候选口:
+
+    · 多命中收集: 发现条目**全部落库**(选项页要列全), 但服务集只手动 —— find-first 已废止;
+    · needsSelection: 不持久化选择(裁决态进快照, 供 T4 横幅);
+    · 按选择服务: 另一份应答不进服务集;
+    · 所选消失: 服务空转, prod 条目被发现集整批替换剪除, 而 **activeNames 纹丝不动**
+      (独立存储键, 抗 mergeInstances 整批替换 + options.js parseInstances 三键重建);
+    · 清除选择: 回无选择分支, 下轮按无选择规则走(单份应答 auto + 持久化);
+    · 手动条目: 每轮服务集都含(P2 恒服务);
+    · D8 legacy 行(评审必修 3): 旧后端聚合全机的单份应答整份 auto 照收, 但标签 >1 **不持久化**
+      activeNames(旧 uuid 不被 pin), 下轮重新裁决。
+    """
+    got = discovery_verdict_trace()
+    if not got:
+        return  # 没装 node: 与其它前端守阵同口径静默跳过
+    r1 = got["r1"]
+    assert r1["verdict"] == "needsSelection", r1
+    assert got["r1Endpoints"] == [
+        "http://127.0.0.1:6001",
+        "http://127.0.0.1:5001",
+        "http://127.0.0.1:5002",
+    ], "两份应答的发现条目全部落库(整批合并, 选项页要列全)"
+    assert got["r1Active"] is None, "needsSelection 不持久化选择(不替用户挑)"
+    assert got["r1Snapshot"]["verdict"] == "needsSelection" and got["r1Snapshot"]["served"] == 1, got["r1Snapshot"]
+    assert got["r1Snapshot"]["ports"] == ["18788", "18789"], "快照记全部命中端口(多收集可观测)"
+    r2 = got["r2"]
+    assert r2["verdict"] == "selected" and got["r2Active"] == ["prod"], r2
+    assert got["r2Snapshot"]["served"] == 2, "按选择服务: 手动 + prod(dev 那份不进服务集)"
+    r3 = got["r3"]
+    assert r3["verdict"] == "selectedMissing", r3
+    assert got["r3Endpoints"] == ["http://127.0.0.1:6001", "http://127.0.0.1:5002"], \
+        "prod 条目随所选 clone 消失被整批替换剪除(发现集租约语义不变)"
+    assert got["r3Active"] == ["prod"], "activeNames 抗整批替换: 发现集被剪, 选择键独立纹丝不动"
+    assert got["r3Snapshot"]["served"] == 1, "空转: 服务集只剩手动条目, 绝不自动改投 dev"
+    r4 = got["r4"]
+    assert r4["verdict"] == "auto" and got["r4Active"] == ["dev"], \
+        "清除选择 -> 回无选择分支: 单份应答 auto, 选择持久化为该应答的唯一标签"
+    assert got["r4Snapshot"]["served"] == 2, "auto 服务集 = 手动 + dev"
+    r5 = got["r5"]
+    assert r5["verdict"] == "selected" and got["r5Active"] == ["dev"] and got["r5Snapshot"]["served"] == 2, \
+        "有选择 + 两份应答: 只服务所选 dev 一份(prod 不进服务集, 选择不因新应答出现而被顶掉)"
+    r6 = got["r6"]
+    assert r6["verdict"] == "auto" and got["r6Active"] == [], \
+        "D8 legacy 行(评审必修 3): 旧后端聚合全机恰 1 份 -> 整份照收, 但标签 >1 不持久化 activeNames"
+    assert got["r6Endpoints"] == [
+        "http://127.0.0.1:6001",
+        "http://127.0.0.1:5003",
+        "http://127.0.0.1:5004",
+    ], "legacy 应答的全部实例落库并整份服务"
+    assert got["r6Snapshot"]["served"] == 3, "legacy auto 服务集 = 手动 + 2 个聚合实例"
+
+
+def test_outbound_paths_follow_verdict():
+    """真跑 background.js 的**外呼消费面接线**(S4a 评审必修 1)—— 三条外呼路径只打「裁决后服务集」:
+
+    !T3 提交态的回归: merge-all 把全部应答 clone 落库后, pollAll / requestBackendRefresh /
+    probeAll 仍无过滤遍历 conf.instances —— needsSelection 态实际全轮询(含测试世界 clone)。
+    这里钉死: 存储发现条目仍全量(选项页列全), 消费面(外呼)只打 servedVerdict 的白名单;
+    无沿用时 needsSelection / selectedMissing 态三条路径都只打手动条目, selected 态打手动 +
+    所选 clone(空应答沿用轮除外, 见阶段 4);
+    快照 served 数与真实外呼数同源一致; 裁决轮间隙新加的手动条目照常服务(P2, 消费时现判);
+    空 instances 应答(「200 + instances:[]」, registry 未热身的重启瞬间)-> C1 消费面对齐:
+    白名单**沿用上轮**(评审轮 2 修 1 —— 否则停服后零外呼零失败, 「失败即发现」触发器打不动,
+    只剩 2 分钟周期发现, 徽标靠冻结台账失真), 轮询不断, 自愈链路完整。
+    """
+    got = served_wiring_trace()
+    if not got:
+        return  # 没装 node: 与其它前端守阵同口径静默跳过
+    assert got["state"] == "needsSelection", got
+    assert got["storedEndpoints"] == [
+        "http://127.0.0.1:6001",
+        "http://127.0.0.1:5001",
+        "http://127.0.0.1:5002",
+    ], "发现条目全量落库(选项页列全, 评审必修 1 的前提: 落库面不变)"
+    assert got["verdictDiscovered"] == [], "needsSelection: 服务白名单为空(零发现条目可外呼)"
+    assert got["pollNeeds"] == ["http://127.0.0.1:6001"], \
+        f"pollAll 只打手动(不轮询任何发现 clone): {got['pollNeeds']}"
+    assert got["refreshNeeds"] == ["http://127.0.0.1:6001"], \
+        f"requestBackendRefresh 只打手动: {got['refreshNeeds']}"
+    assert got["probeNeeds"] == ["m1"], f"probeAll 只探测手动: {got['probeNeeds']}"
+    assert got["state2"] == "selected" and got["verdictDiscovered2"] == ["http://127.0.0.1:5001"], got
+    assert got["servedSnapshot"] == 2, "快照 served 数 = 手动 + 所选(与真实外呼数同源)"
+    assert got["pollSelected"] == ["http://127.0.0.1:6001", "http://127.0.0.1:5001"], \
+        f"selected 态 pollAll 打 手动 + 所选 clone, 不碰 dev: {got['pollSelected']}"
+    assert got["refreshSelected"] == ["http://127.0.0.1:6001", "http://127.0.0.1:5001"], \
+        f"selected 态 requestBackendRefresh 同口径: {got['refreshSelected']}"
+    assert got["refreshTotal"] == 4, "立即拉取返回受理站点总数(手动 + prod 各 2 个站点)"
+    assert got["probeSelected"] == ["m1", "prod"], f"selected 态 probeAll 同口径: {got['probeSelected']}"
+    assert got["state3"] == "selectedMissing", got
+    assert got["pollMissing"] == ["http://127.0.0.1:6001"], \
+        f"所选消失 -> 外呼回落只打手动(绝不自动改投 dev): {got['pollMissing']}"
+    assert got["refreshMissing"] == ["http://127.0.0.1:6001"], f"selectedMissing 态立即拉取同口径: {got['refreshMissing']}"
+    # 阶段 4(评审轮 2 修 1): 空应答(200 + instances:[], registry 未热身的重启瞬间)击穿 C1 消费面
+    assert got["stateAutoP"] == "auto" and got["discAutoP"] == ["http://127.0.0.1:5001"], \
+        "前置: 单 clone auto 白名单已建立"
+    assert got["stateEmpty"] == "selectedMissing" and got["discEmpty"] == ["http://127.0.0.1:5001"], \
+        ("空 instances 应答 -> 落库面 C1 保留 prevDiscovered, 消费面白名单**沿用上轮**(保留语义, "
+         "不是改投: 上轮白名单就是上轮正被服务的端点), 不清成停服")
+    assert got["snapshotEmpty"] == 2, "沿用轮的 served 计数与真实外呼一致(手动 + 沿用条目)"
+    assert got["pollEmpty"] == ["http://127.0.0.1:6001", "http://127.0.0.1:5001"], \
+        "空应答轮轮询不断 —— 真死了也有失败可触发「失败即发现」, 自愈链路完整(零外呼 = 触发器打不动)"
 
 
 def test_discovery_period_is_two_minutes():
@@ -590,6 +810,15 @@ def test_badge_reflects_connection_state():
         f"禁用回落基础无框图(未配置态与安装初始态共用): {trace['iconDisabled']}"
     assert trace["hasOnClicked"] is True, "要注册 chrome.action.onClicked(无 default_popup 才收得到)"
     assert trace["opened"] == 1, f"点图标要打开选项页: {trace['opened']}"
+    # 评审轮 2 修 2: anyOk 按**服务集**算 —— 停服条目台账冻结不得替裁决亮绿灯(T4 横幅接线前
+    # 徽标是 needsSelection 唯一可见面, 与 P2「显性失败: 亮着等选」一致)
+    assert trace["verdictBadgeFrozen"] == "reconnecting", \
+        (f"needsSelection 停服的原 clone 即便台账冻结 ok, 徽标也不得亮「连接正常」: "
+         f"{trace['verdictBadgeFrozen']}")
+    assert trace["verdictBadgeSelected"] == "ok", \
+        f"同一份台账在白名单内(被服务)照常亮 ok: {trace['verdictBadgeSelected']}"
+    assert trace["verdictBadgeNoVerdict"] == "ok", \
+        f"裁决快照缺失(升级瞬态)退化全量, 行为不变: {trace['verdictBadgeNoVerdict']}"
 
 
 def test_badge_text_is_ascii_only():
@@ -754,7 +983,7 @@ def test_conn_state_judgement_matches_badge():
     node = _node()
     if not node:
         return  # 没装 node: 与其它前端守阵同口径静默跳过
-    proc = _run_node([node, "-e", _NODE_RUN_CROSS_LAYER_STATE, background_bundle(), str(OPTIONS_JS)])
+    proc = _run_node([node, "-e", _NODE_RUN_CROSS_LAYER_STATE, background_bundle(), str(OPTIONS_JS), str(DISCOVERY_JS)])
     assert proc.returncode == 0, f"node 跨层比对失败: {proc.stderr.strip()}"
     got = json.loads(proc.stdout)
     assert got["badgeOut"] == got["connOut"], \
