@@ -231,6 +231,9 @@ class RelocateModule(LifecycleMixin, PlanMixin, ExecMixin, BaseModule):
                 "link_pos": len(job.alias_paths),
                 "links": list(job.alias_paths),
                 "recover": job.phase == ru.PHASE_MOVING,  # MOVING 现场待判(_recover 一个 tick 判一次)
+                # 启动对账待判(计划 26-11-10-0721 §03.4): failed 账在首轮 qB 连接成功的
+                # tick 按物理现状重推相位一次(运行期 flag, 零新持久状态; 消费即清不重判)
+                "reconcile": job.phase == ru.PHASE_FAILED,
             }
             n += 1
         self._sync_relocating()

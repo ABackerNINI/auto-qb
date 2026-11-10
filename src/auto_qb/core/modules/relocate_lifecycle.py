@@ -274,7 +274,8 @@ class LifecycleMixin:
         dry_run 时同样零动作: 相位机每一步都是真写(setLocation / 建删链接 / 拉 guardian /
         恢复运行态), 而 relocate_execute 那道闸只挡了「新建 job」这一条路 —— start() 从
         state 恢复的非终态 job 不经任何入口闸(崩溃/重启窗口即常态), 闸门必须落在这里,
-        否则 --dry-run 启动会照着昨天的账真写。与 ops_mod.on_micro_line 同款。
+        否则 --dry-run 启动会照着昨天的账真写。启动对账(_startup_reconcile_tick, 消费点
+        在本函数体内)同受此闸: 重入是真写相位, 干跑 flag 在手也不判。与 ops_mod.on_micro_line 同款。
         """
         conf = self._live_conf()
         if conf is None or not getattr(conf, "enabled", False):
@@ -290,6 +291,11 @@ class LifecycleMixin:
             except Exception as e:  # noqa: BLE001 - 单 job 异常不得拖垮任务线(其它 job 照常推进)
                 logger.exception(f"relocate | job {job.job_id} 推进异常: {e}")
                 self._fail(job, "internal_error", str(e))
+        # 启动对账(计划 26-11-10-0721 §03.4): 首轮 qB 连接成功的 tick 对 failed 账按物理
+        # 现状重推相位一次 —— 与 rt["recover"](_recover 消费)同窗(on_task_line tick),
+        # qB 未连上时 flag 保持留待首连; 消费即清, 运行期不重判。挂在活跃推进之后: 本拍
+        # 常规推进不受影响, 重入的 job 从下一拍进 _advance 既有链。
+        self._startup_reconcile_tick()
         # qB 标签镜像补写(可选功能): 重启/断连期间错过 armed 的 job 在恢复后补上标签
         self._reconcile_pending_tags()
 

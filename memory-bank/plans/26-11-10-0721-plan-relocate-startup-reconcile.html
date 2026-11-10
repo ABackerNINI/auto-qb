@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="relocate-startup-reconcile">
 <meta name="doc-status" content="Open">
 <meta name="doc-added" content="26-11-10-0721">
-<meta name="doc-updated" content="26-11-10-0810">
+<meta name="doc-updated" content="26-11-10-2333">
 <meta name="doc-refs" content="memory-bank/tasks/26-11-10-backend-relocate-startup-reconcile.md, memory-bank/plans/26-11-10-0230-plan-relocate-listing-false-negative.html, memory-bank/issues/26-11-10-0326-feat-relocate-terminal-jobs-no-exit.html, memory-bank/issues/26-11-10-0327-bug-relocate-startup-log-inflight-count.html">
 <style>
   :root {
@@ -75,7 +75,7 @@
 <h1>relocate 启动对账自愈: 终态失败账按物理现状重推相位(防御性重启重判)</h1>
 <p class="lede">本篇只回答: relocate 终态 <code>failed</code> 账为何要在每次重启按物理现状重推相位(启动对账)、重入资格的物理证据标准、重入后如何零新增逻辑地复用既有收尾链自愈到 <code>done</code>,以及 Blood 组既有失败账(<code>jr-a2ce556d0165</code>)如何借此零人工零搬数收敛 —— 前序计划 26-11-10-0230 的自检假阴性修复只防新增,本篇补「账面服从现实」的防御面。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-10-0721 · <b>doc-updated</b> 26-11-10-0810 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-11-10-0721 · <b>doc-updated</b> 26-11-10-2333 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 2026-11-10 生产取证会话(修复部署后 Blood 账未自愈、组仍裂)→ 用户推翻上轮 D2/D3 → grilling 三轮(Round1 七问作废 → Round2 修正为「回既有收尾窗」模型 → Round3 纠正 hotfix 定性、定案通用对账)拍板 G1-G5;代码事实由只读探员取证
 </div>
 
@@ -130,7 +130,7 @@
 </table>
 <p class="cm">混合态(mover==dst 而部分文件不在 dst)由证据②排除 → 落「保持 failed」格;判定表按证据成立性分流,不按 save_path 分布穷举。</p>
 <h3>3.2 重入资格证据(G2)</h3>
-<p>双证据<strong>同时成立</strong>才重入: ①<code>job.mover</code> 的 qB 现值 save_path==dst(store 快照,normcase 比对——save_path 是 qB 自己的搬迁完成记录);②dst 内容<strong>全量在位</strong>: <code>plan.files</code> 全量逐条本机 stat(经 <code>map_to_container</code>/<code>add_long_path_prefix_for_win</code> 单点换算),文件存在且 size 相等才算在位,<strong>缺文件或 size 不等即不在位</strong>。不能复用 B′ 抽样口径(<code>relocate_proof.py:257-278</code> 任一命中即 positive、缺文件 OSError 直接跳过——any-hit 语义会放走「部分在位」态,对账要的是全量真值;换算与前缀工具可复用其单点,判定逻辑另写)。①②任一不成立或取不到 → 保持 failed。</p>
+<p>双证据<strong>同时成立</strong>才重入: ①<code>job.mover</code> 的 qB 现值 save_path==dst(store 快照,path_normalize 等值——与既有 <code>_recover</code>/<code>_step_verify</code> 同口径,不折叠大小写,大小写病态形态落保守保持 failed;save_path 是 qB 自己的搬迁完成记录);②dst 内容<strong>全量在位</strong>: <code>plan.files</code> 全量逐条本机 stat(经 <code>map_to_container</code>/<code>add_long_path_prefix_for_win</code> 单点换算),文件存在且 size 相等才算在位,<strong>缺文件或 size 不等即不在位</strong>。不能复用 B′ 抽样口径(<code>relocate_proof.py:257-278</code> 任一命中即 positive、缺文件 OSError 直接跳过——any-hit 语义会放走「部分在位」态,对账要的是全量真值;换算与前缀工具可复用其单点,判定逻辑另写)。①②任一不成立或取不到 → 保持 failed。</p>
 <h3>3.3 重入动线(G3)与上限(A1)</h3>
 <p><strong>单一入口恢复到 <code>moved</code></strong>: 既有后段链原样重跑——建链(幂等,缺失重建)→ 修后代码自检(skipped 不挡武装;NEGATIVE 合法再 fail)→ <code>_arm</code> 进窗(入口自动清旧 failed journal)→ daemon 退出窗改写 → <code>rewritten</code> → <code>_step_verify</code> 全员核验 + 删链门 → <code>done</code>。不为「全员已到 dst」做特殊直达分支——链上每步本就幂等且有护栏,第二套判定逻辑增加的面比省下的一两步 tick 值钱。<strong>重入上限</strong>: 每生命周期至多一次自动链运行(常规武装或对账重入共用此配额)。<strong>重入落账即置 <code>armed_at</code></strong>(语义 = 重入/武装时点): 自检在 <code>_arm</code> 之前跑(<code>relocate_exec.py:240</code> 先于 <code>:251-254</code>),pre-arm 自检 NEGATIVE 的失败 <code>armed_at</code> 恒 0(<code>_fail</code> 的 replace 不置它,<code>relocate_lifecycle.py:170</code>)——若闸只认武装置位,对这类失败永不闭环,恰是 A1 要防的跨重启 churn 形态;重入置位后闸对所有失败形态闭环,之后出路=人审 re-issue。journal 陈旧锚点联动(<code>relocate_units.py:1229</code> armed_at&gt;0 时锚点取 armed_at): 重入前的旧失败 journal 仍早于锚点(照旧清理)、重入后的新 journal 晚于锚点(保留),方向正确,S2 实现期核对。<code>attempts</code> 是别名重建配额(建链失败 +1 / <code>_arm</code> 归零,<code>:334/518</code>),不挪用——评审轮 1 裁断: 原定 attempts≥1 闸对 qb_side_check_failed 类失败永不触发且会被 _arm 归零销毁。</p>
 <h3>3.4 触发面(G5①)</h3>
@@ -184,6 +184,7 @@
   <li><span class="tag">R0 · 26-11-10-0721</span> 初版: 2026-11-10 生产取证(修复部署后 Blood 账未自愈、组仍裂;state.json updated_at 实证零重发)→ 用户推翻上轮 D2/D3「账面不动」→ grilling 三轮(Round1 七问作废 → Round2 修正为「回既有收尾窗」→ Round3 纠正 hotfix 定性、定案通用对账)→ G1-G5 + A1 拍板入库(Open),实施等显式开工。代码事实由只读探员取证(启动路径/终态过滤/恢复机械面/自检输入/WebUI 面,file:line 见 §02/§03)。</li>
   <li><span class="tag">R1 · 26-11-10-0749</span> 评审轮 1(计划文本批): 4 发现(3 major 1 minor)引文过检 4/4 全修 —— 证据②收紧为全量在位(缺文件不放行, 撤销 B′ any-hit 复用)/误重入风险行重写(唯一防线=证据②, 撤销 _step_verify 兜底错误断言)/A1 载体改 armed_at&gt;0 闸(attempts 为别名重建配额不挪用)/qbmanager 行号修正 :510/:520-532</li>
   <li><span class="tag">R2 · 26-11-10-0810</span> 评审轮 2(修复循环): 回退检查 4/4 未回退; 新 2 major —— 前置闸 armed_at&gt;0 进判定表(armed_at&gt;0 不进表, 行 2 补 armed_at==0 限定)/重入落账即置 armed_at(pre-arm 自检 NEGATIVE 形态 armed_at 恒 0, 仅武装置位闸不闭环; journal 锚点联动分析入 §3.3, S2 核对) —— F1-r2 引文因转抄丢空格被 review.check REFUTE 弃, 实质经主会话自核坐实(自检 :240 先于 _arm :251-254 / _fail :170 不置 armed_at), 按自发修复处置不计 修 数; §06 G2 行同步轮 1 收紧口径</li>
+  <li><span class="tag">R3 · 26-11-10-2333</span> 评审轮 4(T2a 实施批): 1 major 1 nit 全修 —— 证据一口径对齐实现(path_normalize 等值与既有 _recover/_step_verify 同点, 撤销 normcase 表述, 大小写病态落保守保持 failed; 真做折叠须动共享核验路径扩面, 违 G3)/对账 tick docstring 职责补全(重入落账+置 armed_at 在本方法)</li>
 </ul>
 
 </div>

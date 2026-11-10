@@ -95,6 +95,68 @@ class ExecMixin:
         logger.info(f"relocate | job {job.job_id}: 恢复: 未见搬迁现场(qB 不在 moving 且 dst 无数据), "
                     f"交停滞判据(不重发不下判失败)")
 
+    # ---------- 启动对账: 终态 failed 账按物理现状重推相位(计划 26-11-10-0721) ----------
+
+    def _startup_reconcile_tick(self) -> None:
+        """启动对账消费面(§03.4): 对 _load_jobs 推导的 rt["reconcile"] 逐笔判一次
+
+        消费窗 = 首轮 qB 连接成功的 tick(与 rt["recover"] 的消费窗同窗 —— recover 由
+        _step_move 转 _recover 消费, 两者都只落在启动后的头几个 tick; 本消费挂在
+        on_task_line 的活跃推进之后)。qB 探不活时 flag 保持留待首连, 无超时(§07: qB
+        恒离线则账维持 failed 现状); 消费即清 flag —— 每进程每笔至多判一次, 运行期新
+        失败/新现状不属于本口(失败当下已判对)。判定在 _startup_reconcile_one(只读),
+        本方法管触发窗 / flag 卫生 / 重入落账(置 armed_at)与日志(§03.5)。
+        """
+        pending = [jid for jid, rt in self._rt.items() if rt.get("reconcile")]
+        if not pending:
+            return
+        if not self._qb_up():
+            return
+        reentered = 0
+        kept = 0
+        for jid in pending:
+            rt = self._rt.get(jid)
+            if rt is not None:
+                rt.pop("reconcile", None)  # 消费即清: 之后 qB 再抖动/物理现状再变都不重判
+            job = self._jobs.get(jid)
+            if job is None or job.phase != ru.PHASE_FAILED:
+                continue  # 消费窗内账已变(撤销/re-issue): 以账上现值为准, 不凭 flag 重判
+            if not self._startup_reconcile_one(job):
+                kept += 1
+                continue
+            reentered += 1
+            if rt is not None:
+                rt["stage"] = "verify"  # 重入动线与 _recover 同款: 从 moved 校验步走既有链
+            self._set_job(replace(job, phase=ru.PHASE_MOVED, armed_at=self._clock.now()))
+            logger.info(
+                f"relocate | job {job.job_id}: 启动对账重入(mover 已在 dst 且 dst 内容全量在位) —— "
+                "恢复 moved 走既有收尾链; 重入落账即置 armed_at(本生命周期自动链配额已用, A1)"
+            )
+        logger.info(f"relocate | 启动对账 {reentered + kept} 笔: 重入 {reentered} / 保留 {kept}")
+
+    def _startup_reconcile_one(self, job: RelocateJob) -> bool:
+        """启动对账判定表(§03.1/§03.2) -> True = 重入 moved(调用方落账并置 armed_at)
+
+        前置闸(A1): armed_at>0 的 failed 一律保持 failed —— 本生命周期的自动链运行
+        配额(常规武装或对账重入)已用掉一次, 不进判定表; 重入落账即置位, 闸对所有失败
+        形态闭环(含 pre-arm 自检 NEGATIVE 的 armed_at 恒 0 形态), 之后出路 = 人审
+        re-issue。armed_at==0 才按双证据分流(G2, 同时成立才重入):
+        - 证据一: mover 的 qB 现值 save_path == dst(_member_at_dst 等值比较单点, store
+          快照 path_normalize 等值 —— 与 _recover/_step_verify 同口径, 不折叠大小写,
+          大小写病态形态落保守保持 failed); save_path 是 qB 自己的搬迁完成记录;
+        - 证据二: dst 内容全量在位(_dst_ready 全量真值: plan.files 逐条存在且 size 相等,
+          缺文件或 size 不等即不在位) —— 不复用 B′ 抽样口径(rp._bprime_evidence 的
+          any-hit 语义会放走「部分在位」态, 对账要全量真值)。
+        任一证据不成立或取不到(mover 不在快照/stat 异常/plan 缺失) => False 保持 failed
+        (保守默认: 账面服从现实)。判定表行 3(全员==src)与行 4(矛盾/证据不可得)都落
+        本支; 行 2(全员==dst)蕴含证据一, 与行 1 同一重入支。
+        """
+        if job.armed_at > 0:
+            return False
+        if not self._member_at_dst(job.mover, job):
+            return False
+        return self._dst_ready(job)
+
     def _step_move(self, job: RelocateJob, rt: dict) -> None:
         store = self._ctx.store
         mover = store.by_hash.get(job.mover)
