@@ -57,6 +57,11 @@
   pytest / test.full 均带前缀。为什么没命中: 开工按协议同步 + 读 kb.active 切片, 但没进
   testing 类索引, 直到失败行打出自检配方才想起 —— 与复发 3/5/6/7 同款「收尾顺手跑全量」形态;
   本轮还额外确认 `ship.commit` 内部闸门同 env, 提交也要带前缀(复发 4)。
+- **复发**: 9(2026-11-11)—— webui 双排 title 退役批: 首次 `test.quick` rc=4 后补 `unset TMPDIR` 过,
+  但**评审前置链 `sync && ship.gate` 组合命令漏带前缀**, `ship.gate` 内部 `test.quick` 再 rc=4 一次。
+  为什么没命中: 已把前缀记成「跑测试的命令要带」, 漏了**组合命令里间接跑 pytest 的非 test.* 环节**
+  (ship.gate 预跑闸门) —— 同复发 4 的「闸门同 env」教训换了个入口(ship.gate 而非 ship.commit)再犯;
+  前缀应挂在**整条组合命令**开头, 不是只挂 test.* 调用。
 
 ### `--basetemp` 换了目录会让 4 条 sidefx 用例**假红**
 

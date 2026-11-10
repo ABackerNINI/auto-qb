@@ -2,7 +2,7 @@
 
 **Status:** In Progress
 **Added:** 2026-11-10
-**Updated:** 2026-11-10
+**Updated:** 2026-11-11
 **Summary:** WEBUI 整组迁移双排路径伪影错觉修正: 上排删除线替代透明度分层
 **Topics:** webui-relocate-pair-visual
 **Refs:** memory-bank/pitfalls/web-ui/opacity-tier-ghosting.md, memory-bank/testing/baselines/26-11-10-0844-webui-relocate-pair-visual.md
@@ -58,3 +58,5 @@ grilling 三轮拍板 Q1-Q13(用户逐轮「按推荐」), Q6 附五组可切换
 用户说「提交」后, `ship.commit` 的 HTML 规范级增量检查(v.Nu)报 70 条 error, 全部来自 `plans/attachments/relocate-status-display-v2-mockup.html`(同批计划 HTML 零错误); 对 HEAD 原始版跑同一校验同样 70 条、类型逐条一致 → 100% 预存债务, 与本批改动无关。该件 11-08 由 `8a55701e` 以新建文件身份入库(无 doctype/head, `<style>` 在 `<div id="rsd">` 内), 增量闸门取已跟踪 diff 故当时漏检, 今天首次作为已跟踪文件被修改而翻出。
 
 经 AskUserQuestion 显式扩范围, 用户选 B「修 mockup 本体」(未选「改校验脚本加片段豁免」): 补 doctype/html/head/title、`<style>` 归 head、`<div id="rsd">` 移入 body、皮肤切换栏补 `role="group"`、末尾闭合 body/html; CSS 规则(除本批既定的 4 条删除线回写)与整段 JS 一字未动。实测: v.Nu 增量 2 文件零 error、L1+L2 零命中、真实浏览器 6 行渲染 + 上排 `line-through`/`opacity:1` + 皮肤切换生效 + 零 pageerror; 增量只读评审零发现, 全量闸门与 `kb.check` 重跑全绿(数字见基线切片)。
+
+- 2026-11-11 07:21 双排保存路径原生title退役: pair模式置null移除属性, 单排保留供截断; 守卫计数2到4

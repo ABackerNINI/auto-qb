@@ -111,8 +111,10 @@
            隐藏 —— R3 缺口修正), one = 单排仅状态着色。R3 D16(D9 修订 = 零导航点击): A/B 排路径
            chip 可点 = 切换路径筛选(显示值即筛选值, toggle 语义), 仍不开抽屉/链浮窗; 详情真相在
            悬停浮窗(relocate_pop.js, 本单元格挂触发), 展示判定单点 $root.relocateView。 -->
+      <!-- 双排(pair)时原生 title 退役(2026-11-11): A/B 两排已明文 + 悬停浮窗全量, 原生 title
+           只剩单条旧路径反成误导; 单排(无标注/one)保留, 截断路径仍靠它看全文。 -->
       <div v-else-if="col.key === 'save_path'" class="g-save-path"
-           :class="{ 'has-relpair': !!$root.relocateView(g) && $root.relocateView(g).mode === 'pair' }" :title="g.save_path"
+           :class="{ 'has-relpair': !!$root.relocateView(g) && $root.relocateView(g).mode === 'pair' }" :title="(!$root.relocateView(g) || $root.relocateView(g).mode !== 'pair') ? g.save_path : null"
            @mouseenter="$root.relPopEnter($event, g)" @mouseleave="$root.relPopLeave">
         <span v-if="!$root.relocateView(g) || $root.relocateView(g).mode !== 'pair'" class="sp-body f-cell"
               :class="[{ 'f-on': $root.isFilterOn('pathFilter', g.save_path) }, $root.relocateView(g) && $root.relocateView(g).mode === 'one' ? 'rel-tone-' + $root.relocateView(g).tone : '']"
@@ -211,8 +213,9 @@
       <!-- P1 迁移展示(plan 26-11-07-2344 S2 + R3): 与组行 save_path 分支完全对称 —— pair 两排
            **替换**单排路径(原路径行隐藏)/one 单排着色; A/B 排 chip 可点筛选(D16, 不开抽屉/
            链浮窗, title 不写迁移状态), 判定单点 $root.relocateView, 浮窗在 relocate_pop.js。 -->
+      <!-- 双排(pair)时原生 title 退役: 与组行分支同口径(见上方组行注释)。 -->
       <div v-else-if="col.key === 'save_path'" class="g-save-path"
-           :class="{ 'has-relpair': !!$root.relocateView(m) && $root.relocateView(m).mode === 'pair' }" :title="m.save_path"
+           :class="{ 'has-relpair': !!$root.relocateView(m) && $root.relocateView(m).mode === 'pair' }" :title="(!$root.relocateView(m) || $root.relocateView(m).mode !== 'pair') ? m.save_path : null"
            @mouseenter="$root.relPopEnter($event, m)" @mouseleave="$root.relPopLeave">
         <span v-if="!$root.relocateView(m) || $root.relocateView(m).mode !== 'pair'" class="sp-body f-cell"
               :class="[{ 'f-on': $root.isFilterOn('pathFilter', m.save_path) }, $root.relocateView(m) && $root.relocateView(m).mode === 'one' ? 'rel-tone-' + $root.relocateView(m).tone : '']"
