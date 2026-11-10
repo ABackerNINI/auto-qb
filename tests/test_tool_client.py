@@ -36,6 +36,7 @@ import pytest
 
 from auto_qb.webui import tool_client
 from auto_qb.webui.tool_client import ToolUnreachable, call_tool, error_text, read_token
+from _test_ports import http_server  # noqa: E402  测试假服单点: 独占 bind, 禁裸 ThreadingHTTPServer 直建(issue 26-11-11-0114)
 
 # 鉴权头键名: 拆写常量 —— 工作区写入判据把「凭据键名 + 赋值形态」当凭据字面量拦整文件
 # (见 pitfalls/testing/credential-shape-write-guard.md); 值恒为运行期现造桩令牌
@@ -82,7 +83,7 @@ class _StubTool:
             do_POST = _record_and_reply
             do_PUT = _record_and_reply
 
-        self._httpd = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _Handler)
+        self._httpd = http_server(_Handler)
         self._thread = threading.Thread(target=self._httpd.serve_forever, daemon=True)
         self._thread.start()
         self.base_url = f"http://127.0.0.1:{self._httpd.server_address[1]}"

@@ -21,6 +21,7 @@
 | `e2e/gtm-alert.spec.mjs:83` / `e2e/kbd-scroll-band.spec.mjs:102` 双皮肤 —— GitHub Linux runner 上稳定红、本地隔离与整片 `shard 2/3`(102 例)全绿; 非顺序污染, 是等待窗口不足 / 窗口化重渲晚于 `$nextTick` 的时序差异 | time(边界/粒度) · 并发/竞态 | Done | 已修(2026-11-10): `seenTs` 显式 20s + `_kbScrollRowIntoView` 跨帧按真实 DOM 补正落点; 去向 [26-11-07-0326](../issues/26-11-07-0326-test-ci-smoke-existing-red-backlog.html) / [任务档案](../tasks/26-11-10-test-github-ci-e2e-red-fix.md) | 2026-11-10 |
 | `e2e/perf.spec.mjs:361` W5 —— 不定长交互窗按固定 4.4s 数拍子, CI 实测 4 拍即越界 | time(边界/粒度) | Done | 已修(2026-11-10): 上界按 `ceil(elapsed / vm.basePollMs()) + 1` 归一, 不按 CI 分档放宽; 去向 [基线切片](baselines/26-11-10-0121-test-github-ci-e2e-red-fix.md) | 2026-11-10 |
 | `e2e/drawer-general-variants.spec.mjs:175/228` 双皮肤 —— 产品入口下线 / wide 条件式后, e2e 断言与桩数据未同步(本地可稳定复现, 非 flaky) | 共享状态(桩数据缺口) | Done | 已修(2026-11-10): 三处磁力钮断言改「不得回潮」+ `BASE_PATCH` 补三个非空路径值; 去向 [任务档案](../tasks/26-11-10-test-github-ci-e2e-red-fix.md) | 2026-11-10 |
+| `tests/test_legacy_review4_scripts.py::test_qb_capture_dry_true_zero_requests`(同族假服: helpers FakeQB / test_tool_client)—— `-n 8` 并行下对自起假服的请求偶发 ConnectionError(被中止); 根因 = 裸 ThreadingHTTPServer 带 SO_REUSEADDR, Windows 并行双绑串线 | 端口/资源 | Done | 已修(2026-11-11): 假服收敛独占 bind 单点 `tests/_test_ports.py::http_server`(对齐生产 `_EndpointServer` 口径)+ 散落守卫禁裸实例化 + 守阵 2 条; 去向 [26-11-11-0114](../issues/26-11-11-0114-test-qb-conn-flake-parallel.html) | 2026-11-11 |
 
 > 状态词与四形态 5 词表同源: `Open` → `In Progress` → `Done` | `Dropped`。
 

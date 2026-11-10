@@ -1,7 +1,7 @@
 # testing — 测试 / 冒烟 / 仿真纪律 · 卷 1/5
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `annotations-lazy-eval.md` … `fakeclock-migration-missed-forms.md`(共 22 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `annotations-lazy-eval.md` … `fakeclock-migration-missed-forms.md`(共 23 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
@@ -29,4 +29,5 @@
 | [cross-thread-teardown-assert.md](cross-thread-teardown-assert.md) | starlette 1.6 把 SSE 的同步生成器包进 `iterate_in_threadpool`, 它跑在 anyio 工作线程里; 该线程帧里的最后一个引用(`item`/`func`/`args` 元组)是在 `call_soon_threadsafe` **之后**… | 跨线程终态断言, 断流退订, subscriber_count, anyio 工作线程, iterate_in_threadpool, 生成器 finally 退订, 单点采样, 竞态, 偶发红, 句柄堆叠, aclose 后仍订阅, gc… |
 | [event-handler-mock.md](event-handler-mock.md) | `mock.patch.object(模块实例, "_on_xxx")` 拦不住 EventBus 已注册的相位 handler —— 注册期捕获的是绑定方法对象, patch 换的是实例属性, 总线里的引用不变; 守相位接线用「订阅计数 + emit 返回值」, 守行为直调真… | EventBus, 相位, subscribe, mock.patch.object, handler 断言, assert_called_once, P5 守阵 |
 | [fake-config-shared-mutables.md](fake-config-shared-mutables.md) | helpers 的 `FakeConfig` 段对象是类属性(dataclass/dict/list), 任一测试原地改 | FakeConfig, 类属性, 测试隔离, xdist 分布, 偶发失败, make_manager, 原地改配置 |
+| [fake-server-reuse-bind.md](fake-server-reuse-bind.md) | 测试里自起回环 HTTP 假服若用裸 `ThreadingHTTPServer`, 它继承 `HTTPServer.allow_reuse_address = 1`(SO_REUSEADDR) —— Windows 上允许抢绑已监听端口, `-n 8` 并行下两把假服可能 bin… | ThreadingHTTPServer, 假服, 双绑, SO_REUSEADDR, allow_reuse_address, ConnectionError, 回环 HTTP, 并发假红, http_server 单点, 独占 bind |
 | [fakeclock-migration-missed-forms.md](fakeclock-migration-missed-forms.md) | 把多套旧假钟批量迁到统一假钟(tests/clock.py)时, 按类名/替换表机械改最易漏两类形态 —— 直接调用旧假钟实例的 `clock()` 方法形(新假钟 API 是 `now()`/`monotonic()`, 类名相同但方法名不同), 与绕过属性、位置参数直构旧类的… | 假钟迁移, 旧假钟, tests/clock.py, clock() 调用形, 位置参数直构, 直构位, _FixedClock, 迁移漏改, 裸取时残留, 批量替换 |

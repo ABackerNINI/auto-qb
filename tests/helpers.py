@@ -12,11 +12,12 @@ import time
 from collections.abc import Mapping
 from typing import NamedTuple
 from contextlib import contextmanager
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler
 from types import SimpleNamespace
 from urllib.parse import parse_qs, urlparse
 
 from clock import wait_until  # noqa: E402  (单一实现单点, 计划 26-11-05-0118 S1/S3: 调用点一律直连 clock 模块)
+from _test_ports import http_server  # noqa: E402  (测试假服单点: 独占 bind, 禁裸 ThreadingHTTPServer, 见 issue 26-11-11-0114)
 
 from auto_qb.config import (
     GroupingConfig,
@@ -513,7 +514,7 @@ class FakeQbServer:
         self.bodies = []
         self.upload_limit = 0  # transfer/uploadLimit 读数(bytes/s)
         self.download_limit = 0
-        self._httpd = ThreadingHTTPServer(("127.0.0.1", 0), self._make_handler())
+        self._httpd = http_server(self._make_handler())
         self.host, self.port = self._httpd.server_address
 
     # ---------- 生命周期 ----------

@@ -1,14 +1,13 @@
 # testing — 测试 / 冒烟 / 仿真纪律 · 卷 3/5
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `inproc-server-conn-abort.md` … `playwright-teardown.md`(共 22 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `log-capture.md` … `poll-skeleton-redverify.md`(共 23 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
 
 | 主题 | 一句话 | 触发词 |
 |---|---|---|
-| [inproc-server-conn-abort.md](inproc-server-conn-abort.md) | 测试自起 `http.server.ThreadingHTTPServer(("127.0.0.1", 0))` 当假服, test.full(并行 + 覆盖率插桩)高载下, **真客户端打真本地服**的段偶发 `ProtocolError: Connection aborted… | 10053, ConnectionAbortedError, Connection aborted, 你的主机中的软件中止了一个已建立的连接, ProtocolError, ThreadingHTTPServer, 进程内假服, 本地假服,… |
 | [log-capture.md](log-capture.md) | caplog 与全局日志状态是跨测试共享的 —— 断言日志要挂模块 logger 自建 handler + 显式 setLevel, 不碰 caplog。 | caplog, 日志断言, 日志级别, root handlers, root level, xdist, 偶发, CI 红, setup_logging, make_manager |
 | [manager-builder-single-point.md](manager-builder-single-point.md) | 测试构造单点参数面不足导致内联旁路 | 内联构造, make_manager, 单点旁路, 装配样板, FakeConfig, QbManager, 段覆盖, 测试构造器, builder |
 | [manager-connect-stub.md](manager-connect-stub.md) | QbManager.run() 主循环用例里把 `connect` mock 成 `return True` 却不给 `mgr.client` 落值, 在断连稳态守卫(26-10-31-1029)生效后会让请求线被整段静默跳过 —— 用例不报错, 断言以「线没跑」的形态假红/假绿… | 写或改 run() 主循环测试, mock/替换 connect; 或改断连守卫判据后跑主循环用例 |
@@ -30,3 +29,5 @@
 | [perf-measurement.md](perf-measurement.md) | 本机每次文件操作的**固定过路费**(初始 写 20ms / 删 43ms, 与数据量无关)曾支配全量耗时 —— **已由系统层排除项治好(全量 75s → 19.4s, 并行 5.0s)**; 另记"判断单项优化收益不能看全量总时"与"并发污染下的数字一律是假的"两条度量纪律。 | 测试慢, 耗时, 性能, 优化收益, 归因, 全量多久, 跑得慢, durations, 度量, 并发跑, 白名单, 排除项, 杀软, 沙箱 |
 | [plan-docstring-section-boundary.md](plan-docstring-section-boundary.md) | 对「## 测试计划」这类分节 docstring 做机械批量改写时, 段边界若用 `##` 前缀匹配, 段内 `###` 小节标题会被误判成同级边界提前截断 —— 截断点之后的既有条目整段「消失」, 缺列数翻倍, 新条目插进错误小节(2026-10-22 实证: 16 文件误插… | 批量改写 docstring, 测试计划回填, 段边界, ###, 小节被截断, 缺列翻倍, 插错小节, 机械改写脚本, 底数核对, git diff 账目, 误插, 两份解析实现 |
 | [playwright-teardown.md](playwright-teardown.md) | 本机 node 的 `spawnSync` **只要带管道 stdio**(`'pipe'` 或默认)就 EBUSY —— `stdio: 'ignore'` / `'inherit'` 正常, 且与可执行文件无关(连 `process.execPath` 即 node.exe… | dev.e2e 不退出, 测试全过但挂住, webServer 收尾, spawnSync EBUSY, 管道 stdio, taskkill 无效, 端口不释放, 桩服务残留, waitForCleanup, Playwright 挂死,… |
+| [poll-last-round-race.md](poll-last-round-race.md) | e2e 断言等一次**必然发生**的轮次(如「lastRid 置空 ⇒ 请求不带 rid ⇒ 服务端恒回全量」)时读探针记录的「最后一轮」: 只要与该动作无因果的其它轮次(在飞旧 rid 请求被 ver 抬高后回落的增量轮)在全量轮**之后**落袋, 末值就停在否定态, 轮询窗内… | flaky, 顺序相关, 探针, 末值断言, 轮询竞态, expect.poll, 隔离绿全量红, 在飞请求, rid 过期, delta 轮, 全量轮, window.__d, applyStateRows, lastRid, delta… |
+| [poll-skeleton-redverify.md](poll-skeleton-redverify.md) | 手写红验脚本(逐条改源码 → 跑目标守阵 → 还原)时, 「还原」这一步的两个静默失败形态 —— | 红验, 突变还原, grep 校验, 注释形态突变, node 电池挂起, subprocess 超时, 微任务死循环 |

@@ -9,9 +9,9 @@
 <meta name="issue-stamp" content="26-11-11-0114">
 <meta name="issue-type" content="test">
 <meta name="doc-topic" content="qb-conn-flake-parallel">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-11-test-fake-server-exclusive-bind.md, memory-bank/pitfalls/testing/fake-server-reuse-bind.md, memory-bank/testing/baselines/26-11-11-0314-bind-guard-fake-server-exclusive.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="test.quick 并发下偶发回环连接瞬断致用例红">
 <meta name="issue-summary" content="8 worker 并发跑 test.quick 时, 真实占端口/真实本机回环 HTTP(含测试内自起假服)的用例偶发 ConnectionError(被中止), 单跑复现不了, 疑并发压力下回环端口资源瞬断">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-11-0114-test-qb-conn-flake-parallel</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-11 01:14</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">testing</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
@@ -133,24 +133,27 @@ FAILED tests/test_legacy_review4_scripts.py::test_qb_capture_dry_true_zero_reque
 <section id="s5">
   <h2><span class="no">§05</span>根因<span class="opt">（可选）</span></h2>
   <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
-  <div class="callout">待查（已排除：TODO）</div>
+  <div class="callout"><strong>根因(2026-11-11 修复轮定位)</strong>: tests/ 内自起假服用裸 <code>ThreadingHTTPServer</code>, 继承 <code>HTTPServer.allow_reuse_address = 1</code>(SO_REUSEADDR) —— Windows 上它允许<strong>抢绑已监听端口</strong>(生产侧 <code>src/auto_qb/hr/server.py:20</code> 同款论述)。-n 8 下各 worker 的假服都带 REUSEADDR, 两把 bind(0) 可能拿到同一端口双绑, 客户端连接被递给别人的假服/已关闭的 socket ⇒ ConnectionError(被中止)。与「单跑不复现、复跑全绿」吻合。已排除: 被测代码缺陷(两症状被测面无共享)、TOCTOU 取号(假服构造即 bind+listen, 无窗口)。症状 2(hr_discovery bind 用例)报错原文未录且其 socket 全部独占口径、无 HTTP 客户端流量, 双绑机制对它不成立 —— 不强行归因, 再现时先抓 traceback。</div>
 </section>
 
 <section id="s6">
   <h2><span class="no">§06</span>建议修法<span class="opt">（可选）</span></h2>
   <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
-  <p class="todo">TODO / 待定</p>
+  <p>入池时无预判(待定); 实际修法见 §07 修复后补充 —— 消触发面(假服收敛独占 bind 单点), 不是 retry。</p>
 </section>
 
 <section id="s7">
   <h2><span class="no">§07</span>状态变更日志</h2>
   <ul>
     <li>2026-11-11 01:14 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-11 — 状态 Open → In Progress（kb.status）</li>
+    <li>2026-11-11 — 状态 In Progress → Done（kb.status）</li>
+</ul>
   <h3>复验</h3>
-  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <p>复验: 2026-11-11 修复轮 —— 症状 1 的触发面实证成立(tests/ 三处裸 <code>ThreadingHTTPServer</code> 实例化, 全带 SO_REUSEADDR); 症状 2 无报错原文, 未复现(当日两轮全量 + 修复后多轮全量均绿), 见 §05 根因的诚实留痕。</p>
   <h3>修复后补充</h3>
-  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  <p><strong>实际修法</strong>(2026-11-11, 档案 <a href="../tasks/26-11-11-test-fake-server-exclusive-bind.md">26-11-11-test-fake-server-exclusive-bind</a>): 消触发面而非 retry —— 端口单点 <code>tests/_test_ports.py</code> 新增 <code>http_server()</code>(<code>_ExclusiveHTTPServer</code>: <code>allow_reuse_address=False</code> 独占 bind + <code>server_bind</code> 跳过 getfqdn 启动期零 DNS + <code>request_queue_size=128</code>, 两项口径逐字对齐生产 <code>_EndpointServer</code>); 三处假服改走单点(<code>tests/helpers.py</code> FakeQB / <code>tests/test_tool_client.py</code> / <code>tests/test_legacy_review4_scripts.py</code>); <code>tests/test_free_port.py</code> 加行为守阵 + 散落守卫(tests/ 下禁裸 ThreadingHTTPServer 直建, 豁免 bind 扫描器夹具的字面量测试数据)。领域结论沉淀 <code>pitfalls/testing/fake-server-reuse-bind.md</code>。</p>
+  <p><strong>验证方式与数字</strong>: 锚点文件单跑全绿(含新守阵 2 条) + <code>test.quick</code> 全量多轮全绿; 数字只写基线切片(随本批入库, 见 <code>commands run kb.baseline</code>), 本报告不手抄。分批评审 3 轮(全能档单派): blocker 1(守卫误伤 bind 扫描器夹具字面量)当场修 + nit 1(守卫自豁免盲区)当场修, 轮 3 零 actionable。</p>
 </section>
 
 <footer>

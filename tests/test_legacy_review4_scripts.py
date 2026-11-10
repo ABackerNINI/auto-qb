@@ -62,6 +62,8 @@ from types import SimpleNamespace
 
 import pytest
 
+from _test_ports import http_server  # noqa: E402  测试假服单点: 独占 bind, 禁裸 ThreadingHTTPServer 直建(issue 26-11-11-0114)
+
 ROOT = Path(__file__).resolve().parents[1]
 _SPEC = importlib.util.spec_from_file_location("check_context_caps", ROOT / "scripts" / "check_context_caps.py")
 mod = importlib.util.module_from_spec(_SPEC)
@@ -317,7 +319,7 @@ def test_qb_capture_dry_true_zero_requests(tmp_path, caplog):
         def log_message(self, fmt, *args):  # noqa: A003 - 基类签名; 静默
             pass
 
-    srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _CountingHandler)
+    srv = http_server(_CountingHandler)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     try:
         base = [

@@ -7,11 +7,16 @@
 - test_exhausted_raises: 候选全被抢(monkeypatch) → RuntimeError 响亮失败
 - test_hold_run_returns_bindable_run: `hold_run(3)` 返回连号三位、当场真占住、放掉后仍可绑
 - test_hold_run_discards_run_whose_offset_is_refused: 纯合成 socket 注入 10013, 整段有一位被拒 ⇒ 整段丢弃换基址, 不交坏段(不碰真实端口, 断言不受并行抢口影响)
+- test_http_server_exclusive_bind_and_roundtrip: `http_server` 单点行为 —— 独占 bind(同端口再绑被拒)、真回环请求往返、不查 FQDN
+- test_http_server_single_point: tests/ 下禁裸 ThreadingHTTPServer 直建, 假服一律走单点(Windows SO_REUSEADDR 双绑假红, issue 26-11-11-0114; 豁免 bind 扫描器夹具 test_flaky_timing_guards.py 的字面量测试数据)
 """
 from __future__ import annotations
 
+import http.client
+import http.server
 import re
 import socket
+import threading
 from pathlib import Path
 
 import pytest
@@ -158,3 +163,74 @@ def test_hold_run_discards_run_whose_offset_is_refused(monkeypatch):
     finally:
         for s in socks:
             s.close()
+
+
+def test_http_server_exclusive_bind_and_roundtrip():
+    """http_server 单点行为三面: 独占 bind / 真回环往返 / 启动期零 DNS。
+
+    独占口径(allow_reuse_address=False)是本单点的存在理由: Windows 上 SO_REUSEADDR 允许
+    抢绑已监听端口, 并行下假服双绑 ⇒ 连接串线 ⇒ ConnectionError(被中止) 假红
+    (issue 26-11-11-0114)。属性断言是红验: 回潮成 True 即红; 纯 socket 再绑被拒是行为面
+    佐证(独占在场 ⇒ 端口真被占住, 与 hold_run 的持有语义同形)。
+    """
+    class _Handler(http.server.BaseHTTPRequestHandler):
+        def log_message(self, *args):  # noqa: A003 - 基类签名; 静默
+            pass
+
+        def do_GET(self):
+            body = b"ok"
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+    srv = tp.http_server(_Handler)
+    t = threading.Thread(target=srv.serve_forever, daemon=True)
+    t.start()
+    try:
+        port = srv.server_address[1]
+        assert srv.allow_reuse_address is False, "独占 bind 是单点的存在理由, 回潮即双绑假红"
+        assert srv.request_queue_size >= tp.HTTP_SERVER_BACKLOG, "backlog 必须 ≥ 单点常量(默认 5 并发下会满)"
+        assert srv.server_name == "127.0.0.1", "server_bind 不查 FQDN(启动期零 DNS)"
+        with pytest.raises(OSError), socket.socket() as probe:
+            probe.bind(("127.0.0.1", port))  # 独占在场 ⇒ 外人(不带 REUSEADDR)绑不上
+        conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+        try:
+            conn.request("GET", "/probe")
+            assert conn.getresponse().read() == b"ok", "真回环请求必须正常往返"
+        finally:
+            conn.close()
+    finally:
+        srv.shutdown()
+        srv.server_close()
+        t.join(timeout=5)
+
+
+def test_http_server_single_point():
+    """tests/ 下禁裸 ThreadingHTTPServer 直建实例 —— 测试假服一律走 _test_ports.http_server。
+
+    本文件 docstring 与注释刻意写成不含「ThreadingHTTPServer + 紧邻左括号」的形态:
+    守卫也扫本文件自身, 措辞撞上模式就会被迫整文件自豁免, 将来文件里混进真实裸实例
+    反而逃过扫描(nit, 评审 26-11-11-0114 修复轮 2)。
+    裸 ThreadingHTTPServer 继承 HTTPServer.allow_reuse_address=1(SO_REUSEADDR), Windows 上
+    允许抢绑已监听端口; -n 8 并行下各 worker 的假服都带 REUSEADDR, bind(0) 可能拿到同一端口
+    双绑, 客户端连接被递给别人的假服/已关闭的 socket ⇒ ConnectionError 假红(issue
+    26-11-11-0114)。生产侧同款口径与论述: src/auto_qb/hr/server.py::_EndpointServer。
+    """
+    offenders: list[str] = []
+    pat = re.compile(r"(?:http\.server\.)?ThreadingHTTPServer\s*\(")
+    # 唯一豁免: test_flaky_timing_guards.py —— bind 扫描器的夹具文件, ThreadingHTTPServer
+    # 构造位片段是字符串字面量里的合成源码(测试数据), 不是真实实例化(与
+    # test_free_port_single_source 对 tests-real 的豁免同口径)。本文件与 _test_ports.py
+    # 不豁免: 措辞已避开命中模式, 守卫能扫自身才不留自豁免盲区。
+    exempt = REPO / "tests" / "test_flaky_timing_guards.py"
+    for p in (REPO / "tests").rglob("*.py"):
+        if p.samefile(exempt):
+            continue
+        try:
+            if pat.search(p.read_text(encoding="utf-8", errors="ignore")):
+                offenders.append(str(p))
+        except OSError:
+            continue
+    assert not offenders, f"tests/ 下裸 ThreadingHTTPServer 实例化(应走 _test_ports.http_server): {offenders}"
