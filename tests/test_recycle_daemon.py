@@ -175,6 +175,73 @@ daemon 主体:
 - test_observation_payload_roundtrip_and_bad_shape_is_none: to_payload->from_payload 回环幂等;
   owner/absorbed 恢复、未决清空(settle 重算); 坏 payload(host/port 不符或混型/owner 或
   absorbed 形不符/absorbed 缺键/非 dict)=> None 保守弃不抛
+
+接线面(W2a, 计划 26-11-10-0318 §04 W2 的 1-3 项): run/_process_window 三层判据接线 + 观测维护
+tick 契约 + 复验升级 + warning 节流; _stub_qb 并桩观测通道(恒 None)把既有用例钉在 L2 等价
+面。接线级单测; 场景级全链端到端(场景 X/Y、PID 复用两端向、obs 跨重启端到端链)留 W2b
+—— 本波的 test_run_restarts_restore_owner_evidence_from_obs_file 是接线级重启恢复
+(from_payload 恢复面), 不是端到端全链(T3 评审 B3 措辞区分):
+- test_run_l1_dead_owner_enters_window_without_stable_wait: L1 verdict True 立即进窗(拍板
+  D2, 无 down_since 计时)—— obs 死证(owner pid 已从名册消失)+ 拒连 + 无未决 => stable
+  远超 max_wait 仍完成改写(时钟注入证明无 30s 等待)
+- test_run_no_owner_record_walks_l2_stable_window_equivalent: 等价面 —— 无 owner 记录 =>
+  verdict False 走 L2 现状 30s(与 test_run_waits_for_stable_window_before_window 同形态:
+  stable 未满 timeout 零落盘); verdict False 不告警(正常路径, 区别于通道故障); obs 文件零写
+- test_run_l1_roster_channel_broken_falls_back_l2_throttled: 名册通道故障 => l1_open None
+  即便有有效死证也不进窗(通道故障不冒充通过)⇒ 退 L2 + 节流 warning(60s 内多拍只首拍一条;
+  跨 60s 边界的窗口期再计一条); roster None => tick 整拍不动, obs 文件零写
+- test_run_l1_window_reverify_owner_revive_aborts: 复验升级(§03.3)—— 进窗判据与窗内复验
+  之间 owner 复活(名册重现 + 端口回绑)=> L1 窗复验不过 => qb_back 中止零落盘(现状中止
+  语义原样); 复活在位续证只在内存, obs 持久面零变更
+- test_run_obs_tick_persists_changed_state_only: 观测维护 tick 契约 —— 持久面变更(True)
+  才 write_obs: 新面孔零赌注吸收首拍落盘一次, 同 roster 后续拍零变更不重写(多拍写次数
+  钉死 = 1, 在位续证只在内存); 文件内容对齐 obs schema
+- test_run_obs_write_failure_throttled_warning_no_crash: obs 落盘失败 => 节流 warning 不崩,
+  内存态继续(重启丢观测退 L2 安全向); 每 poll 新面孔都触发写尝试, 60s 内只首拍一条
+- test_run_restarts_restore_owner_evidence_from_obs_file: daemon 重启恢复(§03.4 覆盖
+  「停机期间目标死亡」)—— 前世经真实 tick 通道归档在位 owner, 新世 from_payload 恢复
+  死证 => 立即进窗改写; obs 记录跨重启保留
+- test_run_corrupt_obs_file_starts_empty_and_stays_l2: obs 文件坏形(非 JSON)=> 新建空
+  _Observation 走 L2(D3 冷启动形态): 不崩溃、不覆盖坏文件、窗口时序按现状
+- test_run_observation_channels_not_polled_without_pending: §03.1 口径 —— 无 pending job
+  时观测通道零调用(子进程预算只花在有活的拍上)
+
+复验现判补强(W2a 编排方裁决, §03.3 第 3 条件「现判」化: unclassified_faces 纯分类读并入
+_l1_window_open —— 条件 3 不只看进窗时 pending 快照, 现读名册里状态机不能立即出具「无害」
+结论的面一律复验不过):
+- test_run_l1_window_reverify_unclassified_face_blocks: 窗顶复验现读名册冒出全新未分类面
+  => l1_open 三条件全齐也复验不过 qb_back 零落盘; 指纹通道断 => 面永滞未决, 窗不再开
+- test_run_l1_window_reopens_after_settle_absorb: 同面被 tick 正规吸收(settle 30s 行三,
+  持久面落盘)后窗重开改写收口 —— 挡是暂态不是死锁, 与状态机设计自洽
+- test_run_l1_window_reverify_absorbed_face_does_not_block: absorbed 命中面是状态机已出具
+  「无害」结论的面 => 复验放行改写(分类读不把已吸收面当未分类)
+- test_run_l1_window_reverify_unreadable_ct_face_blocks: ct 读不出的面 => 未分类挡(与 tick
+  缺 ct 面停未决真挡同向), l1_open 三条件全齐也不放行
+- test_observation_unclassified_faces_classification_table: unclassified_faces 分类表(纯
+  分类读)—— owner 身份命中/absorbed 命中/pending 在册不进清单; ct 读不出/ct<owner.ct 未及
+  吸收/owner pid 复用面/absorbed pid 复用面(B2)/全新面一律未分类; roster 字面量乱序插入
+  钉 sorted(B5); 纯读状态机零变动
+
+通道告警节流(T3 评审 A1: 通道函数族加 keyword-only warn 形参, 缺省 logger.warning 直落
+—— 直接调用方/既有测试零感知; 接线面 _observe_poll 按(实例, 类)传 _warn_sink 节流绑定,
+sink 类键 obs_listen/obs_roster/obs_owner + 接线点处置类 listen 补齐, 持续故障每类
+1 条/60s 不刷屏):
+- test_run_observe_channel_warnings_throttled_per_class: 持续故障形态(netstat 空输出格式
+  漂移 + PowerShell 缺健康标记 + 接线点指纹/verdict 处置)—— 四类各 60s 只首拍一条, 跨
+  60s 边界的窗口期再计一条(拍点 5s 步进, 140s 窗各 3 条)
+- test_run_observe_owner_warning_throttled: 占用者告警(端口可达 + 归属唯一 + 占用者非名册
+  qB)每 poll 触发同类节流; 占用者永不建档(obs owner 恒 None), 无关名册 qB 面 30s settle 吸收
+  照常(观测维护不因占用者告警阻断)
+- test_run_owner_attribution_and_occupier_warnings_independent_throttled: 归属/占用者告警
+  分键(评审轮 2 N1)—— 归属层告警(映射无我们端口 => 「未归属成功」)走 obs_listen 类、
+  占用者告警走 obs_owner 类, 交替故障形态下两类各自 60s 节流互不顶掉(旧共键实现首拍即把
+  对方顶掉): 60s 窗两类各 1 条, 140s 窗各 3 条; 占用者/归属失败都永不建档(obs owner 恒
+  None)
+- test_run_l1_reverify_channel_failure_throttled: L1 复验拍通道故障节流(评审轮 2 N2)——
+  复验现读名册通道异常经 obs_roster 类 sink 节流(与主循环读同一条 qB 名册通道, 同根因
+  共键不刷屏)+ verdict None 处置留痕走独立 reverify 键(qb_back 中止事件不被主循环处置
+  留痕顶掉): poll 拍通道健康进窗/复验拍通道异常的交替形态下, 60s 窗两类各只首拍一条,
+  跨 60s 边界各 3 条; 复验不过 => qb_back 零落盘
 """
 import builtins
 import io
@@ -262,7 +329,12 @@ def _stub_qb(monkeypatch, state):
     消费同一 socket 模块对象); 进程名册与 state 联动 —— qB 在 = 名册含 qbittorrent,
     不在 = 名册可用但只有无关进程(评审 #6 起 _proc_absent 双判合取, 名册参与判定;
     单实例机器语义: qB 真死时名册自然无 qB 进程, 合取不损窗口可用性)。state["up"]=True
-    即「qB 在」。"""
+    即「qB 在」。
+
+    W2a 并桩观测通道(计划 26-11-10-0318 接线面): _qb_processes/_listening_map 恒 None
+    (观测通道不可用)—— 接线面每拍观测维护拿到 l1_open None => 既有用例一律退 L2 现状
+    路径(等价面锚死: 无 owner 记录/通道故障都不改既有窗口时序), 且不起真子进程
+    (PowerShell/netstat); L1 路径由接线面专测用 _stub_obs 自桩可控 roster/映射。"""
     def _connect(addr, timeout=None):
         if state["up"]:
             return mock.MagicMock()
@@ -272,6 +344,9 @@ def _stub_qb(monkeypatch, state):
     monkeypatch.setattr(
         rd, "_qb_process_names", lambda: ("qbittorrent.exe", ) if state["up"] else ("explorer.exe", "svchost.exe")
     )
+    # *a/**k 接参: 接线面 _observe_poll 以 warn= 关键字调用通道函数(T3 评审 A1), 桩签名须兼容
+    monkeypatch.setattr(rd, "_qb_processes", lambda *a, **k: None)
+    monkeypatch.setattr(rd, "_listening_map", lambda *a, **k: None)
 
 
 def _clock_gen(start=1000.0, step=5.0):
@@ -2503,3 +2578,517 @@ def test_observation_payload_roundtrip_and_bad_shape_is_none():
         }, HOST, PORT
     )
     assert ok is not None and ok.owner is None and ok.absorbed == [] and ok.pending == {}, "合法冷态载荷可载"
+
+
+# ---------------------------------------------------------------------------
+# 接线面(W2a, 计划 26-11-10-0318 §04 W2 的 1-3 项): run/_process_window 三层判据接线 + 观测
+# 维护 tick 契约 + 复验升级 + warning 节流。既有桩全沿用(_stub_qb 的观测通道并桩把既有
+# 用例钉在 L2 等价面); L1 路径用可控 roster/监听映射桩(_stub_obs); 场景级全链端到端
+# (场景 X/Y、PID 复用两端向、obs 跨重启端到端)留 W2b —— 本波的重启恢复是接线级单测
+# (from_payload 恢复面), 本波只做接线级单测
+# ---------------------------------------------------------------------------
+
+
+def _pending_job(tmp_path: Path, data_dir: str, tag: bytes = b"m-1") -> str:
+    """标准待收尾 job 造法(单成员, src/dst/BT_backup 就位), 返回 v1 hash —— 接线面专测
+    共用的最小 pending 形态(既有 _member_fixture/_write_job 的封装)"""
+    tmp_path.joinpath("src").mkdir(exist_ok=True)
+    tmp_path.joinpath("dst").mkdir(exist_ok=True)
+    h1 = _member_fixture(tmp_path / "BT_backup", tag, str(tmp_path / "src"))
+    _write_job(tmp_path, data_dir, "job-1", [h1], src=str(tmp_path / "src"), dst=str(tmp_path / "dst"))
+    return h1
+
+
+def _seed_obs(data_dir: str, owner, absorbed=None, ts: float = 500.0) -> None:
+    """obs 文件播种(模拟前世 daemon 的归档; 走 write_obs 真实路径, schema_version 由写侧
+    钉上)—— owner 非 None = 前世见过该实例(pid/ct 为 OS 身份), ts = 归档时刻"""
+    assert rj.write_obs(
+        data_dir, rj.instance_key(HOST, PORT), {
+            "host": HOST,
+            "port": PORT,
+            "owner": owner,
+            "absorbed": [] if absorbed is None else absorbed,
+            "ts": ts
+        }
+    )
+
+
+def _stub_obs(monkeypatch, st):
+    """观测通道注入(W2a 接线面): roster(_qb_processes)/全机监听映射(_listening_map)按 st
+    现值返回(可变 dict, 桩每拍读现值 => 测试可中途翻面)—— 与 _stub_qb 的联动风格同款;
+    roster=None 模拟通道不可用(None), {} 模拟健康零观测"""
+    monkeypatch.setattr(rd, "_qb_processes", lambda *a, **k: st.get("roster"))
+    monkeypatch.setattr(rd, "_listening_map", lambda *a, **k: st.get("listen_map"))
+
+
+def test_run_l1_dead_owner_enters_window_without_stable_wait(tmp_path, monkeypatch):
+    """L1 verdict True 立即进窗(拍板 D2, 无 down_since 计时): obs 死证(owner pid 已从
+    名册消失)+ 端口拒连 + 无未决 => 首拍即进窗改写 —— stable(1000s)远超 max_wait 仍完成
+    (时钟注入证明无 30s 等待; 同形态无死证走 L2 则 timeout 零落盘, 见等价面专测)"""
+    data_dir = str(tmp_path / "data")
+    h1 = _pending_job(tmp_path, data_dir)
+    _seed_obs(data_dir, {"pid": 4242, "ct": 100.0, "ts": 500.0})  # 前世归档: owner 曾在, 现已死
+    _stub_qb(monkeypatch, {"up": False})
+    _stub_obs(monkeypatch, {"roster": {}, "listen_map": None})  # 名册健康零观测: 4242 不在 => 死证成立
+    assert _run(data_dir, stable=1000.0, max_wait=60.0) == "idle"
+    rw = rj.read_rewrites(data_dir, "job-1")
+    assert rw[h1]["status"] == "rewritten", "L1 首拍进窗改写(stable=1000 未阻)"
+    assert rj.read_journal(data_dir, "job-1")["phase"] == rj.PHASE_REWRITTEN
+    d = frmod.load_fastresume(_fr_path(tmp_path, h1))
+    assert d[b"qBt-savePath"] == (str(tmp_path / "dst").replace("\\", "/") + "/m-1").encode("utf-8")
+
+
+def test_run_no_owner_record_walks_l2_stable_window_equivalent(tmp_path, monkeypatch, caplog):
+    """等价面(硬要求): 无 owner 记录(obs 缺失)=> verdict False 走 L2 现状三证原样 ——
+    30s 稳定期保留, 窗口时序不早于接线前(与 test_run_waits_for_stable_window_before_window
+    同形态:
+    stable 未满 timeout 零落盘); verdict False 是正常路径不告警(区别于通道故障);
+    目标未上线不建档, obs 文件零写"""
+    data_dir = str(tmp_path / "data")
+    h1 = _pending_job(tmp_path, data_dir)
+    before = _fr_path(tmp_path, h1).read_bytes()
+    _stub_qb(monkeypatch, {"up": False})
+    _stub_obs(monkeypatch, {"roster": {}, "listen_map": None})  # 名册健康但无 owner 记录 => L1 不适用
+    with caplog.at_level(logging.WARNING, logger=LOG_RD):
+        assert _run(data_dir, stable=100.0, max_wait=25.0) == "timeout", "L2 30s 稳定期保留(等价面)"
+    assert not [r for r in caplog.records if "退 L2" in r.message], "verdict False 不告警"
+    assert rj.read_rewrites(data_dir, "job-1") == {} and _fr_path(tmp_path, h1).read_bytes() == before, "零落盘"
+    assert rj.read_obs(data_dir, rj.instance_key(HOST, PORT)) is None, "obs 零写(目标未上线不建档)"
+
+
+def test_run_l1_roster_channel_broken_falls_back_l2_throttled(tmp_path, monkeypatch, caplog):
+    """名册通道故障(qB 身份枚举不可用)=> l1_open None 即便有有效死证也不进窗(通道故障
+    绝不冒充通过)⇒ 退 L2 现状判据 + 节流 warning(§03.1 通道纪律): 60s 内多拍只首拍一条;
+    跨过 60s 边界的窗口期再计一条(拍点 5s 步进: 140s 窗 28 拍恰 3 条 —— 1015/1075/1135);
+    roster None => tick 整拍不动, obs 文件零写(死证播种原样)"""
+    data_dir = str(tmp_path / "data")
+    _pending_job(tmp_path, data_dir)
+    _seed_obs(data_dir, {"pid": 4242, "ct": 100.0, "ts": 500.0})
+    _stub_qb(monkeypatch, {"up": False})  # S1 并桩: roster/listen_map 恒 None(通道不可用)
+    seeded = rj.read_obs(data_dir, rj.instance_key(HOST, PORT))
+    with caplog.at_level(logging.WARNING, logger=LOG_RD):
+        assert _run(data_dir, stable=1000.0, max_wait=50.0) == "timeout", "有死证但通道故障: 不进窗"
+        n1 = len([r for r in caplog.records if "不可判" in r.message])
+        assert n1 == 1, f"60s 内多拍只首拍一条, 实得 {n1}"
+    caplog.clear()
+    with caplog.at_level(logging.WARNING, logger=LOG_RD):
+        assert _run(data_dir, stable=1000.0, max_wait=140.0) == "timeout"
+        n2 = len([r for r in caplog.records if "不可判" in r.message])
+        assert n2 == 3, f"跨 60s 边界再计(不刷屏), 实得 {n2}"
+    assert rj.read_obs(data_dir, rj.instance_key(HOST, PORT)) == seeded, "roster None => tick 整拍不动, obs 零写"
+    assert rj.read_rewrites(data_dir, "job-1") == {}, "通道故障零改写"
+
+
+def test_run_l1_window_reverify_owner_revive_aborts(tmp_path, monkeypatch):
+    """复验升级(§03.3 硬要求): L1 窗的窗内复验 = 全套现读现判 —— 进窗判据与窗内复验之间
+    owner 复活(名册重现同 pid 同 ct + 端口回绑)=> 复验不过 => qb_back 中止, 零成员落盘
+    (现状中止/重试语义原样, 不新增行为); 复活在位续证只刷内存 ts, obs 持久面零变更"""
+    data_dir = str(tmp_path / "data")
+    h1 = _pending_job(tmp_path, data_dir)
+    before = _fr_path(tmp_path, h1).read_bytes()
+    _seed_obs(data_dir, {"pid": 100, "ct": 100.0, "ts": 500.0})
+    st = {"phase": "dead"}  # dead => revived: 翻面点 = L1 窗内复验首次现读名册(第 2 次 _qb_processes 调用)
+
+    def _connect(addr, timeout=None):
+        if st["phase"] == "revived":
+            return mock.MagicMock()
+        raise OSError(10061, "refused")
+
+    def _roster(*a, **k):
+        st["calls"] = st.get("calls", 0) + 1
+        if st["calls"] >= 2:
+            st["phase"] = "revived"
+        return {} if st["phase"] == "dead" else {100: _ident(100.0)}
+
+    monkeypatch.setattr(rd.socket, "create_connection", _connect)
+    monkeypatch.setattr(rd, "_qb_processes", _roster)
+    monkeypatch.setattr(
+        rd, "_listening_map", lambda *a, **k: None if st["phase"] == "dead" else {100: frozenset({PORT})}
+    )
+    monkeypatch.setattr(
+        rd, "_qb_process_names", lambda: ("explorer.exe", ) if st["phase"] == "dead" else ("qbittorrent.exe", )
+    )
+    assert _run(data_dir, stable=1000.0, max_wait=60.0) == "timeout", "复验不过 => qb_back, 无窗可再进"
+    assert rj.read_rewrites(data_dir, "job-1") == {} and _fr_path(tmp_path, h1).read_bytes() == before, "零落盘"
+    st2 = rj.read_obs(data_dir, rj.instance_key(HOST, PORT))
+    assert st2["owner"] == {"pid": 100, "ct": 100.0, "ts": 500.0}, "在位续证只在内存, obs 持久面零变更"
+
+
+def test_run_obs_tick_persists_changed_state_only(tmp_path, monkeypatch):
+    """观测维护 tick 契约: 持久面变更(tick True)才 write_obs —— 新面孔零赌注吸收(ct <
+    owner.ct)首拍落盘一次; 同一 roster 的后续拍零持久面变更不重写(owner 在位续证只在
+    内存)—— 多拍写次数钉死 = 1; 文件内容对齐 obs schema(owner 原样 + absorbed 新条目)"""
+    data_dir = str(tmp_path / "data")
+    _pending_job(tmp_path, data_dir)
+    _seed_obs(data_dir, {"pid": 100, "ct": 100.0, "ts": 500.0})  # owner 在位: 不进窗, 纯观测维护
+    _stub_qb(monkeypatch, {"up": True})
+    _stub_obs(monkeypatch, {"roster": {100: _ident(100.0), 200: _ident(50.0)}, "listen_map": {100: frozenset({PORT})}})
+    calls = {"n": 0}
+    real_write = rj.write_obs
+
+    def _count_write(*a, **k):
+        calls["n"] += 1
+        return real_write(*a, **k)
+
+    monkeypatch.setattr(rj, "write_obs", _count_write)
+    assert _run(data_dir, stable=1000.0, max_wait=50.0) == "timeout", "owner 在位: 无窗, 多拍观测维护"
+    assert calls["n"] == 1, f"变更拍写一次, 后续拍零变更不重写, 实得 {calls['n']}"
+    st = rj.read_obs(data_dir, rj.instance_key(HOST, PORT))
+    # owner 身份原样; ts = 变更拍(吸收同拍)的观测时刻 —— 续证单独不触发落盘, 但同拍有
+    # 其它变更时落的是内存已刷新的 ts(契约口径: 刷新只在内存「不单独触发写」, 非隔离快照)
+    assert st["owner"]["pid"] == 100 and st["owner"]["ct"] == 100.0 and st["owner"]["ts"] > 500.0, "owner 身份原样"
+    assert len(st["absorbed"]) == 1, "零赌注吸收进 absorbed"
+    assert st["absorbed"][0]["pid"] == 200 and st["absorbed"][0]["ct"] == 50.0 and st["absorbed"][0]["ts"] > 500.0
+    assert rj.read_rewrites(data_dir, "job-1") == {}, "零改写(未进窗)"
+
+
+def test_run_obs_write_failure_throttled_warning_no_crash(tmp_path, monkeypatch, caplog):
+    """obs 落盘失败(盘故障)=> 节流 warning 留痕不崩, 内存态继续跑(重启丢观测退 L2, 安全
+    向): 每 poll 新面孔吸收都触发写尝试, 60s 内多拍只首拍一条; daemon 结论正常产出
+    (timeout 收束), obs 文件保持种子原样(无一次覆盖)"""
+    data_dir = str(tmp_path / "data")
+    _pending_job(tmp_path, data_dir)
+    _seed_obs(data_dir, {"pid": 100, "ct": 100.0, "ts": 500.0})  # owner 在位: 持续观测, 不进窗
+    seeded = rj.read_obs(data_dir, rj.instance_key(HOST, PORT))
+    _stub_qb(monkeypatch, {"up": True})
+    seq = {"k": 0}
+
+    def _roster(*a, **k):
+        seq["k"] += 1
+        faces = {p: _ident(50.0) for p in range(200, 200 + seq["k"])}  # 每 poll 一个新面孔(全部早于 owner)
+        faces[100] = _ident(100.0)
+        return faces
+
+    monkeypatch.setattr(rd, "_qb_processes", _roster)
+    monkeypatch.setattr(rd, "_listening_map", lambda *a, **k: {100: frozenset({PORT})})
+    monkeypatch.setattr(rj, "write_obs", lambda *a, **k: False)  # 盘故障: 恒失败
+    with caplog.at_level(logging.WARNING, logger=LOG_RD):
+        assert _run(data_dir, stable=1000.0, max_wait=50.0) == "timeout", "写失败不崩, daemon 照常收束"
+        n = len([r for r in caplog.records if "落盘失败" in r.message])
+        assert n == 1, f"60s 内多拍写失败只首拍一条, 实得 {n}"
+    assert rj.read_obs(data_dir, rj.instance_key(HOST, PORT)) == seeded, "写恒失败: 种子原样, 无一次覆盖"
+
+
+def test_run_restarts_restore_owner_evidence_from_obs_file(tmp_path, monkeypatch):
+    """daemon 重启恢复(§03.4, 覆盖「停机期间目标死亡」): 前世 daemon 经真实观测通道归档
+    在位 owner(tick 建档落盘)=> 停机期间目标死亡 => 新世 from_payload 恢复死证 => 立即
+    进窗改写(无 30s 等待); obs 记录跨重启保留(新世 tick 无变更不重写)"""
+    data_dir = str(tmp_path / "data")
+    h1 = _pending_job(tmp_path, data_dir)
+    # 前世: 目标在线(owner 绑端口), 只做观测维护(owner 活着不进窗), timeout 收束
+    _stub_qb(monkeypatch, {"up": True})
+    _stub_obs(monkeypatch, {"roster": {100: _ident(100.0)}, "listen_map": {100: frozenset({PORT})}})
+    assert _run(data_dir, stable=1000.0, max_wait=20.0) == "timeout"
+    seeded = rj.read_obs(data_dir, rj.instance_key(HOST, PORT))
+    assert seeded["owner"]["pid"] == 100 and seeded["owner"]["ct"] == 100.0, "前世已归档在位 owner"
+    # 新世: 停机期间目标死亡(名册零观测 + 端口拒连)—— obs 文件里的 owner 记录 = 有效死证
+    _stub_qb(monkeypatch, {"up": False})
+    _stub_obs(monkeypatch, {"roster": {}, "listen_map": None})
+    assert _run(data_dir, stable=1000.0, max_wait=60.0) == "idle"
+    rw = rj.read_rewrites(data_dir, "job-1")
+    assert rw[h1]["status"] == "rewritten", "恢复的死证驱动 L1 立即进窗"
+    assert rj.read_obs(data_dir, rj.instance_key(HOST, PORT)) == seeded, "死证记录跨重启保留"
+
+
+def test_run_corrupt_obs_file_starts_empty_and_stays_l2(tmp_path, monkeypatch):
+    """obs 文件坏形(非 JSON 半残文件)=> read_obs None => 新建空 _Observation 走 L2(D3
+    冷启动形态: 等目标下次上线建档): 不崩溃、不覆盖坏文件(tick 无变更不落盘)、窗口时序
+    按 L2 现状(30s 保留)"""
+    data_dir = str(tmp_path / "data")
+    _pending_job(tmp_path, data_dir)
+    _stub_qb(monkeypatch, {"up": False})
+    _stub_obs(monkeypatch, {"roster": {}, "listen_map": None})
+    obs_file = Path(rj.obs_path(data_dir, rj.instance_key(HOST, PORT)))
+    obs_file.parent.mkdir(parents=True, exist_ok=True)
+    obs_file.write_bytes(b"not-json-at-all")
+    assert _run(data_dir, stable=100.0, max_wait=25.0) == "timeout", "坏记录不冒充证据 => L2 30s 保留"
+    assert rj.read_rewrites(data_dir, "job-1") == {}
+    assert obs_file.read_bytes() == b"not-json-at-all", "坏文件不覆盖(零变更不落盘)"
+
+
+def test_run_observation_channels_not_polled_without_pending(tmp_path, monkeypatch):
+    """§03.1 口径: 观测维护仅 pending 非空时跑 —— 空载拍(无 job)观测通道零调用(§07 R1
+    子进程预算只花在有活的拍上)"""
+    data_dir = str(tmp_path / "data")
+    calls = {"roster": 0, "lmap": 0}
+    monkeypatch.setattr(rd, "_qb_processes", lambda *a, **k: calls.__setitem__("roster", calls["roster"] + 1))
+    monkeypatch.setattr(rd, "_listening_map", lambda *a, **k: calls.__setitem__("lmap", calls["lmap"] + 1))
+    assert _run(data_dir) == "idle"
+    assert calls == {"roster": 0, "lmap": 0}, "空载零通道调用"
+
+
+# ---------------------------------------------------------------------------
+# 复验现判补强(W2a 编排方裁决, 计划 §03.3 第 3 条件「现判」化): _Observation.unclassified_faces
+# 纯分类读并入 _l1_window_open —— 窗内复验不再只看进窗时的 pending 快照, 现读名册里状态机
+# 不能立即出具「无害」结论的面一律复验不过(qb_back); 新面由下一拍 tick 正规分类后窗可重开
+# ---------------------------------------------------------------------------
+
+
+def _flip_to_face_at_reverify(monkeypatch, st, face):
+    """复验翻面桩: 第 2 次 _qb_processes 调用(L1 窗顶复验的现读点)起名册现值翻出 face ——
+    翻面点即「进窗判据与窗内复验之间」的世界变化; socket 全程拒连(目标已死, 新面不绑端口),
+    _qb_process_names 与名册联动(face 在场 = 全机名册见 qB, L2 亦不得开窗)"""
+    def _connect(addr, timeout=None):
+        raise OSError(10061, "refused")
+
+    def _roster(*a, **k):
+        st["calls"] = st.get("calls", 0) + 1
+        if st["calls"] >= 2:
+            st["phase"] = "face"
+        return {} if st["phase"] == "dead" else dict(face)
+
+    monkeypatch.setattr(rd.socket, "create_connection", _connect)
+    monkeypatch.setattr(rd, "_qb_processes", _roster)
+    monkeypatch.setattr(
+        rd, "_qb_process_names", lambda: ("explorer.exe", ) if st["phase"] == "dead" else ("qbittorrent.exe", )
+    )
+
+
+def test_run_l1_window_reverify_unclassified_face_blocks(tmp_path, monkeypatch):
+    """复验现判补强(裁决项一): L1 窗开启后、窗顶复验现读名册冒出全新未分类面(pid/ct 状态机从未
+    见过)=> l1_open 三条件全齐也复验不过 => qb_back 零落盘 —— 条件 3 的「无未决」不能只看
+    进窗时 pending 快照; 面进未决后指纹通道不可用 => 永滞未决, 窗不再开, timeout 收束"""
+    data_dir = str(tmp_path / "data")
+    h1 = _pending_job(tmp_path, data_dir)
+    before = _fr_path(tmp_path, h1).read_bytes()
+    _seed_obs(data_dir, {"pid": 4242, "ct": 100.0, "ts": 500.0})
+    st = {"phase": "dead"}
+    _flip_to_face_at_reverify(monkeypatch, st, {200: _ident(600.0)})
+    monkeypatch.setattr(rd, "_listening_map", lambda *a, **k: None)  # 指纹通道断: 未决面不 settle
+    assert _run(data_dir, stable=1000.0, max_wait=60.0) == "timeout", "未分类面挡复验 => qb_back, 无窗可再进"
+    assert rj.read_rewrites(data_dir, "job-1") == {} and _fr_path(tmp_path, h1).read_bytes() == before, "零落盘"
+    assert rj.read_obs(data_dir, rj.instance_key(HOST, PORT))["absorbed"] == [], "面滞未决(内存面), 无吸收落盘"
+
+
+def test_run_l1_window_reopens_after_settle_absorb(tmp_path, monkeypatch):
+    """同面被 tick 正规吸收后窗重开: 未分类面进未决后, 指纹稳定 NEW_FACE_SETTLE 且不含
+    我们端口 => settle 吸收(§03.2 行三, 持久面落盘)—— 下一拍 L1 verdict 复为 True 且复验
+    分类读见 absorbed 命中 => 窗重开改写收口(挡是暂态不是死锁, 与状态机设计自洽)"""
+    data_dir = str(tmp_path / "data")
+    h1 = _pending_job(tmp_path, data_dir)
+    _seed_obs(data_dir, {"pid": 4242, "ct": 100.0, "ts": 500.0})
+    st = {"phase": "dead"}
+    _flip_to_face_at_reverify(monkeypatch, st, {200: _ident(600.0)})
+    monkeypatch.setattr(rd, "_listening_map", lambda *a, **k: {200: frozenset({8081})})  # 指纹稳定且不含我们端口
+    assert _run(data_dir, stable=1000.0, max_wait=120.0) == "idle", "settle 吸收后窗重开并收口"
+    rw = rj.read_rewrites(data_dir, "job-1")
+    assert rw[h1]["status"] == "rewritten", "吸收后 L1 重开改写"
+    st2 = rj.read_obs(data_dir, rj.instance_key(HOST, PORT))
+    assert len(st2["absorbed"]) == 1 and st2["absorbed"][0]["pid"] == 200 and st2["absorbed"][0]["ct"] == 600.0
+    assert st2["absorbed"][0]["ts"] > 500.0, "面已正规吸收落盘"
+
+
+def test_run_l1_window_reverify_absorbed_face_does_not_block(tmp_path, monkeypatch):
+    """absorbed 命中面复验不挡: 名册现读里命中 absorbed(pid,ct)的面是状态机已出具
+    「无害」结论的面 —— 复验放行, 窗开启改写(分类读不把已吸收面当未分类)"""
+    data_dir = str(tmp_path / "data")
+    h1 = _pending_job(tmp_path, data_dir)
+    _seed_obs(
+        data_dir,
+        {
+            "pid": 4242,
+            "ct": 100.0,
+            "ts": 500.0
+        },
+        absorbed=[{
+            "pid": 200,
+            "ct": 50.0,
+            "ts": 505.0
+        }],  # 前世已零赌注吸收的面(早于 owner 实例)
+    )
+    _stub_qb(monkeypatch, {"up": False})
+    _stub_obs(monkeypatch, {"roster": {200: _ident(50.0)}, "listen_map": None})
+    assert _run(data_dir, stable=1000.0, max_wait=60.0) == "idle"
+    assert rj.read_rewrites(data_dir, "job-1")[h1]["status"] == "rewritten", "absorbed 命中面不挡复验"
+
+
+def test_run_l1_window_reverify_unreadable_ct_face_blocks(tmp_path, monkeypatch):
+    """ct 读不出面复验挡: 名册条目身份不完整(无 ct)的状态机结论只能是「未分类」——
+    无法证明它是已吸收/在位/已决的哪一类, 保守挡(与 tick 缺 ct 面停未决真挡同向);
+    l1_open 三条件全齐也不放行"""
+    data_dir = str(tmp_path / "data")
+    h1 = _pending_job(tmp_path, data_dir)
+    before = _fr_path(tmp_path, h1).read_bytes()
+    _seed_obs(data_dir, {"pid": 4242, "ct": 100.0, "ts": 500.0})
+    st = {"phase": "dead"}
+    _flip_to_face_at_reverify(monkeypatch, st, {200: {"name": "qbittorrent"}})  # 缺 ct 键
+    monkeypatch.setattr(rd, "_listening_map", lambda *a, **k: None)
+    assert _run(data_dir, stable=1000.0, max_wait=60.0) == "timeout", "缺 ct 面挡复验 => qb_back"
+    assert rj.read_rewrites(data_dir, "job-1") == {} and _fr_path(tmp_path, h1).read_bytes() == before, "零落盘"
+    assert rj.read_obs(data_dir, rj.instance_key(HOST, PORT))["absorbed"] == [], "缺 ct 面写不进合法 absorbed"
+
+
+def test_observation_unclassified_faces_classification_table():
+    """unclassified_faces 分类表(纯分类读): owner 身份命中/absorbed 命中/pending 在册不进
+    清单(三者在 l1_open 各有等价挡); ct 读不出/ct<owner.ct 未及吸收/owner pid 复用面/absorbed
+    pid 复用面/全新面一律未分类; 纯读 —— 状态机零变动; 名册空 => 清单空"""
+    obs = rd._Observation(HOST, PORT)
+    _seed_owner(obs, now=500.0, pid=100, ct=100.0)
+    obs.tick({100: _ident(100.0), 200: _ident(50.0)}, None, None, 505.0)  # 200 零赌注吸收
+    obs.tick(
+        {
+            100: _ident(100.0),
+            200: _ident(50.0),
+            300: _ident(600.0)
+        }, None, {300: frozenset({8081})}, 510.0
+    )  # 300 进未决(200 须在场, 否则 absorbed 消失清出)
+    # roster 字面量 600 放 400 前(插入序与 pid 数值序不同): 钉住返回值 sorted(out) 排序
+    roster = {
+        100: _ident(100.0),  # owner 本尊(pid+ct 命中)
+        200: _ident(50.0),  # absorbed 命中
+        300: _ident(600.0),  # pending 在册
+        600: {
+            "name": "qbittorrent"
+        },  # ct 读不出
+        400: _ident(700.0),  # 全新面(ct > owner.ct)
+        500: _ident(40.0),  # ct < owner.ct 尚未吸收(tick 会零赌注吸收, 此刻未及)
+    }
+    before = (dict(obs.owner), [dict(e) for e in obs.absorbed], {p: dict(v) for p, v in obs.pending.items()})
+    assert obs.unclassified_faces(roster) == [400, 500, 600]
+    after = (dict(obs.owner), [dict(e) for e in obs.absorbed], {p: dict(v) for p, v in obs.pending.items()})
+    assert before == after, "纯读: 状态机零变动"
+    # owner pid 被复用(ct 不等): 不算 owner 身份命中 => 未分类(l1_open 形态二判死的同时,
+    # 复用者本体是未分类新面, 不因「原实例已死」放行)
+    assert obs.unclassified_faces({100: _ident(999.0)}) == [100]
+    # absorbed pid 被复用(ct 不等): absorbed 命中要求 pid+ct 均等, 复用者不继承吸收身份
+    # => 未分类(T3 评审 B2, 与 owner 复用向对称; tick 侧旧 absorbed 条目走消失清出重分类)
+    assert obs.unclassified_faces({200: _ident(600.0)}) == [200]
+    assert obs.unclassified_faces({}) == [], "名册空 => 无未分类面"
+
+
+def test_run_observe_channel_warnings_throttled_per_class(tmp_path, monkeypatch, caplog):
+    """[持续故障节流/通道格式漂移+名册通道故障] 通道函数经接线面节流 sink 告警(T3 评审 A1,
+    §03.1 通道纪律「每(实例, 类)1 条/60s」): netstat 空输出零 LISTENING 解析成功(格式漂移
+    => obs_listen 类)+ PowerShell 名册缺健康标记(obs_roster 类)+ 接线点处置留痕(listen
+    指纹不可用/roster verdict 不可判两类)—— daemon 主循环每 poll 触发, 每类 60s 只首拍
+    一条, 跨 60s 边界的窗口期再计一条(拍点 5s 步进, 140s 窗各 3 条); 通道函数缺省直落
+    路径(warn=None => logger.warning)由既有通道单测钉住, 零改动仍绿"""
+    data_dir = str(tmp_path / "data")
+    _pending_job(tmp_path, data_dir)
+
+    def _connect(addr, timeout=None):
+        raise OSError(10061, "refused")
+
+    monkeypatch.setattr(rd.socket, "create_connection", _connect)
+    monkeypatch.setattr(rd, "_qb_process_names", lambda: ("explorer.exe", "svchost.exe"))
+    monkeypatch.setattr(rd.os, "name", "nt")  # 钉 Windows 分派: 双通道都走子进程桩(平台无关)
+    _stub_stdout(monkeypatch, "")  # 双通道故障: netstat 空输出(格式漂移)+ PS 缺健康标记
+    tags = ("格式漂移", "缺健康标记", "本拍不可判", "未决面本拍不 settle")
+    with caplog.at_level(logging.WARNING, logger=LOG_RD):
+        assert _run(data_dir, stable=1000.0, max_wait=50.0) == "timeout", "L2 现状收束(通道故障不进窗)"
+        counts = {tag: len([r for r in caplog.records if tag in r.message]) for tag in tags}
+        assert counts == {"格式漂移": 1, "缺健康标记": 1, "本拍不可判": 1, "未决面本拍不 settle": 1}, counts
+    caplog.clear()
+    with caplog.at_level(logging.WARNING, logger=LOG_RD):
+        assert _run(data_dir, stable=1000.0, max_wait=140.0) == "timeout"
+        counts = {tag: len([r for r in caplog.records if tag in r.message]) for tag in tags}
+        assert counts == {"格式漂移": 3, "缺健康标记": 3, "本拍不可判": 3, "未决面本拍不 settle": 3}, counts
+
+
+def test_run_observe_owner_warning_throttled(tmp_path, monkeypatch, caplog):
+    """[持续故障节流/占用者告警] 端口可达 + LISTENING 归属唯一 + 占用者非名册 qB =>
+    _observe_owner 的占用者告警(非 qB 服务占端口不记录 owner)每 poll 触发, 经 sink
+    obs_owner 类节流: 60s 只首拍一条, 跨 60s 边界的窗口期再计一条; 占用者永不建档
+    (obs owner 恒 None), 无关名册 qB 面 30s settle 吸收照常(观测维护不因占用者告警阻断)"""
+    data_dir = str(tmp_path / "data")
+    _pending_job(tmp_path, data_dir)
+
+    def _connect(addr, timeout=None):
+        return mock.MagicMock()
+
+    monkeypatch.setattr(rd.socket, "create_connection", _connect)
+    monkeypatch.setattr(rd, "_qb_process_names", lambda: ("qbittorrent.exe", ))
+    monkeypatch.setattr(rd, "_listening_map", lambda *a, **k: {7777: frozenset({PORT})})  # 非 qB 占用者绑我们端口
+    monkeypatch.setattr(rd, "_qb_processes", lambda *a, **k: {100: _ident(100.0)})  # 名册只有无关 qB 实例
+    with caplog.at_level(logging.WARNING, logger=LOG_RD):
+        assert _run(data_dir, stable=1000.0, max_wait=50.0) == "timeout"
+        n1 = len([r for r in caplog.records if "非全机 qB 名册成员" in r.message])
+        assert n1 == 1, f"占用者告警 60s 内只首拍一条, 实得 {n1}"
+    caplog.clear()
+    with caplog.at_level(logging.WARNING, logger=LOG_RD):
+        assert _run(data_dir, stable=1000.0, max_wait=140.0) == "timeout"
+        n2 = len([r for r in caplog.records if "非全机 qB 名册成员" in r.message])
+        assert n2 == 3, f"跨 60s 边界再计, 实得 {n2}"
+    st = rj.read_obs(data_dir, rj.instance_key(HOST, PORT))
+    assert st["owner"] is None, "占用者永不建档"
+    assert len(st["absorbed"]) == 1 and st["absorbed"][0]["pid"] == 100 and st["absorbed"][0]["ct"] == 100.0, \
+        "无关 qB 面 settle 吸收照常"
+
+
+def test_run_owner_attribution_and_occupier_warnings_independent_throttled(tmp_path, monkeypatch, caplog):
+    """[持续故障节流/归属与占用者分键] 归属层告警(端口可达 + LISTENING 映射无我们端口 =>
+    「未归属成功」)走 obs_listen 类、占用者告警(归属唯一 + 占用者非名册 qB)走 obs_owner
+    类 —— 两类 sink 分键后各自 60s 节流互不顶掉(评审轮 2 N1: 交替故障形态下旧共键实现
+    第一拍就把对方顶掉): 60s 窗两类各 1 条, 140s 窗各 3 条; 占用者/归属失败都永不建档
+    (obs owner 恒 None), 无 owner 记录恒走 L2 等价面(不进窗)"""
+    data_dir = str(tmp_path / "data")
+    _pending_job(tmp_path, data_dir)
+
+    def _connect(addr, timeout=None):
+        return mock.MagicMock()
+
+    monkeypatch.setattr(rd.socket, "create_connection", _connect)
+    monkeypatch.setattr(rd, "_qb_process_names", lambda: ("qbittorrent.exe", ))  # 名册见 qB: L2 不开窗, 每 poll 纯观测维护
+    monkeypatch.setattr(rd, "_qb_processes", lambda *a, **k: {100: _ident(100.0)})  # 名册只有无关 qB 实例
+    st = {"n": 0}
+
+    def _lmap(*a, **k):
+        st["n"] += 1
+        if st["n"] % 2:
+            return {7777: frozenset({PORT})}  # 占用者形态: 非 qB 服务绑我们端口(归属成功 => 占用者告警)
+        return {300: frozenset({8081})}  # 归属失败形态: 映射无我们端口 => 「未归属成功」告警
+
+    monkeypatch.setattr(rd, "_listening_map", _lmap)
+    with caplog.at_level(logging.WARNING, logger=LOG_RD):
+        assert _run(data_dir, stable=1000.0, max_wait=50.0) == "timeout"
+        occ = len([r for r in caplog.records if "非全机 qB 名册成员" in r.message])
+        att = len([r for r in caplog.records if "未归属成功" in r.message])
+        assert occ == 1 and att == 1, f"两类分键: 60s 窗内各自首拍一条互不顶掉, occ={occ} att={att}"
+    caplog.clear()
+    with caplog.at_level(logging.WARNING, logger=LOG_RD):
+        assert _run(data_dir, stable=1000.0, max_wait=140.0) == "timeout"
+        occ = len([r for r in caplog.records if "非全机 qB 名册成员" in r.message])
+        att = len([r for r in caplog.records if "未归属成功" in r.message])
+        assert occ == 3 and att == 3, f"跨 60s 边界再计(每类独立 60s 节流), occ={occ} att={att}"
+    assert rj.read_obs(data_dir, rj.instance_key(HOST, PORT))["owner"] is None, "占用者/归属失败都永不建档"
+
+
+def test_run_l1_reverify_channel_failure_throttled(tmp_path, monkeypatch, caplog):
+    """[复验拍通道故障节流] L1 窗内复验(_l1_window_open)现读名册通道故障: 通道告警经
+    warn sink 节流(复用 obs_roster 类 —— 与主循环读同一条 qB 名册通道, 同根因不刷屏)、
+    verdict None 处置留痕走独立 reverify 键(复验不过 = qb_back 中止本轮, 处置事件不被
+    主循环处置留痕顶掉): poll 拍通道健康(verdict True 进窗)/复验拍通道异常的交替形态下,
+    60s 窗内多拍复验两类各只首拍一条, 跨 60s 边界再计(140s 窗各 3 条); 复验不过 =>
+    qb_back 零落盘(通道故障不冒充通过, 中止语义原样)"""
+    data_dir = str(tmp_path / "data")
+    _pending_job(tmp_path, data_dir)
+    _seed_obs(data_dir, {"pid": 4242, "ct": 100.0, "ts": 500.0})  # 有效死证: poll 拍 verdict True 进窗
+    st = {"n": 0}
+
+    def _ps(*, warn=None):
+        st["n"] += 1
+        if st["n"] % 2:
+            return {}  # poll 拍: 通道健康零观测(4242 死证成立 => 立即进窗)
+        raise OSError("reverify channel down")  # 复验拍: 通道异常(经真实 _qb_processes dispatch => sink 节流)
+
+    monkeypatch.setattr(rd.os, "name", "nt")  # 钉 Windows 分派: _qb_processes 真实 dispatch(异常经 warn sink 下发)
+    monkeypatch.setattr(rd, "_qb_processes_from_powershell", _ps)
+    monkeypatch.setattr(rd, "_listening_map", lambda *a, **k: None)  # 指纹通道断(listen 类, 与本测两类互不干扰)
+    monkeypatch.setattr(rd, "_qb_process_names", lambda: ("explorer.exe", ))
+
+    def _connect(addr, timeout=None):
+        raise OSError(10061, "refused")
+
+    monkeypatch.setattr(rd.socket, "create_connection", _connect)
+    with caplog.at_level(logging.WARNING, logger=LOG_RD):
+        assert _run(data_dir, stable=1000.0, max_wait=50.0) == "timeout", "复验不过 => qb_back, 无窗可再进"
+        ch = len([r for r in caplog.records if "枚举通道异常" in r.message])
+        rv = len([r for r in caplog.records if "复验" in r.message])
+        assert ch == 1 and rv == 1, f"60s 窗内多拍复验只首拍各一条(通道/处置分键), ch={ch} rv={rv}"
+    caplog.clear()
+    with caplog.at_level(logging.WARNING, logger=LOG_RD):
+        assert _run(data_dir, stable=1000.0, max_wait=140.0) == "timeout"
+        ch = len([r for r in caplog.records if "枚举通道异常" in r.message])
+        rv = len([r for r in caplog.records if "复验" in r.message])
+        assert ch == 3 and rv == 3, f"跨 60s 边界再计(两类独立节流), ch={ch} rv={rv}"
+    assert rj.read_rewrites(data_dir, "job-1") == {}, "复验中止零改写(通道故障不冒充通过)"
