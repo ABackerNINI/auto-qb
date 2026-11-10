@@ -46,6 +46,11 @@ gen_doc_map.collect() 本体的键集合 —— 它是闸门/守阵消费单点 
 - test_pull_ff_only_diverged_refuses_without_merge: 分叉 → 失败, 且**绝不执行 merge**(仅快进口径)
 - test_pull_ff_only_ahead_only_is_noop: 本地领先(未推送) → 成功且不执行 merge
 - test_pull_ff_only_fast_forwards: 纯落后 → merge --ff-only, 回报新 HEAD
+- test_retryable_three_tiers: _git 重试判据三档 (网络失败即重试 / 非幂等写绝不重试 / 只读救超时与瞬时签名)
+- test_git_retries_transient_failure_then_succeeds: Gitee 抖动首次失败第二次成功, 同一调用内自愈
+- test_git_gives_up_after_three_attempts_with_note: 三次全败取最后一次, 失败行带「已重试 2 次」
+- test_git_does_not_retry_merge: merge 失败一次就交出, 零重试
+- test_git_once_maps_timeout_and_spawn_failure_to_minus_one: 直驱真实 _git_once, 超时/OSError 必须 rc=-1 哨兵码
 - test_pull_endpoint_requires_action_header: 缺 / 错 X-Nav-Action 头 → 403 (CSRF 护栏)
 - test_pull_endpoint_rejects_non_pull_routes: GET /api/pull 与 POST 未知路径 → 404
 - test_pull_endpoint_reports_result: 带头 → 200 + {ok, message} 原样回传
@@ -251,6 +256,101 @@ def test_pull_ff_only_fast_forwards(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(nav_server, "_git", runner)
     ok, msg = nav_server.pull_ff_only(tmp_path)
     assert ok is True and "已快进到" in msg and remote[:8] in msg
+
+
+def test_retryable_three_tiers() -> None:
+    """重试判据三档 (口径同 _pipeline._retryable): 网络子命令失败即重试 / 非幂等本地写绝不重试 /
+    只读命令只救超时与瞬时签名 —— rc=0 与「非 0 即正常答案」的查询都不重试。"""
+    net = ("ls-remote", "gitee", "develop")
+    merge = ("merge", "--ff-only", "b" * 40)
+    ro = ("rev-parse", "HEAD")
+    assert not nav_server._retryable(net, _proc(0, "", ""))
+    assert nav_server._retryable(net, _proc(1, "", "fatal: 差不多任何失败都重试"))
+    assert not nav_server._retryable(merge, _proc(1, "", "error: 快进被拒"))
+    assert not nav_server._retryable(merge, _proc(-1, "", "git 超时 20s")), "merge 超时被杀 ≠ 没执行完, 重试会搅乱工作区"
+    assert nav_server._retryable(ro, _proc(-1, "", "git 超时 20s"))
+    assert nav_server._retryable(ro, _proc(1, "", "fatal: unable to access"))
+    assert not nav_server._retryable(ro, _proc(1, "", "fatal: 不是 git 仓库")), "非 0 是正常答案的查询不重试"
+
+
+def test_git_retries_transient_failure_then_succeeds(tmp_path: Path, monkeypatch) -> None:
+    """Gitee 抖动场景: 首次 fetch 失败(瞬时签名), 第二次成功 —— 同一次 _git 调用内自愈,
+    attempts_used 如实记账 (成功保持沉默, 不啰嗦)。"""
+    monkeypatch.setattr(nav_server, "GIT_RETRY_BACKOFF", 0)
+    tries = {"n": 0}
+
+    def flaky(root, *args):
+        tries["n"] += 1
+        if tries["n"] == 1:
+            return _proc(1, "", "fatal: unable to access 'https://gitee.com/...': Recv failure")
+        return _proc(0, "")
+
+    monkeypatch.setattr(nav_server, "_git_once", flaky)
+    proc = nav_server._git(tmp_path, "fetch", "gitee", "develop")
+    assert proc.returncode == 0 and tries["n"] == 2 and proc.attempts_used == 2
+
+
+def test_git_gives_up_after_three_attempts_with_note(tmp_path: Path, monkeypatch) -> None:
+    """三次全败: 取最后一次结果交出, attempts_used=3; pull 失败行带上「已重试 2 次」,
+    读的人才知道不是一次失败就报错 (口径同 _pipeline.retry_note)。"""
+    monkeypatch.setattr(nav_server, "GIT_RETRY_BACKOFF", 0)
+    runner, calls = _fake_git(
+        {
+            ("rev-parse", "--is-inside-work-tree"): _proc(0, "true\n"),
+            ("remote", ): _proc(0, "gitee\n"),
+            ("rev-parse", "--abbrev-ref", "HEAD"): _proc(0, "develop\n"),
+            ("fetch", ): _proc(1, "", "fatal: unable to access"),
+            ("ls-remote", ): _proc(1, "", "fatal: unable to access"),
+        }
+    )
+    monkeypatch.setattr(nav_server, "_git_once", runner)
+    ok, msg = nav_server.pull_ff_only(tmp_path)
+    assert ok is False and "拿不到远端 gitee/develop" in msg and "已重试 2 次" in msg
+    assert sum(1 for call in calls if call and call[0] == "ls-remote") == 3, "ls-remote 应正好尝试 3 次"
+
+
+def test_git_does_not_retry_merge(tmp_path: Path, monkeypatch) -> None:
+    """非幂等本地写(merge --ff-only)只给超时、不给重试: rc!=0 一次就交出 —— 重试可能把
+    工作区搅乱 (三档判据第 2 档)。"""
+    monkeypatch.setattr(nav_server, "GIT_RETRY_BACKOFF", 0)
+    tries = {"n": 0}
+
+    def once(root, *args):
+        tries["n"] += 1
+        return _proc(1, "", "error: Your local changes would be overwritten by merge")
+
+    monkeypatch.setattr(nav_server, "_git_once", once)
+    proc = nav_server._git(tmp_path, "merge", "--ff-only", "b" * 40)
+    assert proc.returncode == 1 and tries["n"] == 1 and nav_server.retry_note(proc) == ""
+
+
+def test_git_once_maps_timeout_and_spawn_failure_to_minus_one(tmp_path: Path, monkeypatch) -> None:
+    """超时 / 起不来必须映射成 rc=-1 哨兵码 (与真实 git 码不冲突): 第 3 档只读命令靠它重试 ——
+    回归成 rc=1 会静默关掉该档重试(超时文案不含 TRANSIENT_MARKS 任何英文签名), 现有桩测试
+    一条都不会红, 所以必须直驱真实 _git_once 钉死。"""
+    monkeypatch.setattr(nav_server, "_kill_tree", lambda pid: None, raising=True)
+
+    class _FakeProc:
+        def __init__(self) -> None:
+            self.pid = 0
+            self.returncode = 0
+
+        def communicate(self, timeout=None):  # noqa: A002
+            raise subprocess.TimeoutExpired(cmd="git", timeout=timeout or 0)
+
+        def wait(self, timeout=None):  # noqa: A002
+            return 0
+
+    monkeypatch.setattr(subprocess, "Popen", lambda *a, **k: _FakeProc())
+    proc = nav_server._git_once(tmp_path, "rev-parse", "HEAD")
+    assert proc.returncode == -1 and "超时" in proc.stderr, "TimeoutExpired 必须 rc=-1 (第 3 档重试靠它)"
+
+    def _boom(*a, **k):
+        raise OSError("spawn failed")
+
+    monkeypatch.setattr(subprocess, "Popen", _boom)
+    proc = nav_server._git_once(tmp_path, "rev-parse", "HEAD")
+    assert proc.returncode == -1 and "起不来" in proc.stderr, "OSError 必须 rc=-1"
 
 
 def test_pull_endpoint_requires_action_header(nav_port: int) -> None:

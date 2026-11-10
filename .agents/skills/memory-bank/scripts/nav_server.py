@@ -11,6 +11,9 @@
                              原因, 绝不 rebase / 绝不生成 merge commit。必须带 X-Nav-Action 头 ——
                              CSRF 护栏: 跨站 fetch 带自定义头会先发 OPTIONS 预检, 本服务不答 (501)
                              → 浏览器拦下; 同源页面不受影响。
+                             网络容错 (2026-11-11): _git 层单次超时 + 有界重试 (默认 3 次, 判据同
+                             .commands/my-commit-flow/_pipeline.py 三档) —— Gitee 间歇抖动时
+                             「拉取」在同一个 POST 里自愈, 全部尝试失败才回失败行 (带「已重试 N 次」)。
 
 用法 (从仓库根):
     python .agents/skills/memory-bank/scripts/nav_server.py                    起服务 (绑 127.0.0.1:8765,
@@ -36,6 +39,7 @@ import os
 import subprocess
 import sys
 import threading
+import time
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -69,8 +73,68 @@ PULL_HEADER_VALUE = "pull"
 # origin 可能是 GitHub 镜像)。判据纪律同 sync.py —— 只认 ls-remote 现查的远端真值, 不读 refs/remotes
 # (本环境该 ref 的写入会被静默丢弃, 见 pitfalls/git/refs.md)。
 MAIN_REMOTE_CANDIDATES = ("gitee", "origin", "github")
-GIT_TIMEOUT = 60  # 单条 git 命令超时(秒): 离线 / 凭据弹窗时不至于挂死服务线程
+# 单条 git 命令超时(秒) + 有界重试: 口径整体移植自 .commands/my-commit-flow/scripts/_pipeline.py
+# (2026-11-11, 用户报「Gitee 经常抖动, 首次 pull 失败」)。单次超时收紧 60→20s 的理由同源:
+# Gitee 间歇性卡住时 60s 只够等出一次失败, 20s + 重试才能在同一个 POST 里自愈 (最坏
+# 3 次×20s + 退避 ≈ 63s 仍有界, 不至于挂死服务线程 —— 离线 / 凭据弹窗的初衷不变)。
+GIT_TIMEOUT = 20
+GIT_ATTEMPTS = 3  # 含首次; 重试与否由 _retryable 判, 全部失败才把最后一次结果交出去
+GIT_RETRY_BACKOFF = 1.0  # 重试间隔(秒)
 _PULL_LOCK = threading.Lock()  # 串行化并发拉取 (ThreadingHTTPServer 每请求一线程)
+
+# 三档重试判据 (与 _pipeline.py 同一份理由, 单点复制不 import —— commands 包是 .commands 私产,
+# memory-bank skill 只依赖 stdlib + 本目录):
+#   1. 网络子命令(拉 / 取) —— 失败即重试: 失败签名五花八门(网关 502 / 代理重置 / TLS 抖动),
+#      靠白名单必然漏; 除 pull 外都幂等(只读), 重试安全。集合与 _pipeline 保持同源(含 pull ——
+#      它其实非幂等, 但本服务从不调用 git pull, 留在集合里只是同源的代价)。
+#   2. 非幂等的本地写(merge / reset …) —— 只给超时, 不给重试: 超时被杀 ≠ 没执行完, 再跑一次
+#      轻则把正常答案当失败, 重则把工作区搅乱。
+#   3. 其余(只读查询) —— 只在可能自愈的失败上重试: 超时(rc=-1)或命中瞬时签名。
+NETWORK_SUBCOMMANDS = frozenset({"push", "fetch", "pull", "ls-remote", "clone", "remote"})
+NON_IDEMPOTENT_SUBCOMMANDS = frozenset(
+    {
+        "commit",
+        "rebase",
+        "merge",
+        "reset",
+        "checkout",
+        "switch",
+        "restore",
+        "rm",
+        "mv",
+        "am",
+        "apply",
+        "cherry-pick",
+        "revert",
+        "stash",
+        "tag",
+        "update-ref",
+        "branch",
+        "worktree",
+        "clean",
+    }
+)
+TRANSIENT_MARKS = (
+    "Recv failure",
+    "Connection was reset",
+    "Could not resolve host",
+    "Failed to connect",
+    "Connection timed out",
+    "Operation timed out",
+    "The remote end hung up",
+    "remote end hung up",
+    "early EOF",
+    "RPC failed",
+    "unable to access",
+    "unexpected disconnect",
+    "Temporary failure",
+    "SSL",
+    "TLS",
+    "timed out",
+    "502",
+    "503",
+    "504",
+)
 
 # 壳缺失时的占位模板 (仅 --gen-static 自验管线用): dark 主题, 注入数据并回显计数, 不冒充正式壳。
 _PLACEHOLDER_SHELL = """<!DOCTYPE html>
@@ -133,21 +197,123 @@ class NavServer(ThreadingHTTPServer):
 
 
 # --------------------------------------------------------------------------- 仅快进拉取
+def _subcommand(args: tuple[str, ...]) -> str:
+    """从 git argv 里取子命令 —— 跳过 `-c k=v` 与其余前缀旗标 (判据按子命令分档, 吃不掉就会判错)。
+
+    与 _pipeline 原版的差异: 本版 `_git` 收到的 args 首元素即子命令 (可执行名在 _git_once 才拼上),
+    无需再吃开头的 `git`; 原版吃它是因为 `run_git` 拿的是完整 argv。
+    """
+    tokens = list(args)
+    i = 0
+    while i < len(tokens):
+        a = tokens[i]
+        if a == "-c":  # `-c key=value` 是两个 argv 元素, 值不能被吃到
+            i += 2
+            continue
+        if a.startswith("-"):
+            i += 1
+            continue
+        return a
+    return ""
+
+
+def _retryable(args: tuple[str, ...], proc: subprocess.CompletedProcess) -> bool:
+    """这次失败重试有没有意义 —— 三档判据 (理由见 NETWORK_SUBCOMMANDS 上方注释, 单点同 _pipeline)。"""
+    if proc.returncode == 0:
+        return False
+    sub = _subcommand(args)
+    if sub in NETWORK_SUBCOMMANDS:
+        return True
+    if sub in NON_IDEMPOTENT_SUBCOMMANDS:
+        return False
+    if proc.returncode == -1:  # 超时 / 起不来 —— 只读命令重试一次大概率能过
+        return True
+    err = proc.stderr or ""
+    return any(mark in err for mark in TRANSIENT_MARKS)
+
+
+def retry_note(proc: subprocess.CompletedProcess) -> str:
+    """失败行里的重试备注 —— 只有真重试过才出现 (1 次尝试 = 没重试, 不啰嗦; 同 _pipeline)。"""
+    used = getattr(proc, "attempts_used", 1)
+    return "(已重试 %d 次)" % (used - 1) if used > 1 else ""
+
+
 def _git(root: Path, *args: str) -> subprocess.CompletedProcess:
-    """在 root 下跑一条 git。超时 / 起不来统一以 rc!=0 表达 (不抛) —— 调用方一律按 rc 判,
-    失败原因取 stderr 末行。`errors="replace"` 兜住 Windows 下非 UTF-8 输出。"""
+    """在 root 下跑一条 git: 单次超时 + 有界重试, 全部尝试失败才交最后一次的结果。
+
+    超时 / 起不来统一以 rc!=0 表达 (不抛) —— 调用方一律按 rc 判, 失败原因取 stderr 末行
+    (要向人交代重试过, 用 retry_note(proc))。`errors="replace"` 兜住 Windows 下非 UTF-8 输出。
+    重试与否由 _retryable 判 (三档); 实际尝试次数挂在返回值的 attempts_used 上。
+    """
+    proc = _git_once(root, *args)
+    used = 1
+    while used < GIT_ATTEMPTS and _retryable(args, proc):
+        time.sleep(GIT_RETRY_BACKOFF)
+        proc = _git_once(root, *args)
+        used += 1
+    proc.attempts_used = used  # CompletedProcess 是普通类, 挂属性安全 (同 _pipeline)
+    return proc
+
+
+def _kill_tree(pid: int) -> None:
+    """Windows: 连孙子一起杀掉 (git fetch/ls-remote 会派生 git-remote-https 等, 继承管道句柄)。
+
+    仅定点杀本服务自己拉起的 git 进程树 (脚本内部定点杀, 同 _pipeline._kill_tree)。
+    """
     try:
-        return subprocess.run(
-            ["git", *args],
-            cwd=str(root),
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=GIT_TIMEOUT,
-        )
-    except (OSError, subprocess.TimeoutExpired) as exc:
-        return subprocess.CompletedProcess(args, 1, "", "git 起不来 / 超时: %s" % exc)
+        subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)], capture_output=True, timeout=15)
+    except (OSError, subprocess.SubprocessError):
+        pass
+
+
+def _git_once(root: Path, *args: str) -> subprocess.CompletedProcess:
+    """单次尝试: Popen + 看门狗线程, 超时杀整棵进程树, 统一以 rc=-1 表达 (同 _pipeline.run_capture)。
+
+    ! 不能用裸 subprocess.run(timeout=...): Windows 上它只 kill git.exe 直属进程, 派生的
+    git-remote-https 等孙进程继承管道句柄继续活着, 随后 run 内部无超时的 communicate() 会
+    阻塞到管道写端全部关闭 —— 卡在 Gitee 的 TCP 读上(正是本功能的动机场景)就是永久挂住,
+    且请求线程还持着 _PULL_LOCK, 之后所有拉取全部阻塞 (_pipeline 2026-10-03 实测同款挂死)。
+    """
+    box: dict = {}
+
+    def _worker() -> None:
+        proc = None
+        try:
+            proc = subprocess.Popen(
+                ["git", *args],
+                cwd=str(root),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                stdin=subprocess.DEVNULL,  # 凭据提示场景读 stdin 得 EOF 立即失败, 不白等超时
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+            )
+            box["pid"] = proc.pid
+            out, err = proc.communicate(timeout=GIT_TIMEOUT)
+            box["rc"], box["out"], box["err"] = proc.returncode, out, err
+        except subprocess.TimeoutExpired:
+            box["rc"], box["err"] = -1, "git 超时 %ds (进程树已杀)" % GIT_TIMEOUT
+            if proc is not None:
+                box["pid"] = proc.pid
+                # ! 必须真的收尸: 只记 pid 不杀, 孙进程会继续活着占着管道 (同 _pipeline 注释)
+                _kill_tree(proc.pid)
+                try:
+                    proc.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    pass
+        except OSError as exc:
+            box["rc"], box["err"] = -1, "git 起不来: %s" % exc
+
+    worker = threading.Thread(target=_worker, daemon=True)
+    worker.start()
+    worker.join(GIT_TIMEOUT + 15)  # 给 communicate 一点余量; 再卡死就弃线程 (幽灵线程可接受, 同 _pipeline)
+    if worker.is_alive():
+        pid = box.get("pid")
+        if pid:
+            _kill_tree(int(pid))
+        return subprocess.CompletedProcess(args, -1, "", "git 卡死 (>%ds, 进程树已杀)" % GIT_TIMEOUT)
+    return subprocess.CompletedProcess(args, box.get("rc", -1), box.get("out", "") or "", box.get("err", "") or "")
 
 
 def _out(proc: subprocess.CompletedProcess) -> str:
@@ -201,14 +367,15 @@ def pull_ff_only(root: Path) -> tuple[bool, str]:
     if not branch or branch == "HEAD":
         return False, "当前处于游离 HEAD —— 无法确定要同步的分支"
     _git(root, "fetch", remote, branch)  # 只为把远端 tip 的对象拉进对象库; 成败不判(离线时 ls-remote 也为空)
+    ls_proc = _git(root, "ls-remote", remote, branch)
     rsha = ""
-    for line in _out(_git(root, "ls-remote", remote, branch)).splitlines():
+    for line in _out(ls_proc).splitlines():
         parts = line.split()
         if len(parts) == 2 and parts[1] == "refs/heads/" + branch:
             rsha = parts[0]
             break
     if not rsha:
-        return False, "拿不到远端 %s/%s (离线?) —— 联网后重试" % (remote, branch)
+        return False, ("拿不到远端 %s/%s (离线?)%s —— 联网后重试" % (remote, branch, retry_note(ls_proc)))
     head = _out(_git(root, "rev-parse", "HEAD"))
     if not head:
         return False, "本地没有任何提交 (空仓库)"
@@ -227,7 +394,7 @@ def pull_ff_only(root: Path) -> tuple[bool, str]:
                        "需人工合流后重试" % (ahead, behind))
     proc = _git(root, "merge", "--ff-only", rsha)
     if proc.returncode != 0:
-        return False, ("快进被拒 —— %s; 本地改动可能与远端新提交重叠, 先提交或移出后重试" % _last_line(proc.stderr))
+        return False, ("快进被拒 —— %s%s; 本地改动可能与远端新提交重叠, 先提交或移出后重试" % (_last_line(proc.stderr), retry_note(proc)))
     return True, "已快进到 %s" % _out(_git(root, "rev-parse", "HEAD"))[:8]
 
 
