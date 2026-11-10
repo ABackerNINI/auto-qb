@@ -1,10 +1,11 @@
 # 26-11-11-docs-ship-gate-prerun — 提交闸门预跑 ship.gate
 
-**Status:** In Progress
+**Status:** Done
 **Added:** 2026-11-11
 **Updated:** 2026-11-11
 **Summary:** 提交闸门预跑 ship.gate: 提交闸门拎成可单独跑的 ship.gate, 接进评审批次 pack 前置, 让小失误在 review 之前暴露
 **Topics:** docs-ship-gate-prerun
+**Refs:** memory-bank/plans/26-11-11-0408-plan-ship-gate-prerun.html, memory-bank/testing/baselines/26-11-11-0504-ship-gate-prerun.md
 
 ## 本篇只回答
 
@@ -36,10 +37,14 @@ ship.gate 闸门预跑怎么落地、怎么接进评审流程、行为边界(树
 | 4 | test_gate.py 16 用例(测试计划 docstring 同步) | Done(26-11-11) |
 | 5 | dogfood: ship.gate 真跑全绿(引擎注入/输出透传/略过行全验证) | Done(26-11-11) |
 | 6 | 回写 pipeline.md + 分批评审(2 分面 + 增量复评, 零 actionable) + 基线切片 + 坑档 2 条 | Done(26-11-11) |
-| 7 | 提交(等用户显式「提交」) | Open |
+| 7 | 提交(用户显式「提交」触发 ship.commit) | Done(26-11-11) |
 
 ## 进度日志
 
 ### R0 · 立档 (2026-11-11)
 
 - grilling 11 拍板 → 计划 HTML → 全量实现 + 两分面评审(6 条 minor 全修) + 增量复评零发现; 包测试 / ASCII 守卫 / 全量测试全绿, 数字见基线切片 [26-11-11-0504](../testing/baselines/26-11-11-0504-ship-gate-prerun.md); ship.gate dogfood 三次全绿(含远端两次推进后的重跑)。坑档 2 条: testing/engine-pack-dir-injection(引擎注入 PACK_DIR 指向 task 所在包), ops/entry-main-missing-silent-noop(入口 __main__ 漏 main() 调用 = [ok] 假绿)。
+
+### R1 · 提交落库与引用收口 (2026-11-11)
+
+- ship.commit 落库(`6dedc75b`, 714 行 + trailer 检 7/7 轮 4); 状态翻转(计划/档案翻 Done)与 doc-refs 双向链(计划 ↔ 档案/基线切片)属收口面, 随下一批入库 —— 曾被读成"计划仍 Open", 实为翻转未入库, 本行澄清。

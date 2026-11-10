@@ -3,6 +3,8 @@
 > 摘要: 6002 passed, 2 skipped (181.26s), 覆盖率 99% (26747 stmts / 55 miss / 9362 br / 66 partial) —— ship.gate 闸门预跑批次(计划 26-11-11-0408)收尾全量绿
 > 基线时间: 2026-11-11 05:04
 
+**Refs:** memory-bank/tasks/26-11-11-docs-ship-gate-prerun.md, memory-bank/plans/26-11-11-0408-plan-ship-gate-prerun.html
+
 ## 验收数字
 
 - 汇总行: `6002 passed, 2 skipped in 181.26s (0:03:01)`(commands run test.full 实测誊写)
