@@ -132,7 +132,8 @@ def _proc_absent(names: tuple, host: str = "", port: int = 0) -> bool:
     - 无端口可判(port=0) ⇒ 退回全机名册单证(旧行为, 兼容无端口场景)。
 
     W2a 三层定位(计划 26-11-10-0318 §03): 本函数 = **L2 全机口径**的证一实现 —— 触发条件:
-    无 owner 记录 / L1 名册通道不可判(l1_open None);现状保留的原因 = 弱证据配 30s 稳定期
+    L1 不成立(含无 owner 记录/owner 在位/证据未齐)或 L1 名册通道不可判(l1_open None);
+    现状保留的原因 = 弱证据配 30s 稳定期
     (黄金法则 2: 观测缺失/通道故障保守退化, 行为与实例级证据接线前完全等价)。函数内部
     「名册不可用退端口单证」支 = **L3**(现状降级路径, 原样不动)。实例级增强路径(**L1**:
     owner 死证 + 新面孔无害化 + 端口拒连, 证据齐即立即进窗)见 _Observation/l1_open 与
@@ -1293,9 +1294,9 @@ def run(
     - timeout: max_wait 到点(0 = 不限, 窗口内同样生效) —— pending 原样保留, 对账续拉。
     进窗分派(计划 26-11-10-0318 三层): 有 pending 的拍先做观测维护(_observe_poll, §03.1
     每 poll 口径, 空载拍零通道调用)—— L1 verdict True(owner 死证 + 端口拒连 + 无未决
-    新面孔)⇒ 立即进窗, 无 down_since 计时(拍板 D2: 强证据不配稳定期); False(无 owner
-    记录, L1 不适用)/ None(名册通道不可判, _observe_poll 已节流告警)⇒ L2 现状三证判据
-    原样(30s 稳定期保留, 单实例窗口时序不早于接线前 —— 等价面硬要求)。
+    新面孔)⇒ 立即进窗, 无 down_since 计时(拍板 D2: 强证据不配稳定期); False(L1 不成立,
+    含无 owner 记录/owner 在位/证据未齐)/ None(名册通道不可判, _observe_poll 已节流告警)
+    ⇒ L2 现状三证判据原样(30s 稳定期保留, 单实例窗口时序不早于接线前 —— 等价面硬要求)。
     收敛不变量: 窗口外零 fastresume 落盘(三层进窗判据 + 每次落盘前同级瞬时复验: L1 窗
     全套现读现判 / L2 窗两证); journal 是唯一账面, 任一退出路径都留一致账态, 下一窗口可
     重放(D8/N4)。
@@ -1360,9 +1361,9 @@ def run(
                     if outcome in ("deposed", "timeout"):
                         return outcome
                     continue  # settled/qb_back: 回主循环重扫(pending 决定续等或宽限退出)
-                # L2/L3(现状判据原样): verdict False = 无 owner 记录(L1 不适用, 不告警)/
-                # None = 名册通道不可判(_observe_poll 已节流告警留痕)—— 本段行为与实例级
-                # 证据接线前完全等价(等价面硬要求)
+                # L2/L3(现状判据原样): verdict False = L1 不成立(含无 owner 记录/owner 在位/
+                # 证据未齐; 全部落入与接线前字节等价的 L2 分支, 不告警)/ None = 名册通道不可判
+                # (_observe_poll 已节流告警留痕)—— 本段行为与实例级证据接线前完全等价(等价面硬要求)
                 names = _qb_process_names()
                 down = _proc_absent(names, host, port) and _port_refused(host, port)
                 if down:
