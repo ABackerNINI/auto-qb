@@ -282,8 +282,13 @@ html[data-fx-preset] input[type="checkbox"]:not(.hb-switch input):focus-visible 
   /* 评审 A(nit)修: 可见底色已搬到 ::before(文件尾形状分层段), 本体的 background
    * 过渡段随之成死代码(保留不删, 范围守恒); 渐隐过渡补到绘制层, 变量/写法
    * 逐字沿用上面本体段的 background 过渡(--dur/--ease), 位置随过渡声明收进
-   * 本媒体块(本文件 RM 约定: 过渡声明一律进媒体块)。 */
-  html[data-fx-preset] .site-chip::before { transition: background var(--dur) var(--ease); }
+   * 本媒体块(本文件 RM 约定: 过渡声明一律进媒体块)。
+   * S4 补 box-shadow 段: paused/other 与 search-hit 的 inset 状态边线已从本体迁到
+   * ::before(文件尾 S4 段), 本体原有 box-shadow 渐变(上面本体段与
+   * components.css:378 的 --dur-fast/--ease)跟着走, 状态类切换边线仍渐变不跳变。 */
+  html[data-fx-preset] .site-chip::before {
+    transition: background var(--dur) var(--ease), box-shadow var(--dur-fast) var(--ease);
+  }
   /* D4 拍板(hover + 键盘聚焦共用同一套辉光): 选择器扩 :focus-visible:not(.f-on)。
    * 事实注记: 三种 chip 在共用模板里是纯 span, 无 tabindex, focus-visible 分支
    * 当前不会命中, 本条是样式预留(计划 W1-4/O5/R13; 键盘化需改四皮肤共用模板,
@@ -421,10 +426,23 @@ html[data-fx-preset] input[type="checkbox"]:not(.hb-switch input):focus-visible 
  *   components.css:330-338 与 views.css:85-96, 零新增令牌(I2)。下方规则
  *   顺序 = views.css:92 的源序优先级: 站点问题 sa-* > 搜索命中 search-hit >
  *   种子状态(components.css), 同特异性下后到胜出。
- *   注: 本体上的 inset 描边(paused/other、search-hit)与 sa-no-conf 的虚线
- *   底边仍画在本体上(hover 时被辉光 stack 整体替换是既有行为), 是否迁到
- *   ::before 绘制层等 W2 真机目检(计划 W1-3/O1)拍板, 本波最小改动。
- *   tag-chip/cat-chip 无 clip-path, 形状不动(D3/D9)。
+ *   S4(2026-11-11 用户真浏览器目检拍板, W1-3 预留修复路径): paused 柔底接近
+ *   透明, 可见轮廓全靠本体 inset 1px 描边(components.css:337), 本体 clip-path:
+ *   none 后描边不再被裁 = 整 chip 呈方角(用户报「paused 没有切角」)。画在
+ *   本体上的三条状态边线全部迁到对应 ::before —— 切角绘制层自持 clip-path, 把
+ *   inset box-shadow 与 border 一并裁成切角形状, 复刻改动前观感:
+ *     1. paused/other 的 inset 0 0 0 1px var(--paused-line)(components.css:337)
+ *     2. search-hit 的 inset 0 0 0 1px var(--accent-line)(views.css:86)
+ *     3. sa-no-conf 的 border-bottom 1px dashed var(--warn)(views.css:95, dashed 保留)
+ *   本体侧以 html[data-fx-preset] 前缀覆盖关闭(box-shadow: none / border-bottom: 0),
+ *   只覆盖不改写 components.css/views.css 规则体。hover 行为变化: 边线留在
+ *   ::before 持续可见, 不再被本体 hover 辉光 stack 整体替换(辉光仍出在本体,
+ *   现状行为); 组合态优先级沿用源序(sa-* > search-hit > 种子状态), 与迁移前
+ *   本体侧的级联胜负一致。sa-no-conf 本体 border 覆盖为 0 后, ::before 的
+ *   inset: 0 覆盖到原 border 占位, 虚线仍贴 chip 底缘(不改用 transparent 占位,
+ *   避免 .f-on 的 overflow: hidden 裁掉伸进 border 区的绘制层)。
+ *   tag-chip/cat-chip 无 clip-path, 形状不动(D3/D9); tag-chip 的 HR 左边线
+ *   (components.css:347/349)与 .f-on ::after 底线不涉及切角, 不动。
  * ================================================================== */
 html[data-fx-preset] .site-chip {
   position: relative;      /* R5: 基线无定位包含块, ::before 绝对定位的宿主 */
@@ -443,10 +461,25 @@ html[data-fx-preset] .site-chip.seeding::before { background: var(--green-soft);
 html[data-fx-preset] .site-chip.downloading::before,
 html[data-fx-preset] .site-chip.checking::before { background: var(--st-soft, var(--blue-soft)); }
 html[data-fx-preset] .site-chip.paused::before,
-html[data-fx-preset] .site-chip.other::before { background: var(--paused-soft); }
+html[data-fx-preset] .site-chip.other::before {
+  background: var(--paused-soft);
+  box-shadow: inset 0 0 0 1px var(--paused-line); /* S4 迁入(components.css:337) */
+}
 html[data-fx-preset] .site-chip.error::before { background: var(--error-soft); }
-/* 搜索命中让出底色(views.css:85-86): 绘制层同步透明 */
-html[data-fx-preset] .site-chip.search-hit::before { background: transparent; }
+/* 搜索命中让出底色(views.css:85-86): 绘制层同步透明; accent 描边 S4 迁入 */
+html[data-fx-preset] .site-chip.search-hit::before {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--accent-line); /* S4 迁入(views.css:86) */
+}
 /* 站点问题底色(views.css:94-96), 源序最后 = 优先级最高 */
-html[data-fx-preset] .site-chip.sa-no-conf::before { background: var(--warn-soft); }
+html[data-fx-preset] .site-chip.sa-no-conf::before {
+  background: var(--warn-soft);
+  border-bottom: 1px dashed var(--warn); /* S4 迁入(views.css:95), dashed 保留 */
+}
 html[data-fx-preset] .site-chip.sa-tracker::before { background: var(--error-soft); }
+/* S4 本体侧关闭: 三条状态边线的本体载体整组覆盖(几何已迁上面对应 ::before;
+ * 只覆盖不改写源文件。本体 box-shadow 过渡段仍服务 hover 辉光, 不动) */
+html[data-fx-preset] .site-chip.paused,
+html[data-fx-preset] .site-chip.other { box-shadow: none; } /* components.css:337 迁出 */
+html[data-fx-preset] .site-chip.search-hit { box-shadow: none; } /* views.css:86 迁出 */
+html[data-fx-preset] .site-chip.sa-no-conf { border-bottom: 0; } /* views.css:95 迁出, 虚线由 ::before 供给 */
