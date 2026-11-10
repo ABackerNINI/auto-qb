@@ -6,10 +6,10 @@
 <meta name="color-scheme" content="dark">
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="recycle-daemon-instance-evidence">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-11-10-0318">
-<meta name="doc-updated" content="26-11-10-0318">
-<meta name="doc-refs" content="memory-bank/issues/26-11-07-0528-feat-recycle-daemon-roster-machine-wide.html, memory-bank/plans/26-11-05-0808-plan-relocate-fastresume-finalize.html, memory-bank/tasks/26-11-05-backend-relocate-fastresume-finalize.md, memory-bank/tasks/26-11-10-backend-recycle-daemon-instance-evidence.md">
+<meta name="doc-updated" content="26-11-11-0213">
+<meta name="doc-refs" content="memory-bank/issues/26-11-07-0528-feat-recycle-daemon-roster-machine-wide.html, memory-bank/plans/26-11-05-0808-plan-relocate-fastresume-finalize.html, memory-bank/tasks/26-11-05-backend-relocate-fastresume-finalize.md, memory-bank/tasks/26-11-10-backend-recycle-daemon-instance-evidence.md, memory-bank/pitfalls/backend/recycle-daemon-p7-evidence-chain.md, memory-bank/testing/baselines/26-11-11-0225-backend-recycle-daemon-instance-evidence.md">
 <meta name="doc-title" content="recycle daemon 实例级下线证据链: owner 死证 + 新面孔无害化, P7 多实例形态收尾窗解卡 (issue 26-11-07-0528)">
 <title>recycle daemon 实例级下线证据链 · plan · memory-bank</title>
 <style>
@@ -89,8 +89,8 @@
     <a href="#s7"><span class="no">§07</span>风险与对策</a>
     <a href="#s10"><span class="no">§10</span>变更记录</a>
     <div class="toc-foot">
-      plan · Open · 单文件 HTML(dark)<br>
-      认领后按 §04 波次推进
+      plan · Done · 单文件 HTML(dark)<br>
+      四波已实装收口(2026-11-11), 细节见 §10
     </div>
   </nav>
 
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">doc-added</div><div class="v">26-11-10-0318</div></div>
       <div class="item"><div class="k">来源</div><div class="v">issue <a href="../issues/26-11-07-0528-feat-recycle-daemon-roster-machine-wide.html">26-11-07-0528</a>(feat, Open)</div></div>
       <div class="item"><div class="k">决策</div><div class="v">2026-11-10 会话 grilling 三轮拍板(§06)</div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open · 待认领</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done · 已实装收口</span></div></div>
       <div class="item"><div class="k">上游计划</div><div class="v"><a href="26-11-05-0808-plan-relocate-fastresume-finalize.html">26-11-05-0808</a>(Done)</div></div>
     </div>
   </header>
@@ -181,6 +181,7 @@
       <tr><td><code>ct ≥ ts_last_seen</code>, 未 settle</td><td><strong>未决</strong>——可能是目标新身(已创建未绑端口)</td><td><strong>挡</strong>, 直到绑定我们端口(转 owner)或被吸收或消失</td></tr>
     </table>
     <p class="hint">settle 计时(first_seen/监听集指纹)只在内存, daemon 重启即重置(settle 重算, 代价 30s); absorbed 清单持久化, 重启后继续有效。absorbed 成员从名册消失即移出(死进程无威胁, 文件不膨胀)。</p>
+    <div class="callout warn"><strong>实装加固注记(2026-11-11, W1b 评审 major 落地)</strong>: 上表行一「零赌注吸收」阈值由 <code>ct&lt;ts_last_seen</code>(混域比——进程创建时刻对照观测时刻, 时钟回拨/跨域下不成立)升级为同域比 <code>ct&lt;owner.ct</code>(双方都是进程创建时刻, 域一致); 由此产生的 gap 带 <code>[owner.ct, ts_last_seen)</code> 的进程不再直接吸收, 改走行三的 30s settle 管道(有界赌注兜住)。已知残余: 时钟回拨跨越 owner 创建边界的角落仍原理性存在(同域阈值收窄后概率面大幅缩小, 无法归零)——与 §07 R4 的「外部不可区分」残余同族, 记坑档 <a href="../pitfalls/backend/recycle-daemon-p7-evidence-chain.md">recycle-daemon-p7-evidence-chain</a> 不改码。</div>
 
     <h3>§03.3 L1 进窗判据(精确语义)</h3>
     <pre><code>进窗(L1) ⇔
@@ -262,6 +263,7 @@
     <h2><span class="no">§10</span>变更记录</h2>
     <ul>
       <li>2026-11-10 03:18 — 立档(Open): grilling 三轮收敛后成文; 承接 issue 26-11-07-0528 的「未来增强方向」挂账, 拍板 D1-D5 见 §06。</li>
+      <li>2026-11-11 — 实装收口(Done): §04 四波全落地——W1a 观测面 fbcf4117(obs helper+通道函数族, 本机解析实测)/W1b 判据面 a3c0fc1e(_Observation 状态机+L1 判据; 评审 major 加固见 §03.2 注记)/W2a 接线 2ca40f43(三层分派+复验同级+告警 60s 节流)/W2b 六场景 7 测试 76c056ee; 全量全绿(评审全程零回归, 数字权威见 kb.baseline 切片 26-11-11-0225); W3a 真机 P7 三场景 3/3 PASS 零产品缺陷(S1 死亡→开窗+首写 2.63s vs S3b 退 L2 后 37.54s 同机对照; S2 复活 qb_back 零落盘; S3 通道故障退 L2 节流留痕, 证据根 tests-real/.work/p7_w3a/); W3b 回写收口(issue 0528 翻 Done + 本计划 + pitfalls P7 专档)。</li>
     </ul>
   </section>
 
