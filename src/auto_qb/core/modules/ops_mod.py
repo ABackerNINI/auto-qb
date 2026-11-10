@@ -53,6 +53,7 @@ from ...rules.checking_meta import (
     recheck_cooldown_remaining,
     recheck_fail_count,
     record_recheck_cooldown,
+    self_recheck_failed_today,
 )
 from ...torrents import TorrentRecord
 from ..module import AppContext, BaseModule
@@ -111,6 +112,16 @@ class OpsModule(SkipMixin, VerdictMixin, JobsMixin, BaseModule):
         测试换假钟两端同受控)。
         """
         return recheck_cooldown_remaining(self._ctx.state, hash, self._clock.now(), window)
+
+    def self_recheck_failed_today(self, hash: str) -> bool:
+        """该种子自身当日发生过校验失败(只读谓词, 单点 checking_meta.self_recheck_failed_today)
+
+        规则侧经 ctx.ops 消费的通道(与 recheck_cooldown_remaining 同形): 消费方 checking.py
+        决策链 4 skip-checking 段(26-10-05-0402 G9 规则侧镜像, 无 force 概念保守硬 skip)。
+        WEB 侧 G9 在 ops_verdict._skip_gates_detail 直接用模块函数(与 G8 的 recheck_fail_count
+        同形制)。hash-keyed 只读自身 —— 禁止按组键放大(跨站同内容不同 infohash, 互不殃及)。
+        """
+        return self_recheck_failed_today(self._ctx.state, hash)
 
     # ---------- 日志 ----------
 

@@ -16,6 +16,9 @@
 - test_checking_skip_delete_unconfirmed_keeps_backup: 删除未生效(种子仍在) -> 放弃跳检但保留删除前的备份并在失败文案指明备份路径(R1#98: 删除异步未定, 备份是唯一恢复凭据宁可留着)
 - test_checking_skip_backup_failure_aborts_before_delete: 备份写不进去 -> 不删除(无损失)直接 fail
 - test_checking_skip_dedup_same_day: 同日跳检去重
+- test_checking_skip_self_failed_today_gate: G9 规则侧镜像(26-10-05-0402, 决策链 4 skip-checking
+  段): 自身当日校验失败 -> skip 零客户端动作; mode-scoped(full-checking 同条件照常提交, 治疗路径
+  不被拦); 自身计数 0 照常跳检
 - test_checking_skip_partial_download_forbidden: 部分下载(0<progress<1)禁止跳检
 - test_checking_skip_dedup_across_rules: 跨规则同日去重(同种子当日只跳检一次)
 - test_checking_skip_gone_fails_at_export_with_clear_message: S3(26-10-21-2323) —— 提交前不直查: 种子已不在时失败在导出步(文案点明), 撤掉快照残留记录, 不删除/重加(修 C2 复活竞态)
@@ -423,6 +426,53 @@ def test_checking_skip_dedup_same_day():
     handled = process_rule(mgr, client, t, dry_run=False)
     assert not handled, "同日不应重复跳检"
     assert ("delete", False) not in client.calls, f"同日不应删除种子: {client.calls}"
+
+
+def test_checking_skip_self_failed_today_gate():
+    """测试(G9 规则侧镜像, 26-10-05-0402): 决策链 4 skip-checking 段自身失败闸 —— 自身当日
+    校验失败 -> skip(文案含 full-checking 出路), 零客户端动作; mode-scoped: full-checking 模式
+    同条件照常提交 recheck(治疗路径不被拦, 拍板 D4); 自身计数 0 -> 跳检流程照常完成"""
+    # (1) skip-checking + 自身计数>0 -> skip, 不发生任何客户端动作
+    mgr = make_mgr(
+        make_check_cfg(with_mode="skip-checking", without_mode="skip-checking", without_start=False), with_tq=True
+    )
+    client = CheckingFakeClient()
+    mgr.client = client
+    t = make_target()
+    seed_store(mgr, [t])
+    client.torrents["HASH123"] = t
+    mgr.state.setdefault("recheck_fails", {})["HASH123"] = {"date": date.today().isoformat(), "count": 1}
+    ctx = make_ctx(mgr, t, client, dry_run=False)
+    ctx.rule_name = "example_rules.check_rule"
+    action = CheckAction({"basic_check": "filelist", "without_reference": {"enabled": True, "mode": "skip-checking"}})
+    r = action.execute(ctx)
+    assert r.is_skipped and "不再跳检" in r.message and "full-checking" in r.message, \
+        f"自身当日校验失败应 skip 且文案带出路: {r}"
+    assert client.calls == [], f"不得导出/删除/重加: {client.calls}"
+
+    # (2) 治疗路径断言: full-checking 模式 + 自身计数>0 -> 照常提交 recheck(唯一翻案路径不被拦)
+    mgr2 = make_mgr(make_check_cfg(without_mode="full-checking", without_start=True), with_tq=True)
+    client2 = CheckingFakeClient()
+    mgr2.client = client2
+    t2 = make_target(state="stoppedDL", progress=0.5)
+    seed_store(mgr2, [t2])
+    client2.torrents["HASH123"] = t2
+    mgr2.state.setdefault("recheck_fails", {})["HASH123"] = {"date": date.today().isoformat(), "count": 1}
+    ctx2 = make_ctx(mgr2, t2, client2, dry_run=False)
+    ctx2.rule_name = "example_rules.check_rule"
+    action2 = CheckAction({"basic_check": "filelist", "without_reference": {"enabled": True, "mode": "full-checking"}})
+    r2 = action2.execute(ctx2)
+    assert ("recheck", None) in client2.calls, f"full-checking 治疗路径应照常提交 recheck: {client2.calls}"
+    assert r2.is_pending, f"full-checking 提交后 pending(规则断点): {r2}"
+
+    # (3) 自身计数 0 -> 跳检流程照常完成(放行面不回归)
+    mgr3 = make_mgr(make_check_cfg(with_mode="skip-checking", without_mode="skip-checking", without_start=False))
+    client3 = CheckingFakeClient()
+    mgr3.client = client3
+    client3.torrents["HASH123"] = {"state": "pausedUP"}
+    t3 = make_target()
+    handled = process_rule(mgr3, client3, t3, dry_run=False)
+    assert handled and mgr3.state["skip_check_day"]["HASH123"], "自身计数 0 应照常走跳检"
 
 
 # ============================================================

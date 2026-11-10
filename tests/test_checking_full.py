@@ -16,6 +16,8 @@
 - test_recheck_fail_flushed_immediately: recheck 失败冷却计数即时落盘(防死循环闸门不因崩溃失效)
 - test_bump_recheck_fail_resets_count_across_day: C28 守阵 —— 跨自然日重置写 count 键(键名漂移
   -> 昨日计数不清零)
+- test_self_recheck_failed_today_predicate: G9 谓词单点(26-10-05-0402) self_recheck_failed_today:
+  当日计数 0/无记录/跨日 -> False, >=1 -> True; hash-keyed 只读自身(他人记录不放大)
 - test_checking_fail_cooldown_gate_skips_within_window: 校验失败冷却窗口(26-11-08-1717, 决策链
   0.5): 窗口内直接 skip 不再提交 recheck, 且不消耗 recheck_fails 额度(两机制分工)
 - test_checking_fail_cooldown_expired_allows_recheck: 冷却记录过期后决策链放行(时间戳自愈,
@@ -52,7 +54,7 @@ from auto_qb.rules.actions.full_checking import bump_recheck_fail, recheck_fail_
 
 from auto_qb.rules.base import VERDICT_EXECUTED, VERDICT_PENDING
 
-from auto_qb.rules.checking_meta import RECHECK_COOLDOWN_DEFAULT, PieceCheckingStates, PollVerdict, is_piece_checking, poll_verdict
+from auto_qb.rules.checking_meta import RECHECK_COOLDOWN_DEFAULT, PieceCheckingStates, PollVerdict, is_piece_checking, poll_verdict, self_recheck_failed_today
 
 from auto_qb.core.taskqueue import FINISHED, PENDING, REQUEUE, TaskQueue
 
@@ -486,6 +488,27 @@ def test_bump_recheck_fail_resets_count_across_day():
     assert bump_recheck_fail(state, "HX") == 1, "跨日必须从 1 重新计数"
     assert state.data["recheck_fails"]["HX"] == {"date": date.today().isoformat(), "count": 1}
     assert bump_recheck_fail(state, "HX") == 2, "同日继续累加"
+
+
+def test_self_recheck_failed_today_predicate():
+    """G9 谓词单点(26-10-05-0402): self_recheck_failed_today —— 当日计数 0/无记录/跨日 -> False,
+    >=1 -> True; hash-keyed 只读自身(他人当日记录不放大到自身)
+
+    接受面沿用 recheck_fails 现有口径(不发明更锐利谓词); 跨站不殃及的行为面在 ops 侧
+    test_skip_gates_rejects_self_check_failed 钉死。
+    """
+    mgr = make_mgr(make_check_cfg())
+    state = mgr.ctx.state
+    assert self_recheck_failed_today(state, "HX") is False, "无记录 -> False"
+    state.data.setdefault("recheck_fails", {})["HX"] = {"date": date.today().isoformat(), "count": 1}
+    assert self_recheck_failed_today(state, "HX") is True, "当日计数 1 -> True"
+    state.data["recheck_fails"]["HX"]["count"] = 3
+    assert self_recheck_failed_today(state, "HX") is True, "当日计数 3 -> True"
+    state.data["recheck_fails"]["HX"]["date"] = "2000-01-01"
+    assert self_recheck_failed_today(state, "HX") is False, "跨日重置 -> False"
+    state.data["recheck_fails"]["HY"] = {"date": date.today().isoformat(), "count": 2}
+    assert self_recheck_failed_today(state, "HX") is False, "他人的当日记录不改变自身判定"
+    assert self_recheck_failed_today(state, "HZ") is False, "无记录 hash 不受他人影响(hash-keyed)"
 
 
 # ============================================================

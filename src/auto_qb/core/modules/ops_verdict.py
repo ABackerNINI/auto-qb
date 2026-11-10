@@ -6,7 +6,7 @@ from datetime import date
 from typing import Optional
 
 from ...rules.base import ActionResult
-from ...rules.checking_meta import INFLIGHT_TTL, is_piece_checking, recheck_fail_count
+from ...rules.checking_meta import INFLIGHT_TTL, is_piece_checking, recheck_fail_count, self_recheck_failed_today
 from ...torrents import TorrentRecord
 from ..state import prune_day_keys
 from .ops_common import GATE_BLOCKED, GATE_FORCE, GATE_OK, GateVerdict, logger
@@ -142,7 +142,7 @@ class VerdictMixin:
         零副作用铁律(T20): 本判定不写 state、不 prune、不 pop、无任何 qB 写 API —— 预检
         「只是看看」不得改状态; skip_check_day 的清理留在执行路径(_skip_gates 尾部)。
 
-        顺序与短路: dedup → G3 → G4 → G5 → G6 → G7 → G8 → partial → filelist(排最后, plan 插入点由
+        顺序与短路: dedup → G3 → G4 → G5 → G6 → G7 → G8 → G9 → partial → filelist(排最后, plan 插入点由
         skip_check 的执行序保证: R2 实时复核之后、导出之前)。前面已有 **blocked** 未过时短路
         跳过 filelist(省一次 files API + N 次 stat —— 结论已注定 blocked); 仅 force 类未过时
         **不**短路: force=True 豁越后 filelist 仍须真跑(case 1 硬闸不得被短路绕过)。
@@ -172,6 +172,13 @@ class VerdictMixin:
           已删成员时不参与推断且不 pop(规则侧此处 pop, full_checking.py:146) —— 清理仍归规则侧
           与次日重置, 本判定零副作用铁律(T20) / 文件映射一致(group_sizes)。出路 = 对该组做
           full-checking 修数据。
+        - G9 自身当日校验失败(case 2, issue 26-10-05-0402): 谓词单点
+          checking_meta.self_recheck_failed_today, hash-keyed 只读自身 —— 与 G8 的 others 循环平行,
+          不进组内推断(跨站同内容不同 infohash 互不殃及)。计数含 START_TIMEOUT 噪声(数据未知非坏)
+          故不配 blocked 而给 force 逃生 —— 对齐三分流「只拦确定的情形」; 与 G8(他人失败+同映射 =
+          确定性证伪)的分级差异是故意的, 两处注释互指。规则侧镜像闸 checking.py 决策链 4
+          (skip-checking 段硬 skip, 自动化无 force 概念)。G8 排前: 自身与同映射他人当日都失败时
+          执行取首个(blocked 优先于 force), 预检两条都摊开。
         - partial(0<p<1): 预分配使文件尺寸=完整尺寸, filelist 尺寸检查无法发现未下载的零块,
           is_skip_checking 会把全部块标记有效 -> 零块被上传(垃圾数据)。仅 progress==0(全新辅种,
           数据完整)可跳检; full-checking 对部分下载安全, 不设限。
@@ -281,7 +288,8 @@ class VerdictMixin:
         # _skip_on_group_check_failed(决策链 1.6, others-only): 其它成员 / 当日计数(recheck_fails,
         # 含宽限耗尽/异常噪声 —— 继承规则侧既有假阳性面, 同日窗口+自愈条件兜底, 不发明更锐利谓词) /
         # 假失败自愈只读变体 / 文件映射一致。当日校验失败+同映射 = 数据已被证伪, 强制跳检 = 明知坏
-        # 仍标有效并上传, force 无正当用途(「赌已输」与 G7 的「赌未定」有本质区别)
+        # 仍标有效并上传, force 无正当用途(「赌已输」与 G7 的「赌未定」有本质区别);
+        # 自身当日校验失败(存疑, case 2 可强制)另见下方 G9 —— 分级差异见彼处注释互指
         # key / sizes / mine 与 G7 共用同一份组映射(上面已算), 不再各自重算
         if key is not None and mine:
             for h in members:
@@ -300,6 +308,21 @@ class VerdictMixin:
                         )
                     )
                     break  # 同规则侧返回语义: 首个同映射失败成员即成判
+
+        # G9 自身当日校验失败(case 2, issue 26-10-05-0402): self_recheck_failed_today 单点谓词
+        # (checking_meta), hash-keyed 只读自身 —— 与 G8 的 others 循环平行, 不进组内推断(跨站
+        # 同内容不同 infohash = state 里两条独立记录, 互不殃及)。计数含 START_TIMEOUT 噪声
+        # (宽限耗尽未开检 = 数据未知非坏)故不配 blocked —— 对齐三分流「只拦确定的情形」;
+        # 与 G8(他人失败+同映射 = 确定性证伪)的分级差异是故意的, 两处注释互指。规则侧镜像闸:
+        # checking.py 决策链 4 skip-checking 段(硬 skip, 自动化无 force 概念)
+        if self_recheck_failed_today(self._ctx.state, hash):
+            verdicts.append(
+                GateVerdict(
+                    "G9", GATE_FORCE, f"该种子今日校验失败 {recheck_fail_count(self._ctx.state, hash)} 次: "
+                    "数据完整性未证实(含未开检/异常的噪声可能), 跳检将把未验证数据标为有效并上传; "
+                    "确知失败为噪声时方可强制; 安全出路 = 先 full-checking(通过即自动解除)/次日计数重置"
+                )
+            )
 
         # partial 部分下载(既有闸门并入 detail, 文案零变化)
         if 0.0 < progress < 1.0:

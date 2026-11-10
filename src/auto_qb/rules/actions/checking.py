@@ -54,7 +54,9 @@ class CheckAction(FullCheckingMixin, SkipCheckingMixin, BaseAction):
            记录指向已完成/已删除成员时先自愈清除 —— 假失败不得参与推断)
       2. 判组内有无参考种子(basic_check 模式首个命中即提前返回, 并集内存 verified_references)
       3. 有参考 -> with_reference 段; 无参考 -> without_reference 段
-      4. skip-checking: 同日去重 -> 前置文件存在+大小检查 -> 导出->删除->重加(is_skip_checking,paused)
+      4. skip-checking: 同日去重 -> 自身当日校验失败 -> skip(26-10-05-0402 G9 镜像, mode-scoped:
+         谓词与 WEB 侧 ops G9 同源, full-checking 治疗路径不受影响) -> 前置文件存在+大小检查 ->
+         导出->删除->重加(is_skip_checking,paused)
          -> 确认 -> auto_start(无参考时警告高风险)
          full-checking: 同步发送 recheck, 返回 pending(规则断点, 本轮不重入队), 创建校验
          结果轮询子任务(快速队列, interval=CHECK_RESULT_INTERVAL): 每 2s 轮询 store 快照; 成功
@@ -179,6 +181,15 @@ class CheckAction(FullCheckingMixin, SkipCheckingMixin, BaseAction):
         if segment["enabled"] is False:
             which = "有参考" if segment is self.with_reference else "无参考"
             return ActionResult.skip(f"{which}校验段未启用")
+
+        # 决策链 4(skip-checking 段): 自身当日校验失败 -> 不再跳检(26-10-05-0402 G9 规则侧镜像)
+        # 谓词经 ctx.ops.self_recheck_failed_today(单点 checking_meta.self_recheck_failed_today,
+        # 与 WEB 侧 ops_verdict G9 同源)。规则侧自动化无 force 概念, 保守硬 skip; WEB 侧同谓词为
+        # case-2 可强制 —— 两边强度差异是拍板 D2' 的故意的。mode-scoped 到 skip-checking:
+        # full-checking 是自身失败种子的唯一翻案路径(治疗路径保护, 拍板 D4), 不被拦。
+        if segment["mode"] == "skip-checking" and manager.ctx.ops.self_recheck_failed_today(ctx.hash):
+            return ActionResult.skip("该种子今日校验失败, 数据完整性未证实, 不再跳检; "
+                                     "请改用 full-checking 修复(通过即解除, 次日计数重置)")
 
         # 决策链 4: 前置检查: 文件全部存在且大小一致
         # 虽然同group文件已经确定存在且大小一致, 但为了安全, 再次检查

@@ -16,6 +16,7 @@
 - test_skip_check_filelist_precondition_blocks: T7 文件缺失/路径不可判定拒(带 check_filelist 描述与 fs.path_map 出路), 未导出未删除
 - test_skip_gates_rejects_group_checking_inflight: T16 组内其它成员校验在途(G7, case 2)两半各一例: 队列登记 / 快照 is_checking(用户手动 recheck, G5 队列视野外); 在途清空后放行; 零副作用 (S1b-2)
 - test_skip_gates_rejects_group_check_failed: T17 组内成员校验失败推断(G8, case 1): 正样本文案带成员+出路; 负样本三例(映射不一致 / 记录指向已完成成员自愈不参与 / 非当日); 只读自愈不 pop; 零副作用 (S1b-2)
+- test_skip_gates_rejects_self_check_failed: G9(26-10-05-0402) 自身当日校验失败 case-2 force: 正样本文案含次数/出路; 跨站断言(B 失败、自身 0 -> 只 G8 无 G9, hash-keyed 不放大); 双发顺序 G8->G9; G9->partial 顺序; force 豁越审计 + 预检归类 force; 零副作用
 - test_skip_gates_g7_evidence_and_blocker_identity: S1(26-10-21-1857) —— G7 证据口径: checkingResumeData 不算在验 / 映射不一致成员不参与 / 命中时文案点名 blocker(hash8+名字+state)
 - test_skip_gates_inflight_ttl_expires_leaked_registration: S1(26-10-21-1857) —— 在途登记超 TTL 视为泄漏: G5 放行并记 WARNING(登记只在轮询任务 FINISHED 时释放)
 - test_skip_check_no_sleep_polling_and_keeps_record: S2(26-10-21-1857) —— 相位机成功路径零 sleep(原 500ms × 10 轮询) + 删除不摘记录 + 运行状态零写入(调用序 export→delete→add→add_tags)
@@ -590,6 +591,76 @@ def test_skip_gates_rejects_group_check_failed():
     hb.state, hb.progress = "pausedDL", 0.0
     mgr.state["recheck_fails"]["HB"] = {"date": "2000-01-01", "count": 1}
     assert mgr.ctx.ops._skip_gates_detail("HASH123", ha) == [], "非当日记录应放行"
+
+
+def test_skip_gates_rejects_self_check_failed():
+    """测试(G9, issue 26-10-05-0402): 自身当日校验失败闸(case 2 force) —— 自身计数>0 出判
+    force(文案含次数与 full-checking 出路); 跨站断言: 同组 B 失败、自身计数 0 -> 只有 G8 无 G9
+    (hash-keyed 只读自身, 不按组键放大); 自身与同映射他人都失败时顺序 G8(blocked)在前 G9(force)
+    在后; G9 -> partial 固定顺序; force=True 豁越走既有 WARNING+INFO 审计; 预检归类 force;
+    零副作用"""
+    mgr = make_mgr(FakeConfig())
+    client = FakeClient()
+    mgr.client = client
+    ha = FakeTorrent(hash="HASH123", state="pausedDL", progress=0.0)
+    hb = FakeTorrent(hash="HB", state="pausedDL", progress=0.0)
+    seed_store(mgr, [ha, hb])
+    client.torrents["HASH123"] = ha
+    client.torrents["HB"] = hb
+    wire_group(mgr, "K", "HASH123", "HB")
+    key = mgr.store.member_to_key["HASH123"]
+    mgr.store.group_sizes.setdefault(key, {})["HASH123"] = {"movie.mkv": 100}
+    mgr.store.group_sizes[key]["HB"] = {"movie.mkv": 100}
+    mgr.state.setdefault("recheck_fails", {})["HASH123"] = {"date": date.today().isoformat(), "count": 2}
+
+    # 正样本: G9 force, 只判自身(B 无记录, G8 不出判); 文案含次数与出路
+    vs = mgr.ctx.ops._skip_gates_detail("HASH123", ha)
+    assert [(v.gate, v.cls) for v in vs] == [("G9", "force")], vs
+    assert "今日校验失败 2 次" in vs[0].text and "full-checking" in vs[0].text, vs[0].text
+
+    # 固定顺序: G9 在 partial 之前(p=0.5 不触发 G3/G4)
+    ha.progress = 0.5
+    assert [v.gate for v in mgr.ctx.ops._skip_gates_detail("HASH123", ha)] == ["G9", "partial"], \
+        "G9 应排在 partial 之前"
+    ha.progress = 0.0
+
+    # 预检: G9 归类 force(确认框要求显式强制), reasons 摊开 G9
+    res = mgr.ctx.ops.skip_check_precheck(["HASH123"])
+    assert res[0]["cls"] == "force" and any(x["gate"] == "G9" for x in res[0]["reasons"]), res[0]
+
+    # 执行路径缺省硬拒, 零副作用
+    fails_before = copy.deepcopy(mgr.state["recheck_fails"])
+    r = mgr.ctx.ops.skip_check("HASH123", source="web")
+    assert r.is_failed and "今日校验失败" in r.message, f"force 类闸门缺省仍硬拒: {r}"
+    assert client.calls == [], f"拒绝零副作用(不得导出/删除/重加): {client.calls}"
+    assert not mgr.state.get("skip_check_day", {}).get("HASH123"), "拒绝不得写同日去重"
+    assert mgr.state["recheck_fails"] == fails_before, "G9 路径不得改写 recheck_fails(零副作用)"
+
+    # 跨站断言(拍板 D1 不变量): B 当日失败、自身计数 0 -> 只有 G8, G9 不出判(hash-keyed 不放大)
+    mgr.state["recheck_fails"].pop("HASH123")
+    mgr.state["recheck_fails"]["HB"] = {"date": date.today().isoformat(), "count": 1}
+    assert [v.gate for v in mgr.ctx.ops._skip_gates_detail("HASH123", ha)] == ["G8"], \
+        "自身无失败只应落 G8(others), G9 不得出判"
+
+    # 双发顺序: 自身与同映射他人当日都失败 -> G8(blocked)在前, G9(force)在后(执行取首个)
+    mgr.state["recheck_fails"]["HASH123"] = {"date": date.today().isoformat(), "count": 1}
+    vs = mgr.ctx.ops._skip_gates_detail("HASH123", ha)
+    assert [(v.gate, v.cls) for v in vs] == [("G8", "blocked"), ("G9", "force")], vs
+
+    # force=True: 豁越走既有 WARNING(降级) + INFO(审计) 路径, 跳检真实完成(先清 HB 记录:
+    # force 只豁越 force 类, G8 blocked 在场必硬拒, 场景须只留 G9)
+    mgr.state["recheck_fails"].pop("HB")
+    fails_snapshot = copy.deepcopy(mgr.state["recheck_fails"])
+    with capture_logs("auto_qb.core.modules.ops_mod", logging.DEBUG) as cap:
+        r2 = mgr.ctx.ops.skip_check("HASH123", source="web", force=True)
+    assert r2.is_ok, f"force=True 应豁越 G9 放行: {r2}"
+    warns = [x.getMessage() for x in cap.records if x.levelname == "WARNING"]
+    audits = [x.getMessage() for x in cap.records if x.levelname == "INFO"]
+    assert any("force 豁越跳检闸门 G9" in m for m in warns), f"豁越闸门应留 WARNING: {warns}"
+    assert any("force 审计" in m and "G9" in m and "HASH123" in m for m in audits), \
+        f"豁越应留 INFO 审计(hash+闸门): {audits}"
+    assert mgr.state["skip_check_day"]["HASH123"] == date.today().isoformat(), "豁越后跳检应真实完成"
+    assert mgr.state["recheck_fails"] == fails_snapshot, "跳检路径不得改写 recheck_fails"
 
 
 def test_skip_gates_g7_evidence_and_blocker_identity():

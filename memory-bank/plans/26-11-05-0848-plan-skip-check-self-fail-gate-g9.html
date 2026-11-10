@@ -7,10 +7,10 @@
 <title>跳检自身失败闸门 G9: WEB case-2 强制 + 规则侧硬 skip 双点同谓词</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="skip-check-self-fail-gate-g9">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-11-05-0848">
 <meta name="doc-updated" content="26-11-05-0848">
-<meta name="doc-refs" content="memory-bank/issues/26-10-05-0402-bug-skip-check-self-fail-gate.html,memory-bank/issues/26-11-05-0853-feat-recheck-fails-noise-narrowing.html">
+<meta name="doc-refs" content="memory-bank/issues/26-10-05-0402-bug-skip-check-self-fail-gate.html, memory-bank/issues/26-11-05-0853-feat-recheck-fails-noise-narrowing.html, memory-bank/tasks/26-11-10-backend-skip-check-self-fail-gate-g9.md">
 <style>
   :root {
     --bg: #10151a;
@@ -75,7 +75,7 @@
 <h1>跳检自身失败闸门 G9: WEB case-2 强制 + 规则侧硬 skip 双点同谓词</h1>
 <p class="lede">为 issue <a href="../issues/26-10-05-0402-bug-skip-check-self-fail-gate.html">26-10-05-0402</a>(候选种子自身当日校验失败后跳检无任何闸门,坏数据可被静默洗白)补一道 G9 闸:谓词单点、双落点 —— WEB 侧 case-2(WARNING+显式 force 逃生),规则侧硬 skip;full-checking 治疗路径不受影响。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-05-0848 · <b>doc-updated</b> 26-11-05-0848 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-11-05-0848 · <b>doc-updated</b> 26-11-10 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 会话 grilling(2026-11-05):复验 issue 26-10-05-0402(仍复现,锚点漂移已核)后用户发起「grilling 一个修复计划」,七项拍板一轮收敛(含用户以 26-10-05-0314 三分流哲学纠正 G9 分级)
 </div>
 
@@ -183,6 +183,7 @@ if segment.get("mode") == "skip-checking" and manager.ctx.ops.self_recheck_faile
 <h2><span class="no">§10</span>变更记录</h2>
 <ul>
   <li><span class="tag">R0 · 26-11-05-0848</span> 初版:会话 grilling 产出。修复 issue 26-10-05-0402(复验仍复现);七项拍板一次收敛(D1-D7),G9 分级经用户以 26-10-05-0314 三分流哲学由 blocked 修正为 case-2 force;噪声收窄另入池 26-11-05-0853-feat。</li>
+  <li><span class="tag">R1 · 26-11-10</span> S1-S6 实施完成,计划翻 Done:S1 谓词单点 checking_meta.self_recheck_failed_today(+ctx.ops 通道,镜像 recheck_cooldown_remaining 同名同形先例) / S2 ops_verdict G9(G8 后 partial 前,case-2 GATE_FORCE,预检自动归类) / S3 checking.py 链 4 mode-scoped 硬 skip / 三面守阵 3 条红绿双验(钉钳 2 红→恢复绿) / rule-engine.md 决策链与四阶段闸门清单回写 / issue 26-10-05-0402 翻 Done / test.full 全绿(基线切片见 kb.baseline)。实施与拍板零改道。</li>
 </ul>
 
 </div>

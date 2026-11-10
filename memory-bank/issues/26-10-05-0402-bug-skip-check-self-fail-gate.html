@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="skip-check-self-fail-gate">
 <meta name="doc-refs" content="memory-bank/plans/26-10-05-0314-plan-webui-danger-guards.html, memory-bank/tasks/26-10-05-webui-danger-guards.md, memory-bank/plans/26-11-05-0848-plan-skip-check-self-fail-gate-g9.html">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="跳检无闸门拦截候选种子自身当日校验失败, 已证实坏数据可被洗白成已校验">
 <meta name="issue-summary" content="候选种子自身当日校验失败(recheck_fails[hash]&gt;0)后跳检无任何闸门: 决策链 1.6 仅查其它成员, 失败冷却只限 recheck —— 规则侧 without_reference 段与 WEB 路径都能把已证实的坏数据洗白成已校验(zSkipChecked), 且 chain 0 永不回头复查">
 <title>跳检无闸门拦截候选种子自身当日校验失败, 已证实坏数据可被洗白成已校验 · bug · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-05-0402-bug-skip-check-self-fail-gate</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-05 04:02</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">backend</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -175,11 +175,14 @@ if not (ctx.torrent.state_enum.is_stopped and ctx.torrent.progress &lt; 1.0):
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-10-05 04:02 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-    </ul>
+      <li>2026-11-10 — 状态 Open → In Progress（kb.status）</li>
+      <li>2026-11-10 — 状态 In Progress → Done（kb.status）</li>
+</ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验：2026-11-05 仍复现（HEAD 9841bfe4，grilling 会话逐锚点核对）—— 锚点行号漂移但防护缺口原样：决策链 1.6（full_checking.py:141→142）与 ops G8（ops_mod.py:452→ops_verdict.py:288，26-10-05-0314 R5 拆分迁移）均 others-only 跳过自身；失败冷却（ops_mod.py:167→176）仅限 rule 源 recheck 提交；全仓 <code>recheck_fail_count</code> 消费点仅 3 处（定义/链 1.6 读他人/recheck 冷却），无一处把自身计数作为跳检闸门。漂移明细表见计划 <a href="../plans/26-11-05-0848-plan-skip-check-self-fail-gate-g9.html">26-11-05-0848</a> §02。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><strong>实际修法</strong>（计划 26-11-05-0848，拍板 D1-D6）：谓词单点 + 双落点同谓词 —— checking_meta.py 新增 <code>self_recheck_failed_today</code>（hash-keyed 只读自身，接受面沿用 recheck_fails 现有口径，收窄另入池 26-11-05-0853-feat）；WEB 侧 ops_verdict._skip_gates_detail 插 <strong>G9</strong>（G8 之后 partial 之前，case-2 GATE_FORCE：WARNING + force 逃生 + 既有「force 审计」INFO，对齐 26-10-05-0314 三分流「只拦确定的情形」—— 计数含 START_TIMEOUT 噪声不配 blocked）；规则侧 checking.py 决策链 4 skip-checking 段插 mode-scoped 硬 skip（经 ctx.ops.self_recheck_failed_today 通道，与 skip_checked_today 同形；自动化无 force 概念故强度差于 WEB 侧是拍板 D2' 的故意的）。full-checking 治疗路径与计数 bump 写点零改动（拍板 D4/D6）。与建议修法的差异：建议只提规则侧与 WEB 单发，实际按拍板 D1 双落点 + WEB 批量经同一 detail 单点自动覆盖。</p>
+    <p><strong>验证方式</strong>：三面定向测试红绿双验（新增 3 条守阵：谓词单测 / ops G9 闸门 / 规则侧 mode-scoped，行为锁钉钳后先红恢复后绿；含跨站断言「B 失败、A 自身计数 0 → 只有 G8 无 G9」与治疗路径断言「full-checking 同条件照常提交」）；<code>test.full</code> 全量不回退，数字见基线切片（<code>commands run kb.baseline</code> 最新条）。</p>
   </section>
 
   <footer>

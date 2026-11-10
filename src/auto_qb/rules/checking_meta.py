@@ -120,6 +120,19 @@ def recheck_fail_count(state: Any, hash: str) -> int:
     return 0
 
 
+def self_recheck_failed_today(state: Any, hash: str) -> bool:
+    """该种子**自身**当日发生过校验失败(issue 26-10-05-0402 G9 谓词单点)
+
+    接受面与 G8/决策链 1.6 同宽(沿用 recheck_fails 现有口径, 含 START_TIMEOUT 宽限耗尽
+    未开检等噪声 —— 数据未知非坏; 「继承既有假阳性面, 不发明更锐利谓词」, 收窄另入池
+    26-11-05-0853-feat)。hash-keyed 只读自身 —— **禁止按组键放大**: 跨站辅种同一内容 =
+    不同 infohash = state 里两条独立记录, B 站失败不殃及 A 站。
+    消费方: ops_verdict G9(WEB, case-2 可强制)/ checking.py 决策链 4 skip-checking 段
+    (规则侧, mode-scoped 硬 skip)。
+    """
+    return recheck_fail_count(state, hash) > 0
+
+
 def bump_recheck_fail(state: Any, hash: str) -> int:
     """累加当日校验失败次数并返回当前次数"""
     fails = state.data.setdefault("recheck_fails", {})
