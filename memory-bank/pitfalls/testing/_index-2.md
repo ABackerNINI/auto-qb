@@ -1,13 +1,14 @@
 # testing — 测试 / 冒烟 / 仿真纪律 · 卷 2/5
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `fixed-port-test-collision.md` … `inproc-server-conn-abort.md`(共 23 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `fakeclock-migration-missed-forms.md` … `importlib-sys-modules-dataclass.md`(共 23 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
 
 | 主题 | 一句话 | 触发词 |
 |---|---|---|
+| [fakeclock-migration-missed-forms.md](fakeclock-migration-missed-forms.md) | 把多套旧假钟批量迁到统一假钟(tests/clock.py)时, 按类名/替换表机械改最易漏两类形态 —— 直接调用旧假钟实例的 `clock()` 方法形(新假钟 API 是 `now()`/`monotonic()`, 类名相同但方法名不同), 与绕过属性、位置参数直构旧类的… | 假钟迁移, 旧假钟, tests/clock.py, clock() 调用形, 位置参数直构, 直构位, _FixedClock, 迁移漏改, 裸取时残留, 批量替换 |
 | [fixed-port-test-collision.md](fixed-port-test-collision.md) | 测试夹具不覆盖「固定端口 + 连号候选表」的服务端口(`HrChannelConfig.discovery_port` 模型默认 **18788**, 候选表 18788/18789/18790 也是写死的), `-n 8` 并行下多个 worker 同时绑、再叠加本机**真实实… | 加 hr runtime 测试, 发现端口, discovery_port, 固定端口, 18788, 并行偶发红, WARNING 污染 INFO 断言, caplog 断言偶发, 端口被占, 真实实例占端口, xdist 端口冲突, m… |
 | [flaky-midnight-daycount.md](flaky-midnight-daycount.md) | 用例喂 `observe(ts+i)` 循环(i 到阈值+30)拿 `ts = int(time.time())` 时, 距本地零点 &lt;循环跨度秒的跑必红 —— 生产代码按天重置计数是**正确**语义, 用例未固定「同一天」致阈值永不达, 告断言红。修法锚循环起点当日 00… | flaky, 跨零点, 距零点, 必红时段, 按天计数, 阈值永不达, 循环 ts+i, 跨天清零, v4_day_epoch, 86400, 当日 00:01, 正午锚点, 按日文件, 秒精度, 分钟精度, 冻结时钟, 固定 epoch,… |
 | [flaky-minute-stamp-dup.md](flaky-minute-stamp-dup.md) | 用例对文件名带分钟级戳 (`%y-%m-%d-%H%M`) 的制品做「重复建幂等拒绝」断言时, 两次真调用跨分钟边界 ⇒ 派生文件名不同 ⇒ `exists()` 永不命中 ⇒ 拒绝分支永不触发, CI 偶发红本机绿 —— 生产幂等语义 (同路径拒绝) 正确, 是用例没钉住「同路… | flaky, 分钟戳, 时间戳命名, 幂等, 重复建, 跨分钟, timekit, monkeypatch, 冻结时钟, CI 偶发红, 时刻相关, exists 查重 |
@@ -30,4 +31,3 @@
 | [hr-registry-pollution.md](hr-registry-pollution.md) | 测试期 `hr.runtime` 的注册表路径必须被 conftest 重定向到临时目录 —— 用例的 `data_dir` 是每例唯一的 `tmp_path`, 不隔离就是**每个用例往用户真实 `%LOCALAPPDATA%/auto-qb-hr/instances.json… | 加 hr runtime 测试, 发现端点测试, 扩展发现列表出现无关实例, 主实例连不上 Failed to fetch, instances.json 无界增长, 写 app-data, 注册表条目堆积, 测试污染用户数据 |
 | [iab-click-rerender-flake.md](iab-click-rerender-flake.md) | 用 IAB 浏览器 (Playwright surface) 对 kb.nav 这类「动作即整段重渲染 innerHTML」的单文件页做冒烟时, 多个 locator 动作挤在一个 cell 里连打 (间隔 ≤150ms), 后继动作可能报 `Timeout waiting fo… | 冒烟中 locator click 超时; 想断定「功能有 bug」之前; 冒烟脚本连续动作 (右键菜单 → 开关按钮 → 专区内按钮) 后继点击超时。 |
 | [importlib-sys-modules-dataclass.md](importlib-sys-modules-dataclass.md) | importlib 就地加载 future-annotations dataclass 模块, 不先注册 sys.modules 会在 3.13 上炸 NoneType | importlib, spec_from_file_location, exec_module, sys.modules, dataclass, NoneType, 3.13, 就地加载, 守阵加载引擎, find_skill_dir |
-| [inproc-server-conn-abort.md](inproc-server-conn-abort.md) | 测试自起 `http.server.ThreadingHTTPServer(("127.0.0.1", 0))` 当假服, test.full(并行 + 覆盖率插桩)高载下, **真客户端打真本地服**的段偶发 `ProtocolError: Connection aborted… | 10053, ConnectionAbortedError, Connection aborted, 你的主机中的软件中止了一个已建立的连接, ProtocolError, ThreadingHTTPServer, 进程内假服, 本地假服,… |

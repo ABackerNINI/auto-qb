@@ -173,7 +173,11 @@ match = [""]
 run   = ["python <skill-dir:commands>/scripts/run.py run review.trace"]
 auto  = true
 timeout = 60
+when_message = true
 note  = "评审留痕: 可评内容 >0 行(代码+事实性文档)或触安全敏感面即需 `Review:` trailer(含 `· 基`); 新提交写 `Review-Skip:` 判红; 实算恒 0 且无 Review: trailer 才静默; 口径单点见 .commands/review/config.toml 的 review.trace note"
+# when_message(计划 26-11-11-0408): 消息依赖闸门 —— ship.gate 预跑侧在消息文件不存在时
+# 打略过行后摘除(评审批次 pack 前评审尚未发生, 照跑必红); commit 侧不受影响(闸门前就因
+# 消息缺失拒跑)。消息文件存在时预跑照跑 —— 提前发现忘写 trailer。
 
 [[gates]]
 # 空串 = 每次提交都命中 (hit 用 startswith/子串匹配, 空串匹配一切路径)。

@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>提交闸门预跑 ship.gate: pack 前置单独跑</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="ship-gate-prerun">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-11-0408">
+<meta name="doc-updated" content="26-11-11-0408">
+<meta name="doc-refs" content="">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: ship-gate-prerun</div>
+<h1>提交闸门预跑 ship.gate: pack 前置单独跑</h1>
+<p class="lede">本篇只回答: 怎么把提交闸门做成可单独跑的 <code>ship.gate</code>, 并接进评审批次的 pack 前置, 让小失误在评审派发之前暴露 —— 不回答: 闸门清单本身的重构、绿结果缓存去重(第一版明确不做)。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-11-0408 · <b>doc-updated</b> 26-11-11-0408 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 会话 grilling(2026-11-11): 用户对 11 问全部「按推荐」, 共识誊写于 §03/§06
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<p><b>为什么做</b>: 当前小失误只在 <code>ship.commit</code> 闸门一刻暴露 —— 典型浪费回路: 小失误 → review → 提交被拦 → 修改 → 重 review → 再提交。多花的正是评审派发(批 ≤400 行一次派遣)。</p>
+<p><b>做到什么程度算成</b>: 改完代码/文档后、评审派发前, 可用 <code>commands run ship.gate</code> 把「commit 将要跑的同一套闸门」原样预演一遍; 评审批次的 pack 前置固定接线这一步; commit 闸门照旧全跑兜底。</p>
+<p><b>收益锚定(关键事实)</b>: 评审基哈希<b>排除生成物与记账类</b>(code-review skill ③) —— 生成物类闸门红(如索引没重跑)修完不触发重评。重评浪费只发生在<b>闸门逼改可评内容</b>时(fmt 改格式 / test 红改代码 / 措辞改文字 / AGENTS.md 超限)。预跑的目标因此锚定一句话: <b>review 评到的树已经是闸门绿的</b>。</p>
+<p><b>设计不变量</b>:</p>
+<ul>
+  <li>闸门清单单点不动: <code>.my-commit-flow.toml</code> 的 <code>[[gates]]</code> 仍是唯一清单, 预跑照搬全部 <code>auto = true</code> 闸门, 不另抄一份;</li>
+  <li>commit 双跑保留(黄金法则 1 幂等): 预跑绿后 commit 再跑一遍, 不做缓存去重;</li>
+  <li>快照语义照搬(<code>_snapshot.maybe_respawn</code>, 一次调用 = 一个版本);</li>
+  <li>v3 输出契约: 成功一行(要贴进评审记录), 失败一行 + 明细块。</li>
+</ul>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+<ul>
+  <li>闸门引擎早已在 <code>_pipeline.py</code>(<code>gates_for</code> / <code>run_gates</code> / 占位符展开, 两阶段并发执行), <code>commit.py:519</code> 只是调用方 —— 「拎出来」实现上是加一个入口脚本, 不是重写。</li>
+  <li>闸门 11 条三类: <b>代码面</b>(dev.fmt / test.quick / test.pkg.scoped)、<b>KB 与文档面</b>(索引 / 措辞 / 模板 / 状态漂移 / 坏链 / HTML v.Nu 等约 9 条命令)、<b>提交语义面</b>(review.trace / skill 链接同步 / context caps)。</li>
+  <li>成本实测: test.full 全量 185s(基线切片 <code>26-11-11-0314</code>), test.quick 更短 —— 双跑多花约 2-3 分钟, 相对一次评审派发是小头。</li>
+  <li><code>dev.fmt</code> 是<b>真动作</b>(会真格式化文件) → 预跑必须在 pack(基哈希)之前, 否则评审包基线失真。</li>
+  <li><code>review.trace</code> 读提交消息: <code>commit.py:515</code> 经 <code>COMMIT_FLOW_MSG_FILE</code> 递下去, <code>check_review_trace.py:168</code> 消费; 预跑时评审尚未发生、消息通常还没写, 照跑必红。</li>
+  <li>闸门键白名单 <code>GATE_KEYS</code>(<code>_ship_config.py:89</code>): 未知键一律 STOP(config_problems) —— 新键必须先扩白名单, 否则一写就挡提交。</li>
+</ul>
+
+<h2><span class="no">§03</span>方案总览</h2>
+<h3>主线</h3>
+<p>新增 <code>ship.gate</code>(my-commit-flow/ship 子包, 入口 <code>scripts/gate.py</code>), 与 sync/push 并列; 行为表:</p>
+<table>
+  <tr><th>输入态</th><th>行为</th></tr>
+  <tr><td>树净</td><td>一行「树净, 无闸门可跑 —— 提交闸门照旧在 ship.commit 兜底」, rc 0</td></tr>
+  <tr><td>树脏</td><td>changed = staged + unstaged 中工作区仍存在的路径; <code>gates_for</code> 命中 → <code>run_gates</code>(并发池 / 分片 / 聚合语义照搬, 一字不改)</td></tr>
+  <tr><td>红线 / warn 命中</td><td>只打 <code>WARN:</code> 信息行(拦截语义属于 commit 的暂存计划, 预跑不拦)</td></tr>
+  <tr><td>review.trace</td><td>仅当消息文件(<code>.git/COMMIT_MSG_AI.txt</code>)存在才跑(提前发现忘写 trailer), 且照 commit 同款设 <code>COMMIT_FLOW_MSG_FILE</code>; 不存在 → 打「略过」行(评审批次 pack 前评审尚未发生, 跑了必红)。实现: 新增闸门级键 <code>when_message = true</code>, 预跑侧过滤, commit 侧不受影响</td></tr>
+  <tr><td>skill 链接同步</td><td>幂等动作, 照跑</td></tr>
+  <tr><td>失败</td><td><b>全量</b>列出未过闸门(逐条: 闸门名 + rc + 耗时 + $命令 + 输出末 20 行) —— 预跑是诊断面, 一次看全、一轮修完; 结果行「闸门预跑失败: N 条未过 —— 修完重跑 ship.gate; 绿了再 pack/评审」, rc 1</td></tr>
+  <tr><td>成功</td><td>一行「闸门全绿: 命中 G 条, 执行 C 条命令, 总耗时 Xs(略过 M 条)」→ 贴进评审记录</td></tr>
+</table>
+<h3>接线(单点)</h3>
+<ul>
+  <li>code-review skill ③ pack 前置加一步: <b>sync 之后、pack 之前</b>跑 <code>ship.gate</code>, 结果行贴进评审记录; 红 → 修 → 重跑绿才 pack; <b>凡 pack 必前置</b> —— 复评轮与接缝终审不豁免(D9); 非评审提交(纯生成物/记账)可选不预跑, commit 闸门兜底(D7)。</li>
+  <li>AGENTS.md 一字不动(D8): 收尾节已指向 code-review skill, skill 内部接线自动被引用到, 8000 字符预算不花。</li>
+  <li>配置三处: <code>ship/config.toml</code> 注册 task(when/note 写语义与例外); <code>.my-commit-flow.toml</code> review.trace 加 <code>when_message</code>; <code>_ship_config.py</code> 扩 <code>GATE_KEYS</code> + bool 校验(缺了就是 STOP, 挡自己提交)。</li>
+</ul>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+<table>
+  <tr><th>#</th><th>内容</th><th>验收判据</th></tr>
+  <tr><td>1</td><td><code>gate.py</code> 入口: 快照自举 / argv 判据(照 sync.py: <code>argv is None</code> = CLI 直跑) / <code>--safety</code> 自认 <code>action-without-args</code>(无参跑 fmt 真改文件) / 树净 / 红线信息行 / when_message 过滤 / 全量失败明细 / 成功一行</td><td>新用例逐条绿(见 <code>test_gate.py</code> 测试计划); <code>--help</code>/<code>-h</code>/<code>--safety</code> 不进快照不跑闸门</td></tr>
+  <tr><td>2</td><td><code>ship/config.toml</code> 注册 <code>ship.gate</code>; <code>.my-commit-flow.toml</code> review.trace 加 <code>when_message = true</code> + 注释; <code>_ship_config.py</code> 扩 <code>GATE_KEYS</code> + bool 校验</td><td><code>commands run my-commit-flow.verify-ref</code> 同源体检无 STOP; config_stops 对新键零告警</td></tr>
+  <tr><td>3</td><td>code-review SKILL.md ③ pack 前置接线一段</td><td>check_doc_links 绿; skill 文字与 D2/D7/D9 逐字一致</td></tr>
+  <tr><td>4</td><td><code>test_gate.py</code>(头部「## 测试计划」docstring 同步 —— AGENTS.md 硬规则)</td><td><code>commands run test.pkg.scoped</code>(my-commit-flow 包)全绿</td></tr>
+  <tr><td>5</td><td>dogfood: 本仓真跑 <code>commands run ship.gate</code></td><td>真实输出与行为表逐行对上; 结果行可直接贴进评审记录</td></tr>
+  <tr><td>6</td><td>回写: <code>references/pipeline.md</code> 补 ship.gate 一节; 收尾按 DoD(切片/立档/基线/坑档)</td><td>收尾 DoD 逐项过</td></tr>
+</table>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p>无 —— 设计树在 grilling 轮全部拍完(11 问全按推荐), 结论见 §06。</p>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+  <tr><th>D</th><th>结论(2026-11-11 会话拍板, 全部「按推荐」)</th></tr>
+  <tr><td>D1</td><td>预跑照搬全部 auto 闸门, 清单单点不改; 目标锚定「review 评到的树已是闸门绿」</td></tr>
+  <tr><td>D2</td><td>时点 = code-review ③ pack 前置: sync 之后、pack 之前(dev.fmt 真动作, 必须先于 pack)</td></tr>
+  <tr><td>D3</td><td>commit 双跑保留, 第一版不做绿结果缓存去重(缓存失效的静默红面 + changed_extra 复跑键复杂化, 与「静默失效比报错坏」哲学冲突)</td></tr>
+  <tr><td>D4</td><td>接线 = code-review skill + 包 when/note; 第一版不建机检, 观察执行率再议</td></tr>
+  <tr><td>D5</td><td>命令形态 = <code>ship.gate</code>(ship 子包), 复用 _pipeline 引擎与 _snapshot 快照</td></tr>
+  <tr><td>D6</td><td>review.trace 仅消息文件存在才跑否则略过行; skill 链接同步照跑; 红线/warn 仅信息行不拦</td></tr>
+  <tr><td>D7</td><td>非评审提交(纯生成物/记账)不接预跑点, commit 闸门兜底</td></tr>
+  <tr><td>D8</td><td>AGENTS.md 一字不动</td></tr>
+  <tr><td>D9</td><td>凡 pack 必前置 ship.gate(复评循环每轮、接缝终审不豁免; K 轮循环 = K+1 次预跑, 每轮约 2-3 分钟, 接受)</td></tr>
+  <tr><td>D10</td><td>先出计划单文件 HTML(本篇)再实施</td></tr>
+  <tr><td>D11</td><td>开工授权: 新建 gate.py / test_gate.py / 本计划, 修改 ship/config.toml + .my-commit-flow.toml + _ship_config.py + code-review SKILL.md; commit/push 等显式「提交」</td></tr>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+  <tr><th>#</th><th>风险</th><th>触发条件</th><th>处置</th></tr>
+  <tr><td>R1</td><td>agent 忘跑预跑(文档接线无机检, 与「该跑的没跑 = 静默红」同款失效模式)</td><td>观察到预跑执行率低 / commit 被拦的回路仍频繁出现</td><td>再议机检(pack 输出提示 / gate 状态文件), 当前靠 skill 文字 + D9 措辞钉死</td></tr>
+  <tr><td>R2</td><td>评审循环 K 轮 = 预跑 K+1 次, 测试面时长累积</td><td>评审循环频繁(实测发现数 ≈ 派发次数 × 5.6, 循环常见)</td><td>当前接受(D9); 痛了再议「复评轮轻量子集」—— 但那会重新引入「哪些闸门能省」的裁量面, 不轻动</td></tr>
+  <tr><td>R3</td><td>预跑 fmt 与用户编辑并发改文件</td><td>预跑跑 test.quick 时用户同时改代码</td><td>概率低; commit 闸门照旧兜底, 不专门处理</td></tr>
+  <tr><td>R4</td><td>review.trace 预跑分支依赖消息文件提前写好, 实际很少触发</td><td>消息在评审后才写(现状惯例)</td><td>略过行如实显示不静默; 行为表注明「仅消息文件存在才跑」</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-11-0408</span> 初版: 会话 grilling 共识誊写(11 拍板 D1-D11 + 行为表 + 实施步骤); 用户确认「出计划再开工」后本篇即实施依据。</li>
+</ul>
+
+</div>
+</body>
+</html>

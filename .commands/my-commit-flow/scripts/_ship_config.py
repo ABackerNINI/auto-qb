@@ -86,7 +86,10 @@ GENERATED_KEY_TYPES = {
 # gate 级原样透传、不做键过滤, `auto` 拼成 `auto_run` 会**静默**退回 "只打印":
 # 你以为闸门自动跑了, 其实一条没跑, 输出里连痕迹都没有。见 draft_issues 的注释。
 # `shard`(可选, 默认 true): false = 聚合语义闸门, `<changed:>` 不分片, 超命令行上限即 STOP。
-GATE_KEYS = {"match", "run", "note", "auto", "timeout", "shard"}
+# `when_message`(可选, 默认 false, 计划 26-11-11-0408): true = 消息依赖闸门 —— 仅 ship.gate
+# 预跑侧在消息文件不存在时打略过行后摘除(评审尚未发生, 照跑必红); commit 侧不受影响
+# (commit 在闸门之前就因消息缺失拒跑, 恒有消息可读)。
+GATE_KEYS = {"match", "run", "note", "auto", "timeout", "shard", "when_message"}
 
 # <skill-dir:NAME> 的候选位置 —— 按此顺序找, 第一个存在的即命中。
 # 项目级在前(同一份 skill 的 .codebuddy 版本是 .agents 的 junction), 用户级兜底。
@@ -505,6 +508,12 @@ def config_problems(cfg: dict, path: Path | None = None) -> list[tuple[str, str]
         shard = gate.get("shard", True)
         if not isinstance(shard, bool):
             problems.append(("STOP", f"gate「{note}」的 shard 非法: {shard!r}(true / false)"))
+        # when_message 写错类型会让 ship.gate 预跑侧的「消息依赖闸门略过」静默失效: 非 bool 真值
+        # (如字符串 "true")一律按真处理 —— meant-false 的写法(如 "false")会被**错误略过**;
+        # falsy 非 bool 则永不略过 → 预跑必红的 review.trace 照跑。与 shard 同级 STOP。
+        when_message = gate.get("when_message", False)
+        if not isinstance(when_message, bool):
+            problems.append(("STOP", f"gate「{note}」的 when_message 非法: {when_message!r}(true / false)"))
 
     # 生成物自动化解三键的类型: 写错(如 auto_resolve_generated = 1)会让化解路径行为异常, 停手。
     for key, want in GENERATED_KEY_TYPES.items():

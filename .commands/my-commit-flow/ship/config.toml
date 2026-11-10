@@ -19,3 +19,9 @@ script = "push.py"
 when   = "补推 / 单独推送（ship.commit 已默认内联续推）→ 同步核对 + 推主线 + 核对远端 + 镜像(全程静默)"
 note   = "结果行「推送成功 <hash>」, 上面可能带内部同步的步骤行(快进 / rebase 重放); 推主线 20s×3 次重试(全部失败才判失败), 失败行缀「已重试 N 次」; 镜像只给超时(attempts=1)且允许滞后, 成败都不提"
 doc    = "references/pipeline.md"
+
+[tasks."ship.gate"]
+script = "gate.py"
+when   = "评审批次 pack 前置(code-review skill): sync 之后、pack 之前跑一次 —— 让 review 评到的树已是闸门绿(计划 26-11-11-0408); 红必修完重跑绿才 pack; 凡 pack 必前置(复评轮/接缝终审不豁免)。非评审提交(纯生成物/记账)可选, commit 闸门兜底"
+note   = "结果行: 「闸门全绿: 命中 G 条...」(贴进评审记录) / 「树净, 无闸门可跑」 / 失败一行+逐条明细(预跑是诊断面, 一次看全一轮修完); 清单单点 .my-commit-flow.toml 照搬全部 auto 闸门, commit 闸门照旧双跑兜底(拍板 D3, 不缓存); review.trace 仅消息文件存在才跑否则略过行(when_message); 红线/warn 只打 WARN 不拦"
+doc    = "references/pipeline.md"

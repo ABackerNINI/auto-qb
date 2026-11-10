@@ -1,13 +1,14 @@
 # testing — 测试 / 冒烟 / 仿真纪律 · 卷 5/5
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `stub-bypass-apply.md` … `xdist-worker-global-snapshot.md`(共 19 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `static-guard-mutation.md` … `xdist-worker-global-snapshot.md`(共 20 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
 
 | 主题 | 一句话 | 触发词 |
 |---|---|---|
+| [static-guard-mutation.md](static-guard-mutation.md) | 读 JS/模板源码的静态守阵, 若断言只查「字符串在不在」或把多个弱正则串起来, 行为被突变(短路禁用/删语句)后它照样绿 —— 守阵看着活着, 拦不住真突变。升级方向: **整行活性锚定**(匹配带上下文的整行/整块, 摘一个 token 即失配) + **逐分支语句清单**(… | 静态守阵, 静态守卫, 字符串包含, in 断言, 链式正则, 突变盲区, 红验不红, 守阵空转, 短路禁用, 删语句 |
 | [stub-bypass-apply.md](stub-bypass-apply.md) | 桩直改字段/手写派生产物(绕过生产单点函数)当时能过, 生产侧后来加了**以生产函数副作用为判据**的新判定后, 桩链路静默退化成另一条路径 —— 表现是「生产对、桩错」且无报错。本仓实例: ui_harness 直写 delta_fields 绕过 store._apply,… | ui_harness, 冒烟桩, delta_fields, rounds_applied, keyed, unkeyed_command_source, 恒 full, store._apply, 桩失真, 手写派生字段, view_ch… |
 | [stubs-sim.md](stubs-sim.md) | 测试替身"长得像"不等于"够用"; 仿真端最容易变成"自以为在测"的测假陷阱。 | 写替身, FakeClient, FakeTorrent, FakeQbServer, sim_qb, 仿真, 判据空壳, 反向对照, 回执判定, FakeConfig, 假配置, 新配置键, 替身漂移, 枚举成员, dev 脚本, ui_… |
 | [sync-midrun-coverage-synthesis.md](sync-midrun-coverage-synthesis.md) | test.full(xdist+coverage)运行期间执行 `my-commit-flow.sync` 快进换入远端新代码 —— 已启动的 worker 仍持旧模块字节码跑完全程, 新增/改动的源码行从未被执行, coverage 合成时这些行全记 miss, 总覆盖率跌破… | test.full 运行中, 评审 pack 前置 sync, 会话中途 sync, 覆盖率误红, 覆盖率跌破闸门, miss 数暴涨, 基线取数 |
