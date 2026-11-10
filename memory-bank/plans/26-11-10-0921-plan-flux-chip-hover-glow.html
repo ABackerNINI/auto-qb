@@ -7,10 +7,10 @@
 <title>WEBUI 三种筛选 chip hover 辉光统一（仅 flux）</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="flux-chip-hover-glow">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-11-10-0921">
-<meta name="doc-updated" content="26-11-10-0921">
-<meta name="doc-refs" content="">
+<meta name="doc-updated" content="26-11-11-0310">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-11-webui-flux-chip-hover-glow.md">
 <style>
   :root {
     --bg: #10151a;
@@ -75,7 +75,7 @@
 <h1>WEBUI 三种筛选 chip hover 辉光统一（仅 flux）</h1>
 <p class="lede">本篇只回答: 在<strong>仅改 flux 皮肤</strong>的前提下, 怎么让三种筛选 chip 的 hover 辉光四边闭合且彼此一致, 同时不推翻 R3 对站点 chip 切角的「逐字恢复」拍板。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-10-0921 · <b>doc-updated</b> 26-11-10-0921 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-11-10-0921 · <b>doc-updated</b> 26-11-11-0310 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 2026-11-10 grilling 会话(用户指令「WEBUI 分类/标签/站点鼠标 hover 辉光没有统一, 部分辉光仅显示一侧或两侧, 注意部分皮肤切角与圆角」) → Q1–Q5 / N1–N5 / F1–F4 三轮拍板收敛; Q5 由用户改写为「辉光是 flux 特有的, 仅修改 flux」。全部定案见 §06。
 </div>
 
@@ -236,6 +236,7 @@ html[data-fx-preset] .site-chip::before {
 <h2><span class="no">§10</span>变更记录</h2>
 <ul>
   <li><span class="tag">R0 · 26-11-10-0921</span> 初版: 2026-11-10 grilling 三轮(Q1–Q5 / N1–N5 / F1–F4)拍板收敛后立项; 收录只读核查所得的根因(控件层 clip-path 裁外发光)、实施硬约束(components.css 700 行红线 / chip 键集守阵 / 零新增令牌 / fx-mount.css 唯一落点)、W1–W3 分期与 13 条风险; 另如实标注 D4 的 focus-visible 因 chip 无 tabindex 当前不命中, 只做样式预留。本轮仅产出计划, 零生产代码改动。初版经一轮分批评审(2 派), 3 条发现当场修: 测试计划清单落点(<code>_tmp_bootstrap.py</code> 无该段)、<code>views.css</code> 底色优先级行号、W2 e2e 恒真断言改为主判据 <code>clipPath</code> + 红绿双验。</li>
+  <li><span class="tag">R1 · 26-11-11-0309</span> 实施完成: 四笔提交 399bdb2e(W1 site-chip 形状分层, clip-path 挪 ::before + 八组语义柔底 + focus-visible 样式预留)/644f3274(W2 静态守阵 + flux 显式 e2e 计算值双验)/37c12e00(入池分支既有 e2e 失败)/f7f4658c(S4 触发 W1-3 预留路径, paused/other/search-hit inset 描边与 sa-no-conf dashed 底边迁入 ::before 切角绘制层); W1-3 边线迁移由用户真机目检触发(O1), hover 边线持续可见属行为变化, 经目检裁决接受; f-on 无辉光维持 D4 拍板; 各批评审零 actionable 收口; test.full 全绿(见 kb.baseline); focus-visible 键盘化另立件(O5), §02 三条规范漂移按 D14 另案不入本轮</li>
 </ul>
 
 </div>

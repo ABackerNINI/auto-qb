@@ -1,7 +1,7 @@
 # web-ui — 前端 / WEB UI 纪律 · 卷 1/4
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `add-partial-receipt.md` … `descendant-selector-collateral.md`(共 25 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `add-partial-receipt.md` … `derived-snapshot-render.md`(共 25 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
@@ -18,6 +18,7 @@
 | [classic-row-fit-content-grid.md](classic-row-fit-content-grid.md) | 三皮肤经典表对引擎行容器 `.group-row` 写了 `width:fit-content; min-width:100%`(经典 flex 列容器里靠 min-width 兜底成整行宽, 内容超宽才横滚)。变体把 `.group-table` 覆盖成 **grid** 并用… | width:fit-content, min-width, justify-self stretch, group-row, 卡片不填满, 栅格空隙, 两列中间大洞, 长空隙, 卡片宽度不一致, 虚拟卡后方空白, dt04, 状态卡片栅格,… |
 | [classic-script-top-level-const-collision.md](classic-script-top-level-const-collision.md) | classic script(非 module 的 `<script>`)的顶层 `let/const` 不进 `window` 而是进**全局词法环境**, 所有 `<script>` 标签共享这一个环境 —— 两个文件各自写 `const FIT = ...`, 后装载的那个… | 顶层 const 撞名, classic script 全局词法环境, SyntaxError, mixin 未注册, 白屏, AQB_OVERLAY_FIT, 静态守阵看不见, 多 js 文件同名常量, 顶层 let, let/const… |
 | [clip-path-clips-fixed.md](clip-path-clips-fixed.md) | 祖先带 `clip-path`(console/atlas 皮肤的 `.hb-cut` 切角)或 `transform` 时, 其内 `position: fixed` 后代的「相对视口」语义被改写成「相对该祖先」—— `clip-path` 表现为**绘制裁剪**(全屏层只剩与… | fixed 全屏不显示, 覆盖层只显示一部分, 弹窗被裁剪, 全屏遮罩点不到, clip-path, 切角, hb-cut, z-index 调不动, fixed 后代, 设置页覆盖层, 全屏层错位, 底部动作条先出现在中间再下移, 状态栏… |
+| [clip-path-clips-outer-glow.md](clip-path-clips-outer-glow.md) | 控件本体的 `clip-path` 切角会连绘制层一起裁 —— 同元素上的 box-shadow 外发光(hover 辉光)/filter/drop-shadow 被裁成只显一侧/两侧, 把 clip-path 挪进 `::before` 绘制层、本体 `clip-path: n… | 切角, clip-path, 外发光, 辉光, box-shadow 被裁, glow 只显一侧, glow 缺边, hover 辉光不统一, 状态 chip 切角丢失, 切角丢失, filter, drop-shadow, site-ch… |
 | [color-mix-alpha-weight.md](color-mix-alpha-weight.md) | color-mix 混入带 alpha 的颜色且不写权重会产出半透明色 | color-mix, 半透明合成, tint 合成, 不透明基色, 吸左首格 |
 | [columns-persist.md](columns-persist.md) | 列偏好"时不时被重置"的全部已知机制 —— 双轨模型是当前定案(前四轮修复都栽在把意图与派生混在一个字段里); 另有一条**应用之外**的通道: 浏览器站点级"关闭窗口时清除 Cookie 和站点数据"。 | 改列设置, 列宽被重置, localStorage, 列隐藏, 列序, 拖列宽, colHidden, colOrder, colWidths, 浏览器重启, 偏好全回默认, 关闭窗口时清除站点数据, SESSION_ONLY |
 | [combobox-focusout-close.md](combobox-focusout-close.md) | 自绘下拉(combobox)收层判据 —— @focusout 合帧 + label/清空钮/面板根/组件根的 @click.stop 与 @mousedown.prevent、焦点纪律按区域设、净空限高与容器预留、落点归属; 完整多轮取证与教训见 [attachments/co… | 自绘下拉收起, combobox, focusout, blur 收层, label 转发激活, for 属性回焦, 下拉闪烁重现, 点窗口其它位置不收, 下拉撑变形, 浮层限高, add-pop, 转发 click, 合帧守卫, 开层撤销… |
@@ -32,4 +33,3 @@
 | [ctx-menu-edge-clamp.md](ctx-menu-edge-clamp.md) | 视口钳位 e2e: 锚点不贴缘的断言恒真; 左缘 clamp 真实手势结构不可达 | 视口钳位, 左缘, 右缘, ctx-menu, EDGE, e2e 断言, 恒真, 顺带断言, 红验, clientX, 滚动容器左缘 |
 | [density-tier-single-point.md](density-tier-single-point.md) | 移除「经典 / 变体」两档制的一方时(删经典档或删变体档), 真正危险的不是删组件, 而是**档制判据散落在四五处**: 菜单候选集(`[{id:"classic"}].concat(options(tab))`)、缺省读侧(`readSel` 的 out 初始化)、各消费方(`… | 档制单档化, 删经典档, 删变体档, defaultSel, CLASSIC_TABS, hasClassic, choices, 缺省档, 渲染失败兜底, 补落经典, 菜单只有一个项, 菜单候选集, 兜底失真, readSel, dtPe… |
 | [derived-snapshot-render.md](derived-snapshot-render.md) | 派生状态(如"未归组命中")在事件落袋时被存成**快照**, 渲染期却按**当前**数据无条件消费 —— 快照与真值分叉后同一实体画两遍; 修法是渲染期用当前源现算判据 + 双条件闸, 而非在快照里打补丁 | 搜索, 虚拟行, 未归组, 重复行, u- 行, searchUncovered, 派生快照, 渲染期判据, filteredGroups, 跨视图, 归组关系变化, search_rev 不变, 同一 hash 两行 |
-| [descendant-selector-collateral.md](descendant-selector-collateral.md) | 容器级后代选择器误命中后加的子元素 | 给已有容器新增子元素后图标错位/样式怪 |
