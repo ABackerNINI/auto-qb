@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>relocate 同机强探测异步化: run_probe 移出主循环(daemon 单飞 + FIFO 等位 + 意图重放自动续跑)</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="relocate-probe-async">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-10-2350">
+<meta name="doc-updated" content="26-11-11-0043">
+<meta name="doc-refs" content="memory-bank/issues/26-11-10-0638-bug-legacy-review4-relocate-probe-blocking.html">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: relocate-probe-async</div>
+<h1>relocate 同机强探测异步化: run_probe 移出主循环(daemon 单飞 + FIFO 等位 + 意图重放自动续跑)</h1>
+<p class="lede">本篇只回答: relocate 的 E1 同机强探测(<code>run_probe</code>)如何移出主循环线程——daemon 单飞线程执行 + FIFO 等位队列 + 意图重放自动续跑,消除 FS 不可达时最长 ~35s 的主循环阻塞,且探测闸门语义(D5/D6/D7)逐条不变。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-10-2350 · <b>doc-updated</b> 26-11-11-0043 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 会话 grilling(2026-11-10,用户认领 issue 26-11-10-0638 后三轮拍板,全按推荐) · 认领 <a href="../issues/26-11-10-0638-bug-legacy-review4-relocate-probe-blocking.html">26-11-10-0638-bug-legacy-review4-relocate-probe-blocking</a>(R4 汇总件 26-11-07-0527 明细行 8 拆出)
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<h3>为什么做</h3>
+<p>issue <a href="../issues/26-11-10-0638-bug-legacy-review4-relocate-probe-blocking.html">26-11-10-0638</a>:探测的证读/证写/清理三段轮询全走 <code>time.sleep</code>(预算 10+10+5s,轮询间隔 0.25s,另加 qB HTTP 超时 connect 3s/read 10s,<code>qbclient.py:22</code>),且经 <code>_ensure_probe</code> 在主循环线程同步执行——FS 不可达时单次探测阻塞整库监控约 25s+(上界 ~35s)。与成文纪律三处直接抵触:<code>relocate_lifecycle.py:267</code>「单步零阻塞」、<code>relocate_common.py:18</code>「单步 &lt; 50ms」、<code>taskqueue.py:319</code>「无 run 内 sleep」。</p>
+<h3>做到什么程度算成</h3>
+<ul>
+<li>探测全程(FS 正常与故障)不再占用主循环线程可感知时长——主循环单步仍 &lt; 50ms;</li>
+<li>迁移在探测结论到达后<strong>自动续跑</strong>,web 与规则两条路径均然,不要求用户/规则重试;</li>
+<li>探测闸门语义逐条不变:闸门 D5 位置契约(passed 前零建账零 setLocation)、闸门 D6 无旁路、闸门 D7 缓存决策表;</li>
+<li>既有探测相关测试(<code>test_relocate_probe.py</code> 36 用例 + 执行闸 <code>test_relocate_exec_probe_gate.py</code> 10 用例)语义保留。</li>
+</ul>
+<h3>设计底线/不变量</h3>
+<ol>
+<li><strong>run_probe 本体零改动</strong>:自带预算与 finally 清理的自包含黑盒,原样进线程;</li>
+<li><strong>黄金法则#5</strong>:state 写(probe_put/pending 增删)只在主循环线程;探测线程零 state 写、零建账、零 setLocation;</li>
+<li><strong>同步直通路径不动</strong>:单成员组(闸门 D2)/dry-run/assume_shared(闸门 D7)/same_fs_proved(闸门 D4)/缓存命中(闸门 D3)各分支行为逐条不变;</li>
+<li><strong>全局单飞</strong>:任一时刻至多一个探测在飞(FS 故障不放大);</li>
+<li><strong>零新增配置键</strong>:validate_config 不动。</li>
+</ol>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+<h3>现状(取证 2026-11-10 08:32,认领复验,行号为当日值)</h3>
+<ul>
+<li><code>relocate_execute</code>(<code>relocate_exec.py:1041</code>)先 <code>_buckets</code> 分桶(<code>:1067</code>),<code>for records in groups:</code> 循环内每组经幂等 skip/部署闸/evaluate_group 后调 <code>_ensure_probe</code>(<code>:1126</code>→定义 <code>:1134</code>)——<strong>探测按组触发,一组一个指纹</strong>(src save_path → dst);单成员组完全不探测(<code>:1153</code>,闸门 D2)。</li>
+<li><code>_ensure_probe</code> 决策表按序短路(<code>:1140-1151</code> docstring):单成员组跳过 → dry-run 跳过 → assume_shared 跳过 → same_fs_proved 放行 → 指纹缓存命中放行/blocked → 未命中则 <code>run_probe</code> <strong>纯同步</strong>执行(<code>:1209</code>,常态 ~1.3s),其后按 probe.status/probe.env 写缓存或返回 blocked。</li>
+<li><code>run_probe</code>(<code>relocate_probe.py:321</code>)自包含:造种→落源→add→证读(可见轮询 <code>_await_probe_torrent</code> + recheck 轮询,预算各 10s)→证写(<code>_write_proof_poll</code>,10s)→清理(<code>_cleanup</code>,5s);轮询体全 <code>time.sleep(0.25)</code>;四常量 <code>relocate_probe.py:48-51</code>;<code>finally</code> 保证所有出口清理(<code>:409-411</code>)。</li>
+<li>两条上游均在主循环线程:规则动作(<code>rules/actions/transfer.py:33</code>,interval 经 TaskQueue.run_due、事件经同步相位分派)与 web 命令(<code>commands_torrents.py:475/:707</code>,经主循环 <code>consume_commands</code>)。</li>
+<li>探测结论三去向:执行闸(建账与否)、预检只读缓存(<code>relocate_plan.py:588</code>,零副作用)、<code>probe_put</code> 持久化(<code>relocate_mod.py:126-135</code>,容器 <code>state.data["relocate"]["probes"]</code>)。</li>
+</ul>
+<h3>痛点证据</h3>
+<p>复验结论(2026-11-10 08:32,已记入 issue):指控链全部成立——同步调用无线程/异步、三段 sleep 预算 25s、上游两路径均主循环线程、与三处成文纪律抵触;R4 行号漂移:<code>run_probe</code> 174→321、<code>_ensure_probe</code> 707→1134。项目先例(移出主循环两形态):notify 系 daemon 线程(<code>infra/notify.py:229</code>);relocate 回收系独立进程(<code>_spawn_daemon</code> <code>relocate_exec.py:1684</code>,detached 子进程,非线程)。无 ThreadPoolExecutor、无主循环 asyncio 化。</p>
+
+<h2><span class="no">§03</span>方案总览</h2>
+<p><strong>主线</strong>(拍板 D1-D10,见 §06):探测执行位置从主循环线程挪到 daemon 线程(拍板 D1),<code>run_probe</code> 本体零改动;结论经线程安全结果队列回主循环,由 <code>on_task_line</code> 消费(拍板 D9);迁移经「意图重放」自动续跑(拍板 D2/D6);pending 与等位队列持久化 state(拍板 D7);单飞 + FIFO 等位(拍板 D3/D10);web 两段回执(拍板 D8)。</p>
+<h3>落点</h3>
+<ul>
+<li><strong>探测 runner</strong>(relocate_probe.py 内小型封装):daemon 线程跑完整 <code>run_probe</code>;全异常捕获→合成 failed verdict(带 reason),杜绝「线程死→verdict 永不到→pending 挂死」;结果投递 <code>queue.Queue</code>;runner 可注入——测试内联同步执行,既有用例语义保留。</li>
+<li><strong><code>_ensure_probe</code> 改造</strong>:指纹缓存未命中时不再同步跑 <code>run_probe</code>,改为:单飞空闲→入队并立即 kick 启动探测线程;在飞/等位→同指纹把 hashes <strong>合并</strong>进已有 pending 条目(去重),异指纹追加等位队尾;返回「探测中」gate 回执(与 evaluate_group blocked item 同形,note 标注「同机探测已入队」,web 侧凭它发受理段回执)。</li>
+<li><strong>pending 容器</strong>:state 键族 <code>relocate.probe_pending</code>,按指纹 FIFO 列表,条目 <code>{fingerprint, hashes, src, dst, origin, ts}</code>——只存意图不存快照(拍板 D6),重放走 <code>relocate_execute</code> 幂等面全新鲜;持久化 ⇒ 探测窗口(~35s)内进程退出,重启后自动续跑(拍板 D7,黄金法则#3)。</li>
+<li><strong>verdict 消费</strong>(拍板 D9):<code>RelocateModule.on_task_line</code> 在 lifecycle 步进<strong>之前</strong>消费结果队列,每 tick 至多一条:①<code>probe_put</code>(按闸门 D7 原语义写/不写缓存)②重放队首条目(re-invoke <code>relocate_execute</code>:命中 passed 缓存→闸门放行→<code>_start_job</code>;命中 failed 缓存→blocked)③清条目④单飞槽空闲→kick 下一条探测(主循环只启动线程,不等待)。<strong>防自环</strong>:重放结果若仍是探测 gate blocked(env=True 失败未缓存的闸门 D7 2 情形)→丢弃条目终止自动链,下次真实触发(规则 tick/用户)再试——否则自己发起的重放会无限再探。</li>
+<li><strong>web 两段回执</strong>(拍板 D8):命令即时回执「已受理:同机探测进行中」;verdict 消费 tick 向同一回执补发终态。补发通道按 <code>runtime_commands.py</code> 回执存储面现状定(回执本就是主循环单写者,:293),S4 内钉死形态;规则路径回执形态不变。</li>
+<li><strong>残留兜底</strong>(拍板 D4):优雅退出不 join 探测线程;中途残留(add 完成/证读中途/证写中途/清理中途各断点)交既有 <code>sweep_probe_residue</code> 启动清扫,S5 逐一核验覆盖、有洞在 sweep 补。</li>
+</ul>
+<h3>整组移动影响面(拍板 D10 的依据,已核码)</h3>
+<table>
+<tr><th>场景</th><th>行为</th></tr>
+<tr><td>同组整组搬(最常见)</td><td>零退化:全组一个指纹→一次探测,pending 收全组 hash,verdict 后整组同批重放续跑,常态多 ~1.3s 延迟</td></tr>
+<tr><td>一次点击跨多路径批量(桶出 G 个组)</td><td>组1 探测,组2..G 入等位队尾,FIFO 逐个自动续跑,常态总代价 G×~1.3s;不再要求用户重点</td></tr>
+<tr><td>两组同时各搬(规则并发/连点)</td><td>后来者入等位队,verdict 消费后自动接续;规则路径自愈语义不变</td></tr>
+</table>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+<table>
+<tr><th>期</th><th>内容</th><th>验收判据</th></tr>
+<tr><td>S1</td><td>探测 runner(daemon 线程封装 + 全异常合成 verdict + 可注入)+ 结果队列 + state <code>relocate.probe_pending</code> 容器读写(主循环线程面)</td><td>单测:runner 正常路径/异常合成 verdict;容器 round-trip 与重启重载;qB client 隔离断言(探测线程自建连接,非共享主循环 Session)</td></tr>
+<tr><td>S2</td><td><code>_ensure_probe</code> 异步化:决策表「未命中」分支改入队/kick/合并/等位,返回「探测中」gate 回执;缓存命中与其余短路分支逐条不动;同步语义经注入内联保留</td><td>既有 <code>test_relocate_exec_probe_gate</code> 10 用例 + <code>test_relocate_probe</code> 36 用例全绿;新增:入队、同指纹合并去重、等位序、单飞槽互斥</td></tr>
+<tr><td>S3</td><td>verdict 消费:<code>on_task_line</code> 先消费后步进、每 tick ≤1 条;probe_put → 重放队首 → 清条目 → kick 下一条;防自环</td><td>单测:节流(两 verdict 两 tick)、重放命中 passed 续跑到 <code>_start_job</code>、重放遇 env=True 失败终止不循环、重启恢复(pending 落盘→重载→续跑)</td></tr>
+<tr><td>S4</td><td>web 两段回执:受理「探测中」+ verdict 补发终态(先核 <code>runtime_commands</code> 回执存储面现状再定通道形态)</td><td>回执面单测;真机 <code>dev.run -- config.yml --dry-run</code> 冒烟受理段</td></tr>
+<tr><td>S5</td><td><code>sweep_probe_residue</code> 覆盖核验:对 add 完成/证读中途/证写中途/清理中途四断点逐一核验清扫面,有洞在 sweep 补(不在退出路径补)</td><td>各断点残留态单测(sweep 能清干净)</td></tr>
+<tr><td>S6</td><td>全量回归 + 基线切片;回写 <code>memory-bank/</code> relocate 主题文档;issue 26-11-10-0638 置 Done(实际修法/验证方式/测试数字)</td><td><code>commands run test.full</code> 全绿;<code>kb.new baseline --total &lt;实测&gt;</code>;复评裁决后零 actionable</td></tr>
+</table>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p>无——grilling 三轮(2026-11-10)全部落拍,结论见 §06。实现细节层(「探测中」回执的具体 cls/reasons 形态、补发通道形态)不构成用户决策面,分别在 S2/S4 内按现状钉死并回写本件变更记录。</p>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+<tr><th>D</th><th>决策点</th><th>结论(2026-11-10,均按推荐)</th></tr>
+<tr><td>D1</td><td>修法选型</td><td>案B daemon 线程跑完整 <code>run_probe</code>(拒绝案A 相位状态机拆黑盒)</td></tr>
+<tr><td>D2</td><td>续跑方式</td><td>(b) 挂起迁移意图自动续跑(拒绝 (a) blocked 等重试)</td></tr>
+<tr><td>D3</td><td>并发治理</td><td>全局单飞(任一时刻至多一个探测在飞)</td></tr>
+<tr><td>D4</td><td>退出与残留</td><td>(a) 退出不 join,残留交 <code>sweep_probe_residue</code> + S5 补覆盖核验</td></tr>
+<tr><td>D5</td><td>配置面</td><td>零新增配置键</td></tr>
+<tr><td>D6</td><td>续跑机制</td><td>(a) 意图重放(pending 只存 {fingerprint, hashes, src, dst, origin},verdict 后重放 <code>relocate_execute</code>;拒绝快照续跑)</td></tr>
+<tr><td>D7</td><td>pending 持久化</td><td>state_file <code>relocate.probe_pending</code>(重启自动续跑;非 config 键,D5 不受影响)</td></tr>
+<tr><td>D8</td><td>web 回执</td><td>(a) 两段回执:即时受理 + verdict 补发终态</td></tr>
+<tr><td>D9</td><td>消费挂点</td><td><code>on_task_line</code> 先消费 verdict 再步进 lifecycle,每 tick ≤1 条</td></tr>
+<tr><td>D10</td><td>异指纹等位</td><td>(b) 单飞 + FIFO 等位队列(同指纹合并去重;槽空闲 kick 下一条)</td></tr>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+<tr><th>风险</th><th>触发条件</th><th>对策</th></tr>
+<tr><td>线程内探测异常 → verdict 丢失 → pending 挂死</td><td>线程被杀/解释器异常/不可预期崩溃</td><td>runner 全异常捕获合成 failed verdict(S1);兜底:pending 条目带 ts,启动清扫对超龄条目(&gt; 探测上界 × 裕度,如 120s)清条目并记审计</td></tr>
+<tr><td>探测线程与主循环并发共用同一 qB client</td><td><code>run_probe</code> 原样进线程(拍板 D1)后经共享 qbittorrentapi Session(<code>qbclient.py:47</code> <code>_session</code>)并发打 add/recheck/setLocation/delete——现有线程先例(notify/tray/hr)均不碰 torrent API,本计划首次引入第二并发使用方;FS 不可达窗口(探测跑满 ~35s)恰与主循环轮询长期重叠,SID 重登竞态/连接池争用是常态面而非边缘</td><td>S1 钉死处置,默认<strong>独立 client 实例</strong>(探测线程自建 qB 连接,不共享 Session);备选:评估 qbittorrentapi Session 并发语义后共用;否决访问串行化(锁会拖住主循环 tick,放大正要修的阻塞);S1 验收补:隔离断言(探测线程与主循环非同一 Session 实例)</td></tr>
+<tr><td>env=True 失败重放自环</td><td>闸门 D7 2 情形(环境性失败不写缓存)+ 自动重放再触发探测</td><td>防自环规则(S3):重放结果仍是探测 gate blocked → 清条目终止自动链,下次真实触发再试</td></tr>
+<tr><td>FS 故障期等位队列膨胀</td><td>故障窗口内大量异指纹请求入队</td><td>条目为意图记录(极小,零资源),不设上限;恢复后 FIFO 逐个 ~1.3s 清空;观测异常再议上限,不预设</td></tr>
+<tr><td>重放时组状态已变</td><td>探测窗口内成员被删/已在途/已挪走</td><td>重放走 <code>relocate_execute</code> 既有幂等面(T3 在途 skip、全组已在目标 skip、分桶),过期意图自然短路,零新增幂等风险</td></tr>
+<tr><td>探测中途进程退出残留</td><td>~35s 窗口内优雅/非优雅退出</td><td>拍板 D4:不 join,启动清扫兜底;S5 四断点核验补洞</td></tr>
+<tr><td>既有测试语义漂移</td><td>runner 注入不适配/夹具相互作用</td><td>S2 验收即跑既有 46 用例(36+10);任何用例语义变化必须逐条说明,否则视为回归</td></tr>
+<tr><td>web 回执无补发通道</td><td><code>runtime_commands</code> 回执存储面不支持按 id 更新</td><td>S4 先核现状;无通道则加最小补发通道(按命令 id 更新),不引入轮询之外的新机制</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-10-2350</span> 初版。来源:会话 grilling——用户认领 issue 26-11-10-0638 后三轮拍板(D1-D10 全按推荐)。要点:案B 线程化(run_probe 零改动)+ 意图重放自动续跑 + state pending(<code>relocate.probe_pending</code>) + 单飞 FIFO 等位 + web 两段回执 + on_task_line 消费;分期 S1-S6。</li>
+  <li><span class="tag">R1 · 26-11-11-0043</span> R1 评审修复: §07 增补探测线程×主循环共享 qB client 并发风险(major, S1 钉独立 client 处置+隔离断言); 用例计数实测校正 36/10/46 三处; R4 漂移补全 run_probe 174→321(删「仅」)并同步 issue 复验行; _spawn_daemon 先例改判两形态(独立进程非线程); 拍板 D1-D10 与闸门 D1-D7 撞号加前缀区分</li>
+</ul>
+
+</div>
+</body>
+</html>

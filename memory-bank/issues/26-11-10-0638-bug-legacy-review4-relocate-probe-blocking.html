@@ -9,7 +9,7 @@
 <meta name="issue-stamp" content="26-11-10-0638">
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="legacy-review4-relocate-probe-blocking">
-<meta name="doc-refs" content="memory-bank/issues/26-11-07-0527-bug-legacy-review4-core.html">
+<meta name="doc-refs" content="memory-bank/issues/26-11-07-0527-bug-legacy-review4-core.html, memory-bank/plans/26-11-10-2350-plan-relocate-probe-async.html">
 <meta name="issue-tier" content="standard">
 <meta name="issue-status" content="Open">
 <meta name="issue-title" content="relocate run_probe 同步阻塞主循环(FS 不可达单次探测约 25s+, 整库监控同期停滞)">
@@ -150,7 +150,7 @@
     <li>2026-11-10 — 从汇总件 <a href="26-11-07-0527-bug-legacy-review4-core.html">26-11-07-0527-bug-legacy-review4-core.html</a> 明细行 8（R1#39）拆出；此前 2026-11-08 用户拍板「本轮不修」，2026-11-10 改为拆出独立认领，fix 原文两案保留待裁决</li>
   </ul>
   <h3>复验</h3>
-  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <p>复验：2026-11-10 08:32 仍复现（认领取证重跑锚点）。<code>run_probe</code>（<code>relocate_probe.py:321</code>）三段轮询 <code>time.sleep</code> 与预算常量 10+10+5s（<code>relocate_probe.py:48-51</code>）均在；<code>_ensure_probe</code> 对 <code>run_probe</code> 为纯同步调用（<code>relocate_exec.py:1209</code>），无任何线程/异步；两条上游（规则动作 <code>rules/actions/transfer.py:33</code>、web 命令 <code>commands_torrents.py:475/:707</code>）均落主循环线程。R4 行号已漂移：<code>run_probe</code> 174→321、<code>_ensure_probe</code> 707→1134。成文纪律抵触面确认：<code>relocate_lifecycle.py:267</code>「单步零阻塞」、<code>relocate_common.py:18</code>「单步 &lt; 50ms」、<code>taskqueue.py:319</code>「无 run 内 sleep」。</p>
   <h3>修复后补充</h3>
   <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
 </section>
