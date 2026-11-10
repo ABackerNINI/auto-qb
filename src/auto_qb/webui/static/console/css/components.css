@@ -651,7 +651,7 @@
 
 /* 搜索命中高亮: 左侧强调 + 极淡渐变底 */
 .group-row.search-hit { border-color: var(--accent-line);
-  background: linear-gradient(90deg, var(--accent-soft), transparent 46%), var(--bg-row); }
+  background: linear-gradient(90deg, var(--accent-soft), transparent 220px), var(--bg-row); }
 .member-row.search-hit { background: linear-gradient(90deg, var(--accent-soft), transparent 42%); }
 
 /* 单一语义模板统一件(与 atlas/prism 成对): .ui-tools/.ui-link = 界面切换下拉(复用 .pop-menu 面板,

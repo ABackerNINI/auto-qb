@@ -111,11 +111,19 @@ html[data-rowlang="flat"]:not([data-theme="frost"]):not([data-theme="golden"]) .
 html[data-rowlang="flat"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-row.expanded {
   background: linear-gradient(var(--bg-sunken), var(--bg-sunken)), var(--bg, #0d1724);
 }
-/* 搜索命中(阶段 4): 皮肤原样 = 90deg accent-soft→transparent 46% 渐层 over 行底(prism
- * views.css:441 / atlas components.css:666 / console components.css:639) —— 渐层原样保留,
- * 基色从 --bg-row 换新承光底 var(--bg)。首格同表达式(方向渐层镜像判据: 坑档 frozen-column.md 7)。 */
+/* 搜索命中(阶段 4): 皮肤原样 = 90deg accent-soft→transparent 渐层 over 行底(prism
+ * views.css / atlas·console·flux components.css) —— 渐层原样保留, 基色从 --bg-row 换新承光底
+ * var(--bg)。首格同表达式(方向渐层镜像判据: 坑档 frozen-column.md 7)。
+ * !transparent 停靠点 = 固定 220px(2026-11-11 收紧定案, 用户拍板): 旧 46% 是**各自宽度**的
+ *   百分比 —— 行按行宽衰减(可达 ~900px), 首格按格宽压缩衰减(~120px), 边界处行板仍有
+ *   ~55-70% tint 而首格已归零, 实测名称列尾部 vs 相邻列 Δ20-28/255(atlas 28, 可辨阈 20),
+ *   名称列与其它列静态不一致(e2e/main-table-pinned-matrix.spec.mjs 首跑实测)。固定 px 使
+ *   行板与首格**同一绝对几何**(同一停靠点 + 同一 90deg 方向), 两侧逐像素一致, 不再依赖任何
+ *   宽度比。衰减段 220px = 种子/追剧表锁定首列的 minmax 最小宽(shared/app.js
+ *   TORRENT/SHOW_COLUMNS name tpl), 渐层完整收在首列内; 辅种表首列最小 210px 略窄于衰减段,
+ *   但组行不带 search-hit 类(filters.js 组链无该绑定), 不在其覆盖面内。 */
 html[data-rowlang="flat"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-row.search-hit {
-  background: linear-gradient(90deg, var(--accent-soft), transparent 46%), var(--bg, #0d1724);
+  background: linear-gradient(90deg, var(--accent-soft), transparent 220px), var(--bg, #0d1724);
 }
 
 /* 选中/半选基础: 与首格消费**同一条** --rl-sel-solid color-mix 纯色(表达式逐字相同)。旧形态
@@ -177,7 +185,7 @@ html[data-rowlang="flat"]:not([data-theme="frost"]):not([data-theme="golden"]) .
   background: linear-gradient(var(--bg-sunken), var(--bg-sunken)), var(--bg, #0d1724);
 }
 html[data-rowlang="flat"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-row.search-hit > :first-child {
-  background: linear-gradient(90deg, var(--accent-soft), transparent 46%), var(--bg, #0d1724);
+  background: linear-gradient(90deg, var(--accent-soft), transparent 220px), var(--bg, #0d1724);
 }
 /* 选中/半选首格: color-mix 纯色底(与 hover 同管线同过渡源), **background 简写**顺带重置
  * image —— 声明序在 expanded/search-hit 镜像之后压掉它们的 gradient(选中行若同时展开,
@@ -317,7 +325,7 @@ html[data-rowlang="wave"]:not([data-theme="frost"]):not([data-theme="golden"]) .
 
 /* 展开态/搜索命中(阶段 4 状态底重锚, 计划 §04-4): 与 flat 同口径 —— 状态 tint 叠不透明基色,
  * 行板与首格同一表达式(逐字相等, 坑档 frozen-column.md 10/7); search-hit 渐层保留皮肤原样
- * (90deg accent-soft→transparent 46%), 基色换页底。zebra 行写三层合成(sunken/命中渐层 + zebra
+ * (90deg accent-soft→transparent 220px, 停靠点定案口径见 flat 段注释), 基色换页底。zebra 行写三层合成(sunken/命中渐层 + zebra
  * + 页底, 表达式与 selected.rl-zebra 先例同构), 靠 (0,5,0) 特异性取赢普通斑马。排序: 排 zebra
  * 规则之后(声明序压过普通斑马)、selected 之前(皮肤状态序: selected/partial 在 expanded/search-hit
  * 之后取赢) ⇒ 与下方选中块构成 hover(无) < zebra < expanded < search-hit < selected 全序。
@@ -333,11 +341,11 @@ html[data-rowlang="wave"]:not([data-theme="frost"]):not([data-theme="golden"]) .
     var(--bg, #0d1724);
 }
 html[data-rowlang="wave"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-row.search-hit {
-  background: linear-gradient(90deg, var(--accent-soft), transparent 46%), var(--bg, #0d1724);
+  background: linear-gradient(90deg, var(--accent-soft), transparent 220px), var(--bg, #0d1724);
 }
 html[data-rowlang="wave"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-row.search-hit.rl-zebra {
   background:
-    linear-gradient(90deg, var(--accent-soft), transparent 46%),
+    linear-gradient(90deg, var(--accent-soft), transparent 220px),
     linear-gradient(var(--rl-zebra-tint, rgba(255,255,255,.03)), var(--rl-zebra-tint, rgba(255,255,255,.03))),
     var(--bg, #0d1724);
 }
@@ -351,11 +359,11 @@ html[data-rowlang="wave"]:not([data-theme="frost"]):not([data-theme="golden"]) .
     var(--bg, #0d1724);
 }
 html[data-rowlang="wave"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-row.search-hit > :first-child {
-  background: linear-gradient(90deg, var(--accent-soft), transparent 46%), var(--bg, #0d1724);
+  background: linear-gradient(90deg, var(--accent-soft), transparent 220px), var(--bg, #0d1724);
 }
 html[data-rowlang="wave"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-row.search-hit.rl-zebra > :first-child {
   background:
-    linear-gradient(90deg, var(--accent-soft), transparent 46%),
+    linear-gradient(90deg, var(--accent-soft), transparent 220px),
     linear-gradient(var(--rl-zebra-tint, rgba(255,255,255,.03)), var(--rl-zebra-tint, rgba(255,255,255,.03))),
     var(--bg, #0d1724);
 }

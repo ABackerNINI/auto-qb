@@ -1,7 +1,8 @@
 # 首列吸左固定(冻结列)在本仓表格上的十处非显然约束
 
 > 摘要: 首列吸左(冻结列)在本仓 `.group-row` 表格上的十处非显然约束 —— 表头反向位移、首格不透明合成、边界发丝线、stretch、按面重锚、search-hit 渐层镜像、变体两层结构、过渡同源、状态底叠加; 完整处置步骤与实测证据见 [attachments/frozen-column-constraints.md](attachments/frozen-column-constraints.md)。
-> 触发: 首列吸左, 名称列后阴影, 随机出现阴影, 黑块, box-shadow spread 负值, 落影随行高变, 冻结列, frozen column, sticky 首格, 横向滚动, 表头横向同步, transform 桥接, 首格不透明, 半透明状态底, 双重上色, 左侧色条消失, 过渡中间值, 皮肤 CSS 700 行上限, 残根, 尾字粘连, 状态列被盖住, 吸左边界, is-hscrolled, 边界落影, 徽标漏出, chip 换行, align-items center, align-self stretch, 首格高度, 必现列背景不一致, 异色竖带, 按面重锚, 承光底, dt05-list, 行容器, 外壳类名空转, search-hit 渐层丢失, dtNN-wrap, 动态拼接选择器, 必显列悬停闪竖带, 滑过闪一下又恢复一致, 悬停时首格与其它列不同色, 首格无过渡, transition 不同源, 行板 160ms 首格瞬切, 过渡窗口逐帧采样, 选中行必显列异色竖带, 选中的行名称列与其它列不同色, 半透明状态底替换行底, background 简写换掉行底, 行板承光层变页底, 行底丢失, 合成基准分家
+> 触发: 首列吸左, 名称列后阴影, 随机出现阴影, 黑块, box-shadow spread 负值, 落影随行高变, 冻结列, frozen column, sticky 首格, 横向滚动, 表头横向同步, transform 桥接, 首格不透明, 半透明状态底, 双重上色, 左侧色条消失, 过渡中间值, 皮肤 CSS 700 行上限, 残根, 尾字粘连, 状态列被盖住, 吸左边界, is-hscrolled, 边界落影, 徽标漏出, chip 换行, align-items center, align-self stretch, 首格高度, 必现列背景不一致, 异色竖带, 按面重锚, 承光底, dt05-list, 行容器, 外壳类名空转, search-hit 渐层丢失, dtNN-wrap, 动态拼接选择器, 必显列悬停闪竖带, 滑过闪一下又恢复一致, 悬停时首格与其它列不同色, 首格无过渡, transition 不同源, 行板 160ms 首格瞬切, 过渡窗口逐帧采样, 选中行必显列异色竖带, 选中的行名称列与其它列不同色, 渐层停靠点几何分家, 百分比停靠点,
+  空间渐层镜像, search-hit 尾差, 计算样式探针失明, 像素地面真值, 半透明状态底替换行底, background 简写换掉行底, 行板承光层变页底, 行底丢失, 合成基准分家
 
 **Refs:** memory-bank/tasks/26-10-06-webui-frozen-first-column.md,memory-bank/tasks/26-10-11-webui-frozen-col-boundary.md,memory-bank/reports/26-10-14-0136-report-webui-detail-table-rebuild-review.html
 
@@ -85,7 +86,9 @@
 - **守阵**: `test_frontend_frozen_column_boundary_wiring`(静态钉 is-hscrolled 打标、三皮肤成对
   规则与首格 `align-self: stretch`);
   `test_frontend_pinned_first_cell_bg_per_face`(静态钉 search-hit 首格镜像、dt_table.css 八面
-  按面重锚规则与合成基色 `--bg-card`、05 外壳 dt05-list 接线);
+  按面重锚规则与合成基色 `--bg-card`、05 外壳 dt05-list 接线; 2026-11-11 起停靠点改钉固定
+  220px —— 四皮肤镜像+行板双侧, 另钉 shared/row_lang.css **生效层**逐规则块恰 6 处 220px
+  且全文件禁 46%: 只钉皮肤层等于钉休眠面, row_lang 特异性恒压皮肤规则);
   `test_frontend_pinned_first_cell_hover_transition_parity`(静态钉三皮肤首格
   `transition: background-color var(--dur)` 与行板时长同源、悬停镜像规则在位) 与
   `e2e/main-table-pinned-hover.spec.mjs`(三主表 × 双皮肤, 滑入/移出各逐帧采样 —— 首格 vs 行板差
@@ -101,7 +104,11 @@
   `var(--bg-row)`、首格镜像同基色、console 的 `.group-row.expanded:hover` 不得跌回裸 `--bg-sunken`)
   与同一 spec 里的展开行用例(辅种表/追剧表 × 双皮肤: 展开行板不透明 + 与首格逐字相等, 含悬停);
   几何/可见底色静态判不出, 验证 = 桩服务真浏览器量具 `e2e/dt-table-face-bg.spec.mjs`
-  (首格可见底 == 行板可见底, 含悬停与 err/bad/is-chk/sel 状态行; 主表 search-hit 首格渐层镜像)。
+  (首格可见底 == 行板可见底, 含悬停与 err/bad/is-chk/sel 状态行; 主表 search-hit 首格渐层镜像)
+  与 `e2e/main-table-pinned-matrix.spec.mjs`(2026-11-11 行为守阵全矩阵: 四皮肤 flat +
+  prism/flux wave × 状态行滑入移出逐帧 + 稳态截图像素地面真值 × 组合态(选中真手势/
+  search-hit 斑马+非斑马双条/展开行); 首跑抓出 46% 残留 Δ20-28; 钉 colorScheme=dark 必要:
+  theme.js 无存储时跟随系统, prism 上下文会落 frost 亮主题令 row_lang 整体排除, wave 假覆盖)。
   ⚠ 多 clone  workspace 下先确认 8137 没有**别 clone 的残留桩**(本例撞上 auto-qb-clone5 的),
   撞上宁可失败也不要静默验错对象 —— 换干净端口 `E2E_PORT=<n>` 复跑(见 pitfalls/testing/smoke.md)。
   现状(2026-11-03, 计划 26-11-03-0316): e2e 端口由脚本取号(`ui_harness --port 0` + `webServer.wait`

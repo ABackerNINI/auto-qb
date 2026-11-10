@@ -198,10 +198,12 @@ select option { background: var(--bg-elev); color: var(--fg); }
 /* 搜索命中(2026-10-14 修「必现列背景与其他列不一致」): 行自身是「accent 渐层 over
  * --bg-row」(components.css .group-row.search-hit 同款), 首格只拿平铺 --bg-row 会
  * **丢整条渐层** —— 追剧表搜索命中行实测首格 backgroundImage=none, 名称列读作一条异色
- * 竖带(左缘渐层最强处 Δ≈18/14/9)。首格补同款合成; 渐层停靠点同行(46%), 首格宽 << 行宽
- * ⇒ 格内衰减更快, 残余差只落在渐层尾部(左缘逐通道一致), 远小于异色竖带。 */
+ * 竖带(左缘渐层最强处 Δ≈18/14/9)。首格补同款合成。渐层 transparent 停靠点 = 固定 220px
+ * (2026-11-11 收紧定案, 用户拍板; 定案口径单点在 shared/row_lang.css flat 段注释):
+ * 旧「同行 46%」按各自宽度取百分比, 行/首格几何分家 ⇒ 名称列尾部 vs 相邻列实测 Δ20-28,
+ * 静态即名称列与其它列不一致; 固定 px 后两侧同一绝对几何, 逐像素一致。 */
 .group-row.search-hit > :first-child {
-  background: linear-gradient(90deg, var(--accent-soft), transparent 46%), var(--bg-row);
+  background: linear-gradient(90deg, var(--accent-soft), transparent 220px), var(--bg-row);
 }
 .group-head > .h-cell:first-child {
   z-index: 2; background: var(--bg);

@@ -664,7 +664,7 @@
 .search-help { border-radius: 50%; }
 /* 搜索命中高亮: 左侧强调 + 极淡渐变底(不用整框描边, 避免命中多时满屏方框) */
 .group-row.search-hit { border-color: rgba(59, 130, 246, .45);
-  background: linear-gradient(90deg, var(--accent-soft), transparent 46%), var(--bg-row); }
+  background: linear-gradient(90deg, var(--accent-soft), transparent 220px), var(--bg-row); }
 .member-row.search-hit { background: linear-gradient(90deg, var(--accent-soft), transparent 42%); }
 
 /* 单一语义模板统一件(26-09-27 收敛): 与棱镜/控制台 components.css 同名同规则成对改(令牌面已同面)。

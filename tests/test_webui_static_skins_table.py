@@ -7,7 +7,7 @@
 - test_frontend_table_shell_single_point: 表壳/行模型单元格渲染器单点守阵(计划 26-10-11-1722 P1/P2/P3/P5) —— 表头块 5 份内联副本收敛为 `<aq-table>`(shared/table.js + tpl/xtpl.html#tpl-aq-table); 127 条行模型单元格 v-if 分支收敛为五个单份渲染器 `<aq-member-cells>`(member, xtpl.html)/`<aq-group-cells>`/`<aq-torrent-cells>`/`<aq-show-cells>`/`<aq-ep-cells>`(tpl/xtpl-cells.html); 钉 1. 六个组件都 app.component 注册 2. 表壳模板恰一份且四件交互把手(.h-cell/.h-label/.arrow/.resizer/.col-drop-line)齐备 3. groups.html/shows.html 各 2 个、torrents.html 1 个 `<aq-table>` 调用点、三个页面模板 `.h-cell` 内联零残留、各页行模型渲染器调用点齐备 4. thead 模式(P5): 设置页 HR 详情表表头借壳, 占位须 `<tr is="vue:aq-table" mode="thead">` 且该段内联 `<th>` 零残留; thead 可排序性判据同源 col.sortable(sortable 类与箭头 v-if 由它驱动, issue 26-10-29-1348)
 - test_frontend_frozen_column_boundary_wiring: 首列吸左边界提示守阵(2026-10-11 修「向右滚动时状态列被名称列盖住」) —— 横滚时相邻列滑进吸左首格(26-10-06-1717)下方, 未盖满的尾字("做种"的"种"等)紧贴首格右缘露出, 无边界提示时残根读成与名称省略号粘连的坏字(误读成渲染 bug); 钉两层接线: 横滚同步单点 columns.js::syncHeadScroll(ev, page)(P4 把 menu/selection/shows 三份收敛为一份)必须给滚动容器与吸顶表头打 .is-hscrolled(scrollLeft>0 打 / 回 0 摘, CSS 无法感知 scrollLeft, 丢标 = 落影永不出现)且三个滚动容器各带表 id 调用它, 三皮肤 views.css 的 .is-hscrolled 规则必须行吸左首格与表头吸左首格成对(漏表头 = 列名残根仍裸露)且含发丝线(inset -1px)成分、且**不得**再带右缘落影(2026-10-12 用户报「名称列后随机出现阴影」: 落影可见度随首格高度变, 常态行首格 22px 时塌成 2px 近不可见、高行才显形, 逐行深浅差 7 倍读成随机黑块)
 - test_frontend_hscroll_indicator_wiring: 主表横滚指示条守阵(计划 26-11-01-0553 S4) —— 原生横条隐藏 + 底部胶囊单点 shared/hscroll.css: 两条隐藏声明缺一即红(只写 ::-webkit-scrollbar 时 Firefox 仍画条槽 / 只写 scrollbar-width 时 Chromium 系仍画, 全局 `*{scrollbar-width:thin}` 挡不住)、三皮肤各恰挂一次且排在本皮肤 views.css 之后(link 序即级联序, 排前面被页面级规则反压)、三皮肤 /shared/*.css 链接集逐字相同(挂载漂移 = 某皮肤缺规则而规则只有一份, 整条静默失效; shared/fx/* 豁免 —— fx 只挂 flux, 计划 26-10-31-2316 D14 隔离拍板)、皮肤自有 CSS 零第二份隐藏声明(副本 = 日后各自漂移)、CSS 四类名与 columns.js 建 DOM/classList 同侧(改名只改一侧 = 胶囊恒不可见且零报错)、syncHeadScroll 尾部仍调 _hscrollSync 且主表白名单 group/torrent/show 齐全(删接线 = 胶囊永不出现 / 删白名单 = 抽屉面 xtpl.html:360 每次横滚在 body 留一个永不用的胶囊)、_hscrollBind() 调用点在 _ensureHeadObserver 体内(退回挂在 _hscrollPill() 里 = 从没横滚过的纯鼠标用户永远见不到胶囊, 而「纯鼠标没有拖拽入口」正是本方案要补的洞)
-- test_frontend_pinned_first_cell_bg_per_face: 必现列(吸左首格)底色按面重锚守阵(2026-10-14 修「必现列背景与其他列不一致」, 报障面 = 主表三页 + 抽屉全部变体表格) —— 两层根因: 1. 皮肤 `.group-row > :first-child{background:var(--bg-row)}` 是主列表行语言, 抽屉各引擎面复用 .group-row(零特判)致首格与行板三样各算(族面 --tbl-face-bg→--bg / 04 卡 / 05·10 透明 / 08 --bg-row), 行内一条异色竖带(ocean Δ 16/255); 2. 追剧表 search-hit 行底是「accent 渐层 over --bg-row」而首格只平铺 --bg-row, 整条渐层丢失(实测 backgroundImage=none)。修复单点 shared/dt_table.css 按面重锚: 族面 06/07/09/11 行板/表头首格同 Token(--tbl-face-bg/--tbl-head-bg) + 悬停 --bg-hover, err(06)/bad(07/09)/is-chk(11)/sel(10) 半透明 tint 一律 `linear-gradient(tint,tint), var(--bg-card)` 合成(**禁** --bg-row 基色/裸半透明令牌), empty-row 随行透明; 04·05 首格是内容根 ⇒ 摘底摘 position:static(05 failrow 保 error-soft); 10 保留吸左取 --bg-card; 08 bad 补合成; 三皮肤 views.css 补 search-hit 首格镜像(90deg 渐层 46% + --bg-row); 05 变体补内层行容器 dt05-list(家族两层 dtNN-wrap+dtNN-list, 修前单层 dt05-wrap 与 CSS 前缀不匹配致六条 .group-row 规则空转、行带主表卡底)。真浏览器量具 e2e/dt-table-face-bg.spec.mjs(首格可见底 == 行板可见底, 含悬停与 err/bad/is-chk/sel 状态行)
+- test_frontend_pinned_first_cell_bg_per_face: 必现列(吸左首格)底色按面重锚守阵(2026-10-14 修「必现列背景与其他列不一致」, 报障面 = 主表三页 + 抽屉全部变体表格) —— 两层根因: 1. 皮肤 `.group-row > :first-child{background:var(--bg-row)}` 是主列表行语言, 抽屉各引擎面复用 .group-row(零特判)致首格与行板三样各算(族面 --tbl-face-bg→--bg / 04 卡 / 05·10 透明 / 08 --bg-row), 行内一条异色竖带(ocean Δ 16/255); 2. 追剧表 search-hit 行底是「accent 渐层 over --bg-row」而首格只平铺 --bg-row, 整条渐层丢失(实测 backgroundImage=none)。修复单点 shared/dt_table.css 按面重锚: 族面 06/07/09/11 行板/表头首格同 Token(--tbl-face-bg/--tbl-head-bg) + 悬停 --bg-hover, err(06)/bad(07/09)/is-chk(11)/sel(10) 半透明 tint 一律 `linear-gradient(tint,tint), var(--bg-card)` 合成(**禁** --bg-row 基色/裸半透明令牌), empty-row 随行透明; 04·05 首格是内容根 ⇒ 摘底摘 position:static(05 failrow 保 error-soft); 10 保留吸左取 --bg-card; 08 bad 补合成; 四皮肤 views.css 补 search-hit 首格镜像(90deg 渐层, 停靠点 2026-11-11 收紧定案为固定 220px + --bg-row); 05 变体补内层行容器 dt05-list(家族两层 dtNN-wrap+dtNN-list, 修前单层 dt05-wrap 与 CSS 前缀不匹配致六条 .group-row 规则空转、行带主表卡底)。真浏览器量具 e2e/dt-table-face-bg.spec.mjs(首格可见底 == 行板可见底, 含悬停与 err/bad/is-chk/sel 状态行)
 - test_frontend_table_head_a11y: 引擎表头可访问性守阵(issue 26-10-12-0800, 计划 26-10-12-2330 方案 C) —— 语义载体用 role="columnheader"(**不是** button: aria-sort 只对该 role 生效, 挂 button 上读屏忽略) + 件套单点(shared/table.js 的 headAriaSort/headActivate 两方法, grid/thead 共用) + grid .h-cell 的 :aria-sort/:tabindex(仅可排序列)/Enter·Space keydown 全走 headActivate + .group-head role=row / 指示线 role=presentation + thead <th> 同补件套 + 各皮肤 .h-cell.sortable:focus-visible(atlas/prism 落 views.css; console/flux 落 components.css —— 后者曾顶 700 行 cap; flux S5 收编); 键盘真按键行为在 e2e/table-head-a11y.spec.mjs
 - test_frontend_pinned_first_cell_hover_transition_parity: 必显列(吸左首格)悬停过渡与行板同源守阵(2026-10-20 修「必显列鼠标滑过时背景与其它列不一致, 短暂后恢复一致」) —— 行板 `.group-row` 有 transition: background var(--dur)(160ms) 而吸左首格无过渡 ⇒ 滑入瞬间首格 snap 到 --bg-hover、其余列还在从 --bg-row 渐入, 160ms 内行内一条竖带, 过渡完才"恢复一致"(真浏览器逐帧: prism/frost Δ14、atlas/ocean Δ18, 三主表 × 双皮肤全中; 移出同理反号); 钉 1. 行板过渡仍以 `background var(--dur)` 声明(时长基准) 2. 各皮肤 `.group-row > :first-child` 体内 `transition: background-color var(--dur)`(禁字面毫秒, 否则行板调时长又漂) 3. 首格悬停镜像 `:hover > :first-child` → `--bg-hover` 不得丢(丢了是整段悬停期的持久竖带) 4. 首格过渡**只在各皮肤 views.css 单点**, 抽屉按面重锚(dt_table.css)与变体注入 CSS 不得自带 `transition`(带即脱离 --dur 与行板错拍; 2026-10-20 审计: 主表三页 + 经典抽屉表 + 06/07/09/10/11 六面逐帧差全 0; 26-10-30-0217 阶段2 起豁免 shared/row_lang.css —— 其 :first-child 上的 transition 只有行语言名称列左条 ::before 的 .12s 本体动效(D4 拍板 M2); 首格 hover/选中底为 color-mix 纯色换 background-color(26-10-30 复验二修, ::after 已撤销), 过渡继承 views.css 单点)。flux 收编定案(S5, plan 26-10-31-2316): 随 _UI_ALL 自动罩住 —— fork 后规则逐字同 console 天然满足; S6 挂 fx 动效时若要动行板/首格过渡, 必须仍守「views.css 单点 + var(--dur) 同源」前提, 破前提先改本守阵。行为面(逐帧差 ≤ 2、稳态同色)由 e2e/main-table-pinned-hover.spec.mjs 真浏览器采
 - test_frontend_pinned_first_cell_selected_row_keeps_base: 选中/半选行「保留行底」守阵(2026-10-20 修「选中的行必显列背景与其它列不一致」) —— 旧规则 `.group-row.selected { background: var(--sel-bg) }` 用半透明 tint **替换**行底(而非叠在行底上), 行板露出页底 `--bg`, 而吸左首格按 `--bg-row` 合成 ⇒ 两侧承光底分家, 选中行名称列整列异色竖带(真浏览器逐像素: atlas Δ9/255、prism Δ5/255, 三主表×双皮肤全中, 未选中行 Δ0); 钉 1. `.group-row.selected`/`.group-row.partial` 的 background 末层是 `var(--bg-row)`(裸半透明令牌即红) 2. 行板与首格镜像的 tint 同字面(`var(--sel-bg, var(--accent-soft))`) 3. 首格镜像合成基色与行板同令牌 4. 拆分后 `.member-row.selected` 仍在(成员行无吸左首格, 保持裸柔底)。行为面(行板与首格计算背景逐字相等, 选中/悬停选中)由 e2e/main-table-pinned-selected.spec.mjs 采
@@ -747,8 +747,12 @@ def test_frontend_pinned_first_cell_bg_per_face():
         os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src", "auto_qb", "webui", "static", "shared"
     )
 
-    # 1. 三皮肤 search-hit 首格镜像: 行是「90deg accent 渐层 over --bg-row」, 首格必须
-    #    同款合成(渐变停靠点同行 46%) —— 只平铺 --bg-row 即丢整条渐层。
+    # 1. 四皮肤 search-hit 首格镜像: 行是「90deg accent 渐层 over --bg-row」, 首格必须
+    #    同款合成 —— 只平铺 --bg-row 即丢整条渐层。停靠点必须是固定 220px(2026-11-11 收紧
+    #    定案, 用户拍板): 百分比停靠点(旧 46%)按各自宽度解析, 行/首格几何分家, 名称列尾部
+    #    vs 相邻列实测 Δ20-28(atlas 28, e2e/main-table-pinned-matrix.spec.mjs 首跑实测) ——
+    #    静态即「名称列与其它列不一致」。行板规则(components.css / prism views.css)同一停靠点,
+    #    两侧同一绝对几何才逐像素一致, 改一侧即红。
     for ui in _UI_ALL:
         css = open(os.path.join(STATIC_ROOT, ui, "css", "views.css"), encoding="utf-8").read()
         ms = re.search(r"\.group-row\.search-hit > :first-child \{([^}]*)\}", css)
@@ -757,10 +761,39 @@ def test_frontend_pinned_first_cell_bg_per_face():
             "(2026-10-14 修「必现列背景与其他列不一致」: 首格只拿平铺 --bg-row 会丢整条 accent 渐层)"
         )
         body = ms.group(1)
-        assert "linear-gradient(90deg, var(--accent-soft), transparent 46%)" in body, (
-            f"{ui} search-hit 首格镜像缺同款 90deg 渐层(停靠点须同行 46%)"
+        assert "linear-gradient(90deg, var(--accent-soft), transparent 220px)" in body, (
+            f"{ui} search-hit 首格镜像缺同款 90deg 渐层(停靠点须固定 220px, 见 row_lang.css flat 段定案注释)"
         )
         assert "var(--bg-row)" in body, f"{ui} search-hit 首格镜像缺 --bg-row 基色(渐层 over 卡底)"
+        # 行板规则同一停靠点(components.css / prism 在 views.css) —— 改一侧不停靠点即几何分家回潮
+        row_rule = None
+        for name in ("views.css", "components.css"):
+            text = open(os.path.join(STATIC_ROOT, ui, "css", name), encoding="utf-8").read()
+            mr = re.search(r"\.group-row\.search-hit \{([^}]*)\}", text)
+            if mr and "linear-gradient(90deg" in mr.group(1):
+                row_rule = mr.group(1)
+                break
+        assert row_rule is not None, f"{ui} 缺 .group-row.search-hit 行板渐层规则"
+        assert "transparent 220px" in row_rule, (f"{ui} search-hit 行板渐层停靠点不是固定 220px —— 与首格镜像几何分家(名称列尾部竖带回潮)")
+    # 1b. shared/row_lang.css(flat 默认 + wave 的**生效层**, 特异性恒压皮肤规则): 逐规则块钉 220px。
+    #     只钉皮肤层等于钉了休眠面 —— 手改 row_lang.css 停靠点静态套件全绿(e2e 矩阵才兜)。
+    rl_path = os.path.join(shared, "row_lang.css")
+    rl = open(rl_path, encoding="utf-8").read()
+    rl_blocks = re.findall(r"([^{}]+)\{([^}]*)\}", rl)
+    hit_blocks = [
+        (sel.strip(), body)
+        for sel, body in rl_blocks if ".group-row.search-hit" in sel and "linear-gradient(90deg" in body
+    ]
+    assert len(hit_blocks) == 6, (
+        f"row_lang.css search-hit 渐层规则数漂移(实测 {len(hit_blocks)}, 应 6: flat 行/镜像 + "
+        "wave 行/镜像 + wave zebra 行三层/镜像三层) —— 新增/删除规则时同步本钉"
+    )
+    for sel, body in hit_blocks:
+        assert "transparent 220px" in body, (
+            f"row_lang.css 生效层规则 [{sel.strip()[:60]}] 停靠点不是固定 220px —— 皮肤层钉住的是休眠面, "
+            "实际渲染走本层(几何分家回潮)"
+        )
+    assert "transparent 46%" not in rl, "row_lang.css 残留 46% 百分比停靠点(几何分家形态回潮)"
 
     # 2. dt_table.css 按面重锚(剥注释后按规则块取 body, 注释里的示例代码含花括号)
     dt_css = os.path.join(shared, "dt_table.css")
