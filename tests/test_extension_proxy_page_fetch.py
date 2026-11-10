@@ -57,7 +57,8 @@
   不持久化 / 按选择服务(另一份不进服务集)/ 所选消失 = selectedMissing 空转且 prod 条目被整批替换
   剪除而 activeNames 纹丝不动(独立存储键抗 mergeInstances 整批替换 + options 三键重建)/ 清除选择回
   auto 并持久化 / 手动恒服务(每轮服务集都含)/ D8 legacy 行(必修 3): 整份 auto 照收但标签 >1 不写
-  activeNames, 下轮重新裁决
+  activeNames, 下轮重新裁决 / auto pin 双写者竞态(T4 评审修 3): 落盘前重读 activeNames 非空即放弃
+  pin(窗口内用户写入保住不被整组覆盖), 对照无竞态 pin 照常落盘
 - test_outbound_paths_follow_verdict: 真跑 background.js **外呼消费面接线**(评审必修 1)—— pollAll /
   requestBackendRefresh / probeAll 三条路径只打裁决后服务集(servedInstancesOf + 每轮落盘的
   servedVerdict): needsSelection/selectedMissing 态三条路径都只打手动(不混轮任何发现 clone, 修掉
@@ -116,6 +117,23 @@
   (stub 的 fetch 一次都不许被调)且回 `kind:'no-permission'`; 授权后同一任务照常发出
 - test_run_task_marks_network_failure_when_granted: 已授权却 `Failed to fetch` ⇒ `kind:'network'`
   (与缺权限是两个动作: 查代理 vs 去授权; 都不许落到页面层 `HrFetchError`)
+### 多 clone 发现裁决轮 · 选项页接线(计划 26-11-10-0515 S4b/D2): 名称列 + 行级服务开关 + 横幅 + 两处 [0]
+- test_options_fetch_sites_uses_first_served_instance: 真跑 options.js **整页**(mock document/chrome)——
+  fetchSites / probeMainInstance 两处 [0] 改取**首个被服务实例**(servedInstancesOf 同一把尺, 与后台
+  三条外呼一致); 服务集为空(裁决停服)显式报「无可服务实例」类提示, 不静默、不回退 [0]
+- test_options_instance_table_name_column_and_serve_toggle: 实例表名称列(instanceLabel, name 是用户
+  可配自由字符串, 渲染必须过 esc)+ 行级服务开关; 开关初值 = 该 clone 是否被服务(手动恒服务 P2);
+  初值三条渲染路径全覆盖(T4 评审修 1/修 2 + 轮 2 改判): ambiguous 态按 activeNames 勾选可见可取消
+  (勾上加 serve-halt 灰化, 取消即摘除致歧标签恢复闭环 —— 强制不勾的「只加不减」死路不得回潮)/
+  无选择按 servedVerdict 白名单亮 / 快照缺失退化全量全亮
+- test_options_serve_toggle_writes_active_names: 改选/清除写独立存储键 activeNames(与 T3 裁决状态机
+  同钥匙 instanceLabel): 勾选 = 加标签、取消 = 摘除、全清 = 回「无选择」态
+- test_options_verdict_banner_by_state: needsSelection/ambiguous/selectedMissing 横幅显性亮出(文案覆盖
+  「请选择」与「后端可能已重启改名, 请重新选择」)+ 一键跳实例表(instTable.scrollIntoView); auto/
+  selected/noAnswer 不亮(零应答走既有状态行语义, C4)。横幅渲染源 = 发现快照 verdict, 渲染面只有
+  renderVerdictBanner 一处(load 与后台落盘自动刷新都经 renderConnOverview 走它)
+- test_conn_state_judgement_matches_badge 追加(S4b): connStateOf 的 anyOk 对齐**服务集**口径(与
+  badgeStateOf 评审轮 2 修 2 同尺)—— needsSelection 停服后冻结的 ok 台账不得再报「连接正常」
 """
 
 import json
@@ -182,6 +200,7 @@ from extension_proxy_support import (
     _read,
     _run_node,
     discovery_helpers_trace,
+    options_wiring_trace,
     page_fetch_trace,
     quota_trace,
     selfheal_trace,
@@ -625,6 +644,8 @@ def test_discovery_collects_all_hits_and_adjudicates():
     · 手动条目: 每轮服务集都含(P2 恒服务);
     · D8 legacy 行(评审必修 3): 旧后端聚合全机的单份应答整份 auto 照收, 但标签 >1 **不持久化**
       activeNames(旧 uuid 不被 pin), 下轮重新裁决。
+    · auto pin 双写者竞态(T4 评审修 3): 选项页在 runDiscovery 读裁决输入与落盘之间写入 activeNames
+      时, pin 必须放弃(落盘前重读非空), 用户写入保住不被整组覆盖; 对照无窗口写入时 pin 照常落盘。
     """
     got = discovery_verdict_trace()
     if not got:
@@ -664,6 +685,13 @@ def test_discovery_collects_all_hits_and_adjudicates():
         "http://127.0.0.1:5004",
     ], "legacy 应答的全部实例落库并整份服务"
     assert got["r6Snapshot"]["served"] == 3, "legacy auto 服务集 = 手动 + 2 个聚合实例"
+    # r7(T4 评审修 3): pin 窗口内用户写入 ['userChoice'] -> pin 放弃, 选择保住; 服务裁决照常 auto
+    assert got["r7Verdict"] == "auto", got["r7"]
+    assert got["r7Active"] == ["userChoice"], \
+        f"auto pin 不得覆盖裁决窗口内用户对 activeNames 的写入: {got['r7Active']}"
+    # r8 对照: 无窗口写入时 auto pin 照常落盘(唯一标签持久化, 单实例用户零感知 P3 不受影响)
+    assert got["r8Verdict"] == "auto" and got["r8Active"] == ["prod"], \
+        f"无竞态时 auto pin 照常: {got['r8']}"
 
 
 def test_outbound_paths_follow_verdict():
@@ -990,8 +1018,8 @@ def test_conn_state_judgement_matches_badge():
         f"徽标态与顶部总览态对同一配置给出了不同结论(同一条判据的两份实现漂移了): {got}"
     assert got["badgeOut"] == [
         "unconfigured", "reconnecting", "ok", "discoveryFailed", "reconnecting", "reconnecting", "ok",
-        "noSitePermission", "reconnecting", "ok"
-    ], f"五态判据(计划 §3.3 + 26-10-29-0147 D5, C4 边界)取值不符: {got['badgeOut']}"
+        "noSitePermission", "reconnecting", "ok", "reconnecting", "ok"
+    ], f"五态判据(计划 §3.3 + 26-10-29-0147 D5, C4 边界 + S4b 服务集口径)取值不符: {got['badgeOut']}"
     assert got["badgeKeys"] == got["connKeys"] == [
         "unconfigured", "ok", "reconnecting", "discoveryFailed", "noSitePermission"
     ], f"五态键集必须同源: BADGE={got['badgeKeys']} CONN_STATE_TEXT={got['connKeys']}"
@@ -999,6 +1027,109 @@ def test_conn_state_judgement_matches_badge():
     legend = html[html.index('id="badgeLegend"'):]
     for label in got["labels"]:
         assert label in legend, f"徽标图例没写全四态(与 background.js 的 BADGE label 同源): 缺 {label}"
+
+
+def test_options_fetch_sites_uses_first_served_instance():
+    """选项页两处 [0] 接线(计划 26-11-10-0515 S4b): fetchSites / probeMainInstance 取**首个被服务实例**
+    (servedInstancesOf 同一把尺, 与 background 三条外呼消费面一致)—— 不再固定 [0]; 服务集为空
+    (裁决停服)显式报「无可服务实例」类提示, 不静默、也不静默回退 [0]。
+
+    桩: 两份发现应答 prod/dev 各占一口, servedVerdict 白名单只含 dev(= 用户选了 dev)—— 固定取 [0]
+    的旧实现会打到 prod, 服务集口径打到 dev, 一次运行把两种实现分开。
+    """
+    trace = options_wiring_trace()
+    if not trace:
+        return  # 没装 node: 与其它前端守阵同口径静默跳过
+    served_ep = "http://127.0.0.1:5002"  # dev(被服务)
+    unserved_ep = "http://127.0.0.1:5001"  # prod([0], 未被服务)
+    assert trace["sitesFetchOnLoad"], f"进页面自动拉站点清单要发请求: {trace}"
+    assert trace["sitesFetchOnLoad"][0].startswith(served_ep), \
+        f"fetchSites 要打首个**被服务**实例, 不是 [0]: {trace['sitesFetchOnLoad']}"
+    assert all(not u.startswith(unserved_ep) for u in trace["sitesFetchOnLoad"]), \
+        f"未被服务的条目不得被外呼: {trace['sitesFetchOnLoad']}"
+    assert trace["probeServed"]["state"] == "ok", f"probeMainInstance 打服务集首位应可达: {trace['probeServed']}"
+    assert trace["probeFetches"] and trace["probeFetches"][0].startswith(served_ep), \
+        f"probeMainInstance 也要打首个被服务实例: {trace['probeFetches']}"
+    # 服务集为空(needsSelection 停服): 零外呼 + 显式提示(手动/自动同一口径, 不静默)
+    assert trace["sitesFetchEmpty"] == [], f"停服时不得外呼(更不许回退 [0]): {trace['sitesFetchEmpty']}"
+    assert "可服务的实例" in trace["statusEmptyServe"], f"停服要显式报, 不静默: {trace['statusEmptyServe']}"
+    assert trace["probeNoServed"]["state"] == "no-served", f"探测面同口径: {trace['probeNoServed']}"
+    assert "可服务的实例" in trace["probeNoServed"]["text"], trace["probeNoServed"]
+
+
+def test_options_instance_table_name_column_and_serve_toggle():
+    """实例表 UI(计划 26-11-10-0515 §06 D2): 名称列 + 行级服务开关; 开关初值 = 该 clone 是否被服务
+    (手动恒服务 P2, 不给开关); 发现条目按标签归属 clone; name 是用户可配自由字符串, 渲染必须过 esc。
+    开关初值的三条渲染路径全覆盖(T4 评审修 1/修 2): 有选择(ambiguous 态按选择勾 + 灰化) / 无选择按
+    白名单 / 快照缺失退化全量。"""
+    trace = options_wiring_trace()
+    if not trace:
+        return
+    rows = trace["rows"]
+    assert '<td class="nm">prod</td>' in rows and '<td class="nm">dev</td>' in rows, f"名称列要渲染标签: {rows}"
+    # 开关初值按服务集口径: dev 被服务(勾) / prod 未被服务(不勾) / 手动 = 恒服务灰字, 无开关
+    assert 'data-act="serve" data-i="1" checked' in rows, f"被服务条目开关要亮: {rows}"
+    assert 'data-act="serve" data-i="0" checked' not in rows, f"未被服务条目不得亮开关: {rows}"
+    assert rows.count('data-act="serve"') == 2, f"开关只给发现条目: {rows}"
+    assert "恒服务" in rows, f"手动条目亮「恒服务」(P2, 不受裁决约束): {rows}"
+    # ambiguous 态(T4 评审轮 2 改判): 勾选值仍按 activeNames —— 勾上的可见可取消(取消 = 摘除致歧
+    # 标签, 撞名恢复闭环), 但加 serve-halt 灰化提示停服中(与「已暂停」横幅同屏不打架); 强制不勾的
+    # 旧改判会造成「只加不减」死路, 不得回潮
+    amb = trace["rowsAmbiguous"]
+    assert amb.count('data-act="serve"') == 2, f"开关还在: {amb}"
+    assert 'data-act="serve" data-i="0" checked' in amb, f"ambiguous 勾选态要可见(可取消): {amb}"
+    assert 'serve-halt' in amb, f"勾上的开关要加灰化类(停服提示): {amb}"
+    assert 'data-act="serve" data-i="1" checked' not in amb, f"未选条目不勾也不灰化: {amb}"
+    # ambiguous 恢复闭环: 取消勾选 -> activeNames 摘除成功(下轮 matched < 2 回 needsSelection 重选)
+    assert trace["activeAfterAmbiguousOff"] == [], \
+        f"ambiguous 态取消勾选必须真能摘除 activeNames(恢复闭环): {trace['activeAfterAmbiguousOff']}"
+    # 修 2a(T4 评审): 无选择时按 servedVerdict 白名单亮 —— prod(白名单内)勾 / dev(外)不勾
+    wl = trace["rowsByWhitelist"]
+    assert 'data-act="serve" data-i="0" checked' in wl, f"无选择时按白名单亮: {wl}"
+    assert 'data-act="serve" data-i="1" checked' not in wl, f"白名单外不勾: {wl}"
+    # 修 2b(T4 评审): 快照缺失(升级瞬态)退化全量全亮 = 等价升级前行为
+    nv = trace["rowsNoVerdict"]
+    assert 'data-act="serve" data-i="0" checked' in nv and 'data-act="serve" data-i="1" checked' in nv, \
+        f"快照缺失退化全量: {nv}"
+    # XSS: name 是用户可配自由字符串, 名称列必须过 esc
+    xss = trace["xssRow"]
+    assert "&lt;img src=x" in xss and "<img" not in xss, f"名称列必须过 esc(注入面): {xss}"
+
+
+def test_options_serve_toggle_writes_active_names():
+    """改选/清除 → 写独立存储键 activeNames(计划 S4b/D2, 与 T3 裁决状态机同钥匙 instanceLabel):
+    勾选 = 加标签、取消 = 摘除; 全部取消 = 清除选择, 回「无选择」态(下一轮发现重新裁决)。"""
+    trace = options_wiring_trace()
+    if not trace:
+        return
+    assert trace["activeAfterOn"] == ["prod"], f"勾选 = 把该条目标签写进 activeNames: {trace['activeAfterOn']}"
+    assert trace["activeAfterOff"] == [], f"取消 = 摘除标签: {trace['activeAfterOff']}"
+    assert trace["activeAfterClear"] == [], f"全部取消 = 清除选择(空数组 = 无选择): {trace['activeAfterClear']}"
+    assert "清除选择" in trace["statusAfterClear"], f"清除要有状态行回执: {trace['statusAfterClear']}"
+
+
+def test_options_verdict_banner_by_state():
+    """裁决横幅(计划 S4b/D2): needsSelection(请选择)/ ambiguous(撞名)/ selectedMissing(后端可能已
+    重启改名, 请重新选择)显性亮出 + 一键跳实例表(instTable.scrollIntoView); auto/selected/noAnswer
+    不亮 —— 零应答有既有状态行语义(C4), 正常态亮横幅 = 狼来了。"""
+    trace = options_wiring_trace()
+    if not trace:
+        return
+    banners = trace["banners"]
+    for v, kw in (
+        ("needsSelection", "选择"),
+        ("ambiguous", "名称"),
+        ("selectedMissing", "重新选择"),
+    ):
+        assert banners[v]["hidden"] is False, f"{v} 必须亮横幅(显性失败): {banners[v]}"
+        assert kw in banners[v]["html"], f"{v} 文案要覆盖关键场景({kw}): {banners[v]['html']}"
+    assert "重启或改名" in banners["selectedMissing"]["html"], \
+        f"selectedMissing 文案要点破「后端可能已重启改名」: {banners['selectedMissing']['html']}"
+    assert "去实例表选择" in banners["needsSelection"]["html"], "横幅要有跳实例表的按钮"
+    for v in ("auto", "selected", "noAnswer"):
+        assert banners[v]["hidden"] is True and banners[v]["html"] == "", \
+            f"{v} 不亮横幅(零应答走既有状态行语义): {banners[v]}"
+    assert trace["bannerScrolled"], "横幅「去实例表选择」要滚动到实例表(instTable.scrollIntoView)"
 
 
 def test_origin_grant_matches_across_layers():

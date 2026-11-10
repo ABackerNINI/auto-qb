@@ -29,6 +29,10 @@
 - test_options_swiss_wiring 扩: 元素清单随 S1 更新(helpTroubleshoot/connStateDot/Text/Meta)
   + 「自测端点连通」「载入」按钮字面量不得回潮 + 实例表真表头(状态列)
 ### 站点可选权限轮(计划 26-10-29-0147 W1/D5): 未授权即拒发 + 逐站展示
+### 多 clone 发现裁决轮 · 选项页接线(计划 26-11-10-0515 S4b/D2)
+- test_options_swiss_wiring 扩: 元素清单随 S4b 更新(verdictBanner / instTable)+ 实例表真表头加
+  「名称」「服务」列 + options.js 函数落点(serveToggleChange / renderVerdictBanner / isInstanceServed /
+  servedInstancesOf)—— 行为面守阵在 test_extension_proxy_page_fetch(node 实跑)
 """
 
 import json
@@ -143,6 +147,9 @@ def test_options_swiss_wiring():
         "connStateText",
         "connStateMeta",
         "helpTroubleshoot",
+        # 26-11-10-0515 S4b 落点: 裁决横幅 + 实例表锚点(横幅「去实例表选择」滚动目标)
+        "verdictBanner",
+        "instTable",
     ):
         assert el in html, f"选项页缺 {el}"
     assert "discSave" not in html, "S4 已删「保存发现地址与配对码」按钮(发现隐式保存), 别让它回潮"
@@ -151,9 +158,10 @@ def test_options_swiss_wiring():
     assert ">载入<" not in html and 'id="load"' not in html, "「载入」按钮已随 R3 删除(改 token = 删除重加)"
     for el in ("siteTable", "eventTable", "advLogs", "logView", "origins", "instances"):
         assert html.index(el) < html.index("options.js"), f"{el} 容器要在脚本之前"
-    # 实例表是真表头(来源/端点/token/状态/最近联系/操作): 状态列是「实例状态入表」的落点
+    # 实例表是真表头(来源/名称/端点/token/状态/最近联系/服务/操作): 状态列是「实例状态入表」的落点,
+    # 名称列与服务列(行级服务开关)是 26-11-10-0515 S4b/D2 的落点
     inst_thead = html[html.index('<th>来源</th>'):html.index('</thead>')]
-    for col in ("来源", "端点", "token", "状态", "最近联系", "操作"):
+    for col in ("来源", "名称", "端点", "token", "状态", "最近联系", "服务", "操作"):
         assert col in inst_thead, f"实例表头缺「{col}」列"
     assert "重测全部" in html and 'id="test"' in html, "动作行按钮 id test 保留, 文案为「重测全部」"
     for el in (
@@ -174,7 +182,12 @@ def test_options_swiss_wiring():
         "candidateSummary",
         "probeMainInstance",
         "scheduleConnRender",
-        "isManualEntry"
+        "isManualEntry",
+        # 26-11-10-0515 S4b 落点: 服务开关/横幅/服务集口径的函数落点
+        "serveToggleChange",
+        "renderVerdictBanner",
+        "isInstanceServed",
+        "servedInstancesOf"
     ):
         assert el in js, f"options.js 缺 {el} 的落点(按钮点了没反应)"
     # 单一风格定案: 三档共存的机制(uiTemplate/模板切换)不得回潮

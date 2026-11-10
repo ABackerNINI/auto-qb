@@ -87,6 +87,8 @@ async function noteDiscoveryResult(patch) {
  *     整批替换 / options 三键重建被动改写, 改选/清除只经显式写(选项页接线属 T4);
  *     auto 态且应答标签去重后恰 1 个才持久化 —— legacy 聚合应答(标签 >1, 旧后端随机 uuid)
  *     不 pin: 服务整份照收(D8), 下轮重新裁决(否则 uuid 被 pin, 升级后 selectedMissing 恒态);
+ *     pin 前重读一次 activeNames(T4 评审修 3): 与选项页 serveToggleChange 是双写者, 重读非空 =
+ *     用户在窗口内已改选, 放弃本次 pin 不覆盖(auto 态的选择只在无选择时产出, 裁决时必读到空);
  *   · >=2 份且无选择 -> 零服务(裁决态 needsSelection, 供 T4 横幅); 手动条目恒服务(P2);
  *   · 每轮都落**服务裁决快照键 servedVerdict = {state, discovered, at}**(discovered = 被服务的
  *     发现条目 endpoint 表): 三条外呼路径(pollAll / requestBackendRefresh / probeAll)消费时经
@@ -151,7 +153,16 @@ async function runDiscovery(trigger) {
     servedCount = servedInstancesOf(merged, servedVerdict).length;
     const patch = { instances: merged, pairingNeeded: false, servedVerdict: servedVerdict };
     if (verdict.state === 'auto' && verdict.selection.length > 0) {
-      patch.activeNames = verdict.selection; // 唯一标签才记住(legacy 聚合 >1 标签不 pin, 下轮重新裁决)
+      // auto pin 前重读 activeNames(T4 评审修 3): 本处与选项页 serveToggleChange 是 **activeNames 的
+      // 双写者** —— 裁决读取到落盘的窗口内用户的勾选会被整组覆盖(last-write-wins, 下轮按被覆盖值
+      // 裁决)。auto 态的选择只在「无选择」时产出(adjudicateInstances: sel 非空走 selected 分支),
+      // 故裁决时读到的必是空 —— 重读仍为空才 pin; 非空 = 用户刚改选, 放弃本次 pin, 下轮发现按
+      // 用户选择重新裁决, 选择保住。
+      const re = await chrome.storage.local.get({ activeNames: [] });
+      const stillEmpty = !Array.isArray(re.activeNames) || re.activeNames.length === 0;
+      if (stillEmpty) {
+        patch.activeNames = verdict.selection; // 唯一标签才记住(legacy 聚合 >1 标签不 pin, 下轮重新裁决)
+      }
     }
     await chrome.storage.local.set(patch);
     const ports = hits.map((h) => h.port);

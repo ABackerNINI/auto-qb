@@ -775,13 +775,15 @@ def adjudicate_trace() -> dict:
 
 #: 真跑 background.js 的发现裁决流程(S4a): 两 clone 各占一个候选口应答 —— 多命中收集(不再 find-first)/
 #: needsSelection 零服务零持久化 / 按选择服务 / 所选消失空转且 activeNames 抗发现集整批替换 /
-#: 清除选择回 auto 并持久化 / 手动条目恒服务 / D8 legacy 应答(旧后端聚合全机)恰 1 份整份自动服务。
+#: 清除选择回 auto 并持久化 / 手动条目恒服务 / D8 legacy 应答(旧后端聚合全机)恰 1 份整份自动服务 /
+#: r7-r8(T4 评审修 3): auto pin 双写者竞态 —— 窗口内用户写入保住(pin 放弃), 对照无竞态 pin 照常。
 _NODE_RUN_DISCOVERY_VERDICT = """
 const fs = require('fs');
 const vm = require('vm');
 const noop = { addListener() {} };
 const store = { enabled: true, logLevel: 'debug', discoveryAddress: 'http://127.0.0.1:18788' };
 let mode = 'two';   // two = 两 clone 各占一口 | devOnly = 只剩 dev | prodOnly | legacy = 旧后端聚合全机
+let injectPinRace = false;   // T4 评审修 3 竞态注入: 模拟选项页 serveToggleChange 在 pin 窗口内落盘
 const CLONE_P = { instances: [{ id: 'p', name: 'prod', endpoint: 'http://127.0.0.1:5001', token: 'k1' }] };
 const CLONE_D = { instances: [{ id: 'd', name: 'dev', endpoint: 'http://127.0.0.1:5002', token: 'k2' }] };
 const LEGACY = { instances: [
@@ -793,7 +795,16 @@ const chrome = {
   runtime: { onInstalled: noop, onStartup: noop, onMessage: noop },
   permissions: { onAdded: noop },
   storage: { onChanged: noop, local: {
-    get: (defaults) => { const out = {}; for (const k of Object.keys(defaults || {})) out[k] = (k in store) ? store[k] : defaults[k]; return Promise.resolve(out); },
+    get: (defaults) => {
+      // 竞态钩子: runDiscovery 的 auto pin 落盘前会**重读一次** activeNames(单键 get)—— 注入开启时
+      // 在这一刻模拟选项页 serveToggleChange 的写入已落盘(双写者窗口)
+      if (injectPinRace && defaults && Object.keys(defaults).length === 1 && 'activeNames' in defaults) {
+        store.activeNames = ['userChoice'];
+      }
+      const out = {};
+      for (const k of Object.keys(defaults || {})) out[k] = (k in store) ? store[k] : defaults[k];
+      return Promise.resolve(out);
+    },
     set: (obj) => { Object.assign(store, obj); return Promise.resolve(); },
   } },
 };
@@ -858,6 +869,21 @@ const snap = (v) => JSON.parse(JSON.stringify(v));
   out.r6Endpoints = endpoints();
   out.r6Active = snap(store.activeNames);
   out.r6Snapshot = snap(store.lastDiscovery || null);
+  // r7(T4 评审修 3): auto pin 的双写者竞态 —— 选项页在 runDiscovery 读裁决输入与落盘之间写入
+  // activeNames(['userChoice'])时, pin 必须放弃(重读非空), 用户写入保住不被整组覆盖;
+  // 服务集裁决照常(auto 是服务面结论, pin 只是被放弃的选择持久化)
+  mode = 'prodOnly';
+  store.activeNames = [];
+  injectPinRace = true;
+  out.r7 = await sandbox.runDiscovery('t');
+  injectPinRace = false;
+  out.r7Verdict = out.r7.verdict;
+  out.r7Active = snap(store.activeNames);
+  // r8 对照: 无窗口写入时 auto pin 照常落盘(唯一标签持久化)
+  store.activeNames = [];
+  out.r8 = await sandbox.runDiscovery('t');
+  out.r8Verdict = out.r8.verdict;
+  out.r8Active = snap(store.activeNames);
   process.stdout.write(JSON.stringify(out));
 })();
 """
@@ -1447,14 +1473,11 @@ function objKeys(src, name) {
 const bg = fs.readFileSync(process.argv[1], 'utf8');
 const opt = fs.readFileSync(process.argv[2], 'utf8');
 const disc = fs.readFileSync(process.argv[3], 'utf8');
-// badgeStateOf(评审轮 2 修 2 起)经 servedInstancesOf/isManualEntry 按服务集算 anyOk —— 两函数
-// 定义在 discovery.js(importScripts 序在 support 之前), 切出函数体单独跑时要把依赖一并带上
-const badgeFn = new Function(
-  grab(disc, 'isManualEntry') + '\\n' +
-  grab(disc, 'servedInstancesOf') + '\\n' +
-  grab(bg, 'badgeStateOf') + '\\nreturn badgeStateOf;'
-)();
-const connFn = new Function(grab(opt, 'connStateOf') + '\\nreturn connStateOf;')();
+// badgeStateOf(评审轮 2 修 2 起)与 connStateOf(26-11-10-0515 S4b 起)都经 servedInstancesOf/
+// isManualEntry 按服务集算 anyOk —— 两函数定义在 discovery.js, 切出函数体单独跑时要把依赖一并带上
+const deps = grab(disc, 'isManualEntry') + '\\n' + grab(disc, 'servedInstancesOf') + '\\n';
+const badgeFn = new Function(deps + grab(bg, 'badgeStateOf') + '\\nreturn badgeStateOf;')();
+const connFn = new Function(deps + grab(opt, 'connStateOf') + '\\nreturn connStateOf;')();
 const A = 'http://127.0.0.1:9001';
 const cases = [
   { instances: [], discoveryAddress: '' },
@@ -1491,6 +1514,19 @@ const cases = [
     instanceHealth: { [A]: { ok: true } },
     sitePerms: { 'https://pt.example.com': { granted: true, checkedAt: 1 } }
   },
+  // 26-11-10-0515 S4b: anyOk 按**服务集**算 —— needsSelection 停服后, 冻结的 ok 台账不许再报「连接正常」
+  // (!instance 必须带 source:'discovered' —— 缺 source 按 C8 判手动, 手动恒服务, 那就不是本行要钉的事)
+  {
+    instances: [{ endpoint: A, source: 'discovered' }], discoveryAddress: 'http://127.0.0.1:18788',
+    instanceHealth: { [A]: { ok: true } },
+    servedVerdict: { state: 'needsSelection', discovered: [], at: 1 }
+  },
+  // 同一份台账在白名单内(被服务)照常 ok
+  {
+    instances: [{ endpoint: A, source: 'discovered' }], discoveryAddress: 'http://127.0.0.1:18788',
+    instanceHealth: { [A]: { ok: true } },
+    servedVerdict: { state: 'selected', discovered: [A], at: 1 }
+  },
 ];
 const badgeBlock = bg.slice(bg.indexOf('const BADGE = {'), bg.indexOf('function badgeStateOf'));
 const labels = (badgeBlock.match(/label: '([^']*)'/g) || []).map((s) => s.replace("label: '", '').replace("'", ''));
@@ -1502,6 +1538,172 @@ process.stdout.write(JSON.stringify({
   labels: labels,
 }));
 """
+
+#: 真跑 options.js **整页**(mock document/chrome, 计划 26-11-10-0515 S4b): 实例表名称列 + 行级服务开关
+#: + 裁决横幅 + fetchSites/probeMainInstance 的「首个被服务实例」接线 —— chrome API 全 mock, load()
+#: 真跑(实例表渲染 + 自动拉站点清单), 之后逐阶段驱动。
+#: !发现条目 name 是用户可配自由字符串: XSS 转义(esc)与开关写入(activeNames)都在这里真跑钉死。
+_NODE_RUN_OPTIONS_WIRING = """
+const fs = require('fs');
+const vm = require('vm');
+const noop = { addListener() {} };
+const EP_P = 'http://127.0.0.1:5001';   // clone prod(未选)
+const EP_D = 'http://127.0.0.1:5002';   // clone dev(被服务)
+const EP_M = 'http://127.0.0.1:6001';   // 手动条目(恒服务)
+const store = {
+  enabled: true,
+  instances: [
+    { name: 'prod', endpoint: EP_P, token: 'k1', source: 'discovered' },
+    { name: 'dev', endpoint: EP_D, token: 'k2', source: 'discovered' },
+    { name: 'm1', endpoint: EP_M, token: 'km' },
+  ],
+  servedVerdict: { state: 'selected', discovered: [EP_D], at: 1 },
+  activeNames: ['dev'],
+  lastDiscovery: { at: 1, ok: true, port: '18789', ports: ['18789'], verdict: 'selected', served: 2, merged: 2, answered: true, candidates: ['x'], probes: [{ note: '' }] },
+  discoveryAddress: 'http://127.0.0.1:18788',
+};
+const els = {};
+function mkEl(id) {
+  return {
+    id: id,
+    value: '', textContent: '', innerHTML: '', checked: false, className: '', open: false, hidden: false,
+    dataset: {},
+    listeners: {},
+    scrolled: [],
+    addEventListener(type, fn) { this.listeners[type] = fn; },
+    classList: { toggle() {}, add() {}, remove() {} },
+    scrollIntoView(opts) { this.scrolled.push(opts || null); },
+  };
+}
+const document = {
+  getElementById: (id) => (els[id] || (els[id] = mkEl(id))),
+  querySelectorAll: () => [],
+  addEventListener() {},
+};
+let siteFetches = [];
+const chrome = {
+  storage: { onChanged: noop, local: {
+    get: (defaults) => { const out = {}; for (const k of Object.keys(defaults || {})) out[k] = (k in store) ? store[k] : defaults[k]; return Promise.resolve(out); },
+    set: (obj) => { Object.assign(store, obj); return Promise.resolve(); },
+  } },
+  permissions: { getAll: async () => ({ origins: [] }), request: async () => true },
+  runtime: { sendMessage: async () => ({ ok: true }) },
+};
+const sandbox = {
+  chrome, document, window: { addEventListener() {} },
+  console, setTimeout, clearTimeout, Date, Promise, JSON, URL,
+  fetch: async (url) => {
+    siteFetches.push(String(url));
+    const u = String(url);
+    if (u.indexOf('/api/hr/sites') >= 0) return { ok: true, status: 200, json: async () => ({ sites: [{ site: 'demo', origin: 'https://demo.example' }] }) };
+    if (u.indexOf('/api/hr/tasks') >= 0) return { ok: true, status: 200, json: async () => ({ tasks: [], next_poll_s: 60 }) };
+    return { ok: true, status: 200, json: async () => ({}) };
+  },
+};
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync(process.argv[2], 'utf8'), sandbox);   // normalize.js
+vm.runInContext(fs.readFileSync(process.argv[3], 'utf8'), sandbox);   // discovery.js(instanceLabel 等)
+vm.runInContext(fs.readFileSync(process.argv[4], 'utf8'), sandbox);   // site-caps.js
+vm.runInContext(fs.readFileSync(process.argv[1], 'utf8'), sandbox);   // options.js(顶层 wiring + load)
+async function settle() { for (let i = 0; i < 400; i += 1) await new Promise((r) => setTimeout(r, 5)); }
+(async () => {
+  const out = {};
+  await settle();   // load() 完成: 实例表渲染 + 自动拉站点清单(取首个被服务实例)
+  out.rows = els.instList.innerHTML;
+  out.sitesFetchOnLoad = siteFetches.slice();
+  siteFetches = [];
+  out.probeServed = await sandbox.probeMainInstance();
+  out.probeFetches = siteFetches.slice();
+  // 阶段 2: 服务集为空(needsSelection 停服且无手动条目 —— 手动恒服务 P2, 留着它服务集就不为空)
+  // -> 两处接线显式报, 不静默、不回退 [0]
+  store.servedVerdict = { state: 'needsSelection', discovered: [], at: 2 };
+  store.activeNames = [];
+  store.instances = [
+    { name: 'prod', endpoint: EP_P, token: 'k1', source: 'discovered' },
+    { name: 'dev', endpoint: EP_D, token: 'k2', source: 'discovered' },
+  ];
+  store.lastDiscovery = Object.assign({}, store.lastDiscovery, { verdict: 'needsSelection' });
+  await sandbox.refreshConnFromStorage(false);
+  siteFetches = [];
+  await sandbox.fetchSites(true);
+  out.statusEmptyServe = els.status.textContent;
+  out.sitesFetchEmpty = siteFetches.slice();
+  out.probeNoServed = await sandbox.probeMainInstance();
+  out.bannerNeeds = { hidden: els.verdictBanner.hidden, html: els.verdictBanner.innerHTML };
+  els.verdictBanner.listeners.click({ target: { id: 'verdictGoto' } });
+  out.bannerScrolled = els.instTable.scrolled.slice();
+  // 阶段 3: 行级服务开关 = 写 activeNames; 全部取消 = 清除选择(回「无选择」态)
+  // !handler 是 async(set 落盘后才给状态行回执), 必须逐个 await, 否则读到的是竞态前的 status
+  await els.instList.listeners.change({ target: { closest: () => ({ checked: true, dataset: { act: 'serve', i: '0' } }) } });
+  out.activeAfterOn = JSON.parse(JSON.stringify(store.activeNames));
+  await els.instList.listeners.change({ target: { closest: () => ({ checked: false, dataset: { act: 'serve', i: '0' } }) } });
+  out.activeAfterOff = JSON.parse(JSON.stringify(store.activeNames));
+  await els.instList.listeners.change({ target: { closest: () => ({ checked: false, dataset: { act: 'serve', i: '1' } }) } });
+  out.activeAfterClear = JSON.parse(JSON.stringify(store.activeNames));
+  out.statusAfterClear = els.status.textContent;
+  // 阶段 4: 横幅只认 needsSelection/ambiguous/selectedMissing; auto/selected/noAnswer 不亮
+  out.banners = {};
+  for (const v of ['needsSelection', 'ambiguous', 'selectedMissing', 'auto', 'selected', 'noAnswer']) {
+    store.lastDiscovery = Object.assign({}, store.lastDiscovery, { verdict: v });
+    await sandbox.refreshConnFromStorage(false);
+    out.banners[v] = { hidden: els.verdictBanner.hidden, html: els.verdictBanner.innerHTML };
+  }
+  // 阶段 4b: 开关初值的另外三条渲染路径(T4 评审修 1/修 2 + 轮 2 改判)——
+  // a) ambiguous: 勾选值仍按 activeNames(可见可取消), 勾上的加 serve-halt 灰化(停服提示, 不与
+  //    横幅矛盾); 且取消勾选真能摘除 activeNames(撞名恢复闭环: 摘致歧标签 -> 下轮回 needsSelection);
+  // b) 无选择: 按 servedVerdict 白名单亮(白名单内勾 / 外不勾); c) 快照缺失: 退化全量全亮(升级瞬态)
+  store.instances = [
+    { name: 'prod', endpoint: EP_P, token: 'k1', source: 'discovered' },
+    { name: 'dev', endpoint: EP_D, token: 'k2', source: 'discovered' },
+  ];
+  store.activeNames = ['prod'];
+  store.servedVerdict = { state: 'ambiguous', discovered: [], at: 5 };
+  store.lastDiscovery = Object.assign({}, store.lastDiscovery, { verdict: 'ambiguous' });
+  await sandbox.refreshConnFromStorage(false);
+  out.rowsAmbiguous = els.instList.innerHTML;
+  // ambiguous 恢复闭环: 对勾上的致歧标签取消勾选 -> activeNames 摘除成功(轮 2 修 1 钉死)
+  await els.instList.listeners.change({ target: { closest: () => ({ checked: false, dataset: { act: 'serve', i: '0' } }) } });
+  out.activeAfterAmbiguousOff = JSON.parse(JSON.stringify(store.activeNames));
+  store.activeNames = [];
+  store.servedVerdict = { state: 'selected', discovered: [EP_P], at: 6 };
+  store.lastDiscovery = Object.assign({}, store.lastDiscovery, { verdict: 'selected' });
+  await sandbox.refreshConnFromStorage(false);
+  out.rowsByWhitelist = els.instList.innerHTML;
+  store.servedVerdict = null;
+  await sandbox.refreshConnFromStorage(false);
+  out.rowsNoVerdict = els.instList.innerHTML;
+  // 阶段 5: XSS —— name 是用户可配自由字符串, 名称列必须过 esc
+  store.instances = [{ name: '<img src=x onerror=alert(1)>', endpoint: EP_P, token: 'k', source: 'discovered' }];
+  store.servedVerdict = { state: 'selected', discovered: [EP_P], at: 3 };
+  await sandbox.refreshConnFromStorage(false);
+  out.xssRow = els.instList.innerHTML;
+  process.stdout.write(JSON.stringify(out));
+})().catch((e) => { console.error(e && e.stack || e); process.exit(1); });
+"""
+
+_OPTIONS_WIRING_TRACE: dict = {}
+
+
+def options_wiring_trace() -> dict:
+    """跑一次 node 拿选项页 S4b 接线的全部断言点(缓存: 多条用例共用同一次 node 运行)"""
+    if _OPTIONS_WIRING_TRACE:
+        return _OPTIONS_WIRING_TRACE
+    node = _node()
+    if not node:
+        return {}
+    proc = _run_node(
+        [
+            node, "-e", _NODE_RUN_OPTIONS_WIRING,
+            str(OPTIONS_JS),
+            str(NORMALIZE_JS),
+            str(DISCOVERY_JS),
+            str(SITE_CAPS_JS)
+        ]
+    )
+    assert proc.returncode == 0, f"node 跑 options.js 的 S4b 接线场景失败: {proc.stderr.strip()}"
+    _OPTIONS_WIRING_TRACE.update(json.loads(proc.stdout))
+    return _OPTIONS_WIRING_TRACE
+
 
 #: 一次跑完: 1. 两份 originGranted(background / options)对同一张真值表必须一致;
 #: 2. runTask 三场景 —— 未授权(不发请求, kind=no-permission) / 已授权但 fetch 抛 Failed to fetch

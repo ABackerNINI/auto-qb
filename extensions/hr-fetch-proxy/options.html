@@ -83,6 +83,21 @@
     table.swtab .inst-token { font-family: Consolas, "Courier New", monospace; font-size: 11.5px; color: #97a2aa; }
     table.swtab .tk-missing { color: #d98a8a; }
     table.swtab td.ep, table.swtab th.ep { white-space: nowrap; }
+    /* 裁决横幅(计划 26-11-10-0515 S4b): needsSelection/ambiguous/selectedMissing 显性亮出,
+       橙系描边与「重连中」同族(可自愈但要人动手), 内嵌「去实例表选择」按钮 */
+    .verdict-banner {
+      display: flex; gap: 12px; align-items: center;
+      border: 1px solid rgba(226,168,110,.55); border-left: 3px solid #e2a86e;
+      background: rgba(226,168,110,.08); padding: 8px 14px; margin: 4px 0 12px; max-width: 860px;
+      font-size: 13px;
+    }
+    .verdict-banner[hidden] { display: none; }
+    .verdict-banner button { padding: 6px 14px; white-space: nowrap; }
+    .serve-tgl { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: #97a2aa; cursor: pointer; }
+    /* ambiguous 态(撞名停服)勾选开关灰化(T4 评审轮 2): 勾选可见可取消, 灰化提示停服中 —— 不与
+       「已暂停自动取数」横幅矛盾; 取消后回 needsSelection 重选即恢复。灰字复用表内 .dim 同族色 */
+    .serve-tgl.serve-halt { color: #6d7880; }
+    .serve-tgl.serve-halt input { opacity: .5; }
     /* 徽标图例五态色样(框式, R4; 站点未授权与发现失败共用红框, 语义靠角标/悬停区分) */
     .sw-frame { display: inline-block; width: 11px; height: 11px; border-radius: 3px; margin: 0 4px -1px 0; border: 2px solid; background: #101214; }
     .sw-none { border-color: #5a6673; } .sw-ok { border-color: #8fc98f; } .sw-warn { border-color: #e2a86e; } .sw-bad { border-color: #d98a8a; }
@@ -141,8 +156,9 @@
       <button class="primary" id="discNow">立即发现</button>
     </div>
     <p class="sub" id="discStatus" style="margin-top:8px">点一次 = 保存 + 发现 + 自测; 同机零配置, 跨机填后端地址。</p>
-    <table class="swtab inst-tab">
-      <thead><tr><th>来源</th><th class="ep">端点</th><th>token(前 32 位指纹)</th><th>状态</th><th>最近联系</th><th>操作</th></tr></thead>
+    <div class="verdict-banner" id="verdictBanner" hidden></div>
+    <table class="swtab inst-tab" id="instTable">
+      <thead><tr><th>来源</th><th>名称</th><th class="ep">端点</th><th>token(前 32 位指纹)</th><th>状态</th><th>最近联系</th><th>服务</th><th>操作</th></tr></thead>
       <tbody id="instList"></tbody>
     </table>
     <div class="btnrow">
@@ -156,6 +172,7 @@
       <p class="sub" id="badgeLegend" style="margin-top:8px"><b>浏览器工具栏</b>的扩展图标<b>状态色外框</b>(常驻, 非本页元素): <span class="sw-frame sw-none"></span>未配置(无外框) · <span class="sw-frame sw-ok"></span>连接正常(绿框) · <span class="sw-frame sw-warn"></span>重连中(橙框) · <span class="sw-frame sw-bad"></span>发现失败(红框, 图标角标补 <code>!</code>) · <span class="sw-frame sw-bad"></span>站点未授权(红框, 图标角标补 <code>!</code> —— 端点通但站点权限没给, 取数一定全失败, 回第 2 步授权) —— 悬停图标有中文结论, 点图标即回本页。</p>
       <p class="sub">后端 hr_check.channel.discovery_port 默认 18788(被占自动顺延连号 8 个 18788-18795, 本扩展会并行探测整张候选表); 命中后实例自动并入上方列表, token 免手抄。发现地址与配对码随「立即发现」一起保存。</p>
       <p class="sub">后端 port 配 0(默认)时端口随机且经发现自动分发; 显式配端口时多实例必须不同 —— 后端启动日志会打一行「HR 取数通道端点已启动: http://127.0.0.1:&lt;端口&gt;」, 端口以那行为准。</p>
+      <p class="sub">同机多实例: 每个 clone 各占一个发现端口应答, 扩展只服务你在实例表「服务」列勾选的实例 —— 多份应答且没勾选时会亮横幅等你选; 所选实例消失不会自动改投别家(横幅会提示重新选择), 手动指定的条目不受此约束、恒被服务。</p>
       <p class="sub">配对码: 仅跨机/开启配对时需要 —— 取后端启动日志或 HR 状态卡里的 6 位展示码; 同机零配置不需要。</p>
       <p class="sub">排查指路: 实例表「状态」列悬停可见逐实例结论(色点: 绿=正常 / 橙=连败中 / 红=token 或来源被拒 / 灰=还没轮过), 点「重测全部」立即探一遍; 更多细节见底部折叠区「运行日志」。</p>
     </details>

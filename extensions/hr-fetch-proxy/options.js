@@ -15,6 +15,10 @@
 //   → 3. 站点现状表 → 4. 最近取数明细表 → 折叠区(运行日志排障用 + 硬上限 + 高级 JSON)。
 //   3.4. 的数据源是后台与日志同源双写的结构化事件环(chrome.storage `events`) + `siteLedger` 用量
 //   台账 —— 解析日志文案做表太脆。
+// 26-11-10-0515 S4b: 实例表加「名称」列 + 行级服务开关(写独立存储键 activeNames, 与 T3 裁决状态机
+//   同钥匙); 裁决横幅(needsSelection/ambiguous/selectedMissing 显性亮出, 一键跳实例表); fetchSites/
+//   probeMainInstance 两处 [0] 接线改取**首个被服务实例**(servedInstancesOf 同一把尺); connStateOf
+//   的 anyOk 对齐服务集口径(与徽标同尺)。
 //
 // 策略与频控判断**不在这里** —— 那唯一权威在后端。
 // 地址归一化共用 normalize.js(与后台同一份, 免得两条路径各自演化)。
@@ -86,6 +90,8 @@ function parseOrigins() {
 
 let instancesState = []; // 实例清单(唯一事实源仍是 chrome.storage)
 let instanceHealthState = {}; // 实例健康台账(后台按轮/探测落盘): 表格状态列与顶部总览都读它
+let servedVerdictState = null; // 服务裁决快照(S4a runDiscovery 每轮落盘): 两处 [0] 接线与开关初值都按它
+let activeNamesState = []; // 当前选择(标签数组, 独立存储键): 行级服务开关的写入面, 与裁决状态机同钥匙
 
 /** 手动端点表单初始化(R3): 只做空态 —— 「载入」按钮已删除, 改 token 走「删除重加」唯一路径 */
 function fillForm() {
@@ -144,24 +150,32 @@ function rowHealthOf(h) {
 }
 
 /**
- * 实例表渲染(计划 26-10-16-0214 S3): 真 table.swtab, 表头 + 状态列。
+ * 实例表渲染(计划 26-10-16-0214 S3; 26-11-10-0515 S4b 加名称列与行级服务开关): 真 table.swtab,
+ * 表头 + 状态列。
  * - 来源徽标只有「手动 / 自动」两值(R2, 「优先」徽标已废止; 行为不变 —— 手动恒在前, 由
  *   discovery.js::mergeInstances 保证, 这里按清单顺序渲染不重排);
+ * - 名称列(S4b): instanceLabel(name 优先, 缺 name 回落 endpoint)—— 用户可配自由字符串, 渲染必须过 esc;
  * - token 列(R1): 手动 = 前 32 位指纹 + 悬停完整值, 未填标红; 自动 = 「-」;
  * - 状态列(§3.2): 四态色点 + 短语, 悬停 title = note 全文 + 最近联系时间;
- * - 操作列(R3): 手动只有「删」; 自动留空(悬停说明由发现租约自动管理);「载入」「测」已删除。
+ * - 服务列(S4b/D2): 行级服务开关(checkbox), 勾选值 = isInstanceServed(见下); ambiguous 态勾上的
+ *   加 serve-halt 灰化(可取消, 恢复闭环); 手动条目恒服务(P2, 不受裁决约束)亮「恒服务」灰字, 不给开关;
+ * - 操作列(R3): 手动只有「删」; 自动 = 「-」(租约由发现自动管理);「载入」「测」已删除。
  */
 function renderInstList() {
   const box = $('instList');
   if (!instancesState.length) {
     box.innerHTML =
-      '<tr><td class="empty" colspan="6">(还没有实例 —— 点上面「立即发现」自动接入, 或展开「手动端点」显式指定)</td></tr>';
+      '<tr><td class="empty" colspan="8">(还没有实例 —— 点上面「立即发现」自动接入, 或展开「手动端点」显式指定)</td></tr>';
     return;
   }
+  // ambiguous 态(裁决停服)的开关灰化(T4 评审轮 2): 勾选值仍按选择(isInstanceServed), 但勾上的
+  // 加 serve-halt 灰化 —— 提示「已暂停自动取数, 请重新选择」, 且可取消(恢复闭环见 isInstanceServed)
+  const halting = Boolean(servedVerdictState && servedVerdictState.state === 'ambiguous');
   box.innerHTML = instancesState
     .map((item, i) => {
       const manual = isManualEntry(item); // discovery.js 纯函数(与后台共用同一份判定, 不在此抄一份)
       const badge = manual ? '<span class="src-tag">手动</span>' : '<span class="src-tag">自动</span>';
+      const nm = esc(instanceLabel(item)); // !name 是用户可配自由字符串, 不过 esc 就是注入面(S4b 名称列)
       let tk;
       if (!manual) {
         tk = '<span class="dim">-</span>'; // 自动条目 token 免手抄(R1)
@@ -177,16 +191,40 @@ function renderInstList() {
         : health.text === '还没轮过'
           ? '等待下一轮轮询, 或点「重测全部」立即探一次'
           : '';
+      const haltCls = halting && !manual && isInstanceServed(item) ? ' serve-halt' : '';
+      const serve = manual
+        ? '<span class="dim" title="手动条目不受裁决约束, 恒被服务(P2)">恒服务</span>'
+        : `<label class="serve-tgl${haltCls}" title="勾选 = 服务这个实例(按标签记选择, 下一轮发现按该选择裁决)` +
+          `${halting && isInstanceServed(item) ? '; 当前撞名停服, 取消勾选后重新选择可恢复' : ''}">` +
+          `<input type="checkbox" data-act="serve" data-i="${i}"${isInstanceServed(item) ? ' checked' : ''}>服务</label>`;
       const act = manual
         ? `<button class="ghost" data-act="del" data-i="${i}">删</button>`
-        : `<span title="由发现租约自动管理, 删除后下轮发现会重新补入"></span>`;
+        : '<span class="dim">-</span>';
       return (
-        `<tr><td>${badge}</td><td class="ep">${esc(item.endpoint)}</td><td>${tk}</td>` +
+        `<tr><td>${badge}</td><td class="nm">${nm}</td><td class="ep">${esc(item.endpoint)}</td><td>${tk}</td>` +
         `<td><span class="dot dot-${health.level}"></span>${health.text}</td>` +
-        `<td class="num">${h && h.at ? shortTime(h.at) : '<span class="dim">—</span>'}</td><td>${act}</td></tr>`
+        `<td class="num">${h && h.at ? shortTime(h.at) : '<span class="dim">—</span>'}</td>` +
+        `<td>${serve}</td><td>${act}</td></tr>`
       );
     })
     .join('');
+}
+
+/**
+ * 该实例当前是否被服务(行级服务开关**勾选值**, 计划 26-11-10-0515 S4b/D2): 手动恒服务(P2); 发现
+ * 条目在**有选择**时按选择亮(activeNames, 与裁决状态机同一把钥匙 instanceLabel —— 改选即时反馈);
+ * 无选择时按服务裁决快照亮(servedVerdict 白名单, 与消费面 servedInstancesOf 同一把尺), 快照缺失
+ * (升级瞬态)退化全量 = 等价升级前行为。
+ * !ambiguous 态(裁决已停服)不改勾选值、只加灰化样式(renderInstList 的 serve-halt): 强制不勾会造
+ * 成「只加不减」死路 —— 用户对已在 activeNames 里的标签没法取消, 而撞名恢复恰恰要先把致歧标签摘出
+ * 选择(否则下轮 matched 恒 >1); 勾选可见可取消 + 灰化提示停服中, 横幅「请重新选择」闭环才走得通
+ * (T4 评审轮 2 改判)。
+ */
+function isInstanceServed(item) {
+  if (isManualEntry(item)) return true;
+  const sel = Array.isArray(activeNamesState) ? activeNamesState : [];
+  if (sel.length) return sel.includes(instanceLabel(item));
+  return servedInstancesOf([item], servedVerdictState).length > 0;
 }
 
 async function instListClick(ev) {
@@ -200,6 +238,32 @@ async function instListClick(ev) {
   renderInstList();
   syncAdvancedView();
   setStatus(`已删除实例 ${removed.name}`);
+}
+
+/**
+ * 行级服务开关(计划 26-11-10-0515 S4b/D2): 勾选/取消 = 写独立存储键 activeNames(标签数组, 与
+ * T3 裁决状态机同一把钥匙 instanceLabel)—— 下一轮发现按 selected 态走; 全部取消 = 清除选择, 回
+ * 「无选择」态(唯一应答重新自动服务)。取消勾选对 ambiguous 态同样生效: 摘除致歧标签后下一轮
+ * matched < 2, 回 needsSelection 重选 —— 横幅「请重新选择」的恢复闭环靠这条路径(T4 评审轮 2)。
+ * 不立即重跑发现: 服务集到下一轮发现才切过去(D2 口径, 「失败即发现」/ 2 分钟周期都会很快收敛),
+ * 这里只落键 + 状态行回执。
+ */
+async function serveToggleChange(ev) {
+  const cb = ev && ev.target && ev.target.closest ? ev.target.closest('input[data-act="serve"]') : null;
+  if (!cb) return;
+  const i = Number(cb.dataset.i);
+  const item = instancesState[i];
+  if (!item) return;
+  const label = instanceLabel(item);
+  const next = (Array.isArray(activeNamesState) ? activeNamesState : []).filter((n) => n !== label);
+  if (cb.checked) next.push(label);
+  activeNamesState = next;
+  await chrome.storage.local.set({ activeNames: next });
+  setStatus(
+    next.length
+      ? `已选择服务: ${next.join(' / ')} —— 下一轮发现按该选择裁决`
+      : '已清除选择 —— 下一轮发现重新裁决(唯一应答将自动服务)'
+  );
 }
 
 // ---------- 连接后端(计划 26-10-14-1241 S4 立; 26-10-15-2357 S3 收口) ----------
@@ -280,7 +344,11 @@ async function discoverNow() {
     const probe = await probeMainInstance();
     const head = `发现命中 ${(last && last.port) || ''}: 已合并 ${res.merged} 条实例`;
     setDiscStatus(
-      probe.state === 'ok' ? `${head}; 主实例${probe.text}${perm}` : `${head}; 但主实例暂不可用 —— ${probe.text}${perm}`
+      probe.state === 'ok'
+        ? `${head}; 主实例${probe.text}${perm}`
+        : probe.state === 'no-served' || probe.state === 'no-instance'
+          ? `${head}; ${probe.text}${perm}`
+          : `${head}; 但主实例暂不可用 —— ${probe.text}${perm}`
     );
   } else if (res && res.reason) {
     const cands = candidateSummary(last);
@@ -292,14 +360,17 @@ async function discoverNow() {
   }
 }
 
-/** 把 storage 里的连接面(实例 / 健康台账 / 最近发现)读回内存并重渲染列表 + 顶部总览 */
+/** 把 storage 里的连接面(实例 / 健康台账 / 最近发现 / 服务裁决)读回内存并重渲染列表 + 顶部总览 */
 async function refreshConnFromStorage(syncJson) {
   const got = await chrome.storage.local.get({
     enabled: true, instances: [], instanceHealth: {}, lastDiscovery: null,
     discoveryAddress: DEFAULT_DISCOVERY_ADDRESS,
+    servedVerdict: null, activeNames: [],
   });
   instancesState = Array.isArray(got.instances) ? got.instances : [];
   instanceHealthState = got.instanceHealth && typeof got.instanceHealth === 'object' ? got.instanceHealth : {};
+  servedVerdictState = got.servedVerdict && typeof got.servedVerdict === 'object' ? got.servedVerdict : null;
+  activeNamesState = Array.isArray(got.activeNames) ? got.activeNames : [];
   if (syncJson) syncAdvancedView(); // !外部变更(后台发现)不刷 JSON 文本域: 会盖掉用户正在编辑的内容
   renderInstList();
   renderConnOverview(got);
@@ -324,13 +395,17 @@ const CONN_STATE_TEXT = {
  * 连接态推导(纯函数)。
  * !判据与 background.js 的 badgeStateOf(计划 §3.3)是**同一条**: 徽标与顶部总览是同一条判据的两个
  * 展示面 —— 改判据必须两边一起改, 否则会出现「徽标报警但页面说正常」, 那正是用户最怕的静默。
+ * !anyOk 按**服务集**算(26-11-10-0515 S4b, 与 badgeStateOf 评审轮 2 修 2 同尺): needsSelection/
+ *   selectedMissing 停服条目的健康台账是冻结的, 按全量算 anyOk 恒真 = 总览谎报「连接正常」, 与
+ *   徽标(服务集口径)在同一份存储上结论分叉。servedVerdict 缺失(升级瞬态)退化全量, 行为不变。
  */
 function connStateOf(cfg) {
   const instances = Array.isArray(cfg.instances) ? cfg.instances : [];
   const hasDiscovery = Boolean(String(cfg.discoveryAddress || '').trim());
   if (!instances.length && !hasDiscovery) return 'unconfigured';
+  const served = servedInstancesOf(instances, cfg.servedVerdict);
   const health = cfg.instanceHealth && typeof cfg.instanceHealth === 'object' ? cfg.instanceHealth : {};
-  const anyOk = instances.some((e) => {
+  const anyOk = served.some((e) => {
     const h = health[String((e && e.endpoint) || '')];
     return Boolean(h && h.ok);
   });
@@ -412,6 +487,34 @@ function renderConnOverview(cfg) {
     if (state === 'discoveryFailed') manBox.open = true; // C6: 发现失败态自动展开(已展开则不动)
     manBox.classList.toggle('attn', state === 'discoveryFailed');
   }
+  // 裁决横幅(S4b): needsSelection/ambiguous/selectedMissing 显性亮出, 驱动源 = 发现快照的 verdict
+  renderVerdictBanner((cfg.lastDiscovery && cfg.lastDiscovery.verdict) || '', enabled);
+}
+
+// ---------- 裁决横幅(计划 26-11-10-0515 S4b/D2): 显性失败必须抬头可见 ----------
+//
+// !needsSelection(>=2 份应答无选择)/ ambiguous(撞名)/ selectedMissing(所选消失)三态不亮横幅,
+//   用户就只会看到「连接正常/重连中」的正常假象继续空转 —— P2 要消灭的正是这个缺口。零应答
+//   (noAnswer)不用横幅: 它有既有的状态行/总览语义(C4)。
+// !文案全部静态串: 选择标签是用户可配自由字符串, **不拼进横幅**(innerHTML 渲染, 免一条转义面)。
+
+const VERDICT_BANNER_TEXT = {
+  needsSelection: '多个后端实例同时应答, 扩展已暂停自动取数(一个都不服务) —— 请到实例表的「服务」列勾选要服务的实例',
+  ambiguous: '多个实例用了同一个名称(撞名), 扩展已暂停自动取数 —— 请重新选择, 或改掉重复的名称后再发现一次',
+  selectedMissing: '当前所选的实例没有出现在最近一轮发现应答里 —— 后端可能已重启或改名, 请重新选择',
+};
+
+/** 按 verdict 亮/收横幅: 文案静态 + 「去实例表选择」按钮(一键跳到实例表选择区) */
+function renderVerdictBanner(verdict, enabled) {
+  const box = $('verdictBanner');
+  const text = enabled ? VERDICT_BANNER_TEXT[verdict] || '' : '';
+  if (!text) {
+    box.hidden = true;
+    box.innerHTML = '';
+    return;
+  }
+  box.innerHTML = `<span class="vb-text">${text}</span><button class="ghost" id="verdictGoto">去实例表选择</button>`;
+  box.hidden = false;
 }
 
 /** 后台落盘连接面后自动重渲染(防抖, 与日志/两表同款纪律) */
@@ -435,17 +538,18 @@ async function persistSelections() {
 
 /** 拉站点清单。manual=true 时把结果/失败亮进状态栏; 自动拉(进页面)保持安静 */
 async function fetchSites(manual) {
-  let inst;
-  try {
-    inst = currentInstances()[0];
-  } catch (e) {
-    if (manual) setStatus(`获取站点中止: ${e.message || e}`);
-    return;
-  }
+  // S4b 接线: 不再固定取 [0] —— 取**首个被服务实例**(servedInstancesOf, 与后台三条外呼同一把尺);
+  // 服务集为空(裁决停服: 多实例未选择 / 所选已消失)显式报, 不静默、也不静默回退全量清单。
+  const served = servedInstancesOf(currentInstances(), servedVerdictState);
+  const inst = served.length ? served[0] : null;
   if (!inst) {
     backendSites = [];
     renderSiteChecks();
-    if (manual) setStatus('还没有实例端点 —— 先在上面「连接后端」区点「立即发现」自动接入, 或展开「手动端点」指定实例, 再来获取站点');
+    setStatus(
+      instancesState.length
+        ? '获取站点中止: 当前没有可服务的实例(多实例未选择或所选已消失) —— 先到上面实例表的「服务」列勾选要服务的实例, 再来获取站点'
+        : '还没有实例端点 —— 先在上面「连接后端」区点「立即发现」自动接入, 或展开「手动端点」指定实例, 再来获取站点'
+    );
     return;
   }
   try {
@@ -769,10 +873,13 @@ async function load() {
     enabled: true, instances: [], siteOrigins: [], siteSelections: [], status: {}, siteLedger: {}, logMax: 1000, logLevel: 'info',
     discoveryAddress: DEFAULT_DISCOVERY_ADDRESS, pairingCode: '', pairingNeeded: false,
     instanceHealth: {}, lastDiscovery: null,
+    servedVerdict: null, activeNames: [],
   });
   $('enabled').checked = Boolean(got.enabled);
   instancesState = Array.isArray(got.instances) ? got.instances : [];
   instanceHealthState = got.instanceHealth && typeof got.instanceHealth === 'object' ? got.instanceHealth : {};
+  servedVerdictState = got.servedVerdict && typeof got.servedVerdict === 'object' ? got.servedVerdict : null;
+  activeNamesState = Array.isArray(got.activeNames) ? got.activeNames : [];
   siteSelections = Array.isArray(got.siteSelections) ? got.siteSelections : [];
   $('origins').value = got.siteOrigins.join('\n');
   const st = got.status || {};
@@ -838,13 +945,24 @@ async function save() {
 }
 
 /**
- * 探一次**主实例**(instances[0])的连通性, 返回结构化结论 —— 「发现命中后自动接自测」共用这份判据
- * (计划 S3: 免得两处各自演化出两套"通没通"的说法)。逐实例探测统一走后台 probe-all(C1 单一写入口)。
- * 返回 {state, text, hint}, state ∈ ok / 401 / 403 / http / down / no-instance; 本函数不碰 UI。
+ * 探一次**主实例**(首个被服务实例, S4b: 不再固定 instances[0] —— 按服务裁决快照取服务集首位,
+ * 与 fetchSites / 后台三条外呼同一把尺)的连通性, 返回结构化结论 —— 「发现命中后自动接自测」共用
+ * 这份判据(计划 S3: 免得两处各自演化出两套"通没通"的说法)。逐实例探测统一走后台 probe-all
+ * (C1 单一写入口)。
+ * 返回 {state, text, hint}, state ∈ ok / 401 / 403 / http / down / no-instance / no-served;
+ * 本函数不碰 UI。
  */
 async function probeMainInstance() {
-  const inst = currentInstances()[0];
-  if (!inst) return { state: 'no-instance', text: '还没有实例端点', hint: '' };
+  const served = servedInstancesOf(currentInstances(), servedVerdictState);
+  const inst = served.length ? served[0] : null;
+  if (!inst) {
+    if (!instancesState.length) return { state: 'no-instance', text: '还没有实例端点', hint: '' };
+    return {
+      state: 'no-served',
+      text: '没有可服务的实例(多实例未选择或所选已消失) —— 先到实例表「服务」列勾选要服务的实例',
+      hint: '',
+    };
+  }
   const url = `${inst.endpoint}/api/hr/tasks`;
   try {
     const res = await fetch(url, { headers: { 'X-Hr-Token': inst.token } });
@@ -1056,6 +1174,14 @@ window.addEventListener('unhandledrejection', (ev) => {
 $('addInstance').addEventListener('click', () => addInstance().catch((e) => setStatus(String(e))));
 $('newInstance').addEventListener('click', () => fillForm(null));
 $('instList').addEventListener('click', (ev) => instListClick(ev).catch((e) => setStatus(String(e))));
+// 行级服务开关(S4b): checkbox 走 change 事件(click 会先触发一次, 值还没翻) —— 与「删」按钮同容器双通道
+$('instList').addEventListener('change', (ev) => serveToggleChange(ev).catch((e) => setStatus(String(e))));
+// 横幅按钮(S4b): 一键跳到实例表选择区(横幅内容是动态渲染的, 按钮走事件委托)
+$('verdictBanner').addEventListener('click', (ev) => {
+  if (!ev.target || ev.target.id !== 'verdictGoto') return;
+  const tbl = $('instTable');
+  if (tbl && typeof tbl.scrollIntoView === 'function') tbl.scrollIntoView({ block: 'center' });
+});
 $('fetchSites').addEventListener('click', () => fetchSites(true).catch((e) => setStatus(String(e))));
 $('selectAllSites').addEventListener('click', selectAllSites);
 $('grantChecked').addEventListener('click', () => grant().catch((e) => setStatus(String(e))));
@@ -1080,6 +1206,12 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (changes.logs) scheduleLogRender();
   if (changes.events || changes.siteLedger) scheduleTablesRender(); // 两表随后台落盘自动刷新
   // 连接面(S3): 后台的发现/轮询结果实时进页面 —— 此前不监听 instances, 后台并入的实例要重开页面才看得见
-  if (changes.instances || changes.instanceHealth || changes.lastDiscovery || changes.enabled) scheduleConnRender();
+  // S4b 加 servedVerdict / activeNames: 裁决快照与选择键变了, 实例表开关初值与横幅要跟着刷
+  if (
+    changes.instances || changes.instanceHealth || changes.lastDiscovery || changes.enabled ||
+    changes.servedVerdict || changes.activeNames
+  ) {
+    scheduleConnRender();
+  }
 });
 load().catch((e) => setStatus(`读取配置失败: ${e.message || e}`));
