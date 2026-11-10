@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>relocate 启动对账自愈: 终态失败账按物理现状重推相位(防御性重启重判)</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="relocate-startup-reconcile">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-10-0721">
+<meta name="doc-updated" content="26-11-10-0810">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-10-backend-relocate-startup-reconcile.md, memory-bank/plans/26-11-10-0230-plan-relocate-listing-false-negative.html, memory-bank/issues/26-11-10-0326-feat-relocate-terminal-jobs-no-exit.html, memory-bank/issues/26-11-10-0327-bug-relocate-startup-log-inflight-count.html">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: relocate-startup-reconcile</div>
+<h1>relocate 启动对账自愈: 终态失败账按物理现状重推相位(防御性重启重判)</h1>
+<p class="lede">本篇只回答: relocate 终态 <code>failed</code> 账为何要在每次重启按物理现状重推相位(启动对账)、重入资格的物理证据标准、重入后如何零新增逻辑地复用既有收尾链自愈到 <code>done</code>,以及 Blood 组既有失败账(<code>jr-a2ce556d0165</code>)如何借此零人工零搬数收敛 —— 前序计划 26-11-10-0230 的自检假阴性修复只防新增,本篇补「账面服从现实」的防御面。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-10-0721 · <b>doc-updated</b> 26-11-10-0810 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 2026-11-10 生产取证会话(修复部署后 Blood 账未自愈、组仍裂)→ 用户推翻上轮 D2/D3 → grilling 三轮(Round1 七问作废 → Round2 修正为「回既有收尾窗」模型 → Round3 纠正 hotfix 定性、定案通用对账)拍板 G1-G5;代码事实由只读探员取证
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<p><strong>背景</strong>: 26-11-10-0230 修复(链接对象判别 → skipped)已随生产 clone 更新并重启(06:42:56,日志实证 v6→v7 迁移即新代码),但既有失败账 <code>jr-a2ce556d0165</code> 仍 <code>failed</code>、组视图仍裂——修复只改「失败当下」的判定,没有任何治愈既有伤害的路径。用户拍板: <strong>bug 修复应当自愈,至少每次重启要有重新判断当前状态的机制</strong>。</p>
+<p><strong>目标</strong>:</p>
+<ul>
+<li>启动对账机制: 终态 <code>failed</code> 账在每次进程启动后按<strong>物理现状</strong>(qB 现值 + 盘面)重推相位;物理已完成的翻案重入生命周期走完既有收尾链,物理未完成的保持 failed(账面=现实)。</li>
+<li>通用性: 不看 failure reason、不建白名单——对未来未知事故形态、用户在 qB 侧手工补完的迁移、旧版本遗留账,同一套逻辑生效(区别于 hotfix 形状的 reason 白名单方案)。</li>
+<li>收敛判据(Blood 组): 部署后重启 → 对账重入 → 收尾窗 → qB 退出窗改写 → 核验删链 → <code>done</code> + 组归一 + symlink 删净,全程零人工零搬数。</li>
+</ul>
+<p><strong>设计底线 / 不变量</strong>:</p>
+<ul>
+<li><strong>账面服从现实</strong>: failed 账是「判定那一刻的结论」,不是永久事实;重推只认物理证据。</li>
+<li><strong>保守默认</strong>: 证据不可得/矛盾一律保持 failed;重入本身不搬数据(只复用既有链);重入上限每生命周期 1 次(防跨重启 churn,A1)。</li>
+<li><strong>幂等</strong>: 对账判据从 job 记录无态推导,零新持久状态、零新配置键(黄金法则 1/4)。</li>
+<li><strong>单一写线程</strong>: 对账发生在主循环首轮 qB 连接后的 tick,落账走既有 <code>_set_job</code> 单点(黄金法则 5)。</li>
+<li><strong>真机验证硬约束</strong>: 只碰环境1(<code>real.*</code>),生产 26586 零触碰(继承上轮 D5)。</li>
+</ul>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+<h3>2.1 生命周期缝隙: 终态 job 是唯一「死了没人体检」的状态</h3>
+<ul>
+<li>启动路径对终态 job 只「计数+展示」: <code>_load_jobs</code> 全部条目无条件入账并计数(<code>relocate_mod.py:222/235</code>),启动日志「恢复在途 job N 条」含终态虚高(issue <a class="cm">26-11-10-0327</a>);<code>active_jobs()</code> 滤终态(<code>relocate_lifecycle.py:111-113</code>)→ 终态永不进 <code>_advance</code>(<code>:287</code>),启动对终态无任何恢复/推进。</li>
+<li>唯一「离开 failed」的路径 = 同键 re-issue 换生命周期(<code>relocate_exec.py:1379-1412</code>);账面本身无出口(issue <a class="cm">26-11-10-0326</a>)。</li>
+<li>启动时 qB 客户端未连接(<code>qbmanager.py:510</code> start_all 在先、<code>:520-532</code> connect 重试循环在后)→ 任何需要 qB 事实的处置不能落在 <code>start()</code>,自然钩点是首轮连接成功后的 tick。</li>
+<li>非终态 job 每 tick 都被 <code>_advance</code> 推进、moving 相位本有恢复判据(<code>rt["recover"]</code>,<code>relocate_mod.py:233</code>)——缝隙恰好只在终态。</li>
+</ul>
+<h3>2.2 既有机械面盘点(本机制全部复用,零新增破坏性逻辑)</h3>
+<p>恢复落点 <code>moved</code> 是已支持流(<code>relocate_exec.py:93</code> _recover→moved、<code>:829</code> rebuild→moved);<code>_arm</code> 入口自带陈旧终态 journal 清理(<code>_reset_stale_terminal_journal :434-498</code>,调用点 <code>:509</code>);收尾末端 <code>_step_verify</code> 全员核验(<code>:941</code>)不过走 <code>_verify_hang</code> 悬挂、删链门有组外依赖扫描(<code>:945/:1000-1016</code>);收尾窗 <code>FINALIZE_WINDOW_PHASES={armed,rewritten}</code>(<code>relocate_units.py:90</code>);第 1 层作用域登记表=活跃 job(26-10-18-1604 §3.4)→ job 非终态组即不裂;WebUI「立即收尾」按钮对窗内 job 生效(<code>server/routes/relocate_chain.py:110-143</code>)。</p>
+<h3>2.3 生产两笔失败账落格(2026-11-10 只读取证)</h3>
+<ul>
+<li><code>jr-a2ce556d0165</code>(qb_side_check_failed, mover 35711db2): qB 现值 mover save_path=I:(=dst)、7 颗=H:(改写未做,读经 symlink)、dst 数据 5,691,143,274 字节在位(上轮 §02.2 对照组)→ 完美落在判定表「搬迁段完成、收尾断」格。</li>
+<li><code>jr-82f6dee7620d</code>(move_stalled): 3 颗全在 src、<code>alias_paths</code> 空 → 落「搬迁段未完成」格,保持 failed(现状正确,机制不改写它)。</li>
+</ul>
+<h3>2.4 关联件</h3>
+<ul>
+<li>issue <a class="cm">26-11-10-0326</a>(终态留账无清理出口): 本机制给 failed 账一条自动出口,但 done/cancelled/真 failed 仍累积——issue 收窄保留(G5⑤)。</li>
+<li>issue <a class="cm">26-11-10-0327</a>(启动计数含终态): 对账日志改写同一行,本计划吸收(G5⑤)。</li>
+<li>26-11-07-2336 已 Done(相对键 profile base 解析改写);生产 26586 零同盘形态(上轮 §02.5 复核)。</li>
+</ul>
+
+<h2><span class="no">§03</span>方案总览</h2>
+<h3>3.1 对账判定表(G1/G2)</h3>
+<p><strong>前置闸(A1/G3)</strong>: <code>armed_at&gt;0</code> 的 failed 一律保持 failed(本生命周期的自动链运行配额——常规武装或对账重入——已用掉一次),不进判定表;<code>armed_at==0</code> 才按下表分流。</p>
+<table>
+<tr><th>物理现状(qB 现值 save_path 分布)</th><th>推断</th><th>动作</th></tr>
+<tr><td>mover==dst 且 dst 内容全量在位(证据②)</td><td>搬迁段完成,断在收尾(本事故形态)</td><td class="good">重入 <code>moved</code>,重跑后段链 → 收尾窗 → done</td></tr>
+<tr><td>全员==dst(armed_at==0,如 qB 侧手工补完形态)</td><td>收尾只剩核验删链</td><td class="good">同上,既有链自然收敛(建链/核验幂等)</td></tr>
+<tr><td>全员==src</td><td>搬迁段未完成(82f6 形态)</td><td class="wr">保持 failed(账面=现实)</td></tr>
+<tr><td>矛盾 / 证据不可得</td><td>不可判</td><td class="wr">保持 failed(保守)</td></tr>
+</table>
+<p class="cm">混合态(mover==dst 而部分文件不在 dst)由证据②排除 → 落「保持 failed」格;判定表按证据成立性分流,不按 save_path 分布穷举。</p>
+<h3>3.2 重入资格证据(G2)</h3>
+<p>双证据<strong>同时成立</strong>才重入: ①<code>job.mover</code> 的 qB 现值 save_path==dst(store 快照,normcase 比对——save_path 是 qB 自己的搬迁完成记录);②dst 内容<strong>全量在位</strong>: <code>plan.files</code> 全量逐条本机 stat(经 <code>map_to_container</code>/<code>add_long_path_prefix_for_win</code> 单点换算),文件存在且 size 相等才算在位,<strong>缺文件或 size 不等即不在位</strong>。不能复用 B′ 抽样口径(<code>relocate_proof.py:257-278</code> 任一命中即 positive、缺文件 OSError 直接跳过——any-hit 语义会放走「部分在位」态,对账要的是全量真值;换算与前缀工具可复用其单点,判定逻辑另写)。①②任一不成立或取不到 → 保持 failed。</p>
+<h3>3.3 重入动线(G3)与上限(A1)</h3>
+<p><strong>单一入口恢复到 <code>moved</code></strong>: 既有后段链原样重跑——建链(幂等,缺失重建)→ 修后代码自检(skipped 不挡武装;NEGATIVE 合法再 fail)→ <code>_arm</code> 进窗(入口自动清旧 failed journal)→ daemon 退出窗改写 → <code>rewritten</code> → <code>_step_verify</code> 全员核验 + 删链门 → <code>done</code>。不为「全员已到 dst」做特殊直达分支——链上每步本就幂等且有护栏,第二套判定逻辑增加的面比省下的一两步 tick 值钱。<strong>重入上限</strong>: 每生命周期至多一次自动链运行(常规武装或对账重入共用此配额)。<strong>重入落账即置 <code>armed_at</code></strong>(语义 = 重入/武装时点): 自检在 <code>_arm</code> 之前跑(<code>relocate_exec.py:240</code> 先于 <code>:251-254</code>),pre-arm 自检 NEGATIVE 的失败 <code>armed_at</code> 恒 0(<code>_fail</code> 的 replace 不置它,<code>relocate_lifecycle.py:170</code>)——若闸只认武装置位,对这类失败永不闭环,恰是 A1 要防的跨重启 churn 形态;重入置位后闸对所有失败形态闭环,之后出路=人审 re-issue。journal 陈旧锚点联动(<code>relocate_units.py:1229</code> armed_at&gt;0 时锚点取 armed_at): 重入前的旧失败 journal 仍早于锚点(照旧清理)、重入后的新 journal 晚于锚点(保留),方向正确,S2 实现期核对。<code>attempts</code> 是别名重建配额(建链失败 +1 / <code>_arm</code> 归零,<code>:334/518</code>),不挪用——评审轮 1 裁断: 原定 attempts≥1 闸对 qb_side_check_failed 类失败永不触发且会被 _arm 归零销毁。</p>
+<h3>3.4 触发面(G5①)</h3>
+<p>每次进程启动后<strong>首轮 qB 连接成功的 tick</strong> 对账一次(消费点与 <code>rt["recover"]</code> 同窗,具体落位实现期钉死);配置热启用(<code>relocate_lifecycle.py:86-94</code>)同口径。对账 flag 在 <code>_load_jobs</code>(<code>relocate_mod.py:213-238</code>)按 <code>phase==failed</code> 无态推导——零新持久状态、零新配置键。运行期新失败不重判(修后代码在失败当下已判对)。</p>
+<h3>3.5 出路面(G4)与范围(G5④)</h3>
+<p>启动对账日志一行「启动对账 N 笔: 重入 M / 保留 K」;WebUI 零新增——重入后的待收尾/核验悬挂展示既有反馈面已覆盖,「立即收尾」按钮联动零改动(G5③)。cancelled(用户意图且物理已回滚)与 done 不在对账范围。</p>
+<h3>3.6 生产恢复语义(取代上轮 runbook §4.1 的重发步骤)</h3>
+<div class="aside">
+<p>机制部署后,Blood 收敛 = 生产 clone 更新 + auto-qb 重启<strong>即可</strong>: 对账自动翻案重入,余下等 qB 退出窗(16585 与 26586 两实例全部退出,判据 <code>pitfalls/testing/relocate-window-machine-roster.md</code>)→ 改写 → 重启 → 核验删链 → done + 组归一。若用户此前已按旧 runbook 手工重发也兼容(新生命周期走常规链,对账对其无事可做)。<strong>红线不变</strong>: 收敛前不手删 H: symlink;期间组视图表现以 job 相位为准(重入后合并为单组「待收尾」)。</p>
+</div>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+<table>
+<tr><th>#</th><th>内容</th><th>验收判据</th></tr>
+<tr><td>S1</td><td>单测红验: 判定表四行 + 证据②全量在位(缺文件不放行)+ armed_at 闸(含重入置位后闸关)+ flag 无态推导幂等(stub store 快照/客户端/本机 stat)</td><td>用例落位 <code>tests/test_relocate_*</code>;行 3/4 现行代码即绿,行 1/2 红(无机制)</td></tr>
+<tr><td>S2</td><td>实施: <code>_load_jobs</code> 对账 flag 推导 + 首连 tick 对账消费(与 _recover 同窗)+ 判定表 + 重入(moved + journal 卫生复用 + 重入置 armed_at)+ journal 陈旧锚点联动核对(<code>relocate_units.py:1229</code>)</td><td>四行全绿(红转绿);既有 relocate 电池零回归</td></tr>
+<tr><td>S3</td><td>全量 <code>test.full</code> + 基线切片</td><td>全绿;数字实测誊写 <code>kb.new baseline</code>(不手抄)</td></tr>
+<tr><td>S4</td><td>真机闭环(环境1,生产零触碰): real.seed 造组 → 注入失败(旧码形态 NEGATIVE)→ 重启/重连 → 对账重入 → skipped 武装 → 退出窗改写 → done + 组归一;RM04 族沉淀</td><td>job done + 组归一 + 别名删净 + 对账日志留痕 + real-baselines 切片;环境不可用则 BLOCKED 明示</td></tr>
+<tr><td>S5</td><td>回写: issue ③ 翻 Done(计数随对账日志改写);issue ② 批注收窄;architecture/hr-groups.md 整组迁移节补「终态失败账启动对账重推」句;收尾 code-review + 任务档案</td><td><code>kb.check</code> 绿;评审裁决后零 actionable;Review: trailer 闸门过</td></tr>
+</table>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p>无 —— 拍板已在本会话 grilling 三轮收敛(结论迁 §06);重入闸=armed_at&gt;0 且重入落账即置位(每生命周期至多一次自动链运行,A1,评审轮 1-2 裁定载体),无可调常数面。</p>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+<tr><th>#</th><th>拍板(2026-11-10)</th></tr>
+<tr><td>前史</td><td>Round1 七问(Q1-Q7)基于「新终态 stale + reason 白名单」模型,经用户两轮纠正作废: ①自愈=回到既有收尾窗(待收尾)+组自动合并(26-11-05-0808/26-10-18-1604 设计语义),不是新终态;②reason 白名单=hotfix 形状,机制修完即死码,必要性不成立。结论以本表为准。</td></tr>
+<tr><td>G1</td><td>机制定性 = <strong>通用启动对账(账面服从现实)</strong>: failed 账按物理现状重推相位,不看 reason;对未知事故形态/手工补完/旧账升级同构生效(否决 reason 白名单与新终态方案)</td></tr>
+<tr><td>G2</td><td>重入资格 = 双证据同时成立: mover save_path==dst(qB 现值) ∧ dst 内容在位;任一不成立保持 failed <span class="cm">(轮 1 收紧载体: 全量逐条在位, 撤销 B′ any-hit 口径)</span></td></tr>
+<tr><td>G3</td><td>重入动线 = 单一入口恢复 moved,复用既有链,不为「全员已到 dst」做特殊直达分支</td></tr>
+<tr><td>G4</td><td>出路面 = 启动对账一行日志;WebUI 零新增</td></tr>
+<tr><td>G5</td><td>沿用五项: ①触发=首轮 qB 连接成功 tick + 热启用,无态推导幂等零配置键;②账面先合并(重入即回第 1 层登记表)、物理后收敛(退出窗改写)是设计内窗口;③「立即收尾」按钮联动零改动;④cancelled/done 不在对账范围;⑤落位=本计划,吸收 issue ③,issue ② 收窄保留</td></tr>
+<tr><td>A1</td><td>重入上限 = 每生命周期至多一次自动链运行;载体 = <code>armed_at&gt;0</code> 闸且<strong>重入落账即置 armed_at</strong>(闸对所有失败形态闭环,含 pre-arm 自检 NEGATIVE;attempts 为别名重建配额不挪用)——评审轮 1 裁断修正载体(attempts≥1 永不触发且被 _arm 归零),轮 2 裁断补置位点(仅武装置位对 pre-arm 失败不闭环)</td></tr>
+<tr><td>承接</td><td>上轮 26-11-10-0230 D2/D3 被部分推翻: failed 账不再永久静止(启动对账可翻案);但 D2 组键解析口径不变(终态不参与解析,裂组收敛走重入而非并组),真失败仍永久留账</td></tr>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+<tr><th>风险</th><th>触发条件</th><th>处置</th></tr>
+<tr><td>跨重启 churn: 重入后自检再次真失败,下次重启又重入</td><td>判定表行 1/2 持续成立但自检持续 NEGATIVE(未知形态)</td><td>A1 闸闭环: 重入落账即置 armed_at,第二次 failed 起 armed_at&gt;0 不再自动重入,出路=人审 re-issue;单周期内 failed 仍终态,运行期零循环</td></tr>
+<tr><td>误重入: 证据①过但 dst 数据残缺</td><td>数据部分在位/部分滞留 src</td><td><strong>唯一防线 = 证据②全量在位</strong>: 数据不全在 dst 一律不重入。兜底不能靠 _step_verify——改写先于核验(<code>relocate_journal.py:177</code> 自注「真错向由主循环重启后逐成员 save_path 核验兜住」),改写后成员 save_path==dst 使 <code>_member_at_dst</code>(<code>:954-957</code>,仅核 save_path)恒过,链门可达且核验失败会 reset_rewrites 重放再改写(<code>:980-981</code>)——误重入的破坏面(数据困 src + 别名删净)必须在重入前排除</td></tr>
+<tr><td>qB 长期不连接,对账延迟</td><td>qB 停机/网络断</td><td>无超时: flag 保持,首连后执行;qB 恒离线则账维持 failed(现状不变)</td></tr>
+<tr><td>对账与手工 re-issue 竞态</td><td>用户在对账窗口同时 WebUI 重发</td><td>同键在途闸 GATE_UNFINISHED(<code>relocate_exec.py:1274-1292</code>): 重入后 job 非终态,再发起被 blocked;对账只在启动窗一次,单一写线程不与运行期写竞争</td></tr>
+<tr><td>相对键保存形态(2336 家族)污染改写</td><td>dst 与 qB CWD 同盘</td><td>2336 已修 Done;生产零同盘(上轮复核);真机拓扑沿用 src=R:/dst=.work(D:)</td></tr>
+<tr><td>旧失败 last_error/journal 残留误导</td><td>重入后旧文案仍在</td><td><code>_arm</code> 入口既有清理(<code>:509</code>);last_error 保留原文案供追溯,新失败时自然覆盖</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-10-0721</span> 初版: 2026-11-10 生产取证(修复部署后 Blood 账未自愈、组仍裂;state.json updated_at 实证零重发)→ 用户推翻上轮 D2/D3「账面不动」→ grilling 三轮(Round1 七问作废 → Round2 修正为「回既有收尾窗」→ Round3 纠正 hotfix 定性、定案通用对账)→ G1-G5 + A1 拍板入库(Open),实施等显式开工。代码事实由只读探员取证(启动路径/终态过滤/恢复机械面/自检输入/WebUI 面,file:line 见 §02/§03)。</li>
+  <li><span class="tag">R1 · 26-11-10-0749</span> 评审轮 1(计划文本批): 4 发现(3 major 1 minor)引文过检 4/4 全修 —— 证据②收紧为全量在位(缺文件不放行, 撤销 B′ any-hit 复用)/误重入风险行重写(唯一防线=证据②, 撤销 _step_verify 兜底错误断言)/A1 载体改 armed_at&gt;0 闸(attempts 为别名重建配额不挪用)/qbmanager 行号修正 :510/:520-532</li>
+  <li><span class="tag">R2 · 26-11-10-0810</span> 评审轮 2(修复循环): 回退检查 4/4 未回退; 新 2 major —— 前置闸 armed_at&gt;0 进判定表(armed_at&gt;0 不进表, 行 2 补 armed_at==0 限定)/重入落账即置 armed_at(pre-arm 自检 NEGATIVE 形态 armed_at 恒 0, 仅武装置位闸不闭环; journal 锚点联动分析入 §3.3, S2 核对) —— F1-r2 引文因转抄丢空格被 review.check REFUTE 弃, 实质经主会话自核坐实(自检 :240 先于 _arm :251-254 / _fail :170 不置 armed_at), 按自发修复处置不计 修 数; §06 G2 行同步轮 1 收紧口径</li>
+</ul>
+
+</div>
+</body>
+</html>
