@@ -4,16 +4,16 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="color-scheme" content="dark">
-<title>e2e ctx-custom 定制块既有红: .hb-blk「跳检开关」toHaveCount(1) 失败(双皮肤) · test · 计划外问题</title>
+<title>e2e ctx-custom 定制块既有红: 次级行数 toHaveCount(13) 收到 12(copy-magnet 退役断言漂移) · test · 计划外问题</title>
 <meta name="issue-slug" content="e2e-ctx-custom-hb-blk-red">
 <meta name="issue-stamp" content="26-11-11-0134">
 <meta name="issue-type" content="test">
 <meta name="doc-topic" content="e2e-existing-red">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
-<meta name="issue-title" content="e2e ctx-custom 定制块既有红: .hb-blk「跳检开关」toHaveCount(1) 失败(双皮肤)">
-<meta name="issue-summary" content="ctx-custom 定制块用例断言 .hb-blk hasText 跳检开关 toHaveCount(1) 稳定红(prism/atlas 各一条); 与本轮 flux 改动无关(移除新增 spec 单跑同红)">
+<meta name="issue-status" content="Done">
+<meta name="issue-title" content="e2e ctx-custom 定制块既有红: 次级行数 toHaveCount(13) 收到 12(copy-magnet 退役断言漂移)">
+<meta name="issue-summary" content="ctx-custom 定制块用例次级行数断言 toHaveCount(13) 稳定红(prism/atlas 各一条, 收到 12); 入池时误登记为 :72 的 .hb-blk「跳检开关」断言, 复验更正为 :70 次级行数 —— 根因 76deeb7d copy-magnet 退役漏改用例, 裁决断言漂移页面无缺陷, 已修">
 <style>
   :root {
     --bg: #10151a;
@@ -85,13 +85,13 @@
 <div class="sheet">
 
 <div class="kicker">计划外问题（未修）· test</div>
-<h1>e2e ctx-custom 定制块既有红: .hb-blk「跳检开关」toHaveCount(1) 失败(双皮肤)</h1>
-<p class="lede">ctx-custom 定制块用例断言 .hb-blk hasText 跳检开关 toHaveCount(1) 稳定红(prism/atlas 各一条); 与本轮 flux 改动无关(移除新增 spec 单跑同红)</p>
+<h1>e2e ctx-custom 定制块既有红: 次级行数 toHaveCount(13) 收到 12(copy-magnet 退役断言漂移)</h1>
+<p class="lede">ctx-custom 定制块用例次级行数断言 toHaveCount(13) 稳定红(prism/atlas 各一条, 收到 12); 入池时误登记为 :72 的 .hb-blk「跳检开关」断言(见 §02 取证偏差更正), 复验更正为 :70 次级行数 —— 根因 76deeb7d copy-magnet 退役漏改用例, 已修</p>
 <div class="meta-row">
   <div class="item"><div class="k">编号</div><div class="v">26-11-11-0134-test-e2e-ctx-custom-hb-blk-red</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-11 01:34</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
@@ -108,12 +108,19 @@
 <pre><code># 复现命令(单跑即红, 全量 dev.e2e 461 passed / 3 failed 中含这两条)
 commands run dev.e2e -- e2e/ctx-custom.spec.mjs
 
-# 失败断言原文(e2e/ctx-custom.spec.mjs:71-72, 2026-11-11 01:34 誊写)
-/* 跳检开关同卡(D6): 「常规」里的那块已 hidden, 这里必须在 */
-await expect(page.locator('.hb-blk', { hasText: '跳检开关' })).toHaveCount(1);
+# 真实失败断言原文(e2e/ctx-custom.spec.mjs:70, 2026-11-11 复验誊写 —— 入池时误登记为 :72)
+await expect(secSub.locator('.ctx-custom-row')).toHaveCount(13);
+
+# Playwright 失败输出(次级行数 13 ≠ 12)
+Error: expect(locator).toHaveCount(expected)
+
+Locator: locator('.ctx-custom-sec').nth(1).locator('.ctx-custom-row')
+Expected: 13
+Received: 12
 
 # Playwright 失败定位: e2e/ctx-custom.spec.mjs:26:5(用例声明行, test(`[${skin}] 定制块: ...`))
 # prism 与 atlas 两例同断言同败; 全量 461 passed / 3 failed(另 1 条为 traffic-gap-zones flaky, 另件登记)</code></pre>
+  <div class="callout"><b>取证偏差更正(2026-11-11 复验)</b>: 入池时登记的失败点 <code>:72</code>(<code>.hb-blk</code> hasText「跳检开关」<code>toHaveCount(1)</code>)<b>未执行到</b> —— 用例在 <code>:70</code> 次级行数断言处已先红, Playwright 只报首个失败断言。<code>:72</code> 那条断言本身与页面现状一致, 无缺陷。</div>
   <div class="callout"><b>已排除的嫌疑</b>: 与本轮 flux chip 辉光改动(<code>26-11-10-0921</code>, 仅 CSS 形状分层 + 新增 flux spec)<b>无关</b> —— 移除本轮新增 spec 后单跑同样红; 涉及文件(布局 CSS / ctx-custom spec / 定制块模板)本轮零改动。</div>
 </section>
 
@@ -141,24 +148,26 @@ await expect(page.locator('.hb-blk', { hasText: '跳检开关' })).toHaveCount(1
 <section id="s5">
   <h2><span class="no">§05</span>根因<span class="opt">（可选）</span></h2>
   <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
-  <div class="callout">待查。已排除: 本轮 flux chip 改动(移除新增 spec 单跑同红)、<code>.hb-blk</code> 类被整体删除(CSS 定义仍在)。候选二选一未裁决: ① 页面侧定制块内「跳检开关」区块渲染缺失/被折叠(真缺陷); ② 用例选择器漂移(该块换了类名或容器, 断言没跟上)。</div>
+  <div class="callout"><b>已裁决(2026-11-11 复验)</b>: ② 用例断言漂移, 页面无缺陷。根因提交链: <code>76deeb7d</code>(2026-11-10, copy-magnet 退役, issue 26-11-09-0639 用户拍板)把次级注册表 <code>CTX_SUB_ITEM_DEFS.member</code>(<code>src/auto_qb/webui/static/shared/ctx_menu.js:142-162</code> 定义, 2026-11-11 取证; 其中 :156-160 为复制族区域)从 11 项减到 10 项(复制族只剩 name/hash 两项), 次级行数 11+2线=13 变 10+2线=12。<code>e2e/menus.spec.mjs:517</code> 注释当时已同步, 但 <code>ctx-custom.spec.mjs</code> 的 <code>:70</code> 行数断言漏改(入池取证也误登记到 <code>:72</code>)。Playwright 快照佐证页面 DOM 自洽: tab 角标自报「单种子 13 · 次级 10」。已排除: 本轮 flux chip 改动(移除新增 spec 单跑同红)、<code>.hb-blk</code> 类被整体删除(CSS 定义仍在)。</div>
 </section>
 
 <section id="s6">
   <h2><span class="no">§06</span>建议修法<span class="opt">（可选）</span></h2>
   <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
-  <p>待定 —— 先复验并裁决根因方向(渲染缺失则修页面/桩, 选择器漂移则修断言), 不在本报告里预设方案。</p>
+  <p>裁决为断言漂移后实际修法(最小改动, 仅动用例): <code>e2e/ctx-custom.spec.mjs</code> 的 <code>:70</code> 次级行数 <code>toHaveCount(13)</code> → <code>toHaveCount(12)</code>; 同处注释「次级 11 项 + 2 线」改「次级 10 项 + 2 线」并补 copy-magnet 已退役一句(与 <code>menus.spec.mjs:517</code> 注释口径一致)。<code>:72</code> 的 <code>.hb-blk</code>「跳检开关」断言保持原样 —— 该断言与页面现状一致, 不是失败点。</p>
 </section>
 
 <section id="s7">
   <h2><span class="no">§07</span>状态变更日志</h2>
   <ul>
     <li>2026-11-11 01:34 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-11 — 复验：<code>commands run dev.e2e -- e2e/ctx-custom.spec.mjs</code> 仍复现；真实失败点更正为 <code>:70</code> 次级行数 <code>toHaveCount(13)</code> 收到 12（入池登记的 <code>:72</code> 断言未执行到，取证偏差见 §02）</li>
+    <li>2026-11-11 — 修复：<code>e2e/ctx-custom.spec.mjs</code> 次级行数断言 <code>toHaveCount(13)</code> → <code>toHaveCount(12)</code>（修复前行号 :70，补注释后断言现位于 :71）+ 同处注释补 copy-magnet 退役说明；验证 <code>commands run dev.e2e -- e2e/ctx-custom.spec.mjs</code> 双皮肤（prism/atlas）2 passed / 0 failed（12.2s）；状态 Open → Done（kb.status）</li>
+</ul>
   <h3>复验</h3>
-  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <p>2026-11-11 复跑锚点 <code>commands run dev.e2e -- e2e/ctx-custom.spec.mjs</code> 仍复现；真实失败点更正为 <code>:70</code> 次级行数 13 ≠ 12，入池登记的 <code>:72</code> 断言未执行到（取证偏差，见 §02 更正）。</p>
   <h3>修复后补充</h3>
-  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  <p>实际修法 / 验证方式 / 测试数字：<code>e2e/ctx-custom.spec.mjs</code> 次级行数断言 <code>toHaveCount(13)</code> → <code>toHaveCount(12)</code>（修复前行号 :70，补注释后现位于 :71），同处注释「次级 11 项 + 2 线」改「10 项 + 2 线」并补 copy-magnet 退役（issue 26-11-09-0639，提交 76deeb7d）说明，与 <code>menus.spec.mjs:517</code> 口径一致；<code>:72</code>「跳检开关」断言保持原样（补注释后现位于 :73）。验证：<code>commands run dev.e2e -- e2e/ctx-custom.spec.mjs</code> 双皮肤全绿，2 passed / 0 failed（12.2s）。</p>
 </section>
 
 <footer>

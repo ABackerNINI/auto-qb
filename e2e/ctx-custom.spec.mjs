@@ -61,13 +61,14 @@ test.describe('设置页 · WebUI 卡右键菜单定制(W4)', () => {
       /* 2026-11-03 起布局编辑体默认折叠(运行日志同款): 点块头「展开」再数 tab/行 */
       await blk.getByRole('button', { name: '展开', exact: true }).click();
       await expect(blk.locator('.ctx-custom-tab')).toHaveCount(4);
-      /* 默认 tab = 单种子(唯一有默认次级内容的一支): 一级 15 项 + 5 线, 次级 11 项 + 2 线
+      /* 默认 tab = 单种子(唯一有默认次级内容的一支): 一级 15 项 + 5 线, 次级 10 项 + 2 线
          —— 行数含分隔线, 与注册表逐位一致的直接读数(「转移到」为 26-10-28 加入的第二个
-         动态父项, 与「更多操作」并列; 见 shared/ctx_menu.js order.member) */
+         动态父项, 与「更多操作」并列; 见 shared/ctx_menu.js order.member)。复制族只剩
+         name/hash 两项(copy-magnet 已退役, issue 26-11-09-0639, 提交 76deeb7d, 2026-11-10 起) */
       const secTop = blk.locator('.ctx-custom-sec').nth(0);
       const secSub = blk.locator('.ctx-custom-sec').nth(1);
       await expect(secTop.locator('.ctx-custom-row')).toHaveCount(20);
-      await expect(secSub.locator('.ctx-custom-row')).toHaveCount(13);
+      await expect(secSub.locator('.ctx-custom-row')).toHaveCount(12);
       /* 跳检开关同卡(D6): 「常规」里的那块已 hidden, 这里必须在 */
       await expect(page.locator('.hb-blk', { hasText: '跳检开关' })).toHaveCount(1);
 
