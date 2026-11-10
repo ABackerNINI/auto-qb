@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>辅种页整组移动后行高塌陷/移动行文字显示不全(双排保存路径嫌疑, 待复现) · bug · 计划外问题</title>
+<meta name="issue-slug" content="webui-relocate-pair-row-height">
+<meta name="issue-stamp" content="26-11-11-0553">
+<meta name="issue-type" content="bug">
+<meta name="doc-topic" content="webui-relocate-display">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="辅种页整组移动后行高塌陷/移动行文字显示不全(双排保存路径嫌疑, 待复现)">
+<meta name="issue-summary" content="用户报整组迁移后移动行行高塌陷文字被裁; 桩上四皮肤实测双排 A→B 渲染几何全部健康且主表无行高约束机制, 稳态无法复现 —— 已排除双排本身, 记录证据链与真实缺口(组键换键后窗口占位失真)供复发时对照">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --mark: #161e26;     /* issue 特有: callout 底色 (plan.html 不用) */
+    --warn-bg: #2a2119;  /* issue 特有: 状态徽标底色 */
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 单栏流式版面: 与 plan.html 同一套 .sheet (封顶 1280px, 侧距 clamp(18~44px)); 旧双栏+粘性目录已删 */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+
+  /* 封面 meta 行: issue 特有, DOM 形态别改 —— 状态徽标 <span class="badge"> 被
+     flip_status (W4) 与 check_status_drift 的 BADGE_RE 机读 (k/v div 结构在判据里) */
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px 28px; font-family: var(--mono); font-size: 11.5px; color: var(--faint); border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta-row .item .k { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .meta-row .item .v { font-size: 13.5px; color: var(--dim); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin: 14px 0; font-size: 14px; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-family: var(--mono); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">计划外问题（未修）· bug</div>
+<h1>辅种页整组移动后行高塌陷/移动行文字显示不全(双排保存路径嫌疑, 待复现)</h1>
+<p class="lede">用户报整组迁移后移动行行高塌陷文字被裁; 桩上四皮肤实测双排 A→B 渲染几何全部健康且主表无行高约束机制, 稳态无法复现 —— 已排除双排本身, 记录证据链与真实缺口(组键换键后窗口占位失真)供复发时对照</p>
+<div class="meta-row">
+  <div class="item"><div class="k">编号</div><div class="v">26-11-11-0553-bug-webui-relocate-pair-row-height</div></div>
+  <div class="item"><div class="k">报告时间</div><div class="v">2026-11-11 05:53</div></div>
+  <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
+  <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+</div>
+
+<section id="s1">
+  <h2><span class="no">§01</span>现象与发现场景</h2>
+  <p><strong>用户口述(2026-11-11, 无截图)</strong>: WEBUI 辅种页整组移动(设定位置 → relocate 武装时走整组迁移, 行内出现双排 A→B 保存路径)之后, <em>移动行行高塌陷, 导致移动行文字显示不全</em>; 用户猜测是双排保存路径导致。</p>
+  <p><strong>状态: 桩上无法复现, 现象未核实。</strong>2026-11-11 只读分析轮做了下面 §02 的全套实测, 双排本身稳态几何全部健康; 本件入池目的是把已排除面与真实缺口记下来, <strong>下次用户在真机碰到时补截图/皮肤/视图信息即可直接开工</strong>, 不用重查一遍。</p>
+  <p>复发时要向用户收集的四项(缺一就很难定位): ① 截图; ② 皮肤(flux/atlas/console/prism) + 视图(组视图/种子平铺); ③ 被裁文字是组行双排路径本身还是别的列; ④ 时间点(提交弹确认框时 / 迁移进行中 / 迁移完成后)。</p>
+</section>
+
+<section id="s2">
+  <h2><span class="no">§02</span>证据(取证 2026-11-11, 基线 3206b993)</h2>
+  <p>方法: <code>commands run dev.harness</code> 桩(<code>ui_harness._inject_relocate_jobs</code> 灌 moving/pending_finalize/failed/done 四态) + Playwright 逐变体量几何。组行双排(pair)实测:</p>
+  <table>
+    <tr><th>变体</th><th>组行(pair)行高</th><th>路径格高</th><th>两排各高</th><th>裁切</th></tr>
+    <tr><td>flux 基准</td><td>51.59px(单排 43.39 → <strong>自动长 8.2px</strong>)</td><td>30.59px(flex)</td><td>各 14.3px</td><td class="good">无</td></tr>
+    <tr><td>atlas / console / prism</td><td>51.59(prism 52.59)</td><td>30.59</td><td>14.3</td><td class="good">无</td></tr>
+    <tr><td>DPR 1.25 / 行语言 flat / 1100px 窄视口</td><td>同基准</td><td>同</td><td>同</td><td class="good">无</td></tr>
+    <tr><td>11px 中文路径独立样张(fonttest)</td><td colspan="2">14.3px/行</td><td>—</td><td class="good">无</td></tr>
+  </table>
+  <p>真实 UI 流程(右键→设定位置→提交)全程零 console error。截图确认双排两行文字完整、弧形箭头正常。</p>
+  <p><strong>结构性排除(为什么"裁切"在主表不可能发生)</strong>:</p>
+  <ul>
+    <li><code>.group-row</code> 是 grid + <code>align-items:center</code>, 行轨 auto 高 = 最高格内容高 → 双排只会撑高行(flux components.css group-row 基础规则);</li>
+    <li>行窗口化实测行高(<code>_measureRowH</code>)<strong>只喂上下占位 aq-row-pad</strong>, 从不动行元素本身; 行恒自然文档流, 无绝对定位;</li>
+    <li>四皮肤 + row_lang.css + fx-mount.css 全量 grep: 无任何针对行/路径格的 <code>height</code>/<code>max-height</code>/裁切用固定 <code>line-height</code>; <code>.rel-pa/.rel-pb</code> 的 <code>overflow:hidden</code> 只在水平方向生效(nowrap+ellipsis)。</li>
+  </ul>
+</section>
+
+<section id="s3">
+  <h2><span class="no">§03</span>影响面</h2>
+  <table>
+    <tr><th>维度</th><th>结论</th></tr>
+    <tr><td>触发条件</td><td class="wr">未核实(桩上不复现)——用户侧整组迁移后的某个真机状态组合</td></tr>
+    <tr><td>影响范围</td><td>疑仅视觉: 主表行文字显示; 不涉及数据/迁移正确性</td></tr>
+    <tr><td>严重度</td><td>低~中(视觉缺陷, 且可能根本不是缺陷而是占位失真的误读, 见 §05)</td></tr>
+  </table>
+</section>
+
+<section id="s4">
+  <h2><span class="no">§04</span>定位锚点(取证 2026-11-11, 基线 3206b993)</h2>
+  <ul>
+    <li>双排判定单点: <code>relocateView</code>(decorate.js:144, grep <code>relocateView(row)</code>; 字面量 <code>mode: "pair"</code> 在 decorate.js:159) — pair=组级 src 非空且 dst 恰 1 个</li>
+    <li>双排结构/样式: <code>xtpl-cells.html:114-130</code>(组行 save_path 分支) + <code>row_lang.css:510-547</code>(<code>.rl-scope .g-save-path.has-relpair</code> flex 布局, grep <code>has-relpair</code>; 原取证 502-539, 随 019ceffe 漂移, 以 grep 为准)</li>
+    <li>行高实测引擎: <code>_measureRowH</code>(columns_grid.js:400, grep <code>_rowHs</code>) — 逐行 getBoundingClientRect, 只喂占位</li>
+    <li>占位消费: <code>list-shell.html:41</code> / <code>xtpl.html:365,379</code>(grep <code>aq-row-pad</code>)</li>
+    <li>组键构成: <code>group_key_of</code>(grouping_mod.py:41) = (规范化 save_path, 文件相对路径元组) → <strong>save_path 一变组行 data-key 就整个换</strong></li>
+    <li>窗口前缀和兜底: columns_grid.js:546,560(grep <code>ROW_WIN_EST_H</code>) — 未实测行按全局均值 est</li>
+    <li>整组迁移命令面: commands_torrents.py:473-476(grep <code>relocate_execute</code>) — relocate 武装时「设定位置」即整组迁移</li>
+  </ul>
+</section>
+
+<section id="s5">
+  <h2><span class="no">§05</span>根因</h2>
+  <div class="callout"><strong>待复现后定</strong>。已排除: ① 双排 A→B 渲染本身(四皮肤 × DPR × 行语言 × 窄视口实测全健康, 见 §02); ② 主表行高约束机制(不存在, 见 §02 结构性排除); ③ 浏览器缓存/磁盘侧静态资源错配(静态响应 <code>cache-control: no-cache</code> + etag 协商, 四皮肤 index.html 同盘同源 —— 运行中进程驻留旧构建产物不在此面, 见复发方向③); ④ 中文路径 11px/1.3 行高下的字形垂直裁切(独立样张排除)。</div>
+  <p><strong>已证实的真实缺口(只影响占位, 不裁文字, 但最接近"行高异常"的体感)</strong>: 组键含 save_path → 迁移完成(done)瞬间 save_path 变更 → 组行 data-key 换键 → <code>_rowHs</code> 旧键实测值成孤儿、新键无实测 → 该行在窗口前缀和按 est 兜底一拍, 占位/滚动总高短暂失真(列表跳一下)。用户若把这拍位移读成"行高塌陷", 与口述吻合, 但它解释不了"文字显示不全"。</p>
+  <p>复发时优先检查方向: ① 用户真机是否浏览器缩放/系统 DPI 组合下某种自绘(如用户字体设置)把 14.3px 行盒压破; ② 是否发生在抽屉/确认框等有确定高度约束的容器里而非主表; ③ 是否为旧构建产物残留在运行中的进程(重启核验)。</p>
+</section>
+
+<section id="s6">
+  <h2><span class="no">§06</span>建议修法</h2>
+  <p class="wr">待定 —— 现象未复现, 无从谈修法。若复现后确认是双排引入的回归, 修法大概率落在 row_lang.css 双排段或 _rowHs 换键失效面(换键时按 kind 主动作废旧键孤儿项); 若最终证实是占位失真的误读, 可考虑给 _measureRowH 加「键替换时沿用旧键实测值」或本轮全量重测, 消掉那一拍跳变。</p>
+</section>
+
+<section id="s7">
+  <h2><span class="no">§07</span>状态变更日志</h2>
+  <ul>
+    <li>2026-11-11 05:53 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+  </ul>
+  <h3>复验</h3>
+  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <h3>修复后补充</h3>
+  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+</section>
+
+<footer>
+  26-11-11-0553-bug-webui-relocate-pair-row-height.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+</footer>
+
+</div>
+</body>
+</html>
