@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="hr-discovery-port">
 <meta name="doc-refs" content="memory-bank/plans/26-11-03-0316-plan-test-port-zero.html, memory-bank/plans/26-11-10-0515-plan-hr-discovery-isolation.html">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="HR 发现端点固定 18788 加用户级共享 instances.json 导致多 clone 跨项目混串实例与 token">
 <meta name="issue-summary" content="多 clone 都会命中 18788, 发现端点返回全机所有实例(含 token), 扩展取首个命中后把不同项目的实例混列; 旧设计只评估同机多实例">
 <title>HR 发现端点固定 18788 加用户级共享 instances.json 导致多 clone 跨项目混串实例与 token · bug · 计划外问题</title>
@@ -95,14 +95,14 @@
   </nav>
 
   <header class="cover">
-    <div class="kicker">计划外问题（未修）· bug</div>
+    <div class="kicker">计划外问题（已修）· bug</div>
     <h1>HR 发现端点固定 18788 加用户级共享 instances.json 导致多 clone 跨项目混串实例与 token</h1>
     <p class="lede">多 clone 都会命中 18788, 发现端点返回全机所有实例(含 token), 扩展取首个命中后把不同项目的实例混列; 旧设计只评估同机多实例</p>
     <div class="meta-row">
       <div class="item"><div class="k">编号</div><div class="v">26-11-03-0315-bug-hr-discovery-multi-clone-isolation</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-03 03:15</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">hr</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -191,11 +191,25 @@ memory-bank/tasks/26-10-15-backend-hr-channel-portless-remote.md (C7)
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-11-03 03:15 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-    </ul>
+      <li>2026-11-11 — 状态 Open → Done（kb.status）</li>
+</ul>
     <h3>复验</h3>
-    <p class="hint">待认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验 2026-11-11：已消失 —— 登记簿按 clone 物理拆分后，发现响应只含本 clone 实例（<code>src/auto_qb/hr/discovery.py</code> 现态：候选 8 口、entry_id = sha1(data_dir)[:12]）；§04 各锚点已随计划 26-11-10-0515 S1-S6 改造，行号失效，按 grep 关键词重定位。</p>
     <h3>修复后补充</h3>
-    <p class="hint">待修复时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p>计划 26-11-10-0515 六步全部落地，对应提交：ff734738（S1+S2）/ 2c9273ca（S3）/ 4fe0b326（S4a）/ 91aafc85（S4b）/ aa8948ef（S5）/ b212367f（S6）。</p>
+    <ul>
+      <li><strong>实际修法</strong>（与 §06 的 T2+T3 同向，按拍板 D1-D8 细化）：
+        <ul>
+          <li>登记簿按 clone 物理拆分（D3）：entry_id = <code>sha1(data_dir)[:12]</code>，每 clone 一份 <code>&lt;sha1(data_dir)[:12]&gt;.json</code>，发现响应物理隔离只含本 clone 实例；旧用户级 <code>instances.json</code> 遗留不读不删不迁移（P3）。</li>
+          <li>发现候选口 3→8（D6）：18788-18795，扩展并行探测全部候选。</li>
+          <li>标签键 <code>hr_check.channel.name</code>（D7）：非空用作展示名，空回落 data_dir 目录名；name 语义从进程随机 uuid 改为工作区标签，发现响应结构零变化。</li>
+          <li>扩展六态显式裁决（D2）：auto / selected / ambiguous / needsSelection / selectedMissing / noAnswer，快照键 <code>servedVerdict</code> + 选择集 <code>activeNames</code>；三条外呼路径只打服务集（手动添加恒在服务集），选项页名称列 + 行级服务开关。</li>
+          <li>测试带 28788（D4/D5）：桩默认换带；dev.run 经产品 CLI <code>--hr-discovery-port</code> 注入测试带（对 config 语义零侵入），显式豁免口 <code>--hr-prod-discovery</code>；守卫双向禁绑 18788/28788 字面进 tests/（<code>tests/test_flaky_timing_guards.py</code>）。</li>
+        </ul>
+      </li>
+      <li><strong>验证方式</strong>：<code>commands run test.full</code> 全量（数字见 kb.baseline 最新基线切片）；守卫面含 28788 桩默认、dev.run CLI 覆盖注入与豁免口（<code>tests/test_dev_run_injection.py</code>）；人工验收（独立 profile 按新规程走 <code>extensions/hr-fetch-proxy/README.md</code> 验收节）在自动面之外。</li>
+      <li><strong>改道说明</strong>：§06 曾建议 T3「必须先补协议版本/兼容判据」——实际按 D8 兼容口径「只加不改，双端同仓同发不背交叉兼容包袱」，未引入协议版本号；标签与裁决快照走扩展存储，发现响应结构零变化。</li>
+    </ul>
   </section>
 
   <footer>

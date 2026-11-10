@@ -27,6 +27,7 @@
 - **档位独立**: 某档失败只影响该档新证据(截断式: 失效点之前数据全部有效), 处置 = 档位截断 + 下周期自然重试, **无熔断/停用/退避**; 证据无时效只有真伪。
 - 模型主键 = (站点, tid), infohash 下载后回填; 三种运行口径: 正常 / dry-run(**零请求也零写入**) / `hr.once` 只读走查。
 - **能力即角色**: `hr_check.enabled` 即建取数线程, 再满足 `channel.enabled` 才起端点 —— 没装扩展的实例只读共享站点文件照样发布视图(多实例分工: 谁有浏览器谁抓; 跨机实例经通道同样可驱动)。
+- **发现通道按 clone 物理隔离**(plans/26-11-10-0515, 起 issue 26-11-03-0315): 登记簿每 clone 一份 `<sha1(data_dir)[:12]>.json`(entry_id 同源, runtime 算), 发现响应只含本 clone 实例; 旧用户级 `instances.json` 遗留不读不删不迁移。发现候选口 18788-18795 连号 8(`DISCOVERY_CANDIDATES`), 扩展并行探测; 展示名走 `hr_check.channel.name`(空回落 data_dir 目录名); 扩展六态显式裁决(auto/selected/ambiguous/needsSelection/selectedMissing/noAnswer, 快照键 `servedVerdict` + 选择集 `activeNames`, 三条外呼路径只打服务集 —— 手动添加恒在)。测试带 28788: 桩默认与 dev.run 注入(`--hr-discovery-port`)一律测试带, 显式豁免 `--hr-prod-discovery`; 生产默认 18788 一字不动。
 - 事件四类按层单点(login 登录失效 / parse 页面改版 / silence 通道静默 / channel 通道不可用; plans/26-10-09-0821-plan-hr-fault-domain.html): 层是单点表, 「通道事件贴站点标签」在代码上不可表达。站点现状快照(`hr/status.py`)纯数据单层, `--hr-status` 报告/WebUI/运维脚本三消费者同一套数值口径。
 
 ## 跳检与 HR: 代价边界

@@ -7,9 +7,9 @@
 <title>HR 发现通道多 clone 与多环境隔离(登记簿拆分+环境带+显式裁决)</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="hr-discovery-isolation">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-11-10-0515">
-<meta name="doc-updated" content="26-11-10-0515">
+<meta name="doc-updated" content="26-11-11-0101">
 <meta name="doc-refs" content="memory-bank/issues/26-11-03-0315-bug-hr-discovery-multi-clone-isolation.html">
 <style>
   :root {
@@ -75,7 +75,7 @@
 <h1>HR 发现通道多 clone 与多环境隔离(登记簿拆分+环境带+显式裁决)</h1>
 <p class="lede">本篇只回答: HR 发现通道在同机多 clone 与「测试世界/生产世界同机共存」两种场景下的混串怎么修 —— 用三个装置(登记簿按 clone 物理拆分、测试带隔离、扩展显式裁决)把错误状态从结构上变得不可表达,而不是靠文档约定或人工记忆(记忆路线已在本篇 §06 D1 拍板否决)。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-10-0515 · <b>doc-updated</b> 26-11-10-0515 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-11-10-0515 · <b>doc-updated</b> 26-11-11-0101 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 2026-11-10 grilling 会话三轮拷问(用户逐项拍板,见 §06)× <a href="../issues/26-11-03-0315-bug-hr-discovery-multi-clone-isolation.html">issue 26-11-03-0315</a>;事实取证 = 同日两轮只读子代理报告(后端发现机制 / 扩展与测试面,锚点见 §02);前序: <a href="26-11-03-0316-plan-test-port-zero.html">26-11-03-0316 test-port-zero</a> 明确把发现口 18788 排除在外、把发现口改动指向发现口 issue 0315(另案),经其认领链至本篇
 </div>
 
@@ -241,6 +241,7 @@
 <h2><span class="no">§10</span>变更记录</h2>
 <ul>
   <li><span class="tag">R0 · 26-11-10-0515</span> 初版。2026-11-10 grilling 三轮拍板(D1-D8)成文: 三装置(登记簿按 clone 拆分 / 测试带 28788 / 扩展显式裁决)+ 候选口 3→8 + 标签键;事实取证来自同日两轮只读子代理(后端发现机制 / 扩展与测试面全锚点);同日 0115 收档 Done(被 0330 修复覆盖),0315 认领链已双向声明。</li>
+  <li><span class="tag">R1 · 26-11-11-0101</span> 实施完成: S1-S6 六步全部落地(ff734738 S1+S2 / 2c9273ca S3 / 4fe0b326 S4a / 91aafc85 S4b / aa8948ef S5 / b212367f S6); S7 收尾: issue 26-11-03-0315 翻 Done(修复后补充已写), 测试全绿见 kb.baseline 最新切片, 发现机制事实已回写 architecture/hr-groups.md</li>
 </ul>
 
 </div>
