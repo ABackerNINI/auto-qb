@@ -7,14 +7,23 @@
 S3 追加(计划 26-11-05-0808): 链结果附带 `finalize` 收尾反馈面(pending/daemon_stale/
 window, §3.2「失败反馈面」行); `POST /api/relocate/finalize-now` = D14「立即收尾」按钮
 (显式确认 → qB app/shutdown → 回收 daemon 捕窗改写 → 用户手动重启 qB)。
+
+S4 追加(计划 26-11-11-0259): `POST /api/relocate/bt_backup_probe` = 设置页「自动探测」
+按钮(§3.1 主线 3「编辑器」层, D3 读法2 按钮显式触发唯一入口)。与既有两端点相区分的三点: qB 断连
+**降级不 503**(online=False 继续结构自证, 结果标「离线未自证」—— 设置页配置辅助面,
+功能未启用恰是探测的适用场景, 故也无 relocate.enabled 403 门控, 鉴权由 factory 全局
+dependencies 单点覆盖); qB 事实原语化传给 infra/bt_backup_probe(候选推导/资格/hash
+自证/五态裁决); 只读探测零写盘零 state 零缓存(纯请求内现算, 与 chain 端点的短缓存相反)。
 """
 import re
-from typing import List
+from dataclasses import asdict
+from typing import List, Tuple
 
 from fastapi import APIRouter, HTTPException
 
+from ....config.models import bt_backup_path_of
 from ....core.modules.relocate_units import FINALIZE_WINDOW_PHASES as _WINDOW_PHASES
-from ....infra import alias_fs, file_access
+from ....infra import alias_fs, bt_backup_probe, file_access
 from ..context import WebContext
 from .fs import browse_roots
 from ... import relocate_chain
@@ -141,5 +150,74 @@ def build_router(ctx: WebContext) -> APIRouter:
                 "note": f"关闭指令未送达({type(e).__name__}), 请手动重启 qB 完成收尾",
             }
         return {"cls": "ok", "note": "已向 qB 下达关闭指令, 待收尾改写完成后请手动重启 qB"}
+
+    @router.post("/api/relocate/bt_backup_probe")
+    def api_relocate_bt_backup_probe():
+        """设置页 BT_backup 自动探测(计划 26-11-11-0259 S4; §3.2 五态裁决)
+
+        断连降级不 503(与 require_client 既有口径相区分): qB 不可达时 online=False 继续
+        探测(候选/资格仍结构自证), 结果标「离线未自证」。探测是设置页配置辅助面, 无
+        relocate.enabled 403 门控(与 /api/fs/* 同口径; 功能未启用恰是探测的适用场景 ——
+        D3: 草稿留空 = 未启用, 探测回填草稿后用户保存才落盘, 端点本身零配置写)。
+
+        qB 事实原语化传给 infra/bt_backup_probe(D4): online = /torrents/info 是否可达;
+        hashes = infohash_v1/v2 对序列经 torrent_id_set 双算(v1 + v2 截断, R2 兜 4.4.x);
+        storage_type = app/preferences 的 resume_data_storage_type 原语(读不到 = 证据行降级,
+        不猜, D5); manual_set = relocate.bt_backup 非空(读键单点 bt_backup_path_of)。
+        判定顺序短路在 probe.verdict 单点: unusable-sqlite > manual-set > 命中裁决(§3.2)。
+
+        只读: 零写盘零 state 零缓存(纯请求内现算, 与 chain 端点短缓存相反 —— 每次按钮
+        现探, 证据不落账)。响应 = ProbeResult 全量证据(asdict 可序列化, asdict 自带的
+        state 键 pop 掉) + verdict 字符串(该事实唯一响应键, 计划 §3.2 列名 verdict;
+        评审批3 nit: 双键同值不进 API 面)+ online/manual_set/storage_type 请求内事实,
+        供编辑器渲染; 探测模块承诺永不抛栈(R5), 端点面按既有惯例兜 HTTPException
+        结构化错误。
+        """
+        manager = ctx.manager
+        extra_notes: List[str] = []
+        online = False
+        storage_type = ""
+        pairs: List[Tuple[str, str]] = []
+        client = getattr(manager, "client", None)
+        if client is not None:
+            try:
+                infos = client.torrents_info() or []
+            except Exception as e:  # noqa: BLE001 - qB 不可达按离线降级(证据行), 不 503 不 500
+                extra_notes.append(f"qB /torrents/info 不可达({type(e).__name__}): 按离线降级, hash 自证未参与")
+            else:
+                online = True  # online 口径单点 = 是否拿到 /torrents/info(probe.verdict 同款)
+                for t in infos:
+                    v1 = getattr(t, "infohash_v1", "") or ""
+                    v2 = getattr(t, "infohash_v2", "") or ""
+                    pairs.append((str(v1), str(v2)))
+                try:
+                    prefs = client.app_preferences() or {}
+                    storage_type = prefs.get("resume_data_storage_type", "")
+                except Exception as e:  # noqa: BLE001 - 偏好读不到 = 证据行降级, 不猜(D5)
+                    extra_notes.append(f"qB 偏好不可读({type(e).__name__}): resume_data_storage_type 未知, SQLite 存储模式未排除")
+        manual_set = bool(bt_backup_path_of(getattr(manager, "config", None)))
+        try:
+            scan = bt_backup_probe.candidates(bt_backup_probe.host_platform())
+            quals = [bt_backup_probe.qualify(c.path) for c in scan.candidates]
+            matches = bt_backup_probe.verify(bt_backup_probe.torrent_id_set(pairs), quals)
+            result = bt_backup_probe.verdict(
+                scan,
+                qualifications=quals,
+                matches=matches,
+                manual_set=manual_set,
+                storage_type=storage_type,
+                online=online,
+            )
+        except Exception as e:  # noqa: BLE001 - 探测模块承诺永不抛栈; 端点面兜结构化错误(既有惯例)
+            raise HTTPException(status_code=500, detail=f"BT_backup 探测内部异常({type(e).__name__}): {e}")
+        data = asdict(result)
+        data.pop("state")  # verdict 是该事实的唯一响应键(§3.2 列名; 双键同值不进 API 面, 评审批3 nit)
+        data["verdict"] = result.state
+        data["online"] = online
+        data["manual_set"] = manual_set
+        data["storage_type"] = storage_type
+        if extra_notes:
+            data["notes"] = [*data["notes"], *extra_notes]
+        return data
 
     return router

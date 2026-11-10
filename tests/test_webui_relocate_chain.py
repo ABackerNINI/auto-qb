@@ -29,6 +29,20 @@
 - test_finalize_button_and_hint_static: 前端静态守阵(按钮/提示挂浮窗, 确认框与降级文案,
   渲染面零调用; S4b 全量口径 note 段)
 
+### S4 设置页 BT_backup 自动探测端点(计划 26-11-11-0259; POST /api/relocate/bt_backup_probe)
+- test_bt_backup_probe_route_offline_degrades_not_503: 断连(client=None)200 降级(online=false
+  + 离线未自证标注, 不 503)/ client 在但 /torrents/info 抛错同降级 + 证据行 /
+  relocate.enabled=False 不 403(设置页配置辅助面, 与既有 relocate 端点相区分)
+- test_bt_backup_probe_route_hit: 在线唯一合格候选 hash 自证 -> hit + 全量证据(候选明细/
+  matched_ids/覆盖面说明)+ 零 qB 写调用 + state 文件零变
+- test_bt_backup_probe_route_ambiguous: 多后缀候选 hash 同中 -> ambiguous 拒不猜测
+- test_bt_backup_probe_route_miss: 空目录不资格 -> miss(列已扫描候选)
+- test_bt_backup_probe_route_unusable_sqlite: resume_data_storage_type=1 -> unusable-sqlite
+  (合格候选证据保留, 命中裁决被短路)
+- test_bt_backup_probe_route_manual_set: relocate.bt_backup 非空 -> manual-set(仅供核对)
+- test_bt_backup_probe_route_sqlite_precedes_manual: 短路序端点级(unusable-sqlite 先于
+  manual-set, 不被吞)
+
 覆盖率缺口清偿(26-11-07, test.full 99.31% -> 99.5% 闸):
 - test_pick_job_for_hash_without_jobs_returns_none: pick_job_for 无快照/无命中 => None
 - test_chain_start_remote_candidate_short_circuits_without_stat: 远端候选判 remote 后直接取用不做本机 lstat
@@ -775,3 +789,170 @@ def test_chain_endpoint_finalize_bad_port_falls_back_to_zero(web_env, tmp_path):
     assert resp.status_code == 200
     data = resp.json()
     assert data["finalize"]["job_id"] == "j1", data.get("finalize")
+
+
+# ---------------------------------------------------------------------------
+# S4 设置页 BT_backup 自动探测端点(计划 26-11-11-0259; POST /api/relocate/bt_backup_probe)
+# 零真实网络零真实 qB 零子进程: client/config 全替身, 候选目录走 tmp_path 合成
+# (candidates 的 env 注入面经 os.environ 指进 tmp_path, exe 定位替身空)。
+# ---------------------------------------------------------------------------
+
+PROBE_V1 = "a" * 40  # infohash_v1 形态(40 hex, 兼 fastresume 文件名)
+
+
+def _probe_setup(monkeypatch, tmp_path):
+    """探测端点确定性底座: 平台钉 windows + 便携定位替身空 + 配置/数据根指进 tmp_path
+
+    返回默认候选目录(tmp_path/local/qBittorrent/BT_backup)。!platform 钉 windows 是为了
+    三平台 CI 形态一致: candidates("windows") 只读 env 注入面 + scandir(tmp), 不触宿主
+    真实安装; exe 定位替身空则不触 PowerShell 与 /proc。
+    """
+    from auto_qb.infra import bt_backup_probe as probe_mod
+
+    monkeypatch.setattr(probe_mod, "host_platform", lambda: probe_mod.PLATFORM_WINDOWS)
+    monkeypatch.setattr(probe_mod, "_DEFAULT_EXE_LOCATORS", {probe_mod.PLATFORM_WINDOWS: lambda: ((), ())})
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "local"))
+    monkeypatch.setenv("APPDATA", str(tmp_path / "roaming"))
+    return tmp_path / "local" / "qBittorrent" / "BT_backup"
+
+
+def _mk_backup_dir(path, *ids, queue=False):
+    """合成 BT_backup 目录: 每个 id 一个 40hex.fastresume 文件(可选 queue 强结构标记)"""
+    path.mkdir(parents=True)
+    for i in ids:
+        (path / f"{i}.fastresume").write_bytes(b"d")
+    if queue:
+        (path / "queue").write_text("")
+    return path
+
+
+def _probe_client(infohashes=(PROBE_V1, ), prefs=None):
+    """在线 qB 替身: infohash_v1=hash 的种子 + 可选 app/preferences 原语(默认无该键 = 旧 qB)"""
+    from helpers import FakeClient, FakeTorrent
+
+    c = FakeClient()
+    for h in infohashes:
+        c.torrents[h] = FakeTorrent(hash=h, name="Show", infohash_v1=h, infohash_v2="")
+    if prefs is not None:
+        c.app_preferences = lambda **kw: dict(prefs)
+    return c
+
+
+def _state_fingerprint(mgr) -> tuple:
+    """state 文件(存在性, mtime)指纹: 探测零 state 落盘的断言面"""
+    sf = mgr.state_file
+    return (os.path.exists(sf), os.path.getmtime(sf) if os.path.exists(sf) else 0.0)
+
+
+def test_bt_backup_probe_route_offline_degrades_not_503(web_env, tmp_path, monkeypatch):
+    """断连降级不 503(计划 §04 S4 行明示): client=None -> 200 + online=false + 未自证标注,
+    结构自证(hit)继续出; client 在但 /torrents/info 抛错同降级 + 证据行;
+    relocate.enabled=False 不 403(设置页配置辅助面, 功能未启用恰是探测适用场景)"""
+    backup = _probe_setup(monkeypatch, tmp_path)
+    _mk_backup_dir(backup, PROBE_V1)
+    mgr, client = web_env  # web_env manager 替身缺省 client=None = 断连现场
+    assert mgr.client is None and mgr.config.relocate.enabled is False
+    resp = client.post("/api/relocate/bt_backup_probe", headers=_auth(mgr))
+    assert resp.status_code == 200, resp.text  # 不 503(与 require_client 既有端点相区分)
+    data = resp.json()
+    assert data["online"] is False and data["verdict"] == "hit"
+    assert "state" not in data, "verdict 是该事实唯一响应键(评审批3 nit: 双键同值不进 API 面)"
+    assert any("离线未自证" in n for n in data["notes"]), data["notes"]
+    assert data["manual_set"] is False and data["storage_type"] == ""
+    assert data["candidates"][0]["qualified"] is True and data["candidates"][0]["hash_matched"] is False
+
+    # client 在但 /torrents/info 抛错: 同样按离线降级 + 端点证据行(不 500)
+    class _Boom:
+        def torrents_info(self):
+            raise RuntimeError("api down")
+
+    mgr.client = _Boom()
+    data2 = client.post("/api/relocate/bt_backup_probe", headers=_auth(mgr)).json()
+    assert data2["online"] is False and data2["verdict"] == "hit"
+    assert any("/torrents/info 不可达" in n for n in data2["notes"]), data2["notes"]
+
+
+def test_bt_backup_probe_route_hit(web_env, tmp_path, monkeypatch):
+    """在线 + 唯一合格候选 hash 自证 -> hit: 全量证据(候选明细/matched_ids/覆盖面说明)+
+    online=true + 零 qB 写调用 + state 文件零变(只读探测)"""
+    backup = _probe_setup(monkeypatch, tmp_path)
+    _mk_backup_dir(backup, PROBE_V1)
+    mgr, client = web_env
+    mgr.client = _probe_client((PROBE_V1, ))
+    fp = _state_fingerprint(mgr)
+    resp = client.post("/api/relocate/bt_backup_probe", headers=_auth(mgr))
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["verdict"] == "hit" and data["online"] is True
+    assert "hash 自证通过" in data["reason"], data["reason"]
+    cands = data["candidates"]
+    assert len(cands) == 1 and cands[0]["qualified"] is True and cands[0]["hash_matched"] is True
+    assert cands[0]["matched_ids"] == [PROBE_V1] and cands[0]["fastresume_count"] == 1
+    assert cands[0]["origin"] == "default-profile" and cands[0]["suffix"] == ""
+    assert any("探测覆盖面" in n for n in data["notes"]), data["notes"]
+    assert mgr.client.calls == [], f"探测零 qB 写调用: {mgr.client.calls}"
+    assert _state_fingerprint(mgr) == fp, "state 文件被写"
+
+
+def test_bt_backup_probe_route_ambiguous(web_env, tmp_path, monkeypatch):
+    """多后缀候选(_x configuration)hash 同中 -> ambiguous 拒不猜测(D5), 列全部候选明细"""
+    backup = _probe_setup(monkeypatch, tmp_path)
+    _mk_backup_dir(backup, PROBE_V1)
+    _mk_backup_dir(tmp_path / "local" / "qBittorrent_x" / "BT_backup", PROBE_V1)
+    (tmp_path / "roaming" / "qBittorrent_x").mkdir(parents=True)  # 配置目录枚举出 _x 后缀 -> 第二候选
+    mgr, client = web_env
+    mgr.client = _probe_client((PROBE_V1, ))
+    data = client.post("/api/relocate/bt_backup_probe", headers=_auth(mgr)).json()
+    assert data["verdict"] == "ambiguous" and data["online"] is True
+    assert len(data["candidates"]) == 2 and all(c["hash_matched"] for c in data["candidates"])
+    assert "无法消歧" in data["reason"], data["reason"]
+
+
+def test_bt_backup_probe_route_miss(web_env, tmp_path, monkeypatch):
+    """候选目录存在但空(无 .fastresume 与 queue) -> 不资格 -> miss, 列已扫描候选"""
+    backup = _probe_setup(monkeypatch, tmp_path)
+    backup.mkdir(parents=True)
+    mgr, client = web_env
+    mgr.client = _probe_client((PROBE_V1, ))
+    data = client.post("/api/relocate/bt_backup_probe", headers=_auth(mgr)).json()
+    assert data["verdict"] == "miss" and data["online"] is True
+    assert len(data["candidates"]) == 1 and data["candidates"][0]["qualified"] is False
+    assert "零合格" in data["reason"], data["reason"]
+
+
+def test_bt_backup_probe_route_unusable_sqlite(web_env, tmp_path, monkeypatch):
+    """resume_data_storage_type=1 -> unusable-sqlite: 有唯一合格候选也被短路(证据保留)"""
+    backup = _probe_setup(monkeypatch, tmp_path)
+    _mk_backup_dir(backup, PROBE_V1)
+    mgr, client = web_env
+    mgr.client = _probe_client((PROBE_V1, ), prefs={"resume_data_storage_type": 1})
+    data = client.post("/api/relocate/bt_backup_probe", headers=_auth(mgr)).json()
+    assert data["verdict"] == "unusable-sqlite" and data["storage_type"] == 1 and data["online"] is True
+    assert "SQLite" in data["reason"], data["reason"]
+    assert data["candidates"][0]["qualified"] is True, "候选证据保留"
+
+
+def test_bt_backup_probe_route_manual_set(web_env, tmp_path, monkeypatch):
+    """relocate.bt_backup 非空 -> manual-set(显式 > 推断): 唯一合格候选也被短路, 仅供核对"""
+    backup = _probe_setup(monkeypatch, tmp_path)
+    _mk_backup_dir(backup, PROBE_V1)
+    mgr, client = web_env
+    mgr.client = _probe_client((PROBE_V1, ))
+    mgr.config.relocate.bt_backup = "R:/manual/BT_backup"
+    data = client.post("/api/relocate/bt_backup_probe", headers=_auth(mgr)).json()
+    assert data["verdict"] == "manual-set" and data["manual_set"] is True and data["online"] is True
+    assert "已手动配置" in data["reason"], data["reason"]
+    assert data["candidates"][0]["qualified"] is True, "候选证据保留"
+    assert data["storage_type"] == ""  # FakeClient prefs 无该键 -> 原样给空(不猜)
+
+
+def test_bt_backup_probe_route_sqlite_precedes_manual(web_env, tmp_path, monkeypatch):
+    """短路序端点级(§3.2 判定顺序): 已手动配置 + SQLite 后端 -> unusable-sqlite 先于
+    manual-set(「不可用」警示不被「仅供核对」吞掉)"""
+    backup = _probe_setup(monkeypatch, tmp_path)
+    _mk_backup_dir(backup, PROBE_V1)
+    mgr, client = web_env
+    mgr.client = _probe_client((PROBE_V1, ), prefs={"resume_data_storage_type": 1})
+    mgr.config.relocate.bt_backup = "R:/manual/BT_backup"
+    data = client.post("/api/relocate/bt_backup_probe", headers=_auth(mgr)).json()
+    assert data["verdict"] == "unusable-sqlite" and data["manual_set"] is True, data
