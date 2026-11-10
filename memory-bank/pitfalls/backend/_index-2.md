@@ -1,14 +1,13 @@
 # backend — 后端 / qB / 平台 · 卷 2/2
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `platform-fs.md` … `windows-relocate-traps.md`(共 26 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `prefix-rewrite-nested-root.md` … `windows-relocate-traps.md`(共 26 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
 
 | 主题 | 一句话 | 触发词 |
 |---|---|---|
-| [platform-fs.md](platform-fs.md) | Windows / Linux 差异、长路径、稀疏文件、删除拦截层、事件循环断连噪音、批处理与 PATH 条目的写法坑 —— 与宿主环境强相关的一类坑。 | 锁文件, 平台差异, Windows, Linux, 长路径, 稀疏文件, 删不掉, 磁盘空间, 回收站, 盘满, WinError 10054, proactor, 断连噪音, asyncio, 批处理, cmd, .cmd, 行尾, C… |
 | [prefix-rewrite-nested-root.md](prefix-rewrite-nested-root.md) | `core/fastresume.rewrite_save_paths` 初版「先查新根前缀命中 ⇒ already 跳过」在 new_root 是 old_root 真前缀(父方向嵌套, new<old)时误判: 值命中新根前缀只因它命中旧根(旧根以新根开头), 并非「已在新根… | 写前缀替换, 幂等判定, already 跳过, 嵌套根, 新旧路径包含关系, 改写永不生效, 核验永不过, journal 悬挂 |
 | [qb-api.md](qb-api.md) | qB 版本差异、`sync/maindata` 增量语义、`torrents/add` 的响应形态与选项缺省语义、`TorrentRecord` 的唯一所有权 —— 改数据层前必读。 | 改 qbapi, 改 store, 改 TorrentRecord, 改 apply_sync, 加种子字段, 全局限速, qB 状态, 添加种子, torrents/add, 添加后开始, stopped, autoTMM, 自动种子管理… |
 | [qb-content-path-semantics.md](qb-content-path-semantics.md) | qB Web API 的 `content_path` 报的是**逻辑完成形态**的路径 —— 单文件种子在文件尚未落盘、或启用了「未完成文件加 .!qB 扩展名」时, 该路径在磁盘上**不存在**, qB 不会报空也不会报后缀名。对它做存在性分流时若写「非目录即文件」(`isd… | content_path, root_path, open-path, open_path, 单文件种子, 下载中, 未落盘, .!qB, 未完成扩展名, 目标文件不存在, 打开目标文件夹失败, 定位选中, select, 解析顺序, 辅种… |

@@ -1,7 +1,7 @@
 # backend — 后端 / qB / 平台 · 卷 1/2
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `alias-links.md` … `page-scraping.md`(共 26 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `alias-links.md` … `platform-fs.md`(共 27 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
@@ -34,3 +34,4 @@
 | [lazy-property-parse-error.md](lazy-property-parse-error.md) | 给解析器套 `try/except` 做 fail-closed 时, 若只把**构造函数**包进去, 而真正会抛的是结果对象的**惰性 property**(如 `urlsplit(...).port`), 异常照样穿透 —— 安全闸门于是变成 500, 而不是它该给的 403… | 给解析/判定函数加 try 收口; 同族解析器有两侧(如 Host 头 / Origin 头); 生产路径出现「畸形输入报 500」。 |
 | [nested-container-recursion.md](nested-container-recursion.md) | 动作域加嵌套容器(choose)后, 遍历 actions 的检测/剔除判定不递归 = 校验放行而载入崩 | choose, 编排块, then, default, 嵌套, 递归, 遍历 actions, 退役伪动作, 校验放行, 载入崩 |
 | [page-scraping.md](page-scraping.md) | 从 HTML 里抽一段小数字 / 小文本时, 不锤定结构的正则会匹配到页面上别处的同类文本 —— 结果**看着合法但值是错的**, 且不报错。 | 爬页面, 抓页面, 解析 HTML, 正则提取, 页脚区间, 分页判据, HR 统计页, 站点改版, 数字提取 |
+| [platform-fs.md](platform-fs.md) | Windows / Linux 差异、长路径、稀疏文件、删除拦截层、事件循环断连噪音、批处理与 PATH 条目的写法坑 —— 与宿主环境强相关的一类坑。 | 锁文件, 平台差异, Windows, Linux, 长路径, 稀疏文件, 删不掉, 磁盘空间, 回收站, 盘满, WinError 10054, proactor, 断连噪音, asyncio, 批处理, cmd, .cmd, 行尾, C… |
