@@ -1171,6 +1171,7 @@ def make_manager(
     pass_config_none=False,
     qb_config_path="",
     clock=None,
+    hr_discovery_port_override=None,
     **cfg_overrides,
 ):
     """QbManager 构造单点 —— 测试侧唯一装配入口(用例里不要再内联 QbManager(...))。
@@ -1189,6 +1190,8 @@ def make_manager(
     qb_config_path: 透传 QbManager 的 config_path 实参(默认 "")
     clock: 透传 QbManager 的构造期时钟(S3 monkeypatch 收敛: 传 tests/clock.FakeClock 即
                 全组件确定性时间; None = 系统时钟。经装配链到达 webui/流量采样/快照等透传位)
+    hr_discovery_port_override: 透传 QbManager 的 HR 发现口 CLI 覆盖(plan 26-11-10-0515 S5;
+                None = 不覆盖)
     **cfg_overrides: 对最终 cfg 的段覆盖(未知段名抛 TypeError, 防手滑写成幽灵属性)
 
     用法: `make_manager(state_file)` 全默认; `make_manager(state_file, bare=True,
@@ -1209,9 +1212,17 @@ def make_manager(
             raise TypeError(f"make_manager: FakeConfig 无 {key!r} 段(段名写错了?)")
         setattr(cfg, key, value)
     if pass_config_none:
-        mgr = QbManager(qb_config_path, config=None, no_lock=no_lock)
+        mgr = QbManager(
+            qb_config_path, config=None, no_lock=no_lock, hr_discovery_port_override=hr_discovery_port_override
+        )
     else:
-        mgr = QbManager(qb_config_path, config=cfg, no_lock=no_lock, clock=clock)
+        mgr = QbManager(
+            qb_config_path,
+            config=cfg,
+            no_lock=no_lock,
+            clock=clock,
+            hr_discovery_port_override=hr_discovery_port_override
+        )
     if load_rules is None:
         load_rules = assemble
     if load_rules:

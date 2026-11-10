@@ -12,6 +12,8 @@ tests/flaky_allowlist.py(带理由, 机器可清点), 守阵做**两侧对账**:
   src/auto_qb/infra/clock.py 路径豁免 —— 那是取时单点本体, 不是违例;
 - 4. tests/ bind 调用位的非 0 字面端口: AST(bind((host, <int>))) —— 配置值位的固定端口
   字面量(断言/构造参数)不拦, 只拦真去 bind 的位(碰撞面, 见 pitfalls/testing/fixed-port-test-collision.md)。
+  双向禁绑(计划 26-11-10-0515 S5): 生产带 18788 与测试带 28788 都在拦截面内(扫描器拦一切
+  非 0 字面, 两带天然同拦; 活性探针两带各探一份, 防「只拦某一侧」的退化), 桩脚本在 scripts/ 不受限。
 
 检出能力由合成源红验内建(同 test_test_plan_docstring_guard 的自证结构): 每个扫描器都有
 "该抓的抓得到 + 不该抓的放得过"断言, 扫描逻辑退化即红(guard-dead-branch / static-guard-mutation
@@ -27,7 +29,7 @@ tests/flaky_allowlist.py(带理由, 机器可清点), 守阵做**两侧对账**:
 - test_sleep_scanner_liveness: 1. 活性探针 —— 实调用抓到, patch 字符串/注释不误伤
 - test_wait_timeout_scanner_liveness: 2. 活性探针 —— waitForTimeout 抓到, toHaveTimeout/同词根不误伤
 - test_bare_time_scanner_liveness: 3. 活性探针 —— time.time/monotonic(_ns)/裸名抓到, strftime 不误伤, clock.py 豁免
-- test_bind_scanner_liveness: 4. 活性探针 —— 字面非 0 端口抓到, port=0/变量/配置值位不误伤
+- test_bind_scanner_liveness: 4. 活性探针 —— 字面非 0 端口抓到(双向禁绑: 18788 与 28788 都探), port=0/变量/配置值位不误伤
 """
 from __future__ import annotations
 
@@ -256,7 +258,11 @@ def f():
 """
 
 SRC_BIND_BAD = """def f(sock):
-    sock.bind(("127.0.0.1", 18788))  # bind 位的字面固定口
+    sock.bind(("127.0.0.1", 18788))  # bind 位的字面固定口(生产带)
+"""
+
+SRC_BIND_BAD_TESTBAND = """def f(sock):
+    sock.bind(("127.0.0.1", 28788))  # bind 位的字面固定口(测试带, 双向禁绑另一侧)
 """
 
 SRC_BIND_OK = """PORT = 18788
@@ -292,5 +298,11 @@ def test_bare_time_scanner_liveness():
 
 
 def test_bind_scanner_liveness():
-    bad = scan_bind_ports([("tests/bad.py", SRC_BIND_BAD), ("tests/ok.py", SRC_BIND_OK)])
-    assert bad == {"tests/bad.py": Counter({'sock.bind(("127.0.0.1", 18788))  # bind 位的字面固定口': 1})}, bad
+    bad = scan_bind_ports(
+        [("tests/bad.py", SRC_BIND_BAD), ("tests/bad_band2.py", SRC_BIND_BAD_TESTBAND), ("tests/ok.py", SRC_BIND_OK)]
+    )
+    # 双向禁绑: 生产带(18788)与测试带(28788)两字面各探一份 —— 扫描器退化成「只拦某一侧」必红
+    assert bad == {
+        "tests/bad.py": Counter({'sock.bind(("127.0.0.1", 18788))  # bind 位的字面固定口(生产带)': 1}),
+        "tests/bad_band2.py": Counter({'sock.bind(("127.0.0.1", 28788))  # bind 位的字面固定口(测试带, 双向禁绑另一侧)': 1}),
+    }, bad

@@ -153,6 +153,12 @@ def _mask_debug_torrent_dict(tor: Any) -> Any:
     return masked
 
 
+def _apply_hr_discovery_override(cfg: Config, port: Optional[int]) -> None:
+    """HR 发现口 CLI 覆盖落点(--hr-discovery-port, dev.run 注入测试带用): 见 __init__ 内注释"""
+    if port is not None:
+        cfg.hr_check.channel.discovery_port = port
+
+
 class QbManager(
     WebviewMixin,
     WebCommandsMixin,
@@ -163,6 +169,7 @@ class QbManager(
         config: Config | None = None,
         no_lock: bool = False,
         clock: Optional[Clock] = None,
+        hr_discovery_port_override: Optional[int] = None,
     ) -> None:
         self.config_path = config_path
         # 取时注入(D8 构造期统一制): 缺省系统时钟单点(经模块属性现取 —— 旧测试按模块换
@@ -173,6 +180,13 @@ class QbManager(
         # 内核地基(plan kernel-module-refactor P0): ctx 先立 —— config/store/api/state 挂上
         # ctx, 本类同名属性自此刻起全部委托 ctx(单一真相; 见下方服务委托属性区)。
         self.ctx = AppContext(config or load_config(config_path))
+        # HR 发现口 CLI 覆盖(计划 26-11-10-0515 S5, §05 P1 拍板 = CLI 覆盖路线): dev.run
+        # 注入测试带 28788 的落点。覆盖只改本进程内存生效值 —— 配置文件一字不写, schema/
+        # 校验口径零触碰(校验已按文件原值全量跑完); 磁盘侧(config.yml 物化迁移/WebUI
+        # 编辑器/版本备份)仍指向真实配置路径, 行为不变。缺省 None = 零行为变化。
+        # 存成员: apply_new_config 每次热重载重盖(WebUI 保存重读盘, 配置原值会跟着新对象回来)。
+        self._hr_discovery_port_override = hr_discovery_port_override
+        _apply_hr_discovery_override(self.config, hr_discovery_port_override)
         # 事件总线与模块宿主(plan §3/§4): 宿主持注册表并编排生命周期, 总线供相位广播
         self.events = EventBus()
         self.host = ModuleHost(self.ctx, self.events)
@@ -761,6 +775,12 @@ class QbManager(
         """
         from ..config.impact import KERNEL_SECTIONS, RESTART_SECTIONS, diff_config_impacts, restart_required_paths
 
+        # L0 前置: HR 发现口覆盖先于变更 diff 落在新对象上(评审 major 2026-11-11)。注入态下
+        # self.config 带 28788、新对象读自磁盘(18788), 不先盖则整段粒度的 diff 把整个 hr_check
+        # 判为变更 —— 每次 WebUI 保存(哪怕只动别的段)都在热重载日志与保存回执里多出一条用户
+        # 没做过的幻影变更。同时这步也是监听身份判定(28788 -> 18788 当「身份变化」拆重挂端点)
+        # 与 dev.run 注入不被一次 WebUI 保存静默冲掉的前提, 三面同源一个落点。
+        _apply_hr_discovery_override(config, self._hr_discovery_port_override)
         changes = diff_config_impacts(self.config, config)
         restart_required = restart_required_paths(changes)
         if restart_required:
@@ -776,7 +796,7 @@ class QbManager(
             logger.warning(f"以下配置段变更未被任何模块认领(缺 sections 声明?), 按全量重建兜底: {unclaimed}")
         # 旧配置先留底(替换后旧对象不可达): 模块 apply 的整段对比与监听身份判定都要用
         old = self.config
-        # L0: 替换配置对象(动态读取项即刻生效)
+        # L0: 替换配置对象(动态读取项即刻生效); HR 发现口覆盖已在变更 diff 之前盖过(见上)
         self.config = config
         # 每模块无条件 apply, 自判短路/重启/重建 —— 「统一挂载口」的落地形态(plan §4.3)
         actions = self.host.apply_all(old, config)

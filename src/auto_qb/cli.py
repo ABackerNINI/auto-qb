@@ -177,6 +177,13 @@ def main():
         help="搭配 --hr-status: 每站点最多显示多少行明细(默认 10)",
     )
     parser.add_argument(
+        "--hr-discovery-port",
+        type=int,
+        metavar="PORT",
+        help="覆盖 HR 发现端口(只改本进程内存生效值, 不写配置文件): dev.run 注入测试带 28788 的"
+        "注入面(计划 26-11-10-0515 S5); 0 = 关闭发现。日常不要手传 —— 经 dev.run 自动注入",
+    )
+    parser.add_argument(
         "--hr-confirm-empty",
         metavar="SITE",
         help="人工对账: 确认站点账号的 HR 清单确实为空后写一次性确认戳(逗号分隔多个), "
@@ -220,6 +227,8 @@ def main():
         parser.error("--hr-status 与 --hr-once 互斥(前者读已有数据, 后者真去抓一轮)")
     if args.hr_status_rows < 1:
         parser.error("--hr-status-rows 需为正整数")
+    if args.hr_discovery_port is not None and not (0 <= args.hr_discovery_port <= 65535):
+        parser.error("--hr-discovery-port 须为 0-65535 的端口(0 = 关闭发现)")
     if args.hr_confirm_empty and (
         args.tray or args.export_yaml or args.export_torrents_info or args.hr_once or args.hr_status
     ):
@@ -268,7 +277,13 @@ def main():
             return run_hr_once(load_config(args.config), args.hr_html_dir)
 
         # 出口模式不持锁(只读, 可与正常实例并发); 正常 run 模式持锁
-        manager = QbManager(args.config, no_lock=bool(args.export_yaml or args.export_torrents_info))
+        # --hr-discovery-port: dev.run 注入测试带的注入面(S5/P1 CLI 覆盖路线), 落点在
+        # QbManager 构造期(_apply_hr_discovery_override) —— 不在此预载配置, 装载仍归 QbManager
+        manager = QbManager(
+            args.config,
+            no_lock=bool(args.export_yaml or args.export_torrents_info),
+            hr_discovery_port_override=args.hr_discovery_port,
+        )
 
         if args.export_yaml:
             return 0 if export_yaml(manager, args) else 1

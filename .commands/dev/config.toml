@@ -16,10 +16,10 @@ when    = "起假 qBittorrent WebUI 客户端做仿真（--self-test 自检）"
 note    = "同样前台长跑；参数很多，先 --help"
 
 [tasks."dev.run"]
-run     = ["uv run python src/auto-qb.py <args>"]
+run     = ["uv run python scripts/dev_run.py <args>"]
 timeout = 3600
 when    = "真机跑主程序（<args> 先给 config.yml 与 --dry-run）"
-note    = "需真实 qBittorrent; 一律先 --dry-run 观察, 确认无误再去掉"
+note    = "需真实 qBittorrent; 一律先 --dry-run 观察, 确认无误再去掉。HR 发现口默认注入测试带 28788(scripts/dev_run.py 包装经 --hr-discovery-port CLI 覆盖, 零 config 侵入 —— 配置文件一字不写); 显式豁免: <args> 里加 --hr-prod-discovery, 发现口回到配置原值(生产带) —— 真机验证生产带发现行为时用, 是「故意的」豁免非遗漏(计划 26-11-10-0515 S5/§05 P1)"
 
 [tasks."dev.fmt"]
 run     = ["uv run yapf -i <args>"]

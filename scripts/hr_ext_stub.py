@@ -8,7 +8,8 @@
 GET /api/hr/tasks 恒回空任务清单(无任务 = 取数通道的正常稳态), /api/hr/refresh 恒回受理。
 
 协议形态与真后端同源(路径/鉴权头/字段名见守阵 test_protocol_matches_backend):
-- 发现端点 127.0.0.1:18788(与扩展默认发现地址一致, 同机零配置):
+- 发现端点 127.0.0.1:28788(测试带默认, 计划 26-11-10-0515 装置三: 工具链起的一律测试带,
+  生产带 18788-18795 结构上留给生产实例; 真机验证生产带发现行为时显式 --discovery-port 18788):
   GET  /api/hr/discover      -> {"instances": [{id, name, endpoint, token}], "server_time"}
 - 数据端点(两个 OS 随机空闲端口, 发现应答里带回):
   GET  /api/hr/tasks         -> 200 {"tasks": [], "next_poll_s": 60} / 401 {"error": ...} / down=断连
@@ -21,10 +22,10 @@ GET /api/hr/tasks 恒回空任务清单(无任务 = 取数通道的正常稳态)
 
 用法:
     uv run python scripts/hr_ext_stub.py
-    curl http://127.0.0.1:18788/control
-    curl -X POST http://127.0.0.1:18788/control -H "Content-Type: application/json" ^
+    curl http://127.0.0.1:28788/control
+    curl -X POST http://127.0.0.1:28788/control -H "Content-Type: application/json" ^
          -d "{\"port\": <数据端口>, \"mode\": \"down\"}"     # Git Bash 里引号转义同 bash
-停止: Ctrl+C。端口被占会一行报错并退出(可用 scripts/port_kill.py -- 18788 清理; 非 python 监听须加 --yes, 见 AGENTS.md「进程安全」节)。
+停止: Ctrl+C。端口被占会一行报错并退出(可用 scripts/port_kill.py -- 28788 清理; 非 python 监听须加 --yes, 见 AGENTS.md「进程安全」节)。
 """
 from __future__ import annotations
 
@@ -194,7 +195,12 @@ def _serve(server: ThreadingHTTPServer) -> None:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="HR 扩展选项页验收桩服务(dev-only)")
-    ap.add_argument("--discovery-port", type=int, default=18788, help="发现端点端口(默认 18788, 与扩展默认发现地址一致)")
+    ap.add_argument(
+        "--discovery-port",
+        type=int,
+        default=28788,
+        help="发现端点端口(默认 28788 = 测试带; 真机验证生产带发现行为时显式传 --discovery-port 18788)",
+    )
     args = ap.parse_args()
 
     servers = []
@@ -222,7 +228,7 @@ def main() -> int:
         t.start()
 
     print("=" * 72)
-    print(f"[stub] 发现端点: http://127.0.0.1:{args.discovery_port}  (扩展「发现地址」默认即此, 点「立即发现」)")
+    print(f"[stub] 发现端点: http://127.0.0.1:{args.discovery_port}  (测试扩展「发现地址」填此值, 点「立即发现」)")
     print(f"[stub] 实例 A(正常/绿): http://127.0.0.1:{ports[0]}  token={TOKEN_A}  mode=ok")
     print(f"[stub] 实例 B(401/红):  http://127.0.0.1:{ports[1]}  token={TOKEN_B}  mode=401")
     print("[stub] 控制面: GET  http://127.0.0.1:%d/control 看状态" % args.discovery_port)

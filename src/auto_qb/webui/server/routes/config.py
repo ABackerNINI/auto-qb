@@ -151,7 +151,12 @@ def build_router(ctx: WebContext) -> APIRouter:
             raise HTTPException(status_code=400, detail="tree 必须是对象")
         unmask_tree(tree, read_tree(manager.config_path))
         try:
-            result = write_tree(manager.config_path, tree, manager.config, _config_backup_path(manager))
+            # diff 基准取磁盘装载值而非 manager.config(评审 major 2026-11-11): 注入态
+            # (dev.run --hr-discovery-port)下 manager.config 携带覆盖值, 拿它当基准会把
+            # 用户没做过的 hr_check 变更算进保存回执(changes 幻影); 磁盘值才是「用户改了什么」
+            result = write_tree(
+                manager.config_path, tree, load_config(manager.config_path), _config_backup_path(manager)
+            )
         except (ConfigError, ValueError) as e:
             raise HTTPException(status_code=400, detail=str(e))
 
@@ -171,6 +176,7 @@ def build_router(ctx: WebContext) -> APIRouter:
         与 PUT 同口径: 先还原掩码哨兵, 否则预览里会显示一串占位符(与实际写入结果不符)。
         """
         from ....config.errors import ConfigError
+        from ....config.loaders import load_config
         from ....config.writer import preview_tree, read_tree, unmask_tree
 
         tree = (body or {}).get("tree")
@@ -178,7 +184,8 @@ def build_router(ctx: WebContext) -> APIRouter:
             raise HTTPException(status_code=400, detail="tree 必须是对象")
         unmask_tree(tree, read_tree(manager.config_path))
         try:
-            text = preview_tree(manager.config_path, tree, manager.config)
+            # diff 基准同保存路由: 磁盘装载值, 不带运行时注入(注释见 PUT /api/config)
+            text = preview_tree(manager.config_path, tree, load_config(manager.config_path))
         except (ConfigError, ValueError) as e:
             raise HTTPException(status_code=400, detail=str(e))
         return {"yaml": text}

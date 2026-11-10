@@ -75,7 +75,7 @@ def test_main_normal_mode():
             mock.patch("auto_qb.cli.export_yaml_template") as m_exp:
         from auto_qb.cli import main
         main()
-    m_qb.assert_called_once_with("config.yml", no_lock=False)
+    m_qb.assert_called_once_with("config.yml", no_lock=False, hr_discovery_port_override=None)
     manager.run.assert_called_once_with(True)
     m_exp.assert_not_called()
 
@@ -148,7 +148,7 @@ def test_main_default_config_path():
             mock.patch("auto_qb.cli.QbManager", return_value=manager) as m_qb:
         from auto_qb.cli import main
         main()
-    m_qb.assert_called_once_with(DEFAULT_CONFIG_FILE, no_lock=False)
+    m_qb.assert_called_once_with(DEFAULT_CONFIG_FILE, no_lock=False, hr_discovery_port_override=None)
 
 
 def test_main_normal_mode_keyboard_interrupt():
@@ -159,7 +159,7 @@ def test_main_normal_mode_keyboard_interrupt():
             mock.patch("auto_qb.cli.QbManager", return_value=manager) as m_qb:
         from auto_qb.cli import main
         main()  # 不应抛出 KeyboardInterrupt
-    m_qb.assert_called_once_with("config.yml", no_lock=False)
+    m_qb.assert_called_once_with("config.yml", no_lock=False, hr_discovery_port_override=None)
     manager.run.assert_called_once_with(False)
 
 
