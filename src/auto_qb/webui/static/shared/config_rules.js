@@ -715,6 +715,14 @@ window.CONFIG_RULES = {
  * 后端校验拒绝, 前端不吞不装)。 */
 window.AQ_COND_NODE_COMPONENT = {
   name: "aq-cond-node",
+  /* inject/provide 不是可选项(traffic_card.js 头注同款判据): 全局 mixin(CONFIG_EDITOR) 给
+   * **每个**组件都挂了 provide(){ce:this}, 本组件不显式透传的话, 叶子里的 <hub-field> 注入到的
+   * ce 就是本组件实例(mixin data 新建的 cfg 副本, tree=null) —— 表现为叶子字段只显默认值、
+   * 「＋ 添加」/「?」点着没反应(写入/弹层都落在坏副本上, 2026-11-11 用户报障复现实锤)。 */
+  inject: ["ce"],
+  provide() {
+    return { ce: this.ce };
+  },
   props: {
     path: { type: Array, required: true },
     depth: { type: Number, default: 1 },
@@ -761,6 +769,11 @@ window.AQ_COND_NODE_COMPONENT = {
  * 与顶层动作卡同构(spec 字段 + on_error 控件), 块内不再提供 choose 入口(编排块一层)。 */
 window.AQ_CHOOSE_BLOCK_COMPONENT = {
   name: "aq-choose-block",
+  /* ce 透传同 aq-cond-node(then/default 里也嵌 hub-field, 不透传同样坏副本) */
+  inject: ["ce"],
+  provide() {
+    return { ce: this.ce };
+  },
   props: {
     groupKey: { type: String, required: true },
     ruleName: { type: String, required: true },

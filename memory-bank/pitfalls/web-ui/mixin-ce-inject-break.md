@@ -1,7 +1,7 @@
 # Vue 全局 mixin 给每个组件 provide ce: 中间层组件缺透传, 插槽内注入链静默断裂
 
 > 摘要: 全局 mixin(CONFIG_EDITOR)给**每个**组件都挂 `provide(){ce:this}` + 空 cfg 树 —— 把根模板段头抽成中间层组件时, 若它不把注入到的 ce 原样透传, 插槽里的 hub-field 会注入到**该组件实例**: 字段恒显 schema 默认值还带「默认」徽标、拨动不脏树、「保存并应用」永不出现、磁盘不动(重启无效), 而与走 `$root` 的同源读数自相矛盾, 全程零报错。修法 = 中间层组件补 `inject:["ce"]` + `provide(){ce:this.ce}`(范式样本 aq-traffic-card / CE_FIELD_BASE); 守阵必须钉**非缺省态**与写路径往返 —— 默认态断言与断裂回落值同形, 恒真。
-> 触发: Vue provide/inject, 全局 mixin, CONFIG_EDITOR, ce 透传, 插槽注入断裂, aq-fold, hub-field, 开关不显示磁盘值, 默认徽标, 设置页开关无效, 保存并应用不出现, 改配置重启无效, 组件插槽内容注入
+> 触发: Vue provide/inject, 全局 mixin, CONFIG_EDITOR, ce 透传, 插槽注入断裂, aq-fold, hub-field, 开关不显示磁盘值, 默认徽标, 设置页开关无效, 保存并应用不出现, 改配置重启无效, 组件插槽内容注入, 宿主组件自身模板, aq-cond-node, aq-choose-block, 规则页添加条件无反应, 说明浮窗打不开
 
 ### 把根模板段头抽成中间层组件: 插槽里的 provide 消费者改注入到它, 配置编辑器读写全落空还不报错
 
@@ -9,4 +9,4 @@
 - **判别**: 三重签名, 任一命中即中 —— ① **读失真**: 字段恒显 schema 默认值(磁盘 `traffic_source.enabled="false"` 时开关显「启用」)且带「默认」徽标(`cfgIsDefault` 在空树上恒真); ② **写落空**: 拨动不脏树(`cfgDirty` 在空树上恒 false)、「保存并应用」永不出现、磁盘不动(重启无效), 单次拨动还会在 `cfgSetPath` 的 `tree=null` 上抛 TypeError(被 Vue 事件处理器吞成 console.error); ③ **自相矛盾**: 走 `$root.xxx()` 的同源读数是对的(卡头摘要「来源已关闭」), 开关却说「启用」。浏览器级实证: 组件树遍历(subTree/children/slot 递归)看插槽内 hub-field 注入到的 `ce_name === "aq-fold"`; Vue 3 多根片段组件不渲染宿主标签, 选择器取不到, 只能走 `_vnode.component.proxy`。已排除假设: 版本闸门 / 陈旧标签页 / 后端 GET 造假(生产日志里 JSON 确实是 false)。
 - **处置**: 中间层组件补 `inject:["ce"]` + `provide(){ return { ce: this.ce }; }`(Vue 选项初始化 inject 先于 provide, 此时 `this.ce` 已就绪) —— 范式样本在仓库里有两份: `aq-traffic-card`(traffic_card.js:15)与 `CE_FIELD_BASE`(config_editor.js:1171), 照抄即可。全局兜底(`CONFIG_EDITOR.provide` 改 `{ce: this.ce || this}`)对二件皆缺的组件无效且触及每个组件, 不采用。新增任何「默认插槽里放 hub-field / 消费 ce」的组件时, 透传是**必填项**而不是可选项。
 - **守阵**: `e2e/traffic-source-switch.spec.mjs`(issue 26-10-22-0435 的回归栅): route 桩把磁盘值注入成非缺省态, 断言流量卡开关显关闭 + 无「默认」徽标 + 与摘要同判 + 刷新后仍关闭(读路径), 拨动 → 脏标记 → PUT 载荷(写路径), 规则卡 meta 段第二现场; **摘掉透传后 6 例全红**。教训: views.spec「三区同屏」那条只断言「启用勾选反映 schema 缺省 true」—— 与断裂后的回落值**同形**, 恒真, 这类默认态断言对注入断裂零鉴别力; 判据必须钉**非缺省态**与**写路径往返**。
-- **复发**: 0 (复踩时在此行追加「+N (日期): 为什么没命中」, 无复发可删本行)
+- **复发**: 1 (2026-11-11): W3-A/W3-B(plan 26-11-01-0106)新增 aq-cond-node / aq-choose-block 时没把本条当必填项照做 —— 两个组件自身模板(非插槽内容)里嵌 hub-field, 同款截获: 条件叶子「＋ 添加」抛 TypeError 被吞(按钮"无反应")、「?」浮窗开不出、叶子编辑写坏副本全丢, 用户报障才暴露。为什么没命中: 坑档触发段写的是「插槽里的 provide 消费者」, 阅读时容易把"宿主组件**自身模板**里嵌 hub-field"当成另一种形态漏掉 —— 机理完全相同(全局 mixin 给每个组件挂 provide, 任何不透传的中间层组件都截获), 判据应读作「**任何** hub-field / ce 消费者的非根直系祖先组件都必须透传」。回归栅: `e2e/rules-cond-editor.spec.mjs`(写路径往返 + ? 浮窗 + choose 第二现场; aq-cond-node 与 aq-choose-block 各有独立的 ce 介面写路径步骤 —— 下拉选择/分支创建走 $root 不经过 ce 链, 对注入断裂零鉴别力, 守阵步骤必须落在 listAdd/hubAsk 这类 this.ce 调用上; 两处透传分别单摘验证各红在对应现场)。
