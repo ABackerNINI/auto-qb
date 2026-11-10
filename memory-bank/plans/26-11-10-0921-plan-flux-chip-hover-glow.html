@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>WEBUI 三种筛选 chip hover 辉光统一（仅 flux）</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="flux-chip-hover-glow">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-10-0921">
+<meta name="doc-updated" content="26-11-10-0921">
+<meta name="doc-refs" content="">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: flux-chip-hover-glow</div>
+<h1>WEBUI 三种筛选 chip hover 辉光统一（仅 flux）</h1>
+<p class="lede">本篇只回答: 在<strong>仅改 flux 皮肤</strong>的前提下, 怎么让三种筛选 chip 的 hover 辉光四边闭合且彼此一致, 同时不推翻 R3 对站点 chip 切角的「逐字恢复」拍板。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-10-0921 · <b>doc-updated</b> 26-11-10-0921 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 2026-11-10 grilling 会话(用户指令「WEBUI 分类/标签/站点鼠标 hover 辉光没有统一, 部分辉光仅显示一侧或两侧, 注意部分皮肤切角与圆角」) → Q1–Q5 / N1–N5 / F1–F4 三轮拍板收敛; Q5 由用户改写为「辉光是 flux 特有的, 仅修改 flux」。全部定案见 §06。
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<p>用户反馈「分类 / 标签 / 站点鼠标 hover 辉光没有统一, 部分辉光仅显示一侧或两侧」。经只读核查, 这三处就是表格单元格里的三种可点击筛选 chip <code>.cat-chip</code> / <code>.tag-chip</code> / <code>.site-chip</code>(模板 <code>shared/tpl/xtpl.html:262-290</code>、<code>xtpl-cells.html:22-30</code>)。辉光只在 flux 皮肤存在, 因此「统一」= <strong>flux 内部三种 chip 之间的统一</strong>, 不是跨皮肤统一。</p>
+<p><strong>算成</strong>: flux + 有 fx preset + 非选中态下, 三种 chip hover 时都呈现同一条四层 <code>--fx-glow-stack</code> 辉光, 四边闭合、角部不缺光; 站点 chip 的 3px 微切角视觉逐字保留; 三旧皮肤与顶栏筛选面板零变化。</p>
+<h3>设计底线(不变量)</h3>
+<table>
+  <tr><th>编号</th><th>不变量</th><th>依据 / 判据</th></tr>
+  <tr><td>I1</td><td>仅改 flux。atlas / prism / console 一行不碰, 不破 D14 隔离, 不改四皮肤共用模板</td><td>用户 Q5 改写; <code>flux/index.html:27-34</code> 注释「三旧皮肤零引用 = D14 隔离拍板」; <code>test_frontend_fx_wiring</code> 反向钉 <code>test_webui_static_skins_skin.py:548-557</code></td></tr>
+  <tr><td>I2</td><td>零新增 CSS 令牌, 只复用 <code>--fx-glow-stack</code> 与既有变量</td><td>N4; 新 <code>--xxx:</code> 写进 <code>flux/style.css</code> 会撞 <code>test_frontend_skin_css_token_parity</code>(<code>:412/:424</code>)</td></tr>
+  <tr><td>I3</td><td>辉光配方单点不动: 消费方一律取整组 <code>var(--fx-glow-stack)</code>, 不得拆层重拼</td><td>Q2; <code>shared/fx/fx.css:127-129, 145-154</code>; 任务档案 <code>memory-bank/tasks/26-11-04-webui-fx-glow.md:21</code></td></tr>
+  <tr><td>I4</td><td>站点 chip 的 <code>clip-path</code> 3px 切角视觉逐字保留, 不推翻 R3 回退裁决</td><td>N3; 计划 <code>26-10-31-2316-plan-webui-fx-skin.html:518/:520/:523</code></td></tr>
+  <tr><td>I5</td><td>语义单边标记原样保留: <code>.f-on</code> 底边 2px 线、HR 左侧 2px 竖线、<code>sa-no-conf</code> 底边虚线</td><td>Q2 / F2; <code>flux/css/components.css:346-349, 380-383</code>、<code>flux/css/views.css:94-95</code></td></tr>
+  <tr><td>I6</td><td>现有静态守阵与 e2e 不得撞红(尤其 700 行上限、chip 样式键集相等)</td><td>AGENTS.md 生产口径; 明细见 §07</td></tr>
+</table>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+<h3>根因: 切角裁掉外发光, 且只有站点 chip 中招</h3>
+<p>flux 的 <code>flux/css/fx-mount.css:282-286</code> 给三种 chip 统一挂了 <code>box-shadow: var(--fx-glow-stack)</code>, 但 <code>flux/css/components.css:330-333</code> 的 <code>.site-chip</code> 在<strong>控件层</strong>用了 <code>clip-path: polygon(3px 0, ...)</code>。项目自己的硬知识已写明二者互斥:</p>
+<pre><code>shared/console_hub.css:18-20
+  1. **切角与发光是死敌**: clip-path 会把 box-shadow 与 filter 的外发光整圈裁掉,
+     只剩 drop-shadow 一条路, 而它没有 spread 参数 ⇒ 控件层一律方角, 切角只留大面</code></pre>
+<p>于是同一条辉光规则里, <code>site-chip</code> 被自身裁剪(观感即「只显示一侧或两侧」), 而 <code>tag-chip</code> / <code>cat-chip</code> 无 clip-path → 四边完整。<code>components.css:373-374</code> 的注释也自认「本皮肤 site-chip 有 clip-path 切角, ::after 一并被它裁」——选中态底线的两端正是这样被切掉的。</p>
+<h3>覆盖率: 「辉光单点」名不副实</h3>
+<table>
+  <tr><th>元素 / 状态</th><th>flux 现状</th><th>证据</th></tr>
+  <tr><td>三种 chip hover(非选中)</td><td>四层 stack 辉光; 站点 chip 被 clip-path 裁</td><td><code>fx-mount.css:276-286</code> + <code>components.css:332</code></td></tr>
+  <tr><td>三种 chip 静息 / 基础 hover</td><td>仅有 <code>filter: brightness(1.12)</code>, 无辉光</td><td><code>components.css:376-379</code></td></tr>
+  <tr><td><code>.f-on</code> 选中态</td><td>被 <code>:hover:not(.f-on)</code> 排除, 只剩底边 2px 线</td><td><code>fx-mount.css:282-284</code>、<code>components.css:380-383</code></td></tr>
+  <tr><td>三旧皮肤 chip hover</td><td>无辉光(对 <code>shared/fx/</code> 零引用)</td><td><code>flux/index.html:27-34</code></td></tr>
+  <tr><td>顶栏 <code>.filter-btn:hover</code></td><td>另一套独立配方 <code>0 0 16px -8px</code>, 仅 console / flux 有</td><td><code>flux/css/components.css:111-112</code></td></tr>
+  <tr><td>flux 三档 preset</td><td>glass(默认) / neon 开辉光, crisp 故意全关</td><td><code>fx-presets.css:27/101/186</code></td></tr>
+</table>
+<p>即: <strong>配方公式是单点, 但「哪些元素 / 哪些皮肤 / 哪些状态有辉光」从不是单点</strong>, 这才是「没有统一」的制度性根因, 不是某一行 CSS 写错。另有一套负 spread 柔光族(全库 <code>0 0 16px -8px</code> 14 处落点)与 stack 并存, 属另一套设计语言, 本次不收敛。</p>
+<h3>规范层漂移与验收缺口(只记录, 本轮不入池)</h3>
+<ul>
+  <li>计划 <code>26-10-31-2316...:405/:489</code> 的「chip 小面积取半量 / 降档负 spread 柔光」是 S4/R2 年代层, 已被 26-11-04 四轮修「chip 改 stack」推翻, <strong>计划文件未回写</strong>; 与 <code>conventions/doc-forms.md:37</code>「计划改版同文件内写变更记录 + 抬 doc-updated」有差距。</li>
+  <li><code>console_hub.css:17-30</code> 三条硬知识(切角裁发光 / 负 spread 机理与 76%·18% 实测 / 派生变量层级)只以行内注释存在, <code>memory-bank/</code> 全库无归档; 坑档 <code>clip-path-clips-fixed.md</code> 记的是另一症状(改写 fixed 后代包含块)。</li>
+  <li><strong>无截图 diff 门、无视觉回归、无 <code>toHaveScreenshot</code></strong>(报告 <code>26-10-14-0136...:141</code>); e2e 默认 <code>SKINS = ['prism','atlas']</code>(<code>e2e/harness.mjs:102</code>), flux 只在 <code>SKINS_ALL</code>(:106); 静态守阵与 e2e 均<strong>无任何辉光断言</strong>。这是纯视觉问题长期漏过门禁的原因。</li>
+  <li><strong>三种 chip 目前键盘不可聚焦</strong>: 模板里是纯 <code>&lt;span&gt;</code> + <code>@click.stop</code>, 无 <code>tabindex</code> / <code>role="button"</code>(<code>xtpl-cells.html:23-25, 72, 82, 165, 171</code>、<code>xtpl.html:262-290</code>)。对照顶栏筛选面板项有 <code>role="button" tabindex="0"</code>(<code>topbar.html:242</code>)。因此 D4 拍板的「<code>focus-visible</code> 共用同一套辉光」在当前 DOM 下<strong>不会命中</strong>, 而补 <code>tabindex</code> 需改四皮肤共用模板 = 破 I1。处置见 W1-4 / O5 / R13。</li>
+</ul>
+
+<h2><span class="no">§03</span>方案总览</h2>
+<p><strong>主线(F1)</strong>: 形状与辉光<strong>分层</strong>。把 3px 切角从 <code>.site-chip</code> 本体挪到底层绘制层(空闲的 <code>::before</code>), 本体不再持有裁剪, 于是 <code>fx-mount.css:285</code> 的 <code>box-shadow</code> 四边完整; 切角视觉逐字保留, 三种 chip 继续消费同一条 stack, 不引入 <code>drop-shadow</code>(无 spread、无法复刻四层硬芯, 会重演 26-11-04 治好的「雾蒙蒙」), 不改共用模板。</p>
+<h3>落点决策(由本轮只读核查新增, 属于实施硬约束)</h3>
+<table>
+  <tr><th>候选文件</th><th>判定</th><th>理由</th></tr>
+  <tr><td><code>flux/css/components.css</code></td><td class="bad">禁止净增行</td><td>实测恰 700 行, <code>test_webui_static_skins_skin.py:192-195</code> 判据 <code>&gt; 700</code> 即红 —— 新增任何一行都会撞断</td></tr>
+  <tr><td><code>flux/css/views.css</code></td><td class="bad">不改规则体</td><td><code>test_webui_static_skins_widget.py:453-461</code> 钉 <code>sa-no-conf</code> 含 dashed、<code>search-hit</code> 含 inset / <code>--accent-line</code> 且不含 <code>--accent-soft</code></td></tr>
+  <tr><td><code>shared/tpl/*.html</code></td><td class="bad">禁改</td><td>四皮肤共用模板, 违反 I1</td></tr>
+  <tr><td><code>flux/css/fx-mount.css</code></td><td class="good">唯一落点</td><td>391 行有余量; flux 链尾(<code>flux/index.html:34</code>)级联最高; 选择器带 <code>html[data-fx-preset]</code> 前缀, 不被 <code>test_webui_static_skins_widget.py:431-437</code> 的键集扫描收集; <code>test_frontend_fx_wiring</code> 不限制其 chip 规则</td></tr>
+</table>
+<h3>分期</h3>
+<table>
+  <tr><th>波次</th><th>内容</th><th>出口判据</th></tr>
+  <tr><td>W1</td><td>分层 CSS + 语义色/边线搬迁 + <code>focus-visible</code> 样式预留(仅 <code>fx-mount.css</code>, W1-1~W1-4)</td><td>四皮肤静态守阵全绿; 真浏览器目检三种 chip hover 四边闭合、切角无损</td></tr>
+  <tr><td>W2</td><td>补静态守阵 + flux 显式 e2e 计算值断言</td><td>新守阵红验通过; e2e <code>@fast</code> 与全量绿</td></tr>
+  <tr><td>W3</td><td>收尾: 评审 / 回写 / 全量基线切片 / 新坑档</td><td>按 AGENTS.md 收尾 DoD</td></tr>
+</table>
+<p class="aside">本计划只授权「出计划」(F4)。W1–W3 属实施轮, 须用户另行显式下令; 立档(<code>kb.new task</code>)、入池 issue、提交推送均不在本轮授权范围。</p>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+<h3>W1-1 · 形状分层(仅 <code>.site-chip</code>)</h3>
+<p>在 <code>flux/css/fx-mount.css</code> 新增带 <code>html[data-fx-preset]</code> 前缀的规则; <code>tag-chip</code> / <code>cat-chip</code> 形状不动:</p>
+<pre><code>html[data-fx-preset] .site-chip {
+  position: relative;            /* 基线 components.css:330 无定位包含块, 只有 .f-on 有 */
+  background: transparent;       /* 本体不露方角, 底色交给 ::before */
+  clip-path: none;               /* 覆盖 components.css:332, 让本体 box-shadow 不被裁 */
+}
+html[data-fx-preset] .site-chip::before {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  clip-path: polygon(3px 0, 100% 0, 100% calc(100% - 3px),
+                     calc(100% - 3px) 100%, 0 100%, 0 3px);  /* 逐字搬运 components.css:332 */
+  background: var(--surface-2);
+}</code></pre>
+<h3>W1-2 · 语义柔底传递(零新增令牌, I2)</h3>
+<p><strong>不能用 <code>currentColor</code> 或 <code>background: inherit</code></strong>: 柔底是 15% alpha(<code>flux/style.css:43-50</code> <code>--green-soft: rgba(63,214,153,.15)</code>), 字色是实色; 而本体已改 <code>transparent</code>, inherit 拿到的也是 transparent。全库无 <code>background: inherit</code> 先例; 现成模式是 <code>components.css:549-555</code> 的 <code>.ce-note.warn::before</code> 每状态各写一份 background。</p>
+<p>故按状态各写一条 <code>::before</code> 背景, 共 8 组, <strong>顺序须与现有源顺序一致</strong>(<code>views.css:92</code> 明确「站点问题 &gt; 搜索命中 &gt; 种子状态」; <code>:82-84</code> 只讲搜索命中让出底色):</p>
+<table>
+  <tr><th>状态</th><th>柔底</th><th>来源</th></tr>
+  <tr><td>基线 / <code>seeding</code></td><td><code>--surface-2</code> / <code>--green-soft</code></td><td><code>components.css:330, 334</code></td></tr>
+  <tr><td><code>downloading</code> + <code>checking</code></td><td><code>--st-soft, --blue-soft</code></td><td><code>:335</code></td></tr>
+  <tr><td><code>paused</code> + <code>other</code> / <code>error</code></td><td><code>--paused-soft</code>(transparent) / <code>--error-soft</code></td><td><code>:336-338</code></td></tr>
+  <tr><td><code>sa-no-conf</code> / <code>sa-tracker</code></td><td><code>--warn-soft</code> / <code>--error-soft</code></td><td><code>views.css:94-96</code></td></tr>
+  <tr><td><code>search-hit</code></td><td><code>transparent</code></td><td><code>views.css:85-86</code></td></tr>
+  <tr><td>G8 行状态(<code>.group-row.s-*</code> 等)</td><td>只染 tag / cat chip, 不涉及 site-chip</td><td><code>components.css:354-369</code></td></tr>
+</table>
+<p>所有新选择器以 <code>html[data-fx-preset]</code> 开头, 避开 <code>_selectors</code> 的 <code>startswith(".site-chip.sa-")</code> 收集, 保证 <code>test_webui_static_skins_widget.py:465-470</code> 的四皮肤键集相等仍绿。</p>
+<h3>W1-3 · 语义边线与 hover 同属性覆盖</h3>
+<ul>
+  <li><code>box-shadow</code> 是单一属性: 常态 inset 阴影(<code>components.css:337</code> paused/other、<code>views.css:86</code> search-hit、<code>components.css:347/349</code> HR 左边线)在 hover 时会被 <code>fx-mount.css:285</code> 的 stack <strong>整体替换</strong>, 这是现状而非新引入, 实施时须逐态确认可接受。</li>
+  <li>本体改 transparent 后, 画在本体上的 inset 描边与 <code>sa-no-conf</code> 的 <code>border-bottom: 1px dashed</code> 会呈方角矩形边线, 与 <code>::before</code> 的切角轮廓不完全贴合。W1 先做<strong>最小改动 + 真机目检</strong>: 若 3px 切角处方角痕迹可见, 再把这几条边线一并迁到 <code>::before</code>(同一切角绘制层, 被 clip-path 裁成切角形状)。<strong>不改 <code>views.css</code> 规则体</strong>, 以免撞静态守阵。</li>
+  <li><code>.f-on</code> 保持 <code>:hover:not(.f-on)</code> 排除(F2); 其 <code>overflow: hidden</code> 裁的是内容/后代, 不裁元素自身外阴影, 不影响本方案。</li>
+</ul>
+<h3>W1-4 · <code>:focus-visible</code> 预留(D4 的如实落地)</h3>
+<p>按 D4, 在 <code>fx-mount.css</code> 把同款辉光规则的选择器扩成 <code>:hover:not(.f-on), :focus-visible:not(.f-on)</code>, 使「hover 与键盘聚焦共用同一套辉光」在样式层成立、单点不变。<strong>但必须如实标注: 当前三种 chip 无 <code>tabindex</code>, 该分支不会命中</strong>(§02 末条)。本波<strong>不改共用模板</strong>, 因此 W1-4 是样式层的预留, 不是键盘可达性的实现。若要让 chip 真正可键盘聚焦, 需改 <code>shared/tpl/</code> = 动四皮肤 = 破 I1, 属另一件事, 见 O5。</p>
+<p class="aside">为何不直接省略: D4 是用户拍板结论, 计划不能悄悄丢掉; 但也不能假装已实现键盘可达性。写成「样式预留 + 事实注记」是唯一不扩大范围、不静默假设的落地方式。</p>
+
+<h3>W2 · 守阵与验收(F3)</h3>
+<table>
+  <tr><th>项</th><th>做法</th><th>验收判据</th></tr>
+  <tr><td>静态守阵</td><td>新增断言落在 <code>tests/test_webui_static_skins_skin.py</code>: flux 的 <code>.site-chip</code> 本体<strong>不再持有 <code>clip-path</code></strong>, 且切角 <code>polygon(3px ...)</code> 仍存在于 <code>::before</code>; 同步<strong>该测试文件</strong>头部「## 测试计划(每个测试函数一条)」清单(AGENTS.md:63 的「该文件」按此体例落点; <code>tests/_tmp_bootstrap.py</code> 是 TMPDIR 自举 helper, 头部无该清单, 勿写入)</td><td>机制红验: 把 clip-path 放回本体即红; 改坏 polygon 即红</td></tr>
+  <tr><td>e2e 计算值</td><td>新增 spec, <strong>显式用 <code>SKINS_ALL</code> 里的 flux</strong>(或单写 flux 分支), 复刻 <code>main-table-pinned-hover.spec.mjs</code> 的 <code>hoverRow</code> 骨架。<strong>主判据 = 修复前后才变化的 computed 值</strong>: <code>getComputedStyle(el).clipPath === 'none'</code>(本体不再裁剪) 且 <code>getComputedStyle(el, '::before').clipPath</code> 含 <code>polygon(3px</code>(切角在绘制层)。<code>boxShadow</code> 仅作旁证: hover 时三种 chip 非空且一致、crisp 下为空、<code>.f-on</code> 下为空 —— <strong>不得当修复判据</strong>: <code>clip-path</code> 裁剪不改 computed box-shadow, 且修复前三种 chip 已同挂 stack, 该值修复前后恒真(回滚 W1 仍绿)。按 <code>smoke.md:104-105</code> 红绿双验: 把 clip-path 放回本体 ⇒ 红, 改坏 ::before 的 polygon ⇒ 红, 恢复 ⇒ 绿</td><td><code>@fast</code> 与全量 e2e 绿 + 红绿双验留痕; 不改 <code>SKINS</code> 默认值; 四边闭合的视觉判据仍由真浏览器目检兜底(无截图 diff 门)</td></tr>
+  <tr><td>真浏览器目检</td><td>glass / neon / crisp 三档 × 三种 chip × 站点各语义色; 另测 <code>data-rowlang="wave"</code> 扫层</td><td>四边闭合、角部不缺光、切角无损、wave 扫层不把辉光染白</td></tr>
+</table>
+<h3>W3 · 收尾(实施轮)</h3>
+<p>按 AGENTS.md: 分批评审(code-review skill, <code>Review:</code> trailer) → <code>kb.wrap</code> → 达阈值立档 → 代码事实变更回写 <code>memory-bank/</code> 与根 README → <code>test.full</code> + 新基线切片 → 把「切角裁外发光」立为 <code>pitfalls/web-ui/</code> 新坑档并重跑 <code>kb.index</code>。规范漂移(§02 三条)按范围守恒另案入池, 不在 W1–W3 顺手改。</p>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p>设计树已收敛, <strong>本篇无新增待拍板项</strong>, 全部定案见 §06。以下为实施期<strong>观察项(非决策)</strong>, 由 W2 真机目检给出结论, 不改定案; O5 是实施轮的条件分支(需单独授权), 不重开本轮设计树:</p>
+<ul>
+  <li>O1: 3px 切角处是否露出方角边线 → 决定 W1-3 是否需把 inset 描边 / dashed 底边迁到 <code>::before</code>。</li>
+  <li>O2: 矩形辉光轮廓与切角 chip 形状是否协调(flux 是 radius 0 的方角语言, stack 本身是「扩方」配方) → 若明显不协调, 在 <code>::before</code> 上叠加贴合切角的补光, 仍不引入 <code>drop-shadow</code>。</li>
+  <li>O3: <code>wave</code> 扫层(<code>row_lang.css:461-470</code>, <code>z-index:3</code> 半透明白)是否把新绘层染色 → 现状本体背景同样被叠, 预期等价, 目检确认。</li>
+  <li>O4: hover 过渡 120ms 超 100ms 软约束(<code>fx-mount.css:274</code>)沿用既有「只标注」口径, 不调整。</li>
+  <li>O5: <strong>唯一可能回炉的定案</strong> —— D4 的 <code>focus-visible</code> 当前不命中(chip 无 <code>tabindex</code>)。W1-4 先做样式预留、不改模板。若实施轮用户要求键盘可达性真正生效, 需单独拍板是否放宽 I1(允许改 <code>shared/tpl/</code> 四皮肤共用模板), 或改走「另立键盘化专题」; 二者都不在本计划授权内。</li>
+</ul>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<p>2026-11-10 grilling 三轮, 用户逐项确认「按推荐」; Q5 由用户改写。D 编号为本计划内的引用键。</p>
+<table>
+  <tr><th>编号</th><th>结论</th><th>来源</th></tr>
+  <tr><td>D1</td><td>本轮只做设计拷问、零文件改动; 收敛后动作另行显式确认</td><td>Q1</td></tr>
+  <tr><td>D2</td><td>只把 hover 辉光缺失 / 被裁判为缺陷并补齐四边闭合, 形态沿用 <code>--fx-glow-stack</code>; 语义单边标记(<code>f-on</code> 底线 / HR 竖线 / 告警虚线)原样保留</td><td>Q2</td></tr>
+  <tr><td>D3</td><td>范围只锁表格单元格三种 chip; 顶栏筛选面板一律不动</td><td>Q3 / N2</td></tr>
+  <tr><td>D4</td><td><code>hover</code> + <code>focus-visible</code> 共用同一套辉光; <code>.f-on</code> / <code>active</code> / <code>disabled</code> 维持现状。<span class="wr">注: chip 当前无 tabindex, focus-visible 分支只是样式预留(W1-4 / O5 / R13), 不代表已实现键盘可达性</span></td><td>Q4 / F2</td></tr>
+  <tr><td>D5</td><td><strong>辉光是 flux 特有的 fx 效果, 仅修改 flux</strong>, 三旧皮肤一行不碰、不破 D14 隔离, 零新增令牌</td><td>Q5 用户改写 / N4</td></tr>
+  <tr><td>D6</td><td>flux 内部 14 处负 spread 柔光落点(<code>.filter-btn</code> / <code>.bt</code> / <code>.aq-tip</code> 等)一概不动, 两套语言并存</td><td>N2</td></tr>
+  <tr><td>D7</td><td>保留 <code>site-chip</code> 的 3px <code>clip-path</code> 切角(不推翻 R3「逐字恢复」), 改辉光承载方式实现四边闭合</td><td>N3 / F1</td></tr>
+  <tr><td>D8</td><td><code>crisp</code> 保留「全关辉光」破例; <code>glass</code>(默认) / <code>neon</code> 正常出辉光</td><td>N5</td></tr>
+  <tr><td>D9</td><td>切角承载 = 形状与辉光分层(<code>clip-path</code> 挪到底层绘制层), 不引入 <code>drop-shadow</code>, 不动共用模板</td><td>F1</td></tr>
+  <tr><td>D10</td><td>补 flux 显式 e2e 计算值断言 + 静态守阵钉「本体不再持有 clip-path」, 不改 <code>SKINS</code> 默认值</td><td>F3</td></tr>
+  <tr><td>D11</td><td>收敛后先出单文件 HTML 计划(dark), 实施另等显式下令</td><td>F4</td></tr>
+  <tr><td>D12</td><td>原话「注意部分皮肤切角与圆角」在仅 flux 前提下收窄: flux <code>style.css:129-131</code> 三档 radius 全 0, 圆角皮肤(atlas 999px / prism 4px)不在范围内</td><td>Q5 派生结论</td></tr>
+  <tr><td>D13</td><td>26-11-04 四轮修的现行口径为准: chip 与 <code>.bt</code> 共用同一条 stack, 四层 spread 全为正; 计划 <code>26-10-31-2316</code> 的「半量 / 负 spread 降档」是过时年代层, 不作设计依据</td><td>只读核查 + 用户「按推荐」</td></tr>
+  <tr><td>D14</td><td>知识库归档缺口(三条硬知识 / 计划未回写 / <code>clip-path</code> 裁发光未入坑档)本轮只记录, 不入池、不改文档</td><td>D1 派生</td></tr>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+  <tr><th>#</th><th>风险 / 触发条件</th><th>对策</th></tr>
+  <tr><td>R1</td><td><code>flux/css/components.css</code> 恰 700 行, 新增任一行即撞 <code>&gt;700</code> 红线</td><td>W1 全部规则落 <code>fx-mount.css</code>(391 行); 用 <code>clip-path: none</code> 覆盖而非删改 <code>components.css:332</code></td></tr>
+  <tr><td>R2</td><td>新增 <code>.site-chip.sa-*::before</code> 之类选择器被 <code>_selectors</code> 收集 → 四皮肤键集相等红</td><td>一律加 <code>html[data-fx-preset]</code> 前缀(<code>test_webui_static_skins_widget.py:431-437, 465-470</code>)</td></tr>
+  <tr><td>R3</td><td>新 <code>--xxx:</code> 写进 <code>flux/style.css</code> → 令牌名集守阵红</td><td>I2 零新增令牌; 语义色按状态各写 <code>::before</code> 背景, 变量只落在 <code>fx-mount.css</code> 规则体内(不在扫描面)</td></tr>
+  <tr><td>R4</td><td>本体 <code>background: transparent</code> 让「读本体 <code>backgroundColor</code>」的既有断言口径失效(<code>site-alerts.spec.mjs:85-88, 226-233</code>)</td><td>该 spec 只跑 <code>SKINS = ['prism','atlas']</code>, flux 不在内, 且本次只改 flux → 不受影响; 静态守阵校验的是 <code>views.css</code> 规则体文本, 不改即绿; 实施时仍跑一遍确认</td></tr>
+  <tr><td>R5</td><td>基线 <code>.site-chip</code> 无 <code>position: relative</code>, <code>::before</code> 绝对定位会脱离 chip 盒</td><td>W1-1 显式补定位包含块; 注意 <code>.f-on</code> 已有 <code>position: relative</code>, 不要重复声明造成冲突</td></tr>
+  <tr><td>R6</td><td>柔底 15% alpha ≠ 字色实色, <code>currentColor</code> / <code>inherit</code> 都不能等价复刻</td><td>W1-2 八组状态各写一份; 逐字沿用现有变量与源顺序, 真机比对 hover 前后底色</td></tr>
+  <tr><td>R7</td><td><code>box-shadow</code> 同属性覆盖: hover stack 会整体替换常态 inset 描边</td><td>现状如此, 非新引入; W1-3 逐态确认, 必要时把常态描边迁到 <code>::before</code> 并保持 clip-path 切角</td></tr>
+  <tr><td>R8</td><td><code>wave</code> 扫层 <code>z-index:3</code> 半透明白铺满整行, 盖在行内后代之上</td><td>现状本体背景同样被叠; O3 真机目检, 不新建 z-index 层级</td></tr>
+  <tr><td>R9</td><td>全库无 <code>::before + clip-path</code> 先例, 属首次; 项目硬知识只写过「本体切角裁发光」的逆命题未验证</td><td>先做最小改动 + 真浏览器 <code>getComputedStyle</code> 与像素目检双验; W2 补守阵钉住形态</td></tr>
+  <tr><td>R10</td><td>flux 不在 e2e 默认 <code>SKINS</code>, 无截图 diff 门 → 纯视觉回归无自动兜底</td><td>D10 新增 flux 显式计算值断言; 不引入截图比对门(超出本次范围), 保留人工目检环节</td></tr>
+  <tr><td>R11</td><td>改动 <code>views.css</code> 规则体触发 dashed / inset 静态断言; 改 link 顺序触发 <code>test_frontend_fx_wiring</code></td><td>两者均列为禁改面(§03 落点表); 只覆盖、不改写、不加 link</td></tr>
+  <tr><td>R12</td><td>计划 <code>26-10-31-2316</code> 未回写 26-11-04 变更, 实施者若按旧计划条目做设计会与现行代码冲突</td><td>D13 明确现行口径; 规范漂移按 D14 另案入池, 不在 W1–W3 顺手改</td></tr>
+  <tr><td>R13</td><td>D4 的 <code>focus-visible</code> 共用辉光在纯 <code>&lt;span&gt;</code> chip 上不命中(无 tabindex); 若为了让它生效去改共用模板, 会破 I1「仅改 flux」并触发四皮肤模板守阵</td><td>W1-4 做样式预留 + 显式事实注记; 键盘化另立件, 实施轮单独拍板(O5)。<strong>禁止</strong>在本波顺手给 chip 加 <code>tabindex</code></td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-10-0921</span> 初版: 2026-11-10 grilling 三轮(Q1–Q5 / N1–N5 / F1–F4)拍板收敛后立项; 收录只读核查所得的根因(控件层 clip-path 裁外发光)、实施硬约束(components.css 700 行红线 / chip 键集守阵 / 零新增令牌 / fx-mount.css 唯一落点)、W1–W3 分期与 13 条风险; 另如实标注 D4 的 focus-visible 因 chip 无 tabindex 当前不命中, 只做样式预留。本轮仅产出计划, 零生产代码改动。初版经一轮分批评审(2 派), 3 条发现当场修: 测试计划清单落点(<code>_tmp_bootstrap.py</code> 无该段)、<code>views.css</code> 底色优先级行号、W2 e2e 恒真断言改为主判据 <code>clipPath</code> + 红绿双验。</li>
+</ul>
+
+</div>
+</body>
+</html>
