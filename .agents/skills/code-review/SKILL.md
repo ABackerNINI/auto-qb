@@ -41,7 +41,7 @@ user-invocable: true
 
 ## ③ 评审包
 
-`commands run review.pack --base <上一条 Review: 提交>` 生成机械五件: 基线 hash / diff 统计(**含 400 行分档提示**)/ 改动文件清单 / 红线命中预警 / **基哈希** —— 整批(锚点→当前树)过滤 diff 的 12 位哈希, 过滤实现与行数实算共用同一套排除面(生成物/记账类不计入, 所以末轮 pack 后补写记账/生成物不动哈希, 不误红); trailer 的 `· 基` 引**末轮 pack** 输出的值(⑦)。
+`commands run review.pack --base <上一条 Review: 提交>` 生成机械五件: 基线 hash / **评审规模与分档提示**(行数 = 闸门实算口径 —— 锚点核对/排除面/逐笔实算与提交闸门共用 `review_content` 单点, trailer 的 `<N> 行` 与 `· 基` 都以它为准; 记账类/生成物/二进制不计行; `--base` ≠ 闸门锚点时打可见警告, 改用锚点重跑)/ 改动文件清单(可评面; 记账/生成物列进排除面行, 不入清单)/ 红线命中预警 / **基哈希** —— 整批(锚点→当前树)过滤 diff 的 12 位哈希(生成物/记账类不计入, 所以末轮 pack 后补写记账/生成物不动哈希, 不误红); trailer 的 `· 基` 引**末轮 pack** 输出的值(⑦)。
 
 - **pack 前置(齐平)**: 生成评审包前主会话跑 `commands run my-commit-flow.sync`, 结果行贴进评审记录; sync 失败按失败行自带出路解决, 确实解决不了(离线)才允许声明**未齐平态派遣**(reviewer 侧由 ④ 三钉的「无法核实」分支兜住)。
 - **本地分支态(探针判定, 计划 `26-11-10-0342` D1/D2)**: pack 前主会话先跑探针 `git ls-remote origin <当前分支>` —— 命令成功且输出有该分支 ref = **远端分支态**, 照上行走 sync 齐平; 命令成功且输出无该分支 ref = **本地分支态**(分支无远端对应): 跳过前置 sync, 评审记录记「本地分支态」行(替代齐平行); **探针命令本身失败(网络错误/超时) = 离线**, 不判分支态, 照走 sync(失败按上一行既有未齐平逃生口申报)。判定自证式, 不依赖 agent 声明, 三态口径与 ④ 钉3 探针一致。本地态评审对象 = 分支自身 diff 锚点链, 远端推进不进评审上下文(组合树窗口由合流终审收口, 见铁律段); trailer `· 齐平` 字段缺省, `· 基`/`检 P/T`/锚点 walk 照旧。
@@ -101,7 +101,7 @@ user-invocable: true
 11. 保守默认: 高风险动作默认关, 只对显式配置范围生效 → 法则 2。
 12. 红线: diff 未触碰 `config.yml` / `auto-qb-data/` → AGENTS.md 红线节 + `pitfalls/ops/prod-files.md`。
 13. 范围守恒: diff 无计划外文件与"顺手改" → 法则 6 + scope-guard skill。
-14. 非ASCII图形符号: 代码/配置无 emoji 与图形符号 → `conventions/code-style.md`(**需评审真查**: 提交闸门未覆盖源码符号)。
+14. 非ASCII图形符号: 代码/配置无 emoji 与图形符号 → `conventions/code-style.md`(提交闸门 test.quick 已拦表 A 新增 —— 冻结表纯只拦新增, `tests/test_ascii_symbol_guard.py`; 评审查语义面: 豁免理由/冻结递减/表 B 边界)。
 15. 测试基建: 新增测试同步 docstring"测试计划"清单; TMPDIR 约束未破坏 → AGENTS.md 测试节 + `pitfalls/testing/tmpdir.md`。
 16. 真机准入: 完工功能落入真机轨两类准入 → 真机验收已做或理由已明示 → `testing/real-machine.md` §00/§06。
 

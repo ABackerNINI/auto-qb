@@ -13,13 +13,13 @@
 - LaneManifestTest    提交在库的 manifest.json 结构守阵: coverage.ok=true + 批次 id 唯一且前缀==route + routes 映射一致 + 文件跨批不重 + 批内不重 + 全部路径在分层范围内(src 代码文件/scripts py, 无 vendor/test_*) + registry 键齐
 - LaneScriptTest      review_lane.py 无参 rc=2(无参无动作) + --help rc=0
 - LaneStateTest       状态机直驱单测: batch 转换与原子写(无 .tmp 残留)/坏批次 id 拒/重复勾选拒/done 批次未齐拒/产出缺失拒/合法终态/done 需进行中态/schema 校验(status 枚举/批次条目/缺文件)/require_clean lane 边界(lane 内未跟踪与修改放行/lane 外拒/lane 内改名到 lane 外拒)
-- PackTest            敏感 fixture: 基线/HEAD 后缀; 敏感面 -> 分面档; 文件清单精确行(重命名只列新路径/[已删除] 同行); 红线命中行含"出现即停"; 警告清单; 敏感面按元素归因(新增行/已跟踪路径标记/未跟踪内容/未跟踪路径/+++ 头归因, 且无幻影键); 仅删除计数; 尾斜杠目录规则; +++ 头不算内容; 空文件 0 行; 默认 root; 大 diff 用独立无敏感仓库证明分面来自行数
+- PackTest            敏感 fixture: 基线/HEAD 后缀; 敏感面 -> 分面档; 文件清单精确行(重命名只列新路径/[已删除] 同行); 红线命中行含"出现即停"; 警告清单; 敏感面按元素归因(新增行/已跟踪路径标记/未跟踪内容/未跟踪路径/+++ 头归因, 且无幻影键); 评审规模=闸门逐笔实算口径(15 行金值 + 多笔提交逐笔和≠树差 7/6 + 记账类/生成物排除面不计行不入清单 + 二进制 0 行 + --base≠锚点可见警告 + repo excludesFile 不改写未跟踪集合, 2026-11-11 统计口径对齐闸门); 尾斜杠目录规则; +++ 头不算内容; 空文件 0 行; 默认 root; 大 diff 用独立无敏感仓库证明分面来自行数
 - BenignPackTest      无敏感内容的小 diff -> 全能档(纯行数路径); 红线/警告清单仍命中
-- CleanPackTest      干净树 -> +0/-0 且全能; 缺/坏闸门配置 -> 可见降级 + 红线预警"无"; 坏 --base / 非 git --root / 非仓库 cwd -> rc=2; 提交后 HEAD!=base 无后缀且已提交改动仍在范围内
+- CleanPackTest      干净树 -> 评审规模 0 行(闸门实算口径)且全能; 缺/坏闸门配置 -> 可见降级 + 红线预警"无"; 坏 --base / 非 git --root / 非仓库 cwd -> rc=2; 提交后 HEAD!=base 无后缀且已提交改动仍在范围内
 - CheckTest           PASS(rc=0); 幻觉引文/超窗/缺字段/坏枚举/过短引文/非字符串字段/缺文件 REFUTE(rc=1); 窗口边界与 --window; stdin; 根外与穿越 REFUTE; 快照 root(无 .git)放行; 非 UTF-8 兜底; 行注入单行化; 非 JSON/非数组/非 UTF-8 输入 rc=2; 空数组 rc=0; 元素非对象 rc=1
 - BatchBaseHashTest   基哈希(batch_base_hash, 共享模块 review_content): 同树确定且 12hex; 金值锁规范化格式(固定 fixture 硬编码 12hex, 改钉子必红须显式换金值); 记账类/生成物变更(含未跟踪)不动哈希; 可评已跟踪/未跟踪变更动哈希; 工作树 CRLF 行尾噪音不动哈希(--ignore-cr-at-eol 两侧压掉); 未跟踪文件序无关(按 path 排序); repo 配置逐颗覆写(diff.context/前缀/颜色/算法/orderFile/excludesFile/quotepath/diff.external...)哈希不漂(env 掐 system+global + -c 逐键压 repo 的回归); 工作树改名按删+增展开(name-only 两条路径/无 rename 段); pathspec 逐字精确(f[1].txt 不 glob 误匹配、分块不重复); pack 输出「基哈希:」行与共享实现同值; generated_paths 优先 gen_all --list 清单(反斜杠归一)
 - TraceDecideTest     评审留痕纯判定: 实算恒 0 静默; 可评 >0 无 trailer 拦(50 行下限退役 D9, 各量级一律); Review-Skip 恒红(豁免退役 D8, 理由长短不再重要); trailer 行数不符/缺字段(含缺检缺基)/缺行数拦; >400 行只认 派发 ≥ 2(分面降级信息字段); `· 基` 必填+12hex 形状+与重算基哈希比对(不一致红含「重跑 pack 取新基复评」出路, D6); `· 轮` 缺省 1、出现须整数 ≥1(D7), 与 `· 派发` 同现且值合法放行(形状组合); 判定矩阵 11 例(计划 26-11-07-0441 §04: 分面无派发红/派发 2 过/派发 1 红含骨架/缺检红/P>T 红/P<修+入池 红含口径/弃条目不计下界红/自洽数过/全干净 0-0 过/骨架直贴红/无分面超限过); 触安全敏感面无 trailer 拦(含 0 行)/有有效 trailer 放行; Review 优先于 Skip; 正文畸形 Review 段小批也拦(下限豁免已退役); 记账类(含 legacy-review4/)/生成物不计入; 0 行批 x trailer(26-11-08-1701 方案 A: 无 trailer 静默保留/带 trailer 走全链 —— 缺字段红/基不一致红含出路/基一致过)
-- TraceGateTest       端到端(临时仓库真跑脚本): 复跑标记短路先于消息/基比对(带 trailer 错基也 rc=0)且用后即删; 无 trailer 红(10 行小批/60 行, >0 即评, D9); 仅记账类恒 0 静默; trailer 行数相符+基一致 rc=0 / 行数不符 rc=1; 敏感面批(路径标记词)带 trailer 且基一致放行(端到端); 缺基红 / 基不一致(评审后又改一行)红含重跑出路(D6); Review-Skip 新提交红(D8); 历史 Skip 锚点识别回归(Skip 提交照旧推进锚点, 其后无 trailer 提交连坐滚进, 不追溯); 锚点推进(漏评提交被下一批连坐); 评过的提交推进锚点; 冷启动只算工作树; 合并拓扑两例(0903: 侧支带 trailer 不污染/无 trailer 连坐); 提交后复跑不重对行数且 HEAD 回退打「未给消息文件, 实算 N 行」提示(0441 落点 4); 齐平字段弱校验(计划 26-11-07-0201 落点 3): 缺字段/合法 8hex 静默 rc0, 格式异常打 [warn] 一行但 rc0; 0 行二进制批 x 基比对(26-11-08-1701 方案 A: tracked 替换带 trailer 旧基红/新基过, untracked 新增带 trailer 同, 纯记账带 trailer 合法过)
+- TraceGateTest       端到端(临时仓库真跑脚本): 复跑标记短路先于消息/基比对(带 trailer 错基也 rc=0)且用后即删; 无 trailer 红(10 行小批/60 行, >0 即评, D9); 仅记账类恒 0 静默; trailer 行数相符+基一致 rc=0 / 行数不符 rc=1; 敏感面批(路径标记词)带 trailer 且基一致放行(端到端); 缺基红 / 基不一致(评审后又改一行)红含重跑出路(D6); Review-Skip 新提交红(D8); 历史 Skip 锚点识别回归(Skip 提交照旧推进锚点, 其后无 trailer 提交连坐滚进, 不追溯); 锚点推进(漏评提交被下一批连坐); 评过的提交推进锚点; 冷启动只算工作树; unborn HEAD(零提交仓库)容忍 rev-parse 失败跳过 rc=0(评审一轮 major 回归); 合并拓扑两例(0903: 侧支带 trailer 不污染/无 trailer 连坐); 提交后复跑不重对行数且 HEAD 回退打「未给消息文件, 实算 N 行」提示(0441 落点 4); 齐平字段弱校验(计划 26-11-07-0201 落点 3): 缺字段/合法 8hex 静默 rc0, 格式异常打 [warn] 一行但 rc0; 0 行二进制批 x 基比对(26-11-08-1701 方案 A: tracked 替换带 trailer 旧基红/新基过, untracked 新增带 trailer 同, 纯记账带 trailer 合法过)
 """
 
 from __future__ import annotations
@@ -426,9 +426,137 @@ class PackTest(unittest.TestCase):
         self.assertIn("分档: 分面", proc.stdout)
         self.assertIn("安全敏感面: 无", proc.stdout)  # 分面来自行数, 不是敏感面
 
-    def test_deletion_counts_are_parsed(self):
-        # extra.py 删两行 + auth_store.py 改写一行 → -3; 钉住 shortstat 的 deletions 解析
-        self.assertIn("-3", _line_of(self.proc.stdout, "diff 统计:"))
+    def test_scale_is_gate_basis_not_tree_diff(self):
+        # 评审规模 = 闸门实算口径(逐笔+未跟踪, review_content 单点, 2026-11-11 统计口径对齐):
+        # fixture 批 = app +2 / rename 删2增3 / extra 删2 / auth ±1 → 已跟踪 11 行 + 未跟踪 4 文件
+        # 各 1 行 = 15; 旧 pack 的树差 shortstat 只会报 +4/-3(7 行, rename 检出只计内容增量),
+        # 两套口径分叉会让按 pack 数写的
+        # trailer `<N> 行` 被闸门判红 —— 现在 pack 只报实算口径这一个数, 树差行不再存在
+        self.assertIn("评审规模: 15 行(闸门实算口径", _line_of(self.proc.stdout, "评审规模:"))
+        self.assertNotIn("diff 统计", self.proc.stdout)
+
+    def test_scale_counts_per_commit_not_tree_diff(self):
+        # 逐笔口径 vs 树差的反向面: c1 加 5 行, c2 改写其中 1 行; 逐笔 = 5+2 = 7, 树差只有
+        # +5/-1 = 6 —— trailer 行数按闸门逐笔实算, pack 必须报同一个 7
+        other = self.tmp / "multi_repo"
+        other.mkdir()
+
+        def git(*a: str) -> None:
+            subprocess.run(["git", *a], cwd=other, check=True, capture_output=True)
+
+        git("init")
+        git("config", "user.email", "t@example.test")
+        git("config", "user.name", "t")
+        (other / "app.py").write_text("a\n", encoding="utf-8")
+        git("add", "-A")
+        git("commit", "-m", "base")
+        (other / "app.py").write_text("a\nb\nc\nd\ne\nf\n", encoding="utf-8")
+        git("add", "-A")
+        git("commit", "-m", "c1")  # +5
+        (other / "app.py").write_text("a\nB\nc\nd\ne\nf\n", encoding="utf-8")
+        git("add", "-A")
+        git("commit", "-m", "c2")  # +1/-1
+        base = subprocess.run(
+            ["git", "rev-parse", "HEAD~2"], cwd=other, capture_output=True, text=True, encoding="utf-8"
+        ).stdout.strip()
+        proc = _run_script("pack", "--base", base, "--root", str(other))
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertIn("评审规模: 7 行(闸门实算口径", _line_of(proc.stdout, "评审规模:"))
+
+    def test_scale_excludes_bookkeeping_and_generated(self):
+        # 记账类/生成物不计行不入清单: 收尾批必含记账改动, 旧 pack 用未过滤统计, 按 pack 数写
+        # trailer 必被闸门判红(2026-11-10 实测 pack 9 行 vs 闸门实算 1 行)
+        (self.tmp / "memory-bank" / "tasks").mkdir(parents=True)
+        (self.tmp / "memory-bank" / "tasks" / "t.md").write_text("l1\nl2\nl3\n", encoding="utf-8")
+        (self.tmp / "memory-bank" / "active-context").mkdir(parents=True)
+        (self.tmp / "memory-bank" / "active-context" / "s.md").write_text("a\nb\n", encoding="utf-8")
+        (self.tmp / "memory-bank" / "pitfalls").mkdir(parents=True)
+        (self.tmp / "memory-bank" / "pitfalls" / "_index.md").write_text("x\ny\nz\nw\n", encoding="utf-8")
+        proc = _run_script("pack", "--base", self.base, "--root", str(self.tmp))
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertIn("评审规模: 15 行(闸门实算口径", _line_of(proc.stdout, "评审规模:"))  # 与无记账批一致
+        self.assertIn("排除面: 3 个", _line_of(proc.stdout, "排除面:"))
+        listing = proc.stdout.split("文件清单:", 1)[1]
+        self.assertNotIn("tasks/t.md", listing)
+        self.assertNotIn("active-context/s.md", listing)
+
+    def test_binary_changes_count_zero_lines(self):
+        # 二进制按 0 行计(旧 pack _count_lines 按换行数计, 60k 行 blob 被报 60009 行推上分面档);
+        # 未跟踪/已跟踪二进制都进清单(敏感面判定仍可达)但不计行
+        other = self.tmp / "bin_repo"
+        other.mkdir()
+
+        def git(*a: str) -> None:
+            subprocess.run(["git", *a], cwd=other, check=True, capture_output=True)
+
+        git("init")
+        git("config", "user.email", "t@example.test")
+        git("config", "user.name", "t")
+        (other / "app.py").write_text("a\n", encoding="utf-8")
+        git("add", "-A")
+        git("commit", "-m", "base")
+        base = subprocess.run(
+            ["git", "rev-parse", "HEAD"], cwd=other, capture_output=True, text=True, encoding="utf-8"
+        ).stdout.strip()
+        (other / "tracked.bin").write_bytes(b"\x00" + b"abc\n" * 100)
+        git("add", "-A")
+        git("commit", "-m", "bin")
+        (other / "fresh.bin").write_bytes(b"\x00" + b"x\n" * 200)
+        proc = _run_script("pack", "--base", base, "--root", str(other))
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertIn("评审规模: 0 行(闸门实算口径", _line_of(proc.stdout, "评审规模:"))
+        self.assertIn("全能", proc.stdout)
+        self.assertTrue(any(l.strip().startswith("tracked.bin") for l in proc.stdout.splitlines()))
+        self.assertIn("fresh.bin [未跟踪 +0 行]", proc.stdout)
+
+    def test_repo_excludesfile_does_not_hide_untracked(self):
+        # excludesFile 钉值回归(评审一轮 nit/minor): repo config 的额外忽略清单不得改写未跟踪集合
+        # —— 与哈希面 _untracked_reviewable 同口径, 实算面与展示面同钉; 被忽略的可评未跟踪文件
+        # 仍计行仍入清单, 否则 reviewer 窗口看不到 pack 计了行的文件
+        other = self.tmp / "excl_repo"
+        other.mkdir()
+
+        def git(*a: str) -> None:
+            subprocess.run(["git", *a], cwd=other, check=True, capture_output=True)
+
+        git("init")
+        git("config", "user.email", "t@example.test")
+        git("config", "user.name", "t")
+        (other / "myignore").write_text("hidden_mod.py\n", encoding="utf-8")
+        git("config", "core.excludesFile", str(other / "myignore"))
+        (other / "app.py").write_text("a\n", encoding="utf-8")
+        git("add", "-A")
+        git("commit", "-m", "base")
+        base = subprocess.run(
+            ["git", "rev-parse", "HEAD"], cwd=other, capture_output=True, text=True, encoding="utf-8"
+        ).stdout.strip()
+        (other / "hidden_mod.py").write_text("code = 1\n", encoding="utf-8")
+        proc = _run_script("pack", "--base", base, "--root", str(other))
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertIn("评审规模: 1 行(闸门实算口径", _line_of(proc.stdout, "评审规模:"))
+        self.assertIn("hidden_mod.py [未跟踪 +1 行]", proc.stdout)
+
+    def test_pack_warns_when_base_differs_from_anchor(self):
+        # pack 行数与闸门同源的前提是 --base == 闸门锚点; 不一致打可见警告(pack 提示面, rc=0)
+        other = self.tmp / "anchor_repo"
+        other.mkdir()
+
+        def git(*a: str) -> None:
+            subprocess.run(["git", *a], cwd=other, check=True, capture_output=True)
+
+        git("init")
+        git("config", "user.email", "t@example.test")
+        git("config", "user.name", "t")
+        (other / "app.py").write_text("a\n", encoding="utf-8")
+        git("add", "-A")
+        git("commit", "-m", "base")
+        (other / "app.py").write_text("a\nb\n", encoding="utf-8")
+        git("add", "-A")
+        git("commit", "-m", "c1\n\nReview: 冷启动批 · 1 行 · blocker 0 · 修 0 · 入池 0 · 检 0/0 · 基 000000000000")
+        proc = _run_script("pack", "--base", "HEAD~1", "--root", str(other))
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertIn("[warn] --base", proc.stdout)
+        self.assertIn("闸门锚点", proc.stdout)
 
     def test_directory_rule_matches_nested_path(self):
         d = self.tmp / "auto-qb-data"
@@ -488,7 +616,7 @@ class CleanPackTest(unittest.TestCase):
         base = _make_repo(self.tmp, dirty=False)
         proc = _run_script("pack", "--base", base, "--root", str(self.tmp))
         self.assertEqual(proc.returncode, 0, proc.stderr)
-        self.assertIn("0 个已跟踪文件变更, +0/-0", proc.stdout)
+        self.assertIn("评审规模: 0 行(闸门实算口径", proc.stdout)
         self.assertIn("全能", proc.stdout)
 
     def test_missing_gate_config_degrades_visibly(self):
@@ -1216,7 +1344,8 @@ class TraceDecideTest(unittest.TestCase):
         self.assertTrue(self._counted("src/auto_qb/core/rules.py", set()))
 
     def _counted(self, path: str, gen: set[str]) -> bool:
-        return self.mod._counted(path, gen)
+        # 排除面判定已收编 review_content 单点(2026-11-11), 闸门不再转出 _counted —— 直接测共享实现
+        return _load_content()._counted(path, gen)
 
 
 class TraceGateTest(unittest.TestCase):
@@ -1365,6 +1494,19 @@ class TraceGateTest(unittest.TestCase):
         proc = _run_trace(self.tmp, self._msg("第三笔\n"))
         self.assertEqual(proc.returncode, 1)
         self.assertIn("60 行", proc.stdout)  # 20 + 40: 漏评的那笔被下一批连坐
+
+    def test_unborn_head_repo_skips_gracefully(self):
+        """unborn HEAD(新仓库零提交): rev-parse HEAD 失败按空串容忍 -> 「无批可言」rc=0。
+
+        评审一轮 major(2026-11-11): 收编搬移时 HEAD 探测曾被 _git_text 的 fail-fast 变成 rc=2 崩溃,
+        main 的「仓库还没有任何提交」跳过分支成死代码 —— 旧闸门 _git 不查 rc 的容忍语义必须保住。
+        """
+        r = self.tmp / "unborn_repo"
+        r.mkdir()
+        subprocess.run(["git", "init"], cwd=r, check=True, capture_output=True)
+        proc = _run_trace(r)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertIn("无批可言", proc.stdout)
 
     def test_cold_start_counts_worktree_only(self):
         """冷启动(历史里一条 Review: 都没有)时锚点退化为 HEAD —— 只算工作树, 不追溯全历史。

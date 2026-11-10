@@ -1,10 +1,12 @@
 """收口评审的机械面: 评审包生成(review.pack)与发现引文校验(review.check)。
 
 code-review skill 的配套脚本(八节规程见 .agents/skills/code-review/SKILL.md):
-- pack:  基线与 HEAD hash / diff 统计与分档提示(>400 行或安全敏感面命中 -> 分面) /
-         基哈希(「base -> 工作树」过滤后 diff 的确定性哈希, 过滤面与提交闸门共用
-         review_content.py 单点, 记账类/生成物变更不影响) /
-         文件清单 / 红线与安全敏感面预警。红线清单与 my-commit-flow 闸门同源(读
+- pack:  基线与 HEAD hash / 评审规模与分档提示(行数 = **闸门实算口径**: 主线逐笔 + 侧分支无
+         trailer 提交 + 工作树已跟踪 + 未跟踪可评, 排除面/锚点/实算与提交闸门共用 review_content.py
+         单点 —— trailer `<N> 行` 与 `· 基` 过闸用的就是这一个数; --base ≠ 闸门锚点时打可见警告) /
+         基哈希(「base -> 工作树」过滤后 diff 的确定性哈希, 与闸门同源) / 可评文件清单(树差口径,
+         记账类/生成物列进排除面行, 不进清单) / 红线与安全敏感面预警(全量路径, 排除面文件命中也
+         必须亮出来)。红线清单与 my-commit-flow 闸门同源(读
          .commands/my-commit-flow/.my-commit-flow.toml 的 red_lines / warn_lines),
          这里只做提示, 拦截仍归提交闸门; 闸门配置读不到/解析失败给可见警告并降级。
 - check: 对 reviewer 产出的 findings JSON 逐条校验 —— 字段齐全、severity/relevance 枚举、
@@ -31,13 +33,23 @@ import tomllib
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from review_content import batch_base_hash  # noqa: E402  (同目录共享模块: 基哈希的过滤判定与提交闸门单点同源)
+# 同目录共享模块: 锚点/可评路径判定/逐笔行数实算/基哈希, 与提交闸门单点同源
+from review_content import (  # noqa: E402
+    _counted,
+    anchor_commit,
+    batch_base_hash,
+    generated_paths,
+    numstat_batch,
+    untracked_batch,
+)
 
 SEVERITIES = ("blocker", "major", "minor", "nit")
 RELEVANCES = ("相关", "不相关")
 REQUIRED_FIELDS = ("file", "line", "quote", "severity", "claim", "relevance", "fix")
 MIN_QUOTE = 4  # 过短引文无法定位, 视同无效证据
-TIER_LIMIT = 400  # 单次评审 diff 行数上限(SmartBear/Cisco 检出率衰减点)
+TIER_LIMIT = 400  # 单批评审建议上限: 依据是产出密度实验(发现数 ≈ 派发次数 × 5.6, 与批次大小无关;
+# 切细发现多但每次派发有成本) —— reports/26-11-06-0723-report-review-capacity-experiment.html;
+# 超 400 先拆批, 确实不可拆的残余批 trailer 记 `· 派发 <K>` 且 K ≥ 2(提交闸门机检)
 DEFAULT_WINDOW = 3  # quote 实际行与声称行允许的邻近偏差
 
 GATE_CONFIG = ".commands/my-commit-flow/.my-commit-flow.toml"
@@ -111,16 +123,6 @@ def _hit_rules(paths: list[str], rules: list[str]) -> list[str]:
     return sorted({f"{p} (命中 {r})" for p in paths for r in rules if _match_rule(p, r)})
 
 
-def _count_lines(path: Path) -> int:
-    try:
-        data = path.read_bytes()
-    except OSError:
-        return -1  # 不可读(独占锁/坏链接), 调用处降级为 [不可读] 不崩
-    if not data:
-        return 0
-    return data.count(b"\n") + (0 if data.endswith(b"\n") else 1)
-
-
 # --------------------------------------------------------------------------- pack
 
 
@@ -129,31 +131,49 @@ def cmd_pack(args: argparse.Namespace) -> int:
     base = _git(root, "rev-parse", "--verify", args.base).strip()
     head = _git(root, "rev-parse", "HEAD").strip()
 
-    shortstat = _git(root, "diff", "--shortstat", base).strip()
-    m = re.search(r"(\d+) files? changed(?:, (\d+) insertions?\(\+\))?(?:, (\d+) deletions?\(-\))?", shortstat)
-    files_n = int(m.group(1)) if m else 0
-    ins = int(m.group(2)) if m and m.group(2) else 0
-    dele = int(m.group(3)) if m and m.group(3) else 0
+    gen = generated_paths(root)
+    # 锚点核对(2026-11-11): 闸门的批次范围恒从最近一条 Review:/Review-Skip: 提交现算; pack 若按
+    # 别的 --base 算规模, 与闸门实算必分叉, trailer `<N> 行` 过不了闸 —— 可见警告不拦提交
+    # (pack 是提示面, rc=0), 让 agent 当场换锚点重跑。
+    anchor = anchor_commit(root)
+    if anchor != base:
+        print(
+            f"[warn] --base {base[:12]} ≠ 闸门锚点 {anchor[:12]}(最近一条 Review:/Review-Skip: 提交) "
+            "-- trailer 的 `<N> 行` 与 `· 基` 都按锚点批实算, 请改用锚点重跑 pack"
+        )
 
-    changed: list[str] = []
-    deleted: list[str] = []
+    # 评审规模 = 闸门实算口径(review_content 单点): 主线逐笔 + 侧分支无 trailer 提交 + 工作树已跟踪
+    # + 未跟踪可评; 记账类/生成物/二进制不计行。与 trailer `<N> 行` 恒同源, 分档判据也用它。
+    batch_total, _ = numstat_batch(root, base, gen)
+    untracked_total, _, untracked_counts = untracked_batch(root, gen)
+    total = batch_total + untracked_total
+
+    # 展示面(reviewer 实际要读的树差): 可评文件清单 + 记账/生成物排除面行。红线/敏感面预警仍扫
+    # 全量路径(排除面文件命中红线也必须亮出来, 过滤只影响计行与清单, 不影响预警)。
+    changed_all: list[str] = []
+    deleted_all: list[str] = []
     for row in _git(root, "diff", "--name-status", base).splitlines():
         parts = row.split("\t")
         if not parts or not parts[0]:
             continue
         status, path = parts[0][0], parts[-1]
-        changed.append(path)
+        changed_all.append(path)
         if status == "D":
-            deleted.append(path)
+            deleted_all.append(path)
+    # 与实算面 untracked_batch 同钉 core.excludesFile(评审一轮 minor): 否则被 repo/global 额外
+    # 忽略清单排除的可评未跟踪文件会被计行, 却不进文件清单/排除面/敏感面扫描 —— reviewer 的
+    # 窗口看不到 pack 自己计了行的文件。
+    untracked_all = [
+        p
+        for p in _git(root, "-c", "core.excludesFile=", "ls-files", "--others", "--exclude-standard").splitlines() if p
+    ]
 
-    untracked = [p for p in _git(root, "ls-files", "--others", "--exclude-standard").splitlines() if p]
-    untracked_lines: dict[str, int] = {}
-    for p in untracked:
-        n = _count_lines(root / p)
-        if n < 0:
-            print(f"[warn] 未跟踪文件不可读, 按 0 行计: {p}")
-            n = 0
-        untracked_lines[p] = n
+    changed, changed_excluded = [], []
+    for p in changed_all:
+        (changed if _counted(p, gen) else changed_excluded).append(p)
+    untracked_disp = {p: untracked_counts.get(p, 0) for p in untracked_all if _counted(p, gen)}
+    excluded = changed_excluded + [p for p in untracked_all if not _counted(p, gen)]
+    deleted = [p for p in deleted_all if _counted(p, gen)]
 
     # 按文件归因的新增行: 只认 hunk 内的 '+' 行(+++ 头在 hunk 外, 内容以 ++ 开头也不会被误当元数据);
     # 新路径取 +++ b/<path> 头, 不再从 diff --git 行 rsplit(新旧路径本身含 " b/" 都能正确归属)。
@@ -173,12 +193,15 @@ def cmd_pack(args: argparse.Namespace) -> int:
             current = None
         elif in_hunk and line.startswith("+") and current:
             per_file_added.setdefault(current, []).append(line[1:])
-    sensitive_hits = {p for p in changed + untracked if any(mark in p.lower() for mark in SENSITIVE_PATH_MARKERS)}
+    sensitive_hits = {
+        p
+        for p in changed_all + untracked_all if any(mark in p.lower() for mark in SENSITIVE_PATH_MARKERS)
+    }
     sensitive_hits |= {
         p
         for p, added in per_file_added.items() if any(SENSITIVE_LINE_RE.search(line) for line in added)
     }
-    for p in untracked:
+    for p in untracked_all:
         if p in sensitive_hits:
             continue
         try:
@@ -189,37 +212,36 @@ def cmd_pack(args: argparse.Namespace) -> int:
             sensitive_hits.add(p)
     sensitive_hits = sorted(sensitive_hits)
 
-    all_paths = changed + untracked
+    all_paths = changed_all + untracked_all
     red_rules, warn_rules = _load_gate_lines(root)
     red_hits = _hit_rules(all_paths, red_rules)
     warn_hits = _hit_rules(all_paths, warn_rules)
 
-    total = ins + dele + sum(untracked_lines.values())
-    # 分档两判据与 skill 第 3 步/D14 一致: 行数超限 或 触安全敏感面 -> 分面
+    # 分档两判据与 skill 第 3 步一致: 行数超限 或 触安全敏感面 -> 分面
     tier = "分面 (2-3 个: 正确性 / 安全 / 测试缺口)" if total > TIER_LIMIT or sensitive_hits else "全能 (1 个子代理)"
 
     print(f"基线: {base}")
     print(f"HEAD: {head}" + (" (== 基线, 只有未提交改动)" if head == base else ""))
-    print(
-        f"diff 统计: {files_n} 个已跟踪文件变更, +{ins}/-{dele}" +
-        (f", 另有 {len(untracked)} 个未跟踪文件共 {sum(untracked_lines.values())} 行" if untracked else "")
-    )
+    print(f"评审规模: {total} 行(闸门实算口径, 与 trailer `<N> 行` 同源) -> 分档: {tier}")
     # 基哈希(计划 26-11-08-1240 §03 3.3): 「base -> 工作树」过滤后 diff 的确定性哈希 —— 过滤判定与
     # 提交闸门共用 review_content 单点, 末轮评审后补写记账类/生成物不影响它(不误红, D6/R4)。
     print(f"基哈希: {batch_base_hash(root, base)}")
-    print(f"评审规模: {total} 行 -> 分档: {tier}")
     print(f"安全敏感面: {'; '.join(sensitive_hits) if sensitive_hits else '无'}")
     print(f"红线预警: {'; '.join(red_hits) if red_hits else '无'}" + ("  <-- 出现即停, 移出评审范围并回滚" if red_hits else ""))
     if warn_hits:
         print(f"警告清单: {'; '.join(warn_hits)}")
+    if excluded:
+        shown = "; ".join(excluded[:5]) + (f" 等 {len(excluded)} 个" if len(excluded) > 5 else "")
+        print(f"排除面: {len(excluded)} 个记账/生成物文件不计行不入清单: {shown}")
     if deleted:
         print(f"删除文件(引文校验将不可用): {'; '.join(deleted)}")
     print("文件清单:")
     for p in changed:
         mark = " [已删除]" if p in deleted else ""
         print(f"  {p}{mark}")
-    for p, n in untracked_lines.items():
-        print(f"  {p} [未跟踪 +{n} 行]")
+    for p in untracked_all:
+        if p in untracked_disp:
+            print(f"  {p} [未跟踪 +{untracked_disp[p]} 行]")
     return 0
 
 

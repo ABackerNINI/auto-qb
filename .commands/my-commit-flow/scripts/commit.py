@@ -279,7 +279,7 @@ def _exempt_as_generated(path: str, gen: set[str] | None) -> bool:
 def _count_and_paths(base: str, tip: str) -> tuple[int, list[str]] | None:
     """`base..tip` 的远端笔数与改动路径(计划 26-11-07-0201 落点 2 的判据公式: merge-base(旧HEAD,
     rsha)..rsha 只取远端侧); 空 / 非 0 笔都按推导失败返回 None。diff 带 core.quotepath=off ——
-    非 ASCII 路径被八进制转义后会对不上本批清单(与 changed_files / check_review_trace._numstat 同款坑)。
+    非 ASCII 路径被八进制转义后会对不上本批清单(与 changed_files / review_content.numstat_batch 同款坑)。
     """
     n_raw = git("rev-list", "--count", f"{base}..{tip}", check=False)
     if not n_raw.isdigit() or int(n_raw) <= 0:

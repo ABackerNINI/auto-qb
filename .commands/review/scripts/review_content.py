@@ -1,9 +1,15 @@
-"""共享的「可评内容」过滤判定与批次基哈希 —— 提交闸门与 review.pack 单点同源。
+"""共享的「可评内容」过滤判定、锚点、逐笔行数实算与批次基哈希 —— 提交闸门与 review.pack 单点同源。
 
 从 check_review_trace.py 抽出(计划 26-11-08-1240 §03 3.3): 「哪些路径计入可评内容」的判定
 (记账类/生成物排除)原先内联在闸门脚本里, 而基哈希(下述)需要**同一套排除面** —— "末轮评审后
 补写记账类/生成物不影响哈希(不误红)"与"记账类/生成物不计行"必须由同一份实现保证, 两处各自
 演化就会出现行数实算与哈希口径分叉。
+
+2026-11-11 再收编锚点与逐笔行数实算(anchor_commit / numstat_batch / untracked_batch,
+原在闸门脚本): pack 的评审规模原先走树差 shortstat + 全量 untracked, 与闸门逐笔实算两套
+口径 —— 记账类/未跟踪二进制在 pack 侧虚增(实测同一工作树 pack 报 9 行、闸门实算 1 行;
+60k 行未跟踪 blob 被 pack 报 60009 行推上分面档), 多笔提交/合并拓扑下树差 ≠ 逐笔和。收编后
+pack 的评审规模/分档与 trailer `<N> 行`(闸门实算)恒同源。
 
 ## 可评路径判定(_counted)
 - 记账类: 结构由 check_doc_templates / check_status_drift / gen_active_recent 三道守卫管,
@@ -41,6 +47,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -255,3 +262,171 @@ def batch_base_hash(root: Path, anchor: str) -> str:
             content = b""  # 读不到按空内容: 与闸门"坏文件不卡闸门"同口径
         parts.append(path + b"\n" + content)
     return hashlib.sha256(b"".join(parts)).hexdigest()[:12]
+
+
+# ---------------------------------------------------------------------------
+# 批次实算(逐笔口径)与锚点 —— 自 check_review_trace.py 收编(2026-11-11): pack 的评审规模
+# 与 trailer `<N> 行`(闸门实算)原先两套口径(见模块头), 收编后共用本节实现。
+#
+# 实算面与哈希面的 git 环境刻意不同: 哈希要跨机器确定性(env 隔离 + -c 钉子, 见上), 实算沿用
+# 闸门历史行为(环境原样, 仅逐调用 quotepath=off 保路径解析) —— numstat 只计增删行, 对
+# algorithm/context 等内容配置不敏感; 不要在这里补隔离改变既有实算口径。
+# 唯一例外: 未跟踪清单钉 `core.excludesFile=` —— 与哈希面 _untracked_reviewable 对齐(repo/global
+# 额外忽略清单不得改写未跟踪集合, 多算不漏算), 是刻意的口径偏离, 不属 numstat 的「沿用历史」范围。
+
+REVIEW_LINE_RE = re.compile(r"^Review:\s*(.+)$", re.M)
+SKIP_LINE_RE = re.compile(r"^Review-Skip:\s*(.+)$", re.M)
+
+
+def _git_text(root: Path, *args: str, quiet: bool = False) -> str:
+    """跑 git 取文本输出(UTF-8 收端, 与闸门原 _git 同款); 失败按用法/环境错误退出 2。
+
+    quiet=True 不打 [FAIL] 行: 供「失败是预期内、调用方自带容忍分支」的路径(remerge 按 0 计)用,
+    避免 [FAIL] 前缀 + 最终 rc=0 的组合误导读管线输出的 agent(评审二轮 nit)。
+    """
+    proc = subprocess.run(
+        ["git", *args], cwd=str(root), capture_output=True, text=True, encoding="utf-8", errors="replace"
+    )
+    if proc.returncode != 0:
+        if not quiet:
+            print(f"[FAIL] review_content: git {' '.join(args)} 失败: {proc.stderr.strip()}", file=sys.stderr)
+        raise SystemExit(2)
+    return proc.stdout
+
+
+def anchor_commit(root: Path) -> str:
+    """主线(first-parent 路径)上最近一条带 `Review:` / `Review-Skip:` 的提交; 一条都没有时退回
+    HEAD(冷启动只算工作树)。消费方: 提交闸门定批次范围; review.pack 对 --base 做锚点核对。
+
+    ! HEAD 探测容忍失败: unborn HEAD(新仓库首笔提交前)下 `rev-parse HEAD` 失败按空串处理 ——
+    旧闸门 _git 不查 rc 的历史语义, 保住闸门 main() 的「仓库还没有任何提交」跳过分支(收编搬移
+    时曾被 _git_text 的 fail-fast 变成 rc=2 崩溃, 评审一轮 major 回归, 2026-11-11)。
+    ! 不设扫描窗口: 曾经用 `-200` 提速, 结果"上一条 trailer 在第 201 笔"时静默退回 HEAD ——
+    整段累计批被丢弃且无任何提示, 正好与"漏评提交滚进下一批"的连坐机制相反(2026-11-06 评审实测)。
+    几千笔提交的 message 全量解析也就几百 KB, 不值得为它换一个静默失效点。
+    ! 必须 --first-parent: 侧分支 tip 自带 trailer 时(跨 clone 分支流的常态), 平铺 log 按提交时间
+    会取到它 —— 而侧分支常从旧基线切出, 配合树差口径会把主线在分支切出之后的全部已评
+    工作整支算进「本批」(2026-11-08 实证: config-infra 分支 tip 80df0b9a 遮蔽主线锚点 70bba719,
+    实算虚增 ~9600 行, 提交被死锁; 详见 issue 26-11-08-0903)。侧分支的提交已随它自己的 trailer
+    评审过, 不该由主线锚点承担。
+    """
+    proc = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=str(root), capture_output=True, text=True, encoding="utf-8", errors="replace"
+    )
+    head = proc.stdout.strip() if proc.returncode == 0 else ""
+    if not head:
+        return ""
+    for rec in _git_text(root, "log", "--first-parent", "--format=%H%x1f%B%x1e").split("\x1e"):
+        if "\x1f" not in rec:
+            continue
+        sha, _, body = rec.partition("\x1f")
+        if REVIEW_LINE_RE.search(body) or SKIP_LINE_RE.search(body):
+            return sha.strip()
+    return head
+
+
+def _count_numstat(root: Path,
+                   git_args: list[str],
+                   gen: set[str],
+                   total: int,
+                   files: list[str],
+                   quiet: bool = False) -> tuple[int, list[str]]:
+    """跑一条 numstat 类 git 命令并把结果累计进 (total, files)。
+
+    quiet 透传 _git_text: remerge 容忍路径按 0 计不打 [FAIL](见 _commit_numstat)。
+
+    `--no-renames`: numstat 默认把改名写成 `a/{b => c}/d` 合成串, 既不是真实路径、也不匹配任何
+    前缀 —— 移进记账目录的改名会被当普通改动计入, 生成物的 `{_index.md => _index-1.md}` 也绕开
+    排除。改成删+增: 行数偏大(同一内容计两次), 但宁可多算不漏算。
+    `core.quotepath=off`: 默认 ON 时非 ASCII 路径被八进制转义加引号, `root / path` 不存在 →
+    整批漏计(与 _pipeline.changed_files 同款坑)。
+    """
+    for line in _git_text(root, "-c", "core.quotepath=off", *git_args, quiet=quiet).splitlines():
+        parts = line.split("\t")
+        if len(parts) < 3:
+            continue
+        add, delete, path = parts[0], parts[1], parts[2].strip()
+        if not _counted(path, gen):
+            continue
+        files.append(path)
+        if add == "-" or delete == "-":  # 二进制
+            continue
+        total += int(add) + int(delete)
+    return total, files
+
+
+def numstat_batch(root: Path, base: str, gen: set[str]) -> tuple[int, list[str]]:
+    """`base` 之后的主线提交逐笔 + 侧分支无 trailer 提交 + 工作树 的改动行数(增+删)与路径清单。
+
+    为什么逐笔不整段树差: base..HEAD 之间含合并提交时(跨 clone 分支流合流的常态), 树差
+    `git diff base` 量的是「两棵树的差」而不是「新增了哪些提交」—— 被合并分支的已评内容
+    会整支算进本批(2026-11-08 实证, 详见 issue 26-11-08-0903)。逐笔口径:
+      普通提交 = `git diff <sha>^ <sha>`(自身改动);
+      合并提交 = `git show --remerge-diff`(自动合并结果 vs 实际合并结果 = 纯冲突解决面 ——
+                 分支侧内容已随分支自己的 trailer 评过, 第一父母树差/combined diff 都会把它们
+                 重复计入; 实证 0469bf0c: 第一父母差 53 文件, remerge 只剩 2 个生成物);
+                 remerge 失败(旧 git / 特殊提交)按 0 计。
+      侧分支提交 = base..HEAD 全集里不在 first-parent 路径上的那部分: 带 Review/Review-Skip
+                 trailer 的(已评)排除; **无 trailer 的按自身 diff 计入** —— 连坐承诺(漏评滚进
+                 下一批)对侧分支同样成立: 裸 git commit / 漏写 trailer 的提交落在侧分支再被
+                 干净合并, 若只算主线+remerge 会整类漏计(评审二轮 major, 假绿通路)。
+    工作树部分 = `git diff HEAD`(已暂存未提交 + 未暂存)。
+    """
+    total, files = 0, []
+    mainline = _git_text(root, "rev-list", "--first-parent", f"{base}..HEAD").split()
+    seen = set(mainline)
+    side = [s for s in _git_text(root, "rev-list", f"{base}..HEAD").split() if s not in seen]
+    for sha in mainline:
+        total, files = _commit_numstat(root, sha, gen, total, files)
+    for sha in side:
+        body = _git_text(root, "log", "-1", "--format=%B", sha)
+        if REVIEW_LINE_RE.search(body) or SKIP_LINE_RE.search(body):
+            continue  # 侧分支自带 trailer = 已评, 不计入
+        total, files = _commit_numstat(root, sha, gen, total, files)
+    return _count_numstat(root, ["diff", "--numstat", "--no-renames", "HEAD"], gen, total, files)
+
+
+def _commit_numstat(root: Path, sha: str, gen: set[str], total: int, files: list[str]) -> tuple[int, list[str]]:
+    """单笔提交的改动行数: 普通提交 = 与父母的差; 合并提交 = remerge(冲突解决面, 失败按 0 计)。"""
+    parents = _git_text(root, "rev-list", "--parents", "-1", sha).split()
+    if len(parents) > 2:  # 合并提交(sha + ≥2 父母)
+        args = ["show", "--remerge-diff", "--numstat", "--format=", "--no-renames", sha]
+    else:
+        args = ["diff", "--numstat", "--no-renames", f"{sha}^", sha]
+    try:
+        return _count_numstat(root, args, gen, total, files, quiet=len(parents) > 2)
+    except SystemExit:
+        if len(parents) > 2:
+            return total, files  # remerge 失败的合并提交按 0 计(见 numstat_batch docstring)
+        raise
+
+
+def untracked_batch(root: Path, gen: set[str]) -> tuple[int, list[str], dict[str, int]]:
+    """未跟踪可评文件的行数实算: (总行数, 路径清单, 每文件行数)。
+
+    前两个返回值是提交闸门的历史口径; 第三个供 review.pack 的文件清单展示(每文件
+    `[未跟踪 +N 行]`), 同一趟 ls-files 顺带产出, 不让 pack 再走一遍。
+    二进制(前 8192 字节含 0x00)按 0 行计: 随机 0x0A 会被数成上千行(pack 旧统计的虚增来源,
+    2026-11-11 实测 60k 行 blob 被报 60009 行推上分面档) —— 但路径仍进清单供敏感面判定。
+    excludesFile 钉空值: repo/global 配置的额外忽略清单不得改写未跟踪集合。
+    """
+    proc = _git_text(
+        root, "-c", "core.quotepath=off", "-c", "core.excludesFile=", "ls-files", "--others", "--exclude-standard"
+    )
+    total, files, by_file = 0, [], {}
+    for rel in (p.strip() for p in proc.splitlines()):
+        if not rel or not _counted(rel, gen):
+            continue
+        files.append(rel)
+        try:
+            raw = (root / rel).read_bytes()
+        except OSError:
+            by_file[rel] = 0
+            continue  # 读不到按 0 行计: 不让一个坏文件把整道闸门卡死
+        if b"\x00" in raw[:8192]:
+            by_file[rel] = 0
+            continue  # 二进制: 按 0 计(但仍进 files 供敏感面判定)
+        n = len(raw.decode("utf-8", "replace").splitlines())
+        by_file[rel] = n
+        total += n
+    return total, files, by_file
