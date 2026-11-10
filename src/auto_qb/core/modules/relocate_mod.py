@@ -74,9 +74,9 @@ class RelocateModule(LifecycleMixin, PlanMixin, ExecMixin, BaseModule):
         self._tag_failures = 0
 
     def sections(self) -> tuple:
-        # bt_backup(各 qB 实例 BT_backup 路径表, 计划 26-11-05-0808 S1)由本模块消费
-        # (预检部署闸 bt_backup_path_of 现读), 段认领完备守阵(P6)要求登记认领面
-        return ("relocate", "bt_backup")
+        # relocate 整段(bt_backup 已收编为 relocate.bt_backup, 计划 26-11-11-0259 S1)由本模块
+        # 消费(预检部署闸 bt_backup_path_of 现读), 段认领完备守阵(P6)要求登记认领面
+        return ("relocate", )
 
     def _state_jobs(self) -> dict:
         """state.json 的 relocate.jobs 容器(惰性创建; 上下文缺失返回空 dict 不炸)"""

@@ -28,7 +28,6 @@ KNOWN_CONFIG_KEYS = {
     "download_fuse",
     "fs",
     "relocate",
-    "bt_backup",
     "notify",
     "web",
     "hr_check",
@@ -299,7 +298,6 @@ def validate_config(data: Any) -> List[str]:
     from .rules import _validate_rules
     from .sections import (
         _validate_add_episode_tags,
-        _validate_bt_backup,
         _validate_download_fuse,
         _validate_fs,
         _validate_global_hr,
@@ -385,7 +383,6 @@ def validate_config(data: Any) -> List[str]:
     _validate_download_fuse(cfg.get("download_fuse"), errors)
     _validate_fs(cfg.get("fs"), errors)
     _validate_relocate(cfg.get("relocate"), errors)
-    _validate_bt_backup(cfg.get("bt_backup"), errors)
     _validate_notify(cfg.get("notify"), errors)
     _validate_web(cfg.get("web"), errors)
     _validate_hr_check(cfg.get("hr_check"), errors)

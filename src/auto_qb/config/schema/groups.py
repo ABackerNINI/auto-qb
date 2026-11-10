@@ -48,23 +48,6 @@ GROUPS: Tuple[Group, ...] = (
                     ),
                 )
             ),
-            # bt_backup(各 qB 实例 BT_backup 路径表, 计划 26-11-05-0808 S1): 与 qbittorrent 连接段
-            # 同级的顶层键。qB 的 WebAPI 不暴露 BT_backup 路径, 只能按实例在 YAML 声明; 键 = qB 连接
-            # 身份 "host:port"(与 qbittorrent 段的 host/port 一致), 值 = 该实例 BT_backup 目录路径。
-            # 打 hidden 而不是渲染成通用表单: 键是用户自定的动态映射(与 trackers 站点段同性质),
-            # 通用编辑树表达不了 —— 键仍在配置契约里(校验接受 / loader 读取), 摘掉会被键面守卫判成"删键"。
-            # 设置页由"整组迁移"块内嵌的专用路径表编辑器接管渲染(计划 26-11-07-0708 S2)。
-            Field(
-                "bt_backup",
-                "BT_backup 路径表",
-                "object",
-                hidden=True,
-                help="各 qB 实例的 BT_backup 目录(fastresume 收尾用): "
-                "{\"host:port\": \"<该实例的 BT_backup 目录>\"}(键 = qbittorrent 连接配置的身份, "
-                "值 = qB profile 下 data/BT_backup 的本机路径); 设置页由\"整组迁移\"块内嵌的专用路径"
-                "表编辑器接管(hidden, 通用编辑树不渲染); 当前连接实例查不到条目 = fastresume "
-                "收尾功能整体不启用(迁移预检给结构化拒绝, 其余功能不受影响)",
-            ),
             Field(
                 "main_tick",
                 "主循环间隔",
@@ -436,7 +419,7 @@ GROUPS: Tuple[Group, ...] = (
                 "object",
                 help="把辅种组整体搬到新目录(如腾挪盘位), 搬完用文件链接/目录别名让旧路径继续可读, "
                 "搬迁落位只记账, 由回收 daemon 在 qB 下线窗口批量改写 fastresume 收尾, qB 重启后成员原生加载新路径; "
-                "收尾窗(armed/rewritten)的组可直接再迁; fastresume 收尾依赖顶层 bt_backup 键(未配置 = 迁移预检拒绝)。"
+                "收尾窗(armed/rewritten)的组可直接再迁; fastresume 收尾依赖本段 bt_backup 键(留空 = 迁移预检拒绝)。"
                 "本段热重载即生效, 不需要重启进程; **推荐以管理员身份运行 auto-qb**, 可免去每次迁移的 UAC 确认。"
                 "整段缺省 = 功能未启用(默认关闭, 三个入口逐字节保持现状)",
                 fields=(
@@ -529,6 +512,18 @@ GROUPS: Tuple[Group, ...] = (
                         help="可选: 迁移进入待收尾(armed)时给组内种子打上此标签, 进入终态时摘除, 便于在 qB 界面直接识别。"
                         "标签只写不读 —— 迁移状态仍以 auto-qb 自身记录为准, 用户手动删除标签不影响判断; "
                         "必须落在保留命名空间(以 zRelocate 开头, 如 zRelocatePending); 留空(默认)= 不打标签, 零额外 qB 写",
+                    ),
+                    # bt_backup(计划 26-11-11-0259 S1 收编, 原顶层 bt_backup 表退役): 单实例标量。
+                    # qB 的 WebAPI 不暴露 BT_backup 路径, 也不可跨文件系统读取 —— 本程序与 qB 同机
+                    # 时可推导/探测, 远程 qB 须手写(计划 §2.3 可探测性矩阵)。
+                    Field(
+                        "bt_backup",
+                        "BT_backup 目录",
+                        "path",
+                        default="",
+                        grey_if=("enabled", "true"),
+                        help="qB 的 BT_backup 目录(fastresume 收尾改写用): 留空 = fastresume 收尾未启用; "
+                        "可在设置页自动探测; qB 与本程序不同文件系统时须手写",
                     ),
                 ),
             ),

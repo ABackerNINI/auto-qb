@@ -33,7 +33,8 @@ CURRENT_VERSIONS: Dict[str, int] = {
     # v5 = 数据源并入顶层 traffic_source 段(计划 26-10-17-0339 S15; 迁移在 config/migrations.py)
     # v6 = 退役键 relocate.finalize_timeout 移除(计划 26-11-07-0708 S4; 迁移在 config/migrations.py)
     # v7 = qb_traffic 采样间隔键演进 sample_interval(秒) -> sample_interval_multiplier(int 倍数)(计划 26-11-10-0252; 迁移在 config/migrations.py)
-    "config": 7,  # config.schema_version(YAML 的 config: 块内, 不占根键); v3 = HR 14 键口径(迁移函数在 config/migrations.py)
+    # v8 = 顶层 bt_backup 多实例表收编为 relocate.bt_backup 单实例标量(计划 26-11-11-0259 S2; 迁移在 config/migrations.py)
+    "config": 8,  # config.schema_version(YAML 的 config: 块内, 不占根键); v3 = HR 14 键口径(迁移函数在 config/migrations.py)
 }
 
 

@@ -45,7 +45,7 @@ qB 口径采样+重启尖峰缺口(RM07-07)· L2 互传真实速率聚合(RM07-0
 
 跑法: `commands run real.suite -- --slice RM07 --yes`(不要裸 pytest)。真实种子全程非活跃;
 假种子一律 real-fake 标签(死端口 announce, 零外连); 产品 data_dir 指用例临时目录, 不碰
-auto-qb-data/; 配置一律 tests-real 派生 + schema_version: 7。
+auto-qb-data/; 配置一律 tests-real 派生 + schema_version: 8。
 """
 from __future__ import annotations
 
@@ -123,7 +123,7 @@ def assert_no_crash(case: Path) -> None:
 
 CONFIG_TEMPLATE = """\
 config:
-    schema_version: 7
+    schema_version: 8
     qbittorrent:
         host: 127.0.0.1
         port: {qb_port}
@@ -149,7 +149,7 @@ config:
 
 
 def write_cfg(case: Path, *, web: bool = False, main_tick: str = "2S", extra: str = "") -> Path:
-    """生成临时配置(schema_version: 7, 只指 副实例 空库)。extra = 顶层段 YAML 文本(顶格书写,
+    """生成临时配置(schema_version: 8, 只指 副实例 空库)。extra = 顶层段 YAML 文本(顶格书写,
     这里统一缩进 4 格挂到 config: 之下 —— 段落必须嵌在 config 键组内, 根节点只认 config)。"""
     data_dir = (case / "data").as_posix()
     cfg = case / "config.yml"
@@ -168,8 +168,8 @@ def write_cfg(case: Path, *, web: bool = False, main_tick: str = "2S", extra: st
     text = cfg.read_text(encoding="utf-8")
     if f"port: {instances.PRIMARY}" in text:
         raise AssertionError(f"配置指向了 {instances.PRIMARY}(真实种子), 拒跑: {cfg}")
-    if "schema_version: 7" not in text:
-        raise AssertionError(f"配置缺 schema_version: 7(会触发迁移改写), 拒跑: {cfg}")
+    if "schema_version: 8" not in text:
+        raise AssertionError(f"配置缺 schema_version: 8(会触发迁移改写), 拒跑: {cfg}")
     return cfg
 
 
@@ -187,10 +187,12 @@ def traffic_source_section(enabled: bool = True, dat_path: str = "", refresh: st
 def qb_traffic_section(multiplier: int = 2, flush: str = "60S") -> str:
     """qb_traffic 段 YAML: 采样间隔键是 main_tick 的整数倍数(计划 26-11-10-0252 D3),
     生效秒数 = multiplier x main_tick; 本片 main_tick 恒 2S, 故 2 倍 = 4s 档。"""
-    return ("qb_traffic:\n"
-            "    enabled: true\n"
-            f"    sample_interval_multiplier: {multiplier}\n"
-            f"    flush_interval: {flush}\n")
+    return (
+        "qb_traffic:\n"
+        "    enabled: true\n"
+        f"    sample_interval_multiplier: {multiplier}\n"
+        f"    flush_interval: {flush}\n"
+    )
 
 
 def qb_traffic_legacy_section(sample: str = "4S", flush: str = "60S") -> str:
@@ -938,9 +940,10 @@ def test_rm07_09_sample_interval_multiplier_and_reblock():
         gf = day_file(case / "data", "global")
         assert gf.is_file(), f"1. 全局天文件未落盘: {sorted((case / 'data').rglob('*.dat'))}"
         parsed = parse_day(gf)
-        assert parsed.blocks and all(b.interval_s == 4.0 for b in parsed.blocks
-                                    ), (f"块头 interval_s != 2 x main_tick 2s = 4s: "
-                                        f"{[b.interval_s for b in parsed.blocks]}")
+        assert parsed.blocks and all(
+            b.interval_s == 4.0 for b in parsed.blocks
+        ), (f"块头 interval_s != 2 x main_tick 2s = 4s: "
+            f"{[b.interval_s for b in parsed.blocks]}")
         assert parsed.bad_lines == 0
 
         # ---- 2. 运行期热改倍数(2→3, 生效 4S→6S): 触发关块重开, 新数据分块带新 interval。

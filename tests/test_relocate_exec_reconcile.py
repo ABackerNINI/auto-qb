@@ -426,11 +426,11 @@ def _torrent_fixture(backup, tag: bytes, old_root: str):
 
 
 def _s3_mod(tmp_path, host="h1", port=1234, backup=None):
-    """S3 接线用裸模块: config 带 qbittorrent 身份 + bt_backup 表(替身属性全数据侧)"""
+    """S3 接线用裸模块: config 带 qbittorrent 身份 + relocate.bt_backup 标量(替身属性全数据侧)"""
     mod = _bare_mod(data_dir=str(tmp_path / "data"))
     mod._ctx.config.qbittorrent = types.SimpleNamespace(host=host, port=port)
     if backup is not None:
-        mod._ctx.config.bt_backup = {f"{host}:{port}": str(backup)}
+        mod._ctx.config.relocate.bt_backup = str(backup)
     return mod
 
 
@@ -477,7 +477,7 @@ def test_write_arm_spec_bt_backup_and_members(tmp_path):
     backup3.mkdir(parents=True, exist_ok=True)
     (backup3 / f"{tv2}.torrent").write_bytes(torrent)
     mod3 = _s3_mod(tmp_path, backup=backup3)
-    mod3._ctx.config.bt_backup = {f"h1:1234": str(backup3)}
+    mod3._ctx.config.relocate.bt_backup = str(backup3)
     job3 = _job("j3", phase=ru.PHASE_ARMED, hashes=(tv2, ))
     assert mod3._write_arm_spec(job3) is True
     spec3 = relocate_journal.read_spec(str(tmp_path / "data"), "j3")

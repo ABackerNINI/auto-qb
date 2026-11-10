@@ -411,14 +411,9 @@ _LOADER_PROBES = {
     "relocate.assume_shared": ("true", True),
     # pending_tag(计划 26-11-04-1042 P3): 默认空 = 关闭, 探针用保留命名空间内的非空值
     "relocate.pending_tag": ("zRelocateProbe", "zRelocateProbe"),
-    # bt_backup(各 qB 实例 BT_backup 路径表, 计划 26-11-05-0808 S1): hidden 整体段(ctx_menu 同款),
-    # 键是用户自定的动态映射, 键面只入 bt_backup 一个叶键 —— 探针覆盖整表往返
-    # (loader 只做键值剥空白, 期望值按剥空白后的形状写)
-    "bt_backup": ({
-        "127.0.2.1:16585": "/probe/bt_backup"
-    }, {
-        "127.0.2.1:16585": "/probe/bt_backup"
-    }),
+    # bt_backup(计划 26-11-11-0259 S1 收编为 relocate.bt_backup 标量, 原顶层表退役):
+    # 剥空白单标量路径, 空 = fastresume 收尾未启用 —— 探针用非空路径覆盖往返
+    "relocate.bt_backup": ("/probe/bt_backup", "/probe/bt_backup"),
 }
 
 

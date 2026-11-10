@@ -832,11 +832,10 @@ def test_execute_idempotent_faces_and_skip_contract(tmp_path, monkeypatch):
             client=types.SimpleNamespace(app_preferences=lambda **kw: {}), torrents_set_location=lambda **kw: None
         ),
         config=types.SimpleNamespace(
-            relocate=RelocateConfig(enabled=True),
+            # 部署闸 D 格放行面(S1 执行体同拦): bt_backup 指向真实存在目录(26-11-11-0259 S1 标量化)
+            relocate=RelocateConfig(enabled=True, bt_backup=str(Path(__file__).resolve().parent)),
             # 探测闸消费指纹(qb_conf=None 会按环境性失败短路) —— 本用例只聚焦幂等面
             qbittorrent=types.SimpleNamespace(host="127.0.0.1", port=8080, username="", password="", api_key=""),
-            # 部署闸 D 格放行面(S1 执行体同拦): bt_backup 指向真实存在目录
-            bt_backup={"127.0.0.1:8080": str(Path(__file__).resolve().parent)},
         ),
         state=types.SimpleNamespace(data={}),
     )

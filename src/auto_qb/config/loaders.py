@@ -524,6 +524,7 @@ def load_relocate_config(spec: Any) -> RelocateConfig:
     仅转换, 合法性由 validate_config._validate_relocate 保证(段缺省 = 全默认, 功能关)。
     verify/allow_uac 等布尔与枚举直接按 models 默认取 _get 回退; 时间键走 parse_time
     ("10m"/"2h"), 空间键走 parse_fsize("10GiB" —— 本仓 parse_fsize 只认二进制单位)。
+    bt_backup(计划 26-11-11-0259 S1 收编, 原顶层 bt_backup 表退役)为标量路径, 剥首尾空白。
     """
     d = RelocateConfig()
     if not isinstance(spec, dict):
@@ -539,19 +540,8 @@ def load_relocate_config(spec: Any) -> RelocateConfig:
         low_space_warn=_get(spec, "low_space_warn", d.low_space_warn, parse_fsize),
         assume_shared=_get(spec, "assume_shared", d.assume_shared, parse_bool),
         pending_tag=_get(spec, "pending_tag", d.pending_tag, lambda v: str(v or "").strip()),
+        bt_backup=_get(spec, "bt_backup", d.bt_backup, lambda v: str(v or "").strip()),
     )
-
-
-def load_bt_backup_config(spec: Any) -> Dict[str, str]:
-    """解析 config.bt_backup(各 qB 实例 BT_backup 路径表, 计划 26-11-05-0808 S1)
-
-    键 = qB 连接身份 "host:port", 值 = 该实例的 BT_backup 目录路径。仅转换(键值剥首尾
-    空白), 合法性由 validate_config._validate_bt_backup 保证; 段缺省 = 空表 = 当前实例
-    fastresume 收尾功能未启用(bt_backup_path_of 查表返回 "")。
-    """
-    if not isinstance(spec, dict):
-        return {}
-    return {str(k).strip(): str(v).strip() for k, v in spec.items() if str(k).strip()}
 
 
 def load_traffic_source_config(spec: Any) -> TrafficSourceConfig:
@@ -743,7 +733,6 @@ def load_config(config_path: str) -> Config:
         web=load_web_config(_get(cfg, "web", {})),
         hr_check=hr_check,
         qbittorrent=load_qbittorrent_config(_get(cfg, "qbittorrent", {})),
-        bt_backup=load_bt_backup_config(_get(cfg, "bt_backup", {})),
         trackers=trackers,
         global_speed_limit_curve=load_global_speed_limit_curve(cfg.get("global_speed_limit_curve")),
         qb_traffic=load_qb_traffic(cfg.get("qb_traffic")),

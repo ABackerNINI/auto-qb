@@ -14,8 +14,8 @@ from auto_qb.config.writer import materialize_schema_migration, preview_tree, re
 
 from helpers import LEGACY_V1
 
-# 「天生当前版本的干净文件」锚(当前 = v7): BASE 供各写盘用例当无 hr 的最小合法配置
-BASE = "config:\n  qbittorrent:\n    host: h\n    port: 1\n    username: u\n    password: p\n  schema_version: 7\n"
+# 「天生当前版本的干净文件」锚(当前 = v8): BASE 供各写盘用例当无 hr 的最小合法配置
+BASE = "config:\n  qbittorrent:\n    host: h\n    port: 1\n    username: u\n    password: p\n  schema_version: 8\n"
 
 
 def _make(tmp_path, text: str) -> str:

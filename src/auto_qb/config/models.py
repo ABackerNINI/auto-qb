@@ -557,6 +557,9 @@ class RelocateConfig:
     low_space_warn: int = 10 * 1024**3  # 字节; YAML 原始写法 "10GiB"
     assume_shared: bool = False
     pending_tag: str = ""  # qB 待收尾镜像标签: 空(默认)= 关闭, 零 qB 写; 非空须落在 zRelocate 前缀下
+    # qB 的 BT_backup 目录(计划 26-11-11-0259 S1, 单实例标量化): 空(默认)= fastresume 收尾
+    # 功能未启用(预检给结构化拒绝, 不影响启动); qB 与本程序不同文件系统时须手写
+    bt_backup: str = ""
 
 
 @dataclass
@@ -617,10 +620,6 @@ class Config:
 
     qbittorrent: QbittorrentConfig = field(default_factory=QbittorrentConfig)
 
-    # 各 qB 实例的 BT_backup 目录表(计划 26-11-05-0808 S1): {"host:port": 路径};
-    # 空(缺省) = 当前实例的 fastresume 收尾功能未启用(预检给结构化拒绝, 不影响启动)
-    bt_backup: Dict[str, str] = field(default_factory=dict)
-
     trackers: Dict[str, TrackerConfig] = field(default_factory=dict)
 
     # 全局限速曲线(Traffic Monitor): 读取 dat 流量, 按多条 period 曲线聚合, 自动设置 qB 全局速度限制
@@ -647,16 +646,12 @@ class Config:
 
 
 def bt_backup_path_of(config: Any) -> str:
-    """当前 qB 实例的 BT_backup 目录查表(计划 26-11-05-0808 S1 查表口径单点)
+    """当前 qB 的 BT_backup 目录纯读键(计划 26-11-11-0259 S1 标量化读法单点, 派生自 D1/D9)
 
-    按 qbittorrent 连接身份(host:port)查 config.bt_backup 表; 命不中/未配置 = ""(fastresume
-    收尾功能对该实例未启用)。消费方: relocate 预检的 BT_backup 闸门 + 后续回收 daemon(S3)。
-    模块级函数而非 Config 方法: 预检拿到的可能是替身配置(测试 FakeConfig 只备数据属性),
-    鸭子类型查表对两者一致。键按字面拼接(与校验器 host:port 口径一致)—— 大小写/别名
-    (localhost vs 127.0.0.1)不做智能匹配, 命不中时预检文案给出实例身份供用户对照修正。
+    读 relocate.bt_backup 标量(单实例; 空/未配置 = fastresume 收尾功能未启用)。消费方:
+    relocate 预检的 BT_backup 闸门 + 回收 daemon。模块级函数而非 Config 方法: 预检拿到的
+    可能是替身配置(测试 FakeConfig 只备数据属性), 鸭子类型读键对两者一致; strip 兜底空白。
     """
-    qb = getattr(config, "qbittorrent", None)
-    table = getattr(config, "bt_backup", None) or {}
-    host = getattr(qb, "host", "") if qb is not None else ""
-    port = getattr(qb, "port", "") if qb is not None else ""
-    return str(table.get(f"{host}:{port}", "") or "").strip()
+    rel = getattr(config, "relocate", None)
+    raw = getattr(rel, "bt_backup", "") if rel is not None else ""
+    return str(raw or "").strip()

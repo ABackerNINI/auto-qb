@@ -534,7 +534,7 @@ def test_precheck_receipt_contract_and_add_param(tmp_path, monkeypatch):
     # (计划 26-11-05-0808 S1 起, 预检前置部署闸: bt_backup 须指到真实目录才放行;
     # FakeClient 偏好无 resume_data_storage_type = SQLite 选项出现前的 qB, 按 Legacy 放行)
     _stub_cap(monkeypatch, file_kind="hardlink")
-    mgr.config.bt_backup[f"{mgr.config.qbittorrent.host}:{mgr.config.qbittorrent.port}"] = str(tmp_path)
+    mgr.config.relocate.bt_backup = str(tmp_path)
     for h in ("HA", "HB"):
         mgr.store.by_hash[h] = types.SimpleNamespace(
             hash=h,

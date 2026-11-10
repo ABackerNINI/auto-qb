@@ -107,7 +107,7 @@ def test_write_tree_preserves_comments_and_plain_scalars(tmp_path):
     """round-trip 写盘: 已有键注释保留, 未修改标量保持原书写风格(数字/布尔不加引号)"""
     path = _make(
         tmp_path, "config:\n"
-        "  schema_version: 7\n"
+        "  schema_version: 8\n"
         "  # 连接设置\n"
         "  qbittorrent:\n"
         "    host: h\n"
@@ -297,7 +297,7 @@ def test_write_tree_rejects_version_higher_than_program(tmp_path):
     with pytest.raises(ConfigError) as ei:
         write_tree(path, tree, old, _bak(tmp_path))
     assert "高于本程序支持" in str(ei.value)
-    assert read_tree(path)["config"]["schema_version"] == "7", "拒绝时磁盘一字不动"
+    assert read_tree(path)["config"]["schema_version"] == "8", "拒绝时磁盘一字不动"
 
 
 def test_write_tree_writes_float_and_negative_scalars_plain(tmp_path):
@@ -426,7 +426,7 @@ def test_preview_tree_does_not_create_backup(tmp_path):
 
 def test_preview_tree_does_not_touch_disk(tmp_path):
     """预览不落盘; 内容含将写入的新值与已有注释"""
-    path = _make(tmp_path, "config:\n  schema_version: 7\n  # 注释\n  main_tick: 2s\n  qbittorrent:\n    host: h\n")
+    path = _make(tmp_path, "config:\n  schema_version: 8\n  # 注释\n  main_tick: 2s\n  qbittorrent:\n    host: h\n")
     before = _text(path)
     old = load_config(path)
     tree = read_tree(path)
@@ -456,7 +456,7 @@ def test_write_tree_stamps_schema_version(tmp_path):
     write_tree(path, tree, old, _bak(tmp_path))
 
     text = _text(path)
-    assert "schema_version: 7" in text, "写回必须带当前版本章"
+    assert "schema_version: 8" in text, "写回必须带当前版本章"
     assert "'1'" not in text, "版本章必须是 int —— 盖成字符串会被 ruamel 写成带引号的 '1'"
 
 
@@ -466,7 +466,7 @@ def test_preview_tree_stamps_schema_version(tmp_path):
     old = load_config(path)
     tree = read_tree(path)
     text = preview_tree(path, tree, old)
-    assert "schema_version: 7" in text
+    assert "schema_version: 8" in text
 
 
 def test_write_tree_rejects_stale_version_tree(tmp_path):
@@ -495,7 +495,7 @@ def test_write_tree_rejects_v2_tree_with_legacy_key(tmp_path):
     """已盖当前版本章仍带旧键(手改版本号/事故残留): 写盘前校验报废除错, 磁盘一字不动 —— 不设常驻
     兼容层, 迁移链只在版本推进时运行"""
     old = load_config(_make(tmp_path, BASE))
-    corrupt = LEGACY_V1 + "  schema_version: 7\n"
+    corrupt = LEGACY_V1 + "  schema_version: 8\n"
     path = _make(tmp_path, corrupt)  # 同名路径覆写为「当前版本章 + 旧键」的事故残留形态
     tree = read_tree(path)
 
@@ -544,11 +544,11 @@ def test_write_tree_rebuilds_doc_from_non_mapping_file(tmp_path):
     path = _make(tmp_path, "123\n")
     tree = read_tree(path)  # 非映射 -> 空 config 段
     tree["config"]["qbittorrent"] = {"host": "h", "port": "1", "username": "u", "password": "p"}
-    tree["config"]["schema_version"] = "7"
+    tree["config"]["schema_version"] = "8"
     write_tree(path, tree, old, _bak(tmp_path))
     text = _text(path)
     assert "123" not in text, "旧的非映射内容被整体重建"
-    assert "qbittorrent" in text and "schema_version: 7" in text
+    assert "qbittorrent" in text and "schema_version: 8" in text
     loaded = load_config(path)
     assert loaded.qbittorrent.host == "h"
 
@@ -557,7 +557,7 @@ def test_write_tree_roundtrip_list_of_dicts_and_plain_int(tmp_path):
     """列表内映射逐项按 BaseLoader 语义比较(值未变整体跳过); 变更的纯数字字符串按原生标量写出"""
     path = _make(
         tmp_path, "config:\n"
-        "  schema_version: 7\n"
+        "  schema_version: 8\n"
         "  qbittorrent:\n"
         "    host: h\n"
         "    port: 1\n"

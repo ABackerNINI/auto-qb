@@ -1027,12 +1027,11 @@ class FakeConfig:
     # (provider=traffic_monitor, dat_path 空), 既有用例行为零变化
     traffic_source = TrafficSourceConfig()
     # 整组迁移(计划 26-10-18-1604 §3.7): P1 只立配置面, enabled=false(缺省)与真 Config 同默认;
-    # RelocateModule.start/apply 会读它, 替身缺该属性会 AttributeError
+    # RelocateModule.start/apply 会读它, 替身缺该属性会 AttributeError。
+    # bt_backup 目录(计划 26-11-11-0259 S1 收编为标量, 原顶层 bt_backup 表退役):
+    # relocate 预检部署闸经 bt_backup_path_of 现读它(鸭子类型, 替身只备数据属性);
+    # 默认空 = 功能未启用, 期望预检放行的用例须指到真实存在且可写的目录
     relocate = RelocateConfig()
-    # 各 qB 实例 BT_backup 路径表(计划 26-11-05-0808 S1): relocate 预检部署闸按
-    # qbittorrent(host:port)查它(bt_backup_path_of 鸭子类型, 替身只备数据属性);
-    # 默认空表 = 功能未启用, 期望预检放行的用例须实例级指到真实存在且可写的目录
-    bt_backup = {}
     qb_traffic = None  # qB 口径流量采样(未启用; 与 Config 默认一致, 测试按需赋 QbTraffic(...))
     notify = NotifyConfig()  # 主动通知(默认 disabled)
     web = WebConfig(skip_check_menu=True)  # WEB UI(默认 disabled); skip_check_menu 测试侧默认开 ——
@@ -1517,9 +1516,9 @@ def relocate_env(
     mgr = make_manager(os.path.join(str(td), "state.json"), clock=clock)
     client = FakeClient()
     mgr.client = client
-    # 部署维闸门默认放行面(计划 26-11-05-0808 S1): bt_backup 指到环境根(真实存在可写),
-    # happy-path 用例零改动; 闸门用例(test_relocate_fastresume_gates)自行改坏/清空
-    mgr.config.bt_backup[f"{mgr.config.qbittorrent.host}:{mgr.config.qbittorrent.port}"] = str(td)
+    # 部署维闸门默认放行面(计划 26-11-05-0808 S1, 26-11-11-0259 S1 标量化): bt_backup 指到
+    # 环境根(真实存在可写), happy-path 用例零改动; 闸门用例(test_relocate_fastresume_gates)自行改坏/清空
+    mgr.config.relocate.bt_backup = str(td)
     src = os.path.join(str(td), "src")
     dst = os.path.join(str(td), "dst")
     content = os.path.join(src, subdir)

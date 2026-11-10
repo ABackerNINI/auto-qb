@@ -1,9 +1,12 @@
-"""test_relocate_fastresume_gates 测试计划: fastresume 收尾链 S1 配置面 + 预检部署闸门
-(计划 26-11-05-0808 §04 S1: bt_backup 配置键 + 五类闸门中的后端/可达/AutoTMM 三类)
+"""test_relocate_fastresume_gates 测试计划: fastresume 收尾链配置面 + 预检部署闸门
+(计划 26-11-05-0808 §04 S1: BT_backup 部署闸 + 五类闸门中的后端/可达/AutoTMM 三类;
+ 计划 26-11-11-0259 S1: bt_backup 收编为 relocate.bt_backup 标量, 顶层表退役无兼容读法;
+ S2: v7→v8 迁移链一次性搬运旧表 —— 旧形状只存在于迁移入口, 校验器只认新形状)
 
 覆盖面(全部替身, 不依赖真机 qB; D/E 形态真机演示按计划留 S6 复跑):
-- 配置面: config.bt_backup 各 qB 实例路径表({host:port: 路径})的缺省/校验/loader/查表单点
-  (bt_backup_path_of, 鸭子类型 —— 真实 Config 与测试替身同口径)。
+- 配置面: relocate.bt_backup 标量(空 = 未启用)的缺省/校验/loader/读键单点
+  (bt_backup_path_of, 鸭子类型 —— 真实 Config 与测试替身同口径); 旧形状(顶层 bt_backup
+  表)进校验器 = 结构化报错, 无章旧形状经 load 迁移入口收编(反证 = 当前章+旧表绕过迁移)。
 - 部署维闸门(relocate_precheck 前置 + relocate_execute 执行体同拦, S6 真机复跑发现执行
   路径漏拦已补 —— 预检不是唯一入口, web 按钮/规则 move_to 都经执行体):
   E 格 = 存储后端非 Legacy(app/preferences 直读 resume_data_storage_type, D2 fail-fast);
@@ -12,12 +15,13 @@
   键, N8 实测)有即整组拒迁。
 
 ## 测试计划(每个测试函数一条)
-- test_bt_backup_defaults_and_lookup: 缺省空表 = 功能未启用; bt_backup_path_of 按
-  qbittorrent(host:port)查表命中/缺失/替身缺属性三态
-- test_bt_backup_validate_shapes: 段缺省合法; 非字典/坏键(无冒号/坏端口)/非字符串与空值
-  逐条进聚合报错(多条错误一次报全, 法则 4)
-- test_bt_backup_load_config_round_trip: load_config 真链路(剥空 -> 校验 -> 解析);
-  段缺省 = {}; 键值剥空白; 非法形状启动期 ConfigError
+- test_bt_backup_defaults_and_lookup: 缺省空串 = 功能未启用; bt_backup_path_of 读
+  relocate.bt_backup 标量(剥空白)/替身缺属性/None 三态安全回落 ""
+- test_bt_backup_validate_shapes: 键缺省合法; 非字符串聚合报错; 空/纯空白 = 未启用合法;
+  旧形状(顶层 bt_backup 表)进校验器 = 结构化「未知键」报错(无兼容读法反证)
+- test_bt_backup_load_config_round_trip: load_config 真链路(剥空 -> 迁移 -> 校验 -> 解析);
+  键缺省 = ""; 值剥空白; 非字符串启动期 ConfigError; 旧形状顶层表无章经迁移收编为标量
+  (S2 迁移入口), 当前章+旧表绕过迁移 = 启动期 ConfigError「未知键」(D2 反证)
 - test_is_legacy_resume_storage: 0/"0"/"legacy"/None/空 = Legacy; 1/"1"/"sqlite"/其它 = 非
 - test_probe_bt_backup_reject: 空路径/不存在拒; 真实存在且可写过; os.access 判负拒
   (monkeypatch os.access, 验权限位分支文案)
@@ -25,7 +29,7 @@
   gate=backend, 文案含 Legacy 与 E 格口径
 - test_backend_gate_fail_closed: app_preferences 抛错 -> gate=backend(读不到按不可用拒)
 - test_backend_gate_missing_key_is_legacy: 偏好无该键(旧 qB) -> 不拦, 落到后续闸门
-- test_bt_backup_gate_unconfigured: 表空 -> gate=bt_backup, 文案含配置键与实例身份
+- test_bt_backup_gate_unconfigured: 键空 -> gate=bt_backup, 文案含配置键与实例身份
 - test_bt_backup_gate_unreachable: 指到不存在的目录 -> gate=bt_backup
 - test_deployment_gate_order_backend_first: 后端与 BT_backup 同时不满足 -> 先报 backend
   (E 格先于 D 格, 单回执短路面)
@@ -40,8 +44,8 @@
   blocked + gate=auto_tmm; 双成员手动 -> 无 auto_tmm 理由(对照面)
 - test_auto_tmm_gate_pure: evaluate_group 纯函数面: auto_tmm_hashes 非空即 block, 文案点名
   成员; 空元组零理由(缺省字段向后兼容既有 GroupFacts 构造)
-- test_bt_backup_section_claimed_and_apply: RelocateModule 认领 bt_backup(P6); apply 两段
-  全等 none / 仅 bt_backup 变 reloaded(现读, 不换 relocate 缓存)/ relocate 变换缓存
+- test_bt_backup_section_claimed_and_apply: RelocateModule 认领 relocate 单段(P6, bt_backup
+  已收编); apply relocate 全等 = none / relocate 变(含 bt_backup) = reloaded + 换缓存
 - test_nested_target_boundaries_pure: nested_target_on 成分级边界(计划 1300 R1-R5 新签名,
   E2.3 原 8 例按内容根锚重释): 子目录/深层/尾斜杠/大小变体(Windows 口径)按锚判嵌套;
   兄弟(待删2)/前缀同串(待删除)/父目录/等值 job dst/终态 job 不误伤; 严格嵌套 = 相等不算
@@ -63,7 +67,8 @@
 覆盖率缺口清偿(26-11-07, test.full 99.31% -> 99.5% 闸):
 - test_source_three_states_twin_unknown_and_missing: 源侧三态(在/缺失/!.!qB 孪生/探测异常按不可判定)
 - test_own_alias_hardlink_scan_tolerates_dead_alias_paths: 自有别名硬链接判定容忍悬空别名路径
-- test_load_bt_backup_config_non_dict_is_empty: bt_backup 段非字典 => 空表
+- test_relocate_bt_backup_loader_parse: relocate.bt_backup 解析面(非字典 spec = 全默认;
+  值剥空白; 原 load_bt_backup_config 已随 26-11-11-0259 S1 退役)
 """
 import os
 import types
@@ -85,88 +90,125 @@ from relocate_exec_support import _stub_cap
 
 
 def _validate(spec):
-    return validate_config({"config": {"bt_backup": spec}})
+    """relocate.bt_backup 校验入口: spec 直接当作该键的 YAML 值(标量形状)"""
+    return validate_config({"config": {"relocate": {"bt_backup": spec}}})
 
 
 # ---------- 配置面 ----------
 
 
 def test_bt_backup_defaults_and_lookup():
-    """缺省空表 = 功能未启用; bt_backup_path_of 查表: 命中/缺失/替身缺属性三态"""
+    """缺省空串 = 功能未启用; bt_backup_path_of 读 relocate.bt_backup 标量: 命中/替身缺属性/None 三态"""
     cfg = Config()
-    assert cfg.bt_backup == {}
+    assert cfg.relocate.bt_backup == ""
     assert bt_backup_path_of(cfg) == ""
-    cfg.qbittorrent.port = 16585  # 真实 Config 默认 8080; 显式对齐 FakeConfig 惯用的实例身份
-    cfg.bt_backup = {"127.0.0.1:16585": "D:/qB/BT_backup"}
+    cfg.relocate.bt_backup = "D:/qB/BT_backup"
     assert bt_backup_path_of(cfg) == "D:/qB/BT_backup"
-    # 查表键 = qbittorrent 连接身份: 换端口即命中另一实例(多实例口径)
-    cfg.qbittorrent.port = 26586
-    assert bt_backup_path_of(cfg) == ""
-    # 值剥空白口径由 loader 保证, 查表只兜底 strip
-    cfg.bt_backup = {"127.0.0.1:26586": "  D:/qB2/BT_backup  "}
+    # 值剥空白口径由 loader 保证, 读键只兜底 strip
+    cfg.relocate.bt_backup = "  D:/qB2/BT_backup  "
     assert bt_backup_path_of(cfg) == "D:/qB2/BT_backup"
-    # 鸭子类型: 替身配置(无 bt_backup 属性)与 None 均安全回落 ""
-    assert bt_backup_path_of(types.SimpleNamespace(qbittorrent=cfg.qbittorrent)) == ""
+    # 鸭子类型: 替身配置(无 relocate 属性 / relocate 缺 bt_backup 字段)与 None 均安全回落 ""
+    assert bt_backup_path_of(types.SimpleNamespace()) == ""
+    assert bt_backup_path_of(types.SimpleNamespace(relocate=types.SimpleNamespace())) == ""
     assert bt_backup_path_of(None) == ""
 
 
 def test_bt_backup_validate_shapes():
-    """形状校验: 缺省合法; 非字典/坏键/非字符串值逐条聚合, 多错一次报全(法则 4)"""
-    assert _validate(None) == []
-    assert _validate({}) == []
-    assert _validate({"127.0.0.1:16585": "D:/qB/BT_backup"}) == []
-    assert _validate({"localhost:8080": "/var/lib/qbt/BT_backup"}) == []
+    """形状校验(标量): 键缺省/空/纯空白合法; 非字符串聚合报错(法则 4);
+    旧形状(顶层 bt_backup 表)进校验器 = 结构化「未知键」报错 —— 无兼容读法反证(D2)"""
+    assert _validate(None) == []  # 显式 null = 未配置(与 pending_tag 同款; load 路径经 _strip_none 剥除)
+    assert _validate("") == []  # 空串 = 未启用
+    assert _validate("   ") == []  # 纯空白 strip 后为空 = 未启用, 合法
+    assert _validate("D:/qB/BT_backup") == []
+    assert _validate("/var/lib/qbt/BT_backup") == []
 
-    errors = _validate("D:/x")
-    assert errors == ["config.bt_backup: 必须是字典(键 = qB 连接身份 host:port, 值 = 该实例的 BT_backup 目录路径)"], errors
+    # 聚合: 非字符串逐条报(relocate 段其余键的错误互不打断, 多错一次报全)
+    errors = validate_config({"config": {"relocate": {"bt_backup": 123, "enabled": "not-bool"}}})
+    assert any("config.relocate.bt_backup" in e and "字符串" in e for e in errors), errors
+    assert any("config.relocate.enabled" in e for e in errors), errors  # 聚合不互斥
+    errors = validate_config({"config": {"relocate": {"bt_backup": ["D:/a"]}}})
+    assert any("config.relocate.bt_backup" in e and "字符串" in e for e in errors), errors
 
-    # 聚合: 坏键 + 坏值同时报, 互不打断
-    errors = _validate({"no-port-key": "D:/a", "127.0.0.1:99999": 123, "127.0.0.1:70000": ""})
-    assert any("no-port-key" in e and "host:port" in e for e in errors), errors
-    assert any("99999" in e and "1-65535" in e for e in errors), errors
-    assert any("70000" in e and "非空路径字符串" in e for e in errors), errors
-    assert any("99999" in e and "非空路径字符串" in e for e in errors), errors  # 值类型错独立报
+    # 旧形状反证: 顶层 bt_backup 表(26-11-05-0808 S1 形状)直接进校验器 -> 结构化报错,
+    # 不被静默吞掉也不被兼容读法解释(26-11-11-0259 S1: 校验器只认新形状)
+    errors = validate_config({"config": {"bt_backup": {"127.0.0.1:8080": "D:/qB/BT_backup"}}})
+    assert errors, "旧形状必须被拒(无兼容读法)"
+    assert any("未知键" in e and "bt_backup" in e for e in errors), errors
 
-    # 键只有端口段(host 空)同样拒
-    errors = _validate({":8080": "D:/a"})
-    assert any("host:port" in e for e in errors), errors
+    errors = validate_config({"config": {"bt_backup": "D:/qB/BT_backup"}})
+    assert any("未知键" in e and "bt_backup" in e for e in errors), errors  # 标量旧形状同样不认
 
 
 def test_bt_backup_load_config_round_trip(tmp_path):
-    """load_config 真链路: 剥空 -> 校验 -> 解析; 段缺省 = {}; 键值剥空白; 非法形状启动期报错"""
+    """load_config 真链路: 剥空 -> 迁移 -> 校验 -> 解析; 键缺省 = ""; 值剥空白; 非字符串
+    启动期 ConfigError; 旧形状顶层表无章走迁移收编为标量(S2 迁移入口), 已盖当前章仍带
+    旧表(手改/事故残留, 绕过迁移)启动期 ConfigError「未知键」(校验器只认新形状, D2)"""
     from auto_qb.config.errors import ConfigError
 
     cfg_path = tmp_path / "c.yml"
     cfg_path.write_text(
         yaml.safe_dump(
-            {
-                "config":
-                    {
-                        "qbittorrent": {
-                            "host": "127.0.0.1",
-                            "port": "16585"
-                        },
-                        "bt_backup": {
-                            "  127.0.0.1:16585  ": "  D:/qB/BT_backup  "
-                        },
-                    }
-            },
+            {"config": {
+                "relocate": {
+                    "bt_backup": "  D:/qB/BT_backup  "
+                },
+            }},
             allow_unicode=True,
         ),
         encoding="utf-8",
     )
     cfg = load_config(str(cfg_path))
-    assert cfg.bt_backup == {"127.0.0.1:16585": "D:/qB/BT_backup"}
+    assert cfg.relocate.bt_backup == "D:/qB/BT_backup"
     assert bt_backup_path_of(cfg) == "D:/qB/BT_backup"
 
     cfg_path.write_text(yaml.safe_dump({"config": {"main_tick": "3S"}}, allow_unicode=True), encoding="utf-8")
-    assert load_config(str(cfg_path)).bt_backup == {}  # 段缺省 = 未启用
+    assert load_config(str(cfg_path)).relocate.bt_backup == ""  # 键缺省 = 未启用
 
     bad = tmp_path / "bad.yml"
-    bad.write_text(yaml.safe_dump({"config": {"bt_backup": {"bad-key": "D:/x"}}}, allow_unicode=True), encoding="utf-8")
+    bad.write_text(
+        yaml.safe_dump({"config": {
+            "relocate": {
+                "bt_backup": ["D:/x"]
+            }
+        }}, allow_unicode=True), encoding="utf-8"
+    )
     with pytest.raises(ConfigError) as ei:
         load_config(str(bad))
-    assert "config.bt_backup" in str(ei.value), ei.value
+    assert "config.relocate.bt_backup" in str(ei.value), ei.value
+
+    legacy = tmp_path / "legacy.yml"
+    legacy.write_text(
+        yaml.safe_dump({"config": {
+            "bt_backup": {
+                "127.0.0.1:8080": "D:/qB/BT_backup"
+            }
+        }}, allow_unicode=True),
+        encoding="utf-8",
+    )
+    migrated = load_config(str(legacy))  # 无章 = v1 存量: 迁移链 v7→v8 恰一条非空收编为标量
+    assert migrated.relocate.bt_backup == "D:/qB/BT_backup"
+
+    from auto_qb.infra.versioning import CURRENT_VERSIONS
+
+    stamped = tmp_path / "stamped.yml"
+    stamped.write_text(
+        yaml.safe_dump(
+            {
+                "config":
+                    {
+                        "schema_version": CURRENT_VERSIONS["config"],
+                        "bt_backup": {
+                            "127.0.0.1:8080": "D:/qB/BT_backup"
+                        }
+                    }
+            },
+            allow_unicode=True
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigError) as ei:
+        load_config(str(stamped))
+    assert "未知键" in str(ei.value) and "bt_backup" in str(ei.value), ei.value
 
 
 # ---------- 探测/后端纯函数 ----------
@@ -219,7 +261,7 @@ def _gate_env(tmp_path, monkeypatch, data_dir=False):
     _stub_cap(monkeypatch, file_kind="hardlink")
     mgr, client, src, dst, content, files = relocate_env(tmp_path, state="pausedUP", data_dir=data_dir)
     mgr.config.relocate.enabled = True
-    mgr.config.bt_backup["127.0.0.1:16585"] = str(tmp_path)
+    mgr.config.relocate.bt_backup = str(tmp_path)
     return mgr, client, dst, tmp_path
 
 
@@ -262,9 +304,9 @@ def test_backend_gate_missing_key_is_legacy(tmp_path, monkeypatch):
 
 
 def test_bt_backup_gate_unconfigured(tmp_path, monkeypatch):
-    """D 格(未配置): 表空 -> gate=bt_backup, 文案含配置键名与当前实例身份(host:port)"""
+    """D 格(未配置): 键空 -> gate=bt_backup, 文案含配置键名与当前实例身份(host:port)"""
     mgr, client, dst, _td = _gate_env(tmp_path, monkeypatch)
-    mgr.config.bt_backup = {}
+    mgr.config.relocate.bt_backup = ""
     mod = mgr.host.get("relocate")
     it = mod.relocate_precheck(["HA"], dst)[0]
     assert it["cls"] == "blocked" and it["hashes"] == ["HA"], it
@@ -276,7 +318,7 @@ def test_bt_backup_gate_unconfigured(tmp_path, monkeypatch):
 def test_bt_backup_gate_unreachable(tmp_path, monkeypatch):
     """D 格(不可达): 指到不存在的目录 -> gate=bt_backup, 文案含路径"""
     mgr, client, dst, _td = _gate_env(tmp_path, monkeypatch)
-    mgr.config.bt_backup["127.0.0.1:16585"] = os.path.join(str(tmp_path), "missing-bt")
+    mgr.config.relocate.bt_backup = os.path.join(str(tmp_path), "missing-bt")
     mod = mgr.host.get("relocate")
     it = mod.relocate_precheck(["HA"], dst)[0]
     assert it["cls"] == "blocked" and it["reasons"][0]["gate"] == "bt_backup", it
@@ -287,7 +329,7 @@ def test_deployment_gate_order_backend_first(tmp_path, monkeypatch):
     """后端与 BT_backup 同时不满足 -> 单回执只报 backend(E 格先判, 短路面不叠报)"""
     mgr, client, dst, _td = _gate_env(tmp_path, monkeypatch)
     client.app_preferences = lambda **kw: {"resume_data_storage_type": 1}
-    mgr.config.bt_backup = {}
+    mgr.config.relocate.bt_backup = ""
     mod = mgr.host.get("relocate")
     items = mod.relocate_precheck(["HA"], dst)
     assert len(items) == 1 and items[0]["reasons"][0]["gate"] == "backend", items
@@ -296,7 +338,7 @@ def test_deployment_gate_order_backend_first(tmp_path, monkeypatch):
 def test_deployment_gate_before_group_verdicts(tmp_path, monkeypatch):
     """部署闸先于组维: 拒绝时不进分组判定(store 连成员都没有也照样拒同文)"""
     mgr, client, dst, _td = _gate_env(tmp_path, monkeypatch)
-    mgr.config.bt_backup = {}
+    mgr.config.relocate.bt_backup = ""
     mgr.store.by_hash.clear()
     mod = mgr.host.get("relocate")
     it = mod.relocate_precheck(["GHOST"], dst)[0]
@@ -322,7 +364,7 @@ def test_backend_gate_blocks_execute_sqlite(tmp_path, monkeypatch):
 def test_bt_backup_gate_blocks_execute_unreachable(tmp_path, monkeypatch):
     """执行体同拦 D 格: bt_backup 指向不存在目录 -> relocate_execute blocked gate=bt_backup"""
     mgr, client, dst, _td = _gate_env(tmp_path, monkeypatch, data_dir=True)
-    mgr.config.bt_backup["127.0.0.1:16585"] = os.path.join(str(tmp_path), "missing-bt")
+    mgr.config.relocate.bt_backup = os.path.join(str(tmp_path), "missing-bt")
     mod = mgr.host.get("relocate")
     it = mod.relocate_execute(["HA"], dst)[0]
     assert it["cls"] == "blocked" and it["reasons"][0]["gate"] == "bt_backup", it
@@ -394,21 +436,21 @@ def test_auto_tmm_gate_pure():
 
 
 def test_bt_backup_section_claimed_and_apply():
-    """RelocateModule 认领 bt_backup(P6 段认领完备); apply 契约: 两段全等 = none;
-    仅 bt_backup 变 = reloaded(现读回执, relocate 缓存不换); relocate 变 = reloaded + 换缓存"""
+    """RelocateModule 认领 relocate 单段(P6 段认领完备; bt_backup 已收编为段内标量,
+    计划 26-11-11-0259 S1); apply 契约: relocate 全等 = none; 段变(含 bt_backup) = reloaded + 换缓存"""
     from auto_qb.config.models import RelocateConfig
     from auto_qb.core.modules.relocate_mod import RelocateModule
 
     mod = RelocateModule()
-    assert "bt_backup" in mod.sections(), mod.sections()
+    assert mod.sections() == ("relocate", ), mod.sections()
     same = Config()
     assert mod.apply(same, same).action == "none"
 
     bt_changed = Config()
-    bt_changed.bt_backup = {"127.0.0.1:8080": "D:/x/BT_backup"}
+    bt_changed.relocate = RelocateConfig(bt_backup="D:/x/BT_backup")
     res = mod.apply(same, bt_changed)
-    assert res.action == "reloaded" and "bt_backup" in (res.detail or ""), res
-    assert mod._conf is None, "仅 bt_backup 变不得换 relocate 生效缓存"
+    assert res.action == "reloaded", res
+    assert mod._conf is bt_changed.relocate, "bt_backup 随 relocate 段整体换缓存(现读部署闸, 段变即生效)"
 
     rel_changed = Config()
     rel_changed.relocate = RelocateConfig(enabled=True)
@@ -610,7 +652,7 @@ def test_nested_dir_alias_blocked_group(tmp_path, monkeypatch):
     _stub_cap(monkeypatch, file_kind="hardlink", dir_kind="junction")
     mgr, client, src, dst, content, files = relocate_env(tmp_path, file_count=8, state="pausedUP")
     mgr.config.relocate.enabled = True
-    mgr.config.bt_backup["127.0.0.1:16585"] = str(tmp_path)
+    mgr.config.relocate.bt_backup = str(tmp_path)
     target = os.path.join(src, "Show", "待删2")  # 不预建: 目标叶子未建是迁移正常输入(上溯祖先取卷位),
     # 预建反而把内容根 listing 混入非本组条目 -> exclusive=False -> 形态降级 FILE_LINKS
     mod = mgr.host.get("relocate")
@@ -643,7 +685,7 @@ def test_source_qb_twin_deep_reuses_qb_temp(tmp_path, monkeypatch):
     rel = "Show/data/b/c/f3.bin"
     mgr, client, src, dst, content, files = relocate_env(tmp_path, paths=(rel, ), state="pausedUP", data_dir=False)
     mgr.config.relocate.enabled = True
-    mgr.config.bt_backup["127.0.0.1:16585"] = str(tmp_path)
+    mgr.config.relocate.bt_backup = str(tmp_path)
     mod = mgr.host.get("relocate")
     real = os.path.join(str(tmp_path), "src", *rel.split("/"))
     os.rename(real, real + ".!qB")  # 深层孪生化: 原名不在、孪生在(内容根顶层扫描看不到)
@@ -759,14 +801,17 @@ def test_own_alias_hardlink_scan_tolerates_dead_alias_paths(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# 覆盖率缺口清偿(26-11-07): bt_backup 解析非字典输入
+# 覆盖率缺口清偿(26-11-07): bt_backup 解析非字典输入; 26-11-11-0259 S1 改标量口径
 # ---------------------------------------------------------------------------
 
 
-def test_load_bt_backup_config_non_dict_is_empty():
-    """bt_backup 段非字典(字符串/列表) => 空表(启动期校验另拦, 解析面只转换不炸)"""
-    from auto_qb.config.loaders import load_bt_backup_config
+def test_relocate_bt_backup_loader_parse():
+    """relocate.bt_backup 解析面(load_relocate_config): 段非字典(字符串/列表) = 全默认;
+    键缺省 = ""; 值剥首尾空白(启动期校验另拦形状, 解析面只转换不炸)"""
+    from auto_qb.config.loaders import load_relocate_config
 
-    assert load_bt_backup_config(None) == {}
-    assert load_bt_backup_config("not-a-dict") == {}
-    assert load_bt_backup_config(["a", "b"]) == {}
+    assert load_relocate_config(None).bt_backup == ""
+    assert load_relocate_config("not-a-dict").bt_backup == ""
+    assert load_relocate_config(["a", "b"]).bt_backup == ""
+    assert load_relocate_config({}).bt_backup == ""
+    assert load_relocate_config({"bt_backup": "  D:/qB/BT_backup  "}).bt_backup == "D:/qB/BT_backup"

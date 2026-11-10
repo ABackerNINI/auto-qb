@@ -209,15 +209,16 @@ def _pid_alive(pid: int) -> bool:
 
 
 def _write_cfg(case: Path, web_port: int) -> Path:
-    """测试派生配置(生产配置零触碰): 直连副实例 + relocate 开(阈值默认 8) + bt_backup 查表 + WEB 开。
+    """测试派生配置(生产配置零触碰): 直连副实例 + relocate 开(阈值默认 8) + bt_backup 标量 + WEB 开。
 
-    bt_backup 键 = 实例 host:port, 值 = 副实例 portable profile 的 BT_backup(由 env_registry EXE
-    派生, 不手抄路径) —— daemon 按 spec.bt_backup 定位 fastresume, 缺它整条改写链静默空转。
+    relocate.bt_backup = 副实例 portable profile 的 BT_backup(由 env_registry EXE 派生, 不手抄
+    路径) —— daemon 按 spec.bt_backup 定位 fastresume, 缺它整条改写链静默空转(v8 起单实例
+    标量, 旧顶层多实例表已退役且无兼容读法, 计划 26-11-11-0259 S2)。
     """
     cfg = case / "config.yml"
     cfg.write_text(
         f"""config:
-    schema_version: 7
+    schema_version: 8
     qbittorrent:
         host: 127.0.0.1
         port: {instances.SECONDARY}
@@ -239,8 +240,7 @@ def _write_cfg(case: Path, web_port: int) -> Path:
     relocate:
         enabled: true
         alias_file_threshold: 8
-    bt_backup:
-        "127.0.0.1:{instances.SECONDARY}": "{BT_BACKUP.as_posix()}"
+        bt_backup: "{BT_BACKUP.as_posix()}"
     web:
         enabled: true
         host: 127.0.0.1
@@ -256,8 +256,8 @@ def _write_cfg(case: Path, web_port: int) -> Path:
         raise AssertionError(f"配置未指向副实例 {instances.SECONDARY}, 拒跑: {cfg}")
     if f"port: {instances.PRIMARY}" in text:
         raise AssertionError(f"配置指向了 {instances.PRIMARY}(真实种子), 拒跑: {cfg}")
-    if "schema_version: 7" not in text:
-        raise AssertionError(f"配置缺 schema_version: 7(会触发迁移改写), 拒跑: {cfg}")
+    if "schema_version: 8" not in text:
+        raise AssertionError(f"配置缺 schema_version: 8(会触发迁移改写), 拒跑: {cfg}")
     return cfg
 
 
@@ -380,7 +380,7 @@ def test_rm04_20_rlfn_symlink_window_e2e():
         M.purge_tree(src.parent)
         _flush(ev, case)
 
-        # ---- A2 产品实例(派生配置: relocate on + bt_backup 查表; 旁路 runner 已装)
+        # ---- A2 产品实例(派生配置: relocate on + relocate.bt_backup 标量; 旁路 runner 已装)
         web_port = app.free_port()
         cfg = _write_cfg(case, web_port)
         p = start_bypass_app(case, cfg)

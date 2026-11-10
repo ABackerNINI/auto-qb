@@ -37,6 +37,14 @@ floor(600/main_tick) 且下限 1(D8); 换算与被钳制均逐键一条 note。�
 (不猜测用户意图), 只交一条 note —— 随后由校验层以未知键/解析错 fail-fast, 不静默曲解(D1)。
 未设旧键的配置不动(D9): 默认值由 30s 变为 1 倍即 1 x main_tick, 该行为变更由升级行为本身承担,
 迁移不补写新键(补写会把「用户显式选了 1 倍」与「沿默认」混为一谈)。
+
+v7→v8(计划 26-11-11-0259 S2, 顶层 bt_backup 表收编为标量): 旧顶层 bt_backup 多实例表
+{"host:port": 路径} 的唯一消费方(bt_backup_path_of)只按当前 qB 连接身份查表 —— 表里第二个
+条目永远无人消费, v8 收编为 relocate.bt_backup 单实例标量(D1)。一次性搬运口径(D7):
+恰一条非空条目 -> 值搬成 relocate.bt_backup(唯一候选无歧义); 多于一条非空 -> 删键 + note
+提示重配(哪个条目对应当前 qB 身份迁移无从得知, 拒绝替用户挑); 全空/无有效值(含整段非字典)
+-> 删键 + note 提示重配。旧键缺失 -> 仅抬版本号。无兼容读法(D2): 校验器/加载器只认新形状,
+旧形状只存在于本迁移入口。
 """
 from math import ceil, floor
 from typing import Any, Dict, List, Tuple
@@ -413,3 +421,49 @@ def _migrate_config_6_7(cfg: dict) -> dict | Tuple[dict, List[str]]:
 
 
 MIGRATIONS["config"][6] = _migrate_config_6_7
+
+# ---- v7→v8: 顶层 bt_backup 多实例表收编为 relocate.bt_backup 单实例标量(计划 26-11-11-0259 S2) ----
+
+
+def _migrate_config_7_8(cfg: dict) -> dict | Tuple[dict, List[str]]:
+    """v7→v8: 旧顶层 bt_backup 表 {"host:port": 路径} 一次性搬成 relocate.bt_backup 标量(D7)
+
+    - 旧键缺席 -> 原样返回裸 dict, 零副作用(仅抬版本号, 由框架盖章)。
+    - 恰一条非空条目(值为 strip 后非空的字符串) -> 值搬成 relocate.bt_backup + 一条 note
+      (唯一候选, 无歧义可猜); 新位置已有非空值时新位置获胜, 旧值只丢弃(v1→v2 新旧并存同款,
+      不覆盖用户已显式写好的标量)。
+    - 多于一条非空 / 全空或无有效值(含整段非字典的畸形形状) -> 删键 + note 提示重配(D7 不猜:
+      多实例表里哪个条目对应当前 qB 连接身份, 迁移无从得知 —— 表的唯一消费方只按当前身份查,
+      猜错条目 = 把 fastresume 收尾静默指到别人的 BT_backup)。
+    - 幂等: 旧键删除后重放即走「旧键缺席」分支, 零 diff。
+    """
+    if "bt_backup" not in cfg:
+        return cfg
+    legacy = cfg.pop("bt_backup")
+    valid = [(key, value.strip()) for key, value in legacy.items()
+             if isinstance(value, str) and value.strip()] if isinstance(legacy, dict) else []
+    if len(valid) == 1:
+        key, path = valid[0]
+        relocate = cfg.get("relocate")
+        if not isinstance(relocate, dict):
+            relocate = {}  # 段缺失即建; 畸形形状(v7 校验层本会拒)按 v1→v2 建 hr_check 同款重建
+            cfg["relocate"] = relocate
+        if str(relocate.get("bt_backup") or "").strip():
+            return cfg, [
+                f"config.bt_backup[{key!r}]: 已移除(relocate.bt_backup 已有显式配置, 新位置获胜; "
+                f"旧值 {path!r} 未搬运, 如需以它为准请自行改 config.relocate.bt_backup)"
+            ]
+        relocate["bt_backup"] = path
+        return cfg, [f"config.bt_backup[{key!r}] -> config.relocate.bt_backup: 旧表唯一非空条目已收编为单实例标量(值 {path!r})"]
+    if len(valid) > 1:
+        return cfg, [
+            f"config.bt_backup: 已移除(旧表有 {len(valid)} 条非空条目, 无法判定哪条对应当前 qB 实例, 不做猜测搬运; "
+            "如需启用 fastresume 收尾, 请在 config.relocate.bt_backup 手工填写该实例的 BT_backup 路径)"
+        ]
+    return cfg, [
+        "config.bt_backup: 已移除(旧表无有效条目; 如需启用 fastresume 收尾, "
+        "请在 config.relocate.bt_backup 手工填写该实例的 BT_backup 路径)"
+    ]
+
+
+MIGRATIONS["config"][7] = _migrate_config_7_8

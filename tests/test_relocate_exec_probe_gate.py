@@ -94,10 +94,9 @@ def _gate_env(monkeypatch, *, host="127.0.0.1", port=8080):
             torrents_set_location=lambda **kw: locs.append(kw)
         ),
         config=types.SimpleNamespace(
-            relocate=RelocateConfig(enabled=True),
-            qbittorrent=types.SimpleNamespace(host=host, port=port, username="", password="", api_key=""),
             # 部署闸 D 格放行面(S1 执行体同拦): bt_backup 指向真实存在目录(本文件所在 tests/)
-            bt_backup={f"{host}:{port}": str(Path(__file__).resolve().parent)},
+            relocate=RelocateConfig(enabled=True, bt_backup=str(Path(__file__).resolve().parent)),
+            qbittorrent=types.SimpleNamespace(host=host, port=port, username="", password="", api_key=""),
         ),
         state=types.SimpleNamespace(data={}),
     )
@@ -273,7 +272,7 @@ def test_missing_qb_config_blocks_without_caching(monkeypatch):
     """qbittorrent 连接配置缺失 => 环境性失败短路: blocked(gate same_fs)、零探测、零缓存写入
 
     经 _ensure_probe 直测: 无 qbittorrent 段的 config 在执行体现在先被部署闸 D 格拦下
-    (bt_backup 查表需要 qbittorrent 身份) —— 部署闸在前是 S1 fail-fast 的正确顺序,
+    (bt_backup 未配置) —— 部署闸在前是 S1 fail-fast 的正确顺序,
     本用例聚焦探测闸自身的 qb_conf=None 分支, 不再经 relocate_execute 全链。
     """
     mod, _locs = _gate_env(monkeypatch)
@@ -300,8 +299,8 @@ def test_fingerprint_change_reprobes(monkeypatch):
     mod._ctx.config.qbittorrent = types.SimpleNamespace(
         host="127.0.0.1", port=8081, username="", password="", api_key=""
     )
-    # 指纹换实例的同时 bt_backup 表也要跟上新实例身份(S1 部署闸按 host:port 查表)
-    mod._ctx.config.bt_backup["127.0.0.1:8081"] = mod._ctx.config.bt_backup["127.0.0.1:8080"]
+    # bt_backup 已收编为 relocate.bt_backup 标量(26-11-11-0259 S1): 与实例身份解耦,
+    # 换实例无需再同步路径表 —— 只钉指纹面
     assert mod.relocate_execute(["HA"], "R:/dst2")[0]["cls"] == "started"
     assert len(calls) == 2, "指纹变更必须重新探测"
     # 同配置二次: 指纹未变, 命中 passed 缓存, 不再探

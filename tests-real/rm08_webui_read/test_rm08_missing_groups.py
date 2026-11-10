@@ -55,7 +55,7 @@ CONFIGURED_DOMAIN = "rm08grp.invalid"
 
 GRP_CONFIG_TEMPLATE = """\
 config:
-    schema_version: 7
+    schema_version: 8
     qbittorrent:
         host: 127.0.0.1
         port: {qb_port}
@@ -117,7 +117,7 @@ def tracker_entry_block(key: str, domain: str) -> str:
 def write_grp_cfg(case: Path, trackers_block: str) -> tuple[Path, int]:
     """生成 dev.webui 同款最小配置 + trackers 段: 指**副实例**空凭据(bypass_local_auth, §2.5.2)。
 
-    自带断言: 不指主实例 / api_key 为空(token 落盘红线) / schema_version: 7(§2.7)。
+    自带断言: 不指主实例 / api_key 为空(token 落盘红线) / schema_version: 8(§2.7)。
     """
     cfg = case / "config.yml"
     web_port = app.free_port()
@@ -134,7 +134,7 @@ def write_grp_cfg(case: Path, trackers_block: str) -> tuple[Path, int]:
     assert f"port: {instances.SECONDARY}" in text, f"配置没指向副实例(空凭据草稿本): {cfg}"
     assert f"port: {instances.PRIMARY}" not in text, f"配置指向了主实例(需 token 落盘), 拒跑: {cfg}"
     assert 'api_key: ""' in text, f"api_key 非空 —— token 落盘红线: {cfg}"
-    assert "schema_version: 7" in text, f"配置缺 schema_version: 7(会触发迁移改写), 拒跑: {cfg}"
+    assert "schema_version: 8" in text, f"配置缺 schema_version: 8(会触发迁移改写), 拒跑: {cfg}"
     return cfg, web_port
 
 

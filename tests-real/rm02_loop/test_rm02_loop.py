@@ -54,7 +54,7 @@ def cleanup(case: Path) -> None:
 
 CONFIG_TEMPLATE = """\
 config:
-    schema_version: 7
+    schema_version: 8
     qbittorrent:
         host: 127.0.0.1
         port: {qb_port}
@@ -88,7 +88,7 @@ def write_cfg(
     state_save_interval: str = "120S",
     interval: str = "60S",
 ) -> Path:
-    """生成临时配置(schema_version: 7)。qb_port 可指向代理端口/空端口 —— 那两种形态
+    """生成临时配置(schema_version: 8)。qb_port 可指向代理端口/空端口 —— 那两种形态
     过不了 app.start 的 副实例 断言, 所以本片用下面的 start() 代替, 安全面自己复核。"""
     data_dir = (case / "data").as_posix()
     cfg = case / "config.yml"
@@ -108,8 +108,8 @@ def write_cfg(
     text = cfg.read_text(encoding="utf-8")
     if f"port: {instances.PRIMARY}" in text:
         raise AssertionError(f"配置指向了 {instances.PRIMARY}(真实种子), 拒跑: {cfg}")
-    if "schema_version: 7" not in text:
-        raise AssertionError(f"配置缺 schema_version: 7(会触发迁移改写), 拒跑: {cfg}")
+    if "schema_version: 8" not in text:
+        raise AssertionError(f"配置缺 schema_version: 8(会触发迁移改写), 拒跑: {cfg}")
     return cfg
 
 
@@ -193,7 +193,7 @@ def test_rm02_01_interval_cadence():
     """[RM02-01] interval 真节拍: 同步线请求周期与 sync_interval 一致, 无死段无空转
 
     前置: 副实例(SECONDARY)在线空库; 本地 TCP 代理(39000-39999 探空端口, 转发到副实例);
-          配置 schema_version: 7、qB 地址指代理、main_tick=2S/sync_interval=1.5S、非 dry-run。
+          配置 schema_version: 8、qB 地址指代理、main_tick=2S/sync_interval=1.5S、非 dry-run。
     副作用: 无(对 qB 零写, 只读快照请求; 用例目录随收尾删除)。
     回滚: 停进程 + 关代理 + 删用例目录。
     失败判据: 同步线请求间隔中位数偏离 1.5s 超出 +-20%; 或出现 >4.5s 的无请求死段;

@@ -184,10 +184,10 @@ def fake_seed(
 
 
 def write_cfg(case: Path, trackers: dict, rule_sets: dict, *, web: bool = True) -> Path:
-    """生成临时配置(schema_version: 7, 直连副实例)。rule_sets = {规则集名: {规则名: spec}},
+    """生成临时配置(schema_version: 8, 直连副实例)。rule_sets = {规则集名: {规则名: spec}},
     经 yaml.safe_dump 落盘(键序 = 插入序, 规则执行顺序随定义序)。"""
     cfg: dict = {
-        "schema_version": 7,
+        "schema_version": 8,
         "qbittorrent": {
             "host": "127.0.0.1",
             "port": instances.SECONDARY,
@@ -222,8 +222,8 @@ def write_cfg(case: Path, trackers: dict, rule_sets: dict, *, web: bool = True) 
         raise AssertionError(f"配置指向了 {instances.PRIMARY}(真实种子), 拒跑: {path}")
     if f"port: {instances.SECONDARY}" not in text:
         raise AssertionError(f"配置没指向副实例(空库草稿本), 拒跑: {path}")
-    if "schema_version: 7" not in text:
-        raise AssertionError(f"配置缺 schema_version: 7(会触发迁移改写), 拒跑: {path}")
+    if "schema_version: 8" not in text:
+        raise AssertionError(f"配置缺 schema_version: 8(会触发迁移改写), 拒跑: {path}")
     return path
 
 

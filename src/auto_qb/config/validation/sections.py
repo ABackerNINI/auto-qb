@@ -64,6 +64,8 @@ KNOWN_RELOCATE_KEYS = {
     "low_space_warn",
     "assume_shared",
     "pending_tag",
+    # BT_backup 目录标量(计划 26-11-11-0259 S1 收编; 原顶层 bt_backup 表退役)
+    "bt_backup",
 }
 
 KNOWN_WEB_KEYS = {"enabled", "host", "port", "token", "skip_local_verify", "skip_check_menu", "ctx_menu", "transfer"}
@@ -701,7 +703,7 @@ def _validate_fs(spec: dict | None, errors: List[str]) -> None:
 
 
 def _validate_relocate(spec: dict | None, errors: List[str]) -> None:
-    """relocate 段(整组迁移, 计划 26-10-18-1604 §3.7): 10 键逐一键级校验
+    """relocate 段(整组迁移, 计划 26-10-18-1604 §3.7): 11 键逐一键级校验
 
     阈值分流细节(alias_file_threshold 的 7/8/9 边界、hard_max_links 与目录别名的取舍)
     由 P2 引擎纯函数表驱动测试覆盖, 本处只做形状与粗范围: 两个 int >= 1 且
@@ -709,7 +711,8 @@ def _validate_relocate(spec: dict | None, errors: List[str]) -> None:
     plan() 的阈值分支先于 hard_max 检查, threshold > hard_max 时 count < threshold 的
     组绕过逐文件链接硬上限, 「链接爆炸防护」静默失效); verify 取值域
     单点(RELOCATE_VERIFY_MODES, schema.fields 同源); 两个时间键 > 0; low_space_warn 走
-    parse_fsize(二进制单位, YAML 写 10GiB; 0 = 不告警)。
+    parse_fsize(二进制单位, YAML 写 10GiB; 0 = 不告警); bt_backup 标量(计划
+    26-11-11-0259 S1 收编)只验形状, 见 _validate_relocate_bt_backup。
     """
     if spec is None:
         return
@@ -758,6 +761,21 @@ def _validate_relocate(spec: dict | None, errors: List[str]) -> None:
         _try(parse_fsize, spec["low_space_warn"], "config.relocate.low_space_warn(如 10GiB)", errors)
     if "pending_tag" in spec:
         _validate_relocate_pending_tag(spec["pending_tag"], errors)
+    if "bt_backup" in spec:
+        _validate_relocate_bt_backup(spec["bt_backup"], errors)
+
+
+def _validate_relocate_bt_backup(raw: Any, errors: List[str]) -> None:
+    """relocate.bt_backup 标量校验(计划 26-11-11-0259 S1, 原顶层 _validate_bt_backup 表退役)
+
+    须为字符串路径; None(显式留空, load 路径已由 _strip_none 剥除)/空串/纯空白 =
+    fastresume 收尾未启用, 合法(黄金法则 2 保守默认)。只把形状错(非字符串)拦在配置期;
+    路径可达可写性归运行期预检 D 格(部署闸现场探测)。
+    """
+    if raw is None:  # 与 pending_tag 同款: 显式 null = 未配置(load 路径剥空后不可达, 直接调用路径放行)
+        return
+    if not isinstance(raw, str):
+        errors.append(f"config.relocate.bt_backup: 须为字符串路径(留空 = fastresume 收尾未启用): {raw!r}")
 
 
 def _validate_relocate_pending_tag(raw: Any, errors: List[str]) -> None:
@@ -778,32 +796,6 @@ def _validate_relocate_pending_tag(raw: Any, errors: List[str]) -> None:
         errors.append(f"config.relocate.pending_tag: 必须落在保留命名空间(以 {RELOCATE_TAG_NS} 开头): '{raw}'")
     if "," in tag:
         errors.append(f"config.relocate.pending_tag: 不能含逗号(qB 标签分隔符): '{raw}'")
-
-
-def _validate_bt_backup(spec: Any, errors: List[str]) -> None:
-    """校验 config.bt_backup(各 qB 实例 BT_backup 路径表, 计划 26-11-05-0808 S1)
-
-    形状: {"host:port": "该 qB 实例的 BT_backup 目录路径"}。键 = qB 连接身份(预检按
-    qbittorrent 连接配置的 host:port 查表, 命不中 = 该实例功能未启用), 值 = 非空路径
-    字符串。动态映射段(键由用户按实例自定), 无固定子键集 —— 逐条把关: 键须含 host 与
-    port 两段且端口在 1-65535(永不可能命中的死键在配置期拦下, fail-fast), 值须为非空
-    字符串。整段缺省合法 = fastresume 收尾功能整体未启用(预检给结构化拒绝, 不在启动期
-    报错 —— 黄金法则 2 保守默认); 显式留空的键/值已被 _strip_none 剥除(= 未配置)。
-    """
-    if spec is None:
-        return
-    if not isinstance(spec, dict):
-        errors.append("config.bt_backup: 必须是字典(键 = qB 连接身份 host:port, 值 = 该实例的 BT_backup 目录路径)")
-        return
-    for key, value in spec.items():
-        where = f"config.bt_backup[{key!r}]"
-        host, _, port = str(key).strip().rpartition(":")
-        if not host or not port:
-            errors.append(f"{where}: 键须为 'host:port'(与 qbittorrent 连接配置的 host/port 一致)")
-        else:
-            _try_port(port, f"{where} 端口", errors)
-        if not isinstance(value, str) or not value.strip():
-            errors.append(f"{where}: 值必须是非空路径字符串")
 
 
 def _validate_tag_lists(cfg: dict, errors: List[str]) -> None:

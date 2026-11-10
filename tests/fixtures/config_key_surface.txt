@@ -2,7 +2,7 @@
 # 再生成: commands run test.keys-update
 # 口径: 消失/改名 = 破坏性变更 -> 抬 CURRENT_VERSIONS['config'] + config/migrations.py 注册迁移;
 #       纯新增 = 非破坏, 直接重生成. schema_version 是版本章本身不入面; 动态段归一为通配.
-version: 7
+version: 8
 
 <任意>_rules
 <任意>_rules.*.actions.add_category
@@ -69,7 +69,6 @@ add_episode_tags
 add_episode_tags.add_tag_multi
 add_episode_tags.add_tag_single
 add_episode_tags.enabled
-bt_backup
 data_dir
 delete_tags
 delete_tags_if_has_no_torrents
@@ -152,6 +151,7 @@ relocate
 relocate.alias_file_threshold
 relocate.allow_uac
 relocate.assume_shared
+relocate.bt_backup
 relocate.enabled
 relocate.hard_max_links
 relocate.low_space_warn

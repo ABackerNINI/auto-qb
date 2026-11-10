@@ -460,8 +460,8 @@ def _pin_noop_sections(new_cfg, mgr):
     (_rebuild_needed: rules_config/interval/delete_tags*/global_speed_limit_curve/trackers
     —— 不钉的话 Mock 段会被整段不等误判成 L2 重建); traffic_source 是 TrafficSnapshotModule
     的 apply 判据段(26-10-18-0813 A1: 段变 -> 就地改快照任务 interval), 同样必须钉住;
-    relocate 是 RelocateModule 的 apply 判据段(计划 26-10-18-1604 P1, 同口径);
-    bt_backup 是它的第二认领段(计划 26-11-05-0808 S1, 预检部署闸现读), 同样必须钉住。
+    relocate 是 RelocateModule 的 apply 判据段(计划 26-10-18-1604 P1, 同口径; bt_backup 已
+    收编为段内标量, 计划 26-11-11-0259 S1 认领收单 —— 钉住 relocate 即全覆盖)。
     """
     new_cfg.logging = mgr.config.logging
     new_cfg.notify = mgr.config.notify
@@ -474,7 +474,10 @@ def _pin_noop_sections(new_cfg, mgr):
     new_cfg.global_speed_limit_curve = mgr.config.global_speed_limit_curve
     new_cfg.traffic_source = mgr.config.traffic_source
     new_cfg.relocate = mgr.config.relocate
-    new_cfg.bt_backup = mgr.config.bt_backup
+    # 26-11-11-0259 S1: 顶层 bt_backup 键已删(收编 relocate.bt_backup)。relocate_lifecycle.apply
+    # 的 bt_backup 比较分支现对真实 Config 恒 None==None 短路(死分支, S5 收单时随注释一并退役),
+    # 但 MagicMock 会自动生成属性误触该分支 —— 显式钉 None 与真实 Config 同形。
+    new_cfg.bt_backup = None
     new_cfg.trackers = mgr.config.trackers
 
 
