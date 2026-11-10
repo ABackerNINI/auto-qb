@@ -1,15 +1,11 @@
-<div id="rsd">
-  <div class="viz-controls" aria-label="皮肤切换">
-    <span class="text-small" style="color:var(--muted-foreground)">皮肤</span>
-    <button type="button" class="btn btn-sm rsd-skin" data-skin="atlas" aria-pressed="true">atlas</button>
-    <button type="button" class="btn btn-sm rsd-skin" data-skin="flux" aria-pressed="false">flux</button>
-    <button type="button" class="btn btn-sm rsd-skin" data-skin="console" aria-pressed="false">console</button>
-    <button type="button" class="btn btn-sm rsd-skin" data-skin="prism" aria-pressed="false">prism · galaxy</button>
-  </div>
-
-  <div id="rsd-stage" class="rsd-stage"></div>
-
-  <style>
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>整组迁移状态展示 v2 视觉规格 · 四皮肤可切换 mockup</title>
+<style>
     /* ---- 皮肤令牌(取自各皮肤 style.css / prism themes/galaxy.css) ---- */
     #rsd.skin-atlas { --aq-bg:#0e1218; --aq-card:#151b24; --aq-row:#111722; --aq-hover:#1c2534;
       --aq-fg:#e7ebf1; --aq-muted:#96a2b5; --aq-dim:#6c7a8e; --aq-border:#253045; --aq-border-strong:#37455f;
@@ -83,14 +79,16 @@
     #rsd .st-mixed   { color:var(--aq-warn); }
     #rsd .st-ext     { color:var(--aq-dim); }
     #rsd .st-none    { color:var(--aq-fg); }
+    /* 26-11-10 修订 D6: 上排旧值不再用 opacity 做层级(深色底 + 高相似路径文本会被读成下排的淡影/伪影),
+       改 100% 不透明 + 删除线, 形状差异承载层级; 状态色仍是唯一载体 */
     #rsd .aq-row.st-moving .aq-arc, #rsd .aq-row.st-moving .aq-p { color:var(--aq-accent); }
-    #rsd .aq-row.st-moving .aq-pa { color:var(--aq-accent); opacity:.55; }
+    #rsd .aq-row.st-moving .aq-pa { color:var(--aq-accent); text-decoration:line-through; }
     #rsd .aq-row.st-pending .aq-arc, #rsd .aq-row.st-pending .aq-p { color:var(--aq-warn); }
-    #rsd .aq-row.st-pending .aq-pa { color:var(--aq-warn); opacity:.5; }
+    #rsd .aq-row.st-pending .aq-pa { color:var(--aq-warn); text-decoration:line-through; }
     #rsd .aq-row.st-failed .aq-arc, #rsd .aq-row.st-failed .aq-p { color:var(--aq-error); }
-    #rsd .aq-row.st-failed .aq-pa { color:var(--aq-error); opacity:.55; }
+    #rsd .aq-row.st-failed .aq-pa { color:var(--aq-error); text-decoration:line-through; }
     #rsd .aq-row.st-ext .aq-arc, #rsd .aq-row.st-ext .aq-p { color:var(--aq-dim); }
-    #rsd .aq-row.st-ext .aq-pa { color:var(--aq-dim); opacity:.7; }
+    #rsd .aq-row.st-ext .aq-pa { color:var(--aq-dim); text-decoration:line-through; }
     #rsd .aq-row.st-mixed .aq-p { color:var(--aq-warn); }
     @keyframes rsd-pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
     #rsd .aq-row.st-moving .aq-pb, #rsd .aq-row.st-moving .aq-arc { animation:rsd-pulse 1.8s ease-in-out infinite; }
@@ -126,6 +124,20 @@
     #rsd .aq-pop .note { margin-top:5px; padding-top:5px; border-top:1px solid var(--aq-soft); color:var(--aq-dim); font-size:11px; }
     #rsd .aq-cap { padding:8px 14px 10px; font-size:11px; color:var(--aq-dim); border-top:1px solid var(--aq-soft); background:var(--aq-card); }
   </style>
+</head>
+<body>
+<!-- 26-11-10 修订 D6(视觉规格单点): 上排旧值由 opacity:.55/.5/.7 改 100% 不透明 + 删除线; 深色底 + 高相似路径文本下透明度分层会被读成下排的淡影/伪影。状态色仍是唯一载体, 下排/弧形箭头/脉冲/浮窗不变。 -->
+<!-- 26-11-10 结构修订(闸门清障): 补 doctype/head/title, style 归 head, 皮肤切换栏补 role="group"; 原 70 条 v.Nu 存量 error 全消, CSS 规则与 JS 一字未动。 -->
+<div id="rsd">
+  <div class="viz-controls" role="group" aria-label="皮肤切换">
+    <span class="text-small" style="color:var(--muted-foreground)">皮肤</span>
+    <button type="button" class="btn btn-sm rsd-skin" data-skin="atlas" aria-pressed="true">atlas</button>
+    <button type="button" class="btn btn-sm rsd-skin" data-skin="flux" aria-pressed="false">flux</button>
+    <button type="button" class="btn btn-sm rsd-skin" data-skin="console" aria-pressed="false">console</button>
+    <button type="button" class="btn btn-sm rsd-skin" data-skin="prism" aria-pressed="false">prism · galaxy</button>
+  </div>
+
+  <div id="rsd-stage" class="rsd-stage"></div>
 
   <script>
   (function () {
@@ -311,3 +323,5 @@
   })();
   </script>
 </div>
+</body>
+</html>

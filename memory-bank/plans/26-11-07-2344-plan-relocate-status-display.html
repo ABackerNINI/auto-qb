@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="relocate-status-display">
 <meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-11-07-2344">
-<meta name="doc-updated" content="26-11-08-0818">
+<meta name="doc-updated" content="26-11-10-0832">
 <meta name="doc-refs" content="">
 <style>
   :root {
@@ -75,7 +75,7 @@
 <h1>整组迁移状态展示 v2 落地: 着色A→B两排+弧形箭头+悬停浮窗(模板定稿)</h1>
 <p class="lede">本篇只回答: 整组迁移状态展示 v2(着色 A→B 两排 + 右缘弧形箭头 + 悬停浮窗)如何落生产码 —— 数据面增量、前端替换面、浮窗调度、守阵改写与验收判据。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-07-2344 · <b>doc-updated</b> 26-11-08-0107 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-11-07-2344 · <b>doc-updated</b> 26-11-10-0832 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 会话(2026-11-07): grilling 四轮逐项拍板 + 可交互模板五轮迭代定稿; 视觉规格入库件 = <code>memory-bank/plans/attachments/relocate-status-display-v2-mockup.html</code>(四皮肤可切换、交互真实可点)
 </div>
 
@@ -150,6 +150,7 @@
   <tr><td>D15</td><td>浮窗路径块「当前位置」行(标签+路径值)改为固定色系、不随状态色(用户 2026-11-08 拍板); 实现 = 新增专用令牌 --path-src(四皮肤令牌表各定值, 青灰/钢蓝系), 「目标位置」行保持状态色强调</td></tr>
   <tr><td>D16</td><td>D9 部分修订 = 零导航点击: pair 两排的 A/B 排路径 chip 可点 = 切换路径筛选(显示值即筛选值, toggle 语义, f-on 各自独立), **仍不开抽屉/链浮窗**, 悬停浮窗不变; pair 模式原单排路径行隐藏(A 排承载同一值, R2 实施缺口修正)(用户 2026-11-08 拍板)</td></tr>
   <tr><td>D17</td><td>路径筛选 = 位置集匹配, 不新增筛选维度: save_path 恒参与, 进行中三态(moving/pending_finalize/failed)的迁移 src/dst 并入「保存位置」, 命中任一即匹配; done/cancelled 历史位置不参与(active 边界与行内 B 排展示口径对齐, 迁移完成即退出匹配 = 既定推论)。单点 <code>decorate.js::_pathPositions</code>, 四消费点同源(filters.js _facetPick/组级谓词/虚拟行谓词 + hr.js _memberPass), 弹层 options 纳入位置集(Q6a 拍板)(用户 2026-11-08 拍板)</td></tr>
+  <tr><td>D18</td><td>D6 部分修订(用户 2026-11-10 拍板): 上排「暗」不再用 <code>opacity:.55</code> —— 深色底 + 两排高相似路径文本下会被读成下排的淡影/伪影(近视错觉); 改两排同为 100% 不透明状态色, 上排(当前位置)用 <code>text-decoration: line-through</code> 标旧值, 层级载体由亮度差换成形状差异。下排、弧形箭头、tone 着色、rel-pulse、悬停浮窗与四皮肤令牌一律不动; 守阵 <code>tests/test_webui_relocate_visibility.py::test_p1_pair_upper_row_uses_strikethrough_not_opacity</code>(正反双断言, 红验双验留痕)。</td></tr>
 </table>
 
 <h2><span class="no">§07</span>风险与对策</h2>
@@ -169,6 +170,7 @@
   <li><span class="tag">R1 · 26-11-08</span> 微调:当前位置行固定色系(D15, 新令牌 --path-src);委派实施前定稿。</li>
   <li><span class="tag">R2 · 26-11-08</span> 实施完成(S1-S6 全落): 五笔分支提交(e37e570f..d7494351), test.full 5635+2(基线 26-11-08-0050), 真机 harness 四皮肤目检通过; doc-updated 同步。实施偏差: 浮窗 tone 色在 <code>.relpop</code> 域另给一份(teleport 后 <code>.rl-scope</code> 行内规则不命中); ttag 外部链接小标未实现(行级数据面无外部链接场景, 随 issue 26-11-07-1322 落地时补)。<strong>验收后发现的实施缺口(已在 R3 修正)</strong>: pair 模式原单排 save_path 行未删(计划 S2「改两排结构」语义应为替换而非追加, 迁移期间与 A 排值完全重复)。</li>
   <li><span class="tag">R3 · 26-11-08</span> 用户报缺口 + 新拍板 D16/D17, 会话 grilling 两轮定稿: ①pair 模式隐藏原单排路径行(A 排承载同一值); ②A/B 排路径 chip 可点筛选(D16, 修订 D9 为零导航点击); ③路径筛选改位置集匹配(D17, 单点 <code>_pathPositions</code>, done/cancelled 历史位置不参与; 弹层 options 纳入位置集)。守阵红验先行(3 用例对旧生产红)转绿; 新增 e2e <code>relocate-pair-filter.spec.mjs</code>(两皮肤, 真浏览器钉 pair 替换/点击筛选/toggle/f-on/done 不命中)。注意事项: e2e 里注入四粒 relocate 桩是 added_on 最旧种子, 默认排序落在种子页行窗口(P1-2)之外, 需先点「添加于」切升序再断言。</li>
+  <li><span class="tag">R4 · 26-11-10-0832</span> D6 修订: 追加 D18 拍板行(上排旧值改删除线去 opacity, 淡影/伪影错觉), 同步视觉规格单点与 webui.md 口径</li>
 </ul>
 
 </div>

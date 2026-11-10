@@ -32,7 +32,7 @@
 
 ## 迁移状态展示口径(路径列)
 
-- **行内两排 A→B 着色**: 状态唯一载体 = 颜色(当前位置/目标位置两排按态着 accent/warn/error), 无底形无边框无药丸; done/cancelled 回落单排; 判定单点 `decorate.js::relocateView(row)`, 指纹签名同步含 src。pair 模式**替换**单排路径(A 排承载同一值, 原路径行隐藏)。
+- **行内两排 A→B 着色**: 状态唯一载体 = 颜色(两排按态着 accent/warn/error, 同为 `currentColor` 且 100% 不透明), 无底形无边框无药丸; **层级靠形状差异: 上排(当前位置)删除线标旧值, 下排(目标位置)常态**(26-11-10 修订 D6: 旧 `opacity:.55` 在深色底 + 高相似路径文本上被读成下排的淡影/伪影, 近视错觉); done/cancelled 回落单排; 判定单点 `decorate.js::relocateView(row)`, 指纹签名同步含 src。pair 模式**替换**单排路径(A 排承载同一值, 原路径行隐藏)。
 - **路径 chip 点击筛选(R3 D16, 修订原 D9 零点击)**: A/B 排带 `.f-cell`(cursor+hover)+ 各自独立 `.f-on`, 点击 = `filterFromChip('path', a/b)`(显示值即筛选值, toggle 语义); 仍不开抽屉/链浮窗, 详情走悬停浮窗。
 - **路径筛选 = 位置集匹配(R3 D17)**: 匹配与选项计数同一单点 `decorate.js::_pathPositions(r)` —— save_path 恒参与, 进行中三态(moving/pending_finalize/failed)的迁移 src/dst 并入「保存位置」; done/cancelled 历史位置不参与(迁移完成即退出匹配, 既定推论)。消费点四处(filters.js _facetPick/组级谓词/虚拟行谓词 + hr.js _memberPass)禁止各写 save_path 判断。
 - **悬停浮窗**: 详情走 `shared/relocate_pop.js`(调度与 hrPop 同参: enter 120ms / leave 160ms / 移入浮窗不关 / teleport body / ESC 退栈); 数据全来自行载荷, 零新请求。
