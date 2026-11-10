@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="relocate-startup-log-inflight-count">
 <meta name="doc-refs" content="memory-bank/plans/26-11-10-0721-plan-relocate-startup-reconcile.html">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="relocate 启动日志「恢复在途 job N 条」计数含终态, 文案误导">
 <meta name="issue-summary" content="启动日志「恢复在途 job {n} 条」的 n 来自 _load_jobs() 整箱恢复, 计数含终态 job, 与「在途」文案不符, 长期部署热启用几乎必然多报 —— 运维读日志会误判存在在途迁移; 修法方向: 计数改为非终态数, 或文案改「恢复 job N 条(含终态 M)」">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-10-0327-bug-relocate-startup-log-inflight-count</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-10 03:27</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
 
@@ -118,7 +118,12 @@
   <h2><span class="no">§04</span>状态变更日志</h2>
   <ul>
     <li>2026-11-10 03:27 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-11 — 状态 Open → Done（kb.status）</li>
+</ul>
+  <h3>修复后补充</h3>
+  <p><strong>复验</strong>（2026-11-11 修复开工时）: <code>relocate_lifecycle.py</code> 启动日志仍计 <code>_load_jobs()</code> 全量, 现象在; 热启用回执与 §02 记载一致(不写「在途」, 语义本就无误导)。</p>
+  <p><strong>实际修法</strong>（= §03 方向一「计数改为非终态数」; 方向二弃用理由: 「恢复 job N 条(含终态 M)」要运维做减法才能得出在途数, 且计划 26-11-10-0721 的对账日志「启动对账 N 笔: 重入 M / 保留 K」已把 failed 账的启动处置单独留痕）: 启动日志计数改走 <code>active_jobs()</code> 单点(与未收尾拦截/作用域解析同口径, 原 <code>:111-113</code>), 文案「恢复在途 job N 条」不变、N 恒为真实在途数; 热启用回执「恢复 job {restored} 条」核毕不动 —— 它计的是整箱恢复数且文案不写「在途」。</p>
+  <p><strong>验证方式与数字</strong>: <code>commands run test.one</code> 三档 relocate 电池(<code>tests/test_relocate_units.py</code> + <code>tests/test_relocate_exec_jobs.py</code> + <code>tests/test_relocate_startup_reconcile.py</code>)94 passed / 0 failed(2026-11-11); 启动日志文案无既有测试断言; 热启用回执文案有既有断言(exec_jobs:1005/:1049、startup_reconcile:300)但回执未动, 故零测试同步。落地批次: 计划 26-11-10-0721 S5(G5⑤ 吸收项, T2 实施未覆盖, 本修复补上)。</p>
 </section>
 
 <footer>

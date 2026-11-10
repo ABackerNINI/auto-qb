@@ -28,12 +28,17 @@ class LifecycleMixin:
         self._conf = ctx.config.relocate
         if getattr(self._conf, "enabled", False):
             alias_fs.get_capability(refresh=True)
-            n = self._load_jobs()
+            self._load_jobs()
             # E1 探测崩溃残留扫描(计划 26-11-04-0055 P2-6): add 之后 delete 之前被杀会在用户
             # qB 留探测种子+文件, 启动时按 tag 清理(R2); dry-run 不动手(真写, 与相位机同口径)
             swept = 0 if self._dry_run() else sweep_probe_residue(ctx)
             swept_note = f", 启动扫描清理探测残留 {swept} 条" if swept else ""
-            logger.info(f"relocate | 启动: 整组迁移已启用(恢复在途 job {n} 条), 已完成本机链接能力探测{swept_note}")
+            # 启动日志只计非终态(issue 26-11-10-0327): _load_jobs 整箱恢复含终态 job, 照抄全量
+            # 会让「在途」文案长期部署几乎必然虚高(生产实测报 2 条实际在途 0); 计数走
+            # active_jobs() 单点(与未收尾拦截/作用域解析同口径), failed 账的启动处置由对账
+            # 日志「启动对账 N 笔: 重入 M / 保留 K」单独留痕, 终态历史在 jobs_view 可见。
+            inflight = len(self.active_jobs())
+            logger.info(f"relocate | 启动: 整组迁移已启用(恢复在途 job {inflight} 条), 已完成本机链接能力探测{swept_note}")
         else:
             logger.debug("relocate | 启动: 未启用(enabled=false), 不探测不建链不恢复 job")
 

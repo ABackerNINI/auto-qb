@@ -7,9 +7,9 @@
 <title>relocate 启动对账自愈: 终态失败账按物理现状重推相位(防御性重启重判)</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="relocate-startup-reconcile">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="In Progress">
 <meta name="doc-added" content="26-11-10-0721">
-<meta name="doc-updated" content="26-11-10-2333">
+<meta name="doc-updated" content="26-11-11-0125">
 <meta name="doc-refs" content="memory-bank/tasks/26-11-10-backend-relocate-startup-reconcile.md, memory-bank/plans/26-11-10-0230-plan-relocate-listing-false-negative.html, memory-bank/issues/26-11-10-0326-feat-relocate-terminal-jobs-no-exit.html, memory-bank/issues/26-11-10-0327-bug-relocate-startup-log-inflight-count.html">
 <style>
   :root {
@@ -75,7 +75,7 @@
 <h1>relocate 启动对账自愈: 终态失败账按物理现状重推相位(防御性重启重判)</h1>
 <p class="lede">本篇只回答: relocate 终态 <code>failed</code> 账为何要在每次重启按物理现状重推相位(启动对账)、重入资格的物理证据标准、重入后如何零新增逻辑地复用既有收尾链自愈到 <code>done</code>,以及 Blood 组既有失败账(<code>jr-a2ce556d0165</code>)如何借此零人工零搬数收敛 —— 前序计划 26-11-10-0230 的自检假阴性修复只防新增,本篇补「账面服从现实」的防御面。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-10-0721 · <b>doc-updated</b> 26-11-10-2333 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-11-10-0721 · <b>doc-updated</b> 26-11-11-0125 · <b>doc-status</b> In Progress · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 2026-11-10 生产取证会话(修复部署后 Blood 账未自愈、组仍裂)→ 用户推翻上轮 D2/D3 → grilling 三轮(Round1 七问作废 → Round2 修正为「回既有收尾窗」模型 → Round3 纠正 hotfix 定性、定案通用对账)拍板 G1-G5;代码事实由只读探员取证
 </div>
 
@@ -185,6 +185,7 @@
   <li><span class="tag">R1 · 26-11-10-0749</span> 评审轮 1(计划文本批): 4 发现(3 major 1 minor)引文过检 4/4 全修 —— 证据②收紧为全量在位(缺文件不放行, 撤销 B′ any-hit 复用)/误重入风险行重写(唯一防线=证据②, 撤销 _step_verify 兜底错误断言)/A1 载体改 armed_at&gt;0 闸(attempts 为别名重建配额不挪用)/qbmanager 行号修正 :510/:520-532</li>
   <li><span class="tag">R2 · 26-11-10-0810</span> 评审轮 2(修复循环): 回退检查 4/4 未回退; 新 2 major —— 前置闸 armed_at&gt;0 进判定表(armed_at&gt;0 不进表, 行 2 补 armed_at==0 限定)/重入落账即置 armed_at(pre-arm 自检 NEGATIVE 形态 armed_at 恒 0, 仅武装置位闸不闭环; journal 锚点联动分析入 §3.3, S2 核对) —— F1-r2 引文因转抄丢空格被 review.check REFUTE 弃, 实质经主会话自核坐实(自检 :240 先于 _arm :251-254 / _fail :170 不置 armed_at), 按自发修复处置不计 修 数; §06 G2 行同步轮 1 收紧口径</li>
   <li><span class="tag">R3 · 26-11-10-2333</span> 评审轮 4(T2a 实施批): 1 major 1 nit 全修 —— 证据一口径对齐实现(path_normalize 等值与既有 _recover/_step_verify 同点, 撤销 normcase 表述, 大小写病态落保守保持 failed; 真做折叠须动共享核验路径扩面, 违 G3)/对账 tick docstring 职责补全(重入落账+置 armed_at 在本方法)</li>
+  <li><span class="tag">R4 · 26-11-11-0125</span> S1-S5 实施完成(见任务档案 26-11-10-backend-relocate-startup-reconcile): 机制 4897d4f6 + 基线 4b69ed4f + 真机 RM04-21 4a01c94e + S5 回写(issue 0327 修/0326 收窄/hr-groups 口径句)</li>
 </ul>
 
 </div>

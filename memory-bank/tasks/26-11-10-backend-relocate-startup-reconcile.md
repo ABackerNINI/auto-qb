@@ -2,8 +2,8 @@
 
 **Status:** Open
 **Added:** 2026-11-10
-**Updated:** 2026-11-10
-**Summary:** relocate 终态失败账启动对账自愈: 按物理现状重推相位(G1-G5+A1), 复用既有收尾链零搬数收敛; 计划 26-11-10-0721(Open), S1-S5 等显式开工
+**Updated:** 2026-11-11
+**Summary:** relocate 终态失败账启动对账自愈: 按物理现状重推相位(G1-G5+A1), 复用既有收尾链零搬数收敛; 计划 26-11-10-0721 S1-S5 已完成(计划 In Progress, 终审收口另翻 Done)
 **Topics:** backend-relocate-startup-reconcile
 **Refs:** memory-bank/plans/26-11-10-0721-plan-relocate-startup-reconcile.html
 
@@ -37,14 +37,23 @@ relocate 终态 failed 账如何通过「启动对账」自愈(判定表/重入�
 
 | 步 | 内容 | 状态 |
 |---|---|---|
-| S1 | 单测红验: 判定表四行+重入上限+无态推导幂等 | Open |
-| S2 | 实施: flag 推导+首连 tick 对账+判定表+重入 | Open |
-| S3 | 全量 test.full + 基线切片 | Open |
-| S4 | 真机闭环(环境1)+ RM04 沉淀 | Open |
-| S5 | 回写(issue ③ Done/② 收窄/hr-groups.md)+ 收尾评审 | Open |
+| S1 | 单测红验: 判定表四行+重入上限+无态推导幂等 | Done(2026-11-10) |
+| S2 | 实施: flag 推导+首连 tick 对账+判定表+重入 | Done(2026-11-10) |
+| S3 | 全量 test.full + 基线切片 | Done(2026-11-11) |
+| S4 | 真机闭环(环境1)+ RM04 沉淀 | Done(2026-11-11) |
+| S5 | 回写(issue ③ Done/② 收窄/hr-groups.md)+ 收尾评审 | Done(2026-11-11) |
 
 ## 进度日志
 
 ### R0 · 立档 (2026-11-10)
 
 生产取证(修复已部署但 Blood 账 failed/组裂,零重发实证)→ grilling 三轮(Round1 七问作废 → Round2 回收尾窗模型 → Round3 定案通用对账)→ 用户「按推荐」全采 → 计划 26-11-10-0721 入库(Open)+ 本档案立档,双向补链(前序计划 26-11-10-0230、issue 0326/0327)。实施等显式开工。
+
+### R1 · 实施 S1-S5 (2026-11-11)
+
+- S1+S2 机制实施(4897d4f6): `_load_jobs` 推导对账 flag + 首连 tick 判定表对账 + 双证据重入(重入落账即置 armed_at, 闸对所有失败形态闭环), 新用例 12(test_relocate_startup_reconcile.py); 顺带清偿两笔存量红(tests-real ASCII/schema 守卫)。
+- S3 全量基线 4b69ed4f(切片 26-11-11-0001, 全量数字见 kb.baseline); S4 真机 RM04-21 两遍 PASS(4a01c94e, 时长/断言数见 real-baselines 26-11-11-0042; 生产 16585/26586 零触碰)。
+- S5 回写: issue 0327 修(启动日志计数改走 active_jobs 单点, 翻 Done)+ issue 0326 收窄批注(Open 保留)+ hr-groups.md 整组迁移节补「失败账对账重推」句 + 计划 26-11-10-0721 翻 In Progress(终审收口另翻 Done)。
+- 评审账: T1 立档批 轮 3(检 5/6 修 5)+ T2 实施批 轮 2(检 3/3 修 3)+ T4 真机批 轮 2(检 2/2 修 2 minor); S5 回写批评审随本批收尾闸门。
+
+- 2026-11-11 01:25 S1-S5 实施完成: 机制实施(4897d4f6)+全量基线(4b69ed4f, 全量数字见 kb.baseline)+RM04-21 真机两遍 PASS(4a01c94e)+S5 回写(issue ③ 修/② 收窄/hr-groups 口径句)
