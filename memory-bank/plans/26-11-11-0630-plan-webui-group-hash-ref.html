@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>WebUI 组行 hash 引用式与 /api/state 全量轮瘦身联合立项</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="webui-group-hash-ref">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-11-0630">
+<meta name="doc-updated" content="26-11-11-0630">
+<meta name="doc-refs" content="memory-bank/issues/26-10-07-1420-perf-webui-group-row-hash-ref.html, memory-bank/issues/26-10-08-0411-perf-webui-api-state-pagination.html, memory-bank/tasks/26-11-11-webui-group-hash-ref.md">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: webui-group-hash-ref</div>
+<h1>WebUI 组行 hash 引用式与 /api/state 全量轮瘦身联合立项</h1>
+<p class="lede">本篇只回答: 两件 perf issue(<a href="../issues/26-10-07-1420-perf-webui-group-row-hash-ref.html">26-10-07-1420 组行 hash 引用式</a> / <a href="../issues/26-10-08-0411-perf-webui-api-state-pagination.html">26-10-08-0411 /api/state 全量轮瘦身</a>)怎么联合落地 —— 组行 members 改 hash 引用式(选项 C)先行, 全量轮成本构成实测拆分(S0)置为计划首步, B(按需字段)/A(分页)降为实测数字出来后的条件裁决点。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-11-0630 · <b>doc-updated</b> 26-11-11-0630 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 会话: 用户指令「两个issue联合复验, 然后grilling, 出一个计划」(2026-11-11); 联合复验两件均仍复现(HEAD 90764579)后 grilling 一轮五问拍板(D1-D5 全按推荐)
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+
+<h3>背景</h3>
+<p>增量同步一期(plan 26-10-07-0414)落地后稳态轮询走 delta 载荷(1.8 KB 级), 但两笔遗留仍在: <strong>①</strong>组行内嵌完整 members 明细数组(3000 种子全量回包 6.3 MiB 的主体), 任意成员速度抖动脏整条组行, 组视图增量粒度天然停在「组行」; <strong>②</strong>全量轮(首屏 / 多标签冷启动 / rid 滑窗 / 防御降级)仍回整表, HTTP 93.8 ms@3000、前端整表替换 562-816 ms@3000, 原方向③(分页/按需字段)未实施。两件都要动响应体形状, 10-08 收口档案已建议一起排; 本计划联合认领。</p>
+
+<h3>目标</h3>
+<ul>
+  <li><strong>G1</strong> 组行 <code>members</code> 改 hash 引用式: 组行只带聚合字段 + hash 数组, 明细由前端经既有 <code>memberByHash()</code> 基建从 torrents ∪ singles 拼装 —— 全量回包的 members 重复份额塌掉(6.3 MiB 口径的主体)。</li>
+  <li><strong>G2</strong> 组视图增量粒度实质下降(C1 口径): 成员抖动轮的组行 upsert 从「整行 × 全成员明细」缩为「聚合字段 + hash 列表」—— 粗估 100 成员组 ≈40 KB → ≈5 KB(约 8 倍), 精确数字 S0 实测。</li>
+  <li><strong>G3</strong> 协议偏移自愈: 前端轮询比对 app version, 变更即 <code>location.reload()</code> —— 「升级后旧标签页静默渲染破损」变「自愈」。</li>
+  <li><strong>G4</strong> 全量轮成本构成实测拆分(issue 2 §05 预置的第一步), 数字出来后 B/A 只按实测裁决, 不凭猜立项。</li>
+</ul>
+
+<h3>设计不变量</h3>
+<ul>
+  <li><strong>R8 整行替换不破</strong>(C1 口径): 组行 delta upsert 仍是完整行对象(聚合 + hash 列表), 不做字段级 patch / 部分合并。</li>
+  <li><strong>增量安全网全数保留</strong>: full 语义常驻回退、<code>_reduce_delta</code> 三判据(窗外 / 窗内含 full 代 / 缺行防御)、镜子测试与「S6 局部重算 == 全量重跑」单测, 全部只改形状不改语义。</li>
+  <li><strong>兼容口径换轨</strong>: 全量分支响应体形状演进, 不再承诺「与历史响应逐字节等价」(那是 S3 增量协商的独立提交兼容闸, 本计划是响应体二次演进, 两码事)。兼容保障 = 同仓同进程发布(静态 UI 由同一服务端出)+ 静态 no-cache+ETag 重校验(<code>static_ui.py:49-58</code>)+ G3 version-reload 自愈。</li>
+  <li><strong>前端机制不动, 只换数据源</strong>: 乐观补丁链 / WeakMap 记忆化指纹 / 筛选器族逻辑不改写; 60 处 <code>g.members</code> 消费位(全树 grep 口径, 见 §02)零 diff 为前端主验收标准(§04 S2)。</li>
+  <li><strong>范围守恒</strong>: C2 / B / A 全部是实测触发的条件项, 不预设不顺手做; shows 视图已是 hash 引用式, 本计划不再动它的行协议。</li>
+</ul>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+
+<h3>复验事实(取证 2026-11-11, HEAD 90764579)</h3>
+<table>
+  <tr><th>事实</th><th>位置</th><th>口径</th></tr>
+  <tr><td>组行内嵌 members 明细</td><td><code>views_group.py:25</code>, <code>"members": members_view</code> 在 :116-117</td><td>P-02 一期口径(选项 A)原样; <code>_publish_partial_locked</code> 注释同款在 <code>runtime_views.py:452</code> 起</td></tr>
+  <tr><td>全量分支整表回传</td><td><code>runtime_views.py:613</code>(全量段 649-660); 路由 <code>server/routes/state.py:53</code></td><td>首屏 / 冷启动 / 窗外 / 防御降级都落这里</td></tr>
+  <tr><td>三处回落全量判据</td><td><code>_reduce_delta</code> · <code>runtime_views.py:664</code>(窗外 :684-689 / 窗内含 full 代 :691-692 / 缺行防御 :713-749, return 在 717/723/728/749)</td><td>语义保留不变, 本计划不改判定</td></tr>
+  <tr><td>VIEW_ARRAYS / _DELTA_VIEWS</td><td><code>views_common.py:111</code> / <code>runtime_common.py:50</code></td><td>group=(groups,singles); show=(shows,groups,singles) —— hash 化后须连带 torrents(见 §03)</td></tr>
+  <tr><td>前端成员明细索引</td><td><code>memberByHash</code>(decorate.js 等在用); 索引源 = groups ∪ singles ∪ torrents(<code>delete_flow.js:52</code> 注释原文;hash 化后 groups 段不再贡献明细, 生效源 = singles ∪ torrents)</td><td>hash 引用式取数基建已存在, shows 在用</td></tr>
+  <tr><td>shows hash 引用先例</td><td><code>views_episodes.py:32</code>(<code>node["members"].append(rec.hash)</code>)</td><td>S9b 起 shows delta 已解锁 —— hash 引用式与 delta 协议兼容已被趟过</td></tr>
+  <tr><td>前端 g.members 消费面</td><td><strong>60 处 / 17 文件</strong>(全树 grep g.members, 含模板 tpl/ 2 文件 7 处、均为真实消费位;filters.js 五筛选器族、decorate.js 指纹与 <code>_aggStatus</code>、commands_optimistic 乐观链 3 处等)</td><td>入池锚点仅记 decorate.js 两段;全树口径在入池树(f07cc562)即 50 处 / 13 文件, 现 60 处 / 17 文件 —— 代码消费面大体持平, 扩的是复验审计覆盖;「立项级」的实质是物化接缝须零波及全部消费位</td></tr>
+  <tr><td>守阵钉住旧契约</td><td><code>tests/test_webui_delta_merge.py</code> 多处</td><td>断言「组行内嵌 members 随整行重建(P-02 一期口径/R8)」—— S1 须同步改造</td></tr>
+  <tr><td>静态发布面</td><td><code>static_ui.py:49-58</code> no-cache+ETag 中间件</td><td>前后端同仓同进程发布, 旧标签页刷新即愈, 不背长期共存面</td></tr>
+  <tr><td>状态栏计数已服务端化</td><td><code>views_row.py:149</code> <code>_build_speed_totals</code></td><td>「前端从 groups[].members 聚合」的消费面已部分收缩(26-09-20-1646 先例)</td></tr>
+</table>
+
+<h3>痛点(能引的数字都在账)</h3>
+<ul>
+  <li>3000 种子全量回包 6.3 MiB(计划 26-10-07-0414 S0 实测), 主体是 members 内嵌; delta 稳态 1,809 B ≈ 全量 1/4800 —— 差距就是本计划的收益空间。</li>
+  <li>成员抖动脏整条组行: delta 组行 upsert 携带全组成员明细(100 成员组 ≈ 40 KB/抖动轮, 粗估 —— 键数与精确体积以 S0 实测为准), 与「稳态 1.8 KB」一个量级倒挂。</li>
+  <li>全量轮四段(构建+序列化+网络+前端整表替换)按全库计价; <strong>成本构成未实测拆分</strong>(issue 2 §05 预置, 认领后第一步)。</li>
+</ul>
+
+<h2><span class="no">§03</span>方案总览</h2>
+
+<h3>主线: C 先行(hash 引用式, = issue 26-10-07-1420 本体)</h3>
+<table>
+  <tr><th>面</th><th>改法</th><th>依据</th></tr>
+  <tr><td>后端组行</td><td><code>_build_group_row</code> 的 <code>"members"</code> 从 <code>_member_view</code> 明细数组改 hash 字符串数组; 聚合字段(dlspeed 求和等)全部保留 —— 组行仍是完整行对象</td><td>shows 先例 <code>views_episodes.py:32</code></td></tr>
+  <tr><td>VIEW_ARRAYS</td><td><code>group</code> → (groups, singles, <strong>torrents</strong>); <code>show</code> → (shows, groups, singles, <strong>torrents</strong>); <code>torrent</code> 不变</td><td>成员明细索引须 ride along: group/show 视图不回 torrents 则 <code>memberByHash</code> 索引拼不出(与 shows 视图当年「连带 groups+singles」同款先例, <code>views_common.py:118-126</code> 注释原文)</td></tr>
+  <tr><td>增量(C1, D4)</td><td>组行整行 upsert(聚合+hash 列表); VIEW_ARRAYS 扩展后组/追剧视图 delta 桶自然含 torrents 桶; R1(时间线只存键)/R5(removed 让位)/R8(整行替换)语义全不动</td><td>抖动轮 delta = 组行(聚合+hash 列表) + 单成员 torrent 行; R8 再评估属 C2 条件项(§05 G3)</td></tr>
+  <tr><td>前端接缝</td><td><strong>ingestion 物化</strong>(推荐, S2 spike 定案): state 入口对 hash 形组行就地组装 <code>g.members = hashes.map(memberByHash.get)</code> —— 60 处(全树 grep 口径)消费位零波及; 物化引用指向 torrent 行对象(canonical 行), 乐观补丁从「遍历各数组找成员」简化为「补丁打在 canonical 行一处」。备选: 装饰期解析(shows 同款)——仅当 spike 证明 ingestion 缝与 WeakMap 记忆化/乐观链冲突时启用</td><td>验收标准: 60 处消费位零 diff(全树 grep 口径) + 指纹/乐观链行为守阵全绿</td></tr>
+  <tr><td>version-reload(D3)</td><td>前端每轮比对 status payload 既有 <code>version</code> 字段(<code>_status_payload</code> 已回传), 变更即 <code>location.reload()</code></td><td>十行级改动; 根治未来一切协议偏移的静默破损</td></tr>
+</table>
+
+<h3>载荷数学(诚实预期, S0 实测为准)</h3>
+<ul>
+  <li><strong>确定性收缩</strong>: 四数组全量响应(view 缺省 / shows 视图)的 members 重复份额塌掉; 抖动轮 delta 收缩约一个量级(≈40 KB → ≈5 KB@100 成员组, 粗估 ≈8 倍)。</li>
+  <li><strong>可能持平</strong>: view=group 单独看, 分组成员明细从「内嵌在 groups」改为「一次计入 torrents」(SEED_ITEM 行比 _member_view 行略重), 加上 hash 列表, 未必变小 —— 本计划对 view=group 体积<strong>不预写承诺</strong>, 收益主张押在全局去重与 delta 粒度上。若 S0 实测字段冗余仍占大头 → B(按需字段)裁决点(§05 G1)。</li>
+</ul>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+<table>
+  <tr><th>步</th><th>内容</th><th>验收判据</th></tr>
+  <tr><td>S0<br>成本构成实测拆分</td><td>开工动作先行: 两件 issue <code>kb.status</code> → In Progress 补认领链。然后 sim 环境实测(sim_run, @3000 与 @5000; 沙箱 <code>R:\auto-qb-sim</code> 首跑需放行, 26-10-08 先例): ①全量轮四段占比(序列化 json.dumps / 网络 / 前端 JSON.parse / 整表替换); ②载荷按数组拆分 + members 重复份额; ③monster-group 合成数据(单组 ≥2000 成员)抖动轮 delta 体积</td><td>数字表入任务档案; G1/G2/G3 裁决输入就绪; 不改任何生产代码</td></tr>
+  <tr><td>S1<br>后端 hash 引用式</td><td><code>_build_group_row</code> members → hash 数组; VIEW_ARRAYS 两视图连带 torrents; <code>_publish_partial_locked</code> 注释与口径更新(P-02 二期落地); delta 归约随 VIEW_ARRAYS 自然扩展; 守阵同步改造(delta_merge 多处 / mirror / delta)</td><td>守阵改造后绿; 镜子 fuzz 覆盖 hash 形状; 「局部重聚合 == 全量重跑」单测保持; <code>dev.typecheck</code> 绿</td></tr>
+  <tr><td>S2<br>前端物化接缝</td><td>spike 定缝(ingestion vs 装饰期, 按 §03 推荐走, 冲突才改道); delta 应用路径扩展(torrents 桶进组/追剧视图); 筛选器计数 / 指纹 / 乐观链回归</td><td>60 处 <code>g.members</code> 消费位零 diff(全树 grep 口径, 改道则显式清单+守阵); e2e 组行渲染/筛选/乐观补丁绿</td></tr>
+  <tr><td>S3<br>version-reload</td><td>前端轮询比对 <code>version</code>, 变更自动 reload; 防抖(避免重签发循环)</td><td>单测/守阵 + 手动验证(改版本号触发改动)</td></tr>
+  <tr><td>S4<br>e2e 全量回归</td><td><code>dev.e2e</code> 全量; 新增协议形状用例(组行 members 为 hash 数组 / 明细渲染 / 筛选计数 / 乐观补丁)</td><td>全绿(存量口径, 数字见 kb.baseline)</td></tr>
+  <tr><td>S5<br>复评与条件裁决</td><td>重跑 S0 同口径取数; G1(B)/G2(A)/G3(C2) 按数字裁决(§05): 命中 → 追加分期或另立计划; 不命中 → 关闭</td><td>前/后数字对照表入档案; 裁决记录回填 §06</td></tr>
+  <tr><td>S6<br>收尾</td><td>回写 <code>architecture/webui.md</code>(增量同步节)与 web-runtime 口径; 两 issue「修复后补充」+ 翻 Done; 基线切片; 新坑入 pitfalls</td><td>kb.check 全绿; 收尾 DoD 齐</td></tr>
+</table>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p class="cm">方向性五问已于 2026-11-11 grilling 拍板(结论迁 §06); 本节只剩三个<strong>实测触发</strong>的条件裁决点, 默认全部「不立项」, 数字说话:</p>
+<table>
+  <tr><th>#</th><th>裁决点</th><th>默认(推荐)</th><th>备选(触发条件)</th></tr>
+  <tr><td>G1</td><td>B 按需字段(按视图再裁一层字段集, 与 VIEW_ARRAYS 同路数)</td><td class="good">不立项 —— C 落地后全量轮主体已塌, 字段冗余预计不再是大头</td><td class="wr">S5 实测显示字段冗余仍占全量载荷显著份额(建议阈值: 裁剪可省 &gt;30%)→ 追加 B 分期</td></tr>
+  <tr><td>G2</td><td>A 分页(page/per_page 或游标)</td><td class="good">不立项 —— 前端虚拟列表/排序/筛选计数要在不完整数据集上说真话, 代价最大且 C 后收益面被挤占</td><td class="wr">S5 实测显示首屏峰值仍不可接受(建议阈值: 前端首屏整表替换 &gt;300 ms @3000)→ 另立计划</td></tr>
+  <tr><td>G3</td><td>C2 二次演进(delta 组行裁掉 hash 列表 / 聚合改前端从成员重算 —— R8 须再评估, 重建判定与「S6==全量」守阵重做)</td><td class="good">不做 —— C1 已拿走 ~90% 收益且协议手术最小</td><td class="wr">S0/S5 实测出现超大组高频抖动且数字过阈值(建议: 抖动轮 delta &gt;64 KB 且频发)→ 追加 C2 分期</td></tr>
+</table>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+  <tr><th>#</th><th>拍板</th><th>结论</th><th>日期</th></tr>
+  <tr><td>D1</td><td>立项形态</td><td><strong>单计划联合立项</strong> —— 响应体形状只动一次, 守阵与 e2e 一轮覆盖(10-08 收口档案待办原话「建议一起排」)</td><td>2026-11-11</td></tr>
+  <tr><td>D2</td><td>方案主线</td><td><strong>C 先行</strong> —— issue 2 §05 的「先拆分再选」降级为计划内 S0 步骤而非立项阻塞; B/A 转条件裁决点(§05 G1/G2)</td><td>2026-11-11</td></tr>
+  <tr><td>D3</td><td>协议兼容</td><td><strong>直接改形状 + version-reload 小机制</strong> —— 同仓同进程发布 + no-cache 静态; 协商参数/双字段会让构建与守阵长期背两条形状路径, 正是「独立立项级」要控的复杂度税</td><td>2026-11-11</td></tr>
+  <tr><td>D4</td><td>增量粒度</td><td><strong>C1 组行整体 upsert</strong>(R8 不破) —— C2 只作实测触发条件项(§05 G3)</td><td>2026-11-11</td></tr>
+  <tr><td>D5</td><td>issue 动作</td><td><strong>复验行+重锚当轮回写</strong>(两件 §04/§07 已落, 状态保持 Open), 认领(kb.status In Progress)留 S0 开工时</td><td>2026-11-11</td></tr>
+</table>
+<p class="cm">五项用户批复「全按推荐」(2026-11-11)。</p>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+  <tr><th>风险</th><th>触发条件</th><th>处置</th></tr>
+  <tr><td>增量拼装错误(hash 形状下组行/成员一致面)</td><td>镜子 / 「S6==全量」单测红</td><td>镜子测试扩展覆盖 hash 形状(S1 验收项); full 语义常驻回退不变 —— 应急语义回退沿用 <code>_reduce_delta</code> docstring 既有单行方案先例</td></tr>
+  <tr><td>ingestion 物化缝与 WeakMap 记忆化 / 乐观补丁冲突</td><td>S2 spike 发现引用身份或原地变更语义对不上</td><td>改道装饰期解析(shows 同款先例); 验收标准从「60 处(全树 grep 口径)零 diff」放宽为「消费点显式清单 + 行为守阵」, 改道原因记 §10</td></tr>
+  <tr><td>载荷数学反直觉(view=group 体积持平或微增)</td><td>S0 实测</td><td>收益主张只押四数组全量收缩 + 抖动轮 delta 收缩 + shows 视图去重(§03 已预写诚实预期); view=group 体积以实测为准, 不预写承诺</td></tr>
+  <tr><td>旧标签页破损窗口(升级后旧 JS 吃新形状)</td><td>部署后未刷新的已开标签页继续轮询</td><td>version-reload 自愈(G3/S3); 发布说明「升级后刷新页面」兜底; 无跨版本长期共存面(同进程发布 + no-cache)</td></tr>
+  <tr><td>守阵大面积改造遗漏</td><td>test.full 红</td><td>S1 验收含守阵改造清单(delta_merge 多处 / mirror / delta / static dom skins); 改造与协议改动同批提交, 不拆</td></tr>
+  <tr><td>sim 沙箱首跑被拦</td><td><code>R:\auto-qb-sim</code> PermissionError(WinError 5)</td><td>用户放行后重跑(26-10-08 收口先例, 档案有记载)</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-11-0630</span> 初版。来源: 用户指令「两个issue联合复验, 然后grilling, 出一个计划」; 联合复验两件均<strong>仍复现</strong>(HEAD 90764579, 大文件拆分 deb1168d 后锚点整体迁移, 前端消费面经全树 grep 盘点 60 处/17 文件, 含模板 tpl/ 2 文件 7 处), 复验行+重锚已回写两 issue §04/§07; grilling 一轮五问(D1-D5)用户批复「全按推荐」; 计划经 kb.new --refs 与两 issue 双向补链; 只读评审两轮累计 14 发现(minor 9/nit 5, 零 blocker)全过检全修: grep 口径统一为全树(g.members 60 处/17 文件, 入池树 50 处/13 文件, 模板 7 处计入验收口径)/_reduce_delta 行号指针重锚/抖动轮推算去「19 键」改粗估并统一「≈8 倍」口径。</li>
+</ul>
+
+</div>
+</body>
+</html>

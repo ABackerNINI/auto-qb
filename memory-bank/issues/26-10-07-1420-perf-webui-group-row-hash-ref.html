@@ -7,7 +7,7 @@
 <meta name="issue-stamp" content="26-10-07-1420">
 <meta name="issue-type" content="perf">
 <meta name="doc-topic" content="webui-delta-sync">
-<meta name="doc-refs" content="memory-bank/plans/26-10-07-0414-plan-webui-delta-sync.html">
+<meta name="doc-refs" content="memory-bank/plans/26-10-07-0414-plan-webui-delta-sync.html, memory-bank/plans/26-11-11-0630-plan-webui-group-hash-ref.html, memory-bank/tasks/26-11-11-webui-group-hash-ref.md">
 <meta name="issue-tier" content="standard">
 <meta name="issue-status" content="Open">
 <meta name="issue-title" content="组行 hash 引用式响应体二次演进: 组视图增量粒度从「组行」降到「成员」级">
@@ -141,6 +141,7 @@
   <section id="s4">
     <h2><span class="no">04</span>定位锚点</h2>
     <p class="hint">写「符号名 + grep 关键词 + 当时的行号(标取证时间)」—— 代码会漂移, 靠符号与 grep 重新定位, 行号只是加速项。</p>
+    <div class="callout"><strong>复验重锚(2026-11-11, HEAD 90764579)</strong>: 大文件拆分(deb1168d, 9 个后端大文件拆域子模块)后锚点整体迁移 —— <code>_build_group_row</code> 与 <code>"members": members_view</code> 现在 <code>views_group.py:25 / :116-117</code>(下方 <code>views.py:514-515</code> 为入池时旧址); <code>_publish_partial_locked</code> P-02 一期口径注释在 <code>runtime_views.py:452</code> 起(原文仍在); shows hash 引用先例迁 <code>views_episodes.py:32</code>(<code>node["members"].append(rec.hash)</code>); <code>VIEW_ARRAYS</code> 迁 <code>views_common.py:111</code>、<code>_DELTA_VIEWS</code> 迁 <code>runtime_common.py:50</code>。前端 <code>g.members</code> 消费面全树 grep 盘点 <strong>60 处 / 17 文件</strong>(含模板 tpl/ 2 文件 7 处、均为真实消费位;入池树 f07cc562 全树口径即 50 处 / 13 文件 —— 代码消费面大体持平, 扩的是本条入池锚点只记 decorate.js 两段的审计覆盖;filters.js 五筛选器族、decorate.js 指纹 <code>_decoFpBuild/_decoFpHit</code> 逐成员 8 字段进指纹与 <code>_aggStatus</code>、commands_optimistic 乐观链 3 处、dialogs/delete_flow/commands_send 等); shows 已有「成员是 memberByHash 拷贝」乐观补丁语义先例(commands_optimistic.js:172)。守阵面: <code>tests/test_webui_delta_merge.py</code> 多处钉住「组行内嵌 members 随整行重建(P-02 一期口径/R8)」。协议耦合(立项时须一并设计): VIEW_ARRAYS 的 group 视图现只回 groups+singles(views_common.py:115-116), hash 化后成员明细须经 memberByHash 索引拼装, 索引源 = groups ∪ singles ∪ torrents 全量(delete_flow.js:52 注释原文;hash 化后 groups 段不再贡献明细, 生效源 = singles ∪ torrents) —— group/show 视图须连带 torrents 数组, 与 shows 视图当年「连带 groups+singles」同款先例(views_common.py:118-126 注释)。</div>
     <ul>
       <li><code>_build_group_row</code> 返回 dict 的 <code>"members": members_view</code> · <code>src/auto_qb/webui/views.py:514-515</code>(取证 2026-10-07 14:20; 计划取证时为 :494-495)· grep <code>members_view</code> / <code>"members"</code> —— 组行内嵌成员明细的单点</li>
       <li><code>WebUIRuntime._publish_partial_locked</code> 注释「组行内嵌 members 数组随组行整行走(P-02 一期口径)」 · <code>src/auto_qb/webui/runtime.py:1246</code>(取证 2026-10-07)· grep <code>P-02</code> —— 一期增量口径的声明处, 二次演进时这里是主改点</li>
@@ -171,9 +172,10 @@
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-10-07 14:20 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-11 — 联合复验（与 26-10-08-0411），<strong>仍复现</strong>；§04 重锚 + §07 复验行，状态保持 Open；联合计划已入库（见 doc-refs）</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验: 2026-11-11 <strong>仍复现</strong>(联合复验, 与 <a href="26-10-08-0411-perf-webui-api-state-pagination.html">26-10-08-0411</a> 一起; HEAD 90764579)。组行仍内嵌完整 members 明细(<code>views_group.py:116-117</code>), P-02 一期口径注释与 delta_merge 守阵原样; 前端消费面经全树 grep 盘点 60 处 / 17 文件(入池锚点仅记 decorate.js 两段)。重锚与协议耦合细节见 §04 复验重锚块。已出联合计划(见 doc-refs), 状态保持 Open 等开工认领。</p>
     <h3>修复后补充</h3>
     <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
   </section>
