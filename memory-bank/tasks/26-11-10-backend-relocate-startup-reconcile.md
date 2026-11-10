@@ -1,9 +1,9 @@
 # 26-11-10-backend-relocate-startup-reconcile — relocate 启动对账自愈机制(防御性重启重判)
 
-**Status:** Open
+**Status:** Done
 **Added:** 2026-11-10
 **Updated:** 2026-11-11
-**Summary:** relocate 终态失败账启动对账自愈: 按物理现状重推相位(G1-G5+A1), 复用既有收尾链零搬数收敛; 计划 26-11-10-0721 S1-S5 已完成(计划 In Progress, 终审收口另翻 Done)
+**Summary:** relocate 终态失败账启动对账自愈: 按物理现状重推相位(G1-G5+A1), 复用既有收尾链零搬数收敛; 计划 26-11-10-0721 Done(S1-S5 收口 2026-11-11, 全量与真机数字见 kb.baseline 与 real-baselines 26-11-11-0042)
 **Topics:** backend-relocate-startup-reconcile
 **Refs:** memory-bank/plans/26-11-10-0721-plan-relocate-startup-reconcile.html
 
@@ -25,9 +25,9 @@ relocate 终态 failed 账如何通过「启动对账」自愈(判定表/重入�
 - **Round1(七问)作废**: 我按「新终态 stale + reason 白名单」出题,用户纠正: ①自愈=回到既有收尾窗「待收尾」+组自动合并(参考 26-11-05-0808 fastresume-finalize 与 26-10-18-1604 免重启两份设计文档: 收尾窗={armed,rewritten},组合并=第 1 层活跃 job 登记表);②不建新终态。
 - **Round2(六问)再纠正**: reason 白名单被用户定性为 hotfix(修完即死码,必要性存疑)→ 定性改为通用启动对账。
 - **Round3 定案(G1-G5)**: G1 通用对账(账面服从现实,不看 reason);G2 重入资格双证据(mover save_path==dst ∧ dst 内容 B′ 在位);G3 单一入口恢复 moved 复用既有链;G4 出路面最小(一行日志,WebUI 零新增);G5 沿用五项(首轮连接 tick 触发+热启用/账面先合并物理后收敛/立即收尾按钮零改动/cancelled+done 排除/落位本计划+吸收 issue 0327+issue 0326 收窄保留)。
-- **A1(实施裁断)**: 重入上限每生命周期 1 次(attempts≥1 的 failed 不自动重入),防跨重启 churn,常数可调。
+- **A1(实施裁断, 载体经评审轮 1-2 修正, 单点见计划 §06)**: 重入上限 = 每生命周期至多一次自动链运行;载体 = armed_at&gt;0 闸且重入落账即置位(attempts 为别名重建配额不挪用 —— 原定 attempts 闸对 pre-arm 自检失败永不触发且被 _arm 归零销毁), 防跨重启 churn, 无可调常数面。
 - **代码事实源**: 只读探员取证(启动路径终态仅计数+展示、qB 客户端 start() 未连、恢复机械面盘点、自检 B′ 可离线客户端、WebUI 立即收尾端点),file:line 已沉淀进计划 §02/§03。
-- 计划: `memory-bank/plans/26-11-10-0721-plan-relocate-startup-reconcile.html`(Open)。
+- 计划: `memory-bank/plans/26-11-10-0721-plan-relocate-startup-reconcile.html`(Done, 2026-11-11 接缝终审收口)。
 
 ## 实现计划
 
