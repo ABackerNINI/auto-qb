@@ -279,9 +279,21 @@ html[data-fx-preset] input[type="checkbox"]:not(.hb-switch input):focus-visible 
     transition: background var(--dur) var(--ease), filter var(--dur-fast) var(--ease),
       box-shadow var(--dur-fast) var(--ease), transform var(--fx-dur-fast) var(--fx-ease-back);
   }
+  /* 评审 A(nit)修: 可见底色已搬到 ::before(文件尾形状分层段), 本体的 background
+   * 过渡段随之成死代码(保留不删, 范围守恒); 渐隐过渡补到绘制层, 变量/写法
+   * 逐字沿用上面本体段的 background 过渡(--dur/--ease), 位置随过渡声明收进
+   * 本媒体块(本文件 RM 约定: 过渡声明一律进媒体块)。 */
+  html[data-fx-preset] .site-chip::before { transition: background var(--dur) var(--ease); }
+  /* D4 拍板(hover + 键盘聚焦共用同一套辉光): 选择器扩 :focus-visible:not(.f-on)。
+   * 事实注记: 三种 chip 在共用模板里是纯 span, 无 tabindex, focus-visible 分支
+   * 当前不会命中, 本条是样式预留(计划 W1-4/O5/R13; 键盘化需改四皮肤共用模板,
+   * 破 I1, 属另一件事)。 */
   html[data-fx-preset] .site-chip:hover:not(.f-on),
+  html[data-fx-preset] .site-chip:focus-visible:not(.f-on),
   html[data-fx-preset] .tag-chip:hover:not(.f-on),
-  html[data-fx-preset] .cat-chip:hover:not(.f-on) {
+  html[data-fx-preset] .tag-chip:focus-visible:not(.f-on),
+  html[data-fx-preset] .cat-chip:hover:not(.f-on),
+  html[data-fx-preset] .cat-chip:focus-visible:not(.f-on) {
     box-shadow: var(--fx-glow-stack);
   }
   html[data-fx-preset] .site-chip:active,
@@ -389,3 +401,52 @@ html[data-fx-preset] input[type="checkbox"]:not(.hb-switch input):focus-visible 
 /* P1(S7) 下载中进度条条纹流动 keyframes(8px = 条纹周期, 一周期回绕无缝;
  * paint-only 小面积, 仅下载态行常驻 -- 帧率实测见计划档案 S7 实录) */
 @keyframes fx-bar-flow { to { background-position: 8px 0; } }
+
+/* ==================================================================
+ * 站点 chip 形状分层(计划 26-11-10-0921 W1-1/W1-2, 仅 .site-chip;
+ * 静态几何按本文件 RM 约定留在媒体块外)
+ * ------------------------------------------------------------------
+ * W1-1: 3px 微切角从本体挪到底层绘制层 -- 控件层 clip-path 会把 box-shadow
+ *   外发光整圈裁掉(console_hub.css 硬知识「切角与发光是死敌」), 站点 chip 的
+ *   hover 辉光因此只剩两侧(用户报「辉光仅显示一侧或两侧」的根因)。本体
+ *   clip-path 覆盖为 none 后, fx-mount 媒体块内三种 chip 共用的
+ *   --fx-glow-stack 四边闭合; 切角视觉逐字保留(R3 回退裁决不推翻), 本体
+ *   background 改 transparent 不露方角, 柔底全部交给 ::before 绘制层。
+ *   基线 .site-chip 无定位包含块(components.css:330 只有 .f-on 有
+ *   position: relative), 在此补上作为 ::before 绝对定位的宿主(计划 R5;
+ *   与 .f-on 的 relative 同值, 不构成冲突)。
+ * W1-2: 柔底是 15% alpha 半透底, 与字色实色不同源, currentColor/inherit 都
+ *   不能等价复刻(计划 R6), 故按状态各写一份 ::before 背景(现成模式 =
+ *   components.css .ce-note.warn::before 每状态各写一份); 变量逐字沿用
+ *   components.css:330-338 与 views.css:85-96, 零新增令牌(I2)。下方规则
+ *   顺序 = views.css:92 的源序优先级: 站点问题 sa-* > 搜索命中 search-hit >
+ *   种子状态(components.css), 同特异性下后到胜出。
+ *   注: 本体上的 inset 描边(paused/other、search-hit)与 sa-no-conf 的虚线
+ *   底边仍画在本体上(hover 时被辉光 stack 整体替换是既有行为), 是否迁到
+ *   ::before 绘制层等 W2 真机目检(计划 W1-3/O1)拍板, 本波最小改动。
+ *   tag-chip/cat-chip 无 clip-path, 形状不动(D3/D9)。
+ * ================================================================== */
+html[data-fx-preset] .site-chip {
+  position: relative;      /* R5: 基线无定位包含块, ::before 绝对定位的宿主 */
+  background: transparent; /* 本体不露方角, 底色交给 ::before 绘制层 */
+  clip-path: none;         /* 覆盖 components.css:332, 本体 box-shadow 不再被裁 */
+}
+/* 切角绘制层: polygon 逐字搬运 components.css:332, 底色 = 基线柔底(:330) */
+html[data-fx-preset] .site-chip::before {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  clip-path: polygon(3px 0, 100% 0, 100% calc(100% - 3px),
+                     calc(100% - 3px) 100%, 0 100%, 0 3px);
+  background: var(--surface-2);
+}
+/* 种子状态柔底(components.css:334-338, 变量逐字搬运) */
+html[data-fx-preset] .site-chip.seeding::before { background: var(--green-soft); }
+html[data-fx-preset] .site-chip.downloading::before,
+html[data-fx-preset] .site-chip.checking::before { background: var(--st-soft, var(--blue-soft)); }
+html[data-fx-preset] .site-chip.paused::before,
+html[data-fx-preset] .site-chip.other::before { background: var(--paused-soft); }
+html[data-fx-preset] .site-chip.error::before { background: var(--error-soft); }
+/* 搜索命中让出底色(views.css:85-86): 绘制层同步透明 */
+html[data-fx-preset] .site-chip.search-hit::before { background: transparent; }
+/* 站点问题底色(views.css:94-96), 源序最后 = 优先级最高 */
+html[data-fx-preset] .site-chip.sa-no-conf::before { background: var(--warn-soft); }
+html[data-fx-preset] .site-chip.sa-tracker::before { background: var(--error-soft); }
