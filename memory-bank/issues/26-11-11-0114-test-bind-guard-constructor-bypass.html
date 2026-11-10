@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="bind-guard-constructor-bypass">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="bind 守阵只拦 .bind( 调用位, 构造位绑定可绕过">
 <meta name="issue-summary" content="scan_bind_ports 守卫测试只扫描 .bind( 调用位, ThreadingHTTPServer/socket.create_server 等构造位绑定不经 .bind(, 字面端口可绕过守阵">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-11-0114-test-bind-guard-constructor-bypass</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-11 01:14</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
 
@@ -111,13 +111,16 @@
 <section id="s3">
   <h2><span class="no">§03</span>建议<span class="opt">（可选）</span></h2>
   <p>扫描面扩到构造位形态(ThreadingHTTPServer/TCPServer 族/ socket.create_server 的端口实参位), 或至少补一条「构造位绕过会被探针抓到」的负例断言钉住现状边界。</p>
+  <h3>修复后补充(2026-11-11)</h3>
+  <p>按建议前半修:<code>scan_bind_ports</code> 拦截面从「只匹配 <code>.bind(</code>」扩为「<code>.bind(</code> 方法位 + 构造位绑定族」(<code>socketserver</code> 服务族 TCPServer/UDPServer/HTTP/Threading/Forking 变体 + <code>socket.create_server</code>, 裸名/属性两形态都算, 见 <code>BIND_CONSTRUCTOR_NAMES</code> / <code>_is_binding_site_call</code>);子类化改名再实例化与关键字实参位(<code>server_address=(...)</code>)仍属静态扫描盲区, 已在守阵 docstring 声明(撞上即进白名单带理由)。活性探针构造位补四份(socketserver 族裸名/属性 + create_server 属性/裸名, 双向禁绑两带各覆盖):<code>ThreadingHTTPServer</code> 裸名(生产带 18788)、<code>socket.create_server</code>(测试带 28788)、<code>socketserver.TCPServer</code> 属性(生产带 18788)、<code>create_server</code> 裸名(测试带 28788), 放行侧补「port=0/变量位 + 非绑定构造名 <code>MyConfig(("h", 18788))</code> 不误伤」。<code>ALLOW_BIND_PORT</code> 白名单保持空表(tests/ 现存构造位绑定全 port=0, 实测零新违例)。验证:<code>commands run test.quick</code>/<code>test.full</code> 5945 passed / 2 skipped, 覆盖率 99%。</p>
 </section>
 
 <section id="s4">
   <h2><span class="no">§04</span>状态变更日志</h2>
   <ul>
     <li>2026-11-11 01:14 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-11 — 状态 Open → Done（kb.status）</li>
+</ul>
 </section>
 
 <footer>

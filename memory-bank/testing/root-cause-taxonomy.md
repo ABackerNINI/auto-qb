@@ -23,7 +23,7 @@
 | 顺序依赖 | xdist-worker-global-snapshot / hr-registry-pollution(已治) | pytest-randomly 周巡检(test.random-order)暴露 | S5 |
 | platform | timing-tolerance(15.6ms 刻度) / ci-only-guard / coverage-floor-platform | platform_tolerance 容差单点+跨平台断言规范+守阵 | S5 |
 | 随机数 | flaky-random-salt-hash-identity | 种子纪律(pytest-randomly 顺带重置 seed)+断言避开恒等映射 | S5 |
-| 端口/资源 | fixed-port-test-collision(已治) / tests/_test_ports 单点 | bind 位固定口守阵(配置值位不拦) | S1 |
+| 端口/资源 | fixed-port-test-collision(已治) / tests/_test_ports 单点 | 绑定位固定口守阵(.bind( 位 + 构造位绑定族, 配置值位不拦) | S1 |
 | 共享状态 | fake-config-shared-mutables / importlib-sys-modules-dataclass(已治) | conftest 隔离单点+巡检暴露新例 | S5 |
 | 网络 | 仅 tests-real 真网络面 | 真机轨职责, 不改造(见下「边界」) | — |
 | UI randomness | iab-click-rerender-flake(已治) | 归入 e2e 清理与台账 | S4 |
@@ -37,5 +37,5 @@
 
 ## 守阵与巡检(归因的机器面)
 
-- 四类守阵(tests/test_flaky_timing_guards.py + tests/test_platform_tolerance_guards.py): 裸 sleep / waitForTimeout / 裸取时 / bind 位固定口, 新增即红 —— 防回潮, 不替代归因。
+- 四类守阵(tests/test_flaky_timing_guards.py + tests/test_platform_tolerance_guards.py): 裸 sleep / waitForTimeout / 裸取时 / 绑定位固定口(bind 调用位 + ThreadingHTTPServer/socket.create_server 等构造位, 配置值位不拦), 新增即红 —— 防回潮, 不替代归因。
 - 周巡检 `commands run test.random-order`(pytest-randomly 随机序采样): 顺序依赖/共享状态新例的探测器, 红灯固定 seed 复现归因后进台账; 巡检约定见 [flaky-ledger.md](flaky-ledger.md) 巡检段。

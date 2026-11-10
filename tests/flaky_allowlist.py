@@ -59,7 +59,9 @@ ALLOW_WAIT_TIMEOUT_E2E: dict[str, dict[str, int]] = {
     # (时长逐字保留并注释); 合帧收层危险窗 -> rAF 逐帧采样恒真断言(move-dialog-fit 同款)。
 }
 
-# ---------- ALLOW_BIND_PORT: bind 调用位的字面固定端口(配置值位不拦) ----------
-# 实测存量 0: tests/ 全部 bind 已走 port=0 OS 分配(_test_ports 单点 + 26-11-03-0316 治理)。
-# 表语义与上同: 文件 -> {行文本: 条数}; 有新固定口 bind 位即红, 进表须带理由。
+# ---------- ALLOW_BIND_PORT: 绑定调用位的字面固定端口(配置值位不拦) ----------
+# 拦截面 = .bind( 方法位 + 构造位绑定族(socketserver 服务族 + socket.create_server, 26-11-11-0114 收编)。
+# 实测存量 0: tests/ 全部 bind 已走 port=0 OS 分配(_test_ports 单点 + 26-11-03-0316 治理),
+# 构造位绑定同样全 port=0(tests/helpers.py:516 / test_tool_client.py:85 / test_legacy_review4_scripts.py:320)。
+# 表语义与上同: 文件 -> {行文本: 条数}; 有新固定口绑定位即红, 进表须带理由。
 ALLOW_BIND_PORT: dict[str, dict[str, int]] = {}

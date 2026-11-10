@@ -10,8 +10,12 @@ tests/flaky_allowlist.py(带理由, 机器可清点), 守阵做**两侧对账**:
 - 2. e2e/*.mjs page.waitForTimeout(...): 文本按行(Playwright 头号反模式, S4 换 expect 系);
 - 3. src/ 裸 time.time()/time.monotonic[_ns](): AST 实调用(含 from time import 的裸名),
   src/auto_qb/infra/clock.py 路径豁免 —— 那是取时单点本体, 不是违例;
-- 4. tests/ bind 调用位的非 0 字面端口: AST(bind((host, <int>))) —— 配置值位的固定端口
-  字面量(断言/构造参数)不拦, 只拦真去 bind 的位(碰撞面, 见 pitfalls/testing/fixed-port-test-collision.md)。
+- 4. tests/ 绑定调用位的非 0 字面端口: AST 首个位置参数二元组的端口位(下标 1) —— 拦截面 =
+  `.bind(` 方法位 + 构造位绑定族(socketserver 服务族含 HTTP/Threading 变体 + socket.create_server;
+  26-11-11-0114: 只拦 .bind( 时 ThreadingHTTPServer(("h", 18788)) 这类构造位不经 .bind(, 可静默绕过)。
+  配置值位的固定端口字面量(断言/构造参数)不拦, 只拦真去 bind 的位(碰撞面, 见
+  pitfalls/testing/fixed-port-test-collision.md; 子类化改名再实例化与关键字实参位(server_address=(...))属
+  静态扫描盲区, 撞上即进白名单带理由)。
   双向禁绑(计划 26-11-10-0515 S5): 生产带 18788 与测试带 28788 都在拦截面内(扫描器拦一切
   非 0 字面, 两带天然同拦; 活性探针两带各探一份, 防「只拦某一侧」的退化), 桩脚本在 scripts/ 不受限。
 
@@ -29,7 +33,8 @@ tests/flaky_allowlist.py(带理由, 机器可清点), 守阵做**两侧对账**:
 - test_sleep_scanner_liveness: 1. 活性探针 —— 实调用抓到, patch 字符串/注释不误伤
 - test_wait_timeout_scanner_liveness: 2. 活性探针 —— waitForTimeout 抓到, toHaveTimeout/同词根不误伤
 - test_bare_time_scanner_liveness: 3. 活性探针 —— time.time/monotonic(_ns)/裸名抓到, strftime 不误伤, clock.py 豁免
-- test_bind_scanner_liveness: 4. 活性探针 —— 字面非 0 端口抓到(双向禁绑: 18788 与 28788 都探), port=0/变量/配置值位不误伤
+- test_bind_scanner_liveness: 4. 活性探针 —— .bind( 位与构造位(ThreadingHTTPServer/create_server)字面非 0 端口
+  都抓到(双向禁绑: 18788 与 28788 都探), port=0/变量/配置值位/非绑定构造名不误伤
 """
 from __future__ import annotations
 
@@ -112,11 +117,38 @@ def scan_bare_time(sources) -> dict[str, Counter]:
     return hits
 
 
-def scan_bind_ports(sources) -> dict[str, Counter]:
-    """4. bind 调用位第一个参数二元组的端口位(下标 1)的非 0 整数字面量"""
-    def _fixed_port_call(func: ast.expr) -> bool:
-        return isinstance(func, ast.Attribute) and func.attr == "bind"
+#: 构造位绑定族(26-11-11-0114): 不经 .bind( 直接在构造实参里占口的形态 —— socketserver 服务族
+#: (含 HTTP/Threading/Forking 变体)与 socket.create_server(裸名/属性两形态); 子类化改名再实例化与
+#: 关键字实参位属静态扫描盲区, 撞上即进白名单带理由(与存量口径一致)
+BIND_CONSTRUCTOR_NAMES = frozenset(
+    {
+        "TCPServer",
+        "UDPServer",
+        "ThreadingTCPServer",
+        "ThreadingUDPServer",
+        "ForkingTCPServer",
+        "ForkingUDPServer",
+        "HTTPServer",
+        "ThreadingHTTPServer",
+    }
+)
 
+
+def _is_binding_site_call(func: ast.expr) -> bool:
+    """真去占口的调用位: 任意对象 .bind( 方法位, 或构造位绑定族(裸名与属性形态都算)"""
+    if isinstance(func, ast.Name):
+        return func.id in BIND_CONSTRUCTOR_NAMES or func.id == "create_server"  # from-import 裸名形态
+    if isinstance(func, ast.Attribute):
+        if func.attr == "bind":
+            return True
+        if func.attr == "create_server":
+            return isinstance(func.value, ast.Name) and func.value.id == "socket"  # socket.create_server
+        return func.attr in BIND_CONSTRUCTOR_NAMES  # socketserver.TCPServer / http.server.HTTPServer 等
+    return False
+
+
+def scan_bind_ports(sources) -> dict[str, Counter]:
+    """4. 绑定调用位第一个参数二元组的端口位(下标 1)的非 0 整数字面量(.bind( 位 + 构造位绑定族)"""
     out: dict[str, Counter] = {}
     for rel, src in sources:
         try:
@@ -126,7 +158,7 @@ def scan_bind_ports(sources) -> dict[str, Counter]:
         lines = src.splitlines()
         counter: Counter = Counter()
         for node in ast.walk(tree):
-            if not (isinstance(node, ast.Call) and _fixed_port_call(node.func) and node.args):
+            if not (isinstance(node, ast.Call) and _is_binding_site_call(node.func) and node.args):
                 continue
             arg = node.args[0]
             if (
@@ -274,6 +306,45 @@ def f(sock, port):
     assert PORT == 18788  # 配置值位的固定口字面量, 不拦
 """
 
+SRC_BIND_CONSTRUCTOR_BAD = """from http.server import ThreadingHTTPServer
+
+
+def f(handler):
+    ThreadingHTTPServer(("127.0.0.1", 18788), handler)  # 构造位绑定不经 .bind(, 同拦(生产带)
+"""
+
+SRC_BIND_CONSTRUCTOR_BAD_TESTBAND = """import socket
+
+
+def f():
+    socket.create_server(("127.0.0.1", 28788))  # 构造位绑定: create_server 形态(测试带, 双向禁绑另一侧)
+"""
+
+SRC_BIND_CONSTRUCTOR_ATTR_BAD = """import socketserver
+
+
+def f(h):
+    socketserver.TCPServer(("127.0.0.1", 18788), h)  # 构造位属性形态: 删 attr 命中分支必红
+"""
+
+SRC_BIND_CONSTRUCTOR_BARE_BAD = """from socket import create_server
+
+
+def f():
+    create_server(("127.0.0.1", 28788))  # 构造位裸名形态: from-import, 删裸名分支必红
+"""
+
+SRC_BIND_CONSTRUCTOR_OK = """import socket
+import socketserver
+
+
+def f(handler, port):
+    ThreadingHTTPServer(("127.0.0.1", 0), handler)  # OS 分配
+    socket.create_server(("127.0.0.1", port))  # 变量位
+    socketserver.TCPServer(("127.0.0.1", 0), handler)  # 构造位属性形态的放行侧: port=0 照样过
+    MyConfig(("127.0.0.1", 18788))  # 非绑定构造族的名字不拦(配置值位口径同 .bind 位)
+"""
+
 
 def test_sleep_scanner_liveness():
     bad = scan_sleep([("tests/synthetic_bad.py", SRC_SLEEP_BAD), ("tests/synthetic_ok.py", SRC_SLEEP_PATCH_OK)])
@@ -299,10 +370,30 @@ def test_bare_time_scanner_liveness():
 
 def test_bind_scanner_liveness():
     bad = scan_bind_ports(
-        [("tests/bad.py", SRC_BIND_BAD), ("tests/bad_band2.py", SRC_BIND_BAD_TESTBAND), ("tests/ok.py", SRC_BIND_OK)]
+        [
+            ("tests/bad.py", SRC_BIND_BAD),
+            ("tests/bad_band2.py", SRC_BIND_BAD_TESTBAND),
+            ("tests/bad_ctor.py", SRC_BIND_CONSTRUCTOR_BAD),
+            ("tests/bad_ctor_band2.py", SRC_BIND_CONSTRUCTOR_BAD_TESTBAND),
+            ("tests/bad_ctor_attr.py", SRC_BIND_CONSTRUCTOR_ATTR_BAD),
+            ("tests/bad_ctor_bare.py", SRC_BIND_CONSTRUCTOR_BARE_BAD),
+            ("tests/ok.py", SRC_BIND_OK),
+            ("tests/ok_ctor.py", SRC_BIND_CONSTRUCTOR_OK),
+        ]
     )
-    # 双向禁绑: 生产带(18788)与测试带(28788)两字面各探一份 —— 扫描器退化成「只拦某一侧」必红
+    # 双向禁绑: 生产带(18788)与测试带(28788)两字面各探一份 —— 扫描器退化成「只拦某一侧」必红;
+    # 构造位探四份(socketserver 族裸名/属性 + create_server 属性/裸名)—— 只拦 .bind( 或漏任一形态即红(26-11-11-0114)
     assert bad == {
-        "tests/bad.py": Counter({'sock.bind(("127.0.0.1", 18788))  # bind 位的字面固定口(生产带)': 1}),
-        "tests/bad_band2.py": Counter({'sock.bind(("127.0.0.1", 28788))  # bind 位的字面固定口(测试带, 双向禁绑另一侧)': 1}),
+        "tests/bad.py":
+            Counter({'sock.bind(("127.0.0.1", 18788))  # bind 位的字面固定口(生产带)': 1}),
+        "tests/bad_band2.py":
+            Counter({'sock.bind(("127.0.0.1", 28788))  # bind 位的字面固定口(测试带, 双向禁绑另一侧)': 1}),
+        "tests/bad_ctor.py":
+            Counter({'ThreadingHTTPServer(("127.0.0.1", 18788), handler)  # 构造位绑定不经 .bind(, 同拦(生产带)': 1}),
+        "tests/bad_ctor_band2.py":
+            Counter({'socket.create_server(("127.0.0.1", 28788))  # 构造位绑定: create_server 形态(测试带, 双向禁绑另一侧)': 1}),
+        "tests/bad_ctor_attr.py":
+            Counter({'socketserver.TCPServer(("127.0.0.1", 18788), h)  # 构造位属性形态: 删 attr 命中分支必红': 1}),
+        "tests/bad_ctor_bare.py":
+            Counter({'create_server(("127.0.0.1", 28788))  # 构造位裸名形态: from-import, 删裸名分支必红': 1}),
     }, bad
