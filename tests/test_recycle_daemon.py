@@ -242,6 +242,46 @@ sink 类键 obs_listen/obs_roster/obs_owner + 接线点处置类 listen 补齐, 
   共键不刷屏)+ verdict None 处置留痕走独立 reverify 键(qb_back 中止事件不被主循环处置
   留痕顶掉): poll 拍通道健康进窗/复验拍通道异常的交替形态下, 60s 窗两类各只首拍一条,
   跨 60s 边界各 3 条; 复验不过 => qb_back 零落盘
+
+场景级(W2b, 计划 26-11-10-0318 §04 W2 第 4 项; 六场景全链端到端。与接线级 W2a 分工:
+接线级钉分层语义(三层判据分派/tick 契约/复验现判/节流计数), 场景级钉全链行为 ——
+观测通道 -> 状态机 -> 进窗 -> 逐成员改写 -> journal 落账 -> obs 持久化的完整驱动序列,
+时序断言用注入时钟 + 落账时刻捕获证明, 无真实等待; 世界桩 _stub_world 单桩四通道,
+翻面点显式(参考 _flip_to_face_at_reverify 做法)):
+- test_scenario_x_owner_death_gap_rewrites_immediately: [场景X] 目标重启死亡间隙立即落盘
+  (§03.3 callout, 拍板 D2 安全性根基)—— poll1 真实观测通道建档 owner -> poll2 目标死亡
+  新身完全未起 => 同拍 L1 立即进窗复验照过, 两成员逐个改写落盘 + journal 逐成员记账
+  (双键明细在账, 相位翻 rewritten); 落账时刻 - owner 建档时刻 < NEW_FACE_SETTLE(stable=1000
+  注入时钟证明无 30s 等待, 且早于 L2 等价路径的「死亡 + 30s 稳定期」最早开窗点)
+- test_scenario_y_daily_restart_settle_absorb_then_rewrite: [场景Y] 日常实例重启 settle
+  吸收(P7 形态, §03.2 行三, §07 R3 有界赌注定价 ~33s)—— 目标死(owner 记录在 obs)+
+  日常库重启新面孔(ct >= owner.ts, 不绑我们端口)=> 未决挡窗 -> NEW_FACE_SETTLE 指纹
+  稳定吸收落盘 -> 窗开改写; 吸收前零改写(落账时刻 >= absorbed ts)/吸收后改写落盘/
+  首见到吸收 >= 30s 且 < 40s(满界下一拍, 不拖)/obs absorbed 条目持久化/owner 死证原样
+- test_scenario_pid_reuse_non_qb_dead_evidence_form1: [PID复用向一] 死 owner 的 pid 被非
+  qB 程序复用(qB 身份名册无该 pid)=> 死证形态一成立照常进窗, 首拍即改写(同场日常库旧
+  实例 ct < owner.ct 行一零赌注吸收不挡窗); 全机映像名册见 qB(L2 等价路径被阻断)——
+  窗是 L1 开的, 实例级证据相对全机口径的增量; obs absorbed 收录日常库、owner 死证原样
+- test_scenario_pid_reuse_qb_instance_blocks_until_disposed: [PID复用向二] 死 owner 的 pid
+  被另一 qB 实例复用(名册有 pid 但 ct 不等)=> 判原实例已死(形态二)+ 复用者按全新面孔
+  分类(PID 复用不继承 owner/absorbed 身份)=> 未决挡窗直至 settle 吸收后窗开改写;
+  owner 死证记录不被复用者覆盖(未绑我们端口不升格); 吸收前零改写
+- test_scenario_pending_face_at_window_criterion_blocks: [未决挡窗] 窗开判据现场冒未决新面
+  (与场景 Y 呼应、驱动源不同: 目标死亡同拍现身的全新面, ct >= ts_last)=> 判据现场未决
+  在册不进窗(窗从未开过, 区别于窗开后复验挡)零改写, settle 后窗开改写; owner 建档 ts
+  钉在首见拍(真实通道建档), absorbed 持久化
+- test_scenario_obs_reload_across_restart_rewrites_from_dead_evidence: [obs重启重载]
+  第一世 daemon 经真实观测通道建档 owner(目标在跑, 零改写 timeout 收束)-> 停机期间
+  目标死亡 -> 第二世 from_payload 恢复死证 => 首拍 L1 进窗改写(stable=1000 无 30s 等待);
+  obs owner 记录跨重启逐字段一致(死证不被触碰), 与接线级重启恢复专测分工: 本测建档走
+  全链通道非预播种
+- test_scenario_channel_outage_falls_to_l2_then_l1_on_recovery: [通道失败退L2] 名册通道
+  恒故障 => 全程退 L2 现状判据(黄金法则 2 保守退化): 30s 稳定期内零改写(max_wait=25 <
+  stable=30 截停; 通道故障若被冒充成健康零观测或稳定期被丢, 改写会在首拍出现; 分派层
+  None=>True 由接线级复验闸专测兜, 本测断言面 = 端到端往返)+ 节流
+  warning 留痕 60s 一条 + obs 死证种子原样(roster None => tick 整拍不动); 第二世通道
+  恢复(健康零观测)=> 回 L1 死证立即改写(零「退 L2」留痕, 无稳定期)—— 行为与接线前
+  等价的端到端往返
 """
 import builtins
 import io
@@ -3092,3 +3132,451 @@ def test_run_l1_reverify_channel_failure_throttled(tmp_path, monkeypatch, caplog
         rv = len([r for r in caplog.records if "复验" in r.message])
         assert ch == 3 and rv == 3, f"跨 60s 边界再计(两类独立节流), ch={ch} rv={rv}"
     assert rj.read_rewrites(data_dir, "job-1") == {}, "复验中止零改写(通道故障不冒充通过)"
+
+
+# ---------------------------------------------------------------------------
+# 场景级(W2b, 计划 26-11-10-0318 §04 W2 第 4 项): 六场景全链端到端 —— 与接线级(W2a)
+# 分工: 接线级钉分层语义(三层判据分派/tick 契约/复验现判/节流计数), 场景级钉全链行为:
+# 观测通道 -> 状态机 -> 进窗 -> 逐成员改写 -> journal 落账 -> obs 持久化的完整驱动序列,
+# 一律经 _run 主循环驱动(不单调函数), 时序断言用注入时钟 + 落账时刻捕获证明, 无真实等待。
+# 世界桩 _stub_world 单桩四通道(roster/lmap/up/names), 翻面点显式(参考 _flip_to_face_at_
+# reverify 的做法); 全部替身, 不起真进程/不回连真端口
+# ---------------------------------------------------------------------------
+
+
+def _scenario_job(tmp_path: Path, data_dir: str, tags) -> list:
+    """多成员待收尾 job 造法(场景级用: 逐成员记账断言需要 >= 2 个成员), 返回 v1 hash 清单
+    (_member_fixture/_write_job 的多成员封装, 造法与 _pending_job 同源)"""
+    tmp_path.joinpath("src").mkdir(exist_ok=True)
+    tmp_path.joinpath("dst").mkdir(exist_ok=True)
+    hashes = [_member_fixture(tmp_path / "BT_backup", tag, str(tmp_path / "src")) for tag in tags]
+    _write_job(tmp_path, data_dir, "job-1", hashes, src=str(tmp_path / "src"), dst=str(tmp_path / "dst"))
+    return hashes
+
+
+def _stub_world(monkeypatch, st):
+    """场景级世界桩(W2b): 单一 st dict 驱动四条替身面 —— roster(全机 qB 身份名册, O2)/
+    lmap(全机 LISTENING 映射, O3)/up(端口可达性, 证二)/names(全机映像名册, L2 证一消费)。
+    st["phases"][st["phase"]] 供数, 桩每拍读现值(与 _stub_obs/_stub_qb 联动风格同款);
+    st["next"] + st["flip_at"] = 翻面点: 第 flip_at 次 _listening_map 调用起 phase 推进到
+    next —— 翻面点即「世界变化时刻」, 测试显式。翻面钉在 _listening_map 调用序数上而非
+    _qb_processes: 每 poll 恰调用一次且是每拍首个读取(_observe_poll 数据流序), 翻面落在
+    拍边界, 同一拍的三路读取(lmap/refused/roster)看到同一世界(区别于 _flip_to_face_at_
+    reverify 的「窗内复验现读翻面」形态 —— 那是世界变化刻意落在拍内两读之间, 复验现判的
+    被测面); 窗内复验不调 _listening_map, 故其调用数 = poll 拍数。静态世界不设 next。
+    phase 缺省键: roster={}/lmap=None/up=False/names=("explorer.exe",)。"""
+    st.setdefault("calls", 0)
+    st.setdefault("phase", "p0")
+
+    def _cur():
+        return st["phases"][st["phase"]]
+
+    def _connect(addr, timeout=None):
+        if _cur().get("up"):
+            return mock.MagicMock()
+        raise OSError(10061, "refused")
+
+    def _lmap(*a, **k):
+        st["calls"] += 1
+        if st.get("next") and st["calls"] >= st.get("flip_at", 2):
+            st["phase"] = st["next"]
+            st["next"] = None
+        return _cur().get("lmap")
+
+    monkeypatch.setattr(rd.socket, "create_connection", _connect)
+    monkeypatch.setattr(rd, "_qb_processes", lambda *a, **k: _cur().get("roster", {}))
+    monkeypatch.setattr(rd, "_listening_map", _lmap)
+    monkeypatch.setattr(rd, "_qb_process_names", lambda: _cur().get("names", ("explorer.exe", )))
+
+
+def _capture_record_ts(monkeypatch, log):
+    """改写落账时刻捕获(场景级时序测量, 时刻全部来自注入时钟 —— 无真实等待的证明面):
+    包装 rj.record_rewrites, 只记成员记账调用(非空 records)的 ts; 相位补翻(空 records)
+    不计。log 由测试持有。"""
+    orig = rj.record_rewrites
+
+    def _cap(*a, **k):
+        records = a[2] if len(a) > 2 else k.get("records")
+        if records:
+            log.append(k.get("ts"))
+        return orig(*a, **k)
+
+    monkeypatch.setattr(rj, "record_rewrites", _cap)
+
+
+def _spy_obs_tick(monkeypatch, log):
+    """观测 tick 间谍(场景级时序测量): 包装 _Observation.tick 透传原行为, 记录每拍
+    (now, roster 键升序或 None)—— 用于钉「面孔首见时刻/通道恢复时刻/owner 建档拍」。
+    log 由测试持有。"""
+    orig = rd._Observation.tick
+
+    def _spy(self, roster, owner_cand, listen_map, now):
+        log.append((now, sorted(roster) if roster is not None else None))
+        return orig(self, roster, owner_cand, listen_map, now)
+
+    monkeypatch.setattr(rd._Observation, "tick", _spy)
+
+
+def test_scenario_x_owner_death_gap_rewrites_immediately(tmp_path, monkeypatch):
+    """场景 X(计划 26-11-10-0318 §03.3 callout, 拍板 D2 安全性根基): 目标重启死亡间隙
+    立即落盘 —— owner 死、新身完全未起, L1 立即进窗完成多成员改写收口。驱动序列: poll1
+    目标在跑(观测通道经真实 _observe_owner -> tick 建档 owner 并落盘 obs)-> poll2 目标
+    死亡(名册健康零观测 + 端口拒连, 新身未起)=> 同拍 L1 verdict True 立即进窗, 窗内
+    复验现读仍零观测照过 -> 两成员逐个改写落账 -> settled -> idle。
+    断言: 改写落盘(fastresume 双键)+ journal 逐成员记账 + 相位翻 rewritten; 无 30s 等待
+    (stable=1000 仍完成, 落账时刻早于「死亡发现拍 + NEW_FACE_SETTLE」—— 那是 L2 等价
+    路径的最早开窗点, 细步注入时钟证明, 界对成员数与拍内 clock 调用数不敏感)。"""
+    data_dir = str(tmp_path / "data")
+    h1, h2 = _scenario_job(tmp_path, data_dir, (b"m-1", b"m-2"))
+    st = {
+        "phases":
+            {
+                "alive":
+                    {
+                        "roster": {
+                            100: _ident(100.0)
+                        },
+                        "lmap": {
+                            100: frozenset({PORT})
+                        },
+                        "up": True,
+                        "names": ("qbittorrent.exe", )
+                    },
+                "dead": {
+                    "roster": {},
+                    "lmap": {},
+                    "up": False,
+                    "names": ("explorer.exe", )
+                },
+            },
+        "phase": "alive",
+        "next": "dead",
+        "flip_at": 2,  # 翻面点: poll2 的名册观测起世界进入「owner 死 + 新身未起」
+    }
+    _stub_world(monkeypatch, st)
+    rec_ts = []
+    _capture_record_ts(monkeypatch, rec_ts)
+    tick_log = []
+    _spy_obs_tick(monkeypatch, tick_log)
+    # 细步时钟(step=1): 时序界对成员数与拍内 clock 调用数不敏感(每成员 2 次拍内调用也只
+    # 吃掉个位秒), 界 30 的语义不变 —— 早于 L2 等价路径的「死亡 + NEW_FACE_SETTLE」最早开窗点
+    assert _run(data_dir, stable=1000.0, max_wait=200.0, clock=_clock_gen(step=1.0)) == "idle"
+    rw = rj.read_rewrites(data_dir, "job-1")
+    assert rw[h1]["status"] == "rewritten" and rw[h2]["status"] == "rewritten", "两成员都改写落账"
+    assert "qBt-savePath" in rw[h1]["keys"] and "qBt-savePath" in rw[h2]["keys"], "journal 逐成员双键明细在账"
+    assert rj.read_journal(data_dir, "job-1")["phase"] == rj.PHASE_REWRITTEN
+    for h, tag in zip((h1, h2), ("m-1", "m-2")):
+        d = frmod.load_fastresume(_fr_path(tmp_path, h))
+        assert d[b"qBt-savePath"] == (str(tmp_path / "dst").replace("\\", "/") + "/" + tag).encode("utf-8")
+    owner_ts = tick_log[0][0]  # owner 建档拍 = 首拍(真实通道建档, tick 与建档同刻)
+    st_obs = rj.read_obs(data_dir, rj.instance_key(HOST, PORT))
+    assert st_obs["owner"]["ts"] == owner_ts and st_obs["owner"]["pid"] == 100, "建档 ts 与首见拍一致, 死证记录原样"
+    assert tick_log[1][1] == [], "死亡拍名册零观测(新身完全未起 —— 场景 X 的世界前提)"
+    assert rec_ts, "改写已落账"
+    death_poll = tick_log[1][0]  # 死亡发现拍 = poll2(翻面后首拍; L2 口径的 down_since 也从这拍起算)
+    assert max(rec_ts) - death_poll < rd.NEW_FACE_SETTLE, \
+        "无 30s 等待: 落账早于「死亡发现拍 + NEW_FACE_SETTLE」—— 那是 L2 等价路径的最早开窗点(注入时钟证明)"
+
+
+def test_scenario_y_daily_restart_settle_absorb_then_rewrite(tmp_path, monkeypatch):
+    """场景 Y(计划 26-11-10-0318 §03.2 行三, P7 形态, §07 R3 有界赌注定价 ~33s): 日常
+    实例重启 settle 吸收 —— 目标死(owner 记录在 obs)+ 日常库重启新面孔(pid=200, ct=600
+    >= owner.ts, 不绑我们端口)=> 未决挡窗 -> NEW_FACE_SETTLE 30s 指纹稳定后吸收落盘 ->
+    窗开完成改写。驱动序列: 静态世界(无翻面)—— 每拍观测同一名册, 面孔首拍进未决, 满界
+    拍 settle 吸收(持久面落盘), 同拍 L1 verdict True 进窗改写收口。
+    断言: 吸收前零改写(落账时刻 >= absorbed ts)/吸收后改写落盘/首见到吸收 >= 30s 且
+    < 40s(满界下一拍, 不拖)/obs absorbed 条目持久化/owner 死证记录原样。"""
+    data_dir = str(tmp_path / "data")
+    h1 = _pending_job(tmp_path, data_dir)
+    _seed_obs(data_dir, {"pid": 100, "ct": 100.0, "ts": 500.0})
+    _stub_world(
+        monkeypatch,
+        {
+            "phases":
+                {
+                    "p0":
+                        {
+                            "roster": {
+                                200: _ident(600.0)
+                            },
+                            "lmap": {
+                                200: frozenset({8081})
+                            },
+                            "up": False,
+                            "names": ("qbittorrent.exe", )  # 日常库在跑: L2 全机口径同样挡窗
+                        }
+                }
+        }
+    )
+    rec_ts = []
+    _capture_record_ts(monkeypatch, rec_ts)
+    tick_log = []
+    _spy_obs_tick(monkeypatch, tick_log)
+    assert _run(data_dir, stable=1000.0, max_wait=200.0) == "idle"
+    assert rj.read_rewrites(data_dir, "job-1")[h1]["status"] == "rewritten", "吸收后窗开改写收口"
+    first_seen = tick_log[0][0]
+    st_obs = rj.read_obs(data_dir, rj.instance_key(HOST, PORT))
+    assert st_obs["owner"] == {"pid": 100, "ct": 100.0, "ts": 500.0}, "owner 死证记录原样"
+    assert len(st_obs["absorbed"]) == 1 and st_obs["absorbed"][0]["pid"] == 200 \
+        and st_obs["absorbed"][0]["ct"] == 600.0, "absorbed 条目持久化(日常库新面孔)"
+    absorbed_ts = st_obs["absorbed"][0]["ts"]
+    # settle 界下沿钉绝对字面量 30.0(计划 §07 R3 定价): NEW_FACE_SETTLE 被调小(有界赌注
+    # 收窄)时此处必须红; 界上沿引常量 —— 调大(更保守)不红, 由常量断言容忍
+    assert absorbed_ts - first_seen >= 30.0, "settle 界(计划定价 30s)尊重: 提前吸收即赌注破界"
+    assert absorbed_ts - first_seen < rd.NEW_FACE_SETTLE + 10.0, "满界下一拍即吸收(不拖)"
+    assert rec_ts and min(rec_ts) >= absorbed_ts, "吸收前零改写(未决挡窗)"
+    assert max(rec_ts) - first_seen < rd.NEW_FACE_SETTLE + 20.0, "全程 ~33s 时序(计划定价形态)"
+    d = frmod.load_fastresume(_fr_path(tmp_path, h1))
+    assert d[b"qBt-savePath"] == (str(tmp_path / "dst").replace("\\", "/") + "/m-1").encode("utf-8")
+
+
+def test_scenario_pid_reuse_non_qb_dead_evidence_form1(tmp_path, monkeypatch):
+    """PID 复用方向一(计划 26-11-10-0318 §03.3 死证形态一): 死 owner 的 pid 被非 qB 程序
+    复用 —— qB 身份名册(只收映像含 qbittorrent 的进程)里该 pid 消失(名册无此 pid), 原实例
+    死证形态一成立 => 照常进窗。驱动序列: 前世归档 owner(pid=100)-> 本世名册只有日常库实例
+    pid=300(ct=50 早于 owner 实例 => 行一零赌注吸收, 不挡窗); pid 100 现属 chrome.exe
+    (qB 名册不可见, 全机映像名册只见 chrome + 日常库)。
+    断言: 首拍即进窗(死证 + 零赌注吸收同拍成立, 落账时刻 < NEW_FACE_SETTLE, stable=1000
+    无稳定期); 改写落盘; obs absorbed 收录日常库、owner 死证记录原样(复用者不触碰);
+    全机名册见 qB(L2 等价路径被阻断)—— 窗是 L1 开的, 实例级证据相对全机口径的增量。"""
+    data_dir = str(tmp_path / "data")
+    h1 = _pending_job(tmp_path, data_dir)
+    _seed_obs(data_dir, {"pid": 100, "ct": 100.0, "ts": 500.0})
+    _stub_world(
+        monkeypatch,
+        {
+            "phases":
+                {
+                    "p0":
+                        {
+                            "roster": {
+                                300: _ident(50.0)
+                            },
+                            "lmap": {},
+                            "up": False,
+                            "names": ("chrome.exe", "qbittorrent.exe")  # pid 100 现属 chrome; 日常库在跑
+                        }
+                }
+        }
+    )
+    rec_ts = []
+    _capture_record_ts(monkeypatch, rec_ts)
+    tick_log = []
+    _spy_obs_tick(monkeypatch, tick_log)
+    assert _run(data_dir, stable=1000.0, max_wait=200.0) == "idle"
+    assert rj.read_rewrites(data_dir, "job-1")[h1]["status"] == "rewritten", "死证形态一照常进窗改写"
+    first_seen = tick_log[0][0]
+    assert rec_ts and min(rec_ts) - first_seen < rd.NEW_FACE_SETTLE, "首拍即进窗(无稳定期)"
+    st_obs = rj.read_obs(data_dir, rj.instance_key(HOST, PORT))
+    assert st_obs["owner"] == {"pid": 100, "ct": 100.0, "ts": 500.0}, "复用者不触碰 owner 死证记录"
+    assert [e["pid"] for e in st_obs["absorbed"]] == [300], "日常库实例零赌注吸收落盘(不挡窗)"
+    d = frmod.load_fastresume(_fr_path(tmp_path, h1))
+    assert d[b"qBt-savePath"] == (str(tmp_path / "dst").replace("\\", "/") + "/m-1").encode("utf-8")
+
+
+def test_scenario_pid_reuse_qb_instance_blocks_until_disposed(tmp_path, monkeypatch):
+    """PID 复用方向二(计划 26-11-10-0318 §03.3 死证形态二 + §03.2 身份不继承): 死 owner
+    的 pid 被另一 qB 实例复用(名册有 pid=100 但 ct 不等)=> 判原实例已死(形态二), 复用者
+    按全新面孔分类(PID 复用不继承 owner 身份, 也不继承 absorbed)=> 未决挡窗直至状态机
+    处置(settle 吸收)后窗开改写。驱动序列: 前世归档 owner(pid=100, ct=100)-> 本世名册
+    {100: ct=999}(复用者不绑我们端口)-> 首拍起未决挡窗(死证成立但未决一票挡)-> 30s
+    settle 吸收落盘 -> 同拍进窗, 复验分类读见 absorbed 命中放行 -> 改写收口。
+    断言: 吸收前零改写; absorbed 条目按复用者新身份落盘(pid=100, ct=999); owner 死证
+    记录原样(未被复用者覆盖 —— 未绑我们端口不升格 owner); 吸收后改写落盘。"""
+    data_dir = str(tmp_path / "data")
+    h1 = _pending_job(tmp_path, data_dir)
+    _seed_obs(data_dir, {"pid": 100, "ct": 100.0, "ts": 500.0})
+    _stub_world(
+        monkeypatch,
+        {
+            "phases":
+                {
+                    "p0":
+                        {
+                            "roster": {
+                                100: _ident(999.0)
+                            },  # 复用者: 同 pid 异 ct 的另一 qB 实例
+                            "lmap": {
+                                100: frozenset({8081})
+                            },
+                            "up": False,
+                            "names": ("qbittorrent.exe", )
+                        }
+                }
+        }
+    )
+    rec_ts = []
+    _capture_record_ts(monkeypatch, rec_ts)
+    tick_log = []
+    _spy_obs_tick(monkeypatch, tick_log)
+    assert _run(data_dir, stable=1000.0, max_wait=200.0) == "idle"
+    assert rj.read_rewrites(data_dir, "job-1")[h1]["status"] == "rewritten", "复用者被处置后窗开改写"
+    first_seen = tick_log[0][0]
+    st_obs = rj.read_obs(data_dir, rj.instance_key(HOST, PORT))
+    assert st_obs["owner"] == {"pid": 100, "ct": 100.0, "ts": 500.0}, "owner 死证记录不被复用者覆盖"
+    assert len(st_obs["absorbed"]) == 1 and st_obs["absorbed"][0]["pid"] == 100 \
+        and st_obs["absorbed"][0]["ct"] == 999.0, "复用者按新身份吸收(不继承 owner 旧 ct)"
+    absorbed_ts = st_obs["absorbed"][0]["ts"]
+    # settle 界下沿钉绝对字面量 30.0(计划 §07 R3 定价): NEW_FACE_SETTLE 被调小(有界赌注
+    # 收窄)时此处必须红; 界上沿引常量 —— 调大(更保守)不红, 由常量断言容忍
+    assert absorbed_ts - first_seen >= 30.0, "复用者走全新面孔 settle 管道(计划定价 30s)"
+    assert absorbed_ts - first_seen < rd.NEW_FACE_SETTLE + 10.0, "满界下一拍即吸收"
+    assert rec_ts and min(rec_ts) >= absorbed_ts, "复验/分类读挡直至该面被状态机处置(吸收前零改写)"
+    d = frmod.load_fastresume(_fr_path(tmp_path, h1))
+    assert d[b"qBt-savePath"] == (str(tmp_path / "dst").replace("\\", "/") + "/m-1").encode("utf-8")
+
+
+def test_scenario_pending_face_at_window_criterion_blocks(tmp_path, monkeypatch):
+    """未决挡窗(计划 26-11-10-0318 §03.2 行四; 与场景 Y 呼应、驱动源不同: 目标死亡同拍
+    现身的全新面, ct >= ts_last): 窗开判据现场冒未决新面 => 不进窗, settle 后进窗。
+    驱动序列: poll1 目标在跑(观测通道建档 owner)-> poll2 目标死亡且全新 qB 面(pid=300,
+    ct=600)同拍现身(不绑我们端口)—— 判据现场未决成员在册 => 不进窗(L1 未决挡 + L2
+    全机名册见 qB 双向挡), 零改写; settle 30s 吸收 => 窗开改写收口。
+    断言: 吸收前零改写(现场冒面即挡 —— 窗从未开过, 区别于窗开后复验挡的接线级形态);
+    吸收后改写; obs absorbed 持久化; owner 建档 ts 钉在首见拍(真实通道建档)。"""
+    data_dir = str(tmp_path / "data")
+    h1 = _pending_job(tmp_path, data_dir)
+    st = {
+        "phases":
+            {
+                "alive":
+                    {
+                        "roster": {
+                            100: _ident(100.0)
+                        },
+                        "lmap": {
+                            100: frozenset({PORT})
+                        },
+                        "up": True,
+                        "names": ("qbittorrent.exe", )
+                    },
+                "deadface":
+                    {
+                        "roster": {
+                            300: _ident(600.0)
+                        },
+                        "lmap": {
+                            300: frozenset({8081})
+                        },
+                        "up": False,
+                        "names": ("qbittorrent.exe", )  # 新面孔在跑: L2 全机口径同样挡窗
+                    },
+            },
+        "phase": "alive",
+        "next": "deadface",
+        "flip_at": 2,  # 翻面点: poll2 起「目标死亡 + 全新面同拍现身」(判据现场形态)
+    }
+    _stub_world(monkeypatch, st)
+    rec_ts = []
+    _capture_record_ts(monkeypatch, rec_ts)
+    tick_log = []
+    _spy_obs_tick(monkeypatch, tick_log)
+    assert _run(data_dir, stable=1000.0, max_wait=200.0) == "idle"
+    assert rj.read_rewrites(data_dir, "job-1")[h1]["status"] == "rewritten", "settle 后窗开改写收口"
+    st_obs = rj.read_obs(data_dir, rj.instance_key(HOST, PORT))
+    assert st_obs["owner"]["ts"] == tick_log[0][0] and st_obs["owner"]["pid"] == 100, \
+        "owner 建档 ts 钉在首见拍(真实通道建档)"
+    assert len(st_obs["absorbed"]) == 1 and st_obs["absorbed"][0]["pid"] == 300 \
+        and st_obs["absorbed"][0]["ct"] == 600.0, "全新面被正规吸收落盘"
+    face_first = tick_log[1][0]  # 面孔首见拍 = poll2(与死亡同拍现身)
+    absorbed_ts = st_obs["absorbed"][0]["ts"]
+    # settle 界下沿钉绝对字面量 30.0(计划 §07 R3 定价): NEW_FACE_SETTLE 被调小(有界赌注
+    # 收窄)时此处必须红; 界上沿引常量 —— 调大(更保守)不红, 由常量断言容忍
+    assert absorbed_ts - face_first >= 30.0, "未决期 settle 界(计划定价 30s)尊重"
+    assert absorbed_ts - face_first < rd.NEW_FACE_SETTLE + 10.0, "满界下一拍即吸收"
+    assert rec_ts and min(rec_ts) >= absorbed_ts, "吸收前零改写(判据现场未决在册, 窗从未开过)"
+    d = frmod.load_fastresume(_fr_path(tmp_path, h1))
+    assert d[b"qBt-savePath"] == (str(tmp_path / "dst").replace("\\", "/") + "/m-1").encode("utf-8")
+
+
+def test_scenario_obs_reload_across_restart_rewrites_from_dead_evidence(tmp_path, monkeypatch):
+    """obs 重启重载端到端(计划 26-11-10-0318 §03.3/§03.4「停机期间目标死亡」全链):
+    第一世 daemon 经真实观测通道建档 owner(目标在跑)-> daemon 停机(timeout 收束, obs
+    归档留存)-> 停机期间目标死亡 -> 第二世 daemon from_payload 恢复死证 -> 直接 L1 进窗
+    改写(无 30s 等待)。与接线级 test_run_restarts_restore_owner_evidence_from_obs_file
+    分工: 本测第一世 owner 建档走全链通道(桩四通道 -> _observe_owner -> tick -> write_obs),
+    非预播种; 第一世零改写也入断言。
+    断言: 第一世建档成功且零改写; 第二世首拍即改写(落账时刻 - 第二世首拍 < NEW_FACE_SETTLE,
+    stable=1000); obs owner 记录跨重启逐字段一致(死证不被第二世触碰)。"""
+    data_dir = str(tmp_path / "data")
+    h1 = _pending_job(tmp_path, data_dir)
+    # 第一世: 目标在跑, 真实通道建档, owner 活着不进窗, timeout 收束
+    _stub_world(
+        monkeypatch, {
+            "phases":
+                {
+                    "p0":
+                        {
+                            "roster": {
+                                100: _ident(100.0)
+                            },
+                            "lmap": {
+                                100: frozenset({PORT})
+                            },
+                            "up": True,
+                            "names": ("qbittorrent.exe", )
+                        }
+                }
+        }
+    )
+    assert _run(data_dir, stable=1000.0, max_wait=20.0) == "timeout"
+    life1_obs = rj.read_obs(data_dir, rj.instance_key(HOST, PORT))
+    assert life1_obs["owner"]["pid"] == 100 and life1_obs["owner"]["ct"] == 100.0, "第一世真实通道建档"
+    assert rj.read_rewrites(data_dir, "job-1") == {}, "owner 在位: 第一世零改写"
+    # 停机期间目标死亡(名册零观测 + 端口拒连)-> 第二世 from_payload 恢复死证
+    _stub_world(monkeypatch, {"phases": {"p0": {"roster": {}, "lmap": {}, "up": False, "names": ("explorer.exe", )}}})
+    rec_ts = []
+    _capture_record_ts(monkeypatch, rec_ts)
+    tick_log = []
+    _spy_obs_tick(monkeypatch, tick_log)
+    assert _run(data_dir, stable=1000.0, max_wait=200.0) == "idle"
+    assert rj.read_rewrites(data_dir, "job-1")[h1]["status"] == "rewritten", "恢复死证驱动 L1 立即进窗改写"
+    assert rj.read_obs(data_dir, rj.instance_key(HOST, PORT))["owner"] == life1_obs["owner"], \
+        "obs owner 记录跨重启逐字段一致(死证不被触碰)"
+    assert rec_ts and min(rec_ts) - tick_log[0][0] < rd.NEW_FACE_SETTLE, "第二世首拍即进窗(无 30s 等待)"
+
+
+def test_scenario_channel_outage_falls_to_l2_then_l1_on_recovery(tmp_path, monkeypatch, caplog):
+    """通道失败退 L2(计划 26-11-10-0318 §03.1 通道纪律 + §07 R5 等价面, 黄金法则 2 保守
+    退化): L1 观测通道(名册枚举)持续故障 => 全程退 L2 现状判据(30s 稳定期), warning
+    节流留痕, 行为与接线前等价; 恢复后回到 L1。同一 data_dir 连续两世:
+    第一世名册通道恒 None —— 30s 稳定期内零改写(max_wait=25 < stable=30 截停; 通道故障若
+    被冒充成健康零观测(None 冒充 {})或稳定期被丢, 改写会在首拍出现; 分派层 None=>True
+    的冒充由接线级复验闸专测兜, 本测断言面 = 端到端往返)+ 节流 warning 60s 一条 + obs
+    死证种子原样(roster None => tick 整拍不动); 第二世通道恢复(健康零观测)=> 回 L1,
+    死证立即进窗改写(stable=1000 无稳定期), 全程零「退 L2」留痕。"""
+    data_dir = str(tmp_path / "data")
+    h1 = _pending_job(tmp_path, data_dir)
+    _seed_obs(data_dir, {"pid": 4242, "ct": 100.0, "ts": 500.0})
+    seeded = rj.read_obs(data_dir, rj.instance_key(HOST, PORT))
+    _stub_world(
+        monkeypatch,
+        {
+            "phases": {
+                "p0": {
+                    "roster": None,  # 名册通道恒故障(观测不可用)
+                    "lmap": None,
+                    "up": False,
+                    "names": ("explorer.exe", )
+                }
+            }
+        }
+    )
+    with caplog.at_level(logging.WARNING, logger=LOG_RD):
+        assert _run(data_dir, stable=30.0, max_wait=25.0) == "timeout", "通道故障: 30s 稳定期内不进窗(L2 现状)"
+        n = len([r for r in caplog.records if "退 L2 全机口径" in r.message])
+        assert n == 1, f"节流留痕 60s 一条, 实得 {n}"
+    assert rj.read_rewrites(data_dir, "job-1") == {}, "零改写(通道故障不冒充通过, 等价面)"
+    assert rj.read_obs(data_dir, rj.instance_key(HOST, PORT)) == seeded, "roster None => tick 整拍不动, obs 种子原样"
+    caplog.clear()  # 第一世留痕不漏进第二世断言
+    # 第二世: 通道恢复(健康零观测)=> 回 L1
+    _stub_world(monkeypatch, {"phases": {"p0": {"roster": {}, "lmap": {}, "up": False, "names": ("explorer.exe", )}}})
+    rec_ts = []
+    _capture_record_ts(monkeypatch, rec_ts)
+    tick_log = []
+    _spy_obs_tick(monkeypatch, tick_log)
+    with caplog.at_level(logging.WARNING, logger=LOG_RD):
+        assert _run(data_dir, stable=1000.0, max_wait=200.0) == "idle"
+        assert not [r for r in caplog.records if "退 L2 全机口径" in r.message], "通道恢复零退 L2 留痕"
+    assert rj.read_rewrites(data_dir, "job-1")[h1]["status"] == "rewritten", "恢复后回到 L1 立即改写"
+    assert rec_ts and min(rec_ts) - tick_log[0][0] < rd.NEW_FACE_SETTLE, "恢复后无稳定期(L1 强证据)"
