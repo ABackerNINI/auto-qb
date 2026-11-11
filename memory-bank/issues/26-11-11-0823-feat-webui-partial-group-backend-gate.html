@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>后端纵深: 部分组×带文件删除/迁移关移动 fail-closed 拒收 · feat · 计划外问题</title>
+<meta name="issue-slug" content="webui-partial-group-backend-gate">
+<meta name="issue-stamp" content="26-11-11-0823">
+<meta name="issue-type" content="feat">
+<meta name="doc-topic" content="webui-partial-group-warning">
+<meta name="doc-refs" content="memory-bank/plans/26-11-11-0820-plan-webui-partial-group-warning.html">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="后端纵深: 部分组×带文件删除/迁移关移动 fail-closed 拒收">
+<meta name="issue-summary" content="/api/torrents/bulk 直发可绕过前端预警: 部分组+delete_files(共享文件被删)或 location 迁移关(共享文件被搬走)静默破坏组内其余成员,后端应 fail-closed 拒收并点名共存成员">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --mark: #161e26;     /* issue 特有: callout 底色 (plan.html 不用) */
+    --warn-bg: #2a2119;  /* issue 特有: 状态徽标底色 */
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 单栏流式版面: 与 plan.html 同一套 .sheet (封顶 1280px, 侧距 clamp(18~44px)); 旧双栏+粘性目录已删 */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+
+  /* 封面 meta 行: issue 特有, DOM 形态别改 —— 状态徽标 <span class="badge"> 被
+     flip_status (W4) 与 check_status_drift 的 BADGE_RE 机读 (k/v div 结构在判据里) */
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px 28px; font-family: var(--mono); font-size: 11.5px; color: var(--faint); border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta-row .item .k { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .meta-row .item .v { font-size: 13.5px; color: var(--dim); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin: 14px 0; font-size: 14px; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-family: var(--mono); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">计划外问题（未修）· feat</div>
+<h1>后端纵深: 部分组×带文件删除/迁移关移动 fail-closed 拒收</h1>
+<p class="lede">/api/torrents/bulk 直发可绕过前端预警: 部分组+delete_files(共享文件被删)或 location 迁移关(共享文件被搬走)静默破坏组内其余成员,后端应 fail-closed 拒收并点名共存成员</p>
+<div class="meta-row">
+  <div class="item"><div class="k">编号</div><div class="v">26-11-11-0823-feat-webui-partial-group-backend-gate</div></div>
+  <div class="item"><div class="k">报告时间</div><div class="v">2026-11-11 08:23</div></div>
+  <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">feat</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
+  <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+</div>
+
+<section id="s1">
+  <h2><span class="no">§01</span>现象与发现场景</h2>
+  <p>2026-11-11 「webui 部分组操作醒目预警」取证轮(计划 <a href="../plans/26-11-11-0820-plan-webui-partial-group-warning.html">26-11-11-0820</a>)发现: 前端三落点预警只覆盖 webui 这条路,而 <code>/api/torrents/bulk</code> 可被第三方脚本/旧 UI 直发,绕过全部前端确认 —— 请求 hashes 只含某辅种组的<strong>部分</strong>成员时:</p>
+  <ul>
+    <li><code>action=delete + delete_files=true</code> → 组内共享物理文件被删(<code>api.torrents_delete</code> 原样直发),同组其余成员必然缺文件;</li>
+    <li><code>action=location</code> 且 <code>relocate.enabled=off</code> → 共享文件被 <code>setLocation</code> 搬走,同组其余成员仍指向旧路径,缺文件。</li>
+  </ul>
+  <p>配置相关性: <code>relocate.enabled=on</code> 时 location 走整组迁移(<code>_buckets</code> 级联全组,无此洞);off 时直发才有。delete 与迁移开关无关,任何配置下都有此洞。</p>
+</section>
+
+<section id="s2">
+  <h2><span class="no">§02</span>证据</h2>
+  <p class="hint">贴原文,不转述;取证时间 2026-11-11 08:23。</p>
+<pre><code># commands_torrents.py:584-586 —— bulk delete: hashes 平铺直发, 无组部分判定
+"delete":
+    lambda api, hashes, delete_files, extra: api.
+    torrents_delete(torrent_hashes=hashes, delete_files=delete_files),
+
+# commands_torrents.py:597-599 —— bulk location: 迁移关时同样直发
+"location":
+    lambda api, hashes, delete_files, extra: api.
+    torrents_set_location(torrent_hashes=hashes, location=extra["location"]),
+
+# commands_torrents.py:701 —— bulk location 只在迁移武装时才改道整组迁移
+if action == "location" and self._relocate_armed():
+
+# relocate_plan.py:294-296 —— 迁移开的组级联对照(注释原文):
+#   组成员取 store 全组(迁移影响的是整个内容组, 不只是选中的入口种子);
+#   store 无该组(如 grouping 关过) 时退回本次选中集合
+members = [h for h in store.groups.get(key, []) if h in store.by_hash] or list(selected)</code></pre>
+</section>
+
+<section id="s3">
+  <h2><span class="no">§03</span>影响面</h2>
+  <table>
+    <tr><th>维度</th><th>结论</th></tr>
+    <tr><td>触发条件</td><td>POST <code>/api/torrents/bulk</code>,action=delete 且 delete_files=true(或 action=location 且 <code>relocate.enabled=off</code>),hashes 含某辅种组部分成员且未整组覆盖</td></tr>
+    <tr><td>影响范围</td><td>同组未入选成员缺文件(不可逆,数据面);webui 主路径有前端预警兜着(计划 26-11-11-0820 落地后),API 直发路径完全无守卫</td></tr>
+    <tr><td>严重度</td><td>高(数据破坏不可逆;但触发需 API 直发,webui 主路径有前端预警,非全网必现)</td></tr>
+  </table>
+</section>
+
+<section id="s4">
+  <h2><span class="no">§04</span>定位锚点</h2>
+  <ul>
+    <li><code>commands_torrents.py:584</code>(取证 2026-11-11 08:23)· <code>_BULK_ACTIONS["delete"]</code> · grep <code>"delete":</code></li>
+    <li><code>commands_torrents.py:597</code> · <code>_BULK_ACTIONS["location"]</code> · grep <code>"location":</code></li>
+    <li><code>commands_torrents.py:701</code> · bulk location 迁移改道分支 · grep <code>action == "location" and self._relocate_armed</code></li>
+    <li><code>relocate_plan.py:262</code> · <code>_buckets</code> 组级联(迁移开对照面) · grep <code>组成员取 store 全组</code></li>
+    <li>组成员展开可复用件: <code>_group_hashes</code>(bulk keys 模式级联展开同款,commands_torrents.py:633)+ <code>store.groups</code> 组员索引</li>
+  </ul>
+</section>
+
+<section id="s5">
+  <h2><span class="no">§05</span>根因<span class="opt">（可选）</span></h2>
+  <div class="callout">已定位(非待查): bulk 通道按「平铺 hash 单次 API 调用」设计(docstring 明言 qB 端点原生接受批量),组维度只在 keys 模式级联展开,hashes 模式无部分组守卫 —— 属纵深防御缺口,不是行为 bug。</div>
+</section>
+
+<section id="s6">
+  <h2><span class="no">§06</span>建议修法<span class="opt">（可选）</span></h2>
+  <p>在 <code>_cmd_bulk_torrents</code> 分派前加部分组闸: 对 <code>delete_files=true</code> 的 delete 与迁移关下的 location,逐 hash 查组归属,命中「部分组」(组内还有成员不在本次删除/移动集合)时:</p>
+  <ul>
+    <li><strong>候选 A(倾向)</strong>: fail-closed 硬拒 —— error 回执点名共存成员(「辅种组 X 还有 N-M 个成员未包含: 删除文件/移动会破坏它们,请改选整组」)。简单、数据安全优先;代价=既有第三方脚本若确有部分组删除意图会被拒。</li>
+    <li><strong>候选 B</strong>: confirm 二段回路(与整组迁移 confirm 同范式,confirm=true 放行)。向后兼容第三方;代价=加确认状态与回执分支。</li>
+  </ul>
+  <p>keys 覆盖全组 / 成员全选 / 单成员组照常放行(与前端谓词 D2 同口径,守阵可对账)。实施时另行认领,与本报告状态机联动。</p>
+</section>
+
+<section id="s7">
+  <h2><span class="no">§07</span>状态变更日志</h2>
+  <ul>
+    <li>2026-11-11 08:23 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+  </ul>
+  <h3>复验</h3>
+  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <h3>修复后补充</h3>
+  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+</section>
+
+<footer>
+  26-11-11-0823-feat-webui-partial-group-backend-gate.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+</footer>
+
+</div>
+</body>
+</html>
