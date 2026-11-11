@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="linux-testbed-docker">
 <meta name="doc-status" content="Open">
 <meta name="doc-added" content="26-11-12-0152">
-<meta name="doc-updated" content="26-11-12-0223">
+<meta name="doc-updated" content="26-11-12-0322">
 <meta name="doc-refs" content="memory-bank/issues/26-11-12-0053-chore-linux-ci-timeout-py-download.html, memory-bank/tasks/26-11-12-test-linux-testbed.md">
 <style>
   :root {
@@ -75,7 +75,7 @@
 <h1>Linux 测试端统一改造: Docker 常驻容器 testbed(pytest/e2e/变异一体)</h1>
 <p class="lede">本篇只回答: 怎么把 Linux 测试端(pytest / e2e / 变异测试)统一迁到 Docker 常驻容器 testbed —— 环境一次烘焙、代码仅拷代码、残留单根清扫、多会话并行隔离, 并顺带根治 issue 26-11-12-0053 的「包装超时 900s 不够」与「uv 补下载托管 CPython 走 github 不通」两缺口。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-12-0152 · <b>doc-updated</b> 26-11-12-0223 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-11-12-0152 · <b>doc-updated</b> 26-11-12-0322 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 会话 grilling 2026-11-12(Q1–Q8 两轮, 用户逐项拍板, 见 §06)+ issue 26-11-12-0053 认领指令
 </div>
 
@@ -127,8 +127,8 @@
 <ol>
   <li><b>系统层</b>: ubuntu:24.04 + apt —— python3.12(含 venv 模块)、git、tar、rsync、curl + NodeSource LTS nodejs(与 CI <code>lts/*</code> 同源)+ playwright 系统依赖。<b>3.13 不走 apt</b>(noble 官方源无 python3.13, 评审轮 1 引 ubuntu.com 可用性页实测; 3.13 走构建期烘焙, 见烘焙层)。</li>
   <li><b>uv 层</b>: <code>pip install uv</code> 走国内 PyPI 镜像(依赖面国内镜像站优先, D8); ghcr <code>COPY --from</code> 降为备选(github 系直连, 不通走人工代理)。</li>
-  <li><b>环境变量层</b>: <code>ENV UV_PYTHON_DOWNLOADS=never</code> —— 运行期零下载(两个解释器都已进镜像, 发现即用); issue ② 由「构建期烘焙 + 运行期禁取」结构性根除。另烘 <code>UV_DEFAULT_INDEX</code>=国内 PyPI 源(运行期 uv sync delta 同走国内镜像)。</li>
-  <li><b>依赖烘焙层</b>: 拷 pyproject / uv.lock / package.json / package-lock.json → <code>RUN UV_PYTHON_DOWNLOADS=manual uv python install 3.13</code>(RUN 级作用域覆盖 ENV 层的 never —— 否则显式 install 也被拦, 构建自锁, 评审轮 2 引 uv#7340; 托管 CPython 源 github releases —— <b>D8 落点: 直连优先, 失败停手请用户手动开代理</b>; 备选 deadsnakes PPA, launchpad 直连)→ <code>uv sync --no-install-project</code> ×2(3.12 = 系统 apt / 3.13 = 托管)→ <code>/opt/venv-3.12</code> 与 <code>/opt/venv-3.13</code> 模板; <code>npm ci</code>(registry.npmmirror.com)→ <code>/opt/e2e-node</code>; playwright chromium <code>--with-deps</code> 烘焙(二进制走 npmmirror 镜像)。</li>
+  <li><b>环境变量层</b>: <code>ENV UV_PYTHON_DOWNLOADS=never</code> —— 运行期零下载(两个解释器都已进镜像, 发现即用); issue ② 由「构建期烘焙 + 运行期禁取」结构性根除。另烘 <code>UV_DEFAULT_INDEX</code>/<code>UV_INDEX_URL</code>=国内 PyPI 源(只管 export/pip 面;运行期 delta 走 pip 路线, 见 §10 R4)。</li>
+  <li><b>依赖烘焙层</b>: 拷 pyproject / uv.lock / package.json / package-lock.json → <code>RUN UV_PYTHON_DOWNLOADS=manual uv python install 3.13</code>(RUN 级作用域覆盖 ENV 层的 never —— 否则显式 install 也被拦, 构建自锁, 评审轮 2 引 uv#7340; 托管 CPython 源 github releases —— <b>D8 落点: 直连优先, 失败停手请用户手动开代理</b>; 备选 deadsnakes PPA, launchpad 直连)→ <code>uv export --format requirements-txt --generate-hashes</code> + <code>uv pip install -r --index-url</code> 国内镜像 ×2(3.12 = 系统 apt / 3.13 = 托管; 带 hash 校验保住锁文件钉版 —— R4: <code>uv sync --frozen</code> 跳过 index 校验、按 uv.lock 的 files.pythonhosted.org 绝对 URL 下载, 镜像索引对它无效, 见 §10)→ <code>/opt/venv-3.12</code> 与 <code>/opt/venv-3.13</code> 模板; <code>npm ci</code>(registry.npmmirror.com)→ <code>/opt/e2e-node</code>; playwright chromium <code>--with-deps</code> 烘焙(二进制走 npmmirror 镜像)。</li>
   <li><b>网络策略</b>: 见下「网络策略」节(D8)。</li>
 </ol>
 
@@ -137,7 +137,7 @@
 <ul>
   <li>基底镜像 ubuntu:24.04: Docker Hub 国内镜像源优先(候选: 清华 / DaoCloud / 1ms 等, <b>实现时实测钉值记入 task note</b>, 可配置不写死); ghcr 直连仅在备选路线用到。</li>
   <li>apt 层: 换清华/阿里 ubuntu noble 源(main + updates + universe)。</li>
-  <li>PyPI(uv 烘焙与运行期 delta): 清华/阿里 PyPI 镜像, 烘进 <code>UV_DEFAULT_INDEX</code>。</li>
+      <li>PyPI(uv 烘焙与运行期 delta): 清华/阿里 PyPI 镜像, 经 <code>uv pip install --index-url</code> 显式传入(<code>UV_DEFAULT_INDEX</code>/<code>UV_INDEX_URL</code> 烘进 ENV 只管 export/pip 面 —— <code>uv sync --frozen</code> 跳过 index 校验、按 uv.lock 的 files.pythonhosted.org 绝对 URL 下载, 对它无效, 机制事实与改法见 §10 R4)。</li>
   <li>npm: <code>registry.npmmirror.com</code>; playwright 浏览器二进制: <code>PLAYWRIGHT_DOWNLOAD_HOST</code> 指 npmmirror 镜像。</li>
   <li>github 系(ghcr / github release 等): <b>直连优先</b>; 失败 → 失败行「停手 + 开代理指引」, 用户手动开代理后重跑(S1 停手点)。</li>
 </ul>
@@ -212,7 +212,7 @@
   <tr><td>D5</td><td>并行策略</td><td><b>每会话独立 workdir, 允许同时跑</b>; 互斥锁按 workdir 路径 hash 天然分, 保持现状不动; 并行加固=写死端口改动态 + pid 级清扫</td></tr>
   <tr><td>D6</td><td>变异体系</td><td><b>迁入容器</b>, mutants 包后端改写, 8 条硬约束容器重验; 不再回 WSL</td></tr>
   <tr><td>D7</td><td>WSL 残留</td><td><b>清空</b>(锚 issue §07 覆盖表已核: 无进行中轮次, 轮次数字在基线切片, 镜像仓可由 mutants.setup 重建)</td></tr>
-  <tr><td>D8</td><td>网络策略</td><td><b>镜像与依赖国内镜像站优先; github 直连; 连不上停手请用户手动开代理</b>(用户 2026-11-12 补充拍板; 落点见 §03「网络策略」节, 风险 R1/R2/R9)</td></tr>
+  <tr><td>D8</td><td>网络策略</td><td><b>镜像与依赖国内镜像站优先; github 直连; 连不上停手请用户手动开代理</b>(用户 2026-11-12 补充拍板; 落点见 §03「网络策略」节, 风险 R1/R2/R9); PyPI 落点改<b>导出+pip 路线</b>(<code>uv export --generate-hashes</code> + <code>uv pip install --index-url</code> 国内源, 评审轮 3 用户拍板同日 —— 机制事实: <code>UV_DEFAULT_INDEX</code> 对 <code>uv sync --frozen</code> 的 files.pythonhosted.org 绝对 URL 下载无效, §10 R4)</td></tr>
 </table>
 
 <h2><span class="no">§07</span>风险与对策</h2>
@@ -235,6 +235,9 @@
   <li><span class="tag">R1 · 26-11-12-0200</span> R1: 网络策略改版(D8 用户拍板): 镜像与依赖国内镜像站优先(Docker Hub 源/apt 清华阿里/PyPI UV_DEFAULT_INDEX/npmmirror+playwright 二进制镜像), github 系直连, 连不上停手请用户手动开代理(脚本不内置代理不自动重试); uv 主线改 pip 走国内源, ghcr COPY --from 降备选; R1/R2 风险按新策略改写, 新增 R9 镜像站漂移</li>
   <li><span class="tag">R2 · 26-11-12-0219</span> R2: 评审轮1处置(blocker 1 + minor 4 全修): 3.13 路线钉死为构建期 uv 托管 CPython 烘焙(github 直连 D8 落点, 备选 deadsnakes) + 运行期 UV_PYTHON_DOWNLOADS=never —— noble 官方源无 python3.13, 原「双 Python 全来自 apt」不成立; mutants 计数五条改六条; 排除清单补 .tools(vnu.jar 31M)并闭合派生数(约84M/约183M); S5 补构建缓存(builder prune); find_root 与「Docker 等价复现」引文改指 attachment 精确路径; S1 网络措辞对齐 D8</li>
   <li><span class="tag">R3 · 26-11-12-0223</span> R3: 评审轮2处置(major 1): 烘焙层 install 命令加 RUN 级 UV_PYTHON_DOWNLOADS=manual override —— ENV=never 连显式 uv python install 也拦(uv#7340), 否则 S1 构建自锁</li>
+  <li><span class="tag">R4 · 26-11-12-0316</span> R4: 评审轮3处置(major 1 + minor 5 全修): 机制事实 —— uv.lock 记录 787 个 files.pythonhosted.org 绝对 URL 且 <code>uv sync --frozen</code> 跳过 index 校验, <code>UV_DEFAULT_INDEX</code> 对烘焙下载无效; 用户拍板改<b>导出+pip 路线</b>: 烘焙层(与 S2 运行期 delta)改 <code>uv export --generate-hashes</code> + <code>uv pip install -r --index-url</code> 国内镜像(带 hash 校验保住锁文件钉版), ENV 层补 <code>UV_INDEX_URL</code>; minor: D8_BUILD_FAIL「换下一家 --build-arg」改可执行路径(task 拒收参数)、清单缺失不再误打 docker build 失败文案、清单存在性检查提前到 hash 计算之前、NodeSource curl 补 --max-time 60(传输停滞型不可达不再挂满 timeout)、test.linux-env 基建注记标 S2 落地现状</li>
+  <li><span class="tag">R5 · 26-11-12-0316</span> R5: 评审轮2/轮3处置(minor 3 全修): §03 环境变量层残留旧口径改「只管 export/pip 面; 运行期 delta 走 pip 路线」对齐 R4; Dockerfile 层4头注 UV_DEFAULT_INDEX/UV_INDEX_URL 语义按 uv 文档改准(UV_INDEX_URL 是 pip 兼容旧别名, UV_DEFAULT_INDEX 优先, 双写动机独立成句); doc-updated 抬至本版</li>
+  <li><span class="tag">R6 · 26-11-12-0322</span> R6: 时间戳归真: R4 行 tag 26-11-12-0330 是手填估计值(未来时刻), 归一至同批机械 bump 真值 0316(该批内容产生于 0316 bump 之前, 时序归真); doc-updated 重抬本版机械真值</li>
 </ul>
 
 </div>
