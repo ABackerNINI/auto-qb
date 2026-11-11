@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>Linux 测试端统一改造: Docker 常驻容器 testbed(pytest/e2e/变异一体)</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="linux-testbed-docker">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-12-0152">
+<meta name="doc-updated" content="26-11-12-0223">
+<meta name="doc-refs" content="memory-bank/issues/26-11-12-0053-chore-linux-ci-timeout-py-download.html, memory-bank/tasks/26-11-12-test-linux-testbed.md">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: linux-testbed-docker</div>
+<h1>Linux 测试端统一改造: Docker 常驻容器 testbed(pytest/e2e/变异一体)</h1>
+<p class="lede">本篇只回答: 怎么把 Linux 测试端(pytest / e2e / 变异测试)统一迁到 Docker 常驻容器 testbed —— 环境一次烘焙、代码仅拷代码、残留单根清扫、多会话并行隔离, 并顺带根治 issue 26-11-12-0053 的「包装超时 900s 不够」与「uv 补下载托管 CPython 走 github 不通」两缺口。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-12-0152 · <b>doc-updated</b> 26-11-12-0223 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 会话 grilling 2026-11-12(Q1–Q8 两轮, 用户逐项拍板, 见 §06)+ issue 26-11-12-0053 认领指令
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+
+<h3>背景</h3>
+<p>认领 issue 26-11-12-0053 两缺口: ①<code>test.linux</code> 引擎包装超时 900s 已不够 —— 仓库 478M 走 docker bind 挂载 <code>cp -a</code> 实测 ~1MB/s(光拷贝 ~10 分钟), 加 uv sync + 全量 pytest 合计 ~15 分钟; 超时杀包装进程后容器成孤儿(<code>docker run</code> 客户端死、容器不随 <code>--rm</code> 退), 输出全丢。②默认镜像 python3.12 与 <code>.python-version</code>=3.13 错位, uv 补下载托管 CPython(源在 github)容器内不通 → <code>uv sync</code> 直接失败。</p>
+<p>但本计划不止修这两点: 用户拍板「彻底解决 linux 测试端」, 把 pytest / e2e / 变异测试三个 Linux 面统一到一个<b>可移植、可重建、可清扫</b>的体系(变异残留一并纳入, 用户 2026-11-12 显式授权)。</p>
+
+<h3>目标(G1–G5, 做到即成)</h3>
+<ul>
+  <li><b>G1 环境一次性搭好</b>: Dockerfile 入库, 镜像烘焙(apt 系统依赖 + 双 Python venv 模板 + node + playwright chromium + npm 依赖); 他机重建 = clone 仓库 → <code>commands run test.linux-env</code> 一步到位。</li>
+  <li><b>G2 复制仅拷代码</b>: 排除清单式 tar 流推送(剔 <code>__pycache__</code> / <code>.venv</code> / <code>node_modules</code> / <code>dist</code> / <code>.tools</code> / <code>auto-qb-data</code> 等; <b><code>.git</code> 必须随拷</b> —— <code>test_commands_engine</code> 的 <code>find_root()</code> 靠向上找 <code>.git</code>, 坑档 <code>pitfalls/testing/attachments/patching-local-linux-repro.md</code> 实证)。478M → 约 183M(含 .git 99M), 且走 exec 管道不走 bind 挂载。</li>
+  <li><b>G3 残留统一</b>: 容器内一切测试态(代码副本 / venv / 变异镜像仓 / pytest 实例根)收敛 <code>/root/auto-qb-tests/</code> 单根; 宿主 docker 面与 WSL 侧旧残留清空(§04 S5)。</li>
+  <li><b>G4 并行隔离</b>: 每会话独立 workdir, TMPDIR 实例根 / 动态端口 / 写重型锁(按仓库路径 hash 分锁)天然隔离; <b>允许</b>多会话同时跑全量。</li>
+  <li><b>G5 双缺口根治</b>: 超时改分层(引擎 1800s + 容器内 <code>timeout</code> 内层先到, 干净退出); 「孤儿容器」随 <code>docker run --rm</code> 形态退役 —— 常驻容器 + exec, 无容器生命周期问题; exec 客户端被杀的残留进程由下轮 workdir 级 pid 清扫兜底。</li>
+</ul>
+
+<h3>设计底线 / 不变量</h3>
+<ul>
+  <li><b>环境即代码 &gt; 手工态</b>: 镜像可弃可重建; 容器内不留「必须手工抢救」的状态, 重建即净室。</li>
+  <li><b>幂等</b>: <code>test.linux-env</code> 重跑无害(hash 未变 = 秒级 no-op); 清扫一律「内嵌 pid 已死 + mtime 超龄」双条件(与 <code>tests/_tmp_bootstrap.py</code> 同款纪律), 绝不按名字猜删。</li>
+  <li><b>白名单清扫</b>: 宿主 docker 面只动 auto-qb 相关物, 不碰同机 PT 工具容器(downonly / IYUUPlus / tr-bitcake×2 / pt-accelerator, 2026-11-12 <code>docker ps -a</code> 实录)。</li>
+  <li><b>CI 不动</b>: <code>.github/workflows</code> 零改动; 本体系只做「本机复现 Linux CI」, 交付与否仍只看 Gitee。</li>
+  <li><b>生产口径</b>: 失败行 / 清理指引 / 报错文案按生产标准写(失败行自带下一步), 不留糙面。</li>
+</ul>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+
+<h3>现链路</h3>
+<p><code>commands run test.linux</code>(<code>.commands/test/scripts/linux_ci.py</code>)= <code>docker run --rm</code> uv 官方镜像 python3.12-bookworm-slim, 容器内全量 <code>cp -a</code> → 删 .venv → <code>uv sync</code> → 全量 pytest; 引擎 timeout=900s(<code>.commands/test/config.toml</code>:53)。WSL 路线被坑档记为「可能被安全策略拦」(2026-09-22 实测 <code>wsl.exe</code> 命中 Program Blacklist), 且即便可达也只有变异测试在用。</p>
+
+<h3>痛点证据(2026-11-12 实测)</h3>
+<ul>
+  <li><b>拷贝面大而无当</b>: 478M 工作树构成 —— <code>__pycache__</code> 82M / <code>.git</code> 99M / <code>node_modules</code> 21M / <code>dist</code> 26M / <code>memory-bank</code> 39M / <code>tests</code> 91M / <code>src</code> 13M; 按排除清单(含 .tools 的 vnu.jar 31M)剔除后真正要拷的「代码+测试+被测试扫描的文档面」约 84M, 现在每次全搬。</li>
+  <li><b>bind 挂载 ~1MB/s</b>(issue 26-11-12-0053 实测): 光拷贝 ~10 分钟, 900s 包装超时必炸成孤儿容器。</li>
+  <li><b>Python 版本错位</b>: 3.12 镜像 + <code>.python-version</code>=3.13 → uv 补下载托管 CPython, github 容器内不通(容器通 PyPI 200), <code>uv sync</code> 直接失败。</li>
+  <li><b>node 缺失面</b>: e2e(playwright, 根 <code>node_modules</code> 21M + <code>package-lock.json</code> 在库)只在 Windows/CI 跑; WSL Ubuntu-26.04 内 Linux node <b>不存在</b> —— 现有 <code>npm</code> 是 Windows 侧 <code>/mnt/h/Programs/nodejs/npm</code> 经 interop PATH 泄漏的假货(实测 <code>node</code> 不存在而 <code>npm --version</code> 出数); 另一会话在 docker ubuntu 裸镜像同样撞「无 node」。</li>
+  <li><b>残留实测</b>: WSL 侧 7 个 mutmut 镜像仓 <code>~/auto-qb-mut*</code>(base/core/hr/hr-display/hr-svc/rules/w8fix)共 <b>~1.63G</b>(各含独立 .venv)+ <code>~/.cache/uv</code> 258M; docker 侧孤儿卷 <code>auto-qb-uv-cache</code> 48M(2026-10-11 建, 来历不明)+ 可回收镜像层 1.8G + 构建缓存 650M。</li>
+  <li><b>变异体系绑死 WSL</b>: mutation-testing skill 8 条硬约束含多条 WSL 专属坑(打挂要 <code>wsl --shutdown</code> 才救回 / <code>/mnt</code> IO 52s/116MB / zsh 壳 $PWD 失真 / .wslconfig 限 8 核); 镜像仓与 pytest 测试态分裂两地, 清扫纪律两套。</li>
+</ul>
+
+<h2><span class="no">§03</span>方案总览</h2>
+
+<h3>形态主线(D1–D7 落点)</h3>
+<p>Docker <b>常驻容器</b> <code>auto-qb-testbed</code>(基底 ubuntu:24.04 对齐 CI <code>ubuntu-latest</code>; <code>--restart unless-stopped</code>), 会话一律 <code>docker exec</code> 进容器干活; 容器重建 = 净室, 镜像重建 = 环境刷新, 宿主侧零长期态。Docker Desktop 本身就跑在 WSL2 后端 VM 里(同 8 核 / 12G 预算, .wslconfig), 选容器不选裸 distro 的决定性理由是<b>环境即代码可移植重建</b>(用户拍板理由)。</p>
+
+<h3>镜像分层(贪心缓存序; tag 带 uv.lock hash8 锁版本)</h3>
+<ol>
+  <li><b>系统层</b>: ubuntu:24.04 + apt —— python3.12(含 venv 模块)、git、tar、rsync、curl + NodeSource LTS nodejs(与 CI <code>lts/*</code> 同源)+ playwright 系统依赖。<b>3.13 不走 apt</b>(noble 官方源无 python3.13, 评审轮 1 引 ubuntu.com 可用性页实测; 3.13 走构建期烘焙, 见烘焙层)。</li>
+  <li><b>uv 层</b>: <code>pip install uv</code> 走国内 PyPI 镜像(依赖面国内镜像站优先, D8); ghcr <code>COPY --from</code> 降为备选(github 系直连, 不通走人工代理)。</li>
+  <li><b>环境变量层</b>: <code>ENV UV_PYTHON_DOWNLOADS=never</code> —— 运行期零下载(两个解释器都已进镜像, 发现即用); issue ② 由「构建期烘焙 + 运行期禁取」结构性根除。另烘 <code>UV_DEFAULT_INDEX</code>=国内 PyPI 源(运行期 uv sync delta 同走国内镜像)。</li>
+  <li><b>依赖烘焙层</b>: 拷 pyproject / uv.lock / package.json / package-lock.json → <code>RUN UV_PYTHON_DOWNLOADS=manual uv python install 3.13</code>(RUN 级作用域覆盖 ENV 层的 never —— 否则显式 install 也被拦, 构建自锁, 评审轮 2 引 uv#7340; 托管 CPython 源 github releases —— <b>D8 落点: 直连优先, 失败停手请用户手动开代理</b>; 备选 deadsnakes PPA, launchpad 直连)→ <code>uv sync --no-install-project</code> ×2(3.12 = 系统 apt / 3.13 = 托管)→ <code>/opt/venv-3.12</code> 与 <code>/opt/venv-3.13</code> 模板; <code>npm ci</code>(registry.npmmirror.com)→ <code>/opt/e2e-node</code>; playwright chromium <code>--with-deps</code> 烘焙(二进制走 npmmirror 镜像)。</li>
+  <li><b>网络策略</b>: 见下「网络策略」节(D8)。</li>
+</ol>
+
+<h3>网络策略(D8, 2026-11-12 用户拍板)</h3>
+<p><b>镜像与依赖一律国内镜像站优先; github 系资源直连; 连不上 → 停手请用户手动开代理, 代理开着重跑</b>——脚本不内置代理、不自动重试、代理地址不进代码。落点与候选:</p>
+<ul>
+  <li>基底镜像 ubuntu:24.04: Docker Hub 国内镜像源优先(候选: 清华 / DaoCloud / 1ms 等, <b>实现时实测钉值记入 task note</b>, 可配置不写死); ghcr 直连仅在备选路线用到。</li>
+  <li>apt 层: 换清华/阿里 ubuntu noble 源(main + updates + universe)。</li>
+  <li>PyPI(uv 烘焙与运行期 delta): 清华/阿里 PyPI 镜像, 烘进 <code>UV_DEFAULT_INDEX</code>。</li>
+  <li>npm: <code>registry.npmmirror.com</code>; playwright 浏览器二进制: <code>PLAYWRIGHT_DOWNLOAD_HOST</code> 指 npmmirror 镜像。</li>
+  <li>github 系(ghcr / github release 等): <b>直连优先</b>; 失败 → 失败行「停手 + 开代理指引」, 用户手动开代理后重跑(S1 停手点)。</li>
+</ul>
+
+<h3>代码同步(D4: 推模式)</h3>
+<p>排除清单 tar 流: 宿主 <code>tar --exclude=…</code> 打包工作树(含 <code>.git</code> 与未提交 WIP)→ <code>docker exec -i</code> 解到 <code>/root/auto-qb-tests/&lt;slug&gt;/code</code>。排除清单: <code>__pycache__</code> / <code>.venv</code> / <code>node_modules</code> / <code>dist</code> / <code>.tools</code>(vnu.jar 31M, gitignored 本地件, 容器不烘 java 用不上) / <code>.coverage*</code> / <code>.pytest_cache</code> / <code>.ruff_cache</code> / <code>auto-qb-data</code> / <code>tmp-analysis</code>(dist 已 grep 实证零测试引用); <code>memory-bank/</code> / <code>resources/</code> / <code>docs/</code> / <code>tools/</code> / <code>.commands/</code> / <code>.agents/</code> <b>必须随拷</b>(tests/conftest.py、helpers.py、kb 守阵引用面, 2026-11-12 grep 实证)。首建 workdir 后 <code>cp -a</code> 模板 venv → <code>uv sync</code> 补项目 editable 与依赖 delta(S2 实测「cp 模板 vs uv sync 全建」取快者)。</p>
+
+<h3>workdir 布局与并行(D5)</h3>
+<p><code>/root/auto-qb-tests/&lt;slug&gt;/</code>(slug 由会话 <code>--name</code> 传参或自动 pid+时刻生成); 每会话一个, 互不相见。隔离面: pytest TMPDIR 实例根(bootstrap 自举, 收 <code>auto-qb-tests</code> 标记路径)、端口动态取号(<code>tests/_test_ports.py</code> 既有纪律, 需补核 <code>test_hr_server.py:920</code> 写死 discovery_port 一处)、写重型锁按仓库路径 hash 分锁 —— 每会话 workdir 路径不同, 锁互不相撞。</p>
+
+<h3>入口 task 族(任务 id 面向用户保持稳定)</h3>
+<table>
+  <tr><th>task id</th><th>职责</th></tr>
+  <tr><td><code>test.linux-env</code></td><td>幂等构建镜像 + 保活容器(Dockerfile / uv.lock hash 变更才重建对应层)</td></tr>
+  <tr><td><code>test.linux</code></td><td>保容器 → workdir 就绪 + tar 同步 → uv sync → 容器内 <code>timeout</code> 包裹全量 pytest; 引擎 timeout 抬 1800s(issue ①)</td></tr>
+  <tr><td><code>test.linux-e2e</code></td><td>e2e 容器内跑(fast 子集起步); playwright headless chromium, 端口动态取号; node_modules 接挂方案 S3 实测定型(symlink <code>/opt/e2e-node</code> vs per-workdir npm ci)</td></tr>
+  <tr><td><code>test.linux-clean</code></td><td>三层清扫: 容器内过期 workdir(pid+mtime 双条件)/ 宿主悬空镜像层与孤儿卷(白名单)/ 旧镜像 tag</td></tr>
+  <tr><td><code>mutants.*</code> 六条(run / report / verify / setup / gremlins / status)</td><td>脚本后端 wsl.exe → docker exec(同一容器); mirrors 落 <code>/root/auto-qb-tests/mutation/&lt;pkg&gt;</code></td></tr>
+</table>
+
+<h3>分期</h3>
+<p>S1 基建 → S2 pytest 主线 → S3 e2e → S4 变异迁移 → S5 残留清扫 → S6 回写收尾(每步验收见 §04)。</p>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+
+<table>
+  <tr><th style="width:52px">步</th><th>内容</th><th>验收判据</th></tr>
+  <tr>
+    <td>S1</td>
+    <td><b>镜像与容器基建</b>: Dockerfile 落 <code>.commands/test/docker/Dockerfile</code>; 新 task <code>test.linux-env</code>(构建 + 保活, 幂等); 构建网络全程走 D8 落点(镜像站优先 / github 直连 / 失败停手人工代理); tag = <code>uv.lock</code> hash8。uv 主线 = <code>pip install</code> 走国内源; ghcr 直连为备选(R1)。</td>
+    <td>构建成功并实测记录(时长 / 镜像体积 / 各源可达性); 重跑 <code>commands run test.linux-env</code> 幂等秒级; 容器常驻且重启宿主后自起</td>
+  </tr>
+  <tr>
+    <td>S2</td>
+    <td><b>test.linux 后端切换</b>: linux_ci.py 重写为 docker exec 形态(保留「no_proxy 恒并回环」面 —— 容器内有代理变量时回环端点用例假红坑仍在); 守阵 <code>test_linux_ci.py</code> 同步重写; 引擎 timeout 900→1800; 容器内 <code>timeout</code> 内层包裹; <code>test_hr_server.py:920</code> 写死端口核验/改动态。</td>
+    <td><code>commands run test.linux</code>(3.13)全量绿, 数字誊入基线切片; <code>UV_PYTHON=3.12</code> 变体跑通; 两会话并行全量实测互不影响(各 workdir / 各实例根); 环境就绪后总耗时实测入切片</td>
+  </tr>
+  <tr>
+    <td>S3</td>
+    <td><b>e2e</b>: 新 task <code>test.linux-e2e</code>(fast 子集起步); node_modules 接挂实测定型(symlink vs npm ci); headless chromium 冒烟。</td>
+    <td>fast 子集绿; 全量 e2e 耗时数字记录(不进基线口径, e2e 数字锚 Windows 侧); 接挂方案定案写入 task note</td>
+  </tr>
+  <tr>
+    <td>S4</td>
+    <td><b>变异体系迁移</b>: mutants 包脚本后端 wsl.exe → docker exec; mirrors 默认路径 → <code>/root/auto-qb-tests/mutation/&lt;pkg&gt;</code>; 8 条硬约束逐条容器重验(WSL 专属条目改写: <code>wsl --shutdown</code>→<code>docker restart</code>; /mnt 禁令→overlayfs 天然满足; 8 核/12G 预算不变, <code>--max-children</code> 纪律沿用); mutation-testing skill 与坑档(<code>mutants-wsl-shell.md</code> / <code>mutants-shared-mirror.md</code>)同步改写。</td>
+    <td><code>commands run mutants.setup</code> 容器内建镜像仓成功; 最小目标冒烟轮跑通; <code>mutants.report</code> 读数正常; skill/坑档改写完成</td>
+  </tr>
+  <tr>
+    <td>S5</td>
+    <td><b>残留清扫</b>: WSL 侧删 <code>~/auto-qb-mut*</code> 7 仓(~1.63G)+ <code>~/.cache/uv</code>(258M)+ 检查 /tmp 面; docker 侧删孤儿卷 <code>auto-qb-uv-cache</code>、悬空镜像层、构建缓存(builder prune)、旧镜像 tag(<b>白名单</b>: 不碰 PT 工具容器与其镜像)。</td>
+    <td>WSL <code>~/auto-qb*</code> 测试残留清零; <code>docker system df</code> 可回收层归零(PT 容器无损仍在跑); <code>docker ps -a</code> 无新增孤儿</td>
+  </tr>
+  <tr>
+    <td>S6</td>
+    <td><b>回写与收尾</b>: <code>pitfalls/testing/attachments/patching-local-linux-repro.md</code>「Docker 等价复现」节改写(新容器配方; 本体 <code>patching.md</code> 链接指路不动; WSL 段留痕降级为历史); AGENTS.md 命令注记同步; linux 全量基线切片; issue 翻 Done; <code>commands run kb.index</code>; <code>commands run test.full</code> 收尾全绿。</td>
+    <td>文档改写完成且 doc 链路检查绿; 基线切片含 linux 数字(数字只写切片一处); 提交走 ship.commit(Review: trailer 照走)</td>
+  </tr>
+</table>
+
+<p class="aside"><b>范围守恒(显式排除)</b>: <code>tests-real/</code>(需真 qB)不进容器; <code>test.gtm</code>(工具侧独立 venv 口径)不动; <code>.github/workflows</code> 零改动; qB 真机联测不做; WSL distro 本身不删(只清残留, 用户另有用途)。</p>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p>无遗留 —— Q1–Q8 已于 2026-11-12 两轮 grilling 全部拍板(结论见 §06)。</p>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+  <tr><th>编号</th><th>决策点</th><th>结论(拍板 2026-11-12)</th></tr>
+  <tr><td>D1</td><td>宿主形态</td><td><b>Docker 常驻容器</b>(非裸 WSL2 distro)—— 理由: 他机重建容易(环境即代码); 变异体系迁入容器的成本接受</td></tr>
+  <tr><td>D2</td><td>e2e 进环境</td><td><b>进</b> —— node + npm 依赖 + playwright chromium 烘焙进镜像(镜像 +~1G 接受)</td></tr>
+  <tr><td>D3</td><td>Python 版本</td><td><b>双 venv 3.12+3.13 都烘焙</b>(CI 矩阵全对齐, 缺一即留「本地绿 CI 红」盲区)</td></tr>
+  <tr><td>D4</td><td>代码同步</td><td><b>推模式</b>(可测未提交 WIP); <code>.git</code> 随拷(find_root 实证需要); 增量形态按 S2 实测定</td></tr>
+  <tr><td>D5</td><td>并行策略</td><td><b>每会话独立 workdir, 允许同时跑</b>; 互斥锁按 workdir 路径 hash 天然分, 保持现状不动; 并行加固=写死端口改动态 + pid 级清扫</td></tr>
+  <tr><td>D6</td><td>变异体系</td><td><b>迁入容器</b>, mutants 包后端改写, 8 条硬约束容器重验; 不再回 WSL</td></tr>
+  <tr><td>D7</td><td>WSL 残留</td><td><b>清空</b>(锚 issue §07 覆盖表已核: 无进行中轮次, 轮次数字在基线切片, 镜像仓可由 mutants.setup 重建)</td></tr>
+  <tr><td>D8</td><td>网络策略</td><td><b>镜像与依赖国内镜像站优先; github 直连; 连不上停手请用户手动开代理</b>(用户 2026-11-12 补充拍板; 落点见 §03「网络策略」节, 风险 R1/R2/R9)</td></tr>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+  <tr><th>编号</th><th>风险 / 触发条件</th><th>处置</th></tr>
+  <tr><td>R1</td><td>ghcr <code>COPY --from</code> 直连失败(github 系)</td><td>主线本就不走它: uv 改 <code>pip install</code> 走国内 PyPI 镜像(D8); 若坚持 ghcr 路线, 直连失败 → 停手请用户手动开代理后重跑, 不自动重试</td></tr>
+  <tr><td>R2</td><td>NodeSource 源不可达(nodesource.com 非 github 系, 直连)</td><td>降级 apt nodejs(24.04 = 18.x, playwright 1.63 兼容 ≥18); npm 与 playwright 二进制本就走 npmmirror 不受影响</td></tr>
+  <tr><td>R3</td><td>tar 流吞吐不达标(Git Bash tar + <code>docker exec -i</code> 管道, 首跑实测 ~183M)</td><td>降级容器内 rsync 增量(从 /src 只读挂载, delta 小; 1MB/s 慢面只伤首轮)或 git bundle 差量</td></tr>
+  <tr><td>R4</td><td>tar 快照撞并发 git 操作(<code>.git</code> 中间态)</td><td>同步失败即重试(快照瞬时性); 不做文件锁</td></tr>
+  <tr><td>R5</td><td>12G 内存: 全量 pytest(xdist)+ mutmut 并发挤兑</td><td>沿用 mutants <code>--max-children</code> 纪律(默认 3); 并行全量首跑实测内存, 超 10G 则 task note 记「全量与变异勿并发」</td></tr>
+  <tr><td>R6</td><td>exec 客户端被杀后容器内 pytest 残留(原孤儿容器问题的新形态)</td><td>容器内 <code>timeout</code> 内层先到(干净退出); 兜底 = 下轮 workdir 级 pid 清扫(双条件)</td></tr>
+  <tr><td>R7</td><td>dist 排除后有隐藏引用</td><td>已 grep 实证 tests 零引用; S2 全量绿即终验, 红了回补排除清单</td></tr>
+  <tr><td>R8</td><td>变异镜像仓清空丢历史</td><td>锚 §07 已核无进行中轮次; 数字在基线切片; 新镜像仓由 mutants.setup 容器内重建</td></tr>
+  <tr><td>R9</td><td>国内镜像站漂移/失效(时效性强, 构建失败行会带源与错误)</td><td>换候选清单下一家(候选清单与实测钉值进 task note); 候选全灭 → 停手请用户手动开代理; 不在脚本里自动扩面换源</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-12-0152</span> 初版: 认领 issue 26-11-12-0053; 两轮 grilling(Q1–Q8)后用户拍板全量决策; WSL2 vs Docker 对比分析(变异体系零迁移 vs 环境即代码)供拍板, 结论 D1–D7; 事实面(仓库体积构成 / WSL 工具链与假 npm / 残留 1.63G / 锚表无进行中轮次)均 2026-11-12 实测。</li>
+  <li><span class="tag">R1 · 26-11-12-0200</span> R1: 网络策略改版(D8 用户拍板): 镜像与依赖国内镜像站优先(Docker Hub 源/apt 清华阿里/PyPI UV_DEFAULT_INDEX/npmmirror+playwright 二进制镜像), github 系直连, 连不上停手请用户手动开代理(脚本不内置代理不自动重试); uv 主线改 pip 走国内源, ghcr COPY --from 降备选; R1/R2 风险按新策略改写, 新增 R9 镜像站漂移</li>
+  <li><span class="tag">R2 · 26-11-12-0219</span> R2: 评审轮1处置(blocker 1 + minor 4 全修): 3.13 路线钉死为构建期 uv 托管 CPython 烘焙(github 直连 D8 落点, 备选 deadsnakes) + 运行期 UV_PYTHON_DOWNLOADS=never —— noble 官方源无 python3.13, 原「双 Python 全来自 apt」不成立; mutants 计数五条改六条; 排除清单补 .tools(vnu.jar 31M)并闭合派生数(约84M/约183M); S5 补构建缓存(builder prune); find_root 与「Docker 等价复现」引文改指 attachment 精确路径; S1 网络措辞对齐 D8</li>
+  <li><span class="tag">R3 · 26-11-12-0223</span> R3: 评审轮2处置(major 1): 烘焙层 install 命令加 RUN 级 UV_PYTHON_DOWNLOADS=manual override —— ENV=never 连显式 uv python install 也拦(uv#7340), 否则 S1 构建自锁</li>
+</ul>
+
+</div>
+</body>
+</html>
