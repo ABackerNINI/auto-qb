@@ -269,7 +269,9 @@ def test_view_build_does_not_probe_filesystem_or_iterate_jobs(tmp_path, monkeypa
     monkeypatch.setattr(mod, "_jobs", _NoIterJobs(mod._jobs))
     env.mgr._member_view(members)
     row = _row(env)
-    assert row["members"][0]["relocate"]["state"] == "moving"
+    # P-02 二期(hash 引用式): 成员 relocate 明细不随组行外发, 可见面 = 组级聚合
+    # group_relocate(组内单成员全组一致 -> state 原样); 断言语义不变: 构建期不探盘/不遍历
+    assert row["relocate"]["state"] == "moving"
     assert not calls
 
 

@@ -109,17 +109,21 @@ _SHOW_STATE_RANK_LAST = 9
 # 不会让别的视图停在旧数据上 —— 前端切视图时会把 lastRid 置空强制取一次全量。
 # 键未列出 / view 为空 ⇒ 回传全部(保守默认)。
 VIEW_ARRAYS = {
-    # 辅种页: 分组表 + 未归组单种子(singles 是同页的兜底行, 必须一起回)
-    "group": ("groups", "singles"),
+    # 辅种页: 分组表 + 未归组单种子 + **种子平铺数组**。singles 是同页的兜底行, 必须一起回;
+    # P-02 二期(hash 引用式)后 group 行 members 也只是一串 hash(同 shows), memberByHash
+    # 索引源 = singles ∪ torrents ⇒ 不回 torrents 则组行成员明细还原不出 —— 连带 torrents
+    # (与 shows 视图当年连带 groups+singles 同款 ride-along 先例)
+    "group": ("groups", "singles", "torrents"),
     # 种子页: 全部种子一行一条的平铺数组
     "torrent": ("torrents", ),
     # 追剧页: 剧→季→集聚合 + **成员索引**。
     # !shows 里的 members 只是一串 hash(见前端 memberByHash 注释: 明细成员经索引取, 不随 shows
-    #   重复回传), 而索引正是 groups + singles 拼出来的 ⇒ 只回 shows 时前端索引为空,
-    #   decoratedShows 的成员解析全部落空: **刷新后停在追剧页会得到一张永久空表**
-    #   (2026-09-19 实测: groups=0 / memberByHash=0 / 0 行; 且 rid 已记住 ⇒ 后续每轮都是
-    #   "版本未变不回传", 自己不会恢复, 必须切一次视图)。故追剧页必须连带成员索引一起回。
-    "show": ("shows", "groups", "singles"),
+    #   重复回传), 而 group 行 members 经 P-02 二期同样 hash 化 ⇒ 索引生效源 = singles ∪
+    #   torrents(groups 段不再贡献明细) ⇒ 只回 shows 时前端索引为空, decoratedShows 的成员
+    #   解析全部落空: **刷新后停在追剧页会得到一张永久空表**(2026-09-19 实测: groups=0 /
+    #   memberByHash=0 / 0 行; 且 rid 已记住 ⇒ 后续每轮都是"版本未变不回传", 自己不会恢复,
+    #   必须切一次视图)。故追剧页必须连带成员索引一起回(singles + torrents)。
+    "show": ("shows", "groups", "singles", "torrents"),
 }
 
 

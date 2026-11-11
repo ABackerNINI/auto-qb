@@ -31,7 +31,8 @@ removed 剔除, full 轮(payload.full 非 False, 含未协商形状)清空重放
 - test_m7_window_slide_out_and_rid_ahead_full: M7 —— 窗口滑出(41 代未消费, maxlen=40 把客户端
   所在代挤出)与 rid>ver(时钟倒挂)都退化全量(R3/R10), 全量重放补齐后 ≡ A
 - test_m8_show_view_delta_enabled_matrix: M8(S9b 改写) —— show 视图已启用增量(S9 前恒 full 的
-  启用矩阵翻开): 归约命中(delta.shows 回剧行整行 + 连带 groups/singles 成员索引桶), B ≡ A;
+  启用矩阵翻开): 归约命中(delta.shows 回剧行整行 + 连带 groups/singles/torrents 成员索引桶,
+  P-02 二期后索引源 = singles ∪ torrents), B ≡ A;
   缺省(四数组)/未知 view 值仍恒全量(无视图上下文可裁剪, 保守默认)
 - test_m9_gate_skipped_rounds_end_to_end: M9 —— 门控跳拍累积(R4)端到端镜子版: 三拍中后两拍
   未被消费, 键集并入下一代不丢; 恢复消费后一轮增量拿齐全部三拍变化, B ≡ A
@@ -45,7 +46,15 @@ removed 剔除, full 轮(payload.full 非 False, 含未协商形状)清空重放
   按当前成员集局部重扫: 新成员加入使频次反超时展示名翻转, 整行 upsert 携带新 name; B ≡ A
 - test_fuzz_random_operation_sequence: fuzz —— 固定种子(random.Random(20261007))随机操作序列
   N=220 轮, 操作池覆盖 增/删/改(量化边界+真脏字段)/同拍增删/独成员组删除(S6 补: 组行重建
-  为空转 removed)/门控跳拍/命令无键源/HR 波次, torrent/group/show 三客户端每轮断言 B ≡ A
+  为空转 removed)/门控跳拍/命令无键源/HR 波次, torrent/group/show 三客户端每轮断言 B ≡ A;
+  P-02 二期(hash 引用式, 26-11-11-0630 S1b)起每轮追加组行 hash 形状不变量(group/show 两
+  视图): members 为 hash 字符串数组且逐个可由已积累成员索引(singles ∪ torrents)解析 ——
+  memberByHash 拼装前置, count 与 members 同长
+- test_fuzz_monster_group_member_jitter_hash_shape: monster-group 显式 fuzz(26-11-11-0630
+  §04 S1 验收) —— 单组 200 成员 + 3 成员小组多轮真脏抖动: delta 轮组行 = 聚合字段 + hash
+  数组(整行 upsert, count/聚合和随抖动现算, 同轮 delta.torrents 只背被抖成员, 其余成员
+  hash 经已积累索引解析); 多脏组 + 无键命令源折叠落全量代(R11)形状同款, 成员 hash 逐个
+  可在同一响应 torrents 平铺数组解析
 """
 import itertools
 import json
@@ -55,6 +64,7 @@ from types import SimpleNamespace
 
 from auto_qb.core.qbapi import QbApi
 from auto_qb.infra.clock import SYSTEM_CLOCK
+from auto_qb.infra.utils import encode_group_key
 from auto_qb.torrents import REQUIRED_TORRENT_FIELDS, TorrentStore
 from auto_qb.webui import WebUIRuntime
 from auto_qb.webui.views import WebviewMixin
@@ -113,11 +123,13 @@ def _beat(store, hash_: str, **fields):
 
 _ROW_KEYS = {"torrents": "hash", "singles": "hash", "groups": "key", "shows": "key"}
 
-# 每个视图的增量/全量响应实际携带的数组键(与服务端 VIEW_ARRAYS 同款裁剪)
+# 每个视图的增量/全量响应实际携带的数组键(与服务端 VIEW_ARRAYS 同款裁剪;
+# P-02 二期后 group/show 连带 torrents: 组行 members 已改 hash 引用, memberByHash
+# 索引源 = singles ∪ torrents)
 _VIEW_ARRAYS = {
     "torrent": ("torrents", ),
-    "group": ("groups", "singles"),
-    "show": ("shows", "groups", "singles"),
+    "group": ("groups", "singles", "torrents"),
+    "show": ("shows", "groups", "singles", "torrents"),
 }
 
 
@@ -175,6 +187,25 @@ def _assert_rows(merged: dict, expect_rows: list, keyf: str, ctx: str) -> None:
     assert set(merged) == set(expect), (f"{ctx}: 行键集合不等\n  B(增量合并) = {sorted(merged)}\n  A(全量快照) = {sorted(expect)}")
     for k, row in expect.items():
         assert merged[k] == row, f"{ctx}: 行 {k} 内容不等\n  B = {merged[k]}\n  A = {row}"
+
+
+def _assert_group_members_hash_index(client: DeltaClient, ctx: str) -> None:
+    """组行 hash 形状不变量(P-02 二期 hash 引用式, 计划 26-11-11-0630 §04 S1 验收)
+
+    组行 members 必须是 **hash 字符串数组**(成员明细 dict 不再随组行回传), 且每个 hash 都能
+    从成员索引解析到行。索引源 = singles ∪ torrents 两桶已积累行键的并集 —— 即前端
+    memberByHash 的拼装源: 全量轮客户端状态就是该响应载荷(同一响应内可解析), delta 轮 =
+    跨响应已积累状态 ∪ 本轮增量(前端拼索引的真实语义)。count 与 members 同长(同一 recs
+    派生, 聚合字段与 hash 数组同源自洽)。
+    """
+    index = set(client.rows["singles"]) | set(client.rows["torrents"])
+    for key, row in client.rows["groups"].items():
+        members = row["members"]
+        assert isinstance(members, list) and all(isinstance(h, str) for h in members
+                                                ), (f"{ctx}: 组行 {key} members 不是 hash 字符串数组: {members!r}")
+        assert row["count"] == len(members), (f"{ctx}: 组行 {key} count={row['count']} != members 长度 {len(members)}")
+        missing = sorted(h for h in members if h not in index)
+        assert not missing, (f"{ctx}: 组行 {key} 成员 hash 在成员索引(singles ∪ torrents)解析不到: {missing}")
 
 
 class Mirror:
@@ -530,7 +561,7 @@ def test_m7_window_slide_out_and_rid_ahead_full():
 
 def test_m8_show_view_delta_enabled_matrix():
     """M8(S9b 改写) —— show 视图已启用增量: 归约命中(delta.shows 回剧行整行 + 连带
-    groups/singles 成员索引桶), B ≡ A 由 sync 断言; 缺省(四数组)/未知值恒全量(保守默认)"""
+    groups/singles/torrents 成员索引桶), B ≡ A 由 sync 断言; 缺省(四数组)/未知值恒全量(保守默认)"""
     store, rt, m, ct, cg = _mirror(("H1", "H2"))
     cs = DeltaClient("show")
     m.sync(cs)  # show 客户端基线全量(带成员索引)
@@ -804,5 +835,94 @@ def test_fuzz_random_operation_sequence():
             m.publish()
         m.publish()
         m.sync(ct, cg, cs)  # 每轮断言 B ≡ A(三视图客户端)
+        # P-02 二期(hash 引用式): 每轮追加组行 hash 形状不变量(group/show 两视图;
+        # torrent 视图响应无 groups 桶, 客户端恒空不入阵)
+        _assert_group_members_hash_index(cg, f"fuzz@ver{cg.rid}/group视图")
+        _assert_group_members_hash_index(cs, f"fuzz@ver{cs.rid}/show视图")
     assert len(rt._delta_timeline) <= 40  # 时间线上限守卫
     assert store.client.torrents  # 增删随机游走后库非空(操作池自检)
+
+
+# ---------- fuzz: monster-group 显式用例(P-02 二期 S1 验收, 单组大成员量) ----------
+
+
+def test_fuzz_monster_group_member_jitter_hash_shape():
+    """monster-group 显式 fuzz(计划 26-11-11-0630 §04 S1): 单组 200 成员 + 3 成员小组
+
+    多轮成员真脏抖动 -> delta 轮组行 = 聚合字段 + hash 数组(整行 upsert): members 为 hash
+    字符串数组且与 count 同长、集合 = 当前成员全集(recs 序), 聚合和随抖动现算; 同轮
+    delta.torrents 只背被抖成员的行, 其余成员 hash 经客户端已积累索引解析(delta 轮不背
+    全组成员明细的契约面)。多脏组 + 无键命令源折叠落全量代(R11)时形状同款, 且成员 hash
+    逐个可在同一响应 torrents 平铺数组解析(全量轮自洽)。B ≡ A 由 sync 断言(比较面已含
+    torrents 桶)。
+    """
+    rng = random.Random(20261112)
+    monster = tuple(f"M{i:03d}" for i in range(200))
+    small = ("S1", "S2", "S3")
+    store = make_store(*monster, *small)
+    k_monster, k_small = ("R:\\MONSTER", ), ("R:\\SMALL", )
+    for h in monster:
+        store.member_to_key[h] = k_monster
+    store.groups[k_monster] = list(monster)
+    for h in small:
+        store.member_to_key[h] = k_small
+    store.groups[k_small] = list(small)
+    rt = _delta_runtime(store)
+    m = Mirror(store, rt)
+    cg, cs = DeltaClient("group"), DeltaClient("show")
+    rt.mark_dirty()
+    m.publish()
+    m.sync(cg, cs)  # 基线全量: monster 组行 members = 200 个 hash 引用
+    assert len(cg.rows["groups"]) == 2
+    assert cg.rows["groups"][encode_group_key(k_monster)]["members"] == list(monster)
+
+    # a) 多轮成员抖动: 每轮抖 monster 组内 3-8 个成员的真脏字段 -> 组行整行 upsert。
+    #    抖动拍**逐拍发布**(生产节拍 = 一拍一同步, delta_fields 是「最近一轮」快照:
+    #    连拍不发布则只有末拍键集可见) —— 首拍落代、余拍被门控跳拍暂存(R4), 恢复消费后
+    #    一轮增量按窗口归并拿齐全部抖动成员(M9 同款)
+    states = ["stalledUP", "pausedUP", "downloading", "uploading"]
+    for _ in range(6):
+        jitter = rng.sample(monster, rng.randint(3, 8))
+        for h in jitter:
+            _beat(store, h, dlspeed=rng.randint(0, 10**7), state=rng.choice(states))
+            m.publish()
+        out = m.sync(cg, cs)
+        resp = out["resps"][0]
+        assert resp["full"] is False
+        (grow, ) = resp["delta"]["groups"]  # 恰 monster 组一行(小组未动)
+        assert grow["key"] == encode_group_key(k_monster)
+        assert grow["members"] == list(monster)  # hash 字符串数组, recs 序 = 登记序
+        assert grow["count"] == len(grow["members"]) == 200
+        # 聚合字段随抖动现算(整行 upsert, 非陈值): dlspeed = 全组求和(_member_view 原值透传)
+        assert grow["dlspeed"] == sum(store.by_hash[h].dlspeed for h in monster)
+        # 同轮 delta.torrents 只背被抖成员, 其余成员 hash 靠已积累索引(memberByHash 拼装面)
+        assert {r["hash"] for r in resp["delta"]["torrents"]} == set(jitter)
+        _assert_group_members_hash_index(cg, "monster/delta轮")
+        _assert_group_members_hash_index(cs, "monster/delta轮/show视图")
+
+    # b) 多脏组折叠落全量代(R11 无键命令源): 两脏组键集逐拍发布、未消费的被门控暂存
+    #    (keyed 轮不与命令源同窗 —— 同窗有新 _apply 轮即 keyed=True 不折全量), 末拍纯
+    #    命令源在无新 _apply 轮的窗口折叠落全量 —— 全量重放组行形状同款
+    for h in rng.sample(monster, 5):
+        _beat(store, h, dlspeed=rng.randint(0, 10**7))
+        m.publish()
+    _beat(store, "S1", state="pausedUP")  # 小组同拍置脏: 多脏组
+    m.publish()
+    store.update_torrent_fields("S2", category="cs")  # 无键命令源 -> 折叠落全量代
+    m.publish(force=True)
+    assert rt._delta_timeline[-1]["full"] is True
+    out = m.sync(cg, cs)
+    resp = out["resps"][0]
+    assert resp["full"] is True
+    flat = {r["hash"] for r in resp["torrents"]}
+    rows = {r["key"]: r for r in resp["groups"]}
+    assert set(rows) == {encode_group_key(k_monster), encode_group_key(k_small)}
+    for key, members in ((k_monster, monster), (k_small, small)):
+        row = rows[encode_group_key(key)]
+        assert isinstance(row["members"], list) and all(isinstance(h, str) for h in row["members"])
+        assert row["members"] == list(members)
+        assert row["count"] == len(row["members"])
+        assert set(row["members"]) <= flat  # 同一响应的 torrents 平铺数组逐个找到对应行
+        assert row["dlspeed"] == sum(store.by_hash[h].dlspeed for h in members)
+    _assert_group_members_hash_index(cg, "monster/full轮")
+    _assert_group_members_hash_index(cs, "monster/full轮/show视图")

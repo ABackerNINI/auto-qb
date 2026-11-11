@@ -158,9 +158,10 @@ class ViewsMixin:
         """错误原因预取的行级脏并入累积器(**持 view_lock**, plan S2 补)
 
         refresh_tracker_health 改写 tracker_error_msg / tracker_health_msg 的受影响 hash 进
-        torrent 桶; 组行 members 的 error_reason / site_alert 随成员变化 -> 组键经
-        member_to_key 一并进 group 桶(与
-        store 增量推导同口径)。S6 起调用点在 _publish_locked 的分叉判定前(键集须在
+        torrent 桶; 组键经 member_to_key 一并进 group 桶(与 store 增量推导同口径)。
+        P-02 二期(hash 引用式)后组行不再内嵌成员 error_reason / site_alert, 该组键映射
+        退化为保守冗余的整行 upsert —— 口径保留不动(成员明细随 torrent 桶行回传, 组行
+        内容不变亦无害; 收紧与否属 C2 条件面)。S6 起调用点在 _publish_locked 的分叉判定前(键集须在
         构建**前**定型) —— 分叉判定需要完整键集, fold 落代段不再重跑。
         """
         error_hashes = self._pending_error_hashes
@@ -459,7 +460,9 @@ class ViewsMixin:
           未脏/脏区别复用/新建, 不在调用点分批建;
         - 四段(groups/singles/flat/shows)的合并骨架同一单点 `_merge_rows` —— 行对象复用/
           替换/剔除/追加的口径只此一份, 改合并语义(如 removed 处理)不再四处同步;
-        - 组行内嵌 members 数组随组行整行走(P-02 一期口径); singles/flat 脏行按 hash 逐行
+        - 组行 members 为 **hash 引用数组**随组行整行重建(P-02 二期 hash 引用式口径, 计划
+          26-11-11-0630 §03; 成员明细由 torrent 桶平铺行承载, VIEW_ARRAYS 两视图连带
+          torrents 供前端 memberByHash 索引还原); singles/flat 脏行按 hash 逐行
           重建(便宜); removed 键直接从视图剔除(与全量构建不产已删行/空组行对齐); 组行
           重建为空且旧行在视图 -> 组键转 removed 剔除(S6 补, 与 show 分支同口径), 旧行本
           不在视图则仅撤候选不产噪音;
@@ -473,7 +476,7 @@ class ViewsMixin:
         store = host.store
         from ..infra import utils as _utils
 
-        # ---- groups: 脏组键整行重建(members 随行), 未脏组行复用, removed 组键剔除 ----
+        # ---- groups: 脏组键整行重建(members=hash 引用数组随行, P-02 二期), 未脏组行复用, removed 组键剔除 ----
         rebuilt: dict = {}
         old_group_keys = {r["key"] for r in self.group_view}
         for k in list(upsert["group"]):  # 快照迭代: 重建为空的行止转换写回原集合(fold 读同一对象)

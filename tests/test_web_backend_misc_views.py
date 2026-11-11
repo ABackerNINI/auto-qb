@@ -4,7 +4,7 @@
 - test_group_key_codec_roundtrip: 分组 key 编解码往返(含中文/多文件)
 - test_build_group_view: 分组视图组装(组名/合计/成员站点/单种子大小与总大小/标签/分类/保存路径)
 - test_build_group_view_cross_group_conflict_flag: 组视图跨组文件交叉标记(26-10-04-0107 S4/D4) —— 去重集合展平为组 key 集合后端查好, warned 注入组对两侧 true、组外组 false; warned 空全 false; 未归组单种子视图(singles)为成员级投影不携带组级标记
-- test_build_group_view_member_num_seeds_fields: 组视图成员透出 num_seeds/num_leechs/num_complete/num_incomplete
+- test_build_group_view_member_num_seeds_fields: 成员视图透出 num_seeds/num_leechs/num_complete/num_incomplete(组行 members 只回 hash 引用, 明细经平铺行/singles 外发)
 - test_build_group_view_group_aggregates: 组视图组级聚合(辅种扩列 2026-09-28) —— 进度/可用性 max、eta 最小有效值(哨兵不参与)、剩余量 min、最近活动 max(-1 不参与)、已下载求和、做种时长平均、分享率=总上传÷单份大小; 全组无效值回 0/None
 - test_member_view_extended_fields: 成员视图透出辅种扩列字段(eta/time_active/last_activity 分钟量化 + downloaded/amount_left/completion_on/seen_complete/availability/限速/tracker/infohash_v2)
 - test_member_view_occ_key: occ_key 内容单元标识(计划 26-10-18-2013 D8) —— 归组种子 occ_key == 组行 key(同键空间); 未归组为 null(字段恒在); 种子页平铺行经 _seed_view 继承
@@ -94,14 +94,18 @@ def test_build_group_view(tmp_path):
     assert g["upspeed"] == 2048 and g["uploaded"] == 4096
     # size = 单种子大小(代表成员), total_size = 全组求和(两者相等时前端不提示大小不一致)
     assert g["size"] == 512**2 and g["total_size"] == 2 * 512**2
-    assert [m["site"] for m in g["members"]] == ["Unknown", "Unknown"]
-    assert g["members"][0]["kind"] == "seeding"
+    # P-02 二期(hash 引用式): 组行 members = hash 字符串数组, 成员明细经平铺行
+    # (_seed_view 继承 _member_view 全字段)取 —— 与前端 memberByHash 索引同构
+    assert g["members"] == ["HA", "HB"]
+    by_hash = {m["hash"]: m for m in mgr._build_flat_view()}
+    assert by_hash["HA"]["site"] == "Unknown" and by_hash["HB"]["site"] == "Unknown"
+    assert by_hash["HA"]["kind"] == "seeding"
     # 成员视图透出 save_path/tags/category 供前端算组级共同值(后端不做集合运算)
-    assert [m["save_path"] for m in g["members"]] == [r"R:/s", r"R:/s"]
-    assert [m["tags"] for m in g["members"]] == [["a", "b"], ["a", "b"]]
-    assert [m["category"] for m in g["members"]] == ["anime", "anime"]
+    assert by_hash["HA"]["save_path"] == r"R:/s" and by_hash["HB"]["save_path"] == r"R:/s"
+    assert by_hash["HA"]["tags"] == ["a", "b"] and by_hash["HB"]["tags"] == ["a", "b"]
+    assert by_hash["HA"]["category"] == "anime" and by_hash["HB"]["category"] == "anime"
     # seeding_time 展示值按分钟取整(与 store 重建判定同一步长, 防视图内容与脏标记脱钩)
-    assert [m["seeding_time"] for m in g["members"]] == [3600, 3600]
+    assert by_hash["HA"]["seeding_time"] == 3600 and by_hash["HB"]["seeding_time"] == 3600
 
 
 def test_build_group_view_by_hash_probe_index_race(tmp_path):
@@ -183,10 +187,11 @@ def test_build_group_view_cross_group_conflict_flag(tmp_path):
 
 
 def test_build_group_view_member_num_seeds_fields(tmp_path):
-    """组视图成员透出 num_seeds/num_leechs/num_complete/num_incomplete(TorrentRecord 快照直取)
+    """成员视图透出 num_seeds/num_leechs/num_complete/num_incomplete(TorrentRecord 快照直取)
 
-    前端成员列/种子页展示连接数与可用性的数据源: _member_view 是组视图 members 与
-    singles 未归组种子的共同投影, 字段在成员层透出后两处同形。
+    前端成员列/种子页展示连接数与可用性的数据源: _member_view 是成员层投影(P-02 二期后
+    组行 members 只回 hash 引用, 明细经平铺行/ singles 未归组行外发), 字段在成员层透出后
+    两处同形。
     """
     from helpers import FakeClient, FakeTorrent, make_manager, seed_store, seed_store
 
@@ -216,11 +221,12 @@ def test_build_group_view_member_num_seeds_fields(tmp_path):
     mgr.store.member_to_key["HA"] = key
     mgr.store.member_to_key["HB"] = key
 
-    members = mgr._build_group_view()[0]["members"]
-    for m in members:
+    assert mgr._build_group_view()[0]["members"] == ["HA", "HB"]  # P-02 二期: 组行只回 hash 引用
+    members = {m["hash"]: m for m in mgr._build_flat_view()}  # 成员明细面 = 平铺行(_seed_view 继承)
+    for m in members.values():
         for f in ("num_seeds", "num_leechs", "num_complete", "num_incomplete"):
-            assert f in m, f"组视图成员缺少字段 {f}: {sorted(m)}"
-    by_hash = {m["hash"]: m for m in members}
+            assert f in m, f"成员行缺少字段 {f}: {sorted(m)}"
+    by_hash = members
     assert by_hash["HA"]["num_seeds"] == 12
     assert by_hash["HA"]["num_leechs"] == 3
     assert by_hash["HA"]["num_complete"] == 45
@@ -314,7 +320,8 @@ def test_build_group_view_group_aggregates(tmp_path):
 def test_member_view_extended_fields(tmp_path):
     """成员视图透出辅种扩列字段(2026-09-28): 明细表新列与组级聚合的共同数据源
 
-    _member_view 是组视图 members 与 singles 未归组种子的共同投影 —— 明细表新增的
+    _member_view 是成员层投影(P-02 二期后组行 members 只回 hash 引用, 明细经 singles
+    未归组行与平铺行外发) —— 明细表新增的
     剩余时间/已下载/限速/Tracker/Hash v2 等列从这里取数。秒级递增字段(eta/time_active/
     last_activity)必须经 view_field_value 分钟量化(与 store 重建判定同一步长, 否则做种中的
     种子每轮置脏、惰性重建失效); 哨兵原样带过(负数不量化, 见 view_field_value)。
@@ -374,7 +381,7 @@ def test_member_view_occ_key(tmp_path):
     mgr.store.member_to_key["HB"] = key
 
     row = mgr._build_group_view()[0]
-    by_hash = {m["hash"]: m for m in row["members"]}
+    by_hash = {m["hash"]: m for m in mgr._build_flat_view()}  # P-02 二期: 成员明细经平铺行取
     assert by_hash["HA"]["occ_key"] == row["key"], "归组成员 occ_key == 组行 key(同键空间)"
     assert by_hash["HB"]["occ_key"] == row["key"]
     assert row["key"] == encode_group_key(key)

@@ -105,8 +105,11 @@ def test_build_group_view_added_on_is_latest_member(tmp_path):
     groups = {g["name"]: g for g in mgr._build_group_view()}
     assert groups["Show"]["added_on"] == 3000  # max(1000, 3000)
     assert groups["Other"]["added_on"] == 2000
-    # 成员级也透出 added_on(排序/展示共用的原始值)
-    assert sorted(m["added_on"] for m in groups["Show"]["members"]) == [1000, 3000]
+    assert groups["Show"]["members"] == ["HA", "HB"], "P-02 二期: 组行 members = hash 引用数组"
+    # 成员级也透出 added_on(排序/展示共用的原始值): P-02 二期后成员明细经平铺行(_seed_view
+    # 继承 _member_view)取 —— 组行不再内嵌明细
+    flat = {m["hash"]: m for m in mgr._build_flat_view()}
+    assert sorted(flat[h]["added_on"] for h in groups["Show"]["members"]) == [1000, 3000]
 
 
 def test_views_published_atomically_when_rebuilt_concurrently(tmp_path):
@@ -260,7 +263,10 @@ def test_build_group_view_hr_tags(tmp_path):
         mgr.store.groups[key] = [h]
         mgr.store.member_to_key[h] = key
 
-    members = {g["name"]: g["members"][0] for g in mgr._build_group_view()}
+    # P-02 二期: 组行 members = hash 引用数组(每组单成员), 成员明细经平铺行(_seed_view
+    # 继承 _member_view 全字段, HR 展示字段同源)取
+    flat = {m["hash"]: m for m in mgr._build_flat_view()}
+    members = {g["name"]: flat[g["members"][0]] for g in mgr._build_group_view()}
     assert members["Pending.Show"]["hr_tag"] == "!!HR3D!!"
     assert members["Pending.Show"]["hr_tag_done"] == ""
     assert members["Done.Show"]["hr_tag"] == ""

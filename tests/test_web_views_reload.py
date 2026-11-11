@@ -3,7 +3,7 @@
 ## 测试计划(每个测试函数一条)
 - test_ensure_group_view_rebuilds_when_dirty: 分组视图脏时重建(Web 请求侧兜底)/干净时复用引用
 - test_ensure_group_state_versioning: 分组视图版本号: 首次重建自增, rid 一致时不回传 groups
-- test_ensure_group_state_show_view_carries_member_index: 追剧页必须连带成员索引(groups+singles), 但不回传种子平铺数组(否则刷新后追剧页永久空白)
+- test_ensure_group_state_show_view_carries_member_index: 追剧页必须连带成员索引(groups+singles+torrents, P-02 二期后索引源 = singles ∪ torrents; 否则刷新后追剧页永久空白)
 - test_group_view_ver_seeded_from_start_time: 版本号以启动时间播种(进程重启不回落到旧值)
 - test_api_state_rid_gate: /api/state 带 rid: 版本一致时 updated=False 且无 groups; 缺省/不匹配回传全量
 - test_api_state_skips_jsonable_encoder: 热路径(/api/state、/api/groups)必须返回 JSONResponse 而非裸 dict —— 否则 FastAPI 会白跑一遍 jsonable_encoder 递归遍历响应体(3000 种子实测 161ms, 占端点耗时 85%); 用计数替身钉死
@@ -86,14 +86,14 @@ def test_ensure_group_state_versioning():
 
 
 def test_ensure_group_state_show_view_carries_member_index():
-    """追剧页(view=show)必须**连带成员索引** groups+singles 一起回传, 但不得回传种子平铺数组
+    """追剧页(view=show)必须**连带成员索引** groups+singles+torrents 一起回传
 
-    前端 `decoratedShows` 的成员解析走 `memberByHash`(由 groups + singles + torrents 拼出来),
+    前端 `decoratedShows` 的成员解析走 `memberByHash`(由 singles + torrents 拼出来;
+    P-02 二期后 group 行 members 也已 hash 化, groups 段不再贡献明细),
     而后端 shows 里的 `members` 只是一串 hash(设计上"不随 shows 重复回传")。
     只回 shows ⇒ 前端索引为空 ⇒ 每个集的成员都被 `filter(Boolean)` 丢掉 ⇒ 追剧页**永久空白**
     (2026-09-19 实测: 刷新后 groups=0 / memberByHash=0 / 0 行; 且 rid 已记住 ⇒ 之后每轮都是
     "版本未变不回传", 自己不会恢复, 必须手动切一次视图才回来)。
-    同时守住另一头: 种子平铺数组(3000 种子 ≈ 4.5MB)不能顺手一起回 —— 追剧页用不到它。
     """
     with tempfile.TemporaryDirectory() as td:
         mgr, client, key = _make_grouped_manager(td)
@@ -102,7 +102,7 @@ def test_ensure_group_state_show_view_carries_member_index():
         assert "shows" in state, "追剧页应回 shows"
         assert "groups" in state and "singles" in state, \
             "追剧页必须连带成员索引(groups+singles), 否则前端 memberByHash 为空 -> 整页空白"
-        assert "torrents" not in state, "追剧页不该回传种子平铺数组(4.5MB, 用不到)"
+        assert "torrents" in state, "P-02 二期: 索引生效源 = singles ∪ torrents, torrents 必连带"
 
 
 def test_build_singles_view_ungrouped_only():
@@ -118,7 +118,7 @@ def test_build_singles_view_ungrouped_only():
         assert [s["hash"] for s in state["singles"]] == ["HZ"], f"singles 应只含未归组种子: {state['singles']}"
         assert state["singles"][0]["save_path"] == r"R:\Elsewhere"
         assert "hr_triggered" in state["singles"][0] and "name" in state["singles"][0]
-        grouped_hashes = {m["hash"] for g in state["groups"] for m in g["members"]}
+        grouped_hashes = {h for g in state["groups"] for h in g["members"]}  # P-02 二期: 组行 members = hash 数组
         assert not (grouped_hashes & {s["hash"] for s in state["singles"]}), "已归组种子不得出现在 singles"
         again = mgr.web.ensure_state(rid=state["rid"])
         assert "singles" not in again and "groups" not in again
@@ -126,7 +126,7 @@ def test_build_singles_view_ungrouped_only():
 
 
 def test_build_singles_view_num_seeds_fields():
-    """singles 视图透出 num_seeds/num_leechs/num_complete/num_incomplete(与组视图成员同形)"""
+    """singles 视图透出 num_seeds/num_leechs/num_complete/num_incomplete(与平铺行 _seed_view 同形; P-02 二期后组行 members 为 hash 引用数组, 明细不再随组行)"""
     with tempfile.TemporaryDirectory() as td:
         mgr, client, key = _make_grouped_manager(td)
         from helpers import FakeTorrent, seed_store
@@ -331,14 +331,15 @@ def test_api_state_view_scoped_payload(web_env):
     assert "groups" not in t and "singles" not in t and "shows" not in t
 
     s = client.get("/api/state?view=show", headers=auth).json()
-    # 追剧页必须连带**成员索引**(groups+singles): shows 里的 members 只是一串 hash,
-    # 前端靠索引还原成成员对象 —— 只回 shows 会让 memberByHash 为空、整页空白(BUG-8)
-    assert "shows" in s and "groups" in s and "singles" in s
-    assert "torrents" not in s, "追剧页用不到种子平铺数组(4.5MB), 不该一起回"
+    # 追剧页必须连带**成员索引**: shows 里的 members 只是一串 hash, 前端靠索引还原成成员
+    # 对象 —— 只回 shows 会让 memberByHash 为空、整页空白(BUG-8); P-02 二期(hash 引用式)
+    # 后 group 行 members 同样 hash 化, 索引生效源 = singles ∪ torrents ⇒ torrents 必连带
+    assert "shows" in s and "groups" in s and "singles" in s and "torrents" in s
 
     g = client.get("/api/state?view=group", headers=auth).json()
-    # 辅种页要同时用 groups 与 singles(未归组单种子是同页兜底行), 必须一起回
-    assert "groups" in g and "singles" in g and "torrents" not in g
+    # 辅种页要同时用 groups 与 singles(未归组单种子是同页兜底行), 必须一起回;
+    # P-02 二期后组行 members 为 hash 引用数组, memberByHash 索引源 = singles ∪ torrents
+    assert "groups" in g and "singles" in g and "torrents" in g
 
     # 未知 view: 回全部(保守默认, 老客户端/非视图调用方不受影响)
     weird = client.get("/api/state?view=nope", headers=auth).json()

@@ -7,7 +7,7 @@
 (views._build_show_row 纯重构守阵); S9b show 视图解锁(时间线 show 桶推导/局部重聚合/show 归约)。
 
 ## 测试计划(每个测试函数一条)
-- test_s6_partial_rebuild_reference_stability: S6 引用稳定不变量 —— 局部重聚合后未脏行对象引用原样保留(is 恒等), 脏行必然新对象; 组行整行新对象且内嵌 members 随行重建(P-02 一期口径), 组外平铺行引用不动; removed 键(组员删除/组解散)直接从视图剔除
+- test_s6_partial_rebuild_reference_stability: S6 引用稳定不变量 —— 局部重聚合后未脏行对象引用原样保留(is 恒等), 脏行必然新对象; 组行整行新对象且 members(hash 引用数组)随行重建(P-02 二期口径), 组外平铺行引用不动; removed 键(组员删除/组解散)直接从视图剔除
 - test_s6_partial_rows_equal_full_rebuild: S6 逐字段一致性 —— 混合序列(未归组变化/组员变化/新增归组/组员删除)逐代局部重聚合后, 发布视图与全量重跑逐行逐字段相等(含脏组行 == 全量重跑该行); 每代走局部路径的判据(条目 full=False 且键集非空)随行断言
 - test_s6_solo_member_group_removal_no_stale_row: S6 补 —— 独成员组且组条目未清理的桩态下删除成员(组键仍可解析路由 g_up): 组行重建为空(_build_group_row 回 None)-> 组键转 removed 剔除旧行, 局部产物 == 全量重建(修复前旧行残留); 子场景: 重建候选旧行本不在视图 -> 键原样保留 upsert(S2 排空契约, 缺行防御 full 兜底); 对照: 多成员组删单员照常重建(test_s6_partial_rebuild_reference_stability c 钉住)
 - test_s8_added_hash_registered_without_candidates: S8 新增登记 —— added hash(真增量轮) -> 映射登记; 无旧键 -> 不产生迁移候选
@@ -70,7 +70,7 @@ def test_s6_partial_rebuild_reference_stability():
     """S6 引用稳定不变量: 局部重聚合后未脏行对象引用原样保留(is 恒等), 脏行必然新对象
 
     前端 S7 按行对象身份的 WeakMap 记忆化依赖: 引用稳定**只对未脏行**承诺, 脏行新对象
-    自然 miss 重算。组行内嵌 members 数组随组行整行走(P-02 一期口径, R8)。
+    自然 miss 重算。组行 members 为 hash 引用数组随组行整行走(P-02 二期口径, R8)。
     """
     store = make_store("H1", "H2", "H3", "H4")
     # H3/H4 归组, H1/H2 未归组(归组登记须在基线发布前, 同镜子 M4 前置口径)
@@ -99,14 +99,15 @@ def test_s6_partial_rebuild_reference_stability():
     assert flat1["H3"] is flat0["H3"] and flat1["H4"] is flat0["H4"]
     assert _rows_by(rt.group_view, "key")[gkey] is groups0[gkey]
 
-    # b) 组内成员脏 -> 组行整行新对象(members 随行整体重建), 组外平铺行引用不动:
-    #    H4 平铺行未脏仍旧对象, 组行内 H4 成员视图是新 dict(只活在组行内, P-02 口径)
+    # b) 组内成员脏 -> 组行整行新对象(members=hash 引用数组随行整体重建, P-02 二期),
+    #    组外平铺行引用不动: H4 平铺行未脏仍旧对象, 成员明细只在平铺行上(组行只持 hash)
     _beat(store, "H3", dlspeed=2048)
     entry = _publish(rt)
     assert entry["full"] is False and entry["upsert"]["torrent"] == {"H3"}
     flat2, groups2 = _rows_by(rt.flat_view, "hash"), _rows_by(rt.group_view, "key")
     assert groups2[gkey] is not groups0[gkey]  # 脏组行必然新对象
-    assert [m["dlspeed"] for m in groups2[gkey]["members"]] == [2048, 0]
+    assert groups2[gkey]["members"] == ["H3", "H4"]  # hash 引用数组(顺序同 store.groups)
+    assert groups2[gkey]["dlspeed"] == 2048  # 聚合随整行重建(H3 新值 + H4 未变)
     assert flat2["H3"] is not flat1["H3"] and flat2["H3"]["dlspeed"] == 2048
     assert flat2["H4"] is flat1["H4"] and flat2["H1"] is flat1["H1"] and flat2["H2"] is flat1["H2"]
     assert _rows_by(rt.singles_view, "hash")["H1"] is singles1["H1"]
@@ -121,7 +122,7 @@ def test_s6_partial_rebuild_reference_stability():
     assert "H4" not in flat3
     assert flat3["H1"] is flat2["H1"] and flat3["H2"] is flat2["H2"] and flat3["H3"] is flat2["H3"]
     assert groups3[gkey] is not groups2[gkey]
-    assert groups3[gkey]["count"] == 1 and [m["hash"] for m in groups3[gkey]["members"]] == ["H3"]
+    assert groups3[gkey]["count"] == 1 and groups3[gkey]["members"] == ["H3"]
 
     # d) 组解散: 末位成员删除 -> 组键进 removed, 组行从视图剔除(全量构建不产空组行, 产物对齐)
     store.groups.pop(("R:\\D", ))  # 模拟 grouping_mod._leave_group 的解散清除(成员键保留可解析)
@@ -284,8 +285,8 @@ def test_publish_partial_group_members_by_hash_probe_index_race():
     assert entry["full"] is False  # 竞态不炸也不降级: 本代仍走局部路径
     gkey = encode_group_key(("R:\\D", ))
     row = _rows_by(rt.group_view, "key")[gkey]
-    assert [m["hash"] for m in row["members"]] == ["H1", "H2"]  # 单步 get 按当刻快照完整重建
-    assert [m["dlspeed"] for m in row["members"]] == [321, 0]
+    assert row["members"] == ["H1", "H2"]  # 单步 get 按当刻快照完整重建(hash 引用数组)
+    assert row["dlspeed"] == 321  # 聚合字段按当刻快照重算(H2 未变)
 
 
 def test_s8_added_hash_registered_without_candidates():

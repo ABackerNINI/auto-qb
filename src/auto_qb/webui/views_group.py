@@ -27,9 +27,14 @@ class GroupMixin:
         输出组行 dict —— 全量路径(_build_group_view)逐组调用; 局部重聚合
         (runtime._publish_partial_locked)对脏组键单独调用。
 
-        行内字段口径与 _member_view/_seed_view 既有约定逐一保持(纯重构段, S5 镜子守阵 +
-        S6 单测「局部重算 == 全量重跑」双保险)。组行内嵌 members 数组随组行整行走
-        (P-02 一期口径, R8 不做字段级 patch)。recs 为空(组已空/已解散)返回 None ——
+        行内字段口径与 _member_view/_seed_view 既有约定逐一保持(S5 镜子守阵 +
+        S6 单测「局部重算 == 全量重跑」双保险)。members 为 **hash 字符串数组**
+        (P-02 二期 hash 引用式, 计划 26-11-11-0630 §03; 先例 views_episodes.py 集节点),
+        随组行整行走(R8 不做字段级 patch): 成员明细不随组行回传(全量轮四数组去重 +
+        抖动轮 delta 不再背全组成员明细), 前端经 memberByHash(索引源 = singles ∪
+        torrents, 故 VIEW_ARRAYS 两视图连带 torrents)还原明细。聚合仍吃 _member_view
+        明细 —— 组级聚合字段(含 group_relocate)口径逐字段不变, 组行仍是完整行对象。
+        recs 为空(组已空/已解散)返回 None ——
         与全量构建跳过空组的产物对齐, 局部路径据此把该组行从视图剔除。
         """
         from ..infra import utils as _utils
@@ -113,8 +118,9 @@ class GroupMixin:
             # 无标注/全撤销 => None(字段恒在, 值为 null 的契约同 occ_key)
             "relocate":
                 group_relocate(members_view),
-            "members":
-                members_view,
+            # members = hash 引用数组(shows 先例, P-02 二期): 只回成员 hash, 明细经
+            # memberByHash 索引(singles ∪ torrents)还原 —— 与聚合字段同源同序(recs 序)
+            "members": [r.hash for r in recs],
         }
 
     def _build_group_view(self) -> List[dict]:

@@ -97,49 +97,16 @@ def _make_web_manager(tmp_path, config_text):
     groups = {KEY: ["HA", "HB"]}
     view = [
         {
-            "key":
-                encode_group_key(KEY),
-            "name":
-                "Show",
-            "count":
-                2,
-            "dlspeed":
-                0,
-            "upspeed":
-                2048,
-            "uploaded":
-                4096,
-            "size":
-                1024**3,
-            "members":
-                [
-                    {
-                        "hash": "HA",
-                        "site": "HHan",
-                        "state": "stalledUP",
-                        "kind": "seeding",
-                        "dlspeed": 0,
-                        "upspeed": 1024,
-                        "uploaded": 2048,
-                        "size": 512**2,
-                        "progress": 1.0,
-                        "seeding_time": 3600,
-                        "ratio": 1.2
-                    },
-                    {
-                        "hash": "HB",
-                        "site": "M-Team",
-                        "state": "pausedUP",
-                        "kind": "paused",
-                        "dlspeed": 0,
-                        "upspeed": 1024,
-                        "uploaded": 2048,
-                        "size": 512**2,
-                        "progress": 1.0,
-                        "seeding_time": 3600,
-                        "ratio": 1.2
-                    },
-                ],
+            "key": encode_group_key(KEY),
+            "name": "Show",
+            "count": 2,
+            "dlspeed": 0,
+            "upspeed": 2048,
+            "uploaded": 4096,
+            "size": 1024**3,
+            # P-02 二期(hash 引用式): 组行 members = hash 字符串数组(与真实 _build_group_row
+            # 同形), 成员明细由 torrent 桶行承载 —— 替身若仍内嵌明细 dict 即与生产契约漂移
+            "members": ["HA", "HB"],
         }
     ]
     mgr = SimpleNamespace(

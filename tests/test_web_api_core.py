@@ -84,7 +84,7 @@ def test_api_t_skip_check_gated_by_config(web_env):
 
 
 def test_api_status_and_groups(web_env):
-    """状态与分组快照读取: 徽章数据/组名/站点明细齐全; status 携带版本号(顶栏展示)"""
+    """状态与分组快照读取: 徽章数据/组名/成员 hash 引用齐全(P-02 二期); status 携带版本号(顶栏展示)"""
     mgr, client = web_env
     auth = {"Authorization": f"Bearer {mgr.web.token}"}
     status = client.get("/api/status", headers=auth).json()
@@ -94,7 +94,8 @@ def test_api_status_and_groups(web_env):
     assert len(data["groups"]) == 1
     g = data["groups"][0]
     assert g["name"] == "Show" and g["count"] == 2 and g["upspeed"] == 2048
-    assert [m["site"] for m in g["members"]] == ["HHan", "M-Team"]
+    # P-02 二期(hash 引用式): 组行 members = hash 字符串数组(成员明细经 memberByHash 索引还原)
+    assert g["members"] == ["HA", "HB"]
 
 
 def test_api_expr_eval_endpoint(web_env):

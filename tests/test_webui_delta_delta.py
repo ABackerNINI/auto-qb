@@ -22,7 +22,7 @@
 - test_reduce_payload_json_native_and_key_exclusivity: JSON 原生守阵(S3 DoD + S9b 扩 show) —— 三个已启用视图的增量载荷全字段递归断言 JSON 原生类型 + json.dumps 无错(端点 JSONResponse 直出同款); 增量响应不含全量四数组键、全量响应不含 delta/removed 键(逐一断言)
 - test_s8_rename_migration_stages_candidates: S8 改名迁移 —— hash 剧键变化(name 改写经真增量轮) -> 暂存产出旧键 removed + 新键 upsert 候选且映射更新为新键; S9b 落代段暂存两侧并入 show 桶重建候选后清空, 旧键重算无成员转 removed/新键 upsert; 变体: 改名进未识别区 -> 折叠面变化检测(R11)本代 full
 - test_s8_removed_hash_cleans_mapping: S8 删除清理 —— 种子删除 -> 映射条目清除; 候选只由键变化产出(删除不记候选, S8 口径单点)
-- test_s9b_reduce_show_view_normal: S9b show 视图归约 —— delta.shows 回剧行整行(键 = 剧键字符串, R1 引用恒等)/removed.shows 回剧键; show 视图连带 groups/singles 桶(S4 成员索引语义); 纯 show 键代照常归约不退化 full
+- test_s9b_reduce_show_view_normal: S9b show 视图归约 —— delta.shows 回剧行整行(键 = 剧键字符串, R1 引用恒等)/removed.shows 回剧键; show 视图连带 groups/singles/torrents 桶(S4 成员索引语义, P-02 二期后索引源 = singles ∪ torrents); 纯 show 键代照常归约不退化 full
 ### T2a 覆盖率第三轮: 登记口与归约防御弧
 - test_error_reason_ungrouped_hash_skips_group_bucket: 错误原因登记的非组员 hash 只进 torrent 桶, 组键推导按成员映射判空跳过
 - test_reduce_delta_show_upsert_missing_row_yields_full: 跨代 show 残留(R5 让位后 up_s 存无行键) -> 剧行缺失防御性转全量
@@ -372,9 +372,9 @@ def test_ensure_state_no_negotiation_byte_compatible():
     assert state["torrents"] == rt.flat_view
     for absent in ("full", "delta", "removed"):
         assert absent not in state
-    # view=group: groups + singles 连带裁剪
+    # view=group: groups + singles + torrents 连带裁剪(P-02 二期: memberByHash 索引须 torrents)
     state = rt.ensure_state(rid, "group")
-    assert set(state.keys()) == {"rid", "updated", "groups", "singles"}
+    assert set(state.keys()) == {"rid", "updated", "groups", "singles", "torrents"}
     assert state["groups"] == rt.group_view and state["singles"] == rt.singles_view
     # view 缺省: 四数组全回(保守默认)
     state = rt.ensure_state(rid)
@@ -461,7 +461,7 @@ def test_reduce_delta_upsert_removed_normal():
     assert [r["key"] for r in state["delta"]["groups"]] == [enc]
     assert state["delta"]["groups"][0] is gv[enc]  # R1: 行内容 = 当前已发布视图原行
     assert [r["hash"] for r in state["delta"]["singles"]] == ["H2"]  # 归组行不进 singles 桶
-    assert state["removed"] == {"groups": [], "singles": []}
+    assert state["removed"] == {"groups": [], "singles": [], "torrents": []}
 
     # 组解散代(组内唯一成员被删, 组随之消失): removed.groups 回 encode 后字符串
     # (与视图行键同标识), removed.singles 回 hash
@@ -479,8 +479,12 @@ def test_reduce_delta_upsert_removed_normal():
     assert entry["full"] is False and entry["removed"]["group"] == {("R:\\D", )}
     state = rt.ensure_state(rid, "group", True)
     assert state["full"] is False
-    assert state["delta"] == {"groups": [], "singles": []}
-    assert state["removed"] == {"groups": [encode_group_key(("R:\\D", ))], "singles": ["H1"]}
+    assert state["delta"] == {"groups": [], "singles": [], "torrents": []}
+    assert state["removed"] == {
+        "groups": [encode_group_key(("R:\\D", ))],
+        "singles": ["H1"],
+        "torrents": ["H1"],
+    }
 
     # 空键集代(纯 mark_dirty 的命令驱动重建, 视图内容未变): 归约命中但桶全空 ——
     # delta/removed 恒在、可为空(协议定案)
@@ -664,8 +668,8 @@ def test_s8_removed_hash_cleans_mapping():
 
 def test_s9b_reduce_show_view_normal():
     """S9b show 视图归约: delta.shows 回剧行整行(键 = 剧键字符串, R1 引用恒等)/
-    removed.shows 回剧键; show 视图连带 groups/singles 桶(S4 成员索引语义); 剧行消失
-    (单成员剧解散)回 removed.shows"""
+    removed.shows 回剧键; show 视图连带 groups/singles/torrents 桶(S4 成员索引语义,
+    P-02 二期后索引源 = singles ∪ torrents); 剧行消失(单成员剧解散)回 removed.shows"""
     # a) 正常归约: 剧行 + 连带 singles 桶, 行内容 = 当前视图原行(R1)
     store, rt, rid = _baseline_rid(("H1", "H2"))
     _advance_gen(store, rt)  # H1 速度变化 -> torrent {H1} + show {show h1}
@@ -675,7 +679,8 @@ def test_s9b_reduce_show_view_normal():
     assert [r["key"] for r in state["delta"]["shows"]] == [key_h1]
     assert state["delta"]["shows"][0] is next(r for r in rt.shows_view["list"] if r["key"] == key_h1)  # R1
     assert {r["hash"] for r in state["delta"]["singles"]} == {"H1"}  # 成员索引桶连带
-    assert state["delta"]["groups"] == [] and state["removed"] == {"shows": [], "groups": [], "singles": []}
+    assert state["delta"]["groups"] == []
+    assert state["removed"] == {"shows": [], "groups": [], "singles": [], "torrents": []}
     # b) 跨代窗口并集: 第二拍 H2 变化 -> 两代 show 键一轮拿齐
     rid2 = state["rid"]
     store.delta_fields = {"H2": frozenset({"dlspeed"})}
