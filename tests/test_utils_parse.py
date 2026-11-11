@@ -58,6 +58,7 @@
 - test_display_host: 展示地址(可达等价回环 127.0.0.1/::1 含 v4-mapped/全写法折 localhost, 其余回环 127.0.0.2+ 与对外地址原样, 异常入参不炸)
 - test_time_in_range_minute_granularity: 时段判定按**分钟**粒度(端点整分钟含在内: 23:59:30 在 "00:00-23:59" 内 / 跨午夜两端 / 起点前 1 分仍在区间外) —— issue 26-10-19-0013 的守阵
 - test_is_loopback_host_empty_and_unparsable: 回环判据两条保守出口(空/None、主机名 -> False; localhost 大小写与两族字面量 -> True)
+- test_is_loopback_host_ipv4_mapped_version_stable: IPv4-mapped 解包同判(钉平 CPython 3.12/3.13 is_loopback 行为差异)
 - test_fmt_size_invalid
 - test_parse_hm_invalid_format
 """
@@ -874,3 +875,14 @@ def test_is_loopback_host_empty_and_unparsable():
     assert utils.is_loopback_host("localhost") is True
     assert utils.is_loopback_host("  LOCALHOST  ") is True
     assert utils.is_loopback_host("192.168.1.5") is False
+
+
+def test_is_loopback_host_ipv4_mapped_version_stable():
+    """IPv4-mapped IPv6 解包同判 —— CPython 3.13 起 IPv6Address.is_loopback 委托 IPv4 侧,
+    3.12 只认 ::1; 实现面显式解包钉平, 跨版本行为必须一致(2026-11-12 容器 3.12 全量实证)。
+    """
+    assert utils.is_loopback_host("::ffff:127.0.0.1") is True
+    assert utils.is_loopback_host("::ffff:127.0.0.2") is True
+    assert utils.is_loopback_host("::FFFF:127.0.0.1") is True
+    assert utils.is_loopback_host("::ffff:192.168.1.5") is False
+    assert utils.is_loopback_host("::ffff:8.8.8.8") is False

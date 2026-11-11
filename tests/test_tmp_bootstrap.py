@@ -8,7 +8,7 @@ r"""_tmp_bootstrap 自举的回归阵(计划 26-11-02-0657)。
 ## 测试计划
 - test_candidates_single_source: 候选根字面量全仓库唯一, 不得复制到第二处
 - test_candidates_order_is_r_h_system: 固定顺序 R→H→系统 temp 回落(None)
-- test_bootstrap_mark_recognition: 路径含标记即自举值, 系统 temp / H:\Temp 不算
+- test_bootstrap_mark_recognition: 路径含标记即自举值, 平台绝对外部路径样本不算(Win 盘符路径 / POSIX /var 系)
 - test_external_tmpdir_rejected_rc4: 外部 TMPDIR ⇒ SystemExit(4) + 拒收文案
 - test_idempotent_bootstrap_value_accepted: 继承的自举值幂等复用, 不重探测
 - test_lock_zombie_dual_condition: 僵尸判定 —— pid 死 / pid 活但 CreateTime 不符
@@ -51,16 +51,29 @@ def test_candidates_order_is_r_h_system():
     assert cands[-1][0] is None, "最后一级必须是系统 temp 回落(None)"
 
 
+def _external_tmp_samples() -> list[str]:
+    """平台**绝对**外部路径样本(不含标记)。
+
+    Windows 盘符路径字面量在 POSIX 上是相对路径 —— 容器内 cwd 为
+    /root/auto-qb-tests/<slug>/code 时解析结果恰好含 BOOTSTRAP_MARK
+    ("auto-qb-tests"), 会把样本误判成自举路径(2026-11-12 容器全量实证)。
+    样本必须按平台取真绝对路径, 且 realpath 后不含标记。
+    """
+    if os.name == "nt":
+        return ["C:\\Windows\\Temp", "H:\\Temp"]
+    return ["/var/tmp", "/usr/tmp"]
+
+
 def test_bootstrap_mark_recognition():
     assert tb._is_bootstrap_path(os.environ["TMPDIR"])  # 本进程已被自举接管
-    assert not tb._is_bootstrap_path("C:\\Windows\\Temp")
-    assert not tb._is_bootstrap_path("H:\\Temp")
+    for sample in _external_tmp_samples():
+        assert not tb._is_bootstrap_path(sample), sample
 
 
 def test_external_tmpdir_rejected_rc4(monkeypatch, capsys):
     """外部 TMPDIR(不含标记)→ SystemExit(4) + 拒收文案; 进程级端到端实测见计划实施记录。"""
     monkeypatch.setattr(tb, "_INSTANCE_ROOT", None)
-    monkeypatch.setenv("TMPDIR", "H:\\Temp-not-marked")
+    monkeypatch.setenv("TMPDIR", _external_tmp_samples()[0] + "-not-marked")
     with pytest.raises(SystemExit) as ei:
         tb._acquire_instance_root()
     assert ei.value.code == 4

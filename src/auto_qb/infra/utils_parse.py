@@ -79,6 +79,9 @@ def is_loopback_host(host: str) -> bool:
 
     config 校验(S1 5 危险组合)与 hr 配对门(pairing=auto 的生效逻辑)共用 —— 单点在此,
     两处不得各写一份; 无法解析为地址字面量的输入一律按非回环处理(保守)。
+    IPv4-mapped IPv6(::ffff:a.b.c.d)先解包出 IPv4 侧再判: CPython 3.13 起
+    IPv6Address.is_loopback 委托 IPv4 侧而 3.12 只认 ::1, 显式解包钉平跨版本行为
+    (2026-11-12 容器 3.12 变体全量实证: 不解包则 test_web_auth 在 3.12 假红)。
     """
     h = str(host or "").strip().lower()
     if not h:
@@ -86,9 +89,12 @@ def is_loopback_host(host: str) -> bool:
     if h == "localhost":
         return True
     try:
-        return ipaddress.ip_address(h).is_loopback
+        addr = ipaddress.ip_address(h)
     except ValueError:
         return False
+    if isinstance(addr, ipaddress.IPv6Address) and addr.ipv4_mapped is not None:
+        addr = addr.ipv4_mapped
+    return addr.is_loopback
 
 
 def parse_bool(value) -> bool:

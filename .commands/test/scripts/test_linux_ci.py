@@ -20,6 +20,7 @@ pid 标记 / 双条件清扫 / delta 路线)对应用例即红。容器网络纯
 - test_auto_slug_shape                            自动 slug = aqb-<pid>-<时刻>
 - test_sanitize_name_rejects_unsafe               --name 收紧 slug 安全集, 路径毒字符拒收
 - test_run_script_inner_timeout_layering          timeout 与 pytest 本体单条钉紧耦合, 值 < 引擎 1800 且余量 >= 240s
+- test_run_script_exports_testbed_profile         pytest 前 export AUTO_QB_TESTBED=1(挂钟性能基准选 testbed 档: 容器配额/并行会话放大非回归)
 - test_run_script_writes_and_clears_run_pid       .run-pid 开头写、记 bash $$、EXIT trap 自清(R6, 覆盖 venv 准备段)
 - test_run_script_uses_export_pip_delta_route     delta 走 export --no-hashes + uv pip install, 无 uv sync; 准备段失败 rc 20-24 各带 [FAIL]+NEXT
 - test_run_script_copies_template_venv            首建 cp -a 模板 venv, 不全建(S1 拍板 R4)
@@ -148,6 +149,13 @@ def test_sanitize_name_rejects_unsafe() -> None:
 
 
 # ---- 容器内主脚本 ----
+
+
+def test_run_script_exports_testbed_profile() -> None:
+    script = linux_ci.run_script()
+    assert "export AUTO_QB_TESTBED=1" in script and script.index("export AUTO_QB_TESTBED=1") < script.index(
+        ".venv/bin/python -m pytest"
+    ), "pytest 前必须置 testbed 档标记: 挂钟性能基准按容器实测档判(并行会话放大非回归)"
 
 
 def test_run_script_inner_timeout_layering() -> None:

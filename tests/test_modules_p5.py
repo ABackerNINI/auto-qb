@@ -22,7 +22,7 @@ test_rule_engine / test_trigger_events / test_rules_core(经同一刷新路径�
 - test_l2_rebuild_group_view_not_empty: L2 重建保留分组索引, 全量轮后组视图不得为空且不重拉文件表(issue 26-11-03-2206)
 - test_rebuild_preserves_runtime_memory_state: 重建不重读磁盘, exec_history 原对象保留
 - test_rebuild_benchmark_5000_seeds: 5000 种子下短路/重建耗时回归阈值(基线化, 审计 L9)
-- test_rebuild_benchmark_limit_profile_selection: 性能基准两档阈值选档守阵(通用 CI 变量不参与)
+- test_rebuild_benchmark_limit_profile_selection: 性能基准三档阈值选档守阵(通用 CI 变量不参与判档; AUTO_QB_TESTBED=testbed 档 > GITHUB_ACTIONS=CI 档 > 默认严格档)
 - test_p2a_dispatch_event_guards_skip_without_side_effects: 事件分派四守卫(快照/配置/首轮/同值)静默跳过 (P2-a)
 - test_p2a_apply_event_rule_process_exception_caught: 事件规则同步执行异常捕获不传播 (P2-a)
 - test_p2a_handle_event_rule_resume_exception_caught: 断点续跑异常捕获, handler 恒 FINISHED (P2-a)
@@ -659,28 +659,46 @@ def _median_ms(fn, repeats: int = 5) -> float:
 
 
 def _perf_limit_key() -> str:
-    """按环境选性能上界档: GitHub Actions runner 用宽松档, 其余一律严格档。
+    """按环境选性能上界档: Docker testbed 用 testbed 档, GitHub Actions runner 用宽松档, 其余一律严格档。
 
     只认 GITHUB_ACTIONS —— 通用 CI 变量在本仓库的开发机入口会被显式置真
     (.commands/dev/config.toml dev.e2e 的 note 明记「本机 CI=true」, playwright.config.mjs
     也拿它做 retries/forbidOnly), 拿它判档会让严格档在开发机永不生效, 放走真回归。
     GitHub Actions 的 ubuntu / windows 两个 job 均保证设置该变量。
+    AUTO_QB_TESTBED 由 test.linux 容器会话设置(.commands/test/scripts/linux_ci.py run_script):
+    testbed 是 8 核共享容器, 挂钟被容器配额与并行会话(16 worker / 8 vCPU)合法放大
+    (2026-11-12 实测: solo rebuild 中位 1.1ms vs 开发机基线 0.85ms; 双开会偶发越 4.0ms
+    严格档 —— 与 CI 档同源的抢占假红), 显式变量优先于 GITHUB_ACTIONS(判档依据要就近)。
     """
+    if os.environ.get("AUTO_QB_TESTBED"):
+        return "testbed_threshold"
     return "ci_threshold" if os.environ.get("GITHUB_ACTIONS") else "threshold"
 
 
-@pytest.mark.parametrize("gh_actions, expected_key", [(None, "threshold"), ("true", "ci_threshold")])
-def test_rebuild_benchmark_limit_profile_selection(monkeypatch, gh_actions, expected_key):
-    """性能基准选档守阵: 开发机严格档 / GitHub Actions 宽松档, 通用 CI 变量不参与判档"""
+@pytest.mark.parametrize(
+    "testbed, gh_actions, expected_key",
+    [
+        (None, None, "threshold"),
+        (None, "true", "ci_threshold"),
+        ("1", "true", "testbed_threshold"),  # testbed 显式变量优先(GITHUB_ACTIONS 同真时就近判档)
+        ("1", None, "testbed_threshold"),
+    ],
+)
+def test_rebuild_benchmark_limit_profile_selection(monkeypatch, testbed, gh_actions, expected_key):
+    """性能基准选档守阵: 开发机严格档 / Docker testbed 档 / GitHub Actions 宽松档, 通用 CI 变量不参与判档"""
     monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
+    monkeypatch.delenv("AUTO_QB_TESTBED", raising=False)
     monkeypatch.setenv("CI", "true")  # 开发机常态(见 _perf_limit_key docstring), 不得影响选档
+    if testbed is not None:
+        monkeypatch.setenv("AUTO_QB_TESTBED", testbed)
     if gh_actions is not None:
         monkeypatch.setenv("GITHUB_ACTIONS", gh_actions)
     assert _perf_limit_key() == expected_key
     baseline = json.loads(PERF_BASELINE_PATH.read_text(encoding="utf-8"))
     for op in ("short_circuit", "rebuild"):
         # 档位倒置要红; 宽松档松到放走灾难也要红
-        assert baseline[op]["threshold"] < baseline[op]["ci_threshold"] < baseline[op]["disaster_line_ms"] / 100
+        assert baseline[op]["threshold"] < baseline[op]["testbed_threshold"] < baseline[op]["ci_threshold"]
+        assert baseline[op]["ci_threshold"] < baseline[op]["disaster_line_ms"] / 100
 
 
 def test_rebuild_benchmark_5000_seeds(capsys):
@@ -694,10 +712,13 @@ def test_rebuild_benchmark_5000_seeds(capsys):
       (实测分布 / 采样口径 / 机器 / commit / 采样日期), 断言运行时读入。
     - 测试内计时口径 median-of-5: 单次毛刺(调度 / GC)被中位吸收, 持续性劣化才触发 ——
       防抖动靠中位口径, 不靠放大系数。
-    - 两档阈值(数字单点在基线文件, 测试只按环境选档):
+    - 三档阈值(数字单点在基线文件, 测试只按环境选档):
       开发机严格档 threshold: 短路 0.1ms(中位 0.01ms × 5, 向上取整到 0.1ms 整刻度);
       重建 4.0ms(中位 0.85ms × ~4.7, 2.7x 于 20 样本最大值)。
       CI 档 ci_threshold: 短路 1.0ms / 重建 20.0ms, 只由 GITHUB_ACTIONS 启用。
+      testbed 档 testbed_threshold: Docker testbed 容器会话(AUTO_QB_TESTBED=1, 由
+      test.linux run_script 设置), 数字按容器内同口径采样(依据见基线文件 _meta);
+      优先级高于 GITHUB_ACTIONS(testbed 上若兼有该变量, 判档依据要就近取容器实测)。
     - 为何 CI 要分档、且仍用挂钟: 基线采于本机(7950X / CPython 3.13.14), CI 是
       ubuntu-latest 少核 runner + `-n 8` xdist 抢占 + coverage 插桩; 2026-11-07 实测
       rebuild median-of-5 8.158ms(本机同口径 0.864ms), 挂钟被合法调度放大近 10x ——
@@ -727,7 +748,7 @@ def test_rebuild_benchmark_5000_seeds(capsys):
       2. 取中位, 开发机档阈值 = 中位 × 3-5(向上取整到整数 / 一位小数刻度); CI 档另取
       CI 日志 `[5000-seed benchmark]` 行的最坏值 × 2-3(打印行带档位与所用阈值, 可直接对照);
       3. 连同实测分布 / 采样日期 / 当时 commit 更新 perf_baseline.json, 并同步本 docstring
-      的两档阈值数字。
+      的各档阈值数字。
     """
     with tempfile.TemporaryDirectory() as td:
         mgr = _mgr(td)

@@ -29,6 +29,9 @@
 5. 容器内跑全量: **timeout 内层包裹 pytest**(R6 分层超时: 内层 1500s 先到 -> pytest 收
    SIGTERM 干净退出、FAILED 明细照出; 引擎包装 1800s 只兜外层 —— 两层差 300s 付给 tar
    推送 + venv 准备。健康全量时长由 T2b 实测后校准内层值)。输出全文透传。
+   pytest 前置 `export AUTO_QB_TESTBED=1`: 挂钟型性能基准(test_rebuild_benchmark_5000_seeds)
+   按 testbed 档判 —— 容器 8 vCPU 配额与并行会话(16 worker)对挂钟的放大是合法调度非回归
+   (2026-11-12 S2 双开实证: solo rebuild 中位 1.1ms, 双开偶发越开发机严格档 4.0ms)。
 6. 下轮兜底清扫(R6): 开跑前扫 `/root/auto-qb-tests/` 下带 `.run-pid` 标记的 workdir,
    「内嵌 pid 已死(容器内 kill -0) + mtime 超龄(12h, 与 tests/_tmp_bootstrap.py
    CLEAN_AGE_HOURS 同款)」**双条件缺一不可**, 只 rmtree 整个 workdir、不钻子树、不碰
@@ -247,6 +250,7 @@ uv export --frozen --format requirements-txt --no-hashes --no-emit-project --qui
 uv pip install -q --python .venv/bin/python -r "$AQB_WORK/delta-req.txt" || {{ echo "[FAIL] 依赖 delta 补装失败(uv pip install -r)。NEXT: 看上方 uv 报错; 国内镜像站不可达按 R9 换源或手动开代理后重跑。"; exit 22; }}
 uv pip install -q --python .venv/bin/python -e . --no-deps || {{ echo "[FAIL] 项目 editable 补装失败(-e . --no-deps, hatchling 构建面)。NEXT: 看上方 uv 报错; 构建依赖拉不动按 R9 换源或手动开代理后重跑。"; exit 23; }}
 echo "[linux-ci] 阶段: 容器内 timeout {inner_timeout}s 包裹全量 pytest(内层先到, 干净退出)"
+export AUTO_QB_TESTBED=1  # 性能基准选 testbed 档(tests/test_modules_p5.py::_perf_limit_key): 容器配额+并行会话的挂钟放大是合法调度, 非回归
 rc=0
 timeout -k {TIMEOUT_KILL_GRACE} {inner_timeout} .venv/bin/python -m pytest tests -q || rc=$?
 exit $rc"""

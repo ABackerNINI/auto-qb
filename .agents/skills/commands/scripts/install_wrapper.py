@@ -77,7 +77,11 @@ fi
 if [ -f "$root/pyproject.toml" ] && command -v uv >/dev/null 2>&1; then
   exec uv run -q python "$engine" "$@"
 fi
-exec python "$engine" "$@"
+# Linux 常见只有 python3(实测: 容器/WSL 无 `python`, rc 127, mutants why.md 同款记录)
+if command -v python >/dev/null 2>&1; then
+  exec python "$engine" "$@"
+fi
+exec python3 "$engine" "$@"
 """
 
 # ! 批处理的写法约束(实测踩过): `rem` 行里不出现**引号 / 括号 / 反引号**, 消息不用 `1>&2` ——

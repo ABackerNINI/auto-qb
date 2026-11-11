@@ -102,6 +102,11 @@ def test_apply_bump_happy_path(tmp_path, monkeypatch, capsys):
 
     monkeypatch.setattr(mod, "run_cmd", run_stub)
     monkeypatch.setattr(mod, "read_current_version", lambda repo: versions.pop(0))
+    # which 必须桩掉: 测试不得依赖环境 PATH 里碰巧装了 bump-my-version
+    # (容器/CI 无此 dev 工具 -> rc1 空 stdout, 2026-11-12 Linux 全量实证)
+    monkeypatch.setattr(
+        mod.shutil, "which", lambda name: "/usr/local/bin/bump-my-version" if name == "bump-my-version" else None
+    )
     rc = mod.main(["--repo", str(tmp_path), "--kind", "minor"])
     cap = capsys.readouterr()
     payload = json.loads(cap.out)
