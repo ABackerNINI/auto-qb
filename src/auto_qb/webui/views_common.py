@@ -96,13 +96,13 @@ SITE_ALERT_MSG_MAX = 200
 # 集节点聚合状态优先级: 错误 > 下载 > 校验 > 做种 > 暂停 > 移动 > 其它(前端按 state 着色)
 # !做种必须排在**暂停之前**: 组/集内"部分暂停部分做种中"是常态(整组只有个别站点被暂停),
 #   取 paused 会让整个做种中的行变成灰的(2026-09-21 用户报"辅种页状态色错误")。
-#   与前端 `shared/app.js::STATE_RANK` 逐项一致由 tests/test_webui_static_skins.py 静态守阵机械比对。
+#   与前端 `shared/app.js::STATE_RANK` 逐项一致由 tests/webui_static_scan_js.py::_scan_state_rank 静态守阵机械比对。
 # !moving 插在 paused 之后 other 之前, 不扰动上面这段踩过坑的相对顺序(2026-10-29 满分):
 #   两者同属"非典型态", 且 moving 是强遮蔽态(qB 源码 Moving 顺位高于 MissingFiles/Error),
 #   让它在争夺里压过常规态会把整组落成"正在搬", 与实际观感不符。
 _SHOW_STATE_RANK = {"error": 0, "downloading": 1, "checking": 2, "seeding": 3, "paused": 4, "moving": 5, "other": 6}
 # 表外 kind 的兜底秩(排最后): 与前端 `shared/app.js::STATE_RANK_LAST` 同值,
-# 逐项一致由 tests/test_webui_static_skins.py 静态守阵机械比对(issue 26-10-11-0310 补钉)。
+# 逐项一致由 tests/webui_static_scan_js.py::_scan_state_rank 静态守阵机械比对(issue 26-10-11-0310 补钉)。
 _SHOW_STATE_RANK_LAST = 9
 
 # P1-1 按视图回传: 每个视图实际要用的数组。四视图共享同一版本号(rid), 所以"只回一部分"
@@ -135,7 +135,7 @@ def _ep_sort_key(nkey: tuple):
 
 
 # qB eta 哨兵: 8640000 = 无 ETA(与前端 format.js::fmtEta 口径一致; 跨层一致由
-# tests/test_webui_static_skins.py::_scan_eta_sentinel 机械守阵, issue 26-10-11-0310);
+# tests/webui_static_scan_js.py::_scan_eta_sentinel 机械守阵, issue 26-10-11-0310);
 # 时间点哨兵 -1/0 = 从未(fmtTs 空白)
 _ETA_SENTINEL = 8640000
 

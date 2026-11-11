@@ -87,7 +87,7 @@ def test_frontend_card_component_wiring():
     # 纯模板件: 组件里不得定义 methods(与根 mixin 同名会被静默覆盖)
     assert "methods" not in js, "组件里定义了 methods —— 与 config_hub.js 的同名方法会互相覆盖"
 
-    # 三皮肤清单逐项相等由 test_webui_static_skins 钉住, 这里只断"分片被挂上且落 body"
+    # 三皮肤清单逐项相等由 test_webui_static_skins_skin::test_frontend_template_split_wiring 钉住, 这里只断"分片被挂上且落 body"
     for ui in _UI_ALL:
         parts = {os.path.basename(p["src"]): p for p in _ui_manifest(ui)["parts"]}
         assert "traffic-card.html" in parts, f"{ui} 清单漏挂 traffic-card.html(该卡整块消失)"

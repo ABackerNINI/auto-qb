@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="webui-guard-ref-drift">
 <meta name="doc-refs" content="memory-bank/tasks/26-11-12-webui-kbd-hints.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="过期守阵指称族: 16 处注释仍以现在时指称已退役的 test_webui_static_skins.py">
 <meta name="issue-summary" content="test_webui_static_skins.py 已拆分为 _skin/_table/_widget 三件, 但 16 处源码/脚本/测试注释仍指旧文件名, 排障与守阵定位被误导; 同族 4 处已在 0d420c9d 修复(_scan_keys_serial_re 指称 3 处 + ctx_menu.js:93 计数)">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-12-0527-docs-webui-guard-ref-drift</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-12 05:27</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">docs</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
 
@@ -122,12 +122,14 @@
 <section id="s3">
   <h2><span class="no">§03</span>建议<span class="opt">（可选）</span></h2>
   <p>逐符号 grep 现行定义点后改指(符号现分居 <code>tests/webui_static_scan_{common,js,css}.py</code> 与拆分后三件 skins 测试内); 修法范式照 <code>0d420c9d</code> 的同族修复(指定义点, 保持互为对照面的两侧注释对称)。</p>
+  <p><strong>修复后补充(2026-11-12)</strong>: 16 处全部按指定义点范式改指 —— <code>_scan_state_rank</code>/<code>_scan_eta_sentinel</code>/<code>_scan_mixin_wiring</code>/<code>_scan_pending_settle</code> → <code>tests/webui_static_scan_js.py</code>, <code>_section_members</code> → <code>tests/webui_static_scan_common.py</code>, 列隐藏守阵 → <code>webui_static_scan_css.py::_scan_column_cells_paired</code>, 三皮肤清单守阵 → <code>test_webui_static_skins_skin::test_frontend_template_split_wiring</code>, <code>test_frontend_static_bundle_health</code> → <code>test_webui_static_skins_skin.py</code>。验证: 复扫 <code>grep -rn "test_webui_static_skins\b" src/ tests/ scripts/ --include="*.py" --include="*.js"</code>(同 §02 口径)漂移命中归零(仅剩 3 处 scan 搬迁史豁免), 静态守阵与 shortcuts 族测试全绿(见提交信息实测数字)。同词边界复扫扩到 <code>*.css/*.html/*.mjs</code> 另发现 7 处现在时指称(3 src + 4 e2e), 在本条取证口径之外, 计划外已入池 <code>26-11-12-0628-docs-webui-guard-ref-css-e2e</code>。</p>
 </section>
 
 <section id="s4">
   <h2><span class="no">§04</span>状态变更日志</h2>
   <ul>
     <li>2026-11-12 05:27 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    <li>2026-11-12 — 状态 Open → Done（kb.status）</li>
   </ul>
 </section>
 

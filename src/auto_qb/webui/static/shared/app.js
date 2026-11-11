@@ -348,7 +348,7 @@ const DRAWER_FILE_COLUMNS = [
  * 播种语义未变(loadColState 尾部): 只给**从无任何偏好**的页注入本表列 key 与集合的交集
  * (集合含某表没有的 key 时静默跳过); 有任何已存偏好一律以存储为准。
  * 用户暂定(2026-10-12): 剩余 / 最后完整可见 / Tracker / 信息哈希值 v1 / v2 / 完成于。
- * 后续要加默认隐藏列: 只在此集合加 key, 不许回列定义写 hide(守阵判红, 见 test_webui_static_skins)。 */
+ * 后续要加默认隐藏列: 只在此集合加 key, 不许回列定义写 hide(守阵判红, 见 webui_static_scan_css.py::_scan_column_cells_paired)。 */
 const DEFAULT_HIDDEN_KEYS = new Set([
   "amount_left", // 剩余
   "seen_complete", // 最后完整可见
@@ -876,7 +876,7 @@ function initialDrawerMerge() {
  * (`e.state`) 是后端按那张表算好后回传的, 而辅种页的组状态 (`decoratedGroups.status.primary`)
  * 是前端按这张表算的。两张表一旦不一致, **同一批种子在两个页面会显示成不同颜色**;
  * 更糟的是乐观 UI: 前端按自己的表算出"点击后的颜色", 下一轮回执却按后端的表算真值 => 颜色弹回。
- * 两表一致性由 `tests/test_webui_static_skins.py::_scan_state_rank`(test_frontend_static_bundle_health 第 8 项)
+ * 两表一致性由 `tests/webui_static_scan_js.py::_scan_state_rank`(test_frontend_static_bundle_health 第 8 项)
  * 机械守卫(改一边必须改另一边), 该项同时钉住"做种排在暂停之前"的顺序语义。
  *
  * 语义 = "先报需要处理的, 再报在跑的, 最后报已完成的"; 但 **seeding 必须排在 paused 之前** ——

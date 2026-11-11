@@ -2,7 +2,7 @@
 
 守什么: 注册表是键位**单一事实源**(表外无键位), 而前端无 JS 测试框架 —— 键位冲突、黑名单
 越界、危险档键位形态、run 指到不存在的方法, 这些错误全部**静默**(不报错只是键不响/误触),
-只能靠静态断言钉住。挂载成对(三份 tpl-manifest + app.mixin)由本文件与 test_webui_static_skins.py 的
+只能靠静态断言钉住。挂载成对(三份 tpl-manifest + app.mixin)由本文件与 tests/webui_static_scan_js.py 的
 _scan_mixin_wiring 双保险。光标滚动跟随禁 scrollIntoView、模态默认焦点/Enter 确认(§08)、
 Delete 直连注册表外, 均为已拍板的口径, 逐条落断言。W5 局部作用域(drawer/settings/modal
 三档 + 浮层放行焦点局部)与 W6 自定义(适配器 /api/keys / 录制器 / 冲突三选一 / 帮助浮层 /
@@ -53,7 +53,7 @@ def _manifest_scripts(ui: str) -> list[str]:
 
 
 def _bundle_method_names() -> set[str]:
-    """bundle(shared/*.js 清单序)里 methods/computed 块的成员名(与 test_webui_static_skins.py::_section_members 同口径)"""
+    """bundle(shared/*.js 清单序)里 methods/computed 块的成员名(与 tests/webui_static_scan_common.py::_section_members 同口径)"""
     names: set[str] = set()
     for src in _manifest_scripts("prism"):
         rel = src.lstrip("/")
@@ -70,7 +70,7 @@ def _bundle_method_names() -> set[str]:
                 continue
             if line in (
                 "  },", "  }"
-            ) or line == "});":  # 与 test_webui_static_skins.py::_section_members 同口径: 只认块级收口, 不被嵌套函数骗
+            ) or line == "});":  # 与 tests/webui_static_scan_common.py::_section_members 同口径: 只认块级收口, 不被嵌套函数骗
                 in_block = False
                 continue
             m = re.match(r"^    (?:async )?([A-Za-z_$][\w$]*)\s*[(:]", line)
