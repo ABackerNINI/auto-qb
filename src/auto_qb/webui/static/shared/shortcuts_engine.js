@@ -435,7 +435,7 @@ Object.assign(window.AQB_SHORTCUTS.methods, {
      * 2026-10-08(计划 26-10-08-1217): 视图守卫解除 —— 三视图共用面板, 辅种页/追剧页的成员行
      *   (光标 kind=torrent)直接命中目标解析, Alt+1~5 在三视图同样可用。
      * drawer 作用域条目已清空(§3.2), 四条改 list 作用域由此单点分流双态。 */
-    _kbDrawerTab(tab) {
+    async _kbDrawerTab(tab) {
       if (this.page !== "groups") {
         this.toast("页签不可用: 详情面板只在种子/辅种/追剧页可用", "info", 2500);
         return;
@@ -451,9 +451,14 @@ Object.assign(window.AQB_SHORTCUTS.methods, {
       }
       // 流量页签受功能门控: 页签按钮 v-if=qbTrafficOn 不渲染, 切到隐形页签 = 卡在一个没有
       // 按钮可切回的页(与 openTorrentDrawer 的 initialTab 归一同一口径), 未启用时提示后忽略
-      if (tab === "traffic" && !this.qbTrafficOn) {
-        this.toast("功能未启用: qB 口径流量图, 请先在设置里打开", "info", 2500);
-        return;
+      // issue 26-11-11-0633: flags 未取到先补拉一次再判(与 openQbHistory 同款"没取到≠没启用"
+      // 口径); 方法改 async(调用方 shortcuts.js 全部 fire-and-forget, 返回值无人消费)
+      if (tab === "traffic") {
+        if (!this.qbTrafficOn && !this.flagsLoaded) await this.ensureWebFlags();
+        if (!this.qbTrafficOn) {
+          this.toast("功能未启用: qB 口径流量图, 请先在设置里打开", "info", 2500);
+          return;
+        }
       }
       if (this.drawer.open && this.drawerIsSeed) {
         this.drawerTab(tab);  // 开态: 切页签(现行为)

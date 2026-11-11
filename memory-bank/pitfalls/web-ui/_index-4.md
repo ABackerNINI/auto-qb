@@ -1,16 +1,13 @@
 # web-ui — 前端 / WEB UI 纪律 · 卷 4/4
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `search-views.md` … `wording-audit-surface.md`(共 25 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `stale-predicate-inverted.md` … `wording-audit-surface.md`(共 23 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
 
 | 主题 | 一句话 | 触发词 |
 |---|---|---|
-| [search-views.md](search-views.md) | 搜索不是虚拟分组、负词种子级排除、脏标记是共享状态、鉴权不能靠"凭证串非空"、配置写盘按 BaseLoader 语义。 | 改搜索, 改视图脏标记, 改鉴权, 改登录, 改设置页, 改配置写盘, rid 门控 |
-| [show-if-residual-key.md](show-if-residual-key.md) | schema 字段的 show_if 只控制「这一行渲染不渲染」; 用户把触发键从命中值切走后, 该字段先前写进树的值**仍留在配置树里**(show_if 不删键), 行又已隐藏 ⇒ 用户看不见也改不了, 保存时后端校验对残留键报错(如 watch_fields 仅在 trig… | 给规则/段字段配 show_if; 切走关联键后保存报"该键非法"; 字段在某取值下才合法 |
-| [sortable-gate-source-split.md](sortable-gate-source-split.md) | 能力判据源分裂: 视觉侧硬编码 + 行为侧门控 = 「看着能点、点了没反应」的静默全灭 | 补门控, a11y 补课, headActivate, col.sortable, sortable, thead, 表头排序失效, 点了没反应, 视觉与行为分叉, 判据同源, 唯一调用方 |
 | [stale-predicate-inverted.md](stale-predicate-inverted.md) | 同一对象上成对出现的 `active`(本图此刻该不该显示/拉)与 `stale`(在途响应是否**已过期**→丢弃)是**互为反义**的两个谓词; 机械改名/整行重写时把 `stale` 的 `!(...)` 敲成 `!!(...)`, 语义整个翻面 —— 恰在「本图正在被看」… | 改 stale 谓词, 机械改名, 双重取反, 图加载不出来, 一直显示正在加载, loading 不复位, 谓词极性, _qbLoad, _QB_SCOPES, active 与 stale |
 | [sticky-scrollpad-inset.md](sticky-scrollpad-inset.md) | sticky 的视矩形被**滚动容器自身的 padding 内缩** —— top:0 实际停在 padding-top 之下、bottom:0 实际停在 padding-bottom 之上, 中途滚动时数据行文字从这两条缝里漏出来; 行级 grid 表格的吸顶列头与吸底汇总条会… | 吸顶, 吸底, sticky, 滚动容器 padding, drawer-body, 表头吸顶, 统计条吸底, 漏出文字, 行文字漏出, 顶部漏字, 底部漏字, 中途滚动, 未到顶, 没到底, dt11, 树表批量, drawer_tpl,… |
 | [surface-color-family-single-point.md](surface-color-family-single-point.md) | 同一个视觉区域(面板 / 表区)的各层表面(列头底、行板底、悬停、落影)若被多处各写一遍——表头 `--bg-card`、行板 skin 卡底 `--bg-row`、行板透明露面板、页面级吸顶列头的 `--shadow-1` 落影——就会在主题切换时露出肉眼可见的色带 / 横条,… | 表头异色, 异色背景, 色带, 横条, 表头下方颜色不一样, 背景不一致, 主题下表头发白, 抽屉表格底色, --bg-card, --bg-row, box-shadow 落影, 吸顶列头阴影, 三皮肤观感分叉 |
@@ -30,6 +27,7 @@
 | [vif-host-node-stale.md](vif-host-node-stale.md) | 详情面板 aside 被 v-if 拆掉重建后, 变体宿主换了新节点, 而核心层模块级缓存 `_dtMounted` 仍持**旧节点**引用 —— 挂载函数看到"已挂"直接返回, 变体渲染进新宿主无人接管, 页签整幅空白; general/content 页签无独立通知源(不像… | 切设置页返回详情面板空白, v-if 重建, 宿主节点失效, _dtMounted, 变体宿主, detached 引用, $nextTick 重挂, watch drawerVisible, 种子支路, 页签空白, 永不自愈, isCon… |
 | [vue-reactivity.md](vue-reactivity.md) | Vue Options API 的四类静默白屏(computed 当函数 / 带参 computed / 三者同名 / methods 里裸调用跨模块 methods)与 SVG 属性大小写 —— 都**没有运行时提示**。 | 改前端模板, 改 computed, 改 methods, 改 SVG, 加图标, 白屏, 整块不渲染, 裸调用, 漏 this |
 | [webui-css-block-move.md](webui-css-block-move.md) | 跨 CSS 文件搬规则段(分层归位): 等价性怎么证 + 三处必同步的守阵 | 搬 CSS 段, 跨文件搬规则, CSS 分层归位, prism dialogs.css, 级联序, 守阵假红, 单文件路径硬编码, 文件前段式断言, shell 行数上限, 令牌名集, 皮肤少令牌, var font-mono 失效 |
+| [webui-flags-boot-resilience.md](webui-flags-boot-resilience.md) | 前端单飞 promise 槽: 方法加 async 判等失效 / 单槽归置错杀在途链 | 单飞,单飞槽,promise 槽,并发叠发,async 判等,槽主判等,错杀在途 |
 | [webui-optimistic-rollback-symmetry.md](webui-optimistic-rollback-symmetry.md) | 给乐观补丁加第二个覆盖面(如抽屉 detail)时, 失败/超时回滚若只还原行, 新覆盖面就停留假状态 —— 贴与回滚必须经同一单点对称, 且「行采不到 prev」的场景要有独立回滚锚 | 乐观 UI, 乐观补丁, 回滚, 覆盖面, 对称, 抽屉 detail, drawer.detail, applyOptimisticPatch, applyOptimistic, 贴补丁, 失败回滚, 兜底回滚 |
 | [webui-settings-jump-async-restore.md](webui-settings-jump-async-restore.md) | 程序化跳进设置页时同步设置的分区视图态, 会被 `cfgLoad` 完成后 `hubRestore -> hubGo` 的「进分区复位」路径冲掉 —— 跳转链必须 `.then` 在 `openSettings()` 之后 | openSettings, hubRestore, hubGo, 程序化跳转, 跳转后状态被复位, 覆盖层没打开, 自动展开失效, cfgLoad, kbGoSettings, transfer_flow |
 | [wording-audit-surface.md](wording-audit-surface.md) | 「全量文案排查/统一」若只清点主数据链(列模型 + 经典详情行), 会漏掉抽屉变体(drawer_tpl 15 个)、页插件(drawer_pages 4 个)与模板分片(tpl/)里的同词 —— 用户复查实证(26-10-10-2237 报告 §11): 一轮改了 ~470 处… | 文案统一, 术语对齐, 排查报告, 全量替换, 清点面, 变体, 页插件, drawer_tpl, drawer_pages, label 过滤, 报告遗漏, 用户复查 |

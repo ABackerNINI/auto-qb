@@ -753,6 +753,10 @@ window.AQB_DRAWER = {
       this.moveBusy = false;
       this.movePathInput = prefill || "";
       this.loadMoveOptions();
+      // 惰性补拉(issue 26-11-11-0633): flags 未取到时补一发, 「整组迁移已启用」提示
+      // (move-dialog.html v-if="flags.relocate_enabled")补拉成功后按响应式亮起;
+      // fire-and-forget 不阻塞开框, 已取到/在途时零副作用
+      this.ensureWebFlags();
       // 开对话框即聚焦输入框(键盘路径可直接打字/回车), 但**不展开下拉**(2026-10-29 用户拍板):
       // 打开就弹面板会让「第一眼」是开层态, 收层时窗口高度骤变 = 跳变。抑制标志只消费一次,
       // 之后点输入框 / 按方向键照常展开(见 openMovePathMenu 首行)。

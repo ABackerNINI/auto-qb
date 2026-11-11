@@ -210,6 +210,11 @@ window.AQB_STATE = {
       // ctx_menu(计划 26-10-20-0024 W2): 行右键菜单四支用户布局(web.ctx_menu 原样下发;
       //   null = 默认布局 = 注册表定义序, 零漂移); 菜单渲染消费面在 shared/ctx_menu.js)
       flags: { skip_check_menu: false, qb_traffic_enabled: false, relocate_enabled: false, ctx_menu: null },
+      // issue 26-11-11-0633: flags 是否成功取到过(/api/webui/flags 至少一次成功)。
+      // false = "未取到"(boot 期请求失败或在途) —— 惰性补拉(ensureWebFlags)的闸与入口侧
+      // "没取到 != 没启用"的判据读它; true 后惰性补拉停止(真未启用不再重复探测)。
+      // fail-closed 语义不变: 未取到时 flags 恒 false/null。显式建字段(同上, 防非响应式盲区)。
+      flagsLoaded: false,
       // FX-15: 右键菜单的次级菜单(flyout)展开态与翻转态 —— 一级只有一个「更多操作」子面板,
       // 队列/TMM/超级做种/强制启动/分享率限制/复制族 都在它里面(见 conventions/webui.md)
       subMenu: "",        // "" | "advanced" | "transfer"(「转移到」动态子面板, 计划 26-10-31-0306 T6)

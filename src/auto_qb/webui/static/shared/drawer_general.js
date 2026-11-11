@@ -19,6 +19,9 @@ Object.assign(window.AQB_DRAWER.methods, {
       // 成员行(辅种页明细/追剧集明细)的右键「详细信息」与双击均落此入口。
       if (this.page !== "groups") return;
       this.menu.visible = false;
+      // 惰性补拉(issue 26-11-11-0633): flags 未取到时补一发, 流量页签(页签按钮 v-if=qbTrafficOn
+      // 门控)补拉成功后按响应式亮起; fire-and-forget 不阻塞开面板, 已取到/在途时零副作用
+      this.ensureWebFlags();
       /* FX-29 家族纪律(2026-10-07 报障「切换种子时用户页闪'暂无已连接用户'」): 面板已开着(种子
        * 形态)不得再走下面的整体重建 —— 重建把 peers/trackers/files 清成空列表且 loading=false,
        * 详情在途的整个等待期被渲染成一帧空态(空态 -> 加载态 -> 数据三连闪; pitfalls/web-ui/

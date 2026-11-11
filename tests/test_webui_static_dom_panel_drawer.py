@@ -1458,6 +1458,9 @@ def test_frontend_drawer_open_switch_no_empty_flash():
     m = re.search(r"async openTorrentDrawer\(hash\) \{\n(.*?)\n    \},", drawer_js, re.S)
     assert m, "drawer.js 缺 openTorrentDrawer(守阵正则失配, 同步本守阵)"
     ob = m.group(1)
+    # boot 韧性(issue 26-11-11-0633): 冷启动路径带 flags 惰性补拉 —— 未取到时流量页签
+    # (qbTrafficOn 门控)在补拉成功后按响应式亮起; fire-and-forget 不阻塞开面板
+    assert "this.ensureWebFlags();" in ob, "openTorrentDrawer 缺 flags 惰性补拉挂点(未取到时流量页签不会亮起)"
 
     # 1. 已开(种子形态)重入分支: 同目标短路 + 换目标软切换, 先于重建副作用
     # (W3 计划 26-10-11-2106: 判据走单点 drawerIsSeed —— 口径不变, 断言面随之)

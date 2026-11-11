@@ -577,7 +577,10 @@ window.AQB_QB_TRAFFIC = {
      * 关闭统一走 drawer.js closeDrawer()(Esc/关闭钮/切页三路同口), 收轮询与图见 _qbTeardown。 */
     async openQbHistory() {
       // 状态栏入口本身 v-if 在 qbHistEntryOn 上(关闭时无按钮), 这里补的是**键盘入口**
-      // (shortcuts.js open-qb-traffic): 功能关闭时按了键要给出反馈, 不静默
+      // (shortcuts.js open-qb-traffic): 功能关闭时按了键要给出反馈, 不静默。
+      // issue 26-11-11-0633: flags 未取到(boot 期偶发失败落 fail-closed)先补拉一次再判,
+      // 不把"没取到"当"没启用"误报; 已取到的真未启用原样提示
+      if (!this.qbTrafficOn && !this.flagsLoaded) await this.ensureWebFlags();
       if (!this.qbTrafficOn) {
         this.toast("功能未启用: qB 口径流量图, 请先在设置里打开", "info", 2500);
         return;

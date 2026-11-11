@@ -412,9 +412,11 @@ def test_qb_traffic_shortcuts() -> None:
     dtab = re.search(r"_kbDrawerTab\(tab\) \{(.*?)\n    \},", eng, re.S)
     assert dtab, "shortcuts.js 找不到 _kbDrawerTab"
     tb = dtab.group(1)
-    gate = tb.index('tab === "traffic" && !this.qbTrafficOn')
+    gate = tb.index('if (tab === "traffic")')
     assert gate > tb.index('this.page !== "groups"'), "流量门控必须在页面守卫之后(守卫序: 页面 -> 功能门 -> 双态)"
     assert gate < tb.index('if (this.drawer.open && this.drawerIsSeed)'), "流量门控必须先于开态切页(未启用不得切到隐形页签)"
+    # boot 韧性(issue 26-11-11-0633): flags 未取到(boot 期偶发失败)先补拉一次再判, 不把"没取到"当"没启用"
+    assert "await this.ensureWebFlags()" in tb and "flagsLoaded" in tb, "流量页签门控缺'未取到先 await 补拉一次再判'"
     assert "功能未启用: qB 口径流量图" in tb, "流量页签未启用必须 toast 提示后忽略, 不许静默"
 
     # 3. 窗口前后切换(when 条件绑定 + 端点夹取, 见 test_webui_static_dom_page.py 的持久化守阵)
@@ -460,7 +462,7 @@ def test_drawer_tab_shortcuts_merge_remap() -> None:
     tb = dtab.group(1)
     assert "this._kbMergeTabsOn()" in tb, "_kbDrawerTab 未接合并态判据(_kbMergeTabsOn)"
     assert "KB_MERGE_TAB_REMAP[tab]" in tb, "_kbDrawerTab 未消费 KB_MERGE_TAB_REMAP"
-    assert tb.index("KB_MERGE_TAB_REMAP[tab]") < tb.index('tab === "traffic" && !this.qbTrafficOn'), \
+    assert tb.index("KB_MERGE_TAB_REMAP[tab]") < tb.index('if (tab === "traffic")'), \
         "合并态重排必须先于流量门控(第 3 档 remap 成 traffic 后仍要过 qbTrafficOn 门)"
 
     # 3. 判据单点

@@ -219,6 +219,18 @@ def test_frontend_qb_traffic_chart_wiring():
     assert "ctx_menu: (f && f.ctx_menu) || null" in lifecycle_js, \
         "loadWebFlags 必须透传 ctx_menu(漏写 = 布局数据到不了前端, 用户重排静默失效)"
     assert "qb_traffic_enabled: false" in lifecycle_js, "loadWebFlags 失败分支必须保持 fail-closed"
+    # boot 韧性(issue 26-11-11-0633): flagsLoaded 态显式建 + 键盘入口"未取到先补拉再判"
+    assert "flagsLoaded: false" in state_js, \
+        "state.js 缺 flagsLoaded 显式建字段(非响应式盲区, 且'未取到'与'未启用'的判据单点)"
+    mo = re.search(r"async openQbHistory\(\) \{\n(.*?)\n    \},", js, re.S)
+    assert mo and "ensureWebFlags" in mo.group(1) and "flagsLoaded" in mo.group(1), \
+        "openQbHistory 缺'flags 未取到先补拉一次再判'(boot 期偶发失败会把'没取到'误报成'没启用')"
+    assert "await this.ensureWebFlags()" in mo.group(1), \
+        "openQbHistory 补拉必须 await 落地再落门控(fire-and-forget 会在补拉未落地时就误报'没启用')"
+    # boot 韧性(issue 26-11-11-0633): 两条 boot 入口(lifecycle 本机免鉴权 / auth bootstrap)必须走
+    # loadWebFlagsBoot(带有限重试), 回退成裸 loadWebFlags = boot 韧性丢失
+    assert "this.loadWebFlagsBoot()" in lifecycle_js and "this.loadWebFlagsBoot()" in auth_js, \
+        "boot 入口必须调 loadWebFlagsBoot(lifecycle 本机免鉴权路径 + auth bootstrap 成功路径)"
     mo = re.search(r"qbTrafficOn\(\) \{\n(.*?)\n    \},", js, re.S)
     assert mo and "this.flags.qb_traffic_enabled" in mo.group(1), \
         "qb_traffic_chart.js 缺 qbTrafficOn 功能总门单点(抽屉流量页签/组右键菜单项的 v-if 门)"

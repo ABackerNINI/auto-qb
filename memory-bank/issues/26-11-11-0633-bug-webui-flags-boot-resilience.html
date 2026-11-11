@@ -9,9 +9,9 @@
 <meta name="issue-stamp" content="26-11-11-0633">
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="webui-flags-boot-resilience">
-<meta name="doc-refs" content="memory-bank/issues/26-11-11-0134-test-e2e-traffic-gap-zones-load-flake.html, memory-bank/testing/flaky-ledger.md">
+<meta name="doc-refs" content="memory-bank/issues/26-11-11-0134-test-e2e-traffic-gap-zones-load-flake.html, memory-bank/testing/flaky-ledger.md, memory-bank/testing/baselines/26-11-11-0847-webui-flags-boot-resilience.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="loadWebFlags boot 期单发无重试: /api/webui/flags 偶发失败即整会话 fail-closed, 仅刷新可恢复">
 <meta name="issue-summary" content="boot 期 flags 请求单发且初值恒 false, 一次偶发失败 = 跳检菜单/流量页签/迁移提示/ctx_menu 全部静默失效到会话结束">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-11-0633-bug-webui-flags-boot-resilience</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-11 06:33</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
@@ -169,11 +169,20 @@ flags: { skip_check_menu: false, qb_traffic_enabled: false, relocate_enabled: fa
   <h2><span class="no">§07</span>状态变更日志</h2>
   <ul>
     <li>2026-11-11 06:33 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-11 — 状态 Open → Done（kb.status）</li>
+</ul>
   <h3>复验</h3>
-  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
-  <h3>修复后补充</h3>
-  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  <p>复验：2026-11-11(认领开工时) — 锚点全部仍复现:<code>lifecycle.js</code> <code>loadWebFlags</code> 单发无重试、catch 整对象写 false/null、初值单点 <code>state.js</code> flags 三键 + ctx_menu、调用点三处(lifecycle 本机免鉴权 / auth bootstrap / config_editor 保存后 + 2s 补拉)与 issue 记载逐字一致。</p>
+  <h3>修复后补充(2026-11-11 实施完成, 有限重试 + 惰性补拉组合)</h3>
+  <p><strong>实际修法</strong>:§06 候选一(有限重试)与候选二(惰性补拉)的组合;候选三(v-if 门控重构)未采用 —— flagsLoaded 态已把"未取到"与"未启用"分开, 配合惰性补拉自愈, 语义收益拿到了大半而改动面小得多。fail-closed 安全语义与后端 403 兜底原样保持(失败/未取到恒 false/null)。</p>
+  <ol>
+    <li><strong>有限重试</strong>(<code>lifecycle.js loadWebFlagsBoot</code>): boot 期两处入口(lifecycle 本机免鉴权 / auth.js bootstrap)失败后按 1s/3s 退避各补一发(共 3 发);登出态(e.auth)不重试。设置页保存后的重拉(config_editor)不带重试 —— 自带 2s 补拉, 惰性补拉同理靠反复交互形成间隔。</li>
+    <li><strong>flagsLoaded 态</strong>(<code>state.js</code> 显式建字段): <code>/api/webui/flags</code> 至少成功一次才置 true —— "未启用"(真值 false)与"未取到"(loaded=false)从此可分;true 后惰性补拉停止, 真未启用不再重复探测。</li>
+    <li><strong>惰性补拉</strong>(<code>lifecycle.js ensureWebFlags</code>): 未取到时借入口交互补一发(单发)。fire-and-forget 挂点: 全局右键监听(lifecycle <code>_onCtxMenu</code>, 跳检菜单项/流量图菜单项/菜单布局按响应式在上下文里亮起)、<code>openTorrentDrawer</code>(流量页签亮起)、<code>openMoveDialog</code>(「整组迁移已启用」提示亮起);await 挂点: <code>openQbHistory</code>(Ctrl+\)与 <code>_kbDrawerTab("traffic")</code>(Alt+5)—— 未取到先补拉再落门控, 不把"没取到"当"没启用"误报 toast。</li>
+    <li><strong>分档单飞</strong>: <code>loadWebFlags</code> 在途请求按重试档(链长)分槽复用(<code>_flagsLoadSlots</code>, 每档独立持槽, 归置带槽主判等) —— 惰性单发不骑 boot 退避链(await 方不必等重试穷尽才落门控), boot 的 3 发保障不被在途惰性单发降级, 先结算方不清掉在途另一方的槽。!实现上该方法<strong>不加 async</strong>: async 包装会把 return 的 promise 再包一层外层 promise, 并发方判等失效(普通函数直返槽内 promise)。</li>
+  </ol>
+  <p><strong>评审留痕</strong>: 三轮评审累计 <strong>9 条发现全修</strong>(第 1 轮分面 8 条: 单飞档位/消费面 await 钉/挂点行为测试×3/boot 入口接线钉; 第 2 轮 1 条: 单槽归置错杀窗 → 改分档槽表; 第 3 轮 0 条零 actionable, 含变异验证确认电池判别力), 引文校验 9/9 过检。</p>
+  <p><strong>验证方式与实测数字</strong>(2026-11-11): 新增 node 电池 <code>tests/test_webui_static_r4_poll_auth_lifecycle.py::test_r4_webflags_boot_retry_and_ensure</code>(32 断言全绿: 成功四键写回+收口 / 单发失败不续试 / boot 1s/3s 退避三发 / 穷尽止 / auth 态不重试 / flagsLoaded 分叉 / ensure 已取到零副作用 / 同档单飞并入 / 档位分槽+挤占回归钉);<code>test_webui_static_dom_panel_traffic.py</code> 补 flagsLoaded 显式建 + openQbHistory 补拉接线 source-scan 断言;<code>test_web_shortcuts_drawer.py</code> 两处门控锚点跟新结构;<code>test_webui_static_r4_drawer.py</code> submitMoveDialog 电池补 ensureWebFlags 桩。全量 <code>commands run test.full</code> → <strong>6008 passed, 2 skipped</strong>, 覆盖率 <strong>99.66%</strong>(门槛 99.5%)。</p>
 </section>
 
 <footer>

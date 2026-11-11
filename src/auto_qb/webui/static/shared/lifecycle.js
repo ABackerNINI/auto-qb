@@ -235,6 +235,10 @@ window.AQB_LIFECYCLE = {
     // 元素(input/textarea/contenteditable, 保留复制粘贴的原生菜单)外, 一律阻止原生右键菜单;
     // 各处 .ctx-menu 自定义菜单由 Vue @contextmenu.prevent 触发, 与本监听器共存(preventDefault 幂等无害)
     this._onCtxMenu = (e) => {
+      // 惰性补拉(issue 26-11-11-0633): flags 未取到时借右键交互补一发(已取到/在途时零副作用),
+      // 成功后菜单门控项(跳检/流量图/菜单布局)按响应式在上下文里亮起; 放在早退分支之前,
+      // 任意右键都算一次探测时机
+      this.ensureWebFlags();
       const t = e.target;
       if (t && t.closest && (t.closest("header.topbar") || t.closest("input, textarea, [contenteditable]"))) return;
       e.preventDefault();
@@ -255,7 +259,7 @@ window.AQB_LIFECYCLE = {
         this[AQB_TOKEN_FIELD] = savedToken || AQB_BLANK;  // 有旧密钥仍留着: 关掉开关后无需重新输入
         this.lastRid = null;
         this.startPolling();
-        this.loadWebFlags();  // R2(计划 26-10-02-1955 W1): 登录后取一次功能旗标(跳检菜单开关)
+        this.loadWebFlagsBoot();  // R2(计划 26-10-02-1955 W1): 登录后取一次功能旗标(跳检菜单开关); boot 期带有限重试(issue 26-11-11-0633)
         this.transferTargetsReload();  // T6(计划 26-10-31-0306): 预拉转移目标缓存(右键菜单「转移到」读侧; 方法在 transfer_flow.js)
         this._pullErrlogBoot();  // 通知 S3: 本机免鉴权路径的开页全量合并(密钥路径在 auth.js bootstrap)
         return;
@@ -426,9 +430,18 @@ window.AQB_LIFECYCLE = {
       this._errPollTimer = setInterval(() => this._pullErrlog(true), ERR_POLL_INTERVAL_MS);
     },
     /* R2 跳检菜单开关(计划 26-10-02-1955 W1): 登录后取一次 /api/webui/flags 写入 flags
-     * (调用点: lifecycle 本机免鉴权路径 + auth.js bootstrap 成功路径; 设置页 cfgSave
-     * 成功后再调刷新, 免重登)。请求失败保持 false = fail-closed(菜单不显示, 后端端点
-     * 403 兜底)。整对象替换赋值(非原地改键), 保证 Vue 响应式触发。
+     * (调用点: lifecycle 本机免鉴权路径 + auth.js bootstrap 成功路径, 两条 boot 入口走
+     * loadWebFlagsBoot 带有限重试; 设置页 cfgSave 成功后再调刷新, 免重登)。请求失败保持
+     * false = fail-closed(菜单不显示, 后端端点 403 兜底)。整对象替换赋值(非原地改键),
+     * 保证 Vue 响应式触发。
+     * boot 韧性(issue 26-11-11-0633): 原先单发失败 = 整会话静默 fail-closed(跳检菜单/
+     * 流量页签/迁移提示/ctx_menu 布局全部消失, 仅刷新或设置保存可恢复)。现分三层:
+     *   - 有限重试(loadWebFlagsBoot): boot 期失败后 1s/3s 各补一发(共 3 发), 覆盖偶发抖动;
+     *   - flagsLoaded 态(state.js 显式建): 至少成功一次才置 true —— "未启用"(真值 false)
+     *     与"未取到"(loaded=false)从此可分;
+     *   - 惰性补拉(ensureWebFlags): 未取到时借入口交互(右键/开抽屉/流量图快捷键)补一发,
+     *     成功后消费面按 Vue 响应式亮起。
+     * 三层全部不改变 fail-closed 语义: 未取到/失败时 flags 恒 false/null, 后端 403 兜底不动。
      * qb_traffic_enabled(P5a, plan 26-10-03-0946 §07): qB 口径流量图入口旗标, 同一
      * fail-closed 口径 —— false 时入口不渲染、不请求(P5 验收)。
      * relocate_enabled(计划 26-11-07-1300 R6a): 整组迁移入口旗标(relocate.enabled 原样透传),
@@ -436,18 +449,58 @@ window.AQB_LIFECYCLE = {
      * ctx_menu(计划 26-10-20-0024 W2): 行右键菜单四支用户布局原样透传(后端只存不发解析,
      * 合并语义在前端 ctx_menu.js 单点); 缺键/取失败 = null = 默认布局(注册表定义序)。
      * !四个键都必须显式写回: 漏一个 = 该功能恒取不到真值(旗标恒 false / 布局恒默认)。 */
-    async loadWebFlags() {
-      try {
-        const f = await this.api("/api/webui/flags");
-        this.flags = {
-          skip_check_menu: !!(f && f.skip_check_menu),
-          qb_traffic_enabled: !!(f && f.qb_traffic_enabled),
-          relocate_enabled: !!(f && f.relocate_enabled),
-          ctx_menu: (f && f.ctx_menu) || null,
-        };
-      } catch (e) {
-        this.flags = { skip_check_menu: false, qb_traffic_enabled: false, relocate_enabled: false, ctx_menu: null };
-      }
+    loadWebFlags(retryDelays) {
+      // 单飞(分档): 在途请求按重试档(链长)分槽复用 —— boot 重试/设置页保存后重拉/惰性补拉
+      // 并发时同档不叠发(issue 26-11-11-0633 防并发面)。分档而非单槽: 惰性单发不骑 boot 退避链
+      // (await 方不必等重试穷尽才落门控), boot 的 3 发保障也不被在途惰性单发静默降级; 各档
+      // 独立持槽互不挤占, 先结算的一方不清掉仍在途另一方的槽(否则后续同档调用会叠发)。
+      // 异档并行窗口内双请求都收敛到同一 flags 写回(后到者为准), 仅出现在失败窗口期。
+      // !本方法**不加 async**: async 包装会把 return 的 promise 再包一层外层 promise,
+      // 并发方拿到的就不再是同一个对象(单飞判等失效)。普通函数直返槽内 promise。
+      const len = (retryDelays || []).length;
+      const slot = this._flagsLoadSlots || (this._flagsLoadSlots = {});
+      if (slot[len]) return slot[len];
+      const p = (async () => {
+        const delays = retryDelays || [];
+        for (let attempt = 0; ; attempt++) {
+          try {
+            const f = await this.api("/api/webui/flags");
+            this.flags = {
+              skip_check_menu: !!(f && f.skip_check_menu),
+              qb_traffic_enabled: !!(f && f.qb_traffic_enabled),
+              relocate_enabled: !!(f && f.relocate_enabled),
+              ctx_menu: (f && f.ctx_menu) || null,
+            };
+            this.flagsLoaded = true;  // "未取到"收口: 之后惰性补拉停止, 真未启用不再重复探测
+            return true;
+          } catch (e) {
+            this.flags = { skip_check_menu: false, qb_traffic_enabled: false, relocate_enabled: false, ctx_menu: null };
+            this.flagsLoaded = false;
+            // 登出态(api 已收口 _logout)不重试: 再发只会重复 401; 其余失败按 delays 退避续试
+            if ((e && e.auth) || attempt >= delays.length) return false;
+            await new Promise((resolve) => setTimeout(resolve, delays[attempt]));
+          }
+        }
+      })();
+      slot[len] = p;
+      // 归置带槽主判等: 链结算时只清自己占的槽(链内全捕获不 reject, finally 派生 promise 无人消费)
+      p.finally(() => { if (slot[len] === p) delete slot[len]; });
+      return p;
+    },
+    /* boot 期入口专用(lifecycle 本机免鉴权路径 + auth.js bootstrap 成功路径): 失败后 1s/3s
+     * 各补一发(共 3 发)。设置页保存后的重拉(config_editor)与惰性补拉不带重试 —— 前者自带
+     * 2s 补拉, 后者靠反复交互天然形成间隔。 */
+    loadWebFlagsBoot() {
+      return this.loadWebFlags([1000, 3000]);
+    },
+    /* 惰性补拉(issue 26-11-11-0633): flags 未取到时补一发(单发不带重试 —— 入口交互触发面
+     * 频繁, 带重试链会让 await 方等满退避才落门控; 未取到期间反复交互天然连续探测)。
+     * 已取到或在途时零网络副作用(在途时复用单飞 promise)。调用方两种用法:
+     * fire-and-forget(右键/开抽屉/设定位置框, 成功后消费面按响应式亮起)与 await(流量图
+     * 快捷键, 补拉完再落门控, 不把"没取到"当"没启用"误报)。 */
+    ensureWebFlags() {
+      if (this.flagsLoaded) return null;
+      return this.loadWebFlags();
     },
   },
 };

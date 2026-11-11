@@ -7,6 +7,7 @@
 - test_r4_logout_settles_modal_and_stops_events: R5#1 + R5#2 —— auth.js _logout 登出收口: 悬空模态先 resolve(false) 再复位(直接丢弃 _modalResolve 会让 confirmDialog/promptDialog 永久 pending, 删除流程在 await 处挂死)、await 侧恢复看到已复位框状态走取消分支、SSE 通道与轮询同口径一并拆(stopEvents 与 _qbTeardown 同收)、无框登出 no-op 不炸
 - test_r4_search_quiet_retry_backoff: R5#236 —— view.js 静默刷新失败重试退避真跑: searchBuilding 残留 true 时失败续查逐次翻倍夹 15s(2s/4s/8s/15s/15s, 与轮询失败退避 currentPollMs 同曲线口径), 服务端宕机不再形成固定 1 req/s 无限循环; 成功一轮计数清零且续查保持 1s 节拍、resetSearch 新会话从零起算
 - test_r4_lifecycle_unmounted_listener_sweep: R5#3 —— lifecycle.js mounted/unmounted 监听对称 node 电池真跑: mounted 挂的五支监听(click 收层/Esc 退栈/防抖 resize/visibilitychange/contextmenu)提为实例字段后 unmounted 逐一撤除(热重载句柄不再堆叠), stopPolling 与 stopEvents 同收, 既有撤除面(键盘引擎/守卫/storage/时钟 interval)零回归
+- test_r4_webflags_boot_retry_and_ensure: issue 26-11-11-0633 —— loadWebFlags boot 韧性 node 电池真跑: boot 期(loadWebFlagsBoot)失败 1s/3s 退避各补一发共三发(穷尽止/中间态保持 fail-closed)、登出态(e.auth)不重试不排定时器、flagsLoaded 态(成功收口/"未取到"可分)、惰性补拉 ensureWebFlags(已取到返回 null 零副作用/未取到补一发)、并发单飞(同档同帧与退避窗口期并入复用同一 promise 不叠发)、档位分槽(boot 链在途时惰性补拉异档另起单发不骑退避链、惰性结算不挤占 boot 槽, 请求计数钉 3 发)
 
 加载口径: 单文件域直接读盘 eval(顶层纯函数声明随非严格 eval 入作用域, 同 hrsCompareRows 电池范式);
 定时器全部桩住(只记节拍/手动放拍), 时钟可手动放拍 —— 免得真睡 3s/15s。无 node 时 _run_probe 返回
@@ -507,6 +508,20 @@ const ok = (name, cond) => checks.push([name, !!cond]);
   ok("mounted: contextmenu 在册", cnt("document", "contextmenu") === 1);
   ok("mounted: storage 恰两条(列偏好 + 时间口径)", cnt("window", "storage") === 2);
 
+  // issue 26-11-11-0633: 右键挂点 —— 任意右键(在 header/input 早退分支**之前**)触发 flags 惰性补拉
+  const drainCtx = async () => { for (let i = 0; i < 10; i++) await null; };
+  let flagApi = 0;
+  ctx.api = async () => { flagApi += 1; return { skip_check_menu: false, qb_traffic_enabled: false, relocate_enabled: false, ctx_menu: null }; };
+  const ctxHandler = reg.filter((l) => l[0] === "document" && l[1] === "contextmenu")[0][2];
+  ctx.flagsLoaded = false;
+  ctxHandler({ target: { closest: () => null }, preventDefault() {} });  // 普通目标: 走完整屏蔽分支
+  await drainCtx();
+  ok("右键挂点: 普通右键触发 flags 惰性补拉并成功收口", flagApi === 1 && ctx.flagsLoaded === true);
+  ctx.flagsLoaded = false;  // 复位再探第二条路径
+  ctxHandler({ target: { closest: (s) => (s.indexOf("input") === 0 ? {} : null) } });  // input 命中早退分支
+  await drainCtx();
+  ok("右键挂点: input 右键在早退分支之前照样补拉", flagApi === 2);
+
   LC.unmounted.call(ctx);
 
   // unmounted: 五支监听撤净(R5#3 修复面) + 既有撤除面零回归
@@ -522,6 +537,128 @@ const ok = (name, cond) => checks.push([name, !!cond]);
   ok("unmounted: stopPolling 调用(主轮骨架一并收)", calls.includes("stopPolling"));
   ok("unmounted: stopEvents 调用(SSE 同收, 既有口径)", calls.includes("stopEvents"));
   ok("unmounted: cfgGuardRelease 调用(既有口径)", calls.includes("cfgGuardRelease"));
+
+  console.log(JSON.stringify({ ok: checks.filter((c) => c[1]).length, total: checks.length,
+    failed: checks.filter((c) => !c[1]).map((c) => c[0]) }));
+})().catch((e) => { console.error(e && e.stack || e); process.exit(1); });
+"""
+
+# issue 26-11-11-0633: loadWebFlags boot 韧性(有限重试 + flagsLoaded 态 + 惰性补拉 + 单飞) ----
+_NODE_WEBFLAGS_PROBE = r"""
+const fs = require("fs");
+global.window = {};
+global.document = { hidden: false, addEventListener() {}, removeEventListener() {} };
+// 伪时钟: 只入队不真跑, 手动放拍(免真睡 1s/3s)
+const timers = new Map(); let tid = 0;
+global.setTimeout = (fn, ms) => { const id = ++tid; timers.set(id, { fn, ms: ms || 0 }); return id; };
+global.clearTimeout = (id) => { timers.delete(id); };
+const drain = async () => { for (let i = 0; i < 10; i++) await null; };
+const fireMs = (ms) => { for (const [id, t] of [...timers.entries()]) { if (t.ms === ms) { timers.delete(id); t.fn(); return true; } } return false; };
+eval(fs.readFileSync(process.argv[1], "utf8"));   // lifecycle.js
+const LC = window.AQB_LIFECYCLE;
+const checks = [];
+const ok = (name, cond) => checks.push([name, !!cond]);
+const FAIL_CLOSED = (c) => c.flags.skip_check_menu === false && c.flags.qb_traffic_enabled === false
+  && c.flags.relocate_enabled === false && c.flags.ctx_menu === null;
+
+// 根组件替身: api 行为可编程; flags/flagsLoaded 按 state.js 初值显式建
+const mkCtx = (apiImpl) => Object.assign({}, LC.methods, {
+  flags: { skip_check_menu: false, qb_traffic_enabled: false, relocate_enabled: false, ctx_menu: null },
+  flagsLoaded: false, _flagsLoadSlots: null, toasts: [],
+  toast(msg, kind) { this.toasts.push([kind, msg]); },
+  api: apiImpl,
+});
+const slotsEmpty = (c) => !c._flagsLoadSlots || Object.keys(c._flagsLoadSlots).length === 0;
+
+(async () => {
+  // 1. 成功路径: 四键写回 + flagsLoaded 收口 + 单飞句柄归置
+  let n = 0;
+  const okCtx = mkCtx(async () => { n += 1; return { skip_check_menu: true, qb_traffic_enabled: true, relocate_enabled: true, ctx_menu: { multi: ["a"] } }; });
+  ok("成功: 返回 true", (await LC.methods.loadWebFlags.call(okCtx)) === true);
+  ok("成功: 恰一发请求", n === 1);
+  ok("成功: 四键写回(漏键 = 该功能恒取不到真值)", okCtx.flags.skip_check_menu === true
+    && okCtx.flags.qb_traffic_enabled === true && okCtx.flags.relocate_enabled === true
+    && okCtx.flags.ctx_menu && okCtx.flags.ctx_menu.multi.length === 1);
+  ok("成功: flagsLoaded 收口(真未启用不再被惰性补拉重复探测)", okCtx.flagsLoaded === true);
+  ok("已取到: ensureWebFlags 返回 null(零网络副作用)", LC.methods.ensureWebFlags.call(okCtx) === null && n === 1);
+  ok("成功: 单飞槽归置", slotsEmpty(okCtx));
+
+  // 2. 默认单发(无重试档): 失败落 fail-closed, flagsLoaded=false
+  let fails = 0;
+  const f1 = mkCtx(async () => { fails += 1; throw new Error("boom"); });
+  ok("单发失败: 返回 false", (await LC.methods.loadWebFlags.call(f1)) === false);
+  ok("单发失败: 恰一发(不带重试档不续试)", fails === 1);
+  ok("单发失败: flags 保持 fail-closed", FAIL_CLOSED(f1));
+  ok("单发失败: flagsLoaded=false(未取到)", f1.flagsLoaded === false);
+  ok("单发失败: 单飞槽归置(失败路径同样 finally)", slotsEmpty(f1));
+
+  // 3. 惰性补拉: 未取到时补一发; 在途复用同一 promise(单飞不叠发); 成功后收口
+  f1.api = async () => ({ skip_check_menu: true, qb_traffic_enabled: false, relocate_enabled: false, ctx_menu: null });
+  const ep = LC.methods.ensureWebFlags.call(f1);
+  ok("未取到: ensure 发起补拉(返回 promise)", !!ep && typeof ep.then === "function");
+  ok("在途: ensure 复用同一 promise", LC.methods.ensureWebFlags.call(f1) === ep);
+  ok("补拉成功: flagsLoaded 翻 true + 旗标写回", (await ep) === true && f1.flagsLoaded === true && f1.flags.skip_check_menu === true);
+  ok("ensure 补拉全程恰一发(并发并入方不叠发)", fails === 1);
+
+  // 4. boot 有限重试: 两败后第三发成功; 退避节拍 1s/3s; 失败期间保持 fail-closed
+  let boot = 0;
+  const bootCtx = mkCtx(async () => { boot += 1; if (boot <= 2) throw new Error("e" + boot); return { skip_check_menu: false, qb_traffic_enabled: true, relocate_enabled: false, ctx_menu: null }; });
+  const bp = LC.methods.loadWebFlagsBoot.call(bootCtx);
+  await drain();
+  ok("boot 重试: 首败后保持 fail-closed + 未取到", boot === 1 && bootCtx.flagsLoaded === false && FAIL_CLOSED(bootCtx));
+  ok("boot 重试: 首败排 1s 退避", boot === 1 && [...timers.values()].some((t) => t.ms === 1000));
+  fireMs(1000);
+  await drain();
+  ok("boot 重试: 次败后排 3s 退避", boot === 2 && [...timers.values()].some((t) => t.ms === 3000));
+  fireMs(3000);
+  ok("boot 重试: 第三发成功收口(2 败 1 成 = 共 3 发)", (await bp) === true && boot === 3
+    && bootCtx.flagsLoaded === true && bootCtx.flags.qb_traffic_enabled === true);
+  ok("boot 重试: 定时器归置", timers.size === 0);
+
+  // 5. boot 重试穷尽: 三发全败 -> 返回 false, flagsLoaded=false, 不再续排
+  let exhaust = 0;
+  const exCtx = mkCtx(async () => { exhaust += 1; throw new Error("down"); });
+  const exP = LC.methods.loadWebFlagsBoot.call(exCtx);
+  await drain();
+  fireMs(1000); await drain();
+  fireMs(3000); await drain();
+  ok("boot 重试穷尽: 共三发(1 首发 + 2 补试)后止", exhaust === 3 && timers.size === 0);
+  ok("boot 重试穷尽: 返回 false 且整会话 fail-closed 口径保持", (await exP) === false
+    && exCtx.flagsLoaded === false && FAIL_CLOSED(exCtx));
+
+  // 6. 登出态(e.auth)不重试: 再发只会重复 401
+  let authN = 0;
+  const authCtx = mkCtx(async () => { authN += 1; const err = new Error("unauthorized"); err.auth = true; throw err; });
+  ok("登出态: 只一发不重试", (await LC.methods.loadWebFlagsBoot.call(authCtx)) === false && authN === 1);
+  ok("登出态: 不排退避定时器", timers.size === 0);
+
+  // 7. 并发单飞(同档): boot 重试链在途时并入的同档 loadWebFlagsBoot 复用同一 promise 不叠发
+  let conc = 0;
+  const concCtx = mkCtx(async () => { conc += 1; if (conc === 1) throw new Error("first"); return {}; });
+  const cp = LC.methods.loadWebFlagsBoot.call(concCtx);
+  const cp2 = LC.methods.loadWebFlagsBoot.call(concCtx);  // 同帧并入(单飞位已占)
+  await drain();
+  const cp3 = LC.methods.loadWebFlagsBoot.call(concCtx);  // 退避窗口期并入(1s 未放拍, 槽仍被 boot 链持有)
+  ok("并发单飞(同档): 同帧与退避窗口期并入都复用同一 promise", cp2 === cp && cp3 === cp);
+  fireMs(1000);
+  ok("并发单飞(同档): 共两发(首发败 + 1s 重试成功), 并入方不叠发", (await cp) === true && (await cp2) === true && conc === 2);
+
+  // 8. 档位分槽: 单飞槽记重试档 —— boot 链在途时惰性补拉异档另起单发(不骑退避链,
+  //    await 方不必等重试穷尽才落门控), boot 的 3 发保障也不被在途惰性单发降级
+  let slot = 0;
+  const slotCtx = mkCtx(async () => { slot += 1; if (slot === 1) throw new Error("b1"); return {}; });
+  const bp2 = LC.methods.loadWebFlagsBoot.call(slotCtx);
+  await drain();  // 首败, 排 1s, boot 档槽在途
+  const bp3 = LC.methods.loadWebFlagsBoot.call(slotCtx);
+  ok("档位分槽: boot 链在途时同档再调复用同一 promise", bp3 === bp2);
+  const lp2 = LC.methods.ensureWebFlags.call(slotCtx);
+  ok("档位分槽: 惰性补拉异档另起单发(不复用 boot 链)", lp2 !== bp2 && typeof lp2.then === "function");
+  ok("档位分槽: 惰性单发独立落地成功", (await lp2) === true);
+  const bp4 = LC.methods.loadWebFlagsBoot.call(slotCtx);
+  ok("档位分槽: 惰性结算不挤占 boot 槽(仍在途 boot 链可复用, 不叠发)", bp4 === bp2);
+  fireMs(1000);
+  ok("档位分槽: boot 重试第二发成功收口", (await bp2) === true && (await bp3) === true);
+  ok("档位分槽: 请求计数恰 3 发(boot 2 + 惰性 1, 无人叠发)", slot === 3);
 
   console.log(JSON.stringify({ ok: checks.filter((c) => c[1]).length, total: checks.length,
     failed: checks.filter((c) => !c[1]).map((c) => c[0]) }));
@@ -557,3 +694,10 @@ def test_r4_search_quiet_retry_backoff():
 def test_r4_lifecycle_unmounted_listener_sweep():
     """R5#3: lifecycle 五支匿名监听提为实例字段后 unmounted 撤净 + stopPolling 同收。"""
     _assert_battery(_run_probe(_NODE_LIFECYCLE_PROBE, _shared("lifecycle.js")), "监听对称电池")
+
+
+def test_r4_webflags_boot_retry_and_ensure():
+    """issue 26-11-11-0633: loadWebFlags boot 韧性 node 电池真跑 —— boot 期 1s/3s 有限重试
+    (穷尽三发止/auth 态不重试) + flagsLoaded 态收口("未启用"与"未取到"可分) + 惰性补拉
+    ensureWebFlags(已取到零副作用/在途复用单飞) + 并发单飞不叠发; 全程 fail-closed 语义保持。"""
+    _assert_battery(_run_probe(_NODE_WEBFLAGS_PROBE, _shared("lifecycle.js")), "flags boot 韧性电池")

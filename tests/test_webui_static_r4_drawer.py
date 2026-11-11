@@ -528,6 +528,8 @@ const mkMoveCtx = (script) => {
   c.$refs = {};
   c.toast = (msg, kind) => c.toasts.push({ msg, kind });
   c.loadMoveOptions = () => {};
+  // issue 26-11-11-0633: openMoveDialog 开框时补拉 flags —— 本电池只验确认回路, 计数替身
+  c.ensureWebFlags = () => { c.ensures = (c.ensures || 0) + 1; };
   c._relocateConfirmGate = async () => { c.gates += 1; return script.gate; };
   const postImpl = (via, confirm) => {
     c.posts.push({ via, confirm, location: c.movePathInput });
@@ -555,13 +557,14 @@ const msgs = (c) => c.toasts.map((t) => t.msg).join("|");
   c = mkMoveCtx({ first: "confirm", gate: false, second: true });
   await c.submitMoveDialog();
   ok("回路 2: 取消只投递一次(零副作用不重发)", c.posts.length === 1 && c.posts[0].confirm === false);
-  ok("回路 2: 带原路径重开设定位置框", c.moveOpen === true && c.movePathInput === "R:/dst");
+  ok("回路 2: 带原路径重开设定位置框", c.moveOpen === true && c.movePathInput === "R:/dst"
+     && c.ensures === 1);  // 重开走 openMoveDialog -> flags 惰性补拉挂点(issue 26-11-11-0633), 计数钉住回归面
 
   // 3. 再 confirm 仍 "confirm"(后端仍在等确认): warn + 重开, 不误报成功
   c = mkMoveCtx({ first: "confirm", gate: true, second: "confirm" });
   await c.submitMoveDialog();
   ok("回路 3: 二发仍 confirm -> warn + 重开(两次投递)",
-     c.posts.length === 2 && c.moveOpen === true &&
+     c.posts.length === 2 && c.moveOpen === true && c.ensures === 1 &&
      /迁移未发起.*仍在等确认/.test(msgs(c)));
 
   // 4. 一次成功不经确认框; 5. 批量路径走 _bulkEditPost
