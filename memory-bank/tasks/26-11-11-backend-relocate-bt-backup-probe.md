@@ -3,7 +3,7 @@
 **Status:** In Progress
 **Added:** 2026-11-11
 **Updated:** 2026-11-11
-**Summary:** BT_backup 配置从顶层 host:port 表收编为 relocate.bt_backup 标量(v7→v8 迁移) + 设置页按钮自动探测; 计划已入库(Open), S1-S7 等显式开工
+**Summary:** BT_backup 配置从顶层 host:port 表收编为 relocate.bt_backup 标量(v7→v8 迁移) + 设置页按钮自动探测; S1-S6a 五批落地(分批评审全过, blocker 2 全修, 入池 0), 全量基线切片 26-11-11-0756(数字见 kb.baseline); 真机面部分完成——后端 hit+消歧 PASS, UI 回填段 BLOCKED 待复测(切片 26-11-11-0804); S7 收尾回写完成, 计划 Open 真机复测排期后翻 Done
 **Topics:** backend-relocate-bt-backup-probe
 **Refs:** memory-bank/plans/26-11-11-0259-plan-relocate-bt-backup-scalar-probe.html, memory-bank/pitfalls/ops/msys-container-path.md
 
@@ -31,13 +31,13 @@ BT_backup 配置怎么收编成单实例标量并补设置页自动探测——�
 
 | 步 | 内容 | 状态 |
 |---|---|---|
-| S1 | 配置面标量化 | Open |
-| S2 | 升级链 v7→v8 + tests-real bump | Open |
-| S3 | 探测后端 bt_backup_probe.py | Open |
-| S4 | 端点 + 编辑器 UI | Open |
-| S5 | 运行面口径同步 | Open |
-| S6 | 全量测试 + 真机验收(人工) | Open |
-| S7 | 收尾回写 + 档案/基线 | Open |
+| S1 | 配置面标量化 | Done (批1 c4ee6149) |
+| S2 | 升级链 v7→v8 + tests-real bump | Done (批1 c4ee6149) |
+| S3 | 探测后端 bt_backup_probe.py | Done (批2 08b34b54) |
+| S4 | 端点 + 编辑器 UI | Done (批3 61363210 + 批4 2e6487e1) |
+| S5 | 运行面口径同步 | Done (批5 130ec909) |
+| S6 | 全量测试 + 真机验收(人工) | 部分完成: 全量基线切片 f09830e6(数字 = 切片 26-11-11-0756); 真机后端 hit+消歧 PASS(切片 26-11-11-0804, 提交 4281189f), UI 回填段 BLOCKED 待复测(复测清单见切片 §04) |
+| S7 | 收尾回写 + 档案/基线 | Done (R1 本批; 基线切片已入库 f09830e6 / 4281189f) |
 
 ## 进度日志
 
@@ -47,3 +47,11 @@ grilling 三轮九问收敛(D1-D9) + qB/libtorrent 源码取证 + 本机只读�
 
 - 2026-11-11 03:13 grilling 三轮九问拍板 D1-D9 + qB 源码取证 + 计划 26-11-11-0259 入库(Open); BT_backup 收编单实例标量 + 按钮探测; S1-S7 等显式开工
 - 2026-11-11 03:47 提交收尾: 分批评审四轮(轮1 计划 6 minor 全修, 含 D8/R1 定性修正——运行面 E 格已 fail-closed 非缺口; 轮2 零新发现; 轮3 分面两路: 面A 零发现, 面B 坑档 1 major(处置④过度概括)采纳修复; 轮4 服务端配额忙, 面B 复核按评审 skill §8 降级主会话自查——零新发现); ship 闸门 vNu 拦出计划 §3.1 一处未闭合 code 标签已修; MSYS 路径转换坑面第三张脸(参数中段 `/xxx`, grep 模式静默零命中)扩进 msys-container-path.md 复发 2
+
+### R1 · 实施收尾 (2026-11-11)
+
+- 2026-11-11 08:37 S1-S6a 五批落地(本地分支 relocate-bt-backup-scalar-probe): 批1 c4ee6149(S1+S2 配置面标量化 + v7→v8 迁移链) → 批2 08b34b54(S3 探测后端纯函数) → 批3 61363210(S4 探测端点) → 批4 2e6487e1(S4 编辑器重写) → 批5 130ec909(S5 运行面口径收尾) → S6a 基线切片 f09830e6 → S6b 真机切片 4281189f。
+- 2026-11-11 08:37 分批评审 trailer 摘要(全批入池 0, 复评零 actionable): 批1 config+升级链 816 行 blocker 1 修 1(rm04 旧形状残留); 批2 探测后端 1240 行 blocker 0 修 4; 批3 探测端点 271 行 blocker 0 修 1; 批4 编辑器重写 745 行 blocker 1 修 2(hash 命中候选优先回填); 批5 运行面口径 51 行零发现; 真机切片 106 行 blocker 0 修 4。
+- 2026-11-11 08:37 S6a 全量基线(切片 26-11-11-0756): `6000 passed / 2 skipped / coverage 99%`(test.full 实测, HEAD 130ec909)。
+- 2026-11-11 08:37 S6b 真机验收(切片 26-11-11-0804): 探测面后端 verdict=hit + hash 消歧唯一命中便携候选 PASS, 编辑器渲染/证据区 PASS, ambiguous 拒回填(D5)真机取证; UI 回填段(hit 回填 → PUT 落盘)与 offline 组被 clone3 s0 大库轮撞场 BLOCKED —— 真机结论 = 部分完成、复测排期(复测清单见切片 §04); 产品缺陷 0。
+- 2026-11-11 08:37 S7 收尾回写(本批): pitfalls/backend/qb-fastresume-edit.md 补键形状 v8 口径行; docs/configuration.md「整组迁移」节「顶层 bt_backup 键」改 relocate.bt_backup 标量口径; architecture 主题文档核认 = hr-groups.md「整组迁移」节未承载 fastresume 收尾键形状口径, 无既有落点, 不强造新档; 根 README 核对零 bt_backup 描述未动; 计划文档不动(真机复测未完不翻 Done)。

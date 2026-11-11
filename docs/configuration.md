@@ -672,7 +672,7 @@ config:
 
 ## 整组迁移（relocate）
 
-把辅种组整体搬到新目录（腾挪盘位、集中存储）：搬完在旧目录用**文件链接 / 目录别名**让原路径继续可读；搬迁落位只记账，由回收 daemon 在 qB 下线窗口批量改写 fastresume 收尾（fastresume 收尾依赖顶层 `bt_backup` 键，未配置 = 迁移预检拒绝），qB 重启后成员原生加载新路径，不需要手动逐种改位置。收尾窗（armed/rewritten）的组可直接再迁；仍拦截的是同组前段相位（moving/watching/moved）。默认关闭 —— `enabled: false`（缺省）时三个入口（WebUI「移动位置」/规则 `move_to`/添加对话框）逐字节保持现状。
+把辅种组整体搬到新目录（腾挪盘位、集中存储）：搬完在旧目录用**文件链接 / 目录别名**让原路径继续可读；搬迁落位只记账，由回收 daemon 在 qB 下线窗口批量改写 fastresume 收尾（fastresume 收尾依赖本段 `bt_backup` 标量键，留空 = 迁移预检拒绝；可在设置页点「自动探测」回填，qB 与本程序不同文件系统时须手写路径），qB 重启后成员原生加载新路径，不需要手动逐种改位置。收尾窗（armed/rewritten）的组可直接再迁；仍拦截的是同组前段相位（moving/watching/moved）。默认关闭 —— `enabled: false`（缺省）时三个入口（WebUI「移动位置」/规则 `move_to`/添加对话框）逐字节保持现状。
 
 **推荐以管理员身份运行 auto-qb** —— Windows 上未开开发者模式时创建符号链接需要提权，以管理员身份运行可免去每次迁移的 UAC 确认（`allow_uac: false` 则直接拒绝、不弹窗）。
 
