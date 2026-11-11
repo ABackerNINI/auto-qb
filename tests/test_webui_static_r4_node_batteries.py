@@ -7,6 +7,7 @@
 - test_r4_col_persist_intent_merge_and_gates: R5#52(major) + R5#37/R5#38 修复回归 —— 意图升格三层 merge: 拖拽/双击自适应后既有隐藏列 px 仍在、可见列被渲染快照冻结、被拖/适配列被终值覆盖; 纯点击零位移不升格意图不落盘不拦 click(R5#37); 拖拽尾 capture 拦截下一拍自清(R5#38); 微动未过阈值不把起始快照写进生效轨(issue 26-11-08-0229 #10)
 - test_r4_selection_state_machine: R5#51(major) —— AQB_SELECTION 真跑: _selSyncGroups 四态(补选/移出/未知 key 保留/种子页降级: 不补选但降级照做)、_selAnchor 兜底链四态(显式锚点/光标/展开组/首行)、selSizeSummaryOf occ_key 取 max 去重
 - test_r4_partial_groups_predicate_five_forms: 部分组判定单点守阵(计划 26-11-11-0820 S1, 拍板 D2) —— _partialGroupsOf(keys, hashes) -> [{key, name, sel, total}] 是删除确认框行(S2)/迁移关确认框(S3)/迁移开披露条(S4) 三落点共用的「部分组」唯一判定面; 判定 = 真实组(!virtual 且 total>1)有成员命中 hashes ∧ 组键不在 keys ∧ sel<total。静态锚: 判定只在 selection.js 定义形态(裸名+`(`, 接收者调用不计)恰一次(其它 shared 文件零重复定义实现)、方法体走 this.decoratedGroups 与 _findGroup 同源解析面且零 filteredGroups 独走、判据含 g.virtual 豁免。五形态 node 电池真跑: 组键整组入选不触发(含双向联动组键与成员 hash 同存面)/成员全选不触发(组键已晋升 + 种子页降级未晋升 sel===total 两面)/部分选中触发且 sel/total/name 逐字段正确/跨组混合(整组 A + 部分组 C 并存)只列部分组/单成员组与虚拟行均不触发(专设双成员虚拟行钉住 virtual 判据独立于 total<=1); 边界面: 空入参不抛/hash 不属任何组不触发/name 缺失兜组 key/decoratedGroups 缺失(R6 极端竞态)空返回不抛不误拦 —— 摘除判定或换解析面即红
+- test_r4_delete_details_partial_group_row: 删除链部分组行落点级真跑(计划 26-11-11-0820 S2, 拍板 D5) —— _deleteDetails(delete_flow.js)在删除目标含部分组时于既有行流末尾追加一行(tone error/wide/#i-warn, HR 风险行同款), 判定单点消费 selection.js::_partialGroupsOf(带接收者调用)。正例: 部分组目标恰一行且单组文案逐字段(组名/已选 M/N/钉住词「将缺文件」); 多组聚合一行(已选/总数与缺口用合计); 四组触发组名列前 3 +「等 K 个」(照 _hrRiskOf 模式)。负例(D2 不触发面): 整组删除(组键入选)/成员全选未晋升/单成员组/虚拟行/hash 不属任何组均无该行。恒显面(D5): _deleteDetails 形参只有 keys/hashes(无 delete_files 勾选入参, 行与勾选状态无关恒显由结构保证)且行为行流末行(既有五行/六行结构零改动只追加)。电池合并 selection.js + delete_flow.js 两 mixin 方法(app.mixin 同实例注入等价), 无 node 静默跳过
 - test_r4_load_col_state_seeding: R5#18 —— loadColState 默认隐藏播种三态: 空存储播种 / 仅空 hidden 不播(「刻意全开」合法偏好) / 有任一偏好键不播; 附坏 JSON 走完整流程、locked 列忽略、w 白名单洗净(洗净后三键全缺照播)
 - test_r4_sort_domain: R5#54 —— AQB_SORT 真跑: setSort 三态循环(经典 gk/gd 与 dyn dtSortState 两形态) + _dtStrCompare(IPv4 逐段数值序/端口数值/等值/非 IP localeCompare 回落) + sortedDrawer 空值两方向恒末位与 IPv4 数值序
 - test_r4_format_ladder_family: R5#55 —— format 函数族档位边界: _fmtLadder 梯顶回落(top 命中/缺省/档名写错回落整梯)与字节/速度两族、fmtEta 8640000 哨兵与非正值、fmtDuration 三段进位边界、fmtPeersQb 缺省只显已连接
@@ -555,6 +556,79 @@ console.log(JSON.stringify({
 }));
 """
 
+# S2 删除链部分组行(计划 26-11-11-0820 S2, 拍板 D5)落点级真跑 ------------------------
+_NODE_DELETE_PARTIAL_ROW_PROBE = r"""
+const fs = require("fs");
+global.window = {};
+global.L10N_GROUP = "辅种";  // app.js 顶部常量, _deleteDetails 多目标分支引用
+const selSrc = fs.readFileSync(process.argv[1], "utf8");
+eval(selSrc + "\n;globalThis.__SEL__ = window.AQB_SELECTION;");
+const delSrc = fs.readFileSync(process.argv[2], "utf8");
+eval(delSrc + "\n;globalThis.__DEL__ = window.AQB_DELETE;");
+// 两 mixin 方法合并进同一 ctx(生产是 app.mixin 逐个注入同一 Vue 实例, this 等价):
+// _deleteDetails 经 this._findGroup/_partialGroupsOf/selSizeSummaryOf 跨模块消费 selection.js
+const M = Object.assign({}, globalThis.__SEL__.methods, globalThis.__DEL__.methods);
+
+const memberHashesOf = (list) => (list || []).map((m) => (typeof m === "string" ? m : (m && m.hash) || "")).filter(Boolean);
+// 组 A(两成员)/C(三成员)/E/F(各两成员)/B(单成员) + 虚拟行 u-h9(同 S1 电池族谱)
+const GROUPS = [
+  { key: "A", name: "组A", members: [{ hash: "h1", size: 10, site: "s1", save_path: "/p1" }, { hash: "h2", size: 10 }] },
+  { key: "C", name: "组C", members: [{ hash: "h4", size: 5 }, { hash: "h5", size: 5 }, { hash: "h6", size: 5 }] },
+  { key: "E", name: "组E", members: [{ hash: "e1", size: 7 }, { hash: "e2", size: 7 }] },
+  { key: "F", name: "组F", members: [{ hash: "f1", size: 3 }, { hash: "f2", size: 3 }] },
+  { key: "B", name: "组B", members: [{ hash: "h3", size: 1 }] },
+  { key: "u-h9", virtual: true, members: [{ hash: "h9", size: 1 }] },
+];
+const memberByHash = new Map();
+for (const g of GROUPS) for (const m of g.members) memberByHash.set(m.hash, m);
+const mkCtx = (over) => Object.assign({}, M, {
+  memberHashesOf,
+  memberByHash,
+  decoratedGroups: GROUPS,
+  filteredGroups: GROUPS,
+  fmtSize: (v) => String(v),  // 电池不打大小文案, 桩掉 format.js 依赖
+}, over);
+const D = (keys, hashes, over) => M._deleteDetails.call(mkCtx(over || {}), keys, hashes);
+const partialRows = (rows) => rows.filter((r) => r.label === "部分组");
+const checks = [];
+const ok = (name, cond) => checks.push([name, !!cond]);
+
+// --- 正例: 部分组目标 -> 确认框 details 恰含一行(tone error/wide/#i-warn, HR 风险行同款) ---
+const rows1 = D([], ["h1"]);
+const row1 = partialRows(rows1)[0];
+ok("部分组目标 -> details 恰含一行部分组行", partialRows(rows1).length === 1);
+ok("行形态同款 HR 风险行: tone=error / wide / icon=#i-warn", row1 && row1.tone === "error" && row1.wide === true && row1.icon === "#i-warn");
+ok("单组文案逐字段: 组名/已选 1/2/钉住词「将缺文件」", row1 && row1.value === "辅种组「组A」: 已选 1/2 个 —— 若勾选『同时删除磁盘文件』,其余 1 个成员将缺文件");
+
+// --- 多组聚合: 已选/总数与缺口用合计, 不逐组多行 ---
+const rows2 = D([], ["h1", "h4", "h5"]);
+const row2 = partialRows(rows2)[0];
+ok("两组部分选中 -> 一行聚合(不逐组多行)", partialRows(rows2).length === 1);
+ok("聚合 M/N 用合计(1+2 / 2+3), 缺口 2", row2 && row2.value === "辅种组「组A」「组C」: 已选 3/5 个 —— 若勾选『同时删除磁盘文件』,其余 2 个成员将缺文件");
+
+// --- 组名上限 3 个 +「等 K 个」(照 _hrRiskOf 模式) ---
+const rows3 = D([], ["h1", "h4", "e1", "f1"]);
+const row3 = partialRows(rows3)[0];
+ok("四组部分选中 -> 组名列前 3 个 + 等 4 个, 合计 4/9 缺口 5", row3 && row3.value === "辅种组「组A」「组C」「组E」等 4 个: 已选 4/9 个 —— 若勾选『同时删除磁盘文件』,其余 5 个成员将缺文件");
+
+// --- 负例(D2 不触发面) -> 无该行 ---
+ok("整组删除(组键入选) -> 无该行", partialRows(D(["A"], [])).length === 0);
+ok("成员全选未晋升(种子页降级 sel===total) -> 无该行", partialRows(D([], ["h1", "h2"])).length === 0);
+ok("单成员组种子 -> 无该行", partialRows(D([], ["h3"])).length === 0);
+ok("虚拟行(未归组命中) -> 无该行", partialRows(D([], ["h9"])).length === 0);
+ok("hash 不属任何组 -> 无该行", partialRows(D([], ["zz"])).length === 0);
+ok("空入参 -> 无该行不抛", partialRows(D([], [])).length === 0);
+
+// --- 恒显面(D5): 行与 delete_files 勾选状态无关恒显由结构保证 ---
+ok("_deleteDetails 形参只有 keys/hashes(无勾选入参)", M._deleteDetails.length === 2);
+ok("部分组行是行流末行(既有五行/六行结构零改动, 只追加)", rows1[rows1.length - 1] === row1);
+
+console.log(JSON.stringify({
+  ok: checks.filter((c) => c[1]).length, total: checks.length,
+  failed: checks.filter((c) => !c[1]).map((c) => c[0]),
+}));
+"""
+
 
 # R5#18: loadColState 默认隐藏播种语义 ---------------------------------------------
 def _app_head_source():
@@ -966,6 +1040,32 @@ def test_r4_partial_groups_predicate_five_forms():
     # 3. 五形态语义真跑(node 电池, 无 node 静默跳过 —— 与 _NODE_SELECTION_PROBE 同口径)
     report = _run_probe(_NODE_PARTIAL_GROUPS_PROBE, sel_path)
     _assert_battery(report, "部分组判定五形态电池")
+
+
+def test_r4_delete_details_partial_group_row():
+    """删除链部分组行落点级真跑(计划 26-11-11-0820 S2, 拍板 D5) ---
+
+    _deleteDetails(delete_flow.js)在删除目标含部分组时于既有行流末尾追加一行(tone error/
+    wide/#i-warn, HR 风险行同款), 判定单点消费 selection.js::_partialGroupsOf(带接收者
+    调用, 电池经合并 mixin 的 this 真跑该接线, 不经字符串锚)。
+
+    正例: 部分组目标 -> 恰一行且单组文案逐字段(组名/已选 M/N/钉住词「将缺文件」);
+          多组聚合一行(已选/总数与缺口用合计); 四组触发 -> 组名列前 3 +「等 K 个」
+          (照 _hrRiskOf 模式)。
+    负例(D2 不触发面): 整组删除(组键入选)/成员全选未晋升(种子页降级)/单成员组/虚拟行/
+          hash 不属任何组 -> 均无该行。
+    恒显面(D5): _deleteDetails 形参只有 keys/hashes(无 delete_files 勾选入参 —— 行与
+          勾选状态无关恒显由结构保证), 且部分组行是行流末行(既有五行/六行结构零改动,
+          只追加一行)。
+
+    无 node 静默跳过(与既有电池同口径)。
+    """
+    report = _run_probe(
+        _NODE_DELETE_PARTIAL_ROW_PROBE,
+        os.path.join(STATIC_ROOT, "shared", "selection.js"),
+        os.path.join(STATIC_ROOT, "shared", "delete_flow.js"),
+    )
+    _assert_battery(report, "删除链部分组行电池")
 
 
 def test_r4_load_col_state_seeding():

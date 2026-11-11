@@ -139,6 +139,26 @@ window.AQB_DELETE = {
           hint: "辅种组内多站点副本只计一份(取最完整副本)",
         });
       }
+      // 部分组警示行(计划 26-11-11-0820 S2, 拍板 D5): 删除目标含「只选中一部分」的辅种组时,
+      // 确认框恒显一行(tone error / wide / #i-warn, 与 _deleteFlow 追加的 HR 风险行同款邻位) ——
+      // 组内成员共享同一份物理文件, 勾选「同时删除磁盘文件」会物理删除共享文件, 组内其余未选中
+      // 成员必然缺文件(不可逆)。!与 delete_files 勾选状态无关恒显(D5): details 是静态结构,
+      // 不随 checkbox 联动 —— 文案用「若勾选…」陈述条件, 勾与不勾两种状态下都成立, 整组删除/
+      // 成员全选/单成员组/虚拟行(判定不触发)与不带文件删除整组退役路径都不出此行。
+      // 判定单点 = selection.js 的 _partialGroupsOf 谓词(带接收者调用, 消费方不得另写判定);
+      // 多组聚合照 _hrRiskOf 模式: 组名上限 3 个 +「等 K 个」, 已选/总数与缺口用合计。
+      const partials = this._partialGroupsOf(keys, hashes);
+      if (partials.length) {
+        const names = partials.slice(0, 3).map((p) => `「${p.name}」`).join("")
+          + (partials.length > 3 ? `等 ${partials.length} 个` : "");
+        const sel = partials.reduce((s, p) => s + p.sel, 0);
+        const total = partials.reduce((s, p) => s + p.total, 0);
+        rows.push({
+          icon: "#i-warn", label: "部分组", wide: true, tone: "error",
+          value: `辅种组${names}: 已选 ${sel}/${total} 个`
+            + ` —— 若勾选『同时删除磁盘文件』,其余 ${total - sel} 个成员将缺文件`,
+        });
+      }
       return rows;
     },
     async _deleteFlow(targets) {
