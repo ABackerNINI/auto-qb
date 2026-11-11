@@ -2,7 +2,7 @@
 
 > 摘要: Windows 上被管道接住的 Python 子进程按**本地码页(cp936)**输出 stdout, 而调用方按 UTF-8 硬解 ⇒ 中文变一串 U+FFFD; 退出码照旧 0, **一个报错都没有** —— 只有人读输出时才发现。**反方向也一样会炸**: 非 Python 子进程(如 node)输出就是 UTF-8, 而 `text=True` 按 locale 去解 ⇒ 直接抛 `UnicodeDecodeError`。再一变体(2026-10-02): AI 工具壳大输出落盘预览在截断点切进多字节字符时整段按 GBK 重解 —— 数据无损, 读落盘日志即真值。
 > 触发: 输出乱码, 乱码, 中文变问号, U+FFFD, 子进程 stdout, cp936, GBK, PYTHONIOENCODING, 引擎打印外部输出, 包装脚本, 命令行工具输出, UnicodeDecodeError, subprocess text=True, node 输出, encoding, 引擎自身 stdout, run.py 打印, 管道输出, 部分终端乱码, reconfigure, _utf8_self_stdio, PowerShell 捕获, Console.OutputEncoding, -NoProfile, AI 工具终端乱码, chcp 无效, 鍒涘缓, ConPTY, 大输出落盘, persisted output, 预览乱码, outputLimit, 截断点, 30KB, 块缓冲, line_buffering, flush, 输出滞留, 常驻服务无输出, 看不到 log, 无输出, netstat, 表头本地化, 解析恒 0, 探针假 0, 外部命令表头, 测量脚本零值自检, 重定向, UTF-16, Out-File, cmd 转发, FF FE
-**Refs:** memory-bank/tasks/26-11-07-test-legacy-review4-scripts-fix.md
+**Refs:** memory-bank/tasks/26-11-07-test-legacy-review4-scripts-fix.md, memory-bank/tasks/26-11-12-backend-stale-ref-utf8-pin.md
 
 ## 反向: 非 Python 子进程输出是 UTF-8, 别用 `text=True` 让 locale 去猜
 
@@ -18,7 +18,12 @@
   `_readerthread` 打死, 管道再没人读, 子进程卡在写管道上 → `TimeoutExpired`; stdout 侧则是
   `proc.stdout is None` → `json.loads(None)` 报 `NoneType` / `.strip()` 报 `AttributeError`,
   表象离根因很远, 别当成 JS 探针死循环去调超时。
-- **复发**: +3; 最近 (2026-11-10, issue 26-11-07-1216 修复批): 守阵 2026-11-06 落地时扫描面只 rglob `tests/**`,
+- **复发**: +4; 最近 (2026-11-12, src/ 钉码批): 守阵扫描面 2026-11-10 扩成 `tests/ + scripts/` 后
+  **`src/` 仍是盲区** —— 存量同病 5 处(port_owner.py:108 / traffic_source/agent.py _run_foreground /
+  recycle_daemon.py tasklist+ps / checking.py:263)漏钉至本批; 扩面实扫还当场抓出第 5 处(checking.py:263,
+  单点检索又漏掉的那处)。为什么没命中: 1216 修复批只把扫描面扩到 `tests/ + scripts/`, 没把 `src/`
+  一并纳入 —— 守阵扩面时按「这次在哪里发现」取面, 而不是按「文本子进程可能在哪些目录」取面。
+  上次 +1 (2026-11-10, issue 26-11-07-1216 修复批): 守阵 2026-11-06 落地时扫描面只 rglob `tests/**`,
   `scripts/` 存量 5 处同病长期漏扫(CI 不红但同病); 本批把扫描面扩成 `tests/ + scripts/` 并钉码,
   扩面守卫当场抓出单行 grep 漏掉的多行调用 `sim_run.py:813` —— **静态守卫的扫描面本身也要随目录面走全**。
   上次 +1 (2026-11-07, R4 scripts 批): 批内新测试红验回放又一处 `text=True` 缺 encoding/errors
