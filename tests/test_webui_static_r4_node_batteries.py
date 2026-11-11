@@ -808,6 +808,7 @@ const mkCtx = (over) => {
   }, over);
   c.loadMoveOptions = () => { c.loadMoveOptionsCalls += 1; };
   c.$nextTick = (fn) => fn();
+  c.ensureWebFlags = async () => {};  // 沙箱无 web flags 层: openMoveDialog 入口惰性补拉接线(e1fbd849), 照 loadMoveOptions 范式 stub —— 缺桩则开框即 TypeError
   return c;
 };
 const checks = [];

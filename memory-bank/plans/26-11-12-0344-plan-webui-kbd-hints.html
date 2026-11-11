@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>WebUI 快捷键现场提示: 菜单键帽/页签徽标/入口指路</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="webui-kbd-hints">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-12-0344">
+<meta name="doc-updated" content="26-11-12-0423">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-12-webui-kbd-hints.md">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: webui-kbd-hints</div>
+<h1>WebUI 快捷键现场提示: 菜单键帽/页签徽标/入口指路</h1>
+<p class="lede">本篇只回答「快捷键<strong>现场提示</strong>怎么补」: 常驻四落点(右键菜单键帽 / 抽屉页签 Alt+1..5 徽标 / 顶栏 N·K 键帽 / 状态栏 Shift+/ 入口) + 既有 Shift+/ 帮助浮层只补入口不改内容。纯显示层 —— 零键位行为、零引擎改动、零新揭示机制。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-12-0344 · <b>doc-updated</b> 26-11-12-0423 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 用户指令「WEBUI快捷键缺提示(右键菜单/抽屉/其它)…调研成熟的解决方案…grilling 然后出一个修改计划」; 只读盘点两轮(键面全景 + 按钮布局事实核查) + 外部方案调研; grilling 两轮(Q1-Q8)拍板, 结论迁 §06。
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+
+<h3>背景</h3>
+<p>注册表 58 条键位(54 绑键 + 4 空位, <code>AQB_SHORTCUT_DEFS</code>, <code>shortcuts.js:178-369</code>)目前只有两处<strong>集中提示</strong>: Shift+/ 帮助浮层(<code>tpl/popovers.html:406-426</code>)与设置键位面板(<code>tpl/settings-detail.html:157-192</code>)。操作现场 —— 右键菜单 20+ 个与注册表同义的动作项、顶栏按钮、状态栏按钮、抽屉页签 —— <strong>零键位提示</strong>; 帮助浮层本身<strong>无任何入口指路</strong>(不知道 Shift+/ 存在就永远发现不了)。纯键盘动作(↑↓/Enter/Space 等 —— 光标与选择两族 13 条)更是完全不可见。</p>
+
+<h3>目标</h3>
+<ul>
+  <li><strong>G1 操作现场就地学</strong>: 右键菜单/顶栏/抽屉页签常驻键帽, 学习发生在需要时(NN/g accelerator 共识: 快捷键提示放在触发它的动作旁边)。</li>
+  <li><strong>G2 键位零二次维护</strong>: 菜单键帽一律以注册表为唯一事实源, 菜单项经 <code>key</code> 字段引用 shortcut id; 用户在设置页改绑/给空位绑键, 现场键帽自动跟随(清空即隐藏)。</li>
+  <li><strong>G3 集中查阅可发现</strong>: Shift+/ 帮助浮层获得常驻入口; 浮层内容与布局 26-11-11 刚重排过, 本轮零改动。</li>
+  <li><strong>G4 范围收窄</strong>: 纯显示层。不新增键位、不改引擎/退栈链、不做 hold-reveal 等新揭示机制、列表导航键不做常驻挂点(归覆盖层)。</li>
+</ul>
+
+<h3>设计不变量</h3>
+<ul>
+  <li><strong>I1 键位显示串现算不手抄</strong>: 一律 <code>kbSerialWithDraft(item, draft)</code>(模板基准⊕用户草稿, <code>shortcuts.js:136-139</code>) → <code>kbDisplayName()</code>; 禁止在任何模板里写死键位串。改绑即时生效、空串即隐藏由同一取数链保证。</li>
+  <li><strong>I2 菜单项是数据不是模板</strong>(webui.md 硬规则): <code>key</code> 字段进 <code>CTX_ITEM_DEFS</code>/<code>CTX_SUB_ITEM_DEFS</code>, 渲染层查注册表现算; 用户自定义项(flags 合并)天然无 key 字段。</li>
+  <li><strong>I3 令牌纪律</strong>: 键帽样式只引用既有令牌(<code>--surface-2/--border/--fg/--fg-muted/--font-mono</code>), 零新增令牌, 四皮肤令牌名集不动(parity 守阵继续兜住)。</li>
+  <li><strong>I4 tooltip 通道豁免</strong>(例外裁定, D10): 键位提示不走 title/.aq-tip 通道 —— 与 webui.md「悬浮提示」节默认口径不同, 仅限键位提示面; 其余新元素仍按惯例写 title。</li>
+  <li><strong>I5 无键位留白对齐</strong>: 未绑定(取数后空串)与自定义项不渲染键帽区但保留对齐位 —— 菜单项右缘对齐不跳动, 与 VS Code 菜单同款。</li>
+</ul>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+
+<h3>现状事实(盘点 2026-11-12, HEAD 15b0e888; 评审前 sync 至 6e7b4478 —— 中间 12 笔含「部分组操作预警」等多专题, 均未触碰本表引用的任何文件, 锚点复核仍有效)</h3>
+<table>
+  <tr><th>面</th><th>现状</th><th>锚点</th></tr>
+  <tr><td>注册表</td><td>58 条(54 绑键 + 4 空位), 字段 <code>{id,group,label,def,scope,danger,...}</code>; 渲染管线(kbDisplayName/kbSerialWithDraft)现成</td><td><code>shared/shortcuts.js:178-369</code></td></tr>
+  <tr><td>集中提示</td><td>Shift+/ 帮助浮层(分组+键帽) + 设置键位面板; 浮层靠 <code>KB_SELF_TOGGLE_OVERLAY</code> 自切换, <strong>零按钮入口</strong></td><td><code>tpl/popovers.html:406-426</code> · <code>shortcuts.js:116-121</code></td></tr>
+  <tr><td>右键菜单</td><td>四支注册表(multi/episode/member/group) + 次级(member 10 项 + 2 线), 字段无键位位; 渲染对象与模板同样无键位输出</td><td><code>ctx_menu.js:62-162</code> · <code>ctxRenderItem</code> :304-324 · <code>tpl/ctx-menus.html:54-73</code></td></tr>
+  <tr><td>顶栏</td><td>添加种子(N)/列(K)/设置(Ctrl+,) 均无 title 无键帽; .table-tool 药丸钮塞 10-11px 键帽空间足够(spacer 吸收 ~20px), 设置在 .tabs 药丸组内「Ctrl+,」全串 ~40px 拉长药丸</td><td><code>tpl/topbar.html:60-64/67-71/101-103</code></td></tr>
+  <tr><td>状态栏</td><td>34px 锁高(<code>--statusbar-h</code>)+overflow:hidden; 完整统计(\)/历史(Shift+\)/qB 流量图(Ctrl+\) 三钮键位全为反斜杠变体 —— 单字符键帽无法区分三者, 全串 ~40px/个会挤出右角速度组, <strong>物理不可行</strong></td><td><code>tpl/statusbar.html:17-19/24-26/49-51</code> · 各皮肤 <code>--statusbar-h</code></td></tr>
+  <tr><td>抽屉页签</td><td>Alt+1..5 = drawer-tab-general..traffic; 合并页签态按位次重排到三张可见页签(KB_MERGE_TAB_REMAP, 第 4/5 档 null 停用); 页签无键帽</td><td><code>shortcuts.js:325-339</code> · 重排表 :131-133</td></tr>
+  <tr><td>键帽样式先例</td><td><code>.kb-row-keys kbd, .kb-help-row kbd</code> —— 11px mono + --surface-2/--border 令牌, 可直接复用口径</td><td><code>shared/console_hub_panels.css:114-119</code></td></tr>
+</table>
+
+<h3>痛点</h3>
+<ul>
+  <li>菜单 20+ 项与注册表键位同义, 但项上不可见 —— 「菜单点了很多次才发现有快捷键」的典型学习断层(NN/g: 就地提示是 accelerator 被采用的先决条件)。</li>
+  <li>帮助浮层(全集速查)没有入口: 顶栏 search-help「?」旁无键位入口, 状态栏也无 —— 存在本身不被发现。</li>
+  <li>页签 Alt+1..5 与合并态位次重排只有读源码才知道。</li>
+</ul>
+
+<h3>守阵面(改动须同步)</h3>
+<p><code>tests/web_shortcuts_support.py::_registry</code>(正则解析注册表; 本次不动注册表结构, 跑即证零改动) · <code>test_web_shortcuts_registry.py</code> · <code>test_webui_ctx_menu_registry.py</code>(项集对账, key 字段扩展点) · <code>test_webui_static_dom_*</code>(模板文本断言) · <code>test_webui_static_skins_*.py</code>(manifest 顺序/前后端正则一致) · triggers 守阵(<code>triggers.js</code> 审计面) · e2e <code>menus.spec.mjs</code>/<code>ctx-custom.spec.mjs</code>。</p>
+
+<h2><span class="no">§03</span>方案总览</h2>
+<p class="aside">外部调研三腿(NN/g / golsteyn / saasui 共识): ① 菜单/工具提示<strong>就地显示</strong>; ② <code>?</code> 键作弊表浮层(Gmail/GitHub 式); ③ 按住修饰键实时显浮层(Figma 式)。本轮取 ①+②(② 已存在, 只补入口); ③ 与表格 Ctrl/Shift+click 多选交互冲突, 不做(D3)。</p>
+
+<table>
+  <tr><th>波次</th><th>落点</th><th>内容</th></tr>
+  <tr><td><strong>W1</strong> 数据单点</td><td><code>ctx_menu.js</code> 两条注册表</td><td>条目新增 <code>key</code> 字段 = 引用注册表 shortcut id(映射审计 §05 逐条); 自定义项(flags 合并)无 key 自然留白</td></tr>
+  <tr><td><strong>W2</strong> 菜单键帽</td><td><code>ctxRenderItem</code> + <code>tpl/ctx-menus.html</code> + 共享 CSS</td><td>渲染对象增产键帽字段(kbSerialWithDraft⊕kbDisplayName 现算, 空串不产出); 菜单项 label 左吃满 + 键帽右对齐, 无键位留白(I5); danger 三键含内显示(D5); 键帽类放 shared CSS 尾段单点, 复用 :114 kbd 令牌口径</td></tr>
+  <tr><td><strong>W3</strong> 顶栏键帽</td><td><code>tpl/topbar.html</code></td><td>添加种子「N」/列「K」内联常驻小键帽(10-11px mono); 设置 Ctrl+, 不做(D6); 键帽常驻 DOM 非 hover</td></tr>
+  <tr><td><strong>W4</strong> 页签徽标</td><td>抽屉页签模板(实施时 grep 页签按钮定位, dock.html 起)</td><td>五页签 Alt+1..5 键帽; 合并页签态徽标取值与 <code>KB_MERGE_TAB_REMAP</code> 同一单点 —— 重排后第 4/5 档(null)不显示, 可见页签徽标随位次变</td></tr>
+  <tr><td><strong>W5</strong> 状态栏入口</td><td><code>tpl/statusbar.html</code></td><td>新增「键位」文字钮 + Shift+/ 键帽, 插在 <code>.sb-spacer</code>(:52)与 <code>sb-err</code>(:58)之间; click 分派 = help-panel 同链(<code>_kbToggleKbHelp</code>, 与 Shift+/ 同一 toggle 方法); triggers 审计面同步</td></tr>
+  <tr><td><strong>W6</strong> 测试扩面</td><td>守阵 + e2e</td><td>§08 清单; 全量回归数字入基线切片</td></tr>
+</table>
+<p><strong>分期</strong>: 单波次 W1→W6 顺序实施, 四皮肤一步到位(D9) —— 共享模板+令牌制下分皮肤做反而要拆条件。实施等用户显式开工。</p>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+<table>
+  <tr><th>#</th><th>内容</th><th>验收判据</th></tr>
+  <tr><td>S1</td><td>键帽取数单点: helper(注册表条目→显示串, 内含 kbSerialWithDraft 空串判定) + 共享 CSS 键帽类(console_hub*.css 尾段, 令牌复用 I3)</td><td>helper 与设置面板同源取数; 四皮肤键帽渲染同构截图</td></tr>
+  <tr><td>S2</td><td>菜单接线: 两条注册表加 key 字段(§05 表) + ctxRenderItem 增产 + ctx-menus.html 键帽列 + 窄菜单宽度行为(键帽列 nowrap, label 弹性)</td><td>e2e menus 绿 + 新增断言(有键位项出键帽/无键位项留白对齐/自定义项零键帽); ctx registry 守阵扩 key 字段对账</td></tr>
+  <tr><td>S3</td><td>顶栏接线: add-btn/col-picker 加键帽</td><td>四皮肤目检无溢出; dom 守阵同步</td></tr>
+  <tr><td>S4</td><td>页签接线: Alt+1..5 徽标 + 合并态跟随</td><td>合并开/关两态徽标位次正确(与 _kbDrawerTab 同表); e2e drawer 面绿</td></tr>
+  <tr><td>S5</td><td>状态栏入口: 插钮 + 分派 _kbToggleKbHelp + triggers 审计同步</td><td>click 开/关与 Shift+/ 行为一致; triggers 守阵绿; 34px 锁高内无溢出目检</td></tr>
+  <tr><td>S6</td><td>守阵/e2e 扩面 + 全量回归 + 四皮肤真机截图目检(用户拍板外观数字)</td><td>test.full 全绿(数字入基线切片) + e2e fast 绿; 外观先例: webui-kb-overlay-layout(数字靠截图目检定案)</td></tr>
+</table>
+
+<h2><span class="no">§05</span>映射审计表(菜单项 → 注册表 shortcut id)</h2>
+<p>key 字段逐条审计如下; 显示串 = 默认 def 的 kbDisplayName 现算(改绑即变)。「空位」= 注册表 def:"" —— key 字段照填, 默认不显示, 用户绑键后自动出现(G2)。</p>
+<table>
+  <tr><th>菜单项 id</th><th>label</th><th>key 引用</th><th>默认显示</th><th>支</th><th>备注</th></tr>
+  <tr><td><code>resume</code></td><td>启动</td><td><code>act-resume</code></td><td>S</td><td>四支</td><td></td></tr>
+  <tr><td><code>pause</code></td><td>停止</td><td><code>act-pause</code></td><td>P</td><td>四支</td><td></td></tr>
+  <tr><td><code>reannounce</code></td><td>强制重新汇报</td><td><code>act-reannounce</code></td><td>Shift + A</td><td>四支</td><td>danger(dyn 置灰时键帽随行)</td></tr>
+  <tr><td><code>recheck</code></td><td>强制重新检查</td><td><code>act-recheck</code></td><td>Shift + Y</td><td>multi/member/group</td><td>danger</td></tr>
+  <tr><td><code>delete</code></td><td>删除…</td><td><code>act-delete</code></td><td>Shift + D</td><td>四支</td><td>danger; Delete 直连是表外链不入键帽</td></tr>
+  <tr><td><code>limits</code></td><td>速度限制…</td><td>—</td><td>不显示</td><td>multi/member/group</td><td>注册表 speed-down(KeyL) 是全局限速浮层(/api/speed/mode 全局 override), 菜单打开的是 per-hash 限速弹窗(POST limits)——界面与端点均不同, 不映射</td></tr>
+  <tr><td><code>move</code></td><td>设定位置…</td><td><code>edit-move</code></td><td>Shift + V</td><td>multi/member/group</td><td></td></tr>
+  <tr><td><code>meta</code></td><td>标签/分类…</td><td><code>act-meta</code></td><td>M</td><td>multi/member/group</td><td></td></tr>
+  <tr><td><code>export</code></td><td>导出 .torrent</td><td><code>export-torrent</code></td><td>Shift + E</td><td>multi/member/group</td><td></td></tr>
+  <tr><td><code>info</code></td><td>详细信息</td><td><code>act-detail</code></td><td>I</td><td>member</td><td></td></tr>
+  <tr><td><code>rename</code></td><td>重命名…</td><td><code>edit-rename</code></td><td>Shift + R</td><td>member</td><td></td></tr>
+  <tr><td><code>open-path</code></td><td>打开目标文件夹</td><td><code>act-open-folder</code></td><td>O</td><td>episode/member/group</td><td></td></tr>
+  <tr><td><code>qb-traffic</code></td><td>qB 口径流量图</td><td><code>open-qb-traffic</code></td><td>Ctrl + \</td><td>group</td><td>scope 口径差声明: 菜单项开该组口径(openQbGroup), Ctrl+\ 开全局口径(openQbHistory)——同族抽屉不同范围, 键帽仍标(动作族相同); gate=qb_traffic 关→整项不渲染, 键帽随行</td></tr>
+  <tr><td><code>skip_check</code></td><td>跳过哈希校验…</td><td>—</td><td>不显示</td><td>multi/member/group</td><td>注册表无此键, 不映射</td></tr>
+  <tr><td><code>transfer</code></td><td>转移到</td><td>—</td><td>不显示</td><td>四支</td><td>动态子项(transfer_flow), 不在注册表</td></tr>
+  <tr><td><code>sub-more</code></td><td>更多操作</td><td>—</td><td>不显示</td><td>member</td><td>父项</td></tr>
+  <tr><td><code>queue-top</code></td><td>队列顶部</td><td><code>queue-top</code></td><td>Ctrl + Home</td><td>member 次级</td><td></td></tr>
+  <tr><td><code>queue-up</code></td><td>向上移动队列</td><td><code>queue-up</code></td><td>Ctrl + ↑</td><td>member 次级</td><td></td></tr>
+  <tr><td><code>queue-down</code></td><td>向下移动队列</td><td><code>queue-down</code></td><td>Ctrl + ↓</td><td>member 次级</td><td></td></tr>
+  <tr><td><code>queue-bottom</code></td><td>队列底部</td><td><code>queue-bottom</code></td><td>Ctrl + End</td><td>member 次级</td><td></td></tr>
+  <tr><td><code>super-seeding</code></td><td>超级做种(动态 label)</td><td><code>super-seeding</code></td><td class="wr">空位(绑键后出现)</td><td>member 次级</td><td>def:"" 可自定义</td></tr>
+  <tr><td><code>force-start</code></td><td>强制启动(动态 label)</td><td><code>force-start</code></td><td>Shift + F</td><td>member 次级</td><td></td></tr>
+  <tr><td><code>auto-tmm</code></td><td>自动种子管理(动态 label)</td><td><code>auto-tmm</code></td><td>Shift + T</td><td>member 次级</td><td></td></tr>
+  <tr><td><code>share-limits</code></td><td>分享率限制…</td><td><code>share-limits</code></td><td class="wr">空位(绑键后出现)</td><td>member 次级</td><td>def:"" 可自定义</td></tr>
+  <tr><td><code>copy-name</code></td><td>复制名称</td><td><code>copy-name</code></td><td>Shift + C</td><td>member 次级</td><td></td></tr>
+  <tr><td><code>copy-hash</code></td><td>复制哈希</td><td><code>copy-hash</code></td><td>Shift + H</td><td>member 次级</td><td></td></tr>
+</table>
+<p class="cm">巧合注记: 次级 10 条菜单 id 与注册表 id 全部同名(copy-name/copy-hash/queue-top/queue-up/queue-down/queue-bottom/auto-tmm/force-start/super-seeding/share-limits) —— key 字段是显式引用, 同名只是巧合不作隐式依赖。</p>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+  <tr><th>#</th><th>题目</th><th>结论</th><th>日期</th></tr>
+  <tr><td>D1</td><td>总形态</td><td>常驻 + 按需二分; 右键菜单键帽常驻(用户初始指令)</td><td>2026-11-12</td></tr>
+  <tr><td>D2</td><td>常驻面清单</td><td>菜单键帽 + 抽屉页签徽标 + 状态栏 Shift+/ 入口; 顶栏/状态栏按钮 title 追加<strong>否决</strong></td><td>2026-11-12</td></tr>
+  <tr><td>D3</td><td>按需机制</td><td>不做 hold-reveal/sticky-modifier(与 Ctrl/Shift+click 多选冲突); Shift+/ 覆盖层即按需形态</td><td>2026-11-12</td></tr>
+  <tr><td>D4</td><td>列表导航键</td><td>不做常驻挂点, 归覆盖层(光标与选择两族 13 条纯键盘动作无可视挂点)</td><td>2026-11-12</td></tr>
+  <tr><td>D5</td><td>菜单键帽口径</td><td>有键位一律显示<strong>含 danger 三键</strong>(动作有确认框兜底); 未绑定/自定义项留白对齐</td><td>2026-11-12</td></tr>
+  <tr><td>D6</td><td>顶栏键帽</td><td>只做添加种子「N」+列「K」; 设置 Ctrl+, 不做(拉长 .tabs 药丸, 「,」单标误导)</td><td>2026-11-12</td></tr>
+  <tr><td>D7</td><td>状态栏按钮键帽</td><td>不做 —— 反斜杠三变体单字符不可区分 + 34px 锁高溢出, 物理不可行</td><td>2026-11-12</td></tr>
+  <tr><td>D8</td><td>帮助浮层/设置面板</td><td>内容与布局零改动(浮层 26-11-11 刚重排), 本轮只加状态栏入口</td><td>2026-11-12</td></tr>
+  <tr><td>D9</td><td>皮肤范围</td><td>四皮肤一步到位(共享模板+令牌自动同构; e2e fast 门禁 prism/atlas, 全皮肤截图目检)</td><td>2026-11-12</td></tr>
+  <tr><td>D10</td><td>tooltip 通道</td><td>整体否决(.aq-tip 为 hover 悬浮气泡, 用户明确不采用) —— I4 例外裁定, 仅限键位提示面</td><td>2026-11-12</td></tr>
+  <tr><td>D11</td><td>数据单点</td><td>菜单 <code>key</code> 字段引用注册表 shortcut id, 键位零二次维护; 取数 kbSerialWithDraft 同源(改绑即时生效)</td><td>2026-11-12</td></tr>
+  <tr><td>D12</td><td>计划落盘</td><td>单文件 HTML Open 入库, 实施等显式开工</td><td>2026-11-12</td></tr>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+  <tr><th>风险</th><th>触发条件</th><th>对策</th></tr>
+  <tr><td>窄菜单宽度/换行挤压</td><td>最长项「强制重新汇报 Shift + A」加键帽后菜单显著变宽或 label 折行</td><td>键帽列 nowrap + label 弹性吃满; 四皮肤截图实测定数字(先例 webui-kb-overlay-layout); 确定性数字不预写</td></tr>
+  <tr><td>ctxRenderItem 形状变更破坏消费方</td><td>自定义面板/守阵依赖渲染对象既有形状</td><td>只增字段不改既有字段; ctx registry 守阵对账扩 key 字段</td></tr>
+  <tr><td>合并页签徽标错位</td><td>合并态徽标与 _kbDrawerTab 重排表不同步</td><td>徽标取值与重排表同一单点; S4 合并开/关两态 e2e 断言</td></tr>
+  <tr><td>改绑后键帽不跟随</td><td>菜单键帽读 def 不读草稿</td><td>取数链 S1 就钉死 kbSerialWithDraft(item, draft) 与设置面板同源; S2 加改绑断言</td></tr>
+  <tr><td>状态栏溢出</td><td>入口钮挤占右角触发 overflow:hidden 裁切</td><td>插在 spacer 后左移一枚钮宽; 34px 内实测目检; 超限则改文案长度(「键位」二字已最短)</td></tr>
+  <tr><td>既有守阵连锁红</td><td>模板/注册表文本改动触发静态守阵</td><td>动前 test.quick 锁基线, 按 §02 守阵面清单同步; 注册表结构不动(_registry 解析器预计零改动, 跑即证)</td></tr>
+  <tr><td>wording 守阵</td><td>新文案「键位」触发 check_wording</td><td>文案过 wording 单点; 动词族不新增, 不与 qB 对齐动词冲突</td></tr>
+</table>
+
+<h2><span class="no">§08</span>测试与守阵面</h2>
+<table>
+  <tr><th>面</th><th>动作</th></tr>
+  <tr><td><code>test_webui_ctx_menu_registry.py</code></td><td>扩展 key 字段对账(key 引用的 shortcut id 必须存在于注册表; 无键位项 key 缺省合法)</td></tr>
+  <tr><td><code>test_webui_static_dom_*</code> / <code>test_webui_static_skins_*.py</code></td><td>模板断言同步(键帽节点/入口钮/页签徽标)</td></tr>
+  <tr><td>triggers 守阵</td><td>statusbar 入口新触发点入 <code>triggers.js</code> 审计面(ui 值按既有枚举口径扩名或复用)</td></tr>
+  <tr><td>e2e</td><td>menus: 键帽存在/留白/自定义项零键帽; drawer: 合并态徽标; 新入口: click 开关浮层; ctx-custom: 布局定制回归</td></tr>
+  <tr><td>全量</td><td><code>test.full</code> 全绿数字入基线切片(kb.new baseline, 数字实测誊写) + e2e fast 绿</td></tr>
+</table>
+
+<h2><span class="no">§09</span>回写清单(收尾时)</h2>
+<ul>
+  <li><code>memory-bank/architecture/webui.md</code>(或其附件): 新增「键位现场提示」节 —— key 字段口径/取数链单点/I4 例外裁定。</li>
+  <li><code>memory-bank/conventions/webui.md</code>「悬浮提示」节: 补一行例外注记(键位提示不走 title/.aq-tip, 引本计划)。</li>
+  <li>根 README: 核对零漂移即不动。</li>
+  <li>基线切片 + active-context 切片(kb.wrap)。</li>
+</ul>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-12-0344</span> 初版。来源: 用户指令「WEBUI快捷键缺提示…调研成熟的解决方案…grilling然后出一个修改计划」; 只读盘点两轮(键面全景表 58 条(54 绑键 + 4 空位) + 按钮/页签布局事实核查) + 外部方案调研(NN/g accelerator、golsteyn、saasui 三腿模式); grilling 两轮八问(Q1-Q8)拍板 D1-D12; 无关联 issue, 零 refs。计划 Open 入库, S1-S6 等显式开工。评审前 sync 15b0e888→6e7b4478(远端 12 笔, 部分组操作预警等多专题), 计划引用锚点文件零触碰, §02 已注记。</li>
+  <li><span class="tag">R1 · 26-11-12-0423</span> doc-refs 挂任务档案 26-11-12-webui-kbd-hints(kb.new task --refs 双向补链), 对齐 R0「零 refs」旧表述 —— 元数据与变更记录一致</li>
+</ul>
+
+</div>
+</body>
+</html>

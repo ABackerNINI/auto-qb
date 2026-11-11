@@ -14,7 +14,7 @@ UIS = ("atlas", "prism", "console")
 
 # 归一化串合法形态: 单一事实源在后端 routes/keys.py::_KEYS_SERIAL_RE(2026-10-15 消第三份手抄,
 # issue 26-10-11-0310) —— 与 shortcuts.js KB_DEF_RE 的跨层逐字一致由
-# tests/test_webui_static_skins.py::_scan_keys_serial_re 机械守阵
+# tests/webui_static_scan_js.py::_scan_keys_serial_re 机械守阵
 from auto_qb.webui.server.routes.keys import _KEYS_SERIAL_RE as KB_DEF_RE
 
 KB_SCOPES = {"global", "list", "drawer", "settings", "modal"}

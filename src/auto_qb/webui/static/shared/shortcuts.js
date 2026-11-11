@@ -157,7 +157,7 @@ function kbDisplayName(serial) {
 }
 
 /* 默认键位归一化串合法形态: 修饰键按固定序出现至多一次 + 单个 e.code(守阵逐条断言)
- * 与后端 routes/keys.py _KEYS_SERIAL_RE 同一正则, 逐字一致由 tests/test_webui_static_skins.py
+ * 与后端 routes/keys.py _KEYS_SERIAL_RE 同一正则, 逐字一致由 tests/webui_static_scan_js.py
  * _scan_keys_serial_re 机械守阵(issue 26-10-11-0310) —— 改一边必须改另一边 */
 const KB_DEF_RE = /^(Ctrl\+)?(Alt\+)?(Shift\+)?(Meta\+)?[A-Z][A-Za-z0-9]*$/;
 

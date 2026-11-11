@@ -29,7 +29,7 @@ logger = logging.getLogger("auto_qb.web")
 
 _KEYS_SCHEMA_VERSION = 1
 # 与 shortcuts.js KB_DEF_RE 同一正则(修饰键固定序 + 单个 e.code); 改一边必须改另一边 ——
-# 两侧逐字一致由 tests/test_webui_static_skins.py::_scan_keys_serial_re 机械守阵(issue 26-10-11-0310)
+# 两侧逐字一致由 tests/webui_static_scan_js.py::_scan_keys_serial_re 机械守阵(issue 26-10-11-0310)
 # 消费端必须 fullmatch(issue 26-11-07-0536): JS 的 $ 不匹配串尾换行, Python 的 $ 允许串尾恰一
 # 个 \n —— re.match 会把 "Ctrl+R\n" 判合法入库, 前端 _sanitize 再按 KB_DEF_RE.test 静默丢弃,
 # 快捷键无任何报错地失效; fullmatch(全串必须被消费)才与 JS test() 的语义等价, 正则字面量不动。

@@ -90,7 +90,7 @@
       { id: "sep:d2", kind: "sep" },
       { id: "delete", label: "删除…", note: CTX_SEED_NOTE, icon: { cls: "", use: "#i-trash" }, danger: true, act: (vm) => vm.delEpisode() },
     ],
-    /* 单种子(menu.hash): 一级 15 项(含「更多操作」「转移到」两个父项) + 5 线; 次级 11 项 + 2 线见 CTX_SUB_ITEM_DEFS */
+    /* 单种子(menu.hash): 一级 15 项(含「更多操作」「转移到」两个父项) + 5 线; 次级 10 项 + 2 线见 CTX_SUB_ITEM_DEFS */
     member: [
       { id: "resume", label: "启动", note: CTX_SEED_NOTE, icon: { cls: "ico-play", use: "#i-play" }, act: (vm) => vm.actTorrent("resume") },
       { id: "pause", label: "停止", note: CTX_SEED_NOTE, icon: { cls: "ico-pause", use: "#i-pause" }, act: (vm) => vm.actTorrent("pause") },
