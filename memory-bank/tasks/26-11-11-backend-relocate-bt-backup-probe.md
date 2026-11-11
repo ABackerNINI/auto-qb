@@ -5,7 +5,7 @@
 **Updated:** 2026-11-11
 **Summary:** BT_backup 配置从顶层 host:port 表收编为 relocate.bt_backup 标量(v7→v8 迁移) + 设置页按钮自动探测; S1-S6a 五批落地(分批评审全过, blocker 2 全修, 入池 0), 全量基线切片 26-11-11-0756(数字见 kb.baseline); 真机面部分完成——后端 hit+消歧 PASS, UI 回填段 BLOCKED 待复测(切片 26-11-11-0804); S7 收尾回写完成, 计划 Open 真机复测排期后翻 Done
 **Topics:** backend-relocate-bt-backup-probe
-**Refs:** memory-bank/plans/26-11-11-0259-plan-relocate-bt-backup-scalar-probe.html, memory-bank/pitfalls/ops/msys-container-path.md
+**Refs:** memory-bank/plans/26-11-11-0259-plan-relocate-bt-backup-scalar-probe.html, memory-bank/pitfalls/ops/msys-container-path.md, memory-bank/issues/26-11-11-2305-test-bt-backup-probe-real-retest.html
 
 ## 本篇只回答
 

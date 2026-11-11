@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>真机复测待排期: relocate.bt_backup 探测 UI 回填链 + offline 组 + RM04-21 整组迁移走通 (计划 26-11-11-0259 G5 后半) · test · 计划外问题（便签）</title>
+<meta name="issue-slug" content="bt-backup-probe-real-retest">
+<meta name="issue-stamp" content="26-11-11-2305">
+<meta name="issue-type" content="test">
+<meta name="doc-topic" content="relocate-bt-backup-scalar-probe">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-11-backend-relocate-bt-backup-probe.md, memory-bank/plans/26-11-11-0259-plan-relocate-bt-backup-scalar-probe.html">
+<meta name="issue-tier" content="light">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="真机复测待排期: relocate.bt_backup 探测 UI 回填链 + offline 组 + RM04-21 整组迁移走通 (计划 26-11-11-0259 G5 后半)">
+<meta name="issue-summary" content="G5 真机验收后半(UI hit 回填到保存落盘 + offline 组 + RM04-21 形态整组迁移 fastresume 收尾真机走通)因 clone3 s0 大库轮占用共享测试实例撞场 BLOCKED, 复测清单已写在真机切片 §04, 待排期续走">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --mark: #161e26;     /* issue 特有: callout 底色 (plan.html 不用) */
+    --warn-bg: #2a2119;  /* issue 特有: 状态徽标底色 */
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 单栏流式版面: 与 plan.html 同一套 .sheet (封顶 1280px, 侧距 clamp(18~44px)); 旧双栏+粘性目录已删 */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+
+  /* 封面 meta 行: issue 特有, DOM 形态别改 —— 状态徽标 <span class="badge"> 被
+     flip_status (W4) 与 check_status_drift 的 BADGE_RE 机读 (k/v div 结构在判据里) */
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px 28px; font-family: var(--mono); font-size: 11.5px; color: var(--faint); border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta-row .item .k { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .meta-row .item .v { font-size: 13.5px; color: var(--dim); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin: 14px 0; font-size: 14px; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-family: var(--mono); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">计划外问题（便签）· test</div>
+<h1>真机复测待排期: relocate.bt_backup 探测 UI 回填链 + offline 组 + RM04-21 整组迁移走通 (计划 26-11-11-0259 G5 后半)</h1>
+<p class="lede">G5 真机验收后半(UI hit 回填到保存落盘 + offline 组 + RM04-21 形态整组迁移 fastresume 收尾真机走通)因 clone3 s0 大库轮占用共享测试实例撞场 BLOCKED, 复测清单已写在真机切片 §04, 待排期续走</p>
+<div class="meta-row">
+  <div class="item"><div class="k">编号</div><div class="v">26-11-11-2305-test-bt-backup-probe-real-retest</div></div>
+  <div class="item"><div class="k">报告时间</div><div class="v">2026-11-11 23:05</div></div>
+  <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+</div>
+
+<section id="s1">
+  <h2><span class="no">§01</span>现象</h2>
+  <p>计划 26-11-11-0259 G5 的真机面(人工步改测试 qB 验证)只走完了前半: 后端探测 hit + hash 消歧正确性、编辑器渲染/placeholder/按钮可达、污染态 ambiguous 前端行为均已 PASS(切片 <code>memory-bank/testing/real-baselines/26-11-11-0804-real-relocate-bt-backup-probe.md</code>)。剩余未闭环四段——①UI hit 回填草稿 → 用户保存 → <code>relocate.bt_backup</code> 落盘验证;②offline 组(real.down 后点按钮, 200 未自证);③RM04-21 形态整组迁移真机走通 fastresume 收尾(出自计划 §04 S6 判据, 不在切片清单内);④复测后收尾清场(real.seed.clean + real.down + guard 复跑, 切片 §04 ③)。撞场原因: clone3 的 s0 大库轮占用共享测试实例(环境1, 36595)——切片记录时点 08:05 为 3000 枚 real-fake, 主会话 2026-11-11 23:13 只读 curl 复核已增至 5000 枚(轮次仍在加量), 我方假种子被对方轮次清场、hash 集被污染, hit 恒不可达;按 real-machine.md「同一时刻只允许一个 clone 跑 real.*」纪律停手。产品代码零缺陷证据, 纯排期问题。</p>
+</section>
+
+<section id="s2">
+  <h2><span class="no">§02</span>位置</h2>
+  <ul>
+    <li>复测清单(照着走): <code>memory-bank/testing/real-baselines/26-11-11-0804-real-relocate-bt-backup-probe.md</code> §04「未完成面」(取证 2026-11-11 23:05)· grep <code>未完成面</code></li>
+    <li>验收判据: <code>memory-bank/plans/26-11-11-0259-plan-relocate-bt-backup-scalar-probe.html</code> §1.2 G5 / §04 S6 行</li>
+    <li>环境口径: <code>memory-bank/testing/real-machine.md</code> §02(白名单/起停/guard 假红陷阱)</li>
+  </ul>
+</section>
+
+<section id="s3">
+  <h2><span class="no">§03</span>建议<span class="opt">（可选）</span></h2>
+  <p>等共享实例空出(clone3 s0 轮收尾)后按切片 §04 清单复测一轮;干净态三步(guard → real.seed L0 → dev.webui 派生配置)已验证可复现, 直接续走 hit 回填 → 保存落盘 → offline 组 → RM04-21 整组迁移。完成后把切片 §04 勾掉、任务档案 S6 翻 Done、本件 <code>commands run kb.status &lt;件&gt; Done</code>。</p>
+</section>
+
+<section id="s4">
+  <h2><span class="no">§04</span>状态变更日志</h2>
+  <ul>
+    <li>2026-11-11 23:05 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+  </ul>
+</section>
+
+<footer>
+  26-11-11-2305-test-bt-backup-probe-real-retest.html · 便签档（light）· 由 create-issue skill 入池；入池不等于已修，改动状态在上面的「状态变更日志」里留痕
+</footer>
+
+</div>
+</body>
+</html>
