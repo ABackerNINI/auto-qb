@@ -50,10 +50,10 @@ note    = "消失键且版本未抬时脚本拒绝重生成(先抬 CURRENT_VERSI
 
 [tasks."test.linux"]
 script  = "linux_ci.py"
-timeout = 900
-when    = "本机复现 Linux CI(平台差异排查): 起容器跑全量, 与 Windows 侧对照 —— 改了平台相关代码/测试后必跑"
-note    = "用脚本而不是一行 run: 命令里全是 && / ; / | 与多层引号, 引擎在 Windows 上走 cmd.exe, 引号地狱必踩。配方与两个必踩点(别删容器内 /work/.git, 否则 test_commands_engine 多 5 条假红; 先删宿主 .venv 再 uv sync)单点在 memory-bank/pitfalls/testing/patching.md「Docker 等价复现」节。2026-10-11 起**代理自动透传**: http_proxy/https_proxy 带回环主机(127.0.0.1/localhost)时改写成 host.docker.internal 并补 --add-host, no_proxy 恒并入回环 —— 缺改写则容器内 uv sync 连不上 PyPI, 缺回环放行则回环端点用例假红(守阵 .commands/test/scripts/test_linux_ci.py)。默认镜像 python3.12(= CI 矩阵), 传参可换镜像(如 python3.13-bookworm-slim)。输出全文透传(排障要看 FAILED 明细与覆盖率行)"
-doc     = "../../memory-bank/pitfalls/testing/patching.md"
+timeout = 1800
+when    = "本机复现 Linux CI(平台差异排查): Docker testbed 常驻容器内跑全量, 与 Windows 侧对照 —— 改了平台相关代码/测试后必跑"
+note    = "S2 起后端 = docker exec 常驻容器 auto-qb-testbed(计划 26-11-12-0152): 前置核容器在跑(不在则 [FAIL] 指引 test.linux-env, 不自动构建) -> workdir /root/auto-qb-tests/<slug>(--name 传参或自动 pid+时刻; D5 并行隔离) -> tar 流推送(排除清单 D4: __pycache__/.venv/node_modules/dist/.tools/.coverage*/.pytest_cache/.ruff_cache/auto-qb-data/tmp-analysis; .git 必随拷, find_root 坑; 含未提交 WIP) -> cp -a 模板 venv + uv export --no-hashes + uv pip install 补 delta(S1 拍板: 不用 uv sync --frozen, 锁文件 787 个 files.pythonhosted.org 绝对 URL 不吃镜像索引) -> 容器内 timeout 1500s 内层包裹 pytest(先到先干净退出, R6; 引擎 timeout 900→1800: 900s 旧值连拷贝带全量必超, issue 26-11-12-0053; 内外层差 300s 付推送与 venv 准备, T2b 实测后校准)。保留**代理透传面**: 回环主机改写 host.docker.internal(Docker Desktop 内建 DNS, exec 免 --add-host, 2026-11-12 getent 实证), no_proxy 恒并入回环 —— 缺回环放行则 test_hr_server.py 回环端点用例假红(坑档 pitfalls/testing/patching.md「容器网络坑」)。变体: --python 3.12 / --name <slug>。下轮开跑前按「内嵌 pid 已死 + mtime 超龄 12h」双条件清扫旧 workdir(R6 兜底, 同 _tmp_bootstrap 纪律)。守阵 .commands/test/scripts/test_linux_ci.py; 输出全文透传"
+doc     = "../../memory-bank/plans/26-11-12-0152-plan-linux-testbed-docker.html"
 
 # S1 基建(计划 26-11-12-0152): Docker 常驻容器 testbed 的环境底座。test.linux / test.linux-e2e
 # / mutants.* 六条全部以这个容器为宿主(docker exec; S2 起落地, 现状 test.linux 走自带容器),
