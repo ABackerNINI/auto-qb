@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>test.linux 包装超时 900s 已不够, 且 3.12 镜像 uv 补下载托管 CPython 走 github 容器内不通 · chore · 计划外问题（便签）</title>
+<meta name="issue-slug" content="linux-ci-timeout-py-download">
+<meta name="issue-stamp" content="26-11-12-0053">
+<meta name="issue-type" content="chore">
+<meta name="doc-topic" content="linux-ci-timeout-py-download">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="light">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="test.linux 包装超时 900s 已不够, 且 3.12 镜像 uv 补下载托管 CPython 走 github 容器内不通">
+<meta name="issue-summary" content="本机复现 Linux CI 的 test.linux 在仓库增大后必超时成孤儿容器, 3.12 镜像还会因 .python-version=3.13 触发 github 下载被墙">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --mark: #161e26;     /* issue 特有: callout 底色 (plan.html 不用) */
+    --warn-bg: #2a2119;  /* issue 特有: 状态徽标底色 */
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 单栏流式版面: 与 plan.html 同一套 .sheet (封顶 1280px, 侧距 clamp(18~44px)); 旧双栏+粘性目录已删 */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+
+  /* 封面 meta 行: issue 特有, DOM 形态别改 —— 状态徽标 <span class="badge"> 被
+     flip_status (W4) 与 check_status_drift 的 BADGE_RE 机读 (k/v div 结构在判据里) */
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px 28px; font-family: var(--mono); font-size: 11.5px; color: var(--faint); border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta-row .item .k { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .meta-row .item .v { font-size: 13.5px; color: var(--dim); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin: 14px 0; font-size: 14px; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-family: var(--mono); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">计划外问题（便签）· chore</div>
+<h1>test.linux 包装超时 900s 已不够, 且 3.12 镜像 uv 补下载托管 CPython 走 github 容器内不通</h1>
+<p class="lede">本机复现 Linux CI 的 test.linux 在仓库增大后必超时成孤儿容器, 3.12 镜像还会因 .python-version=3.13 触发 github 下载被墙</p>
+<div class="meta-row">
+  <div class="item"><div class="k">编号</div><div class="v">26-11-12-0053-chore-linux-ci-timeout-py-download</div></div>
+  <div class="item"><div class="k">报告时间</div><div class="v">2026-11-12 00:53</div></div>
+  <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">chore</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+</div>
+
+<section id="s1">
+  <h2><span class="no">§01</span>现象</h2>
+  <p>本机复现 Linux CI 的 <code>test.linux</code> 两处环境缺口(取证 2026-11-12, 修 CI 红测试时实测): ①引擎包装超时 900s 不够 —— 仓库 477M 走 Docker 共享挂载 <code>cp -a /src/. /work/</code> 实测约 1MB/s(光拷贝 ~10 分钟), 加 uv sync + 全量 pytest 合计 ~15 分钟; 超时杀包装进程后容器成孤儿继续跑(<code>docker run</code> 客户端进程死、容器不随 <code>--rm</code> 退), 输出全丢。②默认镜像 <code>python3.12-bookworm-slim</code> 下, uv 因 <code>.python-version=3.13</code> 补下载托管 CPython(astral-sh/python-build-standalone, 源在 github), 容器内直连 github 超时(容器通 PyPI 200, github timeout) → <code>uv sync</code> 直接失败。</p>
+</section>
+
+<section id="s2">
+  <h2><span class="no">§02</span>位置</h2>
+  <ul>
+    <li><code>.commands/test/config.toml</code> <code>[tasks."test.linux"]</code> <code>timeout = 900</code>(取证 2026-11-12 00:53)· grep 关键词 <code>test.linux</code></li>
+    <li><code>.commands/test/scripts/linux_ci.py</code> <code>INNER</code>(拷贝 + uv sync 的容器内命令)、<code>IMAGE = "ghcr.io/astral-sh/uv:python3.12-bookworm-slim"</code>(取证同上)· grep 关键词 <code>IMAGE =</code> / <code>cp -a /src</code>(<code>python-build-standalone</code> 串只出现在 uv sync 失败输出里, 本仓代码无)</li>
+    <li>根因侧: <code>.python-version</code> = 3.13 与默认镜像 3.12 不匹配, 是 ② 的触发条件</li>
+  </ul>
+</section>
+
+<section id="s3">
+  <h2><span class="no">§03</span>建议<span class="opt">（可选）</span></h2>
+  <p>临时绕法(本次已用, 未入库): 直跑脚本绕开 900s; 传参 <code>ghcr.io/astral-sh/uv:python3.13-bookworm-slim</code> 用 3.13 镜像免下载。正修方向: timeout 抬到 ~1800s、默认镜像改 3.13 或 uv 钉 <code>--python</code>, 孤儿容器按容器名/挂载源核验后回收。</p>
+</section>
+
+<section id="s4">
+  <h2><span class="no">§04</span>状态变更日志</h2>
+  <ul>
+    <li>2026-11-12 00:53 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+  </ul>
+</section>
+
+<footer>
+  26-11-12-0053-chore-linux-ci-timeout-py-download.html · 便签档（light）· 由 create-issue skill 入池；入池不等于已修，改动状态在上面的「状态变更日志」里留痕
+</footer>
+
+</div>
+</body>
+</html>

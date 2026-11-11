@@ -148,7 +148,9 @@ daemon 主体:
 - test_listening_owner_pid_injected_map_no_subprocess: 注入映射的归属面不起子进程(subprocess
   下毒); 端口无主/归属不唯一 => None+warning(与自取路径同语义)
 - test_observe_owner_injected_map_matches_self_fetch: 注入映射的候选面不起子进程且与自取路径
-  (同一输出)结论一致 —— W2a 每 poll 一次读取喂「归属+指纹」两消费面的接线契约
+  结论一致(自取路径两平台分派任一平台都跑, 两支各 os.name 桩钉住: nt 桩 netstat 输出 /
+  proc 桩 /proc 表+fd, 各让 8081 归 pid 100) —— W2a 每 poll 一次读取喂「归属+指纹」两
+  消费面的接线契约
 - test_observation_zero_bet_absorb_row1: §03.2 行一 零赌注吸收(同域阈值, T2 major 修正)——
   ct < owner.ct 的非 owner 面直接进 absorbed(OS create_time 同域比消钟差, 持久面变更,
   不需要指纹通道); owner 本尊/已吸收面不重复; 名册 None 整拍不动
@@ -2249,18 +2251,45 @@ def test_listening_owner_pid_injected_map_no_subprocess(monkeypatch, caplog):
 
 
 def test_observe_owner_injected_map_matches_self_fetch(monkeypatch):
-    """候选面同源一致性: 注入映射的 _observe_owner 不起子进程, 且与自取路径(桩同一
-    netstat 输出)结论一致 —— W2a 每 poll 一次读取喂「归属 + 指纹」两消费面的接线契约"""
+    """候选面同源一致性: 注入映射的 _observe_owner 不起子进程, 且与自取路径结论一致 ——
+    W2a 每 poll 一次读取喂「归属 + 指纹」两消费面的接线契约。自取路径的两平台分派在任一
+    平台都跑(两支各 os.name 桩钉住): nt 支桩 netstat 输出, proc 支桩 /proc 表+fd, 两支
+    各让 8081 归 pid 100 —— 修 CI Linux 红: 分派不钉时 Linux 上 netstat 桩落空/proc 支
+    真读 /proc(8081 无监听 => None)(坑: 平台分派的测试每支都必须钉住自己的分派)。"""
     def _poison(*a, **kw):
         raise AssertionError("注入映射后不得再起子进程")
 
     qb = {100: {"name": "qBittorrent", "ct": 100.0}}
     monkeypatch.setattr(rd.subprocess, "run", _poison)
     assert rd._observe_owner(8081, qb, 500.0, listen_map={100: frozenset({8081})}) == _owner_record(100, 100.0, 500.0)
-    # 自取路径(桩同一输出)与注入路径结论一致
+    # 自取路径 nt 分派(os.name 桩钉住分派 —— Linux 上不钉则走 proc 分派, netstat 桩落空,
+    # 即本批修的 CI 红同根因): 桩 netstat 输出(编码/超时钉法回归防线), 与注入路径结论一致
+    monkeypatch.setattr(rd.os, "name", "nt")
     calls = _stub_stdout(monkeypatch, NETSTAT_MAP_EN)
     assert rd._observe_owner(8081, qb, 500.0) == _owner_record(100, 100.0, 500.0)
     assert calls["timeout"] == 10
+    # 自取路径 proc 分派(os.name 桩, 两平台都跑): /proc/net/tcp 8081(LISTENING, inode 111)
+    # 归 pid 100, 与 NETSTAT_MAP_EN 同一结论; proc 分派同样不起子进程(回毒)
+    monkeypatch.setattr(rd.subprocess, "run", _poison)
+    monkeypatch.setattr(rd.os, "name", "posix")
+    tcp = (
+        "  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode\n"
+        "   0: 00000000:1F91 00000000:0000 0A 00000000:00000000 00:00000000 00000000     0        0 111 1 0\n"
+    )
+    links = {"/proc/100/fd/3": "socket:[111]"}
+
+    def _listdir(p):
+        if p == "/proc":
+            return ["100"]
+        try:
+            return {"/proc/100/fd": ["3"]}[p.replace("\\", "/")]
+        except KeyError:
+            raise OSError(2, f"no fd dir {p}")
+
+    monkeypatch.setattr(rd.os, "listdir", _listdir)
+    monkeypatch.setattr(rd.os, "readlink", lambda p: links.get(p.replace("\\", "/"), "pipe:[1]"))
+    _stub_proc_open(monkeypatch, {"/proc/net/tcp": tcp, "/proc/net/tcp6": OSError(2, "no tcp6")})
+    assert rd._observe_owner(8081, qb, 500.0) == _owner_record(100, 100.0, 500.0)
 
 
 def test_observation_zero_bet_absorb_row1():
