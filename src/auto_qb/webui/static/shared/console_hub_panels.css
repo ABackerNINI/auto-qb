@@ -526,3 +526,21 @@
   font-size: 12px; color: var(--fg-dim); }
 .hb-branch-then .hb-step { margin-bottom: 6px; }
 .hb-choose-foot { display: flex; gap: 8px; }
+
+/* ---- 键帽通用类(计划 26-11-12-0344 S1, 不变量 I3) ----
+ * 右键菜单键帽 / 顶栏键帽 / 抽屉页签徽标 / 状态栏入口(计划 S2-S5 消费)共用的键帽基形,
+ * 口径沿用上方键位面板与帮助浮层先例(.kb-row-keys kbd / .kb-help-row kbd): 11px mono +
+ * 2px 底边加重描边的键帽感。令牌纪律: 只引用四皮肤 :root 既有令牌(--surface-2 / --border /
+ * --fg / --font-mono), 零新增令牌, 四皮肤令牌名集不动(令牌 parity 守阵继续兜住)。
+ * WARN: 字体必须走 --font-mono 而非 --hb-font-mono —— 后者只定义在 .hub-page 上, 键帽消费面
+ * (菜单/顶栏/状态栏/页签)在主视图拿不到它; 四皮肤 :root 都有 --font-mono(parity 守阵)。
+ * 取数纪律(I1): 键帽文本一律 shortcuts.js kbShortcutDisplay 现算, 此处只管形状不管内容。 */
+.aq-kbd {
+  font: 500 11px/1 var(--font-mono);
+  color: var(--fg);
+  padding: 3px 7px;
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  background: var(--surface-2);
+  white-space: nowrap;
+}

@@ -66,7 +66,8 @@ Delete 直连注册表外, 均为已拍板的口径, 逐条落断言。W5 局部
   Esc 退栈链 / escBusy / _kbOverlayBusy 三处名单同步; 帮助浮层模板(只读速查 + 前往设置链接)
 - test_settings_panel_section: settings-detail 独立 'keys' 分支已删除(2026-11-03 改版并入 WebUI 卡):
   aqb:kb-full-modal 扫描锚内录制/禁用/重置/冲突三选一/保存放弃全套钮 + 覆盖层三件套(遮罩/面板/
-  v-show=kbFullOpen, 默认折叠) + 折叠块头展开钮与读数; config_hub 只认 "webui"(旧 keys 存量值经
+  v-show=kbFullOpen, 默认折叠) + 折叠块头展开钮与读数(键帽串经 kbDisplayOf 走 kbShortcutDisplay
+  取数单点, 计划 26-11-12-0344 S1); config_hub 只认 "webui"(旧 keys 存量值经
   HUB_VIEW_ALIAS 映射), 独立首页卡不复活; console_hub.css 有 .kb-row 样式
 - test_kb_full_overlay_wiring: 键位编辑全屏覆盖层(2026-11-03 改版)接线 —— Esc 退栈链有 kbFullOpen
   分支(对话层级先于清筛选兜底), escBusy/_kbOverlayBusy 两名单同步, state.js 默认折叠不持久化;
@@ -642,7 +643,7 @@ def test_settings_panel_section() -> None:
     frag = m.group(1)
     for needle in (
         "kbRecord(it.id)", "kbDisableRow(it)", "kbResetRow(it)", "kbResetAll()", "kbSaveKeys()", "kbDraftRevert()",
-        "kbConflictResolve(", "kbDisplayName(kbSerialOf(it))"
+        "kbConflictResolve(", "kbDisplayOf(it)"
     ):
         assert needle in frag, f"快捷键面板缺交互 {needle}"
     # 覆盖层三件套 + 默认折叠(HR 覆盖层同款判据, test_frontend_hr_full_modal_wiring 同口径)

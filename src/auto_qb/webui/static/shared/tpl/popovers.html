@@ -415,7 +415,7 @@
                 {{ kbLabel(it) }}
                 <span v-if="it.danger" class="kb-danger">WARN:</span>
               </span>
-              <kbd v-if="kbSerialOf(it)">{{ kbDisplayName(kbSerialOf(it)) }}</kbd>
+              <kbd v-if="kbDisplayOf(it)">{{ kbDisplayOf(it) }}</kbd>
               <span v-else class="kb-none">未绑定</span>
             </div>
           </div>

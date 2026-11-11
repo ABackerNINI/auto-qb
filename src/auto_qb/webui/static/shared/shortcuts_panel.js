@@ -123,6 +123,11 @@ Object.assign(window.AQB_SHORTCUTS.methods, {
     kbSerialOf(item) {
       return kbSerialWithDraft(item, this.kbDraft);
     },
+    /* 键帽显示串(设置键位面板 / 帮助浮层模板共用): 走 shortcuts.js kbShortcutDisplay 取数
+     * 单点(计划 26-11-12-0344 S1, 不变量 I1) —— 空串判定 + 显示名都内含在单点里, 模板不自己拼 */
+    kbDisplayOf(item) {
+      return kbShortcutDisplay(item, this.kbDraft);
+    },
     kbIsOverridden(item) {
       return !!(this.kbDraft && this.kbDraft.overrides && Object.prototype.hasOwnProperty.call(this.kbDraft.overrides, item.id));
     },

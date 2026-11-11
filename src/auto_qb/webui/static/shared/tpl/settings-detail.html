@@ -168,7 +168,7 @@
                               <span v-if="it.fixed" class="hb-badge on">固定</span>
                             </span>
                             <span class="kb-row-keys">
-                              <kbd v-if="kbSerialOf(it)">{{ kbDisplayName(kbSerialOf(it)) }}</kbd>
+                              <kbd v-if="kbDisplayOf(it)">{{ kbDisplayOf(it) }}</kbd>
                               <span v-else class="kb-none">未绑定</span>
                             </span>
                             <span class="kb-row-acts">

@@ -156,6 +156,20 @@ function kbDisplayName(serial) {
   }).join(" + ");
 }
 
+/* ---------------- 键帽取数单点(计划 26-11-12-0344 S1, 不变量 I1) ----------------
+ * 注册表条目 -> 键位显示串的唯一入口: 条目当前生效键位 = kbSerialWithDraft(模板基准 def ⊕
+ * 用户草稿 overrides, 空串 = 显式禁用)空串判定 —— 未绑定条目返回空串, 消费方据此不渲染键帽
+ * (I5 留白对齐) —— 再经 kbDisplayName 把物理 code 串翻成人类键名。
+ * 设置键位面板 / Shift+/ 帮助浮层(经 shortcuts_panel.js kbDisplayOf)与右键菜单等后续键帽
+ * 消费方(计划 S2 起)一律经本函数取数: 不许第二套取数逻辑, 更不许在任何模板/JS 里写死键位串
+ * —— 改绑即时生效与空串即隐藏由这同一条链保证。draft 传 Vue 侧 kbDraft(面板即时试用稿)或
+ * window.AQB_KEYS.load() 同步快照(非 Vue 渲染层, 引擎同口径)。 */
+function kbShortcutDisplay(item, draft) {
+  if (!item) return "";
+  const serial = kbSerialWithDraft(item, draft);
+  return serial ? kbDisplayName(serial) : "";
+}
+
 /* 默认键位归一化串合法形态: 修饰键按固定序出现至多一次 + 单个 e.code(守阵逐条断言)
  * 与后端 routes/keys.py _KEYS_SERIAL_RE 同一正则, 逐字一致由 tests/webui_static_scan_js.py
  * _scan_keys_serial_re 机械守阵(issue 26-10-11-0310) —— 改一边必须改另一边 */
