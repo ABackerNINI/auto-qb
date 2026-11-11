@@ -8,17 +8,19 @@
 - test_r4_search_quiet_retry_backoff: R5#236 —— view.js 静默刷新失败重试退避真跑: searchBuilding 残留 true 时失败续查逐次翻倍夹 15s(2s/4s/8s/15s/15s, 与轮询失败退避 currentPollMs 同曲线口径), 服务端宕机不再形成固定 1 req/s 无限循环; 成功一轮计数清零且续查保持 1s 节拍、resetSearch 新会话从零起算
 - test_r4_lifecycle_unmounted_listener_sweep: R5#3 —— lifecycle.js mounted/unmounted 监听对称 node 电池真跑: mounted 挂的五支监听(click 收层/Esc 退栈/防抖 resize/visibilitychange/contextmenu)提为实例字段后 unmounted 逐一撤除(热重载句柄不再堆叠), stopPolling 与 stopEvents 同收, 既有撤除面(键盘引擎/守卫/storage/时钟 interval)零回归
 - test_r4_webflags_boot_retry_and_ensure: issue 26-11-11-0633 —— loadWebFlags boot 韧性 node 电池真跑: boot 期(loadWebFlagsBoot)失败 1s/3s 退避各补一发共三发(穷尽止/中间态保持 fail-closed)、登出态(e.auth)不重试不排定时器、flagsLoaded 态(成功收口/"未取到"可分)、惰性补拉 ensureWebFlags(已取到返回 null 零副作用/未取到补一发)、并发单飞(同档同帧与退避窗口期并入复用同一 promise 不叠发)、档位分槽(boot 链在途时惰性补拉异档另起单发不骑退避链、惰性结算不挤占 boot 槽, 请求计数钉 3 发)
+- test_r4_truth_snapshot_materialized_members: S2a ingestion 物化缝(计划 26-11-11-0630 §03)× 乐观真值快照 node 电池真跑 —— S2a 后 _snapshotTruth 的组员源从服务端成员字典换成客户端物化拷贝, 此前该缝 tests/ 零命中。前置两断言钉 spike 裁决不变式(组员 = **独立浅拷贝**非平铺行引用, 同 hash 多命中各为独立对象; applyOptimisticPatch 经 _forEachRow 平铺行与组员拷贝同拍命中); 三个绿色向: 全量轮(命令在途)物化源 = 载荷平铺行 = 服务端真值 → 快照逐键比对不误判收敛(hold 保留)且 op.prev 保鲜为真值(兜底回滚不打到补丁值) / 全量轮真值落地 kind 对齐 → 正常收敛(撤 hold 出口) / 增量轮组未脏 → 组不进 d.groups → 快照无该 hash → 宁可慢收不误判(3s 兜底)。*已知边界(电池内注释, 不落断言)*: 误判窗口 = 组脏(**他员变化**使组进 d.groups)+ 该组另有成员 pending —— 物化源落到本地已打补丁行, 快照可能读到补丁值提前撤 hold(op.prev 同窗被污染); 影响如实两分支: 成功路径真值落地即收敛, 失败/停滞路径补丁值停留至该成员下次变化或下一次全量轮(回滚与 3s 兜底同被跳过, 长期滞留而非一轮弹回, 已确认接受该残留) —— S2a 报告「混合组未脏」表述以此修正: **组完全未脏是安全向**(即第三个绿色断言); 三入口接线(delta 桶序/先物化后赋值/auth.js 同缝)留给 S4 e2e 覆盖
 
 加载口径: 单文件域直接读盘 eval(顶层纯函数声明随非严格 eval 入作用域, 同 hrsCompareRows 电池范式);
-定时器全部桩住(只记节拍/手动放拍), 时钟可手动放拍 —— 免得真睡 3s/15s。无 node 时 _run_probe 返回
-None、_assert_battery 即红(不引入 pytest skip; 有 node 时断言电池全绿)。
+多域电池(真值快照 × S2a 物化)经 _run_probe 的 list 路径两路 argv 同进程 eval(polling.js + commands.js
+域聚合 bundle_file, webui_helpers 先例)。定时器全部桩住(只记节拍/手动放拍), 时钟可手动放拍 —— 免得
+真睡 3s/15s。无 node 时 _run_probe 返回 None、_assert_battery 即红(不引入 pytest skip; 有 node 时断言电池全绿)。
 """
 
 import json
 import shutil
 import subprocess
 
-from webui_helpers import STATIC_ROOT
+from webui_helpers import STATIC_ROOT, bundle_file
 
 
 def _shared(name):
@@ -27,12 +29,14 @@ def _shared(name):
 
 
 def _run_probe(probe, path):
-    """跑一个 node 电池: 无 node 返回 None(由 _assert_battery fail-fast 红); 输出末行必须是 {ok, total, failed} JSON"""
+    """跑一个 node 电池: 无 node 返回 None(由 _assert_battery fail-fast 红); 输出末行必须是 {ok, total, failed} JSON。
+    path 传单文件路径(str)或路径列表(依序作 argv[1..n], 多域电池同进程多路 eval, 见真值快照 × 物化电池)"""
     node = shutil.which("node")
     if not node:
         return None
+    paths = path if isinstance(path, (list, tuple)) else [path]
     proc = subprocess.run(
-        [node, "-e", probe, path],
+        [node, "-e", probe, *paths],
         capture_output=True,
         text=True,
         encoding="utf-8",
@@ -664,6 +668,103 @@ const slotsEmpty = (c) => !c._flagsLoadSlots || Object.keys(c._flagsLoadSlots).l
     failed: checks.filter((c) => !c[1]).map((c) => c[0]) }));
 })().catch((e) => { console.error(e && e.stack || e); process.exit(1); });
 """
+# S2a ingestion 物化缝(计划 26-11-11-0630 §03)× 乐观真值快照: 绿色向三场景 ----------------------
+# S2a 后组行 members 进客户端是 hash 串, 三条 state 入口(polling.js applyStateRows 全量/delta +
+# auth.js bootstrap)在赋值前就地物化成成员行浅拷贝; _snapshotTruth(commands_optimistic.js)的组员
+# 源随之从服务端成员字典换成这些拷贝 —— 快照「只认服务端真值」的语义换源后要重新钉住, 此前该缝
+# tests/ 零命中(e2e 乐观用例只走 Happy 时序)。
+# *已知边界(不落断言, S2a 报告表述修正)*: 误判窗口 = 组脏(**他员变化**使组进 d.groups)+ 该组另有
+# 成员 pending —— delta 物化源落到本地已打补丁行, 快照可能读到补丁值而提前撤 hold(op.prev 同窗被
+# 污染)。影响如实两分支: 成功路径真值落地即收敛(观感与换源前一致); 失败/停滞路径(该成员此后静默
+# 不脏)补丁值停留至其下次变化或下一次全量轮, 期间失败回滚(resolveOptimistic: op 已删即跳过)与
+# 3s 兜底(_expirePending 同依赖 pendingOps)一并被跳过 —— 是长期滞留而非「一轮弹回」, 已确认接受
+# 该残留(S2 缝语义)。「组完全未脏」是安全向(场景 3 断言钉住); 组完全未脏时物化根本不发生
+# (组不进 d.groups), 与误判窗口互斥。
+# *接线覆盖声明*: 三场景直呼物化/快照助手, 不经 applyStateRows/refresh 驱动 —— 三入口接线
+# (delta 桶序 torrents/singles 先于 groups、先物化后赋值、auth.js bootstrap 同缝)由 S4 e2e
+# 全量回归覆盖(计划 26-11-11-0630 §04 S4), 本电池不重复钉。
+_NODE_TRUTHSNAPSHOT_PROBE = r"""
+const fs = require("fs");
+global.window = {};
+eval(fs.readFileSync(process.argv[1], "utf8"));   // polling.js(S2a 物化三助手 _memberIndexBuild/_materializeGroupRows/_rematDrain)
+eval(fs.readFileSync(process.argv[2], "utf8"));   // commands.js 域聚合(commands + commands_optimistic + commands_send)
+const P = window.AQB_POLL.methods;
+const C = window.AQB_COMMANDS.methods;
+const checks = [];
+const ok = (name, cond) => checks.push([name, !!cond]);
+
+// vm = 轮询域 + 命令域 methods 合并(生产里 mixin 进同一个 Vue 实例, 方法全走 this)
+const mk = () => Object.assign({}, P, C, {
+  torrents: [], singles: [], groups: [], pendingOps: {}, truthSnapshot: null,
+});
+// 基线: 组 k1 两成员 A(活跃, 会变的"他员") + B(将 pending); 组行 hash 形进站 → 物化
+const boot = (vm) => {
+  vm.torrents = [{ hash: "A", kind: "downloading", progress: 0.5 }, { hash: "B", kind: "seeding", progress: 1 }];
+  vm.singles = [];
+  vm.groups = [{ key: "k1", members: ["A", "B"] }];
+  vm._materializeGroupRows(vm.groups, vm._memberIndexBuild(vm.torrents, vm.singles));
+  vm.pendingOps = {};
+  vm.truthSnapshot = null;
+};
+
+(async () => {
+  // 0. 物化基元(spike 裁决不变式): 组员是**独立浅拷贝**非平铺行引用 —— 同 hash 多命中各为
+  //    独立对象, 乐观链 prev 采集(后命中覆盖前命中)才不互相污染; 快照换源后的语义全建立在它上。
+  const vm0 = mk();
+  boot(vm0);
+  ok("物化: hash 形 members 原地换成成员行对象(消费位不见 hash 串)", typeof vm0.groups[0].members[0] === "object");
+  ok("物化: 组员拷贝独立于平铺行(非同一引用)", vm0.groups[0].members[1] !== vm0.torrents[1]);
+  vm0.applyOptimisticPatch(["B"], "pause", { kind: "paused" });
+  ok("补丁链: _forEachRow 三数组同拍命中(平铺行 + 组员拷贝都吃到 patch)",
+    vm0.torrents[1].kind === "paused" && vm0.groups[0].members[1].kind === "paused");
+
+  // 1. 全量轮(命令在途): refresh 走 full 分支, 物化源 = 载荷平铺行 = 服务端真值(B 仍 seeding,
+  //    pause 未落地)→ 快照逐键比对读真值 → 不误判收敛(hold 保留), 且 op.prev 被真值保鲜
+  //    (take() 的 op.prev 合并) —— 兜底回滚打的是真值, 不是补丁值。
+  //    判别面: 快照 torrents 桶只放 [A](take 先扫平铺桶, m.has 短路)—— B 只能经组员拷贝命中,
+  //    物化源(载荷真值 vs 本地已补丁行)才真正进断言; 若物化错源读补丁值(kind=paused),
+  //    「不误判收敛」与「prev 保鲜」两条都会红。
+  const vm1 = mk();
+  boot(vm1);
+  vm1.applyOptimisticPatch(["B"], "pause", { kind: "paused" });
+  const fullT = [{ hash: "A", kind: "downloading", progress: 0.6 }, { hash: "B", kind: "seeding", progress: 1 }];
+  const fullG = [{ key: "k1", members: ["A", "B"] }];
+  vm1._materializeGroupRows(fullG, vm1._memberIndexBuild(fullT, []));
+  vm1._snapshotTruth({ torrents: [fullT[0]], singles: [], groups: fullG });
+  ok("全量轮在途: 快照确实经组员拷贝取到 B(守门: groups 迭代回退/物化失效时此条红)",
+    vm1.truthSnapshot && vm1.truthSnapshot.has("B"));
+  ok("全量轮在途: 快照读载荷真值(kind=seeding)→ 不误判收敛(hold 保留)",
+    vm1._optimisticSettled("B", vm1.pendingOps.B) === false);
+  ok("全量轮在途: op.prev 保鲜为服务端真值(兜底回滚不打到补丁值)", vm1.pendingOps.B.prev.kind === "seeding");
+
+  // 2. 全量轮(真值已落地): 服务端 kind=paused 与补丁对齐 → 收敛(撤 hold 出口, 既有契约)。
+  const vm2 = mk();
+  boot(vm2);
+  vm2.applyOptimisticPatch(["B"], "pause", { kind: "paused" });
+  const landT = [{ hash: "A", kind: "downloading", progress: 0.6 }, { hash: "B", kind: "paused", progress: 1 }];
+  const landG = [{ key: "k1", members: ["A", "B"] }];
+  vm2._materializeGroupRows(landG, vm2._memberIndexBuild(landT, []));
+  vm2._snapshotTruth({ torrents: landT, singles: [], groups: landG });
+  ok("真值落地: 快照 kind=paused 与补丁对齐 → 收敛(撤 hold)", vm2._optimisticSettled("B", vm2.pendingOps.B) === true);
+
+  // 3. 增量轮(组未脏, 安全向): B 的组 k1 未脏 → 不进 d.groups → 物化不发生、快照无 B →
+  //    不收敛(hold 保留, 交 3s 兜底) —— 宁可慢收不可误判; 同轮另一组 k2 脏(X 推进)照常
+  //    走 delta 物化与快照, 证明安全向不是"delta 轮整体跳过"的假绿。
+  const vm3 = mk();
+  boot(vm3);
+  vm3.applyOptimisticPatch(["B"], "pause", { kind: "paused" });
+  const dT = [{ hash: "X", kind: "downloading", progress: 0.9 }];
+  const dG = [{ key: "k2", members: ["X"] }];
+  vm3.torrents = [...vm3.torrents, dT[0]];   // 平铺桶先行合并(applyRows upsert 追加)
+  vm3._materializeGroupRows(dG, vm3._memberIndexBuild(null, null));
+  vm3._snapshotTruth({ torrents: dT, singles: [], groups: dG });
+  ok("增量轮组未脏: 快照无该 hash → 不误判收敛(hold 保留, 3s 兜底)",
+    vm3._optimisticSettled("B", vm3.pendingOps.B) === false);
+
+  console.log(JSON.stringify({ ok: checks.filter((c) => c[1]).length, total: checks.length,
+    failed: checks.filter((c) => !c[1]).map((c) => c[0]) }));
+})().catch((e) => { console.error(e && e.stack || e); process.exit(1); });
+"""
 
 
 def test_r4_sse_edge_reconnect_state_machine():
@@ -701,3 +802,9 @@ def test_r4_webflags_boot_retry_and_ensure():
     (穷尽三发止/auth 态不重试) + flagsLoaded 态收口("未启用"与"未取到"可分) + 惰性补拉
     ensureWebFlags(已取到零副作用/在途复用单飞) + 并发单飞不叠发; 全程 fail-closed 语义保持。"""
     _assert_battery(_run_probe(_NODE_WEBFLAGS_PROBE, _shared("lifecycle.js")), "flags boot 韧性电池")
+def test_r4_truth_snapshot_materialized_members():
+    """S2a 物化缝 × 乐观真值快照: 快照读服务端真值不读本地补丁值(全量在途/真值落地/增量安全向三绿色向)。"""
+    _assert_battery(
+        _run_probe(_NODE_TRUTHSNAPSHOT_PROBE, [_shared("polling.js"), bundle_file("commands.js")]),
+        "真值快照×物化电池",
+    )

@@ -15,6 +15,14 @@ function _esDisconnectEdge(prev) {
  * 跨文件不变式: AQB_POLL_STALL_MS >= AQB_FETCH_TIMEOUT_MS(守阵 test_frontend_api_request_timeout)。 */
 const AQB_POLL_STALL_MS = 30000;
 
+/* P-02 二期 S2a ingestion 物化的缺项待补队列(计划 26-11-11-0630 §03): key(组行 key) ->
+ * 组行裸对象。物化时某个成员 hash 在索引(singles ∪ torrents)查不到 => 该槽保留原 hash
+ * 字符串(绝不产 undefined 进消费位)并把行登记在此, 后续 applyStateRows 轮次经
+ * _rematDrain 索引齐后补物化。后端 drain 段不变式「成员脏 ⇒ 同代组行脏」(runtime_views.py
+ * drain_delta)保证常规轮不可达 —— 纯兜底, 常态零成本(空 Map)。模块级非响应式:
+ * 登记的是行对象引用, 不进 Vue 数据流。 */
+const _rematQueue = new Map();
+
 window.AQB_POLL = {
   methods: {
     /* ---------------- P2 事件驱动(SSE /api/events) ----------------
@@ -304,6 +312,87 @@ window.AQB_POLL = {
       // 退避省不下什么, 却直接牺牲行数据新鲜度 —— 收益与代价不对等, 故只保留失败退避。
       return this.basePollMs();
     },
+    /* ---------------- P-02 二期 S2a ingestion 物化(plan 26-11-11-0630 §03) ----------------
+     * 后端组行 members 已改 **hash 字符串数组**(views_group._build_group_row), 成员明细由
+     * torrent 桶平铺行承载(VIEW_ARRAYS group/show 两视图连带 torrents, views_common.py)。
+     * 三条 state 入口(refresh 全量轮 / delta 轮 / auth.js bootstrap 登录快照)统一在
+     * **赋值给 this.groups 之前**就地解析成员, 全树成员消费位(decorate/筛选/乐观链/
+     * 选中/模板)零改动 —— 它们看到的仍是成员行对象, 与 P-02 一期行内字典同构。
+     *
+     * spike 裁决(2026-11-12, 记录于任务档案):
+     * - 物化产**成员行浅拷贝**而非 canonical 行引用: 乐观补丁链 _forEachRow 沿
+     *   torrents/singles/groups 三数组逐行命中, prev 采集(applyOptimisticPatch/
+     *   applyOptimistic)以后命中覆盖前命中 —— 隐含「同 hash 多命中各为独立对象」不变式;
+     *   若组员与平铺行同一对象, 第二次命中读到的是**已打补丁**的值, op.prev 被污染,
+     *   失败回滚静默失效。拷贝保持该不变式(与 S1 前服务端成员字典同构), 补丁链零改动。
+     * - WeakMap 装饰指纹(decorate.js fp[0]=members 数组引用 + 逐成员字段值)不受影响:
+     *   物化只发生在**新行实例**(脏行)上; 未脏行由 applyRows 原样保留引用与数组身份,
+     *   不产生装饰缓存失效风暴。
+     * - 索引源与后端 S1b 镜子 fuzz 同构: singles ∪ torrents; delta 轮 torrents/singles
+     *   桶先于 groups 桶合并(下方桶序), 物化时索引恒含本轮最新成员行; 成员脏必同代组脏
+     *   (runtime_views.py drain_delta: added/delta_fields 逐 hash 推导 member_to_key 进
+     *   g_up), 组行引用的成员 hash 常规恒可解析。
+     */
+    /* 成员索引: hash -> 行对象, 源 = singles ∪ torrents(与 decorate.js memberByHash 同源;
+     * groups 段不作为源 —— 组行 members 此刻还是 hash 串)。pt/ps = 本轮载荷的平铺/未归组
+     * 数组(全量轮传载荷, 内容最新; 增量轮传 null 只吃合并后的本地数组), 载荷优先:
+     * 同 hash 冲突时以载荷为准, 本地数组仅查缺兜底。 */
+    _memberIndexBuild(pt, ps) {
+      const idx = new Map();
+      const put = (row) => { if (row && row.hash && !idx.has(row.hash)) idx.set(row.hash, row); };
+      for (const row of pt || []) put(row);
+      for (const row of ps || []) put(row);
+      for (const row of this.torrents || []) put(row);
+      for (const row of this.singles || []) put(row);
+      return idx;
+    },
+    /* 组行物化: 就地替换 hash 形 members 为成员行**浅拷贝**数组(行内对象独立于平铺行,
+     * 乐观链 prev 采集不变式见上)。形状判定: 首元素非字符串(旧服务端对象形/已物化形/
+     * e2e 合成注入)原样跳过 —— full 分支「与 S3 之前逐字节等价」承诺不破。缺项槽保留原
+     * hash 字符串并登记待补(_rematQueue), 不产 undefined 进消费位。 */
+    _materializeGroupRows(rows, idx) {
+      const misses = [];
+      for (const g of rows || []) {
+        const ms = g.members;
+        if (!Array.isArray(ms) || !ms.length || typeof ms[0] !== "string") continue;
+        const out = [];
+        let miss = 0;
+        for (const h of ms) {
+          const src = idx.get(h);
+          if (src) { out.push({ ...src }); continue; }
+          out.push(h);  // 缺项: 原样保留 hash 字符串(消费位不会拿到 undefined)
+          miss += 1;
+        }
+        g.members = out;
+        if (miss) misses.push(g);
+      }
+      for (const g of misses) _rematQueue.set(g.key, g);  // 键去重: 同组新行覆盖旧登记
+    },
+    /* 待补清账(S2a 防御面): 仅在本轮已建索引的入口调用, 队列空零成本。行已不在当前视图
+     * (被整行替换/剔除) => 丢弃; hash 齐了 => 补物化并以 this.groups 重赋值补响应式触发
+     * (队列持有的是裸对象引用, 直接改字段旁路 Vue 代理)。后端不变式下常规不可达。 */
+    _rematDrain(idx) {
+      if (!_rematQueue.size) return;
+      let healed = false;
+      const cur = this.groups || [];
+      for (const [key, row] of [..._rematQueue]) {
+        _rematQueue.delete(key);  // 先出队: 按结果决定是否重登
+        if (!cur.includes(row)) continue;  // 行已被替换/剔除(Vue includes 对裸对象有 toRaw 回退)
+        const ms = row.members || [];
+        let miss = 0;
+        const out = ms.map((m) => {
+          if (typeof m !== "string") return m;
+          const src = idx.get(m);
+          if (!src) { miss += 1; return m; }
+          return { ...src };
+        });
+        if (miss === ms.length) { _rematQueue.set(key, row); continue; }  // 依旧全缺: 留待下轮
+        row.members = out;
+        healed = true;
+        if (miss) _rematQueue.set(key, row);  // 部分补齐: 留队补剩余
+      }
+      if (healed && this.groups) this.groups = this.groups.slice();
+    },
     /* 单一合并入口(plan 26-10-07-0414 S4, R6): 全量/增量两分支共用, 供 refresh() 调用。
      * 顺序安全事实(起草人已核): 三视图渲染入口各自客户端排序(sort.js sortedGroups /
      * filters.js filteredTorrents / shows.js decoratedShows), 服务端数组顺序不承载语义,
@@ -341,7 +430,20 @@ window.AQB_POLL = {
         };
         if (d.torrents || r.torrents) this.torrents = applyRows(this.torrents, "hash", d.torrents || [], r.torrents || []);
         if (d.singles || r.singles) this.singles = applyRows(this.singles, "hash", d.singles || [], r.singles || []);
-        if (d.groups || r.groups) this.groups = applyRows(this.groups, "key", d.groups || [], r.groups || []);
+        if (d.groups || r.groups) {
+          // S2a ingestion 物化(delta 轮): torrents/singles 桶已先行合并 => 索引含本轮最新
+          // 成员行; 组行引用的成员 hash 恒可解析(成员脏⇒同代组脏, 见 _memberIndexBuild 注)。
+          // 物化先于 applyRows/赋值: 脏组行此刻还是裸对象, 改动不旁路响应式。
+          let rematIdx = null;
+          if (d.groups && d.groups.length) {
+            rematIdx = this._memberIndexBuild(null, null);
+            this._materializeGroupRows(d.groups, rematIdx);
+          }
+          this.groups = applyRows(this.groups, "key", d.groups || [], r.groups || []);
+          // 待补清账必须在赋值之后: applyRows 对脏行整行替换并保留 upsert 新实例引用,
+          // 同轮登记行此刻才进 this.groups; 先清则 cur.includes 恒 false, 队列当轮空转。
+          if (rematIdx) this._rematDrain(rematIdx);
+        }
         // shows 桶(S3 期 view=show 恒全量, 此处不可达; S8/S9 接线前的通用合并):
         // shows 是 {list, unrecognized} —— list 按剧键行级合并, unrecognized 不动。
         if (d.shows || r.shows) {
@@ -363,7 +465,20 @@ window.AQB_POLL = {
       // full 分支(含未协商的旧服务端响应: 无 full 键 => 走这里, 行为与 S3 之前逐字节等价)
       // = 清空重放(R6)。P1-1: 服务端只回当前视图的数组 —— **键不存在时必须保留原引用**,
       // 绝不能 `|| []` 清空(否则每次轮询都把另外两个视图抹成空, 切回去要等一轮全量)。
-      if (payload.groups !== undefined) this.groups = payload.groups;
+      if (payload.groups !== undefined) {
+        // S2a ingestion 物化(全量轮): 索引直接吃载荷平铺数组(内容最新, 同 hash 覆盖本地
+        // 旧值), 本地数组仅查缺兜底。行仍裸对象, 先物化后赋值。旧服务端对象形 members 由
+        // _materializeGroupRows 形状判定跳过(full 分支「与 S3 之前逐字节等价」不破)。
+        let rematIdx = null;
+        if (Array.isArray(payload.groups) && payload.groups.length) {
+          rematIdx = this._memberIndexBuild(payload.torrents, payload.singles);
+          this._materializeGroupRows(payload.groups, rematIdx);
+        }
+        this.groups = payload.groups;
+        // 待补清账在赋值之后(理由同 delta 分支: 登记行须先进 this.groups 才过 includes);
+        // groups 键不存在的轮次(其它视图)零成本跳过。
+        if (rematIdx) this._rematDrain(rematIdx);
+      }
       if (payload.singles !== undefined) this.singles = payload.singles;  // 未归组种子(搜索兜底/总数回退)
       if (payload.torrents !== undefined) this.torrents = payload.torrents;  // 种子页平铺数组(SEED_ITEM)
       if (payload.shows !== undefined) this.shows = payload.shows;  // 追剧视图(R10)

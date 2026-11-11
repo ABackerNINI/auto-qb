@@ -172,6 +172,11 @@ window.AQB_AUTH = {
         // 用候选密钥直接验证: 成功前 this.token 不提交、authRequired 不解除, 主界面 DOM 绝不渲染
         const state = await this._request("/api/state", {}, candidate);
         this.status = state.status;
+        // P-02 二期 S2a ingestion 物化(计划 26-11-11-0630 §03): 登录全量快照与轮询全量轮
+        // 同缝(polling.js applyStateRows full 分支) —— hash 形组行 members 就地解析成成员行
+        // 拷贝(索引源 = 载荷 torrents ∪ singles), 否则主界面首帧的组行消费位拿到的是字符串。
+        // 先物化后赋值: 行此刻还是裸对象, 改动不旁路响应式; 旧服务端对象形由形状判定跳过。
+        this._materializeGroupRows(state.groups || [], this._memberIndexBuild(state.torrents, state.singles));
         this.groups = state.groups || [];
         this.singles = state.singles || [];
         this.torrents = state.torrents || [];

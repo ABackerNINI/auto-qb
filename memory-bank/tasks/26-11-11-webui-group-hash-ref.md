@@ -36,7 +36,9 @@
 | 3 | grilling 五问拍板(D1-D5) | Done(2026-11-11) |
 | 4 | 联合计划入库+双向补链+评审 3 轮零 actionable | Done(2026-11-11) |
 | 5 | S0 成本构成实测拆分(计划 §04 首步) | Done(2026-11-11, @3000+@5000 双档实测完成, 见「S0 实测数字」; 两 issue 保持 In Progress 待 S1 开工) |
-| 6 | S1-S6(计划 §04 余步) | Open |
+| 6 | S1 后端 hash 引用式(协议+守阵同批) | Done(2026-11-11, 22a35b18 前身批 392 行, 评审轮 2 零 actionable) |
+| 7 | S2 前端物化接缝(spike→ingestion 拷贝物化) | Done(2026-11-12, 本批; spike 裁决与已知边界见 R2 节) |
+| 8 | S3-S6(计划 §04 余步) | Open |
 
 ## 进度日志
 
@@ -68,6 +70,14 @@ S0 开工动作完成: 两件 issue 经 kb.status 翻 **In Progress**(开工自�
 
 - 2026-11-11 23:52 R1 收尾: @5000 档三件实测完成(①四段占比服务端+前端 / ②字节拆分 / ③monster 2000 成员抖动轮 delta 2.33 MB/轮——@3000 外推命中 <1%), 全部数字入下节; 上一棒坏 monster 注入(2000 missingFiles+无 announce)按坑 3 处置重注入; 归组 727 组 5s 一次到位零修复; 现场已按 real 规程处置(real.seed.rm 删净 5000+2 leech 连数据、伪 tracker 已随 m3 stop、产品实例控制台事件停机——外部优雅停机三路全堵见坑 4, 交主会话裁决是否立产品面停机出口的 issue); 测试 qB 实例(36595/36596)未动留原样; .work/s0 脚本与 results 证据保留(results/ 已复制 results_3000 存 @3000 原始证据)。
 - 2026-11-12 P1 批次评审收口(**本地分支态**, 分面档 2 派遣串行): gate 预跑全绿(命中 6/执行 14 命令); review.pack 基 4de921a9, 可评 14 行 = 两 issue 状态面(任务档案为记账排除面), 基哈希 011a9b4203fd; 正确性面(状态两处一致/链行同构/计划口径吻合/HTML 完好)与安全面(改动行无敏感信息/红线未触/翻转无误改安全断言)两分面均**零发现**, T=0/P=0, 修 0 入池 0, 零 actionable 出口。
+
+### R2 · S2 前端物化接缝 (2026-11-12)
+
+**S2a spike 裁决(polling.js 注释指路单点)**: 缝 = **ingestion 物化**(三入口: applyStateRows 全量/delta + auth.js bootstrap), 产**成员行浅拷贝**而非计划 §03 原推荐的 canonical 行引用 —— 偏差动因: 乐观链 `_forEachRow`(commands_optimistic.js:30-34/:64-72)prev 采集「后命中覆盖前命中」隐含「同 hash 多命中各为独立对象」, 别名化下第二命中读到已打补丁值, `op.prev` 被污染 → 失败回滚静默失效; 浅拷贝与 S1 前服务端成员字典同构, 52 处消费位零波及、补丁链代码零改动。delta 桶序 torrents/singles 先于 groups 合并 ⇒ 物化时索引恒新鲜; full 分支索引直接吃载荷数组。缺项防御: 保留原 hash 字符串不产 undefined + `_rematQueue` 登记、后续轮 `_rematDrain` 补物化(后端「成员脏⇒同代组脏」不变式下常规不可达, 纯兜底)。评审 P3 轮 1 修 1 major: `_rematDrain` 调用点从赋值前挪到赋值后(原位登记行未进 `this.groups`, `cur.includes` 恒 false, 队列当轮空转)。
+
+**已知语义边界(评审确认接受)**: `_snapshotTruth` 组员源换成本地物化拷贝后, 误判窗口 = 组脏(他员变化)+ 该组另有成员 pending —— 提前撤 hold 且 op.prev 同窗污染; **成功路径观感不变, 失败/停滞路径补丁值停留至该成员下次变化或下一次全量轮(长期滞留, 非一轮弹回)**。绿色向守阵 = node 电池 `test_r4_truth_snapshot_materialized_members`(8 断言; 场景 1 平铺桶只放 A + 守门断言钉「快照确实经组员拷贝取到 B」, 判别面真落在物化源上); 三入口接线(delta 桶序/先物化后赋值/auth.js 同缝)留 S4 e2e 覆盖。
+
+**数字**: 行数口径(git numstat)polling.js +113/-2 → 评审修复后 +117/-2; auth.js +5; 电池 +105/-5 → 评审三轮修复后 +115/-5; 测试面(定向 e2e 8 红全转绿 / S2b 补跑 25 spec 全绿 / test.quick)数字只记本批提交信息, 收口立基线切片后统一改「见 kb.baseline」, 不在此手抄。g.members 消费位 52 处/17 文件零 diff(全树 grep 口径)。
 
 ## S0 实测数字
 
