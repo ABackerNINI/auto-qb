@@ -1,4 +1,4 @@
-# 计划 S6 真机验收·探测面(G5 前半): BLOCKED(多 clone 实例冲突)—— 冲突前干净态 hit 裁决与编辑器/证据区渲染已取证
+# 计划 S6 真机验收·探测面(G5 前半): BLOCKED(多 clone 实例冲突)—— 冲突前干净态 hit 裁决与编辑器/证据区渲染已取证 —— 【已复测闭环: 判据①②③④ 全 PASS, 见 26-11-12-0229-real-relocate-bt-backup-retest.md】
 
 > 摘要: 计划 `plans/26-11-11-0259-plan-relocate-bt-backup-scalar-probe.html` §04 S6 的真机
 > 探测面验收(环境1 D盘机, commit f09830e6)。走完开工四步(guard/起实例/造种子/webui)后,
@@ -90,6 +90,7 @@
 | 08:11 | 足迹清理: webui 停(6261 释放); **real.down / real.seed.clean / real.guard 复跑刻意不执行**(分别会关停对方在用实例 / 删 `R:\qbt-fake\s0` 对方数据 / pause-all 打断对方 checking), 双实例 firewalled 原样留给对方 |
 
 **未完成面**(复测轮待做): ① hit 的 UI 回填(草稿=测试便携路径)→ actbar 脏态 → 「保存并应用」→ PUT /api/config → 派生配置 `relocate.bt_backup` 落盘片段; ② offline 组(real.down 后点按钮, 200 + online=false 未自证标注); ③ 收尾 real.seed.clean + real.down + guard 复跑。复测前置: 确认 clone3 s0 轮已收尾(其实例状态恢复 + 无并发驱动进程)后重走 §03 干净态。
+**复测闭环(26-11-12)**: 上列①②③连同判据③(整组迁移, 经用户拍板同盘近似拓扑替代)与清场已全部走通 —— 逐字证据与三态见 `26-11-12-0229-real-relocate-bt-backup-retest.md`。
 
 ## 05 计划外发现(只记录不修)
 

@@ -2,8 +2,8 @@
 
 **Status:** In Progress
 **Added:** 2026-11-11
-**Updated:** 2026-11-11
-**Summary:** BT_backup 配置从顶层 host:port 表收编为 relocate.bt_backup 标量(v7→v8 迁移) + 设置页按钮自动探测; S1-S6a 五批落地(分批评审全过, blocker 2 全修, 入池 0), 全量基线切片 26-11-11-0756(数字见 kb.baseline); 真机面部分完成——后端 hit+消歧 PASS, UI 回填段 BLOCKED 待复测(切片 26-11-11-0804); S7 收尾回写完成, 计划 Open 真机复测排期后翻 Done
+**Updated:** 2026-11-12
+**Summary:** BT_backup 配置从顶层 host:port 表收编为 relocate.bt_backup 标量(v7→v8 迁移) + 设置页按钮自动探测; S1-S7 全部落地(分批评审全过, 入池 0), 全量基线切片 26-11-11-0756(数字见 kb.baseline); 真机面复测闭环 —— 四判据①②③④全 PASS(切片 26-11-12-0229, 判据③经用户拍板同盘近似拓扑替代), issue 26-11-11-2305 已结
 **Topics:** backend-relocate-bt-backup-probe
 **Refs:** memory-bank/plans/26-11-11-0259-plan-relocate-bt-backup-scalar-probe.html, memory-bank/pitfalls/ops/msys-container-path.md, memory-bank/issues/26-11-11-2305-test-bt-backup-probe-real-retest.html
 
@@ -36,7 +36,7 @@ BT_backup 配置怎么收编成单实例标量并补设置页自动探测——�
 | S3 | 探测后端 bt_backup_probe.py | Done (批2 08b34b54) |
 | S4 | 端点 + 编辑器 UI | Done (批3 61363210 + 批4 2e6487e1) |
 | S5 | 运行面口径同步 | Done (批5 130ec909) |
-| S6 | 全量测试 + 真机验收(人工) | 部分完成: 全量基线切片 f09830e6(数字 = 切片 26-11-11-0756); 真机后端 hit+消歧 PASS(切片 26-11-11-0804, 提交 4281189f), UI 回填段 BLOCKED 待复测(复测清单见切片 §04) |
+| S6 | 全量测试 + 真机验收(人工) | Done: 全量基线切片 26-11-11-0756(数字见 kb.baseline); 真机复测闭环四判据①②③④全 PASS(切片 26-11-12-0229-real-relocate-bt-backup-retest, 判据③经用户拍板同盘近似拓扑替代 RM04-21 钉死拓扑), 原 BLOCKED 段清账(issue 26-11-11-2305 翻 Done) |
 | S7 | 收尾回写 + 档案/基线 | Done (R1 本批; 基线切片已入库 f09830e6 / 4281189f) |
 
 ## 进度日志
@@ -57,3 +57,7 @@ grilling 三轮九问收敛(D1-D9) + qB/libtorrent 源码取证 + 本机只读�
 - 2026-11-11 08:37 S7 收尾回写(本批): pitfalls/backend/qb-fastresume-edit.md 补键形状 v8 口径行; docs/configuration.md「整组迁移」节「顶层 bt_backup 键」改 relocate.bt_backup 标量口径; architecture 主题文档核认 = hr-groups.md「整组迁移」节未承载 fastresume 收尾键形状口径, 无既有落点, 不强造新档; 根 README 核对零 bt_backup 描述未动; 计划文档不动(真机复测未完不翻 Done)。
 
 - 2026-11-11 23:21 S1-S7 实施收尾: 批1-批7 落地(c4ee6149→55aac9cd), test.full 6000 passed/99%, 真机后半 BLOCKED 入池 26-11-11-2305 待排期, 接缝终审零发现
+
+### R2 · 真机复测闭环 (2026-11-12)
+
+- 2026-11-12 02:40 S6 复测闭环: 四判据①②③④全 PASS(切片 `testing/real-baselines/26-11-12-0229-real-relocate-bt-backup-retest.md`, 基线 703ceb6c) —— ① hit 回填→PUT 200→落盘 v8 folded scalar; ② offline 网络层 PASS(manual-set + online=false 未自证标注; offline 渲染形态 UI 不可达为产品面发现, 只记录); ③ 整组迁移四断言面全过(用户拍板 C盘机同盘近似拓扑替代 RM04-21 钉死 R:/D:, 形态差异四条见切片 §04); ④ 清场五步(guard 复跑判红=实例 down 预期形态, 如实记录)。issue 26-11-11-2305 翻 Done; 计划外五条入池裁决留主会话; 坑档两件(cmd_guard skip_tags / dev.webui 重生成配置)入库。
