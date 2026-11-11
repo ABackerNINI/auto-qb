@@ -9,9 +9,9 @@
 <meta name="issue-stamp" content="26-11-11-0823">
 <meta name="issue-type" content="feat">
 <meta name="doc-topic" content="webui-partial-group-warning">
-<meta name="doc-refs" content="memory-bank/plans/26-11-11-0820-plan-webui-partial-group-warning.html">
+<meta name="doc-refs" content="memory-bank/plans/26-11-11-0820-plan-webui-partial-group-warning.html, memory-bank/tasks/26-11-12-webui-partial-group-backend-gate.md, memory-bank/testing/baselines/26-11-12-0550-webui-partial-group-backend-gate.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="后端纵深: 部分组×带文件删除/迁移关移动 fail-closed 拒收">
 <meta name="issue-summary" content="/api/torrents/bulk 直发可绕过前端预警: 部分组+delete_files(共享文件被删)或 location 迁移关(共享文件被搬走)静默破坏组内其余成员,后端应 fail-closed 拒收并点名共存成员">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-11-0823-feat-webui-partial-group-backend-gate</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-11 08:23</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">feat</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
@@ -168,11 +168,15 @@ members = [h for h in store.groups.get(key, []) if h in store.by_hash] or list(s
   <h2><span class="no">§07</span>状态变更日志</h2>
   <ul>
     <li>2026-11-11 08:23 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-12 — 状态 Open → In Progress（kb.status）</li>
+    <li>2026-11-12 — 状态 In Progress → Done（kb.status）</li>
+</ul>
   <h3>复验</h3>
-  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <p>复验：2026-11-12 04:00 仍复现 —— 三锚点逐一命中(<code>commands_torrents.py:584-586</code> delete 直发 / <code>:597-599</code> location 直发 / <code>:701</code> 迁移武装改道在);前端谓词单点已落地 <code>selection.js:568 _partialGroupsOf</code>,bulk 已有 <code>confirm</code> 参数(<code>commands_torrents.py:619</code>)且路由层对 location 透传(<code>torrent_cmds.py:370</code>)。</p>
   <h3>修复后补充</h3>
-  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  <p><strong>实际修法(2026-11-12, 与建议修法的差异见下)</strong>: 用户拍板<strong>混合形态</strong>(三选项 AskUserQuestion) —— §06 候选 A 的「倾向」与实施时点的两件已落地事实冲突: D3 已否决迁移关×部分组硬阻断(挪一个种子单放合法), 前端 S3 确认框「确认才发」会被硬拒打成死胡同。落地为: <code>commands_torrents.py</code> 谓词单点 <code>_partial_groups_of</code>(前端 <code>selection.js::_partialGroupsOf</code> 的 D2 口径镜像: 真实组&gt;1 ∧ 有成员入选 ∧ 组键不在 keys ∧ 未全选; 在册交集算成员, 陈旧索引不撑 total) + 文案单点 <code>_partial_group_reject_msg</code>(组名 ≤3 连排+「等 K 个组」+ 合计缺口, 与前端聚合同形) + <code>_cmd_bulk_torrents</code> 闸门块 —— <strong>delete×delete_files 硬拒</strong>(confirm 不释放); <strong>迁移关 location 无 confirm 拒单、confirm=true 放行</strong>(与整组迁移 confirm 同范式的声明位, 无服务端待确认状态; 前端 drawer.js submitMoveDialog 闸内确认后 <code>post(gated !== null)</code> 带上, 一行)。武装态照旧闸前分流(<code>:701</code> 级联全组)。</p>
+  <p><strong>验证方式</strong>: 电池 6 条(硬拒+confirm 免疫半面/放行矩阵五形态/双通道同批拒收/聚合文案/location confirm 闸/武装态不进闸)+ 机制红验双向(摘后端闸门恰 3 条闸门行为用例红; 摘前端接线 S3 电池红); 分面评审 3 轮 5 发现全修零 actionable(轮 1: 1 nit+1 major+2 minor; 轮 2: 1 nit; 轮 3 合流后零发现)。test.full 全绿, 数字见基线切片 <a href="../testing/baselines/26-11-12-0550-webui-partial-group-backend-gate.md">26-11-12-0550</a>(全绿, 见 kb.baseline)。</p>
+  <p><strong>范围注记</strong>: 计划 26-11-11-0820 §02 曾把 rename-fs 端点防线也划归本件, 本件正文未含(入池件正文为准) —— 该端点防线仍未有主, 需另行入池/认领。</p>
 </section>
 
 <footer>

@@ -22,8 +22,8 @@
 - test_cmd_reload_config_delegates: reload_config 命令委托 apply_new_config
 - test_build_search_index_still_dirty_skips_completion_log: 索引仍脏不落「已构建」完成日志(分批不刷屏)
 - test_reannounce_group_no_cmd_id_and_inactive_group: 组汇报直驱 —— 无 cmd_id 照发不写回执; 全非活跃 warn
-- test_bulk_guard_matrix_without_cmd_id: bulk 早退守卫矩阵(无 cmd_id 直投): 六类非法载荷只 return 不写回执不调 API
-- test_cmd_handlers_without_cmd_id_stay_silent: 无 cmd_id 一侧全覆盖(CLI/内部触发旁路) —— 14 处 `if cmd_id:` 假弧 + _bulk_receipt 两档 + _bulk_missing_msgs 缺失组文案 + skip_check 菜单关早退 + add_torrents 无回执: 不写回执(空键不出现)、不炸、日志照记
+- test_bulk_guard_matrix_without_cmd_id: bulk 早退守卫矩阵(无 cmd_id 直投): 七类非法载荷只 return 不写回执不调 API(第 7 类 = 部分组闸拒早退, issue 26-11-11-0823)
+- test_cmd_handlers_without_cmd_id_stay_silent: 无 cmd_id 一侧全覆盖(CLI/内部触发旁路) —— 14 处 `if cmd_id:` 假弧 + _bulk_receipt 两档 + _bulk_missing_msgs 缺失组文案 + skip_check 菜单关早退 + 部分组闸拒静默早退(issue 26-11-11-0823) + add_torrents 无回执: 不写回执(空键不出现)、不炸、日志照记
 - test_drain_web_commands_bulk_torrents_group_keys_mixed_and_missing
 """
 
@@ -612,10 +612,11 @@ def test_drain_web_commands_bulk_torrents():
         mgr.web.consume_commands()
         assert client.recheck_hashes_calls == ["HA", "HB"], client.recheck_hashes_calls
         assert mgr.web.results["b2"]["status"] == "ok"
-        # delete: delete_files 透传, 成员从快照移除
+        # delete: delete_files 透传, 成员从快照移除 —— 平铺全组(部分组×带文件删除已被
+        # 部分组闸门 fail-closed 拒收, issue 26-11-11-0823; 拒收面电池在 test_web_commands_bulk)
         mgr.web.commands.put(
             ("bulk_torrents", {
-                "hashes": ["HA"],
+                "hashes": ["HA", "HB"],
                 "action": "delete",
                 "delete_files": True,
                 "cmd_id": "b3"
@@ -623,8 +624,16 @@ def test_drain_web_commands_bulk_torrents():
         )
         mgr.web.consume_commands()
         assert client.calls[-1] == ("delete", True)
-        assert mgr.store.get("HA") is None
+        assert mgr.store.get("HA") is None and mgr.store.get("HB") is None
         assert mgr.web.results["b3"]["status"] == "ok"
+        # b3 已删全组, b4 需要一个存活种子 —— 重灌 HB(FakeClient 的 delete 会连 client.torrents
+        # 一并弹出; seed_store 不传列表 = 全量口径, 见 test_web_commands_bulk._seed_group 注)
+        from helpers import FakeTorrent, _fake_file, seed_store
+
+        hb = FakeTorrent(hash="HB", name="Show", save_path=r"R:\Downloads")
+        client.torrents["HB"] = hb
+        client.files_map["HB"] = [_fake_file("movie.mkv", 100)]
+        seed_store(mgr)
         # 部分缺失: 已知种子仍执行, 回执 error 带缺失计数
         mgr.web.commands.put(("bulk_torrents", {"hashes": ["HB", "GONE"], "action": "resume", "cmd_id": "b4"}))
         mgr.web.consume_commands()
@@ -948,7 +957,7 @@ def test_reannounce_group_no_cmd_id_and_inactive_group():
 
 
 def test_bulk_guard_matrix_without_cmd_id():
-    """bulk 早退守卫矩阵(无 cmd_id 直投队列): 每个非法载荷只 return 不写回执不调 API"""
+    """bulk 早退守卫矩阵(无 cmd_id 直投队列): 每个非法载荷只 return 不写回执不调 API(七类)"""
     with tempfile.TemporaryDirectory() as td:
         mgr, client, key = _make_grouped_manager(td)
         bad_payloads = [
@@ -976,6 +985,11 @@ def test_bulk_guard_matrix_without_cmd_id():
                 "hashes": ["HA"],
                 "action": "location"
             },  # 缺目标路径
+            {
+                "hashes": ["HA"],
+                "action": "delete",
+                "delete_files": True
+            },  # 部分组×带文件删除(闸拒早退, issue 26-11-11-0823): HA/HB 同组, HA 是部分组
         ]
         for payload in bad_payloads:
             mgr.web.commands.put(("bulk_torrents", payload))
@@ -990,7 +1004,8 @@ def test_cmd_handlers_without_cmd_id_stay_silent(monkeypatch):
     真机除 Web 前端外还有 CLI/内部触发等**不经回执通道**的调用方; 既有用例几乎都带
     cmd_id(回执正是被断言的对象), 于是 commands.py 里 14 处 `if cmd_id:` 的假弧全滞留
     partial —— 把 `if cmd_id:` 误改成无条件 `_set_web_result` 写空键这条回归没人看得见。
-    本用例逐 handler 过一遍无 cmd_id 一侧: 不写回执(空键不出现)、不炸、指令/日志照旧。
+    本用例逐 handler 过一遍无 cmd_id 一侧: 不写回执(空键不出现)、不炸、指令/日志照旧
+    (含 commands_torrents.py 部分组闸拒的 `if cmd_id:` 假弧, issue 26-11-11-0823)。
     """
     from auto_qb.infra.utils import encode_group_key
 
@@ -1036,6 +1051,10 @@ def test_cmd_handlers_without_cmd_id_stay_silent(monkeypatch):
         monkeypatch.setattr(mgr.ctx.config.web, "skip_check_menu", False)
         cmds._cmd_bulk_torrents(hashes=["HA"], action="skip_check")
         monkeypatch.setattr(mgr.ctx.config.web, "skip_check_menu", True)
+
+        # bulk 部分组闸拒: 无 cmd_id -> 静默早退(issue 26-11-11-0823) —— HA/HB 同组即部分组;
+        # 闸拒的 return 若误挪进 if cmd_id: 内, 直投队列的部分组 delete_files 会直发 qB 删共享文件
+        cmds._cmd_bulk_torrents(hashes=["HA"], action="delete", delete_files=True)
 
         # 批量缺失: 无 cmd_id 只记日志(1090->1092); 缺失组走 _bulk_missing_msgs 单点(1111)
         bad_key = encode_group_key(("R:/no-such", ("x.mkv", )))

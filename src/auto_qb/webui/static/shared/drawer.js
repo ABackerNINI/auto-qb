@@ -917,7 +917,11 @@ window.AQB_DRAWER = {
       this.moveBusy = true;
       let ok = false;
       try {
-        ok = await post(false);
+        // 部分组闸放行位(issue 26-11-11-0823): 闸内确认过(gated 非空)即带 confirm=true 重发 ——
+        // 后端迁移关部分组闸「无 confirm 拒单、confirm 放行」, S3 确认框就是那道确认。
+        // 旗标陈旧致后端实际武装态时 confirm 会被 relocate 消费(跳过其交互确认回执):
+        // 用户刚在 S3 框确认过同一动作, 语义已满足, 且 blocked/部署/探测闸全部照跑不受影响。
+        ok = await post(gated !== null);
       } finally {
         this.moveBusy = false;
       }

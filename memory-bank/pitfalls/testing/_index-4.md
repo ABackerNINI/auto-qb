@@ -1,7 +1,7 @@
 # testing — 测试 / 冒烟 / 仿真纪律 · 卷 4/5
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `playwright-teardown.md` … `single-file-xdist-hang.md`(共 23 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `playwright-teardown.md` … `single-file-coverage-gate.md`(共 23 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
@@ -25,9 +25,9 @@
 | [sandbox-tempfile-cwd-fallback.md](sandbox-tempfile-cwd-fallback.md) | 工具(`tools/global-traffic-monitor`)是独立 uv 项目, 其套件不在根 `testpaths` 内 ⇒ 跑它时**不带**根 `test.*` 包的 `TMPDIR` 收口; 若又在本 agent 沙箱内跑, `H:\Temp` 与 `%TEMP%… | 跑工具侧测试, 工具套件, global-traffic-monitor, 临时目录, TMPDIR, 沙箱, 临时垃圾, git status 脏, tmp 文件, pytest-of |
 | [sandbox-tool-cache.md](sandbox-tool-cache.md) | agent 工具 shell 的沙箱按**白名单**放行写操作。工具若把自己的缓存写到白名单外(本仓实测: yapf 的语法缓存 `%LOCALAPPDATA%\Google\YAPF\Cache`), 而该目录**已存在**却写不进, 失败路径可能不是报错而是**紧循环**:… | 沙箱, sandbox, 工具挂住, yapf 挂住, 高CPU, 一直写磁盘, 缓存目录, mkstemp, NamedTemporaryFile, 白名单, AppData, platformdirs, 提交闸门卡住, 闸门超时后仍在跑… |
 | [sandbox-venv-in-workspace.md](sandbox-venv-in-workspace.md) | agent 沙箱给工作区目录打了 Low 完整性标签 + 沙箱 capability ACE, 在**工作区内**新建的 venv, 其 `Scripts/python.exe` 读不到**同目录的** `pyvenv.cfg` —— 报 `Cannot read ... pyv… | exit 107, Cannot read pyvenv.cfg, pyvenv.cfg 不可读, uv run 失败, 工具 venv 坏, permission denied os error 5, uv trampoline, ven… |
+| [seed-store-full-replace.md](seed-store-full-replace.md) | `tests/helpers.py::seed_store(mgr, torrents)` 的形参像「灌入这些种子」(增量), 实际语义是 | seed_store, 全量替换, 整体替换, by_hash, 增量追加, 部分灌入, 挤出快照, 种子不存在, webui_helpers, |
 | [side-effects.md](side-effects.md) | 测试不得产生真实系统副作用, 由 `tests/sidefx.py` 记账 + 会话级守阵兜底 —— 收尾有越界项即让本次 pytest 失败。 | 加测试, 越界, 副作用, sidefx, subprocess, 落盘, state_file, 并发跑测试 |
 | [sidefx-diagnostic-probe.md](sidefx-diagnostic-probe.md) | 生产失败路径上的「只进日志」诊断探针(端口占用者 `ss -ltnp` / `lsof` / PowerShell)在测试里会真跑外部命令 ⇒ Linux CI 的 sidefx 越界; Windows 本机的绿是被通知器守卫偶然遮蔽, 且报错归属到该 worker 最后跑的用例… | sidefx 越界, POPEN, ss -ltnp, port_owner, describe_port_owner, 端口占用者探针, WebUIBindError, CI 红本机绿, xdist, teardown ERROR |
 | [sidefx-import-time-temp-roots.md](sidefx-import-time-temp-roots.md) | sidefx 会话守卫的临时根集合不得在模块导入时固化 | 串行 -n 0 跑测试出现 sidefx 越界, 临时目录内删除/建链被判越界, TEMP_ROOTS 与 gettempdir 不一致 |
 | [sim-root-sentinel.md](sim-root-sentinel.md) | `scripts/sim_qb.py` 的 `prepare_root` 只在 root 目录**不存在**时才写哨兵 `.auto-qb-sim-root`; 自己先 `mkdir` 出来的空目录第一次跑会被当"合法空目录"放过但不留哨兵, 跑过一次目录非空后, 之后每次起 s… | dev.sim, B1, 哨兵, sim root, 已存在且非空, BoundaryViolation, 删除场景 |
 | [single-file-coverage-gate.md](single-file-coverage-gate.md) | 只跑单个测试文件时, 全部用例绿但收尾仍打 `FAIL Required test coverage of <门槛>% not reached. Total coverage: ~18%` —— 覆盖率**全局门槛**只对全量收集有意义, 部分运行收集面小必然红, 用例本身全过。… | test.one, 单文件, 单测一个文件, coverage FAIL, not reached, 18%, 假红, 排查单个用例, 裸跑 pytest 单文件 |
-| [single-file-xdist-hang.md](single-file-xdist-hang.md) | 只跑**一个**测试文件却用默认的 `-n 8`, 会长时间**零输出**看起来像挂死 (实测 7 分钟无一行, 只有 1 个 worker 存活); 单文件 / 少量用例一律 `-n 0` 串行, 同一批用例 24s 跑完。`test.one` 已内置 `-n 0`。 | 单文件 -n 8, 挂死, 零输出, xdist worker 卡住, test.one, 单文件慢, 并行度 |

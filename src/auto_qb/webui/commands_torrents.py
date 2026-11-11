@@ -3,7 +3,7 @@
 move-only 自 commands.py 切出(计划 26-11-02-2342 §07 R5), 未改语义。
 """
 import time
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 from ..core.qbapi import DeleteBlockedError
 from ..infra.utils import VIRTUAL_TRACKER_PREFIXES, mask_tracker_url, sanitize_tracker_url
@@ -603,6 +603,73 @@ class TorrentsMixin:
     # 走 bulk_torrents 的 RESYNC 补刷新让前端尽快看到新值。
     _TAG_ACTIONS = frozenset({"add_tags", "remove_tags"})
 
+    # ---------- 部分组闸门(issue 26-11-11-0823, 用户拍板混合形态) ----------
+    # /api/torrents/bulk 可被第三方/旧 UI 直发, 绕过前端三落点预警(计划 26-11-11-0820):
+    # 部分组×delete_files → 共享物理文件被删, 同组其余在册成员必然缺文件(不可逆);
+    # 部分组×迁移关 location → 共享文件被搬走, 其余成员仍指旧路径。两个动作形态不同
+    # (用户拍板 2026-11-12): delete×带文件删除无合法意图 → fail-closed 硬拒;
+    # location×迁移关存「挪一个种子单放」合法意图(D3) → 无 confirm 拒单、confirm=true 放行
+    # (前端 S3 确认框确认后带上; 第三方显式 confirm 同径 —— 与整组迁移 confirm 同范式但
+    # 无服务端待确认状态, 纯声明位, idempotent)。谓词与前端 selection.js::_partialGroupsOf
+    # 同一 D2 口径, 守阵双侧可对账。
+
+    def _partial_groups_of(self, known: List[str], keys) -> List[dict]:
+        """后端部分组判定(issue 26-11-11-0823): 前端 selection.js::_partialGroupsOf 的 D2 口径镜像
+
+        判定(D2 拍板口径逐条对齐): 真实组(在册成员 >1) ∧ 有成员入选 ∧ 组键不在 keys ∧ 未全选。
+        - 组键入选在后端由 keys 展开保证全组进 known(见 _cmd_bulk_torrents 组键模式), 但口径上
+          仍显式跳过 —— 防未来展开面漂移时假报部分组(与前端 keySet.has(g.key) 同条);
+        - 成员全选(sel == total)不触发(前端选择袋晋升之外, API 直发全成员同样放行);
+        - 单成员组无部分面; 未归组 hash(member_to_key 无键)不参与(虚拟行的后端对应物);
+        - 成员集合取 groups[key] ∩ 在册(by_hash): 快照外的陈旧索引项既不会被删/搬破坏,
+          也不该把 total 撑大制造假「部分组」(与 _group_hashes / relocate _buckets 同口径)。
+        返回 [{key, name, sel, total}]; name = 首个在册成员显示名(与组行 recs[0].name 同源),
+        空名回落组 key 首元(save_path)。不误拦(R6 同族哲学): 索引解析不出/空组一律静默跳过。
+        """
+        sel_set = set(known)
+        key_set = set(keys)
+        seen_keys = set()
+        out: List[dict] = []
+        for h in known:
+            key = self.store.member_to_key.get(h)
+            if key is None or key in key_set or key in seen_keys:
+                continue
+            seen_keys.add(key)
+            members = [m for m in self.store.groups.get(key, []) if m in self.store.by_hash]
+            total = len(members)
+            if total <= 1:
+                continue
+            sel = sum(1 for m in members if m in sel_set)
+            if sel <= 0 or sel >= total:
+                continue
+            rec = self.store.get(members[0])
+            out.append(
+                {
+                    "key": key,
+                    "name": (rec.name if rec is not None and rec.name else "") or str(key[0]),
+                    "sel": sel,
+                    "total": total,
+                }
+            )
+        return out
+
+    def _partial_group_reject_msg(self, known: List[str], keys, verb: str) -> Optional[str]:
+        """部分组闸的拒单文案单点(issue 26-11-11-0823): None = 无部分组(放行)
+
+        点名共存成员: 组名上限 3 个 +「等 K 个组」(聚合口径与前端 _partialGroupsSummary 同形,
+        组名连排不加分隔), 缺口 = 合计差(total-sel 求和)。文案绑定动作语义(删除文件/移动),
+        与建议修法候选 A 同文。
+        """
+        partials = self._partial_groups_of(known, keys)
+        if not partials:
+            return None
+        names = "".join(f"「{p['name']}」" for p in partials[:3])
+        if len(partials) > 3:
+            names += f"等 {len(partials)} 个组"
+        gap = sum(p["total"] - p["sel"] for p in partials)
+        return (f"辅种组{names}还有 {gap} 个成员未包含: {verb}会破坏它们共享的文件(不可逆), "
+                f"请改选整组后重试")
+
     def _cmd_bulk_torrents(
         self,
         hashes=None,
@@ -637,6 +704,11 @@ class TorrentsMixin:
         - 限速/移动动作(计划 26-10-02-1955 W2): limits 只调有值方向(up/dl 传 None = 不改,
           0 = qB 语义的不限速, 合法), Web 层已拦负数; location 需非空路径 —— 缺值在
           handler 同样 error 回执(直投队列绕过路由校验时不得静默无操作)
+        - 部分组闸门(issue 26-11-11-0823, 混合形态): delete×delete_files=true 与迁移关
+          location 直发在分派前做部分组判定(谓词 _partial_groups_of 与前端 _partialGroupsOf
+          同 D2 口径; keys 覆盖全组/成员全选/单成员组/未归组/迁移开武装态照常放行) ——
+          delete 硬拒(error 点名共存成员); location 无 confirm 拒单、confirm=true 放行
+          (前端 S3 确认框确认后带上; D3 拍板「挪一个种子单放」合法)
         """
         req = [h for h in (hashes or []) if h]
         keys = [k for k in (keys or []) if k]
@@ -712,6 +784,21 @@ class TorrentsMixin:
             # force(计划 26-10-05-0314 S2)逐 hash 透传 —— 仅豁越 cls=force 闸门, blocked 照旧硬拒
             self._bulk_skip_check_via_ops(known, cmd_id, missing, len(req), missing_groups, len(keys), force=force)
             return
+        # ---- 部分组闸门(issue 26-11-11-0823): 放行面已分流完 —— 走到这里 location 必是迁移关
+        #      (武装态在上方整组迁移分支已 return, 级联全组无此洞); delete 与迁移关 location 都
+        #      直发 qB 单次调用, 部分组直发 = 共享文件被删/被搬而共存成员毫不知情, 分派前拦。
+        #      混合形态(用户拍板 2026-11-12): delete×delete_files 硬拒; location 无 confirm 拒单、
+        #      confirm=true 放行 —— D3 拍板「挪一个种子单放」合法, 拒单只拦未确认直发。
+        if (action == "delete" and delete_files) or action == "location":
+            confirmed = bool(confirm) and action == "location"
+            msg = None if confirmed else self._partial_group_reject_msg(
+                known, keys, "删除文件" if action == "delete" else "移动"
+            )
+            if msg:
+                logger.warning(f"WEB UI | 批量 {action} 部分组拦截: {msg}")
+                if cmd_id:
+                    self._set_web_result(cmd_id, "error", msg)
+                return
         if known:
             try:
                 fn(self.api, known, delete_files, extra)

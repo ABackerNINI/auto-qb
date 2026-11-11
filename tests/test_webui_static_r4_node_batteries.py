@@ -8,7 +8,7 @@
 - test_r4_selection_state_machine: R5#51(major) —— AQB_SELECTION 真跑: _selSyncGroups 四态(补选/移出/未知 key 保留/种子页降级: 不补选但降级照做)、_selAnchor 兜底链四态(显式锚点/光标/展开组/首行)、selSizeSummaryOf occ_key 取 max 去重
 - test_r4_partial_groups_predicate_five_forms: 部分组判定单点守阵(计划 26-11-11-0820 S1, 拍板 D2) —— _partialGroupsOf(keys, hashes) -> [{key, name, sel, total}] 是删除确认框行(S2)/迁移关确认框(S3)/迁移开披露条(S4) 三落点共用的「部分组」唯一判定面; 判定 = 真实组(!virtual 且 total>1)有成员命中 hashes ∧ 组键不在 keys ∧ sel<total。静态锚: 判定单点 _partialGroupsOf 与聚合单点 _partialGroupsSummary 对称设锚, 各自在 selection.js 定义形态(裸名+(参数)+`{`, 接收者调用与注释散文不计)恰一次(其它 shared 文件零平行定义 —— 消费方内联判定或聚合任一即红)、方法体走 this.decoratedGroups 与 _findGroup 同源解析面且零 filteredGroups 独走、判据含 g.virtual 豁免。五形态 node 电池真跑: 组键整组入选不触发(含双向联动组键与成员 hash 同存面)/成员全选不触发(组键已晋升 + 种子页降级未晋升 sel===total 两面)/部分选中触发且 sel/total/name 逐字段正确/跨组混合(整组 A + 部分组 C 并存)只列部分组/单成员组与虚拟行均不触发(专设双成员虚拟行钉住 virtual 判据独立于 total<=1); 边界面: 空入参不抛/hash 不属任何组不触发/name 缺失兜组 key/decoratedGroups 缺失(R6 极端竞态)空返回不抛不误拦 —— 摘除判定或换解析面即红
 - test_r4_delete_details_partial_group_row: 删除链部分组行落点级真跑(计划 26-11-11-0820 S2, 拍板 D5) —— _deleteDetails(delete_flow.js)在删除目标含部分组时于既有行流末尾追加一行(tone error/wide/#i-warn, HR 风险行同款), 判定单点消费 selection.js::_partialGroupsOf(带接收者调用)。正例: 部分组目标恰一行且单组文案逐字段(组名/已选 M/N/钉住词「将缺文件」); 多组聚合一行(已选/总数与缺口用合计); 四组触发组名列前 3 +「等 K 个」(照 _hrRiskOf 模式); 跨组混合(整组 A 组键入选 + 部分组 C 散员, D2 触发面)行照出且只列 C。负例(D2 不触发面): 整组删除(组键入选)/成员全选未晋升/单成员组/虚拟行/hash 不属任何组均无该行。恒显面(D5): _deleteDetails 形参只有 keys/hashes(无 delete_files 勾选入参, 行与勾选状态无关恒显由结构保证)且行为行流末行(既有五行/六行结构零改动只追加)。电池合并 selection.js + delete_flow.js 两 mixin 方法(app.mixin 同实例注入等价), 无 node 静默跳过
-- test_r4_move_dialog_partial_group_gate: 迁移关部分组确认框落点级真跑(计划 26-11-11-0820 S3, 拍板 D3) —— submitMoveDialog(drawer.js)在目标含部分组且 flags.relocate_enabled===false 时首次 post(false) 前弹确认框(tone error/danger/wide), 确认才发, 取消留在设定位置框; 判定单点消费 selection.js::_partialGroupsOf、聚合单点消费 _partialGroupsSummary(与删除链 S2 行共用)。正例: 部分组+迁移关恰弹一次且弹层顺序先收 moveOpen 再开确认框(R3 防双遮罩互盖, 照 confirm 回路先例), 文案钉住词「将缺文件」+「整组迁移」逐字段, 确认后首发无 confirm 键, 成功后框收; 取消零投递带原路径重开; 确认后投递失败带原路径重开(框已被闸先收, 照 confirm 回路失败分支, 手输路径不丢), 非闸直发失败维持现状无重开; 四组聚合前 3 +「等 K 个」合计口径; 跨组混合(整组 A 组键入选+部分组 C 散员, D2 触发面)闸照触发且文案只列 C。负例(D3): 整组入选/成员全选未晋升/单成员组/虚拟行/hash 不属任何组直发零新增弹层。旗标两态: 迁移开直发零弹层(S4 披露条的面); flags/relocate_enabled 解析不出(R6)静默直发不误拦; decoratedGroups 缺失不抛不误拦。电池合并 selection.js + drawer.js 两 mixin 方法, 无 node 静默跳过
+- test_r4_move_dialog_partial_group_gate: 迁移关部分组确认框落点级真跑(计划 26-11-11-0820 S3, 拍板 D3) —— submitMoveDialog(drawer.js)在目标含部分组且 flags.relocate_enabled===false 时首次投递前弹确认框(tone error/danger/wide), 确认才发, 取消留在设定位置框; 判定单点消费 selection.js::_partialGroupsOf、聚合单点消费 _partialGroupsSummary(与删除链 S2 行共用)。正例: 部分组+迁移关恰弹一次且弹层顺序先收 moveOpen 再开确认框(R3 防双遮罩互盖, 照 confirm 回路先例), 文案钉住词「将缺文件」+「整组迁移」逐字段, 确认后首发带 confirm=true(后端部分组闸放行位, issue 26-11-11-0823), 成功后框收; 取消零投递带原路径重开; 确认后投递失败带原路径重开(框已被闸先收, 照 confirm 回路失败分支, 手输路径不丢), 非闸直发失败维持现状无重开; 四组聚合前 3 +「等 K 个」合计口径; 跨组混合(整组 A 组键入选+部分组 C 散员, D2 触发面)闸照触发且文案只列 C。负例(D3): 整组入选/成员全选未晋升/单成员组/虚拟行/hash 不属任何组直发零新增弹层。旗标两态: 迁移开直发零弹层(S4 披露条的面); flags/relocate_enabled 解析不出(R6)静默直发不误拦; decoratedGroups 缺失不抛不误拦。电池合并 selection.js + drawer.js 两 mixin 方法, 无 node 静默跳过
 - test_r4_move_dialog_partial_disclosure_bar: 迁移开部分组披露条落点级真跑(计划 26-11-11-0820 S4, 拍板 D4) —— openMoveDialog(drawer.js)在 flags.relocate_enabled===true 时开框瞬间算一次部分组聚合(_partialGroupsOf+_partialGroupsSummary 带接收者, 判定/聚合单点只在 JS 侧)存非下划线状态 movePartialDisclosure 供 move-dialog.html 披露条消费(R2: Vue 模板编译器不解析 _ 前缀标识符, 模板只读本字段)。正例: 部分组+迁移开披露非 null 且单组 names/sel/total/gap 逐字段; 四组聚合前 3 +「等 K 个」合计口径; 跨组混合(整组 A 组键入选+部分组 C 散员, D2 触发面)披露只列 C; 非部分组负例(整组入选/成员全选未晋升/单成员组/虚拟行/hash 不属任何组)无条。降级面(R6/D4): 迁移关(relocate_enabled===false, S3 确认框的面, 含 S3 取消重开路径)无条; flags/relocate_enabled 解析不出无条不抛; decoratedGroups 缺失无条不抛。接线面: 开框既有状态机零破坏(moveOpen/moveCount/movePathInput 照常)。静态守阵(照 delete_flow.js WARN 原注/_scan_mixin_wiring 范式): move-dialog.html 剥注释后零 _ 前缀标识符; 文案钉住「整组迁移」+「将按整组迁移扩展至全组」+「个成员」; drawer.js 接线形态(先复位 null + relocate_enabled===true 门 + 带接收者单点调用); state.js 显式建字段; 四皮肤 dialogs.css 各有 .move-note.move-note-warn warn 档。电池合并 selection.js + drawer.js 两 mixin 方法, 无 node 静默跳过
 - test_r4_load_col_state_seeding: R5#18 —— loadColState 默认隐藏播种三态: 空存储播种 / 仅空 hidden 不播(「刻意全开」合法偏好) / 有任一偏好键不播; 附坏 JSON 走完整流程、locked 列忽略、w 白名单洗净(洗净后三键全缺照播)
 - test_r4_sort_domain: R5#54 —— AQB_SORT 真跑: setSort 三态循环(经典 gk/gd 与 dyn dtSortState 两形态) + _dtStrCompare(IPv4 逐段数值序/端口数值/等值/非 IP localeCompare 回落) + sortedDrawer 空值两方向恒末位与 IPv4 数值序
@@ -700,8 +700,8 @@ const ok = (name, cond) => checks.push([name, !!cond]);
   ok("文案钉住词: 「将缺文件」+「整组迁移」", /将缺文件/.test(row.value) && /整组迁移/.test(row.value));
   ok("单组文案逐字段(组名/已选 1/2/其余 1/建议语)",
      row.value === "辅种组「组A」: 已选 1/2 个,其余 1 个成员将缺文件;建议改选整组或开启整组迁移");
-  ok("确认后首发无 confirm 键(走既有正常投递链)",
-     c.posts[0].via === "single" && c.posts[0].body.location === "/dst" && c.posts[0].body.confirm === undefined);
+  ok("确认后首发带 confirm=true(后端部分组闸放行位, issue 26-11-11-0823)",
+     c.posts[0].via === "single" && c.posts[0].body.location === "/dst" && c.posts[0].body.confirm === true);
   ok("发单成功后设定位置框保持收起, 确认框不重开", c.moveOpen === false && c.modalCalls.length === 1);
 
   // --- 取消: 留在设定位置框(带原路径重开), 零投递 ---
@@ -1349,13 +1349,14 @@ def test_r4_move_dialog_partial_group_gate():
     """迁移关部分组确认框落点级真跑(计划 26-11-11-0820 S3, 拍板 D3) ---
 
     submitMoveDialog(drawer.js)在目标含部分组且明确知道整组迁移关
-    (flags.relocate_enabled === false)时, 首次 post(false) 前弹确认框(tone error/danger/wide),
+    (flags.relocate_enabled === false)时, 首次投递前弹确认框(tone error/danger/wide),
     确认才发, 取消留在设定位置框; 判定单点消费 selection.js::_partialGroupsOf、聚合单点消费
     _partialGroupsSummary(与删除链 S2 行共用同一份实现, 电池经合并 mixin 的 this 真跑接线)。
 
     正例: 部分组+迁移关 -> 恰弹一次确认框且弹层顺序为先收 moveOpen 再开确认框(R3 防双遮罩
           互盖, 照 confirm 回路先例), 行文案钉住词「将缺文件」+「整组迁移」逐字段, 确认后
-          首发 body 无 confirm 键(落回既有正常投递链), 成功后设定位置框保持收起;
+          首发 body 带 confirm=true(后端部分组闸放行位, issue 26-11-11-0823 —— S3 确认框
+          就是后端 confirm 闸的那道确认), 成功后设定位置框保持收起;
           取消 -> 零投递, 带原路径重开设定位置框; 四组聚合 -> 组名前 3 +「等 4 个」合计口径; 跨组混合(整组 A 组键入选 + 部分组 C 散员, D2 触发面)闸照触发且文案只列 C。
     负例(D3): 整组入选(组键级联)/成员全选未晋升/单成员组/虚拟行/hash 不属任何组 -> 直发
           零新增弹层。

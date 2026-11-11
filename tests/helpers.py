@@ -1301,6 +1301,10 @@ def seed_store(mgr, torrents=None):
 
     与 store.refresh 语义一致(首轮全部视为新增, 后续 diff), 但保留对象身份而非复制字段;
     返回 (added, removed)。
+
+    注意: torrents 传**子列表 = 整体替换** by_hash(与 refresh 全量同构, 既有种子即被挤出快照),
+    不是增量追加 —— 测试中途追加种子传 None(取 client.torrents 全量); 见
+    pitfalls/testing/seed-store-full-replace.md。
     """
     if torrents is None:
         torrents = list(mgr.client.torrents.values())

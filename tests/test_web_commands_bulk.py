@@ -15,6 +15,12 @@
 - test_bulk_recheck_via_ops_aggregates_skip_and_fail: 批量 recheck 经 ops 逐个提交, 跳过/失败计数进聚合文案
 - test_add_torrents_files_only_and_urls_only: _cmd_add_torrents files/urls 两分支各自一次调用
 - test_add_torrents_registers_expect_landing: add 回执的 added_torrent_ids 登记为「待落地」(issue 26-10-30-0626 追平); 老版 qB 纯文本回执拿不到 id -> 静默跳过不报错
+- test_bulk_partial_group_delete_files_hard_rejected: 部分组闸门(issue 26-11-11-0823 混合形态) —— delete×delete_files=true×部分组 fail-closed 硬拒: error 回执点名共存成员(组名/缺口/改选整组) + 零 qB 调用 + WARNING 日志; delete_files=false 部分组照常放行(辅种退役正常路径)
+- test_bulk_partial_group_release_faces_matrix: 放行面矩阵(D2 口径, 与前端 _partialGroupsOf 守阵对账) —— keys 覆盖全组 / 成员全选平铺 / 单成员组 / 未归组 / 组缩到 1 在册成员(陈旧索引不算) 各自 delete_files=true 放行
+- test_bulk_partial_group_dual_channel_same_batch_rejected: 双通道同批拒收面(keys=[组A 全组]+hashes=[组B 部分成员]×delete_files=true) —— 拒且只列组 B, keys 非空不得短路闸门(与前端 S3 电池跨组混合断言同款兜底)
+- test_bulk_partial_group_delete_message_aggregates_groups: 多组聚合文案 —— 两组合计缺口; 四组触发「等 K 个组」截断(与前端 _partialGroupsSummary 同形)
+- test_bulk_partial_group_location_confirm_gate: 迁移关 location 部分组闸 —— 无 confirm 拒单(零 qB 调用), confirm=true 放行直发 setLocation(D3 拍板挪一个单放合法); keys 覆盖全组照常直发
+- test_bulk_partial_group_location_armed_not_gated: 迁移武装态部分组 location 不进闸门(锚点 :701 在闸前分流) —— relocate_execute 收选中集合与 confirm 原样透传, 零 setLocation 直发
 """
 
 import tempfile
@@ -409,3 +415,316 @@ def test_add_torrents_registers_expect_landing(monkeypatch):
         mgr.web.consume_commands()
         assert mgr.web.results["c-y"]["status"] == "ok"
         assert mgr.store._expect_pending == set(), "拿不到 id 时不得凭空登记"
+
+
+# ---------- 部分组闸门(issue 26-11-11-0823, 用户拍板混合形态) ----------
+
+
+def _seed_group(mgr, client, hashes, name, file_name):
+    """再灌一组(同文件表归组); 返回组 key(裸 tuple, 队列直投 = Web 层已解码态)
+
+    seed_store 不传列表(取 client.torrents 全量) —— 传子列表会整体替换 by_hash, 把
+    既有种子挤出快照(_make_grouped_manager 是全量同灌, 本助手是增量追加, 口径不同)。
+    """
+    from helpers import FakeTorrent, _fake_file, seed_store
+
+    tors = [FakeTorrent(hash=h, name=name, save_path=r"R:\Downloads") for h in hashes]
+    for t in tors:
+        client.torrents[t.hash] = t
+        client.files_map[t.hash] = [_fake_file(file_name, 100)]
+    seed_store(mgr)
+    grouping = mgr.host.get("grouping")
+    for h in hashes:
+        grouping._assign_new_torrent(h)
+    return mgr.store.member_to_key[hashes[0]]
+
+
+def _seed_ungrouped(mgr, client, hash_, name):
+    """灌一个不归组种子(未归组 = 前端虚拟行的后端对应物); seed_store 全量口径同 _seed_group"""
+    from helpers import FakeTorrent, _fake_file, seed_store
+
+    tor = FakeTorrent(hash=hash_, name=name, save_path=r"R:\Downloads")
+    client.torrents[hash_] = tor
+    client.files_map[hash_] = [_fake_file(f"{name}.mkv", 100)]
+    seed_store(mgr)
+
+
+def test_bulk_partial_group_delete_files_hard_rejected():
+    """部分组闸门(issue 26-11-11-0823 混合形态): delete×delete_files=true×部分组 fail-closed 硬拒
+
+    证据(issue §01): bulk 直发可绕过前端三落点预警 —— 部分组带文件删除把共享物理文件删掉,
+    同组其余在册成员必然缺文件(不可逆)。硬拒 = error 回执点名共存成员(组名/缺口计数/改选
+    整组指引) + 零 qB 调用 + WARNING 日志。对照面: delete_files=false 的部分组删除不受闸门
+    影响(不带文件删除正是辅种退役的正常路径, 计划 26-11-11-0820 不打扰原则)。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        mgr, client, _key = _make_grouped_manager(td)
+        with capture_logs("auto_qb.webui.commands") as cap:
+            mgr.web.commands.put(
+                ("bulk_torrents", {
+                    "hashes": ["HA"],
+                    "action": "delete",
+                    "delete_files": True,
+                    "cmd_id": "pg-del"
+                })
+            )
+            mgr.web.consume_commands()
+        r = mgr.web.results["pg-del"]
+        assert r["status"] == "error", r
+        assert "辅种组「Show」还有 1 个成员未包含" in r["error"], r["error"]
+        assert "删除文件会破坏" in r["error"] and "请改选整组后重试" in r["error"], r["error"]
+        assert client.calls == [], f"硬拒不得触碰 qB: {client.calls}"
+        assert any("部分组拦截" in m for m in cap.messages), cap.messages
+
+        # 免疫半面: confirm=true 对 delete 不释放(混合形态拍板: 硬拒不可被确认绕过) ——
+        # 若闸内 confirmed 误改成对称的 bool(confirm), 本对照面红(handler 是纵深最后一层,
+        # 路由层本就只对 location 透传 confirm)
+        mgr.web.commands.put(
+            (
+                "bulk_torrents", {
+                    "hashes": ["HA"],
+                    "action": "delete",
+                    "delete_files": True,
+                    "confirm": True,
+                    "cmd_id": "pg-del-c"
+                }
+            )
+        )
+        mgr.web.consume_commands()
+        rc = mgr.web.results["pg-del-c"]
+        assert rc["status"] == "error", rc
+        assert client.calls == [], client.calls
+    with tempfile.TemporaryDirectory() as td:
+        mgr, client, _key = _make_grouped_manager(td)
+        mgr.web.commands.put(
+            ("bulk_torrents", {
+                "hashes": ["HA"],
+                "action": "delete",
+                "delete_files": False,
+                "cmd_id": "pg-soft"
+            })
+        )
+        mgr.web.consume_commands()
+        assert mgr.web.results["pg-soft"]["status"] == "ok", mgr.web.results["pg-soft"]
+        assert client.calls == [("delete", False)], client.calls
+
+
+def test_bulk_partial_group_release_faces_matrix():
+    """放行面矩阵(D2 口径, 与前端 _partialGroupsOf 守阵对账): 闸门只拦「部分」, 其余全部放行
+
+    - keys 覆盖全组: 组键级联展开即整组, delete_files=true 照常;
+    - 成员全选平铺(恰好全组): sel==total 非部分组(API 直发全成员同样放行);
+    - 单成员组: 无部分面; 未归组 hash(虚拟行对应物): 不参与判定;
+    - 组缩到只剩 1 个在册成员(store.groups 陈旧索引项不算成员): 不制造假部分组。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        mgr, client, key = _make_grouped_manager(td)
+        mgr.web.commands.put(
+            ("bulk_torrents", {
+                "keys": [key],
+                "action": "delete",
+                "delete_files": True,
+                "cmd_id": "pg-k"
+            })
+        )
+        mgr.web.consume_commands()
+        assert mgr.web.results["pg-k"]["status"] == "ok", mgr.web.results["pg-k"]
+        assert client.calls == [("delete", True)], client.calls
+    with tempfile.TemporaryDirectory() as td:
+        mgr, client, _key = _make_grouped_manager(td)
+        mgr.web.commands.put(
+            ("bulk_torrents", {
+                "hashes": ["HA", "HB"],
+                "action": "delete",
+                "delete_files": True,
+                "cmd_id": "pg-all"
+            })
+        )
+        mgr.web.consume_commands()
+        assert mgr.web.results["pg-all"]["status"] == "ok", mgr.web.results["pg-all"]
+        assert client.calls == [("delete", True)], client.calls
+    with tempfile.TemporaryDirectory() as td:
+        mgr, client, _key = _make_grouped_manager(td)
+        _seed_group(mgr, client, ["HS"], "Solo", "solo.mkv")
+        _seed_ungrouped(mgr, client, "HU", "Lone")
+        mgr.web.commands.put(
+            ("bulk_torrents", {
+                "hashes": ["HS", "HU"],
+                "action": "delete",
+                "delete_files": True,
+                "cmd_id": "pg-mix"
+            })
+        )
+        mgr.web.consume_commands()
+        assert mgr.web.results["pg-mix"]["status"] == "ok", mgr.web.results["pg-mix"]
+        assert client.calls == [("delete", True)], client.calls
+    with tempfile.TemporaryDirectory() as td:
+        mgr, client, key = _make_grouped_manager(td)
+        mgr.store.remove_torrent("HB")
+        assert [h for h in mgr.store.groups.get(key, []) if h in mgr.store.by_hash] == ["HA"], "前置: 在册成员已缩到 1"
+        mgr.web.commands.put(
+            ("bulk_torrents", {
+                "hashes": ["HA"],
+                "action": "delete",
+                "delete_files": True,
+                "cmd_id": "pg-shrunk"
+            })
+        )
+        mgr.web.consume_commands()
+        assert mgr.web.results["pg-shrunk"]["status"] == "ok", mgr.web.results["pg-shrunk"]
+        assert client.calls == [("delete", True)], client.calls
+
+
+def test_bulk_partial_group_dual_channel_same_batch_rejected():
+    """双通道同批拒收面: keys=[组A 全组] + hashes=[组B 部分成员]×delete_files=true -> 拒且只列组 B
+
+    钉住「keys 非空即短路」类回归(前端 S3 电池跨组混合断言的同款兜底面, 后端此前无等价物):
+    keys 展开的组 A 照常放行不进文案, 组 B 部分成员照常拦 —— 若闸门给 keys 加非空早退,
+    部分组带文件删除洞静默重开而现有电池全绿, 本用例兜住。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        mgr, client, key = _make_grouped_manager(td)
+        _seed_group(mgr, client, ["HC", "HD"], "Show2", "other.mkv")
+        mgr.web.commands.put(
+            (
+                "bulk_torrents", {
+                    "keys": [key],
+                    "hashes": ["HC"],
+                    "action": "delete",
+                    "delete_files": True,
+                    "cmd_id": "pg-dual"
+                }
+            )
+        )
+        mgr.web.consume_commands()
+        r = mgr.web.results["pg-dual"]
+        assert r["status"] == "error", r
+        assert "「Show2」还有 1 个成员未包含" in r["error"], r["error"]
+        assert "「Show」" not in r["error"], f"keys 展开的组 A 是整组, 不得进文案: {r['error']}"
+        assert client.calls == [], f"双通道同批拒收不得触碰 qB: {client.calls}"
+
+
+def test_bulk_partial_group_delete_message_aggregates_groups():
+    """多组聚合文案: 两组合计缺口; 四组触发「等 K 个组」截断(与前端 _partialGroupsSummary 同形)"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, client, _key = _make_grouped_manager(td)
+        _seed_group(mgr, client, ["HC", "HD"], "Show2", "other.mkv")
+        mgr.web.commands.put(
+            ("bulk_torrents", {
+                "hashes": ["HA", "HC"],
+                "action": "delete",
+                "delete_files": True,
+                "cmd_id": "pg-agg2"
+            })
+        )
+        mgr.web.consume_commands()
+        r = mgr.web.results["pg-agg2"]
+        assert r["status"] == "error", r
+        assert r["error"] == ("辅种组「Show」「Show2」还有 2 个成员未包含: 删除文件会破坏它们共享的文件(不可逆), 请改选整组后重试"), r["error"]
+        assert client.calls == [], client.calls
+    with tempfile.TemporaryDirectory() as td:
+        mgr, client, _key = _make_grouped_manager(td)
+        _seed_group(mgr, client, ["HC", "HD"], "Show2", "o1.mkv")
+        _seed_group(mgr, client, ["HE", "HF"], "Show3", "o2.mkv")
+        _seed_group(mgr, client, ["HG", "HH"], "Show4", "o3.mkv")
+        mgr.web.commands.put(
+            (
+                "bulk_torrents", {
+                    "hashes": ["HA", "HC", "HE", "HG"],
+                    "action": "delete",
+                    "delete_files": True,
+                    "cmd_id": "pg-agg4"
+                }
+            )
+        )
+        mgr.web.consume_commands()
+        r = mgr.web.results["pg-agg4"]
+        assert "「Show」「Show2」「Show3」等 4 个组还有 4 个成员未包含" in r["error"], r["error"]
+        assert client.calls == [], client.calls
+
+
+def test_bulk_partial_group_location_confirm_gate():
+    """迁移关 location 部分组闸(issue 26-11-11-0823): 无 confirm 拒单、confirm=true 放行
+
+    D3 拍板「挪一个种子单放」是合法意图 —— 闸门只拦未确认直发: 无 confirm 时 error 回执点名
+    共存成员并给改选整组指引(第三方脚本可显式带 confirm=true 重发), 零 qB 调用; confirm=true
+    放行直发 setLocation(前端 S3 确认框确认后即带此键, drawer.js submitMoveDialog 闸放行位)。
+    对照面: keys 覆盖全组的迁移关移动照常直发(整组搬走无共存成员被破坏)。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        mgr, client, _key = _make_grouped_manager(td)
+        mgr.web.commands.put(
+            ("bulk_torrents", {
+                "hashes": ["HA"],
+                "action": "location",
+                "location": "R:/dst",
+                "cmd_id": "pg-loc"
+            })
+        )
+        mgr.web.consume_commands()
+        r = mgr.web.results["pg-loc"]
+        assert r["status"] == "error", r
+        assert "辅种组「Show」还有 1 个成员未包含" in r["error"] and "移动会破坏" in r["error"], r["error"]
+        assert client.calls == [], client.calls
+
+        mgr.web.commands.put(
+            (
+                "bulk_torrents", {
+                    "hashes": ["HA"],
+                    "action": "location",
+                    "location": "R:/dst",
+                    "confirm": True,
+                    "cmd_id": "pg-loc-ok"
+                }
+            )
+        )
+        mgr.web.consume_commands()
+        assert mgr.web.results["pg-loc-ok"]["status"] == "ok", mgr.web.results["pg-loc-ok"]
+        assert client.calls == [("set_location", "R:/dst")], client.calls
+    with tempfile.TemporaryDirectory() as td:
+        mgr, client, key = _make_grouped_manager(td)
+        mgr.web.commands.put(
+            ("bulk_torrents", {
+                "keys": [key],
+                "action": "location",
+                "location": "R:/dst",
+                "cmd_id": "pg-loc-key"
+            })
+        )
+        mgr.web.consume_commands()
+        assert mgr.web.results["pg-loc-key"]["status"] == "ok", mgr.web.results["pg-loc-key"]
+        assert client.calls == [("set_location", "R:/dst")], client.calls
+
+
+def test_bulk_partial_group_location_armed_not_gated():
+    """迁移武装态部分组 location 不进闸门: 整组迁移分支级联全组(relocate_execute), 无此洞
+
+    武装态在闸门之前分流(issue 锚点 commands_torrents.py:701); 本用例钉住分流序 ——
+    relocate_execute 收到的是选中集合与 confirm 原样透传(全组级联是 relocate 侧 _buckets
+    的职责), 闸门零触发、零 setLocation 直发。
+    """
+    from types import SimpleNamespace as NS
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr, client, _key = _make_grouped_manager(td)
+        mgr.config.relocate.enabled = True
+        seen = []
+
+        def _exec(hashes, location, confirm=False, origin="unknown"):
+            seen.append((list(hashes), location, confirm, origin))
+            return [{"hash": "HA", "cls": "skip", "reasons": [], "notes": ["幂等"]}]
+
+        mgr.ctx.relocate = NS(relocate_execute=_exec)
+        mgr.web.commands.put(
+            ("bulk_torrents", {
+                "hashes": ["HA"],
+                "action": "location",
+                "location": "R:/dst",
+                "cmd_id": "pg-armed"
+            })
+        )
+        mgr.web.consume_commands()
+        assert seen == [(["HA"], "R:/dst", False, "web")], seen
+        r = mgr.web.results["pg-armed"]
+        assert r["status"] == "ok", r
+        assert client.calls == [], f"武装态不得直发 setLocation: {client.calls}"

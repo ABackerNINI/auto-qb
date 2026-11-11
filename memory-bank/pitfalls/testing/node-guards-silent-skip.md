@@ -6,7 +6,7 @@
 > 改阈值的人跑的是无 node 的全量。教训: ①改 site-caps 阈值必须真跑 node 沙箱守阵(守阵里的魔法数字与
 > site-caps.js 是硬耦合, 改一边必改另一边); ②「全绿」要区分真绿与跳过绿, 收尾怀疑守阵没真跑时先确认
 > node 在不在; ③本机没有 node 时可下载便携版 zip 到临时目录只给当次命令配 PATH(零安装零持久态)。
-> 触发: node, nodejs, 静默跳过, 假绿, 全绿, site-caps, 配额, 阈值, 硬上限, 守阵, test_extension_proxy,
+> 触发: node, nodejs, 静默跳过, 假绿, 全绿, 出生即红, 新电池真跑, site-caps, 配额, 阈值, 硬上限, 守阵, test_extension_proxy, test_webui_static_r4_node_batteries,
 > VM 沙箱, 便携, portable, PATH, 阈值漂移, 配额双桶, options.js 沙箱, 顶层 let, 词法绑定, 喂不进状态
 
 ### 3 条配额守阵漂移红了一天没人看见 (2026-09-28)
@@ -42,3 +42,11 @@
   (`connStateOf` / `renderConnOverview` / `probeMainInstance` / `discoverNow` 等)能直接 `sandbox.<fn>()` 调。
   另: options.js 顶层就注册事件与读 DOM, 沙箱必须给 `document.getElementById` 桩(返回可复用元素对象,
   带 `value/textContent/innerHTML/classList/open/addEventListener`), 否则加载即抛。
+
+### 出生即红的 node 电池三收尾轮报全绿(2026-11-12, 部分组预警 S4 电池)
+
+- **触发**: 计划 26-11-11-0820 S4(e6f1f73a)新增 `_NODE_MOVE_PARTIAL_DISCLOSURE_PROBE` 电池真跑 `openMoveDialog` —— 而上游 e1fbd849(23:35, 先于 S4)已给 `openMoveDialog` 加 `this.ensureWebFlags()` 惰性补拉挂点, 定义在 `lifecycle.js`, 电池只并 selection+drawer 两 mixin → **入库树出生即红**(TypeError); 该电池三收尾轮(S4-S6)报的 test.quick/full 全绿, 唯一自洽解释是当时跑全量的环境无 node、电池静默跳过 —— 与本坑档 26-09-28 条同机制换了件外套: 那条是「改了阈值没真跑」, 这条是「新电池出生即红没人看见」。
+- **判别**: 新增 node 电池**入库前必须在有 node 的环境真跑一次**(本仓电池全部「无 node 静默跳过」, 没跑过 = 从未验证过); 两会话(部分组闸门轮 04:00 / 键帽提示轮 05:21)在有 node 环境先后撞见同一红, 后者先入库补桩(`0d420c9d`, `async () => {}` 照 loadMoveOptions 范式), 前者撤自己的重复版只留远端版 —— 同坑双修的合流面。
+- **处置**: 同文件同位置双修时 stash pop 可零冲突地叠出双桩(grep 确认后保留先入库一侧、撤另一侧); 电池沙箱补桩照 loadMoveOptions/`$nextTick` 范式给空桩; 新增电池的守阵纪律补进判别面 —— 入库前有 node 环境真跑一次。
+- **复发**: 1
+- **复发归因**(为什么没命中): 该坑档的判别面当时钉在「改 site-caps 阈值必须真跑」这一族, 触发词不含 `test_webui_static_r4_node_batteries` —— 写**新** node 电池的会话没把「无 node 静默跳过」当成对自己的约束; 现已把「新电池入库前有 node 环境真跑一次」补进判别面。
