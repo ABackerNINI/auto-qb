@@ -14,25 +14,42 @@
 #   逐家试拉后经 --build-arg BASE_IMAGE 传入; 候选可用环境变量 AUTO_QB_TESTBED_HUB_MIRRORS 覆盖
 #   (逗号/空白分隔, 值 direct = 跳过镜像源直连)。
 #   默认候选: docker.m.daocloud.io / docker.1ms.run / docker.xuanyuan.me / docker.mirrors.tuna.tsinghua.edu.cn
+#   *实跑实测(2026-11-12): 首跑 docker.m.daocloud.io 拉取瞬断(anonymous token EOF), 候选链按序
+#   顶上 —— docker.1ms.run 拉成同一 digest fe81560990fa; 重试跑 daocloud 恢复, 成功构建的基底
+#   终局来自 docker.m.daocloud.io(两家均通; 按序试拉机制已实证, 漂移即换下一家)。
 # - apt(下方 ARG APT_MIRROR): 清华默认, 备选 mirrors.aliyun.com / mirrors.ustc.edu.cn
+#   *实跑实测(2026-11-12): TUNA 走 http 11MB/s; WARN: 必须 http 不能 https —— 极简基底无 CA 包,
+#   详见层 1 注。
 # - PyPI(下方 ARG UV_INDEX): 清华 simple 默认, 备选 https://mirrors.aliyun.com/pypi/simple/
 #   注意: uv sync --frozen 不吃 index(机制事实见层 4 注与计划 §10 R4)—— PyPI 面实走
 #   uv export + uv pip install --index-url(层 5); S2 运行期 delta 走同款 pip 路线
 # - npm / playwright 二进制(下方 ARG NPM_REGISTRY / ARG PLAYWRIGHT_DOWNLOAD_HOST): npmmirror
+#   *实跑实测(2026-11-12): npm ci 859ms; chromium 114.3MiB 走 cdn.npmmirror.com 成功
+#   (playwright 1.63.0 / chromium-1243 / Chrome Headless Shell 153.0.8010.12)。
 # - github 系(uv 托管 CPython 3.13, 源在 github releases): 直连; 失败即构建中断, 停手请用户
 #   手动开代理后重跑。备选路线(计划已记, 未实装): deadsnakes PPA(launchpad 直连)
+#   *实跑实测(2026-11-12): 直连成功, 未开代理 —— CPython 3.13.18 下载 6.9s 落地。
+# - NodeSource(层 2): 直连成功, 未触发 apt 18.x 降级 —— node v22.23.5 / npm 10.9.9。
+# - PyPI(层 3/5): TUNA simple; pip 装到 uv 0.13.7; export+pip 双 venv 各 63 包约 335ms。
+#
+# 整体实测: 全量构建(buildkit 步骤 1-13 一次走通; 注意步号不是本文件的 6 分层编号)约 161s,
+# 镜像 2.95GB; 幂等复跑 0.5s no-op。
 #
 # 分层(贪心缓存序, 改代码不触发重装): 系统层 -> node 层 -> uv 层 -> ENV 层 -> 依赖烘焙层 -> e2e 层。
 
 # ---------------------------------------------------------------------------
 # 层 1 系统层: ubuntu:24.04(基底对齐 CI ubuntu-latest)+ apt 换国内源 + 基础工具
 # 3.13 不走 apt: noble 官方源无 python3.13(计划评审轮 1 实测), 走下方烘焙层 uv 托管 CPython
+# WARN: apt 源必须走 http 不能 https(2026-11-12 首跑实测): 极简基底 ubuntu:24.04 连 /etc/ssl/certs
+# 都没有(无 ca-certificates), https 面 apt 握手必死("No system certificates available"); http 面
+# 完整性靠 apt 的 GPG 签名校验, 安全语义不降 —— 本层会装上 ca-certificates, 后续层的 https 面
+# (nodesource curl / playwright install-deps)不受影响。TUNA http 实测 11MB/s。
 ARG BASE_IMAGE=ubuntu:24.04
 FROM ${BASE_IMAGE}
 ARG APT_MIRROR=mirrors.tuna.tsinghua.edu.cn
 RUN set -eux; \
     if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then \
-      sed -ri "s#http://archive\.ubuntu\.com#https://${APT_MIRROR}#g; s#http://security\.ubuntu\.com#https://${APT_MIRROR}#g" \
+      sed -ri "s#http://archive\.ubuntu\.com#http://${APT_MIRROR}#g; s#http://security\.ubuntu\.com#http://${APT_MIRROR}#g" \
         /etc/apt/sources.list.d/ubuntu.sources; \
     fi; \
     apt-get update; \
@@ -86,15 +103,18 @@ ENV UV_PYTHON_DOWNLOADS=never \
 # 就 fail-fast, 不许偷偷补下载)。
 # R4(评审轮 3 用户拍板): 下载源不用 uv sync --frozen(它跳过 index 校验、按 uv.lock 记录的
 # files.pythonhosted.org 绝对 URL 直连, 镜像索引无效)—— 改导出+pip 路线:
-# uv export --generate-hashes 从锁文件出钉版清单(带 hash 校验), uv pip install -r --index-url
-# 显式指国内镜像。S2 运行期 delta 走同款(见 linux_env.py 头注交接注记)。
+# uv export 从锁文件出钉版清单, uv pip install -r --index-url 显式指国内镜像。S2 运行期 delta
+# 走同款(见 linux_env.py 头注交接注记)。
+# WARN: uv export 不写 --generate-hashes(2026-11-12 首跑实测): 新版 uv(0.13.7 实测; 0.12.14 该
+# 旗标同已移除)export 默认带 hash —— 写了直接 "unexpected
+# argument" 构建自断。若未来 hash 默认行为再变, 以 `uv export --help` 实测为准。
 COPY pyproject.toml uv.lock /root/env-template/
 WORKDIR /root/env-template
 RUN set -eux; \
     UV_PYTHON_DOWNLOADS=manual uv python install 3.13; \
     uv venv --python 3.13 /opt/venv-3.13; \
     uv venv --python 3.12 /opt/venv-3.12; \
-    uv export --frozen --format requirements-txt --generate-hashes --no-emit-project \
+    uv export --frozen --format requirements-txt --no-emit-project \
       -o requirements.txt; \
     uv pip install --python /opt/venv-3.13/bin/python --index-url "${UV_INDEX}" \
       -r requirements.txt; \
