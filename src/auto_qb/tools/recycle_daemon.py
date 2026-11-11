@@ -73,6 +73,8 @@ def _names_from_tasklist() -> tuple:
         ["tasklist", "/NH", "/FO", "CSV"],
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         timeout=10,
         creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
     )
@@ -99,7 +101,14 @@ def _names_from_proc() -> tuple:
 
 def _names_from_ps() -> tuple:
     """其它 POSIX: ps -eo comm="""
-    out = subprocess.run(["ps", "-eo", "comm="], capture_output=True, text=True, timeout=10)
+    out = subprocess.run(
+        ["ps", "-eo", "comm="],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=10,
+    )
     return tuple(n.strip().lower() for n in (out.stdout or "").splitlines())
 
 

@@ -261,6 +261,8 @@ class CheckAction(FullCheckingMixin, SkipCheckingMixin, BaseAction):
                 [self.custom_program, candidate.hash, candidate.save_path],
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
                 timeout=self.custom_timeout,
             )
         except subprocess.TimeoutExpired:

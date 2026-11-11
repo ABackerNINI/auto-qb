@@ -105,7 +105,7 @@ def _run(cmd: list[str], step_timeout: float, deadline: float) -> subprocess.Com
         logger.debug("端口占用者探针预算耗尽, 跳过: %s", cmd[0])
         return None
     try:
-        return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        return subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout)
     except (OSError, subprocess.SubprocessError) as exc:
         logger.debug("端口占用者探针命令失败(%s): %s", cmd[0], exc)
         return None

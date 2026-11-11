@@ -25,7 +25,7 @@ memory-bank/testing/file-conventions.md「跨平台断言规范」节。本文�
 - test_repo_skipif_all_have_reason_and_owner: 1. 全仓对账 —— tests/ 全部 skipif 带 reason + owner
 - test_skipif_checker_liveness: 1. 活性探针 —— 缺 owner / 缺 reason 抓到, 双全放得过
 - test_platform_tolerance_constants_sane: 2. 常量自洽 —— 下界余量 >= 2 tick 且刻度常量未被改小
-- test_repo_text_subprocess_calls_pin_utf8: 3. 全仓对账 —— tests/ 与 scripts/ 全部文本子进程显式 UTF-8 + replace
+- test_repo_text_subprocess_calls_pin_utf8: 3. 全仓对账 —— src/、tests/ 与 scripts/ 全部文本子进程显式 UTF-8 + replace
 - test_text_subprocess_checker_liveness: 3. 活性探针 —— 漏声明/值错/双模式抓到, 字节模式与动态形态放得过
 """
 from __future__ import annotations
@@ -38,6 +38,7 @@ import platform_tolerance
 REPO = Path(__file__).resolve().parent.parent
 TESTS = REPO / "tests"
 SCRIPTS = REPO / "scripts"
+SRC = REPO / "src"
 
 
 def _is_pytest_mark_skipif_call(func: ast.expr) -> bool:
@@ -160,12 +161,12 @@ def check_text_subprocess(path: Path, source: str) -> list[str]:
 
 def test_repo_text_subprocess_calls_pin_utf8():
     violations: list[str] = []
-    for p in sorted(TESTS.rglob("*.py")) + sorted(SCRIPTS.rglob("*.py")):
+    for p in sorted(TESTS.rglob("*.py")) + sorted(SCRIPTS.rglob("*.py")) + sorted(SRC.rglob("*.py")):
         violations.extend(check_text_subprocess(p, p.read_text(encoding="utf-8")))
     assert not violations, (
         "文本子进程必须显式 encoding='utf-8' + errors='replace'(英文 Windows runner cp1252 "
-        "会打死 subprocess 读线程, 2026-11-06 CI 六连红; 扫描面含 tests/ 与 scripts/, "
-        "issue 26-11-07-1216 后者曾长期漏扫):\n" + "\n".join(violations)
+        "会打死 subprocess 读线程, 2026-11-06 CI 六连红; 扫描面含 src/、tests/ 与 scripts/, "
+        "issue 26-11-07-1216 src/ 与 scripts/ 曾长期漏扫):\n" + "\n".join(violations)
     )
 
 
