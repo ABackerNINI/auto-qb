@@ -203,8 +203,10 @@ const mkCtx = ({ confirm = {}, receipt = {}, known = ["H1"], apiFail = false,
   c.selSizeSummaryOf = () => ({ total: 0, occupy: 0 });
   c.fmtSize = (n) => String(n);
   // S2(计划 26-11-11-0820)起 _deleteDetails 消费 selection.js 的部分组谓词; 本电池不加载
-  // selection.js, 桩空返回=「无部分组」负例口径(真跑集成见 node_batteries 的删除链部分组行电池)
+  // selection.js, 桩空返回=「无部分组」负例口径(真跑集成见 node_batteries 的删除链部分组行电池);
+  // S3 起谓词与聚合(_partialGroupsSummary)成对消费, 桩同给(空聚合 = 不加行, 与桩空谓词同口径)
   c._partialGroupsOf = () => [];
+  c._partialGroupsSummary = () => null;
   c.api = async (url, opts) => {
     if (apiFail) throw new Error("boom");
     c.posts.push({ url, body: JSON.parse(opts.body) });
@@ -394,8 +396,10 @@ const mkCtx = (groups, members, summary) => Object.assign({}, DE, {
   fmtSize: (n) => n + "B",
   // S2(计划 26-11-11-0820)起 _deleteDetails 末尾消费 selection.js 的部分组谓词追加警示行;
   // 本电池不加载 selection.js, 桩空返回=「无部分组」负例口径(真跑集成见 node_batteries
-  // 的 test_r4_delete_details_partial_group_row 电池)
+  // 的 test_r4_delete_details_partial_group_row 电池); S3 起谓词与聚合(_partialGroupsSummary)
+  // 成对消费, 桩同给(空聚合 = 不加行, 与桩空谓词同口径)
   _partialGroupsOf: () => [],
+  _partialGroupsSummary: () => null,
 });
 const rowOf = (rows, label) => rows.find((r) => r.label === label);
 const val = (rows, label) => (rowOf(rows, label) || {}).value;
@@ -529,8 +533,13 @@ const mkMoveCtx = (script) => {
     moveSingleHash: "H1", moveTargets: { groupKeys: [], memberHashes: ["H1"] }, moveScope: "",
     movePathMenu: false, movePathHi: -1,
     _pendingRelocateConfirm: null,
+    flags: { relocate_enabled: false },
     posts: [], toasts: [], gates: 0,
   });
+  // S3(计划 26-11-11-0820)起 submitMoveDialog 消费 selection.js 的部分组谓词 + flags 旗标;
+  // 本电池不加载 selection.js, 桩空返回 =「无部分组」负例口径(S3 落点真跑集成见
+  // node_batteries 的迁移关部分组确认框电池)
+  c._partialGroupsOf = () => [];
   c.$nextTick = (fn) => fn();
   c.$refs = {};
   c.toast = (msg, kind) => c.toasts.push({ msg, kind });

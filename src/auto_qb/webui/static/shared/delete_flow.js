@@ -146,17 +146,14 @@ window.AQB_DELETE = {
       // 不随 checkbox 联动 —— 文案用「若勾选…」陈述条件, 勾与不勾两种状态下都成立, 整组删除/
       // 成员全选/单成员组/虚拟行(判定不触发)与不带文件删除整组退役路径都不出此行。
       // 判定单点 = selection.js 的 _partialGroupsOf 谓词(带接收者调用, 消费方不得另写判定);
-      // 多组聚合照 _hrRiskOf 模式: 组名上限 3 个 +「等 K 个」, 已选/总数与缺口用合计。
-      const partials = this._partialGroupsOf(keys, hashes);
-      if (partials.length) {
-        const names = partials.slice(0, 3).map((p) => `「${p.name}」`).join("")
-          + (partials.length > 3 ? `等 ${partials.length} 个` : "");
-        const sel = partials.reduce((s, p) => s + p.sel, 0);
-        const total = partials.reduce((s, p) => s + p.total, 0);
+      // 多组聚合单点 = _partialGroupsSummary(组名上限 3 个 +「等 K 个」, 已选/总数与缺口用合计,
+      // 与迁移关确认框 S3 共用同一份聚合)。
+      const agg = this._partialGroupsSummary(this._partialGroupsOf(keys, hashes));
+      if (agg) {
         rows.push({
           icon: "#i-warn", label: "部分组", wide: true, tone: "error",
-          value: `辅种组${names}: 已选 ${sel}/${total} 个`
-            + ` —— 若勾选『同时删除磁盘文件』,其余 ${total - sel} 个成员将缺文件`,
+          value: `辅种组${agg.names}: 已选 ${agg.sel}/${agg.total} 个`
+            + ` —— 若勾选『同时删除磁盘文件』,其余 ${agg.gap} 个成员将缺文件`,
         });
       }
       return rows;

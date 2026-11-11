@@ -612,6 +612,27 @@ window.AQB_DRAWER = {
         wide: true,
       })) === true;
     },
+    /* 部分组迁移关确认框(S3, 计划 26-11-11-0820 D3): 目标含「只选中一部分」的辅种组且整组
+     * 迁移关闭时, 设定位置提交前弹(error 档 + danger 钮), 列受影响组与缺口成员数 —— 迁移关
+     * 直发会把组内共享文件搬走, 其余未选中成员仍指向旧路径, 缺文件是必然结局且原本全程静默。
+     * 确认才发; 取消留在设定位置框(重开由调用方带原路径做, 与 _relocateConfirmGate 的
+     * confirm 回路同分工)。判定单点 = selection.js::_partialGroupsOf, 聚合单点 =
+     * _partialGroupsSummary(与删除链 S2 行共用); 文案钉住词「将缺文件」与「整组迁移」
+     * (S5 守阵双向钉)。 */
+    async _partialMoveConfirmGate(partials) {
+      const agg = this._partialGroupsSummary(partials);
+      if (!agg) return true;  // R6: 聚合解析不出不误拦, 静默直发
+      return (await this._openModal({
+        title: "需确认: 部分组移动",
+        body: "当前未开启整组迁移, 只搬选中的种子; 组内成员共享同一份物理文件, 共享文件随选中成员搬走后, 组内其余成员仍指向旧路径。",
+        details: [{
+          icon: "#i-warn", label: "部分组", wide: true, tone: "error",
+          value: `辅种组${agg.names}: 已选 ${agg.sel}/${agg.total} 个,其余 ${agg.gap} 个成员将缺文件;建议改选整组或开启整组迁移`,
+        }],
+        okText: "仍要移动", cancelText: "取消",
+        tone: "error", danger: true, wide: true,
+      })) === true;
+    },
     /* 成功 toast 按真实回执计数(整组迁移回执带 truth.summary; 其余动作无 summary 走原文案) */
     _relocateDoneText(r, okText) {
       const s = (r && r.truth && r.truth.summary) || null;
@@ -854,6 +875,30 @@ window.AQB_DRAWER = {
           ? this._editPost(this.moveSingleHash, "location", body, "移动")
           : this._bulkEditPost(this.moveTargets, "location", body, "批量移动");
       };
+      /* 部分组迁移关确认框(S3, 计划 26-11-11-0820 D3): 目标含部分组且**明确知道整组迁移关**
+       * 时, 确认才发; 迁移开(flags.relocate_enabled)不弹(那是 S4 披露条的面, 行为安全由后端
+       * _buckets 级联全组保证); 非部分组维持现状直发零新增弹层。R6: 旗标解析不出(flags 取不到/
+       * relocate_enabled 非 false)与组判定解析不出(快照竞态/decoratedGroups 缺失)一律静默
+       * 直发, 绝不因判定失败阻断正常操作。 */
+      let gated = null;  // 闸内确认后投递的重开钩子(确认框把框先收了, 失败须照 confirm 回路失败分支重开)
+      if (this.flags && this.flags.relocate_enabled === false) {
+        const partials = this._partialGroupsOf(
+          (this.moveTargets && this.moveTargets.groupKeys) || [],
+          (this.moveTargets && this.moveTargets.memberHashes) || [],
+        );
+        if (partials.length) {
+          /* 弹层顺序照 confirm 回路先例(R3 防双遮罩互盖, :866-876 逐位复刻): 两层全屏遮罩
+           * 同 z-index 且 move-dialog 在 DOM 靠后, 留着会被确认框盖住 —— 先收 moveOpen 再开
+           * 确认框, 取消带原路径重开(可改路径/改选整组再试), 确认则落回下方正常投递链。 */
+          this.moveOpen = false;
+          const reopen = () => this.openMoveDialog(this.moveTargets, this.moveScope, this.moveSingleHash, location);
+          if (!(await this._partialMoveConfirmGate(partials))) {
+            reopen();
+            return;
+          }
+          gated = reopen;  // 确认后投递若失败, 框已被闸先收 —— 末尾带原路径重开, 手输路径不丢
+        }
+      }
       this.moveBusy = true;
       let ok = false;
       try {
@@ -886,6 +931,7 @@ window.AQB_DRAWER = {
         return;
       }
       if (ok) this.moveOpen = false;  // 成功即关(与添加种子同口径); 失败留对话框开着让用户改路径
+      else if (gated) gated();  // 闸内确认后失败: 框已被闸先收, :929 的「留着」落空 —— 照 confirm 回路失败分支带原路径重开
     },
     /* ---------------- 批量编辑(多选右键, 计划 26-10-02-1955 W2): 批量限速 / 批量移动 ----------------
      * 与单选编辑同一家族, 但三处不同: 目标集合是整个选中集合(_bulkTargets 口径, 组键 + 成员 hash

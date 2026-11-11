@@ -580,6 +580,20 @@ window.AQB_SELECTION = {
       }
       return out;
     },
+    /* 部分组聚合展示单点(计划 26-11-11-0820 S2/S3 共用): 把 _partialGroupsOf 的返回聚合成
+     * 一段文案素材 —— 组名上限 3 个 +「等 K 个」(照 _hrRiskOf 模式), 已选/总数用合计,
+     * 缺口 = 合计差。空入参 -> null(调用方不加行/不弹框)。判定单点仍是 _partialGroupsOf,
+     * 本函数只做展示聚合, 不含任何「是不是部分组」的判定; 删除链行(S2)与迁移关确认框(S3)
+     * 共用, 消费方不得另写聚合。 */
+    _partialGroupsSummary(partials) {
+      const list = partials || [];
+      if (!list.length) return null;
+      const names = list.slice(0, 3).map((p) => `「${p.name}」`).join("")
+        + (list.length > 3 ? `等 ${list.length} 个` : "");
+      const sel = list.reduce((s, p) => s + p.sel, 0);
+      const total = list.reduce((s, p) => s + p.total, 0);
+      return { names, sel, total, gap: total - sel };
+    },
   },
   computed: {
     /* 多选总数(去重后的种子数): 供右键菜单升级为批量菜单(menu.multi)与快捷键目标解析。

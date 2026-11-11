@@ -8,6 +8,7 @@
 - test_r4_selection_state_machine: R5#51(major) —— AQB_SELECTION 真跑: _selSyncGroups 四态(补选/移出/未知 key 保留/种子页降级: 不补选但降级照做)、_selAnchor 兜底链四态(显式锚点/光标/展开组/首行)、selSizeSummaryOf occ_key 取 max 去重
 - test_r4_partial_groups_predicate_five_forms: 部分组判定单点守阵(计划 26-11-11-0820 S1, 拍板 D2) —— _partialGroupsOf(keys, hashes) -> [{key, name, sel, total}] 是删除确认框行(S2)/迁移关确认框(S3)/迁移开披露条(S4) 三落点共用的「部分组」唯一判定面; 判定 = 真实组(!virtual 且 total>1)有成员命中 hashes ∧ 组键不在 keys ∧ sel<total。静态锚: 判定只在 selection.js 定义形态(裸名+`(`, 接收者调用不计)恰一次(其它 shared 文件零重复定义实现)、方法体走 this.decoratedGroups 与 _findGroup 同源解析面且零 filteredGroups 独走、判据含 g.virtual 豁免。五形态 node 电池真跑: 组键整组入选不触发(含双向联动组键与成员 hash 同存面)/成员全选不触发(组键已晋升 + 种子页降级未晋升 sel===total 两面)/部分选中触发且 sel/total/name 逐字段正确/跨组混合(整组 A + 部分组 C 并存)只列部分组/单成员组与虚拟行均不触发(专设双成员虚拟行钉住 virtual 判据独立于 total<=1); 边界面: 空入参不抛/hash 不属任何组不触发/name 缺失兜组 key/decoratedGroups 缺失(R6 极端竞态)空返回不抛不误拦 —— 摘除判定或换解析面即红
 - test_r4_delete_details_partial_group_row: 删除链部分组行落点级真跑(计划 26-11-11-0820 S2, 拍板 D5) —— _deleteDetails(delete_flow.js)在删除目标含部分组时于既有行流末尾追加一行(tone error/wide/#i-warn, HR 风险行同款), 判定单点消费 selection.js::_partialGroupsOf(带接收者调用)。正例: 部分组目标恰一行且单组文案逐字段(组名/已选 M/N/钉住词「将缺文件」); 多组聚合一行(已选/总数与缺口用合计); 四组触发组名列前 3 +「等 K 个」(照 _hrRiskOf 模式)。负例(D2 不触发面): 整组删除(组键入选)/成员全选未晋升/单成员组/虚拟行/hash 不属任何组均无该行。恒显面(D5): _deleteDetails 形参只有 keys/hashes(无 delete_files 勾选入参, 行与勾选状态无关恒显由结构保证)且行为行流末行(既有五行/六行结构零改动只追加)。电池合并 selection.js + delete_flow.js 两 mixin 方法(app.mixin 同实例注入等价), 无 node 静默跳过
+- test_r4_move_dialog_partial_group_gate: 迁移关部分组确认框落点级真跑(计划 26-11-11-0820 S3, 拍板 D3) —— submitMoveDialog(drawer.js)在目标含部分组且 flags.relocate_enabled===false 时首次 post(false) 前弹确认框(tone error/danger/wide), 确认才发, 取消留在设定位置框; 判定单点消费 selection.js::_partialGroupsOf、聚合单点消费 _partialGroupsSummary(与删除链 S2 行共用)。正例: 部分组+迁移关恰弹一次且弹层顺序先收 moveOpen 再开确认框(R3 防双遮罩互盖, 照 confirm 回路先例), 文案钉住词「将缺文件」+「整组迁移」逐字段, 确认后首发无 confirm 键, 成功后框收; 取消零投递带原路径重开; 确认后投递失败带原路径重开(框已被闸先收, 照 confirm 回路失败分支, 手输路径不丢), 非闸直发失败维持现状无重开; 四组聚合前 3 +「等 K 个」合计口径。负例(D3): 整组入选/成员全选未晋升/单成员组/虚拟行/hash 不属任何组直发零新增弹层。旗标两态: 迁移开直发零弹层(S4 披露条的面); flags/relocate_enabled 解析不出(R6)静默直发不误拦; decoratedGroups 缺失不抛不误拦。电池合并 selection.js + drawer.js 两 mixin 方法, 无 node 静默跳过
 - test_r4_load_col_state_seeding: R5#18 —— loadColState 默认隐藏播种三态: 空存储播种 / 仅空 hidden 不播(「刻意全开」合法偏好) / 有任一偏好键不播; 附坏 JSON 走完整流程、locked 列忽略、w 白名单洗净(洗净后三键全缺照播)
 - test_r4_sort_domain: R5#54 —— AQB_SORT 真跑: setSort 三态循环(经典 gk/gd 与 dyn dtSortState 两形态) + _dtStrCompare(IPv4 逐段数值序/端口数值/等值/非 IP localeCompare 回落) + sortedDrawer 空值两方向恒末位与 IPv4 数值序
 - test_r4_format_ladder_family: R5#55 —— format 函数族档位边界: _fmtLadder 梯顶回落(top 命中/缺省/档名写错回落整梯)与字节/速度两族、fmtEta 8640000 哨兵与非正值、fmtDuration 三段进位边界、fmtPeersQb 缺省只显已连接
@@ -629,6 +630,133 @@ console.log(JSON.stringify({
 }));
 """
 
+# S3 迁移关部分组确认框(计划 26-11-11-0820, 拍板 D3)落点级真跑 ------------------------
+_NODE_MOVE_PARTIAL_GATE_PROBE = r"""
+const fs = require("fs");
+global.window = { AQB_DRAWER_TPL_REG: { helpers: {} } };
+const selSrc = fs.readFileSync(process.argv[1], "utf8");
+eval(selSrc + "\n;globalThis.__SEL__ = window.AQB_SELECTION;");
+const drawerSrc = fs.readFileSync(process.argv[2], "utf8");
+eval(drawerSrc + "\n;globalThis.__DRW__ = window.AQB_DRAWER;");
+// 两 mixin 方法合并进同一 ctx(生产是 app.mixin 逐个注入同一 Vue 实例, this 等价):
+// submitMoveDialog 经 this._partialGroupsOf/_partialGroupsSummary 跨模块消费 selection.js
+const M = Object.assign({}, globalThis.__SEL__.methods, globalThis.__DRW__.methods);
+
+const memberHashesOf = (list) => (list || []).map((m) => (typeof m === "string" ? m : (m && m.hash) || "")).filter(Boolean);
+// 组族谱与 S2 电池同款: A(两成员)/C(三成员)/E/F(各两成员)/B(单成员)+ 虚拟行 u-h9
+const GROUPS = [
+  { key: "A", name: "组A", members: [{ hash: "h1" }, { hash: "h2" }] },
+  { key: "C", name: "组C", members: [{ hash: "h4" }, { hash: "h5" }, { hash: "h6" }] },
+  { key: "E", name: "组E", members: [{ hash: "e1" }, { hash: "e2" }] },
+  { key: "F", name: "组F", members: [{ hash: "f1" }, { hash: "f2" }] },
+  { key: "B", name: "组B", members: [{ hash: "h3" }] },
+  { key: "u-h9", virtual: true, members: [{ hash: "h9" }] },
+];
+const mkCtx = (over) => {
+  const c = Object.assign({}, M, {
+    memberHashesOf,
+    decoratedGroups: GROUPS,
+    filteredGroups: GROUPS,
+    flags: { relocate_enabled: false },
+    moveBusy: false, moveOpen: true, movePathInput: "/dst",
+    moveSingleHash: "h1", moveTargets: { groupKeys: [], memberHashes: ["h1"] }, moveScope: "",
+    modalResult: true, postResult: true,
+    modalCalls: [], posts: [], reopens: [], toasts: [],
+  }, over);
+  c.toast = (msg, kind) => c.toasts.push({ msg, kind });
+  c._openModal = async (cfg) => { c.modalCalls.push({ cfg, moveOpenAtCall: c.moveOpen }); return c.modalResult; };
+  c.openMoveDialog = (targets, scope, singleHash, prefill) => {
+    c.reopens.push({ targets, scope, singleHash, prefill });
+    c.moveOpen = true;
+  };
+  c._editPost = async (hash, action, body) => { c.posts.push({ via: "single", hash, action, body }); return c.postResult; };
+  c._bulkEditPost = async (targets, action, extra) => { c.posts.push({ via: "bulk", targets, action, extra }); return c.postResult; };
+  return c;
+};
+const checks = [];
+const ok = (name, cond) => checks.push([name, !!cond]);
+
+(async () => {
+  // --- 正例: 部分组 + 迁移关 -> 确认框拦截, 确认后正常发单 ---
+  let c = mkCtx({});
+  await c.submitMoveDialog();
+  ok("部分组+迁移关: 恰弹一次确认框, 投递恰一次", c.modalCalls.length === 1 && c.posts.length === 1);
+  ok("弹层顺序(R3): 确认框打开时设定位置框已先收", c.modalCalls[0].moveOpenAtCall === false);
+  const cfg = c.modalCalls[0].cfg;
+  ok("确认框形态: tone error / danger 钮 / wide / #i-warn",
+     cfg.tone === "error" && cfg.danger === true && cfg.wide === true);
+  const row = cfg.details[0];
+  ok("行形态: label=部分组 / tone=error / wide / icon=#i-warn",
+     row.label === "部分组" && row.tone === "error" && row.wide === true && row.icon === "#i-warn");
+  ok("文案钉住词: 「将缺文件」+「整组迁移」", /将缺文件/.test(row.value) && /整组迁移/.test(row.value));
+  ok("单组文案逐字段(组名/已选 1/2/其余 1/建议语)",
+     row.value === "辅种组「组A」: 已选 1/2 个,其余 1 个成员将缺文件;建议改选整组或开启整组迁移");
+  ok("确认后首发无 confirm 键(走既有正常投递链)",
+     c.posts[0].via === "single" && c.posts[0].body.location === "/dst" && c.posts[0].body.confirm === undefined);
+  ok("发单成功后设定位置框保持收起, 确认框不重开", c.moveOpen === false && c.modalCalls.length === 1);
+
+  // --- 取消: 留在设定位置框(带原路径重开), 零投递 ---
+  c = mkCtx({ modalResult: false });
+  await c.submitMoveDialog();
+  ok("取消: 零投递(确认才发)", c.posts.length === 0);
+  ok("取消: 带原路径重开设定位置框", c.reopens.length === 1 && c.reopens[0].prefill === "/dst" && c.moveOpen === true);
+
+  // --- 确认后投递失败: 框已被闸先收 -> 照 confirm 回路失败分支带原路径重开(手输路径不丢) ---
+  c = mkCtx({ postResult: false });
+  await c.submitMoveDialog();
+  ok("确认+投递失败: 恰弹一次确认框 + 恰一次投递", c.modalCalls.length === 1 && c.posts.length === 1);
+  ok("确认+投递失败: 带原路径重开设定位置框", c.reopens.length === 1 && c.reopens[0].prefill === "/dst" && c.moveOpen === true);
+  // 对照: 非闸失败(直发, 框从未收)维持现状口径 —— 留开着不重开
+  c = mkCtx({ postResult: false, moveTargets: { groupKeys: ["A"], memberHashes: [] } });
+  await c.submitMoveDialog();
+  ok("非闸失败(直发): 框从未收, 无重开", c.reopens.length === 0 && c.moveOpen === true && c.modalCalls.length === 0);
+
+  // --- 多组聚合(与 S2 共用 _partialGroupsSummary 单点): 前 3 + 等 K 个, 合计口径 ---
+  c = mkCtx({ moveTargets: { groupKeys: [], memberHashes: ["h1", "h4", "e1", "f1"] }, moveSingleHash: "" });
+  await c.submitMoveDialog();
+  ok("四组聚合: 组名前 3 + 等 4 个, 合计 4/9 缺口 5",
+     c.modalCalls[0].cfg.details[0].value ===
+       "辅种组「组A」「组C」「组E」等 4 个: 已选 4/9 个,其余 5 个成员将缺文件;建议改选整组或开启整组迁移");
+  ok("批量目标(无 singleHash)确认后走 _bulkEditPost", c.posts.length === 1 && c.posts[0].via === "bulk");
+
+  // --- 负例(D3): 非部分组直发零新增弹层 ---
+  c = mkCtx({ moveTargets: { groupKeys: ["A"], memberHashes: [] } });
+  await c.submitMoveDialog();
+  ok("整组入选(组键级联)+迁移关: 直发零弹层", c.modalCalls.length === 0 && c.posts.length === 1);
+  c = mkCtx({ moveTargets: { groupKeys: [], memberHashes: ["h1", "h2"] } });
+  await c.submitMoveDialog();
+  ok("成员全选未晋升(sel===total): 直发零弹层", c.modalCalls.length === 0 && c.posts.length === 1);
+  c = mkCtx({ moveTargets: { groupKeys: [], memberHashes: ["h3"] } });
+  await c.submitMoveDialog();
+  ok("单成员组种子: 直发零弹层", c.modalCalls.length === 0 && c.posts.length === 1);
+  c = mkCtx({ moveTargets: { groupKeys: [], memberHashes: ["h9"] } });
+  await c.submitMoveDialog();
+  ok("虚拟行(未归组命中): 直发零弹层", c.modalCalls.length === 0 && c.posts.length === 1);
+  c = mkCtx({ moveTargets: { groupKeys: [], memberHashes: ["zz"] } });
+  await c.submitMoveDialog();
+  ok("hash 不属任何组: 直发零弹层", c.modalCalls.length === 0 && c.posts.length === 1);
+
+  // --- 旗标两态(D3/R6): 迁移开不弹(S4 披露条的面); 旗标解析不出静默直发不误拦 ---
+  c = mkCtx({ flags: { relocate_enabled: true } });
+  await c.submitMoveDialog();
+  ok("迁移开(relocate_enabled)+部分组: 直发零弹层(S4 披露条的面)", c.modalCalls.length === 0 && c.posts.length === 1);
+  c = mkCtx({ flags: undefined });
+  await c.submitMoveDialog();
+  ok("flags 解析不出(R6): 静默直发不误拦", c.modalCalls.length === 0 && c.posts.length === 1);
+  c = mkCtx({ flags: { relocate_enabled: undefined } });
+  await c.submitMoveDialog();
+  ok("relocate_enabled 解析不出(R6): 静默直发不误拦", c.modalCalls.length === 0 && c.posts.length === 1);
+  c = mkCtx({ decoratedGroups: undefined });
+  await c.submitMoveDialog();
+  ok("decoratedGroups 缺失(R6 竞态): 不抛不误拦, 直发", c.modalCalls.length === 0 && c.posts.length === 1);
+})().then(() => {
+  console.log(JSON.stringify({
+    ok: checks.filter((x) => x[1]).length, total: checks.length,
+    failed: checks.filter((x) => !x[1]).map((x) => x[0]),
+  }));
+}).catch((e) => { console.error(e && e.stack || e); process.exit(1); });
+"""
+
 
 # R5#18: loadColState 默认隐藏播种语义 ---------------------------------------------
 def _app_head_source():
@@ -1066,6 +1194,36 @@ def test_r4_delete_details_partial_group_row():
         os.path.join(STATIC_ROOT, "shared", "delete_flow.js"),
     )
     _assert_battery(report, "删除链部分组行电池")
+
+
+def test_r4_move_dialog_partial_group_gate():
+    """迁移关部分组确认框落点级真跑(计划 26-11-11-0820 S3, 拍板 D3) ---
+
+    submitMoveDialog(drawer.js)在目标含部分组且明确知道整组迁移关
+    (flags.relocate_enabled === false)时, 首次 post(false) 前弹确认框(tone error/danger/wide),
+    确认才发, 取消留在设定位置框; 判定单点消费 selection.js::_partialGroupsOf、聚合单点消费
+    _partialGroupsSummary(与删除链 S2 行共用同一份实现, 电池经合并 mixin 的 this 真跑接线)。
+
+    正例: 部分组+迁移关 -> 恰弹一次确认框且弹层顺序为先收 moveOpen 再开确认框(R3 防双遮罩
+          互盖, 照 confirm 回路先例), 行文案钉住词「将缺文件」+「整组迁移」逐字段, 确认后
+          首发 body 无 confirm 键(落回既有正常投递链), 成功后设定位置框保持收起;
+          取消 -> 零投递, 带原路径重开设定位置框; 四组聚合 -> 组名前 3 +「等 4 个」合计口径。
+    负例(D3): 整组入选(组键级联)/成员全选未晋升/单成员组/虚拟行/hash 不属任何组 -> 直发
+          零新增弹层。
+    旗标两态: 迁移开(relocate_enabled=true)直发零弹层(S4 披露条的面); flags 与
+          relocate_enabled 解析不出(R6)静默直发不误拦; decoratedGroups 缺失(快照竞态)
+          不抛不误拦。
+    失败收口: 闸内确认后投递失败 -> 框已被闸先收, 照 confirm 回路失败分支带原路径重开
+          设定位置框(手输路径不丢); 非闸直发失败维持现状(框从未收, 无重开)。
+
+    无 node 静默跳过(与既有电池同口径)。
+    """
+    report = _run_probe(
+        _NODE_MOVE_PARTIAL_GATE_PROBE,
+        os.path.join(STATIC_ROOT, "shared", "selection.js"),
+        os.path.join(STATIC_ROOT, "shared", "drawer.js"),
+    )
+    _assert_battery(report, "迁移关部分组确认框电池")
 
 
 def test_r4_load_col_state_seeding():
