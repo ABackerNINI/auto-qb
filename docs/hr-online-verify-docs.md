@@ -81,7 +81,7 @@
 |---|---|---|
 | [docs/configuration.md](configuration.md) | 配置文档 | 「HR 在线核实(`hr_check`)」专节: 站点绑定/档案表/超龄豁免/频控/站点状态页等全部配置口径 |
 | [extensions/hr-fetch-proxy/README.md](../extensions/hr-fetch-proxy/README.md) | 扩展说明 | 取数代理(MV3 扩展)的设计说明: 哑取数器定位、cookie 不出浏览器、无界面直取 + 离屏窗口回退 |
-| [memory-bank/config-reference/keys.md](../memory-bank/config-reference/keys.md) | 配置键参考 | `hr_check.*` 全部配置键的参考条目 |
+| `src/auto_qb/config/schema/` + `validate_config` | 配置键权威 | `hr_check.*` 全部配置键的 schema 定义与逐键校验（键面快照: `tests/fixtures/config_key_surface.txt`） |
 | [memory-bank/checklists/manual-walkthrough.md](../memory-bank/checklists/manual-walkthrough.md) | 走查清单 | 真机走查步骤含「HR 站点状态」分区(`--hr-once` 走查口径) |
 | [memory-bank/pitfalls/backend/behavior-core.md](../memory-bank/pitfalls/backend/behavior-core.md) | 坑档(后端) | 含 HR 判定联动相关的行为坑条目 |
 | [memory-bank/pitfalls/ops/alert-levels.md](../memory-bank/pitfalls/ops/alert-levels.md) | 坑档(运维) | 含 HR 告警分档相关条目 |

@@ -42,8 +42,8 @@ window.AQB_STATE = {
       ui: _aqbDetectUi(),
       uiMenuOpen: false,  // 顶栏界面切换下拉的展开态(点空白/Esc 收起, 挂在 lifecycle.js 既有浮层关闭链)
       // 全局流量来源卡(计划 26-10-17-0339 S17/D15): provider 单选 + 工具状态区(五态) + 拉起/自启;
-      // 工具控制面经 /api/traffic/monitor/* 代理; 表单「读后写」(工具 PUT /config 是全量覆盖,
-      // 见 config-reference/keys.md)。方法域在 config_hub.js。
+      // 工具控制面经 /api/traffic/monitor/* 代理; 表单「读后写」(工具 PUT /config 是全量覆盖)。
+      // 方法域在 config_hub.js。
       tm: {
         loaded: false,
         loading: false,

@@ -83,7 +83,9 @@ HEX40_RE = re.compile(r"^[0-9a-fA-F]{40}\Z")
 HEX64_RE = re.compile(r"^[0-9a-fA-F]{64}\Z")
 
 #: resume_data_storage_type 原语口径(对齐 relocate_plan.is_legacy_resume_storage):
-#: qB 4.6+ WebAPI 返回整数 0 = Legacy 文件 / 1 = SQLite; 容错接受字符串字样;
+#: qB 4.6+ WebAPI 返回整数 0 = Legacy 文件 / 1 = SQLite; qB 5.x 改返回字符串枚举
+#: (实测 5.2.3 = "Legacy"), 两代形状都接受 —— str().strip().lower() 后比对
+#: _LEGACY_TOKENS/_SQLITE_TOKENS, 字符串字样与整数同路容错;
 #: 空/None = SQLite 选项出现之前的 qB(只有文件后端), 按 Legacy 处理。
 _SQLITE_TOKENS = ("1", "sqlite")
 _LEGACY_TOKENS = ("0", "legacy", "")
@@ -509,8 +511,9 @@ def verdict(
     """五态裁决(§3.2), 判定顺序短路: unusable-sqlite -> manual-set -> 命中裁决(hit/ambiguous/miss)。
 
     qB 事实由调用方以原语传入: manual_set = relocate.bt_backup 非空(strip 后); storage_type =
-    app/preferences 的 resume_data_storage_type 原语(整数 0/1 或字符串, 口径对齐运行面
-    is_legacy_resume_storage); online = 是否拿到 /torrents/info。matches 仅在 online 时参与
+    app/preferences 的 resume_data_storage_type 原语(整数 0/1 = qB 4.6+, 字符串枚举 = qB 5.x
+    如 "Legacy", 口径对齐运行面 is_legacy_resume_storage); online = 是否拿到 /torrents/info。
+    matches 仅在 online 时参与
     裁决(离线一律机械忽略 —— 「离线未自证」的机械保证, 防调用方矛盾输入误消歧)。
     命中裁决: 零合格 = miss; 恰一个合格 = hit(hash 交集是加分自证, 离线标注未自证); 多候选
     合格时按 hash 交集消歧, 恰一候选命中 = hit, 多候选命中或全零 = ambiguous(拒不猜测, D5)。

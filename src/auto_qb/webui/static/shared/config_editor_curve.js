@@ -15,7 +15,7 @@ Object.assign(window.CONFIG_EDITOR.methods, {
     },
     cfgCurveEnable() {
       // S17/D15: 来源字段已迁到「全局流量来源」卡(config.traffic_source) —— 曲线卡不再播种
-      // 来源段, 只留 curves; 取数路径由 traffic_source 单点决定(见 config reference keys.md)。
+      // 来源段, 只留 curves; 取数路径由 traffic_source 单点决定。
       this.cfgSetPath(this.cfgCurvePath(), { curves: [] });
     },
     async cfgCurveDisable() {

@@ -5,7 +5,9 @@
 - 消失键且版本未抬 = 破坏性变更未走升级流程, **拒绝重生成**, 先抬 CURRENT_VERSIONS["config"]
   并在 config/migrations.py 注册迁移;
 - 纯新增 = 非破坏(versioning.py 口径刻意不造版本), 直接重生成。
-收尾无论哪种现场都要回写 memory-bank/config-reference/keys.md。
+键面参考文档 keys.md 已随 config-reference/ 退役(2026-11-08 重构), 权威归
+src/auto_qb/config/schema/ + validate_config; 本脚本重写的 tests/fixtures/config_key_surface.txt
+就是键面单点快照, 收尾无需再回写任何参考文档。
 """
 import importlib.util
 import sys
@@ -48,7 +50,6 @@ def main() -> int:
         print("  消失:", " ".join(removed))
     if not added and not removed:
         print("  键面无变化(仅版本行/格式刷新)")
-    print("  收尾提醒: 回写 memory-bank/config-reference/keys.md")
     return 0
 
 

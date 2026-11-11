@@ -584,7 +584,7 @@ config:
 - **工具相关的三块只在来源=整机流量监视器(工具)时出现**：工具状态、工具参数（高级）、工具文件选择器。选「Traffic Monitor 文件」时它们整块隐藏 —— 那时工具在不在跑与本次取数无关，摆着只会误导。设置页不再有「打开工具设置」按钮：工具控制面是纯 JSON 且全路径强制 Bearer 鉴权，没有 HTML 设置页，点开只会看到 `{"error":"invalid token"}`；工具参数就在卡片里的「工具参数(高级)」调。
 - **「启用」与「关闭工具」是两件事**：`enabled: false` 只停取数（曲线发 `off` 快照、不查档、不动 qB，也**不再拉起**工具），工具进程原地留着 —— 适合临时掐掉取数；「关闭工具」则进一步把工具进程停掉：先落盘 `enabled: false`，再 `POST /api/traffic/monitor/shutdown`（**先停订阅再停进程**，否则停的瞬间会被订阅线程抢拉）。**不切 `provider`**，开机自启注册也不动 —— 想恢复就打开「启用」，工具会按需重新拉起。确认框会列出受影响的功能（限速曲线 / expr 流量条件 / 历史流量图），清单来自 schema 字段的依赖元数据。
 
-逐键校验边界见 [配置键速查](../memory-bank/config-reference/keys.md)；工具侧完整说明见 [工具 README](../tools/global-traffic-monitor/README.md)。
+逐键校验边界由 `src/auto_qb/config/schema/` + `validate_config` 定义（键面快照基线：`tests/fixtures/config_key_surface.txt`，再生入口 `commands run test.keys-update`）；工具侧完整说明见 [工具 README](../tools/global-traffic-monitor/README.md)。
 
 ### 多安装 / 多实例：正主注册与「以本安装重登记」
 
@@ -693,7 +693,7 @@ config:
 - 本段与 `fs`（容器路径映射，改完要重启进程）分开：由迁移模块认领，**保存配置即时生效**，不需要重启。
 - 文件链接 = 逐文件建链接（symlink；不支持时按平台探测结果用硬链接 / junction）；目录别名 = 整目录一条链接 —— 它会让该目录以后新增的种子也落到新位置，执行前会勾选确认。
 - 大小单位只认二进制单位（`10GiB`，与全仓 `parse_fsize` 一致）；时间单位 `S/M/H/D`。
-- 键面单一出处：`memory-bank/config-reference/keys.md`「relocate 段」。
+- 键面单一出处：`src/auto_qb/config/schema/`（快照基线 `tests/fixtures/config_key_surface.txt`）。
 
 ## 规则系统
 

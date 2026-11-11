@@ -37,8 +37,10 @@ from .relocate_common import (
 def is_legacy_resume_storage(raw: Any) -> bool:
     """qB resume_data_storage_type 是否 Legacy 文件后端(计划 26-11-05-0808 S1, D2 运行时检测)
 
-    WebAPI app/preferences 直读: qB 4.6+ 返回整数(0 = Legacy 文件, 1 = SQLite); 容错接受
-    "legacy" 字样。键缺失/空 = SQLite 选项出现之前的 qB, 只有文件后端, 按 Legacy 放行
+    WebAPI app/preferences 直读: qB 4.6+ 返回整数 0 = Legacy 文件 / 1 = SQLite; qB 5.x 改
+    返回字符串枚举(实测 5.2.3 = "Legacy"), 两代形状都接受 —— str().strip().lower() 后比对
+    ("0", "legacy"), 字符串字样与整数同路容错。键缺失/空 = SQLite 选项出现之前的 qB,
+    只有文件后端, 按 Legacy 放行
     (后端检测拦的是「存在但非 Legacy」, 不是「读不到版本特征」; 读不到偏好整体属连接
     故障, 由调用方 fail-closed 另行拒绝)。
     """
