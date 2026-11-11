@@ -9,6 +9,8 @@
 - test_r4_lifecycle_unmounted_listener_sweep: R5#3 —— lifecycle.js mounted/unmounted 监听对称 node 电池真跑: mounted 挂的五支监听(click 收层/Esc 退栈/防抖 resize/visibilitychange/contextmenu)提为实例字段后 unmounted 逐一撤除(热重载句柄不再堆叠), stopPolling 与 stopEvents 同收, 既有撤除面(键盘引擎/守卫/storage/时钟 interval)零回归
 - test_r4_webflags_boot_retry_and_ensure: issue 26-11-11-0633 —— loadWebFlags boot 韧性 node 电池真跑: boot 期(loadWebFlagsBoot)失败 1s/3s 退避各补一发共三发(穷尽止/中间态保持 fail-closed)、登出态(e.auth)不重试不排定时器、flagsLoaded 态(成功收口/"未取到"可分)、惰性补拉 ensureWebFlags(已取到返回 null 零副作用/未取到补一发)、并发单飞(同档同帧与退避窗口期并入复用同一 promise 不叠发)、档位分槽(boot 链在途时惰性补拉异档另起单发不骑退避链、惰性结算不挤占 boot 槽, 请求计数钉 3 发)
 - test_r4_truth_snapshot_materialized_members: S2a ingestion 物化缝(计划 26-11-11-0630 §03)× 乐观真值快照 node 电池真跑 —— S2a 后 _snapshotTruth 的组员源从服务端成员字典换成客户端物化拷贝, 此前该缝 tests/ 零命中。前置两断言钉 spike 裁决不变式(组员 = **独立浅拷贝**非平铺行引用, 同 hash 多命中各为独立对象; applyOptimisticPatch 经 _forEachRow 平铺行与组员拷贝同拍命中); 三个绿色向: 全量轮(命令在途)物化源 = 载荷平铺行 = 服务端真值 → 快照逐键比对不误判收敛(hold 保留)且 op.prev 保鲜为真值(兜底回滚不打到补丁值) / 全量轮真值落地 kind 对齐 → 正常收敛(撤 hold 出口) / 增量轮组未脏 → 组不进 d.groups → 快照无该 hash → 宁可慢收不误判(3s 兜底)。*已知边界(电池内注释, 不落断言)*: 误判窗口 = 组脏(**他员变化**使组进 d.groups)+ 该组另有成员 pending —— 物化源落到本地已打补丁行, 快照可能读到补丁值提前撤 hold(op.prev 同窗被污染); 影响如实两分支: 成功路径真值落地即收敛, 失败/停滞路径补丁值停留至该成员下次变化或下一次全量轮(回滚与 3s 兜底同被跳过, 长期滞留而非一轮弹回, 已确认接受该残留) —— S2a 报告「混合组未脏」表述以此修正: **组完全未脏是安全向**(即第三个绿色断言); 三入口接线(delta 桶序/先物化后赋值/auth.js 同缝)留给 S4 e2e 覆盖
+- test_r4_version_reload_self_heal: S3 version-reload 自愈(计划 26-11-11-0630 §03 version-reload 行 / §04 S3 行)node 电池真跑 —— 轮询数据处理入口(refresh, 定时轮询与 SSE ver 驱动同汇)每轮比对 status payload 既有 version 字段(_status_payload 恒回传): (1)一致轮零成本直通不 reload 不碰存储 (2)变更沿发起 location.reload(), 本轮载荷不应用但照常续排下一拍(跨版本载荷不喂旧 JS; 防抖封顶续排无循环, 导航取消时链保活)(3)sessionStorage 30s 防抖窗口内第二次变更不重复 reload(窗口内照常处理+续排 = 有界节流非冻结, 基线不动; 窗口外放行一次 = 1 次/窗口有界节流)(4)version 缺失/非字符串轮保守默认不触发不动基线(黄金法则 2; 缺后再见 version 首见记基线不当变更沿)(5)配置编辑器脏态守卫(cfgGuardActive 替身置位)活跃轮跳过自愈(不 reload/不记防抖时间戳/基线不动, 轮询照常), 守卫释放后下一轮变更沿自然再触发 —— 后台轮询不替脏态用户弹原生框; 另钉循环破除主证据: reload 后新页 incarnation 重记新基线, 稳定版本下恰好一次 reload 零循环(防重签发循环第 1 层); 可控时钟替身 global.Date 免真睡 30s; 静态钉 _versionSelfHeal 函数体内含 cfgGuardActive 调用(照 test_webui_static_dom_page_layout.py 守阵先例 —— 电池守卫沿替身驱动只测「活跃时怎么走」, 真机问没问守卫由静态钉补位); 电池替身 mk() 自备 _versionSeen: null(真机初值来自 state.js data() —— Vue3 生产构建跳过 methods 非函数条目, 声明已挪出 polling.js, 搜索续查电池 _searchRetryFails 同款先例), 基线判据随之收紧单臂 === null(undefined 臂会吸收声明错位回归, 已删)
+- test_r4_version_reload_no_storage_fallback: S3 同上存储不可用分支(私隐模式访问即抛, columns_persist.js 先例), 独立探针隔离内存层模块级状态(共进程与主探针串账; cfgGuardActive 以替身置不活跃, 只为过守卫沿): sessionStorage 缺席时变更沿仍放行 reload(fail-open, 自愈不让位) + 内存层 _versionReloadMemAt 同页限流仍拦重复触发(防抖不随存储缺席而全失) + 窗口外放行(内存层窗口同口径); 跨 reload 记忆丢失的残留(唯「存储被禁 + 每请求翻转版本」组合才可能循环)已在 polling.js 注释声明, 电池不钉不可达面; 替身 mk() 同款自备 _versionSeen: null(真机初值来自 state.js data())
 
 加载口径: 单文件域直接读盘 eval(顶层纯函数声明随非严格 eval 入作用域, 同 hrsCompareRows 电池范式);
 多域电池(真值快照 × S2a 物化)经 _run_probe 的 list 路径两路 argv 同进程 eval(polling.js + commands.js
@@ -17,10 +19,11 @@
 """
 
 import json
+import re
 import shutil
 import subprocess
 
-from webui_helpers import STATIC_ROOT, bundle_file
+from webui_helpers import STATIC_ROOT, bundle_file, read_shared
 
 
 def _shared(name):
@@ -766,6 +769,159 @@ const boot = (vm) => {
 })().catch((e) => { console.error(e && e.stack || e); process.exit(1); });
 """
 
+# S3 version-reload 自愈(计划 26-11-11-0630 §03 version-reload 行 / §04 S3 行)--------------------
+# 钉 §04 S3 验收的机械面: 前端轮询比对 status payload 既有 version 字段(_status_payload 恒回传),
+# 变更即 location.reload() 自愈 + 防抖避免重签发循环。可控时钟替身 global.Date(电池免真睡 30s
+# 防抖窗口); sessionStorage/location 桩沿既有电池先例(global 桩, config_editor 电池同款)。
+# 单点语义见 polling.js _versionSelfHeal 注(循环场景怎么破的三层口径都注释在生产代码里)。
+_NODE_VERSIONRELOAD_PROBE = r"""
+const fs = require("fs");
+global.window = {};
+global.document = { hidden: false };
+const store = {};               // sessionStorage 替身: 记录写入面(主探针存储可用)
+let storeReads = 0;
+global.sessionStorage = {
+  getItem(k) { storeReads += 1; return Object.prototype.hasOwnProperty.call(store, k) ? store[k] : null; },
+  setItem(k, v) { store[k] = String(v); },
+};
+const reloads = [];
+global.location = { reload: () => reloads.push(1) };
+let t = 1730000000000;          // 可控时钟
+global.Date = { now: () => t };
+eval(fs.readFileSync(process.argv[1], "utf8"));   // polling.js
+const P = window.AQB_POLL.methods;
+const checks = [];
+const ok = (name, cond) => checks.push([name, !!cond]);
+
+// refresh 全依赖桩(与退避曲线电池同一家): api 每轮注入 payload, 域外方法全替身
+const mk = () => Object.assign({}, P, {
+  status: null, lastRid: null, pollFails: 0, serviceDown: false, selectedCount: 0,
+  searchQuery: "", viewMode: "", nextN: 0, cfgGuardDirty: false,
+  _versionSeen: null,   // 真机初值来自 state.js data()(state.js 不在电池聚合面, 搜索续查电池
+                        // _searchRetryFails 同款先例); 替身自备同值 = 与真机同臂(基线判据单臂 === null)
+  api: async () => { throw new Error("payload 未注入"); },
+  _expirePending() {}, reapplyPending() {}, _maybeSearchRefresh() {}, _snapshotTruth() {},
+  scheduleNext() { this.nextN += 1; },
+  cfgGuardActive() { return !!this.cfgGuardDirty; },  // 守卫判据替身(域外方法全替身): 置位驱动守卫活跃
+});
+const payload = (ver) => ({
+  status: ver === undefined ? { torrents: 0 } : { torrents: 0, version: ver },
+  updated: true, rid: 1,
+});
+const poll = async (ctx, ver) => { ctx.api = async () => payload(ver); await P.refresh.call(ctx); };
+
+(async () => {
+  // --- A. 基线与变更沿((1)(2)) ---
+  const ctx = mk();
+  await poll(ctx, "1.2.3");
+  ok("首轮: 记基线不 reload(首见=基线, 不当变更沿)", reloads.length === 0 && ctx._versionSeen === "1.2.3");
+  ok("首轮照常应用 status + 续排", ctx.status && ctx.status.version === "1.2.3" && ctx.nextN === 1);
+  await poll(ctx, "1.2.3");
+  ok("(1)version 一致轮不 reload(直通, 不碰存储)", reloads.length === 0 && ctx.nextN === 2 && storeReads === 0);
+  await poll(ctx, "9.9.9");
+  ok("(2)version 变更轮发起 reload", reloads.length === 1);
+  ok("(2)reload 轮中止: status 不更新(跨版本载荷不喂旧 JS)", ctx.status.version === "1.2.3");
+  ok("(2)reload 轮照常续排下一拍(防抖封顶续排无循环; 导航取消时链保活)", ctx.nextN === 3);
+  ok("(2)基线不动(仍=本页 incarnation 版本)", ctx._versionSeen === "1.2.3");
+  ok("(2)防抖时间戳已入 sessionStorage(恰好一键, 数字时间戳)",
+    Object.keys(store).length === 1 && /^\d+$/.test(Object.values(store)[0]));
+
+  // --- B. (3)防抖窗口内不重复 reload + 窗口外放行 ---
+  t += 1000;
+  await poll(ctx, "0.0.1");
+  ok("(3)防抖窗口内第二次变更不重复 reload", reloads.length === 1);
+  ok("(3)窗口内本轮照常处理+续排(有界节流非冻结)", ctx.nextN === 4 && ctx.status.version === "0.0.1");
+  ok("(3)窗口内不动基线(窗口外才可能再次自愈)", ctx._versionSeen === "1.2.3");
+  t += 31000;   // 拨出 30s 窗口(时间戳与内存层同批入账, 双层同老)
+  await poll(ctx, "0.0.1");
+  ok("窗口外再变更: 放行一次 reload(1 次/窗口的有界节流)", reloads.length === 2);
+
+  // --- C. (4)version 缺失/非字符串轮保守默认 ---
+  const ctx2 = mk();
+  await poll(ctx2, undefined);
+  ok("(4)version 缺失轮不触发、不动基线(老服务端响应)", reloads.length === 2 && ctx2._versionSeen == null);
+  await poll(ctx2, null);
+  ok("(4)version 非字符串(null)轮不触发、不动基线(异常响应)", reloads.length === 2 && ctx2._versionSeen == null);
+  await poll(ctx2, "7.7.7");
+  ok("(4)缺后再见 version: 首见记基线, 不当变更沿", reloads.length === 2 && ctx2._versionSeen === "7.7.7");
+
+  // --- D. reload 后新页重记基线(循环破除主证据: 稳定版本恰好一次 reload 零循环) ---
+  const ctx3 = mk();   // 模拟 reload 后的新页 incarnation: 实例态全新, sessionStorage 仍存(跨 reload 存活)
+  await poll(ctx3, "9.9.9");
+  ok("reload 后新页: 首轮记新基线, 不二次 reload", reloads.length === 2 && ctx3._versionSeen === "9.9.9");
+  await poll(ctx3, "9.9.9");
+  ok("reload 后新页: 稳定版本下恒不再触发(零循环)", reloads.length === 2 && ctx3.nextN === 2);
+
+  // --- E. 配置编辑器脏态守卫共存((5)): cfgGuardActive 活跃轮跳过自愈, 释放后下一轮自然再触发 ---
+  const ctx4 = mk();   // 全新 incarnation; store/时钟沿用(与真实多轮轮询同环境)
+  await poll(ctx4, "2.0.0");
+  ctx4.cfgGuardDirty = true;   // 用户正在编辑配置(守卫判据为真, 双脏源替身置位驱动)
+  const stampBefore = Object.values(store)[0];
+  await poll(ctx4, "3.0.0");
+  ok("(5)守卫活跃轮不 reload(后台轮询不替脏态用户弹原生框)", reloads.length === 2);
+  ok("(5)守卫活跃轮轮询照常: 载荷应用+续排不中断", ctx4.status.version === "3.0.0" && ctx4.nextN === 2);
+  ok("(5)守卫活跃轮不记基线(变更沿留给释放后的轮次)", ctx4._versionSeen === "2.0.0");
+  ok("(5)守卫活跃轮不记防抖时间戳(存储层值不动; 内存层与存储层同拍入账)", Object.values(store)[0] === stampBefore);
+  t += 31000;   // 拨出 B 段遗留时间戳的窗口, 释放轮不再受防抖拦
+  ctx4.cfgGuardDirty = false;   // 守卫释放(保存/放弃清脏)
+  await poll(ctx4, "3.0.0");
+  ok("(5)守卫释放后的下一轮: 变更沿自然再触发 reload", reloads.length === 3);
+
+  console.log(JSON.stringify({ ok: checks.filter((c) => c[1]).length, total: checks.length,
+    failed: checks.filter((c) => !c[1]).map((c) => c[0]) }));
+})().catch((e) => { console.error(e && e.stack || e); process.exit(1); });
+"""
+
+# 存储不可用分支(私隐模式访问即抛, columns_persist.js 先例)独立探针: 内存层 _versionReloadMemAt
+# 是模块级状态, 与主探针共用进程会串账(主探针的 reload 已写入内存层)—— 单进程隔离才能钉
+# fail-open 与内存层窗口外放行。残留面(跨 reload 记忆丢失, 唯「存储被禁+每请求翻转版本」才可能
+# 循环)已在 polling.js 注释 declared, 本电池不钉不可达面。
+_NODE_VERSIONRELOAD_NOSTORE_PROBE = r"""
+const fs = require("fs");
+global.window = {};
+global.document = { hidden: false };
+const denied = () => { throw new Error("Storage denied"); };
+global.sessionStorage = { getItem: denied, setItem: denied };   // 私隐模式: 访问即抛
+const reloads = [];
+global.location = { reload: () => reloads.push(1) };
+let t = 1730000000000;
+global.Date = { now: () => t };
+eval(fs.readFileSync(process.argv[1], "utf8"));   // polling.js
+const P = window.AQB_POLL.methods;
+const checks = [];
+const ok = (name, cond) => checks.push([name, !!cond]);
+const mk = () => Object.assign({}, P, {
+  status: null, lastRid: null, pollFails: 0, serviceDown: false, selectedCount: 0,
+  searchQuery: "", viewMode: "", nextN: 0, cfgGuardDirty: false,
+  _versionSeen: null,   // 真机初值来自 state.js data()(state.js 不在电池聚合面); 替身自备同值, 与真机同臂
+  api: async () => { throw new Error("payload 未注入"); },
+  _expirePending() {}, reapplyPending() {}, _maybeSearchRefresh() {}, _snapshotTruth() {},
+  scheduleNext() { this.nextN += 1; },
+  cfgGuardActive() { return !!this.cfgGuardDirty; },  // 守卫判据替身: 本探针恒不活跃, 只为过新增守卫沿
+});
+const payload = (ver) => ({
+  status: ver === undefined ? { torrents: 0 } : { torrents: 0, version: ver },
+  updated: true, rid: 1,
+});
+const poll = async (ctx, ver) => { ctx.api = async () => payload(ver); await P.refresh.call(ctx); };
+
+(async () => {
+  const ctx = mk();
+  await poll(ctx, "1.0.0");
+  ok("存储不可用: 首轮记基线不 reload(内存零值不误拦首轮)", reloads.length === 0 && ctx._versionSeen === "1.0.0");
+  await poll(ctx, "2.0.0");
+  ok("存储不可用: 变更沿仍放行 reload(fail-open, 自愈不让位)", reloads.length === 1);
+  t += 1000;
+  await poll(ctx, "3.0.0");
+  ok("存储不可用: 内存层同页限流仍拦重复触发(防抖不随存储缺席而全失)", reloads.length === 1);
+  t += 31000;
+  await poll(ctx, "3.0.0");
+  ok("存储不可用: 窗口外放行(内存层窗口同口径)", reloads.length === 2);
+  console.log(JSON.stringify({ ok: checks.filter((c) => c[1]).length, total: checks.length,
+    failed: checks.filter((c) => !c[1]).map((c) => c[0]) }));
+})().catch((e) => { console.error(e && e.stack || e); process.exit(1); });
+"""
+
 
 def test_r4_sse_edge_reconnect_state_machine():
     """R5#14(major)+R5#15: SSE 断线沿判定/换票重连状态机 node 电池真跑(含 R5#4 ver 落拍 hidden 短路)。"""
@@ -808,3 +964,23 @@ def test_r4_truth_snapshot_materialized_members():
         _run_probe(_NODE_TRUTHSNAPSHOT_PROBE, [_shared("polling.js"), bundle_file("commands.js")]),
         "真值快照×物化电池",
     )
+
+
+def test_r4_version_reload_self_heal():
+    """S3 version-reload(计划 26-11-11-0630 §04): 轮询比对 version 自愈 —— 一致直通/变更沿 reload(载荷
+    不应用但照常续排, 防抖封顶)/30s 防抖窗口内不重复 reload(窗口外放行)/缺失与非字符串轮保守默认/
+    配置脏态守卫活跃轮跳过自愈(释放后再触发) + reload 后新页重记基线零循环。"""
+    # 静态钉(照 test_webui_static_dom_page_layout.py cfgGuardActive 守阵先例): 电池的守卫沿由替身
+    # 置位驱动, 只测「守卫活跃时怎么走」; 真机变更沿是否**真的问过守卫**电池测不到, 静态钉补位 ——
+    # _versionSelfHeal 函数体内必须保留 cfgGuardActive 调用(删/绕开 = 后台轮询替脏态用户弹原生框)。
+    heal = re.search(r"_versionSelfHeal\(status\) \{(.*?)\n    \},", read_shared("polling.js"), re.S)
+    assert heal, "polling.js 缺 _versionSelfHeal(改名? 同步本守阵与 node 电池)"
+    assert "this.cfgGuardActive()" in heal.group(1), \
+        "变更沿必须先问配置编辑器脏态守卫(cfgGuardActive): 删/绕开 = 后台自愈 reload 替脏态用户弹原生 beforeunload 框"
+    _assert_battery(_run_probe(_NODE_VERSIONRELOAD_PROBE, _shared("polling.js")), "version-reload 电池")
+
+
+def test_r4_version_reload_no_storage_fallback():
+    """S3 version-reload 存储不可用分支(独立探针): sessionStorage 访问即抛时 fail-open 放行自愈 reload,
+    内存层同页限流仍拦重复触发、窗口外放行(跨 reload 记忆丢失残留见 polling.js 注释声明)。"""
+    _assert_battery(_run_probe(_NODE_VERSIONRELOAD_NOSTORE_PROBE, _shared("polling.js")), "version-reload 无存储电池")

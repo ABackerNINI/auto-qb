@@ -23,6 +23,16 @@ const AQB_POLL_STALL_MS = 30000;
  * 登记的是行对象引用, 不进 Vue 数据流。 */
 const _rematQueue = new Map();
 
+/* S3 version-reload 防抖(plan 26-11-11-0630 §04 S3): 自愈 reload 的限流窗口与记忆键。
+ * 30s 与轮询失败退避首档同量级 —— 抖动场景最坏退化为 1 次/30s 的有界节流(见 _versionSelfHeal 注)。
+ * 键名沿用 autoqb_*_v1 既有风格; sessionStorage(per-tab、reload 存活、随标签关闭失效)恰好对齐
+ * 「每个标签页一份自愈预算」的语义 —— 新开标签页本就加载新 JS, 不欠一次 reload。 */
+const AQB_VERSION_RELOAD_DEBOUNCE_MS = 30000;
+const AQB_VERSION_RELOAD_STORE_KEY = "autoqb_version_reload_v1";
+/* 存储层不可用(私隐模式访问即抛)时的内存兜底记忆: 只在本页 incarnation 内有效, reload 即失忆。
+ * 0 = 无记录(epoch 时间戳永不与 0 相距 <30s, 天然不误拦首轮)。 */
+let _versionReloadMemAt = 0;
+
 window.AQB_POLL = {
   methods: {
     /* ---------------- P2 事件驱动(SSE /api/events) ----------------
@@ -501,6 +511,63 @@ window.AQB_POLL = {
       this._searchRefreshAt = now;
       this.doSearch(true);
     },
+    /* ---------------- S3 version-reload 自愈(plan 26-11-11-0630 §03 version-reload 行 / §04 S3 行) ----------------
+     * 问题面: 同仓同进程发布(静态 no-cache+ETag 重校验)下, 升级后**已开的旧标签页**仍跑旧 JS,
+     * 每轮轮询把新形状的 status payload 喂给旧消费位 —— 静默渲染破损, 用户无感也无从自愈。
+     * 机制: 后端 _status_payload 恒回传包版本号(version = server/common.py app_version()), 前端在
+     * 轮询数据处理入口(refresh —— 定时轮询与 SSE ver 驱动都汇于它)每轮比对:
+     *   - 首轮(本页 incarnation)记基线 this._versionSeen;
+     *   - 后续轮与基线不一致 = 服务端已换版本 => location.reload() 自愈一跳(reload 拿到新 JS +
+     *     新形状), **中止本轮载荷应用**(不把跨版本载荷喂进旧 JS)但**照常续排下一拍** —— 防抖
+     *     已把实际 reload 速率封顶 1 次/30s, 续排不造成循环; 导航真发生时定时器随页销毁, 导航
+     *     被取消(下条守卫用户点「留下」)时轮询链继续活着, 窗口过后重试自愈。
+     *   - 变更沿先问配置编辑器脏态守卫(cfgGuardActive, U1-b 双脏源判据单点): 活跃 = 本轮跳过
+     *     自愈(不 reload、不记防抖时间戳, 基线不动, 轮询照常) —— 后台轮询不替脏态用户弹原生
+     *     beforeunload 框, 守卫释放后的下一轮变更沿自然再触发。
+     * 防重签发循环(§04 S3 验收): 循环唯一来源是 version 抖动(回滚/灰度期新旧进程交替应答)——
+     *   1) 稳定版本(一切真实部署的稳态): reload 后新页重新记基线, 恰好一次 reload 零循环;
+     *   2) 抖动场景: sessionStorage 记最近一次 reload 时间戳(per-tab), 30s 窗口内至多一次 ——
+     *      最坏退化为 1 次/30s 的有界节流, 部署稳定后归零;
+     *   3) sessionStorage 不可用(私隐模式访问即抛, columns_persist.js 先例)退内存层
+     *      (_versionReloadMemAt): 同页内仍拦重复触发; 跨 reload 记忆丢失 —— 稳定版本路径不受
+     *      影响(第 1 条不依赖存储), 唯「存储被禁 + 每请求翻转版本」组合可能循环, 接受该残留
+     *      (环境级存储缺陷叠加病态部署才可达; 自愈主目标不为其让位, 内存层已是可用上限)。
+     * 保守默认(黄金法则 2): version 缺失/非字符串的轮(老服务端/异常响应)不触发也不动基线 ——
+     *   无从判定变更方向, 宁可不自愈; 首次见到 version(基线尚空)只记基线不当变更沿。 */
+    /* 基线 _versionSeen 不声明在本 methods 对象: 初值落 state.js data()(_versionSeen: null)——
+     * Vue3 生产构建对 methods 里的非函数条目静默跳过(applyOptions 只认函数), 声明在这里恒无效,
+     * 且真机初值变 undefined 与电池替身(null)异臂; data() 下划线字段先例 _searchRefreshAt。
+     * 本方法只读写 this._versionSeen, 语义同上注。 */
+    _versionSelfHeal(status) {
+      const v = status && status.version;
+      if (typeof v !== "string") return false;  // 缺失/异常轮: 不触发、不动基线(保守默认)
+      if (this._versionSeen === null) {  // 单臂: 初值由 state.js data() 声明保证为 null(见上注)——
+        // undefined 臂随落位修正收紧: 真机 undefined 只可能来自声明错位(methods 非函数条目被
+        // Vue3 跳过), 保留反而吸收该回归(替身/真机再次异臂); 收紧后错位在真机首轮即显形
+        // (基线判不中直接落变更沿 → reload, 30s 防抖封顶), 不再静默降级。
+        this._versionSeen = v;  // 首轮记基线; reload 后新页 incarnation 重新记(循环破除第 1 条)
+        return false;
+      }
+      if (v === this._versionSeen) return false;  // 一致轮: 零成本直通, 不碰存储
+      // 配置编辑器脏态守卫活跃(U1-b, cfgGuardActive 双脏源判据单点): 后台自愈 reload 会替脏态
+      // 用户弹原生 beforeunload 框 —— 本轮跳过自愈(不 reload、不记防抖时间戳、基线不动), 轮询
+      // 照常; 守卫释放(cfgGuardRelease / 保存或放弃清脏)后的下一轮变更沿自然再触发, 只让拍不让位。
+      if (this.cfgGuardActive()) return false;
+      const now = Date.now();
+      let recent = false;
+      try {
+        recent = now - (Number(sessionStorage.getItem(AQB_VERSION_RELOAD_STORE_KEY)) || 0)
+          < AQB_VERSION_RELOAD_DEBOUNCE_MS;
+      } catch { /* 私隐模式等: 存储层缺席, 只剩内存层 */ }
+      if (!recent && now - _versionReloadMemAt < AQB_VERSION_RELOAD_DEBOUNCE_MS) recent = true;
+      if (recent) return false;  // 防抖窗口内: 不 reload, 本轮照常处理(有界节流, 不循环重签发)
+      try {
+        sessionStorage.setItem(AQB_VERSION_RELOAD_STORE_KEY, String(now));
+      } catch { /* 写失败同读: 内存层兜底 */ }
+      _versionReloadMemAt = now;  // 内存层恒与存储层同拍记账(存储不可用时它是唯一记忆)
+      location.reload();
+      return true;
+    },
     async refresh() {
       try {
         // rid 增量: 带上已持有的视图版本, 服务端版本未变时不回传数组(响应体趋近于零)。
@@ -517,6 +584,13 @@ window.AQB_POLL = {
         qs.push("delta=1");
         const query = `?${qs.join("&")}`;
         const state = await this.api("/api/state" + query);
+        // S3 version-reload(计划 26-11-11-0630 §03/§04): 轮询数据处理入口的**单点**变更沿,
+        // 放在一切赋值/应用之前 —— 服务端版本与本页基线不一致即 reload 自愈: 本轮载荷**不应用**
+        // (version 已变的载荷可能新形状, 旧 JS 不吃)但**照常续排下一拍** —— 防抖已把实际 reload
+        // 速率封顶 1 次/30s, 续排不造成循环; 导航真发生时定时器随页销毁, 导航被取消(脏态守卫
+        // 用户点「留下」)时轮询链继续活着, 窗口过后重试自愈。比对/防抖/守卫共存/缺失轮保守默认
+        // 等语义单点见 _versionSelfHeal 注。
+        if (this._versionSelfHeal(state.status)) { this.scheduleNext(); return; }
         this.status = state.status;
         // qB 全局状态(server_state)随 status **恒回传**(与 traffic 同口径: 不受 rid 门控) ——
         // 状态栏常显统计与"限制速度"取它, 不再单独打 /api/stats => 每轮只剩 1 条请求,

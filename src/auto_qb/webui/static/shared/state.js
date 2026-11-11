@@ -233,6 +233,10 @@ window.AQB_STATE = {
       pollFails: 0,        // 连续失败次数(轮询退避: 2s->4s->8s->15s 上限)
       // (主轮轮询句柄 pollTimer 已随轮询骨架上提: polling.js 句柄表 _polls["main"])
       lastRid: null,       // 已持有的分组视图版本(服务端 rid); null = 尚未取到(强制全量)
+      // S3 version-reload 自愈基线(polling.js _versionSelfHeal 读写): 本页 incarnation 首见的
+      // 服务端包版本; null = 尚未记基线。初值必须在 data(): Vue3 生产构建对 methods 里的非函数
+      // 条目静默跳过(polling.js 里声明恒无效), 下划线字段先例 _searchRefreshAt(下方搜索域)。
+      _versionSeen: null,
       searchQuery: "",       // 搜索关键字
       searchHits: new Set(),  // 命中种子 hash 集合(服务端匹配裁决: 名字/站点/分类/路径/标签/文件)
       searchUncovered: [],    // 未归组的命中种子(分组未启用/文件列表不可读), 以虚拟行兜底展示
