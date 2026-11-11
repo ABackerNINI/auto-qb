@@ -360,6 +360,8 @@ body.drawer-resizing { cursor: ns-resize; user-select: none; }
 .move-targets { margin: 0 0 10px; color: var(--fg-dim); font-size: 12.5px; }
 .move-targets b { color: var(--fg); }
 .move-note { margin: 0 0 12px; color: var(--fg-muted); font-size: 12px; overflow-wrap: anywhere; }
+/* 部分组扩张披露条(计划 26-11-11-0820 S4, 拍板 D4): 迁移开 x 部分组开框即见的 warn 档, 色取主题令牌 */
+.move-note.move-note-warn { color: var(--warn); }
 .meta-tags { display: flex; flex-wrap: wrap; gap: 8px; max-height: 220px; overflow-y: auto; margin: 2px 0 12px;
   overscroll-behavior: contain; }
 

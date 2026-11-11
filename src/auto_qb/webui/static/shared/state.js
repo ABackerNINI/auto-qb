@@ -497,6 +497,7 @@ window.AQB_STATE = {
       movePathHi: -1,        // 保存路径下拉键盘高亮
       movePathMouseAt: null, // 悬停接管门限坐标(comboHoverIdx, 同 addCatMouseAt)
       moveBusy: false,       // 有命令在飞(防误关 + 防重复投递)
+      movePartialDisclosure: null,  // 部分组扩张披露条数据(S4/D4, 计划 26-11-11-0820): openMoveDialog 开框瞬间算得的聚合({names, sel, total, gap}), null = 无条(非部分组/迁移关/旗标解析不出); 模板消费面, 不得改 _ 前缀(R2)
     };
   },
   computed: {

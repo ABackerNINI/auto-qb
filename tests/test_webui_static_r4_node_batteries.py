@@ -9,6 +9,7 @@
 - test_r4_partial_groups_predicate_five_forms: 部分组判定单点守阵(计划 26-11-11-0820 S1, 拍板 D2) —— _partialGroupsOf(keys, hashes) -> [{key, name, sel, total}] 是删除确认框行(S2)/迁移关确认框(S3)/迁移开披露条(S4) 三落点共用的「部分组」唯一判定面; 判定 = 真实组(!virtual 且 total>1)有成员命中 hashes ∧ 组键不在 keys ∧ sel<total。静态锚: 判定只在 selection.js 定义形态(裸名+`(`, 接收者调用不计)恰一次(其它 shared 文件零重复定义实现)、方法体走 this.decoratedGroups 与 _findGroup 同源解析面且零 filteredGroups 独走、判据含 g.virtual 豁免。五形态 node 电池真跑: 组键整组入选不触发(含双向联动组键与成员 hash 同存面)/成员全选不触发(组键已晋升 + 种子页降级未晋升 sel===total 两面)/部分选中触发且 sel/total/name 逐字段正确/跨组混合(整组 A + 部分组 C 并存)只列部分组/单成员组与虚拟行均不触发(专设双成员虚拟行钉住 virtual 判据独立于 total<=1); 边界面: 空入参不抛/hash 不属任何组不触发/name 缺失兜组 key/decoratedGroups 缺失(R6 极端竞态)空返回不抛不误拦 —— 摘除判定或换解析面即红
 - test_r4_delete_details_partial_group_row: 删除链部分组行落点级真跑(计划 26-11-11-0820 S2, 拍板 D5) —— _deleteDetails(delete_flow.js)在删除目标含部分组时于既有行流末尾追加一行(tone error/wide/#i-warn, HR 风险行同款), 判定单点消费 selection.js::_partialGroupsOf(带接收者调用)。正例: 部分组目标恰一行且单组文案逐字段(组名/已选 M/N/钉住词「将缺文件」); 多组聚合一行(已选/总数与缺口用合计); 四组触发组名列前 3 +「等 K 个」(照 _hrRiskOf 模式)。负例(D2 不触发面): 整组删除(组键入选)/成员全选未晋升/单成员组/虚拟行/hash 不属任何组均无该行。恒显面(D5): _deleteDetails 形参只有 keys/hashes(无 delete_files 勾选入参, 行与勾选状态无关恒显由结构保证)且行为行流末行(既有五行/六行结构零改动只追加)。电池合并 selection.js + delete_flow.js 两 mixin 方法(app.mixin 同实例注入等价), 无 node 静默跳过
 - test_r4_move_dialog_partial_group_gate: 迁移关部分组确认框落点级真跑(计划 26-11-11-0820 S3, 拍板 D3) —— submitMoveDialog(drawer.js)在目标含部分组且 flags.relocate_enabled===false 时首次 post(false) 前弹确认框(tone error/danger/wide), 确认才发, 取消留在设定位置框; 判定单点消费 selection.js::_partialGroupsOf、聚合单点消费 _partialGroupsSummary(与删除链 S2 行共用)。正例: 部分组+迁移关恰弹一次且弹层顺序先收 moveOpen 再开确认框(R3 防双遮罩互盖, 照 confirm 回路先例), 文案钉住词「将缺文件」+「整组迁移」逐字段, 确认后首发无 confirm 键, 成功后框收; 取消零投递带原路径重开; 确认后投递失败带原路径重开(框已被闸先收, 照 confirm 回路失败分支, 手输路径不丢), 非闸直发失败维持现状无重开; 四组聚合前 3 +「等 K 个」合计口径。负例(D3): 整组入选/成员全选未晋升/单成员组/虚拟行/hash 不属任何组直发零新增弹层。旗标两态: 迁移开直发零弹层(S4 披露条的面); flags/relocate_enabled 解析不出(R6)静默直发不误拦; decoratedGroups 缺失不抛不误拦。电池合并 selection.js + drawer.js 两 mixin 方法, 无 node 静默跳过
+- test_r4_move_dialog_partial_disclosure_bar: 迁移开部分组披露条落点级真跑(计划 26-11-11-0820 S4, 拍板 D4) —— openMoveDialog(drawer.js)在 flags.relocate_enabled===true 时开框瞬间算一次部分组聚合(_partialGroupsOf+_partialGroupsSummary 带接收者, 判定/聚合单点只在 JS 侧)存非下划线状态 movePartialDisclosure 供 move-dialog.html 披露条消费(R2: Vue 模板编译器不解析 _ 前缀标识符, 模板只读本字段)。正例: 部分组+迁移开披露非 null 且单组 names/sel/total/gap 逐字段; 四组聚合前 3 +「等 K 个」合计口径; 非部分组负例(整组入选/成员全选未晋升/单成员组/虚拟行/hash 不属任何组)无条。降级面(R6/D4): 迁移关(relocate_enabled===false, S3 确认框的面, 含 S3 取消重开路径)无条; flags/relocate_enabled 解析不出无条不抛; decoratedGroups 缺失无条不抛。接线面: 开框既有状态机零破坏(moveOpen/moveCount/movePathInput 照常)。静态守阵(照 delete_flow.js WARN 原注/_scan_mixin_wiring 范式): move-dialog.html 剥注释后零 _ 前缀标识符; 文案钉住「整组迁移」+「将按整组迁移扩展至全组」+「个成员」; drawer.js 接线形态(先复位 null + relocate_enabled===true 门 + 带接收者单点调用); state.js 显式建字段; 四皮肤 dialogs.css 各有 .move-note.move-note-warn warn 档。电池合并 selection.js + drawer.js 两 mixin 方法, 无 node 静默跳过
 - test_r4_load_col_state_seeding: R5#18 —— loadColState 默认隐藏播种三态: 空存储播种 / 仅空 hidden 不播(「刻意全开」合法偏好) / 有任一偏好键不播; 附坏 JSON 走完整流程、locked 列忽略、w 白名单洗净(洗净后三键全缺照播)
 - test_r4_sort_domain: R5#54 —— AQB_SORT 真跑: setSort 三态循环(经典 gk/gd 与 dyn dtSortState 两形态) + _dtStrCompare(IPv4 逐段数值序/端口数值/等值/非 IP localeCompare 回落) + sortedDrawer 空值两方向恒末位与 IPv4 数值序
 - test_r4_format_ladder_family: R5#55 —— format 函数族档位边界: _fmtLadder 梯顶回落(top 命中/缺省/档名写错回落整梯)与字节/速度两族、fmtEta 8640000 哨兵与非正值、fmtDuration 三段进位边界、fmtPeersQb 缺省只显已连接
@@ -757,6 +758,110 @@ const ok = (name, cond) => checks.push([name, !!cond]);
 }).catch((e) => { console.error(e && e.stack || e); process.exit(1); });
 """
 
+# S4 迁移开部分组披露条(计划 26-11-11-0820, 拍板 D4)落点级真跑 ------------------------
+_NODE_MOVE_PARTIAL_DISCLOSURE_PROBE = r"""
+const fs = require("fs");
+global.window = { AQB_DRAWER_TPL_REG: { helpers: {} } };
+const selSrc = fs.readFileSync(process.argv[1], "utf8");
+eval(selSrc + "\n;globalThis.__SEL__ = window.AQB_SELECTION;");
+const drawerSrc = fs.readFileSync(process.argv[2], "utf8");
+eval(drawerSrc + "\n;globalThis.__DRW__ = window.AQB_DRAWER;");
+// 两 mixin 方法合并进同一 ctx(生产是 app.mixin 逐个注入同一 Vue 实例, this 等价):
+// openMoveDialog 经 this._partialGroupsOf/_partialGroupsSummary 跨模块消费 selection.js
+const M = Object.assign({}, globalThis.__SEL__.methods, globalThis.__DRW__.methods);
+
+const memberHashesOf = (list) => (list || []).map((m) => (typeof m === "string" ? m : (m && m.hash) || "")).filter(Boolean);
+// 组族谱与 S3 电池同款: A(两成员)/C(三成员)/E/F(各两成员)/B(单成员)+ 虚拟行 u-h9
+const GROUPS = [
+  { key: "A", name: "组A", members: [{ hash: "h1" }, { hash: "h2" }] },
+  { key: "C", name: "组C", members: [{ hash: "h4" }, { hash: "h5" }, { hash: "h6" }] },
+  { key: "E", name: "组E", members: [{ hash: "e1" }, { hash: "e2" }] },
+  { key: "F", name: "组F", members: [{ hash: "f1" }, { hash: "f2" }] },
+  { key: "B", name: "组B", members: [{ hash: "h3" }] },
+  { key: "u-h9", virtual: true, members: [{ hash: "h9" }] },
+];
+const mkCtx = (over) => {
+  const c = Object.assign({}, M, {
+    memberHashesOf,
+    decoratedGroups: GROUPS,
+    filteredGroups: GROUPS,
+    flags: { relocate_enabled: true },
+    moveOpen: false, movePartialDisclosure: "stale",  // 非开框残留值: 验证开框必复位
+    $refs: {}, loadMoveOptionsCalls: 0,
+  }, over);
+  c.loadMoveOptions = () => { c.loadMoveOptionsCalls += 1; };
+  c.$nextTick = (fn) => fn();
+  return c;
+};
+const checks = [];
+const ok = (name, cond) => checks.push([name, !!cond]);
+
+// --- 正例: 部分组 + 迁移开 -> 披露条数据非 null, 逐字段 ---
+let c = mkCtx({});
+c.openMoveDialog({ groupKeys: [], memberHashes: ["h1"] }, "", "h1", "");
+ok("部分组+迁移开: 披露数据非 null(开框即算)", c.movePartialDisclosure !== null);
+ok("单组逐字段(names/sel/total/gap = 组A 1/2 缺 1)",
+   c.movePartialDisclosure.names === "「组A」" && c.movePartialDisclosure.sel === 1
+   && c.movePartialDisclosure.total === 2 && c.movePartialDisclosure.gap === 1);
+ok("开框既有状态机零破坏(moveOpen/moveCount/movePathInput/候选拉取照常)",
+   c.moveOpen === true && c.moveCount === 1 && c.movePathInput === "" && c.loadMoveOptionsCalls === 1);
+
+// --- 多组聚合(与 S2/S3 共用 _partialGroupsSummary 单点): 前 3 + 等 K 个, 合计口径 ---
+c = mkCtx({});
+c.openMoveDialog({ groupKeys: [], memberHashes: ["h1", "h4", "e1", "f1"] }, "", "", "");
+ok("四组聚合: 组名前 3 + 等 4 个, 合计 4/9 缺口 5",
+   c.movePartialDisclosure && c.movePartialDisclosure.names === "「组A」「组C」「组E」等 4 个"
+   && c.movePartialDisclosure.sel === 4 && c.movePartialDisclosure.total === 9
+   && c.movePartialDisclosure.gap === 5);
+
+// --- 负例(D2 不触发面): 非部分组开框无条 ---
+c = mkCtx({});
+c.openMoveDialog({ groupKeys: ["A"], memberHashes: [] }, "", "", "");
+ok("整组入选(组键级联)+迁移开: 无条", c.movePartialDisclosure === null);
+c = mkCtx({});
+c.openMoveDialog({ groupKeys: [], memberHashes: ["h1", "h2"] }, "", "", "");
+ok("成员全选未晋升(sel===total)+迁移开: 无条", c.movePartialDisclosure === null);
+c = mkCtx({});
+c.openMoveDialog({ groupKeys: [], memberHashes: ["h3"] }, "", "", "");
+ok("单成员组种子+迁移开: 无条", c.movePartialDisclosure === null);
+c = mkCtx({});
+c.openMoveDialog({ groupKeys: [], memberHashes: ["h9"] }, "", "", "");
+ok("虚拟行(未归组命中)+迁移开: 无条", c.movePartialDisclosure === null);
+c = mkCtx({});
+c.openMoveDialog({ groupKeys: [], memberHashes: ["zz"] }, "", "", "");
+ok("hash 不属任何组+迁移开: 无条", c.movePartialDisclosure === null);
+
+// --- 降级面(R6/D4): 迁移关(S3 的面)/旗标解析不出/组数据缺失 一律无条不抛 ---
+c = mkCtx({ flags: { relocate_enabled: false } });
+c.openMoveDialog({ groupKeys: [], memberHashes: ["h1"] }, "", "h1", "");
+ok("迁移关(relocate_enabled===false)+部分组: 无条(S3 确认框的面)", c.movePartialDisclosure === null);
+c = mkCtx({ flags: undefined });
+c.openMoveDialog({ groupKeys: [], memberHashes: ["h1"] }, "", "h1", "");
+ok("flags 解析不出(R6): 无条不抛", c.movePartialDisclosure === null);
+c = mkCtx({ flags: { relocate_enabled: undefined } });
+c.openMoveDialog({ groupKeys: [], memberHashes: ["h1"] }, "", "h1", "");
+ok("relocate_enabled 解析不出(R6): 无条不抛", c.movePartialDisclosure === null);
+c = mkCtx({ decoratedGroups: undefined });
+c.openMoveDialog({ groupKeys: [], memberHashes: ["h1"] }, "", "h1", "");
+ok("decoratedGroups 缺失(R6 竞态): 无条不抛, 开框不阻断", c.movePartialDisclosure === null && c.moveOpen === true);
+
+// --- 重开复位: 残留值必被清(S3 取消重开路径迁移关无条; 迁移开重开现算) ---
+c = mkCtx({ flags: { relocate_enabled: false } });
+c.openMoveDialog({ groupKeys: [], memberHashes: ["h1"] }, "", "h1", "");
+c.openMoveDialog({ groupKeys: [], memberHashes: ["h1"] }, "", "h1", "");
+ok("迁移关重开(含 S3 取消带原路径重开): 无条", c.movePartialDisclosure === null);
+c = mkCtx({});
+c.openMoveDialog({ groupKeys: [], memberHashes: ["h1"] }, "", "h1", "");
+c.openMoveDialog({ groupKeys: [], memberHashes: ["zz"] }, "", "", "");
+ok("迁移开重开现算: 上一框的披露被新目标覆盖(部分组 -> 非部分组无条)",
+   c.movePartialDisclosure === null);
+
+console.log(JSON.stringify({
+  ok: checks.filter((x) => x[1]).length, total: checks.length,
+  failed: checks.filter((x) => !x[1]).map((x) => x[0]),
+}));
+"""
+
 
 # R5#18: loadColState 默认隐藏播种语义 ---------------------------------------------
 def _app_head_source():
@@ -1224,6 +1329,73 @@ def test_r4_move_dialog_partial_group_gate():
         os.path.join(STATIC_ROOT, "shared", "drawer.js"),
     )
     _assert_battery(report, "迁移关部分组确认框电池")
+
+
+# R2 模板形态面: _ 前缀标识符(Vue 模板编译器不解析, delete_flow.js WARN 原注 2026-09-17 实测)
+_TEMPLATE_UNDERSCORE_RE = re.compile(r"(?<![\w$.])_[A-Za-z_]\w*")
+
+
+def test_r4_move_dialog_partial_disclosure_bar():
+    """迁移开部分组披露条落点级真跑(计划 26-11-11-0820 S4, 拍板 D4) ---
+
+    openMoveDialog(drawer.js)在 flags.relocate_enabled === true 时开框瞬间算一次部分组聚合
+    (判定单点 _partialGroupsOf + 聚合单点 _partialGroupsSummary 均带接收者, 只在 JS 侧)存入
+    非下划线状态 movePartialDisclosure, move-dialog.html 披露条(warn 档, 开框即见)消费该字段
+    —— R2 硬约束: Vue 模板编译器不解析 _ 前缀标识符(delete_flow.js WARN 原注), 模板只读本字段。
+
+    node 电池(接线真跑, 合并 selection.js + drawer.js 两 mixin 方法):
+      正例: 部分组+迁移开 -> 披露非 null 且单组 names/sel/total/gap 逐字段; 四组聚合 ->
+            组名前 3 +「等 4 个」合计口径(与 S2/S3 共用 _partialGroupsSummary); 开框既有
+            状态机零破坏(moveOpen/moveCount/movePathInput/候选拉取照常)。
+      负例(D2 不触发面): 整组入选/成员全选未晋升/单成员组/虚拟行/hash 不属任何组 -> 无条。
+      降级面(R6/D4): 迁移关(relocate_enabled===false, S3 确认框的面, 含取消重开路径)无条;
+            flags/relocate_enabled 解析不出无条不抛; decoratedGroups 缺失无条不抛且开框不阻断。
+      重开复位: 残留值必被清, 重开现算(上一框的披露被新目标覆盖)。
+
+    静态守阵(照 delete_flow.js:36 WARN 原注 / _scan_mixin_wiring 形态面范式):
+      1. move-dialog.html 剥 HTML 注释后零 _ 前缀标识符(模板消费面 R2);
+      2. 文案钉住「整组迁移」+「将按整组迁移扩展至全组」+「个成员」(R4 双向钉, 改文案必改守阵);
+      3. drawer.js 接线形态: openMoveDialog 内先复位 null + relocate_enabled===true 门 +
+         带接收者单点调用(this._partialGroupsOf/_partialGroupsSummary);
+      4. state.js 显式建 movePartialDisclosure 字段;
+      5. 四皮肤 dialogs.css 各有 .move-note.move-note-warn(warn 档, 色取主题令牌)。
+
+    无 node 静默跳过(与既有电池同口径)。
+    """
+    # 1. R2 模板形态面: move-dialog.html 剥注释后零 _ 前缀标识符
+    tpl_path = os.path.join(STATIC_ROOT, "shared", "tpl", "move-dialog.html")
+    tpl_src = open(tpl_path, encoding="utf-8").read()
+    stripped = re.sub(r"<!--.*?-->", "", tpl_src, flags=re.S)
+    hits = _TEMPLATE_UNDERSCORE_RE.findall(stripped)
+    assert not hits, f"move-dialog.html 模板消费面出现 _ 前缀标识符 {hits} —— Vue 模板编译器不解析(R2)"
+    # 2. 文案钉住(R4): 披露条文案与形态关键词
+    assert "move-note-warn" in stripped, "披露条未挂 warn 档类名 move-note-warn"
+    assert 'v-if="movePartialDisclosure"' in stripped, "披露条未走 movePartialDisclosure 门控"
+    for kw in ("整组迁移", "将按整组迁移扩展至全组", "个成员", "已选"):
+        assert kw in stripped, f"披露条文案缺钉住词「{kw}」(改文案必须同步本守阵, R4)"
+    # 3. drawer.js 接线形态: 复位 + 旗标门 + 带接收者单点调用
+    drawer_src = open(os.path.join(STATIC_ROOT, "shared", "drawer.js"), encoding="utf-8").read()
+    body = drawer_src[drawer_src.index("openMoveDialog(targets"):drawer_src.index("closeMove()")]
+    assert "this.movePartialDisclosure = null" in body, "openMoveDialog 未先复位披露状态(残留值漏清)"
+    assert "this.flags && this.flags.relocate_enabled === true" in body, \
+        "披露条未钉 relocate_enabled===true 门(迁移关是 S3 确认框的面, 旗标解析不出降级无条, R6)"
+    assert "this._partialGroupsSummary(this._partialGroupsOf(" in body, \
+        "披露条聚合未走判定/聚合单点(带接收者), 判定不许另写"
+    # 4. state.js 显式建字段(新状态键漏建 = Vue 响应式失效)
+    state_src = open(os.path.join(STATIC_ROOT, "shared", "state.js"), encoding="utf-8").read()
+    assert "movePartialDisclosure: null" in state_src, "state.js 未显式建 movePartialDisclosure"
+    # 5. 四皮肤 CSS 各有 warn 档规则(色取主题令牌 --warn, 不写死色值)
+    for skin in ("prism", "atlas", "console", "flux"):
+        css = open(os.path.join(STATIC_ROOT, skin, "css", "dialogs.css"), encoding="utf-8").read()
+        assert ".move-note.move-note-warn { color: var(--warn); }" in css, \
+            f"{skin} 皮肤 dialogs.css 缺 .move-note.move-note-warn warn 档规则"
+    # node 电池真跑
+    report = _run_probe(
+        _NODE_MOVE_PARTIAL_DISCLOSURE_PROBE,
+        os.path.join(STATIC_ROOT, "shared", "selection.js"),
+        os.path.join(STATIC_ROOT, "shared", "drawer.js"),
+    )
+    _assert_battery(report, "迁移开部分组披露条电池")
 
 
 def test_r4_load_col_state_seeding():

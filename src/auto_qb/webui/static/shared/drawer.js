@@ -773,6 +773,21 @@ window.AQB_DRAWER = {
       this.movePathMouseAt = null;
       this.moveBusy = false;
       this.movePathInput = prefill || "";
+      /* 部分组扩张披露条数据(S4, 计划 26-11-11-0820 D4): 迁移开(flags.relocate_enabled === true)
+       * 时开框瞬间算一次部分组聚合存入, 供 move-dialog.html 披露条消费。!R2 硬约束: 模板不得引用
+       * _ 前缀标识符(Vue 模板编译器不解析, delete_flow.js WARN 原注), 故判定/聚合单点
+       * (_partialGroupsOf/_partialGroupsSummary)只在 JS 侧带接收者消费, 模板只读本非下划线字段。
+       * 迁移关是 S3 确认框的面(不在此算, 重开也落 null); 旗标解析不出(R6)降级为无条;
+       * 非部分组 _partialGroupsSummary 返回 null 同样无条。R6 竞态同口径: 披露条只在开框瞬间
+       * 算得出才显示, 开框到提交之间组解散/成员增减不追算不阻断 —— 迁移开的提交面行为安全
+       * 由后端 _buckets 级联保证(与删除链「解析出不拦」同族哲学)。 */
+      this.movePartialDisclosure = null;
+      if (this.flags && this.flags.relocate_enabled === true) {
+        this.movePartialDisclosure = this._partialGroupsSummary(this._partialGroupsOf(
+          (targets && targets.groupKeys) || [],
+          (targets && targets.memberHashes) || [],
+        ));
+      }
       this.loadMoveOptions();
       // 惰性补拉(issue 26-11-11-0633): flags 未取到时补一发, 「整组迁移已启用」提示
       // (move-dialog.html v-if="flags.relocate_enabled")补拉成功后按响应式亮起;

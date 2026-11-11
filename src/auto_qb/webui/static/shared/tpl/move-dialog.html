@@ -30,6 +30,17 @@
                「以内容组为单位」语义, 零额外点击(确认框披露点在 drawer.js::_relocateConfirmRows);
                关 = 不渲染, 普通移动语义不变。 -->
           <p v-if="flags.relocate_enabled" class="move-note">整组迁移已启用: 移动将以内容组为单位, 同组其它成员一并迁移。</p>
+          <!-- 部分组扩张披露条(计划 26-11-11-0820 S4, 拍板 D4): 迁移开且目标含部分组时开框即见的
+               warn 档披露条, 不加确认步骤(D4) —— 整组迁移开启时部分组选中会被级联扩展到全组,
+               开框就先说清楚「已选 M 个, 将按整组迁移扩展至全组 N 个成员」(M/N 来自聚合单点
+               合计口径, 组名上限 3 +「等 K 个」, 与 S2/S3 共用 _partialGroupsSummary 输出)。
+               R2 硬约束: 模板只消费非下划线状态字段 movePartialDisclosure(数据由 openMoveDialog
+               开框瞬间算好), 判定/聚合的 _ 前缀单点只在 JS 侧带接收者调用 —— Vue 模板编译器
+               不解析下划线前缀标识符(delete_flow.js WARN 原注)。
+               R6: 披露条只在开框瞬间算得出才显示, 开框到提交之间组解散/成员增减不追算 ——
+               提交面行为安全由后端 _buckets 级联保证; 非部分组/迁移关(S3 确认框的面)/
+               旗标解析不出均无条。 -->
+          <p v-if="movePartialDisclosure" class="move-note move-note-warn">辅种组{{ movePartialDisclosure.names }}: 已选 {{ movePartialDisclosure.sel }} 个,将按整组迁移扩展至全组 {{ movePartialDisclosure.total }} 个成员。</p>
           <div class="add-dialog-field add-dialog-combo">
             <!-- label 必须 @mousedown.prevent + @click.stop(与添加种子三下拉 + meta 分类同因同修):
                  @click.stop 挡 window click 收层; @mousedown.prevent 挡 mousedown 默认动作的 blur ——
