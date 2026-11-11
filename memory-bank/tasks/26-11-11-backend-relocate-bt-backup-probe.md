@@ -55,3 +55,5 @@ grilling 三轮九问收敛(D1-D9) + qB/libtorrent 源码取证 + 本机只读�
 - 2026-11-11 08:37 S6a 全量基线(切片 26-11-11-0756): `6000 passed / 2 skipped / coverage 99%`(test.full 实测, HEAD 130ec909)。
 - 2026-11-11 08:37 S6b 真机验收(切片 26-11-11-0804): 探测面后端 verdict=hit + hash 消歧唯一命中便携候选 PASS, 编辑器渲染/证据区 PASS, ambiguous 拒回填(D5)真机取证; UI 回填段(hit 回填 → PUT 落盘)与 offline 组被 clone3 s0 大库轮撞场 BLOCKED —— 真机结论 = 部分完成、复测排期(复测清单见切片 §04); 产品缺陷 0。
 - 2026-11-11 08:37 S7 收尾回写(本批): pitfalls/backend/qb-fastresume-edit.md 补键形状 v8 口径行; docs/configuration.md「整组迁移」节「顶层 bt_backup 键」改 relocate.bt_backup 标量口径; architecture 主题文档核认 = hr-groups.md「整组迁移」节未承载 fastresume 收尾键形状口径, 无既有落点, 不强造新档; 根 README 核对零 bt_backup 描述未动; 计划文档不动(真机复测未完不翻 Done)。
+
+- 2026-11-11 23:21 S1-S7 实施收尾: 批1-批7 落地(c4ee6149→55aac9cd), test.full 6000 passed/99%, 真机后半 BLOCKED 入池 26-11-11-2305 待排期, 接缝终审零发现
