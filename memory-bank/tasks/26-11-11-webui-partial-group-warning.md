@@ -5,6 +5,7 @@
 **Updated:** 2026-11-12
 **Summary:** webui 部分组操作醒目预警: S1-S6 实施完成入库(谓词/聚合单点 + 三落点预警 + 守阵);后端纵深入池 issue 26-11-11-0823 保持 Open 待认领
 **Topics:** webui-partial-group-warning
+**Refs:** memory-bank/issues/26-11-12-0318-test-testing-parallel-flaky.html
 
 ## 本篇只回答
 
@@ -55,7 +56,7 @@
 
 ### R1 · 实施 (2026-11-12)
 
-- S1-S6 全部完成,分批入库(本地分支 `feat/webui-partial-group-warning`,各批提交): `6056894f` 计划+issue 入库 / `fdc5edc1` S1 谓词单点 `_partialGroupsOf` / `ecb71a63` S2 删除确认框部分组行 / `9cf46fb0` S3 迁移关提交前确认框 / `659a5e39` S4 迁移开披露条 / `038a1f64` S5 守阵五形态+三落点电池。
+- S1-S6 全部完成,分批入库(本地分支 `feat/webui-partial-group-warning`,各批提交): `534db5c5` 计划+issue 入库 / `7fa74dfa` S1 谓词单点 `_partialGroupsOf` / `08fef58e` S2 删除确认框部分组行 / `feb052a6` S3 迁移关提交前确认框 / `e6f1f73a` S4 迁移开披露条 / `d4133e3f` S5 守阵五形态+三落点电池。
 - 评审: 每批经 review.pack/只读子代理评审,blocker 0;评审发现的 minor/major 若干均当场修复并增量复评,至零 actionable 出口。
 - 实测: `commands run test.full` 全量全绿, 数字单点见基线切片(`commands run kb.baseline`)。
 - 收尾待办: 接缝终审发现的对称单点锚修复在工作树(`tests/test_webui_static_r4_node_batteries.py` 未提交改动),随本专题收尾入库;计划/档案状态翻转与 `architecture/webui.md` 回写即本批。issue 26-11-11-0823 保持 Open 待认领。

@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>并行测试偶发假红: 8 worker 下计时/时间窗敏感用例闪失 · test · 计划外问题</title>
+<meta name="issue-slug" content="testing-parallel-flaky">
+<meta name="issue-stamp" content="26-11-12-0318">
+<meta name="issue-type" content="test">
+<meta name="doc-topic" content="testing-parallel-flaky">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-11-webui-partial-group-warning.md">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="并行测试偶发假红: 8 worker 下计时/时间窗敏感用例闪失">
+<meta name="issue-summary" content="8 worker 并行全量下偶见单个测试假红(两类: qb_capture dry 计时类/traffic_sample 时间窗类), 单文件隔离重跑均绿, 疑并行时序竞争">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --mark: #161e26;     /* issue 特有: callout 底色 (plan.html 不用) */
+    --warn-bg: #2a2119;  /* issue 特有: 状态徽标底色 */
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 单栏流式版面: 与 plan.html 同一套 .sheet (封顶 1280px, 侧距 clamp(18~44px)); 旧双栏+粘性目录已删 */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+
+  /* 封面 meta 行: issue 特有, DOM 形态别改 —— 状态徽标 <span class="badge"> 被
+     flip_status (W4) 与 check_status_drift 的 BADGE_RE 机读 (k/v div 结构在判据里) */
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px 28px; font-family: var(--mono); font-size: 11.5px; color: var(--faint); border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta-row .item .k { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .meta-row .item .v { font-size: 13.5px; color: var(--dim); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin: 14px 0; font-size: 14px; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-family: var(--mono); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">计划外问题（未修）· test</div>
+<h1>并行测试偶发假红: 8 worker 下计时/时间窗敏感用例闪失</h1>
+<p class="lede">8 worker 并行全量下偶见单个测试假红(两类: qb_capture dry 计时类/traffic_sample 时间窗类), 单文件隔离重跑均绿, 疑并行时序竞争</p>
+<div class="meta-row">
+  <div class="item"><div class="k">编号</div><div class="v">26-11-12-0318-test-testing-parallel-flaky</div></div>
+  <div class="item"><div class="k">报告时间</div><div class="v">2026-11-12 03:18</div></div>
+  <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">涉及模块</div><div class="v">test</div></div>
+  <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+</div>
+
+<section id="s1">
+  <h2><span class="no">§01</span>现象与发现场景</h2>
+  <p>在做 <code>memory-bank/tasks/26-11-11-webui-partial-group-warning.md</code> 任务收尾期间，<code>commands run test.quick</code> / <code>test.full</code> <strong>8 worker 并行</strong>下，全量偶见<strong>单个</strong>测试假红；单文件隔离重跑均绿；S2 子代理两轮闪失的不是同一个测试（闸门轮与 S2 首轮闪的是同一用例 <code>test_qb_capture_dry_true_zero_requests</code>）。全程 Windows 本机，平台/配置相关性未系统排查。</p>
+</section>
+
+<section id="s2">
+  <h2><span class="no">§02</span>证据</h2>
+  <p class="hint">贴原文（报错 / 日志 / 命令输出），不转述；附取证时间，让读者自己判断新鲜度。以下三条均 <strong>2026-11-12 取证</strong>。</p>
+  <ol>
+    <li>ship.commit 提交闸门内全量（原文摘要）：<code>1 failed, 6007 passed, 2 skipped in 189.04s</code>，失败项 <code>tests/test_legacy_review4_scripts.py::test_qb_capture_dry_true_zero_requests</code>——该测试输出自称 <code>[DRY] 本次实际发出请求 0 个</code> 却断言失败；紧接主会话重跑 <code>commands run test.quick</code> → <code>6008 passed, 2 skipped</code>（152.2s）全绿。</li>
+    <li>S2 实施子代理两轮全量分别 flake <code>test_legacy_review4_scripts.py::test_qb_capture_dry_true_zero_requests</code> 与 <code>test_traffic_sample_store.py::test_read_side_view_contract_table[1m]</code>，单文件隔离重跑均绿；其观察：前者 BIND/端口类，后者时间窗类，疑并行时序竞争。</li>
+    <li>S5 全量（test.full <code>6011 passed / 2 skipped</code>，181s）一次通过未遇闪失——非必现，频率低。</li>
+  </ol>
+</section>
+
+<section id="s3">
+  <h2><span class="no">§03</span>影响面</h2>
+  <table>
+    <tr><th>维度</th><th>结论</th></tr>
+    <tr><td>触发条件</td><td>8 worker 并行全量（<code>test.quick</code> / <code>test.full</code>，含 ship.commit 提交闸门内的全量）；<strong>非必现</strong>——五轮全量中三轮各闪一个用例、两轮全绿，频率低</td></tr>
+    <tr><td>影响范围</td><td>纯测试基建信噪面：提交闸门 / 全量验证的假红会中断提交流程需重跑（本任务期间 ship.commit 因它重跑了一次）；不涉生产代码</td></tr>
+    <tr><td>严重度</td><td>低（重跑即消；不会静默放过真缺陷，只消耗流程时间）</td></tr>
+  </table>
+</section>
+
+<section id="s4">
+  <h2><span class="no">§04</span>定位锚点</h2>
+  <p class="hint">写「符号名 + grep 关键词 + 当时的行号（标取证时间）」—— 代码会漂移，靠符号与 grep 重新定位，行号只是加速项。</p>
+  <ul>
+    <li><code>tests/test_legacy_review4_scripts.py:293</code>（取证 2026-11-12 03:18）· 符号 <code>test_qb_capture_dry_true_zero_requests</code>（dry 计时/请求计数断言）· grep <code>test_qb_capture_dry_true_zero_requests</code></li>
+    <li><code>tests/test_traffic_sample_store.py:1374</code>（取证 2026-11-12 03:18）· 符号 <code>test_read_side_view_contract_table</code> 参数化用例，闪失实例 <code>[1m]</code>（<code>window="1m"</code> 时间窗参数化，:1374 的 <code>@pytest.mark.parametrize</code>）· grep <code>test_read_side_view_contract_table</code></li>
+    <li><code>tests/sidefx.py:261</code>（取证 2026-11-12 03:18）· 符号 <code>class SideFxRecorder</code> · 8 worker 副作用台账汇总（并行机制锚）· grep <code>class SideFxRecorder</code></li>
+  </ul>
+</section>
+
+<section id="s5">
+  <h2><span class="no">§05</span>根因<span class="opt">（可选）</span></h2>
+  <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
+  <div class="callout">待查。假说（未验证）：前者 BIND/端口竞争，后者时间窗边界在并行调度下偶发越界。已排除：确定性失败——两用例单文件隔离重跑均绿，失败只出现在 8 worker 并行调度下，疑并行时序竞争。</div>
+</section>
+
+<section id="s6">
+  <h2><span class="no">§06</span>建议修法<span class="opt">（可选）</span></h2>
+  <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
+  <p>待查。候选方向（开工先复验锚点用例是否仍闪，再定方案）：</p>
+  <ul>
+    <li>两用例隔离——加标记串行化/独立 worker，代价：损失少量并行度；</li>
+    <li>降低并行敏感度——dry 计时用例改端口选段/BIND 策略、时间窗用例放宽边界断言，代价：需先定位具体竞争点；</li>
+    <li>时间窗放宽——<code>test_read_side_view_contract_table</code> 的时间窗断言留容差，代价：可能掩盖真实漂移。</li>
+  </ul>
+</section>
+
+<section id="s7">
+  <h2><span class="no">§07</span>状态变更日志</h2>
+  <ul>
+    <li>2026-11-12 03:18 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+  </ul>
+  <h3>复验</h3>
+  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <h3>修复后补充</h3>
+  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+</section>
+
+<footer>
+  26-11-12-0318-test-testing-parallel-flaky.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+</footer>
+
+</div>
+</body>
+</html>
