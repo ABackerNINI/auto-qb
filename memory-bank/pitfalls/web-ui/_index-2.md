@@ -1,7 +1,7 @@
 # web-ui — 前端 / WEB UI 纪律 · 卷 2/4
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `descendant-selector-collateral.md` … `hscroll-indicator.md`(共 25 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `descendant-selector-collateral.md` … `hr-tooltip-overlap.md`(共 25 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
@@ -29,7 +29,7 @@
 | [frozen-column.md](frozen-column.md) | 首列吸左(冻结列)在本仓 `.group-row` 表格上的十处非显然约束 —— 表头反向位移、首格不透明合成、边界发丝线、stretch、按面重锚、search-hit 渐层镜像、变体两层结构、过渡同源、状态底叠加; 完整处置步骤与实测证据见 [attachments/froz… | 首列吸左, 名称列后阴影, 随机出现阴影, 黑块, box-shadow spread 负值, 落影随行高变, 冻结列, frozen column, sticky 首格, 横向滚动, 表头横向同步, transform 桥接, 首格不透明… |
 | [glass-visibility-mask-stacking.md](glass-visibility-mask-stacking.md) | 玻璃可见度=面板alpha×遮罩alpha叠乘; flux全浮层玻璃化预算16 | 毛玻璃不可见, blur看不见, 弹窗玻璃没效果, 遮罩太浓, 半透明底透正文, backdrop-filter预算, _FLUX_BACKDROP_BUDGET |
 | [global-mixin-basetransition-watch.md](global-mixin-basetransition-watch.md) | `app.mixin()` 全局注入的对象若带 `watch: { someState() {} }`, Vue 会把该 watcher 注册进**一切**组件实例 —— 包括内置 `<transition>` 在内部渲染时创建的 BaseTransition **假实例**(无… | 全局 mixin, app.mixin, watch 选项, transition, BaseTransition, TypeError, drawerTpl, 变体, 根实例 $watch |
+| [grid-span-item-track-inflation.md](grid-span-item-track-inflation.md) | CSS Grid 里跨全部列的项(说明段/横幅类)参与轨道尺寸计算 —— 它的 max-content 贡献会摊进 spanned 的 auto/minmax(auto,...) 轨道, 把「按内容取宽」的列撑远超设计底线; 守阵(类存在性/行数/DOM 断言)全绿也测不出, 只… | 把「说明段落/提示条/横幅」等与数据行同容器、又给了 `grid-column: 1 / -1` 的元素留在网格内; 或容器既是 padding 壳又是 grid(为省行数/文件行数上限时容易这么干)。 |
 | [header-cell-gutter.md](header-cell-gutter.md) | `.h-cell` 带 `padding-right: 10px` —— 这是给 `.resizer`(拖拽调宽把手)留的命中区, 因为 `.h-cell` 自身有 `overflow: hidden`(给列名省略号用), 把手伸到格子外会被裁掉、点不到(星图主题里有一条注释专门… | 右对齐, 列对齐, 表头没对齐, 标题文字对不齐, 数值列, text-align right, h-cell, padding-right, resizer, 拖拽把手, 列宽拖拽, colAlignCss, nth-child, 排序箭… |
 | [hover-keynav-fight.md](hover-keynav-fight.md) | 下拉/列表组件把悬停(@mouseenter 直写高亮状态 + CSS :hover 与活动项同款样式)与键盘活动项(↑↓)接到同一个高亮状态上 —— 静止光标钉住旧高亮, 且浏览器在行动画/滚动/DOM 变更后给静止光标补发合成 hover 事件把活动项拽回光标行, 上下键时选… | 改下拉列表键盘导航, 加悬停高亮, 上下键选中项闪烁乱跳, mouseenter, 双高亮, 合成 hover 事件, scrollIntoView, combobox, 活动项, 弹窗内容滑动, 文案从上往下滑, 选中候选后再点下拉, _… |
 | [hr-tooltip-overlap.md](hr-tooltip-overlap.md) | 做种时长列已用 HR 在线核实悬停弹窗(@mouseenter/@mouseleave 触发)承载来源/安全档位结论; 若再在单元格挂原生 `:title="hrDurHint(m)"`, 浏览器原生 title 与自定义弹窗在同一 hover 上叠出, 原生 title 还常被… | 做种时长, HR 在线核实, hrDurHint, 来源:未核实, 被遮挡的 tooltip, 弹窗叠出, 列 tooltip, 状态列, 站点列, 分类列, 标签列, seeding_time, hrPopEnter, hrSrcClas… |
-| [hscroll-indicator.md](hscroll-indicator.md) | 藏掉 `.group-table` 原生横条并补底部指示条时, 五件事不显然 —— ①**横条的位置是容器底边, 不是视口底边**: `.layout { align-items: start }` 让 `.content` 不被拉伸, `.torrents-dock` 虽是 f… | 横向滚动条, 横条, 滚动条在中间, 少种子横条, 横条很丑, group-table, overflow-x, scrollbar-width, ::-webkit-scrollbar, 滚动条隐藏, hscroll, 指示条, 胶囊,… |

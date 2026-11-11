@@ -13,6 +13,6 @@
 | 卷 | 主题范围 | 条数 |
 |---|---|---|
 | [1](_index-1.md) | `add-partial-receipt.md` … `derived-snapshot-render.md` | 25 |
-| [2](_index-2.md) | `descendant-selector-collateral.md` … `hscroll-indicator.md` | 25 |
-| [3](_index-3.md) | `inflight-flag-no-timeout.md` … `search-views.md` | 25 |
-| [4](_index-4.md) | `show-if-residual-key.md` … `wording-audit-surface.md` | 24 |
+| [2](_index-2.md) | `descendant-selector-collateral.md` … `hr-tooltip-overlap.md` | 25 |
+| [3](_index-3.md) | `hscroll-indicator.md` … `search-pending-collapse.md` | 25 |
+| [4](_index-4.md) | `search-views.md` … `wording-audit-surface.md` | 25 |

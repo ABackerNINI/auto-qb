@@ -140,7 +140,7 @@
                      stopPropagation, 退栈链收不到(录制优先级天然最高)。 -->
                 <!-- aqb:kb-full-modal:begin (守阵 test_settings_panel_section 的扫描锚) -->
                 <div class="hr-full-mask" v-show="kbFullOpen" aria-hidden="true" @click="kbFullClose()"></div>
-                <section v-show="kbFullOpen" class="hr-full-modal" role="dialog" aria-modal="true" aria-label="快捷键编辑(全屏)">
+                <section v-show="kbFullOpen" class="hr-full-modal kb-full" role="dialog" aria-modal="true" aria-label="快捷键编辑(全屏)">
                   <div class="hr-full-modal-hd">
                     <span class="hr-full-modal-t">键位自定义</span>
                     <span class="hr-full-modal-sub">改动即时试用(当前页立即生效), 保存只是落盘共享</span>
@@ -156,35 +156,35 @@
                     <div style="padding:12px 14px">
                       <p v-if="kbKeysLoading" class="hb-hp">正在读取服务端键位…</p><p v-else-if="kbKeysLoadFailed" class="hb-hp">服务端键位加载失败, 当前显示默认键位; 保存已禁用(避免用默认键位覆盖服务端数据), 点「重新加载」重试成功后恢复。</p>
                       <p class="kb-note">
-                        键位存于服务端 webui-keys.json, 所有浏览器共享; 保存后其它标签/浏览器刷新后生效。
-                        浏览器保留键(Ctrl+W/T/N/Q 等)不可绑定; 标 WARN: 的危险操作触发时有确认框兜底。
+                        键位存于服务端 webui-keys.json, 所有浏览器共享; 保存后其它标签/浏览器刷新后生效。浏览器保留键(Ctrl+W/T/N/Q 等)不可绑定; 标 WARN: 的危险操作触发时有确认框兜底。
                       </p>
-                      <div v-for="grp in kbGroups()" :key="grp" class="kb-grp">
-                        <div class="kb-grp-t">{{ grp }}</div>
-                        <div v-for="it in kbEntriesOf(grp)" :key="it.id" class="kb-row"
-                             :class="{ rec: kbRecId === it.id }">
-                          <span class="kb-row-label">
-                            {{ kbLabel(it) }}
-                            <span v-if="it.danger" class="kb-danger">WARN: 危险操作{{ kbHasConfirm(it) ? ' (有确认框)' : '' }}</span>
-                            <span v-if="it.fixed" class="hb-badge on">固定</span>
-                          </span>
-                          <span class="kb-row-keys">
-                            <kbd v-if="kbSerialOf(it)">{{ kbDisplayName(kbSerialOf(it)) }}</kbd>
-                            <span v-else class="kb-none">未绑定</span>
-                          </span>
-                          <span class="kb-row-acts">
-                            <template v-if="!it.fixed">
-                              <button class="hb-btn ghost sm" @click="kbRecord(it.id)">{{ kbRecId === it.id ? '取消' : '录制' }}</button>
-                              <button v-if="kbSerialOf(it)" class="hb-btn ghost sm" @click="kbDisableRow(it)">禁用</button>
-                              <button v-if="kbIsOverridden(it)" class="hb-btn ghost sm" @click="kbResetRow(it)">重置</button>
-                            </template>
-                          </span>
-                          <span v-if="kbRecId === it.id" class="kb-rec-tip">按下组合键…(Esc 取消, 纯修饰键不收)</span>
-                          <div v-if="kbConflict && kbConflict.id === it.id" class="kb-conflict">
-                            <span>{{ kbDisplayName(kbConflict.serial) }} 已绑定为「{{ kbConflict.otherLabel }}」</span>
-                            <button class="hb-btn sm" @click="kbConflictResolve('swap')">交换</button>
-                            <button class="hb-btn sm" @click="kbConflictResolve('steal')">覆盖(对方置空)</button>
-                            <button class="hb-btn ghost sm" @click="kbConflict = null">取消</button>
+                      <div class="kb-table">
+                        <div v-for="grp in kbGroups()" :key="grp" class="kb-grp">
+                          <div class="kb-grp-t">{{ grp }}</div>
+                          <div v-for="it in kbEntriesOf(grp)" :key="it.id" class="kb-row" :class="{ rec: kbRecId === it.id }">
+                            <span class="kb-row-label">
+                              {{ kbLabel(it) }}
+                              <span v-if="it.danger" class="kb-danger">WARN: 危险操作{{ kbHasConfirm(it) ? ' (有确认框)' : '' }}</span>
+                              <span v-if="it.fixed" class="hb-badge on">固定</span>
+                            </span>
+                            <span class="kb-row-keys">
+                              <kbd v-if="kbSerialOf(it)">{{ kbDisplayName(kbSerialOf(it)) }}</kbd>
+                              <span v-else class="kb-none">未绑定</span>
+                            </span>
+                            <span class="kb-row-acts">
+                              <template v-if="!it.fixed">
+                                <button class="hb-btn ghost sm" @click="kbRecord(it.id)">{{ kbRecId === it.id ? '取消' : '录制' }}</button>
+                                <button v-if="kbSerialOf(it)" class="hb-btn ghost sm" @click="kbDisableRow(it)">禁用</button>
+                                <button v-if="kbIsOverridden(it)" class="hb-btn ghost sm" @click="kbResetRow(it)">重置</button>
+                              </template>
+                            </span>
+                            <span v-if="kbRecId === it.id" class="kb-rec-tip">按下组合键…(Esc 取消, 纯修饰键不收)</span>
+                            <div v-if="kbConflict && kbConflict.id === it.id" class="kb-conflict">
+                              <span>{{ kbDisplayName(kbConflict.serial) }} 已绑定为「{{ kbConflict.otherLabel }}」</span>
+                              <button class="hb-btn sm" @click="kbConflictResolve('swap')">交换</button>
+                              <button class="hb-btn sm" @click="kbConflictResolve('steal')">覆盖(对方置空)</button>
+                              <button class="hb-btn ghost sm" @click="kbConflict = null">取消</button>
+                            </div>
                           </div>
                         </div>
                       </div>

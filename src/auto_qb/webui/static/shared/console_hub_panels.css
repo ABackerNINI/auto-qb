@@ -68,8 +68,10 @@
  * 面板在设置页「快捷键」分区(共用 .hb-blk 外壳), 行内三段: 动作名 / 当前键帽 / 录制-禁用-重置;
  * 帮助浮层是只读速查(分组 + 键帽), 与面板共用键帽(kbd)与危险标注样式。颜色全走主题令牌。 */
 .kb-note { color: var(--fg-muted); font-size: 12px; margin: 0 0 10px; }
-.kb-grp { margin-bottom: 14px; }
+.kb-grp { display: contents; }
 .kb-grp-t {
+  grid-column: 1 / -1;
+  margin-top: 14px;
   font: 600 11px/1 var(--hb-font-display);
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -77,17 +79,38 @@
   padding: 6px 0 4px;
   border-bottom: 1px solid var(--border);
 }
-.kb-row {
+/* 行布局(2026-11-11 重排): .kb-table 单一 grid 三列(名称 420 / 键帽 minmax(220px,auto) / 操作 auto),
+ * 全列表跨行共用同一网格, 键帽/按钮列严格纵向对齐; 列表整体居中, 视口放不下横向滚动兜底(目标屏 1920×1080)。
+ * 键帽列 minmax 底线防抖: 底线之内列宽不随数据变化, 最宽键帽超出才跟着变, 键帽一律不换行。
+ * .kb-grp/.kb-row 用 display:contents 展平进网格; 行分隔虚线与录制高亮落在单元格上,
+ * 列 gap 归 0、间距用单元格 padding 拉开 —— 保证虚线与高亮在列间不断缝。
+ * 容器=键位覆盖层内层的 .kb-table 包裹 div(说明/加载失败段留在网格外 —— 跨列项的 max-content
+ * 会摊进 auto/minmax 轨道把键帽列撑过底线; 包裹的行数代价由块内两处折行合并抵消, 分片仍 560 行)。 */
+.kb-table {
+  display: grid;
+  grid-template-columns: 420px minmax(220px, auto) auto;
+  width: max-content;
+  max-width: 100%;
+  margin-inline: auto;
+  overflow-x: auto;
+}
+.kb-row { display: contents; }
+.kb-row-label, .kb-row-keys, .kb-row-acts {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 5px 2px;
+  gap: 6px;
+  padding: 5px 12px 5px 0;
   border-bottom: 1px dashed var(--border);
-  flex-wrap: wrap;
+  min-height: 28px;
 }
-.kb-row.rec { background: var(--accent-soft); }
-.kb-row-label { flex: 1 1 200px; min-width: 160px; }
-.kb-danger { color: var(--warn); font-size: 12px; }
+.kb-row-label { padding-left: 2px; }
+.kb-row-keys { padding-right: 12px; }
+.kb-row-acts { padding-right: 2px; }
+.kb-row.rec .kb-row-label,
+.kb-row.rec .kb-row-keys,
+.kb-row.rec .kb-row-acts,
+.kb-row.rec .kb-rec-tip { background: var(--accent-soft); }
+.kb-danger { color: var(--warn); font-size: 12px; white-space: nowrap; }
 .kb-row-keys kbd, .kb-help-row kbd {
   font: 500 11px/1 var(--hb-font-mono);
   color: var(--fg);
@@ -97,9 +120,17 @@
   background: var(--surface-2);
 }
 .kb-none { color: var(--fg-muted); font-size: 12px; }
-.kb-row-acts { display: inline-flex; gap: 6px; }
-.kb-rec-tip { color: var(--accent-hi, var(--accent)); font-size: 12px; }
+.kb-rec-tip {
+  grid-column: 1 / -1;
+  padding: 4px 2px 6px;
+  border-bottom: 1px dashed var(--border);
+  color: var(--accent-hi, var(--accent));
+  font-size: 12px;
+}
 .kb-conflict {
+  grid-column: 1 / -1;
+  margin: 4px 0 6px;
+  justify-self: start;
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -408,6 +439,9 @@
  * (单按钮右推), 按钮组五个同吃会把自由空间均分成五段摊开 —— 包一层 span 收拢成一组整体右靠。 */
 .hr-full-modal-acts { margin-left: auto; display: inline-flex; gap: 8px; flex: none; }
 .hr-full-modal-acts .hb-btn { margin-left: 0; }
+/* kb 覆盖层限宽(2026-11-11 行布局重排): 骨架 .hr-full-modal 不动(站点状态覆盖层同吃),
+ * 只对 kb 实例收窄到 1120px 并居中(目标屏 1920×1080, 更小视口靠 .kb-table 横向滚动兜底)。 */
+.hr-full-modal.kb-full { max-width: 1120px; margin-inline: auto; }
 
 /* ---- E · 种子转移目标编辑器(.tr-tgt-*: 「WebUI」卡二级页, 计划 26-10-31-0306 W1/T5) ----
  * 三皮肤共用层(与 .ctx-custom-* 同层); 本段只摆列表/编辑器/映射表的版式,

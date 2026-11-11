@@ -628,7 +628,7 @@ def test_help_overlay_wiring() -> None:
 
 
 def test_settings_panel_section() -> None:
-    """W6 设置页「快捷键」: WebUI 卡内折叠块 + 全屏覆盖层(2026-11-03 改版) + CSS
+    """W6 设置页「快捷键」: WebUI 卡内折叠块 + 全屏覆盖层(2026-11-03 改版; 2026-11-11 行布局重排) + CSS
 
     独立「keys」分区/首页卡已删除, 面板并入「WebUI」卡: 折叠块(读数) ⇄ 全屏覆盖层
     (HR 站点状态同款骨架, 复用 .hr-full-mask/.hr-full-modal), 覆盖层盖住配置树 actbar
@@ -646,7 +646,8 @@ def test_settings_panel_section() -> None:
     # 覆盖层三件套 + 默认折叠(HR 覆盖层同款判据, test_frontend_hr_full_modal_wiring 同口径)
     for needle, what in (
         ('class="hr-full-mask"', "遮罩(点遮罩关闭路径)"),
-        ('class="hr-full-modal"', "全屏面板"),
+        ('class="hr-full-modal kb-full"', "全屏面板(kb-full: 限宽 1120 居中, 2026-11-11 行布局重排)"),
+        ('class="kb-table"', "三列网格容器(行布局重排, 全列表跨行对齐)"),
         ("kbFullClose()", "关闭动作(x 与遮罩两路复用)"),
         ('aria-label="关闭"', "x 关闭钮可访问名"),
         ('v-show="kbFullOpen"', "显隐挂 kbFullOpen(折叠 ⇄ 全屏覆盖层)"),
@@ -661,7 +662,9 @@ def test_settings_panel_section() -> None:
         assert needle in hub, f"config_hub 缺 webui 分区接线(旧 keys 存量值经 HUB_VIEW_ALIAS 映射): {needle}"
     assert 'key: "keys"' not in hub, "独立「快捷键」首页卡应已删除(读数并入 WebUI 卡)"
     css = read_shared("console_hub.css")
-    for cls in (".kb-row", ".kb-grp-t", ".kb-help", ".kb-conflict", ".kb-danger"):
+    for cls in (
+        ".kb-row", ".kb-grp-t", ".kb-help", ".kb-conflict", ".kb-danger", ".kb-table", ".hr-full-modal.kb-full"
+    ):
         assert cls in css, f"console_hub.css 缺 {cls}(挂件类名必须有对应规则)"
 
 
