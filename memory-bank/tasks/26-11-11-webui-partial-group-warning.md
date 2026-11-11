@@ -1,9 +1,9 @@
 # 26-11-11-webui-partial-group-warning — webui 部分组操作醒目预警: 立档+后端纵深入池(实施待开工)
 
-**Status:** In Progress
+**Status:** Done
 **Added:** 2026-11-11
-**Updated:** 2026-11-11
-**Summary:** webui 部分组操作醒目预警: 立档+后端纵深入池(实施待开工)
+**Updated:** 2026-11-12
+**Summary:** webui 部分组操作醒目预警: S1-S6 实施完成入库(谓词/聚合单点 + 三落点预警 + 守阵);后端纵深入池 issue 26-11-11-0823 保持 Open 待认领
 **Topics:** webui-partial-group-warning
 
 ## 本篇只回答
@@ -34,12 +34,12 @@
 | — | grilling 取证+拍板 D1-D6 | Done(2026-11-11) |
 | — | 计划 26-11-11-0820 立档 | Done(2026-11-11) |
 | — | 后端纵深入池 issue 26-11-11-0823(Open) | Done(2026-11-11) |
-| S1 | 谓词单点 `_partialGroupsOf` | Open |
-| S2 | 删除确认框部分组行 | Open |
-| S3 | 迁移关部分组确认框 | Open |
-| S4 | 迁移开部分组披露条 | Open |
-| S5 | 守阵+e2e+文案钉住 | Open |
-| S6 | 评审/收尾/回写 | Open |
+| S1 | 谓词单点 `_partialGroupsOf` | Done(2026-11-12) |
+| S2 | 删除确认框部分组行 | Done(2026-11-12) |
+| S3 | 迁移关部分组确认框 | Done(2026-11-12) |
+| S4 | 迁移开部分组披露条 | Done(2026-11-12) |
+| S5 | 守阵+e2e+文案钉住 | Done(2026-11-12) |
+| S6 | 评审/收尾/回写 | Done(2026-11-12) |
 
 ## 进度日志
 
@@ -52,3 +52,13 @@
 - 实施(S1-S6)待用户显式开工;提交待用户显式指令。
 
 - 2026-11-11 08:30 grilling Q1-Q6 拍板 D1-D6 全按推荐 + 计划 26-11-11-0820 立档(Open, S1-S6 待显式开工) + 后端纵深入池 issue 26-11-11-0823(Open) + 任务档案立档; 认领链双向闭环 kb.check 全绿; 零代码改动
+
+### R1 · 实施 (2026-11-12)
+
+- S1-S6 全部完成,分批入库(本地分支 `feat/webui-partial-group-warning`,各批提交): `6056894f` 计划+issue 入库 / `fdc5edc1` S1 谓词单点 `_partialGroupsOf` / `ecb71a63` S2 删除确认框部分组行 / `9cf46fb0` S3 迁移关提交前确认框 / `659a5e39` S4 迁移开披露条 / `038a1f64` S5 守阵五形态+三落点电池。
+- 评审: 每批经 review.pack/只读子代理评审,blocker 0;评审发现的 minor/major 若干均当场修复并增量复评,至零 actionable 出口。
+- 实测: `commands run test.full` 全量全绿, 数字单点见基线切片(`commands run kb.baseline`)。
+- 收尾待办: 接缝终审发现的对称单点锚修复在工作树(`tests/test_webui_static_r4_node_batteries.py` 未提交改动),随本专题收尾入库;计划/档案状态翻转与 `architecture/webui.md` 回写即本批。issue 26-11-11-0823 保持 Open 待认领。
+- 真机自检: 纯前端提交前预警面(判定/聚合/文案/接线均为 static/shared 层), 行为由 node 电池合并 mixin 真跑覆盖, 属桩可验——未跑真机轨。
+
+- 2026-11-12 02:56 S1-S6 实施完成: 谓词/聚合单点 + 三落点预警(删除行/迁移关闸/迁移开披露) + 守阵收口, 全量全绿, 收尾回写与基线切片随本批入库

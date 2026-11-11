@@ -6,7 +6,7 @@
 - test_r4_apply_col_order_boundaries: R5#53 —— applyColOrder 落点折算四类边界: 向后移 at=dropIdx-1 / 向前移原位插入 / 末尾边界兜底 push / 非法输入(隐藏列/越界)no-op; 全程隐藏列相对次序不动且尊重既有 colOrder 头部
 - test_r4_col_persist_intent_merge_and_gates: R5#52(major) + R5#37/R5#38 修复回归 —— 意图升格三层 merge: 拖拽/双击自适应后既有隐藏列 px 仍在、可见列被渲染快照冻结、被拖/适配列被终值覆盖; 纯点击零位移不升格意图不落盘不拦 click(R5#37); 拖拽尾 capture 拦截下一拍自清(R5#38); 微动未过阈值不把起始快照写进生效轨(issue 26-11-08-0229 #10)
 - test_r4_selection_state_machine: R5#51(major) —— AQB_SELECTION 真跑: _selSyncGroups 四态(补选/移出/未知 key 保留/种子页降级: 不补选但降级照做)、_selAnchor 兜底链四态(显式锚点/光标/展开组/首行)、selSizeSummaryOf occ_key 取 max 去重
-- test_r4_partial_groups_predicate_five_forms: 部分组判定单点守阵(计划 26-11-11-0820 S1, 拍板 D2) —— _partialGroupsOf(keys, hashes) -> [{key, name, sel, total}] 是删除确认框行(S2)/迁移关确认框(S3)/迁移开披露条(S4) 三落点共用的「部分组」唯一判定面; 判定 = 真实组(!virtual 且 total>1)有成员命中 hashes ∧ 组键不在 keys ∧ sel<total。静态锚: 判定只在 selection.js 定义形态(裸名+`(`, 接收者调用不计)恰一次(其它 shared 文件零重复定义实现)、方法体走 this.decoratedGroups 与 _findGroup 同源解析面且零 filteredGroups 独走、判据含 g.virtual 豁免。五形态 node 电池真跑: 组键整组入选不触发(含双向联动组键与成员 hash 同存面)/成员全选不触发(组键已晋升 + 种子页降级未晋升 sel===total 两面)/部分选中触发且 sel/total/name 逐字段正确/跨组混合(整组 A + 部分组 C 并存)只列部分组/单成员组与虚拟行均不触发(专设双成员虚拟行钉住 virtual 判据独立于 total<=1); 边界面: 空入参不抛/hash 不属任何组不触发/name 缺失兜组 key/decoratedGroups 缺失(R6 极端竞态)空返回不抛不误拦 —— 摘除判定或换解析面即红
+- test_r4_partial_groups_predicate_five_forms: 部分组判定单点守阵(计划 26-11-11-0820 S1, 拍板 D2) —— _partialGroupsOf(keys, hashes) -> [{key, name, sel, total}] 是删除确认框行(S2)/迁移关确认框(S3)/迁移开披露条(S4) 三落点共用的「部分组」唯一判定面; 判定 = 真实组(!virtual 且 total>1)有成员命中 hashes ∧ 组键不在 keys ∧ sel<total。静态锚: 判定单点 _partialGroupsOf 与聚合单点 _partialGroupsSummary 对称设锚, 各自在 selection.js 定义形态(裸名+(参数)+`{`, 接收者调用与注释散文不计)恰一次(其它 shared 文件零平行定义 —— 消费方内联判定或聚合任一即红)、方法体走 this.decoratedGroups 与 _findGroup 同源解析面且零 filteredGroups 独走、判据含 g.virtual 豁免。五形态 node 电池真跑: 组键整组入选不触发(含双向联动组键与成员 hash 同存面)/成员全选不触发(组键已晋升 + 种子页降级未晋升 sel===total 两面)/部分选中触发且 sel/total/name 逐字段正确/跨组混合(整组 A + 部分组 C 并存)只列部分组/单成员组与虚拟行均不触发(专设双成员虚拟行钉住 virtual 判据独立于 total<=1); 边界面: 空入参不抛/hash 不属任何组不触发/name 缺失兜组 key/decoratedGroups 缺失(R6 极端竞态)空返回不抛不误拦 —— 摘除判定或换解析面即红
 - test_r4_delete_details_partial_group_row: 删除链部分组行落点级真跑(计划 26-11-11-0820 S2, 拍板 D5) —— _deleteDetails(delete_flow.js)在删除目标含部分组时于既有行流末尾追加一行(tone error/wide/#i-warn, HR 风险行同款), 判定单点消费 selection.js::_partialGroupsOf(带接收者调用)。正例: 部分组目标恰一行且单组文案逐字段(组名/已选 M/N/钉住词「将缺文件」); 多组聚合一行(已选/总数与缺口用合计); 四组触发组名列前 3 +「等 K 个」(照 _hrRiskOf 模式); 跨组混合(整组 A 组键入选 + 部分组 C 散员, D2 触发面)行照出且只列 C。负例(D2 不触发面): 整组删除(组键入选)/成员全选未晋升/单成员组/虚拟行/hash 不属任何组均无该行。恒显面(D5): _deleteDetails 形参只有 keys/hashes(无 delete_files 勾选入参, 行与勾选状态无关恒显由结构保证)且行为行流末行(既有五行/六行结构零改动只追加)。电池合并 selection.js + delete_flow.js 两 mixin 方法(app.mixin 同实例注入等价), 无 node 静默跳过
 - test_r4_move_dialog_partial_group_gate: 迁移关部分组确认框落点级真跑(计划 26-11-11-0820 S3, 拍板 D3) —— submitMoveDialog(drawer.js)在目标含部分组且 flags.relocate_enabled===false 时首次 post(false) 前弹确认框(tone error/danger/wide), 确认才发, 取消留在设定位置框; 判定单点消费 selection.js::_partialGroupsOf、聚合单点消费 _partialGroupsSummary(与删除链 S2 行共用)。正例: 部分组+迁移关恰弹一次且弹层顺序先收 moveOpen 再开确认框(R3 防双遮罩互盖, 照 confirm 回路先例), 文案钉住词「将缺文件」+「整组迁移」逐字段, 确认后首发无 confirm 键, 成功后框收; 取消零投递带原路径重开; 确认后投递失败带原路径重开(框已被闸先收, 照 confirm 回路失败分支, 手输路径不丢), 非闸直发失败维持现状无重开; 四组聚合前 3 +「等 K 个」合计口径; 跨组混合(整组 A 组键入选+部分组 C 散员, D2 触发面)闸照触发且文案只列 C。负例(D3): 整组入选/成员全选未晋升/单成员组/虚拟行/hash 不属任何组直发零新增弹层。旗标两态: 迁移开直发零弹层(S4 披露条的面); flags/relocate_enabled 解析不出(R6)静默直发不误拦; decoratedGroups 缺失不抛不误拦。电池合并 selection.js + drawer.js 两 mixin 方法, 无 node 静默跳过
 - test_r4_move_dialog_partial_disclosure_bar: 迁移开部分组披露条落点级真跑(计划 26-11-11-0820 S4, 拍板 D4) —— openMoveDialog(drawer.js)在 flags.relocate_enabled===true 时开框瞬间算一次部分组聚合(_partialGroupsOf+_partialGroupsSummary 带接收者, 判定/聚合单点只在 JS 侧)存非下划线状态 movePartialDisclosure 供 move-dialog.html 披露条消费(R2: Vue 模板编译器不解析 _ 前缀标识符, 模板只读本字段)。正例: 部分组+迁移开披露非 null 且单组 names/sel/total/gap 逐字段; 四组聚合前 3 +「等 K 个」合计口径; 跨组混合(整组 A 组键入选+部分组 C 散员, D2 触发面)披露只列 C; 非部分组负例(整组入选/成员全选未晋升/单成员组/虚拟行/hash 不属任何组)无条。降级面(R6/D4): 迁移关(relocate_enabled===false, S3 确认框的面, 含 S3 取消重开路径)无条; flags/relocate_enabled 解析不出无条不抛; decoratedGroups 缺失无条不抛。接线面: 开框既有状态机零破坏(moveOpen/moveCount/movePathInput 照常)。静态守阵(照 delete_flow.js WARN 原注/_scan_mixin_wiring 范式): move-dialog.html 剥注释后零 _ 前缀标识符; 文案钉住「整组迁移」+「将按整组迁移扩展至全组」+「个成员」; drawer.js 接线形态(先复位 null + relocate_enabled===true 门 + 带接收者单点调用); state.js 显式建字段; 四皮肤 dialogs.css 各有 .move-note.move-note-warn warn 档。电池合并 selection.js + drawer.js 两 mixin 方法, 无 node 静默跳过
@@ -1250,9 +1250,18 @@ def test_r4_selection_state_machine():
     _assert_battery(report, "选择联动状态机电池")
 
 
-# 定义形态锚: mixin 方法定义位是裸名后跟 `(`, 调用恒带接收者前缀(this. / .)不计 ——
-# 后续消费方接线写 this._partialGroupsOf(...) 时守阵不误红(评审 major 修法)
-_PARTIAL_GROUPS_DEF_RE = re.compile(r"(?<![.\w$])_partialGroupsOf\s*\(")
+# 定义形态锚(判定/聚合双单点对称, 接缝终审修法): mixin 方法定义位是「裸名 + (参数) + {」,
+# 调用恒带接收者前缀(this. / .)不计; 注释散文里的 name(... 形态因要求收尾 `) {` 不计 ——
+# 后续消费方接线写 this._partialGroupsOf(...) / this._partialGroupsSummary(...) 时守阵不误红。
+# 聚合单点 _partialGroupsSummary 与判定单点 _partialGroupsOf 同族设锚: 消费方将来内联一份聚合时守阵同红。
+_PARTIAL_GROUP_ANCHORS = {
+    "_partialGroupsOf": "判定",
+    "_partialGroupsSummary": "聚合",
+}
+
+
+def _partial_group_def_re(symbol):
+    return re.compile(r"(?<![.\w$])" + symbol + r"\s*\([^)]*\)\s*\{")
 
 
 def test_r4_partial_groups_predicate_five_forms():
@@ -1262,9 +1271,11 @@ def test_r4_partial_groups_predicate_five_forms():
     迁移关确认框(S3)/迁移开披露条(S4) 三落点共用的「部分组」唯一判定面。判定(D2 拍板口径):
     真实组(!virtual 且 total>1)有成员命中 hashes 且组键不在 keys 且 sel<total。
 
-    静态锚(解析面单点; 锚「定义形态」= 裸名后跟 `(`, 调用恒带接收者前缀 this./. 不计,
-    后续消费方接线写 this._partialGroupsOf(...) 不误红):
-      1. 判定只在 selection.js 定义形态恰一次(其它 shared 文件零重复定义实现, 三落点不得各写判定);
+    静态锚(解析面单点; 锚「定义形态」= 裸名 + (参数) + `{`, 调用恒带接收者前缀 this./. 不计,
+    注释散文里的 name(... 形态因要求收尾 `) {` 不计, 后续消费方接线写 this._partialGroupsOf(...) /
+    this._partialGroupsSummary(...) 不误红):
+      1. 判定单点 _partialGroupsOf 与聚合单点 _partialGroupsSummary 对称设锚: 各自在 selection.js
+         定义形态恰一次(其它 shared 文件零平行定义 —— 三落点不得各写判定, 也不得各写聚合);
       2. hash->组反向查走 this.decoratedGroups(与 _findGroup 同源解析面), 方法体内零
          filteredGroups —— 筛选面独走会漏被筛掉的组且混入虚拟行;
       3. 判据含 g.virtual 豁免(虚拟行不是真实组)。
@@ -1280,15 +1291,20 @@ def test_r4_partial_groups_predicate_five_forms():
     """
     sel_path = os.path.join(STATIC_ROOT, "shared", "selection.js")
     sel_src = open(sel_path, encoding="utf-8").read()
-    # 1. 判定单点: 定义形态(裸名+`(`, 接收者调用不计)恰一次, 且不在任何其它 shared 文件里重复实现
-    assert len(_PARTIAL_GROUPS_DEF_RE.findall(sel_src)) == 1, \
-        "selection.js 里 _partialGroupsOf 定义形态不恰一次(单点被复制或改名)"
-    for name in os.listdir(os.path.join(STATIC_ROOT, "shared")):
-        if name == "selection.js" or not name.endswith(".js") or name.startswith("vendor"):
-            continue
-        other = open(os.path.join(STATIC_ROOT, "shared", name), encoding="utf-8").read()
-        assert not _PARTIAL_GROUPS_DEF_RE.search(other), \
-            f"{name} 出现 _partialGroupsOf 定义形态(平行判定) —— 消费方只许带接收者调用, 判定不许另写"
+    # 1. 判定/聚合双单点: 各自定义形态(裸名+(参数)+{, 接收者调用与注释散文不计)恰一次,
+    #    且不在任何其它 shared 文件里重复实现
+    other_srcs = {
+        name: open(os.path.join(STATIC_ROOT, "shared", name), encoding="utf-8").read()
+        for name in os.listdir(os.path.join(STATIC_ROOT, "shared"))
+        if name != "selection.js" and name.endswith(".js") and not name.startswith("vendor")
+    }
+    for symbol, role in _PARTIAL_GROUP_ANCHORS.items():
+        def_re = _partial_group_def_re(symbol)
+        assert len(def_re.findall(sel_src)) == 1, \
+            f"selection.js 里 {symbol} 定义形态不恰一次(单点被复制或改名)"
+        for name, other in other_srcs.items():
+            assert not def_re.search(other), \
+                f"{name} 出现 {symbol} 定义形态(平行{role}) —— 消费方只许带接收者调用, {role}不许另写"
     # 2. 解析面: 方法体走 decoratedGroups, 零 filteredGroups(与 _findGroup 同源, 不得筛选面独走)
     body = sel_src[sel_src.index("_partialGroupsOf(keys, hashes)"):sel_src.index("computed:")]
     assert "this.decoratedGroups" in body, \

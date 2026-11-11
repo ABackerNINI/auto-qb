@@ -7,9 +7,9 @@
 <title>webui 部分组操作醒目预警: 带文件删除/设定位置(迁移两态)</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="webui-partial-group-warning">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-11-11-0820">
-<meta name="doc-updated" content="26-11-11-0820">
+<meta name="doc-updated" content="26-11-12-0249">
 <meta name="doc-refs" content="memory-bank/issues/26-11-11-0823-feat-webui-partial-group-backend-gate.html">
 <style>
   :root {
@@ -75,7 +75,7 @@
 <h1>webui 部分组操作醒目预警: 带文件删除/设定位置(迁移两态)</h1>
 <p class="lede">本篇只回答: webui 在对辅种组做<strong>部分选中</strong>的「带文件删除」与「设定位置」时,如何在前端确认/提交链路给出醒目预警 —— 迁移关=伤害警示+确认框,迁移开=整组扩张披露条;谓词单点、三落点共用。后端 API 纵深另案(issue 26-11-11-0823,见 §07 R5)。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-11-0820 · <b>doc-updated</b> 26-11-11-0820 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-11-11-0820 · <b>doc-updated</b> 26-11-12-0249 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 会话 grilling(2026-11-11): 用户原话点名移动/带文件删除+跨组+整组移动两态+枚举其它情况 → 现状取证 + ❓Q1-Q6 一轮拍板 + 收尾授权,用户两轮「按推荐」全按推荐采纳;S1 起实施等用户显式开工
 </div>
 
@@ -153,6 +153,7 @@
 
 <h2><span class="no">§05</span>待拍板清单</h2>
 <p>无 —— 立档前已全部拍板(D1-D6 见 §06,2026-11-11 会话内完成);实施开工(S1)等用户显式指令。</p>
+<p class="aside">实施事实(2026-11-12): S1-S6 已全部完成并分批入库(各批提交见任务档案 R1,变更记录见 §10 R1);本清单无需再拍板,issue 26-11-11-0823(后端纵深)保持 Open 待认领。</p>
 
 <h2><span class="no">§06</span>拍板记录</h2>
 <table>
@@ -179,6 +180,7 @@
 <h2><span class="no">§10</span>变更记录</h2>
 <ul>
   <li><span class="tag">R0 · 26-11-11-0820</span> 初版。来源=会话 grilling(Q1-Q6 一轮+收尾授权,用户两轮「按推荐」);要点=谓词单点 <code>_partialGroupsOf</code> + 三落点前端预警(删除确认行/迁移关确认框/迁移开披露条),排除面十项逐一判定,后端纵深入池 issue 26-11-11-0823;S1-S6 待显式开工。</li>
+  <li><span class="tag">R1 · 26-11-12-0249</span> S1-S6 实施完成入库(本地分支 feat/webui-partial-group-warning):谓词/聚合单点 selection.js、三落点预警(删除确认行/迁移关确认框/迁移开披露条)、守阵五形态+三落点电池+对称单点锚;test.full 全量全绿, 覆盖率见基线切片(数字单点在 `testing/baselines/`);issue 26-11-11-0823 保持 Open 待认领。</li>
 </ul>
 
 </div>

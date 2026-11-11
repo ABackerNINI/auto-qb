@@ -1,7 +1,7 @@
 # WEB UI 运行时
 
-> 摘要: FastAPI 装配单点与启动 fail-fast、皮肤目录即 URL 与静态契约、线程边界(读快照 + 投命令)、视图发布与版本门控、truth 通道、响应性设计要点、表格几何单点(dt_table)、图形化配置编辑器骨架。
-> 触发: WEB UI, webui, FastAPI, create_app, 路由, 皮肤, 静态, 线程边界, 视图发布, group_view_ver, truth, 回执, 乐观 UI, 响应性, 窗口化, 表格几何, dt_table, DT_TABLE, columns_grid, gridTemplate, 配置编辑器, schema, writer
+> 摘要: FastAPI 装配单点与启动 fail-fast、皮肤目录即 URL 与静态契约、线程边界(读快照 + 投命令)、视图发布与版本门控、truth 通道、响应性设计要点、表格几何单点(dt_table)、部分组操作预警、图形化配置编辑器骨架。
+> 触发: WEB UI, webui, FastAPI, create_app, 路由, 皮肤, 静态, 线程边界, 视图发布, group_view_ver, truth, 回执, 乐观 UI, 响应性, 窗口化, 表格几何, dt_table, DT_TABLE, columns_grid, gridTemplate, 部分组, 部分组预警, partialGroups, 将缺文件, 整组迁移, 配置编辑器, schema, writer
 
 ## 装配单点与启动 (webui/server/factory.py, webui/module.py)
 
@@ -39,6 +39,13 @@
 - **`assertLayout()` 常驻生产渲染自查**(拍板 D3): 三处 O(1) 计数(grid 轨道数 / 列头格数 / 首行子格数), 不一致 `console.error`(含 tableId 与三方计数)**不打断渲染**(保守默认); 未挂载豁免。
 - **D4 例外清单(明文化)**: HR 三表(hrDetail / hrWave / hrKv, 无 tpl/align 字段)+ 04 卡片形态面不接几何单点; 守阵钉「清单之外零旁路」。HR 三表统一交互(拖宽/拖序/右键隐藏/持久化)为第二轮立项(拍板 D7, 方向迁 aq-table grid 链路), 届时补 tpl/align 字段后纳入同一单点。
 - 守阵: node 电池等价性探针(`tests/test_webui_static_r4_node_batteries.py::test_r4_dt_table_layout_geometry_equivalence`, 13 表 136 列 + colWidths 五类场景, 断言现役拼轨 ≡ DT_TABLE.layout 输出) + e2e `dt-table-layout-parity.spec.mjs`(语义 = **钉住单点输出不变**)与 `dt-table-face-bg.spec.mjs`。
+
+## 部分组操作预警 (webui/static/shared/selection.js + delete_flow.js + drawer.js)
+
+- **判定/聚合双单点**(计划 plans/26-11-11-0820-plan-webui-partial-group-warning.html, 拍板 D2): 「辅种组只被选中一部分」的唯一判定点 `selection.js::_partialGroupsOf(keys, hashes)` → `[{key, name, sel, total}]`(真实组 `!virtual` 且 `total>1`: 有成员命中 ∧ 组键不在 groupKeys ∧ 未全选; hash→组反查走 decoratedGroups, 与 `_findGroup` 同源, 不得 filteredGroups 独走) + 展示聚合单点 `_partialGroupsSummary(partials)` → `{names, sel, total, gap}`(组名上限 3 个 +「等 K 个」)。消费方不得另写判定/聚合。
+- **三落点**(删除链/移动链共用上述单点): ① 删除确认框 `_deleteDetails` 末尾恒显行(tone error, D5 —— 与「同时删除磁盘文件」勾选无关恒显, 文案钉住词「将缺文件」); ② 设定位置迁移关提交前确认框(`drawer.js::_partialMoveConfirmGate`, error + danger 钮, 确认才发, 拍板 D3); ③ 迁移开披露条(`move-dialog.html` 内嵌, tone warn, 开框即见不加分步, 拍板 D4 —— 选 1 搬 N 由后端 `_buckets` 级联全组, 行为安全, 提交前醒目披露)。
+- **R6 降级口径(解析不出不误拦)**: 谓词对缺失组数据空返回; 迁移关闸门 `flags.relocate_enabled === false` 严判、迁移开披露条 `=== true` 严判(旗标取不到一律降级为无提示/直发) —— 绝不因开框到提交之间的快照竞态阻断正常操作。
+- **守阵**: `tests/test_webui_static_r4_node_batteries.py`(谓词五形态 + 三落点电池 + 对称单点锚); 文案钉住词「将缺文件」「整组迁移」双向钉住(reannounce-inactive-gate 同款纪律)。
 
 ## 图形化配置编辑器 (webui/static/shared/ + config/writer.py)
 
