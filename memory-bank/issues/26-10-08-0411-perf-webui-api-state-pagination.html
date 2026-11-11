@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="webui-polling">
 <meta name="doc-refs" content="memory-bank/tasks/26-10-08-webui-perf-issues-closing.md, memory-bank/issues/26-10-01-2218-perf-webui-api-state-full-scan.html, memory-bank/plans/26-11-11-0630-plan-webui-group-hash-ref.html, memory-bank/tasks/26-11-11-webui-group-hash-ref.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="In Progress">
 <meta name="issue-title" content="/api/state 分页/按需字段未做: 冷启动与降级轮仍回整表全量(5000 种子首屏峰值残留)">
 <meta name="issue-summary" content="增量 delta 已覆盖稳态, 但全量轮(首屏/多标签冷启动/时间线窗外/防御降级)仍回整表: 3000 种子回包 6.3 MiB 量级; 原 issue 方向③未实施">
 <title>/api/state 分页/按需字段未做: 冷启动与降级轮仍回整表全量(5000 种子首屏峰值残留) · perf · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-08-0411-perf-webui-api-state-pagination</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-08 04:11</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">perf</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">In Progress</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -182,7 +182,8 @@
     <ul>
       <li>2026-10-08 04:11 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
       <li>2026-11-11 — 联合复验（与 26-10-07-1420），<strong>仍复现</strong>；§04 重锚 + §07 复验行，状态保持 Open；联合计划已入库（见 doc-refs），主线定为 §06 选项 C 先行 + S0 拆分前置，B/A 转条件裁决</li>
-    </ul>
+      <li>2026-11-11 — 状态 Open → In Progress（kb.status）</li>
+</ul>
     <h3>复验</h3>
     <p>复验: 2026-11-11 <strong>仍复现</strong>(联合复验, 与 <a href="26-10-07-1420-perf-webui-group-row-hash-ref.html">26-10-07-1420</a> 一起; HEAD 90764579)。全量分支原样(<code>runtime_views.py:649-660</code>), 方向③未实施, 成本构成拆分未做; 重锚见 §04 复验重锚块。已出联合计划(见 doc-refs): 主线选 §06 选项 C(hash 引用式 = 26-10-07-1420 本体)先行, S0 成本拆分置计划首步, B/A 转条件裁决点; 状态保持 Open 等开工认领。</p>
     <h3>修复后补充</h3>

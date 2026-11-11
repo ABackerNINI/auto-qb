@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="webui-delta-sync">
 <meta name="doc-refs" content="memory-bank/plans/26-10-07-0414-plan-webui-delta-sync.html, memory-bank/plans/26-11-11-0630-plan-webui-group-hash-ref.html, memory-bank/tasks/26-11-11-webui-group-hash-ref.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="In Progress">
 <meta name="issue-title" content="组行 hash 引用式响应体二次演进: 组视图增量粒度从「组行」降到「成员」级">
 <meta name="issue-summary" content="组行内嵌完整 members 数组(3000 种子全量回包 6.3 MiB 主体), 任意成员速度抖动脏整条组行; hash 引用式可把组行增量粒度降到成员级, 但波及前端筛选器计数与列模型数据源, 独立立项级改动(计划 P-02 选项 B)">
 <title>组行 hash 引用式响应体二次演进: 组视图增量粒度从「组行」降到「成员」级 · perf · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-07-1420-perf-webui-group-row-hash-ref</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-07 14:20</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">perf</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">In Progress</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -173,7 +173,8 @@
     <ul>
       <li>2026-10-07 14:20 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
       <li>2026-11-11 — 联合复验（与 26-10-08-0411），<strong>仍复现</strong>；§04 重锚 + §07 复验行，状态保持 Open；联合计划已入库（见 doc-refs）</li>
-    </ul>
+      <li>2026-11-11 — 状态 Open → In Progress（kb.status）</li>
+</ul>
     <h3>复验</h3>
     <p>复验: 2026-11-11 <strong>仍复现</strong>(联合复验, 与 <a href="26-10-08-0411-perf-webui-api-state-pagination.html">26-10-08-0411</a> 一起; HEAD 90764579)。组行仍内嵌完整 members 明细(<code>views_group.py:116-117</code>), P-02 一期口径注释与 delta_merge 守阵原样; 前端消费面经全树 grep 盘点 60 处 / 17 文件(入池锚点仅记 decorate.js 两段)。重锚与协议耦合细节见 §04 复验重锚块。已出联合计划(见 doc-refs), 状态保持 Open 等开工认领。</p>
     <h3>修复后补充</h3>
