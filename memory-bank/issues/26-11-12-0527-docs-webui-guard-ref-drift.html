@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>过期守阵指称族: 16 处注释仍以现在时指称已退役的 test_webui_static_skins.py · docs · 计划外问题（便签）</title>
+<meta name="issue-slug" content="webui-guard-ref-drift">
+<meta name="issue-stamp" content="26-11-12-0527">
+<meta name="issue-type" content="docs">
+<meta name="doc-topic" content="webui-guard-ref-drift">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-12-webui-kbd-hints.md">
+<meta name="issue-tier" content="light">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="过期守阵指称族: 16 处注释仍以现在时指称已退役的 test_webui_static_skins.py">
+<meta name="issue-summary" content="test_webui_static_skins.py 已拆分为 _skin/_table/_widget 三件, 但 16 处源码/脚本/测试注释仍指旧文件名, 排障与守阵定位被误导; 同族 4 处已在 0d420c9d 修复(_scan_keys_serial_re 指称 3 处 + ctx_menu.js:93 计数)">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --mark: #161e26;     /* issue 特有: callout 底色 (plan.html 不用) */
+    --warn-bg: #2a2119;  /* issue 特有: 状态徽标底色 */
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 单栏流式版面: 与 plan.html 同一套 .sheet (封顶 1280px, 侧距 clamp(18~44px)); 旧双栏+粘性目录已删 */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+
+  /* 封面 meta 行: issue 特有, DOM 形态别改 —— 状态徽标 <span class="badge"> 被
+     flip_status (W4) 与 check_status_drift 的 BADGE_RE 机读 (k/v div 结构在判据里) */
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px 28px; font-family: var(--mono); font-size: 11.5px; color: var(--faint); border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta-row .item .k { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .meta-row .item .v { font-size: 13.5px; color: var(--dim); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin: 14px 0; font-size: 14px; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-family: var(--mono); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">计划外问题（便签）· docs</div>
+<h1>过期守阵指称族: 16 处注释仍以现在时指称已退役的 test_webui_static_skins.py</h1>
+<p class="lede">test_webui_static_skins.py 已拆分为 _skin/_table/_widget 三件, 但 16 处源码/脚本/测试注释仍指旧文件名, 排障与守阵定位被误导; 同族 4 处已在 0d420c9d 修复(_scan_keys_serial_re 指称 3 处 + ctx_menu.js:93 计数)</p>
+<div class="meta-row">
+  <div class="item"><div class="k">编号</div><div class="v">26-11-12-0527-docs-webui-guard-ref-drift</div></div>
+  <div class="item"><div class="k">报告时间</div><div class="v">2026-11-12 05:27</div></div>
+  <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">docs</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+</div>
+
+<section id="s1">
+  <h2><span class="no">§01</span>现象</h2>
+  <p><code>tests/test_webui_static_skins.py</code> 已拆分为 <code>_skin/_table/_widget</code> 三件(旧文件名不存在), 但 16 处源码/脚本/测试注释仍以<strong>现在时</strong>指称旧文件名与其中符号 —— 排障者按注释找守阵会扑空; 同族 4 处(_scan_keys_serial_re 指称 3 处 + ctx_menu.js:93 计数)已在 <code>0d420c9d</code> 修复, 本条是剩余面。</p>
+</section>
+
+<section id="s2">
+  <h2><span class="no">§02</span>位置</h2>
+  <p class="hint">grep 关键词: <code>grep -rn "test_webui_static_skins" src/ tests/ scripts/ --include="*.py" --include="*.js"</code>(排除 webui_static_scan_* 三件); 行号均为取证 2026-11-12 05:27 的当时值(同日 05:35 复扫扩 scripts/ 面补第 16 处, 计数由 15 修至 16), 漂移后靠符号与 grep 重定位。命中账目: 全库 22 行 = 16 漂移 + 3 scan 豁免 + 3 拆分件自名标题行(<code>test_webui_static_skins_{skin,table,widget}.py:1</code> 是新文件自名, 非漂移)。</p>
+  <table>
+    <tr><th>文件</th><th>当时行号</th><th>所指符号</th></tr>
+    <tr><td><code>src/auto_qb/webui/views_common.py</code></td><td>99 / 105 / 138</td><td>STATE_RANK 静态守阵 / _scan_eta_sentinel</td></tr>
+    <tr><td><code>src/auto_qb/webui/static/shared/app.js</code></td><td>351 / 879</td><td>列隐藏守阵(泛称) / _scan_state_rank</td></tr>
+    <tr><td><code>src/auto_qb/webui/static/shared/polling.js</code></td><td>355</td><td>_scan_pending_settle</td></tr>
+    <tr><td><code>src/auto_qb/webui/static/shared/shortcuts.js</code></td><td>20</td><td>_scan_mixin_wiring</td></tr>
+    <tr><td><code>src/auto_qb/webui/static/shared/traffic_card.js</code></td><td>6</td><td>_scan_mixin_wiring</td></tr>
+    <tr><td><code>scripts/ui_harness.py</code></td><td>12</td><td>test_frontend_static_bundle_health 守阵思路(泛称, 符号现居 skins_skin.py:93)</td></tr>
+    <tr><td><code>tests/test_web_traffic_limit_card.py</code></td><td>90</td><td>三皮肤清单守阵(泛称)</td></tr>
+    <tr><td><code>tests/test_web_shortcuts_registry.py</code></td><td>5</td><td>挂载成对守阵(泛称, 次行 _scan_mixin_wiring)</td></tr>
+    <tr><td><code>tests/test_web_shortcuts_registry.py</code></td><td>56 / 73</td><td>_section_members 同口径</td></tr>
+    <tr><td><code>tests/test_web_shortcuts_{cursor,drawer,engine}.py</code></td><td>各 :5</td><td>挂载成对守阵(泛称)</td></tr>
+  </table>
+  <p class="hint">豁免(不算漂移, 不改): <code>tests/webui_static_scan_{common,js,css}.py:1</code> 的「从 test_webui_static_skins.py 拆出」是 move-only 出处史陈述, 仍为真。</p>
+</section>
+
+<section id="s3">
+  <h2><span class="no">§03</span>建议<span class="opt">（可选）</span></h2>
+  <p>逐符号 grep 现行定义点后改指(符号现分居 <code>tests/webui_static_scan_{common,js,css}.py</code> 与拆分后三件 skins 测试内); 修法范式照 <code>0d420c9d</code> 的同族修复(指定义点, 保持互为对照面的两侧注释对称)。</p>
+</section>
+
+<section id="s4">
+  <h2><span class="no">§04</span>状态变更日志</h2>
+  <ul>
+    <li>2026-11-12 05:27 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+  </ul>
+</section>
+
+<footer>
+  26-11-12-0527-docs-webui-guard-ref-drift.html · 便签档（light）· 由 create-issue skill 入池；入池不等于已修，改动状态在上面的「状态变更日志」里留痕
+</footer>
+
+</div>
+</body>
+</html>
