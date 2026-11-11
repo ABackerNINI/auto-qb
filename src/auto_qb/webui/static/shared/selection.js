@@ -553,6 +553,33 @@ window.AQB_SELECTION = {
       // 等派生字段 —— 曾致删除确认框的保存路径恒为"—"(R03)。filteredGroups 兼容虚拟行(u-<hash>)
       return this.decoratedGroups.find((g) => g.key === key) || this.filteredGroups.find((g) => g.key === key) || null;
     },
+    /* ---------------- 部分组判定单点(计划 26-11-11-0820 S1, 拍板 D2) ----------------
+     * 「这批目标里哪些辅种组只被选中了一部分」的唯一产出点: 删除确认框行(S2)/设定位置
+     * 迁移关确认框(S3)/迁移开披露条(S4) 三个落点共用, 消费方不得各自再写判定。
+     * 判定(D2 拍板口径): 真实组(!virtual 且 total>1)同时满足
+     *   1. 有成员命中 hashes  2. 组键不在 keys  3. sel < total
+     * 即列进返回 [{key, name, sel, total}]。推论: 组键整组入选不触发(组键级联全成员);
+     * 成员全选不触发(选择袋自动晋升组键, 晋升面之外 sel===total 同样判非部分); 单种入口
+     * 落在多成员组 = 1/N 照触发; 跨组混合只列被部分选中的组。
+     * !hash->组反向查走 decoratedGroups —— 与 _findGroup(上方)同一解析面(前端派生超集),
+     *   **不得用 filteredGroups 独走**(筛选面漏被筛掉的组, 且虚拟行混在里面)。
+     * !不误拦(R6 竞态哲学): 组数据缺失/成员解析为空一律静默跳过 —— 判定降级为无提示,
+     *   绝不因开框到提交之间的快照变化阻断正常操作。 */
+    _partialGroupsOf(keys, hashes) {
+      const keySet = new Set(keys || []);
+      const hashSet = new Set(hashes || []);
+      const out = [];
+      for (const g of this.decoratedGroups || []) {
+        if (g.virtual) continue;  // 虚拟行(未归组命中种子)不是真实组, 无"部分"可言
+        const all = this.memberHashesOf(g.members || []);
+        const total = all.length;
+        if (total <= 1 || keySet.has(g.key)) continue;  // 单成员组无部分面; 组键入选 = 整组
+        let sel = 0;
+        for (const h of all) if (hashSet.has(h)) sel += 1;
+        if (sel > 0 && sel < total) out.push({ key: g.key, name: g.name || g.key, sel, total });
+      }
+      return out;
+    },
   },
   computed: {
     /* 多选总数(去重后的种子数): 供右键菜单升级为批量菜单(menu.multi)与快捷键目标解析。

@@ -6,6 +6,7 @@
 - test_r4_apply_col_order_boundaries: R5#53 —— applyColOrder 落点折算四类边界: 向后移 at=dropIdx-1 / 向前移原位插入 / 末尾边界兜底 push / 非法输入(隐藏列/越界)no-op; 全程隐藏列相对次序不动且尊重既有 colOrder 头部
 - test_r4_col_persist_intent_merge_and_gates: R5#52(major) + R5#37/R5#38 修复回归 —— 意图升格三层 merge: 拖拽/双击自适应后既有隐藏列 px 仍在、可见列被渲染快照冻结、被拖/适配列被终值覆盖; 纯点击零位移不升格意图不落盘不拦 click(R5#37); 拖拽尾 capture 拦截下一拍自清(R5#38); 微动未过阈值不把起始快照写进生效轨(issue 26-11-08-0229 #10)
 - test_r4_selection_state_machine: R5#51(major) —— AQB_SELECTION 真跑: _selSyncGroups 四态(补选/移出/未知 key 保留/种子页降级: 不补选但降级照做)、_selAnchor 兜底链四态(显式锚点/光标/展开组/首行)、selSizeSummaryOf occ_key 取 max 去重
+- test_r4_partial_groups_predicate_five_forms: 部分组判定单点守阵(计划 26-11-11-0820 S1, 拍板 D2) —— _partialGroupsOf(keys, hashes) -> [{key, name, sel, total}] 是删除确认框行(S2)/迁移关确认框(S3)/迁移开披露条(S4) 三落点共用的「部分组」唯一判定面; 判定 = 真实组(!virtual 且 total>1)有成员命中 hashes ∧ 组键不在 keys ∧ sel<total。静态锚: 判定只在 selection.js 定义形态(裸名+`(`, 接收者调用不计)恰一次(其它 shared 文件零重复定义实现)、方法体走 this.decoratedGroups 与 _findGroup 同源解析面且零 filteredGroups 独走、判据含 g.virtual 豁免。五形态 node 电池真跑: 组键整组入选不触发(含双向联动组键与成员 hash 同存面)/成员全选不触发(组键已晋升 + 种子页降级未晋升 sel===total 两面)/部分选中触发且 sel/total/name 逐字段正确/跨组混合(整组 A + 部分组 C 并存)只列部分组/单成员组与虚拟行均不触发(专设双成员虚拟行钉住 virtual 判据独立于 total<=1); 边界面: 空入参不抛/hash 不属任何组不触发/name 缺失兜组 key/decoratedGroups 缺失(R6 极端竞态)空返回不抛不误拦 —— 摘除判定或换解析面即红
 - test_r4_load_col_state_seeding: R5#18 —— loadColState 默认隐藏播种三态: 空存储播种 / 仅空 hidden 不播(「刻意全开」合法偏好) / 有任一偏好键不播; 附坏 JSON 走完整流程、locked 列忽略、w 白名单洗净(洗净后三键全缺照播)
 - test_r4_sort_domain: R5#54 —— AQB_SORT 真跑: setSort 三态循环(经典 gk/gd 与 dyn dtSortState 两形态) + _dtStrCompare(IPv4 逐段数值序/端口数值/等值/非 IP localeCompare 回落) + sortedDrawer 空值两方向恒末位与 IPv4 数值序
 - test_r4_format_ladder_family: R5#55 —— format 函数族档位边界: _fmtLadder 梯顶回落(top 命中/缺省/档名写错回落整梯)与字节/速度两族、fmtEta 8640000 哨兵与非正值、fmtDuration 三段进位边界、fmtPeersQb 缺省只显已连接
@@ -63,6 +64,7 @@
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -490,6 +492,69 @@ console.log(JSON.stringify({
 }));
 """
 
+# 部分组判定单点(计划 26-11-11-0820 S1, 拍板 D2): 五形态真跑 ------------------------
+_NODE_PARTIAL_GROUPS_PROBE = r"""
+const fs = require("fs");
+global.window = {};
+const src = fs.readFileSync(process.argv[1], "utf8");
+eval(src + "\n;globalThis.__W2__ = window.AQB_SELECTION;");
+const M = globalThis.__W2__.methods;
+
+const memberHashesOf = (list) => (list || []).map((m) => (typeof m === "string" ? m : (m && m.hash) || "")).filter(Boolean);
+// 真实组 A(两成员) / C(三成员) / B(单成员) + 虚拟行 u-h9(单成员) + 双成员虚拟行 u-v2
+// (u-v2 专钉 virtual 判据: 若判定只看 total<=1, 双成员虚拟行会被误触发)
+const GROUPS = [
+  { key: "A", name: "组A", members: [{ hash: "h1" }, { hash: "h2" }] },
+  { key: "C", name: "组C", members: [{ hash: "h4" }, { hash: "h5" }, { hash: "h6" }] },
+  { key: "B", name: "组B", members: [{ hash: "h3" }] },
+  { key: "u-h9", virtual: true, members: [{ hash: "h9" }] },
+  { key: "u-v2", virtual: true, members: [{ hash: "v1" }, { hash: "v2" }] },
+];
+const mkCtx = (over) => Object.assign({}, M, {
+  memberHashesOf,
+  decoratedGroups: GROUPS,
+  filteredGroups: GROUPS,
+}, over);
+const P = (keys, hashes, over) => M._partialGroupsOf.call(mkCtx(over || {}), keys, hashes);
+const checks = [];
+const ok = (name, cond) => checks.push([name, !!cond]);
+
+// --- 形态1: 组键整组入选 -> 不触发(返回不含该组) ---
+ok("形态1: 组键整组入选 -> 不触发", P(["A"], []).length === 0);
+ok("形态1: 组键入选且成员 hash 也在袋里(双向联动同存) -> 仍不触发", P(["A"], ["h1", "h2"]).length === 0);
+// --- 形态2: 成员全选(自动晋升组键) -> 不触发 ---
+ok("形态2: 成员全选+组键已晋升 -> 不触发", P(["A"], ["h1", "h2"]).length === 0);
+ok("形态2: 成员全选但组键未晋升(种子页降级场景) -> 不触发(sel===total)", P([], ["h1", "h2"]).length === 0);
+// --- 形态3: 部分选中 -> 触发且 sel/total 正确 ---
+const p1 = P([], ["h1"]);
+ok("形态3: 部分选中 -> 恰触发一例", p1.length === 1);
+ok("形态3: sel/total/name 逐字段正确", p1.length === 1 && p1[0].key === "A" && p1[0].sel === 1 && p1[0].total === 2 && p1[0].name === "组A");
+// --- 形态4: 跨组混合(整组 A 与部分组 C 并存) -> 只列部分组 ---
+const p2 = P(["A"], ["h4"]);
+ok("形态4: 整组 A + 部分组 C 并存 -> 只列 C", p2.length === 1 && p2[0].key === "C" && p2[0].sel === 1 && p2[0].total === 3);
+// --- 形态5: 单成员组 + 虚拟行(未归组命中) -> 均不触发 ---
+ok("形态5: 单成员组入口 -> 不触发(total<=1)", P([], ["h3"]).length === 0);
+ok("形态5: 单成员虚拟行 -> 不触发", P([], ["h9"]).length === 0);
+ok("形态5: 双成员虚拟行 -> 不触发(virtual 判据独立于 total<=1)", P([], ["v1"]).length === 0);
+// --- 边界面: 不误拦(R6)/入参健壮性/name 兜底 ---
+ok("空入参 -> 空返回(不抛)", P([], []).length === 0 && P(null, null).length === 0);
+ok("hash 不属任何组 -> 不触发", P([], ["zz"]).length === 0);
+ok("name 缺失 -> 兜组 key", (() => {
+  const r = M._partialGroupsOf.call(
+    { memberHashesOf, decoratedGroups: [{ key: "X", members: [{ hash: "a" }, { hash: "b" }] }] },
+    [], ["a"]);
+  return r.length === 1 && r[0].name === "X" && r[0].sel === 1 && r[0].total === 2;
+})());
+ok("decoratedGroups 缺失(极端竞态) -> 空返回不抛", (() => {
+  try { return M._partialGroupsOf.call({ memberHashesOf }, [], ["h1"]).length === 0; }
+  catch (e) { return false; }
+})());
+console.log(JSON.stringify({
+  ok: checks.filter((c) => c[1]).length, total: checks.length,
+  failed: checks.filter((c) => !c[1]).map((c) => c[0]),
+}));
+"""
+
 
 # R5#18: loadColState 默认隐藏播种语义 ---------------------------------------------
 def _app_head_source():
@@ -850,6 +915,57 @@ def test_r4_selection_state_machine():
     """R5#51(major): _selSyncGroups 四态 / _selAnchor 兜底链 / selSizeSummaryOf 去重"""
     report = _run_probe(_NODE_SELECTION_PROBE, os.path.join(STATIC_ROOT, "shared", "selection.js"))
     _assert_battery(report, "选择联动状态机电池")
+
+
+# 定义形态锚: mixin 方法定义位是裸名后跟 `(`, 调用恒带接收者前缀(this. / .)不计 ——
+# 后续消费方接线写 this._partialGroupsOf(...) 时守阵不误红(评审 major 修法)
+_PARTIAL_GROUPS_DEF_RE = re.compile(r"(?<![.\w$])_partialGroupsOf\s*\(")
+
+
+def test_r4_partial_groups_predicate_five_forms():
+    """部分组判定单点守阵(计划 26-11-11-0820 S1, 拍板 D2): 五形态 + 解析面 + 不误拦 ---
+
+    _partialGroupsOf(keys, hashes) -> [{key, name, sel, total}] 是删除确认框行(S2)/设定位置
+    迁移关确认框(S3)/迁移开披露条(S4) 三落点共用的「部分组」唯一判定面。判定(D2 拍板口径):
+    真实组(!virtual 且 total>1)有成员命中 hashes 且组键不在 keys 且 sel<total。
+
+    静态锚(解析面单点; 锚「定义形态」= 裸名后跟 `(`, 调用恒带接收者前缀 this./. 不计,
+    后续消费方接线写 this._partialGroupsOf(...) 不误红):
+      1. 判定只在 selection.js 定义形态恰一次(其它 shared 文件零重复定义实现, 三落点不得各写判定);
+      2. hash->组反向查走 this.decoratedGroups(与 _findGroup 同源解析面), 方法体内零
+         filteredGroups —— 筛选面独走会漏被筛掉的组且混入虚拟行;
+      3. 判据含 g.virtual 豁免(虚拟行不是真实组)。
+
+    node 电池五形态真跑(接线在不等于判得对):
+      形态1 组键整组入选 -> 不触发(含双向联动袋里组键与成员 hash 同存的形态);
+      形态2 成员全选 -> 不触发(组键已晋升 + 种子页降级未晋升 sel===total 两个面);
+      形态3 部分选中 -> 触发且 sel/total/name 逐字段正确;
+      形态4 跨组混合(整组 A + 部分组 C 并存) -> 只列部分组;
+      形态5 单成员组 + 虚拟行 -> 均不触发(专设双成员虚拟行钉住 virtual 判据独立于 total<=1)。
+    边界面: 空入参不抛 / hash 不属任何组不触发 / name 缺失兜组 key / decoratedGroups 缺失
+    (R6 极端竞态)空返回不抛 —— 判定降级为无提示, 绝不阻断正常操作。
+    """
+    sel_path = os.path.join(STATIC_ROOT, "shared", "selection.js")
+    sel_src = open(sel_path, encoding="utf-8").read()
+    # 1. 判定单点: 定义形态(裸名+`(`, 接收者调用不计)恰一次, 且不在任何其它 shared 文件里重复实现
+    assert len(_PARTIAL_GROUPS_DEF_RE.findall(sel_src)) == 1, \
+        "selection.js 里 _partialGroupsOf 定义形态不恰一次(单点被复制或改名)"
+    for name in os.listdir(os.path.join(STATIC_ROOT, "shared")):
+        if name == "selection.js" or not name.endswith(".js") or name.startswith("vendor"):
+            continue
+        other = open(os.path.join(STATIC_ROOT, "shared", name), encoding="utf-8").read()
+        assert not _PARTIAL_GROUPS_DEF_RE.search(other), \
+            f"{name} 出现 _partialGroupsOf 定义形态(平行判定) —— 消费方只许带接收者调用, 判定不许另写"
+    # 2. 解析面: 方法体走 decoratedGroups, 零 filteredGroups(与 _findGroup 同源, 不得筛选面独走)
+    body = sel_src[sel_src.index("_partialGroupsOf(keys, hashes)"):sel_src.index("computed:")]
+    assert "this.decoratedGroups" in body, \
+        "_partialGroupsOf 未走 decoratedGroups(与 _findGroup 同源解析面被拆散)"
+    assert "this.filteredGroups" not in body, \
+        "_partialGroupsOf 引入 filteredGroups 独走(筛选面漏被筛掉的组且混入虚拟行)"
+    assert "g.virtual" in body, "判定缺 g.virtual 豁免(虚拟行/未归组命中不是真实组)"
+    # 3. 五形态语义真跑(node 电池, 无 node 静默跳过 —— 与 _NODE_SELECTION_PROBE 同口径)
+    report = _run_probe(_NODE_PARTIAL_GROUPS_PROBE, sel_path)
+    _assert_battery(report, "部分组判定五形态电池")
 
 
 def test_r4_load_col_state_seeding():
