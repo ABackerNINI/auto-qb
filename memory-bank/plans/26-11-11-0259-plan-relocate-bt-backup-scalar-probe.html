@@ -7,9 +7,9 @@
 <title>整组移动 BT_backup 收编: 单实例标量化 + 设置页自动探测</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="relocate-bt-backup-scalar-probe">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-11-11-0259">
-<meta name="doc-updated" content="26-11-11-0347">
+<meta name="doc-updated" content="26-11-12-0310">
 <meta name="doc-refs" content="memory-bank/tasks/26-11-11-backend-relocate-bt-backup-probe.md, memory-bank/issues/26-11-11-2305-test-bt-backup-probe-real-retest.html">
 <style>
   :root {
@@ -75,7 +75,7 @@
 <h1>整组移动 BT_backup 收编: 单实例标量化 + 设置页自动探测</h1>
 <p class="lede">本篇只回答: 怎么把顶层 <code>bt_backup: {host:port: 路径}</code> 多实例表收编成单实例标量 <code>relocate.bt_backup</code>(v7→v8 迁移一次性搬运), 并给 fastresume 收尾补一个<strong>设置页按钮显式触发</strong>的 BT_backup 自动探测(候选扫描 + hash 自证)——运行时零隐式探测, 配置留空 = 功能未启用。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-11-0259 · <b>doc-updated</b> 26-11-11-0347 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-11-11-0259 · <b>doc-updated</b> 26-11-12-0310 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 会话 grilling 2026-11-11 三轮九问拍板(§06 D1-D9) · qB/libtorrent 源码取证(Explore 子代理只读, qB v5.3.0 dev 8182ae07 + libtorrent 2.1.2.0, D:\Projects\Else) · 本机只读探测实测 · 血缘: <a href="26-11-05-0808-plan-relocate-fastresume-finalize.html">计划 26-11-05-0808</a>(bt_backup 表的出生计划)
 </div>
 

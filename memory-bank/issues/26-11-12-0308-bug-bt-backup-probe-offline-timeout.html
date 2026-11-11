@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>offline 探测服务端延迟(实测 17-25s) &gt; 前端 AQB_FETCH_TIMEOUT_S=15: bt_backup_probe offline 渲染形态 UI 结构性不可达 · bug · 计划外问题</title>
+<meta name="issue-slug" content="bt-backup-probe-offline-timeout">
+<meta name="issue-stamp" content="26-11-12-0308">
+<meta name="issue-type" content="bug">
+<meta name="doc-topic" content="bt-backup-probe-offline-timeout">
+<meta name="doc-refs" content="memory-bank/testing/real-baselines/26-11-12-0229-real-relocate-bt-backup-retest.md">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="offline 探测服务端延迟(实测 17-25s) &gt; 前端 AQB_FETCH_TIMEOUT_S=15: bt_backup_probe offline 渲染形态 UI 结构性不可达">
+<meta name="issue-summary" content="真机复测 P1 实测: qB down 后 POST /api/relocate/bt_backup_probe 服务端两次 25.16s/17.14s 才返回, 前端 fetch 15s(AQB_FETCH_TIMEOUT_S, auth.js:13)先 abort, UI 恒渲染「探测失败: 请求超时(15s)」—— offline verdict 渲染形态结构性不可达; 网络层本身 200+未自证标注正确(切片 26-11-12-0229 §05-6), 缺陷面=服务端慢因(疑 qB 连接重试窗口)与前端预算的配比">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --mark: #161e26;     /* issue 特有: callout 底色 (plan.html 不用) */
+    --warn-bg: #2a2119;  /* issue 特有: 状态徽标底色 */
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 单栏流式版面: 与 plan.html 同一套 .sheet (封顶 1280px, 侧距 clamp(18~44px)); 旧双栏+粘性目录已删 */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+
+  /* 封面 meta 行: issue 特有, DOM 形态别改 —— 状态徽标 <span class="badge"> 被
+     flip_status (W4) 与 check_status_drift 的 BADGE_RE 机读 (k/v div 结构在判据里) */
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px 28px; font-family: var(--mono); font-size: 11.5px; color: var(--faint); border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta-row .item .k { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .meta-row .item .v { font-size: 13.5px; color: var(--dim); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin: 14px 0; font-size: 14px; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-family: var(--mono); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">计划外问题（未修）· bug</div>
+<h1>offline 探测服务端延迟(实测 17-25s) &gt; 前端 AQB_FETCH_TIMEOUT_S=15: bt_backup_probe offline 渲染形态 UI 结构性不可达</h1>
+<p class="lede">真机复测 P1 实测: qB down 后 POST /api/relocate/bt_backup_probe 服务端两次 25.16s/17.14s 才返回, 前端 fetch 15s(AQB_FETCH_TIMEOUT_S, auth.js:13)先 abort, UI 恒渲染「探测失败: 请求超时(15s)」—— offline verdict 渲染形态结构性不可达; 网络层本身 200+未自证标注正确(切片 26-11-12-0229 §05-6), 缺陷面=服务端慢因(疑 qB 连接重试窗口)与前端预算的配比</p>
+<div class="meta-row">
+  <div class="item"><div class="k">编号</div><div class="v">26-11-12-0308-bug-bt-backup-probe-offline-timeout</div></div>
+  <div class="item"><div class="k">报告时间</div><div class="v">2026-11-12 03:08</div></div>
+  <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
+  <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+</div>
+
+<section id="s1">
+  <h2><span class="no">§01</span>现象与发现场景</h2>
+  <p>真机复测(计划 26-11-11-0259 S6 判据② offline 组)取证时撞见: 主测试 qB(56589)经 real.down 优雅退出后, 在设置页整组迁移编辑器点「自动探测」, UI 恒渲染 <code>探测失败: 请求超时(15s)</code> —— offline verdict 的渲染形态(online=false + 未自证标注)从未出现。同一时刻 curl 直探同端点却正常返回 HTTP 200 + verdict=manual-set + 离线标注, 即<strong>网络层行为正确, 只有 UI 形态结构性不可达</strong>。复现条件: qB 实例 down/不可达 + 前端点「自动探测」; 与配置数据量无关(单 fastresume 即现)。逐字证据见切片 <code>memory-bank/testing/real-baselines/26-11-12-0229-real-relocate-bt-backup-retest.md</code> §05-6/§3.2。</p>
+</section>
+
+<section id="s2">
+  <h2><span class="no">§02</span>证据</h2>
+<pre><code># 服务端直探(绕产品, curl, qB 已 down): 两次延迟实测
+25.16s / 17.14s 才返回 HTTP 200, verdict=manual-set, online=false, manual_set=true
+  离线标注逐字: qB /torrents/info 不可达(APIConnectionError): 按离线降级, hash 自证未参与
+
+# 前端(Playwright/Chromium, 同时刻): fetch 客户端先 abort
+UI 恒渲染 cls="bt-bk-verdict bad", 文案逐字: 探测失败: 请求超时(15s)   (net::ERR_ABORTED)
+
+# 前端预算常量(取证 2026-11-12 03:08)
+src/auto_qb/webui/static/shared/auth.js:13: const AQB_FETCH_TIMEOUT_S = 15;  // 秒; 定时器与超时文案同源</code></pre>
+</section>
+
+<section id="s3">
+  <h2><span class="no">§03</span>影响面</h2>
+  <table>
+    <tr><th>维度</th><th>结论</th></tr>
+    <tr><td>触发条件</td><td>qB 实例 down/不可达时在设置页点「自动探测」必现(服务端 offline 探测耗时 &gt; 15s 即触发)</td></tr>
+    <tr><td>影响范围</td><td>仅 bt_backup_probe 的 offline verdict 渲染形态(用户侧永远只见「请求超时(15s)」); 在线形态(hit/ambiguous/miss/manual-set)不受影响 —— 网络层 200+未自证标注行为本身正确</td></tr>
+    <tr><td>严重度</td><td>低(功能无错判、配置零误写, 是「离线反馈形态不可达 + 15s 空等」的体验/可观测性缺陷)</td></tr>
+  </table>
+</section>
+
+<section id="s4">
+  <h2><span class="no">§04</span>定位锚点</h2>
+  <ul>
+    <li><code>src/auto_qb/webui/static/shared/auth.js:13</code>(取证 2026-11-12 03:08)· <code>AQB_FETCH_TIMEOUT_S</code> · grep <code>AQB_FETCH_TIMEOUT_S</code>(注释: 定时器与超时文案同源, 改一处两处生效)</li>
+    <li>前端 <code>AQB_FETCH_LOW_TIMEOUT_S</code>(fetch_low.js 同族低预算常量)· grep <code>探测失败</code> 与 <code>请求超时(</code>(运行期拼装: 模板 <code>static/shared/tpl/bt-backup-editor.html:28</code>「探测失败: {{…}}」+ <code>shared/auth.js:74</code>「请求超时(…s)」, 单词直 grep 源码零命中)</li>
+    <li>服务端端点 POST <code>/api/relocate/bt_backup_probe</code> · offline 降级分支锚 <code>server/routes/relocate_chain.py:185-186</code>(取证 2026-11-12 03:2x; grep <code>按离线降级</code> 唯一命中, 与 §02 离线标注逐字引文同源) · <code>infra/bt_backup_probe.py</code>(verdict/资格面, grep <code>离线未自证</code>)</li>
+  </ul>
+</section>
+
+<section id="s5">
+  <h2><span class="no">§05</span>根因<span class="opt">（可选）</span></h2>
+  <div class="callout">待查（已排除：前端常量为本轮改动引入 —— 复测基线 703ceb6c 上即此行为; 服务端慢因疑 qB 连接重试窗口(qB down 后 API 调用重试至超时才走 offline 降级), 未深挖, 不作结论）</div>
+</section>
+
+<section id="s6">
+  <h2><span class="no">§06</span>建议修法<span class="opt">（可选）</span></h2>
+  <p>方向二选一(待定): ① 服务端 offline 快速失败 —— qB 不可达时探测前置轻量探活或收紧重试, 让 offline verdict 在 15s 内返回(改探测/重试策略, 收益: 全部前端调用点受益); ② 前端该端点单独放宽 fetch 预算(如 30s, 改常量/调用点, 代价: 用户空等更久)。也可两者组合(收紧服务端 + 适度放宽前端)。</p>
+</section>
+
+<section id="s7">
+  <h2><span class="no">§07</span>状态变更日志</h2>
+  <ul>
+    <li>2026-11-12 03:08 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+  </ul>
+  <h3>复验</h3>
+  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <h3>修复后补充</h3>
+  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+</section>
+
+<footer>
+  26-11-12-0308-bug-bt-backup-probe-offline-timeout.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+</footer>
+
+</div>
+</body>
+</html>

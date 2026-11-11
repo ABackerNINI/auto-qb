@@ -8,7 +8,7 @@
 > / 收尾 done + 组键归一 dst。纯取证复测轮, 产品源码与用例代码零改动, 无基线更新(test.full 未跑)。
 > 基线时间: 2026-11-12 00:29-01:53(P1 截图起 + P2 ts 01:14:52-01:53:51), 清场记账 02:00-02:30(P3)
 > 基线 commit: 703ceb6c(分支 relocate-bt-backup-real-retest, 本地无远端; 实测全程 HEAD 未动)
-**Refs:** memory-bank/issues/26-11-11-2305-test-bt-backup-probe-real-retest.html · memory-bank/plans/26-11-11-0259-plan-relocate-bt-backup-scalar-probe.html · memory-bank/testing/real-baselines/26-11-11-0804-real-relocate-bt-backup-probe.md · memory-bank/tasks/26-11-11-backend-relocate-bt-backup-probe.md
+**Refs:** memory-bank/issues/26-11-11-2305-test-bt-backup-probe-real-retest.html, memory-bank/plans/26-11-11-0259-plan-relocate-bt-backup-scalar-probe.html, memory-bank/testing/real-baselines/26-11-11-0804-real-relocate-bt-backup-probe.md, memory-bank/tasks/26-11-11-backend-relocate-bt-backup-probe.md, memory-bank/issues/26-11-12-0308-bug-bt-backup-probe-offline-timeout.html
 
 ## 01 三态结论(四判据)
 
@@ -100,8 +100,8 @@
 5. **runner.cmd_guard 未传 skip_tags**: guard CLI 行「真实种子 N 个」把 real-fake 计入并暂停(real.seed
    里的 guard 行传了 skip_tags 所以显示 0)。P1 P2 两轮都撞(复发 2 次); 我方种子被暂停为 stoppedUP。
 6. (P1 已记两条备查) offline 服务端探测延迟实测 25.16s/17.14s > 前端 AQB_FETCH_TIMEOUT_S=15s ⇒
-   offline verdict 渲染形态 UI 结构性不可达; qB 5.2.3 /api/v2/torrents/resume 404(本轮未再触碰,
-   探针只认 BT_backup hash 集无影响)。
+   offline verdict 渲染形态 UI 结构性不可达 **—— 已入池** `issues/26-11-12-0308-bug-bt-backup-probe-offline-timeout.html`(Open);
+   qB 5.2.3 /api/v2/torrents/resume 404(本轮未再触碰, 探针只认 BT_backup hash 集无影响)。
 
 ## 06 收尾状态(判据④ 清场五步, P3 02:00-02:30)
 
