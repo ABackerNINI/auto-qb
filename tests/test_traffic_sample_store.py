@@ -74,6 +74,9 @@
   限速注解面 = [t0-86400, t1] 日期集
 - test_read_side_no_poll_when_traffic_tab_closed: 「不打开 = 0 请求」—— 前端轮询门控单点
   (关抽屉/形态切换/登出 -> _qbPollStop clearInterval, 重开幂等不叠加)
+- test_v4_open_paths_probe_scoped_to_data_dir (issue 26-11-12-0318): 探针收窄守阵 ——
+  _v4_open_paths 只记录本用例 data_dir 下的 qb-traffic-v4 路径, 跨 tmp_path 同族打开不入探针
+  (并行下进程级 open 探针被前序测试遗留线程污染的通道关闭, 断言语义不放松)
 
 v4 定约用例(plan 26-10-05-2200 §04 表 3/5/6/7, B2 落地):
 - test_v4_counter_reset_forces_block_reopen: 3. 计数器重置强制关块 —— 重置后块内负 delta 不出现,
@@ -325,7 +328,9 @@ def test_buffer_slot_cap_3600_early_flush(tmp_path, monkeypatch):
     """Q3 保险闸(§3.1): 单系列缓冲槽 >= 3600 提前单独 flush(防 ~60MB 滞留); 不关块,
     块头只写一次, 后续记录续写同块"""
     clock = FakeClock()
-    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=1, flush_interval=10**9), clock=clock)
+    mgr = _mgr_with_traffic(
+        tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=1, flush_interval=10**9), clock=clock
+    )
     mgr.store.server_state = server_state()
     mod = mgr.host.get("qb_traffic")
     for _ in range(V4_BUFFER_SLOT_CAP):  # 3600 轮活跃: 第 3600 槽触发提前 flush(驱动永不触发)
@@ -1055,7 +1060,9 @@ def test_live_tail_published_per_round_and_cleared_by_flush(tmp_path, monkeypatc
     from auto_qb.core.traffic_store import LiveTail
 
     clock = FakeClock()
-    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=30, flush_interval=60), clock=clock)
+    mgr = _mgr_with_traffic(
+        tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=30, flush_interval=60), clock=clock
+    )
     mod = mgr.host.get("qb_traffic")
     assert mod.live_tail == {}  # 初始空表
     # 首轮(非零): r 进缓冲未落盘 -> head_pending=True, records 恰为 buffer 内容
@@ -1145,7 +1152,9 @@ def test_live_tail_pending_agg_published_and_cleared_by_seal(tmp_path, monkeypat
     clock = FakeClock(start=h0 + 1800)
     pub = tmp_path / "pub"
     pub.mkdir()
-    mgr2 = _mgr_with_traffic(pub, QbTraffic(enabled=True, sample_interval_multiplier=30, flush_interval=600), clock=clock)
+    mgr2 = _mgr_with_traffic(
+        pub, QbTraffic(enabled=True, sample_interval_multiplier=30, flush_interval=600), clock=clock
+    )
     mgr2.store.server_state = server_state(dl_info_speed=100, up_info_speed=50, alltime_dl=1000, alltime_ul=2000)
     mod2 = mgr2.host.get("qb_traffic")
     _run_sample(mgr2)  # t=h0+1800: r 开信用(pending 尚空)
@@ -1168,7 +1177,9 @@ def test_v4_counter_reset_forces_block_reopen(tmp_path, monkeypatch):
     """3. 计数器重置强制关块(v4 §01 关块状态机): 重置(cur < 块内最近 totals)后块内负
     delta 不出现, 新块基线 = 重置后 totals(首记录 delta = 0); 旧块以重置前观测收尾"""
     clock = FakeClock()
-    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=30, flush_interval=10**9), clock=clock)
+    mgr = _mgr_with_traffic(
+        tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=30, flush_interval=10**9), clock=clock
+    )
     mgr.store.server_state = server_state(alltime_dl=1000, alltime_ul=500, dl_info_speed=100, up_info_speed=50)
     mod = mgr.host.get("qb_traffic")
     _run_sample(mgr)  # t0: r(totals 1000/500, 块 A 首立基线)
@@ -1252,7 +1263,9 @@ def test_recovery_read_set_bounded_to_watermark_day(tmp_path, monkeypatch):
     window = 1000000 * 86400.0  # 生产口径: 永久保留(恢复读集必须与它解耦, D2 不动)
     now = _local_epoch(13, 0, 30)  # 今日 13:00:30(本地)
     clock = FakeClock(start=now)
-    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=30, rollup_window=window), clock=clock)
+    mgr = _mgr_with_traffic(
+        tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=30, rollup_window=window), clock=clock
+    )
     st = TrafficV4Store(str(tmp_path))
     today_str = v4_epoch_date_str(now)
     y_str = v4_epoch_date_str(now - 86400)
@@ -1299,7 +1312,9 @@ def test_recovery_read_set_bounded_to_watermark_day(tmp_path, monkeypatch):
         assert parsed.hours[1].cov_s == 60 and parsed.hours[2].cov_s == 30  # 昨日块 3 条记录 2 区间 60s / 今日块 2 条 30s(末槽待后续到达)
     # 幂等: 二次重启零追加(字节级不变), 水位推进后读集缩到当日 1 个
     text = _agg_text(tmp_path, GLOBAL_SERIES_KEY)
-    mgr2 = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=30, rollup_window=window), clock=clock)
+    mgr2 = _mgr_with_traffic(
+        tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=30, rollup_window=window), clock=clock
+    )
     mod2 = mgr2.host.get("qb_traffic")
     mod2.start(mgr2.ctx, dry_run=False)
     assert _agg_text(tmp_path, GLOBAL_SERIES_KEY) == text
@@ -1314,7 +1329,9 @@ def test_recovery_fallback_full_read_when_agg_missing(tmp_path, monkeypatch):
     window = 3 * 86400.0
     now = _local_epoch(13, 0, 30)
     clock = FakeClock(start=now)
-    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=30, rollup_window=window), clock=clock)
+    mgr = _mgr_with_traffic(
+        tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=30, rollup_window=window), clock=clock
+    )
     st = TrafficV4Store(str(tmp_path))
     key = GLOBAL_SERIES_KEY
     dates = [v4_epoch_date_str(now - i * 86400) for i in range(3)]  # 今日-2d .. 今日, 全在窗内
@@ -1430,7 +1447,7 @@ def test_read_side_view_contract_table(web_env, monkeypatch, window):
             os.makedirs(os.path.dirname(p), exist_ok=True)
             with open(p, "w", encoding="utf-8", newline="\n") as f:
                 f.write("100,0,0\n")
-    opened = _v4_open_paths(monkeypatch)
+    opened = _v4_open_paths(monkeypatch, mgr.config.data_dir)
     body = client.get(f"/api/traffic/qb/{key}", headers=auth, params={"window": window})
     assert body.status_code == 200 and body.json()["meta"]["window"] == window
     got_days = sorted(
@@ -1441,6 +1458,26 @@ def test_read_side_view_contract_table(web_env, monkeypatch, window):
     assert got_days == exp_days, f"{window} 天文件读集: {got_days} != {exp_days}"
     assert got_agg == exp_agg, f"{window} agg.dat 打开数: {got_agg} != {exp_agg}"
     assert got_lim == lim_dates, f"{window} 限速面读集: {got_lim} != {lim_dates}"
+
+
+def test_v4_open_paths_probe_scoped_to_data_dir(tmp_path, monkeypatch):
+    """探针收窄守阵(issue 26-11-12-0318): _v4_open_paths 只记录本用例 data_dir 下的
+    qb-traffic-v4 路径 -- 探针 patch 的是进程级 builtins.open, -n 8 并行下同 worker 进程里
+    前序测试遗留线程并发打开**别的 tmp_path** 下的同族文件会污染读集([1m] 档假红的唯一
+    可识别非确定通道); 收窄后跨 data_dir 打开不入探针, 端点只开自家 data_dir, 断言语义不放松
+    """
+    mine, other = tmp_path / "data", tmp_path / "other"
+    for root in (mine, other):
+        day = root / "qb-traffic-v4" / "global" / "2026-01-01.dat"
+        day.parent.mkdir(parents=True)
+        day.write_text("v4", encoding="utf-8")
+    opened = _v4_open_paths(monkeypatch, str(mine))
+    with open(other / "qb-traffic-v4" / "global" / "2026-01-01.dat", encoding="utf-8") as f:
+        f.read()
+    assert opened == [], f"跨 data_dir 的打开不得入探针: {opened}"
+    with open(mine / "qb-traffic-v4" / "global" / "2026-01-01.dat", encoding="utf-8") as f:
+        f.read()
+    assert len(opened) == 1 and opened[0].startswith(str(mine).replace("\\", "/")), (f"自家 data_dir 打开必须入探针: {opened}")
 
 
 def test_read_side_no_poll_when_traffic_tab_closed():

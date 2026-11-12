@@ -1,7 +1,7 @@
 # testing — 测试 / 冒烟 / 仿真纪律 · 卷 1/5
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `annotations-lazy-eval.md` … `event-handler-mock.md`(共 23 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `annotations-lazy-eval.md` … `fake-config-shared-mutables.md`(共 24 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
@@ -31,3 +31,4 @@
 | [dev-webui-config-regen-wipe.md](dev-webui-config-regen-wipe.md) | `commands run dev.webui` 每次启动都从 CONFIG_TMPL 无条件重生成派生配置(不 diff 不保留), 上一阶段经 PUT /api/config 落盘到派生配置的键(如 relocate.bt_backup)被静默冲掉, WEB 端口也重新 OS… | dev.webui, dev_webui, CONFIG_TMPL, 重生成配置, PUT 落盘被冲, 端口漂移, 端口重分配, WEB 端口, 多阶段真机, 派生配置 |
 | [engine-pack-dir-injection.md](engine-pack-dir-injection.md) | commands 引擎注入的 COMMAND_FLOW_PACK_DIR 指向 task 所在包, 包内测试要真实配置必须钉 PKG | COMMAND_FLOW_PACK_DIR, 包测试, ConfigMissing, load_config, 钉 PKG, 外置配置, test_commit 夹具 |
 | [event-handler-mock.md](event-handler-mock.md) | `mock.patch.object(模块实例, "_on_xxx")` 拦不住 EventBus 已注册的相位 handler —— 注册期捕获的是绑定方法对象, patch 换的是实例属性, 总线里的引用不变; 守相位接线用「订阅计数 + emit 返回值」, 守行为直调真… | EventBus, 相位, subscribe, mock.patch.object, handler 断言, assert_called_once, P5 守阵 |
+| [fake-config-shared-mutables.md](fake-config-shared-mutables.md) | helpers 的 `FakeConfig` 段对象是类属性(dataclass/dict/list), 任一测试原地改 | FakeConfig, 类属性, 测试隔离, xdist 分布, 偶发失败, make_manager, 原地改配置 |

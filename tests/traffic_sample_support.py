@@ -255,17 +255,24 @@ def _drive_full_day(tmp_path, monkeypatch, multiplier: int, day0: int):
     return mod, counts
 
 
-def _v4_open_paths(monkeypatch):
-    """open 计数探针(读侧契约逐档机检 §3.2): 记录 qb-traffic-v4/ 下打开路径(正斜杠归一;
-    limits/ 目录属注解面单列, 不算系列数据面); 用完由 monkeypatch 自动收"""
+def _v4_open_paths(monkeypatch, data_dir: str):
+    """open 计数探针(读侧契约逐档机检 §3.2): 记录**本用例 data_dir 下** qb-traffic-v4/ 的
+    打开路径(正斜杠归一; limits/ 目录属注解面单列, 不算系列数据面); 用完由 monkeypatch 自动收。
+
+    按 data_dir 前缀收窄(issue 26-11-12-0318): 探针 patch 的是进程级 builtins.open, -n 8
+    并行下同 worker 进程里前序测试遗留的守护线程可能在本用例 GET 窗口内打开**它自己
+    tmp_path** 下的 qb-traffic-v4 文件, 只按「含 qb-traffic-v4/」收录会污染读集 ⇒ 假红;
+    端点只可能打开自家 data_dir 下的文件, 收窄不放松任何断言语义。
+    """
     import builtins
 
     opened = []
     real_open = builtins.open
+    prefix = os.path.join(os.fspath(data_dir), "").replace("\\", "/")
 
     def counting_open(file, *a, **k):
         p = os.fspath(file).replace("\\", "/")
-        if "qb-traffic-v4/" in p:
+        if "qb-traffic-v4/" in p and p.startswith(prefix):
             opened.append(p)
         return real_open(file, *a, **k)
 

@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="testing-parallel-flaky">
 <meta name="doc-refs" content="memory-bank/tasks/26-11-11-webui-partial-group-warning.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="并行测试偶发假红: 8 worker 下计时/时间窗敏感用例闪失">
 <meta name="issue-summary" content="8 worker 并行全量下偶见单个测试假红(两类: qb_capture dry 计时类/traffic_sample 时间窗类), 单文件隔离重跑均绿, 疑并行时序竞争">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-12-0318-test-testing-parallel-flaky</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-12 03:18</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">test</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
@@ -134,7 +134,7 @@
 <section id="s5">
   <h2><span class="no">§05</span>根因<span class="opt">（可选）</span></h2>
   <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
-  <div class="callout">待查。假说（未验证）：前者 BIND/端口竞争，后者时间窗边界在并行调度下偶发越界。已排除：确定性失败——两用例单文件隔离重跑均绿，失败只出现在 8 worker 并行调度下，疑并行时序竞争。</div>
+  <div class="callout">两类根因已定位（2026-11-12 实施轮，静态机制分析 + 既有坑档对照；假红仅并行高载出现，隔离单跑无法复现，未走重跑取证）：<strong>① qb_capture 对照组</strong> —— 命中坑档 <code>pitfalls/testing/inproc-server-conn-abort.md</code> 同 nodeid 假红族（2026-11-07 首例、11-09 复发、本件再两轮 = 第 4 次）：对照组真构造 Capture 打真本地服，并行+覆盖率插桩高载下已建立的回环连接被本机中止（10053），<code>QbClient.login</code> 无重试即抛；该坑档处置预告「同点 ≥2 次复现立受控重试」，本件即兑现。<strong>② [1m] 时间窗面</strong> —— 用例自身逻辑全部由 <code>frozen</code> 派生、内部确定；唯一可识别非确定通道是探针 <code>_v4_open_paths</code> patch 进程级 <code>builtins.open</code> 且只按「路径含 qb-traffic-v4/」收录、不区分 data_dir，同 worker 进程里前序测试遗留守护线程在本用例 GET 窗口内打开它自己 tmp_path 下的同族文件即污染读集；按 data_dir 前缀收窄探针关闭该通道（断言语义不放松）。S2 的「BIND/端口类」初判对 ① 不准（独占 bind 已修双绑，实为已建连中止），对 ② 的「时间窗类」亦不准（实为探针污染）。</div>
 </section>
 
 <section id="s6">
@@ -152,11 +152,18 @@
   <h2><span class="no">§07</span>状态变更日志</h2>
   <ul>
     <li>2026-11-12 03:18 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-12 — 状态 Open → In Progress（kb.status）</li>
+    <li>2026-11-12 — 状态 In Progress → Done（kb.status）</li>
+</ul>
   <h3>复验</h3>
-  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <p>复验：2026-11-12 实施轮 —— 两锚点符号仍在（<code>test_qb_capture_dry_true_zero_requests</code> / <code>test_read_side_view_contract_table</code> 参数化 13 档未变）；假红仅 8 worker 并行高载出现（频率 ~1/5 全量），隔离单跑不复现，未走重跑取证，改走静态机制分析定位（见 §05）。</p>
   <h3>修复后补充</h3>
-  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  <p><strong>实际修法</strong>（与 §06 建议不同道：未做隔离/串行化，也未放宽任何时间窗断言 —— 两类各自按根因修，断言语义零放松）：</p>
+  <ul>
+    <li><code>tests/test_legacy_review4_scripts.py</code> —— 对照组加受控重试 <code>_capture_with_retry</code>（只对 <code>requests.exceptions.RequestException</code> 族重试，上限 3 次；<strong>每轮新起一台假服+独立台账</strong>，被中止请求的服务端残账可能晚到、清旧台账与 handler 线程仍有调度竞态，换新服轮间彻底隔离；重试耗尽原样上抛，<code>SystemExit</code> 等确定性失败不重试照常红）+ 守阵 <code>test_qb_capture_control_group_retry_guard</code>（瞬时/恒失败/SystemExit 三腿红验）。</li>
+    <li><code>tests/traffic_sample_support.py</code> —— 探针 <code>_v4_open_paths</code> 加 <code>data_dir</code> 参数按前缀收窄（进程级 open 探针只记录本用例 data_dir 下的 qb-traffic-v4 路径；端点只可能打开自家 data_dir，收窄不放松断言）+ 守阵 <code>test_v4_open_paths_probe_scoped_to_data_dir</code>（跨 tmp_path 打开不入探针/自家打开入探针双向红验）；调用点 <code>test_read_side_view_contract_table</code> 同步传参。</li>
+  </ul>
+  <p><strong>验证方式与测试数字</strong>：目标用例单跑全绿（qb_capture 组 2 passed；契约表 13 档 + 探针守阵 14 passed）；<code>commands run test.quick</code> 8 worker 全量 <strong>6066 passed, 2 skipped（197.31s）</strong>；<code>commands run test.full</code> 带覆盖率全量 <strong>6066 passed, 2 skipped（172.87s），TOTAL 覆盖率 99%</strong>（2026-11-12 实测）。评审 1 轮 2 过检发现（1 minor 重试轮残账竞态 → 改每轮新服设计当场修；1 nit <code>requests</code> 未声明直接依赖 → 既有仓库面入池另案）。</p>
 </section>
 
 <footer>

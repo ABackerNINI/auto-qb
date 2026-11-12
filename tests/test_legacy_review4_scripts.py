@@ -43,6 +43,7 @@ the kill path never actually runs in tests, only decisions and refusal wiring.
 - test_e2e_selfcheck_parse_port_args_normal_values (P4 表#6): 正常取值/缺省/多值串解析不回归, 未知参数仍走报错行; parse_port_args 为生产 main 真实调用点
 - test_ui_harness_site_alerts_needs_four_torrents (P4 表#23): 2/3 条种子整段跳过注入不崩, 4 条放行且倒数第 4/第 3 注入生效; 红验: 旧守卫(len<2)逐字重放, 2 条时 torrents[-4] 必 IndexError
 - test_qb_capture_dry_true_zero_requests (P4 表#11): --dry 打本地计数假服请求计数为 0(不 login/不握手/不计数; 缺 --sample 不预查计数), 带 --sample 计划行给出 Nx2; 对照组真构造 Capture 计到 4 个 login, 证明计数器非空转、旧顺序(main 先构造后判 dry)回潮即红
+- test_qb_capture_control_group_retry_guard (issue 26-11-12-0318): 对照组受控重试守阵 -- 瞬时 RequestException 重试一次成功且每轮 attempt() 自建台账(轮间隔离); 恒 RequestException 耗尽原样上抛(不静默放行); SystemExit(登录被拒)不重试照常红
 - test_port_kill_decision_matrix (P5 #9): kill_decision 4 states -- python-like listener passes (python*.exe / uv running python), non-python refuses without --yes (reason points to --yes), non-python passes with --yes, verify-failure (None) refuses even with --yes; red check: old kill loop replayed verbatim issues taskkill for any pid on a wrong port with no verification
 - test_port_kill_process_info_parses_ps_json (P5 #9): process_info PS JSON parsing -- array / single-dict forms both normalized, null CommandLine becomes empty string, pids the query cannot answer stay absent
 - test_port_kill_main_attribution_refusal_and_yes (P5 #9): main wiring (all monkeypatched, taskkill never really executed) -- non-python listener gets attribution line then REFUSED with rc!=0 and zero taskkill; with --yes exactly one pinned taskkill
@@ -61,6 +62,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+import requests
 
 from _test_ports import http_server  # noqa: E402  测试假服单点: 独占 bind, 禁裸 ThreadingHTTPServer 直建(issue 26-11-11-0114)
 
@@ -290,6 +292,29 @@ def test_ui_harness_site_alerts_needs_four_torrents():
 
 
 # --------------------------------------------------------------------------- P4 表#11: qb_capture --dry 真零请求
+#: 对照组受控重试次数上限: 10053 假红五轮全量两闪(~2/5, 见 flaky-ledger), 3 次足够压平; 耗尽仍上抛(响亮失败)
+_CAPTURE_CTRL_ATTEMPTS = 3
+
+
+def _capture_with_retry(attempt, attempts: int = _CAPTURE_CTRL_ATTEMPTS):
+    """对照组受控重试(坑档 pitfalls/testing/inproc-server-conn-abort.md 处置兑现, issue 26-11-12-0318)。
+
+    真客户端打真本地服在并行+覆盖率插桩高载下, 偶发**已建立**的回环连接被本机中止
+    (requests.exceptions.ConnectionError 内层 10053)—— 连接已建立才被中止, 不是抢号/拒绝,
+    服务端重压不消除它, 只能在客户端侧受控重试。只对 RequestException 族重试;
+    **每轮 attempt(i) 自带一台新假服与独立台账**(被中止请求的服务端残账可能晚到旧台账,
+    清旧台账与 handler 线程仍有调度竞态, 换新服轮间彻底隔离, 残账留在废弃轮里);
+    重试耗尽原样上抛(不吞不放宽), 登录被拒等确定性失败(SystemExit)不重试照常红。
+    """
+    for i in range(attempts):
+        try:
+            return attempt(i)
+        except requests.exceptions.RequestException:
+            if i == attempts - 1:
+                raise
+    raise AssertionError("unreachable: 重试循环必须以 return 或 raise 退出")
+
+
 def test_qb_capture_dry_true_zero_requests(tmp_path, caplog):
     """P4 表#11: --dry 真零请求 -- 打本地计数假服, 全程 0 请求(不 login / 不握手 / 不计数)。
 
@@ -298,28 +323,33 @@ def test_qb_capture_dry_true_zero_requests(tmp_path, caplog):
     还要 _count_torrents 再发 1 个 -- 与 help「不发请求」矛盾。现在 dry 在 main() 里、
     Capture 构造之前分流(_dry_plan), 缺 --sample 不预查计数(计数本身要发请求)。
     对照组: 同一假服上真构造 Capture, 计到 4 个 login -- 证明计数器非空转, 也证明旧顺序
-    (main 先构造后判 dry)必然带请求, 回潮即红。
+    (main 先构造后判 dry)必然带请求, 回潮即红。对照组对 RequestException 族受控重试
+    (_capture_with_retry, issue 26-11-12-0318): 并行高载下已建连被本机中止(10053)是环境
+    噪声不是回归, 重试压平; 确定性失败照常红。
     """
     mod_cap = _load_script("qb_capture")
     hits: list[str] = []
 
-    class _CountingHandler(http.server.BaseHTTPRequestHandler):
-        def _respond(self):
-            hits.append(f"{self.command} {self.path}")
-            body = b"Ok." if self.path.endswith("/auth/login") else b"{}"
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
+    def _make_counting_handler(sink: list[str]):
+        class _CountingHandler(http.server.BaseHTTPRequestHandler):
+            def _respond(self):
+                sink.append(f"{self.command} {self.path}")
+                body = b"Ok." if self.path.endswith("/auth/login") else b"{}"
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
 
-        do_GET = _respond
-        do_POST = _respond
+            do_GET = _respond
+            do_POST = _respond
 
-        def log_message(self, fmt, *args):  # noqa: A003 - 基类签名; 静默
-            pass
+            def log_message(self, fmt, *args):  # noqa: A003 - 基类签名; 静默
+                pass
 
-    srv = http_server(_CountingHandler)
+        return _CountingHandler
+
+    srv = http_server(_make_counting_handler(hits))
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     try:
         base = [
@@ -328,8 +358,6 @@ def test_qb_capture_dry_true_zero_requests(tmp_path, caplog):
             str(tmp_path / "corpus"),
             "--host",
             "127.0.0.1",
-            "--port",
-            str(srv.server_port),
             "--user",
             "u",
             "--pass",
@@ -338,7 +366,7 @@ def test_qb_capture_dry_true_zero_requests(tmp_path, caplog):
         # 绿面: dry 全程零请求; 缺 --sample 时不预查计数(计划行以"全库"占位)
         caplog.clear()
         with caplog.at_level(logging.INFO, logger="qb_capture"):
-            rc = mod_cap.main(base + ["--dry"])
+            rc = mod_cap.main(base + ["--port", str(srv.server_port), "--dry"])
         assert rc == 0, "--dry 必须正常退出 0"
         assert hits == [], f"--dry 必须零请求(不 login/不握手/不计数), 实发: {hits}"
         dry_lines = [r.getMessage() for r in caplog.records if "[DRY]" in r.getMessage()]
@@ -348,20 +376,73 @@ def test_qb_capture_dry_true_zero_requests(tmp_path, caplog):
         # 带 --sample: 计划行给出 Nx2, 依旧零请求
         caplog.clear()
         with caplog.at_level(logging.INFO, logger="qb_capture"):
-            rc = mod_cap.main(base + ["--dry", "--sample", "7"])
+            rc = mod_cap.main(base + ["--port", str(srv.server_port), "--dry", "--sample", "7"])
         assert rc == 0 and hits == [], "带 --sample 的 dry 同样必须零请求"
         dry2 = [r.getMessage() for r in caplog.records if "[DRY]" in r.getMessage()]
         assert dry2 and "7x2(files+trackers)" in dry2[0]
 
         # 对照组(机制自证/红验): 真构造 Capture -- 构造即 4 个 QbClient 各 login 一次。
         # 旧顺序(main 先构造后判 dry)在此必然留下请求, 回潮即红。
-        args = mod_cap.build_parser().parse_args(base)
-        mod_cap.Capture(args)
-        logins = [h for h in hits if "/auth/login" in h]
-        assert len(logins) == 4, f"Capture 构造 = 4 个 QbClient 各 login 一次, 实计: {hits}"
+        # 受控重试每轮新起一台假服(独立端口+独立台账): 被中止请求的服务端残账可能晚到,
+        # 与 handler 线程清台账仍有调度竞态 —— 换新服轮间彻底隔离, 残账留在废弃轮的台账里。
+        def _control_attempt(_i):
+            ctrl_hits: list[str] = []
+            ctrl_srv = http_server(_make_counting_handler(ctrl_hits))
+            threading.Thread(target=ctrl_srv.serve_forever, daemon=True).start()
+            try:
+                args = mod_cap.build_parser().parse_args(base + ["--port", str(ctrl_srv.server_port)])
+                mod_cap.Capture(args)
+            finally:
+                ctrl_srv.shutdown()
+                ctrl_srv.server_close()
+            return ctrl_hits
+
+        ctrl_log = _capture_with_retry(_control_attempt)
+        logins = [h for h in ctrl_log if "/auth/login" in h]
+        assert len(logins) == 4, f"Capture 构造 = 4 个 QbClient 各 login 一次, 实计: {ctrl_log}"
     finally:
         srv.shutdown()
         srv.server_close()
+
+
+def test_qb_capture_control_group_retry_guard():
+    """对照组受控重试守阵(issue 26-11-12-0318): 瞬时 RequestException 重试且每轮 attempt()
+    自建台账(轮间隔离 -- 中止轮的残账留在废弃轮); 重试耗尽原样上抛不吞; 登录被拒等
+    确定性失败(SystemExit)不重试照常红。红验: 恒失败构造下耗尽必 raises, 不会静默放行。
+    """
+    calls = {"n": 0}
+
+    def _transient_then_ok(_i):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise requests.exceptions.ConnectionError("Connection aborted. (10053)")
+        return ["POST /auth/login"] * 4  # 成功轮自带独立台账: 恰 4 条
+
+    # 瞬时中止: 重试一次后成功, 台账 = 成功轮独立台账 4 条
+    assert _capture_with_retry(_transient_then_ok) == ["POST /auth/login"] * 4
+    assert calls["n"] == 2, f"瞬时中止必须恰好重试 1 次: {calls}"
+
+    # 恒中止(确定性故障形态): 耗尽后原样上抛, 不静默放行
+    calls["n"] = 0
+
+    def _always_aborts(_i):
+        calls["n"] += 1
+        raise requests.exceptions.ConnectionError("Connection aborted. (10053)")
+
+    with pytest.raises(requests.exceptions.ConnectionError):
+        _capture_with_retry(_always_aborts)
+    assert calls["n"] == _CAPTURE_CTRL_ATTEMPTS, f"必须重试满 { _CAPTURE_CTRL_ATTEMPTS } 次才放弃: {calls}"
+
+    # 确定性失败(SystemExit = 登录被拒): 不属于环境噪声族, 不重试
+    calls["n"] = 0
+
+    def _login_rejected(_i):
+        calls["n"] += 1
+        raise SystemExit("[FATAL] qB 登录被拒")
+
+    with pytest.raises(SystemExit):
+        _capture_with_retry(_login_rejected)
+    assert calls["n"] == 1, f"SystemExit 不得重试: {calls}"
 
 
 # --------------------------------------------------------------------------- P5 item#9: port_kill pre-kill verify
