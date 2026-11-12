@@ -15,8 +15,9 @@
    默认仅告警不拦(e2e 轨不用固定口); `--blocking 8099` 可给 dev.harness 做同款前置。
 
 占用归属判定**不走 curl**: 本环境有透明代理, curl 直连被占端口拿到代理 502, 判据不可靠
-(smoke.md 已记); 一律 Get-NetTCPConnection 现查 PID + Win32_Process.CommandLine ——
-命令行里带 clone 路径, "旧桩是哪个 clone 的"一眼可判, 不猜。
+(smoke.md 已记); 一律现查 PID + 命令行, 查询/归属单点在 scripts/port_kill.py(按 os.name
+分派两平台, 明细见其文件头) —— 命令行里带 clone 路径, "旧桩是哪个 clone 的"一眼可判,
+不猜。
 
 用法:
     commands run dev.e2e-check                  # 单跑(默认: 无拦断面, warn=8099)
@@ -28,17 +29,17 @@ from __future__ import annotations
 
 import os
 import re
-import subprocess
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from port_kill import listening_pids  # noqa: E402  (端口探测单点, dev.port-kill 同源)
+from port_kill import listening_pids, process_info  # noqa: E402  (探测+归属单点, dev.port-kill 同源)
 
 DEFAULT_WARN_PORTS = "8099"
-# 命令行里抓 clone 路径段(多 clone 工作区 ../auto-qb-* 平级, 残留桩归属一眼可判)
-CLONE_HINT_RE = re.compile(r"[A-Za-z]:\\[^\"']*auto-qb[^\"']*")
+# 命令行里抓 clone 路径段(多 clone 工作区 ../auto-qb-* 平级, 残留桩归属一眼可判);
+# 两平台形态: nt 盘符路径(C:\...\auto-qb...)与 posix 绝对路径(/.../auto-qb...)
+CLONE_HINT_RE = re.compile(r"(?:[A-Za-z]:\\|/)[^\"']*auto-qb[^\"']*")
 
 
 def parse_port_args(args: list[str]) -> tuple[str, str, str | None]:
@@ -74,25 +75,15 @@ def _utf8_stdout() -> None:
 
 
 def _proc_info(pid: int) -> tuple[str, str]:
-    """(进程名, 命令行摘要) —— Get-CimInstance 一次查一个 PID; 查不到给占位。"""
-    ps = (
-        f"$p = Get-CimInstance Win32_Process -Filter 'ProcessId = {pid}' -ErrorAction SilentlyContinue; "
-        "if ($p) { Write-Output ($p.Name + '|' + $p.CommandLine) }"
-    )
-    r = subprocess.run(
-        ["powershell", "-NoProfile", "-Command", ps],
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-    )
-    out = (r.stdout or "").strip()
-    if "|" in out:
-        name, _, cmdline = out.partition("|")
-        hint = CLONE_HINT_RE.search(cmdline or "")
-        summary = hint.group(0) if hint else (cmdline or "").strip()[:160]
-        return name, summary
-    return "?", "(命令行不可读)"
+    """(进程名, 命令行摘要) —— 复用 port_kill.process_info 单点(os.name 分派两平台), 查不到给占位。"""
+    info = process_info([pid]).get(pid)
+    if info is None:
+        return "?", "(命令行不可读)"
+    name, cmdline = info
+    hint = CLONE_HINT_RE.search(cmdline or "")
+    # 提示位/无提示统一截 160: posix cmdline 无引号, hint 可吞整段, 截断必须套在 hint 上
+    summary = (hint.group(0) if hint else (cmdline or "").strip())[:160]
+    return name, summary
 
 
 def _check_node_modules(root: Path, problems: list[str], notes: list[str]) -> None:

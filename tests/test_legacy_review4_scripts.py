@@ -26,6 +26,11 @@ a comment pointing there in the same batch).
 The test cases below for port_kill are all monkeypatched (fake
 listening_pids/process_info/subprocess.run), so taskkill is never really executed --
 the kill path never actually runs in tests, only decisions and refusal wiring.
+Since the 26-11-13-0234 batch the posix query-unit cases (proc_walk / reads_proc)
+stub at the environment level (fake /proc tree via PROC_ROOT + os.name/os.readlink
+stubs, query functions real); the main-wiring posix cases stub
+listening_pids/process_info as on nt; taskkill/SIGKILL still never actually execute
+on any host.
 
 本文件是 legacy-review4 scripts 各批次共用的测试落点, 后续批次往里追加用例,
 头部 docstring 的「## 测试计划」清单随用例同步登记。用例纯内存构造, 不真跑 git
@@ -49,6 +54,14 @@ the kill path never actually runs in tests, only decisions and refusal wiring.
 - test_port_kill_main_attribution_refusal_and_yes (P5 #9): main wiring (all monkeypatched, taskkill never really executed) -- non-python listener gets attribution line then REFUSED with rc!=0 and zero taskkill; with --yes exactly one pinned taskkill
 - test_port_kill_main_python_listener_keeps_old_flow (P5 #9): compat -- python.exe listener still passes without --yes, bare port list usage unbroken, no-listener behavior unchanged
 - test_port_kill_main_verify_failure_fails_safe (P5 #9): fail-safe -- empty process_info result refuses with verify-failed regardless of --yes, never silently passes
+- test_port_kill_listening_pids_posix_proc_walk (issue 26-11-13-0234): POSIX 支 /proc/net/tcp{,6} Listen(st=0A)inode -> /proc/*/fd 反查; TIME_WAIT/其它端口/有 inode 无 fd 归属/无监听一律空集不误报, tcp+tcp6 都命中; os.name 桩钉 POSIX 分派 + 假 /proc 树 + readlink 桩(fd 内容即目标)任一平台跑; 红验: 旧实现无 POSIX 支在 Linux 必 FileNotFoundError(2026-11-13 dev.e2e-check 实录)
+- test_port_kill_process_info_posix_reads_proc (issue 26-11-13-0234): POSIX 支归属 comm/cmdline(NUL 拼回空格), comm/cmdline 缺失或 raced exit 的 pid 缺席=verify-failure(fail-safe 两支同语义); posix 名形态(python3/python3.13/uv wrapper)过同一道归属闸
+- test_port_kill_main_posix_sigkill_gate (issue 26-11-13-0234): POSIX main 接线 -- python 监听免 --yes 一次 SIGKILL(归属行+回执不回归); 非 python 无 --yes 拒杀且零 os.kill; --yes 放行一次 SIGKILL; process_info 缺席 = verify-failed 拒杀且零 os.kill(两平台同闸)
+- test_port_kill_main_posix_kill_failure_faces (issue 26-11-13-0234): POSIX 实杀失败面 -- ProcessLookupError/PermissionError -> kill-failed 行 + rc!=0, 不崩栈不静默
+- test_port_kill_main_nt_kill_failed_rc (issue 26-11-13-0234): nt 支实杀失败面(与 posix 失败面对称) -- taskkill rc!=0 -> kill-failed 行透传原因 + rc 归一化非 0
+- test_port_kill_listening_pids_nt_parses_stdout (issue 26-11-13-0234): nt 支平台无关钉住 -- Get-NetTCPConnection PS 串含端口且钉 -State Listen 过滤(posix 支 Listen-only 的对称钉), stdout 整数解析不回归、非整数 token 过滤
+- test_e2e_selfcheck_proc_info_reuses_port_kill (issue 26-11-13-0234): _proc_info 收编进 port_kill 单点 -- 静态钉 e2e_selfcheck 无 powershell/Win32_Process 字面量(第三处 powershell 位不许复活); nt 盘符/posix 绝对路径提示位、查不到占位、截 160 旧口径不回归
+- test_e2e_selfcheck_check_port_attribution_wiring (issue 26-11-13-0234): _check_port 归属显示链行为钉 -- 归属行格式 "pid <n> <名>: <摘要>", blocking 进 problems 带 NEXT: dev.port-kill, warn 进 notes 带人工桩提示(分流+格式双钉)
 """
 
 from __future__ import annotations
@@ -517,6 +530,7 @@ def test_port_kill_process_info_parses_ps_json(monkeypatch):
     normalized, null CommandLine becomes empty string, pids the query cannot answer
     stay absent (absence = verify failure, callers refuse)."""
     mod_pk = _load_script("port_kill")
+    monkeypatch.setattr(mod_pk.os, "name", "nt")  # 钉 Windows 分派: PS JSON 解析支在任一平台都跑(issue 26-11-13-0234)
 
     def _fake_run(cmd, **kw):
         ps = cmd[-1]  # [powershell, -NoProfile, -Command, <ps>]
@@ -552,6 +566,7 @@ def test_port_kill_main_attribution_refusal_and_yes(monkeypatch, capsys):
     exactly one pinned taskkill. Old implementation kills on the same input -- red
     on regression."""
     mod_pk = _load_script("port_kill")
+    monkeypatch.setattr(mod_pk.os, "name", "nt")  # 钉 Windows 分派: taskkill 支在任一平台都跑(issue 26-11-13-0234)
     taskkill_calls = []
 
     def _fake_run(cmd, **kw):
@@ -583,6 +598,7 @@ def test_port_kill_main_python_listener_keeps_old_flow(monkeypatch, capsys):
     passes without --yes; bare port-list usage unbroken (dev.port-kill passes args
     through); no-listener behavior unchanged."""
     mod_pk = _load_script("port_kill")
+    monkeypatch.setattr(mod_pk.os, "name", "nt")  # 钉 Windows 分派: taskkill 支在任一平台都跑(issue 26-11-13-0234)
     taskkill_calls = []
 
     def _fake_run(cmd, **kw):
@@ -614,6 +630,7 @@ def test_port_kill_main_verify_failure_fails_safe(monkeypatch, capsys):
     pid failed inside taskkill; the new implementation blocks before the kill, and
     neither input ever issues taskkill."""
     mod_pk = _load_script("port_kill")
+    monkeypatch.setattr(mod_pk.os, "name", "nt")  # 钉 Windows 分派: taskkill 支在任一平台都跑(issue 26-11-13-0234)
     taskkill_calls = []
 
     def _fake_run(cmd, **kw):
@@ -631,3 +648,260 @@ def test_port_kill_main_verify_failure_fails_safe(monkeypatch, capsys):
         assert rc != 0, f"verify failure must exit non-zero: {argv}"
         assert "verify-failed" in out, f"refusal line must say verify failed: {out!r}"
         assert taskkill_calls == [], f"verify failure must not kill ({argv}): {taskkill_calls}"
+
+
+# ---------------------------------------------------------------------------
+# issue 26-11-13-0234: port_kill/e2e_selfcheck 平台双支(参照 recycle-obs os.name 桩先例,
+# 两支各 os.name 桩钉住, 在任一平台都跑; 假 /proc 树 + readlink 桩替代真 symlink 免权限差异)
+_NET_TCP_HEADER = ("  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode\n")
+
+
+def _proc_tcp_row(sl, local, rem, st, inode):
+    """一条 /proc/net/tcp 数据行(列序与内核一致; split 解析只认列位不认对齐)。"""
+    return (
+        f"{sl:>3}: {local} {rem} {st} 00000000:00000000 00:00000000 00000000"
+        f"  1000        0 {inode} 1 ffff8800 100 0 0 10 0\n"
+    )
+
+
+def _fake_proc(tmp_path, files):
+    """假 /proc 树: files = {相对路径: 内容(str/bytes)}; fd 项用普通文件, 内容即 readlink 目标。"""
+    root = tmp_path / "proc"
+    for rel, content in files.items():
+        p = root / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes(content.encode("utf-8") if isinstance(content, str) else content)
+    return root
+
+
+def _stub_fd_readlink(monkeypatch, mod_pk):
+    """readlink 桩: fd 项内容即目标("socket:[<inode>]"), 语义与真 symlink 等价。"""
+    monkeypatch.setattr(mod_pk.os, "readlink", lambda path: Path(path).read_text(encoding="utf-8"))
+
+
+def test_port_kill_listening_pids_posix_proc_walk(monkeypatch, tmp_path):
+    """issue 26-11-13-0234 POSIX 支: /proc/net/tcp{,6} Listen(st=0A)inode -> /proc/*/fd 反查 PID。
+
+    红验面: 旧实现无 POSIX 支, Linux 直调必 FileNotFoundError(2026-11-13 实录:
+    dev.e2e-check 0.1s 即崩)。本用例 os.name 桩钉 POSIX 分派 + 假 /proc 树, 解析与反查
+    全链任一平台都跑; TIME_WAIT(06)、其它端口、有 inode 无 fd 归属(别用户可见性缺口)、
+    无监听端口一律空集不误报; tcp 支与 tcp6 支都命中。
+    """
+    mod_pk = _load_script("port_kill")
+    monkeypatch.setattr(mod_pk.os, "name", "posix")  # 钉 POSIX 分派
+    port = 8099
+    root = _fake_proc(
+        tmp_path, {
+            "net/tcp":
+                _NET_TCP_HEADER + _proc_tcp_row(0, f"0100007F:{port:04X}", "00000000:0000", "0A", 12345) +
+                _proc_tcp_row(1, f"0100007F:{port:04X}", "00000000:0000", "0A", 12346) +
+                _proc_tcp_row(2, f"0100007F:{8080:04X}", "00000000:0000", "0A", 666) +
+                _proc_tcp_row(3, f"0100007F:{port:04X}", "00000000:0000", "06", 555),
+            "net/tcp6":
+                _NET_TCP_HEADER + _proc_tcp_row(0, f"{0:032X}:{port:04X}", f"{0:032X}:0000", "0A", 12347),
+            "472/fd/3":
+                "socket:[12345]",
+            "473/fd/5":
+                "socket:[12346]",
+            "474/fd/7":
+                "socket:[12347]",
+            "999/fd/3":
+                "socket:[555]",
+        }
+    )
+    monkeypatch.setattr(mod_pk, "PROC_ROOT", str(root))
+    _stub_fd_readlink(monkeypatch, mod_pk)
+    assert mod_pk.listening_pids(port) == {472, 473, 474}, "tcp(472/473)与 tcp6(474)的 Listen 归属全命中"
+    assert mod_pk.listening_pids(8080) == set(), "有 inode 无 fd 归属 -> 空集(别用户可见性缺口, 不误报)"
+    assert mod_pk.listening_pids(99999) == set(), "无监听端口 -> 空集"
+
+
+def test_port_kill_process_info_posix_reads_proc(monkeypatch, tmp_path):
+    """issue 26-11-13-0234 POSIX 支归属: /proc/<pid>/comm + cmdline; 缺席 = verify-failure。
+
+    comm 短名形态(python3 / python3.13 / uv wrapper)与 Windows 名形态(python.exe)在
+    _is_python_listener 下同判; cmdline NUL 分隔拼回空格; comm/cmdline 缺失或 raced
+    exit 的 pid 缺席, 调用方拒杀(fail-safe 两支同语义)。
+    """
+    mod_pk = _load_script("port_kill")
+    monkeypatch.setattr(mod_pk.os, "name", "posix")  # 钉 POSIX 分派
+    root = _fake_proc(
+        tmp_path,
+        {
+            "472/comm": "python3\n",
+            "472/cmdline": "uv run python scripts/ui_harness.py --port 0\x00",
+            "473/comm": "python3.13\n",
+            "473/cmdline": "/usr/bin/python3.13\x00scripts/ui_harness.py\x00--port 0\x00",
+            "475/comm": "uv\n",
+            "475/cmdline": "uv\x00run\x00python\x00scripts/ui_harness.py\x00--port 0\x00",
+            "476/comm": "python\n",  # comm 在但 cmdline 缺失: 查询答不全 -> 缺席
+        }
+    )
+    monkeypatch.setattr(mod_pk, "PROC_ROOT", str(root))
+    infos = mod_pk.process_info([472, 473, 475, 476, 123])
+    assert infos[472] == ("python3", "uv run python scripts/ui_harness.py --port 0")
+    assert infos[473] == ("python3.13", "/usr/bin/python3.13 scripts/ui_harness.py --port 0"), "NUL 拼回空格"
+    assert 476 not in infos and 123 not in infos, "comm/cmdline 缺失或 raced exit -> 缺席 = verify-failure"
+    for pid in (472, 473, 475):
+        ok, _ = mod_pk.kill_decision(infos[pid], False)
+        assert ok, f"posix 名形态 python-like 监听须免 --yes 放行: {infos[pid]}"
+
+
+def test_port_kill_main_posix_sigkill_gate(monkeypatch, capsys):
+    """issue 26-11-13-0234 POSIX main 接线: python 监听免 --yes 走一次 SIGKILL; 非 python
+    无 --yes 拒杀且零 os.kill; --yes 放行一次 SIGKILL; process_info 缺席 = verify-failed
+    拒杀且零 os.kill -- 归属闸两平台同闸, 实杀面分派。"""
+    mod_pk = _load_script("port_kill")
+    monkeypatch.setattr(mod_pk.os, "name", "posix")  # 钉 POSIX 分派
+    kills = []
+
+    def _fake_kill(pid, sig):
+        kills.append((pid, sig))
+
+    monkeypatch.setattr(mod_pk.os, "kill", _fake_kill)
+    monkeypatch.setattr(mod_pk, "listening_pids", lambda port: {4321})
+    monkeypatch.setattr(
+        mod_pk, "process_info", lambda pids: {4321: ("python3", "uv run python scripts/ui_harness.py --port 0")}
+    )
+
+    rc = mod_pk.main(["8137"])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert kills == [(4321, mod_pk._SIGKILL)], f"python 监听免 --yes, 实杀 = 一次 SIGKILL: {kills}"
+    assert "pid 4321 = python3" in out and "-> killed" in out, f"归属行与回执不回归: {out!r}"
+
+    kills.clear()
+    monkeypatch.setattr(mod_pk, "process_info", lambda pids: {4321: ("chrome", "chrome --headless")})
+    rc = mod_pk.main(["8137"])
+    capsys.readouterr()
+    assert rc != 0 and kills == [], "非 python 无 --yes: 拒杀且零 os.kill"
+
+    rc = mod_pk.main(["8137", "--yes"])
+    capsys.readouterr()
+    assert rc == 0 and kills == [(4321, mod_pk._SIGKILL)], "--yes 放行一次 SIGKILL"
+
+    kills.clear()
+    monkeypatch.setattr(mod_pk, "process_info", lambda pids: {})  # 查询答不出 = verify-failure
+    rc = mod_pk.main(["8137"])
+    out = capsys.readouterr().out
+    assert rc != 0 and "verify-failed" in out and kills == [], "posix 缺席面: fail-safe 拒杀且零 os.kill"
+
+
+def test_port_kill_main_posix_kill_failure_faces(monkeypatch, capsys):
+    """issue 26-11-13-0234 POSIX 实杀失败面: ProcessLookupError(raced exit)/PermissionError
+    -> kill-failed 行 + rc!=0, 不崩栈不静默(输出形态与旧 taskkill rc!=0 一致)。"""
+    mod_pk = _load_script("port_kill")
+    monkeypatch.setattr(mod_pk.os, "name", "posix")  # 钉 POSIX 分派
+    monkeypatch.setattr(mod_pk, "listening_pids", lambda port: {4321})
+    monkeypatch.setattr(mod_pk, "process_info", lambda pids: {4321: ("python3", "python stub.py")})
+
+    def _gone(pid, sig):
+        raise ProcessLookupError
+
+    monkeypatch.setattr(mod_pk.os, "kill", _gone)
+    rc = mod_pk.main(["8137"])
+    out = capsys.readouterr().out
+    assert rc != 0 and "kill-failed" in out and "already exited" in out, f"raced exit 面: {out!r}"
+
+    def _denied(pid, sig):
+        raise PermissionError
+
+    monkeypatch.setattr(mod_pk.os, "kill", _denied)
+    rc = mod_pk.main(["8137"])
+    out = capsys.readouterr().out
+    assert rc != 0 and "kill-failed" in out and "permission denied" in out, f"权限面: {out!r}"
+
+
+def test_port_kill_main_nt_kill_failed_rc(monkeypatch, capsys):
+    """issue 26-11-13-0234 nt 支实杀失败面(平台无关钉住, 与 posix 失败面对称): taskkill
+    rc!=0 -> kill-failed 行透传原因 + rc 归一化非 0(rc |= returncode 改为失败置 1)。"""
+    mod_pk = _load_script("port_kill")
+    monkeypatch.setattr(mod_pk.os, "name", "nt")  # 钉 Windows 分派
+    monkeypatch.setattr(mod_pk, "listening_pids", lambda port: {4321})
+    monkeypatch.setattr(mod_pk, "process_info", lambda pids: {4321: ("python.exe", "python stub.py")})
+
+    def _fake_run(cmd, **kw):
+        assert cmd[:3] == ["taskkill", "/F", "/PID"], f"实杀参数不回归: {cmd}"
+        return SimpleNamespace(returncode=128, stdout="", stderr="ERROR: The process not found.")
+
+    monkeypatch.setattr(mod_pk.subprocess, "run", _fake_run)
+    rc = mod_pk.main(["8137"])
+    out = capsys.readouterr().out
+    assert rc != 0, "taskkill 失败必须非 0 退出"
+    assert "-> kill-failed" in out and "ERROR: The process not found." in out, f"失败原因透传: {out!r}"
+
+
+def test_port_kill_listening_pids_nt_parses_stdout(monkeypatch):
+    """issue 26-11-13-0234 nt 支(平台无关钉住): Get-NetTCPConnection PS 串含端口且钉
+    -State Listen 过滤(与 posix 支 Listen-only 对称, 丢了它非 Listen 连接属主会被误报),
+    stdout 整数解析不回归、非整数 token 过滤; 端口号不进 PS 串或丢 PID 都算回归。"""
+    mod_pk = _load_script("port_kill")
+    monkeypatch.setattr(mod_pk.os, "name", "nt")  # 钉 Windows 分派
+    seen = {}
+
+    def _fake_run(cmd, **kw):
+        seen["cmd"] = cmd
+        return SimpleNamespace(returncode=0, stdout="123\n\n456 x 789\n", stderr="")
+
+    monkeypatch.setattr(mod_pk.subprocess, "run", _fake_run)
+    assert mod_pk.listening_pids(8137) == {123, 456, 789}
+    ps = seen["cmd"][-1]
+    assert seen["cmd"][0] == "powershell" and "Get-NetTCPConnection" in ps and "8137" in ps
+    assert "-State Listen" in ps, "Listen 过滤必须进 PS 串(posix 支 st=0A 过滤的对称钉)"
+
+
+def test_e2e_selfcheck_proc_info_reuses_port_kill(monkeypatch):
+    """issue 26-11-13-0234 _proc_info 收编进 port_kill 单点(不再复制一份查询): 静态钉
+    e2e_selfcheck 已无 powershell/Win32_Process 字面量; nt 盘符/posix 绝对路径提示位、
+    查不到占位、无提示截 160 的旧口径全部不回归。"""
+    mod_e2e = _load_script("e2e_selfcheck")
+    src = (ROOT / "scripts" / "e2e_selfcheck.py").read_text(encoding="utf-8")
+    assert "powershell" not in src.lower() and "win32_process" not in src.lower(), (
+        "第三处 powershell 位必须收编进 port_kill 单点, 不许在 e2e_selfcheck 复活"
+    )
+
+    monkeypatch.setattr(
+        mod_e2e,
+        "process_info",
+        lambda pids: {77: ("python3", "/home/x/auto-qb-z/scripts/ui_harness.py --port 0")},
+    )
+    assert mod_e2e._proc_info(77) == ("python3",
+                                      "/home/x/auto-qb-z/scripts/ui_harness.py --port 0"), ("posix clone 路径段进提示位")
+
+    monkeypatch.setattr(
+        mod_e2e,
+        "process_info",
+        lambda pids: {88: ("python.exe", r"C:\cl\auto-qb-x\scripts\ui_harness.py --port 0")},
+    )
+    assert mod_e2e._proc_info(88) == ("python.exe",
+                                      r"C:\cl\auto-qb-x\scripts\ui_harness.py --port 0"), ("nt 盘符路径提示位不回归")
+
+    monkeypatch.setattr(mod_e2e, "process_info", lambda pids: {})
+    assert mod_e2e._proc_info(99) == ("?", "(命令行不可读)"), "查不到占位不变"
+
+    monkeypatch.setattr(mod_e2e, "process_info", lambda pids: {11: ("python3", "x" * 300)})
+    assert mod_e2e._proc_info(11) == ("python3", "x" * 160), "无提示位时截 160 旧口径"
+
+
+def test_e2e_selfcheck_check_port_attribution_wiring(monkeypatch):
+    """issue 26-11-13-0234 _check_port 归属显示链行为钉(本批链路成员 listening_pids/
+    process_info 已改, 该链在 Linux 首次真实投产): 归属行格式 "pid <n> <名>: <摘要>",
+    blocking 面 -> problems(带 NEXT: dev.port-kill 清理动作), warn 面 -> notes(带人工桩
+    提示) -- 分流与格式双双钉住, 不再只有 _proc_info 单元级。"""
+    mod_e2e = _load_script("e2e_selfcheck")
+    monkeypatch.setattr(mod_e2e, "listening_pids", lambda port: {77})
+    monkeypatch.setattr(
+        mod_e2e, "process_info", lambda pids: {77: ("python3", "/home/x/auto-qb-z/scripts/ui_harness.py --port 0")}
+    )
+
+    problems, notes = [], []
+    mod_e2e._check_port(8099, blocking=True, problems=problems, notes=notes)
+    assert not notes and len(problems) == 1, "blocking 面进 problems 不进 notes"
+    body = problems[0]
+    assert "pid 77 python3: /home/x/auto-qb-z/scripts/ui_harness.py" in body, f"归属行格式: {body!r}"
+    assert "NEXT: commands run dev.port-kill -- 8099" in body, "blocking 面带 NEXT 清理动作"
+
+    problems, notes = [], []
+    mod_e2e._check_port(8099, blocking=False, problems=problems, notes=notes)
+    assert not problems and len(notes) == 1, "warn 面进 notes 不进 problems"
+    assert "pid 77 python3:" in notes[0] and "人工桩惯用值" in notes[0], "warn 面归属行 + 提示文案"

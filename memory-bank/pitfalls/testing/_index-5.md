@@ -1,13 +1,14 @@
 # testing — 测试 / 冒烟 / 仿真纪律 · 卷 5/5
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `smoke.md` … `xdist-worker-global-snapshot.md`(共 22 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `single-file-xdist-hang.md` … `xdist-worker-global-snapshot.md`(共 23 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
 
 | 主题 | 一句话 | 触发词 |
 |---|---|---|
+| [single-file-xdist-hang.md](single-file-xdist-hang.md) | 只跑**一个**测试文件却用默认的 `-n 8`, 会长时间**零输出**看起来像挂死 (实测 7 分钟无一行, 只有 1 个 worker 存活); 单文件 / 少量用例一律 `-n 0` 串行, 同一批用例 24s 跑完。`test.one` 已内置 `-n 0`。 | 单文件 -n 8, 挂死, 零输出, xdist worker 卡住, test.one, 单文件慢, 并行度 |
 | [smoke.md](smoke.md) | `scripts/ui_harness.py` + `e2e/`(@playwright/test)是本仓库覆盖前端渲染的唯一手段; 这里是它的环境坑与验证手法 | 浏览器冒烟, e2e, Playwright, Edge, 白屏, 前端改完, 时序复现, 聚合行状态色, Cannot find module playwright, 修饰键点击, Ctrl+click, 多选失败, site-chip,… |
 | [stale-repo-copy-scan-red.md](stale-repo-copy-scan-red.md) | gitignored 的旧全量仓库副本被 `rglob` 扫描守阵算进「源码散落」, 报错指向副本而非产品代码; 移出副本即绿, 不是代码缺陷。 | test_free_port_single_source, 端口实现散落, tmp-analysis, 旧仓库副本, rglob, 扫描守阵假红, 环境残留 |
 | [static-guard-mutation.md](static-guard-mutation.md) | 读 JS/模板源码的静态守阵, 若断言只查「字符串在不在」或把多个弱正则串起来, 行为被突变(短路禁用/删语句)后它照样绿 —— 守阵看着活着, 拦不住真突变。升级方向: **整行活性锚定**(匹配带上下文的整行/整块, 摘一个 token 即失配) + **逐分支语句清单**(… | 静态守阵, 静态守卫, 字符串包含, in 断言, 链式正则, 突变盲区, 红验不红, 守阵空转, 短路禁用, 删语句 |

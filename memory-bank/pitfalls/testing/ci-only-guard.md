@@ -30,6 +30,13 @@
   先 `del subprocess.CREATE_NO_WINDOW` 再同进程 `pytest.main(...)`(实测改前 AttributeError、改后绿)。
 - **复发**: +1 (2026-11-03): 为什么没命中 —— 见到用例已用 monkeypatch 造平台差异, 就默认"两侧都覆盖了",
   没检查断言里引用的**模块常量**是否也随平台存在; 判别法当时只写了"切片长度/阈值", 没泛化到"仅一侧存在的符号"。
+- **复发**: +2 (2026-11-13, 镜像方向: POSIX 专属常量在 nt 宿主被钉桩激活) —— port_kill 双支守阵把
+  `os.name` 钉成 `posix` 激活 POSIX 实杀支, 生产表达式 `os.kill(pid, signal.SIGKILL)` 与测试断言引用
+  `signal.SIGKILL`, Windows CPython 的 signal 模块**不定义**该属性 ⇒ 批次同步回 Windows 主 clone 跑
+  test.full 必 AttributeError(与 CREATE_NO_WINDOW 同形反方向); 抓在评审 blocker, 未实际红。为什么没命中:
+  本批只知道 recycle-obs 的 os.name 钉桩先例(platform-fs.md), 没回头扫本档「仅一侧存在的符号」判别面 ——
+  钉桩时检查了**函数桩**, 没检查**实参表达式与断言里引用的常量**是否随平台存在。处置同款: 生产侧模块级
+  单点 `_SIGKILL = getattr(signal, "SIGKILL", 9)`(兜 POSIX 实杀数值), 生产实杀与测试断言同源引用。
 
 ### 2026-11-03 实证: 测试自起子进程 print 中文 —— 本机 cp936 绿, 英文 runner cp1252 红
 
