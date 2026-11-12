@@ -1,7 +1,7 @@
 # testing — 测试 / 冒烟 / 仿真纪律 · 卷 4/5
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `poll-last-round-race.md` … `smoke.md`(共 24 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `poll-last-round-race.md` … `single-file-xdist-hang.md`(共 24 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
@@ -20,6 +20,7 @@
 | [redverify-pycache-stale-verdict.md](redverify-pycache-stale-verdict.md) | 红验/`mutants.verify` 这类「逐条 apply 变异体 → 跑 pytest → 还原」的循环里，同一条源码行若被**等长替换**（如 `get(None, view.channel_state)` ↔ `get(view.channel_state, None)… | 红验, 变异测试, mutmut, apply, 同构变异, 假存活, 假 SURVIVED, pyc, pycache, __pycache__, 字节码缓存, 缓存未失效, mtime 秒级, size 相同, 等长替换, 同长度替换,… |
 | [relocate-window-machine-roster.md](relocate-window-machine-roster.md) | 真机 relocate 收尾实验: daemon 全机名册判据遇生产实例在跑, 离线窗永不开(测试接缝旁路需授权) | 收尾窗, 离线窗, daemon 开窗, 全机名册, _spawn_daemon, 测试接缝, relocate 真机, 生产实例在跑, 旁路授权 |
 | [repo-snapshot-in-tree.md](repo-snapshot-in-tree.md) | 做只读评审要导出整棵仓库快照时, 快照必须放仓库**外** —— 树内的副本会让"单点定义"守卫扫到散落实现, `test.full` 直接红两条, 而快照目录明明已 gitignore。 | 快照, snapshot, git archive, 只读评审, review.lane.start, 批量评审, test-results 放快照, 单点守卫红, test_free_port, test_tmp_bootstrap, 散… |
+| [rowwin-target-row-from-dom.md](rowwin-target-row-from-dom.md) | 行窗口化(rowWin, ROW_WIN_MIN=200)下给 locator 选点击目标, 不能拿 vm 数据序的行当靶 —— vm.groups 是服务端插入序(added_on 升序), 组视图按最近添加降序渲染, 插入序首组排最末、恰在窗外不渲染(点击等元素 30s 超时… | e2e/冒烟在大库档(E2E_TORRENTS=3000 矩阵轮等)点组行/种子行超时; 给窗口化表格写「挑一行来点」的 arrange; 修完可达性后仍偶发点击超时(尾缘行竞速)。 |
 | [sandbox-full-run.md](sandbox-full-run.md) | 沙箱内跑 `commands run test.full` 等自带 `TMPDIR=R:/Temp/...` 的测试命令, 沙箱拒写 R 盘 ⇒ `TMPDIR` 建不了目录 ⇒ pytest 回落 `H:\Temp`(重解析点读不了) ⇒ **点号全过却在收尾崩**, 看着像回… | 沙箱, 沙箱假红, TRAE Sandbox, R:\Temp, TMPDIR 没设, 跑全量, test.full, preflight, 闸门假红, run_in_background, 后台跑测试 |
 | [sandbox-tempfile-cwd-fallback.md](sandbox-tempfile-cwd-fallback.md) | 工具(`tools/global-traffic-monitor`)是独立 uv 项目, 其套件不在根 `testpaths` 内 ⇒ 跑它时**不带**根 `test.*` 包的 `TMPDIR` 收口; 若又在本 agent 沙箱内跑, `H:\Temp` 与 `%TEMP%… | 跑工具侧测试, 工具套件, global-traffic-monitor, 临时目录, TMPDIR, 沙箱, 临时垃圾, git status 脏, tmp 文件, pytest-of |
 | [sandbox-tool-cache.md](sandbox-tool-cache.md) | agent 工具 shell 的沙箱按**白名单**放行写操作。工具若把自己的缓存写到白名单外(本仓实测: yapf 的语法缓存 `%LOCALAPPDATA%\Google\YAPF\Cache`), 而该目录**已存在**却写不进, 失败路径可能不是报错而是**紧循环**:… | 沙箱, sandbox, 工具挂住, yapf 挂住, 高CPU, 一直写磁盘, 缓存目录, mkstemp, NamedTemporaryFile, 白名单, AppData, platformdirs, 提交闸门卡住, 闸门超时后仍在跑… |
@@ -31,4 +32,3 @@
 | [sim-root-sentinel.md](sim-root-sentinel.md) | `scripts/sim_qb.py` 的 `prepare_root` 只在 root 目录**不存在**时才写哨兵 `.auto-qb-sim-root`; 自己先 `mkdir` 出来的空目录第一次跑会被当"合法空目录"放过但不留哨兵, 跑过一次目录非空后, 之后每次起 s… | dev.sim, B1, 哨兵, sim root, 已存在且非空, BoundaryViolation, 删除场景 |
 | [single-file-coverage-gate.md](single-file-coverage-gate.md) | 只跑单个测试文件时, 全部用例绿但收尾仍打 `FAIL Required test coverage of <门槛>% not reached. Total coverage: ~18%` —— 覆盖率**全局门槛**只对全量收集有意义, 部分运行收集面小必然红, 用例本身全过。… | test.one, 单文件, 单测一个文件, coverage FAIL, not reached, 18%, 假红, 排查单个用例, 裸跑 pytest 单文件 |
 | [single-file-xdist-hang.md](single-file-xdist-hang.md) | 只跑**一个**测试文件却用默认的 `-n 8`, 会长时间**零输出**看起来像挂死 (实测 7 分钟无一行, 只有 1 个 worker 存活); 单文件 / 少量用例一律 `-n 0` 串行, 同一批用例 24s 跑完。`test.one` 已内置 `-n 0`。 | 单文件 -n 8, 挂死, 零输出, xdist worker 卡住, test.one, 单文件慢, 并行度 |
-| [smoke.md](smoke.md) | `scripts/ui_harness.py` + `e2e/`(@playwright/test)是本仓库覆盖前端渲染的唯一手段; 这里是它的环境坑与验证手法 | 浏览器冒烟, e2e, Playwright, Edge, 白屏, 前端改完, 时序复现, 聚合行状态色, Cannot find module playwright, 修饰键点击, Ctrl+click, 多选失败, site-chip,… |

@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="webui-group-hash-ref">
 <meta name="doc-refs" content="memory-bank/tasks/26-11-11-webui-group-hash-ref.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="e2e 乐观补丁用例在 @3000 矩阵轮 rowWin 窗口化下组行点击不可达">
 <meta name="issue-summary" content="e2e/group-hash-ref.spec.mjs test4 挑组取 vm.groups 服务端插入序首组(added_on 最老), @3000 矩阵轮 200 组时该行在 rowWin 窗口外不渲染致点击超时; 默认档 150 组不触发, 属负载型用例可达性缺口">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-13-0130-test-e2e-rowwin-group-click-reachability</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-13 01:30</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
 
@@ -118,7 +118,14 @@
   <h2><span class="no">§04</span>状态变更日志</h2>
   <ul>
     <li>2026-11-13 01:30 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-13 — 状态 Open → In Progress（kb.status）</li>
+    <li>2026-11-13 — 状态 In Progress → Done（kb.status）</li>
+</ul>
+  <h3>复验</h3>
+  <p>复验：2026-11-13 实施轮 —— <code>E2E_TORRENTS=3000 commands run dev.e2e -- e2e/group-hash-ref.spec.mjs --grep "乐观补丁"</code> 双皮肤 2 failed，签名与入池一致（test4 展开点击 <code>.group-row[data-key=...] .g-name</code> 等元素 30s 超时，等的是插入序首组 <code>["R:\Downloads\Set000", []]</code>）；默认档不触发。</p>
+  <h3>修复后补充</h3>
+  <p><strong>实际修法</strong>（与 §03 候选对照：取「挑组改从窗口内可见行取」方向，未走滚动检索（避免引入负载型 flake 面）也未降档跳过（保留矩阵档覆盖））：挑组从 <code>vm.groups.find</code>（服务端插入序，首组 = 排序后最末，窗外不渲染）改为沿已渲染组行 <code>.group-row[data-table="group"][data-key]</code> 的 DOM 序（= 最近添加降序）取<strong>最顶</strong>第一个含非暂停成员的组，再反查 <code>vm.groups</code> 拿成员。取「最顶」而非「插入序第一个已渲染」是稳定性要求：挑选与点击之间窗口会重算（首访 n≥ROW_WIN_EST_MIN 按 EST_H 估算开窗，行高实测落定 _rowHVer++ 即重算收窄），滚动顶部 start 恒钳 0 —— 顶部行任何窗口状态下都在场，end 侧尾缘行随重算进出，挑尾缘行 = 点击与重算竞速（修复中间版实验撞过：挑选时在场、点击时已离场）。离线探针实证稳态机理（200 组首包即 active/start=0/end=22，EST_H 44 估算约开到 27、实测 rowH 47.46 收敛后收窄，Set000 从不渲染）。</p>
+  <p><strong>验证方式与测试数字</strong>（2026-11-13 实测）：机制红验 = 原实现矩阵轮定向复跑 2 failed（双皮肤展开点击超时）；绿验 = 修复后同轮 2 passed（3.2s/3.0s），全 spec 矩阵轮 <code>--repeat-each 3</code> <strong>24 passed（56.2s）</strong>，默认档全 spec <strong>8 passed（18.2s）</strong>。评审 2 条过检发现（注释机理归因失实；坑档 rAF 写点文件归属失实），均当场修并复评核销；<code>test.full</code> 全绿（pytest 面零改动，数字见 kb.baseline，与最新基线一致）。</p>
 </section>
 
 <footer>

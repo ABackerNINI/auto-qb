@@ -461,13 +461,27 @@ for (const skin of SKINS) {
       page.on('response', onResp);
       await openApp(page, skin);
 
-      // 挑组: 第一个含非暂停成员的组(长驻桩跨 test 状态, optimistic/delta-sync 同款挑选;
-      // 物化对象形前置自证 —— hash 串槽不能当操作目标)
+      // 挑组: **已渲染组行里最顶**(DOM 序 = 最近添加降序)第一个含非暂停成员的组
+      // (长驻桩跨 test 状态, optimistic/delta-sync 同款挑选; 物化对象形前置自证 ——
+      // hash 串槽不能当操作目标)。
+      // 「已渲染」限定是本用例的可达性前提: 行窗口化(ROW_WIN_MIN=200)下组视图只渲染滚动位置
+      // 附近的一段, 而 vm.groups 是服务端插入序(added_on 升序) —— 其首组在组视图(最近添加降序)
+      // 排最末, @3000 矩阵轮 200 组恰好够开窗阈值, 该行在窗外不渲染, 点击必超时
+      // (issue 26-11-13-0130; 默认档 150 组 < 阈值不开窗, 已渲染 = 全量, 最顶组 = 排序首行)。
+      // 取「最顶」而不是「插入序第一个已渲染」是稳定性要求: 挑选与点击之间窗口会重算 ——
+      // 首访 n>=ROW_WIN_EST_MIN 直接按 EST_H 估算开窗, 行高逐行实测落定(_rowHVer++)即重算
+      // 收窄。滚动顶部窗口 start 恒钳在 0: 顶部行在全量与任何窗口切片下都在场; end 侧尾缘行
+      // 随重算进出, 挑它 = 拿点击跟重算竞速。
+      // 沿 DOM 行键反查 vm.groups 而不是 vm 侧猜窗口边界: 渲染集合的唯一真值在 DOM,
+      // 不复算 _rowWindow 的前缀和/视口几何(那会引入第二份窗口实现, 漂移即假红)。
       const t = await withVm(page, `
-        const g = vm.groups.find((x) => x.members.some((m) => m && typeof m === 'object' && m.kind !== 'paused'));
-        if (!g) return { err: '没有含非暂停成员的组' };
-        const m = g.members.find((m) => m && typeof m === 'object' && m.kind !== 'paused');
-        return { key: g.key, hash: m.hash, beforeKind: m.kind };
+        for (const el of document.querySelectorAll('.group-row[data-table="group"][data-key]')) {
+          const g = vm.groups.find((x) => x.key === el.getAttribute('data-key'));
+          if (!g) continue;
+          const m = g.members.find((m) => m && typeof m === 'object' && m.kind !== 'paused');
+          if (m) return { key: g.key, hash: m.hash, beforeKind: m.kind };
+        }
+        return { err: '已渲染组行里没有含非暂停成员的组' };
       `);
       expect(t.err, `前置: ${t.err || 'ok'}`).toBeUndefined();
 
