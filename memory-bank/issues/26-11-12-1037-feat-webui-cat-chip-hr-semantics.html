@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>WEBUI 分类 chip 缺 HR 语义效果（与 tag chip 不对等） · feat · 计划外问题</title>
+<meta name="issue-slug" content="webui-cat-chip-hr-semantics">
+<meta name="issue-stamp" content="26-11-12-1037">
+<meta name="issue-type" content="feat">
+<meta name="doc-topic" content="webui-cat-chip-hr-semantics">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="WEBUI 分类 chip 缺 HR 语义效果（与 tag chip 不对等）">
+<meta name="issue-summary" content="HR 标记写成分类时只是普通灰 chip 且被行状态色覆盖，拿不到 tag-chip 的 hr-pending/hr-done 语义色与左竖线">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --mark: #161e26;     /* issue 特有: callout 底色 (plan.html 不用) */
+    --warn-bg: #2a2119;  /* issue 特有: 状态徽标底色 */
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 单栏流式版面: 与 plan.html 同一套 .sheet (封顶 1280px, 侧距 clamp(18~44px)); 旧双栏+粘性目录已删 */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+
+  /* 封面 meta 行: issue 特有, DOM 形态别改 —— 状态徽标 <span class="badge"> 被
+     flip_status (W4) 与 check_status_drift 的 BADGE_RE 机读 (k/v div 结构在判据里) */
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px 28px; font-family: var(--mono); font-size: 11.5px; color: var(--faint); border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta-row .item .k { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .meta-row .item .v { font-size: 13.5px; color: var(--dim); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin: 14px 0; font-size: 14px; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-family: var(--mono); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">计划外问题（未修）· feat</div>
+<h1>WEBUI 分类 chip 缺 HR 语义效果（与 tag chip 不对等）</h1>
+<p class="lede">HR 标记写成分类时只是普通灰 chip 且被行状态色覆盖，拿不到 tag-chip 的 hr-pending/hr-done 语义色与左竖线</p>
+<div class="meta-row">
+  <div class="item"><div class="k">编号</div><div class="v">26-11-12-1037-feat-webui-cat-chip-hr-semantics</div></div>
+  <div class="item"><div class="k">报告时间</div><div class="v">2026-11-12 10:37</div></div>
+  <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">feat</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
+  <div class="item"><div class="k">发现者</div><div class="v">2026-11-12 只读核实</div></div>
+</div>
+
+<section id="s1">
+  <h2><span class="no">§01</span>现象与发现场景</h2>
+  <p>2026-11-12 会话：在修复计划 <code>memory-bank/plans/26-11-12-1012-plan-flux-chip-glow-ancestor-clip.html</code> 的只读核实轮，用户追问「分类 chip 没有对 HR 特殊对待吗？」，核实后确认：<strong>表格分类列的 <code>.cat-chip</code> 在展示层完全没有 HR 语义效果</strong>，而同一 HR 语义写在标签路径时 <code>.tag-chip</code> 有 <code>hr-pending</code> / <code>hr-done</code> 的橙/青柔底、字色、加粗与左侧 2px 状态竖线。</p>
+  <p><strong>触发条件</strong>：站点/全局 HR 配置里 <code>hr.add_category</code> 或 <code>hr.add_category_for_satisfied</code> 非空（HR 触发未达标 / 已达标时把标记写成分类而非标签），或分类值命中 <code>exclude_categories</code> 排除表。此时分类列显示的是普通灰 chip，且被所在行的种子状态语义色（绿/蓝/红）无条件覆盖，看不出任何 H&amp;R 含义；而改成 <code>hr.add_tag*</code> 打标签时语义完整可见。</p>
+  <p><strong>当前处置</strong>：用户拍板「另案登记」——<strong>不纳入</strong>上述 flux 修复计划的实施范围（该计划 I1 锁定「仅改 flux」，而本需求需改四皮肤共用模板与四皮肤 CSS）。本件保持 <code>Open</code>、未认领、未排期；与计划的关联仅为正文交叉引用（计划 §02），<code>doc-refs</code> 留空即未建立认领链。</p>
+</section>
+
+<section id="s2">
+  <h2><span class="no">§02</span>证据</h2>
+  <p class="hint">以下原文与 grep 结论取证时间均为 2026-11-12 10:26–10:31（HEAD 59113c69）。行号为当时行号，代码漂移后按符号名与 grep 词重新定位。</p>
+<pre><code># 1) cat-chip 的类绑定只有 f-on，没有 HR 类函数 —— shared/tpl/xtpl-cells.html:80-82
+&lt;span v-if="g.commonCategory.value" class="cat-chip"
+      :class="{ 'f-on': $root.isFilterOn('categoryFilter', g.commonCategory.value) }"
+      @click.stop="$root.filterFromChip('category', g.commonCategory.value)"&gt;{{ g.commonCategory.value }}&lt;/span&gt;
+# 同文件:165-167（member 行）、shared/tpl/xtpl.html:288（torrent 行）同构，亦只有 f-on。
+
+# 2) 唯一的类判定函数只认「标签文本」 —— shared/decorate.js:295-300
+tagClass(tag, member) {
+  if (!member) return "";
+  if (member.hr_tag &amp;&amp; tag === member.hr_tag) return "hr-pending";
+  if (member.hr_tag_done &amp;&amp; tag === member.hr_tag_done) return "hr-done";
+  return "";
+},
+# 组行调用点 xtpl-cells.html:70-71: :class="[$root.tagClass(t, g.members[0]), ...]"
+# 全库 grep "catClass|categoryClass|hrClass" 于 static/ → 无命中。
+
+# 3) tag-chip 有 HR 效果，cat-chip 没有 —— flux/css/components.css:345-352
+.tag-chip.hr-pending { background: var(--hr-pending-soft); color: var(--hr-pending); font-weight: 600;
+  box-shadow: inset 2px 0 0 var(--hr-pending); }
+.tag-chip.hr-done { background: var(--hr-done-soft); color: var(--hr-done);
+  box-shadow: inset 2px 0 0 var(--hr-done); }
+.cat-chip { display: inline-flex; align-items: center; padding: 1px 7px;
+  background: var(--surface-2); color: var(--fg-muted); font-size: 11px; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; }
+# 全库 grep "cat-chip.*hr|hr.*cat-chip" 于 static/ → 仅命中行状态色规则里
+# cat-chip 与 tag-chip 的 :not(.hr-*) 出现在同一条规则，不存在 .cat-chip.hr-* 规则。
+
+# 4) 行状态色规则：tag-chip 让路，cat-chip 不带排除 —— flux/css/components.css:354-369
+.group-row.s-seeding .tag-chip:not(.hr-pending):not(.hr-done),
+.group-row.s-seeding .cat-chip,
+.member-row.seeding .tag-chip:not(.hr-pending):not(.hr-done),
+.member-row.seeding .cat-chip { background: var(--green-soft); color: var(--green); }
+# atlas:387-401 / console / prism:368-382 同构（prism 的 HR 边线形态为 1px 全描边，见 views.css:358-361）。
+
+# 5) 数据层：HR 标记确实可以写成分类 —— config/models.py:45-49, 59-63
+  add_tag / add_category: 满足触发条件时添加的标签/分类(支持 ${required_seeding_time})
+  add_tag_for_satisfied / add_category_for_satisfied: 做种时长已满足要求+额外时间时添加
+  add_category: str = ""
+  add_category_for_satisfied: str = ""
+# core/modules/maintenance_mod.py:326-340
+    if hr.add_category_for_satisfied:
+        category = utils.replace_vars(hr.add_category_for_satisfied, torrent.tracker_conf)
+        added |= self.set_category(torrent, category, hr.overwrite_category_for_satisfied, dry_run)
+    if hr.add_category:
+        category = utils.replace_vars(hr.add_category, torrent.tracker_conf)
+        added |= self.set_category(torrent, category, hr.overwrite_category, dry_run)
+
+# 6) 分类也是 HR 排除表命中面 —— config/models.py:50-52, 65-66 / webui/views.py:310-311
+  exclude_tags / exclude_categories: HR 排除表 ... 命中任一格式的种子不纳入 HR 体系
+  hr_excluded_by: 排除命中来源 token("tag" / "category" / "tag+category", 未命中 = "")</code></pre>
+</section>
+
+<section id="s3">
+  <h2><span class="no">§03</span>影响面</h2>
+  <table>
+    <tr><th>维度</th><th>结论</th></tr>
+    <tr><td>触发条件</td><td><code>hr.add_category*</code> 配非空值并实际写入分类，或分类命中 <code>exclude_categories</code>；qB 分类列有值即呈现，与皮肤 / preset 无关。</td></tr>
+    <tr><td>影响范围</td><td>四种皮肤（atlas / console / prism / flux）表格分类列，组行 <code>commonCategory</code>、成员行、torrent 行三处 <code>.cat-chip</code>；表现为与标签路径的 HR 视觉语义不对等。<strong>不影响</strong>后端 HR 判定、打标、删除安全档位等管束链路。</td></tr>
+    <tr><td>严重度</td><td><strong>低</strong> —— 纯展示层语义缺失，无数据错误与功能失效；判为功能增强（feat）而非缺陷。</td></tr>
+  </table>
+</section>
+
+<section id="s4">
+  <h2><span class="no">§04</span>定位锚点</h2>
+  <p class="hint">符号名 + grep 关键词 + 当时行号（取证 2026-11-12 10:26–10:31, HEAD 59113c69）。</p>
+  <ul>
+    <li><code>shared/decorate.js:295-300</code> · <code>tagClass</code> / <code>hr_tag</code> / <code>hr_tag_done</code> · grep <code>tagClass</code>（唯一类判定，只处理标签文本）</li>
+    <li><code>shared/tpl/xtpl-cells.html:70-82, 165-172</code>、<code>shared/tpl/xtpl.html:288</code> · cat-chip / tag-chip 的 <code>:class</code> 绑定 · grep <code>cat-chip</code>、<code>tagClass</code></li>
+    <li><code>flux/css/components.css:345-369</code> · HR 语义色与行状态色 <code>:not(.hr-pending):not(.hr-done)</code> 排除 · grep <code>hr-pending</code>、<code>cat-chip</code>；四皮肤同构副本在 <code>atlas/css/components.css:373-401</code>、<code>console/css/components.css</code>、<code>prism/css/views.css:358-382</code></li>
+    <li><code>config/models.py:42-66</code> · <code>HrConfig</code> 的 <code>add_tag / add_category / add_*_for_satisfied / exclude_categories</code> · grep <code>add_category_for_satisfied</code></li>
+    <li><code>core/modules/maintenance_mod.py:324-341</code> · <code>set_category</code> 写入 HR 分类 · grep <code>add_category</code>、<code>check_hr_satisfied</code></li>
+    <li><code>webui/views.py:300-325</code> · <code>hr_view_fields</code>（只有 <code>hr_tag / hr_tag_done</code>，无 HR 分类字段）· grep <code>hr_excluded_by</code></li>
+    <li>关联交叉引用（未认领）：<code>memory-bank/plans/26-11-12-1012-plan-flux-chip-glow-ancestor-clip.html</code> §02「分类 chip 与 HR 的关系」</li>
+  </ul>
+</section>
+
+<section id="s5">
+  <h2><span class="no">§05</span>根因<span class="opt">（可选）</span></h2>
+  <p class="hint">默认「待查」—— 不为填单做分析。以下只记已核实事实与已排除假设。</p>
+  <div class="callout">待查（已排除：① 后端 HR 判定/打标失效 —— <code>maintenance_mod.py:326-340</code> 按配置写分类是设计内行为；② flux 单皮肤漏写 CSS —— 四皮肤的 cat-chip 均无 HR 类与规则，非 flux 独有）。事实层：渲染链路缺「HR 分类标记 → cat-chip 状态类」这一段映射，且 CSS 无对应规则与 <code>:not()</code> 让路。</div>
+</section>
+
+<section id="s6">
+  <h2><span class="no">§06</span>建议修法<span class="opt">（可选）</span></h2>
+  <p class="hint">方向 + 候选 + 代价；<strong>待定、未拍板，本报告不实施</strong>。以下只是开工时的讨论起点，认领后须重新核实。</p>
+  <ul>
+    <li><strong>方向 A（补齐渲染链路，与 tag chip 对等）</strong>：后端 <code>hr_view_fields</code> 增补 HR 分类字段（类比 <code>hr_tag / hr_tag_done</code>）→ 前端新增 <code>catClass</code> 按分类文本比对 → 模板三处 cat-chip 加类 → 四皮肤 CSS 成对补 <code>.cat-chip.hr-*</code> 语义色/边线及行状态色规则的 <code>:not()</code> 让路 → 补静态守阵与 e2e。<strong>代价</strong>：改四皮肤共用模板与四皮肤 CSS，破当前 flux 计划的 I1「仅改 flux」，需另立计划并重跑四皮肤键集 / 令牌 parity / 模板守阵。</li>
+    <li><strong>方向 B（配置/文档层收敛）</strong>：不改前端结构，文档明确引导 HR 标记只用 <code>hr.add_tag*</code> 打标签；或把分类形态仅作数据用途。<strong>代价</strong>：不解决已经写入分类的存量种子，视觉不对等仍在。</li>
+    <li><strong>范围提示</strong>：两种方向都超出 flux 辉光修复计划；本件保持 Open 等排期，认领须用户另行指派。</li>
+  </ul>
+</section>
+
+<section id="s7">
+  <h2><span class="no">§07</span>状态变更日志</h2>
+  <ul>
+    <li>2026-11-12 10:37 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    <li>2026-11-12 10:37 — 用户拍板「另案登记」：不纳入 flux 修复计划、不认领、不排期；与计划仅正文交叉引用，<code>doc-refs</code> 留空（未建立认领链）</li>
+  </ul>
+  <h3>复验</h3>
+  <p class="hint">认领后第一件事：重跑 §04 锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」（防过期原则第 5 条）。</p>
+  <h3>修复后补充</h3>
+  <p class="hint">修完时写「实际修法 / 验证方式 / 测试数字」；与 §06 建议不同则保留建议原文并说明改道原因。</p>
+</section>
+
+<footer>
+  26-11-12-1037-feat-webui-cat-chip-hr-semantics.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+</footer>
+
+</div>
+</body>
+</html>
