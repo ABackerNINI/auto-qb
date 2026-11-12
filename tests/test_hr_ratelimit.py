@@ -19,11 +19,16 @@
 - test_day_key_exact_local_date_format: 天窗口键格式钉死 "%Y-%m-%d"(持久化契约)
 - test_next_day_reset_is_exact_next_midnight: 日额重置 = 次日零点整
 - test_window_start_on_pins_start_endpoint_and_rollover: 窗口起点取起点端 + 顺延 + 精确归零
+- test_dst_free_tz_pinned_for_wallclock_asserts: 守阵(POSIX): 本模块测试期 TZ 钉死无 DST 固定偏移, 03-07→03-08 墙钟翻日恰 86400s(issue 26-11-12-2347)
 - test_next_allowed_at_takes_latest_gate_and_reason: 多门槛取最晚者 + 对应原因
 - test_next_allowed_at_clear_returns_empty_reason: 候选存在但都 <= now -> now + 空原因
 - test_next_allowed_at_exact_due_equals_now_is_clear: due 恰等 now 视为已满足(<= 而非 <)
 """
+import os
 import random
+import time
+
+import pytest
 
 from auto_qb.hr.model import HrSiteData
 from auto_qb.hr.ratelimit import (
@@ -39,6 +44,36 @@ from auto_qb.hr.ratelimit import (
 import auto_qb.hr.ratelimit as rl
 
 NOW = 1_700_000_000.0
+
+# 无 DST 固定偏移时区(UTC+8): 墙钟翻日恒 86400s, naive 解析与实现侧 fromtimestamp 同源
+_DST_FREE_TZ = "Asia/Shanghai"
+# Windows CPython 无 time.tzset(进程内改不了时区), 该侧只能维持宿主时区
+_TZSET_AVAILABLE = hasattr(time, "tzset")
+
+
+@pytest.fixture(autouse=True)
+def _pin_dst_free_tz():
+    """钉宿主时区为无 DST 固定偏移(issue 26-11-12-2347)。
+
+    本文件墙钟断言钉死 2026-03-07/08: naive datetime(.timestamp())与实现侧 fromtimestamp
+    各自经宿主 TZ 解析, 含 DST 的宿主(如 America/Los_Angeles)在 03-08 切换日把「次日同时刻」
+    拆出 3600s, 断言恒红且与当前日期无关。POSIX 进程内固定后两侧解析一致且可复现;
+    Windows 无 time.tzset, 该侧维持宿主时区(现有两侧 Windows=Asia/Shanghai / CI=UTC 均无 DST)。
+    """
+    if not _TZSET_AVAILABLE:
+        yield
+        return
+    old = os.environ.get("TZ")
+    os.environ["TZ"] = _DST_FREE_TZ
+    time.tzset()
+    try:
+        yield
+    finally:
+        if old is None:
+            os.environ.pop("TZ", None)
+        else:
+            os.environ["TZ"] = old
+        time.tzset()
 
 
 def limits(**kw) -> HrLimits:
@@ -194,6 +229,15 @@ def test_window_start_on_pins_start_endpoint_and_rollover():
     assert window_start_on(_ts(2026, 3, 7, 3, 0), "08:00-20:00") == _ts(2026, 3, 7, 8, 0)
     # 起点恰为 now: 仍顺延次日(严格 ts > now)
     assert window_start_on(_ts(2026, 3, 7, 8, 0), "08:00-20:00") == _ts(2026, 3, 8, 8, 0)
+
+
+def test_dst_free_tz_pinned_for_wallclock_asserts():
+    """守阵(POSIX): 本模块测试期 TZ 钉死无 DST 固定偏移 —— 03-07→03-08 墙钟翻日恰 86400s;
+    夹具被拆且宿主含 DST 时该差为 82800 必红(issue 26-11-12-2347)"""
+    if not _TZSET_AVAILABLE:
+        return  # Windows 无 tzset: 无钉可守, 宿主时区即测试时区(口径见 _pin_dst_free_tz)
+    assert time.timezone == -8 * 3600  # 钉的是固定 UTC+8(time.timezone 是 UTC 以西秒数, 取负)
+    assert _ts(2026, 3, 8, 8, 0) - _ts(2026, 3, 7, 8, 0) == 86400
 
 
 def test_next_allowed_at_takes_latest_gate_and_reason():

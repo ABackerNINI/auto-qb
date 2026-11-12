@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="test-tz-sensitive-window-start">
 <meta name="doc-refs" content="memory-bank/reports/26-11-12-2347-report-linux-env3-probe.html">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="TZ 敏感用例: test_hr_ratelimit 窗口起点在 DST 时区必红">
 <meta name="issue-summary" content="test_window_start_on_* 用 naive 本地时间构造断言, 断言点落在 2026-03-08 美国 DST 切换日, 差恰好 3600s; DST 时区宿主(America/Los_Angeles)必红, Asia/Shanghai 与 UTC 从未暴露">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-12-2347-test-test-tz-sensitive-window-start</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-12 23:47</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">linux-env3</div></div>
 </div>
@@ -156,11 +156,14 @@ E        +  and   1772982000.0 = _ts(2026, 3, 8, 8, 0)
   <h2><span class="no">§07</span>状态变更日志</h2>
   <ul>
     <li>2026-11-12 23:47 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-13 — 状态 Open → In Progress（kb.status）</li>
+    <li>2026-11-13 — 状态 In Progress → Done（kb.status）</li>
+</ul>
   <h3>复验</h3>
-  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <p>复验：2026-11-13(env3 本机, develop@56b0a82e, TZ=America/Los_Angeles)仍复现 —— <code>uv run pytest tests/test_hr_ratelimit.py -q -n 0 --no-cov</code> 得 <code>1 failed, 16 passed</code>, 失败行与 §02 逐字一致(<code>assert 1772985600.0 == 1772982000.0</code>); 同文件 <code>test_next_day_reset_is_exact_next_midnight</code> 实测绿 —— 午夜归零不跨凌晨 2 点切换点, <code>+86400</code> epoch 算术与墙钟解析恰好一致, 「唯一真红」定断准确。</p>
   <h3>修复后补充</h3>
-  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  <p><strong>实际修法</strong>(按建议 A, 测试面, 生产代码零改动): <code>tests/test_hr_ratelimit.py</code> 新增模块级 autouse 夹具 <code>_pin_dst_free_tz</code> —— POSIX 侧进程内 <code>os.environ["TZ"]="Asia/Shanghai"</code> + <code>time.tzset()</code>(try/finally 恢复原值再 tzset), 让 <code>_ts()</code> naive 解析与实现侧 <code>fromtimestamp</code> 同源、且 2026-03-07/08 墙钟翻日恒 86400s; Windows 无 <code>time.tzset</code> 维持宿主时区(现有两侧 Windows=Asia/Shanghai / CI=UTC 均无 DST)。另加守阵 <code>test_dst_free_tz_pinned_for_wallclock_asserts</code>(POSIX: <code>time.timezone == -28800</code> + 03-07→03-08 墙钟差恰 86400s; Windows 支早退), 同步头部「测试计划」docstring。</p>
+  <p><strong>验证方式</strong>: ①同机(不带任何 TZ 前置)红转绿: 修复前 <code>1 failed, 16 passed</code> → 修复后 <code>18 passed</code>(17 存量 + 1 守阵); ②守阵机制红验: 临时把夹具 autouse 摘掉 → 守阵与锚点用例双红(守阵先红在 <code>time.timezone</code> 断言, 证明标准偏移非 UTC+8 的 POSIX 宿主都有牙 —— UTC+8 宿主钉与不钉同语义, 本就不需要牙), 还原后全绿; ③全量回归见最新基线切片(<code>commands run kb.baseline</code>)。</p>
 </section>
 
 <footer>
