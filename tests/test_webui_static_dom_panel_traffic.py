@@ -2,10 +2,8 @@
 
 ## 测试计划(每个测试函数一条)
 - test_frontend_qb_traffic_chart_wiring: qB 口径流量图前端接线守阵(P5a+P5b, plan 26-10-03-0946 §07) —— enabled=false 三挂点入口不渲染不请求(全局入口按钮 v-if="qbHistEntryOn" / 抽屉流量页签与组右键菜单项 v-if="qbTrafficOn", 门在 flags.qb_traffic_enabled, /api/webui/flags 下发 fail-closed)+ uPlot 双系列 spanGaps=false 断线不连线 + 桶序->_qbPointsToData 栅格重建与 null 语义 node 真跑(全 null 回落/前导 null 锚推算/interval 非法防御 + S3b 月行真值落点/空槽内插/anchor.xs) + 轮询下界常量 1500(A4, S3b §05.5)+ 三挂点作用域表与低频轮询口径(interval_s 夹取 + document.hidden 跳过 + 关闭/切走 clearInterval)+ 静默续拉(loading 空态只在「尚无落袋结果」时接管正文(qbCurPending = loading + 无数据 + 无错误) + 同宿主 setData 原地快路 + 换肤先销毁再重建 + 错误态由成功落袋清除, 2026-10-04 修轮询期闪烁 / 2026-10-05 补齐空态与错误态闪烁)+ FX-29 软切换落定登记(_qbLoad 落袋 _drawerDone("traffic") 与 _drawerWaitSources 成对, 2026-10-04 修流量页签单击换行遮罩挂死)+ 三主题登记链(tpl/vendor/mixin/manifest)+ escBusy 与 Esc 退栈链同步(含退栈顺序: 历史弹层遮罩 130 先于抽屉 80, 2026-10-06 两图同开报障)+ 建图后宿主 ResizeObserver 自适应与销毁断开(便签 26-10-04-0134)+ 缺口三态文案与空态钉住(P4, plan 26-10-04-0721 §05: 0 桶状态行/缺口合并文案/图例 hint 两处/单种空态收窄为从未传输 + node 三段混排回归)
-- test_frontend_qb_traffic_window_persist_and_single_source: 流量图「视图选择」持久化 + 窗口档位单点(2026-10-05) —— QB_WINDOW_NAMES 十三档与后端 traffic_qb.WINDOW_NAMES 逐字一致, 为展示(模板 v-for 走 qbWindowNames)/前后切换(qbCycleWindow)/持久化校验(qbInitialWindow)三处唯一来源(任一处硬编码即与后端 400 校验漂移); 持久化粒度 = 全局单独(autoqb.ui.qbWinGlobal)/组与种子共用(autoqb.ui.qbWinShared), 键按 scope 单点分派, 初值只认合法档位且坏值回落默认, 换窗即落盘并吞写入异常; 初值函数在 qb_traffic_chart.js 且全部皮肤(_UI_ALL)的 tpl-manifest 里排在 state.js 之前(否则 state data() 调它未定义 = 启动白屏)
-
-- test_frontend_qb_traffic_drawer_page_guard: 流量图抽屉的页面守卫(2026-10-06 修「qB 全局流量图出现在设置页」) —— drawerVisible 两形态先挡非主内容页且状态位不随切页翻(回页连数据/窗口选择一起回来) + 轮询与建图 active 同源含 page 判据(面板不在 DOM 还拉还画 = 对空气取数) + openDrawerTraffic 先切回主内容页 + state.js drawerVisible watcher 退场销毁图/进场补拉(种子详情支路 !s 的 $nextTick _dtSync 回页变体重挂, 归 test_drawer_seed_reentry_variant_remount)
-- test_frontend_qb_traffic_yaxis_and_annotation: 流量图纵轴固定模式 + 画布注解层守阵(2026-10-08, issue 26-10-07-0149 认领一并做) —— _qbYRange/_qbGapRuns 纯函数 node 真跑(自动 = peak*1.05 / 固定上限取 max(cap, peak*1.05) 峰值超上限按峰值显示 / 缺口 = 上下行皆 null 才算); 限速三作用域同源 = qB 全局限速上下行**较大者**(_qbGlobalLimit -> speedLimitBytes); 上限派生单点 _qbYCapOf(limit×1.2 / manual MiB); 三作用域**各自独立**持久化(qbYAxisStoreKey 三键 + qbInitialYAxis 只认合法模式与正数 + persistQbYAxis 吞异常) + 切档落盘重排(qbSetYAxisMode/qbSetYAxisManual -> _qbChartRescale 走 setData 重算 scale 不重建) + 限速变化重排 watcher(mounted 注册, this.drawer 守卫剔除 BaseTransition 假实例); 建图 y range 接纯函数 + draw/drawClear 两钩子画限速虚线/缺口斜纹(共享图面三挂点全生效, uPlot.pxRatio 设备像素换算, 限速线只画落在可视值域内的); 模板 .qb-tools/.qb-seg 控件 + CSS 三皮肤成对 + **控件组唯一挂点**(图下统计栏 .qb-statctl; 2026-10-16 版式改: 流量形态头部不再挂控件, 全局/分组与种子流量图三挂点对齐, 上限读数 qbYAxisCapText/.qb-tools-hint 随 UI 移除退役) + P4 重启缝提示(plan 26-10-15-0829; 左端口径修订 2026-10-16, issue 26-10-16-0954): _qbSeamHint 判据纯函数 node 真跑(重启贴近链末->提示(含首采即链末桶的实测帧形态)/链到右沿或链确已接续或旧后端->null, 边界含尾区起点、右沿与左端前一桶三点) + computed qbCurSeamHint 消费单点 + drawer.html 提示行文案单源带重启时刻锚 + 断线语义不变(spanGaps:false ×2)
+- test_frontend_qb_traffic_window_persist_and_single_source: 流量图「视图选择」持久化 + 窗口档位单点(2026-10-05) —— QB_WINDOW_NAMES 十三档与后端 traffic_qb.WINDOW_NAMES 逐字一致, 为展示(模板 v-for 走 qbWindowNames)/前后切换(qbCycleWindow)/持久化校验(qbInitialWindow)三处唯一来源(任一处硬编码即与后端 400 校验漂移); 持久化粒度 = 全局单独(autoqb.ui.qbWinGlobal)/组与种子共用(autoqb.ui.qbWinShared), 键按 scope 单点分派, 初值只认合法档位且坏值回落默认, 换窗即落盘并吞写入异常; 初值函数在 qb_traffic_chart.js 且全部皮肤(_UI_ALL)的 tpl-manifest 里排在 state.js 之前(否则 state data() 调它未定义 = 启动白屏); R8 追加 state.js 数值面板接线静态钉(fx: qbInitialFx() / fxPanel 显式建字段, plan 26-11-12-1139 §05.5), 修复轮追加状态行展示值 computed 落位钉(qbFxPeriodS/qbFxBeatMs 恰 1 次定义且夹在 computed: { 与 mounted() { 之间, fx-panel.html 保持裸插值不带括号 —— 落 methods 即复现 toDisplayString 函数源码渲染 blocker)
+- test_frontend_qb_fx_store_and_sanitize_battery: 数值面板持久化读路径与逐字段校验 node 电池(R8, plan 26-11-12-1139 §05.5, §09 脏值探针) —— qbInitialFx 桩 localStorage 钉四脏值场景(坏 JSON/v:0/数组根/空串)整体回落默认且键保留(全程零 removeItem) + _qbFxSanitize 逐字段: 错类型(数字字段 null/布尔/数组不得被 Number() 误收、布尔严格 ===true/false 且类型归位、合法 false 保真)/未知枚举与空串回落/clamp 边界(impact/particles [0,1]、shiftRatio [0.2,1] 双侧, 数字串"0.9"抢救)/未知键静默丢弃(旧版残留 scene/amp/tpl 清场)/合法值全字段保真 + layers 残缺(数组根/缺键)逐层补默认。无 node 静默跳过(同 _NODE_QB_TRAFFIC_PROBE 口径)
 - test_frontend_qb_traffic_scope_stale_polarity: 流量图三挂点 stale 谓词极性守阵(2026-10-12 修「种子流量图加载不出来」) —— W2–W6 机械改名把 torrent/group 两处 `!(...)` 写成 `!!(...)`(取反变双重取反), 恰在本图活跃时判「响应已过期」⇒ 数据不落袋 + loading 不复位 + 早退不建图 ⇒ 种子「流量」页签恒停「正在加载流量数据…」且轮询被 loading 卡住不自愈(global 未中招, 故症状只在种子/分组图)。既有静态锚(源码字符串级)对单/双 bang 天然失明, 本守阵补两层: 1. node 电池用 `new Function(源码 + "return _QB_SCOPES;")` 取出作用域表, 对三挂点喂「活跃/切走/关闭/换目标/功能关」五类上下文断言 stale 真假 + `active => stale === false` 同向性; 2. 静态极性兜底钉 `!(...)` 书写形态、`!!(...)` 不得回潮
 - test_frontend_qb_traffic_load_stall_fallback: 流量图轮询「在途悬挂」兜底守阵(issue 26-10-16-0954-bug-webui-chart-fetch-no-timeout 方案 #2, 2026-10-16) —— loading 是单向「请求在途」标志(_qbLoad 入口无条件置 true, 唯一复位路径是它的 finally), 请求悬挂时 finally 不执行 ⇒ tick 守卫把之后每一拍都挡掉, 图表永久停在旧帧且无提示(与 10-12 修的同链另一入口 stale 谓词取反不同)。三层静态锚: 1. 阈值常量 _QB_LOAD_STALL_MS(=30000, 请求级超时的两倍余量); 2. 判据单点 _qbLoadStalled 在且 tick 必须经它(合体写法 `document.hidden || this[def.loading]` 不得回潮); 3. _qbLoad 置位处写计时起点 _qbLoadAt[scope] 且 finally 不擦(擦会把换目标场景下新请求的起点抹成 0)。行为面 node 电池真跑(无 node 静默跳过): 真 _qbLoad + 永不 settle 的 api 桩 —— 在途未悬挂照旧挡拍 / 悬挂放行且只留一条警告 / 新起点生效故后续照常挡拍 / 图不活跃与页面隐藏照旧跳过 / 判据边界(29s 不判、31s 判、无起点不判); 附 R5#182 死代码反向锚(loadQbHistory 兼容别名零残留, 入口全走 openQbHistory/openDrawerTraffic)
 - test_frontend_qb_tick_label_and_isolated_idxs: R5#192 —— x 轴刻度与孤点索引 node 电池(同文件其余纯函数均有电池, 唯这两处标着纯函数却零执行): _qbTickLabel 四族分支 13 档逐档断言(1m/5m 标到秒 / 30m-24h 只标时刻 / 3d/7d/30d 标日期 / 6mo/1y/all 标年月; 期望值由同一 Date 本地时区现算, 与机器时区无关)+ torrent 挂点读自己的窗口字段(三挂点窗口互不串) + _qbIsolatedIdxs 三态(两侧皆 null 的孤点收/任一侧非 null 的链中链端不收/贴边孤点与空系列边界)
@@ -555,6 +553,8 @@ def test_frontend_qb_traffic_window_persist_and_single_source():
     drawer_tpl = open(os.path.join(shared, "tpl", "drawer.html"), encoding="utf-8").read()
     # W3(计划 26-10-11-2106): 档位/纵轴控件组的唯一实现(<aq-qb-ctl>)与头部外壳住在这里
     head_tpl = open(os.path.join(shared, "tpl", "drawer-head.html"), encoding="utf-8").read()
+    # R8(修复轮): 数值面板分片(状态行展示值的裸插值消费面, 见下方 computed 落位守阵)
+    fx_tpl = open(os.path.join(shared, "tpl", "fx-panel.html"), encoding="utf-8").read()
 
     # 1. 档位清单单点 + 与后端逐字一致 + 展示面走 computed(模板不再硬编码)
     m = re.search(r"const QB_WINDOW_NAMES = \[(.*?)\];", js, re.S)
@@ -608,12 +608,158 @@ def test_frontend_qb_traffic_window_persist_and_single_source():
     assert 'qbHistWindow: qbInitialWindow("global")' in state_js, "state.js 全局窗口初值未接持久化"
     assert 'qbTorrentWindow: qbInitialWindow("torrent")' in state_js, "state.js 种子窗口初值未接持久化"
     assert 'qbGroupWindow: qbInitialWindow("group")' in state_js, "state.js 分组窗口初值未接持久化"
+    # 数值面板持久化(R8, plan 26-11-12-1139 §05.5): state.js 显式建 fxPanel/fx 字段(根选项显式建
+    # 字段纪律, undefined 是非响应式盲区)并接 qbInitialFx 初值 —— 默认值/逐字段校验/键单点在
+    # qb_traffic_chart.js 属主三件套(同 qbInitialWindow 范式), 行为面由 test_frontend_qb_fx_store_and_sanitize_battery 真跑
+    assert "fx: qbInitialFx()" in state_js, "state.js fx 初值未接 qbInitialFx(持久化 autoqb.ui.qbFx 未接线)"
+    assert "fxPanel: { visible: false, x: 0, y: 0, alt: false }" in state_js, \
+        "state.js 缺 fxPanel 显式建字段(右键浮层视图态, 非响应式盲区)"
+    # R8 修复轮: 状态行展示值必须住 computed 块 —— fx-panel.html 裸插值 {{ qbFxPeriodS }} 不加
+    # 括号, 落 methods 域会被 toDisplayString 渲染成函数源码字符串(首轮 blocker 的回潮形态,
+    # 静态面零引用即无测试变红, 故钉落位)。判据 = 定义名恰出现 1 次且夹在 computed: { 与
+    # mounted() { 之间(mixin 结构里 methods 在 mounted 之后, 落 methods 即越过 mounted 界)。
+    comp_start = js.index("computed: {")
+    mounted_at = js.index("mounted() {")
+    for name in ("qbFxPeriodS", "qbFxBeatMs"):
+        n_def = js.count(name + "()")
+        assert n_def == 1, f"qb_traffic_chart.js 里 {name}() 应恰出现 1 次(现 {n_def} 次, 多半是模板/注释带出了带括号引用)"
+        assert comp_start < js.index(name + "()") < mounted_at, \
+            f"{name} 不在 computed 块(computed: {{ 与 mounted() {{ 之间) —— 回潮到 methods 即复现" \
+            "「状态行渲染函数源码」blocker"
+    assert "{{ qbFxPeriodS }}" in fx_tpl and "{{ qbFxBeatMs }}" in fx_tpl, \
+        "fx-panel.html 状态行必须裸插值展示值 computed(不加括号)"
+    assert "qbFxPeriodS(" not in fx_tpl.replace("{{ qbFxPeriodS }}", "") \
+        and "qbFxBeatMs(" not in fx_tpl.replace("{{ qbFxBeatMs }}", ""), \
+        "fx-panel.html 不得带括号调用展示值(qbFxPeriodS/qbFxBeatMs 是 computed 不是方法)"
 
     # 3. 装载序: qb_traffic_chart.js 必须排在 state.js 之前(初值函数在 state data() 时可用)
     for ui in _UI_ALL:
         scripts = _ui_manifest(ui)["scripts"]
         assert scripts.index("/shared/qb_traffic_chart.js") < scripts.index("/shared/state.js"), \
             f"{ui}: qb_traffic_chart.js 必须排在 state.js 之前(qbInitialWindow 定义处, 否则启动白屏)"
+
+
+# 数值面板持久化 node 电池(R8, plan 26-11-12-1139 §05.5): qbInitialFx 读路径 + _qbFxSanitize
+# 逐字段校验真跑(桩 localStorage; §09 四脏值场景: 错类型/未知枚举/v:0/空串)。无 node 静默跳过
+# (与 _NODE_QB_TRAFFIC_PROBE 同口径, 不引入 skip)。
+_NODE_QB_FX_PROBE = r"""
+const fs = require("fs");
+global.window = {};
+const store = {};
+const removed = [];
+global.localStorage = {
+  getItem: (k) => (k in store ? store[k] : null),
+  setItem: (k, v) => { store[k] = String(v); },
+  removeItem: (k) => { removed.push(k); delete store[k]; },
+};
+// 模块级 const 不随 sloppy eval 外泄(同 test_frontend_qb_traffic_scope_stale_polarity 的
+// new Function 取出口径), 函数声明 qbInitialFx 可直接取
+const { qbInitialFx, QB_FX_DEFAULTS, QB_FX_STORE_KEY } = new Function(
+  fs.readFileSync(process.argv[1], "utf8") + "\nreturn { qbInitialFx, QB_FX_DEFAULTS, QB_FX_STORE_KEY };"
+)();
+const checks = [];
+const D = QB_FX_DEFAULTS;
+const KEY = QB_FX_STORE_KEY;
+const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+// —— 读路径(qbInitialFx, §05.5): 坏 JSON / v:0 / 非对象根 / 空串 -> 整体回落默认 且 键保留 ——
+checks.push(["无存储回落默认", eq(qbInitialFx(), D)]);
+store[KEY] = "{oops";
+checks.push(["坏 JSON 整体回落默认", eq(qbInitialFx(), D)]);
+checks.push(["坏 JSON 键保留(不清键, 供诊断)", KEY in store && removed.length === 0]);
+store[KEY] = JSON.stringify({ v: 0, impact: 1 });
+let fx = qbInitialFx();
+checks.push(["v:0 整体回落默认(不按缺省合并个别字段)", fx.impact === D.impact && fx.v === 1]);
+checks.push(["v:0 键保留", KEY in store && removed.length === 0]);
+store[KEY] = "[1,2]";
+checks.push(["数组根整体回落", eq(qbInitialFx(), D)]);
+store[KEY] = "";
+checks.push(["空串整体回落", eq(qbInitialFx(), D)]);
+checks.push(["读路径零 removeItem(永不删键)", removed.length === 0]);
+// —— 逐字段校验(_qbFxSanitize): 场景 A 错类型 ——
+// 数字字段给 null/布尔/数组: Number(null)===0 / Number(true)===1 的误收必须被拦下(缺省即默认)
+store[KEY] = JSON.stringify({ v: 1, impact: null, particles: true, shiftRatio: [0.5],
+  neon: "no", tail: 0, enabled: false, layers: { band: 1, scan: false } });
+fx = qbInitialFx();
+checks.push(["数值 null 回落默认(不得误收成 0)", fx.impact === D.impact]);
+checks.push(["数值布尔回落默认", fx.particles === D.particles]);
+checks.push(["数值数组回落默认", fx.shiftRatio === D.shiftRatio]);
+checks.push(["布尔字符串/数字严格回落(类型也归位)", typeof fx.neon === "boolean" && fx.neon === D.neon
+  && typeof fx.tail === "boolean" && fx.tail === D.tail]);
+checks.push(["显式合法 false 保真(用户意图不被洗回)", fx.enabled === false && fx.layers.scan === false]);
+// 场景 B 未知枚举与空串: 白名单外/空串一律逐字段回落
+store[KEY] = JSON.stringify({ v: 1, ease: "bogus", palette: 42, shift: "", dual: "solo",
+  tear: "chaos", echoSpan: "999" });
+fx = qbInitialFx();
+checks.push(["未知枚举/空串逐字段回落默认", fx.ease === "out" && fx.palette === "neon"
+  && fx.shift === "smooth" && fx.dual === "both" && fx.tear === "linked" && fx.echoSpan === "auto"]);
+// 场景 C clamp 边界: impact/particles 钳 [0,1], shiftRatio 钳 [0.2,1]; 边界值与数字串的取值面
+store[KEY] = JSON.stringify({ v: 1, impact: 5, particles: -3, shiftRatio: 0.05 });
+fx = qbInitialFx();
+checks.push(["越界钳位(impact->1, particles->0, shiftRatio->0.2)", fx.impact === 1 && fx.particles === 0 && fx.shiftRatio === 0.2]);
+store[KEY] = JSON.stringify({ v: 1, shiftRatio: 9 });
+fx = qbInitialFx();
+checks.push(["shiftRatio 越上界钳 1", fx.shiftRatio === 1]);
+store[KEY] = JSON.stringify({ v: 1, impact: 0, particles: 1, shiftRatio: 0.2 });
+fx = qbInitialFx();
+checks.push(["clamp 边界值保真(0/1/0.2 合法)", fx.impact === 0 && fx.particles === 1 && fx.shiftRatio === 0.2]);
+store[KEY] = JSON.stringify({ v: 1, impact: "0.9" });
+checks.push(["数字串抢救(Number 可解析)", qbInitialFx().impact === 0.9]);
+// 场景 D 未知键丢弃: 旧版本键残留的已删字段(如 scene/amp/tpl)读时清场
+store[KEY] = JSON.stringify({ v: 1, scene: "x", amp: 2, tpl: 3 });
+fx = qbInitialFx();
+checks.push(["未知键静默丢弃(现建新对象)", !("scene" in fx) && !("amp" in fx) && !("tpl" in fx) && eq(fx, D)]);
+// 合法值全字段保真(防校验器把合法手改值洗回默认)
+store[KEY] = JSON.stringify({ v: 1, enabled: false, impact: 0.35, ease: "linear", palette: "glitch",
+  particles: 0.5, neon: false, tail: false, shift: "instant", shiftRatio: 1, dual: "lead",
+  tear: "random", echoSpan: "200", layers: { band: false, particles: false, scan: true, grade: false } });
+fx = qbInitialFx();
+checks.push(["合法值全字段保真", fx.enabled === false && fx.impact === 0.35 && fx.ease === "linear"
+  && fx.palette === "glitch" && fx.particles === 0.5 && fx.neon === false && fx.tail === false
+  && fx.shift === "instant" && fx.shiftRatio === 1 && fx.dual === "lead" && fx.tear === "random"
+  && fx.echoSpan === "200" && fx.layers.band === false && fx.layers.particles === false
+  && fx.layers.scan === true && fx.layers.grade === false]);
+// layers 残缺(数组/缺键) -> 逐层回落默认(缺省即默认合并, §05.5 aside)
+store[KEY] = JSON.stringify({ v: 1, layers: [] });
+fx = qbInitialFx();
+checks.push(["layers 数组根逐层回落默认", eq(fx.layers, D.layers)]);
+store[KEY] = JSON.stringify({ v: 1, layers: { band: false } });
+fx = qbInitialFx();
+checks.push(["layers 缺键逐层补默认(其余三层)", fx.layers.band === false && fx.layers.particles === D.layers.particles
+  && fx.layers.scan === D.layers.scan && fx.layers.grade === D.layers.grade]);
+console.log(JSON.stringify({ ok: checks.filter((c) => c[1]).length, total: checks.length,
+  failed: checks.filter((c) => !c[1]).map((c) => c[0]) }));
+"""
+
+
+def test_frontend_qb_fx_store_and_sanitize_battery():
+    """数值面板持久化读路径 + 逐字段校验 node 电池(R8, plan 26-11-12-1139 §05.5)
+
+    动效参数是单键 JSON 观感偏好, 手改/旧版本残留/隐私模式都会喂进脏值 —— §05.5 读纪律
+    与 §09 面板探针(脏值回落)钉成行为面(无 node 静默跳过, 同 _NODE_QB_TRAFFIC_PROBE 口径):
+    1. 读路径(qbInitialFx): 坏 JSON / v:0 / 数组根 / 空串 -> **整体**回落默认 且 **键保留**
+      (不清键, 原始串留诊断; 全程零 removeItem —— 重置语义是写回默认不删键, 读路径更不许删);
+    2. 逐字段校验(_qbFxSanitize): §09 四脏值场景 —— 错类型(数字字段喂 null/布尔/数组不得被
+      Number() 误收成 0/1, 布尔字段喂字符串/数字类型也归位; 显式合法 false 保真)/未知枚举与
+      空串逐字段回落/clamp 边界(impact/particles [0,1] 与 shiftRatio [0.2,1] 双侧越界, 边界值
+      保真, 数字串 "0.9" 抢救)/未知键静默丢弃(旧版残留 scene/amp/tpl 现建新对象自然清场);
+    3. 合法值全字段保真 + layers 残缺(数组根/缺键)逐层补默认(缺省即默认合并)。
+    state.js 接线面(fx: qbInitialFx() / fxPanel 显式建字段)由
+    test_frontend_qb_traffic_window_persist_and_single_source 静态钉住。"""
+    node = shutil.which("node")
+    if not node:
+        return
+    proc = subprocess.run(
+        [node, "-e", _NODE_QB_FX_PROBE,
+         os.path.join(STATIC_ROOT, "shared", "qb_traffic_chart.js")],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace"
+    )
+    assert proc.returncode == 0, f"qbFx 持久化 node 电池跑挂: {proc.stderr.strip()}"
+    report = json.loads(proc.stdout.strip().splitlines()[-1])
+    assert report["failed"] == [], \
+        f"qbFx 持久化电池 {report['ok']}/{report['total']} 过, 失败: {report['failed']}"
 
 
 # 纵轴固定模式 + 缺口游程 + 重启缝判据 node 电池(2026-10-08; P4 追加 _qbSeamHint, plan 26-10-15-0829):

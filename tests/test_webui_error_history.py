@@ -108,7 +108,8 @@ STORAGE_WRITE_BASELINE = {
     "polling.js":
         1,  # autoqb_version_reload_v1: version-reload 自愈的 reload 时间戳防抖(S3, 计划 26-11-11-0630; sessionStorage 非 localStorage)
     "rowlang.js": 1,  # 主表行语言选择(计划 26-10-30-0217 阶段1: data-rowlang 落 localStorage, 刷新后保持)
-    "qb_traffic_chart.js": 2,  # qbWinGlobal/qbWinShared + qbYAxis{Global,Torrent,Group}(纵轴固定模式, 2026-10-08)
+    "qb_traffic_chart.js":
+        3,  # qbWinGlobal/qbWinShared + qbYAxis{Global,Torrent,Group}(纵轴固定模式, 2026-10-08) + qbFx(动效参数 autoqb.ui.qbFx, R8 plan 26-11-12-1139 §05.5)
     "view.js": 2,  # 视图选择
     "dialogs.js": 1,  # gtm.spike.ack: GTM 虚高告警本机消警键值=gtm_anomaly.ts(计划 26-11-03-1102 S7c/D5, 不写服务端)
 }

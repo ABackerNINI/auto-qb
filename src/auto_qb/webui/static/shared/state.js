@@ -388,6 +388,13 @@ window.AQB_STATE = {
       qbGroupHoverIdx: -1,    // 悬停桶索引(-1 = 无; uPlot setCursor 钩子写回)
       qbGroupHoverLeft: 0,    // 悬停十字线 px(tooltip 水平定位)
       qbGroupYAxis: qbInitialYAxis("group"),  // 纵轴固定模式(三作用域各自独立: autoqb.ui.qbYAxisGroup)
+      // 数值面板(R8, plan 26-11-12-1139 §05.3): 图区右键非模态浮层的视图态 + 动效参数值。字段
+      // 显式建(vue-reactivity 坑: undefined 是非响应式盲区); fx 的默认值/逐字段校验/键单点在
+      // qb_traffic_chart.js(QB_FX_DEFAULTS / qbInitialFx 读 autoqb.ui.qbFx —— 四皮肤共用一份,
+      // 不分 scope, 见 §05.5); alt = 按住 Alt 的「看穿」态(opacity 0.22 + pointer-events:none)。
+      // watch.fx 把整对象 JSON 克隆进 window.AQB_FX_CFG —— 绘制热路径只读普通对象, 不逐帧读 Vue。
+      fxPanel: { visible: false, x: 0, y: 0, alt: false },
+      fx: qbInitialFx(),
       // 登录"验证中"加载态(本地密钥 bootstrap 期间 true): 修复刷新时闪现输入密钥界面。
       // FX-01: 初值必须为 true —— 首帧状态**未知**, 不能当作"未授权"渲染密钥表单。
       // 离开该状态只有三条明确路径(见 mounted/bootstrap): 本机免鉴权 / 密钥验证通过 / 无密钥或验证被拒。
@@ -706,6 +713,21 @@ window.AQB_STATE = {
     // 抽屉右键菜单(R2 S3): 与三浮层同范式 —— 开层对象替换触发重钳位
     drawerMenu() {
       this.$nextTick(() => this._menuFitRefit("drawerMenu", "drawerMenuEl"));
+    },
+    // 数值面板(R8 §05.1): 与四浮层同范式 —— 开层对象整体替换触发 $nextTick 实测重钳位(开层
+    // 初值走常量估算, 真实盒高随内容差一截)。开层/关层都走整对象替换(openFxPanel/fxClose),
+    // 关层那次替换靠本 watcher 的 visible=false 分支跳过钳位; 只有 Alt 看穿翻转是只改 alt 字段
+    // (不整替), 不触发本 watcher。
+    fxPanel() {
+      if (this.fxPanel.visible) this.$nextTick(() => this._qbFxRefit());
+    },
+    // fx -> window.AQB_FX_CFG(§05.3: 绘制热路径只读普通对象, 不逐帧读 Vue): JSON 往返斩断
+    // 响应式代理; immediate 兜首帧(建图先于任何用户操作, 读取面要有初值), deep 兜滑杆 @input
+    // 逐值写与 layers.* 深层改动。
+    fx: {
+      handler(v) { window.AQB_FX_CFG = JSON.parse(JSON.stringify(v)); },
+      deep: true,
+      immediate: true,
     },
     // 通知(S1): 打开面板即视为已读, 未读徽标清零 —— 后续面板 UI 直接绑 _errUnread/errPanelOpen。
     // 写入单点在 ui_feedback.js 的 _recordErrorToast / _clearErrorHistory; watcher 放根组件选项

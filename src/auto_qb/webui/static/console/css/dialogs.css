@@ -578,3 +578,48 @@ body.drawer-resizing { cursor: ns-resize; user-select: none; }
 .drawer-body .group-row.skipped > * { color: var(--fg-dim); }
 .drawer-body .group-row.sel { background: var(--accent-soft); border-color: var(--accent-line); }
 .drawer-body .mono-cell { font-family: var(--font-mono); font-size: 12px; }
+
+/* ================= 动效数值面板(R8, plan 26-11-12-1139 §05.1): 图区右键非模态锚定浮层 =================
+ * 四皮肤共用同一段规则(令牌同名, 取值随皮肤): 非模态(无遮罩) + fixed 定位(坐标由 openFxPanel/
+ * _qbFxRefit 写 fxPanel.x/y, overlay_fit 范式钳位) + 宽 320 固定 + 高自适应(max-height 兜底 +
+ * 正文内部滚动; overlay_fit 只夹视口、不压缩尺寸) + 不可拖拽 resize。z-index 90: 浮于停靠抽屉
+ * (40)之上、右键菜单(100)/通知面板(121)/模态(129+)之下 —— 菜单与弹窗永远是更高一层。
+ * 配色只用中性令牌 + --accent 滑杆; 禁 --today-up/--today-down(上/下载语义色, 冒用到设置件
+ * 会让用户误以为滑块调的是某条曲线)。opacity <= .97(§05.9: 不抢图的注意力)。 */
+.fx-panel { position: fixed; z-index: 90; width: 320px; max-height: calc(100vh - 16px);
+  display: flex; flex-direction: column; padding: 10px 12px 8px; border-radius: var(--radius);
+  background: var(--bg-card); border: 1px solid var(--border-strong); box-shadow: var(--shadow-3);
+  opacity: .97; }
+/* Alt 看穿(§05.1): 按住 Alt 临时透明 + 放行指针, 松开恢复 —— 被盖住的判定线/扫描束的唯一观察通道 */
+.fx-panel.fx-alt { opacity: .22; pointer-events: none; }
+.fx-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.fx-title { font-weight: 600; font-size: 13px; color: var(--fg); }
+.fx-x { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px;
+  padding: 0; border: 0; border-radius: var(--radius); background: transparent; color: var(--fg-muted);
+  cursor: pointer; }
+.fx-x:hover { background: var(--bg-hover); color: var(--fg); }
+/* 正文内部滚动兜底(§05.1: 面板高于视口时滚动的是 body, 头/底栏常驻) */
+.fx-body { overflow-y: auto; min-height: 0; }
+.fx-status { margin: 0 0 6px; font-size: 11px; color: var(--fg-dim); }
+.fx-master { padding-bottom: 6px; }
+.fx-group { padding: 6px 0 4px; border-top: 1px solid var(--hairline); }
+.fx-group-title { margin: 0 0 4px; font-size: 10.5px; letter-spacing: .04em; color: var(--fg-dim); }
+.fx-row { display: flex; align-items: center; gap: 8px; padding: 3px 0; font-size: 12px; color: var(--fg);
+  cursor: default; }
+.fx-name { flex: 1 1 auto; min-width: 0; color: var(--fg-muted); }
+.fx-val { flex: 0 0 auto; min-width: 3ch; text-align: right; color: var(--fg-dim);
+  font-family: ui-monospace, Consolas, monospace; }
+/* 滑杆/下拉: accent 只作滑杆色(中性, §05.1); 尺寸对齐 .fx-sel */
+.fx-range { flex: 0 0 118px; accent-color: var(--accent); }
+.fx-sel { flex: 0 0 118px; height: 24px; padding: 0 4px; border-radius: var(--radius);
+  background: var(--bg-sunken); border: 1px solid var(--border); color: var(--fg); font-size: 12px; }
+.fx-adv { padding: 6px 0 2px; border-top: 1px solid var(--hairline); }
+.fx-adv-sum { cursor: pointer; padding: 4px 0; font-size: 12px; color: var(--fg-muted); user-select: none; }
+.fx-adv-sum:hover { color: var(--fg); }
+.fx-foot { display: flex; gap: 6px; margin-top: 8px; }
+.fx-foot .bt { flex: 1 1 0; padding: 0 4px; }
+.fx-note { margin: 6px 0 0; font-size: 10.5px; line-height: 1.5; color: var(--fg-dim); }
+/* 开合动效(§05.1): 零位移, 仅 120ms opacity; prefers-reduced-motion 下连过渡也去掉 */
+.fx-pop-enter-active, .fx-pop-leave-active { transition: opacity 120ms var(--ease); }
+.fx-pop-enter-from, .fx-pop-leave-to { opacity: 0; }
+@media (prefers-reduced-motion: reduce) { .fx-pop-enter-active, .fx-pop-leave-active { transition: none; } }

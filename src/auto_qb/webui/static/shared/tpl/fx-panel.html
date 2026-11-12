@@ -1,0 +1,149 @@
+    <!-- 动效数值面板(R8, plan 26-11-12-1139 §05): 图区右键的非模态锚定浮层 —— 不是 .ctx-menu
+         (无 role=menu/方向键导航, 不参与菜单选择器统计, e2e/drawer-merge.spec 的计数不受影响)、
+         不是 aq-modal(无遮罩, 边调边看)、不是抽屉二级页(二级页会替换 .qb-chart-host 把图销毁)。
+         落点 into=app = .drawer-dock 的**兄弟**节点: 不进 .drawer 子树 —— flux 的 transform
+         containing-block 会把 fixed 后代劫持成相对抽屉定位(§09 风险行; .err-panel 注释同源坑);
+         共用层 CSS 也不用躲抽屉级联。固定宽 320、max-height 兜底 + 正文内部滚动, 不可拖拽 resize。
+         拦截(§05.1): 根节点 @click.stop(lifecycle._onDocClick 绑 window 冒泡且无 contains 判断,
+         漏了 = 拖一下滑杆面板就关) + @keydown.esc.stop.prevent(面板开着时 Esc 不得穿透去关抽屉;
+         收层登记在下一阶段接 §05.7, 见 qb_traffic_chart.js 面板段头注)。
+         量纲(§05.3): impact/particles/shiftRatio 显示 0-100、存储 0-1, 换算单点在 fxRange/fxPct;
+         状态行只读两项(period/beat)写死只读 —— 改它们要动后端与数据文件, 面板不提供任何入口。
+         配色只用中性令牌(--bg-card/--border/--fg/--fg-muted + --accent 滑杆), 禁 --today-up/down
+         (上/下载语义色, 冒用到设置件会让用户误以为滑块调的是某条曲线)。 -->
+    <transition name="fx-pop">
+      <div v-if="fxPanel.visible" ref="fxPanelEl" class="fx-panel" :class="{ 'fx-alt': fxPanel.alt }"
+           :style="{ left: fxPanel.x + 'px', top: fxPanel.y + 'px' }" role="dialog" aria-label="动效数值"
+           @click.stop @keydown.esc.stop.prevent>
+        <header class="fx-head">
+          <span class="fx-title">动效数值</span>
+          <button type="button" class="fx-x" aria-label="关闭动效数值面板" @click="fxClose">
+            <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
+          </button>
+        </header>
+        <div class="fx-body">
+          <!-- 状态行(§05.3): 一行三值, period 取 _qbPollMs 实算值; 「上次真实拍」S3 接节拍状态后回填 -->
+          <p class="fx-status">采样 {{ qbFxPeriodS }} s · beat {{ qbFxBeatMs }} ms · 上次真实拍 —</p>
+          <!-- 总开关(常显第一行): 立即生效; reduced-motion 置灰红线在下一阶段接(§05.6) -->
+          <label class="fx-row fx-master">
+            <span class="fx-name">启用动效</span>
+            <input type="checkbox" :checked="fx.enabled" @change="fxCheck('enabled', $event)">
+          </label>
+          <!-- 常显 4 组 8 项(节奏 1 + 视觉 4 + 位移 2 + 双轨 1); 其余 7 项收「高级」折叠 -->
+          <div class="fx-group">
+            <p class="fx-group-title">节奏</p>
+            <label class="fx-row">
+              <span class="fx-name">冲击幅度</span>
+              <input class="fx-range" type="range" min="0" max="100" step="1"
+                     :value="fxPct('impact')" @input="fxRange('impact', $event)" @change="persistQbFx()">
+              <span class="fx-val">{{ fxPct('impact') }}</span>
+            </label>
+          </div>
+          <div class="fx-group">
+            <p class="fx-group-title">视觉</p>
+            <label class="fx-row">
+              <span class="fx-name">配色</span>
+              <select class="fx-sel" :value="fx.palette" @change="fxPick('palette', $event)">
+                <option value="neon">霓虹</option>
+                <option value="calm">克制</option>
+                <option value="glitch">故障</option>
+              </select>
+            </label>
+            <label class="fx-row">
+              <span class="fx-name">粒子密度</span>
+              <input class="fx-range" type="range" min="0" max="100" step="5"
+                     :value="fxPct('particles')" @input="fxRange('particles', $event)" @change="persistQbFx()">
+              <span class="fx-val">{{ fxPct('particles') }}</span>
+            </label>
+            <label class="fx-row">
+              <span class="fx-name">霓虹元素层</span>
+              <input type="checkbox" :checked="fx.neon" @change="fxCheck('neon', $event)">
+            </label>
+            <label class="fx-row">
+              <span class="fx-name">次区尾光</span>
+              <input type="checkbox" :checked="fx.tail" @change="fxCheck('tail', $event)">
+            </label>
+          </div>
+          <div class="fx-group">
+            <p class="fx-group-title">位移</p>
+            <label class="fx-row">
+              <span class="fx-name">左移策略</span>
+              <select class="fx-sel" :value="fx.shift" @change="fxPick('shift', $event)">
+                <option value="smooth">平滑</option>
+                <option value="instant">瞬时（对照）</option>
+              </select>
+            </label>
+            <label class="fx-row">
+              <span class="fx-name">左移收敛占比</span>
+              <input class="fx-range" type="range" min="20" max="100" step="5"
+                     :value="fxPct('shiftRatio')" @input="fxRange('shiftRatio', $event)" @change="persistQbFx()">
+              <span class="fx-val">{{ fxPct('shiftRatio') }}</span>
+            </label>
+          </div>
+          <div class="fx-group">
+            <p class="fx-group-title">双轨</p>
+            <label class="fx-row">
+              <span class="fx-name">双轨策略</span>
+              <select class="fx-sel" :value="fx.dual" @change="fxPick('dual', $event)">
+                <option value="both">双轨各发半套</option>
+                <option value="lead">仅主导轨</option>
+                <option value="merge">合并</option>
+              </select>
+            </label>
+          </div>
+          <!-- 高级折叠(默认收起): 缓动 + 4 层开关 + 横向线条 + 竖向行程 -->
+          <details class="fx-adv">
+            <summary class="fx-adv-sum">高级（插值 / 分层开关 / 线条与行程）</summary>
+            <label class="fx-row">
+              <span class="fx-name">数值插值</span>
+              <select class="fx-sel" :value="fx.ease" @change="fxPick('ease', $event)">
+                <option value="out">缓出</option>
+                <option value="linear">线性</option>
+              </select>
+            </label>
+            <label class="fx-row">
+              <span class="fx-name">光带层</span>
+              <input type="checkbox" :checked="fx.layers.band" @change="fxCheck('layers.band', $event)">
+            </label>
+            <label class="fx-row">
+              <span class="fx-name">粒子层</span>
+              <input type="checkbox" :checked="fx.layers.particles" @change="fxCheck('layers.particles', $event)">
+            </label>
+            <label class="fx-row">
+              <span class="fx-name">扫描束层</span>
+              <input type="checkbox" :checked="fx.layers.scan" @change="fxCheck('layers.scan', $event)">
+            </label>
+            <label class="fx-row">
+              <span class="fx-name">分级色相层</span>
+              <input type="checkbox" :checked="fx.layers.grade" @change="fxCheck('layers.grade', $event)">
+            </label>
+            <label class="fx-row">
+              <span class="fx-name">横向线条</span>
+              <select class="fx-sel" :value="fx.tear" @change="fxPick('tear', $event)">
+                <option value="linked">联动</option>
+                <option value="random">随机（不可复现）</option>
+                <option value="fixed">固定（旧观感对照）</option>
+              </select>
+            </label>
+            <label class="fx-row">
+              <span class="fx-name">竖扫回声行程</span>
+              <select class="fx-sel" :value="fx.echoSpan" @change="fxPick('echoSpan', $event)">
+                <option value="auto">自动</option>
+                <option value="100">100px</option>
+                <option value="150">150px</option>
+                <option value="200">200px</option>
+                <option value="full">整幅（旧观感对照）</option>
+              </select>
+            </label>
+          </details>
+        </div>
+        <footer class="fx-foot">
+          <!-- 预览一拍: S0-a 占位(§05.4 语义六条 S3 接真值链路); 重置 = 写回默认不删键(§05.5);
+               复制走 _copyText 通道(非安全上下文 execCommand 降级 + toast 反馈) -->
+          <button type="button" class="bt ghost sm" @click="fxPreview">预览一拍</button>
+          <button type="button" class="bt ghost sm" @click="fxReset">重置为默认</button>
+          <button type="button" class="bt ghost sm" @click="fxCopy">复制配置片段</button>
+        </footer>
+        <p class="fx-note">采样周期涉及后端与数据文件，面板不可改；按住 Alt 可临时看穿面板。</p>
+      </div>
+    </transition>

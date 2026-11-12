@@ -145,6 +145,104 @@ function qbInitialYAxis(scope) {
   return { mode: QB_YAXIS_DEFAULT, manual: 0 };
 }
 
+/* ---------------- 动效参数持久化三件套(R8, plan 26-11-12-1139 §05.5) ----------------
+ * 键 autoqb.ui.qbFx(与 qbWin/qbYAxis 同族 autoqb.ui.* 前缀); 四皮肤共用一份、不分 scope ——
+ * 动效是个人观感偏好, 分三份会让用户遇到"为什么换个图动效不一样"(§05.5 拍板), 也不进
+ * config.qb_traffic(不写后端、不动 KNOWN_QB_TRAFFIC_KEYS/fail-fast 校验/迁移)。本模块 =
+ * 唯一属主: 默认值(QB_FX_DEFAULTS) + 枚举白名单(QB_FX_ENUMS) + 初值读取(qbInitialFx, 由
+ * state.js 的 data() 调用 —— 清单装载序里本文件排在 state.js 之前) + 落盘(persistQbFx, 方法域)
+ * 都在这里; state.js 只显式建 fx / fxPanel 字段(watch.fx 把整对象 JSON 克隆进 window.AQB_FX_CFG,
+ * 绘制热路径只读普通对象, 不逐帧读 Vue —— §05.3)。
+ * !localStorage 访问只在函数体内(本文件会被 node 探针 eval, 顶层不得碰 DOM/BOM —— 同
+ *   qbInitialWindow/qbInitialYAxis 纪律, 见文件头注)。
+ * 量纲(§05.3 量纲统一): impact / particles / shiftRatio **显示 0-100、存储 0-1**, 换算单点在
+ *   面板处理器 fxRange(/100)与 fxPct(*100), 存储面与持久化 JSON 恒见 0-1。 */
+const QB_FX_STORE_KEY = "autoqb.ui.qbFx";
+/* 默认值(唯一来源; 字段名与默认值和计划 §05.5 JSON 逐字一致): 15 个可调项(impact/ease/
+ * palette/particles/neon/tail/shift/shiftRatio/dual/tear/echoSpan + layers.band/particles/
+ * scan/grade) + 1 个总开关(enabled) + 版本号 v。复制配置片段(fxCopy)输出同形状。 */
+const QB_FX_DEFAULTS = {
+  v: 1,
+  enabled: true,
+  impact: 0.7, ease: "out",
+  palette: "neon", particles: 0.7, neon: true, tail: true,
+  shift: "smooth", shiftRatio: 0.6,
+  dual: "both", tear: "linked", echoSpan: "auto",
+  layers: { band: true, particles: true, scan: true, grade: true },
+};
+/* 枚举白名单(读校验用; select 面板候选拿同一份防止两处漂移)。echoSpan 的 "full" 是 R5 整幅
+ * 旧观感对照档(NOT FOR SHIP) —— 白名单放行存储面, 观感降格语义在 S2 动效引擎里区分。 */
+const QB_FX_ENUMS = {
+  ease: ["out", "linear"],
+  palette: ["neon", "calm", "glitch"],
+  shift: ["smooth", "instant"],
+  dual: ["both", "lead", "merge"],
+  tear: ["linked", "random", "fixed"],
+  echoSpan: ["auto", "100", "150", "200", "full"],
+};
+/* 面板盒常量(§05.1): 宽 320 固定、不可拖拽 resize; 开层初值的高度估算(高级折叠态实测约 500),
+ * 精确收口在 fxPanel watcher 的 $nextTick 实测重钳位(_qbFxRefit)。 */
+const QB_FX_PANEL_W = 320;
+const QB_FX_PANEL_H_EST = 500;
+/* 深克隆成**普通**对象(JSON 往返): 默认值下发与 watch.fx -> AQB_FX_CFG 同步共用同一手法 ——
+ * 斩断 Vue 响应式代理, 热路径读普通字段不再触发依赖追踪。 */
+function _qbFxClone(v) {
+  return JSON.parse(JSON.stringify(v));
+}
+/* 逐字段白名单校验(§05.5 读纪律): 数值 clamp 到存储量纲 / 枚举白名单 / 布尔严格 === true|false;
+ * 未知键静默丢弃(现建新对象, 旧版本键里残留的已删字段如 scene/amp/tpl 自然清场)。入参假定
+ * 已是对象且 v === 1(qbInitialFx 先行把关)。
+ * !数值只认真数字与数字串("0.9" 可抢救) —— null/布尔/对象/空串一律回落默认: Number(null) === 0,
+ *   直收会把「没给值」误读成「最小动效」(缺省即默认, §05.5 aside)。 */
+function _qbFxSanitize(v) {
+  const d = QB_FX_DEFAULTS;
+  const num = (raw, lo, hi, def) => {
+    if (raw === null || raw === undefined || typeof raw === "boolean" || raw === ""
+      || typeof raw === "object") return def;
+    const n = Number(raw);
+    return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : def;
+  };
+  const enu = (raw, key) => (QB_FX_ENUMS[key].indexOf(raw) >= 0 ? raw : d[key]);
+  const bl = (raw, def) => (raw === true || raw === false ? raw : def);
+  const ls = v.layers && typeof v.layers === "object" && !Array.isArray(v.layers) ? v.layers : {};
+  return {
+    v: 1,
+    enabled: bl(v.enabled, d.enabled),
+    impact: num(v.impact, 0, 1, d.impact),
+    ease: enu(v.ease, "ease"),
+    palette: enu(v.palette, "palette"),
+    particles: num(v.particles, 0, 1, d.particles),
+    neon: bl(v.neon, d.neon),
+    tail: bl(v.tail, d.tail),
+    shift: enu(v.shift, "shift"),
+    shiftRatio: num(v.shiftRatio, 0.2, 1, d.shiftRatio),
+    dual: enu(v.dual, "dual"),
+    tear: enu(v.tear, "tear"),
+    echoSpan: enu(v.echoSpan, "echoSpan"),
+    layers: {
+      band: bl(ls.band, d.layers.band),
+      particles: bl(ls.particles, d.layers.particles),
+      scan: bl(ls.scan, d.layers.scan),
+      grade: bl(ls.grade, d.layers.grade),
+    },
+  };
+}
+/* 动效参数初值(持久化偏好; 与 qbInitialWindow 同纪律: 坏值/无存储回落默认且**不清键** ——
+ * §05.5: JSON.parse 失败/非对象/v !== 1 整体回落默认, 保留原始串供诊断)。定义在本文件由
+ * state.js 的 data() 调用。 */
+function qbInitialFx() {
+  try {
+    const raw = localStorage.getItem(QB_FX_STORE_KEY);
+    if (raw) {
+      const v = JSON.parse(raw);
+      if (v && typeof v === "object" && !Array.isArray(v) && v.v === 1) return _qbFxSanitize(v);
+    }
+  } catch (e) {
+    /* 无存储/坏 JSON: 回落默认(偏好类读取失败不该影响启动), 不清键 */
+  }
+  return _qbFxClone(QB_FX_DEFAULTS);
+}
+
 /* 三挂点作用域表(模块级单一描述源): 字段名一律指到 state.js 根选项的字段(不进 app.mixin,
  * frontend-split 纪律); url(ctx, window) 组端点串, ctx = 单种 hash / 分组 key(经 this 取);
  * active = 该图此刻是否应显示/可拉(建图守卫 + 轮询 tick 跳过判据同源); stale = 在途响应
@@ -542,6 +640,18 @@ window.AQB_QB_TRAFFIC = {
     },
     /* 注: 纵轴工具条的「上限 …(全局限速 ×1.2)」常驻读数已于 2026-10-16 随 UI 移除
      * (用户要求去掉上限字样, 图面自解释), computed 与 .qb-tools-hint 一并退役。 */
+    /* ---------------- 数值面板状态行只读两项(R8 §05.3 不可编辑项表) ----------------
+     * 展示值落 computed(范式同 qbCurGapText): fx-panel.html 裸插值 {{ qbFxPeriodS }} 不加括号,
+     * 落 methods 域会被 toDisplayString 渲染成函数源码字符串(Vue 3 对非字符串一律 String())。
+     * period 取 _qbPollMs 实算值(不是面板自己估的), 恒一位小数("3.0"/"30.0", §05.3 规格行
+     * 「采样 3.0 s」); beat = clamp(period × 0.4, 320, 1000) 派生量(可调即允许突破 I1 的 1s
+     * 硬上限, 故只读)。「上次真实拍」S3 接节拍状态后回填, 现显示 —。 */
+    qbFxPeriodS() {
+      return (this._qbFxCurPeriodMs() / 1000).toFixed(1);
+    },
+    qbFxBeatMs() {
+      return Math.round(Math.min(1000, Math.max(320, this._qbFxCurPeriodMs() * 0.4)));
+    },
   },
   /* 限速值变化(首次到手 / qB 重连 / 运行中改限速)时重排一次 y 轴 —— 长窗轮询间隔可夹到
    * 600s, 不重排则「限速+20%」迟迟不生效。注册走根实例 mounted(与各 AQB_* 片段同款):
@@ -711,6 +821,193 @@ window.AQB_QB_TRAFFIC = {
         const y = this[_QB_SCOPES[scope].yaxis];
         localStorage.setItem(qbYAxisStoreKey(scope), JSON.stringify({ mode: y.mode, manual: y.manual }));
       } catch { /* 写入失败: 本轮仍生效, 刷新后回落默认 */ }
+    },
+    /* ================= 数值面板(R8, plan 26-11-12-1139 §05): 图区右键的非模态锚定浮层 =================
+     * 模板分片 shared/tpl/fx-panel.html(四皮肤共享, into=app —— .drawer-dock 的**兄弟**节点:
+     * 不进 .drawer 子树, flux 的 transform containing-block 会把 fixed 定位劫持成相对抽屉, §09
+     * 风险行); 视图态 fxPanel 与参数值 fx 在 state.js(根选项显式建字段), 本模块只管行为与持久化。
+     * 本阶段(S0-a)边界: 收层/Esc 七处登记与 IntersectionObserver 收口在下一阶段接(§05.7) ——
+     * 现只接右键入口/开合/调参/落盘/重置/复制/Alt 看穿; 抽屉关闭后面板暂不自收(宿主观察回调里
+     * 跳过钳位, 不把面板推到视口左上角)。
+     * !命名: 模板触达的处理器不得带 _ 前缀(commands_send.js:347-350 前科 —— Vue 模板解析不到
+     *   _ 前缀成员, 整块渲染失败); 对外 fxClose/fxReset/fxCopy/fxPreview/fxCheck/fxPick/fxRange,
+     *   模块内部才 _qb*。 */
+    /* 开层(入口在 _qbChartBuild 的宿主 contextmenu 监听): 定位 = 右键点右侧、图右缘内缩 8px
+     * (FIT.EDGE, 复用 overlay_fit 单点范式, 不发明第二套定位), 垂直以点击 y 为锚; 初值尺寸按
+     * 常量估算(宽 320 固定 / 高按高级折叠态实测约 500), 精确收口在 fxPanel watcher 的
+     * $nextTick 实测重钳位(_qbFxRefit, 与菜单 _menuPos 估 + _menuFitRefit 实测两级同范式)。
+     * 总开关关掉也照开(§05.6: 否则用户失去重新打开的入口)。 */
+    openFxPanel(px, py) {
+      const FIT = window.AQB_OVERLAY_FIT;
+      const host = this.$refs.qbChartHost;
+      let x = Number(px) || 0;
+      if (host && host.isConnected) {
+        x = Math.min(x, host.getBoundingClientRect().right - FIT.EDGE - QB_FX_PANEL_W);
+      }
+      const at = FIT.fitInViewport(null, x, Number(py) || 0, { w: QB_FX_PANEL_W, h: QB_FX_PANEL_H_EST });
+      this.fxPanel = { visible: true, x: at.x, y: at.y, alt: false };  // 对象整体替换 -> watcher 重钳位
+      this._qbFxListen(true);
+    },
+    /* 关层(面板右上 x 钮; S0-a 唯一关闭通道, 点外/Esc 收层在下一阶段进 §05.7 名单) */
+    fxClose() {
+      if (!this.fxPanel.visible) return;
+      this.fxPanel = { visible: false, x: 0, y: 0, alt: false };
+      this._qbFxListen(false);
+    },
+    /* 开/关层的窗口级监听装卸(resize / 页面滚动 / Alt 看穿 / 宿主高度观察, §05.1 跟随行)。
+     * !处理器一律提为实例字段(lifecycle.js R4 清池纪律: removeEventListener 需要同一引用);
+     *   装卸与 open/close 配对, 页面卸载随 window 消亡(不另挂 unmounted —— AQB_QB_TRAFFIC 走
+     *   app.mixin, 生命周期钩子会波及全部组件实例, 见 state.js/lifecycle.js 头 WARN)。 */
+    _qbFxListen(on) {
+      if (on) {
+        if (!this._qbFxOnResize) {
+          this._qbFxOnResize = () => this._qbFxRefitSoon();
+          this._qbFxOnScroll = () => this._qbFxRefitSoon();
+          this._qbFxOnBlur = () => { this.fxPanel.alt = false; };  // Alt+Tab 离场 keyup 丢失, 失焦复位防卡在看穿态
+          this._qbFxOnAltKey = (e) => {
+            if (!this.fxPanel.visible) return;
+            this.fxPanel.alt = e.altKey === true;  // 按住 Alt 看穿(opacity 0.22 + pointer-events:none), 松开恢复(§05.1)
+          };
+        }
+        window.addEventListener("resize", this._qbFxOnResize);
+        window.addEventListener("scroll", this._qbFxOnScroll, { passive: true });
+        window.addEventListener("keydown", this._qbFxOnAltKey);
+        window.addEventListener("keyup", this._qbFxOnAltKey);
+        window.addEventListener("blur", this._qbFxOnBlur);
+        // 抽屉拖拽调高 -> 图宿主高变(.qb-chart-host height:100%): RO 触发节流重钳位。宿主被拆
+        // (抽屉关/换 kind/切页签)时 RO 报空盒 —— 跳过即可, 收口登记(§05.7)在下一阶段接。
+        if (!this._qbFxHostRo) {
+          this._qbFxHostRo = new ResizeObserver(() => {
+            const host = this.$refs.qbChartHost;
+            if (!host || !host.isConnected || host.clientWidth === 0) return;
+            this._qbFxRefitSoon();
+          });
+        }
+        const host = this.$refs.qbChartHost;
+        if (host && host.isConnected) this._qbFxHostRo.observe(host);
+        return;
+      }
+      window.removeEventListener("resize", this._qbFxOnResize);
+      window.removeEventListener("scroll", this._qbFxOnScroll);
+      window.removeEventListener("keydown", this._qbFxOnAltKey);
+      window.removeEventListener("keyup", this._qbFxOnAltKey);
+      window.removeEventListener("blur", this._qbFxOnBlur);
+      if (this._qbFxHostRo) this._qbFxHostRo.disconnect();
+    },
+    /* 节流重钳位(≤60ms 一次, §05.1 跟随行): resize / 页面滚动 / 抽屉高度变化共用的唯一入口。
+     * leading + trailing 两段 —— 抽屉入场 rAF 逐帧改高只换来 60ms 一次的钳位, 不与
+     * ResizeObserver -> u.setSize 连锁成逐帧抖动; 事件停了也要补一跳, 停在最终位置。 */
+    _qbFxRefitSoon() {
+      if (!this.fxPanel.visible) return;
+      const now = Date.now();
+      if (now - (this._qbFxRefitAt || 0) >= 60) {
+        if (this._qbFxRefitTimer) { clearTimeout(this._qbFxRefitTimer); this._qbFxRefitTimer = 0; }
+        this._qbFxRefitAt = now;
+        this._qbFxRefit();
+        return;
+      }
+      if (this._qbFxRefitTimer) return;
+      this._qbFxRefitTimer = setTimeout(() => {
+        this._qbFxRefitTimer = 0;
+        this._qbFxRefitAt = Date.now();
+        this._qbFxRefit();
+      }, 60);
+    },
+    /* 实测重钳位: 量真实面板盒(offsetWidth/offsetHeight)后两轴夹取进视口(FIT.fitInViewport,
+     * 只夹视口、**不压缩尺寸** —— 尺寸大于视口由 CSS max-height + 正文内部滚动兜底, §05.9),
+     * 且保持右缘不越过图宿主右缘内缩 8px(首次定位的锚定约束在重钳位时同样成立)。 */
+    _qbFxRefit() {
+      const s = this.fxPanel;
+      if (!s || !s.visible) return;
+      const el = this.$refs.fxPanelEl;
+      if (!el || !el.isConnected) return;
+      const FIT = window.AQB_OVERLAY_FIT;
+      let x = s.x;
+      const host = this.$refs.qbChartHost;
+      if (host && host.isConnected) {
+        x = Math.min(x, host.getBoundingClientRect().right - FIT.EDGE - el.offsetWidth);
+      }
+      const p = FIT.fitInViewport(el, x, s.y);
+      s.x = p.x;  // 回写 x/y 字段而非整对象: 不会自触发 fxPanel watcher(同 _menuFitRefit 口径)
+      s.y = p.y;
+    },
+    /* ---------------- 面板控件处理器(§05.3 字段表; 模板触达, 不得带 _ 前缀) ----------------
+     * 持久化时机(§05.5「只在用户操作时写」): 滑杆 @input 逐值写内存(即改即用)、@change 落盘
+     * 一次 —— 拖拽全程不逐 tick 写 localStorage; 复选框/下拉只有 change 事件, 处理器内直接落盘。 */
+    /* 百分比读数(存储 0-1 -> 显示 0-100; 消费面: impact/particles/shiftRatio 三根滑杆的 value 与读数) */
+    fxPct(key) {
+      const n = Number(this.fx[key]);
+      return Number.isFinite(n) ? Math.round(n * 100) : 0;
+    },
+    /* 滑杆(显示 0-100 -> 存储 /100; shiftRatio 滑杆 min=20 => 存储域 [0.2,1] 天然成立)。 */
+    fxRange(key, ev) {
+      const el = ev && ev.target;
+      if (!el) return;
+      const n = Number(el.value);
+      if (!Number.isFinite(n)) return;
+      const v = Math.min(1, Math.max(0, n / 100));
+      if (this.fx[key] === v) return;
+      this.fx[key] = v;
+    },
+    /* 下拉(select 的 value 恒来自模板静态候选, 白名单兜一道防脏 —— 非法回落现值, 不落盘不生效) */
+    fxPick(key, ev) {
+      const el = ev && ev.target;
+      if (!el) return;
+      const wl = QB_FX_ENUMS[key];
+      if (!wl || wl.indexOf(el.value) < 0) {
+        el.value = String(this.fx[key]);
+        return;
+      }
+      if (this.fx[key] === el.value) return;
+      this.fx[key] = el.value;
+      this.persistQbFx();
+    },
+    /* 复选框(总开关 enabled / 视觉 neon/tail / 高级四层开关 layers.*; 布尔严格 === true|false) */
+    fxCheck(key, ev) {
+      const el = ev && ev.target;
+      if (!el) return;
+      const on = el.checked === true;
+      if (key.indexOf("layers.") === 0) {
+        const lk = key.slice(7);
+        if (!this.fx.layers || !(lk in this.fx.layers) || this.fx.layers[lk] === on) return;
+        this.fx.layers[lk] = on;
+      } else {
+        if (this.fx[key] === on) return;
+        this.fx[key] = on;
+      }
+      this.persistQbFx();
+    },
+    /* 重置为默认(§05.5: 写回默认值并立即生效, **不删键** —— 用户可能只想回到默认, 不想让旧值
+     * 在下次启动时"复活"; reduced-motion 对 enabled 的置灰红线在下一阶段接)。 */
+    fxReset() {
+      this.fx = _qbFxClone(QB_FX_DEFAULTS);  // 对象整体替换 -> watch.fx 同步 AQB_FX_CFG
+      this.persistQbFx();
+    },
+    /* 复制配置片段(§05.5: 走既有复制通道 _copyText —— 非安全上下文 execCommand 降级 + toast
+     * 反馈, qB WebUI 常走局域网 http, 自建 clipboard 调用会静默失败; 输出可直接粘进源码默认
+     * 常量的 JS 片段, 含全部存储字段 + 只读两项的去处注释)。 */
+    fxCopy() {
+      const snip = "var QB_FX_DEFAULTS = " + JSON.stringify(this.fx, null, 2) + ";\n"
+        + "// 只读两项不进本片段: 采样周期 period(属后端与数据文件) / 拍长 beat(派生量)。";
+      this._copyText(snip, "动效配置片段");
+    },
+    /* 预览一拍(占位): 语义六条(§05.4 不动窗口/假 Δ 贴近真实量级/连点重启/真值抢占/不写 store/
+     * 同预算)在 S3 接真值链路 —— 本阶段按钮在、处理器在、零副作用。 */
+    fxPreview() {
+      /* S3: _qbPreviewBeat 按 §05.4 伪代码接, 预览令牌/真值抢占/预算同 I9。 */
+    },
+    /* fx 落盘(§05.5: 只在用户操作时写 —— 调用点全在面板处理器; try/catch 静默失败, 隐私模式/
+     * 配额满不得让调参崩; 重置也走这里 = 写回默认不删键)。 */
+    persistQbFx() {
+      try {
+        localStorage.setItem(QB_FX_STORE_KEY, JSON.stringify(this.fx));
+      } catch { /* 写入失败: 本轮仍生效, 刷新后回落默认 */ }
+    },
+    /* 状态行只读两项的周期实算单点(展示值 qbFxPeriodS/qbFxBeatMs 在 computed 块 —— 模板裸
+     * 插值不加括号, 落 methods 会被 toDisplayString 渲染成函数源码字符串; §05.3 不可编辑项表) */
+    _qbFxCurPeriodMs() {
+      const s = this.qbCurScope;
+      return s ? this._qbPollMs(s) : _QB_POLL_FALLBACK_MS;
     },
     /* y 轴重排(上限变更/限速到手): 只重算 scale 并重画注解层, 不销毁重建、不重取数。
      * setData(resetScales 默认 true) 会重跑 y range 与全部 draw 钩子(注解层随之上新)。 */
@@ -1003,6 +1300,22 @@ window.AQB_QB_TRAFFIC = {
       if (!def.active(this) || !host || !d || !d.points || !d.points.length) return;
       const data = _qbPointsToData(d.points, Number(d.meta && d.meta.interval_s));
       if (!data) return;
+      // 图区右键入口(R8 §05.2): 独立处理器 —— preventDefault + stopPropagation 拦住冒泡到
+      // drawer.html:66 的 @contextmenu.prevent(四皮肤同验一次「图区右键只有一个面板」)。
+      // !不碰 menu.js:223 的 openDrawerMenu 早退判据: 改了会让整片正文右键都弹出「只有一个
+      //   模板选项」的半残菜单, 并撞 e2e/drawer-merge.spec.mjs 的 .ctx-menu strict-mode 计数。
+      // 总开关关掉也照开(§05.6: 否则用户失去重新打开的入口)。
+      // !宿主跨重建复用而 _qbChartDestroy 只断 RO/destroy uPlot、不摘 host 监听 -> _qbFxBound
+      //   标记幂等绑定(换肤 N 次不弹 N 个面板, §05.7); 宿主 DOM 随 v-if 拆走时标记随节点消亡,
+      //   重建的新宿主会重新走到这里再绑。
+      if (!host._qbFxBound) {
+        host._qbFxBound = true;
+        host.addEventListener("contextmenu", (ev) => {
+          ev.preventDefault();
+          ev.stopPropagation();
+          this.openFxPanel(ev.clientX, ev.clientY);
+        });
+      }
       if (!this._qbCharts) this._qbCharts = {};
       if (!this._qbChartWs) this._qbChartWs = {};
       if (!this._qbChartHs) this._qbChartHs = {};
