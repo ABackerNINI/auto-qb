@@ -5,7 +5,7 @@
 **Updated:** 2026-11-13
 **Summary:** 两件 perf issue(26-10-07-1420 组行 hash 引用式 / 26-10-08-0411 /api/state 全量轮瘦身)联合复验均仍复现 → grilling 五问拍板(D1-D5 全按推荐) → 联合计划 26-11-11-0630 全批次落地收口(S0-S6 完成, 2026-11-13): 主线 C 落地(组行 members 改 hash 引用式 + 前端 ingestion 物化缝 + version-reload 自愈), 全量回包 -35%、抖动轮组行 24.6×/27.0× 塌缩(S0/S5 对照单点=本档案); G1/G2/G3 三裁决点全部不立项(2026-11-12 用户拍板); 两 issue 翻 Done; 基线切片 26-11-13-0027(测试数字见 kb.baseline)
 **Topics:** webui-group-hash-ref
-**Refs:** memory-bank/plans/26-11-11-0630-plan-webui-group-hash-ref.html, memory-bank/issues/26-10-07-1420-perf-webui-group-row-hash-ref.html, memory-bank/issues/26-10-08-0411-perf-webui-api-state-pagination.html, memory-bank/issues/26-11-12-2345-chore-real-seed-clean-evidence-guard.html, memory-bank/testing/baselines/26-11-13-0027-webui-group-hash-ref.md
+**Refs:** memory-bank/plans/26-11-11-0630-plan-webui-group-hash-ref.html, memory-bank/issues/26-10-07-1420-perf-webui-group-row-hash-ref.html, memory-bank/issues/26-10-08-0411-perf-webui-api-state-pagination.html, memory-bank/issues/26-11-12-2345-chore-real-seed-clean-evidence-guard.html, memory-bank/testing/baselines/26-11-13-0027-webui-group-hash-ref.md, memory-bank/issues/26-11-13-0130-test-e2e-rowwin-group-click-reachability.html
 
 ## 本篇只回答
 
