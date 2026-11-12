@@ -13,7 +13,7 @@ import { collectRuntimeErrors, installRuntimeErrorGuard } from './lib/errors.mjs
  * 异色竖带。真浏览器逐像素实测: atlas Δ9/255、prism Δ5/255, 未选中行 Δ0。
  * **修法**: 行底不被状态替换 —— `linear-gradient(tint, tint), var(--bg-row)`, 与首格同一个合成表达式
  * ⇒ 两侧计算背景逐字节相等(声明式契约由
- * test_webui_static_skins.py::test_frontend_pinned_first_cell_selected_row_keeps_base 静态钉住;
+ * test_webui_static_skins_table.py::test_frontend_pinned_first_cell_selected_row_keeps_base 静态钉住;
  * 本 spec 钉**行为**: 声明看着对、实际被后置规则/继承打回半透明的形态静态看不出来)。
  *
  * 三段断言(每段都能独立抓回退):

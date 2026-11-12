@@ -9,9 +9,9 @@
 <meta name="issue-stamp" content="26-11-12-0628">
 <meta name="issue-type" content="docs">
 <meta name="doc-topic" content="webui-guard-ref-css-e2e">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-12-webui-guard-ref-css-e2e.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="过期守阵指称族(css/html/e2e 面): 7 处非 py/js 注释仍以现在时指称已退役的 test_webui_static_skins.py">
 <meta name="issue-summary" content="issue 26-11-12-0527 的 grep 限定 py/js 两后缀, 词边界复扫扩到 css/html/mjs 另发现 7 处现在时指称旧文件名(3 src + 4 e2e); 修法范式同 0527(指现行定义点)">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-12-0628-docs-webui-guard-ref-css-e2e</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-12 06:28</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">docs</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
 
@@ -118,13 +118,16 @@
 <section id="s3">
   <h2><span class="no">§03</span>建议<span class="opt">（可选）</span></h2>
   <p>修法范式照 <code>0d420c9d</code> 与 issue 26-11-12-0527 已修轮(逐符号 grep 现行定义点后改指, 对照面两侧注释对称); 位置表第三列已给现行定义点, 开工时复核一遍行号即可。</p>
+  <p><strong>复验与修复后补充(2026-11-12)</strong>: 开工按 §02 同口径词边界复扫, 7 处仍全部复现(行号与取证当时值一致)。逐符号核对现行定义点后 7 处全部改指: <code>atlas/css/views.css:318</code> → <code>test_webui_static_skins_skin.py::test_frontend_template_split_wiring</code>, <code>settings-detail.html:129</code> → <code>test_webui_static_skins_skin.py</code>, <code>xtpl-cells.html:318</code> → <code>test_webui_static_skins_table.py::test_drawer_table_bridge_wiring</code>, <code>drawer-dock-stability.spec.mjs:8</code> → <code>test_webui_static_skins_widget.py::test_frontend_search_pending_no_collapse</code>, <code>hscroll-indicator.spec.mjs:15</code> → <code>test_webui_static_skins_table.py::test_frontend_hscroll_indicator_wiring</code>, <code>main-table-pinned-hover.spec.mjs:14</code> / <code>main-table-pinned-selected.spec.mjs:16</code> → <code>test_webui_static_skins_table.py</code> 的两条同名守阵。<strong>改道一处</strong>: §02 首行建议的 <code>test_frontend_frozen_column_boundary_wiring</code> 实钉 <code>.is-hscrolled</code> 吸左发丝线, 而 <code>views.css:317</code> 括号里的「守阵见」紧邻「components.css 顶 700 行体量上限」, 逐符号复核(拆分前旧件 2322 行 <code>test_frontend_static_bundle_health</code> 体内含 700 行 cap 断言; 拆分后该断言落 skin 件 <code>test_frontend_template_split_wiring</code> 的 181-196 行)后改指 <code>test_frontend_template_split_wiring</code>, 保留建议原文于此。评审轮 1 抓回首版误指 <code>test_frontend_static_bundle_health</code>(拆分后该函数只调 <code>_scan_frontend_assets()</code>, 无 cap 断言), 已订正。验证: 同口径复扫 <code>src/ e2e/</code> 三后缀命中归零(仅剩 <code>memory-bank/</code> 冻结历史件); 零逻辑/断言改动。全量回归结论与本专题基线切片由本专题收尾据实回填(见任务档案 S4 与 <code>memory-bank/testing/baselines/</code> 本专题切片), 此处不预先写完成式。评审轮 2 抓回超前陈述(完成式全量结论 + 悬空 <code>kb.baseline</code> 引用)并订正。</p>
 </section>
 
 <section id="s4">
   <h2><span class="no">§04</span>状态变更日志</h2>
   <ul>
     <li>2026-11-12 06:28 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-12 — 状态 Open → In Progress（kb.status）</li>
+    <li>2026-11-12 — 状态 In Progress → Done（kb.status）</li>
+</ul>
 </section>
 
 <footer>

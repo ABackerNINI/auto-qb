@@ -12,7 +12,7 @@ import { collectRuntimeErrors, installRuntimeErrorGuard } from './lib/errors.mjs
  * 且**表头跟着同步**(R2: 拖动是程序化写 scrollLeft, 只信"scroll 事件会触发"的推断不够);
  * 5) 宽窗无溢出时热区内也不出现; 6) 召唤范围(纵向不含状态栏 / 横向只认胶囊邻域 / Shift+滚轮也召唤)。
  *
- * **为什么静态守阵(S4, tests/test_webui_static_skins.py)不够**: 那条只能读源码文本 —— 它看得出
+ * **为什么静态守阵(S4, tests/test_webui_static_skins_table.py::test_frontend_hscroll_indicator_wiring)不够**: 那条只能读源码文本 —— 它看得出
  * `display: none` 在不在、link 挂没挂, 但看不出**几何是否真的生效**: `::-webkit-scrollbar{display:none}`
  * 被更高特异性的规则压掉、`scrollbar-width` 拼错、`.hscroll-pill` 被别的 `opacity` 规则覆盖、
  * `syncHeadScroll` 尾部那行 `_hscrollSync` 被删但静态锚点仍在 —— 这四类都只在真浏览器里有结果。

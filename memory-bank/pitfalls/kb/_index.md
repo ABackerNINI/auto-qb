@@ -18,6 +18,7 @@
 | [discipline.md](discipline.md) | 纪律为什么"反复强调却从不执行"、埋点与验收口径为什么必须有人消费、**闸门能判红却没有能修的命令**、**该判的却没判(闸门漏挂 → 静默红)**、测试写在没人跑的地方等于没写。 | 规则不执行, 立档, 收尾, 埋点, 验收标准, 口径, 测试没跑, testpaths, 生成物, 重建提示, 报错文案指错命令, 照做仍然红, 闸门漏挂, 静默红, 闸门覆盖, kb.check |
 | [doc-status-meta.md](doc-status-meta.md) | `plans/` `reports/` 的 `<meta name="doc-status">` 不在 5 词表(`Open`/`In Progress`/`Done`/`Dropped`/`Superseded`)时, 该件不落任何分区 ⇒ **静默漏收**。修复前 `kb.i… | 新建计划/报告, doc-status, 状态词, 索引漏收, kb.index 已生成但件不在索引, Draft, test_status_vocabulary |
 | [doc-topics-comma-composite.md](doc-topics-comma-composite.md) | Topics 行英文逗号不拆主键 | Topics, 专题主键, docmap, 跨形态视图, 名录 |
+| [doc-verify-completed-claim.md](doc-verify-completed-claim.md) | 结档文档禁把未执行的验证写成完成式 (含悬空基线引用) | 结档, 修复后补充, 全量测试全绿, 见 kb.baseline, 完成式断言, 验证依据, 悬空引用 |
 | [handmade-doc-header-escape.md](handmade-doc-header-escape.md) | 手写计划/报告绕过 kb.new: 缺 doc-* 头部整件逃出新增面守卫 | 计划件无状态, (无状态), 手写头部, doc-status, doc-added, 缺状态, 排期计划, 新建计划 |
 | [index-archive-view.md](index-archive-view.md) | 生成式索引撞 `index-auto` cap 且「无摘要口径」本身已 > cap(即摘要砍到 0 也超)时, 后备出口不是「搬走老条目」而是**视图归档** —— 生成器只渲染已关闭状态最近 N 条, 文件原地不动, 全量清单另落 `attachments/`; 因为搬文件的前… | 索引条目数撑爆 cap, 无摘要口径超 cap, 后备出口, 搬文件 vs 视图归档, CLOSED_KEEP, 归档索引, attachments, 冻结件认领链, issues/_index 触顶, EXTRA_GENERATED |
 | [index-volume-routing.md](index-volume-routing.md) | `pitfalls/{backend,testing,web-ui}` 主索引是分卷路由(只有卷号/主题范围/条数), 定位表在 `_index-<n>.md`; 主索引查不到不等于没有这个坑。 | 分卷索引,卷页,主索引找不到,多一跳,pitfalls 索引,卷号定位,CLOSED_KEEP,归档索引,全量清单 |

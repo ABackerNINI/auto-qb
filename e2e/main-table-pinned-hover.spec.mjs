@@ -11,7 +11,7 @@ import { collectRuntimeErrors, installRuntimeErrorGuard } from './lib/errors.mjs
  * ⇒ 滑过瞬间首格已 snap 到 `--bg-hover`, 其余列还在从 `--bg-row` 渐入; 160ms 内行内是一条比其它
  * 列更亮的竖带, 过渡结束又"恢复一致"(用户描述的现象逐字对应)。移出方向同理反号。
  * **修法**: 三皮肤 views.css 的 `.group-row > :first-child` 补同源时长/缓动的 `background-color`
- * 过渡(声明式契约由 test_webui_static_skins.py::test_frontend_pinned_first_cell_hover_transition_parity
+ * 过渡(声明式契约由 test_webui_static_skins_table.py::test_frontend_pinned_first_cell_hover_transition_parity
  * 静态钉住; 本 spec 钉**行为**: 静态守阵看不出两边是否真的逐帧同步)。
  *
  * 三段断言(每段都能独立抓回退):

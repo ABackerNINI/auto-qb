@@ -315,7 +315,7 @@ select option { background: var(--bg-elev); color: var(--fg); }
  * image 层天然叠在 color 层之上, 合法语法(prism 同口径)。 */
 .group-head > .h-cell:first-child:hover { background-image: linear-gradient(var(--surface-2), var(--surface-2)); }
 /* 拖拽把手(2026-10-16 二轮; 自 components.css 迁入 —— 该文件顶 700 行体量上限, 守阵见
- * tests/test_webui_static_skins.py): 可见线落**列间间隙(gap)中央**而非压在列边界上 —— 2026-10-06
+ * tests/test_webui_static_skins_skin.py::test_frontend_template_split_wiring): 可见线落**列间间隙(gap)中央**而非压在列边界上 —— 2026-10-06
  * 去掉 padding-right 后右对齐列表头文字紧贴格子右缘, 压在边界上的线会盖住文字右 1px(实测 11 个
  * 右对齐数字列全重叠); 移到 gap 中央后线距两侧文字各 4px。热区 [R-2, R+8] 仍跨边界, 抓握手感
  * 不变(right:calc(-1*var(--tbl-gap,10px)/2 - 3px) + width:10px, ::after left:6px → 线恒落 gap 正中:
