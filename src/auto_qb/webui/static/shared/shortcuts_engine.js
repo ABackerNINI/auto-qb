@@ -704,6 +704,12 @@ Object.assign(window.AQB_SHORTCUTS.methods, {
       }
       this.kbOpenHelp();
     },
+    /* 模板入口别名(issue 26-10-03-1412): Vue 模板解析不到 `_` 前缀成员(保留内部域, 处理器恒抛
+     * ReferenceError 且整块渲染失败)。计划 26-11-12-0344 S5: 状态栏「键位」入口钮与 Shift+/
+     * 同链 —— 模板经此中转 _kbToggleKbHelp(toggle 语义本体不动, 纯显示层); 键盘路径不经此。 */
+    kbToggleHelp() {
+      return this._kbToggleKbHelp();
+    },
     /* qB 口径流量图 Ctrl+\: 已开着全局流量形态 => closeDrawer; 否则走 openQbHistory(含 qbTrafficOn
      * 门 + 未启用提示)。同目标 = 关, 未开/换形态仍走原打开语义。 */
     _kbToggleQbTraffic() {

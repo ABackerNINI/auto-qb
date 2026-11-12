@@ -12,7 +12,7 @@
  *
  * 字段:
  *   ui[]    id        唯一标识
- *           ui        ctx-menu | kbd | drawer
+ *           ui        ctx-menu | kbd | drawer | statusbar
  *           variant   仅 ctx-menu 有, 与 menu.js::ctxMenuKind() 的四个返回值一一对应
  *                     (multi / episode / member / group); 守阵 T3 拿它对账支名单点
  *                     (模板消费面 = 一条 ctxItems(ctxMenuKind()) v-for, 2026-10-22 起无四支段)
@@ -173,6 +173,10 @@ const TRIGGER_DEFS = {
     {
       "id": "panel.tracker-remove", "ui": "drawer", "entry": "trackerRemove",
       "scope": "panel", "dispatch": "panel"
+    },
+    {
+      "id": "statusbar.kbd-help", "ui": "statusbar", "entry": "_kbToggleKbHelp",
+      "scope": "none", "dispatch": "panel"
     }
   ],
   "calls": [

@@ -46,7 +46,9 @@ for (const skin of SKINS) {
       expect(scope.kind, '选中行右键应走批量支').toBe('multi');
       expect(scope.count, '菜单明示的目标数 == 选中集合种子数').toBe(2);
       const texts = await openMenuTexts(page);
-      expect(texts.some((t) => /^启动 \d+ 个种子$/.test(t)), `应渲染「启动 N 个种子」: ${texts.slice(0, 8).join(' / ')}`).toBe(true);
+      // 菜单键帽(计划 26-11-12-0344 S2)追加在项文本尾, innerText 里与标签隔一个换行
+      //   (.ctx-item 是 flex 容器, allInnerTexts 不归一化空白): 锚定匹配兼容尾随键帽串(改绑跟随)。
+      expect(texts.some((t) => /^启动 \d+ 个种子(?:\s.+)?$/.test(t)), `应渲染「启动 N 个种子」: ${texts.slice(0, 8).join(' / ')}`).toBe(true);
 
       const { hits, off } = bulkTap(page);
       await ctxItemById(page, 'resume').first().click();

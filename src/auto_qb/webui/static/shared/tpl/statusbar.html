@@ -50,6 +50,21 @@
         <svg class="ico ico-sm ico-chart" viewBox="0 0 16 16"><use href="#i-chart"></use></svg>完整统计
       </button>
       <span class="sb-spacer"></span>
+      <!-- 键位帮助入口(计划 26-11-12-0344 S5): Shift+/ 帮助浮层的常驻鼠标入口 —— 浮层此前零按钮
+           入口(不知道 Shift+/ 存在就永远发现不了)。分派 = help-panel 同链: kbToggleHelp 是
+           _kbToggleKbHelp 的模板别名(shortcuts_engine.js, Vue 模板解析不到 _ 前缀成员,
+           issue 26-10-03-1412; 与 Shift+/ 同一 toggle 方法, 开/关行为与键盘完全一致; 浮层开着时
+           被 modal-mask(z-index 130) 盖住点不到, 鼠标关走 Esc/x/遮罩, 键盘自切换
+           KB_SELF_TOGGLE_OVERLAY 本体不动 —— 纯显示层)。键帽串走 kbKeycapOf('help-panel') 现算
+           (id 引用注册表, I1 不手抄; 改绑即时跟随/空串即隐藏与顶栏键帽同链); I4/D10 例外裁定:
+           键位提示不走 title/.aq-tip 通道。版式: 复用 .sb-btn(与「完整统计」同款, 四皮肤既有样式
+           零新增 CSS); 插在 spacer 之后 = 增宽先被 .sb-spacer(flex:1) 吸收, 不挤右角速度组;
+           高度: 键帽 11px mono + 3px padding + 3px border ≈ 20px + .sb-btn 2px padding ≈ 26px,
+           在 --statusbar-h(34px) 锁高内(实测断言见 e2e statusbar-kbd-entry)。 -->
+      <button class="sb-btn" @click.stop="kbToggleHelp()">
+        键位
+        <kbd v-if="kbKeycapOf('help-panel')" class="aq-kbd">{{ kbKeycapOf('help-panel') }}</kbd>
+      </button>
       <!-- 通知入口(WEBUI 通知 S4, 原「错误历史」, 2026-10-09 改名; 模板 T2): 照 .sb-hist/.sb-qb 范式(图标 + title +
            @click.stop), 样式单点在 shared/console_hub.css 的 .sb-err 段。独立按钮不入
            .sb-speed(该组 overflow: hidden), 常驻渲染(不依赖 todayTraffic)。未读徽标 =

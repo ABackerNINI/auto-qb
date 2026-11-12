@@ -35,6 +35,13 @@ kbDisplayName), 设置键位面板(tpl/settings-detail.html)/ Shift+/ 帮助浮�
   kbKeysRev 显式建字段 + 适配器四变更点 _kbReloadKeys/_kbApplyOverrides/kbSaveKeys/
   kbDraftRevert 各 +1 + 取数方法渲染期 void 读, 断一环 = 常驻键帽面改绑后钉死)
   + 被接线模板零手抄键位串(禁 "Alt + " 字面量与无 v-if 的静态 kbd)
+- test_keycap_static_mount_statusbar_entry(计划 S5): 状态栏「键位」入口钮(<kbd class="aq-kbd">
+  常驻 DOM, 串走 AQB_SHORTCUTS.methods.kbKeycapOf -> kbKeycapById -> kbShortcutDisplay 单点,
+  id 引用注册表 help-panel —— 与 Shift+/ 键盘条目同一条目, I1 不手抄)+ 分派链 = @click.stop
+  调 kbToggleHelp 模板别名(shortcuts_engine.js 一比一中转 _kbToggleKbHelp = 注册表
+  help-panel run 同一 toggle 方法, 开/关行为与 Shift+/ 完全一致; 模板别名因 Vue 解析不到
+  _ 前缀成员, issue 26-10-03-1412; 纯显示层: 引擎/浮层本体零改动)+ statusbar.html 恰一处
+  kbd(S5 = 恰一处入口, 反漂移)+ 反手抄锚扩 statusbar.html(kbd 必带 v-if, 键位串字面量禁入)
 """
 
 from __future__ import annotations
@@ -86,6 +93,8 @@ A("kbDisplayOf 委托单点(草稿经 this.kbDraft 生效)",
 /* S3: 顶栏静态挂点按 shortcut id 直查(kbKeycapById -> kbShortcutDisplay 单点链) */
 A("kbKeycapById: 顶栏两钮 id 现算(N/K)", kbKeycapById("add-torrent", null) === "N" && kbKeycapById("col-picker", null) === "K");
 A("kbKeycapById: 未知 id 防御性空串(不抛)", kbKeycapById("no-such-entry", null) === "");
+/* S5: 状态栏「键位」入口钮按 shortcut id 现算(id 引用注册表 help-panel, 与 Shift+/ 键盘条目同一条目) */
+A("kbKeycapById: help-panel 状态栏入口现算(Shift + /)", kbKeycapById("help-panel", null) === "Shift + /");
 A("kbKeycapOf 方法委托单点(沙箱无适配器回默认表)",
   typeof M.kbKeycapOf === "function" && M.kbKeycapOf.call({}, "add-torrent") === "N");
 /* S4: 页签徽标单点 —— 非合并五档直映 / 合并态与 KB_MERGE_TAB_REMAP 同表反查(位次重排) */
@@ -262,7 +271,43 @@ def test_keycap_static_mounts_topbar_and_drawer_tabs() -> None:
 
     # 反手抄锚: 被接线模板零手抄键位串 —— kbd 一律带 v-if(现算空串判定), 键位显示串字面量
     # (「Alt + 」带空格形态即 kbDisplayName 输出)不得出现在模板里
-    for name in ("topbar.html", "drawer.html", "ctl-bits.html"):
+    for name in ("topbar.html", "drawer.html", "ctl-bits.html", "statusbar.html"):
         text = open(os.path.join(SHARED, "tpl", name), encoding="utf-8").read()
         assert re.search(r"<kbd(?![^>]*v-if=)", text) is None, (f"tpl/{name} 出现无 v-if 的静态 <kbd>(键位串必须现算, 禁手抄)")
         assert "Alt + " not in text, (f"tpl/{name} 出现手抄键位显示串字面量「Alt + …」 —— 一律走 kbShortcutDisplay 单点(I1)")
+
+
+def test_keycap_static_mount_statusbar_entry() -> None:
+    """S5 状态栏「键位」入口接线静态锚(计划 26-11-12-0344)
+
+    状态栏: 「键位」文字钮(.sb-btn, 与「完整统计」同款四皮肤既有样式零新增)内联
+    <kbd class="aq-kbd"> 常驻 DOM, 串走 kbKeycapOf(id 引用注册表 help-panel —— 与 Shift+/
+    键盘条目同一条目, I1 不手抄); 分派 = @click.stop 调 kbToggleHelp 模板别名 —— 该别名必须
+    一比一中转 _kbToggleKbHelp(注册表 help-panel run 的同一 toggle 方法, 开/关行为与 Shift+/
+    完全一致; 别名存在的唯一理由是 Vue 模板解析不到 _ 前缀成员, issue 26-10-03-1412;
+    _kbToggleKbHelp 方法体的开/关双分支由 test_web_shortcuts_drawer 切换语义守阵钉住)。
+    纯显示层: 引擎/浮层本体零改动, S5 = 恰一处入口(kbd 数量反漂移)。
+    """
+    sb = open(os.path.join(SHARED, "tpl", "statusbar.html"), encoding="utf-8").read()
+    # 键帽节点: v-if 与文本同走 kbKeycapOf 单点(空串判定内含在单点里, 模板不自己拼)
+    needle = "<kbd v-if=\"kbKeycapOf('help-panel')\" class=\"aq-kbd\">{{ kbKeycapOf('help-panel') }}</kbd>"
+    assert needle in sb, ("statusbar.html 缺键位帮助入口键帽节点(S5)或未走 kbKeycapOf 单点"
+                          "(I1 改绑即时跟随/空串即隐藏与顶栏键帽同链)")
+    assert sb.count("<kbd") == 1, (f"statusbar.html 键帽数量漂移(S5 拍板: 恰 help-panel 入口一处; 实测 {sb.count('<kbd')} 处)")
+    # 分派链: click 调 kbToggleHelp(模板可触达的无前缀别名, issue 26-10-03-1412); 别名必须
+    # 一比一中转 _kbToggleKbHelp —— 与注册表 help-panel run 同一 toggle 方法(不得另写实现),
+    # 中转体断言单点在下方 engine 块。
+    assert '@click.stop="kbToggleHelp()"' in sb, (
+        "statusbar.html 键位入口缺 @click.stop=kbToggleHelp 分派(help-panel 同链 toggle 方法)"
+    )
+    engine = open(os.path.join(SHARED, "shortcuts_engine.js"), encoding="utf-8").read()
+    m_alias = re.search(r"kbToggleHelp\(\) \{(.*?)\n    \},", engine, re.S)
+    assert m_alias and "this._kbToggleKbHelp()" in m_alias.group(1), (
+        "shortcuts_engine.js 缺 kbToggleHelp 模板别名或别名不再中转 _kbToggleKbHelp"
+        "(分派必须与 Shift+/ 同链, 不得另写 toggle 实现)"
+    )
+    # 入口钮文案锚: 「键位」二字已最短(计划 §07 状态栏溢出对策 —— 超限只许缩文案不许加宽)
+    assert "键位" in sb, "statusbar.html 缺「键位」入口文案(S5)"
+    # 版式锚: 复用 .sb-btn(与「完整统计」同款) —— 不另起样式类(零新增 CSS, I3 令牌纪律)
+    entry = re.search(r'<button class="sb-btn" @click\.stop="kbToggleHelp\(\)">', sb)
+    assert entry, "statusbar.html 键位入口钮未用 .sb-btn 既有样式类(四皮肤零新增 CSS 的落点)"

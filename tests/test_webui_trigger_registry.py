@@ -44,7 +44,7 @@ _JS_KEYWORDS = frozenset(
     "if for while switch catch return else do try function await typeof new void delete in of".split()
 )
 
-UI_KINDS = {"ctx-menu", "kbd", "drawer"}
+UI_KINDS = {"ctx-menu", "kbd", "drawer", "statusbar"}
 VARIANTS = {"multi", "episode", "member", "group"}
 SCOPES = {"sel", "anchor", "cursor", "sel-first-cursor", "panel", "none"}
 DISPATCHES = {"action", "edit", "delete", "export", "folder", "panel", "none"}
