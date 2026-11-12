@@ -2,7 +2,7 @@
 
 守什么: 注册表是键位**单一事实源**(表外无键位), 而前端无 JS 测试框架 —— 键位冲突、黑名单
 越界、危险档键位形态、run 指到不存在的方法, 这些错误全部**静默**(不报错只是键不响/误触),
-只能靠静态断言钉住。挂载成对(三份 tpl-manifest + app.mixin)由本文件与 tests/webui_static_scan_js.py 的
+只能靠静态断言钉住。挂载成对(全部皮肤(webui_helpers._UI_ALL)的 tpl-manifest + app.mixin)由本文件与 tests/webui_static_scan_js.py 的
 _scan_mixin_wiring 双保险。光标滚动跟随禁 scrollIntoView、模态默认焦点/Enter 确认(§08)、
 Delete 直连注册表外, 均为已拍板的口径, 逐条落断言。W5 局部作用域(drawer/settings/modal
 三档 + 浮层放行焦点局部)与 W6 自定义(适配器 /api/keys / 录制器 / 冲突三选一 / 帮助浮层 /
@@ -16,7 +16,8 @@ Delete 直连注册表外, 均为已拍板的口径, 逐条落断言。W5 局部
   逐字钉住(删除 Shift+KeyD / 重新校验 Shift+KeyY / 强制汇报 Shift+KeyA; 超级做种空位)
 - test_default_keys_no_conflict_and_no_blacklist: 非 fixed 非空默认键两两不同, 且不碰浏览器黑名单
 - test_runs_resolve_to_bundle_methods: 每个 run 里调用的 vm.X 必须在 bundle 方法成员表里存在
-- test_mount_pairing_three_shells: shortcuts.js 进三份 tpl-manifest 且排 app.js 前;
+- test_mount_pairing_all_shells: shortcuts.js 进全部皮肤(webui_helpers._UI_ALL, 含 flux)的
+  tpl-manifest 且排 app.js 前;
   app.mixin(window.AQB_SHORTCUTS) 存在; kbCursor 在 state.js(根选项, 不许进 app.mixin);
   引擎 keydown 注册在 lifecycle.js Esc 退栈链之后且 unmounted 撤除
 - test_delete_direct_outside_registry: 注册表无 def="Delete" 条目; 引擎 Delete 直连 _kbDelete;
@@ -33,12 +34,13 @@ from pathlib import Path
 
 from auto_qb.webui.server.routes.keys import _KEYS_SERIAL_RE as KB_DEF_RE
 
+from webui_helpers import _UI_ALL
+
 from web_shortcuts_support import (
     BLACKLIST,
     KB_SCOPES,
     SHARED,
     STATIC,
-    UIS,
     _pick,
     _read,
     _registry,
@@ -137,8 +139,8 @@ def test_runs_resolve_to_bundle_methods() -> None:
             )
 
 
-def test_mount_pairing_three_shells() -> None:
-    for ui in UIS:
+def test_mount_pairing_all_shells() -> None:
+    for ui in _UI_ALL:
         scripts = _manifest_scripts(ui)
         assert "/shared/shortcuts.js" in scripts, f"{ui} 的 tpl-manifest 未挂 shortcuts.js(整块功能静默消失)"
         assert scripts.index("/shared/shortcuts.js") < scripts.index("/shared/app.js"), (

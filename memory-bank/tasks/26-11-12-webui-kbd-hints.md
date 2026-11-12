@@ -5,7 +5,7 @@
 **Updated:** 2026-11-13
 **Summary:** WebUI 快捷键现场提示实施完成: 常驻键帽四落点(菜单 key 字段/页签 Alt+1..5 徽标/顶栏 N·K/状态栏 Shift+/ 入口)五笔提交 3df2c3b9..e544bfd2 落地, S1-S6 全 Done, 全量全绿(见 kb.baseline); 领域结论回写 architecture/webui.md「键位现场提示」节; 残余(子菜单溢出/UIS 枚举漂移)入池
 **Topics:** webui-kbd-hints
-**Refs:** memory-bank/plans/26-11-12-0344-plan-webui-kbd-hints.html, memory-bank/pitfalls/kb/subagent-survey-fact-verify.md, memory-bank/issues/26-11-12-0527-docs-webui-guard-ref-drift.html, memory-bank/issues/26-11-13-0443-bug-webui-ctx-sub-overflow.html, memory-bank/issues/26-11-13-0443-test-webui-uis-enum-drift.html, memory-bank/pitfalls/web-ui/ctx-sub-width-coupling.md, memory-bank/pitfalls/web-ui/css-file-line-cap.md, memory-bank/issues/26-11-12-0318-test-testing-parallel-flaky.html
+**Refs:** memory-bank/plans/26-11-12-0344-plan-webui-kbd-hints.html, memory-bank/pitfalls/kb/subagent-survey-fact-verify.md, memory-bank/issues/26-11-12-0527-docs-webui-guard-ref-drift.html, memory-bank/issues/26-11-13-0443-bug-webui-ctx-sub-overflow.html, memory-bank/issues/26-11-13-0443-test-webui-uis-enum-drift.html, memory-bank/pitfalls/web-ui/ctx-sub-width-coupling.md, memory-bank/pitfalls/web-ui/css-file-line-cap.md, memory-bank/issues/26-11-12-0318-test-testing-parallel-flaky.html, memory-bank/tasks/26-11-13-webui-uis-enum-drift.md
 
 ## 本篇只回答
 
@@ -66,3 +66,5 @@ WebUI 快捷键现场提示专题**执行到哪、验证数字多少** —— �
 - 2026-11-13 04:10 S6 外观拍板(e544bfd2 入库): 真机截图目检发现键帽致 .ctx-sub label 折三行(四皮肤一致), 拍板加宽 190→260(四皮肤 min-width + menu.js 估宽 272 五处同步 + scan_css _scan_ctx_sub_width 守阵双向变异自证); 首行右键子菜单底部探出视口的残余拍板入池不入本批; 评审 T5 轮 2 检 1/1 修 1(宽度耦合守阵); 基线切片 26-11-13-0249 全量全绿(见 kb.baseline) + e2e fast 全绿 + 真机四皮肤截图目检过(real-machine.md §06, 测试实例 56589)
 
 - 2026-11-13 04:47 收尾回写完成(§09, 本会话): 顺延三条 nit 勘正(ctx_menu.js:289 括注 / console_hub_panels.css:574 特异性计数 / 文案锚收紧), 随本专题入库; 回写三处 —— architecture/webui.md 新增「键位现场提示」节(key 字段口径/kbShortcutDisplay→kbKeycapById→kbKeycapOf 取数链单点/I4 例外) + conventions/webui.md 悬浮提示例外注记 + 根 README 核对零漂移不动; 入池 2(26-11-13-0443-bug 子菜单溢出残余 / 26-11-13-0443-test UIS 旧枚举漂移, 均挂本档案双向链); 坑档 2(ctx-sub-width-coupling 新立 / css-file-line-cap 复发+1 扩 flux); issue 26-11-12-0318 复发+1(T5 真机截图阶段假红一次, 复跑两轮全绿); 计划收口(doc-status Done + D13 增量拍板行 + R2 变更记录); 状态表 S1-S6 全 Done, 档案结档
+
+- 2026-11-13 07:20 后续结转(本档案为发现源): 本档案 S1/T3 评审撞见并入池的 issue 26-11-13-0443(UIS 旧枚举漂移)已由独立任务修复(用户指派, 档案 26-11-13-webui-uis-enum-drift), issue 翻 Done; 相邻面 drawer 三处内联硬编码三皮肤循环与 engine 头部旧导语仍在, 入池候选待拍板

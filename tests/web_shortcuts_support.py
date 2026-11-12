@@ -10,7 +10,8 @@ from webui_helpers import read_shared
 ROOT = Path(__file__).resolve().parents[1]
 STATIC = ROOT / "src" / "auto_qb" / "webui" / "static"
 SHARED = STATIC / "shared"
-UIS = ("atlas", "prism", "console")
+# 皮肤清单单点在 webui_helpers._UI_ALL(atlas/prism/console/flux, issue 26-11-13-0443 收编旧三皮肤
+# 枚举 UIS)—— 本模块不再另立枚举, 消费方一律 from webui_helpers import _UI_ALL
 
 # 归一化串合法形态: 单一事实源在后端 routes/keys.py::_KEYS_SERIAL_RE(2026-10-15 消第三份手抄,
 # issue 26-10-11-0310) —— 与 shortcuts.js KB_DEF_RE 的跨层逐字一致由

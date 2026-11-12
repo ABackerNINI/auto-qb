@@ -9,9 +9,9 @@
 <meta name="issue-stamp" content="26-11-13-0443">
 <meta name="issue-type" content="test">
 <meta name="doc-topic" content="webui-kbd-hints">
-<meta name="doc-refs" content="memory-bank/tasks/26-11-12-webui-kbd-hints.md">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-12-webui-kbd-hints.md, memory-bank/tasks/26-11-13-webui-uis-enum-drift.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="web_shortcuts_support UIS 旧三皮肤枚举 vs 四皮肤现口径漂移(flux 不在守阵循环)">
 <meta name="issue-summary" content="tests/web_shortcuts_support.py UIS=(atlas,prism,console) 三皮肤旧枚举, tests/webui_helpers.py _UI_ALL 已是四皮肤现口径(含 flux); 经 for ui in UIS 的守阵循环 flux 不被覆盖">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-13-0443-test-webui-uis-enum-drift</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-13 04:43</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
 
@@ -112,13 +112,15 @@
 <section id="s3">
   <h2><span class="no">§03</span>建议<span class="opt">（可选）</span></h2>
   <p>UIS 改为引用/对齐 <code>webui_helpers._UI_ALL</code>（或原地补 flux 并注记口径单点），修完跑 <code>test_web_shortcuts_registry.py</code> 确认 flux 支全绿（若注册表解析对 flux 静态面本就成立则纯扩面，若有真实差异另立缺陷）。</p>
+  <p><strong>实际修法（2026-11-13，走首项「引用对齐」并彻底去名）</strong>：删除 <code>web_shortcuts_support.py</code> 的 <code>UIS</code> 枚举（留一行指向 <code>webui_helpers._UI_ALL</code> 单点的注记），三个消费方（registry/cursor/drawer）改 <code>from webui_helpers import _UI_ALL</code> 直连单点。连带如实更新：测试 <code>test_mount_pairing_three_shells</code> 改名 <code>test_mount_pairing_all_shells</code>（同步头部测试计划条目），三处循环周边「三皮肤」文案改「四皮肤」。取证修正一处：issue §02 称 cursor/drawer「不受本次枚举影响面」不实——两者同样 <code>for ui in UIS</code>，本次一并扩面（flux 的 views.css/dialogs.css/components.css 断言面逐条预核成立）。<strong>验证</strong>：<code>test.one</code> 跑 registry/cursor/drawer/engine 四件 36 passed，flux 支全绿，属纯扩面、无真实差异（§03 预判成立）。另发现 drawer 内三处内联硬编码 <code>("atlas", "console", "prism")</code> 循环（lines 280/374/701，实测 2026-11-13）为同类漂移的相邻面，超出本件范围未动。</p>
 </section>
 
 <section id="s4">
   <h2><span class="no">§04</span>状态变更日志</h2>
   <ul>
     <li>2026-11-13 04:43 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-13 — 状态 Open → Done（kb.status）</li>
+</ul>
 </section>
 
 <footer>

@@ -2,7 +2,7 @@
 
 守什么: 注册表是键位**单一事实源**(表外无键位), 而前端无 JS 测试框架 —— 键位冲突、黑名单
 越界、危险档键位形态、run 指到不存在的方法, 这些错误全部**静默**(不报错只是键不响/误触),
-只能靠静态断言钉住。挂载成对(三份 tpl-manifest + app.mixin)由本文件与 tests/webui_static_scan_js.py 的
+只能靠静态断言钉住。挂载成对(全部皮肤(webui_helpers._UI_ALL)的 tpl-manifest + app.mixin)由本文件与 tests/webui_static_scan_js.py 的
 _scan_mixin_wiring 双保险。光标滚动跟随禁 scrollIntoView、模态默认焦点/Enter 确认(§08)、
 Delete 直连注册表外, 均为已拍板的口径, 逐条落断言。W5 局部作用域(drawer/settings/modal
 三档 + 浮层放行焦点局部)与 W6 自定义(适配器 /api/keys / 录制器 / 冲突三选一 / 帮助浮层 /
@@ -92,12 +92,12 @@ Delete 直连注册表外, 均为已拍板的口径, 逐条落断言。W5 局部
   (_kbViewBottom 优先读它, 让位量测不读中间插值; 2026-10-04 回归: 详情中途长高后起拍
   登记值失效, 追赶循环逐帧重登记落定顶缘 = dock 底缘 - 面板自然高); 重开打断收场时
   清面板内联高再量自然高; after 钩子挡被打断的迟到清场; reduced-motion 与 D3 全屏态
-  双豁免; 三皮肤 CSS 成对(dock 动画期裁剪 + 退场 absolute 底缘锚定)
+  双豁免; 四皮肤 CSS 成对(dock 动画期裁剪 + 退场 absolute 底缘锚定)
 """
 
 from __future__ import annotations
 
-from webui_helpers import read_shared
+from webui_helpers import read_shared, _UI_ALL
 
 import re
 
@@ -109,7 +109,6 @@ from web_shortcuts_support import (
     ROOT,
     SHARED,
     STATIC,
-    UIS,
     _pick,
     _read,
     _registry,
@@ -853,11 +852,11 @@ def test_drawer_transition_dock_anim() -> None:
     al = re.search(r"drawerAfterLeaveHook\(\) \{(.*?)\n    \},", drawer_js, re.S)
     assert ae and "if (!this.drawer.open) return;" in ae.group(1), "afterEnter 必须挡入场被打断的迟到清场(不杀 leave 拍循环)"
     assert al and "if (this.drawer.open) return;" in al.group(1), "afterLeave 必须挡收场被打断的迟到清场(不杀 enter 拍循环)"
-    # --- 三皮肤 CSS 成对: 动画期裁剪 + 退场 absolute 底缘锚定(顶锚定会随槽位塌缩把面板顶跑) ---
-    for ui in UIS:
-        cssp = STATIC / ui / "css" / "dialogs.css"  # issue 26-10-20-2231: prism 也有了弹窗层, 三皮肤同路径
+    # --- 四皮肤 CSS 成对: 动画期裁剪 + 退场 absolute 底缘锚定(顶锚定会随槽位塌缩把面板顶跑) ---
+    for ui in _UI_ALL:
+        cssp = STATIC / ui / "css" / "dialogs.css"  # issue 26-10-20-2231: prism 也有了弹窗层, 四皮肤同路径
         css = cssp.read_text(encoding="utf-8")
-        assert ".drawer-dock.drawer-anim { overflow: hidden; }" in css, f"{ui}: 缺 dock 动画期裁剪规则(三皮肤成对)"
+        assert ".drawer-dock.drawer-anim { overflow: hidden; }" in css, f"{ui}: 缺 dock 动画期裁剪规则(四皮肤成对)"
         assert re.search(r"\.drawer-leave-active \{ position: absolute; left: 0; right: 0; bottom: 0;",
                          css), (f"{ui}: 退场必须 absolute 底缘锚定(bottom: 0, 面板沉下去而不是被顶跑)")
         # 判据只落在 .drawer-leave-active **自己的声明体**上: issue 26-10-20-2231 起 prism 的

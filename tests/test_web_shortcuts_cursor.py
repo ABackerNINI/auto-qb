@@ -2,7 +2,7 @@
 
 守什么: 注册表是键位**单一事实源**(表外无键位), 而前端无 JS 测试框架 —— 键位冲突、黑名单
 越界、危险档键位形态、run 指到不存在的方法, 这些错误全部**静默**(不报错只是键不响/误触),
-只能靠静态断言钉住。挂载成对(三份 tpl-manifest + app.mixin)由本文件与 tests/webui_static_scan_js.py 的
+只能靠静态断言钉住。挂载成对(全部皮肤(webui_helpers._UI_ALL)的 tpl-manifest + app.mixin)由本文件与 tests/webui_static_scan_js.py 的
 _scan_mixin_wiring 双保险。光标滚动跟随禁 scrollIntoView、模态默认焦点/Enter 确认(§08)、
 Delete 直连注册表外, 均为已拍板的口径, 逐条落断言。W5 局部作用域(drawer/settings/modal
 三档 + 浮层放行焦点局部)与 W6 自定义(适配器 /api/keys / 录制器 / 冲突三选一 / 帮助浮层 /
@@ -33,11 +33,11 @@ Delete 直连注册表外, 均为已拍板的口径, 逐条落断言。W5 局部
   groupSelState 按成员完整度派生 selected(视觉兜底; 2026-10-31 计划 26-10-30-2359 模板C 起
   直通 _selState 多带 ratio 供半选左条按高度量化) / selectedCount 走 selHashSet 去重(组 key
   与其成员 hash 同时在集合里, 直接相加会数两遍) / _bulkTargets 剔除已被选中组覆盖的成员 hash
-- test_sel_visual_parity_and_site_cell: 成员行选中视觉与种子页种子行同形(三皮肤 CSS 成对:
+- test_sel_visual_parity_and_site_cell: 成员行选中视觉与种子页种子行同形(四皮肤 CSS 成对:
   .member-row.selected 与 .group-row.selected 同一 tint 令牌(`--sel-bg`)且同吃左色条规则; 两条规则
   自 2026-10-20 拆分 —— 组行有吸左首格须合成在不透明 `--bg-row` 上(frozen-column 10), 成员行无首格
   保持裸柔底) + 成员行「站点」列去掉代表状态的
-  方框(groups.html / shows.html 两处模板无 <i class="dot"> + 三皮肤无 .m-site .dot 死规则)
+  方框(groups.html / shows.html 两处模板无 <i class="dot"> + 四皮肤无 .m-site .dot 死规则)
 - test_esc_collapse_returns_cursor_to_parent: Esc 收展开兜底档把键盘光标**退回被收起的父行**
   (2026-10-22 用户报「Esc 退出明细表后键盘锚点消失」) —— 三档(expandedKey→group /
   expandedShowEp→ep / expandedShows→show)各自归位, 就地赋值不调 _kbCollapseRow(退栈链不反向
@@ -59,10 +59,11 @@ from pathlib import Path
 
 from auto_qb.webui.server.routes.keys import _KEYS_SERIAL_RE as KB_DEF_RE
 
+from webui_helpers import _UI_ALL
+
 from web_shortcuts_support import (
     SHARED,
     STATIC,
-    UIS,
     _read,
 )
 
@@ -470,15 +471,15 @@ def test_sel_visual_parity_and_site_cell() -> None:
 
     种子页种子行是 .group-row.torrent-row -> 选中态吃 .group-row.selected(柔底 + 左色条);
     辅种/追剧页成员行是 .member-row -> 此前只有柔底没有左色条, 与种子页选中种子长得不一样。
-    本守阵钉: 三皮肤里 .member-row.selected 与 .group-row.selected **用同一个 tint 令牌**
+    本守阵钉: 四皮肤里 .member-row.selected 与 .group-row.selected **用同一个 tint 令牌**
     (`var(--sel-bg, var(--accent-soft))`, 各写一份色值会随主题漂移)且同吃左色条规则;
     两条规则自 2026-10-20 起**拆开写**(组行有吸左首格, 底色要合成在不透明 --bg-row 上;
     成员行没有首格、底由明细面板承光, 保持裸柔底 —— 见 pitfalls/web-ui/frozen-column.md 10),
     故这里不再要求“选择器并列同一条规则”。另钉 .member-row 保持 position: relative(左色条 ::before
     的定位前提)。
-    「站点」列: 成员行站点格只剩站点名文本(状态由「状态」列表达), 渲染器与三皮肤都不得再挂
+    「站点」列: 成员行站点格只剩站点名文本(状态由「状态」列表达), 渲染器与四皮肤都不得再挂
     <i class="dot"> / 残留 .m-site .dot 死规则。"""
-    for ui in UIS:
+    for ui in _UI_ALL:
         views = (STATIC / ui / "css" / "views.css").read_text(encoding="utf-8")
         # 成员行选中与组行/种子行**同一 tint 令牌**(2026-10-20 起两条规则拆开: 组行/种子行有吸左
         # 首格, 底色必须合成在不透明 --bg-row 上(否则选中行名称列成异色竖带, 见
@@ -499,7 +500,7 @@ def test_sel_visual_parity_and_site_cell() -> None:
                          views), (f"{ui}: 成员行选中必须同吃左色条规则(与种子页选中种子同形)")
         assert re.search(r"\.member-row \{[^}]*position: relative",
                          views), (f"{ui}: .member-row 缺 position: relative(左色条 ::before 没有定位锚)")
-        # .m-site .dot 死规则三皮肤分别落在 views.css / components.css, 两处都不许残留
+        # .m-site .dot 死规则四皮肤分别落在 views.css / components.css, 两处都不许残留
         # (正则只认"选择器 + 开花括号"的规则行, 注释里提到该选择器不算)
         for css_name in ("views.css", "components.css"):
             cssp = STATIC / ui / "css" / css_name
