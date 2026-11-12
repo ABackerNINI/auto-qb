@@ -62,15 +62,19 @@
                 <template v-for="sit in it.subItems" :key="sit.id">
                   <div v-if="sit.kind === 'sep'" class="ctx-sep"></div>
                   <div v-else class="ctx-item" :class="[sit.cls, { 'is-gated': sit.gated }]" :title="sit.title" :data-item="sit.id" @click="ctxRun(sit)">
-                    <svg class="ico ico-sm" :class="sit.icon.cls" viewBox="0 0 16 16"><use :href="sit.icon.use"></use></svg><span class="ctx-text">{{ sit.label }} <span v-if="sit.note" class="ctx-note">{{ sit.note }}</span></span>
+                    <svg class="ico ico-sm" :class="sit.icon.cls" viewBox="0 0 16 16"><use :href="sit.icon.use"></use></svg><span class="ctx-text">{{ sit.label }} <span v-if="sit.note" class="ctx-note">{{ sit.note }}</span></span><kbd v-if="sit.kbd" class="aq-kbd">{{ sit.kbd }}</kbd>
                   </div>
                 </template>
               </div>
             </div>
             <!-- 其余三支(多选/整集整剧/单组)共用本骨架 —— 支目标语义见注册表 CTX_ITEM_DEFS 的支注释
-                 (批量 = 选中集合 / 整集整剧 = menu.episode.hashes / 单组 = menu.key 全部成员)。 -->
+                 (批量 = 选中集合 / 整集整剧 = menu.episode.hashes / 单组 = menu.key 全部成员)。
+                 键帽列(计划 26-11-12-0344 S2): it.kbd 由注册表渲染层经 kbShortcutDisplay 现算
+                 (key 字段引用 shortcuts.js shortcut id, 改绑即时跟随), 空串不产出字段即不渲染
+                 kbd —— label(.ctx-text) flex 吃满整行, 右缘对齐位保留(I5, VS Code 菜单同款);
+                 键帽形状 .aq-kbd 在共享 CSS 尾段单点(I4: 键位提示不走 title/.aq-tip 通道)。 -->
             <div v-else class="ctx-item" :class="[it.cls, { 'is-gated': it.gated }]" :title="it.title" :data-item="it.id" @click="ctxRun(it)">
-              <svg class="ico ico-sm" :class="it.icon.cls" viewBox="0 0 16 16"><use :href="it.icon.use"></use></svg><span class="ctx-text">{{ it.label }} <span v-if="it.note" class="ctx-note">{{ it.note }}</span></span>
+              <svg class="ico ico-sm" :class="it.icon.cls" viewBox="0 0 16 16"><use :href="it.icon.use"></use></svg><span class="ctx-text">{{ it.label }} <span v-if="it.note" class="ctx-note">{{ it.note }}</span></span><kbd v-if="it.kbd" class="aq-kbd">{{ it.kbd }}</kbd>
             </div>
           </template>
         </div>

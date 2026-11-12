@@ -22,7 +22,9 @@ kbDisplayName), 设置键位面板(tpl/settings-detail.html)/ Shift+/ 帮助浮�
 - test_aq_kbd_css_four_skin_isomorphic: 共享 CSS 键帽类 .aq-kbd 在 console_hub_panels.css 单点
   (形状沿用 .kb-row-keys kbd 先例口径), var() 引用只落在 I3 允许集
   {--surface-2, --border, --fg, --font-mono} 且无字面色值; 四皮肤 index.html 全部 link
-  console_hub_panels.css(共享单文件 => 四皮肤同构, 静态断言不做截图)
+  console_hub_panels.css(共享单文件 => 四皮肤同构, 静态断言不做截图); 置灰行键帽随行 needle
+  (.ctx-menu .ctx-item.is-gated .aq-kbd -> var(--fg-dim), S2 增量: dyn gate 置灰行走各皮肤
+  components.css 既有置灰链, 键帽不随行会原地亮 --fg)
 """
 
 from __future__ import annotations
@@ -143,3 +145,9 @@ def test_aq_kbd_css_four_skin_isomorphic() -> None:
         assert 'href="/shared/console_hub_panels.css"' in shell, (
             f"{ui} shell 未 link console_hub_panels.css(键帽类四皮肤同构破口)"
         )
+    # 置灰行键帽随行(S2 增量): dyn gate 置灰(.is-gated, 各皮肤 components.css 的置灰链
+    # label -> var(--fg-dim))行内键帽颜色必须随行, 规则被删/改名 = 置灰行键帽原地亮 --fg
+    assert ".ctx-menu .ctx-item.is-gated .aq-kbd { color: var(--fg-dim); }" in css, (
+        "console_hub_panels.css 缺置灰行键帽随行规则 .ctx-menu .ctx-item.is-gated .aq-kbd"
+        "(S2 增量被删? 同步本守阵与 e2e menus.spec 置灰键帽色断言)"
+    )

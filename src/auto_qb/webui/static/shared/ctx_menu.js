@@ -58,81 +58,94 @@
    *         decorate.js::REANNOUNCE_BLOCKED_STATES, 目标全部非活跃时置灰不可用)
    *   danger true —— .ctx-item.danger 样式
    *   kind  "item"(缺省) | "sep" | "submenu"; submenu = 「更多操作」父项(次级内容见 CTX_SUB_ITEM_DEFS)
+   *   key   引用 shortcuts.js 注册表(AQB_SHORTCUT_DEFS)的 shortcut id(计划 26-11-12-0344 §05 映射表,
+   *         逐条审计单点): 渲染层经 kbShortcutDisplay 现算键帽显示串(kbSerialWithDraft ⊕ kbDisplayName,
+   *         I1 现算不手抄) —— 用户改绑/清空, 菜单键帽即时跟随/隐藏(G2 键位零二次维护)。「不映射」项
+   *         (limits/skip_check/transfer/sub-more)一律不给 key 字段; 「空位」项(super-seeding/share-limits,
+   *         注册表 def:"")key 照填 —— 默认不显示, 用户绑键后自动出现; qb-traffic 的 scope 口径差
+   *         (菜单开组口径 openQbGroup, Ctrl+\ 开全局口径 openQbHistory)键帽仍标, 见计划 §05 备注。
    */
   const CTX_ITEM_DEFS = {
     /* 批量(多选升级, CTX-03): 目标 = 整个选中集合, 动作走 ctxAct/bulk 链 */
     multi: [
-      { id: "resume", label: "启动", note: CTX_SEED_NOTE, icon: { cls: "ico-play", use: "#i-play" }, act: (vm) => vm.ctxAct("resume") },
-      { id: "pause", label: "停止", note: CTX_SEED_NOTE, icon: { cls: "ico-pause", use: "#i-pause" }, act: (vm) => vm.ctxAct("pause") },
-      { id: "reannounce", label: "强制重新汇报", icon: { cls: "ico-sync", use: "#i-refresh" }, dyn: "reannounce", act: (vm) => vm.ctxAct("reannounce") },
+      { id: "resume", label: "启动", key: "act-resume", note: CTX_SEED_NOTE, icon: { cls: "ico-play", use: "#i-play" }, act: (vm) => vm.ctxAct("resume") },
+      { id: "pause", label: "停止", key: "act-pause", note: CTX_SEED_NOTE, icon: { cls: "ico-pause", use: "#i-pause" }, act: (vm) => vm.ctxAct("pause") },
+      { id: "reannounce", label: "强制重新汇报", key: "act-reannounce", icon: { cls: "ico-sync", use: "#i-refresh" }, dyn: "reannounce", act: (vm) => vm.ctxAct("reannounce") },
       { id: "sep:d1", kind: "sep" },
-      { id: "recheck", label: "强制重新检查", icon: { cls: "ico-recheck", use: "#i-refresh" }, act: (vm) => vm.ctxAct("recheck") },
+      { id: "recheck", label: "强制重新检查", key: "act-recheck", icon: { cls: "ico-recheck", use: "#i-refresh" }, act: (vm) => vm.ctxAct("recheck") },
+      /* limits/skip_check 不映射(计划 §05): 注册表 speed-down(KeyL)是全局限速浮层, 菜单开的是
+       * per-hash 限速弹窗 —— 界面与端点均不同; 跳检注册表无键 */
       { id: "skip_check", label: "跳过哈希校验…", icon: { cls: "ico-recheck", use: "#i-bolt" }, gate: "skip_check_menu", act: (vm) => vm.ctxAct("skip_check") },
       { id: "limits", label: "速度限制…", icon: { cls: "ico-gauge", use: "#i-gauge" }, act: (vm) => vm.ctxAct("limits") },
-      { id: "move", label: "设定位置…", icon: { cls: "ico-move", use: "#i-folder-open" }, act: (vm) => vm.ctxAct("location") },
-      { id: "meta", label: "标签/分类…", icon: { cls: "ico-tag", use: "#i-tag" }, act: (vm) => vm.ctxMeta() },
-      { id: "export", label: "导出 .torrent", icon: { cls: "ico-export", use: "#i-download" }, act: (vm) => vm.ctxAct("export") },
+      { id: "move", label: "设定位置…", key: "edit-move", icon: { cls: "ico-move", use: "#i-folder-open" }, act: (vm) => vm.ctxAct("location") },
+      { id: "meta", label: "标签/分类…", key: "act-meta", icon: { cls: "ico-tag", use: "#i-tag" }, act: (vm) => vm.ctxMeta() },
+      { id: "export", label: "导出 .torrent", key: "export-torrent", icon: { cls: "ico-export", use: "#i-download" }, act: (vm) => vm.ctxAct("export") },
       /* 「转移到」父项(计划 26-10-31-0306 D5): 子项 = 启用转移目标列表(动态, 不在本注册表 ——
-       * 来源与空态见 CTX_DYN_SUB 注释); 四支各一项, 同位次(删除线前) */
+       * 来源与空态见 CTX_DYN_SUB 注释); 四支各一项, 同位次(删除线前)。动态子项无 key 字段,
+       * 键帽自然留白 */
       { id: "transfer", label: "转移到", icon: { cls: "", use: "#i-external" }, kind: "submenu", subName: CTX_DYN_SUB },
       { id: "sep:d2", kind: "sep" },
-      { id: "delete", label: "删除…", note: CTX_SEED_NOTE, icon: { cls: "", use: "#i-trash" }, danger: true, act: (vm) => vm.ctxDelete() },
+      { id: "delete", label: "删除…", key: "act-delete", note: CTX_SEED_NOTE, icon: { cls: "", use: "#i-trash" }, danger: true, act: (vm) => vm.ctxDelete() },
     ],
     /* 整集整剧(shows.js openShowEpMenu/openShowMenu): 2026-10-20 起文案与 scope 无关
      * (整集/整剧统一成「启动 N 个种子」), scope 只剩目标集合的意义(在 menu.episode.hashes) */
     episode: [
-      { id: "resume", label: "启动", note: CTX_SEED_NOTE, icon: { cls: "ico-play", use: "#i-play" }, act: (vm) => vm.actEpisode("resume") },
-      { id: "pause", label: "停止", note: CTX_SEED_NOTE, icon: { cls: "ico-pause", use: "#i-pause" }, act: (vm) => vm.actEpisode("pause") },
-      { id: "reannounce", label: "强制重新汇报", icon: { cls: "ico-sync", use: "#i-refresh" }, dyn: "reannounce", act: (vm) => vm.actEpisode("reannounce") },
+      { id: "resume", label: "启动", key: "act-resume", note: CTX_SEED_NOTE, icon: { cls: "ico-play", use: "#i-play" }, act: (vm) => vm.actEpisode("resume") },
+      { id: "pause", label: "停止", key: "act-pause", note: CTX_SEED_NOTE, icon: { cls: "ico-pause", use: "#i-pause" }, act: (vm) => vm.actEpisode("pause") },
+      { id: "reannounce", label: "强制重新汇报", key: "act-reannounce", icon: { cls: "ico-sync", use: "#i-refresh" }, dyn: "reannounce", act: (vm) => vm.actEpisode("reannounce") },
       { id: "sep:d1", kind: "sep" },
-      { id: "open-path", label: "打开目标文件夹", icon: { cls: "ico-folder", use: "#i-folder-open" }, act: (vm) => vm.openTargetPath("torrent", vm.menu.episode.hashes[0]) },
+      { id: "open-path", label: "打开目标文件夹", key: "act-open-folder", icon: { cls: "ico-folder", use: "#i-folder-open" }, act: (vm) => vm.openTargetPath("torrent", vm.menu.episode.hashes[0]) },
       { id: "transfer", label: "转移到", icon: { cls: "", use: "#i-external" }, kind: "submenu", subName: CTX_DYN_SUB },
       { id: "sep:d2", kind: "sep" },
-      { id: "delete", label: "删除…", note: CTX_SEED_NOTE, icon: { cls: "", use: "#i-trash" }, danger: true, act: (vm) => vm.delEpisode() },
+      { id: "delete", label: "删除…", key: "act-delete", note: CTX_SEED_NOTE, icon: { cls: "", use: "#i-trash" }, danger: true, act: (vm) => vm.delEpisode() },
     ],
     /* 单种子(menu.hash): 一级 15 项(含「更多操作」「转移到」两个父项) + 5 线; 次级 10 项 + 2 线见 CTX_SUB_ITEM_DEFS */
     member: [
-      { id: "resume", label: "启动", note: CTX_SEED_NOTE, icon: { cls: "ico-play", use: "#i-play" }, act: (vm) => vm.actTorrent("resume") },
-      { id: "pause", label: "停止", note: CTX_SEED_NOTE, icon: { cls: "ico-pause", use: "#i-pause" }, act: (vm) => vm.actTorrent("pause") },
-      { id: "reannounce", label: "强制重新汇报", icon: { cls: "ico-sync", use: "#i-refresh" }, dyn: "reannounce", act: (vm) => vm.actTorrent("reannounce") },
+      { id: "resume", label: "启动", key: "act-resume", note: CTX_SEED_NOTE, icon: { cls: "ico-play", use: "#i-play" }, act: (vm) => vm.actTorrent("resume") },
+      { id: "pause", label: "停止", key: "act-pause", note: CTX_SEED_NOTE, icon: { cls: "ico-pause", use: "#i-pause" }, act: (vm) => vm.actTorrent("pause") },
+      { id: "reannounce", label: "强制重新汇报", key: "act-reannounce", icon: { cls: "ico-sync", use: "#i-refresh" }, dyn: "reannounce", act: (vm) => vm.actTorrent("reannounce") },
       { id: "sep:d1", kind: "sep" },
-      { id: "info", label: "详细信息", icon: { cls: "ico-info", use: "#i-info" }, act: (vm) => vm.openTorrentDrawer(vm.menu.hash) },
+      { id: "info", label: "详细信息", key: "act-detail", icon: { cls: "ico-info", use: "#i-info" }, act: (vm) => vm.openTorrentDrawer(vm.menu.hash) },
       { id: "sep:d2", kind: "sep" },
+      /* limits/skip_check 不映射(计划 §05, 同 multi 支口径) */
       { id: "limits", label: "速度限制…", icon: { cls: "ico-gauge", use: "#i-gauge" }, act: (vm) => vm.editLimits() },
-      { id: "move", label: "设定位置…", icon: { cls: "ico-move", use: "#i-folder-open" }, act: (vm) => vm.editMove() },
-      { id: "rename", label: "重命名…", icon: { cls: "ico-rename", use: "#i-pencil" }, act: (vm) => vm.editRename() },
-      { id: "meta", label: "标签/分类…", icon: { cls: "ico-tag", use: "#i-tag" }, act: (vm) => vm.openMetaDialog(vm.menu.hash) },
+      { id: "move", label: "设定位置…", key: "edit-move", icon: { cls: "ico-move", use: "#i-folder-open" }, act: (vm) => vm.editMove() },
+      { id: "rename", label: "重命名…", key: "edit-rename", icon: { cls: "ico-rename", use: "#i-pencil" }, act: (vm) => vm.editRename() },
+      { id: "meta", label: "标签/分类…", key: "act-meta", icon: { cls: "ico-tag", use: "#i-tag" }, act: (vm) => vm.openMetaDialog(vm.menu.hash) },
       { id: "sep:d3", kind: "sep" },
-      { id: "recheck", label: "强制重新检查", icon: { cls: "ico-recheck", use: "#i-refresh" }, act: (vm) => vm.torrentCmd("recheck", null, "强制重新检查") },
+      { id: "recheck", label: "强制重新检查", key: "act-recheck", icon: { cls: "ico-recheck", use: "#i-refresh" }, act: (vm) => vm.torrentCmd("recheck", null, "强制重新检查") },
       { id: "skip_check", label: "跳过哈希校验…", icon: { cls: "ico-recheck", use: "#i-bolt" }, gate: "skip_check_menu", act: (vm) => vm.skipCheckTorrent() },
-      { id: "export", label: "导出 .torrent", icon: { cls: "ico-export", use: "#i-download" }, act: (vm) => vm.exportTorrent() },
-      { id: "open-path", label: "打开目标文件夹", icon: { cls: "ico-folder", use: "#i-folder-open" }, act: (vm) => vm.openTargetPath("torrent", vm.menu.hash) },
+      { id: "export", label: "导出 .torrent", key: "export-torrent", icon: { cls: "ico-export", use: "#i-download" }, act: (vm) => vm.exportTorrent() },
+      { id: "open-path", label: "打开目标文件夹", key: "act-open-folder", icon: { cls: "ico-folder", use: "#i-folder-open" }, act: (vm) => vm.openTargetPath("torrent", vm.menu.hash) },
       { id: "transfer", label: "转移到", icon: { cls: "", use: "#i-external" }, kind: "submenu", subName: CTX_DYN_SUB },
       { id: "sep:d4", kind: "sep" },
       /* 「更多操作」父项: 次级内容 = CTX_SUB_ITEM_DEFS.member; D7 次级无可见项时不渲染父项 */
       { id: "sub-more", label: "更多操作", icon: { cls: "ico-tune", use: "#i-sliders" }, kind: "submenu" },
       { id: "sep:d5", kind: "sep" },
-      { id: "delete", label: "删除…", note: CTX_SEED_NOTE, icon: { cls: "", use: "#i-trash" }, danger: true, act: (vm) => vm.delTorrent() },
+      { id: "delete", label: "删除…", key: "act-delete", note: CTX_SEED_NOTE, icon: { cls: "", use: "#i-trash" }, danger: true, act: (vm) => vm.delTorrent() },
     ],
     /* 单组(ctxMenuKind() 兜底支): 目标 = 该组全部成员(组级六入口复用批量链, commands.js;
      * 2026-10-09 用户报「单组右键菜单缺选项」后按批量菜单同序同图标补齐) */
     group: [
-      { id: "resume", label: "启动", note: CTX_SEED_NOTE, icon: { cls: "ico-play", use: "#i-play" }, act: (vm) => vm.act("resume") },
-      { id: "pause", label: "停止", note: CTX_SEED_NOTE, icon: { cls: "ico-pause", use: "#i-pause" }, act: (vm) => vm.act("pause") },
-      { id: "reannounce", label: "强制重新汇报", icon: { cls: "ico-sync", use: "#i-refresh" }, dyn: "reannounce", act: (vm) => vm.act("reannounce") },
+      { id: "resume", label: "启动", key: "act-resume", note: CTX_SEED_NOTE, icon: { cls: "ico-play", use: "#i-play" }, act: (vm) => vm.act("resume") },
+      { id: "pause", label: "停止", key: "act-pause", note: CTX_SEED_NOTE, icon: { cls: "ico-pause", use: "#i-pause" }, act: (vm) => vm.act("pause") },
+      { id: "reannounce", label: "强制重新汇报", key: "act-reannounce", icon: { cls: "ico-sync", use: "#i-refresh" }, dyn: "reannounce", act: (vm) => vm.act("reannounce") },
       { id: "sep:d1", kind: "sep" },
-      { id: "recheck", label: "强制重新检查", icon: { cls: "ico-recheck", use: "#i-refresh" }, act: (vm) => vm.recheckGroup() },
+      { id: "recheck", label: "强制重新检查", key: "act-recheck", icon: { cls: "ico-recheck", use: "#i-refresh" }, act: (vm) => vm.recheckGroup() },
       { id: "skip_check", label: "跳过哈希校验…", icon: { cls: "ico-recheck", use: "#i-bolt" }, gate: "skip_check_menu", act: (vm) => vm.skipCheckGroup() },
+      /* limits 不映射(计划 §05, 同 multi/member 支口径) */
       { id: "limits", label: "速度限制…", icon: { cls: "ico-gauge", use: "#i-gauge" }, act: (vm) => vm.editLimitsGroup() },
-      { id: "move", label: "设定位置…", icon: { cls: "ico-move", use: "#i-folder-open" }, act: (vm) => vm.editMoveGroup() },
-      { id: "meta", label: "标签/分类…", icon: { cls: "ico-tag", use: "#i-tag" }, act: (vm) => vm.metaGroup() },
-      { id: "export", label: "导出 .torrent", icon: { cls: "ico-export", use: "#i-download" }, act: (vm) => vm.exportGroup() },
+      { id: "move", label: "设定位置…", key: "edit-move", icon: { cls: "ico-move", use: "#i-folder-open" }, act: (vm) => vm.editMoveGroup() },
+      { id: "meta", label: "标签/分类…", key: "act-meta", icon: { cls: "ico-tag", use: "#i-tag" }, act: (vm) => vm.metaGroup() },
+      { id: "export", label: "导出 .torrent", key: "export-torrent", icon: { cls: "ico-export", use: "#i-download" }, act: (vm) => vm.exportGroup() },
       { id: "sep:d2", kind: "sep" },
-      { id: "open-path", label: "打开目标文件夹", icon: { cls: "ico-folder", use: "#i-folder-open" }, act: (vm) => vm.openTargetPath("group", vm.menu.key) },
-      { id: "qb-traffic", label: "qB 口径流量图", icon: { cls: "", use: "#i-chart" }, gate: "qb_traffic", act: (vm) => vm.openQbGroup(vm.menu.key) },
+      { id: "open-path", label: "打开目标文件夹", key: "act-open-folder", icon: { cls: "ico-folder", use: "#i-folder-open" }, act: (vm) => vm.openTargetPath("group", vm.menu.key) },
+      /* qb-traffic scope 口径差声明(计划 §05): 菜单项开该组口径(openQbGroup), Ctrl+\ 开全局口径
+       * (openQbHistory) —— 同族抽屉不同范围, 动作族相同故键帽仍标; gate 关时整项不渲染, 键帽随行 */
+      { id: "qb-traffic", label: "qB 口径流量图", key: "open-qb-traffic", icon: { cls: "", use: "#i-chart" }, gate: "qb_traffic", act: (vm) => vm.openQbGroup(vm.menu.key) },
       { id: "transfer", label: "转移到", icon: { cls: "", use: "#i-external" }, kind: "submenu", subName: CTX_DYN_SUB },
       { id: "sep:d3", kind: "sep" },
-      { id: "delete", label: "删除…", note: CTX_SEED_NOTE, icon: { cls: "", use: "#i-trash" }, danger: true, act: (vm) => vm.delGroup() },
+      { id: "delete", label: "删除…", key: "act-delete", note: CTX_SEED_NOTE, icon: { cls: "", use: "#i-trash" }, danger: true, act: (vm) => vm.delGroup() },
     ],
   };
 
@@ -141,20 +154,22 @@
    * 默认为空, 用户可把任意支的项移入(移入即创建入口, 为空不显示)。 */
   const CTX_SUB_ITEM_DEFS = {
     member: [
-      { id: "queue-top", label: "队列顶部", icon: { cls: "ico-queue", use: "#i-sort" }, act: (vm) => vm.torrentCmd("queue", { action: "top" }, "队列顶部") },
-      { id: "queue-up", label: "向上移动队列", icon: { cls: "ico-queue", use: "#i-sort" }, act: (vm) => vm.torrentCmd("queue", { action: "up" }, "向上移动队列") },
-      { id: "queue-down", label: "向下移动队列", icon: { cls: "ico-queue", use: "#i-sort" }, act: (vm) => vm.torrentCmd("queue", { action: "down" }, "向下移动队列") },
-      { id: "queue-bottom", label: "队列底部", icon: { cls: "ico-queue", use: "#i-sort" }, act: (vm) => vm.torrentCmd("queue", { action: "bottom" }, "队列底部") },
+      { id: "queue-top", label: "队列顶部", key: "queue-top", icon: { cls: "ico-queue", use: "#i-sort" }, act: (vm) => vm.torrentCmd("queue", { action: "top" }, "队列顶部") },
+      { id: "queue-up", label: "向上移动队列", key: "queue-up", icon: { cls: "ico-queue", use: "#i-sort" }, act: (vm) => vm.torrentCmd("queue", { action: "up" }, "向上移动队列") },
+      { id: "queue-down", label: "向下移动队列", key: "queue-down", icon: { cls: "ico-queue", use: "#i-sort" }, act: (vm) => vm.torrentCmd("queue", { action: "down" }, "向下移动队列") },
+      { id: "queue-bottom", label: "队列底部", key: "queue-bottom", icon: { cls: "ico-queue", use: "#i-sort" }, act: (vm) => vm.torrentCmd("queue", { action: "bottom" }, "队列底部") },
       /* 次级默认线 token 用 s 前缀(sep:s1/s2): 与一级 d 前缀错开 —— 同支两层 token 恒唯一,
        * 跨层拖分隔线才不会被「目标层已有同名 token」的去重规则吞掉 */
       { id: "sep:s1", kind: "sep" },
-      { id: "super-seeding", labelText: "超级做种", label: (vm) => (vm.menuTorrent().super_seeding ? "关闭超级做种" : "开启超级做种"), icon: { cls: "ico-super", use: "#i-shield" }, act: (vm) => vm.torrentCmd("super-seeding", { enable: !vm.menuTorrent().super_seeding }, vm.menuTorrent().super_seeding ? "关闭超级做种" : "开启超级做种") },
-      { id: "force-start", labelText: "强制启动", label: (vm) => (vm.menuTorrent().force_start ? "取消强制启动" : "强制启动"), icon: { cls: "ico-force", use: "#i-bolt" }, act: (vm) => vm.torrentCmd("force-start", { enable: !vm.menuTorrent().force_start }, vm.menuTorrent().force_start ? "取消强制启动" : "强制启动") },
-      { id: "auto-tmm", labelText: "自动种子管理", label: (vm) => (vm.menuTorrent().auto_tmm ? "关闭自动种子管理" : "开启自动种子管理"), icon: { cls: "ico-tmm", use: "#i-shield" }, act: (vm) => vm.autoTmmToggle() },
-      { id: "share-limits", label: "分享率限制…", icon: { cls: "ico-percent", use: "#i-percent" }, act: (vm) => vm.editShareLimits() },
+      /* super-seeding/share-limits 是注册表空位(def:""): key 照填 —— 默认无键帽, 用户绑键后
+       * 自动出现(计划 §05「空位」口径, G2) */
+      { id: "super-seeding", labelText: "超级做种", key: "super-seeding", label: (vm) => (vm.menuTorrent().super_seeding ? "关闭超级做种" : "开启超级做种"), icon: { cls: "ico-super", use: "#i-shield" }, act: (vm) => vm.torrentCmd("super-seeding", { enable: !vm.menuTorrent().super_seeding }, vm.menuTorrent().super_seeding ? "关闭超级做种" : "开启超级做种") },
+      { id: "force-start", labelText: "强制启动", key: "force-start", label: (vm) => (vm.menuTorrent().force_start ? "取消强制启动" : "强制启动"), icon: { cls: "ico-force", use: "#i-bolt" }, act: (vm) => vm.torrentCmd("force-start", { enable: !vm.menuTorrent().force_start }, vm.menuTorrent().force_start ? "取消强制启动" : "强制启动") },
+      { id: "auto-tmm", labelText: "自动种子管理", key: "auto-tmm", label: (vm) => (vm.menuTorrent().auto_tmm ? "关闭自动种子管理" : "开启自动种子管理"), icon: { cls: "ico-tmm", use: "#i-shield" }, act: (vm) => vm.autoTmmToggle() },
+      { id: "share-limits", label: "分享率限制…", key: "share-limits", icon: { cls: "ico-percent", use: "#i-percent" }, act: (vm) => vm.editShareLimits() },
       { id: "sep:s2", kind: "sep" },
-      { id: "copy-name", label: "复制名称", icon: { cls: "ico-copy", use: "#i-copy" }, act: (vm) => vm.copyTorrentInfo("name") },
-      { id: "copy-hash", label: "复制哈希", icon: { cls: "ico-copy", use: "#i-copy" }, act: (vm) => vm.copyTorrentInfo("hash") },
+      { id: "copy-name", label: "复制名称", key: "copy-name", icon: { cls: "ico-copy", use: "#i-copy" }, act: (vm) => vm.copyTorrentInfo("name") },
+      { id: "copy-hash", label: "复制哈希", key: "copy-hash", icon: { cls: "ico-copy", use: "#i-copy" }, act: (vm) => vm.copyTorrentInfo("hash") },
       // copy-magnet 已退役(issue 26-11-09-0639): magnet_uri 入库即掩码(26-11-08-0043), 复制出的
       // 是 tr= 已掩的废链接; 用户拍板移除入口而非加端点回原文。存量布局里的 copy-magnet id 由
       // ctxMergeLayout 当未知 id 忽略(换版本不丢布局)。
@@ -269,6 +284,11 @@
  *     submenu 父项就地解析出 subName + subItems(模板一个骨架消费两种质料)
    */
   function ctxRenderLayer(branch, level, flags, vm) {
+    /* 键帽草稿快照(计划 26-11-12-0344 S2, I1): 一层渲染一取 —— 与设置键位面板同源
+     * window.AQB_KEYS.load() 同步快照(菜单是低频开层渲染, 不缓存); 用户在设置页改绑/清空后
+     * 重开菜单即跟随。沙箱(node 电池未 eval shortcuts.js)无 AQB_KEYS 时回 null,
+     * kbSerialWithDraft 回落模板基准键位。 */
+    const draft = window.AQB_KEYS && typeof window.AQB_KEYS.load === "function" ? window.AQB_KEYS.load() : null;
     const merged = ctxMergeLayout(branch, flags && flags.ctx_menu);
     const layer = level === 1 ? merged.sub : merged;
     const out = [];
@@ -286,7 +306,7 @@
         // 动态 submenu(CTX_DYN_SUB)无注册表次级: 子项恒由 vm 单点供给(含空态), 父项恒渲染
       }
       if (def.gate && !ctxGateOk(def.gate, flags)) continue;
-      const item = ctxRenderItem(def, vm, level);
+      const item = ctxRenderItem(def, vm, level, draft);
       if (def.kind === "submenu") {
         const sub = def.subName || CTX_SUB_NAME;
         item.subName = sub;
@@ -301,7 +321,22 @@
     return out;
   }
 
-  function ctxRenderItem(def, vm, level) {
+  /* 菜单项键帽取数(计划 26-11-12-0344 S2, I1 单点链): key 字段 -> AQB_SHORTCUT_DEFS 条目 ->
+   * kbShortcutDisplay(kbSerialWithDraft(模板基准 def ⊕ 用户草稿 overrides) 空串判定 ⊕
+   * kbDisplayName) —— 与设置键位面板/Shift+/ 帮助浮层同一条取数链, 不许第二套逻辑。
+   * 无 key 字段(四条不映射项/动态子项)与未绑定(含注册表空位 def:"" 与用户显式清空)一律空串,
+   * 消费方据此不产出键帽字段(I5 留白)。加载序上 ctx_menu.js 在 shortcuts.js 之前, 故注册表
+   * 与取数链都是**渲染时**解引用(全局词法域, 与 shortcuts_panel.js 裸引用同范式); 沙箱里
+   * shortcuts.js 未 eval 时静默回空串 —— 键帽渲染面由 eval 两侧文件的扩展电池守。
+   * danger 项键帽照常显示(D5: 动作有确认框兜底)。 */
+  function ctxKeycapOf(def, draft) {
+    if (!def.key) return "";
+    const table = typeof AQB_SHORTCUT_DEFS === "undefined" ? null : AQB_SHORTCUT_DEFS;
+    const entry = table && Array.isArray(table) ? table.find((it) => it.id === def.key) : null;
+    return typeof kbShortcutDisplay === "function" ? kbShortcutDisplay(entry, draft) : "";
+  }
+
+  function ctxRenderItem(def, vm, level, draft) {
     const item = {
       id: def.id,
       kind: def.kind || "item",
@@ -320,6 +355,11 @@
       item.gated = !gate.ok;
       item.title = gate.title || ""; // 恒绑字符串: 可用时空串(ui_feedback 空串 title = 清除提示通道)
     }
+    /* 键帽字段(S2, I1 现算): 有键位才产出 —— 只增字段不改既有字段, 既有消费方兼容;
+     * 空串(未绑定/无 key)不产出该字段, 模板 v-if 不渲染键帽但 .ctx-text flex 吃满整行,
+     * 右缘对齐位保留(I5)。 */
+    const kbd = ctxKeycapOf(def, draft);
+    if (kbd) item.kbd = kbd;
     return item;
   }
 

@@ -20,7 +20,14 @@ v-for 消费 ctxItems/ctxSubItems, 判据链与子面板交互原样); 3. 接线
   次级空与只剩线不显示父项(D7) + 未知 id 容忍与 sep 一等公民 + 门控两态 + 结构项防嵌套 +
   动态 label + 置灰 title + ctxRun 分派 + 静态名(labelText)成对 + 动词族灰色后缀(四支 12 项,
   计划 26-10-20-0145) + 动态 submenu「转移到」(四支各一, 子项 vm 单点供给/无供给方空数组/
-  advanced 空不压父项/次级防嵌套/布局可隐藏, 计划 26-10-31-0306 T6)
+  advanced 空不压父项/次级防嵌套/布局可隐藏, 计划 26-10-31-0306 T6) + key 字段逐条对账 §05
+  映射表(key 引用存在于 shortcuts 注册表/四条不映射项无 key/两条空位 key 照填, 计划
+  26-11-12-0344 S2) + 键帽渲染(kbd 经 kbShortcutDisplay 现算/绑定项出键帽/danger 照常 D5/
+  qb-traffic scope 口径差仍标/不映射与空位项无 kbd 字段/改绑即时跟随与显式禁用隐藏)
+- test_ctx_menu_key_fields_reconcile_shortcut_registry: key 字段对账 python 静态面(计划
+  26-11-12-0344 S2/§05, 不依赖 node) —— key 引用必须存在于 shortcuts 注册表(_registry 解析) /
+  「不映射」四项(limits/skip_check/transfer/sub-more)无 key / 其余非 sep 项一律带 key /
+  落点总数 == 44(multi 8 + episode 5 + member 一级 11 + group 10 + 次级 10)
 - test_ctx_custom_panel_wiring: 设置页「WebUI」卡接线守阵(W4) —— 卡片注册/hubNow/hubGo 复位/
   hubRestore 认它 + 模板 v-else-if 分支内四支 tab 与两个固定区(D17)+ 跳检开关绑 cmSkipCheck(D6)
   + app.js mixin + 三 manifest 装载序(ctx_menu.js < ctx_menu_custom.js < app.js)+ .ctx-custom-* 样式在
@@ -45,6 +52,7 @@ from webui_helpers import STATIC_ROOT, _UI_ALL, _ui_manifest
 _CTX_MENU_JS = os.path.join(STATIC_ROOT, "shared", "ctx_menu.js")
 _CTX_CUSTOM_JS = os.path.join(STATIC_ROOT, "shared", "ctx_menu_custom.js")
 _CTX_MENUS_TPL = os.path.join(STATIC_ROOT, "shared", "tpl", "ctx-menus.html")
+_SHORTCUTS_JS = os.path.join(STATIC_ROOT, "shared", "shortcuts.js")
 
 # node 探针: 在真 vm 桩上跑**定制面板的写路径**(ctx_menu_custom.js 的 methods), 输出面板
 # 实际写回的 ctx_menu 形状 —— 交 python 侧过 validate_config(两端对"合法布局"的认定必须一致)
@@ -152,10 +160,15 @@ console.log(JSON.stringify({
 
 # node 电池: 加载 ctx_menu.js(global.window 沙箱, 与 _NODE_QB_TRAFFIC_PROBE 同范式),
 # 对默认布局与合并语义跑断言电池, 末行输出 JSON 报告。
+# 计划 26-11-12-0344 S2 起与 shortcuts.js **同一次 eval**(键帽取数链 AQB_SHORTCUT_DEFS/
+# kbShortcutDisplay 与 ctx_menu.js 的 ctxKeycapOf 共处同一 eval 词法域 —— 顶层 const 不跨
+# eval 可见, 分两次 eval 会让 ctxKeycapOf 静默回空串把键帽断言全部架空); 电池体(probe 侧)
+# 自身也在 eval 外, 故再补一行把注册表挂到 window.__SHORTCUT_DEFS 供 §05 对账读 —— 仅
+# 电池沙箱用, 生产文件零改动。
 _NODE_CTX_MENU_BATTERY = r"""
 const fs = require("fs");
 global.window = {};
-eval(fs.readFileSync(process.argv[1], "utf8"));
+eval(fs.readFileSync(process.argv[2], "utf8") + "\n;\n" + fs.readFileSync(process.argv[1], "utf8") + "\n;window.__SHORTCUT_DEFS = AQB_SHORTCUT_DEFS;");
 const R = window.AQB_CTX_MENU_REG;
 const M = window.AQB_CTX_MENU;
 const checks = [];
@@ -419,6 +432,59 @@ checks.push(["次级默认仅 member", eq(Object.keys(R.CTX_SUB_ITEM_DEFS), ["me
   checks.push([shells.length === 0 ? "静态名不含未填占位" : "静态名含占位: " + shells.join(","), shells.length === 0]);
 }
 
+// ---- 17. key 字段逐条对账(计划 26-11-12-0344 §05 映射表钉死): key = 引用的 shortcuts 注册表
+//      shortcut id; 「不映射」四项(limits/skip_check/transfer/sub-more)不给 key 字段; 「空位」
+//      两项(super-seeding/share-limits, 注册表 def:"")key 照填 —— 默认不显示, 绑键后自动出现
+const EXPECT_KEY = {
+  multi: { resume: "act-resume", pause: "act-pause", reannounce: "act-reannounce", recheck: "act-recheck", skip_check: null, limits: null, move: "edit-move", meta: "act-meta", export: "export-torrent", transfer: null, delete: "act-delete" },
+  episode: { resume: "act-resume", pause: "act-pause", reannounce: "act-reannounce", "open-path": "act-open-folder", transfer: null, delete: "act-delete" },
+  member: { resume: "act-resume", pause: "act-pause", reannounce: "act-reannounce", info: "act-detail", limits: null, move: "edit-move", rename: "edit-rename", meta: "act-meta", recheck: "act-recheck", skip_check: null, export: "export-torrent", "open-path": "act-open-folder", transfer: null, "sub-more": null, delete: "act-delete" },
+  group: { resume: "act-resume", pause: "act-pause", reannounce: "act-reannounce", recheck: "act-recheck", skip_check: null, limits: null, move: "edit-move", meta: "act-meta", export: "export-torrent", "open-path": "act-open-folder", "qb-traffic": "open-qb-traffic", transfer: null, delete: "act-delete" },
+};
+const EXPECT_SUB_KEY = {
+  member: { "queue-top": "queue-top", "queue-up": "queue-up", "queue-down": "queue-down", "queue-bottom": "queue-bottom", "super-seeding": "super-seeding", "force-start": "force-start", "auto-tmm": "auto-tmm", "share-limits": "share-limits", "copy-name": "copy-name", "copy-hash": "copy-hash" },
+};
+{
+  const bad = [];
+  const audit = (branch, defs, wantMap, tag) => {
+    for (const d of defs) {
+      if (d.kind === "sep") continue;
+      const want = wantMap && wantMap[d.id] !== undefined ? wantMap[d.id] : undefined;
+      if (want === undefined) { bad.push(tag + d.id + " 缺期望映射(新增项? 同步 §05 表与 EXPECT_KEY)"); continue; }
+      if ((d.key || null) !== want) bad.push(tag + d.id + " key=" + JSON.stringify(d.key || null) + " want=" + JSON.stringify(want));
+      if (d.key && !window.__SHORTCUT_DEFS.some((it) => it.id === d.key)) bad.push(tag + d.id + " key 引用不存在的 shortcut id: " + d.key);
+    }
+  };
+  for (const b of R.CTX_BRANCHES) audit(b, R.CTX_ITEM_DEFS[b], EXPECT_KEY[b], b + "/");
+  for (const b of Object.keys(R.CTX_SUB_ITEM_DEFS)) audit(b, R.CTX_SUB_ITEM_DEFS[b], EXPECT_SUB_KEY[b], b + "(sub)/");
+  checks.push([bad.length === 0 ? "key 字段逐条对账 §05(引用存在/不映射无 key/空位照填)" : "key 对账失败: " + bad.join("; "), bad.length === 0]);
+}
+
+// ---- 18. 键帽渲染(计划 26-11-12-0344 S2): kbd 字段经 kbShortcutDisplay 现算(I1), 空串不产出
+{
+  const find = (arr, id) => arr.filter((i) => i.id === id)[0];
+  const vm = stubVm();
+  const items = M.methods.ctxItems.call(vm, "member");
+  const sub = M.methods.ctxSubItems.call(vm, "member");
+  const grp = M.methods.ctxItems.call(vm, "group");
+  checks.push(["绑定项键帽现算(resume -> S)", find(items, "resume").kbd === "S"]);
+  checks.push(["次级绑定项键帽(copy-name -> Shift + C)", find(sub, "copy-name").kbd === "Shift + C"]);
+  checks.push(["danger 项键帽照常显示(D5, reannounce -> Shift + A)", find(items, "reannounce").kbd === "Shift + A"]);
+  checks.push(["qb-traffic 键帽仍标(scope 口径差声明, Ctrl + \\)", find(grp, "qb-traffic").kbd === "Ctrl + \\"]);
+  checks.push(["不映射项无 kbd 字段(limits)", !("kbd" in find(items, "limits"))]);
+  checks.push(["空位项默认无 kbd 字段(share-limits def:'')", !("kbd" in find(sub, "share-limits"))]);
+  checks.push(["sep 渲染对象无 kbd 字段", !("kbd" in find(items, "sep:d1"))]);
+  // 改绑即时跟随(I1): window.AQB_KEYS.apply = 设置键位面板「即时试用稿」同一单点 —— 草稿胜出
+  // 模板基准; 显式禁用(空串)键帽隐藏; 空位绑键后键帽出现
+  window.AQB_KEYS.apply({ schema_version: 1, template: "aqb-default", overrides: { "act-resume": "KeyX", "copy-name": "", "share-limits": "KeyL" } });
+  const items2 = M.methods.ctxItems.call(stubVm(), "member");
+  const sub2 = M.methods.ctxSubItems.call(stubVm(), "member");
+  checks.push(["改绑后键帽即时跟随(resume -> X)", find(items2, "resume").kbd === "X"]);
+  checks.push(["显式禁用(空串)键帽隐藏(copy-name)", !("kbd" in find(sub2, "copy-name"))]);
+  checks.push(["空位绑键后键帽出现(share-limits -> L)", find(sub2, "share-limits").kbd === "L"]);
+  window.AQB_KEYS.apply(null); // 回滚试用稿, 不污染后续电池场景
+}
+
 console.log(JSON.stringify({ ok: checks.filter((c) => c[1]).length, total: checks.length, failed: checks.filter((c) => !c[1]).map((c) => c[0]) }));
 """
 
@@ -491,7 +557,7 @@ def test_ctx_menu_registry_node_battery():
     if not node:
         return
     proc = subprocess.run(
-        [node, "-e", _NODE_CTX_MENU_BATTERY, _CTX_MENU_JS],
+        [node, "-e", _NODE_CTX_MENU_BATTERY, _CTX_MENU_JS, _SHORTCUTS_JS],
         capture_output=True,
         text=True,
         encoding="utf-8",
@@ -500,6 +566,45 @@ def test_ctx_menu_registry_node_battery():
     assert proc.returncode == 0, f"ctx_menu node 电池跑挂: {proc.stderr.strip()}"
     report = json.loads(proc.stdout.strip().splitlines()[-1])
     assert report["failed"] == [], f"ctx_menu 电池 {report['ok']}/{report['total']} 过, 失败: {report['failed']}"
+
+
+def test_ctx_menu_key_fields_reconcile_shortcut_registry():
+    """key 字段对账(python 静态面, 计划 26-11-12-0344 S2/§05): 菜单侧 key 引用必须落在注册表
+
+    node 电池(§17)已把 §05 映射表逐条钉死; 本测试是 python 侧的对账兜底(不依赖 node):
+      1. 两条注册表里每个 key: 引用的 shortcut id 必须存在于 shortcuts.js 注册表(_registry 解析);
+      2. 「不映射」四项(limits/skip_check/transfer/sub-more, 计划 §05)不得给 key 字段;
+      3. 其余非 sep 项一律带 key(§05 表内没有"可给可不给"的中间态 —— 新增项漏给 key 在这里红);
+      4. key 落点总数 == 44(multi 8 + episode 5 + member 一级 11 + group 10 + 次级 10, §05 表口径)。
+    """
+    from web_shortcuts_support import _registry
+
+    with open(_CTX_MENU_JS, encoding="utf-8") as f:
+        text = f.read()
+    reg_text = text[text.index("const CTX_ITEM_DEFS = {"):text.index("const DEFAULT_CTX_LAYOUT")]
+    reg_ids = {r["id"] for r in _registry()}
+
+    no_key_ids = {"limits", "skip_check", "transfer", "sub-more"}  # §05「不映射」四项
+    keys = []
+    for chunk in reg_text.split('{ id: "')[1:]:
+        item_id = chunk.split('"', 1)[0]
+        if item_id.startswith("sep:"):
+            continue
+        m = re.search(r'key: "([^"]+)"', chunk)
+        if item_id in no_key_ids:
+            assert not m, f"「{item_id}」是 §05 不映射项, 不得给 key 字段(拿到键位显示会误导: 界面/端点与注册表条目不同)"
+        elif m:
+            assert m.group(1) in reg_ids, (
+                f"「{item_id}」的 key={m.group(1)} 不在 shortcuts.js 注册表里 —— 渲染层查不到条目,"
+                "键帽恒空串(死引用); 改名/退役 shortcut 时必须同步 §05 映射"
+            )
+            keys.append(m.group(1))
+        else:
+            assert False, f"「{item_id}」无 key 字段也不在 §05 不映射清单里 —— 新增项漏映射(同步 §05 表)"
+    assert len(keys) == 44, (
+        f"key 落点 {len(keys)} != §05 表口径 44(multi 8 + episode 5 + member 一级 11 + group 10 + 次级 10)"
+        " —— 逐条对账以计划 26-11-12-0344 §05 映射审计表为准"
+    )
 
 
 def test_ctx_custom_panel_wiring():

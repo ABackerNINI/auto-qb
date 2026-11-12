@@ -551,6 +551,102 @@ for (const skin of SKINS) {
         await expect(page.locator('.ctx-menu')).toHaveCount(0);
       });
 
+      /* 菜单键帽(计划 26-11-12-0344 S2): 键帽文本由注册表渲染层经 kbShortcutDisplay 现算
+       * (kbSerialWithDraft ⊕ kbDisplayName, 菜单项 key 字段引用 shortcuts 注册表 shortcut id),
+       * 断言面 = 有键位项出键帽 / danger 项照常(D5) / 不映射项(limits)与空位项(share-limits,
+       * def:"")不渲染键帽但 label flex 吃满整行(I5 留白对齐) / 动态子项(转移到)零键帽 /
+       * 改绑后键帽即时跟随(读 AQB_KEYS 草稿, I1) / 空位绑键后键帽自动出现(G2) /
+       * 置灰行键帽随行(dyn gate 置灰项键帽色 == --fg-dim, 与 --fg 可区分)。
+       * 改绑借用 window.AQB_KEYS.apply —— 设置键位面板「即时试用稿」的同一单点(shortcuts.js),
+       * 面板 UI 改绑链由键位面板专题自守, 这里只证菜单侧读的是草稿不是模板基准。 */
+      test('菜单键帽: 绑定项出键帽 / 不映射与空位项留白 / 改绑即时跟随 @fast', async ({ page }) => {
+        await openApp(page, skin);
+        await tab(page, 'torrents').click();
+        await expect(page.locator('.torrent-row').first()).toBeVisible({ timeout: 15_000 });
+        // 不选中直接右键 = member(单种子)菜单
+        await clickRow(page, page.locator('.torrent-row').nth(0), { button: 'right' });
+        const menu = page.locator('.ctx-menu');
+        await expect(menu).toBeVisible({ timeout: 5_000 });
+        // 绑定项出键帽(现算显示串): 启动 -> S
+        await expect(ctxItemById(page, 'resume').locator('.aq-kbd')).toHaveText('S');
+        // danger 项键帽照常显示(D5): 强制重新汇报 -> Shift + A
+        await expect(ctxItemById(page, 'reannounce').locator('.aq-kbd')).toHaveText('Shift + A');
+        // 不映射项留白: limits 无键帽节点, label 仍 flex 吃满整行(对齐位保留, I5)
+        const limits = ctxItemById(page, 'limits');
+        await expect(limits.locator('.aq-kbd')).toHaveCount(0);
+        const grow = await limits.locator('.ctx-text').evaluate((el) => getComputedStyle(el).flexGrow);
+        expect(grow, '无键位项 label 弹性吃满整行(I5 留白对齐)').toBe('1');
+        // 键帽右对齐: 键帽右缘 == 项右缘 - 水平 padding 11px(±1px, 与留白项共同守住右缘对齐)
+        const align = await ctxItemById(page, 'resume').evaluate((el) => {
+          const i = el.getBoundingClientRect();
+          const k = el.querySelector('.aq-kbd').getBoundingClientRect();
+          return Math.round(i.right - 11 - k.right);
+        });
+        expect(Math.abs(align), `键帽右缘偏差 ${align}px 应等于项右 padding`).toBeLessThanOrEqual(1);
+        // 置灰行键帽随行(dyn gate, S2 增量): 桩 _STATES 轮转窗口内必有暂停行(delta-sync/optimistic
+        // 挑行同款), 单目标全非活跃 -> reannounceMenuGate 拦 -> reannounce 项 is-gated(各皮肤
+        // components.css 置灰链 label 走 --fg-dim)。键帽自带 .aq-kbd 基形 color: var(--fg), 无
+        // `.ctx-menu .ctx-item.is-gated .aq-kbd` 规则时会原地亮着 —— 颜色比对沿用 CTX-04 色探针
+        // 口径(页面内解析 var() 再比 computed, 字符串 evaluate 形式): 键帽色必须 == --fg-dim
+        // 解析值且 != --fg 解析值(后者保证规则缺席必红, 不是恒绿)。
+        await page.keyboard.press('Escape');
+        await expect(menu).toHaveCount(0);
+        const pausedRows = page.locator('.torrent-row');
+        const pausedCount = await pausedRows.count();
+        let pausedRow = null;
+        for (let i = 0; i < pausedCount; i++) {
+          const cls = (await pausedRows.nth(i).getAttribute('class')) || '';
+          if (cls.includes('s-paused')) { pausedRow = pausedRows.nth(i); break; }
+        }
+        expect(pausedRow, '存在暂停行(dyn gate 置灰形态的载体)').toBeTruthy();
+        await clickRow(page, pausedRow, { button: 'right' });
+        await expect(menu).toBeVisible({ timeout: 5_000 });
+        const reann = ctxItemById(page, 'reannounce');
+        await expect(reann, '暂停行 member 菜单 reannounce 置灰(dyn gate)').toHaveClass(/is-gated/);
+        const kbdColor = await page.evaluate(`(() => {
+          const item = document.querySelector('.ctx-menu .ctx-item.is-gated[data-item="reannounce"]');
+          if (!item) return null;
+          const kbd = item.querySelector('.aq-kbd');
+          if (!kbd) return null;
+          const mk = (v) => { const s = document.createElement("span"); s.style.color = v; document.body.appendChild(s); return s; };
+          const dim = mk("var(--fg-dim)"), fg = mk("var(--fg)");
+          const out = { kbd: getComputedStyle(kbd).color, dim: getComputedStyle(dim).color, fg: getComputedStyle(fg).color };
+          dim.remove(); fg.remove();
+          return out;
+        })()`);
+        expect(kbdColor, '置灰 reannounce 项未渲染或无键帽').toBeTruthy();
+        expect(kbdColor.kbd,
+          `置灰行键帽 ${kbdColor.kbd} 应随行走置灰(--fg-dim 解析值 ${kbdColor.dim})`).toBe(kbdColor.dim);
+        expect(kbdColor.kbd, '常态键帽色(--fg)与置灰色可区分(否则本断言恒绿)').not.toBe(kbdColor.fg);
+        // 「更多操作」次级: 绑定项出键帽(copy-name -> Shift + C), 空位项(share-limits)默认留白
+        await page.locator('.ctx-menu > .ctx-item.has-sub[data-item="sub-more"]').hover();
+        const subMore = page.locator('.ctx-menu > .ctx-item.has-sub[data-item="sub-more"] > .ctx-sub');
+        await expect(subMore).toBeVisible({ timeout: 3_000 });
+        await expect(subMore.locator('.ctx-item[data-item="copy-name"] .aq-kbd')).toHaveText('Shift + C');
+        await expect(subMore.locator('.ctx-item[data-item="share-limits"] .aq-kbd')).toHaveCount(0);
+        // 动态子项(转移到)零键帽: 子项由 vm 单点供给, 无 key 字段自然留白(I2)
+        await page.locator('.ctx-menu > .ctx-item.has-sub[data-item="transfer"]').hover();
+        const subTransfer = page.locator('.ctx-menu > .ctx-item.has-sub[data-item="transfer"] > .ctx-sub');
+        await expect(subTransfer).toBeVisible({ timeout: 3_000 });
+        expect(await subTransfer.locator('.aq-kbd').count(), '转移到子面板零键帽').toBe(0);
+        await page.keyboard.press('Escape');
+        await expect(menu).toHaveCount(0);
+        // 改绑即时跟随: AQB_KEYS.apply = 设置键位面板「即时试用稿」同一单点, 草稿胜出模板基准(I1)
+        // (字符串 evaluate 形式, 与 trigger-scope.spec 同款 —— 避开 @ts-check 对 AQB_* 自定义全局的误报)
+        await page.evaluate(
+          "window.AQB_KEYS && window.AQB_KEYS.apply({ schema_version: 1, template: 'aqb-default', overrides: { 'act-resume': 'KeyX', 'share-limits': 'KeyL' } })"
+        );
+        await clickRow(page, page.locator('.torrent-row').nth(1), { button: 'right' });
+        await expect(ctxItemById(page, 'resume').locator('.aq-kbd'), '改绑后键帽即时跟随(读草稿非模板基准)').toHaveText('X');
+        // 空位绑键后键帽自动出现(G2): share-limits -> L
+        await page.locator('.ctx-menu > .ctx-item.has-sub[data-item="sub-more"]').hover();
+        await expect(subMore).toBeVisible({ timeout: 3_000 });
+        await expect(subMore.locator('.ctx-item[data-item="share-limits"] .aq-kbd'), '空位绑键后键帽出现').toHaveText('L');
+        await page.keyboard.press('Escape');
+        await expect(menu).toHaveCount(0);
+        await page.evaluate('window.AQB_KEYS && window.AQB_KEYS.apply(null)'); // 收口: 回滚试用稿(内存态, 防同页复用串台)
+      });
+
       /* CTX-sub fit(2026-10-10 用户报「二级菜单显示不全, 部分出现在屏幕外」的回归断言):
        * 子面板不能搬出父项(CTX-05 的 mouseleave 语义依赖它是父项 DOM 后代), 只能按触发
        * 位置就地收进视口 —— 水平: .ctx-sub 锚在父项**右缘**+4px, 旧判据从父项**左缘**+200

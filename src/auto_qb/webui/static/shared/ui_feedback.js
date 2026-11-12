@@ -344,13 +344,31 @@ window.AQB_FEEDBACK = {
      * 现读 this[stateKey] 而不是闭包捕获: 量测在 $nextTick, 期间若又开了一次(换对象),
      * 这里拿到的已是新对象、新对象自己的 watcher 也已排队, 不会把旧位置写回新菜单。
      * $nextTick 回调在 Vue 补丁之后、浏览器绘制之前跑, 回写 x/y 触发的重渲染同帧完成 ——
-     * 不产生"先弹错位置再跳一下"的可见抖动。 */
+     * 不产生"先弹错位置再跳一下"的可见抖动。
+     * 二次收口(计划 26-11-12-0344 S2 实测发现): 菜单含键帽(.aq-kbd, 11px mono 字距为分数
+     * 像素)后 max-content 宽越过 min-width 整数下限, 首次布局到回写触发的重渲染之间实测宽
+     * 还会落定 ~2px(Chrome 对新插入内容的首轮文本 shaping 与终轮不等) —— 单次 $nextTick
+     * 量测钳位后右缘仍可溢出 1~2px(e2e CTX-fit 右缘红)。故钳位回写后再排一帧按落定后的
+     * 实测宽复核; 位置已在界内时复核是幂等的(不写回、不重排), 宽度若又变则最多再补两帧,
+     * 有界收敛。rAF 在后台页签不触发 —— 菜单只在可见页签打开, 无此场景。 */
     _menuFitRefit(stateKey, refName) {
       const s = this[stateKey];
       if (!s || !s.visible) return;
       const p = this._menuFit(this.$refs[refName], s.x, s.y);
       s.x = p.x;
       s.y = p.y;
+      let retries = 2;
+      const settle = () => {
+        const s2 = this[stateKey];
+        if (!s2 || !s2.visible) return;
+        const p2 = this._menuFit(this.$refs[refName], s2.x, s2.y);
+        if (p2.x !== s2.x || p2.y !== s2.y) {
+          s2.x = p2.x;
+          s2.y = p2.y;
+          if (retries-- > 0) requestAnimationFrame(settle);
+        }
+      };
+      requestAnimationFrame(settle);
     },
   },
 };

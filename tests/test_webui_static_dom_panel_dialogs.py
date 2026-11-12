@@ -15,7 +15,7 @@
 - test_frontend_add_torrent_drag_drop_wiring: DND-01 全局拖拽添加种子接线守阵(静态) —— window 级 drag 四事件 add/remove 对称、drop handler 必 preventDefault(否则浏览器直接打开文件)、接管判据只认 Files/text-uri-list(不误拦页面内拖文本)、双 UI 落点遮罩成对 + app.js addDragOver 状态
 - test_frontend_add_torrent_partial_receipt_wiring: 添加种子「部分受理关窗」回执分流守阵(2026-10-18 用户报障「部分种子添加失败(已存在)时添加窗口不消失」) —— submitAddTorrent 三态分流(r.status === "warn" 分支在, 只判 r.ok 的二态写法回潮即红)+ warn 分支关窗且 warn 类 toast 带详情(后端文案带成功/失败计数)+ ok 分支保持关窗 + error(全拒)分支不得关窗(文件/链接原样没进 qB, 留窗才能改完重提; 部分成功与全部失败混为一谈是本案病根, 两个方向都钉)。行为面由 e2e/add-partial-receipt.spec.mjs 真浏览器钉
 - test_frontend_add_combo_blur_close_and_fit: 添加种子三下拉「失焦即收 + 限高不出窗」接线守阵(2026-10-03 报障) —— 三输入框 @focusout 收层 + 收层必须 40ms 合帧守卫(label 转发回焦同步收 = 闪烁) + 三开层方法撤销挂起收层 + 开层 watcher 量「输入行→滚动容器可见底沿」净空限高(滚动条留在窗口内) + 候选异步到位重限 + 三浮层互斥双向(closeAddPopsExcept 单点, 三开层各调一次, 26-10-04-0130)
-- test_frontend_ctx_menu_refit_by_measured_size: 浮层菜单开层实测钳位守阵(issue 26-10-06-1717) —— _menuFit 按 offsetWidth/offsetHeight 实测算(退回常量估算即红)且以视口为界、每次复位兜底限高; 三个菜单容器 ref(ctxMenu/headMenuEl/filePrioEl)与三个开层 watcher 的 (stateKey, refName) 一一对上且都在 $nextTick 里量; _menuFitRefit 现读 this[stateKey]/this.$refs[refName] 并守 visible
+- test_frontend_ctx_menu_refit_by_measured_size: 浮层菜单开层实测钳位守阵(issue 26-10-06-1717) —— _menuFit 按 offsetWidth/offsetHeight 实测算(退回常量估算即红)且以视口为界、每次复位兜底限高; 三个菜单容器 ref(ctxMenu/headMenuEl/filePrioEl)与三个开层 watcher 的 (stateKey, refName) 一一对上且都在 $nextTick 里量; _menuFitRefit 现读 this[stateKey]/this.$refs[refName] 并守 visible + 二次收口 rAF 复核(计划 26-11-12-0344 S2: 菜单键帽分数字距使首帧实测宽偏小, 单次钳位右缘溢出)
 - test_frontend_add_combo_label_clear_mask_and_refit: 添加种子三下拉「第二轮遗留四项」守阵(2026-10-03, label 闪烁 2026-10-04 三修+四轮 JS 守卫) —— 四个 combo 的字段 label 一律 @mousedown.prevent + @click.stop(mousedown 默认动作 blur 武装的 40ms 合帧定时器在人手按住期间先收层、松手转发回焦再重开 = 闪烁; stop 挡 window click 收层; 缺一即回归)+ 收层 JS 单点守卫 _popBlurShouldHold(收层前判「焦点已回本族输入框 / 本族 label 转发 click 仍在途」→ 不收, 模板修饰符缺位(旧页签残留)时独立根除闪烁, add 三字段 + meta 分类全接)+ 三输入框内嵌清空 x(@mousedown.prevent 保焦点 + @click.stop 挡 window 收层, 缺一即「清完下拉没了」)+ 遮罩关窗改「mousedown 记臂位 + mouseup.self 才关」(全仓 11 处, @click.self 会被"拖选文字终点落在遮罩上抬手"误判成点空白关窗, 零残留)+ 过滤词变化重限高(三个输入值 watcher + meta 侧三处)+ meta 分类下拉补失焦收层与 window click 兜底名单 + 清空钮样式三皮肤成对
 - test_frontend_combo_hiscroll_never_scrolls_ancestors: 下拉高亮滚动跟随「只滚菜单内部」守阵(2026-10-29 八修, 用户报「选中新路径后再点下拉框, 弹窗里的文字从上往下滑一次」)—— _hiScroll 禁用 scrollIntoView(它把**所有可滚祖先**一起滚: 开层过渡期 .add-dialog-body 的 scrollHeight 比 clientHeight 大 166px, 于是整段文案被滚走再弹回, 实测 body.scrollTop 0→166→83→18→0; 输入框为空时 hi=-1 无 [data-hi="1"] 故只有"选过路径"才看得见); 必须逐级向上以**菜单根为界**手动差值调 scrollTop(box.contains(n) + 到 box 即 break), 剥注释后不得出现 scrollIntoView 字面量(注释里讲禁令不算违规)。行为面由 e2e/move-dialog-fit.spec.mjs 逐帧采样 body.scrollTop 恒 0 + 文案 top 极差 ≤2px 钉
 - test_frontend_add_options_recent_order: 添加种子三候选「最近使用」排序守阵(2026-10-09 用户动议: 保存路径/分类/标签按最近使用排序) —— 口径 = 由种子记录派生(非本机存储): 「最近使用」= 该值下种子 added_on 最大值, 数据面**跨视图自取数** `_addRecencyRows`(与 filters.js::facetRows 同族; 添加入口是顶栏常驻而 /api/state 按 viewMode 裁剪阵列, 直读 this.torrents 会在默认辅种页拿到空表 ⇒ 排序静默退化成字母序, 2026-10-09 e2e 首跑实测) ⇒ 零新存储; node 真跑 _addOrderByRecent(最近使用降序 -> 未用过落末尾并按字母序 -> 表空/表 null/值未命中一律退化纯字母序 + 纯函数不改入参)与 _addNormPath(与后端 infra/utils.path_normalize 同口径; 两侧不同径则 /api/paths 已归一路径与取数行的 qB 原文 save_path 对不上, 时间表恒不命中 ⇒ 静默退化成纯字母序); 静态钉接线(三候选都过 _addOrderByRecent 单点 + pick 不得再内联 .sort + _addRecencyMaps 经 _addRecencyRows 现算且三键齐全 + 路径键过 _addNormPath + _addRecencyRows 按 viewMode 分支且三来源齐全)
@@ -978,6 +978,14 @@ def test_frontend_ctx_menu_refit_by_measured_size():
     assert "this[stateKey]" in refit_body and "this.$refs[refName]" in refit_body, \
         "_menuFitRefit 必须现读 this[stateKey] / this.$refs[refName](闭包捕获会在重开时写错位置)"
     assert ".visible" in refit_body, "_menuFitRefit 必须守 visible(菜单已关就别再回写位置)"
+    # 4. 二次收口(计划 26-11-12-0344 S2): 菜单含键帽(.aq-kbd 11px mono 分数字距)后 max-content
+    #    宽越过 min-width 整数下限, 首轮文本 shaping 到落定之间实测宽还会长 ~2px —— 单次
+    #    $nextTick 钳位后右缘可溢出 1~2px(e2e CTX-fit 右缘红)。钳位回写必须再排帧复核
+    #    (requestAnimationFrame settle), 有界收敛; 删掉二次收口 = 该回归复现。
+    assert "requestAnimationFrame" in refit_body, (
+        "_menuFitRefit 缺二次收口(钳位回写后须再排一帧按落定后的实测宽复核) —— "
+        "菜单键帽(11px mono 分数字距)使首帧实测宽偏小, 单次钳位右缘溢出 1~2px"
+    )
 
 
 def test_frontend_add_combo_label_clear_mask_and_refit():

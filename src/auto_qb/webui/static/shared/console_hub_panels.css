@@ -544,3 +544,21 @@
   background: var(--surface-2);
   white-space: nowrap;
 }
+
+/* ---- 菜单键帽列版式(计划 26-11-12-0344 S2, I5 留白对齐) ----
+ * .ctx-text 是行右键菜单项的 label 圈容器(ctx-menus.html 一级/次级两份骨架共用): flex 吃满
+ * 把键帽(.aq-kbd)推到行右缘 —— 无键位/自定义项不渲染 kbd 但 label 仍占满整行, 各项键帽
+ * 右缘对齐不跳动(与 VS Code 菜单同款); 窄菜单宽度行为 = 键帽列 flex:none + .aq-kbd 自带
+ * nowrap, label 弹性收缩不挤键帽。.ctx-item 的 flex/gap 与 danger/is-gated 等既有口径在各
+ * 皮肤 components.css(不动); submenu 父项无键帽(注册表不映射)故 .ctx-caret 的 margin-left:auto
+ * 不受影响。 */
+.ctx-item .ctx-text { flex: 1 1 auto; min-width: 0; }
+.ctx-item .aq-kbd { flex: none; }
+
+/* ---- 置灰行键帽随行(计划 26-11-12-0344 S2 增量, 用户拍板) ----
+ * dyn gate 置灰(ctx_menu.js ctxRenderItem 的 reannounceMenuGate 不满足 -> item.gated)时,
+ * 整行走各皮肤 components.css 既有置灰链 `.ctx-menu .ctx-item.is-gated { color: var(--fg-dim) }`
+ * (atlas/console/flux/prism 四份同文), 但键帽自带 .aq-kbd 基形 color: var(--fg) 会原地亮着,
+ * 与灰行相顶 —— 此处让置灰行内键帽颜色随行走 --fg-dim。特异性 (0,3,0) 压过基形 (0,1,0),
+ * 选择器与置灰链同口径(.ctx-menu 前缀 + .is-gated); 令牌纪律: 只用既有令牌 --fg-dim, 零新增。 */
+.ctx-menu .ctx-item.is-gated .aq-kbd { color: var(--fg-dim); }
