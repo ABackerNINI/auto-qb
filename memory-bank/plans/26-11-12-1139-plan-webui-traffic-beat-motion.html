@@ -1,0 +1,1840 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>WEBUI 流量图节拍动效: 静态背景 + L0 + L1 + N 霓虹 + 6 个模板与落地计划</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="webui-traffic-beat-motion">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-12-1139">
+<meta name="doc-updated" content="26-11-13-0213">
+<meta name="doc-refs" content="">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --neon-blue: #7ad9ff;
+    --neon-gold: #feffa9;
+    --neon-pink: #ff6bd6;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .nb { color: var(--neon-blue); }
+  .ng { color: var(--neon-gold); }
+  .np { color: var(--neon-pink); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+
+  .axis { width: 100%; height: auto; display: block; margin: 16px 0 6px; }
+  .mini { font-size: 12.5px; color: var(--faint); }
+  .lab { border: 1px solid var(--hair); padding: 20px 22px 22px; margin: 24px 0 8px; background: #121a21; }
+  .lab-hd { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; flex-wrap: wrap; margin-bottom: 12px; }
+  .lab-hd .ttl { font-family: var(--display); font-size: 15px; font-weight: 600; }
+  .tabs { display: flex; flex-wrap: wrap; border-bottom: 1px solid var(--hair); margin: 0 0 14px; }
+  .tabs button { font-family: var(--sans); font-size: 12.5px; color: var(--dim); background: transparent; border: 0; border-bottom: 2px solid transparent; padding: 8px 12px; cursor: pointer; }
+  .tabs button.on { color: var(--neon-blue); border-bottom-color: var(--neon-blue); text-shadow: 0 0 10px rgba(122,217,255,0.45); }
+  .tabs button:hover { color: var(--ink); }
+  .note { font-size: 13px; color: var(--dim); line-height: 1.6; min-height: 82px; margin: 0 0 14px; }
+  .note b { color: var(--ink); font-weight: 500; }
+  #cv { width: 100%; height: 250px; display: block; border: 1px solid var(--hair-soft); background: #0d141a; }
+  .tl { position: relative; display: flex; height: 22px; margin: 10px 0 6px; border: 1px solid var(--hair-soft); }
+  .tl-seg { font-family: var(--mono); font-size: 10.5px; color: var(--faint); display: flex; align-items: center; justify-content: center; border-right: 1px solid var(--hair-soft); overflow: hidden; white-space: nowrap; }
+  .tl-seg.s1 { background: #3a2a18; }
+  .tl-seg.s2 { background: #2a2318; }
+  .tl-seg.s3 { background: #1d2026; }
+  .tl-seg.s4 { background: #141b21; }
+  .tl-cursor { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--warn); left: 0; }
+  .hud { font-family: var(--mono); font-size: 11.5px; color: var(--dim); line-height: 1.8; margin: 6px 0 14px; }
+  .hud b { color: var(--accent-ink); font-weight: 400; }
+  .ctl { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px 18px; border-top: 1px solid var(--hair); padding-top: 14px; }
+  .ctl label { display: block; font-size: 12px; color: var(--dim); }
+  .ctl input[type=range] { width: 100%; accent-color: var(--accent); }
+  .ctl input[type=checkbox] { accent-color: var(--accent); vertical-align: -1px; margin-right: 6px; }
+  .ctl select { font-family: var(--sans); font-size: 12px; background: #151d25; color: var(--ink); border: 1px solid var(--hair); padding: 3px 6px; }
+  .ctl .val { font-family: var(--mono); color: var(--accent-ink); }
+  .bar { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+  .bar button { font-family: var(--sans); font-size: 12.5px; color: var(--ink); background: #18222b; border: 1px solid var(--hair); padding: 6px 14px; cursor: pointer; }
+  .bar button:hover { border-color: var(--accent); }
+  .bar button.on { color: var(--accent-ink); border-color: var(--accent); }
+  .out { width: 100%; height: 116px; margin-top: 12px; font-family: var(--mono); font-size: 11.5px; line-height: 1.5; color: var(--dim); background: #0d141a; border: 1px solid var(--hair-soft); padding: 9px 11px; resize: vertical; }
+  /* R8: 模板标签上的「参考 / 交付」角标 */
+  .ref { font-family: var(--mono); font-size: 9px; font-style: normal; letter-spacing: 0.06em; color: var(--faint); border: 1px solid var(--hair); padding: 0 3px; margin-left: 6px; border-radius: 2px; vertical-align: 1px; }
+  .ref.ship { color: var(--accent-ink); border-color: var(--accent); }
+  /* R8: 右键数值面板预演 —— 与 §05 规格同款(320px / 常显 4 组 8 项 / 高级折叠) */
+  .stage { position: relative; }
+  .fxp { position: absolute; right: 8px; top: 8px; width: 320px; max-height: 522px; display: flex; flex-direction: column; background: #121a21; border: 1px solid var(--hair); box-shadow: 0 18px 48px rgba(0,0,0,0.6); z-index: 20; font-size: 12px; opacity: 0.97; transition: opacity 120ms linear; }
+  .fxp[hidden] { display: none; }
+  .fxp.see-through { opacity: 0.22; pointer-events: none; }
+  .fxp-hd { display: flex; align-items: center; justify-content: space-between; padding: 7px 11px; border-bottom: 1px solid var(--hair); flex: 0 0 auto; }
+  .fxp-hd .t { font-family: var(--display); font-size: 13px; font-weight: 600; }
+  .fxp-x { background: none; border: 0; color: var(--dim); cursor: pointer; font-size: 16px; line-height: 1; padding: 0 3px; }
+  .fxp-x:hover { color: var(--ink); }
+  .fxp-bd { padding: 8px 11px 10px; overflow-y: auto; flex: 1 1 auto; }
+  .fxp-stat { font-family: var(--mono); font-size: 10px; color: var(--faint); line-height: 1.65; padding-bottom: 5px; border-bottom: 1px solid var(--hair-soft); margin-bottom: 5px; }
+  .fxp-stat b { color: var(--accent-ink); font-weight: 400; }
+  .fxp-sw { display: flex; align-items: center; gap: 7px; color: var(--ink); font-size: 12px; padding-bottom: 6px; }
+  .fxp-g { font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--faint); margin: 6px 0 4px; padding-top: 5px; border-top: 1px solid var(--hair-soft); }
+  .fxp-g.first { border-top: 0; padding-top: 0; margin-top: 2px; }
+  .fxp-row { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+  .fxp-row > label { flex: 1 1 auto; color: var(--dim); font-size: 11.5px; }
+  .fxp-row select { flex: 0 0 146px; font-family: var(--sans); font-size: 11.5px; background: #151d25; color: var(--ink); border: 1px solid var(--hair); padding: 2px 4px; }
+  .fxp-row input[type=range] { flex: 0 0 118px; accent-color: var(--accent); }
+  .fxp-row .v { flex: 0 0 42px; text-align: right; font-family: var(--mono); font-size: 10px; color: var(--accent-ink); }
+  .fxp-chk { display: flex; align-items: center; gap: 6px; color: var(--dim); font-size: 11.5px; margin-bottom: 4px; }
+  .fxp-chk input { accent-color: var(--accent); }
+  .fxp-adv summary { cursor: pointer; color: var(--dim); font-size: 11.5px; margin: 4px 0 6px; }
+  .fxp-adv summary:hover { color: var(--ink); }
+  .fxp-ft { display: flex; gap: 6px; padding: 7px 11px; border-top: 1px solid var(--hair); flex: 0 0 auto; }
+  .fxp-ft button { flex: 1 1 0; font-family: var(--sans); font-size: 11px; color: var(--ink); background: #18222b; border: 1px solid var(--hair); padding: 5px 4px; cursor: pointer; }
+  .fxp-ft button:hover { border-color: var(--accent); }
+  .fxp-ft button[disabled] { opacity: 0.55; cursor: default; }
+  .fxp-ro { font-size: 9.5px; color: var(--faint); line-height: 1.55; padding: 0 11px 6px; }
+  .fxp-ro b { color: var(--warn); font-weight: 400; }
+  @media (prefers-reduced-motion: reduce) { .tl-cursor { display: none; } .fxp { transition: none; } }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: webui-traffic-beat-motion</div>
+<h1>WEBUI 流量图节拍动效: 静态背景 + L0 左移 + L1 双轨 + N 霓虹 + T6 综合模板 + 右键数值面板</h1>
+<p class="lede">本篇只回答一件事: <strong>qB 实时流量图两帧之间如何补上 &lt;1s 的节拍动效，以及六个候选表现模板怎么落地</strong>。R1 补上<strong>所有模板共用的 L0 左移底座</strong>（定长滚动窗口每拍整体左移一格才是瞬时跳变主因）; R2 退役 T3 整曲线残影、加入色彩 / 形状 / 粒子的视觉引擎 V; R3 补 <strong>L1 双轨底座</strong>，让上传 / 下载各自有独立中间态与反馈; <span class="np">R4</span> 按用户反馈<strong>禁用背景闪烁与右边缘色差</strong>（画布背景恒静态、右缘与绘图区同色）、把<strong>霓虹抽成只作用于非曲线元素的 N 层</strong>（由 T5 分级联动决定色相）、并新增<strong>集 T2 光带 + T3 粒子 + T5 分级 + T1 霓虹于一体的 T6 综合模板</strong>; <span class="np">R5</span> 把 T4 扫描束重做为<strong>双相位六层光刃</strong>并并入 T6; <span class="np">R6</span> 把故障类的<strong>横向线条</strong>从常量几何改为「<strong>lead / Δ 定强度 + 拍序号伪随机定长相</strong>」; <span class="np">R7</span> 给竖扫描束的<strong>回声加上行程上限</strong>——越过判定线后按距离淡出，100–200px 内归零，<strong>不再扫过全屏</strong>。<span class="np">R8</span> 把调参<strong>搬进产品</strong>——流量图右键出一张<strong>独立数值面板</strong>（非模态、边调边看、即时生效 + 预览一拍），并<strong>把交付范围收敛到只做 T6</strong>，T1–T5 降级为参考实现（留在 §04 作设计证据）。<span class="wr">状态</span> <code>Open</code> = 规格已定、待实施授权; 六个可运行原型按用户要求<strong>直接嵌在 §04</strong>、不外迁附件（先例 <code>26-09-29-0323-plan-webui-sites-search-3-proposals.html</code>）。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-12-1139 · <b>doc-updated</b> 26-11-13-0213 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 用户指令「WEBUI流量图动态展示, 参考音游…grilling然后出一个计划，模板嵌入计划文档」; 三轮 grilling (Q1–Q12) 拍板结论迁 §08; 只读事实核查三轮(渲染栈/守阵与计划规范/右键菜单可行性); 会话开工同步 <code>已同步 59113c69</code>; <b>R1</b> 用户反馈「模板无法表示整体左移」后的第四轮只读核查(滚动窗口几何); <b>R2</b> 用户反馈「T3 整曲线伪影不适用 / 效果不够大胆前卫」后的音游视觉语言补调研(色彩·形状·粒子); <b>R3</b> 用户反馈「上传/下载双曲线，只有 1 条有特效」后的第五轮只读核查(双 series / 双通道色义契约); <b>R4</b> 用户反馈「背景不要闪烁 / 右边缘背景需与其它地方一致 / T1 曲线颜色固定后不适用 / 加一个综合模板」后的表现层重构(背景静态化 · N 层作用域 · T6 组合); <b>R5</b> 用户反馈「故障扫描也加入综合模板 / 竖向扫描线不够精致」后的扫描束重构(双相位六层光刃); <b>R6</b> 用户问「横向的彩色线条（故障扫描）能否改为随机？或与 lead/delta 联动」后的横向线条重写(联动定强度 · 拍序号伪随机定长相); <b>R7</b> 用户反馈「竖向扫描线不要扫过全屏，过右边的线后 100–200px 完全消失」后的回声行程收紧(距离衰减 · 行程上限); <b>R8</b> 用户要求「数值调整设计为单独页面挂在右键菜单、只做 T6」后的<strong>产品化改版</strong>(两轮 grilling Q1–Q12: 载体 / 即时生效 / 持久化 / 内容范围 / 右键挂法 / 文档收敛 / 视觉规格 / 预览拍 / 作用域 / 只读与红线)。<br>
+  <b>本轮动作边界</b> 仅新建 / 修订本文件; 不改生产代码、不入池 issue、不认领 issue、不 commit/push。
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+
+<h3>背景</h3>
+<p>实时流量图 (<code>shared/qb_traffic_chart.js</code>, uPlot 1.6.x Canvas) 每次续拉走 <code>:1017</code> 的 <code>prev.setData([data.xs, data.up, data.dl])</code> 原地快路，两帧之间<strong>瞬时换数据、无中间态</strong>。用户要「有动感、节奏把握好」: 动画集中在拿到数据后的几百毫秒内，不超过 1 秒; 可以接受动画更新慢于数据最多 1s。参考对象为音游的判定帧反馈。</p>
+<p><span class="wr">R1 关键补漏</span>: 「瞬时更改」实际有<strong>两层</strong>，且主因不是数值——① <strong>整图左移一格</strong>: <code>points</code> 是定长桶数组，每拍最左桶出窗、右端进新桶，<code>xs</code> 随之重建，而 <code>scales.x</code> 只有 <code>time:true</code>、无固定 <code>range</code>，uPlot auto-range 跟随数据，于是<strong>所有旧值在屏幕上瞬时左移一格</strong>; ② 末点数值跳变。初版只处理了 ②，且 §04 demo 是「40 点原地改末点、不 shift」，与生产滚动行为不符。本版把 ① 抽成 <strong>L0 左移底座</strong>，五个模板全部跑在它之上。</p>
+<p><span class="np">R2 视觉升级</span>: 用户反馈初版模板「不够大胆前卫」，且 <strong>T3 整曲线残影不适用</strong> —— L0 已经把旧帧摆回旧位置再推开，再叠一层整曲线残影是双重影、遮挡谱面、生产侧还要缓存一份 2880 点旧窗口。本版退役该模板，槽位由「棱镜碎裂」接替，并引入所有模板共用的 <strong>视觉引擎 V</strong>（色彩 / 形状 / 粒子三层 + 严格图层顺序），让动效大胆但绝不盖住读数。</p>
+<p><span class="np">R3 双轨补漏</span>: 用户 26-11-12-1235 指出「流量图具有上传 / 下载双曲线，目前的模板只有 1 条有特效」。核查 <code>qb_traffic_chart.js:1052-1065</code> 确认生产是 <code>series[1] 上传 (--today-up)</code> + <code>series[2] 下载 (--today-down)</code> 两条独立折线，共用 y scale、各自 <code>spanGaps:false</code>; <code>:1017</code> 的 <code>setData([xs, up, dl])</code> 同时换两列; tooltip（<code>drawer.html:124-125</code>）、统计栏图例（<code>:155-156</code>）、限速虚线（<code>:968-982</code>）全是双通道。初版实验台第二条曲线只是 <code>disp.map(v =&gt; v×0.34+0.06)</code> 的暗灰静态陪衬，<strong>既没有独立数值中间态，也没有独立 Δ / 等级 / 反馈</strong>，等于把一半数据通道排除在方案之外。本版补 <strong>L1 双轨底座</strong>，五模板全部按双轨运行。</p>
+<p><span class="np">R5 扫描束重构 + 并入综合模板</span>: 用户 26-11-12-2147 指出「故障扫描也加入综合模板，但是竖向扫描线需要更改，当前的竖向扫描线不够精致」。核查旧实现只有<strong>一层 10px 对称渐变 <code>fillRect</code></strong> + 3 条固定长度实心速度线: ① <strong>对称</strong>所以没有方向感，读不出「扫」; ② <strong>只有一层</strong>，没有硬核与边缘层次，1x DPR 下被抗锯齿糊成半透明胶带; ③ 位置在两轨中点、与曲线无关; ④ 亮束本体若横穿全幅就会压住谱面。本版把 T4 扫描束重做为<strong>双相位「亮束入场 + 回声全幅扫掠」</strong>: 亮束由「亚像素 1px 硬核 + 2.5/5/10/16/24/34px 六层 Lv 晕 + 双侧 ±1.6px 色散 + 5 段非对称彗尾 + 7 条固定模式梳齿（R6 起改 3/5/7，随 <code>lead</code> 等级）」构成，纵向亮度按<strong>两轨末点 y 的包络</strong>起落; 亮束止于判定线，扫掠感交给 <strong>α≤0.20、按曲线包络着色的回声</strong>承担，全程<strong>零 <code>fillRect</code> 铺底</strong>。同时把 T4 并入 <strong>T6 综合模板</strong>（强度 ×0.78），模板数量不变。<span class="wr">（R7 已把回声从整幅扫掠改为「越线 100–200px 内淡出硬停」，见下条）</span></p>
+<p><span class="np">R7 回声行程收紧</span>: 用户 26-11-12-2325 指出「竖向扫描线不要扫过全屏，在过右边的线后逐渐透明，大概在过右边的线后 100–200px 的位置完全消失」。R5 的回声是 <code>g.R → g.L</code> 的<strong>整幅扫掠</strong>（0.18–0.7beat 走完全幅宽），虽只有 α≤0.20 + 曲线包络，仍是一道横穿数据的竖线——与 I6「装饰不得抢谱面」和 R4「背景不得整块变化」的气质相反，也会让读数区每拍被一条移动直线切过。R7 把回声改成<strong>受控行程 + 距离衰减</strong>: 越过判定线（绘图区右缘）后，alpha 按已走距离 <code>pow(1 − d/span, 0.85)</code> 递减，<code>d = span</code> 处<strong>直接停止绘制</strong>（几何保证，不是把 alpha 调小到看不见）; <code>span</code> 取 100–200px（<code>auto</code> = 绘图宽 ×0.22，clamp 到该区间，宽屏约 150–200px、窄屏取下限 100px），并把行程窗口收到 0.18–0.45beat 做匀速位移，让淡出沿路径均匀分布而不是「先冲后停」。整幅扫掠降级为 <code>full</code> <strong>对照档</strong>（导出标注 comparison-only，不交付）。束体的六层结构、曲线包络、梳齿、切片全部不动——本次只改<strong>回声能走多远</strong>。</p>
+<p><span class="np">R8 调参产品化 + 交付收敛</span>: 用户 26-11-13-0020 要求「<strong>将数值调整设计为一个单独的页面挂在右键菜单上，只做 T6，其余模板当参考但不实现</strong>」。此前所有控件都长在计划文档的 §04 实验台里，产品里没有任何调参入口 —— 用户要么接受写死的默认值，要么改代码。R8 把控件搬进产品: 流量图<strong>右键出一张独立面板</strong>（非模态浮层，<strong>边调边看</strong>），滑杆即时生效，「预览一拍」解决采样 600s 时等不到下一拍看效果的问题; 参数存 <code>autoqb.ui.qbFx</code>，<strong>不进配置 schema</strong>。同时<strong>交付范围收敛到 T6</strong>: T1–T5 只作为 T6 的构成要素与设计证据保留在 §04，<strong>不单独接线</strong>。一处硬边界: <strong>采样周期在面板里只读</strong> —— 改它要动后端与数据文件（<code>config.qb_traffic</code> 的 <code>sample_interval_multiplier</code> 与落盘聚合桶宽），面板只管观感，不碰采集。</p>
+<p><span class="np">R4 背景与霓虹重构</span>: 用户 26-11-12-1309 指出三点 —— ① <strong>背景不要闪烁</strong>: R2 的「色调呼吸」会在判定帧给整个绘图区叠一层主色相半透明色，整块背景亮度随拍变化，正是 <code>drawer-switch-flicker.md</code> 所警惕的「快的中间态本身也是一种闪」; ② <strong>右边缘背景应与其它地方一致</strong>: R1 为演示新桶入场给 <code>g.R → W</code> 铺了 <code>rgba(109,179,201,0.05)</code> 底色，形成一条常驻色差带; ③ <strong>曲线描边被 D1 钉成语义色后，T1 靠「给曲线 / 背景染霓虹色」的表现不再成立</strong>。本版删除两处整块铺色、把霓虹收成<strong>只作用于非曲线、非背景元素</strong>的横切 <strong>N 层</strong>，并新增 <strong>T6 综合模板</strong>把 T2 / T3 / T5 / T1 组合起来。</p>
+
+<h3>目标（做到什么程度算成）</h3>
+<ul>
+  <li><strong>G1 可见的中间态</strong>: 数据落袋后有可感知的过渡，覆盖<strong>整图左移一格</strong>与<strong>末点数值跳变</strong>两层，不再是硬切; 显示值与真值的偏差、以及视口偏置，均在 1s 内归零。</li>
+  <li><strong>G2 节奏正确</strong>: 冲击锚在判定帧 (t=0)，主区 &lt;1s，次区极轻且默认开、可调关; 采样周期变化时自动适配，不写死 1.5s / 3s。</li>
+  <li><strong>G3 零闪烁回归</strong>: 不重建 uPlot、不触发空态/遮罩、不回跳、不遮挡曲线与 tooltip; 不改变悬停坐标语义; 相邻两拍边界曲线位置连续。</li>
+  <li><strong>G4 六个可选模板</strong> <span class="tag">R4 / R5</span>: 同一节奏底座 + L0 左移 + L1 双轨 + 视觉引擎 V + N 霓虹层之上给出 <strong>6 种</strong>帧间过渡实现（含集大成的 T6 综合模板，R5 起见 <strong>五层</strong>：T2 光带 + T3 粒子 + <strong>T4 扫描束</strong> + T5 分级 + T1 霓虹），可交互、可调参、可导出配置。<span class="np">R8 收敛</span>: 六种实现全部保留为<strong>参考</strong>，<strong>生产只交付 T6</strong>，其余五种作为 T6 的构成要素与设计证据（见 §03 交付口径与 §05.8）。</li>
+  <li><strong>G5 大胆但守读图</strong> <span class="tag">R2</span>: 霓虹色相 / 几何形状 / 粒子爆发全部落在<strong>曲线之下或曲线描边本身</strong>; 遵循信息层级「谱面 &gt; 反馈效果 &gt; 氛围装饰 &gt; 背景可视化」，曲线永远最后以高亮描边重绘在最上层。<span class="np">（R4: 霓虹色相不得整块铺到背景，只允许落在局部几何 / 粒子 / 描边元素上）</span></li>
+  <li><strong>G6 双轨守恒</strong> <span class="tag">R3</span>: 上传 / 下载各自独立 Δ 与等级、各自数值插值、各自静默判定; 曲线描边恒用各自语义色（与图例 / tooltip / 限速虚线色义一致），Lv 分级色只作用于反馈层; 粒子 / 碎片 / 辉光预算按<strong>两轨合计</strong>计，不得因双轨翻倍; 默认 <strong>D3-b 双轨各发半套</strong>，两条曲线都有可见反馈。</li>
+  <li><strong>G7 背景静态 + 霓虹不越界</strong> <span class="tag">R4</span>: 画布底色、网格、判定线静态虚线与右边缘底色在任意帧 / 任意模板 / 任意配色档下恒定，<strong>不得对绘图区或右边缘做整块半透明铺色</strong>; 霓虹色相只允许出现在判定线局部亮段、环外圈、粒子外圈、锚点辉光、角落徽标等<strong>非曲线元素</strong>上，且由 T5 分级联动决定色相。</li>
+</ul>
+
+<h3>设计不变量（违反即破坏设计）</h3>
+<table>
+  <tr><th>编号</th><th>不变量</th><th>可验证判据</th></tr>
+  <tr><td>I1</td><td><strong>1s 绝对硬上限</strong>: <code>beat = clamp(period × 0.4, 320ms, 1000ms)</code>，真值在 <code>t ≤ beat ≤ 1s</code> 完全落地; 左移偏置同样在 <code>t ≤ beat</code> 归零</td><td>任意合法 <code>multiplier</code> 下，动画结束时刻 − 数据到达时刻 ≤ 1000ms</td></tr>
+  <tr><td>I2</td><td><strong>周期自适应</strong>: <code>period</code> 取 <code>_qbPollMs()</code> 实算值（<code>meta.interval_s × 1000</code> 夹到 1.5s–600s），每拍重算</td><td>改 <code>sample_interval_multiplier</code> 后不改任何代码，节奏自动跟随</td></tr>
+  <tr><td>I3</td><td><strong>不闪</strong>: 不 destroy/new uPlot、不重跑 loading 空态、不触发 <code>ResizeObserver</code> 连锁、新拍以当前显示值为起点打断旧动画（禁止回跳）</td><td>逐帧采样无 <code>E→L→E</code> 交替（沿用 <code>e2e/drawer-switch-no-flash.spec.mjs</code> 量具）</td></tr>
+  <tr><td>I4</td><td><strong>读数不撒谎</strong>: 禁止 overshoot; y 值只插值尾部 1–2 个点; <strong>data / 悬停锚 / tooltip 取值一律瞬时定档为真窗口</strong>; 纵轴 scale 瞬时定档（每帧 <code>setData(..., false)</code> 不重算 range）; x 视口只允许 ±1 格偏置（见 I8）</td><td>插值序列单调收敛、不越界; 动画期间 tooltip 读数与已落袋真值逐字一致</td></tr>
+  <tr><td>I5</td><td><strong>判定帧锚定</strong>: 冲击在 t=0 同帧触发，视觉不得晚于约 80ms; <code>--ease-spring</code> 只许用于装饰层缩放</td><td>逐帧探针首帧即见冲击</td></tr>
+  <tr><td>I6 <span class="tag">R2 改写 / R4 收紧</span></td><td><strong>大胆不越层级 + 背景静态</strong>: 分级 + 无变化静默; 装饰层允许覆盖曲线所在像素，但<strong>曲线必须在装饰之后以高亮描边重绘在最上层</strong>; 层级固定「<strong>静态背景</strong> → 网格 / 判定线 → 几何 / 粒子 / 扫描 / <strong>N 霓虹元素层</strong> → 曲线描边 → 数据锚点」; <span class="np">R4</span>: <strong>删除「背景色调呼吸」与「右边缘入场地带」两处整块铺色</strong>，任何帧不得给绘图区 / 右边缘叠半透明色块; 反馈层不得抢到谱面之上，背景可视化不得抢到第二层</td><td>任一时刻曲线像素对比度不低于静态基线; 固定两点（绘图区中央 / 右边缘）背景 RGB 逐帧恒定且二者相等; 静音看动效能猜到节奏即判「背景太吵」; Δ≈0 连拍 10 次叠加层零绘制（静态网格不计）</td></tr>
+  <tr><td>I7</td><td><strong>工程边界</strong>: 走共享层 + 四皮肤既有 <code>--dur*</code> 令牌; 不引 <code>shared/fx/</code>（flux 专属隔离由守阵反向钉）; <code>prefers-reduced-motion</code> 直接退回原 <code>setData</code> 快路 + 瞬时左移、<strong>视觉引擎 V 全关</strong><span class="np">（R3: 降级只关动效，双轨语义色与双 series 仍保留，不退回单色）</span></td><td><code>test_frontend_fx_wiring</code> 保持绿; 降级帧双曲线描边色仍与图例一致</td></tr>
+  <tr><td>I8 <span class="tag">R1</span></td><td><strong>左移只动视口</strong>: 过渡期不重建 <code>xs</code>、不改 <code>up/dl</code>、不碰 <code>_qbAnchors</code>; 视口偏置在 <code>t ≤ beat</code> 归零并交还 auto range; 收敛帧与下一拍首帧曲线位置连续（禁止回跳）; hover 索引钳到 <code>[0, n-1]</code></td><td>连拍 30 次逐帧采样，相邻两拍边界曲线像素位移 ≤1px; 收敛后 <code>u.scales.x</code> 回到 auto 值</td></tr>
+  <tr><td>I9 <span class="tag">R2 新增 / R3 改写 / R4 改写</span></td><td><strong>视觉预算（按两轨合计）</strong>: 粒子 ≤32 个、几何碎片 ≤16 片、<code>shadowBlur ≤ 14</code>（三档配色上限: <code>glitch</code> 14 / <code>neon</code> 10 / <code>calm</code> 0）、<strong>局部霓虹元素 ≤0.33×beat（≈20 帧）后回落</strong>、故障切片微震 ≤5px; <strong>粒子最亮帧必须与判定线闪光同帧</strong>; 粒子只在 ≤0.55×beat 内活跃，之后完全静默; <span class="np">R3</span>: 上述上限是 <strong>up + dl 两轨合计</strong>，不得每轨各配一套; 同帧辉光描边 ≤3 次（光带 1 + 两轨曲线各 1; 实测掉帧时先关曲线 blur 降到 2 次）; <span class="np">R4</span>: 原「色调呼吸 ≤0.33×beat」预算改为<strong>局部元素着色</strong>，不再包含任何整块背景铺色; <span class="np">R5</span>: 扫描束<strong>束体逐帧 ≤23 条绘制指令</strong>（6 晕 + 1 核 + 2 色散 + 5 彗尾 + ≤7 梳齿 + 2 回声）; <span class="np">R6</span>: 束体 + 切片合计 <strong>≤28 条/帧</strong>，<strong>横向细线条合计 ≤12 条/帧</strong>（撕裂切片 ≤5 + 梳齿 ≤7）、回声 alpha ≤0.20、<strong>零 <code>fillRect</code> 铺底</strong>、新增 blur 为 0; <span class="np">R7</span>: 回声<strong>行程 ≤200px 且必须硬停</strong> —— 越过判定线后按 <code>pow(1 − d/span, 0.85)</code> 淡出，<code>d ≥ span</code> 时<strong>零绘制</strong>（不是把 alpha 压到看不见），<code>span = clamp(0.22×绘图宽, 100, 200)</code>，整幅扫掠仅作 <code>full</code> 对照档</td><td>逐帧探针: t=0 首帧粒子亮度峰值; t &gt; 0.55×beat 冲击类叠加层（粒子 / 扫描束 / 光带 / 环）零绘制（<code>tail</code> 开启时的次区光点每轨 ≤2 除外）; 生产侧每帧额外绘制指令数 ≤ 预算（双轨合计）; 次区流动光点每轨 ≤2 个; 整块背景 <code>fillRect</code> 调用数为 0; <span class="np">R7</span>: 回声最左 <code>x ≥ g.R − 200</code>，且 <code>d</code> 到达 <code>span</code> 后该帧无回声绘制指令（束体仍在）; <span class="np">R8 复核</span>: L0 每帧改 <code>x</code> scale 会让 uPlot 置 <code>series._paths = null</code> 重建全部路径并重跑 <code>drawClear/draw</code> 钩子, 这笔帧耗时<strong>必须计入同一预算</strong>（「只改视口所以便宜」不成立）</td></tr>
+  <tr><td>I10 <span class="tag">R3 新增</span></td><td><strong>双轨不串味</strong>: 两通道各自维护 <code>{prev, target, shown, delta, level, live}</code>; 单列 <code>null</code> 时该轨断线且完全静默、另一轨照常; 两列同为 0 / Δ≈0 时<strong>零装饰</strong>但 L0 左移与数值收敛仍执行（窗口滚动与数据驱动解耦）; <strong>曲线描边 / 图例 / tooltip / 限速虚线色义恒为 <code>--today-up</code> / <code>--today-down</code></strong>，Lv 色不得替代语义色; 双轨末点 y 间距 &lt; 26px 时反馈按比例缩小但两轨各自保留，避免两套环叠成一团</td><td>逐帧探针: 上传 Δ=0 / 下载 Lv.3 时上传零粒子零环; 单列 null 时该轨无描边无锚点; 任一帧两曲线描边色与 <code>.hs-leg .sw.up/.down</code> 一致; 粒子合计 ≤32</td></tr>
+  <tr><td>I11 <span class="tag">R4 新增</span></td><td><strong>霓虹 N 层作用域</strong>: N 层是横切视觉层，色相由 <code>lead</code> 等级决定（T5 联动）; <strong>白名单</strong> = 判定线局部亮段 / 扩张环外圈 / 粒子外圈描边 / 末点锚辉光 / 角落 Lv 徽标 / 数值光带辉光; <strong>黑名单</strong> = 两条曲线描边（恒语义色）、绘图区背景、右边缘背景、网格、tooltip、图例、限速虚线; N 层可独立开关，关闭时只保留轨道语义色</td><td>逐帧探针: 任一帧两曲线 <code>strokeStyle</code> 恒等于 <code>trackCol(k)</code>; N 开 / 关两态背景像素完全相同; 六模板 × 三配色下黑名单元件颜色零变化</td></tr>
+</table>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+
+<h3>现状事实（只读核查，HEAD 59113c69；R1 补第 2 行）</h3>
+<table>
+  <tr><th>面</th><th>现状</th><th>锚点</th></tr>
+  <tr><td>渲染</td><td>uPlot 1.6.x Canvas，双系列折线; 续拉走 <code>setData</code> 原地快路，整图重建只在首图 / 宿主被拆 / 换肤</td><td><code>qb_traffic_chart.js:1010-1019</code> · <code>:1084</code></td></tr>
+  <tr><td><strong>滚动窗口几何</strong> <span class="tag">R1</span></td><td><code>points</code> 是「桶值 | null」<strong>定长数组</strong>，每拍最左桶出窗、右端进新桶; <code>xs</code> 由 <code>_qbPointsToData</code> 每拍重建（等距栅格 + 真值覆写）; <code>scales.x</code> 仅 <code>{time: true}</code>、<strong>无固定 range</strong>，uPlot auto-range 跟随 <code>[xs[0], xs[n-1]]</code> → <strong>所有旧值每拍瞬时左移一格，新点从右边界「跳」出来</strong></td><td><code>:203-241</code> · <code>:1040-1042</code> · <code>:1017</code></td></tr>
+  <tr><td>刻意无动画</td><td><code>_qbChartBuild</code> 内注释明写「destroy + new uPlot 会清屏一帧, 每次轮询落袋都闪一次」; 全文零 <code>requestAnimationFrame</code>、零动画常量</td><td><code>qb_traffic_chart.js:1010-1012</code></td></tr>
+  <tr><td>数据</td><td>纯 HTTP GET 轮询（非 WS / SSE），<code>/api/traffic/qb/{global,group,torrent}</code>; 点数最多 2880 (24h 窗); <code>null</code> = 缺口，<code>spanGaps:false</code></td><td><code>:742-778</code> · <code>traffic_grid.py:99-106</code> · <code>:1056</code></td></tr>
+  <tr><td><strong>双曲线语义</strong> <span class="tag">R3</span></td><td><code>series[1]</code> 上传 <code>stroke: --today-up</code>（兜底 <code>--indigo</code>）、<code>series[2]</code> 下载 <code>stroke: --today-down</code>（兜底 <code>--teal</code>）; 两列共用单 y scale、各自 <code>value: fmtSpeed</code> / <code>spanGaps:false</code>; <code>data = [xs, up, dl]</code> 三列，<code>null</code> 缺口由 <code>_qbGapRuns(up, dl)</code> 双列联合判定; 图例 <code>.hs-leg .sw.up/.down</code>、tooltip 双值、限速虚线按 <code>tk.up/tk.down</code> 分色 —— <strong>色义是双通道契约，动效不得覆盖</strong></td><td><code>:852-868</code> · <code>:1052-1065</code> · <code>:1084</code> · <code>drawer.html:124-125,155-156</code></td></tr>
+  <tr><td>采样周期</td><td>生效采样 = <code>sample_interval_multiplier × main_tick</code>; 本实例 <code>1×1.5s=1.5s</code>，<code>2×1.5s=3s</code> 同为合法配置; 合法域 int ≥1 且 ≤600s。长窗 <code>meta.interval_s</code> 是聚合桶宽（3d/7d=3600s、all=30×86400s），前端夹到 600s 续拉</td><td><code>traffic_grid.py:89-96</code> · <code>validation/sections.py:1182-1206</code> · <code>_qbPollMs() :820-826</code></td></tr>
+  <tr><td>已有动效</td><td>历史 SVG 图 <code>hist-draw .7s</code>; <code>--dur-fast/dur/dur-slow</code> = 100/160/280ms; <code>--ease-out</code> / <code>--ease-spring</code>; 四皮肤均有 reduced-motion 全局降级</td><td><code>atlas/css/views.css:425-430</code> · <code>atlas/style.css:153-158</code> · 四皮肤 <code>style.css/base.css</code></td></tr>
+  <tr><td>右键菜单 <span class="tag">R8 改挂法</span></td><td><code>drawerMenu</code> 容器 + <code>.ctx-menu</code> 四皮肤各一份 (fixed, z-index 100); 流量形态下 <code>openDrawerMenu</code> 因「经典档只剩一档」<strong>早退不弹任何菜单</strong>。R8 起不再把这里当"空位"：改早退会让整片正文右键弹出「只有一个模板选项」的半残菜单，因此在<strong>图宿主</strong>上挂独立 <code>contextmenu</code>（<code>stopPropagation</code> 拦住 <code>drawer.html:66</code> 的处理器）；面板<strong>不是 <code>.ctx-menu</code></strong>，不参与菜单选择器统计</td><td><code>menu.js:217-231</code> · <code>ctx-menus.html:130-149</code> · <code>drawer.html:66</code> · <code>lifecycle.js:78-99,105-174</code></td></tr>
+</table>
+
+<h3>痛点证据</h3>
+<ul>
+  <li><span class="bad">R1 补漏（方案级，最高优先）</span>: 初版把「瞬时跳变」等同于末点数值跳变，<strong>漏掉整图左移一格这个主因</strong>; 因此 5 个模板都只演示原地变形，无法回答「值更新后图层整体左移怎么做中间态」。用户 26-11-12-1153 指出后核查生产几何确认，本版补 L0 并重写实验台使其真实 <code>shift + push</code> 一格。</li>
+  <li><span class="bad">R3 双轨漏项（方案级）</span>: 初版五个模板的特效锚点、Δ 分级、数值插值、粒子池全部绑定<strong>单条主曲线</strong>，第二条只是 <code>disp.map(v =&gt; v×0.34+0.06)</code> 的暗灰静态陪衬。落地会立刻暴露四类问题: ① 两轨 Δ 常不同（下载飙升 / 上传平稳），单通道等级<strong>把两者错误归并</strong>; ② 单列 <code>null</code> 缺口或零流量时静默判定无从下手; ③ 两轨同时爆点会发两套粒子，<strong>预算翻倍、画面打架</strong>; ④ 若把 Lv 分级色刷到两条曲线上，<strong>上传 / 下载的语义色与图例色义断裂</strong>。本版补 L1 双轨底座与主导轨仲裁。</li>
+  <li><span class="bad">R2 T3 退役</span>: 「整条曲线残影淡出」在 L0 引入后不再适用 —— <strong>语义重复</strong>（L0 起始帧本就把整条曲线摆回旧位置，已产生旧帧可见感）、<strong>双重影</strong>（残影与新曲线分离时整屏两份谱面）、<strong>违反 I6 层级</strong>（残影盖在谱面上）、<strong>生产代价高</strong>（要额外缓存上一拍整列 ≤2880 点并在 <code>draw</code> 钩子再描一遍）。T3 槽位改为只作用于末点 / 判定线的「棱镜碎裂」。</li>
+  <li><span class="bad">R2 视觉强度不足</span>: 初版五模板全是单色琥珀细线 + 圆环，只有「克制」没有「记忆点」。用户要「大胆前卫」，需补色相分级、几何形状、粒子爆发三条线; 但按 R2 调研，大胆必须靠<strong>同帧叠加 + 层级控制</strong>，不能靠堆常驻动画。</li>
+  <li><span class="bad">R4 背景闪烁 / 右缘色差（方案级）</span>: 「色调呼吸」在判定帧给整个绘图区叠 5–9% alpha 的 Lv 色并 0.33×beat 内回落，<strong>整块背景亮度随拍变化</strong>，与 §02 反面证据同族; 右边缘 <code>g.R → W</code> 的 <code>rgba(109,179,201,0.05)</code> 入场地带则形成<strong>常驻色差带</strong>，新桶滑入时该带被曲线穿过，视觉上像「半张图在闪」。同时 D1 把曲线描边钉成语义色后，<strong>T1 原本靠曲线 / 背景染霓虹色的表现失去载体</strong>。本版删除两处铺色、把霓虹收成 N 层并新增 T6 综合模板。</li>
+  <li><span class="wr">R5 扫描束粗糙（表现级）</span>: 旧 T4 是一层 <code>createLinearGradient(scanX-5, … scanX+5)</code> 的 10px 对称色带 + 3 条固定长度实心矩形。对称渐变让「扫掠方向」不可读，单层结构没有硬核 / 近晕 / 远晕层次，在 1x DPR 下糊成半透明胶带; 3 条速度线锚在两轨中点、与曲线无关，看起来像贴纸而非光刃; 亮束若加宽横穿全幅则会压住谱面（违 I6）。R5 改为双相位多层束 + 曲线包络 + 非对称彗尾，扫掠交给极轻回声。</li>
+  <li><span class="wr">R7 回声仍扫过全屏（表现级）</span>: R5 把「扫」的语义全部押在回声上，于是它必须横穿整幅（<code>g.R → g.L</code>）—— 每拍有一条竖线从右到左切过两条曲线与网格；<strong>亮束本人已经收在判定线了，结果换成回声去横穿</strong>，等于把 R5 修掉的问题从亮束挪到了回声上。而且 α 低不代表不存在: 暗背景上一条 1px 细线穿过曲线像素仍会被眼睛抓住，读图时会下意识去「追那条线」。R7 给回声加<strong>行程上限 + 距离衰减</strong>: 只擦过判定线右侧 100–200px 就淡到 0 并停止绘制，扫掠的「起始动作」保留、横穿全幅的「经过动作」删除。</li>
+  <li><span class="bad">R8 调参只存在于文档里（产品级缺口）</span>: 前七轮把 15 个可调项全放在 §04 实验台 —— 那是<strong>计划文档</strong>，不是产品。真实用户想把冲击调轻一点、把粒子关掉，只能改代码; 而默认值一旦写死，遇到「这台机器上太吵 / 那台机器上看不见」就没有出口。R8 把控件搬成<strong>产品内的右键面板</strong>，并明确<strong>采样周期只读</strong>（改它涉及后端与数据文件，不是观感问题）。</li>
+  <li><span class="wr">R8 六个模板 = 六条实施岔路</span>: 「六模板待拍板」在计划阶段是优点（不预设胜出），进入实施就是成本 —— 每个模板都要独立接线、独立守阵、独立回归，而用户已经明确<strong>只做 T6</strong>。R8 把 T1–T5 降为参考实现，实施主线只留 T6; 同时保留它们的代码与文档，因为那是 R2–R7 六轮迭代的<strong>证据链</strong>（删了等于把「为什么这样设计」一起删掉）。</li>
+  <li><span class="bad">反面证据</span>: <code>memory-bank/pitfalls/web-ui/drawer-switch-flicker.md</code> 记闪烁<strong>同族已到第九处</strong>（第五 / 第六 / 第九处与流量图直接相关），原话「<strong>『快的中间态』本身也是一种闪</strong>」; 用户原话「数据不实时刷新, 而是随闪烁刷新」。这意味着「加动画」在这个仓库里是<strong>高风险动作</strong>，不是纯美化 —— 左移过渡尤其要守 I8 的「相邻两拍位置连续」，粒子尤其要守 I9 的「只在冲击窗内活跃」。</li>
+  <li><span class="wr">性能</span>: 2880 点 × 60fps 全量 <code>setData</code> 会重跑 y range 与全部 draw 钩子（缺口斜纹 / 限速虚线），整图随帧缩放抖动; <code>shadowBlur</code> 与逐粒子填充在长折线上尤其昂贵，需按 I9 限额并只在冲击窗内开。</li>
+  <li><span class="wr">测试</span>: <code>tests/test_webui_static_dom_panel_traffic.py:426</code> 逐字断言 <code>prev.setData([data.xs, data.up, data.dl]);</code>; <code>e2e/traffic-gap-zones.spec.mjs:121-141</code> 悬停后<strong>零等待</strong>立即回读，全仓 e2e 无 <code>waitForTimeout</code>。</li>
+  <li><span class="wr">几何耦合</span>: <code>drawer_general.js:268-291</code> 抽屉入场 rAF 逐帧改高度，经 <code>ResizeObserver</code>（<code>:1091-1106</code>）触发 <code>u.setSize</code> 连锁重画。</li>
+</ul>
+
+<h3>外部调研（音游，取可用结论）</h3>
+<ul>
+  <li><strong>反馈锚在判定帧</strong>: 视觉特效延迟 80ms 就会被感知为「画面慢半拍 / 打击感飘」; 应把视觉时间线对准判定帧而非动画固定播完时间。</li>
+  <li><strong>谱面滚动连续性</strong>: 音游的 Note 是<strong>连续向判定线移动</strong>的，判定线固定; 换成流量图即「曲线整体平滑左移一格、新桶从右边界滑到判定线」，而不是整图瞬移。这正是 L0 的动效语义来源。</li>
+  <li><strong>分级而非堆料</strong>: 普通 Note 用「小圆点闪光 + 不放大不抖动」的 Lv.1，连击/里程碑才升级; 反馈的信噪比比华丽度值钱。</li>
+  <li><strong>判定色是一手规范</strong>: Phigros 谱面行为标准写明判定线 <code>AP 金 #FEFFA9</code> / <code>FC 蓝 #A2EEFF</code> / <code>Clear 白 #FFFFFF</code>，Perfect ±80ms / Good ±160ms，且<strong>只有 Perfect / Good 才播放打击特效</strong> —— 对应本计划的 Lv 分级 + Δ≈0 静默。</li>
+  <li><strong>Phigros 的克制路线</strong>: 大幅降低粒子，只留线框指示与轻微判读闪光，玩家反馈「判定读起来反而更清晰」—— 与 I6「不遮挡」同向。</li>
+</ul>
+
+<h4>R2 补充调研: 色彩 / 形状 / 粒子</h4>
+<ul>
+  <li><span class="np">粒子三阶段 + 同帧</span>: 等待期粒子低活跃散在边缘; 爆发瞬间向四周飞散、速度为平时 <strong>3–5 倍</strong>、可叠一次<strong>≤5px 微震</strong>; 拖尾阶段减速透明化，为下一拍蓄力。《Muse Dash》把「角色攻击 + 背景粒子 + 判定闪光」<strong>三层同帧触发</strong>，粒子最亮帧恰是判定线闪光同一帧 —— 信息高度重叠才会「打起来爽」。→ 直接落为 I9 的「最亮帧同帧」与三阶段速度曲线。（来源: 独游魔盒《音频可视化设计: 视听同步的视觉语言》）</li>
+  <li><span class="ng">色调呼吸 → R4 修正为「局部霓虹」</span>: Phigros 每次重拍让整个背景色调向主色相偏移一档、20 帧后回落，适合<strong>纯色背景 + 焦点全在音符</strong>的音游; 但流量图已有网格 / 缺口斜纹 / 限速虚线三层背景，且仓库记闪烁<strong>同族已到第九处</strong>，整块背景变色会被直接读成「闪」。→ <span class="np">R4 起本项目禁用整块背景色调呼吸</span>，保留「Lv 色相在 ≤0.33×beat 内回落」的时间包络，但只作用于<strong>判定线局部亮段 / 环外圈 / 粒子外圈 / 锚点辉光</strong>（N 层），背景恒静态。（来源同上，结论已按本项目约束收窄）</li>
+  <li><span class="nb">形状语言</span>: Phigros 判定线可平移 / 倾斜 / 缩放 / 分裂（最多 4 条、8 种轨迹），电子核章节用<strong>故障艺术、破碎像素、闪烁警告框</strong>; Arcaea 用双色霓虹判定线与 <strong>Arc 蛇形弧线 / X 型交叉轨道</strong>; Beat Saber 用<strong>方块碎片炸开</strong>。→ 落为 V 的多边形环（三 / 六 / 八边）、旋转菱形末点、故障切片与速度线。</li>
+  <li><span class="bad">信息层级硬约束</span>: 「<strong>谱面 &gt; 反馈效果 &gt; 氛围装饰 &gt; 背景可视化</strong>」; 若背景可视化抢到第二层以上，玩家会失控。自检法: 静音看画面还能大致猜到节奏 → 背景太吵。波形/频谱这类自带强视觉重量的元素不要铺成常驻底纹。→ 落为 I6 的图层顺序与次区只留极轻流动光点。</li>
+  <li><strong>前置条件</strong>: 《Phigros》的「看谱如看秀」建立在<strong>纯色背景 + 所有焦点集中在音符与判定线</strong>之上; 流量图已有网格 / 缺口斜纹 / 限速虚线三层背景，因此 V 的装饰只能集中在<strong>判定线附近一格</strong>，不能铺满全图。<span class="np">（R4 进一步收紧为：连「铺满全图的半透明色块」也禁用，背景完全静态）</span>（来源: Phigros 资讯站 / 视觉与听觉双重冲击: 音游画面进化史）</li>
+</ul>
+
+<h2><span class="no">§03</span>方案总览</h2>
+
+<h3>节奏模型</h3>
+<p>判定帧 = 每次 <code>_qbLoad</code> 成功落袋的时刻。动效时间线按真实毫秒渲染，随 <code>period</code> 每拍重算:</p>
+<pre><code>period     = clamp(meta.interval_s × 1000, 1500, 600000)   // 每拍重算, 不写死
+beat       = clamp(period × 0.4, 320, 1000)                  // 主区, 硬顶 1s
+impact     = 0 .. 0.12 × beat                                 // 判定帧冲击 + 粒子爆发最亮帧
+shift      = 0 .. shiftRatio × beat (默认 0.60)               // R1: L0 左移一格收敛
+converge   = 0.12 × beat .. 0.60 × beat                       // 数值收敛
+afterglow  = 0.60 × beat .. beat                              // 余辉衰减
+neon       = 0 .. 0.33 × beat                                 // R4: 仅局部非曲线元素着 Lv 色; 背景零绘制
+particles  = 0 .. 0.55 × beat                                 // R2: 粒子活跃窗, 之后零绘制
+truth      = 真值在 t ≤ beat 完全落地                          // 「滞后 ≤1s」的可验证保证
+tail       = min(period − beat, 2000)                         // 次区装饰, 默认开, 可调关
+            // 长窗 600s 也只铺 2s, 绝不变成常驻动画</code></pre>
+<svg class="axis" viewBox="0 0 680 210" role="img" xmlns="http://www.w3.org/2000/svg">
+<title>一拍内的动效节奏预算</title>
+<desc>数据到达后 0 到 12% beat 为冲击与粒子爆发最亮帧, 0 到 60% beat 为左移一格收敛, 12% 到 60% 为数值收敛, 60% 到 100% 为余辉, 之后到下一拍为次要区; 曲线真值与视口偏置必须在 beat 内完全落地。</desc>
+<path d="M60 118 L620 118" fill="none" stroke="#26313a" stroke-width="0.5"/>
+<path d="M247 34 L247 172" fill="none" stroke="#6db3c9" stroke-width="0.5" stroke-dasharray="3 4"/>
+<polyline points="60,118 64,46 82,68 172,102 247,117 620,118" fill="none" stroke="#e2a86e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="64" cy="46" r="3.5" fill="#e2a86e"/>
+<circle cx="82" cy="68" r="3" fill="#8fd0e0"/>
+<circle cx="247" cy="117" r="3.5" fill="#e2a86e"/>
+<text x="74" y="40" font-size="12" fill="#e2a86e">判定帧 · 冲击 / 粒子最亮帧</text>
+<text x="100" y="90" font-size="12" fill="#a2b0bd">数值收敛 / 左移收敛</text>
+<text x="188" y="88" font-size="12" fill="#6f7d8a">余辉衰减</text>
+<text x="262" y="54" font-size="12" fill="#a2b0bd">beat 后读数静默</text>
+<text x="262" y="74" font-size="12" fill="#a2b0bd">动画滞后数据 ≤ 1s</text>
+<rect x="60" y="135" width="22" height="28" fill="#7a542b"/>
+<rect x="82" y="135" width="90" height="28" fill="#4a3a22"/>
+<rect x="172" y="135" width="75" height="28" fill="#2a2b2a"/>
+<rect x="247" y="135" width="373" height="28" fill="#141b21" stroke="#26313a" stroke-width="0.5" stroke-dasharray="3 3"/>
+<text x="127" y="149" font-size="12" fill="#e2a86e" text-anchor="middle" dominant-baseline="central">主区 beat</text>
+<text x="209" y="149" font-size="11" fill="#a2b0bd" text-anchor="middle" dominant-baseline="central">余辉</text>
+<text x="433" y="149" font-size="12" fill="#6f7d8a" text-anchor="middle" dominant-baseline="central">次要区 · 读数不变 / 极轻流动光点（默认开，可调关）</text>
+<path d="M60 163 L60 170 M82 163 L82 170 M172 163 L172 170 M247 163 L247 170 M620 163 L620 170" fill="none" stroke="#26313a" stroke-width="0.5"/>
+<text x="60" y="186" font-size="12" fill="#6f7d8a">0</text>
+<text x="82" y="186" font-size="12" fill="#6f7d8a">12% beat</text>
+<text x="172" y="186" font-size="12" fill="#6f7d8a">60% beat</text>
+<text x="247" y="186" font-size="12" fill="#8fd0e0">beat ≤ 1s</text>
+<text x="620" y="186" font-size="12" fill="#6f7d8a" text-anchor="end">period · 下一拍</text>
+<text x="60" y="204" font-size="11.5" fill="#e2a86e">横轴按 period 归一化; 3s 周期时 beat 被夹到 1000ms, 三段 ≈ 120 / 600 / 1000ms; 左移 / 数值 / 局部霓虹 / 粒子并行; 背景全程静态</text>
+</svg>
+
+<h4>自适应示例（公式推导值，非实测）</h4>
+<table>
+  <tr><th>配置</th><th>period</th><th>beat（主区）</th><th>冲击 / 收敛 / 余辉</th><th>左移收敛（0.6×beat）</th><th>次区装饰真实时长</th></tr>
+  <tr><td><code>multiplier=1, main_tick=1.5s</code></td><td>1.5s</td><td>600ms</td><td>72 / 360 / 600ms</td><td>360ms</td><td>900ms</td></tr>
+  <tr><td><code>multiplier=2, main_tick=1.5s</code>（用户举例的「3 秒」）</td><td>3s</td><td>1000ms（夹顶）</td><td>120 / 600 / 1000ms</td><td>600ms</td><td>2000ms</td></tr>
+  <tr><td><code>multiplier=8</code></td><td>12s</td><td>1000ms</td><td>120 / 600 / 1000ms</td><td>600ms</td><td>2000ms（封顶）</td></tr>
+  <tr><td>长窗 3d 及以上（夹到 600s）</td><td>600s</td><td>1000ms</td><td>120 / 600 / 1000ms</td><td>600ms</td><td>2000ms（封顶，非常驻）</td></tr>
+</table>
+<p class="mini">注: 上表为公式代入值，落地实测数字在实施阶段回填，不写进提交信息。左移一格的<strong>像素距离</strong>由绘图宽度 / 点数决定，与 period 无关; 收敛时长才随 beat 自适应。</p>
+
+<h3>L0 左移底座 <span class="tag">R1 · 六个模板共用</span></h3>
+<p><strong>事实</strong>: 定长滚动窗口 + auto x range 决定了每一拍新桶落袋时，旧值全部左移一格。这是「两帧瞬时更改」的主因，也是音游谱面滚动语义在流量图里的对应物。<strong>初版口径错误</strong>: Q2 排除的「整图横向推进」指的是<em>把 x 轴语义改成相对谱面 / 每帧重建 2880 点 xs</em>（C 方案），并不是排除<em>屏幕视口一格的平滑过渡</em>; 初版把两者混为一谈，导致 demo 与生产不符。</p>
+<pre><code>// 判定帧 t=0: 真窗口已经 setData 落袋, data / _qbAnchors / tooltip 全部用真值(I4)
+// 只是绘制视口先「摆回旧位置」, 再平滑放开到真位置:
+p      = clamp(t / (shiftRatio × beat), 0, 1)
+dx_t   = (1 − easeOut(p)) × interval          // 时间单位偏置, 一格
+range  = [xs[0] − dx_t, xs[n-1] − dx_t]       // 视口整体往过去偏一格
+// p→1 时 dx_t→0, 视口交还 auto range; 恒有 t ≤ beat ≤ 1s
+// 起始帧: 新数组第 i 点(=旧数组第 i+1) 恰好画回 px(i+1), 与上一拍收敛帧逐像素接续 → 不闪、不回跳</code></pre>
+<table>
+  <tr><th>路径</th><th>做法</th><th>取舍</th></tr>
+  <tr><td><strong>L0-a 视口偏置（推荐，P6 默认）</strong></td><td>只调 <code>u.setScale('x', {min: xs[0] − dx_t, max: xs[n-1] − dx_t})</code>; <code>data</code> / <code>up</code> / <code>dl</code> / <code>_qbAnchors</code> 一行不动; 收敛后释放手动 range 交还 auto</td><td>每帧只重画一次、无数组构造; tooltip 取值仍是真值; 代价是 time 轴 ticks 每帧重算（见 §09）</td></tr>
+  <tr><td>L0-b x 列临时偏置（备选）</td><td>每帧 <code>setData([xs.map(x =&gt; x + dx_t), up, dl], false)</code>，收敛后写回真 <code>xs</code></td><td>直观但每帧构造 ≤2880 长数组、hover 索引语义临时漂移; 不推荐</td></tr>
+  <tr><td>L0-c 谱面式横移（Q2 仍排除）</td><td>改 x 轴为相对时间 / 每帧重建 xs</td><td>破坏读图、每帧重算最多 2880 点; <strong>维持排除</strong></td></tr>
+</table>
+<p class="aside">demo 的「左移策略」三档对应关系: <strong>平滑滑入一格</strong> = L0-a（默认）; <strong>瞬时左移（现状基线）</strong> = 不过渡，用来和现状对比; <strong>不左移 · 原地变形（对照）</strong> = 初版 demo 行为，<strong>仅演示对照、生产不可选</strong>（数据必须滚动，否则窗口不再表示当前时间）。</p>
+
+<h3>视觉引擎 V <span class="tag">R2 新增 / R4 收紧 · 六个模板共用</span></h3>
+<p>三层视觉语言，默认<strong>霓虹档</strong>开启（P8）; 可一键切回<strong>克制档</strong>（等价初版单色细线，用于对比「够不够大胆」）或 <strong>故障档</strong>（青 / 品红 / 黄 + 切片位移）。所有装饰<strong>只作用于判定线附近一格</strong>，不铺满全图。<span class="np">R4: 连「整块半透明铺色」也禁用，背景与右边缘恒为同一静态色; 见新增的 N 层与 I11。</span></p>
+<table>
+  <tr><th>层</th><th>色彩</th><th>形状</th><th>粒子</th></tr>
+  <tr><td><strong>V1 色彩</strong> <span class="tag">R4</span></td><td>Lv.1 <span class="nb">蓝 #7AD9FF</span> / Lv.2 <span class="ng">金 #FEFFA9</span> / Lv.3 <span class="np">品红 #FF6BD6</span>（沿用 Phigros AP 金 / FC 蓝）; <code>shadowBlur ≤14</code>（三档配色上限: 常规 10 / <code>glitch</code> 14 / <code>calm</code> 0）霓虹辉光只施于<strong>局部元素</strong>; <strong>背景零铺色</strong> —— 原「整个绘图区叠主色相 5–9% alpha」已按 R4 删除，色相变化改由 <strong>N 层</strong>承载; 两条曲线描边恒为各自语义色</td><td>—</td><td>—</td></tr>
+  <tr><td><strong>V2 形状</strong></td><td>按 Lv 切换色相</td><td>判定线从竖虚线升级为<strong>菱形几何标记</strong>; 冲击环从圆环升级为<strong>三 / 六 / 八边多边形扩张环</strong>; 末点从圆点升级为<strong>旋转菱形</strong>; 故障档加 <strong>glitch 水平切片</strong>（±3px，≤5px 微震）与横向速度线</td><td>—</td></tr>
+  <tr><td><strong>V3 粒子</strong> <span class="tag">R4</span></td><td>粒子本体恒为<strong>轨道语义色</strong>; <span class="np">R4</span>: Lv 色相只给<strong>外圈描边</strong>（N 层白名单），曲线与背景零染色; 亮度 <code>∝ (1 − t/0.55beat)</code></td><td>碎片为<strong>三角 / 四边 / 五边多边形</strong>而非圆点（Beat Saber 方块碎片 / Phigros 几何碎片）</td><td>判定帧同帧从末点喷射 ≤32 个（<strong>两轨合计</strong>）; 三阶段: 爆发期速度 ×4.5、拖尾期 ×1 并减速透明、0.55×beat 后零绘制; 次区每轨 ≤2 个沿曲线缓慢流动的极轻光点（合计 ≤4）</td></tr>
+</table>
+<pre><code>// 图层顺序(I6 / I11, 违反即判失败): 静态背景(零铺色) → 网格/判定线 → 几何环/粒子/扫描/切片
+//                              → N 霓虹元素层(白名单) → 曲线高亮描边(永远最上) → 末点菱形锚 → HUD
+// 生产侧预算(I9): 粒子 ≤32, 碎片 ≤16, shadowBlur ≤14, 微震 ≤5px
+//                 粒子只在 t ≤ 0.55×beat 内活跃; 2880 点长折线的 shadowBlur 只施一次描边,
+//                 不逐点发光; reduced-motion / 克制档 / Δ≈0 时 V 与 N 全关, 背景仍恒静态</code></pre>
+
+<h3>N 霓虹元素层 <span class="tag">R4 新增 · 横切六模板</span></h3>
+<p>用户指出「T1 曲线颜色固定后似乎不适用了」: D1 已把两条曲线描边恒定为各自语义色，R4 又禁用了整块背景铺色，于是<strong>以「给曲线 / 背景染霓虹色」为载体的 T1 失去作用面</strong>。本版把霓虹<strong>从模板降格为可复用的横切视觉层 N</strong>: 它不再试图改变曲线颜色，而是给<strong>除曲线外的反馈元素</strong>上色 + 辉光，色相由 <strong>T5 分级联动</strong>决定（<code>lead</code> 等级 → Lv 蓝 / 金 / 品红）。</p>
+<table>
+  <tr><th>作用域</th><th>元素</th><th>约束</th></tr>
+  <tr><td><span class="good">白名单</span></td><td>判定线短亮段（两轨末点 y 附近 ±10px）、扩张环<strong>外圈</strong>、粒子<strong>外圈描边</strong>、末点菱形锚辉光、角落 Lv 徽标、数值光带辉光</td><td>只画局部几何 / 描边; 时长 ≤0.33×beat 回落; 不新增令牌，色值取自同一 Lv 色表</td></tr>
+  <tr><td><span class="bad">黑名单</span></td><td>两条曲线描边（恒 <code>--today-up/down</code>）、绘图区背景、右边缘背景、网格、tooltip、图例、限速虚线</td><td>I10 / I11 反向钉死: 任一帧这些元素颜色与静态基线逐像素一致</td></tr>
+</table>
+<pre><code>// N 层每拍(判定帧 t=0), 与模板正交, 可独立开关:
+lv   = max(level_up, level_dl)                    // T5 分级
+hue  = LvColor(lv)                               // 蓝 / 金 / 品红 —— 联动点
+q    = clamp(1 - t / (0.33 * beat), 0, 1)         // 20 帧内回落, 只作用于局部元素
+// 白名单: 判定线短亮段 / 环外圈 / 粒子外圈 / 锚辉光 / 徽标 / 光带辉光  ← hue
+// 黑名单: 曲线描边 / plot 背景 / 右缘背景 / 网格 / tooltip / 图例       ← 恒定, 零绘制
+// 曲线描边仍由 D1 供色; N 关闭时只保留轨道语义色</code></pre>
+<p class="aside"><strong>与 T5 的联动</strong>: 分级不只是「强度」，还是 N 的<strong>色相源</strong> —— Lv.1 蓝只点判定线、Lv.2 金加环外圈、Lv.3 品红再加粒子外圈与徽标; 因此综合模板 T6 里「这一拍多强」同时由颜色、边数、粒子数三种信号表达，且三者同源不会互相矛盾。</p>
+
+<h3>L1 双轨底座 <span class="tag">R3 新增 · 六个模板共用</span></h3>
+<p>生产侧两条 series 同拍落袋、共用判定帧与 L0 左移 <code>dx</code>，但<strong>数值与反馈状态必须双份独立</strong>。L1 四条约定:</p>
+<table>
+  <tr><th>约定</th><th>内容</th><th>为什么</th></tr>
+  <tr><td><strong>D1 语义色守恒</strong></td><td>两条曲线描边恒用 <code>--today-up</code> / <code>--today-down</code>（换肤随令牌）; Lv 分级色只作用于判定线闪光、扩张环外圈、N 层白名单等<strong>反馈层</strong>（R4: 不含背景）; 粒子按轨道语义色着色</td><td>图例 / tooltip / 限速虚线已建立色义契约，把两线都染成金 / 品红会让用户分不清哪条是上传</td></tr>
+  <tr><td><strong>D2 独立状态机 + 解耦</strong></td><td>每轨独立 <code>prev / target / shown / delta / level / live</code>，各自 Δ 分档、各自插值起点、各自静默; <strong>L0 由窗口滚动驱动，L1 由数据驱动</strong>: 零流量 / Δ≈0 时零装饰，但左移与数值收敛照常执行</td><td>「零变化静默」指零反馈，不是不滚窗口; 混在一起会漏掉最常见的稳态拍</td></tr>
+  <tr><td><strong>D3 主导轨仲裁</strong></td><td><code>lead = argmax(Δ_up, Δ_dl)</code>（优先取非缺口、非静默轨）。三策略: <strong>D3-b 双轨各发半套（默认）</strong> —— 两条曲线都发环 / 粒子，各 ≤16、合计 ≤32，直接回答「只有 1 条有特效」; <strong>D3-a 主导轨发射（更克制）</strong> —— 只由 lead 发全套，从属轨仅描边加亮与小锚点; <strong>D3-c 合流单反馈（最克制）</strong> —— 两轨 y 中点发一次，色取 lead 的 Lv 色</td><td>默认保证两条轨都有可见反馈，同时靠「半套 + 合计上限」避免预算翻倍 / 叠成「第二个谱面」</td></tr>
+  <tr><td><strong>D4 缺口 / 重叠</strong></td><td>单列 <code>null</code> → 该轨断线、不插值、不画锚、零反馈，另一轨全量照常; 两轨末点 y 间距 &lt; 26px 时反馈<strong>按比例缩小但两条轨都保留</strong>（不合并、不取消），各自仍留菱形数据锚</td><td>两条曲线交叉或贴近时两套环会重叠成一团高亮; 缩小比取消更符合「双轨都要有反馈」，也不遮读数</td></tr>
+</table>
+<pre><code>// 每拍(判定帧 t=0), 两轨并行, 共享同一个 dx 与判定线:
+for k in [up, dl]:
+    prev_k   = shown_k                      // 以当前显示值接续, 禁止回跳
+    target_k = 真值 (null 则 live_k = false)
+    delta_k  = |target_k − prev_k| / max(prev_k, 可视下限)
+    level_k  = f(delta_k);  level_k = 0 当 live_k=false / Δ≈0 / 零流量
+    shown_k  = (T2 ? prev + (target − prev)·easeOut(p) : target)   // ≤0.6×beat 收敛
+lead     = argmax(delta_k), 且优先 live / level&gt;0
+fxBudget = 粒子 ≤32 · 碎片 ≤16 · 辉光 ≤3 次   // 全部为「两轨合计」, 非每轨
+// 图层: 静态背景 → 网格/判定线 → 反馈(D3 仲裁, 环/粒子按轨道语义色) + N 层(Lv 色外圈) → 两曲线描边(各自语义色, 最上) → 双锚点</code></pre>
+<p class="aside"><strong>数值中间态（A）与装饰反馈（B）在 L1 里分道</strong>: T2 的末点插值光带<strong>两轨都必须画</strong>（这是读数过渡，不占 I9 装饰预算）; 粒子 / 环 / 扫描属于装饰反馈，才走 D3 仲裁。这样既不会漏掉上传通道，也不会把画面翻倍。</p>
+
+<h3>横向装饰线条: 联动定强度, 伪随机定长相 <span class="tag">R6 新增 · 六模板共用</span></h3>
+<p>故障类表现里有两种横向线条 —— <strong>撕裂切片</strong>（<code>glitchSlices</code>，短横条）与<strong>扫描束梳齿</strong>（细刻线）。R5 及以前两者都是常量几何: 切片 4 条 y 恒按 <code>(i+1)/5</code> 等分、x 恒在 <code>g.R-66</code>、长度恒 66px、α 恒 0.2、颜色只两色交替，只有 ±3px 抖动; 梳齿 7 条 y 恒等距 <code>0.08+c×0.128</code>、长度 <code>6+(c×7)%13</code> 全由常量 <code>c</code> 算出。结果是<strong>每拍长得完全一样</strong> —— 既读不出强弱，也像贴在右边缘的贴纸。R6 把「强度」和「长相」拆成两件事:</p>
+<table>
+  <tr><th>维度</th><th>由谁决定</th><th>具体</th></tr>
+  <tr><td><strong>强度</strong><br>多少条 / 多长 / 铺多开 / 多亮</td><td><strong>lead 等级 + Δ</strong>（确定性）</td><td>切片 <strong>2 / 3 / 5</strong> 条、梳齿 <strong>3 / 5 / 7</strong> 条按等级; 撕裂带中心 = <code>lead</code> 轨末点 y，总带宽 <code>= 2 × (0.08 + 0.30 × min(1, Δ/0.5)) × 绘图高</code>（Δ 小 ≈33px，末点旁一道裂纹; Δ 大 ≈155px，整片被拉开）; 切片长度 10–80px 随 Δ 拉长; α 按等级 0.18 / 0.26 / 0.34</td></tr>
+  <tr><td><strong>长相</strong><br>这一拍具体落在哪</td><td><strong>拍序号的确定性哈希</strong>（伪随机）</td><td><code>hash01(beatIndex, slot)</code> + <strong>分层采样</strong> <code>strat(i,n,r) = (i+r)/n</code> —— 第 i 条只能落在自己那一层内，所以<strong>每拍不重复、又不会聚成一堆或飞出带外</strong>; 同一拍内几何逐像素冻结（只在判定帧重算）</td></tr>
+  <tr><td><strong>色义</strong></td><td><strong>故障色为主，语义色为辅</strong></td><td>颜色池 = <code>Lv 色</code> / 品红 / <code>lead 语义色</code>，约 45% / 35% / 20%。<span class="bad">不能反过来</span>: 切片锚在 <code>lead</code> 曲线旁，若以语义色为主调就会与曲线<strong>同色而隐身</strong>（T6 实测 Lv.2 几乎看不见，与 R4「霓虹靠染曲线承载」是同类错误）; I10 约束的是<strong>读数层</strong>（曲线描边 / 图例 / tooltip / 限速虚线），装饰层用 Lv 色与品红本就在 R4 的 N 层白名单内</td></tr>
+  <tr><td><strong>端点参差</strong></td><td><strong>拍序号伪随机</strong></td><td>右端额外留 0–18px 缩进 —— 否则所有切片右端齐平判定线，读起来是「一排信号柱」而不是撕裂; <code>fixed</code> 对照档把缩进置 0 以完整复现 R5 的平齐观感</td></tr>
+</table>
+<p class="aside"><strong>为什么默认不用纯随机</strong>: <code>Math.random</code> 会让每拍位置在整条带内乱跳，视觉上等价于「噪点闪」—— 正是 <code>drawer-switch-flicker.md</code> 里记到同族第九处的那类问题; 而且<strong>不可复现</strong>，截图比对与逐帧断言全部失效。所以纯随机只作<strong>对照档</strong>（<code>sTear = random</code>）并在导出里标注 <code>NOT reproducible</code>，默认走 <code>linked</code>。同理保留 <code>fixed</code> 档完整复现 R5 的常量几何，供直接对比升级前后。</p>
+
+<h3>六个模板（同一节奏底座 + 同一 L0 + 同一 L1 + 同一视觉引擎 V + 同一 N 层）<span class="tag">R8: 只交付 T6</span></h3>
+<p><span class="np">R8 交付口径</span>: 下表<strong>六项全部保留</strong>，但<strong>只有 T6 进生产</strong>。T1–T5 的地位从「并列候选」改为「<strong>T6 的构成要素 / 参考实现</strong>」: T2 是数值插值层、T3 是粒子层、T4 是扫描束层、T5 是分级（驱动 N 色相与边数）、T1 是 N 层的纯展示形态 —— 它们各自的观感仍可在 §04 单独切出来对比，但<strong>不单独接线、不单独守阵、不单独发版</strong>。理由与保留代价见 §05.8。</p>
+<table>
+  <tr><th>模板</th><th>L0 之上的帧间过渡机制</th><th>色彩 · 形状 · 粒子（R2）</th><th>读数滞后</th><th>风险 / 音游参照</th></tr>
+  <tr><td><strong>T1 霓虹元素层</strong> <span class="tag">R4 重定义</span></td><td>左移由 L0 完成; 两轨真值立即落地，<strong>曲线颜色不再改变</strong>; 只在判定帧给按 D3 仲裁的双轨六边环 + 判定线短亮段 + 锚点辉光</td><td><strong>N 层的纯展示形态</strong>: Lv 色只落在环外圈 / 判定线 / 锚辉光 / 徽标，<strong>背景零铺色</strong>; 零粒子、零插值、读数零滞后</td><td>否</td><td><span class="good">最低</span> / Phigros 判读闪光 Lv.1; 曲线语义色固定后仍成立</td></tr>
+  <tr><td><strong>T2 光带爬升</strong></td><td>新桶随 L0 滑入的同时，末点从旧值 ease-out 缓动到真值 + 拖尾光带（<strong>A 的直接实现</strong>）</td><td>沿曲线的<strong>渐变流动光带</strong> + 辉光描边 + 旋转菱形末点 + 少量拖尾粒子</td><td>≤ 0.6 × beat</td><td><span class="wr">中</span>（需守 I4）/ Cytus 音符升起 / Hold 光带</td></tr>
+  <tr><td><strong>T3 棱镜碎裂</strong> <span class="np">替换原残影</span></td><td>真值立即落地; 判定帧在<strong>末点局部</strong>炸开几何碎片 + 多边形冲击环; <strong>不画整条曲线残影</strong></td><td>三角 / 四边 / 五边碎片飞散（≤32）+ 快速扩张八边环 + Lv.3 叠 glitch 切片; 判定帧同帧最亮</td><td>否</td><td><span class="wr">中高</span>（粒子预算）/ Phigros「炸开的粒子」· Beat Saber 碎片 · Muse Dash 三层同帧</td></tr>
+  <tr><td><strong>T4 故障扫描</strong> <span class="tag">R5 重做束 / R7 收行程</span></td><td>真值立即落地; <strong>相位 A（0–0.12beat）</strong>一道细束从右侧留白滑入判定线（1.2 格行程，0.12beat 内抵达，与冲击窗同长）; <strong>相位 B（0.18–0.45beat）</strong>亮束在判定线衰减，同时一条 α≤0.20 的回声<strong>只擦过判定线右侧 100–200px</strong>（按距离淡出、到点硬停，不再横穿全幅）+ 按轨收缩多边形环</td><td><strong>亚像素 1px 硬核</strong> + <strong>2.5/5/10/16/24/34px 六层 Lv 晕</strong>（低 alpha 叠层逼近高斯，纵向按两轨末点 y 包络起落）+ <strong>双侧 ±1.6px 青/品红色散</strong>（仅前 0.5beat）+ <strong>5 段非对称彗尾</strong>（只在来向拖）+ <strong>3/5/7 条梳齿（随 <code>lead</code> 等级，R6）</strong>; 亮束不横穿数据、零整块 <code>fillRect</code>; glitch 水平切片 ±3px</td><td>否</td><td><span class="wr">中</span>（逐帧 23 指令）/ Phigros 电子核章节故障艺术 · 音游扫描线; 束体本身不压谱面</td></tr>
+  <tr><td><strong>T5 棱镜分级</strong></td><td>按 Δ 分 Lv.1/2/3 给不同强度反馈 + 角落速率数字滚动</td><td>Lv 决定<strong>色相 + 多边形边数(3/6/8) + 粒子数 + 是否局部霓虹加倍 / 微震</strong>; <span class="np">R4</span>: 色相同时是 <strong>N 层</strong>的色相源（T6 内置联动），横切维度，可叠加到任一模板</td><td>否（数字仅装饰）</td><td><span class="wr">中</span>（需守不遮挡）/ Combo 计数 · Perfect 金 Good 蓝</td></tr>
+  <tr><td><strong>T6 综合 · 霓虹光带</strong> <span class="tag">R4 新增 / R5 并入 T4</span></td><td><strong>T2 光带爬升</strong>: 两列各自 ease-out 插值 + 渐变光带（A 的双轨实现）; <strong>T4 扫描束</strong>同一道精致束（强度 ×0.78、双轨共享）滑入判定线 + 越线 100–200px 内淡出的回声，Lv.2 起叠 glitch 水平切片; 左移仍由 L0 完成</td><td><strong>T3 粒子</strong>（合计 ≤32 的多边形碎片）+ <strong>T5 分级</strong>（lead 等级 → 环边数 3/6/8 · 粒子数 · <strong>N 层色相</strong> · 扫描束色相）+ <strong>T1 霓虹</strong>（只染环外圈 / 粒子外圈 / 判定线短亮段 / 锚辉光 / 角落 Lv 徽标，<strong>绝不染曲线</strong>）; 背景全程静态</td><td>≤ 0.6 × beat（两轨各自）</td><td><span class="wr">中高</span>（五层叠加需守 I9 合计预算）/ 音游「判定闪光 + 扫描线 + 粒子 + Combo 分级」同帧多层; <strong>R8: 唯一交付形态</strong></td></tr>
+</table>
+<p>六者共享 I1–I11、同一判定帧冲击、同一 L0 左移、同一 L1 双轨、同一视觉引擎 V 与同一<strong>可开关的 N 霓虹层</strong>; <strong>T2 是数值插值（A）的直接实现，T6 是 T2 + T3 + T4 + T5 + T1 的组合实现，其余是 B 的不同表现</strong>。拍板可单选一个作为主表现，也可叠加 T5 分级作为横切维度（T6 已内置）。Q2 排除的仍是 L0-c 谱面式横移，<strong>不再排除视口一格的平滑过渡</strong>（R1 修正）。配色档「克制」用于与初版逐帧对比，不是默认交付形态; <span class="np">R4</span>: 任意配色档下背景与右边缘恒为同一静态色。</p>
+
+<p><span class="np">R3 双轨表现</span>: 当时五个模板全部改为双轨运行 —— T1 默认双轨各自六边环（各半套）、T2 <strong>两列分别插值</strong>并各画一条渐变光带、T3 碎片按轨道语义色分批、T4 扫描束<strong>整图只画一道</strong>（双轨共享同一 L0 位移与同一道束）而收缩环按轨、T5 分级取 <code>lead</code> 的等级决定 Lv 色与多边形边数。两条曲线恒以各自语义色重绘在最上层; 「哪条轨在动」由轨道色表达，「这一拍多强」由 Lv 色表达，两种信息不互相覆盖。<span class="np">R4</span>: 六模板全部按双轨运行，T1 / T6 的 N 层色相取 <code>lead</code> 等级但只染非曲线元素，两轨描边仍各自语义色。</p>
+<h3>落地形态（R8: 图区右键 + 独立数值面板）</h3>
+<ul>
+  <li><strong>入口: 图宿主上挂独立 <code>contextmenu</code></strong> <span class="tag">R8 改</span>: <code>preventDefault + stopPropagation</code> 拦住冒泡到 <code>drawer.html:66</code> 的 <code>@contextmenu.prevent</code>，<strong>不改 <code>menu.js:223</code> 的早退判据</strong> —— 改了会让整片正文右键都弹出「只有一个模板选项」的半残菜单，并撞 <code>e2e/drawer-merge.spec.mjs:236</code> 的 <code>.ctx-menu</code> strict-mode 计数。<span class="bad">（R8 更正 R0–R7 的「复用 drawerMenu 空位」结论: 那个空位不能填，填了就是半残菜单）</span></li>
+  <li><strong>面板: 非模态锚定浮层 <code>.fx-panel</code></strong> <span class="tag">R8</span>: 320px 固定宽、贴图右缘、<code>overlay_fit</code> 钳位; <strong>不是 <code>.ctx-menu</code>、不是 <code>aq-modal</code>、不是抽屉二级页</strong> —— 调参必须边调边看，模态有遮罩会盖住图、二级页会替换 <code>.qb-chart-host</code> 直接把图销毁。模板分片新增 <code>shared/tpl/fx-panel.html</code>，状态进 <code>state.js</code> 的 <code>fxPanel</code> / <code>fx</code>，绘制热路径只读 <code>window.AQB_FX_CFG</code>（不逐帧读 Vue）。完整规格见 <strong>§05</strong>。</li>
+  <li><strong>参数落点</strong> <span class="tag">R8</span>: 15 个可调项存 <code>autoqb.ui.qbFx</code> 单键 JSON（四皮肤共用、<strong>不分 global / torrent / group</strong>），<strong>不进 <code>config.qb_traffic</code> schema</strong>、不动 <code>KNOWN_QB_TRAFFIC_KEYS</code> / fail-fast 校验 / 迁移; <strong>采样周期只读</strong>（改它要动后端与数据文件）; <code>prefers-reduced-motion</code> 下总开关置灰强制关，面板不能成为它的后门。字段表 / 契约见 §05.3–§05.6。</li>
+  <li><strong>共享层实现</strong>: 节奏内核 + L0 视口偏置 + 视觉引擎 V + <strong>N 霓虹元素层</strong> + 表现层均进 <code>qb_traffic_chart.js</code>（沿用 <code>draw</code>/<code>drawClear</code> 钩子画同一画布，无第二块 canvas）; 时长读四皮肤既有 <code>--dur*</code> 令牌，色值从四皮肤令牌现读（不写死 hex 到 JS）; 不引 <code>shared/fx/</code>（四皮肤隔离由 <code>test_frontend_fx_wiring</code> 反向钉）。</li>
+  <li><strong>降级</strong>: <code>prefers-reduced-motion: reduce</code> 优先级最高，JS 侧 <code>matchMedia</code> 短路，直接退回原 <code>setData</code> 快路 + 瞬时左移 + <strong>V / N 全关</strong>（单色细线）; 四皮肤全局降级块已存在; <span class="np">R4</span>: 降级前后背景与右边缘同为静态色，不产生色差跳变。</li>
+  <li><strong>双轨色值现读</strong> <span class="tag">R3</span>: V 的反馈色从四皮肤 <code>--today-up</code> / <code>--today-down</code> 现读（与 <code>_qbChartTokens():849-870</code> 同源），不写死 hex、不新增令牌; 图例 <code>.hs-leg</code>、tooltip 双值、限速虚线分色<strong>一行不动</strong>; 双轨状态机存在图记录上（与 <code>u._qbLimits</code> 同款），不进 Vue 全局 state、不进配置 schema。reduced-motion 降级只关动效，<strong>双轨语义色仍保留</strong>（不退回单色）。</li>
+</ul>
+
+<h2><span class="no">§04</span>六个可交互模板（可运行原型）<span class="tag">R8: 仅 T6 进生产</span></h2>
+<p><span class="np">R8 使用说明</span>: 本实验台保留六模板，但<strong>只有 T6 会进生产</strong>，T1–T5 标签带<strong>（参考）</strong>字样、仅用于对比与回归。台内新增<strong>右键面板预演</strong> —— 在画布上点右键，弹出与 §05 规格同款的面板（320px、常显 4 组 8 项 + 高级折叠、预览一拍 / 重置 / 复制），可直接改参数看效果; 面板与下方控件区<strong>双向同步</strong>，改哪里都行。预演用的是与生产一致的字段名与默认值，唯一差别是它调的是本页的模拟画布，不是真实流量图。<strong>原型用自有 clipboard 实现</strong>（文档页没有应用里的 <code>_copyText</code>，生产必须走 <code>commands_send.js:324-345</code> 那条）; <strong>原型比规格多两档对照</strong>（左移策略的「不左移」、数值缓动的「spring」）—— 只用于本页对比「没有 L0 / 有 overshoot」的观感差异，<strong>不进生产字段表</strong>（§05.3 的枚举里没有它们）。</p>
+<p>下面六个模板共用同一份模拟数据、同一节奏公式、<strong>同一 L0 左移底座</strong>、<strong>同一 L1 双轨底座</strong>、<strong>同一视觉引擎 V</strong>与<strong>同一可开关的 N 霓虹元素层</strong>。每拍真实执行 <code>shift + push</code> 一格（与生产定长滚动窗口一致），<strong>上传 / 下载两条曲线各自独立取数、独立 Δ 分级、独立数值插值</strong>，绘制层把两条曲线先一起摆回旧位置再平滑左移一格。<span class="np">R4: 画布背景全程静态、右边缘与绘图区同色（无入场地带底色、无色调呼吸）</span>; 霓虹只作用于判定线短亮段 / 环外圈 / 粒子外圈 / 锚点辉光 / 角落 Lv 徽标等<strong>非曲线元素</strong>，色相由 T5 分级联动决定。<strong>T6 综合模板</strong>把 T2 光带爬升、T3 粒子、<strong>T4 扫描束</strong>、T5 分级、T1 霓虹组合在同一拍里。<span class="np">R5</span>: T4 扫描束重做为<strong>双相位多层束</strong>（1px 硬核 / 六层 Lv 晕 / 双侧色散 / 非对称彗尾 / 3·5·7 条梳齿 / 受控行程回声），纵向亮度按两轨末点包络起落，亮束止于判定线、不横穿数据，全程零 <code>fillRect</code> 铺底。<span class="np">R7</span>: 回声<strong>不再扫过全屏</strong> —— 越过判定线后按距离淡出，100–200px 内归零硬停（整幅扫掠降为对照档）。装饰层按 <span class="nb">霓虹</span> / <span class="wr">克制</span> / <span class="np">故障</span> 三档可切换; <strong>双轨策略</strong>默认「双轨各发半套」让两条曲线都有可见反馈; <strong>双轨场景</strong>可复现下载飙升、上传静默、单列缺口、零流量等边界。粒子密度与冲击强度可调; <strong>横向线条</strong>可在「Δ/lead 联动 + 伪随机（默认）/ 纯随机（对照）/ 固定同形（R5 旧观感 · 对照）」三档间切换，<strong>竖向扫描行程</strong>可在「随宽度 100–200px（默认）/ 固定 100 / 150 / 200px / 整幅（对照）」间切换，直接对比三种取向的观感差异。<strong>动效时长按真实毫秒渲染</strong>; 为便于观察，两拍之间的间隔做了演示压缩（面板实时标出真实值与演示值）。</p>
+
+<div class="lab">
+  <div class="lab-hd">
+    <span class="ttl">节拍动效实验台 · 静态背景 + L0 + L1 + V + N + 六模板</span>
+    <span class="mini">单文件内联 Canvas · 无外链 · 不写本地存储</span>
+  </div>
+  <div class="tabs" id="tabs">
+    <button data-t="pulse">T1 霓虹元素层<i class="ref">参考</i></button>
+    <button data-t="rise">T2 光带爬升<i class="ref">参考</i></button>
+    <button data-t="shatter">T3 棱镜碎裂<i class="ref">参考</i></button>
+    <button data-t="scan">T4 故障扫描<i class="ref">参考</i></button>
+    <button data-t="combo">T5 棱镜分级<i class="ref">参考</i></button>
+    <button data-t="fusion" class="on">T6 综合 · 霓虹光带<i class="ref ship">交付</i></button>
+  </div>
+  <div class="note" id="note"></div>
+  <div class="stage" id="stage">
+  <canvas id="cv"></canvas>
+  <!-- R8: 右键数值面板预演（与 §05 规格同款：非模态 / 320px / 常显 4 组 8 项 / 高级折叠 / 预览一拍 / Alt 穿透） -->
+  <div class="fxp" id="fxp" hidden>
+    <div class="fxp-hd"><span class="t">动效数值</span><button class="fxp-x" id="fxpX" title="关闭">×</button></div>
+    <div class="fxp-bd">
+      <div class="fxp-stat" id="fxpStat">采样 <b>3.00 s</b> · beat <b>1000 ms</b> · 上次真实拍 <b>—</b></div>
+      <label class="fxp-sw"><input type="checkbox" id="fxpOn" checked>启用动效</label>
+      <div class="fxp-g first">节奏</div>
+      <div class="fxp-row"><label for="fxpImpact">冲击强度</label><input type="range" id="fxpImpact" min="0" max="100" step="1" value="70"><span class="v" id="fxpImpactV">70%</span></div>
+      <div class="fxp-g">视觉</div>
+      <div class="fxp-row"><label>配色档</label><select id="fxpPal"><option value="neon">霓虹</option><option value="calm">克制</option><option value="glitch">故障</option></select></div>
+      <div class="fxp-row"><label for="fxpPar">粒子密度</label><input type="range" id="fxpPar" min="0" max="100" step="5" value="70"><span class="v" id="fxpParV">70%</span></div>
+      <label class="fxp-chk"><input type="checkbox" id="fxpNeon" checked>霓虹元素层 N（T1）</label>
+      <label class="fxp-chk"><input type="checkbox" id="fxpTail" checked>次区装饰</label>
+      <div class="fxp-g">位移</div>
+      <div class="fxp-row"><label>左移策略</label><select id="fxpShift"><option value="smooth">平滑滑入一格</option><option value="instant">瞬时左移</option><option value="off">不左移（对照）</option></select></div>
+      <div class="fxp-row"><label for="fxpRatio">收敛比例</label><input type="range" id="fxpRatio" min="20" max="100" step="5" value="60"><span class="v" id="fxpRatioV">60%</span></div>
+      <div class="fxp-g">双轨</div>
+      <div class="fxp-row"><label>双轨策略</label><select id="fxpDual"><option value="both">双轨各发半套</option><option value="lead">主导轨发射</option><option value="merge">合流单反馈</option></select></div>
+      <details class="fxp-adv"><summary>高级 · T6 分层与诊断</summary>
+        <div class="fxp-row"><label>数值缓动</label><select id="fxpEase"><option value="out">ease-out</option><option value="linear">linear</option><option value="spring">spring（仅装饰）</option></select></div>
+        <label class="fxp-chk"><input type="checkbox" id="fxpBand" checked>T2 光带</label>
+        <label class="fxp-chk"><input type="checkbox" id="fxpParts" checked>T3 粒子</label>
+        <label class="fxp-chk"><input type="checkbox" id="fxpScan" checked>T4 扫描束</label>
+        <label class="fxp-chk"><input type="checkbox" id="fxpGrade" checked>T5 分级 → N 色相</label>
+        <div class="fxp-row"><label>横向线条</label><select id="fxpTear"><option value="linked">联动 + 伪随机</option><option value="random">纯随机（对照）</option><option value="fixed">固定同形（R5）</option></select></div>
+        <div class="fxp-row"><label>竖向扫描行程</label><select id="fxpEcho"><option value="auto">随宽度 100–200px</option><option value="100">固定 100px</option><option value="150">固定 150px</option><option value="200">固定 200px</option><option value="full">整幅（对照 · 不交付）</option></select></div>
+      </details>
+    </div>
+    <div class="fxp-ft"><button id="fxpPreview">预览一拍</button><button id="fxpReset">重置为默认</button><button id="fxpCfg">复制配置</button></div>
+    <div class="fxp-ro">只读：<b>采样周期</b>涉及后端与数据文件；按住 <b>Alt</b> 可临时看穿面板。</div>
+  </div>
+  </div>
+  <div class="tl" id="tl">
+    <div class="tl-seg s1" style="width:7.2%">冲击 / 粒子</div>
+    <div class="tl-seg s2" style="width:28.8%">收敛 / 左移</div>
+    <div class="tl-seg s3" style="width:24%">余辉</div>
+    <div class="tl-seg s4" style="width:40%">次区装饰（不改读数）</div>
+    <div class="tl-cursor" id="cursor"></div>
+  </div>
+  <div class="hud" id="hud"></div>
+  <div class="ctl">
+    <label>采样周期 period <span class="val" id="vPeriod"></span><input type="range" id="rPeriod" min="0" max="100" step="1" value="12"></label>
+    <label>配色档 <select id="sPalette"><option value="neon">霓虹（默认 · 大胆）</option><option value="calm">克制（初版对照）</option><option value="glitch">故障（青/品红/黄）</option></select></label>
+    <label>横向线条 <select id="sTear"><option value="linked">Δ/lead 联动 + 伪随机（默认）</option><option value="random">纯随机（每拍不同 · 对照）</option><option value="fixed">固定同形（R5 旧观感 · 对照）</option></select></label>
+    <label>竖向扫描行程 <select id="sEcho"><option value="auto">随绘图宽 100–200px（默认 · 越线即淡出）</option><option value="100">固定 100px</option><option value="150">固定 150px</option><option value="200">固定 200px</option><option value="full">整幅扫掠（R5 旧观感 · 对照）</option></select></label>
+    <label>粒子密度 <span class="val" id="vParticles"></span><input type="range" id="rParticles" min="0" max="100" step="5" value="70"></label>
+    <label>左移策略 <select id="sShift"><option value="smooth">平滑滑入一格（L0-a 默认）</option><option value="instant">瞬时左移（现状基线）</option><option value="off">不左移 · 原地变形（对照）</option></select></label>
+    <label>左移收敛 <span class="val" id="vShift"></span><input type="range" id="rShift" min="20" max="100" step="5" value="60"></label>
+    <label>冲击强度 <span class="val" id="vImpact"></span><input type="range" id="rImpact" min="0" max="100" step="1" value="70"></label>
+    <label>数据变化幅度 Δ <span class="val" id="vAmp"></span><input type="range" id="rAmp" min="0" max="100" step="1" value="45"></label>
+    <label>数值缓动 <select id="sEase"><option value="out">ease-out cubic（禁 overshoot）</option><option value="linear">linear</option><option value="spring">spring（仅装饰层）</option></select></label>
+    <label>双轨策略 <select id="sDual"><option value="both">双轨各发半套（默认 · 合计 ≤32）</option><option value="lead">主导轨发射（更克制 · 从属轨只加亮）</option><option value="merge">合流单反馈（两轨中点 · Lv 色）</option></select></label>
+    <label>双轨场景 <select id="sScene"><option value="link">常态联动（两轨独立 Δ）</option><option value="dlSpike">下载飙升 → Lv.3</option><option value="upSpike">上传飙升 → Lv.3</option><option value="upFlat">上传零变化 → 该轨静默</option><option value="dlGap">下载缺口 null → 该轨断线</option><option value="zero">零流量 → 零装饰（仅左移）</option></select></label>
+    <label><input type="checkbox" id="cTail" checked>次区装饰（默认开，可调关）</label>
+    <label><input type="checkbox" id="cNeon" checked>霓虹元素层 N（仅非曲线元素 · Lv 联动色相）</label>
+    <label><input type="checkbox" id="cReduce">模拟 prefers-reduced-motion</label>
+  </div>
+  <div class="bar">
+    <button id="bOnce">触发单拍</button>
+    <button id="bPlay">连续播放</button>
+    <button id="bReset">重置</button>
+    <button id="bCfg">生成配置片段</button>
+  </div>
+  <textarea class="out" id="out" readonly spellcheck="false">点「生成配置片段」导出当前参数。</textarea>
+</div>
+<p class="mini">实验台是<strong>节奏与表现原型</strong>，不是生产渲染器: 曲线为模拟数据（40 点定长<strong>滚动</strong>窗口 × 2 轨，每拍 <code>shift + push</code> 一格），纵轴瞬时定档，仅尾部点参与数值插值; 左移由绘制层像素偏置 <code>dx</code> 表示，生产侧对应 <code>u.setScale('x', …)</code> 的时间偏置 <code>dx_t = (1−ease(p)) × interval</code>（L0-a），且 data / tooltip 恒为真窗口。<strong>两轨描边色模拟四皮肤 <code>--today-up</code> / <code>--today-down</code></strong>; <span class="np">R4</span>: <strong>画布背景由 CSS <code>#0d141a</code> 恒定提供，绘图区与右边缘同色，脚本不对背景做任何整块 <code>fillRect</code></strong>; Lv 色经 N 层只作用于判定线短亮段 / 环外圈 / 粒子外圈 / 锚辉光 / 徽标，绝不替代曲线语义色。装饰严格按 I6 / I11 图层顺序绘制、按 I9 <strong>双轨合计</strong>限额; <span class="np">R7</span>: 竖扫描只保留「越出判定线后一段距离内淡出」的擦掠，<strong>越线 100–200px 处 alpha 归零并停止绘制</strong>，不横穿绘图区; 面板的「竖向扫描行程」可切 <code>auto</code> / <code>100</code> / <code>150</code> / <code>200</code> / <code>full</code>（后者是 R5 的整幅旧观感，仅作对照）。「克制」档等价初版单色细线，可直接对比升级前后的观感差异。缺口场景该轨末点不画，等价生产 <code>spanGaps:false</code>。</p>
+
+<h2><span class="no">§05</span>数值调整页（右键面板）<span class="tag">R8 新增 · 生产只交付此面板 + T6</span></h2>
+<p>R8 把「调参」从计划文档的实验台<strong>搬进产品</strong>: 流量图上右键出一张独立面板，面板只调 <strong>T6 综合模板</strong>的数值，其余五个模板降级为<strong>参考实现</strong>（留在 §04 供对比，不进生产）。这一节是面板的完整规格 —— 实施时按此写，不再二次设计。</p>
+
+<h3>5.1 形态与定位</h3>
+<table>
+  <tr><th>项</th><th>规格</th><th>理由</th></tr>
+  <tr><td>载体</td><td><strong>非模态锚定浮层</strong>（<code>.fx-panel</code>），不是 <code>aq-modal</code>、不是抽屉二级页、不是新 URL</td><td>调参必须<strong>边调边看</strong>: 模态有遮罩会盖住图，二级页会替换 <code>.qb-chart-host</code> 直接把图销毁</td></tr>
+  <tr><td>尺寸</td><td>宽 <strong>320px</strong> 固定，高度自适应（<strong>高级折叠态实测 ≈500px</strong>，全展开自然内容高 ≈640px（§04 预演为免撑破演示画布钳到 522px + 内部滚动，属演练简化）; 生产面板正文区 <code>max-height</code> + 内部滚动兜底），<strong>不可拖拽 resize</strong></td><td>320px 是「够放 15 项、又不到图宽一半」的折中; 它会覆盖图右侧约 1/3（含判定线），所以配一条<strong>按住 <code>Alt</code> 临时透明</strong>（opacity 0.22 + <code>pointer-events:none</code>），松手即恢复 —— 想完全不遮图只能把面板挪到图外，抽屉全宽时没有那块空间</td></tr>
+  <tr><td>定位</td><td>首次出现在<strong>右键点右侧、图右缘内缩 8px</strong>处，垂直方向以点击 y 为锚、超出视口用 <code>overlay_fit.fitInViewport()</code> 钳位（<code>EDGE=8</code>）</td><td>复用 <code>columns_menu.js:17-27</code>（<code>FIT.clampAxis</code>）的锚定范式，不发明第二套定位</td></tr>
+  <tr><td>跟随</td><td>抽屉高度变化 / 窗口 resize / <strong>页面滚动</strong>时<strong>节流重钳位</strong>（≤60ms 一次），<strong>不做逐帧跟随</strong></td><td>抽屉入场 rAF 逐帧改高度（<code>drawer_general.js:268-291</code>），逐帧跟随会与 <code>ResizeObserver</code> → <code>u.setSize</code> 连锁叠成抖动</td></tr>
+  <tr><td>拦截</td><td>面板<strong>根节点</strong>必须带 <code>@click.stop</code>（与 <code>@keydown.esc.stop.prevent</code>）</td><td><code>lifecycle.js:78-99</code> 的 <code>_onDocClick</code> 绑在 <code>window</code> 冒泡阶段且<strong>无 <code>contains</code> 判断</strong>，无条件收所有浮层; 仓库既有浮层（<code>overlays.html:22</code> <code>.err-panel</code>、<code>popovers.html:259</code>）全靠根节点 <code>@click.stop</code> 挡住。漏了它 = 拖一下滑杆面板就关，唯一交付物直接不可用</td></tr>
+  <tr><td>关闭</td><td>点面板外空白 / <code>Esc</code> / 面板右上 × / 图滚出视口 / 切页签或换 kind</td><td>前三条走 <code>lifecycle.js</code> 现成收层与退栈; 后两条<strong>不能挂 <code>_qbChartDestroy</code></strong>（换肤也走 destroy→build，会把面板误关）: 用 <code>IntersectionObserver</code> 观察 <code>.qb-chart-host</code>，<code>ratio === 0</code> 即关 —— 一条机制同时覆盖「滚出视口」「切页签」「抽屉关闭」; <strong>系统明暗变化</strong>（<code>theme.js:46-58</code> 派发 <code>autoqb:themechange</code> → destroy+build，宿主不重挂）不触发它，面板保留。注意: 从<strong>主题菜单点选</strong>换肤属「点面板外」，会按点外收层规则关掉（<code>theme.js:91-103</code> 未 <code>stopPropagation</code>）—— 这不算误关</td></tr>
+  <tr><td>自身动效</td><td><strong>零位移</strong>，仅开合 120ms opacity; <code>prefers-reduced-motion</code> 下连 opacity 也去掉</td><td>面板与曲线抢注意力会污染「节拍感」，且它是设置件不是内容件</td></tr>
+  <tr><td>配色</td><td>只用中性令牌（surface / border / text / muted）+ 中性 accent 作滑杆色; <strong>禁止用 <code>--today-up</code> / <code>--today-down</code></strong></td><td>那两个色是上传 / 下载的<strong>语义色</strong>，冒用到设置件上会让用户误以为滑块调的是某条曲线</td></tr>
+</table>
+
+<h3>5.2 入口: 图区右键（独立处理器）</h3>
+<p>流量页签当前右键<strong>根本不弹菜单</strong>: <code>menu.js:217 openDrawerMenu</code> 在 <code>:223</code> 因 <code>choices(tab).length &lt; 2</code> 早退（注释原话「单选项菜单 = 半残 UI」）。三种挂法里选<strong>在图宿主上挂独立处理器</strong>:</p>
+<pre><code><span class="cm">// qb_traffic_chart.js · _qbChartBuild 内, 与 setData 快路同生命周期</span>
+host.addEventListener('contextmenu', function (ev) {
+  ev.preventDefault();
+  ev.stopPropagation();          <span class="cm">// 拦住冒泡到 drawer.html:66 的 @contextmenu.prevent</span>
+  openFxPanel(ev.clientX, ev.clientY);   <span class="cm">// 总开关关掉也照开: 否则用户失去重新打开的入口(§05.6)</span>
+});</code></pre>
+<ul>
+  <li><strong>不碰 <code>openDrawerMenu</code></strong>: 改早退条件会让整片正文右键都弹出「只有一个模板选项」的菜单，直接违 <code>drawer-merge.spec.mjs</code> 里对 <code>.ctx-menu</code> 的 strict-mode 计数预期。</li>
+  <li><strong>不加键盘入口</strong>: 图宿主不是可聚焦元素，硬加要动 <code>tabindex</code> 与焦点环，收益为零。</li>
+  <li><strong>一处入口收窄（如实记录）</strong>: 开 <code>drawerMerge</code> 时，原来在流量页签右键会走 <code>menu.js:223</code> 的 <code>&amp;&amp; !this.dtMenuMergeOn</code> 分支弹出「合并」项; 新监听器 <code>stopPropagation</code> 后图上右键不再到那里。合并开关仍可由<strong>页签栏右键</strong>（<code>drawer.html:42</code>）触达，功能未丢，但这是本次要接受的交互变化。</li>
+  <li><strong>不新增第五个 <code>.ctx-menu</code></strong>: 面板不是菜单（无 <code>role="menu"</code>、无方向键导航），命名与样式都与 <code>.ctx-menu</code> 分开，避免 <code>ctx-menu</code> 选择器统计类测试把面板算进去。</li>
+</ul>
+
+<h3>5.3 面板结构与字段表</h3>
+<p>模板分片新增 <code>shared/tpl/fx-panel.html</code>（与 <code>ctx-menus.html</code> 同级注册，四皮肤共享），状态进 <code>state.js</code>: <code>fxPanel: { visible: false, x: 0, y: 0 }</code> + <code>fx: { …默认值 }</code>。绘制热路径<strong>不读 Vue</strong> —— <code>state.js</code> 的 watcher 把 <code>fx</code> 同步到普通对象 <code>window.AQB_FX_CFG</code>，<code>draw()</code> 只读它。</p>
+<table>
+  <tr><th>组</th><th>字段（store 键）</th><th>控件</th><th>默认</th><th>生效方式</th></tr>
+  <tr><td>节奏</td><td><code>impact</code></td><td>range 0–100（<strong>显示</strong>）→ 存储 <code>0–1</code></td><td><code>70</code></td><td>装饰幅度; 下一帧起用新值，不回跳</td></tr>
+  <tr><td rowspan="2">视觉</td><td><code>palette</code></td><td>select <code>neon</code> / <code>calm</code> / <code>glitch</code></td><td><code>neon</code></td><td>立即; 粒子池重建</td></tr>
+  <tr><td><code>particles</code></td><td>range 0–100 step 5（显示）→ 存储 <code>0–1</code></td><td><code>70</code></td><td>立即; 重算 <code>partCap()</code> 并重建粒子池</td></tr>
+  <tr><td rowspan="2">视觉<br>（续）</td><td><code>neon</code></td><td>checkbox</td><td><code>true</code></td><td>立即; N 层整体开关（<strong>T1 层</strong>）</td></tr>
+  <tr><td><code>tail</code></td><td>checkbox</td><td><code>true</code></td><td>立即; 次区装饰（不改读数）</td></tr>
+  <tr><td rowspan="2">位移</td><td><code>shift</code></td><td>select <code>smooth</code> / <code>instant</code></td><td><code>smooth</code></td><td>下一拍起; <code>instant</code> = 退回原 <code>setData</code> 快路的瞬时跳变（对照）</td></tr>
+  <tr><td><code>shiftRatio</code></td><td>range 20–100 step 5（显示）→ 存储 <code>0.2–1</code></td><td><code>60</code></td><td>下一拍起; 左移收敛占 beat 的比例</td></tr>
+  <tr><td>双轨</td><td><code>dual</code></td><td>select <code>both</code> / <code>lead</code> / <code>merge</code></td><td><code>both</code></td><td>下一拍起; 关掉「双轨各发半套」会让一条曲线静默</td></tr>
+  <tr><td>顶部</td><td><code>enabled</code></td><td>checkbox（常显第一行）</td><td><code>true</code></td><td>立即; 总开关，与图区右键勾选项<strong>同一字段、双向同步</strong></td></tr>
+  <tr><td rowspan="5">高级<br>（默认折叠）</td><td><code>ease</code></td><td>select <code>out</code> / <code>linear</code></td><td><code>out</code></td><td>数值插值曲线; 当前拍内不换式（避免中途换曲线跳变），下一拍起用。放高级是因为绝大多数人不会改</td></tr>
+  <tr><td><code>layers.band</code></td><td>checkbox</td><td><code>true</code></td><td>T6 的 <strong>T2 光带</strong>层</td></tr>
+  <tr><td><code>layers.particles</code></td><td>checkbox</td><td><code>true</code></td><td>T6 的 <strong>T3 粒子</strong>层</td></tr>
+  <tr><td><code>layers.scan</code></td><td>checkbox</td><td><code>true</code></td><td>T6 的 <strong>T4 扫描束</strong>层</td></tr>
+  <tr><td><code>layers.grade</code></td><td>checkbox</td><td><code>true</code></td><td>T6 的 <strong>T5 分级 → N 色相</strong>层</td></tr>
+  <tr><td rowspan="2">高级<br>（续）</td><td><code>tear</code></td><td>select <code>linked</code> / <code>random</code> / <code>fixed</code></td><td><code>linked</code></td><td>横向故障线条; <code>random</code> 标「不可复现」、<code>fixed</code> 是 R5 旧观感对照</td></tr>
+  <tr><td><code>echoSpan</code></td><td>select <code>auto</code> / <code>100</code> / <code>150</code> / <code>200</code> / <code>full</code></td><td><code>auto</code></td><td>竖扫描回声行程; <code>full</code> 标 <span class="bad">NOT FOR SHIP</span>（R5 整幅旧观感，仅对照）</td></tr>
+</table>
+<p><strong>合计 15 个可调项 + 1 个总开关（<code>enabled</code>，常显第一行）+ 2 项只读</strong>。常显区只放 4 组 8 项（节奏 1 + 视觉 4 + 位移 2 + 双轨 1），其余 <strong>7 项收进「高级」折叠</strong>（缓动 + 4 层开关 + 横向线条 + 竖向行程）—— 实测高级折叠态面板约 <strong>500px</strong> 高（见 §04 预演），高于 250px 的演示画布，因此<strong>必然越过图底覆盖时间轴 / 统计栏</strong>，这是浮层语义下的可接受代价，靠「Alt 看穿」与「点外关闭」补。组标题 + hairline 分隔。面板底栏三个按钮: 「预览一拍」「重置为默认」「复制配置片段」。</p>
+
+<h4>不可编辑项（写死只读，不是漏做）</h4>
+<table>
+  <tr><th>项</th><th>展示</th><th>为什么不可编辑</th></tr>
+  <tr><td>采样周期 <code>period</code></td><td><code>采样 3.0 s</code>，只读文本</td><td><strong>改它要动后端与数据文件</strong>（<code>sample_interval_multiplier × main_tick</code> 属 <code>config.qb_traffic</code> 与落盘聚合桶宽），面板只管<strong>观感</strong>，不碰采集。面板不提供任何写入该值的入口。</td></tr>
+  <tr><td>拍长 <code>beat</code></td><td><code>beat 1000 ms</code>，只读文本</td><td>派生量 <code>clamp(period × 0.4, 320, 1000)</code>; 让它可调等于允许突破 I1 的 1s 硬上限</td></tr>
+</table>
+<p class="mini">状态行一行三值: <code>采样 3.0 s · beat 1000 ms · 上次真实拍 4.2 s 前</code>；预览中追加 <code>· 预览中</code>。<code>period</code> 取 <code>_qbPollMs()</code> 实算值（<code>qb_traffic_chart.js:820-826</code>），不是面板自己估的。</p>
+
+<h3>5.4 即时生效与「预览一拍」</h3>
+<p>采样周期合法区间 1.5s–600s: 若参数只在「下一拍真值到达」时生效，<code>multiplier</code> 调到 600s 的用户要等 10 分钟才知道自己拉的是什么。所以: <strong>滑杆即改即用 + 手动预览一拍</strong>。</p>
+<ul>
+  <li><strong>即时</strong>: <code>input</code> 事件写内存并重算派生量（<code>partCap</code> / 行程 / 切片数 / 三档阈值），<strong>当前拍内装饰层下一帧就用新值</strong>; 唯一例外是 <code>ease</code>（当前拍不换式，避免中途换曲线造成位置跳变）。数值插值不回跳、不重排、不重建 uPlot。</li>
+  <li><strong>预览一拍</strong>: 采样 600s 时不必干等。语义六条 ——
+    <ol>
+      <li><strong>不动窗口</strong>: 不 <code>shift</code>、不 <code>push</code>、<code>dx ≡ 0</code>，只跑尾部插值 + 装饰; <code>xs</code> / <code>data</code> 零变化;</li>
+      <li><strong>假 Δ 贴近真实量级</strong>: <code>target = shown ± clamp(0.18 + 0.35 × 粒子密度, 0.10, 0.50)</code>，方向按轨交替 —— <strong>不固定拉满 Lv.3</strong>，否则预览永远最高档，真到低 Δ 时参数对不上;</li>
+      <li><strong>连点重启</strong>: 作废当前预览、从当前显示值重新起一拍，<strong>不排队不叠加</strong>（<code>previewToken++</code> 递增即令旧帧失效）;</li>
+      <li><strong>真值抢占</strong>: 预览期间真实拍到达 → 预览立即作废，真实拍走正常链路（<strong>真值永远优先</strong>）;</li>
+      <li><strong>不写 store</strong>: 预览不产生任何持久化副作用，也不改 <code>shown</code> 以外的真值字段;</li>
+      <li><strong>同预算</strong>: 与真实拍共用 I9 的 ≤28 指令/帧，<strong>不为预览放宽额度</strong>。</li>
+    </ol>
+  </li>
+  <li><strong>不自动循环</strong>: 面板打开期间不自动假拍 —— 会与真实拍撞车，也会让「刚才那次是真是假」不可辨。要看连续效果就连续点，或去 §04 实验台开「连续播放」。</li>
+</ul>
+<pre><code><span class="cm">// 预览拍: 与 nextBeat 同构, 但去掉窗口搬运与 dx</span>
+function _qbPreviewBeat() {
+  var token = ++S.previewToken;
+  KEYS.forEach(function (k) {
+    var c = S.ch[k];
+    c.prev = c.shown;                                  <span class="cm">// 以显示值接续, 禁止回跳</span>
+    var mag = clamp(0.18 + 0.35 * cfg().particles, 0.10, 0.50);
+    c.target = clamp(c.prev + (k === 'dl' ? mag : -mag), 0.06, 0.94);
+    c.delta = Math.abs(c.target - c.prev) / Math.max(c.prev, 0.08);
+    c.level = levelOf(c.delta);
+    c.committed = c.target;                            <span class="cm">// 仅本帧用, 不落 data</span>
+  });
+  S.lead = S.ch.dl.delta &gt;= S.ch.up.delta ? 'dl' : 'up';
+  S.beatStart = performance.now();
+  S.preview = token;                                   <span class="cm">// draw() 见 preview 则 dx = 0</span>
+  S.previewUntil = S.beatStart + cfg().beatMs;
+}</code></pre>
+
+<h3>5.5 持久化契约</h3>
+<p>键 <code>autoqb.ui.qbFx</code>（与 <code>autoqb.ui.qbYAxisGlobal</code> / <code>qbWinGlobal</code> 同族，前缀是 <code>autoqb.</code> 不是 <code>qb.</code>），单键一份 JSON，<strong>四皮肤共用、不分 scope</strong>（global / torrent / group 同一份）:</p>
+<pre><code>{
+  "v": 1,
+  "enabled": true,
+  "impact": 0.7, "ease": "out",
+  "palette": "neon", "particles": 0.7, "neon": true, "tail": true,
+  "shift": "smooth", "shiftRatio": 0.6,
+  "dual": "both", "tear": "linked", "echoSpan": "auto",
+  "layers": { "band": true, "particles": true, "scan": true, "grade": true }
+}</code></pre>
+<ul>
+  <li><strong>为什么不分 scope</strong>: 动效是<strong>个人观感偏好</strong>，不是「这个数据视图该怎么看」; 分三份会让用户遇到「为什么换个图动效不一样」，也让实施多出三套读写与迁移。</li>
+  <li><strong>不进 <code>config.qb_traffic</code></strong>: 不写后端、不动 <code>KNOWN_QB_TRAFFIC_KEYS</code> / fail-fast 校验 / 迁移，不随配置导出。</li>
+  <li><strong>读</strong>: <code>JSON.parse</code> 失败 / 非对象 / <code>v !== 1</code> → <strong>整体回落默认且不清键</strong>（保留原始串供诊断）; 逐字段校验（数值 clamp、枚举白名单、布尔严格 <code>=== true/false</code>），未知键丢弃。</li>
+  <li><strong>写</strong>: 只在用户操作时写（不节流到每帧），<code>try/catch</code> 静默失败（隐私模式 / 配额满不得让调参崩）。</li>
+  <li><strong>落点（属主模块三件套）</strong>: 键常量 + 初值 + 持久化函数放 <code>qb_traffic_chart.js</code>，与现成的 <code>qbWinStoreKey / qbInitialWindow / persistQbWindow</code>（<code>:88-104</code> / <code>:657-661</code>）同款 —— 仓库<strong>没有通用偏好助手</strong>可复用。注意该文件有 node 探针约束（源文件自注 <code>:95</code>、<code>:130</code>: 顶层不得碰 DOM / BOM，电池只给 <code>global.window = {}</code>、无 <code>localStorage</code>），所以 <code>localStorage</code> / <code>matchMedia</code> 一律在函数内惰性取，不在模块顶层求值。</li>
+  <li><strong><code>enabled</code> 只存用户意图</strong>: reduced-motion 只改<strong>有效值</strong> <code>effectiveOn = enabled && !reduce</code>，自动置位<strong>永不回写 store</strong> —— 否则用户手动开过的动效在系统设置恢复后仍回不来; 面板「重置为默认」在 <code>reduce</code> 下只能把 <code>enabled</code> 写回 <code>true</code>（有效值仍为关），不得绕过红线。</li>
+  <li><strong>重置</strong>: 面板「重置为默认」= 写回上表默认值并立即生效，<strong>不删除键</strong>（用户可能只想回到默认，不想让旧值在下次启动时"复活"）。</li>
+  <li><strong>复制配置片段</strong>: 复用既有复制通道 <code>commands_send.js:324-345 _copyText</code>（非安全上下文 <code>navigator.clipboard</code> 不可用 → <code>execCommand</code> 降级 → toast 反馈）; qB WebUI 常走局域网 http，自建 clipboard 调用会静默失败。输出可直接粘进源码默认常量的 JS 片段（<code>var QB_FX_DEFAULTS = { … };</code>），比口头描述可靠; 与 §04 的导出块同一形状，但<strong>只含 15 个字段 + 只读值注释</strong>。</li>
+</ul>
+<p class="aside"><strong>脏值场景</strong>: 旧版本键里若有已删字段（如 <code>scene</code> / <code>amp</code> / <code>tpl</code>），读时静默丢弃、写时自然清除;<code>v</code> 升级时按「缺省即默认」合并，不做逐版本迁移脚本 —— 这是观感偏好，丢一次可接受。</p>
+
+<h3>5.6 只读项、总开关与 reduced-motion 红线</h3>
+<table>
+  <tr><th>场景</th><th>表现</th></tr>
+  <tr><td>正常</td><td>顶部一行只读状态（采样 / beat / 上次真实拍）+ 「启用动效」总开关（默认开）+ 15 个可调项</td></tr>
+  <tr><td>总开关关</td><td>装饰层零绘制、<strong>L0 左移仍执行</strong>（那是数据刷新语义，不是装饰）; 面板其余控件仍可调（值保留，重开即用）; 图区右键仍出面板（否则用户找不到开关）</td></tr>
+  <tr><td>系统 <code>prefers-reduced-motion: reduce</code></td><td>总开关<strong>置灰且强制关</strong>（改的是<strong>有效值</strong>，<code>enabled</code> 字段仍保留用户意图、不被回写），顶部一行说明「系统要求减弱动效，当前不生效」; 其余控件可调但标注不生效、值保留; <strong>面板任何操作都不能把它打开</strong></td></tr>
+  <tr><td>系统设置恢复</td><td><code>matchMedia</code> 的 <code>change</code> 监听恢复; 有效值立即回到 <code>enabled</code> 的用户上次手动值（不是被强制的 <code>false</code>），避免「改完系统设置动效再也回不来」; 判定单点在本模块（内联 <code>matchMedia</code> + <code>change</code> 监听），<strong>不引用 <code>AQB_FX.reduced()</code></strong> —— 它只在 flux 皮肤挂载（<code>shared/fx/fx.js:189</code> 与 <code>flux/index.html:250</code>），三套旧皮肤引用即 <code>ReferenceError</code>，而 <code>test_frontend_fx_wiring</code> 只查 shell 的 <code>link/script</code>、照绿不报</td></tr>
+</table>
+<p class="aside"><strong>为什么不让面板覆盖系统设置</strong>: <code>prefers-reduced-motion</code> 是可访问性红线（I7 已定为「强退」）。设置面板成为绕过它的后门，等于把红线变成建议值。</p>
+
+<h3>5.7 收层与 Esc 登记（七处同步 + 面板根拦截，缺一即漏）</h3>
+<table>
+  <tr><th>登记点</th><th>改动</th></tr>
+  <tr><td><code>lifecycle.js:78-99</code></td><td>点空白收层名单加 <code>fxPanel.visible = false</code>（与 <code>drawerMenu</code> 同组）</td></tr>
+  <tr><td><code>lifecycle.js:105-174</code></td><td>Esc 退栈链，位置<strong>紧跟 <code>drawerMenu</code> 之后</strong>（面板比菜单"重"一层，后开先关）</td></tr>
+  <tr><td><code>dialogs_meta.js:182 escBusy()</code></td><td>注释已写「新增浮层时两处同步」—— 加 <code>fxPanel.visible</code></td></tr>
+  <tr><td><code>shortcuts_engine.js:37 _kbOverlayBusy()</code></td><td>面板打开时不响应单键快捷键（避免输入到滑杆时触发全局动作）。<strong><code>fxPanel.visible</code> 必须追加在这串条件的末尾</strong> —— <code>tests/test_web_shortcuts_drawer.py:161</code> 逐字钉住 <code>this.filePrio.visible || this.historyOpen</code> 的书写序，插在前面直接红</td></tr>
+  <tr><td><code>drawer_general.js:95 closeDrawer</code></td><td>收 <code>drawerMenu</code> 的同一处同步收 <code>fxPanel</code> —— 面板不能比抽屉活得久（否则抽屉关了面板还浮在页面上）</td></tr>
+  <tr><td><code>drawer_general.js:105-114 drawerTab()</code></td><td>切页签时收面板 —— 图宿主被替换，面板会浮在新内容上</td></tr>
+  <tr><td><code>drawer_store.js:355</code></td><td><strong>换 kind</strong>（seed↔traffic）走 <code>openTorrentDrawer</code>，跨目标浮层的既有收口单点是这里（注释即写「与 <code>drawerTab</code> / <code>closeDrawer</code> 同口径」）—— 同处补 <code>fxPanel.visible = false</code>; <code>IntersectionObserver</code> 只在宿主被真拆掉时兜底，若某皮肤用 <code>v-show</code> 保留宿主，光靠 IO 会漏</td></tr>
+</table>
+<ul>
+  <li><strong>方法命名</strong>: 模板触达的处理器<strong>不得带 <code>_</code> 前缀</strong> —— 仓库有前科明文（<code>commands_send.js:347-350</code>: Vue 模板解析不到 <code>_</code> 前缀成员，点按钮恒抛 <code>ReferenceError</code> 且整块渲染失败）。对外用 <code>fxClose / fxPreview / fxReset / fxCopy / fxToggle</code>，模块内部才用 <code>_qb*</code>。</li>
+  <li><strong>宿主监听器防重</strong>: <code>_qbChartBuild</code> 在换肤时会被反复调用而宿主 DOM 跨重建复用，<code>_qbChartDestroy</code>（<code>:987-998</code>）只断 RO / destroy uPlot、不摘 host 监听 → 换肤 N 次后一次右键弹 N 个面板。用 <code>host._qbFxBound</code> 标记幂等绑定（或 <code>{ once: true }</code> + destroy 处摘除）。</li>
+  <li><strong>L0 的最小可见位移</strong>: 24h 窗 ≤2880 点时一格位移 ≈ 绘图宽 / 2880 ≈ <strong>0.4px</strong>，「平滑左移」在长窗下不可见，I8 的「相邻两拍位移 ≤1px」也失去区分力。规则: 单格像素 &lt; <strong>0.75px</strong> 时直接瞬时落地（等同 <code>instant</code>），只在短窗（1m / 10m）播放 L0 过渡。</li>
+</ul>
+<p>另需: <code>state.js</code> 显式建 <code>fxPanel</code> / <code>fx</code> 字段（<strong>undefined 是非响应式盲区</strong>）; <code>state.js:696-698</code> 同款 <code>$nextTick(_menuFitRefit)</code> watcher（对象整体替换触发重钳位，与 <code>drawerMenu</code> 同范式）。</p>
+
+<h3>5.8 交付收敛: 只做 T6</h3>
+<table>
+  <tr><th></th><th>R7 及以前</th><th>R8 起</th></tr>
+  <tr><td>生产交付</td><td>六模板待拍板选一</td><td><strong>只交付 T6 综合模板</strong>（T2 光带 + T3 粒子 + T4 扫描束 + T5 分级 + T1 霓虹）</td></tr>
+  <tr><td>T1–T5</td><td>六个并列候选，各自可单独落地</td><td>降级为 <strong>T6 的构成要素 / 参考实现</strong>: 保留在 §04 可运行，用于对比与回归，<strong>不单独接线</strong></td></tr>
+  <tr><td>实验台</td><td>六模板平铺，模板下拉可切</td><td>保留六模板（设计证据），但标签加 <code>（参考）</code>，默认选中 T6; 顶部注明「仅 T6 进生产」</td></tr>
+  <tr><td>契约 JSON</td><td>六模板并列</td><td><code>templates</code> 保留六项但 T1–T5 标 <code>reference_only: true</code>; 新增 <code>panel</code> 块（字段 / 默认值 / store key / 只读项）</td></tr>
+  <tr><td>实施步骤</td><td>S1–S4 覆盖六模板</td><td>主线只保留 T6; T1–T5 相关条目移入附录「未采纳方案」</td></tr>
+</table>
+<p><strong>为什么不删掉 T1–T5 的代码</strong>: 它们是 R2–R7 六轮迭代的证据链 —— 没有 T4 的旧束体就说不清 R5 为什么重做，没有 T1 的旧形态就说不清 R4 为什么把霓虹降格为 N 层。删掉等于把设计理由一起删掉，后来者只会看到"凭空的结论"。代价是 §04 多几百行演示代码，可接受。</p>
+
+<h3>5.9 验收探针（面板自身）</h3>
+<ul>
+  <li><strong>字段闭环</strong>: 15 个控件逐个改 → <code>window.AQB_FX_CFG</code> 与 <code>localStorage['autoqb.ui.qbFx']</code> 同步变化 → 刷新后回读一致; 反向: 手工写脏 JSON（错类型 / 未知枚举 / <code>v:0</code>）→ 面板显示默认值、控制台零报错、键未被清空。</li>
+  <li><strong>预览拍</strong>: 预览期间 <code>u.data[0]</code> 与 <code>u.scales.x</code> 逐帧不变、<code>dx ≡ 0</code>; 预览帧数 ≈ <code>beat/16.7</code>; 预览中点「触发真实拍」（或等真值到达）→ 预览立即失效、真实拍正常左移; 连点 5 次不出现两套装饰叠加（粒子合计仍 ≤32）。</li>
+  <li><strong>收层</strong>: 点空白关、Esc 关、再按 Esc 关的是抽屉而不是页面其它层（顺序正确）; 面板开着时单键快捷键不触发。</li>
+  <li><strong>不遮挡</strong>: 面板<strong>宽度</strong>落在图宿主内、右边距 ≥8px; 因面板约 500px 高必然越过图底（浮层语义，允许覆盖时间轴 / 统计栏），但<strong>底边不得超出视口</strong>（面板自身 <code>max-height: calc(100vh - 16px)</code> + 正文内部滚动兜底; <code>overlay_fit</code> 只夹视口、<strong>不压缩尺寸</strong>，尺寸大于视口时返回 <code>EDGE</code> 而非缩放）; 面板 <code>opacity ≤0.97</code> 且不拦画布外的点击; 按住 <code>Alt</code> 时降到 0.22 且 <code>pointer-events:none</code>，松开恢复。</li>
+  <li><strong>reduced-motion</strong>: 模拟 <code>reduce</code> → 总开关置灰、装饰零绘制、L0 左移仍在; 恢复 <code>no-preference</code> → 总开关回到用户手动值。</li>
+  <li><strong>零回归</strong>: <code>test_webui_static_dom_panel_traffic.py:426</code> 的 <code>prev.setData([data.xs, data.up, data.dl]);</code> 逐字断言不变（面板不改快路）; <code>e2e/traffic-gap-zones.spec.mjs</code> 悬停零等待回读不变（面板不拦 pointer）; <code>drawer-merge.spec.mjs:236</code> 的 <code>.ctx-menu</code> strict-mode 计数不变（面板不是 <code>.ctx-menu</code>）。</li>
+</ul>
+
+<h2><span class="no">§06</span>实施步骤</h2>
+<p>本轮<strong>只产出 / 修订本计划文档</strong>。下表为拍板后另轮授权的实施路径，不在本轮动作范围内。</p>
+<table>
+  <tr><th>期</th><th>内容</th><th>验收判据</th></tr>
+  <tr><td>S0 数值面板 <span class="tag">R8 新增</span></td><td>新增 <code>shared/tpl/fx-panel.html</code>（320px 非模态浮层，常显 4 组 8 项 + 高级折叠）; <code>state.js</code> 建 <code>fxPanel</code> / <code>fx</code> 字段; 图宿主挂独立 <code>contextmenu</code>（<code>preventDefault + stopPropagation</code>）; 15 个字段按 §05.3 表接线 + <code>autoqb.ui.qbFx</code> 读写与逐字段校验; 「预览一拍」按 §05.4 六条语义实现（不动窗口、<code>dx ≡ 0</code>、真值抢占）; <strong>七处收层 / Esc 登记</strong>（<code>lifecycle.js</code> 两处 + <code>dialogs_meta.js:182</code> + <code>shortcuts_engine.js:37</code> + <code>drawer_general.js</code> 的 <code>closeDrawer</code> / <code>drawerTab</code> + <code>drawer_store.js:355</code> 换 kind 收口）<strong>+ 面板根 <code>@click.stop</code></strong>; 四皮肤中性令牌样式</td><td>15 字段逐个改 → <code>AQB_FX_CFG</code> 与 localStorage 同步、刷新回读一致; 脏 JSON（错类型 / 未知枚举 / <code>v:0</code>）回落默认且不清键; 预览期间 <code>u.data[0]</code> / <code>u.scales.x</code> 逐帧不变且 <code>dx ≡ 0</code>; 点空白与 Esc 均收层且顺序正确; reduced-motion 下总开关置灰; 四皮肤面板不溢出不错位</td></tr>
+  <tr><td>S1 节奏内核 + L0 左移底座 <span class="tag">R3 双轨</span></td><td>在 <code>qb_traffic_chart.js</code> 加 <code>_qbBeatMs(period)</code> 单点公式 + 每拍 rAF 调度器（含抢占、静默、reduced-motion 短路）; 续拉快路改为「真窗口 <code>[xs, up, dl]</code> 立即 <code>setData</code> 落袋 → x 视口一格偏置 → ≤beat 归零并交还 auto range」; <strong>双轨状态机存图记录，两列分别插值 / 分别判等级，L0 由窗口驱动与数据驱动解耦</strong>; 冻结动画期 x 轴 ticks</td><td>任意 <code>multiplier</code> 下逐帧探针测得 <code>t_truth − t_arrival ≤ 1000ms</code>、<code>dx_t</code> 同步归零; 零变化连拍零装饰但窗口仍滚一格; 相邻两拍边界像素位移 ≤1px</td></tr>
+  <tr><td>S2 视觉引擎 V + N 层 + 表现层 <span class="tag">R3 双轨 / R4 静态背景</span></td><td>按 I6 / I11 图层顺序实现 V1 色彩（分级色相 / 辉光，<strong>背景零铺色</strong>）、V2 形状（多边形环 / 菱形 / 切片）、V3 粒子（三阶段、<strong>两轨合计 ≤32</strong>）; 实现 <strong>N 霓虹元素层</strong>（白名单元素、Lv 联动色相、独立开关）与<strong>背景静态化</strong>（删除整块 toneBreath 与右边缘入场地带）; 按拍板模板接上（<span class="np">R8</span>: <strong>只接 T6</strong>，T1–T5 不单独接线），T6 综合模板按 T2 插值 + T3 粒子 + <strong>T4 扫描束</strong> + T5 分级 + T1 霓虹组合; <strong>T4 束体按 §03 六层结构实现</strong>（硬核 / 六层晕 / 色散 / 彗尾 / 梳齿 / 回声），纵向包络取两轨末点 y，逐帧 23 指令（上限 23）、零 <code>fillRect</code> 铺底; <strong>回声行程 <code>clamp(0.22 × 绘图宽, 100, 200)</code> 且越线后按 <code>pow(1 − d/span, 0.85)</code> 归零、到点零绘制</strong>（整幅扫掠只作对照档，不交付）; <strong>每条轨独立 <code>prev/target/shown/delta/level/live</code>，反馈按 P11 仲裁，描边恒用各自语义色</strong>; 色值走四皮肤令牌，时长走 <code>--dur*</code>; 走同画布 <code>draw</code>/<code>drawClear</code> 钩子</td><td>四皮肤目测一致且上传 / 下载色义与图例一致; 背景与右缘像素逐帧恒定且同色; <code>test_frontend_fx_wiring</code> 保持绿; 无第二块 canvas; 每帧额外绘制指令数 ≤ I9 预算（双轨合计）; 曲线像素对比度不低于静态基线; <span class="np">R7</span>: 竖扫描回声最左 <code>x ≥ g.R − 200</code>，行程用尽后该帧不再有回声绘制指令（束体仍在）</td></tr>
+  <tr><td>S3 面板接线 <span class="tag">R8 改写</span></td><td>把 S0 的面板接到 S1 / S2 的真值链路: 字段 → <code>window.AQB_FX_CFG</code> → 绘制分支（热路径不读 Vue）; 「启用动效」总开关与图区右键勾选项<strong>读写同一字段、双向同步</strong>; <code>enabled</code> 关闭时装饰零绘制但 L0 左移仍执行; 面板打开时按 <code>shortcuts_engine</code> 抑制单键快捷键</td><td>流量图形态右键出面板、可调可持久化; <code>e2e/drawer-merge.spec.mjs</code> 不撞 strict mode 且 <code>.ctx-menu</code> 计数不变; 两个开关入口状态一致</td></tr>
+  <tr><td>S4 守阵与测试</td><td>同步 §09 / §10 清单; 为动效、左移、视觉引擎加逐帧探针用例与确定性等待</td><td><code>commands run test.full</code> 绿; e2e 全量并发不 flaky</td></tr>
+  <tr><td>S5 回写</td><td>按 §10 回写知识库，新坑入 <code>pitfalls/web-ui/</code></td><td><code>commands run kb.check</code> 绿</td></tr>
+</table>
+
+<h2><span class="no">§07</span>待拍板清单</h2>
+<p><span class="np">R8 关闭了六项</span>: <strong>P1 / P4 / P10 / P13 / P14 / P16</strong> 已由 R8 拍板关闭（理由分散在 §08: P1 见 <strong>D25</strong>（只做 T6）、P10 见 <strong>D14</strong>（T3 退役换槽）、P13 / P14 见 <strong>D16</strong>、P16 见 <strong>D18</strong>、面板相关见 <strong>D20–D28</strong>），表内保留原行以便回溯「当时为什么这么问」。R8 只留下 <strong>P18</strong> 一项待确认：面板字段集是否就按 §05.3 的 15 项交付。</p>
+<table>
+  <tr><th>编号</th><th>待定项</th><th>默认（推荐）</th><th>备选</th></tr>
+  <tr><td>P1 <span class="tag">R4 改默认</span> <span class="good">R8 关闭</span></td><td>主表现模板选哪个</td><td><strong>T6 综合 · 霓虹光带</strong> (T2 光带爬升 + T3 粒子 + <strong>T4 扫描束</strong> + T5 分级 → T1 霓虹色相)，L0 之上一次给全「数值中间态 + 判定帧 + 扫描 + 强度分级 + 颜色联动」; 配色档默认霓虹、N 层默认开</td><td>原推荐 T2 + T1 判定帧冲击（更克制）/ T3 棱镜碎裂 / T4 故障扫描 / 单取 T1 霓虹元素层; 亦可关闭 T5 横切</td></tr>
+  <tr><td>P2</td><td>T5 分级是否作为横切维度叠加</td><td>叠加，但 Lv.3 只在三类事件触发</td><td>不叠加，强度恒定</td></tr>
+  <tr><td>P3</td><td>三级阈值实测值</td><td>Δ &lt; 5% / 5–30% / &gt; 30%（初始建议，实测后调）</td><td>按绝对值分档 / 按环比 + 绝对值双判据</td></tr>
+  <tr><td>P4 <span class="good">R8 关闭</span></td><td>右键菜单项文案与位置</td><td>「流量动效」总开关 + 「次区余辉」开关，置于流量形态菜单顶部</td><td>合并为「动效设置」子菜单 / 放设置页</td></tr>
+  <tr><td>P5</td><td>次区装饰在长窗下的观感</td><td>2s 封顶后完全静默</td><td>按 period 比例铺满（<span class="bad">不推荐，600s 时变常驻动画</span>）</td></tr>
+  <tr><td>P6 <span class="tag">R1</span></td><td><strong>左移策略</strong>（L0 是否过渡、走哪条路径）</td><td><strong>L0-a 视口偏置平滑滑入一格</strong>; 不左移仅作演示对照，生产不可选</td><td>瞬时左移（现状基线，零成本）/ L0-b x 列偏置（hover 语义漂移，不推荐）/ L0-c 谱面式横移（仍排除）</td></tr>
+  <tr><td>P7 <span class="tag">R1</span></td><td>左移收敛时长 <code>shiftRatio × beat</code></td><td><strong>0.6 × beat</strong>（与数值收敛同步，两拍边界位置连续）</td><td>0.12 × beat（只给冲击感）/ 1.0 × beat（铺满主区，可能拖慢读图）</td></tr>
+  <tr><td>P8 <span class="tag">R2</span></td><td><strong>配色档默认</strong></td><td><strong>霓虹</strong>（蓝 / 金 / 品红分级 + 辉光 + <strong>N 层局部霓虹</strong>; R4 起无背景色调呼吸）</td><td>克制（初版单色，作为用户可切回的保守档）/ 故障（青 / 品红 / 黄 + 切片，最前卫但最吵）</td></tr>
+  <tr><td>P9 <span class="tag">R2</span></td><td>粒子密度与预算上限</td><td>默认 70% → ≤32 个; 只在 ≤0.55×beat 活跃; Lv.1 不发粒子</td><td>0（纯几何，零粒子）/ 100%（≤32 封顶不变，仅提高亮度与速度）</td></tr>
+  <tr><td>P10 <span class="tag">R2</span> <span class="good">R8 关闭</span></td><td>T3 槽位处置</td><td><strong>「整曲线残影」退役，槽位由「棱镜碎裂」接替，当时 5 个数量不变</strong><span class="np">（R4 因新增 T6 变为 6 个）</span></td><td>缩到 4 个模板（若用户不想保留替代模板）/ 保留局部残影（仅末点 ±1 格，不画整曲线）</td></tr>
+  <tr><td>P11 <span class="tag">R3</span></td><td><strong>双轨反馈策略</strong>（D3）</td><td><strong>D3-b 双轨各发半套</strong>: 两条曲线都有可见环 / 粒子，各 ≤16、合计 ≤32; 粒子 / 碎片 / 辉光预算按<strong>两轨合计</strong>守恒。默认即此档，直接补齐「只有 1 条有特效」</td><td>D3-a 主导轨发射（更克制，从属轨只加亮描边）/ D3-c 合流单反馈（最克制，两轨 y 中点一次，色取 lead 的 Lv 色）</td></tr>
+  <tr><td>P12 <span class="tag">R3</span></td><td>主导轨选取与两轨贴近阈值</td><td><code>lead = argmax(Δ)</code>，优先取非缺口 / 非静默轨; 两轨末点 y 间距 &lt; 26px 时反馈按比例缩小，<strong>两轨仍各自保留</strong></td><td>固定以下载为主导轨 / 不缩小（各自全尺寸反馈）/ 阈值按实测像素调整</td></tr>
+  <tr><td>P13 <span class="tag">R4</span> <span class="good">R8 关闭</span></td><td><strong>T6 综合模板是否为默认交付形态</strong></td><td><strong>是</strong>: demo 默认切到 T6，且 P1 改为 T6; 四者同拍叠加但预算按 I9 两轨合计守恒、背景恒静态</td><td>仍以 T2+T1 为默认，T6 仅作「最热闹」备选 / 把 T6 拆成可勾选的四层组合器</td></tr>
+  <tr><td>P14 <span class="tag">R4</span> <span class="good">R8 关闭</span></td><td>N 层作用域与 T1 槽位处置</td><td>N 层按白名单（环外圈 / 粒子外圈 / 判定线短亮段 / 锚辉光 / 徽标 / 光带辉光）+ 黑名单（曲线 / 背景 / 右缘 / 网格 / tooltip / 图例）; <strong>T1 保留为 N 层的纯展示形态</strong>，六个模板数量不变</td><td>T1 退役、只留 5 个模板 + 独立 N 开关 / N 层白名单再加扫描束端点 / 允许光带本体染 Lv 色（<span class="bad">不推荐，读数层染分级色会混淆语义</span>）</td></tr>
+  <tr><td>P15 <span class="tag">R5 / R7 改默认</span></td><td><strong>T4 扫描束形态</strong></td><td><strong>双相位「细束入场 + 越线后 100–200px 内淡出的回声」</strong>: 亮束只在判定线附近（1.2 格行程，0.12beat 抵达），扫掠感由 α≤0.20、按曲线包络着色的 1px 回声承担，<strong>回声越过判定线后按距离归零、硬停，不横穿绘图区</strong>; 六层结构 + 曲线包络 + 非对称彗尾</td><td>整幅右→左扫掠（R5 旧观感，<span class="bad">R7 已否决: 每拍一条竖线切过曲线与网格</span>，仅留 <code>full</code> 对照）/ 只在判定线闪光一次（最克制，失去「扫描」语义）/ 色散边再加到 ±3px（更故障，也更吵）</td></tr>
+  <tr><td>P16 <span class="tag">R6</span> <span class="good">R8 关闭</span></td><td><strong>横向线条要不要随机</strong></td><td><strong>联动定强度 + 确定性伪随机定长相</strong>: 条数按等级（切片 2/3/5、梳齿 3/5/7）; 撕裂带中心取 <code>lead</code> 末点 y，带宽与长度随 <code>Δ</code> 增长; 每拍落点用 <code>hash(拍序号, 槽位)</code> 分层采样 —— 每拍不重复，但可复现、可逐帧断言</td><td>纯随机（<code>Math.random</code>，每拍乱跳且不可复现，仅作对照档）/ 完全固定（R5 旧观感，已保留为 <code>fixed</code> 对照档）</td></tr>
+  <tr><td>P17 <span class="tag">R7</span></td><td><strong>竖扫描回声的行程与淡出曲线</strong></td><td><code>span = clamp(0.22 × 绘图宽, 100, 200)</code>（宽屏约 150–200px、窄屏取下限 100px），<code>alpha ∝ pow(1 − d/span, 0.85)</code> 前段慢降 / 末端归零，0.18–0.45beat 匀速走完，到点<strong>零绘制</strong>; 行程随绘图宽自适应而非固定像素</td><td>固定 100px（最克制，几乎只擦到右缘）/ 固定 200px（走得更远，接近半幅）/ 线性衰减（末端拖尾更长）/ 整幅扫掠（R5 旧观感，<span class="bad">不交付</span>）</td></tr>
+  <tr><td>P18 <span class="tag">R8</span></td><td><strong>面板字段集是否就按 §05.3 的 15 项交付</strong></td><td><strong>照表</strong>: 常显 4 组 8 项（节奏 1 <code>impact</code> + 视觉 4 <code>palette/particles/neon/tail</code> + 位移 2 <code>shift/shiftRatio</code> + 双轨 1 <code>dual</code>）+ 高级 7 项（<code>ease</code> / <code>tear</code> / <code>echoSpan</code> / 四层开关）+ 总开关 <code>enabled</code> 置顶; 只读两项（period / beat）不可编辑。若嫌多，可把 <code>tear</code> / <code>echoSpan</code> 收进「诊断」二级折叠</td><td>再精简到 9 项（去掉 4 层开关与 tear / echoSpan）/ 再加「Lv 阈值」三项（<span class="bad">不推荐: 用户能调出「永远 Lv.3」</span>）</td></tr>
+</table>
+
+<h2><span class="no">§08</span>拍板记录</h2>
+<p>首轮 grilling（Q1–Q12）与 R1–R7 的反馈改版均已确认; <span class="np">R8 又跑了两轮 grilling（Q1–Q7 / Q8–Q12，与首轮同号不同轮）</span>，把「数值面板」从载体到字段全部拍定，并关闭了六个历史待拍项。未决项见 §07（只剩 P18）。</p>
+<table>
+  <tr><th>编号</th><th>结论</th></tr>
+  <tr><td>D1</td><td>只改 qB 实时 Canvas 流量图（三挂点共用），历史 SVG 弹层不动、仅作动效参照（Q1）</td></tr>
+  <tr><td>D2</td><td>A+B 混合: 尾部 1–2 点数值插值 + 判定帧冲击; <strong>明确排除整图横向推进</strong>（Q2）<span class="wr">（R1 修正: 排除的是「改 x 轴语义 / 每帧重建 xs 的谱面式横移」，<strong>不排除</strong>视口一格的平滑过渡; 初版把两者混为一谈，已补 L0 底座）</span></td></tr>
+  <tr><td>D3</td><td>1s 绝对硬上限，真值 ≤1s 落地; 主区按周期自适应; <strong>次区装饰默认开、可调关</strong>（Q3，用户改）</td></tr>
+  <tr><td>D4</td><td>三级强度 + 无变化静默 + 不遮挡; Lv.3 仅限速事件 / 缺口恢复 / 峰值突破（Q4）<span class="np">（R2 细化: 不遮挡改按 I6 图层顺序判定，装饰可覆盖曲线像素但曲线必须最后重绘在最上层）</span></td></tr>
+  <tr><td>D5</td><td>共享层 + 四皮肤令牌，不碰 fx 隔离; reduced-motion 强退原 <code>setData</code>; 提供总开关（Q5）<span class="np">（R2: 强退时视觉引擎 V 同步全关）</span></td></tr>
+  <tr><td>D6</td><td>模板嵌入单文件 HTML 计划，可交互、可调参（Q6）; <strong>数量由 3 改 5</strong>（用户改）</td></tr>
+  <tr><td>D7</td><td>本轮只新建一个计划文件，不改生产代码 / 不入池 issue / 不 commit/push（Q7）</td></tr>
+  <tr><td>D8</td><td><code>period</code> 从响应动态导出、每拍重算，适配各种合法 <code>sample_interval_multiplier</code>; demo 周期控件覆盖 1.5–600s（Q8，用户澄清）</td></tr>
+  <tr><td>D9</td><td>数值走 <code>--ease-out</code>，<strong>禁止 overshoot</strong>; spring 只装饰; 每帧 <code>setData(..., false)</code>; 新拍以当前显示值为起点接续、禁止回跳（Q9）</td></tr>
+  <tr><td>D10</td><td>三级阈值为初始建议值、全部进调参面板，实测后定案（Q10）</td></tr>
+  <tr><td>D11</td><td>开关<strong>改做流量图右键菜单</strong>（用户改 Q11）; 可行性核查后定为复用 <code>drawerMenu</code> 空位、不新增菜单容器; 不进配置 schema <span class="wr">（R8 更正: 该空位<strong>不能填</strong> —— 见 D24; 此处保留原始判断供回溯）</span></td></tr>
+  <tr><td>D12</td><td>计划章节形态与共识（Q12）: 模板全部保留、不预设胜出，评估维度与拍板记录留 §08<span class="np">（R4: 数量由 5 增至 6，新增 T6 综合模板，仍不预设胜出）</span></td></tr>
+  <tr><td>D13 <span class="tag">R1</span></td><td>用户 26-11-12-1153 反馈「当前模板无法表示值更新后图层整体左移」→ 第四轮只读核查确认生产是<strong>定长滚动窗口 + auto x range</strong>，整图每拍瞬时左移一格是瞬时跳变<strong>主因</strong>; 补 <strong>L0 左移底座</strong>（五模板共用）、不变量 I8、待拍板 P6/P7，并重写 §04 实验台使其真实 <code>shift + push</code> 一格、绘制层从 +1 格缓动到 0 格。<strong>5 个模板数量不变</strong>，Q2 排除范围按 D2 注收窄。</td></tr>
+  <tr><td>D14 <span class="tag">R2</span></td><td>用户 26-11-12-1207 反馈「T3 整个曲线伪影不适用 / 另外几个模板不够大胆前卫，从色彩·形状·粒子优化，可参考音游设计」→ ① <strong>T3「整曲线残影淡出」退役</strong>（与 L0 语义重复、双重影、违反 I6、需缓存 2880 点旧列），槽位由 <strong>T3「棱镜碎裂」</strong>接替，<strong>5 个数量不变</strong>; ② 补音游视觉语言调研（Phigros 谱面行为标准 / 粒子三阶段与同帧 / 色调呼吸 / 故障几何 / 信息层级），新增 <strong>视觉引擎 V</strong>、不变量 <strong>I6 改写 + I9</strong>、目标 G5、待拍板 P8/P9/P10; ③ 五个模板全部升级为分级色相 + 多边形几何 + 粒子，§04 新增「配色档 / 粒子密度」控件并保留「克制」档供逐帧对比初版。</td></tr>
+  <tr><td>D15 <span class="tag">R3</span></td><td>用户 26-11-12-1235 反馈「流量图具有上传 / 下载双曲线，目前的模板只有 1 条有特效」→ 第五轮只读核查确认生产 <code>series[1] 上传 / [2] 下载</code> 双 series、<code>setData([xs, up, dl])</code> 三列、tooltip / 图例 / 限速虚线全为<strong>双通道色义契约</strong>; 初版 demo 第二条仅静态暗色陪衬，属<strong>方案级漏项</strong>。补 <strong>L1 双轨底座</strong>（D1 语义色守恒 / D2 独立状态机且与 L0 解耦 / D3 主导轨仲裁 / D4 缺口与贴近缩小）、目标 <strong>G6</strong>、不变量 <strong>I9 改写 + I10 新增</strong>、待拍板 <strong>P11/P12</strong>、§09 两条风险、§10 双轨探针; 重写 §04 实验台为双数组双通道，新增「双轨策略 / 双轨场景」控件与 HUD / JSON 字段。<strong>5 个模板数量不变</strong>，全部按双轨运行。</td></tr>
+  <tr><td>D16 <span class="tag">R4</span></td><td>用户 26-11-12-1309 反馈「背景不要闪烁 / 右边缘背景需要与其它地方保持一致 / T1 曲线颜色固定后似乎不适用了 / 加一个综合模板」→ ① <strong>删除两处整块铺色</strong>: <code>toneBreath()</code> 的整绘图区 Lv 色呼吸、<code>fillRect(g.R … W)</code> 的右缘入场地带底色; 画布背景改由 CSS <code>#0d141a</code> 恒静态提供，新增 <strong>I11</strong> 与 <strong>G7</strong>、I6 / I9 收紧、§02 调研条目修正。② <strong>T1 重定义为「霓虹元素层」</strong>: D1 固定曲线语义色后，把霓虹从「染曲线 / 染背景」降格为横切 <strong>N 层</strong>，只作用于非曲线、非背景元素，色相由 T5 分级联动。③ <strong>新增 T6 综合模板</strong> = T2 光带爬升 + T3 粒子 + T5 分级（→ N 色相 / 边数 / 粒子数）+ T1 霓虹，<strong>模板数 5 → 6</strong>，demo 默认切到 T6、P1 改推 T6、新增 P13/P14。④ §04 新增「霓虹元素层 N」开关、HUD / JSON 加 <code>neon_*</code> / <code>fusion_*</code> / <code>background</code> 字段; 状态仍 <code>Open</code>。</td></tr>
+  <tr><td>D17 <span class="tag">R5</span></td><td>用户 26-11-12-2147 反馈「故障扫描也加入综合模板，但是竖向扫描线需要更改，当前的竖向扫描线不够精致」→ ① 旧 T4 束体是<strong>一层 10px 对称渐变 <code>fillRect</code></strong> + 3 条固定长度实心速度线，缺方向感 / 缺层次 / 与曲线无关 / 加宽就会压谱面。② 重做为 <strong>双相位</strong>: 相位 A 细束（1.2 格行程 / 0.12beat，与冲击窗同长）从右侧留白滑入判定线，由<strong>亚像素 1px 硬核 + 2.5/5/10/16/24/34px 六层 Lv 晕 + 双侧 ±1.6px 青/品红色散 + 5 段非对称彗尾 + 7 条固定模式梳齿（R6 起改 3/5/7）</strong>构成，纵向亮度按<strong>两轨末点 y 包络</strong>起落; 相位 B 亮束在判定线衰减，<strong>α≤0.20 的 1px 回声</strong>（同样按曲线包络着色，扫过曲线时最亮）整幅右→左扫掠承担「扫」的语义。③ 全程<strong>零 <code>fillRect</code> 铺底</strong>（不触 I11 / G7），逐帧 23 条绘制指令（上限 23）、echo alpha ≤0.20、不新增 blur。④ <strong>T4 并入 T6 综合模板</strong>（强度 ×0.78，与 T2 / T3 / T5 / T1 共享同一判定帧与 L0 位移），模板数量仍 6; 新增 <strong>P15</strong>、§09 一条风险、§10 扫描束探针、JSON <code>scan_beam</code> 字段。<span class="wr">（R7 修订: 回声由「整幅扫掠」改为「越线 100–200px 内淡出硬停」，见 D19 / P17）</span></td></tr>
+  <tr><td>D18 <span class="tag">R6</span></td><td>用户 26-11-12-2225 问「横向的彩色线条（故障扫描）能否改为随机？或与 lead/delta 联动」→ 判定<strong>不是二选一</strong>: 位置与长度交给 Δ / lead 才有信息量; 每拍的细微差异交给确定性伪随机才有生命感。纯随机降为对照档——每拍位置乱跳即「快的中间态本身也是一种闪」，与闪烁坑直接冲突，且不可复现、无法断言。实现 <code>hash01(beatIndex, slot)</code> + <code>strat</code> 分层采样，并加 <code>sTear</code> 三档控件（<code>linked</code> / <code>random</code> / <code>fixed</code>）。</td></tr>
+  <tr><td>D19 <span class="tag">R7</span></td><td>用户 26-11-12-2325 反馈「竖向扫描线不要扫过全屏，在过右边的线后逐渐透明，大概在过右边的线后 100–200px 的位置完全消失」→ ① 定位问题: R5 把「扫」的语义全押在回声响上，回声因此必须横穿整幅（<code>g.R → g.L</code>），<strong>等于把 R5 修掉的「竖线压谱面」从亮束挪到了回声</strong>; α 低不等于不存在，暗背景上 1px 细线仍会抓眼睛。② 改法: 回声<strong>行程上限 <code>span = clamp(0.22 × 绘图宽, 100, 200)</code></strong>，越线后 <code>alpha ∝ pow(1 − d/span, 0.85)</code> 衰减，<code>d ≥ span</code> 时<strong>直接不绘制</strong>（几何硬停，8ms 探针可断言）; 行程窗口由 0.18–0.7beat 收到 <strong>0.18–0.45beat 匀速</strong>（原本 easeOut 会让位移先冲完、淡出挤在最后几十毫秒）。③ 亮束 / 六层晕 / 色散 / 彗尾 / 梳齿 / 切片<strong>全部不动</strong>，束体仍 23 指令、零 <code>fillRect</code>。④ 整幅扫掠降级为 <code>full</code> <strong>对照档</strong>（导出 <code>echo_travel_note</code> 标 comparison-only），新增 <code>sEcho</code> 五档控件、<strong>P17</strong>、§09 一条风险、§10 探针、JSON <code>echo_travel_px</code> / <code>echo_fade</code> 字段。</td></tr>
+  <tr><td>D20 <span class="tag">R8</span></td><td><strong>面板载体 = 非模态锚定浮层</strong>（<code>.fx-panel</code>，320px 固定宽，<code>overlay_fit</code> 钳位，开合仅 120ms opacity、reduced-motion 下零动画）。排除模态 <code>aq-modal</code>（遮罩盖图，调参看不见效果）、抽屉二级页（无先例且会替换 <code>.qb-chart-host</code> 销毁图）、独立 URL（脱离实时数据）。配色只用中性令牌，<strong>禁止 <code>--today-up/down</code></strong>（那是曲线语义色，冒用会让人以为滑块调的是某条曲线）。</td></tr>
+  <tr><td>D21 <span class="tag">R8</span></td><td><strong>即时生效 + 预览一拍</strong>: 滑杆 <code>input</code> 写内存并重算派生量，当前拍内装饰层下一帧即用新值（唯一例外 <code>ease</code>，当前拍不换式以免中途跳变）; 「预览一拍」<strong>不动窗口</strong>（不 shift / 不 push / <code>dx ≡ 0</code>），假 Δ 取 <code>clamp(0.18 + 0.35 × 粒子密度, 0.10, 0.50)</code> 贴近真实量级而非固定拉满 Lv.3; 连点重启不排队、真值到达立即抢占作废、不写 store、与真实拍共用 I9 预算; <strong>不自动循环</strong>（会与真拍撞车且分不清真假）。</td></tr>
+  <tr><td>D22 <span class="tag">R8</span></td><td><strong>持久化 = <code>autoqb.ui.qbFx</code> 单键 JSON</strong>（与 <code>autoqb.ui.qbYAxis*</code> / <code>qbWin*</code> 同族），<strong>不进 <code>config.qb_traffic</code></strong>、不写后端、不跨设备; 读时 <code>parse</code> 失败 / 非对象 / <code>v !== 1</code> → <strong>整体回落默认且不清键</strong>，逐字段校验（clamp / 枚举白名单 / 布尔严格），未知键丢弃; 写只在用户操作时、<code>try/catch</code> 静默失败; 「重置为默认」写回默认值<strong>不删键</strong>（避免旧值下次启动复活）; 「复制配置片段」输出可直接粘进源码的 JS 默认常量。</td></tr>
+  <tr><td>D23 <span class="tag">R8</span></td><td><strong>面板内容 = 15 个可调项 + 1 个总开关 + 2 个只读项</strong>（字段表见 §05.3）。删除实验台专用件: 模板下拉、双轨场景 <code>sScene</code>、连续播放、触发单拍（由「预览一拍」取代）、<code>amp</code> 假振幅。共用的 <code>neon</code> 既是「视觉」组开关也是 T6 的 T1 层，不重复列。高级组默认折叠。<strong>采样周期与 beat 只读</strong> —— 用户明确「采样周期涉及后端与数据文件，在此处不可编辑」，面板不提供任何写入入口，只显示 <code>_qbPollMs()</code> 实算值与派生 <code>beat</code>。</td></tr>
+  <tr><td>D24 <span class="tag">R8</span></td><td><strong>右键入口 = 图宿主独立 <code>contextmenu</code></strong>: <code>preventDefault + stopPropagation</code> 拦住 <code>drawer.html:66</code> 的 <code>@contextmenu.prevent</code>，<strong>不改 <code>menu.js:223</code> 早退判据</strong>（改则整片正文右键弹出「只有一个模板选项」的半残菜单，并撞 <code>drawer-merge.spec.mjs:236</code> 的 <code>.ctx-menu</code> strict-mode）; 面板<strong>不叫 <code>.ctx-menu</code></strong>、不加键盘入口。R8 明确更正了 R0–R7「复用 drawerMenu 空位」的结论: 那个空位不能填。</td></tr>
+  <tr><td>D25 <span class="tag">R8</span></td><td><strong>交付范围收敛: 只做 T6</strong>。T1–T5 降为「T6 的构成要素 / 参考实现」，保留在 §04 可运行（设计证据: 没有旧束体就说不清 R5 为什么重做，没有旧 T1 就说不清 R4 为什么把霓虹降格），但<strong>不单独接线、不单独守阵、不单独发版</strong>; 契约 JSON 的 <code>templates</code> 保留六项、T1–T5 标 <code>reference_only</code>; 实验台标签加「参考」字样，默认选中 T6。</td></tr>
+  <tr><td>D26 <span class="tag">R8</span></td><td><strong>作用域 = 全局一份 + reduced-motion 不可绕</strong>: 动效是个人观感偏好，不分 global / torrent / group（分三份会让用户困惑「为什么换个图动效不一样」）; 系统 <code>prefers-reduced-motion: reduce</code> 时总开关<strong>置灰强制关</strong>，面板任何操作都不能打开它（I7 已定为强退，设置面板不能成为后门）; 系统设置恢复后总开关回到<strong>用户上次手动值</strong>而非被强制的 <code>false</code>。</td></tr>
+  <tr><td>D27 <span class="tag">R8</span></td><td><strong>文档结构</strong>: 新增 <strong>§05「数值调整页（右键面板）」</strong>，原 §05–§10 顺延为 §06–§11（37 处 <code>§</code> 交叉引用倒序替换并核对守恒）; §06 实施加 <strong>S0 面板</strong>、原 S3「右键菜单」改写为「面板接线」; §07 关闭六项、新增 <strong>P18</strong>; §09 新增三条风险; §10 新增面板探针; §11 加本条目。</td></tr>
+  <tr><td>D28 <span class="tag">R9</span></td><td><strong>提交前评审修正（两派只读评审）</strong>: ① <strong>面板根必须 <code>@click.stop</code></strong> —— <code>_onDocClick</code> 无 <code>contains</code> 判断，漏了它「拖一下滑杆面板就关」，唯一交付物不可用; 收层登记由四处扩到<strong>七处</strong>（补 <code>closeDrawer</code> / <code>drawerTab</code> / <code>drawer_store.js:355</code> 三处），「滚出视口 / 切页签」改由 <code>IntersectionObserver</code> 观察 <code>.qb-chart-host</code> 收口（<code>_qbChartDestroy</code> 同时在换肤路径上，挂那里会误关）。② <strong>量纲统一</strong>: 面板显示 <code>0–100</code>、存储 <code>0–1</code>（<code>impact</code> / <code>particles</code> / <code>shiftRatio</code>），校验按存储量纲 clamp。③ <strong>预算统一</strong>: 束体 23 指令（上限 23）、束体 + 切片 28、<code>shadowBlur ≤14</code>（glitch 档）、同帧辉光 ≤3 次; L0 的 <code>setScale</code> 会置 <code>_paths=null</code> 全量重建，帧耗时必须计入同一预算。④ <strong>判据去互斥</strong>: 「t&gt;0.55×beat 零绘制」排除 <code>tail</code> 次区光点; 「<code>fillRect</code> 调用数为 0」改为「<strong>整块全高</strong> <code>fillRect</code> = 0」（glitch 切片允许，≤6px / ≤5 条）; 面板遮挡三处口径统一为「与绘图区相交是既定代价，断言右缘 ≥8px / 底边不出视口 / Alt 穿透」。</td></tr>
+</table>
+
+<h2><span class="no">§09</span>风险与对策</h2>
+<table>
+  <tr><th>风险</th><th>触发条件</th><th>处置</th></tr>
+  <tr><td><span class="bad">闪烁复发</span>（最高）</td><td>每拍必闪 / 重建 uPlot / 触发 loading 空态 / 新拍回跳到旧值 / 快响应点亮遮罩</td><td>守 I3 + I8; 逐帧探针复用 <code>e2e/drawer-switch-no-flash.spec.mjs</code> 量具; 零变化静默; 落地前先跑一轮「连拍 30 次逐帧采样」</td></tr>
+  <tr><td><span class="bad">背景闪烁 / 右缘色差</span> <span class="tag">R4 已修</span></td><td>判定帧给整绘图区叠 Lv 色半透明块（原 toneBreath）; 右缘 <code>g.R → W</code> 铺入场地带底色，与绘图区形成常驻色差; 新桶滑入时看起来像半张图在闪</td><td>守 <strong>I11 + G7</strong>: 删除两处整块 <code>fillRect</code>，背景恒由 CSS 提供、右缘与绘图区同色; 霓虹改走 N 层白名单; 逐帧探针断言「整块背景 fillRect 调用数 = 0」与两点 RGB 恒定且相等</td></tr>
+  <tr><td><span class="bad">大胆前卫 vs 信息层级</span> <span class="tag">R2</span></td><td>粒子 / 辉光 / 局部霓虹抢到谱面之上，或铺满全图变成「第二个谱面」; 用户静音看画面就能猜到节奏</td><td>守 I6 固定图层顺序、装饰只落判定线附近一格; 曲线最后高亮重绘; 自检「静音猜节奏」判据; 提供克制档与配色档开关一键回退</td></tr>
+  <tr><td><span class="bad">双轨预算翻倍 / 色义断裂</span> <span class="tag">R3</span></td><td>两轨各发一套粒子 → 合计 64 个、两套环叠加; 或把 Lv 金 / 品红刷到两条曲线上，用户分不清哪条是上传</td><td>守 I9「≤32 为<strong>两轨合计</strong>」+ I10 语义色守恒; 反馈走 D3 仲裁（默认双轨各发半套，合计守恒）; Lv 色只用于判定线 / N 层白名单 / 环外圈; 曲线描边从 <code>--today-up/down</code> 现读，与 <code>.hs-leg</code> 同源</td></tr>
+  <tr><td><span class="wr">单轨缺口 / 静默的一半画面</span> <span class="tag">R3</span></td><td>下载 <code>null</code> 而上传照常，或上传 Δ≈0 而下载 Lv.3; 若只按单一 Δ 判定，会出现「整拍静默」或「缺口轨仍发粒子」</td><td>守 D2 独立状态机 + I10: 缺口轨断线 / 不插值 / 不画锚 / 零反馈，另一轨全量照常; <code>lead</code> 优先取非缺口非静默轨; 零装饰时 L0 左移与 T2 收敛仍执行（窗口滚动与数据驱动解耦）</td></tr>
+  <tr><td><span class="wr">粒子 / 辉光性能</span> <span class="tag">R2</span></td><td>2880 点长折线逐点 <code>shadowBlur</code>、每帧逐粒子填充、粒子常驻不退出</td><td>守 I9: ≤32 粒子、≤16 碎片、blur ≤14、只在 ≤0.55×beat 活跃、长折线只施一次辉光描边; 实测帧耗时写入 S2 验收; 超预算自动降级到克制档</td></tr>
+  <tr><td><span class="bad">左移与悬停坐标漂移</span> <span class="tag">R1</span></td><td>视口偏置期间鼠标 → 索引映射偏一格; 手动 <code>setScale</code> 未在收敛后释放，导致下一拍 auto range 失效、窗口越走越偏</td><td>守 I8: <code>data</code> 恒为真窗口、tooltip 只取 data 值、索引钳到 <code>[0,n-1]</code>; 收敛帧显式释放 manual range 交还 auto; 新增「动画中悬停」e2e 用例</td></tr>
+  <tr><td>x 轴刻度每帧重算 <span class="tag">R1</span></td><td>time scale 随视口偏置每帧重算 splits / 标签，轴标抖动或刷新开销</td><td>收敛期冻结 <code>axes[0].values</code> 到判定帧的 splits，收敛帧一次性刷新; 若实测仍抖，退回 L0-b 路径并接受 hover 语义代价（P6 复评）</td></tr>
+  <tr><td>逐帧性能</td><td>2880 点全量 <code>setData</code> 触发 y range 重算与全部 draw 钩子重跑</td><td>L0-a 不动 data、只改视口; y 值只插值尾部 1–2 点; <code>setData(..., false)</code>; 特效走同画布 hooks，不新增 canvas; L0 的 <code>setScale</code> 同样会触发 <code>_paths=null</code> 全量重建（见 I9 复核），故收敛帧必须停改 scale 并交还 auto range; 实测帧耗时写入 S1 验收</td></tr>
+  <tr><td><span class="bad">扫描束糊成一片 / 压住谱面</span> <span class="tag">R5</span></td><td>束体只有单层对称渐变、或加宽到横穿全幅 → 1x DPR 下变成半透明胶带、且亮束盖住曲线; 每帧对全高区域 <code>fillRect</code> → 撞 I11 背景守阵</td><td>守 §03 六层结构与 I9 束预算: 1px 硬核亚像素对齐（<code>x + 0.5</code>）、六层晕由宽到窄递进（2.5/5/10/16/24/34px）、色散只在 ±1.6px、彗尾只在来向、回声 ≤0.20 alpha 且 1px; 亮束止于判定线; <strong>全程 stroke（梳齿与切片是 1px 级 <code>fillRect</code>，不构成铺底），零整块 <code>fillRect</code></strong>; 逐帧探针断言「整块全高 <code>fillRect</code> 调用数 = 0」与「亮束 x 不进入绘图区左侧 80%」</td></tr>
+  <tr><td><span class="bad">竖扫描横穿全屏</span> <span class="tag">R7 已修</span></td><td>回声按 <code>g.R → g.L</code> 整幅扫掠 → 每拍一条 1px 竖线切过两条曲线与网格; α 低但仍在，读图时会下意识追那条线; 若改用「把 alpha 调小凑淡出」则末端出现可见截断，反而更抓眼</td><td>守 I9-R7: 行程 <code>clamp(0.22 × 绘图宽, 100, 200)</code>，越线后按距离衰减、<strong>到点零绘制</strong>（几何硬停，不靠 alpha 逼近 0）; 探针断言「echo 最左 <code>x ≥ g.R − 200</code>」与「行程用尽后该帧无回声绘制指令」; 整幅扫掠仅保留为 <code>full</code> 对照档并导出标注 comparison-only</td></tr>
+  <tr><td>故障微震与抽屉动画耦合 <span class="tag">R2</span></td><td>glitch ≤5px 微震叠加 <code>drawer_general.js</code> 入场 rAF 逐帧改高度 → <code>ResizeObserver</code> → <code>u.setSize</code> 连锁重画，近似「闪」</td><td>微震只作用于装饰层水平色带、不移动 canvas 或宿主; 抽屉入场期间 V2 切片与微震暂停，动效调度器让帧</td></tr>
+  <tr><td>e2e 悬停漂移</td><td>动效改变了坐标 / tooltip 落点 / 读数时机</td><td>动效只画视觉层，不动 data 坐标与 tooltip; <code>traffic-gap-zones.spec.mjs:121-141</code> 保持零等待可过; 若必须等待，加确定性 <code>expect.poll</code> 而非 <code>waitForTimeout</code></td></tr>
+  <tr><td>右键菜单被 fixed 坐标系劫持</td><td>flux 持久 <code>transform: translateY(-push)</code> 或 <code>clip-path</code> 生成 containing block（<code>pitfalls/web-ui/clip-path-clips-fixed.md:22-27</code>，2026-11-01 实测 dy=-464px）</td><td><span class="np">R8</span>: 面板走 <code>position:fixed</code> + <code>overlay_fit</code> 钳位，同样会被 containing block 劫持; 四皮肤各验一次 rect 与光标差 dx=dy=0，重点验 flux 皮肤（面板须挂 <code>.drawer-dock</code> 的兄弟节点而非 <code>.drawer</code> 子节点 —— 后者会被 <code>.drawer-enter-active { transition: transform .2s }</code>（<code>atlas/css/dialogs.css:46</code>）在开场 200ms 内带动位移; <code>transform: translateY(-push)</code> 已于 2026-11-01 改为 <code>position: relative + top</code>，守阵反钉 <code>transform:none</code>）</td></tr>
+  <tr><td>守阵逐字断言</td><td>改 <code>setData</code> 快路字面量 / <code>menu.js</code> 早退判据 / <code>ctx-menus.html</code> 模板串</td><td>见 §10 同步清单; 优先「追加新分支」而非「改写既有字面量」</td></tr>
+  <tr><td>长窗次区常驻</td><td><code>period</code> 夹到 600s 时余辉铺满整拍</td><td><code>tail = min(period − beat, 2000)</code> 封顶，2s 后完全静默（P5）</td></tr>
+  <tr><td>换肤</td><td>Canvas 色值在建图时烘焙，换肤走整图重建; V 的分级色相 / 辉光色同样需随皮肤走</td><td>色值从四皮肤令牌现读，不写死 hex 到 JS; 动效中间态色值同样现读; 换肤时终止在途动画、释放视口偏置并直接落真值，不留半帧</td></tr>
+  <tr><td><span class="wr">伪随机每拍换形 → 噪点闪</span> <span class="tag">R6</span></td><td>若抖动幅度过大或不分层，切片会在整条带内乱跳，视觉上等价于噪点闪烁; 纯 <code>Math.random</code> 更会每拍不可复现，截图比对与逐帧断言全部失效</td><td>三层约束: ① <strong>分层采样</strong>——第 i 条只能在自己那一层内抖，槽位互不越界; ② 抖动只作用于 ±3px 微震与层内相位，绝不改整体位置; ③ <strong>拍内几何逐像素冻结</strong>（只在判定帧更新），冒烟断言 t=0 与 t=150ms 位置完全一致。纯随机仅作对照档并显式标注不可复现</td></tr>
+  <tr><td><span class="wr">面板压住观察区 / 误读</span> <span class="tag">R8</span></td><td>面板贴图右缘时盖住判定线短亮段、扫描束与末点锚; 或用户以为面板里的数值会写进配置、改了采样</td><td>宽 320px 固定贴图右缘内缩 8px（<strong>必然覆盖图右侧约 1/3，含判定线</strong>）; 配一条<strong>按住 <code>Alt</code> 临时透明</strong>（opacity 0.22 + <code>pointer-events:none</code>），用户随时能看穿; 只读项显式标注「只读 · 改动需后端」; 探针断言面板右缘距图宿主右缘 ≥8px、底边不出视口、<code>Alt</code> 态下点击可穿透到画布（与绘图区相交是既定代价，不写「不相交」断言）</td></tr>
+  <tr><td><span class="bad">图表右键与抽屉模板菜单事件冲突</span> <span class="tag">R8</span></td><td>图宿主上的 <code>contextmenu</code> 没拦住冒泡 → <code>openDrawerMenu</code> 也跑一遍，出现两个浮层; 或某皮肤在捕获阶段监听导致 <code>stopPropagation</code> 无效; 或旧结论残留，实施者去改 <code>menu.js:223</code> 早退</td><td>图宿主监听器在<strong>冒泡阶段</strong>先于 <code>.drawer-body</code> 触发，<code>preventDefault + stopPropagation</code> 双写; 四皮肤各验一次「图区右键只有一个面板」; §03 落地形态与 D24 已显式标注「空位不能填」，代码评审时按此驳回改早退的提交</td></tr>
+  <tr><td><span class="wr">localStorage 脏值 / 旧字段复活</span> <span class="tag">R8</span></td><td>旧版本键里残留 <code>scene</code> / <code>amp</code> / <code>tpl</code>; 手改 JSON 成错类型; 多标签页同时写导致互相覆盖; 隐私模式 <code>setItem</code> 抛错把调参流程打断</td><td>读时<strong>逐字段白名单 + clamp</strong>、未知键丢弃、<code>v</code> 不匹配整体回落默认<strong>且不清键</strong>; 写包 <code>try/catch</code>; 多标签页以「后写覆盖」为可接受语义（观感偏好，不做冲突合并）; 探针覆盖「错类型 / 未知枚举 / <code>v:0</code> / 空串」四种脏值</td></tr>
+</table>
+
+<h2><span class="no">§10</span>测试与守阵面 / 回写清单</h2>
+<h3>实施阶段须同步的守阵</h3>
+<table>
+  <tr><th>文件</th><th>锚点</th><th>影响</th></tr>
+  <tr><td><code>tests/test_webui_static_dom_panel_traffic.py</code></td><td><code>:426</code> 逐字断言 <code>prev.setData([data.xs, data.up, data.dl]);</code>; <code>:340-359</code> drawer.html 逐字; <code>:320-328</code> 四皮肤 CSS 规则逐字</td><td>续拉快路改造必撞，需同步断言; L0-a 追加 <code>setScale</code> 分支而非改写既有字面量; V 若新增令牌需同步 CSS 规则断言</td></tr>
+  <tr><td><code>tests/test_webui_static_dom_panel_drawer.py</code></td><td><code>:1135-1195</code> 逐字钉 <code>menu.js</code> 早退判据与 <code>ctx-menus.html</code> 模板串</td><td><span class="np">R8</span>: <strong>不改 <code>menu.js</code> 早退、不往 <code>ctx-menus.html</code> 加项</strong>，该测试应保持零改动通过; 若红了说明有人又去填那个空位</td></tr>
+  <tr><td><code>tests/test_webui_ctx_menu_registry.py</code></td><td><code>:426-485</code> 模板消费注册表、<code>:181-197</code> 项集硬编码</td><td><span class="np">R8</span>: 不再往菜单里加项 —— 面板是独立容器，<code>CTX_ITEM_DEFS</code> 与项集硬编码<strong>一行不动</strong>; 但面板必须登记 <code>escBusy()</code> 与 <code>_kbOverlayBusy()</code>（见 §05.7）</td></tr>
+  <tr><td><code>tests/test_webui_static_skins_skin.py</code></td><td><code>:215-221</code> 四套 tpl-manifest 逐项相等、<code>:548-559</code> fx 隔离</td><td><span class="np">R8 更正</span>: 不是「禁止新增分片」—— 新增 <code>shared/tpl/fx-panel.html</code> <strong>必须在四套 tpl-manifest 同步登记</strong>，否则逐项相等断言必红; 不引 <code>shared/fx/</code>（<code>AQB_FX</code> 只在 flux 挂载，三旧皮肤引用即 <code>ReferenceError</code>，而该守阵只查 shell 的 <code>link/script</code>、照绿不报 —— 属<strong>自觉约束</strong>，不是测试兜底）; V 的色值令牌须四皮肤同名</td></tr>
+  <tr><td><code>e2e/traffic-gap-zones.spec.mjs</code></td><td><code>:121-141</code> 悬停零等待立即回读; <code>:175-194</code> tooltip 立即断言</td><td>动效不得改 data 坐标与读数时机; 已有一次并发偶红前科（<code>memory-bank/issues/26-11-11-0134-...</code>）; R1 起还须验「动画中悬停」索引不越界</td></tr>
+  <tr><td><code>qb_traffic_chart.js</code> / <code>drawer.html</code></td><td><code>:849-870</code> 令牌读取、<code>:1052-1065</code> 双 series 字面量、<code>:1084</code> 三列 data; <code>drawer.html:124-125</code> hover 双值、<code>:155-156</code> 图例双色</td><td><span class="tag">R3</span> 动效不得改 series 顺序 / 描边令牌 / 图例色; 双轨状态机存图记录（同 <code>u._qbLimits</code>）而不进 Vue state; 反馈色须与 <code>_qbChartTokens</code> 同源; 逐字断言同步</td></tr>
+  <tr><td><code>e2e/drawer-merge.spec.mjs</code></td><td><code>:236</code> <code>.ctx-menu</code> count(0) strict mode; <code>:69-110</code> 勾选态</td><td><span class="np">R8</span>: 面板<strong>不是 <code>.ctx-menu</code></strong>，天然不参与该计数; 但仍须断言「面板打开前后 <code>.ctx-menu</code> 数量不变」</td></tr>
+  <tr><td><code>e2e/menus.spec.mjs</code></td><td>CTX-fit 四边钳位 / 次级菜单收起</td><td>新增项长度影响菜单盒高，需复验钳位</td></tr>
+</table>
+<h3>建议新增</h3>
+<ul>
+  <li>逐帧探针: 断言「数据到达 → 冲击首帧 = 同帧」「真值落地 ≤ 1s」「插值序列无 overshoot / 无回跳」，探针间隔压到帧级（≤16ms，见 <code>pitfalls/web-ui/frame-swap-scroll-reset.md:21-25</code>）。</li>
+  <li><strong>左移连续性探针（R1）</strong>: 连拍 30 次，断言相邻两拍边界曲线像素位移 ≤1px（不回跳）、<code>dx_t</code> 在 <code>≤ shiftRatio × beat</code> 归零、收敛后 <code>u.scales.x</code> 交还 auto range; 三档策略各跑一遍（平滑 / 瞬时 / 对照）。</li>
+  <li><strong>视觉引擎探针（R2）</strong>: 断言 t=0 首帧粒子亮度峰值与判定线闪光同帧; t &gt; 0.55×beat 冲击类叠加层（粒子 / 碎片 / 扫描束 / 光带 / 环）零绘制（<code>tail</code> 次区光点每轨 ≤2 除外）; 粒子数 ≤32、碎片 ≤16、blur ≤14、微震 ≤5px; 三档配色各跑一遍且「克制」档零粒子/零辉光; 曲线像素对比度不低于静态基线（图层顺序不倒置）。</li>
+  <li><strong>双轨探针（R3）</strong>: 断言两轨 <code>delta / level / live</code> 独立; 「上传 Δ=0 + 下载 Lv.3」时上传零粒子零环、下载有反馈; 「下载 null」时该轨无描边无锚点而上传全量照常; 零流量 / Δ≈0 时零装饰但 L0 左移与 T2 收敛仍执行; 任一帧两曲线描边色与 <code>.hs-leg .sw.up/.down</code> 一致; 粒子 / 碎片按<strong>两轨合计</strong> ≤32 / ≤16; 三档双轨策略各跑一遍。</li>
+  <li><strong>背景静态探针（R4）</strong>: 连拍 30 次逐帧采样固定两点（绘图区中央 / 右边缘），断言背景 RGB 恒定且两点相等; 断言每帧对绘图区 / 右缘的整块 <code>fillRect</code> 调用数为 0; 六模板 × 三配色 × N 开 / 关全跑一遍; 「克制」档与 reduced-motion 降级前后背景不产生色差跳变。</li>
+  <li><strong>N 层作用域探针（R4）</strong>: 断言任一帧两条曲线 <code>strokeStyle</code> 恒等于各自语义色（与 <code>.hs-leg</code> 同源）; 黑名单元件（网格 / tooltip / 图例 / 限速虚线）颜色零变化; Lv.1/2/3 分别得到蓝 / 金 / 品红的<strong>局部</strong>霓虹，且 ≤0.33×beat 回落; N 开 / 关两态背景像素完全相同。</li>
+  <li><strong>T6 组合探针（R4 / R5）</strong>: 断言同一拍内两轨各自 ease-out 插值（无 overshoot / 无回跳）、两轨合计粒子 ≤32、环边数随 <code>lead</code> 等级取 3/6/8、N 色相与等级一致、<span class="np">R5</span> 扫描束与单独 T4 同构（同一道束、强度 ×0.78、色相随等级）、真值 ≤beat 落地; 与单独 T2 / T3 / T4 / T5 / T1 逐帧对比，验证五层叠加不破坏 I1 / I4 / I9 / I10 / I11。</li>
+  <li><strong>扫描束探针（R5）</strong>: 连拍 30 次逐帧采样，断言 ① 束体逐帧绘制指令 ≤23 条（实测 23）、<strong>高度≈绘图高的整块 <code>fillRect</code> 调用数为 0</strong>（束体主体——核 / 晕 / 色散 / 彗尾 / 回声——只走 stroke; 例外只有两类 1px 级 <code>fillRect</code>: glitch 切片高度 ≤6px · ≤5 条/帧、梳齿高度 1px · ≤7 条/帧，二者都不构成整块铺底）; ② 亮束 x 在相位 A 内从 <code>g.R + 1.2 格</code> 单调收敛到 <code>g.R</code>，<strong>不进入绘图区</strong>; ③ 纵向包络峰值落在两轨末点 y（±2px）; ④ 回声 alpha ≤0.20 且全程 1px，扫掠方向与 L0 同向; ⑤ 相位 B 结束后（t &gt; 0.55×beat，与 I9 同阈值）束体与回声零绘制; ⑥ 三档配色 × 六模板跑一遍，「克制」档与 reduced-motion 下束体零绘制; <span class="np">R7</span> ⑦ <strong>回声行程探针</strong>: 在 0.18–0.45beat 内每 30ms 采一帧，断言「echo 的最左 <code>x ≥ g.R − span</code>（<code>span = clamp(0.22 × 绘图宽, 100, 200)</code>）」「alpha 随距离单调不增」「<code>d = span</code> 之后该帧<strong>完全没有 lw=9 的回声绘制指令</strong>而核心仍在」; ⑧ 三档 <code>sEcho</code>（<code>auto</code> / <code>100</code> / <code>full</code>）各跑一遍，<code>full</code> 必须能扫得更远（证明对照臂有效）且导出标 comparison-only。</li>
+  <li>周期参数化用例: 覆盖 <code>multiplier</code> 1 / 2 / 8 与长窗 600s，验 <code>beat</code> 夹顶行为与左移像素距离恒定。</li>
+  <li>零变化静默用例 + reduced-motion 降级用例（V 全关） + 四皮肤菜单 rect 用例 + 动画中悬停 tooltip 取值用例。</li>
+  <li>新增测试须同步 <code>tests/_tmp_bootstrap.py</code> 头部「## 测试计划」清单（AGENTS.md 硬约束）。</li>
+  <li><strong>面板探针（R8）</strong>: ① <strong>字段闭环</strong>——15 个控件逐个改，断言 <code>window.AQB_FX_CFG</code> 与 <code>localStorage['autoqb.ui.qbFx']</code> 同步、刷新后回读一致; ② <strong>脏值回落</strong>——错类型 / 未知枚举 / <code>v:0</code> / 空串 / 缺 <code>layers</code> 五种输入，断言面板显示默认值、控制台零报错、键未被删除; ③ <strong>预览拍不动数据</strong>——预览期间逐帧断言 <code>u.data[0] / u.data[1] / u.data[2]</code> 与 <code>u.scales.x.min/max</code> 不变、<code>dx ≡ 0</code>、粒子合计 ≤32; ④ <strong>真值抢占</strong>——预览中让真实拍到达（或再点一次「预览一拍」重启），断言预览令牌失效、真实拍正常左移一次、不出现两套装饰叠加; ⑤ <strong>收层顺序</strong>——面板开着按 Esc 只关面板，再按 Esc 才轮到抽屉/其它层; 点空白同样只收面板; ⑥ <strong>不遮挡</strong>——与绘图区相交是<strong>既定代价</strong>（宽 320px 贴图右缘，必然盖住右侧约 1/3，含判定线），断言的是「面板右缘距图宿主右缘 ≥8px、底边不出视口、<code>Alt</code> 态点击可穿透到画布」，<strong>不作「不相交」断言</strong>; ⑦ <strong>总开关双向</strong>——面板顶部开关与图区右键勾选项改任一，另一处状态同步，且 <code>enabled=false</code> 时装饰零绘制、L0 左移仍执行; ⑧ <strong>reduced-motion</strong>——模拟 <code>reduce</code>，断言总开关置灰且面板无法打开动效、装饰零绘制; 恢复 <code>no-preference</code> 后总开关回到用户手动值; ⑨ <strong>四皮肤</strong>——四套各开一次面板，断言 <code>rect</code> 不溢出视口、滑杆与 select 可用、无 <code>--today-up/down</code> 渗色。</li>
+  <li><strong>横向线条探针（R6）</strong>: 切片条数随等级 2/3/5、梳齿 3/5/7; 切片恒在绘图区内且右端不越过判定线; 撕裂带 <code>= 2×(0.08+0.30×min(1,Δ/0.5))×绘图高</code>; <strong>同一拍内 t=0 与 t=150ms 的切片几何逐像素相同</strong>; <code>linked</code> 相邻两拍形状不同、<code>fixed</code> 两拍完全相同、<code>random</code> 不可复现; 横向细线条合计 ≤12 条/帧。</li>
+</ul>
+<h3>回写清单（实施收尾时）</h3>
+<ul>
+  <li><code>memory-bank/conventions/webui.md</code>: 补「流量图节拍动效」的 1s 上限、周期自适应、<strong>定长滚动窗口的 L0 左移底座（视口偏置 ≠ 谱面式横移）</strong>、<strong>视觉引擎 V 的图层顺序与预算（I6 / I9）</strong>、<strong>L1 双轨底座（语义色守恒 / 独立状态机 / 主导轨仲裁 / 预算按两轨合计）</strong>、<strong>N 霓虹元素层白名单 / 黑名单（I11）与背景静态硬约束（G7 / I6）</strong>、<strong>六模板与 T6 组合口径（含 R5 扫描束六层结构与 23 指令 / 上限 23（束体）· 28（束体+切片）的预算、R7 回声行程 <code>clamp(0.22 × 绘图宽, 100, 200)</code> 与越线淡出硬停）</strong>、右键开关落点与 fx 隔离边界; <span class="np">R8</span>: <strong>数值面板载体（非模态浮层 ≠ ctx-menu）、15 字段表、<code>autoqb.ui.qbFx</code> 契约、采样周期只读边界（观感 vs 采集）、只交付 T6</strong>。</li>
+  <li><code>memory-bank/pitfalls/web-ui/</code>: 若踩到闪烁族，<code>drawer-switch-flicker.md</code> 复发 +1 并写「为什么没命中」; 新坑按动作新建主题档后跑 <code>commands run kb.index</code>。</li>
+  <li>根 <code>README.md</code>: 仅在功能面向用户可见时回写，本轮不动。</li>
+  <li>测试基线: 实施轮跑 <code>commands run test.full</code> 后按实测数字 <code>commands run kb.new baseline ...</code>，本轮不造数字。</li>
+</ul>
+
+<h2><span class="no">§11</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R9 · 26-11-13-0156</span> <strong>提交前评审修正（两派只读评审）</strong>: 用户「提交」→ 按仓库分批评审协议派两派（正确性 / 可实施性与守阵）评审 1824 行新增文档, 逐条裁决后修正: ① <strong>blocker</strong> —— 面板漏 <code>@click.stop</code>（<code>lifecycle.js:78-99</code> 的 <code>_onDocClick</code> 无 <code>contains</code>，拖滑杆即关），补 §05.1「拦截」行 + §05.7 七处登记（加 <code>closeDrawer</code> / <code>drawerTab</code> / <code>drawer_store.js:355</code>）; 「滚出视口 / 切页签」改由 <code>IntersectionObserver</code> 收口，撤销「挂 <code>_qbChartDestroy</code>」的错误断言（换肤同路径，会误关）。② 量纲统一（显示 0–100 / 存储 0–1）。③ 预算统一为 23（束体）/ 28（+切片）/ blur ≤14 / 辉光 ≤3，并把 L0 <code>setScale</code> 的 <code>_paths=null</code> 全量重建计入预算。④ 三条互斥判据收敛（<code>t&gt;0.55beat</code> 排除 tail 光点 · 整块全高 <code>fillRect</code>=0 · 面板遮挡改为右缘/底边/穿透）。⑤ 事实与引文修正: <code>_qbReadTokens</code>→<code>_qbChartTokens</code>（<code>:849-870</code>）、文件头引文锚点（实为 <code>_qbChartBuild</code> 内注释）<code>:28-33</code>→<code>:1010-1012</code>、「同族 6 次复发」→「已到第九处」、<code>:519-520</code>→<code>:548-559</code>、<code>columns_menu.js :26-37</code>→<code>:17-27</code>（<span class="wr">初版还把 <code>prev.setData</code> 断言改成 <code>:429</code>、图例改成 <code>:157-158</code>, 两者都是<strong>改反了</strong>, ⑧ 已回正为 <code>:426</code> / <code>:155-156</code></span>）; R5 记录的「三层晕 / 2.6 格 / α≤0.12 / 20 指令」与 D17 对齐为「六层 / 1.2 格 / α≤0.20 / 23 指令」，R6 记录「颜色偏语义色」改为「故障色为主（Lv 45% / 品红 35% / 语义色 20%）」。⑥ 结构修复: §11 被 R8 插入吞掉的 R0 <code>&lt;li&gt;</code> 复原、R5–R9 按时间倒序重排。⑦ 补五条可实施性附注（Vue 方法名不得带 <code>_</code> · <code>_kbOverlayBusy</code> 追加末尾 · reduce 单点不引 <code>AQB_FX</code> · 宿主监听防重 · L0 最小可见位移 0.75px）与持久化落点 / 复制通道。⑧ <strong>复评轮</strong>再修 13 处: 事实锚点回正（<code>:429</code> 是 <code>theme_blk</code> 断言，<code>prev.setData</code> 逐字断言仍在 <code>:426</code>; <code>drawer.html</code> 图例回 <code>:155-156</code>）、预算旧值清零（D17 上限 24→23、V1 与导出 <code>glow_blur_max</code> 12→14、<code>fxBudget</code> 辉光 2→3 次）、「复发 6 次」→「同族第九处」、探针补「梳齿 1px <code>fillRect</code> 例外」与 tail 例外、面板高度改为「折叠态 ≈500px / 全展开 ≈640px」、换肤措辞限定为「系统明暗变化不误关（菜单点选属点外收层）」、收层处数由六改<strong>七</strong>（补 <code>drawer_store.js:355</code> 换 kind 收口）、滚动并入节流重钳位、<code>drawerTab</code> 行号 <code>:105-114</code>。状态仍 <code>Open</code>（待实施授权）。</li>
+  <li><span class="tag">R8 · 26-11-13-0117</span> <strong>数值面板 + 只做 T6</strong>: 用户要求「将数值调整设计为一个单独的页面挂在右键菜单上，只做 T6，其余模板当参考但不实现」，复述确认「采样周期涉及后端与数据文件，在此处不可编辑」。① <strong>两轮 grilling（Q1–Q7 / Q8–Q12）</strong>拍定: 非模态锚定浮层（320px，边调边看）/ 即时生效 + 预览一拍 / <code>autoqb.ui.qbFx</code> 单键全局 / 15 项字段 / 图宿主独立 <code>contextmenu</code> / 新增 §05 并顺延 / 中性令牌 + 零位移动画 / 预览拍不动窗口 / 全局一份作用域 / 只读项与 reduced-motion 红线。② 新增 <strong>§05「数值调整页（右键面板）」</strong>九小节（形态定位 · 入口 · 字段表 · 即时生效与预览拍 · 持久化契约 · 只读与红线 · 四处收层登记 · 交付收敛 · 验收探针），原 §05–§10 <strong>顺延为 §06–§11</strong>（37 处 <code>§</code> 引用倒序替换并核对守恒）。③ 显式<strong>更正 R0–R7 的「复用 drawerMenu 空位」结论</strong>: 那个早退空位不能填 —— 填了就是「只有一个模板选项」的半残菜单，还与 <code>drawer-merge.spec.mjs</code> strict-mode 相撞; 改为图宿主 <code>contextmenu</code> + <code>stopPropagation</code>。④ <strong>交付收敛</strong>: 只接 T6，T1–T5 降为构成要素 / 参考实现（§04 标签加「参考」、实验台顶部注明、契约 JSON 标 <code>reference_only</code>）; §06 加 <strong>S0 面板</strong>、S3 改写为「面板接线」。⑤ §07 <strong>关闭 P1 / P4 / P10 / P13 / P14 / P16</strong>、新增 <strong>P18</strong>（字段集）; §08 新增 <strong>D20–D27</strong>; §09 新增三条风险（面板遮挡 / 右键事件冲突 / localStorage 脏值）; §10 新增<strong>面板九项探针</strong>并更正「禁止新增分片」为「四套 tpl-manifest 必须同步登记」。⑥ §04 新增<strong>右键面板预演</strong>: 画布右键弹同款面板，与控件区双向同步，可「预览一拍」（不动窗口）。状态仍 <code>Open</code>（待实施授权）。</li>
+  <li><span class="tag">R7 · 26-11-12-2335</span> <strong>竖扫描回声收成受控行程</strong>: 用户反馈「竖向扫描线不要扫过全屏，在过右边的线后逐渐透明，大概在过右边的线后 100–200px 的位置完全消失」。① 定位问题不在亮束而在<strong>回声</strong>: R5 让它 <code>g.R → g.L</code> 整幅扫掠来承担「扫」的语义，于是每拍一条 1px 竖线横穿曲线与网格，与 I6 / R4 气质相反。② 改法: <code>span = clamp(0.22 × 绘图宽, 100, 200)</code>，越线后 <code>alpha ∝ pow(1 − d/span, 0.85)</code>，<code>d ≥ span</code> <strong>零绘制</strong>; 行程窗口收到 0.18–0.45beat 且改匀速（原 easeOut 会把淡出压到最后几十毫秒）。③ 束体六层结构 / 曲线包络 / 色散 / 彗尾 / 梳齿 / 切片全部不动，仍 23 指令、零 <code>fillRect</code>。④ 新增 <code>S.echoSpan</code> + <code>echoSpanPx()</code> + <code>sEcho</code> 五档控件（<code>auto</code> / <code>100</code> / <code>150</code> / <code>200</code> / <code>full</code> 对照），导出新字段 <code>echo_travel_px</code> / <code>echo_travel_mode</code> / <code>echo_travel_note</code> / <code>echo_fade</code> / <code>echo_fade_cap_px</code>; 新增 <strong>P17 / D19</strong>、§02 痛点条、§09 一条风险、§10 回声行程探针（⑦⑧）; §01 / §03 / §04 / §06 同步。冒烟新增 8 条 R7 断言，逐帧截图核到回声在 <code>d ≈ 64px</code> 可见、<code>d ≈ 113px</code> 极淡、<code>d ≥ span</code> 零绘制。<code>Open</code> 不变。</li>
+  <li><span class="tag">R6 · 26-11-12-2225</span> <strong>横向线条改为「联动 + 确定性伪随机」</strong>: 用户问「横向的彩色线条（故障扫描）能否改为随机？或与 lead/delta 联动」→ 判断<strong>不是二选一</strong>，重写两处: ① <code>glitchSlices</code> 从「4 条等距 66px 固定色条」改为「2/3/5 条、中心取 <code>lead</code> 末点 y、带宽与长度随 Δ 增长、细纹 1.5px、颜色池以<strong>故障色为主</strong>（Lv 色约 45% / 品红 35% / <code>lead</code> 语义色 20% —— 语义色只作点缀，反过来会让切片与曲线同色隐身）」; ② 扫描束梳齿从「7 条等距常量长度」改为「3/5/7 条、沿 up+dl 包络分层、长度随 Δ」。新增 <code>hash01(拍序号, 槽位)</code> 确定性伪随机 + <code>strat</code> 分层采样 + <code>S.bi</code> 拍序号; 新增 <code>sTear</code> 三档控件与 <code>glitch_lines</code> 导出块; I9 补「横向细线条 ≤12 条/帧」，束体 + 切片上限 28; 新增 <strong>P16 / D18</strong>、§09 一条风险、§10 探针、§03 新小节。5 个模板的既有结构不变。</li>
+  <li><span class="tag">R5 · 26-11-12-2147</span> <strong>扫描束重构 + 并入 T6</strong>: 用户反馈「故障扫描也加入综合模板，但是竖向扫描线需要更改，当前的竖向扫描线不够精致」。① 定位旧束体缺陷（单层 10px 对称渐变 <code>fillRect</code> + 3 条固定长度速度线 → 无方向感 / 无层次 / 与曲线无关 / 加宽即压谱面）。② 重做为<strong>双相位「亮束入场 + 回声全幅扫掠」</strong>: 六层结构（1px 亚像素硬核 / 2.5·5·10·16·24·34px 六层 Lv 晕 / ±1.6px 双侧色散 / 5 段非对称彗尾 / 3/5/7 条梳齿 / 1px 回声 + 9px 淡晕），纵向亮度按<strong>两轨末点 y 的渐变包络</strong>起落; 亮束行程 1.2 格止于判定线（与冲击窗同长），扫掠由 α≤0.20 回声承担（R7 再收为 100–200px 硬停）。③ 束体主体全程 stroke（梳齿是 1px 级 <code>fillRect</code>）、<strong>零整块 <code>fillRect</code> 铺底</strong>，逐帧 23 指令（6 晕 + 1 核 + 2 色散 + 5 彗尾 + ≤7 梳齿 + 2 回声，上限 23），不新增 blur。④ <strong>T4 并入 T6</strong>（强度 ×0.78，共享同一判定帧 / L0 / 扫描道），T6 由四层变<strong>五层</strong>，模板数仍 6; 新增 <strong>P15</strong>、§09 风险、§10 扫描束探针与 T6 同构断言、JSON <code>scan_beam</code> 字段（层清单 / 23 指令 / alpha caps / 零铺底 / 不压数据）。⑤ §02 新增 R5 痛点条与 §01 R5 段落，§03 T4 / T6 行、§04 引言、§06 S2 同步。状态仍 <code>Open</code>。</li>
+  <li><span class="tag">R4 · 26-11-12-1309</span> <strong>背景静态化 + N 霓虹层 + T6 综合模板</strong>: 用户反馈「背景不要闪烁 / 右边缘背景需要与其它地方保持一致 / T1 曲线颜色固定后似乎不适用了 / 加一个综合模板: T1 霓虹(可应用于除曲线外元素) + T2 光带爬升 + T3 粒子 + T5 分级(与 T1 霓虹联动决定颜色)」。① 删除 <code>toneBreath()</code> 整绘图区铺色与 <code>fillRect(g.R … W)</code> 右缘入场地带底色，画布背景恒由 CSS <code>#0d141a</code> 提供、右缘与绘图区同色 → 新增 <strong>G7 / I11</strong>、改写 <strong>I6 / I9</strong>、修正 §02 调研「色调呼吸」条与 §03 节奏公式 <code>breath → neon</code>、图层顺序与 V1 色彩行、§11 R1 记录的入场地带表述。② 霓虹从模板降格为横切 <strong>N 霓虹元素层</strong>（§03 新增小节，白名单 / 黑名单 + Lv 色相联动 + ≤0.33×beat 回落），<strong>T1 重定义为「霓虹元素层」</strong>的纯展示形态，不再依赖曲线 / 背景变色。③ 新增 <strong>T6 综合 · 霓虹光带</strong>: T2 两轨光带插值 + T3 多边形粒子 + T5 分级(边数 / 粒子数 / <strong>N 色相</strong>) + T1 霓虹，<strong>模板数 5 → 6</strong>; demo 默认切 T6、<strong>P1 改推 T6</strong>、新增 <strong>P13/P14</strong>、拍板记录 <strong>D16</strong>、§09 一条已修风险、§10 三条新探针。④ §04 新增「霓虹元素层 N」开关，HUD 显示 N 状态与背景静态，JSON 导出加 <code>neon_*</code> / <code>fusion_*</code> / <code>background</code> 字段; <code>tone_breath_by_ms</code> 改 <code>neon_accent_by_ms</code>。状态仍 <code>Open</code>。</li>
+  <li><span class="tag">R3 · 26-11-12-1235</span> <strong>双轨补漏</strong>: 用户反馈「流量图具有上传 / 下载双曲线，目前的模板只有 1 条有特效」→ 第五轮只读核查确认生产 <code>series[1]/[2]</code> 双 series、<code>setData([xs, up, dl])</code> 三列、tooltip / 图例 / 限速虚线全为双通道契约; 初版 demo 第二条仅静态暗色陪衬（<code>disp.map(v=&gt;v×0.34+0.06)</code>），无独立 Δ / 等级 / 插值 / 反馈，属方案级漏项。补 <strong>L1 双轨底座</strong>（D1 语义色守恒 / D2 独立状态机且与 L0 解耦 / D3 主导轨仲裁 / D4 缺口与贴近缩小）、目标 <strong>G6</strong>、<strong>I7 注 + I9 改写 + I10 新增</strong>、待拍板 <strong>P11/P12</strong>、拍板记录 <strong>D15</strong>、§09 两条风险、§10 守阵行与双轨探针; <strong>重写 §04 实验台</strong>为双数组双通道，新增「双轨策略 / 双轨场景」控件、双轨 HUD 与 <code>dual_*</code> 导出字段; <strong>默认 D3-b 双轨各发半套</strong>，两条曲线都有可见反馈、预算按两轨合计守恒。5 个模板数量不变，全部按双轨运行，状态仍 <code>Open</code>。</li>
+  <li><span class="tag">R2 · 26-11-12-1207</span> <strong>视觉升级 + T3 退役</strong>: 用户反馈「T3 整个曲线伪影不适用 / 其余不够大胆前卫」。① <strong>T3「整曲线残影淡出」退役</strong>，理由 = 与 L0 语义重复 / 双重影 / 违反 I6 / 需缓存 2880 点旧列; 槽位由 <strong>T3「棱镜碎裂」</strong>接替，5 个数量不变。② 补音游视觉语言调研（Phigros 谱面行为标准 AP 金 FC 蓝与「炸开的粒子」、Muse Dash 三层同帧、粒子三阶段 3–5 倍速、Phigros 色调呼吸 20 帧、故障艺术 / Arc 几何、信息层级硬约束）。③ 新增 <strong>视觉引擎 V</strong>（V1 色彩分级 + 辉光 + 色调呼吸 / V2 多边形环 · 菱形 · glitch 切片 / V3 三阶段粒子 ≤32）、目标 G5、<strong>I6 改写 + I9 新增</strong>、节奏公式 <code>breath</code> / <code>particles</code> 段、待拍板 <strong>P8/P9/P10</strong>、拍板记录 <strong>D14</strong>、§09 两条风险、§10 视觉引擎探针。④ 五模板全部升级（霓虹判定脉冲 / 光带爬升 / 棱镜碎裂 / 故障扫描 / 棱镜分级）; §04 新增「配色档（霓虹 / 克制 / 故障）」与「粒子密度」控件、脚本重写为严格图层顺序 + 几何绘制 + 三阶段粒子，保留「克制」档等价初版供对比。状态仍 <code>Open</code>。</li>
+  <li><span class="tag">R1 · 26-11-12-1155</span> <strong>方案级补漏</strong>: 按用户反馈「模板无法表示值更新后图层整体左移」做第四轮只读核查，确认 <code>points</code> 定长滚动 + <code>scales.x</code> auto range 使整图每拍瞬时左移一格，是瞬时跳变主因。新增 <strong>L0 左移底座</strong>（§03，L0-a/b/c 三路径）、不变量 <strong>I8</strong>、节奏公式 <code>shift</code> 段、待拍板 <strong>P6/P7</strong>、拍板记录 <strong>D13</strong> 与 D2 修正注、§09 两条风险、§10 左移连续性探针; <strong>重写 §04 实验台</strong>: 40 点窗口每拍真实 <code>shift + push</code>、绘制层 <code>dx</code> 从 +1 格缓动到 0、右侧新桶入场地带（<span class="np">R4 已删除: 与绘图区形成常驻色差，见 D16</span>）、新增「左移策略 / 左移收敛」两个控件与 HUD / JSON 字段。5 个模板数量不变，状态仍 <code>Open</code>。</li>
+  <li><span class="tag">R0 · 26-11-12-1139</span> 三轮 grilling (Q1–Q12) 拍板结论 + 三轮只读事实核查 + 音游动效调研; 内嵌 5 个可交互模板与统一调参面板; 状态 Open 待 P1–P5 拍板。</li>
+</ul>
+
+</div>
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var clamp = function (v, a, b) { return Math.max(a, Math.min(b, v)); };
+  var easeOut = function (p) { return 1 - Math.pow(1 - p, 3); };
+  var easeLinear = function (p) { return p; };
+  var TAU = 6.2831853;
+
+  var L0 = '<b>L0 左移 + L1 双轨 + N 霓虹元素层 + 静态背景（六模板共用）</b> · 本拍新桶落袋后，定长窗口整体前移一格；绘制层先把两条曲线一起摆回旧位置，再在 ≤beat 内平滑左移一格到真值位置。上传 / 下载各自独立 Δ 与等级、各自数值插值，共享同一判定帧与左移 dx。<strong>R4: 画布背景与右边缘恒为同一静态色，无任何整块铺色</strong>; 霓虹只作用于判定线短亮段 / 环外圈 / 粒子外圈 / 锚辉光 / 徽标等非曲线元素，色相由 Lv 等级联动。装饰按「静态背景 → 扫描束 / 几何 / 粒子 / N → 双曲线描边」绘制，两条曲线永远最上层且恒用各自语义色。<br>';
+  var NOTES = {
+    pulse: '<b>T1 霓虹元素层</b> <span class="np">R4 重定义</span> · 曲线描边色已被 D1 固定为各自语义色、背景又被 R4 禁闪，因此 T1 <strong>不再染曲线 / 不染背景</strong>，改为 <strong>N 层的纯展示形态</strong>: 左移交给 L0，两轨真值立即落地，只在判定帧给按 D3 仲裁的双轨六边环（<strong>外圈着 Lv 色</strong>）、判定线短亮段与末点锚辉光。零粒子、零插值、读数零滞后、风险最低。参照 Phigros AP 金 / FC 蓝判读闪光。',
+    rise: '<b>T2 光带爬升</b> · <strong>上传 / 下载两列分别从各自旧值 ease-out 缓动到真值</strong>，各画一条渐变流动光带 + 辉光描边 + 旋转菱形末点 + 少量拖尾粒子; 这是 Q2 的 A（数值插值）的双轨实现，两轨读数滞后均 ≤0.6×beat 且单调收敛。参照 Cytus 音符升起 / Hold 光带。',
+    shatter: '<b>T3 棱镜碎裂</b>（替换原整曲线残影）· 判定帧只在<strong>主导轨末点局部</strong>炸开三角 / 四边 / 五边几何碎片（双轨合计 ≤32）+ 快速扩张八边环 + Lv.3 叠 glitch 切片; 碎片按轨道语义色分批，<strong>不画整条曲线残影</strong>。参照 Phigros「炸开的粒子」· Beat Saber 方块碎片。',
+    scan: '<b>T4 故障扫描</b> <span class="np">R5 重做扫描束 / R7 收行程</span> · 两轨真值同时立即落地; 扫描束改为<strong>双相位</strong>: 相位 A（0–0.12beat）一道<strong>亚像素 1px 硬核 + 2.5/5/10/16/24/34px 六层 Lv 晕 + 双侧 ±1.6px 青/品红色散 + 5 段非对称彗尾 + 3/5/7 条梳齿（随 <code>lead</code> 等级）</strong>从右侧留白滑入判定线，纵向亮度按<strong>两轨末点 y 的包络</strong>起落; 相位 B（0.18–0.45beat）亮束在判定线衰减，同时一条 <strong>α≤0.20、按曲线包络着色的回声越过判定线后按距离淡出，100–200px 内完全消失</strong>（<span class="np">R7</span>: 不再整幅扫掠; 扫过曲线时仍最亮）。亮束<strong>不横穿数据、不用整块 fillRect</strong>，另有按轨收缩六边环 + glitch 水平切片（±3px，≤5px 微震）。参照 Phigros 电子核章节故障艺术 / 音游扫描线。',
+    combo: '<b>T5 棱镜分级</b> · 按 <strong>lead = argmax(Δ_up, Δ_dl)</strong> 的等级决定<strong>色相 + 多边形边数(3/6/8) + 双轨合计粒子数 + 是否局部霓虹加倍 / 微震</strong>，角落数字滚动; 数字仅装饰，两轨读数立即为真。<strong>R4: 等级还是 N 层的色相源</strong>，横切维度，可叠加到任一模板（T6 已内置）。参照 Combo 计数 / Perfect 金 Good 蓝。',
+    fusion: '<b>T6 综合 · 霓虹光带</b> <span class="np">R4 新增 / R5 并入 T4 · 推荐默认</span> · <strong>五层同拍组合</strong>: <strong>T2</strong> 上传 / 下载两列各自 ease-out 插值 + 各画一条渐变流动光带（A 的双轨实现）; <strong>T3</strong> 判定帧同帧喷射多边形碎片（两轨合计 ≤32）; <strong>T4</strong> 同一道<strong>精致扫描束（强度 ×0.78，双轨共享）</strong>滑入判定线，回声只擦过判定线右侧 100–200px 便淡出（<span class="np">R7</span>）; <strong>T5</strong> 取 <code>lead</code> 等级决定环边数 3/6/8、粒子数、<strong>扫描束色相与宽度感</strong>; <strong>T1 霓虹</strong>把该色相只涂在<strong>环外圈 / 粒子外圈 / 判定线短亮段 / 锚辉光 / 角落 Lv 徽标</strong>上。<strong>曲线描边恒为语义色、背景恒静态</strong>，五者共享同一判定帧与 L0 位移，真值仍 ≤beat 落地。参照音游「判定闪光 + 扫描线 + 粒子 + Combo 分级」同帧多层。'
+  };
+
+  // up / dl 模拟四皮肤 --today-up / --today-down 语义色; Lv 色只作用于反馈层
+  var PAL = {
+    neon:   { 1: '#7AD9FF', 2: '#FEFFA9', 3: '#FF6BD6', up: '#9B8CF0', dl: '#5FD3C0', blur: 10 },
+    calm:   { 1: '#e2a86e', 2: '#e2a86e', 3: '#e2a86e', up: '#8a93a8', dl: '#6db3c9', blur: 0 },
+    glitch: { 1: '#5CF2E8', 2: '#FFE04D', 3: '#FF4D9D', up: '#9B8CF0', dl: '#5FD3C0', blur: 14 }
+  };
+
+  var cv = $('cv'), ctx = cv.getContext('2d');
+  var W = 760, H = 250;
+  var S = {
+    tpl: 'fusion', v: 12, period: 3, beat: 1000, impactMs: 120,
+    tailReal: 2000, demoTail: 900, cycle: 1900,
+    impact: 0.7, amp: 0.45, ease: 'out', tail: true, reduce: false,
+    palette: 'neon', particles: 0.7, neon: true,
+    shift: 'smooth', shiftRatio: 0.6, dx: 0, pShift: 1,
+    dual: 'both', scene: 'link', lead: 'dl', merged: false,
+    bi: 0, tear: 'linked', echoSpan: 'auto',
+    band: true, parts: true, scan: true, grade: true,   // R8: T6 五层中可单独关的四层(T1 复用 neon)
+    on: true, preview: false, pvSaved: null, lastReal: 0, uiTick: 0,   // R8: 总开关 / 预览一拍 / 状态行
+    ch: {
+      up: { pts: [], prev: 0, target: 0, shown: 0, committed: 0, delta: 0, level: 1, live: true },
+      dl: { pts: [], prev: 0, target: 0, shown: 0, committed: 0, delta: 0, level: 1, live: true }
+    },
+    beatStart: 0, playing: false, parts: []
+  };
+  var N = 40;
+  var KEYS = ['up', 'dl'];
+
+  function rgba(hex, a) {
+    var n = parseInt(hex.slice(1), 16);
+    return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + clamp(a, 0, 1).toFixed(3) + ')';
+  }
+  function pal() { return S.reduce ? PAL.calm : PAL[S.palette]; }
+  function isCalm() { return S.reduce || S.palette === 'calm'; }
+  function trackCol(k) { return pal()[k] || '#8fd0e0'; }        // D1: 恒为轨道语义色
+  function leadLevel() { return Math.max(S.ch.up.level, S.ch.dl.level); }
+  function lvColor() {
+    // R8: grade 层关掉时, N 层恒用 Lv.1 色(分级只留边数/粒子数, 不再变色)
+    if (S.grade === false) return pal()[1];
+    return pal()[Math.max(1, leadLevel())] || pal()[1];
+  }
+  function levelOf(d) { return d < 0.005 ? 0 : (d <= 0.05 ? 1 : (d <= 0.30 ? 2 : 3)); }
+  // R6: 确定性伪随机 —— 同一 (拍序号, 槽位) 永远得到同一个 [0,1), 所以「每拍不重复」但可复现可断言
+  function hash01(a, b) {
+    var h = ((a | 0) * 374761393 + (b | 0) * 668265263) | 0;
+    h = ((h ^ (h >> 13)) * 1274126177) | 0;
+    return ((h ^ (h >> 16)) >>> 0) / 4294967296;
+  }
+  // 横向线条取随机源: linked = 联动+确定性伪随机 / random = 纯 Math.random(不可复现, 仅对照) / fixed = 每拍同形
+  function tearRnd(i) {
+    if (S.tear === 'random') return Math.random();
+    if (S.tear === 'fixed') return 0.5;
+    return hash01(S.bi, i);
+  }
+  // 分层采样: 第 i 条落在第 i~i+1 段内, 既覆盖整段又不聚集
+  function strat(i, n, r) { return (i + r) / Math.max(1, n); }
+  // R4: N 霓虹元素层 —— 横切开关, 只作用于非曲线 / 非背景元素
+  function neonOn() { return S.neon && !S.reduce && !isCalm(); }
+
+  function fit() {
+    var r = cv.getBoundingClientRect();
+    var dpr = window.devicePixelRatio || 1;
+    W = Math.max(300, Math.round(r.width));
+    H = 250;
+    cv.width = Math.round(W * dpr);
+    cv.height = Math.round(H * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  function recalc() {
+    S.period = 1.5 * Math.pow(400, S.v / 100);
+    S.beat = clamp(S.period * 400, 320, 1000);
+    S.impactMs = S.beat * 0.12;
+    S.tailReal = Math.min(Math.max(0, S.period * 1000 - S.beat), 2000);
+    S.demoTail = Math.min(S.tailReal, 900);
+    S.cycle = S.beat + S.demoTail;
+    $('vPeriod').textContent = S.period < 10 ? S.period.toFixed(2) + ' s' : Math.round(S.period) + ' s';
+    $('vShift').textContent = Math.round(S.beat * S.shiftRatio) + ' ms';
+    $('vImpact').textContent = Math.round(S.impact * 100) + '%';
+    $('vAmp').textContent = Math.round(S.amp * 100) + '%';
+    $('vParticles').textContent = Math.round(S.particles * 100) + '% (双轨合计 ≤' + partCap() + ')';
+    emit();
+  }
+
+  // 粒子预算是「两轨合计」(I9 R3): 上限按主导轨等级算, 再按 D3 策略分配
+  function partCap() {
+    if (isCalm() || leadLevel() <= 1) return 0;
+    return Math.min(32, Math.round(S.particles * (6 + leadLevel() * 7)));
+  }
+  function emitKeys() {
+    var total = partCap();
+    if (!total) return [];
+    if (S.dual === 'merge') return ['merge'];
+    if (S.dual === 'both') return KEYS.filter(function (k) { return S.ch[k].live && S.ch[k].level > 0; });
+    return (S.ch[S.lead].live && S.ch[S.lead].level > 0) ? [S.lead] : [];
+  }
+  // 双轨场景: 常态联动 / 单轨飙升 / 单轨静默 / 单轨缺口 / 零流量
+  function newTarget(k) {
+    var b = S.ch[k].prev;
+    if (S.scene === 'zero') return 0;
+    var spike = (S.scene === 'dlSpike' && k === 'dl') || (S.scene === 'upSpike' && k === 'up');
+    var quiet = (S.scene === 'dlSpike' && k === 'up') || (S.scene === 'upSpike' && k === 'dl');
+    if (spike) return clamp(b + 0.34 + S.amp * 0.2, 0.10, 0.96);
+    if (quiet) return clamp(b + (Math.random() - 0.5) * 0.03, 0.05, 0.95);
+    if (S.scene === 'upFlat' && k === 'up') return b;
+    return clamp(b + (Math.random() * 2 - 1) * (0.02 + S.amp * 0.5), 0.08, 0.94);
+  }
+  function seedParts() {
+    var keys = emitKeys(), total = partCap();
+    S.parts = [];
+    if (!keys.length || !total) return;
+    var per = Math.max(1, Math.floor(total / keys.length));
+    for (var j = 0; j < keys.length; j++) {
+      for (var i = 0; i < per; i++) {
+        S.parts.push({
+          ch: keys[j],
+          a: (i / per) * TAU + (Math.random() - 0.5) * 0.6,
+          v: 0.45 + Math.random() * 0.85,
+          sz: 1.6 + Math.random() * 2.6,
+          sides: 3 + (i % 3)
+        });
+        if (S.parts.length >= total) return;
+      }
+    }
+  }
+
+  // 两轨独立基线: 下载偏高 / 上传偏低, 偶有接近以演示 D4 锚点合并
+  function seed() {
+    KEYS.forEach(function (k, ki) {
+      var c = S.ch[k], v = ki ? 0.62 : 0.26;
+      c.pts = [];
+      for (var i = 0; i < N; i++) {
+        v = clamp(v + (Math.random() - 0.5) * 0.11, ki ? 0.30 : 0.08, ki ? 0.90 : 0.52);
+        c.pts.push(v);
+      }
+      c.prev = c.pts[N - 1];
+      c.shown = c.prev;
+      c.committed = c.prev;
+      c.target = c.prev;
+      c.delta = 0;
+      c.level = 1;
+      c.live = true;
+    });
+    S.lead = 'dl';
+    S.merged = false;
+    seedParts();
+  }
+
+  // 判定帧: 两轨各自 shift + push 一格, 各自 Δ/等级/静默, 共享同一 dx 与 beatStart
+  function nextBeat(ts) {
+    KEYS.forEach(function (k) {
+      var c = S.ch[k];
+      c.prev = c.shown;                       // 以当前显示值接续, 禁止回跳
+      c.target = newTarget(k);
+      c.shown = c.prev;
+      c.live = !(S.scene === 'dlGap' && k === 'dl');
+      c.delta = Math.abs(c.target - c.prev) / Math.max(c.prev, 0.08);
+      c.level = S.scene === 'zero' ? 0 : (c.live ? levelOf(c.delta) : 0);
+      if (S.shift !== 'off') { c.pts.shift(); c.pts.push(c.target); }
+      else { c.pts[N - 1] = c.target; }
+      c.committed = c.target;
+      if (S.reduce) { c.shown = c.target; c.pts[N - 1] = c.target; }
+    });
+    S.lead = S.ch.dl.delta >= S.ch.up.delta ? 'dl' : 'up';
+    if (!S.ch[S.lead].live || S.ch[S.lead].level === 0) S.lead = S.lead === 'dl' ? 'up' : 'dl';
+    S.bi++;
+    seedParts();
+    S.beatStart = ts;
+    S.lastReal = ts;
+    if (S.preview) { S.preview = false; S.pvSaved = null; endPreviewBtn(); }   // R8: 真值抢占, 预览立即作废
+  }
+
+  function geo() { return { L: 34, R: W - 46, T: 20, B: H - 26 }; }
+  function stepX(g) { return (g.R - g.L) / (N - 1); }
+  function px(i, g) { return g.L + i * stepX(g); }
+  function py(v, g) { return g.B - v * (g.B - g.T); }
+
+  function poly(cx, cy, r, sides, rot, fill, stroke, lw) {
+    ctx.beginPath();
+    for (var i = 0; i < sides; i++) {
+      var a = rot + i * TAU / sides;
+      var x = cx + Math.cos(a) * r, y = cy + Math.sin(a) * r;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+    if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+    if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = lw || 1.5; ctx.stroke(); }
+  }
+  function ring(cx, cy, r, sides, rot, stroke, lw) {
+    if (isCalm()) { ctx.beginPath(); ctx.arc(cx, cy, r, 0, TAU); ctx.strokeStyle = stroke; ctx.lineWidth = lw || 1.5; ctx.stroke(); }
+    else poly(cx, cy, r, sides, rot, null, stroke, lw);
+  }
+  function clipPlot() {
+    var g = geo();
+    ctx.beginPath(); ctx.rect(g.L - 1, g.T, W - g.L, g.B - g.T); ctx.clip();
+  }
+  function line(arr, color, width, alpha, dx, glowColor, blur) {
+    var g = geo(), off = dx || 0;
+    ctx.save();
+    clipPlot();
+    ctx.globalAlpha = alpha === undefined ? 1 : alpha;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = width;
+    if (glowColor && blur) { ctx.shadowColor = glowColor; ctx.shadowBlur = blur; }
+    ctx.beginPath();
+    for (var i = 0; i < arr.length; i++) {
+      var x = px(i, g) + off, y = py(clamp(arr[i], 0, 1), g);
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // R4: 原 V1「色调呼吸」整块铺色已删除(背景闪烁)。改为 N 层: 只在判定线两轨末点
+  // 附近画局部短亮段, 色相由 T5 分级(lead 等级)联动决定; 背景 / 右边缘零绘制。
+  function neonAccent(t, xJudge, ys) {
+    if (!neonOn()) return;
+    var lv = leadLevel();
+    if (lv === 0 || t > S.beat * 0.33) return;
+    var q = clamp(1 - t / (S.beat * 0.33), 0, 1);
+    var col = lvColor();
+    ctx.save(); clipPlot();
+    KEYS.forEach(function (k) {
+      if (!S.ch[k].live) return;
+      var y = ys[k];
+      ctx.strokeStyle = rgba(col, 0.55 * q * S.impact);
+      ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(xJudge, y - 10); ctx.lineTo(xJudge, y + 10); ctx.stroke();
+      poly(xJudge, y, 2.2 * q + 1, 4, t / 300, rgba(col, 0.7 * q * S.impact));
+    });
+    ctx.restore();
+  }
+
+  // V3: 三阶段粒子 —— 爆发期 ×4.5, 拖尾减速透明, 0.55×beat 后零绘制
+  // R3: 按轨道/合流锚分批取子集; 双轨合计 ≤32; 色按轨道语义色
+  // R4: neon=true 时只给粒子「外圈描边」着 Lv 色(N 层), 粒子本体仍为轨道语义色
+  function particles(t, x, y, key, neon) {
+    var list = S.parts.filter(function (p) { return p.ch === key; });
+    if (!list.length || t > S.beat * 0.55) return;
+    var life = clamp(1 - t / (S.beat * 0.55), 0, 1);
+    var boost = t < S.impactMs ? 4.5 : 1;
+    var col = key === 'merge' ? lvColor() : trackCol(key);
+    var edge = (neon && neonOn()) ? rgba(lvColor(), 0.6 * life * S.impact) : null;
+    ctx.save(); clipPlot();
+    for (var i = 0; i < list.length; i++) {
+      var p = list[i];
+      var d = p.v * (t / 1000) * 90 * boost;
+      var xx = x + Math.cos(p.a) * d, yy = y + Math.sin(p.a) * d * 0.7;
+      poly(xx, yy, p.sz * life, p.sides, t / 260 + i, rgba(col, 0.78 * life * S.impact), edge, 1);
+    }
+    ctx.restore();
+  }
+
+  // V2: glitch 水平撕裂切片 (R6 重写) —— 强度与 lead 联动, 每拍长相由确定性伪随机决定
+  //   R5 及以前: 4 条 y 恒按 (i+1)/5 等分、x 恒在 g.R-66、长度恒 66、alpha 恒 0.2, 只有 ±3px 抖动
+  //   -> 每拍长得一模一样, 读起来是「贴在右边缘的固定色条」, 不承载任何信息, 也不像撕裂
+  //   R6: 数量 2/3/5 按等级; 中心 = lead 轨末点 y; 撕裂带宽 = (0.08+0.30*Δ归一)*绘图高;
+  //       长度 = 10..80 随 Δ 拉长; 右端留 0..18px 参差; 颜色以 Lv 色/品红为主(故障色), 语义色只占少数
+  //       —— 切片贴着 lead 曲线, 若用语义色主调会与曲线同色而隐身(R4 同类错误)
+  function glitchSlices(t, ys) {
+    var lv = leadLevel();
+    if (isCalm() || lv === 0 || t > S.beat * 0.25) return;
+    // fusion 里切片只在 Lv.2 以上出现, 避免五层叠加时过于嘈杂
+    if (!(S.palette === 'glitch' || S.tpl === 'scan' || (S.tpl === 'fusion' && lv >= 2) || (S.tpl === 'shatter' && lv === 3))) return;
+    var q = clamp(1 - t / (S.beat * 0.25), 0, 1);
+    var g = geo(), span = g.B - g.T, mid = (g.T + g.B) / 2;
+    var isFix = S.tear === 'fixed';                           // 对照档: 完整复现 R5 的常量几何, 忽略 Δ 与等级
+    var n = isFix ? 4 : (lv === 3 ? 5 : (lv === 2 ? 3 : 2));
+    var pow = isFix ? 0 : clamp(S.ch[S.lead].delta / 0.5, 0, 1);   // 0..1: 这一拍有多猛
+    var spread = (isFix ? 0.40 : (0.08 + 0.30 * pow)) * span;      // 撕裂带宽: Δ 小=末点一道裂纹, Δ 大=整片被拉开
+    var cy0 = isFix ? mid : ((ys && isFinite(ys[S.lead])) ? ys[S.lead] : mid);
+    var thr = isFix ? 3 : 1.5 + (lv === 3 ? 0.5 : 0);              // 细纹 1.5px(原 3px 偏粗)
+    var alpha = isFix ? 0.2 * q * S.impact : (0.10 + 0.08 * lv) * q * S.impact;
+    // 色序: Lv 色 / 品红 / lead 语义色 —— 以故障色为主, 否则切片贴着 lead 曲线又同色会直接隐身
+    var pool = [lvColor(), '#FF4D9D', trackCol(S.lead)];
+    ctx.save(); clipPlot();
+    for (var i = 0; i < n; i++) {
+      var r = tearRnd(i * 13 + 3);
+      var cy = clamp(cy0 + (strat(i, n, r) - 0.5) * 2 * spread, g.T + 2, g.B - 2 - thr);
+      var len = isFix ? 66 : 10 + 70 * pow * (0.45 + 0.55 * tearRnd(i * 7 + 11));
+      var ci = isFix ? (i % 2 ? 1 : 0) : (r < 0.45 ? 0 : (r < 0.80 ? 1 : 2));
+      var off = (tearRnd(i * 5 + 1) * 2 - 1) * 3 * q;         // 保留 ±3px 微震, 但每拍相位不同
+      var inset = isFix ? 0 : 18 * tearRnd(i * 17 + 9);       // 右端也参差, 否则一排平齐的「柱子」
+      ctx.fillStyle = rgba(pool[ci], alpha);
+      ctx.fillRect(g.R - len - inset + off, cy, len, thr);
+    }
+    ctx.restore();
+  }
+
+  // 次区: 每轨 ≤2 个极轻流动光点(合计 ≤4), 按轨道语义色
+  function flowDots(t, series, dx) {
+    if (!S.tail || t <= S.beat || t >= S.cycle || S.reduce || S.palette === 'calm') return;
+    var q = (t - S.beat) / Math.max(1, S.cycle - S.beat);
+    var g = geo();
+    ctx.save(); clipPlot();
+    KEYS.forEach(function (k) {
+      var arr = series[k];
+      if (!arr || !arr.length) return;
+      for (var i = 0; i < 2; i++) {
+        var ph = ((t / 1000) * 0.12 + i / 2 + (k === 'up' ? 0.31 : 0)) % 1;
+        var idx = Math.min(arr.length - 1, Math.floor(ph * (arr.length - 1)));
+        poly(px(idx, g) + dx, py(arr[idx], g), 2.2, 4, t / 500, rgba(trackCol(k), 0.3 * (1 - q)));
+      }
+    });
+    ctx.restore();
+  }
+
+  // R5: 扫描束的纵向包络 —— 亮度在两条曲线末点 y 处最强, 上下渐隐;
+  // 这样束不是「全高一条杠」, 而是一道穿过数据的扫描光刃(仍不改变任何读数像素)。
+  function beamEnv(g, ys, fade) {
+    var span = g.B - g.T;
+    var lo = (ys && isFinite(ys.up)) ? clamp((ys.up - g.T) / span, 0.02, 0.98) : 0.5;
+    var hi = (ys && isFinite(ys.dl)) ? clamp((ys.dl - g.T) / span, 0.02, 0.98) : 0.5;
+    var pts = [{ p: 0, a: 0.07 }, { p: 1, a: 0.07 }];
+    if (Math.abs(lo - hi) < 0.08) { pts.push({ p: (lo + hi) / 2, a: 1 }); }
+    else { pts.push({ p: lo, a: 1 }); pts.push({ p: hi, a: 1 }); }
+    pts.sort(function (a, b) { return a.p - b.p; });
+    var gr = ctx.createLinearGradient(0, g.T, 0, g.B);
+    if (gr && gr.addColorStop) {
+      pts.forEach(function (st) { gr.addColorStop(st.p, rgba(lvColor(), clamp(st.a * fade, 0, 1))); });
+    }
+    return gr;
+  }
+
+  // R7: 回声的横向行程 —— 越出判定线(绘图区右缘)后的可见距离, 到点即完全消失, 绝不扫过全屏
+  //   auto = 随绘图宽取 100~200px 的中间值(移动端不至于一擦就穿, 宽屏也不会拉成整幅)
+  //   full = R5 旧观感(整幅右->左扫掠), 只作对照
+  function echoSpanPx(g) {
+    var w = g.R - g.L;
+    var px = S.echoSpan === 'full'
+      ? w
+      : (S.echoSpan === 'auto' ? clamp(w * 0.22, 100, 200) : +S.echoSpan);
+    return clamp(px || 150, 40, w);
+  }
+
+  // R5: T4 扫描束 —— 精致度来自 6 个层次, 而不是一条对称的半透明胶带:
+  //   (1) 亚像素对齐的 1px 硬核 (2) 2.5/5/10/16/24/34px 六层 Lv 晕(低 alpha 叠加逼近高斯)
+  //   (3) 双侧色散 +-1.6px (青 / 品红, 仅前 0.5beat) (4) 只在来向拖尾的 5 段彗尾
+  //   (5) 沿曲线包络分层的梳齿 3/5/7 条(按等级), 长度与横向偏移随 Δ 联动、相位随拍序号变化 (6) 相位 B 的回声: R7 起只在判定线右侧 100~200px 内擦过并淡到 0
+  // 相位 A 行程 1.2 格 / 0.12beat, 与冲击窗同长 -> t=0 首帧即可见, 不空 100ms
+  // 约束: 全程零 fillRect 铺底(不触 I11 背景守阵); 亮束止于判定线, 不横穿数据; 回声不越出判定线左侧 echoSpanPx;
+  //       束体逐帧 <= 23 条指令(6 晕 + 1 核 + 2 色散 + 5 彗尾 + <=7 梳齿 + 2 回声); 另加切片 <= 5, 合计 <= 28;
+  //       echo alpha <= 0.20; blur 不新增; 横向细线条合计 <= 12 条/帧(切片 5 + 梳齿 7)。
+  function scanBeam(t, ys, scale) {
+    if (isCalm() || S.reduce) return;
+    var g = geo(), sx = stepX(g);
+    var a0 = (scale === undefined ? 1 : scale) * S.impact;
+    if (a0 <= 0.02) return;
+    var pAll = clamp(t / (S.beat * 0.7), 0, 1);
+    if (pAll >= 1) return;
+    var pEnt = clamp(t / Math.max(60, S.beat * 0.12), 0, 1);   // 与冲击窗同长
+    var fade = Math.pow(1 - pAll, 1.4);
+    var x0 = g.R + sx * 1.2 * (1 - easeOut(pEnt));     // 相位 A: 右侧留白 1.2 格滑入判定线
+    var env = beamEnv(g, ys, fade * a0);
+    ctx.save(); clipPlot();
+    // 六层晕(宽 -> 窄): 用低 alpha 多层叠加逼近高斯衰减, 避免「一道硬边光条」
+    var halo = [[34, 0.035], [24, 0.05], [16, 0.08], [10, 0.13], [5, 0.22], [2.5, 0.38]];
+    ctx.strokeStyle = env;
+    for (var h = 0; h < halo.length; h++) {
+      ctx.lineWidth = halo[h][0];
+      ctx.globalAlpha = halo[h][1];
+      ctx.beginPath(); ctx.moveTo(x0, g.T); ctx.lineTo(x0, g.B); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = rgba('#F2FFFF', 0.86 * fade * a0);
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(x0 + 0.5, g.T); ctx.lineTo(x0 + 0.5, g.B); ctx.stroke();
+    // 双侧色散: 只在前 0.5beat 存在, 替代原「青->品红整条渐变」
+    if (t < S.beat * 0.5) {
+      var dfade = (1 - clamp(t / (S.beat * 0.5), 0, 1)) * a0;
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = rgba('#5CF2E8', 0.3 * dfade);
+      ctx.beginPath(); ctx.moveTo(x0 - 1.6, g.T); ctx.lineTo(x0 - 1.6, g.B); ctx.stroke();
+      ctx.strokeStyle = rgba('#FF4D9D', 0.26 * dfade);
+      ctx.beginPath(); ctx.moveTo(x0 + 1.6, g.T); ctx.lineTo(x0 + 1.6, g.B); ctx.stroke();
+    }
+    // 非对称彗尾: 只在来向(右)拖, 宽度与 alpha 逐段递减 -> 有方向感
+    ctx.strokeStyle = env;
+    for (var j = 0; j < 5; j++) {
+      ctx.globalAlpha = 0.42 * Math.pow(0.7, j) * fade;
+      ctx.lineWidth = 1.2 * Math.pow(0.68, j);
+      var tx = x0 + 2.5 + j * 3.2;
+      ctx.beginPath(); ctx.moveTo(tx, g.T); ctx.lineTo(tx, g.B); ctx.stroke();
+    }
+    // 梳齿 (R6): 沿两条曲线的包络分层铺开 —— 条数/长度/横向偏移由等级与 Δ 联动, 相位由拍序号决定
+    //   R5 及以前: 7 条 y 恒等距 (0.08+c*0.128)、长度恒 6+(c*7)%13, 全由常量 c 算出 -> 每拍完全同形
+    ctx.globalAlpha = 1;
+    var nComb = S.tear === 'fixed' ? 7 : 3 + 2 * (leadLevel() - 1);   // Lv.1 3 / Lv.2 5 / Lv.3 7; fixed 恒 7
+    var yA = (ys && isFinite(ys.up)) ? ys.up : g.T + (g.B - g.T) * 0.5;
+    var yB = (ys && isFinite(ys.dl)) ? ys.dl : yA;
+    var cLo = Math.min(yA, yB), cHi = Math.max(yA, yB);
+    if (cHi - cLo < 28) { var cm = (cLo + cHi) / 2; cLo = cm - 14; cHi = cm + 14; }
+    var powC = clamp(S.ch[S.lead].delta / 0.5, 0, 1);
+    for (var c = 0; c < nComb; c++) {
+      var cyC, lenC, dxC;
+      if (S.tear === 'fixed') {                               // R5 原式: 等距 7 条 + 常量长度
+        cyC = g.T + (g.B - g.T) * (0.08 + c * 0.128);
+        lenC = 6 + (c * 7) % 13;
+        dxC = 0;
+      } else {
+        cyC = cLo + (cHi - cLo) * strat(c, nComb, tearRnd(c * 11 + 5));
+        lenC = 4 + (8 + 12 * powC) * tearRnd(c * 3 + 2);
+        dxC = 3 * tearRnd(c * 9 + 4);
+      }
+      ctx.fillStyle = rgba(lvColor(), 0.26 * fade * a0);
+      ctx.fillRect(x0 + 2.5 + dxC, cyC, lenC, 1);
+    }
+    // 相位 B (R7): 回声越出判定线后按距离淡出 —— 只擦过右侧 100~200px 就归零, 不扫过全屏
+    //   行程由 echoSpanPx 决定(auto / 100 / 150 / 200 / full 对照), fade 到 0 时干脆不绘制,
+    //   所以「越线后 100~200px 完全消失」是几何保证, 不是靠 alpha 调小凑出来的
+    if (pAll > 0.18) {
+      var spanE = echoSpanPx(g);
+      var q = clamp((pAll - 0.18) / 0.27, 0, 1);            // 0.18~0.45 beat 匀速走完全部行程
+      var d = spanE * q;                                    // 已离开判定线的距离(px); 匀速才让淡出分布均匀
+      var fall = Math.pow(clamp(1 - d / spanE, 0, 1), 0.85); // 距离衰减: 前段慢降(仍看得见在走), 末端归零(d = spanE 处为 0)
+      if (fall > 0.004) {
+        var ex = g.R - d;
+        ctx.strokeStyle = beamEnv(g, ys, 0.2 * fall * a0);   // 仍按曲线包络着色 -> 扫过曲线时最亮
+        ctx.globalAlpha = 1;
+        ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(ex + 0.5, g.T); ctx.lineTo(ex + 0.5, g.B); ctx.stroke();
+        ctx.globalAlpha = 0.34 * fall;                       // 淡晕一起收, 否则残影会拖出「半条带」
+        ctx.lineWidth = 9;
+        ctx.beginPath(); ctx.moveTo(ex + 0.5, g.T); ctx.lineTo(ex + 0.5, g.B); ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
+    }
+    ctx.restore();
+  }
+
+  // R3: 单轨 / 合流反馈绘制, 按 D3 仲裁调用; c = 轨道语义色
+  // R4: N 层开启时给环外圈 / 粒子外圈着 Lv 色; fusion 为 T2+T3+T4+T5+T1 的组合模板
+  function fx(t, key, x, y, c, scale) {
+    var r = scale, g = geo(), lv = leadLevel();
+    var useNeon = neonOn();
+    var pPulse = 0;
+    function outer(radius, sides, rot, alpha) {
+      if (!useNeon || isCalm()) return;
+      ring(x, y, radius, sides, rot + 0.4, rgba(lvColor(), alpha * (1 - pPulse) * S.impact * r), 1);
+    }
+    if (S.tpl === 'pulse' && t < S.beat * 0.3) {
+      pPulse = clamp(t / (S.beat * 0.3), 0, 1);
+      ring(x, y, 3 + 20 * pPulse * r, 6, t / 400, rgba(c, 0.85 * (1 - pPulse) * S.impact * r), 2);
+      outer(7 + 27 * pPulse * r, 6, t / 400, 0.5);
+      if (!isCalm()) poly(g.R, y, 5 * (1 - pPulse) + 2, 4, t / 300, rgba(c, 0.7 * (1 - pPulse) * S.impact * r));
+    }
+    if (S.tpl === 'shatter' && t < S.beat * 0.6) {
+      var psh = clamp(t / (S.beat * 0.6), 0, 1);
+      ring(x, y, 4 + 26 * psh * r, 8, t / 320, rgba(c, 0.8 * (1 - psh) * S.impact * r), 2);
+      pPulse = psh; outer(9 + 32 * psh * r, 8, t / 320, 0.45);
+      particles(t, x, y, key, useNeon);
+    }
+    if (S.tpl === 'scan' && t < S.beat * 0.7) {
+      var psc = clamp(t / (S.beat * 0.7), 0, 1);
+      ring(g.R, y, (22 - 16 * psc) * r, 6, t / 300, rgba(c, 0.85 * (1 - psc) * S.impact * r), 2);
+    }
+    if (S.tpl === 'combo' && t < S.beat * 0.6) {
+      var pc = clamp(t / (S.beat * 0.6), 0, 1);
+      var sides = lv === 3 ? 8 : (lv === 2 ? 6 : 3);
+      for (var n = 0; n < lv; n++) {
+        ring(x, y, (6 + n * 7 + 18 * pc) * r, sides, t / 300 + n * 0.3,
+          rgba(c, 0.7 * (1 - pc) * S.impact * r * (1 - n * 0.22)), 2 - n * 0.4);
+      }
+      pPulse = pc; outer(12 + 26 * pc * r, sides, t / 300, 0.42);
+      if (lv === 3) particles(t, x, y, key, useNeon);
+    }
+    if (S.tpl === 'rise' && t < S.beat) particles(t, x, y, key, useNeon);
+    // ===== T6 综合: T3 粒子 + T5 分级(边数/数量) + T1 霓虹外圈;
+    //       T4 扫描束走 draw() 的 scanBeam(整图语义, 双轨共享), 不在这里重复 =====
+    if (S.tpl === 'fusion' && t < S.beat * 0.6) {
+      var pf = clamp(t / (S.beat * 0.6), 0, 1);
+      var fsides = lv === 3 ? 8 : (lv === 2 ? 6 : 3);
+      ring(x, y, 4 + 24 * pf * r, fsides, t / 300, rgba(c, 0.85 * (1 - pf) * S.impact * r), 2);
+      pPulse = pf; outer(9 + 31 * pf * r, fsides, t / 300, 0.55);
+      if (S.parts) particles(t, x, y, key, true);   // R8: T3 粒子层可单独关(环照画)
+    }
+  }
+
+  function draw(t) {
+    var g = geo(), sx = stepX(g);
+    ctx.clearRect(0, 0, W, H);
+
+    // R4: 背景恒静态 —— 底色由 CSS #0d141a 提供, 绘图区与右边缘同色。
+    // 不铺入场地带底色、不做整块色调呼吸; 任何帧都不改背景像素(I11 / G7)。
+
+    ctx.strokeStyle = '#1c252d'; ctx.lineWidth = 1;
+    for (var k = 0; k <= 3; k++) {
+      var yy = g.T + k * (g.B - g.T) / 3;
+      ctx.beginPath(); ctx.moveTo(g.L, yy); ctx.lineTo(g.R, yy); ctx.stroke();
+    }
+    for (var q0 = 0; q0 <= 4; q0++) {
+      var xx0 = g.L + q0 * (g.R - g.L) / 4;
+      ctx.beginPath(); ctx.moveTo(xx0, g.T); ctx.lineTo(xx0, g.B); ctx.stroke();
+    }
+    ctx.save();
+    ctx.setLineDash([3, 4]); ctx.strokeStyle = '#3d4d59';
+    ctx.beginPath(); ctx.moveTo(g.R, g.T); ctx.lineTo(g.R, g.B); ctx.stroke();
+    ctx.restore();
+
+    var pConv = clamp(t / (S.beat * 0.6), 0, 1);
+    var ease = S.ease === 'linear' ? easeLinear : easeOut;
+    var ps = (S.shift === 'smooth' && !S.reduce) ? clamp(t / (S.beat * S.shiftRatio), 0, 1) : 1;
+    var se = S.ease === 'linear' ? easeLinear : easeOut;
+    var dx = S.shift === 'off' ? 0 : (1 - se(ps)) * sx;
+    if (S.preview) { dx = 0; ps = 1; }        // R8: 预览拍不动窗口, dx 恒 0
+    S.pShift = ps; S.dx = dx;
+    var xJudge = g.R, xEnd = g.R + dx;
+    var pImp = clamp(t / S.impactMs, 0, 1);
+
+    // L1: 两轨各自数值中间态(T2) 或立即落地; 缺口轨末点不画
+    var disp = {}, ys = {}, P = pal();
+    KEYS.forEach(function (k) {
+      var c = S.ch[k];
+      c.shown = ((S.tpl === 'rise' || S.tpl === 'fusion') && !S.reduce)
+        ? c.prev + (c.target - c.prev) * ease(pConv)
+        : c.target;
+      c.pts[N - 1] = c.shown;
+      disp[k] = c.live ? c.pts.slice() : c.pts.slice(0, N - 1);
+      ys[k] = py(clamp(c.shown, 0, 1), g);
+    });
+    S.merged = Math.abs(ys.up - ys.dl) < 26;
+    var lv = leadLevel(), col = lvColor(), silent = lv === 0;
+
+    // 数值中间态光带: 两轨都必须画, 不受 D3 仲裁限制, 也不占装饰预算
+    if (!S.reduce && S.on !== false && S.band && (S.tpl === 'rise' || S.tpl === 'fusion') && t < S.beat) {
+      KEYS.forEach(function (k) {
+        var c = S.ch[k];
+        if (!c.live || Math.abs(c.target - c.prev) < 1e-6) return;
+        var yOld = py(c.prev, g), yNew = ys[k], tc0 = trackCol(k);
+        var grad = Math.abs(yOld - yNew) < 1
+          ? rgba(tc0, 0.5 * (1 - pConv) * S.impact)
+          : ctx.createLinearGradient(0, yOld, 0, yNew);
+        if (grad.addColorStop) {
+          grad.addColorStop(0, rgba(tc0, 0));
+          grad.addColorStop(1, rgba(tc0, 0.7 * (1 - pConv) * S.impact));
+        }
+        ctx.save(); clipPlot();
+        ctx.strokeStyle = grad; ctx.lineWidth = 4;
+        if (!isCalm()) { ctx.shadowColor = (neonOn() && S.tpl === 'fusion') ? lvColor() : tc0; ctx.shadowBlur = P.blur; }
+        ctx.beginPath(); ctx.moveTo(xEnd, yOld); ctx.lineTo(xEnd, yNew); ctx.stroke();
+        ctx.restore();
+      });
+    }
+
+    // ===== 装饰层(全部在双曲线之下, I6) =====
+    if (!S.reduce && !silent && S.on !== false) {
+      glitchSlices(t, ys);
+      neonAccent(t, xJudge, ys);          // R4: N 层只画判定线局部短亮段, 背景零绘制
+      if (t < S.impactMs) {
+        ctx.strokeStyle = rgba(col, 0.75 * (1 - pImp) * S.impact);
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(xJudge, g.T); ctx.lineTo(xJudge, g.B); ctx.stroke();
+      }
+      // T4 扫描束 (R5 重构 + R7 收敛行程): 双相位「亮束入场 + 越线后 100~200px 内淡出的回声」; T6 也内置, 强度 x0.78
+      if (S.scan && (S.tpl === 'scan' || S.tpl === 'fusion')) scanBeam(t, ys, S.tpl === 'fusion' ? 0.78 : 1);
+      if (S.dual === 'merge') {
+        fx(t, 'merge', xEnd, (ys.up + ys.dl) / 2, col, 1);
+      } else {
+        KEYS.forEach(function (k) {
+          var c = S.ch[k];
+          if (!c.live || c.level === 0) return;
+          var isLead = k === S.lead;
+          if (S.dual === 'lead' && !isLead) return;   // D3-a: 从属轨只加亮描边
+          var sc = S.dual === 'both' ? 0.5 : 1;
+          if (S.merged) sc *= 0.6;                    // D4: 两轨贴近时缩小而非取消, 保证两条都有反馈
+          fx(t, k, xEnd, ys[k], trackCol(k), sc);
+        });
+      }
+    }
+
+    if (S.tail && t > S.beat && t < S.cycle && !S.reduce) {
+      var qt = (t - S.beat) / Math.max(1, S.cycle - S.beat);
+      ctx.strokeStyle = rgba(col, 0.14 * (1 - qt));
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(xJudge, g.T); ctx.lineTo(xJudge, g.B); ctx.stroke();
+      flowDots(t, disp, dx);
+    }
+
+    // ===== 双曲线永远最后重绘在最上层, 各自语义色(I10) =====
+    KEYS.forEach(function (k) {
+      var arr = disp[k], c = S.ch[k];
+      if (!arr || !arr.length) return;
+      var glow = (!S.reduce && c.level > 0) ? trackCol(k) : null;
+      var blur = glow ? P.blur * ((k === S.lead || S.dual === 'both') ? 1 : 0.45) : 0;
+      line(arr, trackCol(k), isCalm() ? 2 : 2.4, 1, dx, glow, blur);
+    });
+
+    // 双轨数据锚点(语义色) + 判定线菱形
+    KEYS.forEach(function (k) {
+      if (!S.ch[k].live || !disp[k].length) return;
+      var c0 = trackCol(k), y = ys[k];
+      if (isCalm()) {
+        ctx.fillStyle = c0;
+        ctx.beginPath(); ctx.arc(xEnd, y, 3.2, 0, TAU); ctx.fill();
+      } else {
+        poly(xEnd, y, 4.2, 4, t / 420, rgba(c0, 0.95), rgba('#ffffff', 0.45), 1);
+        poly(xJudge, y, 2.6, 4, t / 420, rgba(c0, 0.35));
+        if (neonOn() && t < S.beat * 0.33) {
+          var qn = clamp(1 - t / (S.beat * 0.33), 0, 1);
+          ring(xEnd, y, 7 + 4 * qn, 6, t / 320, rgba(lvColor(), 0.5 * qn * S.impact), 1);
+        }
+      }
+    });
+
+    // 图例色标(与 drawer.html .hs-leg 语义对应)
+    ctx.font = '11px Consolas, monospace';
+    var lgX = g.L + 4, lgY = H - 15;
+    ctx.fillStyle = trackCol('up'); ctx.fillRect(lgX, lgY - 7, 8, 3);
+    ctx.fillStyle = '#8b98a5'; ctx.fillText('上传', lgX + 12, lgY - 2);
+    ctx.fillStyle = trackCol('dl'); ctx.fillRect(lgX + 52, lgY - 7, 8, 3);
+    ctx.fillText('下载', lgX + 64, lgY - 2);
+
+    // L0 收敛进度条
+    ctx.fillStyle = '#26313a'; ctx.fillRect(g.L, H - 9, g.R - g.L, 2);
+    ctx.fillStyle = '#e2a86e'; ctx.fillRect(g.L, H - 9, (g.R - g.L) * ps, 2);
+
+    ctx.fillStyle = '#8fd0e0'; ctx.font = '11px Consolas, monospace';
+    ctx.fillText(S.reduce ? '已降级: 瞬时 setData + 瞬时左移 + V/N 全关（双轨语义色保留 · 背景恒静态）' :
+      ('t = ' + Math.round(t) + ' ms · dx +' + dx.toFixed(1) + 'px · ' + (isCalm() ? '克制档' : (S.palette === 'glitch' ? '故障档' : '霓虹档')) +
+        ' · N ' + (neonOn() ? 'on' : 'off') + ' · 背景静态/右缘同色 · 双轨粒子合计 ' + S.parts.length),
+      g.L + 4, g.T + 12);
+    if ((S.tpl === 'combo' || S.tpl === 'fusion') && !S.reduce) {
+      ctx.fillStyle = col;
+      ctx.fillText('Lv.' + lv + ' · lead ' + (S.lead === 'up' ? '上传' : '下载'), g.R - 160, g.T + 12);
+    }
+  }
+
+  function hud(t) {
+    var lv = ['静默', 'Lv.1', 'Lv.2', 'Lv.3'][leadLevel()];
+    var shiftName = { smooth: '平滑滑入一格', instant: '瞬时左移(基线)', off: '不左移(对照)' }[S.shift];
+    var palName = { neon: '霓虹', calm: '克制(初版)', glitch: '故障' }[S.palette];
+    var dualName = { lead: '主导轨发射', both: '双轨各发半套', merge: '合流单反馈' }[S.dual];
+    var sceneName = { link: '常态联动', dlSpike: '下载飙升', upSpike: '上传飙升', upFlat: '上传静默', dlGap: '下载缺口', zero: '零流量' }[S.scene];
+    function row(k) {
+      var c = S.ch[k];
+      return '<b style="color:' + trackCol(k) + '">' + (k === 'up' ? '上传' : '下载') + '</b> 真值 <b>' + c.committed.toFixed(3) +
+        '</b> / 显示 <b>' + c.shown.toFixed(3) + '</b> · Δ <b>' + (c.delta * 100).toFixed(1) + '%</b> · Lv.' + c.level +
+        (c.live ? '' : ' · <span class="wr">缺口 null</span>');
+    }
+    $('hud').innerHTML =
+      'period <b>' + (S.period < 10 ? S.period.toFixed(2) : Math.round(S.period)) + ' s</b> · beat <b>' + Math.round(S.beat) +
+        ' ms</b> · 冲击 <b>' + Math.round(S.impactMs) + ' ms</b> · 左移收敛 <b>' + Math.round(S.beat * S.shiftRatio) +
+        ' ms</b> · 真值落地 ≤ <b>' + Math.round(S.beat) + ' ms</b> · 次区真实 <b>' + (S.tailReal / 1000).toFixed(2) + ' s</b><br>' +
+      'L0 策略 <b>' + shiftName + '</b> · dx <b>+' + S.dx.toFixed(1) + ' px</b> · 进度 <b>' + Math.round(S.pShift * 100) + '%</b> · t <b>' + Math.round(t) + ' ms</b><br>' +
+      row('up') + ' &nbsp;|&nbsp; ' + row('dl') + '<br>' +
+      '双轨策略 <b>' + dualName + '</b> · 场景 <b>' + sceneName + '</b> · 主导轨 <b>' + (S.lead === 'up' ? '上传' : '下载') +
+        '</b> · 锚点 <b>' + (S.merged ? '合并' : '分离') + '</b> · 粒子合计 <b>' + S.parts.length + '/' + partCap() + '</b>（≤32 双轨共享）<br>' +
+      '视觉引擎 V <b>' + (S.reduce ? '全关（双轨语义色保留）' : palName) + '</b> · Lv 色 <b>' + lvColor() + '</b> · <b>' + lv + '</b> · ' +
+      'N 层 <b>' + (neonOn() ? '开 · 仅非曲线元素' : '关') + '</b> · 背景 <b>静态 / 右缘同色</b> · ' +
+      (S.reduce ? '<span class="wr">reduced-motion 已降级</span>' : (S.tail ? '次区装饰 <span class="good">开</span>' : '次区装饰 关'));
+    $('cursor').style.left = clamp(t / S.cycle * 100, 0, 100) + '%';
+  }
+
+  function emit() {
+    function chan(k) {
+      var c = S.ch[k];
+      return { semantic_color: trackCol(k), delta: +c.delta.toFixed(3), level: c.level,
+        live: c.live, truth: +c.committed.toFixed(3), shown: +c.shown.toFixed(3) };
+    }
+    var o = {
+      template: S.tpl,
+      template_count: 6,
+      template_kind: S.tpl === 'fusion' ? 'composite (T2 rise + T3 particles + T4 scan beam + T5 level + T1 neon)' : 'single',
+      t3_note: '整曲线残影已退役; 槽位由棱镜碎裂接替',
+      fusion_parts: S.tpl === 'fusion'
+        ? { t2_rise_light_band: true, t3_particles: true,
+            t4_scan_beam: { two_phase: true, scale: 0.78, shares_l0_shift: true },
+            t5_level: { ring_sides: [3, 6, 8], hue_source: 'lead level' }, t1_neon_layer: true }
+        : null,
+      shift_layer: 'L0-a viewport offset',
+      shift_strategy: S.shift,
+      shift_converge_by_ms: Math.round(S.beat * S.shiftRatio),
+      shift_offset_px: +S.dx.toFixed(2),
+      shift_progress: +S.pShift.toFixed(3),
+      shift_formula: 'dx_t = (1 - easeOut(p)) * interval; p = t / (shift_ratio * beat)',
+      dual_layer: 'L1 two-track base (R3)',
+      dual_strategy: S.dual,
+      dual_scene: S.scene,
+      dual_lead: S.lead,
+      dual_anchor_merged: S.merged,
+      dual_anchor_merge_px: 26,
+      dual_budget_scope: 'up + dl combined, not per-track',
+      dual_particle_total: S.parts.length,
+      dual_particle_split: (function () {
+        var m = {};
+        S.parts.forEach(function (p) { m[p.ch] = (m[p.ch] || 0) + 1; });
+        return m;
+      })(),
+      dual_particle_cap: partCap(),
+      dual_semantic_colors: { up: trackCol('up'), dl: trackCol('dl') },
+      dual_level_color: lvColor(),
+      dual_channels: { up: chan('up'), dl: chan('dl') },
+      visual_engine: 'V1 color + V2 geometry + V3 particles + N neon element layer',
+      palette: S.reduce ? 'off' : S.palette,
+      level_colors: { 1: '#7AD9FF', 2: '#FEFFA9', 3: '#FF6BD6' },
+      neon_layer: {
+        enabled: neonOn(),
+        hue_source: 'lead level (T5 linkage)',
+        hue: lvColor(),
+        active_by_ms: Math.round(S.beat * 0.33),
+        whitelist: ['judge-line short highlight', 'ring outer', 'particle outer stroke',
+          'anchor glow', 'corner Lv badge', 'rise light-band glow'],
+        blacklist: ['up/dl curve strokes', 'plot background', 'right-edge background',
+          'grid', 'tooltip', 'legend', 'limit dashes']
+      },
+      background: {
+        animated: false,
+        css_color: '#0d141a',
+        right_edge_same_as_plot: true,
+        full_area_fillrect_calls: 0,
+        note: 'R4: toneBreath full-plot tint and right-edge landing-zone tint both removed'
+      },
+      particle_count: S.parts.length,
+      particle_cap: 32,
+      particle_active_by_ms: Math.round(S.beat * 0.55),
+      particle_burst_speed_x: 4.5,
+      neon_accent_by_ms: Math.round(S.beat * 0.33),
+      glow_blur_max: 14,
+      glitch_shake_px_max: 5,
+      scan_beam: {
+        phase_a: 'beam slides in 1.2 cells from right margin to the judge line within 0.12 beat (same window as impact)',
+        phase_b: 'bright beam decays at the judge line; echo (alpha <= 0.20, curve-enveloped) crosses the judge line and fades to zero within echo_travel_px, 0.18-0.45 beat',
+        echo_travel_px: Math.round(echoSpanPx(geo())),
+        echo_travel_mode: S.echoSpan,
+        echo_travel_note: S.echoSpan === 'full'
+          ? 'R5 legacy whole-plot sweep - comparison baseline only, never ship'
+          : 'echo dies out 100-200px past the judge line, never sweeps the whole plot',
+        echo_fade: 'alpha = pow(1 - d / echo_travel_px, 0.85); drawing stops once d >= echo_travel_px',
+        echo_fade_cap_px: 200,
+        layers: ['1px sub-pixel core', '6 Lv halo layers 2.5 / 5 / 10 / 16 / 24 / 34px with vertical curve envelope',
+          'double chromatic fringes at +-1.6px', '5-step asymmetric comet tail (trailing side only)',
+          'comb teeth 3 / 5 / 7 by level, stratified along the up+dl envelope', '1px echo + 9px faint halo (distance-faded)'],
+        draw_ops_per_frame: 23,
+        draw_ops_cap_beam: 23,
+        draw_ops_cap_with_slices: 28,
+        draw_ops_cap_note: '23 = beam only (6 halo + 1 core + 2 fringe + 5 tail + up to 7 comb + 2 echo); 28 = beam + up to 5 glitch slices',
+        opacity_caps: { core: 0.86, halo: 0.38, fringe: 0.3, echo: 0.2 },
+        envelope: 'vertical gradient peaking at up/dl last-point y',
+        full_height_fillrect: false,
+        covers_data: false,
+        fusion_scale: 0.78
+      },
+      glitch_lines: {
+        mode: S.tear,
+        mode_note: S.tear === 'random'
+          ? 'Math.random per frame - NOT reproducible, comparison baseline only'
+          : (S.tear === 'fixed' ? 'same shape every beat (R5 look), 4 equal-span slices / 7 equal-step teeth'
+            : 'strength driven by lead track delta; per-beat variation from beat-index hash (reproducible)'),
+        seed_beat: S.bi,
+        strength_source: 'lead track delta / 0.5, clamped',
+        position_source: 'lead track last-point y (slices) / up+dl envelope (teeth)',
+        count_by_level: { 1: 2, 2: 3, 3: 5 },
+        comb_teeth_by_level: { 1: 3, 2: 5, 3: 7 },
+        tear_band_px: Math.round(2 * (0.08 + 0.30 * clamp(S.ch[S.lead].delta / 0.5, 0, 1)) * (H - 46)),
+        tear_band_note: 'total height of the tear zone (slice centre +- half band); grows with lead delta',
+        slice_length_px_range: [10, 80],
+        slice_thickness_px: 1.5,
+        jitter_px_max: 3,
+        right_edge_inset_px: [0, 18],
+        color_pool: ['Lv color', 'magenta', 'lead semantic'],
+        color_note: 'glitch colours lead; the lead semantic colour is a minority so slices never blend into the curve they anchor to',
+        alpha_by_level: { 1: 0.18, 2: 0.26, 3: 0.34 },
+        horizontal_lines_per_frame_cap: 12,
+        draw_ops_per_frame_total: 28,
+        covers_data: false
+      },
+      layer_order: 'static background > grid/judge line > scan beam/geometry/particles/N > up+dl curve strokes (topmost) > dual anchors',
+      window: 'fixed-length rolling: shift + push one bucket per beat, on both tracks',
+      period_s: +S.period.toFixed(2),
+      beat_ms: Math.round(S.beat),
+      impact_ms: Math.round(S.impactMs),
+      converge_by_ms: Math.round(S.beat * 0.6),
+      truth_landed_by_ms: Math.round(S.beat),
+      hard_ceiling_ms: 1000,
+      tail_decor_real_ms: Math.round(S.tailReal),
+      tail_decor_default: 'on',
+      tail_enabled: S.tail,
+      impact_strength: +S.impact.toFixed(2),
+      particle_density: +S.particles.toFixed(2),
+      amplitude: +S.amp.toFixed(2),
+      ease: S.ease,
+      overshoot: false,
+      reduced_motion: S.reduce ? 'instant setData + instant shift + V/N off; dual semantic colors and static background kept' : 'off'
+    };
+    $('out').value = JSON.stringify(o, null, 2);
+  }
+
+  function frame(ts) {
+    if (!S.beatStart) S.beatStart = ts;
+    var t = ts - S.beatStart;
+    draw(t);
+    hud(t);
+    if (ts - S.uiTick > 150) {
+      S.uiTick = ts;
+      if (panelOpen) { syncPanelFromS(); writeCtlValues(); fxStat(); }   // R8: 两处控件保持一致 + 只读状态行
+    }
+    if (S.playing && t >= S.cycle) nextBeat(ts);
+    requestAnimationFrame(frame);
+  }
+
+  $('tabs').addEventListener('click', function (e) {
+    var b = e.target.closest('button');
+    if (!b) return;
+    var all = this.querySelectorAll('button');
+    for (var i = 0; i < all.length; i++) all[i].classList.remove('on');
+    b.classList.add('on');
+    S.tpl = b.getAttribute('data-t');
+    $('note').innerHTML = L0 + NOTES[S.tpl];
+    emit();
+  });
+
+  $('sDual').addEventListener('change', function () { S.dual = this.value; seedParts(); emit(); });
+  $('sScene').addEventListener('change', function () { S.scene = this.value; nextBeat(performance.now()); emit(); });
+  $('rPeriod').addEventListener('input', function () { S.v = +this.value; recalc(); });
+  $('sPalette').addEventListener('change', function () { S.palette = this.value; seedParts(); recalc(); });
+  $('sTear').addEventListener('change', function () { S.tear = this.value; emit(); });
+  $('sEcho').addEventListener('change', function () { S.echoSpan = this.value; emit(); });
+  $('rParticles').addEventListener('input', function () { S.particles = +this.value / 100; seedParts(); recalc(); });
+  $('sShift').addEventListener('change', function () { S.shift = this.value; emit(); });
+  $('rShift').addEventListener('input', function () { S.shiftRatio = +this.value / 100; recalc(); });
+  $('rImpact').addEventListener('input', function () { S.impact = +this.value / 100; recalc(); });
+  $('rAmp').addEventListener('input', function () { S.amp = +this.value / 100; recalc(); });
+  $('sEase').addEventListener('change', function () { S.ease = this.value; emit(); });
+  $('cTail').addEventListener('change', function () { S.tail = this.checked; emit(); });
+  $('cNeon').addEventListener('change', function () { S.neon = this.checked; emit(); });
+  $('cReduce').addEventListener('change', function () {
+    S.reduce = this.checked;
+    if (S.reduce) KEYS.forEach(function (k) {
+      var c = S.ch[k]; c.shown = c.target; c.pts[N - 1] = c.target;
+    });
+    seedParts();
+    emit();
+  });
+  $('bOnce').addEventListener('click', function () { nextBeat(performance.now()); });
+  $('bPlay').addEventListener('click', function () {
+    S.playing = !S.playing;
+    this.classList.toggle('on', S.playing);
+    this.textContent = S.playing ? '暂停' : '连续播放';
+    if (S.playing) nextBeat(performance.now());
+  });
+  $('bReset').addEventListener('click', function () {
+    S.playing = false;
+    $('bPlay').classList.remove('on');
+    $('bPlay').textContent = '连续播放';
+    seed();
+    nextBeat(performance.now());
+  });
+  $('bCfg').addEventListener('click', function () { emit(); });
+  // ===== R8: 右键数值面板（§05 规格的可运行预演；与控件区双向同步，S 是唯一真源）=====
+  var FX_DEFAULTS = {
+    impact: 0.7, ease: 'out', palette: 'neon', particles: 0.7, neon: true, tail: true,
+    shift: 'smooth', shiftRatio: 0.6, dual: 'both', tear: 'linked', echoSpan: 'auto',
+    band: true, parts: true, scan: true, grade: true
+  };
+  var panelOpen = false;
+
+  function setTxt(id, v) { var el = $(id); if (el) el.textContent = v; }
+
+  function syncPanelFromS() {
+    $('fxpOn').checked = S.on !== false;
+    $('fxpImpact').value = Math.round(S.impact * 100); setTxt('fxpImpactV', Math.round(S.impact * 100) + '%');
+    $('fxpEase').value = S.ease;
+    $('fxpPal').value = S.palette;
+    $('fxpPar').value = Math.round(S.particles * 100); setTxt('fxpParV', Math.round(S.particles * 100) + '%');
+    $('fxpNeon').checked = S.neon;
+    $('fxpTail').checked = S.tail;
+    $('fxpShift').value = S.shift;
+    $('fxpRatio').value = Math.round(S.shiftRatio * 100); setTxt('fxpRatioV', Math.round(S.shiftRatio * 100) + '%');
+    $('fxpDual').value = S.dual;
+    $('fxpBand').checked = S.band;
+    $('fxpParts').checked = S.parts;
+    $('fxpScan').checked = S.scan;
+    $('fxpGrade').checked = S.grade;
+    $('fxpTear').value = S.tear;
+    $('fxpEcho').value = S.echoSpan;
+  }
+  // 只写控件区的值（不 recalc，避免与调用方互相递归）
+  function writeCtlValues() {
+    $('rImpact').value = Math.round(S.impact * 100);
+    $('rParticles').value = Math.round(S.particles * 100);
+    $('rShift').value = Math.round(S.shiftRatio * 100);
+    $('sPalette').value = S.palette;
+    $('sEase').value = S.ease;
+    $('sShift').value = S.shift;
+    $('sDual').value = S.dual;
+    $('sTear').value = S.tear;
+    $('sEcho').value = S.echoSpan;
+    $('cNeon').checked = S.neon;
+    $('cTail').checked = S.tail;
+  }
+  function fxStat() {
+    var ago = S.lastReal ? ((performance.now() - S.lastReal) / 1000) : 0;
+    $('fxpStat').innerHTML = '采样 <b>' + S.period.toFixed(2) + ' s</b> · beat <b>' + Math.round(S.beat) +
+      ' ms</b> · 上次真实拍 <b>' + (S.lastReal ? ago.toFixed(1) + ' s 前' : '—') + '</b>' +
+      (S.preview ? ' · <b>预览中</b>' : '');
+  }
+  function endPreviewBtn() {
+    var b = $('fxpPreview');
+    if (b) { b.textContent = '预览一拍'; b.disabled = false; }
+  }
+  // 预览一拍: 不动窗口 / dx 恒 0 / 真值抢占 / 不写累积历史（结束后还原末点）
+  function previewBeat() {
+    var ts = performance.now();
+    S.pvSaved = KEYS.map(function (k) {
+      var c = S.ch[k];
+      return { k: k, last: c.pts[N - 1], shown: c.shown, committed: c.committed, delta: c.delta, level: c.level };
+    });
+    KEYS.forEach(function (k) {
+      var c = S.ch[k];
+      c.prev = c.shown;
+      var mag = clamp(0.18 + 0.35 * S.particles, 0.10, 0.50);
+      c.target = clamp(c.prev + (k === 'dl' ? mag : -mag), 0.06, 0.94);
+      c.shown = c.prev;
+      c.delta = Math.abs(c.target - c.prev) / Math.max(c.prev, 0.08);
+      c.level = levelOf(c.delta);
+      c.live = true;
+      c.committed = c.target;
+    });
+    S.lead = S.ch.dl.delta >= S.ch.up.delta ? 'dl' : 'up';
+    S.bi++;
+    seedParts();
+    S.preview = true;
+    S.beatStart = ts;
+    $('fxpPreview').textContent = '预览中…';
+    $('fxpPreview').disabled = true;
+    clearTimeout(S.pvTimer);
+    S.pvTimer = setTimeout(function () {
+      if (!S.preview) return;
+      S.preview = false;
+      if (S.pvSaved) S.pvSaved.forEach(function (o) {
+        var c = S.ch[o.k];
+        c.pts[N - 1] = o.last; c.shown = o.shown; c.committed = o.committed;
+        c.delta = o.delta; c.level = o.level;
+      });
+      S.pvSaved = null;
+      endPreviewBtn();
+    }, S.beat + 40);
+  }
+  function openFxPanel(ev) {
+    var st = $('stage'), f = $('fxp');
+    f.hidden = false;
+    syncPanelFromS(); fxStat();
+    var sr = st.getBoundingClientRect();
+    var w = f.offsetWidth || 320;
+    var left = clamp((ev.clientX - sr.left) + 12, 8, Math.max(8, sr.width - w - 8));
+    var top = clamp((ev.clientY - sr.top) - 16, 8, 40);
+    f.style.left = left + 'px'; f.style.right = 'auto'; f.style.top = top + 'px';
+    panelOpen = true;
+  }
+  function closeFxPanel() { $('fxp').hidden = true; panelOpen = false; }
+
+  $('stage').addEventListener('contextmenu', function (ev) {
+    if (ev.target.closest && ev.target.closest('.fxp')) return;   // 面板内右键不重开
+    ev.preventDefault();
+    ev.stopPropagation();
+    openFxPanel(ev);
+  });
+  $('fxpX').addEventListener('click', closeFxPanel);
+  document.addEventListener('click', function (ev) {
+    if (!panelOpen) return;
+    if (ev.target.closest && ev.target.closest('.fxp')) return;
+    closeFxPanel();
+  });
+  document.addEventListener('keydown', function (ev) {
+    if (ev.key === 'Escape' && panelOpen) closeFxPanel();
+    if (ev.key === 'Alt') { $('fxp').classList.add('see-through'); ev.preventDefault(); }
+  });
+  document.addEventListener('keyup', function (ev) {
+    if (ev.key === 'Alt') $('fxp').classList.remove('see-through');
+  });
+
+  $('fxpOn').addEventListener('change', function () { S.on = this.checked; emit(); });
+  $('fxpImpact').addEventListener('input', function () { S.impact = +this.value / 100; setTxt('fxpImpactV', this.value + '%'); recalc(); });
+  $('fxpEase').addEventListener('change', function () { S.ease = this.value; emit(); });
+  $('fxpPal').addEventListener('change', function () { S.palette = this.value; seedParts(); recalc(); });
+  $('fxpPar').addEventListener('input', function () { S.particles = +this.value / 100; setTxt('fxpParV', this.value + '%'); seedParts(); recalc(); });
+  $('fxpNeon').addEventListener('change', function () { S.neon = this.checked; emit(); });
+  $('fxpTail').addEventListener('change', function () { S.tail = this.checked; emit(); });
+  $('fxpShift').addEventListener('change', function () { S.shift = this.value; emit(); });
+  $('fxpRatio').addEventListener('input', function () { S.shiftRatio = +this.value / 100; setTxt('fxpRatioV', this.value + '%'); recalc(); });
+  $('fxpDual').addEventListener('change', function () { S.dual = this.value; seedParts(); emit(); });
+  $('fxpBand').addEventListener('change', function () { S.band = this.checked; emit(); });
+  $('fxpParts').addEventListener('change', function () { S.parts = this.checked; emit(); });
+  $('fxpScan').addEventListener('change', function () { S.scan = this.checked; emit(); });
+  $('fxpGrade').addEventListener('change', function () { S.grade = this.checked; emit(); });
+  $('fxpTear').addEventListener('change', function () { S.tear = this.value; emit(); });
+  $('fxpEcho').addEventListener('change', function () { S.echoSpan = this.value; emit(); });
+  $('fxpPreview').addEventListener('click', previewBeat);
+  $('fxpReset').addEventListener('click', function () {
+    Object.keys(FX_DEFAULTS).forEach(function (k) { S[k] = FX_DEFAULTS[k]; });
+    S.on = !S.reduce;   // reduce 下不置真: 与 D26 / §05.6 红线一致, 重置不是绕过开关的后门
+    S.preview = false; S.pvSaved = null; clearTimeout(S.pvTimer); endPreviewBtn();
+    seedParts(); recalc(); syncPanelFromS(); writeCtlValues();
+  });
+  $('fxpCfg').addEventListener('click', function () {
+    var o = {
+      v: 1, enabled: S.on !== false, impact: +S.impact.toFixed(2), ease: S.ease,
+      palette: S.palette, particles: +S.particles.toFixed(2), neon: S.neon, tail: S.tail,
+      shift: S.shift, shiftRatio: +S.shiftRatio.toFixed(2), dual: S.dual,
+      tear: S.tear, echoSpan: S.echoSpan,
+      layers: { band: S.band, particles: S.parts, scan: S.scan, grade: S.grade }
+    };
+    var txt = 'var QB_FX_DEFAULTS = ' + JSON.stringify(o, null, 2) + ';';
+    $('out').value = txt;
+    try { if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt); } catch (e) {}
+  });
+
+
+  syncPanelFromS();
+  $('note').innerHTML = L0 + NOTES.fusion;
+  fit();
+  window.addEventListener('resize', fit);
+  seed();
+  recalc();
+  nextBeat(performance.now());
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
