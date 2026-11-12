@@ -5,7 +5,7 @@
 **Updated:** 2026-11-13
 **Summary:** web_shortcuts UIS 三皮肤旧枚举收编 webui_helpers._UI_ALL 单点(issue 26-11-13-0443)
 **Topics:** webui-uis-enum-drift
-**Refs:** memory-bank/issues/26-11-13-0443-test-webui-uis-enum-drift.html, memory-bank/tasks/26-11-12-webui-kbd-hints.md
+**Refs:** memory-bank/issues/26-11-13-0443-test-webui-uis-enum-drift.html, memory-bank/tasks/26-11-12-webui-kbd-hints.md, memory-bank/issues/26-11-13-0744-test-webui-shortcuts-drawer-inline-skins.html, memory-bank/issues/26-11-13-0745-docs-webui-tests-three-manifest-phrase-drift.html
 
 ## 本篇只回答
 
@@ -44,3 +44,5 @@ issue 26-11-13-0443(UIS 三皮肤旧枚举 vs `_UI_ALL` 四皮肤现口径漂移
 ### R0 · 立档 (2026-11-13)
 
 用户指派修复 issue 26-11-13-0443(单轮)。修复 + 验证 + issue 翻 Done 完成;评审三轮:R1 全能档单代理 4 发现(minor ×4,`review.check` 4/4 过检)全修,R2 复评零发现 4/4 落实,R3 坑档增量复评零发现(基哈希 d01d64368b74);收尾 DoD 完成:坑档 `env3-test-run-prereqs` 复发+1 + `kb.index` 再生、本档案立档(阈值第 2 条:改动 ≥3 源文件)、test.full 实测 6084 passed + 19 skipped 覆盖 99%(基线切片 26-11-13-0715,较 0629 +3: +1 TZ 批守阵用例、+2 跨 clone 环境差异带,零新增用例零回归)、会话切片 26-11-13-0716。**待用户「提交」指令**;入池候选两组待拍板(drawer 三处内联硬编码三皮肤循环 lines 280/374/701 / engine 头部同款旧导语,均为相邻面非本件范围)。
+
+- 2026-11-13 07:46 R0 后续: 用户拍板「入池」—— 两组入池候选建件: 26-11-13-0744-test(drawer 三处内联硬编码三皮肤循环 flux 不覆盖) 与 26-11-13-0745-docs(「三份 tpl-manifest」旧口径残留, 建件清点扩至 dom_panel_dialogs/traffic 两文件 4 处, 4 文件 5 处一次记全), 均 Open、双链到本档案、挂专题 webui-uis-enum-drift
