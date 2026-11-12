@@ -59,8 +59,8 @@ note    = "<args> 传 --all 或 --name X 或 --hash 前缀, 加 --yes 才真删;
 [tasks."real.seed.clean"]
 run     = ["uv run python tests-real/seed.py clean <args>"]
 timeout = 300
-when    = "清掉 tests-real/.work 与 R:/qbt-fake 下残留的数据与 .torrent(不碰 qB 里的条目)"
-note    = "两处都扫(含空目录壳子), 越界直接拒跑; 加 --yes 才真删"
+when    = "清掉 tests-real/.work 与 R:/qbt-fake 下残留的数据与 .torrent(不碰 qB 里的条目; .work 顶层有 seeds/rmNN 之外的内容会拒跑)"
+note    = "两处都扫(含空目录壳子), 越界直接拒跑; 加 --yes 才真删。证据保护闸(issue 26-11-12-2345): .work 顶层凡不是 seeds/ 或 rmNN 用例目录的内容(疑似测量证据, gitignored 直删不可恢复)一律拒跑 rc=1 —— 要清的子树用 --dir 显式指名, 每次一处; 要留的证据先挪走/归档"
 
 [tasks."real.run"]
 run     = ["uv run python tests-real/runner.py run <args>"]

@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="webui-group-hash-ref">
 <meta name="doc-refs" content="memory-bank/tasks/26-11-11-webui-group-hash-ref.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="real.seed.clean 整清 tests-real/.work 连测量证据, 缺保护闸">
 <meta name="issue-summary" content="real.seed.clean 契约=整目录清空 tests-real/.work 与 R:\qbt-fake, 对 .work 内的测量证据(results JSON/脚本)无检测即拒跑的保护; 26-11-12 S5 复评收尾时实测证据全树丢失(蒸馏数字已誊档案, 原始 JSON 不可复核), 建议加证据存在检测或仅清 real-fake 子树">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-12-2345-chore-real-seed-clean-evidence-guard</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-12 23:45</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">chore</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
 
@@ -112,13 +112,16 @@
 <section id="s3">
   <h2><span class="no">§03</span>建议<span class="opt">（可选）</span></h2>
   <p>clean 前检测 .work 下是否存在 results*/ 或 *.json 证据面 → 存在即拒跑并提示改用 real.seed.rm(只删种子); 或把清扫范围收窄到 real-fake 数据子树, 不再整清 .work。取其一即可, 方向待接手者定。</p>
+  <p><strong>修复后补充(2026-11-13)</strong>: 未取 §03 任一单独方向, 改走「白名单 + 拒跑」合流 —— 改道原因: 形状检测(<code>results*/</code>、<code>*.json</code>)抓不住 <code>reconcile-e2e/</code> 这类脚本证据目录(2026-11-12 事故里丢的 inject/m1/m2/m3 复用脚本就不带证据形状), 而纯收窄会让「收尾清场」契约残缺(用例目录的种子残留没人清)。落地: <code>tests-real/seed.py</code> <code>cmd_clean</code> 增证据保护闸 —— 默认整扫与 <code>--dir</code> 指 <code>.work</code> 本体时, 顶层凡不是 <code>seeds/</code>(seed.py 自造落点)或 <code>rmNN</code>(用例工作目录)的内容一律 rc=1 拒跑(dry-run 同拒, 删除动作一个不发生), 逐项列出未知内容并带本 issue 指称; <code>--dir</code> 显式指名子树是唯一清法(每次一处), 不提供一键全清逃生门。认得的名字(seeds/rmNN/R:)契约不变。配套: <code>.commands/real/config.toml</code> real.seed.clean when/note、坑档 <code>pitfalls/ops/seed-clean-vs-evidence.md</code> 处置行、<code>testing/real-machine.md</code> 收尾行同步回写; 守阵 3 条入 <code>tests/test_real_machine_safety.py</code>(tmp 搭景, 不碰真实 .work 证据面)。评审轮2修正: <code>_allowed</code> 裸前缀匹配会误收 <code>.work-20261112</code> 这类兄弟目录(--dir 指过去即绕闸整树清), 已改按路径分量严格包含并补第 4 条守阵。验证(最终树实测): <code>commands run test.one -- tests/test_real_machine_safety.py</code> 17 passed(13 既有 + 4 新增), <code>commands run test.full</code> 6084 passed + 2 skipped、覆盖率 99%。</p>
 </section>
 
 <section id="s4">
   <h2><span class="no">§04</span>状态变更日志</h2>
   <ul>
     <li>2026-11-12 23:45 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-13 — 状态 Open → In Progress（kb.status）</li>
+    <li>2026-11-13 — 状态 In Progress → Done（kb.status）</li>
+</ul>
 </section>
 
 <footer>

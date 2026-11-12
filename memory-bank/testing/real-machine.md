@@ -62,7 +62,7 @@ qB 5.2 API 差异已封装在 `lib/qb.py`; 诊断入口 `tests-real/tools/diag_l
 ### 2.5 假种子 CLI(`real.seed*`; 参数见 `--help`)
 
 - 默认 256K 够看状态; **>2G 停下等授权**(`--allow-huge --reason` 双写), 只要"大"用 `--no-data`(零落盘; 停 `stalledDL` 不进 `missingFiles`, 测"文件被删"要真删)。
-- ≥32M 落 `R:/qbt-fake/`(重启即清; 环境2 无 R: 退回 `.work` 真写盘); 默认无 announce=纯本地做种, 要 announce 用例里用 `FakeTracker`; 自造种子一律打 **`real-fake`** 标签, list/rm/clean 与守卫只认它; 收尾 `real.seed.clean`。
+- ≥32M 落 `R:/qbt-fake/`(重启即清; 环境2 无 R: 退回 `.work` 真写盘); 默认无 announce=纯本地做种, 要 announce 用例里用 `FakeTracker`; 自造种子一律打 **`real-fake`** 标签, list/rm/clean 与守卫只认它; 收尾 `real.seed.clean` —— .work 顶层有 seeds/rmNN 之外的内容(疑似测量证据)会拒跑 rc=1, 要留的先挪走、确认可清的子树 `--dir` 显式指名逐处清(见 pitfalls/ops/seed-clean-vs-evidence.md)。
 
 ### 2.6 产品进程(`tests-real/lib/app.py`)
 

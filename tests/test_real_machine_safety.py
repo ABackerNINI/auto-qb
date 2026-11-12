@@ -24,6 +24,17 @@
 - test_cmd_down_reports_timeout_without_force_kill: 等退出超时 -> rc=1 如实报, 不强杀。
 - test_qb_shutdown_is_post_with_empty_body: app/shutdown 是空体 POST(不是 GET)。
 - test_qb_default_calls_stay_get: 默认读端点仍是 GET, 防 _open 改动带偏既有调用。
+
+2026-11-13 issue 26-11-12-2345 修复(real.seed.clean 证据保护闸):
+- test_seed_clean_refuses_unknown_work_top_level: .work 顶层出现 seeds/rmNN 之外的内容
+  (results 目录/散装 json)即拒跑 rc=1, dry-run 与 --yes 同拒且一个文件都不删;
+  拒跑信息逐项列出未知内容并带 issue 指称。
+- test_seed_clean_sweeps_known_namespaces_when_no_strays: 只有认得的名字(seeds/rmNN)时
+  契约不变 —— --yes 清文件与空目录壳(含 R: 内存盘根), dry-run 零删除。
+- test_seed_clean_explicit_dir_named_subtree_bypasses_guard: --dir 指名子树不过闸、只清
+  指名处不波及证据; --dir 指 .work 本体与默认同闸。
+- test_seed_allowed_rejects_prefix_sibling_dir(评审轮1发现): 白名单按路径分量判严格包含,
+  .work 同前缀兄弟目录拒收(SystemExit), 落点内的路径照常放行。
 """
 from __future__ import annotations
 
@@ -299,3 +310,102 @@ def test_qb_default_calls_stay_get(monkeypatch):
     assert seen["method"] == "GET"
     assert seen["url"].endswith("/api/v2/app/version")
     assert seen["data"] is None
+
+
+# ---- real.seed.clean 证据保护闸 (issue 26-11-12-2345) ----
+# clean 的旧契约是整目录清空 tests-real/.work —— 2026-11-12 S5 收尾一跑把整树测量证据
+# (results/、复用脚本)清掉且 git 不可恢复。守阵钉死: .work 顶层出现 seeds/rmNN 之外的
+# 内容即拒跑(rc=1, dry-run 也拒, 删除动作一个都不发生); 只有 --dir 显式指名的子树
+# 可以逐处清, 不存在绕过闸门的一键全清。
+
+
+def _load_seed(monkeypatch, work: Path, ram: Path):
+    """隔离加载 tests-real/seed.py: 假 lib 包 + 落点改指 tmp 树。
+
+    真实 tests-real/.work 正是闸门要守的证据面(本 clone 里就躺着 review-findings/
+    reconcile-e2e 等), 守阵一律在 tmp 搭景, 不给真实证据面任何被误清的机会。
+    """
+    fake_guard = types.SimpleNamespace(WHITELIST_PORTS=(36595, 36596), check_port=lambda port: {})
+    fake_lib = types.ModuleType("lib")
+    fake_lib.guard = fake_guard
+    fake_lib.instances = types.SimpleNamespace(PRIMARY=36595, SECONDARY=36596)
+    fake_lib.torrent = types.SimpleNamespace(PATTERNS=("random", "zeros", "text"), PIECE_LEN=16384)
+    monkeypatch.setitem(sys.modules, "lib", fake_lib)
+    monkeypatch.setattr(sys, "path", list(sys.path))
+    spec = importlib.util.spec_from_file_location("_real_seed_under_test", TESTS_REAL / "seed.py")
+    mod = importlib.util.module_from_spec(spec)
+    monkeypatch.setitem(sys.modules, spec.name, mod)
+    spec.loader.exec_module(mod)
+    monkeypatch.setattr(mod, "WORK_ROOT", work)
+    monkeypatch.setattr(mod, "WORK", work / "seeds")
+    monkeypatch.setattr(mod, "RAM_ROOT", ram)
+    monkeypatch.setattr(mod, "ALLOWED_ROOTS", (work, ram))
+    return mod
+
+
+def test_seed_clean_refuses_unknown_work_top_level(tmp_path, monkeypatch, capsys):
+    mod = _load_seed(monkeypatch, tmp_path / "work", tmp_path / "ram")
+    work = tmp_path / "work"
+    (work / "seeds").mkdir(parents=True)
+    (work / "seeds" / "fake.bin").write_bytes(b"x")
+    (work / "rm03").mkdir()
+    (work / "rm03" / "data.bin").write_bytes(b"x")
+    (work / "results_3000").mkdir()  # 事故里被整树清掉的证据目录形态
+    (work / "review-findings.json").write_text("{}", encoding="utf-8")
+    for yes in (False, True):
+        assert mod.cmd_clean(types.SimpleNamespace(dir="", yes=yes)) == 1, "顶层有未知内容必须拒跑"
+        assert (work / "seeds" / "fake.bin").exists(), "拒跑必须一个文件都不删(含认得的落点)"
+        assert (work / "results_3000").exists() and (work / "rm03" / "data.bin").exists()
+    out = capsys.readouterr().out
+    assert "results_3000" in out and "review-findings.json" in out, "拒跑信息要逐项列出未知内容"
+    assert "26-11-12-2345" in out, "守卫信息要带 issue 指称, 便于回溯事故档案"
+
+
+def test_seed_clean_sweeps_known_namespaces_when_no_strays(tmp_path, monkeypatch, capsys):
+    mod = _load_seed(monkeypatch, tmp_path / "work", tmp_path / "ram")
+    work, ram = tmp_path / "work", tmp_path / "ram"
+    (work / "seeds" / "fake-256k").mkdir(parents=True)
+    (work / "seeds" / "fake-256k" / "fake.bin").write_bytes(b"x")
+    (work / "seeds" / "fake.torrent").write_bytes(b"x")
+    (work / "rm04").mkdir()
+    (work / "rm04" / "rm04_10_evidence.json").write_text("{}", encoding="utf-8")
+    (ram / "big").mkdir(parents=True)
+    (ram / "big" / "big.bin").write_bytes(b"x")
+    assert mod.cmd_clean(types.SimpleNamespace(dir="", yes=False)) == 0
+    assert (work / "seeds" / "fake-256k" / "fake.bin").exists()
+    assert (ram / "big" / "big.bin").exists(), "dry-run 零删除"
+    assert mod.cmd_clean(types.SimpleNamespace(dir="", yes=True)) == 0
+    assert not (work / "seeds" / "fake-256k").exists(), "认得的名字照旧清(含空目录壳子)"
+    assert not (work / "rm04").exists()
+    assert not (ram / "big").exists(), "R: 内存盘根照旧整清"
+
+
+def test_seed_clean_explicit_dir_named_subtree_bypasses_guard(tmp_path, monkeypatch, capsys):
+    mod = _load_seed(monkeypatch, tmp_path / "work", tmp_path / "ram")
+    work = tmp_path / "work"
+    (work / "seeds").mkdir(parents=True)
+    (work / "seeds" / "fake.bin").write_bytes(b"x")
+    (work / "probe-accept").mkdir()
+    (work / "probe-accept" / "evidence.json").write_text("{}", encoding="utf-8")
+    assert mod.cmd_clean(types.SimpleNamespace(dir=str(work / "seeds"), yes=True)) == 0
+    assert not (work / "seeds" / "fake.bin").exists(), "--dir 指名子树照常清"
+    assert (work / "probe-accept" / "evidence.json").exists(), "指名清 seeds 不该波及证据目录"
+    assert mod.cmd_clean(types.SimpleNamespace(dir=str(work), yes=True)) == 1, "--dir 指 .work 本体与默认同闸"
+    assert (work / "probe-accept" / "evidence.json").exists()
+
+
+def test_seed_allowed_rejects_prefix_sibling_dir(tmp_path, monkeypatch):
+    """白名单按路径分量判严格包含: .work 的同前缀兄弟目录(.work-20261112 之类)不算落点。
+
+    裸字符串前缀匹配会把兄弟目录误收 —— --dir 指过去即整树清且绕过证据闸(评审轮1发现)。
+    """
+    mod = _load_seed(monkeypatch, tmp_path / "work", tmp_path / "ram")
+    sibling = tmp_path / "work-backup"
+    sibling.mkdir()
+    (sibling / "evidence.json").write_text("{}", encoding="utf-8")
+    with pytest.raises(SystemExit, match="不在允许的落点"):
+        mod._allowed(sibling)
+    with pytest.raises(SystemExit, match="不在允许的落点"):
+        mod.cmd_clean(types.SimpleNamespace(dir=str(sibling), yes=True))
+    assert (sibling / "evidence.json").exists(), "兄弟目录里的东西一个都不许动"
+    assert mod._allowed(tmp_path / "work" / "seeds" / "x.bin") == (tmp_path / "work" / "seeds" / "x.bin").resolve()

@@ -8,7 +8,10 @@
   - 端口只认白名单 主实例/副实例, 且镜像路径必须在 `D:\\Programs\\qBittorrent-testing*` 下(guard 核);
   - 加种子前先把**真实种子全部暂停**并核一遍;
   - 自造种子一律打 `real-fake` 标签 —— list / rm / clean 只认这个标签, 绝不碰真实种子;
-  - 自造的数据与 .torrent 只能落在 `tests-real/.work/` 下(越界拒跑)。
+  - 自造的数据与 .torrent 只能落在 `tests-real/.work/` 下(越界拒跑);
+  - clean 有证据保护闸(issue 26-11-12-2345): `.work` 顶层凡不是 seeds/ 与 rmNN 用例目录的
+    内容一律拒跑 —— 测量证据(results/、复用脚本、review-findings 之类)也常落 .work,
+    gitignored 直删不可恢复, 要清哪个子树用 --dir 显式指名。
 
 用法示例:
   uv run python tests-real/seed.py add --yes                             # 默认 256K 伪随机, 加到 副实例 并做种(零外连)
@@ -40,12 +43,13 @@ sys.path.insert(0, str(HERE))
 
 from lib import guard, instances, torrent  # noqa: E402
 
-WORK = HERE / ".work" / "seeds"
+WORK_ROOT = HERE / ".work"  # 自造物/用例工作区根(gitignored); clean 的证据闸盯它的顶层
+WORK = WORK_ROOT / "seeds"
 RAM_ROOT = Path("R:/qbt-fake")  # R 盘是内存盘: 大种子写这里, 免写盘代价(重启即清空)
 BIG_SIZE = 32 * 1024 * 1024  # ≥ 32M 才算"大种子", 默认落内存盘
 HUGE_SIZE = 2 * 1024**3  # > 2G 原则上不许造: 要 --allow-huge + --reason 显式授权
 DEFAULT_SIZE = "256K"  # 默认 KB 级: 造种子是为了看状态, 不是为了塞满盘
-ALLOWED_ROOTS = (HERE / ".work", RAM_ROOT)
+ALLOWED_ROOTS = (WORK_ROOT, RAM_ROOT)
 TAG = "real-fake"
 DEFAULT_PORT = instances.SECONDARY  # 副实例: 空库, 拿它当草稿本
 
@@ -68,10 +72,15 @@ def fmt_size(n: float) -> str:
 
 
 def _allowed(path: Path) -> Path:
-    """落点白名单: 自造物只许进 `tests-real/.work/`(仓库内, gitignore) 或 `R:/qbt-fake/`(内存盘)。"""
+    """落点白名单: 自造物只许进 `tests-real/.work/`(仓库内, gitignore) 或 `R:/qbt-fake/`(内存盘)。
+
+    按路径分量判严格包含 —— 裸字符串前缀会把 `.work-20261112` 这类兄弟目录误收进来
+    (issue 26-11-12-2345 评审轮1发现), --dir 指过去就能绕过证据闸整树清。
+    """
     p = path.resolve()
     for root in ALLOWED_ROOTS:
-        if str(p).lower().startswith(str(root.resolve()).lower()):
+        r = root.resolve()
+        if p == r or r in p.parents:
             return p
     raise SystemExit(f"拒绝: {p} 不在允许的落点之下 —— 只认 {[str(r) for r in ALLOWED_ROOTS]}")
 
@@ -314,8 +323,32 @@ def _clean_root(root: Path, yes: bool) -> int:
     return 0
 
 
+# clean 默认清扫时「认得」的 .work 顶层名字: seeds/(本工具的自造落点)与 rmNN(用例工作目录)。
+# 之外的东西视为未知内容 —— 测量证据就从这里长出来(issue 26-11-12-2345: 整清把 results/ 与
+# 复用脚本连锅端, gitignored 直删不可恢复), 有未知项即拒跑, 不提供一键全清的逃生门。
+CLEAN_KNOWN_WORK = re.compile(r"^(?:seeds|rm\d+)$")
+
+
+def _work_strays(work: Path) -> list[Path]:
+    """`.work` 顶层不属于「认得的落点」的子项 —— 那里可能躺着测量证据, clean 不许碰。"""
+    if not work.exists():
+        return []
+    return sorted(p for p in work.iterdir() if not CLEAN_KNOWN_WORK.fullmatch(p.name))
+
+
 def cmd_clean(args) -> int:
-    roots = [_allowed(Path(args.dir))] if args.dir else [r for r in ALLOWED_ROOTS if r.exists()]
+    work = WORK_ROOT
+    # 证据保护闸: 默认整扫与 --dir 指 .work 本体, 都先看顶层有没有认得之外的内容 ——
+    # 有就整单拒跑(dry-run 也拒), 要清哪个子树让用户 --dir 显式指名, 一次一处。
+    if not args.dir or _allowed(Path(args.dir)) == work.resolve():
+        strays = _work_strays(work)
+        if strays:
+            print(f"[guard] {work} 顶层有 seeds/、rmNN 之外的内容 —— 可能是测量证据, clean 拒跑(issue 26-11-12-2345):")
+            for p in strays:
+                print(f"  - {p.name}{'/' if p.is_dir() else ''}")
+            print("[hint] 要留的先挪走/归档; 确认可清的子树用 --dir <该子树> --yes 显式指名再清(每次一处)。")
+            return 1
+    roots = [_allowed(Path(args.dir))] if args.dir else [r for r in (work, RAM_ROOT) if r.exists()]
     for root in roots:
         _clean_root(root, args.yes)
     if not args.yes:
@@ -383,8 +416,11 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--yes", action="store_true")
     p.set_defaults(fn=cmd_rm)
 
-    p = sub.add_parser("clean", help="清掉 tests-real/.work 与 R:/qbt-fake 下的数据与 .torrent(不碰 qB)")
-    p.add_argument("--dir", default="", help="只清这一处(必须在允许的落点之下); 不给则两处都扫")
+    p = sub.add_parser(
+        "clean", help="清掉 tests-real/.work 与 R:/qbt-fake 下的数据与 .torrent(不碰 qB); "
+        ".work 顶层有 seeds/rmNN 之外的内容即拒跑(证据保护)"
+    )
+    p.add_argument("--dir", default="", help="只清这一处(必须在允许的落点之下); 不给则两处都扫。指 .work 本体同样要过证据闸")
     p.add_argument("--yes", action="store_true")
     p.set_defaults(fn=cmd_clean)
 

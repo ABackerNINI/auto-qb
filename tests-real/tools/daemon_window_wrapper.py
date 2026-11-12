@@ -9,7 +9,8 @@
   权威记录 = tests-real/.work/relocate-rlfn-e2e/evidence/authorization.md。
 判据与旁路配方见 memory-bank/pitfalls/testing/relocate-window-machine-roster.md; 消费方 =
 计划 26-11-10-0230 的 S4 真机闭环(环境1)。收编说明: 原件在 E2c 实验 scratch(tests-real/
-.work/e2c_recheck/, gitignored, real.seed clean 可清), 2026-11-10 收编入库耐久化,
+.work/e2c_recheck/, gitignored; real.seed clean 对此类目录拒跑, --dir 显式指名才可清 ——
+2026-11-12-2345 证据闸), 2026-11-10 收编入库耐久化,
 唯一改动 = 决策留痕落点移到 gitignored 的 .work/tools-daemon-wrapper/(原版写 scratch
 内 evidence/)。
 
