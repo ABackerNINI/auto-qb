@@ -1,11 +1,11 @@
 # 26-11-11-webui-group-hash-ref — webui 组行 hash 引用式联合立项: 联合复验+grilling+计划入库
 
-**Status:** In Progress
+**Status:** Done
 **Added:** 2026-11-11
-**Updated:** 2026-11-11
-**Summary:** 两件 perf issue(26-10-07-1420 组行 hash 引用式 / 26-10-08-0411 /api/state 全量轮瘦身)联合复验均仍复现 → grilling 五问拍板(D1-D5 全按推荐) → 联合计划 26-11-11-0630 入库(Open): 主线 C(hash 引用式)先行, S0 成本拆分置首步, B/A 转条件裁决; S0-S6 等显式开工, 两 issue 状态保持 Open
+**Updated:** 2026-11-13
+**Summary:** 两件 perf issue(26-10-07-1420 组行 hash 引用式 / 26-10-08-0411 /api/state 全量轮瘦身)联合复验均仍复现 → grilling 五问拍板(D1-D5 全按推荐) → 联合计划 26-11-11-0630 全批次落地收口(S0-S6 完成, 2026-11-13): 主线 C 落地(组行 members 改 hash 引用式 + 前端 ingestion 物化缝 + version-reload 自愈), 全量回包 -35%、抖动轮组行 24.6×/27.0× 塌缩(S0/S5 对照单点=本档案); G1/G2/G3 三裁决点全部不立项(2026-11-12 用户拍板); 两 issue 翻 Done; 基线切片 26-11-13-0027(测试数字见 kb.baseline)
 **Topics:** webui-group-hash-ref
-**Refs:** memory-bank/plans/26-11-11-0630-plan-webui-group-hash-ref.html, memory-bank/issues/26-10-07-1420-perf-webui-group-row-hash-ref.html, memory-bank/issues/26-10-08-0411-perf-webui-api-state-pagination.html, memory-bank/issues/26-11-12-2345-chore-real-seed-clean-evidence-guard.html
+**Refs:** memory-bank/plans/26-11-11-0630-plan-webui-group-hash-ref.html, memory-bank/issues/26-10-07-1420-perf-webui-group-row-hash-ref.html, memory-bank/issues/26-10-08-0411-perf-webui-api-state-pagination.html, memory-bank/issues/26-11-12-2345-chore-real-seed-clean-evidence-guard.html, memory-bank/testing/baselines/26-11-13-0027-webui-group-hash-ref.md
 
 ## 本篇只回答
 
@@ -38,7 +38,7 @@
 | 5 | S0 成本构成实测拆分(计划 §04 首步) | Done(2026-11-11, @3000+@5000 双档实测完成, 见「S0 实测数字」; 两 issue 保持 In Progress 待 S1 开工) |
 | 6 | S1 后端 hash 引用式(协议+守阵同批) | Done(2026-11-11, 22a35b18 前身批 392 行, 评审轮 2 零 actionable) |
 | 7 | S2 前端物化接缝(spike→ingestion 拷贝物化) | Done(2026-11-12, 本批; spike 裁决与已知边界见 R2 节) |
-| 8 | S3-S6(计划 §04 余步) | Open |
+| 8 | S3-S6(计划 §04 余步) | Done(2026-11-13; S3-S4 随前批入库(22a35b18/de1fe327/d7e6bc23), S5a/S5b 见 R3, S6 收尾本批) |
 
 ## 进度日志
 
@@ -90,6 +90,7 @@ S5a 开工自检过(HEAD==d7e6bc23 树净; 36595/36596 WebAPI 清点 0/0 与 S0 
 - 现场处置: real.seed.rm 删净(36595 逐删 3000 + 36596 leech 1, 连数据, R:/qbt-fake/s0 只余空目录壳)→ 产品经 dev.port-kill 停(核归属: PID cmdline = dev_run.py + s0 config, python 监听者免 --yes; 坑 4 外部优雅停机三路全堵照旧)→ 伪 tracker 已随 m3 脚本退出停止(38901 无监听)→ state.json 回 90B 空态; 测试 qB 36595/36596 本体未动留原样。证据: results/s5/ 11 件(steady×5/serialize/build/curl 在 build.json/payload_split/fe_results/fe2_prism/delta_jit), S0 的 results/ 与 results_3000/ 未再动。S5b 接手面: @5000+monster 档同口径复评 + G1/G2/G3 裁决回填(③ 注有 monster 外推 0.09 MB/轮待验证; inject.py --monster 2000 配方见坑 3)。
 - 2026-11-12 09:5x S5b(@5000+monster 档)完成: 开工自检过(HEAD==d7e6bc23, 树恰 1 修改件=本档案)→ 36595/36596 WebAPI 清点 0/0(与 S5a 删净一致)→ 注入 86s(通用库 40+jit 3+monster 2000 入库 43, 全 stalledUP, 副 2 leech)→ 产品 dev.run 后台起, 首轮归组 <40s 到 727 组(零修复; monster/jit 0 号自带 announce)+ 725 库组首成员落单(坑 1 照旧)→ fix_singles.py 5000 删净重加 → 727 组 5000 members 0 singles。三件实测(①四段/②字节拆分/③monster 抖动轮真值 86,430 B, 外推命中 <0.1%)全部入「S5 复评数字」节 @5000 小节; 输出路径事故教训照办: 脚本 OUT 复用前逐个核对改道 **results/s5/5000/**(11 件), results/ 与 results_3000/ 与 results/s5/(S5a)均未动; **G3 STOP 条件命中**(monster 86,430 B > 64 KB 且 21/30 轮频发, 合成极端库形)→ 按指令不裁决不回填计划, 对照分析与三个选项入「裁决状态」节交主会话问用户; G1/G2 数据面(7.7% vs 30% 阈值; 82~110ms vs 300ms 阈值)同节在案。现场处置照 S5a 规程(见下条)。
 - 2026-11-12 现场处置收尾(本轮; 补上一棒被配额切断欠写的「下条」, 只清场零测量): 到达态即净——36595/36596 两测试实例**已停机**(netstat 36595/36596/18211(产品 WEB 口, .work/s0/webui/config.yml 口径)/38901(伪 tracker)全无监听; 产品与伪 tracker 上一棒已停, 无进程归属可核; 本机仅用户自有 qB 两实例 Program Files/qBittorrent-2, 非测试镜像)。种子面复核走全规程: real.up 拉起两实例 → WebAPI 双口径(seed.list + /api/v2/torrents/info)**均 0 种** → real.seed.rm --all --yes 两实例 0 命中(幂等, 连数据口径) → real.down 优雅停回; **终态: 两实例停机 0 种**。R:/qbt-fake 仅余空目录壳(lib 下 725 个 g* 空目录 + jit/jit-leech/monster/monster-leech 顶层 4 壳, 0 文件), 随 real.seed.clean --yes 清壳回空。**新事故如实记**: real.seed.clean 真实语义是**整目录清空 tests-real/.work**(不止种子残留; 「已清空」即其正常输出), 本轮误判为「只扫种子残留」连带清掉 **.work/s0 全树**——S0 原始证据(results/ @5000 余件 + results_3000/ 全部)、S5a results/s5/ 11 件、S5b results/s5/5000/ 11 件、.work 复用脚本(inject/m1/m2/m3/fix_singles 等)与 s0 state.json(90B 空态)全部丢失; 该面 gitignored、shutil 直删不进回收站, git 不可恢复, memory-bank 无副本。**蒸馏数字不受影响**(「S0 实测数字」「S5 复评数字」两节誊写在案), 但全部原始测量证据自此不可复核; 89 行旧事故(results/ 顶层 steady_*.json 被 S5a 覆盖)随目录一并消失。教训(与 89 行并案待入 pitfalls): **跑 real.seed.clean 前必须先确认 .work 内无待留证据——它清的是整树, 不是「种子残留」**。红线未触: auto-qb-data/(空)/config.yml 未动, git 树仍恰 1 修改件(本档案)。
+- 2026-11-13 00:28 S6 收尾(本批, 开工自检过: HEAD==a139dedd 树净; 零生产代码改动, 纯文档/记账/issue 面): ①`architecture/webui.md` 回写四处增量(「皮肤目录即 URL 与静态契约」补 version-reload 自愈 / 「视图发布与 truth 通道」补组行 hash 引用式(P-02 二期, VIEW_ARRAYS group/show 连带 torrents)+载荷结论(全量 -35%、抖动轮 24.6×/27.0× 塌缩, S0/S5 对照单点=本档案) / 「响应性设计」补 ingestion 物化缝(polling.js 三入口, 浅拷贝物化, 已知边界与守阵单点)——web-runtime.md 已随 4cc002a2 memory-bank 大重构并入 architecture/webui.md, **web-runtime 口径单点即 webui.md**); ②两 issue(26-10-07-1420 / 26-10-08-0411)补「修复后补充」段 + kb.status 翻 Done(0411 口径如实: 主线诉求「全量轮瘦身」由 C1+实测达成(-35%), B/A 按 G1/G2 裁决收口, 非全部诉求的实施性达成); ③R1/R3 三坑合并入档 pitfalls 三件(testing/fake-seed-injection / ops/dev-run-background-shutdown / ops/seed-clean-vs-evidence)+ kb.index 重建(19 生成物); ④test.full 全绿 + 基线切片 [26-11-13-0027](../testing/baselines/26-11-13-0027-webui-group-hash-ref.md)(测试数字见 kb.baseline, 不在此手抄); ⑤kb.check 全绿; ⑥计划 26-11-11-0630 doc-status 翻 Done; 本档案 Status 翻 Done + Summary 收口, 子任务表 8 行 Done。
 
 ## S0 实测数字
 

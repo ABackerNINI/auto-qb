@@ -1,7 +1,7 @@
 # WEB UI 运行时
 
-> 摘要: FastAPI 装配单点与启动 fail-fast、皮肤目录即 URL 与静态契约、线程边界(读快照 + 投命令)、视图发布与版本门控、truth 通道、响应性设计要点、表格几何单点(dt_table)、部分组操作预警、图形化配置编辑器骨架。
-> 触发: WEB UI, webui, FastAPI, create_app, 路由, 皮肤, 静态, 线程边界, 视图发布, group_view_ver, truth, 回执, 乐观 UI, 响应性, 窗口化, 表格几何, dt_table, DT_TABLE, columns_grid, gridTemplate, 部分组, 部分组预警, partialGroups, 将缺文件, 整组迁移, 配置编辑器, schema, writer
+> 摘要: FastAPI 装配单点与启动 fail-fast、皮肤目录即 URL 与静态契约、线程边界(读快照 + 投命令)、视图发布与版本门控、组行 hash 引用式(聚合 + members hash 数组)、truth 通道、前端 ingestion 物化缝、version-reload 自愈、响应性设计要点、表格几何单点(dt_table)、部分组操作预警、图形化配置编辑器骨架。
+> 触发: WEB UI, webui, FastAPI, create_app, 路由, 皮肤, 静态, 线程边界, 视图发布, group_view_ver, hash 引用式, members hash 数组, memberByHash, VIEW_ARRAYS, 物化, _materializeGroupRows, _rematQueue, version-reload, _versionSelfHeal, truth, 回执, 乐观 UI, 响应性, 窗口化, 表格几何, dt_table, DT_TABLE, columns_grid, gridTemplate, 部分组, 部分组预警, partialGroups, 将缺文件, 整组迁移, 配置编辑器, schema, writer
 
 ## 装配单点与启动 (webui/server/factory.py, webui/module.py)
 
@@ -10,6 +10,8 @@
 ## 皮肤目录即 URL 与静态契约 (webui/server/static_ui.py)
 
 `webui/static/<名>/` 一个目录 = 一套皮肤(atlas 星图 / prism 棱镜 / console 控制台 / flux), `shared/` 是公共逻辑层、`fx/` 是动效库 —— **新增 UI = 新增目录, 零后端改动**。根路径按 cookie(`shared/boot.js` 写入)307 直达「上次使用的 UI」(服务端只认形状合法且 index.html 真实存在的值, 挡路径逃逸), 失效回落默认; 旧 `/newui` 书签 307 到 prism。**静态契约**: 非 /api 响应一律 `Cache-Control: no-cache` —— 浏览器仍缓存但每次带 ETag 协商(未变更 304), 否则升级后浏览器自缓存数小时, 界面「改了没变」。
+
+- **version-reload 自愈**(plans/26-11-11-0630 §04 S3, 2026-11-12 接线): no-cache+ETag 只保证**新开页面**拿到新 JS —— 同仓同进程发布下**已开的旧标签页**仍跑旧 JS, 每轮轮询把新形状载荷喂给旧消费位(静默渲染破损, 用户无感)。机制: 后端 status 载荷恒带 `version`(app_version), 前端 `_versionSelfHeal`(polling.js, 轮询数据入口)每轮比对: 变更沿 → `location.reload()` 自愈一跳(**中止本轮载荷应用**, 不把跨版本载荷喂进旧 JS)且照常续排下一拍; **30s 防抖**(sessionStorage per-tab, 不可用退内存层)把 reload 速率封顶 1 次/30s, 部署稳定后归零; 配置编辑器脏态守卫(cfgGuardActive)活跃 = 让拍不让位(不 reload、基线不动, 守卫释放后下一轮变更沿自然再触发); version 缺失/非字符串**保守不动基线**(无从判定变更方向, 宁可不自愈)。
 
 ## 线程边界 (webui/runtime.py, WebUIRuntime 门面)
 
@@ -22,6 +24,8 @@
 - **版本门控**(等价 qB 的 rid): `group_view_ver` 每次重建自增; `ensure_state(rid, view)` 版本一致**不回传任何数组**(响应趋近零, 恒回 status 标量与 traffic/server 快照); **按视图回传**(指定视图只回该视图数组, 单点 `views_common.py`); 切视图前端置空 rid 强制取一次全量。
 - **命令回执**: 每个 `_cmd_*` 是一次 qB 写操作, 由门面在主循环线程分发执行; 回执(cmd_id → status/wait/exec/truth)暂存, **每轮收尾 `flush_truths()` 无条件落**(异常路径兜底)。
 - **命令唤醒**: `wake()` 只触发消费命令**不触发 tick** —— 否则每 tick 任务数上限的速率语义失效, 且自投递命令会自激循环(自投递走白名单)。
+- **组行 hash 引用式(P-02 二期, plans/26-11-11-0630, 2026-11-12 落地)**: 组行 = **聚合字段 + `members` hash 数组**(`_build_group_row` views_group.py, `"members": [r.hash for r in recs]`; 先例 views_episodes.py 集节点), 成员明细不随组行回传, 前端经既有 `memberByHash()` 从 `singles ∪ torrents` 拼装 —— **VIEW_ARRAYS group 视图连带 torrents**(shows 视图当年「连带 groups+singles」同款 ride-along 先例, views_common.py:111)。聚合仍吃 `_member_view` 明细(组级聚合口径逐字段不变), 组行仍是完整行对象随整行走(R8 整行替换, 不做字段级 patch); delta 下组行整行 upsert(聚合 + hash 数组), 抖动成员明细改经 **delta.torrents 桶**回传(只抖那一条)。full 语义常驻回退与 `_reduce_delta` 三判据不动; 守阵 = 镜子测试 hash 形状 + `test_s6_partial_rows_equal_full_rebuild`「局部重算 == 全量重跑」单测。
+- **载荷结论(S0/S5 实测对照, 单点 = 任务档案 tasks/26-11-11-webui-group-hash-ref.md)**: 全量回包 **-35%**(@3000 -35.3% / @5000 -35.5%, 与改造前投影命中 —— @5000 逐位、@3000 偏差 0.2pp); 抖动轮组行塌缩 **24.6×**@100 成员组(116 KB→4.7 KB) / **27.0×**@2000 成员组(2.33 MB→86 KB), 抖动轮响应整体 -93%(@3000 117 KB→8 KB)/ -96.2%(@2000 成员组 2.33 MB→90 KB); view=group 因连带 torrents 反而略大(计划「不预写承诺」被实测证实); G1(按需字段)/G2(分页)/G3(C2 二次演进)经 S5 实测三裁决点全部不立项(裁决记录在计划 §05)。
 
 ## 响应性设计 (plans/26-09-19-1241-webui-responsiveness-plan.html)
 
@@ -29,6 +33,7 @@
 
 - **乐观 UI 只做白名单(pause/resume)**: 补丁**先于 POST** 贴上(放 await 之后 = 押在网络往返上); **3s 兜底显式回滚到补丁前值**(光删补丁记录不叫回落 —— rid 未变时服务端不回传数组, 行对象不被替换, 补丁值会永久留在行上); **真值匹配即清必须比服务端快照**(比行上的当前值 = 跟自己比, 首轮必假匹配); 只认本轮 payload 真带了的 hash; 失败立即回滚。
 - **命令后补刷新走完整同步**(只 apply 增量会留半刷新态), 整批命令 drain 完只补一次; qB 受理(HTTP 200)≠建好, 另有**有界追平**: 登记期望 hash, 同步线提前 +80ms 再问(≤3 次/TTL)。
+- **ingestion 物化缝**(plans/26-11-11-0630 §04 S2, 2026-11-12 接线): 组行 `members` 改 hash 引用式后, 前端在**摄入侧**物化成员明细 —— polling.js 三入口(applyStateRows 全量/delta + auth.js bootstrap)经 `_materializeGroupRows` 产**成员行浅拷贝**而非 canonical 行引用(动因: 乐观链 prev 采集「同 hash 多命中各为独立对象」, 别名化下第二命中读到已打补丁值 → `op.prev` 被污染, 失败回滚静默失效; 浅拷贝与物化前服务端成员字典同构, g.members 消费位零波及)。delta 桶序 torrents/singles 先于 groups 合并 ⇒ 物化时索引恒新鲜; 缺项保留原 hash 字符串不产 undefined + `_rematQueue`/`_rematDrain` 后续轮补物化(后端「成员脏 ⇒ 同代组脏」不变式下常规不可达, 纯兜底)。**已知语义边界**: `_snapshotTruth` 组员源换本地物化拷贝后, 组脏(他员变化)+ 该组另有成员 pending 同窗会提前撤 hold 且 op.prev 同窗污染 —— 成功路径观感不变, 失败/停滞路径补丁值滞留至该成员下次变化或下一次全量轮。守阵单点: node 电池 `test_r4_truth_snapshot_materialized_members` + `test_r4_remat_drain_after_assign_two_beat`(tests/test_webui_static_r4_poll_auth_lifecycle.py)+ e2e `group-hash-ref.spec.mjs`。
 - **行窗口化只减 DOM 行数不改布局模型**(上下占位撑高度, 列对齐与列宽协议保持有效); 行高逐行实测 + 前缀和 + 二分(行高不齐, 等高假设会漂); 展开的组在可见集合里时窗口退避全量。
 - **搜索索引**: 种子名匹配即时扫 store, 文件列表匹配靠索引(文件 API 只在主循环线程); 按 hash 增量维护 + 单次限流预算, 未拉完下一 tick 续建。
 - 前端纪律: 页面隐藏停轮询恢复即刷; setTimeout 链式续排不堆叠请求; **只做失败退避**, 不做「无变化退避」。

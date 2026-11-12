@@ -7,10 +7,10 @@
 <title>WebUI 组行 hash 引用式与 /api/state 全量轮瘦身联合立项</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="webui-group-hash-ref">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-11-11-0630">
-<meta name="doc-updated" content="26-11-11-0630">
-<meta name="doc-refs" content="memory-bank/issues/26-10-07-1420-perf-webui-group-row-hash-ref.html, memory-bank/issues/26-10-08-0411-perf-webui-api-state-pagination.html, memory-bank/tasks/26-11-11-webui-group-hash-ref.md">
+<meta name="doc-updated" content="26-11-13-0029">
+<meta name="doc-refs" content="memory-bank/issues/26-10-07-1420-perf-webui-group-row-hash-ref.html, memory-bank/issues/26-10-08-0411-perf-webui-api-state-pagination.html, memory-bank/tasks/26-11-11-webui-group-hash-ref.md, memory-bank/testing/baselines/26-11-13-0027-webui-group-hash-ref.md">
 <style>
   :root {
     --bg: #10151a;
@@ -75,7 +75,7 @@
 <h1>WebUI 组行 hash 引用式与 /api/state 全量轮瘦身联合立项</h1>
 <p class="lede">本篇只回答: 两件 perf issue(<a href="../issues/26-10-07-1420-perf-webui-group-row-hash-ref.html">26-10-07-1420 组行 hash 引用式</a> / <a href="../issues/26-10-08-0411-perf-webui-api-state-pagination.html">26-10-08-0411 /api/state 全量轮瘦身</a>)怎么联合落地 —— 组行 members 改 hash 引用式(选项 C)先行, 全量轮成本构成实测拆分(S0)置为计划首步, B(按需字段)/A(分页)降为实测数字出来后的条件裁决点。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-11-0630 · <b>doc-updated</b> 26-11-11-0630 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-11-11-0630 · <b>doc-updated</b> 26-11-13-0029 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 会话: 用户指令「两个issue联合复验, 然后grilling, 出一个计划」(2026-11-11); 联合复验两件均仍复现(HEAD 90764579)后 grilling 一轮五问拍板(D1-D5 全按推荐)
 </div>
 

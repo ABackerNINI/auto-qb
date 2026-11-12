@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="webui-polling">
 <meta name="doc-refs" content="memory-bank/tasks/26-10-08-webui-perf-issues-closing.md, memory-bank/issues/26-10-01-2218-perf-webui-api-state-full-scan.html, memory-bank/plans/26-11-11-0630-plan-webui-group-hash-ref.html, memory-bank/tasks/26-11-11-webui-group-hash-ref.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="In Progress">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="/api/state 分页/按需字段未做: 冷启动与降级轮仍回整表全量(5000 种子首屏峰值残留)">
 <meta name="issue-summary" content="增量 delta 已覆盖稳态, 但全量轮(首屏/多标签冷启动/时间线窗外/防御降级)仍回整表: 3000 种子回包 6.3 MiB 量级; 原 issue 方向③未实施">
 <title>/api/state 分页/按需字段未做: 冷启动与降级轮仍回整表全量(5000 种子首屏峰值残留) · perf · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-08-0411-perf-webui-api-state-pagination</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-08 04:11</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">perf</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">In Progress</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -183,11 +183,17 @@
       <li>2026-10-08 04:11 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
       <li>2026-11-11 — 联合复验（与 26-10-07-1420），<strong>仍复现</strong>；§04 重锚 + §07 复验行，状态保持 Open；联合计划已入库（见 doc-refs），主线定为 §06 选项 C 先行 + S0 拆分前置，B/A 转条件裁决</li>
       <li>2026-11-11 — 状态 Open → In Progress（kb.status）</li>
+      <li>2026-11-13 — 状态 In Progress → Done（kb.status）</li>
 </ul>
     <h3>复验</h3>
     <p>复验: 2026-11-11 <strong>仍复现</strong>(联合复验, 与 <a href="26-10-07-1420-perf-webui-group-row-hash-ref.html">26-10-07-1420</a> 一起; HEAD 90764579)。全量分支原样(<code>runtime_views.py:649-660</code>), 方向③未实施, 成本构成拆分未做; 重锚见 §04 复验重锚块。已出联合计划(见 doc-refs): 主线选 §06 选项 C(hash 引用式 = 26-10-07-1420 本体)先行, S0 成本拆分置计划首步, B/A 转条件裁决点; 状态保持 Open 等开工认领。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <h4>实际修法(提交区间 73b99d09..a139dedd, 联合计划主线 C1)</h4>
+    <p>§06 的排序建议(「先做全量轮成本构成实测拆分再选」)按联合计划 <a href="../plans/26-11-11-0630-plan-webui-group-hash-ref.html">26-11-11-0630</a> 执行: S0 实测拆分确认主体 = 组行内嵌 members 明细(36.5% @3000 / 36.9% @5000 全量) → 主线走 C(hash 引用式, 即 <a href="26-10-07-1420-perf-webui-group-row-hash-ref.html">26-10-07-1420</a> 本体), S1-S3 落地(组行 = 聚合字段 + members hash 数组 / VIEW_ARRAYS group 连带 torrents / 前端 ingestion 物化缝 / version-reload 自愈); 实际修法明细与守阵见该 issue 修复后补充段。</p>
+    <h4>验收数字摘要(S0/S5 同口径实测对照, 单点 = 任务档案 <a href="../tasks/26-11-11-webui-group-hash-ref.md">26-11-11-webui-group-hash-ref.md</a>)</h4>
+    <p>全量回包 @3000 9,592,173 → 6,206,929 B(<strong>-35.3%</strong>)、@5000 -5,605,792 B(<strong>-35.5%</strong>), 均与改造前投影命中(@3000 偏差 0.2pp / @5000 逐位)—— <strong>主线诉求「全量轮瘦身」达成</strong>; 抖动轮响应整体 @2000 成员组 -96.2%(median 2,335,213 → 89,744 B); 首屏墙钟 @3000 full 125.4 → 81.8ms。全量测试数字见 kb.baseline(不在此手抄)。</p>
+    <h4>收口口径(如实)</h4>
+    <p><strong>按 G1/G2 裁决收口, 非全部诉求的实施性达成</strong>: §06 方向 C(主线)已落地且实测达标; 方向 B(按需字段)/A(分页)经 S5 复评实测转条件裁决点(§05 G1/G2)后<strong>均不立项</strong>(2026-11-12 用户拍板) —— G1: 净可裁 @3000 ≈7.4% / @5000 ≈7.7% 全量, 远低 30% 阈值; G2: 改造后首屏整表替换 @3000 76~89ms / @5000 82~110ms/任务, 远低 300ms 阈值, 且 S0 @5000 的超字节线性面(138~175ms)已被 C1 回落。残余面: 若将来实测命中 G1/G2 再议触发条件(计划 §05 表), 由该行重新立项。</p>
   </section>
 
   <footer>

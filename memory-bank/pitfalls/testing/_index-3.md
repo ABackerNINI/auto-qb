@@ -1,7 +1,7 @@
 # testing — 测试 / 冒烟 / 仿真纪律 · 卷 3/5
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `importlib-sys-modules-dataclass.md` … `poll-last-round-race.md`(共 24 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `importlib-sys-modules-dataclass.md` … `playwright-teardown.md`(共 23 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
@@ -25,10 +25,9 @@
 | [mypy-isinstance-narrow-repeated-get.md](mypy-isinstance-narrow-repeated-get.md) | mypy 对重复调用 d.get(k) 的 isinstance 收窄失效: 类型残留 None | mypy, typecheck, union-attr, arg-type, isinstance, 收窄, 重复调用, dict.get |
 | [nested-pytest-config.md](nested-pytest-config.md) | 仓库内子目录独立包(自带 pyproject+venv)内 `uv run pytest` 会向上拾取仓库根 pytest.ini, rootdir 上移, 根 ini 的 addopts(-n/--cov 等)在子包 venv 不可用 → unrecognized argume… | 在 tools/ 下「仓库内嵌套、自带 pyproject 与 venv 的独立子包」内跑 pytest |
 | [no-uv-fallback.md](no-uv-fallback.md) | 包内 `test.*` 任务单点写着 `uv run pytest`, 而**本 clone 的工具 shell 的 PATH 里没有 `uv`**(实测 uv 本体已装在 `C:\Users\<用户>\.local\bin\uv.exe`, 只是不在 PATH) ⇒ 每个测试任… | 跑测试, 提交, 闸门, uv, command not found, .local\bin, PATH, R:/Temp, 驱动器不存在, DriveNotFoundException, 全量, TMPDIR, COVERAGE_FILE… |
-| [node-guards-silent-skip.md](node-guards-silent-skip.md) | 扩展行为守阵(`tests/test_extension_proxy_*.py` 的 node VM 场景)在没有 node 的机器上**静默 return 当 pass** | node, nodejs, 静默跳过, 假绿, 全绿, 出生即红, 新电池真跑, site-caps, 配额, 阈值, 硬上限, 守阵, test_extension_proxy, test_webui_static_r4_node_bat… |
+| [node-guards-silent-skip.md](node-guards-silent-skip.md) | 扩展行为守阵(`tests/test_extension_proxy_*.py` 的 node VM 场景)在没有 node 的机器上**静默 return 当 pass** | node, nodejs, 静默跳过, 假绿, 全绿, site-caps, 配额, 阈值, 硬上限, 守阵, test_extension_proxy, |
 | [parallel-run.md](parallel-run.md) | **已设为默认**(`pytest.ini` 的 `addopts = -n 8`, 2026-10-08 由 `-n 4` 上调) —— 全量 21s → **7.6s**(带覆盖率); sidefx 台账已用 `workeroutput` 回传汇总, 「越界 0 条」不再消失… | 并行, 并发跑测试, xdist, -n, 加速, 多进程, 跑得慢, 闸门, 端口冲突, 台账不打印, 串行挂住, 提交卡死, test.pkg, -n 0, subprocess 挂死, CreateProcess, 聚合脚本, bun… |
 | [patching.md](patching.md) | 「Windows 全绿 / Linux 全红」的**多类根因**与"归错类比不修更危险"的教训 —— 平台相关测试必须以 `monkeypatch` 固定平台; 最隐蔽的两类: **Windows 路径归一化(结尾点/空格被剥、大小写不敏感)让"路径存在性"判据在本机恒真**(2… | CI 红, Linux CI, 平台差异, monkeypatch, WSL, normcase, dir_fd, 平台专属模块, 码页, GBK, cp936, PYTHONUTF8, 假红, 路径归一化, 结尾点, 大小写不敏感, ex… |
 | [perf-measurement.md](perf-measurement.md) | 本机每次文件操作的**固定过路费**(初始 写 20ms / 删 43ms, 与数据量无关)曾支配全量耗时 —— **已由系统层排除项治好(全量 75s → 19.4s, 并行 5.0s)**; 另记"判断单项优化收益不能看全量总时"与"并发污染下的数字一律是假的"两条度量纪律。 | 测试慢, 耗时, 性能, 优化收益, 归因, 全量多久, 跑得慢, durations, 度量, 并发跑, 白名单, 排除项, 杀软, 沙箱 |
 | [plan-docstring-section-boundary.md](plan-docstring-section-boundary.md) | 对「## 测试计划」这类分节 docstring 做机械批量改写时, 段边界若用 `##` 前缀匹配, 段内 `###` 小节标题会被误判成同级边界提前截断 —— 截断点之后的既有条目整段「消失」, 缺列数翻倍, 新条目插进错误小节(2026-10-22 实证: 16 文件误插… | 批量改写 docstring, 测试计划回填, 段边界, ###, 小节被截断, 缺列翻倍, 插错小节, 机械改写脚本, 底数核对, git diff 账目, 误插, 两份解析实现 |
 | [playwright-teardown.md](playwright-teardown.md) | 本机 node 的 `spawnSync` **只要带管道 stdio**(`'pipe'` 或默认)就 EBUSY —— `stdio: 'ignore'` / `'inherit'` 正常, 且与可执行文件无关(连 `process.execPath` 即 node.exe… | dev.e2e 不退出, 测试全过但挂住, webServer 收尾, spawnSync EBUSY, 管道 stdio, taskkill 无效, 端口不释放, 桩服务残留, waitForCleanup, Playwright 挂死,… |
-| [poll-last-round-race.md](poll-last-round-race.md) | e2e 断言等一次**必然发生**的轮次(如「lastRid 置空 ⇒ 请求不带 rid ⇒ 服务端恒回全量」)时读探针记录的「最后一轮」: 只要与该动作无因果的其它轮次(在飞旧 rid 请求被 ver 抬高后回落的增量轮)在全量轮**之后**落袋, 末值就停在否定态, 轮询窗内… | flaky, 顺序相关, 探针, 末值断言, 轮询竞态, expect.poll, 隔离绿全量红, 在飞请求, rid 过期, delta 轮, 全量轮, window.__d, applyStateRows, lastRid, delta… |

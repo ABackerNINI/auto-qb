@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="webui-delta-sync">
 <meta name="doc-refs" content="memory-bank/plans/26-10-07-0414-plan-webui-delta-sync.html, memory-bank/plans/26-11-11-0630-plan-webui-group-hash-ref.html, memory-bank/tasks/26-11-11-webui-group-hash-ref.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="In Progress">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="组行 hash 引用式响应体二次演进: 组视图增量粒度从「组行」降到「成员」级">
 <meta name="issue-summary" content="组行内嵌完整 members 数组(3000 种子全量回包 6.3 MiB 主体), 任意成员速度抖动脏整条组行; hash 引用式可把组行增量粒度降到成员级, 但波及前端筛选器计数与列模型数据源, 独立立项级改动(计划 P-02 选项 B)">
 <title>组行 hash 引用式响应体二次演进: 组视图增量粒度从「组行」降到「成员」级 · perf · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-07-1420-perf-webui-group-row-hash-ref</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-07 14:20</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">perf</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">In Progress</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -174,11 +174,33 @@
       <li>2026-10-07 14:20 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
       <li>2026-11-11 — 联合复验（与 26-10-08-0411），<strong>仍复现</strong>；§04 重锚 + §07 复验行，状态保持 Open；联合计划已入库（见 doc-refs）</li>
       <li>2026-11-11 — 状态 Open → In Progress（kb.status）</li>
+      <li>2026-11-13 — 状态 In Progress → Done（kb.status）</li>
 </ul>
     <h3>复验</h3>
     <p>复验: 2026-11-11 <strong>仍复现</strong>(联合复验, 与 <a href="26-10-08-0411-perf-webui-api-state-pagination.html">26-10-08-0411</a> 一起; HEAD 90764579)。组行仍内嵌完整 members 明细(<code>views_group.py:116-117</code>), P-02 一期口径注释与 delta_merge 守阵原样; 前端消费面经全树 grep 盘点 60 处 / 17 文件(入池锚点仅记 decorate.js 两段)。重锚与协议耦合细节见 §04 复验重锚块。已出联合计划(见 doc-refs), 状态保持 Open 等开工认领。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <h4>实际修法(提交区间 73b99d09..a139dedd, 联合计划 S1-S3)</h4>
+    <p>按联合计划 <a href="../plans/26-11-11-0630-plan-webui-group-hash-ref.html">26-11-11-0630</a> 主线 C(P-02 二期)落地:</p>
+    <ul>
+      <li><strong>后端组行 hash 引用式(S1, <code>22a35b18</code>)</strong>: <code>_build_group_row</code> 组行 members 改 hash 引用数组(<code>"members": [r.hash for r in recs]</code>, views_group.py; 聚合仍吃 _member_view, 组级聚合口径逐字段不变, 组行仍是完整行对象); §04 复验重锚预判的协议耦合项一并落地 —— VIEW_ARRAYS(<code>views_common.py:111</code>)group 视图连带 torrents、show 索引源 = singles ∪ torrents; delta 组行整行 upsert(R8)语义不动, 抖动成员明细改经 delta.torrents 桶回传(只抖那一条)。</li>
+      <li><strong>前端 ingestion 物化缝(S2, <code>f58b4a05</code>)</strong>: polling.js 三入口(applyStateRows 全量/delta + auth.js bootstrap)经 <code>_materializeGroupRows</code> 对组行 members 做<strong>浅拷贝物化</strong>(非 canonical 行引用 —— 乐观链 prev 采集「同 hash 多命中各为独立对象」语义), 缺项 <code>_rematQueue</code>/<code>_rematDrain</code> 后续轮补; g.members 消费位零 diff。</li>
+      <li><strong>version-reload 自愈(S3, <code>de1fe327</code>)</strong>: 协议形状演进不背旧标签页长期共存面(§03 静态 no-cache+ETag「刷新即愈」的补全) —— status 载荷恒带 version, 前端变更沿 reload + 30s 防抖。</li>
+    </ul>
+    <h4>验收数字摘要(S0/S5 同口径实测对照, 单点 = 任务档案 <a href="../tasks/26-11-11-webui-group-hash-ref.md">26-11-11-webui-group-hash-ref.md</a>)</h4>
+    <table>
+      <tr><th>项</th><th>改造前(S0)</th><th>改造后(S5)</th><th>结论</th></tr>
+      <tr><td>全量回包 @3000</td><td>9,592,173 B</td><td>6,206,929 B</td><td><strong>-35.3%</strong>(改造前投影 -35.1%, 偏差 0.2pp 命中)</td></tr>
+      <tr><td>groups 段 @3000</td><td>3,797,187 B(39.6%)</td><td>425,205 B(6.9%)</td><td>塌缩 8.9×; members hash 数组 43 B/条</td></tr>
+      <tr><td>抖动轮组行 @100 成员组</td><td>median 116,005 B</td><td>median 4,711 B</td><td><strong>24.6× 塌缩</strong>(计划预期 5-6 KB 量级命中)</td></tr>
+      <tr><td>抖动轮组行 @2000 成员组</td><td>median 2,333,851 B</td><td>median 86,430 B</td><td><strong>27.0× 塌缩</strong>; 抖动轮响应整体 -96.2%</td></tr>
+    </table>
+    <p>守阵: 镜子测试扩展覆盖 hash 形状 + <code>test_s6_partial_rows_equal_full_rebuild</code>「局部重算 == 全量重跑」+ e2e 协议形状用例(S4, <code>d7e6bc23</code>); 全量测试数字见 kb.baseline(不在此手抄)。</p>
+    <h4>残余面</h4>
+    <ul>
+      <li>三条件裁决点经 S5 复评实测<strong>全部不立项</strong>(裁决记录在计划 §05, 2026-11-12 用户拍板): G1(按需字段)/G2(分页)/G3(C2 二次演进, 合成极端库形字面超阈但维持默认); G3 再议触发条件 = 真实生产库出现 ≥≈1,500 成员且高频抖动的组。</li>
+      <li>前端已知语义边界(评审确认接受): <code>_snapshotTruth</code> 组员源换本地物化拷贝后, 组脏 + 该组另有成员 pending 同窗提前撤 hold —— 失败/停滞路径补丁值滞留至该成员下次变化或下一次全量轮(成功路径观感不变); 绿色向守阵 = node 电池 <code>test_r4_truth_snapshot_materialized_members</code>。</li>
+      <li>机制单点已回写 <code>memory-bank/architecture/webui.md</code>(组行 hash 引用式 / 载荷结论 / ingestion 物化缝 / version-reload)。</li>
+    </ul>
   </section>
 
   <footer>

@@ -1,7 +1,7 @@
 # testing — 测试 / 冒烟 / 仿真纪律 · 卷 2/5
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `fake-server-reuse-bind.md` … `iab-click-rerender-flake.md`(共 24 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `fake-server-reuse-bind.md` … `iab-click-rerender-flake.md`(共 23 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
@@ -19,7 +19,6 @@
 | [gate-concurrency-memory-timeout.md](gate-concurrency-memory-timeout.md) | 提交闸门 `ship.commit` 把闸门命令放进 4 线程池并发, 而 pytest 类闸门自身又用 `-n 8` —— 峰值 4×8 = 32 worker 打满内存, 表现为 **`timekit --check` 超时 / node battery flake** 这类… | 提交闸门超时, timekit --check 超时, 闸门红, 假红, node battery flake, 内存打满, 换页, GATE_WORKERS, ship.commit 五连红 |
 | [gate-probe-must-not-run-action.md](gate-probe-must-not-run-action.md) | `parse_args(argv or [])` 在 CLI 直跑时把真实 `sys.argv` 整个丢掉 —— 冒烟闸门加的 `--help` 被当"无参", 于是 `sync.py --help` **真跑一次同步**、`push.py --help` **真推一次推送**;… | 冒烟闸门, --help, --safety, parse_args, argv or [], 陌生参数被当无参, 闸门真跑动作, 真推送, sync.py --help, push.py --help, 探测与动作同形, `<each:>… |
 | [ghost-pkg-residue.md](ghost-pkg-residue.md) | 包源码迁走后, 旧目录在 git 里已删但磁盘残留只含 `__pycache__` 的空壳目录 (gitignored 未跟踪, 检出/同步不清掉), 被幽灵包守阵 (test_no_ghost_pkg_dirs) 判红 —— 是环境残留不是代码缺陷, 整目录删除即绿。 | 跑 pytest 时 test_src_has_no_ghost_pkg_dirs 红, 报 src/ 下某目录; 或排障时发现某包「还在」但 import 不到。 |
-| [global-open-probe-pollution.md](global-open-probe-pollution.md) | 测试用 monkeypatch 替换**进程级**单点(`builtins.open`/`subprocess.Popen` 等)当探针记录被测行为时, 记录面默认是「全进程」; -n 8 并行下同 worker 进程里**前序测试遗留的守护线程**(tests/ 有 20+ 文… | builtins.open 探针, open 计数, 进程级 monkeypatch, 探针污染, xdist 遗留线程, 守护线程, tmp_path, 读集假红, 探针收窄, data_dir 前缀, global-open-probe… |
 | [group-relocate-restart-free.md](group-relocate-restart-free.md) | 写迁移执行体测试时两处「看起来对、其实恒真/恒假」的断言形态 —— `ActionResult.ok` 是 classmethod 不是属性; 同卷硬链接下删目标路径不会造出悬空链接。 | ActionResult,is_ok,硬链接,悬空,迁移执行体,jar |
 | [guard-dead-branch.md](guard-dead-branch.md) | 扫描型守阵的「没扫到」与「扫了没有违规」输出完全一样 —— 正则后来为 `\1` 回引用补了捕获组, 消费处组号没跟着挪, 整个分支从此恒扫引号字符, 检出能力归零而 pytest 照样全绿(issue 26-10-11-2030 实证: 保留前缀守阵的指令表达式分支死了很久,… | 守阵, 死分支, 捕获组, group(1), group(2), 正则改形, 回引用, 假绿, 红绿双验, 活性探针, 扫描型守阵, 静态守卫, 检出能力, docstring 宣称, 白名单回退 |
 | [guard-literal-comment-trip.md](guard-literal-comment-trip.md) | 「X 已移除/退役, 不得回潮」类守阵按 `assert "标识符" not in 源码` 扫描**整份源文本**(含注释与 docstring) —— 在同一份源码里写退役说明注释时把标识符原文写进去, 守阵立刻判红, 且报错信息极具迷惑性(明明只是注释)。写退役说明要么换措辞… | 移除功能, 反回潮守阵, 退役注释, assert not in, 判红, 注释, 文档字符串, 源码扫描 |
