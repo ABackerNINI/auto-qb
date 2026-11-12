@@ -227,8 +227,10 @@ Object.assign(window.AQB_DRAWER.methods, {
      * 生硬根源: 停靠面板占据文档流, open 翻转时列表底部一帧被面板撑开/收回 —— 面板本体的
      * transform/opacity 滑淡(CSS .drawer-enter/leave-*)治不了布局跳变。修法 = 槽位插值:
      * enter 用 rAF 追赶循环把 .drawer-dock 高度 0 -> 面板实时高(每帧重量, 详情中途到达长高也跟),
-     * leave 反向把面板自身高度收拢到 0(dock auto 跟随); 全程只写 height/margin, 不碰面板 :style
-     * 绑定, Vue 重渲染即便回写绑定值下一帧也被循环覆盖(自愈)。动画期 .drawer-anim 裁掉溢出,
+     * leave 反向把面板自身高度收拢到 0, 而槽位(dock)整段冻结、末帧一次性收拢 —— W2(计划
+     * 26-11-12-1048): 旧实现 dock 逐帧跟缴 = 文档逐帧变矮 = scrollY 逐帧钳制, 背景列表逐帧回弹。
+     * enter 侧每帧写 height/margin, 不碰面板 :style 绑定, Vue 重渲染即便回写绑定值下一帧也被
+     * 循环覆盖(自愈)。动画期 .drawer-anim 裁掉溢出,
      * 面板从底缘升起/收回; prefers-reduced-motion 与窄屏全屏态(D3, 面板 fixed 出流)不插值。
      * 几何登记: 插值期间 dock 顶缘是中间值, 让位量测(_kbRevealRow)不许读 —— enter 起拍把
      * "自然高时的 dock 顶缘"(即落定顶缘, sticky 钉底)登记进 _drawerAnimTop, _kbViewBottom
@@ -317,20 +319,32 @@ Object.assign(window.AQB_DRAWER.methods, {
       if (!frozenH && !this._drawerAnimTop) this._drawerAnimTop = this._drawerFinalTop(dock);
       const m0 = parseFloat(getComputedStyle(dock).marginTop) || 0;
       dock.classList.add("drawer-anim");
-      dock.style.height = h0 + "px";  // 从捕获帧起步, 面板同步收拢 —— 两边同一曲线永不脱节
+      /* W2(计划 26-11-12-1048 §02/D9): 槽位整段冻结 —— 高度与呼吸距各写一次, 收场动画期逐帧
+       * 不动。dock 是流内 sticky 元素, 逐帧缩它 = 文档逐帧变矮 = 浏览器逐帧钳制 scrollY, 背景
+       * 列表逐帧回弹(修复前真机逐帧取证: 收场位移事件 8~11 次, D11 判据 <=1)。高度插值只作用
+       * 于已出流的面板(leave-active absolute 底缘锚定, 四皮肤成对、守阵钉住), 文档高全程恒定
+       * —— 列表这才真正「只看到面板沉下去」。槽位在末帧一次性收拢(见 step 末尾): 文档底至多
+       * 一次钳制, 属「结果变短后的一次性钳制」预期口径(dock-panel.md:118), 非文档底零钳制。 */
+      dock.style.height = h0 + "px";     // 槽位冻结(closeDrawer 已写同值, 自捕获帧起整段保持)
+      dock.style.marginTop = m0 + "px";  // 呼吸距一并冻结(它同样进文档高, 逐帧收回一样逐帧钳制)
       const t0 = performance.now();
       const step = () => {
-        if (seq !== this._drawerAnimSeq) return;  // 重开接管: enter 拍已接管 dock 与面板
+        if (seq !== this._drawerAnimSeq) return;  // 重开接管: enter 拍清冻结残局后自起动画, 本循环自弃
         const t = Math.min(1, (performance.now() - t0) / 160);  // 收场 160ms = CSS 退场(.drawer-leave-active)同拍
         const k = t * t;  // easeInQuad: 收场加速(与退场滑淡 ease-in 同感)
-        // 收面板自身高度(面板已转 absolute 底缘锚定, 底边钉死向下收), dock 冻结高同步跟缴 —— 列表全程只看到面板沉下去
+        // 只收面板自身高度(面板已转 absolute 底缘锚定, 底边钉死向下收) —— 槽位冻结, 文档高与列表全程不动
         el.style.height = Math.max(0, Math.round(h0 * (1 - k))) + "px";
-        dock.style.height = el.style.height;
-        dock.style.marginTop = Math.round(m0 * (1 - k)) + "px";  // 呼吸距同步收回, 免得尾部刺 8px
         if (t < 1) {
           this._drawerAnimRaf = requestAnimationFrame(step);
           return;
         }
+        // 末帧一次性收拢槽位: 面板已收到 0(不可见), 文档此刻一次性变矮 —— scrollY 至多一次
+        // 钳制(D11 位移事件 <=1)。height 回自然(面板出流, 自然高 0), 呼吸距一并缴 0 —— 二者
+        // 是槽位文档占用的一体两面, 必须同帧 surrender(只缴高留 8px 边距, 重开时 enter 起拍
+        // 清边距会在贴文档底时多钳一次)。afterLeave 清内联回 CSS 自然 8px = 文档长回 8px,
+        // 恰好是重开 enter 起拍清边距要消费的余量(与逐帧缴旧机制同一稳态, 重开零位移)
+        dock.style.height = "";
+        dock.style.marginTop = "0px";
         this._drawerAnimRaf = 0;  // 面板节点随后被 Vue 摘除; dock 残留内联由 afterLeave 兜底清
       };
       this._drawerAnimRaf = requestAnimationFrame(step);

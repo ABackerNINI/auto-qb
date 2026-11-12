@@ -87,12 +87,19 @@ Delete 直连注册表外, 均为已拍板的口径, 逐条落断言。W5 局部
   innerHeight), 行不在 DOM 静默放弃, 不用逐层滚动 API(文件头禁令)
 - test_drawer_transition_dock_anim: 出入过渡动画(2026-10-03 用户报: 抽屉出现/消失生硬) ——
   停靠面板占文档流, 开/关时列表底部一帧撑开/收回是生硬根源, 面板本体滑淡治不了布局跳变:
-  JS 钩子驱动 .drawer-dock 槽位高度插值(enter 追面板实时高 / leave 收面板自身高 + dock 跟随),
+  JS 钩子驱动 .drawer-dock 槽位高度插值(enter 追面板实时高 / leave 收面板自身高, 槽位整段
+  冻结末帧一次收拢 —— W2 改写, 正面断言见 test_drawer_leave_slot_freeze_w2),
   模板 @enter/@leave 接线(before-enter 同帧量不到面板); 动画期几何登记 _drawerAnimTop
   (_kbViewBottom 优先读它, 让位量测不读中间插值; 2026-10-04 回归: 详情中途长高后起拍
   登记值失效, 追赶循环逐帧重登记落定顶缘 = dock 底缘 - 面板自然高); 重开打断收场时
   清面板内联高再量自然高; after 钩子挡被打断的迟到清场; reduced-motion 与 D3 全屏态
   双豁免; 四皮肤 CSS 成对(dock 动画期裁剪 + 退场 absolute 底缘锚定)
+- test_drawer_leave_slot_freeze_w2: W2 收场高度传导修复(计划 26-11-12-1048 §02/§04 S3, D9/D11) ——
+  旧机制逐帧写 dock 高度/呼吸距跟缴面板 = 文档逐帧变矮 = scrollY 逐帧钳制, 背景列表逐帧回弹
+  (修复前真机逐帧取证: 收场位移事件 8~11 次, e2e W2 文档底用例判据 <=1)。新机制: 槽位高度/
+  呼吸距各写一次整段冻结, 逐帧循环只收已出流面板自身高, 末帧一次性收拢(文档底至多一次钳制,
+  「钳制属预期」口径不动); 四皮肤 CSS 成对(sticky 槽位 + margin-top 8px + 动画期裁剪 +
+  退场 absolute 底缘锚定 + 160ms 同拍; flux 差异只在入场 translateY(100%) 与 RM 降级块)
 """
 
 from __future__ import annotations
@@ -793,8 +800,9 @@ def test_drawer_transition_dock_anim() -> None:
     """出入过渡动画(2026-10-03 用户报: 抽屉出现/消失很生硬)
 
     停靠面板占据文档流, open 翻转时列表底部一帧被面板撑开/收回 —— 这是生硬根源; 面板本体的
-    transform/opacity 滑淡(既有 CSS)治不了布局跳变。修法 = JS 钩子驱动 .drawer-dock 槽位高度
-    插值(列表全程不动, 面板仍走滑淡), 并把动画期的几何登记进 _drawerAnimTop 供下界单点消费。
+    transform/opacity 滑淡(既有 CSS)治不了布局跳变。修法 = JS 钩子驱动: enter 追面板实时高
+    插值 / leave 槽位整段冻结只收面板自身高、末帧一次收拢(W2, 计划 26-11-12-1048, 正面断言见
+    test_drawer_leave_slot_freeze_w2), 并把动画期的几何登记进 _drawerAnimTop 供下界单点消费。
     """
     drawer_js = _read("drawer.js")
     tpl = (SHARED / "tpl" / "drawer.html").read_text(encoding="utf-8")
@@ -819,9 +827,11 @@ def test_drawer_transition_dock_anim() -> None:
     lb = leave.group(1)
     assert 'drawer-dock.drawer-anim' in lb and "frozenH" in lb, "收场必须先取 closeDrawer 冻结的槽位高再清理(面板出流后自然高已塌)"
     assert 'position === "fixed"' in lb, "D3 窄屏全屏态必须豁免(面板出流, 无布局可插值)"
-    assert "el.style.height" in lb and "dock.style.height = el.style.height" in lb, (
-        "收场必须同步收面板自身高度与 dock 槽位(面板出流后不收自身高会顶住槽位, 插值失效)"
-    )
+    # W2(计划 26-11-12-1048)如实改写: 旧断言钉「dock.style.height = el.style.height 逐帧跟缴」,
+    # 该机制正是 W2 根因(dock 流内 sticky, 逐帧缩它 = 文档逐帧变矮 = scrollY 逐帧钳制) ——
+    # 收场只收面板自身高; 槽位冻结/末帧收拢的正面断言在 test_drawer_leave_slot_freeze_w2
+    assert "el.style.height" in lb, "收场必须收面板自身高度(面板出流后不收自身高会顶住槽位, 插值失效)"
+    assert "dock.style.height = el.style.height" not in lb, ("收场不得逐帧跟缴 dock 槽位高(W2 根因机制已废: 槽位整段冻结, 逐帧写它文档逐帧变矮)")
     # --- 几何登记: 动画期下界单点优先读登记值, 让位量测不读中间插值 ---
     assert "_drawerAnimTop = this._drawerFinalTop(dock)" in drawer_js or "_drawerAnimTop = _drawerFinalTop(dock)" in drawer_js, (
         "钩子必须把自然高帧的 dock 顶缘登记进 _drawerAnimTop(插值期顶缘是中间值, 不可让让位量测读到)"
@@ -864,3 +874,56 @@ def test_drawer_transition_dock_anim() -> None:
         # 判会把遮罩的合法写法当违规 —— 改成逐条抽该选择器的声明体来判(意图不变, 判据更窄)。
         for body in re.findall(r"\.drawer-leave-active[^{]*\{([^}]*)\}", css):
             assert "inset" not in body, f"{ui}: 退场不得用 inset: 0(顶锚定随槽位塌缩把面板顶跑)"
+
+
+def test_drawer_leave_slot_freeze_w2() -> None:
+    """W2 收场高度传导修复(计划 26-11-12-1048 §02/§04 S3, D9/D11): leave 期槽位整段冻结。
+
+    旧机制逐帧写 dock.style.height/marginTop 跟缴面板 —— dock 是流内 sticky 元素, 文档随之
+    逐帧变矮, 浏览器逐帧钳制 scrollY, 背景列表逐帧回弹(修复前真机逐帧取证: 收场位移事件
+    8~11 次; e2e drawer-dock-stability W2 文档底用例判据 <=1)。新机制: 高度插值约束在已出流的
+    面板层(leave-active absolute 底缘锚定), 槽位高度/呼吸距各写一次整段冻结, 末帧一次性收拢
+    —— 文档底至多一次钳制(「钳制属预期」口径不动, D4), 非文档底零位移。判据/位移公式/三发
+    挂点/_kbViewBottom 零改动(D3/D7), 本守阵只钉新机制接线与四皮肤 CSS 成对(R4/S3)。"""
+    drawer_js = _read("drawer.js")
+    leave = re.search(r"drawerLeaveHook\(el\) \{(.*?)\n    \},", drawer_js, re.S)
+    assert leave, "drawer.js 聚合面找不到 drawerLeaveHook(拆分漂移? 同步本守阵)"
+    lb = leave.group(1)
+    # --- 槽位冻结: 高度与呼吸距各写一次(动画期逐帧不动), 逐帧循环里只准写面板自身高 ---
+    assert 'dock.style.height = h0 + "px"' in lb and 'dock.style.marginTop = m0 + "px"' in lb, (
+        "收场必须把 dock 槽位高与呼吸距一次性冻结(W2: 二者都进文档高, 逐帧收回 = 逐帧钳制 scrollY)"
+    )
+    assert 'dock.style.height = "";' in lb and 'dock.style.marginTop = "0px"' in lb, (
+        "末帧必须把槽位高与呼吸距一并一次性收拢(文档底至多一次钳制, D11 位移事件 <=1; "
+        "只缴高留边距, 重开 enter 起拍清边距会在贴文档底时多钳一次 —— 收场与重开的几何交接面)"
+    )
+    # 计数钉(评审加固, 取代旧的精确串负向钉): leave 函数体内 dock 高度/呼吸距写点各恰 2 处
+    # = 起拍冻结 1 + 末帧收拢 1 —— 逐帧跟缴旧机制不论 RHS 换成什么写法都会引入第 3 处写点
+    # 破此计数, 比精确串匹配更能挡「机制语法变体回退」(旧断言只认旧写法, 变体回退两测全绿)
+    assert lb.count("dock.style.height") == 2 and lb.count("dock.style.marginTop") == 2, (
+        "leave 函数体内 dock.style.height/marginTop 各只许出现 2 次(冻结 1 + 末帧收拢 1): "
+        "新增任何逐帧 dock 写(不论写法)= 文档逐帧变矮 = scrollY 逐帧钳制(旧机制复发)"
+    )
+    # 闭合稳态恢复钉(评审加固): 末帧收拢后 dock 内联 margin="0px", CSS 自然 8px 呼吸距靠
+    # drawerAfterLeaveHook 清内联恢复 —— 它是「重开 enter 起拍清边距恰好消费 8px headroom」
+    # 交接面的供给侧; 该行无钉则删掉后首次关面板起闭合稳态永久丢 8px 且本守阵全绿
+    al = re.search(r"drawerAfterLeaveHook\(\) \{(.*?)\n    \},", drawer_js, re.S)
+    assert al and 'dock.style.marginTop = "";' in al.group(1), (
+        "drawerAfterLeaveHook 必须清 dock 内联 margin(W2 交接面: 末帧缴 0 后由它恢复 CSS 自然 "
+        "8px 呼吸距 = 重开 enter 起拍清边距要消费的余量; 缺失则闭合稳态永久丢 8px 边距)"
+    )
+    # --- 四皮肤 CSS 成对(R4/S3): 冻结机制依赖的几何契约逐皮肤钉住, 不出现只改一皮肤的漂移 ---
+    # flux 与另三皮肤的差异只在入场(translateY(100%) 整幅上滑 + fx 骨令牌)与 RM 降级块,
+    # 收场几何四皮肤同构 —— 本循环逐字钉收场面, flux 入场差异不进判据
+    for ui in ("console", "flux", "prism", "atlas"):
+        css = (STATIC / ui / "css" / "dialogs.css").read_text(encoding="utf-8")
+        assert re.search(r"\.drawer-dock \{ position: sticky;",
+                         css), (f"{ui}: .drawer-dock 必须流内 sticky(W2 前提: 槽位在文档流里, 冻结它文档高才恒定)")
+        assert "margin-top: 8px" in css, f"{ui}: 缺呼吸距 margin-top 8px(四皮肤成对设计常量, JS 冻结面 m0 的来源)"
+        assert ".drawer-dock.drawer-anim { overflow: hidden; }" in css, f"{ui}: 缺 dock 动画期裁剪规则(四皮肤成对)"
+        assert ".drawer-leave-active { position: absolute; left: 0; right: 0; bottom: 0; pointer-events: none; }" in css, (
+            f"{ui}: 退场必须 absolute 底缘锚定出流(W2 载体: 高度插值约束在不出流的层, 面板底边钉死向下收)"
+        )
+        assert ".drawer-leave-active { transition: transform .16s ease-in" in css, (
+            f"{ui}: 退场 CSS 时长必须 160ms(与 JS 收场曲线同拍, 收场视觉时序保持)"
+        )

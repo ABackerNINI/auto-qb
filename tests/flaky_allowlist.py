@@ -57,6 +57,15 @@ ALLOW_WAIT_TIMEOUT_E2E: dict[str, dict[str, int]] = {
     # (稳态类三拍口径, 拍距 >= 300ms 保静默跨度 >= 350ms); 负条件观察窗(「不该发生的」poll 首拍
     # 即中会提前通过)与页内采样器量具窗 -> Node 侧 setTimeout observeWindow/measureWindow
     # (时长逐字保留并注释); 合帧收层危险窗 -> rAF 逐帧采样恒真断言(move-dialog-fit 同款)。
+    # S0 红验基线新增(2026-11-13, 计划 26-11-12-1048): drawer-dock-stability.spec.mjs 3 处,
+    # 均为页内 rAF 采样器的「采满 X ms」观察窗/提交宽限, 非赌完成的睡等, 条件等待不适用:
+    # - 700ms x2 = W2 收场采样过覆盖窗: 收场墙钟锁定(160ms 收场曲线 + 220ms 面板 detach),
+    #   采样窗须盖过动画结束; 漏采面由前置断言把门(lastDockH<=2 / docHDrop>=面板高)
+    # - 150ms x1 = W2 文档底显式 scrollTo(文档底)后的提交宽限, 前置断言 y==maxScroll 本身把门
+    "e2e/drawer-dock-stability.spec.mjs": {
+        "await page.waitForTimeout(700);": 2,
+        "await page.waitForTimeout(150);": 1,
+    },
 }
 
 # ---------- ALLOW_BIND_PORT: 绑定调用位的字面固定端口(配置值位不拦) ----------
