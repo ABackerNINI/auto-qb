@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>容器 e2e 4 个 spec 计时敏感面(慢 CPU 显性化)待 spec 层加固 · test · 计划外问题</title>
+<meta name="issue-slug" content="e2e-testbed-timing-sensitive-specs">
+<meta name="issue-stamp" content="26-11-13-0212">
+<meta name="issue-type" content="test">
+<meta name="doc-topic" content="linux-testbed-docker">
+<meta name="doc-refs" content="memory-bank/plans/26-11-12-0152-plan-linux-testbed-docker.html, memory-bank/tasks/26-11-12-test-linux-testbed.md">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="容器 e2e 4 个 spec 计时敏感面(慢 CPU 显性化)待 spec 层加固">
+<meta name="issue-summary" content="testbed 容器 swiftshader 软件渲染慢 CPU 显性化 4 个既有 spec 潜伏竞态(Windows/CI 恒绿), 修法方向: spec 层加固 + 计时探测接 testbed 档">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --mark: #161e26;     /* issue 特有: callout 底色 (plan.html 不用) */
+    --warn-bg: #2a2119;  /* issue 特有: 状态徽标底色 */
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 单栏流式版面: 与 plan.html 同一套 .sheet (封顶 1280px, 侧距 clamp(18~44px)); 旧双栏+粘性目录已删 */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+
+  /* 封面 meta 行: issue 特有, DOM 形态别改 —— 状态徽标 <span class="badge"> 被
+     flip_status (W4) 与 check_status_drift 的 BADGE_RE 机读 (k/v div 结构在判据里) */
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px 28px; font-family: var(--mono); font-size: 11.5px; color: var(--faint); border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta-row .item .k { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .meta-row .item .v { font-size: 13.5px; color: var(--dim); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin: 14px 0; font-size: 14px; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-family: var(--mono); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">计划外问题（未修）· test</div>
+<h1>容器 e2e 4 个 spec 计时敏感面(慢 CPU 显性化)待 spec 层加固</h1>
+<p class="lede">testbed 容器 swiftshader 软件渲染慢 CPU 显性化 4 个既有 spec 潜伏竞态(Windows/CI 恒绿), 修法方向: spec 层加固 + 计时探测接 testbed 档</p>
+<div class="meta-row">
+  <div class="item"><div class="k">编号</div><div class="v">26-11-13-0212-test-e2e-testbed-timing-sensitive-specs</div></div>
+  <div class="item"><div class="k">报告时间</div><div class="v">2026-11-13 02:12</div></div>
+  <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
+  <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+</div>
+
+<section id="s1">
+  <h2><span class="no">§01</span>现象与发现场景</h2>
+  <p>S3(计划 26-11-12-0152)在 testbed 容器内首跑 e2e 时撞出: <code>@fast</code> 子集 2 failed / 全量 4 failed(经 <code>commands run test.linux-e2e --full</code> 全链路), Windows 侧与 Gitee CI Linux 均恒绿。容器为 8 核 / 12G 预算 + swiftshader 软件渲染 chromium(无 GPU), 慢 CPU 把既有 spec 的潜伏竞态显性化。用户 2026-11-13 拍板: 收下差异, 修法走正式认领另开任务(即本件)。</p>
+</section>
+
+<section id="s2">
+  <h2><span class="no">§02</span>证据</h2>
+<pre><code># 容器内实跑(2026-11-12, S3 验收轮; 数字单点=任务档案 26-11-12-test-linux-testbed.md)
+fast 子集: 342 passed / 2 failed, 41.7m(344 例)
+全量:      490 passed / 4 failed / 18 skipped, 59.2m(3551s)
+
+# 失败归属(两组根因, 均为 spec 层计时敏感面):
+1) traffic-source-switch:94/169 — route.fetch() 在测试结束后才 resolve 的 spec 层竞态
+   (响应 200 OK 已返回, 只是 resolve 晚了); Windows 侧恒绿, 属既有潜在竞态
+2) settings-bt-backup:303 — 「探测 ambiguous」双皮肤(计时探测类)
+
+# 独立复跑 traffic-source-switch 确认 deterministic(非容器/接挂/桩问题, 2026-11-12 S3 轮)</code></pre>
+</section>
+
+<section id="s3">
+  <h2><span class="no">§03</span>影响面</h2>
+  <table>
+    <tr><th>维度</th><th>结论</th></tr>
+    <tr><td>触发条件</td><td>仅在 testbed 容器(软件渲染慢 CPU)跑 e2e 时显性; Windows/CI 硬件与耗时余量下恒绿</td></tr>
+    <tr><td>影响范围</td><td>traffic-source-switch 与 settings-bt-backup 两个 spec(共 4 个失败点); 不影响 pytest 全量面与生产代码</td></tr>
+    <tr><td>严重度</td><td>低 —— 既有潜伏竞态被显性化, 修复方向明确; 不阻塞容器 e2e 体系使用(已知差异口径收下)</td></tr>
+  </table>
+</section>
+
+<section id="s4">
+  <h2><span class="no">§04</span>定位锚点</h2>
+  <ul>
+    <li><code>e2e/</code> 下 traffic-source-switch spec · grep 关键词 <code>route.fetch</code> · 失败点 :94/:169(取证 2026-11-12 S3 轮)</li>
+    <li><code>e2e/</code> 下 settings-bt-backup spec · grep 关键词 <code>ambiguous</code> / 计时探测 · 失败点 :303(取证同上)</li>
+    <li>现状记录单点: <code>.commands/test/config.toml</code> test.linux-e2e note(已知差异清单 + 数字单点指针); 修法方向单点=本件 §06</li>
+  </ul>
+</section>
+
+<section id="s5">
+  <h2><span class="no">§05</span>根因<span class="opt">（可选）</span></h2>
+  <div class="callout">已定位(2026-11-12 S3 验收轮): 容器慢 CPU(软件渲染)使 spec 内异步等待余量不足 —— ① route.fetch() 的 resolve 时序未与测试生命周期绑定(测试结束才 resolve); ② 计时探测阈值按硬件余量写死, 无 testbed 档。非容器/接挂/桩缺陷(独立复跑 deterministic 佐证)。</div>
+</section>
+
+<section id="s6">
+  <h2><span class="no">§06</span>建议修法<span class="opt">（可选）</span></h2>
+  <p>两个方向(取自 S3 验收轮, 实施时以现场复验为准):</p>
+  <ul>
+    <li>spec 层加固: route.fetch 竞态面用 <code>unrouteAll({ behavior: 'ignoreErrors' })</code> 之类把清理与生命周期绑定;</li>
+    <li>计时探测接档: 探测类阈值参照 pytest 侧 <code>perf_baseline.json</code> 的 testbed 档做法, 按 <code>AUTO_QB_TESTBED</code> 放宽(e2e 侧现不导出该变量, 需同步决定导出面)。</li>
+  </ul>
+  <p class="hint">修完验收口径: 容器内 fast 子集与全量 e2e 全绿(容器实测耗时锚 Windows 侧, 不进基线)。</p>
+</section>
+
+<section id="s7">
+  <h2><span class="no">§07</span>状态变更日志</h2>
+  <ul>
+    <li>2026-11-13 02:12 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+  </ul>
+  <h3>复验</h3>
+  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <h3>修复后补充</h3>
+  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+</section>
+
+<footer>
+  26-11-13-0212-test-e2e-testbed-timing-sensitive-specs.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+</footer>
+
+</div>
+</body>
+</html>

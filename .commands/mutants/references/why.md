@@ -169,8 +169,8 @@ TMPDIR=R:/Temp/auto-qb/tests COVERAGE_FILE=R:/Temp/auto-qb/gremlins.cov \
 | 整轮基线红在两条文本层守阵 | `mutants/` 把源码撑大, 读源码文本的守阵误报 | 它们在 `set_conf.py` 的 `DEFAULT_DESELECT`; **测试文件拆分后路径会漂移**(`test_web.py` 已拆成 `tests/test_web_*.py`), 报错时按新路径改这张表 |
 | 注册表类守阵(如 `test_actions_registry_complete`)在 clean test 里红, 但手跑 `mutants/` 树是绿的 | `process_isolation=fork` 继承的调用形态 | 已固定 `forkserver`(`set_conf.py` 硬写) |
 | 覆盖率闸 `FAIL Required test coverage of 98% not reached` | 子集跑必然不满足全库闸 | 已固定 `--no-cov`(`set_conf.py` 的 `pytest_add_cli_args`) |
-| WSL 整体失去响应 | 目标太大 / 池太宽 / `--max-children` 拉满 | `wsl --shutdown` 救回; 回按包 + 定向池 + `--children 3` |
-| `exec python: not found`(wrapper 端到端用例) | WSL 里通常只有 `python3` | `mutants.setup` 已补 `~/.local/bin/python` 软链(幂等) |
+| WSL 整体失去响应(WSL 历史) | WSL 形态专属: 目标太大 / 池太宽 / `--max-children` 拉满 | 当时 `wsl --shutdown` 救回; 回按包 + 定向池 + `--children 3`。**容器现役口径**(2026-11-12 S4 起): `docker restart auto-qb-testbed`(镜像仓在可写层, restart 保留; 容器重建才丢且 setup 可重建) |
+| `exec python: not found`(wrapper 端到端用例)(WSL 历史) | WSL 形态专属: WSL 里通常只有 `python3` | 当时 `mutants.setup` 已补 `~/.local/bin/python` 软链(幂等)。**容器现役口径**(2026-11-12 S4 起): 一律 `.venv/bin/python`, 软链 shim 已删, 不再有此面 |
 | `mutants.status` 恒报 `mutmut=no`(实际已装) | 容器形态(docker exec bash)无壳层 cwd 失真 —— `$()` 现为**正确形态**(2026-11-12 S4 起脚本已回归常规写法); 多半是**版本不匹配**: `_ensure_tool` 按版本核对, 镜像里躺旧版 mutmut(如 3.8.0)会判未就位 | 核镜像内实际版本(`docker exec auto-qb-testbed bash -c 'cd <mirror> && .venv/bin/mutmut --version'`)与 `MUTMUT_VERSION` 是否一致, 不符重跑 `mutants.setup`。历史(WSL 形态, 2026-10-08 曾因 zsh `$PWD`/`$()` 失真把回显改成 `cd {mq} && <直接命令>` 特化形态)见坑档 [memory-bank/pitfalls/testing/mutants-wsl-shell.md](../../../memory-bank/pitfalls/testing/mutants-wsl-shell.md) |
 | 复跑时新加的守阵"没生效"(存活数不降) | `mutants.run` 默认 `git checkout -q -f -B develop FETCH_HEAD`, 会把镜像里**未提交的测试改动冲掉** | 先把新测试 `cp` 进镜像 `tests/`, 再 `mutants.run --no-refresh`(跳过刷新) |
 | 想看某条变异的 diff / 想批量三分类 | `mutmut results` 只有 id, 没有 diff | 用 `mutants.report`(带 diff 的清单 + 按状态/按模块汇总); 单条用 `mutmut show <id>` |
