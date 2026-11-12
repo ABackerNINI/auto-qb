@@ -12,8 +12,8 @@
 
 | 卷 | 主题范围 | 条数 |
 |---|---|---|
-| [1](_index-1.md) | `annotations-lazy-eval.md` … `fake-seed-injection.md` | 23 |
-| [2](_index-2.md) | `fake-server-reuse-bind.md` … `iab-click-rerender-flake.md` | 23 |
-| [3](_index-3.md) | `importlib-sys-modules-dataclass.md` … `playwright-teardown.md` | 23 |
-| [4](_index-4.md) | `poll-last-round-race.md` … `smoke.md` | 23 |
+| [1](_index-1.md) | `annotations-lazy-eval.md` … `fake-config-shared-mutables.md` | 24 |
+| [2](_index-2.md) | `fake-seed-injection.md` … `hr-registry-pollution.md` | 24 |
+| [3](_index-3.md) | `iab-click-rerender-flake.md` … `playwright-teardown.md` | 24 |
+| [4](_index-4.md) | `poll-last-round-race.md` … `smoke.md` | 24 |
 | [5](_index-5.md) | `stale-repo-copy-scan-red.md` … `xdist-worker-global-snapshot.md` | 21 |

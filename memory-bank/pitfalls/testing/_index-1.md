@@ -1,7 +1,7 @@
 # testing — 测试 / 冒烟 / 仿真纪律 · 卷 1/5
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `annotations-lazy-eval.md` … `fake-seed-injection.md`(共 23 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `annotations-lazy-eval.md` … `fake-config-shared-mutables.md`(共 24 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
@@ -18,6 +18,7 @@
 | [bulk-rename.md](bulk-rename.md) | 分批迁移类机械改名(W2 测试面 700+ 处)最易翻车的两处 —— ①正则替换串忘回填接收者, 整批替换全毁; ②名字按域分批 × 文件按域分批两个维度对不齐时, 该名字的替换规则不进脚本, 静默漏迁且**测试照样全绿**(旧名转发还在)。防御 = 捕获组回填 + 替换后畸形形… | 批量改名, 机械替换, re.subn, sed, 分批迁移, 迁移脚本, 旧名残留, 验收 grep, 漏迁, 接收者, 改名脚本, W3 删除波 |
 | [ci-env-var-profile.md](ci-env-var-profile.md) | 通用 CI 变量在本仓库开发机入口常态为真, 拿它判「是否 CI」会让本地严格档永不生效(假绿) | CI, GITHUB_ACTIONS, 环境变量判档, 阈值分档, dev.e2e, playwright, 严格档失效, 假绿, 回归检测力, 性能基准 |
 | [ci-only-guard.md](ci-only-guard.md) | 多类守阵/用例**只在与开发机不同的那一侧 CI job 上现形**, 本机单平台绿不构成"守阵成立"的证据 —— ①跨平台断言把**前缀切片长度写死**(`args[:2]`), nt 侧凑巧成立而 POSIX 侧恒红; ②并发守阵的**活性阈值绑机器速度**("写者写满 30… | CI 红本机绿, 跨平台断言, os.name, sys.platform, 写死切片长度, 前缀长度, 仅一侧存在的模块常量, CREATE_NO_WINDOW, 活性阈值, 并发守阵, 读次数, flaky, gtm, atomic_w… |
+| [cmd-guard-real-fake-count.md](cmd-guard-real-fake-count.md) | 真机开工自检 `real.guard`(runner.cmd_guard 路径)调 qB API 时没传 skip_tags 过滤, 我方 real-fake 假种子被计入「真实种子 N 个」并被暂停 —— guard 输出形似「现场被别人污染」, 实为自家种子; real.se… | cmd_guard, skip_tags, real-fake, 真实种子, guard 计数, guard 暂停, 真机开工, real.guard |
 | [commands-wrapper-from-python.md](commands-wrapper-from-python.md) | python 脚本里 `subprocess.run(["commands", "run", ...])` 必 FileNotFoundError(WinError 2) —— commands wrapper 是 bash 侧脚本, 不在 Windows CreateProce… | subprocess, commands wrapper, WinError 2, FileNotFoundError, 造种脚本 |
 | [config-validation-test-input.md](config-validation-test-input.md) | 给 config 校验器写测试时, 走 `load_config`/`_load_errors` 这条真实链路(而非直调校验函数)最省事, 但**输入必须先过两道加工**再进校验器: ①YAML 用 **BaseLoader** 读, **所有标量一律是字符串** —— `- 1… | 写 config 校验测试, 校验器测试, _load_errors, load_config, BaseLoader, 标量全是字符串, 空串被剥, _strip_none, _check_str_list, 第 N 项必须是非空字符串,… |
 | [consecutive-port-run.md](consecutive-port-run.md) | 「连续 N 个候选端口」类用例(发现端点 base/base+1/base+2)若只用 `_free_port()` 取基址、再自己逐个显式 bind, 后 N-1 位从未被验证: 落进 Windows 动态排除段(Hyper-V/WSL 开机预留, 每次开机不同)或被独占进程占… | 连号候选端口, base+1, base+2, 排除段, WinError 10013, 10048, _hold_ports, discovery_candidates, 端口单点, hold_run, 假红, netsh exclude… |
@@ -27,7 +28,7 @@
 | [coverage-floor-platform.md](coverage-floor-platform.md) | 覆盖率闸单阈值在双 OS 上必有一侧恒红 —— Windows 独有代码(ctypes/junction/注册表后端)在 Linux 上跑不到, 实测 Windows 99.27% / Linux **98.74%**, 于是 `--cov-fail-under=99` 让 ub… | 覆盖率闸, cov-fail-under, 双 OS, ubuntu CI 恒红, pytest-cov, config.option 不生效, 平台定档, 分母不同, Windows 独有代码 |
 | [credential-shape-write-guard.md](credential-shape-write-guard.md) | 工具写入判据把「凭据键名(Authorization/token 等) + 值不回显」的任何赋值形态当凭据字面量拦截 —— 测试里合法的鉴权头字典字面量(值是运行期读桩令牌, 无字面凭据)会让**整个文件**不可写; 且输出层掩码会把「凭据键名 + 分隔符 + 值」的片段显示改写… | 改含鉴权头字典字面量的测试文件被 artifact_secret_detected 拦, docstring 写 token 冒号键值形态, 凭显示层所见拼 oldText 永远匹配不上, 配置夹具凭据键, yaml 夹具凭据键 |
 | [cross-thread-teardown-assert.md](cross-thread-teardown-assert.md) | starlette 1.6 把 SSE 的同步生成器包进 `iterate_in_threadpool`, 它跑在 anyio 工作线程里; 该线程帧里的最后一个引用(`item`/`func`/`args` 元组)是在 `call_soon_threadsafe` **之后**… | 跨线程终态断言, 断流退订, subscriber_count, anyio 工作线程, iterate_in_threadpool, 生成器 finally 退订, 单点采样, 竞态, 偶发红, 句柄堆叠, aclose 后仍订阅, gc… |
+| [dev-webui-config-regen-wipe.md](dev-webui-config-regen-wipe.md) | `commands run dev.webui` 每次启动都从 CONFIG_TMPL 无条件重生成派生配置(不 diff 不保留), 上一阶段经 PUT /api/config 落盘到派生配置的键(如 relocate.bt_backup)被静默冲掉, WEB 端口也重新 OS… | dev.webui, dev_webui, CONFIG_TMPL, 重生成配置, PUT 落盘被冲, 端口漂移, 端口重分配, WEB 端口, 多阶段真机, 派生配置 |
 | [engine-pack-dir-injection.md](engine-pack-dir-injection.md) | commands 引擎注入的 COMMAND_FLOW_PACK_DIR 指向 task 所在包, 包内测试要真实配置必须钉 PKG | COMMAND_FLOW_PACK_DIR, 包测试, ConfigMissing, load_config, 钉 PKG, 外置配置, test_commit 夹具 |
 | [event-handler-mock.md](event-handler-mock.md) | `mock.patch.object(模块实例, "_on_xxx")` 拦不住 EventBus 已注册的相位 handler —— 注册期捕获的是绑定方法对象, patch 换的是实例属性, 总线里的引用不变; 守相位接线用「订阅计数 + emit 返回值」, 守行为直调真… | EventBus, 相位, subscribe, mock.patch.object, handler 断言, assert_called_once, P5 守阵 |
 | [fake-config-shared-mutables.md](fake-config-shared-mutables.md) | helpers 的 `FakeConfig` 段对象是类属性(dataclass/dict/list), 任一测试原地改 | FakeConfig, 类属性, 测试隔离, xdist 分布, 偶发失败, make_manager, 原地改配置 |
-| [fake-seed-injection.md](fake-seed-injection.md) | 大批量注入 qB 假种子(压测/测量库形)三坑合档 —— ①qB 默认入库逐种子校验 ~1s/种, 3000 种 = 45 分钟, 必须 skip_checking; ②手搓注入变体「配方漂移」三处全坏(漏 payload 数据文件 = 全组 missingFiles + 漏 a… | 批量注入, 假种子, 测量库形, skip_checking, missingFiles, 永不归组, 首同步风暴, 归组, tracker 匹配, 注入配方, inject.py, 压测库, 真机轨, stalledUP |

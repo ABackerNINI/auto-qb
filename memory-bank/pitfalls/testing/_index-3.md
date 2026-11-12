@@ -1,13 +1,14 @@
 # testing — 测试 / 冒烟 / 仿真纪律 · 卷 3/5
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `importlib-sys-modules-dataclass.md` … `playwright-teardown.md`(共 23 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `iab-click-rerender-flake.md` … `playwright-teardown.md`(共 24 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
 
 | 主题 | 一句话 | 触发词 |
 |---|---|---|
+| [iab-click-rerender-flake.md](iab-click-rerender-flake.md) | 用 IAB 浏览器 (Playwright surface) 对 kb.nav 这类「动作即整段重渲染 innerHTML」的单文件页做冒烟时, 多个 locator 动作挤在一个 cell 里连打 (间隔 ≤150ms), 后继动作可能报 `Timeout waiting fo… | 冒烟中 locator click 超时; 想断定「功能有 bug」之前; 冒烟脚本连续动作 (右键菜单 → 开关按钮 → 专区内按钮) 后继点击超时。 |
 | [importlib-sys-modules-dataclass.md](importlib-sys-modules-dataclass.md) | importlib 就地加载 future-annotations dataclass 模块, 不先注册 sys.modules 会在 3.13 上炸 NoneType | importlib, spec_from_file_location, exec_module, sys.modules, dataclass, NoneType, 3.13, 就地加载, 守阵加载引擎, find_skill_dir |
 | [inproc-server-conn-abort.md](inproc-server-conn-abort.md) | 测试自起 `http.server.ThreadingHTTPServer(("127.0.0.1", 0))` 当假服, test.full(并行 + 覆盖率插桩)高载下, **真客户端打真本地服**的段偶发 `ProtocolError: Connection aborted… | 10053, ConnectionAbortedError, Connection aborted, 你的主机中的软件中止了一个已建立的连接, ProtocolError, ThreadingHTTPServer, 进程内假服, 本地假服,… |
 | [log-capture.md](log-capture.md) | caplog 与全局日志状态是跨测试共享的 —— 断言日志要挂模块 logger 自建 handler + 显式 setLevel, 不碰 caplog。 | caplog, 日志断言, 日志级别, root handlers, root level, xdist, 偶发, CI 红, setup_logging, make_manager |
@@ -25,7 +26,7 @@
 | [mypy-isinstance-narrow-repeated-get.md](mypy-isinstance-narrow-repeated-get.md) | mypy 对重复调用 d.get(k) 的 isinstance 收窄失效: 类型残留 None | mypy, typecheck, union-attr, arg-type, isinstance, 收窄, 重复调用, dict.get |
 | [nested-pytest-config.md](nested-pytest-config.md) | 仓库内子目录独立包(自带 pyproject+venv)内 `uv run pytest` 会向上拾取仓库根 pytest.ini, rootdir 上移, 根 ini 的 addopts(-n/--cov 等)在子包 venv 不可用 → unrecognized argume… | 在 tools/ 下「仓库内嵌套、自带 pyproject 与 venv 的独立子包」内跑 pytest |
 | [no-uv-fallback.md](no-uv-fallback.md) | 包内 `test.*` 任务单点写着 `uv run pytest`, 而**本 clone 的工具 shell 的 PATH 里没有 `uv`**(实测 uv 本体已装在 `C:\Users\<用户>\.local\bin\uv.exe`, 只是不在 PATH) ⇒ 每个测试任… | 跑测试, 提交, 闸门, uv, command not found, .local\bin, PATH, R:/Temp, 驱动器不存在, DriveNotFoundException, 全量, TMPDIR, COVERAGE_FILE… |
-| [node-guards-silent-skip.md](node-guards-silent-skip.md) | 扩展行为守阵(`tests/test_extension_proxy_*.py` 的 node VM 场景)在没有 node 的机器上**静默 return 当 pass** | node, nodejs, 静默跳过, 假绿, 全绿, site-caps, 配额, 阈值, 硬上限, 守阵, test_extension_proxy, |
+| [node-guards-silent-skip.md](node-guards-silent-skip.md) | 扩展行为守阵(`tests/test_extension_proxy_*.py` 的 node VM 场景)在没有 node 的机器上**静默 return 当 pass** | node, nodejs, 静默跳过, 假绿, 全绿, 出生即红, 新电池真跑, site-caps, 配额, 阈值, 硬上限, 守阵, test_extension_proxy, test_webui_static_r4_node_bat… |
 | [parallel-run.md](parallel-run.md) | **已设为默认**(`pytest.ini` 的 `addopts = -n 8`, 2026-10-08 由 `-n 4` 上调) —— 全量 21s → **7.6s**(带覆盖率); sidefx 台账已用 `workeroutput` 回传汇总, 「越界 0 条」不再消失… | 并行, 并发跑测试, xdist, -n, 加速, 多进程, 跑得慢, 闸门, 端口冲突, 台账不打印, 串行挂住, 提交卡死, test.pkg, -n 0, subprocess 挂死, CreateProcess, 聚合脚本, bun… |
 | [patching.md](patching.md) | 「Windows 全绿 / Linux 全红」的**多类根因**与"归错类比不修更危险"的教训 —— 平台相关测试必须以 `monkeypatch` 固定平台; 最隐蔽的两类: **Windows 路径归一化(结尾点/空格被剥、大小写不敏感)让"路径存在性"判据在本机恒真**(2… | CI 红, Linux CI, 平台差异, monkeypatch, WSL, normcase, dir_fd, 平台专属模块, 码页, GBK, cp936, PYTHONUTF8, 假红, 路径归一化, 结尾点, 大小写不敏感, ex… |
 | [perf-measurement.md](perf-measurement.md) | 本机每次文件操作的**固定过路费**(初始 写 20ms / 删 43ms, 与数据量无关)曾支配全量耗时 —— **已由系统层排除项治好(全量 75s → 19.4s, 并行 5.0s)**; 另记"判断单项优化收益不能看全量总时"与"并发污染下的数字一律是假的"两条度量纪律。 | 测试慢, 耗时, 性能, 优化收益, 归因, 全量多久, 跑得慢, durations, 度量, 并发跑, 白名单, 排除项, 杀软, 沙箱 |
