@@ -7,9 +7,9 @@
 <title>Linux 测试端统一改造: Docker 常驻容器 testbed(pytest/e2e/变异一体)</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="linux-testbed-docker">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-11-12-0152">
-<meta name="doc-updated" content="26-11-12-0322">
+<meta name="doc-updated" content="26-11-13-0150">
 <meta name="doc-refs" content="memory-bank/issues/26-11-12-0053-chore-linux-ci-timeout-py-download.html, memory-bank/tasks/26-11-12-test-linux-testbed.md">
 <style>
   :root {
@@ -75,7 +75,7 @@
 <h1>Linux 测试端统一改造: Docker 常驻容器 testbed(pytest/e2e/变异一体)</h1>
 <p class="lede">本篇只回答: 怎么把 Linux 测试端(pytest / e2e / 变异测试)统一迁到 Docker 常驻容器 testbed —— 环境一次烘焙、代码仅拷代码、残留单根清扫、多会话并行隔离, 并顺带根治 issue 26-11-12-0053 的「包装超时 900s 不够」与「uv 补下载托管 CPython 走 github 不通」两缺口。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-12-0152 · <b>doc-updated</b> 26-11-12-0322 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-11-12-0152 · <b>doc-updated</b> 26-11-13-0150 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 会话 grilling 2026-11-12(Q1–Q8 两轮, 用户逐项拍板, 见 §06)+ issue 26-11-12-0053 认领指令
 </div>
 
@@ -128,7 +128,7 @@
   <li><b>系统层</b>: ubuntu:24.04 + apt —— python3.12(含 venv 模块)、git、tar、rsync、curl + NodeSource LTS nodejs(与 CI <code>lts/*</code> 同源)+ playwright 系统依赖。<b>3.13 不走 apt</b>(noble 官方源无 python3.13, 评审轮 1 引 ubuntu.com 可用性页实测; 3.13 走构建期烘焙, 见烘焙层)。</li>
   <li><b>uv 层</b>: <code>pip install uv</code> 走国内 PyPI 镜像(依赖面国内镜像站优先, D8); ghcr <code>COPY --from</code> 降为备选(github 系直连, 不通走人工代理)。</li>
   <li><b>环境变量层</b>: <code>ENV UV_PYTHON_DOWNLOADS=never</code> —— 运行期零下载(两个解释器都已进镜像, 发现即用); issue ② 由「构建期烘焙 + 运行期禁取」结构性根除。另烘 <code>UV_DEFAULT_INDEX</code>/<code>UV_INDEX_URL</code>=国内 PyPI 源(只管 export/pip 面;运行期 delta 走 pip 路线, 见 §10 R4)。</li>
-  <li><b>依赖烘焙层</b>: 拷 pyproject / uv.lock / package.json / package-lock.json → <code>RUN UV_PYTHON_DOWNLOADS=manual uv python install 3.13</code>(RUN 级作用域覆盖 ENV 层的 never —— 否则显式 install 也被拦, 构建自锁, 评审轮 2 引 uv#7340; 托管 CPython 源 github releases —— <b>D8 落点: 直连优先, 失败停手请用户手动开代理</b>; 备选 deadsnakes PPA, launchpad 直连)→ <code>uv export --format requirements-txt --generate-hashes</code> + <code>uv pip install -r --index-url</code> 国内镜像 ×2(3.12 = 系统 apt / 3.13 = 托管; 带 hash 校验保住锁文件钉版 —— R4: <code>uv sync --frozen</code> 跳过 index 校验、按 uv.lock 的 files.pythonhosted.org 绝对 URL 下载, 镜像索引对它无效, 见 §10)→ <code>/opt/venv-3.12</code> 与 <code>/opt/venv-3.13</code> 模板; <code>npm ci</code>(registry.npmmirror.com)→ <code>/opt/e2e-node</code>; playwright chromium <code>--with-deps</code> 烘焙(二进制走 npmmirror 镜像)。</li>
+  <li><b>依赖烘焙层</b>: 拷 pyproject / uv.lock / package.json / package-lock.json → <code>RUN UV_PYTHON_DOWNLOADS=manual uv python install 3.13</code>(RUN 级作用域覆盖 ENV 层的 never —— 否则显式 install 也被拦, 构建自锁, 评审轮 2 引 uv#7340; 托管 CPython 源 github releases —— <b>D8 落点: 直连优先, 失败停手请用户手动开代理</b>; 备选 deadsnakes PPA, launchpad 直连)→ <code>uv export --format requirements-txt --no-hashes</code>(S1 下半实跑修正: 0.13.7 已移除 --generate-hashes 旗标, 现行不带; 钉版由 <code>--frozen</code> 导出锁文件版本清单保住) + <code>uv pip install -r --index-url</code> 国内镜像 ×2(3.12 = 系统 apt / 3.13 = 托管; R4: <code>uv sync --frozen</code> 跳过 index 校验、按 uv.lock 的 files.pythonhosted.org 绝对 URL 下载, 镜像索引对它无效, 见 §10)→ <code>/opt/venv-3.12</code> 与 <code>/opt/venv-3.13</code> 模板; <code>npm ci</code>(registry.npmmirror.com)→ <code>/opt/e2e-node</code>; playwright chromium <code>--with-deps</code> 烘焙(二进制走 npmmirror 镜像)。</li>
   <li><b>网络策略</b>: 见下「网络策略」节(D8)。</li>
 </ol>
 
@@ -143,7 +143,7 @@
 </ul>
 
 <h3>代码同步(D4: 推模式)</h3>
-<p>排除清单 tar 流: 宿主 <code>tar --exclude=…</code> 打包工作树(含 <code>.git</code> 与未提交 WIP)→ <code>docker exec -i</code> 解到 <code>/root/auto-qb-tests/&lt;slug&gt;/code</code>。排除清单: <code>__pycache__</code> / <code>.venv</code> / <code>node_modules</code> / <code>dist</code> / <code>.tools</code>(vnu.jar 31M, gitignored 本地件, 容器不烘 java 用不上) / <code>.coverage*</code> / <code>.pytest_cache</code> / <code>.ruff_cache</code> / <code>auto-qb-data</code> / <code>tmp-analysis</code>(dist 已 grep 实证零测试引用); <code>memory-bank/</code> / <code>resources/</code> / <code>docs/</code> / <code>tools/</code> / <code>.commands/</code> / <code>.agents/</code> <b>必须随拷</b>(tests/conftest.py、helpers.py、kb 守阵引用面, 2026-11-12 grep 实证)。首建 workdir 后 <code>cp -a</code> 模板 venv → <code>uv sync</code> 补项目 editable 与依赖 delta(S2 实测「cp 模板 vs uv sync 全建」取快者)。</p>
+<p>排除清单 tar 流: 宿主 <code>tar --exclude=…</code> 打包工作树(含 <code>.git</code> 与未提交 WIP)→ <code>docker exec -i</code> 解到 <code>/root/auto-qb-tests/&lt;slug&gt;/code</code>。排除清单: <code>__pycache__</code> / <code>.venv</code> / <code>node_modules</code> / <code>dist</code> / <code>.tools</code>(vnu.jar 31M, gitignored 本地件, 容器不烘 java 用不上) / <code>.coverage*</code> / <code>.pytest_cache</code> / <code>.ruff_cache</code> / <code>auto-qb-data</code> / <code>tmp-analysis</code>(dist 已 grep 实证零测试引用); <code>memory-bank/</code> / <code>resources/</code> / <code>docs/</code> / <code>tools/</code> / <code>.commands/</code> / <code>.agents/</code> <b>必须随拷</b>(tests/conftest.py、helpers.py、kb 守阵引用面, 2026-11-12 grep 实证)。首建 workdir 后 <code>cp -a</code> 模板 venv → <code>uv export --no-hashes</code> + <code>uv pip install</code> 补项目 editable 与依赖 delta(S2 实测「cp 模板 vs 全建」取快者; 不用 <code>uv sync</code> —— R4 机制事实, 见 §10)。</p>
 
 <h3>workdir 布局与并行(D5)</h3>
 <p><code>/root/auto-qb-tests/&lt;slug&gt;/</code>(slug 由会话 <code>--name</code> 传参或自动 pid+时刻生成); 每会话一个, 互不相见。隔离面: pytest TMPDIR 实例根(bootstrap 自举, 收 <code>auto-qb-tests</code> 标记路径)、端口动态取号(<code>tests/_test_ports.py</code> 既有纪律, 需补核 <code>test_hr_server.py:920</code> 写死 discovery_port 一处)、写重型锁按仓库路径 hash 分锁 —— 每会话 workdir 路径不同, 锁互不相撞。</p>
@@ -152,9 +152,9 @@
 <table>
   <tr><th>task id</th><th>职责</th></tr>
   <tr><td><code>test.linux-env</code></td><td>幂等构建镜像 + 保活容器(Dockerfile / uv.lock hash 变更才重建对应层)</td></tr>
-  <tr><td><code>test.linux</code></td><td>保容器 → workdir 就绪 + tar 同步 → uv sync → 容器内 <code>timeout</code> 包裹全量 pytest; 引擎 timeout 抬 1800s(issue ①)</td></tr>
+  <tr><td><code>test.linux</code></td><td>保容器 → workdir 就绪 + tar 同步 → cp 模板 venv + <code>uv export --no-hashes</code> + <code>uv pip install</code> 补 delta → 容器内 <code>timeout</code> 包裹全量 pytest; 引擎 timeout 抬 1800s(issue ①)</td></tr>
   <tr><td><code>test.linux-e2e</code></td><td>e2e 容器内跑(fast 子集起步); playwright headless chromium, 端口动态取号; node_modules 接挂方案 S3 实测定型(symlink <code>/opt/e2e-node</code> vs per-workdir npm ci)</td></tr>
-  <tr><td><code>test.linux-clean</code></td><td>三层清扫: 容器内过期 workdir(pid+mtime 双条件)/ 宿主悬空镜像层与孤儿卷(白名单)/ 旧镜像 tag</td></tr>
+  <tr><td><code>test.linux-clean</code></td><td>三层清扫: 容器内过期 workdir(pid+mtime 双条件)/ 宿主悬空镜像层与孤儿卷(白名单)/ 旧镜像 tag。<b>落地注记(S6)</b>: 未落独立 task id —— 一层内联进 test.linux / test.linux-e2e 每轮开跑前(R6, 内嵌 pid 已死 + mtime 超龄 12h 双条件); 二/三层为 S5 一次性手工清扫(白名单点名式, 已执行毕, 见任务档案); 自动化清扫 task 待后续认领再落</td></tr>
   <tr><td><code>mutants.*</code> 六条(run / report / verify / setup / gremlins / status)</td><td>脚本后端 wsl.exe → docker exec(同一容器); mirrors 落 <code>/root/auto-qb-tests/mutation/&lt;pkg&gt;</code></td></tr>
 </table>
 
@@ -173,7 +173,7 @@
   <tr>
     <td>S2</td>
     <td><b>test.linux 后端切换</b>: linux_ci.py 重写为 docker exec 形态(保留「no_proxy 恒并回环」面 —— 容器内有代理变量时回环端点用例假红坑仍在); 守阵 <code>test_linux_ci.py</code> 同步重写; 引擎 timeout 900→1800; 容器内 <code>timeout</code> 内层包裹; <code>test_hr_server.py:920</code> 写死端口核验/改动态。</td>
-    <td><code>commands run test.linux</code>(3.13)全量绿, 数字誊入基线切片; <code>UV_PYTHON=3.12</code> 变体跑通; 两会话并行全量实测互不影响(各 workdir / 各实例根); 环境就绪后总耗时实测入切片</td>
+    <td><code>commands run test.linux</code>(3.13)全量绿(含覆盖率闸 —— 闸值以 <code>tests/conftest.py</code> 平台分档常量为单点: 非 Windows <code>COVERAGE_FLOOR_OTHER</code>=99.0, T2b 容器实测 99.08–99.09% 过闸; 98.5 系 2026-11-05 覆盖率提升第三轮把闸抬到 99.5/99.0 之前的旧值), 数字誊入基线切片; <code>UV_PYTHON=3.12</code> 变体跑通; 两会话并行全量实测互不影响(各 workdir / 各实例根); 环境就绪后总耗时实测入切片</td>
   </tr>
   <tr>
     <td>S3</td>
@@ -193,11 +193,11 @@
   <tr>
     <td>S6</td>
     <td><b>回写与收尾</b>: <code>pitfalls/testing/attachments/patching-local-linux-repro.md</code>「Docker 等价复现」节改写(新容器配方; 本体 <code>patching.md</code> 链接指路不动; WSL 段留痕降级为历史); AGENTS.md 命令注记同步; linux 全量基线切片; issue 翻 Done; <code>commands run kb.index</code>; <code>commands run test.full</code> 收尾全绿。</td>
-    <td>文档改写完成且 doc 链路检查绿; 基线切片含 linux 数字(数字只写切片一处); 提交走 ship.commit(Review: trailer 照走)</td>
+    <td>文档改写完成且 doc 链路检查绿; 基线切片只记 Windows 侧全量(容器面 S1–S5 数字单点=任务档案 26-11-12-test-linux-testbed; e2e 数字不进基线, 锚 Windows); 提交走 ship.commit(Review: trailer 照走)</td>
   </tr>
 </table>
 
-<p class="aside"><b>范围守恒(显式排除)</b>: <code>tests-real/</code>(需真 qB)不进容器; <code>test.gtm</code>(工具侧独立 venv 口径)不动; <code>.github/workflows</code> 零改动; qB 真机联测不做; WSL distro 本身不删(只清残留, 用户另有用途)。</p>
+<p class="aside"><b>范围守恒(显式排除)</b>: <code>tests-real/</code>(需真 qB)不进容器<b>执行面</b> —— 整树 tar 流会随拷, 但 pytest 不收集不运行; <code>test.gtm</code>(工具侧独立 venv 口径)不动; <code>.github/workflows</code> 零改动; qB 真机联测不做; WSL distro 本身不删(只清残留, 用户另有用途)。</p>
 
 <h2><span class="no">§05</span>待拍板清单</h2>
 <p>无遗留 —— Q1–Q8 已于 2026-11-12 两轮 grilling 全部拍板(结论见 §06)。</p>
@@ -212,7 +212,7 @@
   <tr><td>D5</td><td>并行策略</td><td><b>每会话独立 workdir, 允许同时跑</b>; 互斥锁按 workdir 路径 hash 天然分, 保持现状不动; 并行加固=写死端口改动态 + pid 级清扫</td></tr>
   <tr><td>D6</td><td>变异体系</td><td><b>迁入容器</b>, mutants 包后端改写, 8 条硬约束容器重验; 不再回 WSL</td></tr>
   <tr><td>D7</td><td>WSL 残留</td><td><b>清空</b>(锚 issue §07 覆盖表已核: 无进行中轮次, 轮次数字在基线切片, 镜像仓可由 mutants.setup 重建)</td></tr>
-  <tr><td>D8</td><td>网络策略</td><td><b>镜像与依赖国内镜像站优先; github 直连; 连不上停手请用户手动开代理</b>(用户 2026-11-12 补充拍板; 落点见 §03「网络策略」节, 风险 R1/R2/R9); PyPI 落点改<b>导出+pip 路线</b>(<code>uv export --generate-hashes</code> + <code>uv pip install --index-url</code> 国内源, 评审轮 3 用户拍板同日 —— 机制事实: <code>UV_DEFAULT_INDEX</code> 对 <code>uv sync --frozen</code> 的 files.pythonhosted.org 绝对 URL 下载无效, §10 R4)</td></tr>
+  <tr><td>D8</td><td>网络策略</td><td><b>镜像与依赖国内镜像站优先; github 直连; 连不上停手请用户手动开代理</b>(用户 2026-11-12 补充拍板; 落点见 §03「网络策略」节, 风险 R1/R2/R9); PyPI 落点改<b>导出+pip 路线</b>(<code>uv export --no-hashes</code>(S1 下半实跑修正: 0.13.7 已移除该旗标, 现行不带) + <code>uv pip install --index-url</code> 国内源, 评审轮 3 用户拍板同日 —— 机制事实: <code>UV_DEFAULT_INDEX</code> 对 <code>uv sync --frozen</code> 的 files.pythonhosted.org 绝对 URL 下载无效, §10 R4)</td></tr>
 </table>
 
 <h2><span class="no">§07</span>风险与对策</h2>
@@ -238,6 +238,8 @@
   <li><span class="tag">R4 · 26-11-12-0316</span> R4: 评审轮3处置(major 1 + minor 5 全修): 机制事实 —— uv.lock 记录 787 个 files.pythonhosted.org 绝对 URL 且 <code>uv sync --frozen</code> 跳过 index 校验, <code>UV_DEFAULT_INDEX</code> 对烘焙下载无效; 用户拍板改<b>导出+pip 路线</b>: 烘焙层(与 S2 运行期 delta)改 <code>uv export --generate-hashes</code> + <code>uv pip install -r --index-url</code> 国内镜像(带 hash 校验保住锁文件钉版), ENV 层补 <code>UV_INDEX_URL</code>; minor: D8_BUILD_FAIL「换下一家 --build-arg」改可执行路径(task 拒收参数)、清单缺失不再误打 docker build 失败文案、清单存在性检查提前到 hash 计算之前、NodeSource curl 补 --max-time 60(传输停滞型不可达不再挂满 timeout)、test.linux-env 基建注记标 S2 落地现状</li>
   <li><span class="tag">R5 · 26-11-12-0316</span> R5: 评审轮2/轮3处置(minor 3 全修): §03 环境变量层残留旧口径改「只管 export/pip 面; 运行期 delta 走 pip 路线」对齐 R4; Dockerfile 层4头注 UV_DEFAULT_INDEX/UV_INDEX_URL 语义按 uv 文档改准(UV_INDEX_URL 是 pip 兼容旧别名, UV_DEFAULT_INDEX 优先, 双写动机独立成句); doc-updated 抬至本版</li>
   <li><span class="tag">R6 · 26-11-12-0322</span> R6: 时间戳归真: R4 行 tag 26-11-12-0330 是手填估计值(未来时刻), 归一至同批机械 bump 真值 0316(该批内容产生于 0316 bump 之前, 时序归真); doc-updated 重抬本版机械真值</li>
+  <li><span class="tag">R7 · 26-11-13-0038</span> S1–S5 执行完成 + S6 回写半落盘, 执行数字单点=任务档案 26-11-12-test-linux-testbed(基线切片/test.full/最终提交归 T6b): S1 testbed 基建建成(镜像约 2.95GB / 首建约 161s / 幂等复跑 0.5s no-op, 各源钉值单点在 Dockerfile 头注); S2 test.linux 重写 docker exec 常驻容器形态 + 超时分层, 容器全量 3.13/3.12 solo 与双开并行全绿, 撞出并修复 5 处 Linux 平台真差异; S3 test.linux-e2e 落地, node_modules 接挂定案 symlink, fast/全量实测 4 个计时敏感差异经用户拍板收下(e2e 数字不进基线, 锚 Windows 侧); S4 mutants.* 六条迁容器, 8 条硬约束 8/8 重验, 冒烟轮跑通; S5 残留清扫 WSL+docker 两面共约 9.6GB, PT 容器无损; 本版同时钉准 S2 覆盖率闸口径(见 §04 S2 行)</li>
+  <li><span class="tag">R8 · 26-11-13-0150</span> 接缝终审(7844ebf5→工作树全专题)9 条全修: §03 task 表 test.linux-clean 行加落地注记(未落独立 task id —— 一层 R6 内联进 test.linux/-e2e 每轮开跑前双条件清扫, 二/三层 S5 一次性手工清扫已毕, 自动化待后续认领); 烘焙层与 §06 D8 行 uv export 旗标归真 --no-hashes(0.13.7 已移除 --generate-hashes, S1 下半实跑修正; 钉版由 --frozen 导出锁文件版本清单保住); D4 段与 task 表 test.linux 行 uv sync 路线改 cp 模板 venv + export/pip delta(对齐 R4 与实现); aside「tests-real 不进容器」改准「不进执行面(随拷但不收集不运行)」; §04 S6 判据改最终口径(基线切片只记 Windows 侧, 容器数字单点=任务档案); 随批文档面: mutants why.md「已验证的命令」节加 WSL 时代历史框架并指现役单点(config.toml note/mutants.py 头注)、环境事实表改容器口径(mutmut 3.8.1/系统临时目录结果目录, WSL 行降历史)、排障 mutmut=no 行改容器口径($() 现为正确形态, 先查版本不匹配), linux_env.py 头注旗标归真 --no-hashes</li>
 </ul>
 
 </div>

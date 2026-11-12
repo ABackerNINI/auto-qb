@@ -6,15 +6,22 @@
 
 ## 为什么要有脚本(而不是四条 `run` 串)
 
-一轮 mutmut 是六步: **刷新镜像 → uv sync → 装工具 → 清缓存 → 写 `[tool.mutmut]` → 跑 → 取结果**。
+一轮 mutmut 是六步: **刷新镜像 → venv 就绪 → 装工具 → 清缓存 → 写 `[tool.mutmut]` → 跑 → 取结果**。
+(venv 就绪一段: WSL 时代 = `uv sync`; **现役容器 = cp -a 模板 venv + uv export --no-hashes + uv pip install delta**, 见下节框注。)
 每一步都有「看着正常但不生效」的写法(镜像路径的 `~`、`uv run` 会 prune 掉 `uv pip install` 的工具、
 旧 `mutants/` 缓存让 mutmut 提前收工、deselect 表随测试拆分漂移…)。写进 `config.toml` 的 `run` 串
 要么拼不出来, 要么拼出来但静默跑错。收进脚本后, **改配置比改记忆可靠**。
 
-## 已验证的命令(2026-10-08 实测, 本机 WSL2 `Ubuntu-26.04`)
+## 已验证的命令(2026-10-08 实测, WSL 时代历史留痕)
+
+> ⚠ **历史(WSL 形态)——2026-11-12 S4 起 mutants.\* 六条后端 = `docker exec auto-qb-testbed bash -c`**
+> (计划 26-11-12-0152), venv 路线 = **cp -a 模板 venv + uv export --no-hashes + uv pip install delta**,
+> **不用 uv sync**(R4 机制事实: `uv sync --frozen` 按 uv.lock 的 files.pythonhosted.org 绝对 URL 下载,
+> 镜像索引对它无效)。**现役单点 = `.commands/mutants/config.toml` 的 setup/run note 与
+> `scripts/mutants.py` 头注**; 本节命令按 WSL 时代原文留痕, **别照抄**。
 
 ```text
-# mutmut(WSL, 主力) —— mutants.run 展开成这几步
+# mutmut(WSL, 主力) —— mutants.run 展开成这几步(WSL 时代; 现役见上方框注)
 git -C <mirror> fetch -q origin develop && git -C <mirror> checkout -q -f -B develop FETCH_HEAD
 cd <mirror> && uv sync -q
 cd <mirror> && test -x .venv/bin/mutmut || uv pip install -q mutmut==3.8.0
@@ -140,15 +147,17 @@ TMPDIR=R:/Temp/auto-qb/tests COVERAGE_FILE=R:/Temp/auto-qb/gremlins.cov \
 ⚠ **别把切片数字抄进切片之外的正文** —— 回写守卫判据族 B 只允许测试通过数出现在切片里; 常驻锚那张表填的是
 **变异数 / 杀死率**(不是 `N passed`), 只做汇总与指针。规程见 skill 的「覆盖进度总表(收尾必更)」节与硬约束 12。
 
-## 环境事实(改脚本前先核)
+## 环境事实(改脚本前先核; 2026-11-12 S4 起容器口径)
 
 | 项 | 值 | 备注 |
 |---|---|---|
-| WSL 发行版 | `Ubuntu-26.04` | `--distro` 可换; `wsl.exe -l -v` 看全 |
-| 镜像仓 | `~/auto-qb-mut`(WSL 原生 ext4) | `--mirror` 可换; **别放 `/mnt/*`**(实测拷 116MB 要 52s); **多 clone 并行时各用一份**(如 `~/auto-qb-mut-hr`) |
-| 核数 | 8(`.wslconfig` 限) | Windows 侧 32 逻辑核; `--max-children` 默认 3(有并行会话时降到 2) |
-| 工具版本 | mutmut `3.8.0` / pytest-gremlins `1.11.2` | 常量在脚本顶部; 换版本要同步改这里 |
-| 结果目录 | `R:/Temp/auto-qb/mutants` | `--out` 可换; 别落仓内(报告 §10 #7) |
+| 执行环境 | Docker 常驻容器 `auto-qb-testbed`(`docker exec`) | 容器不在跑先 `commands run test.linux-env`; 镜像内双 venv 3.12/3.13 |
+| 镜像仓 | `/root/auto-qb-tests/mutation/<pkg>`(容器 overlayfs, 默认按 `--target` 派生) | `--mirror` 可换; **同 target 并行会话互冲, 各用一份**; 旧 WSL 的 `~/auto-qb-mut*` 与 `/mnt/*` 禁令已随迁移退役(overlayfs 天然满足) |
+| 核数 | 8(容器 vCPU 配额) | `--max-children` 默认 3(容器 12G 预算, 还要与并行会话共存, R5) |
+| 工具版本 | mutmut `3.8.1` / pytest-gremlins `1.11.2`(Windows 兜底) | 常量在脚本顶部(`MUTMUT_VERSION`; `_ensure_tool` 按版本核对 —— 3.8.0 在 pytest 9.2 上 stats 收集崩); 换版本要同步改这里 |
+| 结果目录 | `<系统temp>/auto-qb-mutants`(脚本 `DEFAULT_OUT`) | `--out` 可换; 别落仓内(报告 §10 #7) |
+
+历史(WSL 时代, 2026-11-12 退役): WSL `Ubuntu-26.04`(`--distro` 可换)/ 镜像仓 `~/auto-qb-mut`(WSL 原生 ext4, 别放 `/mnt/*` —— 实测拷 116MB 要 52s)/ 结果目录 `R:/Temp/auto-qb/mutants` / 8 核(`.wslconfig` 限)。
 
 ## 排障表
 
@@ -162,7 +171,7 @@ TMPDIR=R:/Temp/auto-qb/tests COVERAGE_FILE=R:/Temp/auto-qb/gremlins.cov \
 | 覆盖率闸 `FAIL Required test coverage of 98% not reached` | 子集跑必然不满足全库闸 | 已固定 `--no-cov`(`set_conf.py` 的 `pytest_add_cli_args`) |
 | WSL 整体失去响应 | 目标太大 / 池太宽 / `--max-children` 拉满 | `wsl --shutdown` 救回; 回按包 + 定向池 + `--children 3` |
 | `exec python: not found`(wrapper 端到端用例) | WSL 里通常只有 `python3` | `mutants.setup` 已补 `~/.local/bin/python` 软链(幂等) |
-| `mutants.status` 恒报 `mutmut=no`(实际已装) | WSL 登录壳实为 zsh —— `cd` 改了**真实** cwd, 但 `$PWD` / `$()` 仍报 WSL 启动目录; `status` 的 `$(test -x .venv/bin/mutmut ...)` 因此读错目录 | **已修(2026-10-08)**: `cmd_status` 的回显改 `cd {mq} && <直接命令>` 形态(不再用 `$()` 取相对路径); 顺带把末行 `only_mutate` 加 fallback(镜像未跑过 run 时不再误报 `[FAIL]`)。若又见到本现象, 核脚本是否被改回 `$()` 写法。详见坑档 [memory-bank/pitfalls/testing/mutants-wsl-shell.md](../../../memory-bank/pitfalls/testing/mutants-wsl-shell.md) |
+| `mutants.status` 恒报 `mutmut=no`(实际已装) | 容器形态(docker exec bash)无壳层 cwd 失真 —— `$()` 现为**正确形态**(2026-11-12 S4 起脚本已回归常规写法); 多半是**版本不匹配**: `_ensure_tool` 按版本核对, 镜像里躺旧版 mutmut(如 3.8.0)会判未就位 | 核镜像内实际版本(`docker exec auto-qb-testbed bash -c 'cd <mirror> && .venv/bin/mutmut --version'`)与 `MUTMUT_VERSION` 是否一致, 不符重跑 `mutants.setup`。历史(WSL 形态, 2026-10-08 曾因 zsh `$PWD`/`$()` 失真把回显改成 `cd {mq} && <直接命令>` 特化形态)见坑档 [memory-bank/pitfalls/testing/mutants-wsl-shell.md](../../../memory-bank/pitfalls/testing/mutants-wsl-shell.md) |
 | 复跑时新加的守阵"没生效"(存活数不降) | `mutants.run` 默认 `git checkout -q -f -B develop FETCH_HEAD`, 会把镜像里**未提交的测试改动冲掉** | 先把新测试 `cp` 进镜像 `tests/`, 再 `mutants.run --no-refresh`(跳过刷新) |
 | 想看某条变异的 diff / 想批量三分类 | `mutmut results` 只有 id, 没有 diff | 用 `mutants.report`(带 diff 的清单 + 按状态/按模块汇总); 单条用 `mutmut show <id>` |
 | `verify` 输出**全是** KILLED(尤其「全杀」) | 老口径拿「套件里有 failed」当 KILLED, 而本机 Linux 侧基线本来就红(当时 3 条平台失败) ⇒ 恒真 | **已修(2026-10-30)**: 判据改「本次失败 - 基线失败」差集; 若又见到全杀, 先看输出里 `[baseline] 既有失败 N 条` 是否合理, 并核命令是否被改回带 `-x` 的写法 |

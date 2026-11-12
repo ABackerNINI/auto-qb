@@ -53,10 +53,15 @@
 ```text
 commands run test.full # 全量测试(最新基线:commands run kb.baseline列最近3条;排障 --all)
 commands run test.quick # 快速迭代,跳过覆盖率报表
+commands run test.linux-env # Linux 测试基建(幂等): 构建/保活 Docker testbed 容器(首次或 uv.lock 变更后)
+commands run test.linux # Linux 全量 pytest(容器内; docker exec 常驻容器形态, 变体 --python 3.12 / --name)
+commands run test.linux-e2e # Linux e2e(playwright headless chromium; 默认 @fast 子集, --full 全量)
 commands run dev.run -- config.yml --dry-run # 真机跑主程序(需真实qB;一律先 --dry-run)
 commands run dev.fmt -- <改过的 .py> # 格式化(.style.yapf:facebook,列宽120)
 commands run env.sync # 首次/依赖变更后同步依赖
 ```
+
+- Linux 测试三面(pytest / e2e / 变异`mutants.*`)统一跑在 Docker 常驻容器`auto-qb-testbed`(docker exec 形态, 计划 26-11-12-0152): 容器不在跑先`test.linux-env`, 别手拼 docker 命令; 容器配方与坑见`memory-bank/pitfalls/testing/patching.md`。
 
 - 依赖统一走`uv`(`pyproject.toml`+`uv.lock`)。
 - ⚠测试TMPDIR由`tests/_tmp_bootstrap.py`自举探测,**外部TMPDIR一律拒收(rc=4)**,别手工加前缀;判据与换根单点见`memory-bank/pitfalls/testing/tmpdir.md`。

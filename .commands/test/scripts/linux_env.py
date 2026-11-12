@@ -21,8 +21,9 @@
   docker.mirrors.tuna.tsinghua.edu.cn
 - apt / PyPI / npm / playwright 二进制的候选与切法在 Dockerfile 头注(单点, 本文件不复述)。
 
-S2 交接注记: 运行期依赖 delta 也走导出+pip 同款路线(uv export --generate-hashes + uv pip
-install --index-url 国内源)—— uv sync --frozen 的下载源按 uv.lock 记录的 files.pythonhosted.org
+S2 交接注记: 运行期依赖 delta 也走导出+pip 同款路线(uv export --no-hashes + uv pip
+install --index-url 国内源; 0.13.7 已移除 --generate-hashes 旗标, 单点 Dockerfile 层 5 WARN)——
+uv sync --frozen 的下载源按 uv.lock 记录的 files.pythonhosted.org
 绝对 URL 直连, 镜像索引对它无效(计划 §10 R4); ENV 已烘 UV_DEFAULT_INDEX/UV_INDEX_URL,
 只覆盖 export/pip 面(Dockerfile 层 4/5 头注是单点)。
 

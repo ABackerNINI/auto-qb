@@ -1,6 +1,6 @@
 # 覆盖率闸单阈值在双 OS 上必有一侧恒红, 且 pytest-cov 的阈值改 config.option 不生效
 
-> 摘要: 覆盖率闸单阈值在双 OS 上必有一侧恒红 —— Windows 独有代码(ctypes/junction/注册表后端)在 Linux 上跑不到, 实测 Windows 99.27% / Linux **98.74%**, 于是 `--cov-fail-under=99` 让 ubuntu CI 恒红而 Windows 正常。修法是**按平台定档**(Windows 99 / 其余 98.5), 且阈值**不能**在 `pytest_configure` 里改 `config.option` —— pytest-cov 早在 `pytest_load_initial_conftests` 就用**早期解析的命名空间**建好了插件, 之后只读自己那份, 改 `config.option` / `session.config.option` 全部静默无效(闸门反而彻底失效, 比红更危险)。必须改插件实例 `config.pluginmanager.getplugin("_cov").options.cov_fail_under`。
+> 摘要: 覆盖率闸单阈值在双 OS 上必有一侧恒红 —— Windows 独有代码(ctypes/junction/注册表后端)在 Linux 上跑不到, 实测 Windows 99.27% / Linux **98.74%**, 于是 `--cov-fail-under=99` 让 ubuntu CI 恒红而 Windows 正常。修法是**按平台定档**(Windows 99 / 其余 98.5), 且阈值**不能**在 `pytest_configure` 里改 `config.option` —— pytest-cov 早在 `pytest_load_initial_conftests` 就用**早期解析的命名空间**建好了插件, 之后只读自己那份, 改 `config.option` / `session.config.option` 全部静默无效(闸门反而彻底失效, 比红更危险)。必须改插件实例 `config.pluginmanager.getplugin("_cov").options.cov_fail_under`。闸值 2026-11-05 起抬至常量 `COVERAGE_FLOOR_WIN`=99.5 / `COVERAGE_FLOOR_OTHER`=99.0(单点 `tests/conftest.py`, issue 26-11-04-0600); 本文行文中的 99/98.5 是 2026-10-30 修复时点值, 钩子机制不变。
 > 触发: 覆盖率闸, cov-fail-under, 双 OS, ubuntu CI 恒红, pytest-cov, config.option 不生效, 平台定档, 分母不同, Windows 独有代码
 
 ### 单一覆盖率阈值 + 双 OS ⇒ 必有一侧恒红 (2026-10-30)
@@ -30,10 +30,14 @@
      plugin.options.cov_fail_under = 99.0 if sys.platform == "win32" else 98.5
      ```
      口径与 `tools/global-traffic-monitor` 的「双 OS 阈值取较低者」一致。
+     2026-11-05 起本仓实现改用常量 `COVERAGE_FLOOR_WIN` / `COVERAGE_FLOOR_OTHER`(单点
+     `tests/conftest.py`, 现值 99.5 / 99.0) —— 钩子写法不变, 照抄上面行内字面量会拿到旧值。
   2. **别去给平台独有代码贴 `# pragma: no cover` 来强行对齐分母**: 那些行在 Windows 上是**可测且有测试**
      的, 贴了就同时放弃 Windows 侧的卡口 —— 用降门槛换对齐, 亏。
   3. 显式 `--cov-fail-under=<非零>` 仍优先(钩子让路); `=0` 按「未设」处理(与 pytest-cov 的 `>0` 语义一致);
      彻底不测覆盖率用 `--no-cov`。
 - **守阵**: 无自动机检(阈值是配置口径)。旁证: `commands run test.linux` 的收尾行必须出现
-  `Required test coverage of 98.5% reached` —— 出现 `99%` 说明钩子没生效、`pytest.ini` 又被写回了。
+  `Required test coverage of 99.0% reached`(非 Windows 档现闸值 —— 2026-11-05 抬档后 99.0 就是
+  正确值, 常量单点 `tests/conftest.py::COVERAGE_FLOOR_OTHER`, Windows 档现为 99.5) ——
+  收尾行的值与常量对不上说明钩子没生效、`pytest.ini` 又被写回了。
 - **复发**: 0

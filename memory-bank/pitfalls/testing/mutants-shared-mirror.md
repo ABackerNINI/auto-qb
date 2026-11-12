@@ -34,6 +34,11 @@
   ```
   目录明明在、文件却打不开 —— 因为对方会话的 `mutants.run` 在 `[4/6]` 步执行了 `rm -rf mutants`, 把本会话**已跑 85% 的 `mutants/src/auto_qb/hr/*.meta` 整目录删了**。
 
+- **判别**(WSL 形态, 宿主侧; 三条与上节容器形态同型, 2026-11-13 补回 —— S4 改写时判别整体上移容器节, 本历史条目漏挂, 被 `test_kb_pitfall_entries_have_required_fields` 拦下):
+  1. `ps -eo pid,etime,cmd | grep "[m]utmut run"` → **两份** `mutmut run`, 其中一份的 `--max-children` 与你给的不同;
+  2. `grep -m1 only_mutate <镜像仓>/pyproject.toml` → **不是你设的目标**(实测被对方改成 `["**/config/*.py"]`);
+  3. `find <镜像仓>/mutants -name '*.meta'` → 出现**别人目标**的 `.meta`(如 config), 而**你自己的目标一条都没有**。
+
 - **处置**(WSL 形态): ①每会话一份镜像 `--mirror '~/auto-qb-mut-<pkg>'`(WSL 路径形态, 已随容器迁移退役); ②并存时降并发; ③可续跑补齐。
 
 **复发**: 1 —— 2026-10-10 hr 首轮(直接损失: 已跑的 ≈60 min / 85% 作废; 改用专用镜像后整包 96 min 跑完)。容器形态(2026-11-12 起)未复发 —— 冲突面按目标收窄, 预防靠「同目标并行才各占一份镜像」的纪律。

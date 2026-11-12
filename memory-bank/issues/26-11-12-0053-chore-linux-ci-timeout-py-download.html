@@ -9,9 +9,9 @@
 <meta name="issue-stamp" content="26-11-12-0053">
 <meta name="issue-type" content="chore">
 <meta name="doc-topic" content="linux-ci-timeout-py-download">
-<meta name="doc-refs" content="memory-bank/plans/26-11-12-0152-plan-linux-testbed-docker.html">
+<meta name="doc-refs" content="memory-bank/plans/26-11-12-0152-plan-linux-testbed-docker.html, memory-bank/tasks/26-11-12-test-linux-testbed.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="In Progress">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="test.linux 包装超时 900s 已不够, 且 3.12 镜像 uv 补下载托管 CPython 走 github 容器内不通">
 <meta name="issue-summary" content="本机复现 Linux CI 的 test.linux 在仓库增大后必超时成孤儿容器, 3.12 镜像还会因 .python-version=3.13 触发 github 下载被墙">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-12-0053-chore-linux-ci-timeout-py-download</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-12 00:53</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">chore</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">In Progress</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
 
@@ -112,6 +112,7 @@
 <section id="s3">
   <h2><span class="no">§03</span>建议<span class="opt">（可选）</span></h2>
   <p>临时绕法(本次已用, 未入库): 直跑脚本绕开 900s; 传参 <code>ghcr.io/astral-sh/uv:python3.13-bookworm-slim</code> 用 3.13 镜像免下载。正修方向: timeout 抬到 ~1800s、默认镜像改 3.13 或 uv 钉 <code>--python</code>, 孤儿容器按容器名/挂载源核验后回收。</p>
+  <p><strong>实际修法（2026-11-12 认领收口，计划 <a href="../plans/26-11-12-0152-plan-linux-testbed-docker.html">26-11-12-0152</a>；与上方建议不同故保留原文并说明改道：两缺口都不是参数修补，而是把 test.linux 整体迁入 Docker 常驻容器 testbed（<code>auto-qb-testbed</code>），结构性根除）：</strong>①超时——<code>test.linux</code> 重写为 docker exec 形态（计划 §04 S2）：工作树按排除清单 tar 流推送（含 <code>.git</code>；冒烟实测 6.1s，替代 bind 挂载 <code>cp -a</code> 的 ~10 分钟），引擎 timeout 900→1800 并加容器内 <code>timeout 1500s</code> 内层包裹（先到先干净退出），孤儿容器随 <code>docker run --rm</code> 形态退役，exec 客户端被杀的残留由下轮 workdir 级 pid 清扫兜底。②uv 补下载——双解释器（3.12 走 apt / 3.13 托管 CPython）构建期烘焙进镜像 + <code>ENV UV_PYTHON_DOWNLOADS=never</code> 运行期禁取，uv 不再存在补下载路径（「构建期烘焙 + 运行期 never」结构性根除）。<strong>验证（2026-11-12 容器实测，数字单点=任务档案 <a href="../tasks/26-11-12-test-linux-testbed.md">26-11-12-test-linux-testbed</a>）</strong>：3.13 solo 6043 passed / 19 skipped；3.12 solo 6044 passed / 19 skipped；双会话并行各 6046 passed / 19 skipped 全绿互不影响；覆盖率闸（非 Windows <code>COVERAGE_FLOOR_OTHER</code>=99.0）实测 99.08–99.09% 过闸。</p>
 </section>
 
 <section id="s4">
@@ -119,6 +120,8 @@
   <ul>
     <li>2026-11-12 00:53 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
     <li>2026-11-12 — 状态 Open → In Progress（kb.status）</li>
+    <li>2026-11-12 — 复验（认领执行期，防过期原则第 5 条）：两锚点均已被 S2 重写取代——<code>config.toml</code> <code>test.linux</code> <code>timeout = 1800</code>（旧 900 不在）、<code>linux_ci.py</code> <code>IMAGE</code> 常量与 <code>cp -a /src</code> 已随 docker exec 形态退役；两缺口本体在容器全量实测中确认消失（细节与验证数字见 §03「实际修法」）</li>
+    <li>2026-11-13 — 状态 In Progress → Done（kb.status）</li>
 </ul>
 </section>
 
