@@ -1,15 +1,35 @@
-"""变异测试审计的编排 —— WSL 里跑 mutmut(主力) / Windows 里跑 pytest-gremlins(兜底)。
+"""变异测试审计的编排 —— Docker testbed 常驻容器里跑 mutmut(主力) / Windows 里跑 pytest-gremlins(兜底)。
+
+计划单点:
+[memory-bank/plans/26-11-12-0152-plan-linux-testbed-docker.html](../../../memory-bank/plans/26-11-12-0152-plan-linux-testbed-docker.html)
+§03 入口 task 族表(mutants.* 六条) / §04 S4 / §06 D6。
 
 用法::
 
-    python mutants.py setup     [--distro D] [--mirror P] [--branch B] [--no-sync] [--dry-run]
+    python mutants.py setup     [--target G | --mirror P] [--branch B] [--no-sync] [--dry-run]
     python mutants.py run       --target G [--pool F ...] [--children N] [--timeout-multiplier X]
                                 [--no-refresh] [--dry-run]
     python mutants.py report    [--target G] [--status S,S] [--limit N] [--out DIR] [--dry-run]
     python mutants.py verify    (--from-report F | --ids-file F) [--workers N] [--no-refresh]
                                 [--suite-timeout S] [--recompute-baseline] [--fresh] [--dry-run]
     python mutants.py gremlins  --target F [--pool F ...] [--workers N] [--dry-run]
-    python mutants.py status    [--distro D] [--mirror P]
+    python mutants.py status    [--target G | --mirror P](都不给 = 列出全部镜像仓)
+
+**形态**(S4 起, 后端 wsl.exe -> docker exec): 一切容器内操作走 `docker exec` 进常驻容器
+auto-qb-testbed(与 test.linux / test.linux-e2e 同一容器, 前置 `commands run test.linux-env`,
+不在跑则 [FAIL] 指引, 不自动构建)。镜像仓(git clone 自 origin, 与旧 WSL 形态同构)落容器内
+`/root/auto-qb-tests/mutation/<pkg>`; `<pkg>` 默认按 `--target` 的 slug 自动派生(每目标一份,
+按目标隔离收窄了旧「共用一份镜像仓互相冲毁」的冲突面; 同一 target 的并行会话仍互冲,
+并行时 `--mirror` 各占一份)。
+容器内单根收敛在 /root/auto-qb-tests 下 —— linux_ci 的双条件清扫只回收带 .run-pid 标记的
+workdir, mutation/<pkg>(无标记)不被它碰。
+
+**复用面**(import linux_ci, 不复制字面量): 容器名/容器核验(linux_env)、TESTS_ROOT 单根、
+模板 venv 路径(/opt/venv-3.13)。镜像仓 venv 就绪沿用 linux_ci 同款路线(R4 机制事实:
+uv sync --frozen 按 uv.lock 里 files.pythonhosted.org 绝对 URL 直连, 不吃镜像索引)——
+**cp -a 模板 venv + uv export --no-hashes + uv pip install delta + editable 补装**, 不用 uv sync。
+mutmut 不在锁文件/模板 venv 里, 由 `_ensure_tool` 按版本核对后经烘焙国内索引装进镜像仓 venv
+(与旧 WSL 形态一致, Dockerfile 不扩面)。
 
 **report → verify 是本包的主线后半段**(首轮 `run` 之后):
 
@@ -22,11 +42,19 @@
   **这一步是整轮的时间大头**(实测 ~15s/条), 所以清单要先按 `--status` / 手挑缩小。
 
 **为什么要有这个脚本**(而不是把命令写进 config.toml 的 run 串): 一轮 mutmut 是
-「刷新镜像 -> 装工具 -> 清缓存 -> 写 [tool.mutmut] -> 跑 -> 取结果」六步, 中间全是
-「看着正常但不生效」的写法(见可行性报告 26-10-08-0231 §10)。把它们收在脚本里, 改配置比改记忆可靠。
+「建/刷新镜像仓 -> venv 就绪 -> 装工具 -> 清缓存 -> 写 [tool.mutmut] -> 跑 -> 取结果」七步,
+中间全是「看着正常但不生效」的写法(见可行性报告 26-10-08-0231 §10)。把它们收在脚本里,
+改配置比改记忆可靠。
 
-**主仓库环境不动**: 镜像仓与工具都只在 WSL 侧(`--mirror`, 默认 `~/auto-qb-mut`); 本脚本
+**主仓库环境不动**: 镜像仓与工具都只在容器侧(`--mirror` / 自动派生路径); 本脚本
 不碰主仓库的 pyproject.toml / .venv(报告 §01 的沙箱纪律)。
+
+**WSL 形态残留清理(S4)**: 旧后端的 WSL 专属假设已随 docker exec 后端一并清除 ——
+1) zsh 登录壳的 `$PWD`/`$()` 失真(status 被迫 `cd X && cmd` 形态)在容器 bash 下不存在,
+   status 脚本回归常规 `$(...)` 形态(坑档 mutants-wsl-shell.md 的 WSL 段历史留痕);
+2) `python3 -> python` 软链 shim(WSL 只有 python3)删除 —— 容器内一律显式 `.venv/bin/python`;
+3) `--distro` 参数删除(WSL 发行版概念不存在); 4) `~/auto-qb-mut` 别放 /mnt/* 的 ext4 禁令
+   在容器 overlayfs 下天然满足; 5) `wsl --shutdown` 救僵面对应 `docker restart auto-qb-testbed`。
 
 **输出策略**: mutmut/gremlins 的进度行(\r 刷新)会被折叠, 只留最后一行汇总 + 警告/报错原文;
 存活清单(可能上千行, 超过 AI 工具壳 30KB 内联上限)写到 --out 目录并只回显头部。
@@ -47,13 +75,21 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+_PKG_SCRIPTS = Path(__file__).resolve().parent
+#: 跨包复用: linux_ci / linux_env 的组件单点(.commands/test/scripts), import 不复制字面量
+_TEST_SCRIPTS = _PKG_SCRIPTS.parents[1] / "test" / "scripts"
+for _p in (str(_PKG_SCRIPTS), str(_TEST_SCRIPTS)):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
 
+import linux_ci  # noqa: E402  (TESTS_ROOT / 模板 venv / DEFAULT_PYTHON 的单点)
+import linux_env  # noqa: E402  (容器名与状态核验的单点)
 import set_conf  # noqa: E402  (同目录渲染器: timeout_multiplier 的单点默认值)
 from set_conf import FLAKY_DESELECT  # noqa: E402
 
-DEFAULT_DISTRO = "Ubuntu-26.04"
-DEFAULT_MIRROR = "~/auto-qb-mut"
+CONTAINER = linux_env.CONTAINER_NAME
+#: 容器内测试态单根(linux_ci 单点); 镜像仓收敛在它下面的 mutation/ 子根
+MUTATION_ROOT = f"{linux_ci.TESTS_ROOT}/mutation"
 DEFAULT_BRANCH = "develop"
 # 3.8.1 修了 stats 收集在 pytest 9.2 上崩的问题(9.2 删了私有属性 Function._nodeid,
 # 3.8.0 的 stats 插件还按 `item._nodeid` 取值 ⇒ 基线直接 `failed to collect stats`);
@@ -61,14 +97,14 @@ DEFAULT_BRANCH = "develop"
 MUTMUT_VERSION = "3.8.1"
 GREMLINS_VERSION = "1.11.2"
 DEFAULT_TIMEOUT_MULTIPLIER = set_conf.DEFAULT_TIMEOUT_MULTIPLIER  # 与 mutmut 自身默认一致
-DEFAULT_CHILDREN = 3  # WSL 只有 8 核(.wslconfig); 4 路并发峰值曾顶到 VM 内存上限 OOM
+# 容器 8 vCPU 配额 / 12G 内存(R5): 4 路并发峰值曾 OOM(WSL 实测); 并行全量 pytest 同容器跑时
+# 更要守住这个默认 —— 纪律沿用, 不因换宿主放宽
+DEFAULT_CHILDREN = 3
 DEFAULT_WORKERS = 8
 DEFAULT_SUITE_TIMEOUT = 1200  # 单次全套件硬截止; 变异体可能死循环, 没有它会把整条 verify 挂死
-DEFAULT_OUT = os.path.join(
-    tempfile.gettempdir(), "auto-qb-mutants"
-)  # 别落仓内(报告 §10 #7); R:/ 写死自 2026-10-08 起在无 R 盘机器从未生效, 2026-11-02 改随系统 temp(计划 26-11-02-0657)
+DEFAULT_OUT = os.path.join(tempfile.gettempdir(), "auto-qb-mutants")  # 别落仓内(报告 §10 #7); 随系统 temp(计划 26-11-02-0657)
 HEAD_LINES = 30
-#: 结果导出脚本(仓库内, 由本脚本推进镜像 /tmp 后执行) —— 它 import mutmut 内部 API, 只能在镜像里跑
+#: 结果导出脚本(仓库内, 由本脚本推进容器 /tmp 后执行) —— 它 import mutmut 内部 API, 只能在镜像仓 venv 里跑
 DUMP_SCRIPT_REL = ".commands/mutants/scripts/mutants_dump.py"
 #: 基线失败清单缓存前缀 —— 内容由(镜像 HEAD, 并行度)决定, 两者任一变化都必须重算
 BASELINE_CACHE_PREFIX = "s4-baseline"
@@ -104,6 +140,7 @@ def _run(
     env: dict[str, str] | None = None,
     check: bool = True
 ) -> subprocess.CompletedProcess:
+    """宿主侧命令(仅 gremlins 的 uv run 用; 容器内操作一律走 _exec)。"""
     if _DRY:
         _say("+ " + " ".join(cmd))
         return subprocess.CompletedProcess(cmd, 0, "", "")
@@ -111,6 +148,43 @@ def _run(
     if check and proc.returncode != 0:
         raise Fail(f"命令失败(rc={proc.returncode}): {' '.join(cmd)}\n{proc.stdout.strip()}\n{proc.stderr.strip()}")
     return proc
+
+
+def _exec(script: str, *, check: bool = True) -> subprocess.CompletedProcess:
+    """容器内命令: `docker exec <容器> bash -c <script>`(脚本经 argv 传入, 不经宿主壳引号层)。"""
+    if _DRY:
+        _say(f"+ (docker exec {CONTAINER} bash -c) {script}")
+        return subprocess.CompletedProcess(["docker", "exec", CONTAINER, "bash", "-c", script], 0, "", "")
+    proc = subprocess.run(
+        ["docker", "exec", CONTAINER, "bash", "-c", script],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+    if check and proc.returncode != 0:
+        raise Fail(f"容器内命令失败(rc={proc.returncode}): {script}\n{proc.stdout.strip()}\n{proc.stderr.strip()}")
+    return proc
+
+
+def _exec_write(remote_path: str, content: str) -> None:
+    """把文本写进容器内文件 —— **走 stdin**(`docker exec -i bash -c 'cat > <path>'`)。
+
+    多行内容不过命令行参数, 免引号/换行转义坑; 目标路径必须是容器内绝对路径。
+    """
+    if _DRY:
+        _say(f"+ (docker exec -i {CONTAINER}, stdin -> {remote_path}) {len(content)} bytes")
+        return
+    proc = subprocess.run(
+        ["docker", "exec", "-i", CONTAINER, "bash", "-c", f"cat > {_bq(remote_path)}"],
+        input=content,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+    if proc.returncode != 0:
+        raise Fail(f"写入容器文件失败({remote_path}, rc={proc.returncode}): {proc.stderr.strip()}")
 
 
 def _bq(path: str) -> str:
@@ -123,45 +197,51 @@ def _bq(path: str) -> str:
 
 
 def check_mirror(mirror: str) -> None:
-    """镜像必须是 **WSL 侧**路径 —— 收到 Windows 路径说明它被调用方 shell 展开过。
+    """镜像必须是**容器内绝对路径** —— 收到 Windows 路径说明它被调用方 shell 改写过。
 
-    Git Bash 会把未加引号的 `~/auto-qb-mut` 展开成本机家目录(`C:/Users/...`), 再进 WSL 就是
-    一个不存在(且语义错误)的路径。这种错**不会报错**, 只会让后续步骤在别处莫名其妙地失败 ——
-    所以在这里停手, 而不是让它跑下去。走 `commands run mutants.*` 时 cmd.exe 不展开 `~`, 不受影响。
+    Git Bash 会把未加引号的 `~/auto-qb-mut` 展开成本机家目录(`C:/Users/...`), 手工敲
+    `--mirror /root/...` 时 MSYS 还会把容器绝对路径改写成 `C:/Program Files/Git/root/...`
+    (MSYS_NO_PATHCONV 坑, 见 linux_ci.py 头注)。这种错**不会报错**, 只会让后续步骤在容器里
+    莫名其妙地失败 —— 所以在这里停手, 而不是让它跑下去。走 `commands run mutants.*` 时
+    参数经 python argv 直传, 不受影响。
     """
     if re.match(r"^[A-Za-z]:[\\/]", mirror) or mirror.startswith("\\\\"):
         raise Fail(
             f"--mirror 收到 Windows 路径: {mirror}\n"
-            "  镜像仓在 WSL 侧, 要写 WSL 路径(默认 ~/auto-qb-mut)。\n"
-            "  在 Git Bash 里手工调用时, `~` 必须加引号: --mirror '~/auto-qb-mut'"
+            "  镜像仓在容器内, 要写容器绝对路径(默认按 --target 派生 /root/auto-qb-tests/mutation/<pkg>)。\n"
+            "  在 Git Bash 里手工调用时, `~` 必须加引号; 容器绝对路径会被 MSYS 改写, 加前缀 MSYS_NO_PATHCONV=1"
         )
+    if not (mirror.startswith("/") or mirror == "~" or mirror.startswith("~/")):
+        raise Fail(f"--mirror 必须是容器内绝对路径(/ 或 ~/ 开头, 相对路径在容器里语义不明): {mirror}")
 
 
-def _wsl(distro: str, script: str, *, check: bool = True) -> subprocess.CompletedProcess:
-    if shutil.which("wsl.exe") is None and not _DRY:
-        raise Fail("找不到 wsl.exe —— 本机没装 WSL, 走 mutants.gremlins(Windows 兜底)")
-    return _run(["wsl.exe", "-d", distro, "--", "bash", "-lc", script], check=check)
+def derive_mirror(target: str) -> str:
+    """`--target` -> 默认镜像仓路径 `/root/auto-qb-tests/mutation/<pkg>`。
 
-
-def _wsl_write(distro: str, remote_path: str, content: str) -> None:
-    """把文本写进 WSL 的文件 —— **走 stdin**, 不走命令行参数。
-
-    多行内容塞进 `bash -lc '<script>'` 会被 WSL 的登录壳按行拆开(实测: 后续行不报错地
-    落到别处), 所以统一用 `cat > <path>` + stdin 传内容。目标路径必须是 WSL 侧绝对路径。
+    `<pkg>` = target 的 slug: 每个目标一份镜像仓, mutmut 注册表/缓存按目标隔离 —— 旧形态
+    「共用一份镜像仓, 换目标 rm -rf mutants 会冲毁别的目标的注册表」的冲突面被收窄;
+    但容器是**全宿主共享**的, **同一 target 的并行会话仍互冲**(一方 rm -rf mutants 会清掉
+    另一方的缓存), 并行时用 --mirror 各占一份。
     """
-    if _DRY:
-        _say(f"+ (stdin -> {remote_path}) {len(content)} bytes")
-        return
-    proc = subprocess.run(
-        ["wsl.exe", "-d", distro, "--", "bash", "-lc", f"cat > {_bq(remote_path)}"],
-        input=content,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace"
-    )
-    if proc.returncode != 0:
-        raise Fail(f"写入 WSL 文件失败({remote_path}, rc={proc.returncode}): {proc.stderr.strip()}")
+    return f"{MUTATION_ROOT}/{_slug(target)}"
+
+
+def resolve_mirror(args: argparse.Namespace) -> str | None:
+    """--mirror 显式优先; 否则按 --target 派生; 都没有返回 None(status 转列全部, 其余报错)。"""
+    if args.mirror:
+        check_mirror(args.mirror)
+        return args.mirror
+    if args.target:
+        return derive_mirror(args.target)
+    return None
+
+
+def require_mirror(args: argparse.Namespace) -> str:
+    mirror = resolve_mirror(args)
+    if mirror is None:
+        raise Fail("未定镜像路径: 给 --mirror(容器内绝对路径)或 --target(自动派生 "
+                   f"{MUTATION_ROOT}/<pkg>)")
+    return mirror
 
 
 def _strip_spinner(line: str) -> str:
@@ -208,28 +288,46 @@ def _slug(text: str) -> str:
 # ------------------------------------------------------------------ 子命令
 
 
-def _ensure_mirror(distro: str, mirror: str, branch: str, *, refresh: bool, no_sync: bool) -> None:
+def _venv_ready(mirror: str) -> None:
+    """容器内镜像仓的 venv 就绪(R4 导出+pip 路线, 与 linux_ci.run_script 同款, 不用 uv sync)。
+
+    cp -a 模板 venv(秒级) -> uv export --no-hashes 出钉版清单 -> uv pip install delta
+    (模板已含全部钉版时秒级 no-op) -> editable 补装项目。镜像仓 venv 一经建好跨轮复用,
+    delta 段每轮重跑以吸收 uv.lock 变更。
+    """
     mq = _bq(mirror)
-    # 先探 WSL 可达性: VM 被杀/OOM 时任何 wsl.exe 调用都返回非零, 此时「test -d 失败」≠「镜像缺失」。
-    # 不先探测就 clone, 一次成功就会毁掉专用镜像(注册表 + 本地 pyproject/venv 钉版)。
-    probe = _wsl(distro, "echo ok", check=False)
-    if probe.returncode != 0:
-        raise Fail(
-            f"WSL 不可达(distro={distro}, rc={probe.returncode}) —— VM 可能被杀/OOM, 稍后重跑; "
-            "本脚本不会重建镜像。\n"
-            f"{(probe.stdout + probe.stderr).strip()[-800:]}"
+    vtmpl = linux_ci.VENV_TEMPLATE[linux_ci.DEFAULT_PYTHON]
+    _say(f"[2/3] venv 就绪(cp 模板 {vtmpl} + export/pip delta)")
+    try:
+        _exec(
+            f"set -eu; cd {mq}; "
+            f"if [ ! -x .venv/bin/python ]; then cp -a {vtmpl}/. .venv/; fi; "
+            "uv export --frozen --format requirements-txt --no-hashes --no-emit-project --quiet "
+            "-o .mutants-delta-req.txt; "
+            "uv pip install -q --python .venv/bin/python -r .mutants-delta-req.txt; "
+            "uv pip install -q --python .venv/bin/python -e . --no-deps; "
+            "rm -f .mutants-delta-req.txt"
         )
+    except Fail as exc:
+        raise Fail(
+            f"{exc}\nNEXT: 看上方 uv 真实报错; 国内索引不可达按 R9 换源(Dockerfile ARG UV_INDEX 经 "
+            "test.linux-env 重建镜像)或手动开代理后重跑。"
+        ) from None
+
+
+def _ensure_mirror(mirror: str, branch: str, *, refresh: bool, no_sync: bool) -> None:
+    mq = _bq(mirror)
     if _DRY:
         state = "MIRROR_HAVE_GIT"
     else:
-        state = _wsl(
-            distro, f'if [ -d {mq} ]; then if [ -d {mq}/.git ]; then echo MIRROR_HAVE_GIT; '
+        state = _exec(
+            f'if [ -d {mq} ]; then if [ -d {mq}/.git ]; then echo MIRROR_HAVE_GIT; '
             f'else echo MIRROR_NO_GIT; fi; else echo MIRROR_NO_DIR; fi',
             check=False
         ).stdout.strip()
     if "MIRROR_NO_DIR" in state:
-        _say(f"[1/3] 建镜像仓 {mirror} (git clone)")
-        _wsl(distro, f"git clone -q --branch {branch} {_git_url()} {mq}")
+        _say(f"[1/3] 建镜像仓 {mirror} (git clone, 容器内)")
+        _exec(f"mkdir -p {_bq(MUTATION_ROOT)} && git clone -q --branch {branch} {_git_url()} {mq}")
     elif "MIRROR_NO_GIT" in state:
         raise Fail(f"镜像目录在但 .git 缺失: {mirror} —— 疑似损坏/误判; 先人工核验 head 与 mutants/ 注册表, "
                    "不自动 clone 覆盖")
@@ -237,61 +335,57 @@ def _ensure_mirror(distro: str, mirror: str, branch: str, *, refresh: bool, no_s
         raise Fail(f"无法判定镜像状态(探测输出: {state!r}) —— 不自动 clone 覆盖")
     elif refresh:
         _say(f"[1/3] 刷新镜像仓 {mirror} (fetch + 硬切到 origin/{branch})")
-        _wsl(distro, f"git -C {mq} fetch -q origin {branch} && git -C {mq} checkout -q -f -B {branch} FETCH_HEAD")
+        _exec(f"git -C {mq} fetch -q origin {branch} && git -C {mq} checkout -q -f -B {branch} FETCH_HEAD")
     else:
         _say(f"[1/3] 跳过刷新(--no-refresh): {mirror}")
     if not no_sync:
-        _say("[2/3] uv sync")
-        _wsl(distro, f"cd {mq} && uv sync -q")
+        _venv_ready(mirror)
     else:
-        _say("[2/3] 跳过 uv sync(--no-sync)")
+        _say("[2/3] 跳过 venv 准备(--no-sync)")
 
 
-def _ensure_tool(distro: str, mirror: str) -> None:
+def _ensure_tool(mirror: str) -> None:
     mq = _bq(mirror)
-    _say(f"[3/3] 确保 mutmut=={MUTMUT_VERSION} 在镜像 venv 里(版本不符才装)")
+    _say(f"[3/3] 确保 mutmut=={MUTMUT_VERSION} 在镜像仓 venv 里(版本不符才装; uv pip 走镜像烘焙国内索引)")
     # **必须核版本, 不能只判文件在不在**: 镜像里躺着的旧版(mutmut 3.8.0 + pytest 9.2)会在
     # stats 收集阶段崩(`failed to collect stats`), 而「文件存在」让这套检查完全看不出问题。
-    version = _wsl(distro, f"cd {mq} && .venv/bin/mutmut --version", check=False).stdout.strip()
+    version = _exec(f"cd {mq} && .venv/bin/mutmut --version", check=False).stdout.strip()
     if version != f"mutmut, version {MUTMUT_VERSION}":
-        _wsl(distro, f"cd {mq} && uv pip install -q mutmut=={MUTMUT_VERSION}")
-    # WSL 里通常只有 python3; 包脚本的 wrapper 端到端用例要裸 `python`(报告 §10 #13)
-    _wsl(
-        distro, 'command -v python >/dev/null 2>&1 || { mkdir -p "$HOME/.local/bin" '
-        '&& ln -sf "$(command -v python3)" "$HOME/.local/bin/python"; }',
-        check=False
-    )
+        _exec(f"cd {mq} && uv pip install -q --python .venv/bin/python mutmut=={MUTMUT_VERSION}")
 
 
 def cmd_setup(args: argparse.Namespace) -> int:
-    _ensure_mirror(args.distro, args.mirror, args.branch, refresh=not args.no_refresh, no_sync=args.no_sync)
-    _ensure_tool(args.distro, args.mirror)
-    _say(f"[OK] 镜像就绪: {args.mirror} (distro={args.distro}, branch={args.branch})")
+    mirror = require_mirror(args)
+    _ensure_mirror(mirror, args.branch, refresh=not args.no_refresh, no_sync=args.no_sync)
+    _ensure_tool(mirror)
+    _say(f"[OK] 镜像就绪: {mirror} (container={CONTAINER}, branch={args.branch})")
     return 0
 
 
 def cmd_run(args: argparse.Namespace) -> int:
     if args.timeout_multiplier <= 0:
         raise Fail(f"--timeout-multiplier 必须 > 0(收到 {args.timeout_multiplier:g})")
-    _ensure_mirror(args.distro, args.mirror, args.branch, refresh=not args.no_refresh, no_sync=args.no_sync)
-    _ensure_tool(args.distro, args.mirror)
-    mq = _bq(args.mirror)
+    mirror = require_mirror(args)
+    _ensure_mirror(mirror, args.branch, refresh=not args.no_refresh, no_sync=args.no_sync)
+    _ensure_tool(mirror)
+    mq = _bq(mirror)
 
     if not args.pool:
-        _say("[WARN] 没给 --pool: 会用全 tests 当池 —— 实测会把 WSL 打挂(报告 §07 对照四), 强烈建议给定向池")
+        _say("[WARN] 没给 --pool: 会用全 tests 当池 —— 实测会把宿主打挂(报告 §07 对照四; 容器 12G "
+             "还要与并行会话共存, R5), 强烈建议给定向池")
     # 清缓存: 目标/池一变, 旧 mutants/ 会让 mutmut 保留旧结果并「0 files mutated」提前收工(实测)
     _say("[4/6] 清 mutants/ 与 mutmut-cache.db")
-    _say("[WARN] 该清理会一并清掉其它目标的 mutmut 注册表 —— 换目标跑 verify 前必须对该目标重跑 mutants.run")
-    _wsl(args.distro, f"cd {mq} && rm -rf mutants mutmut-cache.db")
+    _say("[WARN] 该清理会一并清掉同镜像仓里其它目标的 mutmut 注册表 —— 换目标跑 verify 前必须对该目标重跑 mutants.run")
+    _exec(f"cd {mq} && rm -rf mutants mutmut-cache.db")
     _say(f"[5/6] 写 [tool.mutmut] (目标 / 池 / forkserver / deselect / timeout_multiplier={args.timeout_multiplier:g})")
     pool = " ".join(_bq(p) for p in args.pool)
-    _wsl(
-        args.distro, f"cd {mq} && .venv/bin/python .commands/mutants/scripts/set_conf.py "
+    _exec(
+        f"cd {mq} && .venv/bin/python .commands/mutants/scripts/set_conf.py "
         f"--target {_bq(args.target)} --timeout-multiplier {args.timeout_multiplier:g}" +
         (f" --pool {pool}" if args.pool else "")
     )
     _say(f"[6/6] mutmut run --max-children {args.children}")
-    proc = _wsl(args.distro, f"cd {mq} && .venv/bin/mutmut run --max-children {args.children}", check=False)
+    proc = _exec(f"cd {mq} && .venv/bin/mutmut run --max-children {args.children}", check=False)
     body, summary = _collapse(proc.stdout + "\n" + proc.stderr)
     for line in body:
         _say(line)
@@ -305,7 +399,7 @@ def cmd_run(args: argparse.Namespace) -> int:
         )
         return 1
 
-    _write_results(args)
+    _write_results(args, mirror)
     return 0
 
 
@@ -334,15 +428,16 @@ def _run_header(
     )
 
 
-def _write_results(args: argparse.Namespace) -> None:
-    proc = _wsl(args.distro, f"cd {_bq(args.mirror)} && .venv/bin/mutmut results", check=False)
+def _write_results(args: argparse.Namespace, mirror: str) -> None:
+    mq = _bq(mirror)
+    proc = _exec(f"cd {mq} && .venv/bin/mutmut results", check=False)
     text = proc.stdout.strip()
     n = len([x for x in text.splitlines() if x.strip()])
     if _DRY:
         _say(f"[结果] (dry-run 未取) 预计未杀死 {n} 条")
         return
-    head = _wsl(args.distro, f"cd {_bq(args.mirror)} && git rev-parse --short HEAD", check=False).stdout.strip()
-    version = _wsl(args.distro, f"cd {_bq(args.mirror)} && .venv/bin/mutmut --version", check=False).stdout.strip()
+    head = _exec(f"cd {mq} && git rev-parse --short HEAD", check=False).stdout.strip()
+    version = _exec(f"cd {mq} && .venv/bin/mutmut --version", check=False).stdout.strip()
     header = _run_header(
         args.target, args.pool, args.children, args.timeout_multiplier, head or "unknown", version or "unknown"
     )
@@ -361,17 +456,18 @@ def _write_results(args: argparse.Namespace) -> None:
 
 def cmd_report(args: argparse.Namespace) -> int:
     """把镜像里**上一轮**的存活/未覆盖变异导出成带 diff 的清单 + 分类汇总(只读, 不刷新镜像)。"""
-    _ensure_mirror(args.distro, args.mirror, args.branch, refresh=False, no_sync=True)
-    _ensure_tool(args.distro, args.mirror)
+    mirror = require_mirror(args)
+    _ensure_mirror(mirror, args.branch, refresh=False, no_sync=True)
+    _ensure_tool(mirror)
     dump_src = (repo_root() / DUMP_SCRIPT_REL).read_text(encoding="utf-8")
-    _wsl_write(args.distro, "/tmp/mutants_dump.py", dump_src)
-    mq = _bq(args.mirror)
+    _exec_write("/tmp/mutants_dump.py", dump_src)
+    mq = _bq(mirror)
     cmd = f"cd {mq} && .venv/bin/python /tmp/mutants_dump.py --status {shlex.quote(args.status)}"
     if args.limit:
         cmd += f" --limit {args.limit}"
     if args.target:
         cmd += f" --target-glob {shlex.quote(args.target)}"
-    proc = _wsl(args.distro, cmd, check=False)
+    proc = _exec(cmd, check=False)
     if proc.returncode != 0:
         for line in (proc.stdout + "\n" + proc.stderr).splitlines()[-20:]:
             _say(line)
@@ -395,11 +491,17 @@ def cmd_report(args: argparse.Namespace) -> int:
 
 def _candidate_ids(args: argparse.Namespace) -> list[str]:
     """候选 id 来源: --ids-file 直给, 或 --from-report 从 mutants.report 的产物里按状态挑。"""
+    src = args.ids_file or args.from_report
+    try:
+        lines = Path(src).read_text(encoding="utf-8").splitlines()
+    except OSError as exc:
+        raise Fail(f"候选清单读不到({src}): {exc} —— --from-report 要用 mutants.report 的产物路径, "
+                   "--ids-file 每行一条 id") from None
     if args.ids_file:
-        return [x.strip() for x in Path(args.ids_file).read_text(encoding="utf-8").splitlines() if x.strip()]
+        return [x.strip() for x in lines if x.strip()]
     want = {s.strip() for s in (args.only_status or "survived").split(",") if s.strip()}
     ids: list[str] = []
-    for line in Path(args.from_report).read_text(encoding="utf-8").splitlines():
+    for line in lines:
         if not line.startswith("@@@ "):
             continue
         mid, _, status = line[4:].partition(" :: ")
@@ -409,7 +511,7 @@ def _candidate_ids(args: argparse.Namespace) -> list[str]:
 
 
 def _suite_cmd(workers: int, timeout_s: int, target: str = "tests/") -> str:
-    """全套件的一次调用(在镜像里跑)。
+    """全套件的一次调用(在容器镜像仓里跑)。
 
     `-B` + `PYTHONDONTWRITEBYTECODE=1` 是**判定正确性**的一部分, 不是性能开关: 逐条 apply 时等长替换
     + 秒级 mtime 碰撞会让 CPython 复用上一条变异体编译的 `.pyc`, 于是「跑的其实不是这个变异体」
@@ -421,11 +523,14 @@ def _suite_cmd(workers: int, timeout_s: int, target: str = "tests/") -> str:
     参数口径: **不能有 `-x`**(基线本来就红时它会停在第一条既有失败上, 变异体根本没被执行);
     `-rfE` 出 short test summary(逐条 node id, 用来与基线做差集); `--tb=no` 压掉回溯。
 
+    `AUTO_QB_TESTBED=1` 与 test.linux 同口径: 全套件里的挂钟型性能基准按 testbed 档判 ——
+    容器配额 + 并行会话对挂钟的放大是合法调度非回归, 不导出它基线会多一批假红污染差集。
+
     flaky 用例从 FLAKY_DESELECT(set_conf.py)自动派生 --deselect, 不让人手拼。
     """
     deselects = " ".join(f"--deselect {shlex.quote(d)}" for d in FLAKY_DESELECT)
     return (
-        f"PYTHONDONTWRITEBYTECODE=1 timeout {timeout_s} "
+        f"AUTO_QB_TESTBED=1 PYTHONDONTWRITEBYTECODE=1 timeout {timeout_s} "
         f".venv/bin/python -B -m pytest {target} -q --no-cov -p no:cacheprovider -rfE --tb=no -n {workers}" +
         (f" {deselects}" if deselects else "")
     )
@@ -473,29 +578,26 @@ def _summary_of(text: str) -> str:
     return ""
 
 
-def _purge_pycache(distro: str, mirror: str) -> None:
+def _purge_pycache(mirror: str) -> None:
     """开工清字节码缓存 —— 只设 `PYTHONDONTWRITEBYTECODE` 挡不住**已存在**的旧 `.pyc`。"""
     mq = _bq(mirror)
-    _wsl(
-        distro,
+    _exec(
         f"cd {mq} && find src tests -name __pycache__ -type d -prune -exec rm -rf {{}} + 2>/dev/null; true",
         check=False
     )
 
 
-def _baseline(distro: str, mirror: str, out: Path, workers: int, timeout_s: int, *,
-              recompute: bool) -> tuple[set[str], str]:
+def _baseline(mirror: str, out: Path, workers: int, timeout_s: int, *, recompute: bool) -> tuple[set[str], str]:
     """量出「未变异时本来就红」的集合 —— verify 的判据是**与它的差集**, 不是「套件有没有失败」。
 
-    本机 WSL Linux 侧曾恒有 3 个既有平台失败(`test_alias_fs` ×2 · `test_relocate_paths` ×1, 2026-10-30
-    已修绿), 直接拿「套件失败」当 KILLED 会让每条候选都判 KILLED(全杀 = 没杀)。基线随镜像 HEAD 与并行度
+    直接拿「套件失败」当 KILLED 会让每条候选都判 KILLED(全杀 = 没杀); 基线随镜像 HEAD 与并行度
     变化, 所以缓存键带上两者; 命中就复用, 续跑不必重付这一遍。
     """
     mq = _bq(mirror)
     if _DRY:
         _say("[baseline] (dry-run 未跑)")
         return set(), "(dry-run)"
-    head = _wsl(distro, f"cd {mq} && git rev-parse --short HEAD", check=False).stdout.strip() or "unknown"
+    head = _exec(f"cd {mq} && git rev-parse --short HEAD", check=False).stdout.strip() or "unknown"
     cache = out / f"{BASELINE_CACHE_PREFIX}-{head}-n{workers}.json"
     if cache.exists() and not recompute:
         data = json.loads(cache.read_text(encoding="utf-8"))
@@ -504,8 +606,8 @@ def _baseline(distro: str, mirror: str, out: Path, workers: int, timeout_s: int,
         return fails, data.get("summary") or ""
 
     _say(f"[baseline] 先跑一遍未变异全套件, 量出「本来就红」的集合(-n {workers})")
-    _wsl(distro, f"cd {mq} && git checkout -- src/ 2>/dev/null", check=False)
-    proc = _wsl(distro, f"cd {mq} && {_suite_cmd(workers, timeout_s)}", check=False)
+    _exec(f"cd {mq} && git checkout -- src/ 2>/dev/null", check=False)
+    proc = _exec(f"cd {mq} && {_suite_cmd(workers, timeout_s)}", check=False)
     text = proc.stdout + "\n" + proc.stderr
     fails, summary = _fail_ids(text), _summary_of(text)
     if not summary:
@@ -555,7 +657,7 @@ def _verdict(rc: int, text: str, baseline: set[str], *, reconfirmed: bool | None
     return "KILLED", f"{summary} | 新增失败: {', '.join(sorted(new)[:3])}"
 
 
-def _reproduces(distro: str, mirror: str, ids: set[str], timeout_s: int) -> bool:
+def _reproduces(mirror: str, ids: set[str], timeout_s: int) -> bool:
     """只复跑「新增失败」的那几条 node id(变异体仍处于 applied 状态), 看是否还红。
 
     这是 KILLED 的防伪: 全套件里混着 flaky 用例时, 一次红不足以定罪。复跑成本 ~1-3s(几条用例),
@@ -564,18 +666,18 @@ def _reproduces(distro: str, mirror: str, ids: set[str], timeout_s: int) -> bool
     if not ids:
         return False
     sel = " ".join(shlex.quote(i) for i in sorted(ids))
-    proc = _wsl(distro, f"cd {_bq(mirror)} && {_suite_cmd(0, timeout_s, sel)}", check=False)
+    proc = _exec(f"cd {_bq(mirror)} && {_suite_cmd(0, timeout_s, sel)}", check=False)
     return bool(_fail_ids(proc.stdout + "\n" + proc.stderr) & ids)
 
 
-def _check_registry(distro: str, mirror: str) -> None:
+def _check_registry(mirror: str) -> None:
     """verify 前确认镜像里有**非空**的 mutmut 注册表。
 
     只看存在性不够: OOM/中断的一轮会留下 0 字节 `.meta`, 它能通过「文件在不在」的预检,
     随后逐条 `mutmut apply` 全报 APPLYFAIL —— 排障时还会误判成 apply 通道坏了(实测 2026-11-02
     中池 3 路 OOM 打断, 注册表被写成 0 字节)。空注册表没有可验证的变异, 语义等同缺失。
     """
-    reg = _wsl(distro, f"cd {_bq(mirror)} && find mutants -name '*.meta' -printf '%s %p\\n' 2>/dev/null", check=False)
+    reg = _exec(f"cd {_bq(mirror)} && find mutants -name '*.meta' -printf '%s %p\\n' 2>/dev/null", check=False)
     entries = [ln.strip() for ln in reg.stdout.splitlines() if ln.strip()]
     if reg.returncode != 0 or not entries:
         raise Fail("镜像里没有 mutmut 注册表(mutants/**/*.meta) —— 先跑 mutants.run 该目标再 verify; "
@@ -594,9 +696,8 @@ def cmd_verify(args: argparse.Namespace) -> int:
     已写进结果文件的 id 会跳过。
 
     **判据是差集, 不是「套件有没有失败」**: 先跑一遍未变异套件拿到基线失败集合, 每条候选只看
-    `本次失败 - 基线失败` 是否非空。基线本来就红(本机 Linux 侧 3 个平台失败)时, 老口径「有 failed
-    就算 KILLED」会把每条候选都判 KILLED —— 全杀 = 没杀。同理不能带 `-x`: 它会停在第一条**既有**
-    失败上, 变异体根本没被执行。
+    `本次失败 - 基线失败` 是否非空。基线本来就红时, 老口径「有 failed 就算 KILLED」会把每条候选
+    都判 KILLED —— 全杀 = 没杀。同理不能带 `-x`: 它会停在第一条**既有**失败上, 变异体根本没被执行。
 
     **新增失败还要复跑复现**才算 KILLED: 套件里混着 flaky 用例(端口绑定类)时, 一次红不足以定罪,
     复现不了记 FLAKY(未判定)。
@@ -606,12 +707,12 @@ def cmd_verify(args: argparse.Namespace) -> int:
     ids = _candidate_ids(args)
     if not ids:
         raise Fail("候选为空 —— 核 --only-status / --ids-file / 报告文件")
-    _ensure_mirror(args.distro, args.mirror, args.branch, refresh=not args.no_refresh, no_sync=args.no_sync)
-    _ensure_tool(args.distro, args.mirror)
-    mq = _bq(args.mirror)
+    mirror = require_mirror(args)
+    _ensure_mirror(mirror, args.branch, refresh=not args.no_refresh, no_sync=args.no_sync)
+    _ensure_tool(mirror)
 
     if not _DRY:
-        _check_registry(args.distro, args.mirror)
+        _check_registry(mirror)
 
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
@@ -625,9 +726,9 @@ def cmd_verify(args: argparse.Namespace) -> int:
         done = _done_ids(path.read_text(encoding="utf-8"))
     todo = [i for i in ids if i not in done]
 
-    _purge_pycache(args.distro, args.mirror)
+    _purge_pycache(mirror)
     baseline, baseline_summary = _baseline(
-        args.distro, args.mirror, out, args.workers, args.suite_timeout, recompute=args.recompute_baseline
+        mirror, out, args.workers, args.suite_timeout, recompute=args.recompute_baseline
     )
     _say(f"[verify] 候选 {len(ids)} 条(已验 {len(done)} · 本次 {len(todo)}) · 全套件 -n {args.workers}")
     _say(f"[verify] 判据: 本次失败 - 基线 {len(baseline)} 条既有失败 非空 **且复跑复现** ⇒ KILLED")
@@ -636,7 +737,7 @@ def cmd_verify(args: argparse.Namespace) -> int:
         _say("[verify] (dry-run) 以上为计划, 未执行")
         return 0
 
-    if not _DRY and not path.exists():
+    if not path.exists():
         path.write_text(
             f"# baseline {len(baseline)} 条既有失败 · {baseline_summary} · {', '.join(sorted(baseline))}\n",
             encoding="utf-8"
@@ -648,22 +749,19 @@ def cmd_verify(args: argparse.Namespace) -> int:
             t0 = time.time()
             # apply 后**不还原**: 新增失败要在这个变异体上复跑校验, 还原放到判定之后
             script = (
-                f"cd {mq} && git checkout -- src/ 2>/dev/null; "
+                f"cd {_bq(mirror)} && git checkout -- src/ 2>/dev/null; "
                 f".venv/bin/mutmut apply {mid} >/dev/null 2>&1 "
                 f"|| {{ echo 'APPLYFAIL apply 返回非零'; exit 9; }}; "
                 # apply 报成功但**没落地**(缓存与源码对不上)时必须停手: 跑的是原码 ⇒ 恒 SURVIVED
                 f"git diff --quiet -- src/ && {{ echo 'APPLYFAIL 变异未落地(apply 后 src/ 无改动)'; exit 9; }}; "
                 f"{_suite_cmd(args.workers, args.suite_timeout)}; exit $?"
             )
-            proc = _wsl(args.distro, script, check=False)
+            proc = _exec(script, check=False)
             text = proc.stdout + "\n" + proc.stderr
             verdict, summary = _verdict(proc.returncode, text, baseline)
-            if verdict == "KILLED" and not _reproduces(
-                args.distro, args.mirror,
-                _fail_ids(text) - baseline, args.suite_timeout
-            ):
+            if verdict == "KILLED" and not _reproduces(mirror, _fail_ids(text) - baseline, args.suite_timeout):
                 verdict, summary = _verdict(proc.returncode, text, baseline, reconfirmed=False)
-            _wsl(args.distro, f"cd {mq} && git checkout -- src/ 2>/dev/null", check=False)
+            _exec(f"cd {_bq(mirror)} && git checkout -- src/ 2>/dev/null", check=False)
             if verdict == "APPLY_FAIL":
                 apply_failed += 1
             elif verdict == "TIMEOUT":
@@ -679,7 +777,7 @@ def cmd_verify(args: argparse.Namespace) -> int:
             fh.write(f"{mid} :: {verdict} :: {summary}\n")
             fh.flush()
             _say(f"  [{i}/{len(todo)}] {time.time() - t0:.0f}s {verdict}  {mid}")
-    _wsl(args.distro, f"cd {mq} && git checkout -- src/ 2>/dev/null", check=False)
+    _exec(f"cd {_bq(mirror)} && git checkout -- src/ 2>/dev/null", check=False)
     _say(
         f"[verify] KILLED(假存活) {killed} · SURVIVED(真洞候选) {survived} · "
         f"APPLY_FAIL {apply_failed} · TIMEOUT {timed_out} · FLAKY {flaky} · UNKNOWN {unknown} -> {path}"
@@ -712,31 +810,62 @@ def cmd_gremlins(args: argparse.Namespace) -> int:
     return proc.returncode
 
 
-def cmd_status(args: argparse.Namespace) -> int:
-    """只读回显镜像与工具的就位情况。
+def _status_script(mirror: str) -> str:
+    """单镜像仓只读回显(容器 bash, 无旧 WSL zsh `$PWD` 失真坑, `$(...)` 常规形态即可)。
 
-    **每条 `echo` 都是 `cd {mq} && <直接命令>` 形态, 不用 `$(...)` 取相对路径** —— 本机 WSL 登录壳
-    实为 zsh: `cd X` 改了**真实 cwd**(`cd X && cmd` 正确), 但 `$PWD` 与 `$()` 子壳仍报 WSL 启动目录,
-    于是 `$(test -x .venv/bin/mutmut ...)` 会去**启动目录**找工具 ⇒ 恒报 `mutmut=no`(实际已装)。
-    `du -sh mutants` 同理(报空)。见坑档 memory-bank/pitfalls/testing/mutants-wsl-shell.md。
+    回显键保持旧口径: mirror= / head= / mutmut= / mutants= / not_killed= / only_mutate。
+    末行 only_mutate 带 fallback: 缺它(镜像未跑过 run)不该让整条命令回非零 ⇒ 假 [FAIL]。
     """
-    mq = _bq(args.mirror)
-    script = (
-        f"echo mirror={mq}; cd {mq} 2>/dev/null || {{ echo '[FAIL] 镜像不存在, 先跑 setup'; exit 3; }}; "
-        f"cd {mq} && {{ git rev-parse --short HEAD 2>/dev/null | sed 's/^/head=/' || echo head=none; }}; "
-        f"cd {mq} && (test -x .venv/bin/mutmut && echo mutmut=yes || echo mutmut=no); "
-        f"cd {mq} && {{ du -sh mutants 2>/dev/null | cut -f1 | sed 's/^/mutants=/' || echo mutants=none; }}; "
-        f"cd {mq} && {{ .venv/bin/mutmut results 2>/dev/null | wc -l | sed 's/^/not_killed=/'; }}; "
-        # 末行给 fallback: 回显是只读的, 缺 only_mutate(镜像未跑过 run)不该让整条命令回非零 ⇒ 假 [FAIL]
-        f"cd {mq} && {{ grep -m1 only_mutate pyproject.toml 2>/dev/null || echo 'only_mutate = (未写, 先跑一轮 run)'; }}"
-    )
-    proc = _wsl(args.distro, script, check=False)
-    _say(proc.stdout.strip() or proc.stderr.strip())
-    out = Path(args.out)
-    if out.is_dir():
-        files = sorted(out.glob("*-results.txt"))
+    m = _bq(mirror)
+    return f"""set -u
+m={m}
+if [ ! -d "$m" ]; then echo "[FAIL] 镜像不存在($m), 先跑 mutants.setup"; exit 3; fi
+cd "$m" || exit 3
+echo "mirror=$m"
+echo "head=$(git rev-parse --short HEAD 2>/dev/null || echo none)"
+if [ -x .venv/bin/mutmut ]; then echo "mutmut=yes"; else echo "mutmut=no"; fi
+v=$(du -sh mutants 2>/dev/null | cut -f1)
+echo "mutants=${{v:-none}}"
+echo "not_killed=$(.venv/bin/mutmut results 2>/dev/null | wc -l | tr -d ' ')"
+grep -m1 only_mutate pyproject.toml 2>/dev/null || echo "only_mutate = (未写, 先跑一轮 run)"
+exit 0"""
+
+
+def _status_all_script() -> str:
+    """全部镜像仓的概览(容器 bash): 每仓一行 head + 未杀死条数; 根目录不存在不算失败。"""
+    return f"""set -u
+root={_bq(MUTATION_ROOT)}
+if [ ! -d "$root" ]; then echo "(还没有镜像仓: $root 不存在, 先跑 mutants.setup)"; exit 0; fi
+found=0
+for d in "$root"/*/; do
+  [ -d "$d" ] || continue
+  found=1
+  d=${{d%/}}
+  head=$(git -C "$d" rev-parse --short HEAD 2>/dev/null || echo none)
+  nk=$(cd "$d" && .venv/bin/mutmut results 2>/dev/null | wc -l | tr -d ' ')
+  # 兜底看工具就位性而非输出非空: 管道末 wc -l 恒出数字, mutmut 缺失时会让 0 假装「全杀干净」
+  [ -x "$d/.venv/bin/mutmut" ] || nk='?'
+  echo "mirror=$d head=$head not_killed=$nk"
+done
+[ "$found" = 1 ] || echo "(mutation/ 下还没有镜像仓, 先跑 mutants.setup)"
+exit 0"""
+
+
+def _print_last_result(out: str) -> None:
+    out_path = Path(out)
+    if out_path.is_dir():
+        files = sorted(out_path.glob("*-results.txt"))
         if files:
             _say(f"[上次结果] {files[-1]} ({files[-1].stat().st_size} B)")
+
+
+def cmd_status(args: argparse.Namespace) -> int:
+    """只读回显镜像与工具的就位情况; 不带 --mirror/--target 时列出 mutation/ 下全部镜像仓。"""
+    mirror = resolve_mirror(args)
+    script = _status_all_script() if mirror is None else _status_script(mirror)
+    proc = _exec(script, check=False)
+    _say(proc.stdout.strip() or proc.stderr.strip())
+    _print_last_result(args.out)
     return 0 if proc.returncode == 0 else 1
 
 
@@ -747,7 +876,11 @@ def main(argv: list[str] | None = None) -> int:
     global _DRY
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("cmd", choices=("setup", "run", "report", "verify", "gremlins", "status"))
-    p.add_argument("--target", help="run: 只变异的目标 glob(相对仓库根, 例 '**/config/*.py'); gremlins: 目标文件")
+    p.add_argument(
+        "--target",
+        help="run: 只变异的目标 glob(相对仓库根, 例 '**/config/*.py'); gremlins: 目标文件; "
+        "其余: 不给 --mirror 时按它派生镜像仓 <pkg>"
+    )
     p.add_argument("--pool", nargs="*", default=[], help="测试选择池(定向的几个文件; 别用全 tests)")
     p.add_argument(
         "--children", type=int, default=DEFAULT_CHILDREN, help=f"mutmut --max-children(默认 {DEFAULT_CHILDREN})"
@@ -779,13 +912,12 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--from-report", help="verify: 用 mutants.report 的产物文件挑候选")
     p.add_argument("--ids-file", help="verify: 直接给一份候选 id 清单(每行一条)")
     p.add_argument("--only-status", default="survived", help="verify: 从 --from-report 里挑哪些状态(默认 survived)")
-    p.add_argument("--distro", default=DEFAULT_DISTRO, help=f"WSL 发行版(默认 {DEFAULT_DISTRO})")
-    p.add_argument("--mirror", default=DEFAULT_MIRROR, help=f"WSL 镜像仓路径(默认 {DEFAULT_MIRROR})")
+    p.add_argument("--mirror", default="", help=f"镜像仓容器内绝对路径(默认空 = 按 --target 派生 {MUTATION_ROOT}/<pkg>)")
     p.add_argument("--branch", default=DEFAULT_BRANCH, help=f"镜像跟的分支(默认 {DEFAULT_BRANCH})")
     p.add_argument("--out", default=DEFAULT_OUT, help=f"结果落盘目录(默认 {DEFAULT_OUT}, 别落仓内)")
     p.add_argument("--no-refresh", action="store_true", help="不 fetch/硬切镜像(用现成的工作树)")
-    p.add_argument("--no-sync", action="store_true", help="不跑 uv sync")
-    p.add_argument("--dry-run", action="store_true", help="只打印将执行的命令")
+    p.add_argument("--no-sync", action="store_true", help="不跑 venv 准备段(cp 模板 + export/pip delta)")
+    p.add_argument("--dry-run", action="store_true", help="只打印将执行的命令(不要求 docker/容器在跑)")
     args = p.parse_args(argv)
     _DRY = args.dry_run
 
@@ -793,8 +925,15 @@ def main(argv: list[str] | None = None) -> int:
         sys.stderr.write("[FAIL] 这条子命令必须给 --target\n")
         return 2
     try:
-        if args.cmd != "gremlins":
-            check_mirror(args.mirror)
+        if args.cmd != "gremlins" and not _DRY:
+            if shutil.which("docker") is None:
+                raise Fail("没装 docker: testbed 以 Docker 常驻容器为宿主(D1), 没 docker 跑不了")
+            state = linux_env.container_state()
+            if state is None or not state[0]:
+                raise Fail(
+                    f"常驻容器 {CONTAINER} 不在或未运行 —— mutants 不自动构建环境(环境面与测试面分离)。"
+                    "NEXT: 先跑 `commands run test.linux-env`(幂等, 镜像已存在时秒级), 再重跑本 task。"
+                )
         return {
             "setup": cmd_setup,
             "run": cmd_run,

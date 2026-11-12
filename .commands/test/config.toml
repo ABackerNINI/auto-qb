@@ -63,7 +63,7 @@ note    = "S3(计划 26-11-12-0152): 复用 test.linux 的容器核验/tar 推�
 doc     = "../../memory-bank/plans/26-11-12-0152-plan-linux-testbed-docker.html"
 
 # S1 基建(计划 26-11-12-0152): Docker 常驻容器 testbed 的环境底座。test.linux / test.linux-e2e
-# / mutants.* 六条全部以这个容器为宿主(docker exec; S2 起落地, 现状 test.linux 走自带容器),
+# / mutants.* 六条全部以这个容器为宿主(docker exec; test.linux S2 落地, e2e S3, mutants.* S4),
 # 换机 clone 后先跑这条。
 [tasks."test.linux-env"]
 script  = "linux_env.py"
