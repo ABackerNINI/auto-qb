@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>relocate 收尾窗写路径误拦修正: 添加/删种/删链门判据形态感知 + 成员收缩自愈</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="relocate-form-aware-gates">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-13-0448">
+<meta name="doc-updated" content="26-11-13-0448">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-13-backend-relocate-form-aware-gates.md">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: relocate-form-aware-gates</div>
+<h1>relocate 收尾窗写路径误拦修正: 添加/删种/删链门判据形态感知 + 成员收缩自愈</h1>
+<p class="lede">本篇只回答: relocate 收尾窗(armed/rewritten)内旧根的三个写路径判据 —— 添加预检、删链门、删种拦截 —— 为何把「文件级别名 + 组外异名种子」的合法添加与带文件删除误判成「删链门永久依赖 / 会穿别名删数据」,如何以「种子文件清单 × 别名链接路径交集」的形态感知判据修正,并补上 0808 重构丢失的成员收缩收敛行 —— 使生产现状(armed + 组外种子已落旧根)在修复后的代码路径上零人工干预自愈。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-13-0448 · <b>doc-updated</b> 26-11-13-0448 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 2026-11-13 生产误拦报告(26586 部署, job <code>jr-abb68712234e</code>, FILE_LINKS 形态, src <code>R:\Download\PTing</code> → dst <code>R:\Download\待删</code>) + 三轮 grilling 拍板 D1-D8 + 设计文档对齐(1604 §3.6 场景表 / 0808 D16 / 1300 R5-R7 与 blocker 修复 9f0cbe4e)
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+
+<h3>为什么做</h3>
+<p>生产整组移动(文件级别名形态)进入待收尾窗口后,旧根目录出现两单<b class="bad">误拦</b>(用户定性, D2/D3):</p>
+<table>
+  <tr><th>#</th><th>操作</th><th>现行行为</th><th>事实</th></tr>
+  <tr>
+    <td>误拦①</td>
+    <td>在旧根 <code>R:\Download\PTing</code> 下添加新种子(文件夹包,异名)</td>
+    <td>「落点确认」弹窗,断言「账面会记在旧路径 —— 成为删链门的永久依赖(旧路径别名将永不删除)」</td>
+    <td>文件级别名下旧根是<b>真实目录</b>,别名只是成员内容根里的逐文件链接;异名新种子的数据落原盘真实目录,<b>不经别名、不依赖别名</b>。原设计 1604 §3.6 场景 1 明文「无影响 / 独立成组」</td>
+  </tr>
+  <tr>
+    <td>误拦②</td>
+    <td>删除 PTing 下<b>组外别的种子</b>(带文件)</td>
+    <td>D16 拒绝:「带文件删除会经别名删到已迁往新位置的数据」</td>
+    <td>组外异名种子的文件是<b>真实文件</b>,删除不经任何链接;D16 的 N5 依据(junction 穿透 / 文件级 symlink 跟随)对它们不成立</td>
+  </tr>
+</table>
+<p>根因:0808 D16 的前提「pending 期往旧根添加非本组种子 = 删链门永久依赖」是<b>不分别名形态的过度泛化</b> —— 它只对目录别名(一切落点被 junction 重定向,真依赖)与文件级<b>同名</b>(落点撞链接树,真依赖 / 真覆盖,1604 §3.6 场景 2/3)成立。三处判据忠实复现了这个过度泛化(§02)。<span class="wr">附带缺陷</span>:0808 重定义对账表时丢失了原设计 1604 §3.5 对账表的「种子已不存在 → failed(torrent_gone) 保留现场」行 —— 收尾窗内成员消失(包括 D16 文案自己推荐的出口「仅删除种子」)后 job 永不收敛,1300 D4/R5 披露的「D16 摩擦收尾后消失」前提(收尾会及时发生)随之击穿。</p>
+
+<h3>做到什么程度算成</h3>
+<ol>
+  <li><b>添加面</b>:文件级收尾窗内,异名落点静默放行(§3.6 场景 1);同名落点(落点即链接)仍 confirm 且文案改准(场景 2/3);目录级 confirm 保留(D10/D16 原样)且判据扩成前缀(补「深层添加绕过弹窗」覆盖洞)。</li>
+  <li><b>删链门</b>:文件级 job 的组外种子按「文件清单 × 链接路径交集」精判 —— 不相交(异名)不算依赖,收尾照常收敛;目录级判据原样(scope 前缀 + src 等值面)。</li>
+  <li><b>删种拦截</b>:文件级 job 的 D16 拦截面收窄为同一交集判据 —— 组外异名种子带文件删除当场放行;成员 / 同名撞链接根仍拦。</li>
+  <li><b>成员收缩</b>:收尾窗内成员经多拍确认消失 → 收缩 <code>job.hashes</code> + WARNING 留痕;全部成员删光 = 空集核验通过,自然走删链门收尾。</li>
+  <li><b>自愈</b>:生产现状(armed + 组外种子已落旧根,无论弹窗当时确认与否)在修复后的代码路径上<b>零人工干预收敛到 done</b> —— 生产不跑任何恢复操作(用户拍板 D7);qB 下一次重启(自然或经「立即收尾」按钮)即完成收尾。</li>
+</ol>
+
+<h3>设计底线 / 不变量</h3>
+<ul>
+  <li><b>本计划是对 0808 D16 的「前提形态化修正」,不是推翻</b>:confirm 预防面(D10 防静默改盘)与 N5 拦截本体保留;修正的只是判据对文件级形态的适用范围。</li>
+  <li>数据安全三约束(0546 §1.3)全程断言:不删种 / 不 skip_check 重加 / 不读盘(哈希)校验。</li>
+  <li><b>豁免判据宁拦勿漏</b>:交集判据的输入(文件清单)不可得 → 照旧拦(现状行为),绝不猜「不相交」。</li>
+  <li>判据纯函数不触盘;预检拦截先于任何数据移动(fail-fast)。</li>
+  <li>生产 26586/16585 与 <code>I:\PT\</code>、<code>config.yml</code>、<code>auto-qb-data/</code> 零触碰;真机验证只在测试实例 + real-fake 假种子(D7)。</li>
+  <li>真机实验先行(1300 D7 同款纪律):任何结构判据先上真机构造场景实证,与推演不符即回炉,不带假设进实现。</li>
+</ul>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+
+<table>
+  <tr><th>环节</th><th>位置</th><th>事实</th><th>对修法的含义</th></tr>
+  <tr>
+    <td>添加预检(收尾窗分支)</td>
+    <td><code>relocate_units.py:825-866</code> evaluate_add 规则 1</td>
+    <td>判据 = 相位 ∈ FINALIZE_WINDOW 且 <code>_norm(save_path) == _norm(job.src)</code>(:832),<b>不看 alias_kind、不看落点名</b>;目录级分支补「实际落点+卷剩余」,文件级分支断言「账面记旧路径 → 删链门永久依赖(别名永不删除)」(:853-866)</td>
+    <td>文件级异名落点的断言失实(数据落原盘真实目录);分流必须以形态为第一维</td>
+  </tr>
+  <tr>
+    <td>添加预检覆盖洞</td>
+    <td>同上 规则 1/2(:832/:876)</td>
+    <td>两规则都要求 <code>save_path</code> 恰等 <code>job.src</code>;往旧根更深路径添加完全绕过弹窗,但照样顶进删链门前缀面 → 目录级静默卡死、文件级被误计依赖</td>
+    <td>目录级判据需扩前缀;文件级深层添加本就是安全落点(场景 1)</td>
+  </tr>
+  <tr>
+    <td>删链门</td>
+    <td><code>relocate_units.py:1285-1306</code> chain_gate_hits;<code>relocate_exec.py:1062-1078</code> _chain_gate_deps</td>
+    <td>判据 = <code>under_alias_root(sp, scope)</code> 前缀面 + <code>equal_root=job.src</code> 仅等值面(:1304);成员豁免仅按 hash。等值面来自 1300 收口评审 blocker 修复 9f0cbe4e —— 其「误放删链 = 组外种子断粮」论据只对目录级成立(数据确经别名)</td>
+    <td>文件级 job 的组外异名种子被误计依赖 → job 卡 chain_deps、别名永不删;文件级需换精确判据</td>
+  </tr>
+  <tr>
+    <td>删种拦截 D16</td>
+    <td><code>qbapi.py:42-56</code> DeleteBlockedError;<code>:218-245</code> _relocate_delete_blocked;<code>relocate_units.py:1270-1282</code> alias_roots_of</td>
+    <td>拦截面 = <code>under_alias_root(sp, (raw_root,))</code>,raw_root 对 file/dir 两形态同取 <code>job.src</code>(:1281);TAG_PROBE 豁免保留(:239)</td>
+    <td>文件级 job 的组外异名种子数据真实,删除不经链接 → 误拦;目录级全量拦截有 N5 实测依据,保留</td>
+  </tr>
+  <tr>
+    <td>成员删除无收敛</td>
+    <td><code>relocate_exec.py:780-785</code> _all_at_dst;<code>relocate_units.py:1179-1212</code> reconcile;<code>relocate_exec.py:989-1060</code> _step_verify/_verify_hang</td>
+    <td>成员从 store 消失 → <code>all_at_dst=False</code> → 恒 <code>ACT_WAIT</code>(:1212)job 静默悬挂;<code>job.hashes</code> 全库无收缩点(grep 实证);move 相位有 <code>torrent_gone → failed</code>(<code>relocate_exec.py:164</code>),收尾窗无对应行。1604 §3.5 对账表原行:「种子已不存在 → failed(用户删了种子), 保留链接现场交人处理」—— 0808 重定义对账表时丢失</td>
+    <td>D16 文案推荐的出口「仅删除种子」对成员是陷阱;需补收缩收敛行</td>
+  </tr>
+  <tr>
+    <td>反馈面文案</td>
+    <td><code>add_torrent.js:673</code>;<code>qbapi.py:51-55</code>;<code>relocate_exec.py:1080-1089</code></td>
+    <td>弹窗 body 硬编码「落点与请求路径不一致(该目录已在整组迁移中建了别名)」—— 文件级分支无 actual_path 时该断言无据;D16 出路「等迁移收尾完成后重试」无收敛保证;删链门文案按 save_path 面措辞</td>
+    <td>文案随判据分流改准;出路指向「立即收尾」按钮(D14, <code>routes/relocate_chain.py:119</code> 已存在)与收缩后自收敛语义</td>
+  </tr>
+  <tr>
+    <td>别名链接账</td>
+    <td><code>relocate_units.py:283/294</code>(alias_kind: "file" | "dir" | "");job.alias_paths 建链落账(armed 必非空)</td>
+    <td>文件级别名 = 成员内容路径上的逐文件链接,链接路径全集在 <code>job.alias_paths</code>;收尾窗内别名在位(对账 _alias_live)</td>
+    <td>「文件清单 × alias_paths 交集」是三处判据共用的精确谓词候选</td>
+  </tr>
+</table>
+
+<div class="aside">文档出处:1604 §3.6 场景表(行 1 = 无影响/独立成组;行 2/3 = 同名共享/覆盖;行 4-6 = 目录级重定向须告知)+ D10(防静默改盘,确认面依据);0808 D16(收尾窗 confirm 变更承重 / 删种拦截)+ §07 风险表「漏网者成为删链门依赖 —— 别名正确地不删,反馈面给出解法」;1300 D4/D5(R5 note 披露 D16 摩擦「收尾后消失」)、R7 删链门重锚(锚 job.scope + 成员豁免)与收口 blocker 修复 9f0cbe4e(等值面)。本计划不恢复 1604 D7 的「动态收尾集合」收编语义(0808 已以固定 hashes + fastresume 改写替代):文件级异名种子数据本就独立,无需收编;目录级同名经别名落进的组外种子维持「依赖 + 反馈面解法」现状。</div>
+
+<h2><span class="no">§03</span>方案总览</h2>
+
+<p>主线:三处判据共用一个精确谓词 —— <b>文件级 job 下,「种子的文件清单与 job.alias_paths 是否相交」</b>;相交 = 真(依赖/穿链接风险),不相交 = 误拦面豁免。目录级判据原样保留。外加成员收缩行与文案修正。</p>
+
+<table>
+  <tr><th>#</th><th>级别</th><th>内容</th><th>拍板</th></tr>
+  <tr>
+    <td>R1</td>
+    <td>添加预检形态分流</td>
+    <td><code>evaluate_add</code> 收尾窗分支(<code>relocate_units.py:825-866</code>)重写:<b>文件级 job</b> —— ① 落点本身是链接(<code>landing_is_link</code>,同名文件 —— 文件级形态的成员内容根目录不是链接,同名目录碰撞由 ② 首段判据接住)→ confirm,文案 = 场景 2/3(同名同内容 = 经链接共享、真依赖;同名不同内容 = 写入将覆盖链接目标数据);② 落点首段撞任一成员链接根(<code>job.alias_paths</code> 在 src 下第一段派生)→ confirm(保守);③ 其余(异名)→ <span class="good">ok 静默放行</span>(§3.6 场景 1)。磁力/URL/NoSubfolder 布局不可判定不作第四分支 —— 落点按名字判定,残余碰撞由既有执行侧背网兜住(跨组交叉检测 = 场景 3 处置;同名共享 = R2 交集判依赖)。<b>目录级 job</b> —— confirm 保留,判据从 <code>save_path == src</code> 扩为 <code>under_alias_root(save_path, (src,))</code>(深层添加也进弹窗,补覆盖洞);<code>actual_path</code> 的 rel 改按 <code>job.src</code> 计算(修 <code>save_path ≠ src</code> 时错算)</td>
+    <td>D4</td>
+  </tr>
+  <tr>
+    <td>R2</td>
+    <td>删链门文件级精确化</td>
+    <td><code>chain_gate_hits</code>(<code>relocate_units.py:1285-1306</code>)/ <code>_chain_gate_deps</code>(<code>relocate_exec.py:1062-1078</code>):候选面不变(save_path 在 scope 下或恰等 src 的组外种子,预过滤便宜);<b>文件级</b> verdict 换成「候选种子文件清单(qB files API,走 <code>relocate_plan._file_map</code> 同款缓存单点)× <code>job.alias_paths</code> 交集」—— 相交 = 依赖,不相交 = 豁免,清单不可得 = 保守计依赖;<b>目录级</b>原样(scope 前缀 + src 等值面,equal_root 保留)。本组豁免(按 hash)与全员核验前置不变 —— 进删链门时成员已直读 dst,链接只可能被组外同名种子依赖;<b>候选面边界如实披露</b>: 组外种子 save_path 为 src 祖先且内容根恰覆盖 src 的形态,save_path 预过滤收不到、交集判据不运行 —— 现状既有洞,非本计划引入,本计划不扩候选面,是否闭合另行裁决(§07 边界行)</td>
+    <td>D4</td>
+  </tr>
+  <tr>
+    <td>R3</td>
+    <td>删种拦截精确化</td>
+    <td><code>_relocate_delete_blocked</code>(<code>qbapi.py:218-245</code>):候选面不变(<code>under_alias_root(sp, job.src)</code>);<b>文件级</b> verdict 换成同一交集判据(文件清单 × <code>job.alias_paths</code>)—— 不相交(组外异名)→ <span class="good">放行</span>(纯真实文件删除),相交(成员 / 同名撞链接根)→ 拦;清单不可得 → 保守拦(现状)。<b>目录级</b>原样(N5 junction 通路全量拦)。TAG_PROBE 豁免保留;路径归一走 <code>_norm</code> 同款单点</td>
+    <td>D4/D6</td>
+  </tr>
+  <tr>
+    <td>R4</td>
+    <td>成员收缩(补 0808 丢行)</td>
+    <td>收尾窗(armed/rewritten)内,成员仅在「qB 在线 + 快照非陈旧」时判缺席,连续 N 拍(实施期钉值并单测)缺席 → 从 <code>job.hashes</code> 收缩(<code>_set_job</code>,单一写线程)+ WARNING 留痕 + reason/last_error 注记(反馈面可见「成员已删除,组账收缩」);全部成员删光 = 空集核验通过 → 删链门 → 收尾(别名照删)。配套:回收 daemon 对「成员 fastresume 文件缺失」的改写步从失败改为跳过并记 settled(前提「qB 删种即删 fastresume」列入 P1 E5 实证核对,不引既有 N 系记录);<code>relocating_hashes</code> 登记随 <code>_set_job → _sync_relocating</code>(relocate_mod.py:243)整表重算自然收缩(实施期验证)。move 相位 <code>torrent_gone → failed</code>(<code>relocate_exec.py:164</code>)不动 —— 收缩只限收尾窗</td>
+    <td>D5</td>
+  </tr>
+  <tr>
+    <td>R5</td>
+    <td>文案改准</td>
+    <td>① D16 文案(<code>qbapi.py:51-55</code>):出路改「仅删除种子(不含文件)—— 收尾窗内删成员后组账自动收缩、收尾自动完成,数据留新位置待收尾后清理」+「或用『立即收尾』按钮加速收尾后重试」;② <code>_chain_deps_text</code>(<code>relocate_exec.py:1080-1089</code>):文件级 job 随 R2 语义改措辞(「N 个种子的文件与别名链接重叠」);③ <code>add_torrent.js:673</code> body 不再无条件断言「落点与请求路径不一致」—— 有 <code>actual_path</code>(目录级分支)才用该句,否则以 reason 文本作 body</td>
+    <td>D4/D6</td>
+  </tr>
+  <tr>
+    <td>R6</td>
+    <td>自愈验收(生产等价态)</td>
+    <td>测试实例构造生产等价现场:FILE_LINKS job armed + 组外异名种子若干已落旧根(模拟「弹窗可能确认过」)+ qB 不重启。断言三件:① 组外种子带文件删除当场成功;② 新添加异名种子静默 ok;③ 重启 qB(等价生产自然重启)→ 改写 → 核验 → 删链门(豁免生效)→ 别名删除 → done,全程零人工清理。<b>生产口径</b>:生产零触碰、不写 runbook、不做恢复操作 —— 代码上线 + auto-qb 重启后,现状在定点判据下自然收敛(qB 下一次重启即完成收尾,窗口期内添加/删除不再误拦)</td>
+    <td>D7</td>
+  </tr>
+</table>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+
+<h3>P1 真机实验先行(改代码前;全部测试实例 + real-fake 假种子;回炉条款)</h3>
+<table>
+  <tr><th>E</th><th>目的</th><th>构造</th><th>断言 / 判定</th></tr>
+  <tr><td>E1</td><td>复现两单误拦(基线取证)</td><td>FILE_LINKS 组迁移武装 + 组外异名种子落旧根</td><td>现行代码:异名添加弹窗(文件级分支文案)+ 组外异名带文件删除被 D16 拒 —— 与生产报告等价</td></tr>
+  <tr><td>E2</td><td>异名添加放行 + 全链路成立</td><td>同 E1 构造,armed 态异名添加</td><td>预检 ok 零弹窗;立即收尾/重启 → 改写 → 核验 → 删链门(豁免生效)→ 收尾 done;新种子照常做种、账面 1.00、零 recheck、零拒载</td></tr>
+  <tr><td>E3</td><td>同名仍拦 + 真依赖实证</td><td>armed 态添加同名同内容跨种种子</td><td>confirm(场景 2 文案);确认后其文件清单与链接相交 → 删链门计依赖(别名正确保留);删除该种子账面 → 依赖清零 → 收尾恢复</td></tr>
+  <tr><td>E4</td><td>组外异名带文件删除放行</td><td>armed 态删除组外异名种子(带文件)</td><td>当场删除成功;真实文件清干净;别名与成员做种无损</td></tr>
+  <tr><td>E5</td><td>成员收缩收敛</td><td>armed 态对成员「仅删除种子」→ 观察 N 拍;再逐个删光</td><td>收缩 + WARNING 留痕;全部删光 → 空集核验 → 删链门 → 收尾 done,别名删除;daemon 对缺失 fastresume 跳过不失败</td></tr>
+  <tr><td>E6</td><td>目录级回归</td><td>DIR_ALIAS 形态组 + 深层路径添加</td><td>confirm 不松动、深层添加新弹窗、actual_path 按正 rel 展示;D16 目录级全量拦截原样</td></tr>
+  <tr><td>E7</td><td>交集判据取数核验</td><td>files API / _file_map 缓存单点对 FILE_LINKS 与 NoSubfolder 形态取清单</td><td>清单与磁盘实况一致;<code>_norm</code> 归一后交集判定正确</td></tr>
+  <tr><td>E8</td><td>不可判定保守回归</td><td>注入清单取数失败</td><td>删链门计依赖、D16 照旧拦 —— 宁拦勿漏</td></tr>
+  <tr><td>E9</td><td>自愈全链(生产等价态)</td><td>R6 三断言全跑</td><td>零人工干预收敛 done;窗口期内两单误拦均消失</td></tr>
+</table>
+<p><b>回炉条款</b>:任一 E 与 §03 推演不符 → 停,回 §03 改判据,重走受影响 E,才进 P2。禁止「实验结果与设计不符就调实验」。</p>
+
+<h3>P2-P4</h3>
+<table>
+  <tr><th>期</th><th>内容</th><th>验收判据</th></tr>
+  <tr><td>P2</td><td>纯函数 + 单测:<code>evaluate_add</code> 分流表驱动 / <code>chain_gate_hits</code> 交集判据 / D16 判据 / 收缩判据(N 拍 + qB 在线前提)/ 目录级前缀扩面与 rel 修正;daemon 缺失 fastresume 跳过</td><td>单测全绿;既有 relocate 表驱动用例按新判据重写;各文件头 docstring「测试计划」清单同步(仓库守卫)</td></tr>
+  <tr><td>P3</td><td>实现:四处判据(R1-R4)+ 文案三处(R5)+ add_torrent.js body 分流</td><td>单测过;前端契约测试与五主题静态渲染检查过</td></tr>
+  <tr><td>P4</td><td>真机全链路验收:E1-E9 在实现后代码路径复跑;回归既有 relocate 测试面</td><td>E1-E9 全 PASS;<code>commands run test.full</code> 全绿 → 基线切片(数字实测誊写)</td></tr>
+</table>
+<p><b>收尾 DoD</b>:code-review(触安全敏感面,强制)→ kb.wrap → 代码事实回写 memory-bank → 基线切片。</p>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p>无遗留 —— 三轮 grilling 拍板 D1-D8 全部落档(§06)。</p>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+  <tr><th>#</th><th>结论</th><th>日期</th></tr>
+  <tr><td>D1</td><td>目标拓扑勘误:dst = <code>R:\Download\待删</code>(兄弟目录),非源内嵌套;FILE_LINKS 形态、qB 未重启、job 仍 armed(用户贴文实证)</td><td>2026-11-13</td></tr>
+  <tr><td>D2</td><td>误拦①定性:文件级收尾窗内异名添加被 confirm = 误拦(用户)</td><td>2026-11-13</td></tr>
+  <tr><td>D3</td><td>误拦②定性:删除对象 = PTing 下组外异名种子,被 D16 判据误拦(用户)</td><td>2026-11-13</td></tr>
+  <tr><td>D4</td><td>修正框架 = 三处判据形态感知(交集谓词共用);confirm 预防面与 N5 拦截本体保留 —— 对 0808 D16 是前提形态化修正,非推翻;不恢复 D7 动态收尾集合收编语义(用户按推荐)</td><td>2026-11-13</td></tr>
+  <tr><td>D5</td><td>成员收缩纳入本期(R4;补 0808 丢失的成员消失收敛行)(用户按推荐)</td><td>2026-11-13</td></tr>
+  <tr><td>D6</td><td>成员带文件删除(收尾窗内)保守案:维持拦截 + 文案改准(出路 = 仅删种子[配合 R4 收敛] + 立即收尾按钮);进取案(摘链+精确删 dst 树)不入本期(用户按推荐)</td><td>2026-11-13</td></tr>
+  <tr><td>D7</td><td>生产零触碰:不写 runbook、不做生产恢复操作;仅修代码使现状自愈(R6 口径)(用户)</td><td>2026-11-13</td></tr>
+  <tr><td>D8</td><td>范围与验收:一次计划全修 + 真机实验先行(1300 D7 同款纪律,含回炉条款)+ E1-E9 验收矩阵(用户按推荐)</td><td>2026-11-13</td></tr>
+</table>
+<div class="aside">第一轮 grilling 的三处误读(把弹窗存在当缺陷并提议静默重定向、把 D16 拦截当过度保守、把「仅删种子悬挂」当设计意图)经设计文档对齐修正 —— 判据出处以 1604 §3.6 场景表与 0808 D16 原文为准,已在 §01/§02 引文行标注。</div>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+  <tr><th>风险</th><th>触发条件</th><th>对策</th></tr>
+  <tr><td>豁免判据误放(真依赖被豁免 → 断粮)</td><td>文件清单与链接的实际交集与判据不一致(取数错/归一错)</td><td>清单不可得一律保守计依赖/拦(E8);E7 逐形态核对取数;<code>_norm</code> 单点归一;同名跨种种子文件清单与链接全等 → 必判依赖(E3 实证)</td></tr>
+  <tr><td>候选面外祖先形态漏判(既有洞,如实披露)</td><td>组外种子 save_path 为 src 祖先且内容根恰覆盖 src(如 save_path=R:\Download、name=PTing),文件清单与 alias_paths 真实相交</td><td>候选面(save_path 在 scope 下或恰等 src)收不到它 → 删链门漏计依赖、D16 不拦其带文件删除 —— 现状既有洞,非本计划引入;本计划不扩候选面(避免范围膨胀),文本如实披露,是否闭合(候选面加祖先格)另行裁决</td></tr>
+  <tr><td>files API 开销</td><td>删除/核验路径对候选种子逐个取清单</td><td>候选面先经 save_path 预过滤(同现状);清单走 <code>_file_map</code> 同款缓存单点;仅收尾窗 verify/删除消费,非热路径</td></tr>
+  <tr><td>磁力/URL/NoSubfolder 布局不可判定</td><td>落点按名字判定,文件集未知</td><td>不设「不可判定 → confirm」分支(否则修复失效);落点即链接 / 首段撞链接根仍 confirm;残余碰撞由跨组交叉检测(场景 3 处置)与 R2 交集判依赖兜住 —— 均为既有设计背网</td></tr>
+  <tr><td>收缩误判(qB 同步抖动/断连)</td><td>store 短暂缺行被当成删除</td><td>仅在 qB 在线 + 快照非陈旧时判;连续 N 拍缺席才收缩(E5 实测钉值);move 相位 torrent_gone→failed 语义不动</td></tr>
+  <tr><td>收缩与改写账不一致</td><td>成员已删但 daemon 仍试图改写其 fastresume</td><td>qB 删种即删 fastresume 文件(P1 E5 核对该前提)→ daemon 改写步对缺失文件跳过并记 settled(非失败);R4 配套件</td></tr>
+  <tr><td>目录级前缀扩面误伤</td><td>深层合法添加被新弹窗拦</td><td>目录级深层添加本就经 junction 重定向(D10 须告知)—— 弹窗即设计语义;E6 回归 actual 展示正确性</td></tr>
+  <tr><td>生产自愈依赖 qB 重启</td><td>fastresume 改写只能在 qB 下线窗口(N1 铁律)</td><td>窗口期内的两单误拦已全部消除(修复主体);qB 自然重启即收敛;「立即收尾」按钮(D14)为用户侧加速路径,不算人工解卡 —— D7 口径</td></tr>
+  <tr><td>存量测试漂移</td><td>evaluate_add / chain_gate / D16 表驱动用例钉住旧行为</td><td>P2 同轮重写,不绕过不删断言;守阵语义演进留痕</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-13-0448</span> 初版:生产误拦报告(job jr-abb68712234e, FILE_LINKS, 误拦①异名添加弹窗 / 误拦②组外异名带文件删除被拒)→ 设计文档对齐(1604 §3.6 场景表 / 0808 D16 / 1300 R5-R7)→ 三轮 grilling 拍板 D1-D8 → 判据形态感知 R1-R3 + 成员收缩 R4 + 文案 R5 + 自愈验收 R6;分期 P1(真机先行 E1-E9) - P4。</li>
+</ul>
+
+</div>
+</body>
+</html>
