@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>relocate 形态感知判据 P1 真机实验: E1-E9 子集取证(改码前基线)</title>
+<meta name="doc-type" content="report">
+<meta name="doc-topic" content="relocate-form-aware-gates">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-11-13-0617">
+<meta name="doc-updated" content="26-11-13-0617">
+<meta name="doc-refs" content="memory-bank/plans/26-11-13-0448-plan-relocate-form-aware-gates.html">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">REPORT · memory-bank · doc-topic: relocate-form-aware-gates</div>
+<h1>relocate 形态感知判据 P1 真机实验: E1-E9 子集取证(改码前基线)</h1>
+<p class="lede">本篇只回答: 计划 26-11-13-0448 §04 P1 的真机实验子集(E1 基线取证 / E7 取数核验 / E5·E3 前提 / E6 目录级基线 / E2·E4·E9 场景演练)在<b>改代码之前</b>的现行代码路径上,「当时是什么样」—— 两单误拦是否可复现、新交集判据的取数前提是否成立、目录级覆盖洞是否存在、E5 收缩前提是否为真。全部实验只跑在测试实例 + real-fake 假种子, 生产零触碰。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-13-0617 · <b>doc-updated</b> 26-11-13-0617 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 生产误拦报告(job jr-abb68712234e, FILE_LINKS, 误拦①异名添加弹窗 / 误拦②组外异名带文件删除被 D16 拒) → 计划 26-11-13-0448 P1 真机先行(E1-E9 + 回炉条款); 基线 commit <code>2870cb60</code>, 分支 <code>feat/relocate-form-aware-gates</code>(本地, 零 commit/push)
+</div>
+
+<h2><span class="no">§01</span>结论</h2>
+<p><b class="good">P1 子集 20 项判定全 PASS, 0 FAIL, 回炉条款未触发</b> —— 每一项实测都与计划 §03 推演一致, 无一处需要回 §03 改判据。分面结论:</p>
+<ol>
+  <li><b>误拦两单真机复现(E1)</b>: FILE_LINKS 组 armed + 组外异名落旧根的生产等价现场下, ①旧根异名添加预检弹「落点确认」文件级分支文案(<code>账面会记在旧路径, 成为删链门的永久依赖(旧路径别名将永不删除)</code>, <code>actual_path=None</code>); ②组外异名种子带文件删除被 D16 拒(原文见 §02)。与生产报告逐字等价 —— R1/R3 修正面的靶子全部实证在位。</li>
+  <li><b>新交集判据取数前提成立(E7)</b>: 产品码单点 <code>relocate_plan.PlanMixin._file_map</code>(files API + <code>path_normalize</code>)对 FILE_LINKS 成员与 NoSubfolder 剥根形态取的清单均与磁盘实况逐项一致; <code>_norm</code> 归一后 landing(<code>save_path/rel</code>)× <code>job.alias_paths</code> 的交集推演手工核对: 成员相交(True)/组外异名×2 不相交(False)/同名跨种全等(1/1)。关键形状实证: <b>qB 5.2.3 对 NoSubfolder(剥根)种子的 files API 名单不带 info 根前缀</b>(<code>['a.bin','b.bin']</code>), 与磁盘平铺逐项一致 —— landing 计算对该形态无需剥根校正, 与计划 §07「NoSubfolder 不可判定」的保守预期相比是<b>更有利</b>的实测结果(清单可得且形状正确)。</li>
+  <li><b>E5 前提为真(R4 配套)</b>: qB 5.2.3 删种即删对应 BT_backup fastresume —— 仅账面删 0.03s / 连文件删 0.02s 内消失(逐项计时实测), 「daemon 改写步对缺失 fastresume 跳过并记 settled」的前提成立。</li>
+  <li><b>E3 真依赖全链实证</b>: armed 态同名同内容跨种种子预检 confirm(现行规则 1 先中); 其文件清单与 <code>job.alias_paths</code> 经 <code>_norm</code> 归一后<b>全等</b>; 现行删链门按 save_path 等值/前缀把它计为依赖(3 依赖悬挂, 别名保留) → 删组外账面依赖 3→1(别名仍保留) → 删同名账面依赖清零 → 收尾 <code>reason=finalized</code> done + 别名删除。R2「同名必判依赖、别名正确保留、删账面收敛恢复」的行为链在现行代码上完整走通。</li>
+  <li><b>E6 目录级基线三点全部实证</b>: DIR_ALIAS 组(junction, alias_kind=dir)现行 <code>save_path==src</code> 预检 confirm(目录分支, <code>actual_path</code> 在场; <code>volume_free=None</code>+「不可判定」note —— newone 落点在 scope 外时 <code>scope_hit</code> 判 False, 现行如此, 如实留痕); <b>深层路径添加(save_path=src/&lt;folder&gt;/deeper)预检 cls=ok 零弹窗</b> —— 计划 §02 所述覆盖洞实证; 深层种子带文件删除被 D16 前缀面拦(目录级全量拦原样)。</li>
+  <li><b>场景构造演练(E2/E4/E9)</b>: 「armed 态异名添加」「armed 态组外异名带文件删除」「自愈全链」三场景均真机构造成立且可复现(E4 同场景两次复跑; E9 全链机制——下线窗改写/重启/核验/删链门——真实跑通并实证现行代码卡 3 依赖的生产等价受阻态)。收敛断言本身留 P4 修后全量复跑, 本轮不判新行为。</li>
+</ol>
+
+<h2><span class="no">§02</span>证据快照</h2>
+
+<h3>环境指纹(开工自检, 2026-11-13 06:00-06:17)</h3>
+<table>
+  <tr><th>项</th><th>值</th></tr>
+  <tr><td>环境/实例</td><td>环境1(D盘机); 主 36595 = <code>D:\Programs\qBittorrent-testing</code>(pid 13728 → 重启后轮换), 副 36596 全程下线(开窗判据要求两测试实例全下线)</td></tr>
+  <tr><td>qB 版本/连接态</td><td>v5.2.3(与生产同版本) · <code>firewalled</code>(开工自检非 disconnected, 假红陷阱已核)</td></tr>
+  <tr><td>链接能力(产品单点 alias_fs 探测)</td><td>junction / dir_symlink / file_symlink / hardlink 全 ok(<code>evidence/capability.json</code>)—— E6 目录别名可行性前提</td></tr>
+  <tr><td>生产实例</td><td>16585(pid 17488) / 26586(pid 18056) 常驻在跑, 全程零请求零触碰(netstat 只读识别留痕)</td></tr>
+  <tr><td>拓扑</td><td>FILE_LINKS 组: src=<code>R:/qbt-fake/rfg-exp</code>(R: 盘) → dst=<code>tests-real/.work/relocate-form-gates/dst</code>(D:, 异盘 ⇒ file_links+symlink; 1 文件 &lt; 阈值 8); DIR_ALIAS 组: src=<code>R:/qbt-fake/rfg-dir</code>, 内容根 <code>dexp</code>(2 成员 × 8 文件 ≥ 阈值 8, 内容根专属) → dst=<code>.../dir-dst</code>(异盘 ⇒ 目录别名)</td></tr>
+  <tr><td>假种子</td><td>全部 real-fake 标签, announce 指本机死端口(零外连); 假种子成员共享同一 1MB <code>rlfn.bin</code>(异 piece_len 16K/32K ⇒ 异 infohash), 归组键 = (save_path, 文件相对路径)</td></tr>
+  <tr><td>产品进程</td><td>tests-real 派生配置(schema_version 6, relocate.enabled, bt_backup 查表, WEB :39000), daemon 离线窗旁路 = 产品 docstring 自留测试接缝(<code>_spawn_daemon</code>「测试替换本方法」)+ <code>tests-real/tools/daemon_window_wrapper.py</code> 实例级名册; 授权先例 = 用户 2026-11-10「授权旁路(推荐)」(<code>evidence/bypass_authorization.json</code> 留痕, 盘上产品代码零改动)</td></tr>
+  <tr><td>job 账</td><td>FILE_LINKS: <code>jr-6427e1237afe</code>(mover 0b135809, alias_paths=<code>['R:\qbt-fake\rfg-exp\rlfn.bin']</code>, alias_kind=file); DIR_ALIAS: <code>jr-4f80da00509a</code>(scope=<code>R:/qbt-fake/rfg-dir/dexp</code>, alias_paths=<code>['R:\qbt-fake\rfg-dir\dexp']</code>, alias_kind=dir, junction readlink=<code>\\?\D:\...\dir-dst\dexp</code>)</td></tr>
+</table>
+
+<h3>逐实验判定表(P1 子集, 20 PASS / 0 FAIL)</h3>
+<p class="cm">口径: 20 = <code>exp_state.json</code> results 去重条目数(复跑幂等跳过条目不计, 评审轮核实 ledger 21 行含 1 条 restart 复跑重复); 本表 17 行覆盖其中 18 条(window + restart 合并 1 行计 2 条), 另 setup / seeds 2 条见上「环境指纹」表(开工自检与武装构造面)。0 FAIL = 去重后无任何 FAIL 判定。</p>
+<table>
+  <tr><th>判定</th><th>实验</th><th>构造/步骤</th><th>断言(现行代码)与实测</th></tr>
+  <tr>
+    <td><span class="good">PASS</span></td>
+    <td>E1-1(误拦①复现)</td>
+    <td>FILE_LINKS 组 armed + 组外异名落旧根后, 对产品 <code>POST /api/relocate/precheck-add {save_path: 旧根, name: brand-new-seed}</code>(异名新种子)</td>
+    <td>cls=<code>confirm</code>, 文件级分支文案原文: 「该目录的迁移待收尾(job jr-6427e1237afe 相位 armed, 数据已迁到 ..., 成员经别名做种): 现在添加的种子账面会记在旧路径, 成为删链门的永久依赖(旧路径别名将永不删除) —— …」; <code>actual_path=None</code>(证据 <code>evidence/e1_precheck_add.json</code>)—— 与生产误拦①等价</td>
+  </tr>
+  <tr>
+    <td><span class="good">PASS</span></td>
+    <td>E1-2(误拦②复现)</td>
+    <td>组外异名种子(other.bin, 数据为旧根真实文件)经产品 <code>POST /api/torrents/{hash}/delete {delete_files: true}</code></td>
+    <td>回执 status=<code>error</code>, D16 原文: 「1 个种子位于迁移收尾窗口的活动别名之下(R:\qbt-fake\rfg-exp): 带文件删除会经别名删到已迁往新位置的数据 —— 请改用「仅删除种子(不含文件)」, …」; 种子与数据原样在场, 产品日志「删除种子被拦截」行留痕(<code>evidence/e1_delete_blocked.json</code> + <code>e1_d16_log_line.txt</code>)—— 与生产误拦②等价</td>
+  </tr>
+  <tr>
+    <td><span class="good">PASS</span></td>
+    <td>E7a(FILE_LINKS 取数核验)</td>
+    <td>产品码 <code>PlanMixin._file_map</code>(构造最小 TorrentRecord + files API)对 2 成员取清单; 磁盘逐项比对(lstat 链接位 size=0, 穿透读 = 内容 1048576B); 交集谓词按 R2 口径手演: landing=<code>_norm(save_path/rel)</code> ∈ <code>{_norm(alias_paths)}</code></td>
+    <td>files API 与 _file_map 键面一致(<code>{'rlfn.bin': 1048576}</code> × 2), 磁盘大小三方全等; 交集: 成员 <b>True</b> / 组外异名 other.bin <b>False</b> / newseed.bin <b>False</b>(<code>evidence/e7a_file_map.json</code>)</td>
+  </tr>
+  <tr>
+    <td><span class="good">PASS</span></td>
+    <td>E7b(NoSubfolder 取数核验)</td>
+    <td>多文件种子(info.name=nsf, 2 文件)以 <code>contentLayout=NoSubfolder</code> 加库(剥根平铺), 独立落点 R:/qbt-fake/rfg-nsf</td>
+    <td>磁盘平铺存在; files API 名单 = <code>['a.bin', 'b.bin']</code>(<b>不带</b> info 根前缀), _file_map 键同; content_path == save_path; landing 逐项匹配磁盘 <code>{'a.bin': True, 'b.bin': True}</code>(<code>evidence/e7b_nosubfolder.json</code>)—— 新判据 landing 计算对该形态无需剥根校正</td>
+  </tr>
+  <tr>
+    <td><span class="good">PASS</span></td>
+    <td>E5 前提(fastresume 随删)</td>
+    <td>探针种子(128KB)入库确认 fastresume 在位(1352B)→ qB 直删两种模式各一次, 逐项计时</td>
+    <td>仅账面删(delete_files=False)→ fastresume <b>0.03s</b> 消失; 连文件删(delete_files=True)→ <b>0.02s</b> 消失且数据移除(<code>evidence/e5_fastresume_premise.json</code>)—— R4「qB 删种即删 fastresume」前提成立</td>
+  </tr>
+  <tr>
+    <td><span class="good">PASS</span></td>
+    <td>E3a(同名跨种 confirm + 全等)</td>
+    <td>armed 态以同文件异 piece_len(65536)造同名同内容跨种种子(90c64dce), qB 直加落旧根; 预检 <code>{save_path: 旧根, name: rlfn.bin}</code></td>
+    <td>预检 <code>confirm</code>(现行规则 1 收尾窗分支先中); 清单 landing(<code>r:/qbt-fake/rfg-exp/rlfn.bin</code>)与 alias_paths 归一后 <b>1/1 全等</b>(<code>evidence/e3a_samename.json</code>)—— 新判据「同名必判真依赖」的取数面实证</td>
+  </tr>
+  <tr>
+    <td><span class="good">PASS</span></td>
+    <td>window + restart(全链机制)</td>
+    <td>real.down 双实例 → wrapper 实例级名册开窗 → daemon 改写非 mover fastresume → real.up 重启</td>
+    <td>journal 相位翻 <code>rewritten</code>(非 mover 改写账 <code>rewritten</code>, mover <code>already</code>); 重启后全员 save_path==dst, 零 recheck, 零异常态(<code>evidence/journal_after_window.json</code> + <code>window_restart.json</code>)</td>
+  </tr>
+  <tr>
+    <td><span class="good">PASS</span></td>
+    <td>E3b-1(删链门计依赖)</td>
+    <td>重启后 3 颗非成员种子(同名跨种 + 组外×2)账面 save_path 恰等旧根, 观察现行删链门</td>
+    <td>job 悬挂 <code>reason=chain_deps</code>, 文案原文: 「仍有 <b>3 个</b>种子的保存路径在别名作用域 R:\qbt-fake\rfg-exp 之下或恰在旧根 R:\qbt-fake\rfg-exp(等值)(90c64dce, a2dce15d, ab7c6f4d): …」; 别名链接保留(<code>evidence/e3b_chain_deps_stuck.json</code>)—— 等值/前缀面把同名与组外异名一律计依赖, 与计划 §02 描述一致</td>
+  </tr>
+  <tr>
+    <td><span class="good">PASS</span></td>
+    <td>E3b-2(删组外账面)</td>
+    <td>对组外×2 仅删账面(delete_files=False, 不经 D16)</td>
+    <td>依赖 <b>3→1</b>(仅同名跨种), job 仍 <code>chain_deps</code> 悬挂「仍有 1 个种子…」, 别名仍保留(<code>evidence/e3b_chain_deps_1left.json</code>)—— 前缀面依赖计数的独立观测</td>
+  </tr>
+  <tr>
+    <td><span class="good">PASS</span></td>
+    <td>E3b-3(收尾恢复)</td>
+    <td>删同名跨种账面 → 等收敛</td>
+    <td>依赖清零 → 收尾 <code>phase=done, reason=finalized</code>, 别名链接删除(src 链接位 lexists=False), 日志「收尾完成/依赖清零」行留痕(<code>evidence/e3b_finalized.json</code> + <code>log_verify_excerpt.txt</code>)—— 「删账面 → 依赖清零 → 收尾恢复」全链实测</td>
+  </tr>
+  <tr>
+    <td><span class="good">PASS</span></td>
+    <td>E6-1(目录级弹窗正常)</td>
+    <td>DIR_ALIAS 组 armed(junction)后, 预检 <code>{save_path: job.src, name: newone}</code></td>
+    <td>cls=<code>confirm</code>(目录分支), <code>actual_path=.../dir-dst/newone</code> 在场; <code>volume_free=None</code> + note「目标卷剩余不可判定」(newone 落点在 scope 外时 scope_hit=False, 现行如此, 如实留痕)(<code>evidence/e6_precheck_at_src.json</code>)</td>
+  </tr>
+  <tr>
+    <td><span class="good">PASS</span></td>
+    <td>E6-2(深层绕过洞)</td>
+    <td>预检 <code>{save_path: src/dexp/deeper, name: deepseed}</code>(深层路径)</td>
+    <td>cls=<code>ok</code> 零弹窗 —— 计划 §02「两规则都要求 save_path 恰等 job.src, 往旧根更深路径添加完全绕过弹窗」覆盖洞实证; 该落点顶进删链门前缀面(D16 面由 E6-3 同款 save_path 实测拦截; 删链门前缀覆盖与 E3b 同机制, 本组未实测 —— DIR_ALIAS job 全程停在 armed, 无重启/收尾环节)(<code>evidence/e6_precheck_deep.json</code>)</td>
+  </tr>
+  <tr>
+    <td><span class="good">PASS</span></td>
+    <td>E6-3(D16 目录级全量拦)</td>
+    <td>深层真种子(save_path=<code>R:\qbt-fake\rfg-dir\dexp\deeper</code>, 数据经 junction 穿透写入)带文件删除</td>
+    <td>回执 status=<code>error</code>: 「1 个种子位于迁移收尾窗口的活动别名之下(R:\qbt-fake\rfg-dir): 带文件删除会经别名删到已迁往新位置的数据 —— …」; 种子原样(<code>evidence/e6_delete_blocked.json</code>)—— 前缀面全量拦原样</td>
+  </tr>
+  <tr>
+    <td><span class="good">PASS</span></td>
+    <td>E2 演练</td>
+    <td>armed 态 qB 直加异名新种子(newseed.bin, 数据落旧根真实文件)</td>
+    <td>场景可构造可复现: 种子做种态落旧根, 数据为真实文件不经别名, 组隔离正确(未并入迁移组)(<code>evidence/outgroup.json</code>)—— 放行断言留 P4 修后复跑</td>
+  </tr>
+  <tr>
+    <td><span class="good">PASS</span></td>
+    <td>E4 演练</td>
+    <td>armed 态组外异名带文件删除场景对第二颗复跑一次</td>
+    <td>同样构造成立: 第二次 D16 拒(status=error), 种子/数据原样(<code>evidence/e4_rehearsal_delete.json</code>)</td>
+  </tr>
+  <tr>
+    <td><span class="good">PASS</span></td>
+    <td>E9 演练(自愈全链生产等价态)</td>
+    <td>armed + 组外异名×2 已落旧根 + qB 过完整重启(下线窗改写→重启→核验→删链门)</td>
+    <td>全链机制真实跑通且现行代码卡 3 依赖(生产等价受阻态)—— 场景可构造可复现实证; R6 三断言(删除放行/添加放行/零人工收敛)留 P4 修后全量复跑</td>
+  </tr>
+  <tr>
+    <td><span class="good">PASS</span></td>
+    <td>收尾清场</td>
+    <td>产品 sentinel 优雅退出; 自造种子 qB 直连删净(不经产品 D16); 数据目录×6 清; BT_backup 逐哈希清 + 开工快照比对</td>
+    <td>qB 内 6 颗自造种子删净; R:/qbt-fake 三根与 case 目录清空; BT_backup before=1 after=1(queue 记账文件除外, 会话期合法变化)(<code>evidence/cleanup.json</code>); <code>real.seed.list</code> 复核 0 种子与双实例优雅退出为外层动作(评审轮核实: cleanup 相位无该两步调用, 证据未落盘, 仅会话记录在案 —— 如实标注, 不补证)</td>
+  </tr>
+</table>
+
+<div class="aside">证据树全量(以 2026-11-13 评审轮 ls 现盘清点为准): <code>tests-real/.work/relocate-form-gates/evidence/</code> 共 <b>42 个文件 = 32 个非 torrent 取证件 + 10 个 .torrent 原件</b>。非 torrent 32 件: env_snapshot / capability / bypass_authorization(离线窗旁路授权先例留痕) / config_used(产品派生配置原件) / armed / outgroup / group_file_links / e1_d16_log_line / e1_delete_blocked / e1_precheck_add / e3_precheck_samename / e3a_samename / e3b_chain_deps_stuck / e3b_chain_deps_1left / e3b_finalized / e4_rehearsal_delete / e5_fastresume_premise / e6_armed / e6_receipt_migrate / e6_log_armed_excerpt / e6_precheck_at_src / e6_precheck_deep / e6_delete_blocked / e7a_file_map / e7b_nosubfolder / journal_after_window / window_restart / log_armed_excerpt / log_verify_excerpt / receipt_migrate / cleanup / timeline。.torrent 原件 10 颗: 成员×2(0b135809/6ff3d014) + 组外×2(ab7c6f4d/a2dce15d) + 同名跨种(90c64dce) + dir 成员×2(553daa25/61ddc8d8) + 深层种子(87673225) + <b>残留×2(torrent_dirmember_4ebffc27/b4b2ee54) —— 来龙去脉: E6 首跑用错多文件种子 path 形状(info 根前缀误写进 path, files 解析为 dexp/dexp/*.bin)构造失败(wait_seeded 超时), 两颗假种子已当场经 qB 直连 delete_files=True 删除并清 DIRSRC 重跑(修正后 553daa25/61ddc8d8 成功); 两颗失败构造的 .torrent 原件按「证据不删」原则留树, 记录该次构造失败</b>(其 BT_backup fastresume 已随当场删除清走, cleanup 比对 residue=空 亦覆盖此二哈希)。另: harness <code>tests-real/.work/relocate-form-gates/run_exp.py</code>(12 相位: setup/seeds/outgroup/e1/e7a/e5/e7b/e3a/window/chain/e6/cleanup)+ 判定账 <code>exp_state.json</code>(results 追加面)。harness 在 gitignore 面(.work), 与先例 26-11-10-0435 同口径。</div>
+
+<h2><span class="no">§03</span>方法与局限</h2>
+<p><b>方法</b>: 真机实验先行纪律(1300 D7 同款)—— 全部实验跑在测试实例 36595(白名单端口 + 镜像路径 guard 核)+ real-fake 假种子(先例 26-11-10-0435 配方: 共享文件异 piece_len 异 infohash 归组、announce 本机死端口零外连; 本轮未用 skip_checking —— 全部假种子经 qB 真实完整性校验达做种态(wait_seeded progress=1.0 + settled 态), 校验口径比 skip_checking 信任预写更严); 产品侧断言经产品 WEB 命令队列(precheck-add / delete / location)取回执, 判据取数经产品码单点(<code>PlanMixin._file_map</code>)直调; 删链门行为链经真实下线窗(wrapper 实例级名册, 授权先例 2026-11-10)+ 真实重启; 判定逐条落 <code>record()</code>(results 追加面, 同 exp 幂等), 证据逐相位落盘(长任务防丢进度)。</p>
+<p><b>边界条件</b>: ①本报告全部判定都在<b>现行代码</b>(基线 2870cb60)路径上作出, 只验前提、不判新行为 —— R1-R6 修正后的放行/收敛断言留 P4 全量复跑(E2/E4/E9 三场景本轮只证可构造可复现); ②DIR_ALIAS 形态经 dir symlink(跨卷, junction 不可用)建成, 能力探测四形态全 ok 前提下成立; ③E6-1 的 <code>volume_free=None</code> 是现行 <code>scope_hit</code> 对 scope 外落点判 False 的既有行为, 非缺陷新增(计划 R1 有 <code>actual_path</code> rel 计算修正项, 与此相邻但不相同); ④NoSubfolder 形态用多文件种子 + <code>contentLayout=NoSubfolder</code> 构造, 磁力/URL 加库形态不在本轮取数核验范围(计划 §07 已列为「不可判定」保守面)。</p>
+<p><b>未覆盖</b>: E8(注入清单取数失败 → 保守计依赖)属 P2/P3 实现后的注入实验, 本轮不适用(现行代码无交集判据注入面); 成员收缩 N 拍钉值(E5 主断言)属 R4 实现后实验; 生产等价态的「零人工收敛 done」(R6③)留 P4。</p>
+<p><b>安全口径复核</b>: 生产 16585/26586 与 <code>I:\PT\</code>、<code>config.yml</code>、<code>auto-qb-data/</code> 全程零触碰(只读 netstat 识别留痕); 零 taskkill(qB 退出走 WebAPI app/shutdown 经 <code>real.down</code>, 产品退出走 sentinel SIGTERM, daemon 等宽限退位); 零产品代码改动(src/ 零 diff, 本轮只新增实验面与本文档); 不删种(skip_checking 重加)/不读盘校验三约束未破。收尾归位: 双测试实例优雅退出(与开工态一致)、实例内真实种子 0 个(<code>real.seed.list</code> 外层复核) —— 两项均为外层动作未留证据文件(同收尾清场行的如实标注), BT_backup 无残留有 cleanup.json 比对为证。</p>
+
+</div>
+</body>
+</html>
