@@ -4,6 +4,11 @@ import { SKINS } from './harness.mjs';
 import { installRuntimeErrorGuard } from './lib/errors.mjs';
 import { openApp } from './lib/gestures.mjs';
 import { readInst } from './lib/vm.mjs';
+import { installRouteCleanup } from './lib/route-cleanup.mjs';
+
+/* 收尾竞态兜底(issue 26-11-13-0234): stubFlags 桩回调内 await route.fetch 飞行中撞用例
+ * 结束 → "Test ended" 假红; file 级 afterEach 统一卸载(机制与判据见 route-cleanup.mjs)。 */
+installRouteCleanup(test);
 
 /**
  * qB 流量图「缺口分区段」悬停文案的**真浏览器**守阵 —— issue「种子添加之前的空白被说成

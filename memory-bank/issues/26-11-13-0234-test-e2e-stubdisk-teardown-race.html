@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="e2e-stubdisk-teardown-race">
 <meta name="doc-refs" content="memory-bank/reports/26-11-12-2347-report-linux-env3-probe.html">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="traffic-source-switch fast e2e 收尾竞态: stubDisk route 回调飞行中 test ended">
 <meta name="issue-summary" content="stubDisk 的 page.route 回调在用例结束后仍在飞行 → route.fetch: Test ended 记为失败; 断言本体全过; CI retries=1 重试即绿, 本机 retries=0 直接红">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-13-0234-test-e2e-stubdisk-teardown-race</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-13 02:34</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
@@ -165,11 +165,40 @@ before the end of the test to ignore remaining routes in flight.
   <h2><span class="no">§07</span>状态变更日志</h2>
   <ul>
     <li>2026-11-13 02:34 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-13 — 状态 Open → Done（kb.status）</li>
+</ul>
   <h3>复验</h3>
-  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <p>复验：2026-11-13，clone2(原生 Linux，同族环境)<strong>仍复现且更强</strong> —— 修前单跑本 spec 全量
+  6 例即 2 红(<code>:94 atlas 读路径</code> / <code>:169 prism 规则卡</code>，4P/2F/57.2s)，报错与证据节同位
+  (<code>route.fetch: Test ended</code> @ :62)。机制澄清: GET 分支的 <code>route.fetch()</code> 是<strong>每次
+  GET 都执行</strong>(不只首拉)，任何用例末段撞上一次 config GET 都在窗内。</p>
   <h3>修复后补充</h3>
-  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  <p><strong>实际修法</strong>(采纳建议 A，形态一处改道): <code>e2e/lib/route-cleanup.mjs</code> 新增
+  <code>installRouteCleanup(test)</code> —— file 级 afterEach <code>page.unrouteAll({ behavior: 'ignoreErrors' })</code>
+  单点兜底(与 <code>installRuntimeErrorGuard</code> 同款传 test 惯例)；<strong>8 个同模式 spec 全部接线</strong>
+  (本件 + ctx-custom / settings-bt-backup / traffic-gap-zones / gtm-alert / drawer-general-variants /
+  drawer-trackers-reannounce，复用面排查实证全部同险按 §06「一并纳入」处置；第 8 个 drawer-merge 系评审轮
+  静态守阵点名上游新增的未接线 flags 桩调用位后按同款补接)。建议 A 说「afterEach 或用例末」
+  落在 afterEach + file 级；建议 B(try/catch 吞错)不采纳，理由如原文。</p>
+  <p><strong>守阵改道</strong>(运行期差分经实证不可构造): 原计划的 e2e 运行期守阵(摘兜底必红)做了三种构造
+  (sleep→fetch / fetch→sleep→fulfill / 同组存活窗提供归账期)，实测「<strong>结束后才发起</strong>」的 route
+  调用被 playwright 静默吞掉不归账，可归账的只有「运行期内发起、结束后才完成」形态，其窗 = 服务端往返毫秒级、
+  由服务端控速 —— 差分守阵物理不可行。改道<strong>静态接线守阵</strong>: <code>tests/test_flaky_timing_guards.py</code>
+  扫描器 5(<code>test_repo_route_fetch_specs_wired_route_cleanup</code> + 八形态活性探针，违例侧看原文按调用位判、
+  接线侧剥注释判<strong>文件顶层</strong>调用形态，另钉兜底单点本体 lib 剥注释后必须含 unrouteAll + ignoreErrors
+  字面；细节见坑档守阵段)。差分证据 = 修复轮复验: 修前 2/6 红(真实复现) ↔ 修后全绿。</p>
+  <p><strong>验证方式与数字</strong>(2026-11-13，clone2 本机): ①静态守阵红绿双验: 摘 drawer-general-variants
+  接线 → 守卫红(点名文件+机制)；装回 → <code>test_flaky_timing_guards.py</code> 11 passed。②锚点 spec 修后
+  <code>--repeat-each=3</code> <strong>18/18 全绿</strong>(2.7m)；③其余 6 接线 spec 同轮
+  <strong>28/28 全绿</strong>(4.1m)；④fast 全量子集 <code>npm run test:e2e:fast</code>
+  <strong>349P/1F/44.8m</strong> —— 唯一 1F = <code>dt-live-update.spec.mjs:368 atlas #10</code>
+  千文件勾选长任务预算(实测 1 个 63ms 长任务，预算下界 0；prism 孪生同轮 0/0 过；该 spec 不在接线面、
+  无因果路径)，静机单跑 <strong>14/14 全绿</strong>(2.0m) —— 负载型产量具假红<strong>候选</strong>
+  (归因待查，处置件 <a href="26-11-13-0519-test-e2e-dt-live-update-longtask-budget-flake.html">26-11-13-0519</a>，
+  Open)，与本件无关(不在接线面、无因果路径有实证)；
+  ⑤pytest 守卫文件 11 passed。test.full 数字见对应基线切片。台账已登记
+  (<code>flaky-ledger.md</code> 2026-11-13 行，并发/竞态)，坑档立档
+  <code>pitfalls/testing/route-callback-teardown-race.md</code>。</p>
 </section>
 
 <footer>

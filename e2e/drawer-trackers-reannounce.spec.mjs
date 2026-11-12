@@ -2,6 +2,11 @@
 import { expect, test } from '@playwright/test';
 import { baseUrl, SKINS } from './harness.mjs';
 import { collectRuntimeErrors, installRuntimeErrorGuard } from './lib/errors.mjs';
+import { installRouteCleanup } from './lib/route-cleanup.mjs';
+
+/* 收尾竞态兜底(issue 26-11-13-0234): 详情/trackers 双桩回调内 await route.fetch 飞行中
+ * 撞用例结束 → "Test ended" 假红; file 级 afterEach 统一卸载(机制见 route-cleanup.mjs)。 */
+installRouteCleanup(test);
 
 /**
  * 06 变体逐行汇报倒计时真 per-tracker 口径渲染(issue 26-10-07-0149, P-02 升级, 2026-10-09) ——

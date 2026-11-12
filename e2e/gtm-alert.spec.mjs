@@ -3,6 +3,12 @@ import { expect, test } from '@playwright/test';
 import { baseUrl, SKINS } from './harness.mjs';
 import { installRuntimeErrorGuard } from './lib/errors.mjs';
 import { readInst } from './lib/vm.mjs';
+import { installRouteCleanup } from './lib/route-cleanup.mjs';
+
+/* 收尾竞态兜底(issue 26-11-13-0234): injectAnomaly 桩回调内 await route.fetch(/api/state
+ * 每拍轮询都走)飞行中撞用例结束 → "Test ended" 假红; file 级 afterEach 统一卸载
+ * (机制与判据见 route-cleanup.mjs)。 */
+installRouteCleanup(test);
 
 /**
  * GTM 当日总量虚高告警的**常驻横幅**(计划 26-11-03-1102 S7c / 验收 T32)。

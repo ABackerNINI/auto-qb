@@ -4,6 +4,12 @@ import { baseUrl, SKINS } from './harness.mjs';
 import { collectRuntimeErrors, installRuntimeErrorGuard } from './lib/errors.mjs';
 import { expectNoDeadClass } from './lib/dt-dead-class.mjs';
 import { INST } from './lib/vm.mjs';
+import { installRouteCleanup } from './lib/route-cleanup.mjs';
+
+/* 收尾竞态兜底(issue 26-11-13-0234): /api/webui/flags 桩回调内 await route.fetch 飞行中撞用例
+ * 结束 → "Test ended" 假红; file 级 afterEach 统一卸载(机制与判据见 route-cleanup.mjs)。
+ * 接线由静态守阵钉住(tests/test_flaky_timing_guards.py 扫描器 5): 摘掉本调用 pytest 必红。 */
+installRouteCleanup(test);
 
 /**
  * 抽屉页签合并(R2 计划 26-10-09-2219 · R3 修订) —— 单开关 / 合并页签 / 双列布局 / 宽度门:

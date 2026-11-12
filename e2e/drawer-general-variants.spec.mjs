@@ -3,6 +3,12 @@ import { expect, test } from '@playwright/test';
 import { baseUrl, SKINS } from './harness.mjs';
 import { collectRuntimeErrors, installRuntimeErrorGuard } from './lib/errors.mjs';
 import { expectNoDeadClass } from './lib/dt-dead-class.mjs';
+import { installRouteCleanup } from './lib/route-cleanup.mjs';
+
+/* 收尾竞态兜底(issue 26-11-13-0234): stubDetail 桩回调内 await route.fetch 飞行中撞用例
+ * 结束 → "Test ended" 假红; file 级 afterEach 统一卸载(机制与判据见 route-cleanup.mjs)。
+ * 接线由静态守阵钉住(tests/test_flaky_timing_guards.py 扫描器 5): 摘掉本调用 pytest 必红。 */
+installRouteCleanup(test);
 
 /**
  * general 三变体(01 英雄行 / 02 六卡聚类 / 03 双栏档案)行为级守阵(存量评审 R4·P12 批):

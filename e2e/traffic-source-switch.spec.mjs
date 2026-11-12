@@ -3,6 +3,13 @@ import { expect, test } from '@playwright/test';
 import { SKINS } from './harness.mjs';
 import { installRuntimeErrorGuard } from './lib/errors.mjs';
 import { openApp } from './lib/gestures.mjs';
+import { installRouteCleanup } from './lib/route-cleanup.mjs';
+
+/* 收尾竞态兜底(issue 26-11-13-0234): 本文件 stubDisk 桩回调内 await route.fetch 飞行中
+ * 撞用例结束 → "Test ended" 记红(env3 全量轮 2/344 实证); file 级 afterEach 统一
+ * unrouteAll(ignoreErrors), 下面全部用例受益。接线由静态守阵钉住
+ * (tests/test_flaky_timing_guards.py 扫描器 5): 摘掉本调用 pytest 必红。 */
+installRouteCleanup(test);
 
 /**
  * 「流量与限速 → 数据来源」总开关的 ce 注入链守阵 —— issue 26-10-22-0435 回归栅。

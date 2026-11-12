@@ -3,6 +3,11 @@ import { expect, test } from '@playwright/test';
 import { baseUrl, SKINS } from './harness.mjs';
 import { installRuntimeErrorGuard } from './lib/errors.mjs';
 import { openApp } from './lib/gestures.mjs';
+import { installRouteCleanup } from './lib/route-cleanup.mjs';
+
+/* 收尾竞态兜底(issue 26-11-13-0234): 本文件四处 /api/config 桩回调内 await route.fetch
+ * 飞行中撞用例结束 → "Test ended" 假红; file 级 afterEach 统一卸载(机制见 route-cleanup.mjs)。 */
+installRouteCleanup(test);
 
 /**
  * 设置页 · 「自动化」分区 · 「整组迁移」块的 BT_backup 编辑器(S4 重写, 计划 26-11-11-0259;

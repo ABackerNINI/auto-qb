@@ -3,6 +3,11 @@ import { expect, test } from '@playwright/test';
 import { baseUrl, SKINS } from './harness.mjs';
 import { collectRuntimeErrors, installRuntimeErrorGuard } from './lib/errors.mjs';
 import { clickRow, openApp, openMenuTexts, tab } from './lib/gestures.mjs';
+import { installRouteCleanup } from './lib/route-cleanup.mjs';
+
+/* 收尾竞态兜底(issue 26-11-13-0234): /api/config 桩回调内 await route.fetch 飞行中撞用例
+ * 结束 → "Test ended" 假红; file 级 afterEach 统一卸载(机制与判据见 route-cleanup.mjs)。 */
+installRouteCleanup(test);
 
 /**
  * 设置页「WebUI」卡 · 行右键菜单布局定制(W4, 计划 26-10-20-0024 D1/D8/D14–D17)。

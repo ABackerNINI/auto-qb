@@ -15,5 +15,5 @@
 | [1](_index-1.md) | `annotations-lazy-eval.md` … `event-handler-mock.md` | 24 |
 | [2](_index-2.md) | `fake-config-shared-mutables.md` … `hot-reload-section-choice-side-effects.md` | 24 |
 | [3](_index-3.md) | `hr-registry-pollution.md` … `plan-docstring-section-boundary.md` | 24 |
-| [4](_index-4.md) | `playwright-teardown.md` … `single-file-coverage-gate.md` | 24 |
-| [5](_index-5.md) | `single-file-xdist-hang.md` … `xdist-worker-global-snapshot.md` | 23 |
+| [4](_index-4.md) | `playwright-teardown.md` … `sim-root-sentinel.md` | 24 |
+| [5](_index-5.md) | `single-file-coverage-gate.md` … `xdist-worker-global-snapshot.md` | 24 |

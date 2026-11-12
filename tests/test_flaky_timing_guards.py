@@ -1,6 +1,7 @@
-"""flaky 治理四类守阵: 裸 sleep / waitForTimeout / 裸取时 / bind 位固定口(计划 26-11-05-0118 S1)
+r"""flaky 治理五类守阵: 裸 sleep / waitForTimeout / 裸取时 / bind 位固定口 / route.fetch 收尾兜底接线
+(计划 26-11-05-0118 S1; 第 5 类补于 issue 26-11-13-0234 —— 收尾竞态属同族时序 flaky)
 
-时序类 flaky 的防回归闸门 —— 四类违例模式各配一个扫描器, 存量全进白名单单点
+时序类 flaky 的防回归闸门 —— 前四类违例模式各配一个扫描器, 存量全进白名单单点
 tests/flaky_allowlist.py(带理由, 机器可清点), 守阵做**两侧对账**:
 - 新增侧: 扫描出的违例白名单没覆盖 -> 红(新增即红, S2/S3/S4 期间违例只许减不许涨);
 - 失效侧: 白名单条目在对应文件已扫不到 / 条数下降 -> 红(清理后必须回来删条目, 白名单只减不涨)。
@@ -18,6 +19,20 @@ tests/flaky_allowlist.py(带理由, 机器可清点), 守阵做**两侧对账**:
   静态扫描盲区, 撞上即进白名单带理由)。
   双向禁绑(计划 26-11-10-0515 S5): 生产带 18788 与测试带 28788 都在拦截面内(扫描器拦一切
   非 0 字面, 两带天然同拦; 活性探针两带各探一份, 防「只拦某一侧」的退化), 桩脚本在 scripts/ 不受限。
+- 5. e2e/*.spec.mjs 含 route.fetch 调用位却未接线 installRouteCleanup: **硬要求, 无白名单**
+  (机制: 桩回调内 await(route.fetch 等)是飞行物, 用例结束时仍在飞的回调其 route 调用报
+  "Test ended" 被记成用例失败 —— 断言本体全绿的收尾假红; 兜底 = e2e/lib/route-cleanup.mjs
+  的 file 级 afterEach `unrouteAll({ behavior: 'ignoreErrors' })`, 见
+  pitfalls/testing/route-callback-teardown-race.md)。文本级扫描(mjs 不进 AST, 同 2. 的口径),
+  两侧取噪声方向相反的安全侧: 违例侧看原文按 `route.fetch\s*\(` 调用位判(注释提及也算,
+  先取响应再 await 的分离形态同拦)—— 误报只会逼着装兜底; 接线侧剥注释后判**文件顶层**
+  (行首无缩进)的调用形态 `installRouteCleanup\s*\(` —— import 单独在场不算接线(把调用注释掉
+  ≠ 接线, 防「注释掉临时关闸」), describe 内缩进调用也不算(afterEach 只覆盖该 describe);
+  兜底单点本体另有静态钉(lib 剥注释后必须含 unrouteAll + ignoreErrors 字面, 缺一即红)。
+  扫描面边界: 只扫 *.spec.mjs, 桩助手收敛进 e2e/lib/ 时本守阵对那些 spec 失明须同步扩面。
+  运行期差分守阵经实证不可构造(route 调用「结束后才发起」被 playwright 静默吞掉不归账;
+  in-flight 跨界窗 = 服务端往返毫秒级不可控), 差分证据 = 修复轮复验(修前单跑 6 例 2 红(2/6)
+  ↔ 修后全绿)。
 
 检出能力由合成源红验内建(同 test_test_plan_docstring_guard 的自证结构): 每个扫描器都有
 "该抓的抓得到 + 不该抓的放得过"断言, 扫描逻辑退化即红(guard-dead-branch / static-guard-mutation
@@ -29,16 +44,20 @@ tests/flaky_allowlist.py(带理由, 机器可清点), 守阵做**两侧对账**:
 - test_repo_no_new_wait_for_timeout_in_e2e: 2. 全仓对账 —— e2e waitForTimeout 零漂移
 - test_repo_no_bare_time_calls_in_src: 3. 全仓对账 —— src/ 裸取时零漂移(clock.py 豁免)
 - test_repo_no_fixed_port_bind_in_tests: 4. 全仓对账 —— bind 位固定端口零漂移
+- test_repo_route_fetch_specs_wired_route_cleanup: 5. 全仓守阵 —— route.fetch spec 接线兜底零漂移
 - test_reconcile_flags_new_and_stale: 对账函数单测 —— 超额/缺额/缺文件两侧都能报, 行文本全等口径
 - test_sleep_scanner_liveness: 1. 活性探针 —— 实调用抓到, patch 字符串/注释不误伤
 - test_wait_timeout_scanner_liveness: 2. 活性探针 —— waitForTimeout 抓到, toHaveTimeout/同词根不误伤
 - test_bare_time_scanner_liveness: 3. 活性探针 —— time.time/monotonic(_ns)/裸名抓到, strftime 不误伤, clock.py 豁免
 - test_bind_scanner_liveness: 4. 活性探针 —— .bind( 位与构造位(ThreadingHTTPServer/create_server)字面非 0 端口
   都抓到(双向禁绑: 18788 与 28788 都探), port=0/变量/配置值位/非绑定构造名不误伤
+- test_route_cleanup_wiring_scanner_liveness: 5. 活性探针 —— 未接线/两行全注释/只注释调用行/describe
+  作用域调用/注释提及/分离 await 六形态抓到, 已接线/纯 route.fulfill 不误伤
 """
 from __future__ import annotations
 
 import ast
+import re
 from collections import Counter
 from pathlib import Path
 
@@ -172,6 +191,44 @@ def scan_bind_ports(sources) -> dict[str, Counter]:
     return out
 
 
+#: mjs 注释剥除(接线侧判据用): 先块后行 —— 行注释里的 `http://` 一类串会被行注释规则吃掉,
+#: 但那只影响接线侧的搜索面, 误剥只会把"已接线"误判成"未接线"(逼着装兜底, 向安全侧偏差)
+_MJS_BLOCK_COMMENT = re.compile(r"/\*.*?\*/", re.S)
+_MJS_LINE_COMMENT = re.compile(r"//[^\n]*")
+
+
+def _strip_mjs_comments(src: str) -> str:
+    return _MJS_BLOCK_COMMENT.sub("", _MJS_LINE_COMMENT.sub("", src))
+
+
+#: 违例/接线两侧的调用位形态(评审轮 1 收紧 / 轮 4 顶层锚, 26-11-13-0234): 违例侧原文匹配
+#: (注释提及也算, `const resp = route.fetch()` 先取后 await 的分离形态同拦); 接线侧剥注释后
+#: 必须见**文件顶层**(行首无缩进)的调用形态 —— import 单独在场不算(只注释调用行 = 临时关闸),
+#: describe 作用域内的缩进调用也不算(afterEach 只覆盖该 describe, 同文件 describe 外用例裸奔)
+_ROUTE_FETCH_CALL = re.compile(r"route\.fetch\s*\(")
+_ROUTE_CLEANUP_CALL = re.compile(r"^installRouteCleanup\s*\(", re.M)
+
+
+def scan_route_fetch_unwired(sources) -> list[str]:
+    """5. e2e spec 含 route.fetch 调用位却未接线 route 收尾兜底(issue 26-11-13-0234):
+    桩回调内 await(route.fetch) 是飞行物, 用例结束时仍在飞的回调其 route 调用报
+    "Test ended" 记成用例失败 —— 接线 = 文件顶层 installRouteCleanup(test)
+    (e2e/lib/route-cleanup.mjs 的 file 级 afterEach unrouteAll ignoreErrors)。
+    文本级扫描(mjs 不进 AST, 同 scan_wait_timeout 口径), 返回未接线的相对路径有序表。
+    两侧取噪声方向相反的安全侧: 违例侧看原文(注释提及也算, 逼着接线);
+    接线侧剥注释后判「文件顶层的调用形态」(把调用注释掉 ≠ 接线, 防「注释掉临时关闸」;
+    describe 内缩进调用 ≠ 顶层, 防 describe 外用例裸奔)。扫描面边界: 只扫 *.spec.mjs ——
+    桩助手若收敛进 e2e/lib/(spec 文本不再含 route.fetch), 本守阵对那些 spec 静默失明,
+    届时须同步扩面(评审轮 4 记录的前置边界, 现树无非 spec 的 route.fetch 调用位)。"""
+    out = []
+    for rel, src in sorted(sources):
+        if not _ROUTE_FETCH_CALL.search(src):
+            continue
+        if not _ROUTE_CLEANUP_CALL.search(_strip_mjs_comments(src)):
+            out.append(rel)
+    return out
+
+
 # ---------- 对账(两侧: 新增 / 失效) ----------
 
 
@@ -207,7 +264,7 @@ def _reconcile(actual: dict[str, Counter], allowed: dict[str, dict[str, int]]) -
     assert not stale, "白名单有失效条目(存量已清理), 须同步删除收紧:\n" + "\n".join(stale)
 
 
-# ---------- 全仓守阵(四类) ----------
+# ---------- 全仓守阵(五类) ----------
 
 
 def test_repo_no_new_bare_sleep_in_tests():
@@ -227,6 +284,24 @@ def test_repo_no_bare_time_calls_in_src():
 
 def test_repo_no_fixed_port_bind_in_tests():
     _reconcile(scan_bind_ports(_py_sources("tests")), allow.ALLOW_BIND_PORT)
+
+
+def test_repo_route_fetch_specs_wired_route_cleanup():
+    sources = (
+        (p.relative_to(REPO).as_posix(), p.read_text(encoding="utf-8"))
+        for p in sorted((REPO / "e2e").rglob("*.spec.mjs"))
+    )
+    unwired = scan_route_fetch_unwired(sources)
+    assert not unwired, (
+        "含 route.fetch( 调用位的 e2e spec 必须在文件顶层接线 installRouteCleanup(test)"
+        "(e2e/lib/route-cleanup.mjs; 机制与判据见 memory-bank/pitfalls/testing/route-callback-teardown-race.md):\n" +
+        "\n".join(unwired)
+    )
+    # 兜底单点本体也要钉(评审轮 4): 接线守卫只看 spec 文本, lib 被改坏(删 afterEach 体/
+    # 丢 ignoreErrors 改默认等待语义)时接线全在场、守阵全绿, 收尾假红静默复活
+    lib = _strip_mjs_comments((REPO / "e2e/lib/route-cleanup.mjs").read_text(encoding="utf-8"))
+    missing = [k for k in ("unrouteAll", "ignoreErrors") if k not in lib]
+    assert not missing, f"e2e/lib/route-cleanup.mjs 兜底语义字面缺失({missing}), 收尾竞态兜底已被改坏"
 
 
 # ---------- 对账函数单测(行文本全等 + 条数口径) ----------
@@ -345,6 +420,65 @@ def f(handler, port):
     MyConfig(("127.0.0.1", 18788))  # 非绑定构造族的名字不拦(配置值位口径同 .bind 位)
 """
 
+SRC_ROUTE_UNWIRED = """test('x', async ({ page }) => {
+  await page.route('**/api/config', async (route) => {
+    const json = await (await route.fetch()).json();  // 回调飞行物: 收尾竞态源
+    return route.fulfill({ json });
+  });
+});
+"""
+
+SRC_ROUTE_WIRED = (
+    "import { installRouteCleanup } from './lib/route-cleanup.mjs';\n"
+    "installRouteCleanup(test);\n\n" + SRC_ROUTE_UNWIRED
+)
+
+SRC_ROUTE_FULFILL_ONLY = "await page.route('**/api/x', (route) => route.fulfill({ json: {} }));\n"
+
+#: 注释掉的接线 ≠ 接线: 摘兜底的「注释掉临时关闸」形态也要红(26-11-13-0234 红验补的形态)
+SRC_ROUTE_COMMENTED_WIRING = (
+    "// import { installRouteCleanup } from './lib/route-cleanup.mjs';\n"
+    "// installRouteCleanup(test); // 临时摘除\n\n" + SRC_ROUTE_UNWIRED
+)
+
+#: 只注释调用行、留真实 import 的最小摘除形态(评审轮 1 收紧): import 行的标识符单独在场
+#: 不构成接线, 照样判未接线 —— 临时关闸最自然的单行改法不得静默绕过
+SRC_ROUTE_COMMENTED_CALL_ONLY = (
+    "import { installRouteCleanup } from './lib/route-cleanup.mjs';\n"
+    "// installRouteCleanup(test); // 临时摘除\n\n" + SRC_ROUTE_UNWIRED
+)
+
+#: 分离消费形态: route.fetch( 不与 await 相邻(先取响应再 await), 违例侧照样要拦(评审轮 1)
+SRC_ROUTE_DETACHED_AWAIT = """test('x', async ({ page }) => {
+  await page.route('**/api/config', async (route) => {
+    const resp = route.fetch();  // 先发起
+    const json = await (await resp).json();  // 后消费 —— 飞行窗同在
+    return route.fulfill({ json });
+  });
+});
+"""
+
+#: route.fetch 仅存在于注释(无真实调用): 违例侧看原文不看剥后文本 —— 该形态照样判未接线,
+#: 钉住「违例侧不剥注释」这支(评审轮 4: 若违例侧误套 _strip_mjs_comments, 本形态漏报必红)
+SRC_ROUTE_COMMENT_MENTION = (
+    "// 历史注释: 这里曾用 await route.fetch() 取真树, 已改走他路\n"
+    "test('x', async ({ page }) => { /* 无桩 */ });\n"
+)
+
+#: describe 作用域内调用(有缩进): afterEach 只覆盖该 describe, 同文件 describe 外用例裸奔
+#: —— 接线侧钉「文件顶层」(剥注释后行首无缩进的调用形态), 缩进位不算接线(评审轮 4)
+SRC_ROUTE_SCOPED_CALL = """test.describe('g', () => {
+  installRouteCleanup(test);
+});
+
+test('bare', async ({ page }) => {
+  await page.route('**/api/config', async (route) => {
+    const json = await (await route.fetch()).json();
+    return route.fulfill({ json });
+  });
+});
+"""
+
 
 def test_sleep_scanner_liveness():
     bad = scan_sleep([("tests/synthetic_bad.py", SRC_SLEEP_BAD), ("tests/synthetic_ok.py", SRC_SLEEP_PATCH_OK)])
@@ -397,3 +531,27 @@ def test_bind_scanner_liveness():
         "tests/bad_ctor_bare.py":
             Counter({'create_server(("127.0.0.1", 28788))  # 构造位裸名形态: from-import, 删裸名分支必红': 1}),
     }, bad
+
+
+def test_route_cleanup_wiring_scanner_liveness():
+    sources = [
+        ("e2e/unwired.spec.mjs", SRC_ROUTE_UNWIRED),
+        ("e2e/wired.spec.mjs", SRC_ROUTE_WIRED),
+        ("e2e/commented_wiring.spec.mjs", SRC_ROUTE_COMMENTED_WIRING),
+        ("e2e/commented_call_only.spec.mjs", SRC_ROUTE_COMMENTED_CALL_ONLY),
+        ("e2e/scoped_call.spec.mjs", SRC_ROUTE_SCOPED_CALL),
+        ("e2e/comment_mention.spec.mjs", SRC_ROUTE_COMMENT_MENTION),
+        ("e2e/detached_await_unwired.spec.mjs", SRC_ROUTE_DETACHED_AWAIT),
+        ("e2e/fulfill_only.spec.mjs", SRC_ROUTE_FULFILL_ONLY),
+    ]
+    # 未接线抓到; 已接线放过; 注释掉的接线(两行全注释 / 只注释调用行)都算未接线;
+    # describe 作用域调用(缩进位)不算顶层接线; 注释提及(route.fetch 仅在注释)也算违例;
+    # 分离 await 形态拦到; 纯 route.fulfill(同步桩, 无飞行窗)不误伤
+    assert scan_route_fetch_unwired(sources) == [
+        "e2e/comment_mention.spec.mjs",
+        "e2e/commented_call_only.spec.mjs",
+        "e2e/commented_wiring.spec.mjs",
+        "e2e/detached_await_unwired.spec.mjs",
+        "e2e/scoped_call.spec.mjs",
+        "e2e/unwired.spec.mjs",
+    ]

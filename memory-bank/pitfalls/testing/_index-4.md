@@ -1,7 +1,7 @@
 # testing — 测试 / 冒烟 / 仿真纪律 · 卷 4/5
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `playwright-teardown.md` … `single-file-coverage-gate.md`(共 24 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `playwright-teardown.md` … `sim-root-sentinel.md`(共 24 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
@@ -21,6 +21,7 @@
 | [redverify-pycache-stale-verdict.md](redverify-pycache-stale-verdict.md) | 红验/`mutants.verify` 这类「逐条 apply 变异体 → 跑 pytest → 还原」的循环里，同一条源码行若被**等长替换**（如 `get(None, view.channel_state)` ↔ `get(view.channel_state, None)… | 红验, 变异测试, mutmut, apply, 同构变异, 假存活, 假 SURVIVED, pyc, pycache, __pycache__, 字节码缓存, 缓存未失效, mtime 秒级, size 相同, 等长替换, 同长度替换,… |
 | [relocate-window-machine-roster.md](relocate-window-machine-roster.md) | 真机 relocate 收尾实验: daemon 全机名册判据遇生产实例在跑, 离线窗永不开(测试接缝旁路需授权) | 收尾窗, 离线窗, daemon 开窗, 全机名册, _spawn_daemon, 测试接缝, relocate 真机, 生产实例在跑, 旁路授权 |
 | [repo-snapshot-in-tree.md](repo-snapshot-in-tree.md) | 做只读评审要导出整棵仓库快照时, 快照必须放仓库**外** —— 树内的副本会让"单点定义"守卫扫到散落实现, `test.full` 直接红两条, 而快照目录明明已 gitignore。 | 快照, snapshot, git archive, 只读评审, review.lane.start, 批量评审, test-results 放快照, 单点守卫红, test_free_port, test_tmp_bootstrap, 散… |
+| [route-callback-teardown-race.md](route-callback-teardown-race.md) | `page.route` 桩回调体内含 `await`(`route.fetch` 等)时, 回调是异步飞行物 —— 用例末段触发的 | route.fetch, Test ended, 收尾竞态, teardown race, unrouteAll, ignoreErrors, installRouteCleanup, |
 | [rowwin-target-row-from-dom.md](rowwin-target-row-from-dom.md) | 行窗口化(rowWin, ROW_WIN_MIN=200)下给 locator 选点击目标, 不能拿 vm 数据序的行当靶 —— vm.groups 是服务端插入序(added_on 升序), 组视图按最近添加降序渲染, 插入序首组排最末、恰在窗外不渲染(点击等元素 30s 超时… | e2e/冒烟在大库档(E2E_TORRENTS=3000 矩阵轮等)点组行/种子行超时; 给窗口化表格写「挑一行来点」的 arrange; 修完可达性后仍偶发点击超时(尾缘行竞速)。 |
 | [sandbox-full-run.md](sandbox-full-run.md) | 沙箱内跑 `commands run test.full` 等自带 `TMPDIR=R:/Temp/...` 的测试命令, 沙箱拒写 R 盘 ⇒ `TMPDIR` 建不了目录 ⇒ pytest 回落 `H:\Temp`(重解析点读不了) ⇒ **点号全过却在收尾崩**, 看着像回… | 沙箱, 沙箱假红, TRAE Sandbox, R:\Temp, TMPDIR 没设, 跑全量, test.full, preflight, 闸门假红, run_in_background, 后台跑测试 |
 | [sandbox-tempfile-cwd-fallback.md](sandbox-tempfile-cwd-fallback.md) | 工具(`tools/global-traffic-monitor`)是独立 uv 项目, 其套件不在根 `testpaths` 内 ⇒ 跑它时**不带**根 `test.*` 包的 `TMPDIR` 收口; 若又在本 agent 沙箱内跑, `H:\Temp` 与 `%TEMP%… | 跑工具侧测试, 工具套件, global-traffic-monitor, 临时目录, TMPDIR, 沙箱, 临时垃圾, git status 脏, tmp 文件, pytest-of |
@@ -31,4 +32,3 @@
 | [sidefx-diagnostic-probe.md](sidefx-diagnostic-probe.md) | 生产失败路径上的「只进日志」诊断探针(端口占用者 `ss -ltnp` / `lsof` / PowerShell)在测试里会真跑外部命令 ⇒ Linux CI 的 sidefx 越界; Windows 本机的绿是被通知器守卫偶然遮蔽, 且报错归属到该 worker 最后跑的用例… | sidefx 越界, POPEN, ss -ltnp, port_owner, describe_port_owner, 端口占用者探针, WebUIBindError, CI 红本机绿, xdist, teardown ERROR |
 | [sidefx-import-time-temp-roots.md](sidefx-import-time-temp-roots.md) | sidefx 会话守卫的临时根集合不得在模块导入时固化 | 串行 -n 0 跑测试出现 sidefx 越界, 临时目录内删除/建链被判越界, TEMP_ROOTS 与 gettempdir 不一致 |
 | [sim-root-sentinel.md](sim-root-sentinel.md) | `scripts/sim_qb.py` 的 `prepare_root` 只在 root 目录**不存在**时才写哨兵 `.auto-qb-sim-root`; 自己先 `mkdir` 出来的空目录第一次跑会被当"合法空目录"放过但不留哨兵, 跑过一次目录非空后, 之后每次起 s… | dev.sim, B1, 哨兵, sim root, 已存在且非空, BoundaryViolation, 删除场景 |
-| [single-file-coverage-gate.md](single-file-coverage-gate.md) | 只跑单个测试文件时, 全部用例绿但收尾仍打 `FAIL Required test coverage of <门槛>% not reached. Total coverage: ~18%` —— 覆盖率**全局门槛**只对全量收集有意义, 部分运行收集面小必然红, 用例本身全过。… | test.one, 单文件, 单测一个文件, coverage FAIL, not reached, 18%, 假红, 排查单个用例, 裸跑 pytest 单文件 |
