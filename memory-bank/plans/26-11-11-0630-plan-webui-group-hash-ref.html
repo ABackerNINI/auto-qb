@@ -97,7 +97,7 @@
   <li><strong>R8 整行替换不破</strong>(C1 口径): 组行 delta upsert 仍是完整行对象(聚合 + hash 列表), 不做字段级 patch / 部分合并。</li>
   <li><strong>增量安全网全数保留</strong>: full 语义常驻回退、<code>_reduce_delta</code> 三判据(窗外 / 窗内含 full 代 / 缺行防御)、镜子测试与「S6 局部重算 == 全量重跑」单测, 全部只改形状不改语义。</li>
   <li><strong>兼容口径换轨</strong>: 全量分支响应体形状演进, 不再承诺「与历史响应逐字节等价」(那是 S3 增量协商的独立提交兼容闸, 本计划是响应体二次演进, 两码事)。兼容保障 = 同仓同进程发布(静态 UI 由同一服务端出)+ 静态 no-cache+ETag 重校验(<code>static_ui.py:49-58</code>)+ G3 version-reload 自愈。</li>
-  <li><strong>前端机制不动, 只换数据源</strong>: 乐观补丁链 / WeakMap 记忆化指纹 / 筛选器族逻辑不改写; 60 处 <code>g.members</code> 消费位(全树 grep 口径, 见 §02)零 diff 为前端主验收标准(§04 S2)。</li>
+  <li><strong>前端机制不动, 只换数据源</strong>: 乐观补丁链 / WeakMap 记忆化指纹 / 筛选器族逻辑不改写; 52 处 <code>g.members</code> 消费位(全树 grep 口径, 见 §02; 立项复验口径 60 处经 S2 实查重锚, 见 §10 R1)零 diff 为前端主验收标准(§04 S2)。</li>
   <li><strong>范围守恒</strong>: C2 / B / A 全部是实测触发的条件项, 不预设不顺手做; shows 视图已是 hash 引用式, 本计划不再动它的行协议。</li>
 </ul>
 
@@ -112,7 +112,7 @@
   <tr><td>VIEW_ARRAYS / _DELTA_VIEWS</td><td><code>views_common.py:111</code> / <code>runtime_common.py:50</code></td><td>group=(groups,singles); show=(shows,groups,singles) —— hash 化后须连带 torrents(见 §03)</td></tr>
   <tr><td>前端成员明细索引</td><td><code>memberByHash</code>(decorate.js 等在用); 索引源 = groups ∪ singles ∪ torrents(<code>delete_flow.js:52</code> 注释原文;hash 化后 groups 段不再贡献明细, 生效源 = singles ∪ torrents)</td><td>hash 引用式取数基建已存在, shows 在用</td></tr>
   <tr><td>shows hash 引用先例</td><td><code>views_episodes.py:32</code>(<code>node["members"].append(rec.hash)</code>)</td><td>S9b 起 shows delta 已解锁 —— hash 引用式与 delta 协议兼容已被趟过</td></tr>
-  <tr><td>前端 g.members 消费面</td><td><strong>60 处 / 17 文件</strong>(全树 grep g.members, 含模板 tpl/ 2 文件 7 处、均为真实消费位;filters.js 五筛选器族、decorate.js 指纹与 <code>_aggStatus</code>、commands_optimistic 乐观链 3 处等)</td><td>入池锚点仅记 decorate.js 两段;全树口径在入池树(f07cc562)即 50 处 / 13 文件, 现 60 处 / 17 文件 —— 代码消费面大体持平, 扩的是复验审计覆盖;「立项级」的实质是物化接缝须零波及全部消费位</td></tr>
+  <tr><td>前端 g.members 消费面</td><td><strong>52 处 / 17 文件</strong>(全树 grep g.members, 实查基线 4de921a9, 含模板 tpl/ 2 文件 5 处、均为真实消费位;filters.js 五筛选器族、decorate.js 指纹与 <code>_aggStatus</code>、commands_optimistic 乐观链 3 处等;立项复验口径 60 处系审计口径差, S2 实查重锚见 §10 R1)</td><td>入池锚点仅记 decorate.js 两段;全树口径在入池树(f07cc562)即 50 处 / 13 文件 —— 代码消费面大体持平, 扩的是复验审计覆盖;「立项级」的实质是物化接缝须零波及全部消费位</td></tr>
   <tr><td>守阵钉住旧契约</td><td><code>tests/test_webui_delta_merge.py</code> 多处</td><td>断言「组行内嵌 members 随整行重建(P-02 一期口径/R8)」—— S1 须同步改造</td></tr>
   <tr><td>静态发布面</td><td><code>static_ui.py:49-58</code> no-cache+ETag 中间件</td><td>前后端同仓同进程发布, 旧标签页刷新即愈, 不背长期共存面</td></tr>
   <tr><td>状态栏计数已服务端化</td><td><code>views_row.py:149</code> <code>_build_speed_totals</code></td><td>「前端从 groups[].members 聚合」的消费面已部分收缩(26-09-20-1646 先例)</td></tr>
@@ -133,7 +133,7 @@
   <tr><td>后端组行</td><td><code>_build_group_row</code> 的 <code>"members"</code> 从 <code>_member_view</code> 明细数组改 hash 字符串数组; 聚合字段(dlspeed 求和等)全部保留 —— 组行仍是完整行对象</td><td>shows 先例 <code>views_episodes.py:32</code></td></tr>
   <tr><td>VIEW_ARRAYS</td><td><code>group</code> → (groups, singles, <strong>torrents</strong>); <code>show</code> → (shows, groups, singles, <strong>torrents</strong>); <code>torrent</code> 不变</td><td>成员明细索引须 ride along: group/show 视图不回 torrents 则 <code>memberByHash</code> 索引拼不出(与 shows 视图当年「连带 groups+singles」同款先例, <code>views_common.py:118-126</code> 注释原文)</td></tr>
   <tr><td>增量(C1, D4)</td><td>组行整行 upsert(聚合+hash 列表); VIEW_ARRAYS 扩展后组/追剧视图 delta 桶自然含 torrents 桶; R1(时间线只存键)/R5(removed 让位)/R8(整行替换)语义全不动</td><td>抖动轮 delta = 组行(聚合+hash 列表) + 单成员 torrent 行; R8 再评估属 C2 条件项(§05 G3)</td></tr>
-  <tr><td>前端接缝</td><td><strong>ingestion 物化</strong>(推荐, S2 spike 定案): state 入口对 hash 形组行就地组装 <code>g.members = hashes.map(memberByHash.get)</code> —— 60 处(全树 grep 口径)消费位零波及; 物化引用指向 torrent 行对象(canonical 行), 乐观补丁从「遍历各数组找成员」简化为「补丁打在 canonical 行一处」。备选: 装饰期解析(shows 同款)——仅当 spike 证明 ingestion 缝与 WeakMap 记忆化/乐观链冲突时启用</td><td>验收标准: 60 处消费位零 diff(全树 grep 口径) + 指纹/乐观链行为守阵全绿</td></tr>
+  <tr><td>前端接缝</td><td><strong>ingestion 物化</strong>(推荐, S2 spike 定案): state 入口对 hash 形组行就地组装 <code>g.members = hashes.map(memberByHash.get)</code> —— 52 处(全树 grep 口径)消费位零波及; <strong>spike 定案(2026-11-12): 成员行浅拷贝</strong>而非 canonical 行引用 —— 动因 = 乐观链 prev 采集「同 hash 多命中各为独立对象」不变式在别名化下被污染(op.prev 读到已打补丁值 → 失败回滚静默失效), 浅拷贝与改造前服务端成员字典同构、补丁链零改写; 单点 = 任务档案 R2 节。备选: 装饰期解析(shows 同款)——仅当 spike 证明 ingestion 缝与 WeakMap 记忆化/乐观链冲突时启用</td><td>验收标准: 52 处消费位零 diff(全树 grep 口径) + 指纹/乐观链行为守阵全绿</td></tr>
   <tr><td>version-reload(D3)</td><td>前端每轮比对 status payload 既有 <code>version</code> 字段(<code>_status_payload</code> 已回传), 变更即 <code>location.reload()</code></td><td>十行级改动; 根治未来一切协议偏移的静默破损</td></tr>
 </table>
 
@@ -148,10 +148,10 @@
   <tr><th>步</th><th>内容</th><th>验收判据</th></tr>
   <tr><td>S0<br>成本构成实测拆分</td><td>开工动作先行: 两件 issue <code>kb.status</code> → In Progress 补认领链。然后 sim 环境实测(sim_run, @3000 与 @5000; 沙箱 <code>R:\auto-qb-sim</code> 首跑需放行, 26-10-08 先例): ①全量轮四段占比(序列化 json.dumps / 网络 / 前端 JSON.parse / 整表替换); ②载荷按数组拆分 + members 重复份额; ③monster-group 合成数据(单组 ≥2000 成员)抖动轮 delta 体积</td><td>数字表入任务档案; G1/G2/G3 裁决输入就绪; 不改任何生产代码</td></tr>
   <tr><td>S1<br>后端 hash 引用式</td><td><code>_build_group_row</code> members → hash 数组; VIEW_ARRAYS 两视图连带 torrents; <code>_publish_partial_locked</code> 注释与口径更新(P-02 二期落地); delta 归约随 VIEW_ARRAYS 自然扩展; 守阵同步改造(delta_merge 多处 / mirror / delta)</td><td>守阵改造后绿; 镜子 fuzz 覆盖 hash 形状; 「局部重聚合 == 全量重跑」单测保持; <code>dev.typecheck</code> 绿</td></tr>
-  <tr><td>S2<br>前端物化接缝</td><td>spike 定缝(ingestion vs 装饰期, 按 §03 推荐走, 冲突才改道); delta 应用路径扩展(torrents 桶进组/追剧视图); 筛选器计数 / 指纹 / 乐观链回归</td><td>60 处 <code>g.members</code> 消费位零 diff(全树 grep 口径, 改道则显式清单+守阵); e2e 组行渲染/筛选/乐观补丁绿</td></tr>
+  <tr><td>S2<br>前端物化接缝</td><td>spike 定缝(ingestion vs 装饰期, 按 §03 推荐走, 冲突才改道); delta 应用路径扩展(torrents 桶进组/追剧视图); 筛选器计数 / 指纹 / 乐观链回归</td><td>52 处 <code>g.members</code> 消费位零 diff(全树 grep 口径, 改道则显式清单+守阵); e2e 组行渲染/筛选/乐观补丁绿</td></tr>
   <tr><td>S3<br>version-reload</td><td>前端轮询比对 <code>version</code>, 变更自动 reload; 防抖(避免重签发循环)</td><td>单测/守阵 + 手动验证(改版本号触发改动)</td></tr>
   <tr><td>S4<br>e2e 全量回归</td><td><code>dev.e2e</code> 全量; 新增协议形状用例(组行 members 为 hash 数组 / 明细渲染 / 筛选计数 / 乐观补丁)</td><td>全绿(存量口径, 数字见 kb.baseline)</td></tr>
-  <tr><td>S5<br>复评与条件裁决</td><td>重跑 S0 同口径取数; G1(B)/G2(A)/G3(C2) 按数字裁决(§05): 命中 → 追加分期或另立计划; 不命中 → 关闭</td><td>前/后数字对照表入档案; 裁决记录回填 §06</td></tr>
+  <tr><td>S5<br>复评与条件裁决</td><td>重跑 S0 同口径取数; G1(B)/G2(A)/G3(C2) 按数字裁决(§05): 命中 → 追加分期或另立计划; 不命中 → 关闭</td><td>前/后数字对照表入档案; 裁决记录回填 §05 收口段(即本计划的三条件裁决点所在节)</td></tr>
   <tr><td>S6<br>收尾</td><td>回写 <code>architecture/webui.md</code>(增量同步节)与 web-runtime 口径; 两 issue「修复后补充」+ 翻 Done; 基线切片; 新坑入 pitfalls</td><td>kb.check 全绿; 收尾 DoD 齐</td></tr>
 </table>
 
@@ -185,7 +185,7 @@
 <table>
   <tr><th>风险</th><th>触发条件</th><th>处置</th></tr>
   <tr><td>增量拼装错误(hash 形状下组行/成员一致面)</td><td>镜子 / 「S6==全量」单测红</td><td>镜子测试扩展覆盖 hash 形状(S1 验收项); full 语义常驻回退不变 —— 应急语义回退沿用 <code>_reduce_delta</code> docstring 既有单行方案先例</td></tr>
-  <tr><td>ingestion 物化缝与 WeakMap 记忆化 / 乐观补丁冲突</td><td>S2 spike 发现引用身份或原地变更语义对不上</td><td>改道装饰期解析(shows 同款先例); 验收标准从「60 处(全树 grep 口径)零 diff」放宽为「消费点显式清单 + 行为守阵」, 改道原因记 §10</td></tr>
+  <tr><td>ingestion 物化缝与 WeakMap 记忆化 / 乐观补丁冲突</td><td>S2 spike 发现引用身份或原地变更语义对不上</td><td>改道装饰期解析(shows 同款先例); 验收标准从「52 处(全树 grep 口径)零 diff」放宽为「消费点显式清单 + 行为守阵」, 改道原因记 §10</td></tr>
   <tr><td>载荷数学反直觉(view=group 体积持平或微增)</td><td>S0 实测</td><td>收益主张只押四数组全量收缩 + 抖动轮 delta 收缩 + shows 视图去重(§03 已预写诚实预期); view=group 体积以实测为准, 不预写承诺</td></tr>
   <tr><td>旧标签页破损窗口(升级后旧 JS 吃新形状)</td><td>部署后未刷新的已开标签页继续轮询</td><td>version-reload 自愈(G3/S3); 发布说明「升级后刷新页面」兜底; 无跨版本长期共存面(同进程发布 + no-cache)</td></tr>
   <tr><td>守阵大面积改造遗漏</td><td>test.full 红</td><td>S1 验收含守阵改造清单(delta_merge 多处 / mirror / delta / static dom skins); 改造与协议改动同批提交, 不拆</td></tr>
@@ -194,6 +194,7 @@
 
 <h2><span class="no">§10</span>变更记录</h2>
 <ul>
+  <li><span class="tag">R1 · 26-11-13-0045</span> 实施收口改版(S0-S6 全部落地, doc-status 翻 Done): ①S0 测量改道 —— sim 沙箱弃用, 用户拍板改「测试 qB 真机轨 + 1KiB real-fake 假种子」(§04 S0 行的 sim_run/沙箱放行口径已不适用, 实测配方与数字单点 = 任务档案 R1/R3 节); ②S2 spike 定案 —— ingestion 缝可行但产<strong>成员行浅拷贝</strong>而非 §03 原推荐 canonical 行引用(动因 = 乐观链 prev 采集不变式, §03 已回填, 单点 = 档案 R2); ③S5 三裁决点收口 —— G1/G2 机械判据未触发、G3 用户拍板维持默认不立项(§05 收口段); ④验收口径重锚 —— g.members 消费位 60 处/17 文件(立项复验审计口径)实查基线 4de921a9 为 <strong>52 处/17 文件</strong>(tpl 7 处→5 处), §01-§04/§07 已统一, S2 按 52 处验收。</li>
   <li><span class="tag">R0 · 26-11-11-0630</span> 初版。来源: 用户指令「两个issue联合复验, 然后grilling, 出一个计划」; 联合复验两件均<strong>仍复现</strong>(HEAD 90764579, 大文件拆分 deb1168d 后锚点整体迁移, 前端消费面经全树 grep 盘点 60 处/17 文件, 含模板 tpl/ 2 文件 7 处), 复验行+重锚已回写两 issue §04/§07; grilling 一轮五问(D1-D5)用户批复「全按推荐」; 计划经 kb.new --refs 与两 issue 双向补链; 只读评审两轮累计 14 发现(minor 9/nit 5, 零 blocker)全过检全修: grep 口径统一为全树(g.members 60 处/17 文件, 入池树 50 处/13 文件, 模板 7 处计入验收口径)/_reduce_delta 行号指针重锚/抖动轮推算去「19 键」改粗估并统一「≈8 倍」口径。</li>
 </ul>
 
