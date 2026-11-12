@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>relocate 删链门/D16 候选面对祖先 save_path 形态漏判: 组外种子内容根覆盖 src 时依赖漏计且带文件删除不拦 · bug · 计划外问题</title>
+<meta name="issue-slug" content="relocate-ancestor-savepath-blindspot">
+<meta name="issue-stamp" content="26-11-13-0535">
+<meta name="issue-type" content="bug">
+<meta name="doc-topic" content="relocate-form-aware-gates">
+<meta name="doc-refs" content="memory-bank/plans/26-11-13-0448-plan-relocate-form-aware-gates.html">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="relocate 删链门/D16 候选面对祖先 save_path 形态漏判: 组外种子内容根覆盖 src 时依赖漏计且带文件删除不拦">
+<meta name="issue-summary" content="组外种子 save_path 为 job.src 祖先且内容根恰覆盖 src 时候选面收不到: 删链门漏计依赖(收尾删别名后断粮), D16 不拦其带文件删除(可穿链接删 dst 数据); 现状既有洞, 计划 26-11-13-0448 §07 已披露">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --mark: #161e26;     /* issue 特有: callout 底色 (plan.html 不用) */
+    --warn-bg: #2a2119;  /* issue 特有: 状态徽标底色 */
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 单栏流式版面: 与 plan.html 同一套 .sheet (封顶 1280px, 侧距 clamp(18~44px)); 旧双栏+粘性目录已删 */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+
+  /* 封面 meta 行: issue 特有, DOM 形态别改 —— 状态徽标 <span class="badge"> 被
+     flip_status (W4) 与 check_status_drift 的 BADGE_RE 机读 (k/v div 结构在判据里) */
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px 28px; font-family: var(--mono); font-size: 11.5px; color: var(--faint); border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta-row .item .k { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .meta-row .item .v { font-size: 13.5px; color: var(--dim); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin: 14px 0; font-size: 14px; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-family: var(--mono); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">计划外问题（未修）· bug</div>
+<h1>relocate 删链门/D16 候选面对祖先 save_path 形态漏判: 组外种子内容根覆盖 src 时依赖漏计且带文件删除不拦</h1>
+<p class="lede">组外种子 save_path 为 job.src 祖先且内容根恰覆盖 src 时候选面收不到: 删链门漏计依赖(收尾删别名后断粮), D16 不拦其带文件删除(可穿链接删 dst 数据); 现状既有洞, 计划 26-11-13-0448 §07 已披露</p>
+<div class="meta-row">
+  <div class="item"><div class="k">编号</div><div class="v">26-11-13-0535-bug-relocate-ancestor-savepath-blindspot</div></div>
+  <div class="item"><div class="k">报告时间</div><div class="v">2026-11-13 05:35</div></div>
+  <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">涉及模块</div><div class="v">backend/relocate</div></div>
+  <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+</div>
+
+<section id="s1">
+  <h2><span class="no">§01</span>现象与发现场景</h2>
+  <p>发现场景: 评审计划 <a href="../plans/26-11-13-0448-plan-relocate-form-aware-gates.html">26-11-13-0448</a>(relocate 收尾窗写路径误拦修正)轮 1 的 major 发现 —— 该计划把删链门/删种拦截的判据换成「种子文件清单 × <code>job.alias_paths</code> 交集」时,宣称交集判据「恰覆盖」;核查发现<b>候选面(预过滤)本身按 save_path 收窄</b>,存在一类真实相交却被候选面挡在判据之外的形态,且该洞为现状代码既有、非计划引入。计划 §07 已如实披露(「候选面外祖先形态漏判(既有洞,如实披露)」行),本条把它独立成池。</p>
+  <p>漏判形态: 组外种子 <code>save_path</code> 为 <code>job.src</code> 的<b>祖先</b>,且其内容根恰覆盖 src。例: 组 src = <code>R:\Download\PTing</code>(成员内容根 <code>PTing\&lt;name&gt;</code>),组外种子 save_path = <code>R:\Download</code>、name = <code>PTing</code> → 内容根 = <code>R:\Download\PTing</code> == src。若它与组同内容(跨种),其文件清单与 alias_paths 真实相交,但它的 save_path 既不在 scope 之下也不恰等 src —— 两处判据的候选面都收不到它。生产布局(<code>R:\Download\PTing</code> 直接挂在下载根下)下该形态真实可达。</p>
+</section>
+
+<section id="s2">
+  <h2><span class="no">§02</span>证据</h2>
+  <p>三处判据的候选面原文(取证 2026-11-13,行号当时值):</p>
+<pre><code># src/auto_qb/core/modules/relocate_units.py:1304 — chain_gate_hits 判据(删链门):
+if sp and (under_alias_root(sp, (root, )) is not None or (eq and _norm(sp) == eq)):
+
+# src/auto_qb/core/modules/relocate_units.py:1281 — alias_roots_of(删种拦截数据源, 不分别名形态):
+out.append((job.src, job.job_id))
+
+# src/auto_qb/core/qbapi.py:242-244 — _relocate_delete_blocked(D16 候选面):
+for raw_root, job_id in roots.items():
+    if under_alias_root(sp, (raw_root, )) is not None:
+        blocked.append((h, str(raw_root), str(job_id or "")))
+
+# src/auto_qb/core/modules/relocate_exec.py:1077 — _chain_gate_deps 消费点:
+hits = set(ru.chain_gate_hits(save_paths, anchor, equal_root=job.src))</code></pre>
+  <p><code>under_alias_root</code>(relocate_units.py:1252-1267)只判「path 在根上(等值)或根内(前缀)」—— <b>祖先方向(path 是根的父目录)结构性漏</b>;等值面 <code>equal_root</code> 只并列恰等形态(1300 收口评审 9f0cbe4e 加,其「断粮」论据即针对恰等)。祖先形态两头都不命中。计划 26-11-13-0448 §07 风险表「候选面外祖先形态漏判」行为同一结论的披露面。</p>
+</section>
+
+<section id="s3">
+  <h2><span class="no">§03</span>影响面</h2>
+  <table>
+    <tr><th>维度</th><th>结论</th></tr>
+    <tr><td>触发条件</td><td>组外种子 save_path 为 job.src 祖先 且 内容根恰覆盖 src 且 文件清单与 alias_paths 相交(同内容跨种最典型);迁移组收尾(armed/rewritten → verify)期间即暴露</td></tr>
+    <tr><td>影响范围</td><td>① 删链门漏计依赖: 收尾核验通过后别名被删,祖先种子经链接做种的数据丢失(断粮),且失去 D16 保护;② D16 不拦其带文件删除: qB deleteFiles 经文件级 symlink 跟随直删(N5 实测通路)可破坏 dst 侧成员数据,目录级形态经 junction 同通路;③ 文件级/目录级两形态同洞</td></tr>
+    <tr><td>严重度</td><td>高(数据丢失通路),但拓扑窄 —— 需祖先 save_path + 内容根恰好覆盖 src 的组合,常规分目录布局不可达</td></tr>
+  </table>
+</section>
+
+<section id="s4">
+  <h2><span class="no">§04</span>定位锚点</h2>
+  <ul>
+    <li><code>relocate_units.py:1285-1306</code>(取证 2026-11-13)· <code>chain_gate_hits</code> · grep「chain_gate_hits(save_paths, anchor」—— 判据在 :1304</li>
+    <li><code>relocate_units.py:1252-1267</code> · <code>under_alias_root</code> · grep「p == r or p.startswith(r + \"/\")」—— 祖先方向结构性漏的判据本体</li>
+    <li><code>relocate_exec.py:1062-1078</code> · <code>_chain_gate_deps</code> · grep「hits = set(ru.chain_gate_hits」—— 候选面 = store 全量 save_path,verdict 漏判在此之后</li>
+    <li><code>qbapi.py:218-245</code> · <code>_relocate_delete_blocked</code> · grep「under_alias_root(sp, (raw_root, ))」—— D16 候选面(:241-244)</li>
+    <li>披露面: <code>memory-bank/plans/26-11-13-0448-plan-relocate-form-aware-gates.html</code> §07 风险表「候选面外祖先形态漏判」行</li>
+  </ul>
+</section>
+
+<section id="s5">
+  <h2><span class="no">§05</span>根因</h2>
+  <div class="callout">候选面以 save_path 的「包含关系」为唯一预过滤维度: under_alias_root 只判「sp 在根上/内」,等值面只并列恰等 —— 「sp 为根祖先但内容根覆盖根」的形态两头都不命中,交集判据根本不运行。已排除: 非取数错/归一错(文件清单本身可得),非判据实现 bug(判据从未被触发)。该洞为现状既有(0808 S4 引入 D16、1300 R7 重锚时均未覆盖祖先方向),非 26-11-13-0448 计划引入。</div>
+</section>
+
+<section id="s6">
+  <h2><span class="no">§06</span>建议修法<span class="opt">（可选）</span></h2>
+  <p><b>方向: 补候选面而非改判据</b>(交集谓词本体正确,漏在预过滤):</p>
+  <ul>
+    <li>候选面加一格: 「save_path ∈ src 严格祖先(父方向链)且 <code>content_root_of(save_path, files)</code> == src」(files = 文件清单,签名 <code>content_root_of(save_path, files)</code> 全库调用点同款;清单取数走 <code>relocate_plan._file_map</code> 同款缓存单点,祖先格命中面极小、开销可控)—— 命中该格的种子进入同一交集判据(R2 删链门计依赖 / R3 D16 拦带文件删除)。</li>
+    <li>备选: 放弃 save_path 预过滤,对 qB 全量种子跑清单×alias_paths 交集 —— 判据最完备但 files API 请求面扩大到全库,成本不成比例,不建议。</li>
+    <li>实施注意: 与计划 26-11-13-0448 的 R2/R3 同点施工(候选面构造单点共用),建议认领时并入该计划实施或紧随其后,避免两处候选面漂移。</li>
+  </ul>
+</section>
+
+<section id="s7">
+  <h2><span class="no">§07</span>状态变更日志</h2>
+  <ul>
+    <li>2026-11-13 05:35 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+  </ul>
+  <h3>复验</h3>
+  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <h3>修复后补充</h3>
+  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+</section>
+
+<footer>
+  26-11-13-0535-bug-relocate-ancestor-savepath-blindspot.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+</footer>
+
+</div>
+</body>
+</html>
