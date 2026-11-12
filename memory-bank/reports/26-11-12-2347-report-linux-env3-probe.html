@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>第三开发环境(Ubuntu 24.04 原生 Linux)接入探测: 依赖、断点与测试面实测</title>
+<meta name="doc-type" content="report">
+<meta name="doc-topic" content="linux-env3-probe">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-11-12-2347">
+<meta name="doc-updated" content="26-11-12-2347">
+<meta name="doc-refs" content="memory-bank/issues/26-11-12-2347-test-test-tz-sensitive-window-start.html, memory-bank/pitfalls/ops/zcode-linux-argv0-sys-executable.md">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">REPORT · memory-bank · doc-topic: linux-env3-probe</div>
+<h1>第三开发环境(Ubuntu 24.04 原生 Linux)接入探测: 依赖、断点与测试面实测</h1>
+<p class="lede">本篇只回答: 把这台 Ubuntu 24.04 原生机作为第三个开发环境接入 auto-qb 工作区, 要装哪些依赖、踩了哪些断点、测试面在原生 Linux 上实测如何; 并给出它与进行中计划 26-11-12-0152(Windows 侧 Docker testbed)的关系判定。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-12-2347 · <b>doc-updated</b> 26-11-12-2347 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 用户指令「这是第三个开发环境, 探测本机环境, 分析需要安装哪些依赖、需要更改哪些开发流程, 特别是测试」; grilling 两轮拍板(完整开发环境定位 / 计划 26-11-12-0152 不动 / TZ 用例入池 / argv[0] 立坑档 / 全程不提交)
+</div>
+
+<h2><span class="no">§01</span>结论</h2>
+
+<h3>1.1 判定表(grilling 拍板)</h3>
+<table>
+  <tr><th>判定点</th><th>结论</th></tr>
+  <tr><td>本机定位</td><td><strong>完整开发环境</strong>(改码/提交/推送, 与其它 clone 并行)—— 原生 Linux 已证全绿且比 Windows 侧快一个量级, 当纯测试端浪费</td></tr>
+  <tr><td>测试路线</td><td><strong>原生直跑为主</strong>(uv + .venv + node, 无需 Docker); Docker 27.5 在机保留为「CI 平价/净室复验」可选面, 非日常路径</td></tr>
+  <tr><td>计划 26-11-12-0152</td><td><strong>不动</strong>(拍板: 已 in progress)—— 它解决的是 Windows 宿主的 Linux 测试端(bind 挂载 1MB/s / 无 Linux node / uv 走 github 不通), 这些痛点在原生 Linux 上天然不存在, 与本机正交; 计划完成后可把南大镜像落点补进其 D8(拍板: 届时再补)</td></tr>
+  <tr><td>TZ 敏感用例</td><td><strong>入池不顺手修</strong>(<a href="../issues/26-11-12-2347-test-test-tz-sensitive-window-start.html">issue 26-11-12-2347</a>, Open); 系统时区不动(用户桌面机真实时区)</td></tr>
+  <tr><td>ZCode argv[0] 坑</td><td><strong>立坑档</strong>(<a href="../../memory-bank/pitfalls/ops/zcode-linux-argv0-sys-executable.md">pitfalls/ops/zcode-linux-argv0-sys-executable.md</a>)—— 本机未来会话的必踩点, 症状与真因距离极远</td></tr>
+  <tr><td>提交边界</td><td>本轮产物全部留工作区, <strong>不提交</strong>, 待用户审后显式触发「提交」</td></tr>
+</table>
+
+<h3>1.2 依赖安装清单(全部已就位)</h3>
+<table>
+  <tr><th>依赖</th><th>版本/落点</th><th>装法(可复现)</th><th>作用</th></tr>
+  <tr><td>uv</td><td class="good">0.13.7 → <code>~/.local/bin</code></td><td><code>python3 -m pip install --user --break-system-packages -i https://pypi.tuna.tsinghua.edu.cn/simple uv</code></td><td><strong>断点修复的第一张多米诺</strong>: wrapper 走 <code>uv run python</code> 分支后, argv[0] 污染与字面 <code>python</code>=py2 两个断点同时自愈; 项目依赖/venv 单点</td></tr>
+  <tr><td>CPython 3.13</td><td class="good">3.13.18(uv 托管)</td><td><code>UV_PYTHON_INSTALL_MIRROR=https://mirror.nju.edu.cn/github-release/astral-sh/python-build-standalone/ uv python install 3.13</code>(uv 会拼 <code>&lt;mirror&gt;/&lt;tag&gt;/&lt;file&gt;</code>, 南大布局无 <code>releases/download</code> 段)</td><td>github 直连失败下 3.13 的唯一通路; <strong>计划 D8 未收录的新落点</strong>, Windows 侧实施 S1 时可复用</td></tr>
+  <tr><td>项目 venv</td><td class="good">.venv(develop@5dfb3662)</td><td><strong>裸 <code>uv sync</code>(无镜像变量)</strong> —— 锁内官方下载 CDN <code>files.pythonhosted.org</code> 本机可达(实测 200/2.1s), 锁文件保持 canonical 不动</td><td>10 个 <code>==</code> 锁定依赖全装; wrapper/kb/doc 包任务全部可用。<span class="bad">⚠ 曾用 <code>UV_DEFAULT_INDEX=清华</code> 同步, 实测把 uv.lock 全文 865 行 registry URL 烤成镜像并抬 revision —— 已 <code>git restore</code> 撤销; 镜像变量只在 re-resolution(uv lock --upgrade/加新依赖)时才需要, 用后必须还原锁</span></td></tr>
+  <tr><td>node</td><td class="good">v22.20.0 + npm 10.9.3 → <code>~/.local/node</code></td><td>npmmirror 官方二进制用户级解压(免 sudo; PATH 前插 <code>~/.local/node/bin</code>)</td><td>65 条 webui 静态电池族 + 后续 e2e 的前置; 计划 D2 在容器内烘焙是 Windows 侧路线, 本机原生路线直接装宿主</td></tr>
+  <tr><td>python 符号链接</td><td class="good">/usr/bin/python → python3(3.12.3)</td><td><code>sudo apt install python-is-python3</code>(用户执行)</td><td>消除裸 <code>python</code>=py2 的调试地雷</td></tr>
+</table>
+
+<h3>1.3 开发流程差异清单(Windows 口径 → 本机口径)</h3>
+<table>
+  <tr><th>Windows 侧口径</th><th>本机口径</th></tr>
+  <tr><td>test.quick/full 的 <code>uv run pytest</code> 直跑</td><td class="good">完全一致, 无需任何前缀(TMPDIR 自举在本机自动落 <code>/tmp</code>; 外部 TMPDIR 不存在, rc=4 拒收面天然不触发)</td></tr>
+  <tr><td>临时目录约定 <code>R:/Temp/auto-qb/…</code>(现行单点 collaboration.md「协作约定」; 原 techContext「临时目录/备份盘约定」节已随 2026-11-08 重构移除)</td><td class="wr">不适用 —— R:/H: 盘是 Windows 实体; 本机用 <code>/tmp</code> 与 <code>~/</code>(run.md WSL 节同款纪律: 仓库副本勿放 /tmp, 本机仓库在 <code>~/Desktop</code> 天然满足)</td></tr>
+  <tr><td>cmd.exe 语义(<code>set "VAR=…"</code> / COMSPEC / cmd //c)</td><td class="good">退场 —— 引擎 run 形任务走 <code>/bin/sh</code>; 坑档里 cmd.exe 专属条目在本机不触发</td></tr>
+  <tr><td><code>\\?\</code> 长路径前缀(utils.add_long_path_prefix_for_win)</td><td class="good">不触发(平台分支)</td></tr>
+  <tr><td>taskkill 红线 / 进程树清理</td><td>不适用本机(该红线约束 Windows 宿主); 本机遵循「禁止一切 taskkill」同条红线, POSIX 侧本无 taskkill</td></tr>
+  <tr><td>基线数字(Windows 实测)</td><td class="wr">平台差异面: 本机数字另记, 不与 Windows 基线互比(quick 31.3s / full 110.4s 是本机量级, 见 §02.4); 覆盖率闸非 Windows 档 99.0(单点 <code>tests/conftest.py</code>), 实测 99% 达标</td></tr>
+  <tr><td>分支: 日常 develop</td><td class="good">已切换: 本 clone master(发布线, 曾落后 335 提交)→ develop@5dfb3662, sync 已过</td></tr>
+</table>
+
+<div class="aside">不是差异但值得知道: ①每条命令输出头部两行噪声(zsh parse error + AppImage not found)来自 ZCode Linux 宿主自身, <strong>不可修</strong>(AppImage 只读 squashfs, 脚本按会话重新生成), 不影响任何退出码, 建议向工具方反馈; ②本机 docker 里有 23 个月前的开发残留镜像(gcc 1.42G 等)可选手工清理, 非项目范围; ③Docker Hub 直连超时, 若真要用 testbed 容器需先给 docker daemon 配国内 registry mirror。</div>
+
+<h2><span class="no">§02</span>证据快照</h2>
+
+<h3>2.1 环境事实面(2026-11-12 实测)</h3>
+<table>
+  <tr><th>项</th><th>值</th></tr>
+  <tr><td>OS / 内核</td><td>Ubuntu 24.04.5 LTS(Noble)/ 6.8.0-149-generic x64 —— <strong>原生 Linux, 非 WSL</strong>(对齐 CI ubuntu-latest 的 glibc 侧)</td></tr>
+  <tr><td>CPU / 内存 / 盘</td><td>32 核 / 11Gi(可用 7.8Gi)/ 项目盘剩 22G(72% 用量)</td></tr>
+  <tr><td>工具链</td><td>git 2.43.0 · docker 27.5.0(用户在 docker 组, 免 sudo)+ compose v2.32.4 · uv 0.13.7 · node v22.20.0</td></tr>
+  <tr><td>时区 / locale</td><td>America/Los_Angeles(PST, 含 DST)/ en_US.UTF-8 —— <strong>无控制台编码坑</strong>(Windows cp1252/GBK 系坑档全部不适用)</td></tr>
+  <tr><td>qBittorrent</td><td>未安装(无 qbittorrent/qbittorrent-nox); 本机 docker 无 PT 生产容器(计划 S5 的 PT 白名单是 Windows 侧 Docker Desktop 的, 与本机无关)</td></tr>
+  <tr><td>sudo</td><td>需密码(用户级安装路线全部走 <code>~/.local</code> 规避)</td></tr>
+</table>
+
+<h3>2.2 网络可达性(首轮探测曾因 zsh 不做词分割全部误判 000, 修正写法后重测)</h3>
+<table>
+  <tr><th>源</th><th>结果</th><th>备注</th></tr>
+  <tr><td>清华 PyPI / 阿里 PyPI</td><td class="good">200(3.3s / 3.0s)</td><td><code>UV_DEFAULT_INDEX</code> 落点</td></tr>
+  <tr><td>npmmirror / 清华 apt / 南大 github-release</td><td class="good">200(0.2~0.3s)</td><td>node / apt / 托管 CPython 三条镜像链全通</td></tr>
+  <tr><td>astral.sh</td><td class="good">301</td><td>可达, 但其后 binary 走 github releases</td></tr>
+  <tr><td>github.com</td><td class="bad">FAIL(curl 退出非 0)</td><td>DNS 正常; uv 托管 CPython 默认源不可用 ⇒ 南大镜像成必需</td></tr>
+  <tr><td>raw.githubusercontent.com</td><td class="wr">301(可达但不稳定面)</td><td>与 github.com 主站行为分裂, 不可依赖</td></tr>
+  <tr><td>PyPI 索引 API(pypi.org/simple)</td><td class="bad">FAIL</td><td>仅影响 re-resolution(uv lock --upgrade/加新依赖); 裸 sync 走锁文件不需要它</td></tr>
+  <tr><td>files.pythonhosted.org(锁内下载 CDN)</td><td class="good">200(2.1s)</td><td>裸 <code>uv sync</code> 本机完全成立的根据 —— 锁保持 canonical, 全新 clone 亦无需镜像变量</td></tr>
+  <tr><td>registry-1.docker.io</td><td class="bad">000(20s 超时)</td><td>docker pull 需 registry mirror(仅容器路线受影响)</td></tr>
+  <tr><td>gitee.com</td><td class="good">通</td><td>sync 主线, 全程无碍</td></tr>
+</table>
+
+<h3>2.3 引擎断点链(argv[0] 污染, 已立坑档)</h3>
+<pre><code># 实锤(2026-11-12): ZCode Linux 宿主把进程 argv[0] 设为相对 AppImage 路径
+$ python3 -c "import sys; print(sys.executable)"
+/home/nini/Desktop/MyProjects/ZCode/auto-qb-zcode-clone1/ZCode-3.17.2-linux-x64.AppImage   # 不存在
+$ python3 -S -c "import os; print(os.readlink('/proc/self/exe'))"
+/usr/bin/python3.12            # 内核真相没坏 —— 只是被污染的 argv[0] 骗了 CPython getpath
+$ cat /proc/self/cmdline | tr '\0' ' '
+./ZCode-3.17.2-linux-x64.AppImage /proc/self/cmdline   # 每条命令的噪声行同源</code></pre>
+<p>后果链: 引擎 <code>_config.py:406</code> <code>argv=[sys.executable, script]</code> → script 形任务全炸 <code>AppImage not found</code>; 无 uv 时 wrapper 落 <code>exec python</code> → py2 读 UTF-8 源码炸 <code>Non-ASCII character</code> SyntaxError。装 uv 后 wrapper 走 <code>uv run -q python</code> 分支, argv[0] 正确, <strong>整链自愈</strong>(实测 <code>kb.active</code> 等字面 python 任务一并恢复)。判别与应急配方见坑档。</p>
+
+<h3>2.4 测试面数字(全部 2026-11-12 实测)</h3>
+<table>
+  <tr><th>#</th><th>现场</th><th>结果</th></tr>
+  <tr><td>1</td><td>master@abac3ddc(切换前), quick(-n 8), 无 node, TZ=PST</td><td class="wr">7 failed / 5592 passed / 55.35s —— 6 条 alias_fs/relocate 族是 develop 已修面(落后 335 提交), 1 条 = TZ 真红</td></tr>
+  <tr><td>2</td><td>develop@5dfb3662(一次性 worktree, 已清), quick, 无 node</td><td class="bad">66 failed / 5985 passed / 46.9s —— 65 条 webui 静态电池族全因 node 缺失探针返回 None 断言红(文案两种: 「本电池静默跳过」/ poll_auth 族「无法运行」)+ 1 条 TZ</td></tr>
+  <tr><td>3</td><td>同树, node(v22)装后, 电池族三文件复跑</td><td class="good">36 passed / 2.30s —— 65 条全消, 证实归因</td></tr>
+  <tr><td>4</td><td>同树, node + <code>TZ=Asia/Shanghai</code>, 全量 quick(-n 8)</td><td class="good"><strong>6055 passed / 19 skipped / 0 failed / 31.34s</strong> —— 原生 Linux 全绿成立</td></tr>
+  <tr><td>5</td><td>同树, <code>commands run test.full</code>(带覆盖率)</td><td class="good">rc=0, 110.4s; <code>TOTAL 27110 miss 219 · 分支 9478 partial 88 · 99%</code> —— 非 Windows 覆盖率闸 <strong>99.0</strong> 达标(闸值单点 <code>tests/conftest.py:108-109</code>; Windows 档 99.5 本机未跑, 该闸只归 Windows 全量)</td></tr>
+  <tr><td>6</td><td>TZ 对照: 同用例 <code>TZ=Asia/Shanghai</code> 单跑</td><td class="good">1 passed / 0.03s(PST 下 0.06s 恒红, 差恰好 3600s = DST)→ <a href="../issues/26-11-12-2347-test-test-tz-sensitive-window-start.html">issue 26-11-12-2347</a></td></tr>
+</table>
+<p class="cm">对照量级(出处: <code>.commands/test/config.toml</code> 两条 task note 的实测留痕, 2026-11-02 / 2026-10-08): Windows B 环境(四 clone 并发机载)全量实测 1519s、快速档(-n 8)实测 26.6s —— 本机 32 核原生下 quick 31.3s / full 110.4s, 同量级或更快; 平台与负载不同, <strong>不进基线口径</strong>, 只作本机快照。</p>
+
+<h3>2.5 本轮对环境的全部变更(可审计)</h3>
+<table>
+  <tr><th>变更</th><th>落点</th><th>可逆性</th></tr>
+  <tr><td>安装 uv 0.13.7</td><td><code>~/.local/lib/python3.12/site-packages</code> + <code>~/.local/bin/uv</code></td><td>pip uninstall 即净</td></tr>
+  <tr><td>托管 CPython 3.13.18</td><td><code>~/.local/share/uv/python/</code></td><td><code>uv python uninstall 3.13</code></td></tr>
+  <tr><td>安装 node v22.20.0</td><td><code>~/.local/node/</code>(需自配 PATH)</td><td>删目录即净</td></tr>
+  <tr><td>项目 venv(develop)</td><td><code>&lt;repo&gt;/.venv</code>(gitignored)</td><td><code>uv sync</code> 重建</td></tr>
+  <tr><td>commands wrapper 两份</td><td><code>&lt;repo&gt;/commands</code> + <code>~/.local/bin/commands</code>(skill 装的, 未跟踪件)</td><td>重装/删除</td></tr>
+  <tr><td>python 符号链接换 py3</td><td>系统级(用户亲手 <code>apt install python-is-python3</code>)</td><td>dpkg 管理, 可逆</td></tr>
+  <tr><td>clone 切 develop(拍板)</td><td>本 clone master → develop@5dfb3662</td><td>checkout 即回</td></tr>
+  <tr><td>uv.lock 镜像烤锁(意外, 见 §1.2 ⚠)</td><td>865 行 registry URL → 清华 + revision 3→5</td><td class="good">已 <code>git restore uv.lock</code>, 净零; 教训: 镜像变量只配 re-resolution 用, 用后还原锁</td></tr>
+  <tr><td>一次性 develop worktree</td><td><code>~/aqb-develop-wt</code></td><td class="good">已删(git worktree remove, 协作约定 2026-09-20 弃 worktree 模式, 仅作只读验证)</td></tr>
+  <tr><td>仓库内新增三件</td><td>本报告 + <a href="../issues/26-11-12-2347-test-test-tz-sensitive-window-start.html">issue 26-11-12-2347</a> + 坑档(含索引重建)</td><td>留工作区未提交</td></tr>
+</table>
+
+<h2><span class="no">§03</span>方法与局限</h2>
+
+<h3>3.1 方法</h3>
+<ul>
+  <li>探测面: 直跑事实命令(os-release/timedatectl/docker info/df/free/id/curl 八源带计时), 不依赖文档口径。</li>
+  <li>断点面: 失败现场 → 逐层下钻(wrapper 脚本 → 引擎 <code>_config.py:406</code> → <code>sys.executable</code> 实测 → <code>/proc/self/exe</code> 对照 → argv[0] 机制定性), 每层留原文。</li>
+  <li>测试面: master 与 develop 分开实测; develop 用一次性 detached worktree(不动本 clone 分支, 测完即删); 每个「红→绿」结论都做单变量对照(装 node / 换 TZ)。</li>
+  <li>建件面: 本报告 / issue / 坑档全部 <code>kb.new</code> 命令化创建, <code>--refs</code> 双向补链, 索引由命令重建。</li>
+</ul>
+
+<h3>3.2 局限(未覆盖面)</h3>
+<ul>
+  <li><strong>e2e 未跑</strong>: node 已就位, 但 playwright 需要 <code>npm ci</code>(node_modules)+ 浏览器二进制下载(PLAYWRIGHT_DOWNLOAD_HOST 指 npmmirror)—— 该面属计划 26-11-12-0152 S3 的验证范围, 本轮不抢。</li>
+  <li><strong>变异测试未跑</strong>: mutmut 原生 Linux 能力未验证; 计划 S4 迁移容器, 本机原生面留待需要时另行验证。</li>
+  <li><strong>TZ 未改系统</strong>(拍板): 本机裸跑全量仍有 1 条红(<code>test_hr_ratelimit</code>), 修复前要么 <code>TZ=Asia/Shanghai</code> 前缀, 要么等 issue 26-11-12-2347 清偿。</li>
+  <li><strong>docker 容器路线未实测</strong>: Docker Hub 直连断, 若启用计划 testbed 需先配 registry mirror(计划 D8 候选清单适用)。</li>
+  <li><strong>数字均为单次采样</strong>: 本报告是快照(develop@5dfb3662, 2026-11-12), 不进基线口径; 后续数字以 <code>kb.baseline</code> 切片为准。</li>
+</ul>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>TZ 敏感用例: test_hr_ratelimit 窗口起点在 DST 时区必红 · test · 计划外问题</title>
+<meta name="issue-slug" content="test-tz-sensitive-window-start">
+<meta name="issue-stamp" content="26-11-12-2347">
+<meta name="issue-type" content="test">
+<meta name="doc-topic" content="test-tz-sensitive-window-start">
+<meta name="doc-refs" content="memory-bank/reports/26-11-12-2347-report-linux-env3-probe.html">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="TZ 敏感用例: test_hr_ratelimit 窗口起点在 DST 时区必红">
+<meta name="issue-summary" content="test_window_start_on_* 用 naive 本地时间构造断言, 断言点落在 2026-03-08 美国 DST 切换日, 差恰好 3600s; DST 时区宿主(America/Los_Angeles)必红, Asia/Shanghai 与 UTC 从未暴露">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --mark: #161e26;     /* issue 特有: callout 底色 (plan.html 不用) */
+    --warn-bg: #2a2119;  /* issue 特有: 状态徽标底色 */
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 单栏流式版面: 与 plan.html 同一套 .sheet (封顶 1280px, 侧距 clamp(18~44px)); 旧双栏+粘性目录已删 */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+
+  /* 封面 meta 行: issue 特有, DOM 形态别改 —— 状态徽标 <span class="badge"> 被
+     flip_status (W4) 与 check_status_drift 的 BADGE_RE 机读 (k/v div 结构在判据里) */
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px 28px; font-family: var(--mono); font-size: 11.5px; color: var(--faint); border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta-row .item .k { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .meta-row .item .v { font-size: 13.5px; color: var(--dim); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin: 14px 0; font-size: 14px; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-family: var(--mono); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">计划外问题（未修）· test</div>
+<h1>TZ 敏感用例: test_hr_ratelimit 窗口起点在 DST 时区必红</h1>
+<p class="lede">test_window_start_on_* 用 naive 本地时间构造断言, 断言点落在 2026-03-08 美国 DST 切换日, 差恰好 3600s; DST 时区宿主(America/Los_Angeles)必红, Asia/Shanghai 与 UTC 从未暴露</p>
+<div class="meta-row">
+  <div class="item"><div class="k">编号</div><div class="v">26-11-12-2347-test-test-tz-sensitive-window-start</div></div>
+  <div class="item"><div class="k">报告时间</div><div class="v">2026-11-12 23:47</div></div>
+  <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
+  <div class="item"><div class="k">发现者</div><div class="v">linux-env3</div></div>
+</div>
+
+<section id="s1">
+  <h2><span class="no">§01</span>现象与发现场景</h2>
+  <p>第三个开发环境(Ubuntu 24.04 原生 Linux, 时区 <code>America/Los_Angeles</code>)接入探测(报告 <a href="../reports/26-11-12-2347-report-linux-env3-probe.html">26-11-12-2347</a>): develop <code>commands run test.quick</code> 66 failed 里 65 条为 node 缺失的电池族(装 node 即消), 唯一「真红」是本条 —— 与平台无关、与环境时区相关。Windows 侧(Asia/Shanghai)与 CI(UTC)都无夏令时, 所以从未暴露; DST 时区宿主<strong>恒红</strong>(用例构造日期硬编码跨 2026-03-08 切换日, 不随当前日期移动), 非 DST 时区宿主恒绿。</p>
+</section>
+
+<section id="s2">
+  <h2><span class="no">§02</span>证据</h2>
+  <p class="hint">贴原文（报错 / 日志 / 命令输出），不转述；附取证时间，让读者自己判断新鲜度。</p>
+<pre><code># 取证 2026-11-12, 宿主 TZ=America/Los_Angeles, develop@5dfb3662, Python 3.13.18
+$ uv run pytest tests/test_hr_ratelimit.py::test_window_start_on_pins_start_endpoint_and_rollover -q -n 0 --no-cov
+&gt;       assert window_start_on(now, "08:00-20:00") == _ts(2026, 3, 8, 8, 0)
+E       AssertionError: assert 1772985600.0 == 1772982000.0
+E        +  where 1772985600.0 = window_start_on(1772926245.123456, '08:00-20:00')
+E        +  and   1772982000.0 = _ts(2026, 3, 8, 8, 0)
+
+# 两值差恰好 3600s; 2026-03-08 是美国 DST 切换日(3月第二个周日)。
+# 对照实验(同机同树): TZ=Asia/Shanghai 前缀后同用例 1 passed in 0.03s。</code></pre>
+</section>
+
+<section id="s3">
+  <h2><span class="no">§03</span>影响面</h2>
+  <table>
+    <tr><th>维度</th><th>结论</th></tr>
+    <tr><td>触发条件</td><td>宿主时区含夏令时(如 <code>America/Los_Angeles</code>)且用例构造的日期跨 DST 切换日(美国: 3月第二个周日 / 11月第一个周日)时必现; 无 DST 时区(Asia/Shanghai / UTC)永不触发</td></tr>
+    <tr><td>影响范围</td><td>仅测试面: <code>tests/test_hr_ratelimit.py</code> 中依赖 <code>_ts()</code> 助手与 naive 本地时间的窗口起点组用例(同文件其它组用例若同样跨切换日构造, 换 DST 宿主同形); 生产代码 <code>window_start_on</code> 在 DST 日的 1h 墙钟差是限速曲线域的正常语义, 非产品缺陷</td></tr>
+    <tr><td>严重度</td><td>低 —— 不挡 Windows/CI 两侧(恒绿), 只在 DST 时区宿主(第三个开发环境类)假红且<strong>恒红</strong>(构造日期硬编码, 不修就一直红, 与当前日期无关)</td></tr>
+  </table>
+</section>
+
+<section id="s4">
+  <h2><span class="no">§04</span>定位锚点</h2>
+  <p class="hint">写「符号名 + grep 关键词 + 当时的行号（标取证时间）」—— 代码会漂移，靠符号与 grep 重新定位，行号只是加速项。</p>
+  <ul>
+    <li><code>tests/test_hr_ratelimit.py:188</code> — <code>test_window_start_on_pins_start_endpoint_and_rollover</code>(grep <code>def test_window_start_on</code>); :190 构造 naive <code>datetime(2026, 3, 7, 15, 30, 45)</code>, :192 断言跨切换日(取证 2026-11-12, develop@5dfb3662)</li>
+    <li><code>tests/test_hr_ratelimit.py:155</code> — <code>_ts()</code> 助手(grep <code>def _ts</code>): naive datetime 走宿主本地时区 <code>.timestamp()</code>, 全文件共用</li>
+    <li><code>src/auto_qb/hr/ratelimit.py:82</code> — <code>window_start_on(now, spec)</code>(grep <code>def window_start_on</code>): 实现侧的顺延计算同样解析墙钟时刻</li>
+  </ul>
+</section>
+
+<section id="s5">
+  <h2><span class="no">§05</span>根因<span class="opt">（可选）</span></h2>
+  <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
+  <div class="callout">用例隐含「宿主时区无夏令时」假设, 违反 file-conventions「不依赖宿主环境能力」的既有约定: <code>_ts()</code> 助手与实现侧 <code>window_start_on</code> 各自把墙钟时刻经宿主 TZ 解析成 UTC 瞬间, 在 DST 切换日两侧对同一墙钟解析出相差 3600s 的瞬间(实测 1772985600.0 vs 1772982000.0), 断言恒红。已排除: 非 master 落后(develop 上该文件 2026-11 零改动)、非并行/时序 flake(-n 0 单跑 100% 复现)、非代码回归(TZ=Asia/Shanghai 同树即绿)。</div>
+</section>
+
+<section id="s6">
+  <h2><span class="no">§06</span>建议修法<span class="opt">（可选）</span></h2>
+  <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
+  方向: 用例内固定时区, 不改生产代码。候选:
+  <ul>
+    <li><strong>A(推荐)</strong>: conftest 或用例级 monkeypatch <code>os.environ["TZ"] = "Asia/Shanghai"</code> + <code>time.tzset()</code>(POSIX 原语; CI 本就 UTC, 加固定后三侧语义一致), 覆盖 <code>_ts()</code> 与实现两侧 —— 一处固定全文件受益。代价: 需注意 Windows 上 <code>time.tzset()</code> 不存在, 固定手段要按平台分支或仅 POSIX 生效(Windows 侧本来就无 DST 假设问题)。</li>
+    <li><strong>B</strong>: 把 <code>_ts()</code> 助手改为显式固定偏移(如 <code>datetime(..., tzinfo=timezone(timedelta(hours=8))).timestamp()</code>), 不动环境变量。代价: 只修测试侧, 实现侧仍随宿主 TZ 解析 —— 若实现内部也跨切换日解析墙钟, 两侧仍可能分裂, 需先核 <code>window_start_on</code> 内部实现是否同样依赖本地墙钟。</li>
+  </ul>
+  <p>两者都属测试面小改; 认领时先复验本锚点, 按 file-conventions「平台相关测试必须固定, 不依赖运行环境」执行。</p>
+</section>
+
+<section id="s7">
+  <h2><span class="no">§07</span>状态变更日志</h2>
+  <ul>
+    <li>2026-11-12 23:47 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+  </ul>
+  <h3>复验</h3>
+  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <h3>修复后补充</h3>
+  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+</section>
+
+<footer>
+  26-11-12-2347-test-test-tz-sensitive-window-start.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+</footer>
+
+</div>
+</body>
+</html>
