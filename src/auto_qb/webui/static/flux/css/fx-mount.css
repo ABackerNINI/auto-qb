@@ -289,6 +289,13 @@ html[data-fx-preset] input[type="checkbox"]:not(.hb-switch input):focus-visible 
   html[data-fx-preset] .site-chip::before {
     transition: background var(--dur) var(--ease), box-shadow var(--dur-fast) var(--ease);
   }
+  /* 评审 minor 修(计划 26-11-12-1012 S2 代码块漏写渐隐段, 按其目标口径 2 与
+   * site-chip S4 迁层同构补齐): box-shadow 段令牌逐字沿用上面 site-chip::before
+   * 渐隐段(--dur-fast/--ease), hr-pending<->hr-done 状态类切换竖线色渐变不跳变。 */
+  html[data-fx-preset] .tag-chip.hr-pending::before,
+  html[data-fx-preset] .tag-chip.hr-done::before {
+    transition: box-shadow var(--dur-fast) var(--ease);
+  }
   /* D4 拍板(hover + 键盘聚焦共用同一套辉光): 选择器扩 :focus-visible:not(.f-on)。
    * 事实注记: 三种 chip 在共用模板里是纯 span, 无 tabindex, focus-visible 分支
    * 当前不会命中, 本条是样式预留(计划 W1-4/O5/R13; 键盘化需改四皮肤共用模板,
@@ -483,3 +490,25 @@ html[data-fx-preset] .site-chip.paused,
 html[data-fx-preset] .site-chip.other { box-shadow: none; } /* components.css:337 迁出 */
 html[data-fx-preset] .site-chip.search-hit { box-shadow: none; } /* views.css:86 迁出 */
 html[data-fx-preset] .site-chip.sa-no-conf { border-bottom: 0; } /* views.css:95 迁出, 虚线由 ::before 供给 */
+
+/* 祖先裁剪放行: 保留内容裁剪语义(不建立滚动容器), 只把裁剪边界外扩给辉光让路 */
+html[data-fx-preset] .g-tags,
+html[data-fx-preset] .m-tags,
+html[data-fx-preset] .g-cat,
+html[data-fx-preset] .m-cat {
+  overflow: clip;
+  overflow-clip-margin: 16px;
+}
+
+html[data-fx-preset] .tag-chip { position: relative; }  /* 基线 components.css:342 无定位包含块; .f-on(:380) 已有同值, 不冲突 */
+
+html[data-fx-preset] .tag-chip.hr-pending::before,
+html[data-fx-preset] .tag-chip.hr-done::before {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+}
+html[data-fx-preset] .tag-chip.hr-pending::before { box-shadow: inset 2px 0 0 var(--hr-pending); }
+html[data-fx-preset] .tag-chip.hr-done::before    { box-shadow: inset 2px 0 0 var(--hr-done); }
+
+/* 本体常态竖线撤下, 由 ::before 承接; hover 时本体仍单独消费 --fx-glow-stack, 两者互不同属性覆盖 */
+html[data-fx-preset] .tag-chip.hr-pending,
+html[data-fx-preset] .tag-chip.hr-done { box-shadow: none; }

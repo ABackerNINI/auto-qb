@@ -8,6 +8,7 @@
 - test_frontend_button_system_paired: 按钮体系(.bt)迁移守阵 —— ce-btn/ce-icon 全语料零残留、.bt 六变体各套 CSS 成对定义(atlas/prism/console/flux, S5 收编 flux)、atlas/prism 模板 bt 用量逐类相等、双色令牌(on-accent/on-accent-ink/on-error)星图 :root + 棱镜五主题成对声明
 - test_frontend_fx_wiring: fx 动效库挂行守阵(计划 26-10-31-2316 S6 前半 + 后半) —— shared/fx 三件只挂 flux: flux shell 恰挂 fx.css/fx-presets.css 各一次(head link, 级联序排本皮肤全部 CSS 之后)与 fx.js 一次(shell 静态 script, 不进 tpl-manifest —— 四套清单守阵钉逐项相等), S6 后半追加 flux 专属挂载面 fx-mount.css(link, 排 fx 三件之后)与 fx-mount.js(script)恰一次、三旧皮肤对 /shared/fx/ 与 fx-mount 零引用(D14 隔离反向钉)、flux <html> 带 data-fx-preset="glass"(S4 主 preset 拍板)、fx.js REGISTRY.effects 逐名能在 fx.css 找到 [data-fx~="名"] 规则且 presets 逐名能在 fx-presets.css 找到配方块(漏 CSS = audit 放行但样式静默不生效; 2026-11-03 用户要求移除 flux 右键强调动效 ⇒ row-flash/D4-3 连同 keyframes/RM 降级/注册项退役, 注册表 26 名); R1 精修(26-10-31-2316 §06)追加回归钉: fx-mount.css 不得复活行板 :hover gradient 叠底(B2 行板/首格悬停管线分家)/fx-mount.js 滚动干预三符号(ensureFocusedVisible/scheduleReveal/revealFocusedRow)反向钉不在档(F7c: R3 精修退役 R1 B3 自定义回拉, 滚动单点交还 shortcuts.js 原版逻辑; F7d: 落定回执链路钉 —— fx-mount.js transitionend/兜底定时器/单发守卫 + state.js dock 第二参重入原版 _kbScrollRowIntoView; F7e(R5 精修): push 位移本体弃用反向钉(fx-mount.css/js 零 push 载体/--fx-push-y 规则, 打点实证 scrollY=0 时位移把聚焦行推出视野且滚动不可恢复) + 两段动效落点钉(dialogs.css 面板底部上滑 translateY(100%) 消费 --fx-dur-panel/--fx-ease-out, fx-mount.css 面板开着 scroll-behavior:smooth 的 :has 作用域), 缺一即回退到「聚焦行终位被推出视野」的 D3-4 三轮报障缺陷; R5#179: dock(true) 须真武装 armSettle 兜底定时器(此前零调用, 回执丢失场景 fx-glide 恒驻留))
 - test_frontend_fx_site_chip_shape_layering: flux 站点 chip 形状分层守阵(计划 26-11-10-0921 W2 + S4) —— fx-mount.css 的 html[data-fx-preset] .site-chip 本体规则体必须含 clip-path: none(本体重新持裁剪 = box-shadow 辉光被整圈裁掉, 用户报「辉光仅显示一侧或两侧」回归) + .site-chip::before 规则体含切角 polygon(3px 0, ...) 逐字(3px 微切角视觉 = R3「逐字恢复」拍板); components.css:332 本体 clip-path 被覆盖而非删除的事实不设防(700 行体量断言只限净增行, 钉不住减行删除), 级联正确性由同批 W2 e2e 主判据(computed clipPath === 'none')兜底; S4(f7f4658c)状态边线迁移面: ::before 三条边线载体(paused/other --paused-line、search-hit --accent-line、sa-no-conf dashed --warn)+ 本体三条关闭(box-shadow: none ×3 / border-bottom: 0)+ ::before 渐隐过渡段含 box-shadow var(--dur-fast), 缺任一半 = 边线消失或方角线双线叠画
+- test_frontend_fx_tag_cat_chip_glow_layering: flux tag/cat chip 辉光放行 + H&R 竖线迁层守阵(计划 26-11-12-1012 S1+S2) —— 旧计划 26-11-10-0921 只救 .site-chip 本体裁剪, tag/cat chip 的 hover 辉光仍被两层裁掉(「辉光仅显示一侧或两侧」第二根因: 直接父容器 .g-tags/.m-tags/.g-cat/.m-cat 的 overflow:hidden 裁掉画在盒外的 box-shadow 外发光, components.css:340-341): S1 段逐字钉四祖先(html[data-fx-preset] 前缀, 不入四皮肤键集扫描)规则体含 overflow: clip + overflow-clip-margin: 16px(clip 非 visible = 不建滚动容器保留内容裁剪语义 I3, 标签全量展开换行行高与吸左首格几何不动; 16px = 12px blur + 3px spread + 1px 硬芯余量(stack 最大层 0 0 12px 3px), 零新增令牌 I2; .g-sites 本来无裁剪不加同款 D5); S2 段钉 .tag-chip 补 position: relative(基线 components.css:342 无定位包含块, .f-on:380 同值不冲突)+ .hr-pending/.hr-done::before 迁层三条(content:""/absolute/inset:0/pointer-events:none 共用绘制盒 + box-shadow: inset 2px 0 0 var(--hr-pending)/var(--hr-done) 两档语义色竖线)+ 本体 box-shadow: none 关闭(缺任一半 = hover 前后竖线消失或本体线与 ::before 线双线叠画, 同 site-chip S4 迁移面; HR = H&R 做种考核状态类, 非人力资源)+ ::before 渐隐过渡段(RM 媒体块内, box-shadow 段令牌逐字沿用 site-chip::before 渐隐段 --dur-fast/--ease, hr-pending<->hr-done 状态类切换竖线色渐变不跳变); any() 存在性断言只防删行/改值, hover 本体仍单独消费同一条 --fx-glow-stack, 级联胜负由 S3 像素采样 e2e 仲裁(纯静态/纯 computed 均对绘制层裁剪无感)
 - test_frontend_console_square_radius: console 方角口径守阵(R1 精修 B1, 用户报「console 详情模板/文字元素出现圆角」) —— console/style.css 的 --radius-lg/--radius/--radius-sm 三令牌全 0px + console 自有 CSS 与 console 实际加载的四件共享面(row_lang/dt_table/hscroll/console_hub)的 border-radius 声明值全量白名单(0/999px 胶囊/小值/50%/var(--radius*)/inherit, 现存值盘点后冻结): flux 意图的圆角 16/10/6 写进共享面 = 三皮肤同时回归, 新值入列必须显式改白名单(有意识决策)
 - test_frontend_tpl_ctl_bits_single_source
 
@@ -746,6 +747,101 @@ def test_frontend_fx_site_chip_shape_layering():
         "box-shadow var(--dur-fast)" in " ".join(b.split()) for b in before_bodies
     ), ("fx-mount.css 的 .site-chip::before 渐隐过渡段缺 box-shadow var(--dur-fast) —— "
         "状态类切换时 inset 边线跳变不渐隐(S4 渐隐补段回退)")
+
+
+def test_frontend_fx_tag_cat_chip_glow_layering():
+    """flux tag/cat chip 辉光放行 + H&R 竖线迁层守阵(计划 26-11-12-1012 S1 + S2)
+
+    旧计划 26-11-10-0921 只救了 .site-chip 本体裁剪(W1), 三种 chip 共用的 hover 辉光
+    配方(--fx-glow-stack)对 tag/cat chip 仍被两层裁掉(用户报「辉光仅显示一侧或两侧」
+    的第二根因, 本体无 clip-path 但祖先链有):
+      1. 直接父容器 .g-tags/.m-tags/.g-cat/.m-cat 带 overflow: hidden(components.css:340-341),
+         裁掉画在盒外的 box-shadow 外发光 —— S1 用 overflow: clip + overflow-clip-margin: 16px
+         覆盖放行: clip 不建立滚动容器、保留内容裁剪语义(标签全量展开换行的逐行实测行高与
+         吸左首格几何不动, I3), 16px = 12px blur + 3px spread + 1px 硬芯余量(stack 最大层
+         0 0 12px 3px), 零新增令牌(I2); .g-sites 本来无裁剪, 不加同款(零收益扩面, D5)。
+      2. .tag-chip.hr-pending/.hr-done 的 H&R 状态竖线画在本体 box-shadow
+         (components.css:346-349), hover 规则整体写入辉光 stack ⇒ 竖线被替换消失;
+         S2 仿旧计划 S4 迁到空闲的 .tag-chip::before(.f-on::after 底线占 ::after 不冲突),
+         本体常态竖线以 box-shadow: none 撤下。HR = H&R(PT 做种考核)状态类, 非人力资源。
+    静默回归形态(缺一 = 本计划修复回退而 pytest 无感; 纯 computed 值断言对绘制层裁剪无感):
+      3. S1 放行段删行/改值(overflow 退回 hidden 或 margin 归零)= 辉光再被祖先裁成一侧/两侧;
+      4. ::before 迁层载体缺失(content/inset 绘制盒或两档语义色竖线)= hover 前后竖线消失
+         (本体侧已 none, 无人承接);
+      5. 本体 box-shadow: none 关闭漏写 = 本体 inset 竖线与 ::before 竖线双线叠画;
+      6. .tag-chip 的 position: relative 缺失 = ::before 脱离 chip 盒, 竖线画进最近的
+         定位祖先包含块(基线 components.css:342 无 position, 必须显式补);
+      7. ::before 渐隐过渡段(RM 媒体块内)缺 box-shadow 段 = hr-pending<->hr-done
+         状态类切换时竖线色跳变不渐隐(评审 minor 修, 仿 site-chip S4 渐隐补段先例)。
+    any() 存在性断言只防删行/改值, 不防日后追加同名规则重赢级联; hover 时本体仍单独
+    消费同一条 --fx-glow-stack(与 ::before 竖线互不同属性), 级联胜负由 S3 像素采样
+    e2e 仲裁。
+    """
+
+    mount_css = open(os.path.join(STATIC_ROOT, "flux", "css", "fx-mount.css"), encoding="utf-8").read()
+    # 手法对齐 test_frontend_fx_site_chip_shape_layering: 注释先剥再逐条规则收集,
+    # 归一选择器(逗号拆分逐个) -> 该选择器名下全部规则体, 精确匹配取用
+    # (不把 .tag-chip.hr-* 误收进 .tag-chip 本体)
+    css = re.sub(r"/\*.*?\*/", "", mount_css, flags=re.S)
+    rules = {}
+    for mo in re.finditer(r"(?m)^\s*([^{}@/][^{}]*)\{([^}]*)\}", css):
+        for sel in mo.group(1).split(","):
+            sel = " ".join(sel.split())
+            rules.setdefault(sel, []).append(mo.group(2))
+
+    def _body_has(sel, needle, why):
+        bodies = rules.get(sel, [])
+        assert bodies, f"fx-mount.css 缺 {sel} 规则 —— {why}"
+        assert any(needle in " ".join(b.split()) for b in bodies), f"fx-mount.css 的 {sel} 规则体缺 {needle} —— {why}"
+
+    # 1. S1 祖先裁剪放行: 四个直接父容器逐字 overflow: clip + overflow-clip-margin: 16px
+    for sel in (
+        "html[data-fx-preset] .g-tags", "html[data-fx-preset] .m-tags", "html[data-fx-preset] .g-cat",
+        "html[data-fx-preset] .m-cat"
+    ):
+        _body_has(
+            sel, "overflow: clip",
+            ("S1 祖先裁剪放行缺失/退回 hidden —— hover 辉光被 "
+             "overflow: hidden 祖先裁成一侧/两侧(计划 26-11-12-1012 判据)")
+        )
+        _body_has(
+            sel, "overflow-clip-margin: 16px",
+            ("S1 裁剪边界外扩缺失/归零 —— clip 虽保留, "
+             "辉光 16px 余量仍被裁(12px blur + 3px spread + 1px 硬芯)")
+        )
+    # 2. S2 迁层前置: .tag-chip 补 position: relative(::before absolute 的定位包含块)
+    _body_has(
+        "html[data-fx-preset] .tag-chip", "position: relative",
+        ("S2 迁层前置缺失 —— 基线 components.css:342 无 position, ::before 脱离 chip 盒"
+         "画进最近的定位祖先包含块")
+    )
+    # 3. S2 迁层载体: ::before 三条(共用 content/inset 绘制盒 + pending/done 两档语义色竖线)
+    for sel, needle in (
+        (
+            "html[data-fx-preset] .tag-chip.hr-pending::before",
+            'content: ""; position: absolute; inset: 0; pointer-events: none;'
+        ),
+        (
+            "html[data-fx-preset] .tag-chip.hr-done::before",
+            'content: ""; position: absolute; inset: 0; pointer-events: none;'
+        ),
+        ("html[data-fx-preset] .tag-chip.hr-pending::before", "box-shadow: inset 2px 0 0 var(--hr-pending)"),
+        ("html[data-fx-preset] .tag-chip.hr-done::before", "box-shadow: inset 2px 0 0 var(--hr-done)"),
+    ):
+        _body_has(sel, needle, ("S2 H&R 状态竖线迁层载体缺失 —— hover 前后竖线消失"
+                                "(本体侧已 none 无人承接, 迁移回退)"))
+    # 4. S2 本体侧关闭: 常态竖线撤下, 缘由同 site-chip S4(漏写 = 本体线与 ::before 线双线叠画)
+    for sel in ("html[data-fx-preset] .tag-chip.hr-pending", "html[data-fx-preset] .tag-chip.hr-done"):
+        _body_has(sel, "box-shadow: none", ("S2 本体侧关闭漏写 —— 本体 inset 竖线与 ::before 竖线双线叠画"))
+    # 5. S2 渐隐过渡段(RM 媒体块内, 评审 minor 修): ::before 的 box-shadow 段随迁,
+    #    hr-* 状态类切换线色渐变不跳变; 令牌逐字沿用 site-chip::before 渐隐段
+    #    (--dur-fast/--ease), 缺段 = 竖线色跳变(同 site-chip S4 渐隐补段先例)
+    for sel in ("html[data-fx-preset] .tag-chip.hr-pending::before", "html[data-fx-preset] .tag-chip.hr-done::before"):
+        _body_has(
+            sel, "transition: box-shadow var(--dur-fast) var(--ease)",
+            ("S2 ::before 渐隐过渡段缺 box-shadow 段 —— hr-pending<->hr-done 状态类"
+             "切换竖线色跳变不渐隐(仿 site-chip S4 渐隐补段先例)")
+        )
 
 
 def test_frontend_console_square_radius():
