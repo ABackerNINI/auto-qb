@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>port_kill.py 纯 PowerShell 实现无 os.name 分支, 原生 Linux 调用必炸 FileNotFoundError · bug · 计划外问题</title>
+<meta name="issue-slug" content="port-kill-linux-no-posix-branch">
+<meta name="issue-stamp" content="26-11-13-0234">
+<meta name="issue-type" content="bug">
+<meta name="doc-topic" content="port-kill-linux-no-posix-branch">
+<meta name="doc-refs" content="memory-bank/reports/26-11-12-2347-report-linux-env3-probe.html">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="port_kill.py 纯 PowerShell 实现无 os.name 分支, 原生 Linux 调用必炸 FileNotFoundError">
+<meta name="issue-summary" content="listening_pids/process_info 直调 powershell(Get-NetTCPConnection/Win32_Process), 无平台分支; dev.e2e-check/dev.e2e/dev.port-kill 在原生 Linux 必炸, CI ubuntu 不跑 selfcheck 故从未暴露">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --mark: #161e26;     /* issue 特有: callout 底色 (plan.html 不用) */
+    --warn-bg: #2a2119;  /* issue 特有: 状态徽标底色 */
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 单栏流式版面: 与 plan.html 同一套 .sheet (封顶 1280px, 侧距 clamp(18~44px)); 旧双栏+粘性目录已删 */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+
+  /* 封面 meta 行: issue 特有, DOM 形态别改 —— 状态徽标 <span class="badge"> 被
+     flip_status (W4) 与 check_status_drift 的 BADGE_RE 机读 (k/v div 结构在判据里) */
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px 28px; font-family: var(--mono); font-size: 11.5px; color: var(--faint); border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta-row .item .k { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .meta-row .item .v { font-size: 13.5px; color: var(--dim); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin: 14px 0; font-size: 14px; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-family: var(--mono); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">计划外问题（未修）· bug</div>
+<h1>port_kill.py 纯 PowerShell 实现无 os.name 分支, 原生 Linux 调用必炸 FileNotFoundError</h1>
+<p class="lede">listening_pids/process_info 直调 powershell(Get-NetTCPConnection/Win32_Process), 无平台分支; dev.e2e-check/dev.e2e/dev.port-kill 在原生 Linux 必炸, CI ubuntu 不跑 selfcheck 故从未暴露</p>
+<div class="meta-row">
+  <div class="item"><div class="k">编号</div><div class="v">26-11-13-0234-bug-port-kill-linux-no-posix-branch</div></div>
+  <div class="item"><div class="k">报告时间</div><div class="v">2026-11-13 02:34</div></div>
+  <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
+  <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+</div>
+
+<section id="s1">
+  <h2><span class="no">§01</span>现象与发现场景</h2>
+  <p>env3(原生 Linux, Ubuntu 24.04)接 e2e 前置轮(发现轮明细见记账切片 <code>memory-bank/active-context/26-11-13-0105-linux-env3-probe.md</code> 的 R3 行, env3 接入背景见报告 <a href="../reports/26-11-12-2347-report-linux-env3-probe.html">26-11-12-2347</a>; 26-11-13): clone1 装完 node_modules + chromium 后按流程先跑 <code>commands run dev.e2e-check</code> —— 第一步就崩(0.1s)。<code>scripts/port_kill.py</code> 的 <code>listening_pids()</code>/<code>process_info()</code> 只实现了 Windows 宿主(经 <code>powershell</code> 查 <code>Get-NetTCPConnection</code>/<code>Win32_Process</code>), 无 <code>os.name</code> 分支; POSIX 宿主本无 powershell 命令, <code>subprocess.run</code> 直接 <code>FileNotFoundError</code>。同病消费者: <code>dev.e2e</code>(run 列表首条即 selfcheck, 原生 Linux 全量轮第一步必炸)与 <code>dev.port-kill</code>(残留桩定点杀通道)。CI(ubuntu-latest)的 playwright job 不跑 selfcheck(直接 <code>npx playwright install --with-deps</code> + shard-run), 所以 Linux 侧从未暴露。</p>
+</section>
+
+<section id="s2">
+  <h2><span class="no">§02</span>证据</h2>
+  <p class="hint">贴原文（报错 / 日志 / 命令输出），不转述；附取证时间，让读者自己判断新鲜度。</p>
+<pre><code># 取证 2026-11-13, clone1(env3 Ubuntu 24.04.5 原生 Linux), develop@73f65b0f
+$ commands run dev.e2e-check
+[FAIL] dev.e2e-check (0.1s)
+  Traceback (most recent call last):
+    File ".../scripts/e2e_selfcheck.py", line 181, in &lt;module&gt;
+        raise SystemExit(main())
+    File ".../scripts/e2e_selfcheck.py", line 167, in main
+        _check_port(port, blocking=False, problems=problems, notes=notes)
+    File ".../scripts/e2e_selfcheck.py", line 118, in _check_port
+        pids = listening_pids(port)
+    File ".../scripts/port_kill.py", line 29, in listening_pids
+        r = subprocess.run(
+            ["powershell", "-NoProfile", "-Command", ps],
+    ...
+  FileNotFoundError: [Errno 2] No such file or directory: 'powershell'
+
+# 同病位: scripts/port_kill.py:39 process_info() 同样 subprocess.run(["powershell", ...]) 查 Win32_Process
+# 第三处: scripts/e2e_selfcheck.py:76 _proc_info() 同硬编码 powershell 查 Win32_Process(Get-CimInstance)
+#   —— 修完 port_kill 两查询函数后, dev.e2e-check 在 listening_pids 有返回(:118)→ :125 调 _proc_info
+#   的场景(8099 留桩告警 / --blocking 排查)仍在此二次炸 FileNotFoundError
+# CI 对照(grep 取证 2026-11-13): .github/workflows/playwright.yml 全文无 e2e_selfcheck/dev.e2e-check 调用 ——
+#   ubuntu job 直接 npx playwright install --with-deps chromium + shard-run, 缺口在 CI 不可见</code></pre>
+</section>
+
+<section id="s3">
+  <h2><span class="no">§03</span>影响面</h2>
+  <table>
+    <tr><th>维度</th><th>结论</th></tr>
+    <tr><td>触发条件</td><td>POSIX 宿主(无 powershell)上调 <code>listening_pids()</code> 或 <code>process_info()</code> 即崩, 无配置可绕; Windows 宿主不受影响(设计平台)</td></tr>
+    <tr><td>影响范围</td><td>仅 dev 工具链, 生产代码零涉: <code>dev.e2e-check</code>(e2e 前置自检)、<code>dev.e2e</code>(run 列表首条即 selfcheck)、<code>dev.port-kill</code>(残留桩定点杀通道)三者在原生 Linux 全部失效; pytest/e2e 断言面与 CI 行为均不变</td></tr>
+    <tr><td>严重度</td><td>低-中 —— 不挡 CI/Windows; 但 env3 类原生 Linux 宿主上 e2e 的「前置自检 + 残留清理」两保障面全缺, 本机暂以直跑 <code>npm run test:e2e:fast</code> 绕行(webServer 恒 OS 取号 + <code>reuseExistingServer:false</code> 兜底); 残留桩时只能人工 ps/kill</td></tr>
+  </table>
+</section>
+
+<section id="s4">
+  <h2><span class="no">§04</span>定位锚点</h2>
+  <p class="hint">写「符号名 + grep 关键词 + 当时的行号（标取证时间）」—— 代码会漂移，靠符号与 grep 重新定位，行号只是加速项。</p>
+  <ul>
+    <li><code>scripts/port_kill.py:23</code> — <code>listening_pids(port)</code>(grep <code>def listening_pids</code>), :29 <code>subprocess.run(["powershell", ...])</code> 调 <code>Get-NetTCPConnection</code>(取证 2026-11-13, develop@73f65b0f)</li>
+    <li><code>scripts/port_kill.py:39</code> — <code>process_info(pids)</code>(grep <code>def process_info</code>), 同病: <code>Win32_Process</code> 查询亦硬编码 powershell</li>
+    <li><code>scripts/port_kill.py:149</code> — <code>main()</code> 实杀调用 <code>["taskkill", "/F", "/PID", ...]</code>(grep <code>taskkill</code>), 同为 Windows 专属 —— 查询面修完后 dev.port-kill 走到实杀一步仍炸</li>
+    <li><code>scripts/e2e_selfcheck.py:76</code> — <code>_proc_info(pid)</code>(grep <code>def _proc_info</code>), 第三处 powershell 位; :125 调用位(grep <code>_proc_info(pid)</code>)</li>
+    <li><code>scripts/e2e_selfcheck.py:118</code> — <code>_check_port()</code> 内调用位(grep <code>listening_pids</code>); :167 <code>main()</code> 默认主路径即走到</li>
+    <li><code>.commands/dev/config.toml</code> — <code>dev.e2e</code> run 列表首条 <code>uv run python scripts/e2e_selfcheck.py</code>(grep <code>dev.e2e</code>)</li>
+  </ul>
+</section>
+
+<section id="s5">
+  <h2><span class="no">§05</span>根因<span class="opt">（可选）</span></h2>
+  <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
+  <div class="callout">port_kill.py 设计时只面向 Windows 宿主(文件头注释即「PowerShell 一行式经 PS → cmd 批处理不可靠, 落成脚本跨 shell 稳定」的 Windows 语义), 进程查询共<strong>三处</strong>硬编码 powershell(port_kill.py <code>listening_pids</code>/<code>process_info</code> 两函数 + e2e_selfcheck.py <code>_proc_info</code>)而未按 <code>os.name</code> 分派; env3 探测轮只验证了 pytest 面, e2e 工具链面在本轮(26-11-13)首次实跑即暴露。已排除: 非 PATH 配置问题(POSIX 本无 powershell, 属预期), 非参数/时序问题(<code>blocking=False</code> 默认主路径即触发, 0.1s 即崩), 非本机特例(任何无 powershell 的宿主同炸)。</div>
+</section>
+
+<section id="s6">
+  <h2><span class="no">§06</span>建议修法<span class="opt">（可选）</span></h2>
+  <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
+  方向: 按 <code>os.name</code> 加 POSIX 分支, Windows 支路原样保留; 修复面 = <strong>三处查询 + 一处实杀</strong>共四个 powershell/taskkill 位: port_kill.py <code>listening_pids</code>/<code>process_info</code> + e2e_selfcheck.py:76 <code>_proc_info</code>(建议直接复用 port_kill 的 POSIX 支, 不再复制一份)+ port_kill.py:149 实杀 <code>taskkill</code>(POSIX 支 <code>os.kill SIGKILL</code>, 归属核验语义不变)。必须保持脚本「先核身份再定点杀、非 python 监听者须显式 --yes、验证失败拒绝杀」的豁免语义(AGENTS.md「🔴 进程安全」节, 2026-11-07 用户拍板)。候选:
+  <ul>
+    <li><strong>A(推荐)</strong>: POSIX 支走 <code>/proc</code> 直读零外部依赖 —— <code>listening_pids</code> 解析 <code>/proc/net/tcp{,6}</code> Listen 态 inode → <code>/proc/*/fd</code> 反查 PID(或 <code>ss -tlnp</code> 一行式, 前提是同用户可见性, 桩进程恒同用户); <code>process_info</code>/<code>_proc_info</code> 读 <code>/proc/&lt;pid&gt;/comm</code> + <code>/proc/&lt;pid&gt;/cmdline</code>, 归属核验语义与 Windows 支等价。</li>
+    <li><strong>B</strong>: <code>ss -tlnp</code> 一行式解析 —— 实现短, 但引入对 <code>ss</code> 输出格式的文本耦合, 且需处理无 <code>-p</code> 权限时的空归属(fail-safe 拒杀语义要对齐)。</li>
+  </ul>
+  <p>认领时先复验本锚点(dev.e2e-check 在 env3 仍崩 + Windows 侧行为不变), 守阵按平台双支覆盖(参照 recycle-obs os.name 分派先例: 两支各 os.name 桩钉住, 在任一平台都跑); 改完跑 <code>test.quick</code> + 在 env3 实测 dev.e2e-check 绿(端口空闲 + <code>--blocking</code>/8099 留桩两场景, 后者验 <code>_proc_info</code> 支) + dev.port-kill 实杀面(杀一个自起的占口进程)。</p>
+</section>
+
+<section id="s7">
+  <h2><span class="no">§07</span>状态变更日志</h2>
+  <ul>
+    <li>2026-11-13 02:34 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+  </ul>
+  <h3>复验</h3>
+  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <h3>修复后补充</h3>
+  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+</section>
+
+<footer>
+  26-11-13-0234-bug-port-kill-linux-no-posix-branch.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+</footer>
+
+</div>
+</body>
+</html>
