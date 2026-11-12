@@ -66,5 +66,5 @@
 - **页签徽标与键盘 run 同一单点**: `kbDrawerTabKbd(pages, merged)`(shortcuts.js)与键盘路径(shortcuts_engine.js `_kbDrawerTab`)同表 `KB_MERGE_TAB_REMAP` —— 合并页签态反查落点, 第 4/5 档(null)不显示, 可见页签徽标随位次变(流量 Alt+5 → Alt+3)。
 - **常驻落点**: 顶栏添加种子「N」/列「K」内联键帽(tpl/topbar.html); 状态栏「键位」入口钮 + Shift+/ 键帽(tpl/statusbar.html, click 经别名 `kbToggleHelp` 中转 `shortcuts_engine.js::_kbToggleKbHelp` 与 Shift+/ 同一 toggle; triggers.js 触发点 `"statusbar.kbd-help"`)。键帽共享类 `.aq-kbd`(console_hub_panels.css 尾段单点, 令牌复用零新增; 守阵 `test_aq_kbd_css_four_skin_isomorphic` 以「首个 .aq-kbd 规则块即共享基形」定位)。
 - **I4 例外裁定**: 键位提示不走 title/.aq-tip 通道(D10) —— 与 conventions/webui.md「悬浮提示」节默认口径不同, 仅限键帽面, 其余新元素仍按惯例写 title。
-- **子面板宽度与视口钳位**: `.ctx-sub` min-width 260 四皮肤同值 + menu.js `_subOverflowsRight` 首帧估宽 272(=260+12)五处耦合(`webui_static_scan_css.py::_scan_ctx_sub_width` 机械拦截); 实测重钳位 `_subFitViewport`(估宽只管首帧水平翻转方向)。
+- **子面板宽度与视口钳位**: `.ctx-sub` min-width 260 四皮肤同值 + menu.js `_subOverflowsRight` 首帧估宽 272(=260+12)五处耦合(`webui_static_scan_css.py::_scan_ctx_sub_width` 机械拦截); 实测重钳位 `_subFitViewport`(估宽只管首帧水平翻转方向)+ 二次收口 `_subFitRefit`(rAF 有界复核 1+3 帧收敛; 宿主菜单 `_menuFitRefit` 的 settle 会在子面板单次钳位后再修正菜单 x/y, 嵌套层不跟随即底缘溢出 vh-8 契约 —— 坑档 ctx-sub-clamp-host-settle)。
 - 字段渲染单点 `hub-field` 组件(嵌套 object 预先扁平化为带缩进的渲染项, 组件无需递归); 命名实体(站点/规则集/规则)增改删收敛为三个骨架 + 三份差异清单; **「不适用」整块隐藏 ≠「不可用」灰显**: 来源不支持 ⇒ 字段无意义整块不渲染; 功能开关关 ⇒ 灰显但仍可编辑(先把参数配好, 开回即生效)。

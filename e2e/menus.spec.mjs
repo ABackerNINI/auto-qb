@@ -694,6 +694,48 @@ for (const skin of SKINS) {
         await page.keyboard.press('Escape'); // 收尾关菜单
         await expect(page.locator('.ctx-menu')).toHaveCount(0);
       });
+
+      /* CTX-sub fit 首行场景(issue 26-11-13-0443): 右键**首行**时菜单贴视口顶、「更多操作」
+       * 父项靠视口下部, 子面板被钳位上移收进视口 —— 但主菜单 _menuFitRefit 的 rAF 二次收口
+       * 会在子面板**单次钳位之后**再修正一次菜单 x/y(~2px, 首钳用未落定分数像素尺寸), 锚点
+       * 随之移动, 子面板不跟随 => 底缘溢出 vh-8 契约 ~2px, 末项「复制哈希」贴视口下缘被裁
+       * (四皮肤一致)。修法 = 子面板补 _subFitRefit 二次收口(机理同主菜单)。
+       * 断言 = 上一条同款四边收进视口, 但 arrange 换成首行, 且**等 subTop 收敛后再读盒** ——
+       * hover 后立即读会读到主菜单 settle 搬移前的旧位置(红验 12/12 漏报的教训); 旧实现
+       * subTop 恒不变故此等待对它即时通过, 判别力全在四边断言上。 */
+      test('CTX-sub fit 首行场景: 二次收口后子面板整盒仍收进视口', async ({ page }) => {
+        await openApp(page, skin);
+        await tab(page, 'torrents').click();
+        await expect(page.locator('.torrent-row').first()).toBeVisible({ timeout: 15_000 });
+        await clickRow(page, page.locator('.torrent-row').nth(0), { button: 'right' });
+        await expect(page.locator('.ctx-menu')).toBeVisible({ timeout: 5_000 });
+        await page.locator('.ctx-menu > .ctx-item.has-sub[data-item="sub-more"]').hover();
+        const sub = page.locator('.ctx-sub');
+        await expect(sub).toBeVisible({ timeout: 3_000 });
+        // 等钳位复核链收敛: subTop 跨两帧 rAF 不再变化(有界循环 1+3 帧内必稳, 见 _subFitRefit)
+        await expect.poll(async () => {
+          const a = await readInst(page, 'vm.subTop');
+          await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+          const b = await readInst(page, 'vm.subTop');
+          return a === b;
+        }, { message: '子面板钳位复核应收敛(subTop 稳定)', timeout: 2_000 }).toBe(true);
+        const vp = /** @type {{width: number, height: number}} */ (page.viewportSize());
+        const b = /** @type {{x: number, y: number, width: number, height: number}} */ (await sub.boundingBox());
+        expect(b, '子面板盒量不到').toBeTruthy();
+        expect(Math.round(b.x + b.width),
+          `子面板右缘 ${Math.round(b.x + b.width)} 应 ≤ 视口宽 - 8`)
+          .toBeLessThanOrEqual(vp.width - 8 + 1);
+        expect(Math.round(b.x), `子面板左缘 ${Math.round(b.x)} 应 ≥ 8`)
+          .toBeGreaterThanOrEqual(8 - 1);
+        expect(Math.round(b.y + b.height),
+          `子面板底缘 ${Math.round(b.y + b.height)} 应 ≤ 视口高 - 8 —— 主菜单 settle 搬移锚点后 ` +
+          '子面板不跟随, 底缘溢出契约(issue 26-11-13-0443: 末项复制哈希贴下缘被裁)')
+          .toBeLessThanOrEqual(vp.height - 8 + 1);
+        expect(Math.round(b.y), `子面板顶缘 ${Math.round(b.y)} 应 ≥ 8`)
+          .toBeGreaterThanOrEqual(8 - 1);
+        await page.keyboard.press('Escape'); // 收尾关菜单
+        await expect(page.locator('.ctx-menu')).toHaveCount(0);
+      });
     });
 
     test.describe('W5 off: fail-closed 门控精简组(skip-check off)', () => {

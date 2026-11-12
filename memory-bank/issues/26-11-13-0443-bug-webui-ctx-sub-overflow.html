@@ -9,9 +9,9 @@
 <meta name="issue-stamp" content="26-11-13-0443">
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="webui-kbd-hints">
-<meta name="doc-refs" content="memory-bank/tasks/26-11-12-webui-kbd-hints.md">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-12-webui-kbd-hints.md, memory-bank/pitfalls/web-ui/ctx-sub-clamp-host-settle.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="右键菜单次级子菜单首行场景底部探出视口下缘(末项复制哈希被裁)">
 <meta name="issue-summary" content="首行右键悬停「更多操作」时次级子菜单盒底贴/越视口下缘, 末项「复制哈希」行被遮裁; 键帽使子菜单变高加重既有溢出行为">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-13-0443-bug-webui-ctx-sub-overflow</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-13 04:43</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
@@ -148,11 +148,14 @@
   <h2><span class="no">§07</span>状态变更日志</h2>
   <ul>
     <li>2026-11-13 04:43 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-13 — 状态 Open → In Progress（kb.status）</li>
+    <li>2026-11-13 — 状态 In Progress → Done（kb.status）</li>
+</ul>
   <h3>复验</h3>
-  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <p>2026-11-13 06:00 认领复验：<strong>仍复现</strong>。§04 锚点全部命中（menu.js <code>_subFitViewport</code> / ctx-menus.html <code>.ctx-sub</code> / 四皮肤 <code>.ctx-sub</code> 规则）；S6 截图 <code>atlas-2b-ctxmenu-sub.png</code> 仍在，末项「复制哈希」贴视口下缘被裁。e2e 桩 + Playwright 探针实测（1440×900，atlas，右键首行悬停「更多操作」）：子面板底缘 <code>893.94px</code> &gt; 契约 <code>vh-8+1 = 893</code>，5/5 轮一致。另证：假设①不成立——<code>.ctx-menu</code> z-index 100 &gt; 状态栏 30，子面板是<strong>压在状态栏上面</strong>画的，非被其遮挡（截图可见子面板末两行盖住状态栏中段）；真正机理见「修复后补充」。</p>
   <h3>修复后补充</h3>
-  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  <p><strong>实际修法</strong>（与 §06 候选方向不同，改道原因见下）：两个候选都未采纳——①「钳位底扣 <code>--statusbar-h</code>」不必要（状态栏根本不遮挡菜单，z 100 &gt; 30，重叠是主菜单既有且被接受的语义，只给子面板改钳位目标反而与主菜单分叉）；②「max-height + 内部滚动」不需要（子面板 397px 远小于可用视口高，极端矮视口下宿主菜单的限高滚动分支已兜底并注明「子面板随本盒被裁」）。真正根因是<strong>二阶时序交互</strong>：计划 26-11-12-0344 S2 给主菜单 <code>_menuFitRefit</code> 加的 rAF 二次收口，会在子面板单次 <code>$nextTick</code> 钳位<strong>之后</strong>再修正一次菜单 x/y（首钳用未落定的分数像素尺寸，~2.5px）——instrument 实测：钳位时刻锚点 top 711.29、<code>want=495</code> 精确；主菜单 settle 后锚点移到 713.83，子面板不跟随，渲染顶变 496.55、底缘 893.95 溢出契约。修法 = <code>menu.js</code> 子面板补同款二次收口 <code>_subFitRefit</code>（rAF 有界复核循环，1+3 帧收敛，幂等不写回），顺带把 <code>openSub</code> 的 <code>ev.currentTarget</code> 改为事件回调内同步捕获（对齐 hr.js 既有纪律，消除派发后读 currentTarget 的潜在脆弱点——实测 Vue $nextTick 微任务里它恰好还活着，但这是依赖引擎实现顺序的侥幸）。<br>
+  <strong>验证方式与数字</strong>：一次性探针 instrument（钳位时刻 want=495 / 终态底缘 893.95→修后 892.625，3/3 轮终态逐字节一致）；新增 e2e <code>menus.spec「CTX-sub fit 首行场景」</code>（四边收进断言 + subTop 收敛等待）红绿双验——旧代码红（底缘 894 断言失败）、修后 20/20 绿（2 用例 × 2 皮肤 × 5 轮）；<code>menus.spec + ctx-custom</code> 全量 36 过 6 跳；「改前端」门禁 <code>test:e2e:fast</code> 与 <code>test.full</code> 数字见本档提交与基线切片。</p>
 </section>
 
 <footer>

@@ -302,10 +302,13 @@ window.AQB_MENU = {
       this.keepSub();
       this.subMenu = name;
       this.subTop = -6; /* 每次展开现算垂直位移, 先复位回 CSS 默认基准 */
-      this.subFlip = this._subOverflowsRight(ev && ev.currentTarget);
+      /* currentTarget 只在事件派发同步期内有效, 派发后再读(timer/rAF 里)已是 null
+       * (hr.js hrPopEnter 同款纪律): 量测回调一律用这里同步捕获的锚点元素 */
+      const anchor = ev && ev.currentTarget;
+      this.subFlip = this._subOverflowsRight(anchor);
       /* 渲染后按**实测**尺寸复核水平方向并钳垂直方向(估宽只管首帧方向,
-       * 精确收口在实测; 机理同主菜单 _menuPos 估 + _menuFitRefit 实测两级) */
-      this.$nextTick(() => this._subFitViewport(ev && ev.currentTarget));
+       * 精确收口在实测 + 二次收口; 机理同主菜单 _menuPos 估 + _menuFit 实测 + _menuFitRefit 收口) */
+      this.$nextTick(() => this._subFitRefit(anchor, name));
     },
     /* 子面板水平方向初判: .ctx-sub 锚在**父项右缘** + 4px 缝(left: calc(100% + 4px)),
      * 判据必须从父项右缘起算 —— 旧实现 _menuOverflowsRight(currentTarget, 200) 从父项
@@ -318,8 +321,8 @@ window.AQB_MENU = {
       const FIT = window.AQB_OVERLAY_FIT; /* 几何单点(issue 26-10-20-2231), 方法内取别名 */
       return FIT.probeRight(anchor.getBoundingClientRect().right, 272, 4);
     },
-    /* 子面板展开后按实测尺寸重钳位。子面板不能搬出父项 —— 它是父项的 DOM 后代
-     * (CTX-05 的 mouseleave 收起语义依赖这一点), 故钳位只做两件事:
+    /* 子面板展开后按实测尺寸重钳位(单次; 有界复核循环见 _subFitRefit)。子面板不能搬出父项
+     * —— 它是父项的 DOM 后代(CTX-05 的 mouseleave 收起语义依赖这一点), 故钳位只做两件事:
      * 1) 水平: 实测宽复核 subFlip(估宽判错的两头都纠: 该翻没翻/不该翻翻了);
      * 2) 垂直: 理想顶 = 父项顶 - 6(.ctx-sub top 基准), 底越视口下缘则整体上移收进
      *    视口(顶再钳回上缘留白) —— 位移写成相对父项的 top 内联值, 不动 DOM 结构。 */
@@ -342,6 +345,28 @@ window.AQB_MENU = {
        * 换算成相对父项的 top(CSS top 基准 = 父项顶)。不裁剪时结果恒为 -6 = CSS 默认。 */
       const want = FIT.clampAxis(rect.top - 6, h, window.innerHeight, EDGE);
       this.subTop = want - rect.top;
+    },
+    /* 子面板二次收口(复核循环形态同 _menuFitRefit, 触发源不同): 主菜单的 _menuFitRefit
+     * 二次收口会在子面板单次 $nextTick 钳位**之后**再修正一次菜单 x/y(其首钳用的分数像素
+     * 尺寸未落定, ~2px) —— 锚点(父项)随之移动, 子面板不跟随就溢出 vh-8 契约(issue
+     * 26-11-13-0443: 首行右键悬停「更多操作」时末项「复制哈希」贴视口下缘被裁, 四皮肤一致;
+     * instrument 实测钳位时刻 want=495 精确、主菜单 settle 搬移锚点后渲染底缘 893.95>893)。
+     * 钳位回写后再排帧按**当前**锚点实测复核; 已对齐时复核幂等(不写回、不重排), 锚点若再动
+     * 则最多再补两帧, 有界收敛。rAF 在后台页签不触发 —— 子面板只在可见页签展开, 无此场景。 */
+    _subFitRefit(anchor, name) {
+      this._subFitViewport(anchor);
+      let retries = 2;
+      const settle = () => {
+        /* 只复核本轮展开的这个子面板: 已收起/已切到别的父项(本轮 rAF 挂起期间 openSub 又跑过)
+         * 都作废 —— 否则会把新子面板按旧锚点误钳一帧(下一轮循环自纠, 但没必要付这一帧) */
+        if (this.subMenu !== name) return;
+        const flip = this.subFlip, top = this.subTop;
+        this._subFitViewport(anchor);
+        if (flip !== this.subFlip || top !== this.subTop) {
+          if (retries-- > 0) requestAnimationFrame(settle);
+        }
+      };
+      requestAnimationFrame(settle);
     },
     /* 指针落在父项或子面板上: 撤销挂起的收起(子面板上不要再算 flip —— 锚点是父项不是面板) */
     keepSub() {

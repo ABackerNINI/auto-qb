@@ -5,7 +5,7 @@
 **Updated:** 2026-11-13
 **Summary:** WebUI 快捷键现场提示实施完成: 常驻键帽四落点(菜单 key 字段/页签 Alt+1..5 徽标/顶栏 N·K/状态栏 Shift+/ 入口)五笔提交 3df2c3b9..e544bfd2 落地, S1-S6 全 Done, 全量全绿(见 kb.baseline); 领域结论回写 architecture/webui.md「键位现场提示」节; 残余(子菜单溢出/UIS 枚举漂移)入池
 **Topics:** webui-kbd-hints
-**Refs:** memory-bank/plans/26-11-12-0344-plan-webui-kbd-hints.html, memory-bank/pitfalls/kb/subagent-survey-fact-verify.md, memory-bank/issues/26-11-12-0527-docs-webui-guard-ref-drift.html, memory-bank/issues/26-11-13-0443-bug-webui-ctx-sub-overflow.html, memory-bank/issues/26-11-13-0443-test-webui-uis-enum-drift.html, memory-bank/pitfalls/web-ui/ctx-sub-width-coupling.md, memory-bank/pitfalls/web-ui/css-file-line-cap.md, memory-bank/issues/26-11-12-0318-test-testing-parallel-flaky.html, memory-bank/tasks/26-11-13-webui-uis-enum-drift.md
+**Refs:** memory-bank/plans/26-11-12-0344-plan-webui-kbd-hints.html, memory-bank/pitfalls/kb/subagent-survey-fact-verify.md, memory-bank/issues/26-11-12-0527-docs-webui-guard-ref-drift.html, memory-bank/issues/26-11-13-0443-bug-webui-ctx-sub-overflow.html, memory-bank/issues/26-11-13-0443-test-webui-uis-enum-drift.html, memory-bank/pitfalls/web-ui/ctx-sub-width-coupling.md, memory-bank/pitfalls/web-ui/css-file-line-cap.md, memory-bank/issues/26-11-12-0318-test-testing-parallel-flaky.html, memory-bank/tasks/26-11-13-webui-uis-enum-drift.md, memory-bank/pitfalls/web-ui/ctx-sub-clamp-host-settle.md
 
 ## 本篇只回答
 

@@ -1,0 +1,6 @@
+# webui-ctx-sub-fit-refit
+
+> 摘要: 修复 issue 26-11-13-0443: 右键子面板底缘溢出视口真根因定位(主菜单 _menuFitRefit 的 rAF settle 在子面板单次钳位后搬移锚点 ~2.5px, instrument 实测钳位时刻 want=495 精确/终态底缘 893.95>893; 推翻 issue 两假设: 状态栏 z30 不遮挡 z100 菜单/子面板自身高度钳位时刻已是终值) + menu.js 补 _subFitRefit 二次收口(rAF 有界 1+3 帧收敛+幂等+name 闸防旧循环误钳新子面板) + openSub 同步捕获 currentTarget(hr.js 纪律对齐) + e2e 新增首行场景回归(四边断言+subTop 收敛等待; 立即读盒读到搬移前快照的红验漏报教训入坑) + 红绿双验(旧代码红 894>893/修后 20/20 绿) + 新坑档 ctx-sub-clamp-host-settle + webui.md 钳位链回写 + issue 翻 Done; 门禁: test.full 6101+2 99%(基线切片 26-11-13-0713)/e2e fast 356P/menus+ctx-custom 36P6S; 评审 2 轮(1 minor 状态推进已修/复评零 actionable)
+> 最后活动: 2026-11-13 07:36
+
+**R0(2026-11-13 07:36):** 修复 issue 26-11-13-0443: 右键子面板底缘溢出视口真根因定位(主菜单 _menuFitRefit 的 rAF settle 在子面板单次钳位后搬移锚点 ~2.5px, instrument 实测钳位时刻 want=495 精确/终态底缘 893.95>893; 推翻 issue 两假设: 状态栏 z30 不遮挡 z100 菜单/子面板自身高度钳位时刻已是终值) + menu.js 补 _subFitRefit 二次收口(rAF 有界 1+3 帧收敛+幂等+name 闸防旧循环误钳新子面板) + openSub 同步捕获 currentTarget(hr.js 纪律对齐) + e2e 新增首行场景回归(四边断言+subTop 收敛等待; 立即读盒读到搬移前快照的红验漏报教训入坑) + 红绿双验(旧代码红 894>893/修后 20/20 绿) + 新坑档 ctx-sub-clamp-host-settle + webui.md 钳位链回写 + issue 翻 Done; 门禁: test.full 6101+2 99%(基线切片 26-11-13-0713)/e2e fast 356P/menus+ctx-custom 36P6S; 评审 2 轮(1 minor 状态推进已修/复评零 actionable)

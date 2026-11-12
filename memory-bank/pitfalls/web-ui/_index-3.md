@@ -1,13 +1,14 @@
 # web-ui — 前端 / WEB UI 纪律 · 卷 3/4
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `inflight-flag-no-timeout.md` … `show-if-residual-key.md`(共 26 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `hscroll-indicator.md` … `search-views.md`(共 26 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
 
 | 主题 | 一句话 | 触发词 |
 |---|---|---|
+| [hscroll-indicator.md](hscroll-indicator.md) | 藏掉 `.group-table` 原生横条并补底部指示条时, 五件事不显然 —— ①**横条的位置是容器底边, 不是视口底边**: `.layout { align-items: start }` 让 `.content` 不被拉伸, `.torrents-dock` 虽是 f… | 横向滚动条, 横条, 滚动条在中间, 少种子横条, 横条很丑, group-table, overflow-x, scrollbar-width, ::-webkit-scrollbar, 滚动条隐藏, hscroll, 指示条, 胶囊,… |
 | [inflight-flag-no-timeout.md](inflight-flag-no-timeout.md) | 前端「loading 置真 → await 请求 → finally 复位」是最常见的形状, 但裸 `fetch` 没有超时 ⇒ 请求悬挂时 `await` 永不返回、`finally` 永不执行, 而轮询 tick 又拿**同一个标志**当跳过判据 ⇒ 复位路径被自己挡住(图表… | 前端轮询, 轮询停了, 图表停在旧帧, 数据不再更新, 加载卡死, loading 不复位, 不自愈, 手动刷新才恢复, fetch 无超时, AbortController, 请求悬挂, TCP 半开, 信号丢失 |
 | [injected-dom-title-migrated-to-aq-tip.md](injected-dom-title-migrated-to-aq-tip.md) | 全局自绘 tooltip 的「原生 title 断供式」机制(shared/ui_feedback.js 的 MutationObserver)对 **一切**新出现的 title 属性做单向迁移 —— 不只 Vue 模板渲染, **JS 手工插值出的 DOM(innerHTML… | 变体 DOM, title 属性, data-aq-tip, getAttribute null, [title] 选择器, MutationObserver, ui_feedback, 悬浮提示, Playwright title |
 | [js-comment-terminator.md](js-comment-terminator.md) | JS 块注释以第一个 `*/` 结束 —— 注释文字里再出现 `*/`(如 `Key*/Digit*` 想表达通配前缀)会把注释提前砍断, 尾巴落成**代码态**; 与 CSS 版(见 css-comment-terminator)不同, 尾巴常能被解析成正则字面量等合法语法,… | 写 JS 注释, 注释里出现 星号斜杠, Digit is not defined, pageerror 白屏, node check 全绿, shortcuts.js |
@@ -33,4 +34,3 @@
 | [scroll-visible-band.md](scroll-visible-band.md) | 键盘光标滚动跟随把「目标行几何在视口内」当成「看得见」, 但列表的上下边各压着一层随正文滚动的 chrome —— 顶部是吸在顶栏下缘的吸顶列头 `.group-head`(sticky, top = `--head-h - 1px`), 底部是固定状态栏 `.statusbar… | 键盘移到第一个种子只显示一半, 最后一个种子只显示一半, 翻页跳行, 翻一屏跳过行, PageDown 少看几行, 无光标回落, 跳极值行, 落回列表顶, 落到列表底, 追剧页键盘, 光标行被列头盖住, 光标行被状态栏盖住, 看不见当前行,… |
 | [search-pending-collapse.md](search-pending-collapse.md) | 搜索匹配是服务端单点(search_torrents)、前端消费 searchHits 的模式下, "输入新词到响应返回之间沿用上一查询的命中集"(search-as-you-type)契约对「空集→首词」转换失效 —— 首词的待响应窗(防抖 400ms + 请求往返)里 sea… | 改搜索/筛选派生, 改 searchHits 消费, 新增走命中门的列表视图, 搜索时列表闪空, 搜索整页跳顶, 搜索时面板跳动, 待响应窗, search-as-you-type, filteredTorrents, filteredGr… |
 | [search-views.md](search-views.md) | 搜索不是虚拟分组、负词种子级排除、脏标记是共享状态、鉴权不能靠"凭证串非空"、配置写盘按 BaseLoader 语义。 | 改搜索, 改视图脏标记, 改鉴权, 改登录, 改设置页, 改配置写盘, rid 门控 |
-| [show-if-residual-key.md](show-if-residual-key.md) | schema 字段的 show_if 只控制「这一行渲染不渲染」; 用户把触发键从命中值切走后, 该字段先前写进树的值**仍留在配置树里**(show_if 不删键), 行又已隐藏 ⇒ 用户看不见也改不了, 保存时后端校验对残留键报错(如 watch_fields 仅在 trig… | 给规则/段字段配 show_if; 切走关联键后保存报"该键非法"; 字段在某取值下才合法 |
