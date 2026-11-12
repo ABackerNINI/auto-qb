@@ -1,6 +1,6 @@
 ---
 name: mutation-testing
-description: '变异测试定期审计的指导与流程: 按包/按模块在 WSL 里跑 mutmut(Windows 侧兜底 pytest-gremlins), 用「机器提名 + 手工确认」把存活变异分成本洞 / 等价变异 / 假存活, 真洞入池、每轮记一条基线切片。USE FOR: 用户说「跑变异测试」「变异测试审计」「看看测试够不够硬」「补测试的薄弱面」时; 用户说「根据变异测试指导写一份针对 X 的分步执行计划」(X 是包名/模块/领域, 如 config)时 —— 按本 skill 的「派生计划」节写; 要给某个包做测试强度审计时。真洞 issue 只给了「变异形态」没给 id(形态级手搓复验)时; DO NOT USE FOR: 常规测试缺口盘点(走 test-gap-audit skill)、单纯加用例、把变异分数挂进提交闸门、前端(JS)变异测试(结构前提不具备, 见报告 §12)。'
+description: '变异测试定期审计的指导与流程: 按包/按模块在 Docker testbed 容器里跑 mutmut(Windows 侧兜底 pytest-gremlins), 用「机器提名 + 手工确认」把存活变异分成本洞 / 等价变异 / 假存活, 真洞入池、每轮记一条基线切片。USE FOR: 用户说「跑变异测试」「变异测试审计」「看看测试够不够硬」「补测试的薄弱面」时; 用户说「根据变异测试指导写一份针对 X 的分步执行计划」(X 是包名/模块/领域, 如 config)时 —— 按本 skill 的「派生计划」节写; 要给某个包做测试强度审计时。真洞 issue 只给了「变异形态」没给 id(形态级手搓复验)时; DO NOT USE FOR: 常规测试缺口盘点(走 test-gap-audit skill)、单纯加用例、把变异分数挂进提交闸门、前端(JS)变异测试(结构前提不具备, 见报告 §12)。'
 user-invocable: true
 ---
 
@@ -12,6 +12,9 @@ user-invocable: true
   —— 本 skill 只留「怎么做」; 框架比对 / 成本模型 / 实测表一律引报告, **不复述**(复述必然漂移)。
 - **命令**一律走 `.commands/mutants/` 包的 task id, **本 skill 不抄命令本体**(手抄会被 `commands run doc.drift` 判红)。
 - 本 skill 是**排期锚**（常驻 issue）与**执行**之间的那层「怎么做」; 「要不要做 / 什么时候做」在 issue 侧, 「做到哪了」在任务档案侧。
+- **环境**(2026-11-12 起, 计划 26-11-12-0152 S4): mutmut 主力面 = Docker testbed 常驻容器
+  `auto-qb-testbed`, 镜像仓落容器内 `/root/auto-qb-tests/mutation/<pkg>`(默认按 `--target` 派生, 每目标一份);
+  旧 WSL 形态退役不再回去 —— WSL 专属坑的历史留痕见坑档, 本 skill 只留容器口径。
 
 ## 这套流程怎么运转 (优化后的四段)
 
@@ -37,22 +40,26 @@ user-invocable: true
 | 取舍 | 定论 | 理由(引报告) |
 |---|---|---|
 | 做不做 | **做, 但只在定期审计** | 便宜(每变异 0.015–0.16s), 但仍是全量测试的几十倍(§02 / §08) |
-| 框架 | **mutmut(WSL)主力 + pytest-gremlins(Windows)兜底** | 同环境同池: mutmut 用 58% 墙时打 3.8 倍变异, 且打得到字符串/语句类(§07) |
+| 框架 | **mutmut(容器)主力 + pytest-gremlins(Windows)兜底** | 同环境同池: mutmut 用 58% 墙时打 3.8 倍变异, 且打得到字符串/语句类(§07) |
 | 进不进闸门 | **不进** | 反馈太慢; 工具硬要求基线全绿才开跑; 覆盖闸门已挂 98%(§02) |
-| 一把跑全项目 | **不行, 按包是硬要求** | 实测 37% / 74% 两处把 WSL 打挂(§07 对照四) |
+| 一把跑全项目 | **不行, 按包是硬要求** | 实测 37% / 74% 两处把宿主打挂(§07 对照四, WSL 时代实测; 容器 12G 共享内存同理勿试) |
 | 前端(JS) | **暂不做** | 无单元层, 唯一执行面是真浏览器 e2e, 前提不成立(§12) |
 | 目标 | **不是「分数涨」** | 是「包内不再有不知道为什么活着的变异」; 等价变异杀不掉是数学事实(§11) |
 
-## 硬约束 (缺一条就会白跑、假绿或把 WSL 打挂)
+## 硬约束 (缺一条就会白跑、假绿或挤兑容器内存)
 
-1. **按包 / 按模块切目标**, 永不一把跑全 `src` —— 全量会把 WSL 打挂(硬崩, 要 `wsl --shutdown` 才救回)。
-2. **选择池必须是「定向的几个测试文件」**, 别用全 `tests/` —— 宽池的代价落在内存(打挂 WSL), 不在结论上(§07 对照五)。
-3. **`process_isolation = "forkserver"`** —— 默认 `fork` 会让注册表类守阵假红(同一份 `mutants/` 树手跑却是绿的, 极难归因)。
+1. **按包 / 按模块切目标**, 永不一把跑全 `src` —— 全量挤兑容器 VM 的共享内存(Docker VM 共 12G,
+   与宿主全部容器、并行全量 pytest 共用, R5); 僵死救回 = `docker restart auto-qb-testbed`
+   (镜像仓在容器可写层, restart 保留; 重建容器才丢, 丢了 `mutants.setup` 可重建, R8)。
+   (历史: WSL 时代是硬崩要 `wsl --shutdown`, 2026-11-12 起改容器。)
+2. **选择池必须是「定向的几个测试文件」**, 别用全 `tests/` —— 宽池的代价落在内存(挤兑容器 12G, R5), 不在结论上(§07 对照五)。
+3. **`process_isolation = "forkserver"`** —— 默认 `fork` 会让注册表类守阵假红(同一份 `mutants/` 树手跑却是绿的, 极难归因)。容器 Linux 下 forkserver 原生可用(2026-11-12 冒烟轮 155 变异全跑, 注册表无假红)。
 4. **文本层守阵必须 `--deselect`** —— mutmut 把变异体写进同一份文件, 「读源码文本做断言」的守阵在基线就红, 整轮直接中断(结构性劣势, gremlins 没有)。当前清单见包的 `set_conf.py` 的 `DEFAULT_DESELECT`。新增/改名文本层守阵时**同步核这张表**; 漂移由包内 `test_mutants.py` 的 `DeselectTableTest` 对差守阵兜底(文件或函数改名即判红)。flaky 用例(端口绑定/并发类)另表维护在 `FLAKY_DESELECT`, run 与 verify 都自动 deselect。
-5. **必带 `-n 0 --no-cov`** —— 抵消 `pytest.ini` 的 addxdist `-n 4` 与覆盖率闸; 否则报错 / 零变异 / 子集跑必不达标。
-6. **`--max-children` 别拉满** —— WSL 只有 8 核(`.wslconfig` 限), 默认取 `os.cpu_count()` 会打挂; 包级轮用默认 3。
+5. **必带 `-n 0 --no-cov`** —— 抵消 `pytest.ini` 的 addxdist `-n 8` 与覆盖率闸; 否则报错 / 零变异 / 子集跑必不达标。
+6. **`--max-children` 别拉满** —— 容器 8 vCPU 配额(nproc=8), 默认取 `os.cpu_count()` 会打挂; 包级轮用默认 3(4 路并发峰值曾 OOM, WSL 实测; 容器内存面同构, 纪律不因换宿主放宽)。
 7. **基线不绿不开跑** —— 工具会直接跳过(实测 `skipping mutation testing because N baseline test(s) failed`); 先修基线。
-8. **镜像放 WSL 原生 ext4, 不放 `/mnt/*`** —— 经 `/mnt` 的 IO 慢到不可用(实测拷 116MB 要 52s); 用 `git clone` 而不是从 `/mnt` 拷。
+8. **镜像别放慢盘(WSL 时代是 `/mnt/*` 9p 禁令)** —— 容器形态下**天然满足**: 容器根 fs = overlayfs, 无宿主盘挂载
+   (2026-11-12 实测 `df -T` 全 overlay, `/mnt` 为空), `git clone` 容器内直连 Gitee, 无 IO 陷阱可踩。
 
 > 这 8 条全部由 `.commands/mutants/` 包的脚本内建(它们是「看着正常但不生效」的写法), 正常路径**不需要手工拼**。
 > 逐条取证与 14 条坑的完整表在报告 §10。
@@ -76,16 +83,17 @@ user-invocable: true
 13. **手上只有「变异形态」没有 id 时, 走形态级手搓复验, 别硬凑 `mutants.verify`** —— 真洞 issue 常只写
     形态(如「`_get(spec, KEY, d.<field>)` 的默认值换成 None」「某个关键字实参被删」)而给不出 id,
     而 `mutants.verify` 是**按 id** 工作的, 这时用不上。做法见下节「形态级手搓复验(无 id 时的第二条路)」。
-14. **多 clone 并行时每会话用专用镜像** —— 镜像默认 `~/auto-qb-mut`, **多会话共用**; 而 `mutants.run` 每次都
-    `rm -rf mutants`, 并行会话一开跑就把**你正在跑的** `mutants/<pkg>/*.meta` 一起删掉, 使你在下一次结果落盘时
-    崩在 `FileNotFoundError: mutants/.../<file>.meta`(实测 hr 首轮在 5125/8027 处崩, 85% 作废)。
-    用 `--mirror '~/auto-qb-mut-<pkg>'` 各占一份(`report` / `verify` 带**同一个** `--mirror`); 并存时把
+14. **并行会话别共用同一份镜像仓** —— 容器形态(2026-11-12 起)镜像仓默认**按目标派生** `/root/auto-qb-tests/mutation/<pkg>`,
+    每目标一份, 换目标互不冲; 但容器是**全宿主共享**的(多 clone 的会话都在同一个容器里), **同 target 的并行会话仍互冲** ——
+    `mutants.run` 每次都 `rm -rf mutants`, 并行会话一开跑就把**你正在跑的** `mutants/<pkg>/*.meta` 一起删掉, 使你在下一次
+    结果落盘时崩在 `FileNotFoundError: mutants/.../<file>.meta`(实测 hr 首轮在 5125/8027 处崩, 85% 作废)。
+    同目标并行时用 `--mirror <容器内绝对路径>` 各占一份(`report` / `verify` 带**同一个** `--mirror`); 并存时把
     `--children` 降到 2(对方 3)。判别(两份 `mutmut run` / `only_mutate` 被别人改 / `mutants/` 下出现别人目标的
     `.meta`)与处置见 [pitfalls/testing/mutants-shared-mirror.md](../../../memory-bank/pitfalls/testing/mutants-shared-mirror.md)。
-15. **整包单轮可能 >60 min, 且被截断后可续跑** —— `mutants.run` 的 timeout 是 3600s; hr(24 文件 / 8,027 变异)
+15. **整包单轮可能 >60 min, 且被截断后可续跑** —— `mutants.run` 的 timeout 是 7200s; hr(24 文件 / 8,027 变异)
     实测墙时 ≈96 min(报告 §08 的单价锚点是在 config 上量的, 大包慢数倍; 且 mutmut 按「估计快的先跑」,
-    长尾吃掉大半)。撞超时后**不要从零重跑**: mutmut 对未变函数**保留既有 `exit_code`**, 直接在镜像里
-    `cd <mirror> && .venv/bin/mutmut run --max-children 3` 会**跳过已有结果、只补余量**, 与整跑等价
+    长尾吃掉大半)。撞超时后**不要从零重跑**: mutmut 对未变函数**保留既有 `exit_code`**, 直接在容器里进镜像仓
+    续跑(`.venv/bin/mutmut run --max-children 3`, 配方见包 note)会**跳过已有结果、只补余量**, 与整跑等价
     (实测: 60 min 到 6838/8027, 续跑 35m52s 补齐)。注意这条**必须绕过 `mutants.run`**(它每次都
     `rm -rf mutants` 把续跑点删掉); 结果照旧落 `mutants/*.meta`, 之后 `mutants.report` 正常读。
     **更稳的是先按模块切**(见「派生计划」§5 停手点)。
@@ -94,11 +102,11 @@ user-invocable: true
 
 | task id | 干什么 | 什么时候用 |
 |---|---|---|
-| `commands run mutants.setup` | 建 / 刷新 WSL 镜像仓 + 装工具 | 首次, 或镜像落后时(其余命令会自动确保) |
+| `commands run mutants.setup` | 建 / 刷新容器内镜像仓 + 装工具 | 首次, 或镜像落后时(其余命令会自动确保) |
 | `commands run mutants.run -- <目标glob> <池文件...>` | 对某包/模块跑一轮 mutmut | **主力**: 每轮审计 |
 | `commands run mutants.report -- <目标glob>` | 把上一轮的存活/未覆盖变异导出成**带 diff 的清单** + 按状态/按模块汇总 | 首轮跑完, **三分类之前**(`mutmut results` 只有 id, 没有文件:行与变异内容) |
 | `commands run mutants.verify -- --from-report <清单>` | 对候选逐条 `apply` → 跑**全套件** → 还原, 记 KILLED / SURVIVED(**判据 = 本次失败 - 基线失败**的差集, 基线常红不影响) | **S4 手工确认的机械化**(整轮时间大头, 先缩小候选) |
-| `commands run mutants.gremlins -- <目标文件> <池文件...>` | Windows 侧兜底 / 交叉验证 | 不想开 WSL, 或想用第二工具核对数字 |
+| `commands run mutants.gremlins -- <目标文件> <池文件...>` | Windows 侧兜底 / 交叉验证 | 不想开容器、用第二工具在 Windows 侧核对数字 |
 | `commands run mutants.status` | 看镜像状态 + 上一轮结果摘要 | 轮次之间回看 |
 
 - 细节(`<args>` 形态 / 缺省池 / 退出码语义)用 `commands run show mutants.run` 取, **不要翻文档**。
@@ -109,6 +117,10 @@ user-invocable: true
 **入场条件**: 基线全绿(`commands run test.quick` 过)。不绿先修, 别跑变异。
 
 1. **定目标与池** —— 一个包或一个模块; 池 = 直接相关的那几个测试文件(先核「覆盖函数面」, 见硬约束 9)。
+   目标里必须有 mutmut 能变异的**语句面**(分支/默认值/字符串字面量/边界这些真实逻辑) —— 纯 Protocol/常量单点类
+   模块会生成 **0 变异**, stats 阶段报「no test case for any mutant」提前收工, 看着像环境坏了(2026-11-12
+   容器冒烟踩过: `infra/clock.py` 全文件 0 变异, 换 versioning.py 一轮就通)。开跑前 `mutants.status` 的
+   注册表为空(`mutants/` 无 `.meta`)就是中招, 换目标, 不是修环境。
 2. **跑一轮** —— `commands run mutants.run -- --target '<glob>' --pool <池...>`; 记下变异数 / 杀死率 / 耗时 / **工具版本** / **选择池**。
 3. **导出清单** —— `commands run mutants.report -- --target '<glob>'`; 拿到**带 diff 的清单** + 按状态/按模块汇总。
    (别拿 `mutmut results` 的纯 id 清单去分类 —— 没有变异内容判不了真洞/等价。)
@@ -195,7 +207,7 @@ user-invocable: true
 **必填字段**(缺了跨轮不可比):
 
 - 目标(glob) · **选择池(逐个文件)** · 变异总数 · 杀死 / 存活 / `no tests` / 超时 计数 · 杀死率
-- 耗时(墙时 + CPU) · **工具名 + 版本** · `--max-children` · 机器(WSL 核数)
+- 耗时(墙时 + CPU) · **工具名 + 版本** · `--max-children` · 机器(容器 vCPU / 内存形态, 2026-11-12 起容器口径)
 - **首轮与复跑各一行**(复跑要写「同目标同池 + 补测」并给存活数增减; 有新增存活要单独点出)
 - **手工确认后的真洞数** + 指向各自 issue 的链接 · S4 覆盖了多少条 / 其中假存活多少
 - 切片自带一行 `**Refs:** <任务档案路径>`(认领链反向声明)
@@ -248,7 +260,7 @@ user-invocable: true
    - 为什么先它: 引报告 §11 的对象优先级, 或引 §09 的实测刻度(分数最低的先补)。
    - **显式排除**: 不在范围内的文件/行为。
 2. **测算基数**(用报告实测密度与单价外推, 别拍脑袋)
-   - 变异数 ≈ 行数 × 1.0(实测 0.84–1.23/行); 单轮时长 ≈ 变异数 × 0.134s(包级锚点, WSL 8 核 `--max-children 4` 时实测; 现行默认 3, 该锚点未重测)。
+   - 变异数 ≈ 行数 × 1.0(实测 0.84–1.23/行); 单轮时长 ≈ 变异数 × 0.134s(包级锚点, WSL 8 核 `--max-children 4` 时实测; 现行默认 3, 该锚点未重测; 容器冒烟锚点 2026-11-12: versioning.py 155 变异, 变异段 6.96 变异/s @ children 3, 与 0.134s/变异同量级)。
      口径按**目标 glob 命中的全行**算就行 —— **别**自作聪明剔除「纯数据声明」行: config 首轮这么精化后估 ≈3,800,
      实测 **4,799**(+26%), 估算只用于排期, **首轮一律以实测为准**并原样记进切片。
    - **墙时别用单价外推(hr 首轮实测)**: 0.134s/变异是在 config(6 文件池)上量的; hr(24 文件 / 15 文件池)整体
@@ -272,10 +284,12 @@ user-invocable: true
    - 每轮基线切片字段齐(见上节); 真洞**全部**已入池或已补测; 复跑存活数 ≤ 首轮(同池)。
    - **常驻锚 §07 覆盖进度总表已同步该包行**(硬约束 12) —— 日期/变异数/杀死率与切片逐位一致, 且挂了切片链接。
 5. **风险与停手点**
-   - 基线不绿 → 停, 先修; WSL 无响应 → `wsl --shutdown` 后降 `--max-children` 重来; 池越宽内存越紧 → 回定向池。
-   - **单轮墙时超 60 min**(撞 `mutants.run` 的 3600s timeout)或内存吃紧 → **按模块再切**(先跑最大单模块, 再逐模块),
+   - 基线不绿 → 停, 先修; 容器僵死/无响应 → `docker restart auto-qb-testbed` 后降 `--max-children` 重来
+     (镜像仓在容器可写层, restart 保留; 池越宽内存越紧 → 回定向池)。
+   - **单轮墙时超 60 min**(撞 `mutants.run` 的 7200s timeout)或内存吃紧 → **按模块再切**(先跑最大单模块, 再逐模块),
      别硬撑整包; 已跑一半的可用 mutmut 续跑补齐(硬约束 15)。
-   - **有并行会话在跑变异** → 用专用镜像 + 降 `--children`(硬约束 14), 否则对方 `rm -rf mutants` 会删掉你正在跑的结果。
+   - **同目标有并行会话在跑变异** → `--mirror` 各占一份 + 降 `--children`(硬约束 14), 否则对方 `rm -rf mutants` 会删掉你正在跑的结果;
+     不同目标各用默认镜像仓即可(按目标派生, 天然隔离)。
 
 **计划的边界**: 计划只写「怎么修 / 为什么这么修」; **不在计划里实施**。执行时按 [memory-bank skill](../memory-bank/SKILL.md) 立任务档案, 轮次进档案。
 
@@ -290,26 +304,27 @@ user-invocable: true
   锚点比 bytes 行** / 单行锚点在两个函数里各出现一次 `count=2`): 共同后果是**变异压根没生效却被判「存活」**,
   与「守阵真的挡不住」在输出上无法区分。唯一兜底是「`count != 1` 就报 `ANCHOR-MISS` 停手」。见
   [pitfalls/testing/redverify-anchor-lineendings.md](../../../memory-bank/pitfalls/testing/redverify-anchor-lineendings.md)。
-- **本机 WSL 登录壳是 zsh**: `cd` 改了真实 cwd, 但 `$PWD` / `$()` 仍报启动目录 —— 写 WSL 脚本别用 `$()` 取相对路径。
-  工具侧 `mutants.status` 的这处失真**已修(2026-10-08, `cd X && cmd` 直连形态)**;
-  `mutants.run` 本来就不受影响。若再见到 `mutmut=no`, 见
+- **壳层 `$PWD`/`$()` 失真** —— 容器形态(2026-11-12 起)**不适用**: `mutants.*` 全走 `docker exec ... bash -c`,
+  容器 bash 无 WSL zsh 登录壳的「`cd` 了但 `$PWD`/`$()` 仍报启动目录」坑, status 脚本已回归常规 `$(...)` 形态。
+  历史留痕(WSL 形态, 2026-10-08)见
   [pitfalls/testing/mutants-wsl-shell.md](../../../memory-bank/pitfalls/testing/mutants-wsl-shell.md)。
-- **多 clone 并行共用镜像会被对方冲毁** —— 并行会话的 `rm -rf mutants` 删掉你正在跑的 `.meta`, 崩在
-  `FileNotFoundError: mutants/...meta`。判别与处置见
+- **并行共用镜像会被对方冲毁** —— 同 target 并行会话的 `rm -rf mutants` 删掉你正在跑的 `.meta`, 崩在
+  `FileNotFoundError: mutants/...meta`(不同 target 用默认镜像仓即天然隔离)。判别与处置见
   [pitfalls/testing/mutants-shared-mirror.md](../../../memory-bank/pitfalls/testing/mutants-shared-mirror.md)(硬约束 14)。
-- **S4 手工通道别直 apply 伪 hunk**: dump 的 `@@` 行号会漂移, WSL `/mnt/*` 上 GNU patch 可能空读却
-  `rc=0` 假成功。做法=定位唯一匹配行后**整文件 post-image cp**, 以 post-image 复跑为准。见
+- **S4 手工通道别直 apply 伪 hunk**: dump 的 `@@` 行号会漂移, 直接拿伪 hunk 打 patch 可能空读却
+  `rc=0` 假成功(WSL `/mnt/*` 时代实测; 容器 overlayfs 无该 IO 坑, 但行号漂移与锚点纪律照旧)。
+  做法=定位唯一匹配行后**整文件 post-image cp**, 以 post-image 复跑为准。见
   [包内 references/why.md 的「S4 手工通道」](../../../.commands/mutants/references/why.md)。
 
 ## 反模式
 
-- ❌ 一把跑全 `src` / 用全 `tests/` 当池 —— 会打挂 WSL, 且不是「更全」, 是「跑不完」。
+- ❌ 一把跑全 `src` / 用全 `tests/` 当池 —— 会挤兑容器 12G 内存(WSL 时代实测硬崩 37%/74% 两处), 且不是「更全」, 是「跑不完」。
 - ❌ 把存活清单直接当缺口单 —— 先手工确认, 假存活比例不小。
 - ❌ 追「杀死率 100%」/ 设 `break` 阈值挂 CI —— 等价变异杀不掉, 追它等于自欺。
 - ❌ 换池后跨轮比存活数 —— 池是变量, 数字不可比; 选择池必须写进切片。
 - ❌ 拿 mutmut 的分数和 gremlins 的分数横向比 —— 分母不同(前者含 `no tests`)。
 - ❌ 在计划 / 文档里手抄命令 —— 只写 task id(`doc.drift` 判红)。
-- ❌ 为了跑变异去动主仓库的 `pyproject.toml` / `.venv` —— 镜像与工具在 WSL 侧独立, 主仓库环境不动(报告 §01 的沙箱纪律)。
+- ❌ 为了跑变异去动主仓库的 `pyproject.toml` / `.venv` —— 镜像与工具在容器侧独立, 主仓库环境不动(报告 §01 的沙箱纪律)。
 - ❌ 拿 `mutmut results` 的**纯 id 清单**直接分类 —— 没有文件:行与变异内容, 判不出真洞/等价; 先 `mutants.report`。
 - ❌ 对「全部存活」无差别开 `mutants.verify` —— 每条要跑一遍全套件(实测 ~15s/条), 先把候选收窄。
 - ❌ 复跑忘了 `--no-refresh` —— 新加的守阵会被镜像刷新 `git checkout -f` 冲掉, 存活数纹丝不动, 还以为是真洞。
@@ -321,7 +336,7 @@ user-invocable: true
 - ❌ 判「等价变异」前不问「输入能不能区分派生值与字段默认」 —— 派生值恰等于字段默认时, 删实参在现存
   输入下就是等价的; 先造能区分的输入再下结论, 别把可观测的真洞误判成等价变异而放过。
 - ❌ 跑完一轮**不更常驻锚 §07 覆盖进度总表** —— 「覆盖到哪几个包了」就散了, 下轮得翻遍切片才知道谁做过了(硬约束 12; 该表只放汇总刻度与指针, 不是流水)。
-- ❌ 多 clone 并行**共用默认镜像** —— 并行会话的 `rm -rf mutants` 会删掉你正在跑的结果, 崩在 `FileNotFoundError: mutants/...meta`(实测 hr 首轮 85% 作废); 各占一份 `--mirror` + 降 `--children`(硬约束 14)。
+- ❌ 同目标并行会话**共用同一份镜像仓** —— 一方开跑就 `rm -rf mutants` 删掉另一方正在跑的结果, 崩在 `FileNotFoundError: mutants/...meta`(实测 hr 首轮 85% 作废); 同目标并行各占一份 `--mirror` + 降 `--children`, 不同目标用默认派生仓即天然隔离(硬约束 14)。
 - ❌ 宽池时指望 `mutants.verify` **缩小候选** —— 池覆盖整包时它只会把候选原样确认一遍(实测 24/24 SURVIVED / 0 假存活); 该直接读 diff 判真洞 vs 等价, 别把整轮时间耗在「确认已知结论」上。
-- ❌ 撞 `mutants.run` 的 3600s 超时后**从零重跑整包** —— mutmut 可续跑(硬约束 15), 重跑等于白烧一遍长尾; 但续跑必须绕过 `mutants.run`(它会 `rm -rf mutants`)。
+- ❌ 撞 `mutants.run` 的 7200s 超时后**从零重跑整包** —— mutmut 可续跑(硬约束 15), 重跑等于白烧一遍长尾; 但续跑必须绕过 `mutants.run`(它会 `rm -rf mutants`)。
 - ❌ 轮次号**不看远端就取** —— 轮次记在共享档案里, 并行会话会撞号(实测 hr 轮与 config 轮都用了 R11); 开工先 `git fetch` 看远端档案的轮次, 合流时后到者重编号。

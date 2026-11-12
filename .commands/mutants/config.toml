@@ -12,13 +12,18 @@ scripts_dir = "scripts"
 # - 脚本每次清 mutants/ 缓存: 目标/池一变, 旧缓存会让 mutmut「0 files mutated」提前收工(实测)。
 # - 结果落 <系统temp>/auto-qb-mutants(不落仓内), 存活清单只回显头部 —— 全量可能上千行, 超内联上限。
 # - **不进提交闸门**: 一轮 1-21 min, 是审计信号不是放行条件; 工具还硬要求基线全绿才开跑。
+# - 容器实测锚点(2026-11-12, S4 冒烟, 数字单点=任务档案 26-11-12-test-linux-testbed(计划 26-11-12-0152), 基线切片随 S6): setup 首建 22s
+#   (clone 13.5s + cp 模板 venv 0.4s + export/pip delta ~0.1s + mutmut 首装 ~7s); 镜像仓 setup 后 ≈280M,
+#   跑一轮后 ≈378M(含 mutants/ 注册表+变异副本)。冒烟轮 versioning.py(190 行)+ tests/test_versioning.py
+#   池 @ children=3: 155 变异 / 147 杀 / 7 存活 / 1 超时, 变异段 6.96 变异/s(≈22s), 整轮 65.6s(含当轮建仓);
+#   report 8 条带 diff 1.2s。镜像仓在容器可写层(无卷挂载): docker restart 保留, 容器重建才丢(重建走 setup)。
 
 [tasks."mutants.run"]
 script  = "mutants.py"
 args    = ["run"]
 timeout = 7200
 when    = "定期审计: 对某个包/模块跑一轮 mutmut(容器) —— 按包/按模块 + 定向测试池"
-note    = "用法: commands run mutants.run -- --target '**/config/*.py' --pool tests/test_config.py tests/test_config_schema.py [--children 3] [--timeout-multiplier 15]。**池必须是定向的几个测试文件**; 不给 --pool 会用全 tests(会打挂宿主)。目标 glob 相对仓库根; 镜像仓默认按 --target 派生 /root/auto-qb-tests/mutation/<pkg>(每目标一份, 冲突面按目标隔离收窄; **同 target 的并行会话仍互冲 —— 多 clone/多会话并行时用 --mirror 各占一份镜像仓**), --mirror 可指名容器内绝对路径。退出码非 0 = 基线不绿/池空/配置写错, 输出自带原因。**timeout_multiplier 显式写进 [tool.mutmut] 并记进结果文件头** —— 只在镜像里手工加的值会被下一轮 set_conf 覆盖抹掉(W5/W6 实证), 超时口径不可复现; no-tests 是池的函数、TIMEOUT 是超时倍数的函数, 账本缺这两项就无法归因。**大包单轮可 >60 min**(hr 24 文件 / 8027 变异实测 ≈96 min) —— timeout 已从 3600 抬到 7200; 被截断后可在容器里 `docker exec auto-qb-testbed bash -c 'cd <镜像仓> && .venv/bin/mutmut run'` 续跑(见包内 references/why.md), 更稳的是按模块切。跑完记得三分类存活变异(机器提名 + 手工确认), 别把存活清单当缺口单 —— 见 skill 与 pitfalls/testing/mutation-pool-artifact.md"
+note    = "用法: commands run mutants.run -- --target '**/config/*.py' --pool tests/test_config.py tests/test_config_schema.py [--children 3] [--timeout-multiplier 15]。**池必须是定向的几个测试文件**; 不给 --pool 会用全 tests(会打挂宿主)。目标 glob 相对仓库根; 镜像仓默认按 --target 派生 /root/auto-qb-tests/mutation/<pkg>(每目标一份, 冲突面按目标隔离收窄; **同 target 的并行会话仍互冲 —— 多 clone/多会话并行时用 --mirror 各占一份镜像仓**), --mirror 可指名容器内绝对路径。退出码非 0 = 基线不绿/池空/配置写错, 输出自带原因。**timeout_multiplier 显式写进 [tool.mutmut] 并记进结果文件头** —— 只在镜像里手工加的值会被下一轮 set_conf 覆盖抹掉(W5/W6 实证), 超时口径不可复现; no-tests 是池的函数、TIMEOUT 是超时倍数的函数, 账本缺这两项就无法归因。**大包单轮可 >60 min**(hr 24 文件 / 8027 变异实测 ≈96 min) —— timeout 已从 3600 抬到 7200; 被截断后可在容器里 `docker exec auto-qb-testbed bash -c 'cd <镜像仓> && .venv/bin/mutmut run --max-children 3'` 续跑(见包内 references/why.md; 不带会按容器 os.cpu_count()=8 续跑, 4 路并发峰值曾 OOM —— 与 skill 硬约束 15/6 同口径), 更稳的是按模块切。跑完记得三分类存活变异(机器提名 + 手工确认), 别把存活清单当缺口单 —— 见 skill 与 pitfalls/testing/mutation-pool-artifact.md。**目标必须有可变异的语句面**(分支/默认值/字符串字面量等真实逻辑) —— 纯 Protocol/常量单点模块会生成 **0 变异**, stats 阶段报「no test case for any mutant」提前收工, 看着像环境坏了(2026-11-12 冒烟先撞 clock.py 全文件 0 变异, 换 versioning.py 一轮就通); 开跑后注册表空(mutants/ 无 .meta)= 中招, 换目标别修环境"
 doc     = "references/why.md"
 
 [tasks."mutants.report"]
@@ -42,7 +47,7 @@ script  = "mutants.py"
 args    = ["setup"]
 timeout = 3600
 when    = "首次跑之前 / 镜像仓落后时: 建或刷新容器内镜像仓(git clone|fetch) + cp 模板 venv + delta + 装 mutmut"
-note    = "幂等。镜像仓默认按 --target 派生 /root/auto-qb-tests/mutation/<pkg>(容器 overlayfs 单根; 旧 WSL 的 /mnt/* 禁令在此天然满足), --mirror 可指名。venv = cp -a 模板(/opt/venv-3.13) + uv export/pip delta(不用 uv sync, R4 机制事实), mutmut 按版本核对后经烘焙国内索引装进镜像仓 venv(不在模板 venv 里)。mutants.run 会自己确保镜像仓, 这条只在想单独预热时用。容器不在跑时先跑 test.linux-env(不再像 WSL 时代那样降级 gremlins —— gremlins 现在只是 Windows 侧交叉验证面)"
+note    = "幂等。镜像仓默认按 --target 派生 /root/auto-qb-tests/mutation/<pkg>(容器 overlayfs 单根; 旧 WSL 的 /mnt/* 禁令在此天然满足), --mirror 可指名。venv = cp -a 模板(/opt/venv-3.13) + uv export/pip delta(不用 uv sync, R4 机制事实), mutmut 按版本核对后经烘焙国内索引装进镜像仓 venv(不在模板 venv 里)。首建实测(2026-11-12): 整条 22s = clone 13.5s + cp 模板 venv 0.4s + export/pip delta ~0.1s + mutmut 首装 ~7s; 镜像仓 setup 后 ≈280M, 跑一轮后 ≈378M。镜像仓在容器可写层(无卷挂载): docker restart 保留, 容器重建才丢, 丢了重跑本命令即可(R8)。mutants.run 会自己确保镜像仓, 这条只在想单独预热时用。容器不在跑时先跑 test.linux-env(不再像 WSL 时代那样降级 gremlins —— gremlins 现在只是 Windows 侧交叉验证面)"
 doc     = "references/why.md"
 
 [tasks."mutants.gremlins"]
