@@ -311,11 +311,12 @@ window.AQB_MENU = {
      * 判据必须从父项右缘起算 —— 旧实现 _menuOverflowsRight(currentTarget, 200) 从父项
      * **左缘** + 200 估算, 少算一个父项宽(~190px): 主菜单右缘离视口 200~390px 时判
      * "不用翻", 子面板实际已整条探出视口右缘(用户报"二级菜单部分出现在屏幕外")。
-     * 估宽 = min-width 190 + 内边距 12 ≈ 202; 实测重判在 _subFitViewport。 */
+     * 估宽 = min-width 260 + 内边距 12 ≈ 272(260 与四皮肤 .ctx-sub min-width 同源, 改宽度
+     * 四处 components.css + 本处同步); 实测重判在 _subFitViewport。 */
     _subOverflowsRight(anchor) {
       if (!anchor || !anchor.getBoundingClientRect) return false;
       const FIT = window.AQB_OVERLAY_FIT; /* 几何单点(issue 26-10-20-2231), 方法内取别名 */
-      return FIT.probeRight(anchor.getBoundingClientRect().right, 202, 4);
+      return FIT.probeRight(anchor.getBoundingClientRect().right, 272, 4);
     },
     /* 子面板展开后按实测尺寸重钳位。子面板不能搬出父项 —— 它是父项的 DOM 后代
      * (CTX-05 的 mouseleave 收起语义依赖这一点), 故钳位只做两件事:

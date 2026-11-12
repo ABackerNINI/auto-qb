@@ -459,10 +459,10 @@
   transform: rotate(-90deg); transition: transform var(--dur) var(--ease); }
 .ctx-item.has-sub.open .ctx-caret { opacity: 1; transform: none; color: var(--accent-hi); }
 .ctx-item.has-sub.open { background: var(--bg-hover); }
-/* top 的内联覆盖见 menu.js _subFitViewport: 父项靠视口下部时子面板实测上移收进视口,
- * 不裁剪时 Vue 绑定的内联 top 恒为 -6px —— 与本条默认值一致, 改默认值两处要同步 */
+/* top 的内联覆盖见 menu.js _subFitViewport: 父项靠视口下部时子面板实测上移收进视口, 内联 top 恒 -6px(改默认值两处同步);
+ * min-width 260 = 最长项「开启自动种子管理」(104px) + 键帽「Shift + T」(≈75px) 单行实需 ≈246(icon/gap/内边距计入)取整留余 —— 四皮肤 components.css 同值, menu.js _subOverflowsRight 估宽 272 同步 */
 .ctx-sub { position: absolute; left: calc(100% + 4px); top: -6px; z-index: 1;
-  min-width: 190px; padding: 6px;
+  min-width: 260px; padding: 6px;
   background: var(--bg-card); border: 1px solid var(--border-strong); box-shadow: var(--shadow-3);
   animation: drop-in .12s var(--ease); }
 .ctx-sub.flip-x { left: auto; right: calc(100% + 4px); }

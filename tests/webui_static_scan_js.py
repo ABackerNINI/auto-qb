@@ -40,6 +40,7 @@ from webui_static_scan_css import (
     _scan_column_cells_paired,
     _scan_css_blocks,
     _scan_css_comments,
+    _scan_ctx_sub_width,
     _scan_flux_modal_frost,
     _scan_progress_val_parity,
     _scan_state_color_tokens,
@@ -863,6 +864,7 @@ def _scan_frontend_assets():
     _scan_backdrop_filter(problems)
     _scan_column_cells_paired(problems)
     _scan_progress_val_parity(problems)
+    _scan_ctx_sub_width(problems)
     _scan_state_color_tokens(problems)
     _scan_message_surface_parity(problems)
     _scan_flux_modal_frost(problems)

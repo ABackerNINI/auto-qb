@@ -267,6 +267,78 @@ def _scan_progress_val_parity(problems):
             problems.append(f"{ui} 皮肤的 `.m-progress .val` 基础规则数 = {n}(应恰 1 条且带 min-width 定宽)")
 
 
+def _scan_ctx_sub_width(problems):
+    """右键菜单次级子面板宽度守阵: 四皮肤 `.ctx-sub` min-width 互证同值 260px + menu.js 首帧估宽算术绑定(2026-11-13)
+
+    五处数字耦合(四皮肤 components.css 的 min-width 各一份 + menu.js::_subOverflowsRight 首帧估宽)此前
+    零守阵, 单边改动即静默复发两种故障:
+    - 某皮肤 min-width 回退(260 -> 190): 该皮肤子菜单 label+键帽放不下折行(260 = 最长项
+      「开启自动种子管理」104px + 键帽「Shift + T」约 75px, 单行实需约 246 取整留余);
+    - 估宽与 min-width 脱钩: _subOverflowsRight 按估宽先判子面板翻不翻, 估宽 < min-width 时首帧按
+      窄面板判向, 实测复核(_subFitViewport)前面板已探出视口右缘(用户报"二级菜单部分出现在屏幕外")。
+    钉两件事(缺一即红):
+    1. 四皮肤 `<ui>/css/components.css` 基础 `.ctx-sub` 规则各恰 1 条, 体内 min-width 四值互证同值
+       且 == 260px(单皮肤回退 = 四皮肤静默分叉, 该皮肤折行);
+    2. `_subOverflowsRight` 的 probeRight 第二参 == min-width 260 + 内边距 12(=272; JS 写字面量 272
+       或表达式 260 + 12 均认) —— 与 CSS 侧算术绑定, 改宽度漏同步 JS(或反之)即红。
+    """
+    want, pad = 260, 12
+    vals = {}
+    for ui in _UI_ALL:
+        path = os.path.join(STATIC_ROOT, ui, "css", "components.css")
+        rel = f"{ui}/css/components.css"
+        if not os.path.isfile(path):
+            problems.append(f"{rel} 不存在 —— `.ctx-sub` min-width 守阵无处落")
+            continue
+        text = re.sub(r"/\*.*?\*/", "", open(path, encoding="utf-8").read(), flags=re.S)
+        rules = re.findall(r"(?m)^\.ctx-sub\s*\{([^{}]*)\}", text)
+        if len(rules) != 1:
+            problems.append(f"{rel} 基础 `.ctx-sub` 规则数 = {len(rules)}(应恰 1 条) —— 规则被改名/拆并, 宽度守阵无处落")
+            continue
+        m = re.search(r"min-width\s*:\s*([0-9.]+)px", rules[0])
+        if not m:
+            problems.append(f"{rel} `.ctx-sub` 缺 min-width 定宽 —— label+键帽宽度失去下限, 子菜单项随文本折行")
+            continue
+        vals[ui] = float(m.group(1))
+    if len(set(vals.values())) > 1:
+        problems.append(
+            "四皮肤 `.ctx-sub` min-width 不齐: " + ", ".join(f"{u} {v:g}px" for u, v in sorted(vals.items())) +
+            " —— 单皮肤回退该皮肤子菜单 label+键帽折行(四皮肤同值, 改宽度四处 components.css 同步)"
+        )
+    drifted = sorted(u for u, v in vals.items() if v != want)
+    if drifted:
+        problems.append(
+            f"{'+'.join(drifted)} 皮肤 `.ctx-sub` min-width = {vals[drifted[0]]:g}px(应 {want}px) —— "
+            "260 = 最长项「开启自动种子管理」+ 键帽「Shift + T」单行实需约 246 取整留余, 回退即折行复发"
+        )
+    menu_path = os.path.join(STATIC_ROOT, "shared", "menu.js")
+    menu = open(menu_path, encoding="utf-8").read()
+    m = re.search(r"(?m)^\s*_subOverflowsRight\s*\(\s*anchor\s*\)\s*\{", menu)
+    if not m:
+        problems.append("shared/menu.js 缺 `_subOverflowsRight(anchor)` 方法定义 —— 子面板首帧方向估宽无处落")
+        return
+    end = menu.find("_subFitViewport", m.end())
+    if end == -1:
+        problems.append("shared/menu.js `_subOverflowsRight` 之后找不到 `_subFitViewport` —— 方法结构漂移, 估宽守阵不再可靠")
+        return
+    body = re.sub(r"/\*.*?\*/", "", menu[m.end():end], flags=re.S)
+    probe = re.search(r"probeRight\s*\(([^{}]*)\)", body)
+    if not probe:
+        problems.append("shared/menu.js `_subOverflowsRight` 缺 probeRight 估宽调用 —— 首帧方向判据丢失")
+        return
+    args = [a.strip() for a in probe.group(1).split(",")]
+    if len(args) < 2:
+        problems.append(f"shared/menu.js `_subOverflowsRight` probeRight 参数不足({probe.group(1).strip()}) —— 估宽实参无从判定")
+        return
+    est = args[1]
+    if est != str(want + pad) and not re.fullmatch(rf"{want}\s*\+\s*{pad}", est):
+        problems.append(
+            f"shared/menu.js `_subOverflowsRight` 首帧估宽 = {est}(应 {want + pad} = min-width {want} + 内边距 {pad}, "
+            f"写字面量 {want + pad} 或表达式 {want} + {pad} 均可) —— 估宽与 min-width 脱钩时首帧按窄面板判向, "
+            "子面板实测复核前已探出视口右缘(改 min-width 四处 components.css + 本处同步)"
+        )
+
+
 def _scan_state_color_tokens(problems):
     """状态色令牌守阵(2026-11-02): 每皮肤的 7 个 kind 都必须有 --st/--st-soft, 进度条必须读 --st
 
