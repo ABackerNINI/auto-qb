@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>右键菜单次级子菜单首行场景底部探出视口下缘(末项复制哈希被裁) · bug · 计划外问题</title>
+<meta name="issue-slug" content="webui-ctx-sub-overflow">
+<meta name="issue-stamp" content="26-11-13-0443">
+<meta name="issue-type" content="bug">
+<meta name="doc-topic" content="webui-kbd-hints">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-12-webui-kbd-hints.md">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="右键菜单次级子菜单首行场景底部探出视口下缘(末项复制哈希被裁)">
+<meta name="issue-summary" content="首行右键悬停「更多操作」时次级子菜单盒底贴/越视口下缘, 末项「复制哈希」行被遮裁; 键帽使子菜单变高加重既有溢出行为">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --mark: #161e26;     /* issue 特有: callout 底色 (plan.html 不用) */
+    --warn-bg: #2a2119;  /* issue 特有: 状态徽标底色 */
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 单栏流式版面: 与 plan.html 同一套 .sheet (封顶 1280px, 侧距 clamp(18~44px)); 旧双栏+粘性目录已删 */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+
+  /* 封面 meta 行: issue 特有, DOM 形态别改 —— 状态徽标 <span class="badge"> 被
+     flip_status (W4) 与 check_status_drift 的 BADGE_RE 机读 (k/v div 结构在判据里) */
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px 28px; font-family: var(--mono); font-size: 11.5px; color: var(--faint); border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta-row .item .k { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .meta-row .item .v { font-size: 13.5px; color: var(--dim); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin: 14px 0; font-size: 14px; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-family: var(--mono); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">计划外问题（未修）· bug</div>
+<h1>右键菜单次级子菜单首行场景底部探出视口下缘(末项复制哈希被裁)</h1>
+<p class="lede">首行右键悬停「更多操作」时次级子菜单盒底贴/越视口下缘, 末项「复制哈希」行被遮裁; 键帽使子菜单变高加重既有溢出行为</p>
+<div class="meta-row">
+  <div class="item"><div class="k">编号</div><div class="v">26-11-13-0443-bug-webui-ctx-sub-overflow</div></div>
+  <div class="item"><div class="k">报告时间</div><div class="v">2026-11-13 04:43</div></div>
+  <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
+  <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+</div>
+
+<section id="s1">
+  <h2><span class="no">§01</span>现象与发现场景</h2>
+  <p>计划 26-11-12-0344（webui 键帽提示）S6 真机四皮肤截图目检阶段发现：右键列表<strong>首行</strong>种子，悬停「更多操作」展开次级子菜单时，盒底贴/越视口下缘，末项「复制哈希 <code>Shift + H</code>」行下缘被遮裁。四皮肤（atlas/prism/console/flux）一致。键帽接线后每行菜单项增高（键帽列 + <code>.ctx-sub</code> min-width 190→260），使子菜单整体变高，<strong>加重既有溢出行为</strong>（纯展示层改动未引入新钳位缺陷，放大的是既有现象）。</p>
+</section>
+
+<section id="s2">
+  <h2><span class="no">§02</span>证据</h2>
+  <ol>
+    <li>真机截图（Playwright + 测试实例 56589，取证 2026-11-13 03:40，路线 real-machine.md §06）：<code>%TEMP%\aqb-kbd-shots\atlas-2b-ctxmenu-sub.png</code> 等 <code>&lt;skin&gt;-2b-ctxmenu-sub.png</code> 四份 —— 子菜单末项「复制哈希」贴视口下缘、行下缘被状态栏遮裁。<strong>注意：临时目录可能被系统清理，证据不复现时以 §01 场景重拍。</strong></li>
+    <li>提交 <code>e544bfd2</code>（S6）提交信息原文（2026-11-13 04:10）：「首行右键子菜单底部探出视口的残余, 用户拍板入池不入本批」。</li>
+    <li>代码事实（取证 2026-11-13）：menu.js <code>_subFitViewport</code> 注释自述「垂直: 理想顶 = 父项顶 - 6 … 底越视口下缘则整体上移收进视口」—— 已有垂直收进（<code>FIT.clampAxis</code>），但该场景实测仍探出，钳位未兜住的原因待查（见 §05）。</li>
+  </ol>
+</section>
+
+<section id="s3">
+  <h2><span class="no">§03</span>影响面</h2>
+  <table>
+    <tr><th>维度</th><th>结论</th></tr>
+    <tr><td>触发条件</td><td>右键列表首行（子菜单理想展开位贴近视口下缘）且悬停「更多操作」；子菜单行数固定 12 项（含键帽后更高），与数据量无关</td></tr>
+    <tr><td>影响范围</td><td>右键菜单次级子面板（member 支「更多操作」）纯显示层：末项「复制哈希」不可见/不可点；同义键盘路径（注册表 <code>copy-hash</code>，Shift+H）仍可达，非功能阻断</td></tr>
+    <tr><td>严重度</td><td>低—中（四皮肤一致复现的动作入口被裁，键盘兜底仍在）</td></tr>
+  </table>
+</section>
+
+<section id="s4">
+  <h2><span class="no">§04</span>定位锚点</h2>
+  <ul>
+    <li><code>src/auto_qb/webui/static/shared/menu.js:326</code>（取证 2026-11-13 04:43）· 符号 <code>_subFitViewport</code>（子面板实测重钳位，垂直收进 clampAxis 在此）· grep <code>_subFitViewport</code></li>
+    <li><code>src/auto_qb/webui/static/shared/menu.js:316</code>（取证 2026-11-13 04:43）· 符号 <code>_subOverflowsRight</code>（首帧估宽 272，只管水平 flip-x 翻转方向）· grep <code>_subOverflowsRight</code></li>
+    <li><code>src/auto_qb/webui/static/shared/tpl/ctx-menus.html:59</code>（取证 2026-11-13 04:43）· <code>.ctx-sub</code> 挂 <code>flip-x</code> 类与 subTop 内联位移 · grep <code>ctx-sub</code></li>
+    <li>四皮肤 <code>css/components.css</code> 的 <code>.ctx-sub</code> 规则（<code>top: -6px</code> 基准、min-width 260；atlas 取证 :494）· grep <code>.ctx-sub { position: absolute</code></li>
+  </ul>
+</section>
+
+<section id="s5">
+  <h2><span class="no">§05</span>根因<span class="opt">（可选）</span></h2>
+  <div class="callout">待查。假说（未验证）：① clampAxis 以 <code>window.innerHeight</code> 为底收进，未扣状态栏遮挡面（<code>--statusbar-h</code> 34px）—— 子菜单底探进状态栏之下被遮裁；② 首帧 <code>subTop</code> 位移生效时序晚于首帧绘制（闪现后未重算）。已排除：水平翻转方向判错（估宽/实测双链正常，现象在垂直方向）。</div>
+</section>
+
+<section id="s6">
+  <h2><span class="no">§06</span>建议修法<span class="opt">（可选）</span></h2>
+  <p>待定（开工先复验 §04 锚点与截图场景）。候选方向：</p>
+  <ul>
+    <li>垂直钳位底改「视口高 - 状态栏高」（clampAxis 入参加 <code>--statusbar-h</code>），代价：需确认其它浮层是否共用同一钳位口径；</li>
+    <li>子菜单限高 + 内部滚动（<code>max-height</code>），代价：滚动容器与 CTX-05 mouseleave 收起语义的交互要重验。</li>
+  </ul>
+</section>
+
+<section id="s7">
+  <h2><span class="no">§07</span>状态变更日志</h2>
+  <ul>
+    <li>2026-11-13 04:43 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+  </ul>
+  <h3>复验</h3>
+  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <h3>修复后补充</h3>
+  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+</section>
+
+<footer>
+  26-11-13-0443-bug-webui-ctx-sub-overflow.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+</footer>
+
+</div>
+</body>
+</html>

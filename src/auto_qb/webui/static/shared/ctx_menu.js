@@ -286,7 +286,7 @@
   function ctxRenderLayer(branch, level, flags, vm) {
     /* 键帽草稿快照(计划 26-11-12-0344 S2, I1): 一层渲染一取 —— 与设置键位面板同源
      * window.AQB_KEYS.load() 同步快照(菜单是低频开层渲染, 不缓存); 用户在设置页改绑/清空后
-     * 重开菜单即跟随。沙箱(node 电池未 eval shortcuts.js)无 AQB_KEYS 时回 null,
+     * 重开菜单即跟随。沙箱无 AQB_KEYS 时(未 eval shortcuts.js 的其它沙箱)回 null,
      * kbSerialWithDraft 回落模板基准键位。 */
     const draft = window.AQB_KEYS && typeof window.AQB_KEYS.load === "function" ? window.AQB_KEYS.load() : null;
     const merged = ctxMergeLayout(branch, flags && flags.ctx_menu);

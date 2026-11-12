@@ -306,8 +306,11 @@ def test_keycap_static_mount_statusbar_entry() -> None:
         "shortcuts_engine.js 缺 kbToggleHelp 模板别名或别名不再中转 _kbToggleKbHelp"
         "(分派必须与 Shift+/ 同链, 不得另写 toggle 实现)"
     )
-    # 入口钮文案锚: 「键位」二字已最短(计划 §07 状态栏溢出对策 —— 超限只许缩文案不许加宽)
-    assert "键位" in sb, "statusbar.html 缺「键位」入口文案(S5)"
     # 版式锚: 复用 .sb-btn(与「完整统计」同款) —— 不另起样式类(零新增 CSS, I3 令牌纪律)
     entry = re.search(r'<button class="sb-btn" @click\.stop="kbToggleHelp\(\)">', sb)
     assert entry, "statusbar.html 键位入口钮未用 .sb-btn 既有样式类(四皮肤零新增 CSS 的落点)"
+    # 入口钮文案锚: 「键位」二字已最短(计划 §07 状态栏溢出对策 —— 超限只许缩文案不许加宽);
+    # 收紧到按钮节点内再断言 —— 全文件子串会被模板注释块稀释(注释里也写「键位」, 恒绿失真)
+    btn_close = sb.find("</button>", entry.end())
+    assert btn_close != -1, "statusbar.html 键位入口钮节点未闭合(模板形态漂移)"
+    assert "键位" in sb[entry.start():btn_close], "statusbar.html 键位入口钮节点内缺「键位」文案(S5)"

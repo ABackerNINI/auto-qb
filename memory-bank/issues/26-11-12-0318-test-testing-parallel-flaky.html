@@ -9,7 +9,7 @@
 <meta name="issue-stamp" content="26-11-12-0318">
 <meta name="issue-type" content="test">
 <meta name="doc-topic" content="testing-parallel-flaky">
-<meta name="doc-refs" content="memory-bank/tasks/26-11-11-webui-partial-group-warning.md">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-11-webui-partial-group-warning.md, memory-bank/tasks/26-11-12-webui-kbd-hints.md">
 <meta name="issue-tier" content="standard">
 <meta name="issue-status" content="Done">
 <meta name="issue-title" content="并行测试偶发假红: 8 worker 下计时/时间窗敏感用例闪失">
@@ -152,9 +152,10 @@
   <h2><span class="no">§07</span>状态变更日志</h2>
   <ul>
     <li>2026-11-12 03:18 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    <li>2026-11-13 04:36 — 复发 +1（第 1 次，发生 2026-11-13 02:47、记录于本地分支 26-11-12-0344 收尾批）：该批 T5 真机截图阶段全量踩到一次假红，与本批改动无关，复跑两轮全绿；闪失用例未留痕，仅记复发事实。发生时该本地分支基线尚不含本修复（50fae3bc），复发不推翻 Done 结论。</li>
     <li>2026-11-12 — 状态 Open → In Progress（kb.status）</li>
     <li>2026-11-12 — 状态 In Progress → Done（kb.status）</li>
-</ul>
+  </ul>
   <h3>复验</h3>
   <p>复验：2026-11-12 实施轮 —— 两锚点符号仍在（<code>test_qb_capture_dry_true_zero_requests</code> / <code>test_read_side_view_contract_table</code> 参数化 13 档未变）；假红仅 8 worker 并行高载出现（频率 ~1/5 全量），隔离单跑不复现，未走重跑取证，改走静态机制分析定位（见 §05）。</p>
   <h3>修复后补充</h3>

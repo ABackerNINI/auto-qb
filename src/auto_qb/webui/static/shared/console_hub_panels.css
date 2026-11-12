@@ -571,6 +571,6 @@
  * dyn gate 置灰(ctx_menu.js ctxRenderItem 的 reannounceMenuGate 不满足 -> item.gated)时,
  * 整行走各皮肤 components.css 既有置灰链 `.ctx-menu .ctx-item.is-gated { color: var(--fg-dim) }`
  * (atlas/console/flux/prism 四份同文), 但键帽自带 .aq-kbd 基形 color: var(--fg) 会原地亮着,
- * 与灰行相顶 —— 此处让置灰行内键帽颜色随行走 --fg-dim。特异性 (0,3,0) 压过基形 (0,1,0),
+ * 与灰行相顶 —— 此处让置灰行内键帽颜色随行走 --fg-dim。特异性 (0,4,0) 压过基形 (0,1,0),
  * 选择器与置灰链同口径(.ctx-menu 前缀 + .is-gated); 令牌纪律: 只用既有令牌 --fg-dim, 零新增。 */
 .ctx-menu .ctx-item.is-gated .aq-kbd { color: var(--fg-dim); }

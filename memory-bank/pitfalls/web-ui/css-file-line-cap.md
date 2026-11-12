@@ -1,7 +1,7 @@
-# 单 CSS 文件 700 行体量上限(atlas components.css 已卡满)
+# 单 CSS 文件 700 行体量上限(atlas/flux components.css 双双卡满)
 
-> 摘要: 单 CSS 文件 700 行体量上限(atlas components.css 已卡满)
-> 触发: 追加 CSS 规则, 三套皮肤成对改, test_frontend_template_split_wiring 红, Get-Content 少计行数, 行数测量假余量, 702 行
+> 摘要: 单 CSS 文件 700 行体量上限(atlas/flux components.css 双双卡满零余量) —— 任何净增行的编辑(连注释、连改值带补注)都红; 改动必须压缩式写(行内注记/零净增行解法)
+> 触发: 追加 CSS 规则, 改值补注释, 任何净增行, 三套皮肤成对改, 四皮肤, atlas 卡满, flux 卡满, test_frontend_template_split_wiring 红, Get-Content 少计行数, 行数测量假余量, 702 行
 
 ### 追加共享 CSS 规则前先量行数 —— atlas `css/components.css` 恰好 700 行零余量, 往里加一行就红
 
@@ -11,6 +11,7 @@
 - **零净增行解法**(2026-11-02, 状态色拆分轮): 四个文件里有两个同时卡死(atlas `components.css` 700 整、prism `css/views.css` 818 冻结)时, 不要硬塞 —— 把新规则改成「**令牌声明 + 消费者改写**」: 声明段(7 行)放本套仍有余量的那个文件(CSS 变量在**使用时**求值, 声明晚于消费点照样生效, 跨文件无顺序约束); 消费点只把裸令牌替换成 `var(--x, <原值>)`, **行数不变** —— 冻结文件"只许减不许增"因此也满足。比「行内注记」更普适: 后者只解决一行, 前者一次解决 N 处消费点且顺带做了单点化。
 - **守阵**: `tests/test_webui_static_skins_skin.py::test_frontend_template_split_wiring`(同时钉三件事: 四文件 ≤700 行、link 顺序、tpl-manifest 逐项相等)。
 - **复发**: 1 (2026-10-20): 为展开态补注释时把 atlas `components.css` 顶到 702 行。**为何没命中**: 动手前确实量了行数, 但用的是 `(Get-Content $f).Count` —— 它对 UTF-8 中文/CRLF 混排文件**少计**(同一文件实测 649, Python 逐行 700), 于是“还有 51 行余量”是假信号; 真到提交时才被 `test_frontend_template_split_wiring` 抓住。**新增判据**: 量行数只用 `wc -l` 或 Python `sum(1 for _ in open(p, encoding='utf-8'))`, **不要**用 PowerShell `(Get-Content).Count`; 撞满后又不能再加行时, 用「行内注记」(`.sel { /* … */ background: … }`) 保持行数不变 —— 本次就是这样把 702 拉回 700 的。
+- **复发**: 2 (2026-11-13): 计划 26-11-12-0344 S6 改 `.ctx-sub` 宽度时, atlas 与 flux 的 `css/components.css` **双双卡满 700 整**(此前坑档只记 atlas), 注释多写一行即红(`test_frontend_template_split_wiring`), 注释压回 2 行净 0 行过。**为何没命中**: 本坑档触发面原文是「追加 CSS 规则」, 本次是「改值 + 补注释」类编辑, 线索不匹配没唤起动手前量行数 —— 触发面应读作**任何净增行的编辑**(连注释, 连改值带补注)。新事实: 四皮肤中 atlas/flux 两份 components.css 均无余量, 余量只在 prism/console; 量法照复发 1(只用 wc -l / Python 逐行)。
 
 > 该守阵同时钉三件事, 报红时先分辨是哪条分支: 行数超限的措辞是 `<file> NNN 行, 超 700 行`; 顺序问题的措辞是 `CSS 链接顺序漂移`。
-**Refs:** memory-bank/plans/26-10-31-2316-plan-webui-fx-skin.html
+**Refs:** memory-bank/plans/26-10-31-2316-plan-webui-fx-skin.html, memory-bank/tasks/26-11-12-webui-kbd-hints.md

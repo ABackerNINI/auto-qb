@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>web_shortcuts_support UIS 旧三皮肤枚举 vs 四皮肤现口径漂移(flux 不在守阵循环) · test · 计划外问题（便签）</title>
+<meta name="issue-slug" content="webui-uis-enum-drift">
+<meta name="issue-stamp" content="26-11-13-0443">
+<meta name="issue-type" content="test">
+<meta name="doc-topic" content="webui-kbd-hints">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-12-webui-kbd-hints.md">
+<meta name="issue-tier" content="light">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="web_shortcuts_support UIS 旧三皮肤枚举 vs 四皮肤现口径漂移(flux 不在守阵循环)">
+<meta name="issue-summary" content="tests/web_shortcuts_support.py UIS=(atlas,prism,console) 三皮肤旧枚举, tests/webui_helpers.py _UI_ALL 已是四皮肤现口径(含 flux); 经 for ui in UIS 的守阵循环 flux 不被覆盖">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --mark: #161e26;     /* issue 特有: callout 底色 (plan.html 不用) */
+    --warn-bg: #2a2119;  /* issue 特有: 状态徽标底色 */
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 单栏流式版面: 与 plan.html 同一套 .sheet (封顶 1280px, 侧距 clamp(18~44px)); 旧双栏+粘性目录已删 */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+
+  /* 封面 meta 行: issue 特有, DOM 形态别改 —— 状态徽标 <span class="badge"> 被
+     flip_status (W4) 与 check_status_drift 的 BADGE_RE 机读 (k/v div 结构在判据里) */
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px 28px; font-family: var(--mono); font-size: 11.5px; color: var(--faint); border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta-row .item .k { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .meta-row .item .v { font-size: 13.5px; color: var(--dim); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin: 14px 0; font-size: 14px; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-family: var(--mono); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">计划外问题（便签）· test</div>
+<h1>web_shortcuts_support UIS 旧三皮肤枚举 vs 四皮肤现口径漂移(flux 不在守阵循环)</h1>
+<p class="lede">tests/web_shortcuts_support.py UIS=(atlas,prism,console) 三皮肤旧枚举, tests/webui_helpers.py _UI_ALL 已是四皮肤现口径(含 flux); 经 for ui in UIS 的守阵循环 flux 不被覆盖</p>
+<div class="meta-row">
+  <div class="item"><div class="k">编号</div><div class="v">26-11-13-0443-test-webui-uis-enum-drift</div></div>
+  <div class="item"><div class="k">报告时间</div><div class="v">2026-11-13 04:43</div></div>
+  <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+</div>
+
+<section id="s1">
+  <h2><span class="no">§01</span>现象</h2>
+  <p>皮肤枚举两套并存且旧套漏 flux：<code>tests/web_shortcuts_support.py</code> 的 <code>UIS = ("atlas", "prism", "console")</code> 是三皮肤旧枚举（flux 皮肤 2026-11-01 由 console fork 落地，提交 <code>0e91a3a7</code>，枚举未随之扩），而 <code>tests/webui_helpers.py</code> 的 <code>_UI_ALL = ("atlas", "prism", "console", "flux")</code> 是四皮肤现口径 —— <code>for ui in UIS</code> 的守阵循环（如 <code>test_web_shortcuts_registry.py:141</code>）因此<strong>不跑 flux</strong>，注册表跨皮肤断言对 flux 静默缺覆盖。存量漂移，计划 26-11-12-0344 S1/T3 两轮评审撞见，用户拍板入池。</p>
+</section>
+
+<section id="s2">
+  <h2><span class="no">§02</span>位置</h2>
+  <ul>
+    <li><code>tests/web_shortcuts_support.py:13</code>（取证 2026-11-13 04:43）· <code>UIS = ("atlas", "prism", "console")</code> · grep <code>UIS = (</code></li>
+    <li><code>tests/webui_helpers.py:234</code>（取证 2026-11-13 04:43）· <code>_UI_ALL = ("atlas", "prism", "console", "flux")</code>（现口径参照）· grep <code>_UI_ALL = (</code></li>
+    <li>直接消费方：<code>tests/test_web_shortcuts_registry.py:141</code> <code>for ui in UIS</code>（取证 2026-11-13 04:43）；模块其余常量另有 test_web_shortcuts_cursor/drawer/engine 等消费（不受本次枚举影响面）</li>
+  </ul>
+</section>
+
+<section id="s3">
+  <h2><span class="no">§03</span>建议<span class="opt">（可选）</span></h2>
+  <p>UIS 改为引用/对齐 <code>webui_helpers._UI_ALL</code>（或原地补 flux 并注记口径单点），修完跑 <code>test_web_shortcuts_registry.py</code> 确认 flux 支全绿（若注册表解析对 flux 静态面本就成立则纯扩面，若有真实差异另立缺陷）。</p>
+</section>
+
+<section id="s4">
+  <h2><span class="no">§04</span>状态变更日志</h2>
+  <ul>
+    <li>2026-11-13 04:43 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+  </ul>
+</section>
+
+<footer>
+  26-11-13-0443-test-webui-uis-enum-drift.html · 便签档（light）· 由 create-issue skill 入池；入池不等于已修，改动状态在上面的「状态变更日志」里留痕
+</footer>
+
+</div>
+</body>
+</html>

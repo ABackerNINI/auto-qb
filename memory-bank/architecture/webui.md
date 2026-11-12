@@ -1,7 +1,7 @@
 # WEB UI 运行时
 
-> 摘要: FastAPI 装配单点与启动 fail-fast、皮肤目录即 URL 与静态契约、线程边界(读快照 + 投命令)、视图发布与版本门控、组行 hash 引用式(聚合 + members hash 数组)、truth 通道、前端 ingestion 物化缝、version-reload 自愈、响应性设计要点、表格几何单点(dt_table)、部分组操作预警、图形化配置编辑器骨架。
-> 触发: WEB UI, webui, FastAPI, create_app, 路由, 皮肤, 静态, 线程边界, 视图发布, group_view_ver, hash 引用式, members hash 数组, memberByHash, VIEW_ARRAYS, 物化, _materializeGroupRows, _rematQueue, version-reload, _versionSelfHeal, truth, 回执, 乐观 UI, 响应性, 窗口化, 表格几何, dt_table, DT_TABLE, columns_grid, gridTemplate, 部分组, 部分组预警, partialGroups, 将缺文件, 整组迁移, 配置编辑器, schema, writer
+> 摘要: FastAPI 装配单点与启动 fail-fast、皮肤目录即 URL 与静态契约、线程边界(读快照 + 投命令)、视图发布与版本门控、组行 hash 引用式(聚合 + members hash 数组)、truth 通道、前端 ingestion 物化缝、version-reload 自愈、响应性设计要点、表格几何单点(dt_table)、部分组操作预警、键位现场提示(键帽/页签徽标/入口)、图形化配置编辑器骨架。
+> 触发: WEB UI, webui, FastAPI, create_app, 路由, 皮肤, 静态, 线程边界, 视图发布, group_view_ver, hash 引用式, members hash 数组, memberByHash, VIEW_ARRAYS, 物化, _materializeGroupRows, _rematQueue, version-reload, _versionSelfHeal, truth, 回执, 乐观 UI, 响应性, 窗口化, 表格几何, dt_table, DT_TABLE, columns_grid, gridTemplate, 部分组, 部分组预警, partialGroups, 将缺文件, 整组迁移, 键位, 键帽, 键位现场提示, kbShortcutDisplay, kbKeycapOf, kbKeysRev, aq-kbd, 配置编辑器, schema, writer
 
 ## 装配单点与启动 (webui/server/factory.py, webui/module.py)
 
@@ -59,4 +59,12 @@
 - **保存管线(config/writer.py)**: 结构自检 → 落临时文件跑 `load_config`(**与启动同一校验路径**, 失败 400 不碰盘) → diff 判定 → R 级字段回退磁盘旧值 → 备份 → ruamel round-trip 写盘 → 投递 `reload_config` 命令(仍由主循环线程应用)。已存在键的注释保留; **值未变的键跳过赋值**(保留磁盘原标量形态); 列表整体替换。
 - **保存后联动刷新只有一种做法: 投递命令, 不在端点里干活**(热重载后快照类数据要等下一轮 interval; 判定单点按配置指纹在 apply 前后各算一次, 不等即投刷新命令)。
 - `config/schema/` 是纯声明的 UI 元数据(分组/字段/控件/单位/枚举/帮助), **不承载正确性** —— 合法性唯一入口仍是 `validate_config`。
+
+## 键位现场提示 (webui/static/shared/shortcuts.js + ctx_menu.js + state.js)
+
+- **菜单键帽零二次维护**(计划 plans/26-11-12-0344-plan-webui-kbd-hints.html, 映射审计在其 §05): 右键菜单项 `key` 字段引用注册表 shortcut id(`CTX_ITEM_DEFS`/`CTX_SUB_ITEM_DEFS`, ctx_menu.js); 自定义项(flags 合并)无 key 自然留白对齐(I5); 渲染单点 `ctxRenderItem` 查注册表现算, **禁止模板写死键位串**(I1)。显示串取数链: `kbShortcutDisplay`(shortcuts.js, 模板基准 def ⊕ 用户草稿 overrides, 与 kbSerialWithDraft⊕kbDisplayName 同源, 改绑/清空即时生效) → `kbKeycapById(id)` → 适配器方法 `kbKeycapOf`(shortcuts.js 的 AQB_SHORTCUTS.methods, 经 app.mixin 挂入; 方法体内 `void this.kbKeysRev` 注册响应式依赖 —— 键位草稿源 AQB_KEYS 适配器各变更点自增 `kbKeysRev` 代次, 字段在 state.js)。
+- **页签徽标与键盘 run 同一单点**: `kbDrawerTabKbd(pages, merged)`(shortcuts.js)与键盘路径(shortcuts_engine.js `_kbDrawerTab`)同表 `KB_MERGE_TAB_REMAP` —— 合并页签态反查落点, 第 4/5 档(null)不显示, 可见页签徽标随位次变(流量 Alt+5 → Alt+3)。
+- **常驻落点**: 顶栏添加种子「N」/列「K」内联键帽(tpl/topbar.html); 状态栏「键位」入口钮 + Shift+/ 键帽(tpl/statusbar.html, click 经别名 `kbToggleHelp` 中转 `shortcuts_engine.js::_kbToggleKbHelp` 与 Shift+/ 同一 toggle; triggers.js 触发点 `"statusbar.kbd-help"`)。键帽共享类 `.aq-kbd`(console_hub_panels.css 尾段单点, 令牌复用零新增; 守阵 `test_aq_kbd_css_four_skin_isomorphic` 以「首个 .aq-kbd 规则块即共享基形」定位)。
+- **I4 例外裁定**: 键位提示不走 title/.aq-tip 通道(D10) —— 与 conventions/webui.md「悬浮提示」节默认口径不同, 仅限键帽面, 其余新元素仍按惯例写 title。
+- **子面板宽度与视口钳位**: `.ctx-sub` min-width 260 四皮肤同值 + menu.js `_subOverflowsRight` 首帧估宽 272(=260+12)五处耦合(`webui_static_scan_css.py::_scan_ctx_sub_width` 机械拦截); 实测重钳位 `_subFitViewport`(估宽只管首帧水平翻转方向)。
 - 字段渲染单点 `hub-field` 组件(嵌套 object 预先扁平化为带缩进的渲染项, 组件无需递归); 命名实体(站点/规则集/规则)增改删收敛为三个骨架 + 三份差异清单; **「不适用」整块隐藏 ≠「不可用」灰显**: 来源不支持 ⇒ 字段无意义整块不渲染; 功能开关关 ⇒ 灰显但仍可编辑(先把参数配好, 开回即生效)。
