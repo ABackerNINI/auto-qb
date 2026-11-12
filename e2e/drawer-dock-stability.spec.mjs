@@ -4,6 +4,14 @@ import { baseUrl, SKINS } from './harness.mjs';
 import { collectRuntimeErrors, installRuntimeErrorGuard } from './lib/errors.mjs';
 
 /**
+ * S-A 扩展(2026-11-13): 本 spec 的用例矩阵扩成三皮肤(prism/atlas/flux) —— flux 是 S-A 首开
+ * 遮挡竞速的当事皮肤, 既有 W1 守卫/W2 两用例/S-C 两用例一并扩到 flux 跑(任务口径「优先把
+ * SKINS 扩成三皮肤」)。全局 SKINS(harness.mjs 冒烟预算单点, 53 个 spec 共用)不动, 只本 spec
+ * 局部扩 —— 全局翻三皮肤会让整套 e2e 运行时长翻倍以上, 超出本任务预算。
+ */
+const DOCK_SKINS = [...SKINS, 'flux'];
+
+/**
  * 停靠面板几何稳定(2026-10-07 修「种子详情面板/流量图在搜索/筛选时跳动」) —— 静态守阵
  * (test_webui_static_skins_widget.py::test_frontend_search_pending_no_collapse)钉的是接线存在性; 本 spec 钉**行为**:
  * 静态守阵探不到「调用存在但几何/时机错」的缺陷(dock-panel 坑档 2026-10-04 教训), 必须真浏览器采样。
@@ -179,7 +187,21 @@ function frameDigest(frames) {
   return `y=[${fold('y')}] dockH=[${fold('dockH')}]`;
 }
 
-for (const skin of SKINS) {
+/** 任意两列压缩序列(S-A 遮挡时序用): 同 fold 机制, 列名带进标签。 */
+function pairDigest(frames, keyA, keyB) {
+  const fold = (key) => {
+    const out = [];
+    for (const f of frames) {
+      const v = f[key];
+      if (out.length && out[out.length - 1].v === v) out[out.length - 1].n++;
+      else out.push({ v, n: 1 });
+    }
+    return out.map((s) => `${s.v}${s.n > 1 ? `x${s.n}` : ''}`).join(',');
+  };
+  return `${keyA}=[${fold(keyA)}] ${keyB}=[${fold(keyB)}]`;
+}
+
+for (const skin of DOCK_SKINS) {
   test.describe(`停靠面板几何稳定 ${skin}`, () => {
     installRuntimeErrorGuard(test);
 
@@ -644,6 +666,122 @@ for (const skin of SKINS) {
       expect(Math.abs(after2.rowB - (after2.panelTop - 16)),
         `边界探针让位终值应落在公式落点 vBot - 8 = 面板顶 - 16(实测 ${after2.rowB.toFixed(1)} vs ${(after2.panelTop - 16).toFixed(1)})`)
         .toBeLessThanOrEqual(2);
+    });
+
+    /* ==================== S-A flux 首开遮挡竞速(2026-11-13 用户报「种子先被面板遮挡、之后才上移」) ====================
+     * 定因(取证报告 S-A): flux 独有形态 = 入场 translateY(100%) 300ms 整幅上滑(dialogs.css,
+     * 令牌 --fx-dur-panel) x html.fx-glide { scroll-behavior: smooth }(fx-mount.css, 开门窗口内
+     * 所有程序化滚动变平滑动画) x 四个滚动写入者互相重启(openTorrentDrawer 开场 / _drawerDone
+     * 集合落定兑现 / drawerAfterEnterHook 补发 / state.js flux 开门落定回执重入) —— 每次新
+     * scrollBy 取消上一个平滑滚动从中途重启, 合成 490ms+ 爬行; 抽屉 300ms 就升完了, 行还在
+     * 半路 = 先被盖后探出。prism/atlas 无 fx-glide(瞬时传输), 同用例是对照组(应绿)。
+     *
+     * 确定性化: 默认高 42vh(378px)时是否被盖是竞速抛硬币; 拖高记忆 620px(addInitScript 注入
+     * localStorage —— initialDrawerHeight 在应用 created 读一次, 必须先于应用 boot)加大行程,
+     * 被盖窗口变宽, 竞速变确定性。滚动相位对齐: 距文档底 900px 停车(让位 scrollBy 余量足额,
+     * 开场那发不被文档底钳制 —— 文档底路径要等槽位长高才有余量, 是另一条时序), 挑行底落在
+     * (全开顶缘 + 60, 全开顶缘 + 550] 的真覆盖行(覆盖深 60~550px —— 红验迭代中从 400 放宽,
+     * 缘由: 400 档红验红在断言2(同步滞后), 断言1 未红 —— 面板顶扫过行底与平滑爬行追平几乎
+     * 同时; 加深覆盖把被盖窗口拉宽, 550 档红验仍落断言2(爬行尾部+回执修正 ~180ms), 两档结论
+     * 一致; 550 上限保证开场让位 Δ <= 566 < 900 停车余量, 开场那发不被文档底钳制)。
+     *
+     * 断言口径(全部位移量/时间差, 无绝对像素阈值; R6 不放宽):
+     * 1. 开门全程(面板在场每一帧)选中行行底不越过面板顶实缘(行底 - 面板顶 <= 1px 取整噪声)。
+     *    注: 任务书原文写「rect.bottom >= 面板 top」—— 视口坐标 y 越小越靠上, 「不被遮」的
+     *    几何语义是行底 <= 面板顶, 按几何语义落地(任务书不等号方向与坐标语义相反, 属笔误)。
+     * 2. 滚动落定不晚于面板升完(允许 ~3 帧余量 50ms): 最后一次 scrollY 变化帧时间 <= 面板顶
+     *    首次到达终值帧时间 + 50ms —— 同步感判据(修复前平滑爬行 490ms+ 越过面板升起完成时刻)。
+     */
+    test(`S-A 首开遮挡: 开门全程选中行不被面板遮 + 滚动落定不晚于面板升完 @fast (${skin})`, async ({ page }) => {
+      test.setTimeout(90_000);
+      collectRuntimeErrors(page);
+
+      // 620px 拖拽高度记忆: 应用 boot 前注入 localStorage(W3 高度记忆跨会话生效的既有键)
+      await page.addInitScript(() => {
+        try { localStorage.setItem('autoqb.ui.drawerHeight', '620'); } catch { /* 隐私模式等: 用例走默认高, 前置会拦 */ }
+      });
+      await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 15_000 });
+      await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
+      await page.click('nav.tabs [data-view="torrents"]');
+      await expect(page.locator('.torrent-row').first()).toBeVisible({ timeout: 15_000 });
+
+      // 距文档底 900px 停车(开场让位 scrollBy 的下滚余量足额, 不被文档底钳制)
+      await page.evaluate(() => {
+        window.scrollTo(0, document.documentElement.scrollHeight - window.innerHeight - 900);
+      });
+      await waitListSettled(page);
+      const panelTopEst = await page.evaluate(() => {
+        const sb = document.querySelector('.statusbar');
+        const sbTop = sb ? sb.getBoundingClientRect().top : window.innerHeight;
+        return sbTop - 620;  // 620px 拖高记忆的全开顶缘估算(同 W1 的 42vh 式, 高度换 620)
+      });
+      // 挑真覆盖行: 行底在 (顶缘估算 + 60, 顶缘估算 + 550] 内取最深一行(覆盖深 60~550px:
+      // 覆盖越深面板顶越早扫过行底、平滑爬行追平越晚 = 遮挡窗口越宽越确定; 550 上限保证开场
+      // 让位 Δ <= 566 < 900 停车余量, 不被文档底钳制); 中心须在状态栏上缘之上才可点(与
+      // pickCoveredRow 同约束)。
+      const cov = await page.evaluate((pt) => {
+        const sb = document.querySelector('.statusbar');
+        const sbTop = sb ? sb.getBoundingClientRect().top : window.innerHeight;
+        let best = null;
+        for (const r of document.querySelectorAll('.torrent-row')) {
+          const b = r.getBoundingClientRect();
+          if (b.bottom > pt + 60 && b.bottom <= pt + 550 && (b.top + b.bottom) / 2 < sbTop - 8
+              && (!best || b.bottom > best.bottom)) {
+            best = { hash: r.getAttribute('data-hash'), top: Math.round(b.top), bottom: Math.round(b.bottom) };
+          }
+        }
+        return best;
+      }, panelTopEst);
+      expect(cov, `前置: 视口内应有覆盖深 60~550px 的真覆盖行(620px 全开顶缘估算 ${panelTopEst})`).toBeTruthy();
+      expect(cov.bottom, `前置: 选中行应真被 620px 面板覆盖(行底 ${cov.bottom} > 顶缘估算 ${panelTopEst})`)
+        .toBeGreaterThan(panelTopEst + 8);
+
+      // 基线预读 -> 采样 -> 双击开面板(首开, 此前面板从未打开过) -> 条件等待落定
+      const baseline = await page.evaluate((h) => {
+        const r = document.querySelector(`[data-hash="${h}"]`).getBoundingClientRect();
+        return { y: Math.round(window.scrollY), rowB: Math.round(r.bottom) };
+      }, cov.hash);
+      await installGeoSampler(page, cov.hash);
+      await page.dblclick(`.torrent-row[data-hash="${cov.hash}"]`, { force: true, position: { x: 8, y: 8 } });
+      await expect(page.locator('.drawer-dock > .drawer')).toBeVisible({ timeout: 5_000 });
+      await waitDockSettled(page);
+      const { frames, sb: scrollLog } = await stopGeoSampler(page);
+      expect(frames.length, '前置: 采样应有足够帧数').toBeGreaterThan(10);
+
+      // 前置: 面板到过 620px 全高且顶缘到位(高度记忆生效的判据; 峰值对估算给 4px 取整余量)
+      const openedFrames = frames.filter((f) => f.open && f.panelTop != null);
+      expect(openedFrames.length, '前置: 采样应覆盖到开门动画期(面板在场)').toBeGreaterThan(5);
+      const maxDockH = Math.max(...frames.filter((f) => f.open).map((f) => f.dockH ?? 0));
+      expect(maxDockH, `前置: 面板应到过 620px 全高(实测峰值 ${maxDockH} —— 高度记忆未生效或入场被截断)`).toBeGreaterThanOrEqual(616);
+      const finalPanelTop = openedFrames[openedFrames.length - 1].panelTop;
+      // 前置: 落定后行应已被让位到公式落点(面板顶 - 16) —— 真覆盖行按判据必须让位(S-C 反向
+      // 守卫同口径); 本前置不成立说明挑行/几何漂了, 断言无效。
+      const lastRowB = frames[frames.length - 1].rowB;
+      expect(lastRowB - finalPanelTop,
+        `前置: 落定后行底 ${lastRowB} 应已被让位到面板顶 ${finalPanelTop} - 16 公式落点(偏差 ${lastRowB - finalPanelTop - (-16)})`)
+        .toBeLessThanOrEqual(-14);
+
+      // 断言1(核心, 修复前红): 开门全程行底不越过面板顶实缘 —— 遮挡深度 = 行底 - 面板顶
+      // (视口坐标, >0 = 行底被面板顶盖住)。1px = 行/面板矩形取整噪声, 非绝对像素判据。
+      let worst = 0;
+      let worstAt = 0;
+      for (const f of openedFrames) {
+        const d = f.rowB - f.panelTop;
+        if (d > worst) { worst = d; worstAt = f.t; }
+      }
+      expect(worst,
+        `开门全程最大遮挡深度(行底-面板顶, 实测峰值 ${worst}px @${worstAt}ms; 时序 ${pairDigest(openedFrames, 'rowB', 'panelTop')}; scrollBy 登记 ${JSON.stringify(scrollLog)})`)
+        .toBeLessThanOrEqual(1);
+
+      // 断言2(修复前红): 滚动落定不晚于面板升完(允许 3 帧余量 50ms) —— 同步感。
+      const panelDoneT = (openedFrames.find((f) => f.panelTop <= finalPanelTop + 1)
+        ?? openedFrames[openedFrames.length - 1]).t;
+      let lastScrollT = -1;
+      for (let i = 1; i < frames.length; i++) if (frames[i].y !== frames[i - 1].y) lastScrollT = frames[i].t;
+      expect(lastScrollT,
+        `最后一次 scrollY 变化帧(${lastScrollT}ms)不得晚于面板顶首次到终值帧(${panelDoneT}ms)+50ms —— 滚动与抽屉上升的同步感(修复前平滑爬行越过面板升起完成时刻; 开门时序 rowB基线=${baseline.rowB} ${pairDigest(openedFrames, 'rowB', 'panelTop')}; scrollBy 登记 ${JSON.stringify(scrollLog)})`)
+        .toBeLessThanOrEqual(panelDoneT + 50);
     });
   });
 }

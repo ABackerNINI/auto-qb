@@ -91,6 +91,18 @@ Delete 直连注册表外, 均为已拍板的口径, 逐条落断言。W5 局部
   面板顶])的未覆盖行不触发; 状态栏/整窗分支 +0 精确边, 关闭路径让位行为不变), 位移公式
   不动(真覆盖仍让位到 vBot - 8 终值); 同带语义第二实现点 _kbScrollRowIntoView 两路
   (flux 开门落定回执经 state.js drawerVisible 重入)一并收紧
+- test_flux_door_window_scroll_transport: S-A flux 首开遮挡竞速修复(2026-11-13 用户报「种子先被面板
+  遮挡、之后才上移」) —— flux 入场 translateY(100%) 300ms 整幅上滑 x html.fx-glide{scroll-behavior:
+  smooth} x 四个让位/重入写入者(openTorrentDrawer 开场 / _drawerDone 兑现 / afterEnter 补发 / 落定
+  回执重入)互相重启平滑爬行(实测 490ms+), 面板 300ms 就升完而行还在半路。修复 = fx-glide 挂点从
+  开门挪到落定回执后(setTimeout 宏任务延迟): 开门窗口(enter 起拍到面板升完)内四写者走瞬时(与
+  抽屉上升同步, 对齐 prism「种子跟着上升」手感), 回执后恢复平滑(800ms 窗口罩开门结束后的短暂
+  键盘滚动); 四写者职责/挂点/判据/公式零改动, 只动传输方式; 宏任务延迟的依据(评审勘误如实口径):
+  fireSettle 在 transitionend 捕获阶段、同一派发的目标阶段还有 Vue onAfterEnter(#3 入口), 两发
+  重入的 scrollBy 都在本任务收尾后的微任务落地 —— 同步挂会赶上 afterEnter 那发, 包装本身必要;
+  dock(true)/dock(false) 各撤挂类(glideAddTimer)/摘除(glideTimer)两个句柄 + 开门分支防御性摘类
+  (重复触发幂等); e2e 红验在 e2e/drawer-dock-stability.spec.mjs S-A 用例(三皮肤,
+  flux 红->绿, prism/atlas 对照恒绿)
 - test_drawer_transition_dock_anim: 出入过渡动画(2026-10-03 用户报: 抽屉出现/消失生硬) ——
   停靠面板占文档流, 开/关时列表底部一帧撑开/收回是生硬根源, 面板本体滑淡治不了布局跳变:
   JS 钩子驱动 .drawer-dock 槽位高度插值(enter 追面板实时高 / leave 收面板自身高, 槽位整段
@@ -858,6 +870,99 @@ def test_drawer_open_reveal_row() -> None:
     assert re.search(r"window\.scrollBy\(0, rect\.bottom - vBot \+ 8\)", sib2) and re.search(
         r"window\.scrollTo\(0, y \+ h - vBot \+ 8\)", sib2
     ), "_kbScrollRowIntoView 两路位移公式不动(只收紧触发界, 让位量口径不变)"
+
+
+def test_flux_door_window_scroll_transport() -> None:
+    """S-A flux 首开遮挡竞速修复(2026-11-13 用户报「种子先被面板遮挡、之后才上移」):
+    fx-glide 挂点从开门挪到落定回执后, 开门窗口内让位/重入滚动走瞬时。
+
+    病根(flux 独有): 入场 translateY(100%) 300ms 整幅上滑(dialogs.css, 令牌 --fx-dur-panel)
+    x html.fx-glide { scroll-behavior: smooth }(fx-mount.css) x 四个让位/重入写入者
+    (openTorrentDrawer 开场 / _drawerDone 集合落定兑现 / drawerAfterEnterHook 补发 /
+    state.js 落定回执重入) —— 开门即挂的 fx-glide 让四次 scrollBy 互相重启/累加平滑爬行
+    (真机取证 490ms+, 且互相累加会越过公式落点再被回执修正), 面板 300ms 就升完而行还在
+    半路 = 先被盖后探出。修复只动传输方式: 挂点挪到落定回执后 —— 开门窗口(enter 起拍到
+    面板升完)内四写者瞬时(与抽屉上升同步, 对齐 prism 手感), 回执后恢复平滑(800ms 窗口)。
+    四写者职责/挂点/判据/公式零改动(三发挂点与 state.js 重入由 test_drawer_open_reveal_row
+    与 test_frontend_fx_wiring 钉住, 本守阵只钉传输机制不变量)。钉法:
+    1. dock(true) 分支不得挂 fx-glide(开门窗口传输 = 瞬时)且保留 armSettle() 武装(R5#179);
+    2. fireSettle 挂点必须在 settleArmed 单发守卫与 settleCb() 之后, 且经 setTimeout 宏任务
+       延迟。依据(2026-11-13 评审勘误, 如实口径): fireSettle 跑在 transitionend 派发的捕获
+       阶段, 同一次派发的目标阶段还有 Vue Transition 的 onAfterEnter(#3 补发入口);
+       回执重入(#4)在回执回调内同步进入 _kbScrollRowIntoView —— 两发重入的入口(监听器/
+       同步调用)都在**本任务内**, 只有它们的 scrollBy 在本任务收尾后的微任务里落地。
+       若在 fireSettle 内同步挂类, 类会先于 afterEnter 监听器挂上(同步挂会赶上 afterEnter
+       那发), 两发全被平滑重启爬行, S-A 症状复发 —— 宏任务包装把挂类推到本任务(含全部
+       微任务)跑完之后, 本身必要, 不是可选优化; 按「微任务先于宏任务」把挂点改回同步恰是复发路径;
+    3. 挂/摘两个定时器都留句柄(glideAddTimer 回执后挂类的 setTimeout(0) / glideTimer 挂上后
+       800ms 的摘除), dock(true)/dock(false) 各撤两个句柄(重复触发幂等): 只撤摘除句柄撤不掉
+       「回执→宏任务」间隙里的挂类定时器 —— 关面板落在间隙则 fx-glide 在面板已关后被挂上并
+       存续 800ms, 期间再开被 dock(true) 带进新开门窗口(S-A 复发); 上一轮摘除句柄还挂着则会
+       砍短这一轮的平滑窗口。类本身的残局(定时器已 fire、类还在)由 dock(true) 防御性摘类兜底,
+       关面板立即摘。"""
+    mount_js = (STATIC / "flux" / "fx-mount.js").read_text(encoding="utf-8")
+    # --- 1. dock: 开门分支不挂 fx-glide + 撤两个句柄 + 防御性摘类; 关面板分支立即摘 + 撤两个句柄 ---
+    dock_blk = re.search(r"function dock\(open, onSettled\) \{(.*?)\n  \}", mount_js, re.S)
+    assert dock_blk, "fx-mount.js 找不到 dock(open, onSettled)(签名漂移? 同步本守阵)"
+    db = dock_blk.group(1)
+    assert 'classList.add("fx-glide")' not in db, (
+        "dock(true) 分支不得挂 fx-glide(S-A): 开门窗口内的让位/重入滚动必须瞬时(与抽屉上升同步; "
+        "开门即挂 = 四写者互相重启/累加平滑爬行 490ms+, 面板 300ms 升完而行在半路, 「先遮挡后上移」复发)"
+    )
+    assert "armSettle()" in db, (
+        "dock(true) 分支必须保留 armSettle() 武装(R5#179 兜底定时器; test_frontend_fx_wiring 同钉, "
+        "回执丢失场景 fx-glide 恒挂 = 键盘滚动一直平滑)"
+    )
+    # 句柄清理(幂等面, 两分支各撤两个): glideAddTimer(回执后挂类的 setTimeout(0))与
+    # glideTimer(挂上后的 800ms 摘除) —— 只撤摘除句柄的旧口径撤不掉「回执→宏任务」间隙里
+    # 的挂类定时器(关面板落在间隙 = fx-glide 在面板已关后被挂上并存续 800ms, 期间再开被
+    # 带进新开门窗口); 上一轮摘除句柄挂着则砍短这一轮的平滑窗口。
+    assert db.count("clearTimeout(glideAddTimer)") == 2 and db.count("clearTimeout(glideTimer)") == 2, (
+        "dock 两分支必须各撤两个句柄(glideAddTimer 挂类 / glideTimer 摘除) —— 只撤摘除句柄撤不掉"
+        "「回执→宏任务」间隙里的挂类定时器: 关面板落在间隙则 fx-glide 在面板已关后被挂上并存续 "
+        "800ms, 期间再开被带进新开门窗口, S-A 复发(各恰 2 处 = open 分支 1 + close 分支 1)"
+    )
+    open_blk = re.search(r"if \(open\) \{(.*?)\n    \} else \{", db, re.S)
+    assert open_blk and 'classList.remove("fx-glide")' in open_blk.group(1), (
+        "dock(true) 必须防御性摘 fx-glide(上一轮类已挂上的残局: 定时器已 fire 后句柄撤无可撤, "
+        "不摘类则平滑仍被带进本次开门窗口)"
+    )
+    close_blk = re.search(r"\} else \{\n(.*?)\n    \}", db, re.S)
+    assert close_blk, "fx-mount.js dock 缺 else 分支(关面板路径)? 同步本守阵解析"
+    cb = close_blk.group(1)
+    assert 'classList.remove("fx-glide")' in cb, "dock(false) 必须立即摘 fx-glide(关面板不留平滑窗口)"
+    assert "clearTimeout(glideAddTimer)" in cb and "clearTimeout(glideTimer)" in cb, (
+        "dock(false) 必须连同挂类/摘除两个定时器一并撤(关面板后不得再有定时器写 html 类)"
+    )
+    # --- 2. fireSettle: 挂点在单发守卫与回执之后、经宏任务延迟; 两个句柄都写回 ---
+    fs = re.search(r"function fireSettle\(\) \{(.*?)\n  \}", mount_js, re.S)
+    assert fs, "fx-mount.js 找不到 fireSettle"
+    fb = fs.group(1)
+    at_armed = fb.index("settleArmed = false")
+    at_cb = fb.index("settleCb()")
+    at_add = fb.find('classList.add("fx-glide")')
+    assert at_add > at_cb > at_armed >= 0, (
+        "fx-glide 挂点必须在 settleArmed 单发守卫与 settleCb() 之后(S-A: 先回执后挂平滑 —— 回执重入"
+        "与 afterEnter 补发都属开门窗口, 挂早了会被平滑重启爬行)"
+    )
+    assert re.search(
+        r"setTimeout\(function \(\) \{[^}]*?document\.documentElement\.classList\.add\(\"fx-glide\"\)", fb
+    ), (
+        "fx-glide 挂点必须经 setTimeout 宏任务延迟(S-A 关键顺序): fireSettle 在 transitionend 捕获阶段"
+        "运行, 同一派发的目标阶段还有 Vue Transition 的 onAfterEnter(#3 入口), 两发重入的 scrollBy 都"
+        "在本任务收尾后的微任务落地 —— 同步挂会赶上 afterEnter 那发, 两发全被平滑, 症状复发; "
+        "宏任务包装本身必要, 不是可选优化"
+    )
+    assert re.search(r"glideAddTimer\s*=\s*setTimeout", fb) and re.search(r"glideTimer\s*=\s*setTimeout", fb) \
+        and 'classList.remove("fx-glide")' in fb, (
+        "挂类与摘除都必须写回句柄(glideAddTimer/glideTimer, dock 两分支要撤它们, 幂等面)且 fireSettle "
+        "保留 800ms 后摘(平滑窗口只罩回执后的短暂键盘滚动, 不能恒驻留)"
+    )
+    # --- 3. CSS 落点仍在(正面钉在 test_frontend_fx_wiring; 这里防 JS/CSS 两半漂移的另一半) ---
+    assert 'classList.add("fx-glide")' in mount_js and 'classList.remove("fx-glide")' in mount_js, (
+        "fx-mount.js 必须保留 fx-glide 的挂/摘(S-A 只挪挂点, 类与 CSS 规则两半都在: 缺任一半 = "
+        "回执后键盘滚动窗口失效或平滑恒驻留)"
+    )
 
 
 def test_drawer_transition_dock_anim() -> None:

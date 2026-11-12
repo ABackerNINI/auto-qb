@@ -77,6 +77,15 @@
   var settleCb = null;
   var settleArmed = false;
   var settleTimer = 0;
+  /* fx-glide 两个定时器句柄(重复触发幂等面, dock 两分支各撤两个):
+   * - glideAddTimer: 回执后挂类的 setTimeout(0) 句柄 —— 关面板/重开若落在「回执→宏任务」间隙
+   *   (毫秒级, 程序化关闭可复现), 不撤则回调会在面板已关后才把 fx-glide 挂上并存续 800ms,
+   *   期间再开又被 dock(true) 带进新开门窗口(平滑进开门窗 = S-A 症状复发);
+   * - glideTimer: 挂上后的 800ms 摘除句柄 —— 上一轮窗口的摘除若还挂着, 会把这一轮回执后刚
+   *   挂上的平滑提前摘走(窗口缩短, 键盘滚动手感漂移)。
+   * 类本身的残局(定时器已 fire、类还在)由 dock(true) 的防御性摘类兜底。 */
+  var glideAddTimer = 0;
+  var glideTimer = 0;
   /* 面板入场时长: 与 dialogs.css .drawer-enter-active 消费的 --fx-dur-panel 同源。
    * dock(true) 在 watch pre-flush 跑、面板还没挂载, 读不到计算样式, 故取常量;
    * 主路 transitionend 不依赖本值, 只有兜底定时器用它。 */
@@ -89,13 +98,23 @@
        * 丢事件时永不点火 —— 不武装则回执不发、fx-glide 恒驻留(键盘 End/Home/翻页一直平滑)。
        * 与下方 transitionend 双路并存, fireSettle 的 settleArmed 单发守卫保证只发一次。 */
       armSettle();
-      /* 上推过渡动效窗口(F7e 动效(2)): 开门到落定回执之间, 原版让位/重入的滚动走
-       * 平滑(fx-mount.css html.fx-glide 段)。作用域只罩这段窗口 —— 面板开着期间的
-       * 键盘滚动(End/Home/翻页)保持原版瞬时, 与 console 手感逐位一致。 */
-      document.documentElement.classList.add("fx-glide");
+      /* S-A(2026-11-13 用户报「flux 首开种子先被面板遮挡、之后才上移」): fx-glide 不再开门
+       * 即挂 —— 开门窗口(enter 起拍到面板升完)内的让位/重入滚动(openTorrentDrawer 开场 /
+       * _drawerDone 兑现 / afterEnter 补发 / 落定回执重入, 四写者职责与挂点全不动)走瞬时,
+       * 与抽屉上升同步(对齐 prism「种子跟着上升」手感); 平滑挂点挪到落定回执后(fireSettle)。
+       * 开门即挂的旧口径下四个 scrollBy 互相重启/累加平滑爬行(实测 490ms+), 面板 300ms 就
+       * 升完而行还在半路。 */
+      /* 撤上一轮残局(重复触发幂等): 两个定时器句柄 + 防御性摘类 —— 重开若落在「回执→宏任务」
+       * 间隙或上一轮 800ms 平滑窗口内, 挂类定时器/摘除定时器/类本身都可能还挂着, 不撤/不摘
+       * 则平滑被带进本次开门窗口, S-A 症状复发。 */
+      if (glideAddTimer) { clearTimeout(glideAddTimer); glideAddTimer = 0; }
+      if (glideTimer) { clearTimeout(glideTimer); glideTimer = 0; }
+      document.documentElement.classList.remove("fx-glide");
     } else {
       settleArmed = false;
       document.documentElement.classList.remove("fx-glide");
+      if (glideAddTimer) { clearTimeout(glideAddTimer); glideAddTimer = 0; }
+      if (glideTimer) { clearTimeout(glideTimer); glideTimer = 0; }
       if (settleTimer) { clearTimeout(settleTimer); settleTimer = 0; } /* 关面板不再发落定回执 */
     }
   }
@@ -113,10 +132,24 @@
     if (!settleArmed || !settleCb) return;
     settleArmed = false;
     settleCb();
-    /* 回执消费点(state.js)在 $nextTick 里对目标行重入原版单点, 平滑滚动本身还要
-     * 走几百毫秒 -- fx-glide 留到重入滚动落走后再摘(经验余量 800ms), 摘早了那一次
-     * 校正滚动会退化成瞬时(终态不变, 只损失动效)。 */
-    setTimeout(function () { document.documentElement.classList.remove("fx-glide"); }, 800);
+    /* S-A: fx-glide 改在落定回执后挂(原为开门即挂) —— 面板升完前让位/重入走瞬时(S-A 修复),
+     * 升完后恢复平滑。挂点必须经 setTimeout 宏任务延迟, 不是可选优化: fireSettle 跑在
+     * transitionend 派发的捕获阶段, 同一次派发的目标阶段还有 Vue Transition 的 onAfterEnter
+     * (#3 补发入口, drawerAfterEnterHook -> _kbRevealRow), 回执重入(#4)也在本回调内同步进入
+     * _kbScrollRowIntoView —— 两发的 scrollBy 都在本任务收尾后的微任务里落地。若在 fireSettle
+     * 内同步挂类, 类会先于 afterEnter 监听器挂上(同步挂会赶上 afterEnter 那发), 两发全被平滑
+     * 重启爬行, S-A 症状复发; 宏任务挂点把挂类推到本任务(含全部微任务)跑完之后, 两发已瞬时
+     * 落地。挂/摘两个定时器都留句柄(glideAddTimer/glideTimer), dock 两分支各撤两个(幂等面)。 */
+    glideAddTimer = setTimeout(function () {
+      glideAddTimer = 0;  /* 已执行: 先清句柄, 免得残留旧 id 被下一次 dock 误撤(no-op 无害, 求准) */
+      document.documentElement.classList.add("fx-glide");
+      /* 回执后挂的平滑窗口 800ms 后摘(余量口径不变): 面板开着期间的后续键盘滚动在此窗口内
+       * 平滑、之后回原版瞬时(fx-mount.css html.fx-glide 段注)。 */
+      glideTimer = setTimeout(function () {
+        glideTimer = 0;
+        document.documentElement.classList.remove("fx-glide");
+      }, 800);
+    }, 0);
   }
   document.addEventListener("transitionend", function (ev) {
     if (!settleArmed || !settleCb) return;

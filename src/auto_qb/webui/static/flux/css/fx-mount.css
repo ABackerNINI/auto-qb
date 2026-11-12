@@ -156,12 +156,15 @@ html[data-fx-preset] input[type="checkbox"]:not(.hb-switch input):focus-visible 
   }
 
   /* ==================================================================
-   * 上推过渡动效(R5 精修 F7e): 开门让位窗口内, 原版让位/重入的 window 滚动
-   * (_kbRevealRow / _kbScrollRowIntoView 的 scrollBy/scrollTo)走平滑过渡 --
-   * 零 JS 几何, 终态与 console 逐位一致, 只把瞬时跳变变过渡(用户口径「上推
-   * 过渡动效」)。fx-glide 类由 fx-mount.js::dock 挂/摘(开面板挂, 落定回执的
-   * 重入滚动落走后摘), 作用域只罩开门窗口 -- 面板开着期间的键盘滚动保持原版
-   * 瞬时。RM 下本条不生效 = 原版瞬时滚动(D5 无动效终态)。
+   * 上推过渡动效(R5 精修 F7e; S-A 2026-11-13 改挂点): 原版让位/重入的 window
+   * 滚动(_kbRevealRow / _kbScrollRowIntoView 的 scrollBy/scrollTo)在 fx-glide
+   * 挂着时走平滑过渡 -- 零 JS 几何, 终态与 console 逐位一致, 只把瞬时跳变变
+   * 过渡。fx-glide 类由 fx-mount.js 挂/摘(**落定回执后挂**, 回执后 800ms 摘):
+   * S-A 前它开门即挂, 开门窗口内四个让位/重入 scrollBy 互相重启平滑爬行
+   * (实测 490ms+), 面板 300ms 就升完而行还在半路 = 用户报「先被遮挡后上移」;
+   * 现开门窗口(enter 起拍到面板升完)内的让位/重入一律瞬时(与抽屉上升同步,
+   * 对齐 prism 手感), 回执后窗口只罩开门结束后的短暂键盘滚动。RM 下本条不
+   * 生效 = 原版瞬时滚动(D5 无动效终态)。
    * ================================================================== */
   html.fx-glide { scroll-behavior: smooth; }
 
