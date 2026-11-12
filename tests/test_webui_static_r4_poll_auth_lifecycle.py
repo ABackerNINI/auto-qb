@@ -8,7 +8,8 @@
 - test_r4_search_quiet_retry_backoff: R5#236 —— view.js 静默刷新失败重试退避真跑: searchBuilding 残留 true 时失败续查逐次翻倍夹 15s(2s/4s/8s/15s/15s, 与轮询失败退避 currentPollMs 同曲线口径), 服务端宕机不再形成固定 1 req/s 无限循环; 成功一轮计数清零且续查保持 1s 节拍、resetSearch 新会话从零起算
 - test_r4_lifecycle_unmounted_listener_sweep: R5#3 —— lifecycle.js mounted/unmounted 监听对称 node 电池真跑: mounted 挂的五支监听(click 收层/Esc 退栈/防抖 resize/visibilitychange/contextmenu)提为实例字段后 unmounted 逐一撤除(热重载句柄不再堆叠), stopPolling 与 stopEvents 同收, 既有撤除面(键盘引擎/守卫/storage/时钟 interval)零回归
 - test_r4_webflags_boot_retry_and_ensure: issue 26-11-11-0633 —— loadWebFlags boot 韧性 node 电池真跑: boot 期(loadWebFlagsBoot)失败 1s/3s 退避各补一发共三发(穷尽止/中间态保持 fail-closed)、登出态(e.auth)不重试不排定时器、flagsLoaded 态(成功收口/"未取到"可分)、惰性补拉 ensureWebFlags(已取到返回 null 零副作用/未取到补一发)、并发单飞(同档同帧与退避窗口期并入复用同一 promise 不叠发)、档位分槽(boot 链在途时惰性补拉异档另起单发不骑退避链、惰性结算不挤占 boot 槽, 请求计数钉 3 发)
-- test_r4_truth_snapshot_materialized_members: S2a ingestion 物化缝(计划 26-11-11-0630 §03)× 乐观真值快照 node 电池真跑 —— S2a 后 _snapshotTruth 的组员源从服务端成员字典换成客户端物化拷贝, 此前该缝 tests/ 零命中。前置两断言钉 spike 裁决不变式(组员 = **独立浅拷贝**非平铺行引用, 同 hash 多命中各为独立对象; applyOptimisticPatch 经 _forEachRow 平铺行与组员拷贝同拍命中); 三个绿色向: 全量轮(命令在途)物化源 = 载荷平铺行 = 服务端真值 → 快照逐键比对不误判收敛(hold 保留)且 op.prev 保鲜为真值(兜底回滚不打到补丁值) / 全量轮真值落地 kind 对齐 → 正常收敛(撤 hold 出口) / 增量轮组未脏 → 组不进 d.groups → 快照无该 hash → 宁可慢收不误判(3s 兜底)。*已知边界(电池内注释, 不落断言)*: 误判窗口 = 组脏(**他员变化**使组进 d.groups)+ 该组另有成员 pending —— 物化源落到本地已打补丁行, 快照可能读到补丁值提前撤 hold(op.prev 同窗被污染); 影响如实两分支: 成功路径真值落地即收敛, 失败/停滞路径补丁值停留至该成员下次变化或下一次全量轮(回滚与 3s 兜底同被跳过, 长期滞留而非一轮弹回, 已确认接受该残留) —— S2a 报告「混合组未脏」表述以此修正: **组完全未脏是安全向**(即第三个绿色断言); 三入口接线(delta 桶序/先物化后赋值/auth.js 同缝)留给 S4 e2e 覆盖
+- test_r4_truth_snapshot_materialized_members: S2a ingestion 物化缝(计划 26-11-11-0630 §03)× 乐观真值快照 node 电池真跑 —— S2a 后 _snapshotTruth 的组员源从服务端成员字典换成客户端物化拷贝, 此前该缝 tests/ 零命中。前置两断言钉 spike 裁决不变式(组员 = **独立浅拷贝**非平铺行引用, 同 hash 多命中各为独立对象; applyOptimisticPatch 经 _forEachRow 平铺行与组员拷贝同拍命中); 三个绿色向: 全量轮(命令在途)物化源 = 载荷平铺行 = 服务端真值 → 快照逐键比对不误判收敛(hold 保留)且 op.prev 保鲜为真值(兜底回滚不打到补丁值) / 全量轮真值落地 kind 对齐 → 正常收敛(撤 hold 出口) / 增量轮组未脏 → 组不进 d.groups → 快照无该 hash → 宁可慢收不误判(3s 兜底)。*已知边界(电池内注释, 不落断言)*: 误判窗口 = 组脏(**他员变化**使组进 d.groups)+ 该组另有成员 pending —— 物化源落到本地已打补丁行, 快照可能读到补丁值提前撤 hold(op.prev 同窗被污染); 影响如实两分支: 成功路径真值落地即收敛, 失败/停滞路径补丁值停留至该成员下次变化或下一次全量轮(回滚与 3s 兜底同被跳过, 长期滞留而非一轮弹回, 已确认接受该残留) —— S2a 报告「混合组未脏」表述以此修正: **组完全未脏是安全向**(即第三个绿色断言); 三入口接线覆盖落点(P5 评审修复后如实): delta 桶序 + 重组后 members 仍物化对象形 = S4 e2e 乐观用例(组员拷贝补丁不触字段 state == 平铺真值行的新鲜度档 + 暂停真值轮 delta.groups 形状钉, e2e/group-hash-ref.spec.mjs), 待补清账 drain 赋值后时序 = 本文件 test_r4_remat_drain_after_assign_two_beat, auth.js bootstrap 同缝 = 本函数静态钉(_materializeGroupRows 调用先于 this.groups 赋值, 跨度比较钉顺序) —— e2e 桩恒免鉴权(ui_harness skip_local_verify), 登录快照轮 e2e 不可达, 不再声称由 e2e 覆盖; 「先物化后赋值」的响应式时序半边(物化挪到赋值后产物相同, 仅 Vue 代理旁路差异)无直接断言面, 由 polling.js 注释声明 + e2e 产物面(组行 members 物化形)间接覆盖
+- test_r4_remat_drain_after_assign_two_beat: S2a delta 分支待补清账时序(P3 major 修复点「_rematDrain 必须在 this.groups 赋值之后」)node 电池真跑 —— 两拍缺项 delta 直调 applyStateRows(delta-sync.spec 行级语义直测同款载荷形状): 第一拍组行带未知 hash 成员(缺项保留 hash 串 + 登记 _rematQueue), 第二拍 torrents 桶补齐 + 组桶非空(物化索引入口的触发前提; 补物化组不在组桶, 只能走待补队列)→ 断言第一拍登记组行 members 补物化齐; **drain 挪回赋值前即红**(登记行当轮未进 this.groups, cur.includes 恒 false 被当轮丢弃, 第二拍队列空转 members 停 hash 串) —— 把 P3 修复语义钉进 node 层
 - test_r4_version_reload_self_heal: S3 version-reload 自愈(计划 26-11-11-0630 §03 version-reload 行 / §04 S3 行)node 电池真跑 —— 轮询数据处理入口(refresh, 定时轮询与 SSE ver 驱动同汇)每轮比对 status payload 既有 version 字段(_status_payload 恒回传): (1)一致轮零成本直通不 reload 不碰存储 (2)变更沿发起 location.reload(), 本轮载荷不应用但照常续排下一拍(跨版本载荷不喂旧 JS; 防抖封顶续排无循环, 导航取消时链保活)(3)sessionStorage 30s 防抖窗口内第二次变更不重复 reload(窗口内照常处理+续排 = 有界节流非冻结, 基线不动; 窗口外放行一次 = 1 次/窗口有界节流)(4)version 缺失/非字符串轮保守默认不触发不动基线(黄金法则 2; 缺后再见 version 首见记基线不当变更沿)(5)配置编辑器脏态守卫(cfgGuardActive 替身置位)活跃轮跳过自愈(不 reload/不记防抖时间戳/基线不动, 轮询照常), 守卫释放后下一轮变更沿自然再触发 —— 后台轮询不替脏态用户弹原生框; 另钉循环破除主证据: reload 后新页 incarnation 重记新基线, 稳定版本下恰好一次 reload 零循环(防重签发循环第 1 层); 可控时钟替身 global.Date 免真睡 30s; 静态钉 _versionSelfHeal 函数体内含 cfgGuardActive 调用(照 test_webui_static_dom_page_layout.py 守阵先例 —— 电池守卫沿替身驱动只测「活跃时怎么走」, 真机问没问守卫由静态钉补位); 电池替身 mk() 自备 _versionSeen: null(真机初值来自 state.js data() —— Vue3 生产构建跳过 methods 非函数条目, 声明已挪出 polling.js, 搜索续查电池 _searchRetryFails 同款先例), 基线判据随之收紧单臂 === null(undefined 臂会吸收声明错位回归, 已删)
 - test_r4_version_reload_no_storage_fallback: S3 同上存储不可用分支(私隐模式访问即抛, columns_persist.js 先例), 独立探针隔离内存层模块级状态(共进程与主探针串账; cfgGuardActive 以替身置不活跃, 只为过守卫沿): sessionStorage 缺席时变更沿仍放行 reload(fail-open, 自愈不让位) + 内存层 _versionReloadMemAt 同页限流仍拦重复触发(防抖不随存储缺席而全失) + 窗口外放行(内存层窗口同口径); 跨 reload 记忆丢失的残留(唯「存储被禁 + 每请求翻转版本」组合才可能循环)已在 polling.js 注释声明, 电池不钉不可达面; 替身 mk() 同款自备 _versionSeen: null(真机初值来自 state.js data())
 
@@ -683,9 +684,15 @@ const slotsEmpty = (c) => !c._flagsLoadSlots || Object.keys(c._flagsLoadSlots).l
 # 3s 兜底(_expirePending 同依赖 pendingOps)一并被跳过 —— 是长期滞留而非「一轮弹回」, 已确认接受
 # 该残留(S2 缝语义)。「组完全未脏」是安全向(场景 3 断言钉住); 组完全未脏时物化根本不发生
 # (组不进 d.groups), 与误判窗口互斥。
-# *接线覆盖声明*: 三场景直呼物化/快照助手, 不经 applyStateRows/refresh 驱动 —— 三入口接线
-# (delta 桶序 torrents/singles 先于 groups、先物化后赋值、auth.js bootstrap 同缝)由 S4 e2e
-# 全量回归覆盖(计划 26-11-11-0630 §04 S4), 本电池不重复钉。
+# *接线覆盖声明(P5 评审修复后如实口径)*: 三场景直呼物化/快照助手, 不经 applyStateRows/refresh
+# 驱动。三入口接线的覆盖落点按面拆: delta 桶序(torrents/singles 先于 groups 合并)+ 重组后
+# members 仍物化对象形 = S4 e2e 乐观用例(组员拷贝补丁不触字段 state == 平铺真值行的新鲜度档 +
+# 暂停真值轮 delta.groups 形状钉, e2e/group-hash-ref.spec.mjs); 待补清账 drain 赋值后时序 =
+# 本文件 test_r4_remat_drain_after_assign_two_beat(两拍缺项 delta, drain 挪回赋值前即红);
+# auth.js bootstrap 同缝 = 本文件静态钉(物化调用先于 this.groups 赋值) —— e2e 桩恒免鉴权
+# (ui_harness skip_local_verify), 登录快照轮 e2e 不可达, 不再声称由 e2e 覆盖(旧表述只对
+# delta 桶序一入口成立); 「先物化后赋值」的响应式时序半边无直接断言面(物化挪到赋值后产物
+# 相同, 仅 Vue 代理旁路差异), 由 polling.js 注释声明 + e2e 产物面间接覆盖。
 _NODE_TRUTHSNAPSHOT_PROBE = r"""
 const fs = require("fs");
 global.window = {};
@@ -763,6 +770,60 @@ const boot = (vm) => {
   vm3._snapshotTruth({ torrents: dT, singles: [], groups: dG });
   ok("增量轮组未脏: 快照无该 hash → 不误判收敛(hold 保留, 3s 兜底)",
     vm3._optimisticSettled("B", vm3.pendingOps.B) === false);
+
+  console.log(JSON.stringify({ ok: checks.filter((c) => c[1]).length, total: checks.length,
+    failed: checks.filter((c) => !c[1]).map((c) => c[0]) }));
+})().catch((e) => { console.error(e && e.stack || e); process.exit(1); });
+"""
+
+# S2a delta 分支待补清账时序(P3 major 修复点): _rematDrain 必须在 this.groups 赋值之后 ---------
+# 两拍缺项 delta 直调 applyStateRows 注入桩态(delta-sync.spec 行级语义直测同款载荷形状)。
+# 判别机理: 登记行(k1)在第一拍当轮就要过 drain 的 cur.includes 重登留队 —— drain 在赋值后
+# (生产序)时 cur 已含本轮 upsert 进来的 k1 行, 重登成功; drain 挪回赋值前则 cur 还是**没有
+# 该行的旧数组**(P3 事故机理: 原位登记行未进 this.groups, includes 恒 false, 当轮被当
+# 「已被替换/剔除」丢弃), 第二拍队列空转 => members 停 hash 串 => 断言红。第二拍组桶放**另一
+# 组 k2**(补物化组不在组桶, 补齐只能走待补队列, 不能靠组行 upsert 顺带物化) —— 这也是 drain
+# 入口的真实触发前提(rematIdx 只在 d.groups 非空时构建)。
+_NODE_REMATDRAIN_PROBE = r"""
+const fs = require("fs");
+global.window = {};
+eval(fs.readFileSync(process.argv[1], "utf8"));   // polling.js(_rematQueue/_memberIndexBuild/_materializeGroupRows/_rematDrain/applyStateRows)
+const P = window.AQB_POLL.methods;
+const checks = [];
+const ok = (name, cond) => checks.push([name, !!cond]);
+
+const mk = () => Object.assign({}, P, { torrents: [], singles: [], groups: [] });
+
+(async () => {
+  const vm = mk();
+  // 第一拍: delta 只带组桶, 组行引用的 hash 还不在任何索引源 => 缺项保留 hash 串 + 登记
+  vm.applyStateRows({
+    rid: 1, updated: true, full: false,
+    delta: { groups: [{ key: "k1", count: 1, members: ["h1"] }] },
+    removed: {},
+  });
+  const g1 = vm.groups.find((x) => x.key === "k1");
+  ok("第一拍: 组行进 this.groups(赋值完成)", !!g1);
+  ok("第一拍: 缺项成员保留 hash 串(登记前提: 不产 undefined 进消费位)", !!g1 && g1.members[0] === "h1");
+
+  // 第二拍: torrents 桶补齐 h1/x2 + 组桶非空(k2 脏行) => 索引含 h1, drain 补物化第一拍登记行
+  vm.applyStateRows({
+    rid: 2, updated: true, full: false,
+    delta: {
+      torrents: [{ hash: "h1", kind: "downloading", progress: 0.5 }, { hash: "x2", kind: "seeding", progress: 1 }],
+      groups: [{ key: "k2", count: 1, members: ["x2"] }],
+    },
+    removed: {},
+  });
+  const k2 = vm.groups.find((x) => x.key === "k2");
+  ok("第二拍: 新组 k2 照常物化(物化索引入口在跑, 排除「delta 轮整体跳过」的假绿)",
+    !!k2 && typeof k2.members[0] === "object" && !!k2.members[0] && k2.members[0].hash === "x2");
+  const k1 = vm.groups.find((x) => x.key === "k1");
+  const flat = (vm.torrents || []).find((x) => x.hash === "h1");
+  ok("第二拍: 第一拍登记组行 members 补物化齐(drain 挪回赋值前当轮空转则此条红)",
+    !!k1 && typeof k1.members[0] === "object" && !!k1.members[0] && k1.members[0].hash === "h1");
+  ok("第二拍: 补物化产物仍是独立浅拷贝(非平铺行引用, 乐观链 prev 采集不变式)",
+    !!k1 && !!flat && k1.members[0] !== flat);
 
   console.log(JSON.stringify({ ok: checks.filter((c) => c[1]).length, total: checks.length,
     failed: checks.filter((c) => !c[1]).map((c) => c[0]) }));
@@ -959,11 +1020,31 @@ def test_r4_webflags_boot_retry_and_ensure():
     ensureWebFlags(已取到零副作用/在途复用单飞) + 并发单飞不叠发; 全程 fail-closed 语义保持。"""
     _assert_battery(_run_probe(_NODE_WEBFLAGS_PROBE, _shared("lifecycle.js")), "flags boot 韧性电池")
 def test_r4_truth_snapshot_materialized_members():
-    """S2a 物化缝 × 乐观真值快照: 快照读服务端真值不读本地补丁值(全量在途/真值落地/增量安全向三绿色向)。"""
+    """S2a 物化缝 × 乐观真值快照: 快照读服务端真值不读本地补丁值(全量在途/真值落地/增量安全向三绿色向);
+    另钉 auth.js bootstrap 静态缝(三入口之一, e2e 免鉴权轨不可达)。"""
+    # 静态钉(照 test_r4_version_reload_self_heal 的 cfgGuardActive 守阵先例): e2e 桩恒免鉴权
+    # (ui_harness skip_local_verify), auth.js bootstrap 的登录快照轮在 e2e 永远不发生 —— 三入口
+    # 之一只能在这里钉。钉**顺序**: bootstrap 体内 _materializeGroupRows 调用必须先于 this.groups
+    # 赋值(先物化后赋值: 赋值后行进响应式代理, 就地改 members 旁路 Vue 代理), 跨度比较钉先后,
+    # 改名/挪序/删调用都红。
+    boot = re.search(r"async bootstrap\(candidate\) \{(.*?)\n    \},", read_shared("auth.js"), re.S)
+    assert boot, "auth.js 缺 async bootstrap(改名/移位? 同步本守阵与覆盖声明)"
+    mat = re.search(r"this\._materializeGroupRows\(state\.groups", boot.group(1))
+    assign = re.search(r"this\.groups = state\.groups", boot.group(1))
+    assert mat and assign, \
+        "auth.js bootstrap 必须含 _materializeGroupRows 调用与 this.groups 赋值(登录快照轮同缝; 形状变了? 同步本守阵)"
+    assert mat.start() < assign.start(), \
+        "bootstrap 物化必须先于 this.groups 赋值(先物化后赋值): 顺序倒置 = 赋值后就地改组行旁路响应式"
     _assert_battery(
         _run_probe(_NODE_TRUTHSNAPSHOT_PROBE, [_shared("polling.js"), bundle_file("commands.js")]),
         "真值快照×物化电池",
     )
+
+
+def test_r4_remat_drain_after_assign_two_beat():
+    """S2a delta 分支待补清账时序(P3 major 修复点): 两拍缺项 delta 直调 applyStateRows ——
+    第一拍登记未知 hash 成员, 第二拍 torrents 桶补齐 + 组桶非空后补物化齐; drain 挪回赋值前即红。"""
+    _assert_battery(_run_probe(_NODE_REMATDRAIN_PROBE, _shared("polling.js")), "待补清账时序电池")
 
 
 def test_r4_version_reload_self_heal():
