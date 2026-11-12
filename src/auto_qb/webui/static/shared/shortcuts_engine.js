@@ -257,6 +257,18 @@ Object.assign(window.AQB_SHORTCUTS.methods, {
       }
       return bot;
     },
+    /* 让位触发界补差单点(2026-11-13 S-C 评审收口): 与 _kbViewBottom 的**分支语义**配对 ——
+     * 面板分支返回的界自带 -8 呼吸距(面板顶 - 8), 触发界补 +8 才回到面板顶实缘(未覆盖行绝对
+     * 不动); 状态栏/整窗分支返回的就是遮蔽实缘本身, 补差 +0(精确边)—— 关闭路径遮 1~8px 的行
+     * 照旧让位到状态栏上 8px 净空, 不因面板分支的补差外溢而漏让。面板在 DOM 且非 fixed 时面板
+     * 分支必为更紧者(面板顶 - 8 < 状态栏顶, 吸底与文档底自然位都成立), 界源判定只需这两个条件;
+     * 本体只读分支条件不读矩形(几何仍归 _kbViewBottom 单点), 消费方与它同帧同步取值(不跨帧)。 */
+    _kbViewBottomPad() {
+      if (!this.drawer.open) return 0;  // 关闭: 界源 = 状态栏/整窗(精确边, 补差 0)
+      const panel = document.querySelector(".drawer-dock > .drawer");
+      if (!panel || getComputedStyle(panel).position === "fixed") return 0;  // D3 全屏态面板出流: 界源 = 状态栏/整窗
+      return 8;  // 面板分支: 界自带呼吸距 -8, 补回同值(与 _kbViewBottom 面板分支的 8 同源)
+    },
     /* 列表行可见**上界**单点(与 _kbViewBottom 对称, 2026-10-09 用户报「键盘移到第一个种子只显示
      * 一半」): 顶栏之下还压着**吸顶列头** `.group-head`(三皮肤一律 position:sticky, top =
      * calc(--head-h - 1px), 实测 32px 高) —— 行被它盖住时几何上「在视口内」但其实看不见, 只按
@@ -284,6 +296,7 @@ Object.assign(window.AQB_SHORTCUTS.methods, {
           : `[data-hash="${CSS.escape(r.id)}"]`;
         const vTop = this._kbViewTop();     // 顶栏 + 吸顶列头(列头盖住列表首行, 2026-10-09 报障)
         const vBot = this._kbViewBottom();  // 状态栏 + 面板开着时让位面板顶缘(W4 几何走查)
+        const vPad = this._kbViewBottomPad();  // 触发界补差按界源分支配对(面板开=+8 呼吸距补偿 / 关闭·D3=+0 精确边)
         /* 用真实 DOM 矩形校正落点。抽成局部函数是为了在下一帧复用: 共享 runner 上
          * $nextTick 可能早于窗口化重渲(目标行还没进 DOM), 或前缀和用的是估算行高而实测
          * 行高随字体/平台变化 —— 两种情形都会让首次落点停在状态栏背后。下一帧用真实
@@ -294,7 +307,12 @@ Object.assign(window.AQB_SHORTCUTS.methods, {
           if (!el) return false;
           const rect = el.getBoundingClientRect();
           if (rect.top < vTop + 4) window.scrollBy(0, rect.top - vTop - 8);
-          else if (rect.bottom > vBot - 4) window.scrollBy(0, rect.bottom - vBot + 8);
+          // 下界触发界 = 单点 + 补差(界源分支配对, 2026-11-13 S-C 收紧, 与 _kbRevealRow 同带语义):
+          // 面板开 = +8 呼吸距补偿(界 = 面板顶实缘, 未覆盖行不动) / 关闭·D3 = +0 精确边(遮蔽行照旧
+          // 让位)。flux 开门落定回执(state.js drawerVisible -> AQB_FX_MOUNT.dock 回执)重入本方法
+          // 把打开面板的那行算回可见带, 不一并收紧则 flux 上该路径仍会抬越过带行; 键盘跟随共用
+          // 同一下界, 真覆盖仍按公式让位(位移量不变)。
+          else if (rect.bottom > vBot + vPad) window.scrollBy(0, rect.bottom - vBot + 8);
           return true;
         };
         /* 跨帧重试: 窗口化重渲未必一帧落定(共享 runner 上尤其慢), 单次 rAF 仍可能扑空,
@@ -324,23 +342,34 @@ Object.assign(window.AQB_SHORTCUTS.methods, {
         const y = pre[idx] + (this._winTop[kind] || 0);
         const h = pre[idx + 1] - pre[idx];
         if (y < window.scrollY + vTop + 4) window.scrollTo(0, y - vTop - 8);
-        else if (y + h > window.scrollY + vBot - 4) window.scrollTo(0, y + h - vBot + 8);
+        // 下界触发界与渲染行路同收紧(单点 + 补差按界源分支, 2026-11-13 S-C), 位移量不变
+        else if (y + h > window.scrollY + vBot + vPad) window.scrollTo(0, y + h - vBot + 8);
         revealNext();  // 估算行高与实测行高的偏差由后续帧补正
       });
     },
     /* 显式打开路径的行让位(2026-10-03 报障: 双击列表最后几行, 停靠面板一开把被点行盖住) ——
      * W4 下界单点只接了键盘跟随, drawer.js openTorrentDrawer(双击/右键/Enter/Alt+数字 共用
      * 的显式打开)挂上状态后调本方法一次补让位。面板 DOM 随 open 状态 v-if 挂载, 同帧还量不到
-     * 面板 —— nextTick 后再测; 目标行下缘低于可视下界才 scrollBy, 本来可见就不动(不抢用户的
-     * 滚轮位置); 行不在 DOM(窗口化折叠)静默放弃, 滚动位置宁可不动也不猜(P1-2 退避口径)。 */
+     * 面板 —— nextTick 后再测; 行不在 DOM(窗口化折叠)静默放弃, 滚动位置宁可不动也不猜(P1-2
+     * 退避口径)。
+     * 触发界(2026-11-13 S-C 收紧, 用户拍板「未被覆盖的行绝对不动」; 同日评审收口: 补差按界源
+     * 分支取值): 面板开(面板分支为界源)时行底**真越过面板顶实缘**才让位 —— 触发界 = 单点 + 8
+     * 呼吸距 = 面板顶 rect.top, 行底不越过面板顶(含呼吸带)的行在让位三发(openTorrentDrawer /
+     * _drawerDone 兑现 / drawerAfterEnterHook)上一律不动; 旧口径触发界再减 4px 容差, 行底落在
+     * (面板顶-12, 面板顶] 的未覆盖行也按公式被抬 4~16px(e2e S-C 红验实测双皮肤 10px)。面板关/
+     * D3 全屏(状态栏·整窗分支为界源)补差 +0 = 精确边, 关闭路径的让位行为与收紧前逐位一致
+     * (遮 1~8px 的行照旧让位到状态栏上 8px 净空)。位移公式不动: 真覆盖行的让位量与落点终值
+     * (vBot - 8)全程逐位一致 —— 只动判据触发条件, 不动量。 */
     _kbRevealRow(hash) {
       this.$nextTick(() => {
         if (!this.drawer.open) return;
         const el = document.querySelector(`[data-hash="${CSS.escape(hash)}"]`);
         if (!el) return;
         const rect = el.getBoundingClientRect();
-        const vBot = this._kbViewBottom();  // 面板开着时下界 = 面板顶缘(W4 单点); 关闭/窄屏全屏态回落整窗高
-        if (rect.bottom > vBot - 4) window.scrollBy(0, rect.bottom - vBot + 8);
+        const vBot = this._kbViewBottom();  // 面板开着时 = 面板顶缘 - 8 呼吸距(W4 单点); 关闭/窄屏全屏态回落状态栏/整窗高
+        // 触发界补差按界源分支取值(面板=呼吸距补偿 / 关闭·D3=精确边), 见 _kbViewBottomPad;
+        // 位移公式里的 +8 是落点净空, 与触发补差无关, 两者别混。
+        if (rect.bottom > vBot + this._kbViewBottomPad()) window.scrollBy(0, rect.bottom - vBot + 8);
       });
     },
     /* ---------------- W2: 展开面板与定位页签 ---------------- */

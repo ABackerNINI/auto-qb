@@ -84,7 +84,13 @@ Delete 直连注册表外, 均为已拍板的口径, 逐条落断言。W5 局部
   补让位 + 开场按 FX-29 待到集合登记数据源、全到手在 _drawerDone 兑现挂单补发
   (_drawerOpenReveal 带 open/hash 双守卫); 槽位落定 drawerAfterEnterHook 再补一发
   (流量形态不发); nextTick 等面板挂载再量, 下界走 _kbViewBottom 单点(不裸用
-  innerHeight), 行不在 DOM 静默放弃, 不用逐层滚动 API(文件头禁令)
+  innerHeight), 行不在 DOM 静默放弃, 不用逐层滚动 API(文件头禁令); S-C 判据收紧
+  (2026-11-13 用户拍板「未被覆盖的行绝对不动」, 修订计划 26-11-12-1048 D3/D7 的
+  「判据零改动」仅此一处): 触发界 = vBot + 补差, 补差按界源分支取值(单点
+  _kbViewBottomPad: 面板分支 +8 呼吸距补偿 = 面板顶实缘, 越过带(行底落在(面板顶-12,
+  面板顶])的未覆盖行不触发; 状态栏/整窗分支 +0 精确边, 关闭路径让位行为不变), 位移公式
+  不动(真覆盖仍让位到 vBot - 8 终值); 同带语义第二实现点 _kbScrollRowIntoView 两路
+  (flux 开门落定回执经 state.js drawerVisible 重入)一并收紧
 - test_drawer_transition_dock_anim: 出入过渡动画(2026-10-03 用户报: 抽屉出现/消失生硬) ——
   停靠面板占文档流, 开/关时列表底部一帧撑开/收回是生硬根源, 面板本体滑淡治不了布局跳变:
   JS 钩子驱动 .drawer-dock 槽位高度插值(enter 追面板实时高 / leave 收面板自身高, 槽位整段
@@ -760,7 +766,16 @@ def test_drawer_open_reveal_row() -> None:
     """显式打开路径行让位(2026-10-03 报障: 双击列表末尾几行, 停靠面板一开把被点行盖住) ——
     W4 下界单点只接了键盘跟随, 显式打开 openTorrentDrawer 必须补一次被点行让位;
     2026-10-04 回归: 开场那发量的是 loading 态几何(面板随后长到 42vh), 且文档底打开时
-    scrollBy 被钳制成 0(下滚余量是停靠槽位长高才创造的) —— 数据落定与槽位落定各补一发"""
+    scrollBy 被钳制成 0(下滚余量是停靠槽位长高才创造的) —— 数据落定与槽位落定各补一发。
+    2026-11-13 S-C(用户拍板「未被覆盖的行绝对不动」, 修订计划 26-11-12-1048 D3/D7 的
+    「判据零改动」仅此一处): 触发界从 vBot - 4 收紧到 vBot + 补差, 补差按 _kbViewBottom 的
+    界源分支取值(单点 _kbViewBottomPad) —— 面板分支 +8 呼吸距补偿(界 = 面板顶实缘, 行底落在
+    (面板顶-12, 面板顶] 越过带内的未覆盖行不再被抬 4~16px, e2e 红验实测 prism/atlas ~10px) /
+    状态栏·整窗分支 +0 精确边(关闭路径遮 1~8px 的行照旧让位到状态栏上 8px 净空, 统一 +8 不
+    分支会过紧外溢 —— 同日评审发现); 位移公式不动, 真覆盖行的让位量与落点终值(vBot - 8)全程
+    逐位一致。同带语义第二实现点 _kbScrollRowIntoView 两路(flux 开门落定回执经 state.js
+    drawerVisible 重入)一并收紧; _kbViewportRow/_kbMovePage 不在让位链(只选行/算一屏,
+    不因开门滚动), 不动。"""
     drawer_js = _read("drawer.js")
     store_js = _read("drawer_store.js")  # W1: _drawerDone 在数据层
     open_fn = re.search(r"async openTorrentDrawer\(hash\) \{(.*?)\n    \},", drawer_js, re.S)
@@ -794,6 +809,55 @@ def test_drawer_open_reveal_row() -> None:
     assert "scrollBy" in rb, "让位走 getBoundingClientRect + scrollBy 差值(与 _kbScrollRowIntoView 同口径)"
     assert "scrollIntoView" not in rb, "_kbRevealRow 不得用逐层滚动 API(shortcuts.js 文件头禁令)"
     assert "if (!el) return;" in rb, "行不在 DOM(窗口化折叠)必须静默放弃, 滚动位置宁可不动也不猜"
+    # --- S-C 判据收紧(2026-11-13 用户拍板「未被覆盖的行绝对不动」; 同日评审收口: 补差按界源分支
+    # 取值): 触发界 = 单点 + 补差, 补差与 _kbViewBottom 的分支语义配对 —— 面板分支 +8(界自带
+    # -8 呼吸距, 补回后界 = 面板顶实缘, 行底 <= 面板顶的未覆盖行在让位三发上都不动) / 状态栏·
+    # 整窗分支 +0(返回值就是遮蔽实缘, 精确边 —— 关闭路径遮 1~8px 的行照旧让位到状态栏上 8px
+    # 净空, 不因面板分支补差外溢而漏让)。位移公式不动(真覆盖行让位量与落点终值修复前后逐位
+    # 一致)。钉法 = 补差单点与面板分支呼吸距的**关系** + 三处判据点一致化, 不是裸字符串:
+    # 单点呼吸距若调整, 补差必须跟随才算仍指面板顶实缘; 旧口径 vBot - 4 的越过带会把未覆盖行
+    # 抬 4~16px; 统一 +8 不分支则关闭路径过紧外溢(评审发现)。
+    vb2 = re.search(r"_kbViewBottom\(\) \{(.*?)\n    \},", eng, re.S)
+    assert vb2, "shortcuts.js 缺 _kbViewBottom(行可见下界单点, S-C 触发界从它派生)"
+    breathe = re.search(r"panel\.getBoundingClientRect\(\)\.top - (\d+)", vb2.group(1))
+    assert breathe, "_kbViewBottom 面板分支应带呼吸距(面板顶缘 - N), 补差单点与其同值才等于面板顶实缘"
+    pad = re.search(r"_kbViewBottomPad\(\) \{(.*?)\n    \},", eng, re.S)
+    assert pad, "shortcuts.js 缺 _kbViewBottomPad(触发界补差单点: 补差按界源分支取值)"
+    pdb = pad.group(1)
+    assert pdb.count("window.innerHeight") == 0 and "getBoundingClientRect().top" not in pdb, (
+        "补差单点只读分支条件不读矩形(几何仍归 _kbViewBottom 单点, 不许第二几何源)"
+    )
+    assert "this.drawer.open" in pdb, "补差单点必须先挡面板开合(关闭 = 界源状态栏/整窗, 补差 0 精确边)"
+    assert 'document.querySelector(".drawer-dock > .drawer")' in pdb, ("补差单点必须实测面板 DOM(面板不在 DOM = 界源非面板分支, 补差 0)")
+    assert 'getComputedStyle(panel).position === "fixed"' in pdb, ("D3 窄屏全屏态面板出流, 界源回落状态栏/整窗, 补差必须为 0(精确边)")
+    assert f"return {breathe.group(1)}" in pdb, (
+        f"面板分支补差必须与 _kbViewBottom 面板分支呼吸距同值(实测补差单点 return 值, 呼吸距 {breathe.group(1)}): "
+        "补回呼吸距触发界才等于面板顶实缘(未覆盖行绝对不动)"
+    )
+    assert re.search(r"if \(rect\.bottom > vBot \+ this\._kbViewBottomPad\(\)\) window\.scrollBy", rb), (
+        "_kbRevealRow 触发界必须是 vBot + _kbViewBottomPad()(补差按界源分支取值): 面板开 = 面板顶实缘"
+        "(未覆盖行绝对不动; 旧口径 vBot - 4 的越过带会把未覆盖行抬 4~16px, e2e S-C 红验实测) / "
+        "面板关·D3 = 精确边(关闭路径遮 1~8px 的行照旧让位, 统一 +8 不分支会过紧外溢 —— 评审发现)"
+    )
+    assert re.search(r"window\.scrollBy\(0, rect\.bottom - vBot \+ 8\)",
+                     rb), ("位移公式 rect.bottom - vBot + 8 不得随判据收紧改动(真覆盖行的让位量与落点终值 vBot - 8 修复前后逐位一致)")
+    # --- 同带语义第二实现点(让位链普查): _kbScrollRowIntoView 下界两路 —— flux 开门落定回执
+    # (state.js drawerVisible -> AQB_FX_MOUNT.dock 回执)重入本方法把 drawer.hash 行算回可见带,
+    # 不一并收紧则 flux 上越过带行在开门路径仍被抬; 键盘跟随共用同一下界(真覆盖仍让位, 口径一致)。
+    si2 = re.search(r"_kbScrollRowIntoView\(rows, idx\) \{(.*?)\n    \},", eng, re.S)
+    assert si2, "shortcuts.js 缺 _kbScrollRowIntoView(S-C 同带语义第二实现点)"
+    sib2 = si2.group(1)
+    assert re.search(r"const vPad = this\._kbViewBottomPad\(\);",
+                     sib2), ("补差必须与 _kbViewBottom 同帧单次落值复用(单点纪律: 边界落值只取一次)")
+    assert re.search(r"else if \(rect\.bottom > vBot \+ vPad\) window\.scrollBy", sib2), (
+        "_kbScrollRowIntoView 渲染行路下界触发界必须是 vBot + vPad(补差单点落值; flux 开门回执经此重入, "
+        "同带语义必须一并收紧 —— 旧口径 vBot - 4 在 flux 开门路径仍会抬越过带行)"
+    )
+    assert re.search(r"else if \(y \+ h > window\.scrollY \+ vBot \+ vPad\) window\.scrollTo",
+                     sib2), ("_kbScrollRowIntoView 窗口化前缀和路下界触发界必须与渲染行路同收紧(vBot + vPad, 两路同带语义)")
+    assert re.search(r"window\.scrollBy\(0, rect\.bottom - vBot \+ 8\)", sib2) and re.search(
+        r"window\.scrollTo\(0, y \+ h - vBot \+ 8\)", sib2
+    ), "_kbScrollRowIntoView 两路位移公式不动(只收紧触发界, 让位量口径不变)"
 
 
 def test_drawer_transition_dock_anim() -> None:

@@ -31,6 +31,17 @@ import { collectRuntimeErrors, installRuntimeErrorGuard } from './lib/errors.mjs
  * 3. W2 收场文档底(W2 红验主判据): 贴文档底关面板, leave 钩子逐帧写 dock.style.height → 文档逐帧
  *    变矮 → 浏览器逐帧钳制 scrollY —— 修复前实测位移事件 8~11 次(双皮肤多次运行, D11 判据
  *    允许一次性位移 ≤1), 逐帧序列存逐条断言消息。
+ *
+ * S-C 判据越过带收紧(2026-11-13 用户拍板「未被覆盖的行绝对不动」, 替代已取消的 S1): 上面的 W1
+ * 红验未复现的原因即本判据的**有意越过带** —— 旧触发界 rect.bottom > vBot - 4(vBot = 面板顶 - 8)
+ * 把行底落在 (面板顶-12, 面板顶] 的未覆盖行也按公式抬 4~16px。收紧后触发界 = 单点 + 界源分支补差
+ * (_kbViewBottomPad: 面板分支 +8 呼吸距补偿 → 界 = 面板顶实缘; 状态栏/整窗分支 +0 精确边 → 关闭
+ * 路径遮 1~8px 的行照旧让位, 不外溢过紧): 行底 <= 面板顶的行在首开/再开全程零位移; 位移公式不动,
+ * 真覆盖行(行底 > 面板顶)仍让位到公式终值 vBot - 8 = 面板顶 - 16(修复前后都必须绿)。用例:
+ * 4. S-C 越过带: 滚动相位对齐把行底精确送到带中央(面板顶 - 6), 首开与「关→再开」两个场景
+ *    全程零位移; 修复前预期红(实测被抬 4~16px)。
+ * 5. S-C 反向守卫: 真被覆盖的行(最深 + 最浅边界探针)仍被让位到公式终值 —— 最深行钉公式全程
+ *    无钳制, 最浅行(面板顶 + 3 对齐)直接贴触发界边界, 拦「结构性过紧到中浅覆盖行漏让」。
  */
 
 /* ==================== S0 三条用例共用小件(判据一律位移量/事件次数, 不用绝对像素阈值) ==================== */
@@ -404,6 +415,235 @@ for (const skin of SKINS) {
       const events = scrollEvents(frames);
       expect(events, `收场期 scrollY 位移事件数(D11 判据 ≤1; 实测 ${events}; 序列 ${frameDigest(frames)})`)
         .toBeLessThanOrEqual(1);
+    });
+
+    /* ==================== S-C 判据越过带收紧(2026-11-13 用户拍板「未被覆盖的行绝对不动」) ==================== */
+
+    test(`S-C 越过带: 带内未覆盖行首开与再开全程零位移 @fast (${skin})`, async ({ page }) => {
+      test.setTimeout(90_000);
+      collectRuntimeErrors(page);
+
+      await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 15_000 });
+      await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
+      await page.click('nav.tabs [data-view="torrents"]');
+      await expect(page.locator('.torrent-row').first()).toBeVisible({ timeout: 15_000 });
+
+      // 距文档底 600px 滚动(预留收场 headroom: 关面板文档变矮 ~面板全高, scrollY 不得被钳制挪动
+      // 行位 —— 钳制是 W2 文档底用例的取证口径, 不混入本判据; 600 > 面板全高 + 呼吸距, 对齐增量
+      // (<= 半行)吃不完)。
+      await page.evaluate(() => {
+        window.scrollTo(0, document.documentElement.scrollHeight - window.innerHeight - 600);
+      });
+      await waitListSettled(page);
+
+      // 滚动相位对齐: 挑最深一个行底 <= 全开顶缘估算的行, scrollBy 精确送到带中央(顶缘 - 6)。
+      // 顶缘估算 = 状态栏顶 - 42vh(W1 用例同式; dock sticky bottom = --statusbar-h + 面板高恒锁
+      // 42vh, 估算对实值的偏差只有取整级 ±1px, ±5px 内带判据不受扰)。越过带 = (面板顶-12, 面板顶]:
+      // 旧触发界 vBot - 4(vBot = 面板顶 - 8)的触发范围, 带内行肉眼未被覆盖(行底 <= 面板顶)。
+      const aligned = await page.evaluate(() => {
+        const sb = document.querySelector('.statusbar');
+        const sbTop = sb ? sb.getBoundingClientRect().top : window.innerHeight;
+        const panelTopEst = sbTop - Math.round(window.innerHeight * 0.42);
+        let best = null;
+        for (const r of document.querySelectorAll('.torrent-row')) {
+          const b = r.getBoundingClientRect();
+          if (b.bottom <= panelTopEst && (b.top + b.bottom) / 2 < sbTop - 8 && (!best || b.bottom > best.bottom)) {
+            best = { hash: r.getAttribute('data-hash'), bottom: b.bottom };
+          }
+        }
+        if (!best) return null;
+        // 下滚把行往上搬(scrollY 增大 = 内容上移): 行底要从 best.bottom 移到 panelTopEst - 6(更下方),
+        // 滚动量 = 当前 - 目标(负值 = 上滚, 行随内容下移进带)。红验第一轮曾写反成 目标-当前,
+        // 行被滚出带下方 21px, 前置断言当场拦下 —— 带对齐的符号口径以此为准。
+        window.scrollBy(0, Math.round(best.bottom - (panelTopEst - 6)));
+        return best.hash;
+      });
+      expect(aligned, '前置: 视口内应有行底不越过全开顶缘的行(带对齐原料)').toBeTruthy();
+      await waitListSettled(page);
+
+      // 场景1(首开): 基线预读 -> 采样 -> 双击带内行 -> 落定(三发让位全部停稳)。
+      const band = await page.evaluate((h) => {
+        const r = document.querySelector(`[data-hash="${h}"]`).getBoundingClientRect();
+        return { y: Math.round(window.scrollY), rowB: r.bottom };
+      }, aligned);
+      await installGeoSampler(page, aligned);
+      await page.dblclick(`.torrent-row[data-hash="${aligned}"]`, { force: true, position: { x: 8, y: 8 } });
+      await expect(page.locator('.drawer-dock > .drawer')).toBeVisible({ timeout: 5_000 });
+      await waitDockSettled(page);
+      const first = await stopGeoSampler(page);
+      const panelGeo = await page.evaluate(() => {
+        const p = document.querySelector('.drawer-dock > .drawer').getBoundingClientRect();
+        return { top: p.top, h: p.height };
+      });
+
+      // 前置: 面板到过全高; 行底(打开前实测)确实落在越过带内 —— 对面板顶**实值**判, 估算偏差
+      // 超过 ±5px 在此显形(测试无效), 不静默放过。
+      const maxDockH1 = Math.max(...first.frames.filter((f) => f.open).map((f) => f.dockH ?? 0));
+      expect(maxDockH1, `前置: 首开面板应到过全高(实测峰值 ${maxDockH1}, 落定 ${Math.round(panelGeo.h)})`)
+        .toBeGreaterThanOrEqual(Math.round(panelGeo.h) - 4);
+      expect(band.rowB, `前置: 对齐后行底 ${band.rowB.toFixed(1)} 应在越过带 (${panelGeo.top - 12}, ${panelGeo.top}] 内(面板顶实值)`)
+        .toBeGreaterThan(panelGeo.top - 12 - 1);
+      expect(band.rowB, `前置: 对齐后行底 ${band.rowB.toFixed(1)} 不得真被覆盖(应 <= 面板顶实值 ${panelGeo.top.toFixed(1)})`)
+        .toBeLessThanOrEqual(panelGeo.top + 1);
+
+      // 断言(修复后应绿, 修复前红: 带内行被抬 4~16px): 首开全程 scrollY 与行 rect.bottom 零位移。
+      const dy1 = first.frames.map((f) => f.y - band.y);
+      const db1 = first.frames.map((f) => (f.rowB ?? band.rowB) - band.rowB);
+      expect(Math.max(...dy1.map(Math.abs)),
+        `首开全程 scrollY 位移量(基线 ${band.y}; 序列 ${frameDigest(first.frames)}; scrollBy 登记 ${JSON.stringify(first.sb)})`)
+        .toBe(0);
+      expect(Math.max(...db1.map(Math.abs)),
+        `首开全程行 rect.bottom 位移量(基线 ${band.rowB.toFixed(1)}; scrollBy ${JSON.stringify(first.sb)})`)
+        .toBeLessThanOrEqual(1);
+
+      // 场景2(再开, 用户症状路径): 关 -> 等收场 -> 同一带内行再开。先证收场没挪行位(headroom
+      // 足额无钳制), 再开断言同一套零位移。
+      await page.click('.drawer-dock .drawer-close');
+      await waitDockCollapsed(page);
+      const reopened = await page.evaluate((h) => {
+        const r = document.querySelector(`[data-hash="${h}"]`).getBoundingClientRect();
+        return { y: Math.round(window.scrollY), rowB: r.bottom };
+      }, aligned);
+      expect(Math.abs(reopened.rowB - band.rowB),
+        `收场不得挪动带内行位(行底 ${band.rowB.toFixed(1)} -> ${reopened.rowB.toFixed(1)}; 收场期钳制即此处红)`)
+        .toBeLessThanOrEqual(1);
+      expect(reopened.rowB, `前置: 再开前带判据应仍成立(行底 ${reopened.rowB.toFixed(1)} vs 面板顶 ${panelGeo.top.toFixed(1)})`)
+        .toBeGreaterThan(panelGeo.top - 12 - 1);
+      await installGeoSampler(page, aligned);
+      await page.dblclick(`.torrent-row[data-hash="${aligned}"]`, { force: true, position: { x: 8, y: 8 } });
+      await expect(page.locator('.drawer-dock > .drawer')).toBeVisible({ timeout: 5_000 });
+      await waitDockSettled(page);
+      const second = await stopGeoSampler(page);
+      expect(second.frames.length, '前置: 采样应有足够帧数').toBeGreaterThan(10);
+      const dy2 = second.frames.map((f) => f.y - reopened.y);
+      const db2 = second.frames.map((f) => (f.rowB ?? reopened.rowB) - reopened.rowB);
+      expect(Math.max(...dy2.map(Math.abs)),
+        `再开全程 scrollY 位移量(基线 ${reopened.y}; 序列 ${frameDigest(second.frames)}; scrollBy 登记 ${JSON.stringify(second.sb)})`)
+        .toBe(0);
+      expect(Math.max(...db2.map(Math.abs)),
+        `再开全程行 rect.bottom 位移量(基线 ${reopened.rowB.toFixed(1)}; scrollBy ${JSON.stringify(second.sb)})`)
+        .toBeLessThanOrEqual(1);
+    });
+
+    test(`S-C 反向守卫: 真被覆盖的行(最深+最浅边界探针)仍让位到公式终值 @fast (${skin})`, async ({ page }) => {
+      test.setTimeout(90_000);
+      collectRuntimeErrors(page);
+
+      await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 15_000 });
+      await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
+      await page.click('nav.tabs [data-view="torrents"]');
+      await expect(page.locator('.torrent-row').first()).toBeVisible({ timeout: 15_000 });
+
+      // 双探针(防过紧): 探针1 = 最深被覆盖行(覆盖深达 ~42vh-16px)钉「公式全程 + 无文档底钳制」;
+      // 探针2 = 最浅被覆盖行(行底刚过面板顶 + 补差)直接贴新触发界边界 —— 只探最深行拦不住
+      // 「触发界结构性过紧到中浅覆盖行漏让」(如把面板分支补差误做成 +16, 最深行仍会让位)。
+      // 距文档底 600px(下滚余量足额, 让位 scrollBy 不被文档底钳制 —— 文档底钳制是已修缺陷的
+      // 取证口径, 不混入本判据)。挑最深一个行底越过全开顶缘估算 + 8 且可点(中心在状态栏上缘
+      // 之上)的行 = 真被面板覆盖的行。
+      await page.evaluate(() => {
+        window.scrollTo(0, document.documentElement.scrollHeight - window.innerHeight - 600);
+      });
+      await waitListSettled(page);
+      const covered = await page.evaluate(() => {
+        const sb = document.querySelector('.statusbar');
+        const sbTop = sb ? sb.getBoundingClientRect().top : window.innerHeight;
+        const panelTopEst = sbTop - Math.round(window.innerHeight * 0.42);
+        let best = null;
+        for (const r of document.querySelectorAll('.torrent-row')) {
+          const b = r.getBoundingClientRect();
+          if (b.bottom > panelTopEst + 8 && b.bottom < sbTop - 8 && (!best || b.bottom > best.bottom)) {
+            best = { hash: r.getAttribute('data-hash'), bottom: b.bottom };
+          }
+        }
+        return best;
+      });
+      expect(covered, '前置: 视口内应有真被面板覆盖的行(行底越过全开顶缘 + 8)').toBeTruthy();
+
+      const base = await page.evaluate((h) => {
+        const r = document.querySelector(`[data-hash="${h}"]`).getBoundingClientRect();
+        return { y: Math.round(window.scrollY), rowB: r.bottom };
+      }, covered.hash);
+      await installGeoSampler(page, covered.hash);
+      await page.dblclick(`.torrent-row[data-hash="${covered.hash}"]`, { force: true, position: { x: 8, y: 8 } });
+      await expect(page.locator('.drawer-dock > .drawer')).toBeVisible({ timeout: 5_000 });
+      await waitDockSettled(page);
+      const run = await stopGeoSampler(page);
+      const after = await page.evaluate((h) => {
+        const p = document.querySelector('.drawer-dock > .drawer').getBoundingClientRect();
+        const r = document.querySelector(`[data-hash="${h}"]`).getBoundingClientRect();
+        return { panelTop: p.top, panelH: p.height, rowB: r.bottom, y: Math.round(window.scrollY) };
+      }, covered.hash);
+
+      // 前置: 行底真被覆盖(越过面板顶实值 + 4px 裕量), 且面板到过全高
+      expect(base.rowB, `前置: 行底 ${base.rowB.toFixed(1)} 应真被覆盖(> 面板顶实值 ${after.panelTop.toFixed(1)} + 4)`)
+        .toBeGreaterThan(after.panelTop + 4);
+      const maxDockH = Math.max(...run.frames.filter((f) => f.open).map((f) => f.dockH ?? 0));
+      expect(maxDockH, `前置: 面板应到过全高(实测峰值 ${maxDockH}, 落定 ${Math.round(after.panelH)})`)
+        .toBeGreaterThanOrEqual(Math.round(after.panelH) - 4);
+
+      // 断言(修复前后都必须绿 —— 判据收紧只动触发界, 位移公式不动): 行确实被让位, 且终值落在
+      // 公式落点 vBot - 8 = 面板顶 - 16(呼吸距 8 + 落点裕量 8)。
+      expect(after.rowB - base.rowB,
+        `真覆盖行必须被让位(行底 ${base.rowB.toFixed(1)} -> ${after.rowB.toFixed(1)}; scrollBy ${JSON.stringify(run.sb)})`)
+        .toBeLessThan(0);
+      expect(Math.abs(after.rowB - (after.panelTop - 16)),
+        `让位终值应落在公式落点 vBot - 8 = 面板顶 - 16(实测 ${after.rowB.toFixed(1)} vs ${(after.panelTop - 16).toFixed(1)})`)
+        .toBeLessThanOrEqual(2);
+
+      // ---- 探针2: 最浅被覆盖行, 贴触发界边界 ----
+      // 关面板收场后, 把最深一个未覆盖行精确滚到面板顶 + 3(行底刚过新触发界 —— 面板分支补差
+      // +8 后触发界 = 面板顶实缘, 覆盖 3px)。触发界若结构性过紧 >= 8px, 该行不再让位即当场红;
+      // 正确判据下它必须仍被让位到公式终值(旧口径对真覆盖行无差别让位, 修复前后都绿)。
+      await page.click('.drawer-dock .drawer-close');
+      await waitDockCollapsed(page);
+      const shallowHash = await page.evaluate((pt) => {
+        let best = null;
+        for (const r of document.querySelectorAll('.torrent-row')) {
+          const b = r.getBoundingClientRect();
+          if (b.bottom <= pt && (!best || b.bottom > best.bottom)) {
+            best = { hash: r.getAttribute('data-hash'), bottom: b.bottom };
+          }
+        }
+        if (!best) return null;
+        // 下滚把行往上搬(scrollY 增大 = 内容上移): 行底要从 best.bottom(<= 面板顶)移到
+        // pt + 3(更下方), 滚动量 = 当前 - 目标(负 = 上滚, 行随内容下移进覆盖区)。
+        window.scrollBy(0, Math.round(best.bottom - (pt + 3)));
+        return best.hash;
+      }, after.panelTop);
+      expect(shallowHash, '前置: 收场后视口内应有未覆盖行可作边界探针').toBeTruthy();
+      await waitListSettled(page);
+      const base2 = await page.evaluate((h) => {
+        const r = document.querySelector(`[data-hash="${h}"]`).getBoundingClientRect();
+        return { y: Math.round(window.scrollY), rowB: r.bottom };
+      }, shallowHash);
+      // 前置: 行底确实刚过触发界(面板顶 + 3 对齐, 取整/亚像素余量内; 且覆盖 <= 8px ——
+      // 恰是「补差若误做成 +16 就不再让位」的判别区间)
+      expect(base2.rowB, `前置: 边界探针行底 ${base2.rowB.toFixed(1)} 应刚过面板顶 ${after.panelTop.toFixed(1)}`)
+        .toBeGreaterThan(after.panelTop + 1);
+      expect(base2.rowB, `前置: 边界探针行底 ${base2.rowB.toFixed(1)} 覆盖应 <= 8px(浅覆盖判别区间)`)
+        .toBeLessThanOrEqual(after.panelTop + 8);
+      await installGeoSampler(page, shallowHash);
+      await page.dblclick(`.torrent-row[data-hash="${shallowHash}"]`, { force: true, position: { x: 8, y: 8 } });
+      await expect(page.locator('.drawer-dock > .drawer')).toBeVisible({ timeout: 5_000 });
+      await waitDockSettled(page);
+      const run2 = await stopGeoSampler(page);
+      const after2 = await page.evaluate((h) => {
+        const p = document.querySelector('.drawer-dock > .drawer').getBoundingClientRect();
+        const r = document.querySelector(`[data-hash="${h}"]`).getBoundingClientRect();
+        return { panelTop: p.top, rowB: r.bottom };
+      }, shallowHash);
+      // 前置: 重开后面板几何与探针1一致(高度恒锁), 对齐目标才可信
+      expect(Math.abs(after2.panelTop - after.panelTop), '前置: 重开面板顶应与探针1一致(高度恒锁)')
+        .toBeLessThanOrEqual(1);
+      // 断言(修复前后都必须绿): 浅覆盖行仍被让位到公式终值 —— 触发界边界行为与旧行为无差别
+      expect(after2.rowB - base2.rowB,
+        `边界探针行必须仍被让位(行底 ${base2.rowB.toFixed(1)} -> ${after2.rowB.toFixed(1)}; scrollBy ${JSON.stringify(run2.sb)})`)
+        .toBeLessThan(0);
+      expect(Math.abs(after2.rowB - (after2.panelTop - 16)),
+        `边界探针让位终值应落在公式落点 vBot - 8 = 面板顶 - 16(实测 ${after2.rowB.toFixed(1)} vs ${(after2.panelTop - 16).toFixed(1)})`)
+        .toBeLessThanOrEqual(2);
     });
   });
 }
