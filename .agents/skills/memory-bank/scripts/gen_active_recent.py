@@ -46,6 +46,7 @@ from _common import (  # noqa: E402
     LAST_ACTIVE_RE,
     SLICE_COUNT_LIMIT,
     SLICE_COUNT_TARGET,
+    SLICE_COUNT_TARGET_MIN,
     SLICE_DIR,
     SLICE_FILE_RE,
     STALE_DAYS_VOLATILE,
@@ -117,8 +118,8 @@ def collect(slice_dir: Path, root: Path) -> tuple[list[dict], list[str], list[st
 
     **债务的判据只是"该蒸馏了"**(2026-09-30 债务制, 计划 26-09-30-2112): 单个切片超 cap 与
     切片总数达到 `SLICE_COUNT_LIMIT`, 违反后读起来更贵、但事实源完好 —— 报进 `warns`, 提交不拦,
-    由 `doc.caps` / `kb.active` 现算输出并转告用户, 清理另开会话。提示文案带处置目标
-    `SLICE_COUNT_TARGET`(一次降到该值以内, 免得刚清完又立刻触顶)。旧口径是判红, 实测后果是在会话最贵的时刻
+    由 `doc.caps` / `kb.active` 现算输出并转告用户, 清理另开会话。提示文案带处置目标区间
+    `SLICE_COUNT_TARGET_MIN`~`SLICE_COUNT_TARGET`(一次降到该区间内, 免得刚清完又立刻触顶或清太狠丢近期上下文)。旧口径是判红, 实测后果是在会话最贵的时刻
     (满载历史) 逼出一轮蒸馏返工, 而阈值原就是按 ~5 片/日校准的估计值。
     """
     rows: list[dict] = []
@@ -174,8 +175,8 @@ def collect(slice_dir: Path, root: Path) -> tuple[list[dict], list[str], list[st
     if len(rows) >= SLICE_COUNT_LIMIT:
         warns.append(
             f"切片数 {len(rows)} 条 >= 上限 {SLICE_COUNT_LIMIT} 条 —— **债务**: 只告警, 不拦提交/收尾; "
-            f"处置目标 = 蒸馏到 {SLICE_COUNT_TARGET} 条以内 (一次降到位, 否则刚处理完又立刻超限); "
-            "把 14 天未动的切片蒸馏进任务档案后删除"
+            f"处置目标 = 蒸馏到 {SLICE_COUNT_TARGET_MIN}<=目标<={SLICE_COUNT_TARGET} (一次降到位, 否则刚处理完又立刻超限或清太狠丢近期上下文); "
+            "把 14 天未动的切片蒸馏进任务档案后删除, 不足下限时停止删除"
         )
     return rows, problems, warns
 

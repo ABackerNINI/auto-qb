@@ -25,7 +25,7 @@ warn 而不是 problem —— 守住"降级后的严重度仍然正确", 而不�
 - test_kb_cap_debt_is_discoverable_not_blocking: 造超限文件 → 必须报成 warn(债务) 而不是 problem
 - test_agents_md_cap_is_hard_not_debt: AGENTS.md 超 8,000 仍是 problem(硬规定), 且不出现在债务清单里
 - test_kb_slice_cap_and_count_are_debt_not_blocking: 切片尺寸 / 条数 → warns(债务); 命名 / 三行头仍判红
-- test_kb_slice_count_limit_warns_at_120_and_targets_80: 到 120 只告警(--check rc 0)、119 静默; 文案含上限 120 与处置目标「蒸馏到 80」
+- test_kb_slice_count_limit_warns_at_120_and_targets_band: 到 120 只告警(--check rc 0)、119 静默; 文案含上限 120 与处置目标区间「60<=目标<=80」
 - test_context_caps_hard_and_debt_split: `check_context_caps.py` 的 AGENTS.md 只在 `HARD_CAPS`、不进债务组
 - test_context_caps_files_mode_wiring: `check_context_caps.py` 认 `--files`(闸门收窄方案 D) —— 非帽点传入时空组不打印、rc 0
 - test_check_caps_only_scopes_kb_walk: `check_caps(only=)` 只算传入文件(方案 D) —— 集内报债务、集外不读不报, None=全量不变
@@ -245,8 +245,8 @@ def test_kb_slice_cap_and_count_are_debt_not_blocking(tmp_path: Path, monkeypatc
     assert any("债务" in w for w in warns2), f"基线切片超限必须报成债务: {warns2}"
 
 
-def test_kb_slice_count_limit_warns_at_120_and_targets_80(tmp_path: Path, monkeypatch, capsys) -> None:
-    """120 上限 / 80 处置目标: 到 120 只告警不失败, 低于 120 静默, 文案带可执行落点。
+def test_kb_slice_count_limit_warns_at_120_and_targets_band(tmp_path: Path, monkeypatch, capsys) -> None:
+    """120 上限 / 60~80 处置目标区间: 到 120 只告警不失败, 低于 120 静默, 文案带可执行落点。
 
     真实造 120 个合规切片(而非 monkeypatch 压小阈值), 把「达到即告警」与 `--check` 的退出码
     一起钉住 —— 这两点正是 2026-11-03 改为「只通知、不拦」的验收判据。
@@ -256,8 +256,10 @@ def test_kb_slice_count_limit_warns_at_120_and_targets_80(tmp_path: Path, monkey
     import gen_active_recent
     import _common
 
-    assert (_common.SLICE_COUNT_LIMIT, _common.SLICE_COUNT_TARGET
-           ) == (120, 80), (f"单点常量漂移: {_common.SLICE_COUNT_LIMIT} / {_common.SLICE_COUNT_TARGET}")
+    assert (_common.SLICE_COUNT_LIMIT, _common.SLICE_COUNT_TARGET_MIN, _common.SLICE_COUNT_TARGET) == (120, 60, 80), (
+        f"单点常量漂移: {_common.SLICE_COUNT_LIMIT} / "
+        f"{_common.SLICE_COUNT_TARGET_MIN} / {_common.SLICE_COUNT_TARGET}"
+    )
 
     slice_dir = tmp_path / "memory-bank" / "active-context"
     slice_dir.mkdir(parents=True)
@@ -277,7 +279,7 @@ def test_kb_slice_count_limit_warns_at_120_and_targets_80(tmp_path: Path, monkey
     assert not problems, f"合规切片不该报结构问题: {problems}"
     assert len(warns) == 1, f"到 120 条必须正好一条债务告警: {warns}"
     text = warns[0]
-    assert "120" in text and "上限" in text and "80" in text, f"告警文案缺可执行落点: {text}"
+    assert "120" in text and "上限" in text and "60" in text and "80" in text, f"告警文案缺可执行落点: {text}"
     assert "不拦" in text, f"告警必须明示不拦: {text}"
 
     # 达到上限时 `--check` 仍返回 0 —— 不阻断 kb.check / kb.wrap / 提交
