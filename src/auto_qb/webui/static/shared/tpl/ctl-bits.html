@@ -64,6 +64,8 @@
   <template v-if="open"><slot></slot></template>
 </script>
 <script type="text/x-template" id="tpl-aq-seg">
+  <!-- kbd 键帽(计划 26-11-12-0344 S4): kbdOf 不传恒 falsy => 其余三套分段钮 DOM 零变化;
+       串由调用方经 shortcuts.js 单点现算, 组件不管内容 -->
   <button v-for="it in items" :key="it.v" :class="{ active: it.v === value }"
-          @click="onPick(it.v)">{{ it.label }}</button>
+          @click="onPick(it.v)">{{ it.label }} <kbd v-if="kbdOf && kbdOf(it)" class="aq-kbd">{{ kbdOf(it) }}</kbd></button>
 </script>

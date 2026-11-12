@@ -170,6 +170,36 @@ function kbShortcutDisplay(item, draft) {
   return serial ? kbDisplayName(serial) : "";
 }
 
+/* shortcut id -> 键帽显示串(计划 26-11-12-0344 S3/S4): 顶栏按钮/页签徽标这类**静态挂点**按
+ * id 引用注册表条目(不许在模板里写死「N」「Alt+1」等串, I1), 取数仍走 kbShortcutDisplay
+ * 单点 —— 改绑即时跟随、空串(未绑定/显式禁用)即隐藏由同一条链保证。id 不存在防御性空串。 */
+function kbKeycapById(id, draft) {
+  const table = typeof AQB_SHORTCUT_DEFS === "undefined" ? null : AQB_SHORTCUT_DEFS;
+  const entry = table && Array.isArray(table) ? table.find((it) => it.id === id) || null : null;
+  return kbShortcutDisplay(entry, draft);
+}
+
+/* 详情面板可见页签 -> 键帽显示串(计划 26-11-12-0344 S4): 合并页签态徽标与键盘 run 路径
+ * (shortcuts_engine.js _kbDrawerTab)**同一单点** KB_MERGE_TAB_REMAP —— 表的 key 是注册表五档
+ * run 传入的原页签(亦即条目 id "drawer-tab-<key>" 的后缀), value 是合并态重排落点。
+ * 非合并态: 页签名直映条目 id(drawer-tab-<tab>, 五档含 traffic)。
+ * 合并态: 按 KB_MERGE_TAB_REMAP **反查** —— 扫表(插入序 = Alt+1..5 位次)取第一个落点命中
+ * 本页签代表页集合的档位; 第 4/5 档(落点 null)永不命中 => 合并态不显示(与键盘 run 同表同义),
+ * 可见页签徽标随位次变(流量页签 Alt+5 变 Alt+3)。pages 传该页签代表的页名数组(非合并态单页
+ * 名单元素数组; 合并对传 MERGE_PAIRS 的 tabs, 流量传 ["traffic"])。 */
+function kbDrawerTabKbd(pages, merged, draft) {
+  if (!Array.isArray(pages) || !pages.length) return "";
+  let id = "";
+  if (merged) {
+    for (const k of Object.keys(KB_MERGE_TAB_REMAP)) {
+      if (pages.indexOf(KB_MERGE_TAB_REMAP[k]) >= 0) { id = "drawer-tab-" + k; break; }
+    }
+  } else {
+    id = "drawer-tab-" + pages[0];
+  }
+  return id ? kbKeycapById(id, draft) : "";
+}
+
 /* 默认键位归一化串合法形态: 修饰键按固定序出现至多一次 + 单个 e.code(守阵逐条断言)
  * 与后端 routes/keys.py _KEYS_SERIAL_RE 同一正则, 逐字一致由 tests/webui_static_scan_js.py
  * _scan_keys_serial_re 机械守阵(issue 26-10-11-0310) —— 改一边必须改另一边 */
@@ -450,5 +480,17 @@ window.AQB_KEYS = AQB_KEYS_ADAPTER;
 
 window.AQB_SHORTCUTS = {
   methods: {
+    /* 顶栏等常驻静态按钮的键帽读数(计划 26-11-12-0344 S3): id 引用注册表条目, 串经
+     * kbKeycapById -> kbShortcutDisplay 现算(禁止模板写死键位串, I1)。**方法而非 computed**:
+     * 草稿源是 AQB_KEYS.load() 同步快照(引擎 _kbTable 同口径, 含面板「即时试用」态), 非响应式;
+     * computed 会把首次求值永久缓存(启动拉取服务端真值的窗口期被钉死), 方法随每次重渲染重取。
+     * 改绑即时跟随靠 kbKeysRev 代次(state.js): 适配器每个变更点(_kbReloadKeys/_kbApplyOverrides/
+     * kbSaveKeys/kbDraftRevert, shortcuts_panel.js/shortcuts_engine.js)+1, 本方法渲染期 void
+     * 读该字段注册渲染依赖 => 变更即重渲染重取(抽屉页签 _dtTabKbd 同款)。 */
+    kbKeycapOf(id) {
+      void this.kbKeysRev;  // 键位代次依赖注册(见 state.js kbKeysRev 注); 值恒取适配器快照
+      const draft = window.AQB_KEYS && typeof window.AQB_KEYS.load === "function" ? window.AQB_KEYS.load() : null;
+      return kbKeycapById(id, draft);
+    },
   },
 };

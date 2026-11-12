@@ -150,7 +150,8 @@ async function openTorrentTraffic(page) {
   await page.dblclick('.torrent-row >> nth=0', { force: true });
   const drawer = page.locator('.drawer-dock > .drawer');
   await expect(drawer).toBeVisible({ timeout: 5_000 });
-  await drawer.locator('.drawer-tabs button', { hasText: /^流量$/ }).click();
+  // 页签键帽徽标(计划 26-11-12-0344 S4)追加在按钮文本尾: 页签锚定匹配一律带尾随空格(/^流量 /)
+  await drawer.locator('.drawer-tabs button', { hasText: /^流量 / }).click();
   await expect(drawer.locator('.qb-chart-host canvas')).toBeVisible({ timeout: 15_000 });
   await drawer.locator('.hist-summary .qb-tabs button', { hasText: '30分' }).click();
   await expect.poll(async () => readInst(page, 'vm.qbTorrentWindow'),

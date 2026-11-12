@@ -46,7 +46,8 @@ async function openTorrentDrawer(page) {
 
 /* 打开抽屉 → 切用户页签 → 右键选 stub → 桥点亮; 返回 drawer 与锚 locator */
 async function selectStub(page, drawer) {
-  await drawer.locator('.drawer-tabs button', { hasText: /^用户$/ }).click();
+  // 页签键帽徽标(计划 26-11-12-0344 S4)追加在按钮文本尾: 页签锚定匹配一律带尾随空格(/^用户 /)
+  await drawer.locator('.drawer-tabs button', { hasText: /^用户 / }).click();
   await expect(drawer.locator('.group-row[data-table="drawerPeerV07"]').first()).toBeVisible({ timeout: 10_000 });
   // 2026-10-14: 经典对端表已删, 用户页签默认变体 07 —— 右键必须点**行**(表头 @contextmenu.stop
   // 独占右键, 点 .drawer-body 中心会命中 07 的表头而弹列菜单, 取不到 stub 项)。
@@ -74,7 +75,7 @@ for (const skin of SKINS) {
       await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 15_000 });
       await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
       const drawer = await openTorrentDrawer(page);
-      await drawer.locator('.drawer-tabs button', { hasText: /^用户$/ }).click();
+      await drawer.locator('.drawer-tabs button', { hasText: /^用户 / }).click();
       await expect(drawer.locator('.group-row[data-table="drawerPeerV07"]').first()).toBeVisible({ timeout: 10_000 });
       // 同样点**行**(表头独占右键, 见 selectStub 注)
       await drawer.locator('.group-row[data-table="drawerPeerV07"]').first().click({ button: 'right' });
@@ -122,7 +123,7 @@ for (const skin of SKINS) {
       await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 15_000 });
       await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
       const drawer2 = await openTorrentDrawer(page);
-      await drawer2.locator('.drawer-tabs button', { hasText: /^用户$/ }).click();
+      await drawer2.locator('.drawer-tabs button', { hasText: /^用户 / }).click();
       const anchor2 = drawer2.locator(ANCHOR);
       await expect(anchor2.locator('.group-head[data-table="drawerStubV0"]'),
         '刷新后模板选择回放: 桥自动恢复').toBeVisible({ timeout: 10_000 });
@@ -140,12 +141,12 @@ for (const skin of SKINS) {
       await expect(anchor.locator('.group-head[data-table="drawerStubV0"]')).toBeVisible();
 
       // 切走: peers 宿主卸载(锚清代数) → trackers 变体 04(缺省档)
-      await drawer.locator('.drawer-tabs button', { hasText: /^Tracker$/ }).click();
+      await drawer.locator('.drawer-tabs button', { hasText: /^Tracker / }).click();
       await expect(drawer.locator('.group-row[data-table="drawerTrackerV04"]').first()).toBeVisible({ timeout: 10_000 });
       await expect(drawer.locator(ANCHOR), '切走后锚随宿主卸载').toHaveCount(0);
 
       // 切回: 桥重挂进新锚(新代数) —— 手势仍通(再点排序)
-      await drawer.locator('.drawer-tabs button', { hasText: /^用户$/ }).click();
+      await drawer.locator('.drawer-tabs button', { hasText: /^用户 / }).click();
       const anchor2 = drawer.locator(ANCHOR);
       await expect(anchor2.locator('.group-head[data-table="drawerStubV0"]'), '切回后桥重挂').toBeVisible({ timeout: 10_000 });
       await anchor2.locator('.h-cell.hc-addr').click();
@@ -183,7 +184,7 @@ for (const skin of SKINS) {
       const drawer = await openTorrentDrawer(page);
 
       // 开 tp 合并对: Tracker 页签右键 → 合并页签
-      await drawer.locator('.drawer-tabs button', { hasText: /^Tracker$/ }).click();
+      await drawer.locator('.drawer-tabs button', { hasText: /^Tracker / }).click();
       await expect(drawer.locator('.group-row[data-table="drawerTrackerV04"]').first()).toBeVisible({ timeout: 10_000 });
       await drawer.locator('.drawer-body').click({ button: 'right' });
       await page.locator('.ctx-menu').locator('.ctx-item:has-text("合并页签")').click();

@@ -63,7 +63,8 @@ async function openTorrentDrawer(page) {
 /** 开抽屉 → 用户页签 → 等变体外壳与引擎表体点亮; 返回 drawer */
 async function openPeersVariant(page, variantId) {
   const drawer = await openTorrentDrawer(page);
-  await drawer.locator('.drawer-tabs button', { hasText: /^用户$/ }).click();
+  // 页签键帽徽标(计划 26-11-12-0344 S4)追加在按钮文本尾: 页签锚定匹配一律带尾随空格(/^用户 /)
+  await drawer.locator('.drawer-tabs button', { hasText: /^用户 / }).click();
   await expect(drawer.locator(`.dt${variantId}-wrap`)).toBeVisible({ timeout: 10_000 });
   const anchor = drawer.locator(`[data-dt-table-anchor="drawerPeerV${variantId}"]`);
   await expect(anchor.locator('.group-head[data-table="drawerPeerV' + variantId + '"]').first(),

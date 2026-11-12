@@ -255,6 +255,37 @@ window.AQB_DRAWER = {
       if (p.tabs.indexOf(this.drawer && this.drawer.tab) >= 0) return;
       if (typeof this.drawerTab === "function") this.drawerTab(p.tabs[0]);
     },
+    /* ---------------- 页签键帽徽标(计划 26-11-12-0344 S4) ----------------
+     * 五页签 Alt+1..5 徽标, 串一律 shortcuts.js kbDrawerTabKbd 单点现算(按 shortcut id 引用
+     * 注册表条目, 合并态与键盘 run 同表 KB_MERGE_TAB_REMAP, 模板零手抄键位串, I1)。
+     * 形态: 模板经 <aq-seg> 的 :kbd-of 回调逐项取(方法而非把串烘进 dtTabItems/dtMergeTabList
+     * computed —— 清单 computed 无响应式依赖会缓存一次永不重估, 键帽串跟着钉死; 方法随每次
+     * 渲染重取)。草稿源 = AQB_KEYS.load() 同步快照(引擎 _kbTable 同口径)非响应式 —— 改绑
+     * 即时跟随靠 kbKeysRev 代次(state.js): 适配器每个变更点(_kbReloadKeys/_kbApplyOverrides/
+     * kbSaveKeys/kbDraftRevert)+1, 本方法渲染期 void 读该字段注册渲染依赖 => 变更即重渲染
+     * 重取(顶栏 kbKeycapOf 同款)。沙箱(node 电池不 eval shortcuts.js)与适配器缺位时回空串
+     * 不渲染 —— 键帽渲染面由 test_webui_kbd_keycap node 电池守。 */
+    _dtTabKbd(pages, merged) {
+      void this.kbKeysRev;  // 键位代次依赖注册(见 state.js kbKeysRev 注); 值恒取适配器快照
+      if (typeof kbDrawerTabKbd !== "function") return "";
+      const draft = window.AQB_KEYS && typeof window.AQB_KEYS.load === "function" ? window.AQB_KEYS.load() : null;
+      return kbDrawerTabKbd(pages, merged, draft);
+    },
+    /* 非合并态四页签(it.v = 页签名 general/trackers/peers/content) -> 各自档位 Alt+1..4 */
+    dtTabKbdOf(it) {
+      return it ? this._dtTabKbd([it.v], false) : "";
+    },
+    /* 合并态两张对页签(it.v = 对 id gc/tp) -> 反查 KB_MERGE_TAB_REMAP 命中对内页面的档位
+     * (gc = Alt+1 / tp = Alt+2); 流量页签第三张(Alt+3)见 dtTrafficKbd */
+    dtMergeTabKbdOf(it) {
+      const p = it && window.AQB_DRAWER_MERGE ? window.AQB_DRAWER_MERGE.PAIRS.find((x) => x.id === it.v) : null;
+      return this._dtTabKbd(p ? p.tabs : [], true);
+    },
+    /* 流量页签按钮徽标: 非合并 Alt+5(drawer-tab-traffic)/ 合并态重排成第 3 档(drawer-tab-peers,
+     * Alt+3)—— merged 判据与键盘侧同一 computed dtMergeTabsOn(_kbMergeTabsOn 只是其透传) */
+    dtTrafficKbd() {
+      return this._dtTabKbd(["traffic"], this.dtMergeTabsOn);
+    },
     /* ---------------- 模板选择层(W7 归位 drawer_templates.js, 见其 mixin) ----------------
      * _dtCurTab/dtHostOn/dtMenuPick/dtPersistSel 已随选择层回原家; 本文件零残留(双份定义会被
      * mixin 静默覆盖, 守阵 _scan_mixin_wiring/成员重名钉会红)。 */

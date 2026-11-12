@@ -829,6 +829,7 @@ Object.assign(window.AQB_SHORTCUTS.methods, {
     async _kbReloadKeys(quiet = false) {
       const ok = await window.AQB_KEYS.reload(this.token);
       this._kbTableCache = null;
+      this.kbKeysRev++;  // 键帽面重渲染通知(计划 26-11-12-0344 S3/S4, state.js kbKeysRev)
       if (!ok && !quiet) this.toast("快捷键配置加载失败, 已用默认键位", "warn");
       return ok;
     },

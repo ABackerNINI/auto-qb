@@ -48,7 +48,8 @@ async function openTrackerTab(page) {
   await page.dblclick('.torrent-row >> nth=0', { force: true });
   const drawer = page.locator('.drawer-dock > .drawer');
   await expect(drawer).toBeVisible({ timeout: 5_000 });
-  await drawer.locator('.drawer-tabs button', { hasText: /^Tracker$/ }).click();
+  // 页签键帽徽标(计划 26-11-12-0344 S4)追加在按钮文本尾: 页签锚定匹配一律带尾随空格(/^Tracker /)
+  await drawer.locator('.drawer-tabs button', { hasText: /^Tracker / }).click();
   return drawer;
 }
 

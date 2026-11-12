@@ -143,6 +143,7 @@ Object.assign(window.AQB_SHORTCUTS.methods, {
       };
       window.AQB_KEYS.apply(JSON.parse(JSON.stringify(this.kbDraft)));  // 即时试用(引擎可见)
       this._kbTableCache = null;
+      this.kbKeysRev++;  // 键帽面重渲染通知(计划 26-11-12-0344 S3/S4: 顶栏/页签徽标即时跟随试用稿)
     },
     /* 落一条键位: 回到模板默认即删掉 override(草稿最小化, 重置语义与之合一);
      * danger 条目绑裸键提示但允许(§08 v4: 确认框兜底)。 */
@@ -246,6 +247,7 @@ Object.assign(window.AQB_SHORTCUTS.methods, {
       this.kbSaved = JSON.parse(JSON.stringify(doc));
       window.AQB_KEYS.apply(JSON.parse(JSON.stringify(doc)));
       this._kbTableCache = null;
+      this.kbKeysRev++;  // 键帽面重渲染通知(计划 26-11-12-0344 S3/S4)
       this.toast("快捷键已保存: 其它浏览器/标签刷新后生效", "ok", 3500);
     },
     kbDraftRevert() {
@@ -255,6 +257,7 @@ Object.assign(window.AQB_SHORTCUTS.methods, {
       this.kbDraft = JSON.parse(JSON.stringify(base));
       window.AQB_KEYS.apply(JSON.parse(JSON.stringify(base)));  // 回滚到最近保存的服务端真值
       this._kbTableCache = null;
+      this.kbKeysRev++;  // 键帽面重渲染通知(计划 26-11-12-0344 S3/S4)
     },
     /* 键位显示名(物理 code -> 人类键名, §3.3): 录制/面板/帮助浮层共用 */
     kbDisplayName(serial) {

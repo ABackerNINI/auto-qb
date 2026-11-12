@@ -47,12 +47,18 @@
                  判据); 高亮 = 该对即当前页签所属对(mt.id === dtPair, 与列组同源)。
                  26-10-20-2231: 两态都改 <aq-seg> —— 非合并态那四个按钮此前是 DT_TAB_LABELS 的
                  第二份拷贝(dtTabItems 已投影), 高亮判据统一为 `value === v`。 -->
+            <!-- 页签键帽徽标(计划 26-11-12-0344 S4): :kbd-of 逐项回调取串(箭头函数保证每次
+                 父渲染都换新函数引用 => 子组件跟着重渲染重取), 串走 shortcuts.js kbDrawerTabKbd
+                 单点(非合并 Alt+1..4 / 合并态与键盘 run 同表 KB_MERGE_TAB_REMAP 随位次重排,
+                 模板零手抄键位串, I1); .aq-kbd 形状在共享 CSS(I3 令牌) -->
             <aq-seg v-if="dtMergeTabsOn" :items="dtMergeTabList" :value="dtPair"
-                    :on-pick="dtMergeTabPick"></aq-seg>
-            <aq-seg v-else :items="dtTabItems" :value="drawer.tab" :on-pick="drawerTab"></aq-seg>
+                    :on-pick="dtMergeTabPick" :kbd-of="(it) => dtMergeTabKbdOf(it)"></aq-seg>
+            <aq-seg v-else :items="dtTabItems" :value="drawer.tab" :on-pick="drawerTab"
+                    :kbd-of="(it) => dtTabKbdOf(it)"></aq-seg>
             <!-- qB 口径流量图 · 单种挂点(S5b, plan 26-10-03-0946 §07 表2): enabled=false 时
-                 页签不渲染(v-if=qbTrafficOn, fail-closed 门) = 无进入路径即无请求(P5 验收) -->
-            <button v-if="qbTrafficOn" :class="{ active: drawer.tab === 'traffic' }" @click="drawerTab('traffic')">流量</button>
+                 页签不渲染(v-if=qbTrafficOn, fail-closed 门) = 无进入路径即无请求(P5 验收);
+                 徽标(S4): 非合并 Alt+5 / 合并态随 KB_MERGE_TAB_REMAP 位次重排成 Alt+3 -->
+            <button v-if="qbTrafficOn" :class="{ active: drawer.tab === 'traffic' }" @click="drawerTab('traffic')">流量 <kbd v-if="dtTrafficKbd()" class="aq-kbd">{{ dtTrafficKbd() }}</kbd></button>
           </nav>
           <!-- 2026-10-10 模板选择迁右键(用户动议「在对应的区域弹右键」; 选择按页签记忆
                autoqb.ui.drawerTpl, 见 drawer_templates.js 选择层): 原头部 .dt-select 下拉退役 ——

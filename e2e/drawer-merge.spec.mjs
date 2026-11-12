@@ -3,6 +3,7 @@ import { expect, test } from '@playwright/test';
 import { baseUrl, SKINS } from './harness.mjs';
 import { collectRuntimeErrors, installRuntimeErrorGuard } from './lib/errors.mjs';
 import { expectNoDeadClass } from './lib/dt-dead-class.mjs';
+import { INST } from './lib/vm.mjs';
 
 /**
  * 抽屉页签合并(R2 计划 26-10-09-2219 · R3 修订) —— 单开关 / 合并页签 / 双列布局 / 宽度门:
@@ -16,6 +17,8 @@ import { expectNoDeadClass } from './lib/dt-dead-class.mjs';
  *      两列各自选择互不影响。
  *   5. 2026-10-10 用户报「合并后右侧空白右键弹左列模板」回归: 右列(内容)通常短于左列, 其下方
  *      空白格区/列间隙不落在任何 .dt-col 元素上 —— 右键仍须归右列(不得回落当前/左列)。
+ *   6. 计划 26-11-12-0344 S4 页签键帽徽标: 五页签 Alt+1..5 常驻键帽; 合并态与键盘 run 同表
+ *      KB_MERGE_TAB_REMAP 位次重排(流量 Alt+5 -> Alt+3, 第 4/5 档停用), 开/关两态 + 改绑跟随。
  * 断言口径: 真实手势(右键 click button:'right'), 不借道 vm。
  *
  * !2026-10-14(「移除四内容页签经典 UI」)后口径简化: 四内容页签**只有变体一档**(经典渲染链已删),
@@ -64,7 +67,8 @@ for (const skin of SKINS) {
       await settleDrawerAnim(drawer); // 旧 300ms 睡等: 抽屉入场过渡(200ms)跑完的显式化
 
       // 默认四页签(合并关闭): Tracker 单页签在
-      await expect(drawer.locator('.drawer-tabs button', { hasText: /^Tracker$/ })).toBeVisible();
+      // 页签键帽徽标(计划 26-11-12-0344 S4)追加在按钮文本尾: 页签锚定匹配一律带尾随空格(/^Tracker /)
+      await expect(drawer.locator('.drawer-tabs button', { hasText: /^Tracker / })).toBeVisible();
 
       // 开启合并: 右键 → 单开关「合并页签」(门内可点)
       await drawer.locator('.drawer-body').click({ button: 'right' });
@@ -77,7 +81,7 @@ for (const skin of SKINS) {
       // 页签栏收敛为两合并页签(四页签隐去)
       await expect(drawer.locator('.drawer-tabs button', { hasText: '常规&内容' })).toBeVisible();
       await expect(drawer.locator('.drawer-tabs button', { hasText: 'Tracker&用户' })).toBeVisible();
-      await expect(drawer.locator('.drawer-tabs button', { hasText: /^Tracker$/ })).toHaveCount(0);
+      await expect(drawer.locator('.drawer-tabs button', { hasText: /^Tracker / })).toHaveCount(0);
 
       // gc 双列: 列头 常规/内容; 两列正文都渲染出来(2026-10-14 起两列**同为变体宿主**, 缺省档 =
       // 各页签首个变体: 常规 01 / 内容 10)
@@ -113,7 +117,7 @@ for (const skin of SKINS) {
       await expect(menu.locator(MERGE_ITEM).locator('.ctx-tick')).toHaveCount(1);
       await menu.locator(MERGE_ITEM).click();
       await expect(split).toHaveCount(0);
-      await expect(drawer.locator('.drawer-tabs button', { hasText: /^Tracker$/ })).toBeVisible();
+      await expect(drawer.locator('.drawer-tabs button', { hasText: /^Tracker / })).toBeVisible();
       await expect(drawer.locator('.drawer-tabs button', { hasText: 'Tracker&用户' })).toHaveCount(0);
     });
 
@@ -136,7 +140,7 @@ for (const skin of SKINS) {
       await expect(menu).toBeVisible();
       await expect(drawer.locator('.drawer-split')).toHaveCount(0);
       await expect(drawer.locator('.drawer-tabs button', { hasText: '常规&内容' })).toHaveCount(0);
-      await expect(drawer.locator('.drawer-tabs button', { hasText: /^Tracker$/ })).toBeVisible();
+      await expect(drawer.locator('.drawer-tabs button', { hasText: /^Tracker / })).toBeVisible();
       // 单栏正文不受扰动(缺省变体 01 的正文仍在; 单栏下只有当前页签渲染正文)
       await expect(drawer.locator('.drawer-body .dt-host[data-dt-host="general"]')).not.toBeEmpty();
     });
@@ -159,7 +163,7 @@ for (const skin of SKINS) {
       const split = drawer.locator('.drawer-split');
       await expect(split).toHaveCount(0);
       await expect(drawer.locator('.drawer-tabs button', { hasText: '常规&内容' })).toHaveCount(0);
-      await expect(drawer.locator('.drawer-tabs button', { hasText: /^Tracker$/ })).toBeVisible();
+      await expect(drawer.locator('.drawer-tabs button', { hasText: /^Tracker / })).toBeVisible();
 
       // 拉宽过门: 双列自动恢复(列组 = gc, 初值常规页); 第二列(内容)数据补给到位(行渲染出来)
       await page.setViewportSize(WIDE);
@@ -173,7 +177,7 @@ for (const skin of SKINS) {
       // 缩回门外: 双列回落单栏, 四页签回来; 再拉宽直接恢复(标志仍在, 不需重新开合并)
       await page.setViewportSize(NARROW);
       await expect(split).toHaveCount(0);
-      await expect(drawer.locator('.drawer-tabs button', { hasText: /^Tracker$/ })).toBeVisible();
+      await expect(drawer.locator('.drawer-tabs button', { hasText: /^Tracker / })).toBeVisible();
       await page.setViewportSize(WIDE);
       await expect(split, '再拉宽必须直接恢复(门只遮蔽, 不撤销用户的合并意图)').toBeVisible({ timeout: 5_000 });
     });
@@ -203,6 +207,73 @@ for (const skin of SKINS) {
       await expect(split, 'Alt+1 必须切回 常规&内容 对').toHaveAttribute('data-merge', 'gc', { timeout: 5_000 });
       await page.keyboard.press('Alt+Digit4');
       await expect(split, 'Alt+4 合并态停用, 双列不得切换').toHaveAttribute('data-merge', 'gc', { timeout: 5_000 });
+    });
+
+    test(`页签键帽徽标: 非合并 Alt+1..5 / 合并态位次重排 + 改绑跟随 @fast (${skin})`, async ({ page }) => {
+      /* 计划 26-11-12-0344 S4: 五页签 Alt+1..5 常驻键帽(串走 shortcuts.js kbDrawerTabKbd 单点,
+       * 模板零手抄)。合并态徽标与键盘 run 同表 KB_MERGE_TAB_REMAP —— 可见页签徽标随位次变
+       * (流量 Alt+5 -> Alt+3), 第 4/5 档(remap null)合并态不显示。断言面 = 两态真实键帽文本
+       * (不借道 vm) + 改绑即时跟随(AQB_KEYS.apply 试用稿单点, e2e menus 菜单键帽同范式)。
+       * 流量页签受 qbTrafficOn 门控(v-if fail-closed) —— route mock /api/webui/flags 开门
+       * (ctx-custom 同款), 否则第五页签不渲染, Alt+5 徽标无从断言。 */
+      collectRuntimeErrors(page);
+      await page.route('**/api/webui/flags', async (route) => {
+        const json = await (await route.fetch()).json();
+        return route.fulfill({ json: { ...json, qb_traffic_enabled: true } });
+      });
+      await page.setViewportSize(WIDE);
+      await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 15_000 });
+      await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
+      const drawer = await openTorrentDrawer(page);
+      await settleDrawerAnim(drawer);
+      const menu = page.locator('.ctx-menu');
+      const tabKbd = (re) => drawer.locator('.drawer-tabs button', { hasText: re }).locator('.aq-kbd');
+      const toggleMerge = async () => {
+        /* 右键页签栏(与正文同绑 openDrawerMenu, 不被变体表头覆盖), 点完等菜单离场 */
+        await drawer.locator('.drawer-tabs').click({ button: 'right' });
+        await expect(menu).toHaveCount(1);
+        await menu.locator(MERGE_ITEM).click();
+        await expect(menu).toHaveCount(0, { timeout: 5_000 });
+      };
+
+      // ---- 非合并态: 四页签 + 流量页签, 徽标 = 注册表五档原样(Alt+1..5, 现算显示串)
+      await expect(drawer.locator('.drawer-tabs button')).toHaveCount(5, { timeout: 5_000 });
+      await expect(tabKbd(/^常规 /), '非合并常规页签徽标 Alt+1').toHaveText('Alt + 1');
+      await expect(tabKbd(/^Tracker /), '非合并 Tracker 页签徽标 Alt+2').toHaveText('Alt + 2');
+      await expect(tabKbd(/^用户 /), '非合并用户页签徽标 Alt+3').toHaveText('Alt + 3');
+      await expect(tabKbd(/^内容 /), '非合并内容页签徽标 Alt+4').toHaveText('Alt + 4');
+      await expect(tabKbd(/^流量 /), '非合并流量页签徽标 Alt+5').toHaveText('Alt + 5');
+
+      // ---- 开合并: 三张可见页签, 徽标随 KB_MERGE_TAB_REMAP 位次重排(与键盘 run 同表)
+      await toggleMerge();
+      await expect(drawer.locator('.drawer-tabs button')).toHaveCount(3, { timeout: 5_000 });
+      await expect(tabKbd(/常规&内容/), '合并态常规&内容徽标 = 第 1 档').toHaveText('Alt + 1');
+      await expect(tabKbd(/Tracker&用户/), '合并态 Tracker&用户徽标 = 第 2 档').toHaveText('Alt + 2');
+      await expect(tabKbd(/^流量 /), '合并态流量页签徽标随位次变 Alt+5 -> Alt+3').toHaveText('Alt + 3');
+
+      // ---- 改绑即时跟随: 走产品路径 = 面板「即时试用」单点 _kbApplyOverrides(vm 注入, e2e D4
+      // 允许的桩态注入类; 它写 AQB_KEYS 适配器 + kbKeysRev 代次 +1 => 常驻键帽面重渲染重取)。
+      // 不能只裸调 AQB_KEYS.apply: 适配器快照非响应式, 抽屉是常驻 DOM 不像右键菜单逐次开层重渲,
+      // 不经变更点(面板单点/重载)就不会重渲染 —— 产品改绑必经面板单点, 借道它才是真契约。
+      // 合并态流量徽标读的是第 3 档(drawer-tab-peers, peers->traffic 重排), 改绑它流量徽标
+      // 即时变(读草稿非模板基准)。
+      await page.evaluate(`(() => {
+        const vm = ${INST};
+        vm && vm._kbApplyOverrides && vm._kbApplyOverrides({ 'drawer-tab-peers': 'KeyZ' });
+      })()`);
+      await expect(tabKbd(/^流量 /), '改绑第 3 档后合并态流量徽标即时跟随(读草稿, I1)').toHaveText('Z');
+      await page.evaluate(`(() => {
+        const vm = ${INST};
+        vm && vm._kbApplyOverrides && vm._kbApplyOverrides({});  // 收口: 清空试用稿(内存态防串台)
+      })()`);
+      await expect(tabKbd(/^流量 /), '回滚后徽标复位 Alt+3').toHaveText('Alt + 3');
+
+      // ---- 关合并: 四页签回来, 徽标回落五档原样(位次重排只作用合并态)
+      await toggleMerge();
+      await expect(drawer.locator('.drawer-tabs button')).toHaveCount(5, { timeout: 5_000 });
+      await expect(tabKbd(/^流量 /), '关合并后流量页签徽标回落 Alt+5').toHaveText('Alt + 5');
+      await expect(tabKbd(/^内容 /), '关合并后内容页签徽标 Alt+4 恢复').toHaveText('Alt + 4');
     });
 
     test(`合并态切换: 桥变体列换代不得抛错且内容不丢 @fast (${skin})`, async ({ page }) => {

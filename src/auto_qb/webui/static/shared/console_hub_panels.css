@@ -361,7 +361,10 @@
 
 /* ---- B · 详情抽屉 · 页签(.drawer-tabs) ----
  * 激活态(.drawer-tabs button.active)**不在本文件**: atlas/console 取 --accent / --accent,
- * prism 取 --accent-hi / --accent-line(棱镜激活页签文字更亮) —— 视觉差异是事实, 留皮肤内。 */
+ * prism 取 --accent-hi / --accent-line(棱镜激活页签文字更亮) —— 视觉差异是事实, 留皮肤内。
+ * 键帽徽标(计划 26-11-12-0344 S4)的版式规则在文件尾段(紧随 .aq-kbd 基形之后 —— 不得上移:
+ * 守阵 test_aq_kbd_css_four_skin_isomorphic 以「首个 .aq-kbd 规则块即共享基形」定位, 注释里
+ * 也不得再现带花括号的该选择器 —— 花括号配平守阵按行扫, 注释内花括号一样计数)。 */
 .drawer-tabs { display: flex; gap: 2px; }
 .drawer-tabs button { padding: 0 12px; border: 0; background: transparent; color: var(--fg-muted);
   cursor: pointer; font-size: 13px; border-bottom: 2px solid transparent; }
@@ -554,6 +557,15 @@
  * 不受影响。 */
 .ctx-item .ctx-text { flex: 1 1 auto; min-width: 0; }
 .ctx-item .aq-kbd { flex: none; }
+
+/* ---- 抽屉页签键帽徽标版式(计划 26-11-12-0344 S4) ----
+ * 页签按钮(.drawer-tabs button)是普通内联流(非 flex), 键帽沿 baseline 挂自带 2px 底边会探向
+ * 页签自己的下划线 border-bottom —— 居中对齐; 按钮文本与 kbd 之间模板留了一个空格, 此处再补
+ * 3px 左距凑成 ~7px 视觉间隙。只动版式不引令牌(I3); 无徽标(空串不渲染 kbd)时零占位。
+ * !本规则必须留在 .aq-kbd 基形(上方)之后: 守阵 test_aq_kbd_css_four_skin_isomorphic 以
+ * 「文件里首个 .aq-kbd 规则块即共享基形」定位 —— 任何更早出现的该选择器(含注释, 花括号
+ * 配平守阵按行计数不认注释)都会让它错位, 故注释里写「规则块」不带花括号。 */
+.drawer-tabs button .aq-kbd { vertical-align: middle; margin-left: 3px; }
 
 /* ---- 置灰行键帽随行(计划 26-11-12-0344 S2 增量, 用户拍板) ----
  * dyn gate 置灰(ctx_menu.js ctxRenderItem 的 reannounceMenuGate 不满足 -> item.gated)时,

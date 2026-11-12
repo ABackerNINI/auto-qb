@@ -75,15 +75,18 @@ window.AQ_FOLD_COMPONENT = {
 /* 分段单选钮 <aq-seg>: 四套分段钮(hist-tabs / qb-tabs / qb-seg / drawer-tabs)的收敛形态(R23-B-17)。
  * items = [{ v, label }] —— 清单改由调用方各自的领域单点提供(历史粒度 / 窗口档位 / 纵轴三态 /
  * 抽屉页签), 组件只管「按钮长什么样、哪个 active、点了回调谁」。
+ * kbdOf(可选, 计划 26-11-12-0344 S4): (it) => 键帽显示串, 空串不渲染键帽 —— 只有抽屉页签传
+ * (徽标串走 shortcuts.js kbDrawerTabKbd 单点, I1 不手抄); 其余三套不传, DOM 零变化。
  * !容器不在组件里: 容器类名是 CSS 选择器的一部分(见模板分片头注), 且四套的 DOM 位置差异很大
  *  (nav[role=tablist] / .hist-tabs / 嵌在 .qb-tools 里的 .qb-seg) —— 硬要由组件吐容器, 父组件的
- *  结构守阵(如 <aq-qb-ctl> 恰两根)就得跟着下沉。 */
+ * 结构守阵(如 <aq-qb-ctl> 恰两根)就得跟着下沉。 */
 window.AQ_SEG_COMPONENT = {
   name: "aq-seg",
   props: {
     items: { type: Array, default: () => [] },     // [{ v, label }]
     value: { type: [String, Number], default: "" },// 当前选中项的 v
     onPick: { type: Function, required: true },    // (v) => void
+    kbdOf: { type: Function, default: null },      // (it) => 键帽显示串(可选; S4 页签徽标)
   },
   template: "#tpl-aq-seg",
 };
