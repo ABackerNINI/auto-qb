@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>WEBUI 抽屉跨周期让位误补偿与下降抖动修复计划</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="webui-drawer-reopen-reveal">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-12-1048">
+<meta name="doc-updated" content="26-11-12-1126">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-12-webui-drawer-reopen-reveal.md">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: webui-drawer-reopen-reveal</div>
+<h1>WEBUI 抽屉跨周期让位误补偿与下降抖动修复计划</h1>
+<p class="lede">本篇只回答：在不改动「最小滚动 / 非对称 / 可见下界单点」这套原设计的前提下，怎么修掉抽屉「开 → 关 → 再开」后本不该让位的选中行仍被抬起，以及收起动画期的可见抖动。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-12-1048 · <b>doc-updated</b> 26-11-12-1126 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 用户 2026-11-12 报障 → grilling 两轮 12 问拍板（Q1–Q12，Q3/Q4 由用户修正并以设计文档为准）→ 只读代码与设计文档取证；取证基线 HEAD <code>59113c69</code>
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<p><b>做到什么算成</b>：用户复现路径的第二步（关闭后再选中「附近不会被覆盖的种子」并打开抽屉）中，<code>window.scrollY</code> 与选中行 <code>rect.bottom</code> 全程零位移；收起动画 160ms 内背景列表不出现逐帧来回位移。两个症状都归零，且既有让位语义、判据、位移公式、三发挂点、下界单点<b>一字不改</b>。</p>
+<p><b>复现路径（用户原话）</b>：先在种子列表最下方选中一个种子 → 触发抽屉上升（种子跟着上升，正常）→ 关闭抽屉 → 选中附近不会被覆盖的种子 → 再触发抽屉（此时种子仍上升，<span class="bad">不正常</span>）；另外下降过程中有不正常抖动。</p>
+<p><b>硬约束</b>：用户 2026-11-12 指令「机制尽量尊重原设计」。下面不变量全部来自明文，不来自推测。</p>
+
+<h3>原设计取证（明文出处）</h3>
+<table>
+  <tr><th>不变量</th><th>原文要点</th><th>出处</th></tr>
+  <tr><td>最小滚动 / block:nearest</td><td>「行可见则不动（<code>rect</code> 差值只补出界部分）」；「被点的行本来就在视口内，最小滚动语义下 no-op」；「行在视野内不动」</td><td><code>reports/26-09-30-1806-report-webui-keymouse-cohesion.html</code> §03 L177、§07 L274；<code>pitfalls/web-ui/hover-keynav-fight.md:11</code></td></tr>
+  <tr><td>判据与位移</td><td>「目标行下缘低于 <code>_kbViewBottom() - 4</code> 才 scrollBy，本来可见不动」；位移 = 出界部分 + <b>8px 呼吸距</b>（面板顶缘 − 8px）</td><td><code>pitfalls/web-ui/dock-panel.md:50-51</code>；<code>testing/baselines/attachments/26-10-03-1335-webui-drawer-redesign-w4-done.md:7</code></td></tr>
+  <tr><td>不动优先</td><td>「滚动位置宁可不动也不猜（P1-2 退避口径）」；「只在被点行被盖时 scrollBy，不抢滚轮」</td><td><code>dock-panel.md:51,71</code></td></tr>
+  <tr><td>下界单点</td><td><code>_kbViewBottom()</code> 只出视口坐标；「凡『元素是否在视口内』判定一律走这个单点，不许现写 <code>innerHeight</code>」</td><td><code>dock-panel.md:13-15</code>；<code>pitfalls/web-ui/scroll-visible-band.md:16-19</code></td></tr>
+  <tr><td>三发让位各治一层</td><td>①追赶循环逐帧重登记落定顶缘（修量测）②集合到手在 <code>_drawerDone</code> 兑现挂单（修中途长高）③<code>drawerAfterEnterHook</code> 槽位落定补发（修文档底钳制）；全走 <code>_kbRevealRow</code> 单点</td><td><code>dock-panel.md:71-78</code></td></tr>
+  <tr><td>非对称 / 钳制属预期</td><td>「下滚余量是停靠槽位长高才创造的」；「真浏览器逐帧取证：scrollY 全程一字不动」；「中间行不扰滚动(scrollY 不变)」；「top 恒定但背景列表跳 = 滚动钳制（结果确实变短，属预期）」</td><td><code>dock-panel.md:64-66,118</code>；<code>testing/baselines/attachments/26-10-04-0951-webui-drawer-reveal-regression.md:17</code></td></tr>
+  <tr><td><code>_drawerAnimTop</code> 是瞬态量</td><td>「动画期几何登记 <code>_drawerAnimTop</code> …行让位量测不读中间插值」</td><td><code>tasks/26-10-03-webui-drawer-redesign.md:65</code></td></tr>
+  <tr><td>几何不变式</td><td>「停靠面板占文档流，高度变化传导给列表 —— 任何『会改高度的内容更新』先问要不要动几何」；「能撑住的就撑住」</td><td><code>plans/26-10-11-2106-plan-webui-drawer-refactor.html</code> §06 L415；<code>pitfalls/web-ui/attachments/drawer-switch-flicker-migrated-26-10-31-1155.md:16-17</code></td></tr>
+</table>
+<p class="aside">全库<b>无任何明文</b>支持「把选中行顶到面板上沿」。上一轮 grilling 的 Q3 表述与「不多不少」均不准确，本计划按上表口径修正（D3）。</p>
+
+<h3>口径差异如实注明（D4 / D10）</h3>
+<ul>
+  <li>「非对称还原」「不做对称还原」「不主动复位 <code>scrollY</code>」「除非是列表最后几个种子，抽屉下降时列表保持不动」——<b>全库未找到逐字明文</b>；可定位到的最接近表述是「中间行不扰滚动(scrollY 不变)」「几何也不动」「先问要不要动几何，能撑住的就撑住」，以及代码事实：让位仅在打开路径调用、无成对 close 复位。故按<b>本次新拍板</b>记录，不冒充历史设计。</li>
+  <li>档案里「文档变矮 → 滚动钳制」记作「<b>钳回 0 / 整页跳顶</b>」（列表被筛空、文档塌到视口高时，<code>pitfalls/web-ui/search-pending-collapse.md:27</code>、<code>tasks/26-10-07-webui-drawer-search-jump.md:17</code>），与用户「只影响文档底部」措辞不同。二者不是同一现象，实施轮回写时不得混成一条。</li>
+  <li>对照分界：<code>pitfalls/web-ui/frame-swap-scroll-reset.md:13</code> 的 <code>H.withScroll</code> 成对恢复是<b>抽屉内部表格体</b>滚动容器，与主列表文档滚动两套口径，不能据它推出主列表也该对称还原。</li>
+</ul>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+<p>取证基线 <code>HEAD 59113c69</code>（会话开工同步值），全部为只读静态阅读结论，<b>未在真机/浏览器复现</b>。</p>
+<table>
+  <tr><th>面</th><th>代码事实</th></tr>
+  <tr><td>组件</td><td>抽屉不是浮层，是 app 级 <code>position: sticky</code> 吸底停靠面板 <code>shared/tpl/dock.html:10</code>；<code>&lt;transition :duration="220"&gt;</code> 四钩子 <code>shared/tpl/drawer.html:16-19</code>；可见性单点 <code>shared/drawer.js:87-91</code></td></tr>
+  <tr><td>开合动画</td><td>JS rAF 对 <code>.drawer-dock</code> 的 height / marginTop 插值，非纯 CSS：enter <code>shared/drawer_general.js:251-292</code>、leave <code>:302-338</code>、stop <code>:239-250</code>；<code>_drawerFinalTop</code> <code>:236-237</code></td></tr>
+  <tr><td>让位单点</td><td><code>shortcuts_engine.js:331-345</code> <code>_kbRevealRow</code>：判据 <code>rect.bottom &gt; vBot - 4</code> → <code>window.scrollBy(0, rect.bottom - vBot + 8)</code>；下界 <code>_kbViewBottom()</code> <code>:228-259</code>，动画期优先读登记值 <code>_drawerAnimTop - 8</code>（<code>:249-250</code>）</td></tr>
+  <tr><td>三发挂点</td><td><code>drawer_general.js:69</code>（开场）、<code>:300</code>（after-enter）、<code>drawer_store.js:398</code>（集合落定兑现挂单）</td></tr>
+</table>
+
+<h3>W1 根因：动画期瞬态登记量泄漏成跨周期状态</h3>
+<ul>
+  <li><code>closeDrawer()</code>（<code>drawer_general.js:79-102</code>）<b>不清</b> <code>_drawerAnimTop</code>，反在 <code>:88</code> 写入落定顶缘；清零只挂 <code>drawerAfterLeaveHook :339-350</code>，而它带 <code>if (this.drawer.open) return;</code>（<code>:340</code>）——收场被快速重开打断时<b>跳过清零</b>。</li>
+  <li><code>drawerEnterHook</code> 的 reduced-motion / 无 dock 早退（<code>:255</code>）在登记赋值前 return，<b>不清</b>旧值；<code>h0=0</code> 早退（<code>:263</code>）的前一行 <code>:262</code> 已写 <code>_drawerAnimTop = h0 ? _drawerFinalTop(dock) : 0</code>，该分支<b>已清零、不需补清场</b>（评审更正）；<code>_kbViewBottom :249-250</code> 在面板仍于 DOM 时直接返回旧登记值且<b>不清零</b>。</li>
+  <li><code>_drawerSwitchEnd()</code>（<code>drawer_store.js:417-422</code>）只清 <code>_drawerWait</code> / <code>_drawerSoftSwitch</code> / <code>_busyArmTimer</code> / <code>drawer.switching</code>，不含 <code>_drawerAnimTop</code>、<code>_drawerAnimDock</code>、<code>_drawerOpenReveal</code> 与 dock 内联 height/marginTop。</li>
+  <li>后果：旧顶缘偏小 → <code>vBot</code> 偏小 → 对本不该让位的行 <code>rect.bottom &gt; vBot - 4</code> 也成立 → <code>window.scrollBy</code> 把整页连同选中种子抬起。<code>window.scrollY</code> 全程无还原，但那是<b>原设计</b>（§01），不是本 bug 的修复靶点。</li>
+</ul>
+
+<h3>W2 根因：收场高度逐帧传导给文档高</h3>
+<ul>
+  <li><code>drawerLeaveHook :327-329</code> 每帧写三处内联样式（<code>el.style.height</code> / <code>dock.style.height</code> / <code>dock.style.marginTop</code>）；dock 是流内 sticky 元素，<code>dock.style.height</code> 从 h0 → 0 令文档<b>逐帧变矮</b>，浏览器逐帧钳制 <code>scrollY</code> → 背景列表逐帧回弹。</li>
+  <li>与 <code>dock-panel.md:118</code>「滚动钳制（属预期）」的区别：预期是结果变短后的<b>一次性</b>钳制，缺陷是动画期<b>逐帧反复</b>。W2 只治后者。</li>
+  <li>抽屉开合链无 <code>transitionend</code> 监听、无 scroll 驱动的让位重算；after 钩子由 <code>:duration="220"</code> 定时器触发。三发让位分散在 nextTick / after-enter / 数据落定三个拍。</li>
+</ul>
+
+<h3>覆盖空白与坑档复发</h3>
+<p><code>e2e/drawer-dock-stability.spec.mjs</code> 只测<b>单次打开后</b>搜索/筛选时面板 top 稳定（不关不重开）；全库<b>零用例</b>覆盖「开 → 关 → 再开」或「不会被覆盖的行不该上升」。静态守阵 <code>tests/test_web_shortcuts_drawer.py::test_drawer_open_reveal_row</code> / <code>::test_drawer_transition_dock_anim</code> 只钉「调用存在」——<code>dock-panel.md:55-57</code> 已记复发 1：「守阵只断言『调用了让位』，探不到『调用存在但几何/时机错』……<b>静态守阵全绿而真机必红</b>」。本次是该坑同族机理的触发面从「文档底首次打开」扩展到「开 → 关 → 再开」周期残留，<b>复发 +1 与补明文列入 S6</b>（本轮不动坑档，D10）。</p>
+
+<h2><span class="no">§03</span>方案总览</h2>
+<p>一个计划、两个工作包（D5），各自独立红绿双验；<b>判据、位移公式、三发挂点、<code>_kbViewBottom()</code> 单点口径零改动</b>（D3/D7）。</p>
+<table>
+  <tr><th>包</th><th>靶点</th><th>改法</th><th>明确不做</th></tr>
+  <tr><td>W1</td><td><code>_drawerAnimTop</code> 生命周期（D7）</td><td>最小改动（D8）：在 <code>openTorrentDrawer</code> 周期起拍作废旧登记 + 补齐 <code>drawerEnterHook</code> / <code>drawerAfterLeaveHook</code> 各早退分支的清场，使旧顶缘不可能流到下一周期</td><td>不引入代际状态机、不改 <code>_kbViewBottom()</code> 读取口径、不加 scrollY 快照、不动三发挂点</td></tr>
+  <tr><td>W2</td><td>leave 期逐帧改文档高（D9）</td><td>让收场高度变化不逐帧传导给文档高。候选：把高度插值约束在不出流的层，或改为一次性收拢 + 视觉层位移；<b>实施轮以真机逐帧取证定案</b>，本计划不预支实现</td><td>不推翻「钳制属预期」、不加 scrollY 复位、不改「最小滚动」语义</td></tr>
+</table>
+
+<h3>改动落点（精确到行号）</h3>
+<table>
+  <tr><th>文件:行号</th><th>动作</th></tr>
+  <tr><td><code>shared/drawer_general.js:16</code> <code>openTorrentDrawer</code></td><td>W1：周期起拍作废旧 <code>_drawerAnimTop</code>（保留 close 写入的语义，只在边界隔离）</td></tr>
+  <tr><td><code>shared/drawer_general.js:255</code> enter 早退</td><td>W1：补齐清场（reduced-motion / 无 dock）；<code>:263</code> 的 <code>h0=0</code> 分支已由 <code>:262</code> 清零，<b>不改动</b>（评审更正）</td></tr>
+  <tr><td><code>shared/drawer_general.js:339-350</code> <code>drawerAfterLeaveHook</code></td><td>W1：<code>:340</code> 重开打断分支清旧登记，但<b>不得</b>杀掉新 enter 的 rAF（清登记与清动画循环分离）</td></tr>
+  <tr><td><code>shared/drawer_general.js:302-338</code>（尤 <code>:327-329</code>）</td><td>W2：收场高度插值改造；四皮肤 <code>css/dialogs.css</code> 差异同步核对</td></tr>
+  <tr><td><code>shortcuts_engine.js:228-259,331-345</code>；<code>drawer_general.js:69,300</code>；<code>drawer_store.js:398</code></td><td><b>零改动</b>（原设计单点与三发挂点，仅作为红验基准）</td></tr>
+</table>
+
+<h3>验收总纲（D6 / D11）</h3>
+<p>e2e 逐帧红绿双验为主判据，静态守阵只作接线补充，抖动观感由用户真机目检定案。用例挂既有 <code>e2e/drawer-dock-stability.spec.mjs</code>（复用 <code>__geoSettled</code> 落定等待、<code>window.__geo</code> rAF 逐帧采样、<code>SKINS</code> 双皮肤、<code>@fast</code>），静态守阵扩 <code>tests/test_web_shortcuts_drawer.py</code>；<b>不新建测试文件</b>（D12）。拍板编号见 §06。</p>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+<p class="aside">D1：本轮<b>纯计划产出，零代码改动、零 commit/push</b>。S0–S6 全部待用户<b>显式开工</b>；「继续 / 接着做 / 你看着办」不构成授权。</p>
+<table>
+  <tr><th>步</th><th>内容</th><th>验收判据</th></tr>
+  <tr><td>S0</td><td>红验基线：在 <code>drawer-dock-stability.spec.mjs</code> 增「开 → 关 → 再开」用例与 close 160ms 逐帧采样；按用户复现路径留真机取证</td><td><b>修复前必须红</b>：第二步 <code>scrollY</code>/<code>rect.bottom</code> 出现非零位移；close 期出现反复位移。用例本身先可跑（<code>commands run dev.e2e</code> 目标 spec）</td></tr>
+  <tr><td>S1</td><td>W1：修 <code>drawer_general.js</code> 的登记量生命周期（§03 落点前三行）</td><td>代码面只动清场，不动判据/公式/三发挂点；<code>commands run dev.fmt</code> 不适用（JS 面），按仓库既有 JS 风格</td></tr>
+  <tr><td>S2</td><td>W1 绿验 + 静态守阵扩「跨周期登记量失效」断言；补「打断重开」边界用例</td><td>新 e2e 转绿；静态守阵绿；<code>commands run dev.e2e</code> / <code>commands run test.quick</code> 全绿；摘掉 S1 修复必红（红绿双验）</td></tr>
+  <tr><td>S3</td><td>W2：修收场高度传导；逐皮肤核对 <code>{console,flux,prism,atlas}/css/dialogs.css</code>（flux 入场 <code>translateY(100%)</code> 特殊、窄屏 <code>position: fixed</code>）</td><td>四皮肤成对；不出现只改一皮肤的漂移</td></tr>
+  <tr><td>S4</td><td>W2 逐帧断言绿验</td><td>贯穿 close 160ms 采 <code>scrollY</code> / 选中行 <code>rect.bottom</code> / dock <code>top</code>：<b>非文档底全程零位移；文档底允许一次性位移但不得来回反复</b>（D11）</td></tr>
+  <tr><td>S5</td><td>用户真机目检：抖动观感，按计划写明的复现步骤操作</td><td>用户拍板「下降无可见抖动」；目检结论记进任务档案（D6）</td></tr>
+  <tr><td>S6</td><td>收尾：<code>dock-panel.md</code> 复发 +1 并补 Q4 口径明文、新坑档（跨周期瞬态量残留）、文档事实回写、<code>commands run test.full</code> + 基线切片、计划翻 Done、档案同步</td><td><code>commands run kb.check</code> / <code>commands run test.full</code> 全绿；坑档差异按 §01「口径差异」两条分别写，不混同；<code>kb.status</code> 翻终态</td></tr>
+</table>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p><b>无。</b>12 项已于 2026-11-12 经两轮 grilling 全部拍板（Q1–Q12 全按推荐；Q3/Q4 由用户修正并以设计文档取证为准），结论见 §06。唯一预留的分支是 D8 的备选「绑 <code>_drawerAnimSeq</code> 代际校验」——<b>仅当</b>实施轮证明最小改动不足时才触发，届时需另起 R 行拍板，本计划不预支。</p>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<p>全部由用户于 <b>2026-11-12</b> 拍板（前六项见第一轮、后六项「按推荐」）。</p>
+<table>
+  <tr><th>编号</th><th>问</th><th>结论</th></tr>
+  <tr><td>D1</td><td>Q1 范围</td><td>本轮纯计划、零代码改动、零 commit/push；S0–S6 待显式开工</td></tr>
+  <tr><td>D2</td><td>Q2 产物</td><td>计划落 <code>memory-bank/plans/</code> 单文件 dark HTML + 任务档案；缺陷按本轮正式专题处理，<b>不入池 issue</b></td></tr>
+  <tr><td>D3</td><td>Q3 修正</td><td>让位口径 = <b>最小滚动 / 只补出界部分 + 8px 呼吸距 / 本来可见 no-op / 不抢滚轮 / 宁可不动也不猜</b>；判据与公式不改；「顶到面板上沿、不多不少」非原设计，以设计文档为准</td></tr>
+  <tr><td>D4</td><td>Q4 修正</td><td><b>非对称</b>：不主动复位 <code>scrollY</code>、不引入快照还原；列表不需要动就不动；文档变矮的钳制属预期。「顶到抽屉上沿」式对称还原剔除</td></tr>
+  <tr><td>D5</td><td>Q5 划分</td><td>一个计划、W1/W2 两工作包，各有独立复现用例与摘修复必红验证；查明同源也不删验证用例</td></tr>
+  <tr><td>D6</td><td>Q6 验收</td><td>逻辑面自动化红绿双验必备；抖动观感归用户真机目检，计划写明操作步骤与判据</td></tr>
+  <tr><td>D7</td><td>Q7 W1 靶点</td><td>只修 <code>_drawerAnimTop</code> 瞬态量生命周期；判据、位移公式、三发挂点、<code>_kbViewBottom()</code> 单点口径<b>一律不动</b></td></tr>
+  <tr><td>D8</td><td>Q8 W1 实现</td><td><b>最小改动</b>：周期起拍作废旧登记 + 补齐各早退分支清场；不引入代际状态机、不改读取口径、不加 scrollY 快照</td></tr>
+  <tr><td>D9</td><td>Q9 W2 靶点</td><td>只治 leave 期逐帧写 <code>dock.style.height</code> 造成的文档逐帧变矮；<b>不</b>推翻「钳制属预期」、<b>不</b>加 scrollY 复位</td></tr>
+  <tr><td>D10</td><td>Q10 档案偏差</td><td>Q4 口径作为本次新拍板写入；取证节如实注明「全库无逐字明文」与「钳回 0 / 整页跳顶」措辞差异；本轮<b>不动坑档</b>，复发 +1 与补明文留 S6</td></tr>
+  <tr><td>D11</td><td>Q11 加码</td><td>W2 除目检外<b>也</b>加 e2e 逐帧断言：贯穿 close 160ms 采 <code>scrollY</code> / 选中行 <code>rect.bottom</code> / dock <code>top</code>，把抖动变成可红验判据</td></tr>
+  <tr><td>D12</td><td>Q12 落点</td><td>新 e2e 挂既有 <code>e2e/drawer-dock-stability.spec.mjs</code>，静态守阵扩 <code>tests/test_web_shortcuts_drawer.py</code>；<b>不新建测试文件</b></td></tr>
+</table>
+<p class="aside">用户附加硬约束：「机制尽量尊重原设计」，贯穿 D3/D4/D7/D8/D9。</p>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+  <tr><th>#</th><th>触发条件</th><th>处置</th></tr>
+  <tr><td>R1</td><td>把用户 Q4 口径当成历史明文，或把「钳回 0 / 整页跳顶」与「只影响文档底部」混成一条</td><td>按 D10 在 §01 如实注明两处差异；S6 回写坑档时按新拍板补明文，两种现象分条写</td></tr>
+  <tr><td>R2</td><td>静态守阵全绿而真机必红（<code>dock-panel.md:55-57</code> 已记复发 1）</td><td>S0 先红验；e2e 逐帧采样作主判据，静态守阵只作接线补充（<code>frame-swap-scroll-reset.md:25</code>「瞬态缺陷必须逐帧采样」）</td></tr>
+  <tr><td>R3</td><td>补 <code>drawerAfterLeaveHook :340</code> 清场时误杀快速重开的 enter rAF</td><td>清登记与清动画循环分离；S2 用「打断重开」边界用例验证新 enter 动画完整</td></tr>
+  <tr><td>R4</td><td>改 leave 只改一处皮肤：flux 入场 <code>translateY(100%)</code>、窄屏 <code>position: fixed</code> 与另三皮肤不同形</td><td>S3 逐皮肤核对 <code>css/dialogs.css</code> 并补成对守阵断言</td></tr>
+  <tr><td>R5</td><td>把「钳制属预期」误当缺陷一并消除，或反过来引入 scrollY 复位（改设计）</td><td>W2 判据只钉「逐帧反复」，文档底一次性位移允许通过；评审逐条对照 D4/D9</td></tr>
+  <tr><td>R6</td><td>e2e 因 Linux runner 字体/时序差异假红（<code>scroll-visible-band.md:22-33</code> 复发 1）</td><td>复用 <code>__geoSettled</code> 落定等待与 <code>SKINS</code> 双皮肤；判据用「零位移 / 反复次数」而非绝对像素阈值，不放宽断言掩盖</td></tr>
+  <tr><td>R7</td><td>范围蔓延：本轮顺手改代码、入池 issue 或提交</td><td>D1/D2/D10 硬边界；S1–S6 与坑档回写均待显式开工，本轮零代码改动</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-12-1048</span> 初版。来源：用户 2026-11-12 报障 + grilling 两轮 12 问拍板（Q3/Q4 以设计文档取证修正，Q7–Q12 全按推荐）+ 只读代码/设计文档取证（HEAD <code>59113c69</code>）。要点：W1 = 动画期瞬态登记量跨周期残留，W2 = 收场高度逐帧传导文档高；全程尊重原设计「最小滚动 / 非对称 / 下界单点」；本轮纯计划、零代码改动。</li>
+  <li><span class="tag">R1 · 26-11-12-1126</span> 评审更正: enter 的 h0=0 早退(:263)已由 :262 清零, 从 W1 待补落点中移除</li>
+</ul>
+
+</div>
+</body>
+</html>
