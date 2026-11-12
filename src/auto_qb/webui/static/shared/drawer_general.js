@@ -93,6 +93,9 @@ Object.assign(window.AQB_DRAWER.methods, {
       this.drawer.open = false;
       this.filePrio.visible = false;
       this.drawerMenu.visible = false;  // 抽屉右键菜单(R2 S3)随面板收
+      // 动效数值面板(R8, plan 26-11-12-1139 §05.7)随抽屉收 —— 面板不能比抽屉活得久(否则抽屉
+      // 关了面板还浮在页面上; Esc 退栈链先关面板才轮到抽屉, 这里是抽屉侧的收口)
+      this.fxPanel.visible = false;
       this._stopDrawerPoll();
       this._stopDrawerFollow();
       this._kbRevealCompleteStop();  // T6: 让位截断续缴的状态随 open 周期显式作废(不引跨周期残留)
@@ -109,6 +112,9 @@ Object.assign(window.AQB_DRAWER.methods, {
       this.drawerLastTab = tab;
       this.persistDrawerTab();
       this.filePrio.visible = false;  // 换页签时收起文件优先级小菜单(内容页签专属)
+      // 动效数值面板(R8, plan 26-11-12-1139 §05.7): 切页签时图宿主被替换(v-if 分支退场),
+      // 面板会浮在新内容上 —— 与 closeDrawer 同口径收掉(右键图宿主重开即用)
+      this.fxPanel.visible = false;
       this._drawerSwitchEnd();  // FX-29: 切页签使在途的那一组响应全部过期(stale 不落袋), 若不撤等待
       this._stopDrawerPoll();   //     遮罩会挂死 —— 显式操作视作结束上一次切换
       this._loadDrawerTab(tab);

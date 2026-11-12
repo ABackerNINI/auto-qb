@@ -38,7 +38,11 @@ Object.assign(window.AQB_SHORTCUTS.methods, {
       return !!(this.modal.visible || this.addOpen || this.statsOpen || this.speedOpen || this.mgrOpen ||
         this.metaOpen || this.relChain.open || this.filePrio.visible || this.historyOpen || this.headMenu.visible ||
         this.colMenuOpen || this.uiMenuOpen || this.searchHelpOpen || this.filterMenu || this.menu.visible ||
-        this.kbHelpOpen || this.kbFullOpen);
+        this.kbHelpOpen || this.kbFullOpen ||
+        // 动效数值面板(R8, plan 26-11-12-1139 §05.7): 面板开着时不响应单键快捷键(避免输入到滑杆
+        // 时触发全局动作)。!必须追加在这串条件的**末尾** —— 守阵逐字钉住 filePrio/historyOpen
+        // 两锚的书写序, 插在前面直接红(注释不得复现锚串原文: 守阵捕方法体含注释, 可被注释单独满足)
+        this.fxPanel.visible);
     },
     /* 引擎入口(lifecycle.js mounted 注册在 Esc 退栈链之后; unmounted 撤除) */
     _kbOnKeyDown(e) {

@@ -4,6 +4,10 @@
 - test_frontend_qb_traffic_chart_wiring: qB 口径流量图前端接线守阵(P5a+P5b, plan 26-10-03-0946 §07) —— enabled=false 三挂点入口不渲染不请求(全局入口按钮 v-if="qbHistEntryOn" / 抽屉流量页签与组右键菜单项 v-if="qbTrafficOn", 门在 flags.qb_traffic_enabled, /api/webui/flags 下发 fail-closed)+ uPlot 双系列 spanGaps=false 断线不连线 + 桶序->_qbPointsToData 栅格重建与 null 语义 node 真跑(全 null 回落/前导 null 锚推算/interval 非法防御 + S3b 月行真值落点/空槽内插/anchor.xs) + 轮询下界常量 1500(A4, S3b §05.5)+ 三挂点作用域表与低频轮询口径(interval_s 夹取 + document.hidden 跳过 + 关闭/切走 clearInterval)+ 静默续拉(loading 空态只在「尚无落袋结果」时接管正文(qbCurPending = loading + 无数据 + 无错误) + 同宿主 setData 原地快路 + 换肤先销毁再重建 + 错误态由成功落袋清除, 2026-10-04 修轮询期闪烁 / 2026-10-05 补齐空态与错误态闪烁)+ FX-29 软切换落定登记(_qbLoad 落袋 _drawerDone("traffic") 与 _drawerWaitSources 成对, 2026-10-04 修流量页签单击换行遮罩挂死)+ 三主题登记链(tpl/vendor/mixin/manifest)+ escBusy 与 Esc 退栈链同步(含退栈顺序: 历史弹层遮罩 130 先于抽屉 80, 2026-10-06 两图同开报障)+ 建图后宿主 ResizeObserver 自适应与销毁断开(便签 26-10-04-0134)+ 缺口三态文案与空态钉住(P4, plan 26-10-04-0721 §05: 0 桶状态行/缺口合并文案/图例 hint 两处/单种空态收窄为从未传输 + node 三段混排回归)
 - test_frontend_qb_traffic_window_persist_and_single_source: 流量图「视图选择」持久化 + 窗口档位单点(2026-10-05) —— QB_WINDOW_NAMES 十三档与后端 traffic_qb.WINDOW_NAMES 逐字一致, 为展示(模板 v-for 走 qbWindowNames)/前后切换(qbCycleWindow)/持久化校验(qbInitialWindow)三处唯一来源(任一处硬编码即与后端 400 校验漂移); 持久化粒度 = 全局单独(autoqb.ui.qbWinGlobal)/组与种子共用(autoqb.ui.qbWinShared), 键按 scope 单点分派, 初值只认合法档位且坏值回落默认, 换窗即落盘并吞写入异常; 初值函数在 qb_traffic_chart.js 且全部皮肤(_UI_ALL)的 tpl-manifest 里排在 state.js 之前(否则 state data() 调它未定义 = 启动白屏); R8 追加 state.js 数值面板接线静态钉(fx: qbInitialFx() / fxPanel 显式建字段, plan 26-11-12-1139 §05.5), 修复轮追加状态行展示值 computed 落位钉(qbFxPeriodS/qbFxBeatMs 恰 1 次定义且夹在 computed: { 与 mounted() { 之间, fx-panel.html 保持裸插值不带括号 —— 落 methods 即复现 toDisplayString 函数源码渲染 blocker)
 - test_frontend_qb_fx_store_and_sanitize_battery: 数值面板持久化读路径与逐字段校验 node 电池(R8, plan 26-11-12-1139 §05.5, §09 脏值探针) —— qbInitialFx 桩 localStorage 钉四脏值场景(坏 JSON/v:0/数组根/空串)整体回落默认且键保留(全程零 removeItem) + _qbFxSanitize 逐字段: 错类型(数字字段 null/布尔/数组不得被 Number() 误收、布尔严格 ===true/false 且类型归位、合法 false 保真)/未知枚举与空串回落/clamp 边界(impact/particles [0,1]、shiftRatio [0.2,1] 双侧, 数字串"0.9"抢救)/未知键静默丢弃(旧版残留 scene/amp/tpl 清场)/合法值全字段保真 + layers 残缺(数组根/缺键)逐层补默认。无 node 静默跳过(同 _NODE_QB_TRAFFIC_PROBE 口径)
+- test_frontend_qb_fx_overlay_close_registry_and_reduced_motion: 数值面板收层七处登记 + IO 兜底 + reduced-motion 红线静态守阵(R8 S0-b, plan 26-11-12-1139 §05.6/§05.7/§05.9) —— lifecycle 点空白名单与 Esc 退栈链(紧跟 drawerMenu 之后: 后开先关, 面板开着 Esc 只关面板)/dialogs_meta escBusy/closeDrawer/drawerTab/换目标收口六处在位(shortcuts _kbOverlayBusy 末尾项归 test_drawer_dock_keyboard_w2 书写序守阵) + IO 观察 .qb-chart-host 在 _qbFxListen 开面板支路建/关面板支路断(ratio===0 走 fxClose 单点, 不挂 _qbChartDestroy 防换肤误关; 七处直写 visible=false 的断开由 state.js 'fxPanel.visible' watcher 统一汇到 _qbFxListen(false)) + reduce 红线: 判定单点内联 matchMedia 不引用 AQB_FX.reduced(flux-only 三套旧皮肤 ReferenceError)/有效值单点 fxOn = enabled && !reduce/change 监听 mounted 装beforeUnmount 摘/AQB_FX_CFG._qbFxCfgSync 附加 on 且 fx+fxReduce 两 watcher 汇入/面板总开关 :checked=fxOn + :disabled=fxReduce 置灰与说明行/有效值 on 不进持久化形状(QB_FX_DEFAULTS 无 on 键)
+
+- test_frontend_qb_traffic_drawer_page_guard: 流量图抽屉的页面守卫(2026-10-06 修「qB 全局流量图出现在设置页」) —— drawerVisible 两形态先挡非主内容页且状态位不随切页翻(回页连数据/窗口选择一起回来) + 轮询与建图 active 同源含 page 判据(面板不在 DOM 还拉还画 = 对空气取数) + openDrawerTraffic 先切回主内容页 + state.js drawerVisible watcher 退场销毁图/进场补拉(种子详情支路 !s 的 $nextTick _dtSync 回页变体重挂, 归 test_drawer_seed_reentry_variant_remount)
+- test_frontend_qb_traffic_yaxis_and_annotation: 流量图纵轴固定模式 + 画布注解层守阵(2026-10-08, issue 26-10-07-0149 认领一并做) —— _qbYRange/_qbGapRuns 纯函数 node 真跑(自动 = peak*1.05 / 固定上限取 max(cap, peak*1.05) 峰值超上限按峰值显示 / 缺口 = 上下行皆 null 才算); 限速三作用域同源 = qB 全局限速上下行**较大者**(_qbGlobalLimit -> speedLimitBytes); 上限派生单点 _qbYCapOf(limit×1.2 / manual MiB); 三作用域**各自独立**持久化(qbYAxisStoreKey 三键 + qbInitialYAxis 只认合法模式与正数 + persistQbYAxis 吞异常) + 切档落盘重排(qbSetYAxisMode/qbSetYAxisManual -> _qbChartRescale 走 setData 重算 scale 不重建) + 限速变化重排 watcher(mounted 注册, this.drawer 守卫剔除 BaseTransition 假实例); 建图 y range 接纯函数 + draw/drawClear 两钩子画限速虚线/缺口斜纹(共享图面三挂点全生效, uPlot.pxRatio 设备像素换算, 限速线只画落在可视值域内的); 模板 .qb-tools/.qb-seg 控件 + CSS 三皮肤成对 + **控件组唯一挂点**(图下统计栏 .qb-statctl; 2026-10-16 版式改: 流量形态头部不再挂控件, 全局/分组与种子流量图三挂点对齐, 上限读数 qbYAxisCapText/.qb-tools-hint 随 UI 移除退役) + P4 重启缝提示(plan 26-10-15-0829; 左端口径修订 2026-10-16, issue 26-10-16-0954): _qbSeamHint 判据纯函数 node 真跑(重启贴近链末->提示(含首采即链末桶的实测帧形态)/链到右沿或链确已接续或旧后端->null, 边界含尾区起点、右沿与左端前一桶三点) + computed qbCurSeamHint 消费单点 + drawer.html 提示行文案单源带重启时刻锚 + 断线语义不变(spanGaps:false ×2)
 - test_frontend_qb_traffic_scope_stale_polarity: 流量图三挂点 stale 谓词极性守阵(2026-10-12 修「种子流量图加载不出来」) —— W2–W6 机械改名把 torrent/group 两处 `!(...)` 写成 `!!(...)`(取反变双重取反), 恰在本图活跃时判「响应已过期」⇒ 数据不落袋 + loading 不复位 + 早退不建图 ⇒ 种子「流量」页签恒停「正在加载流量数据…」且轮询被 loading 卡住不自愈(global 未中招, 故症状只在种子/分组图)。既有静态锚(源码字符串级)对单/双 bang 天然失明, 本守阵补两层: 1. node 电池用 `new Function(源码 + "return _QB_SCOPES;")` 取出作用域表, 对三挂点喂「活跃/切走/关闭/换目标/功能关」五类上下文断言 stale 真假 + `active => stale === false` 同向性; 2. 静态极性兜底钉 `!(...)` 书写形态、`!!(...)` 不得回潮
 - test_frontend_qb_traffic_load_stall_fallback: 流量图轮询「在途悬挂」兜底守阵(issue 26-10-16-0954-bug-webui-chart-fetch-no-timeout 方案 #2, 2026-10-16) —— loading 是单向「请求在途」标志(_qbLoad 入口无条件置 true, 唯一复位路径是它的 finally), 请求悬挂时 finally 不执行 ⇒ tick 守卫把之后每一拍都挡掉, 图表永久停在旧帧且无提示(与 10-12 修的同链另一入口 stale 谓词取反不同)。三层静态锚: 1. 阈值常量 _QB_LOAD_STALL_MS(=30000, 请求级超时的两倍余量); 2. 判据单点 _qbLoadStalled 在且 tick 必须经它(合体写法 `document.hidden || this[def.loading]` 不得回潮); 3. _qbLoad 置位处写计时起点 _qbLoadAt[scope] 且 finally 不擦(擦会把换目标场景下新请求的起点抹成 0)。行为面 node 电池真跑(无 node 静默跳过): 真 _qbLoad + 永不 settle 的 api 桩 —— 在途未悬挂照旧挡拍 / 悬挂放行且只留一条警告 / 新起点生效故后续照常挡拍 / 图不活跃与页面隐藏照旧跳过 / 判据边界(29s 不判、31s 判、无起点不判); 附 R5#182 死代码反向锚(loadQbHistory 兼容别名零残留, 入口全走 openQbHistory/openDrawerTraffic)
 - test_frontend_qb_tick_label_and_isolated_idxs: R5#192 —— x 轴刻度与孤点索引 node 电池(同文件其余纯函数均有电池, 唯这两处标着纯函数却零执行): _qbTickLabel 四族分支 13 档逐档断言(1m/5m 标到秒 / 30m-24h 只标时刻 / 3d/7d/30d 标日期 / 6mo/1y/all 标年月; 期望值由同一 Date 本地时区现算, 与机器时区无关)+ torrent 挂点读自己的窗口字段(三挂点窗口互不串) + _qbIsolatedIdxs 三态(两侧皆 null 的孤点收/任一侧非 null 的链中链端不收/贴边孤点与空系列边界)
@@ -760,6 +764,150 @@ def test_frontend_qb_fx_store_and_sanitize_battery():
     report = json.loads(proc.stdout.strip().splitlines()[-1])
     assert report["failed"] == [], \
         f"qbFx 持久化电池 {report['ok']}/{report['total']} 过, 失败: {report['failed']}"
+
+
+def test_frontend_qb_fx_overlay_close_registry_and_reduced_motion():
+    """数值面板收层七处登记 + IntersectionObserver 兜底 + reduced-motion 红线(R8 S0-b, plan 26-11-12-1139 §05.6/§05.7)
+
+    非模态浮层的收层登记散在五个文件里, 任一处漏/被重构掉都是「面板浮死在页面上」的静默故障
+    (遮住内容/跟随到别的图上), 前端无 JS 测试框架只能静态钉住:
+    1. 七处登记(§05.7 表逐行): lifecycle 点空白名单(与 drawerMenu 同组) + Esc 退栈链(紧跟
+      drawerMenu 之后 —— 面板比菜单"重"一层, 后开先关: 面板开着按 Esc 只关面板, 再按 Esc 才轮到
+      抽屉) + dialogs_meta escBusy(两处同步 WARN 的另一处) + closeDrawer(面板不能比抽屉活得久)
+      + drawerTab(切页签图宿主被替换) + drawer_store 换目标收口(与 drawerTab/closeDrawer 同口径;
+      IO 只在宿主被真拆掉时兜底, 光靠 IO 会漏)。shortcuts_engine _kbOverlayBusy **末尾**追加项
+      由 test_drawer_dock_keyboard_w2 钉住(书写序守阵在那边, 不在此重复); 面板根
+      @keydown.esc="fxEsc" —— 面板可见才 stop+prevent+fxClose(焦点在面板控件内按 Esc 也只关
+      面板, 一次 Esc 只关一层), 退场过渡期放行 Esc 给 document 退栈链(.stop/.prevent 修饰符与
+      无处理器两种回潮形态都钉住, §05.1/§05.9);
+    2. IO 兜底: 观察 .qb-chart-host, 开面板时装(_qbFxListen(true), 与宿主 RO 同点)、关面板时断
+      (装卸对称防泄漏; 七处登记直写 visible=false 不经 fxClose, 断开统一由 state.js 的
+      'fxPanel.visible' watcher 汇到 _qbFxListen(false)), ratio===0 即 fxClose —— 一条机制覆盖
+      「滚出视口」「切页签」「抽屉关闭」; **不得挂 _qbChartDestroy**(换肤也走 destroy->build,
+      会把面板误关; 系统明暗变化宿主不重挂不触发, 面板保留);
+    3. reduced-motion 红线(§05.6): 判定单点在 qb_traffic_chart.js —— 内联 matchMedia + change
+      监听, **不引用 AQB_FX.reduced()**(它只在 flux 皮肤挂载, 三套旧皮肤引用即 ReferenceError,
+      而 test_frontend_fx_wiring 只查 shell 照绿不报); 有效值单点 fxOn = enabled && !reduce
+      (面板任何操作都写不出有效值打开, enabled 只存用户意图、reduce 自动置位永不回写 store);
+      matchMedia change 监听 mounted 装 / beforeUnmount 摘(系统设置恢复后有效值立即回到手动值);
+      AQB_FX_CFG 同步单点 _qbFxCfgSync 附加 on 字段且 fx/fxReduce 两 watcher 都汇入(reduce 翻转
+      on 必须立即跟着翻); 面板总开关显示有效值并置灰(:checked="fxOn" + :disabled="fxReduce"),
+      顶部说明行「系统要求减弱动效，当前不生效」; 有效值 on 不进持久化形状(QB_FX_DEFAULTS 无 on)。"""
+    shared = os.path.join(STATIC_ROOT, "shared")
+    js = open(os.path.join(shared, "qb_traffic_chart.js"), encoding="utf-8").read()
+    state_js = open(os.path.join(shared, "state.js"), encoding="utf-8").read()
+    lifecycle_js = open(os.path.join(shared, "lifecycle.js"), encoding="utf-8").read()
+    dialogs_meta_js = open(os.path.join(shared, "dialogs_meta.js"), encoding="utf-8").read()
+    drawer_general_js = open(os.path.join(shared, "drawer_general.js"), encoding="utf-8").read()
+    store_js = open(os.path.join(shared, "drawer_store.js"), encoding="utf-8").read()
+    fx_tpl = open(os.path.join(shared, "tpl", "fx-panel.html"), encoding="utf-8").read()
+
+    # 1a. lifecycle 点空白名单(与 drawerMenu 同组; 面板根 @click.stop 已拦截, 不误收面板内点击)
+    click_m = re.search(r"this\._onDocClick = \(\) => \{(.*?)\n    \};", lifecycle_js, re.S)
+    assert click_m, "lifecycle.js 缺 _onDocClick(点空白收层名单)"
+    click_body = click_m.group(1)
+    assert "this.fxPanel.visible = false;" in click_body, "点空白收层名单缺动效数值面板(§05.7 第 1 处)"
+    assert click_body.index("this.drawerMenu.visible = false;") < click_body.index("this.fxPanel.visible = false;"), \
+        "点空白名单上面板项应与 drawerMenu 同组(同层临时浮层, §05.7)"
+    # 1b. Esc 退栈链: 紧跟 drawerMenu 之后(后开先关), 且先于历史弹层与抽屉分支
+    fx_esc = "else if (this.fxPanel.visible) this.fxPanel.visible = false;"
+    assert fx_esc in lifecycle_js, "Esc 退栈链缺动效数值面板分支(§05.7 第 2 处)"
+    menu_esc = lifecycle_js.index("else if (this.drawerMenu.visible) this.drawerMenu.visible = false;")
+    fx_at = lifecycle_js.index(fx_esc)
+    hist_esc = lifecycle_js.index("else if (this.historyOpen) this.historyOpen = false;")
+    drawer_esc = lifecycle_js.index("else if (this.drawerVisible) this.closeDrawer();")
+    assert menu_esc < fx_at < hist_esc, "Esc 退栈顺序错: 面板必须紧跟 drawerMenu 之后(面板比菜单重一层, 后开先关)"
+    assert fx_at < drawer_esc, "Esc 退栈顺序错: 面板开着按 Esc 只关面板, 再按 Esc 才轮到抽屉"
+    # 1c. escBusy(config_hub「Esc 返回设置首页」守门的同一份浮层名单; WARN 明写新增浮层两处同步)
+    busy_m = re.search(r"escBusy\(\) \{(.*?)\n    \},", dialogs_meta_js, re.S)
+    assert busy_m and "this.fxPanel.visible" in busy_m.group(1), "escBusy 缺动效数值面板项(与 Esc 退栈链两处同步, §05.7 第 3 处)"
+    # 1d. closeDrawer / drawerTab(面板不能比抽屉活得久; 切页签图宿主被替换, 面板会浮在新内容上)
+    cd_m = re.search(r"closeDrawer\(\) \{\n(.*?)\n    \},", drawer_general_js, re.S)
+    assert cd_m and "this.fxPanel.visible = false;" in cd_m.group(1), "closeDrawer 缺收面板(面板不能比抽屉活得久, §05.7 第 4 处)"
+    dt_m = re.search(r"drawerTab\(tab\) \{\n(.*?)\n    \},", drawer_general_js, re.S)
+    assert dt_m and "this.fxPanel.visible = false;" in dt_m.group(1), "drawerTab 缺收面板(切页签图宿主被替换, §05.7 第 5 处)"
+    # 1e. 换目标/换 kind 收口单点(与 drawerTab/closeDrawer 同口径; 宿主不一定被真拆, 光靠 IO 会漏)
+    sw_m = re.search(r"_switchDrawerTarget\(hash\) \{(.*?)\n    \},", store_js, re.S)
+    assert sw_m and "this.fxPanel.visible = false;" in sw_m.group(1), \
+        "换目标收口单点缺收面板(与 drawerTab/closeDrawer 同口径, §05.7 第 6 处; shortcuts 末尾项第 7 处在 test_drawer_dock_keyboard_w2)"
+
+    # 2. IO 兜底: _qbFxListen 开面板支路建/观察, 关面板支路断(装卸对称); 不挂 _qbChartDestroy
+    listen_m = re.search(r"_qbFxListen\(on\) \{\n(.*?)\n    \},", js, re.S)
+    assert listen_m, "qb_traffic_chart.js 缺 _qbFxListen(窗口级监听装卸)"
+    listen_body = listen_m.group(1)
+    assert "new IntersectionObserver(" in listen_body, "IO 兜底缺位(滚出视口/切页签/抽屉关闭三路无收口, §05.7)"
+    assert "en.intersectionRatio === 0" in listen_body, "IO 回调缺 ratio===0 关面板判据(§05.9 收层探针)"
+    assert "this.fxClose();" in listen_body, "IO 回调必须走 fxClose 单点收层(整对象替换 + 监听断开一体)"
+    assert "this._qbFxHostIo.observe(host)" in listen_body, "IO 必须观察图宿主(.qb-chart-host ref)"
+    assert listen_body.count("this._qbFxHostIo.disconnect()") == 1, "IO 必须在关面板支路断开(装卸对称防泄漏)"
+    destroy_m = re.search(r"_qbChartDestroy\(scope\) \{\n(.*?)\n    \},", js, re.S)
+    assert destroy_m and "IntersectionObserver" not in destroy_m.group(1), \
+        "IO 不得挂 _qbChartDestroy(换肤也走 destroy->build, 会把面板误关)"
+    # 断开兜底的汇入点: 七处登记直写 visible=false 不经 fxClose -> state.js watcher 统一汇到
+    # _qbFxListen(false), 否则点空白/Esc/抽屉关闭那几路收层后监听与 IO 永不摘(泄漏 + Alt 卡死面)
+    visw_m = re.search(r'"fxPanel\.visible"\(v\) \{(.*?)\n    \},', state_js, re.S)
+    assert visw_m and "this._qbFxListen(false)" in visw_m.group(1), \
+        "state.js 缺 'fxPanel.visible' watcher(七处登记直写 visible 不经 fxClose, 监听/IO 断开必须统一汇到 _qbFxListen(false))"
+
+    # 3a. reduced-motion 判定单点在本模块: 内联 matchMedia, 不引用 AQB_FX.reduced()
+    assert "AQB_FX.reduced" not in js, "不得引用 AQB_FX.reduced()(只在 flux 皮肤挂载, 三套旧皮肤 ReferenceError; §05.6)"
+    init_m = re.search(r"function qbInitialFxReduce\(\) \{\n(.*?)\n\}", js, re.S)
+    assert init_m and "matchMedia" in init_m.group(1) and "catch" in init_m.group(1), \
+        "缺 qbInitialFxReduce(reduced-motion 判定单点; matchMedia 函数体内惰性取, node 探针顶层不碰 BOM)"
+    # 3b. 有效值单点: effectiveOn = enabled && !reduce(两因子缺一即红线失守)
+    fxon_m = re.search(r"fxOn\(\) \{\n(.*?)\n    \},", js, re.S)
+    assert fxon_m and "this.fx.enabled" in fxon_m.group(1) and "this.fxReduce" in fxon_m.group(1), \
+        "缺有效值单点 fxOn = enabled && !reduce(面板任何操作都写不出有效值打开, §05.6)"
+    assert "fxReduce: qbInitialFxReduce()" in state_js, "state.js 缺 fxReduce 显式建字段(undefined 是非响应式盲区)"
+    # 3c. matchMedia change 监听: mounted 装 / beforeUnmount 摘(成对; 系统设置恢复 -> 有效值立即回手动值)
+    mo_m = re.search(r"mounted\(\) \{\n(.*?)\n  \},\n  beforeUnmount\(\) \{", js, re.S)
+    assert mo_m and 'matchMedia("(prefers-reduced-motion: reduce)")' in mo_m.group(1) \
+        and 'addEventListener("change"' in mo_m.group(1), \
+        "mounted 缺 matchMedia change 监听(系统设置恢复后有效值回不到用户手动值, §05.6)"
+    bu_m = re.search(r"beforeUnmount\(\) \{\n(.*?)\n  \},", js, re.S)
+    assert bu_m and 'removeEventListener("change"' in bu_m.group(1), \
+        "beforeUnmount 缺 matchMedia change 监听摘除(MediaQueryList 持实例引用, 泄漏)"
+    # 3d. AQB_FX_CFG 同步单点: 附加有效值 on; fx/fxReduce 两 watcher 都汇入(reduce 翻转 on 立即跟着翻)。
+    # fxOn 是 computed, 同步面只允许 getter 读取形态(this.fxOn 不带括号 —— 带括号即把 getter 的值
+    # 当函数调, TypeError 整页白屏, 守阵 test_frontend_computed_not_invoked_as_function 同口径)
+    sync_m = re.search(r"_qbFxCfgSync\(\) \{\n(.*?)\n    \},", js, re.S)
+    assert sync_m and "cfg.on = this.fxOn;" in sync_m.group(1), \
+        "AQB_FX_CFG 缺有效值 on 字段(S1/S3 引擎侧开关消费面, §05.6); fxOn 是 computed 只许 getter 读取"
+    assert "this.fxOn(" not in js, "computed fxOn 不得以 this.fxOn() 调用(getter 值再调即 TypeError 白屏)"
+    assert "handler() { this._qbFxCfgSync(); }" in state_js, "state.js fx watcher 未汇入 _qbFxCfgSync 单点"
+    redw_m = re.search(r"fxReduce\(\) \{\n(.*?)\n    \},", state_js, re.S)
+    assert redw_m and "this._qbFxCfgSync()" in redw_m.group(1), \
+        "state.js 缺 fxReduce watcher(reduce 翻转时 on 必须立即跟着翻, 只挂 fx watcher 会漏)"
+    # 有效值不进持久化形状: QB_FX_DEFAULTS 无 on 键(persistQbFx 只写 fx; reduce 态的强关是
+    # 运行期事实不是用户意图, 落盘会把红线值带进 store)
+    defaults_m = re.search(r"const QB_FX_DEFAULTS = \{(.*?)\n\};", js, re.S)
+    assert defaults_m and not re.search(r"\bon:", defaults_m.group(1)), \
+        "QB_FX_DEFAULTS 不得含 on 键(有效值不进持久化形状, store 只存 15+1 字段)"
+    # 3e. 面板面: 总开关显示有效值并置灰 + 顶部说明行
+    assert ':checked="fxOn"' in fx_tpl and ':disabled="fxReduce"' in fx_tpl, \
+        "总开关必须显示有效值且 reduce 态置灰(:checked=fxOn + :disabled=fxReduce, §05.6)"
+    assert ':checked="fx.enabled"' not in fx_tpl, \
+        "总开关不得直接显示 fx.enabled(那是用户意图; reduce 态必须显示有效值为关, 灰而不能是勾着不生效)"
+    assert 'v-if="fxReduce"' in fx_tpl and "系统要求减弱动效，当前不生效" in fx_tpl, \
+        "缺 reduce 说明行(置灰读不出原因是系统层可访问性红线, 用户会当故障报; §05.6)"
+
+    # 4. 面板根 Esc(§05.1 关闭路径 + §05.9 探针): 根处理器走 fxEsc —— 面板可见才 stopPropagation
+    # + preventDefault + fxClose(焦点在面板控件内如刚拖完滑杆按 Esc 也只关面板, 同一次 Esc 不再
+    # 推进抽屉退栈链, 一次 Esc 只关一层); 退场过渡(fx-pop-leave-active 120ms)期 visible 已翻
+    # false 而焦点仍在面板控件里时**放行**该次 Esc 给 document 退栈链 —— 与面板外二次 Esc 关
+    # 抽屉行为一致。.stop/.prevent 修饰符不得回潮: 修饰符的阻断先于处理器表达式, 退场期那次
+    # Esc 被整体吞掉(两处行为不一致, 评审 nit 轮裁决); 无处理器形态(只拦不关)同样不得回潮。
+    assert '@keydown.esc="fxEsc"' in fx_tpl, \
+        "面板根 Esc 缺 fxEsc 处理器(只拦不关或修饰符吞 Esc 均破坏 §05.1/§05.9 关闭语义)"
+    assert "@keydown.esc.stop" not in fx_tpl and "@keydown.esc.prevent" not in fx_tpl, \
+        "面板根 Esc 不得用 .stop/.prevent 修饰符(阻断先于处理器, 退场过渡期吞掉本应放行的 Esc)"
+    fxe_m = re.search(r"fxEsc\(e\) \{\n(.*?)\n    \},", js, re.S)
+    assert fxe_m, "qb_traffic_chart.js 缺 fxEsc(面板根 Esc 处理器)"
+    fxe_body = fxe_m.group(1)
+    assert "this.fxPanel.visible" in fxe_body and "return;" in fxe_body, \
+        "fxEsc 缺可见性早退(退场过渡期须放行该次 Esc 给 document 退栈链)"
+    assert "stopPropagation" in fxe_body and "preventDefault" in fxe_body and "this.fxClose();" in fxe_body, \
+        "fxEsc 可见分支必须 stopPropagation + preventDefault + fxClose(同一次 Esc 只关面板一层)"
 
 
 # 纵轴固定模式 + 缺口游程 + 重启缝判据 node 电池(2026-10-08; P4 追加 _qbSeamHint, plan 26-10-15-0829):

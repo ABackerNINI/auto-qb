@@ -26,7 +26,8 @@
   用 new Function 在源码作用域内取 _kbTable/_kbOnKeyDown 真跑): _kbTable 派生(overrides 覆盖与旧键
   释放/黑名单脏数据与 Meta 全族不进表/空串与 fixed(Esc) 跳过/冲突先到先得) + _kbOnKeyDown 分流
   (Escape 早退/defaultPrevented/IME 双保险/纯修饰键/登录遮罩/repeat 丢与 repeat 条目连发/输入元素
-  屏蔽与 inputSafe 放行/模态层屏蔽/浮层屏蔽与自切换白名单/when 条件不消费/preventDefault 消费)
+  屏蔽与 inputSafe 放行/模态层屏蔽/浮层屏蔽与自切换白名单/动效数值面板打开单键与 Delete 直连同失效
+  (R8 plan 26-11-12-1139 §05.7, mock 建 fxPanel 字段)/when 条件不消费/preventDefault 消费)
 - test_r4_shortcuts_panel_record_cancel_exits: R5#232(major) 修复回归 —— 关闭/离开出口摘录制监听:
   非脏 kbFullClose 与 kbGuardLeave 非脏早退必须调 kbRecordCancel(修复前残留 document 捕获期
   _kbRecHandler, 下一次任意按键被吞并静默提交成键位绑定); 脏路径确认后经 kbDraftRevert 内含取消;
@@ -648,6 +649,7 @@ function battery() {
     headMenu: { visible: false }, colMenuOpen: false, uiMenuOpen: false,
     searchHelpOpen: false, filterMenu: null, menu: { visible: false },
     kbHelpOpen: false, kbFullOpen: false,
+    fxPanel: { visible: false },  // 动效数值面板(R8 §05.7): _kbOverlayBusy 名单末项, mock 须建字段
     qbTrafficActive: false,
     goView: (v) => calls.push(["goView", v]),
     _kbToggleStats: () => calls.push(["toggleStats"]),
@@ -697,6 +699,10 @@ function battery() {
   ok("模态层打开: 非模态键位失效", calls.length === 0 && !pd);
   vm.historyOpen = true; fire(mkEv()); vm.historyOpen = false;
   ok("浮层打开: 全局/列表键位失效(非自切换)", calls.length === 0 && !pd);
+  vm.fxPanel.visible = true; fire(mkEv()); vm.fxPanel.visible = false;
+  ok("动效数值面板打开: 单键快捷键失效(R8 plan 26-11-12-1139 §05.7, 输入到滑杆时不误触全局动作)", calls.length === 0 && !pd);
+  vm.fxPanel.visible = true; fire(mkEv({ key: "Delete", code: "Delete" })); vm.fxPanel.visible = false;
+  ok("动效数值面板打开: Delete 直连同被闸住(同走 _kbOverlayBusy)", calls.length === 0 && !pd);
   vm.statsOpen = true; fire(mkEv({ key: "\\", code: "Backslash" })); vm.statsOpen = false;
   ok("自切换白名单: 开着本键控制的浮层时本键仍消费", calls.length === 1 && calls[0][0] === "toggleStats");
   fire(mkEv({ key: "[", code: "BracketLeft" }));

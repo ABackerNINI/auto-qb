@@ -353,6 +353,10 @@ window.AQB_DRAWER_STORE = {
       this._drawerWait = new Set(this._drawerWaitSources(this.drawer.tab));
       this._drawerBusyArm();   // 延迟点亮遮罩(快响应时用户看不到任何中间态)
       this.filePrio.visible = false;  // 内容页签小菜单跨种子失效(与 drawerTab/closeDrawer 同口径)
+      // 动效数值面板(R8, plan 26-11-12-1139 §05.7): 跨目标同口径收层 —— 换 kind(seed<->traffic)
+      // 与软切换路径的宿主替换不一定真拆 .qb-chart-host(IO 只在宿主被真拆掉时兜底), 浮层收口
+      // 不能只靠 IO(§05.7 表 drawer_store 行)
+      this.fxPanel.visible = false;
       /* FX-29 软切换标记(第九次形态, 见 _drawerListLoadingOn): 本次换目标保留**上一个目标的已落袋
        * 结果**(其中"空列表"= 没有对端/没有 tracker, 是种子的**常态**) -> 期间三个列表 fetcher
        * 不置 loading 门 —— 否则模板门 `loading && 无行` 会把这份常态空态顶掉一帧换成「正在加载…」,

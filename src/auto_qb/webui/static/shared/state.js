@@ -395,6 +395,12 @@ window.AQB_STATE = {
       // watch.fx 把整对象 JSON 克隆进 window.AQB_FX_CFG —— 绘制热路径只读普通对象, 不逐帧读 Vue。
       fxPanel: { visible: false, x: 0, y: 0, alt: false },
       fx: qbInitialFx(),
+      // reduced-motion 判定镜像(R8, plan 26-11-12-1139 §05.6): 系统级 prefers-reduced-motion
+      // 的响应式镜像(初值 qbInitialFxReduce 函数体内取 BOM; 运行期由 qb_traffic_chart.js
+      // mounted 的 matchMedia change 监听跟随) —— 有效值单点 fxOn = fx.enabled && !fxReduce
+      // (qb_traffic_chart.js computed), 面板总开关置灰/说明行/AQB_FX_CFG.on 三处消费面都吃它;
+      // enabled 字段本身只存用户意图, reduce 态不回写 store。
+      fxReduce: qbInitialFxReduce(),
       // 登录"验证中"加载态(本地密钥 bootstrap 期间 true): 修复刷新时闪现输入密钥界面。
       // FX-01: 初值必须为 true —— 首帧状态**未知**, 不能当作"未授权"渲染密钥表单。
       // 离开该状态只有三条明确路径(见 mounted/bootstrap): 本机免鉴权 / 密钥验证通过 / 无密钥或验证被拒。
@@ -721,13 +727,26 @@ window.AQB_STATE = {
     fxPanel() {
       if (this.fxPanel.visible) this.$nextTick(() => this._qbFxRefit());
     },
-    // fx -> window.AQB_FX_CFG(§05.3: 绘制热路径只读普通对象, 不逐帧读 Vue): JSON 往返斩断
-    // 响应式代理; immediate 兜首帧(建图先于任何用户操作, 读取面要有初值), deep 兜滑杆 @input
+    // 数值面板收层的监听/IO 断开兜底(R8 S0-b, plan 26-11-12-1139 §05.7): 七处登记(lifecycle
+    // 点空白与 Esc 退栈链 / closeDrawer / drawerTab / drawer_store 换 kind 收口)都直接写
+    // fxPanel.visible = false(与 drawerMenu 同组的既有收层形态, 不经 fxClose) —— 窗口级监听与
+    // IO 的装卸不能只挂 fxClose 一处, visible 一翻 false 统一在这汇到 _qbFxListen(false)
+    // (开面板建、关面板断, 装卸对称防泄漏; _qbFxListen 幂等, fxClose 自身的显式断开重入无副作用)。
+    "fxPanel.visible"(v) {
+      if (!v) this._qbFxListen(false);
+    },
+    // fx / fxReduce -> window.AQB_FX_CFG(§05.3: 绘制热路径只读普通对象, 不逐帧读 Vue): JSON
+    // 往返斩断响应式代理, 附加有效值 on(= fxOn = enabled && !reduce, §05.6 引擎消费面) ——
+    // 两个 watcher 都汇到 _qbFxCfgSync 单点(reduce 翻转时 on 必须立即跟着翻, 只挂 fx watcher
+    // 会漏); immediate 兜首帧(建图先于任何用户操作, 读取面要有初值), deep 兜滑杆 @input
     // 逐值写与 layers.* 深层改动。
     fx: {
-      handler(v) { window.AQB_FX_CFG = JSON.parse(JSON.stringify(v)); },
+      handler() { this._qbFxCfgSync(); },
       deep: true,
       immediate: true,
+    },
+    fxReduce() {
+      this._qbFxCfgSync();
     },
     // 通知(S1): 打开面板即视为已读, 未读徽标清零 —— 后续面板 UI 直接绑 _errUnread/errPanelOpen。
     // 写入单点在 ui_feedback.js 的 _recordErrorToast / _clearErrorHistory; watcher 放根组件选项

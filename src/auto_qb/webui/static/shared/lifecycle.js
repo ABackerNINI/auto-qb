@@ -84,6 +84,9 @@ window.AQB_LIFECYCLE = {
       this.searchHelpOpen = false;  // 搜索语法浮卡(触发钮自身 @click.stop 已拦截, 点空白 = 收起)
       this.filePrio.visible = false;
       this.drawerMenu.visible = false;  // 抽屉右键菜单(R2 S3): 与右键菜单同层的临时浮层
+      // 动效数值面板(R8, plan 26-11-12-1139 §05.7): 非模态浮层同族 —— 点空白收层(面板根
+      // @click.stop 已拦截, 与通知面板 .err-panel 同一套口径); 图区右键重开即用
+      this.fxPanel.visible = false;
       this.addCatMenu = false;  // 添加种子对话框内浮层: 点空白处统一收起(触发元素自身已 @click.stop 拦截)
       this.addTagMenu = false;
       this.addPathPop = false;
@@ -120,6 +123,9 @@ window.AQB_LIFECYCLE = {
       else if (this.relChain.open) this.relChainClose();  // 路径链浮窗(P2): 浮于抽屉(40)/历史(130)之上, 先于抽屉内浮层与抽屉本身关闭
       else if (this.filePrio.visible) this.filePrio.visible = false;  // 文件优先级小菜单: 抽屉内浮层先于抽屉关闭
       else if (this.drawerMenu.visible) this.drawerMenu.visible = false;  // 抽屉右键菜单(R2 S3): 同为抽屉内浮层
+      // 动效数值面板(R8, plan 26-11-12-1139 §05.7): 比抽屉菜单"重"一层(浮于图宿主之上, z-index 90),
+      // 后开先关 —— 面板开着按 Esc 只关面板, 再按 Esc 才轮到抽屉(位置紧跟 drawerMenu 之后, §05.7 表)
+      else if (this.fxPanel.visible) this.fxPanel.visible = false;
       // 历史流量弹层: 遮罩层(z-index 130)盖在停靠抽屉(80)之上, 与 qB 口径流量图(drawerVisible)
       // 同时存在时它才是视觉上的**最上层** —— 必须先关它, 否则 Esc 会穿过遮罩去关底下被盖住的抽屉
       // (退栈顺序 = 视觉层叠顺序: 弹层 -> 抽屉; 2026-10-06 报障: 两图同开时 Esc 先关错了抽屉)

@@ -5,8 +5,13 @@
          containing-block 会把 fixed 后代劫持成相对抽屉定位(§09 风险行; .err-panel 注释同源坑);
          共用层 CSS 也不用躲抽屉级联。固定宽 320、max-height 兜底 + 正文内部滚动, 不可拖拽 resize。
          拦截(§05.1): 根节点 @click.stop(lifecycle._onDocClick 绑 window 冒泡且无 contains 判断,
-         漏了 = 拖一下滑杆面板就关) + @keydown.esc.stop.prevent(面板开着时 Esc 不得穿透去关抽屉;
-         收层登记在下一阶段接 §05.7, 见 qb_traffic_chart.js 面板段头注)。
+         漏了 = 拖一下滑杆面板就关) + Esc 键绑定走 fxEsc 处理器(面板**可见**才 stopPropagation +
+         preventDefault + fxClose —— 焦点在面板控件内如刚拖完滑杆按 Esc 也只关面板, 同一次
+         Esc 不再推进抽屉退栈链; 退场过渡 120ms 期 visible 已翻 false 时**放行**该次 Esc 给
+         document 退栈链, 与面板外二次 Esc 关抽屉行为一致; 不用 .stop/.prevent 修饰符 ——
+         修饰符的阻断先于处理器表达式, 退场期那次 Esc 被整体吞掉)。收层登记已接 §05.7 ——
+         lifecycle 两处 + escBusy + _kbOverlayBusy + closeDrawer/drawerTab/换 kind 收口 +
+         IO 兜底, 名单见 qb_traffic_chart.js 面板段头注。
          量纲(§05.3): impact/particles/shiftRatio 显示 0-100、存储 0-1, 换算单点在 fxRange/fxPct;
          状态行只读两项(period/beat)写死只读 —— 改它们要动后端与数据文件, 面板不提供任何入口。
          配色只用中性令牌(--bg-card/--border/--fg/--fg-muted + --accent 滑杆), 禁 --today-up/down
@@ -14,7 +19,7 @@
     <transition name="fx-pop">
       <div v-if="fxPanel.visible" ref="fxPanelEl" class="fx-panel" :class="{ 'fx-alt': fxPanel.alt }"
            :style="{ left: fxPanel.x + 'px', top: fxPanel.y + 'px' }" role="dialog" aria-label="动效数值"
-           @click.stop @keydown.esc.stop.prevent>
+           @click.stop @keydown.esc="fxEsc">
         <header class="fx-head">
           <span class="fx-title">动效数值</span>
           <button type="button" class="fx-x" aria-label="关闭动效数值面板" @click="fxClose">
@@ -24,10 +29,16 @@
         <div class="fx-body">
           <!-- 状态行(§05.3): 一行三值, period 取 _qbPollMs 实算值; 「上次真实拍」S3 接节拍状态后回填 -->
           <p class="fx-status">采样 {{ qbFxPeriodS }} s · beat {{ qbFxBeatMs }} ms · 上次真实拍 —</p>
-          <!-- 总开关(常显第一行): 立即生效; reduced-motion 置灰红线在下一阶段接(§05.6) -->
+          <!-- reduced-motion 说明行(§05.6): 系统要求减弱动效时总开关强制关且置灰 —— 这里显式
+               说明原因, 否则「开关是灰的」读不出是系统层的可访问性红线, 用户会当故障报。 -->
+          <p v-if="fxReduce" class="fx-note">系统要求减弱动效，当前不生效</p>
+          <!-- 总开关(常显第一行): 显示/操作的都是有效值(fxOn = enabled && !reduce, §05.6) ——
+               reduce 态强制显示为关且置灰(disabled, 点不动), enabled 的用户意图原样保留在
+               fx 里不回写 store; 系统设置恢复后自动回到手动值。面板任何操作都写不出有效值
+               打开: 有效值恒过 fxOn 单点的 && !reduce(含「重置为默认」把 enabled 写回 true)。 -->
           <label class="fx-row fx-master">
             <span class="fx-name">启用动效</span>
-            <input type="checkbox" :checked="fx.enabled" @change="fxCheck('enabled', $event)">
+            <input type="checkbox" :checked="fxOn" :disabled="fxReduce" @change="fxCheck('enabled', $event)">
           </label>
           <!-- 常显 4 组 8 项(节奏 1 + 视觉 4 + 位移 2 + 双轨 1); 其余 7 项收「高级」折叠 -->
           <div class="fx-group">

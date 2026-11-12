@@ -17,6 +17,9 @@ Delete 直连注册表外, 均为已拍板的口径, 逐条落断言。W5 局部
   浮层打开只放行焦点局部(settings)键位; 非 inputSafe 条目不得标 inputSafe
 - test_drawer_dock_keyboard_w2: 方案A W2(计划 26-10-03-0917 §2.2/§2.3/§3.2/§3.4) ——
   _kbOverlayBusy 摘 drawer.open 而 escBusy 保留(两名单职责分叉: 面板≠浮层 vs Esc 关面板);
+  R8 追加(plan 26-11-12-1139 §05.7): _kbOverlayBusy 名单**末尾**(kbFullOpen 之后)追加
+  fxPanel.visible —— 动效数值面板开着时单键快捷键失效, 书写序钉在 filePrio/historyOpen
+  锚与末位双断言上(插进中间 = 名单漂移回潮);
   drawer-tab 四条 group=详情面板 / scope=list / run=_kbDrawerTab 双态(非种子页 toast 忽略 /
   开态切页只对种子形态 kind=seed 成立, 流量形态开态视同关态走 openTorrentDrawer 换形打开 ——
   流量形态 hash 恒空, 切页签会打出 /api/torrents//trackers 空 hash 404 / 关态开面板定位该页签,
@@ -216,6 +219,13 @@ def test_drawer_dock_keyboard_w2() -> None:
     assert busy, "shortcuts.js 找不到 _kbOverlayBusy"
     assert "this.drawer.open" not in busy.group(1), "_kbOverlayBusy 必须摘除 drawer.open(停靠面板不是浮层, Delete 等列表键面板开着要保持可用)"
     assert "this.filePrio.visible || this.historyOpen" in busy.group(1), "_kbOverlayBusy 名单书写序漂移, 同步本守阵解析"
+    # 动效数值面板(R8, plan 26-11-12-1139 §05.7)必须追加在名单**末尾**: fxPanel.visible 出现在
+    # historyOpen(既钉书写序锚)与 kbFullOpen(追加前的实际末项)之后 —— 插进中间 = 两名单(
+    # escBusy/_kbOverlayBusy)又添一处各自漂移的先例
+    assert "this.fxPanel.visible" in busy.group(1), "_kbOverlayBusy 缺动效数值面板项(面板开着时单键快捷键必须失效, §05.7)"
+    assert busy.group(1).index("this.fxPanel.visible") > busy.group(1).index("this.historyOpen") \
+        and busy.group(1).index("this.fxPanel.visible") > busy.group(1).index("this.kbFullOpen"), \
+        "fxPanel.visible 必须追加在 _kbOverlayBusy 名单末尾(kbFullOpen 之后), 插前面直接破坏书写序守阵"
     dialogs_js = _read("dialogs.js")
     esc_busy = re.search(r"escBusy\(\) \{(.*?)\n    \},", dialogs_js, re.S)
     # Esc 关面板这一项两处(dialogs.escBusy / lifecycle 退栈链)都写 drawerVisible —— 面板随

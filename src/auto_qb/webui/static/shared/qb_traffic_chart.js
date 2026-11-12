@@ -243,6 +243,21 @@ function qbInitialFx() {
   return _qbFxClone(QB_FX_DEFAULTS);
 }
 
+/* reduced-motion 判定(R8, plan 26-11-12-1139 §05.6): 判定单点在本模块 —— 内联 matchMedia,
+ * **不引用共享 fx 域的 reduced 助手**(window.AQB_FX 只在 flux 皮肤挂载, shared/fx/fx.js:189;
+ * 三套旧皮肤页面上引用即 ReferenceError, 而 test_frontend_fx_wiring 只查 shell 的 link/script
+ * 照绿不报 —— 自觉约束, 守阵钉住本文件零该引用)。
+ * 返回值进 state.js 的 fxReduce 字段(响应式, 面板置灰/说明行/AQB_FX_CFG.on 消费面都吃它),
+ * 运行期变化由 mounted 里的 matchMedia change 监听跟随。函数体内取 BOM(node 探针 eval 本文件,
+ * 顶层不得碰 —— 同 qbInitialWindow 纪律); 无 matchMedia(node/旧环境)回落 false。 */
+function qbInitialFxReduce() {
+  try {
+    return !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+  } catch (e) {
+    return false;
+  }
+}
+
 /* 三挂点作用域表(模块级单一描述源): 字段名一律指到 state.js 根选项的字段(不进 app.mixin,
  * frontend-split 纪律); url(ctx, window) 组端点串, ctx = 单种 hash / 分组 key(经 this 取);
  * active = 该图此刻是否应显示/可拉(建图守卫 + 轮询 tick 跳过判据同源); stale = 在途响应
@@ -652,6 +667,14 @@ window.AQB_QB_TRAFFIC = {
     qbFxBeatMs() {
       return Math.round(Math.min(1000, Math.max(320, this._qbFxCurPeriodMs() * 0.4)));
     },
+    /* 有效值单点(§05.6 reduced-motion 红线): effectiveOn = enabled && !reduce —— 系统要求减弱
+     * 动效时可访问性红线(I7 强退)压过面板总开关, 面板置灰/强制关与 AQB_FX_CFG.on 引擎消费面
+     * 一律吃这里; fx.enabled 只存用户意图, reduce 态的自动置位**永不回写 store**(否则系统设置
+     * 恢复后用户手动开过的动效回不来)。面板任何操作(含重置为默认)都写不出有效值打开 —— 结构上
+     * 有效值恒过本单点的 && !reduce, 不是靠各处理器自觉。 */
+    fxOn() {
+      return this.fx.enabled === true && !this.fxReduce;
+    },
   },
   /* 限速值变化(首次到手 / qB 重连 / 运行中改限速)时重排一次 y 轴 —— 长窗轮询间隔可夹到
    * 600s, 不重排则「限速+20%」迟迟不生效。注册走根实例 mounted(与各 AQB_* 片段同款):
@@ -664,11 +687,30 @@ window.AQB_QB_TRAFFIC = {
         if (_QB_SCOPES[s].active(this) && this._qbYCapOf(s) > 0) this._qbChartRescale(s);
       }
     });
+    /* reduced-motion 跟随(§05.6): matchMedia change 监听 app 常驻(mounted 装 / beforeUnmount
+     * 摘, 同 _qbLimitUnwatch 装卸纪律) —— 系统设置恢复后有效值**立即**回到 enabled 的用户手动
+     * 值(fxReduce 翻转 -> state.js 的 fxReduce watcher 重同步 AQB_FX_CFG.on + 面板控件解除
+     * 置灰), 不能等下次用户操作才生效。初值 data() 已由 qbInitialFxReduce 取过, 这里补监听并
+     * 再对齐一次(mounted 前系统设置变了也吃得到)。处理器提为实例字段(unmounted 按同一引用摘,
+     * R4 清池纪律)。 */
+    if (window.matchMedia) {
+      this._qbFxMql = window.matchMedia("(prefers-reduced-motion: reduce)");
+      this._qbFxOnReduce = () => { this.fxReduce = this._qbFxMql.matches === true; };
+      this._qbFxOnReduce();
+      this._qbFxMql.addEventListener("change", this._qbFxOnReduce);
+    }
   },
   beforeUnmount() {
     if (this._qbLimitUnwatch) {
       this._qbLimitUnwatch();
       this._qbLimitUnwatch = null;
+    }
+    /* matchMedia change 监听对称摘除(与 _qbLimitUnwatch 同纪律): MediaQueryList 持实例引用,
+     * 不摘则热重载后旧句柄堆叠; 假实例 mounted 早退未挂, 守卫恒过。 */
+    if (this._qbFxMql) {
+      this._qbFxMql.removeEventListener("change", this._qbFxOnReduce);
+      this._qbFxMql = null;
+      this._qbFxOnReduce = null;
     }
     /* themechange 监听对称摘除(池条目 R5#181): 挂载在 _qbChartBuild 里由 _qbThemeBound 保证
      * 只挂一次, 卸载不同步摘除则 documentElement 持实例引用一起泄漏; 处理器在挂载点已提为
@@ -825,10 +867,12 @@ window.AQB_QB_TRAFFIC = {
     /* ================= 数值面板(R8, plan 26-11-12-1139 §05): 图区右键的非模态锚定浮层 =================
      * 模板分片 shared/tpl/fx-panel.html(四皮肤共享, into=app —— .drawer-dock 的**兄弟**节点:
      * 不进 .drawer 子树, flux 的 transform containing-block 会把 fixed 定位劫持成相对抽屉, §09
-     * 风险行); 视图态 fxPanel 与参数值 fx 在 state.js(根选项显式建字段), 本模块只管行为与持久化。
-     * 本阶段(S0-a)边界: 收层/Esc 七处登记与 IntersectionObserver 收口在下一阶段接(§05.7) ——
-     * 现只接右键入口/开合/调参/落盘/重置/复制/Alt 看穿; 抽屉关闭后面板暂不自收(宿主观察回调里
-     * 跳过钳位, 不把面板推到视口左上角)。
+     * 风险行); 视图态 fxPanel/fxReduce 与参数值 fx 在 state.js(根选项显式建字段), 本模块只管
+     * 行为与持久化。
+     * 收层面(S0-b, §05.7): 七处登记(lifecycle 点空白 + Esc 退栈链 / dialogs_meta escBusy /
+     * shortcuts _kbOverlayBusy 末尾 / closeDrawer / drawerTab / drawer_store 换 kind 收口)+
+     * IO 宿主可见性兜底(_qbFxListen 内, 换肤不误关); 七处登记直接写 visible = false 不经
+     * fxClose, 监听与 IO 的断开由 state.js 的 'fxPanel.visible' watcher 统一汇到 _qbFxListen(false)。
      * !命名: 模板触达的处理器不得带 _ 前缀(commands_send.js:347-350 前科 —— Vue 模板解析不到
      *   _ 前缀成员, 整块渲染失败); 对外 fxClose/fxReset/fxCopy/fxPreview/fxCheck/fxPick/fxRange,
      *   模块内部才 _qb*。 */
@@ -848,7 +892,23 @@ window.AQB_QB_TRAFFIC = {
       this.fxPanel = { visible: true, x: at.x, y: at.y, alt: false };  // 对象整体替换 -> watcher 重钳位
       this._qbFxListen(true);
     },
-    /* 关层(面板右上 x 钮; S0-a 唯一关闭通道, 点外/Esc 收层在下一阶段进 §05.7 名单) */
+    /* 面板根 Esc(fx-panel.html @keydown.esc="fxEsc"): 面板**可见**才拦 —— stopPropagation +
+     * preventDefault + fxClose, 焦点在面板控件内(如刚拖完滑杆)按 Esc 也只关面板, 同一次 Esc
+     * 不再推进抽屉退栈链(一次 Esc 只关一层)。可见性早退是行为面不是防御: 退场过渡
+     * (fx-pop-leave-active 120ms)期 visible 已翻 false 而焦点仍在面板控件里, 那次 Esc 必须
+     * **放行**给 document 退栈链 —— 若用 .stop 修饰符, 阻断先于处理器表达式, 该次 Esc 被整体
+     * 吞掉, 与「面板外按 Esc 二次关抽屉」的行为不一致(评审 nit 轮裁决)。
+     * !模板触达, 不得带 _ 前缀(commands_send.js:347-350 前科)。 */
+    fxEsc(e) {
+      if (!this.fxPanel.visible) return;
+      e.stopPropagation();
+      e.preventDefault();
+      this.fxClose();
+    },
+    /* 关层(面板右上 x 钮 / 面板根 Esc 经 fxEsc / IO 兜底; 七处收层登记走各自位置的
+     * visible = false 直写, 监听断开统一由 state.js 的 'fxPanel.visible' watcher 汇到
+     * _qbFxListen(false) —— 本方法的显式断开与它重入幂等, 先到先断; 已关面板再入走首行
+     * 早退, 重入安全) */
     fxClose() {
       if (!this.fxPanel.visible) return;
       this.fxPanel = { visible: false, x: 0, y: 0, alt: false };
@@ -875,7 +935,7 @@ window.AQB_QB_TRAFFIC = {
         window.addEventListener("keyup", this._qbFxOnAltKey);
         window.addEventListener("blur", this._qbFxOnBlur);
         // 抽屉拖拽调高 -> 图宿主高变(.qb-chart-host height:100%): RO 触发节流重钳位。宿主被拆
-        // (抽屉关/换 kind/切页签)时 RO 报空盒 —— 跳过即可, 收口登记(§05.7)在下一阶段接。
+        // (抽屉关/换 kind/切页签)时 RO 报空盒 —— 跳过即可, 收口由下面的 IO 兜底(§05.7)。
         if (!this._qbFxHostRo) {
           this._qbFxHostRo = new ResizeObserver(() => {
             const host = this.$refs.qbChartHost;
@@ -885,6 +945,24 @@ window.AQB_QB_TRAFFIC = {
         }
         const host = this.$refs.qbChartHost;
         if (host && host.isConnected) this._qbFxHostRo.observe(host);
+        // 宿主可见性兜底(R8, plan 26-11-12-1139 §05.7): 观察 .qb-chart-host, intersectionRatio
+        // === 0 即关面板 —— 一条机制覆盖「滚出视口」「切页签」「抽屉关闭」三路(宿主是 v-if 分支,
+        // 被真拆后 IO 对已卸载元素报 ratio 0)。!不挂 _qbChartDestroy: 换肤也走 destroy->build
+        // (themechange), 会把面板误关; 系统明暗变化(theme.js 派发 autoqb:themechange)宿主不重挂,
+        // IO 不触发, 面板保留。生命周期与面板开关对称: 开面板建/观察(与 RO 同点), 关面板断(见
+        // 下面 off 支), 装卸配对防泄漏(七处登记直接写 visible = false 不经 fxClose 的那路, 由
+        // state.js 的 'fxPanel.visible' watcher 统一汇到这里断)。
+        if (!this._qbFxHostIo) {
+          this._qbFxHostIo = new IntersectionObserver((entries) => {
+            for (const en of entries) {
+              if (en.intersectionRatio === 0) {
+                this.fxClose();
+                return;
+              }
+            }
+          }, { threshold: 0 });
+        }
+        if (host && host.isConnected) this._qbFxHostIo.observe(host);
         return;
       }
       window.removeEventListener("resize", this._qbFxOnResize);
@@ -893,6 +971,7 @@ window.AQB_QB_TRAFFIC = {
       window.removeEventListener("keyup", this._qbFxOnAltKey);
       window.removeEventListener("blur", this._qbFxOnBlur);
       if (this._qbFxHostRo) this._qbFxHostRo.disconnect();
+      if (this._qbFxHostIo) this._qbFxHostIo.disconnect();
     },
     /* 节流重钳位(≤60ms 一次, §05.1 跟随行): resize / 页面滚动 / 抽屉高度变化共用的唯一入口。
      * leading + trailing 两段 —— 抽屉入场 rAF 逐帧改高只换来 60ms 一次的钳位, 不与
@@ -978,7 +1057,9 @@ window.AQB_QB_TRAFFIC = {
       this.persistQbFx();
     },
     /* 重置为默认(§05.5: 写回默认值并立即生效, **不删键** —— 用户可能只想回到默认, 不想让旧值
-     * 在下次启动时"复活"; reduced-motion 对 enabled 的置灰红线在下一阶段接)。 */
+     * 在下次启动时"复活")。reduced-motion 红线(§05.6)结构上成立: reduce 态下 enabled 写回
+     * 默认 true 是用户操作落 store, 有效值仍经 fxOn 单点被 !reduce 压住为关 —— 任何面板操作
+     * (含本重置)都写不出有效值打开。 */
     fxReset() {
       this.fx = _qbFxClone(QB_FX_DEFAULTS);  // 对象整体替换 -> watch.fx 同步 AQB_FX_CFG
       this.persistQbFx();
@@ -997,11 +1078,24 @@ window.AQB_QB_TRAFFIC = {
       /* S3: _qbPreviewBeat 按 §05.4 伪代码接, 预览令牌/真值抢占/预算同 I9。 */
     },
     /* fx 落盘(§05.5: 只在用户操作时写 —— 调用点全在面板处理器; try/catch 静默失败, 隐私模式/
-     * 配额满不得让调参崩; 重置也走这里 = 写回默认不删键)。 */
+     * 配额满不得让调参崩; 重置也走这里 = 写回默认不删键)。有效值 on 不落盘: store 只存 15+1
+     * 个字段(v + enabled + 14 项), reduce 态的有效关是运行期事实不是用户意图。 */
     persistQbFx() {
       try {
         localStorage.setItem(QB_FX_STORE_KEY, JSON.stringify(this.fx));
       } catch { /* 写入失败: 本轮仍生效, 刷新后回落默认 */ }
+    },
+    /* AQB_FX_CFG 同步单点(§05.3 + §05.6): fx 整对象 JSON 克隆(斩响应式代理, 绘制热路径只读
+     * 普通对象) + 附加有效值 **on**(= fxOn, = enabled && !reduce) —— S1/S3 引擎侧的开关消费面。
+     * state.js 的 fx 与 fxReduce 两个 watcher 都汇到这里: reduce 翻转时 on 必须立即跟着翻
+     * (系统设置恢复 -> 有效值立即回到 enabled 的手动值), 不能只靠 fx watcher(它只看 fx 自身)。
+     * !fxOn 是 computed, 读它不带括号(getter 语义; 带括号 = 把 getter 的值当函数调, TypeError
+     *   整页白屏, 守阵 test_frontend_computed_not_invoked_as_function 钉此形态)。
+     * on 只进运行期配置对象, 不进持久化键(persistQbFx 只写 fx)。 */
+    _qbFxCfgSync() {
+      const cfg = JSON.parse(JSON.stringify(this.fx));
+      cfg.on = this.fxOn;
+      window.AQB_FX_CFG = cfg;
     },
     /* 状态行只读两项的周期实算单点(展示值 qbFxPeriodS/qbFxBeatMs 在 computed 块 —— 模板裸
      * 插值不加括号, 落 methods 会被 toDisplayString 渲染成函数源码字符串; §05.3 不可编辑项表) */
