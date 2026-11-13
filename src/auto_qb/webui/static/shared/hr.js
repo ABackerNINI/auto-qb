@@ -183,13 +183,14 @@ window.AQB_HR = {
       window.addEventListener("resize", () => this.hrPopHideNow());
     },
     /* 排除态 chip 悬停短语(计划 26-11-14-0001 S2): face("tag"/"category") -> HR_EXCLUDED_BY_TEXT
-     * 对应短语, 供 4 处 chip 绑定点(xtpl/xtpl-cells 的 torrent 与 member 行 cat/tag)的 :title;
-     * 未命中该 face(含 member 无 hr_excluded_by)返回 null —— Vue 会移除 title 属性,
-     * 非排除 chip 不出空悬停。"tag+category" 组合串整句仍由 hrPopData 弹窗依据行承载,
-     * chip 级按各自 face 各说各的(短语复用上表, 不另造措辞)。 */
+     * 对应短语, 供 4 处 chip 绑定点(xtpl/xtpl-cells 的 torrent 与 member 行 cat/tag)的 :title。
+     * 排除判定**不在此重写**, 复用 decorate.js::hrExclClass 的单点判定门(该函数不依赖 this,
+     * AQB_DECORATE 挂 window 对象字面量, 模板渲染期两文件均已加载, 直接调用无加载序风险):
+     * 类命中 <=> 短语出, 恒同步, 不存在"有类无短语"漂移面。未命中返回 null —— Vue 会移除
+     * title 属性, 非排除 chip 不出空悬停。"tag+category" 组合串整句仍由 hrPopData 弹窗依据行
+     * 承载, chip 级按各自 face 各说各的(短语复用上表, 不另造措辞)。 */
     hrExclTip(face, member) {
-      if (!member || !member.hr_excluded_by) return null;
-      return member.hr_excluded_by.split("+").includes(face) ? (HR_EXCLUDED_BY_TEXT[face] || null) : null;
+      return window.AQB_DECORATE.hrExclClass(face, member) === "hr-excl" ? (HR_EXCLUDED_BY_TEXT[face] || null) : null;
     },
     /* 弹窗数据组装(全为后端算好字段的展示映射; null = 不弹):
      * lane <- hr_safety(danger 橙=考察中 / failed 红=考核未通过终态 / safe 绿 / warning 黄=疑似辅种),
