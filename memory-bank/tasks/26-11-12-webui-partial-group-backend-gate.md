@@ -2,14 +2,14 @@
 
 **Status:** In Progress
 **Added:** 2026-11-12
-**Updated:** 2026-11-12
-**Summary:** 认领并修复 issue 26-11-11-0823: 后端部分组闸门(混合形态拍板) + 前端闸放行位 + 电池 6 条; 分面评审 3 轮 5 发现全修零 actionable
+**Updated:** 2026-11-14
+**Summary:** 认领并修复 issue 26-11-11-0823: 后端部分组闸门(混合形态拍板) + 前端闸放行位 + 电池 6 条; 分面评审 3 轮 5 发现全修零 actionable。同专题续作: rename-fs 端点闸(issue 26-11-12-0807, 谓词复用, 无 confirm 位硬拒)
 **Topics:** webui-partial-group-backend-gate
-**Refs:** memory-bank/issues/26-11-11-0823-feat-webui-partial-group-backend-gate.html, memory-bank/plans/26-11-11-0820-plan-webui-partial-group-warning.html, memory-bank/testing/baselines/26-11-12-0550-webui-partial-group-backend-gate.md
+**Refs:** memory-bank/issues/26-11-11-0823-feat-webui-partial-group-backend-gate.html, memory-bank/issues/26-11-12-0807-feat-webui-rename-fs-partial-group-gate.html, memory-bank/plans/26-11-11-0820-plan-webui-partial-group-warning.html, memory-bank/testing/baselines/26-11-12-0550-webui-partial-group-backend-gate.md
 
 ## 本篇只回答
 
-issue 26-11-11-0823(/api/torrents/bulk 直发绕过前端部分组预警)的后端闸门如何拍板、如何实现、如何验证 —— 形态选择(delete 硬拒 vs location confirm 闸)、谓词口径(与前端 D2 对账)、前端放行位一行、测试电池面。前端三落点预警的设计与实现是另一篇(计划 26-11-11-0820 / 档案 26-11-11-webui-partial-group-warning)。
+issue 26-11-11-0823(/api/torrents/bulk 直发绕过前端部分组预警)的后端闸门如何拍板、如何实现、如何验证 —— 形态选择(delete 硬拒 vs location confirm 闸)、谓词口径(与前端 D2 对账)、前端放行位一行、测试电池面。前端三落点预警的设计与实现是另一篇(计划 26-11-11-0820 / 档案 26-11-11-webui-partial-group-warning)。同专题续作 issue 26-11-12-0807(rename-fs 端点闸, 复用本篇谓词)的拍板与实现也收进本篇(见 S7)。
 
 ## 原始请求
 
@@ -37,9 +37,12 @@ issue 26-11-11-0823(/api/torrents/bulk 直发绕过前端部分组预警)的后�
 | S4 | 电池 6 条(硬拒+免疫半面/放行矩阵/双通道/聚合文案/location confirm 闸/武装态不进闸)+ dispatch 改道(平铺全组+重灌 HB)+ 无 cmd_id 矩阵第 7 类 | Done(2026-11-12) |
 | S5 | 分面评审 3 轮(5 发现全修)+ 合流撞桩裁决 + test.full 全绿(数字见基线切片) | Done(2026-11-12) |
 | S6 | 收尾回写(issue 翻 Done + architecture/webui.md + README 核对 + 坑档) | Done(2026-11-12) |
+| S7 | 同专题续作: rename-fs 端点闸(issue 26-11-12-0807) —— `_cmd_rename_fs` 复用 `_partial_groups_of` fail-closed 硬拒(无 confirm 位, 用户直接指派无形态拍板需要), 守阵 1 条 + 两既有用例收编放行面; 纯桩可验(闸门判定只用 store 快照, 拦截在 qB 调用之前)故未走真机轨 | Done(2026-11-14) |
 
 ## 进度日志
 
 ### R0 · 立档 (2026-11-12)
 
 认领并修复 issue 26-11-11-0823: 谓词/文案双单点 + 闸门块(commands_torrents.py)+ 前端放行位一行(drawer.js)+ 电池 6 条与守阵同步。形态经 AskUserQuestion 三选项用户拍板混合(与 D3/S3 已落地事实对齐)。机制红验双向(摘后端闸门恰 3 条闸门行为用例红; 摘前端接线 S3 电池红)。分面评审轮 1(正确性面 1 nit + 测试缺口面 1 major 2 minor 全过检全修) → 轮 2(4 修复确认在位, 新 1 nit 修) → sync 合流(远端 0d420c9d 撞同桩, 保留远端版) → 轮 3 零发现出口。test.full 全绿(数字见 kb.baseline)。提交待用户显式指令。
+
+- 2026-11-14 05:05 rename-fs 端点部分组闸(issue 26-11-12-0807)修复: _cmd_rename_fs 复用 _partial_groups_of 硬拒 + 守阵 1 条 + 两既有用例收编放行面; issue 翻 Done, 评审 2 轮零 actionable 出口, test.full 全绿(基线切片 26-11-14-0502)

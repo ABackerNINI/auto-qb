@@ -560,6 +560,20 @@ class TorrentsMixin:
             return
         if not old_path or not new_path:
             raise ValueError("old_path/new_path 均不能为空")
+        # 部分组闸门(issue 26-11-12-0807): rename-fs 重命名的是辅种组共享物理文件/文件夹
+        # (同组 = 同 save_path + 同文件表, 磁盘只占一份), qB 只重写本成员的文件表映射,
+        # 同组其余在册成员仍指旧名 -> 缺文件(不可逆)。对共存成员纯破坏, 无「明知且想要」的
+        # 合法部分组意图(区别于迁移关 location 的「挪一个种子单放」, 0823 D3) —— 无 confirm
+        # 位, fail-closed 硬拒; 谓词复用 0823 的 _partial_groups_of(单 hash 直发 = keys 空,
+        # sel=1 < total 即拦), 单成员组/未归组照常放行。回执经 ValueError ->
+        # consume_commands 的 error 分支带出(与 set_file_priority 等单命令拒绝同形态)。
+        partials = self._partial_groups_of([hash], [])
+        if partials:
+            p = partials[0]
+            raise ValueError(
+                f"辅种组「{p['name']}」还有 {p['total'] - p['sel']} 个成员共享该文件/文件夹: "
+                f"重命名会让它们的文件表失效(不可逆), 辅种组共享文件/文件夹不支持重命名"
+            )
         if is_folder:
             self.api.torrents_rename_folder(torrent_hash=hash, old_path=old_path, new_path=new_path)
         else:

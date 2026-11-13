@@ -21,6 +21,7 @@
 - test_bulk_partial_group_delete_message_aggregates_groups: 多组聚合文案 —— 两组合计缺口; 四组触发「等 K 个组」截断(与前端 _partialGroupsSummary 同形)
 - test_bulk_partial_group_location_confirm_gate: 迁移关 location 部分组闸 —— 无 confirm 拒单(零 qB 调用), confirm=true 放行直发 setLocation(D3 拍板挪一个单放合法); keys 覆盖全组照常直发
 - test_bulk_partial_group_location_armed_not_gated: 迁移武装态部分组 location 不进闸门(锚点 :701 在闸前分流) —— relocate_execute 收选中集合与 confirm 原样透传, 零 setLocation 直发
+- test_rename_fs_partial_group_hard_rejected: rename-fs 部分组闸门(issue 26-11-12-0807) —— 重命名辅种组共享文件/文件夹 fail-closed 硬拒(组名/缺口/不支持重命名) + 零 qB 调用; 未归组/单成员组/组缩到 1 在册成员照常放行(谓词复用 _partial_groups_of)
 """
 
 import tempfile
@@ -728,3 +729,93 @@ def test_bulk_partial_group_location_armed_not_gated():
         r = mgr.web.results["pg-armed"]
         assert r["status"] == "ok", r
         assert client.calls == [], f"武装态不得直发 setLocation: {client.calls}"
+
+
+# ---------- rename-fs 部分组闸门(issue 26-11-12-0807) ----------
+
+
+def test_rename_fs_partial_group_hard_rejected():
+    """rename-fs 部分组闸门(issue 26-11-12-0807): 重命名辅种组共享文件 fail-closed 硬拒
+
+    rename-fs 重命名的是共享物理文件/文件夹(同组 = 同 save_path + 同文件表, 磁盘只占一份),
+    qB 只重写本成员的文件表映射, 同组其余在册成员仍指旧名 -> 缺文件(不可逆)。对共存成员纯
+    破坏无合法意图(区别于迁移关 location 的 confirm 位) —— 硬拒 = error 回执点名组名与缺口
+    + 零 qB 调用; 文件/文件夹两形态同闸。放行面: 未归组/单成员组照常(谓词复用 0823 的
+    _partial_groups_of)。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        mgr, client, _key = _make_grouped_manager(td)
+        # 文件形态: 部分组(组内 2 在册成员, 直发其一)硬拒
+        mgr.web.commands.put(
+            ("rename_fs", {
+                "hash": "HA",
+                "old_path": "movie.mkv",
+                "new_path": "renamed.mkv",
+                "cmd_id": "rfs-g"
+            })
+        )
+        mgr.web.consume_commands()
+        r = mgr.web.results["rfs-g"]
+        assert r["status"] == "error", r
+        assert "辅种组「Show」还有 1 个成员共享该文件" in r["error"], r["error"]
+        assert "不支持重命名" in r["error"], r["error"]
+        assert client.calls == [], f"硬拒不得触碰 qB: {client.calls}"
+        # 文件夹形态同闸
+        mgr.web.commands.put(
+            (
+                "rename_fs", {
+                    "hash": "HA",
+                    "old_path": "season1",
+                    "new_path": "season01",
+                    "is_folder": True,
+                    "cmd_id": "rfs-gf"
+                }
+            )
+        )
+        mgr.web.consume_commands()
+        rf = mgr.web.results["rfs-gf"]
+        assert rf["status"] == "error", rf
+        assert "辅种组「Show」还有 1 个成员共享该文件" in rf["error"], rf["error"]
+        assert client.calls == [], client.calls
+    with tempfile.TemporaryDirectory() as td:
+        # 放行面: 未归组 hash 照常重命名(谓词不参与)
+        mgr, client, _key = _make_grouped_manager(td)
+        _seed_ungrouped(mgr, client, "HU", "Lone")
+        mgr.web.commands.put(
+            ("rename_fs", {
+                "hash": "HU",
+                "old_path": "Lone.mkv",
+                "new_path": "renamed.mkv",
+                "cmd_id": "rfs-u"
+            })
+        )
+        mgr.web.consume_commands()
+        assert mgr.web.results["rfs-u"]["status"] == "ok", mgr.web.results["rfs-u"]
+        assert client.calls == [("rename_file", ("HU", "Lone.mkv", "renamed.mkv"))], client.calls
+    with tempfile.TemporaryDirectory() as td:
+        # 放行面: 单成员组无部分面照常; 组缩到 1 个在册成员(陈旧索引不算)不制造假拦截
+        mgr, client, key = _make_grouped_manager(td)
+        _seed_group(mgr, client, ["HS"], "Solo", "solo.mkv")
+        mgr.web.commands.put(
+            ("rename_fs", {
+                "hash": "HS",
+                "old_path": "solo.mkv",
+                "new_path": "renamed.mkv",
+                "cmd_id": "rfs-s"
+            })
+        )
+        mgr.web.consume_commands()
+        assert mgr.web.results["rfs-s"]["status"] == "ok", mgr.web.results["rfs-s"]
+        assert client.calls[-1] == ("rename_file", ("HS", "solo.mkv", "renamed.mkv")), client.calls
+        mgr.store.remove_torrent("HB")
+        mgr.web.commands.put(
+            ("rename_fs", {
+                "hash": "HA",
+                "old_path": "movie.mkv",
+                "new_path": "renamed.mkv",
+                "cmd_id": "rfs-s1"
+            })
+        )
+        mgr.web.consume_commands()
+        assert mgr.web.results["rfs-s1"]["status"] == "ok", mgr.web.results["rfs-s1"]
+        assert client.calls[-1] == ("rename_file", ("HA", "movie.mkv", "renamed.mkv")), client.calls

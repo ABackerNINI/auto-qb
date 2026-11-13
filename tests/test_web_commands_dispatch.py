@@ -338,6 +338,9 @@ def test_drain_web_commands_torrent_write_actions():
     """二轮写命令: 参数正确传给 QbApi(真链路), cmd_id 回执 ok, 限速同 tick 生效; 保存路径**等上报**"""
     with tempfile.TemporaryDirectory() as td:
         mgr, client, key = _make_grouped_manager(td)
+        # rename_fs 部分组闸门(issue 26-11-12-0807): 本用例 HA 直发 rename_fs(c12, 参数透传守阵)
+        # 需走放行面 —— 组缩到 1 个在册成员(非部分组); 其余命令不受影响
+        mgr.store.remove_torrent("HB")
         old_save_path = mgr.store.get("HA").save_path
         # S3 删除改道(plan 26-10-07-0055): remove_tracker 收 mask 值, 后端重取原文比对
         client.trackers_map["HA"] = [{"url": "https://c.example/announce?passkey=SUPERSECRET123", "status": 2}]

@@ -9,9 +9,9 @@
 <meta name="issue-stamp" content="26-11-12-0807">
 <meta name="issue-type" content="feat">
 <meta name="doc-topic" content="webui-partial-group-warning">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-12-webui-partial-group-backend-gate.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="后端纵深: rename-fs 端点×部分组无防线 —— 重命名共享文件破坏组内其余成员文件表">
 <meta name="issue-summary" content="/api/torrents/{hash}/rename-fs 直发可重命名辅种组共享物理文件, 组内其余成员文件表失效缺文件; 前端入口 2026-10-14 已退役仅端点存留, 计划 26-11-11-0820 §02 曾划归 issue 26-11-11-0823 但其正文未含, 防线无主">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-12-0807-feat-webui-rename-fs-partial-group-gate</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-12 08:07</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">feat</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
@@ -166,11 +166,15 @@ def _cmd_rename_fs(self, hash: str, old_path: str = "", new_path: str = "", is_f
   <h2><span class="no">§07</span>状态变更日志</h2>
   <ul>
     <li>2026-11-12 08:07 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-14 — 状态 Open → In Progress（kb.status）</li>
+    <li>2026-11-14 — 状态 In Progress → Done（kb.status）</li>
+</ul>
   <h3>复验</h3>
-  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
-  <h3>修复后补充</h3>
-  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  <p>复验：2026-11-14 05:00 仍复现 —— 三锚点全部在位: <code>torrent_cmds.py:295</code> 路由 / <code>commands_torrents.py:558</code> <code>_cmd_rename_fs</code>(只查在册无组闸) / <code>drawer_files.js:32</code> 前端退役注释。</p>
+  <h3>修复后补充（2026-11-14）</h3>
+  <p><strong>实际修法</strong>: 与建议修法一致(无改道) —— <code>_cmd_rename_fs</code> 在在册与参数校验之后、qB 调用之前加部分组闸: 谓词复用 0823 的 <code>_partial_groups_of([hash], [])</code>(单 hash 直发 = keys 空, sel=1 &lt; total 即拦), 命中多成员在册组 raise <code>ValueError</code> fail-closed 硬拒(无 confirm 位 —— 重命名共享文件对共存成员纯破坏, 无合法部分组意图), 回执经 <code>consume_commands</code> 的 error 分支带出; 单成员组/未归组/组缩到 1 在册成员照常放行。</p>
+  <p><strong>验证方式</strong>: 新增守阵 <code>tests/test_web_commands_bulk.py::test_rename_fs_partial_group_hard_rejected</code>(文件/文件夹两形态硬拒 = error 回执点名组名缺口 + 零 qB 调用; 放行面三例 = 未归组/单成员组/组缩 1 在册成员); 既有 <code>test_drain_web_commands_torrent_write_actions</code> 与 <code>test_web_commands_rename_fs_folder_branch</code> 收编进放行面(组缩到 1 在册成员后直发)。全量测试绿(数字见 <code>testing/baselines/</code> 最新切片); 只读评审 2 轮闭环(1 nit 文案修, 零 actionable 出口)。</p>
+  <p><strong>联动注记</strong>: 同池 Open 件 <a href="26-10-14-0521-feat-content-tab-file-rename-missing.html">26-10-14-0521</a>(内容页签文件重命名入口恢复)若落地将直发本端点 —— 现闸门已就位, 其直发面自动受本闸保护(多成员组拒绝), 两件联动风险消除。</p>
 </section>
 
 <footer>

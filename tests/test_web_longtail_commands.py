@@ -6,7 +6,7 @@
 - test_reannounce_group_empty_snapshot_error_receipt: 组命令空组回执(E-03) —— 组内成员执行时刻全不在快照时显式 error 回执, 不发指令不登记跟踪(对齐单发口径, 前端不再挂到超时)
 - test_web_commands_recheck_and_skip_check_receipts: recheck/skip-check 拒绝回执带文案
 - test_web_commands_limits_partial_directions: 限速只下发提供的方向; 分享限制缺省 -2 补齐
-- test_web_commands_rename_fs_folder_branch: 重命名文件夹分支
+- test_web_commands_rename_fs_folder_branch: 重命名文件夹分支(组缩到 1 在册成员 = rename-fs 部分组闸门 issue 26-11-12-0807 放行面)
 - test_web_commands_bulk_argument_errors: 批量参数四类错误回执
 - test_web_commands_bulk_missing_targets_reported: 批量缺失种子/组分列计数
 - test_web_commands_bulk_recheck_via_ops: 批量 recheck 经 ops 聚合回执
@@ -112,9 +112,14 @@ def test_web_commands_limits_partial_directions():
 
 
 def test_web_commands_rename_fs_folder_branch():
-    """重命名文件夹走 torrents_rename_folder(文件走 rename_file 已有守阵)"""
+    """重命名文件夹走 torrents_rename_folder(文件走 rename_file 已有守阵)
+
+    组缩到 1 个在册成员后直发(rename-fs 部分组闸门 issue 26-11-12-0807 的放行面:
+    多成员在册组共享文件硬拒, 有专项守阵 test_rename_fs_partial_group_hard_rejected)
+    """
     with tempfile.TemporaryDirectory() as td:
         mgr, client, key = _make_grouped_manager(td)
+        mgr.store.remove_torrent("HB")
         mgr._cmd_rename_fs("HA", old_path="old/dir", new_path="new/dir", is_folder=True)
         assert client.calls[-1] == ("rename_folder", ("HA", "old/dir", "new/dir"))
 
