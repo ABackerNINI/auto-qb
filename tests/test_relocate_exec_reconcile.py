@@ -71,7 +71,8 @@ R4 成员收缩接线追加(计划 26-11-13-0448 §03 R4, D5; 补 0808 丢失的
 - test_step_reconcile_absence_counts_persist_in_state: 计数随 _set_job 落 state.json,
   对象重建(job_from_dict)后计数仍在(黄金法则 3)
 - test_step_reconcile_all_shrunk_vacuous_verify_finalizes: 全员删光 -> 空集核验空转通过
-  -> 删链门(零依赖) -> 收尾 done 别名照删(收缩当拍顺 VERIFY 链自然走通);
+  -> 删链门(组外交集豁免: 组外异名停 src 等值面但清单与 alias_paths 不相交, R2 x R4
+  跨批组合钉, 接缝终审 I) -> 收尾 done 别名照删(收缩当拍顺 VERIFY 链自然走通);
   move 相位 torrent_gone -> failed 不受影响由 test_step_move_mover_gone_marks_failed 钉住
 """
 
@@ -855,7 +856,8 @@ def _r4_env(
     need_validate=False,
     last_removed=(),
     qb=True,
-    alias_live=True
+    alias_live=True,
+    alias_kind=""
 ):
     """R4 判定环境: store 带同步轮基线(rounds_applied/need_validate/last_removed 三信号)+
     api 探活替身 + armed job(alias 在位)。absent 里的成员从 by_hash 摘除。"""
@@ -879,7 +881,9 @@ def _r4_env(
         if qb else types.SimpleNamespace(client=None)
     )
     mod = _bare_mod(store=store, api=api, data_dir=str(tmp_path))
-    job = _job("j1", phase=ru.PHASE_ARMED, hashes=tuple(members), alias_paths=("R:/src/e00.mkv", ))
+    job = _job(
+        "j1", phase=ru.PHASE_ARMED, hashes=tuple(members), alias_paths=("R:/src/e00.mkv", ), alias_kind=alias_kind
+    )
     mod.register_job(job)
     return mod, job
 
@@ -967,9 +971,22 @@ def test_step_reconcile_absence_counts_persist_in_state(tmp_path, monkeypatch):
 
 
 def test_step_reconcile_all_shrunk_vacuous_verify_finalizes(tmp_path, monkeypatch):
-    """全部成员删光 -> 空集核验通过(空转, 无除零/空迭代坑) -> 删链门(零依赖) -> 收尾
-    done(别名照删) —— 收缩当拍即顺 VERIFY 链自然走通"""
-    mod, _j = _r4_env(tmp_path, monkeypatch, absent=("HA", "HB"), last_removed=["HA"], rounds=7)
+    """全部成员删光 -> 空集核验通过(空转, 无除零/空迭代坑) -> 删链门(组外交集豁免) -> 收尾
+    done(别名照删) —— 收缩当拍即顺 VERIFY 链自然走通
+
+    接缝终审 I(R2 x R4 跨批组合钉): 组外异名种子停 src 等值面(save_path 命中删链门
+    候选面)但文件清单与 alias_paths 不相交 —— 收缩至空后的删链门必须走 R2 交集豁免
+    放行, 整链(收缩至空 -> 空集核验 -> 组外豁免 -> done)在收缩当拍一次走通。"""
+    mod, _j = _r4_env(tmp_path, monkeypatch, absent=("HA", "HB"), last_removed=["HA"], rounds=7, alias_kind="file")
+    # 组外异名种子(R2 候选面命中 + 交集不相交 = 豁免面): 不影响缺席收缩(非成员),
+    # 只在空集核验后的删链门被扫到
+    mod._ctx.store.by_hash["HZ"] = types.SimpleNamespace(
+        hash="HZ",
+        save_path="R:/src",
+        state="pausedUP",
+        log_repr="HZ",
+        files=lambda client: [types.SimpleNamespace(name="other.bin", size=1)],
+    )
     removed = []
     mod._remove_links = lambda paths: (removed.extend(list(paths)), len(paths))[1]
     _r4_tick(mod, 7)
@@ -983,5 +1000,5 @@ def test_step_reconcile_all_shrunk_vacuous_verify_finalizes(tmp_path, monkeypatc
     assert saved.hashes == (), "全员收缩 -> 空集"
     assert saved.phase == ru.PHASE_DONE and saved.reason == ru.REASON_FINALIZED, (saved.phase, saved.reason)
     assert saved.alias_paths == (), "终态 job 不再背别名账"
-    assert removed == ["R:/src/e00.mkv"], "别名照删"
+    assert removed == ["R:/src/e00.mkv"], "别名照删(组外异名经 R2 交集豁免不计依赖)"
     assert relocate_journal.read_journal(str(tmp_path), "j1")["phase"] == "done", "journal 同步落终态"

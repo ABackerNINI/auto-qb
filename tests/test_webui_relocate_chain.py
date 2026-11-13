@@ -24,10 +24,12 @@
   确认 -> app_shutdown -> ok / shutdown 被拒 -> degraded 降级(不重试) / 断连 503
 - test_chain_finalize_face_in_response: 链响应 finalize 段(pending 现读/daemon_stale/
   window 相位单点; 旧链 spec 与终态 journal 恒 pending=0)
-- test_finalize_face_reason_fields: S4b 全量字段 —— job reason 分流 verify_failed/chain_deps,
-  note 透传 last_error; R4 追加 members_gone 同走 note 透传(计划 26-11-13-0448 §03 R4,
-  评审轮 1 修 2, 收缩注记反馈面可见); 无 spec 的 job 字段照常给出(前端照显不重判)
+- test_finalize_face_reason_fields: S4b 全量字段 —— job reason 分流 verify_failed/chain_deps/
+  members_gone(布尔位随 reason 分流, 接缝终审 H), note 透传 last_error; R4 追加 members_gone
+  同走 note 透传(计划 26-11-13-0448 §03 R4, 评审轮 1 修 2, 收缩注记反馈面可见);
+  无 spec 的 job 字段照常给出(前端照显不重判)
 - test_finalize_button_and_hint_static: 前端静态守阵(按钮/提示挂浮窗, 确认框与降级文案,
+  note 三分支 v-if 渲染锚 verify_failed/chain_deps/members_gone —— 缺支即收缩注记无渲染面,
   渲染面零调用; S4b 全量口径 note 段)
 
 ### S4 设置页 BT_backup 自动探测端点(计划 26-11-11-0259; POST /api/relocate/bt_backup_probe)
@@ -709,10 +711,10 @@ def test_chain_finalize_face_in_response(web_env, tmp_path):
 
 
 def test_finalize_face_reason_fields(web_env):
-    """S4b 全量字段: job reason 分流 verify_failed/chain_deps, note 透传 last_error
+    """S4b 全量字段: job reason 分流 verify_failed/chain_deps/members_gone, note 透传 last_error
 
     字段在 spec 检查之前给出(核验未过/删链门依赖是 job 账事实, 不依赖 spec 现读);
-    无 reason 的 armed job 三字段恒 False/""(前端照显不重判)。"""
+    无 reason 的 armed job 各布尔位恒 False/note ""(前端照显不重判)。"""
     from auto_qb.core.modules.relocate_units import REASON_CHAIN_DEPS, REASON_VERIFY_FAILED
 
     job = {"job_id": "j1", "phase": "rewritten", "hashes": [HASH], "mover": HASH}
@@ -725,25 +727,28 @@ def test_finalize_face_reason_fields(web_env):
 
     face = _face(dict(job))
     assert face["verify_failed"] is False and face["chain_deps"] is False and face["note"] == "", face
+    assert face["members_gone"] is False, face
 
     face = _face(dict(job, reason=REASON_VERIFY_FAILED, last_error="核验未过: HB 已不在客户端"))
-    assert face["verify_failed"] is True and face["chain_deps"] is False, face
+    assert face["verify_failed"] is True and face["chain_deps"] is False and face["members_gone"] is False, face
     assert "HB" in face["note"], face
 
     face = _face(dict(job, reason=REASON_CHAIN_DEPS, last_error="仍有 2 个种子位于旧根"))
-    assert face["chain_deps"] is True and face["verify_failed"] is False, face
+    assert face["chain_deps"] is True and face["verify_failed"] is False and face["members_gone"] is False, face
     assert "2 个种子" in face["note"], face
 
     # R4(计划 26-11-13-0448 §03 R4, 评审轮 1 修 2): members_gone 同走 note 透传 ——
-    # 收缩事件本就是「反馈面可见」的验收面, last_error 即收缩注记原文
+    # 收缩事件本就是「反馈面可见」的验收面, last_error 即收缩注记原文;
+    # 布尔位随 reason 分流给出(接缝终审 H), 前端浮窗按位渲染收缩注记分支
     from auto_qb.core.modules.relocate_units import REASON_MEMBERS_GONE
     face = _face(dict(job, reason=REASON_MEMBERS_GONE, last_error="成员已删除, 组账收缩 1 个(HA)"))
-    assert face["verify_failed"] is False and face["chain_deps"] is False, face
+    assert face["members_gone"] is True and face["verify_failed"] is False and face["chain_deps"] is False, face
     assert "组账收缩" in face["note"] and "HA" in face["note"], face
 
     # 终态/前段相位: window False, note 照 reason 规则(终态 job reason 已被收口码覆盖)
     face = _face(dict(job, phase="done", reason="finalized", last_error=""))
-    assert face["window"] is False and face["verify_failed"] is False and face["note"] == "", face
+    assert face["window"] is False and face["verify_failed"] is False and face["members_gone"] is False, face
+    assert face["note"] == "", face
 
 
 def test_finalize_button_and_hint_static():
@@ -752,6 +757,16 @@ def test_finalize_button_and_hint_static():
     pop = _static("shared/tpl/popovers.html")
     for needle in (
         "立即收尾", "relChainFinalizeNow()", "relChainFinalizeWindow()", "relChainFinalizePending()", "待收尾: 重启 qB 即完成"
+    ):
+        assert needle in pop, needle
+    # S4b/R4 反馈面 note 三分支渲染锚(接缝终审 H): verify_failed / chain_deps / members_gone
+    # 各一支 v-if 消费 finalize.note —— members_gone 缺渲染分支时收缩注记在唯一 relocate
+    # 反馈面永不显示(R4 验收「反馈面可见」在 T4 只到 API 层, 渲染面由本锚钉住)
+    for needle in (
+        'v-if="relChain.data.finalize.verify_failed"',
+        'v-if="relChain.data.finalize.chain_deps"',
+        'v-if="relChain.data.finalize.members_gone"',
+        "成员已删除, 组账已收缩",
     ):
         assert needle in pop, needle
     js = _static("shared/relocate_chain.js")

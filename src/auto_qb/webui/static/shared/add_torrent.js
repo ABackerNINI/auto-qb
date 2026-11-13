@@ -662,15 +662,21 @@ window.AQB_ADD = {
         return true;
       }
       if (!r || r.cls !== "confirm") return true;
-      // body 分流(R5(3), 计划 26-11-13-0448): 「落点与请求路径不一致」断言只在有
-      // actual_path(目录级重定向/等值面, 后端已按真实落点建模)时为真 —— 文件级 confirm
-      // (撞链接路径/撞派生根)与 direct 无 actual_path, body 用后端 reason 原文, 行表不再
-      // 重复「落点提示」行(reason 全文已在 body)。
+      // body 分流(R5(3), 计划 26-11-13-0448; 判别式接缝终审 J 收窄): 「落点与请求路径
+      // 不一致(该目录已在整组迁移中建了别名)」只对**目录级别名迁移面**为真 —— 按
+      // reasons[0].gate 分流(与后端 evaluate_add 分支契约对齐): finalize_window(收尾窗
+      // 目录级双面, actual=真实落点/账面建模镜像根)与 alias_scope(moved 相位目录别名)
+      // 用该句; alias_file(文件级逐文件链接)/ alias_path(第三方账外链接)虽有 actual_path
+      // (=链接目标), 该断言与语义错位(目录并未建别名); 文件级收尾窗分支与 direct 无
+      // actual_path —— 以上各形态 body 都用后端 reason 原文, 行表不再重复「落点提示」行
+      // (reason 全文已在 body)。
       const reasons = (r.reasons || []).map((x) => String((x && x.text) || "")).filter(Boolean);
-      const body = r.actual_path
+      const gate = String(((r.reasons || [])[0] || {}).gate || "");
+      const aliasFace = !!r.actual_path && (gate === "finalize_window" || gate === "alias_scope");
+      const body = aliasFace
         ? `「${name}」的落点与请求路径不一致(该目录已在整组迁移中建了别名)。`
         : (reasons.join(" ") || `「${name}」的落点需确认(该目录的迁移待收尾)。`);
-      const rows = (r.actual_path ? reasons.map((x) => ({ icon: "#i-warn", label: "落点提示", value: x, wide: true })) : []);
+      const rows = (aliasFace ? reasons.map((x) => ({ icon: "#i-warn", label: "落点提示", value: x, wide: true })) : []);
       rows.push({ icon: "#i-info", label: "请求路径", value: r.requested_path, wide: true });
       if (r.actual_path) rows.push({ icon: "#i-warn", label: "实际落点", value: r.actual_path, wide: true });
       if (r.volume_free != null) {

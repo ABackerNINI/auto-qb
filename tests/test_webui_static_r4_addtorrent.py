@@ -14,9 +14,11 @@
   的 node 真 vm 桩范式, 与 test_web_relocate.py 的字符串锚互补): 后端 cls==="confirm" 弹「落点确认」
   (verdict 行表: 落点提示/请求路径/实际落点/目标卷剩余 GiB 换算) + 确认放行后提交载荷逐字段核对
   (files_b64 去 dataURL 前缀/urls 逐行 trim/save_path/category/tags/paused 取反/四开关透传);
-  R5(3) body 分流两态(计划 26-11-13-0448): actual_path 在场 = 「落点与请求路径不一致」句
-  (目录级面断言为真), 无 actual_path(文件级 confirm/direct)= body 用后端 reason 原文且行表
-  不重复「落点提示」, 多条 reason 空格拼接, reasons 缺失走兜底句;
+  R5(3) body 分流(计划 26-11-13-0448, 判别式接缝终审 J 收窄按 reasons[0].gate):
+  actual_path 在场 + 迁移面 gate(finalize_window/alias_scope)= 「落点与请求路径不一致」句;
+  无 actual_path(文件级 confirm/direct)或非迁移面 gate(alias_path 第三方账外链接/
+  alias_file 文件级逐文件链接, actual=链接目标)= body 用后端 reason 原文且行表不重复
+  「落点提示」(实际落点行照展), 多条 reason 空格拼接, reasons 缺失走兜底句;
   confirm+弹窗取消 = 预检 false 零提交; 非 confirm(cls==="ok")与回执失败 = 放行不弹窗;
   预检抛 auth = false 且零 error toast(401 由 _logout 收口); 网络异常 = 放行; 全角逗号
   U+FF0C 标签口径五面一致(addTagList 拆分/addTagCurrent 尾段/addTagFiltered 剔除/pickAddTag
@@ -227,7 +229,8 @@ _NODE_MKDIR_RECEIPT_PROBE = _COMMON_PRELUDE + _IIFE_OPEN + _MKDIR_RECEIPT_BODY +
 _RELOCATE_GATE_BODY = r"""
 const CONFIRM_TRUTH = {
   cls: "confirm",
-  reasons: [{ text: "整组迁移别名生效中" }],
+  gate: "alias_scope",
+  reasons: [{ gate: "alias_scope", text: "整组迁移别名生效中" }],
   requested_path: "/downloads/req",
   actual_path: "/data/alias",
   volume_free: 3 * 1024 * 1024 * 1024,
@@ -256,7 +259,7 @@ const CONFIRM_TRUTH = {
   ok("预检 waitCmd 20s 上限", vm.waitCalls.some((w) => w[1] === 20000));
   const addCall = vm.apiCalls.find((c) => c[0] === "/api/torrents/add");
   ok("confirm: 确认后提交放行", !!addCall);
-  ok("body: actual_path 在场 = 「落点与请求路径不一致」句(R5(3) 分流: 目录级面断言为真)",
+  ok("body: actual_path 在场 + 迁移面 gate(alias_scope) = 「落点与请求路径不一致」句(R5(3) 分流)",
      vm.modalCfg.body === "「Ubuntu」的落点与请求路径不一致(该目录已在整组迁移中建了别名)。");
   const body = JSON.parse(addCall[1].body);
   ok("载荷 files_b64: 去 dataURL 前缀只留 base64", JSON.stringify(body.files_b64) === JSON.stringify(["QUE="]));
@@ -270,8 +273,8 @@ const CONFIRM_TRUTH = {
 }
 
 // ---- 1b. body 分流(R5(3), 计划 26-11-13-0448): 无 actual_path(文件级 confirm / direct)----
-// 「落点与请求路径不一致」断言只对目录级面为真; 无 actual_path 时 body = 后端 reason 原文,
-// 行表不再重复「落点提示」行(reason 全文已在 body)
+// 「落点与请求路径不一致」断言只对目录级别名迁移面为真; 无 actual_path 时 body = 后端
+// reason 原文, 行表不再重复「落点提示」行(reason 全文已在 body)
 {
   const vm = makeVm();
   vm.addSavePath = "/downloads/req";
@@ -281,7 +284,8 @@ const CONFIRM_TRUTH = {
     ok: true,
     truth: {
       cls: "confirm",
-      reasons: [{ text: "该目录的迁移待收尾(job j1 相位 armed): 落点与成员别名链接同名 —— 确认接受依赖后继续" }],
+      gate: "finalize_window",
+      reasons: [{ gate: "finalize_window", text: "该目录的迁移待收尾(job j1 相位 armed): 落点与成员别名链接同名 —— 确认接受依赖后继续" }],
       requested_path: "/downloads/req/rlfn.bin",
       actual_path: null,
       volume_free: null,
@@ -313,6 +317,56 @@ const CONFIRM_TRUTH = {
   vm3.confirmRes = { ok: true };
   await vm3._relocateAddGate();
   ok("body 分流: reasons 缺失走兜底句(弹窗不哑)", vm3.modalCfg.body === "「A」的落点需确认(该目录的迁移待收尾)。");
+}
+
+// ---- 1c. body 分流判别式收窄(接缝终审 J): 有 actual_path 但非目录级别名迁移面 ----
+// alias_path(第三方账外链接)/ alias_file(文件级逐文件链接)的 actual_path = 链接目标,
+// 「该目录已在整组迁移中建了别名」断言与其语义错位(目录并未建别名)—— body 用 reason
+// 原文; 行表仍展示「实际落点」(链接目标对用户有用), 但无「落点提示」(已在 body)
+{
+  const vm = makeVm();
+  vm.addSavePath = "/downloads/req";
+  vm.addFiles = [{ name: "Ubuntu.torrent", size: 1 }];
+  vm.apiReply["/api/relocate/precheck-add"] = { cmd_id: "g1" };
+  vm.cmdResult = {
+    ok: true,
+    truth: {
+      cls: "confirm",
+      gate: "alias_path",
+      reasons: [{ gate: "alias_path", text: "该路径当前是一条链接(symlink -> /data/other): 添加将写入链接目标而非请求路径" }],
+      requested_path: "/downloads/req/rlfn.bin",
+      actual_path: "/data/other",
+      volume_free: null,
+    },
+  };
+  vm.confirmRes = { ok: true };
+  await vm._relocateAddGate();
+  ok("body 分流(alias_path 第三方面): body = reason 原文, 不用「整组迁移建了别名」句",
+     vm.modalCfg.body === "该路径当前是一条链接(symlink -> /data/other): 添加将写入链接目标而非请求路径");
+  ok("body 分流(alias_path 第三方面): 行表 = 请求路径 + 实际落点(无落点提示)",
+     JSON.stringify((vm.modalCfg.verdict || []).map((r) => r.label)) === JSON.stringify(["请求路径", "实际落点"]));
+  // alias_file(文件级逐文件链接迁移面): 同不用该句(目录未建别名, 逐文件链接语义)
+  const vm2 = makeVm();
+  vm2.addSavePath = "/downloads/req";
+  vm2.addFiles = [{ name: "Ubuntu.torrent", size: 1 }];
+  vm2.apiReply["/api/relocate/precheck-add"] = { cmd_id: "g1" };
+  vm2.cmdResult = {
+    ok: true,
+    truth: {
+      cls: "confirm",
+      gate: "alias_file",
+      reasons: [{ gate: "alias_file", text: "该路径当前是迁移别名链接: 写入将直接覆盖已迁到新位置的数据 —— 确认是同内容辅种再继续" }],
+      requested_path: "/downloads/req/rlfn.bin",
+      actual_path: "/data/dst/rlfn.bin",
+      volume_free: null,
+    },
+  };
+  vm2.confirmRes = { ok: true };
+  await vm2._relocateAddGate();
+  ok("body 分流(alias_file 文件级链接面): body = reason 原文(断言错位面不用迁移别名句)",
+     vm2.modalCfg.body === "该路径当前是迁移别名链接: 写入将直接覆盖已迁到新位置的数据 —— 确认是同内容辅种再继续");
+  ok("body 分流(alias_file): 行表 = 请求路径 + 实际落点",
+     JSON.stringify((vm2.modalCfg.verdict || []).map((r) => r.label)) === JSON.stringify(["请求路径", "实际落点"]));
 }
 
 // ---- 2. cls==="confirm" + 弹窗取消: 预检 false, 零提交 ----

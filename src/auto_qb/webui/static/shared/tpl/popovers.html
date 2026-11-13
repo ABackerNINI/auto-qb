@@ -305,13 +305,19 @@
             </div>
           </div>
           <!-- S4b 失败反馈面全量口径(计划 §3.2 / S4): 优先级 = 核验未过 > 删链门依赖未清 >
-               journal 悬挂(pending); 文案由后端 job 账分流(finalize.note/verify_failed/chain_deps),
-               前端只渲染不重判 -->
+               journal 悬挂(pending); 文案由后端 job 账分流(finalize.note/verify_failed/chain_deps/
+               members_gone), 前端只渲染不重判 -->
           <div v-if="relChain.data.finalize.verify_failed" class="relc-note">
             核验未过, 维持现场: {{ relChain.data.finalize.note || "成员 save_path 未到目标, 别名维持、成员经别名可读" }}
           </div>
           <div v-if="relChain.data.finalize.chain_deps" class="relc-note">
             删链门依赖未清, 别名暂不删除: {{ relChain.data.finalize.note }}
+          </div>
+          <!-- R4 成员收缩注记分支(计划 26-11-13-0448 §03 R4, 接缝终审 H): 收缩注记
+               (last_error)是自含完整句, 兜底只补注记缺席态 —— 收缩事件必须在唯一
+               relocate 反馈面可见(R4 验收「反馈面可见」) -->
+          <div v-if="relChain.data.finalize.members_gone" class="relc-note">
+            {{ relChain.data.finalize.note || "成员已删除, 组账已收缩" }}
           </div>
           <div v-if="relChainFinalizePending()" class="relc-note">
             待收尾: 重启 qB 即完成(尚有 {{ relChain.data.finalize.pending }} 个成员待改写{{ relChainFinalizeDaemonStale() ? ", 回收 daemon 未在位, 将由对账自动重拉" : "" }})。
