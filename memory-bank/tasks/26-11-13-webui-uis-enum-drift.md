@@ -49,3 +49,7 @@ issue 26-11-13-0443(UIS 三皮肤旧枚举 vs `_UI_ALL` 四皮肤现口径漂移
 - 2026-11-13 08:15 R1: 用户指派修复 issue 26-11-13-0744(drawer 三处内联硬编码三皮肤循环, 本专题第二笔)。三处循环(280/374/701)收编 `for ui in _UI_ALL` 单点, flux 三断言面(FX-29 遮罩/胶囊、grip 三判据、D3 窄屏五判据)扩面前逐条预核成立, 纯扩面无真实差异未另立缺陷; 周边「三皮肤」文案如实改「四皮肤」(docstring×4/注释×6/断言消息×1)。验证: test.one drawer 17 passed + shortcuts 四件 36 passed; test.full 6084+19 覆盖 99%(基线切片 26-11-13-0809, 较 0715 零差)。评审三轮: R1 全能档单代理零发现; issue 翻 Done+正文补实际修法后触发 R2 —— 1 minor(实际修法段计数 docstring×3/注释×4 与 diff 实况 11 处不符, 引文过检 PASS 后当场修, 三处文档同步: issue HTML/基线切片 0809/本档案); R3 零发现出口(检 1/1, 修 1, 基 30e20c5c617e)。改 1 源文件未达立档阈值, 进度并入本档案, 随本专题入库。
 
 - 2026-11-13 08:19 修 issue 26-11-13-0744: drawer 三处内联硬编码三皮肤循环收编 _UI_ALL 单点(flux 进守阵), 验证 test.full 6084+19 覆盖 99%(基线 0809 零差), 评审三轮 R2 修 1 计数 minor 出口零发现; issue 翻 Done, 基线切片 0809+会话切片随本专题入库
+
+- 2026-11-13 08:12 修复 issue 26-11-13-0745: tests 守阵「三份 tpl-manifest」旧口径 4 文件 5 处改「全部皮肤(_UI_ALL / webui_helpers._UI_ALL)」(engine:5 照 0443 registry 同款, dom_panel_dialogs/traffic 各按语境), test.one 三件 32 passed + grep 全 tests/ 清零, issue 翻 Done; 评审 1 轮全能档零发现(基 af808bd17dd2); 相邻面 src/qb_traffic_chart.js:50/94 生产注释同款 2 处用户拍板「一并修」(本 clone 当批修复, 见后续 R 行)
+
+- 2026-11-13 23:07 issue 26-11-13-0745 收口: 相邻面 src/qb_traffic_chart.js:50/94 生产注释同款旧口径用户拍板一并修(50 行枚举漏 flux 修正并入全部皮肤括注/94 行最小改), grep 全 tests/+src/ 清零, test.full 重跑 6101+2 与 0816 基线逐位一致; 合流并行 0744 批(acc36968, 零代码交集)后复评 R2 零 actionable(基 c1c81a6184b2), 修复循环出口

@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="webui-uis-enum-drift">
 <meta name="doc-refs" content="memory-bank/tasks/26-11-13-webui-uis-enum-drift.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="tests 守阵文本「三份 tpl-manifest」旧口径残留(engine + dom_panel_dialogs + dom_panel_traffic 共 4 文件 5 处)">
 <meta name="issue-summary" content="「三份 tpl-manifest」样板句在 tests 4 文件 5 处残留, 挂载/登记面现口径已是全部皮肤 webui_helpers._UI_ALL(含 flux); web_shortcuts 三件同款已随 0443 批改齐, engine 是该批改动面外唯一漏改件, 另两处 dom_panel 为建件清点补充">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-13-0745-docs-webui-tests-three-manifest-phrase-drift</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-13 07:45</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">docs</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
 
@@ -114,13 +114,15 @@
 <section id="s3">
   <h2><span class="no">§03</span>建议<span class="opt">（可选）</span></h2>
   <p>engine:5 照 0443 批同款改「全部皮肤(webui_helpers._UI_ALL)的 tpl-manifest」;dom_panel 两处按各自语境改「全部皮肤(_UI_ALL)」并同步对应测试计划条目行;修完 grep <code>三份 tpl-manifest</code> 全 tests/ 清零收口。纯文案漂移,断言本体未核出问题(dom_panel 两文件的皮肤循环本体已走 _UI_ALL)。</p>
+  <p><strong>实际修法（2026-11-13 08:11，照 §03 全项落地）</strong>：共 5 处 —— <code>tests/test_web_shortcuts_engine.py:5</code> 照 0443 批（c1297450）registry 同款逐字改「挂载成对(全部皮肤(webui_helpers._UI_ALL)的 tpl-manifest + app.mixin)」；<code>test_webui_static_dom_panel_dialogs.py:23/1761</code> 与 <code>test_webui_static_dom_panel_traffic.py:5/548</code> 各按语境改「全部皮肤(_UI_ALL)的 tpl-manifest」（两文件本地惯例是 <code>from webui_helpers import _UI_ALL</code> 直连，裸名自洽；traffic:548 因行宽顺带换行重排，语义改点仅一处短语）。<strong>验证</strong>：<code>test.one</code> 三文件 32 passed；grep <code>三份 tpl-manifest</code> 全 tests/ 清零（§03 预判成立，纯文案断言本体零触碰）；评审 1 轮全能档零发现（基哈希 af808bd17dd2）。相邻面留痕：grep 扩面核出 <code>src/auto_qb/webui/static/shared/qb_traffic_chart.js:50/94</code> 生产注释同款「三份 tpl-manifest」2 处（2026-11-13 08:11 实测），不在本件 5 处清单内未动；<strong>2026-11-13 用户拍板「一并修」</strong>——两处已随本批修复（50 行「见 prism/atlas/console」枚举漏 flux 一并修正并入「全部皮肤(atlas/prism/console/flux)」括注，94 行最小改「全部皮肤的 tpl-manifest」），grep 全 tests/+src/ 清零。</p>
 </section>
 
 <section id="s4">
   <h2><span class="no">§04</span>状态变更日志</h2>
   <ul>
     <li>2026-11-13 07:45 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-13 — 状态 Open → Done（kb.status）</li>
+</ul>
 </section>
 
 <footer>

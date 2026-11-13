@@ -2,7 +2,7 @@
 
 守什么: 注册表是键位**单一事实源**(表外无键位), 而前端无 JS 测试框架 —— 键位冲突、黑名单
 越界、危险档键位形态、run 指到不存在的方法, 这些错误全部**静默**(不报错只是键不响/误触),
-只能靠静态断言钉住。挂载成对(三份 tpl-manifest + app.mixin)由本文件与 tests/webui_static_scan_js.py 的
+只能靠静态断言钉住。挂载成对(全部皮肤(webui_helpers._UI_ALL)的 tpl-manifest + app.mixin)由本文件与 tests/webui_static_scan_js.py 的
 _scan_mixin_wiring 双保险。光标滚动跟随禁 scrollIntoView、模态默认焦点/Enter 确认(§08)、
 Delete 直连注册表外, 均为已拍板的口径, 逐条落断言。W5 局部作用域(drawer/settings/modal
 三档 + 浮层放行焦点局部)与 W6 自定义(适配器 /api/keys / 录制器 / 冲突三选一 / 帮助浮层 /

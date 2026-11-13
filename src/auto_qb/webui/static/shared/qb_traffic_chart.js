@@ -47,7 +47,7 @@
  * qbWindowNames computed, 不再各自硬编码。持久化粒度 = **全局单独一份 / 分组与种子共用一份**
  * (autoqb.ui.qbWinGlobal / autoqb.ui.qbWinShared, 键单点 qbWinStoreKey): 全局图与单对象图
  * 观察尺度习惯不同, 而组与种子常被当作同类"单对象"视图对照着看。初值读取 qbInitialWindow
- * 定义在本文件(三份 tpl-manifest 里本文件均排在 state.js 之前, 见 prism/atlas/console),
+ * 定义在本文件(全部皮肤(atlas/prism/console/flux)的 tpl-manifest 里本文件均排在 state.js 之前),
  * 由 state.js 的 data() 调用 —— 档位域归流量图模块所有。落盘纪律与 persistDrawerTab 同款:
  * 只落"选了哪档"这个用户意图, 写失败吞异常(刷新后回落默认), 不打断换窗。
  * 快捷键三入口(shortcuts.js): 打开全局图 Ctrl+Backslash / 详情面板流量页签 Alt+5(无条件,
@@ -91,7 +91,7 @@ function qbWinStoreKey(scope) {
   return scope === "global" ? QB_WIN_STORE_KEY_GLOBAL : QB_WIN_STORE_KEY_SHARED;
 }
 /* 窗口初值(持久化偏好; 与 initialDrawerTab 同纪律: 只认合法档位, 坏值/无存储回落默认)。
- * 定义在本文件(三份 tpl-manifest 里本文件均排在 state.js 之前)由 state.js 的 data() 调用;
+ * 定义在本文件(全部皮肤的 tpl-manifest 里本文件均排在 state.js 之前)由 state.js 的 data() 调用;
  * localStorage 访问只在函数体内(本文件会被 test_webui_static_dom_panel.py 的 node 探针 eval, 顶层不得碰 DOM/BOM)。 */
 function qbInitialWindow(scope) {
   try {
