@@ -18,7 +18,7 @@ store 为必传参数(QbManager 恒持有数据层): "无 store 则透明透传"
   文件优先级/重命名文件(夹)均透传, 由下轮 refresh 校准; tracker 写操作额外失效记录级惰性缓存)
 """
 import logging
-from typing import Any, List, Optional, Union
+from typing import Any, Collection, List, Optional, Union
 
 from qbittorrentapi import (
     Client,
@@ -42,18 +42,37 @@ HashType = Union[str, List[str]]
 class DeleteBlockedError(RuntimeError):
     """D16 删种拦截的拒绝异常(带文件删除会经活动别名删到已迁移数据, N5 实测)
 
-    blocked = [(hash, 命中根, job_id), ...]; 文案面向用户可直接回显(WebUI 删除命令
-    据此写 error 回执), 并给出可行动出路(仅删种子 / 等收尾完成)。
+    blocked = [(hash, 命中根, job_id), ...]; members = 拦截种子里属于任一活动迁移组账的
+    hash 集(store.relocating_hashes 单点, R4 成员收缩语义的成员面)。文案按拦截对象分型
+    (成员 / 组外撞根, R5(1) 计划 26-11-13-0448, D6): 成员出路 = 「仅删除种子(不含文件)」
+    —— 收尾窗内删成员后组账自动收缩、收尾自动完成(数据留新位置待收尾后清理); 组外撞根
+    出路 = 迁出旧根或仅删种子 —— 它们本身是删链门依赖(R2 交集命中), 等收尾不收敛
+    (依赖未清别名永不删), 依赖清零收尾自动完成后带文件删除自然可重试; 「立即收尾」只加速
+    改写窗不清依赖, 降为次选。文案面向用户可直接回显(WebUI 删除命令据此写 error 回执);
+    混批(成员与组外并存)分型各给一句。
     """
-    def __init__(self, blocked: List[tuple]) -> None:
+    def __init__(self, blocked: List[tuple], members: Collection[str] = ()) -> None:
         self.blocked = list(blocked or [])
-        first = self.blocked[0] if self.blocked else ("", "", "")
-        text = (
-            f"{len(self.blocked)} 个种子位于迁移收尾窗口的活动别名之下({first[1]}): "
-            "带文件删除会经别名删到已迁往新位置的数据 —— 请改用「仅删除种子(不含文件)」, "
-            "或等迁移收尾完成后重试"
-        )
-        super().__init__(text)
+        self.members = frozenset(members or ())
+        mem = [b for b in self.blocked if b[0] in self.members]
+        out = [b for b in self.blocked if b[0] not in self.members]
+        parts = []
+        if mem:
+            parts.append(
+                f"{len(mem)} 个种子是迁移收尾窗口中活动迁移组的成员(别名根 {mem[0][1]}): "
+                "带文件删除会经别名删到已迁往新位置的数据 —— 请改用「仅删除种子(不含文件)」: "
+                "收尾窗内删成员后组账自动收缩、收尾自动完成, 数据留新位置待收尾后清理; "
+                "或用「立即收尾」按钮加速收尾后重试"
+            )
+        if out:
+            parts.append(
+                f"{len(out)} 个种子位于迁移收尾窗口的活动别名之下({out[0][1]}), 不是该迁移组的成员: "
+                "带文件删除会经别名链接删到已迁往新位置的数据 —— "
+                "请把这些种子迁出旧根, 或改用「仅删除种子(不含文件)」"
+                "—— 依赖清零收尾自动完成后, 带文件删除自然可重试; "
+                "也可用「立即收尾」按钮加速改写窗"
+            )
+        super().__init__("; ".join(parts) if parts else "带文件删除被迁移收尾窗拦截")
 
 
 class QbApi:
@@ -196,7 +215,8 @@ class QbApi:
 
         D16 删种拦截(计划 26-11-05-0808 §3.2「删种拦截」行; R3 形态感知, 计划
         26-11-13-0448 §03 R3): delete_files=True 时, save_path 位于**活动别名作用域**下的
-        种子按形态分流(抛 DeleteBlockedError, 整批不发 qB)—— 目录别名存续期 deleteFiles
+        种子按形态分流(抛 DeleteBlockedError, 整批不发 qB; 文案按拦截对象分型成员/组外,
+        R5(1))—— 目录别名存续期 deleteFiles
         会穿目录 junction(误删新位置共享数据, N5 实测)全量拦; 文件级别名按「文件清单 x
         alias_paths 交集」精判(相交 = 拦 / 不相交 = 组外异名放行)。两条删除路径(WebUI
         删除命令与内部删种流程)都经本入口, 候选面判据单点 = relocate_units.under_alias_root
@@ -210,7 +230,8 @@ class QbApi:
         if delete_files and hashes:
             blocked = self._relocate_delete_blocked(hashes)
             if blocked:
-                raise DeleteBlockedError(blocked)
+                # 成员面取 relocating_hashes 单点(非终态 job 成员并集): 文案按成员/组外分型
+                raise DeleteBlockedError(blocked, members=getattr(self.store, "relocating_hashes", None) or ())
         self._client.torrents_delete(torrent_hashes=torrent_hashes, delete_files=delete_files, **kwargs)
         if keep_record:
             return
@@ -242,7 +263,8 @@ class QbApi:
         数据风险 —— 该豁免按 tag 单判是**最小方案**: TAG_PROBE 是普通用户标签可被伪造,
         伪造者本就有 qB WebUI 直删通路(本拦截不覆盖), 不为此加第二判据。命中返回
         (hash, 命中根原值, job_id) —— 根以登记原值回显(判据内部的归一形不进文案)。
-        DeleteBlockedError 文案不动(R5(1) 范围)。"""
+        DeleteBlockedError 文案按拦截对象分型(成员/组外, R5(1) 计划 26-11-13-0448): 成员集
+        由调用侧(torrents_delete)取 store.relocating_hashes 传入, 本判定不改文案。"""
         roots = getattr(self.store, "relocating_alias_roots", None)
         if not roots:
             return []

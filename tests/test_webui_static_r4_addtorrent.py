@@ -14,6 +14,9 @@
   的 node 真 vm 桩范式, 与 test_web_relocate.py 的字符串锚互补): 后端 cls==="confirm" 弹「落点确认」
   (verdict 行表: 落点提示/请求路径/实际落点/目标卷剩余 GiB 换算) + 确认放行后提交载荷逐字段核对
   (files_b64 去 dataURL 前缀/urls 逐行 trim/save_path/category/tags/paused 取反/四开关透传);
+  R5(3) body 分流两态(计划 26-11-13-0448): actual_path 在场 = 「落点与请求路径不一致」句
+  (目录级面断言为真), 无 actual_path(文件级 confirm/direct)= body 用后端 reason 原文且行表
+  不重复「落点提示」, 多条 reason 空格拼接, reasons 缺失走兜底句;
   confirm+弹窗取消 = 预检 false 零提交; 非 confirm(cls==="ok")与回执失败 = 放行不弹窗;
   预检抛 auth = false 且零 error toast(401 由 _logout 收口); 网络异常 = 放行; 全角逗号
   U+FF0C 标签口径五面一致(addTagList 拆分/addTagCurrent 尾段/addTagFiltered 剔除/pickAddTag
@@ -253,6 +256,8 @@ const CONFIRM_TRUTH = {
   ok("预检 waitCmd 20s 上限", vm.waitCalls.some((w) => w[1] === 20000));
   const addCall = vm.apiCalls.find((c) => c[0] === "/api/torrents/add");
   ok("confirm: 确认后提交放行", !!addCall);
+  ok("body: actual_path 在场 = 「落点与请求路径不一致」句(R5(3) 分流: 目录级面断言为真)",
+     vm.modalCfg.body === "「Ubuntu」的落点与请求路径不一致(该目录已在整组迁移中建了别名)。");
   const body = JSON.parse(addCall[1].body);
   ok("载荷 files_b64: 去 dataURL 前缀只留 base64", JSON.stringify(body.files_b64) === JSON.stringify(["QUE="]));
   ok("载荷 urls: 逐行 trim 去空行", JSON.stringify(body.urls) === JSON.stringify(["magnet:?xt=a", "https://x.example/y"]));
@@ -262,6 +267,52 @@ const CONFIRM_TRUTH = {
   ok("载荷四开关透传", body.skip_checking === true && body.sequential === true
      && body.first_last_piece_prio === true && body.auto_tmm === true);
   ok("提交 waitCmd 不带预检 20s(用默认轮询)", vm.waitCalls.some((w) => w[0] === "c1" && w[1] === undefined));
+}
+
+// ---- 1b. body 分流(R5(3), 计划 26-11-13-0448): 无 actual_path(文件级 confirm / direct)----
+// 「落点与请求路径不一致」断言只对目录级面为真; 无 actual_path 时 body = 后端 reason 原文,
+// 行表不再重复「落点提示」行(reason 全文已在 body)
+{
+  const vm = makeVm();
+  vm.addSavePath = "/downloads/req";
+  vm.addFiles = [{ name: "Ubuntu.torrent", size: 1 }];
+  vm.apiReply["/api/relocate/precheck-add"] = { cmd_id: "g1" };
+  vm.cmdResult = {
+    ok: true,
+    truth: {
+      cls: "confirm",
+      reasons: [{ text: "该目录的迁移待收尾(job j1 相位 armed): 落点与成员别名链接同名 —— 确认接受依赖后继续" }],
+      requested_path: "/downloads/req/rlfn.bin",
+      actual_path: null,
+      volume_free: null,
+    },
+  };
+  vm.confirmRes = { ok: true };
+  await vm._relocateAddGate();
+  ok("body 分流(无 actual_path): body = 后端 reason 原文",
+     vm.modalCfg.body === "该目录的迁移待收尾(job j1 相位 armed): 落点与成员别名链接同名 —— 确认接受依赖后继续");
+  ok("body 分流(无 actual_path): 行表无「落点提示」(不与 body 重复)",
+     JSON.stringify((vm.modalCfg.verdict || []).map((r) => r.label)) === JSON.stringify(["请求路径"]));
+  // 多条 reason: 空格拼接为 body; reasons 缺失: 兜底句仍可确认(弹窗不哑)
+  const vm2 = makeVm();
+  vm2.addSavePath = "/downloads/req";
+  vm2.addFiles = [{ name: "A.torrent", size: 1 }];
+  vm2.apiReply["/api/relocate/precheck-add"] = { cmd_id: "g1" };
+  vm2.cmdResult = {
+    ok: true,
+    truth: { cls: "confirm", reasons: [{ text: "第一条" }, { text: "第二条" }], requested_path: "/downloads/req/A" },
+  };
+  vm2.confirmRes = { ok: true };
+  await vm2._relocateAddGate();
+  ok("body 分流: 多条 reason 空格拼接为 body", vm2.modalCfg.body === "第一条 第二条");
+  const vm3 = makeVm();
+  vm3.addSavePath = "/downloads/req";
+  vm3.addFiles = [{ name: "A.torrent", size: 1 }];
+  vm3.apiReply["/api/relocate/precheck-add"] = { cmd_id: "g1" };
+  vm3.cmdResult = { ok: true, truth: { cls: "confirm", reasons: [], requested_path: "/downloads/req/A" } };
+  vm3.confirmRes = { ok: true };
+  await vm3._relocateAddGate();
+  ok("body 分流: reasons 缺失走兜底句(弹窗不哑)", vm3.modalCfg.body === "「A」的落点需确认(该目录的迁移待收尾)。");
 }
 
 // ---- 2. cls==="confirm" + 弹窗取消: 预检 false, 零提交 ----

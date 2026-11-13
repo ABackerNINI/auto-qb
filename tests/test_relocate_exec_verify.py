@@ -30,9 +30,17 @@
   alias_paths 交集」—— 相交(同名撞链接路径/等值面平铺同名 E3 形态) = 依赖 / 不相交
   (组外异名, 等值面+前缀面候选) = 豁免(误拦1 修正面) / 不可得(取数抛错/空清单) =
   保守计依赖(宁拦勿漏 E8) / 目录级与 direct 零变化 / 本组 hash 豁免不变
+### 删链门反馈面文案分型(R5(2), 计划 26-11-13-0448 §03 R5)
+- test_chain_deps_text_form_aware_wording: 文件级 job 文案随 R2 语义改措辞「N 个种子的文件
+  与别名链接重叠」+ 出路带立即收尾加速器(依赖清零即自动收尾); 目录级/direct 保留现行
+  save_path 面措辞(scope 前缀 + src 等值), 不带立即收尾句
 ### D16 删种拦截(qbapi.torrents_delete 单点, 两条删除路径共用判据)
 - test_qbapi_delete_guard_blocks_delete_files: 目录别名形态(junction 根=src)——等值与前缀
-  成员都拦(整批不发 qB, 文案带解法); delete_files=False(纯删除)放行
+  成员都拦(整批不发 qB, R5(1) 成员文案: 收缩自愈出路); delete_files=False(纯删除)放行
+- test_qbapi_delete_guard_message_member_vs_out_group: R5(1) D16 文案按拦截对象分型 ——
+  成员出路 = 仅删种子 -> 组账自动收缩自愈 + 立即收尾; 组外撞根出路 = 迁出旧根或仅删种子
+  (其本身即删链门依赖, 「等收尾」循环句退场) + 立即收尾降为次选(加速改写窗);
+  混批分型各一句; 成员集缺省空 = 全部按组外文案分型(替身兼容面)
 - test_qbapi_delete_guard_file_links_form: 文件级形态(成员/同名撞链接)相交拦(文件级
   symlink deleteFiles 跟随直删; R3 后放行面单测在 file_kind_intersection 行)
 - test_qbapi_delete_guard_allows_outside_and_unregistered: 门外种子放行; 无活动别名登记放行
@@ -45,7 +53,8 @@
   同根仍拦
 ### WebUI 删除命令面(第二条路径, 经命令队列全链)
 - test_webui_delete_blocked_receipt_single_and_group: delete_torrent / delete_group 撞拦截 →
-  error 回执带解法文案 + qB 客户端未收到 delete; 纯删除照常发
+  error 回执带解法文案(R5(1) 成员出路句: 仅删种子 + 组账收缩)+ qB 客户端未收到 delete;
+  纯删除照常发
 
 覆盖率缺口清偿(26-11-07, test.full 99.31% -> 99.5% 闸):
 - test_webui_delete_blocked_receipt_bulk_and_no_cmd_id: 批量删除拦截 error 回执 + 单发/组发无
@@ -338,14 +347,47 @@ def test_chain_gate_deps_file_kind_intersection_verdict(tmp_path):
     assert _deps(direct, [("HZ", _rec_files("HZ", "R:/src/Show", ("other.bin", )))]) == ["HZ"], "direct 行为零变化"
 
 
+def test_chain_deps_text_form_aware_wording(tmp_path):
+    """R5(2) 删链门反馈面文案分型(计划 26-11-13-0448 §03 R5): 文件级随 R2 语义改措辞
+    「N 个种子的文件与别名链接重叠」+ 出路带立即收尾加速器; 目录级/direct 保留现行
+    save_path 面(scope/save_path 语义仍真), 不带立即收尾句"""
+    mod = _bare_mod(data_dir=str(tmp_path / "data"))
+    deps = [
+        ("HZ" + "0" * 32, "R:/src"), ("HY" + "0" * 32, "R:/src/g2"), ("HX" + "0" * 32, "R:/src/g3"),
+        ("HW" + "0" * 32, "R:/src/g4")
+    ]
+    # 文件级: 重叠语义 + 收尾出路(依赖清零即自动收尾 / 立即收尾), 无 save_path 面旧句
+    fjob = _job(
+        "j1", phase=ru.PHASE_REWRITTEN, alias_kind="file", alias_paths=("R:/src/Show/e00.mkv", ), scope="R:/src/Show"
+    )
+    ftext = mod._chain_deps_text(fjob, deps)
+    assert "4 个种子的文件与别名链接重叠 等共 4 个" in ftext, ftext
+    assert "迁移到新位置或删除后自动重判" in ftext, ftext
+    assert "依赖清零即自动收尾, 也可用「立即收尾」按钮加速收尾" in ftext, ftext
+    assert "保存路径在别名作用域" not in ftext, "文件级不再用 save_path 面措辞"
+    # 目录级: 现行面原样(scope 前缀 + src 等值), 无立即收尾句
+    djob = _job("j2", phase=ru.PHASE_REWRITTEN, alias_kind="dir", scope="R:/src/Show")
+    dtext = mod._chain_deps_text(djob, deps)
+    assert "4 个种子的保存路径在别名作用域 R:/src/Show 之下或恰在旧根 R:/src(等值) 等共 4 个" in dtext, dtext
+    assert "迁移到新位置或删除后自动重判" in dtext and "立即收尾" not in dtext, dtext
+    # direct: 与目录级同一文案(判据面零变化, 不造第二份格式)
+    direct = _job("j3", phase=ru.PHASE_REWRITTEN, alias_kind="", scope="R:/src/Show")
+    assert mod._chain_deps_text(direct, deps) == dtext, "direct 与目录级同文案"
+
+
 # ---------------------------------------------------------------- D16 删种拦截(qbapi 单点)
 
 
 class _GuardStore:
-    """QbApi 拦截判定的最小 store 替身: get/remove_torrent + relocating_alias_roots 登记"""
-    def __init__(self, records, roots=None):
+    """QbApi 拦截判定的最小 store 替身: get/remove_torrent + relocating_alias_roots 登记
+
+    relocating_hashes = 成员账(R5(1) 文案分型的成员面, 计划 26-11-13-0448); 缺省空集 =
+    全部按组外文案分型(生产真 store 恒有该字段, 替身按需给)。
+    """
+    def __init__(self, records, roots=None, members=()):
         self._records = dict(records)
         self.removed = []
+        self.relocating_hashes = set(members)
         if roots is not None:
             self.relocating_alias_roots = dict(roots)
 
@@ -356,32 +398,84 @@ class _GuardStore:
         self.removed.append(h)
 
 
-def _guard_api(records, roots=None):
+def _guard_api(records, roots=None, members=()):
     client = FakeClient()
-    api = QbApi(client, _GuardStore(records, roots))
+    api = QbApi(client, _GuardStore(records, roots, members))
     return api, client
 
 
 def test_qbapi_delete_guard_blocks_delete_files():
     """目录别名形态(根=src): 等值与前缀命中都拦(整批不发 qB); 纯删除(delete_files=False)放行
-    (R3 后目录级全量拦原样, D6; 登记值 = (job_id, alias_kind, alias_paths) 新形)"""
+    (R3 后目录级全量拦原样, D6; 登记值 = (job_id, alias_kind, alias_paths) 新形;
+    R5(1) 成员文案: 出路 = 仅删种子 -> 组账收缩自愈 + 立即收尾加速器)"""
     records = {
         "HA": _rec("HA", r"R:\src"),  # 等值(N5 形态)
         "HB": _rec("HB", r"R:\src\sub"),  # 前缀
         "HZ": _rec("HZ", r"R:\elsewhere"),  # 门外
     }
-    api, client = _guard_api(records, {r"R:\src": ("j1", "dir", ())})
+    api, client = _guard_api(records, {r"R:\src": ("j1", "dir", ())}, members={"HA", "HB"})
     with pytest.raises(DeleteBlockedError) as ei:
         api.torrents_delete(torrent_hashes=["HA", "HB", "HZ"], delete_files=True)
     assert [b[0] for b in ei.value.blocked] == ["HA", "HB"], ei.value.blocked
     assert ei.value.blocked[0][2] == "j1", "命中根必须能追到 job"
-    assert "仅删除种子" in str(ei.value), "文案必须给出去文件化出路"
+    msg = str(ei.value)
+    assert "2 个种子是迁移收尾窗口中活动迁移组的成员" in msg, msg
+    assert "仅删除种子(不含文件)" in msg and "组账自动收缩" in msg, "文案必须给出收缩自愈出路"
+    assert "数据留新位置待收尾后清理" in msg and "立即收尾" in msg, msg
+    assert "等迁移收尾完成后重试" not in msg, "成员出路已是收缩自愈, 旧「等收尾重试」句必须退场"
     assert not any(c[0] == "delete" for c in client.calls), "拦截必须整批不发 qB"
     api.torrents_delete(torrent_hashes=["HZ"], delete_files=True)  # 门外照删
     assert ("delete", True) in client.calls
     api.torrents_delete(torrent_hashes=["HA"], delete_files=False)  # 纯删除 = 去文件化出口
     assert ("delete", False) in client.calls
     assert api.store.removed == ["HZ", "HA"], api.store.removed
+
+
+def test_qbapi_delete_guard_message_member_vs_out_group():
+    """R5(1) D16 文案按拦截对象分型(计划 26-11-13-0448 §03 R5, D6): 成员出路 = 仅删种子 ->
+    组账自动收缩自愈 + 立即收尾; 组外撞根出路 = 迁出旧根或仅删种子(其本身即删链门依赖,
+    「等收尾」不收敛 —— 循环句退场) + 立即收尾降为次选(只加速改写窗);
+    混批分型各给一句; 成员集缺省空 = 全部按组外文案分型(替身兼容面, 拦截判定不受影响)"""
+    records = {
+        "HA": _rec_files("HA", "R:/src", ("rlfn.bin", )),  # 成员(清单与链接全等, 相交)
+        "HB": _rec_files("HB", "R:/src", ("rlfn.bin", )),  # 组外同名撞链接(相交, E3 形态)
+    }
+    roots = {"R:/src": ("j9", "file", ("R:/src/rlfn.bin", ))}
+    api, client = _guard_api(records, roots, members={"HA"})
+    # 混批: 成员句 + 组外句并存(分型各一)
+    with pytest.raises(DeleteBlockedError) as ei:
+        api.torrents_delete(torrent_hashes=["HA", "HB"], delete_files=True)
+    msg = str(ei.value)
+    assert "1 个种子是迁移收尾窗口中活动迁移组的成员" in msg, msg
+    assert "组账自动收缩" in msg and "数据留新位置待收尾后清理" in msg, msg
+    assert "1 个种子位于迁移收尾窗口的活动别名之下" in msg and "不是该迁移组的成员" in msg, msg
+    assert "请把这些种子迁出旧根" in msg and "或改用「仅删除种子(不含文件)」" in msg, msg
+    assert "依赖清零收尾自动完成后, 带文件删除自然可重试" in msg and "「立即收尾」按钮加速改写窗" in msg, msg
+    assert "请等迁移收尾完成后重试" not in msg, "组外「等收尾」循环句必须退场(被拦组外种子自身即删链门依赖)"
+    assert not any(c[0] == "delete" for c in client.calls), "整批不发 qB"
+    # 纯成员批: 只有成员句(组外句与旧「等收尾重试」出路退场)
+    client.calls.clear()
+    with pytest.raises(DeleteBlockedError) as ei2:
+        api.torrents_delete(torrent_hashes=["HA"], delete_files=True)
+    m2 = str(ei2.value)
+    assert "活动迁移组的成员" in m2 and "不是该迁移组的成员" not in m2, m2
+    assert "等迁移收尾完成后重试" not in m2, m2
+    # 纯组外批: 只有组外句(成员分型语义不出现; 出路可落地: 迁出/仅删种子 -> 依赖清零自动收尾)
+    client.calls.clear()
+    with pytest.raises(DeleteBlockedError) as ei3:
+        api.torrents_delete(torrent_hashes=["HB"], delete_files=True)
+    m3 = str(ei3.value)
+    assert "不是该迁移组的成员" in m3, m3
+    assert "请把这些种子迁出旧根" in m3 and "或改用「仅删除种子(不含文件)」" in m3, m3
+    assert "依赖清零收尾自动完成后, 带文件删除自然可重试" in m3, m3
+    assert "「立即收尾」按钮加速改写窗" in m3, "立即收尾保留为次选(只加速改写窗)"
+    assert "请等迁移收尾完成后重试" not in m3 and "等迁移收尾完成后重试" not in m3, m3
+    assert "组账自动收缩" not in m3 and "活动迁移组的成员" not in m3, "组外句不得带成员收缩语义"
+    # 成员集缺省空(替身未带成员账): 全部按组外文案分型(兼容面), 拦截本身不松动
+    api2, _client2 = _guard_api({"HA": records["HA"]}, roots)
+    with pytest.raises(DeleteBlockedError) as ei4:
+        api2.torrents_delete(torrent_hashes=["HA"], delete_files=True)
+    assert "不是该迁移组的成员" in str(ei4.value), str(ei4.value)
 
 
 def test_qbapi_delete_guard_file_links_form():
@@ -505,22 +599,25 @@ def test_qbapi_delete_guard_allows_probe_tagged_seeds():
 
 def test_webui_delete_blocked_receipt_single_and_group(tmp_path):
     """delete_torrent / delete_group 撞 D16 拦截 → error 回执带解法文案 + qB 未收到 delete;
-    纯删除(delete_files=False)照常发(两条 WebUI 删除命令路径共用 qbapi 单点判)"""
+    纯删除(delete_files=False)照常发(两条 WebUI 删除命令路径共用 qbapi 单点判;
+    R5(1) 成员分型: HA 登记进成员账, 回执文案走成员出路句)"""
     from webui_helpers import _make_grouped_manager
 
     mgr, client, key = _make_grouped_manager(str(tmp_path))
     mgr.store.relocating_alias_roots = {r"R:\Downloads": "j1"}
+    mgr.store.relocating_hashes = {"HA"}
     # 单发路径
     mgr.web.commands.put(("delete_torrent", {"hash": "HA", "delete_files": True, "cmd_id": "d1"}))
     mgr.web.consume_commands()
     r1 = mgr.web.results["d1"]
-    assert r1["status"] == "error" and "仅删除种子" in r1["error"], r1
+    assert r1["status"] == "error" and "仅删除种子(不含文件)" in r1["error"], r1
+    assert "组账自动收缩" in r1["error"], "成员出路句必须带收缩自愈语义(R5(1))"
     assert not any(c[0] == "delete" for c in client.calls), "拦截不得发 qB"
     # 组路径
     mgr.web.commands.put(("delete_group", {"key": key, "delete_files": True, "cmd_id": "d2"}))
     mgr.web.consume_commands()
     r2 = mgr.web.results["d2"]
-    assert r2["status"] == "error" and "仅删除种子" in r2["error"], r2
+    assert r2["status"] == "error" and "仅删除种子(不含文件)" in r2["error"], r2
     assert not any(c[0] == "delete" for c in client.calls)
     # 纯删除: 放行(去文件化出口)
     mgr.web.commands.put(("delete_torrent", {"hash": "HA", "delete_files": False, "cmd_id": "d3"}))
@@ -578,6 +675,7 @@ def test_webui_delete_blocked_receipt_bulk_and_no_cmd_id(tmp_path):
 
     mgr, client, key = _make_grouped_manager(str(tmp_path))
     mgr.store.relocating_alias_roots = {r"R:\Downloads": "j1"}
+    mgr.store.relocating_hashes = {"HA", "HB"}  # R5(1) 成员分型: 整批按成员出路句回显
     # 批量路径(cmd_id 在场): 整批不发 qB, error 回执
     mgr.web.commands.put(
         ("bulk_torrents", {

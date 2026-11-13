@@ -1181,10 +1181,22 @@ class ExecMixin:
         return deps
 
     def _chain_deps_text(self, job: RelocateJob, deps: list) -> str:
-        """删链门依赖的反馈面文案(数量 + 样例 + 解法; R7 锚口径 = 别名作用域 + 旧根等值面)"""
-        anchor = job.scope or job.src
+        """删链门依赖的反馈面文案(数量 + 样例 + 解法; R7 锚口径 = 别名作用域 + 旧根等值面)
+
+        文件级 job 随 R2 语义改措辞(依赖谓词 = 文件清单 x alias_paths 交集, 计划
+        26-11-13-0448 §03 R2/R5): 「N 个种子的文件与别名链接重叠」+ 出路带「立即收尾」
+        加速器(依赖清零即自动收尾); 目录级/direct 保留现行 save_path 面措辞
+        (scope 前缀 + src 等值面语义仍真)。分流按 job.alias_kind, 同一格式不造第二份。
+        """
         samples = ", ".join(h[:8] for h, _sp in deps[:3])
         more = f" 等共 {len(deps)} 个" if len(deps) > 3 else ""
+        if job.alias_kind == "file":
+            return (
+                f"仍有 {len(deps)} 个种子的文件与别名链接重叠{more}({samples}): "
+                "别名删除会让它们找不到数据 —— 请把这些种子迁移到新位置或删除后自动重判; "
+                "依赖清零即自动收尾, 也可用「立即收尾」按钮加速收尾"
+            )
+        anchor = job.scope or job.src
         return (
             f"仍有 {len(deps)} 个种子的保存路径在别名作用域 {anchor} 之下或恰在旧根 {job.src}"
             f"(等值){more}({samples}): "

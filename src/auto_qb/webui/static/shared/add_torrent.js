@@ -662,7 +662,15 @@ window.AQB_ADD = {
         return true;
       }
       if (!r || r.cls !== "confirm") return true;
-      const rows = (r.reasons || []).map((x) => ({ icon: "#i-warn", label: "落点提示", value: x.text, wide: true }));
+      // body 分流(R5(3), 计划 26-11-13-0448): 「落点与请求路径不一致」断言只在有
+      // actual_path(目录级重定向/等值面, 后端已按真实落点建模)时为真 —— 文件级 confirm
+      // (撞链接路径/撞派生根)与 direct 无 actual_path, body 用后端 reason 原文, 行表不再
+      // 重复「落点提示」行(reason 全文已在 body)。
+      const reasons = (r.reasons || []).map((x) => String((x && x.text) || "")).filter(Boolean);
+      const body = r.actual_path
+        ? `「${name}」的落点与请求路径不一致(该目录已在整组迁移中建了别名)。`
+        : (reasons.join(" ") || `「${name}」的落点需确认(该目录的迁移待收尾)。`);
+      const rows = (r.actual_path ? reasons.map((x) => ({ icon: "#i-warn", label: "落点提示", value: x, wide: true })) : []);
       rows.push({ icon: "#i-info", label: "请求路径", value: r.requested_path, wide: true });
       if (r.actual_path) rows.push({ icon: "#i-warn", label: "实际落点", value: r.actual_path, wide: true });
       if (r.volume_free != null) {
@@ -670,7 +678,7 @@ window.AQB_ADD = {
       }
       const choice = await this._openModal({
         title: "落点确认",
-        body: `「${name}」的落点与请求路径不一致(该目录已在整组迁移中建了别名)。`,
+        body,
         okText: "确认添加",
         cancelText: "取消",
         icon: "#i-warn",
