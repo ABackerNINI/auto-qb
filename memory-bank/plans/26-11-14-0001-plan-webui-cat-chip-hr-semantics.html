@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>WEBUI 分类 chip 补齐 HR 语义效果（与 tag chip 对等）</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="webui-cat-chip-hr-semantics">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-14-0001">
+<meta name="doc-updated" content="26-11-14-0100">
+<meta name="doc-refs" content="">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: webui-cat-chip-hr-semantics</div>
+<h1>WEBUI 分类 chip 补齐 HR 语义效果（与 tag chip 对等）</h1>
+<p class="lede">本篇只回答: 怎么把 H&amp;R 语义效果（语义色 / 状态线 / 排除态 / 行状态色让路）在四皮肤的分类 chip 上补齐到与 tag chip <strong>逐点对等</strong> —— 后端 <code>hr_view_fields</code> 加两个视图时现算字段、前端 <code>catClass</code> 文本比对、共用模板加类绑定、四皮肤 CSS 逐皮肤镜像各自 tag-chip 形态。机制与标签路径完全同构: 零持久化改动、零新增 CSS 令牌、零新增配置键。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-14-0001 · <b>doc-updated</b> 26-11-14-0100 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 2026-11-13 用户指令「issue 26-11-12-1037 grilling 然后出一个修改计划」→ 只读侦查子代理深查(HEAD <code>e17bd088</code>, 全部行号实测) → grilling 两轮(Q1–Q4 方向/皮肤范围/排除态/形态区分度; Q5–Q8 排除态范围修正重拍/抽屉/验证深度/落盘) → 用户逐项「按推荐」→ 2026-11-14 立项落盘。全部定案见 §06。<br>
+  <b>交叉引用</b> issue <code>memory-bank/issues/26-11-12-1037-feat-webui-cat-chip-hr-semantics.html</code>(仅正文交叉引用, 不建认领链, D8) · flux 辉光计划 <code>memory-bank/plans/26-11-12-1012-plan-flux-chip-glow-ancestor-clip.html</code>(Open, 文件面零交叠, 协调注记见 §07 R7)
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<p>HR（本篇均指 <strong>H&amp;R, PT 站做种考核</strong>, 对应 <code>--hr-*</code> 语义色体系, 非人力资源）标记由 <code>hr.add_tag* / hr.add_category*</code> 写成标签或分类两条路径。标签路径在 webui 有完整视觉语义（<code>.tag-chip.hr-pending/.hr-done</code> 橙/青柔底 + 状态线 + 行状态色让路）, 分类路径 <strong>完全没有</strong>（issue 26-11-12-1037）。用户生产配置 <code>add_category</code> / <code>add_category_for_satisfied</code> 非空、<code>exclude_categories</code> 1 条、<strong>完全没用 <code>add_tag*</code></strong> —— 即在用户自己的环境里, 表格 chip 层面的 HR 语义目前是 100% 不可见, 本案补的是主路径而非边角。</p>
+<p><strong>算成</strong>: ① 配了 <code>add_category*</code> 的 HR 种子, 四皮肤表格分类列 cat-chip 呈现与同皮肤 tag-chip 相同的 <code>hr-pending</code>/<code>hr-done</code> 语义色与状态线, 且 seeding/downloading/checking/moving/error 行状态色不再覆盖它; ② 命中排除表的分类 cat-chip 与标签 tag-chip（D5 对称）呈现克制排除态（虚线描边 + 字色转灰 + title）, 行状态色同样让路; ③ 详情抽屉 hero 展示 HR 分类 chip（复用 <code>is-hr</code> 现成样式）; ④ 零新增令牌、模板结构不动、既有守阵全绿, 新守阵 + flux e2e 自动钉住; ⑤ 用户生产配置真机可见（<code>add_category*</code> 非空即有真实 HR 分类种子, 无需造数据; 但见 §02 边界⑥——已有分类且不覆盖的种子呈灰属预期）。</p>
+<h3>设计底线(不变量)</h3>
+<table>
+  <tr><th>编号</th><th>不变量</th><th>依据 / 判据</th></tr>
+  <tr><td>I1</td><td>与标签路径<strong>机制逐点镜像</strong>: 分类 HR 判定 = 视图时现算（<code>replace_vars</code> 展开配置模板）与当前分类值文本比对, 不持久化、不新增 state/DB 结构、不改打标流程</td><td>标签路径既定机制(<code>views.py:410-414</code> 现算 + <code>decorate.js:295-300</code> 文本比对); 两路径行为永远同构</td></tr>
+  <tr><td>I2</td><td>零新增 CSS 令牌、零新增配置键(<code>add_category*</code>/<code>exclude_categories</code> 均已存在, <code>validate_config</code> 无涉); CSS 只复用各皮肤现有 <code>--hr-*</code> 与 chip 基线令牌</td><td>令牌名集四皮肤 parity(<code>skin.py:389-429</code>); 新 <code>--xxx:</code> 落任何皮肤即红</td></tr>
+  <tr><td>I3</td><td>模板只加 <code>:class</code> 绑定, <strong>不动结构与组件化口径</strong>(cat-chip 三处刻意不组件化, issue 26-10-20-2231 登记不动)</td><td><code>shared/tpl/xtpl-cells.html:77-79</code> 注释; tpl manifest 守阵名单不变</td></tr>
+  <tr><td>I4</td><td><code>hr-pending</code>/<code>hr-done</code>/<code>hr-excl</code> 三类互斥(排除早退先于 triggered, 排除种子无 HR 分类字段); <code>f-on</code> 与 <code>hr-*</code> 可并存(既有口径)</td><td>数据层保证(<code>maintenance_mod.py:312-313</code> 排除早退; <code>views.py</code> 排除种子 triggered=false)</td></tr>
+  <tr><td>I5</td><td>既有守阵维持全绿: 令牌 parity、<code>hr_safety_wiring</code>(JS 引用 <code>m.hr_*</code> 字段 ⊆ 后端键集; 正则只认 <code>m.</code> 前缀)、bundle_health、tpl manifest、shell parity</td><td><code>tests/test_webui_static_skins_widget.py:239-401</code> / <code>skin.py:389-429</code> 各守阵; 新字段的键集一致性由 S4③ 单测钉(wiring 正则不覆盖 <code>member./d.</code> 形态)</td></tr>
+  <tr><td>I6</td><td>issue 26-11-12-1037 保持 <code>Open</code>, 本计划不建认领链(<code>doc-refs</code> 留空, 仅正文交叉引用); <strong>认领与实施须用户另行显式指派</strong></td><td>D8; 沿 26-11-12-1012 计划 R2 的「另案不认领」口径</td></tr>
+  <tr><td>I7</td><td>范围外不顺手改: atlas 现有硬编码 rgba 令牌化、flux hover 态 HR 竖线被辉光替换(<code>fx-mount.css:296-303</code>, 1012 计划 S2 范畴)、f-on 键盘化等一概不动</td><td>scope-guard; 各自另案</td></tr>
+</table>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+<p class="hint">以下全部为只读侦查实测(2026-11-13, HEAD <code>e17bd088</code>), 行号为当时行号。webui 静态树在 <code>src/auto_qb/webui/static/</code>(issue 正文写 <code>static/</code> 为省略前缀)。</p>
+<h3>渲染链: 分类 chip 完全没有 HR 类判定</h3>
+<ul>
+  <li>唯一的类判定函数 <code>tagClass(tag, member)</code>(<code>shared/decorate.js:295-300</code>)只比对 <code>member.hr_tag / member.hr_tag_done</code> 文本; webui 渲染链内(static/ + views.py)grep <code>catClass / hr_category / hrCategory</code> <strong>零命中</strong>(tests/ 有后端分类维护语义的同名测试, 与渲染链无关)。</li>
+  <li>cat-chip 全库仅 3 处, 全在共用模板, <code>:class</code> 只绑 <code>f-on</code>: 组行 <code>shared/tpl/xtpl-cells.html:80-84</code>(值 <code>g.commonCategory.value</code>, 前端聚合 <code>decorate.js:257-262,420</code>; 虚拟组行 <code>shared/filters.js:279</code>)、torrent 行 <code>xtpl-cells.html:165-168</code>、成员行 <code>shared/tpl/xtpl.html:288-291</code>(均 <code>m.category</code>)。</li>
+  <li>对照 tag-chip 三处(<code>xtpl-cells.html:70-74, 171-174</code>、<code>xtpl.html:282-285</code>): 组行用 <code>g.members[0]</code> 算类、行行用 <code>m</code> —— 组行口径取<strong>首个成员</strong>是标签路径既有取舍。</li>
+</ul>
+<h3>CSS: 四皮肤 tag-chip 有 HR 规则、cat-chip 没有, 行状态色只让路给标签</h3>
+<table>
+  <tr><th>皮肤</th><th>.tag-chip.hr-* 形态(位置)</th><th>.cat-chip</th><th>行状态色规则(位置)</th></tr>
+  <tr><td>flux</td><td>左 2px 竖线 <code>inset 2px 0 0 var(--hr-*)</code>, pending 加粗(<code>components.css:346-349</code>)</td><td class="bad">无 hr 规则(基线 :350-352)</td><td>cat-chip 无 <code>:not()</code> 让路(:353-369), tag-chip 带</td></tr>
+  <tr><td>atlas</td><td>1px 全描边, <strong>硬编码 rgba</strong>(<code>components.css:377-380</code>; 令牌在 <code>style.css:98-99</code> 有但未用)</td><td class="bad">无(:381-383)</td><td>同构不让路(:384-402)</td></tr>
+  <tr><td>console</td><td>左 2px 竖线, 同 flux 形态(<code>components.css:344-347</code>)</td><td class="bad">无(:348-350)</td><td>同构不让路(:351-367)</td></tr>
+  <tr><td>prism</td><td>1px 全描边, 走 <code>var(--hr-*-line)</code> 令牌(<code>views.css:358-361</code>)</td><td class="bad">无(:362-364)</td><td>同构不让路(:365-383)</td></tr>
+</table>
+<ul>
+  <li><code>--hr-*</code> 令牌: flux <code>style.css:83-86,94-95</code> · console <code>style.css:77-80,88-89</code> · atlas <code>style.css:86-89,98-99</code> · prism 无集中定义, 按主题分布在 <code>css/themes/</code>(ocean/galaxy/orbit/golden/frost 各 6 键: pending/done 两族的 -/-soft/-line)。</li>
+  <li>flux 专属绘制层 <code>fx-mount.css:276-281,296-303</code>: 三种 chip 共用 hover 辉光(整体替换 box-shadow ⇒ HR 竖线 hover 消失, 1012 计划 S2 处理中, 本案不涉及但受其结论影响, 见 R7)。</li>
+</ul>
+<h3>数据层: 标签字段是视图时现算, 分类侧无对应字段</h3>
+<ul>
+  <li><code>hr_view_fields</code>(<code>views.py:300-415</code>, staticmethod)两个分支返回<strong>同一键集</strong>(未配 HR 分支 :336-356 全空值); 正常分支 <code>hr_tag/hr_tag_done</code> 现算(:410-414): <code>replace_vars(hr.add_tag[_for_satisfied], conf)</code>。</li>
+  <li><code>replace_vars</code>(<code>infra/utils_paths.py:343-352</code>)把 <code>${required_seeding_time}</code> 替换为 <code>required_seeding_time_raw</code> 原始串(如 "3D") —— 打标与取数两处各自调用, 展开结果一致, 文本比对成立。</li>
+  <li>消费面全自动继承: <code>views_row.py:64-65</code>(成员行)、<code>:97-98</code>(种子行)、<code>views_group.py:44</code>(组成员)、<code>server/routes/torrent_detail.py:49</code>(抽屉)、<code>views_episodes.py:31</code>。分类值暴露点 <code>views_row.py:40</code>。</li>
+  <li>写入路径 <code>set_category</code>(<code>maintenance_mod.py:254-285</code>)另记 state <code>auto_categories</code>(hash→分类, 仅供覆盖判定), 与视图无关; 排除表命中单点 <code>torrents/record.py:339-379</code>(<code>hr_excluded_by</code> ∈ ""/"tag"/"category"/"tag+category")。</li>
+  <li><code>hr_excluded_by</code> 已暴露且前端在用, 但只喂 HR 列悬停弹窗(<code>shared/hr.js:41</code> 短语映射 + <code>:192-204</code> hrPopData)—— <strong>tag 路径同样没有 chip 级排除视觉</strong>, 排除态是两条路径共同的空白面。</li>
+  <li>详情抽屉 hero 把 <code>hr_tag/hr_tag_done</code> 渲染成 <code>dt01-chip is-hr</code>(<code>shared/drawer_tpl/01-general-hero-tall.js:177-178</code>), 分类路径在抽屉同样不可见。</li>
+</ul>
+<h3>守阵与 e2e 现状</h3>
+<ul>
+  <li><code>cat-chip / tag-chip / hr-pending</code> 在 tests/ <strong>零断言</strong>; e2e 无 cat-chip HR 用例。已有可复用面: <code>test_frontend_hr_safety_wiring</code>(<code>tests/test_webui_static_skins_widget.py:239-401</code>, JS 引用 <code>m.hr_*</code> 字段 ⊆ <code>hr_view_fields</code> 键集; 扫描正则只认 <code>m.</code> 前缀形态)、四皮肤令牌 parity(<code>skin.py:389-429</code>)、bundle_health(挂件类名须有 CSS 规则)、tpl manifest; e2e <code>flux-site-chip-shape-glow.spec.mjs</code>(三种 chip hover 辉光 parity, :165-197)提供 flux chip 测试 harness 与 mock 路径, <code>drawer-general-variants.spec.mjs:61</code> 有 hr 字段空值桩先例。</li>
+</ul>
+<p class="aside"><strong>已知边界(镜像语义自带, 非缺陷)</strong>: ① satisfied 且未配 <code>add_*_for_satisfied</code> 时 chip 无色 —— 标签路径同款行为; ② 组行 HR 类取 <code>members[0]</code>, 组内状态不一致时以首成员为准 —— 标签路径既有取舍; ③ 组行/虚拟组行不做排除态(标签路径组行同样没有); ④ 非 HR 种子分类值恰与 HR 标记值相同会命中高亮 —— 纯文本比对的既定语义(标签路径一致); ⑤ 用户事后手改分类, chip 回落灰色 —— 现算比对的正确语义; ⑥ <strong>已有分类且不覆盖的种子 chip 恒灰</strong>: <code>set_category</code> 对「已有分类且 <code>overwrite=false</code> 且非本程序前次所设」的种子跳过写入(<code>maintenance_mod.py:283-285</code>), HR 分类永不落 qB —— 标签路径无此失败模式(标签是叠加写), 生产配置两 overwrite 开关实况均为 false, 这类种子在三态目检中呈灰属预期而非实现缺陷。</p>
+
+<h2><span class="no">§03</span>方案总览</h2>
+<p><strong>主线</strong>: 沿标签路径的既有机制逐点镜像 —— 后端 <code>hr_view_fields</code> 增 <code>hr_category</code>/<code>hr_category_done</code> 两个现算键(两分支同加), 前端 <code>decorate.js</code> 增 <code>catClass</code>(镜像 <code>tagClass</code>)与 <code>hrExclClass</code>(排除 token 判定), 共用模板 5 处加绑定(3 处 cat-chip 全加 HR 类; torrent/member 两处 tag-chip 加排除类, D5 对称; 组行不做排除态), 抽屉加 2 行展示, 四皮肤 CSS 逐皮肤镜像各自 tag-chip HR 形态并给行状态色规则补 <code>:not()</code> 让路。排除态为两路径共用的新增克制形态(虚线描边 + 字色转灰 + title, 用各皮肤 chip 基线既有令牌)。</p>
+<h3>落点清单</h3>
+<table>
+  <tr><th>文件</th><th>动作</th><th>说明</th></tr>
+  <tr><td><code>src/auto_qb/webui/views.py</code></td><td class="good">hr_view_fields 两分支各 +2 键</td><td>未配分支(:336-356)加空值键保持键集恒定; 正常分支(:410-414 旁)镜像现算; 消费面五个挂载点零改动(spread 继承)</td></tr>
+  <tr><td><code>static/shared/decorate.js</code></td><td class="good">+<code>catClass</code> +<code>hrExclClass</code></td><td>紧邻 tagClass(:295-300); <code>hrExclClass(face, member)</code> 按 <code>hr_excluded_by.split("+")</code> 含 face token 判定</td></tr>
+  <tr><td><code>static/shared/tpl/xtpl-cells.html</code></td><td class="good">3 处绑定</td><td>组行 cat(:80-84, 用 <code>g.members[0]</code>) / torrent 行 cat(:165-168, 加排除类) / torrent 行 tag(:171-174, 加排除类)</td></tr>
+  <tr><td><code>static/shared/tpl/xtpl.html</code></td><td class="good">2 处绑定</td><td>成员行 cat(:288-291) / 成员行 tag(:282-285), 均加排除类</td></tr>
+  <tr><td><code>static/shared/drawer_tpl/01-general-hero-tall.js</code></td><td class="good">+2 行</td><td><code>hr_category / hr_category_done</code> → <code>dt01-chip is-hr</code>(title 沿用 <code>hr_reason</code>), 镜像 :177-178</td></tr>
+  <tr><td><code>static/shared/hr.js</code></td><td class="good">+1 helper</td><td><code>hrExclTip(face)</code> 挂 <code>window.AQB_HR</code>: 复用 <code>HR_EXCLUDED_BY_TEXT</code>(现为模块私有)产出排除 title 短语, 供 4 处排除绑定点的 <code>:title</code></td></tr>
+  <tr><td>四皮肤 CSS(flux/atlas/console <code>components.css</code>, prism <code>views.css</code>)</td><td class="good">+3 规则 + 行状态 <code>:not()</code> 改造</td><td>每皮肤: <code>.cat-chip.hr-pending/.hr-done</code>(镜像本皮肤 tag 形态, 见 §04 镜像表) + <code>.cat-chip.hr-excl,.tag-chip.hr-excl</code>(一条合并规则) + 行状态各条 cat-chip 加三重 <code>:not()</code>、tag-chip 追加 <code>:not(.hr-excl)</code></td></tr>
+  <tr><td><code>tests/</code></td><td class="good">守阵增补</td><td>四皮肤 CSS 断言 + <code>hr_view_fields</code> 两分支键集断言; 同步所在文件头部「## 测试计划」</td></tr>
+  <tr><td><code>e2e/</code> + <code>scripts/ui_harness.py</code></td><td class="good">+1 spec + 桩扩展</td><td>flux 一条(D7); spec 无 route 级 mock, 行数据来自 <code>ui_harness.py</code> FakeClient 桩单点 —— 桩种子扩展 hr_category/排除场景; <code>drawer-general-variants.spec.mjs:61</code> 补 <code>hr_category/hr_category_done</code> 空桩</td></tr>
+</table>
+<h3>分期</h3>
+<table>
+  <tr><th>波次</th><th>内容</th><th>出口判据</th></tr>
+  <tr><td>S1</td><td>后端: hr_view_fields 两分支加 <code>hr_category / hr_category_done</code></td><td>两分支键集相等且含新键; 未配 HR 时新键为空串; 单测过</td></tr>
+  <tr><td>S2</td><td>前端: catClass / hrExclClass + 模板 5 处绑定 + 抽屉 2 行</td><td>模拟数据下类命中正确; wiring 守阵(新字段 ⊆ 键集)过</td></tr>
+  <tr><td>S3</td><td>四皮肤 CSS: 镜像表逐皮肤落地 + hr-excl + 行状态让路</td><td>零新增令牌(parity 绿); bundle_health 绿; 四皮肤形态与各自 tag-chip 一致</td></tr>
+  <tr><td>S4</td><td>守阵 + e2e</td><td>静态断言四皮肤齐装; flux e2e 类命中 + 行状态不让路 + 排除态; 红绿双验</td></tr>
+  <tr><td>S5</td><td>真机目检(四皮肤 × pending/done/排除 × 行状态 × f-on × 组行)</td><td>用户生产配置直接可见; 四皮肤切换无串味</td></tr>
+  <tr><td>S6</td><td>收尾 DoD</td><td>按 AGENTS.md(评审 / kb.wrap / 回写 / test.full + 基线切片)</td></tr>
+</table>
+<p class="aside">本计划只授权「出计划」。<strong>S1–S6 属实施轮, 须用户另行显式下令认领</strong>(I6); 认领时先按 issue §07 复验 §04 锚点(防过期), 并补建认领链(issue <code>doc-refs</code> ↔ 档案 <code>Refs:</code>)。</p>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+<h3>S1 · 后端字段(镜像 views.py:410-414)</h3>
+<pre><code><span class="cm"># views.py hr_view_fields 正常分支, 紧挨现有 hr_tag/hr_tag_done 两行:</span>
+if triggered:
+    if satisfied:
+        fields["hr_tag_done"] = _utils.replace_vars(hr.add_tag_for_satisfied, conf)
+        fields["hr_category_done"] = _utils.replace_vars(hr.add_category_for_satisfied, conf)
+    else:
+        fields["hr_tag"] = _utils.replace_vars(hr.add_tag, conf)
+        fields["hr_category"] = _utils.replace_vars(hr.add_category, conf)
+<span class="cm"># 未配 HR 分支(:336-356)的全空键集同步加 "hr_category": "", "hr_category_done": ""
+# —— 两分支键集必须恒定, wiring 守阵与前端消费都依赖这一点。</span></code></pre>
+<ul>
+  <li><strong>验收</strong>: 两分支 <code>set(fields)</code> 相等; <code>add_category</code> 空 → 键为空串(前端 falsy 短路); 排除种子 triggered=false → 两键为空(与 I4 互斥一致)。</li>
+</ul>
+<h3>S2 · 前端判定与绑定(镜像 decorate.js:295-300)</h3>
+<pre><code>catClass(cat, member) {
+  if (!member || !cat) return "";
+  if (member.hr_category &amp;&amp; cat === member.hr_category) return "hr-pending";
+  if (member.hr_category_done &amp;&amp; cat === member.hr_category_done) return "hr-done";
+  return "";
+},
+hrExclClass(face, member) {
+  if (!member || !member.hr_excluded_by) return "";
+  return member.hr_excluded_by.split("+").includes(face) ? "hr-excl" : "";
+},</code></pre>
+<ul>
+  <li>模板绑定: 组行 cat <code>:class="[$root.catClass(g.commonCategory.value, g.members[0]), { 'f-on': ... }]"</code>(镜像组行 tag 的 members[0] 口径); torrent/member 行 cat <code>:class="[$root.catClass(m.category, m), $root.hrExclClass('category', m), { 'f-on': ... }]"</code>; torrent/member 行 tag 追加 <code>$root.hrExclClass('tag', m)</code>。4 处排除绑定点同加 <code>:title</code>(经 <code>shared/hr.js</code> 新增 <code>hrExclTip</code> helper 挂 <code>window.AQB_HR</code>, 复用 <code>HR_EXCLUDED_BY_TEXT</code> 短语——该映射现为模块私有 const, 不导出)。抽屉两行镜像 <code>:177-178</code> 原文换字段名。</li>
+  <li><strong>验收</strong>: 新字段键集一致性由 S4③ 单测承担(wiring 守阵扫描正则只认 <code>m.</code> 前缀, <code>member./d.</code> 形态不进扫描面, 不作兜底); 模板改动不触发 tpl manifest(名单不变, 只动属性)。</li>
+</ul>
+<h3>S3 · 四皮肤 CSS(逐皮肤镜像, D2/D4/D5)</h3>
+<table>
+  <tr><th>皮肤</th><th>.cat-chip.hr-pending / .hr-done 新规则(逐字镜像本皮肤 tag 形态)</th><th>行状态规则改造位置</th></tr>
+  <tr><td>flux</td><td><code>background: var(--hr-pending-soft); color: var(--hr-pending); font-weight: 600; box-shadow: inset 2px 0 0 var(--hr-pending);</code>(done 同构青色, 不加粗)—— 镜像 <code>components.css:346-349</code></td><td>:353-369 每条 cat-chip 加 <code>:not(.hr-pending):not(.hr-done):not(.hr-excl)</code>, tag-chip 追加 <code>:not(.hr-excl)</code></td></tr>
+  <tr><td>atlas</td><td>1px 全描边, <strong>镜像其硬编码</strong> <code>rgba(255,138,61,.5)</code> / <code>rgba(94,234,212,.38)</code>(I7: 不顺手改既有硬编码为令牌)—— 镜像 :377-380</td><td>:384-402 同上</td></tr>
+  <tr><td>console</td><td>同 flux 形态(左 2px 竖线 + pending 加粗)—— 镜像 :344-347</td><td>:351-367 同上</td></tr>
+  <tr><td>prism</td><td>1px 全描边走 <code>var(--hr-pending-line)</code> / <code>var(--hr-done-line)</code>(令牌在 themes/*.css 已齐)—— 镜像 <code>views.css:358-361</code></td><td>:365-383 同上</td></tr>
+</table>
+<p>排除态四皮肤同构一条合并规则(用各皮肤 chip 基线既有令牌, 零新增):</p>
+<pre><code>.cat-chip.hr-excl, .tag-chip.hr-excl {
+  background: transparent; color: var(--fg-muted); border: 1px dashed var(--fg-muted);
+}
+<span class="cm">/* padding 按「皮肤×芯片」矩阵: 基线无 border 的(cat-chip 四皮肤 + atlas/prism tag-chip)
+   用 padding: 0 6px 抵消新增 border(原 1px 7px, 盒尺寸守恒);
+   flux/console 的 .tag-chip 基线本就带 1px border(components.css:343 / :341),
+   hr-excl 只换边框线型不新增 —— padding 保持 1px 7px 不动 */</span></code></pre>
+<ul>
+  <li>title 提示文案由模板侧承载(排除断言处复用 <code>shared/hr.js:41</code> 的 <code>HR_EXCLUDED_BY_TEXT</code> 短语), CSS 不含文案。</li>
+  <li><strong>验收</strong>: 四皮肤令牌名集 parity 不变(零新令牌); bundle_health 绿(chip 类名规则齐); 各皮肤 <code>.cat-chip.hr-*</code> 与同皮肤 <code>.tag-chip.hr-*</code> computed 形态一致(e2e/目检)。</li>
+</ul>
+<h3>S4 · 守阵与 e2e(D7)</h3>
+<ul>
+  <li><strong>静态守阵</strong>(落 <code>tests/test_webui_static_skins_widget.py</code>, 与 hr_safety_wiring 同文件; 同步该文件头「## 测试计划」): ① 四皮肤 CSS 均含 <code>.cat-chip.hr-pending</code> / <code>.cat-chip.hr-done</code> / <code>hr-excl</code> 合并规则; ② 四皮肤行状态规则里 cat-chip 选择器全部带三重 <code>:not()</code>、tag-chip 全部带 <code>:not(.hr-excl)</code>(兜住「某皮肤某条漏改 → seeding 行仍染绿」的静默回归); ③ <code>hr_view_fields</code> 两分支键集相等且含新键的单测(落点实施时 grep 现有 hr_view_fields 测试就近放)。</li>
+  <li><strong>e2e 一条</strong>(flux, 新 spec; 行数据桩在 <code>scripts/ui_harness.py</code> FakeClient 单点扩展——spec 无 route 级 mock): ① 桩种子 <code>hr_category</code> 与 <code>category</code> 同值 + seeding 行 → cat-chip 含 <code>hr-pending</code> 且 computed background 为 pending-soft 而非 green-soft(行状态不让路的运行时证明); ② done 同理; ③ <code>hr_excluded_by: "category"</code> → cat-chip 含 <code>hr-excl</code>; ④ <strong>抽屉断言</strong>: 桩给 <code>hr_category</code> 同值 → 详情抽屉 hero 出现 <code>dt01-chip is-hr</code>(spec 已有 dt01-hr 断言基建, 增量极小)——堵住 D6 修复面无验收的缺口; ⑤ 红绿双验: 删 S3 规则或改桩即红、恢复即绿, 按 smoke 口径留痕。</li>
+  <li><strong>mock 桩</strong>: <code>drawer-general-variants.spec.mjs:61</code> 补 <code>hr_category: '', hr_category_done: ''</code>。</li>
+</ul>
+<h3>S5 · 真机目检</h3>
+<p>用户生产配置即真实数据源(<code>add_category*</code> 全分类路径 + <code>exclude_categories</code> 1 条), 无需造数据; 但注意 §02 边界⑥——已有分类且不覆盖的种子呈灰属预期, <strong>三态验证用无分类或可覆盖的种子</strong>(需验证覆盖语义时, 用独立临时配置文件如 <code>minimal.yml</code> 副本改 <code>overwrite</code> 启动, <strong>全程禁止改动生产 <code>config.yml</code></strong>——红线), 不要把预期灰误判为实现缺陷。四皮肤各过一遍: ① pending 橙 / done 青 / 排除虚线灰三态在分类列正确呈现; ② seeding/下载/error 行状态色不再覆盖 HR cat-chip, 排除 chip 保持灰; ③ 点击 chip 的 <code>f-on</code> 与 HR 类并存观感(含 pending 加粗 + f-on 底线叠加, flux); ④ 组行 <code>members[0]</code> 口径、虚拟组行无 HR 类; ⑤ 抽屉 hero 的 HR 分类 chip; ⑥ prism 五主题逐一(令牌按主题分布); ⑦ 排除 chip 悬停 <code>:title</code> 短语正确(标签规则/分类规则/标签与分类规则)。</p>
+<h3>S6 · 收尾 DoD</h3>
+<p>按 AGENTS.md: 分批评审(code-review skill, <code>Review:</code> trailer) → <code>kb.wrap</code> → 达阈值立档 → 代码事实变更回写 <code>memory-bank/</code>(webui 口径文档若受影响)与根 README → <code>test.full</code> + 新基线切片 → 若踩新坑按动作写 <code>pitfalls/</code> 并重跑 <code>kb.index</code>; issue 26-11-12-1037 按 create-issue 口径翻状态(Fixed)并补「实际修法/验证方式/测试数字」。</p>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p>设计树已收敛(grilling 两轮 Q1–Q8 全部定案, 见 §06), <strong>本篇无新增待拍板项</strong>。以下为实施期<strong>观察项(非决策)</strong>, 由 S4/S5 给结论, 不重开设计树:</p>
+<ul>
+  <li>O1: 排除态形态(虚线 + 灰字)真机观感 —— 若用户不满意, 回炉拍板<strong>形态</strong>(不回炉「两路径对称纳入」的范围决策)。</li>
+  <li>O2: 组行 <code>members[0]</code> 口径在 HR 场景的观感(组内 HR 状态不一致时组行按首成员) —— 既有标签口径, 目检确认无误导即可。</li>
+  <li>O3: e2e 桩与真实 <code>/api/state</code> 行结构差异 —— 行数据桩单点在 <code>scripts/ui_harness.py</code>(FakeClient), 实施时对齐其既有构造, 不新造结构。</li>
+  <li>O4: 与 1012 计划的实施顺序协调 —— 见 §07 R7, 无硬依赖, 按认领先后自然排序。</li>
+</ul>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<p>2026-11-13/14 grilling 两轮(第一轮 Q1–Q4 独立决策; 侦查回报后第二轮 Q5–Q8 事实依赖项), 用户逐项「按推荐」。D 编号为本计划内的引用键。</p>
+<table>
+  <tr><th>编号</th><th>结论</th><th>来源</th></tr>
+  <tr><td>D1</td><td>总方向 = 补齐渲染链路与 tag chip 对等(后端字段 → catClass → 模板 → 四皮肤 CSS → 守阵/e2e); 不做「文档劝退 add_category」的方向 B —— 分类路径是设计内功能, 不该靠劝退配置绕过</td><td>Q1-A</td></tr>
+  <tr><td>D2</td><td>四皮肤一次到位; CSS 逐皮肤镜像<strong>各自</strong> tag-chip HR 形态(prism 保持其 1px 令牌描边, 不强拉成 flux 左竖线); 模板是共用单点, flux 先行只会制造窗口期不一致</td><td>Q2-A</td></tr>
+  <tr><td>D3</td><td>排除态(分类命中 <code>exclude_categories</code>)纳入本计划</td><td>Q3-A</td></tr>
+  <tr><td>D4</td><td>pending/done 形态完全复用同皮肤 tag-chip 形态, 不做分类专属变体 —— chip 本身在分类列, 承载位置已自明</td><td>Q4-A</td></tr>
+  <tr><td>D5</td><td>排除态两路径<strong>对称补齐</strong>(<code>hr_excluded_by</code> 含 tag → tag-chip、含 category → cat-chip, 5 处绑定中 tag 占 2 处); 克制形态 = 虚线描边 + 字色转灰 + title(复用 <code>HR_EXCLUDED_BY_TEXT</code> 短语); 行状态色让路; 组行不做排除态(标签路径组行同样没有)</td><td>Q5-A(侦查发现 tag 路径也无排除视觉后修正重拍)</td></tr>
+  <tr><td>D6</td><td>详情抽屉同步展示 <code>hr_category/hr_category_done</code>(复用 <code>dt01-chip is-hr</code> 现成样式, 增量约 2 行)—— 不加则抽屉成为第四处不对等面</td><td>Q6-A</td></tr>
+  <tr><td>D7</td><td>验证深度 = 静态守阵(hr_view_fields 两分支键集单测 + 四皮肤 CSS 断言)+ flux e2e 一条(类命中 + 行状态不让路 + 排除态); 不做四皮肤 e2e 全参数化(CSS 是同一镜像模板, 静态守阵已兜住)</td><td>Q7-A</td></tr>
+  <tr><td>D8</td><td>计划落盘 <code>memory-bank/plans/</code> 单文件 HTML(dark, <code>kb.new plan</code> 命令化建件); issue 保持 Open 不认领, <code>doc-refs</code> 留空仅正文交叉引用; S1–S6 属实施轮, 须用户另行显式下令</td><td>Q8-A</td></tr>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+  <tr><th>#</th><th>风险 / 触发条件</th><th>对策</th></tr>
+  <tr><td>R1</td><td>未配 HR 分支漏加新键 → 分支间键集不一致, 排除种子/未配场景前端读 <code>undefined</code></td><td>S1 显式两分支同加; S4③ 单测钉「两分支键集相等」(wiring 正则只认 <code>m.</code> 前缀, 不覆盖本字段消费形态, 不作兜底)</td></tr>
+  <tr><td>R2</td><td>四皮肤镜像时抄错形态(atlas 硬编码 rgba / prism 令牌 / flux·console 竖线三种形态各异)</td><td>§04 镜像表给逐皮肤精确原文, 实施照抄不默写; S5 目检四皮肤逐一切换核对</td></tr>
+  <tr><td>R3</td><td>行状态 <code>:not()</code> 漏改某皮肤某条 → 该皮肤该状态下 HR cat-chip 仍被染绿/蓝/红, 静态不报错</td><td>S4 守阵②断言四皮肤全部行状态条目的 cat-chip/tag-chip 带齐 <code>:not()</code>; e2e 用 seeding 行做运行时证明</td></tr>
+  <tr><td>R4</td><td>排除态加 <code>border</code> 使 chip 盒增高 2px, 行内基线微移</td><td>按「皮肤×芯片」矩阵处理(§04 配方): 无 border 基线的用 padding 抵消守恒, flux/console tag-chip 基线自带 border 只换线型不动 padding; S5 目检行高无变化</td></tr>
+  <tr><td>R5</td><td><code>replace_vars</code> 展开值与 qB 实际写入分类不一致(如站点段与全局段并集口径) → 比对不命中, chip 不亮</td><td>打标(maintenance_mod:329-339)与取数(views:410-414)消费<strong>同一份解析后的 hr 规则</strong>, 天然一致; S5 用用户真实配置验收即为端到端证明</td></tr>
+  <tr><td>R6</td><td>e2e mock 行结构与真实 <code>/api/state</code> 漂移 → 断言假绿</td><td>mock 构造沿用既有 spec 的数据形态(O3); 断言用 computed 样式而非仅类名</td></tr>
+  <tr><td>R7</td><td>与 1012 计划(Open)交叉: 其 S2 把 flux 的 HR 竖线迁 <code>::before</code> 解决 hover 消失, 但选择器若只写 <code>.tag-chip.hr-*</code>, 本案落地后 cat-chip 在 hover 态竖线仍消失 —— 新的 chip 间不一致</td><td>本案文件面(<code>components.css</code>/<code>shared/tpl</code>/<code>views.py</code>)与其(<code>fx-mount.css</code>)零交叠, 可并行; 协调注记: 两案谁后实施, 谁把 <code>.cat-chip.hr-pending/.hr-done</code> 一并纳入 1012 S2 的迁层选择器(一行扩展, 按 1012 改版协议记录), 不在实施轮顺手改对方文件</td></tr>
+  <tr><td>R8</td><td><code>hr_excluded_by.split("+")</code> 对未来新增 token 值的健壮性</td><td>helper 按 token 拆分而非整串比对, 值域新增 token 时自动兼容; 值域单点在 <code>record.py:368-379</code></td></tr>
+  <tr><td>R9</td><td>实施轮顺手扩大范围(atlas 硬编码令牌化 / hover 迁层 / 组行排除态)</td><td>I7 明令禁止; 各自另案(1012 S2 / O1 回炉口径); 评审按范围守恒把关</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-14-0001</span> 初版: 2026-11-13 用户指令「issue 26-11-12-1037 grilling 然后出一个修改计划」→ 只读侦查子代理深查(HEAD <code>e17bd088</code>, A–F 六面事实全部行号实测: 渲染链三处 cat-chip 绑定 / 四皮肤 CSS 形态差异 / hr_view_fields 现算机制 / 排除链路与前端消费 / 守阵与 e2e 现状 / 生产配置 hr 键存在性) → grilling 两轮 Q1–Q8 收敛(用户逐项按推荐; Q5 因侦查发现 tag 路径同样无 chip 级排除视觉而修正重拍为两路径对称补齐) → 2026-11-14 立项落盘。收录: I1–I7 不变量(机制镜像/零令牌/零配置键/三类互斥/守阵全绿/不认领/不顺手扩围)、S1–S6 分期与逐皮肤镜像表、已知边界五条(镜像语义自带)、D1–D8 拍板、R1–R9 风险(含与 1012 计划的 hover 迁层协调注记)。本轮零代码改动, 仅命令化新建本计划文件; issue 未认领, 未提交。</li>
+  <li><span class="tag">R1 · 26-11-14-0039</span> 分批评审修正(面A 9条全过检全采纳): ①wiring守阵正则只认m.前缀, 三处「自动核对/自动受约束/正向兜底」表述改为键集一致性由S4③单测承担; ②已知边界补第⑥条(已有分类且overwrite=false→set_category跳过写入→chip恒灰, maintenance_mod:283-285, 生产两开关均false), §01⑤/S5目检口径同步改; ③排除态padding配方按皮肤×芯片矩阵(flux/console tag-chip基线自带border只换线型); ④D5绑定数6→5; ⑤prism五主题各4键→6键; ⑥落点清单补hr.js(hrExclTip)+模板:title绑定+e2e行补ui_harness.py桩扩展; ⑦S4补抽屉断言堵D6验收缺口; ⑧渲染链grep口径收窄; 按改版协议抬doc-updated</li>
+  <li><span class="tag">R2 · 26-11-14-0100</span> 评审轮2修正两条: ①S5「overwrite试验配置」补显式口径(独立临时配置文件如minimal.yml副本, 全程禁止改动生产config.yml——红线, 安全面minor); ②守阵落点引用 widget.py:255-393 改为 tests/test_webui_static_skins_widget.py:239-401(I5依据列与§02守阵现状两处同源, 复评minor——侦查回报继承的文件名缩写与行区间漂移); 按改版协议抬doc-updated</li>
+</ul>
+
+</div>
+</body>
+</html>
