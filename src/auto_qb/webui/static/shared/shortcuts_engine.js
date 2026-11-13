@@ -284,6 +284,18 @@ Object.assign(window.AQB_SHORTCUTS.methods, {
       // 只是让行多让 1px, 不影响可见性。
       return headH + hd.getBoundingClientRect().height;
     },
+    /* 上界触发界补差单点(2026-11-14 T7, 与 _kbViewBottomPad 对称, 用户拍板「未被覆盖的行绝对不动」
+     * 顶界方向): 与 _kbViewTop 的**分支语义**配对 —— 吸顶列头分支返回的界内建 +1(列头吸顶落位
+     * top = calc(--head-h - 1px) 防透缝, 四皮肤 CSS 同式, 返回值 headH + 列头高 = 列头底实缘 + 1),
+     * 触发界补 -1 才回到列头底实缘(未被列头遮住的行, 顶距列头 0~4px 也一律零位移 —— flux 独有
+     * writer #4(state.js 开门落定回执重入)的上界分支旧口径把它们下移 4~12px, e2e T7 红验实测
+     * 6.4px); 列头不在 DOM/未吸顶时界源 = 顶栏, 返回值就是遮蔽实缘本身, 补差 +0(精确边)。
+     * 本体只读分支条件不读矩形(几何仍归 _kbViewTop 单点), 消费方与它同帧同步取值(不跨帧)。 */
+    _kbViewTopPad() {
+      const hd = document.querySelector(".group-head");
+      if (!hd || getComputedStyle(hd).position !== "sticky") return 0;  // 界源 = 顶栏(精确边, 补差 0)
+      return -1;  // 吸顶列头分支: 界内建 +1(防透缝, 与四皮肤 CSS 的 calc(--head-h - 1px) 同源), 补 -1 回列头底实缘
+    },
     /* 滚动进视口: 目标已可见则不动(避免每次按键都跳)。渲染行用 getBoundingClientRect 差值;
      * 窗口化未渲染行用 _rowWindow 前缀和换算 y(计划 W2; 禁 scrollIntoView, 见文件头)。
      * 上下边界走 _kbViewTop / _kbViewBottom 两个单点(顶栏+吸顶列头 / 固定状态栏+停靠面板)。 */
@@ -297,6 +309,7 @@ Object.assign(window.AQB_SHORTCUTS.methods, {
         const vTop = this._kbViewTop();     // 顶栏 + 吸顶列头(列头盖住列表首行, 2026-10-09 报障)
         const vBot = this._kbViewBottom();  // 状态栏 + 面板开着时让位面板顶缘(W4 几何走查)
         const vPad = this._kbViewBottomPad();  // 触发界补差按界源分支配对(面板开=+8 呼吸距补偿 / 关闭·D3=+0 精确边)
+        const vTopPad = this._kbViewTopPad();  // 上界触发界补差按界源分支配对(吸顶列头=-1 回列头底实缘 / 顶栏=+0 精确边)
         /* 用真实 DOM 矩形校正落点。抽成局部函数是为了在下一帧复用: 共享 runner 上
          * $nextTick 可能早于窗口化重渲(目标行还没进 DOM), 或前缀和用的是估算行高而实测
          * 行高随字体/平台变化 —— 两种情形都会让首次落点停在状态栏背后。下一帧用真实
@@ -306,7 +319,12 @@ Object.assign(window.AQB_SHORTCUTS.methods, {
           const el = document.querySelector(sel);
           if (!el) return false;
           const rect = el.getBoundingClientRect();
-          if (rect.top < vTop + 4) window.scrollBy(0, rect.top - vTop - 8);
+          // 上界触发界 = 单点 + 补差(界源分支配对, 2026-11-14 T7 收紧, 与下界 S-C 同带语义):
+          // 吸顶列头在位 = -1 补偿 vTop 内建 +1(列头吸顶落位 top = calc(--head-h - 1px) 防透缝),
+          // 触发界 = 列头底实缘 —— 顶距列头 0~4px 未覆盖的行不再被下移(flux 开门落定回执 writer#4
+          // 重入实证 4~12px); 列头不在 DOM/未吸顶 = +0 精确边(界源 = 顶栏, 返回值即遮蔽实缘)。
+          // 真被列头/顶栏遮住的行照旧按公式让位(位移量不变), 键盘跟随共用同一上界。
+          if (rect.top < vTop + vTopPad) window.scrollBy(0, rect.top - vTop - 8);
           // 下界触发界 = 单点 + 补差(界源分支配对, 2026-11-13 S-C 收紧, 与 _kbRevealRow 同带语义):
           // 面板开 = +8 呼吸距补偿(界 = 面板顶实缘, 未覆盖行不动) / 关闭·D3 = +0 精确边(遮蔽行照旧
           // 让位)。flux 开门落定回执(state.js drawerVisible -> AQB_FX_MOUNT.dock 回执)重入本方法
@@ -341,7 +359,9 @@ Object.assign(window.AQB_SHORTCUTS.methods, {
         }
         const y = pre[idx] + (this._winTop[kind] || 0);
         const h = pre[idx + 1] - pre[idx];
-        if (y < window.scrollY + vTop + 4) window.scrollTo(0, y - vTop - 8);
+        // 上界触发界与渲染行路同收紧(单点 + 补差按界源分支, 2026-11-14 T7), 位移量不变;
+        // 估算偏差导致的漏判由下一帧 revealNext 真实 DOM 校正兜底(与下界 S-C 同理)
+        if (y < window.scrollY + vTop + vTopPad) window.scrollTo(0, y - vTop - 8);
         // 下界触发界与渲染行路同收紧(单点 + 补差按界源分支, 2026-11-13 S-C), 位移量不变
         else if (y + h > window.scrollY + vBot + vPad) window.scrollTo(0, y + h - vBot + 8);
         revealNext();  // 估算行高与实测行高的偏差由后续帧补正

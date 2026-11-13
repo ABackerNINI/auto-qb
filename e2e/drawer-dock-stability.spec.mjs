@@ -69,6 +69,18 @@ const DOCK_SKINS = [...SKINS, 'flux'];
  *    故锚点取循环前的闭合基线)。
  * 8. T6 回归守卫: reopen 全程 scrollY 零位移(Chromium 修复前后恒绿 —— 修复前钳制窗密闭; 修复后
  *    结构性消失, 防回退), 不作红验。
+ *
+ * T7 上界(顶界)触发带收紧(2026-11-14 用户拍板「未被覆盖的行绝对不动」顶界方向): S-C 只收了下界,
+ * flux 独有 writer #4(开门落定回执 -> _kbScrollRowIntoView)的上界分支旧触发界 rect.top < vTop + 4
+ * 把「行顶距吸顶列头底实缘 0~4px」的未覆盖行也按公式下移(位移 ∈ (-9, -5], 探针实测 4~12px)。
+ * 修复 = 补差单点 _kbViewTopPad(吸顶列头分支 -1 补偿 vTop 内建 +1(列头吸顶落位 top =
+ * calc(--head-h - 1px) 防透缝)回到列头底实缘; 列头不在/未吸顶 +0 精确边), 位移公式不动。用例
+ * (flux 专属 —— writer #4 只在 flux 挂, prism/atlas 开门路径无上界触发面, 键盘跟随面归
+ * kbd-scroll-band.spec.mjs):
+ * 9. T7 顶界带: 列头下 2px 未覆盖行开门(writer#4 重入)全程行顶/scrollY 零位移; 修复前预期红
+ *    (实测被下移 ~7px)。
+ * 10. T7 反向守卫: 真被列头遮住的行(覆盖 10px)走门仍让位到公式终值 vTop + 8 = 列头底 + 9
+ *     (修复前后都必须绿)。
  */
 
 /* ==================== S0 三条用例共用小件(判据一律位移量/事件次数, 不用绝对像素阈值) ==================== */
@@ -217,6 +229,7 @@ async function installGeoSampler(page, hash) {
         dockH: dr ? Math.round(dr.height) : null, dockTop: dr ? Math.round(dr.top) : null,
         panelTop: pr ? Math.round(pr.top) : null,
         rowB: rr ? Math.round(rr.bottom) : null,
+        rowT: rr ? Math.round(rr.top) : null,  // T7 上界(顶界)判据用: 行顶位移(下界用例只看 rowB, 加列无扰)
       });
       if (window.__geo.length < 6000) requestAnimationFrame(tick);
     };
@@ -731,6 +744,152 @@ for (const skin of DOCK_SKINS) {
         .toBeLessThan(0);
       expect(Math.abs(after2.rowB - (after2.panelTop - 16)),
         `边界探针让位终值应落在公式落点 vBot - 8 = 面板顶 - 16(实测 ${after2.rowB.toFixed(1)} vs ${(after2.panelTop - 16).toFixed(1)})`)
+        .toBeLessThanOrEqual(2);
+    });
+
+    /* ==================== T7 上界(顶界)触发带收紧(2026-11-14 用户拍板「未被覆盖的行绝对不动」顶界方向) ====================
+     * 下界方向已由 S-C 收紧(触发界 = 界源实缘, _kbViewBottomPad 单点); 上界方向还有一处漏网:
+     * flux 独有 writer #4(state.js drawerVisible -> AQB_FX_MOUNT.dock 落定回执 -> _kbScrollRowIntoView)
+     * 重入时, 其上界分支(旧触发界 rect.top < vTop + 4, vTop = _kbViewTop = 顶栏 + 吸顶列头高)把
+     * 「行顶距吸顶列头底实缘 0~4px」的**未覆盖**行也按公式下移(位移 = rect.top - vTop - 8 ∈
+     * (-9, -5], 16 场景探针实测 4~12px)—— 行顶在列头之下 = 未被列头/面板覆盖, 按拍板语义必须
+     * 零位移。修复(与 S-C 同法): 触发界收紧到界源实缘 —— 补差单点 _kbViewTopPad(吸顶列头分支
+     * -1 补偿 vTop 内建 +1: 列头吸顶落位 top = calc(--head-h - 1px) 防透缝, 单点返回值 = 列头底
+     * 实缘 + 1; 列头不在 DOM/未吸顶分支 +0 精确边, 界源 = 顶栏), 位移公式逐字不动, 真被列头
+     * 遮住的行仍按公式让位到 vTop + 8。
+     * 两用例 flux 专属: writer #4 只在 flux 挂(AQB_FX_MOUNT 仅 flux shell 注册), prism/atlas 无
+     * 此写入者 = 开门路径无上界触发面(上界的键盘跟随面由 kbd-scroll-band.spec.mjs 覆盖)。
+     */
+
+    test(`T7 顶界带: 列头下 2px 未覆盖行开门落定回执重入全程零位移 @fast (${skin})`, async ({ page }) => {
+      test.skip(skin !== 'flux', 'writer#4(开门落定回执重入)flux 独有; 其余皮肤无此写入者');
+      test.setTimeout(90_000);
+      collectRuntimeErrors(page);
+
+      await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 15_000 });
+      await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
+      await page.click('nav.tabs [data-view="torrents"]');
+      await expect(page.locator('.torrent-row').first()).toBeVisible({ timeout: 15_000 });
+
+      // 先深滚进列表中部(列头吸顶恒成立 —— 吸顶前滚动连列头一起搬, 行顶-列头底相对量不动,
+      // 对齐无从谈起; 首轮红验实证: 不深滚对齐残差 17px), 再挑视口中部一个行顶在列头底 40px
+      // 以下的行, scrollBy 精确送到列头底实缘 + 2(未覆盖: 行顶在列头之下; 且在旧触发带内 ——
+      // vTop = 列头底实缘 + 1, 行顶 = 列头底 + 2 即 vTop + 1 < vTop + 4, 旧判据必触发; 修复后
+      // 判据 = 列头底实缘, 不触发)。+2 档对亚像素安全: Math.round 对齐误差 ±0.5px 内, 既不会
+      // 把行顶推到列头之上(误成真覆盖), 也不会推出 vTop + 4(红验不红)。
+      // 滚动量 = 当前 - 目标(下滚把行往上搬, S-C 同式)。
+      await page.evaluate(() => window.scrollTo(0, Math.round(document.documentElement.scrollHeight / 2)));
+      await waitListSettled(page);
+      const aligned = await page.evaluate(() => {
+        const hb = document.querySelector('.group-head').getBoundingClientRect().bottom;
+        let best = null;
+        for (const r of document.querySelectorAll('.torrent-row')) {
+          const b = r.getBoundingClientRect();
+          if (b.top > hb + 40 && b.bottom < window.innerHeight - 40) {
+            best = { hash: r.getAttribute('data-hash'), top: b.top };
+            break;
+          }
+        }
+        if (!best) return null;
+        window.scrollBy(0, Math.round(best.top - (hb + 2)));
+        return best.hash;
+      });
+      expect(aligned, '前置: 视口内应有行顶在列头底 40px 以下的行(带对齐原料)').toBeTruthy();
+      await waitListSettled(page);
+
+      const band = await page.evaluate((h) => {
+        const head = document.querySelector('.group-head');
+        const r = document.querySelector(`[data-hash="${h}"]`).getBoundingClientRect();
+        return { y: Math.round(window.scrollY), rowT: r.top, hb: head.getBoundingClientRect().bottom };
+      }, aligned);
+      // 前置: 行顶确实落在列头底实缘之下 0~4px(未被列头覆盖 + 旧触发带内 —— 对列头底**实值**判)
+      expect(band.rowT - band.hb, `前置: 对齐后行顶 - 列头底 = ${(band.rowT - band.hb).toFixed(1)} 应在 (0, 4] 内(未覆盖且旧判据必触发)`)
+        .toBeGreaterThan(0);
+      expect(band.rowT - band.hb, `前置: 对齐后行顶 - 列头底 = ${(band.rowT - band.hb).toFixed(1)} 应 <= 4(旧触发带内)`)
+        .toBeLessThanOrEqual(4);
+
+      await installGeoSampler(page, aligned);
+      await page.dblclick(`.torrent-row[data-hash="${aligned}"]`, { force: true, position: { x: 8, y: 8 } });
+      await expect(page.locator('.drawer-dock > .drawer')).toBeVisible({ timeout: 5_000 });
+      // writer#4 在面板入场落定回执(transitionend + 宏任务)后 ~10ms 发 —— 不加 waitForTimeout
+      // (flaky 守阵禁新增): waitDockSettled 的判稳对要求 dock 高 + scrollY 连续两拍(拍距 250ms)
+      // 全等, 而 writer#4 恒在高度收敛后 ~15ms 内发且其位移必打破 scrollY 全等 —— 判稳对在
+      // writer#4 之前结构上不可能凑齐, 落定返回时回执重入必已被采样覆盖。
+      await waitDockSettled(page);
+      const run = await stopGeoSampler(page);
+
+      // 断言(修复后绿, 修复前红: writer#4 上界分支把行下移 ~7px): 全程行顶与 scrollY 零位移。
+      const dt = run.frames.map((f) => (f.rowT ?? band.rowT) - band.rowT);
+      const dy = run.frames.map((f) => f.y - band.y);
+      expect(Math.max(...dy.map(Math.abs)),
+        `开门全程 scrollY 位移量(基线 ${band.y}; 序列 ${frameDigest(run.frames)}; scrollBy 登记 ${JSON.stringify(run.sb)})`)
+        .toBe(0);
+      expect(Math.max(...dt.map(Math.abs)),
+        `开门全程行顶位移量(基线 ${band.rowT.toFixed(1)}; scrollBy ${JSON.stringify(run.sb)})`)
+        .toBeLessThanOrEqual(1);
+    });
+
+    test(`T7 反向守卫: 真被吸顶列头遮住的行走门仍让位到上界公式终值 vTop + 8 @fast (${skin})`, async ({ page }) => {
+      test.skip(skin !== 'flux', 'writer#4(开门落定回执重入)flux 独有; 其余皮肤无此写入者');
+      test.setTimeout(90_000);
+      collectRuntimeErrors(page);
+
+      await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 15_000 });
+      await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
+      await page.click('nav.tabs [data-view="torrents"]');
+      await expect(page.locator('.torrent-row').first()).toBeVisible({ timeout: 15_000 });
+
+      // 对齐: 先深滚进列表中部(列头吸顶恒成立, 缘由同上例), 再把行顶送到列头底实缘 - 10(真被
+      // 列头遮 10px)。点击点必须落在列头之下(行顶被盖, y=8 会点在列头上被 z-index 拦截), 按行高
+      // 取行下半部一个安全偏移: 点视口 y = 行顶 + clickY > 列头底 且仍在行盒内(clickY <= 行高 - 8)。
+      await page.evaluate(() => window.scrollTo(0, Math.round(document.documentElement.scrollHeight / 2)));
+      await waitListSettled(page);
+      const aligned = await page.evaluate(() => {
+        const hb = document.querySelector('.group-head').getBoundingClientRect().bottom;
+        let best = null;
+        for (const r of document.querySelectorAll('.torrent-row')) {
+          const b = r.getBoundingClientRect();
+          if (b.top > hb + 40 && b.bottom < window.innerHeight - 40) {
+            best = { hash: r.getAttribute('data-hash'), top: b.top, h: b.height };
+            break;
+          }
+        }
+        if (!best) return null;
+        window.scrollBy(0, Math.round(best.top - (hb - 10)));
+        return { hash: best.hash, clickY: Math.max(12, Math.min(Math.round(best.h) - 8, 30)) };
+      });
+      expect(aligned, '前置: 视口内应有行顶在列头底 40px 以下的行(带对齐原料)').toBeTruthy();
+      await waitListSettled(page);
+
+      const base = await page.evaluate((h) => {
+        const head = document.querySelector('.group-head');
+        const r = document.querySelector(`[data-hash="${h}"]`).getBoundingClientRect();
+        return { y: Math.round(window.scrollY), rowT: r.top, hb: head.getBoundingClientRect().bottom };
+      }, aligned.hash);
+      // 前置: 行顶真被列头盖住(覆盖 >= 4px 裕量 —— 贴 1px 边的行属触发界边界探针域, 不混入本守卫)
+      expect(base.hb - base.rowT, `前置: 对齐后行顶 ${base.rowT.toFixed(1)} 应真被列头盖住(列头底 ${base.hb.toFixed(1)}, 覆盖 >= 4px)`)
+        .toBeGreaterThanOrEqual(4);
+
+      await installGeoSampler(page, aligned.hash);
+      await page.dblclick(`.torrent-row[data-hash="${aligned.hash}"]`, { force: true, position: { x: 8, y: aligned.clickY } });
+      await expect(page.locator('.drawer-dock > .drawer')).toBeVisible({ timeout: 5_000 });
+      await waitDockSettled(page);  // writer#4 覆盖性: 判稳对结构上不可能早于回执重入(上例注)
+      const run = await stopGeoSampler(page);
+      const after = await page.evaluate((h) => {
+        const head = document.querySelector('.group-head');
+        const r = document.querySelector(`[data-hash="${h}"]`).getBoundingClientRect();
+        return { rowT: r.top, hb: head.getBoundingClientRect().bottom };
+      }, aligned.hash);
+
+      // 断言(修复前后都必须绿 —— 判据收紧只动触发界, 位移公式不动): 行被下移让位, 终值落在
+      // 公式落点 vTop + 8 = 列头底实缘 + 9(vTop = 列头底 + 1 内建偏移)。
+      expect(after.rowT - base.rowT,
+        `真覆盖行必须被让位(行顶 ${base.rowT.toFixed(1)} -> ${after.rowT.toFixed(1)}; scrollBy ${JSON.stringify(run.sb)})`)
+        .toBeGreaterThan(0);
+      expect(Math.abs(after.rowT - (after.hb + 9)),
+        `让位终值应落在公式落点 vTop + 8 = 列头底 + 9(实测 ${after.rowT.toFixed(1)} vs ${(after.hb + 9).toFixed(1)})`)
         .toBeLessThanOrEqual(2);
     });
 

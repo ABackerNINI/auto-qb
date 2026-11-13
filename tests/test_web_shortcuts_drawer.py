@@ -135,6 +135,14 @@ Delete 直连注册表外, 均为已拍板的口径, 逐条落断言。W5 局部
   周期界(drawer.open/hash 逐帧 + closeDrawer 显式 _kbRevealCompleteStop, 无跨周期残留)、
   余量不足只等不发(盲发 = 再被钳 = 白发位移事件)、600ms 退避、平滑在途停稳才缴(开门窗口
   瞬时/fx-glide 平滑按现行传输, fx-mount 零改动)
+- test_kb_view_top_band_tighten: T7 上界(顶界)触发带收紧(2026-11-14 用户拍板「未被覆盖的行绝对
+  不动」顶界方向, S-C 的对称面) —— flux 独有 writer #4(state.js 开门落定回执重入)的上界分支旧
+  触发界 vTop + 4 把「行顶距吸顶列头底实缘 0~4px」的未覆盖行也按公式下移(e2e T7 红验实测
+  6.4px)。修复 = 补差单点 _kbViewTopPad(吸顶列头分支 -N 补偿 vTop 内建 +N(列头吸顶落位
+  top = calc(--head-h - Npx) 防透缝)回到列头底实缘; 列头不在/未吸顶 +0 精确边, 界源 = 顶栏),
+  关系钉 = 补差与四皮肤 CSS 防透缝偏移同值反号(CSS 改 N 当场红); _kbScrollRowIntoView 两路
+  (渲染行/前缀和)判据一致化 + 位移公式逐字不动(真覆盖行仍让位到 vTop + 8, 行为面由 e2e
+  drawer-dock-stability.spec.mjs T7 两用例钉, flux 专属)
 """
 
 from __future__ import annotations
@@ -891,6 +899,70 @@ def test_drawer_open_reveal_row() -> None:
     assert re.search(r"window\.scrollBy\(0, rect\.bottom - vBot \+ 8\)", sib2) and re.search(
         r"window\.scrollTo\(0, y \+ h - vBot \+ 8\)", sib2
     ), "_kbScrollRowIntoView 两路位移公式不动(只收紧触发界, 让位量口径不变)"
+
+
+def test_kb_view_top_band_tighten() -> None:
+    """T7 上界(顶界)触发带收紧(2026-11-14 用户拍板「未被覆盖的行绝对不动」顶界方向; S-C 的对称面):
+    S-C 只收了下界, flux 独有 writer #4(state.js drawerVisible -> AQB_FX_MOUNT.dock 落定回执 ->
+    _kbScrollRowIntoView)的上界分支旧触发界 rect.top < vTop + 4 把「行顶距吸顶列头底实缘 0~4px」
+    的未覆盖行也按公式下移(位移 = rect.top - vTop - 8 ∈ (-9, -5], e2e T7 红验实测 6.4px)—— 行顶
+    在列头之下 = 未被覆盖, 按拍板语义必须零位移。修复与 S-C 同法: 触发界收紧到界源实缘 —— 补差
+    单点 _kbViewTopPad(吸顶列头分支 -1 补偿 vTop 内建 +1: 列头吸顶落位 top = calc(--head-h - 1px)
+    防透缝, 单点返回值 = 列头底实缘 + 1; 列头不在 DOM/未吸顶分支 +0 精确边, 界源 = 顶栏), 位移
+    公式逐字不动, 真被列头遮住的行仍让位到 vTop + 8。钉法 = 补差单点与 CSS 防透缝偏移的**关系**
+    (CSS 若改 N, 补差必须跟随才算仍指列头底实缘) + _kbScrollRowIntoView 两路判据一致化, 不是裸
+    字符串。"""
+    eng = _read("shortcuts.js")
+    # --- 补差单点: 分支条件与 _kbViewTop 镜像, 只读分支条件不读矩形(几何仍归 _kbViewTop 单点) ---
+    vt = re.search(r"_kbViewTop\(\) \{(.*?)\n    \},", eng, re.S)
+    assert vt, "shortcuts.js 缺 _kbViewTop(行可见上界单点, T7 触发界从它派生)"
+    assert 'document.querySelector(".group-head")' in vt.group(1) and 'position !== "sticky"' in vt.group(1), (
+        "_kbViewTop 必须按「列头在位且吸顶 / 回落顶栏」两分支取值(T7 补差单点的分支语义镜像源)"
+    )
+    pad = re.search(r"_kbViewTopPad\(\) \{(.*?)\n    \},", eng, re.S)
+    assert pad, "shortcuts.js 缺 _kbViewTopPad(上界触发界补差单点: 补差按界源分支取值)"
+    ptb = pad.group(1)
+    assert ptb.count("getBoundingClientRect") == 0, ("上界补差单点只读分支条件不读矩形(几何仍归 _kbViewTop 单点, 不许第二几何源 —— S-C 同纪律)")
+    assert 'document.querySelector(".group-head")' in ptb, ("上界补差单点必须实测列头 DOM(列头不在 DOM = 界源顶栏分支, 补差 0 精确边)")
+    assert 'position !== "sticky"' in ptb, ("上界补差单点必须实测列头吸顶态(未吸顶 = 界源顶栏分支, 补差 0 精确边)")
+    # --- 关系钉: 吸顶列头落位 top = calc(--head-h - N px)(防透缝重叠, 四皮肤 CSS 成对) ——
+    # vTop 吸顶分支返回 headH + 列头高 = 列头底实缘 + N(内建 +N 偏移), 补差必须补 -N 才回到
+    # 实缘; CSS 改 N 而补差不跟随, 触发界就偏离列头底实缘(N px 内的未覆盖行被误移) —— 当场红。
+    css_offsets = set()
+    css_hits = 0
+    for p in sorted(STATIC.rglob("*.css")):
+        m = re.search(
+            r"\.group-head \{[^}]*position: sticky; top: calc\(var\(--head-h[^)]*\) - (\d+)px\)",
+            p.read_text(encoding="utf-8"), re.S
+        )
+        if m:
+            css_hits += 1
+            css_offsets.add(int(m.group(1)))
+    assert css_hits >= 4 and len(css_offsets) == 1, (
+        f"吸顶列头防透缝落位应四皮肤 CSS 成对且偏移一致(实测 {css_hits} 处, 偏移集 {sorted(css_offsets)})"
+    )
+    n = css_offsets.pop()
+    assert f"return -{n};" in ptb, (
+        f"上界补差必须与列头吸顶落位的防透缝偏移同值反号(CSS -{n}px, 补差 -{n}): 补回偏移触发界才等于"
+        "列头底实缘(未被列头遮住的行绝对不动); 旧口径 vTop + 4 的越过带把顶距列头 0~4px 的未覆盖行下移"
+        "4~12px(e2e T7 红验实测 6.4px)"
+    )
+    # --- 消费方: _kbScrollRowIntoView 两路上界触发界一致化(flux 开门落定回执 writer#4 经渲染行路
+    # 重入; 键盘跟随共用同一上界, 收紧是「同带语义一致化」, 真覆盖行让位行为不变) ---
+    si = re.search(r"_kbScrollRowIntoView\(rows, idx\) \{(.*?)\n    \},", eng, re.S)
+    assert si, "shortcuts.js 缺 _kbScrollRowIntoView(T7 同带语义实现点)"
+    sib = si.group(1)
+    assert re.search(r"const vTopPad = this\._kbViewTopPad\(\);",
+                     sib), ("上界补差必须与 _kbViewTop 同帧单次落值复用(单点纪律: 边界落值只取一次, 不跨帧)")
+    assert re.search(r"if \(rect\.top < vTop \+ vTopPad\) window\.scrollBy\(0, rect\.top - vTop - 8\);", sib), (
+        "渲染行路上界触发界必须是 vTop + vTopPad(补差单点落值 = 列头底实缘): flux 开门落定回执 "
+        "writer#4 经此重入, 旧口径 vTop + 4 的越过带把顶距列头 0~4px 的未覆盖行下移 4~12px"
+    )
+    assert re.search(r"if \(y < window\.scrollY \+ vTop \+ vTopPad\) window\.scrollTo\(0, y - vTop - 8\);",
+                     sib), ("窗口化前缀和路上界触发界必须与渲染行路同收紧(vTop + vTopPad, 两路同带语义)")
+    assert sib.count("vTop - 8"
+                    ) == 2, ("上界位移公式两路逐字不动(只收紧触发界, 落点终值 vTop + 8 口径不变 —— 真被列头遮住的行让位量"
+                             "修复前后逐位一致; e2e T7 反向守卫钉行为面)")
 
 
 def test_flux_door_window_scroll_transport() -> None:
