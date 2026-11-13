@@ -7,6 +7,7 @@
 - test_frontend_qb_fx_overlay_close_registry_and_reduced_motion: 数值面板收层七处登记 + IO 兜底 + reduced-motion 红线静态守阵(R8 S0-b, plan 26-11-12-1139 §05.6/§05.7/§05.9) —— lifecycle 点空白名单与 Esc 退栈链(紧跟 drawerMenu 之后: 后开先关, 面板开着 Esc 只关面板)/dialogs_meta escBusy/closeDrawer/drawerTab/换目标收口六处在位(shortcuts _kbOverlayBusy 末尾项归 test_drawer_dock_keyboard_w2 书写序守阵) + IO 观察 .qb-chart-host 在 _qbFxListen 开面板支路建/关面板支路断(ratio===0 走 fxClose 单点, 不挂 _qbChartDestroy 防换肤误关; 七处直写 visible=false 的断开由 state.js 'fxPanel.visible' watcher 统一汇到 _qbFxListen(false)) + reduce 红线: 判定单点内联 matchMedia 不引用 AQB_FX.reduced(flux-only 三套旧皮肤 ReferenceError)/有效值单点 fxOn = enabled && !reduce/change 监听 mounted 装beforeUnmount 摘/AQB_FX_CFG._qbFxCfgSync 附加 on 且 fx+fxReduce 两 watcher 汇入/面板总开关 :checked=fxOn + :disabled=fxReduce 置灰与说明行/有效值 on 不进持久化形状(QB_FX_DEFAULTS 无 on 键)
 - test_frontend_qb_beat_kernel_battery: 节拍内核 S1 电池 + 接缝静态钉(S1, plan 26-11-12-1139 §03 节奏模型/L0/L1, §06 S1 行) —— node 电池真跑(同 _NODE_QB_FX_PROBE 的 new Function 取出口径): 节奏公式四组(multiplier 1/2/8 与 600s 长窗 -> beat 600/夹顶 1000×3, 下限 320 与非法 period 防御) + 每拍时间线(impact 0.12/shift=shiftRatio×beat 防御夹取/converge [0.12,0.6]/tail=min(period-beat,2000) 封顶非常驻, animEnd<=beat<=1000 全域扫 = I1 真值落地可验证面) + easeOut 三次多项式 1000 采样单调无 overshoot(D9) + 0.75px 最小可见位移规则(短窗播 L0/24h 长窗 2880 点瞬时/0.75 边界/量不到宽瞬时) + L1 双轨独立(上传 Δ=0 静默 + 下载 Lv.3 各自正确/Δ 分档端点归属 0.005/0.05/0.30/缺口轨 live=false 不插值/复活轨直落真值不造斜坡/分母可视下限防爆炸/0->0 守卫) + 以显示值接续不回跳(打断中值作下一拍 prev, 上下行收敛序列单调落在 [prev,target] 终点恰真值 —— I3); 接缝静态钉: :426 逐字行后追加 _qbBeatStart(不改写既有字面量)/L0 判定帧摆回旧位与每帧 dx 归零成对/收敛帧 setData 交还 auto/ticks 冻结挂 pending 与清冻结先于 setData/reduce 短路读 AQB_FX_CFG.on 有效值(仅 reduce 分量短路, enabled=false 不短路)/_qbChartDestroy 先 _qbBeatCancel 再 destroy/面板 beat 展示值复用 _qbBeatMs 单点(内联 clamp 公式退场)/模块级头部零 BOM 触碰(rAF/performance.now/document.hidden 只准方法域)/调度器域零 destroy+new uPlot+零 loading(I3 反向钉)/tooltip 读数面接缝(_qbHoverOf 读 d.points[i] 不读 u.data, 与 L1 插值写面零交集 —— I4); y 钉成对(x 提交必配 setScale("y") 全窗真值档位, 纯数值收敛帧先钉 y 再 redraw, 钉值口径 _qbYRange x _qbYCapOf, 收敛帧不得再钉 —— 评审 #1 I4 纵轴定档)/ticks 冻结等长守卫在位(splits 数变化即解除缓存回落现算 —— 评审 #4)/_qbChartRescale 在途拍收口(落真值 + _qbBeatCancel + 清冻结先于 setData —— 评审 #6); S8 收敛帧补逐帧 ySeen 钉 y 恒 31.5(只记确有绘制的帧 —— S8 不播 L0, impact 窗静默帧零提交; 封 setScaleLog.every 在零钉时空转的盲区, 删纯数值帧 y 钉即红) + S9b roll 恰边界 dx0=2x step 仍播 L0(rAF=1 + 视口摆回旧位 [1000,1120], 判据改 < 即红)。无 node 静默跳过(同 _NODE_QB_TRAFFIC_PROBE 口径)
 
+- test_frontend_qb_fx_visual_engine_battery: 视觉引擎 V + N 霓虹元素层 S2-a 电池 + 接缝静态钉(S2-a, plan 26-11-12-1139 §03 V 表/N 节/D1-D4, §06 S2 行) —— node 电池真跑(同节拍内核范式): I6 图层顺序常量逐字(geometry/neon 恒在 curve 前、anchor 在后)+ I11 N 层白名单五元素/黑名单八元素逐字且零交集 + V1 Lv 色表逐字(#7AD9FF/#FEFFA9/#FF6BD6; 四皮肤无 --qb-lv* 令牌已核查, 计划色值常量落 shared 层)+ 三档配色 blur 上限(neon 10/glitch 14/calm 0)+ V2 环边数映射(3/6/8)+ I9 预算常量(粒子 ≤32/每轨半套 ≤16/N 0.33×beat/粒子窗 0.55×beat/y 间距 26px/切片 ≤5/微震 3px/光点 ≤2/末段 6 桶) + D3 lead 仲裁(argmax 优先非缺口非静默轨/双轨静默 null/恰等取 up) + partCap(等级基数 16/24/32 x 密度, clamp 32, 密度 ≤0 零粒子) + D3 三策略分配(both 对半各 ≤16 合计守恒全域扫/lead 全套从属零/merge 中点一次/未知回落 both) + D4 y 间距缩小(线性 /26 下限 0.4 不合并不取消) + N 回落 0.33×beat + 冲击环(easeOut 扩张/alpha 线性回落/0.55×beat 后 null) + V3 粒子三阶段(爆发 ×4.5 闭式/拖尾 easeOut 减速位移步单调收缩/末态恰 dist/t=0 alpha=1 与判定线闪光同帧/carryPx 随 L0 末点滑动) + 喷射清单(三/四/五边非圆点/同种子恒同/左向 270° 弧避开右向扇区/尺寸行程界) + glitch 切片(≤5/|dy0| ≤3/同种子恒同) + 伪随机确定性; 调度器 fx 面(真 mixin 方法 + 桩 uPlot 含 valToPos/bbox 全量): 判定帧 fx 生成门(cfg.on=false fx null 但 L0/L1 照常/reduce 无 anim/缺口轨 lead 单轨/双轨静默零装饰)+ both/lead/merge 三策略落 fx 清单 + D4 y 间距实测缩小 + 装饰帧保障(无 shift 长窗 impact 窗零提交帧强制重绘 + y 钉 31.5 成对)+ 次区相位(收敛帧衔接/光点 ≤4 alpha ≤0.35 位置在绘图区内/1px 量化节流零提交/窗尽收尾 anim null/拍内关 tail 下一帧收尾)+ merge+缺口轨落位退 lead 末点 y(F7: specs.merge[0].y0 === yOf(lead.shown), 与底边的假中点即红 —— 评审修复2; 切片锚带中心同退且清单无条件生成)+ spawn 满额清单与密度解耦(F8: 密度 0.4 仍 16/16, cap=partCap(lv,1) —— 评审修复3); 绘制面 ctx 桩电池(G1-G8, 记账式 2d context 真 _qbDrawFx/_qbDrawFxAnchor): blur 预算(非零赋值恰 1 施加点/带 blur stroke = spots 数 ≤2/逐帧扫帧末 shadowBlur 恒 0/palette=calm 恒不赋非零 —— 评审修复7, 变异自证删 blur 清零行必红)+ neon=false 零白名单元素落笔(fillText/shadowBlur/Lv 色描边, 锚段同验)+ 密度拍内即时(0.4→13/1→32/0.1→3 粒)+ 切片 palette 逐帧门(neon 零切片/拍内切 glitch 下一帧即画 5 条 1px 级 —— 评审修复4)+ draw 侧 merge+缺口轨环心 = yOf(lead.shown)(x=tipX 顶点四点均值观测, 假中点即红)+ lead 加亮跨缺口重新 moveTo 不桥接([20,null,25] vs [20,22,25] 对照 —— 评审修复6); 静态钉: I6/I11/V1/I9 常量行逐字 + 钩子注册序 = 层序(vendor 1.6.32 源实证: 主渲染序 clearRect→drawClear→Pl.forEach[axes→series]→draw, Ci("drawAxes") 在 Dl.axes 末尾 = 网格后系列前 —— drawClear 斜纹恒最底/drawAxes fx(挂 drawClear 会被网格盖住违 I6)/draw 限速→锚)+ 背景零铺色(fx 域剥注释后 fillRect 恰 1 处且为切片 1px 级、锚/次区域零 fillRect)+ I11 黑名单(fx 域零触碰 legend/cursor/series)+ I3 反向钉(fx 四域零 destroy/new uPlot/loading)+ 生效条件门(spawn 与 fx 装饰段逐帧复核 cfg.on、tail 域复核 cfg.tail)+ 收敛帧次区衔接(phase tail/fxTail/cfg.tail 门)+ 装饰帧保障行 + 次区相位分支在 _qbBeatFrame(装饰帧挂调度器循环, 无独立循环)。无 node 静默跳过(同 _NODE_QB_TRAFFIC_PROBE 口径)
 - test_frontend_qb_traffic_drawer_page_guard: 流量图抽屉的页面守卫(2026-10-06 修「qB 全局流量图出现在设置页」) —— drawerVisible 两形态先挡非主内容页且状态位不随切页翻(回页连数据/窗口选择一起回来) + 轮询与建图 active 同源含 page 判据(面板不在 DOM 还拉还画 = 对空气取数) + openDrawerTraffic 先切回主内容页 + state.js drawerVisible watcher 退场销毁图/进场补拉(种子详情支路 !s 的 $nextTick _dtSync 回页变体重挂, 归 test_drawer_seed_reentry_variant_remount)
 - test_frontend_qb_traffic_yaxis_and_annotation: 流量图纵轴固定模式 + 画布注解层守阵(2026-10-08, issue 26-10-07-0149 认领一并做) —— _qbYRange/_qbGapRuns 纯函数 node 真跑(自动 = peak*1.05 / 固定上限取 max(cap, peak*1.05) 峰值超上限按峰值显示 / 缺口 = 上下行皆 null 才算); 限速三作用域同源 = qB 全局限速上下行**较大者**(_qbGlobalLimit -> speedLimitBytes); 上限派生单点 _qbYCapOf(limit×1.2 / manual MiB); 三作用域**各自独立**持久化(qbYAxisStoreKey 三键 + qbInitialYAxis 只认合法模式与正数 + persistQbYAxis 吞异常) + 切档落盘重排(qbSetYAxisMode/qbSetYAxisManual -> _qbChartRescale 走 setData 重算 scale 不重建) + 限速变化重排 watcher(mounted 注册, this.drawer 守卫剔除 BaseTransition 假实例); 建图 y range 接纯函数 + draw/drawClear 两钩子画限速虚线/缺口斜纹(共享图面三挂点全生效, uPlot.pxRatio 设备像素换算, 限速线只画落在可视值域内的); 模板 .qb-tools/.qb-seg 控件 + CSS 三皮肤成对 + **控件组唯一挂点**(图下统计栏 .qb-statctl; 2026-10-16 版式改: 流量形态头部不再挂控件, 全局/分组与种子流量图三挂点对齐, 上限读数 qbYAxisCapText/.qb-tools-hint 随 UI 移除退役) + P4 重启缝提示(plan 26-10-15-0829; 左端口径修订 2026-10-16, issue 26-10-16-0954): _qbSeamHint 判据纯函数 node 真跑(重启贴近链末->提示(含首采即链末桶的实测帧形态)/链到右沿或链确已接续或旧后端->null, 边界含尾区起点、右沿与左端前一桶三点) + computed qbCurSeamHint 消费单点 + drawer.html 提示行文案单源带重启时刻锚 + 断线语义不变(spanGaps:false ×2)
 - test_frontend_qb_traffic_scope_stale_polarity: 流量图三挂点 stale 谓词极性守阵(2026-10-12 修「种子流量图加载不出来」) —— W2–W6 机械改名把 torrent/group 两处 `!(...)` 写成 `!!(...)`(取反变双重取反), 恰在本图活跃时判「响应已过期」⇒ 数据不落袋 + loading 不复位 + 早退不建图 ⇒ 种子「流量」页签恒停「正在加载流量数据…」且轮询被 loading 卡住不自愈(global 未中招, 故症状只在种子/分组图)。既有静态锚(源码字符串级)对单/双 bang 天然失明, 本守阵补两层: 1. node 电池用 `new Function(源码 + "return _QB_SCOPES;")` 取出作用域表, 对三挂点喂「活跃/切走/关闭/换目标/功能关」五类上下文断言 stale 真假 + `active => stale === false` 同向性; 2. 静态极性兜底钉 `!(...)` 书写形态、`!!(...)` 不得回潮
@@ -1292,7 +1293,12 @@ def test_frontend_qb_beat_kernel_battery():
         "_qbBeatStart 的 y 钉必须紧跟 x 摆回(同一提交批, 缺 y = 该提交按偏置窗重推 y)"
     assert fb.index('u.setScale("x", { min: xs[0] - dx') < fb.index('u.setScale("y", { min: 0, max: a.yMax });'), \
         "_qbBeatFrame 的 y 钉必须紧跟 x 提交(同一提交批)"
-    assert fb.index('u.setScale("y", { min: 0, max: a.yMax });') < fb.index("u.redraw();"), \
+    # 纯数值收敛帧必须先钉 y 再 redraw(S2-a 起 _qbBeatFrame 前段还有次区相位的清理 redraw,
+    # 全方法体首现下标比对失真 —— 改在 tailChanged 块内定位, 守的是同一对不变量)
+    tail_conv = re.search(r"if \(tailChanged && !dxChanged\) \{\n(.*?)\n      \}", frame_blk.group(1), re.S)
+    assert tail_conv and 'u.setScale("y", { min: 0, max: a.yMax });' in tail_conv.group(1) \
+        and tail_conv.group(1).index('u.setScale("y", { min: 0, max: a.yMax });') \
+        < tail_conv.group(1).index("u.redraw();"), \
         "纯数值收敛帧必须先钉 y 再 redraw(redraw 内部 setScale(x, current) 同样触发 y 重推)"
     assert "_qbYRange(dmax, this._qbYCapOf(scope))[1]" in sb, \
         "y 钉值必须复用建图 range 单点口径(_qbYRange x _qbYCapOf = 真窗档位 yMax, 不是显示尾值)"
@@ -1355,6 +1361,881 @@ def test_frontend_qb_beat_kernel_battery():
     if not node:
         return
     for probe, tag in ((_NODE_QB_BEAT_PROBE, "节拍内核"), (_NODE_QB_BEAT_SCHED_PROBE, "节拍调度器")):
+        proc = subprocess.run(
+            [node, "-e", probe, os.path.join(shared, "qb_traffic_chart.js")],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace"
+        )
+        assert proc.returncode == 0, f"{tag} node 电池跑挂: {proc.stderr.strip()}"
+        report = json.loads(proc.stdout.strip().splitlines()[-1])
+        assert report["failed"] == [], \
+            f"{tag}电池 {report['ok']}/{report['total']} 过, 失败: {report['failed']}"
+
+
+# 视觉引擎 V + N 层 node 电池(S2-a, plan 26-11-12-1139 §03 V 表/N 节/D1-D4): 常量/仲裁/预算/
+# 粒子运动/清单确定性真跑。new Function 取出口径(同 _NODE_QB_BEAT_PROBE); 无 node 静默跳过。
+_NODE_QB_FXVIS_PROBE = r"""
+const fs = require("fs");
+global.window = {};
+const src = fs.readFileSync(process.argv[1], "utf8");
+const {
+  _QB_FX_LAYER_ORDER, _QB_FX_N_WHITELIST, _QB_FX_N_BLACKLIST, _QB_FX_LV_COLORS,
+  _QB_FX_BLUR_CAPS, _QB_FX_RING_SIDES, _QB_FX_PART_MAX, _QB_FX_SHARD_MAX,
+  _QB_FX_NEON_RATIO, _QB_FX_PART_RATIO, _QB_FX_Y_GAP_PX, _QB_FX_SLICES_MAX,
+  _QB_FX_SLICE_SHAKE_PX, _QB_FX_TAIL_PTS_MAX, _QB_FX_TAIL_SPAN_BUCKETS,
+  _qbFxLead, _qbFxPartCap, _qbFxAlloc, _qbFxGapScale, _qbFxNeonQ, _qbFxRingAt,
+  _qbFxParticleAt, _qbFxSpawnSpecs, _qbFxSlices, _qbFxRand,
+} = new Function(src + "\nreturn { _QB_FX_LAYER_ORDER, _QB_FX_N_WHITELIST, _QB_FX_N_BLACKLIST,"
+  + " _QB_FX_LV_COLORS, _QB_FX_BLUR_CAPS, _QB_FX_RING_SIDES, _QB_FX_PART_MAX, _QB_FX_SHARD_MAX,"
+  + " _QB_FX_NEON_RATIO, _QB_FX_PART_RATIO, _QB_FX_Y_GAP_PX, _QB_FX_SLICES_MAX,"
+  + " _QB_FX_SLICE_SHAKE_PX, _QB_FX_TAIL_PTS_MAX, _QB_FX_TAIL_SPAN_BUCKETS,"
+  + " _qbFxLead, _qbFxPartCap, _qbFxAlloc, _qbFxGapScale, _qbFxNeonQ, _qbFxRingAt,"
+  + " _qbFxParticleAt, _qbFxSpawnSpecs, _qbFxSlices, _qbFxRand };")();
+const checks = [];
+const ok = (name, cond) => checks.push([name, !!cond]);
+// —— A. I6 图层顺序常量(违反即判失败的单点描述) ——
+ok("I6 层序七层逐字", JSON.stringify(_QB_FX_LAYER_ORDER)
+  === JSON.stringify(["bg", "grid", "geometry", "neon", "curve", "anchor", "hud"]));
+ok("I6 层序: geometry/neon 恒在 curve 之前(装饰不压曲线), anchor 在 curve 之后",
+  _QB_FX_LAYER_ORDER.indexOf("geometry") < _QB_FX_LAYER_ORDER.indexOf("curve")
+  && _QB_FX_LAYER_ORDER.indexOf("neon") < _QB_FX_LAYER_ORDER.indexOf("curve")
+  && _QB_FX_LAYER_ORDER.indexOf("anchor") > _QB_FX_LAYER_ORDER.indexOf("curve"));
+// —— B. I11 N 层白名单/黑名单 ——
+ok("I11 白名单五元素逐字(判定线短亮段/环外圈/粒子外圈/锚辉光/Lv 徽标)",
+  JSON.stringify(_QB_FX_N_WHITELIST)
+  === JSON.stringify(["judgeFlash", "ringOuter", "partOuter", "anchorHalo", "lvBadge"]));
+ok("I11 黑名单八元素逐字(曲线/绘图区背景/右缘/网格/tooltip/图例/限速虚线恒静态)",
+  JSON.stringify(_QB_FX_N_BLACKLIST)
+  === JSON.stringify(["curveUp", "curveDl", "plotBg", "edgeBg", "grid", "tooltip", "legend", "limitDash"]));
+ok("I11 白名单与黑名单零交集", _QB_FX_N_WHITELIST.every((w) => _QB_FX_N_BLACKLIST.indexOf(w) < 0));
+// —— C. V1 Lv 色表(plan §03 V1 行逐字; 四皮肤无令牌已核查, 计划色值常量) ——
+ok("V1 Lv 色表: Lv.1 蓝 #7AD9FF / Lv.2 金 #FEFFA9 / Lv.3 品红 #FF6BD6",
+  _QB_FX_LV_COLORS[1] === "#7AD9FF" && _QB_FX_LV_COLORS[2] === "#FEFFA9" && _QB_FX_LV_COLORS[3] === "#FF6BD6");
+ok("V1 三档配色 shadowBlur 上限: neon 10 / glitch 14 / calm 0",
+  _QB_FX_BLUR_CAPS.neon === 10 && _QB_FX_BLUR_CAPS.glitch === 14 && _QB_FX_BLUR_CAPS.calm === 0);
+ok("V2 环边数映射: Lv.1 三边 / Lv.2 六边 / Lv.3 八边",
+  _QB_FX_RING_SIDES[1] === 3 && _QB_FX_RING_SIDES[2] === 6 && _QB_FX_RING_SIDES[3] === 8);
+// —— D. I9 预算常量(全部两轨合计) ——
+ok("I9 预算常量: 粒子 32 / 半套 16 / N 0.33 / 粒子窗 0.55 / y 间距 26 / 切片 5 / 微震 3px / 光点 2 / 末段 6 桶",
+  _QB_FX_PART_MAX === 32 && _QB_FX_SHARD_MAX === 16 && _QB_FX_NEON_RATIO === 0.33
+  && _QB_FX_PART_RATIO === 0.55 && _QB_FX_Y_GAP_PX === 26 && _QB_FX_SLICES_MAX === 5
+  && _QB_FX_SLICE_SHAKE_PX === 3 && _QB_FX_TAIL_PTS_MAX === 2 && _QB_FX_TAIL_SPAN_BUCKETS === 6);
+// —— E. D3 lead 仲裁(argmax, 优先非缺口非静默轨) ——
+const mkTr = (delta, level, live) => ({ prev: 100, target: 100, shown: 100, delta, level, live: live !== false });
+ok("lead = argmax: up 0.5 > dl 0.3 -> up", _qbFxLead(mkTr(0.5, 3), mkTr(0.3, 2)) === "up");
+ok("lead: dl 更大 -> dl", _qbFxLead(mkTr(0.1, 1), mkTr(0.4, 3)) === "dl");
+ok("双轨皆静默(level 0) -> null(零装饰, L0/L1 照常 —— I10/D2)", _qbFxLead(mkTr(0.001, 0), mkTr(0.002, 0)) === null);
+ok("缺口轨(live=false)不参与仲裁, 另一轨全量照常(D4)", _qbFxLead(mkTr(0.9, 3, false), mkTr(0.1, 1)) === "dl");
+ok("delta 大但 level 0(静默)不参与(优先非静默轨)", _qbFxLead({ delta: 0.9, level: 0, live: true }, mkTr(0.1, 1)) === "dl");
+ok("恰等 delta 取 up(稳定序)", _qbFxLead(mkTr(0.3, 2), mkTr(0.3, 2)) === "up");
+// —— F. partCap(lead 等级 + 密度参数, 两轨合计上限) ——
+ok("partCap 密度 0.7: Lv1 16x0.7=11 / Lv2 24x0.7=17 / Lv3 32x0.7=22",
+  _qbFxPartCap(1, 0.7) === 11 && _qbFxPartCap(2, 0.7) === 17 && _qbFxPartCap(3, 0.7) === 22);
+ok("partCap 密度 1: Lv3 恰 32(合计上限) / Lv1 16 / Lv2 24",
+  _qbFxPartCap(3, 1) === 32 && _qbFxPartCap(1, 1) === 16 && _qbFxPartCap(2, 1) === 24);
+ok("partCap 密度 0/负/NaN = 0 粒子(密度关到底即无粒子)",
+  _qbFxPartCap(3, 0) === 0 && _qbFxPartCap(3, -0.5) === 0 && _qbFxPartCap(3, NaN) === 0);
+ok("partCap 密度 >1 钳 1 / level 0 = 0", _qbFxPartCap(3, 1.7) === 32 && _qbFxPartCap(0, 1) === 0);
+// —— G. D3 三策略分配(两轨合计守恒, 各轨 ≤16) ——
+ok("both cap22: 11/11 合计守恒", (() => {
+  const a = _qbFxAlloc("both", 22, "up");
+  return a.up === 11 && a.dl === 11 && a.up + a.dl === 22 && a.merge === 0;
+})());
+ok("both cap23: ceil 给 up(12/11)", (() => {
+  const a = _qbFxAlloc("both", 23, "up");
+  return a.up === 12 && a.dl === 11;
+})());
+ok("both cap32: 各 16 恰半套上限(双轨预算不翻倍 —— I9)", (() => {
+  const a = _qbFxAlloc("both", 32, "up");
+  return a.up === 16 && a.dl === 16;
+})());
+ok("lead 策略: 主导轨全套从属零(双向)", (() => {
+  const a = _qbFxAlloc("lead", 32, "up");
+  const b = _qbFxAlloc("lead", 32, "dl");
+  return a.up === 32 && a.dl === 0 && b.up === 0 && b.dl === 32;
+})());
+ok("merge 策略: 两轨 y 中点一次 merge=cap", (() => {
+  const a = _qbFxAlloc("merge", 22, "up");
+  return a.merge === 22 && a.up === 0 && a.dl === 0;
+})());
+ok("未知策略回落 both(保守默认 —— D3-b)", (() => {
+  const a = _qbFxAlloc("what", 10, "up");
+  return a.up === 5 && a.dl === 5;
+})());
+ok("cap 0 = 全零", (() => {
+  const a = _qbFxAlloc("both", 0, "up");
+  return a.up === 0 && a.dl === 0 && a.merge === 0;
+})());
+ok("全域扫 cap 1..32: both 分配合计守恒且各 ≤16", (() => {
+  for (let c = 1; c <= 32; c++) {
+    const a = _qbFxAlloc("both", c, "up");
+    if (a.up + a.dl !== c || a.up > 16 || a.dl > 16) return false;
+  }
+  return true;
+})());
+// —— H. D4 末点 y 间距缩小(<26px 按比例, 下限 0.4 不合并不取消) ——
+ok("gapScale: 30px->1 / 26px->1(不放大) / 13px->0.5 / 5px->0.4(下限) / 0 与 NaN->0.4(保留)",
+  _qbFxGapScale(30) === 1 && _qbFxGapScale(26) === 1 && _qbFxGapScale(13) === 0.5
+  && _qbFxGapScale(5) === 0.4 && _qbFxGapScale(0) === 0.4 && _qbFxGapScale(NaN) === 0.4);
+// —— I. N 层回落 0.33×beat(≈20 帧) ——
+ok("neonQ: t=0 -> 1 / 半窗 -> 0.5 / >=0.33×beat -> 0 / 负 t -> 0",
+  _qbFxNeonQ(0, 1000) === 1 && Math.abs(_qbFxNeonQ(165, 1000) - 0.5) <= 1e-9
+  && _qbFxNeonQ(330, 1000) === 0 && _qbFxNeonQ(400, 1000) === 0 && _qbFxNeonQ(-1, 1000) === 0);
+// —— J. 冲击扩张环(V2) ——
+ok("ring t=0: r=0 alpha=1(判定帧同帧起步)", (() => {
+  const r = _qbFxRingAt(0, 1000, 29);
+  return r && r.r === 0 && r.alpha === 1;
+})());
+ok("ring 半窗: r = rMax x easeOut(0.5)=0.875 / alpha 0.5", (() => {
+  const r = _qbFxRingAt(275, 1000, 29);
+  return r && Math.abs(r.r - 29 * 0.875) <= 1e-9 && Math.abs(r.alpha - 0.5) <= 1e-9;
+})());
+ok("ring >=0.55×beat -> null(零绘制 —— I9 冲击类叠加层窗)",
+  _qbFxRingAt(550, 1000, 29) === null && _qbFxRingAt(600, 1000, 29) === null && _qbFxRingAt(-1, 1000, 29) === null);
+// —— K. V3 粒子三阶段(爆发 x4.5 / 拖尾减速透明 / 0.55×beat 后零绘制) ——
+const spec = { x0: 100, y0: 50, ang: Math.PI, dist: 100, size: 2, sides: 4, rot0: 0.3, vr: 0.01 };
+const V = 100 / (4.5 * 120 + 430);   // beat 1000 / burst 120 / T 550: v = dist/(4.5×burst + trail)
+ok("粒子 t=0: 原点起喷 alpha=1(首帧最亮与判定线闪光同帧 —— I9), rot=rot0", (() => {
+  const p = _qbFxParticleAt(0, 1000, 120, spec, 0);
+  return p && p.x === 100 && p.y === 50 && p.alpha === 1 && Math.abs(p.rot - 0.3) <= 1e-9;
+})());
+ok("爆发期速度 ×4.5: d(60) = 4.5v×60", (() => {
+  const p = _qbFxParticleAt(60, 1000, 120, spec, 0);
+  const dExp = 4.5 * V * 60;
+  return p && Math.abs(p.d - dExp) <= 1e-9 && Math.abs(p.x - (100 + Math.cos(Math.PI) * dExp)) <= 1e-9;
+})());
+ok("爆发/拖尾交接连续: d(burst) 恒 4.5v×burst", (() => {
+  const p = _qbFxParticleAt(120, 1000, 120, spec, 0);
+  return p && Math.abs(p.d - 4.5 * V * 120) <= 1e-9;
+})());
+ok("拖尾期减速: 等距采样位移步单调收缩(easeOut 减速)", (() => {
+  let prevStep = Infinity;
+  let prevD = null;
+  for (let t = 120; t < 550; t += 30) {
+    const p = _qbFxParticleAt(t, 1000, 120, spec, 0);
+    if (prevD != null) {
+      const step = p.d - prevD;
+      if (step > prevStep + 1e-12) return false;
+      prevStep = step;
+    }
+    prevD = p.d;
+  }
+  return true;
+})());
+ok("末态: d(T-1) 收敛到 dist / alpha(T/2)=0.5 / t>=T -> null(0.55×beat 后零绘制)", (() => {
+  const near = _qbFxParticleAt(549, 1000, 120, spec, 0);
+  const mid = _qbFxParticleAt(275, 1000, 120, spec, 0);
+  return near && Math.abs(near.d - 100) <= 1e-6 && mid && Math.abs(mid.alpha - 0.5) <= 1e-9
+    && _qbFxParticleAt(550, 1000, 120, spec, 0) === null && _qbFxParticleAt(551, 1000, 120, spec, 0) === null;
+})());
+ok("carryPx: 粒子随 L0 末点滑动(x 平移, 与曲线不脱钩)", (() => {
+  const p = _qbFxParticleAt(60, 1000, 120, spec, -7);
+  const q = _qbFxParticleAt(60, 1000, 120, spec, 0);
+  return p && q && Math.abs((q.x - p.x) - 7) <= 1e-9;
+})());
+// —— L. 喷射清单(V3 多边形碎片) ——
+ok("清单长度 = cap; 同种子恒同清单(同拍重绘不闪变)", (() => {
+  const a = _qbFxSpawnSpecs(11, 0, 0, 29, 12345);
+  const b = _qbFxSpawnSpecs(11, 0, 0, 29, 12345);
+  return a.length === 11 && JSON.stringify(a) === JSON.stringify(b);
+})());
+ok("碎片三/四/五边(非圆点), 尺寸 1.5-3.5px",
+  _qbFxSpawnSpecs(16, 0, 0, 29, 7).every((s) => s.sides >= 3 && s.sides <= 5 && s.size >= 1.5 && s.size <= 3.5));
+ok("喷射角铺左向 270° 弧(避开右向 90° 扇区 —— 末点贴判定线, 右向碎片全被裁白费)", (() => {
+  return _qbFxSpawnSpecs(32, 0, 0, 29, 99).every((s) => {
+    let deg = (s.ang * 180) / Math.PI;
+    deg = ((deg % 360) + 360) % 360;
+    return deg >= 40 && deg <= 320;
+  });
+})());
+ok("行程 = 1.1-1.6 x 环最大半径",
+  _qbFxSpawnSpecs(16, 0, 0, 40, 3).every((s) => s.dist >= 40 * 1.1 - 1e-9 && s.dist <= 40 * 1.6 + 1e-9));
+ok("不同种子清单不同(跨拍随尾桶时刻自然变化)",
+  JSON.stringify(_qbFxSpawnSpecs(8, 0, 0, 29, 1)) !== JSON.stringify(_qbFxSpawnSpecs(8, 0, 0, 29, 2)));
+// —— M. glitch 水平切片(V2) ——
+ok("切片 5 条, |dy0| <= 3px(微震 <=5px 上限), len 24-64, alpha0 0.2-0.5, 同种子恒同", (() => {
+  const a = _qbFxSlices(5, 100, 42);
+  const b = _qbFxSlices(5, 100, 42);
+  return a.length === 5 && JSON.stringify(a) === JSON.stringify(b)
+    && a.every((s) => Math.abs(s.dy0) <= 3 && s.len >= 24 && s.len <= 64 && s.alpha0 >= 0.2 && s.alpha0 <= 0.5);
+})());
+// —— N. 伪随机确定性 ——
+ok("同种子同序列 / 异种子异序列", (() => {
+  const r1 = _qbFxRand(7);
+  const r2 = _qbFxRand(7);
+  const r3 = _qbFxRand(8);
+  for (let i = 0; i < 10; i++) {
+    const v = r1();
+    if (v !== r2() || v === r3()) return false;
+  }
+  return true;
+})());
+console.log(JSON.stringify({ ok: checks.filter((c) => c[1]).length, total: checks.length,
+  failed: checks.filter((c) => !c[1]).map((c) => c[0]) }));
+"""
+
+# 视觉引擎调度器 fx 面 node 电池(S2-a): 真 mixin 方法 + 桩 uPlot(含 valToPos/bbox 全量, 提交语义
+# 同节拍调度器电池) —— fx 生成门 / 三策略落 fx / D4 实测 / 装饰帧保障 / 次区相位全生命周期。
+# 无 node 静默跳过(同 _NODE_QB_TRAFFIC_PROBE 口径)。
+_NODE_QB_FXVIS_SCHED_PROBE = r"""
+const fs = require("fs");
+global.window = {};
+const src = fs.readFileSync(process.argv[1], "utf8");
+const { methods } = new Function(src + "\nreturn { methods: window.AQB_QB_TRAFFIC.methods };")();
+const checks = [];
+const ok = (name, cond) => checks.push([name, !!cond]);
+let rafId = 0;
+const rafMap = new Map();
+global.requestAnimationFrame = (cb) => { rafMap.set(++rafId, cb); return rafId; };
+global.cancelAnimationFrame = (id) => { rafMap.delete(id); };
+let nowMs = 0;
+Object.defineProperty(global, "performance", { value: { now: () => nowMs }, configurable: true });
+global.document = { hidden: false };
+function mkU(xs, up, dl) {
+  const u = {
+    root: { isConnected: true },
+    data: [xs, up, dl],
+    scales: { x: { min: xs[0], max: xs[xs.length - 1] }, y: { min: 0, max: 1 } },
+    bbox: { left: 60, top: 10, width: 800, height: 300 },
+    yCap: 0,
+    pending: {},
+    setScaleLog: [], setDataCount: 0, redrawCount: 0, destroyed: false,
+    setScale(k, r) {
+      this.pending[k] = { min: r.min, max: r.max };
+      this.setScaleLog.push([k, r.min, r.max]);
+    },
+    setData(d) {
+      this.data = d;
+      this.setDataCount++;
+      this.pending = { x: { min: d[0][0], max: d[0][d[0].length - 1] } };
+      this.commit();
+    },
+    redraw() {
+      this.redrawCount++;
+      this.pending.x = { min: this.scales.x.min, max: this.scales.x.max };
+      this.commit();
+    },
+    valToPos(v, k) {
+      const s = this.scales[k];
+      return k === "x" ? ((v - s.min) / (s.max - s.min)) * 800 : (1 - (v - s.min) / (s.max - s.min)) * 300;
+    },
+    commit() {
+      const px = this.pending.x;
+      const py = this.pending.y;
+      this.pending = {};
+      if (!px) {
+        if (py) this.scales.y = { min: py.min, max: py.max };
+        return;
+      }
+      const xs = this.data[0];
+      let lo = 0;
+      let hi = xs.length - 1;
+      while (lo < hi && xs[lo] < px.min) lo++;
+      while (hi > lo && xs[hi] > px.max) hi--;
+      if (py) {
+        this.scales.y = { min: py.min, max: py.max };
+      } else {
+        let dmax = 0;
+        for (const col of [this.data[1], this.data[2]]) {
+          for (let i = lo; i <= hi; i++) {
+            const v = col[i];
+            if (v != null && v > dmax) dmax = v;
+          }
+        }
+        const top = dmax > 0 ? dmax * 1.05 : 1;
+        this.scales.y = { min: 0, max: this.yCap > 0 ? Math.max(this.yCap, top) : top };
+      }
+      this.scales.x = { min: px.min, max: px.max };
+    },
+    destroy() { this.destroyed = true; },
+  };
+  return u;
+}
+function mkBeat(xs0, n, upShown, dlShown) {
+  return {
+    raf: 0, anim: null, xs0, n,
+    tracks: {
+      up: { prev: upShown, target: upShown, shown: upShown, delta: 0, level: 0, live: true },
+      dl: { prev: dlShown, target: dlShown, shown: dlShown, delta: 0, level: 0, live: true },
+    },
+  };
+}
+const self = Object.assign({}, methods, { _qbPollMs: () => 3000, _qbCharts: {} });
+/* tail=false 基准配置(次区相位单独在 F5/F6 开): period 3s -> beat 1000 / impact 120 / animEnd 600 */
+const CFG = { enabled: true, on: true, shiftRatio: 0.6, neon: true, particles: 1, tail: false,
+  dual: "both", palette: "neon", layers: { band: true, particles: true, scan: true, grade: true } };
+global.window.AQB_FX_CFG = CFG;
+const XS1 = [1030, 1060, 1090, 1120, 1150];
+const pump = () => {
+  const fns = [...rafMap.values()];
+  rafMap.clear();
+  fns.forEach((f) => f());
+  const cu = self._qbCharts.global;
+  if (cu && cu.commit) cu.commit();
+};
+const drain = () => { let g = 0; while (rafMap.size && g++ < 200) { nowMs += 50; pump(); } return g; };
+// —— F1a: 正常拍(双轨活性, both 默认) ——
+{
+  const u = mkU(XS1, [0, 0, 0, 0, 30], [0, 0, 0, 0, 60]);
+  u._qbBeat = mkBeat(1000, 5, 10, 55);
+  self._qbCharts = { global: u };
+  self._qbBeatStart("global", u);
+  const fx = u._qbBeat.anim && u._qbBeat.anim.fx;
+  ok("F1a 判定帧起 fx(phase=impact) + lead=up Lv.3", u._qbBeat.anim && u._qbBeat.anim.phase === "impact"
+    && fx && fx.lead === "up" && fx.lv === 3);
+  ok("F1a both 分配: cap 32 -> 16/16, 清单各 16(两轨合计不翻倍 —— I9)",
+    fx && fx.cap === 32 && fx.alloc.up === 16 && fx.alloc.dl === 16
+    && fx.specs.up.length === 16 && fx.specs.dl.length === 16);
+  ok("F1a 两轨皆活性(次区资格双轨) + y 间距 214px>26 gapScale 1",
+    fx && fx.act.up && fx.act.dl && fx.tail.length === 2 && fx.gapScale === 1);
+  ok("F1a 粒子原点 = t=0 显示末点像素位(yOf(prev) 对钉档 yMax=63)",
+    fx && Math.abs(fx.specs.up[0].y0 - (10 + 300 * (1 - 10 / 63))) <= 1e-9);
+  drain();
+  ok("F1a 收敛落地 + tail=false 无次区相位", u.data[1][4] === 30 && u._qbBeat.anim === null);
+}
+// —— F1b: enabled=false(on=false): L0/L1 照常但 fx null ——
+{
+  global.window.AQB_FX_CFG = Object.assign({}, CFG, { enabled: false, on: false });
+  const u = mkU(XS1, [0, 0, 0, 0, 30], [0, 0, 0, 0, 60]);
+  u._qbBeat = mkBeat(1000, 5, 10, 55);
+  self._qbCharts = { global: u };
+  self._qbBeatStart("global", u);
+  ok("F1b enabled=false: 起拍照常但 fx null(装饰零绘制, §05.6)", rafMap.size === 1
+    && u._qbBeat.anim && u._qbBeat.anim.fx === null);
+  drain();
+  ok("F1b 收敛落地", u.data[1][4] === 30 && u._qbBeat.anim === null);
+  global.window.AQB_FX_CFG = CFG;
+}
+// —— F1c: reduce(on=false, enabled=true): 无 anim 即无装饰(V 全关, I7) ——
+{
+  global.window.AQB_FX_CFG = Object.assign({}, CFG, { on: false });
+  const u = mkU(XS1, [0, 0, 0, 0, 30], [0, 0, 0, 0, 60]);
+  u._qbBeat = mkBeat(1000, 5, 10, 55);
+  self._qbCharts = { global: u };
+  self._qbBeatStart("global", u);
+  ok("F1c reduce 短路: 零 rAF 零 anim(退回快路)", rafMap.size === 0 && u._qbBeat.anim === null);
+  global.window.AQB_FX_CFG = CFG;
+}
+// —— F1d: 缺口轨(dl null): lead 单轨, 另一轨零反馈(D4/I10) ——
+{
+  const u = mkU(XS1, [0, 0, 0, 0, 30], [0, 0, 0, 0, null]);
+  u._qbBeat = mkBeat(1000, 5, 10, 55);
+  self._qbCharts = { global: u };
+  self._qbBeatStart("global", u);
+  const fx = u._qbBeat.anim && u._qbBeat.anim.fx;
+  ok("F1d 缺口轨: lead=up, dl 零反馈(act false), 次区资格只 up",
+    fx && fx.lead === "up" && fx.act.up === true && fx.act.dl === false
+    && fx.tail.length === 1 && fx.tail[0] === "up");
+  ok("F1d 单轨活性不套 D4 缩小(gapScale 1)", fx && fx.gapScale === 1);
+  drain();
+  ok("F1d 收敛落地(dl 保持 null)", u.data[1][4] === 30 && u.data[2][4] === null && u._qbBeat.anim === null);
+}
+// —— F2: D3 三策略落 fx 清单 ——
+{
+  global.window.AQB_FX_CFG = Object.assign({}, CFG, { dual: "lead" });
+  const u = mkU(XS1, [0, 0, 0, 0, 30], [0, 0, 0, 0, 60]);
+  u._qbBeat = mkBeat(1000, 5, 10, 55);
+  self._qbCharts = { global: u };
+  self._qbBeatStart("global", u);
+  let fx = u._qbBeat.anim.fx;
+  ok("F2 lead 策略: 主导轨全套 32, 从属零清单", fx && fx.alloc.up === 32 && fx.alloc.dl === 0
+    && fx.specs.up.length === 32 && fx.specs.dl === undefined);
+  drain();
+  global.window.AQB_FX_CFG = Object.assign({}, CFG, { dual: "merge" });
+  const u2 = mkU(XS1, [0, 0, 0, 0, 30], [0, 0, 0, 0, 60]);
+  u2._qbBeat = mkBeat(1000, 5, 10, 55);
+  self._qbCharts = { global: u2 };
+  self._qbBeatStart("global", u2);
+  fx = u2._qbBeat.anim.fx;
+  ok("F2 merge 策略: 中点一次 merge=32(原点 y = 两轨 y 中点), 双轨零清单",
+    fx && fx.alloc.merge === 32 && fx.alloc.up === 0 && fx.specs.merge.length === 32
+    && fx.specs.up === undefined
+    && Math.abs(fx.specs.merge[0].y0 - (10 + 300 * (1 - ((10 + 55) / 2) / 63))) <= 1e-9);
+  drain();
+  global.window.AQB_FX_CFG = CFG;
+}
+// —— F3: D4 末点 y 间距缩小(实测) ——
+{
+  const u = mkU(XS1, [0, 0, 0, 0, 32.73], [0, 0, 0, 0, 35]);
+  u._qbBeat = mkBeat(1000, 5, 30, 32.73);
+  self._qbCharts = { global: u };
+  self._qbBeatStart("global", u);
+  const fx = u._qbBeat.anim.fx;
+  const yMax = 35 * 1.05;
+  const yUp = 10 + 300 * (1 - 30 / yMax);
+  const yDl = 10 + 300 * (1 - 32.73 / yMax);
+  const exp = Math.max(0.4, Math.min(1, Math.abs(yUp - yDl) / 26));
+  ok("F3 D4: y 间距 <26px 反馈按比例缩小(与 _qbFxGapScale 同式现算, 两轨各自保留)",
+    fx && Math.abs(fx.gapScale - exp) <= 1e-9 && fx.gapScale < 1 && fx.act.up && fx.act.dl);
+  drain();
+}
+// —— F4: 装饰帧保障(无 shift 长窗 impact 窗零提交帧强制重绘) ——
+{
+  const xs = Array.from({ length: 2880 }, (_, i) => 1000 + i * 30);
+  const up = new Array(2880).fill(0);
+  up[2879] = 30;
+  const dl = new Array(2880).fill(0);
+  const u = mkU(xs, up, dl);
+  u._qbBeat = mkBeat(970, 2880, 10, 0);
+  self._qbCharts = { global: u };
+  self._qbBeatStart("global", u);
+  ok("F4 前置: 无 shift 长窗起拍(零 setScale) + fx 在", u.setScaleLog.length === 0
+    && u._qbBeat.anim && !!u._qbBeat.anim.fx);
+  for (let i = 0; i < 2; i++) { nowMs += 50; pump(); }   // clock 0/50: impact 窗(120)内尾点冻结
+  ok("F4 装饰帧保障: impact 窗内 L0/L1 零提交帧强制重绘(粒子不冻结在 t=0) + y 钉成对 31.5",
+    u.redrawCount === 2 && u.setScaleLog.length === 2
+    && u.setScaleLog.every((r) => r[0] === "y" && r[2] === 31.5));
+  drain();
+  ok("F4 收敛落地(cfg.tail=false 无次区)", u.data[1][2879] === 30 && u._qbBeat.anim === null);
+}
+// —— F5: 次区相位全生命周期(衔接/光点/节流/收尾) ——
+{
+  global.window.AQB_FX_CFG = Object.assign({}, CFG, { tail: true });
+  const xs = Array.from({ length: 2880 }, (_, i) => 1000 + i * 30);
+  const up = new Array(2880).fill(0);
+  up[2879] = 30;
+  const dl = new Array(2880).fill(0);
+  dl[2879] = 20;
+  const u = mkU(xs, up, dl);
+  u._qbBeat = mkBeat(970, 2880, 10, 5);
+  self._qbCharts = { global: u };
+  self._qbBeatStart("global", u);
+  for (let i = 0; i < 13; i++) { nowMs += 50; pump(); }   // clock 600: 收敛帧
+  ok("F5 收敛帧转次区相位(tail=true + 双轨活性) + 真值已落袋", u._qbBeat.anim
+    && u._qbBeat.anim.phase === "tail" && u.data[1][2879] === 30 && u.data[2][2879] === 20);
+  const seen = { pts: 0, skips: 0, lastRedraw: u.redrawCount, bad: false };
+  let guard = 0;
+  while (rafMap.size && guard++ < 200) {
+    nowMs += 50;
+    pump();
+    const a = u._qbBeat.anim;
+    if (a && a.phase === "tail" && a.fxTail.pts && a.fxTail.pts.length) {
+      if (a.fxTail.pts.length > seen.pts) seen.pts = a.fxTail.pts.length;
+      if (u.redrawCount === seen.lastRedraw) seen.skips++;
+      seen.lastRedraw = u.redrawCount;
+      for (const pt of a.fxTail.pts) {
+        if (!(pt.alpha > 0 && pt.alpha <= 0.35)) seen.bad = true;
+        if (!(pt.x >= 60 && pt.x <= 860 && pt.y >= 10 && pt.y <= 310)) seen.bad = true;
+      }
+    }
+  }
+  ok("F5 次区光点: <=2/轨 合计 <=4, alpha <=0.35, 位置在绘图区内(极轻 —— I9/G2)",
+    seen.pts > 0 && seen.pts <= 4 && !seen.bad);
+  ok("F5 1px 量化节流: 位置无可见变化的帧不提交(长窗光点每帧位移 <1px —— I9 R8 帧成本)",
+    seen.skips > 3);
+  ok("F5 次区收尾: 窗尽 anim null(下一拍前静默, tail=min(period-beat,2000) 非常驻)",
+    u._qbBeat.anim === null && rafMap.size === 0);
+  global.window.AQB_FX_CFG = CFG;
+}
+// —— F6: 拍内关 tail: 下一帧收尾 ——
+{
+  global.window.AQB_FX_CFG = Object.assign({}, CFG, { tail: true });
+  const u = mkU(XS1, [0, 0, 0, 0, 30], [0, 0, 0, 0, 60]);
+  u._qbBeat = mkBeat(1000, 5, 10, 55);
+  self._qbCharts = { global: u };
+  self._qbBeatStart("global", u);
+  for (let i = 0; i < 13; i++) { nowMs += 50; pump(); }
+  ok("F6 前置: 次区相位已挂", u._qbBeat.anim && u._qbBeat.anim.phase === "tail");
+  global.window.AQB_FX_CFG = CFG;   // tail 回 false(拍内改参, 下一帧生效)
+  nowMs += 50;
+  pump();
+  ok("F6 拍内关 tail: 下一帧收尾(anim null + 清理提交)", u._qbBeat.anim === null);
+  global.window.AQB_FX_CFG = CFG;
+}
+// —— F7: merge + 缺口轨(评审修复2): 落位退 lead 末点 y, 不发「与底边的假中点」——
+//    缺口轨 shown=null 会被 yOf 换算成绘图区底边 T+H, 中点成了与真实末点无关的假落位(I10/D4) ——
+{
+  global.window.AQB_FX_CFG = Object.assign({}, CFG, { dual: "merge" });
+  const u = mkU(XS1, [0, 0, 0, 0, 30], [0, 0, 0, 0, null]);
+  u._qbBeat = mkBeat(1000, 5, 10, 55);
+  self._qbCharts = { global: u };
+  self._qbBeatStart("global", u);
+  const fx = u._qbBeat.anim && u._qbBeat.anim.fx;
+  const yMax = 31.5;   // dl 缺口 -> 全窗真值峰 30 x1.05
+  const yMerge = 10 + 300 * (1 - 10 / yMax);   // yOf(up.shown=10)
+  ok("F7 merge+缺口轨: specs.merge[0].y0 === yOf(lead.shown)(假中点 = (yMerge+310)/2 即红)",
+    fx && fx.specs.merge && fx.specs.merge.length === 32
+    && Math.abs(fx.specs.merge[0].y0 - yMerge) <= 1e-9
+    && Math.abs(fx.specs.merge[0].y0 - (yMerge + 310) / 2) > 1);
+  ok("F7 切片锚带中心同退 lead 末点 y(±14px 带内) + 清单无条件生成(palette=neon 也有 —— 修复4)",
+    fx && fx.slices && fx.slices.length === 5
+    && fx.slices.every((s) => Math.abs(s.y - yMerge) <= 14 + 1e-9));
+  drain();
+  global.window.AQB_FX_CFG = CFG;
+}
+// —— F8: 密度解耦(评审修复3): spawn 满额清单(= partCap(lv,1)), 与拍内 cfg.particles 无关 ——
+//    密度/dual 拍内改参由绘制侧逐帧重算 + 钳制生效, cap 冻结会让改密度整拍失效(违 §05.3/D21) ——
+{
+  global.window.AQB_FX_CFG = Object.assign({}, CFG, { particles: 0.4 });
+  const u = mkU(XS1, [0, 0, 0, 0, 30], [0, 0, 0, 0, 60]);
+  u._qbBeat = mkBeat(1000, 5, 10, 55);
+  self._qbCharts = { global: u };
+  self._qbBeatStart("global", u);
+  const fx = u._qbBeat.anim && u._qbBeat.anim.fx;
+  ok("F8 密度 0.4 仍满额清单 16/16(cap 32 = partCap(lv,1), 清单长度与密度解耦)",
+    fx && fx.cap === 32 && fx.specs.up.length === 16 && fx.specs.dl.length === 16);
+  drain();
+  global.window.AQB_FX_CFG = CFG;
+}
+console.log(JSON.stringify({ ok: checks.filter((c) => c[1]).length, total: checks.length,
+  failed: checks.filter((c) => !c[1]).map((c) => c[0]) }));
+"""
+
+# 视觉引擎绘制面 node 电池(S2-a 评审修复 2/3/4/6/7): 真 mixin 方法 + 记账式 2d ctx 桩(记录
+# shadowBlur 赋值/带 blur 的 stroke/路径落笔 ops/fill/fillRect)直接调 _qbDrawFx/_qbDrawFxAnchor ——
+# blur 预算(同帧带 blur stroke <= spots 数/帧末清零/calm 恒不赋非零)、neon=false 零白名单元素落笔、
+# 密度拍内即时、切片 palette 逐帧门、draw 侧 merge+缺口轨落位、lead 加亮缺口不桥接。
+# 无 node 静默跳过(同 _NODE_QB_TRAFFIC_PROBE 口径)。
+_NODE_QB_FXVIS_DRAW_PROBE = r"""
+const fs = require("fs");
+global.window = {};
+const src = fs.readFileSync(process.argv[1], "utf8");
+const { methods, _qbFxSpawnSpecs, _qbFxSlices, _qbFxRingAt } =
+  new Function(src + "\nreturn { methods: window.AQB_QB_TRAFFIC.methods,"
+  + " _qbFxSpawnSpecs, _qbFxSlices, _qbFxRingAt };")();
+const checks = [];
+const ok = (name, cond) => checks.push([name, !!cond]);
+/* 记账式 2d ctx: 只记不画。shadowBlur 用 getter/setter 截获每次赋值(含清零), stroke 时若
+ * _blur > 0 记一次「带 blur 的 stroke」(I9 同帧 <=3 次预算的观测面), ops 记路径点(M/L)。 */
+function mkCtx() {
+  const ctx = {
+    blurSets: [], strokeVals: [], fillRects: [], fillTexts: [], ops: [],
+    strokesWhileBlur: 0, fillCnt: 0,
+    _blur: 0, shadowColor: "", globalAlpha: 1,
+    strokeStyle: "", fillStyle: "", lineWidth: 1, font: "", textAlign: "", textBaseline: "",
+    beginPath() {}, closePath() {}, rect() {}, clip() {}, arc() {},
+    scale() {}, save() {}, restore() {}, setLineDash() {},
+    moveTo(x, y) { this.ops.push([x, y, "M"]); },
+    lineTo(x, y) { this.ops.push([x, y, "L"]); },
+    stroke() { if (this._blur > 0) this.strokesWhileBlur++; this.strokeVals.push(this.strokeStyle); },
+    fill() { this.fillCnt++; },
+    fillRect(x, y, w, h) { this.fillRects.push([x, y, w, h]); },
+    fillText(s) { this.fillTexts.push(String(s)); },
+  };
+  Object.defineProperty(ctx, "shadowBlur", {
+    get() { return ctx._blur; },
+    set(v) { ctx._blur = v; ctx.blurSets.push(v); },
+    configurable: true,
+  });
+  return ctx;
+}
+const YMAX = 63;
+const yOfT = (v) => 10 + 300 * (1 - Math.min(v, YMAX) / YMAX);
+function mkDrawU(up, dl) {
+  const xs = [1030, 1060, 1090, 1120, 1150];
+  const u = {
+    root: { isConnected: true },
+    data: [xs, up, dl],
+    scales: { x: { min: xs[0], max: xs[4] }, y: { min: 0, max: YMAX } },
+    bbox: { left: 60, top: 10, width: 800, height: 300 },
+    valToPos(v, k) {
+      const s = this.scales[k];
+      return k === "x" ? ((v - s.min) / (s.max - s.min)) * 800 : (1 - (v - s.min) / (s.max - s.min)) * 300;
+    },
+  };
+  u.ctx = mkCtx();
+  return u;
+}
+const LIVE_UP = { prev: 10, target: 30, shown: 10, delta: 2, level: 3, live: true };
+const LIVE_DL = { prev: 55, target: 60, shown: 55, delta: 0.09, level: 2, live: true };
+const GAP_DL = { prev: null, target: null, shown: null, delta: 0, level: 0, live: false };
+function mkBeatSt(up, dl) {
+  return { raf: 0, anim: null, xs0: 1030, n: 5, tracks: { up: up, dl: dl } };
+}
+function mkAnim(fx, over) {
+  return Object.assign({ dx0: 0, needsShift: false, needsTail: false, n: 5,
+    tl: { beat: 1000, impactMs: 120, shiftMs: 600, convergeMs: 480, animEndMs: 600, tailMs: 0 },
+    yMax: YMAX, clock: 100, lastT: 0, lastDx: null, fx: fx, phase: "impact" }, over || {});
+}
+function mkFx(over) {
+  return Object.assign({
+    lead: "up", lv: 3, gapScale: 1, rMax: 29, cap: 32,
+    alloc: { up: 16, dl: 16, merge: 0 },
+    specs: { up: _qbFxSpawnSpecs(16, 860, yOfT(10), 29, 11), dl: _qbFxSpawnSpecs(16, 860, yOfT(55), 29, 12) },
+    slices: _qbFxSlices(5, yOfT(10), 13),
+    tail: ["up", "dl"],
+    act: { up: true, dl: true },
+    pxPerT: 0.5, dx0: 0, beatMs: 1000, burstMs: 120,
+  }, over || {});
+}
+const TK = { up: "#UP", down: "#DN", grid: "#GRID", gap: "#GAP", axis: "#AXIS" };
+const CFG0 = { enabled: true, on: true, shiftRatio: 0.6, neon: true, particles: 1, tail: false,
+  dual: "both", palette: "neon", layers: { band: true, particles: true, scan: true, grade: true } };
+global.window.AQB_FX_CFG = CFG0;
+const draw = (u) => methods._qbDrawFx.call(methods, u, TK);
+const drawAnchor = (u) => methods._qbDrawFxAnchor.call(methods, u, TK);
+const at = (u, t) => { u._qbBeat.anim.clock = t; draw(u); };
+// —— G1/G2: blur 预算(修复7): 同帧带 blur 的 stroke <= spots 数(<=2), 帧末 shadowBlur 恒清 0 ——
+{
+  const u = mkDrawU([0, 0, 0, 0, 30], [0, 0, 0, 0, 60]);
+  u._qbBeat = mkBeatSt(LIVE_UP, LIVE_DL);
+  u._qbBeat.anim = mkAnim(mkFx());
+  at(u, 100);   // 环扩张中 + neon 窗内: 辉光块必经
+  ok("G1 blur 预算: 非零赋值恰 1 个施加点 + 带 blur 的 stroke 恰 = spots 数(both 双活性轨 = 2)",
+    u.ctx.blurSets.filter((v) => v > 0).length === 1 && u.ctx.strokesWhileBlur === 2);
+  ok("G1 帧末态: shadowBlur 用后即清 0(末次赋值 = 0)",
+    u.ctx.shadowBlur === 0 && u.ctx.blurSets[u.ctx.blurSets.length - 1] === 0);
+}
+{
+  let endOk = true;
+  let budgetOk = true;
+  for (const t of [0, 50, 100, 200, 300, 400, 500]) {
+    const u = mkDrawU([0, 0, 0, 0, 30], [0, 0, 0, 0, 60]);
+    u._qbBeat = mkBeatSt(LIVE_UP, LIVE_DL);
+    u._qbBeat.anim = mkAnim(mkFx(), { clock: t });
+    draw(u);
+    if (u.ctx.shadowBlur !== 0) endOk = false;
+    if (u.ctx.strokesWhileBlur > 2 || u.ctx.blurSets.filter((v) => v > 0).length > 1) budgetOk = false;
+  }
+  ok("G2 逐帧扫 t=0..500: 帧末 shadowBlur 恒 0 + 带 blur stroke <=2 + 非零赋值点 <=1(每帧)",
+    endOk && budgetOk);
+}
+// —— G3: palette=calm 恒不赋非零 blur(V1 上限 calm=0) ——
+{
+  let calmOk = true;
+  global.window.AQB_FX_CFG = Object.assign({}, CFG0, { palette: "calm" });
+  for (const t of [50, 100, 200, 300]) {
+    const u = mkDrawU([0, 0, 0, 0, 30], [0, 0, 0, 0, 60]);
+    u._qbBeat = mkBeatSt(LIVE_UP, LIVE_DL);
+    u._qbBeat.anim = mkAnim(mkFx(), { clock: t });
+    draw(u);
+    if (!u.ctx.blurSets.every((v) => v === 0)) calmOk = false;
+  }
+  global.window.AQB_FX_CFG = CFG0;
+  ok("G3 palette=calm: shadowBlur 赋值恒 0(恒不赋非零)", calmOk);
+}
+// —— G4: cfg.neon=false 零白名单元素落笔(judgeFlash/ringOuter/partOuter/anchorHalo/lvBadge) ——
+{
+  global.window.AQB_FX_CFG = Object.assign({}, CFG0, { neon: false });
+  const lv = "#FF6BD6";   // Lv.3
+  const u = mkDrawU([0, 0, 0, 0, 30], [0, 0, 0, 0, 60]);
+  u._qbBeat = mkBeatSt(LIVE_UP, LIVE_DL);
+  u._qbBeat.anim = mkAnim(mkFx());
+  draw(u);
+  ok("G4 neon=false: 零 lvBadge(fillText)/零环外圈辉光(shadowBlur)/零 Lv 色描边",
+    u.ctx.fillTexts.length === 0 && u.ctx.blurSets.every((v) => v === 0)
+    && u.ctx.strokeVals.every((s) => s !== lv));
+  // 锚段同验(dual=lead 让从属轨语义色加亮照画, 只有白名单 anchorHalo 不落笔)
+  global.window.AQB_FX_CFG = Object.assign({}, CFG0, { neon: false, dual: "lead" });
+  const u2 = mkDrawU([0, 0, 0, 0, 30], [0, 0, 0, 0, 60]);
+  u2._qbBeat = mkBeatSt(LIVE_UP, LIVE_DL);
+  u2._qbBeat.anim = mkAnim(mkFx({ lead: "up", alloc: { up: 32, dl: 0, merge: 0 },
+    specs: { up: _qbFxSpawnSpecs(32, 860, yOfT(10), 29, 14) } }));
+  drawAnchor(u2);
+  ok("G4 锚段 neon=false: 语义色加亮照画 + 零 Lv 色描边(anchorHalo 不落笔)",
+    u2.ctx.strokeVals.every((s) => s !== lv) && u2.ctx.fillTexts.length === 0);
+  global.window.AQB_FX_CFG = CFG0;
+}
+// —— G5: lead 从属轨加亮跨缺口不桥接(修复6): null 处断段重新 moveTo, 与 spanGaps:false 一致 ——
+{
+  global.window.AQB_FX_CFG = Object.assign({}, CFG0, { dual: "lead" });
+  const fxLead = mkFx({ lead: "up", alloc: { up: 32, dl: 0, merge: 0 },
+    specs: { up: _qbFxSpawnSpecs(32, 860, yOfT(10), 29, 14) } });
+  const u = mkDrawU([0, 0, 0, 0, 30], [null, null, 20, null, 25]);
+  u._qbBeat = mkBeatSt(LIVE_UP, LIVE_DL);
+  u._qbBeat.anim = mkAnim(fxLead);
+  drawAnchor(u);
+  const hi = [yOfT(20), yOfT(25)];   // 加亮段只落这两桶(末 3 桶窗)
+  const seg = u.ctx.ops.filter((o) => hi.some((y) => Math.abs(o[1] - y) < 1e-6));
+  ok("G5 加亮缺口 [20,null,25]: moveTo+moveTo 零 lineTo 桥接(gap 后重新起笔)",
+    seg.length === 2 && seg.every((o) => o[2] === "M"));
+  const u2 = mkDrawU([0, 0, 0, 0, 30], [null, null, 20, 22, 25]);
+  u2._qbBeat = mkBeatSt(LIVE_UP, LIVE_DL);
+  u2._qbBeat.anim = mkAnim(fxLead);
+  drawAnchor(u2);
+  const hi2 = [yOfT(20), yOfT(22), yOfT(25)];
+  const seg2 = u2.ctx.ops.filter((o) => hi2.some((y) => Math.abs(o[1] - y) < 1e-6));
+  ok("G5 对照连续 [20,22,25]: moveTo + lineTo x2(逐段描边原样)",
+    seg2.length === 3 && seg2[0][2] === "M" && seg2[1][2] === "L" && seg2[2][2] === "L");
+  global.window.AQB_FX_CFG = CFG0;
+}
+// —— G6: 密度拍内即时(修复3): 逐帧 partCap 现算, 拍内改 cfg.particles 下一帧粒子数即变 ——
+{
+  const u = mkDrawU([0, 0, 0, 0, 30], [0, 0, 0, 0, 60]);
+  u._qbBeat = mkBeatSt(LIVE_UP, LIVE_DL);
+  u._qbBeat.anim = mkAnim(mkFx());   // 满额清单 16/16
+  global.window.AQB_FX_CFG = Object.assign({}, CFG0, { particles: 0.4 });
+  at(u, 100);
+  const low = u.ctx.fillCnt;   // round(32x0.4)=13 -> both 7+6
+  u.ctx = mkCtx();
+  global.window.AQB_FX_CFG = Object.assign({}, CFG0, { particles: 1 });
+  at(u, 100);
+  const full = u.ctx.fillCnt;   // 满额清单 16+16 = 32(不再被 spawn cap 冻结)
+  u.ctx = mkCtx();
+  global.window.AQB_FX_CFG = Object.assign({}, CFG0, { particles: 0.1 });
+  at(u, 100);
+  const lower = u.ctx.fillCnt;   // round(3.2)=3 -> both 2+1
+  global.window.AQB_FX_CFG = CFG0;
+  ok("G6 密度即时: 同拍内 0.4 -> 13 粒 / 1 -> 32 粒 / 0.1 -> 3 粒(下一帧生效)",
+    low === 13 && full === 32 && lower === 3);
+}
+// —— G7: 切片 palette 逐帧门(修复4): neon 零切片, 拍内切 glitch 下一帧即画(清单已在) ——
+{
+  const u = mkDrawU([0, 0, 0, 0, 30], [0, 0, 0, 0, 60]);
+  u._qbBeat = mkBeatSt(LIVE_UP, LIVE_DL);
+  u._qbBeat.anim = mkAnim(mkFx());
+  at(u, 100);
+  ok("G7 palette=neon: 零切片 fillRect(绘制门逐帧复核)", u.ctx.fillRects.length === 0);
+  u.ctx = mkCtx();
+  global.window.AQB_FX_CFG = Object.assign({}, CFG0, { palette: "glitch" });
+  at(u, 100);
+  ok("G7 拍内切 glitch: 下一帧即画 5 条 1px 级切片(切入口整拍无切片回潮即红)",
+    u.ctx.fillRects.length === 5 && u.ctx.fillRects.every((r) => r[3] === 1));
+  global.window.AQB_FX_CFG = CFG0;
+}
+// —— G8: draw 侧 merge + 缺口轨(修复2): 环心 = yOf(lead.shown), 非与底边的假中点 ——
+//    观测面 = 环/辉光八边形在 x=tipX 处的一对顶点(90°/270°), y = 环心 ± r, 四点均值即环心 ——
+{
+  global.window.AQB_FX_CFG = Object.assign({}, CFG0, { dual: "merge" });
+  const u = mkDrawU([0, 0, 0, 0, 30], [0, 0, 0, 0, null]);
+  u._qbBeat = mkBeatSt(LIVE_UP, GAP_DL);
+  u._qbBeat.anim = mkAnim(mkFx({ alloc: { up: 0, dl: 0, merge: 32 },
+    specs: { merge: _qbFxSpawnSpecs(32, 860, yOfT(10), 29, 15) }, act: { up: true, dl: false } }));
+  at(u, 100);
+  const r = _qbFxRingAt(100, 1000, 29).r;
+  const ys = u.ctx.ops.filter((o) => Math.abs(o[0] - 860) < 1e-6).map((o) => o[1]);
+  const avg = ys.reduce((a, b) => a + b, 0) / ys.length;
+  ok("G8 draw merge+缺口: 环心 = yOf(lead.shown)(假中点 = (yOf+310)/2 即红 —— I10/D4)",
+    ys.length === 4 && Math.abs(avg - yOfT(10)) <= 1e-6 && Math.abs(avg - (yOfT(10) + 310) / 2) > 1);
+  const u2 = mkDrawU([0, 0, 0, 0, 30], [0, 0, 0, 0, 60]);
+  u2._qbBeat = mkBeatSt(LIVE_UP, LIVE_DL);
+  u2._qbBeat.anim = mkAnim(mkFx({ alloc: { up: 0, dl: 0, merge: 32 },
+    specs: { merge: _qbFxSpawnSpecs(32, 860, (yOfT(10) + yOfT(55)) / 2, 29, 15) } }));
+  u2.ctx = mkCtx();
+  at(u2, 100);
+  const ys2 = u2.ctx.ops.filter((o) => Math.abs(o[0] - 860) < 1e-6).map((o) => o[1]);
+  const avg2 = ys2.reduce((a, b) => a + b, 0) / ys2.length;
+  ok("G8 对照双轨 live: 环心 = (yUp+yDl)/2 中点(D3-c)", ys2.length === 4
+    && Math.abs(avg2 - (yOfT(10) + yOfT(55)) / 2) <= 1e-6);
+  global.window.AQB_FX_CFG = CFG0;
+}
+console.log(JSON.stringify({ ok: checks.filter((c) => c[1]).length, total: checks.length,
+  failed: checks.filter((c) => !c[1]).map((c) => c[0]) }));
+"""
+
+
+def test_frontend_qb_fx_visual_engine_battery():
+    """视觉引擎 V + N 层 S2-a 电池 + 接缝静态钉(plan 26-11-12-1139 §03 V 表/N 节/D1-D4, §06 S2 行)
+
+    行为面(node 电池, 无 node 静默跳过, 同节拍内核口径):
+    1. I6 图层顺序常量逐字 + 序断言(geometry/neon 恒在 curve 之前, anchor 之后);
+    2. I11 N 层白名单五元素/黑名单八元素逐字且零交集;
+    3. V1 Lv 色表逐字(#7AD9FF/#FEFFA9/#FF6BD6) + 三档配色 blur 上限(10/14/0) + V2 环边数(3/6/8);
+    4. I9 预算常量(32/16/0.33/0.55/26/5/3px/2/6 桶, 全部两轨合计口径);
+    5. D3 lead 仲裁(argmax 优先非缺口非静默/双轨静默 null/恰等取 up);
+    6. partCap(等级基数 16/24/32 x 密度 clamp 32, 密度 <=0 零粒子);
+    7. D3 三策略分配(both 对半各 <=16 合计守恒全域扫/lead 全套从属零/merge 中点一次/未知回落 both);
+    8. D4 y 间距缩小(线性 /26 下限 0.4, 不合并不取消);
+    9. N 回落 0.33×beat + 冲击环(easeOut 扩张/alpha 回落/0.55×beat 后 null);
+    10. V3 粒子三阶段(爆发 x4.5 闭式/拖尾 easeOut 减速/末态恰 dist/t=0 alpha=1 与判定线闪光
+        同帧/carryPx 随 L0 末点滑动) + 喷射清单(三/四/五边/同种子恒同/左向 270° 弧/尺寸行程界);
+    11. glitch 切片(<=5/|dy0|<=3/同种子恒同) + 伪随机确定性;
+    12. 调度器 fx 面: fx 生成门(on=false fx null 但 L0/L1 照常/reduce 无 anim/缺口轨 lead 单轨/
+        D4 实测缩小)/三策略落 fx 清单/装饰帧保障(impact 窗强制重绘 + y 钉成对)/次区相位全生命周期
+        (衔接/光点 <=4 alpha<=0.35 位置在绘图区/1px 量化节流/窗尽收尾/拍内关 tail 下一帧收尾)
+        + merge+缺口轨落位退 lead 末点 y(F7, specs.merge[0].y0 === yOf(lead.shown), 假中点即红
+        —— 评审修复2; 切片锚带中心同退且清单无条件生成)/spawn 满额清单与密度解耦(F8, 密度 0.4
+        仍 16/16 —— 评审修复3);
+    13. 绘制面 ctx 桩电池(G1-G8, 记账式 2d context 真 _qbDrawFx/_qbDrawFxAnchor): blur 预算
+        (非零赋值恰 1 施加点/带 blur stroke = spots 数 <=2/逐帧扫帧末 shadowBlur 恒 0/palette=calm
+        恒不赋非零 —— 评审修复7)/neon=false 零白名单元素落笔(fillText/shadowBlur/Lv 色描边, 锚段
+        同验)/密度拍内即时(0.4->13/1->32/0.1->3 粒)/切片 palette 逐帧门(neon 零切片, 拍内切
+        glitch 下一帧即画 5 条 1px 级)/draw 侧 merge+缺口轨环心 = yOf(lead.shown)(x=tipX 顶点
+        四点均值观测, 假中点即红)/lead 加亮跨缺口重新 moveTo 不桥接([20,null,25] vs [20,22,25]
+        对照)。
+    接缝面(静态钉):
+    a. I6/I11/V1/I9 常量行逐字(单点漂移即红);
+    b. 钩子注册序 = 层序(vendor 1.6.32 源实证: 主渲染序 clearRect -> drawClear -> Pl.forEach
+       [axes -> series] -> draw, Ci("drawAxes") 在 Dl.axes 末尾 = 网格后、系列前 —— drawClear:
+       斜纹恒最底; drawAxes: fx(挂 drawClear 会被网格盖住违 I6); draw: 限速 -> 锚; 曲线描边 =
+       uPlot 系列原生);
+    c. 背景零铺色(I11/G7): fx 绘制域剥注释后 fillRect 恰 1 处且为切片 1px 级(高度字面量 1),
+       锚段/次区段零 fillRect;
+    d. I11 黑名单: fx 三域零触碰 legend/cursor/series(黑名单元素恒静态基线);
+    e. I3 反向钉: fx 四域(spawn/fx 装饰段/锚段/次区段)零 destroy/new uPlot/零 loading;
+    f. 生效条件门: spawn 与 fx 装饰段(drawAxes)逐帧复核 cfg.on(拍内改参下一帧生效), 次区帧复核
+       cfg.tail;
+    g. 收敛帧次区衔接(phase: "tail" + fxTail + cfg.tail === true 门);
+    h. 装饰帧保障行(impact 窗零提交帧强制重绘)与次区相位分支在 _qbBeatFrame(装饰帧挂调度器
+       循环内, 无独立循环)。"""
+    shared = os.path.join(STATIC_ROOT, "shared")
+    js = open(os.path.join(shared, "qb_traffic_chart.js"), encoding="utf-8").read()
+    # —— a. 常量单点逐字 ——
+    assert '_QB_FX_LAYER_ORDER = ["bg", "grid", "geometry", "neon", "curve", "anchor", "hud"]' in js, \
+        "缺/漂移 I6 图层顺序常量(违反即判失败的单点)"
+    assert '_QB_FX_N_WHITELIST = ["judgeFlash", "ringOuter", "partOuter", "anchorHalo", "lvBadge"]' in js, \
+        "缺/漂移 I11 N 层白名单"
+    assert '_QB_FX_N_BLACKLIST = ["curveUp", "curveDl", "plotBg", "edgeBg", "grid", "tooltip", "legend", "limitDash"]' in js, \
+        "缺/漂移 I11 N 层黑名单"
+    assert '_QB_FX_LV_COLORS = { 1: "#7AD9FF", 2: "#FEFFA9", 3: "#FF6BD6" }' in js, \
+        "缺/漂移 V1 Lv 色表(plan §03 V1 行逐字)"
+    assert "_QB_FX_BLUR_CAPS = { neon: 10, glitch: 14, calm: 0 }" in js, \
+        "缺/漂移 V1 三档配色 blur 上限"
+    assert "_QB_FX_RING_SIDES = { 1: 3, 2: 6, 3: 8 }" in js, "缺/漂移 V2 环边数映射"
+    for line in (
+        "_QB_FX_PART_MAX = 32;", "_QB_FX_SHARD_MAX = 16;", "_QB_FX_NEON_RATIO = 0.33;", "_QB_FX_PART_RATIO = 0.55;",
+        "_QB_FX_Y_GAP_PX = 26;"
+    ):
+        assert line in js, f"缺/漂移 I9 预算常量 {line}"
+    # —— b. 钩子注册序 = I6 层序(vendor 1.6.32 源实证: 主渲染序 clearRect -> Ci("drawClear") ->
+    #      Pl.forEach(axes -> series) -> Ci("draw"), 且 Ci("drawAxes") 在 Dl.axes 函数末尾 = 网格
+    #      之后、系列之前 —— fx 挂 drawClear 会被网格盖住, 必须挂 drawAxes) ——
+    assert "drawClear: [(u) => this._qbDrawGaps(u, tk)]" in js, \
+        "drawClear 只挂缺口斜纹(恒最底, 与网格相互独立)"
+    assert "drawAxes: [(u) => this._qbDrawFx(u, tk)]" in js, \
+        "fx 装饰段必须挂 drawAxes(uPlot 网格之后、系列原生之前 —— 挂 drawClear 被网格盖住违 I6)"
+    assert "draw: [(u) => this._qbDrawLimits(u, tk), (u) => this._qbDrawFxAnchor(u, tk)]" in js, \
+        "draw 锚段必须紧跟限速虚线(层序: 曲线描边(系列原生) -> 末点菱形锚)"
+    # —— c. 背景零铺色(I11/G7) ——
+    fxb = re.search(r"_qbDrawFx\(u, tk\) \{\n(.*?)\n    \},", js, re.S)
+    assert fxb, "缺 _qbDrawFx(drawClear 装饰段)"
+    fxb_code = re.sub(r"//[^\n]*", "", re.sub(r"/\*.*?\*/", "", fxb.group(1), flags=re.S))
+    assert fxb_code.count("fillRect") == 1 and re.search(r"fillRect\([^;]*, 1\);", fxb_code), \
+        "fx 装饰段 fillRect 必须 = glitch 切片 1px 级横条恰一处(整块铺底回潮即红 —— I11/G7)"
+    anb = re.search(r"_qbDrawFxAnchor\(u, tk\) \{\n(.*?)\n    \},", js, re.S)
+    assert anb, "缺 _qbDrawFxAnchor(draw 锚段)"
+    tlb = re.search(r"_qbTailFrame\(u, a\) \{\n(.*?)\n    \},", js, re.S)
+    assert tlb, "缺 _qbTailFrame(次区相位帧)"
+    assert "fillRect" not in anb.group(1), "锚段不得有 fillRect(1px 级以外零铺底)"
+    assert "fillRect" not in tlb.group(1), "次区光点域不得有 fillRect"
+    # —— d. I11 黑名单: fx 三域零触碰图例/十字线/系列 ——
+    for blk in (fxb.group(1), anb.group(1), tlb.group(1)):
+        assert "legend" not in blk and "cursor" not in blk and "u.series" not in blk, \
+            "fx 绘制域不得触碰图例/十字线/系列(黑名单元素恒静态基线 —— I11)"
+    # —— e. I3 反向钉: fx 四域零销毁重建/零 loading ——
+    spb = re.search(r"_qbFxSpawn\(u, tl, dx0, needsShift, yMax\) \{\n(.*?)\n    \},", js, re.S)
+    assert spb, "缺 _qbFxSpawn(判定帧装饰状态生成单点)"
+    for blk in (spb.group(1), fxb.group(1), anb.group(1), tlb.group(1)):
+        assert "new uPlot" not in blk and "destroy(" not in blk and "loading" not in blk, \
+            "fx 域不得 destroy/new uPlot/触碰 loading(I3 不闪; 装饰帧只经调度器提交)"
+    # —— f. 生效条件门(逐帧复核) ——
+    assert "cfg.on !== true" in spb.group(1), "spawn 缺 cfg.on 门(有效值单点 —— I7/§05.6)"
+    assert "window.AQB_FX_CFG" in fxb.group(1) and "cfg.on !== true" in fxb.group(1), \
+        "fx 装饰段(drawAxes)必须逐帧读 AQB_FX_CFG 并复核 on(拍内改参下一帧生效 —— §05.3)"
+    assert "cfg.tail !== true" in tlb.group(1), "次区帧缺 cfg.tail 门(拍内关闭下一帧收尾)"
+    # —— g. 收敛帧次区衔接 ——
+    conv_blk = re.search(r"_qbBeatConverge\(scope, u\) \{\n(.*?)\n    \},", js, re.S)
+    assert conv_blk and 'phase: "tail"' in conv_blk.group(1) and "fxTail" in conv_blk.group(1) \
+        and "cfg.tail === true" in conv_blk.group(1), \
+        "收敛帧缺次区相位衔接(tail 开启且有活性轨才挂, 非常驻)"
+    # —— h. 装饰帧保障 + 次区分支挂调度器循环 ——
+    frame_blk = re.search(r"_qbBeatFrame\(scope\) \{\n(.*?)\n    \},", js, re.S)
+    assert frame_blk, "qb_traffic_chart.js 缺 _qbBeatFrame"
+    assert (
+        'if (a.fx && !dxChanged && !tailChanged && a.clock < a.fx.beatMs * _QB_FX_PART_RATIO) {' in frame_blk.group(1)
+    ), "缺装饰帧保障(无 shift 长窗 impact 段零提交帧须强制重绘 —— I5)"
+    assert 'if (a.phase === "tail") {' in frame_blk.group(1), \
+        "缺次区相位分支(装饰帧必须挂调度器循环内, 无独立循环)"
+    # —— 行为面 node 电池(纯函数面 + 调度器 fx 面各一发) ——
+    node = shutil.which("node")
+    if not node:
+        return
+    for probe, tag in (
+        (_NODE_QB_FXVIS_PROBE, "视觉引擎纯函数"), (_NODE_QB_FXVIS_SCHED_PROBE, "视觉引擎调度器"),
+        (_NODE_QB_FXVIS_DRAW_PROBE, "视觉引擎绘制面")
+    ):
         proc = subprocess.run(
             [node, "-e", probe, os.path.join(shared, "qb_traffic_chart.js")],
             capture_output=True,
@@ -1935,8 +2816,14 @@ def test_frontend_qb_traffic_yaxis_and_annotation():
     # 5. 建图接线: y range 走纯函数 + 两钩子画注解层(共享图面)
     assert "y: { range: (u, dmin, dmax) => _qbYRange(dmax, this._qbYCapOf(scope)) }" in js, \
         "建图 y range 未接 _qbYRange/_qbYCapOf(固定上限不生效)"
-    assert "drawClear: [(u) => this._qbDrawGaps(u, tk)]" in js, "缺缺口斜纹 drawClear 钩子(画在系列之下)"
-    assert "draw: [(u) => this._qbDrawLimits(u, tk)]" in js, "缺限速虚线 draw 钩子(画在系列之上)"
+    # S2-a 起钩子序即 I6 图层序(vendor 1.6.32 实证: drawAxes 在 Dl.axes 末尾 = 网格后、系列前):
+    # drawClear = 斜纹(恒最底), drawAxes = 几何/N 层(网格后系列前), draw = 限速线 → 锚(系列之上)
+    assert "drawClear: [(u) => this._qbDrawGaps(u, tk)]" in js, \
+        "缺缺口斜纹 drawClear 钩子(恒最底, 与网格相互独立)"
+    assert "drawAxes: [(u) => this._qbDrawFx(u, tk)]" in js, \
+        "缺 fx 装饰段 drawAxes 钩子(网格之后、系列原生之前 —— 挂 drawClear 会被网格盖住, I6 层序)"
+    assert "draw: [(u) => this._qbDrawLimits(u, tk), (u) => this._qbDrawFxAnchor(u, tk)]" in js, \
+        "缺限速虚线 draw 钩子(画在系列之上; S2-a 起锚段紧随其后)"
 
     # 6. 重启缝提示(P4, plan 26-10-15-0829): 判据单点 + computed 消费单点 + 模板提示行
     #    (node 真跑在上面第 2 段电池里; 这里钉接线与文案单源)

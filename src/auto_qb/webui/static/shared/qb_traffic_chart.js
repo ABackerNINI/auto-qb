@@ -47,6 +47,14 @@
  * 收敛(两列独立插值尾部 1 点, 收敛帧写回真值)。纯函数(公式/时间线/状态机)在模块级「节奏内核」
  * 节, 调度器在 methods 域 _qbBeat*; 动画期 x 轴 ticks 冻结与 tooltip 真值接缝等判据见各处注。
  *
+ * 视觉引擎 V + N 霓虹元素层(S2-a, plan §03 V 表/N 节/D1-D4): 同画布装饰面 —— V1 分级色相
+ * (Lv 色表常量, 四皮肤无 --qb-lv* 令牌已核查)/V2 多边形扩张环 + 旋转菱形锚 + glitch 切片/
+ * V3 三阶段多边形粒子(两轨合计 ≤32)+ 次区流动光点; N 层白名单五元素(Lv 色相, cfg.neon 独立
+ * 开关), D3 双轨仲裁(both/lead/merge)与 D4 末点 y 间距缩小。图层顺序 I6 单点
+ * _QB_FX_LAYER_ORDER, 背景零铺色(I11/G7), 曲线描边恒语义色一行不动(I10/D1); 纯函数(仲裁/
+ * 预算/粒子运动/回落阈值)在模块级「视觉引擎」节, 绘制在 methods 域 _qbDrawFx/_qbDrawFxAnchor
+ * (drawAxes/draw 钩子, 不新增 canvas), 装饰帧挂节拍调度器循环内(无独立循环)。
+ *
  * 窗口档位单点(QB_WINDOW_NAMES)与「视图选择」持久化(2026-10-05, 用户拍板): 十三档清单、
  * 前后切换(qbCycleWindow)与落盘校验(qbInitialWindow)共用同一份常量 —— 展示面模板走
  * qbWindowNames computed, 不再各自硬编码。持久化粒度 = **全局单独一份 / 分组与种子共用一份**
@@ -614,6 +622,197 @@ function _qbFxTrackNext(prevTrack, target, floor) {
  * 内, 单调无 overshoot(I4/D9)。 */
 function _qbFxShown(track, p) {
   return track.prev + (track.target - track.prev) * _qbFxEaseOut(p);
+}
+
+/* ---------------- 视觉引擎 V + N 霓虹元素层(S2-a, plan 26-11-12-1139 §03 V 表/N 节/D1-D4) ----------------
+ * 本节是装饰面的常量与模块级纯函数单点(node 电池直接真跑, 同节奏内核先例); 带副作用的绘制面在
+ * methods 域: _qbDrawFx(drawAxes 钩子 = uPlot 网格之后、系列原生之前: 几何环/粒子/切片 →
+ * N 霓虹元素层)与 _qbDrawFxAnchor(draw 钩子 = 系列之上: 末点菱形锚 + lead 策略从属轨描边加亮),
+ * 装饰帧挂在节拍调度器的 rAF 循环内(无独立循环 —— 调度器每帧提交即重跑钩子, L0/L1 提交帧顺路
+ * 带出装饰)。
+ * 生效条件(I7/§05.6): cfg.on === true(有效值单点 = enabled && !reduce)且该轨 level ≥ 1 ——
+ * Δ≈0/零流量/缺口轨零装饰但 L0/L1 照常(D2/I10); N 层独立开关 cfg.neon(I11), 粒子层
+ * cfg.layers.particles, 次区光点 cfg.tail, 三策略 cfg.dual, 密度 cfg.particles, 配色 cfg.palette。 */
+
+/* I6 图层顺序常量(违反即判失败; 单点描述, 绘制落位已读 vendor 1.6.32 源实证: 主渲染序
+ * clearRect → drawClear → axes(网格) → drawAxes → series → draw, 其中 Ci("drawAxes") 在
+ * Dl.axes 末尾 = 网格之后、系列之前): bg = 零铺色恒由 CSS 提供, grid/判定线 = uPlot 网格 +
+ * _qbDrawGaps 缺口斜纹(drawClear 段), geometry/neon = _qbDrawFx(drawAxes 段 = 网格后系列前),
+ * curve = uPlot 系列原生(画在 drawAxes 之后 = 装饰永不压曲线, 语义色一行不动), anchor =
+ * _qbDrawFxAnchor(draw 段), hud = DOM tooltip/图例(本引擎零触碰)) */
+const _QB_FX_LAYER_ORDER = ["bg", "grid", "geometry", "neon", "curve", "anchor", "hud"];
+
+/* I11 N 层白名单(可着 Lv 色的局部元素)/黑名单(恒与静态基线逐像素一致, 本引擎零触碰 ——
+ * 曲线描边恒 --today-up/down 由 _qbChartTokens 现读; 背景/网格/tooltip/图例/限速虚线不染) */
+const _QB_FX_N_WHITELIST = ["judgeFlash", "ringOuter", "partOuter", "anchorHalo", "lvBadge"];
+const _QB_FX_N_BLACKLIST = ["curveUp", "curveDl", "plotBg", "edgeBg", "grid", "tooltip", "legend", "limitDash"];
+
+/* V1 Lv 色表(plan §03 V1 色彩行逐字: Lv.1 蓝 #7AD9FF / Lv.2 金 #FEFFA9 / Lv.3 品红 #FF6BD6,
+ * 沿用 Phigros AP 金 / FC 蓝)。!四皮肤均无 --qb-lv* 令牌(落表前已核查 atlas/prism/console/
+ * flux 全部样式面), canvas 热路径也不逐帧 getComputedStyle —— 故按计划色值常量落 shared 层
+ * (来源 = plan §03 V 表 V1 行); 色相语义是「这一拍多强」的分级反馈色, 不属皮肤语义色面,
+ * 换肤不变; 绝不替代曲线语义色(I10/D1)。 */
+const _QB_FX_LV_COLORS = { 1: "#7AD9FF", 2: "#FEFFA9", 3: "#FF6BD6" };
+
+/* V1 三档配色 shadowBlur 上限(I9): glitch 14 / neon(常规) 10 / calm 0。同帧辉光(blur)描边
+ * 另有 ≤3 次预算: 本引擎只把 blur 施于扩张环外圈(至多 2 次), 锚辉光用无 blur 低透明外圈菱形
+ * 替代(白名单 anchorHalo), 粒子外圈/判定线短亮段恒纯描边。 */
+const _QB_FX_BLUR_CAPS = { neon: 10, glitch: 14, calm: 0 };
+
+/* V2 冲击环边数映射(由 lead 等级决定): Lv.1 三边 / Lv.2 六边 / Lv.3 八边 */
+const _QB_FX_RING_SIDES = { 1: 3, 2: 6, 3: 8 };
+
+/* I9 视觉预算常量(R3: 全部按 up + dl 两轨合计, 不每轨各配一套): 粒子 ≤32 / 每轨半套 ≤16 /
+ * N 层 ≤0.33×beat 回落 / 粒子活跃窗 ≤0.55×beat / 末点 y 间距 <26px 反馈按比例缩小(下限
+ * 0.4 —— 不合并不取消, D4) / glitch 切片 ≤5 条(R6)且微震 ≤5px(实际 ±3px) / 次区光点每轨 ≤2
+ * (合计 ≤4)沿末段 6 桶缓动 */
+const _QB_FX_PART_MAX = 32;
+const _QB_FX_SHARD_MAX = 16;
+const _QB_FX_NEON_RATIO = 0.33;
+const _QB_FX_PART_RATIO = 0.55;
+const _QB_FX_Y_GAP_PX = 26;
+const _QB_FX_Y_GAP_MIN_SCALE = 0.4;
+const _QB_FX_SLICES_MAX = 5;
+const _QB_FX_SLICE_SHAKE_PX = 3;
+const _QB_FX_TAIL_PTS_MAX = 2;
+const _QB_FX_TAIL_SPAN_BUCKETS = 6;
+
+/* 确定性伪随机(线性同余; 数值域: int32 种子 × 1664525 < 2^53 无精度丢失) —— 粒子/切片清单
+ * 同拍重绘恒同形(不闪变), 跨拍随尾桶时刻自然变化 */
+function _qbFxRand(seed) {
+  let s = (seed | 0) || 1;
+  return () => {
+    s = (s * 1664525 + 1013904223) | 0;
+    return ((s >>> 8) & 0xffffff) / 0x1000000;
+  };
+}
+
+/* 多边形路径(V2/V3 共用; stroke/fill 由调用方定 —— 1px 级 stroke 与小多边形 fill, 零整块铺底) */
+function _qbFxPolyPath(ctx, x, y, r, sides, rot) {
+  if (!(r > 0) || !(sides >= 3)) return;
+  ctx.beginPath();
+  for (let i = 0; i < sides; i++) {
+    const ang = rot + (Math.PI * 2 * i) / sides;
+    const px2 = x + Math.cos(ang) * r;
+    const py2 = y + Math.sin(ang) * r;
+    if (i === 0) ctx.moveTo(px2, py2);
+    else ctx.lineTo(px2, py2);
+  }
+  ctx.closePath();
+}
+
+/* D3 主导轨仲裁: lead = argmax(delta_up, delta_dl), 优先非缺口(live)且非静默(level>0)轨;
+ * 双轨皆缺口/静默 -> null(零装饰, L0/L1 照常 —— D2/I10); 恰等时取 up(稳定序)。 */
+function _qbFxLead(up, dl) {
+  const a = up && up.live && up.level > 0 ? up.delta : -1;
+  const b = dl && dl.live && dl.level > 0 ? dl.delta : -1;
+  if (a < 0 && b < 0) return null;
+  return b > a ? "dl" : "up";
+}
+
+/* partCap(lead 等级 + 密度参数 cfg.particles): 两轨合计上限 = min(32, round(基数 × density)),
+ * 基数按等级 16/24/32(Lv.1/Lv.2/Lv.3); density ≤ 0 或非法 = 0 粒子(密度关到底即无粒子)。 */
+function _qbFxPartCap(level, particles) {
+  const d = Number(particles);
+  if (!(level >= 1) || !Number.isFinite(d) || d <= 0) return 0;
+  const base = level >= 3 ? 32 : level === 2 ? 24 : 16;
+  return Math.min(_QB_FX_PART_MAX, Math.round(base * Math.min(1, d)));
+}
+
+/* D3 三策略粒子分配(both 各轨 ≤16; lead 单轨全套 ≤32; 合计恒 ≤32): both = 双轨各发半套
+ * (默认) / lead = 主导轨全套从属轨零粒子(只描边加亮 + 小锚点) / merge = 两轨 y 中点一次
+ * (色取 lead Lv 色 —— D3-c)。未知策略回落 both(保守默认 —— D3-b)。 */
+function _qbFxAlloc(strategy, cap, lead) {
+  if (!(cap > 0)) return { up: 0, dl: 0, merge: 0 };
+  if (strategy === "merge") return { up: 0, dl: 0, merge: cap };
+  if (strategy === "lead") {
+    return lead === "dl" ? { up: 0, dl: cap, merge: 0 } : { up: cap, dl: 0, merge: 0 };
+  }
+  const up = Math.min(_QB_FX_SHARD_MAX, Math.ceil(cap / 2));
+  return { up, dl: Math.min(_QB_FX_SHARD_MAX, cap - up), merge: 0 };
+}
+
+/* D4 末点 y 间距缩小: spacing < 26px 时 scale = spacing/26 线性缩小(下限 0.4 —— 反馈按比例
+ * 缩小但两轨各自保留, 不合并不取消); 间距 ≥26px 恒 1(不放大)。 */
+function _qbFxGapScale(spacingPx) {
+  const s = Number(spacingPx);
+  if (!Number.isFinite(s) || s <= 0) return _QB_FX_Y_GAP_MIN_SCALE;
+  return Math.max(_QB_FX_Y_GAP_MIN_SCALE, Math.min(1, s / _QB_FX_Y_GAP_PX));
+}
+
+/* N 层回落系数(I9/I11): q = 1 − t/(0.33×beat) ∈ [0,1], t ≥ 0.33×beat 恒 0(零绘制) */
+function _qbFxNeonQ(t, beat) {
+  const end = beat * _QB_FX_NEON_RATIO;
+  if (!(t >= 0) || !(t < end)) return 0;
+  return 1 - t / end;
+}
+
+/* 冲击扩张环状态(V2): r(t) = rMax × easeOut(t/0.55beat) 快速扩张, alpha ∝ (1 − t/0.55beat);
+ * t ≥ 0.55×beat -> null(零绘制 —— I9 冲击类叠加层窗)。 */
+function _qbFxRingAt(t, beat, rMax) {
+  const T = beat * _QB_FX_PART_RATIO;
+  if (!(t >= 0) || !(t < T)) return null;
+  return { r: rMax * _qbFxEaseOut(Math.min(t / T, 1)), alpha: 1 - t / T };
+}
+
+/* V3 粒子三阶段运动/亮度(纯函数): 爆发期 [0, burstMs) 速度 ×4.5(= impact 窗), 拖尾期
+ * [burstMs, 0.55×beat) 名义速度 ×1 并 easeOut 减速; t ≥ 0.55×beat -> null(零绘制)。
+ * 速度 v 由末态行程反解: 4.5v×burstMs + v×trailMs = dist(easeOut(1)=1); 亮度 ∝ (1 − t/T),
+ * t=0 首帧最亮(与判定线闪光同帧 —— I9); carryPx = L0 视口回摆带来的末点位移(粒子随末点滑动,
+ * 与曲线不脱钩)。 */
+function _qbFxParticleAt(t, beat, burstMs, spec, carryPx) {
+  const T = beat * _QB_FX_PART_RATIO;
+  if (!(t >= 0) || !(t < T)) return null;
+  const trailMs = Math.max(T - burstMs, 1e-9);
+  const v = spec.dist / (4.5 * burstMs + trailMs);
+  const d = t <= burstMs
+    ? 4.5 * v * t
+    : 4.5 * v * burstMs + v * trailMs * _qbFxEaseOut((t - burstMs) / trailMs);
+  return {
+    x: spec.x0 + Math.cos(spec.ang) * d + carryPx,
+    y: spec.y0 + Math.sin(spec.ang) * d,
+    alpha: 1 - t / T,
+    d,
+    rot: spec.rot0 + spec.vr * t,
+  };
+}
+
+/* 粒子喷射清单(V3): n 个三/四/五边多边形碎片(非圆点 —— Beat Saber 碎片/Phigros 几何碎片),
+ * 喷射角均匀铺满左向 270° 弧(45°..315°, 0°=+x 指向右缘外 —— 末点贴判定线, 右向碎片全被绘图
+ * 区裁剪白费)加 ±5° 抖动, 尺寸 1.5-3.5px / 行程 1.1-1.6 × 环最大半径 / 自旋伪随机。
+ * 确定性: 同种子恒同清单(node 电池真跑)。 */
+function _qbFxSpawnSpecs(n, x0, y0, rMax, seed) {
+  const rnd = _qbFxRand(seed);
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const ang = (45 + (270 * (i + 0.5)) / n + (rnd() - 0.5) * 10) * Math.PI / 180;
+    out.push({
+      x0, y0, ang,
+      sides: 3 + Math.floor(rnd() * 3),
+      size: 1.5 + rnd() * 2,
+      dist: rMax * (1.1 + 0.5 * rnd()),
+      rot0: rnd() * Math.PI * 2,
+      vr: (rnd() - 0.5) * 0.03,
+    });
+  }
+  return out;
+}
+
+/* glitch 水平切片清单(V2, palette=glitch 专用; R6: ≤5 条): y 在锚带 ±14px 内伪随机, dy0 为
+ * ±3px 正弦微震幅值(I9 上限 ≤5px), len 24-64px 右缘对齐, alpha0 0.2-0.5。 */
+function _qbFxSlices(n, yCenter, seed) {
+  const rnd = _qbFxRand(seed);
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    out.push({
+      y: yCenter + (rnd() * 2 - 1) * 14,
+      dy0: (rnd() * 2 - 1) * _QB_FX_SLICE_SHAKE_PX,
+      len: 24 + rnd() * 40,
+      alpha0: 0.2 + rnd() * 0.3,
+      ph: rnd() * Math.PI * 2,
+    });
+  }
+  return out;
 }
 
 window.AQB_QB_TRAFFIC = {
@@ -1502,6 +1701,316 @@ window.AQB_QB_TRAFFIC = {
       }
       ctx.restore();
     },
+    /* ================= 视觉引擎 V + N 层绘制面(S2-a, plan §03 V 表/N 节/D1-D4) =================
+     * 图层顺序(I6, 单点 _QB_FX_LAYER_ORDER; 挂点层序已读 vendor 1.6.32 源实证 —— drawAxes 在
+     * Dl.axes 末尾 = 网格之后、系列之前): drawClear 段(恒最底)= _qbDrawGaps 缺口斜纹;
+     * drawAxes 段(网格后系列前)= 几何环 → 粒子 → glitch 切片 → N 霓虹元素层(判定线短亮段/
+     * 环外圈辉光/粒子外圈/角落徽标); draw 段(系列之上)= lead 策略从属轨描边加亮 → 末点菱形锚
+     * (+N 锚辉光)。曲线描边由 uPlot 系列原生画在 drawAxes 之后 = 装饰永不压曲线(语义色一行
+     * 不动 —— I10/D1); 背景/右缘/网格/tooltip/图例/限速虚线本引擎零触碰(I11 黑名单), 背景零
+     * 铺色(I11/G7)。逐帧读 window.AQB_FX_CFG —— 拍内改参下一帧即生效(§05.3); 装饰帧全部经
+     * 节拍调度器提交, 本域零 destroy/new uPlot/零 loading(I3)。 */
+    /* 装饰面几何(CSS px; uPlot 1.6.x ctx 无 transform, 坐标 = 设备像素 —— 与 _qbDrawGaps 同口径) */
+    _qbFxGeom(u) {
+      const px = (typeof uPlot !== "undefined" && uPlot.pxRatio) || 1;
+      return {
+        px,
+        L: u.bbox.left / px,
+        T: u.bbox.top / px,
+        W: u.bbox.width / px,
+        H: u.bbox.height / px,
+      };
+    },
+    /* 判定帧装饰状态生成(t=0 一次性; D3 仲裁 + V3 粒子清单): 返回 null = 本拍零装饰。
+     * 时机 = _qbBeatStart 的尾点摆回之后(粒子原点 = t=0 显示末点像素位, y 由钉档 yMax 线性
+     * 换算 —— 与钉住的纵轴刻度逐像素一致, 不依赖 valToPos 时序); 粒子/切片清单确定性伪随机
+     * (种子取尾桶时刻) —— 同拍重绘恒同形, 跨拍随数据自然变化。生效条件: cfg.on === true 且
+     * lead 等级 ≥ 1(双轨皆缺口/静默 -> null, L0/L1 照常 —— D2/I10)。 */
+    _qbFxSpawn(u, tl, dx0, needsShift, yMax) {
+      const cfg = window.AQB_FX_CFG;
+      if (!cfg || cfg.on !== true) return null;
+      const tr = u._qbBeat.tracks;
+      const lead = _qbFxLead(tr.up, tr.dl);
+      if (!lead) return null;
+      const g = this._qbFxGeom(u);
+      if (!(g.W > 0) || !(g.H > 0) || !(yMax > 0)) return null;
+      const xs = u.data[0];
+      const n = xs.length;
+      const span = n > 1 ? xs[n - 1] - xs[0] : 0;
+      const pxPerT = span > 0 ? g.W / span : 0;
+      const dxPx = (needsShift ? dx0 : 0) * pxPerT;   // t=0 末点越出右缘的像素距(L0 偏置量)
+      const yOf = (v) => g.T + g.H * (1 - Math.min(v, yMax) / yMax);
+      const yUp = yOf(tr.up.shown);
+      const yDl = yOf(tr.dl.shown);
+      const bothLive = tr.up.live && tr.dl.live;
+      const gapScale = bothLive ? _qbFxGapScale(Math.abs(yUp - yDl)) : 1;  // D4 y 间距缩小
+      const lv = tr[lead].level;
+      const rMax = (14 + 5 * lv) * gapScale;
+      // 粒子清单按**满额**生成(密度恒取 1 的 partCap, 与拍内 cfg.particles 解耦): 密度/dual
+      // 拍内改参由绘制侧逐帧重算 alloc 并钳制到清单长度(m = min(specs.length, n)) —— 下一帧即
+      // 生效; cap 冻结在 spawn 会让拍内改密度整拍失效(违 §05.3/D21: partCap 即时生效)。策略
+      // 形状(both/lead/merge 各自的清单落位与半套上限)仍按 spawn 时 cfg.dual 定型。
+      const cap = _qbFxPartCap(lv, 1);
+      const alloc = _qbFxAlloc(cfg.dual, cap, lead);
+      const seed = Math.floor(xs[n - 1]) || 1;
+      const tipX0 = g.L + g.W + dxPx;
+      // merge 落位 y: 两轨皆 live 才取中点; 任一缺口退 lead 轨末点 y —— 缺口轨 shown=null 会被
+      // yOf 换算成绘图区底边 T+H, 中点成了「与真实末点无关的假落位」(I10/D4)
+      const yMerge = bothLive ? (yUp + yDl) / 2 : yOf(tr[lead].shown);
+      const specs = {};
+      if (alloc.up > 0) specs.up = _qbFxSpawnSpecs(alloc.up, tipX0, yUp, rMax, seed);
+      if (alloc.dl > 0) specs.dl = _qbFxSpawnSpecs(alloc.dl, tipX0, yDl, rMax, seed ^ 0x9E3779B9);
+      if (alloc.merge > 0) {
+        specs.merge = _qbFxSpawnSpecs(alloc.merge, tipX0, yMerge, rMax, seed ^ 0x5BD1E995);
+      }
+      // glitch 水平切片清单(V2): **无条件**生成 5 条, 绘制侧按 cfg.palette === "glitch" 逐帧
+      // 门控 —— palette 拍内切入/切出下一帧生效(清单冻结 palette 会让切入口整拍无切片); 锚带
+      // 中心 = merge 时两轨 y 中点(缺口退 lead 末点 y, 同上), 否则 lead 末点 y
+      const slices = _qbFxSlices(_QB_FX_SLICES_MAX,
+        alloc.merge > 0 ? yMerge : yOf(tr[lead].shown), seed ^ 0x85EBCA6B);
+      // 次区光点资格(每轨: live 且 level ≥ 1 —— Δ≈0/零流量/缺口轨零装饰, I10/D2)
+      const tail = [];
+      if (tr.up.live && tr.up.level > 0) tail.push("up");
+      if (tr.dl.live && tr.dl.level > 0) tail.push("dl");
+      return {
+        lead, lv, gapScale, rMax, cap, alloc, specs, slices, tail,
+        act: { up: tr.up.live && tr.up.level > 0, dl: tr.dl.live && tr.dl.level > 0 },
+        pxPerT,
+        dx0: needsShift ? dx0 : 0,
+        beatMs: tl.beat,
+        burstMs: tl.impactMs,
+      };
+    },
+    /* drawAxes 装饰段(uPlot 网格之后、系列原生之前 —— 装饰压网格不压曲线, I6)。生效条件逐帧
+     * 复核(cfg.on !== true 即零绘制 —— 拍内关总开关下一帧生效); 背景零铺色(I11/G7): 本钩子
+     * 唯一的 fillRect 是 glitch 切片的 1px 级横条(R6 明示「切片是 1px 级 fillRect, 不构成铺底」),
+     * 其余全部 stroke / 小多边形 fill。 */
+    _qbDrawFx(u, tk) {
+      const st = u._qbBeat;
+      const a = st && st.anim;
+      if (!a) return;
+      if (a.phase === "tail") {
+        // 次区相位: 流动光点落笔(像素位置由 _qbTailFrame 现算; 轨道语义色, 极轻不着 Lv —— I10)
+        const pts = a.fxTail && a.fxTail.pts;
+        if (!pts || !pts.length) return;
+        this._qbCanvasScale(u);
+        const ctx = u.ctx;
+        for (const pt of pts) {
+          ctx.globalAlpha = pt.alpha;
+          ctx.fillStyle = pt.k === "up" ? tk.up : tk.down;
+          ctx.beginPath();
+          ctx.arc(pt.x, pt.y, 2, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.restore();
+        return;
+      }
+      const fx = a.fx;
+      if (!fx) return;
+      const cfg = window.AQB_FX_CFG;
+      if (!cfg || cfg.on !== true) return;
+      const t = a.clock;
+      if (!(t < fx.beatMs * _QB_FX_PART_RATIO)) return;   // 0.55×beat 后冲击类零绘制(I9)
+      const px = this._qbCanvasScale(u);
+      const ctx = u.ctx;
+      const L = u.bbox.left / px;
+      const T = u.bbox.top / px;
+      const W = u.bbox.width / px;
+      const H = u.bbox.height / px;
+      ctx.beginPath();
+      ctx.rect(L, T, W, H);
+      ctx.clip();   // 装饰不出绘图区(与缺口斜纹同口径)
+      const dx = a.needsShift ? (a.lastDx || 0) : 0;
+      const tipX = L + W + dx * fx.pxPerT;      // 末点像素 x(随 L0 视口回摆滑动)
+      const carry = (dx - fx.dx0) * fx.pxPerT;  // 粒子随末点一起滑动(L0 同步)
+      const yOf = (v) => T + H * (1 - Math.min(v, a.yMax) / a.yMax);
+      const tr = st.tracks;
+      const yUp = yOf(tr.up.shown);
+      const yDl = yOf(tr.dl.shown);
+      const lvColor = _QB_FX_LV_COLORS[fx.lv] || _QB_FX_LV_COLORS[3];
+      const blurCap = _QB_FX_BLUR_CAPS[cfg.palette] != null
+        ? _QB_FX_BLUR_CAPS[cfg.palette] : _QB_FX_BLUR_CAPS.neon;
+      const q = _qbFxNeonQ(t, fx.beatMs);        // N 层回落系数(≤0.33×beat —— I9/I11)
+      const neon = cfg.neon === true && q > 0;
+      const ens = Math.max(0, 1 - t / (fx.beatMs * _QB_FX_PART_RATIO));
+      // 本帧落位清单(D3 逐帧仲裁: dual/密度拍内改参下一帧生效 —— 密度逐帧经 partCap 现算,
+      // 配合 spawn 满额清单 + 下方 m 钳制; merge = 两轨皆 live 取 y 中点、缺口退 lead 末点 y
+      // (与 spawn 同式 —— 缺口轨 shown=null 会落底边假中点, I10/D4), 单反馈色取 lead Lv 色
+      // —— D3-c; lead = 只主导轨; both(默认) = 各活性轨一落位, 环不占粒子预算故 eff 为 0 也
+      // 保留环落位)
+      const eff = _qbFxAlloc(cfg.dual, _qbFxPartCap(fx.lv, cfg.particles), fx.lead);
+      const spots = [];
+      if (eff.merge > 0) {
+        spots.push({ y: tr.up.live && tr.dl.live ? (yUp + yDl) / 2 : yOf(tr[fx.lead].shown),
+          color: lvColor, specs: fx.specs.merge, n: eff.merge });
+      } else if (cfg.dual === "lead") {
+        spots.push({ y: fx.lead === "up" ? yUp : yDl, color: fx.lead === "up" ? tk.up : tk.down,
+          specs: fx.specs[fx.lead], n: eff[fx.lead] });
+      } else {
+        if (fx.act.up) spots.push({ y: yUp, color: tk.up, specs: fx.specs.up, n: eff.up });
+        if (fx.act.dl) spots.push({ y: yDl, color: tk.down, specs: fx.specs.dl, n: eff.dl });
+      }
+      const sides = _QB_FX_RING_SIDES[fx.lv] || _QB_FX_RING_SIDES[3];
+      const ringT = _qbFxRingAt(t, fx.beatMs, fx.rMax);
+      // —— 几何环(V2: 多边形扩张环, 边数 = lead 等级 3/6/8; 环心跟随末点; 轨道语义色) ——
+      if (ringT && ringT.r > 0) {
+        ctx.lineWidth = 1.5;
+        ctx.globalAlpha = ringT.alpha;
+        for (const sp of spots) {
+          ctx.strokeStyle = sp.color;
+          _qbFxPolyPath(ctx, tipX, sp.y, ringT.r, sides, 0);
+          ctx.stroke();
+        }
+      }
+      // —— N 环外圈辉光(白名单 ringOuter; blur = 配色上限 × q ≤ 上限, 同帧 ≤2 次 ≤ I9 的 3 次) ——
+      if (neon && ringT && ringT.r > 0) {
+        ctx.globalAlpha = q * ringT.alpha;
+        ctx.strokeStyle = lvColor;
+        ctx.lineWidth = 1;
+        ctx.shadowBlur = Math.round(blurCap * q);
+        ctx.shadowColor = lvColor;
+        for (const sp of spots) {
+          _qbFxPolyPath(ctx, tipX, sp.y, ringT.r + 3, sides, 0);
+          ctx.stroke();
+        }
+        ctx.shadowBlur = 0;
+        ctx.shadowColor = "transparent";
+      }
+      // —— 粒子(V3: 三/四/五边碎片本体轨道语义色, N 外圈描边着 Lv 色 —— 白名单 partOuter;
+      //     三阶段: 爆发 ×4.5 / 拖尾减速透明 / 0.55×beat 后零绘制; t=0 首帧最亮与判定线同帧) ——
+      if (cfg.layers.particles === true) {
+        for (const sp of spots) {
+          if (!sp.specs || !(sp.n > 0)) continue;
+          const m = Math.min(sp.specs.length, sp.n);
+          for (let i = 0; i < m; i++) {
+            const ps = _qbFxParticleAt(t, fx.beatMs, fx.burstMs, sp.specs[i], carry);
+            if (!ps || !(ps.alpha > 0)) continue;
+            ctx.globalAlpha = ps.alpha;
+            ctx.fillStyle = sp.color;
+            _qbFxPolyPath(ctx, ps.x, ps.y, sp.specs[i].size, sp.specs[i].sides, ps.rot);
+            ctx.fill();
+            if (neon) {   // N 外圈描边(Lv 色, 纯描边不占辉光 blur 预算)
+              ctx.globalAlpha = ps.alpha * q;
+              ctx.strokeStyle = lvColor;
+              ctx.lineWidth = 1;
+              ctx.stroke();
+            }
+          }
+        }
+      }
+      // —— glitch 水平切片(V2 glitch 档; palette 逐帧门控, 拍内切入/切出下一帧生效; ≤5 条
+      //     1px 级 fillRect 右缘对齐, ±3px 正弦微震 ≤5px) ——
+      if (fx.slices && cfg.palette === "glitch" && ens > 0) {
+        ctx.fillStyle = eff.merge > 0 ? lvColor : (fx.lead === "up" ? tk.up : tk.down);
+        for (const sl of fx.slices) {
+          ctx.globalAlpha = sl.alpha0 * ens;
+          ctx.fillRect(L + W - sl.len, sl.y + sl.dy0 * Math.sin(t / 45 + sl.ph), sl.len, 1);
+        }
+      }
+      // —— N 判定线短亮段(白名单 judgeFlash: 活性轨末点 y ±10px; ≤0.33×beat 回落) ——
+      if (neon) {
+        ctx.globalAlpha = q;
+        ctx.strokeStyle = lvColor;
+        ctx.lineWidth = 2;
+        for (const k of ["up", "dl"]) {
+          if (!fx.act[k]) continue;
+          const y = k === "up" ? yUp : yDl;
+          ctx.beginPath();
+          ctx.moveTo(L + W - 0.5, y - 10);
+          ctx.lineTo(L + W - 0.5, y + 10);
+          ctx.stroke();
+        }
+        // —— N 角落 Lv 徽标(白名单 lvBadge; 与环边数/粒子数同源的第三种分级信号 —— T5 联动) ——
+        ctx.globalAlpha = 0.85 * q;
+        ctx.fillStyle = lvColor;
+        ctx.font = "9px ui-monospace, Consolas, monospace";
+        ctx.textAlign = "right";
+        ctx.textBaseline = "top";
+        ctx.fillText("Lv." + fx.lv, L + W - 4, T + 4);
+      }
+      ctx.restore();
+    },
+    /* draw 装饰段(系列之上): lead 策略从属轨描边加亮(D3-a: 只加亮描边 + 小锚点; 语义色加宽
+     * 半透明短段, 不着 Lv —— I10) -> 末点菱形锚(每活性轨一枚; D4 y 间距 <26px 时缩小但两轨
+     * 各自保留; N 锚辉光 = 白名单 anchorHalo, 无 blur 低透明外圈菱形 —— blur 预算让给环外圈)。 */
+    _qbDrawFxAnchor(u, tk) {
+      const st = u._qbBeat;
+      const a = st && st.anim;
+      if (!a || a.phase === "tail" || !a.fx) return;
+      const cfg = window.AQB_FX_CFG;
+      if (!cfg || cfg.on !== true) return;
+      const fx = a.fx;
+      const t = a.clock;
+      if (!(t < fx.beatMs * _QB_FX_PART_RATIO)) return;
+      const px = this._qbCanvasScale(u);
+      const ctx = u.ctx;
+      const L = u.bbox.left / px;
+      const T = u.bbox.top / px;
+      const W = u.bbox.width / px;
+      const H = u.bbox.height / px;
+      ctx.beginPath();
+      ctx.rect(L, T, W, H);
+      ctx.clip();
+      const dx = a.needsShift ? (a.lastDx || 0) : 0;
+      const tipX = L + W + dx * fx.pxPerT;
+      const yOf = (v) => T + H * (1 - Math.min(v, a.yMax) / a.yMax);
+      const tr = st.tracks;
+      const yUp = yOf(tr.up.shown);
+      const yDl = yOf(tr.dl.shown);
+      const q = _qbFxNeonQ(t, fx.beatMs);
+      const neon = cfg.neon === true && q > 0;
+      const ens = Math.max(0, 1 - t / (fx.beatMs * _QB_FX_PART_RATIO));
+      const lvColor = _QB_FX_LV_COLORS[fx.lv] || _QB_FX_LV_COLORS[3];
+      const rot = Math.PI / 4 + (Math.PI * 2 * t) / fx.beatMs;   // 旋转菱形(每拍一圈)
+      // lead 策略从属轨: 末段描边加亮(读绘制面尾点插值 shown; y 钉定档下 yOf 与 uPlot 像素对位)
+      if (cfg.dual === "lead") {
+        const sub = fx.lead === "up" ? "dl" : "up";
+        if (fx.act[sub]) {
+          const col = u.data[sub === "up" ? 1 : 2];
+          const xs = u.data[0];
+          const i0 = Math.max(0, a.n - 3);
+          ctx.globalAlpha = 0.45 * ens;
+          ctx.strokeStyle = sub === "up" ? tk.up : tk.down;
+          ctx.lineWidth = 3.5;
+          ctx.beginPath();
+          let started = false;
+          for (let i = i0; i < a.n; i++) {
+            if (col[i] == null) {
+              started = false;   // 缺口断段: 与 spanGaps:false 逐段一致, gap 后重新 moveTo 不桥接
+              continue;
+            }
+            const x = L + u.valToPos(xs[i], "x");
+            const y = yOf(col[i]);
+            if (!started) {
+              ctx.moveTo(x, y);
+              started = true;
+            } else {
+              ctx.lineTo(x, y);
+            }
+          }
+          if (started) ctx.stroke();
+        }
+      }
+      // 末点菱形锚(数据语义; D4: 重叠时缩小但两轨各自保留; lead 策略从属轨小锚)
+      for (const k of ["up", "dl"]) {
+        if (!fx.act[k]) continue;
+        const y = k === "up" ? yUp : yDl;
+        const role = cfg.dual === "lead" && k !== fx.lead ? 0.6 : 1;
+        const r = 5 * role * fx.gapScale;
+        ctx.globalAlpha = ens;
+        ctx.fillStyle = k === "up" ? tk.up : tk.down;
+        _qbFxPolyPath(ctx, tipX, y, r, 4, rot);
+        ctx.fill();
+        if (neon) {   // N 锚辉光(白名单 anchorHalo): 无 blur 低透明外圈菱形
+          ctx.globalAlpha = 0.35 * q;
+          ctx.strokeStyle = lvColor;
+          ctx.lineWidth = 1;
+          _qbFxPolyPath(ctx, tipX, y, r * 1.8, 4, rot);
+          ctx.stroke();
+        }
+      }
+      ctx.restore();
+    },
     /* ================= 节拍调度器(S1, plan 26-11-12-1139 §03 L0/L1 + §06) =================
      * 判定帧 = 每次 _qbLoad 成功落袋(续拉快路 setData 之后同帧触发, 见 _qbChartBuild 快路)。
      * 每拍两件事, 驱动源解耦(D2):
@@ -1594,7 +2103,15 @@ window.AQB_QB_TRAFFIC = {
         u.setScale("x", { min: xs[0] - dx0, max: xs[n - 1] - dx0 });
         u.setScale("y", { min: 0, max: yMax });  // 与 x 成对: 该提交不得按偏置可视窗重推 y
       }
-      st.anim = { dx0, needsShift, needsTail, n, tl, yMax, clock: 0, lastT: 0, lastDx: needsShift ? dx0 : null };
+      // S2-a 装饰状态(V1 色彩/V2 形状/V3 粒子/N 层/D3 仲裁, plan §03): t=0 一次性生成, 粒子/
+      // 切片清单确定性伪随机(同拍重绘恒同形)。拍内改参的生效口径(§05.3/D21): neon/layers.
+      // particles/tail/palette/dual 逐帧读 AQB_FX_CFG 下一帧生效; 密度(particles)经满额清单 +
+      // 绘制侧逐帧钳制下一帧生效; 唯一例外 ease(消费点 S3 阶段接线, 当前改值无效果)。生效
+      // 条件: cfg.on === true(有效值单点)且 lead 等级 ≥ 1 —— reduce 已在上方短路(I7);
+      // enabled=false 与 Δ≈0/零流量/缺口轨零装饰但 L0/L1 照常(§05.6/D2/I10)。
+      const fx = this._qbFxSpawn(u, tl, dx0, needsShift, yMax);
+      st.anim = { dx0, needsShift, needsTail, n, tl, yMax, clock: 0, lastT: 0,
+        lastDx: needsShift ? dx0 : null, fx, phase: "impact" };
       st.raf = requestAnimationFrame(() => this._qbBeatFrame(scope));
     },
     /* 每帧推进(判定帧同帧触发 I5; 每帧按真实毫秒推进): 页面隐藏 rAF 不触发 = 拍内时钟自然
@@ -1619,6 +2136,18 @@ window.AQB_QB_TRAFFIC = {
       a.lastT = now;
       a.clock += dt;
       const tl = a.tl;
+      if (a.phase === "tail") {
+        // S2-a 次区相位: 流动光点逐帧推进(位置 1px 量化, 无可见变化不提交 —— 极轻面不逐帧
+        // 全量重绘, I9 R8 复核); 页面隐藏已在上方冻结时钟, 光点随钟暂停
+        if (this._qbTailFrame(u, a)) {
+          st.anim = null;
+          st.raf = 0;
+          u.redraw();  // 末帧清理: 光点层随本次提交归零(钩子见 anim 已清 -> 零装饰)
+          return;
+        }
+        st.raf = requestAnimationFrame(() => this._qbBeatFrame(scope));
+        return;
+      }
       if (a.clock >= tl.animEndMs) {
         this._qbBeatConverge(scope, u);
         return;
@@ -1670,7 +2199,64 @@ window.AQB_QB_TRAFFIC = {
         u.setScale("y", { min: 0, max: a.yMax });
         u.redraw();
       }
+      // S2-a 装饰帧保障: 冲击窗(≤0.55×beat)内 L0/L1 都没提交的帧(无 shift 长窗的 impact 段,
+      // 尾点显示值冻结在 prev)强制重绘一次, 否则粒子/环/切片冻结在 t=0 帧(I5: 冲击 t=0 同帧
+      // 触发); y 钉成对同上(显示尾值参与可视窗重推会垂直跳)。
+      if (a.fx && !dxChanged && !tailChanged && a.clock < a.fx.beatMs * _QB_FX_PART_RATIO) {
+        u.setScale("y", { min: 0, max: a.yMax });
+        u.redraw();
+      }
       st.raf = requestAnimationFrame(() => this._qbBeatFrame(scope));
+    },
+    /* 次区相位帧(S2-a: tail 光点推进): 沿末段 _QB_FX_TAIL_SPAN_BUCKETS 个桶的折线缓动, 每轨
+     * ≤2 个错峰光点(合计 ≤4, 轨道语义色, 极轻 alpha ≤0.35); 位置 1px 量化 —— 无可见变化不
+     * 提交(全量路径重建是帧成本大头, 极轻面不逐帧重绘 —— I9 R8 复核)。返回 true = 次区结束
+     * (窗尽/拍内关闭), 调用方清 anim 并补一帧清理提交。 */
+    _qbTailFrame(u, a) {
+      const tl = a.tl;
+      if (!(a.clock < tl.beat + tl.tailMs)) return true;
+      const cfg = window.AQB_FX_CFG;
+      if (!cfg || cfg.on !== true || cfg.tail !== true) return true;
+      const K = Math.min(_QB_FX_TAIL_SPAN_BUCKETS, a.n - 1);
+      const pts = [];
+      if (K >= 1 && a.clock >= tl.beat) {
+        const p = Math.min(1, (a.clock - tl.beat) / tl.tailMs);
+        const px = (typeof uPlot !== "undefined" && uPlot.pxRatio) || 1;
+        const L = u.bbox.left / px;
+        const T = u.bbox.top / px;
+        const H = u.bbox.height / px;
+        const xs = u.data[0];
+        for (const k of a.fx.tail) {
+          const col = u.data[k === "up" ? 1 : 2];
+          for (let j = 0; j < _QB_FX_TAIL_PTS_MAX; j++) {
+            const pj = p + j * 0.45;
+            if (pj > 1) continue;   // 走完即隐(不循环 —— 次区是余韵, 不是常驻动画)
+            const b = (a.n - 1 - K) + pj * K;
+            const i = Math.floor(b);
+            const f = b - i;
+            const v0 = col[i];
+            const v1 = col[i + 1];
+            if (v0 == null || v1 == null) continue;   // 缺口段跳过(曲线断线处无光点 —— D4)
+            const alpha = 0.35 * Math.min(1, p * 8) * Math.min(1, (1 - p) * 6);
+            if (!(alpha > 0)) continue;   // 淡入前/淡出后零绘制
+            const x0 = L + u.valToPos(xs[i], "x");
+            const x1 = L + u.valToPos(xs[i + 1], "x");
+            pts.push({
+              k,
+              x: x0 + (x1 - x0) * f,
+              y: T + H * (1 - (v0 + (v1 - v0) * f) / a.yMax),
+              alpha,
+            });
+          }
+        }
+      }
+      const ft = a.fxTail;
+      const sig = pts.map((pt) => pt.k + ":" + Math.round(pt.x) + "," + Math.round(pt.y)).join("|");
+      if (sig === ft.sig) return false;   // 位置无可见变化: 时钟照常推进, 不提交
+      ft.sig = sig;
+      ft.pts = pts;
+      u.redraw();
+      return false;
     },
     /* 收敛帧: 真值写回 + 显式交还 auto range + x 轴 ticks 一次性刷新, 一次提交完成。
      * 交还方式已读 uPlot 1.6.x vendor 源确认: 无持久手动 range —— setScale 只往 pending 表
@@ -1690,6 +2276,18 @@ window.AQB_QB_TRAFFIC = {
       u._qbTickFreeze = null;        // ticks 冻结清除: 本次提交即用真窗口现算标签(一次性刷新)
       u._qbTickFreezePending = false;
       u.setData([u.data[0], u.data[1], u.data[2]]);
+      // S2-a 次区相位衔接(tail 开启且有活性轨): 主区装饰在本帧已全部回落(环/粒子 ≤0.55×beat、
+      // N ≤0.33×beat —— 收敛帧零残留), 此处转入 tail 相位让次区光点沿末段曲线缓动到下一拍前
+      // (窗长 tail = min(period − beat, 2000), 600s 长窗也只铺 2s, 非常驻)。拍内 cfg 在
+      // _qbTailFrame 逐帧重读 —— 关闭即下一帧收尾(补一帧清理提交)。
+      const tl = a.tl;
+      const cfg = window.AQB_FX_CFG;
+      if (a.fx && a.fx.tail.length && tl.tailMs > 0 && cfg && cfg.on === true && cfg.tail === true
+        && u.root && u.root.isConnected) {
+        st.anim = { phase: "tail", n: a.n, tl, yMax: a.yMax, clock: a.clock, lastT: 0,
+          dx0: 0, needsShift: false, needsTail: false, fx: a.fx, fxTail: { pts: null, sig: "" } };
+        st.raf = requestAnimationFrame(() => this._qbBeatFrame(scope));
+      }
     },
     /* 终止在途拍(rAF 句柄先摘): _qbBeatStart 打断旧拍 / _qbChartDestroy 销毁 / 宿主被拆三条
      * 路共用的收口。「终止即落真值不留半帧」由各路径原生满足: 打断路新拍 setData 已落真值;
@@ -1819,10 +2417,18 @@ window.AQB_QB_TRAFFIC = {
           },
         ],
         hooks: {
-          // 注解层(共享图面, 三挂点全生效): drawClear = 系列之下(缺口斜纹), draw = 系列之上
-          // (限速虚线)。tk 由本次建图捕获 —— 令牌换肤走整图重建, 钩子随新图换新 tk。
+          // 注解层 + S2-a 视觉引擎(共享图面, 四挂点全生效, 不新增 canvas)。挂点层序已读 vendor
+          // 1.6.32 源实证: 主渲染序 clearRect → Ci("drawClear") → Pl.forEach(axes → series) →
+          // Ci("draw"), 且 Ci("drawAxes") 在 Dl.axes 函数**末尾**(网格/刻度/轴标画完之后)——
+          // 即 drawAxes = **网格之后、系列原生之前**。故: drawClear = 缺口斜纹(恒最底, 与网格
+          // 相互独立), drawAxes = 几何环/粒子/切片 → N 霓虹元素层(I6 层序: 装饰压网格不压曲线
+          // —— 挂 drawClear 会被网格盖住, 评审 blocker 实证), draw = 系列之上(限速虚线 → lead
+          // 从属轨加亮 + 末点菱形锚)。曲线描边由 uPlot 系列原生画在 drawAxes 之后 = 装饰永远
+          // 不压曲线(语义色一行不动 —— I10/D1)。tk 由本次建图捕获 —— 令牌换肤走整图重建,
+          // 钩子随新图换新 tk。
           drawClear: [(u) => this._qbDrawGaps(u, tk)],
-          draw: [(u) => this._qbDrawLimits(u, tk)],
+          drawAxes: [(u) => this._qbDrawFx(u, tk)],
+          draw: [(u) => this._qbDrawLimits(u, tk), (u) => this._qbDrawFxAnchor(u, tk)],
           // 悬停取值通道: uPlot 算好 idx/px, Vue 侧渲染 tooltip(数据/格式化走组件既有成员)
           setCursor: [(u) => {
             const idx = u.cursor.idx;
