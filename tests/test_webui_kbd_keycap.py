@@ -5,8 +5,10 @@
 kbDisplayName), 设置键位面板(tpl/settings-detail.html)/ Shift+/ 帮助浮层(tpl/popovers.html)/
 后续键帽消费方(计划 S2-S5: 右键菜单/顶栏/页签徽标/状态栏入口)一律经它取数 —— 不许第二套取数
 逻辑, 更不许在模板/JS 里写死键位串; 改绑即时生效与空串即隐藏由同一条链保证。共享 CSS 键帽类
-.aq-kbd 在 console_hub_panels.css 尾段单点, 四皮肤同构; 令牌纪律 I3: 只引用既有令牌
-(--surface-2/--border/--fg/--font-mono), 零新增令牌, 四皮肤令牌名集不动(parity 守阵继续兜住)。
+.aq-kbd 在 console_hub_panels.css 尾段单点, 四皮肤同构; S2(计划 26-11-14-0041)去按钮化后为
+灰色括号包裹的弱化纯文本, 显影态(S1)默认隐藏 / 按住反引号 body.kbd-reveal 显影(纯 CSS, 取数链
+一行不动); 令牌纪律 I3: 只引用既有令牌(--fg-dim/--fg-muted/--font-mono), 零新增令牌, 四皮肤
+令牌名集不动(parity 守阵继续兜住)。
 
 ## 测试计划
 
@@ -20,11 +22,12 @@ kbDisplayName), 设置键位面板(tpl/settings-detail.html)/ Shift+/ 帮助浮�
   kbShortcutDisplay 并传 this.kbDraft; settings-detail / popovers 两处模板键帽 v-if 与文本均走
   kbDisplayOf; 全模板零 kbDisplayName(kbSerialOf(...)) 二套取数残留
 - test_aq_kbd_css_four_skin_isomorphic: 共享 CSS 键帽类 .aq-kbd 在 console_hub_panels.css 单点
-  (形状沿用 .kb-row-keys kbd 先例口径), var() 引用只落在 I3 允许集
-  {--surface-2, --border, --fg, --font-mono} 且无字面色值; 四皮肤 index.html 全部 link
+  (S2 去按钮化: 无实心背景 / 无边框 / 无厚底边 / 无 padding / 无圆角, 灰色括号 ::before/::after
+  包裹, color 走 --fg-dim 弱化, var() 引用只落在 I3 允许集 {--fg-dim, --fg-muted, --font-mono}
+  且无字面色值); 显影态(S1)默认隐藏(opacity:0/visibility:hidden) + body.kbd-reveal 显影,
+  显/隐只用 opacity/visibility/color 不碰几何、无 transition; 四皮肤 index.html 全部 link
   console_hub_panels.css(共享单文件 => 四皮肤同构, 静态断言不做截图); 置灰行键帽随行 needle
-  (.ctx-menu .ctx-item.is-gated .aq-kbd -> var(--fg-dim), S2 增量: dyn gate 置灰行走各皮肤
-  components.css 既有置灰链, 键帽不随行会原地亮 --fg)
+  (.ctx-menu .ctx-item.is-gated .aq-kbd -> var(--fg-dim), 锁死置灰行键帽弱化色防 hover 回潮)
 - test_keycap_static_mounts_topbar_and_drawer_tabs(计划 S3/S4): 顶栏键帽(添加种子/列选择两钮
   <kbd class="aq-kbd"> 常驻 DOM, 串走 AQB_SHORTCUTS.methods.kbKeycapOf -> kbKeycapById ->
   kbShortcutDisplay 单点, id 引用注册表 add-torrent/col-picker; D6 口径 = 顶栏恰两处键帽,
@@ -57,8 +60,9 @@ from webui_helpers import STATIC_ROOT, _UI_ALL, read_shared
 SHARED = os.path.join(STATIC_ROOT, "shared")
 PANELS_CSS = os.path.join(SHARED, "console_hub_panels.css")
 
-# I3 令牌纪律: .aq-kbd 的 var() 引用只允许这个集合(四皮肤 :root 既有令牌, parity 守阵兜住)
-AQ_KBD_TOKENS = {"--surface-2", "--border", "--fg", "--font-mono"}
+# I3 令牌纪律: .aq-kbd 的 var() 引用只允许这个集合(四皮肤 :root 既有令牌, parity 守阵兜住)。
+# S2 去按钮化后键帽只走弱化文本令牌, --surface-2/--border/--fg 退出(实心背景/边框/高对比已删)。
+AQ_KBD_TOKENS = {"--fg-dim", "--fg-muted", "--font-mono"}
 
 # node 电池: 加载真实 shortcuts.js + shortcuts_panel.js(kbDisplayOf 在面板片段), 对键帽取数单点
 # 跑行为面(空串判定/改绑草稿即时生效)。注册表 AQB_SHORTCUT_DEFS 是 new Function 体内 const,
@@ -169,7 +173,7 @@ def test_kbd_display_single_source_static() -> None:
 
 
 def test_aq_kbd_css_four_skin_isomorphic() -> None:
-    """共享键帽类 .aq-kbd: 令牌纪律 I3 + 四皮肤同构(共享单文件 + 四 shell 全 link, 静态断言)"""
+    """共享键帽类 .aq-kbd: S2 去按钮化形态 + S1 显影态 + 令牌纪律 I3 + 四皮肤同构(静态断言)"""
     css = open(PANELS_CSS, encoding="utf-8").read()
     m = re.search(r"\.aq-kbd \{(.*?)\n\}", css, re.S)
     assert m, "console_hub_panels.css 缺共享键帽类 .aq-kbd(S1 单点被搬走? 同步本守阵)"
@@ -178,17 +182,36 @@ def test_aq_kbd_css_four_skin_isomorphic() -> None:
     assert vars_used, ".aq-kbd 须引用既有令牌(四皮肤同构靠令牌, 不许字面色值)"
     assert vars_used <= AQ_KBD_TOKENS, (f".aq-kbd 引用了 I3 允许集之外的令牌(疑似新增令牌): {sorted(vars_used - AQ_KBD_TOKENS)}")
     assert not re.search(r"#[0-9a-fA-F]{3,8}\b", body), ".aq-kbd 不许字面色值(令牌纪律 I3)"
+    # S2 去按钮化: 基形不得再出现实体按键/按钮形态声明(无实心背景/无边框/无厚底边/无圆角/无 padding)
+    for gone in ("background", "border", "padding", "border-radius"):
+        assert gone not in body, (f".aq-kbd 基形仍含按钮形态声明 {gone}(计划 26-11-14-0041 S2 去按钮化未落地)")
+    # 灰色括号包裹 + 弱化纯文本(菜单第一视觉层级回到文字); 括号走 CSS 伪元素不进模板、不污染取数串
+    assert "color: var(--fg-dim)" in body, ".aq-kbd 须走 --fg-dim 弱化纯文本(S2)"
+    assert '.aq-kbd::before { content: "("; }' in css and '.aq-kbd::after { content: ")"; }' in css, (
+        "console_hub_panels.css 缺灰色括号 ::before/::after(S2 形态)"
+    )
+    # 显影态(S1/W1, I2): 默认隐藏 + body.kbd-reveal 显示, 显/隐只切 opacity/visibility
+    assert "opacity: 0" in body and "visibility: hidden" in body, (
+        ".aq-kbd 默认须隐藏(opacity:0/visibility:hidden), 否则键帽常驻抢焦点"
+    )
+    m_reveal = re.search(r"body\.kbd-reveal \.aq-kbd \{(.*?)\}", css, re.S)
+    assert m_reveal, "console_hub_panels.css 缺 body.kbd-reveal 显影态显示规则(S1/W1)"
+    reveal_body = m_reveal.group(1)
+    assert "opacity: 1" in reveal_body and "visibility: visible" in reveal_body, ("显影态须切回 opacity:1/visibility:visible")
+    # I2: 显影态不碰任何几何属性、不加 transition(大列表对强制同步重排敏感)
+    for geo in ("width", "height", "margin", "padding", "top", "left", "transform", "transition", "display"):
+        assert geo not in reveal_body, f"显影态规则触碰几何/过渡属性 {geo}(I2 只允许 opacity/visibility/color)"
     # 四皮肤同构: 键帽类是共享单文件单点, 四份 shell 全 link 同一文件 => 同一规则四皮肤生效
     for ui in _UI_ALL:
         shell = open(os.path.join(STATIC_ROOT, ui, "index.html"), encoding="utf-8").read()
         assert 'href="/shared/console_hub_panels.css"' in shell, (
             f"{ui} shell 未 link console_hub_panels.css(键帽类四皮肤同构破口)"
         )
-    # 置灰行键帽随行(S2 增量): dyn gate 置灰(.is-gated, 各皮肤 components.css 的置灰链
-    # label -> var(--fg-dim))行内键帽颜色必须随行, 规则被删/改名 = 置灰行键帽原地亮 --fg
+    # 置灰行键帽随行: dyn gate 置灰(.is-gated, 各皮肤 components.css 置灰链 label -> var(--fg-dim))
+    # 行内键帽须锁死弱化色 --fg-dim, 防止任何皮肤专属 hover / 高对比覆盖把它抬回 --fg(Q5 否 b)
     assert ".ctx-menu .ctx-item.is-gated .aq-kbd { color: var(--fg-dim); }" in css, (
         "console_hub_panels.css 缺置灰行键帽随行规则 .ctx-menu .ctx-item.is-gated .aq-kbd"
-        "(S2 增量被删? 同步本守阵与 e2e menus.spec 置灰键帽色断言)"
+        "(S2 形态同步被删? 同步本守阵与 e2e menus.spec 置灰键帽色断言)"
     )
     # 页签键帽徽标版式(S4): .drawer-tabs button 内联流下键帽居中 + 左距 —— 必须在 .aq-kbd
     # 基形之后(守阵以「文件里首个 .aq-kbd { 即共享基形」定位, 本测试自己的正则同此假设)
@@ -210,9 +233,11 @@ def test_keycap_static_mounts_topbar_and_drawer_tabs() -> None:
     for sid in ("add-torrent", "col-picker"):
         needle = "<kbd v-if=\"kbKeycapOf('%s')\" class=\"aq-kbd\">{{ kbKeycapOf('%s') }}</kbd>" % (sid, sid)
         assert needle in topbar, (f"topbar.html 缺 {sid} 键帽节点(S3)或未走 kbKeycapOf 单点(I1 改绑即时跟随/空串即隐藏)")
+    # 计数按 S2 新形态复核: 键帽常驻 DOM、显影(S1)靠 body class 切 opacity/visibility 不增删
+    # 节点, 故 <kbd> 数量仍为 2(形态与显影都不改模板结构); 此断言兼作"显影不靠增删 DOM"的锚
     assert topbar.count("<kbd") == 2, (
-        f"topbar.html 键帽数量漂移(D6 拍板: 恰 add-torrent/col-picker 两处, 设置 Ctrl+, 不做; "
-        f"实测 {topbar.count('<kbd')} 处)"
+        f"topbar.html 键帽数量漂移(D6 拍板 + S2 形态复核: 恰 add-torrent/col-picker 两处, "
+        f"设置 Ctrl+, 不做, 显影不增删 DOM; 实测 {topbar.count('<kbd')} 处)"
     )
 
     drawer_tpl = open(os.path.join(SHARED, "tpl", "drawer.html"), encoding="utf-8").read()
@@ -293,7 +318,10 @@ def test_keycap_static_mount_statusbar_entry() -> None:
     needle = "<kbd v-if=\"kbKeycapOf('help-panel')\" class=\"aq-kbd\">{{ kbKeycapOf('help-panel') }}</kbd>"
     assert needle in sb, ("statusbar.html 缺键位帮助入口键帽节点(S5)或未走 kbKeycapOf 单点"
                           "(I1 改绑即时跟随/空串即隐藏与顶栏键帽同链)")
-    assert sb.count("<kbd") == 1, (f"statusbar.html 键帽数量漂移(S5 拍板: 恰 help-panel 入口一处; 实测 {sb.count('<kbd')} 处)")
+    # 计数按 S2 新形态复核: 键帽常驻 DOM、显影(S1)靠 body class 切 opacity/visibility 不增删节点
+    assert sb.count("<kbd") == 1, (
+        f"statusbar.html 键帽数量漂移(S5 拍板 + S2 形态复核: 恰 help-panel 入口一处, 显影不增删 DOM; 实测 {sb.count('<kbd')} 处)"
+    )
     # 分派链: click 调 kbToggleHelp(模板可触达的无前缀别名, issue 26-10-03-1412); 别名必须
     # 一比一中转 _kbToggleKbHelp —— 与注册表 help-panel run 同一 toggle 方法(不得另写实现),
     # 中转体断言单点在下方 engine 块。

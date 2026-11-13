@@ -6,7 +6,7 @@
 - test_r4_errlog_reseed_probe: R5#16 —— lifecycle.js _errlogReseed node 电池真跑(兑现「探针真跑」注释契约, 兑现前 tests/ 零命中): cursor 0(尚无游标)不判重启 / last<cursor 判重启(seq 进程内只增, 倒退唯一路径是重启归零) / last>=cursor 正常
 - test_r4_logout_settles_modal_and_stops_events: R5#1 + R5#2 —— auth.js _logout 登出收口: 悬空模态先 resolve(false) 再复位(直接丢弃 _modalResolve 会让 confirmDialog/promptDialog 永久 pending, 删除流程在 await 处挂死)、await 侧恢复看到已复位框状态走取消分支、SSE 通道与轮询同口径一并拆(stopEvents 与 _qbTeardown 同收)、无框登出 no-op 不炸
 - test_r4_search_quiet_retry_backoff: R5#236 —— view.js 静默刷新失败重试退避真跑: searchBuilding 残留 true 时失败续查逐次翻倍夹 15s(2s/4s/8s/15s/15s, 与轮询失败退避 currentPollMs 同曲线口径), 服务端宕机不再形成固定 1 req/s 无限循环; 成功一轮计数清零且续查保持 1s 节拍、resetSearch 新会话从零起算
-- test_r4_lifecycle_unmounted_listener_sweep: R5#3 —— lifecycle.js mounted/unmounted 监听对称 node 电池真跑: mounted 挂的五支监听(click 收层/Esc 退栈/防抖 resize/visibilitychange/contextmenu)提为实例字段后 unmounted 逐一撤除(热重载句柄不再堆叠), stopPolling 与 stopEvents 同收, 既有撤除面(键盘引擎/守卫/storage/时钟 interval)零回归
+- test_r4_lifecycle_unmounted_listener_sweep: R5#3 —— lifecycle.js mounted/unmounted 监听对称 node 电池真跑: mounted 挂的五支监听(click 收层/Esc 退栈/防抖 resize/visibilitychange/contextmenu)提为实例字段后 unmounted 逐一撤除(热重载句柄不再堆叠), stopPolling 与 stopEvents 同收, 既有撤除面(键盘引擎/守卫/storage/时钟 interval)零回归; S1(计划 26-11-14-0041)反引号显影链新增 document keydown(第 4 条)/keyup + window blur 三支监听, 同样注册/撤除对称(keydown 计数 3->4), 并真跑显影 handler 核对六约束判定面(合法反引号加 class / 反引号 repeat 维持按住不隐 / IME·输入态·录制态不加 / 每次非反引号 keydown 自愈 / keyup·blur·visibilitychange(hidden) 兜底清 / 不吞事件 I5)
 - test_r4_webflags_boot_retry_and_ensure: issue 26-11-11-0633 —— loadWebFlags boot 韧性 node 电池真跑: boot 期(loadWebFlagsBoot)失败 1s/3s 退避各补一发共三发(穷尽止/中间态保持 fail-closed)、登出态(e.auth)不重试不排定时器、flagsLoaded 态(成功收口/"未取到"可分)、惰性补拉 ensureWebFlags(已取到返回 null 零副作用/未取到补一发)、并发单飞(同档同帧与退避窗口期并入复用同一 promise 不叠发)、档位分槽(boot 链在途时惰性补拉异档另起单发不骑退避链、惰性结算不挤占 boot 槽, 请求计数钉 3 发)
 - test_r4_truth_snapshot_materialized_members: S2a ingestion 物化缝(计划 26-11-11-0630 §03)× 乐观真值快照 node 电池真跑 —— S2a 后 _snapshotTruth 的组员源从服务端成员字典换成客户端物化拷贝, 此前该缝 tests/ 零命中。前置两断言钉 spike 裁决不变式(组员 = **独立浅拷贝**非平铺行引用, 同 hash 多命中各为独立对象; applyOptimisticPatch 经 _forEachRow 平铺行与组员拷贝同拍命中); 三个绿色向: 全量轮(命令在途)物化源 = 载荷平铺行 = 服务端真值 → 快照逐键比对不误判收敛(hold 保留)且 op.prev 保鲜为真值(兜底回滚不打到补丁值) / 全量轮真值落地 kind 对齐 → 正常收敛(撤 hold 出口) / 增量轮组未脏 → 组不进 d.groups → 快照无该 hash → 宁可慢收不误判(3s 兜底)。*已知边界(电池内注释, 不落断言)*: 误判窗口 = 组脏(**他员变化**使组进 d.groups)+ 该组另有成员 pending —— 物化源落到本地已打补丁行, 快照可能读到补丁值提前撤 hold(op.prev 同窗被污染); 影响如实两分支: 成功路径真值落地即收敛, 失败/停滞路径补丁值停留至该成员下次变化或下一次全量轮(回滚与 3s 兜底同被跳过, 长期滞留而非一轮弹回, 已确认接受该残留) —— S2a 报告「混合组未脏」表述以此修正: **组完全未脏是安全向**(即第三个绿色断言); 三入口接线覆盖落点(P5 评审修复后如实): delta 桶序 + 重组后 members 仍物化对象形 = S4 e2e 乐观用例(组员拷贝补丁不触字段 state == 平铺真值行的新鲜度档 + 暂停真值轮 delta.groups 形状钉, e2e/group-hash-ref.spec.mjs), 待补清账 drain 赋值后时序 = 本文件 test_r4_remat_drain_after_assign_two_beat, auth.js bootstrap 同缝 = 本函数静态钉(_materializeGroupRows 调用先于 this.groups 赋值, 跨度比较钉顺序) —— e2e 桩恒免鉴权(ui_harness skip_local_verify), 登录快照轮 e2e 不可达, 不再声称由 e2e 覆盖; 「先物化后赋值」的响应式时序半边(物化挪到赋值后产物相同, 仅 Vue 代理旁路差异)无直接断言面, 由 polling.js 注释声明 + e2e 产物面(组行 members 物化形)间接覆盖
 - test_r4_remat_drain_after_assign_two_beat: S2a delta 分支待补清账时序(P3 major 修复点「_rematDrain 必须在 this.groups 赋值之后」)node 电池真跑 —— 两拍缺项 delta 直调 applyStateRows(delta-sync.spec 行级语义直测同款载荷形状): 第一拍组行带未知 hash 成员(缺项保留 hash 串 + 登记 _rematQueue), 第二拍 torrents 桶补齐 + 组桶非空(物化索引入口的触发前提; 补物化组不在组桶, 只能走待补队列)→ 断言第一拍登记组行 members 补物化齐; **drain 挪回赋值前即红**(登记行当轮未进 this.groups, cur.includes 恒 false 被当轮丢弃, 第二拍队列空转 members 停 hash 串) —— 把 P3 修复语义钉进 node 层
@@ -480,7 +480,13 @@ const mkTarget = (scope) => ({
   },
 });
 global.window = Object.assign(mkTarget("window"), { innerHeight: 800 });
-global.document = Object.assign(mkTarget("document"), { hidden: false });
+// 键位提示显影态(计划 26-11-14-0041 S1): _setKbdReveal 翻转时写 body.classList, 这里用 Set
+// 记录 class 存亡, 供下方显影链判定电池逐条核对(合法反引号加 / 非法与兜底清)。
+const bodyCls = new Set();
+global.document = Object.assign(mkTarget("document"), {
+  hidden: false,
+  body: { classList: { toggle(c, force) { force ? bodyCls.add(c) : bodyCls.delete(c); } } },
+});
 global.localStorage = { getItem: () => null, setItem() {}, removeItem() {} };
 global.aqbFetch = () => new Promise(() => {});   // 永悬挂: 本电池只验注册/撤除面, 不走启动链
 global.readColStateRaw = () => "has-prefs";      // 非空 -> 跳过 origin 提示分支
@@ -507,10 +513,13 @@ const ok = (name, cond) => checks.push([name, !!cond]);
   LC.created.call(ctx);
   await LC.mounted.call(ctx);
 
-  // mounted: 全部监听在册(scroll/resize 具名 + click/Esc/防抖 resize/可见性/右键/storage x2/keydown x3)
+  // mounted: 全部监听在册(scroll/resize 具名 + click/Esc/防抖 resize/可见性/右键/storage x2
+  //   + keydown x4: Esc 退栈/快捷键引擎/刷新守卫/反引号显影链 + 显影链 keyup x1 + window blur x1)
   const cnt = (scope, type) => reg.filter((l) => l[0] === scope && l[1] === type).length;
   ok("mounted: click 收层监听在册", cnt("window", "click") === 1);
-  ok("mounted: keydown 恰三条(Esc 退栈 + 快捷键引擎 + 刷新守卫)", cnt("document", "keydown") === 3);
+  ok("mounted: keydown 恰四条(Esc 退栈 + 快捷键引擎 + 刷新守卫 + 反引号显影链)", cnt("document", "keydown") === 4);
+  ok("mounted: keyup 恰一条(反引号显影链 keyup 移除)", cnt("document", "keyup") === 1);
+  ok("mounted: window blur 恰一条(显影链丢 keyup 兜底)", cnt("window", "blur") === 1);
   ok("mounted: resize 恰两条(具名 + 防抖)", cnt("window", "resize") === 2);
   ok("mounted: visibilitychange 在册", cnt("document", "visibilitychange") === 1);
   ok("mounted: contextmenu 在册", cnt("document", "contextmenu") === 1);
@@ -530,11 +539,59 @@ const ok = (name, cond) => checks.push([name, !!cond]);
   await drainCtx();
   ok("右键挂点: input 右键在早退分支之前照样补拉", flagApi === 2);
 
+  // 反引号显影链判定电池(计划 26-11-14-0041 S1, 03 六约束的 JS 面): 真跑 handler 核对
+  // body.kbd-reveal 存亡 —— 合法反引号加 / 非法(repeat/IME/输入/录制)与自愈/keyup/blur/
+  // visibilitychange(hidden) 清。不吞事件(I5)单独核对: handler 不调 preventDefault/stopPropagation。
+  const rd = ctx._onKbdRevealDown;
+  const ev = (o) => Object.assign({ code: "Backquote", repeat: false, isComposing: false, keyCode: 96,
+    target: { closest: () => null } }, o);
+  ctx._setKbdReveal(false); rd(ev({}));
+  ok("显影: 合法反引号 keydown 加 class", bodyCls.has("kbd-reveal"));
+  // 每次任意(非反引号) keydown 自愈(Alt+Tab 丢 keyup 后下一次按键纠正)
+  rd(ev({ code: "KeyA" }));
+  ok("显影: 任意其它 keydown 自愈清 class", !bodyCls.has("kbd-reveal"));
+  // 反引号长按 repeat 维持显影态(不 add 也不清): 按住超过自动重复阈值键帽不消失
+  ctx._setKbdReveal(true); rd(ev({ repeat: true }));
+  ok("显影: 反引号 repeat 维持显影态(按住不隐)", bodyCls.has("kbd-reveal"));
+  ctx._setKbdReveal(false); rd(ev({ repeat: true }));
+  ok("显影: 反引号 repeat 不在默认态误加 class", !bodyCls.has("kbd-reveal"));
+  // 非法显影键: 起点置 true, 该 keydown 必须清(IME 双保险 / 输入态 closest 命中)
+  const illegal = [
+    ["IME isComposing 不加", { isComposing: true }],
+    ["IME keyCode 229 不加", { keyCode: 229 }],
+    ["输入态跳过不加", { target: { closest: () => ({}) } }],
+  ];
+  for (const [name, patch] of illegal) {
+    ctx._setKbdReveal(true); rd(ev(patch));
+    ok("显影: " + name, !bodyCls.has("kbd-reveal"));
+  }
+  // 录制态(kbRecId)避开: 捕获段 _kbOnRecordKey 全吞 keydown, 这里再判一层双保险
+  ctx.kbRecId = "act-resume";
+  ctx._setKbdReveal(true); rd(ev({}));
+  ok("显影: 录制态跳过(kbRecId)", !bodyCls.has("kbd-reveal"));
+  ctx.kbRecId = "";
+  // keyup / window blur / visibilitychange(hidden) 三重兜底
+  ctx._setKbdReveal(true); ctx._onKbdRevealUp({ code: "Backquote" });
+  ok("显影: Backquote keyup 清 class", !bodyCls.has("kbd-reveal"));
+  ctx._setKbdReveal(true); ctx._onKbdRevealBlur();
+  ok("显影: window blur 兜底清 class", !bodyCls.has("kbd-reveal"));
+  document.hidden = true; ctx._setKbdReveal(true); ctx._onVisChange();
+  ok("显影: visibilitychange(hidden) 强制清 class", !bodyCls.has("kbd-reveal"));
+  document.hidden = false;
+  // I5 不吞事件: 合法显影 keydown 不得 preventDefault / stopPropagation
+  let swallowed = false;
+  ctx._setKbdReveal(false);
+  rd(ev({ preventDefault() { swallowed = true; }, stopPropagation() { swallowed = true; } }));
+  ok("显影: 不 preventDefault / stopPropagation(I5)", !swallowed);
+  ctx._setKbdReveal(false);  // 复位, 不干扰后续 unmounted 撤除断言
+
   LC.unmounted.call(ctx);
 
-  // unmounted: 五支监听撤净(R5#3 修复面) + 既有撤除面零回归
+  // unmounted: 五支监听撤净(R5#3 修复面) + 显影链三支(keydown/keyup/blur)同撤 + 既有撤除面零回归
   ok("unmounted: click 撤除", cnt("window", "click") === 0);
-  ok("unmounted: keydown 撤净(Esc 退栈 + 引擎 + 守卫)", cnt("document", "keydown") === 0);
+  ok("unmounted: keydown 撤净(Esc 退栈 + 引擎 + 守卫 + 显影链)", cnt("document", "keydown") === 0);
+  ok("unmounted: keyup 撤净(显影链)", cnt("document", "keyup") === 0);
+  ok("unmounted: window blur 撤除(显影链)", cnt("window", "blur") === 0);
   ok("unmounted: resize 撤净(具名 + 防抖)", cnt("window", "resize") === 0);
   ok("unmounted: visibilitychange 撤除", cnt("document", "visibilitychange") === 0);
   ok("unmounted: contextmenu 撤除", cnt("document", "contextmenu") === 0);
@@ -1019,6 +1076,8 @@ def test_r4_webflags_boot_retry_and_ensure():
     (穷尽三发止/auth 态不重试) + flagsLoaded 态收口("未启用"与"未取到"可分) + 惰性补拉
     ensureWebFlags(已取到零副作用/在途复用单飞) + 并发单飞不叠发; 全程 fail-closed 语义保持。"""
     _assert_battery(_run_probe(_NODE_WEBFLAGS_PROBE, _shared("lifecycle.js")), "flags boot 韧性电池")
+
+
 def test_r4_truth_snapshot_materialized_members():
     """S2a 物化缝 × 乐观真值快照: 快照读服务端真值不读本地补丁值(全量在途/真值落地/增量安全向三绿色向);
     另钉 auth.js bootstrap 静态缝(三入口之一, e2e 免鉴权轨不可达)。"""

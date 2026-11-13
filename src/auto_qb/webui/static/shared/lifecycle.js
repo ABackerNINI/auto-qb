@@ -65,6 +65,9 @@ window.AQB_LIFECYCLE = {
     // 通知 S3(非响应式: 游标与定时器句柄无渲染依赖, 刻意不进 data —— 同上 P1-2 口径)
     this._errLogCursor = 0;  // /api/errlog 已持游标(环内最大已拉 seq; 后端重启时清零重拉)
     this._errPollTimer = 0;  // 60s 补拉定时器句柄(unmounted 撤除防热重载堆叠)
+    // 键位提示显影态(计划 26-11-14-0041 S1/W1): body.kbd-reveal 的有无。纯显示态缓存,
+    // 刻意不进 data —— 每次 keydown 都要写它, 进 data 会平白触发整表重渲染(P1-2 口径)。
+    this._kbdRevealOn = false;
   },
   async mounted() {
     /* P1-2: 视口高度 + 页面滚动监听(被动 + rAF 合帧, 滚动本身不做任何布局读取) */
@@ -200,6 +203,33 @@ window.AQB_LIFECYCLE = {
     // 阶段 + stopPropagation, 录制态天然先手, 不会误弹守卫框。
     this._cfgGuardKey = (e) => this._cfgOnReloadKey(e);
     document.addEventListener("keydown", this._cfgGuardKey);
+    // 键位提示显影链(计划 26-11-14-0041 S1/W1, I4 生命周期闭环): 按住反引号 Backquote 给
+    // <body> 加 kbd-reveal class, 松开移除。冒泡阶段注册且排引擎之后, 捕获段录制器
+    // _kbOnRecordKey 对所有 keydown 全吞, 天然先手; 再判 kbRecId 双保险。绝不 preventDefault /
+    // stopPropagation(I5) —— 引擎的 defaultPrevented 礼仪会让组合键整条动作被跳过。
+    this._onKbdRevealDown = (e) => {
+      // 每次任意(非反引号) keydown 自愈: Alt+Tab 切窗 / 点进 iframe 丢 keyup 卡住的 class,
+      // 下一次按键立即纠正(I4)。不跟踪按键状态; 反引号自身 keydown 不在这里清。
+      if (e.code !== "Backquote") {
+        this._setKbdReveal(false);
+        return;
+      }
+      // 反引号长按的 repeat 维持现状(不 add 也不清): 约束 1 要求 !repeat 才 add, 但把 repeat
+      // 当「其它 keydown」清掉会让按住超过自动重复阈值后键帽消失, 违背「按住显影」语义。
+      if (e.repeat) return;
+      const reveal = !(e.isComposing || e.keyCode === 229)  // IME 组合期(与 shortcuts_engine.js:47 同式)
+        && !this.kbRecId                                    // 录制态避开(state.js:311)
+        && !(e.target && e.target.closest &&
+          e.target.closest("input, textarea, select, [contenteditable]"));  // 输入态跳过(与 :53 同式): 不吞字符, 键帽不闪
+      this._setKbdReveal(reveal);
+    };
+    this._onKbdRevealUp = (e) => {
+      if (e.code === "Backquote") this._setKbdReveal(false);  // keyup 移除
+    };
+    this._onKbdRevealBlur = () => this._setKbdReveal(false);   // window blur 兜底丢 keyup
+    document.addEventListener("keydown", this._onKbdRevealDown);
+    document.addEventListener("keyup", this._onKbdRevealUp);
+    window.addEventListener("blur", this._onKbdRevealBlur);
     // 生效宽度: 全自动页按当前渲染现算(见 recomputeEffective); 窗口变化后重算, 保持
     // "填满容器 + 自适应"的观感; 固化页(colW 非空)用意图值, 不随窗口变(拖一列不再影响其它列)
     this._resizeDebounceTimer = 0;
@@ -241,8 +271,10 @@ window.AQB_LIFECYCLE = {
     }, 30000);
     // 页面可见性(与 qB 自带 WebUI 同策略): 后台标签停止轮询; 恢复可见立即刷新并续排
     this._onVisChange = () => {
-      if (document.hidden) this.stopPolling();
-      else {
+      if (document.hidden) {
+        this._setKbdReveal(false);  // 切后台强制清显影 class(I4): visibilitychange(hidden) 兜底
+        this.stopPolling();
+      } else {
         this.adoptColState();  // F3: 补漏 —— 标签被冻结 / storage 事件丢失时, 回到可见即对齐一次
         this.adoptTimeFmt();   // 同上(FX-28): 时间口径也在回到可见时补对齐一次
         if (this.authOk) this.refresh();  // 登出态切回标签不发空 Bearer; R10-01: 判据 = 鉴权模式
@@ -327,6 +359,21 @@ window.AQB_LIFECYCLE = {
       document.removeEventListener("keydown", this._kbKeyDown);
       this._kbKeyDown = null;
     }
+    // 键位提示显影链(S1/W1): keydown/keyup/blur 监听随组件销毁撤掉, 并清掉可能残留的
+    // body class(同上, 防热重载后旧句柄堆叠 / 显影态卡在 body 上)。
+    if (this._onKbdRevealDown) {
+      document.removeEventListener("keydown", this._onKbdRevealDown);
+      this._onKbdRevealDown = null;
+    }
+    if (this._onKbdRevealUp) {
+      document.removeEventListener("keyup", this._onKbdRevealUp);
+      this._onKbdRevealUp = null;
+    }
+    if (this._onKbdRevealBlur) {
+      window.removeEventListener("blur", this._onKbdRevealBlur);
+      this._onKbdRevealBlur = null;
+    }
+    this._setKbdReveal(false);
     // 未保存改动防护(U1-b): 键盘拦截与原生 beforeunload 兜底一并撤掉(同上, 防热重载后句柄堆叠)
     if (this._cfgGuardKey) {
       document.removeEventListener("keydown", this._cfgGuardKey);
@@ -390,6 +437,14 @@ window.AQB_LIFECYCLE = {
     this._assertLayouts();
   },
   methods: {
+    /* 键位提示显影态开关(计划 26-11-14-0041 S1/W1, I2 纯 CSS class): 只在状态翻转时写一次
+     * body.classList, 不碰任何几何、不重绘键位文本(取数链零改动, I1)。显/隐全交给共享 CSS
+     * 的 opacity/visibility, 这里只负责挂/摘 body 上的 kbd-reveal。 */
+    _setKbdReveal(on) {
+      if (this._kbdRevealOn === on) return;  // 幂等: 同一态不重复写 DOM
+      this._kbdRevealOn = !!on;
+      document.body.classList.toggle("kbd-reveal", !!on);
+    },
     /* ------------------------------------- 通知 S3(后端条目合并与补拉, 见文件头块注释) */
     /* 后端环条目 -> _errHistory 合并单点: id = "b"+后端 seq(按 seq 稳定去重), kind 映射
      * WARNING->warn / ERROR 及以上->error, ts 转完整 HH:MM:SS, source 固定 "backend"。

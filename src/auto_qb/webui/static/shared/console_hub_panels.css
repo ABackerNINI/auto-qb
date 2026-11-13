@@ -530,23 +530,30 @@
 .hb-branch-then .hb-step { margin-bottom: 6px; }
 .hb-choose-foot { display: flex; gap: 8px; }
 
-/* ---- 键帽通用类(计划 26-11-12-0344 S1, 不变量 I3) ----
- * 右键菜单键帽 / 顶栏键帽 / 抽屉页签徽标 / 状态栏入口(计划 S2-S5 消费)共用的键帽基形,
- * 口径沿用上方键位面板与帮助浮层先例(.kb-row-keys kbd / .kb-help-row kbd): 11px mono +
- * 2px 底边加重描边的键帽感。令牌纪律: 只引用四皮肤 :root 既有令牌(--surface-2 / --border /
- * --fg / --font-mono), 零新增令牌, 四皮肤令牌名集不动(令牌 parity 守阵继续兜住)。
- * WARN: 字体必须走 --font-mono 而非 --hb-font-mono —— 后者只定义在 .hub-page 上, 键帽消费面
- * (菜单/顶栏/状态栏/页签)在主视图拿不到它; 四皮肤 :root 都有 --font-mono(parity 守阵)。
- * 取数纪律(I1): 键帽文本一律 shortcuts.js kbShortcutDisplay 现算, 此处只管形状不管内容。 */
+/* ---- 键帽通用类(计划 26-11-12-0344 S1 建 / 26-11-14-0041 S2 去按钮化, 不变量 I3) ----
+ * 右键菜单键帽 / 顶栏键帽 / 抽屉页签徽标 / 状态栏入口共用的键帽基形。S2 推翻前序件的
+ * 「实体按键」形态: 去掉 --surface-2 实心背景 / 1px --border 边框 / 2px 厚底边 / padding /
+ * --fg 高对比, 退化为灰色括号包裹的弱化纯文本(--fg-dim + --font-mono, 11px 不超过 label),
+ * 菜单打开第一视觉层级回到文字(G1/G2)。灰括号用 ::before / ::after 生成, 不写进模板
+ * (取数链零改动 I1, 键位串文本不被污染, 守阵 needle / e2e toHaveText 恒等于裸显示串)。
+ * 无 hover 提亮(Q5 否 b), 不限制一次只显一个(Q3 否 c)。令牌纪律: 只引用既有令牌
+ * --fg-dim / --font-mono, 零新增, 四皮肤 :root 都有(parity 守阵); 字体必须走 --font-mono
+ * 而非 --hb-font-mono(后者只定义在 .hub-page 上, 键帽消费面拿不到)。
+ * 显影态(计划 26-11-14-0041 S1/W1, I2): 默认 opacity:0 / visibility:hidden, 按住反引号
+ * body.kbd-reveal 时切回可见。显/隐只用 opacity / visibility(不碰任何几何属性 —— 大列表
+ * 对强制同步重排敏感), 不加 transition。括号与整块一起切, 文字位置永不位移(I3)。
+ * !本规则块必须是文件里首个 .aq-kbd 选择器: 守阵 test_aq_kbd_css_four_skin_isomorphic
+ * 以「首个 .aq-kbd 规则块即共享基形」定位(详见下方页签版式注释)。 */
 .aq-kbd {
-  font: 500 11px/1 var(--font-mono);
-  color: var(--fg);
-  padding: 3px 7px;
-  border: 1px solid var(--border);
-  border-bottom-width: 2px;
-  background: var(--surface-2);
+  font: 11px/1 var(--font-mono);
+  color: var(--fg-dim);
   white-space: nowrap;
+  opacity: 0;
+  visibility: hidden;
 }
+.aq-kbd::before { content: "("; }
+.aq-kbd::after { content: ")"; }
+body.kbd-reveal .aq-kbd { opacity: 1; visibility: visible; }
 
 /* ---- 菜单键帽列版式(计划 26-11-12-0344 S2, I5 留白对齐) ----
  * .ctx-text 是行右键菜单项的 label 圈容器(ctx-menus.html 一级/次级两份骨架共用): flex 吃满
@@ -558,19 +565,20 @@
 .ctx-item .ctx-text { flex: 1 1 auto; min-width: 0; }
 .ctx-item .aq-kbd { flex: none; }
 
-/* ---- 抽屉页签键帽徽标版式(计划 26-11-12-0344 S4) ----
- * 页签按钮(.drawer-tabs button)是普通内联流(非 flex), 键帽沿 baseline 挂自带 2px 底边会探向
- * 页签自己的下划线 border-bottom —— 居中对齐; 按钮文本与 kbd 之间模板留了一个空格, 此处再补
- * 3px 左距凑成 ~7px 视觉间隙。只动版式不引令牌(I3); 无徽标(空串不渲染 kbd)时零占位。
+/* ---- 抽屉页签键帽徽标版式(计划 26-11-12-0344 S4 / 26-11-14-0041 S2 形态同步) ----
+ * 页签按钮(.drawer-tabs button)是普通内联流(非 flex), 键帽 S2 后是弱化括号纯文本(无底边);
+ * 按钮文本与 kbd 之间模板留了一个空格, 此处再补 3px 左距凑成 ~7px 视觉间隙, 并居中对齐到
+ * 页签文本 baseline。只动版式不引令牌(I3); 无徽标(空串不渲染 kbd)时零占位。
  * !本规则必须留在 .aq-kbd 基形(上方)之后: 守阵 test_aq_kbd_css_four_skin_isomorphic 以
  * 「文件里首个 .aq-kbd 规则块即共享基形」定位 —— 任何更早出现的该选择器(含注释, 花括号
  * 配平守阵按行计数不认注释)都会让它错位, 故注释里写「规则块」不带花括号。 */
 .drawer-tabs button .aq-kbd { vertical-align: middle; margin-left: 3px; }
 
-/* ---- 置灰行键帽随行(计划 26-11-12-0344 S2 增量, 用户拍板) ----
+/* ---- 置灰行键帽随行(计划 26-11-12-0344 S2 增量 / 26-11-14-0041 S2 形态同步) ----
  * dyn gate 置灰(ctx_menu.js ctxRenderItem 的 reannounceMenuGate 不满足 -> item.gated)时,
  * 整行走各皮肤 components.css 既有置灰链 `.ctx-menu .ctx-item.is-gated { color: var(--fg-dim) }`
- * (atlas/console/flux/prism 四份同文), 但键帽自带 .aq-kbd 基形 color: var(--fg) 会原地亮着,
- * 与灰行相顶 —— 此处让置灰行内键帽颜色随行走 --fg-dim。特异性 (0,4,0) 压过基形 (0,1,0),
- * 选择器与置灰链同口径(.ctx-menu 前缀 + .is-gated); 令牌纪律: 只用既有令牌 --fg-dim, 零新增。 */
+ * (atlas/console/flux/prism 四份同文)。S2 后 .aq-kbd 基形也已弱化到 --fg-dim, 与灰行天然同色;
+ * 本规则作为显式锚锁死置灰行键帽的弱化色, 防止任何皮肤专属 hover / 高对比覆盖把它抬回
+ * --fg(Q5 否 b); 特异性 (0,4,0) 压过基形 (0,1,0), 选择器与置灰链同口径(.ctx-menu + .is-gated)。
+ * 令牌纪律: 只用既有令牌 --fg-dim, 零新增。 */
 .ctx-menu .ctx-item.is-gated .aq-kbd { color: var(--fg-dim); }
