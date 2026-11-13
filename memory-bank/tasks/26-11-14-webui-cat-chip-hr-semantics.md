@@ -32,11 +32,11 @@
 
 | 步 | 内容 | 状态 |
 |---|---|---|
-| T1 | S1+S4-3: views.py 两分支 hr_category/hr_category_done + 键集单测(e68b64cb) | Done(2026-11-14) |
-| T2 | S2: catClass/hrExclClass/hrExclTip + 模板 5 处绑定 + 抽屉 2 行 + e2e 空桩(6f158caa) | Done(2026-11-14) |
-| T3 | S3: 四皮肤 CSS 镜像+hr-excl+行状态 :not() 让路(16d5febe) | Done(2026-11-14) |
-| T4 | S4: 静态守阵+ui_harness 桩+flux e2e 四断言+红绿双验(9ab337e7) | Done(2026-11-14) |
-| T5 | 接缝终审+hrExclTip 判定门单点化修复(c5ca4771) | Done(2026-11-14) |
+| T1 | S1+S4-3: views.py 两分支 hr_category/hr_category_done + 键集单测(f9c5c752) | Done(2026-11-14) |
+| T2 | S2: catClass/hrExclClass/hrExclTip + 模板 5 处绑定 + 抽屉 2 行 + e2e 空桩(ac554ba2) | Done(2026-11-14) |
+| T3 | S3: 四皮肤 CSS 镜像+hr-excl+行状态 :not() 让路(276458be) | Done(2026-11-14) |
+| T4 | S4: 静态守阵+ui_harness 桩+flux e2e 四断言+红绿双验(2ff9cf99) | Done(2026-11-14) |
+| T5 | 接缝终审+hrExclTip 判定门单点化修复(cd14ffe6) | Done(2026-11-14) |
 | S6 | 收尾 DoD(评审/回写/基线/issue 翻状态) | Done(2026-11-14) |
 | S5 | 真机目检(四皮肤×三态×行状态×组行×抽屉) | Open |
 
@@ -44,7 +44,7 @@
 
 ### R0 · 立档+实施收口 (2026-11-14)
 
-- 五笔本地提交 e68b64cb→c5ca4771 全部走分批评审(检 P/T 逐批过 review.check, T3 两条 nit 与 T1 一条 nit 不阻塞留痕), 接缝终审 1 minor(hrExclTip 双实现)已修并复评零新增。
+- 五笔提交 f9c5c752→cd14ffe6 全部走分批评审(检 P/T 逐批过 review.check, T3 两条 nit 与 T1 一条 nit 不阻塞留痕), 接缝终审 1 minor(hrExclTip 双实现)已修并复评零新增。
 - 全量与守阵: test.full 全绿(见 kb.baseline 26-11-14-0348); 新守阵 test_frontend_cat_chip_hr_semantics_css + flux e2e 四断言(红绿双验留痕在基线切片)。
 - 真机自检: S5 真机目检按用户拍板(2026-11-14 会话)留待用户执行, 本轮按纯桩+e2e 验收, 属「观感面用户肉眼判断」豁免; 档案子任务表 S5 保持 Open。
 - 回写: issue 26-11-12-1037 翻 Done + 补实际修法; 计划翻 Done; 坑档 css-file-line-cap 复发+1(为什么没命中: 计划侦查面未路由到 web-ui 坑档, 实施子代理被守阵红拦下后照坑档口径自行处置); 新坑档 py 注释带圈数字撞 ASCII 守卫。

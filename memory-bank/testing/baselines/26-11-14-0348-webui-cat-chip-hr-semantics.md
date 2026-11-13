@@ -5,7 +5,7 @@
 
 ## 验收数字
 
-`commands run test.full` 实测(2026-11-14 03:45, clone2 本机, 计划 26-11-14-0001 S1-S4 五笔提交 e68b64cb..c5ca4771 收尾):
+`commands run test.full` 实测(2026-11-14 03:45, clone2 本机, 计划 26-11-14-0001 S1-S4 五笔提交 f9c5c752..cd14ffe6 收尾):
 
 - 汇总行: `6102 passed, 2 skipped in 147.42s (0:02:27)`
 - TOTAL 表: `27115 stmts / 65 miss / 9480 branch / 69 miss / 99%`
@@ -19,21 +19,21 @@
 ## 本改动面
 
 - `src/auto_qb/webui/views.py` — hr_view_fields 两分支各 +2 现算键 hr_category/hr_category_done
-  (S1, e68b64cb)。
+  (S1, f9c5c752)。
 - `tests/test_web_hr_views.py` — 两分支键集恒等 + 排除种子空串 + 三种子分类键断言(S4-3,
   随 S1 同笔)。
-- `src/auto_qb/webui/static/shared/decorate.js` — +catClass/hrExclClass(S2, 6f158caa)。
+- `src/auto_qb/webui/static/shared/decorate.js` — +catClass/hrExclClass(S2, ac554ba2)。
 - `src/auto_qb/webui/static/shared/hr.js` — +hrExclTip(判定门单点复用 hrExclClass, 终审修复
-  c5ca4771)。
+  cd14ffe6)。
 - `src/auto_qb/webui/static/shared/tpl/xtpl-cells.html` / `xtpl.html` — 组行/torrent/member
   行 cat+tag 5 处 :class/:title 绑定(S2)。
 - `src/auto_qb/webui/static/shared/drawer_tpl/01-general-hero-tall.js` — 抽屉 hero HR 分类
   chip 2 行(S2)。
 - `e2e/drawer-general-variants.spec.mjs` — 桩补 hr_category/hr_category_done 空键(S2)。
 - 四皮肤 CSS(flux/atlas/console components.css + prism views.css) — cat-chip.hr-* 镜像 +
-  hr-excl 合并规则 + 行状态 :not() 让路(S3, 16d5febe; flux/atlas 恰 700 行、prism 恰 818 行
+  hr-excl 合并规则 + 行状态 :not() 让路(S3, 276458be; flux/atlas 恰 700 行、prism 恰 818 行
   达体量守阵冻结值)。
 - `tests/test_webui_static_skins_widget.py` — +test_frontend_cat_chip_hr_semantics_css
-  (S4, 9ab337e7)。
+  (S4, 2ff9cf99)。
 - `scripts/ui_harness.py` — +_inject_hr_category 桩注入(S4)。
 - `e2e/flux-cat-chip-hr-semantics.spec.mjs` — 新 spec, computed 判据四断言(S4)。
