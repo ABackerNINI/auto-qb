@@ -6,7 +6,8 @@
 - test_under_alias_root_dual_criteria: 等值 OR 前缀双判据(N5: save_path 恰等于根必须命中);
   前缀同串兄弟目录不误伤; 门外不命中; 空路径 None
 - test_chain_gate_hits_scan: 门外共享者零依赖 / 等值+前缀命中混合 / 空 save_path 跳过
-- test_alias_roots_of_filters: 终态 / direct(无别名) / 无链接记录的 job 不进拦截根集
+- test_alias_roots_of_filters: 终态 / direct(无别名) / 无链接记录的 job 不进拦截根集;
+  R3 条目随带形态与链接账(四元组单点产出, 计划 26-11-13-0448 §03 R3)
 ### 核验三分(_step_verify)
 - test_step_verify_all_pass_zero_deps_finalizes: 全员 save_path == dst + 删链门零依赖 →
   在线删别名 + 终态 done + journal 落 done + alias_paths 清空
@@ -24,12 +25,21 @@
 - test_chain_gate_deps_scope_anchor_and_member_exempt: 本组成员豁免(嵌套放行形态 dst ⊆ scope
   不再自锁)/ 组外 scope 内保守计数(等值+前缀双向)/ scope 外不计(旧根兄弟停车假依赖修)/
   旧账 scope 缺失回落 job.src
+### 删链门 R2 形态感知 verdict(计划 26-11-13-0448 §03 R2, D4)
+- test_chain_gate_deps_file_kind_intersection_verdict: 文件级 job verdict 换「文件清单 x
+  alias_paths 交集」—— 相交(同名撞链接路径/等值面平铺同名 E3 形态) = 依赖 / 不相交
+  (组外异名, 等值面+前缀面候选) = 豁免(误拦1 修正面) / 不可得(取数抛错/空清单) =
+  保守计依赖(宁拦勿漏 E8) / 目录级与 direct 零变化 / 本组 hash 豁免不变
 ### D16 删种拦截(qbapi.torrents_delete 单点, 两条删除路径共用判据)
 - test_qbapi_delete_guard_blocks_delete_files: 目录别名形态(junction 根=src)——等值与前缀
   成员都拦(整批不发 qB, 文案带解法); delete_files=False(纯删除)放行
-- test_qbapi_delete_guard_file_links_form: 文件级形态(scope==src)同判据拦截(文件级 symlink
-  deleteFiles 跟随直删)
+- test_qbapi_delete_guard_file_links_form: 文件级形态(成员/同名撞链接)相交拦(文件级
+  symlink deleteFiles 跟随直删; R3 后放行面单测在 file_kind_intersection 行)
 - test_qbapi_delete_guard_allows_outside_and_unregistered: 门外种子放行; 无活动别名登记放行
+- test_qbapi_delete_guard_file_kind_intersection_verdict: R3 文件级 verdict(计划
+  26-11-13-0448 §03 R3)—— 不相交(组外异名带文件)放行 / 相交(成员/同名撞链接根)拦 /
+  不可得(取数抛错/空清单)保守拦 / 目录级全量拦原样 / 多根重叠两序仍拦(file 豁免根
+  不短路 dir 全量拦, 评审轮 1 修 1) / 登记旧形(str)按目录级保守拦(兼容面)
 - test_qbapi_delete_guard_allows_probe_tagged_seeds: 探测种子(tag 含 TAG_PROBE)落在活动别名
   根下也放行(评审 #5, 自造探针非组成员数据; 拦截会让探测清理 deleteFiles 恒失败)/ 普通种子
   同根仍拦
@@ -79,14 +89,14 @@ def test_chain_gate_hits_scan():
 
 
 def test_alias_roots_of_filters():
-    """活动别名根集只收「非终态 + 有别名形态 + 账上有链接记录」的 job"""
+    """活动别名根集只收「非终态 + 有别名形态 + 账上有链接记录」的 job; R3 条目随带形态与链接账"""
     jobs = [
         _job("j1", phase=ru.PHASE_ARMED, alias_kind="dir", alias_paths=("R:/src/l", )),
         _job("j2", phase=ru.PHASE_DONE, alias_kind="dir", alias_paths=("R:/x", )),  # 终态: 不拦
         _job("j3", phase=ru.PHASE_ARMED, alias_kind="", alias_paths=()),  # direct: 无别名
         _job("j4", phase=ru.PHASE_MOVING, alias_kind="file", alias_paths=()),  # 链接未建: 不拦
     ]
-    assert ru.alias_roots_of(jobs) == (("R:/src", "j1"), ), ru.alias_roots_of(jobs)
+    assert ru.alias_roots_of(jobs) == (("R:/src", "j1", "dir", ("R:/src/l", )), ), ru.alias_roots_of(jobs)
 
 
 # ---------------------------------------------------------------- 核验三分(_step_verify)
@@ -94,6 +104,22 @@ def test_alias_roots_of_filters():
 
 def _rec(h, save_path):
     return types.SimpleNamespace(hash=h, save_path=save_path, state="pausedUP")
+
+
+def _rec_files(h, save_path, names=(), files_error=False):
+    """带文件清单替身的记录(R2/R3 交集判据取数面): files(client) 回 canned 清单
+    (name/size SimpleNamespace 形, 同 helpers._fake_file)或抛错(取数失败 -> 判据按不可得
+    保守计依赖/拦)。log_repr 与生产 TorrentRecord 对齐(_file_map 失败日志引用它)。"""
+    rec = types.SimpleNamespace(hash=h, save_path=save_path, state="pausedUP", log_repr=h)
+    if files_error:
+
+        def _boom(client):
+            raise RuntimeError("files api down")
+
+        rec.files = _boom
+    else:
+        rec.files = lambda client: [types.SimpleNamespace(name=n, size=1) for n in names]
+    return rec
 
 
 def _rewritten_env(tmp_path, members, *, extra=(), alias_paths=("R:/src/l", ), replays=0):
@@ -267,6 +293,51 @@ def test_chain_gate_deps_scope_anchor_and_member_exempt(tmp_path):
     assert _deps(legacy, [("HZ", "R:/src/停车")]) == ["HZ"], "scope 缺失回落 src(旧账兼容)"
 
 
+def test_chain_gate_deps_file_kind_intersection_verdict(tmp_path):
+    """R2 文件级删链门 verdict 交集判据(计划 26-11-13-0448 §03 R2, D4)
+
+    命中面(scope 等值/前缀 + src 等值面)只是候选; 文件级 job(alias_kind="file")最终判定 =
+    「文件清单 x job.alias_paths 交集」: 相交 = 依赖 / 不相交(组外异名) = 豁免(误拦1 修正面) /
+    不可得(取数抛错/空清单) = 保守计依赖(宁拦勿漏, E8 口径); 本组 hash 豁免不变。
+    """
+    mod = _bare_mod(data_dir=str(tmp_path / "data"))
+
+    def _deps(job, records):
+        mod._ctx.store = types.SimpleNamespace(by_hash={h: r for h, r in records}, relocating_hashes=set())
+        return [h for h, _sp in mod._chain_gate_deps(job)]
+
+    # 文件级 job: src=R:/src, scope=R:/src/Show, 链接账 = 内容根下 e00.mkv(嵌套成员形)
+    fjob = _job(
+        "j1",
+        phase=ru.PHASE_REWRITTEN,
+        hashes=("HA", ),
+        alias_kind="file",
+        alias_paths=("R:/src/Show/e00.mkv", ),
+        scope="R:/src/Show",
+    )
+    # 相交(同名撞链接路径): 组外种子停 scope 等值面, 清单含链接同名文件 -> 依赖
+    assert _deps(fjob, [("HZ", _rec_files("HZ", "R:/src/Show", ("e00.mkv", )))]) == ["HZ"], "同名撞链接 = 依赖"
+    # 相交(E3 同名跨种形态): 组外种子恰等 src(等值面候选), 平铺同名文件 landing 撞链接 -> 依赖
+    assert _deps(fjob, [("HZ", _rec_files("HZ", "R:/src", ("Show/e00.mkv", )))]) == ["HZ"], "E3 同名跨种 = 依赖"
+    # 不相交(组外异名, 误拦1 修正面): 恰等 src + 清单与链接无交集 -> 豁免(R2 前 = 恒依赖)
+    assert _deps(fjob, [("HZ", _rec_files("HZ", "R:/src", ("other.bin", )))]) == [], "组外异名(等值面) = 豁免"
+    # 不相交: 前缀面候选(scope 之下)同样过交集精判, 异名豁免
+    assert _deps(fjob, [("HZ", _rec_files("HZ", "R:/src/Show/g2", ("deep.bin", )))]) == [], "组外异名(前缀面) = 豁免"
+    # 不可得(取数抛错): 候选命中 + 清单拿不到 -> 保守计依赖(宁拦勿漏, E8)
+    assert _deps(fjob, [("HZ", _rec_files("HZ", "R:/src", files_error=True))]) == ["HZ"], "取数失败 = 保守计依赖"
+    # 不可得(空清单): 同保守
+    assert _deps(fjob, [("HZ", _rec_files("HZ", "R:/src", ()))]) == ["HZ"], "空清单 = 保守计依赖"
+    # 本组豁免不变: 成员 hash 即使清单不相交也先按 hash 豁免(身份语义, 与路径无关)
+    assert _deps(fjob, [("HA", _rec_files("HA", "R:/src", ("other.bin", )))]) == [], "成员 hash 豁免承重"
+    # 目录级零变化: 命中即依赖, 不看文件清单(异名也拦, D16 契约面)
+    djob = _job("j2", phase=ru.PHASE_REWRITTEN, hashes=("HA", ), alias_kind="dir", scope="R:/src/Show")
+    assert _deps(djob, [("HZ", _rec_files("HZ", "R:/src/Show", ("other.bin", )))]) == ["HZ"], "目录级命中即依赖"
+    assert _deps(djob, [("HZ", _rec_files("HZ", "R:/src", ("other.bin", )))]) == ["HZ"], "目录级等值面保留"
+    # direct(无别名)零变化(issue 26-11-13-0711): 命中面照算, 不走交集判据
+    direct = _job("j3", phase=ru.PHASE_REWRITTEN, hashes=("HA", ), alias_kind="", scope="R:/src/Show")
+    assert _deps(direct, [("HZ", _rec_files("HZ", "R:/src/Show", ("other.bin", )))]) == ["HZ"], "direct 行为零变化"
+
+
 # ---------------------------------------------------------------- D16 删种拦截(qbapi 单点)
 
 
@@ -292,13 +363,14 @@ def _guard_api(records, roots=None):
 
 
 def test_qbapi_delete_guard_blocks_delete_files():
-    """目录别名形态(根=src): 等值与前缀命中都拦(整批不发 qB); 纯删除(delete_files=False)放行"""
+    """目录别名形态(根=src): 等值与前缀命中都拦(整批不发 qB); 纯删除(delete_files=False)放行
+    (R3 后目录级全量拦原样, D6; 登记值 = (job_id, alias_kind, alias_paths) 新形)"""
     records = {
         "HA": _rec("HA", r"R:\src"),  # 等值(N5 形态)
         "HB": _rec("HB", r"R:\src\sub"),  # 前缀
         "HZ": _rec("HZ", r"R:\elsewhere"),  # 门外
     }
-    api, client = _guard_api(records, {r"R:\src": "j1"})
+    api, client = _guard_api(records, {r"R:\src": ("j1", "dir", ())})
     with pytest.raises(DeleteBlockedError) as ei:
         api.torrents_delete(torrent_hashes=["HA", "HB", "HZ"], delete_files=True)
     assert [b[0] for b in ei.value.blocked] == ["HA", "HB"], ei.value.blocked
@@ -313,11 +385,84 @@ def test_qbapi_delete_guard_blocks_delete_files():
 
 
 def test_qbapi_delete_guard_file_links_form():
-    """文件级形态(scope==src): 同一根判据拦截(文件级 symlink deleteFiles 跟随直删, D16)"""
-    records = {"HA": _rec("HA", "R:/src")}
-    api, client = _guard_api(records, {"R:/src": "j9"})
+    """文件级形态(成员/同名撞链接): 相交拦(文件级 symlink deleteFiles 跟随直删, D16);
+    R3 后的放行面(组外异名不相交)单测在 test_qbapi_delete_guard_file_kind_intersection_verdict"""
+    records = {"HA": _rec_files("HA", "R:/src", ("l", ))}
+    api, client = _guard_api(records, {"R:/src": ("j9", "file", ("R:/src/l", ))})
     with pytest.raises(DeleteBlockedError):
         api.torrents_delete(torrent_hashes=["HA"], delete_files=True)
+    assert not any(c[0] == "delete" for c in client.calls)
+
+
+def test_qbapi_delete_guard_file_kind_intersection_verdict():
+    """R3 文件级 D16 verdict 交集判据(计划 26-11-13-0448 §03 R3, D4/D6)
+
+    候选面不变(save_path 在登记根等值/前缀面); 文件级 verdict 换「文件清单 x alias_paths
+    交集」—— 不相交(组外异名带文件, 误拦2 修正面)放行 / 相交(成员身份面/同名撞链接根
+    E3 形态)拦 / 清单不可得(取数抛错/空清单)保守拦(宁拦勿漏, E8) / 目录级全量拦原样
+    (N5 junction 通路) / 多根重叠两序仍拦(任一后根命中即拦, 目录级全量拦不被先扫到的
+    file 豁免根短路, 评审轮 1 修 1) / 登记旧形(str)按目录级保守拦(兼容面)。
+    """
+    # 放行: 组外异名带文件, 清单与链接不相交(R3 修正面 —— R3 前该形态被拦)
+    records = {"HZ": _rec_files("HZ", "R:/src", ("other.bin", ))}
+    api, client = _guard_api(records, {"R:/src": ("j9", "file", ("R:/src/rlfn.bin", ))})
+    api.torrents_delete(torrent_hashes=["HZ"], delete_files=True)
+    assert ("delete", True) in client.calls, "组外异名带文件删除必须放行(R3)"
+    # 拦: 成员身份面(清单与链接全等)
+    client.calls.clear()
+    api.store._records["HA"] = _rec_files("HA", "R:/src", ("rlfn.bin", ))
+    with pytest.raises(DeleteBlockedError) as ei:
+        api.torrents_delete(torrent_hashes=["HA"], delete_files=True)
+    assert [b[0] for b in ei.value.blocked] == ["HA"] and ei.value.blocked[0][2] == "j9", ei.value.blocked
+    assert not any(c[0] == "delete" for c in client.calls), "整批不发 qB"
+    # 拦: 同名撞链接根(E3 同名跨种形态, 嵌套成员形)
+    client.calls.clear()
+    api.store._records["HB"] = _rec_files("HB", "R:/src", ("Show/e00.mkv", ))
+    api.store.relocating_alias_roots = {"R:/src": ("j9", "file", ("R:/src/Show/e00.mkv", ))}
+    with pytest.raises(DeleteBlockedError):
+        api.torrents_delete(torrent_hashes=["HB"], delete_files=True)
+    assert not any(c[0] == "delete" for c in client.calls)
+    # 保守拦: 清单不可得(取数抛错 / 空清单) -> 宁拦勿漏(E8)
+    for bad in (_rec_files("HX", "R:/src", files_error=True), _rec_files("HX", "R:/src", ())):
+        client.calls.clear()
+        api.store._records["HX"] = bad
+        with pytest.raises(DeleteBlockedError):
+            api.torrents_delete(torrent_hashes=["HX"], delete_files=True)
+        assert not any(c[0] == "delete" for c in client.calls), "清单不可得必须保守拦"
+    # 目录级原样: 全量拦(清单不相交也拦, N5 junction 通路)
+    client.calls.clear()
+    api.store._records["HD"] = _rec_files("HD", "R:/src", ("other.bin", ))
+    api.store.relocating_alias_roots = {"R:/src": ("j1", "dir", ())}
+    with pytest.raises(DeleteBlockedError):
+        api.torrents_delete(torrent_hashes=["HD"], delete_files=True)
+    assert not any(c[0] == "delete" for c in client.calls)
+    # 多根重叠(评审轮 1 修 1): save_path 同时落在 file 根(不相交)与 dir 根(前缀)之下,
+    # file 根在前 -> 豁免只跳过该根, 后面的 dir 根仍必须拦(评审员实复现的序敏感放行洞)
+    client.calls.clear()
+    api.store._records["HZ"] = _rec_files("HZ", "R:/src/d1/z.bin", ("z.bin", ))
+    api.store.relocating_alias_roots = {
+        "R:/src": ("jA", "file", ("R:/src/rlfn.bin", )),
+        "R:/src/d1": ("jB", "dir", ()),
+    }
+    with pytest.raises(DeleteBlockedError) as ei:
+        api.torrents_delete(torrent_hashes=["HZ"], delete_files=True)
+    assert ei.value.blocked[0][1:] == ("R:/src/d1", "jB"), ei.value.blocked
+    assert not any(c[0] == "delete" for c in client.calls)
+    # 反序: dir 根在前(file 根在后) -> 同样拦(两序钉死, 防序敏感回归)
+    client.calls.clear()
+    api.store.relocating_alias_roots = {
+        "R:/src/d1": ("jB", "dir", ()),
+        "R:/src": ("jA", "file", ("R:/src/rlfn.bin", )),
+    }
+    with pytest.raises(DeleteBlockedError) as ei2:
+        api.torrents_delete(torrent_hashes=["HZ"], delete_files=True)
+    assert ei2.value.blocked[0][1:] == ("R:/src/d1", "jB"), ei2.value.blocked
+    assert not any(c[0] == "delete" for c in client.calls)
+    # 兼容面: 登记值旧形(str job_id)形态不可判 -> 目录级保守拦(与 R3 前判据同口径)
+    client.calls.clear()
+    api.store.relocating_alias_roots = {"R:/src": "j-old"}
+    with pytest.raises(DeleteBlockedError):
+        api.torrents_delete(torrent_hashes=["HD"], delete_files=True)
     assert not any(c[0] == "delete" for c in client.calls)
 
 
@@ -340,7 +485,8 @@ def test_qbapi_delete_guard_allows_probe_tagged_seeds():
 
     probe = types.SimpleNamespace(hash="HP", save_path=r"R:\src\probe-x", tags_set=frozenset({TAG_PROBE}))
     normal = _rec("HA", r"R:\src")  # 无 tags_set 属性(旧形态替身也判得出: 非探针)
-    api, client = _guard_api({"HP": probe, "HA": normal}, {r"R:\src": "j1"})
+    api, client = _guard_api({"HP": probe, "HA": normal}, {r"R:\src": ("j1", "dir", ())})  # 生产新形
+    # (评审轮 1 修 4; str 旧形兼容面由 webui 删除命令两用例与本文件 intersection 用例尾行覆盖)
     api.torrents_delete(torrent_hashes=["HP"], delete_files=True)  # 探针: 放行
     assert ("delete", True) in client.calls
     with pytest.raises(DeleteBlockedError) as ei:  # 普通成员种子同根: 照拦

@@ -811,7 +811,9 @@ def test_relocate_module_precheck_add(tmp_path):
     r = mod.precheck_add(src, "Late.Show")
     assert r["cls"] == "confirm" and r["reasons"][0]["gate"] == "finalize_window"
     # 同名链接覆盖(前段相位 moved): 落点是真硬链接 -> confirm alias_file
-    # (收尾窗相位下同名落点由分支 1 finalize_window 先行拦截 —— D16 判据只看 save_path==src)
+    # (前段相位不进分支 1 finalize_window; 收尾窗判据已形态感知(计划 26-11-13-0448 R1-R3):
+    #  添加预检目录级双面真值/文件级落点名判定, 删种拦截 R3 文件级按「文件清单 x alias_paths
+    #  交集」精判、目录级全量拦保留)
     mod._jobs.clear()
     mod.register_job(
         RelocateJob(

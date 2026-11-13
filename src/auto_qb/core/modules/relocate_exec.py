@@ -996,9 +996,11 @@ class ExecMixin:
           重放一次后仍不过则维持悬挂+告警(防无限改写循环, 保守节奏)。
         - 删链门(N5 教训): 扫 qB 全量种子的 save_path(不限于本组)——「save_path == 别名
           作用域(等值)或位于其下(前缀)」双判据(判据单点 ru.under_alias_root; R7 重锚
-          job.src → job.scope + 本组成员豁免, 计划 26-11-07-1300 D9), 命中=0(含组外共享者
-          零依赖)→ 主循环在线删别名(alias_fs.remove_alias 非递归绝不跟随)+
-          job 终态 done; 命中>0 → 维持别名, 依赖未清零永不删, 反馈面给出解法文案。
+          job.src → job.scope + 本组成员豁免, 计划 26-11-07-1300 D9), 命中面为候选,
+          文件级 job 再按「文件清单 x alias_paths 交集」精判 verdict(R2, 计划
+          26-11-13-0448 §03 R2, 见 _chain_gate_deps), 命中=0(含组外共享者零依赖)→ 主循环
+          在线删别名(alias_fs.remove_alias 非递归绝不跟随)+ job 终态 done; 命中>0 →
+          维持别名, 依赖未清零永不删, 反馈面给出解法文案。
         """
         bad = [(h, self._verify_member_state(h, job)) for h in job.hashes if not self._member_at_dst(h, job)]
         if bad:
@@ -1069,13 +1071,36 @@ class ExecMixin:
         (保守, 与旧锚同口径)。等值面并列 job.src(R7 评审修复): dir_alias 收尾窗内经别名
         落进作用域的组外种子账面 save_path 恰等 job.src —— 只按 scope 前缀判会漏计(D16
         契约对齐, 误放删链 = 该种子断粮)。
+        形态感知 verdict(R2, 计划 26-11-13-0448 §03 R2, D4): chain_gate_hits 命中面只是
+        **候选**(scope 前缀 + src 等值面预过滤, 便宜, files API 只对候选取数); 文件级
+        job(alias_kind="file")的最终判定换「文件清单 x job.alias_paths 交集」谓词
+        (ru.file_alias_intersects 单点)—— 相交 = 依赖, 不相交(组外异名, 数据落原盘真实
+        目录不经别名) = 豁免, 清单不可得(取数失败/空表/client 缺席) = 保守计依赖(宁拦
+        勿漏, E8 口径); 取数走 PlanMixin._file_map 既有缓存单点(TorrentRecord.files 惰性
+        缓存; 本类与 PlanMixin 同属 RelocateModule 的 MRO, self._file_map 即该方法本体,
+        无第二份取数口径)。目录级与 direct(无别名)维持命中即依赖原样
+        (direct 判据面零变化 —— issue 26-11-13-0711)。
         """
         anchor = job.scope or job.src
         members = set(job.hashes)
         records = list(self._ctx.store.by_hash.values())
         save_paths = [getattr(r, "save_path", "") or "" for r in records]
         hits = set(ru.chain_gate_hits(save_paths, anchor, equal_root=job.src))
-        return [(r.hash, sp) for r, sp in zip(records, save_paths) if sp in hits and r.hash not in members]
+        if not hits:
+            return []
+        file_job = job.alias_kind == "file"
+        api = getattr(self._ctx, "api", None)
+        client = getattr(api, "client", None) if api is not None else None
+        deps = []
+        for r, sp in zip(records, save_paths):
+            if sp not in hits or r.hash in members:
+                continue
+            if file_job:
+                fmap = self._file_map(r, client)
+                if ru.file_alias_intersects(sp, list(fmap.keys()), job.alias_paths) is False:
+                    continue  # R2 交集豁免: 组外异名种子数据不经别名, 不是删链门依赖
+            deps.append((r.hash, sp))
+        return deps
 
     def _chain_deps_text(self, job: RelocateJob, deps: list) -> str:
         """删链门依赖的反馈面文案(数量 + 样例 + 解法; R7 锚口径 = 别名作用域 + 旧根等值面)"""

@@ -851,14 +851,13 @@ def evaluate_add(facts: AddFacts) -> dict:
          是唯一预防面;
        - 文件级别名: 旧根是真实目录, 别名只是成员内容里的逐文件链接 —— 落点按名字判定:
          (1) 撞链接路径(同名文件, §3.6 场景 2/3)confirm; (2) 撞成员链接根(alias_paths 在
-         src 下第一段派生; 同名目录碰撞在此接住)confirm(保守); (3) 其余(异名)静默放行
-         (场景 1: 数据落原盘真实目录, 不经别名、不依赖别名), 惟 save_path 恰等 src 的等值面
-         临时 confirm —— R2 交集判据落地(计划 26-11-13-0448 §03 R2)前收尾窗删链门等值面
-         (_chain_gate_deps equal_root=src)仍计依赖, 放行会收尾恒悬挂; 文案/actual 同
-         目录级等值面口径(临时面: R2 交集判据落地后由放行闭合)。磁力/URL/NoSubfolder 布局
-         不可判定不作第四分支 —— 残余碰撞由执行侧背网兜住(跨组交叉检测 = 场景 3 处置;
-         同名共享 = 删链门交集判依赖)。账面不可得(alias_paths 空/解析不出根)⇒ 保守
-         confirm 不猜「异名」(宁拦勿漏); 落点是账外链接(第三方/他组)交分支 4 拦;
+         src 下第一段派生; 同名目录碰撞在此接住)confirm(保守); (3) 其余(异名, 含
+         save_path 恰等 src 的等值面)静默放行(场景 1: 数据落原盘真实目录, 不经别名、
+         不依赖别名) —— 残余同名碰撞由删链门交集判据按文件清单精判依赖(R2, 计划
+         26-11-13-0448 §03 R2; 等值面临时守卫已随 R2 落地翻转闭合放行)。磁力/URL/
+         NoSubfolder 布局不可判定不作第四分支 —— 残余碰撞由执行侧背网兜住(跨组交叉检测 =
+         场景 3 处置; 同名共享 = 删链门交集判依赖)。账面不可得(alias_paths 空/解析不出根)
+         ⇒ 保守 confirm 不猜「异名」(宁拦勿漏); 落点是账外链接(第三方/他组)交分支 4 拦;
        - direct(无别名): 判据维持旧面(恰等 src)不变;
     2. 目录别名作用域命中(前段相位 moved): 一切落点被重定向到 T ⇒ confirm(展示实际落点
        与目标卷剩余);
@@ -882,8 +881,9 @@ def evaluate_add(facts: AddFacts) -> dict:
     # 第一维: 目录级判据双面真值 = 恰等 src(删链门等值面)或 landing 落在 anchor(scope
     # or src, junction 所在内容根 = 真重定向面); 重定向面 actual 按真实落点算(dst 侧
     # scope 镜像 + rel-to-anchor), 等值面展示账面建模镜像根且文案分流(不经别名); 文件级
-    # 按落点名字判定: (1)(2) confirm / (3) 异名放行(save_path 恰等 src 的等值面由临时守卫
-    # 先拦 confirm, R2 交集判据落地前承重, 见下)。
+    # 按落点名字判定: (1)(2) confirm / (3) 异名放行(含 save_path 恰等 src 的等值面 ——
+    # R2 交集判据落地(计划 26-11-13-0448 §03 R2)后删链门按文件清单精判依赖,
+    # 等值面临时守卫已翻转闭合)。
     # (3) 的 ok 不即刻返回: 先扫完其余 job 的 confirm 面(宁拦勿漏), 全部无交叉才静默放行。
     finalize_ok = False  # 有文件级 job 认领本次落点且判定「异名无交叉」(§3.6 场景 1)
     link_pending = False  # 落点是链接但不在任一认领 job 账上(第三方/他组): 不可判「异名」
@@ -993,28 +993,8 @@ def evaluate_add(facts: AddFacts) -> dict:
                 # 落点是链接但不在本 job 账上(第三方/他组): 不可判「异名」, 交分支 4 拦
                 link_pending = True
                 continue
-            if _norm(facts.save_path) == _norm(job.src):
-                # 临时面: R2 交集判据落地(计划 26-11-13-0448 §03 R2)后由放行闭合 ——
-                # save_path 恰等 src 账面必记旧根, 收尾窗删链门等值面(_chain_gate_deps
-                # equal_root=job.src, R2 落地前未改交集判据)仍把该种子计依赖, 预检放行会收尾恒
-                # 悬挂(REASON_CHAIN_DEPS, 文案失实); R2 落地前按目录级等值面同款 confirm
-                # 承重(文案/actual/notes 同一口径, 不另造第二份)。
-                anchor = job.scope or job.src
-                actual = _join(_join(job.dst, _rel_under(anchor, job.src)), _rel_under(landing, anchor))
-                text = (
-                    f"该目录的迁移待收尾(job {job.job_id} 相位 {job.phase}, 数据已迁到 {job.dst}): "
-                    f"新种子账面将记在旧根 {job.src} —— 成为删链门等值面依赖(旧路径别名将永不删除)"
-                    " —— 请等 qB 重启收尾完成后再添加, 或确认接受依赖后继续"
-                )
-                return {
-                    **base,
-                    "cls": CLS_CONFIRM,
-                    "actual_path": actual,
-                    "volume_free": facts.target_free,
-                    "reasons": [_reason("finalize_window", CLS_CONFIRM, text)],
-                    "notes": [f"目标卷剩余 {facts.target_free} 字节" if facts.target_free is not None else "目标卷剩余不可判定"],
-                }
-            finalize_ok = True  # (3) 异名候选(§3.6 场景 1) —— 继续扫其余 job 的 confirm 面
+            finalize_ok = True  # (3) 异名候选(§3.6 场景 1, 含 save_path 恰等 src 的等值面:
+            # R2 交集判据落地后删链门按文件清单精判依赖, 等值面不再是账面依赖面) —— 继续扫其余 job 的 confirm 面
             continue
         # 其余形态(direct, 无别名): 判据维持旧面(恰等 src), 形态感知分流不扩 direct
         if _norm(facts.save_path) == _norm(job.src):
@@ -1438,18 +1418,56 @@ def under_alias_root(path: str, roots: Iterable[str]) -> Optional[str]:
     return None
 
 
+def file_alias_intersects(save_path: str, files: Sequence[str], alias_paths: Sequence[str]) -> Optional[bool]:
+    """「候选种子文件清单 x job.alias_paths 交集」判据(R2 删链门 / R3 删种拦截共用谓词,
+    计划 26-11-13-0448 §03 R2/R3, D4; 单点纯函数)
+
+    文件级别名形态下, 组外种子是否真依赖/真穿链接, 由「它的文件清单落点是否撞 job 落账的
+    链接路径集」精判: 相交 = True(成员身份面 / 同名跨种共享, E3 实证必判依赖), 不相交 =
+    False(组外异名的数据落原盘真实目录, 不经别名 —— 两单误拦的修正面), 清单不可得 =
+    None(调用侧**保守计依赖/拦**, 宁拦勿漏 —— §01 设计底线, 绝不猜「不相交」)。
+
+    输入口径:
+    - save_path: 候选种子 qB 账面 save_path(缺失/空 = 不可判 -> None);
+    - files: 该种子 files API 相对路径清单(qB 风格正斜杠)。E7a/E7b 实证(报告
+      26-11-13-0617): FILE_LINKS 成员与 NoSubfolder 剥根形态的 files API 名单都与磁盘
+      逐项一致, 平铺形态**不带 info 根前缀** —— 本谓词直接 _join(save_path, rel) 绝对化,
+      无需剥根校正; 空清单 = 取数失败形态 -> None;
+    - alias_paths: job 落账的绝对链接路径集(armed 落账必非空; 空/条目全空串 = 账面异常
+      -> None)。
+    归一走 _norm 单点(斜杠统一 + normcase 平台折叠)后求交。纯函数不触盘、不读 qB;
+    取数在调用侧(relocate_exec 走 PlanMixin._file_map 缓存单点 / qbapi 走
+    TorrentRecord.files 同一惰性缓存)。!判空一律按原文(空串): _norm("") 底层 normpath
+    恒返回 "." 恒真值(issue 26-11-05-0200 同款防御支), save_path 与 alias_paths 条目都
+    不能拿 _norm 真值当判据(评审轮 1 修 3: 条目死过滤会让全空账混进 links 返回 False
+    豁免, 违背保守契约)。
+    """
+    if not files or not str(save_path or "").strip():
+        return None
+    links = {_norm(ap) for ap in alias_paths or () if str(ap or "").strip()}
+    if not links:
+        return None  # 账面异常(armed 落账必非空, 空条目混入同口径): 保守, 不猜「不相交」
+    for rel in files:
+        if _norm(_join(save_path, str(rel))) in links:
+            return True
+    return False
+
+
 def alias_roots_of(jobs: Iterable[RelocateJob]) -> tuple:
-    """活动别名根集(删种拦截 D16 的数据源; 纯函数): [(src, job_id), ...]
+    """活动别名根集(删种拦截 D16 的数据源; 纯函数): [(src, job_id, alias_kind, alias_paths), ...]
 
     只有**确实建过别名**的非终态 job 才拦: alias_kind 非空(direct 单成员组无别名不拦)
     且 alias_paths 非空(账上有链接记录 —— moving 相位别名尚未建, 不拦; 链接随 moved
     建成后进入拦截, 直到终态随 _sync_relocating 退出登记)。
+    R3(计划 26-11-13-0448 §03 R3): 条目随带 alias_kind/alias_paths —— 拦截侧文件级 job
+    的 verdict 换「文件清单 x alias_paths 交集」谓词(file_alias_intersects)按形态精判,
+    目录级维持全量拦; 四元组在本单点一次产出, 登记与判据不造第二份口径。
     """
     out = []
     for job in jobs or ():
         if job.is_terminal or not job.alias_kind or not job.alias_paths:
             continue
-        out.append((job.src, job.job_id))
+        out.append((job.src, job.job_id, job.alias_kind, job.alias_paths))
     return tuple(out)
 
 
@@ -1467,6 +1485,10 @@ def chain_gate_hits(save_paths: Iterable[str], root: str, equal_root: str = "") 
     断粮且失去 D16 保护。仅并等值不并前缀: job.src 的前缀面正是 R2/E7 要摘掉的假依赖
     (旧根兄弟目录)。本组成员的豁免在调用侧按 hash 过滤(relocate_exec._chain_gate_deps)
     —— 豁免是成员身份语义不是路径语义, 路径层排除会误伤恰同路径的组外种子。
+    R2 形态感知(计划 26-11-13-0448 §03 R2): 本函数是**候选面**(scope 前缀 + src 等值面
+    预过滤, 便宜)—— 文件级 job(alias_kind="file")的最终 verdict 由消费侧(_chain_gate_deps)
+    按「文件清单 x alias_paths 交集」谓词(file_alias_intersects)精判; 目录级与 direct
+    维持命中即依赖原样。
     返回命中的 save_path 原值元组(保持输入侧大小写/斜杠原样, 供文案展示)。
     """
     out = []

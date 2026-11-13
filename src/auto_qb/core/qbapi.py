@@ -32,7 +32,7 @@ from ..infra.utils import mask_tracker_entry
 from ..torrents import TorrentStore
 from . import curves
 from .modules.relocate_probe import TAG_PROBE
-from .modules.relocate_units import under_alias_root
+from .modules.relocate_units import file_alias_intersects, under_alias_root
 
 logger = logging.getLogger(__name__)
 
@@ -194,12 +194,14 @@ class QbApi:
         摘了记录, apply_sync 会拿残缺 patch 新建记录(缺 name/save_path 等必填字段)。窗口内记录
         由下一轮上报原地校正, 状态一个字不写(计划 26-10-21-1857 §5)。
 
-        D16 删种拦截(计划 26-11-05-0808 §3.2「删种拦截」行): delete_files=True 时,
-        save_path 位于**活动别名作用域**下的种子一律拒绝(抛 DeleteBlockedError, 整批不发
-        qB)—— 别名存续期 deleteFiles 会穿目录 junction(误删新位置共享数据)或跟随文件级
-        symlink 直删(N5 实测), 两条删除路径(WebUI 删除命令与内部删种流程)都经本入口,
-        判据单点 = relocate_units.under_alias_root(等值 OR 前缀); 活动别名根集来自
-        relocate 模块维护的 store.relocating_alias_roots(非终态且确有别名记录的 job)。
+        D16 删种拦截(计划 26-11-05-0808 §3.2「删种拦截」行; R3 形态感知, 计划
+        26-11-13-0448 §03 R3): delete_files=True 时, save_path 位于**活动别名作用域**下的
+        种子按形态分流(抛 DeleteBlockedError, 整批不发 qB)—— 目录别名存续期 deleteFiles
+        会穿目录 junction(误删新位置共享数据, N5 实测)全量拦; 文件级别名按「文件清单 x
+        alias_paths 交集」精判(相交 = 拦 / 不相交 = 组外异名放行)。两条删除路径(WebUI
+        删除命令与内部删种流程)都经本入口, 候选面判据单点 = relocate_units.under_alias_root
+        (等值 OR 前缀); 活动别名根集来自 relocate 模块维护的 store.relocating_alias_roots
+        (非终态且确有别名记录的 job)。
         例外(收口评审 #5): tag 含探测标签(TAG_PROBE)的种子放行 —— 自造探针非组成员
         数据, 拦截会让探测清理的 deleteFiles 永远失败(探针滞留, 见 _relocate_delete_blocked)。
         delete_files=False 不拦: 纯删除不触盘, 正是 D16 要求的「去文件化」出口。
@@ -216,8 +218,21 @@ class QbApi:
             self.store.remove_torrent(h)
 
     def _relocate_delete_blocked(self, hashes: List[str]) -> List[tuple]:
-        """D16 拦截判定: 待删种子里 save_path 位于活动别名根(等值或之下)的明细
+        """D16 拦截判定: 待删种子里位于活动别名根(等值或之下)的明细(R3 形态感知 verdict,
+        计划 26-11-13-0448 §03 R3, D4/D6)
 
+        候选面不变: save_path 位于登记根(等值 OR 前缀, under_alias_root 单点)才进判定;
+        verdict 按别名形态分流:
+        - 文件级(alias_kind="file"): 「文件清单 x job.alias_paths 交集」谓词精判
+          (relocate_units.file_alias_intersects 单点)—— 相交(成员身份面 / 同名撞链接根,
+          E3 实证) = 拦, 不相交(组外异名, 数据为真实文件、删除不经链接) = 放行(误拦2
+          修正面), 清单不可得(取数失败/空清单) = 保守拦(宁拦勿漏, E8 口径);
+        - 目录级(alias_kind="dir"): 全量拦原样(N5 实测 junction 穿透通路, D6 拍板保留);
+        - 登记值旧形(str job_id, 旧测试替身/外部直写): 形态不可判 -> 按目录级保守拦
+          (与 R3 前判据同口径, 兼容面)。
+        多根重叠登记同一 save_path 时**逐根判**: 任一命中根判拦即拦(先到先拦), **全部**
+        匹配根都文件级且不相交才放行 —— 目录级全量拦不可被先扫到的 file 豁免根短路
+        (评审轮 1 修 1: 豁免只跳过当前根, 必须继续扫余根)。
         无登记(store 无 relocating_alias_roots)/种子不在快照(save_path 不可判, 快照是
         qB 镜像)一律放行 —— 判据只对「能判的事实」生效, 不猜。探测种子(tag 含 TAG_PROBE,
         收口评审 #5)放行: 它们是 relocate 探针自造自删的种子, 不是组成员数据 —— save_path
@@ -226,7 +241,8 @@ class QbApi:
         每次启动重复告警; 且真探针删除即便穿别名删到的也只是探针自己的 4KiB 文件, 无成员
         数据风险 —— 该豁免按 tag 单判是**最小方案**: TAG_PROBE 是普通用户标签可被伪造,
         伪造者本就有 qB WebUI 直删通路(本拦截不覆盖), 不为此加第二判据。命中返回
-        (hash, 命中根原值, job_id) —— 根以登记原值回显(判据内部的归一形不进文案)。"""
+        (hash, 命中根原值, job_id) —— 根以登记原值回显(判据内部的归一形不进文案)。
+        DeleteBlockedError 文案不动(R5(1) 范围)。"""
         roots = getattr(self.store, "relocating_alias_roots", None)
         if not roots:
             return []
@@ -238,11 +254,36 @@ class QbApi:
                 continue
             if TAG_PROBE in (getattr(rec, "tags_set", None) or frozenset()):
                 continue  # 自造探针: 不在 D16 拦截面内(见 docstring)
-            for raw_root, job_id in roots.items():
-                if under_alias_root(sp, (raw_root, )) is not None:
-                    blocked.append((h, str(raw_root), str(job_id or "")))
-                    break
+            for raw_root, entry in roots.items():
+                if under_alias_root(sp, (raw_root, )) is None:
+                    continue
+                if isinstance(entry, tuple):
+                    job_id, kind, alias_paths = entry
+                else:  # 旧形 str: 形态不可判 -> 目录级保守全量拦(与 R3 前判据同口径)
+                    job_id, kind, alias_paths = str(entry), "", ()
+                # R3 豁免: 文件级 + 清单与该根链接不相交 -> 该根不拦; 多根重叠时必须 continue
+                # 扫余根(任一后根命中即拦 —— 目录级全量拦不可被先扫到的 file 豁免根短路,
+                # 评审轮 1 修 1), 全部匹配根都 file+不相交才放行; 单根语义不变。
+                if kind == "file" and file_alias_intersects(sp, self._relocate_file_names(rec), alias_paths) is False:
+                    continue
+                blocked.append((h, str(raw_root), str(job_id or "")))
+                break
         return blocked
+
+    def _relocate_file_names(self, rec: Any) -> List[str]:
+        """待删种子的文件相对路径清单(R3 交集判据取数; TorrentRecord.files 惰性缓存单点)
+
+        取数模式与 relocate_plan.PlanMixin._file_map 同款(files API + 异常按不可得保守
+        处理), 不直接 import 规划 mixin —— qbapi 的 relocate 依赖面收在纯判定层
+        (relocate_units), 缓存本体单点在 TorrentRecord.files(惰性持久缓存), 不造第二份
+        缓存口径。清单不可得(异常/空)返回 [](谓词判 None -> 保守拦, 宁拦勿漏); 文件名
+        不做预归一: 谓词内部 _norm 单点归一(斜杠/大小写平台口径)。"""
+        try:
+            files = rec.files(self._client)
+        except Exception as e:  # noqa: BLE001 - 拦截边界: 读不到清单按不可得保守拦, 不漏真相
+            logger.warning(f"qbapi | D16 交集判据取文件清单失败({getattr(rec, 'hash', '?')}): {e}")
+            return []
+        return [str(f.name) for f in files or []]
 
     # ---------- 写操作: 无快照变化(下轮 refresh 校准) ----------
 

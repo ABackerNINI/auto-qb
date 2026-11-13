@@ -244,8 +244,10 @@ class RelocateModule(LifecycleMixin, PlanMixin, ExecMixin, BaseModule):
         """relocating 登记 = 非终态 job 的成员并集(P4: 缺文件扫描与跳检闸门据此让路)
 
         S4b(D16 删种拦截)追加: 活动别名根登记 store.relocating_alias_roots
-        ({src: job_id}) —— QbApi.torrents_delete 的拦截面据此判「save_path 位于活动
-        别名之下」, 随本单点(每次 job 变更整表重算)自动增删, 终态即撤拦。
+        ({src: (job_id, alias_kind, alias_paths)}, R3 形态感知取数面, 计划 26-11-13-0448
+        §03 R3; 条目四元组单点产出 = ru.alias_roots_of) —— QbApi.torrents_delete 的
+        拦截面据此判「save_path 位于活动别名之下」并按形态分流 verdict(文件级按交集谓词
+        精判 / 目录级全量拦), 随本单点(每次 job 变更整表重算)自动增删, 终态即撤拦。
         """
         store = getattr(self._ctx, "store", None) if self._ctx is not None else None
         if store is None:
@@ -263,8 +265,8 @@ class RelocateModule(LifecycleMixin, PlanMixin, ExecMixin, BaseModule):
         for job in self.active_jobs():
             reg.update(job.hashes)
             reg.update(job.resume_hashes)
-        for src, job_id in ru.alias_roots_of(self.active_jobs()):
-            roots[src] = job_id
+        for src, job_id, kind, paths in ru.alias_roots_of(self.active_jobs()):
+            roots[src] = (job_id, kind, paths)
 
     def _set_job(self, job: RelocateJob) -> RelocateJob:
         """登记相位推进后的 job(单点: 落内存 + 刷登记 + 写 state + 可选 qB 标签镜像)

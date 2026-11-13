@@ -39,15 +39,22 @@
 R1 收尾窗形态感知分流追加(计划 26-11-13-0448 P2; _file_job 默认 alias_paths 改绝对路径生产形):
 - test_evaluate_add_finalize_window_form_aware: 收尾窗分流表驱动 —— 文件级 (1)同名撞链接路径
   confirm(场景 2/3 文案)/(2) 首段撞成员链接根(同名目录+深层+内容根内)confirm(保守)/
-  (3)异名放行(armed+rewritten; save_path 取 src 下非恰等形)/(3+)临时等值面: save_path 恰等
-  src -> confirm(临时面, R2 交集判据落地后翻转闭合; 落地前删链门等值面仍计依赖)/(4)异名深层放行(含同名兄弟
+  (3)异名放行(armed+rewritten; save_path 取 src 下兄弟形)/(3+)等值面放行: save_path 恰等
+  src + 异名 -> ok(R2 交集判据落地后翻转闭合, 删链门按文件清单精判依赖)/(4)异名深层放行(含同名兄弟
   不误伤); 目录级 (5)==src confirm
   (正 rel)/(6)深层添加 confirm(E6-2 覆盖洞)/(7)scope 内深层 confirm(actual= dst 侧 scope
   镜像 + rel-to-scope, 评审轮 1 勘误); (8)组外路径与 src 下 scope 外兄弟目录裸 ok(勘误防回归);
   (9)账面不可得(alias_paths 空/不在 src 下)保守 confirm; (10)direct 维持恰等 src 旧面
 - test_evaluate_add_finalize_ok_scan_and_link_pending: (3) 的 ok 不即刻返回(后续 job confirm
-  胜出, 与 job 顺序无关)+ 账外链接落到分支 4 拦(不静默放行穿链接写入); (3) 对照对两行
-  save_path 同取非恰等形(恰等面归临时守卫拦)
+  胜出, 与 job 顺序无关)+ 账外链接落到分支 4 拦(不静默放行穿链接写入); 对照行 save_path
+  取兄弟形, 等值面放行由形态分流表 (3+) 行承重
+
+R2/R3 共用交集谓词追加(计划 26-11-13-0448 P2; E7a/E7b/E3 实证依据, 报告 26-11-13-0617):
+- test_file_alias_intersects_table: 相交(成员自身嵌套/平铺, 同名跨种 E3 全等) -> True /
+  不相交(组外异名平铺+嵌套) -> False / 不可得(空清单/空账/全空账条目/空 save_path) ->
+  None 保守(宁拦勿漏) / NoSubfolder 剥根平铺直接命中(E7b: files API 名单不带 info 根
+  前缀, 无需剥根校正) / 斜杠归一平台无关 + 大小写折叠按平台 normcase 口径(Win 折 /
+  POSIX 不折)
 - test_file_link_roots_derivation: 链接根派生契约(嵌套=内容根/平铺=链接自身/不在 src 下
   跳过/空账空集)
 - test_evaluate_group_confirm_not_downgraded_by_later_block
@@ -681,8 +688,8 @@ def test_evaluate_add_finalize_window_form_aware():
             lambda r: _reason_gate(r) == "finalize_window" and "内容根重叠" in _reason_text(r),
         ),
         # ---- 文件级 (3)/(4): 异名静默放行(§3.6 场景 1: 数据落原盘真实目录, 不经别名);
-        #      save_path 一律取 src 下非恰等形(兄弟/深层) —— 恰等 src 的等值面已由临时守卫拦
-        #      confirm(见 (3+) 行, 临时面, R2 交集判据落地后翻转) ----
+        #      save_path 兄弟形与恰等 src 的等值形都放行(等值面见 (3+) 行, R2 交集判据落地后
+        #      翻转闭合, 放行真承重) ----
         (
             "(3)异名放行: src 下兄弟目录(非恰等 src)",
             os.path.join(S, "sibling"),
@@ -711,20 +718,17 @@ def test_evaluate_add_finalize_window_form_aware():
             ru.CLS_OK,
             lambda r: r["reasons"] == [],
         ),
-        # ---- 文件级 (3) 临时等值面守卫: save_path 恰等 src + 异名 -> confirm(临时面, R2 交集
-        #      判据落地(计划 26-11-13-0448 §03 R2)后翻转闭合: 落地前 _chain_gate_deps 等值面
-        #      仍计依赖, 预检放行会收尾恒悬挂 REASON_CHAIN_DEPS; 文案/actual 同目录级等值面口径) ----
+        # ---- 文件级 (3) 等值面: save_path 恰等 src + 异名 -> ok(R2 交集判据落地(计划
+        #      26-11-13-0448 §03 R2)翻转闭合: 删链门按文件清单精判依赖, 等值面不再是账面依赖面,
+        #      临时守卫撤除后放行真承重(R2 落地闭合)) ----
         (
-            "(3+)临时等值面: save_path 恰等 src -> confirm(临时面, R2 交集判据落地后翻转闭合)",
+            "(3+)等值面放行: save_path 恰等 src + 异名 -> ok(R2 交集判据落地翻转闭合)",
             S,
             "Other",
             (fjob, ),
-            dict(target_free=5000),
-            ru.CLS_CONFIRM,
-            lambda r: (
-                _reason_gate(r) == "finalize_window" and _fwd(r["actual_path"]) == _fwd(os.path.join(T, "Show")) and
-                "账面将记在旧根" in _reason_text(r) and "经别名" not in _reason_text(r) and r["volume_free"] == 5000
-            ),
+            {},
+            ru.CLS_OK,
+            lambda r: r["reasons"] == [] and r["notes"] == [],
         ),
         # ---- 目录级 (5)(6)(7) ----
         (
@@ -837,11 +841,10 @@ def test_evaluate_add_finalize_ok_scan_and_link_pending():
     """
     fjob = _file_job()
     djob = _dir_job()
-    # 文件级 (3) 候选 + 目录级等值面命中: confirm 胜出(save_path 恰等 src 而落点不在 anchor 内:
-    # 账面记 src → 删链门等值面必命中 ⇒ confirm; actual 按 D16 契约取账面建模镜像根, 文案走
-    # 账面/依赖语义不带「经别名」—— 评审轮 2 勘误)。临时等值面守卫(T2 修复轮 3)落地后,
-    # 正序行(fjob 在前)的 confirm 由文件级守卫先行产出 —— 文案/actual 与目录级等值面同一
-    # 口径, 断言两序通用; 反序行仍由目录级等值面命中。
+    # 文件级 (3) 放行(R2 落地后等值面不再 confirm)+ 目录级等值面命中: confirm 胜出
+    # (save_path 恰等 src 而落点不在 anchor 内: 目录级账面记 src -> 删链门等值面必命中 =>
+    # confirm; actual 按 D16 契约取账面建模镜像根, 文案走账面/依赖语义不带「经别名」——
+    # 评审轮 2 勘误)。两序的 confirm 都由目录级等值面命中产出(文件级异名放行不拦), 断言通用。
     r = ru.evaluate_add(ru.AddFacts(save_path=S, name="Other", jobs=(fjob, djob)))
     assert r["cls"] == ru.CLS_CONFIRM and r["reasons"][0]["gate"] == "finalize_window", r
     assert _fwd(r["actual_path"]) == _fwd(os.path.join(T, "Show"))
@@ -850,7 +853,7 @@ def test_evaluate_add_finalize_ok_scan_and_link_pending():
     r = ru.evaluate_add(ru.AddFacts(save_path=S, name="Other", jobs=(djob, fjob)))
     assert r["cls"] == ru.CLS_CONFIRM and r["reasons"][0]["gate"] == "finalize_window", r
     # 账外链接: 文件级 (1)(2) 不中 + landing_is_link -> 不判「异名」, 落到分支 4 第三方拦截
-    # (两行 save_path 同取 src 下非恰等形: 恰等 src 的等值面已归临时守卫拦, 不占 (3) 放行面)
+    # (save_path 取兄弟形; 等值形同样落本分支 —— link_pending 判定在 (3) 放行判定之前)
     r = ru.evaluate_add(
         ru.AddFacts(
             save_path=os.path.join(S, "sibling"),
@@ -881,6 +884,41 @@ def test_file_link_roots_derivation():
     assert ru._file_link_roots(S, ("Show/e00.mkv", )) == ()
     assert ru._file_link_roots(S, ()) == ()
     assert ru._file_link_roots("", (os.path.join(S, "a.mkv"), )) == ()
+
+
+def test_file_alias_intersects_table():
+    """R2/R3 共用交集谓词表驱动(计划 26-11-13-0448 §03 R2/R3, D4; E7a/E7b/E3 实证依据)
+
+    相交 True(成员自身嵌套/平铺, 同名跨种 E3 全等)/不相交 False(组外异名平铺+嵌套)/
+    不可得 None 保守(空清单=取数失败形态/空账/全空账条目/空 save_path, 宁拦勿漏 E8)/
+    NoSubfolder 剥根平铺直接命中(E7b: files API 名单不带 info 根前缀, 无需剥根校正)/
+    斜杠归一平台无关 + 大小写折叠按平台 normcase 口径(Windows 折 / POSIX 不折, 两分支各断言)。
+    """
+    # -- 相交: 成员自身(嵌套内容根) --
+    alias2 = (os.path.join(S, "Show", "e00.mkv"), os.path.join(S, "Show", "e01.mkv"))
+    assert ru.file_alias_intersects(S, ("Show/e00.mkv", "Show/e01.mkv"), alias2) is True
+    # -- 相交: 平铺成员(生产 FILE_LINKS 平铺形, E7a: 清单与磁盘逐项一致) --
+    assert ru.file_alias_intersects(S, ("rlfn.bin", ), (S + "/rlfn.bin", )) is True
+    # -- 相交: 同名跨种 E3 形态(清单与链接全等 -> 必判依赖, 别名正确保留) --
+    assert ru.file_alias_intersects(S, ("rlfn.bin", ), (S + "/rlfn.bin", S + "/extra.bin")) is True
+    # -- 不相交: 组外异名(平铺/嵌套) -> 豁免(误拦1/误拦2 修正面) --
+    assert ru.file_alias_intersects(S, ("other.bin", ), (S + "/rlfn.bin", )) is False
+    assert ru.file_alias_intersects(S, ("BrandX/a.mkv", ), (S + "/Show/e00.mkv", )) is False
+    # -- NoSubfolder 剥根平铺(E7b): 名单不带 info 根前缀, landing 直接命中/不命中 --
+    assert ru.file_alias_intersects(S, ("a.bin", "b.bin"), (S + "/a.bin", )) is True
+    assert ru.file_alias_intersects(S, ("a.bin", "b.bin"), (S + "/x.bin", )) is False
+    # -- 不可得 -> None(调用侧保守计依赖/拦, 宁拦勿漏, E8 口径) --
+    assert ru.file_alias_intersects(S, (), (S + "/l", )) is None  # 空清单(取数失败形态)
+    assert ru.file_alias_intersects(S, ("a.bin", ), ()) is None  # 账面异常(armed 落账必非空)
+    assert ru.file_alias_intersects(S, ("a.bin", ), ("", )) is None  # 全空账条目 -> None 保守(评审轮 1
+    # 修 3: _norm 恒真值是死过滤, 判空必须按原串; 修前该形态返回 False 豁免, 违背宁拦勿漏)
+    assert ru.file_alias_intersects("", ("a.bin", ), (S + "/a.bin", )) is None  # save_path 缺失
+    # -- 归一: 斜杠形态无关(平台无关断言) --
+    assert ru.file_alias_intersects("R:/Download/PTing", ("a.bin", ), (r"R:\Download\PTing\a.bin", )) is True
+    assert ru.file_alias_intersects(r"R:\Download\PTing", ("Sub/a.bin", ), ("R:/Download/PTing/sub/a.bin", )) is True
+    # -- 归一: 大小写折叠按平台 normcase 口径(Windows 折 / POSIX 不折) --
+    row = (r"R:\DL", ("A.bin", ), ("r:/dl/a.BIN", ))
+    assert ru.file_alias_intersects(*row) is (True if os.name == "nt" else False)
 
 
 def _reason_gate(result):
