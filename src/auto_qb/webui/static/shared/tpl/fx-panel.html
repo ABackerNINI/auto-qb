@@ -27,8 +27,10 @@
           </button>
         </header>
         <div class="fx-body">
-          <!-- 状态行(§05.3): 一行三值, period 取 _qbPollMs 实算值; 「上次真实拍」S3 接节拍状态后回填 -->
-          <p class="fx-status">采样 {{ qbFxPeriodS }} s · beat {{ qbFxBeatMs }} ms · 上次真实拍 —</p>
+          <!-- 状态行(§05.3 状态行格式, S3 已接线): 一行三值 + 预览中后缀 —— period 取 _qbPollMs
+               实算值; 「上次真实拍 Xs 前」读 fxBeatAt/fxNow 镜像(真拍判定帧写入 + 1s 步进时钟,
+               无真拍显示 —); 「· 预览中」随 fxPreviewing 翻转(预览一拍在途, §05.4) -->
+          <p class="fx-status">采样 {{ qbFxPeriodS }} s · beat {{ qbFxBeatMs }} ms · 上次真实拍 {{ qbFxBeatAgeText }}<span v-if="fxPreviewing"> · 预览中</span></p>
           <!-- reduced-motion 说明行(§05.6): 系统要求减弱动效时总开关强制关且置灰 —— 这里显式
                说明原因, 否则「开关是灰的」读不出是系统层的可访问性红线, 用户会当故障报。 -->
           <p v-if="fxReduce" class="fx-note">系统要求减弱动效，当前不生效</p>
@@ -149,7 +151,8 @@
           </details>
         </div>
         <footer class="fx-foot">
-          <!-- 预览一拍: S0-a 占位(§05.4 语义六条 S3 接真值链路); 重置 = 写回默认不删键(§05.5);
+          <!-- 预览一拍: §05.4 语义六条 S3 已接线(_qbPreviewBeat —— 不动窗口/假 Δ 贴真实量级/
+               连点重启/真值抢占/不写 store/同 I9 预算, 不自动循环); 重置 = 写回默认不删键(§05.5);
                复制走 _copyText 通道(非安全上下文 execCommand 降级 + toast 反馈) -->
           <button type="button" class="bt ghost sm" @click="fxPreview">预览一拍</button>
           <button type="button" class="bt ghost sm" @click="fxReset">重置为默认</button>

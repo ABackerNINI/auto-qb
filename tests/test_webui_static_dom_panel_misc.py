@@ -1044,7 +1044,14 @@ def test_frontend_poll_skeleton_single_point():
     assert "this.startPoll(`qb:${scope}`" in chart_js and "this.stopPoll(`qb:${scope}`)" in chart_js, \
         "流量图轮询未走骨架(裸 setInterval 回潮)"
     for name, js in (("drawer_store.js", store_js), ("qb_traffic_chart.js", chart_js)):
-        assert "setInterval(" not in js, f"{name} 裸 setInterval 回潮(轮询启停收口到骨架)"
+        # qb_traffic_chart.js 白名单(S3 起): 唯一裸写 = 面板状态行 1s 时钟 _qbFxClock(非轮询
+        # 定时器, 开面板装 / 关面板与 beforeUnmount 双清, 成对启停由
+        # test_frontend_qb_traffic_chart_wiring 的定时器白名单钉逐字把守); 轮询启停仍一律骨架
+        bare = [
+            m.start() for m in re.finditer(r"setInterval\(", js)
+            if "setInterval(() => { this.fxNow = Date.now(); }, 1000)" not in js[m.start():m.start() + 60]
+        ]
+        assert not bare, f"{name} 裸 setInterval 回潮(轮询启停收口到骨架; 白名单仅面板状态行 1s 时钟)"
 
     # 3. 停止条件单点: document.hidden 只许在骨架(每拍判据)与 lifecycle 的可见性事件响应里;
     #    S1 起放行 qb_traffic_chart.js 的**节拍暂停**一处(plan 26-11-12-1139 §09: 页面隐藏暂停

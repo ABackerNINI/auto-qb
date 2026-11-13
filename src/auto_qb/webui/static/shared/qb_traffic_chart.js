@@ -66,6 +66,14 @@
  * N 层/扫描束恒 Lv.1 色, 束宽度感按等级 ×0.9/1/1.1); 抽屉入场 rAF 追赶循环在途时切片与微震
  * 暂停(§09 让位)。
  *
+ * 面板接线(S3, plan §05.3/§05.4/§06 S3 行 + D21): cfg.ease 消费端 —— 数值插值曲线选择单点
+ * _qbFxCurve, 判定帧冻结进 anim.easeF(拍内不换式, 下一拍起用), 帧循环经 _qbFxShown 单次施加
+ * (L1 专用; L0 与装饰运动曲线恒 easeOut); cfg.shift 消费端 —— instant 对照档判定帧跳过 L0
+ * 过渡(数据语义不变); 「预览一拍」—— _qbPreviewBeat/Restore/End 与真实拍同构但不动窗口
+ * (dx ≡ 0), 假 Δ 贴真实量级、连点重启令牌、真值抢占、不写 store、同 I9 预算、不自动循环;
+ * 状态行「上次真实拍 Xs 前」(fxBeatAt/fxNow + 1s 步进时钟, 仅面板开着走)与「· 预览中」
+ * (fxPreviewing 镜像, 翻转沿写 —— 动画态本体在图记录, Vue 只留显示镜像)。
+ *
  * 窗口档位单点(QB_WINDOW_NAMES)与「视图选择」持久化(2026-10-05, 用户拍板): 十三档清单、
  * 前后切换(qbCycleWindow)与落盘校验(qbInitialWindow)共用同一份常量 —— 展示面模板走
  * qbWindowNames computed, 不再各自硬编码。持久化粒度 = **全局单独一份 / 分组与种子共用一份**
@@ -578,6 +586,22 @@ function _qbFxEaseOut(p) {
   const r = 1 - q;
   return 1 - r * r * r;
 }
+/* linear 缓动(ease 枚举 "linear" 的曲线单点, S3): 恒等映射, 越界夹取口径与 out 一致 ——
+ * 数值插值直线收敛(对照档: 用户想看不受减速塑形的原始插值)。 */
+function _qbFxLinear(p) {
+  const q = p <= 0 ? 0 : p >= 1 ? 1 : p;
+  return q;
+}
+/* ease 曲线选择单点(S3, plan 26-11-12-1139 §05.3 ease 行 + D21 唯一例外条款): 数值插值曲线
+ * 按 cfg.ease 选取 —— "out" = _qbFxEaseOut / "linear" = _qbFxLinear, 未知值防御回落 out(与
+ * _qbFxSanitize 枚举白名单同口径)。拍内不换式: 判定帧(真拍 _qbBeatStart / 预览 _qbPreviewBeat)
+ * 读一次 cfg.ease, 曲线引用冻结进 anim.easeF, 帧循环与收敛插值只消费冻结引用 —— 拍中改值
+ * 下一拍起用, 当前拍不换式(避免中途换曲线造成位置跳变)。消费域只限 L1 尾点数值收敛
+ * (§05.3 ease=数值插值曲线): L0 视口左移与环/粒子/束等装饰运动曲线恒 _qbFxEaseOut, 不随
+ * ease 变。 */
+function _qbFxCurve(ease) {
+  return ease === "linear" ? _qbFxLinear : _qbFxEaseOut;
+}
 /* L0 最小可见位移规则: 单格像素 = 绘图宽(CSS px) / 点数, < 0.75px 的位移肉眼不可辨 —— 该拍
  * 直接瞬时落地(等同 instant), 只短窗播放 L0 过渡(24h 长窗 2880 点 × ~800px ≈ 0.28px/格恒瞬时,
  * 省掉每帧全量路径重建的帧成本, 见 §09「逐帧性能」与 I9 R8 复核)。量不到绘图宽(首绘前)按 0
@@ -597,7 +621,8 @@ function _qbFxShouldShift(cellPx) {
  *   prev   = 上拍显示值(shown 接续, 禁止回跳 —— I3); 上拍轨死(shown null)即复活, 无从接续
  *            直落真值(不造斜坡 —— 从 0 缓升是撒谎)
  *   target = 本拍尾桶真值; null = 缺口 -> live=false, 轨静默不插值(D4)
- *   shown  = 当前显示值(动画期按 easeOut 向 target 收敛; 收敛帧 = target)
+ *   shown  = 当前显示值(动画期按 cfg.ease 选定的曲线向 target 收敛, 缺省 easeOut —— S3; 收敛帧
+ *            = target)
  *   delta  = |target − prev| / max(prev, 可视下限) —— 可视下限由调用方按 y 轴可视尺度传入
  *            (floor = y 轴顶值 × _QB_FX_VIS_FLOOR_RATIO), 防 prev≈0 时相对变化爆炸
  *   level  = Δ 分档: <0.5% 静默(0) / <5% Lv.1 / <30% Lv.2 / 其余 Lv.3(阈值常量单点可调);
@@ -629,10 +654,13 @@ function _qbFxTrackNext(prevTrack, target, floor) {
     live: true,
   };
 }
-/* 收敛插值(纯函数): prev -> target 按 easeOut(p), 恒落在 [min(prev,target), max(prev,target)]
- * 内, 单调无 overshoot(I4/D9)。 */
-function _qbFxShown(track, p) {
-  return track.prev + (track.target - track.prev) * _qbFxEaseOut(p);
+/* 收敛插值(纯函数): prev -> target 按曲线 ease(p) 收敛(单次应用 —— p 由调用方传**原始进度**,
+ * 曲线选择单点 _qbFxCurve 在判定帧冻结后经 anim.easeF 传入, 缺省 out), 恒落在
+ * [min(prev,target), max(prev,target)] 内, 单调无 overshoot(I4/D9)。ease 只在这里施加一次
+ * (S3 接线: 帧循环不再预折算 —— 与计划 §03 公式 shown = prev + (target−prev)·easeOut(p)
+ * 同构); ease 越界夹取让 impact 窗(原始进度为负)与超窗帧自然落在 prev/target 端点。 */
+function _qbFxShown(track, p, ease) {
+  return track.prev + (track.target - track.prev) * (ease || _qbFxEaseOut)(p);
 }
 
 /* ---------------- 视觉引擎 V + N 霓虹元素层 + T6 表现层(S2-a/S2-b, plan 26-11-12-1139 §03 V 表/N 节/T6 行/D1-D4/D17-D19) ----------------
@@ -1135,18 +1163,24 @@ window.AQB_QB_TRAFFIC = {
     },
     /* 注: 纵轴工具条的「上限 …(全局限速 ×1.2)」常驻读数已于 2026-10-16 随 UI 移除
      * (用户要求去掉上限字样, 图面自解释), computed 与 .qb-tools-hint 一并退役。 */
-    /* ---------------- 数值面板状态行只读两项(R8 §05.3 不可编辑项表) ----------------
+    /* ---------------- 数值面板状态行(R8 §05.3 不可编辑项表 + 状态行格式, S3 回填) ----------------
      * 展示值落 computed(范式同 qbCurGapText): fx-panel.html 裸插值 {{ qbFxPeriodS }} 不加括号,
      * 落 methods 域会被 toDisplayString 渲染成函数源码字符串(Vue 3 对非字符串一律 String())。
      * period 取 _qbPollMs 实算值(不是面板自己估的), 恒一位小数("3.0"/"30.0", §05.3 规格行
      * 「采样 3.0 s」); beat 为派生量(可调即允许突破 I1 的 1s 硬上限, 故只读), 公式单点在
-     * _qbBeatMs(S1 起面板与调度器共用一份, 不再各写一遍 clamp)。「上次真实拍」S3 接节拍状态
-     * 后回填, 现显示 —。 */
+     * _qbBeatMs(S1 起面板与调度器共用一份, 不再各写一遍 clamp)。「上次真实拍 Xs 前」S3 回填:
+     * fxBeatAt(真拍判定帧写入) + fxNow(1s 步进时钟)双依赖, 无真拍过/时钟未起显示 —。 */
     qbFxPeriodS() {
       return (this._qbFxCurPeriodMs() / 1000).toFixed(1);
     },
     qbFxBeatMs() {
       return Math.round(_qbBeatMs(this._qbFxCurPeriodMs()));
+    },
+    qbFxBeatAgeText() {
+      if (!(this.fxBeatAt > 0) || !(this.fxNow > 0)) return "—";
+      // fxNow 是 1s 步进时钟, 拍落在两次步进之间时差值为负 —— 钳 0 显示「0.0 s 前」,
+      // 不回 —(— 只保留给「还没开过面板时钟 / 没来过真拍」)
+      return (Math.max(0, (this.fxNow - this.fxBeatAt) / 1000)).toFixed(1) + " s 前";
     },
     /* 有效值单点(§05.6 reduced-motion 红线): effectiveOn = enabled && !reduce —— 系统要求减弱
      * 动效时可访问性红线(I7 强退)压过面板总开关, 面板置灰/强制关与 AQB_FX_CFG.on 引擎消费面
@@ -1185,6 +1219,12 @@ window.AQB_QB_TRAFFIC = {
     if (this._qbLimitUnwatch) {
       this._qbLimitUnwatch();
       this._qbLimitUnwatch = null;
+    }
+    /* 状态行 1s 时钟对称摘除(S3, 同清池纪律): 面板开着时组件卸载(登出/热重载)走这里,
+     * 正常关面板已由 _qbFxListen(false) 清过(幂等)。 */
+    if (this._qbFxClock) {
+      clearInterval(this._qbFxClock);
+      this._qbFxClock = 0;
     }
     /* matchMedia change 监听对称摘除(与 _qbLimitUnwatch 同纪律): MediaQueryList 持实例引用,
      * 不摘则热重载后旧句柄堆叠; 假实例 mounted 早退未挂, 守卫恒过。 */
@@ -1415,6 +1455,13 @@ window.AQB_QB_TRAFFIC = {
         window.addEventListener("keydown", this._qbFxOnAltKey);
         window.addEventListener("keyup", this._qbFxOnAltKey);
         window.addEventListener("blur", this._qbFxOnBlur);
+        // 状态行「上次真实拍 Xs 前」的 1s 步进时钟(§05.3 状态行格式, S3): 仅面板开着才走
+        // (关面板即停, 无常驻定时器), 每跳写 fxNow 让 qbFxBeatAgeText computed 重估;
+        // fxBeatAt 由 _qbBeatStart 在真拍判定帧写入(qbCurScope 对齐)。
+        if (!this._qbFxClock) {
+          this._qbFxClock = setInterval(() => { this.fxNow = Date.now(); }, 1000);
+          this.fxNow = Date.now();  // 开面板立即对齐一次(不等首跳, 打开即显示正确)
+        }
         // 抽屉拖拽调高 -> 图宿主高变(.qb-chart-host height:100%): RO 触发节流重钳位。宿主被拆
         // (抽屉关/换 kind/切页签)时 RO 报空盒 —— 跳过即可, 收口由下面的 IO 兜底(§05.7)。
         if (!this._qbFxHostRo) {
@@ -1451,6 +1498,10 @@ window.AQB_QB_TRAFFIC = {
       window.removeEventListener("keydown", this._qbFxOnAltKey);
       window.removeEventListener("keyup", this._qbFxOnAltKey);
       window.removeEventListener("blur", this._qbFxOnBlur);
+      if (this._qbFxClock) {
+        clearInterval(this._qbFxClock);  // 关面板即停(状态行不再可见, 无需续跳)
+        this._qbFxClock = 0;
+      }
       if (this._qbFxHostRo) this._qbFxHostRo.disconnect();
       if (this._qbFxHostIo) this._qbFxHostIo.disconnect();
     },
@@ -1522,7 +1573,13 @@ window.AQB_QB_TRAFFIC = {
       this.fx[key] = el.value;
       this.persistQbFx();
     },
-    /* 复选框(总开关 enabled / 视觉 neon/tail / 高级四层开关 layers.*; 布尔严格 === true|false) */
+    /* 复选框(总开关 enabled / 视觉 neon/tail / 高级四层开关 layers.*; 布尔严格 === true|false)。
+     * 总开关单一状态源(§05.3 enabled 行 + §06 S3 行, S3 落点说明): 「启用动效」只有一个入口
+     * —— 本处理器写唯一字段 fx.enabled(P4 右键勾选项已被 R8 关闭, D24: 右键入口就是面板本身,
+     * 不存在第二个勾选项); 图区右键监听只做 openFxPanel, 零开关语义。若未来要加第二个开关
+     * 入口(§05.3「双向同步」的预留面), 必须读写同一字段 fx.enabled —— 状态单向流 fx ->
+     * watch.fx -> _qbFxCfgSync -> window.AQB_FX_CFG(引擎只读 CFG), 双向同步由该单链自动完成,
+     * 不允许出现第二个状态源(否则两边各存一份必然漂移)。 */
     fxCheck(key, ev) {
       const el = ev && ev.target;
       if (!el) return;
@@ -1553,10 +1610,11 @@ window.AQB_QB_TRAFFIC = {
         + "// 只读两项不进本片段: 采样周期 period(属后端与数据文件) / 拍长 beat(派生量)。";
       this._copyText(snip, "动效配置片段");
     },
-    /* 预览一拍(占位): 语义六条(§05.4 不动窗口/假 Δ 贴近真实量级/连点重启/真值抢占/不写 store/
-     * 同预算)在 S3 接真值链路 —— 本阶段按钮在、处理器在、零副作用。 */
+    /* 预览一拍(§05.4 六条语义, S3 已接线): 交调度器域 _qbPreviewBeat —— 预览动画态在图记录
+     * (u._qbBeat.anim.preview + previewToken), Vue 只留 fxPreviewing 布尔镜像供状态行
+     * 「· 预览中」(翻转沿写, 绘制热路径不读 Vue —— §05.3); 本处理器零持久化副作用。 */
     fxPreview() {
-      /* S3: _qbPreviewBeat 按 §05.4 伪代码接, 预览令牌/真值抢占/预算同 I9。 */
+      this._qbPreviewBeat();  // 缺省 scope = qbCurScope(面板浮在当前图上)
     },
     /* fx 落盘(§05.5: 只在用户操作时写 —— 调用点全在面板处理器; try/catch 静默失败, 隐私模式/
      * 配额满不得让调参崩; 重置也走这里 = 写回默认不删键)。有效值 on 不落盘: store 只存 15+1
@@ -1594,12 +1652,18 @@ window.AQB_QB_TRAFFIC = {
       if (!u || !u.root || !u.root.isConnected || !u.data) return;
       const st = u._qbBeat;
       if (st && st.anim) {
-        const a = st.anim;
-        const tr = st.tracks;
-        if (tr.up.live) u.data[1][a.n - 1] = tr.up.target;
-        if (tr.dl.live) u.data[2][a.n - 1] = tr.dl.target;
-        tr.up.shown = tr.up.live ? tr.up.target : null;
-        tr.dl.shown = tr.dl.live ? tr.dl.target : null;
+        if (st.anim.preview !== undefined) {
+          // 预览在途(S3): 假 target 不得当真值写回 —— 走预览还原核心(尾点写回预览前真值 +
+          // 状态机复位), 提交交给下方 setData(还原值 = 真值, 重推档位一致)。
+          this._qbPreviewRestore(u, st.anim);
+        } else {
+          const a = st.anim;
+          const tr = st.tracks;
+          if (tr.up.live) u.data[1][a.n - 1] = tr.up.target;
+          if (tr.dl.live) u.data[2][a.n - 1] = tr.dl.target;
+          tr.up.shown = tr.up.live ? tr.up.target : null;
+          tr.dl.shown = tr.dl.live ? tr.dl.target : null;
+        }
         this._qbBeatCancel(u);
         u._qbTickFreeze = null;
         u._qbTickFreezePending = false;
@@ -2440,6 +2504,10 @@ window.AQB_QB_TRAFFIC = {
       const roll = !rewin && dx0 > 0 && step > 0 && dx0 <= step * 2;
       st.xs0 = xs[0];
       st.n = n;
+      // 面板状态行「上次真实拍 Xs 前」镜像(§05.3 状态行格式, S3): 真拍判定帧到达即写当前 scope
+      // 的墙钟时间(每拍一笔, 非热路径); 只镜像面板浮着的图(scope 对齐 qbCurScope), 其余挂点
+      // 的拍不写。Date.now 而非 performance.now: 展示面要墙钟语义(隐藏期冻结的动画时钟不参与)。
+      if (scope === this.qbCurScope) this.fxBeatAt = Date.now();
       // L1 判定推进(D2 双轨独立): 尾桶真值 -> {prev,target,shown,delta,level,live}
       const yTop = u.scales && u.scales.y && u.scales.y.max > 0 ? u.scales.y.max : 1;
       const floor = yTop * _QB_FX_VIS_FLOOR_RATIO;
@@ -2455,7 +2523,11 @@ window.AQB_QB_TRAFFIC = {
       }
       const px = (typeof uPlot !== "undefined" && uPlot.pxRatio) || 1;
       const cellPx = _qbFxCellPx(u.bbox && u.bbox.width > 0 ? u.bbox.width / px : 0, n);
-      const needsShift = roll && _qbFxShouldShift(cellPx);
+      // 左移策略(§05.3 shift 行, S3 补消费端): instant = 退回原 setData 快路的瞬时跳变(对照档)
+      // —— L0 过渡不播(数据语义不变: 真值已在快路落袋, 这里只是不摆回视口), L1 数值收敛不受
+      // 影响; 读点在判定帧 = 「下一拍起」语义天然成立(拍中改档不影响在途拍)。
+      const needsShift = roll && _qbFxShouldShift(cellPx)
+        && !(cfg && cfg.shift === "instant");
       const needsTail = !rewin && ((tr.up.live && tr.up.prev !== tr.up.target)
         || (tr.dl.live && tr.dl.prev !== tr.dl.target));
       if (!needsShift && !needsTail) {
@@ -2498,13 +2570,17 @@ window.AQB_QB_TRAFFIC = {
       // 拍内改参的生效口径(§05.3/D21): neon/layers.band/layers.particles/layers.scan/
       // layers.grade/tail/palette/dual/echoSpan/impact 逐帧读 AQB_FX_CFG 下一帧生效; 密度
       // (particles)经满额清单 + 绘制侧逐帧钳制下一帧生效; tear 对照档与切片/梳齿清单在
-      // spawn 判定帧定型(拍内切档下一拍生效 —— 对照档非逐帧面, 清单冻结=拍内不闪); 唯一
-      // 例外 ease(消费点 S3 阶段接线, 当前改值无效果)。
+      // spawn 判定帧定型(拍内切档下一拍生效 —— 对照档非逐帧面, 清单冻结=拍内不闪); ease
+      // 同为判定帧定型(S3 已接线): 曲线引用冻结进 anim.easeF(_qbFxCurve 单点), 拍内不换式、
+      // 下一拍起用 —— D21 唯一例外条款, 避免中途换曲线造成位置跳变。
       // 条件: cfg.on === true(有效值单点)且 lead 等级 ≥ 1 —— reduce 已在上方短路(I7);
       // enabled=false 与 Δ≈0/零流量/缺口轨零装饰但 L0/L1 照常(§05.6/D2/I10)。
       const fx = this._qbFxSpawn(u, tl, dx0, needsShift, yMax);
+      // easeF = 判定帧冻结的数值插值曲线(S3, _qbFxCurve 单点): 本拍全程只用它, 拍中改 ease
+      // 不换式(D21 例外条款) —— L1 帧循环经 _qbFxShown(track, 原始进度, easeF) 消费。
       st.anim = { dx0, needsShift, needsTail, n, tl, yMax, clock: 0, lastT: 0,
-        lastDx: needsShift ? dx0 : null, fx, phase: "impact" };
+        lastDx: needsShift ? dx0 : null, fx, phase: "impact",
+        easeF: _qbFxCurve(cfg ? cfg.ease : undefined) };
       st.raf = requestAnimationFrame(() => this._qbBeatFrame(scope));
     },
     /* 每帧推进(判定帧同帧触发 I5; 每帧按真实毫秒推进): 页面隐藏 rAF 不触发 = 拍内时钟自然
@@ -2519,6 +2595,17 @@ window.AQB_QB_TRAFFIC = {
         return;
       }
       const a = st.anim;
+      // 预览令牌失效门(§05.4 连点重启, S3): anim.preview 携带起拍时的 previewToken, 与状态
+      // 本体不一致 = 旧预览残帧(新预览已递增令牌接管调度), 直接失效不动作 —— 结构上
+      // _qbBeatCancel 已摘旧 rAF + st.anim 整体替换, 本门是把「令牌递增即令旧帧失效」钉成
+      // 可执行契约(调度病理下的兜底), 也给电池一个直接断言面。门能触发即 anim 是**过期**
+      // 预览(新预览 anim 的 token 必与当前令牌一致, 走不到这里), 置空后拍内无在途预览 ——
+      // 同步清「· 预览中」镜像, 兜底路径不得把它卡成常亮(评审 minor2)。
+      if (a.preview !== undefined && a.preview !== st.previewToken) {
+        st.anim = null;
+        this.fxPreviewing = false;
+        return;
+      }
       if (document.hidden) {
         a.lastT = 0;  // 隐藏期不推进; 置 0 让恢复后的首帧不吞隐藏时长(dt 从 0 起算)
         st.raf = requestAnimationFrame(() => this._qbBeatFrame(scope));
@@ -2542,6 +2629,10 @@ window.AQB_QB_TRAFFIC = {
         return;
       }
       if (a.clock >= tl.animEndMs) {
+        if (a.preview !== undefined) {
+          this._qbPreviewEnd(scope, u);  // 预览拍末帧: 还原真值显示面(假值不落任何真值面 —— §05.4)
+          return;
+        }
         this._qbBeatConverge(scope, u);
         return;
       }
@@ -2563,13 +2654,16 @@ window.AQB_QB_TRAFFIC = {
           u.setScale("y", { min: 0, max: a.yMax });  // 与 x 成对: 该提交不得按偏置可视窗重推 y
         }
       }
-      // L1: 尾点收敛窗(0.12-0.6 beat)内 shown = prev + (target − prev) × easeOut(p), 单调
-      // 无 overshoot(I4/D9); impact 窗(0-0.12 beat)内 shown 恒 = prev(冲击留给 S2 装饰)
+      // L1: 尾点收敛窗(0.12-0.6 beat)内 shown = prev + (target − prev) × ease(p), 单调
+      // 无 overshoot(I4/D9); impact 窗(0-0.12 beat)内 shown 恒 = prev(冲击留给 S2 装饰)。
+      // p 传**原始进度**(S3 接线: 曲线在 _qbFxShown 内单次施加, 判定帧冻结的 anim.easeF 选式
+      // —— 修正 S1 遗留的「帧循环预 easeOut + _qbFxShown 再 easeOut」双重施加, 与计划 §03
+      // 公式及 §04 演示单次口径对齐); ease 只作用于数值收敛, L0 与装饰运动曲线不随 ease 变。
       if (a.needsTail) {
-        const p = _qbFxEaseOut((a.clock - tl.impactMs) / tl.convergeMs);
+        const p = (a.clock - tl.impactMs) / tl.convergeMs;
         const tr = st.tracks;
         if (tr.up.live && tr.up.prev !== tr.up.target) {
-          const shown = _qbFxShown(tr.up, p);
+          const shown = _qbFxShown(tr.up, p, a.easeF);
           if (shown !== tr.up.shown) {
             tr.up.shown = shown;
             u.data[1][n - 1] = shown;
@@ -2577,7 +2671,7 @@ window.AQB_QB_TRAFFIC = {
           }
         }
         if (tr.dl.live && tr.dl.prev !== tr.dl.target) {
-          const shown = _qbFxShown(tr.dl, p);
+          const shown = _qbFxShown(tr.dl, p, a.easeF);
           if (shown !== tr.dl.shown) {
             tr.dl.shown = shown;
             u.data[2][n - 1] = shown;
@@ -2684,7 +2778,10 @@ window.AQB_QB_TRAFFIC = {
     },
     /* 终止在途拍(rAF 句柄先摘): _qbBeatStart 打断旧拍 / _qbChartDestroy 销毁 / 宿主被拆三条
      * 路共用的收口。「终止即落真值不留半帧」由各路径原生满足: 打断路新拍 setData 已落真值;
-     * 销毁/换肤路整图重建即真窗口 auto range —— 不存在残留偏置的半帧。 */
+     * 销毁/换肤路整图重建即真窗口 auto range —— 不存在残留偏置的半帧。预览拍(§05.4 真值抢占
+     * 的接缝, S3)被终止时假值不在 data 里残留: 抢占路新拍 setData 已整组替换真窗口; 重排路
+     * (_qbChartRescale)在取消前先走 _qbPreviewRestore 还原真值显示面。取消预览必须同步清
+     * 「· 预览中」镜像(仅翻转沿写, 非热路径)。 */
     _qbBeatCancel(u) {
       if (!u || !u._qbBeat) return;
       const st = u._qbBeat;
@@ -2692,7 +2789,119 @@ window.AQB_QB_TRAFFIC = {
         cancelAnimationFrame(st.raf);
         st.raf = 0;
       }
+      if (st.anim && st.anim.preview !== undefined) this.fxPreviewing = false;
       st.anim = null;
+    },
+    /* ================= 预览一拍(S3, plan 26-11-12-1139 §05.4 六条语义 + D21) =================
+     * 与真实拍同构但去掉窗口搬运: 不 shift、不 push、dx ≡ 0(xs / u.scales.x 零变化), 只跑
+     * 尾部插值 + 装饰。语义逐条落位:
+     *   1 不动窗口   — anim.needsShift=false/dx0=0, 帧循环 L0 块整体跳过(零 setScale("x"));
+     *   2 假 Δ 贴近真实量级 — mag = clamp(0.18 + 0.35×粒子密度, 0.10, 0.50)(相对量, 生产数值
+     *     域是字节率, 计划伪代码的归一化 ±mag 换算为 shown ± mag×max(shown, 可视下限), 相对
+     *     Δ 恒等于 mag —— 与真拍 delta 口径同构), 方向按轨 up 减 / dl 加(伪代码
+     *     k === 'dl' ? mag : -mag), 不固定拉满 Lv.3(密度 0.7 -> Δ0.425 Lv.3 / 0 -> 0.10 Lv.2);
+     *   3 连点重启   — previewToken 递增令旧帧失效(_qbBeatFrame 令牌门), 从当前显示值重新起拍,
+     *     不排队不叠加;
+     *   4 真值抢占   — 真拍判定帧 _qbBeatStart 首行 _qbBeatCancel 先取消预览态, 新真值 setData
+     *     已整组落袋, 真实拍走正常链路(真值永远优先);
+     *   5 不写 store — 零持久化副作用(persistQbFx/localStorage 不出现在预览路径), 真值字段
+     *     零改写: 假值只进 u.data 尾点显示面, 末帧 _qbPreviewEnd 还原 + 双轨状态机复位到真值
+     *     对齐(下一真拍从真值接续, 假值不留痕);
+     *   6 同预算     — spawn 与绘制钩子走真拍同一条代码路径(_qbFxSpawn/_qbDrawFx/_qbDrawFxScan),
+     *     I9 预算(粒子 ≤32/束体 ≤23/束+切片 ≤28)不放宽。
+     * 生效门: cfg.on === true —— reduce(I7 强退)与 enabled=false 下没有动效可预览, 预览空操作;
+     * 真拍主区在途时真值优先同样忽略(§05.4 第 4 条的对偶), 次区装饰相位无真值语义可被接管。
+     * 不自动循环: 仅面板「预览一拍」显式点击触发, 无任何定时器(与真实拍撞车且真假不可辨 —— D21)。 */
+    _qbPreviewBeat(scope) {
+      const s = scope || this.qbCurScope;
+      const u = this._qbCharts && this._qbCharts[s];
+      const st = u && u._qbBeat;
+      if (!u || !st || !u.root || !u.root.isConnected || !u.data || !u.data.length) return;
+      const cfg = window.AQB_FX_CFG;
+      if (!cfg || cfg.on !== true) return;
+      // 真值链路主区在途: 真值优先, 忽略预览(预览/次区装饰相位才可重启/接管 —— §05.4 第 4 条)
+      if (st.anim && st.anim.preview === undefined && st.anim.phase !== "tail") return;
+      const old = st.anim;
+      if (old) this._qbBeatCancel(u);  // 连点重启(作废当前预览)/接管次区相位: 装饰性在途态
+      const xs = u.data[0];
+      const n = xs.length;
+      if (!n) {
+        // 早退也须不留痕(评审 minor1, §05.4 第 5 条): 取消的是在途预览时假值已上屏显示面,
+        // 走预览还原核心再退(双轨钳在界/数据面清空等角点的连点, 假值不得滞留到下次真值)
+        if (old && old.preview !== undefined) this._qbPreviewRestore(u, old);
+        return;
+      }
+      const yMax = u.scales.y && u.scales.y.max > 0 ? u.scales.y.max : 1;
+      const floor = yMax * _QB_FX_VIS_FLOOR_RATIO;
+      const tr = st.tracks;
+      const mag = Math.min(0.5, Math.max(0.1, 0.18 + 0.35 * Math.min(1,
+        Math.max(0, Number(cfg.particles)))));
+      let moving = 0;
+      for (const k of ["up", "dl"]) {
+        const c = tr[k];
+        if (!c || !c.live || c.shown == null) continue;  // 缺口/死轨不造斜坡(复活直落真值语义)
+        c.prev = c.shown;  // 以显示值接续, 禁止回跳(I3; 连点重启亦从当前显示值起 —— §05.4 第 3 条)
+        const target = c.prev + (k === "dl" ? mag : -mag) * Math.max(c.prev, floor);
+        c.target = Math.max(0, Math.min(target, yMax));  // 非负 + 不越预览钉住的轴(零裁切零跳轴)
+        c.delta = Math.abs(c.target - c.prev) / Math.max(c.prev, floor);
+        c.level = _qbFxLevel(c.delta, true);
+        if (c.prev !== c.target) moving++;
+      }
+      if (!moving) {
+        // 同上(评审 minor1): 双轨钳在界(prev==target, 如 up 钳 0 + dl 钳轴顶)的连点早退,
+        // 旧预览假值已上屏 —— 还原真值显示面再退, 不滞留到下次真值落袋(长窗分钟级)
+        if (old && old.preview !== undefined) this._qbPreviewRestore(u, old);
+        return;
+      }
+      const token = (st.previewToken || 0) + 1;
+      st.previewToken = token;
+      // 末帧还原值 = 预览前真值显示面; 连点重启继承首拍捕获值(中途假值永不落还原点)
+      const restore = old && old.restore ? old.restore
+        : { up: u.data[1] ? u.data[1][n - 1] : null, dl: u.data[2] ? u.data[2][n - 1] : null };
+      if (tr.up.live && tr.up.prev !== tr.up.target) u.data[1][n - 1] = tr.up.prev;
+      if (tr.dl.live && tr.dl.prev !== tr.dl.target) u.data[2][n - 1] = tr.dl.prev;
+      const tl = _qbBeatTimeline(this._qbPollMs(s), cfg.shiftRatio);
+      const fx = this._qbFxSpawn(u, tl, 0, false, yMax);  // dx0=0 + needsShift=false: 不动窗口
+      st.anim = {
+        preview: token, restore, dx0: 0, needsShift: false, needsTail: true, n, tl, yMax,
+        clock: 0, lastT: 0, lastDx: null, fx, phase: "impact",
+        easeF: _qbFxCurve(cfg.ease),
+      };
+      this.fxPreviewing = true;  // 状态行「· 预览中」镜像(翻转沿写, 绘制热路径不读 Vue)
+      st.raf = requestAnimationFrame(() => this._qbBeatFrame(s));
+    },
+    /* 预览还原核心(不提交): 尾点显示面写回预览前真值 + 双轨状态机复位到真值对齐(delta/level
+     * 归零 —— 下一真拍从真值接续, 预览假值不留痕) + 「· 预览中」镜像清。_qbPreviewEnd(末帧)
+     * 与 _qbChartRescale(预览在途重排)共用; 提交面由调用方决定(末帧 setData 交还 auto / 重排
+     * 走自己的 setData)。不走 _qbBeatConverge: 那是把 target 当真值写回, 预览的 target 是假值。 */
+    _qbPreviewRestore(u, a) {
+      const n = a.n;
+      const rst = a.restore || {};
+      if (rst.up != null && u.data[1]) u.data[1][n - 1] = rst.up;
+      if (rst.dl != null && u.data[2]) u.data[2][n - 1] = rst.dl;
+      const tr = u._qbBeat.tracks;
+      for (const k of ["up", "dl"]) {
+        const c = tr[k];
+        if (!c) continue;
+        const v = rst[k];
+        c.prev = v;
+        c.target = v;
+        c.shown = v;
+        c.delta = 0;
+        c.level = 0;
+        c.live = v != null;
+      }
+      this.fxPreviewing = false;
+    },
+    /* 预览拍末帧收口(§05.4 第 5 条): 还原真值显示面 + setData 交还 auto range —— 重推出的
+     * 正是预览钉住的同一 yMax(轴从预览前到还原零跳变), xs / u.data[0] 全程零变化。 */
+    _qbPreviewEnd(scope, u) {
+      const st = u._qbBeat;
+      const a = st.anim;
+      st.anim = null;
+      st.raf = 0;
+      this._qbPreviewRestore(u, a);
+      u.setData([u.data[0], u.data[1], u.data[2]]);
     },
     _qbChartDestroy(scope) {
       if (!this._qbCharts) return;

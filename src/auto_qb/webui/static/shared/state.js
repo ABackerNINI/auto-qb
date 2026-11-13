@@ -401,6 +401,14 @@ window.AQB_STATE = {
       // (qb_traffic_chart.js computed), 面板总开关置灰/说明行/AQB_FX_CFG.on 三处消费面都吃它;
       // enabled 字段本身只存用户意图, reduce 态不回写 store。
       fxReduce: qbInitialFxReduce(),
+      // 面板状态行镜像(S3, plan 26-11-12-1139 §05.3 状态行格式): 动画态本体在图记录
+      // (u._qbBeat.anim.preview), 这里只显式建显示镜像字段 —— vue-reactivity 坑: undefined
+      // 是非响应式盲区。fxPreviewing = 「· 预览中」后缀(翻转沿写: _qbPreviewBeat/_qbBeatCancel/
+      // _qbPreviewRestore, 绘制热路径零读); fxBeatAt = 最近真实拍墙钟(_qbBeatStart 判定帧写,
+      // qbCurScope 对齐); fxNow = 1s 步进时钟(仅面板开着走, _qbFxListen 装/摘)供「Xs 前」重估。
+      fxPreviewing: false,
+      fxBeatAt: 0,
+      fxNow: 0,
       // 登录"验证中"加载态(本地密钥 bootstrap 期间 true): 修复刷新时闪现输入密钥界面。
       // FX-01: 初值必须为 true —— 首帧状态**未知**, 不能当作"未授权"渲染密钥表单。
       // 离开该状态只有三条明确路径(见 mounted/bootstrap): 本机免鉴权 / 密钥验证通过 / 无密钥或验证被拒。
