@@ -148,6 +148,33 @@ for (const skin of SKINS) {
       expect(stale, '导航焦点: 键盘切页后旧页签不残留焦点框').toBe(0);
     });
 
+    test('Esc 退出搜索框聚焦: 焦点归还、搜索词保留、列表键位复活 @fast', async ({ page }) => {
+      collectRuntimeErrors(page);
+      await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await expect(tab(page, 'shows')).toBeVisible({ timeout: 15_000 });
+
+      /* 报障复现(2026-11-13): 焦点在顶栏搜索框时按 Esc —— 修复前退栈链的浮层名单走空后
+       * 无分支消费输入态, 焦点卡死框里, 列表键位全被输入态屏蔽。 */
+      const input = page.locator('.search-box input');
+      await input.click();
+      await input.fill('4k');
+      await expect.poll(async () =>
+        page.evaluate(() => document.activeElement === document.querySelector('.search-box input')),
+      ).toBe(true);
+
+      await page.keyboard.press('Escape');
+      await expect.poll(async () =>
+        page.evaluate(() => document.activeElement === document.querySelector('.search-box input')),
+      ).toBe(false);
+      /* vm 内部字段读数(evaluate 第2类): searchQuery。词保留 = Esc 只退焦不清词(清词归 × 钮)。 */
+      expect(await readInst(page, 'vm.searchQuery'), 'Esc 退焦后搜索词保留').toBe('4k');
+
+      /* 退焦的收尾证据: 列表键位复活 —— 焦点还压在输入框里时 Digit2 只会被输入态屏蔽(打不进
+       * 引擎), 退焦后同键切到种子页。 */
+      await page.keyboard.press('2');
+      await expect.poll(() => readInst(page, 'vm.viewMode'), 'Esc 退焦后列表键位复活').toBe('torrents');
+    });
+
     test('种子视图: 切换有数据、总数与桩一致、renderMs 埋点可读', async ({ page }) => {
       collectRuntimeErrors(page);
       await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });

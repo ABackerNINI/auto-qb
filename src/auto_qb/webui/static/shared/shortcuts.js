@@ -296,7 +296,7 @@ const AQB_SHORTCUT_DEFS = [
   { id: "select-all", group: "选择", label: "全选当前视图",
     def: "Ctrl+KeyA", scope: "list",
     run: (vm) => vm._kbSelectAll() },
-  { id: "clear-esc", group: "选择", label: "清除选择 / 逐层退栈 / 清筛选",
+  { id: "clear-esc", group: "选择", label: "退出搜索框 / 清除选择 / 逐层退栈 / 清筛选",
     def: "Escape", scope: "global", fixed: true,
     run: null },  // 既有 lifecycle.js 退栈链(FIX-07)实现, 引擎永不接(注册表登记只为守阵与面板展示)
   // ---- D · 一级动作(§08 决策 v4: 危险档一律二键组合; 裸键 D/C/F 释放为空位) ----

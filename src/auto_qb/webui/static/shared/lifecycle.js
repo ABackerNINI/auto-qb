@@ -98,14 +98,16 @@ window.AQB_LIFECYCLE = {
       if (this.speedOpen) this.closeSpeedDialog();
     };
     window.addEventListener("click", this._onDocClick);
-    // Esc: 逐层退栈(FIX-07) —— 确认框/弹窗 -> 抽屉内浮层 -> 历史弹层 -> 抽屉 -> 筛选器下拉/其余弹层(pop) -> 右键菜单 -> 清选择/收展开兜底 -> 清筛选兜底(仅数据页+非输入态, 26-10-01-2108)
+    // Esc: 逐层退栈(FIX-07) —— 确认框/弹窗 -> 抽屉内浮层 -> 历史弹层 -> 抽屉 -> 筛选器下拉/其余弹层(pop) -> 右键菜单 -> 退出搜索框聚焦(仅顶栏搜索框, 2026-11-13) -> 清选择/收展开兜底 -> 清筛选兜底(仅数据页+非输入态, 26-10-01-2108)
     // 收展开兜底档(2026-10-22 起)**顺便把键盘光标退回被收起的父行**, 不再让它悬空指向已卸载的明细行。
     // WARN: 本链与 dialogs.js::escBusy 是同一份浮层名单(后者给 config_hub 的「Esc 返回设置首页」守门),
     //   新增浮层两处同步; config_hub.js::hubOnKey 的 Esc 分支排在本链之后(链上有层时它不动)
     this._onEscKey = (e) => {
       if (e.key !== "Escape") return;
-      const inInput = !!(e.target && e.target.closest &&
-        e.target.closest("input, textarea, select, [contenteditable]"));  // 仅清筛选兜底消费(与引擎同式, 既有分支行为不变)
+      // 输入元素判据与引擎同式(先取元素后取布尔: 退出搜索框档要拿元素本体比对)
+      const inputEl = e.target && e.target.closest &&
+        e.target.closest("input, textarea, select, [contenteditable]");
+      const inInput = !!inputEl;  // 仅清筛选兜底与退出搜索框档消费(既有分支行为不变)
       if (this.modal.visible) this.resolveModal(false);
       else if (this.addOpen) this.escAddTorrent();  // 添加种子对话框: 先收内部浮层(分类/标签下拉 -> 位置面板), 再关对话框
       else if (this.statsOpen) this.closeStats();  // 统计面板对话框: 与添加对话框同层(先后于确认框)
@@ -137,6 +139,16 @@ window.AQB_LIFECYCLE = {
       else if (this.relPop.open) this.relPopHideNow();
       else if (this.filterMenu) this.filterMenu = "";  // 筛选器下拉(pop)
       else if (this.menu.visible) this.menu.visible = false;  // 右键菜单: pop 层之后
+      /* 退出搜索框聚焦(2026-11-13 报障): 输入态不是浮层, 但浮层名单走空后 Esc 若还压着输入焦点
+       * 就是死键 —— 焦点在顶栏搜索框时退焦, 把键位还给列表。搜索词不清(归 clearSearch, 与清筛选
+       * 兜底的「搜索词保留」同口径); IME 组词中的 Esc 归输入法(同引擎 §3.4 / hubOnKey 口径,
+       * 只取消组词不退焦)。排在清选择兜底之前: 打字中按 Esc 的语境是"离开输入框", 不该顺手动
+       * 列表状态 —— 第二次 Esc 才轮到清选择/清筛选。设置页各输入框不接(站点搜索层有自己的
+       * Esc 路径 hubOnKey, 清词收层退聚焦), 本档只钉死顶栏搜索框这一个元素。 */
+      else if (inInput && !(e.isComposing || e.keyCode === 229) &&
+               inputEl === this.$refs.searchInput) {
+        inputEl.blur();
+      }
       else if (this.selGroups.length || this.selMembers.length) this.clearSelection();  // 兜底: 清除行/组选择(复用现有逻辑)
       /* 兜底: 收起分组展开。**收起不"清光标", 光标退回被收起的父行**(2026-10-22):
        *   明细行随收起一起卸载, 光标却仍指着那个已不在链上的成员 hash —— 虚线框被宿主连坐带走,

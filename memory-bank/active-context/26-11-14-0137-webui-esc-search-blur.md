@@ -1,0 +1,6 @@
+# webui-esc-search-blur
+
+> 摘要: 修复用户报障「esc can't exit focus from the search edit box」: Esc 退栈链(lifecycle.js _onEscKey)浮层名单走空后无分支消费输入态按键, 焦点卡死顶栏搜索框且列表键位被输入态屏蔽 —— 补「退出搜索框聚焦」档(blur; 排清选择兜底之前=输入语境优先; IME 双保险同引擎 §3.4/hubOnKey 口径; 仅钉 inputEl===.searchInput; 不清词归 clearSearch) + 链头摘要同步 + clear-esc label 补「退出搜索框」; 新守阵 test_esc_chain_search_input_blur(分支序/IME 门/仅搜索框/档内无 clearSearch, 排序锚点钉清选择兜底长特征串防将来误红) + e2e/views.spec.mjs 新回归 @fast(退焦/词保留/Digit2 键位复活); 红绿双验(摘修复 e2e 双皮肤红/回补绿); 相邻 spec 18P; 评审 2 轮(轮1 唯一 nit=守阵排序锚点健壮性已修/轮2 零发现), 检 1/1 修 1 入池 0; test.full 6085+19 覆盖 99% 基线切片 26-11-14-0136; 零新坑(单分支缺陷, 陷阱面空)
+> 最后活动: 2026-11-14 01:37
+
+**R0(2026-11-14 01:37):** 修复用户报障「esc can't exit focus from the search edit box」: Esc 退栈链(lifecycle.js _onEscKey)浮层名单走空后无分支消费输入态按键, 焦点卡死顶栏搜索框且列表键位被输入态屏蔽 —— 补「退出搜索框聚焦」档(blur; 排清选择兜底之前=输入语境优先; IME 双保险同引擎 §3.4/hubOnKey 口径; 仅钉 inputEl===.searchInput; 不清词归 clearSearch) + 链头摘要同步 + clear-esc label 补「退出搜索框」; 新守阵 test_esc_chain_search_input_blur(分支序/IME 门/仅搜索框/档内无 clearSearch, 排序锚点钉清选择兜底长特征串防将来误红) + e2e/views.spec.mjs 新回归 @fast(退焦/词保留/Digit2 键位复活); 红绿双验(摘修复 e2e 双皮肤红/回补绿); 相邻 spec 18P; 评审 2 轮(轮1 唯一 nit=守阵排序锚点健壮性已修/轮2 零发现), 检 1/1 修 1 入池 0; test.full 6085+19 覆盖 99% 基线切片 26-11-14-0136; 零新坑(单分支缺陷, 陷阱面空)

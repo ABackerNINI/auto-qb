@@ -18,6 +18,10 @@ Delete 直连注册表外, 均为已拍板的口径, 逐条落断言。W5 局部
   兜底在收剧展开之后(链序即退栈序, LIFO 不可倒) / 门条件五件套(authOk / page=groups /
   !hrPop.open / !inInput / facetsActive) / toast 点名不静默; Escape 仅 clear-esc 一个默认绑定
   且面板 label 点名清筛选; facetsActive 不含 searchQuery(搜索词归 clearSearch)
+- test_esc_chain_search_input_blur: ESC 退出搜索框聚焦(2026-11-13 报障) —— 退焦档排在清选择
+  兜底之前(输入语境优先, 第二次 Esc 才轮到列表状态) / 仅钉死 $refs.searchInput(设置页输入
+  不接, 站点搜索层归 hubOnKey) / IME 双保险(组词中 Esc 只取消组词不退焦) / 档内无 clearSearch
+  (搜索词归 clearSearch, Esc 只退焦) / 面板 label 点名退出搜索框
 """
 
 from __future__ import annotations
@@ -80,3 +84,23 @@ def test_esc_chain_clear_filters_fallback() -> None:
     block = fj[fj.index("facetsActive()"):]
     block = block[:block.index("},")]
     assert "searchQuery" not in block, "facetsActive 不得含 searchQuery(搜索词归 clearSearch)"
+
+
+def test_esc_chain_search_input_blur() -> None:
+    """ESC 退出搜索框聚焦(2026-11-13 报障): 浮层名单走空后焦点在顶栏搜索框 -> blur 退焦。
+
+    钉四件事: 分支序(退焦档必须在清选择兜底之前 —— 打字中按 Esc 是"离开输入框", 不许先动
+    列表状态) / 仅钉死顶栏搜索框(设置页输入框不接) / IME 双保险(组词中 Esc 归输入法) /
+    档内不清词(搜索词归 clearSearch)。"""
+    lc = _read("lifecycle.js")
+    blur_at = lc.index("inputEl.blur()")
+    assert lc.count("inputEl.blur()") == 1, "退焦档只许一个调用位(其余输入面各有自己的 Esc 路径)"
+    assert blur_at < lc.index("this.selGroups.length || this.selMembers.length) this.clearSelection()"), \
+        "退出搜索框档必须排在清选择兜底之前(链序即优先序, 输入语境优先)"
+    assert "inputEl === this.$refs.searchInput" in lc, "退焦档必须钉死顶栏搜索框, 不得泛化到全部输入"
+    branch_start = lc.rindex("else if", 0, blur_at)
+    branch = lc[branch_start:blur_at + len("inputEl.blur()")]
+    assert "e.isComposing || e.keyCode === 229" in branch, "退焦档必须带 IME 双保险(组词中 Esc 只取消组词)"
+    assert "clearSearch" not in branch, "退焦档不得清搜索词(词归 clearSearch, Esc 只退焦)"
+    sc = _read("shortcuts.js")
+    assert "退出搜索框" in sc, "clear-esc 面板 label 必须点名退出搜索框(行为新增要进面板文案)"
