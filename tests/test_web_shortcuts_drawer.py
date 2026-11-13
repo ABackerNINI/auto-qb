@@ -26,7 +26,7 @@ Delete 直连注册表外, 均为已拍板的口径, 逐条落断言。W5 局部
   (W1 计划 26-10-11-2106 起这层剥在 drawer_store.js, 守阵读该文件);
   _switchDrawerTarget 换目标走 FX-29 软切换(不清空旧数据, switching 遮罩防串显 + 按 tab 的
   待到集合全到手才落定); open/close 作废在途跟随定时器; 头部标题走 drawerTitle(memberByHash
-  名优先, 不等详情); 详情加载空态只归常规页签; 三皮肤 CSS 成对(switching 遮罩 + 加载胶囊)
+  名优先, 不等详情); 详情加载空态只归常规页签; 四皮肤 CSS 成对(switching 遮罩 + 加载胶囊)
 - test_drawer_follow_mouse_click: 鼠标路径接 §1.3 预留的同一跟随挂点 —— 种子行**普通单击**走
   _kbFollowDrawer(面板开则换目标, 200ms 防抖与 page/kind 守卫全在挂点内); Ctrl/Shift 是选择
   手势不跟随(圈选 N 行不该让面板逐行翻); 单击**不得开面板**(开面板仍归双击 / Enter / 右键
@@ -36,7 +36,7 @@ Delete 直连注册表外, 均为已拍板的口径, 逐条落断言。W5 局部
   松手才落盘); 持久化 autoqb.ui.drawerHeight / autoqb.ui.drawerOpen 与 drawerTab 同族(try/catch);
   D1 首屏默认关闭 = drawer.open 初值 false + drawerOpen 键全 bundle 只写不回读(逐文件断言) +
   drawerHeightPx 高度记忆仍生效; 模板 grip 四 pointer 事件 / aside 内联高度绑定;
-  三皮肤 CSS 成对(grip touch-action / 拖拽期禁选中 / .drawer relative)
+  四皮肤 CSS 成对(grip touch-action / 拖拽期禁选中 / .drawer relative)
 - test_qb_traffic_shortcuts: 流量图三入口(2026-10-05) —— open-qb-traffic(Ctrl+Backslash, run
   _kbToggleQbTraffic 含切换分支; 未开走 openQbHistory 含 qbTrafficOn 门 + 未启用提示) /
   drawer-tab-traffic(Alt+Digit5, run
@@ -73,7 +73,7 @@ Delete 直连注册表外, 均为已拍板的口径, 逐条落断言。W5 局部
   分支(对话层级先于清筛选兜底), escBusy/_kbOverlayBusy 两名单同步, state.js 默认折叠不持久化;
   刷新兜底 U1-b 双脏源(cfgGuardActive = cfgDirty || kbDirtyView) + 双 watcher 传 true 重算
 - test_drawer_narrow_fullscreen_w4: 方案A W4(计划 26-10-03-0917 D3 + 前波移交观察项) ——
-  D3 窄屏降级三皮肤成对(≤900px 面板 fixed 全屏覆盖主区 / !important 压内联高度记忆 /
+  D3 窄屏降级四皮肤成对(≤900px 面板 fixed 全屏覆盖主区 / !important 压内联高度记忆 /
   statusbar 让位 / grip 隐藏 / 停靠基线 relative 不删 / 关闭钮保留); W4 几何走查产出
   _kbViewBottom 行可见下界单点(实测面板顶缘, fixed 全屏态回落, _kbViewportRow 与
   _kbScrollRowIntoView 两处消费且不再裸用 window.innerHeight 当下界); 轮询停靠化收口
@@ -276,11 +276,11 @@ def test_drawer_dock_keyboard_w2() -> None:
     assert "drawer.tab === 'general' && drawer.loading && !drawer.detail" in tpl, (
         "详情加载空态只归常规页签(压到 Tracker/用户/内容会把整幅表格换成一行空态)"
     )
-    # --- 三皮肤 CSS 成对: switching 遮罩 + 加载胶囊 ---
-    for ui in ("atlas", "console", "prism"):
-        cssp = STATIC / ui / "css" / "dialogs.css"  # issue 26-10-20-2231: prism 也有了弹窗层, 三皮肤同路径
+    # --- 四皮肤 CSS 成对: switching 遮罩 + 加载胶囊 ---
+    for ui in _UI_ALL:
+        cssp = STATIC / ui / "css" / "dialogs.css"  # issue 26-10-20-2231: prism 也有了弹窗层, 四皮肤同路径
         css = cssp.read_text(encoding="utf-8")
-        assert ".drawer-body.switching > *:not(.drawer-busy)" in css, f"{ui}: 缺 FX-29 软切换遮罩规则(三皮肤成对)"
+        assert ".drawer-body.switching > *:not(.drawer-busy)" in css, f"{ui}: 缺 FX-29 软切换遮罩规则(四皮肤成对)"
         assert ".drawer-busy {" in css, f"{ui}: 缺加载胶囊样式"
     # open/close 作废在途跟随(显式操作优先于防抖中的跟随)
     assert drawer_js.count("this._stopDrawerFollow();") >= 2, "openTorrentDrawer 与 closeDrawer 都必须作废在途跟随定时器"
@@ -370,9 +370,9 @@ def test_drawer_height_w3() -> None:
     # Vue 3.5 运行时编译模板解析不了 `_` 前缀裸标识符(ReferenceError, W3 目检实证) ——
     # grip 三个内联处理器必须非下划线命名(精确匹配已隐含); 既有 _copyText 模板调用是历史缺陷, 单独报告不在此钉
     assert ':style="drawerPanelStyle()"' in tpl, "aside 必须绑定内联高度"
-    # --- 三皮肤 CSS 成对: grip / 拖拽期禁选中 / 面板 relative(absolute grip 定位参照) ---
-    for ui in ("atlas", "console", "prism"):
-        cssp = STATIC / ui / "css" / "dialogs.css"  # issue 26-10-20-2231: prism 也有了弹窗层, 三皮肤同路径
+    # --- 四皮肤 CSS 成对: grip / 拖拽期禁选中 / 面板 relative(absolute grip 定位参照) ---
+    for ui in _UI_ALL:
+        cssp = STATIC / ui / "css" / "dialogs.css"  # issue 26-10-20-2231: prism 也有了弹窗层, 四皮肤同路径
         css = cssp.read_text(encoding="utf-8")
         assert ".drawer-grip" in css and "touch-action: none" in css, f"{ui}: grip 样式缺失(触摸端拖拽会滚动页面)"
         assert "body.drawer-resizing" in css and "user-select: none" in css, f"{ui}: 拖拽期禁选中文本缺失"
@@ -690,16 +690,16 @@ def test_kb_full_overlay_wiring() -> None:
 
 
 def test_drawer_narrow_fullscreen_w4() -> None:
-    """方案A W4(计划 26-10-03-0917 W4/D3 + 前波移交观察项): D3 窄屏降级三皮肤成对;
+    """方案A W4(计划 26-10-03-0917 W4/D3 + 前波移交观察项): D3 窄屏降级四皮肤成对;
     行可见下界 _kbViewBottom(停靠面板盖住列表视口底部, 走查实证后收口); 轮询停靠化语义收口"""
-    # --- D3: ≤900px 面板转全屏覆盖主区(三皮肤成对; 关闭钮在模板, 断言不被降级样式移除) ---
+    # --- D3: ≤900px 面板转全屏覆盖主区(四皮肤成对; 关闭钮在模板, 断言不被降级样式移除) ---
     # W3: 关闭钮随两形态共用头部壳一并上移到 aq-drawer-head 片段(单一实现, 面板模板不再各写一份)
     head_tpl = (SHARED / "tpl" / "drawer-head.html").read_text(encoding="utf-8")
     assert head_tpl.count('class="drawer-close"') == 1, ("关闭钮必须在头部壳片段(drawer-head.html, D3 全屏态唯一的关面板入口; 两形态共用一处)")
     assert 'class="drawer-close"' not in (SHARED / "tpl" / "drawer.html").read_text(encoding="utf-8"), \
         "关闭钮不得在面板模板再写一份(两形态各一份头部的复写正是问题 4 根因, W3 收口)"
-    for ui in ("atlas", "console", "prism"):
-        cssp = STATIC / ui / "css" / "dialogs.css"  # issue 26-10-20-2231: prism 也有了弹窗层, 三皮肤同路径
+    for ui in _UI_ALL:
+        cssp = STATIC / ui / "css" / "dialogs.css"  # issue 26-10-20-2231: prism 也有了弹窗层, 四皮肤同路径
         css = cssp.read_text(encoding="utf-8")
         # prism 等文件在 D3 之前已有同断点的窄屏块(topbar 折行族), 必须认含 .drawer 的那块
         blocks = [m.group(1) for m in re.finditer(r"@media \(max-width: 900px\) \{(.*?)\n\}", css, re.S)]

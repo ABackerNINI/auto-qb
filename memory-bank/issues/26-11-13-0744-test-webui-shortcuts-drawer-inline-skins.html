@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="webui-uis-enum-drift">
 <meta name="doc-refs" content="memory-bank/tasks/26-11-13-webui-uis-enum-drift.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="test_web_shortcuts_drawer 三处内联硬编码三皮肤循环 flux 不覆盖(与 UIS 枚举同类漂移)">
 <meta name="issue-summary" content="drawer 三处皮肤循环内联硬编码 (atlas,console,prism)(lines 280/374/701), 不走 webui_helpers._UI_ALL 单点, flux 不被覆盖; issue 26-11-13-0443 修复时按范围守恒未动">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-13-0744-test-webui-shortcuts-drawer-inline-skins</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-13 07:44</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
 
@@ -112,13 +112,16 @@
 <section id="s3">
   <h2><span class="no">§03</span>建议<span class="opt">（可选）</span></h2>
   <p>三处循环改 <code>for ui in _UI_ALL</code>(<code>from webui_helpers import _UI_ALL</code>, 与 0443 同款接线); 扩面前逐条预核 flux <code>css/dialogs.css</code> 对应断言面(0443 修复轮只预核过 dock 裁剪/退场锚定两条成立, 本三条面另行预核); 循环周边「三皮肤」注释与断言消息照 0443 R1 同款如实改「四皮肤」—— 若 flux 真有差异, 按 0443 §03 口径另立缺陷。</p>
+  <p><strong>实际修法（2026-11-13, 按建议执行无改道）</strong>: 开工复验三处锚点仍复现(280/374/701); 三处循环改 <code>for ui in _UI_ALL</code>(<code>webui_helpers</code> import 为 0443 轮基线已有); 扩面前 flux 三断言面逐条预核成立 —— FX-29 遮罩/胶囊(line 80/81)、grip 三判据(line 13/19/25)、D3 窄屏块五判据全齐, 纯扩面无真实差异; 循环周边 docstring×4/注释×6/断言消息×1「三皮肤」如实改「四皮肤」。<strong>验证</strong>: test.one drawer 单文件 17 passed; shortcuts 四件 36 passed; test.full 6084 passed + 19 skipped 覆盖 99%(基线切片 26-11-13-0809, 较 0715 零差, 零新增用例零回归)。</p>
 </section>
 
 <section id="s4">
   <h2><span class="no">§04</span>状态变更日志</h2>
   <ul>
     <li>2026-11-13 07:44 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-13 — 状态 Open → In Progress（kb.status）</li>
+    <li>2026-11-13 — 状态 In Progress → Done（kb.status）</li>
+</ul>
 </section>
 
 <footer>
