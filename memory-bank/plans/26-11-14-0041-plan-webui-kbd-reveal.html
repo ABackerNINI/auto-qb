@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>WebUI 键位提示全面改造 按需显影、弱化键位、全量落点</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="webui-kbd-reveal">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-14-0041">
+<meta name="doc-updated" content="26-11-14-0041">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-14-webui-kbd-reveal.md">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  /* 章节导航: 十节长文档走 sticky 横排, 与正文同色系, 不抢视觉 */
+  .toc { position: sticky; top: 0; z-index: 5; background: var(--bg); border-bottom: 1px solid var(--hair); padding: 9px 0 8px; margin: 0 0 30px; font-family: var(--mono); font-size: 11px; letter-spacing: 0.04em; display: flex; flex-wrap: wrap; gap: 4px 16px; }
+  .toc a { color: var(--faint); text-decoration: none; white-space: nowrap; }
+  .toc a:hover { color: var(--accent-ink); }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); scroll-margin-top: 54px; }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: webui-kbd-reveal</div>
+<h1>WebUI 键位提示全面改造<br>按需显影、弱化键位、全量落点</h1>
+<p class="lede">本篇只回答「<strong>已落地的键位现场提示怎么全面改造</strong>」：把常驻键帽改成「默认隐藏 + 按住反引号显影 + 全局开关常驻」，键帽退化为灰色括号弱化的纯文本，右键菜单走 VS Code 式加宽 / 右对齐 / 间距拉长，并把提示扩到所有「注册表已绑键且 UI 有稳定挂点」的元素。纯显示层，注册表零改动。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-14-0041 · <b>doc-updated</b> 26-11-14-0041 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 用户指令「当前快捷键提示太显眼 / 按钮形式太丑 / 状态栏太丑 / 添加种子·列太丑……全面改造……倾向于按住 ctrl 显示或者一个切换开关……grilling 然后出一个方案」; grilling 三轮 Q1–Q10 拍板(结论迁 §07); 只读核查两路(键盘事件链与候选键 / UI 元素↔注册表全量映射与布局守阵); 前序件 <code>memory-bank/plans/26-11-12-0344-plan-webui-kbd-hints.html</code>(已 Done, 本轮取代其形态决策, 原件保留 Done 留痕)。<br>
+  <b>事实基线</b> HEAD <code>e17bd088</code>(开工 sync 快进 <code>f9296ba6→e17bd088</code>, 远端 44 笔); 核查日期 2026-11-14。<br>
+  <b>调研</b> 外部方案调研仅命中 VS Code keybindings 与通用 UX 片段, <strong>未取得菜单 accelerator 版式的权威参数</strong>; 「VS Code 式布局」为用户指定的方向性参照, 具体宽度 / 间距 / 字号不预写, 由 W4 实施期四皮肤真机截图目检定案(先例: 前序件 S6、<code>webui-kb-overlay-layout</code>)。
+</div>
+
+<nav class="toc">
+  <a href="#s01">§01 目标</a><a href="#s02">§02 现状</a><a href="#s03">§03 触发键</a><a href="#s04">§04 总览</a><a href="#s05">§05 实施</a><a href="#s06">§06 落点表</a><a href="#s07">§07 拍板</a><a href="#s08">§08 风险</a><a href="#s09">§09 测试与回写</a><a href="#s10">§10 变更记录</a>
+</nav>
+
+<h2 id="s01"><span class="no">§01</span>目标与设计原则</h2>
+
+<h3>背景</h3>
+<p>前序计划 <code>26-11-12-0344</code> 已实施完成(S1–S6 五笔提交 <code>3df2c3b9</code> / <code>8a4b255f</code> / <code>cc342b57</code> / <code>b661be35</code> / <code>e544bfd2</code>, <code>doc-status: Done</code>, 四皮肤真机截图目检过)。实机反馈五点: ① 打开右键菜单第一眼聚焦在键帽而非文字; ② 按钮形式的键帽丑; ③ 状态栏键位提示丑; ④ 添加种子 / 列选择的提示丑; ⑤ <strong>覆盖不一致</strong> —— 静态界面只有极少数元素有提示, 主页面切换 / 设置 / 搜索框 / 皮肤切换等都没有。用户要求全面改造, 倾向「按住 ctrl 显影」或「一个切换开关」。</p>
+<p>本轮<strong>不是改样式, 是推翻前序件的形态决策重做</strong>: D1(常驻) / D3(不做 hold-reveal) / D6(设置 Ctrl+, 不做) / D7(状态栏按钮键帽物理不可行) / D2(顶栏·状态栏 title 否决) 一并解禁或反转, 详见 §07。</p>
+
+<h3>目标</h3>
+<ul>
+  <li><strong>G1 零抢焦点</strong>: 默认隐藏, 菜单打开瞬间只有文字; 显影态下文字仍是第一视觉层级 —— 靠<strong>布局与弱化</strong>实现, 不靠「一次只显一个」。</li>
+  <li><strong>G2 去按钮化</strong>: <code>.aq-kbd</code> 从「有底 / 有框 / 2px 厚底边」退化为灰色括号包裹的弱化纯文本。</li>
+  <li><strong>G3 覆盖一致</strong>: 所有「注册表已绑键 + UI 有稳定挂点」的元素一律补提示, 不留旧样式孤岛。</li>
+  <li><strong>G4 键位零二次维护</strong>: 取数链单点不变, 改绑即时跟随 / 空串即隐藏 / 空位绑键后自动出现。</li>
+  <li><strong>G5 范围收窄</strong>: 纯显示层。注册表零改动、零新增键位、帮助浮层与设置键位面板内容·布局零改动。</li>
+</ul>
+
+<h3>设计不变量</h3>
+<ul>
+  <li><strong>I1 取数单点不动</strong>: <code>kbShortcutDisplay(item, draft)</code>(<code>shortcuts.js:167-171</code>) → <code>kbSerialWithDraft</code>(<code>:136-139</code>) → <code>kbDisplayName</code>(<code>:149-157</code>); 菜单侧 <code>ctxKeycapOf</code>(<code>ctx_menu.js:332-337</code>)。任何模板禁写死键位串。</li>
+  <li><strong>I2 显影是纯 CSS class</strong>: <code>&lt;body&gt;</code> 上一个 class, 只用 <code>opacity</code> / <code>visibility</code> / <code>color</code>, <strong>不碰任何几何属性</strong> —— 大列表对强制同步重排敏感(<code>lifecycle.js:359-361</code> 明记 3000 行下是「不跟手」直接来源)。</li>
+  <li><strong>I3 零布局跳动</strong>: 菜单走「固定预留键位列」(平时空白、显影填文本); 顶栏 / 状态栏 / 页签走 <code>::after</code> 或绝对定位 badge。<strong>文字位置永不因显影位移</strong> —— 显影只解决「抢焦点」, 撑宽药丸 / 挤出 34px 状态栏 / 菜单折行要靠挂载手法解决, 不会自动消失。</li>
+  <li><strong>I4 生命周期闭环</strong>: 必须自带 keyup 移除 + 每次任意 keydown 自愈校正 + <code>window blur</code> + <code>visibilitychange(hidden)</code> 强制清 class, 并在 <code>unmounted</code> 撤除(<code>lifecycle.js:287-316</code> 纪律)。<strong>全仓当前零 keyup、零修饰键状态跟踪、零 blur 兜底</strong>, 这是全新机制。</li>
+  <li><strong>I5 不吞事件</strong>: 不 <code>preventDefault</code>、不 <code>stopPropagation</code>, 照抄 <code>shortcuts_engine.js:48</code> 对纯修饰键的放行做法; 否则引擎 <code>:46</code> 的 <code>defaultPrevented</code> 礼仪会让组合键整条动作被跳过。</li>
+  <li><strong>I6 令牌与皮肤纪律</strong>: 只用既有令牌(<code>--fg-dim</code> / <code>--fg-muted</code> / <code>--font-mono</code>), 零新增令牌; <code>.aq-kbd</code> 令牌集与守阵 <code>AQ_KBD_TOKENS</code>(<code>test_webui_kbd_keycap.py:61</code>)同步。共享模板 + 共享 CSS 改一处四皮肤自动同构; 皮肤专属 <code>components.css</code> 需四处同步。</li>
+</ul>
+
+<h2 id="s02"><span class="no">§02</span>现状与痛点</h2>
+
+<h3>三条事实纠偏(动工前必读)</h3>
+<ol>
+  <li><strong>注册表行号已漂移 +44</strong>: <code>AQB_SHORTCUT_DEFS</code> 真实在 <code>shortcuts.js:222-413</code>(58 条 = 54 绑键 + 4 空位, 内容未变), 前序件 §02 写的 <code>178-369</code> 已过时 —— S1 在 <code>:159-201</code> 插入取数单点所致。</li>
+  <li><strong>常驻键帽是 3 个不是 2 个</strong>: 顶栏 N(<code>topbar.html:66</code>)、顶栏 K(<code>:76</code>)、<strong>状态栏「键位」入口的 Shift+/</strong>(<code>statusbar.html:66</code>, W5/S5 加的常驻入口)。用户「界面上只有添加种子 / 列有提示」漏算第三处; 右键菜单 / 抽屉页签 / 帮助浮层 / 设置键位面板都是打开才渲染, 非常驻。</li>
+  <li><strong><code>check_wording</code> 不扫前端模板</strong>: 实现在 <code>.agents/skills/memory-bank/scripts/check_wording.py</code>, 扫的是 memory-bank 文档(<code>:159</code>); 前序件 §07「新文案触发 check_wording」指<strong>回写文档时</strong>措辞过单点, 不是 webui 模板检查。</li>
+</ol>
+
+<h3>键帽形态 = 「按钮形式太丑」的来源</h3>
+<p><code>console_hub_panels.css:541-549</code> 规则全文:</p>
+<pre><code>.aq-kbd {
+  font: 500 11px/1 var(--font-mono);
+  color: var(--fg);
+  padding: 3px 7px;
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  background: var(--surface-2);
+  white-space: nowrap;
+}</code></pre>
+<p>有底(<code>--surface-2</code>)、有框(<code>1px --border</code> + 底边加重 2px)、直角、<code>--fg</code> 高对比 —— 视觉上是一枚实体按键 / 小按钮。置于菜单行右缘时, 高对比 + 实心背景使它比 label 更先被眼睛捕获, 这正是「第一眼聚焦快捷键」的机制。</p>
+
+<h3>落点现状(7 类)</h3>
+<table>
+  <tr><th>面</th><th>渲染位置</th><th>常驻?</th><th>取数 / 版式锚点</th></tr>
+  <tr><td>右键菜单一级 / 次级</td><td><code>tpl/ctx-menus.html:77</code> / <code>:65</code></td><td>否</td><td><code>ctx_menu.js:339-364</code>(<code>:361-362</code> 有键位才产出字段); <code>console_hub_panels.css:558-559</code> flex 骨架</td></tr>
+  <tr><td>顶栏 添加种子 N / 列 K</td><td><code>tpl/topbar.html:66</code> / <code>:76</code></td><td class="wr">是</td><td><code>shortcuts.js:490-494</code> <code>kbKeycapOf</code>; <code>atlas/css/components.css:191-196</code> 药丸</td></tr>
+  <tr><td>状态栏「键位」入口</td><td><code>tpl/statusbar.html:64-67</code></td><td class="wr">是</td><td><code>shortcuts_engine.js:710-712</code> → <code>:700-706</code> → <code>shortcuts_panel.js:9/12</code></td></tr>
+  <tr><td>抽屉页签 Alt+1..5</td><td><code>tpl/drawer.html:54-57</code> / <code>:61</code></td><td>否</td><td><code>shortcuts.js:190-201</code> <code>kbDrawerTabKbd</code>; <code>console_hub_panels.css:568</code></td></tr>
+  <tr><td>Shift+/ 帮助浮层</td><td><code>tpl/popovers.html:406-426</code></td><td>否</td><td><code>shortcuts_panel.js:128</code>; 内容与布局零改动(G5)</td></tr>
+  <tr><td>设置键位面板</td><td><code>tpl/settings-detail.html:161-190</code></td><td>否</td><td>同上; 零改动(G5)</td></tr>
+  <tr><td>设置页 hub 表外 <code>&lt;kbd&gt;</code></td><td><code>tpl/settings.html:93/:130/:164</code></td><td>否</td><td><strong>不在注册表</strong>, 是 hub 局部说明文案(<code>config_hub_hr.js:168-172</code> 等 Esc-only 链); 见 §06 表 C</td></tr>
+</table>
+<p class="aside"><strong>显影机制现状 = 零</strong>: <code>.aq-kbd</code> 只有形状, 无 <code>opacity</code> / <code>transition</code> / <code>display</code> 开关; 各 tpl 的 <code>v-if</code> 只判断键位串是否为空。全局键盘链只有 <code>keydown</code>(<code>lifecycle.js:175/178-179/183-184</code> 等), <strong>零 keyup</strong>、零修饰键按下状态跟踪、零清 class 的 blur 兜底。</p>
+
+<h3>用户点名四动作: 注册表里到底有没有</h3>
+<table>
+  <tr><th>动作</th><th>结论</th><th>id / def</th><th>UI 挂点</th><th>本轮处置</th></tr>
+  <tr><td>主页面切换</td><td class="good">有 3 条(非缺条目)</td><td><code>view-groups</code> Digit1 / <code>view-torrents</code> Digit2 / <code>view-shows</code> Digit3, <code>shortcuts.js:224-232</code></td><td><code>topbar.html:19/22/25</code> .tabs 三按钮, 零键帽</td><td>纳入</td></tr>
+  <tr><td>设置</td><td class="good">有</td><td><code>open-settings</code> Ctrl+Comma, <code>:233-235</code></td><td><code>topbar.html:107-109</code>, 零键帽</td><td>纳入(<strong>解禁 D6</strong>)</td></tr>
+  <tr><td>搜索框聚焦</td><td class="good">有(非空位)</td><td><code>focus-search</code> Slash, <code>:239-241</code></td><td><code>topbar.html:30-34</code>, 零键帽</td><td>纳入</td></tr>
+  <tr><td>皮肤切换</td><td class="bad">注册表无此条</td><td>全表 <code>:222-413</code> 无 id 含 skin/theme/ui</td><td><code>topbar.html:161-179</code> .ui-link / <code>:117-139</code> prism .theme-pop</td><td><strong>跳过</strong>(不做 B, 见 §07 D5)</td></tr>
+</table>
+
+<h3>痛点与用户五点对应</h3>
+<ul>
+  <li>「太显眼」= <code>.aq-kbd</code> 实心背景 + <code>--fg</code> 高对比, 且菜单有键位项一律常驻(D5 曾拍「含 danger 三键全显」)。</li>
+  <li>「按钮形式丑 / 状态栏丑 / 添加种子列丑」= 同一条 <code>:541-549</code> 规则被七类落点共用, 改一处即可全解, 但状态栏 34px 与顶栏药丸还需各自的挂载手法。</li>
+  <li>「不一致」= 58 条里只有 <strong>28 个绑键 id</strong> 有现场挂点; 另有 <strong>12 条已绑键且有稳定 UI 挂点却零提示</strong>(下表), 外加 4 空位、14 条纯键盘动作无挂点。</li>
+</ul>
+
+<h3>「能加上的都加上」的事实底座: 12 条已绑键 + 稳定挂点 + 零提示</h3>
+<table>
+  <tr><th>id</th><th>def</th><th>UI 挂点</th><th>挂载手法 / 备注</th></tr>
+  <tr><td><code>view-groups</code></td><td>Digit1</td><td><code>topbar.html:19</code></td><td>角标; 前序 D6 未覆盖此条</td></tr>
+  <tr><td><code>view-torrents</code></td><td>Digit2</td><td><code>topbar.html:22</code></td><td>角标</td></tr>
+  <tr><td><code>view-shows</code></td><td>Digit3</td><td><code>topbar.html:25</code></td><td>角标</td></tr>
+  <tr><td><code>open-settings</code></td><td>Ctrl+Comma</td><td><code>topbar.html:107-109</code></td><td>角标; 括号包完整串, 解「<code>,</code> 单标误导」</td></tr>
+  <tr><td><code>focus-search</code></td><td>Slash</td><td><code>topbar.html:30-34</code></td><td>输入框内角标; 显影态输入焦点下需目检</td></tr>
+  <tr><td><code>open-stats</code></td><td>Backslash</td><td><code>statusbar.html:49-51</code></td><td>角标; 解禁 D7</td></tr>
+  <tr><td><code>open-history</code></td><td>Shift+Backslash</td><td><code>statusbar.html:17-19</code></td><td>角标; 括号包完整串后与 <code>\</code> / <code>Ctrl + \</code> 可区分</td></tr>
+  <tr><td><code>speed-down</code></td><td>KeyL</td><td><code>statusbar.html:92-98</code></td><td>角标; 全局限速浮层, 菜单 <code>limits</code> 是 per-hash 弹窗, 不映射</td></tr>
+  <tr><td><code>speed-up</code></td><td>Shift+KeyL</td><td><code>statusbar.html:100-106</code></td><td>同上</td></tr>
+  <tr><td><code>traffic-win-prev</code></td><td>BracketLeft</td><td><code>tpl/drawer-head.html:48</code></td><td>角标; <code>when: vm.qbTrafficActive</code> 条件绑定</td></tr>
+  <tr><td><code>traffic-win-next</code></td><td>BracketRight</td><td>同上</td><td>同上</td></tr>
+  <tr><td><code>settings-save</code></td><td>Ctrl+KeyS</td><td><code>tpl/settings-detail.html:520</code></td><td>角标; <code>inputSafe:true</code>, scope=settings</td></tr>
+</table>
+<p class="cm">部分覆盖: <code>open-qb-traffic</code>(Ctrl+Backslash, <code>:248-250</code>) 已有菜单键帽(<code>ctx_menu.js:145</code>), 状态栏入口 <code>statusbar.html:24-26</code> 零键帽; 前序件 §05 声明 scope 口径差(菜单开组口径 / Ctrl+\ 开全局口径), 本轮沿用。</p>
+
+<h2 id="s03"><span class="no">§03</span>触发键定案(回答「撞 Ctrl 键有什么影响」)</h2>
+
+<p><strong>结论: 反引号 <code>Backquote</code> 为唯一显影键</strong>; F1 记为备选(实机若别扭, 二期待选); Ctrl / Alt / Shift / 空格 / CapsLock / Ctrl+Shift 全部否决。Q9 授权按核查结论定案, 本节给全部证据。</p>
+
+<h3>Ctrl 的逐条实际影响</h3>
+<table>
+  <tr><th>面</th><th>影响</th><th>判据</th></tr>
+  <tr><td>多选功能</td><td class="good"><strong>零影响</strong>。读的是鼠标事件自带 <code>event.ctrlKey</code>, 与 body class 无关</td><td><code>selection.js:269/306/379/524/541</code>; 只要显影不 <code>preventDefault</code>、不改行 DOM 结构即恒真</td></tr>
+  <tr><td>多选视觉</td><td class="bad"><strong>中—高且结构性不可消除</strong>: 引擎对纯修饰键直接放行, 按住 Ctrl 逐行点选那几秒<strong>键帽全程亮着</strong> —— 恰好是最不希望它出现的时刻</td><td><code>shortcuts_engine.js:48</code>(<code>KB_MODIFIER_CODES</code> <code>shortcuts.js:67-70</code>); 前序件 <code>:129</code> / <code>:191</code> D3 原始否决理由</td></tr>
+  <tr><td>组合键</td><td class="bad">Ctrl 另承担 8 条组合键, 按 Ctrl+Home / Ctrl+↑ 同样闪; 若显影监听注册在引擎之前且对组合键 <code>preventDefault</code>, 引擎 <code>defaultPrevented</code> 礼仪会让<strong>整条动作被跳过</strong></td><td><code>shortcuts.js:234/:249/:297/:350/:353/:356/:359/:393</code>; <code>shortcuts_engine.js:46/:88-89</code></td></tr>
+  <tr><td>输入框</td><td class="wr">引擎在输入态本就屏蔽, Ctrl+A/C/V 浏览器默认正常; 但新增的全局显影链与引擎无关, 无条件加 class 会让输入框内按 Ctrl 也闪键帽。显影逻辑若 <code>preventDefault</code> 则<strong>毁掉 Ctrl+A/C/V/X/Z 与 Ctrl+滚轮缩放</strong></td><td><code>shortcuts_engine.js:52-53/:65</code>; <code>ui_feedback.js:645</code></td></tr>
+  <tr><td>生命周期</td><td class="bad">Alt+Tab / 点进 iframe 丢一次 keyup → class <strong>永久卡住</strong>。现有 <code>window blur</code> 只 <code>tip.classList.remove("on")</code>(tooltip 专用), <code>visibilitychange</code> 只做轮询 / 列偏好 / 时间口径 / 刷新, 无任何可清 class 的兜底</td><td><code>ui_feedback.js:587/:449-454</code>; <code>lifecycle.js:233/:225-232</code></td></tr>
+</table>
+<p>朴素实现(<strong>裸 keydown/keyup 给 body 加删 class</strong>)判定<strong>不可用</strong>。附加 6 条约束(仅纯修饰键单按且不 repeat / 输入态跳过 / keyup+自愈 / blur+visibilitychange / 避录制态 / CSS 不碰几何)后可升到「有条件可用」, 但第 2 行「多选手势期间常亮」无法消除 —— 这是<strong>键位选择的结构性缺陷, 不是实现细节</strong>。</p>
+
+<h3>候选对比</h3>
+<table>
+  <tr><th>候选</th><th>注册表</th><th>浏览器默认</th><th>输入框风险</th><th>与多选冲突</th><th>结论</th></tr>
+  <tr><td>Ctrl</td><td>8 条组合键</td><td>单按无; 组合键有默认</td><td>吞则毁编辑键与滚轮</td><td class="bad">高</td><td>有条件可用 / 不推荐</td></tr>
+  <tr><td>Alt</td><td>5 条 <code>Alt+Digit1..5</code></td><td class="bad">单按聚焦菜单栏·设置(用户指出); Alt+Tab; OS 常吞 keyup</td><td>部分布局产字符</td><td>中</td><td class="bad">不可用</td></tr>
+  <tr><td><strong>反引号 <code>`</code></strong></td><td class="good">零占用</td><td class="good">非输入态<strong>无</strong></td><td>不吞则输入正常; 长按 repeat 连打字符</td><td class="good">无</td><td class="good"><strong>定案</strong></td></tr>
+  <tr><td>F1</td><td>零占用(黑名单仅 F5/F11/F12)</td><td>帮助页, <strong>必须 preventDefault</strong></td><td>无(不产字符)</td><td>无</td><td>备选</td></tr>
+  <tr><td>Ctrl+Shift 长按</td><td>零占用(组合在拒绑黑名单)</td><td>输入法 / 布局切换; 浏览器默认</td><td>低</td><td>低, 但双键状态跟踪使 keyup 丢失翻倍</td><td>不推荐</td></tr>
+  <tr><td>CapsLock</td><td>零占用(在修饰键集)</td><td>大小写状态切换, 非「按住」语义</td><td>改大小写</td><td>无</td><td class="bad">不可用</td></tr>
+  <tr><td>空格长按</td><td class="bad">已占用 <code>toggle-select</code></td><td>滚页 / 打空格</td><td>吞则破坏输入</td><td>每次按下切换选中行</td><td class="bad">不可用</td></tr>
+  <tr><td>任意修饰键长按</td><td>8 个均零绑定(引擎全放行)</td><td>见各键</td><td>见各键</td><td>见各键</td><td>机制可行, 无干净键位</td></tr>
+</table>
+
+<h3>定案理由与必做约束</h3>
+<p>反引号: 58 条 def 无 <code>Backquote</code>(<code>KB_CODE_NAMES</code> <code>shortcuts.js:146</code> 只是显示名, 黑名单 <code>:85-104</code> 亦无); 非输入态零浏览器默认; 与 Ctrl/Shift+click 多选零冲突; 纯 Backquote keydown 引擎无 item(<code>:54-64</code> 无-item 分支只处理 Delete)不争抢; 不在 8 个 <code>KB_MODIFIER_CODES</code> 里, 不受修饰键状态问题波及; <strong>引擎输入态已屏蔽(<code>:65</code>), 显影无需 preventDefault 就不破坏输入</strong>。</p>
+<ol>
+  <li>仅当 <code>e.code === "Backquote"</code> 且 <code>!e.repeat</code> 且非 IME 组合期(<code>shortcuts_engine.js:47</code> 同式)时 add; <strong>绝不 preventDefault / stopPropagation</strong>(I5)。</li>
+  <li>输入态跳过显影: 复用 <code>:53</code> 同式 <code>closest("input, textarea, select, [contenteditable]")</code>。<strong>不吞字符</strong> —— 输入框内按反引号仍正常输入, 键帽不闪, 属可接受边界(不是显影场景)。</li>
+  <li>keyup 移除 + <strong>每次任意 keydown 自愈校正</strong>(keyup 丢失时下一次按键立即纠正)。</li>
+  <li><code>window blur</code> + <code>visibilitychange(hidden)</code> 强制清 class(可并入 <code>lifecycle.js:225</code> 的 <code>_onVisChange</code>)。</li>
+  <li>避开录制态: 冒泡阶段注册、判 <code>kbRecId</code>(<code>state.js:311</code>); 捕获阶段 <code>_kbOnRecordKey</code>(<code>shortcuts_panel.js:181-183</code>) 对所有 keydown 全吞。</li>
+  <li>CSS 只用 opacity / visibility / color; <code>unmounted</code> 撤除全部句柄(<code>lifecycle.js:287-316</code>)。</li>
+</ol>
+<p class="aside"><strong>F1 为何只做备选</strong>: 输入框内零破坏(不产字符)优于反引号, 但必须吞浏览器帮助页、kiosk / 远程桌面 / 浏览器进程接管 F1 的环境收不到或 preventDefault 无效, 且 F1 的「帮助」直觉与 Shift+/ 帮助浮层(<code>shortcuts.js:398</code>)语义略偏。<strong>Alt 否决依据</strong>: 浏览器单按聚焦菜单栏 / 设置(用户指出)、<code>Alt+1..5</code> 已绑抽屉页签(<code>:370-382</code>)、OS 常吞 Alt keyup、Alt+Tab 切窗。</p>
+
+<h2 id="s04"><span class="no">§04</span>方案总览</h2>
+<p>主线: <strong>一条显影机制(W1) + 一个开关(W2) + 一套弱化形态(W3) + 两种挂载手法(W4/W5) + 全量落点(W6) + 守阵(W7)</strong>。</p>
+<table>
+  <tr><th>波次</th><th>落点</th><th>内容</th></tr>
+  <tr><td><strong>W1</strong> 显影机制</td><td><code>lifecycle.js</code> + 共享 CSS</td><td>反引号 keydown/keyup 链、body class、§03 六条约束、生命周期闭环; 零取数链改动</td></tr>
+  <tr><td><strong>W2</strong> 全局开关</td><td><code>tpl/statusbar.html:64-67</code></td><td>「键位」文字钮 → 无文字图标钮; 两态互斥(开=常驻 / 关=仅按住显影); 状态存本机 <code>autoqb.ui.*</code> localStorage 口径; <code>triggers.js</code> 审计面同步</td></tr>
+  <tr><td><strong>W3</strong> 键帽形态</td><td><code>console_hub_panels.css:541-549</code></td><td>去底 / 去框 / 去厚底边 → <strong>灰色括号包裹弱化纯文本</strong>(<code>--fg-dim</code>, <code>--font-mono</code>, 字号 ≤ label); <strong>不要 hover 提亮(Q5 否 b)</strong>; <strong>不限制一次只显一个(Q3 否 c)</strong></td></tr>
+  <tr><td><strong>W4</strong> 菜单布局</td><td><code>tpl/ctx-menus.html:65/:77</code> · <code>ctx_menu.js:339-364</code> · 共享 CSS <code>:551-559</code></td><td>VS Code 式: 菜单加宽、键位右对齐、label 与键位间距拉长; <strong>恒渲染固定预留键位列</strong>(平时空白、显影填文本), 文字位置永不位移</td></tr>
+  <tr><td><strong>W5</strong> 无预留空间落点</td><td>顶栏 / 状态栏 / 抽屉页签</td><td><code>::after</code> 或绝对定位 badge; 先例 <code>.filter-btn .filter-count</code>(<code>atlas/views.css:92</code> 及四皮肤, <code>topbar.html:231</code> 注释逐字写明「计数徽标绝对定位 → 选中数不改变按钮宽度」); 状态栏 34px + <code>overflow:hidden</code> 会裁 <code>top:-6px</code> 角标 → 改基线内 inset</td></tr>
+  <tr><td><strong>W6</strong> 全量落点</td><td>§06 映射表</td><td>12 条新增 + 4 空位有挂点者 + 部分覆盖者; 现有 28 个挂点形态统一改; 纯显示层</td></tr>
+  <tr><td><strong>W7</strong> 测试扩面</td><td>守阵 + e2e + 四皮肤</td><td>§09 清单; 全量回归数字入基线切片; 外观靠真机截图目检定案</td></tr>
+</table>
+
+<h3>「显影」解禁了什么(关键论证)</h3>
+<p>前序件 D6 / D7 / D2 三条否决<strong>全部建立在「键帽常驻占位」之上</strong>: 设置 <code>Ctrl + ,</code> 全串 ~40px 拉长 .tabs 药丸; 状态栏反斜杠三变体单字符不可区分、全串挤出右角速度组、34px 锁高物理不可行。改成默认隐藏后:</p>
+<ul>
+  <li>默认零占位 → 药丸宽度 / 状态栏右角不再被挤;</li>
+  <li>括号包<strong>完整串</strong>(<code>Ctrl + \</code> / <code>Shift + \</code> / <code>\</code>) → 三者可区分, 「<code>,</code> 单标误导」消失;</li>
+  <li><code>::after</code> / 绝对定位不进布局流 → 34px 与药丸宽度约束消失。</li>
+</ul>
+<p class="aside"><strong>解禁的是「落点」, 不是「常驻」</strong>: 这些落点只在显影态 / 开关常驻态出现, 默认态一律隐藏。若把 badge 写进布局流, 三条否决会立刻复活 —— 挂载手法(I3)是解禁成立的前提, 不是可选项。</p>
+<p><strong>分期</strong>: 单波次 W1→W7 顺序实施, 四皮肤一步到位(共享模板 + 令牌制下分皮肤做反而要拆条件)。<strong>实施等用户显式开工</strong>(§07 D9)。</p>
+
+<h2 id="s05"><span class="no">§05</span>实施步骤</h2>
+<table>
+  <tr><th>#</th><th>内容</th><th>验收判据</th></tr>
+  <tr><td>S1</td><td>W1 显影链: <code>lifecycle.js</code> 挂载 / 撤除 + body class + §03 六条约束; 共享 CSS 显影态(只 opacity/visibility/color)</td><td>按住反引号全落点显 / 松手隐; Alt+Tab 丢 keyup 后下一次按键自愈; 输入框内按反引号不打乱输入且不闪; 录制态不干扰; 组合键动作全部照常(Ctrl+Home / Ctrl+↑ / Alt+1..5 用例)</td></tr>
+  <tr><td>S2</td><td>W3 形态: 重写 <code>.aq-kbd</code> 基形为灰色括号弱化文本; 同步 <code>AQ_KBD_TOKENS</code> 与置灰行规则(<code>:576</code>)</td><td>四皮肤键帽同构截图; 无实心背景 / 无边框 / 无圆角; 菜单第一视觉层级为文字; 令牌零新增</td></tr>
+  <tr><td>S3</td><td>W4 菜单: 恒渲染固定预留键位列 + 加宽 / 右对齐 / 间距拉长; 五处宽度同步(四皮肤 <code>.ctx-sub min-width:260</code>、<code>menu.js:322</code> 的 272、<code>_scan_ctx_sub_width</code> 的 <code>want/pad</code>、四皮肤 <code>gap:9px</code>)</td><td>显影前后菜单项文字像素位置不变(零跳动); 最长项「强制重新汇报 Shift + A」不折行; 无键位项留白对齐; e2e menus 绿</td></tr>
+  <tr><td>S4</td><td>W5 角标: 顶栏 / 状态栏 / 抽屉页签改 <code>::after</code> 或绝对定位; 状态栏 34px 内基线定位</td><td>显影前后药丸宽度与状态栏右角速度组位置不变; <code>overflow:hidden</code> 不裁角标; 四皮肤目检</td></tr>
+  <tr><td>S5</td><td>W2 开关: 状态栏无文字图标钮 + 两态互斥 + localStorage + <code>triggers.js</code> 登记</td><td>刷新后开关态保留; 开=常驻 / 关=仅按住显影; click 与 Shift+/ 帮助浮层行为互不干扰; triggers 守阵绿</td></tr>
+  <tr><td>S6</td><td>W6 全量落点: §06 表 B 12 条 + 空位有挂点者 + 部分覆盖者接线</td><td>每条挂点出正确显示串(与设置键位面板同源); 改绑即时跟随; 空位绑键后自动出现; 皮肤切换 / 无挂点项确认零键帽</td></tr>
+  <tr><td>S7</td><td>W7 守阵 / e2e 扩面 + 全量回归 + 四皮肤真机截图目检(用户拍板外观数字)</td><td><code>test.full</code> 全绿(数字入基线切片) + e2e fast 绿; 外观先例 <code>webui-kb-overlay-layout</code> / 前序件 S6, 数字不预写</td></tr>
+</table>
+
+<h2 id="s06"><span class="no">§06</span>改造后落点全量映射</h2>
+
+<h3>表 A · 现有 28 个绑键挂点(形态统一改, 映射不重写)</h3>
+<p>沿用前序件 §05「映射审计表」(右键菜单 20 条) + 顶栏 2(<code>add-torrent</code> / <code>col-picker</code>) + 状态栏 1(<code>help-panel</code>, 由开关钮承接) + 抽屉页签 5(<code>drawer-tab-general..traffic</code>)。<strong>权威在前序件, 本件只引用不重抄</strong>(doc-forms 单一权威口径)。全部改走 W3 弱化形态 + W4/W5 挂载手法 + 显影 / 开关二态。</p>
+
+<h3>表 B · 新增 12 条(见 §02 表)</h3>
+<p><code>view-groups</code> / <code>view-torrents</code> / <code>view-shows</code> / <code>open-settings</code> / <code>focus-search</code> / <code>open-stats</code> / <code>open-history</code> / <code>speed-down</code> / <code>speed-up</code> / <code>traffic-win-prev</code> / <code>traffic-win-next</code> / <code>settings-save</code>。部分覆盖: <code>open-qb-traffic</code> 状态栏入口(<code>statusbar.html:24-26</code>)。</p>
+
+<h3>表 C · 空位、不纳入清单与裁定</h3>
+<table>
+  <tr><th>类</th><th>条目</th><th>处置</th></tr>
+  <tr><td>4 个 <code>def:""</code> 空位</td><td><code>super-seeding</code> / <code>share-limits</code>(已挂菜单次级, <code>ctx_menu.js:166/:169</code>) · <code>clear-filters</code>(有挂点 <code>topbar.html:265-268</code>, 零键帽) · <code>invert-select</code>(<code>:410-412</code>)</td><td>前三条纳入(恒渲染键位槽, 默认空串留白, 绑键后自动出现); <code>invert-select</code> <strong>无稳定挂点, 跳过</strong></td></tr>
+  <tr><td>纯键盘动作 14 条</td><td>光标族 9(<code>ArrowUp/Down/Left/Right</code>、<code>Home/End</code>、<code>PageUp/PageDown</code>、<code>Enter</code>) + 选择族 5(<code>Space</code>、<code>Shift+ArrowUp/Down</code>、<code>Ctrl+KeyA</code>、<code>Escape</code> fixed); 前序件口径 13 = 排除 <code>clear-esc</code></td><td><strong>不造挂点, 保留 D4</strong>, 只在帮助浮层查</td></tr>
+  <tr><td>注册表无条目</td><td>皮肤切换(<code>topbar.html:161-179</code> / <code>:117-139</code>)</td><td><strong>跳过</strong> —— 给它加提示等于新增键位(动注册表 / 引擎 / 冲突裁定), 越出纯显示层</td></tr>
+  <tr><td>表外 <code>&lt;kbd&gt;</code></td><td>设置页 hub <code>settings.html:93/:130/:164</code>(Esc / ↑↓ / Enter 局部说明)</td><td><strong>不纳入统一显影</strong>: 不走注册表、不是「快捷键现场提示」, 是 hub 局部操作说明文案; 保持原样(方案内裁定 D10)</td></tr>
+</table>
+
+<h2 id="s07"><span class="no">§07</span>拍板记录</h2>
+<p>grilling 三轮 Q1–Q10 全部拍板, frontier 空, 无待拍板项。</p>
+<table>
+  <tr><th>#</th><th>题目</th><th>结论</th><th>日期</th></tr>
+  <tr><td>D1</td><td>总形态(Q1)</td><td><strong>C 混合</strong>: 默认隐藏 + 按住显影 + 开关常驻。用户否了我推荐的 B(单开关), 接受两套机制 + 状态机 + 触发键冲突核查的成本</td><td>26-11-14</td></tr>
+  <tr><td>D2</td><td>改造范围(Q2)</td><td>四落点 + 抽屉页签徽标<strong>全纳入统一规则</strong>, 不留旧样式孤岛; 状态栏「键位」文字钮删, 替换为开关图标; 帮助浮层内容·布局零改动</td><td>26-11-14</td></tr>
+  <tr><td>D3</td><td>显示态形态(Q3/Q5)</td><td>键帽退化: <strong>灰色括号 + 弱化纯文本</strong> + VS Code 式菜单加宽 / 右对齐 / 间距拉长 + 固定预留键位列。<strong>否 b</strong>(无 hover 提亮)、<strong>否 c</strong>(不限制一次只显一个)</td><td>26-11-14</td></tr>
+  <tr><td>D4</td><td>C 状态机(Q6)</td><td>全局单开关、两态互斥; 显影 / 常驻都只是 body class 的 CSS 切换, 零 JS 重绘、取数链一行不动</td><td>26-11-14</td></tr>
+  <tr><td>D5</td><td>扩展边界(Q7)</td><td><strong>C + 不造挂点</strong>: 只给注册表已有绑定键的 UI 元素补提示, 空位元素纳入; <strong>坚决不做 B</strong>(不给无键位元素新增键位), 纯显示层、注册表零改动; 纯键盘动作不造挂点(保留前序 D4)</td><td>26-11-14</td></tr>
+  <tr><td>D6</td><td>可发现性与开关(Q8)</td><td>状态栏右角无文字图标, <code>title</code> 写明「按住 <code>`</code> 显影 / 点此常驻」; 状态随现有 <code>autoqb.ui.*</code> 本机偏好口径持久化, 不新造通道; 不做一次性引导</td><td>26-11-14</td></tr>
+  <tr><td>D7</td><td>触发键(Q9)</td><td><strong>反引号 <code>Backquote</code></strong> 定案(§03 全证据); F1 备选; Ctrl / Alt / Shift / 空格 / CapsLock / Ctrl+Shift 否决</td><td>26-11-14</td></tr>
+  <tr><td>D8</td><td>工程面(Q10)</td><td>四皮肤令牌零新增 · 注册表结构零改动 · 帮助浮层 / 设置面板零改动 · 守阵 e2e 同步扩面 · 外观数字靠截图目检不预写</td><td>26-11-14</td></tr>
+  <tr><td>D9</td><td>产物与授权(Q4/Q10)</td><td>新建本计划(单文件 dark HTML 入 <code>memory-bank/plans/</code>), 前序件保留 <code>Done</code> 仅加指链; <strong>本轮只出方案, 不改 <code>src/</code> 代码、不跑实施、不立档、不提交</strong></td><td>26-11-14</td></tr>
+  <tr><td>D10</td><td>表外 <code>&lt;kbd&gt;</code>(方案内裁定)</td><td>设置页 hub 局部 <code>&lt;kbd&gt;</code> 不纳入统一显影, 理由见 §06 表 C</td><td>26-11-14</td></tr>
+  <tr><td>D11</td><td>I4 例外边界(方案内裁定)</td><td>前序 D10/I4「键位提示不走 title / .aq-tip」<strong>仅约束键位提示面</strong>; 开关图标的 <code>title</code> 属<strong>控件自身的功能说明</strong>, 不是键位提示, 按 <code>conventions/webui.md</code>「悬浮提示」默认口径写原生 title。收尾回写时补一行边界注记</td><td>26-11-14</td></tr>
+</table>
+
+<h3>与前序件决策的关系</h3>
+<table>
+  <tr><th>前序决策</th><th>本轮</th><th>原因</th></tr>
+  <tr><td>D1 菜单键帽常驻</td><td class="bad">推翻</td><td>默认隐藏(D1)</td></tr>
+  <tr><td>D2 顶栏 / 状态栏 title 追加否决</td><td class="bad">推翻</td><td>改为显影角标 + 开关 title(D6/D11)</td></tr>
+  <tr><td>D3 不做 hold-reveal / sticky-modifier</td><td class="bad">推翻(仅机制层)</td><td>改用<strong>非修饰键</strong>反引号, 绕开 Ctrl/Shift+click 冲突(§03); 原否决理由对 Ctrl 仍成立</td></tr>
+  <tr><td>D6 设置 Ctrl+, 不做</td><td class="bad">解禁</td><td>默认零占位 + 括号包完整串(§04)</td></tr>
+  <tr><td>D7 状态栏按钮键帽物理不可行</td><td class="bad">解禁</td><td>绝对定位 badge 不进布局流 + 完整串可区分(§04)</td></tr>
+  <tr><td>D4 列表导航键不做常驻挂点</td><td class="good">保留</td><td>纯键盘动作仍无可视挂点, 归帮助浮层</td></tr>
+  <tr><td>D10 / I4 tooltip 通道整体否决</td><td class="wr">收窄</td><td>仅限键位提示面; 开关控件说明例外(D11)</td></tr>
+  <tr><td>D11 菜单 <code>key</code> 字段引用注册表 / 取数同源</td><td class="good">保留</td><td>I1, 零改动</td></tr>
+  <tr><td>D9 四皮肤一步到位</td><td class="good">保留</td><td>共享模板 + 令牌制</td></tr>
+</table>
+
+<h2 id="s08"><span class="no">§08</span>风险与对策</h2>
+<table>
+  <tr><th>风险</th><th>触发条件</th><th>对策</th></tr>
+  <tr><td>反引号输入态</td><td>搜索框 / 输入框内按住反引号: 键帽不显且打出字符</td><td>输入态跳过显影、不 <code>preventDefault</code>(§03 约束 2); 开关 title 与帮助浮层入口写明「非输入态按住」; 若实机不可接受, 二期切 F1(D7)</td></tr>
+  <tr><td>class 卡死</td><td>Alt+Tab / 点进 iframe 丢 keyup</td><td>四重兜底: 每次 keydown 自愈 + keyup + <code>window blur</code> + <code>visibilitychange(hidden)</code>(I4); e2e 补切窗用例</td></tr>
+  <tr><td>组合键被吞</td><td>显影监听注册在引擎之前且 <code>preventDefault</code></td><td>I5 不吞事件、监听排引擎之后、冒泡阶段; 组合键回归用例(Ctrl+Home / Alt+1..5 / Ctrl+S)</td></tr>
+  <tr><td>录制态干扰</td><td>设置键位面板录制时按住反引号</td><td>判 <code>kbRecId</code>(<code>state.js:311</code>); 捕获阶段 <code>shortcuts_panel.js:181-183</code> 全吞 keydown</td></tr>
+  <tr><td>大列表重排抖动</td><td>CSS 改几何 / 加 transition</td><td>I2 只 opacity/visibility/color; <code>body</code> class 不触发布局尺寸变化</td></tr>
+  <tr><td>菜单加宽连锁</td><td>W4 调 <code>.ctx-sub</code> 宽度或 gap</td><td>五处同步: 四皮肤 <code>components.css</code> <code>min-width:260</code> + <code>menu.js:322</code> 的 272 + <code>_scan_ctx_sub_width</code>(<code>webui_static_scan_css.py:285</code>) + 四皮肤 <code>gap:9px</code></td></tr>
+  <tr><td>状态栏裁切 / 挤压</td><td>badge 用 <code>top:-6px</code> 或进布局流</td><td>基线内 inset 定位; 34px + <code>overflow:hidden</code> 下四皮肤目检; 不挤右角 <code>.sb-speed</code></td></tr>
+  <tr><td>既有守阵连锁红</td><td>形态 / 模板 / 文案改动</td><td>动前 <code>test.quick</code> 锁基线; §09 清单同步; <code>test_webui_kbd_keycap.py</code> 顶栏恰两处(<code>:204-206</code>) / 状态栏恰 1 处(<code>:296</code>) / 「键位」文案(<code>:316</code>) / 反手抄(<code>:274-277</code> 禁 <code>"Alt + "</code> 字面量) / 令牌集(<code>:61</code>)逐项复核</td></tr>
+  <tr><td>改绑跟随失效</td><td>显影层自造取数或缓存键位串</td><td>I1 取数链零改动; 显影是纯 CSS 不重绘。注意菜单是「<strong>重开菜单即跟随</strong>」(<code>ctx_menu.js:291</code> 一层渲染一取), 不是打开期间即时刷新 —— 保持既有语义, 不误判为回归</td></tr>
+  <tr><td>外观数字不实</td><td>预写宽度 / 间距 / 字号</td><td>不预写; W4 实施期四皮肤真机截图目检定案(前序件 S6 先例)</td></tr>
+  <tr><td>wording 守阵</td><td>回写文档措辞</td><td><code>check_wording.py</code> 扫 memory-bank 文档(<code>:159</code>), 不扫模板; 动词族不新增、不与 qB 对齐动词冲突</td></tr>
+</table>
+
+<h2 id="s09"><span class="no">§09</span>测试、守阵面与回写清单</h2>
+<h3>守阵 / 测试面</h3>
+<table>
+  <tr><th>面</th><th>动作</th></tr>
+  <tr><td><code>tests/test_webui_kbd_keycap.py</code></td><td>键帽形态断言改写(无底 / 无框 / 括号弱化); 顶栏「恰两处」与状态栏「恰 1 处」计数按新形态重定; <code>AQ_KBD_TOKENS</code>(<code>:61</code>)同步; 反手抄(<code>:274-277</code>)继续禁字面量</td></tr>
+  <tr><td><code>test_webui_ctx_menu_registry.py</code></td><td>恒渲染键位槽形状对账; <code>key</code> 字段引用仍合法; 空串留白断言</td></tr>
+  <tr><td><code>test_webui_trigger_registry.py</code> + <code>triggers.js</code></td><td>开关新触发点登记(<code>ui</code> 四值枚举 <code>triggers.js:15-16</code>, <code>UI_KINDS</code> <code>:47</code>); 新增 ui 值须同步守阵</td></tr>
+  <tr><td><code>webui_static_scan_css.py::_scan_ctx_sub_width</code> + <code>webui_static_scan_js.py</code></td><td>四皮肤 <code>min-width</code> 四值互证 + <code>menu.js</code> 272 算术绑定 + 前后端正则一致</td></tr>
+  <tr><td><code>test_webui_static_dom_*</code> / <code>test_webui_static_skins_skin.py</code></td><td>模板断言(恒渲染槽 / 角标 / 开关钮); manifest 顺序、四皮肤同指共享模板、令牌名集 parity</td></tr>
+  <tr><td><code>test_web_shortcuts_*</code> / <code>test_web_keys.py</code></td><td>注册表结构零改动, 跑即证; 引擎组合键回归(显影链不吞事件)</td></tr>
+  <tr><td>e2e</td><td><code>menus.spec.mjs:556-644</code> 改形态断言 + 新增显影 / 零跳动; <code>drawer-merge.spec.mjs:218-282</code> 徽标; <code>statusbar-kbd-entry.spec.mjs:31-81</code> 改开关; <code>ctx-custom.spec.mjs</code> 布局定制回归; 新增切窗自愈 / 输入态 / 录制态用例</td></tr>
+  <tr><td>全量</td><td><code>test.full</code> 全绿(数字入基线切片, <code>kb.new baseline --total</code> 实测誊写) + e2e fast 绿 + 四皮肤真机截图目检。<strong>基线数字只写一处</strong>, 本件不抄</td></tr>
+</table>
+
+<h3>回写清单(实施收尾时)</h3>
+<ul>
+  <li><code>memory-bank/architecture/webui.md</code>「键位现场提示」节: 补显影机制 / 反引号定案 / 生命周期闭环 / 两种挂载手法 / C 状态机。</li>
+  <li><code>memory-bank/conventions/webui.md</code>「悬浮提示」节: I4 例外边界收窄为「仅键位提示面」, 补开关控件说明例外, 引本计划(D11)。</li>
+  <li>根 README: 核对零漂移即不动。</li>
+  <li>基线切片 + active-context 切片(<code>kb.wrap</code>); 达立档阈值时建任务档案(<code>kb.new task</code>) —— <strong>均属实施收尾动作, 本轮未执行</strong>(D9)。</li>
+</ul>
+
+<h2 id="s10"><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-14-0041</span> 初版。来源: 用户实机反馈五点 + 「grilling 然后出一个方案」; 开工 sync 快进 <code>f9296ba6→e17bd088</code>(远端 44 笔); 只读核查两路(键盘事件链 / 候选键冲突; UI 元素↔注册表全量映射 / 布局 / 开关基础设施 / 守阵); grilling 三轮 Q1–Q10 拍板 D1–D11; 外部调研未取得菜单 accelerator 权威版式参数, 外观数字留待截图目检。三条事实纠偏(注册表行号 +44 / 常驻键帽 3 个 / check_wording 不扫模板)入 §02。前序件 <code>26-11-12-0344</code> 保留 Done, 仅由 <code>kb.bump</code> 追加指链。<strong>计划 Open 入库, S1–S7 等用户显式开工</strong>; 本轮未改 <code>src/</code>、未跑实施、未立档、未提交。</li>
+</ul>
+
+</div>
+</body>
+</html>
