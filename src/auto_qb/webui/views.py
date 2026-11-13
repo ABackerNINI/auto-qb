@@ -301,7 +301,8 @@ class WebviewMixin(GroupMixin, RowMixin, EpisodesMixin, SearchMixin):
     def hr_view_fields(rec: TorrentRecord) -> dict:
         """该成员的 HR 展示字段(标签文本 + 要求/达成布尔 + 三态与依据), 供前端渲染 H&R 栏与对照列
 
-        - hr_tag / hr_tag_done: 已触发未达标 / 已达标时应有的标签(供前端按文本着色)
+        - hr_tag / hr_tag_done / hr_category / hr_category_done: 已触发未达标 / 已达标时
+          应有的标签与分类(供前端按文本着色; 分类与标签同机制现算, 路径逐点镜像)
         - hr_triggered / hr_satisfied: 本机下载条件满足(展示辅助, 区分「本机下载」与「疑似辅种」;
           管理语义在 hr_managed, 不再由本字段表达) / 是否已达成要求
         - hr_excluded: 是否命中 HR 排除表(计划 26-09-28-1805) —— True 时触发/达标恒 False、
@@ -336,6 +337,8 @@ class WebviewMixin(GroupMixin, RowMixin, EpisodesMixin, SearchMixin):
             return {
                 "hr_tag": "",
                 "hr_tag_done": "",
+                "hr_category": "",
+                "hr_category_done": "",
                 "hr_triggered": False,
                 "hr_satisfied": False,
                 "hr_excluded": False,
@@ -371,6 +374,10 @@ class WebviewMixin(GroupMixin, RowMixin, EpisodesMixin, SearchMixin):
             "hr_tag":
                 "",
             "hr_tag_done":
+                "",
+            "hr_category":
+                "",
+            "hr_category_done":
                 "",
             "hr_triggered":
                 triggered,
@@ -410,8 +417,10 @@ class WebviewMixin(GroupMixin, RowMixin, EpisodesMixin, SearchMixin):
         if triggered:
             if satisfied:
                 fields["hr_tag_done"] = _utils.replace_vars(hr.add_tag_for_satisfied, conf)
+                fields["hr_category_done"] = _utils.replace_vars(hr.add_category_for_satisfied, conf)
             else:
                 fields["hr_tag"] = _utils.replace_vars(hr.add_tag, conf)
+                fields["hr_category"] = _utils.replace_vars(hr.add_category, conf)
         return fields
 
     def build_search_index(self) -> None:

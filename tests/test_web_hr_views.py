@@ -5,10 +5,13 @@
 - test_flush_views_marks_dirty_on_hr_revision_change: HR 判定新鲜度置脏(plan 26-10-03-0436 Step 2) —— hr.revision 变化后 flush_views 置脏, 重建后基线前移、再次 flush 不再置脏(无循环置脏)
 - test_flush_views_hr_facade_missing_null_defense: hr 门面缺失(None)时判空防御 —— 重建记基线与 flush 比对都跳过, 不炸不置脏
 - testhr_view_fields_three_state: 详情字段透出站点侧三态与依据(接入站点才有值, 未接入全空)
-- testhr_view_fields_excluded: HR 排除态视图(hr_excluded=True, 触发/达标 False, 站点侧全空, 桥不被打扰)
+- testhr_view_fields_excluded: HR 排除态视图(hr_excluded=True, 触发/达标 False, 站点侧全空, 桥不被打扰);
+  另钉 hr_view_fields 两分支键集恒等 + 新键 hr_category/hr_category_done 空串口径
+  (未配 HR 分支 / 排除种子 triggered=false 都为空串, 计划 26-11-14-0001 S1/S4-3)
 - test_build_group_view_added_on_is_latest_member
 - test_build_group_view_hr_counts
-- test_build_group_view_hr_tags
+- test_build_group_view_hr_tags: 分组视图透出 HR 标签与分类展示值(已触发未达标 -> hr_tag/hr_category,
+  已达标 -> hr_tag_done/hr_category_done, 分类路径与标签路径同机制现算逐字镜像, 计划 26-11-14-0001 S1)
 """
 
 import json
@@ -224,10 +227,11 @@ def test_flush_views_hr_facade_missing_null_defense(tmp_path):
 
 
 def test_build_group_view_hr_tags(tmp_path):
-    """分组视图透出 HR 标签展示值: 已触发未达标 -> hr_tag, 已达标 -> hr_tag_done
+    """分组视图透出 HR 标签与分类展示值: 已触发未达标 -> hr_tag/hr_category, 已达标 -> hr_tag_done/hr_category_done
 
-    判定与打标签流程同源(torrents.check_hr_condition/check_hr_satisfied), 标签文本经
-    utils.replace_vars 展开 ${required_seeding_time} —— 前端只按文本相等着色, 故两者必须逐字一致。
+    判定与打标签流程同源(torrents.check_hr_condition/check_hr_satisfied), 标签与分类文本经
+    utils.replace_vars 展开 ${required_seeding_time} —— 前端只按文本相等着色, 故两者必须逐字一致;
+    分类路径与标签路径机制逐点镜像(计划 26-11-14-0001 S1)。
     """
     from helpers import FakeClient, FakeTorrent, FakeTracker, _hr_rule, make_manager, seed_store
 
@@ -271,8 +275,15 @@ def test_build_group_view_hr_tags(tmp_path):
     assert members["Pending.Show"]["hr_tag_done"] == ""
     assert members["Done.Show"]["hr_tag"] == ""
     assert members["Done.Show"]["hr_tag_done"] == "--HR3D--"
+    # 分类路径逐点镜像标签路径(计划 26-11-14-0001 S1): 同机制 replace_vars 现算,
+    # 模板与打标流程同源(_hr_rule 默认 add_category*, 与 add_tag 同 ${required_seeding_time} 展开)
+    assert members["Pending.Show"]["hr_category"] == "!!HR3D!!"
+    assert members["Pending.Show"]["hr_category_done"] == ""
+    assert members["Done.Show"]["hr_category"] == ""
+    assert members["Done.Show"]["hr_category_done"] == "--HR3D--"
     # 未触发 HR 条件时两字段都为空 -> 前端保持普通标签配色
     assert members["NoHR.Show"]["hr_tag"] == "" and members["NoHR.Show"]["hr_tag_done"] == ""
+    assert members["NoHR.Show"]["hr_category"] == "" and members["NoHR.Show"]["hr_category_done"] == ""
     # 新增展示字段(前端 H&R 栏 / 做种时长与分享率对照列的数据源): 触发与达成布尔 + 要求阈值
     assert members["Pending.Show"]["hr_triggered"] is True
     assert members["Pending.Show"]["hr_satisfied"] is False
@@ -446,6 +457,8 @@ def testhr_view_fields_excluded(tmp_path):
     assert fields["hr_triggered"] is False and fields["hr_satisfied"] is False
     assert fields["hr_state"] == "" and fields["hr_safety"] == "" and fields["hr_safety_text"] == ""
     assert fields["hr_safety_src"] == "" and fields["hr_site_lane"] == ""
+    # 排除种子(triggered=false 恒短路): 分类两键与标签两键同为空串(计划 26-11-14-0001 S1 验收)
+    assert fields["hr_category"] == "" and fields["hr_category_done"] == ""
     rec.hr_link.judge.assert_not_called()
 
     # 分类命中(2026-10-02 实报的主场景)与双命中: 来源 token 随命中列表走
@@ -467,3 +480,12 @@ def testhr_view_fields_excluded(tmp_path):
     # 空配置分支也带 hr_excluded/hr_excluded_by 键(前端字段一致性守阵消费全键集)
     empty = QbManager.hr_view_fields(TorrentRecord.from_torrent(FakeTorrent(hash="HF")))
     assert empty["hr_excluded"] is False and empty["hr_excluded_by"] == ""
+
+    # 两分支键集恒等(计划 26-11-14-0001 I1/R1, S4-3): 未配 HR 分支与正常分支返回键集必须
+    # 完全相等且都含新键 —— 前端按 m.hr_category 等消费, 漏键 = 页面静默空白
+    assert set(empty) == set(fields) == set(fields_cat) == set(fields_both)
+    assert "hr_category" in empty and "hr_category_done" in empty
+    # 未配 HR 时新键为空串(前端 falsy 短路)
+    assert empty["hr_category"] == "" and empty["hr_category_done"] == ""
+    # 分类命中排除的场景同样覆盖: 键在、值为空串
+    assert fields_cat["hr_category"] == "" and fields_cat["hr_category_done"] == ""
