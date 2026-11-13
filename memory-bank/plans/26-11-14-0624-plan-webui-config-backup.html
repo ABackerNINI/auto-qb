@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>WEBUI 配置导出/导入（配置备份 bundle）</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="webui-config-backup">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-14-0624">
+<meta name="doc-updated" content="26-11-14-0624">
+<meta name="doc-refs" content="memory-bank/issues/26-11-14-0625-feat-webui-config-import-diff.html,memory-bank/tasks/26-11-14-webui-config-backup.md">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: webui-config-backup</div>
+<h1>WEBUI 配置导出/导入（配置备份 bundle）</h1>
+<p class="lede">本篇只回答: WEBUI「配置导出/导入（配置备份 bundle）」怎么做 —— bundle 打包哪四面、敏感值与导入语义怎么定、入口与登记闸落在哪。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-14-0624 · <b>doc-updated</b> 26-11-14-0624 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 2026-11-14 用户指令「WEBUI 新增导出/导入 config/WEBUI 配置功能」· grilling 12 问拍板（D1-D12）· 三路只读取证（配置系统 / webui API 面 / gtm 机制）
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<h3>背景</h3>
+<p>配置散在四处，没有任何「整份备份 / 一键迁移」通道：</p>
+<ul>
+  <li><b>主配置 config.yml</b>（仓库根）：WebUI 可整树读写（掩码哨兵 + <code>write_tree</code>），但<b>没有</b>整份原文下载/上传端点——备份恢复只能手动拿 <code>auto-qb-data/config.yml.bak</code>；</li>
+  <li><b>WEBUI 服务端设置</b> = 快捷键 <code>auto-qb-data/webui-keys.json</code>（<code>GET/PUT /api/keys</code>）——无导出通道；</li>
+  <li><b>WEBUI 浏览器偏好</b> = localStorage 15+ 键（主题/列布局/抽屉/时间格式/流量图窗口…）——用户既定裁决「只存浏览器，不上服务端」（<code>app.js:376</code> 注释），零迁移通道；</li>
+  <li><b>gtm 工具配置</b>（tools/global-traffic-monitor）主权在工具自己的数据目录——主程序侧零备份面。</li>
+</ul>
+<p>跨机迁移 / 换 clone / 劫后恢复，今天只能逐项手填。做到什么程度算成：<b>一次导出 = 一个文件；一次导入 = 勾选 section → 确认 → 应用 → 报告</b>；掩码敏感值永不落 bundle 明文；运行时状态永不迁移。</p>
+
+<h3>设计不变量</h3>
+<ol>
+  <li><b>掩码不出机</b>（D2）：导出端点是纯掩码面——不新增「秘密读取原语」。<code>web.skip_local_verify=true</code> 时 loopback 免鉴权（<code>auth.py:167-171</code>），明文端点 = 本机任意进程可静默读走 qB 凭据。</li>
+  <li><b>浏览器偏好不服务端化</b>：收集/写回全在前端；bundle 文件经手但不落服务端存储（与「只存浏览器」裁决精神一致，D3）。</li>
+  <li><b>不碰工具数据区</b>：主程序对 gtm 只经 HTTP 契约通信（<code>tool_client.py:16</code>、<code>traffic_monitor.py:14-17</code> 明文架构约束）——gtm 段在线读 / 在线写，离线跳过（D9）。</li>
+  <li><b>config.yml 导入保注释</b>：全程 ruamel round-trip（掩码化导出与导入落盘都不丢注释/格式）；每次导入前 <code>.bak</code>。</li>
+  <li><b>运行时状态不进 bundle</b>（D5）：导出 = 「配置」而非「整机快照」——state.json 的 exec_history 去重、skip_check_backup 账本与本地 .torrent 强绑定、流量历史是缓存，导入他机必破坏不变量。</li>
+  <li><b>fail-fast 聚合报错</b>（黄金法则 4）：config/keys 校验失败整体拒绝、不半应用；gtm 是唯一「可跳过」面（工具在线才可写，D9）。</li>
+</ol>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+<h3>配置面 2+1+1 现状（取证 2026-11-14）</h3>
+<table>
+  <tr><th>配置面</th><th>落盘</th><th>现有读写路径</th><th>缺口</th></tr>
+  <tr><td>主配置 config.yml</td><td><code>config.yml</code>（生产红线：AI 不动，运行期 app 自写）</td>
+    <td><code>GET/PUT /api/config</code> 整树：掩码哨兵 <code>MASK_SENTINEL="********"</code>（<code>writer.py:64-65,101-129</code>）；<code>write_tree</code> 原子写 + .bak + readonly 字段回退 + 版本闸（<code>writer.py:257-272,375-448</code>）；保存后 <code>reload_config</code> 热重载（<code>routes/config.py:138-170</code>）</td>
+    <td>无整份原文下载/上传端点</td></tr>
+  <tr><td>WEBUI 服务端设置</td><td><code>auto-qb-data/webui-keys.json</code></td>
+    <td><code>GET/PUT /api/keys</code> 整份替换 + sanitize + 读兜底链主→.bak→默认表（<code>routes/keys.py:37-46,98-125</code>）——<b>唯一「webui 设置存服务端文件」先例</b></td>
+    <td>无导出通道</td></tr>
+  <tr><td>WEBUI 浏览器偏好</td><td>localStorage 15+ 键（<code>autoqb.ui.*</code> / <code>autoqb_cols_v5</code> / <code>autoqb_timefmt_v1</code> / <code>gtm.spike.ack</code>…）</td>
+    <td>前端直读直写；「只存浏览器」用户裁决（<code>app.js:376</code>）</td><td>无收集/恢复通道</td></tr>
+  <tr><td>gtm 工具配置</td><td>工具数据目录 <code>&lt;data_dir&gt;/config.yml</code>（+ <code>config.v2.yml</code> overlay，工具侧拆分写）</td>
+    <td>读回通道现成且唯一：<code>GET /status</code> 回显全量 13 键合并树含 v2 键（<code>gtm/server.py:315-345</code>），主程序 <code>/api/traffic/monitor/status</code> 透传（<code>traffic_monitor.py:115-122</code>）；写入 <code>PUT /api/traffic/monitor/config</code> 全量覆盖代理（<code>traffic_monitor.py:218-238</code>）——<b>只在工具在线时可用</b>，离线 502 收口（<code>traffic_monitor.py:126-134</code>）</td>
+    <td>无备份通道</td></tr>
+  <tr><td>web 行为开关</td><td>config.yml 的 <code>web</code> 段</td><td>随 config.yml 走（<code>models.py:330-355</code>）</td><td>—</td></tr>
+</table>
+
+<h3>敏感字段面（决定 D2）</h3>
+<ul>
+  <li>掩码判定单点：<code>SENSITIVE_KEY_PARTS = ("password","passkey","token","secret","cookie","authkey","api_key")</code>（<code>writer.py:64-65</code>）+ transfer targets 条目 <code>password</code>/<code>api_key</code>（<code>loaders.py:163-164</code>、<code>writer.py:70-75</code>）。</li>
+  <li><b>gtm 配置树无敏感字段</b>（webhook 订阅者在 gtm 的 state.json、控制面密钥在 monitor.token——都不属「配置」面），导出无需掩码。</li>
+  <li><code>web.token</code>/<code>hr.token</code> 留空 = 自动生成落 <code>&lt;data_dir&gt;</code>，跨机不用带。</li>
+</ul>
+
+<h3>导出/导入既有先例（决定技术形态）</h3>
+<ul>
+  <li>下载先例：.torrent 导出 = 内存字节 <code>Response</code> + <code>Content-Disposition</code>（<code>torrent_detail.py:235-246</code>）+ 前端 Blob <code>&lt;a download&gt;</code>（<code>commands_send.js:375</code>）——无 FileResponse 先例。</li>
+  <li>导入先例：<code>hubImportSites</code>（<code>config_hub_tracker.js:229-293</code>）= 只读扫描 → confirmDialog → 写配置树待审；<b>全仓无 UploadFile/multipart 先例</b> → bundle 导入走 POST JSON（前端 FileReader 读文本，天然不需要 multipart）。</li>
+  <li>前端收集偏好不经服务端的实现位：导出时客户端把 <code>ui_prefs</code> 段并进已下载的服务端 bundle 再落盘；导入时客户端先摘走该段本地写回，只把服务端三段 POST 上去。</li>
+</ul>
+
+<h3>痛点</h3>
+<p>备份 = 手动复制 <code>.bak</code>（还得赶在下次保存覆盖前）；跨机迁移 = 全部配置逐项手填；快捷键自定义与浏览器偏好完全无法带走。golden 面测试基线 6086+ 的项目里，配置是唯一没有版本化出入口的用户资产。</p>
+
+<h2><span class="no">§03</span>方案总览</h2>
+<h3>bundle 形态（D1）</h3>
+<pre><code>{
+  "format": "auto-qb-config-bundle",
+  "bundle_version": 1,
+  "created_at": "2026-11-14T12:34:56+08:00",
+  "app_version": "&lt;导出时 auto_qb 版本&gt;",
+  "config_yaml": "&lt;掩码化 YAML 原文, 注释保留&gt;",
+  "webui_keys": { "schema_version": 1, "template": "...", "overrides": { ... } },
+  "gtm": { "config": { ...13 键合并树含 v2 键... }, "tool_version": "...", "captured_at": "..." },
+  "ui_prefs": { "autoqb.ui.theme": "...", "autoqb_cols_v5": { ... }, "...": "..." }
+}</code></pre>
+<ul>
+  <li>gtm 离线导出时该段为 <code>null</code>；缺段 = 不含该面；导入对未知 section（顶层）<b>忽略 + warnings</b>（向前兼容）；section 信封内未知键忽略不报错——<b>gtm.config 例外</b>：未知键由工具侧校验整份拒绝（gtm/config.py:250,260-261）→ 400 → warnings → 该段不应用（见 R3）。</li>
+  <li>文件名 <code>auto-qb-backup-&lt;YYYYMMDD-HHMMSS&gt;.json</code>。</li>
+</ul>
+
+<h3>四 section 来源/去向</h3>
+<table>
+  <tr><th>section</th><th>导出来源</th><th>导入去向</th><th>失败语义</th></tr>
+  <tr><td><code>config_yaml</code></td>
+    <td>服务端：读原文 → ruamel 解析 → 掩码 → 回 dump（新单点 <code>mask_yaml_text</code>，writer.py 族）</td>
+    <td>服务端：bundle_version / schema_version 闸 → 掩码 resolve（SENTINEL → 本机现值；不可 resolve 聚合 422）→ <code>readonly_config_paths</code> 回退 → <code>load_config</code> 全量校验 → <code>_WRITE_LOCK</code> + .bak + 原子写 → <code>reload_config</code></td>
+    <td>校验失败整体拒（422 聚合错误列表）</td></tr>
+  <tr><td><code>webui_keys</code></td>
+    <td>服务端：现 <code>load_keys_doc</code>（<code>keys.py:75-91</code>）</td>
+    <td>服务端：复用 PUT /api/keys 的 sanitize + 原子写 + .bak</td>
+    <td>sanitize 失败整体拒</td></tr>
+  <tr><td><code>gtm</code></td>
+    <td>服务端：<code>agent.status()</code> 在线合并树（与 /api/traffic/monitor/status 同源）</td>
+    <td>服务端：复用 <code>_ready_endpoint</code> + PUT /config 代理（<code>traffic_monitor.py:218-238</code>）</td>
+    <td>工具离线 → skipped + 原因（不致命）；工具 400 校验错透传进报告</td></tr>
+  <tr><td><code>ui_prefs</code></td>
+    <td>前端：<code>collect()</code> 读 PREF_KEYS 内 localStorage</td>
+    <td>前端：<code>apply()</code> 写回（只覆盖 bundle 内出现的键，缺键保持本机值）</td>
+    <td>服务端零接触零持久化；未登记键忽略 + 警告</td></tr>
+</table>
+
+<h3>端点与落点</h3>
+<ul>
+  <li>新 router <code>server/routes/backup.py</code>：<code>GET /api/backup/export</code> + <code>POST /api/backup/import</code>（direct 端点、非 cmd 透传）；登记 <code>ROUTE_BUILDERS</code>（<code>routes/__init__.py:8-23</code>）+ 金清单 <code>_GOLDEN_ROUTES</code>（<code>test_web_route_manifest.py:20-114</code>）。</li>
+  <li>前端新文件 <code>static/shared/ui_prefs.js</code>：PREF_KEYS / PREF_EXCLUDED 双清单单点 + collect()/apply()（<code>window.AQB_*</code> mixin 惯例，manifest scripts 排 app.js 前）。</li>
+  <li>按钮：设置页 actbar <code>.hb-actbar .ab-r</code>「放弃改动」左（<code>settings-detail.html:515-522</code>，常显不随脏态隐藏）——shared 模板四皮肤自动 parity，无 ui-diff 分支。</li>
+  <li>登记闸（D8/D11）：新守阵 <code>tests/test_webui_static_ui_prefs.py</code> —— 扫 static/ 全部 JS 里 localStorage/sessionStorage 键族字面量（前缀 <code>autoqb.</code>/<code>autoqb_</code>/<code>gtm.</code> 两族形态都收，防下划线键逃出登记闸；扫描面<b>限存储键字面量及其 const 单键定义</b>——<code>document.cookie</code> 赋值（<code>autoqb_ui</code>，下文已拍板不入本期）与事件名（<code>autoqb:*</code> 冒号族）不在闸内），每个键必须 ∈ PREF_KEYS ∪ PREF_EXCLUDED 否则红；双清单与 ui_prefs.js 源码交叉验证（两侧一致性守阵先例：keys 串正则两侧守阵）；负例自钉。</li>
+  <li>脏态交互（D12）：导出恒读磁盘，<code>cfgDirty</code> 时提示「导出的是已保存配置，未保存改动不含在内」不阻断；导入时 <code>cfgDirty</code> 先弹「未保存改动将丢失」，确认后先 <code>cfgDiscard()</code> 再走三闸。</li>
+</ul>
+
+<h3>双清单初版（实施时以 grep 实测为准）</h3>
+<table>
+  <tr><th>清单</th><th>键</th></tr>
+  <tr><td>PREF_KEYS（导出导入）</td><td><code>autoqb.ui.theme</code> / <code>autoqb.ui.page</code> / <code>autoqb.ui.view</code> / <code>autoqb.ui.hub</code> / <code>autoqb.ui.rowlang</code> / <code>autoqb.ui.drawerTab</code> / <code>autoqb.ui.drawerHeight</code> / <code>autoqb.ui.drawerMerge</code> / <code>autoqb.ui.drawerTpl</code> / <code>autoqb.ui.qbWinGlobal</code> / <code>autoqb.ui.qbWinShared</code> / <code>autoqb.ui.qbYAxisGlobal</code> / <code>autoqb.ui.qbYAxisTorrent</code> / <code>autoqb.ui.qbYAxisGroup</code> / <code>autoqb_cols_v5</code> / <code>autoqb_timefmt_v1</code></td></tr>
+  <tr><td>PREF_EXCLUDED（排除，不带走）</td><td><code>autoqb_token</code>（凭据，绝不带走）/ <code>autoqb_cols_origin_hint_v1</code>（一次性提示）/ <code>gtm.spike.ack</code>（24h 消警时间戳，状态非偏好）/ <code>autoqb_version_reload_v1</code>（sessionStorage 节流戳）/ <code>autoqb.ui.drawerOpen</code>（只写不读的开合态记录，<code>drawer_general.js:164,223</code>）/ <code>autoqb_cols_v3</code> / <code>autoqb_cols_v4</code>（LEGACY_COLS_KEYS 遗留迁移读键，<code>app.js:396</code>）</td></tr>
+</table>
+<p class="aside">cookie <code>autoqb_ui</code>（上次皮肤）不入本期：localStorage 面之外，登录后自选一次成本≈0。</p>
+
+<h3>导入交互流（三闸，D6）</h3>
+<ol>
+  <li>选文件 → JSON shape 检查（<code>format</code> 字段不符直接报错）；</li>
+  <li>confirmDialog：分 section 勾选（bundle 含该段才可勾，缺段灰显）+ 摘要行（bundle 版本 / 创建时间 / 来源 app 版本 / config schema 版本 / gtm 工具版本）+ 固定提示行「bundle 含机器相关路径（gtm tool_dir/tool_exe、qB 保存路径、transfer targets 路径等），导入后请核对」（D10）+ cfgDirty 警告；</li>
+  <li>POST /api/backup/import（只带勾选段；ui_prefs 留在本地不经服务端）→ 应用；</li>
+  <li>结果 dialog：applied / skipped / warnings 报告 → 确认后 <code>location.reload()</code>（keys / 配置热重载 / 偏好一次到位）。</li>
+</ol>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+<table>
+  <tr><th>期</th><th>内容</th><th>验收判据</th></tr>
+  <tr><td><b>S1</b><br>后端导出</td>
+    <td><code>routes/backup.py</code> <code>GET /api/backup/export</code>；writer.py 新单点 <code>mask_yaml_text(text)</code>（ruamel round-trip + SENSITIVE_KEY_PARTS + TARGET_SECRET_KEYS 掩码，注释保留）；gtm 段经 <code>agent.status()</code>；keys 段经 <code>load_keys_doc</code>；ROUTE_BUILDERS + 金清单登记</td>
+    <td>测试：敏感键全掩码（含 transfer targets 条目）/ 掩码前后 diff 仅敏感值行（byte 级钉注释不丢）/ gtm 离线该段 null / keys 形状与 GET /api/keys 一致 / 金清单过</td></tr>
+  <tr><td><b>S2</b><br>后端导入</td>
+    <td><code>POST /api/backup/import</code> 全管线：bundle_version 闸 → schema_version 高于当前拒 → 掩码 resolve → readonly_config_paths 回退 → <code>load_config</code> 聚合校验 → <code>_WRITE_LOCK</code> + .bak + 原子写 → <code>reload_config</code> enqueue；keys 复用 sanitize；gtm 走 <code>_ready_endpoint</code> + PUT 代理；响应 <code>{applied, skipped, warnings}</code></td>
+    <td>测试矩阵：同机掩码还原（写盘值=本机现值非哨兵）/ 跨机不可 resolve 422 聚合逐路径 / readonly 回退 / 新版本拒 / 旧版本 bundle 原样落盘+reload（loaders 内存迁移），schema 版本迁移靠下次启动 materialize 链——验收断言 applied 且重启后终态一致 / 未知 section 忽略+警告 / keys 非法 422 / gtm 离线 skip / 部分段勾选 / 幂等（同 bundle 两次导入终态一致）</td></tr>
+  <tr><td><b>S3</b><br>前端</td>
+    <td><code>ui_prefs.js</code> 双清单 + collect/apply；actbar 两按钮；导出流（GET → 并入 ui_prefs + created_at → Blob）；导入流（FileReader → shape check → confirm 勾选+摘要+提示行 → POST → 结果 dialog → reload）</td>
+    <td>e2e <code>settings-backup.spec.mjs</code> @fast：导出 download 事件捕到合法 bundle / 导入 round-trip 生效（改一处→导入还原→断言回原值）/ 缺段灰显；四皮肤 parity（shared 模板自动）；静态 dom 守阵适配</td></tr>
+  <tr><td><b>S4</b><br>守阵</td>
+    <td><code>tests/test_webui_static_ui_prefs.py</code>：扫描器（<code>autoqb.*</code>/<code>gtm.*</code> 字面量全量收）+ 双清单交叉验证 + 负例自钉</td>
+    <td>负例红验：JS 加未登记 storage 键 → 守阵红（点分 <code>autoqb.ui.*</code> 与下划线 <code>autoqb_*</code> 两形态各验一次）；登记进双清单 → 绿（红绿双验留痕）</td></tr>
+  <tr><td><b>S5</b><br>收尾</td>
+    <td><code>architecture/webui.md</code> 配置备份节回写；根 README 功能清单；test.full 全量 + <code>kb.new baseline</code>；真机目检（导出 → 改乱 → 导入还原 round-trip，用户）</td>
+    <td>基线切片数字实测誊写；真机目检过</td></tr>
+</table>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p>无待拍板项 —— grilling 12 问已全部拍板（2026-11-14），结论见 §06。</p>
+<p>显式移出本期：<b>导入 diff 预览视图</b>（逐段对照「导入会改什么」）—— 已入池 <a href="../issues/26-11-14-0625-feat-webui-config-import-diff.html">26-11-14-0625-feat-webui-config-import-diff</a>，留作后续增强。</p>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+  <tr><th>D</th><th>问题</th><th>结论（2026-11-14）</th></tr>
+  <tr><td>D1</td><td>打包形态</td><td>单文件 JSON bundle 分 section；导入 confirm 分 section 勾选应用哪些</td></tr>
+  <tr><td>D2</td><td>敏感字段</td><td>导出一律掩码；导入遇掩码值保留本机现值；不做明文导出（skip_local_verify 下明文端点 = 本机任意进程可读 qB 凭据）</td></tr>
+  <tr><td>D3</td><td>浏览器偏好</td><td>纳入；前端收集/写回不经服务端（与「只存浏览器」裁决精神一致）</td></tr>
+  <tr><td>D4</td><td>gtm 工具配置</td><td>纳入</td></tr>
+  <tr><td>D5</td><td>运行时落盘文件</td><td>全不纳入（state.json / hr/ / 流量历史 / 删种备份 / relocate journal / 日志 / .bak）——导出=「配置」非「整机快照」</td></tr>
+  <tr><td>D6</td><td>导入语义</td><td>整份替换 + 三道闸（先验 → confirm 摘要 → 应用）；diff 预览入池留后续</td></tr>
+  <tr><td>D7</td><td>UI 入口</td><td>设置页 actbar「放弃改动」左边（不放 WebUI 卡——该卡管不到后端配置面）</td></tr>
+  <tr><td>D8</td><td>偏好键口径</td><td>显式清单；新增键必须登记双清单之一否则报错</td></tr>
+  <tr><td>D9</td><td>gtm 通道</td><td>在线 HTTP 通道（status 读 / PUT 代理写）；离线跳过+警告；不开文件通道（架构明文约束「只经 HTTP 契约通信」）</td></tr>
+  <tr><td>D10</td><td>机器相关路径</td><td>原样导入 + confirm 摘要固定提示行；不做字段级回退（路径面无法穷举，清单会漂移）</td></tr>
+  <tr><td>D11</td><td>登记闸形态</td><td>静态扫描守阵双清单（不加运行时校验）</td></tr>
+  <tr><td>D12</td><td>脏态交互</td><td>导出读磁盘 + 提示不阻断；导入先确认「未保存改动将丢失」再应用</td></tr>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+  <tr><th>#</th><th>风险</th><th>触发条件</th><th>处置</th></tr>
+  <tr><td>R1</td><td>掩码不可 resolve（bundle 有条目、本机无对应键）</td><td>跨机导入且本机无同键条目（如 bundle 含第 3 个 transfer target）</td><td>聚合 422 逐路径列出，用户编辑 bundle 或先建条目；<b>绝不</b>把 <code>"********"</code> 字面量写盘（fail-fast 黄金法则）</td></tr>
+  <tr><td>R2</td><td>bundle 来自更新版本</td><td>config schema_version / bundle_version 高于本机</td><td>拒绝并提示先升级本机；旧版本靠启动迁移链 <code>materialize_schema_migration</code> 兜底（<code>qbmanager.py:509</code>）</td></tr>
+  <tr><td>R3</td><td>gtm 工具侧拒绝键集</td><td>导出/导入两端 gtm 版本不同（未知键被工具拒，<code>gtm/config.py:260-261</code>）</td><td>工具 400 原样透传进报告 warnings；不阻断 config/keys 应用；<code>http_host/http_port</code> 改动需重启工具的既有口径进提示</td></tr>
+  <tr><td>R4</td><td>机器路径迁移后静默失效</td><td>tool_dir/tool_exe/dat_path/qB 保存路径指向旧机</td><td>confirm 摘要固定提示行（D10）；traffic source 降级为 not_installed 五态，不崩（<code>agent.py:613-619</code>）</td></tr>
+  <tr><td>R5</td><td>偏好键格式漂移</td><td>将来 cols_v5→v6 等键格式变更</td><td>双清单登记闸强制显式登记；apply 只覆盖 bundle 内出现的键，缺键保持本机值</td></tr>
+  <tr><td>R6</td><td>导入覆盖未保存编辑</td><td>cfgDirty 时点导入</td><td>脏态确认前置（D12）+ 导入后 reload</td></tr>
+  <tr><td>R7</td><td>ruamel round-trip 破坏注释/格式</td><td>掩码化导出或导入落盘</td><td>S1 测试钉「掩码前后 diff 仅敏感值行」byte 级一致；非敏感行原样</td></tr>
+  <tr><td>R8</td><td>导入与 PUT /api/config 竞写</td><td>并发请求</td><td>复用 <code>_WRITE_LOCK</code> 同一单点（<code>writer.py:51-56</code>）；单写线程黄金法则不破</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-14-0624</span> 初版：grilling 12 问拍板 D1-D12（打包形态/掩码/浏览器偏好/gtm/运行时数据/导入语义/入口/双清单/通道/机器路径/登记闸/脏态）+ 三路只读取证（配置系统、webui API 面、gtm 机制）；计划入库 Open；diff 预览移出本期入池 <a href="../issues/26-11-14-0625-feat-webui-config-import-diff.html">26-11-14-0625-feat-webui-config-import-diff</a>；S1-S5 待显式开工。</li>
+</ul>
+
+</div>
+</body>
+</html>
