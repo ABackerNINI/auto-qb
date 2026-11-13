@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="e2e-dt-live-update-longtask-budget-flake">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="dt-live-update #10 千文件勾选长任务预算 fast 全量轮负载偶红(单跑复绿)">
 <meta name="issue-summary" content="预算下界 0 的 longtask 量具条在 44.8m 全量负载下实测 1 个 63ms 长任务即红; prism 孪生同轮 0/0 过; 静机单跑 14/14 复绿 —— 负载型产量具假红候选, 与 route-cleanup 修复无因果">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-13-0519-test-e2e-dt-live-update-longtask-budget-flake</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-13 05:19</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
@@ -167,11 +167,34 @@ Received: 1
   <h2><span class="no">§07</span>状态变更日志</h2>
   <ul>
     <li>2026-11-13 05:19 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-13 — 状态 Open → Done（kb.status）</li>
+</ul>
   <h3>复验</h3>
-  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <p>复验：2026-11-13，clone2 本机(同发现环境)—— 静机单跑全 spec <strong>14/14 复绿(1.9m)</strong>,
+  #10/#11 双皮诊断行 longtask 无(合 0ms), 与入池取证一致; 负载态不可稳定复现(负载型候选,
+  44.8m/轮采样成本不成比例), 机制面改<strong>页面任务注入确定性复刻</strong>(见修复后补充)。</p>
   <h3>修复后补充</h3>
-  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  <p><strong>实际修法</strong>(建议 B 量级口径, 建议 A 采样先行改道): <code>e2e/dt-live-update.spec.mjs</code>
+  #10/#11 longtask 断言 <code>lt.length === 0</code> → <strong>量级口径</strong>
+  <code>Math.max(0, ...lt) &lt; LT_REGRESSION_MS(=100, 单点常量)</code>; 阈值锚三处: ①负载噪声实测上限
+  63ms; ②回归面下界 = W1 千行 keyed diff 残留(W1 长任务预算 &lt;150ms, 同 longtask 口径; W6a 旧
+  全路径同面可见延迟 171-174ms 含 100ms 回执延迟, 非 longtask 口径, 仅旁证旧路径慢一个量级);
+  ③长任务定义界(&gt;50ms)的 2 倍。同形先例 <code>perf.spec.mjs</code> W5「灾难冻结帧 &lt;500ms」;
+  计数不随时长线性, ③ 坑档的 elapsed 归一化不适用(timing-tolerance.md 复发④)。检测力不丢:
+  行侧零重建的主守阵是 mut 预算(≤8/≤16, DOM 记录数与 CPU 负载无关, 千行重写必爆), longtask
+  预算只作计时伴证。</p>
+  <p><strong>改道说明</strong>(不采纳建议 A 的多轮负载采样): 机制类已定位(GC/调度毛刺 × 计数零容差,
+  timing-tolerance ③ 同族), 采样只补偶红率数字、不改判据形态。改用<strong>注入复刻</strong>:
+  ①红验注入 130ms 页面任务 → 双皮红(<code>Expected: &lt; 100 / Received: 130</code>, 回归量级仍必红);
+  ②注入 63ms(=假红实测值, 旧口径此形态必红) → 双皮绿(诊断行 <code>longtask 63(合 63ms)</code>)——
+  假红条件的确定性等价物, 证据硬于概率采样。附带实测: CDP <code>page.evaluate</code> 直跑忙等
+  <strong>不产生 longtask 条目</strong>(独立探针 [] vs 页面自调度 [130]), 红验注入必须走页面任务队列
+  —— 新坑档 <code>pitfalls/testing/longtask-redverify-page-task.md</code>。</p>
+  <p><strong>验证方式与数字</strong>(2026-11-13, clone2 本机): ①红验 130ms 注入双皮红;
+  ②噪声容忍 63ms 注入双皮绿; ③静机全 spec <strong>14/14 全绿(1.9m)</strong>, 双皮 longtask 无;
+  ④全量 fast 门禁轮复跑(原假红场景) <code>npm run test:e2e:fast</code>
+  <strong>356P/0F/flaky 0/40.6m</strong>(上轮同场景 349P/1F/44.8m); ⑤test.full 数字见最新基线切片。
+  台账已登记(flaky-ledger.md 2026-11-13 行, time(边界/粒度)); #11 同窗在险面同批收口。</p>
 </section>
 
 <footer>

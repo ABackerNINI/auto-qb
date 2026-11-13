@@ -15,8 +15,8 @@
  *      before/after offsetTop)必然错过, 必须**逐帧采样**(rAF + 4ms 双路)覆盖整个
  *      数据回路窗口, 取全程最大偏移。atlas/console 双皮肤都中过招(prism 无该动画规则)。
  *   #10/#11 千级止血量具(计划 26-11-02-0351 W1): 千文件桩下勾选单行/数据回路补拉,
- *      longtask PerformanceObserver 钉主线程零长任务(记忆化跳渲 + 廉价 sig + O(D×F) 消除),
- *      失效面(_cls 染色/三态框)与未变行身份同步盯住。
+ *      longtask PerformanceObserver 钉主线程无回归量级(>=100ms)长任务(记忆化跳渲 + 廉价 sig +
+ *      O(D×F) 消除), 失效面(_cls 染色/三态框)与未变行身份同步盯住。
  *   #12 千级窗口化量具(计划 26-11-02-0351 W3): 千文件桩下 content 变体挂 window:"drawerContent"
  *      —— 常驻 DOM 行数 << 数据行数(渲染基数收口)/ 滚到底末行可见(占位撑总高)/ 键盘 ↓ 跨窗
  *      先滚动后回焦(dtWinKbd 前缀和换算)。
@@ -117,6 +117,16 @@ const awaitWindowSettled = (page, anchor, timeout = 5_000) => {
  * @param {number} ms
  */
 const measureWindow = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/* W1 长任务预算的量级线(2026-11-13 W5 修, issue 26-11-13-0519): W4 收紧的 count==0 只在静机
+ * 成立 —— 44.8m 全量负载轮实测 1 个 63ms GC/调度毛刺混进测量窗即假红(prism 孪生同轮 0/0,
+ * 静机单跑 14/14)。口径改「无回归量级长任务」: 阈值 100ms 锚三处 —— (1)负载噪声实测上限 63ms
+ * (Chromium GC 停顿常规 <100ms); (2)回归面 = W1 千行 keyed diff 残留(W1 长任务预算 <150ms,
+ * 同 longtask 口径; W6a 旧全路径同面可见延迟 171-174ms 含 100ms 回执延迟, 非 longtask 口径,
+ * 仅旁证旧路径慢一个量级); (3)长任务定义界(>50ms)的 2 倍。≥100ms 即红仍钉住千行重写回潮;
+ * 行侧零重建的主守阵是 mut 预算(DOM 记录数与 CPU 负载无关), longtask 预算只作计时伴证。
+ * 同形口径先例: perf.spec.mjs W5「同屏交互无灾难冻结帧(实测 max <500ms)」。 */
+const LT_REGRESSION_MS = 100;
 
 async function openTorrentDrawer(page) {
   await page.click('nav.tabs [data-view="torrents"]');
@@ -358,7 +368,9 @@ for (const skin of SKINS) {
      *   #10 勾选单行: 记忆化 + O(D×F) 消除后行侧零重建(锚内 MutationObserver 记录数钉住
      *       —— 旧实现 = 1000+ 行全量重写), 长任务(PerformanceObserver longtask, 口径同
      *       perf.spec.mjs 既有埋点)钉回归下界。W1 时预算 ≤1/<150ms(残留 = 桥 v-for 千行
-     *       keyed diff); W4 A/B 收紧为 0(W3 收窗后基数 ~47 行, 2026-11-02 实测双皮 0)。
+     *       keyed diff); W4 A/B 收紧为 0(W3 收窗后基数 ~47 行, 2026-11-02 实测双皮 0);
+     *       2026-11-13 W5 改量级口径 >=100ms(W4 的 count==0 在负载轮假红, 锚点见
+     *       LT_REGRESSION_MS 注释)。
      *       失效面同钉: 勾选行 _cls 翻 is-chk、目录行三态框 indeterminate 跟进(漏键 =
      *       染色停旧值, node 电池同判据)。
      *   #11 数据回路: 徽章点击 → POST → 静默补拉(仅一个文件 priority 变), 廉价 sig 不再
@@ -410,10 +422,12 @@ for (const skin of SKINS) {
       const ltSum = lt.reduce((a, b) => a + b, 0);
       // W4 A/B 收紧(计划 26-11-02-0351 §W4): W1 时预算 ≤1/<150ms, 钉的残留面是「桥 v-for
       // 千行 keyed diff」; W3 收窗后渲染基数 ~47 行, 该面随基数消失。2026-11-02 实测(收窗
-      // settle 判据对齐 #12 后)双皮 0 longtask / 0ms —— 回归下界收紧为 0, 勾选单行再出现任何
-      // longtask 即红(length==0 时总时长恒 0, 不再留冗余的绝对 ms 断言, perf-cadence 口径)。
-      expect(lt.length, `勾选单行零长任务(实测 ${lt.join('/') || '无'}; W4 A/B 收紧: W1 预算 ≤1, ` +
-        `W3 收窗 + 双皮实测 0/0ms → 下界 0)`).toBe(0);
+      // settle 判据对齐 #12 后)双皮 0 longtask / 0ms —— 回归下界收紧为 0。
+      // W5 改道(2026-11-13, issue 26-11-13-0519): count==0 在 44.8m 全量负载轮被 1 个 63ms
+      // GC/调度毛刺打穿(prism 孪生同轮 0/0, 静机 14/14) —— 静机取证下的收紧把环境噪声当回归。
+      // 改量级口径 LT_REGRESSION_MS(锚点与先例见其注释): <100ms 毛刺不计, >=100ms 即红。
+      expect(Math.max(0, ...lt), `勾选单行无>=${LT_REGRESSION_MS}ms长任务(实测 ${lt.join('/') || '无'}; ` +
+        `W4 A/B 收紧 count==0 负载轮假红改量级口径)`).toBeLessThan(LT_REGRESSION_MS);
       expect(mut, `锚内 DOM 变更记录 ≤8(实测 ${mut}; 行侧零重建 —— 旧实现 = 1000+ 行全量重写)`).toBeLessThanOrEqual(8);
       console.log(`      [#10 ${skin}] 勾选单行: longtask ${lt.join('/') || '无'}(合 ${ltSum}ms), 锚内 mut ${mut}`);
       // 失效面在真浏览器成立: 勾选行 _cls 翻 is-chk(rowCls="_cls" 绑行容器), 目录行三态跟进
@@ -477,8 +491,9 @@ for (const skin of SKINS) {
       // W4 A/B 收紧(口径同 #10): W1 预算 ≤2/<200ms 钉的是「整包 JSON.stringify + 千行全量
       // 重装配」残留面; W3 收窗 + 廉价 sig 后该面消失, 2026-11-02 实测双皮 0 longtask / 0ms
       // (POST→补拉→换帧全程, settle 判据对齐 #12)→ 回归下界 0。
-      expect(lt.length, `数据回路零长任务(实测 ${lt.join('/') || '无'}; W4 A/B 收紧: W1 预算 ≤2, ` +
-        `W3 收窗 + 廉价 sig + 双皮实测 0/0ms → 下界 0)`).toBe(0);
+      // W5 改道同 #10(count==0 负载轮假红, issue 26-11-13-0519): 改量级口径 LT_REGRESSION_MS。
+      expect(Math.max(0, ...lt), `数据回路无>=${LT_REGRESSION_MS}ms长任务(实测 ${lt.join('/') || '无'}; ` +
+        `W4 A/B 收紧 count==0 负载轮假红改量级口径)`).toBeLessThan(LT_REGRESSION_MS);
       expect(mut, `锚内 DOM 变更记录 ≤16(实测 ${mut}; 记忆化只重装配脏行)`).toBeLessThanOrEqual(16);
       console.log(`      [#11 ${skin}] 数据回路: longtask ${lt.join('/') || '无'}(合 ${ltSum}ms), 锚内 mut ${mut}`);
       await expect(anchor.locator('[data-row-probe="f0"]'), '脏行 file0 DOM 身份保持(keyed 补丁)').toBeAttached();

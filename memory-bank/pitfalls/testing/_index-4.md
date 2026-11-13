@@ -1,15 +1,13 @@
 # testing — 测试 / 冒烟 / 仿真纪律 · 卷 4/5
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `playwright-teardown.md` … `sim-root-sentinel.md`(共 24 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `poll-skeleton-redverify.md` … `smoke.md`(共 25 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
 
 | 主题 | 一句话 | 触发词 |
 |---|---|---|
-| [playwright-teardown.md](playwright-teardown.md) | 本机 node 的 `spawnSync` **只要带管道 stdio**(`'pipe'` 或默认)就 EBUSY —— `stdio: 'ignore'` / `'inherit'` 正常, 且与可执行文件无关(连 `process.execPath` 即 node.exe… | dev.e2e 不退出, 测试全过但挂住, webServer 收尾, spawnSync EBUSY, 管道 stdio, taskkill 无效, 端口不释放, 桩服务残留, waitForCleanup, Playwright 挂死,… |
-| [poll-last-round-race.md](poll-last-round-race.md) | e2e 断言等一次**必然发生**的轮次(如「lastRid 置空 ⇒ 请求不带 rid ⇒ 服务端恒回全量」)时读探针记录的「最后一轮」: 只要与该动作无因果的其它轮次(在飞旧 rid 请求被 ver 抬高后回落的增量轮)在全量轮**之后**落袋, 末值就停在否定态, 轮询窗内… | flaky, 顺序相关, 探针, 末值断言, 轮询竞态, expect.poll, 隔离绿全量红, 在飞请求, rid 过期, delta 轮, 全量轮, window.__d, applyStateRows, lastRid, delta… |
 | [poll-skeleton-redverify.md](poll-skeleton-redverify.md) | 手写红验脚本(逐条改源码 → 跑目标守阵 → 还原)时, 「还原」这一步的两个静默失败形态 —— | 红验, 突变还原, grep 校验, 注释形态突变, node 电池挂起, subprocess 超时, 微任务死循环 |
 | [qb-api-latency-probe.md](qb-api-latency-probe.md) | 标定 qB API 耗时(如 tracker 取数预算)时, 三个坑会把数字或结论带偏: 路径式 `/torrents/{hash}/trackers` 不存在(404)、该实例对带 SID cookie 的请求回 404、每次新建连接会把 TCP 建连算进单次耗时(实测 27… | 真机标定, 耗时测量, tracker 取数预算, qB API, 404, 连接复用, keep-alive, P95 |
 | [qb-profile-nic.md](qb-profile-nic.md) | 换机抄 qB profile 残留原机网卡标识 ⇒ connection_status=disconnected 假红 | disconnected, 网卡, ethernet_, profile, 换机, firewalled, real.up, connection_status |
@@ -32,3 +30,6 @@
 | [sidefx-diagnostic-probe.md](sidefx-diagnostic-probe.md) | 生产失败路径上的「只进日志」诊断探针(端口占用者 `ss -ltnp` / `lsof` / PowerShell)在测试里会真跑外部命令 ⇒ Linux CI 的 sidefx 越界; Windows 本机的绿是被通知器守卫偶然遮蔽, 且报错归属到该 worker 最后跑的用例… | sidefx 越界, POPEN, ss -ltnp, port_owner, describe_port_owner, 端口占用者探针, WebUIBindError, CI 红本机绿, xdist, teardown ERROR |
 | [sidefx-import-time-temp-roots.md](sidefx-import-time-temp-roots.md) | sidefx 会话守卫的临时根集合不得在模块导入时固化 | 串行 -n 0 跑测试出现 sidefx 越界, 临时目录内删除/建链被判越界, TEMP_ROOTS 与 gettempdir 不一致 |
 | [sim-root-sentinel.md](sim-root-sentinel.md) | `scripts/sim_qb.py` 的 `prepare_root` 只在 root 目录**不存在**时才写哨兵 `.auto-qb-sim-root`; 自己先 `mkdir` 出来的空目录第一次跑会被当"合法空目录"放过但不留哨兵, 跑过一次目录非空后, 之后每次起 s… | dev.sim, B1, 哨兵, sim root, 已存在且非空, BoundaryViolation, 删除场景 |
+| [single-file-coverage-gate.md](single-file-coverage-gate.md) | 只跑单个测试文件时, 全部用例绿但收尾仍打 `FAIL Required test coverage of <门槛>% not reached. Total coverage: ~18%` —— 覆盖率**全局门槛**只对全量收集有意义, 部分运行收集面小必然红, 用例本身全过。… | test.one, 单文件, 单测一个文件, coverage FAIL, not reached, 18%, 假红, 排查单个用例, 裸跑 pytest 单文件 |
+| [single-file-xdist-hang.md](single-file-xdist-hang.md) | 只跑**一个**测试文件却用默认的 `-n 8`, 会长时间**零输出**看起来像挂死 (实测 7 分钟无一行, 只有 1 个 worker 存活); 单文件 / 少量用例一律 `-n 0` 串行, 同一批用例 24s 跑完。`test.one` 已内置 `-n 0`。 | 单文件 -n 8, 挂死, 零输出, xdist worker 卡住, test.one, 单文件慢, 并行度 |
+| [smoke.md](smoke.md) | `scripts/ui_harness.py` + `e2e/`(@playwright/test)是本仓库覆盖前端渲染的唯一手段; 这里是它的环境坑与验证手法 | 浏览器冒烟, e2e, Playwright, Edge, 白屏, 前端改完, 时序复现, 聚合行状态色, Cannot find module playwright, 修饰键点击, Ctrl+click, 多选失败, site-chip,… |

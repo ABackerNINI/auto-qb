@@ -1,7 +1,7 @@
 # 计时断言的 OS 粒度余量
 
 > 摘要: 挂钟计时断言的两个假红面 —— ①**下界**零容差: Windows 等待原语按 15.6ms 定时器刻度取整, 50ms 等待实测可提前到 46.8ms(3 刻度); ②**上界**零容差: 合法负载 / CI 抢占直接撞线(2026-10-05 实测)。守阵余量一律以"被守回归的量级"定界; 上界优先换 CPU 时间(process_time)而非挂钟。
-> 触发: 计时断言, 挂钟, elapsed, sleep 精度, 定时器刻度, 假红, 节流守阵, 节拍, Event.wait, 抖动, flaky, 耗时上界, 性能上界, CPU 时间, process_time, 并行 worker, xdist
+> 触发: 计时断言, 挂钟, elapsed, sleep 精度, 定时器刻度, 假红, 节流守阵, 节拍, Event.wait, 抖动, flaky, 耗时上界, 性能上界, CPU 时间, process_time, 并行 worker, xdist, longtask, 长任务, PerformanceObserver, 窗口内计数
 
 ### 挂钟下界断言零容差: Windows 等待按 15.6ms 刻度取整, `elapsed >= main_tick` 必假红
 
@@ -16,7 +16,7 @@
   1.8ms 仍会抖)。**不要**为对称加挂钟上界: 负载合法拉长等待, 上界会制造新的假红模式。相关: 同根双 issue
   [26-09-20-0952](../../issues/26-09-20-0952-test-mainloop-tick-timing-flaky.html) /
   [26-09-22-2052](../../issues/26-09-22-2052-test-throttle-test-sleep-tolerance.html)(2026-09-28 修复关闭)。
-- **复发**: 3
+- **复发**: 4
   - ① 2026-10-05 CI 假红: `tests/test_traffic_grid_group.py::test_group_50_members_correct_and_time_bound`
     的**挂钟上界** `elapsed < 3.0` 在 windows-latest 实测 4.01s(同一负载本机插桩中位 ~1.26s) —— 正是上面
     「不要为对称加挂钟上界」形态的**首次真兑现**(上界零容差, 合法负载直接撞线)。处置: 计时改
@@ -58,6 +58,19 @@
     **为什么没命中**: ①② 都挂在 Python 侧挂钟/CPU 时间守阵, 本条是 JS 侧「窗口内事件计数」,
     词面「节拍 / 拍数」不在本条 `触发` 视野; 评审轮 1 又抓出初版硬编码 2000ms 与真实档不符,
     说明「放宽上界」类修法必须先问分母(节拍/窗口)是不是常量。
+  - ④ 2026-11-13 本机负载假红: `e2e/dt-live-update.spec.mjs` #10/#11 的 longtask 预算 W4 收紧为
+    `count==0`(2026-11-02, 只在静机取证双皮 0/0), 44.8m 全量负载轮实测 1 个 63ms GC/调度毛刺混进
+    500/800ms 测量窗即红(prism 孪生同轮 0/0, 静机单跑 14/14)—— ③ 的 JS 侧「窗口内事件计数零容差」
+    同族, 但计数对象是 longtask: 计数不随时长线性, **按 elapsed 归一化不适用**。处置: 量级口径
+    `Math.max(0, ...lt) < 100`(阈值锚: 噪声实测上限 63ms / 回归面下界 W1 长任务预算 <150ms /
+    长任务定义界 2 倍), 回归检测力不丢 —— 行侧零重建的主守阵是
+    mut 预算(DOM 记录数与负载无关), longtask 只作计时伴证; 同形先例 perf.spec W5 灾难冻结帧
+    <500ms。**为什么没命中**: 收紧(11-02)先于 ③(11-10)落档, 非读了没照做; 但收紧时的实测只在
+    静机做 —— 上界收紧类判据的取证环境必须含负载态(哪怕全量跑一轮), 只在静机验证的"实测 0"
+    对负载态无外推力。红验注入形态另有坑档
+    [longtask-redverify-page-task.md](longtask-redverify-page-task.md)(CDP evaluate 忙等不计
+    longtask, 必须页面自调度任务)。相关: issue
+    [26-11-13-0519](../../issues/26-11-13-0519-test-e2e-dt-live-update-longtask-budget-flake.html)。
 - **守阵**: `tests/test_qbmanager_*.py` `test_run_loop_throttles_without_stop_event` 断言处注释写明余量依据;
   改守阵判据时先读该注释再动数字。性能**上界**形态的守阵见 `tests/test_traffic_grid_*.py`
   `test_group_50_members_correct_and_time_bound`(CPU 时间口径, 余量依据同样写在注释 / docstring 里)。

@@ -1,18 +1,17 @@
 # testing — 测试 / 冒烟 / 仿真纪律 · 卷 3/5
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `hr-registry-pollution.md` … `plan-docstring-section-boundary.md`(共 24 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `importlib-sys-modules-dataclass.md` … `poll-last-round-race.md`(共 25 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
 
 | 主题 | 一句话 | 触发词 |
 |---|---|---|
-| [hr-registry-pollution.md](hr-registry-pollution.md) | 测试期 `hr.runtime` 的注册表路径必须被 conftest 重定向到临时目录 —— 用例的 `data_dir` 是每例唯一的 `tmp_path`, 不隔离就是**每个用例往用户真实 `%LOCALAPPDATA%/auto-qb-hr/instances.json… | 加 hr runtime 测试, 发现端点测试, 扩展发现列表出现无关实例, 主实例连不上 Failed to fetch, instances.json 无界增长, 写 app-data, 注册表条目堆积, 测试污染用户数据 |
-| [iab-click-rerender-flake.md](iab-click-rerender-flake.md) | 用 IAB 浏览器 (Playwright surface) 对 kb.nav 这类「动作即整段重渲染 innerHTML」的单文件页做冒烟时, 多个 locator 动作挤在一个 cell 里连打 (间隔 ≤150ms), 后继动作可能报 `Timeout waiting fo… | 冒烟中 locator click 超时; 想断定「功能有 bug」之前; 冒烟脚本连续动作 (右键菜单 → 开关按钮 → 专区内按钮) 后继点击超时。 |
 | [importlib-sys-modules-dataclass.md](importlib-sys-modules-dataclass.md) | importlib 就地加载 future-annotations dataclass 模块, 不先注册 sys.modules 会在 3.13 上炸 NoneType | importlib, spec_from_file_location, exec_module, sys.modules, dataclass, NoneType, 3.13, 就地加载, 守阵加载引擎, find_skill_dir |
 | [inproc-server-conn-abort.md](inproc-server-conn-abort.md) | 测试自起 `http.server.ThreadingHTTPServer(("127.0.0.1", 0))` 当假服, test.full(并行 + 覆盖率插桩)高载下, **真客户端打真本地服**的段偶发 `ProtocolError: Connection aborted… | 10053, ConnectionAbortedError, Connection aborted, 你的主机中的软件中止了一个已建立的连接, ProtocolError, ThreadingHTTPServer, 进程内假服, 本地假服,… |
 | [log-capture.md](log-capture.md) | caplog 与全局日志状态是跨测试共享的 —— 断言日志要挂模块 logger 自建 handler + 显式 setLevel, 不碰 caplog。 | caplog, 日志断言, 日志级别, root handlers, root level, xdist, 偶发, CI 红, setup_logging, make_manager |
+| [longtask-redverify-page-task.md](longtask-redverify-page-task.md) | 给 longtask 预算断言做红验(注入长任务证必红)时, Playwright `page.evaluate` 里直跑忙等 | longtask, 长任务, 红验, 红绿双验, 注入, 忙等, evaluate, PerformanceObserver, 量具, 预算断言 |
 | [manager-builder-single-point.md](manager-builder-single-point.md) | 测试构造单点参数面不足导致内联旁路 | 内联构造, make_manager, 单点旁路, 装配样板, FakeConfig, QbManager, 段覆盖, 测试构造器, builder |
 | [manager-connect-stub.md](manager-connect-stub.md) | QbManager.run() 主循环用例里把 `connect` mock 成 `return True` 却不给 `mgr.client` 落值, 在断连稳态守卫(26-10-31-1029)生效后会让请求线被整段静默跳过 —— 用例不报错, 断言以「线没跑」的形态假红/假绿… | 写或改 run() 主循环测试, mock/替换 connect; 或改断连守卫判据后跑主循环用例 |
 | [monotonic-warn-sentinel.md](monotonic-warn-sentinel.md) | `time.monotonic()` 的 0 点是**机器开机时刻**(Linux `CLOCK_MONOTONIC` / Windows `GetTickCount64`), 不是"很久以前" —— 拿 `0.0` 当「从未告警」哨兵时, 节流判据 `now - 0.0 >=… | CI 红, 本机绿, 平台无关的 CI 红, caplog 断言 False, 告警没打出来, 首次告警被吞, 节流, throttle, 哨兵, sentinel, time.monotonic, uptime, 全新 VM, 日志断言,… |
@@ -32,3 +31,5 @@
 | [patching.md](patching.md) | 「Windows 全绿 / Linux 全红」的**多类根因**与"归错类比不修更危险"的教训 —— 平台相关测试必须以 `monkeypatch` 固定平台; 最隐蔽的两类: **Windows 路径归一化(结尾点/空格被剥、大小写不敏感)让"路径存在性"判据在本机恒真**(2… | CI 红, Linux CI, 平台差异, monkeypatch, WSL, normcase, dir_fd, 平台专属模块, 码页, GBK, cp936, PYTHONUTF8, 假红, 路径归一化, 结尾点, 大小写不敏感, ex… |
 | [perf-measurement.md](perf-measurement.md) | 本机每次文件操作的**固定过路费**(初始 写 20ms / 删 43ms, 与数据量无关)曾支配全量耗时 —— **已由系统层排除项治好(全量 75s → 19.4s, 并行 5.0s)**; 另记"判断单项优化收益不能看全量总时"与"并发污染下的数字一律是假的"两条度量纪律。 | 测试慢, 耗时, 性能, 优化收益, 归因, 全量多久, 跑得慢, durations, 度量, 并发跑, 白名单, 排除项, 杀软, 沙箱 |
 | [plan-docstring-section-boundary.md](plan-docstring-section-boundary.md) | 对「## 测试计划」这类分节 docstring 做机械批量改写时, 段边界若用 `##` 前缀匹配, 段内 `###` 小节标题会被误判成同级边界提前截断 —— 截断点之后的既有条目整段「消失」, 缺列数翻倍, 新条目插进错误小节(2026-10-22 实证: 16 文件误插… | 批量改写 docstring, 测试计划回填, 段边界, ###, 小节被截断, 缺列翻倍, 插错小节, 机械改写脚本, 底数核对, git diff 账目, 误插, 两份解析实现 |
+| [playwright-teardown.md](playwright-teardown.md) | 本机 node 的 `spawnSync` **只要带管道 stdio**(`'pipe'` 或默认)就 EBUSY —— `stdio: 'ignore'` / `'inherit'` 正常, 且与可执行文件无关(连 `process.execPath` 即 node.exe… | dev.e2e 不退出, 测试全过但挂住, webServer 收尾, spawnSync EBUSY, 管道 stdio, taskkill 无效, 端口不释放, 桩服务残留, waitForCleanup, Playwright 挂死,… |
+| [poll-last-round-race.md](poll-last-round-race.md) | e2e 断言等一次**必然发生**的轮次(如「lastRid 置空 ⇒ 请求不带 rid ⇒ 服务端恒回全量」)时读探针记录的「最后一轮」: 只要与该动作无因果的其它轮次(在飞旧 rid 请求被 ver 抬高后回落的增量轮)在全量轮**之后**落袋, 末值就停在否定态, 轮询窗内… | flaky, 顺序相关, 探针, 末值断言, 轮询竞态, expect.poll, 隔离绿全量红, 在飞请求, rid 过期, delta 轮, 全量轮, window.__d, applyStateRows, lastRid, delta… |
