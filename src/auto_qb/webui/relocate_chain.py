@@ -116,6 +116,8 @@ def finalize_face(job: Mapping, data_dir: str, host: str, port: int, *, now: Opt
     - verify_failed / chain_deps / note(S4b 全量口径): job 账上 reason 码分流 ——
       核验未过(verify_failed)/删链门依赖未清(chain_deps)时 note 带解法文案,
       前端照显不重判。三者只在 window 内有意义(前段相位零悬挂)。
+      R4(计划 26-11-13-0448 §03 R4)追加: members_gone(成员已删除, 组账收缩)同走 note
+      透传 —— 收缩事件本就是「反馈面可见」的验收面, last_error 即收缩注记原文。
     只对新链 spec(spec 带 bt_backup 字段)取证: 无 bt_backup 的 job 不走 fastresume 改写
     (S1 五闸应已拦下), pending 恒 0 防误导。journal 已终态 ⇒ pending 恒 0
     (已收口/已取消/已失败 —— failed 也在 STOP_PHASES, daemon 对该 job_id 退休, 反馈面不再悬)。
@@ -129,14 +131,25 @@ def finalize_face(job: Mapping, data_dir: str, host: str, port: int, *, now: Opt
     job_id = str(job.get("job_id") or "")
     reason = str(job.get("reason") or "")
     face = {
-        "job_id": job_id,
-        "phase": phase,
-        "window": phase in ru.FINALIZE_WINDOW_PHASES,
-        "pending": 0,
-        "daemon_stale": False,
-        "verify_failed": reason == ru.REASON_VERIFY_FAILED,
-        "chain_deps": reason == ru.REASON_CHAIN_DEPS,
-        "note": str(job.get("last_error") or "") if reason in (ru.REASON_VERIFY_FAILED, ru.REASON_CHAIN_DEPS) else "",
+        "job_id":
+            job_id,
+        "phase":
+            phase,
+        "window":
+            phase in ru.FINALIZE_WINDOW_PHASES,
+        "pending":
+            0,
+        "daemon_stale":
+            False,
+        "verify_failed":
+            reason == ru.REASON_VERIFY_FAILED,
+        "chain_deps":
+            reason == ru.REASON_CHAIN_DEPS,
+        "note":
+            (
+                str(job.get("last_error") or "")
+                if reason in (ru.REASON_VERIFY_FAILED, ru.REASON_CHAIN_DEPS, ru.REASON_MEMBERS_GONE) else ""
+            ),
     }
     spec = rj.read_spec(data_dir, job_id) if job_id else None
     if not isinstance(spec, dict) or not str(spec.get("bt_backup") or "").strip():

@@ -57,6 +57,16 @@ R2/R3 共用交集谓词追加(计划 26-11-13-0448 P2; E7a/E7b/E3 实证依据,
   POSIX 不折)
 - test_file_link_roots_derivation: 链接根派生契约(嵌套=内容根/平铺=链接自身/不在 src 下
   跳过/空账空集)
+
+R4 成员收缩判据追加(计划 26-11-13-0448 §03 R4, D5; 补 0808 丢失的「种子已不存在」收敛行):
+- test_absence_shrink_table: 表驱动 —— 权威删除证据起计 -> 连续缺席累计 -> 第
+  ABSENCE_SHRINK_ROUNDS 拍收缩 / N-1 拍不收缩; 静默缺席(无证据且计数 0)不计数;
+  确认延续(计数>0)继续累计; threshold 参数化与下限钳 1; 空 hashes/空串成员空转通过
+  (全删光 -> 空集核验的前提)
+- test_absence_shrink_gate_and_reset: gate=False(qB 离线/快照陈旧/全量轮)整拍跳过
+  既不计数也不复位; 成员回归无条件复位(账摘除), 回归后再缺席从 0 起计; 全员删光 kept 空
+- test_job_absent_counts_roundtrip: absent_counts 随 job 落账往返(重启不清零)+ 坏形条目
+  逐条跳过 + 旧账缺键空账
 - test_evaluate_group_confirm_not_downgraded_by_later_block
 - test_evaluate_group_cross_volume_note
 - test_evaluate_group_form_reject_gate
@@ -1611,3 +1621,66 @@ def test_unit_plan_shape_no_fallback_field():
     )
     assert u.form == ru.FORM_FILE_LINKS and u.link_count == 2
     assert not hasattr(u, "fallback"), "fallback 字段已删: 确认拒绝即不发起, 无回落路径"
+
+
+# ---------------------------------------------------------------- R4 成员收缩判据(计划 26-11-13-0448 §03 R4, D5)
+
+
+def test_absence_shrink_table():
+    """收缩判据表驱动: 权威删除证据起计 -> 连续缺席累计 -> 第 N 拍收缩 / N-1 拍不收缩;
+    静默缺席(无证据且计数 0)不计数; 确认延续(计数>0 后的缺席)继续累计"""
+    # 拍1: A 在本轮删除证据里 -> 计 1, 不收缩
+    kept, counts, shrunk = ru.absence_shrink(("HA", "HB"), set(), {}, removals=["HA"])
+    assert (kept, shrunk) == (("HA", "HB"), ()) and counts == (("HA", 1), )
+    # 拍2: 无重复证据, 计数>0 延续 -> 计 2, 不收缩
+    kept, counts, shrunk = ru.absence_shrink(kept, set(), dict(counts))
+    assert (kept, shrunk) == (("HA", "HB"), ()) and counts == (("HA", 2), )
+    # 拍3: 达 ABSENCE_SHRINK_ROUNDS -> 收缩(账随之摘除); HB 静默缺席不计数(无账)
+    kept, counts, shrunk = ru.absence_shrink(kept, set(), dict(counts))
+    assert kept == ("HB", ) and shrunk == ("HA", ) and counts == ()
+    # 静默缺席(无证据且计数 0): 不计数不收缩 —— 快照基线不全形态(重启加载窗)安全面
+    kept, counts, shrunk = ru.absence_shrink(("HB", ), set(), {}, removals=[])
+    assert (kept, counts, shrunk) == (("HB", ), (), ())
+    # 非成员缺席面: 不在 hashes 里的 removals 不产生任何账
+    kept, counts, shrunk = ru.absence_shrink(("HB", ), set(), {}, removals=["HO"])
+    assert (kept, counts, shrunk) == (("HB", ), (), ())
+    # threshold 收窄可传(判据参数化); 下限钳 1
+    kept, counts, shrunk = ru.absence_shrink(("HB", ), set(), {}, removals=["HB"], threshold=2)
+    assert (kept, counts, shrunk) == (("HB", ), (("HB", 1), ), ())
+    kept, counts, shrunk = ru.absence_shrink(("HB", ), set(), dict(counts), threshold=2)
+    assert kept == () and shrunk == ("HB", ) and counts == ()
+    assert ru.absence_shrink(("HB", ), set(), {}, removals=["HB"], threshold=0)[2] == ("HB", )
+    # 空成员集与空串成员: 空转通过, 无除零/空迭代坑(全删光 -> 空集核验的前提)
+    assert ru.absence_shrink((), set(), {}, removals=["HA"]) == ((), (), ())
+    assert ru.absence_shrink(("", ), set(), {}) == ((), (), ())
+
+
+def test_absence_shrink_gate_and_reset():
+    """gate=False(qB 离线/快照陈旧/全量轮)整拍跳过: 既不计数也不复位; 成员回归无条件复位"""
+    counts = (("HA", 2), ("HB", 1))
+    # gate 关: 计数账原样透传, 不收缩不复位
+    kept, out_counts, shrunk = ru.absence_shrink(("HA", "HB"), {"HA"}, counts, gate=False)
+    assert (kept, shrunk) == (("HA", "HB"), ()) and out_counts == counts
+    # gate 开 + 成员回归: 计数复位(从账摘除, 跨轮持久语义的复位面); HB 继续累计
+    kept, out_counts, shrunk = ru.absence_shrink(("HA", "HB"), {"HA"}, dict(counts))
+    assert (kept, shrunk) == (("HA", "HB"), ()) and out_counts == (("HB", 2), )
+    # 回归后再缺席: 从 0 起计(复位不是暂停); HB 未回归按确认延续累计到钉值 -> 收缩
+    kept, out_counts, shrunk = ru.absence_shrink(("HA", "HB"), set(), dict(out_counts), removals=["HA"])
+    assert dict(out_counts) == {"HA": 1} and shrunk == ("HB", ) and kept == ("HA", )
+    # 全员删光: kept 空 -> 调用方空集核验(空转通过)
+    kept, out_counts, shrunk = ru.absence_shrink(("HA", "HB"), set(), {"HA": 2, "HB": 2})
+    assert kept == () and shrunk == ("HA", "HB") and out_counts == ()
+
+
+def test_job_absent_counts_roundtrip():
+    """R4 缺席计数账随 job 落账往返(重启不清零, 黄金法则 3); 坏形条目逐条跳过不炸"""
+    job = _job(absent_counts=(("HA", 2), ("HB", 1)))
+    back = ru.job_from_dict(ru.job_to_dict(job))
+    assert back == job and dict(back.absent_counts) == {"HA": 2, "HB": 1}
+    # 旧账无该键 -> 空账(前向兼容)
+    assert ru.job_from_dict(ru.job_to_dict(_job())).absent_counts == ()
+    raw = ru.job_to_dict(_job())
+    raw["absent_counts"] = [["HA", 2], "bad", ["HB"], ["HC", "x"], ["HD", -1], [None, 1], [], ["HE", True]]
+    assert ru.job_from_dict(raw).absent_counts == (("HA", 2), ), "非 (str, int>=0) 二元组逐条跳过"
+    raw["absent_counts"] = "garbage"
+    assert ru.job_from_dict(raw).absent_counts == ()

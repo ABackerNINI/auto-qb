@@ -1149,8 +1149,15 @@ def _rewrite_member(spec: dict, member: dict, prev: Optional[dict]) -> dict:
       都不命中旧根; 相对形态键已按 profile base 解析改写(issue 26-11-07-2336), 落到
       unmatched = 解析失败或解析后不命中旧新根 —— 重放无意义; 真错向由主循环重启后
       逐成员 save_path 核验兜住(S4), 账留逐键明细供诊断) —— 出账
-    - not_found / FastresumeError/ValueError/OSError -> not_found/failed: 不出账,
-      fails 计数承前累计 +1(每失败一次进一账), 窗口内随拍重试(D8)、下一窗口重放
+    - not_found -> member_gone(R4 配套, 计划 26-11-13-0448 §03 R4): BT_backup 定位不到
+      fastresume 按成员已被删等价收口(主源 = E5 实证: qB 5.2.3 删种即删 fastresume,
+      仅账面 0.03s / 连文件 0.02s 内消失; 缺失源不可分辨 —— locate 在 BT_backup 目录
+      消失/键空时同样返回 None, 成员已删或 BT_backup 部署态漂移, 计划 §07 接受等价
+      收口)—— 跳过并按 settled 收口, 不计失败不重试(原 not_found 留账会随窗口无限
+      重放, 永不收敛); 成员是否收缩由主循环按 qB 快照缺席判(R4), daemon 不越权改
+      job 账
+    - FastresumeError/ValueError/OSError -> failed: 不出账, fails 计数承前累计 +1
+      (每失败一次进一账), 窗口内随拍重试(D8)、下一窗口重放
     """
     backup = str(spec.get("bt_backup") or "")
     old_root = str(spec.get("src") or "")
@@ -1172,7 +1179,9 @@ def _rewrite_member(spec: dict, member: dict, prev: Optional[dict]) -> dict:
             rj.REWRITE_FAILS_KEY: fails,
         }
     if report.status == "not_found":
-        return {"status": "not_found", rj.REWRITE_FAILS_KEY: fails + 1}
+        # R4 配套(计划 26-11-13-0448 §03 R4): fastresume 缺失 = 成员已被删(E5 实证),
+        # 跳过并记 settled 收口(不再随窗口无限重放); 不计失败 —— 删种不是改写故障
+        return {"status": rj.REWRITE_MEMBER_GONE, rj.REWRITE_FAILS_KEY: fails}
     if report.already:
         return {
             "status": "already",
@@ -1277,7 +1286,19 @@ def _process_window(
                 prev = raw_prev if isinstance(raw_prev, dict) else {}
                 mkey = rj.member_key(member)
                 rec = _rewrite_member(spec, member, prev.get(mkey))
-                if not rj.record_rewrites(data_dir, job_id, {mkey: rec}, ts=now, pid=owner.pid):
+                recorded = rj.record_rewrites(data_dir, job_id, {mkey: rec}, ts=now, pid=owner.pid)
+                if recorded and str(rec.get("status") or "") == rj.REWRITE_MEMBER_GONE:
+                    # R4 配套留痕(R4 评审轮 1 修 4: 落在 record_rewrites 成功之后 —— 拒写
+                    # 路径账里无收口记录, 不得提前宣称「已收口」): fastresume 缺失按
+                    # member_gone 等价收口(缺失源不可分辨: 成员已删或 BT_backup 部署态
+                    # 漂移, 计划 26-11-13-0448 §07 接受; 主源 = qB 删种即删, E5 实证)
+                    # —— 不失败不重试, 收缩判定归主循环(R4)
+                    logger.warning(
+                        f"recycle_daemon | job {job_id}: 成员 {mkey[:8]} 的 fastresume 已缺失"
+                        "(主源: qB 删种即删; 缺失源不可分辨) —— 跳过改写, 已记 member_gone 收口;"
+                        "组账收缩由主循环判定"
+                    )
+                if not recorded:
                     break  # 拒写 = 对账刚收口: 放弃本 job(下拍 scan 剔除)
         sleep(poll)
 

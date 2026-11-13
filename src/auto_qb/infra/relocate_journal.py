@@ -176,9 +176,26 @@ PHASE_REWRITTEN = "rewritten"
 # - unmatched: 全部路径键都不命中旧根(retarget unchanged 且纯 unmatched, 含 N10 相对
 #              路径形态与 AutoTMM 之外的键缺席形态)—— 确定性无操作, 重放无意义; 真错向
 #              由主循环重启后逐成员 save_path 核验兜住(S4), 账里保留逐键明细供诊断
-# 三者视为已收口(pending 出账)。not_found / failed 不在集合: 留待窗口内重试与下一
+# - member_gone(R4 配套, 计划 26-11-13-0448 §03 R4): BT_backup 定位不到成员 fastresume
+#              —— E5 实证(报告 26-11-13-0617): qB 5.2.3 删种即删 fastresume(仅账面
+#              0.03s / 连文件 0.02s 内消失)⇒ 缺失 = 成员已被删, 改写步跳过并按 settled
+#              收口(与主循环 R4 收缩判定同源), 不再无限重试; 成员是否收缩由主循环按
+#              qB 快照缺席判, daemon 不越权改 job 账(D13 账本契约)
+# 四者视为已收口(pending 出账)。not_found(定位步骤本身)经 member_gone 出账;
+# failed(FastresumeError/ValueError/OSError)不在集合: 留待窗口内重试与下一
 # 窗口重放(D8), fails 计数进账(每失败一次 +1), 供对账「失败计数上限转人工告警」。
-REWRITE_SETTLED = frozenset({"rewritten", "already", "unmatched"})
+REWRITE_SETTLED = frozenset({"rewritten", "already", "unmatched", "member_gone"})
+
+# 成员 fastresume 缺失的收口状态(R4 配套; qB 删种即删 fastresume => 缺失 = 成员已删)
+REWRITE_MEMBER_GONE = "member_gone"
+
+# 「改写已落账」专用判据集(冻结态判据面; R4 评审轮 1 修 1): REWRITE_SETTLED 里只有
+# rewritten/already 代表「成员 fastresume 已改写到 dst」—— 冻结态前提(成员重启将从 dst
+# 载入)对 member_gone 不成立(fastresume 不存在, 无可冻结, 成员重启什么都载不进)。
+# 消费方按语义取用: pending 口径/重放复确认用 REWRITE_SETTLED(缺失下窗重确认无害),
+# 「已落账即冻结」类闸门(撤销闸 relocate_exec cancel_rewritten)必须用本集 —— 把
+# member_gone 当已落账会误堵「卡死悬挂 job 的唯一人工出口」(撤销), 且文案失实。
+REWRITE_SETTLED_FROZEN = frozenset({"rewritten", "already"})
 
 # 成员账记录里计数控的键名(单点: daemon 写 / 对账读)
 REWRITE_FAILS_KEY = "fails"

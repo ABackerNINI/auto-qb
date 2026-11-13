@@ -785,6 +785,72 @@ class ExecMixin:
                 return False
         return True
 
+    def _step_absence_shrink(self, job: RelocateJob, rt: dict, *, qb_up: bool) -> Optional[RelocateJob]:
+        """R4 成员收缩一步(计划 26-11-13-0448 §03 R4, D5; 判据纯函数 ru.absence_shrink)
+
+        收尾窗内成员从 qB 快照消失 -> 连续 N 拍(ru.ABSENCE_SHRINK_ROUNDS)权威缺席 ->
+        从 job.hashes 收缩(_set_job 单点: state 落账 + relocating 登记整表重算 + 快照发布),
+        WARNING 留痕 + reason/last_error 注记(ru.REASON_MEMBERS_GONE, 收缩事件本身;
+        D16 出路文案归 R5, 不在本面)。全部成员删光后 job.hashes 空集 -> all_at_dst 空转
+        通过 -> reconcile 判 VERIFY -> _step_verify 空核验 -> 删链门(R2 交集判据, 计划 26-11-13-0448)-> 收尾,
+        链上无空集坑(逐成员循环对空表零迭代)。
+
+        证据与门槛(宁慢勿误删, §07「收缩误判」对策; 全部同源于 store 既有同步机制,
+        不造平行快照):
+        - qB 在线: _qb_up()(既有单点)—— 离线拍既不计数也不复位;
+        - 快照非陈旧: store.rounds_applied(主循环成功应用轮计数, store 文档「轮次基线」
+          单点; runtime_views 的 _drained_sync_rounds 同款用法)自本 job 上次判定后有前进
+          —— rt["absence_round"] 每轮只判一次(一拍一判, 防「最近一轮」证据跨拍重复计数);
+          无轮次基线(=0 或替身缺字段)不可判 -> 跳过;
+        - 全量轮不采信: need_validate=True 的拍 = 基线刚由全量响应重建(qB 重启加载窗 /
+          重连首轮) —— 全量轮的 last_removed 是「上一基线差集」, 含「还没加载完」的活成员
+          (假删除证据), 整拍跳过; 增量轮的 last_removed = qB torrents_removed + 本程序
+          自删待报集, 是权威删除证据(确认起点);
+        - 静默缺席(无权威证据且计数 0)不计数: 与加载窗同形, 绝不当删除(确认延续只在
+          计数已 >0 时生效 —— 删除只在增量轮上报一次, 此后缺席按已确认延续计数)。
+        计数账随 job.absent_counts 持久(黄金法则 3), 重启不清零; 成员回归即复位。
+
+        披露(计划 26-11-13-0448 §07「停机期删除不收缩」行, R4 评审轮 1 修 5; 入池
+        26-11-14-0401): 本判据把缺席证据**锚定在增量轮删除上报**上, 比计划 R4 字面的
+        「qB 在线 + 快照非陈旧」更保守 —— 这是取舍不是疏漏: 计划字面判据无法分辨
+        「qB 重启加载窗未加载完」与「真已删除」(全量轮差集把未加载完的活成员当删除,
+        误收缩 + 删别名 = 死种), 故宁可不收缩。残余时机: 成员在**本程序离线/qB 同步
+        失效期间**被删(恢复轮必为全量轮, 证据被弃用)或删于两判定拍之间被覆盖的多轮里
+        (main_tick > 2x sync_interval 配置), 该成员永不进入确认 -> job 维持悬挂(现状
+        行为, 非回归); 出口 = 重新添加该种子(成员回归即复位计数, 走 D16「仅删除种子」
+        出路再删一次即可在在线稳态下被确认收缩)。
+        """
+        store = self._ctx.store
+        rounds = getattr(store, "rounds_applied", None)
+        if not isinstance(rounds, int) or rounds <= 0:
+            return None  # 无同步轮基线(store 未被主循环驱动/替身): 判定不可用, 不动账
+        if rt.get("absence_round") == rounds:
+            return None  # 本轮已判定过(一拍一判): 「最近一轮」证据不得跨拍重复计数
+        rt["absence_round"] = rounds
+        if not qb_up:
+            return None  # qB 离线: 既不计数也不复位
+        if bool(getattr(store, "need_validate", True)):
+            return None  # 全量轮(基线重建面): 差集含「未加载完」的活成员, 不采信
+        removals = getattr(store, "last_removed", None)
+        kept, counts, shrunk = ru.absence_shrink(
+            job.hashes,
+            set(getattr(store, "by_hash", {}) or ()),
+            dict(job.absent_counts or ()),
+            removals=list(removals) if removals else [],
+            gate=True,
+        )
+        if not shrunk:
+            if counts != tuple(sorted(job.absent_counts or ())):
+                # 计数有推进/复位但尚未达收缩线: 落账持久(黄金法则 3), 不动 reason
+                return self._set_job(replace(job, absent_counts=counts))
+            return None
+        text = (f"成员已删除, 组账收缩 {len(shrunk)} 个({', '.join(h[:8] for h in shrunk)}); "
+                f"剩余 {len(kept)} 个成员继续收尾")
+        logger.warning(f"relocate | job {job.job_id}: {text}")
+        return self._set_job(
+            replace(job, hashes=kept, absent_counts=counts, reason=ru.REASON_MEMBERS_GONE, last_error=text)
+        )
+
     def _step_reconcile(self, job: RelocateJob, rt: dict) -> None:
         """收尾窗(armed/rewritten)对账一步(S4 新链): journal 镜像合并 -> 查现场 -> 对账表处置
 
@@ -798,6 +864,10 @@ class ExecMixin:
           journal, 删前证据留痕, 解除 daemon 对该 job_id 的退休)再按无账现场重评常规表
           —— 重拉判据一并恢复, 否则同 job_id 再迁移死锁在 armed; 清账未成本拍直接收口
           (不重评不重拉, 下拍重试);
+        - R4 成员收缩(计划 26-11-13-0448 §03 R4, D5): 常规表判定前先走一步
+          _step_absence_shrink —— 收尾窗内成员经 N 拍权威确认消失即从 job.hashes 收缩
+          (补 0808 丢失的「种子已不存在」收敛行); 收缩后 at_dst 按新账重算, 全部删光即
+          空集核验顺 VERIFY -> 删链门 -> 收尾; journal failed 相位不收缩(证据消费优先);
         - 现场三输入(别名在? qB 在? 全员已到目标?)交 ru.reconcile 新表判 WAIT/REBUILD/
           VERIFY; ACT_ENSURE_DAEMON 判据独立(pending + daemon_stale), 每拍顺带判;
         - 旧链输入(seed_state/心跳)已随对账表重定义退役。
@@ -808,6 +878,14 @@ class ExecMixin:
             job = self._set_job(replace(job, phase=ru.PHASE_REWRITTEN))
         alias_present = bool(job.alias_paths) and any(self._alias_live(p) for p in job.alias_paths)
         qb_up = self._qb_up()
+        if j_phase != ru.PHASE_FAILED:
+            # R4 成员收缩(计划 26-11-13-0448 §03 R4, D5): 收尾窗内成员经多拍确认消失 ->
+            # 从 job.hashes 收缩(补 0808 丢失的「种子已不存在」收敛行); 收缩后 job 换新账,
+            # at_dst 按收缩后重算 —— 全部删光即空集核验, 本拍就能顺 VERIFY -> 删链门 -> 收尾。
+            # journal failed 相位不收缩(证据消费优先, job 即将终态, 收缩是噪音)。
+            shrunk = self._step_absence_shrink(job, rt, qb_up=qb_up)
+            if shrunk is not None:
+                job = shrunk
         at_dst = self._all_at_dst(job)
         action = ru.reconcile(
             job,
@@ -1600,9 +1678,12 @@ class ExecMixin:
         # 没有任何机制再把 fastresume 改回来, 违反「失败态永远收敛到别名还在、成员可读、
         # journal 待重放」。检查放在成本确认前: 连 confirm 面都不给, 不误导可撤。
         # D15 cancel_chain 只挡同目标在途同伴, 挡不住这种「改写已落账」形态。
+        # 判据集用 REWRITE_SETTLED_FROZEN(R4 评审轮 1 修 1): member_gone(fastresume 缺失
+        # = 成员已删)虽是 settled, 但无「已改写到 dst」的冻结前提 —— 撤销不得被它误堵
+        # (卡死悬挂 job 的唯一人工出口), 成员收缩由 R4 对账面另行收敛。
         settled = [
             h for h, rec in relocate_journal.read_rewrites(self._data_dir(), job_id).items()
-            if isinstance(rec, dict) and rec.get("status") in relocate_journal.REWRITE_SETTLED
+            if isinstance(rec, dict) and rec.get("status") in relocate_journal.REWRITE_SETTLED_FROZEN
         ]
         if settled:
             shown = ", ".join(h[:8] for h in settled[:3]) + (f" 等共 {len(settled)} 个" if len(settled) > 3 else "")

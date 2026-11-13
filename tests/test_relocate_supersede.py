@@ -39,6 +39,11 @@ D19 旧 mover 通用补条目、搬前别名重建可行性预检(alias_busy)、
   (评审 #3, 成员 fastresume 已指向 dst, 撤销留 0420 同款冻结态)/ 成本确认前即拒(无 confirm
   面)/ 无 settled 记录(pending/无账)撤销行为不变
 
+R4 评审轮 1 修 1 追加(计划 26-11-13-0448 §03 R4; 判据集改 REWRITE_SETTLED_FROZEN):
+- test_supersede_cancel_member_gone_not_frozen: member_gone(fastresume 缺失 = 成员已删)
+  不算「改写已落账」—— 纯 member_gone 账撤销放行(进成本 confirm, 不撞 cancel_rewritten,
+  冻结文案不失实); 混合账(member_gone + rewritten)仍拒(frozen 前提由 rewritten 承)
+
 覆盖率缺口清偿(26-11-07, test.full 99.31% -> 99.5% 闸):
 - test_supersede_stage_tick_failure_keeps_retrying_without_link: 重定向失败落在 supersede stage
   拍(verify 拍已失败过) -> 停 moved 不建链, 注入解除后幂等续跑收敛
@@ -415,6 +420,32 @@ def test_supersede_cancel_refuses_settled_rewrites(tmp_path, monkeypatch):
     assert out2["cls"] == "ok", out2
     assert mod.get_job(j2).phase == ru.PHASE_CANCELLED
     assert any("set_location" in str(c) for c in client.calls[len(calls_before_ok):]), "搬回已下发"
+
+
+def test_supersede_cancel_member_gone_not_frozen(tmp_path, monkeypatch):
+    """R4 评审轮 1 修 1(计划 26-11-13-0448 §03 R4): member_gone(fastresume 缺失 = 成员已删)
+    不算「改写已落账」—— 撤销闸判据集改 REWRITE_SETTLED_FROZEN: 纯 member_gone 账撤销放行
+    (member_gone 无冻结前提, fastresume 不存在无可冻结; 误堵会卡死悬挂 job 唯一人工出口,
+    且「成员重启将从 dst 载入」文案失实); 混合账(member_gone + rewritten)仍拒"""
+    pin_disk_usage(monkeypatch)
+    mgr, client, mod, j1, spawned, src, dst, content = _armed_env(tmp_path, monkeypatch)
+    dd = mgr.config.data_dir
+    files = client.files_map["HA"]
+    dst_c = _c_root(tmp_path)
+    items = mod.relocate_execute(["HA"], dst_c)
+    j2 = items[0]["job_id"]
+    _simulate(mgr, dst_c, files, os.path.join(dst, "Show"))
+    _run_ticks(mod, 8)
+    assert mod.get_job(j2).phase == ru.PHASE_ARMED, mod.get_job(j2).phase
+    # 纯 member_gone 账: 不触发 cancel_rewritten, 撤销进成本 confirm 面(放行)
+    assert rj.record_rewrites(dd, j2, {"HA": {"status": rj.REWRITE_MEMBER_GONE}})
+    out = mod.relocate_cancel(j2, cost_confirmed=False)
+    assert out["cls"] == "confirm" and out["reasons"][0]["gate"] == "cost", out
+    assert not any(r.get("gate") == "cancel_rewritten" for r in out["reasons"]), out
+    # 混合账: frozen 前提由 rewritten 记录承, 撤销仍拒(判据集只摘 member_gone, 不放宽冻结面)
+    assert rj.record_rewrites(dd, j2, {"HB": {"status": "rewritten", "path": "x"}})
+    out2 = mod.relocate_cancel(j2, cost_confirmed=False)
+    assert out2["cls"] == "blocked" and out2["reasons"][0]["gate"] == "cancel_rewritten", out2
 
 
 # ---------------------------------------------------------------------------

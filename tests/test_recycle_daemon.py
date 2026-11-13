@@ -27,12 +27,13 @@ relocate_journal S3 扩展段)+ 回收 daemon 主体(D12 简化形制)的竞态�
 - test_failed_phase_is_stop_phase_daemon_side: failed 相位纳入停止语义(issue 26-11-07-0527
   #3)—— 记账/翻相/心跳式整包写拒收(失败证据不被覆盖)/scan 剔除/重放入口拒写/成员级
   failed 状态不回归(仍不视为收口)
-- test_pending_members_settled_semantics: pending 口径 —— rewritten/already/unmatched 出账,
-  failed/not_found/无账留守; members 字段优先于 hashes 派生
+- test_pending_members_settled_semantics: pending 口径 —— rewritten/already/unmatched/
+  member_gone(R4 配套: fastresume 缺失 = 成员已删, E5 实证)出账, failed/无账留守;
+  members 字段优先于 hashes 派生
 
 daemon 主体:
-- test_rewrite_member_status_mapping: retarget 三态 + not_found/异常到记账 status 的映射表;
-  fails 承前累计(失败 +1, 成功保值)
+- test_rewrite_member_status_mapping: retarget 三态 + not_found->member_gone(R4 配套,
+  不计失败)/异常->failed 的记账映射表; fails 承前累计(失败 +1, 成功/缺失保值)
 - test_rewrite_member_relative_keys_resolved_via_profile_base: 相对形态键经 spec.bt_backup
   推导 base 解析改写(E2c/issue 26-11-07-2336)—— rewritten 出账 + 产物落盘 + 重放 already
 - test_scan_jobs_filters_instance_optin_and_terminal: 实例字面过滤/bt_backup opt-in(旧链
@@ -83,7 +84,8 @@ daemon 主体:
 - test_write_journal_refuses_nonterminal_over_terminal: 终态闸门(非终态拒/终态互覆)
 - test_alive_posix_fallback_paths: _alive POSIX 支(kill 探活/进程不在/信号不支持)
 - test_verify_replays_of_bad_shape_is_zero: verify_replays 坏形 => 0
-- test_reset_rewrites_terminal_refused_and_keeps_unsettled: 重放入口终态拒(-1)/非 settled 原样保留
+- test_reset_rewrites_terminal_refused_and_keeps_unsettled: 重放入口终态拒(-1)/非 settled
+  原样保留/member_gone 同走重放(prev_status 留诊, 下窗重确认)
 - test_tasklist_ignores_non_quoted_lines: tasklist CSV 非引号行跳过
 - test_names_from_proc_tolerates_unreadable_comm: /proc 名册逐项容错(comm 打不开跳过;
   pid 1 comm 重定向真实文件 => 可读支两平台非空可断, 修 Windows 主平台空转断言)
@@ -594,7 +596,7 @@ def test_clear_journal_removes_stale_life_journal(tmp_path):
 
 
 def test_pending_members_settled_semantics():
-    spec = {"hashes": ["h1", "h2", "h3", "h4", "h5"]}
+    spec = {"hashes": ["h1", "h2", "h3", "h4", "h5", "h6"]}
     rewrites = {
         "h1": {
             "status": "rewritten"
@@ -609,11 +611,15 @@ def test_pending_members_settled_semantics():
             "status": "failed",
             "fails": 2
         },
+        "h5": {
+            "status": rj.REWRITE_MEMBER_GONE
+        },
     }
     pend = rj.pending_members(spec, rewrites)
-    # rewritten/already/unmatched 出账(REWRITE_SETTLED); failed 与无账留守
-    assert [rj.member_key(m) for m in pend] == ["h4", "h5"]
-    assert rj.pending_members(spec, {}) and len(rj.pending_members(spec, {})) == 5
+    # rewritten/already/unmatched/member_gone 出账(REWRITE_SETTLED); failed 与无账留守
+    # (member_gone = R4 配套: fastresume 缺失 = 成员已删, 收口不再重试)
+    assert [rj.member_key(m) for m in pend] == ["h4", "h6"]
+    assert rj.pending_members(spec, {}) and len(rj.pending_members(spec, {})) == 6
     # members 字段优先于 hashes 派生(v2/hybrid 显式双 hash 形态)
     spec2 = {"hashes": ["hA"], "members": [{"hash_v1": "", "hash_v2": "v2id"}]}
     pend2 = rj.pending_members(spec2, {})
@@ -647,7 +653,11 @@ def test_rewrite_member_status_mapping(tmp_path):
     rec = rd._rewrite_member(spec, {"hash_v1": h_already}, None)
     assert rec["status"] == "already" and "save_path" in rec["keys"]
     assert rd._rewrite_member(spec, {"hash_v1": h_elsewhere}, None)["status"] == "unmatched"
-    assert rd._rewrite_member(spec, {"hash_v1": h_missing}, None)["status"] == "not_found"
+    # R4 配套(计划 26-11-13-0448 §03 R4): fastresume 缺失 = 成员已删(E5 实证: qB 删种
+    # 即删 fastresume) -> member_gone 收口(settled), 不计失败不重试
+    gone = rd._rewrite_member(spec, {"hash_v1": h_missing}, None)
+    assert gone["status"] == rj.REWRITE_MEMBER_GONE and gone[rj.REWRITE_FAILS_KEY] == 0
+    assert rj.pending_members(spec, {h_missing: gone}) == [], "member_gone 出账(pending 口径)"
     bad = rd._rewrite_member(spec, {"hash_v1": h_bad}, None)
     assert bad["status"] == "failed" and bad["error"] and bad[rj.REWRITE_FAILS_KEY] == 1
     # fails 承前累计: 失败 +1, 成功保值(失败计数进账, D8); ok 已被上面真改写过, 用新成员
@@ -1254,21 +1264,26 @@ def test_reset_rewrites_terminal_refused_and_keeps_unsettled(tmp_path):
         "j2",
         {
             "phase": "rewritten",
-            "rewrites": {
-                "HA": {
-                    "status": "rewritten"
+            "rewrites":
+                {
+                    "HA": {
+                        "status": "rewritten"
+                    },
+                    "HB": {
+                        "status": "failed",
+                        "error": "x"
+                    },
+                    "HC": {
+                        "status": rj.REWRITE_MEMBER_GONE
+                    },
                 },
-                "HB": {
-                    "status": "failed",
-                    "error": "x"
-                },
-            },
         },
     )
     n = rj.reset_rewrites(str(tmp_path), "j2", ts=2.0)
-    assert n == 1, "只有 settled(rewritten)被清"
+    assert n == 2, "settled(rewritten + member_gone)都被清; failed 留守"
     rewrites = rj.read_rewrites(str(tmp_path), "j2")
     assert rewrites["HA"]["status"] == rj.REWRITE_RESET_STATUS and rewrites["HA"]["prev_status"] == "rewritten"
+    assert rewrites["HC"]["prev_status"] == rj.REWRITE_MEMBER_GONE, "member_gone 同走重放(下窗重确认)"
     assert rewrites["HB"] == {"status": "failed", "error": "x"}, "非 settled 记录原样保留"
 
 

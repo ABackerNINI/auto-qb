@@ -58,6 +58,21 @@ verify 三动作, 判据面 ru.reconcile 纯函数层在 test_relocate_units)与
 - test_tag_name_without_config_is_empty: relocate 配置段缺席 -> 待收尾标签名空串
 - test_ensure_daemon_spawn_failure_warns_and_still_throttles: 拉起失败只告警 + 退避账键照记
 - test_penetrate_stage_without_aliases_goes_straight_to_arm: penetrate 无别名直进武装
+
+R4 成员收缩接线追加(计划 26-11-13-0448 §03 R4, D5; 补 0808 丢失的「种子已不存在」收敛行):
+- test_step_reconcile_shrinks_after_n_absent_rounds: 在线+新鲜快照下连续 N 拍权威缺席 ->
+  第 ABSENCE_SHRINK_ROUNDS 拍收缩(WARNING 留痕 + reason/last_error 注记 + relocating
+  登记整表重算不留幽灵行); N-1 拍不收缩; 在场成员零计数
+- test_step_reconcile_absence_gates_no_count: qB 离线 / 快照无新轮(一拍一判) / 全量轮
+  (need_validate, 基线重建面含「未加载完」活成员差集) / 静默缺席 / 无轮次基线 ——
+  既不计数也不复位(宁慢勿误删)
+- test_step_reconcile_absence_member_return_resets: 成员回归计数复位(账摘除),
+  复位不动 reason/last_error; 回归后再缺席从 0 起计
+- test_step_reconcile_absence_counts_persist_in_state: 计数随 _set_job 落 state.json,
+  对象重建(job_from_dict)后计数仍在(黄金法则 3)
+- test_step_reconcile_all_shrunk_vacuous_verify_finalizes: 全员删光 -> 空集核验空转通过
+  -> 删链门(零依赖) -> 收尾 done 别名照删(收缩当拍顺 VERIFY 链自然走通);
+  move 相位 torrent_gone -> failed 不受影响由 test_step_move_mover_gone_marks_failed 钉住
 """
 
 import os
@@ -825,3 +840,148 @@ def test_tag_name_without_config_is_empty(tmp_path):
     mod = _bare_mod(data_dir=str(tmp_path / "data"))
     mod._ctx.config = _types.SimpleNamespace(relocate=None)  # relocate 段缺席
     assert mod._tag_name() == ""
+
+
+# ---------------------------------------------------------------- R4 成员收缩接线(计划 26-11-13-0448 §03 R4, D5)
+
+
+def _r4_env(
+    tmp_path,
+    monkeypatch,
+    *,
+    members=("HA", "HB"),
+    absent=(),
+    rounds=7,
+    need_validate=False,
+    last_removed=(),
+    qb=True,
+    alias_live=True
+):
+    """R4 判定环境: store 带同步轮基线(rounds_applied/need_validate/last_removed 三信号)+
+    api 探活替身 + armed job(alias 在位)。absent 里的成员从 by_hash 摘除。"""
+    from auto_qb.infra import alias_fs as afs
+
+    if alias_live:
+        monkeypatch.setattr(afs, "alias_kind_of", lambda p: "junction")
+    by_hash = {
+        h: types.SimpleNamespace(hash=h, save_path="R:/src", state="pausedUP")
+        for h in members if h not in absent
+    }
+    store = types.SimpleNamespace(
+        by_hash=by_hash,
+        relocating_hashes=set(),
+        rounds_applied=rounds,
+        need_validate=need_validate,
+        last_removed=list(last_removed),
+    )
+    api = (
+        types.SimpleNamespace(client=types.SimpleNamespace(app_preferences=lambda: None))
+        if qb else types.SimpleNamespace(client=None)
+    )
+    mod = _bare_mod(store=store, api=api, data_dir=str(tmp_path))
+    job = _job("j1", phase=ru.PHASE_ARMED, hashes=tuple(members), alias_paths=("R:/src/e00.mkv", ))
+    mod.register_job(job)
+    return mod, job
+
+
+def _r4_tick(mod, rounds):
+    """推进一轮同步基线后跑一步对账(重注册 rt 由 _advance 同款 setdefault 语义承担)"""
+    mod._ctx.store.rounds_applied = rounds
+    rt = mod._rt.setdefault("j1", {})
+    mod._step_reconcile(mod.get_job("j1"), rt)
+
+
+def test_step_reconcile_shrinks_after_n_absent_rounds(tmp_path, monkeypatch):
+    """在线+新鲜快照下连续 N 拍权威缺席 -> 第 N 拍收缩(WARNING 留痕 + reason/last_error
+    注记 + relocating 登记整表重算不留幽灵行); N-1 拍不收缩; 在场成员零计数"""
+    mod, _job0 = _r4_env(tmp_path, monkeypatch, absent=("HA", ), last_removed=["HA"], rounds=7)
+    _r4_tick(mod, 7)
+    saved = mod.get_job("j1")
+    assert saved.hashes == ("HA", "HB") and dict(saved.absent_counts) == {"HA": 1}, "第 1 拍只计不缩"
+    _r4_tick(mod, 8)
+    assert mod.get_job("j1").hashes == ("HA", "HB") and dict(mod.get_job("j1").absent_counts) == {"HA": 2}
+    with capture_logs("auto_qb.core.modules.relocate_mod") as cap:
+        _r4_tick(mod, 9)
+    saved = mod.get_job("j1")
+    assert saved.hashes == ("HB", ), "第 3 拍达钉值 -> 收缩"
+    assert dict(saved.absent_counts) == {}, "收缩成员计数账随之摘除"
+    assert saved.reason == ru.REASON_MEMBERS_GONE and "收缩" in saved.last_error and "HA" in saved.last_error
+    assert saved.phase == ru.PHASE_ARMED, "部分收缩不动相位(剩余成员继续收尾)"
+    assert mod._ctx.store.relocating_hashes == {"HB"}, "relocating 登记随 _set_job 整表重算"
+    assert "HB" not in cap.text and "HA" in cap.text and "收缩" in cap.text, cap.text
+
+
+def test_step_reconcile_absence_gates_no_count(tmp_path, monkeypatch):
+    """四门: qB 离线 / 快照无新轮(一拍一判) / 全量轮(need_validate) / 静默缺席 ——
+    既不计数也不复位(宁慢勿误删); 无轮次基线(store 未驱动)同样跳过"""
+    # qB 离线: 有删除证据也不计数
+    mod, _j = _r4_env(tmp_path, monkeypatch, absent=("HA", ), last_removed=["HA"], qb=False)
+    _r4_tick(mod, 7)
+    assert mod.get_job("j1").absent_counts == ()
+    # 全量轮(基线重建面): 不采信 —— 含「未加载完」的活成员差集, 绝不当删除
+    mod, _j = _r4_env(tmp_path, monkeypatch, absent=("HA", ), last_removed=["HA"], need_validate=True)
+    _r4_tick(mod, 7)
+    assert mod.get_job("j1").absent_counts == ()
+    # 静默缺席(不在本轮删除证据里且计数 0): 不计数 —— 重启加载窗同形安全面
+    mod, _j = _r4_env(tmp_path, monkeypatch, absent=("HA", ), last_removed=[])
+    _r4_tick(mod, 7)
+    assert mod.get_job("j1").absent_counts == ()
+    # 无轮次基线(rounds_applied=0, store 未被主循环驱动): 判定不可用, 不动账
+    mod, _j = _r4_env(tmp_path, monkeypatch, absent=("HA", ), last_removed=["HA"], rounds=0)
+    _r4_tick(mod, 0)
+    assert mod.get_job("j1").absent_counts == ()
+    # 一拍一判: 同一同步轮重复对账不重复计数(「最近一轮」证据只消费一次)
+    mod, _j = _r4_env(tmp_path, monkeypatch, absent=("HA", ), last_removed=["HA"])
+    mod._ctx.store.rounds_applied = 7
+    rt = mod._rt.setdefault("j1", {})
+    mod._step_reconcile(mod.get_job("j1"), rt)
+    mod._step_reconcile(mod.get_job("j1"), rt)
+    assert dict(mod.get_job("j1").absent_counts) == {"HA": 1}, "同轮双判不得把计数翻倍"
+
+
+def test_step_reconcile_absence_member_return_resets(tmp_path, monkeypatch):
+    """成员回归 -> 计数复位(账摘除, 跨轮持久语义); 复位照常落账但不动 reason/last_error"""
+    mod, _j = _r4_env(tmp_path, monkeypatch, absent=("HA", ), last_removed=["HA"])
+    _r4_tick(mod, 7)
+    assert dict(mod.get_job("j1").absent_counts) == {"HA": 1}
+    # HA 回归(用户重加/误报回落)
+    mod._ctx.store.by_hash["HA"] = types.SimpleNamespace(hash="HA", save_path="R:/src", state="pausedUP")
+    _r4_tick(mod, 8)
+    saved = mod.get_job("j1")
+    assert saved.absent_counts == () and saved.reason == "" and saved.last_error == ""
+    # 回归后再缺席: 从 0 起计(复位不是暂停) —— 仍需本轮权威删除证据
+    del mod._ctx.store.by_hash["HA"]
+    mod._ctx.store.last_removed = ["HA"]
+    _r4_tick(mod, 9)
+    assert dict(mod.get_job("j1").absent_counts) == {"HA": 1}
+
+
+def test_step_reconcile_absence_counts_persist_in_state(tmp_path, monkeypatch):
+    """计数随 _set_job 走 job 记录持久化路径落 state.json(黄金法则 3): 重启(对象重建)不清零"""
+    mod, _j = _r4_env(tmp_path, monkeypatch, absent=("HA", ), last_removed=["HA"])
+    _r4_tick(mod, 7)
+    box = mod._ctx.state.data["relocate"]["jobs"]
+    assert box["j1"]["absent_counts"] == [["HA", 1]], "state.json 落账形态"
+    rebuilt = ru.job_from_dict(box["j1"])
+    assert dict(rebuilt.absent_counts) == {"HA": 1}, "重启重建后计数仍在"
+
+
+def test_step_reconcile_all_shrunk_vacuous_verify_finalizes(tmp_path, monkeypatch):
+    """全部成员删光 -> 空集核验通过(空转, 无除零/空迭代坑) -> 删链门(零依赖) -> 收尾
+    done(别名照删) —— 收缩当拍即顺 VERIFY 链自然走通"""
+    mod, _j = _r4_env(tmp_path, monkeypatch, absent=("HA", "HB"), last_removed=["HA"], rounds=7)
+    removed = []
+    mod._remove_links = lambda paths: (removed.extend(list(paths)), len(paths))[1]
+    _r4_tick(mod, 7)
+    assert mod.get_job("j1").hashes == ("HA", "HB"), "第 1 拍仅 HA 计 1(HB 无证据不计数)"
+    mod._ctx.store.last_removed = ["HA", "HB"]
+    _r4_tick(mod, 8)
+    _r4_tick(mod, 9)
+    assert mod.get_job("j1").hashes == ("HB", ), "HA 达钉值先收缩; HB 证据起点晚一拍"
+    _r4_tick(mod, 10)
+    saved = mod.get_job("j1")
+    assert saved.hashes == (), "全员收缩 -> 空集"
+    assert saved.phase == ru.PHASE_DONE and saved.reason == ru.REASON_FINALIZED, (saved.phase, saved.reason)
+    assert saved.alias_paths == (), "终态 job 不再背别名账"
+    assert removed == ["R:/src/e00.mkv"], "别名照删"
+    assert relocate_journal.read_journal(str(tmp_path), "j1")["phase"] == "done", "journal 同步落终态"

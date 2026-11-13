@@ -25,7 +25,8 @@
 - test_chain_finalize_face_in_response: 链响应 finalize 段(pending 现读/daemon_stale/
   window 相位单点; 旧链 spec 与终态 journal 恒 pending=0)
 - test_finalize_face_reason_fields: S4b 全量字段 —— job reason 分流 verify_failed/chain_deps,
-  note 透传 last_error; 无 spec 的 job 字段照常给出(前端照显不重判)
+  note 透传 last_error; R4 追加 members_gone 同走 note 透传(计划 26-11-13-0448 §03 R4,
+  评审轮 1 修 2, 收缩注记反馈面可见); 无 spec 的 job 字段照常给出(前端照显不重判)
 - test_finalize_button_and_hint_static: 前端静态守阵(按钮/提示挂浮窗, 确认框与降级文案,
   渲染面零调用; S4b 全量口径 note 段)
 
@@ -732,6 +733,13 @@ def test_finalize_face_reason_fields(web_env):
     face = _face(dict(job, reason=REASON_CHAIN_DEPS, last_error="仍有 2 个种子位于旧根"))
     assert face["chain_deps"] is True and face["verify_failed"] is False, face
     assert "2 个种子" in face["note"], face
+
+    # R4(计划 26-11-13-0448 §03 R4, 评审轮 1 修 2): members_gone 同走 note 透传 ——
+    # 收缩事件本就是「反馈面可见」的验收面, last_error 即收缩注记原文
+    from auto_qb.core.modules.relocate_units import REASON_MEMBERS_GONE
+    face = _face(dict(job, reason=REASON_MEMBERS_GONE, last_error="成员已删除, 组账收缩 1 个(HA)"))
+    assert face["verify_failed"] is False and face["chain_deps"] is False, face
+    assert "组账收缩" in face["note"] and "HA" in face["note"], face
 
     # 终态/前段相位: window False, note 照 reason 规则(终态 job reason 已被收口码覆盖)
     face = _face(dict(job, phase="done", reason="finalized", last_error=""))

@@ -24,7 +24,7 @@
 import os
 from dataclasses import dataclass, field
 from types import MappingProxyType
-from typing import Any, Iterable, Mapping, Optional, Sequence, Tuple
+from typing import Any, Collection, Iterable, Mapping, Optional, Sequence, Tuple
 
 # ---------------------------------------------------------------- 常量
 
@@ -335,6 +335,11 @@ class RelocateJob:
     # 不参与任何闸门判定。写入端在 relocate_execute(origin=...); web/rule 调用方各自传值,
     # cli 为保留值(当前树无 CLI 入口, 仅保证跨端落账口径一致)。
     origin: str = "unknown"
+    # 成员收缩缺席计数账(R4, 计划 26-11-13-0448 §03 R4, D5): hash -> 连续缺席拍数。
+    # 跨轮持久(黄金法则 3): 随 _set_job 走 job 记录落 state.json, 重启不清零 —— 否则
+    # 重启落在「已确认删除, N 拍未满」的窗口会把计数清零, 收缩要多等一整轮 N 拍(宁慢,
+    # 但账不能无端丢)。成员回归即复位(从账摘除); 收缩后条目随之摘除。
+    absent_counts: Tuple[Tuple[str, int], ...] = ()
 
     @property
     def is_terminal(self) -> bool:
@@ -1138,6 +1143,7 @@ def job_to_dict(job: RelocateJob) -> dict:
         "move_issued": job.move_issued,
         "tag_on": job.tag_on,
         "origin": job.origin,
+        "absent_counts": [[str(h), int(n)] for h, n in (job.absent_counts or ())],
     }
 
 
@@ -1170,9 +1176,26 @@ def job_from_dict(d: Any) -> Optional[RelocateJob]:
             move_issued=bool(d.get("move_issued")),
             tag_on=bool(d.get("tag_on")),
             origin=str(d.get("origin") or "unknown"),
+            # R4 缺席计数账(旧账缺失 = 空账); 坏形条目逐条跳过, 不炸
+            absent_counts=_absent_counts_from(d.get("absent_counts")),
         )
     except (TypeError, ValueError):
         return None
+
+
+def _absent_counts_from(raw: Any) -> Tuple[Tuple[str, int], ...]:
+    """state.json 的 absent_counts 条目 -> tuple-of-pairs(R4); 非法条目逐条跳过"""
+    if not isinstance(raw, (list, tuple)):
+        return ()
+    out: list = []
+    for item in raw:
+        if not isinstance(item, (list, tuple)) or len(item) != 2:
+            continue
+        h, n = item
+        if not isinstance(h, str) or not h or isinstance(n, bool) or not isinstance(n, int) or n < 0:
+            continue
+        out.append((h, n))
+    return tuple(out)
 
 
 @dataclass(frozen=True)
@@ -1398,6 +1421,74 @@ def _journal_failed_action(job: RelocateJob, *, reason: str, ts: Optional[float]
 REASON_VERIFY_FAILED = "verify_failed"  # 核验未过: 成员 save_path 未到目标(journal 悬挂, 良性态)
 REASON_CHAIN_DEPS = "chain_deps"  # 删链门依赖未清: 仍有种子 save_path 位于旧根(等值或前缀)
 REASON_FINALIZED = "finalized"  # 收尾完成(核验通过 + 删链门依赖清零, 已在线删别名)
+REASON_MEMBERS_GONE = "members_gone"  # 成员已删除, 组账收缩(R4 收缩事件注记; 计划 26-11-13-0448 §03 R4)
+
+# 成员收缩钉值(R4, 计划 26-11-13-0448 §03 R4, D5): 连续缺席拍数达到即从 job.hashes 收缩。
+# 取常量而非配置键: 执行体内部节拍(与 REBUILD_MAX_ATTEMPTS 同理), 非用户策略面。钉 3 的
+# 依据: 缺席证据(增量轮 torrents_removed / 本程序自删待报集)在删除后**第一拍**即得
+# (报告 26-11-13-0617 E5 实证: qB 5.2.3 删种即删 BT_backup fastresume, 仅账面 0.03s /
+# 连文件 0.02s 内消失 —— 账面消失先于一切判定), N=3 拍(默认节拍 sync 1.5s / main_tick 2s
+# 下约 4-6s)足够骑过单轮同步抖动与「删除当拍恰逢判定窗错过」, 又不把「删种 -> 收缩」
+# 拖长到用户可感; 全部删光后空集核验 -> 删链门 -> 收尾自然走通。
+ABSENCE_SHRINK_ROUNDS = 3
+
+
+def absence_shrink(
+    hashes: Sequence[str],
+    present: Collection[str],
+    counts: Mapping[str, int],
+    *,
+    removals: Collection[str] = (),
+    gate: bool = True,
+    threshold: int = ABSENCE_SHRINK_ROUNDS,
+) -> Tuple[Tuple[str, ...], Tuple[Tuple[str, int], ...], Tuple[str, ...]]:
+    """收尾窗成员收缩判据(R4, 计划 26-11-13-0448 §03 R4, D5; 纯函数单点)
+
+    补 0808 重定义对账表时丢失的「种子已不存在」收敛行(1604 §3.5 原行): 成员从 qB 消失
+    后 all_at_dst 恒 False -> job 恒 ACT_WAIT 悬挂; 本判据按「连续 N 拍权威缺席」把该成员
+    从 job.hashes 收缩, 让剩余成员(或空集)的核验/删链门/收尾链自然走通。
+
+    逐成员规则(表驱动):
+    - 在快照(present) -> 计数复位(从账里摘除 —— 成员回归的正证据, 无条件生效);
+    - 缺席且本轮有权威删除证据(removals 命中) -> 计数 +1(确认起点);
+    - 缺席且计数已 >0(此前已确认过删除, 删除后不再重复上报) -> 计数 +1(确认延续);
+    - 缺席且无证据且计数 0(「静默缺席」) -> **不计数**(暂停): 快照基线不全的形态
+      (qB 重启加载窗成员未加载完 / 全量轮基线重建)与此同形 —— 宁慢勿误删(黄金法则 2),
+      绝不把「还没加载」当成「已删除」;
+    - 计数达 threshold -> 收缩(移出 hashes, 计数账随之摘除)。
+    gate=False(qB 离线 / 快照陈旧 / 全量轮) -> 整拍跳过: **既不计数也不复位**(§07
+    「收缩误判」对策行)。
+
+    返回 (保留 hashes 原序, 新计数账 tuple-of-pairs, 本拍收缩的 hashes)。
+    """
+    threshold = max(1, int(threshold))
+    if not gate:
+        return tuple(hashes), tuple(sorted((str(h), int(c)) for h, c in dict(counts or {}).items())), ()
+    present_set = set(present or ())
+    removal_set = set(removals or ())
+    new_counts: dict = dict(counts or {})
+    kept: list = []
+    shrunk: list = []
+    for h in hashes:
+        h = str(h)
+        if not h:
+            continue
+        if h in present_set:
+            new_counts.pop(h, None)  # 成员回归: 计数复位(跨轮持久语义的复位面)
+            kept.append(h)
+            continue
+        n = int(new_counts.get(h, 0) or 0)
+        if h in removal_set or n > 0:
+            n += 1
+        if n >= threshold:
+            shrunk.append(h)
+            new_counts.pop(h, None)
+        elif n > 0:
+            new_counts[h] = n
+            kept.append(h)
+        else:
+            kept.append(h)  # 静默缺席未确认: 不落 0 账(无计数语义, 等价缺席)
+    return tuple(kept), tuple(sorted(new_counts.items())), tuple(shrunk)
 
 
 def under_alias_root(path: str, roots: Iterable[str]) -> Optional[str]:
