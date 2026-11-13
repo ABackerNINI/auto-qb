@@ -50,6 +50,25 @@ const DOCK_SKINS = [...SKINS, 'flux'];
  *    全程零位移; 修复前预期红(实测被抬 4~16px)。
  * 5. S-C 反向守卫: 真被覆盖的行(最深 + 最浅边界探针)仍被让位到公式终值 —— 最深行钉公式全程
  *    无钳制, 最浅行(面板顶 + 3 对齐)直接贴触发界边界, 拦「结构性过紧到中浅覆盖行漏让」。
+ *
+ * T6 边距生命周期(2026-11-13 缺陷甲+乙, 用户拍板本轮修掉): drawerEnterHook 起拍两行
+ * height=0/marginTop=0 使文档在 enter 起拍帧缩短 8px(呼吸距被 JS 清零)—— 关闭态贴文档底
+ * (gap<8)时 scrollY 被钳 (8-gap) px, 全部行视口下移, 行底 (面板顶-(8-gap), 面板顶] 的未覆盖行
+ * 被推进触发带, writer #1(_kbRevealRow)误发 reveal。Chromium 在文档长回同帧恢复 scrollY(钳制窗
+ * 密闭, 误发恒落 0, 净 0)—— Gecko 无此恢复, 钳制永久, writer #2(~30ms 后, 余量充足)判据仍真、
+ * 全额落地 -> 未覆盖行被拉到面板顶-16, 净上移 8~16px(Firefox 真机 20/20 确定性复现)。缺陷乙:
+ * leave 末帧 marginTop=0 + afterLeave 缴回 CSS 8px 无滚动补偿 -> 文档两段式变化(->0 再 ->8), 贴
+ * 文档底时闭合稳态 scrollY 比关闭前低 8px, 行位随之低 8px —— W1「重开零位移」基线取关闭后, 对它
+ * 盲区。修复 = margin-top 生命周期整体退出 JS(dock.style.marginTop 全程零写入), 高度插值口径改为
+ * 「槽位总占位 = margin(CSS 恒 8) + height」-> enter 全程文档单调不减、leave 全程单调降到关闭态
+ * 总占位, 钳制在所有浏览器结构性消失。可观测面(Chromium): 甲的 scrollY 症状不可观测(同帧恢复),
+ * 但 docH 的 -8 凹陷可观测(取证实测 19781->19773); 乙的 -8 残差落在行位上可观测。用例:
+ * 6. T6 红验1: reopen 全程 docH >= 闭合态基线(修复前红: 起拍凹陷 -8)。
+ * 7. T6 红验2: 两循环闭合稳态行位稳定(vs 开关循环前的闭合基线; 修复前红: 首轮关闭钳制 -8 残差,
+ *    行位 +8; 修复前两循环之间因钳制落点饱和而相等 —— 残差是首轮一次性落地, 对「循环间比较」盲,
+ *    故锚点取循环前的闭合基线)。
+ * 8. T6 回归守卫: reopen 全程 scrollY 零位移(Chromium 修复前后恒绿 —— 修复前钳制窗密闭; 修复后
+ *    结构性消失, 防回退), 不作红验。
  */
 
 /* ==================== S0 三条用例共用小件(判据一律位移量/事件次数, 不用绝对像素阈值) ==================== */
@@ -82,6 +101,53 @@ async function waitDockCollapsed(page) {
     () => document.querySelector('.drawer-dock').getBoundingClientRect().height <= 0.5,
     undefined, { timeout: 5_000, polling: 30 },
   );
+}
+
+/** 闭合收尾完成等待: 面板节点出 DOM(leave 过渡终了 Vue 摘除, afterLeave 钩子同任务已跑完)。
+ *  T6 闭合稳态基线(docH/行位)必须在它之后读 —— waitDockCollapsed 只等到收场末帧, 比 afterLeave
+ *  早 ~60ms, 边距恢复(旧口径)发生在那段间隙里, 在那里读会把两段式文档的中间态当闭合基线。 */
+async function waitDrawerGone(page) {
+  await page.waitForFunction(
+    () => !document.querySelector('.drawer-dock > .drawer'),
+    undefined, { timeout: 5_000, polling: 30 },
+  );
+}
+
+/** T6 文档底(gap 0)挑未被覆盖的参照行: 滚到文档底 -> 落定 -> 按全开顶缘估算挑最深未覆盖行。
+ *  参照行未覆盖: 开/关全程无让位滚动, scrollY 的任何变化只可能来自文档高变化的钳制 ——
+ *  判据对「边距生命周期」纯净。 */
+async function pickRefAtBottom(page) {
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  await waitListSettled(page);
+  const panelTopEst = await page.evaluate(() => {
+    const sb = document.querySelector('.statusbar');
+    const sbTop = sb ? sb.getBoundingClientRect().top : window.innerHeight;
+    return sbTop - Math.round(window.innerHeight * 0.42); // 全开顶缘估算: 状态栏顶 - 42vh(W1 同式)
+  });
+  const ref = await pickUncoveredRow(page, panelTopEst);
+  expect(ref, `前置: 文档底视口内应有未被抽屉覆盖的行(全开顶缘估算 ${panelTopEst})`).toBeTruthy();
+  return ref;
+}
+
+/** T6 闭合稳态读数: { y, rowB, docH }(参照行行底视口坐标 + scrollY + 文档高)。 */
+async function measureClosed(page, hash) {
+  return page.evaluate((h) => {
+    const r = document.querySelector(`[data-hash="${h}"]`).getBoundingClientRect();
+    return { y: Math.round(window.scrollY), rowB: Math.round(r.bottom), docH: document.documentElement.scrollHeight };
+  }, hash);
+}
+
+/** T6 开面板(双击参照行; position 左缘 {x:8,y:8}: 行宽超出视口, 中心点会命中溢出的行外元素 ——
+ *  smoke.md, 既有用例同口径)。 */
+async function openRefDrawer(page, hash) {
+  await page.dblclick(`.torrent-row[data-hash="${hash}"]`, { force: true, position: { x: 8, y: 8 } });
+  await expect(page.locator('.drawer-dock > .drawer')).toBeVisible({ timeout: 5_000 });
+}
+
+/** T6 关面板并等闭合收尾完成(面板出 DOM = afterLeave 已跑完)。 */
+async function closeRefDrawer(page) {
+  await page.click('.drawer-dock .drawer-close');
+  await waitDrawerGone(page);
 }
 
 /** 挑"会被抽屉覆盖"的行: 全开顶缘(pt)以下 60px 起、中心在状态栏上缘之上(可点)的渲染行里取最深
@@ -782,6 +848,124 @@ for (const skin of DOCK_SKINS) {
       expect(lastScrollT,
         `最后一次 scrollY 变化帧(${lastScrollT}ms)不得晚于面板顶首次到终值帧(${panelDoneT}ms)+50ms —— 滚动与抽屉上升的同步感(修复前平滑爬行越过面板升起完成时刻; 开门时序 rowB基线=${baseline.rowB} ${pairDigest(openedFrames, 'rowB', 'panelTop')}; scrollBy 登记 ${JSON.stringify(scrollLog)})`)
         .toBeLessThanOrEqual(panelDoneT + 50);
+    });
+
+    /* ==================== T6 边距生命周期(缺陷甲+乙, 2026-11-13 用户拍板本轮修掉) ====================
+     * 红验两用例(修复前红 / 修复后绿) + 一条回归守卫(修复前后都绿, 不作红验)。判据全部位移量/差值,
+     * 无绝对像素阈值; 场景恒为文档底(gap 0) + 未覆盖参照行(开/关全程无让位滚动, scrollY 的任何
+     * 变化只可能来自文档高变化的钳制)。 */
+
+    test(`T6 红验1: reopen 全程 docH >= 闭合态基线(enter 起拍清边距凹陷 -8) @fast (${skin})`, async ({ page }) => {
+      test.setTimeout(90_000);
+      collectRuntimeErrors(page);
+
+      await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 15_000 });
+      await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
+      await page.click('nav.tabs [data-view="torrents"]');
+      await expect(page.locator('.torrent-row').first()).toBeVisible({ timeout: 15_000 });
+
+      const ref = await pickRefAtBottom(page);
+      await openRefDrawer(page, ref.hash);
+      await waitDockSettled(page);
+      await closeRefDrawer(page);
+      const closed = await measureClosed(page, ref.hash);
+
+      // reopen 全程 rAF 采样: 起拍帧的 docH 是判据 —— 采样器 tick 先于追赶循环首帧注册,
+      // 必然读到处在起拍态的文档高(修复前 = 基线 - 8: 起拍清边距把文档压短 8px, 取证实测
+      // 19781->19773; 修复后起拍只压 height, 总占位 = margin(CSS 恒 8) + 0 = 关闭态, 文档零变化)。
+      await installGeoSampler(page, ref.hash);
+      await openRefDrawer(page, ref.hash);
+      await waitDockSettled(page);
+      const { frames } = await stopGeoSampler(page);
+      expect(frames.length, '前置: 采样应有足够帧数').toBeGreaterThan(10);
+      const openedH = await page.evaluate(() => Math.round(document.querySelector('.drawer-dock').getBoundingClientRect().height));
+      const maxDockH = Math.max(...frames.filter((f) => f.open).map((f) => f.dockH ?? 0));
+      expect(maxDockH, `前置: reopen 后面板应到过全高(实测峰值 ${maxDockH}, 落定 ${openedH})`).toBeGreaterThanOrEqual(openedH - 4);
+
+      const minDocH = Math.min(...frames.map((f) => f.docH));
+      expect(minDocH,
+        `reopen 全程 docH 最小值(实测 ${minDocH})不得低于闭合态基线 ${closed.docH} —— enter 起拍清边距使文档凹陷 -8px` +
+        `(修复前实测 ${closed.docH - 8}; docH/dockH 序列 ${pairDigest(frames, 'docH', 'dockH')})`)
+        .toBeGreaterThanOrEqual(closed.docH);
+    });
+
+    test(`T6 红验2: 两循环闭合稳态行位稳定(边距两段式 -8 残差) @fast (${skin})`, async ({ page }) => {
+      test.setTimeout(120_000);
+      collectRuntimeErrors(page);
+
+      await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 15_000 });
+      await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
+      await page.click('nav.tabs [data-view="torrents"]');
+      await expect(page.locator('.torrent-row').first()).toBeVisible({ timeout: 15_000 });
+
+      // 开关循环前的闭合基线(锚点): 贴文档底、面板从未开过
+      const ref = await pickRefAtBottom(page);
+      const pristine = await measureClosed(page, ref.hash);
+
+      // 两个完整开关循环(同一未覆盖行), 各轮闭合收尾完成(面板出 DOM)后测闭合稳态
+      await openRefDrawer(page, ref.hash);
+      await waitDockSettled(page);
+      await closeRefDrawer(page);
+      const closed1 = await measureClosed(page, ref.hash);
+      await openRefDrawer(page, ref.hash);
+      await waitDockSettled(page);
+      await closeRefDrawer(page);
+      const closed2 = await measureClosed(page, ref.hash);
+
+      // 断言(修复后应绿, 修复前红): 闭合稳态行底与循环前闭合基线差 <=1px(取整噪声)。修复前红:
+      // 贴文档底(gap 0)关闭, 末帧清边距使文档比闭合稳态多缩 8px -> scrollY 被多钳 8, 闭合稳态
+      // 行位比基线低 8px(afterLeave 缴回 8 只还文档高不还 scrollY —— 残差留在行位上, 首轮一次性
+      // 落地; 两循环之间因钳制落点饱和而相等, 故锚点必须取循环前基线, 循环间比较对首轮残差盲)。
+      const db1 = closed1.rowB - pristine.rowB;
+      const db2 = closed2.rowB - pristine.rowB;
+      expect(Math.abs(db1),
+        `循环1 闭合稳态行底位移量(基线 ${pristine.rowB} -> ${closed1.rowB}, 实测 ${db1}; y ${pristine.y}->${closed1.y}, ` +
+        `docH ${pristine.docH}->${closed1.docH}) —— 闭合收尾不得挪动未覆盖行位(边距两段式 ->0 再 ->8 的钳制落点残差)`)
+        .toBeLessThanOrEqual(1);
+      expect(Math.abs(db2),
+        `循环2 闭合稳态行底位移量(基线 ${pristine.rowB} -> ${closed2.rowB}, 实测 ${db2}; 循环1 后 ${closed1.rowB}; ` +
+        `y ${closed1.y}->${closed2.y}, docH ${closed1.docH}->${closed2.docH})`)
+        .toBeLessThanOrEqual(1);
+    });
+
+    test(`T6 回归守卫: reopen 全程 scrollY 零位移(Chromium 修复前后恒绿, 防回退) @fast (${skin})`, async ({ page }) => {
+      test.setTimeout(90_000);
+      collectRuntimeErrors(page);
+
+      await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 15_000 });
+      await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
+      await page.click('nav.tabs [data-view="torrents"]');
+      await expect(page.locator('.torrent-row').first()).toBeVisible({ timeout: 15_000 });
+
+      const ref = await pickRefAtBottom(page);
+      await openRefDrawer(page, ref.hash);
+      await waitDockSettled(page);
+      await closeRefDrawer(page);
+      const baseline = await measureClosed(page, ref.hash);
+
+      // 基线显式预读后采样 reopen 全程: 修复前 Chromium 起拍钳制窗密闭(同帧恢复, 误发恒落 0)
+      // 恒绿; Gecko 的钳制在 e2e(Chromium)不可观测, 由边距退出 JS 的结构性修复消除 —— 本用例
+      // 只防回退, 不作红验(与 W1 再开零位移同谱系, 参照行换未覆盖行 + 场景钉死文档底)。
+      await installGeoSampler(page, ref.hash);
+      await openRefDrawer(page, ref.hash);
+      await waitDockSettled(page);
+      const { frames, sb } = await stopGeoSampler(page);
+      expect(frames.length, '前置: 采样应有足够帧数').toBeGreaterThan(10);
+      const openedH = await page.evaluate(() => Math.round(document.querySelector('.drawer-dock').getBoundingClientRect().height));
+      const maxDockH = Math.max(...frames.filter((f) => f.open).map((f) => f.dockH ?? 0));
+      expect(maxDockH, `前置: reopen 后面板应到过全高(实测峰值 ${maxDockH}, 落定 ${openedH})`).toBeGreaterThanOrEqual(openedH - 4);
+
+      const dy = frames.map((f) => f.y - baseline.y);
+      const db = frames.map((f) => (f.rowB ?? baseline.rowB) - baseline.rowB);
+      expect(Math.max(...dy.map(Math.abs)),
+        `reopen 全程 scrollY 位移量(基线 ${baseline.y}; 序列 ${frameDigest(frames)}; scrollBy 登记 ${JSON.stringify(sb)})`)
+        .toBe(0);
+      expect(Math.max(...db.map(Math.abs)),
+        `reopen 全程参照行 rect.bottom 位移量(基线 ${baseline.rowB}; scrollBy ${JSON.stringify(sb)})`)
+        .toBeLessThanOrEqual(1); // 1px = 行矩形取整噪声(W1 同口径), 非绝对像素判据
     });
   });
 }

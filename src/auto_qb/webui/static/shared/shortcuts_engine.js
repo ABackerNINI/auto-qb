@@ -369,8 +369,76 @@ Object.assign(window.AQB_SHORTCUTS.methods, {
         const vBot = this._kbViewBottom();  // 面板开着时 = 面板顶缘 - 8 呼吸距(W4 单点); 关闭/窄屏全屏态回落状态栏/整窗高
         // 触发界补差按界源分支取值(面板=呼吸距补偿 / 关闭·D3=精确边), 见 _kbViewBottomPad;
         // 位移公式里的 +8 是落点净空, 与触发补差无关, 两者别混。
-        if (rect.bottom > vBot + this._kbViewBottomPad()) window.scrollBy(0, rect.bottom - vBot + 8);
+        if (rect.bottom > vBot + this._kbViewBottomPad()) {
+          const y0 = window.scrollY;
+          const wanted = rect.bottom - vBot + 8;
+          window.scrollBy(0, wanted);
+          /* T6 补残差(A 路线, 2026-11-14 用户拍板): 请求超过当前文档下滚余量时 scrollBy 被
+           * maxScroll 截断(enter 起拍槽位还塌着/文档底 gap=0, 让位头寸要等停靠槽位长高才出现,
+           * 2026-10-04 取证), 行停在 (公式落点, 请求落点) 之间 —— S-C 收紧后的触发界(行底>
+           * 面板顶)对这种「已发起被截断」的残位不再触发, 后续发不补。只对**本拍已发起让位且
+           * 确被截断**的行登记续缴(判定 = y0 + wanted 越过 maxScroll, 与传输方式无关: 瞬时和
+           * 平滑的终点都受同一 maxScroll 钳制); 静态触发带一字不动, 从未发起的行(含带内未覆盖
+           * 行)不进本机制 —— 「未被覆盖的行绝对不动」不破。 */
+          const maxScroll = document.documentElement.scrollHeight - document.documentElement.clientHeight;
+          if (y0 + wanted > maxScroll + 0.5) this._kbRevealCompleteStart(hash);
+        }
       });
+    },
+    /* T6 让位截断续缴(A 路线, 2026-11-14 用户拍板): 把「本拍已发起且被 maxScroll 截断」的让位
+     * 补到同一公式落点(vBot - 8)。不是新公式 —— 落点/判据单点(_kbViewBottom/_kbViewBottomPad)
+     * 逐帧复读, 差额按公式落点与当前位之差现算, 重复触发不叠加(幂等); 发送后回排验证帧 ——
+     * 「发到收口为止」不是单发(平滑窗被打断/再被钳的残位要回本循环续补, 守卫原样沿用)。
+     * 传输用当下窗口的现行语义(开门窗口内瞬时 / fx-glide 窗口内平滑, scrollBy 一把抓,
+     * fx-mount 零改动): 检测到平滑在途(scrollY 还在动)就不叠加发, 停稳才续缴。守卫四条:
+     *   1) 只服务登记时那行(hash 不符即弃)且面板开着 —— 关面板/换目标/重开 = 状态随周期作废,
+     *      closeDrawer 另接 _kbRevealCompleteStop 显式清(不引跨周期残留, 旧 W1 教训);
+     *   2) 行已到/越过公式落点(delta < 0.5, 亚像素容差同:384/:407)即收口 —— 不许来回修;
+     *   3) 余量不足(delta > headroom)只等不发 —— 盲发会再被钳, 白发位移事件(D11 口径);
+     *   4) 600ms 退避 —— 槽位长高最长 400ms(drawerEnterHook 强制收敛), 到点仍无余量说明截断
+     *      与让位无关(后续文档变化), 放弃。行离窗(窗口化重渲摘走)同样静默弃, 与让位链同口径。 */
+    _kbRevealCompleteStart(hash) {
+      if (this._kbRevealCompleteTimer) cancelAnimationFrame(this._kbRevealCompleteTimer);
+      const t0 = performance.now();
+      let lastY = null;
+      const step = () => {
+        this._kbRevealCompleteTimer = 0;
+        if (!this.drawer.open || this.drawer.hash !== hash) return;  // 守卫1: 状态随 open 周期作废
+        const el = document.querySelector(`[data-hash="${CSS.escape(hash)}"]`);
+        if (!el) return;  // 行离窗: 静默弃(让位链同口径)
+        const y = window.scrollY;
+        if (lastY !== null && Math.abs(y - lastY) > 0.5) {  // 平滑滚动在途: 停稳才续缴(不叠加)
+          lastY = y;
+          this._kbRevealCompleteTimer = requestAnimationFrame(step);
+          return;
+        }
+        lastY = y;
+        const rect = el.getBoundingClientRect();
+        const landing = this._kbViewBottom() - 8;  // 公式落点(判据单点逐帧复读, 与发起拍同式)
+        const delta = rect.bottom - landing;
+        if (delta < 0.5) return;  // 守卫2: 已达/越过落点即收口(幂等)。0.5 亚像素容差与:384 截断判定
+        // /:407 在途判定同口径 —— DSF≠1 缩放下滚动像素吸附把分数落点钉在设备像素格上, 严格
+        // delta<=0 会让恒 +ε 残差过守卫、回排循环每帧空转重发 no-op 直到周期作废
+        const headroom = document.documentElement.scrollHeight - document.documentElement.clientHeight - y;
+        if (delta > headroom) {  // 守卫3: 余量不足只等不发
+          if (performance.now() - t0 > 600) return;  // 守卫4: 退避
+          this._kbRevealCompleteTimer = requestAnimationFrame(step);
+          return;
+        }
+        window.scrollBy(0, delta);  // 续缴差额(落点 = 公式终值)
+        // 发送后回排验证帧 —— 语义是「发到收口为止」不是单发: 平滑窗(fx-glide)里该发为平滑
+        // 滚动, 被用户中途滚动打断/文档中途收缩再钳时行会停在残位, 静态触发带对残位不触发,
+        // 不回排就无人再补。回排后次轮按既有守卫自然处置: delta<=0 收口 / 在途只等 / 再被钳
+        // 只等(余量出现续缴), 600ms 退避兜住一切(评审 minor: 注释承诺的收口此前无实现帧)。
+        this._kbRevealCompleteTimer = requestAnimationFrame(step);
+      };
+      this._kbRevealCompleteTimer = requestAnimationFrame(step);
+    },
+    _kbRevealCompleteStop() {
+      if (this._kbRevealCompleteTimer) {
+        cancelAnimationFrame(this._kbRevealCompleteTimer);
+        this._kbRevealCompleteTimer = 0;
+      }
     },
     /* ---------------- W2: 展开面板与定位页签 ---------------- */
     _kbParseEpId(id) {

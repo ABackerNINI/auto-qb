@@ -111,13 +111,30 @@ Delete 直连注册表外, 均为已拍板的口径, 逐条落断言。W5 局部
   (_kbViewBottom 优先读它, 让位量测不读中间插值; 2026-10-04 回归: 详情中途长高后起拍
   登记值失效, 追赶循环逐帧重登记落定顶缘 = dock 底缘 - 面板自然高); 重开打断收场时
   清面板内联高再量自然高; after 钩子挡被打断的迟到清场; reduced-motion 与 D3 全屏态
-  双豁免; 四皮肤 CSS 成对(dock 动画期裁剪 + 退场 absolute 底缘锚定)
+  双豁免; 四皮肤 CSS 成对(dock 动画期裁剪 + 退场 absolute 底缘锚定); T6 如实口径
+  (2026-11-13): enter 起拍只写 height, margin-top 呼吸距恒在 CSS、JS 全程零写入
 - test_drawer_leave_slot_freeze_w2: W2 收场高度传导修复(计划 26-11-12-1048 §02/§04 S3, D9/D11) ——
   旧机制逐帧写 dock 高度/呼吸距跟缴面板 = 文档逐帧变矮 = scrollY 逐帧钳制, 背景列表逐帧回弹
-  (修复前真机逐帧取证: 收场位移事件 8~11 次, e2e W2 文档底用例判据 <=1)。新机制: 槽位高度/
-  呼吸距各写一次整段冻结, 逐帧循环只收已出流面板自身高, 末帧一次性收拢(文档底至多一次钳制,
-  「钳制属预期」口径不动); 四皮肤 CSS 成对(sticky 槽位 + margin-top 8px + 动画期裁剪 +
-  退场 absolute 底缘锚定 + 160ms 同拍; flux 差异只在入场 translateY(100%) 与 RM 降级块)
+  (修复前真机逐帧取证: 收场位移事件 8~11 次, e2e W2 文档底用例判据 <=1)。新机制: 槽位高度
+  写一次整段冻结, 逐帧循环只收已出流面板自身高, 末帧一次性收拢(文档底至多一次钳制,
+  「钳制属预期」口径不动)。T6 边距生命周期改版如实改写(2026-11-13, 缺陷甲+乙): margin-top
+  呼吸距整体退出 JS, margin 写点在 drawer + shortcuts 两域聚合面零出现(marginTop 字面全量禁
+  + setProperty 钉, 关系断言, 甲的结构性保证 —— 旧口径 enter 起拍清边距 = 文档凹陷 -8px/Gecko 钳制永久, leave 末帧缴 0 + afterLeave
+  缴回 = 两段式 -8 行位残差); 槽位总占位 = margin(CSS 恒 8) + height, leave 冻结/末帧收拢
+  只写 height 各 1 次(计数钉 2), 闭合稳态一步落回 8px; 四皮肤 CSS 成对(sticky 槽位 +
+  margin-top 8px(呼吸距唯一持有者) + 动画期裁剪 + 退场 absolute 底缘锚定 + 160ms 同拍;
+  flux 差异只在入场 translateY(100%) 与 RM 降级块)
+- test_kb_reveal_clamp_complete_a: T6 让位截断续缴(A 路线, 2026-11-14 用户拍板, 破
+  shortcuts_engine.js 零改动的显式授权) —— 让位 scrollBy 请求超过当下文档下滚余量时被
+  maxScroll 截断(enter 起拍槽位塌着/文档底 gap=0, 头寸要等槽位长高才出现), 行停在 (公式落点,
+  请求落点) 之间, S-C 收紧后的触发界(行底>面板顶)对残位不再触发、后续发不补(S-A prism 前置红
+  实证: 残位 面板顶-2, 差 14px; 改前靠「起拍凹陷多钳 8px 把残位留在带内」的巧合补齐)。续缴 =
+  「同一公式落点的续缴」不是新公式(_kbViewBottom 单点逐帧复读, 差额现算幂等收口); **已发起
+  限定** = 登记只在触发分支内 scrollBy 之后且带截断判定(y0+wanted 越过 maxScroll, 与传输无关)
+  —— 静态触发带一字不动, 从未发起的行(含带内未覆盖行)绝不进本机制(S-C 不破); 守卫: open
+  周期界(drawer.open/hash 逐帧 + closeDrawer 显式 _kbRevealCompleteStop, 无跨周期残留)、
+  余量不足只等不发(盲发 = 再被钳 = 白发位移事件)、600ms 退避、平滑在途停稳才缴(开门窗口
+  瞬时/fx-glide 平滑按现行传输, fx-mount 零改动)
 """
 
 from __future__ import annotations
@@ -846,13 +863,17 @@ def test_drawer_open_reveal_row() -> None:
         f"面板分支补差必须与 _kbViewBottom 面板分支呼吸距同值(实测补差单点 return 值, 呼吸距 {breathe.group(1)}): "
         "补回呼吸距触发界才等于面板顶实缘(未覆盖行绝对不动)"
     )
-    assert re.search(r"if \(rect\.bottom > vBot \+ this\._kbViewBottomPad\(\)\) window\.scrollBy", rb), (
+    assert re.search(r"if \(rect\.bottom > vBot \+ this\._kbViewBottomPad\(\)\) \{", rb), (
         "_kbRevealRow 触发界必须是 vBot + _kbViewBottomPad()(补差按界源分支取值): 面板开 = 面板顶实缘"
         "(未覆盖行绝对不动; 旧口径 vBot - 4 的越过带会把未覆盖行抬 4~16px, e2e S-C 红验实测) / "
-        "面板关·D3 = 精确边(关闭路径遮 1~8px 的行照旧让位, 统一 +8 不分支会过紧外溢 —— 评审发现)"
+        "面板关·D3 = 精确边(关闭路径遮 1~8px 的行照旧让位, 统一 +8 不分支会过紧外溢 —— 评审发现)。"
+        "T6(A 路线)如实改写: 触发体从单行改块状(截断续缴登记进分支), 判据表达式逐字不动"
     )
-    assert re.search(r"window\.scrollBy\(0, rect\.bottom - vBot \+ 8\)",
-                     rb), ("位移公式 rect.bottom - vBot + 8 不得随判据收紧改动(真覆盖行的让位量与落点终值 vBot - 8 修复前后逐位一致)")
+    assert re.search(r"const wanted = rect\.bottom - vBot \+ 8;",
+                     rb) and re.search(r"window\.scrollBy\(0, wanted\)", rb), (
+                         "位移公式 rect.bottom - vBot + 8 不得随判据收紧改动(真覆盖行的让位量与落点终值 vBot - 8 修复前后逐位一致; "
+                         "T6(A 路线)如实改写: 公式落值进 wanted 变量(scrollBy 与截断判定共用一次计算), 数式逐字不动)"
+                     )
     # --- 同带语义第二实现点(让位链普查): _kbScrollRowIntoView 下界两路 —— flux 开门落定回执
     # (state.js drawerVisible -> AQB_FX_MOUNT.dock 回执)重入本方法把 drawer.hash 行算回可见带,
     # 不一并收紧则 flux 上越过带行在开门路径仍被抬; 键盘跟随共用同一下界(真覆盖仍让位, 口径一致)。
@@ -972,6 +993,9 @@ def test_drawer_transition_dock_anim() -> None:
     transform/opacity 滑淡(既有 CSS)治不了布局跳变。修法 = JS 钩子驱动: enter 追面板实时高
     插值 / leave 槽位整段冻结只收面板自身高、末帧一次收拢(W2, 计划 26-11-12-1048, 正面断言见
     test_drawer_leave_slot_freeze_w2), 并把动画期的几何登记进 _drawerAnimTop 供下界单点消费。
+    T6(2026-11-13)如实口径: enter 起拍只写 height(margin-top 呼吸距恒在 CSS, JS 全程零写入 ——
+    dock.style.marginTop 聚合面零出现的关系断言钉在 test_drawer_leave_slot_freeze_w2), 槽位
+    总占位 = margin(恒 8) + height, 起拍帧文档零变化(旧口径清边距 = 凹陷 -8px)。
     """
     drawer_js = _read("drawer.js")
     tpl = (SHARED / "tpl" / "drawer.html").read_text(encoding="utf-8")
@@ -1051,35 +1075,62 @@ def test_drawer_leave_slot_freeze_w2() -> None:
     旧机制逐帧写 dock.style.height/marginTop 跟缴面板 —— dock 是流内 sticky 元素, 文档随之
     逐帧变矮, 浏览器逐帧钳制 scrollY, 背景列表逐帧回弹(修复前真机逐帧取证: 收场位移事件
     8~11 次; e2e drawer-dock-stability W2 文档底用例判据 <=1)。新机制: 高度插值约束在已出流的
-    面板层(leave-active absolute 底缘锚定), 槽位高度/呼吸距各写一次整段冻结, 末帧一次性收拢
-    —— 文档底至多一次钳制(「钳制属预期」口径不动, D4), 非文档底零位移。判据/位移公式/三发
-    挂点/_kbViewBottom 零改动(D3/D7), 本守阵只钉新机制接线与四皮肤 CSS 成对(R4/S3)。"""
+    面板层(leave-active absolute 底缘锚定), 槽位高度写一次整段冻结, 末帧一次性收拢 —— 文档底
+    至多一次钳制(「钳制属预期」口径不动, D4), 非文档底零位移。判据/位移公式/三发
+    挂点/_kbViewBottom 零改动(D3/D7), 本守阵只钉新机制接线与四皮肤 CSS 成对(R4/S3)。
+
+    T6 边距生命周期改版(2026-11-13, 缺陷甲+乙, 本守阵按新口径如实改写): margin-top 呼吸距
+    整体退出 JS —— 旧口径 enter 起拍清边距使文档凹陷 -8px(贴文档底 scrollY 被钳, Gecko 无
+    Chromium 的同帧恢复, 钳制永久 -> 重开误发 reveal)、leave 末帧缴 0 + afterLeave 缴回 CSS =
+    文档两段式(->0 再 ->8), 首段多钳的 -8 残差永久落在闭合行位上(实测行底 +8)。新口径: 槽位
+    总占位 = margin(CSS 恒 8, JS 零写入) + height(JS 唯一写面), enter 全程单调不减、leave 单调
+    降到关闭态总占位 8px, 文档两段式与起拍凹陷结构性消失(红验见 e2e T6 两用例)。"""
     drawer_js = _read("drawer.js")
+    # --- T6 关系断言(缺陷甲的结构性保证): margin 写点在 drawer + shortcuts 两域聚合面零出现 ---
+    # 写点与清点都不许有 —— 呼吸距恒在 CSS(8px, 四皮肤成对钉在下方), JS 一旦写 margin(不论
+    # 写 0、写值还是 = "" 清点)都是旧两段式机制的复发面: enter 起拍写 0 = 文档凹陷 -8px
+    # (Gecko 钳制永久), leave 末帧缴 0 + afterLeave 缴回 = 闭合行位 -8 残差。负向扫描按字面
+    # "marginTop" 全量(覆盖 dock.style.marginTop / dock.style["marginTop"] / 任意接收者的
+    # .style.marginTop 写法) + setProperty("margin-top") 单独钉(css 属性名写法不含 camelCase 字面)
+    eng_margin = _read("shortcuts.js")  # T6 A 路线授权改动的另一半域(让位链), 同入负向扫描
+    both_domains = drawer_js + eng_margin
+    assert "marginTop" not in both_domains, (
+        "marginTop 不得在 drawer + shortcuts 两域聚合面任何写法出现(dock.style.marginTop / "
+        "style[\"marginTop\"] / 任意接收者同判 —— T6: margin-top 呼吸距恒在 CSS, 槽位总占位 = "
+        "margin(恒 8) + height, JS 参与 margin 生命周期 = 起拍凹陷/两段式残差复发)"
+    )
+    assert not re.search(r"setProperty\([\"']margin-top", both_domains), (
+        "setProperty(\"margin-top\") 是 margin 写入的第二语法面(css 属性名写法, 不含 camelCase "
+        "字面), 必须与 marginTop 字面一并负向钉死(评审 minor: 只扫 dock.style.marginTop 一种写法"
+        "且只扫 drawer 域时, 变体/另一域回归恒绿)"
+    )
     leave = re.search(r"drawerLeaveHook\(el\) \{(.*?)\n    \},", drawer_js, re.S)
     assert leave, "drawer.js 聚合面找不到 drawerLeaveHook(拆分漂移? 同步本守阵)"
     lb = leave.group(1)
-    # --- 槽位冻结: 高度与呼吸距各写一次(动画期逐帧不动), 逐帧循环里只准写面板自身高 ---
-    assert 'dock.style.height = h0 + "px"' in lb and 'dock.style.marginTop = m0 + "px"' in lb, (
-        "收场必须把 dock 槽位高与呼吸距一次性冻结(W2: 二者都进文档高, 逐帧收回 = 逐帧钳制 scrollY)"
+    # --- 槽位冻结: 高度写一次(动画期逐帧不动; margin 恒在 CSS 本就不冻结自不动), 逐帧循环里
+    # 只准写面板自身高 ---
+    assert 'dock.style.height = h0 + "px"' in lb, (
+        "收场必须把 dock 槽位高一次性冻结(W2: dock 进文档高, 逐帧收回 = 逐帧钳制 scrollY; "
+        "T6 口径下冻结态总占位 = margin(CSS 恒 8) + height, 文档高全程恒定)"
     )
-    assert 'dock.style.height = "";' in lb and 'dock.style.marginTop = "0px"' in lb, (
-        "末帧必须把槽位高与呼吸距一并一次性收拢(文档底至多一次钳制, D11 位移事件 <=1; "
-        "只缴高留边距, 重开 enter 起拍清边距会在贴文档底时多钳一次 —— 收场与重开的几何交接面)"
+    assert 'dock.style.height = "";' in lb, (
+        "末帧必须把槽位高一次性收拢: 槽位总占位一步落回关闭态 margin 8 + height 0 = 8px"
+        "(文档底至多一次钳制, D11 位移事件 <=1; margin 不缴 —— T6 两段式 ->0 再 ->8 的 -8 "
+        "行位残差正是旧口径末帧缴边距所致)"
     )
-    # 计数钉(评审加固, 取代旧的精确串负向钉): leave 函数体内 dock 高度/呼吸距写点各恰 2 处
+    # 计数钉(评审加固, 取代旧的精确串负向钉): leave 函数体内 dock 高度写点恰 2 处
     # = 起拍冻结 1 + 末帧收拢 1 —— 逐帧跟缴旧机制不论 RHS 换成什么写法都会引入第 3 处写点
     # 破此计数, 比精确串匹配更能挡「机制语法变体回退」(旧断言只认旧写法, 变体回退两测全绿)
-    assert lb.count("dock.style.height") == 2 and lb.count("dock.style.marginTop") == 2, (
-        "leave 函数体内 dock.style.height/marginTop 各只许出现 2 次(冻结 1 + 末帧收拢 1): "
+    assert lb.count("dock.style.height") == 2, (
+        "leave 函数体内 dock.style.height 只许出现 2 次(冻结 1 + 末帧收拢 1): "
         "新增任何逐帧 dock 写(不论写法)= 文档逐帧变矮 = scrollY 逐帧钳制(旧机制复发)"
     )
-    # 闭合稳态恢复钉(评审加固): 末帧收拢后 dock 内联 margin="0px", CSS 自然 8px 呼吸距靠
-    # drawerAfterLeaveHook 清内联恢复 —— 它是「重开 enter 起拍清边距恰好消费 8px headroom」
-    # 交接面的供给侧; 该行无钉则删掉后首次关面板起闭合稳态永久丢 8px 且本守阵全绿
+    # afterLeave 兜底钉: 末帧已收拢, afterLeave 清 height 内联只服务打断路径; margin 无内联
+    # 可清(T6 关系断言已钉全聚合面零出现), 不再有「缴回 CSS 8px」的第二段文档变化
     al = re.search(r"drawerAfterLeaveHook\(\) \{(.*?)\n    \},", drawer_js, re.S)
-    assert al and 'dock.style.marginTop = "";' in al.group(1), (
-        "drawerAfterLeaveHook 必须清 dock 内联 margin(W2 交接面: 末帧缴 0 后由它恢复 CSS 自然 "
-        "8px 呼吸距 = 重开 enter 起拍清边距要消费的余量; 缺失则闭合稳态永久丢 8px 边距)"
+    assert al and 'dock.style.height = "";' in al.group(1), (
+        "drawerAfterLeaveHook 必须清 dock 内联 height(打断路径兜底; T6: margin 无内联, 无第二段"
+        "文档变化可兜)"
     )
     # --- 四皮肤 CSS 成对(R4/S3): 冻结机制依赖的几何契约逐皮肤钉住, 不出现只改一皮肤的漂移 ---
     # flux 与另三皮肤的差异只在入场(translateY(100%) 整幅上滑 + fx 骨令牌)与 RM 降级块,
@@ -1088,7 +1139,7 @@ def test_drawer_leave_slot_freeze_w2() -> None:
         css = (STATIC / ui / "css" / "dialogs.css").read_text(encoding="utf-8")
         assert re.search(r"\.drawer-dock \{ position: sticky;",
                          css), (f"{ui}: .drawer-dock 必须流内 sticky(W2 前提: 槽位在文档流里, 冻结它文档高才恒定)")
-        assert "margin-top: 8px" in css, f"{ui}: 缺呼吸距 margin-top 8px(四皮肤成对设计常量, JS 冻结面 m0 的来源)"
+        assert "margin-top: 8px" in css, f"{ui}: 缺呼吸距 margin-top 8px(四皮肤成对设计常量; T6 起它是呼吸距唯一持有者, JS 零写入)"
         assert ".drawer-dock.drawer-anim { overflow: hidden; }" in css, f"{ui}: 缺 dock 动画期裁剪规则(四皮肤成对)"
         assert ".drawer-leave-active { position: absolute; left: 0; right: 0; bottom: 0; pointer-events: none; }" in css, (
             f"{ui}: 退场必须 absolute 底缘锚定出流(W2 载体: 高度插值约束在不出流的层, 面板底边钉死向下收)"
@@ -1096,3 +1147,98 @@ def test_drawer_leave_slot_freeze_w2() -> None:
         assert ".drawer-leave-active { transition: transform .16s ease-in" in css, (
             f"{ui}: 退场 CSS 时长必须 160ms(与 JS 收场曲线同拍, 收场视觉时序保持)"
         )
+
+
+def test_kb_reveal_clamp_complete_a() -> None:
+    """T6 让位截断续缴(A 路线, 2026-11-14 用户拍板, 破 shortcuts_engine.js 零改动的显式授权)。
+
+    缺陷面(S-A prism 前置红实证): 让位 scrollBy 的请求超过当下文档下滚余量时被 maxScroll 截断
+    (enter 起拍槽位还塌着/文档底 gap=0, 让位头寸要等停靠槽位长高才出现), 行停在 (公式落点,
+    请求落点) 之间 —— S-C 收紧后的触发界(行底>面板顶)对这种残位不再触发, 后续发不补
+    (实测残位 面板顶-2, 差 14px; 改前靠「起拍凹陷多钳 8px 把残位留在带内」的巧合由后续发补齐)。
+
+    续缴 = 「同一公式落点的续缴」, 不是新公式: 落点/判据走 _kbViewBottom/_kbViewBottomPad 单点
+    逐帧复读, 差额按公式落点与当前位之差现算(重复触发不叠加, 幂等)。**已发起限定**(本机制不
+    复活 S-C 杀掉的行为的关键): 登记只许出现在 _kbRevealRow 触发分支内、且须带「确被截断」判定
+    —— 从未发起让位的行(含带内未覆盖行)绝不进本机制, 静态触发带一字不动。守卫: open 周期界
+    (drawer.open/hash 逐帧守卫 + closeDrawer 显式 stop, 无跨周期残留 —— 旧 W1 教训)、delta<=0
+    幂等收口、余量不足只等不发(盲发 = 再被钳 = 白发位移事件, D11 口径)、600ms 退避(槽位长高
+    最长 400ms)、平滑在途停稳才缴(开门窗口瞬时/fx-glide 平滑按现行传输, fx-mount 零改动)。"""
+    eng = _read("shortcuts.js")
+    # --- 已发起限定: 续缴登记只许在触发分支内 scrollBy 之后, 且带截断判定 ---
+    rv = re.search(r"_kbRevealRow\(hash\) \{(.*?)\n    \},", eng, re.S)
+    assert rv, "shortcuts.js 缺 _kbRevealRow(让位单点被改名/搬走? 同步本守阵)"
+    rb = rv.group(1)
+    assert rb.count("_kbRevealCompleteStart") == 1, (
+        "_kbRevealCompleteStart 只许在 _kbRevealRow 触发分支内登记一次(已发起限定): 分支外的登记"
+        "= 静态触发带被放宽, 从未发起的行(含带内未覆盖行)会被主动抬起 —— S-C「未覆盖绝对不动」复发"
+    )
+    assert eng.count("this._kbRevealCompleteStart(") == 1, (
+        "登记调用点必须 shortcuts.js 聚合面全文件唯一(文件级计数钉, 评审 minor): 只钉 _kbRevealRow "
+        "函数体内的次数/顺序时, 未来其它方法对未发起行新增登记调用全部钉不红 —— 「从未发起的行绝不"
+        "被机制抬起」在文件级失守"
+    )
+    idx_trigger = rb.index("rect.bottom > vBot + this._kbViewBottomPad()")
+    idx_scrollby = rb.index("window.scrollBy(0, wanted)")
+    idx_reg = rb.index("this._kbRevealCompleteStart(hash)")
+    assert idx_trigger < idx_scrollby < idx_reg, ("续缴登记必须落在「触发判定 -> 发起 scrollBy 之后」: 未发起/未实际让位不得登记(已发起限定)")
+    assert "document.documentElement.scrollHeight - document.documentElement.clientHeight" in rb, (
+        "登记必须带截断判定(y0 + wanted 越过 maxScroll): 未截断的让位已足额落地, 登记续缴 = 白挂状态"
+    )
+    assert re.search(r"y0 \+ wanted > maxScroll \+ 0\.5", rb), (
+        "截断判定按请求终点越界算(y0 + wanted > maxScroll), 与传输方式无关(瞬时和平滑的终点都受"
+        "同一 maxScroll 钳制) —— 读发起后的 scrollY 判截断在平滑传输下恒假(动画未落地)"
+    )
+    # --- 续缴循环四守卫 + 传输/公式口径 ---
+    start = re.search(r"_kbRevealCompleteStart\(hash\) \{(.*?)\n    \},", eng, re.S)
+    assert start, "shortcuts.js 缺 _kbRevealCompleteStart(截断续缴单点)"
+    sb = start.group(1)
+    assert "!this.drawer.open" in sb and "this.drawer.hash !== hash" in sb, (
+        "续缴循环必须带 open 周期守卫(drawer.open + hash 双查): 关面板/换目标 = 状态随周期作废, "
+        "不得跨周期残留(旧 W1 跨周期登记量教训)"
+    )
+    assert "delta < 0.5" in sb, (
+        "续缴必须幂等: 已到/越过公式落点(delta < 0.5 亚像素容差收口, 与:384 截断判定/:407 在途判定"
+        "同一 0.5 口径)即收口, 重复触发不叠加不回修; 严格 delta<=0 在 DSF!=1 滚动像素吸附下恒 +ε"
+        "残差过守卫, 回排循环每帧空转重发 no-op(评审 minor)"
+    )
+    assert "delta > headroom" in sb and "requestAnimationFrame(step)" in sb, (
+        "余量不足(delta > headroom)只等不发: 盲发会被 maxScroll 再钳, 白发位移事件(D11 口径)且"
+        "把截断固化为逐帧爬行"
+    )
+    assert "performance.now() - t0 > 600" in sb, (
+        "续缴必须带 600ms 退避: 槽位长高最长 400ms(drawerEnterHook 强制收敛), 到点仍无余量说明"
+        "截断与让位无关(后续文档变化), 放弃 —— 不许无限排队"
+    )
+    assert "Math.abs(y - lastY) > 0.5" in sb, ("平滑滚动在途(scrollY 仍在变)不得叠加发: 停稳才续缴, 否则逐帧抢发与平滑动画互相打架")
+    assert "const landing = this._kbViewBottom() - 8" in sb, (
+        "续缴落点必须走 _kbViewBottom 单点逐帧复读(同一公式落点的续缴, 不是新公式; vBot - 8 与"
+        "_kbRevealRow 发起拍同式), 判据/补差分支语义不得在续缴里复制第二份"
+    )
+    assert sb.count("window.scrollBy") == 1 and "scrollIntoView" not in sb and "window.scrollTo" not in sb, (
+        "续缴只许 window.scrollBy 一把(传输按现行窗口语义: 开门窗口瞬时/fx-glide 平滑, fx-mount "
+        "零改动); 逐层滚动 API 是文件头禁令, scrollTo 会绕开增量口径"
+    )
+    send_idx = sb.index("window.scrollBy(0, delta)")
+    step_tail = sb[send_idx:].split("\n      };")[0]  # send 到 step 体内收拢(方法末尾的初始排帧不在窗内)
+    assert "this._kbRevealCompleteTimer = requestAnimationFrame(step);" in step_tail, (
+        "发送后必须在 step 体内回排验证帧(发到收口为止, 评审 minor): 单发语义下平滑窗(fx-glide)里"
+        "该发为平滑滚动, 被用户中途滚动打断/文档中途收缩再钳后行停在残位, 静态触发带对残位不触发,"
+        "无人再补 —— 回排后次轮按既有守卫自然处置(delta<=0 收口/在途只等/再被钳只等, 600ms 退避兜底)"
+    )
+    assert "getBoundingClientRect" in sb and "data-hash" in sb, "续缴按行实测矩形现算差额(不按请求历史累加)"
+    # --- 状态句柄与清理时机: 实例级非响应式 + closeDrawer 显式作废 ---
+    assert "_kbRevealCompleteTimer" in sb and "cancelAnimationFrame" in sb, (
+        "续缴必须走可取消的 rAF 句柄(_kbRevealCompleteTimer, 与 _drawerAnimRaf 同族: 实例级"
+        "非响应式, 惰性初始化, 不进 state.js 的 data)"
+    )
+    stop = re.search(r"_kbRevealCompleteStop\(\) \{(.*?)\n    \},", eng, re.S)
+    assert stop and "cancelAnimationFrame" in stop.group(1) and "_kbRevealCompleteTimer = 0" in stop.group(1), (
+        "必须有 _kbRevealCompleteStop 单点(取消在途 rAF + 句柄归零)供 closeDrawer 显式清状态"
+    )
+    drawer_js = _read("drawer.js")
+    close_fn = re.search(r"closeDrawer\(\) \{(.*?)\n    \},", drawer_js, re.S)
+    assert close_fn and "this._kbRevealCompleteStop()" in close_fn.group(1), (
+        "closeDrawer 必须显式 _kbRevealCompleteStop(状态清理时机 = open 周期终点): 只靠循环内的 "
+        "open 守卫有一帧窗口, 快速关->重开同 hash 时旧拍续缴会跨周期复活(旧 W1 机理)"
+    )

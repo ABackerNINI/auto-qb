@@ -95,6 +95,7 @@ Object.assign(window.AQB_DRAWER.methods, {
       this.drawerMenu.visible = false;  // 抽屉右键菜单(R2 S3)随面板收
       this._stopDrawerPoll();
       this._stopDrawerFollow();
+      this._kbRevealCompleteStop();  // T6: 让位截断续缴的状态随 open 周期显式作废(不引跨周期残留)
       this._dtUnmountAll();     // 插件实例逐个 destroy + 清宿主(W7 恢复; 本体 drawer_templates.js)
       this._drawerSwitchEnd();  // FX-29: 收面板即撤切换态(未完成的等待不得挂到下次打开)
       this._qbTeardown();       // 流量形态(全局/分组/单种)轮询与图一并收(2026-10-04 三挂点并入抽屉)
@@ -229,8 +230,13 @@ Object.assign(window.AQB_DRAWER.methods, {
      * enter 用 rAF 追赶循环把 .drawer-dock 高度 0 -> 面板实时高(每帧重量, 详情中途到达长高也跟),
      * leave 反向把面板自身高度收拢到 0, 而槽位(dock)整段冻结、末帧一次性收拢 —— W2(计划
      * 26-11-12-1048): 旧实现 dock 逐帧跟缴 = 文档逐帧变矮 = scrollY 逐帧钳制, 背景列表逐帧回弹。
-     * enter 侧每帧写 height/margin, 不碰面板 :style 绑定, Vue 重渲染即便回写绑定值下一帧也被
-     * 循环覆盖(自愈)。动画期 .drawer-anim 裁掉溢出,
+     * enter 侧每帧写 height, 不碰面板 :style 绑定, Vue 重渲染即便回写绑定值下一帧也被
+     * 循环覆盖(自愈)。**margin-top 呼吸距全程不进 JS**(T6 2026-11-13, 缺陷甲+乙根治): dock 的
+     * 8px 呼吸距恒在 CSS, JS 零写入 —— 槽位总占位口径 = margin(恒 8) + height。旧口径 JS 参与
+     * 边距生命周期(enter 起拍清 0 / leave 末帧缴 0 / afterLeave 缴回 CSS), 文档两段式变化:
+     * 起拍凹陷 -8px(贴文档底时 scrollY 被钳, Gecko 无 Chromium 的同帧恢复, 钳制永久 -> 重开
+     * 误发 reveal)、闭合收尾 -8 残差落在行位上(每轮比关闭前低 8px)。总占位全程单调(enter 不减、
+     * leave 单调降到关闭态 8px), 钳制在所有浏览器结构性消失。动画期 .drawer-anim 裁掉溢出,
      * 面板从底缘升起/收回; prefers-reduced-motion 与窄屏全屏态(D3, 面板 fixed 出流)不插值。
      * 几何登记: 插值期间 dock 顶缘是中间值, 让位量测(_kbRevealRow)不许读 —— enter 起拍把
      * "自然高时的 dock 顶缘"(即落定顶缘, sticky 钉底)登记进 _drawerAnimTop, _kbViewBottom
@@ -246,8 +252,7 @@ Object.assign(window.AQB_DRAWER.methods, {
       const dock = document.querySelector(".drawer-dock.drawer-anim");
       if (dock) {
         dock.classList.remove("drawer-anim");
-        dock.style.height = "";
-        dock.style.marginTop = "";
+        dock.style.height = "";  // 只清高度内联; margin-top 从不进 JS(T6), 无内联可清
       }
     },
     drawerEnterHook(el) {
@@ -263,10 +268,10 @@ Object.assign(window.AQB_DRAWER.methods, {
       const h0 = dock.getBoundingClientRect().height;
       this._drawerAnimTop = h0 ? this._drawerFinalTop(dock) : 0;  // 自然高帧的顶缘 = 落定顶缘(sticky 钉底)
       if (!h0) return;  // 窄屏全屏态(D3, 面板 fixed 不占布局)或空内容: 无槽位可插值, 交回纯 CSS 滑淡
-      const m0 = parseFloat(getComputedStyle(dock).marginTop) || 0;
       dock.classList.add("drawer-anim");
-      dock.style.height = "0px";
-      dock.style.marginTop = "0px";
+      dock.style.height = "0px";  // T6(缺陷甲): 起拍只压高度, 不清 margin —— 呼吸距恒在 CSS, 起拍帧
+      // 槽位总占位 = margin 8 + height 0 = 关闭态 8px, 文档零变化(旧口径同帧清边距 = 文档凹陷 -8px,
+      // 贴文档底时 scrollY 被钳, Gecko 上钳制永久, 未覆盖行被推进触发带 -> 重开误发 reveal)
       const t0 = performance.now();
       const step = () => {
         if (seq !== this._drawerAnimSeq) return;  // 被新开合打断: 新拍已接管 dock
@@ -274,15 +279,15 @@ Object.assign(window.AQB_DRAWER.methods, {
         const cur = parseFloat(dock.style.height) || 0;
         const next = cur + (target - cur) * 0.45;
         if (Math.abs(target - next) < 1 || performance.now() - t0 > 400) {
-          dock.style.height = "";  // 收敛: 回交自然高, 内容后续涨落不再经动画
-          dock.style.marginTop = "";
+          dock.style.height = "";  // 收敛: 回交自然高, 内容后续涨落不再经动画(margin 恒 CSS 8, 无内联)
           dock.classList.remove("drawer-anim");
           this._drawerAnimTop = 0;
           this._drawerAnimRaf = 0;
           return;
         }
-        dock.style.height = next + "px";
-        dock.style.marginTop = Math.min(m0, next * (m0 / h0)) + "px";  // 呼吸距随槽位同步长出
+        dock.style.height = next + "px";  // 槽位总占位 = margin(恒 8) + height: 全程单调不减, 开稳态
+        // 8 + h 与旧口径逐位一致(margin 8 + 自然高 h); 面板顶只随 height 走(sticky 吸底钉底, margin
+        // 不参与), 视觉与旧边距插值逐位相同
         // 落定顶缘逐帧重登记: 详情中途长高后, enter 起拍登记的 loading 态顶缘不再是落定值,
         // 让位量测(_kbRevealRow/键盘跟随)会按旧几何漏让(2026-10-04 回归取证)。dock sticky
         // 吸底期底缘恒定(margin-top 不参与吸底定位), 落定顶缘 = dock 底缘 - 面板自然高
@@ -317,16 +322,15 @@ Object.assign(window.AQB_DRAWER.methods, {
       const h0 = frozenH || Math.round(el.getBoundingClientRect().height);
       if (!h0) { this._drawerAnimTop = 0; return; }  // 空内容: 无高度可收
       if (!frozenH && !this._drawerAnimTop) this._drawerAnimTop = this._drawerFinalTop(dock);
-      const m0 = parseFloat(getComputedStyle(dock).marginTop) || 0;
       dock.classList.add("drawer-anim");
-      /* W2(计划 26-11-12-1048 §02/D9): 槽位整段冻结 —— 高度与呼吸距各写一次, 收场动画期逐帧
-       * 不动。dock 是流内 sticky 元素, 逐帧缩它 = 文档逐帧变矮 = 浏览器逐帧钳制 scrollY, 背景
-       * 列表逐帧回弹(修复前真机逐帧取证: 收场位移事件 8~11 次, D11 判据 <=1)。高度插值只作用
-       * 于已出流的面板(leave-active absolute 底缘锚定, 四皮肤成对、守阵钉住), 文档高全程恒定
-       * —— 列表这才真正「只看到面板沉下去」。槽位在末帧一次性收拢(见 step 末尾): 文档底至多
-       * 一次钳制, 属「结果变短后的一次性钳制」预期口径(dock-panel.md:118), 非文档底零钳制。 */
+      /* W2(计划 26-11-12-1048 §02/D9): 槽位整段冻结 —— 高度写一次(呼吸距 margin-top 恒在 CSS
+       * 本就不动, T6 起它彻底不进 JS), 收场动画期逐帧不动。dock 是流内 sticky 元素, 逐帧缩它 =
+       * 文档逐帧变矮 = 浏览器逐帧钳制 scrollY, 背景列表逐帧回弹(修复前真机逐帧取证: 收场位移
+       * 事件 8~11 次, D11 判据 <=1)。高度插值只作用于已出流的面板(leave-active absolute 底缘
+       * 锚定, 四皮肤成对、守阵钉住), 文档高全程恒定 —— 列表这才真正「只看到面板沉下去」。槽位
+       * 在末帧一次性收拢(见 step 末尾): 文档底至多一次钳制, 属「结果变短后的一次性钳制」预期
+       * 口径(dock-panel.md:118), 非文档底零钳制。 */
       dock.style.height = h0 + "px";     // 槽位冻结(closeDrawer 已写同值, 自捕获帧起整段保持)
-      dock.style.marginTop = m0 + "px";  // 呼吸距一并冻结(它同样进文档高, 逐帧收回一样逐帧钳制)
       const t0 = performance.now();
       const step = () => {
         if (seq !== this._drawerAnimSeq) return;  // 重开接管: enter 拍清冻结残局后自起动画, 本循环自弃
@@ -339,13 +343,12 @@ Object.assign(window.AQB_DRAWER.methods, {
           return;
         }
         // 末帧一次性收拢槽位: 面板已收到 0(不可见), 文档此刻一次性变矮 —— scrollY 至多一次
-        // 钳制(D11 位移事件 <=1)。height 回自然(面板出流, 自然高 0), 呼吸距一并缴 0 —— 二者
-        // 是槽位文档占用的一体两面, 必须同帧 surrender(只缴高留 8px 边距, 重开时 enter 起拍
-        // 清边距会在贴文档底时多钳一次)。afterLeave 清内联回 CSS 自然 8px = 文档长回 8px,
-        // 恰好是重开 enter 起拍清边距要消费的余量(与逐帧缴旧机制同一稳态, 重开零位移)
+        // 钳制(D11 位移事件 <=1)。height 回自然(面板出流, 自然高 0), 槽位总占位一步落回关闭态
+        // margin 8 + height 0 = 8px(T6 缺陷乙根治: 旧口径末帧把 margin 一并缴 0、afterLeave 再
+        // 缴回 CSS 8px = 文档 ->0 再 ->8 两段式, 贴文档底时首段比闭合稳态多缩 8px 多钳一次,
+        // 第二段只还文档高不还 scrollY, -8 残差永久落在行位上); margin 恒在 CSS, JS 不写不缴
         dock.style.height = "";
-        dock.style.marginTop = "0px";
-        this._drawerAnimRaf = 0;  // 面板节点随后被 Vue 摘除; dock 残留内联由 afterLeave 兜底清
+        this._drawerAnimRaf = 0;  // 面板节点随后被 Vue 摘除; dock 残留内联(height)由 afterLeave 兜底清
       };
       this._drawerAnimRaf = requestAnimationFrame(step);
       this._drawerAnimDock = dock;  // afterLeave 时面板已出 DOM(parentElement 为 null), 提前留手
@@ -356,8 +359,7 @@ Object.assign(window.AQB_DRAWER.methods, {
       const dock = this._drawerAnimDock;
       if (dock) {
         dock.classList.remove("drawer-anim");
-        dock.style.height = "";
-        dock.style.marginTop = "";
+        dock.style.height = "";  // 只清高度内联(margin 从未进 JS, T6); 末帧已缴, 此为打断路径兜底
         this._drawerAnimDock = null;
       }
       this._drawerAnimTop = 0;
