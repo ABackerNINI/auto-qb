@@ -355,32 +355,32 @@
   background: var(--surface-2); color: var(--fg-muted); font-size: 11px; white-space: nowrap;
   overflow: hidden; text-overflow: ellipsis; }
 /* HR 标签语义色: pending 最醒目, done 镇静对照 */
-.tag-chip.hr-pending { background: var(--hr-pending-soft); color: var(--hr-pending); font-weight: 600;
-  box-shadow: inset 0 0 0 1px var(--hr-pending-line); }
+.tag-chip.hr-pending { background: var(--hr-pending-soft); color: var(--hr-pending); font-weight: 600; box-shadow: inset 0 0 0 1px var(--hr-pending-line); }
 .tag-chip.hr-done { background: var(--hr-done-soft); color: var(--hr-done);
   box-shadow: inset 0 0 0 1px var(--hr-done-line); }
 .cat-chip { display: inline-flex; align-items: center; padding: 1px 7px; border-radius: var(--radius-sm);
   background: var(--surface-2); color: var(--fg-muted); font-size: 11px; white-space: nowrap;
   overflow: hidden; text-overflow: ellipsis; }
+/* HR 分类语义色: 逐字镜像 .tag-chip.hr-* 形态(1px 全描边走 --hr-*-line 令牌) */
+.cat-chip.hr-pending { background: var(--hr-pending-soft); color: var(--hr-pending); font-weight: 600; box-shadow: inset 0 0 0 1px var(--hr-pending-line); }
+.cat-chip.hr-done { background: var(--hr-done-soft); color: var(--hr-done); box-shadow: inset 0 0 0 1px var(--hr-done-line); }
+/* 排除态(命中排除表, 与 tag-chip 对称): 虚线描边+字色转灰; 本皮肤 cat/tag chip 基线均无 border, 新增 border 用 padding 0 6px 抵消(盒尺寸守恒) */
+.cat-chip.hr-excl, .tag-chip.hr-excl { background: transparent; color: var(--fg-muted); border: 1px dashed var(--fg-muted); padding: 0 6px; }
 /* 标签/分类芯片改"状态色"(2026-09-17 用户要求): 原先分类永远蓝、普通标签永远灰 —— 颜色不带语义,
  * 蓝色分类 chip 还会和"下载中"撞色。改为跟随**所在行的状态语义色**(与 .site-chip 同口径);
  * HR 标签(hr-pending/hr-done)自带 HR 语义, 用 :not() 排除不受影响; paused/other 保持中性灰。 */
-.group-row.s-seeding .tag-chip:not(.hr-pending):not(.hr-done),
-.group-row.s-seeding .cat-chip,
-.member-row.seeding .tag-chip:not(.hr-pending):not(.hr-done),
-.member-row.seeding .cat-chip { background: var(--green-soft); color: var(--green); }
-.group-row.s-downloading .tag-chip:not(.hr-pending):not(.hr-done),
-.group-row.s-downloading .cat-chip,
-.group-row.s-checking .tag-chip:not(.hr-pending):not(.hr-done),
-.group-row.s-checking .cat-chip,
-.member-row.downloading .tag-chip:not(.hr-pending):not(.hr-done),
-.member-row.downloading .cat-chip,
-.member-row.checking .tag-chip:not(.hr-pending):not(.hr-done),
-.member-row.checking .cat-chip, .group-row.s-moving .tag-chip:not(.hr-pending):not(.hr-done), .group-row.s-moving .cat-chip, .member-row.moving .tag-chip:not(.hr-pending):not(.hr-done), .member-row.moving .cat-chip { background: var(--st-soft, var(--blue-soft)); color: var(--st, var(--blue)); }
-.group-row.s-error .tag-chip:not(.hr-pending):not(.hr-done),
-.group-row.s-error .cat-chip,
-.member-row.error .tag-chip:not(.hr-pending):not(.hr-done),
-.member-row.error .cat-chip { background: var(--error-soft); color: var(--error); }
+.group-row.s-seeding .tag-chip:not(.hr-pending):not(.hr-done):not(.hr-excl), .group-row.s-seeding .cat-chip:not(.hr-pending):not(.hr-done):not(.hr-excl),
+.member-row.seeding .tag-chip:not(.hr-pending):not(.hr-done):not(.hr-excl), .member-row.seeding .cat-chip:not(.hr-pending):not(.hr-done):not(.hr-excl) { background: var(--green-soft); color: var(--green); }
+.group-row.s-downloading .tag-chip:not(.hr-pending):not(.hr-done):not(.hr-excl),
+.group-row.s-downloading .cat-chip:not(.hr-pending):not(.hr-done):not(.hr-excl),
+.group-row.s-checking .tag-chip:not(.hr-pending):not(.hr-done):not(.hr-excl),
+.group-row.s-checking .cat-chip:not(.hr-pending):not(.hr-done):not(.hr-excl),
+.member-row.downloading .tag-chip:not(.hr-pending):not(.hr-done):not(.hr-excl),
+.member-row.downloading .cat-chip:not(.hr-pending):not(.hr-done):not(.hr-excl),
+.member-row.checking .tag-chip:not(.hr-pending):not(.hr-done):not(.hr-excl),
+.member-row.checking .cat-chip:not(.hr-pending):not(.hr-done):not(.hr-excl), .group-row.s-moving .tag-chip:not(.hr-pending):not(.hr-done):not(.hr-excl), .group-row.s-moving .cat-chip:not(.hr-pending):not(.hr-done):not(.hr-excl), .member-row.moving .tag-chip:not(.hr-pending):not(.hr-done):not(.hr-excl), .member-row.moving .cat-chip:not(.hr-pending):not(.hr-done):not(.hr-excl) { background: var(--st-soft, var(--blue-soft)); color: var(--st, var(--blue)); }
+.group-row.s-error .tag-chip:not(.hr-pending):not(.hr-done):not(.hr-excl), .group-row.s-error .cat-chip:not(.hr-pending):not(.hr-done):not(.hr-excl),
+.member-row.error .tag-chip:not(.hr-pending):not(.hr-done):not(.hr-excl), .member-row.error .cat-chip:not(.hr-pending):not(.hr-done):not(.hr-excl) { background: var(--error-soft); color: var(--error); }
 
 /* 挂件点击即筛选(2026-09-29): 与 atlas/views.css 同口径 —— 站点/标签/分类胶囊与路径、
  * 明细站点单元格可点, 点击 = 切换顶栏筛选弹层里的对应值; f-on = 该值已在筛选中,
