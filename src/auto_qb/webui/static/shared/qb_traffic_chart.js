@@ -1984,6 +1984,10 @@ window.AQB_QB_TRAFFIC = {
       // 拍内改参由绘制侧逐帧重算 alloc 并钳制到清单长度(m = min(specs.length, n)) —— 下一帧即
       // 生效; cap 冻结在 spawn 会让拍内改密度整拍失效(违 §05.3/D21: partCap 即时生效)。策略
       // 形状(both/lead/merge 各自的清单落位与半套上限)仍按 spawn 时 cfg.dual 定型。
+      // 清单恒满额、与配色档解耦(评审 major): calm 档零粒子的唯一闸在绘制侧 eff 逐帧门 ——
+      // spawn 侧冻 palette 会让「calm 判定帧 specs 全不建 -> 拍内切出 calm」余下冲击窗零粒子
+      // 到下一拍才恢复(违 §05.3「立即; 粒子池重建」), 且 alloc.merge=0 把切片带 yCenter 退
+      // lead 末点 y(带中心漂移)。密度满额解耦(F8)与切片无条件生成同款先例。
       const cap = _qbFxPartCap(lv, 1);
       const alloc = _qbFxAlloc(cfg.dual, cap, lead);
       const seed = Math.floor(xs[n - 1]) || 1;
@@ -2128,7 +2132,14 @@ window.AQB_QB_TRAFFIC = {
       // (与 spawn 同式 —— 缺口轨 shown=null 会落底边假中点, I10/D4), 单反馈色取 lead Lv 色
       // —— D3-c; lead = 只主导轨; both(默认) = 各活性轨一落位, 环不占粒子预算故 eff 为 0 也
       // 保留环落位)
-      const eff = _qbFxAlloc(cfg.dual, _qbFxPartCap(fx.lv, cfg.particles), fx.lead);
+      // calm 档零粒子逐帧门(plan §04 原型 partCap 的 isCalm 口径; §10「克制档零粒子」原文)。
+      // 这是 calm 零粒子的唯一闸: spawn 恒满额清单(与密度解耦同款), 故 palette 两个方向都
+      // 下一帧生效(§05.3「立即; 粒子池重建」) —— 切入 calm 零粒、切出 calm 恢复, 与切片
+      // glitch 门类比对称; eff=0 经 m=min(specs.length, n) 钳制落零粒。isCalm 的 reduce 分量
+      // 由 spawn 顶门 cfg.on !== true 承接(on=false 时根本不进绘制面)。原型 partCap 另有
+      // leadLevel()<=1->0 门, Lv.1 发粒子系用户拍板维持现状(P9 未采纳), 生产只采纳 calm 分量。
+      const effCap = cfg.palette === "calm" ? 0 : _qbFxPartCap(fx.lv, cfg.particles);
+      const eff = _qbFxAlloc(cfg.dual, effCap, fx.lead);
       const spots = [];
       if (eff.merge > 0) {
         spots.push({ y: tr.up.live && tr.dl.live ? (yUp + yDl) / 2 : yOf(tr[fx.lead].shown),
