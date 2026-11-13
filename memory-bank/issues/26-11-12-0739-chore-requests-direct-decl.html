@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="deps-direct-decl">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="requests 未声明为直接依赖: 生产 scripts 与 tests 三处裸 import 仅靠 qbittorrent-api 传递依赖">
 <meta name="issue-summary" content="pyproject dependencies 不含 requests, scripts/qb_capture_core.py、scripts/qb_capture.py 与 tests/test_legacy_review4_scripts.py 三处裸 import; 上游 qbittorrent-api 依赖图变更移除它时生产脚本与测试收集期同时断">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-12-0739-chore-requests-direct-decl</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-12 07:39</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">chore</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
 
@@ -119,6 +119,16 @@
   <h2><span class="no">§04</span>状态变更日志</h2>
   <ul>
     <li>2026-11-12 07:39 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    <li>2026-11-14 — 状态 Open → Done（kb.status）</li>
+</ul>
+</section>
+
+<section id="s5">
+  <h2><span class="no">§05</span>修复后补充</h2>
+  <ul>
+    <li><strong>修法</strong>：<code>requests==2.34.2</code> 加进 pyproject.toml dependencies（钉 uv.lock 现值，零版本变更，纯声明显式化）；<code>env.sync</code> 同步 uv.lock，根包 dependencies 与 requires-dist 两处登记。</li>
+    <li><strong>顺带排查（§03 建议）</strong>：全仓 scripts/tests/src 裸 import 对直接依赖清单核对 —— 第三方残留两组同款脆弱面：<code>anyio==4.15.1</code>（httpx/fastapi 传递，test_web_hr_endpoints 函数级 import）与 <code>starlette==1.10.0</code>（fastapi 传递，test_web_auth / test_web_route_manifest 函数级 import）已进 dev 组精确 pin；<code>hatchling</code> 在 test_hatch_build 已自建桩模块规避（构建期隔离依赖，无需声明）；其余命中均为仓库内部模块。取证行号漂移：tests 裸 import 现为 78 行。</li>
+    <li><strong>验证</strong>：<code>commands run test.full</code> 全绿（见 kb.baseline）；deps-upgrade 事实层已回写 impact-map.md §1.2 直接依赖清单。</li>
   </ul>
 </section>
 

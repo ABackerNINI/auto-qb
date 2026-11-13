@@ -12,20 +12,20 @@
 qbittorrent-api (pin, uv.lock)  --门控 WebAPI 版本-->  qBittorrent (watch)  --内嵌-->  libtorrent (watch)
 ```
 
-- **qbittorrent-api**:唯一进 uv.lock 的特殊依赖(`pyproject.toml` 钉死 `==2026.8.1`)。按探测到的 WebAPI 版本逐端点门控(`version_introduced`/`version_removed`),对未知新版本天然前向兼容;`RAISE_ERROR_FOR_UNSUPPORTED_QBITTORRENT_VERSIONS` **不要开**(见报告 §8.4 注意事项)。
+- **qbittorrent-api**:唯一进 uv.lock 的特殊依赖(`pyproject.toml` 钉死 `==2026.10.1`)。按探测到的 WebAPI 版本逐端点门控(`version_introduced`/`version_removed`),对未知新版本天然前向兼容;`RAISE_ERROR_FOR_UNSUPPORTED_QBITTORRENT_VERSIONS` **不要开**(见报告 §8.4 注意事项)。
 - **qBittorrent**:外部目标程序,生产对端 v5.2.3(WebAPI 2.15.1)。升级语义不是 patch/minor/major,而是「兼容性承诺有无」。
 - **libtorrent**:随 qB 内嵌(2.0.x),从不直接 bump;行为变化经 qB 升级间接带入。
 - **联动规则**:三者**任何一者**有更新 → 三者联合分析(库的参数双发/门控决定 qB 升级面;qB 的 WebAPI 版本决定库的门控行为;libtorrent 世代决定 qB 行为层变化)。runbook 见 §3。
 
 ### 1.2 普通 pin 依赖(pyproject 直接依赖,全部 `==` 钉死)
 
-pyyaml / filelock / pystray / pillow / customtkinter / fastapi / uvicorn / ruamel.yaml / httpx(+ dev 组:pytest / pytest-cov / pytest-xdist / yapf)。传递闭包由 uv.lock 锁定。无特殊联动;按 SKILL.md 分档走 bump 流程即可。
+pyyaml / filelock / pystray / pillow / customtkinter / fastapi / uvicorn / ruamel.yaml / httpx / requests(+ dev 组:bump-my-version / pytest / pytest-cov / pytest-xdist / pytest-randomly / yapf / mypy / anyio / starlette)。requests 与 dev 组 anyio/starlette 是 2026-11-13 裸 import 显式化(issue 26-11-12-0739):tests 生产 scripts 裸 import 只靠传递依赖带入,已钉现值收编为直接依赖。传递闭包由 uv.lock 锁定。无特殊联动;按 SKILL.md 分档走 bump 流程即可。
 
 ### 1.3 支持矩阵口径
 
 - **最终目的:支持 qB v5.2.3 及之后所有版本** → **特性检测优先于抬版本下界**:新能力=加探测项(字段存在性探测/响应双形态识别),不是抬 qB 版本要求。
 - alpha/beta **只跟踪不承诺**;rc + stable 才入 `deps.toml` 的 support 矩阵。
-- 现有锚点:qB 5.2.3(生产)/ 5.3.0;libtorrent 2.0.x / 2.1.0;qbittorrent-api 2026.8.1(钉)/ 2026.10.1(已分析)。锚点与报告路径记在 `deps.toml` `[[support]]`。
+- 现有锚点:qB 5.2.3(生产)/ 5.3.0;libtorrent 2.0.x / 2.1.0;qbittorrent-api 2026.10.1(钉)。锚点与报告路径记在 `deps.toml` `[[support]]`。
 
 ## 2. 影响面清单指要
 

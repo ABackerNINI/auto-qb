@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.12"
 resolution-markers = [
     "python_full_version >= '3.15'",
@@ -113,18 +113,21 @@ dependencies = [
     { name = "pystray" },
     { name = "pyyaml" },
     { name = "qbittorrent-api" },
+    { name = "requests" },
     { name = "ruamel-yaml" },
     { name = "uvicorn" },
 ]
 
 [package.dev-dependencies]
 dev = [
+    { name = "anyio" },
     { name = "bump-my-version" },
     { name = "mypy" },
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "pytest-randomly" },
     { name = "pytest-xdist" },
+    { name = "starlette" },
     { name = "yapf" },
 ]
 
@@ -138,18 +141,21 @@ requires-dist = [
     { name = "pystray", specifier = "==0.19.5" },
     { name = "pyyaml", specifier = "==6.0.3" },
     { name = "qbittorrent-api", specifier = "==2026.10.1" },
+    { name = "requests", specifier = "==2.34.2" },
     { name = "ruamel-yaml", specifier = "==0.19.1" },
     { name = "uvicorn", specifier = "==0.54.0" },
 ]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "anyio", specifier = "==4.15.1" },
     { name = "bump-my-version", specifier = "==1.8.1" },
     { name = "mypy", specifier = "==2.4.1" },
     { name = "pytest", specifier = "==9.2.0" },
     { name = "pytest-cov", specifier = "==7.1.0" },
     { name = "pytest-randomly", specifier = "==5.0.0" },
     { name = "pytest-xdist", specifier = "==3.8.0" },
+    { name = "starlette", specifier = "==1.10.0" },
     { name = "yapf", specifier = "==0.43.0" },
 ]
 

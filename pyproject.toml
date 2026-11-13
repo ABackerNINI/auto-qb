@@ -37,6 +37,10 @@ dependencies = [
     "uvicorn==0.54.0",
     "ruamel.yaml==0.19.1",
     "httpx==0.28.1",
+    # requests: 生产 scripts 与 tests 裸 import 的直接依赖(issue 26-11-12-0739)——此前仅靠
+    # qbittorrent-api 传递带入, 上游依赖图变更移除它时生产脚本 import 即崩。钉 uv.lock 现值,
+    # 零版本变更, 纯声明显式化。
+    "requests==2.34.2",
 ]
 
 [project.scripts]
@@ -64,6 +68,10 @@ dev = [
     # 不进提交闸门, 见该计划 D3)。2.4.1 是当前最新稳定版(PyPI 实查 2026-11-05, 2026-10-28 发布;
     # 要求 Python >=3.10, 覆盖本仓 requires-python >=3.12)。
     "mypy==2.4.1",
+    # 以下两个是 tests 裸 import 的传递依赖显式化(issue 26-11-12-0739 §03 顺带排查结论):
+    # fastapi/httpx 依赖图一旦不再携带, 测试收集期即 ImportError。钉 uv.lock 现值, 零版本变更。
+    "anyio==4.15.1",
+    "starlette==1.10.0",
 ]
 
 [build-system]

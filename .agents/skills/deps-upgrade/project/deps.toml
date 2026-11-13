@@ -78,6 +78,6 @@ anchor = "memory-bank/reports/26-10-31-0548-report-qb-5-3-upgrade-impact.html"
 
 [[support]]
 dep = "qbittorrent-api"
-current = "2026.8.1"                 # pinned in pyproject.toml
+current = "2026.10.1"                # pinned in pyproject.toml
 analyzed = ["2026.8.1", "2026.10.1"]
 anchor = "memory-bank/reports/26-10-31-0548-report-qb-5-3-upgrade-impact.html"
