@@ -298,6 +298,22 @@ window.AQB_DECORATE = {
       if (member.hr_tag_done && tag === member.hr_tag_done) return "hr-done";
       return "";
     },
+    /* HR 分类色(镜像 tagClass, 计划 26-11-14-0001 S2): 判定依据同样是后端现算的
+     * hr_view_fields 文本(hr_category/hr_category_done, 已展开变量), 纯文本比对,
+     * 前端不重算 HR 语义。组级口径与标签路径一致 —— 取 g.members[0] 代表成员。 */
+    catClass(cat, member) {
+      if (!member || !cat) return "";
+      if (member.hr_category && cat === member.hr_category) return "hr-pending";
+      if (member.hr_category_done && cat === member.hr_category_done) return "hr-done";
+      return "";
+    },
+    /* 排除表命中态(HR 类别与标签两路径对称): face 为 "tag"/"category" 单 token,
+     * hr_excluded_by 是 "tag"/"category"/"tag+category" 组合串, 按 "+" 拆开比对。
+     * 只答"该 chip 是否排除", 短语在 hr.js::hrExclTip。 */
+    hrExclClass(face, member) {
+      if (!member || !member.hr_excluded_by) return "";
+      return member.hr_excluded_by.split("+").includes(face) ? "hr-excl" : "";
+    },
     /* ---------------- 强制重新汇报可用性(qB 口径, 单点判定) ----------------
      * 判据表见文件顶部 REANNOUNCE_BLOCKED_STATES。四个消费面共用这一份:
      *   右键菜单(ctx-menus.html 四支)/ 键盘 shortcuts.js _kbAct / 动作层 commands.js _actCore /

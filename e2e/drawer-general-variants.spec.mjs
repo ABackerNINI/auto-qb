@@ -59,6 +59,7 @@ const BASE_PATCH = {
   hr_triggered: false, hr_satisfied: false, hr_excluded: false,
   hr_req_time: 0, hr_req_ratio: 0, hr_state: '', hr_reason: '',
   hr_tag: '', hr_tag_done: '', hr_site_lane: '', hr_site_need: '', hr_site_remain: '',
+  hr_category: '', hr_category_done: '',
 };
 
 /** HR 已触发已达标补丁(R5#79 文案单源的断言面)。 */

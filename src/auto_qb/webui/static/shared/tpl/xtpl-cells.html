@@ -78,7 +78,7 @@
              有 commonCategory.diff 三态(多分类); torrent 行(本文件)与 member 行(xtpl.html)
              只有有/无两态, 那两处彼此逐字同 -->
         <span v-if="g.commonCategory.value" class="cat-chip"
-              :class="{ 'f-on': $root.isFilterOn('categoryFilter', g.commonCategory.value) }"
+              :class="[$root.catClass(g.commonCategory.value, g.members[0]), { 'f-on': $root.isFilterOn('categoryFilter', g.commonCategory.value) }]"
               @click.stop="$root.filterFromChip('category', g.commonCategory.value)">{{ g.commonCategory.value }}</span>
         <span v-else-if="g.commonCategory.diff" class="diff-mark" title="组内分类不一致">多分类</span>
         <span v-else class="zero"></span>
@@ -163,13 +163,15 @@
       <div v-else-if="col.key === 'size'" class="g-stat" :class="{ zero: !m.size }">{{ $root.fmtSizeOrDash(m.size) }}</div>
       <div v-else-if="col.key === 'category'" class="g-cat">
         <span v-if="m.category" class="cat-chip"
-              :class="{ 'f-on': $root.isFilterOn('categoryFilter', m.category) }"
+              :class="[$root.catClass(m.category, m), $root.hrExclClass('category', m), { 'f-on': $root.isFilterOn('categoryFilter', m.category) }]"
+              :title="$root.hrExclTip('category', m)"
               @click.stop="$root.filterFromChip('category', m.category)">{{ m.category }}</span>
         <span v-else class="zero"></span>
       </div>
       <div v-else-if="col.key === 'tags'" class="g-tags">
         <span v-for="t in $root.mTags(m)" :key="t" class="tag-chip"
-              :class="[$root.tagClass(t, m), { 'f-on': $root.isFilterOn('tagFilter', t) }]"
+              :class="[$root.tagClass(t, m), $root.hrExclClass('tag', m), { 'f-on': $root.isFilterOn('tagFilter', t) }]"
+              :title="$root.hrExclTip('tag', m)"
               @click.stop="$root.filterFromChip('tag', t)">{{ t }}</span>
         <span v-if="!$root.mTags(m).length" class="zero"></span>
       </div>

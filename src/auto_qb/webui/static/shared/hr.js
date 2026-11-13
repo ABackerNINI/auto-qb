@@ -182,6 +182,15 @@ window.AQB_HR = {
       window.addEventListener("scroll", () => this.hrPopHideNow(), true);
       window.addEventListener("resize", () => this.hrPopHideNow());
     },
+    /* 排除态 chip 悬停短语(计划 26-11-14-0001 S2): face("tag"/"category") -> HR_EXCLUDED_BY_TEXT
+     * 对应短语, 供 4 处 chip 绑定点(xtpl/xtpl-cells 的 torrent 与 member 行 cat/tag)的 :title;
+     * 未命中该 face(含 member 无 hr_excluded_by)返回 null —— Vue 会移除 title 属性,
+     * 非排除 chip 不出空悬停。"tag+category" 组合串整句仍由 hrPopData 弹窗依据行承载,
+     * chip 级按各自 face 各说各的(短语复用上表, 不另造措辞)。 */
+    hrExclTip(face, member) {
+      if (!member || !member.hr_excluded_by) return null;
+      return member.hr_excluded_by.split("+").includes(face) ? (HR_EXCLUDED_BY_TEXT[face] || null) : null;
+    },
     /* 弹窗数据组装(全为后端算好字段的展示映射; null = 不弹):
      * lane <- hr_safety(danger 橙=考察中 / failed 红=考核未通过终态 / safe 绿 / warning 黄=疑似辅种),
      * verdict <- hr_safety_text, 依据 <- hr_reason, 站点侧值 <- hr_site_*(与详情抽屉 hrSiteLine 同源),

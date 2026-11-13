@@ -176,6 +176,8 @@
     }
     if (d.hr_tag) bits.push(T`<span class="dt01-chip is-hr" title="${d.hr_reason || ""}">${d.hr_tag}</span>`);
     if (d.hr_tag_done) bits.push(T`<span class="dt01-chip is-hr" title="${d.hr_reason || ""}">${d.hr_tag_done}</span>`);
+    if (d.hr_category) bits.push(T`<span class="dt01-chip is-hr" title="${d.hr_reason || ""}">${d.hr_category}</span>`);
+    if (d.hr_category_done) bits.push(T`<span class="dt01-chip is-hr" title="${d.hr_reason || ""}">${d.hr_category_done}</span>`);
     if (!bits.length) return "";
     return T`<div class="dt01-hr ${tone}">${R(bits.join(""))}</div>`;
   }

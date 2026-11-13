@@ -280,13 +280,15 @@
       <span v-else-if="col.key === 'dl_limit'" class="m-stat">{{ $root.fmtLimitBytes(m.dl_limit) }}</span>
       <span v-else-if="col.key === 'tags'" class="m-tags">
         <span v-for="t in $root.mTags(m)" :key="t" class="tag-chip"
-              :class="[$root.tagClass(t, m), { 'f-on': $root.isFilterOn('tagFilter', t) }]"
+              :class="[$root.tagClass(t, m), $root.hrExclClass('tag', m), { 'f-on': $root.isFilterOn('tagFilter', t) }]"
+              :title="$root.hrExclTip('tag', m)"
               @click.stop="$root.filterFromChip('tag', t)">{{ t }}</span>
         <span v-if="!$root.mTags(m).length" class="zero"></span>
       </span>
       <span v-else-if="col.key === 'category'" class="m-cat">
         <span v-if="m.category" class="cat-chip"
-              :class="{ 'f-on': $root.isFilterOn('categoryFilter', m.category) }"
+              :class="[$root.catClass(m.category, m), $root.hrExclClass('category', m), { 'f-on': $root.isFilterOn('categoryFilter', m.category) }]"
+              :title="$root.hrExclTip('category', m)"
               @click.stop="$root.filterFromChip('category', m.category)">{{ m.category }}</span>
         <span v-else class="zero"></span>
       </span>
