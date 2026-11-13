@@ -1,13 +1,14 @@
 # web-ui — 前端 / WEB UI 纪律 · 卷 4/4
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `show-if-residual-key.md` … `wording-audit-surface.md`(共 25 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `search-views.md` … `wording-audit-surface.md`(共 26 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
 
 | 主题 | 一句话 | 触发词 |
 |---|---|---|
+| [search-views.md](search-views.md) | 搜索不是虚拟分组、负词种子级排除、脏标记是共享状态、鉴权不能靠"凭证串非空"、配置写盘按 BaseLoader 语义。 | 改搜索, 改视图脏标记, 改鉴权, 改登录, 改设置页, 改配置写盘, rid 门控 |
 | [show-if-residual-key.md](show-if-residual-key.md) | schema 字段的 show_if 只控制「这一行渲染不渲染」; 用户把触发键从命中值切走后, 该字段先前写进树的值**仍留在配置树里**(show_if 不删键), 行又已隐藏 ⇒ 用户看不见也改不了, 保存时后端校验对残留键报错(如 watch_fields 仅在 trig… | 给规则/段字段配 show_if; 切走关联键后保存报"该键非法"; 字段在某取值下才合法 |
 | [sortable-gate-source-split.md](sortable-gate-source-split.md) | 能力判据源分裂: 视觉侧硬编码 + 行为侧门控 = 「看着能点、点了没反应」的静默全灭 | 补门控, a11y 补课, headActivate, col.sortable, sortable, thead, 表头排序失效, 点了没反应, 视觉与行为分叉, 判据同源, 唯一调用方 |
 | [stale-predicate-inverted.md](stale-predicate-inverted.md) | 同一对象上成对出现的 `active`(本图此刻该不该显示/拉)与 `stale`(在途响应是否**已过期**→丢弃)是**互为反义**的两个谓词; 机械改名/整行重写时把 `stale` 的 `!(...)` 敲成 `!!(...)`, 语义整个翻面 —— 恰在「本图正在被看」… | 改 stale 谓词, 机械改名, 双重取反, 图加载不出来, 一直显示正在加载, loading 不复位, 谓词极性, _qbLoad, _QB_SCOPES, active 与 stale |

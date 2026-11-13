@@ -1,7 +1,7 @@
 # testing — 测试 / 冒烟 / 仿真纪律 · 卷 1/5
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `annotations-lazy-eval.md` … `event-handler-mock.md`(共 25 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `annotations-lazy-eval.md` … `env3-test-run-prereqs.md`(共 25 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
@@ -20,6 +20,7 @@
 | [ci-env-var-profile.md](ci-env-var-profile.md) | 通用 CI 变量在本仓库开发机入口常态为真, 拿它判「是否 CI」会让本地严格档永不生效(假绿) | CI, GITHUB_ACTIONS, 环境变量判档, 阈值分档, dev.e2e, playwright, 严格档失效, 假绿, 回归检测力, 性能基准 |
 | [ci-only-guard.md](ci-only-guard.md) | 多类守阵/用例**只在与开发机不同的那一侧 CI job 上现形**, 本机单平台绿不构成"守阵成立"的证据 —— ①跨平台断言把**前缀切片长度写死**(`args[:2]`), nt 侧凑巧成立而 POSIX 侧恒红; ②并发守阵的**活性阈值绑机器速度**("写者写满 30… | CI 红本机绿, 跨平台断言, os.name, sys.platform, 写死切片长度, 前缀长度, 仅一侧存在的模块常量, CREATE_NO_WINDOW, 活性阈值, 并发守阵, 读次数, flaky, gtm, atomic_w… |
 | [cmd-guard-real-fake-count.md](cmd-guard-real-fake-count.md) | 真机开工自检 `real.guard`(runner.cmd_guard 路径)调 qB API 时没传 skip_tags 过滤, 我方 real-fake 假种子被计入「真实种子 N 个」并被暂停 —— guard 输出形似「现场被别人污染」, 实为自家种子; real.se… | cmd_guard, skip_tags, real-fake, 真实种子, guard 计数, guard 暂停, 真机开工, real.guard |
+| [commands-e2e-arg-passthrough-three-dashes.md](commands-e2e-arg-passthrough-three-dashes.md) | `commands run test.linux-e2e` 想只跑单个 spec / 加 playwright 过滤参数时, 一层 `--` 不够 —— 三个 `--` 由引擎 argparse(REMAINDER)、引擎 `_extra` 前导剥离、任务脚本 `_parse_a… | commands run 透传, 三连 --, test.linux-e2e 单 spec, e2e 单用例重跑, playwright 透传参数, --grep 不生效, grep 竖线, -- -- -- |
 | [commands-wrapper-from-python.md](commands-wrapper-from-python.md) | python 脚本里 `subprocess.run(["commands", "run", ...])` 必 FileNotFoundError(WinError 2) —— commands wrapper 是 bash 侧脚本, 不在 Windows CreateProce… | subprocess, commands wrapper, WinError 2, FileNotFoundError, 造种脚本 |
 | [config-validation-test-input.md](config-validation-test-input.md) | 给 config 校验器写测试时, 走 `load_config`/`_load_errors` 这条真实链路(而非直调校验函数)最省事, 但**输入必须先过两道加工**再进校验器: ①YAML 用 **BaseLoader** 读, **所有标量一律是字符串** —— `- 1… | 写 config 校验测试, 校验器测试, _load_errors, load_config, BaseLoader, 标量全是字符串, 空串被剥, _strip_none, _check_str_list, 第 N 项必须是非空字符串,… |
 | [consecutive-port-run.md](consecutive-port-run.md) | 「连续 N 个候选端口」类用例(发现端点 base/base+1/base+2)若只用 `_free_port()` 取基址、再自己逐个显式 bind, 后 N-1 位从未被验证: 落进 Windows 动态排除段(Hyper-V/WSL 开机预留, 每次开机不同)或被独占进程占… | 连号候选端口, base+1, base+2, 排除段, WinError 10013, 10048, _hold_ports, discovery_candidates, 端口单点, hold_run, 假红, netsh exclude… |
@@ -32,4 +33,3 @@
 | [dev-webui-config-regen-wipe.md](dev-webui-config-regen-wipe.md) | `commands run dev.webui` 每次启动都从 CONFIG_TMPL 无条件重生成派生配置(不 diff 不保留), 上一阶段经 PUT /api/config 落盘到派生配置的键(如 relocate.bt_backup)被静默冲掉, WEB 端口也重新 OS… | dev.webui, dev_webui, CONFIG_TMPL, 重生成配置, PUT 落盘被冲, 端口漂移, 端口重分配, WEB 端口, 多阶段真机, 派生配置 |
 | [engine-pack-dir-injection.md](engine-pack-dir-injection.md) | commands 引擎注入的 COMMAND_FLOW_PACK_DIR 指向 task 所在包, 包内测试要真实配置必须钉 PKG | COMMAND_FLOW_PACK_DIR, 包测试, ConfigMissing, load_config, 钉 PKG, 外置配置, test_commit 夹具 |
 | [env3-test-run-prereqs.md](env3-test-run-prereqs.md) | env3 Ubuntu 24.04 上跑 test.quick/test.full/ship.gate, 不带 `PATH=$HOME/.local/node/bin:$PATH` 则 r4 node 电池族大面积假红(_run_probe 的 shutil.which("nod… | env3, 原生 Linux, node 电池, 无 node, r4 batteries, node PATH, TZ, 时区, window_start_on, ship.gate 红, test.quick 红, 闸门预跑红, 环境态… |
-| [event-handler-mock.md](event-handler-mock.md) | `mock.patch.object(模块实例, "_on_xxx")` 拦不住 EventBus 已注册的相位 handler —— 注册期捕获的是绑定方法对象, patch 换的是实例属性, 总线里的引用不变; 守相位接线用「订阅计数 + emit 返回值」, 守行为直调真… | EventBus, 相位, subscribe, mock.patch.object, handler 断言, assert_called_once, P5 守阵 |

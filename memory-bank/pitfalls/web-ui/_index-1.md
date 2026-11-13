@@ -1,7 +1,7 @@
 # web-ui — 前端 / WEB UI 纪律 · 卷 1/4
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `add-partial-receipt.md` … `density-tier-single-point.md`(共 26 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `add-partial-receipt.md` … `ctx-sub-width-coupling.md`(共 26 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
@@ -9,6 +9,7 @@
 | 主题 | 一句话 | 触发词 |
 |---|---|---|
 | [add-partial-receipt.md](add-partial-receipt.md) | 部分受理被回执成 error: 按回执二态驱动 UI 行为必然错一头 | 部分成功, 部分受理, 添加种子回执, 命令回执三态, warn 回执, 添加窗口不消失, 关窗判据, 批量添加 |
+| [ancestor-overflow-clips-descendant-glow.md](ancestor-overflow-clips-descendant-glow.md) | 直接父容器的 `overflow:hidden` 裁剪边界连后代画在盒外的 box-shadow 外发光一起裁 —— hover 辉光只显一侧/两侧、静态值全对; `overflow: clip + overflow-clip-margin` 外扩放行即闭合, 不放弃内容裁剪语义… | 祖先裁剪, overflow hidden 裁辉光, 父容器裁剪, 外发光缺失, 辉光缺边, 辉光只显一侧, overflow-clip-margin, overflow clip, 辉光放行, chip 辉光不统一, box-shadow… |
 | [aq-tip-nested-title-double.md](aq-tip-nested-title-double.md) | 全局自绘 tooltip(.aq-tip, 调度单点 shared/ui_feedback.js)若靠「hover 时摘掉 title 属性 + 离开还原」压制原生气泡, 摘除时机永远追不上 title 的出现时机: ①模板**嵌套带 title 结构**(statusbar.h… | 双 tooltip, 两个 tooltip, 状态栏 tooltip, aq-tip, 嵌套 title, 祖先 title, 原生气泡还魂, Vue 重写 title, 轮询 title 变值, 节点替换 title, statusbar… |
 | [aq-tip-position-clamp.md](aq-tip-position-clamp.md) | 全局自绘 tooltip(.aq-tip, 调度单点 `shared/ui_feedback.js`)的定位缺陷, 都表现为「位置错误 / 浮层盖住它描述的元素」: ①(首轮)`show()` 的 350ms 延时窗口内锚点被 Vue 轮询整个换掉 → 拿到已脱离文档的节点, `… | tooltip 位置错误, tooltip 挡住元素, tooltip 跑到左上角, aq-tip, ui_feedback, show 定位, getBoundingClientRect 全 0, 脱离文档, detached, 节点替换… |
 | [bucket-granularity-boundary.md](bucket-granularity-boundary.md) | 判据的可分精度不可能高于它读取的数据粒度 —— 数据只有「桶」(时间栅格槽)时, 「事件(如进程重启)在链末之前还是之后」这类判定天然存在一条**一桶宽的不可分带**, 按桶覆盖端一刀切会把整条带判给「链已接续」而静默漏判; 修法 = 端点重定义为「链末桶前一桶起点」并写明端点含… | 桶粒度, 判据边界, 不可分带, 链末桶, 接缝判据, 时间比较, 覆盖端, server_started_at, 首采入账, 重启缝, 聚合槽 |
@@ -33,4 +34,3 @@
 | [ctx-menu-edge-clamp.md](ctx-menu-edge-clamp.md) | 视口钳位 e2e: 锚点不贴缘的断言恒真; 左缘 clamp 真实手势结构不可达 | 视口钳位, 左缘, 右缘, ctx-menu, EDGE, e2e 断言, 恒真, 顺带断言, 红验, clientX, 滚动容器左缘 |
 | [ctx-sub-clamp-host-settle.md](ctx-sub-clamp-host-settle.md) | 嵌套浮层单次钳位会被宿主二次收口搬移失效——子面板钳位必须带同款有界复核, e2e 读盒须等收敛 | 嵌套浮层, 子面板, .ctx-sub, 钳位, 二次收口, _menuFitRefit, _subFitRefit, settle, 锚点搬移, vh-8 契约, clampAxis, e2e 读盒时机, subTop 收敛, curre… |
 | [ctx-sub-width-coupling.md](ctx-sub-width-coupling.md) | 右键菜单次级子面板宽度五处耦合 —— 四皮肤 css/components.css 的 .ctx-sub min-width 260(同值互证) + shared/menu.js _subOverflowsRight 首帧估宽 272(=260+12); 改宽度必须五处同步, s… | .ctx-sub, 子面板宽度, min-width, 260, 272, 估宽, _subOverflowsRight, _subFitViewport, _scan_ctx_sub_width, 宽度耦合, flip-x, 键帽加宽 |
-| [density-tier-single-point.md](density-tier-single-point.md) | 移除「经典 / 变体」两档制的一方时(删经典档或删变体档), 真正危险的不是删组件, 而是**档制判据散落在四五处**: 菜单候选集(`[{id:"classic"}].concat(options(tab))`)、缺省读侧(`readSel` 的 out 初始化)、各消费方(`… | 档制单档化, 删经典档, 删变体档, defaultSel, CLASSIC_TABS, hasClassic, choices, 缺省档, 渲染失败兜底, 补落经典, 菜单只有一个项, 菜单候选集, 兜底失真, readSel, dtPe… |

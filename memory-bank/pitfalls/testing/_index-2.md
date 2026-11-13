@@ -1,13 +1,14 @@
 # testing — 测试 / 冒烟 / 仿真纪律 · 卷 2/5
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `fake-config-shared-mutables.md` … `hr-registry-pollution.md`(共 25 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `event-handler-mock.md` … `hot-reload-section-choice-side-effects.md`(共 25 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
 
 | 主题 | 一句话 | 触发词 |
 |---|---|---|
+| [event-handler-mock.md](event-handler-mock.md) | `mock.patch.object(模块实例, "_on_xxx")` 拦不住 EventBus 已注册的相位 handler —— 注册期捕获的是绑定方法对象, patch 换的是实例属性, 总线里的引用不变; 守相位接线用「订阅计数 + emit 返回值」, 守行为直调真… | EventBus, 相位, subscribe, mock.patch.object, handler 断言, assert_called_once, P5 守阵 |
 | [fake-config-shared-mutables.md](fake-config-shared-mutables.md) | helpers 的 `FakeConfig` 段对象是类属性(dataclass/dict/list), 任一测试原地改 | FakeConfig, 类属性, 测试隔离, xdist 分布, 偶发失败, make_manager, 原地改配置 |
 | [fake-seed-injection.md](fake-seed-injection.md) | 大批量注入 qB 假种子(压测/测量库形)三坑合档 —— ①qB 默认入库逐种子校验 ~1s/种, 3000 种 = 45 分钟, 必须 skip_checking; ②手搓注入变体「配方漂移」三处全坏(漏 payload 数据文件 = 全组 missingFiles + 漏 a… | 批量注入, 假种子, 测量库形, skip_checking, missingFiles, 永不归组, 首同步风暴, 归组, tracker 匹配, 注入配方, inject.py, 压测库, 真机轨, stalledUP |
 | [fake-server-reuse-bind.md](fake-server-reuse-bind.md) | 测试里自起回环 HTTP 假服若用裸 `ThreadingHTTPServer`, 它继承 `HTTPServer.allow_reuse_address = 1`(SO_REUSEADDR) —— Windows 上允许抢绑已监听端口, `-n 8` 并行下两把假服可能 bin… | ThreadingHTTPServer, 假服, 双绑, SO_REUSEADDR, allow_reuse_address, ConnectionError, 回环 HTTP, 并发假红, http_server 单点, 独占 bind |
@@ -32,4 +33,3 @@
 | [heredoc-cjk-punct-js-syntax.md](heredoc-cjk-punct-js-syntax.md) | 对 drawer_tpl/*.js 这类「字符串数组拼 CSS/JS」的变体文件做批量编辑(heredoc 重写、切片替换、python 正则改写)时, 两个高频翻车点: ①heredoc 内容里的**中文标点**(「」（）等)或行尾引号被 shell/编码吃掉, 产生残行(如孤… | 批量编辑变体, heredoc 改 js, 切片替换, 残行, 语法错误, node --check, drawer_tpl, 字符串数组, 中文标点, 引号错位, 编辑后没检查语法 |
 | [hot-reload-mock-sections.md](hot-reload-mock-sections.md) | apply_new_config 的守阵惯用 `mock.MagicMock()` 当新配置(替身区只钉住自己关心的段)。内核化 | 改 apply_new_config / 新增模块 apply / 热重载守阵, 见到 MagicMock 配置 + 新模块段短路判据 |
 | [hot-reload-section-choice-side-effects.md](hot-reload-section-choice-side-effects.md) | 驱动 apply_new_config 的测试(段认领兜底/回执/级别语义类)如果改的是 notify 这类「apply 有 | 写热重载/兜底类测试选驱动段时; 见「单跑绿全量红」且红在 logging 全局面断言 |
-| [hr-registry-pollution.md](hr-registry-pollution.md) | 测试期 `hr.runtime` 的注册表路径必须被 conftest 重定向到临时目录 —— 用例的 `data_dir` 是每例唯一的 `tmp_path`, 不隔离就是**每个用例往用户真实 `%LOCALAPPDATA%/auto-qb-hr/instances.json… | 加 hr runtime 测试, 发现端点测试, 扩展发现列表出现无关实例, 主实例连不上 Failed to fetch, instances.json 无界增长, 写 app-data, 注册表条目堆积, 测试污染用户数据 |

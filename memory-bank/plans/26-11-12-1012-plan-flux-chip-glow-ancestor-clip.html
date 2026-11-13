@@ -7,10 +7,10 @@
 <title>WEBUI flux 分类/标签 chip hover 辉光绘制层统一（祖先裁剪 + H&amp;R 状态竖线）</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="flux-chip-glow-ancestor-clip">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-11-12-1012">
-<meta name="doc-updated" content="26-11-12-1104">
-<meta name="doc-refs" content="memory-bank/plans/26-11-10-0921-plan-flux-chip-hover-glow.html">
+<meta name="doc-updated" content="26-11-14-0431">
+<meta name="doc-refs" content="memory-bank/plans/26-11-10-0921-plan-flux-chip-hover-glow.html, memory-bank/tasks/26-11-14-webui-flux-chip-glow-ancestor-clip.md">
 <style>
   :root {
     --bg: #10151a;
@@ -75,9 +75,9 @@
 <h1>WEBUI flux 分类/标签 chip hover 辉光绘制层统一（祖先裁剪 + H&amp;R 状态竖线）</h1>
 <p class="lede">本篇只回答: 在<strong>仅改 flux 皮肤</strong>、不推翻旧计划 Done 口径的前提下, 怎么补上「三种筛选 chip hover 辉光统一」在<strong>绘制层</strong>还差的两处(分类/标签 chip 被祖先 <code>overflow:hidden</code> 裁掉外发光、H&amp;R 状态竖线 hover 被同属性覆盖), 并给出能自动钉住绘制层裁剪的验收。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-12-1012 · <b>doc-updated</b> 26-11-12-1104 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-11-12-1012 · <b>doc-updated</b> 26-11-14-0431 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 2026-11-12 用户「只完成了 site-chip 的改造, 分类/标签 chip 仍未统一, 先核实」→ 只读核实(零改动) → grilling 两轮(Q1–Q4 范围/旧件关系/验收强度/范围外; Q5–Q8 主修法/边线处置/验收落点/机械口径) → 用户「按推荐」, 并对 Q6 提出释义追问、把 Q8 改写为「补双向链接」。全部定案见 §06。<br>
-  <b>交叉引用</b> 旧计划 <code>memory-bank/plans/26-11-10-0921-plan-flux-chip-hover-glow.html</code>(保持 Done) · 任务档案 <code>memory-bank/tasks/26-11-11-webui-flux-chip-hover-glow.md</code> · 坑档 <code>memory-bank/pitfalls/web-ui/clip-path-clips-outer-glow.md</code>
+  <b>交叉引用</b> 旧计划 <code>memory-bank/plans/26-11-10-0921-plan-flux-chip-hover-glow.html</code>(保持 Done) · 任务档案 <code>memory-bank/tasks/26-11-11-webui-flux-chip-hover-glow.md</code> · 坑档 <code>memory-bank/pitfalls/web-ui/clip-path-clips-outer-glow.md</code> · 实施档案 <code>memory-bank/tasks/26-11-14-webui-flux-chip-glow-ancestor-clip.md</code> · 实施坑档 <code>memory-bank/pitfalls/web-ui/ancestor-overflow-clips-descendant-glow.md</code>
 </div>
 
 <h2><span class="no">§01</span>目标与设计原则</h2>
@@ -248,6 +248,7 @@ html[data-fx-preset] .tag-chip.hr-done { box-shadow: none; }</code></pre>
   <li><span class="tag">R1 · 26-11-12-1028</span> S5 补入 HR tag 三重叠加目检项(hr-pending 加粗 + f-on 底线 + S2 新增 ::before 竖线, 含 hover 前后与选中态)及分类 chip 四边闭合复核; §02 新增分类 chip 与 HR 关系的事实注记(渲染层无特殊对待、数据层四个 add_* 输出键与 exclude_categories 关联, 既存展示层不对称不扩大范围); 按改版协议抬 doc-updated</li>
   <li><span class="tag">R2 · 26-11-12-1040</span> 按用户拍板另案登记: 入池 memory-bank/issues/26-11-12-1037-feat-webui-cat-chip-hr-semantics.html (feat/standard, Open 未认领); §02 补另案目标(分类 chip 具备与 tag chip 对等的 HR 语义色/状态边线/:not() 让路, 实现需后端 HR 分类字段 + 四皮肤共用模板与 CSS, 破 I1 故不纳入 S1-S6), §03 aside 同步本轮动作口径; 仅正文交叉引用, 不建认领链(issue doc-refs 留空); 抬 doc-updated</li>
   <li><span class="tag">R3 · 26-11-12-1104</span> 分批评审修正: §01 首段去掉与旧件原文不符的直引「用户真机目检全过」, 改为如实转述旧计划 §10 R1(实施完成 / W1-3 边线迁移由用户真机目检触发并经裁决接受 / test.full 全绿), 并明确目检记录只覆盖 .site-chip; 依据本批事实/口径面 1 条 nit(引文逐字校验 1/1 过检), 安全/范围/守阵/反面/认领链五面零发现; 按改版协议抬 doc-updated 并追加 R3</li>
+  <li><span class="tag">R4 · 26-11-14-0431</span> 实施完成收档: S1+S2+S4(提交 fa0eea6d: fx-mount.css 祖先裁剪放行 overflow:clip + overflow-clip-margin:16px 覆盖四容器 / H&amp;R 竖线迁 .tag-chip::before / RM 媒体块渐隐段; 评审 blocker 0 / 修 1 / 检 1/1 / 轮 2) + S3(提交 bf95eefb: e2e/flux-tag-cat-chip-glow.spec.mjs 像素采样红绿双验 + scripts/ui_harness.py fixture 注入 hr-e2e; 评审 blocker 0 / 修 2 / 检 3/3 / 轮 2) + S5 用户目检 pass(2026-11-13, dev.harness 桩数据) + S6 收尾(任务档案 26-11-14-webui-flux-chip-glow-ancestor-clip 立档 / 坑档两份: 祖先 overflow 裁辉光 + e2e 透传三连 -- / 全量测试全绿见 kb.baseline 最新切片 26-11-14-0428); doc-status Open→Done</li>
 </ul>
 
 </div>
