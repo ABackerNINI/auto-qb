@@ -342,7 +342,11 @@ def _make_torrents(count: int, site_conf):
                 # 要按需取详情读它(BUG-9), 桩里留空则那条断言退化成"永远提示没有 magnet"。
                 magnet_uri=f"magnet:?xt=urn:btih:{i:040x}&dn=Some.Show.S01E{(i % 24) + 1:02d}",
                 category=["", "Movies", "TV", "Anime"][i % 4],
-                tags=",".join([t for k, t in enumerate(["HHan", "seed-3D", "low-ratio"]) if (i >> k) & 1]),
+                # 第 4 位 hr-e2e = HR 状态标签数据面(计划 26-11-12-1012 S3, 注入见 main): 位 3
+                # (每 16 个种子的后 8 个携带; 组对 2k/2k+1 只差 bit0, bit3 恒同) => 表尾/表头
+                # 各有成批带 HR 状态类的 tag-chip。名字进 hr 输出标签 => /api/tags?exclude_auto=1
+                # 与站点标签同款滤出添加窗口候选, add-options-recent-order 的 3 标签期望序不受影响。
+                tags=",".join([t for k, t in enumerate(["HHan", "seed-3D", "low-ratio", "hr-e2e"]) if (i >> k) & 1]),
                 tracker=f"https://tracker.hhanclub.net/announce/{i}",
                 num_seeds=i % 40,
                 num_leechs=i % 7,
@@ -1136,6 +1140,23 @@ def main() -> int:
     _materialize_config(mgr.config_path, actual, args.skip_check_menu == "on")
 
     site_conf = mgr.config.trackers["HHan"]
+    # HR 状态标签的 e2e 数据面(计划 26-11-12-1012 S3): 桩默认 add_tag / add_tag_for_satisfied
+    # 恒空串 => 前端 tagClass(decorate.js)永远打不出 hr-pending / hr-done, 列表里没有带 HR 状态
+    # 类的标签 chip, S3 的竖线像素断言无样本。两档统一指到位 3 池名 hr-e2e(_make_torrents):
+    # done(i%3!=0)种子全部触发 HR(dlsratio 0.7), 达标线 = 做种 84h((i%400)h >= 84h 达标) =>
+    # 未达标成员的 hr-e2e chip 打 hr-pending / 已达标打 hr-done, 两态各成批(表尾 Set004 起 /
+    # 表头 Set149 起)。名字随 hr 输出标签进 auto_managed_tag_rules 精确集(infra/utils_paths.py),
+    # /api/tags?exclude_auto=1 把它滤出添加窗口候选 —— 不能指到池名 seed-3D/low-ratio, 那会把
+    # add-options-recent-order 的标签候选过滤成空(2026-11-13 整跑实测双皮肤红)。
+    # 只改**内存** FakeConfig(上方 _materialize_config 已落盘, /api/config 读磁盘树不受影响);
+    # 注入只进列表行成员载荷的 tagClass 数据面(行 tag-chip 状态类, 计划 S3 spec 的断言面);
+    # 抽屉徽章断言面存在(drawer-general-variants.spec.mjs:154 .dt01-hr-badge / :215
+    # .dt02-hr-badge), 与本次注入绝缘的机理是详情载荷 hr_* 字段被 stubDetail route 补丁
+    # (BASE_PATCH / HR_TRIGGERED_OK)覆写; 未打桩抽屉 hero 的 is-hr 小徽章
+    # (01-general-hero-tall.js:177)随 hr_tag 出现, 全库无 spec 断言该处。
+    site_conf.hr.add_tag = "hr-e2e"
+    site_conf.hr.add_tag_for_satisfied = "hr-e2e"
+    print("[harness] HR 状态标签已注入: add_tag=hr-e2e / add_tag_for_satisfied=hr-e2e(计划 26-11-12-1012 S3)")
     torrents = _make_torrents(args.torrents, site_conf)
     # HR 分类三态(计划 26-11-14-0001 S4): 改 HR 规则输出值 + pending 样本态 —— 快照字段
     # (state/downloaded)必须在 seed_store/apply_sync 之前就位, 见 _inject_hr_category docstring
