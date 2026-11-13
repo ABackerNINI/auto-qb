@@ -264,6 +264,55 @@ def _inject_site_alerts(torrents) -> None:
     print("[harness] 站点健康两态已注入: 1 行缺配置(no_site_conf) + 1 行 tracker 报错(tracker_error)", flush=True)
 
 
+def _inject_hr_category(torrents, site_conf) -> None:
+    """HR 分类三态(计划 26-11-14-0001 S4 e2e): 分类列 cat-chip 的 pending/done/排除数据面
+
+    与 peers/trackers 同病: 合成种子的分类池(["", "Movies", "TV", "Anime"])与站点 HR 规则的
+    add_category("!!HR${required_seeding_time}!!" 展开为 "!!HR3D!!")永不相等 => catClass 恒空,
+    分类列的 HR 语义色与排除态在真浏览器里从未渲染过。这里把三态灌进桩:
+
+    口径(对齐既有注入"不新造结构"的纪律, 且**不新增分类值**):
+      - 站点 HR 规则的输出值直接对齐合成种子的既有分类池: add_category -> "TV" /
+        add_category_for_satisfied -> "Anime" / exclude_categories -> ["Movies"] —— 新增分类值
+        会破坏 add-options-recent-order.spec 的候选全量断言(它按 _make_torrents 公式现算
+        EXPECT_CATS, 明言"改桩的合成数据必须同步"); 不改种子分类/名称/added_on 同理(期望序
+        与搜索词唯一性都锚在原公式上)。
+      - 其余同分类种子按公式自然落位, 与真机"打标后分类命中"形态同构: TV 触发未达标 =
+        hr-pending(i%4==2 且 i<84 且 i%3!=0), Anime 触发已达标 =
+        hr-done(i%4==3 且 i>=84 且 i%3!=0), Movies 全部 = hr-excl(排除表命中,
+        excluded_by="category"); 触发门 = 下载量达线(done 轮转 i%3!=0 给满下载量)。
+      - pending 样本(i=82)原态 downloading、done 样本(i=103)原态 errored, 都不能当让路
+        counterfactual(downloading 的 counterfactual 是 blue-soft; errored 不是合法 qB 状态名
+        -> kind=other, 根本没有覆盖规则)—— 两个样本统一切成 stalledUP(seeding 态)并清 dlspeed,
+        让 e2e 的「行状态不让路」computed 背景断言都踩 green-soft 让路面(计划 S4-1 口径, S4-2
+        同理); 排除样本(297 等全部 Movies 行)不动。
+      - 样本搜索词锚组名(x265-GROUP82 / x265-GROUP102): 组对内 b.name = a.name, 奇数号种子
+        与偶数号同伴同名 —— 两个词各命中恰好一对, e2e 在搜索收窄后的窗口里断言。
+    必须在 seed_store/apply_sync **之前**调用: state/downloaded 是快照字段, 同步后再改不进记录。
+    """
+    hr = site_conf.hr if site_conf is not None else None
+    if hr is None:
+        return
+    if len(torrents) < 104:
+        # 守卫(同 _inject_site_alerts 惯例): 样本锚 i=82/103, 种子数不足时跳过注入(三态缺席, 不崩)
+        print(f"[harness] HR 分类三态跳过注入: 种子数 {len(torrents)} < 104(样本索引面不足)", flush=True)
+        return
+    hr.add_category = "TV"
+    hr.add_category_for_satisfied = "Anime"
+    hr.exclude_categories = ["Movies"]
+    pending = torrents[82]  # TV, 已触发(下载量满), 做种 82h < 84h 要求 => 未达标(pending)
+    pending.state = "stalledUP"
+    pending.dlspeed = 0
+    done = torrents[103]  # Anime, 已触发, 做种 103h >= 84h 要求 => 已达标(done)
+    done.state = "stalledUP"
+    done.dlspeed = 0
+    print(
+        "[harness] HR 分类三态已注入: add_category=TV / for_satisfied=Anime / exclude=Movies; "
+        "pending 样本=GROUP82(seeding 态) done 样本=GROUP102 对(seeding 态) 排除=全部 Movies 行",
+        flush=True
+    )
+
+
 def _make_torrents(count: int, site_conf):
     """合成种子: 名字/大小/状态/进度轮转, 保证每行列宽不整齐(更接近真机)"""
     out = []
@@ -1088,6 +1137,9 @@ def main() -> int:
 
     site_conf = mgr.config.trackers["HHan"]
     torrents = _make_torrents(args.torrents, site_conf)
+    # HR 分类三态(计划 26-11-14-0001 S4): 改 HR 规则输出值 + pending 样本态 —— 快照字段
+    # (state/downloaded)必须在 seed_store/apply_sync 之前就位, 见 _inject_hr_category docstring
+    _inject_hr_category(torrents, site_conf)
     if args.hr_site:
         _inject_hr_site(torrents)
         print(f"[harness] HR 站点判定已注入: {args.torrents} 个种子轮转全分支")

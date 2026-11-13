@@ -8,6 +8,7 @@
 - test_drawer_tpl_variant_interaction_single_point: 变体交互单点定型守阵(计划 26-10-12-0527 U5 1) —— drawer_tpl/*.js 全目录扫 ui.sort(手搓排序状态机不允许在任何变体复活); 凡声明 tableId+rowsFn(桥表格变体)的文件**声明即受检**, 另强制零表格容器列宽 grid(列宽唯一来源 = 引擎列集 computed; 版式 grid 卡片/双栏/图例是 D5 保留面) —— 未来新变体接引擎即自动落入本守阵, 无需改守阵, 即「定型」之义
 - test_frontend_search_auto_refresh_wiring: 搜索自动更新接线守阵(plan 26-11-03-0120) —— 服务端 search_rev 单点/触发面(增删+全量轮+name/category/save_path/tags)/state 恒回传/search 响应先在快照前取 rev + 前端常量定值(2000ms/3000ms)/doSearch(quiet) 不武装 pending/落袋版本对齐/轮询触发点与冷却/续查用独立定时器 + 共享 topbar 提示每套皮肤恰好一份(零复制)
 - test_frontend_search_uncovered_deduped: 虚拟行只兜底"真正未归组且仍在命中集"的种子(2026-11-03 issue 26-11-03-0254) —— filteredGroups 追加 searchUncovered 前必须用渲染时未过滤的 this.groups 现算 groupedNow, 且「已不在命中集」「已归组」两道闸排在 facet 过滤与 kept.push 之前; 虚拟行只允许 filteredGroups 消费一处, filteredTorrents 不得引入
+- test_frontend_cat_chip_hr_semantics_css: HR 分类 chip 三态 CSS 守阵(计划 26-11-14-0001 S4) —— 四皮肤(flux/atlas/console components.css + prism views.css)均含 .cat-chip.hr-pending/.cat-chip.hr-done 与 hr-excl 合并规则(cat/tag 同条, D5 对称) + 行状态让路(R3): 行状态区间(seeding/downloading/checking/moving/error x group/member)的全部 cat-chip 选择器带三重 :not()、tag-chip 带 :not(.hr-excl), 且 5 态 x 2 容器 x 2 chip 选择器全集逐条在(整条规则被删 = 扫描空转的假绿防线); 运行时面由 e2e/flux-cat-chip-hr-semantics.spec.mjs 用 seeding 行做 computed 背景证明
 
 ## 皮肤档位口径
 - 皮肤清单单点在 webui_helpers._UI_ALL(atlas/prism/console/flux); flux(第四套, plan 26-10-31-2316 S5)
@@ -399,6 +400,75 @@ def test_frontend_hr_safety_wiring():
         used |= set(re.findall(r"\bm\.(hr_[a-z_]+)", _ui_aggregate(ui)))
     unknown = used - keys
     assert not unknown, f"前端引用了后端不存在的 HR 字段: {sorted(unknown)}(字段打错 = 页面静默空白)"
+
+
+def test_frontend_cat_chip_hr_semantics_css():
+    """HR 分类 chip 三态 CSS 守阵(计划 26-11-14-0001 S4)
+
+    cat-chip 的 HR 三态(S3 落地: 逐皮肤镜像各自 tag-chip 形态 + 行状态 :not() 让路)按
+    两类"文本守阵看不见但静态可查"的静默回归机械钉住:
+    1. 三态规则四皮肤齐装: .cat-chip.hr-pending / .cat-chip.hr-done / hr-excl 合并规则
+       (.cat-chip.hr-excl 与 .tag-chip.hr-excl **同条**, D5 两路径对称)—— 某皮肤漏写 =
+       该皮肤分类列 HR 种子恒灰/排除态不显, 静态不报错(同 hr-warn 成对定义纪律);
+    2. 行状态色让路(R3): 行状态规则(seeding/downloading/checking/moving/error x
+       group-row/member-row)里的全部 cat-chip 选择器带三重
+       :not(.hr-pending):not(.hr-done):not(.hr-excl)、全部 tag-chip 选择器带
+       :not(.hr-excl) —— 漏一处 = 该皮肤该状态下 HR chip 仍被行状态染绿/蓝/红
+       (seeding 行染绿正是本计划要修的报障); 预期选择器全集(5 态 x 2 容器 x 2 chip)
+       必须逐条在, 兜住"整条规则被删 ⇒ 扫描空转"的假绿。
+    """
+    # 三态规则落点(计划 §04 落点清单): flux/atlas/console 在 components.css, prism 在 views.css
+    skin_css = {
+        "flux": "css/components.css",
+        "atlas": "css/components.css",
+        "console": "css/components.css",
+        "prism": "css/views.css",
+    }
+    # 2. 行状态让路: 结构化扫描行状态区间的 chip 选择器(R3 兜底)
+    # 预期选择器事实全集(容器.状态类, chip): 组行状态类带 s- 前缀, member 行直接挂状态类
+    states = ("seeding", "downloading", "checking", "moving", "error")
+    row_states = [("group-row", "s-" + s) for s in states] + [("member-row", s) for s in states]
+    want = {(f"{c}.{st}", chip) for c, st in row_states for chip in (".cat-chip", ".tag-chip")}
+    row_containers = (".group-row.s-", ".member-row.")
+    for ui in _UI_ALL:
+        # 去注释后的 CSS 全文 = 两段判据的同一份输入: 整段规则被注释掉时, 未去注释原文的
+        # 子串断言仍命中(第 1 段假绿)/行状态扫描把注释体当选择器(第 2 段误报), 都不可接受
+        css = re.sub(
+            r"/\*.*?\*/",
+            "",
+            open(os.path.join(STATIC_ROOT, ui, skin_css[ui]), encoding="utf-8").read(),
+            flags=re.S,
+        )
+        # -- 2a. 三态规则齐装 --
+        for rule in (".cat-chip.hr-pending", ".cat-chip.hr-done"):
+            assert rule in css, f"{ui} 缺 {rule} 规则 —— 分类列 HR 语义色静默消失(四皮肤必须齐装)"
+        # hr-excl 必须是 cat/tag 合并的同条规则(两条路径对称补齐的形态锚点; 拆成两条 = 形态漂移)
+        assert re.search(r"\.cat-chip\.hr-excl,\s*\.tag-chip\.hr-excl", css), \
+            f"{ui} 缺 .cat-chip.hr-excl, .tag-chip.hr-excl 合并规则 —— 排除态必须两路径同条"
+        # -- 2b. 行状态让路逐条核对 --
+        got = set()
+        for m in re.finditer(r"([^{}]+)\{[^{}]*\}", css):
+            # 逗号拆选择器列表(:not() 内无逗号, 顶层拆分安全), 逐条核对
+            for sel in m.group(1).split(","):
+                sel = sel.strip()
+                if not any(c in sel for c in row_containers):
+                    continue
+                chip = ".cat-chip" if ".cat-chip" in sel else (".tag-chip" if ".tag-chip" in sel else None)
+                if chip is None:
+                    continue
+                chain = ":not(.hr-pending):not(.hr-done):not(.hr-excl)" if chip == ".cat-chip" else ":not(.hr-excl)"
+                assert chain in sel, \
+                    f"{ui} 行状态选择器 `{sel}` 缺 {chain} —— 该状态下 HR chip 会被行状态色覆盖" \
+                    "(R3: seeding 行染绿回归; 计划 26-11-14-0001 S4 守阵 2)"
+                state_tok = re.search(r"\.group-row\.s-([a-z]+)|\.member-row\.([a-z]+)", sel)
+                assert state_tok, f"{ui} 选择器 `{sel}` 的状态类解析失败 —— 同步本守阵"
+                if state_tok.group(1):
+                    got.add((f"group-row.s-{state_tok.group(1)}", chip))
+                else:
+                    got.add((f"member-row.{state_tok.group(2)}", chip))
+        missing = want - got
+        assert not missing, \
+            f"{ui} 行状态让路选择器缺条: {sorted(missing)} —— 整条规则被删会让上面的逐条核对空转(R3 假绿防线)"
 
 
 def test_frontend_site_alert_icon_wiring():
