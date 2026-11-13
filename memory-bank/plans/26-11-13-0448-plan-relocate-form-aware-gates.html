@@ -9,8 +9,8 @@
 <meta name="doc-topic" content="relocate-form-aware-gates">
 <meta name="doc-status" content="Open">
 <meta name="doc-added" content="26-11-13-0448">
-<meta name="doc-updated" content="26-11-13-0537">
-<meta name="doc-refs" content="memory-bank/tasks/26-11-13-backend-relocate-form-aware-gates.md, memory-bank/issues/26-11-13-0535-bug-relocate-ancestor-savepath-blindspot.html, memory-bank/reports/26-11-13-0617-report-relocate-form-aware-gates.html">
+<meta name="doc-updated" content="26-11-13-0833">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-13-backend-relocate-form-aware-gates.md, memory-bank/issues/26-11-13-0535-bug-relocate-ancestor-savepath-blindspot.html, memory-bank/reports/26-11-13-0617-report-relocate-form-aware-gates.html, memory-bank/issues/26-11-13-0711-bug-relocate-direct-form-deep-add-hole.html">
 <style>
   :root {
     --bg: #10151a;
@@ -75,7 +75,7 @@
 <h1>relocate 收尾窗写路径误拦修正: 添加/删种/删链门判据形态感知 + 成员收缩自愈</h1>
 <p class="lede">本篇只回答: relocate 收尾窗(armed/rewritten)内旧根的三个写路径判据 —— 添加预检、删链门、删种拦截 —— 为何把「文件级别名 + 组外异名种子」的合法添加与带文件删除误判成「删链门永久依赖 / 会穿别名删数据」,如何以「种子文件清单 × 别名链接路径交集」的形态感知判据修正,并补上 0808 重构丢失的成员收缩收敛行 —— 使生产现状(armed + 组外种子已落旧根)在修复后的代码路径上零人工干预自愈。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-13-0448 · <b>doc-updated</b> 26-11-13-0537 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-11-13-0448 · <b>doc-updated</b> 26-11-13-0833 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 2026-11-13 生产误拦报告(26586 部署, job <code>jr-abb68712234e</code>, FILE_LINKS 形态, src <code>R:\Download\PTing</code> → dst <code>R:\Download\待删</code>) + 三轮 grilling 拍板 D1-D8 + 设计文档对齐(1604 §3.6 场景表 / 0808 D16 / 1300 R5-R7 与 blocker 修复 9f0cbe4e)
 </div>
 
@@ -132,8 +132,8 @@
   <tr>
     <td>添加预检覆盖洞</td>
     <td>同上 规则 1/2(:832/:876)</td>
-    <td>两规则都要求 <code>save_path</code> 恰等 <code>job.src</code>;往旧根更深路径添加完全绕过弹窗,但照样顶进删链门前缀面 → 目录级静默卡死、文件级被误计依赖</td>
-    <td>目录级判据需扩前缀;文件级深层添加本就是安全落点(场景 1)</td>
+    <td>两规则都要求 <code>save_path</code> 恰等 <code>job.src</code>;往旧根更深路径添加完全绕过弹窗 —— 其中 landing 落在 scope 内的形态写入经 junction 重定向且照样顶进删链门前缀面(目录级静默卡死、文件级被误计依赖);src 下 scope 外兄弟/前缀同串目录则写入落真实目录、删链门不计依赖,非洞(评审轮 1 勘误)</td>
+    <td>目录级判据扩为「恰等 src 或 landing 落在 scope 内」双面真值(真重定向面 + 删链门等值面);文件级深层添加按落点名判定(撞链接路径/撞链接根 confirm,异名安全放行,场景 1)</td>
   </tr>
   <tr>
     <td>删链门</td>
@@ -178,7 +178,7 @@
   <tr>
     <td>R1</td>
     <td>添加预检形态分流</td>
-    <td><code>evaluate_add</code> 收尾窗分支(<code>relocate_units.py:825-866</code>)重写:<b>文件级 job</b> —— ① 落点本身是链接(<code>landing_is_link</code>,同名文件 —— 文件级形态的成员内容根目录不是链接,同名目录碰撞由 ② 首段判据接住)→ confirm,文案 = 场景 2/3(同名同内容 = 经链接共享、真依赖;同名不同内容 = 写入将覆盖链接目标数据);② 落点首段撞任一成员链接根(<code>job.alias_paths</code> 在 src 下第一段派生)→ confirm(保守);③ 其余(异名)→ <span class="good">ok 静默放行</span>(§3.6 场景 1)。磁力/URL/NoSubfolder 布局不可判定不作第四分支 —— 落点按名字判定,残余碰撞由既有执行侧背网兜住(跨组交叉检测 = 场景 3 处置;同名共享 = R2 交集判依赖)。<b>目录级 job</b> —— confirm 保留,判据从 <code>save_path == src</code> 扩为 <code>under_alias_root(save_path, (src,))</code>(深层添加也进弹窗,补覆盖洞);<code>actual_path</code> 的 rel 改按 <code>job.src</code> 计算(修 <code>save_path ≠ src</code> 时错算)</td>
+    <td><code>evaluate_add</code> 收尾窗分支(<code>finalize_window</code> gate)重写:<b>文件级 job</b> —— ① 落点本身是链接(<code>landing_is_link</code>,同名文件 —— 文件级形态的成员内容根目录不是链接,同名目录碰撞由 ② 首段判据接住)→ confirm,文案 = 场景 2/3(同名同内容 = 经链接共享、真依赖;同名不同内容 = 写入将覆盖链接目标数据);② 落点首段撞任一成员链接根(<code>job.alias_paths</code> 在 src 下第一段派生)→ confirm(保守);③ 其余(异名)→ <span class="good">ok 静默放行</span>(§3.6 场景 1)。磁力/URL/NoSubfolder 布局不可判定不作第四分支 —— 落点按名字判定,残余碰撞由既有执行侧背网兜住(跨组交叉检测 = 场景 3 处置;同名共享 = R2 交集判依赖)。<b>目录级 job</b> —— confirm 保留,判据改双面真值「恰等 src(删链门等值面)或 landing 落在 scope 内(<code>anchor = job.scope or job.src</code>,= junction 所在内容根 = 真重定向面)」(补 scope 内深层覆盖洞;src 下 scope 外兄弟/前缀同串目录写入落真实目录、删链门不计依赖,不拦 —— 评审轮 1 勘误);<code>actual_path</code> 按真实落点算(dst 侧 scope 镜像 + rel-to-scope,<code>_scope_rel</code> 同款口径;仅等值面按 D16 契约建模落镜像根)</td>
     <td>D4</td>
   </tr>
   <tr>
@@ -265,7 +265,7 @@
   <tr><td>磁力/URL/NoSubfolder 布局不可判定</td><td>落点按名字判定,文件集未知</td><td>不设「不可判定 → confirm」分支(否则修复失效);落点即链接 / 首段撞链接根仍 confirm;残余碰撞由跨组交叉检测(场景 3 处置)与 R2 交集判依赖兜住 —— 均为既有设计背网</td></tr>
   <tr><td>收缩误判(qB 同步抖动/断连)</td><td>store 短暂缺行被当成删除</td><td>仅在 qB 在线 + 快照非陈旧时判;连续 N 拍缺席才收缩(E5 实测钉值);move 相位 torrent_gone→failed 语义不动</td></tr>
   <tr><td>收缩与改写账不一致</td><td>成员已删但 daemon 仍试图改写其 fastresume</td><td>qB 删种即删 fastresume 文件(P1 E5 核对该前提)→ daemon 改写步对缺失文件跳过并记 settled(非失败);R4 配套件</td></tr>
-  <tr><td>目录级前缀扩面误伤</td><td>深层合法添加被新弹窗拦</td><td>目录级深层添加本就经 junction 重定向(D10 须告知)—— 弹窗即设计语义;E6 回归 actual 展示正确性</td></tr>
+  <tr><td>目录级前缀扩面误伤</td><td>深层合法添加被新弹窗拦</td><td>双面真值(评审轮 1 勘误):仅 landing 落在 scope 内(= junction 所在内容根,_scope_rel)的深层添加本就经重定向(D10 须告知)—— 弹窗即设计语义;src 下 scope 外兄弟/前缀同串目录写入落真实目录、删链门不计依赖,判据不认、不弹窗;E6 回归 actual 展示正确性</td></tr>
   <tr><td>生产自愈依赖 qB 重启</td><td>fastresume 改写只能在 qB 下线窗口(N1 铁律)</td><td>窗口期内的两单误拦已全部消除(修复主体);qB 自然重启即收敛;「立即收尾」按钮(D14)为用户侧加速路径,不算人工解卡 —— D7 口径</td></tr>
   <tr><td>存量测试漂移</td><td>evaluate_add / chain_gate / D16 表驱动用例钉住旧行为</td><td>P2 同轮重写,不绕过不删断言;守阵语义演进留痕</td></tr>
 </table>
@@ -273,7 +273,11 @@
 <h2><span class="no">§10</span>变更记录</h2>
 <ul>
   <li><span class="tag">R0 · 26-11-13-0448</span> 初版:生产误拦报告(job jr-abb68712234e, FILE_LINKS, 误拦①异名添加弹窗 / 误拦②组外异名带文件删除被拒)→ 设计文档对齐(1604 §3.6 场景表 / 0808 D16 / 1300 R5-R7)→ 三轮 grilling 拍板 D1-D8 → 判据形态感知 R1-R3 + 成员收缩 R4 + 文案 R5 + 自愈验收 R6;分期 P1(真机先行 E1-E9) - P4。</li>
+<<<<<<< HEAD
   <li><span class="tag">R1 · 26-11-13-0537</span> §07/R2 边界披露挂 issue 26-11-13-0535-bug-relocate-ancestor-savepath-blindspot(候选面祖先形态既有洞独立成池), doc-refs 双向补链</li>
+=======
+  <li><span class="tag">R1 勘误 · 26-11-13</span> 目录级判据双面真值 —— 恰等 src 或 landing 在 scope 内;依据 junction 建在内容根(_scope_rel)与删链门真值面(chain_gate_hits),评审轮 1 发现;§02/§03 R1/§07 三处前提同步改口径。</li>
+>>>>>>> 3502aed8 (🐛 R1 添加预检形态感知分流: 文件级异名放行/同名 confirm, 目录级双面真值扩面, direct 原样)
 </ul>
 
 </div>

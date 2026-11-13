@@ -131,6 +131,23 @@ def _within(scope: str, path: str) -> bool:
     return p == s or p.startswith(s + "/")
 
 
+def _rel_under(path: str, base: str) -> str:
+    """path 相对 base 的尾段(词法, 保留原大小写/斜杠形态); 相等或不在 base 之下 -> ""
+
+    比对走 _norm(平台归一口径); 截取按「归一形测长、原形取尾」—— 现实输入(precheck-add
+    的 save_path/name 词法拼接)不含 normpath 可折叠段, 归一前后长度恒一致, 尾段大小写
+    得以保留; 防御支(折叠发生)返回 ""(调用侧 actual 退化为根本身, 不伪段)。
+    """
+    n_p, n_b = _norm(path), _norm(base)
+    if not n_p or not n_b or n_p == n_b or not n_p.startswith(n_b + "/"):
+        return ""
+    tail = len(n_p) - len(n_b) - 1
+    raw = path.replace("\\", "/").rstrip("/")
+    if 0 < tail <= len(raw) and len(raw) == len(n_p):
+        return raw[-tail:]
+    return ""
+
+
 def _too_long(path: str, limit: Optional[int]) -> bool:
     """路径长度是否达到链接创建上限(实测: 259 可建, 260 起一律 WinError 1314)"""
     return limit is not None and len(path) >= limit
@@ -798,14 +815,51 @@ class AddFacts:
     target_free: Optional[int] = None
 
 
+def _file_link_roots(src: str, alias_paths: Sequence[str]) -> tuple:
+    """文件级 job 的成员链接根集合(alias_paths 在 src 下第一段派生; 纯函数)
+
+    每条链接路径取其在 src 之下的第一段 -> 根 = src/<第一段>: 嵌套成员 = 内容根目录
+    (同名目录碰撞由该根接住 —— 内容根目录本身不是链接), 平铺成员 = 链接文件自身
+    (同名文件碰撞与 (1) 重合)。不在 src 下的条目跳过(账面异常形态不猜); 全部解析不出
+    -> 空集, 调用侧按「账面不可得 -> 保守 confirm」处理(宁拦勿漏), 不猜「异名」。
+    """
+    if not _norm(src):
+        return ()
+    roots = []
+    for ap in alias_paths or ():
+        rel = _rel_under(ap, src)
+        if not rel:
+            continue
+        seg = rel.split("/", 1)[0]
+        if seg and _join(src, seg) not in roots:
+            roots.append(_join(src, seg))
+    return tuple(roots)
+
+
 def evaluate_add(facts: AddFacts) -> dict:
     """往别名作用域添加种子的三分流(ok=无影响 / confirm=弹「请求路径→实际落点→卷剩余」二次确认)
 
     落点 = save_path/内容根(种子名)。判定顺序(§3.6 行号; D16 收尾窗重定义到 {armed,
-    rewritten} 且**变更承重**):
-    1. 收尾窗口(armed/rewritten: 数据已在新位置、成员经别名做种): 落点账面 save_path 记
-       在旧根的任何添加都会成为删链门(等值 OR 前缀)的**永久依赖** —— 别名将永不删,
-       confirm 是唯一预防面; 目录别名形态补充「实际落点」展示(gate 仍 finalize_window);
+    rewritten} 且**变更承重**; 收尾窗分支形态感知, 计划 26-11-13-0448 R1):
+    1. 收尾窗口(armed/rewritten: 数据已在新位置、成员经别名做种), 按别名形态分流:
+       - 目录别名: 双面真值(评审轮 1 勘误)—— 恰等 src(删链门等值面的账面依赖面)或 landing
+         落在 anchor(job.scope or job.src, = junction 所在内容根)内的写入 ⇒ confirm; landing
+         在 anchor 内 = 真重定向面(actual = dst 侧 scope 镜像 + rel-to-scope, 文案「经别名
+         落到」); 仅等值面 landing 在 junction 外不经重定向, actual 展示按 D16 契约取账面
+         建模镜像根、文案走账面/依赖语义; src 下 scope 外兄弟/前缀同串目录写入落真实目录、
+         删链门不计依赖 ⇒ 不拦。账面记旧根 = 删链门(等值 OR 前缀)的**永久依赖**, confirm
+         是唯一预防面;
+       - 文件级别名: 旧根是真实目录, 别名只是成员内容里的逐文件链接 —— 落点按名字判定:
+         (1) 撞链接路径(同名文件, §3.6 场景 2/3)confirm; (2) 撞成员链接根(alias_paths 在
+         src 下第一段派生; 同名目录碰撞在此接住)confirm(保守); (3) 其余(异名)静默放行
+         (场景 1: 数据落原盘真实目录, 不经别名、不依赖别名), 惟 save_path 恰等 src 的等值面
+         临时 confirm —— R2 交集判据落地(计划 26-11-13-0448 §03 R2)前收尾窗删链门等值面
+         (_chain_gate_deps equal_root=src)仍计依赖, 放行会收尾恒悬挂; 文案/actual 同
+         目录级等值面口径(临时面: R2 交集判据落地后由放行闭合)。磁力/URL/NoSubfolder 布局
+         不可判定不作第四分支 —— 残余碰撞由执行侧背网兜住(跨组交叉检测 = 场景 3 处置;
+         同名共享 = 删链门交集判依赖)。账面不可得(alias_paths 空/解析不出根)⇒ 保守
+         confirm 不猜「异名」(宁拦勿漏); 落点是账外链接(第三方/他组)交分支 4 拦;
+       - direct(无别名): 判据维持旧面(恰等 src)不变;
     2. 目录别名作用域命中(前段相位 moved): 一切落点被重定向到 T ⇒ confirm(展示实际落点
        与目标卷剩余);
     3. 逐文件链接: 只有落点**本身就是链接**(同名)才 confirm(写入将覆盖 T 侧数据);
@@ -822,34 +876,148 @@ def evaluate_add(facts: AddFacts) -> dict:
         "volume_free": None,
     }
 
-    # ---- 1. 收尾窗口(armed/rewritten; D16 变更承重) ----
-    # 判据只看「落点账面 save_path == job 声明源」: 收尾窗内任何往旧根添加的种子, 其
-    # save_path 记在旧根, 会成为删链门(等值 OR 前缀)的永久依赖 —— 别名将永不删, confirm
-    # 是唯一预防面。目录别名形态补充「实际落点」展示(写入经别名落到新位置, 但账面仍记旧根)。
+    # ---- 1. 收尾窗口(armed/rewritten; D16 变更承重; 形态感知分流, 计划 26-11-13-0448 R1) ----
+    # 旧判据「save_path == job.src 一律 confirm」不分形态, 把文件级 job 的组外异名添加
+    # 误拦成「删链门永久依赖」(数据本落原盘真实目录, 1604 §3.6 场景 1)。分流以形态为
+    # 第一维: 目录级判据双面真值 = 恰等 src(删链门等值面)或 landing 落在 anchor(scope
+    # or src, junction 所在内容根 = 真重定向面); 重定向面 actual 按真实落点算(dst 侧
+    # scope 镜像 + rel-to-anchor), 等值面展示账面建模镜像根且文案分流(不经别名); 文件级
+    # 按落点名字判定: (1)(2) confirm / (3) 异名放行(save_path 恰等 src 的等值面由临时守卫
+    # 先拦 confirm, R2 交集判据落地前承重, 见下)。
+    # (3) 的 ok 不即刻返回: 先扫完其余 job 的 confirm 面(宁拦勿漏), 全部无交叉才静默放行。
+    finalize_ok = False  # 有文件级 job 认领本次落点且判定「异名无交叉」(§3.6 场景 1)
+    link_pending = False  # 落点是链接但不在任一认领 job 账上(第三方/他组): 不可判「异名」
     for job in facts.jobs:
         if job.is_terminal:
             continue
-        if job.phase in FINALIZE_WINDOW_PHASES and _norm(facts.save_path) == _norm(job.src):
-            if job.alias_kind == "dir":
-                sp = facts.save_path.replace("\\", "/").rstrip("/")
-                rel = landing[len(sp):].lstrip("/") if landing.startswith(sp + "/") else ""
-                actual = _join(job.dst, rel)
+        if job.phase not in FINALIZE_WINDOW_PHASES:
+            continue
+        if job.alias_kind == "dir":
+            # 双面真值(评审轮 1 勘误, 计划 26-11-13-0448): junction 实际建在内容根 src+scope_rel
+            # (relocate_exec._build_links / _scope_rel 单点), 只有 landing 落在其内的写入才被重定向
+            # —— 该面取 anchor = job.scope or job.src(删链门 _chain_gate_deps 同款锚); 恰等 src 是
+            # 删链门等值面的账面依赖(D16 契约, confirm 照旧承重)。src 下 scope 外兄弟/前缀同串
+            # 目录: 写入落真实目录不经重定向、删链门也不计依赖 —— 不拦(原前缀扩面在该形态误拦,
+            # 文案「经别名落到 actual」「删链门永久依赖」双双失实)。
+            anchor = job.scope or job.src
+            hit_redirect = under_alias_root(landing, (anchor, )) is not None
+            if _norm(facts.save_path) != _norm(job.src) and not hit_redirect:
+                continue
+            # actual: 重定向面(hit_redirect)按真实落点算 —— junction target = dst+scope_rel, 写入
+            # 映射 = dst 侧 scope 镜像 + landing 相对 anchor 的尾段(恰等 anchor = 镜像根; scope==src
+            # 时镜像根 = dst, 与旧 rel-to-src 口径重合)。仅等值面(save_path 恰等 src 而 landing 不在
+            # anchor 内): 账面 save_path 恒记 src → 删链门等值面必命中 ⇒ confirm 承重; 该形态 landing
+            # 在 junction 外、写入不经别名落真实目录, actual 按 D16 契约取账面建模落点(镜像根)展示
+            # —— 不把「恰等 src」推成「内容根=scope」(等值面建模前提是「经别名落进作用域」, 即
+            # landing 在 anchor 内, 见 chain_gate_hits 等值面), 文案随之分流(下方)。
+            actual = _join(_join(job.dst, _rel_under(anchor, job.src)), _rel_under(landing, anchor))
+            if hit_redirect:
+                text = (
+                    f"该目录的迁移待收尾(job {job.job_id} 相位 {job.phase}, 数据已迁到 {job.dst}): "
+                    f"新种子将经别名落到 {actual}, 但账面会记在旧路径 —— 成为删链门的永久依赖"
+                    "(旧路径别名将永不删除) —— 请等 qB 重启收尾完成后再添加, 或确认接受依赖后继续"
+                )
+            else:
+                text = (
+                    f"该目录的迁移待收尾(job {job.job_id} 相位 {job.phase}, 数据已迁到 {job.dst}): "
+                    f"新种子账面将记在旧根 {job.src} —— 成为删链门等值面依赖(旧路径别名将永不删除)"
+                    " —— 请等 qB 重启收尾完成后再添加, 或确认接受依赖后继续"
+                )
+            return {
+                **base,
+                "cls": CLS_CONFIRM,
+                "actual_path": actual,
+                "volume_free": facts.target_free,
+                "reasons": [_reason("finalize_window", CLS_CONFIRM, text)],
+                "notes": [f"目标卷剩余 {facts.target_free} 字节" if facts.target_free is not None else "目标卷剩余不可判定"],
+            }
+        if job.alias_kind == "file":
+            if under_alias_root(facts.save_path, (job.src, )) is None:
+                continue  # 落点不在旧根面(祖先/平行路径): 不进收尾窗分支, 与旧判据行为一致
+            alias_paths = job.alias_paths or ()
+            roots = _file_link_roots(job.src, alias_paths)
+            if not alias_paths or not roots:
+                # 账面不可得(armed 落账必非空, 这里是账异常/防御面): 保守 confirm, 不猜「异名」
+                return {
+                    **base,
+                    "cls": CLS_CONFIRM,
+                    "reasons":
+                        [
+                            _reason(
+                                "finalize_window", CLS_CONFIRM,
+                                f"该目录的迁移待收尾(job {job.job_id} 相位 {job.phase}, 数据已迁到 {job.dst}, "
+                                "成员经别名做种): 现在添加的种子账面会记在旧路径, 成为删链门的永久依赖"
+                                "(旧路径别名将永不删除) —— 请等 qB 重启收尾完成后再添加, 或确认接受依赖后继续"
+                            )
+                        ],
+                    "notes": [],
+                }
+            if any(_norm(landing) == _norm(ap) for ap in alias_paths):
+                # (1) 落点撞链接路径(同名文件, §3.6 场景 2/3): 同内容 = 经链接共享、真依赖;
+                #   不同内容 = 写入将覆盖链接目标数据
+                return {
+                    **base,
+                    "cls": CLS_CONFIRM,
+                    "reasons":
+                        [
+                            _reason(
+                                "finalize_window", CLS_CONFIRM,
+                                f"该目录的迁移待收尾(job {job.job_id} 相位 {job.phase}, 数据已迁到 {job.dst}, "
+                                f"成员经别名做种): 落点 {landing} 与成员别名链接同名 —— 同内容辅种会经链接"
+                                "共享同一份物理数据(账面成为删链门依赖, 收尾完成前别名不会删除); 不同内容则"
+                                "写入将覆盖链接目标(已迁到新位置)的数据 —— 请等 qB 重启收尾完成后再添加,"
+                                " 或确认接受依赖后继续"
+                            )
+                        ],
+                    "notes": [],
+                }
+            if under_alias_root(landing, roots) is not None:
+                # (2) 落点撞成员链接根(保守): 同名目录碰撞在此接住(内容根目录不是链接),
+                #   深层落点顶进内容根面同样拦 —— 账面也会记在旧根成为删链门前缀依赖
+                return {
+                    **base,
+                    "cls": CLS_CONFIRM,
+                    "reasons":
+                        [
+                            _reason(
+                                "finalize_window", CLS_CONFIRM,
+                                f"该目录的迁移待收尾(job {job.job_id} 相位 {job.phase}, 数据已迁到 {job.dst}, "
+                                f"成员经别名做种): 落点 {landing} 与成员别名的内容根重叠 —— 写入可能与别名"
+                                "链接交叉(同名目录/深层落点), 账面也会记在旧路径成为删链门的永久依赖"
+                                " —— 请等 qB 重启收尾完成后再添加, 或确认接受依赖后继续"
+                            )
+                        ],
+                    "notes": [],
+                }
+            if facts.landing_is_link:
+                # 落点是链接但不在本 job 账上(第三方/他组): 不可判「异名」, 交分支 4 拦
+                link_pending = True
+                continue
+            if _norm(facts.save_path) == _norm(job.src):
+                # 临时面: R2 交集判据落地(计划 26-11-13-0448 §03 R2)后由放行闭合 ——
+                # save_path 恰等 src 账面必记旧根, 收尾窗删链门等值面(_chain_gate_deps
+                # equal_root=job.src, R2 落地前未改交集判据)仍把该种子计依赖, 预检放行会收尾恒
+                # 悬挂(REASON_CHAIN_DEPS, 文案失实); R2 落地前按目录级等值面同款 confirm
+                # 承重(文案/actual/notes 同一口径, 不另造第二份)。
+                anchor = job.scope or job.src
+                actual = _join(_join(job.dst, _rel_under(anchor, job.src)), _rel_under(landing, anchor))
+                text = (
+                    f"该目录的迁移待收尾(job {job.job_id} 相位 {job.phase}, 数据已迁到 {job.dst}): "
+                    f"新种子账面将记在旧根 {job.src} —— 成为删链门等值面依赖(旧路径别名将永不删除)"
+                    " —— 请等 qB 重启收尾完成后再添加, 或确认接受依赖后继续"
+                )
                 return {
                     **base,
                     "cls": CLS_CONFIRM,
                     "actual_path": actual,
                     "volume_free": facts.target_free,
-                    "reasons":
-                        [
-                            _reason(
-                                "finalize_window", CLS_CONFIRM,
-                                f"该目录的迁移待收尾(job {job.job_id} 相位 {job.phase}, 数据已迁到 {job.dst}): "
-                                f"新种子将经别名落到 {actual}, 但账面会记在旧路径 —— 成为删链门的永久依赖"
-                                "(旧路径别名将永不删除) —— 请等 qB 重启收尾完成后再添加, 或确认接受依赖后继续"
-                            )
-                        ],
+                    "reasons": [_reason("finalize_window", CLS_CONFIRM, text)],
                     "notes": [f"目标卷剩余 {facts.target_free} 字节" if facts.target_free is not None else "目标卷剩余不可判定"],
                 }
+            finalize_ok = True  # (3) 异名候选(§3.6 场景 1) —— 继续扫其余 job 的 confirm 面
+            continue
+        # 其余形态(direct, 无别名): 判据维持旧面(恰等 src), 形态感知分流不扩 direct
+        if _norm(facts.save_path) == _norm(job.src):
             return {
                 **base,
                 "cls": CLS_CONFIRM,
@@ -864,6 +1032,9 @@ def evaluate_add(facts: AddFacts) -> dict:
                     ],
                 "notes": [],
             }
+    if finalize_ok and not link_pending:
+        # (3) 异名静默放行(§3.6 场景 1): 数据落原盘真实目录, 不经别名、不依赖别名
+        return {**base, "cls": CLS_OK, "reasons": [], "notes": []}
 
     # ---- 2/3. 别名作用域 ----
     # !这里用「落点是否落在作用域目录内」的本地判定, **不用** job.scope_hit: scope_hit 是

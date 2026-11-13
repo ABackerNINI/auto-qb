@@ -28,12 +28,28 @@
 - test_evaluate_group_dir_alias_confirms: F>=thr + 专属 -> confirm(dir_alias, needs_confirm)
 - test_evaluate_group_external_files_force_file_links: 组外文件 -> exclusive=False ->
   file_links + note 列出组外条目(不动别人的文件)
-- test_evaluate_add_rows: §3.6 第 1/3/8/15 行 + 第三方链接落点(无 job 登记)
+- test_evaluate_add_rows: §3.6 第 1/3/8/15 行 + 第三方链接落点(无 job 登记);
+  行 1'' 按 R1 新判据重写(计划 26-11-13-0448): 文件级收尾窗同名撞内容根 -> (2) 保守 confirm
 - test_same_volume_proof_table: 相等 True / 任一侧 None False / 不等 False(§2.4 硬证据口径)
 - test_evaluate_add_skips_terminal_and_unmatched_jobs
 - test_evaluate_add_second_pass_skips_terminal_job: 第二段作用域环的终态跳过 -> 落点无交叉判 OK
 - test_evaluate_add_dir_alias_redirects_landing_in_moved_phase: 行 2 目录别名改道(moved 相位)
   -> confirm 带实际落点与卷剩余
+
+R1 收尾窗形态感知分流追加(计划 26-11-13-0448 P2; _file_job 默认 alias_paths 改绝对路径生产形):
+- test_evaluate_add_finalize_window_form_aware: 收尾窗分流表驱动 —— 文件级 (1)同名撞链接路径
+  confirm(场景 2/3 文案)/(2) 首段撞成员链接根(同名目录+深层+内容根内)confirm(保守)/
+  (3)异名放行(armed+rewritten; save_path 取 src 下非恰等形)/(3+)临时等值面: save_path 恰等
+  src -> confirm(临时面, R2 交集判据落地后翻转闭合; 落地前删链门等值面仍计依赖)/(4)异名深层放行(含同名兄弟
+  不误伤); 目录级 (5)==src confirm
+  (正 rel)/(6)深层添加 confirm(E6-2 覆盖洞)/(7)scope 内深层 confirm(actual= dst 侧 scope
+  镜像 + rel-to-scope, 评审轮 1 勘误); (8)组外路径与 src 下 scope 外兄弟目录裸 ok(勘误防回归);
+  (9)账面不可得(alias_paths 空/不在 src 下)保守 confirm; (10)direct 维持恰等 src 旧面
+- test_evaluate_add_finalize_ok_scan_and_link_pending: (3) 的 ok 不即刻返回(后续 job confirm
+  胜出, 与 job 顺序无关)+ 账外链接落到分支 4 拦(不静默放行穿链接写入); (3) 对照对两行
+  save_path 同取非恰等形(恰等面归临时守卫拦)
+- test_file_link_roots_derivation: 链接根派生契约(嵌套=内容根/平铺=链接自身/不在 src 下
+  跳过/空账空集)
 - test_evaluate_group_confirm_not_downgraded_by_later_block
 - test_evaluate_group_cross_volume_note
 - test_evaluate_group_form_reject_gate
@@ -532,7 +548,10 @@ def _dir_job(phase=ru.PHASE_ARMED):
     )
 
 
-def _file_job(phase=ru.PHASE_ARMED, paths=("Show/S01E01.mkv", )):
+def _file_job(phase=ru.PHASE_ARMED, paths=None):
+    """文件级 job(armed): alias_paths = 建链落账的绝对路径形(生产口径, relocate_exec._native(src, rel))"""
+    if paths is None:
+        paths = (os.path.join(S, "Show", "e00.mkv"), os.path.join(S, "Show", "e01.mkv"))
     return ru.RelocateJob(
         job_id="j1",
         hashes=("HA", "HB"),
@@ -557,9 +576,12 @@ def test_evaluate_add_rows():
     # 行 1: 前段相位(moved)+ 逐文件链接作用域 + 异名落点 -> 原盘真实目录, 无影响
     r = ru.evaluate_add(ru.AddFacts(save_path=S, name="Show", jobs=(_file_job(phase=ru.PHASE_MOVED), )))
     assert r["cls"] == ru.CLS_OK and r["reasons"] == []
-    # 行 1'': 收尾窗 + 逐文件链接 + 异名落点(D16): 账面记旧根 -> 删链门永久依赖 -> confirm
+    # 行 1''(R1 重写): 收尾窗 + 文件级 + 落点=Show —— 同名撞成员内容根(链接根首段 "Show")
+    # -> (2) 保守 confirm(内容根目录不是链接, 同名目录碰撞由首段判据接住; 旧判据不分形态一律
+    # confirm「账面记旧根」, 现判据只拦与别名交叉的落点, 异名走 (3) 放行, 见形态分流表驱动用例)
     r = ru.evaluate_add(ru.AddFacts(save_path=S, name="Show", jobs=(_file_job(), )))
     assert r["cls"] == ru.CLS_CONFIRM and r["reasons"][0]["gate"] == "finalize_window"
+    assert "内容根重叠" in r["reasons"][0]["text"]
     # 行 3: 前段相位 + 落点本身是链接(同名) -> confirm + 覆盖警示
     r = ru.evaluate_add(
         ru.AddFacts(
@@ -590,6 +612,287 @@ def test_evaluate_add_rows():
     # 基线: 无 job 无链接 -> ok(第 1 行的反面: 完全无交叉)
     r = ru.evaluate_add(ru.AddFacts(save_path=S, name="Other"))
     assert r["cls"] == ru.CLS_OK and r["requested_path"].endswith("Other")
+
+
+def test_evaluate_add_finalize_window_form_aware():
+    """R1 收尾窗形态分流表驱动(计划 26-11-13-0448 §03 R1, D4 拍板)
+
+    文件级: (1) 同名撞链接路径 -> confirm(§3.6 场景 2/3: 同内容=经链接共享/不同内容=覆盖链接
+    目标); (2) 首段撞成员链接根(同名目录/深层落点) -> confirm(保守); (3) 异名 -> ok 静默放行
+    (场景 1); (4) 异名深层 -> ok。目录级: (5) ==src confirm(actual 正 rel); (6) 深层添加 confirm
+    (补 T1 E6-2 实证覆盖洞); (7) scope 内深层: save_path==scope, actual = dst 侧 scope 镜像 +
+    rel-to-scope(评审轮 1 勘误: 双面真值, rel 不再按 job.src 词法截取)。(8) 组外路径与 src 下
+    scope 外兄弟目录行为不变(裸 ok, 勘误防回归); (9) 账面不可得(alias_paths 空/不在 src 下)
+    -> 保守 confirm, 不猜「异名」; (10) direct 维持恰等 src 旧面(形态分流不扩 direct)。
+    """
+    fjob = _file_job()  # src=S, scope=S/Show, alias_paths=(S/Show/e00.mkv, S/Show/e01.mkv)
+    fjob_rewritten = _file_job(phase=ru.PHASE_REWRITTEN)
+    djob = _dir_job()  # src=S, scope=S/Show, alias_kind=dir
+    # (label, save_path, name, jobs, AddFacts kwargs, 期望 cls, 检查函数(result))
+    rows = [
+        # ---- 文件级 (1): 落点撞链接路径(同名文件, §3.6 场景 2/3) ----
+        (
+            "(1)同名文件: 单文件种落内容根内撞链接路径",
+            os.path.join(S, "Show"),
+            "e00.mkv",
+            (fjob, ),
+            {},
+            ru.CLS_CONFIRM,
+            lambda r: (
+                _reason_gate(r) == "finalize_window" and "同名" in _reason_text(r) and "共享" in _reason_text(r) and "覆盖" in
+                _reason_text(r)
+            ),
+        ),
+        (
+            "(1)同名文件: name 带 rel 段(precheck_add 原样透传形态)",
+            S,
+            "Show/e01.mkv",
+            (fjob, ),
+            {},
+            ru.CLS_CONFIRM,
+            lambda r: _reason_gate(r) == "finalize_window" and "同名" in _reason_text(r),
+        ),
+        # ---- 文件级 (2): 落点撞成员链接根(首段派生; 同名目录碰撞在此接住) ----
+        (
+            "(2)同名目录: 落点=成员内容根(内容根目录不是链接, 首段判据接住)",
+            S,
+            "Show",
+            (fjob, ),
+            {},
+            ru.CLS_CONFIRM,
+            lambda r: _reason_gate(r) == "finalize_window" and "内容根重叠" in _reason_text(r),
+        ),
+        (
+            "(2)深层: 落点顶进成员内容根面",
+            os.path.join(S, "Show", "deeper"),
+            "DeepX",
+            (fjob, ),
+            {},
+            ru.CLS_CONFIRM,
+            lambda r: _reason_gate(r) == "finalize_window" and "内容根重叠" in _reason_text(r),
+        ),
+        (
+            "(2)内容根内: save_path 已在内容根下",
+            os.path.join(S, "Show"),
+            "Other",
+            (fjob, ),
+            {},
+            ru.CLS_CONFIRM,
+            lambda r: _reason_gate(r) == "finalize_window" and "内容根重叠" in _reason_text(r),
+        ),
+        # ---- 文件级 (3)/(4): 异名静默放行(§3.6 场景 1: 数据落原盘真实目录, 不经别名);
+        #      save_path 一律取 src 下非恰等形(兄弟/深层) —— 恰等 src 的等值面已由临时守卫拦
+        #      confirm(见 (3+) 行, 临时面, R2 交集判据落地后翻转) ----
+        (
+            "(3)异名放行: src 下兄弟目录(非恰等 src)",
+            os.path.join(S, "sibling"),
+            "Other",
+            (fjob, ),
+            {},
+            ru.CLS_OK,
+            lambda r: r["reasons"] == [] and r["notes"] == [],
+        ),
+        (
+            "(3)rewritten 相位同判(收尾窗 = {armed, rewritten})",
+            os.path.join(S, "sibling"),
+            "Other2",
+            (fjob_rewritten, ),
+            {},
+            ru.CLS_OK,
+            lambda r: r["reasons"] == [] and r["notes"] == [],
+        ),
+        ("(4)异名深层放行", os.path.join(S, "deeper"), "Other", (fjob, ), {}, ru.CLS_OK, lambda r: r["reasons"] == []),
+        (
+            "(4)深层同名兄弟不误伤(前缀以分隔符为界: deeper/Show 不在 Show 下)",
+            os.path.join(S, "deeper"),
+            "Show",
+            (fjob, ),
+            {},
+            ru.CLS_OK,
+            lambda r: r["reasons"] == [],
+        ),
+        # ---- 文件级 (3) 临时等值面守卫: save_path 恰等 src + 异名 -> confirm(临时面, R2 交集
+        #      判据落地(计划 26-11-13-0448 §03 R2)后翻转闭合: 落地前 _chain_gate_deps 等值面
+        #      仍计依赖, 预检放行会收尾恒悬挂 REASON_CHAIN_DEPS; 文案/actual 同目录级等值面口径) ----
+        (
+            "(3+)临时等值面: save_path 恰等 src -> confirm(临时面, R2 交集判据落地后翻转闭合)",
+            S,
+            "Other",
+            (fjob, ),
+            dict(target_free=5000),
+            ru.CLS_CONFIRM,
+            lambda r: (
+                _reason_gate(r) == "finalize_window" and _fwd(r["actual_path"]) == _fwd(os.path.join(T, "Show")) and
+                "账面将记在旧根" in _reason_text(r) and "经别名" not in _reason_text(r) and r["volume_free"] == 5000
+            ),
+        ),
+        # ---- 目录级 (5)(6)(7) ----
+        (
+            "(5)==src confirm + 实际落点正 rel + 卷剩余透传",
+            S,
+            "Show",
+            (djob, ),
+            dict(target_free=5000),
+            ru.CLS_CONFIRM,
+            lambda r: (
+                _reason_gate(r) == "finalize_window" and _fwd(r["actual_path"]) == _fwd(os.path.join(T, "Show")) and
+                "经别名" in _reason_text(r) and r["volume_free"] == 5000
+            ),
+        ),
+        (
+            "(6)深层添加 confirm(T1 E6-2 实证覆盖洞: 旧判据恰等 src 时该落点零弹窗)",
+            os.path.join(S, "Show", "deeper"),
+            "DeepX",
+            (djob, ),
+            {},
+            ru.CLS_CONFIRM,
+            lambda r: (
+                _reason_gate(r) == "finalize_window" and _fwd(r["actual_path"]) ==
+                _fwd(os.path.join(T, "Show", "deeper", "DeepX"))
+            ),
+        ),
+        (
+            "(7)scope 内深层: save_path==scope, actual= dst 侧 scope 镜像 + rel-to-scope(评审轮 1 勘误: "
+            "双面真值, rel 不再按 job.src 词法截取)",
+            os.path.join(S, "Show"),
+            "deeper",
+            (djob, ),
+            {},
+            ru.CLS_CONFIRM,
+            lambda r: _fwd(r["actual_path"]) == _fwd(os.path.join(T, "Show", "deeper")),
+        ),
+        # ---- (8) 组外路径行为不变(不撞任何判据 -> 落到分支 5 裸 ok) ----
+        (
+            "(8)组外路径: 不进收尾窗分支(裸 ok)",
+            "R:/Download/Elsewhere",
+            "X",
+            (fjob, djob),
+            {},
+            ru.CLS_OK,
+            lambda r: r["reasons"] == [] and r["notes"] == [] and r["actual_path"] is None,
+        ),
+        (
+            "(8)src 下 scope 外兄弟目录: 静默 ok(评审轮 1 勘误防回归: 写入落真实目录不经重定向, "
+            "删链门等值/前缀都不计依赖, 原前缀扩面在该形态误拦)",
+            os.path.join(S, "other"),
+            "X",
+            (djob, ),
+            {},
+            ru.CLS_OK,
+            lambda r: r["reasons"] == [] and r["notes"] == [] and r["actual_path"] is None,
+        ),
+        # ---- (9) 账面不可得 -> 保守 confirm(宁拦勿漏, 不猜「异名」) ----
+        (
+            "(9)alias_paths 空(账异常/防御面) -> 保守 confirm(旧文案)",
+            S,
+            "Other",
+            (_file_job(paths=()), ),
+            {},
+            ru.CLS_CONFIRM,
+            lambda r: _reason_gate(r) == "finalize_window" and "账面会记在旧路径" in _reason_text(r),
+        ),
+        (
+            "(9)alias_paths 不在 src 下(相对形, 解析不出根) -> 保守 confirm",
+            S,
+            "Other",
+            (_file_job(paths=("Show/e00.mkv", )), ),
+            {},
+            ru.CLS_CONFIRM,
+            lambda r: _reason_gate(r) == "finalize_window" and "账面会记在旧路径" in _reason_text(r),
+        ),
+        (
+            "(10)direct(无别名)维持旧面: 恰等 src -> confirm(形态分流不扩 direct)",
+            S,
+            "X",
+            (
+                ru.RelocateJob(
+                    job_id="jd",
+                    hashes=("HA", ),
+                    mover="HA",
+                    src=S,
+                    dst=T,
+                    scope=S,
+                    alias_kind="",
+                    phase=ru.PHASE_ARMED
+                ),
+            ),
+            {},
+            ru.CLS_CONFIRM,
+            lambda r: _reason_gate(r) == "finalize_window" and "账面会记在旧路径" in _reason_text(r),
+        ),
+    ]
+    for label, sp, name, jobs, kw, want_cls, check in rows:
+        r = ru.evaluate_add(ru.AddFacts(save_path=sp, name=name, jobs=jobs, **kw))
+        assert r["cls"] == want_cls, (label, r)
+        assert check(r), (label, r)
+
+
+def test_evaluate_add_finalize_ok_scan_and_link_pending():
+    """(3) 的 ok 不即刻返回(先扫完其余 job 的 confirm 面, 宁拦勿漏); 落点是账外链接交分支 4 拦
+
+    - 文件级 job 判「异名」后, 同落点撞后续目录级 job 的旧根面 -> confirm 胜出(不被 (3) 吞);
+    - 落点本身是链接但不在认领 job 账上(第三方/他组) -> link_pending -> 落到分支 4
+      alias_path confirm(不静默放行穿链接写入);
+    - 反序同理(confirm 面优先与 job 顺序无关)。
+    """
+    fjob = _file_job()
+    djob = _dir_job()
+    # 文件级 (3) 候选 + 目录级等值面命中: confirm 胜出(save_path 恰等 src 而落点不在 anchor 内:
+    # 账面记 src → 删链门等值面必命中 ⇒ confirm; actual 按 D16 契约取账面建模镜像根, 文案走
+    # 账面/依赖语义不带「经别名」—— 评审轮 2 勘误)。临时等值面守卫(T2 修复轮 3)落地后,
+    # 正序行(fjob 在前)的 confirm 由文件级守卫先行产出 —— 文案/actual 与目录级等值面同一
+    # 口径, 断言两序通用; 反序行仍由目录级等值面命中。
+    r = ru.evaluate_add(ru.AddFacts(save_path=S, name="Other", jobs=(fjob, djob)))
+    assert r["cls"] == ru.CLS_CONFIRM and r["reasons"][0]["gate"] == "finalize_window", r
+    assert _fwd(r["actual_path"]) == _fwd(os.path.join(T, "Show"))
+    assert "账面将记在旧根" in _reason_text(r) and "经别名" not in _reason_text(r), r
+    # 反序: 同一结论(job 顺序无关)
+    r = ru.evaluate_add(ru.AddFacts(save_path=S, name="Other", jobs=(djob, fjob)))
+    assert r["cls"] == ru.CLS_CONFIRM and r["reasons"][0]["gate"] == "finalize_window", r
+    # 账外链接: 文件级 (1)(2) 不中 + landing_is_link -> 不判「异名」, 落到分支 4 第三方拦截
+    # (两行 save_path 同取 src 下非恰等形: 恰等 src 的等值面已归临时守卫拦, 不占 (3) 放行面)
+    r = ru.evaluate_add(
+        ru.AddFacts(
+            save_path=os.path.join(S, "sibling"),
+            name="Elsewhere",
+            jobs=(fjob, ),
+            landing_is_link=True,
+            landing_link_kind="symlink",
+            landing_link_target="D:/elsewhere",
+        )
+    )
+    assert r["cls"] == ru.CLS_CONFIRM and r["reasons"][0]["gate"] == "alias_path", r
+    # 对照: 同落点无链接实况 -> (3) 静默放行
+    r = ru.evaluate_add(ru.AddFacts(save_path=os.path.join(S, "sibling"), name="Elsewhere", jobs=(fjob, )))
+    assert r["cls"] == ru.CLS_OK and r["reasons"] == [], r
+
+
+def test_file_link_roots_derivation():
+    """_file_link_roots 派生契约: 嵌套成员=内容根 / 平铺成员=链接文件自身 / 不在 src 下跳过 / 空账空集
+
+    根路径取 _join 拼接形(正斜杠), 断言按同形比较。
+    """
+    # 嵌套: 链接在内容根下 -> 根 = 内容根目录(多条同根去重)
+    assert ru._file_link_roots(S, (os.path.join(S, "Show", "e00.mkv"), os.path.join(S, "Show",
+                                                                                    "e01.mkv"))) == (S + "/Show", )
+    # 平铺: 链接直接在 src 下 -> 根 = 链接文件自身(与 (1) 重合)
+    assert ru._file_link_roots(S, (os.path.join(S, "a.mkv"), os.path.join(S, "b.mkv"))) == (S + "/a.mkv", S + "/b.mkv")
+    # 不在 src 下的条目跳过(账面异常不猜); 全部解析不出 -> 空集(调用侧保守 confirm)
+    assert ru._file_link_roots(S, ("Show/e00.mkv", )) == ()
+    assert ru._file_link_roots(S, ()) == ()
+    assert ru._file_link_roots("", (os.path.join(S, "a.mkv"), )) == ()
+
+
+def _reason_gate(result):
+    return result["reasons"][0]["gate"]
+
+
+def _reason_text(result):
+    return result["reasons"][0]["text"]
+
+
+def _fwd(p):
+    return str(p).replace("\\", "/")
 
 
 def test_evaluate_group_cross_volume_note():

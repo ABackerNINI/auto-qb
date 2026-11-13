@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>direct 无别名形态收尾窗深层添加绕过 confirm 弹窗但顶进删链门前缀面 · bug · 计划外问题</title>
+<meta name="issue-slug" content="relocate-direct-form-deep-add-hole">
+<meta name="issue-stamp" content="26-11-13-0711">
+<meta name="issue-type" content="bug">
+<meta name="doc-topic" content="relocate-form-aware-gates">
+<meta name="doc-refs" content="memory-bank/plans/26-11-13-0448-plan-relocate-form-aware-gates.html">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="direct 无别名形态收尾窗深层添加绕过 confirm 弹窗但顶进删链门前缀面">
+<meta name="issue-summary" content="R1 形态感知分流只扩 dir/file 两形态; direct 形态收尾窗维持恰等 src 旧面, src 下深层路径添加不弹窗却落进删链门前缀依赖面, 与本计划修掉的覆盖洞同类">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --mark: #161e26;     /* issue 特有: callout 底色 (plan.html 不用) */
+    --warn-bg: #2a2119;  /* issue 特有: 状态徽标底色 */
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 单栏流式版面: 与 plan.html 同一套 .sheet (封顶 1280px, 侧距 clamp(18~44px)); 旧双栏+粘性目录已删 */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+
+  /* 封面 meta 行: issue 特有, DOM 形态别改 —— 状态徽标 <span class="badge"> 被
+     flip_status (W4) 与 check_status_drift 的 BADGE_RE 机读 (k/v div 结构在判据里) */
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px 28px; font-family: var(--mono); font-size: 11.5px; color: var(--faint); border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta-row .item .k { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .meta-row .item .v { font-size: 13.5px; color: var(--dim); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin: 14px 0; font-size: 14px; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-family: var(--mono); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">计划外问题（未修）· bug</div>
+<h1>direct 无别名形态收尾窗深层添加绕过 confirm 弹窗但顶进删链门前缀面</h1>
+<p class="lede">R1 形态感知分流只扩 dir/file 两形态; direct 形态收尾窗维持恰等 src 旧面, src 下深层路径添加不弹窗却落进删链门前缀依赖面, 与本计划修掉的覆盖洞同类</p>
+<div class="meta-row">
+  <div class="item"><div class="k">编号</div><div class="v">26-11-13-0711-bug-relocate-direct-form-deep-add-hole</div></div>
+  <div class="item"><div class="k">报告时间</div><div class="v">2026-11-13 07:11</div></div>
+  <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
+  <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+</div>
+
+<section id="s1">
+  <h2><span class="no">§01</span>现象与发现场景</h2>
+  <p>2026-11-13 计划 26-11-13-0448(R1 添加预检形态感知分流)T2 实施期发现: R1 按拍板 D4 只扩 dir/file 两形态, direct(无别名, FORM_DIRECT 单成员组直搬)形态收尾窗判据维持「恰等 src」旧面。后果链: direct 形态 job 收尾窗(armed/rewritten)内, 组外种子 <code>save_path</code> 落在 <code>job.src</code> 前缀下(深层路径添加最典型)—— (a) 预检零弹窗零告知(D10 面缺失, 用户无感知); (b) 该账面落点照常命中删链门前缀面(<code>_chain_gate_deps</code> 调用侧对 direct 形态与 alias 空集均无早退)→ deps&gt;0 → 收尾步恒悬挂 <code>REASON_CHAIN_DEPS</code>, 且文案说「维持别名等依赖消失」而 direct 形态根本没有别名。与计划 §02「添加预检覆盖洞」行修掉的目录级/文件级洞同类 —— 该行只列了 dir/file 两形态, direct 同理但计划未披露。</p>
+</section>
+
+<section id="s2">
+  <h2><span class="no">§02</span>证据</h2>
+  <p class="hint">贴原文（报错 / 日志 / 命令输出），不转述；附取证时间，让读者自己判断新鲜度。</p>
+<pre><code># 均为 2026-11-13 07:11 取证(T2 改后工作树, 本地分支 feat/relocate-form-aware-gates)
+# relocate_units.py:970(evaluate_add 收尾窗 direct 分支, T2 重写后):
+# 其余形态(direct, 无别名): 判据维持旧面(恰等 src), 形态感知分流不扩 direct
+
+# relocate_exec.py:1077(_chain_gate_deps, 调用侧无 direct / alias 空集早退):
+hits = set(ru.chain_gate_hits(save_paths, anchor, equal_root=job.src))
+
+# relocate_exec.py:1007-1012(收尾步消费点, deps&gt;0 → 恒悬挂):
+deps = self._chain_gate_deps(job)
+if deps:
+    ...
+    return
+
+# relocate_units.py:1426(chain_gate_hits 前缀面, 组外种子深层落点命中):
+if sp and (under_alias_root(sp, (root, )) is not None or (eq and _norm(sp) == eq)):</code></pre>
+</section>
+
+<section id="s3">
+  <h2><span class="no">§03</span>影响面</h2>
+  <table>
+    <tr><th>维度</th><th>结论</th></tr>
+    <tr><td>触发条件</td><td>单成员组 direct 形态 job 进入收尾窗(armed/rewritten)后, 组外种子 <code>save_path</code> 落在 <code>job.src</code> 前缀下 —— 深层路径添加必现; 该种子不走不删则持续</td></tr>
+    <tr><td>影响范围</td><td>该 direct job 收尾永不收敛(卡 <code>REASON_CHAIN_DEPS</code>, 反馈面文案误导「维持别名」而 direct 无别名); 组外种子添加侧零告知(D10 面缺失)。无数据风险 —— direct 无别名无重定向, 纯收敛/反馈面缺陷</td></tr>
+    <tr><td>严重度</td><td>中(用户把该种子删走/搬走即解锁, 非永久死锁; 但静默无告知)</td></tr>
+  </table>
+</section>
+
+<section id="s4">
+  <h2><span class="no">§04</span>定位锚点</h2>
+  <p class="hint">写「符号名 + grep 关键词 + 当时的行号（标取证时间）」—— 代码会漂移，靠符号与 grep 重新定位，行号只是加速项。</p>
+  <ul>
+    <li><code>src/auto_qb/core/modules/relocate_units.py:970</code>(取证 2026-11-13 07:11)· <code>evaluate_add</code> 收尾窗 direct 分支 · grep「形态感知分流不扩 direct」</li>
+    <li><code>src/auto_qb/core/modules/relocate_exec.py:1062</code> · <code>_chain_gate_deps</code>(调用侧无 direct/空集早退)· grep「删链门依赖扫描」</li>
+    <li><code>src/auto_qb/core/modules/relocate_exec.py:1007</code> · 收尾步 <code>deps = self._chain_gate_deps(job)</code> 消费点 · grep「删链门依赖未清」</li>
+    <li><code>src/auto_qb/core/modules/relocate_units.py:1407</code> · <code>chain_gate_hits</code>(前缀面 :1426)· grep「删链门依赖扫描(纯函数)」</li>
+  </ul>
+</section>
+
+<section id="s5">
+  <h2><span class="no">§05</span>根因<span class="opt">（可选）</span></h2>
+  <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
+  <div class="callout">计划范围裁断留白, 非实现缺陷: 拍板 D4 与计划 §02 覆盖洞行明示扩面只限 dir/file 两形态(已排除: T2 偏离计划 —— 实现忠实执行了 D4), 但删链门前缀面对 direct 形态的覆盖后果计划未披露。候选修法涉及 D4 范围重裁, 须用户拍板。</div>
+</section>
+
+<section id="s6">
+  <h2><span class="no">§06</span>建议修法<span class="opt">（可选）</span></h2>
+  <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
+  <p>两个候选方向(可并议, 均涉及 D4 范围重裁须用户拍板后另立计划/认领): (a) direct 形态收尾窗预检判据同款扩前缀(<code>under_alias_root(save_path, (src,))</code>), 补齐 D10 告知面 —— 代价: 单成员组高频路径弹窗增多; (b) direct 形态 finalize 的删链门短路(无别名即无链可删, deps 判据对 direct 无意义, 文案「维持别名」失实)—— 代价: 需论证 direct 收尾窗内组外落点无数据 hazard(direct 无链接, 重定向不成立)。 (b) 单独做即解除悬挂; (a)+(b) 一并做则告知面与收敛面都闭合。</p>
+</section>
+
+<section id="s7">
+  <h2><span class="no">§07</span>状态变更日志</h2>
+  <ul>
+    <li>2026-11-13 07:11 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+  </ul>
+  <h3>复验</h3>
+  <p>TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <h3>修复后补充</h3>
+  <p>TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+</section>
+
+<footer>
+  26-11-13-0711-bug-relocate-direct-form-deep-add-hole.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+</footer>
+
+</div>
+</body>
+</html>
