@@ -5,7 +5,7 @@
 - test_frontend_ctx_submenu_single_entry_and_hover_close: 右键次级菜单守阵 —— 次级入口由注册表声明、渲染层计数(「更多操作」+「转移到」, 模板骨架单份; 原 CTX-06 单入口断言随「转移到」入口过期, R5#30)、移出父项后延迟收起(CTX-05)、hover 图标规则必须限定直接子级且压特异性否则整片子面板变灰(CTX-04)
 - test_frontend_reannounce_inactive_gate_wiring: 非活跃种子禁强制汇报(qB 口径)入口接线守阵(2026-10-10; 2026-10-17 扩段删除链, issue 26-10-17-1703) —— qB 的 Force reannounce 仅在种子活跃时可用(commit aa189a7 关闭 issue #12080: isPaused/isChecking/isQueued 时 setEnabled(false)), 本项目沿用同一判据(暂停/停止·排队·校验中·错误/文件丢失): 1. 判定单点 decorate.js 的 REANNOUNCE_BLOCKED_STATES 必含 paused*/stopped*/queued*/checking*/error/missingFiles/**moving** 且**读 qB 原始 state**(kind 现 7 档, 排队仍被归进 downloading/seeding ⇒ 单看 kind 判不出排队; moving 虽自成第 7 档, 后端却不在任何 state_enum 谓词集合里 ⇒ 后端同须判 state 串); 2. 右键菜单 ctx-menus.html 四支(多选/整集/单种子/单组)的强制汇报项都挂 reannounceMenuGate(); 3. 行为层两道 —— _actCore 的 reannounce 前置闸门(早于乐观补丁/POST) + _kbAct 的 reannounce 分支先于 confirmDialog("先问确定再回不行"是坏体感); 4. 详情面板 tracker 页签 04/05/06 三个变体的 data-act=report 钮挂 drawerReannounceGate() + 各变体 .is-gated CSS(压过 base :hover, 含 05 失败区 .dt05-fail 的 (0,4,0) 覆盖) + drawer.js torrentCmd 兜底; 5. 投递收敛 —— 闸门(集合级全有全无, 与 qB oneCanForceReannounce 一致)只管「允不允许」, 放行后「发给谁」由 reannouncePlan 单点收敛为活跃子集(混选时 qB 引擎对非活跃目标静默空转, 照集合全量投递会让 tracker 确认层白等 item deadline 后落假「未确认」, 把一次干净的成功报成部分失败), 回执体现跳过数, 空投递必须显式收口(不得落成功分支报「成功 0 个目标」), 且前后端判据表(REANNOUNCE_BLOCKED_STATES)逐项同表; 6. 删除链(唯一漏接入口的修复) —— _deleteFlow 按 reannouncePlan 收敛 + 全非活跃时闸门禁用复选框(popovers.html is-gated 类/标题/点击短路三件 + .opt-pill.is-gated 三套 CSS 成套压过 :hover)+ _reannounceAll 的 skip 桶(非活跃 warn 降级为跳过不挡删除, 推迟中/error 维持不放行)+ 后端 REANNOUNCE_INACTIVE_SKIP 文案含「非活跃」(前端文本判据锚点)。行为语义由同批 node 电池真跑(判定表 + 投递计划 + 删除闸门 + skip 桶分型)。键盘与详情面板是右键之外的两条绕行路径, 任一入口被摘除即红
 - test_frontend_api_request_timeout: 前端请求级超时守阵(issue 26-10-16-0954-bug-webui-chart-fetch-no-timeout 方案 #1, 2026-10-16) —— `_request` 旧的裸 `fetch(path, { ...options, headers })` 无超时: 连接静默失效时 await 永不返回, 调用方 finally 整条失效(流量图 loading 卡死⇒轮询守卫把自己挡死; polling.js::refresh 更是永久停表), 界面上也无任何提示。四层静态锚: 1. 常量单点 AQB_FETCH_TIMEOUT_S/MS(毫秒值由秒值派生, 不手抄两份); 2. fetch 必须带 `signal: ctl.signal`(裸 fetch 不得回潮); 3. AbortError 必须翻译(超时/取消分型 + timeout 标记); 4. `finally` 必须 `clearTimeout(timer)` 且跨文件不变式 `_QB_LOAD_STALL_MS >= AQB_FETCH_TIMEOUT_MS`(兜底不得早于请求级超时)。行为面 node 电池真跑(无 node 静默跳过): 桩 fetch + 手动触发定时器, 六型 —— 悬挂→「请求超时(15s)」+ timeout 标记 + 定时器已清 / 成功值透传且定时器清 / 401 仍走 auth 分支(_logout + auth 标记) / 非 2xx 文案照旧 / 已 abort 的外部 signal → 「请求已取消」不冒充超时 / - test_frontend_raw_fetch_timeout_single_point: 前端裸 fetch 零回潮 + 低层带超时单点守阵(issue 26-10-16-1303-bug-webui-raw-fetch-bypass-no-timeout, 2026-10-16) —— 5 处请求有意或历史地绕开 auth.js::_request(它已有请求级超时), 直接裸 fetch 且无 signal: 启动分片装载 / 免鉴权判定 / 导出下载 / 快捷键密钥读写 x2; 连接静默失效时 await 永不返回 ⇒ 各有收尾动作停在中途(白屏 / 停在“验证中” / 回执停在“进行中” / 密钥面板 loading 不复位)。修法 = 低层单点 shared/fetch_low.js(aqbFetch: AbortController + 15s + AbortError 翻译, **原始 Response** 透传不解析), 四处改调它; boot.js 在清单脚本之前执行(用不了单点), 自带等价内联超时(10s, 阻塞首屏 ⇒ 早失败)。四层静态锚: 1. 单点常量在且与 auth.js 请求级超时同值(同口径两处实现, 只改一边即红); 2. **裸 fetch 零回潮**(全 shared 除 vendor 外, 出现调用点 fetch( 的文件只允许单点自身 / auth.js / boot.js); 3. boot.js 内联件齐(常量 10s + AbortController + signal 透传 + clearTimeout + AbortError 翻译); 4. 四旁路调用点全改调单点 + lifecycle 采纳行的等价格式(字段名与空值占位各一个常量; 回潮成字面成员赋值会让该文件对本仓 agent 只读)。行为面 node 电池真跑(无 node 静默跳过): 单点七型(悬挂→「请求超时(15s)」+ timeout 标记 / 原始 Response 透传不解析 / 非 abort 错误上抛 / 外部取消不冒充超时 / method+headers 透传 / 定时器清理)与 boot.js 白屏悬挂五项(信号在 / 10s 定时器在 / 悬挂→可读失败文案 / 定时器清掉)
-- test_frontend_poll_skeleton_single_point: 长驻/有界轮询骨架单点守阵(issue 26-10-20-2231, 2026-10-22) —— 同一份「启停 + 守卫 + 在途悬挂兜底 + 代际守卫」此前写了三份(主轮 setTimeout 链 / 抽屉 setInterval / 流量图 setInterval), 停止条件五处手写, 且**抽屉侧漏了悬挂兜底**(同一类「loading 卡死⇒面板永久冻结」缺陷只修了流量图一边, 本件的实质缺陷面)。收敛后: 1. 骨架三口子 startPoll/stopPoll/awaitPoll 在 polling.js + 阈值常量 AQB_POLL_STALL_MS(30s = 请求级超时 15s 的两倍余量); 2. 抽屉/流量两侧只声明差异(ms/guard/stall/mutex/onStall), 裸 setInterval 零残留; 3. document.hidden 守卫单点在骨架里, shared/ 内除骨架与 lifecycle 的 visibilitychange 事件响应外不得再有散点; 4. 三条有界等待(_pollCmd / tmPollSettle / tmPollShutdown)一律经 awaitPoll, 手写 ++pollGen 代际守卫与 setTimeout 递归不得回潮。行为面 node 电池真跑(无 node 静默跳过): chain 在途不排下一拍(不堆叠请求) / 悬挂超阈值补偿一次且重新计时 / 退避曲线与旧 _pollCmd 逐项等价(0,150,300,500,500 与 500,1000,1000) / 拍数上限与截止时间收摊兑现 null / 同名先停后起(旧链兑现 null) / 外部叫停 / fn 抛出即 reject / 页面隐藏恒等守卫
+- test_frontend_poll_skeleton_single_point: 长驻/有界轮询骨架单点守阵(issue 26-10-20-2231, 2026-10-22) —— 同一份「启停 + 守卫 + 在途悬挂兜底 + 代际守卫」此前写了三份(主轮 setTimeout 链 / 抽屉 setInterval / 流量图 setInterval), 停止条件五处手写, 且**抽屉侧漏了悬挂兜底**(同一类「loading 卡死⇒面板永久冻结」缺陷只修了流量图一边, 本件的实质缺陷面)。收敛后: 1. 骨架三口子 startPoll/stopPoll/awaitPoll 在 polling.js + 阈值常量 AQB_POLL_STALL_MS(30s = 请求级超时 15s 的两倍余量); 2. 抽屉/流量两侧只声明差异(ms/guard/stall/mutex/onStall), 裸 setInterval 零残留; 3. document.hidden 守卫单点在骨架里, shared/ 内除骨架与 lifecycle 的 visibilitychange 事件响应外不得再有散点; S1 起放行 qb_traffic_chart.js 的**节拍暂停**恰一处(plan 26-11-12-1139 §09: 页面隐藏暂停 rAF、可见后从当前显示值接续, 是"冻结拍内时钟"不是"跳拍"), 且必须在 _qbBeatFrame 内; 4. 三条有界等待(_pollCmd / tmPollSettle / tmPollShutdown)一律经 awaitPoll, 手写 ++pollGen 代际守卫与 setTimeout 递归不得回潮。行为面 node 电池真跑(无 node 静默跳过): chain 在途不排下一拍(不堆叠请求) / 悬挂超阈值补偿一次且重新计时 / 退避曲线与旧 _pollCmd 逐项等价(0,150,300,500,500 与 500,1000,1000) / 拍数上限与截止时间收摊兑现 null / 同名先停后起(旧链兑现 null) / 外部叫停 / fn 抛出即 reject / 页面隐藏恒等守卫
 
 ## 皮肤档位口径
 - 皮肤清单单点在 webui_helpers._UI_ALL(atlas/prism/console/flux); flux(第四套, plan 26-10-31-2316 S5)
@@ -1015,7 +1015,9 @@ def test_frontend_poll_skeleton_single_point():
       1. 骨架三口子在 + 阈值常量 `AQB_POLL_STALL_MS`(30000 = 请求级超时 15s 的两倍余量);
       2. 三处启停一律经骨架 —— 抽屉/流量两侧裸 `setInterval` 零残留, 主轮走 `startPoll("main")`;
       3. 停止条件单点: `document.hidden` 只许出现在骨架里(另一处是 lifecycle 的 visibilitychange
-         事件响应, 那是"停表"不是"每拍判据"), 散点回潮即红;
+         事件响应, 那是"停表"不是"每拍判据"), 散点回潮即红; S1 起放行 qb_traffic_chart.js 的
+         **节拍暂停**一处(plan 26-11-12-1139 §09: 页面隐藏暂停 rAF、可见后从当前显示值接续,
+         不是"跳拍"语义) —— 恰一次且必须在 _qbBeatFrame 内;
       4. 三条有界等待(_pollCmd / tmPollSettle / tmPollShutdown)一律经 `awaitPoll`, 手写的
          `++pollGen` 代际守卫与 setTimeout 递归不得回潮。
     行为面走 node 电池真跑(无 node 静默跳过), 见 _NODE_POLL_SKELETON_PROBE。
@@ -1044,13 +1046,20 @@ def test_frontend_poll_skeleton_single_point():
     for name, js in (("drawer_store.js", store_js), ("qb_traffic_chart.js", chart_js)):
         assert "setInterval(" not in js, f"{name} 裸 setInterval 回潮(轮询启停收口到骨架)"
 
-    # 3. 停止条件单点: document.hidden 只许在骨架(每拍判据)与 lifecycle 的可见性事件响应里
+    # 3. 停止条件单点: document.hidden 只许在骨架(每拍判据)与 lifecycle 的可见性事件响应里;
+    #    S1 起放行 qb_traffic_chart.js 的**节拍暂停**一处(plan 26-11-12-1139 §09: 页面隐藏暂停
+    #    rAF、可见后从当前显示值接续 —— 是"冻结拍内时钟"不是"跳拍"), 轮询跳过语义仍单点在骨架
     hidden_files = sorted(
         n for n in os.listdir(shared) if n.endswith(".js") and os.path.isfile(os.path.join(shared, n)) and
         "document.hidden" in open(os.path.join(shared, n), encoding="utf-8").read()
     )
-    assert hidden_files == ["lifecycle.js", "polling.js"], \
-        f"document.hidden 散点回潮(应为骨架 polling.js + lifecycle 的 visibilitychange 停表): {hidden_files}"
+    assert hidden_files == ["lifecycle.js", "polling.js", "qb_traffic_chart.js"], \
+        f"document.hidden 散点回潮(应为骨架 polling.js + lifecycle 停表 + 流量图节拍暂停一处): {hidden_files}"
+    beat_frame_m = re.search(r"_qbBeatFrame\(scope\) \{\n(.*?)\n    \},", chart_js, re.S)
+    chart_code = re.sub(r"//[^\n]*", "", re.sub(r"/\*.*?\*/", "", chart_js, flags=re.S))
+    assert beat_frame_m and len(re.findall(r"document\.hidden", chart_code)) == 1 \
+        and "document.hidden" in beat_frame_m.group(1), \
+        "qb_traffic_chart.js 的 document.hidden 必须恰 _qbBeatFrame 内一处(节拍暂停; 轮询跳过语义不得回潮到此)"
 
     # 4. 有界等待一律经 awaitPoll, 旧形态不得回潮
     assert "this.awaitPoll(null, {" in cmd_js, \
