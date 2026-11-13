@@ -9,9 +9,9 @@
 <meta name="issue-stamp" content="26-11-12-1037">
 <meta name="issue-type" content="feat">
 <meta name="doc-topic" content="webui-cat-chip-hr-semantics">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-14-webui-cat-chip-hr-semantics.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="WEBUI 分类 chip 缺 HR 语义效果（与 tag chip 不对等）">
 <meta name="issue-summary" content="HR 标记写成分类时只是普通灰 chip 且被行状态色覆盖，拿不到 tag-chip 的 hr-pending/hr-done 语义色与左竖线">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-12-1037-feat-webui-cat-chip-hr-semantics</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-12 10:37</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">feat</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">2026-11-12 只读核实</div></div>
 </div>
@@ -203,11 +203,17 @@ tagClass(tag, member) {
   <ul>
     <li>2026-11-12 10:37 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
     <li>2026-11-12 10:37 — 用户拍板「另案登记」：不纳入 flux 修复计划、不认领、不排期；与计划仅正文交叉引用，<code>doc-refs</code> 留空（未建立认领链）</li>
-  </ul>
+    <li>2026-11-14 — 状态 Open → Done（kb.status）</li>
+</ul>
   <h3>复验</h3>
-  <p class="hint">认领后第一件事：重跑 §04 锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」（防过期原则第 5 条）。</p>
-  <h3>修复后补充</h3>
-  <p class="hint">修完时写「实际修法 / 验证方式 / 测试数字」；与 §06 建议不同则保留建议原文并说明改道原因。</p>
+  <p>2026-11-14 实施开工前复验（HEAD <code>8fcd45a4</code>）：§04 锚点全部仍命中（子代理逐批复验实测，与计划行号一致或仅 ±2 内漂移），仍复现。</p>
+  <h3>修复后补充（2026-11-14）</h3>
+  <ul>
+    <li><strong>实际修法</strong>：按计划 <code>memory-bank/plans/26-11-14-0001-plan-webui-cat-chip-hr-semantics.html</code> S1-S4 实施（五笔本地提交 e68b64cb..c5ca4771）：① <code>views.py</code> <code>hr_view_fields</code> 两分支各 +2 现算键 <code>hr_category</code>/<code>hr_category_done</code>（镜像 <code>hr_tag</code> 机制，未配分支加空键保键集恒定）；② <code>decorate.js</code> +<code>catClass</code>/<code>hrExclClass</code>（逐字镜像 <code>tagClass</code>）、<code>hr.js</code> +<code>hrExclTip</code>（判定门单点复用 <code>hrExclClass</code>，终审修复）、共用模板 5 处 <code>:class</code>/<code>:title</code> 绑定（组行 <code>members[0]</code> 口径无排除态，D5）、抽屉 hero 2 行 <code>dt01-chip is-hr</code>；③ 四皮肤 CSS 逐皮肤镜像各自 tag-chip HR 形态 + <code>hr-excl</code> 合并规则（padding 皮肤×芯片矩阵）+ 行状态 <code>:not()</code> 让路；④ 守阵 <code>test_frontend_cat_chip_hr_semantics_css</code> + <code>ui_harness.py</code> 桩 + flux e2e 四断言。零新增令牌/零新增配置键/模板只加属性（I2/I3）。</li>
+    <li><strong>验证方式</strong>：新守阵（四皮肤齐装 + 行状态 20 条选择器全集 <code>:not()</code> 逐条）+ flux e2e computed 判据四断言（pending/done 背景不为行状态绿、排除 dashed、抽屉 is-hr），红绿双验 4 组逐条独立留痕；分批评审 6 轮（含接缝终审）全过 review.check。</li>
+    <li><strong>测试数字</strong>：test.full 6102 passed / 2 skipped、覆盖 99%（基线切片 <code>memory-bank/testing/baselines/26-11-14-0348-webui-cat-chip-hr-semantics.md</code>）；e2e 1 passed 5.0s。</li>
+    <li><strong>遗留</strong>：S5 真机目检（四皮肤×三态×行状态×组行×抽屉×prism 五主题）由用户后续执行；注意 §02 边界⑥——已有分类且不覆盖的种子 chip 恒灰属预期。</li>
+  </ul>
 </section>
 
 <footer>

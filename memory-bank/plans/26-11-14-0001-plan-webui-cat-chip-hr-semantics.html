@@ -7,10 +7,10 @@
 <title>WEBUI 分类 chip 补齐 HR 语义效果（与 tag chip 对等）</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="webui-cat-chip-hr-semantics">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-11-14-0001">
-<meta name="doc-updated" content="26-11-14-0100">
-<meta name="doc-refs" content="">
+<meta name="doc-updated" content="26-11-14-0350">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-14-webui-cat-chip-hr-semantics.md">
 <style>
   :root {
     --bg: #10151a;
@@ -75,7 +75,7 @@
 <h1>WEBUI 分类 chip 补齐 HR 语义效果（与 tag chip 对等）</h1>
 <p class="lede">本篇只回答: 怎么把 H&amp;R 语义效果（语义色 / 状态线 / 排除态 / 行状态色让路）在四皮肤的分类 chip 上补齐到与 tag chip <strong>逐点对等</strong> —— 后端 <code>hr_view_fields</code> 加两个视图时现算字段、前端 <code>catClass</code> 文本比对、共用模板加类绑定、四皮肤 CSS 逐皮肤镜像各自 tag-chip 形态。机制与标签路径完全同构: 零持久化改动、零新增 CSS 令牌、零新增配置键。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-14-0001 · <b>doc-updated</b> 26-11-14-0100 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-11-14-0001 · <b>doc-updated</b> 26-11-14-0350 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 2026-11-13 用户指令「issue 26-11-12-1037 grilling 然后出一个修改计划」→ 只读侦查子代理深查(HEAD <code>e17bd088</code>, 全部行号实测) → grilling 两轮(Q1–Q4 方向/皮肤范围/排除态/形态区分度; Q5–Q8 排除态范围修正重拍/抽屉/验证深度/落盘) → 用户逐项「按推荐」→ 2026-11-14 立项落盘。全部定案见 §06。<br>
   <b>交叉引用</b> issue <code>memory-bank/issues/26-11-12-1037-feat-webui-cat-chip-hr-semantics.html</code>(仅正文交叉引用, 不建认领链, D8) · flux 辉光计划 <code>memory-bank/plans/26-11-12-1012-plan-flux-chip-glow-ancestor-clip.html</code>(Open, 文件面零交叠, 协调注记见 §07 R7)
 </div>

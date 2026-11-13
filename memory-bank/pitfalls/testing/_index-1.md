@@ -1,7 +1,7 @@
 # testing — 测试 / 冒烟 / 仿真纪律 · 卷 1/5
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `annotations-lazy-eval.md` … `fake-config-shared-mutables.md`(共 25 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `annotations-lazy-eval.md` … `event-handler-mock.md`(共 25 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
@@ -9,6 +9,7 @@
 | 主题 | 一句话 | 触发词 |
 |---|---|---|
 | [annotations-lazy-eval.md](annotations-lazy-eval.md) | Python 3.14 起 PEP 649 让注解默认惰性求值 —— 模块级注解引用未导入的 typing 名字(如 Dict)在导入期**不报错**, 只在 ≤3.13 的解释器上炸; import-all 守卫必须显式 `inspect.get_annotations(obj… | Dict, typing, 注解, NameError, import 报错, 3.14, PEP 649, 惰性求值, import-all, 守卫, 假绿灯, 红验, TYPE_CHECKING, 前向引用, 引号, 字符串注解, 循环… |
+| [ascii-circled-digits-py-comments.md](ascii-circled-digits-py-comments.md) | 写 .py 文件(代码注释/测试 docstring)时从计划/文档顺手抄 ①②③ 类带圈数字, test_ascii_symbol_guard 即红(冻结表只拦新增, circled 类冻结 0); 若发生在评审快照之后, 修复本身构成新 diff, 强制多走一轮复评 | 计划编号带圈数字, S4③, 注释抄计划, 带圈数字, circled, test_ascii_symbol_guard 红, 评审快照后修守卫红, docstring 测试计划 |
 | [assertions.md](assertions.md) | 恒真 / 恒红 / 安慰剂 / 量错对象 —— 断言失去意义的所有已知形态(含"样本与配置脱节"), 以及红验与 A/B 归因的纪律, 外加"存量失败登记前必须先重跑锚点"(取证时刻≠登记时刻)。 | 写断言, 红验, 反向对照, 阈值, 恒真, 摆设断言, 顺序断言, 冒烟失败归因, flaky, 反查表长度, infohash v1 v2, 手写样本, 配置没被读到, 存量失败, 入池前复跑, 历史数字, 重复报告, 复验锚点, 预期… |
 | [ast-migration-fidelity.md](ast-migration-fidelity.md) | 机械拆分/迁移文件时, **AST 只给结构, 内容必须从源行取** —— `ast.get_docstring` 返回的是**求值后**的字符串(转义已解开), 拿它写回会把 `\\p{L}` 吃成 `\p{L}`(内容被静默改写 + 触发 SyntaxWarning); 另一… | 拆分文件, 迁移脚本, 逐行搬移, ast.get_docstring, 求值串, 转义被吃, `\\p`, SyntaxWarning, 生成模块, 自我 import, 循环 import, 行守恒, 保真校验, 分批迁移, 批模式,… |
 | [base-schema-version-staleness.md](base-schema-version-staleness.md) | tests-real 各片基座(write_cfg/CONFIG_TEMPLATE)写死 `schema_version: <当时现行版>` 避免迁移改写 —— 产品 config schema 一 bump, 该字面量立即过期, 启动物化(materialize_schema_… | schema_version, 基座, 版本字串, 迁移改写, config.yml.v5.bak, 版本备份, CURRENT_VERSIONS, 启动物化, materialize_schema_migration, v5→v6, 版本… |
@@ -32,4 +33,3 @@
 | [engine-pack-dir-injection.md](engine-pack-dir-injection.md) | commands 引擎注入的 COMMAND_FLOW_PACK_DIR 指向 task 所在包, 包内测试要真实配置必须钉 PKG | COMMAND_FLOW_PACK_DIR, 包测试, ConfigMissing, load_config, 钉 PKG, 外置配置, test_commit 夹具 |
 | [env3-test-run-prereqs.md](env3-test-run-prereqs.md) | env3 Ubuntu 24.04 上跑 test.quick/test.full/ship.gate, 不带 `PATH=$HOME/.local/node/bin:$PATH` 则 r4 node 电池族大面积假红(_run_probe 的 shutil.which("nod… | env3, 原生 Linux, node 电池, 无 node, r4 batteries, node PATH, TZ, 时区, window_start_on, ship.gate 红, test.quick 红, 闸门预跑红, 环境态… |
 | [event-handler-mock.md](event-handler-mock.md) | `mock.patch.object(模块实例, "_on_xxx")` 拦不住 EventBus 已注册的相位 handler —— 注册期捕获的是绑定方法对象, patch 换的是实例属性, 总线里的引用不变; 守相位接线用「订阅计数 + emit 返回值」, 守行为直调真… | EventBus, 相位, subscribe, mock.patch.object, handler 断言, assert_called_once, P5 守阵 |
-| [fake-config-shared-mutables.md](fake-config-shared-mutables.md) | helpers 的 `FakeConfig` 段对象是类属性(dataclass/dict/list), 任一测试原地改 | FakeConfig, 类属性, 测试隔离, xdist 分布, 偶发失败, make_manager, 原地改配置 |
