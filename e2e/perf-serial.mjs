@@ -2,10 +2,13 @@
 /**
  * CPU 敏感量具 spec 的**串行补跑**入口(计划 26-11-05-0118 §04 S5 / §06 D14)。
  *
- * shard 轮转(playwright.config.mjs 在 E2E_SHARD_TOTAL 下 testIgnore)把这两份 spec 排除了:
+ * shard 轮转(playwright.config.mjs 在 E2E_SHARD_TOTAL 下 testIgnore)把这三份 spec 排除了:
  *   - e2e/perf.spec.mjs           —— 量具节拍/CPU 时间断言(longtask/强制布局计数)
  *   - e2e/drawer-content-perf.spec.mjs —— mut 预算按 ~500ms 观察窗标定, 并发下数字会漂
+ *   - e2e/traffic-fx-frames.spec.mjs —— 节拍动效帧级采样量具(拍墙钟/帧数下限按帧距折算)
  * 本脚本把它们收回串行口径跑绿, 与 shard 轮转相加 == 全量。
+ * !清单同步纪律: 新增 CPU 敏感 spec 必须同时改 playwright.config.mjs 的 CPU_SENSITIVE_SPECS
+ * 与本文件的 args(两处清单掉一份 = spec 从门禁组合里消失)。
  *
  * 用法: npm run test:e2e:perf-serial [-- 透传 playwright 的额外参数]
  *
@@ -42,6 +45,7 @@ const args = [
   'test',
   'e2e/perf.spec.mjs',
   'e2e/drawer-content-perf.spec.mjs',
+  'e2e/traffic-fx-frames.spec.mjs',
   ...argv,
 ];
 console.log(

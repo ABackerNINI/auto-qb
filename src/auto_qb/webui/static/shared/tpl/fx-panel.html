@@ -104,8 +104,10 @@
               </select>
             </label>
           </div>
-          <!-- 高级折叠(默认收起): 缓动 + 4 层开关 + 横向线条 + 竖向行程 -->
-          <details class="fx-adv">
+          <!-- 高级折叠(默认收起): 缓动 + 4 层开关 + 横向线条 + 竖向行程。开合改变面板真实
+               高度, 而 refit 触发面(watcher/resize/scroll/RO)都不含它 —— 不重钳位, 贴底钳位
+               过的面板展开后底边越出视口(§05.9), 底栏按钮点不到; @toggle 走 fxRefitSoon。 -->
+          <details class="fx-adv" @toggle="fxRefitSoon">
             <summary class="fx-adv-sum">高级（插值 / 分层开关 / 线条与行程）</summary>
             <label class="fx-row">
               <span class="fx-name">数值插值</span>

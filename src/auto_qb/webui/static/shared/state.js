@@ -753,8 +753,30 @@ window.AQB_STATE = {
       deep: true,
       immediate: true,
     },
-    fxReduce() {
-      this._qbFxCfgSync();
+    // fxReduce 拆双 watcher(S4-b 评审轮 2 minor): pre 沿只管 CFG 同步(on 必须立即跟着翻);
+    // 重钳沿必须 flush post —— pre 沿在 DOM 重渲染前触发, fxRefitSoon 的 leading 分支同步读
+    // 旧高且单次调用不排 trailing(节流器只在 60ms 窗内重复调用才排), reduce 说明行
+    // ≈21.75px > 钳位余量 8px -> 贴底面板底边越出钳位线且无后续触发面兜底。
+    fxReduce: [
+      { handler() { this._qbFxCfgSync(); } },
+      {
+        handler() {
+          // reduce 说明行(v-if fxReduce)翻转改变面板实高 -> 贴底钳位过的面板重钳(§05.9 底边
+          // 不出视口; 与 fxRefitSoon 的 details @toggle 同一缺陷族 —— 高度变化而 refit 触发面
+          // 不含它)。flush post: DOM 更新后测高, 首钳即准(与 fxPreviewing 同款)。
+          this.fxRefitSoon();
+        },
+        flush: "post",
+      },
+    ],
+    // 状态行「· 预览中」后缀(v-if fxPreviewing)翻转改变面板实高 —— 写入面散在 chart 多处
+    // (_qbPreviewBeat 起沿 / _qbPreviewRestore 收沿 / _qbBeatCancel 与令牌门兜底清沿), 收口
+    // 在此翻转沿单点: 未来新写入点自动被覆盖, 不逐处补调。flush post = DOM 更新后再测高,
+    // 首钳即准 —— 重钳沿一律 flush post, 不用默认 pre(pre 在重渲染前触发, leading 分支读
+    // 旧高且单次调用不排 trailing, 旧高带进钳位即失效)。
+    fxPreviewing: {
+      handler() { this.fxRefitSoon(); },
+      flush: "post",
     },
     // 通知(S1): 打开面板即视为已读, 未读徽标清零 —— 后续面板 UI 直接绑 _errUnread/errPanelOpen。
     // 写入单点在 ui_feedback.js 的 _recordErrorToast / _clearErrorHistory; watcher 放根组件选项

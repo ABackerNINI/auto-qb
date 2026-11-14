@@ -1435,6 +1435,14 @@ window.AQB_QB_TRAFFIC = {
       this.fxPanel = { visible: false, x: 0, y: 0, alt: false };
       this._qbFxListen(false);
     },
+    /* 高级折叠开合后的实测重钳位(fx-panel.html details @toggle): 折叠改变面板真实高度, 而
+     * refit 的触发面(watcher/resize/scroll/宿主 RO)都不含它 —— 不重钳位, 贴底钳位过的面板
+     * 展开后底边越出视口(§05.9「底边不得超出视口」), 底栏按钮点不到。公开名转发节流单点
+     * (模板触达的处理器不得带 _ 前缀 —— commands_send.js:347-350 前科); 收起(高度变小)
+     * 走同一入口幂等重钳, 位置只松不紧, 无副作用。 */
+    fxRefitSoon() {
+      this._qbFxRefitSoon();
+    },
     /* 开/关层的窗口级监听装卸(resize / 页面滚动 / Alt 看穿 / 宿主高度观察, §05.1 跟随行)。
      * !处理器一律提为实例字段(lifecycle.js R4 清池纪律: removeEventListener 需要同一引用);
      *   装卸与 open/close 配对, 页面卸载随 window 消亡(不另挂 unmounted —— AQB_QB_TRAFFIC 走

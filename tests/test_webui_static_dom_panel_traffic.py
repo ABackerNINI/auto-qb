@@ -4127,7 +4127,10 @@ def test_frontend_qb_fx_overlay_close_registry_and_reduced_motion():
       Alt 看穿三路接线(keydown/keyup 同处理器按 e.altKey 写态 + 面板不可见早退 + blur 失焦
       复位防卡看穿态); 四皮肤 .fx-panel CSS 成对(fixed 本体/max-height 视口兜底/fx-alt 看穿/
       120ms 仅 opacity/reduce 零动画) + D20 渗色禁令(fx CSS 段剥注释后零 --today-up/
-      --today-down)。rect 实测(底边不出视口/滑杆可用/Alt 穿透到画布)仍归 e2e(P8)。"""
+      --today-down)。rect 实测(底边不出视口/滑杆可用/Alt 穿透到画布)仍归 e2e(P8)。S4-b 轮追加
+      5b(评审 major1/minor3): 面板实高变化的三条 refit 触发面静态钉 —— details @toggle="fxRefitSoon"
+      恰 1 处 + fxRefitSoon 转发定义恰 1 处 + state.js fxPreviewing/fxReduce 两翻转沿汇 fxRefitSoon
+      恰 2 处(高级折叠/预览中后缀/reduce 说明行改变面板高度, 不重钳位则贴底面板底边越出视口)。"""
     shared = os.path.join(STATIC_ROOT, "shared")
     js = open(os.path.join(shared, "qb_traffic_chart.js"), encoding="utf-8").read()
     state_js = open(os.path.join(shared, "state.js"), encoding="utf-8").read()
@@ -4215,9 +4218,13 @@ def test_frontend_qb_fx_overlay_close_registry_and_reduced_motion():
         "AQB_FX_CFG 缺有效值 on 字段(S1/S3 引擎侧开关消费面, §05.6); fxOn 是 computed 只许 getter 读取"
     assert "this.fxOn(" not in js, "computed fxOn 不得以 this.fxOn() 调用(getter 值再调即 TypeError 白屏)"
     assert "handler() { this._qbFxCfgSync(); }" in state_js, "state.js fx watcher 未汇入 _qbFxCfgSync 单点"
-    redw_m = re.search(r"fxReduce\(\) \{\n(.*?)\n    \},", state_js, re.S)
-    assert redw_m and "this._qbFxCfgSync()" in redw_m.group(1), \
-        "state.js 缺 fxReduce watcher(reduce 翻转时 on 必须立即跟着翻, 只挂 fx watcher 会漏)"
+    # fxReduce 是双 watcher 数组(S4-b 评审轮 2: pre 沿管 CFG 同步, 重钳沿必须 flush post ——
+    # pre 在重渲染前触发, leading 分支读旧高且单次调用不排 trailing, 贴底面板底边越出视口)
+    redw_m = re.search(r"fxReduce: \[(.*?)\n    \],", state_js, re.S)
+    assert redw_m and "this._qbFxCfgSync()" in redw_m.group(1) \
+        and 'flush: "post"' in redw_m.group(1) and "this.fxRefitSoon();" in redw_m.group(1), \
+        "state.js fxReduce 缺双 watcher(pre 沿 _qbFxCfgSync + post 沿 fxRefitSoon 重钳 —— " \
+        "reduce 翻转 on 必须立即跟翻, 且实高变化的重钳沿不得用默认 pre)"
     # 有效值不进持久化形状: QB_FX_DEFAULTS 无 on 键(persistQbFx 只写 fx; reduce 态的强关是
     # 运行期事实不是用户意图, 落盘会把红线值带进 store)
     defaults_m = re.search(r"const QB_FX_DEFAULTS = \{(.*?)\n\};", js, re.S)
@@ -4296,6 +4303,27 @@ def test_frontend_qb_fx_overlay_close_registry_and_reduced_motion():
         seg_code = re.sub(r"/\*.*?\*/", "", seg, flags=re.S)
         assert "--today-up" not in seg_code and "--today-down" not in seg_code, \
             f"{name} 的 fx 面板 CSS 段出现曲线语义色令牌(D20 渗色禁令)"
+
+    # 5b. 实高变化的 refit 触发面(S4-b): 高级折叠开合 / 状态行「· 预览中」后缀翻转 / reduce
+    #     说明行翻转三者都改变面板真实高度, 而 _qbFxRefitSoon 的既有触发面(fxPanel watcher/
+    #     resize/scroll/宿主 RO)都不含它们 —— 不重钳位, 贴底钳位过的面板底边越出视口(§05.9),
+    #     底栏按钮点不到。两条静态钉钉「接线在位」: rect 实测归 e2e(traffic-fx-panel 的
+    #     四皮肤 rect 用例展开高级后 poll 底边)。Vue 缺模板处理器只 console.warn 且
+    #     installRuntimeErrorGuard 不收 console.warn —— 这里是 fxRefitSoon 的**接线面唯一闸**
+    #     (行为面另由 traffic-fx-panel 四皮肤 rect 展开例覆盖, 但其判红依赖贴底钳位几何成立,
+    #     点击点不在贴底区时不会红 —— 两层闸互补, 各管各的面)。
+    #     计数面剥 HTML 注释(注释里的口径描述不计 —— 只钉代码事实)。
+    fx_tpl_code = re.sub(r"<!--.*?-->", "", fx_tpl, flags=re.S)
+    assert fx_tpl_code.count('@toggle="fxRefitSoon"') == 1, \
+        "fx-panel.html 高级折叠缺 @toggle=\"fxRefitSoon\" 恰 1 处(开合改变面板实高, 不重钳位则贴底面板底边越出视口)"
+    assert fx_tpl_code.count("fxRefitSoon") == 1, \
+        "fx-panel.html 出现多余 fxRefitSoon 引用(模板只负责 details 开合一处, 其余高度变化走 state.js 翻转沿)"
+    refit_m = re.search(r"fxRefitSoon\(\) \{\n(.*?)\n    \},", js, re.S)
+    assert refit_m and refit_m.group(1).strip() == "this._qbFxRefitSoon();", \
+        "qb_traffic_chart.js 缺 fxRefitSoon 公开转发单点或转发面变了(必须原样转 _qbFxRefitSoon 节流单点 —— 模板触达不得带 _ 前缀)"
+    assert js.count("fxRefitSoon() {") == 1, "fxRefitSoon 定义恰 1 处(第二定义 = 钳位节奏分叉)"
+    assert state_js.count("this.fxRefitSoon();") == 2, \
+        "state.js 缺 fxPreviewing/fxReduce 两翻转沿的 fxRefitSoon 重钳(预览中后缀/reduce 说明行改变面板实高 —— §05.9)"
 
 
 # 纵轴固定模式 + 缺口游程 + 重启缝判据 node 电池(2026-10-08; P4 追加 _qbSeamHint, plan 26-10-15-0829):

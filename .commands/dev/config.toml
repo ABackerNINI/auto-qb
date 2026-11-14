@@ -74,12 +74,12 @@ doc     = "../../memory-bank/pitfalls/testing/harness-save-flow.md"
 run     = ["node e2e/shard-run.mjs --grep @fast <args>"]
 timeout = 1800
 when    = "改前端后的 fast 门禁并行形态: shard 多进程隔离桩(--index x --total N), 每 shard 独立 webServer; 串行口径见 dev.e2e"
-note    = "必须经 e2e/shard-run.mjs 包装: 它置 E2E_SHARD_TOTAL 让 playwright.config.mjs testIgnore 掉 CPU 敏感量具 spec(perf/drawer-content-perf), 并恒传 --shard=x/N —— 裸 npx playwright test --shard 不会排除量具 spec(量具断言在并发下数字会漂); 被排除的 spec 由 dev.e2e-perf-serial 串行补跑, 相加==全量。--index/--total 用 -- 透传(commands run dev.e2e-fast-shard -- --index 1 --total 3); shard 数先 S4 清睡等再按实测时长定(计划 26-11-05-0118 §06 D14); config 里 workers:1 刻意不动(单共享桩确定性口径), 并行只走 shard"
+note    = "必须经 e2e/shard-run.mjs 包装: 它置 E2E_SHARD_TOTAL 让 playwright.config.mjs testIgnore 掉 CPU 敏感量具 spec(perf/drawer-content-perf/traffic-fx-frames), 并恒传 --shard=x/N —— 裸 npx playwright test --shard 不会排除量具 spec(量具断言在并发下数字会漂); 被排除的 spec 由 dev.e2e-perf-serial 串行补跑, 相加==全量。--index/--total 用 -- 透传(commands run dev.e2e-fast-shard -- --index 1 --total 3); shard 数先 S4 清睡等再按实测时长定(计划 26-11-05-0118 §06 D14); config 里 workers:1 刻意不动(单共享桩确定性口径), 并行只走 shard"
 doc     = "../../memory-bank/plans/26-11-05-0118-plan-flaky-test-governance.html"
 
 [tasks."dev.e2e-perf-serial"]
 run     = ["node e2e/perf-serial.mjs <args>"]
 timeout = 900
-when    = "shard 轮转后串行补跑 CPU 敏感量具 spec(perf/drawer-content-perf), 与 shard 相加==全量; 单跑量具验证也用它"
-note    = "必须经 e2e/perf-serial.mjs: 固定串行口径跑两份量具 spec + E2E_TORRENTS 默认抬 600(perf.spec.mjs 行窗口化用例按 >500 门控, 默认 300 档整组 skip, 600 档才真跑; 已显式设则尊重现值) + 显式 delete E2E_SHARD_TOTAL(残留会让 config 把这两份 spec 又 ignore 掉=白跑); drawer-content-perf 用 page.route 自造千文件树, 不受该档影响; 桩由 webServer 自动起, 端口 OS 分配"
+when    = "shard 轮转后串行补跑 CPU 敏感量具 spec(perf/drawer-content-perf/traffic-fx-frames), 与 shard 相加==全量; 单跑量具验证也用它"
+note    = "必须经 e2e/perf-serial.mjs: 固定串行口径跑三份量具 spec + E2E_TORRENTS 默认抬 600(perf.spec.mjs 行窗口化用例按 >500 门控, 默认 300 档整组 skip, 600 档才真跑; 已显式设则尊重现值) + 显式 delete E2E_SHARD_TOTAL(残留会让 config 把这三份 spec 又 ignore 掉=白跑); drawer-content-perf 用 page.route 自造千文件树, 不受该档影响; 桩由 webServer 自动起, 端口 OS 分配"
 doc     = "../../memory-bank/plans/26-11-05-0118-plan-flaky-test-governance.html"

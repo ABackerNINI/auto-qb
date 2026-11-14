@@ -15,7 +15,10 @@ import { HARNESS_CMD, WAIT_STDOUT } from './e2e/harness.mjs';
  * 模式矩阵轮(env 组合决定桩形态)仍**轮间串行人跑**, 提速落在每轮内部 —— 见 e2e/harness.mjs。
  */
 const SHARDED = !!process.env.E2E_SHARD_TOTAL;
-const CPU_SENSITIVE_SPECS = ['**/perf.spec.mjs', '**/drawer-content-perf.spec.mjs'];
+/* CPU 敏感量具 spec: shard 轮转排除、由 e2e/perf-serial.mjs 串行补跑(两处清单必须同步改,
+ * 否则 spec 从门禁组合里掉出去)。traffic-fx-frames 是节拍动效的帧级采样量具 —— 断言里有
+ * 拍墙钟 <= animEnd+900ms 与采样帧数下限(按帧距折算), rAF 帧距被并发拖长即假红。 */
+const CPU_SENSITIVE_SPECS = ['**/perf.spec.mjs', '**/drawer-content-perf.spec.mjs', '**/traffic-fx-frames.spec.mjs'];
 
 /**
  * WEB UI 真浏览器冒烟 —— 本仓库"静态守阵之外"的那一层门禁。

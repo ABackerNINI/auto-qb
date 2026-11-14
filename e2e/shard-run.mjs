@@ -8,7 +8,7 @@
  *
  * 做三件事, 缺一不可:
  *  1. 置 `E2E_SHARD_TOTAL` —— playwright.config.mjs 据此 testIgnore 掉 CPU 敏感量具 spec
- *     (perf / drawer-content-perf, 并发下量具数字会漂); 它们由 `npm run test:e2e:perf-serial`
+ *     (perf / drawer-content-perf / traffic-fx-frames, 并发下量具数字会漂); 它们由 `npm run test:e2e:perf-serial`
  *     串行补跑。env 与 `--shard` 同源设置, 不存在"shard 了但没排除"的漂移窗口。
  *  2. 恒传 `--shard=index/total` 给 playwright —— 每个 shard 是独立进程, 各自拉起独立
  *     webServer(桩 `--port 0` OS 分配, 互不冲突; `reuseExistingServer:false` 保留)。
