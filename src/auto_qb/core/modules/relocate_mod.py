@@ -72,6 +72,13 @@ class RelocateModule(LifecycleMixin, PlanMixin, ExecMixin, BaseModule):
         self._tag_applied: dict = {}
         self._tag_next_try: dict = {}
         self._tag_failures = 0
+        # 恢复确认(issue 26-11-14-1744 (1)+(2)): 跨拍退避时刻表 + 失败/穷尽计数 + 穷尽告警
+        # 的开账回合去重(每开账回合一笔; 出口重开账有意重新武装 —— 防新回合的穷尽被
+        # 旧去重吞掉; 重启清空 = 在途余量重启后再挂一次告警, 挂账本身随 job 账走 state
+        # 持久, 重启续跑不丢)。仿 _tag_next_try/_tag_failures 形态。
+        self._resume_next_try: dict = {}
+        self._resume_failures = 0
+        self._resume_exhausted_warned: set = set()
 
     def sections(self) -> tuple:
         # relocate 整段(bt_backup 已收编为 relocate.bt_backup, 计划 26-11-11-0259 S1)由本模块

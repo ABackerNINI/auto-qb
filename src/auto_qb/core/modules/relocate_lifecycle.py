@@ -3,7 +3,7 @@
 拆分(R5)只搬位置: 方法体与 relocate_mod.py 原文件逐字一致。
 """
 from dataclasses import replace
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, Optional, Tuple
 
 from ...infra import alias_fs
 from ..module import AppContext, ApplyResult
@@ -18,6 +18,12 @@ if TYPE_CHECKING:
 # 标签镜像失败后的重试间隔(秒): qB 失联/超时/版本不支持时只告警, 不阻塞迁移主流程,
 # 也不每 tick 撞一次 qB。配置关闭时该常量不参与任何路径。
 _TAG_RETRY_SECONDS = 30.0
+
+# 恢复确认(issue 26-11-14-1744 (1)+(2))的重试参数: 退避间隔与 _TAG_RETRY_SECONDS 同值同形态
+# (跨拍退避, 绝不在拍内等待); 补发次数另有常数上界 —— 有界穷尽后余量挂账(黄金法则 2:
+# 保守默认, 不新增配置键)。四个终态出口共用同一预算。
+_RESUME_RETRY_SECONDS = 30.0
+_RESUME_RETRY_MAX = 3
 
 
 class LifecycleMixin:
@@ -146,24 +152,164 @@ class LifecycleMixin:
         return job if job.move_issued else self._set_job(replace(job, move_issued=True))
 
     def _resume_members(self, job: RelocateJob) -> None:
-        """恢复本 job 发起时被暂停的成员(幂等: 无暂停成员即 no-op)
+        """恢复本 job 发起时被暂停的成员(幂等: 无暂停成员即 no-op)+ 失败有界重试/恢复确认
 
         _start_job 为按住搬迁窗口先暂停组内运行中成员并记进 resume_hashes; 此后任何出口
         要么「迁移成了」(武装/单成员收口/撤销成功)要么「没成」—— 后者不恢复的话, 整组
         成员会永久停在暂停态而日志一字不提(做种静默中断, 用户只能靠猜)。故恢复与置相位
-        一样是收口的必做项, 不是可选的美化。恢复失败只告警: 数据面未动, 用户可手动起。
+        一样是收口的必做项, 不是可选的美化。
+
+        单发即弃已退役(issue 26-11-14-1744): 下发后即开「恢复确认账」(_note_resume_state
+        挂 resume_pending + _resume_next_try 起退避), 每拍 _reconcile_resume_pending 对照
+        store 快照核对成员回到非 stopped 态, 未回去的按退避补发(有界, 穷尽挂账告警)。
+        API 异常同样开账(退避补发), 只多一笔计数告警; 下发成功 ≠ 成员已回运行态,
+        两者都要等快照回流核对 —— 语义对齐 §06 (2)「快照回流后核对」。绝不改迁移相位与
+        终态判定(与标签镜像同纪律), job 照常走自己的出口。
         """
         if not job.resume_hashes:
             return
         try:
             self._ctx.api.torrents_resume(torrent_hashes=list(job.resume_hashes))
         except Exception as e:  # noqa: BLE001 - 恢复失败只记: 数据面未动, 用户可手动恢复
-            logger.warning(
-                f"relocate | job {job.job_id}: 恢复成员运行态失败({e}) —— "
-                f"{len(job.resume_hashes)} 个成员仍被暂停, 需手动恢复: {', '.join(job.resume_hashes)}"
-            )
+            self._resume_failures += 1
+            retries_used = self._resume_retries_of(job)
+            if retries_used >= _RESUME_RETRY_MAX:
+                # 预算已穷尽(生产可达: armed 期穷尽后同 job 再走 _fail 双开账链): 文案如实写
+                # 「不再补发」, 不许承诺一次不会发生的退避补发(评审 26-11-14-1744 nit#5)
+                logger.warning(
+                    f"relocate | job {job.job_id}: 恢复成员运行态失败({e}) —— "
+                    f"{len(job.resume_hashes)} 个成员仍被暂停, 补发预算已穷尽"
+                    f"({retries_used}/{_RESUME_RETRY_MAX}), 不再补发, 需手动恢复: {', '.join(job.resume_hashes)}"
+                )
+            else:
+                logger.warning(
+                    f"relocate | job {job.job_id}: 恢复成员运行态失败({e}) —— "
+                    f"{len(job.resume_hashes)} 个成员仍被暂停, 将按退避补发(至多 {_RESUME_RETRY_MAX} 次): "
+                    f"{', '.join(job.resume_hashes)}"
+                )
+        else:
+            logger.info(f"relocate | job {job.job_id}: 已下发恢复 {len(job.resume_hashes)} 个成员(待快照回流确认)")
+        # 确认账开账(成功/失败都开): 账面挂 pending(随 state 走, 重启续上), 退避点起核对;
+        # 上一次未闭合的余量并入本次名单(同一生命周期 pending ⊆ resume_hashes, 并集即全量)
+        # 出口重开账 = 新开确认回合: 穷尽告警去重有意重新武装(每开账回合一笔, nit#6)
+        self._resume_exhausted_warned.discard(job.job_id)
+        self._resume_next_try[job.job_id] = self._clock.monotonic() + _RESUME_RETRY_SECONDS
+        self._note_resume_state(job.job_id, tuple(job.resume_hashes), self._resume_retries_of(job))
+
+    def _resume_retries_of(self, job: RelocateJob) -> int:
+        """账面现值的已耗补发次数(开账不清零: 跨出口共享同一份有界预算)"""
+        cur = self._jobs.get(job.job_id)
+        return cur.resume_retries if cur is not None else job.resume_retries
+
+    def _note_resume_state(self, job_id: str, pending: Tuple[str, ...], retries: int) -> None:
+        """恢复确认账落账单点(仿 _note_tag_state: 只改 resume 两位, 不重走 _set_job)
+
+        不走 _set_job 的原因与 _note_tag_state 相同: 终态 job 的挂账/清账不该触发标签镜像
+        重入, 也不该反复后移 updated_at; 内容无变化时不写(对账每拍都进来, 不设变化门会
+        每 tick 落盘刷屏)。落盘 + 换代快照, 账随 state 持久(重启后确认循环照常续上)。
+        """
+        cur = self._jobs.get(job_id)
+        if cur is None:
             return
-        logger.info(f"relocate | job {job.job_id}: 已恢复 {len(job.resume_hashes)} 个成员的运行态")
+        pending = tuple(pending)
+        retries = int(retries)
+        if cur.resume_pending == pending and cur.resume_retries == retries:
+            return
+        self._jobs[job_id] = replace(cur, resume_pending=pending, resume_retries=retries)
+        self._persist()
+        self._publish_snapshot()
+
+    def _member_stopped(self, h: str) -> bool:
+        """成员当前是否停着(store 为 qB 镜像; 对照 qB 真实态判定, 不靠内存标记单点)
+
+        不在客户端(已删除)也按停着算 —— 保守不闭合其账: 快照空窗误判「已删除」会把
+        该成员的恢复账悄悄关掉(宁挂账勿漏恢复), 已删成员的补发是 qB 侧无害 no-op。
+        """
+        store = getattr(self._ctx, "store", None) if self._ctx is not None else None
+        rec = getattr(store, "by_hash", {}).get(h) if store is not None else None
+        if rec is None:
+            return True
+        return bool(getattr(getattr(rec, "state_enum", None), "is_stopped", True))
+
+    def _resume_reissue(self, job: RelocateJob, stopped: Tuple[str, ...]) -> None:
+        """补发一次恢复(只发仍停着的成员; torrents_resume 对运行中成员是 qB 侧 no-op, 幂等)
+
+        无论 API 成败都消耗一次补发预算(预算按尝试计, 不按结果计 —— API 收了但成员
+        起不来的形态同样要有界); 穷尽(retries 达上界)后不再补发, 余量留账 + 计数告警。
+        退避窗重置后本拍收口, 下一次推进由 reconcile 跨拍进行(黄金法则 5, 绝不拍内等待)。
+        """
+        jid = job.job_id
+        retries = int(job.resume_retries) + 1
+        exhausted = retries >= _RESUME_RETRY_MAX
+        now = self._clock.monotonic()
+        try:
+            self._ctx.api.torrents_resume(torrent_hashes=list(stopped))
+        except Exception as e:  # noqa: BLE001 - 补发失败退避重试(有界), 绝不影响迁移状态
+            self._resume_failures += 1
+            if exhausted:
+                logger.warning(
+                    f"relocate | job {jid}: 补发恢复失败({e})且补发预算已穷尽({retries}/{_RESUME_RETRY_MAX}) —— "
+                    f"{len(stopped)} 个成员仍被暂停, 余量已记账, 需手动恢复: {', '.join(stopped)}"
+                )
+            else:
+                logger.warning(
+                    f"relocate | job {jid}: 补发恢复失败({e}) —— {_RESUME_RETRY_SECONDS:.0f}s 后重试"
+                    f"(第 {retries}/{_RESUME_RETRY_MAX} 次): {', '.join(stopped)}"
+                )
+        else:
+            if exhausted:
+                logger.info(f"relocate | job {jid}: 补发恢复已下发({retries}/{_RESUME_RETRY_MAX}), 待快照回流确认")
+            else:
+                logger.info(
+                    f"relocate | job {jid}: 恢复确认未过({len(stopped)} 个成员仍停着), 已补发"
+                    f"(第 {retries}/{_RESUME_RETRY_MAX} 次), 待快照回流确认: {', '.join(stopped)}"
+                )
+        self._resume_next_try[jid] = now + _RESUME_RETRY_SECONDS
+        self._note_resume_state(jid, stopped, retries)
+
+    def _reconcile_resume_pending(self) -> None:
+        """每拍核对恢复确认账(issue 26-11-14-1744 (2)): 快照回流后核对成员回到非 stopped 态
+
+        扫全部账上 resume_pending 非空的 job(终态与否都扫 —— 四个终态出口的确认语义
+        不漏口, 与 _reconcile_pending_tags「终态也扫 tag_on=True」同形态):
+        - 全员回到运行态: 确认闭合清账(对照 qB 实况自愈, 含用户手动恢复的情形);
+        - 仍有停着的且退避点已到: 预算未穷尽则补发一次(_resume_reissue, 有界);
+        - 预算已穷尽: 不再补发, 只把账面余量收敛到 qB 实况(可能已部分自愈), 穷尽
+          告警每开账回合一笔(出口重开账有意重新武装 —— 防新回合的穷尽被旧去重吞掉;
+          重启后同样重挂一笔, 挂账事实不重复刷屏)。
+        """
+        if self._dry_run():  # 与 on_task_line 同闸(调用点已挡, 直调面也稳)
+            return
+        api = getattr(self._ctx, "api", None) if self._ctx is not None else None
+        if api is None:
+            return
+        now = self._clock.monotonic()
+        for job in list(self._jobs.values()):
+            pending = job.resume_pending
+            if not pending:
+                continue
+            stopped = tuple(h for h in pending if self._member_stopped(h))
+            if not stopped:
+                self._note_resume_state(job.job_id, (), job.resume_retries)
+                self._resume_next_try.pop(job.job_id, None)
+                self._resume_exhausted_warned.discard(job.job_id)
+                logger.info(f"relocate | job {job.job_id}: 恢复确认闭合({len(pending)} 个成员已回到运行态)")
+                continue
+            if now < self._resume_next_try.get(job.job_id, 0.0):
+                continue  # 退避窗内(含快照回流窗): 等下一拍, 绝不在拍内等待/重发
+            if job.resume_retries >= _RESUME_RETRY_MAX:
+                # 穷尽后的常驻面: 只收敛账面(变化门在 _note_resume_state), 不再消耗 qB 写
+                if stopped != tuple(pending):
+                    self._note_resume_state(job.job_id, stopped, job.resume_retries)
+                if job.job_id not in self._resume_exhausted_warned:
+                    self._resume_exhausted_warned.add(job.job_id)
+                    self._resume_failures += 1
+                    logger.warning(
+                        f"relocate | job {job.job_id}: 恢复确认穷尽({job.resume_retries}/{_RESUME_RETRY_MAX} 次补发后"
+                        f"仍有 {len(stopped)} 个成员停着) —— 不再补发, 余量已记账, 需手动恢复: {', '.join(stopped)}"
+                    )
+                continue
+            self._resume_reissue(job, stopped)
 
     def _fail(self, job: RelocateJob, reason: str, last_error: str = "") -> RelocateJob:
         """失败收口单点: 置 FAILED + 消费 resume_hashes(把发起时暂停的成员放回去)
@@ -300,6 +446,9 @@ class LifecycleMixin:
         self._startup_reconcile_tick()
         # qB 标签镜像补写(可选功能): 重启/断连期间错过 armed 的 job 在恢复后补上标签
         self._reconcile_pending_tags()
+        # 恢复确认账核对(issue 26-11-14-1744 (2)): 快照回流后核对 resume 成员回运行态,
+        # 未回去的按退避补发(有界) —— 终态 job 也在扫, 四出口确认语义不漏口
+        self._reconcile_resume_pending()
 
     def _advance(self, job: RelocateJob) -> None:
         """按相位分派一步(S4 相位模型: 前段 moving/watching/moved + 收尾窗 armed/rewritten)"""

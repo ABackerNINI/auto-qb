@@ -588,15 +588,20 @@ class ExecMixin:
         )
 
     def _finish_direct(self, job: RelocateJob) -> None:
-        """单成员组收口: 重归组 + 恢复运行态 + done(无别名 ⇒ 无 guardian、无收尾窗口)"""
+        """单成员组收口: 重归组 + done + 恢复运行态(无别名 ⇒ 无 guardian、无收尾窗口)
+
+        恢复放在终态落账之后: _resume_members 的确认账挂账读的是账面现值, 若在 _set_job
+        之前下发, 挂账会被本方法尾部 replace(旧对象) 整体覆盖丢失(issue 26-11-14-1744
+        修复面; 其余三出口本来就是先 _set_job 后恢复, 无需动)。
+        """
         grouping = getattr(self._ctx, "grouping", None)
         if grouping is not None:
             try:
                 grouping.regroup_scope(job.scope, job.src, job.hashes)
             except Exception as e:  # noqa: BLE001
                 logger.warning(f"relocate | job {job.job_id}: 重归组失败({e})")
-        self._resume_members(job)
-        self._set_job(replace(job, phase=ru.PHASE_DONE, reason="direct"))
+        done = self._set_job(replace(job, phase=ru.PHASE_DONE, reason="direct"))
+        self._resume_members(done)
         logger.info(f"relocate | job {job.job_id}: 单成员组迁移完成(qB 自搬, 无需别名)")
 
     def _scope_rel(self, job: RelocateJob) -> str:

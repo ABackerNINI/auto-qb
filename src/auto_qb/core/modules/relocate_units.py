@@ -318,6 +318,14 @@ class RelocateJob:
     armed_at: float = 0.0
     updated_at: float = 0.0
     resume_hashes: Tuple[str, ...] = ()
+    # 恢复确认账(issue 26-11-14-1744 (1)+(2), 仿 tag_on 的账面挂法): resume_hashes 成员
+    # 发起恢复后**仍未确认回到运行态**的余量(hash 集)与已消耗的补发次数。非空 = 恢复
+    # 确认未闭合(每拍 _reconcile_resume_pending 对照 store 快照核对, 未回去的按退避补发,
+    # 有界至穷尽); 穷尽后余量留存账上 = 「待恢复余量」挂账(面板展示接线在下一批)。
+    # 跨轮持久(黄金法则 3): 随 job_to_dict/job_from_dict 走 state.json, 重启续跑不丢。
+    # 旧 state 条目缺该字段 = 空账(历史 job 不进确认循环, 行为不变)。
+    resume_pending: Tuple[str, ...] = ()
+    resume_retries: int = 0
     attempts: int = 0
     last_error: str = ""
     # 执行计划快照(P3 落账, 供重启后继续执行与 P6 收尾): {form, link_kind, scope,
@@ -1137,6 +1145,8 @@ def job_to_dict(job: RelocateJob) -> dict:
         "armed_at": job.armed_at,
         "updated_at": job.updated_at,
         "resume_hashes": list(job.resume_hashes),
+        "resume_pending": list(job.resume_pending),
+        "resume_retries": int(job.resume_retries),
         "attempts": job.attempts,
         "last_error": job.last_error,
         "plan": job.plan,
@@ -1170,6 +1180,10 @@ def job_from_dict(d: Any) -> Optional[RelocateJob]:
             armed_at=float(d.get("armed_at") or 0.0),
             updated_at=float(d.get("updated_at") or 0.0),
             resume_hashes=tuple(d.get("resume_hashes") or ()),
+            # 恢复确认账(旧账缺失 = 空账); 坏形条目由外层 except (TypeError, ValueError)
+            # 兜成整条跳过, 与 attempts/updated_at 等既有标量同一容错口径
+            resume_pending=tuple(str(h) for h in (d.get("resume_pending") or ())),
+            resume_retries=int(d.get("resume_retries") or 0),
             attempts=int(d.get("attempts") or 0),
             last_error=str(d.get("last_error") or ""),
             plan=d.get("plan") if isinstance(d.get("plan"), dict) else None,

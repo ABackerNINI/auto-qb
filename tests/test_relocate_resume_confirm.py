@@ -1,0 +1,449 @@
+"""test_relocate_resume_confirm 测试计划: relocate 恢复成员运行态的确认契约
+(issue 26-11-14-1744: resume 单发即弃 -> 有界退避重试 + 终态出口恢复确认 + 余量挂账)
+
+验收判据(issue §06 (1)+(2); (3)「待恢复余量进面板展示」属下一批, 本批只备数据面):
+- (1) resume 调用异常不再单发即弃: 登记跨拍重试(仿 _TAG_RETRY_SECONDS 退避形态),
+  退避点补发, 补发有界(常数上界, 不新增配置键), 穷尽后计数告警 + 余量记进 job 账;
+- (2) 终态出口恢复确认: 快照回流后(store 为 qB 镜像)核对 resume_hashes 成员回到
+  非 stopped 态, 未回去的补发; 全员回去即闭合(对照 qB 真实态判定, 幂等);
+- 确认账挂 job 账(resume_pending/resume_retries)随 state 走, 重启续跑不丢;
+- job 照常走终态(照常终态+余量挂账): 恢复问题绝不改相位/终态判定(与标签镜像同纪律);
+- 黄金法则 5: 重试跨拍推进, 拍内零等待零重发; dry-run 零写。
+
+## 测试计划(每个测试函数一条)
+- test_resume_issue_failure_books_pending_and_reissues: 出口 resume 异常 -> 计数告警 +
+  挂账(resume_pending=resume_hashes) -> 退避窗内不重发 -> 退避点补发成功 -> 成员回
+  运行态 -> 确认闭合清账((1)+(2) 主链)
+- test_resume_reissue_only_still_stopped_members: 部分成员已回来时补发只含仍停着的成员
+- test_resume_retries_exhausted_books_surplus_then_self_heals: 补发穷尽(3 次)后不再补发
+  + 穷尽告警每开账回合一笔 + 余量留存账上; 双成员部分自愈 -> 账面收敛为仍停着的子集
+  (零补发零新告警), 全员恢复 -> 自愈清空(幂等: 重复拍无副作用)
+- test_resume_budget_shared_across_exits: 补发预算跨出口共享 —— armed 期耗 1 次补发后
+  同 job 再走 _fail 二次开账, resume_retries 延续不清零(armed->failed 生产可达双开账链)
+- test_resume_issue_failure_at_exhausted_budget_no_empty_promise: 预算穷尽后出口首发
+  失败 -> 文案如实写「不再补发」(不承诺不会发生的退避补发), 确认循环零补发; 穷尽
+  告警按新开账回合重挂一笔(出口重开账有意重新武装, 防新回合穷尽被旧去重吞掉)
+- test_exit_arm_resume_confirmed_closed: 武装出口(成功确认): armed 时恢复已下发且确认闭合
+- test_exit_arm_resume_pending_reissues_until_confirmed: 武装出口(失败补发): qB 收了但
+  成员仍停着 -> 挂账跨拍退避补发, 退避窗内零重发(黄金法则 5)
+- test_exit_arm_resume_exhausted_keeps_phase_and_books: 武装出口(穷尽告警): resume 一路
+  异常 -> 补发穷尽 -> 余量挂账 + 计数告警, 相位保持 armed(恢复问题不改终态判定)
+- test_exit_cancel_books_pending_and_closes: 撤销出口: CANCELLED 后确认账开账并随确认闭合
+- test_exit_fail_books_pending_on_failed: 失败出口: FAILED 后挂账(失败补发面, 单元形态)
+- test_finish_direct_books_after_done: 单成员收口: 挂账在 done 落账之后(次序守卫 ——
+  挂账若在终态 _set_job 之前会被旧对象 replace 整体覆盖丢失)
+- test_resume_fields_roundtrip_and_restart: resume_pending/resume_retries 随 job_to_dict/
+  job_from_dict 往返(旧账缺字段 = 空账)+ 重启(_load_jobs)后续跑不丢
+- test_no_resume_hashes_is_noop: 无暂停成员(豁免/直接形态)零 API 调用零挂账
+- test_dry_run_reconcile_never_writes: dry-run 下确认核对零动作(不补发不落盘)
+"""
+
+import types
+
+from auto_qb.core.modules import relocate_units as ru
+
+from clock import FakeClock
+
+from helpers import capture_logs, pin_disk_usage, relocate_env
+
+from relocate_exec_support import _bare_mod, _job, _rec, _run_ticks, _simulate_moved, _spy_spawn, _stub_probe_pass
+
+RESUME_BACKOFF = 30.0
+RESUME_MAX = 3
+LOG_NAME = "auto_qb.core.modules.relocate_mod"
+
+
+def _stopped(h="HA"):
+    return _rec(h=h, state="pausedUP")
+
+
+def _running(h="HA"):
+    return _rec(h=h, state="stalledUP")
+
+
+def _resume_mod(api, store=None):
+    """裸模块 + 假钟: 恢复确认机制的单元形态(不落真盘, state 用 SimpleNamespace 箱)"""
+    mod = _bare_mod(api=api, store=store)
+    mod._clock = FakeClock()
+    return mod
+
+
+def test_resume_issue_failure_books_pending_and_reissues():
+    """出口 resume 异常: 计数告警 + 挂账 -> 退避窗内不重发 -> 退避点补发 -> 确认闭合((1)+(2) 主链)"""
+    issues = []
+    state = {"first": True}
+
+    def _resume(**kw):
+        if state["first"]:
+            state["first"] = False
+            raise RuntimeError("qB 失联")
+        return issues.append(list(kw["torrent_hashes"]))
+
+    mod = _resume_mod(
+        api=types.SimpleNamespace(torrents_resume=_resume),
+        store=types.SimpleNamespace(by_hash={"HA": _stopped()}, relocating_hashes=set()),
+    )
+    mod._fail(_job(resume_hashes=("HA", )), "move_stalled", "停滞")  # 失败出口触发恢复, 首发即异常
+
+    job = mod._jobs["j1"]
+    assert job.phase == ru.PHASE_FAILED
+    assert job.resume_pending == ("HA", ), "首发异常必须开确认账(等快照回流核对)"
+    assert job.resume_retries == 0 and mod._resume_failures == 1
+    # 退避窗内: 不重发(跨拍退避, 黄金法则 5)
+    mod._reconcile_resume_pending()
+    assert issues == [] and mod._jobs["j1"].resume_retries == 0
+
+    # 退避点已到 + 成员仍停着: 补发一次(计入预算), 这次成功
+    mod._clock.advance(RESUME_BACKOFF)
+    mod._reconcile_resume_pending()
+    assert issues == [["HA"]], issues
+    assert mod._jobs["j1"].resume_retries == 1
+
+    # 成员回到运行态(快照回流): 确认闭合清账
+    mod._ctx.store.by_hash["HA"] = _running()
+    mod._clock.advance(RESUME_BACKOFF)
+    mod._reconcile_resume_pending()
+    assert mod._jobs["j1"].resume_pending == ()
+    assert "j1" not in mod._resume_next_try
+
+
+def test_resume_reissue_only_still_stopped_members():
+    """补发只发仍停着的成员: 已回运行态的成员不再重复下发(对照 qB 实况, 幂等)"""
+    issues = []
+    mod = _resume_mod(
+        api=types.SimpleNamespace(torrents_resume=lambda **kw: issues.append(list(kw["torrent_hashes"]))),
+        store=types.SimpleNamespace(by_hash={
+            "HA": _stopped("HA"),
+            "HB": _running("HB")
+        }, relocating_hashes=set()),
+    )
+    mod._jobs["j1"] = _job("j1", phase=ru.PHASE_FAILED, resume_hashes=("HA", "HB"))
+    mod._note_resume_state("j1", ("HA", "HB"), 0)
+    mod._clock.advance(RESUME_BACKOFF)
+    mod._reconcile_resume_pending()
+    assert issues == [["HA"]], "已恢复的 HB 不得重复下发"
+    assert mod._jobs["j1"].resume_pending == ("HA", )
+
+
+def test_resume_retries_exhausted_books_surplus_then_self_heals():
+    """补发穷尽(3 次)后不再补发 + 穷尽告警每开账回合一笔 + 余量挂账; 部分自愈 -> 账面收敛为
+    仍停着的子集(零补发零新告警), 全员恢复 -> 自愈清空(幂等: 重复拍无副作用)"""
+    issues = []
+
+    def _boom(**kw):
+        issues.append(list(kw["torrent_hashes"]))
+        raise RuntimeError("qB 失联")
+
+    mod = _resume_mod(
+        api=types.SimpleNamespace(torrents_resume=_boom),
+        store=types.SimpleNamespace(by_hash={
+            "HA": _stopped("HA"),
+            "HB": _stopped("HB")
+        }, relocating_hashes=set()),
+    )
+    mod._fail(_job(resume_hashes=("HA", "HB")), "move_stalled", "停滞")
+    issues.clear()
+
+    for i in range(RESUME_MAX):  # 首发(出口)后 3 次退避补发, 全部异常
+        mod._clock.advance(RESUME_BACKOFF)
+        mod._reconcile_resume_pending()
+        assert mod._jobs["j1"].resume_retries == i + 1
+    mod._clock.advance(RESUME_BACKOFF)
+    with capture_logs(LOG_NAME) as cap:
+        mod._reconcile_resume_pending()  # 穷尽面: 告警 + 挂账
+    job = mod._jobs["j1"]
+    assert job.resume_retries == RESUME_MAX, "三次补发后预算穷尽"
+    assert len(issues) == RESUME_MAX, f"首发之后只补发 {RESUME_MAX} 次: {issues}"
+    assert job.resume_pending == ("HA", "HB"), "穷尽后余量留存账上(待恢复余量, 面板下一批接线)"
+    assert any("恢复确认穷尽" in m and "HA" in m for m in cap.messages), cap.messages
+
+    # 部分自愈(HB 回来了, HA 仍停着): 穷尽面只收敛账面 —— 零补发、零新告警
+    failures_at_exhaustion = mod._resume_failures
+    mod._ctx.store.by_hash["HB"] = _running("HB")
+    mod._clock.advance(RESUME_BACKOFF)
+    with capture_logs(LOG_NAME) as cap2:
+        mod._reconcile_resume_pending()
+    assert mod._jobs["j1"].resume_pending == ("HA", ), "账面收敛为仍停着的子集(部分自愈)"
+    assert len(issues) == RESUME_MAX, "穷尽后不得再消耗 qB 写"
+    assert mod._resume_failures == failures_at_exhaustion, "部分自愈不新增计数"
+    assert not any("恢复确认穷尽" in m for m in cap2.messages), "穷尽告警本回合内不重复"
+
+    # 重复拍: 账面已收敛, 零动作(幂等)
+    mod._clock.advance(RESUME_BACKOFF)
+    mod._reconcile_resume_pending()
+    assert mod._jobs["j1"].resume_pending == ("HA", ) and len(issues) == RESUME_MAX
+
+    # 全员回来(用户手动/qB 自愈): 账面按实况自愈清空 —— 挂账不是永久判决
+    mod._ctx.store.by_hash["HA"] = _running()
+    mod._reconcile_resume_pending()
+    assert mod._jobs["j1"].resume_pending == ()
+    assert mod._resume_failures == 1 + RESUME_MAX + 1, "首发 1 + 补发 3 + 穷尽 1"
+
+
+def test_resume_budget_shared_across_exits():
+    """补发预算跨出口共享: armed 期耗 1 次补发后同 job 再走 _fail 二次开账, resume_retries
+    延续不清零(armed->failed 生产可达双开账链: journal failed 消费/核验失败都会走 _fail)"""
+    issues = []
+    mod = _resume_mod(
+        api=types.SimpleNamespace(torrents_resume=lambda **kw: issues.append(list(kw["torrent_hashes"]))),
+        store=types.SimpleNamespace(by_hash={"HA": _stopped()}, relocating_hashes=set()),
+    )
+    mod._jobs["j1"] = _job(phase=ru.PHASE_ARMED, resume_hashes=("HA", ))
+    mod._resume_members(mod._jobs["j1"])  # armed 出口首发(成功下发, 确认未过)
+    mod._clock.advance(RESUME_BACKOFF)
+    mod._reconcile_resume_pending()  # 补发一次 -> retries=1
+    assert mod._jobs["j1"].resume_retries == 1
+
+    # 同一 job 再走失败出口(armed->failed): 二次开账不清零 —— 预算跨出口共享
+    out = mod._fail(mod._jobs["j1"], "verify_mismatch", "不符")
+    assert out.phase == ru.PHASE_FAILED
+    assert mod._jobs["j1"].resume_retries == 1, "二次开账延续已耗补发次数(开账不清零)"
+    assert mod._jobs["j1"].resume_pending == ("HA", ), "失败出口重开账(挂账随 resume_hashes 重挂)"
+
+    # 退避点后继续补发: 预算接着走(retries=2, 不是从头计)
+    mod._clock.advance(RESUME_BACKOFF)
+    mod._reconcile_resume_pending()
+    assert mod._jobs["j1"].resume_retries == 2
+    assert len(issues) == 4, "armed 首发 + armed 补发 + failed 首发 + failed 补发"
+
+
+def test_resume_issue_failure_at_exhausted_budget_no_empty_promise():
+    """预算穷尽后出口首发失败: 文案如实写「不再补发」(不承诺不会发生的退避补发),
+    随后的确认循环零补发; 穷尽告警按新开账回合重挂一笔(nit#5/#6)"""
+    issues = []
+
+    def _boom(**kw):
+        issues.append(list(kw["torrent_hashes"]))
+        raise RuntimeError("qB 失联")
+
+    mod = _resume_mod(
+        api=types.SimpleNamespace(torrents_resume=_boom),
+        store=types.SimpleNamespace(by_hash={"HA": _stopped()}, relocating_hashes=set()),
+    )
+    mod._jobs["j1"] = _job(phase=ru.PHASE_ARMED, resume_hashes=("HA", ))
+    mod._resume_members(mod._jobs["j1"])  # armed 首发(异常)
+    for _ in range(RESUME_MAX):  # 3 次退避补发, 全部异常 -> 预算穷尽
+        mod._clock.advance(RESUME_BACKOFF)
+        mod._reconcile_resume_pending()
+    assert mod._jobs["j1"].resume_retries == RESUME_MAX
+    assert mod._jobs["j1"].phase == ru.PHASE_ARMED
+
+    # armed->failed 双开账链: 出口首发再次异常, 此时 retries 已达上界
+    with capture_logs(LOG_NAME) as cap:
+        mod._fail(mod._jobs["j1"], "verify_mismatch", "不符")
+    assert mod._jobs["j1"].resume_retries == RESUME_MAX, "穷尽后的出口开账不再消耗预算"
+    assert any("不再补发" in m and "恢复成员运行态失败" in m for m in cap.messages), cap.messages
+    assert not any("将按退避补发" in m for m in cap.messages), "不得承诺不会发生的退避补发"
+
+    # 后续确认循环: 零补发; 穷尽告警按新开账回合重挂一笔(出口重开账重新武装了去重)
+    mod._clock.advance(RESUME_BACKOFF)
+    with capture_logs(LOG_NAME) as cap2:
+        mod._reconcile_resume_pending()
+    assert len(issues) == 1 + RESUME_MAX + 1, "只有各次出口下发 + 3 次补发, 穷尽面零 qB 写"
+    assert any("恢复确认穷尽" in m for m in cap2.messages), "新开账回合的穷尽不被旧去重吞掉"
+
+
+def test_exit_arm_resume_confirmed_closed(tmp_path, monkeypatch):
+    """武装出口(成功确认): armed 时恢复下发, 快照回流后确认闭合(成功面)"""
+    pin_disk_usage(monkeypatch)
+    _stub_probe_pass(monkeypatch)
+    clock = FakeClock()
+    mgr, client, src, dst, content, files = relocate_env(tmp_path, state="uploading", clock=clock)
+    mod = mgr.host.get("relocate")
+    _spy_spawn(mod, [])
+    job_id = mod.relocate_execute(["HA"], dst)[0]["job_id"]
+    _simulate_moved(mgr, dst, files, content)
+    _run_ticks(mod, 6)
+    assert mod.get_job(job_id).phase == ru.PHASE_ARMED
+    assert any(c[0] == "resume" for c in client.calls), "armed 出口必须恢复成员"
+    assert mod.get_job(job_id).resume_pending == (), "成员已回运行态(stalledUP): 确认闭合"
+    assert mod.get_job(job_id).resume_retries == 0
+
+
+def test_exit_arm_resume_pending_reissues_until_confirmed(tmp_path, monkeypatch):
+    """武装出口(失败补发): qB 收了但成员仍停着 -> 挂账 + 退避窗内零重发 + 退避点补发"""
+    pin_disk_usage(monkeypatch)
+    _stub_probe_pass(monkeypatch)
+    clock = FakeClock()
+    mgr, client, src, dst, content, files = relocate_env(tmp_path, state="uploading", clock=clock)
+    mod = mgr.host.get("relocate")
+    _spy_spawn(mod, [])
+    real_resume = client.torrents_resume
+    resumes = []
+    client.torrents_resume = lambda torrent_hashes=None: resumes.append(list(torrent_hashes or []))
+    job_id = mod.relocate_execute(["HA"], dst)[0]["job_id"]
+    _simulate_moved(mgr, dst, files, content)
+    _run_ticks(mod, 6)
+    job = mod.get_job(job_id)
+    assert job.phase == ru.PHASE_ARMED
+    assert job.resume_pending == ("HA", "HB"), "resume 未生效(替身不翻 state): 确认账保持开"
+    assert mod._resume_failures == 0, "API 没抛错: 只有确认未过, 不计失败"
+
+    _run_ticks(mod, 2)  # 退避窗内: 零重发(黄金法则 5)
+    assert mod.get_job(job_id).resume_retries == 0
+    assert len(resumes) == 1, "只有 armed 首发一次"
+
+    clock.advance(RESUME_BACKOFF)
+    _run_ticks(mod, 1)
+    assert mod.get_job(job_id).resume_retries == 1
+    assert len(resumes) == 2, "首发(armed) + 一次补发"
+
+    # 快照回流: 成员真回运行态 -> 下一拍确认闭合
+    client.torrents_resume = real_resume
+    client.torrents_resume(torrent_hashes=["HA", "HB"])
+    _run_ticks(mod, 1)
+    assert mod.get_job(job_id).resume_pending == ()
+
+
+def test_exit_arm_resume_exhausted_keeps_phase_and_books(tmp_path, monkeypatch):
+    """武装出口(穷尽告警): resume 一路异常 -> 补发穷尽 -> 余量挂账 + 计数告警, 相位保持 armed"""
+    pin_disk_usage(monkeypatch)
+    _stub_probe_pass(monkeypatch)
+    clock = FakeClock()
+    mgr, client, src, dst, content, files = relocate_env(tmp_path, state="uploading", clock=clock)
+    mod = mgr.host.get("relocate")
+    _spy_spawn(mod, [])
+
+    def _boom(**kw):
+        raise RuntimeError("qB 失联")
+
+    monkeypatch.setattr(client, "torrents_resume", _boom, raising=False)
+    job_id = mod.relocate_execute(["HA"], dst)[0]["job_id"]
+    _simulate_moved(mgr, dst, files, content)
+    _run_ticks(mod, 6)
+    assert mod.get_job(job_id).phase == ru.PHASE_ARMED, "恢复失败绝不改相位/终态判定"
+    assert mod.get_job(job_id).resume_pending == ("HA", "HB")
+
+    for i in range(RESUME_MAX):
+        clock.advance(RESUME_BACKOFF)
+        _run_ticks(mod, 1)
+        assert mod.get_job(job_id).resume_retries == i + 1
+    clock.advance(RESUME_BACKOFF)
+    with capture_logs(LOG_NAME) as cap:
+        _run_ticks(mod, 1)
+    assert any("恢复确认穷尽" in m for m in cap.messages), cap.messages
+    job = mod.get_job(job_id)
+    assert job.phase == ru.PHASE_ARMED and job.resume_pending == ("HA", "HB"), "余量挂账, 相位不动"
+    assert mod._resume_failures >= 1 + RESUME_MAX + 1
+
+    # 穷尽后再推进: 计数不再增长(有界), 告警不重复
+    failures_before = mod._resume_failures
+    clock.advance(RESUME_BACKOFF)
+    with capture_logs(LOG_NAME) as cap2:
+        _run_ticks(mod, 1)
+    assert mod._resume_failures == failures_before
+    assert not any("恢复确认穷尽" in m for m in cap2.messages)
+
+
+def test_exit_cancel_books_pending_and_closes(tmp_path, monkeypatch):
+    """撤销出口: CANCELLED 后确认账开账并随确认闭合(成员已回运行态)"""
+    pin_disk_usage(monkeypatch)
+    _stub_probe_pass(monkeypatch)
+    clock = FakeClock()
+    mgr, client, src, dst, content, files = relocate_env(tmp_path, state="uploading", clock=clock)
+    mod = mgr.host.get("relocate")
+    _spy_spawn(mod, [])
+    job_id = mod.relocate_execute(["HA"], dst)[0]["job_id"]
+    _simulate_moved(mgr, dst, files, content)
+    _run_ticks(mod, 6)
+    r = mod.relocate_cancel(job_id, cost_confirmed=True)
+    assert r["cls"] == "ok" and mod.get_job(job_id).phase == ru.PHASE_CANCELLED
+    assert mod.get_job(job_id).resume_pending == ("HA", "HB"), "撤销出口必须开确认账(本用例自证)"
+    _run_ticks(mod, 1)
+    assert mod.get_job(job_id).resume_pending == (), "撤销出口的恢复确认随实况闭合"
+
+
+def test_exit_fail_books_pending_on_failed():
+    """失败出口(单元形态): FAILED 后确认账挂账(失败补发面; API 正常时等快照回流核对)"""
+    issues = []
+    mod = _resume_mod(
+        api=types.SimpleNamespace(torrents_resume=lambda **kw: issues.append(list(kw["torrent_hashes"]))),
+        store=types.SimpleNamespace(by_hash={"HA": _stopped()}, relocating_hashes=set()),
+    )
+    mod._jobs["j1"] = _job(phase=ru.PHASE_ARMED, resume_hashes=("HA", ))
+    out = mod._fail(mod._jobs["j1"], "verify_mismatch", "不符")
+    assert out.phase == ru.PHASE_FAILED
+    assert mod._jobs["j1"].resume_pending == ("HA", ) and mod._resume_failures == 0
+    assert issues == [["HA"]]
+
+
+def test_finish_direct_books_after_done():
+    """单成员收口: 确认账挂账必须在 done 落账之后 —— 否则被旧对象 replace 覆盖丢失(次序守卫)"""
+    issues = []
+    mod = _resume_mod(
+        api=types.SimpleNamespace(
+            client=None,
+            torrents_resume=lambda **kw: issues.append(list(kw["torrent_hashes"])),
+        )
+    )
+    mod._ctx.grouping = types.SimpleNamespace(regroup_scope=lambda *a: None)
+    mod._finish_direct(_job("j8", src="R:/src8", resume_hashes=("HA", )))
+    saved = mod._jobs["j8"]
+    assert saved.phase == ru.PHASE_DONE and saved.reason == "direct"
+    assert saved.resume_pending == ("HA", ), "done 落账后挂账必须留存(次序守卫)"
+    assert issues == [["HA"]]
+
+
+def test_resume_fields_roundtrip_and_restart(tmp_path, monkeypatch):
+    """resume_pending/resume_retries 随 job_to_dict/job_from_dict 往返 + 重启续跑(黄金法则 3)"""
+    pin_disk_usage(monkeypatch)
+    _stub_probe_pass(monkeypatch)
+    clock = FakeClock()
+    mgr, client, src, dst, content, files = relocate_env(tmp_path, state="uploading", clock=clock)
+    mod = mgr.host.get("relocate")
+    _spy_spawn(mod, [])
+
+    def _boom(**kw):
+        raise RuntimeError("qB 失联")
+
+    monkeypatch.setattr(client, "torrents_resume", _boom, raising=False)
+    job_id = mod.relocate_execute(["HA"], dst)[0]["job_id"]
+    _simulate_moved(mgr, dst, files, content)
+    _run_ticks(mod, 6)
+    clock.advance(RESUME_BACKOFF)
+    _run_ticks(mod, 1)
+    before = mod.get_job(job_id)
+    assert before.resume_pending == ("HA", "HB") and before.resume_retries == 1
+
+    # 序列化往返: 新字段随账走
+    back = ru.job_from_dict(ru.job_to_dict(before))
+    assert back.resume_pending == ("HA", "HB") and back.resume_retries == 1
+    # 旧账(缺新字段)= 空账, 不进确认循环(历史 job 行为不变)
+    legacy = ru.job_from_dict({**ru.job_to_dict(before), "resume_pending": None, "resume_retries": None})
+    assert legacy.resume_pending == () and legacy.resume_retries == 0
+
+    # 重启: 新模块 _load_jobs 恢复确认账, 续跑不丢(退避点后照常补发)
+    mod2 = type(mod)(mgr.ctx, clock=clock)
+    assert mod2._load_jobs() == 1
+    restored = mod2.get_job(job_id)
+    assert restored.resume_pending == ("HA", "HB") and restored.resume_retries == 1
+    clock.advance(RESUME_BACKOFF)
+    resumes = []
+    mod2._ctx.api = types.SimpleNamespace(torrents_resume=lambda **kw: resumes.append(list(kw["torrent_hashes"])))
+    mod2._reconcile_resume_pending()
+    assert resumes == [["HA", "HB"]], "重启后确认循环续跑: 退避点补发"
+    assert mod2.get_job(job_id).resume_retries == 2
+
+
+def test_no_resume_hashes_is_noop():
+    """无暂停成员(豁免路径/直接形态): 零 API 调用零挂账(既有幂等 no-op 口径不变)"""
+    issues = []
+    mod = _resume_mod(api=types.SimpleNamespace(torrents_resume=lambda **kw: issues.append(kw)))
+    mod._jobs["j1"] = _job(phase=ru.PHASE_ARMED, resume_hashes=())
+    mod._resume_members(mod._jobs["j1"])
+    assert issues == [] and mod._jobs["j1"].resume_pending == ()
+    mod._reconcile_resume_pending()  # 空账不进确认循环, 零动作不炸
+    assert mod._jobs["j1"].resume_pending == ()
+
+
+def test_dry_run_reconcile_never_writes():
+    """dry-run: 确认核对零动作(不补发不落盘) —— 与 on_task_line 同闸, 直调面也稳"""
+    issues = []
+    mod = _resume_mod(api=types.SimpleNamespace(torrents_resume=lambda **kw: issues.append(kw)))
+    mod._dry = True
+    mod._jobs["j1"] = _job(phase=ru.PHASE_FAILED, resume_hashes=("HA", ))
+    mod._note_resume_state("j1", ("HA", ), 2)
+    mod._clock.advance(RESUME_BACKOFF)
+    mod._reconcile_resume_pending()
+    assert issues == [] and mod._jobs["j1"].resume_retries == 2, "dry-run 不推进确认循环"
+    assert mod._jobs["j1"].resume_pending == ("HA", )
