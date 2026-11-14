@@ -10,7 +10,9 @@ v-for 消费 ctxItems/ctxSubItems, 判据链与子面板交互原样); 3. 接线
 - test_ctx_menu_template_consumes_registry: 模板消费守阵(W3 + 2026-10-22 骨架单点) —— 支名
   只许走 ctxMenuKind()(无 ctxItems('<支>') 字面量) + 行菜单根块 .ctx-item 骨架恰 2 份
   (一级 + 次级面板) + 「更多操作」父项结构(has-sub/ctx-caret/ctxSubItems(ctxMenuKind())/
-  CTX-05 交互三件/钳位状态) + 逐项 @click 直写回潮拦截(唯一允许 ctxRun(it) 与 toggleSub)。
+  CTX-05 交互三件/钳位状态) + 逐项 @click 直写回潮拦截(唯一允许 ctxRun(it) 与 toggleSub)
+  + W4 恒渲染固定预留键位列(计划 26-11-14-0041 S3: 一级/次级各恒渲染 1 个 .ctx-kbd-slot 且无 v-if/
+  槽内 <kbd v-if> 才按 it.kbd/sit.kbd 现算填文本/空串留白即槽内不渲染 kbd/零写死键位串)。
   W2 期还另有一项「注册表 ↔ 静态模板计数对账」过渡锚
   (52 项 + 14 线逐支相等), W3 模板 v-for 化后如期退役 —— 渲染层零漂移由 e2e menus.spec 接棒,
   注册表层由本文件余两项与 W5 新守阵(注册表 id ↔ 默认布局 ↔ config 契约 ↔ flags 键)接棒
@@ -23,7 +25,9 @@ v-for 消费 ctxItems/ctxSubItems, 判据链与子面板交互原样); 3. 接线
   advanced 空不压父项/次级防嵌套/布局可隐藏, 计划 26-10-31-0306 T6) + key 字段逐条对账 §05
   映射表(key 引用存在于 shortcuts 注册表/四条不映射项无 key/两条空位 key 照填, 计划
   26-11-12-0344 S2) + 键帽渲染(kbd 经 kbShortcutDisplay 现算/绑定项出键帽/danger 照常 D5/
-  qb-traffic scope 口径差仍标/不映射与空位项无 kbd 字段/改绑即时跟随与显式禁用隐藏)
+  qb-traffic scope 口径差仍标/不映射与空位项无 kbd 字段/改绑即时跟随与显式禁用隐藏);
+  W4 恒渲染槽只改模板层: ctx_menu.js 取数链(kbd 字段有键位才产出)一行不动, 故本节
+  「不映射/空位项无 kbd 字段」断言仍成立, 空串留白形状由本文件模板消费守阵 + e2e 接棒
 - test_ctx_menu_key_fields_reconcile_shortcut_registry: key 字段对账 python 静态面(计划
   26-11-12-0344 S2/§05, 不依赖 node) —— key 引用必须存在于 shortcuts 注册表(_registry 解析) /
   「不映射」四项(limits/skip_check/transfer/sub-more)无 key / 其余非 sep 项一律带 key /
@@ -549,6 +553,27 @@ def test_ctx_menu_template_consumes_registry():
             f"行菜单段出现逐项 @click 直写 {handler} —— 回退静态直写 = 四支人肉奇偶复发"
             f"(pitfall ctx-menu-branch-parity); 分派归注册表 act, 模板只调 ctxRun(it)"
         )
+
+    # 5. W4 恒渲染固定预留键位列(计划 26-11-14-0041 S3): 一级/次级两份骨架各恒渲染一个
+    #    .ctx-kbd-slot(无 v-if), 槽内 <kbd v-if> 才按 it.kbd/sit.kbd 现算填文本 —— 空串留白
+    #    (槽内不渲染 kbd, 天然不出现空括号), 取数链单点 I1 一行不动, 模板禁写死键位串。
+    n_slot = row.count('class="ctx-kbd-slot"')
+    assert n_slot == 2, (
+        f"行菜单根块恒渲染键位槽 .ctx-kbd-slot = {n_slot} 份(应恰 2: 一级 + 次级) —— "
+        "恒渲染固定预留键位列缺失会让无键位项不占列, 显影前后各行 label 右缘不齐(I3 零跳动)"
+    )
+    for slot in re.findall(r'<span class="ctx-kbd-slot"[^>]*>', row):
+        assert "v-if" not in slot, (f"恒渲染键位槽带了 v-if({slot}) —— 无键位项将不预留列, 恒渲染语义破口(空串留白/零跳动同时失守)")
+    for var in ("it", "sit"):
+        needle = f'<span class="ctx-kbd-slot"><kbd v-if="{var}.kbd" class="aq-kbd">{{{{ {var}.kbd }}}}</kbd></span>'
+        assert needle in row, (
+            f"行菜单 {var} 骨架键位槽形状漂移(应恒渲染 .ctx-kbd-slot + 槽内 <kbd v-if=\"{var}.kbd\"> 现算文本) "
+            "—— 取数链单点 I1 与空串留白须同时成立, 显影(按住反引号)只切已渲染键帽的 opacity/visibility"
+        )
+    # 空串留白: 键位显示串一律现算, 模板正文(去注释)不得出现任何写死的键位显示串
+    body = re.sub(r"<!--.*?-->", "", row, flags=re.S)
+    for dead in ("Shift + ", "Ctrl + ", "Alt + "):
+        assert dead not in body, (f"行菜单模板出现写死键位串「{dead}」—— 键位显示串一律经 kbShortcutDisplay 单点现算(I1)")
 
 
 def test_ctx_menu_registry_node_battery():

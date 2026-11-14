@@ -555,14 +555,17 @@
 .aq-kbd::after { content: ")"; }
 body.kbd-reveal .aq-kbd { opacity: 1; visibility: visible; }
 
-/* ---- 菜单键帽列版式(计划 26-11-12-0344 S2, I5 留白对齐) ----
- * .ctx-text 是行右键菜单项的 label 圈容器(ctx-menus.html 一级/次级两份骨架共用): flex 吃满
- * 把键帽(.aq-kbd)推到行右缘 —— 无键位/自定义项不渲染 kbd 但 label 仍占满整行, 各项键帽
- * 右缘对齐不跳动(与 VS Code 菜单同款); 窄菜单宽度行为 = 键帽列 flex:none + .aq-kbd 自带
- * nowrap, label 弹性收缩不挤键帽。.ctx-item 的 flex/gap 与 danger/is-gated 等既有口径在各
- * 皮肤 components.css(不动); submenu 父项无键帽(注册表不映射)故 .ctx-caret 的 margin-left:auto
- * 不受影响。 */
+/* ---- 菜单键位槽列版式(计划 26-11-12-0344 S2 建 / 26-11-14-0041 W4 恒渲染固定预留列) ----
+ * ctx-menus.html 一级/次级两份骨架各恒渲染一个 .ctx-kbd-slot(无论该项有无键位都占同一固定
+ * 列宽, 宽度值在四皮肤 components.css 同值, 守阵四值互证), 槽内 <kbd v-if> 才按 it.kbd/sit.kbd
+ * 现算填文本(空串 = 槽内不渲染 kbd = 留白, 不出现空括号; 取数链单点 I1 一行不动)。
+ * .ctx-text flex 吃满整行把键位槽推到右缘; 槽 flex:none + text-align:right 让键帽右对齐,
+ * .aq-kbd 自带 nowrap, label 弹性收缩不挤键位。显影(按住反引号 body.kbd-reveal)只切
+ * opacity/visibility, 槽恒在 DOM 几何不变, 显影前后菜单项文字像素位置不变(I3 零跳动)。
+ * .ctx-item 的 flex/gap 与 danger/is-gated 等既有口径在各皮肤 components.css(不动);
+ * submenu 父项无键位槽(注册表不映射)故 .ctx-caret 的 margin-left:auto 不受影响。 */
 .ctx-item .ctx-text { flex: 1 1 auto; min-width: 0; }
+.ctx-item .ctx-kbd-slot { flex: none; text-align: right; }
 .ctx-item .aq-kbd { flex: none; }
 
 /* ---- 抽屉页签键帽徽标版式(计划 26-11-12-0344 S4 / 26-11-14-0041 S2 形态同步) ----

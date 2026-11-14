@@ -40,6 +40,7 @@ from webui_static_scan_css import (
     _scan_column_cells_paired,
     _scan_css_blocks,
     _scan_css_comments,
+    _scan_ctx_kbd_slot,
     _scan_ctx_sub_width,
     _scan_flux_modal_frost,
     _scan_progress_val_parity,
@@ -811,6 +812,12 @@ def _scan_frontend_assets():
        `--bg-pop`(不透明)消费面收窄到 .col-ghost, 另钉 `.modal-mask` 遮罩 alpha ≤ .6(玻璃可见度
        = 弹窗底 alpha × 遮罩 alpha, 11-03 轮的 .72 遮罩把实际透视压到 ~5%)。
 
+    23. 恒渲染固定预留键位列(见 _scan_ctx_kbd_slot, 26-11-14 计划 26-11-14-0041 S3/W4):
+       四皮肤 components.css 的 `.ctx-item .ctx-kbd-slot` min-width/margin-left 与 `.ctx-item` gap
+       各四值互证 + 钉值, 共享 console_hub_panels.css 只留 flex:none/text-align:right 结构单点 ——
+       外观数字只在皮肤专属层, 单皮肤回退会让该皮肤各行 label 右缘不对齐(显影零跳动 I3 破口);
+       前后端正则一致: 守阵解析四皮肤 CSS 与共享 CSS 用同一条行首规则正则, 改写法即红不漏检。
+
 
     WARN: 7/8/9/11/18 五项按 **app.js 整包**(HTML 加载顺序拼接 app.js + 各片段)扫描, 不按单文件 ——
       拆分后同一条不变量的代码可能分处两个文件, 只看一个文件必然漏(2026-09-20 实测);
@@ -865,6 +872,7 @@ def _scan_frontend_assets():
     _scan_column_cells_paired(problems)
     _scan_progress_val_parity(problems)
     _scan_ctx_sub_width(problems)
+    _scan_ctx_kbd_slot(problems)
     _scan_state_color_tokens(problems)
     _scan_message_surface_parity(problems)
     _scan_flux_modal_frost(problems)

@@ -576,6 +576,14 @@ for (const skin of SKINS) {
         await expect(limits.locator('.aq-kbd')).toHaveCount(0);
         const grow = await limits.locator('.ctx-text').evaluate((el) => getComputedStyle(el).flexGrow);
         expect(grow, '无键位项 label 弹性吃满整行(I5 留白对齐)').toBe('1');
+        // W4 恒渲染固定预留键位列(计划 26-11-14-0041 S3): 无键位项也恒渲染 .ctx-kbd-slot,
+        // 槽内不渲染 kbd(空串留白, 不出现空括号), 且槽右缘与有键位项逐行对齐 —— 显影只切
+        // 键帽 opacity/visibility, 槽恒在 DOM 几何不变 => 显影前后文字零位移(I3)。
+        await expect(limits.locator('.ctx-kbd-slot')).toHaveCount(1);
+        await expect(limits.locator('.ctx-kbd-slot')).toHaveText('');
+        const blankSlotRight = await limits.locator('.ctx-kbd-slot').evaluate((el) => Math.round(el.getBoundingClientRect().right));
+        const boundSlotRight = await ctxItemById(page, 'resume').locator('.ctx-kbd-slot').evaluate((el) => Math.round(el.getBoundingClientRect().right));
+        expect(Math.abs(boundSlotRight - blankSlotRight), '恒渲染键位槽逐行右缘对齐(无键位项留白对齐)').toBeLessThanOrEqual(1);
         // 键帽右对齐: 键帽右缘 == 项右缘 - 水平 padding 11px(±1px, 与留白项共同守住右缘对齐)
         const align = await ctxItemById(page, 'resume').evaluate((el) => {
           const i = el.getBoundingClientRect();
@@ -624,11 +632,15 @@ for (const skin of SKINS) {
         await expect(subMore).toBeVisible({ timeout: 3_000 });
         await expect(subMore.locator('.ctx-item[data-item="copy-name"] .aq-kbd')).toHaveText('Shift + C');
         await expect(subMore.locator('.ctx-item[data-item="share-limits"] .aq-kbd')).toHaveCount(0);
+        // W4: 空位项也恒渲染键位槽, 槽内留白(绑键后重开菜单才填文本, 见下方改绑用例)
+        await expect(subMore.locator('.ctx-item[data-item="share-limits"] .ctx-kbd-slot')).toHaveCount(1);
+        await expect(subMore.locator('.ctx-item[data-item="share-limits"] .ctx-kbd-slot')).toHaveText('');
         // 动态子项(转移到)零键帽: 子项由 vm 单点供给, 无 key 字段自然留白(I2)
         await page.locator('.ctx-menu > .ctx-item.has-sub[data-item="transfer"]').hover();
         const subTransfer = page.locator('.ctx-menu > .ctx-item.has-sub[data-item="transfer"] > .ctx-sub');
         await expect(subTransfer).toBeVisible({ timeout: 3_000 });
         expect(await subTransfer.locator('.aq-kbd').count(), '转移到子面板零键帽').toBe(0);
+        expect(await subTransfer.locator('.ctx-kbd-slot').count(), '转移到子面板每项仍恒渲染键位槽(槽内留白)').toBeGreaterThan(0);
         await page.keyboard.press('Escape');
         await expect(menu).toHaveCount(0);
         // 改绑即时跟随: AQB_KEYS.apply = 设置键位面板「即时试用稿」同一单点, 草稿胜出模板基准(I1)

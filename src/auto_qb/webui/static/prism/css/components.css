@@ -210,7 +210,7 @@ html[data-theme="frost"] .rowlang-group, html[data-theme="golden"] .rowlang-grou
   animation: drop-in .12s var(--ease); }
 .ctx-item { display: flex; align-items: center; gap: 9px; padding: 8px 11px; border-radius: var(--radius-sm);
   font-size: 13px; cursor: pointer; transition: background var(--dur) var(--ease); }
-.ctx-item:hover { background: var(--bg-hover); }
+.ctx-item:hover { background: var(--bg-hover); } .ctx-item .ctx-kbd-slot { min-width: 88px; margin-left: 0; }
 .ctx-menu .ctx-item.is-gated, .ctx-menu .ctx-item.is-gated > .ico { color: var(--fg-dim, #888); cursor: default; } .ctx-menu .ctx-item.is-gated:hover { background: transparent; }  /* 右键菜单置灰项(R2 S3; W6 自 drawer_templates.js 注入迁入): 门不满足时可见不可点(title 提示; 行为层 dtToggleMerge 再拦一道); 并上 `> .ico` 不压 .ico-sync 蓝 */
 .ctx-item .ico { color: var(--fg-dim); }
 /* CTX-04: hover 只提亮**该项自己**那颗图标 —— 两处刻意的写法, 缺一就会回到"整片图标变灰":
@@ -368,7 +368,7 @@ select option { background: var(--bg-elev); color: var(--fg); }
 .ctx-item.has-sub.open .ctx-caret { opacity: 1; transform: none; color: var(--accent-hi); }
 .ctx-item.has-sub.open { background: var(--bg-hover); }
 /* top 的内联覆盖见 menu.js _subFitViewport: 父项靠视口下部时子面板实测上移收进视口, 内联 top 恒 -6px(改默认值两处同步);
- * min-width 260 = 最长项「开启自动种子管理」(104px) + 键帽「Shift + T」(≈75px) 单行实需 ≈246(icon/gap/内边距计入)取整留余 —— 四皮肤 components.css 同值, menu.js _subOverflowsRight 估宽 272 同步 */
+ * min-width 260 是生效下限: W4 定案 B(槽宽 88 / 槽距 0)后 Chromium 实测菜单宽 259(atlas/console/flux) / 257(prism 主题边框口径), 最长行内容需求 246~248 ≤ 260, 故子面板宽由 min-width 回落到 260 —— 即「子面板 260 / 菜单 259」; 较 A 档 279 正好少 20(= 槽宽 -8 + 槽距 -12); menu.js 272 属保守估宽(实测重判在 _subFitViewport 兜底), 259 ≤ 260 ≤ 272 三层对账不冲突 —— 四皮肤 components.css 同值 */
 .ctx-sub { position: absolute; left: calc(100% + 4px); top: -6px; z-index: 1;
   min-width: 260px; padding: 6px; border-radius: var(--radius);
   background: var(--bg-card); border: 1px solid var(--border-strong); box-shadow: var(--shadow-3);

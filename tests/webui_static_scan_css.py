@@ -339,6 +339,91 @@ def _scan_ctx_sub_width(problems):
         )
 
 
+def _scan_ctx_kbd_slot(problems):
+    """W4 恒渲染固定预留键位列守阵(计划 26-11-14-0041 S3): 四皮肤同值 + 钉值 + 共享结构单点
+
+    恒渲染键位槽(ctx-menus.html 一级/次级 .ctx-kbd-slot)把「键位列几何」从键帽文本宽度解耦:
+    无论该项有无键位, 每行都占同一固定列宽(min-width), 显影(按住反引号)只切键帽
+    opacity/visibility, 文字位置永不位移(I3); 无键位项槽内留白(不渲染 kbd)。数字是外观定案
+    B 档(槽宽 88 / 槽距 0, 2026-11-14 用户拍板; 子面板回 260 / 菜单 259), 落皮肤专属布局层
+    四皮肤同值, 守阵钉住防止单皮肤静默回退。
+    钉四件事(缺一即红):
+    1. 四皮肤 components.css 基础 `.ctx-item .ctx-kbd-slot` 规则各恰 1 条, 体内 min-width
+       与 margin-left 四值互证同值且 == 88 / 0(0 允许无单位写法; 单皮肤回退 = 该皮肤各行
+       label 右缘不对齐);
+    2. 四皮肤 `.ctx-item` 基础规则 gap 四值互证 == 9px(W4 五处连锁之一, 与 .ctx-sub 260 /
+       menu.js 272 / _scan_ctx_sub_width want,pad 同口径);
+    3. 共享 console_hub_panels.css 有 `.ctx-item .ctx-kbd-slot { flex: none; text-align: right; }`
+       结构单点(四皮肤 index.html 全 link => 同构), 且共享侧不带 min-width/margin-left
+       (外观数字只在皮肤专属层, 共享结构侧不分裂第二份宽度口径);
+    4. 前后端正则一致: 守阵用同一条 `\\.ctx-item \\.ctx-kbd-slot\\s*\\{...\\}` 解析四皮肤 CSS
+       与共享 CSS(同一份前端产物), 规则写法(单行块, 允许接在既有规则行尾以守住 700 行体量
+       上限)与正则同款 —— 前端漏写/拆块即红, 不会静默漏检(与 _scan_ctx_sub_width 解析
+       .ctx-sub 同款口径)。
+    """
+    want_min, want_margin, want_gap = 88, 0, 9
+    slot_re = r"\.ctx-item \.ctx-kbd-slot\s*\{([^{}]*)\}"
+    item_re = r"(?m)^\.ctx-item\s*\{([^{}]*)\}"
+    vals_min, vals_margin, vals_gap = {}, {}, {}
+    for ui in _UI_ALL:
+        path = os.path.join(STATIC_ROOT, ui, "css", "components.css")
+        rel = f"{ui}/css/components.css"
+        if not os.path.isfile(path):
+            problems.append(f"{rel} 不存在 —— 恒渲染键位槽守阵无处落")
+            continue
+        text = re.sub(r"/\*.*?\*/", "", open(path, encoding="utf-8").read(), flags=re.S)
+        slots = re.findall(slot_re, text)
+        if len(slots) != 1:
+            problems.append(f"{rel} `.ctx-item .ctx-kbd-slot` 规则数 = {len(slots)}(应恰 1 条) —— 恒渲染键位槽宽度守阵无处落")
+            continue
+        m = re.search(r"min-width\s*:\s*([0-9.]+)px", slots[0])
+        ml = re.search(r"margin-left\s*:\s*([0-9.]+)(?:px)?", slots[0])
+        if not m or not ml:
+            problems.append(f"{rel} `.ctx-item .ctx-kbd-slot` 缺 min-width/margin-left —— 键位列不固定或间距丢失")
+            continue
+        vals_min[ui], vals_margin[ui] = float(m.group(1)), float(ml.group(1))
+        items = re.findall(item_re, text)
+        if len(items) != 1:
+            problems.append(f"{rel} 基础 `.ctx-item` 规则数 = {len(items)}(应恰 1 条) —— gap 连锁守阵无处落")
+            continue
+        g = re.search(r"gap\s*:\s*([0-9.]+)px", items[0])
+        if not g:
+            problems.append(f"{rel} `.ctx-item` 缺 gap —— W4 五处连锁之一失锚")
+            continue
+        vals_gap[ui] = float(g.group(1))
+    for label, vals, want in (
+        ("min-width", vals_min, want_min), ("margin-left", vals_margin, want_margin), ("gap", vals_gap, want_gap)
+    ):
+        if len(vals) < len(_UI_ALL):
+            continue  # 缺口已在上面逐皮肤报出
+        if len(set(vals.values())) > 1:
+            problems.append(
+                f"四皮肤 {label} 不齐: " + ", ".join(f"{u} {v:g}" for u, v in sorted(vals.items())) +
+                " —— 单皮肤回退该皮肤键位列不对齐(W4 四皮肤同步, 改数字四处 components.css 同步)"
+            )
+        drifted = sorted(u for u, v in vals.items() if v != want)
+        if drifted:
+            problems.append(
+                f"{'+'.join(drifted)} 皮肤 {label} = {vals[drifted[0]]:g}(应 {want}) —— "
+                "改数字须四皮肤 components.css + 守阵锚值同步(§08 菜单加宽连锁)"
+            )
+    shared = os.path.join(STATIC_ROOT, "shared", "console_hub_panels.css")
+    shared_text = re.sub(r"/\*.*?\*/", "", open(shared, encoding="utf-8").read(), flags=re.S)
+    shared_slots = re.findall(slot_re, shared_text)
+    if len(shared_slots) != 1:
+        problems.append(
+            f"shared/console_hub_panels.css `.ctx-item .ctx-kbd-slot` 结构规则数 = {len(shared_slots)}(应恰 1 条) —— 四皮肤同构的结构单点丢失"
+        )
+    elif "flex: none" not in shared_slots[0] or "text-align: right" not in shared_slots[0]:
+        problems.append(
+            "shared/console_hub_panels.css `.ctx-item .ctx-kbd-slot` 缺 flex:none/text-align:right —— 键位槽右对齐结构丢失"
+        )
+    elif re.search(r"min-width|margin-left", shared_slots[0]):
+        problems.append(
+            "shared/console_hub_panels.css `.ctx-item .ctx-kbd-slot` 混入 min-width/margin-left 数字 —— 外观数字只在皮肤专属层, 共享结构侧不许分裂第二份宽度口径"
+        )
+
+
 def _scan_state_color_tokens(problems):
     """状态色令牌守阵(2026-11-02): 每皮肤的 7 个 kind 都必须有 --st/--st-soft, 进度条必须读 --st
 
