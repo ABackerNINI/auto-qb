@@ -3,7 +3,7 @@
 ## 测试计划(每个测试函数一条)
 - test_frontend_search_syntax_wiring: 搜索匹配**服务端单点**的前端接线守阵 —— 清除钮 @mousedown.prevent 成对(焦点态清除失灵回归)/前端不得复活任何文本匹配实现(filters.js _parseSearchQuery 等四函数、hr.js/shows.js 旧整句 includes、app.js searchHitsQ 均已删, 复活即红)/filteredTorrents 必须消费 searchHits
 - test_frontend_search_pending_no_collapse: 搜索待响应期空命中集不得接管列表(2026-10-07 修详情面板/流量图搜索跳动) —— view.js searchPending 生命周期(输入武装防抖即置位/doSearch 直达入口补武装/resetSearch 清除/落袋且过代际守卫后清除) + filters.js _searchGateActive 单点(待响应且命中集未落袋 = 门不生效, 两个派生 filteredTorrents/filteredGroups 都走它; 渐进输入命中集非空仍按旧集过滤) + 三皮肤 .layout min-height: calc(100vh - var(--head-h)) 撑满首屏(停靠面板 sticky 锚点与列表长短无关, 筛到短列表不再脱锚跳)
-- test_frontend_hr_safety_wiring: 删除安全档位前端接线守阵 —— hr.js 的 token 映射表与后端 resolve.py 的 SRC_* 常量逐字一致、做种时长列每套 UI 2 处换绑 hrDurClass/hrSrcClass(计划 26-10-11-1722 P2 起明细成员单元格收敛为单份 <aq-member-cells> 渲染器, 触发面 3→2, 该渲染器由辅种页/追剧页共用)+ 挂 hrSrcFull/hrSrcHalf 底线与 hrPopEnter 触发 + 来源与已排除文案都走 hrDurHint 进 title(行内不留 chip) + 弹窗单例 DOM 每套 UI 恰一份、三套 CSS 的 hr-warn/hr-line/hr-pop 成对定义、js 引用的 m.hr_* 字段都在后端 hr_view_fields 键集里(字段打错 = 页面静默空白)
+- test_frontend_hr_safety_wiring: 删除安全档位前端接线守阵 —— hr.js 的 token 映射表与后端 resolve.py 的 SRC_* 常量逐字一致、做种时长列每套 UI 2 处换绑 hrDurClass/hrSrcClass(计划 26-10-11-1722 P2 起明细成员单元格收敛为单份 <aq-member-cells> 渲染器, 触发面 3→2, 该渲染器由辅种页/追剧页共用)+ 挂 hrSrcFull/hrSrcHalf 底线与 hrPopEnter 触发 + 来源与已排除文案都走 hrDurHint 进 title(行内不留 chip) + 弹窗单例 DOM 每套 UI 恰一份、三套 CSS 的 hr-warn/hr-line/hr-pop 成对定义、js 引用的 m.hr_* 字段都在后端 hr_view_fields 键集里(字段打错 = 页面静默空白) + hrExclTip 判定门必须经 AQB_DECORATE.methods 层调用(直呼根路径 = 每行渲染 TypeError, 2026-11-14 实报)
 - test_frontend_site_alert_icon_wiring: 站点 chip 改色表达守阵(计划 26-10-19-2206 S4, 取代 26-10-19-2007 的两槽口径) —— 站点问题走**颜色**(缺配置橙底+虚线下边 / tracker 报错红底)、命令结果走**图标**且固定放站点名之后: 三皮肤样式键集相等(含 reduced-motion 降级/搜索命中让出底色/明细行染色)/模板三处 cell 只剩一个图标槽且 tooltip 挂整块 chip/旧图标类 `.sa` 零残留/token->符号单点只含命令结果四种
 - test_drawer_tpl_variant_interaction_single_point: 变体交互单点定型守阵(计划 26-10-12-0527 U5 1) —— drawer_tpl/*.js 全目录扫 ui.sort(手搓排序状态机不允许在任何变体复活); 凡声明 tableId+rowsFn(桥表格变体)的文件**声明即受检**, 另强制零表格容器列宽 grid(列宽唯一来源 = 引擎列集 computed; 版式 grid 卡片/双栏/图例是 D5 保留面) —— 未来新变体接引擎即自动落入本守阵, 无需改守阵, 即「定型」之义
 - test_frontend_search_auto_refresh_wiring: 搜索自动更新接线守阵(plan 26-11-03-0120) —— 服务端 search_rev 单点/触发面(增删+全量轮+name/category/save_path/tags)/state 恒回传/search 响应先在快照前取 rev + 前端常量定值(2000ms/3000ms)/doSearch(quiet) 不武装 pending/落袋版本对齐/轮询触发点与冷却/续查用独立定时器 + 共享 topbar 提示每套皮肤恰好一份(零复制)
@@ -255,6 +255,9 @@ def test_frontend_hr_safety_wiring():
       挂它上面 width:100% 的空 <i> 就画成整列一条(线随列宽不随文字, 2026-09-29 真机实报);
     4. 前端 js 里引用的 m.hr_* 字段必须都在后端 hr_view_fields 的键集里(字段一致性守阵,
       M4 设置页守阵同款思路)。
+    5. hrExclTip 的单点判定门调用必须走 AQB_DECORATE.methods 层(2026-11-14 实报: cd14ffe6
+      直呼根路径 AQB_DECORATE.hrExclClass —— 方法嵌在 methods 层下, 根对象无此键, 每行渲染
+      抛 TypeError 刷屏; e2e 本批未跑 —— 现有 @fast e2e 挂运行期错误守卫当跑必拦, 静默上线)。
     """
     shared = os.path.join(STATIC_ROOT, "shared")
     hr_js = open(os.path.join(shared, "hr.js"), encoding="utf-8").read()
@@ -400,6 +403,25 @@ def test_frontend_hr_safety_wiring():
         used |= set(re.findall(r"\bm\.(hr_[a-z_]+)", _ui_aggregate(ui)))
     unknown = used - keys
     assert not unknown, f"前端引用了后端不存在的 HR 字段: {sorted(unknown)}(字段打错 = 页面静默空白)"
+
+    # 5. hrExclTip 单点判定门的调用层级(2026-11-14 用户实报): 判定方法定义在 decorate.js 的
+    #    window.AQB_DECORATE.methods 层下, hr.js 必须经 `.methods.` 调用 —— cd14ffe6 直呼根
+    #    路径 AQB_DECORATE.hrExclClass(根对象无此键), 每行渲染抛 TypeError 刷屏; 本批 e2e
+    #    未跑(现有 @fast e2e 挂运行期错误守卫当跑必拦), 静默上线。断言切出 AQB_DECORATE 顶层
+    #    片段(赋值起至 computed 键止, methods 层块在其内): 定义挪出 methods 层 / 层级重排时
+    #    守阵必红, 而非仅钉 hr.js 一侧。
+    decorate_js = open(os.path.join(shared, "decorate.js"), encoding="utf-8").read()
+    m_root = re.search(r"window\.AQB_DECORATE = \{(.*?)^  computed: \{", decorate_js, re.M | re.S)
+    assert m_root, \
+        "decorate.js 的 AQB_DECORATE 顶层片段(methods→computed)找不到了 —— 层级重排须同步本守阵与 hr.js 调用点"
+    assert re.search(r"\bmethods: \{", m_root.group(1)), \
+        "decorate.js 的 AQB_DECORATE 根层缺 methods 键 —— hr.js 的 .methods 调用路径将失效"
+    assert re.search(r"^    hrExclClass\(face, member\) \{", m_root.group(1), re.M), \
+        "hrExclClass 判定门不在 AQB_DECORATE.methods 层内(4 空格缩进的成员位, 根层键为 2 空格) —— 挪出即 hr.js 的 .methods 调用路径失效"
+    assert re.search(r"window\.AQB_DECORATE\.methods\.hrExclClass\(", hr_js), \
+        "hr.js hrExclTip 必须经 AQB_DECORATE.methods.hrExclClass 调用判定门(方法在 methods 层下)"
+    assert "window.AQB_DECORATE.hrExclClass(" not in hr_js, \
+        "hr.js 不得直呼根路径 AQB_DECORATE.hrExclClass —— 根对象无此方法(在 methods 层下), 直呼即每行渲染刷屏"
 
 
 def test_frontend_cat_chip_hr_semantics_css():

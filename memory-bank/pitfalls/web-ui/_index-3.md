@@ -1,7 +1,7 @@
 # web-ui — 前端 / WEB UI 纪律 · 卷 3/4
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `hscroll-indicator.md` … `show-if-residual-key.md`(共 27 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `hscroll-indicator.md` … `search-views.md`(共 27 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
@@ -19,6 +19,7 @@
 | [kbd-tab-set-sync.md](kbd-tab-set-sync.md) | 详情面板的页签快捷键(Alt+1~5)与**可见页签集合**是两套独立事实源 —— 页签栏收敛为合并页签后, 注册表五档仍按旧的四页签映射(`Alt+3` 名义「用户页」实际落到收起页签), 症状是**按了键切到别的页签**(不报错、不白屏, 只是"怎么跳到这页去了")。修法 =… | 改页签/子视图集合, 页签栏收敛或增删页签, 快捷键切错页签, Alt+数字不对, 合并页签, 快捷键没同步, 按了跳到别的页 |
 | [layout-css.md](layout-css.md) | 行宽口径、表头吸顶、两表逐栏对齐、sticky 层叠、flex 挤压、flex 子项错行、特异性之争、状态色分不出 —— 前端版式类的固定判据。 | 改 CSS, 布局, 表格, 滚动条, 表头吸顶, sticky, flex, flex-basis, 对齐, 未对齐, 没对齐, 错行, 文字高低不一, 后者更高, 统计栏, 工具条, 图例, align-items, stretch,… |
 | [mixin-ce-inject-break.md](mixin-ce-inject-break.md) | 全局 mixin(CONFIG_EDITOR)给**每个**组件都挂 `provide(){ce:this}` + 空 cfg 树 —— 把根模板段头抽成中间层组件时, 若它不把注入到的 ce 原样透传, 插槽里的 hub-field 会注入到**该组件实例**: 字段恒显 sc… | Vue provide/inject, 全局 mixin, CONFIG_EDITOR, ce 透传, 插槽注入断裂, aq-fold, hub-field, 开关不显示磁盘值, 默认徽标, 设置页开关无效, 保存并应用不出现, 改配置重启… |
+| [mixin-method-call-misses-methods-layer.md](mixin-method-call-misses-methods-layer.md) | `window.AQB_*` mixin 对象的方法嵌在 `.methods` 层下, 跨文件直调写根路径(`AQB_DECORATE.hrExclClass(...)`)时根对象无此键, 调用点每次执行必抛 `is not a function`; 模板绑定走 Vue mixi… | is not a function, hrExclClass, hrExclTip, AQB_DECORATE, methods 层, 根路径直调, 跨文件调用, mixin 全局对象, 每行渲染 TypeError, 判定门单点化, wi… |
 | [modal-mask-click-self-drag.md](modal-mask-click-self-drag.md) | `.modal-mask` 上写 `@click.self="closeX"` 判的是 click 事件的 target, 而 click 由 mousedown 与 mouseup 的**公共祖先**派发(DOM 规范)—— 在对话框里的输入框按下左键拖选文字、鼠标终点落到遮罩… | 遮罩关窗, click.self, 拖选文字窗口消失, 拖选后弹窗自己关了, mouseup 公共祖先, 点空白关窗误判, mousedown 起手位置, 添加种子窗口消失, 弹窗误关, text selection, 拖拽抬手 |
 | [modal-width-tier.md](modal-width-tier.md) | 弹窗宽度档位与内容形态错配: 编辑框骑通用基档, 长值被输入框裁掉 | 弹窗太小, 对话框太小, 重命名弹窗, modal 宽度, 宽度档位, --modal-w-base, --modal-w-add, rename-dialog, 输入框裁掉, 长名显示不全, 种子名显示不全, 弹窗宽度档, cls 附加类… |
 | [nav-focus-stale-ring.md](nav-focus-stale-ring.md) | 鼠标点过的页签持有 DOM 焦点, 键盘切页(1/2/3)不动焦点; Chromium 在 keydown 分发时把焦点元素重估为 :focus-visible ⇒ 旧页签画出残留 outline。分发期间 matches(":focus-visible") 已翻转, **不能*… | 键盘切页, 页签残留高亮框, 残留 outline, focus-visible, 焦点残留, 数字键切视图, 切页, tab 焦点, 修键盘导航 |
@@ -34,4 +35,3 @@
 | [scroll-visible-band.md](scroll-visible-band.md) | 键盘光标滚动跟随把「目标行几何在视口内」当成「看得见」, 但列表的上下边各压着一层随正文滚动的 chrome —— 顶部是吸在顶栏下缘的吸顶列头 `.group-head`(sticky, top = `--head-h - 1px`), 底部是固定状态栏 `.statusbar… | 键盘移到第一个种子只显示一半, 最后一个种子只显示一半, 翻页跳行, 翻一屏跳过行, PageDown 少看几行, 无光标回落, 跳极值行, 落回列表顶, 落到列表底, 追剧页键盘, 光标行被列头盖住, 光标行被状态栏盖住, 看不见当前行,… |
 | [search-pending-collapse.md](search-pending-collapse.md) | 搜索匹配是服务端单点(search_torrents)、前端消费 searchHits 的模式下, "输入新词到响应返回之间沿用上一查询的命中集"(search-as-you-type)契约对「空集→首词」转换失效 —— 首词的待响应窗(防抖 400ms + 请求往返)里 sea… | 改搜索/筛选派生, 改 searchHits 消费, 新增走命中门的列表视图, 搜索时列表闪空, 搜索整页跳顶, 搜索时面板跳动, 待响应窗, search-as-you-type, filteredTorrents, filteredGr… |
 | [search-views.md](search-views.md) | 搜索不是虚拟分组、负词种子级排除、脏标记是共享状态、鉴权不能靠"凭证串非空"、配置写盘按 BaseLoader 语义。 | 改搜索, 改视图脏标记, 改鉴权, 改登录, 改设置页, 改配置写盘, rid 门控 |
-| [show-if-residual-key.md](show-if-residual-key.md) | schema 字段的 show_if 只控制「这一行渲染不渲染」; 用户把触发键从命中值切走后, 该字段先前写进树的值**仍留在配置树里**(show_if 不删键), 行又已隐藏 ⇒ 用户看不见也改不了, 保存时后端校验对残留键报错(如 watch_fields 仅在 trig… | 给规则/段字段配 show_if; 切走关联键后保存报"该键非法"; 字段在某取值下才合法 |
