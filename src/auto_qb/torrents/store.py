@@ -223,6 +223,12 @@ class TorrentStore:
         # 此刻的缺文件扫描会「命中」正在被搬的文件 ⇒ 误判缺失 ⇒ 整组暂停 + MISSING。
         # 形态同 own_writes(纯内存、不落盘、非终态 job 的成员并集), 由 RelocateModule 单点维护。
         self.relocating_hashes: Set[str] = set()
+        # 恢复确认账窗口的成员登记(issue 26-11-15-0441): resume_pending 非空的 job 的挂账
+        # 成员并集 —— 生命周期是**账窗口**(非 job 窗口, 终态挂账 job 也在内), 开账即登记、
+        # 闭合即撤登记, 形态同 relocating_hashes(纯内存、不落盘), 由 RelocateModule 单点
+        # 维护(_note_resume_state 落账即重算 + _sync_relocating 路径兜底); 消费方 = fuse
+        # 保险丝让路(grouping/ops_skip/qbapi 仍消费 relocating_hashes, 口径不动)。
+        self.resuming_hashes: Set[str] = set()
         # 第三方文件级链接/硬链接组标记(D11 三层之第三层): 识别但**不并组**(组键形态表达不了
         # 任意目标), 供界面标注与迁移闸门拒迁。纯内存, 归组时重算。
         self.third_party_link_groups: Set[Any] = set()

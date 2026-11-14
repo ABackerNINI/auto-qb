@@ -218,7 +218,9 @@ class RelocateModule(LifecycleMixin, PlanMixin, ExecMixin, BaseModule):
             mark_dirty(full=True, reason="relocate_jobs")
 
     def _load_jobs(self) -> int:
-        """启动/热重载时从 state 恢复 job 账; 非终态的重挂 relocating 登记(抑制缺文件误判)"""
+        """启动/热重载时从 state 恢复 job 账; 非终态的重挂 relocating 登记(抑制缺文件误判),
+        挂账 job 的 resuming 登记同步重建(resume_pending 随 state 持久, 重启后账还活着,
+        让路窗口不能等第一次账面变更才出现 —— 走 _sync_relocating 漏斗, issue 26-11-15-0441)"""
         self._jobs_loaded = True  # 本会话已接管 job 账(stop() 补写闸的依据, 见 __init__ 注)
         box = self._state_jobs()
         n = 0
@@ -255,6 +257,9 @@ class RelocateModule(LifecycleMixin, PlanMixin, ExecMixin, BaseModule):
         §03 R3; 条目四元组单点产出 = ru.alias_roots_of) —— QbApi.torrents_delete 的
         拦截面据此判「save_path 位于活动别名之下」并按形态分流 verdict(文件级按交集谓词
         精判 / 目录级全量拦), 随本单点(每次 job 变更整表重算)自动增删, 终态即撤拦。
+        末尾附带刷新 resuming 登记(_sync_resuming): 本方法是 job 变更的重算漏斗(_set_job /
+        _load_jobs / 新建 job 都经此), 账变更路径由 _note_resume_state 直呼补齐 —— 两路
+        合起来覆盖登记的全部变更面(issue 26-11-15-0441)。
         """
         store = getattr(self._ctx, "store", None) if self._ctx is not None else None
         if store is None:
@@ -274,6 +279,35 @@ class RelocateModule(LifecycleMixin, PlanMixin, ExecMixin, BaseModule):
             reg.update(job.resume_hashes)
         for src, job_id, kind, paths in ru.alias_roots_of(self.active_jobs()):
             roots[src] = (job_id, kind, paths)
+        self._sync_resuming()
+
+    def _sync_resuming(self) -> None:
+        """resuming 登记 = resume_pending 非空的账窗口成员并集(fuse 让路口径, issue 26-11-15-0441)
+
+        生命周期语义 = **账窗口, 非 job 窗口**(与 relocating_hashes 的 job 级并集刻意不同):
+        - 开账(_resume_members 四出口经 _note_resume_state 挂账)即登记, 不等 _set_job ——
+          挂账单点不走 _set_job, 若只挂 _sync_relocating 会滞后一拍(账开了登记还没有,
+          让路窗口错位), 故 _note_resume_state 落账即直呼本方法(重算挂点之一);
+        - 账闭合(reconcile 对照快照核实全员回运行态后清账)即撤登记 —— armed 恢复运行期
+          job 仍 active 的真实拉流不再被让路, fuse 恢复计连击(收口「保护停摆至 job 终态」
+          的缺口; P1 回声依据只覆盖按住期/恢复期, 覆盖不了恢复运行期);
+        - 穷尽收敛(pending 只收敛到仍停者)继续登记: 成员本就停着无拉流, 但 triggered 分支
+          不补暂停的口径保持(机器恢复动作不被打回);
+        - 扫**全部 job**(终态与否): reconcile 对账口径就是终态也扫, 终态挂账 job(armed 期
+          穷尽后同 job 终态仍挂账)的让路窗口不能漏 —— 不沿用 relocating 的 active_jobs()
+          过滤。fuse 是唯一消费方(grouping/ops_skip/qbapi 仍消费 relocating_hashes, 不动)。
+        """
+        store = getattr(self._ctx, "store", None) if self._ctx is not None else None
+        if store is None:
+            return
+        reg = getattr(store, "resuming_hashes", None)
+        if reg is None:  # 老 store 替身无该字段: 自建一份, 不打扰既有测试形状
+            reg = set()
+            store.resuming_hashes = reg
+        reg.clear()
+        for job in self._jobs.values():
+            if job.resume_pending:
+                reg.update(job.resume_pending)
 
     def _set_job(self, job: RelocateJob) -> RelocateJob:
         """登记相位推进后的 job(单点: 落内存 + 刷登记 + 写 state + 可选 qB 标签镜像)

@@ -43,9 +43,10 @@
 - test_fuse_release_untag_skipped_when_client_none: 放行时 api.client 已断 -> 摘标签路径安全降级(零请求/告警/只标 released), 不 AttributeError
 - test_fuse_monitor_trigger_already_tagged_zero_requests: 触发时快照已带标签 -> 加标签零请求且无打标签日志
 - test_fuse_tag_apply_helpers_tolerate_missing_entries: 标签批量助手直驱 entries 缺 hash/rec 无标签 -> 防御假两侧不炸
-- test_fuse_relocating_monitor_member_not_paused: 搬迁窗口让路一 _scan_unmanaged 监控支: 窗口内不计连击不暂停不建条目, 解除后从零累计(issue 26-11-14-1744)
-- test_fuse_relocating_armed_member_not_triggered: 搬迁窗口让路二 _advance armed 支: 窗口内连击清零不转 triggered, 窗口外成员照常触发(不误伤), 解除后从零累计
-- test_fuse_relocating_triggered_member_not_repaused: 搬迁窗口让路三 _advance triggered 支: 窗口内不补暂停(恢复不被打回), 解除后仍拉流才照常补
+- test_fuse_resuming_monitor_member_not_paused: 账窗口让路一 _scan_unmanaged 监控支: 账在走不计连击不暂停不建条目, 账闭合后从零累计(issue 26-11-14-1744 / 26-11-15-0441)
+- test_fuse_resuming_armed_member_not_triggered: 账窗口让路二 _advance armed 支: 账在走连击清零不转 triggered, 窗口外成员照常触发(不误伤), 账闭合后从零累计
+- test_fuse_resuming_triggered_member_not_repaused: 账窗口让路三 _advance triggered 支: 账在走不补暂停(恢复不被打回), 账闭合后仍拉流才照常补
+- test_fuse_resuming_account_close_restreaks_armed: 账闭合(经 reconcile 清账撤登记)后 armed 成员的真实拉流恢复计连击 —— 本 issue 主缺口收口; relocating 登记在册(job 未终态, 前提显式挂上成真)但 fuse 不再消费它
 """
 
 from unittest import mock
@@ -53,6 +54,8 @@ from unittest import mock
 from auto_qb.config.impact import KERNEL_SECTIONS
 
 from auto_qb.config.models import DownloadFuseConfig
+
+from auto_qb.core.modules import relocate_units as ru
 
 from helpers import FakeClient, FakeTorrent, capture_logs, make_manager, seed_store
 
@@ -70,6 +73,20 @@ def _mgr(tmp_path, **fuse_kw):
         str(tmp_path / "state.json"), bare=True, download_fuse=DownloadFuseConfig(**fuse_kw), client=client
     )
     return mgr, client
+
+
+def _rjob(h, job_id="jf"):
+    """最小 relocate job 替身(armed 相位, 成员即恢复面): 驱动恢复确认账的挂账/闭合链"""
+    return ru.RelocateJob(
+        job_id=job_id,
+        hashes=(h, ),
+        mover=h,
+        src="R:/src",
+        dst="R:/dst",
+        scope="R:/src",
+        phase=ru.PHASE_ARMED,
+        resume_hashes=(h, ),
+    )
 
 
 def _tor(h, **kw):
@@ -715,56 +732,57 @@ def test_fuse_tag_apply_helpers_tolerate_missing_entries(tmp_path):
     api.torrents_remove_tags.assert_called_once_with(tags=[FUSE_TAG], torrent_hashes=[tagged.hash])
 
 
-# ---------- 搬迁窗口让路(issue 26-11-14-1744): relocating_hashes 登记成员不被保险丝暂停 ----------
+# ---------- 恢复确认账窗口让路(issue 26-11-14-1744 让路由来 / 26-11-15-0441 收窄口径):
+# resuming_hashes(resume_pending 非空的账窗口)登记成员不被保险丝暂停 ----------
 
 
-def test_fuse_relocating_monitor_member_not_paused(tmp_path):
-    """让路三支之 _scan_unmanaged 监控支(非零限速无条目): 搬迁窗口内 dlspeed>0 不计连击、
-    不暂停、不建 triggered 条目; 窗口解除后连击从零重新累计, 满 confirm_ticks 才暂停"""
+def test_fuse_resuming_monitor_member_not_paused(tmp_path):
+    """让路三支之 _scan_unmanaged 监控支(非零限速无条目): 账窗口内 dlspeed>0 不计连击、
+    不暂停、不建 triggered 条目; 账闭合(登记撤除)后连击从零重新累计, 满 confirm_ticks 才暂停"""
     mgr, client = _mgr(tmp_path)
     tor = _tor("f1" + "a" * 38, dl_limit=512 * 1024, dlspeed=1000)
     seed_store(mgr, [tor])
-    mgr.store.relocating_hashes.add(tor.hash)
+    mgr.store.resuming_hashes.add(tor.hash)
     for _ in range(TICKS + 2):
         _tick(mgr)
-    assert _pause_calls(client) == [], "搬迁窗口内不暂停(relocating 让路登记)"
+    assert _pause_calls(client) == [], "账窗口内不暂停(resuming 让路登记)"
     assert tor.hash not in _entries(mgr), "窗口内不建 triggered 条目"
-    mgr.store.relocating_hashes.clear()  # job 终态: 登记解除(relocate_mod._sync_relocating 整表重算)
+    mgr.store.resuming_hashes.clear()  # 账闭合: 登记撤除(relocate_mod._sync_resuming 随清账整表重算)
     _tick(mgr)
-    assert _pause_calls(client) == [], "窗口拍不计连击: 解除后第 1 拍不足额不触发"
+    assert _pause_calls(client) == [], "窗口拍不计连击: 闭合后第 1 拍不足额不触发"
     _tick(mgr)
-    assert _pause_calls(client) == [], "解除后第 2 拍仍不足额"
+    assert _pause_calls(client) == [], "闭合后第 2 拍仍不足额"
     _tick(mgr)
-    assert _pause_calls(client) == [("pause", [tor.hash])], "解除后从零累计满额才暂停"
+    assert _pause_calls(client) == [("pause", [tor.hash])], "闭合后从零累计满额才暂停"
     ent = _entries(mgr)[tor.hash]
     assert ent["status"] == "triggered" and ent["confirm_count"] == TICKS
 
 
-def test_fuse_relocating_armed_member_not_triggered(tmp_path):
-    """让路三支之 _advance armed 支: 搬迁窗口内 armed 成员 dlspeed>0 连击清零、不转 triggered;
-    同库窗口外成员照常触发暂停(护栏不误伤); 窗口解除后 relocating 成员从零累计满额才升级"""
+def test_fuse_resuming_armed_member_not_triggered(tmp_path):
+    """让路三支之 _advance armed 支: 账窗口内 armed 成员 dlspeed>0 连击清零、不转 triggered;
+    同库窗口外成员照常触发暂停(护栏不误伤); 账闭合后成员从零累计满额才升级"""
     mgr, client = _mgr(tmp_path)
-    reloc = _tor("f2" + "b" * 38, dlspeed=1000)
+    resuming_tor = _tor("f2" + "b" * 38, dlspeed=1000)
     free = _tor("f3" + "c" * 38, dlspeed=1000)
-    seed_store(mgr, [reloc, free])
+    seed_store(mgr, [resuming_tor, free])
     _tick(mgr)  # 武装拍(不计连击)
     assert len(_set_calls(client)) == 1 and _set_calls(client)[0][1] == FENCE, "两成员一次批量武装"
-    mgr.store.relocating_hashes.add(reloc.hash)
+    mgr.store.resuming_hashes.add(resuming_tor.hash)
     for _ in range(TICKS):
         _tick(mgr)
-    assert _entries(mgr)[reloc.hash]["status"] == "armed", "窗口内不升级 triggered"
-    assert _entries(mgr)[reloc.hash]["confirm_count"] == 0, "窗口拍连击清零(不作异常证据)"
+    assert _entries(mgr)[resuming_tor.hash]["status"] == "armed", "窗口内不升级 triggered"
+    assert _entries(mgr)[resuming_tor.hash]["confirm_count"] == 0, "窗口拍连击清零(不作异常证据)"
     assert _entries(mgr)[free.hash]["status"] == "triggered", "窗口外成员照常触发(护栏不误伤)"
     assert _pause_calls(client) == [("pause", [free.hash])]
-    mgr.store.relocating_hashes.clear()
+    mgr.store.resuming_hashes.clear()
     for _ in range(TICKS):
         _tick(mgr)
-    assert ("pause", [reloc.hash]) in _pause_calls(client), "解除后从零累计满额才暂停 relocating 成员"
+    assert ("pause", [resuming_tor.hash]) in _pause_calls(client), "闭合后从零累计满额才暂停该成员"
 
 
-def test_fuse_relocating_triggered_member_not_repaused(tmp_path):
-    """让路三支之 _advance triggered 支: 搬迁窗口内被外部启动的 triggered 成员不再补暂停
-    (relocate 收尾的恢复不被保险丝打回); 窗口解除后仍 dlspeed>0 才照常补暂停"""
+def test_fuse_resuming_triggered_member_not_repaused(tmp_path):
+    """让路三支之 _advance triggered 支: 账窗口内被外部启动的 triggered 成员不再补暂停
+    (relocate 的恢复动作不被打回; 穷尽仍停者也在登记内, 口径保持); 账闭合后仍 dlspeed>0 才照常补暂停"""
     mgr, client = _mgr(tmp_path)
     tor = _tor("f4" + "d" * 38, dlspeed=1000)
     seed_store(mgr, [tor])
@@ -772,14 +790,41 @@ def test_fuse_relocating_triggered_member_not_repaused(tmp_path):
     for _ in range(TICKS):
         _tick(mgr)
     assert len(_pause_calls(client)) == 1
-    # 模拟 own_write 回流 + relocate 收尾把成员拉起(仍在搬迁窗口内: 登记未解除)
+    # 模拟 own_write 回流 + relocate 把成员拉起(仍在账窗口内: 登记未撤)
     mgr.store.own_writes.clear()
     tor.state = "stalledUP"
     tor.dlspeed = 2000
-    mgr.store.relocating_hashes.add(tor.hash)
+    mgr.store.resuming_hashes.add(tor.hash)
     _tick(mgr)
     assert len(_pause_calls(client)) == 1, "窗口内不补暂停(恢复动作不被打回)"
     assert _entries(mgr)[tor.hash]["status"] == "triggered", "窗口内条目保持 triggered"
-    mgr.store.relocating_hashes.clear()
+    mgr.store.resuming_hashes.clear()
     _tick(mgr)
-    assert len(_pause_calls(client)) == 2, "窗口解除后仍拉流才照常补暂停"
+    assert len(_pause_calls(client)) == 2, "账闭合后仍拉流才照常补暂停"
+
+
+def test_fuse_resuming_account_close_restreaks_armed(tmp_path):
+    """本 issue 主缺口收口: 账闭合(成员经 reconcile 核实回运行态, 清账即撤登记)后, armed 成员的
+    真实拉流恢复计连击 —— relocating 登记在册(job 未终态, register_job 不走 _sync_relocating
+    漏斗, 前提由用例显式挂上成真)但 fuse 不再消费它; 账窗口在 _note_resume_state 落账拍即
+    在场(登记随落账即时重算, 不滞后一拍)"""
+    mgr, client = _mgr(tmp_path)
+    tor = _tor("f5" + "e" * 38, dlspeed=1000)
+    seed_store(mgr, [tor])
+    _tick(mgr)  # 武装拍
+    mod = mgr.host.get("relocate")
+    mod.register_job(_rjob(tor.hash))
+    mgr.store.relocating_hashes.add(tor.hash)  # 前提成真: job 未终态 relocating 应在册(_sync_relocating 口径)
+    mod._note_resume_state("jf", (tor.hash, ), 0)  # 恢复确认账开账(落账单点)
+    assert tor.hash in mgr.store.resuming_hashes, "挂账即登记(随 _note_resume_state 即时重算, 不等 _set_job)"
+    for _ in range(TICKS):
+        _tick(mgr)
+    assert _entries(mgr)[tor.hash]["status"] == "armed", "账窗口内不升级 triggered"
+    assert _entries(mgr)[tor.hash]["confirm_count"] == 0, "账窗口内连击清零(真实拉流也被当回声)"
+    mod._reconcile_resume_pending()  # 成员已回运行态(stalledUP): 确认闭合清账
+    assert mod.get_job("jf").resume_pending == ()
+    assert tor.hash not in mgr.store.resuming_hashes, "账闭合即撤登记"
+    assert tor.hash in mgr.store.relocating_hashes, "relocating 登记未动(job 仍 active): fuse 不消费它的对照面"
+    for _ in range(TICKS):
+        _tick(mgr)
+    assert ("pause", [tor.hash]) in _pause_calls(client), "账闭合后真实拉流恢复计连击(relocating 在册也不让路)"

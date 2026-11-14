@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="relocate-move-window">
 <meta name="doc-refs" content="memory-bank/tasks/26-11-15-backend-relocate-resume-confirm.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="fuse armed 窗口让路语义缺口: 恢复运行期成员的真实拉流也被当回声清零连击">
 <meta name="issue-summary" content="让路窗口=relocating_hashes 登记生命周期(非终态 job 并集), _arm 出口恢复成员后 job 仍 active 登记不清, 该窗口内 job 成员的真实拉流也被每拍清零 confirm 连击, fuse 对这些成员的保护在整个 armed 窗口停摆至 job 终态">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-15-0441-bug-fuse-armed-window-yield-stall</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-15 04:41</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">core</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">接缝终审(2026-11-15)</div></div>
 </div>
@@ -149,11 +149,15 @@ def _sync_relocating(self) -&gt; None:
   <h2><span class="no">§07</span>状态变更日志</h2>
   <ul>
     <li>2026-11-15 04:41 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-15 — 状态 Open → In Progress（kb.status）</li>
+    <li>2026-11-15 — 状态 In Progress → Done（kb.status）</li>
+</ul>
   <h3>复验</h3>
-  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <p>复验：2026-11-15 05:14 仍复现（fuse_mod.py:107「正常回声」注释 / :108 <code>relocating_hashes</code> 取现值、relocate_mod.py:250 <code>_sync_relocating</code>、三支让路落点 180/232/253 均与取证一致，行号无漂移）。</p>
   <h3>修复后补充</h3>
-  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  <p><b>实际修法</b>（按拍板修向 ② 实施，与 §06 建议修法②一致，无改道）：fuse 让路口径收窄为「恢复确认账在走」—— 新登记 <code>store.resuming_hashes</code> = resume_pending 非空的账窗口成员并集，重算单点 <code>relocate_mod._sync_resuming</code>，生命周期语义 = <b>账窗口，非 job 窗口</b>。重算双挂点覆盖全部变更面：①账变更路径 —— 挂账落账单点 <code>_note_resume_state</code>（本模块唯一不经 _set_job 的账面变更点）落账即直呼重算，开账/闭合/穷尽收敛都不滞后一拍；②job 变更路径 —— <code>_sync_relocating</code> 漏斗（_set_job / _load_jobs / 新建 job 都经此）末尾附带刷新，启动加载面（resume_pending 随 state 持久，重启后账还活着）随 _load_jobs 重建。登记扫<b>全部 job</b>（终态与否，不沿用 relocating 的 active_jobs() 过滤 —— reconcile 对账口径就是终态也扫，终态挂账 job 的让路窗口不漏）。fuse 三支让路谓词 <code>h in relocating</code> → <code>h in resuming</code>（getattr 缺省口径同款，老替身无字段自建不炸），参数链 relocating → resuming 按实清理（不留死参数），回声注释按账窗口重写并引用两 issue（26-11-14-1744 让路由来 / 本件收窄）；<code>relocating_hashes</code> 登记本身与其余三消费方（grouping 缺文件扫描 / ops_skip 跳检闸门 / qbapi D16 删种拦截）零改动。语义边界保持：穷尽仍停者继续让路（triggered 分支不补暂停口径不动 —— 机器恢复动作不被打回）；被让路拍 confirm_count/_streak 清零、解除后从零累计（P1 拍板不变）；按住期账未开不让路，暂停过渡期陈旧速度衰减尾计 1-2 拍后由 else 分支清零（知情拍板接受的取舍）。</p>
+  <p><b>验证方式</b>：既有 3 例让路用例口径改造（relocating → resuming 登记驱动，清零/解除从零累计断言保持）；新增 4 例 —— fuse 侧 1 例全链（挂账拍连击清零 → <code>_reconcile_resume_pending</code> 闭合清账撤登记 → armed 成员真实拉流恢复计连击，本缺口主收口面；同时断言挂账即登记不滞后）；relocate 侧 3 例（登记随 _note_resume_state 即时重算 + 老替身无字段自建 / 终态挂账与穷尽仍停者登记保持 + 自愈闭合撤登记 / _load_jobs 启动重建含终态挂账）。真机轨判定：按 testing/real-machine.md §00 准入判据，本修为纯账面/登记语义（fuse 只读快照，store/qB 全 Fake 可验），不落「qB 真执行才成立」「必碰真文件系统/进程」两类，纯桩可验不进真机轨（§06 明示理由）。</p>
+  <p><b>测试数字</b>（实测 2026-11-15）：全量 <code>commands run test.full</code> 6161 passed / 2 skipped，覆盖率 99%（statements 27412 / miss 72）；邻接族先行（relocate 全家 + grouping + webui relocate 13 个测试文件）<code>commands run test.one</code> 311 passed。改动文件：fuse_mod.py / relocate_mod.py / relocate_lifecycle.py / torrents/store.py / test_fuse_mod.py / test_relocate_resume_confirm.py。</p>
 </section>
 
 <footer>

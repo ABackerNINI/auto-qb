@@ -207,6 +207,8 @@ class LifecycleMixin:
         不走 _set_job 的原因与 _note_tag_state 相同: 终态 job 的挂账/清账不该触发标签镜像
         重入, 也不该反复后移 updated_at; 内容无变化时不写(对账每拍都进来, 不设变化门会
         每 tick 落盘刷屏)。落盘 + 换代快照, 账随 state 持久(重启后确认循环照常续上)。
+        与 _note_tag_state 的差异: 落账后直呼 _sync_resuming 刷新 resuming 登记 —— 这是
+        本模块唯一不经 _set_job 的账面变更点, 登记重算必须在挂账处补齐(issue 26-11-15-0441)。
         """
         cur = self._jobs.get(job_id)
         if cur is None:
@@ -216,6 +218,10 @@ class LifecycleMixin:
         if cur.resume_pending == pending and cur.resume_retries == retries:
             return
         self._jobs[job_id] = replace(cur, resume_pending=pending, resume_retries=retries)
+        # resuming 登记随落账即时重算(issue 26-11-15-0441): 挂账单点不走 _set_job, 若只等
+        # _sync_relocating 会滞后一拍(账开了登记还没有, fuse 让路窗口错位) —— 开账/闭合/
+        # 穷尽收敛三个账面变化都要在这里落到登记上
+        self._sync_resuming()
         self._persist()
         self._publish_snapshot()
 

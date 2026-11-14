@@ -36,6 +36,13 @@
   job_from_dict 往返(旧账缺字段 = 空账)+ 重启(_load_jobs)后续跑不丢
 - test_no_resume_hashes_is_noop: 无暂停成员(豁免/直接形态)零 API 调用零挂账
 - test_dry_run_reconcile_never_writes: dry-run 下确认核对零动作(不补发不落盘)
+- test_resuming_registry_tracks_account_no_lag: resuming 登记 = 账窗口 —— 挂账拍即登记
+  (随 _note_resume_state 即时重算, 不等 _set_job 不滞后), 账闭合拍即撤登记; 老 store
+  替身无该字段自建不炸(issue 26-11-15-0441)
+- test_resuming_registry_keeps_terminal_job_and_exhausted_members: 终态挂账 job 仍登记
+  (不沿用 active_jobs 过滤); 穷尽收敛(pending 只剩仍停者)登记保持, 自愈闭合即撤
+- test_resuming_registry_rebuilt_on_load_jobs: 启动加载面 —— state 恢复的挂账 job(终态与否)
+  经 _load_jobs 重建登记(resume_pending 随 state 持久, 让路窗口在第一次账面变更前就在场)
 """
 
 import types
@@ -447,3 +454,77 @@ def test_dry_run_reconcile_never_writes():
     mod._reconcile_resume_pending()
     assert issues == [] and mod._jobs["j1"].resume_retries == 2, "dry-run 不推进确认循环"
     assert mod._jobs["j1"].resume_pending == ("HA", )
+
+
+# ---------- resuming 登记(fuse 让路口径, issue 26-11-15-0441): 生命周期 = 账窗口 ----------
+# 口径: fuse 让路 = resume_pending 非空的账窗口(store.resuming_hashes, _sync_resuming 单点
+# 重算), 不再消费 job 级的 relocating_hashes —— 挂账拍登记在场, 闭合拍撤登记, 终态挂账
+# job 与穷尽仍停者都不漏。登记本身保留 relocating(grouping/ops_skip/qbapi 仍消费)。
+
+
+def test_resuming_registry_tracks_account_no_lag():
+    """登记随落账即时重算不滞后: 挂账拍即登记(不等 _set_job —— 挂账单点不走它), 账闭合拍
+    即撤登记; 老 store 替身无 resuming_hashes 字段自建一份不炸(getattr 缺省口径)"""
+    mod = _resume_mod(
+        api=types.SimpleNamespace(torrents_resume=lambda **kw: None),
+        store=types.SimpleNamespace(by_hash={"HA": _running()}),
+    )
+    assert not hasattr(mod._ctx.store, "resuming_hashes"), "替身无该字段(老形状)"
+    mod._jobs["j1"] = _job(phase=ru.PHASE_ARMED, resume_hashes=("HA", ))
+    mod._note_resume_state("j1", ("HA", ), 0)  # 挂账(落账单点): 不经 _set_job
+    assert mod._ctx.store.resuming_hashes == {"HA"}, "挂账即登记(同一落账点内重算, 不滞后一拍)"
+    mod._reconcile_resume_pending()  # 成员已回运行态(stalledUP): 确认闭合清账
+    assert mod._jobs["j1"].resume_pending == ()
+    assert mod._ctx.store.resuming_hashes == set(), "账闭合即撤登记"
+
+
+def test_resuming_registry_keeps_terminal_job_and_exhausted_members():
+    """终态挂账 job 仍登记(不沿用 relocating 的 active_jobs 过滤 —— reconcile 对账口径就是
+    终态也扫); 穷尽收敛(pending 只剩仍停者)登记保持, 全员自愈回运行态即闭合撤登记"""
+    issues = []
+
+    def _boom(**kw):
+        issues.append(list(kw["torrent_hashes"]))
+        raise RuntimeError("qB 失联")
+
+    mod = _resume_mod(
+        api=types.SimpleNamespace(torrents_resume=_boom), store=types.SimpleNamespace(by_hash={"HA": _stopped()})
+    )
+    mod._fail(_job(resume_hashes=("HA", )), "move_stalled", "停滞")
+    assert mod._jobs["j1"].phase == ru.PHASE_FAILED, "job 已终态"
+    assert mod._ctx.store.resuming_hashes == {"HA"}, "终态挂账 job 仍登记(armed 期穷尽后同 job 终态仍挂账)"
+    for _ in range(RESUME_MAX):  # 补发穷尽(全部异常): pending 收敛到仍停者, 登记保持
+        mod._clock.advance(RESUME_BACKOFF)
+        mod._reconcile_resume_pending()
+    assert mod._jobs["j1"].resume_retries == RESUME_MAX
+    assert mod._jobs["j1"].resume_pending == ("HA", )
+    assert mod._ctx.store.resuming_hashes == {"HA"}, "穷尽仍停者继续登记(triggered 分支不补暂停口径保持)"
+    mod._ctx.store.by_hash["HA"] = _running()  # 用户手动恢复/qB 自愈
+    mod._reconcile_resume_pending()
+    assert mod._ctx.store.resuming_hashes == set(), "自愈闭合即撤登记"
+
+
+def test_resuming_registry_rebuilt_on_load_jobs():
+    """启动加载面: state 恢复的挂账 job(终态与否)经 _load_jobs 重建登记 —— resume_pending
+    随 state 持久, 重启后账还活着, 让路窗口在第一次账面变更前就在场(走 _sync_relocating 漏斗)"""
+    mod = _resume_mod(api=types.SimpleNamespace(torrents_resume=lambda **kw: None))
+    mod._ctx.state.data = {
+        "relocate":
+            {
+                "jobs":
+                    {
+                        "j1":
+                            ru.job_to_dict(
+                                _job(
+                                    "j1", phase=ru.PHASE_ARMED, resume_hashes=("HA", "HB"), resume_pending=("HA", "HB")
+                                )
+                            ),
+                        "j2":
+                            ru.job_to_dict(
+                                _job("j2", phase=ru.PHASE_FAILED, resume_hashes=("HC", ), resume_pending=("HC", ))
+                            ),
+                    }
+            }
+    }
+    assert mod._load_jobs() == 2
+    assert mod._ctx.store.resuming_hashes == {"HA", "HB", "HC"}, "挂账 job(含终态 j2)的成员全部重建进登记"
