@@ -1,7 +1,7 @@
 # backend — 后端 / qB / 平台 · 卷 1/2
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `alias-links.md` … `platform-fs.md`(共 27 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `alias-links.md` … `page-scraping.md`(共 27 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
@@ -19,6 +19,7 @@
 | [crlf-lf-mixed-endings.md](crlf-lf-mixed-endings.md) | 仓库存量文件 CRLF/LF 混行尾: 补丁按统一行尾假设必失配 | 行尾不同, CRLF, LF, 批量替换未命中, count=0, edit 匹配失败, 补丁失配, here-string 转义 |
 | [ctypes-x64-argtypes.md](ctypes-x64-argtypes.md) | 用 `ctypes.windll.user32.XXX(...)` 直调 Windows API 时**不声明 argtypes/restype**, 参数按 32 位 int 传, 而 `HWND` / `HWND_TOPMOST` 这类"指针宽度"参数的高 32 位是寄存器残… | ctypes, windll, WinDLL, argtypes, restype, 静默失败, GetLastError 为 0, x64, 传参, HWND, 指针宽度, 寄存器残留, 有概率, SetWindowPos, SetFor… |
 | [deps-upgrade-2026-10.md](deps-upgrade-2026-10.md) | fastapi 0.x 升级后 body: dict 注解把 JSON null 拦成 422 | fastapi 升级, 0.x minor, body dict, 422, 400 契约, Optional, pydantic 校验, notify, 签名 |
+| [derived-registry-sync-points.md](derived-registry-sync-points.md) | 给 store 加新的派生登记(relocating/resuming 这类纯内存并集)时, 重算挂点若只选在「job 变更的重算漏斗」(_set_job → _sync_relocating), 而账面存在**刻意不走漏斗**的落账单点(_note_resume_state/_… | 新增 store 登记, 派生登记, 重算挂点, 漏斗, _set_job, _sync_relocating, _note_resume_state, _note_tag_state, 不走 _set_job, 登记滞后, 让路窗口, r… |
 | [effect-confirmation.md](effect-confirmation.md) | 「从陈旧观测直接下确定性结论」—— 异步操作(recheck 这类 qB 异步应用 + 快照按节拍滞后)的成败宣称若只凭一份快照观测, 而该快照在「生效前」与「生效后」**不可分辨**(已完成种子 progress=1.0 且非 checking, 既是校验前的完成态也是校验通过… | 异步操作, 成败判定, 轮询, recheck, 校验成功, 校验启动超时, seen_checking, poll_verdict, is_piece_checking, checkingResumeData, 伪证据, 快照滞后, 首跳… |
 | [explorer-foreground.md](explorer-foreground.md) | 后台进程经 `SHOpenFolderAndSelectItems` / `os.startfile` 弹资源管理器时, 新窗口**有概率被压在当前前台窗口后面** —— Windows 前台锁不允许后台进程抢前台; 必须打开后找回窗口、抬 Z 序, 再尽力争取焦点。⚠ 2026… | 打开目标文件夹, open-path, open_path, 资源管理器, explorer, 不弹到顶层, 不置前, 后台窗口, 前台锁, foreground, SetForegroundWindow, AttachThreadInpu… |
 | [fault-domain-classification.md](fault-domain-classification.md) | 分类模型缺一层时, **通道 / 环境类**故障会掉进基类, 被下游当「站点故障」处理 —— 于是环境噪音进持久证据链(站点文件 `wave.notes`)、推进档位失败(连关几晚升成「疑似改版」ERROR), 并出现在前端错误历史。判据: **异常即分类** —— 「能不能靠重… | 告警文案与真实根因不符, 环境态被当站点结论, 错误历史里出现「浏览器 / 网络 / 本机」字样, 通道静默, 取数超时, 新增告警出口, 想给日志打静默标记 |
@@ -34,4 +35,3 @@
 | [lazy-property-parse-error.md](lazy-property-parse-error.md) | 给解析器套 `try/except` 做 fail-closed 时, 若只把**构造函数**包进去, 而真正会抛的是结果对象的**惰性 property**(如 `urlsplit(...).port`), 异常照样穿透 —— 安全闸门于是变成 500, 而不是它该给的 403… | 给解析/判定函数加 try 收口; 同族解析器有两侧(如 Host 头 / Origin 头); 生产路径出现「畸形输入报 500」。 |
 | [nested-container-recursion.md](nested-container-recursion.md) | 动作域加嵌套容器(choose)后, 遍历 actions 的检测/剔除判定不递归 = 校验放行而载入崩 | choose, 编排块, then, default, 嵌套, 递归, 遍历 actions, 退役伪动作, 校验放行, 载入崩 |
 | [page-scraping.md](page-scraping.md) | 从 HTML 里抽一段小数字 / 小文本时, 不锤定结构的正则会匹配到页面上别处的同类文本 —— 结果**看着合法但值是错的**, 且不报错。 | 爬页面, 抓页面, 解析 HTML, 正则提取, 页脚区间, 分页判据, HR 统计页, 站点改版, 数字提取 |
-| [platform-fs.md](platform-fs.md) | Windows / Linux 差异、长路径、稀疏文件、删除拦截层、事件循环断连噪音、批处理与 PATH 条目的写法坑 —— 与宿主环境强相关的一类坑。 | 锁文件, 平台差异, Windows, Linux, 长路径, 稀疏文件, 删不掉, 磁盘空间, 回收站, 盘满, WinError 10054, proactor, 断连噪音, asyncio, 批处理, cmd, .cmd, 行尾, C… |
