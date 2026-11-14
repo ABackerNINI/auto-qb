@@ -1,13 +1,14 @@
 # testing — 测试 / 冒烟 / 仿真纪律 · 卷 5/5
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `single-file-xdist-hang.md` … `xdist-worker-global-snapshot.md`(共 23 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `single-file-coverage-gate.md` … `xdist-worker-global-snapshot.md`(共 25 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
 
 | 主题 | 一句话 | 触发词 |
 |---|---|---|
+| [single-file-coverage-gate.md](single-file-coverage-gate.md) | 只跑单个测试文件时, 全部用例绿但收尾仍打 `FAIL Required test coverage of <门槛>% not reached. Total coverage: ~18%` —— 覆盖率**全局门槛**只对全量收集有意义, 部分运行收集面小必然红, 用例本身全过。… | test.one, 单文件, 单测一个文件, coverage FAIL, not reached, 18%, 假红, 排查单个用例, 裸跑 pytest 单文件 |
 | [single-file-xdist-hang.md](single-file-xdist-hang.md) | 只跑**一个**测试文件却用默认的 `-n 8`, 会长时间**零输出**看起来像挂死 (实测 7 分钟无一行, 只有 1 个 worker 存活); 单文件 / 少量用例一律 `-n 0` 串行, 同一批用例 24s 跑完。`test.one` 已内置 `-n 0`。 | 单文件 -n 8, 挂死, 零输出, xdist worker 卡住, test.one, 单文件慢, 并行度 |
 | [smoke.md](smoke.md) | `scripts/ui_harness.py` + `e2e/`(@playwright/test)是本仓库覆盖前端渲染的唯一手段; 这里是它的环境坑与验证手法 | 浏览器冒烟, e2e, Playwright, Edge, 白屏, 前端改完, 时序复现, 聚合行状态色, Cannot find module playwright, 修饰键点击, Ctrl+click, 多选失败, site-chip,… |
 | [stale-repo-copy-scan-red.md](stale-repo-copy-scan-red.md) | gitignored 的旧全量仓库副本被 `rglob` 扫描守阵算进「源码散落」, 报错指向副本而非产品代码; 移出副本即绿, 不是代码缺陷。 | test_free_port_single_source, 端口实现散落, tmp-analysis, 旧仓库副本, rglob, 扫描守阵假红, 环境残留 |
@@ -25,6 +26,7 @@
 | [tool-mode-coverage.md](tool-mode-coverage.md) | 一次性工具/校验器若支持**多种运行模式**(全量 vs 分批、dry-run vs apply、演练 vs 生产), 而演练只覆盖了其中一种, 另一种模式的代码路径就**从未被任何用例或红验碰过** —— 它要么静默放过(假绿), 要么在真实使用时才报一堆假红。判别: 工具的每… | 一次性工具, 迁移脚本, 分批模式, 批模式, --files 子集, dry-run, 演练, 校验器, 红验, 模式覆盖, 假绿, 假红, 只演练了一种模式, 末批, 删除源文件, 收尾批, split_test_web |
 | [ui-preview-harness.md](ui-preview-harness.md) | 前端视觉改动的真浏览器冒烟: Vue 生产版拿不到 `app._instance`、无头 Edge 的 virtual-time 与 SSE 坑 —— 都有固定解法。 | UI 冒烟, 截图, 无头浏览器, 弹窗驱动, Vue 实例, createApp, 截图工装 |
 | [unreached-branch-guard.md](unreached-branch-guard.md) | 一个测试名字/断言都对, 但**夹具数据让被测分支根本进不去**, 于是它测的是另一条路; | 红验, 守阵, 假绿灯, 假绿, 分支不可达, 未导入, NameError, 未执行行, 覆盖率盲区, 夹具, 注入 bug, 原地改配置, 热重载短路 |
+| [uplot-axes-splits-generator.md](uplot-axes-splits-generator.md) | 读 uPlot x 轴刻位(tick 位置)时 `u.axes[0].splits` **不是数组**, 是生成刻位的函数(vendor 1.6.32: 绘制时 `t._splits = t.splits(...)` 回填); 拿它当数组用得到的是函数对象本身(长度/下标全错或… | uPlot axes, splits, _splits, 刻位真值, tick 位置, split 集, 网格刻度, 生成器函数, vendor 1.6.32, 轴标断言, split 数恒定 |
 | [uplot-hover-hit-area.md](uplot-hover-hit-area.md) | 给 uPlot 图写「悬停第 N 个桶」类 e2e 断言时, 拿宿主 `.qb-chart-host` 的盒子推像素会落到**交互面之外** —— uPlot 收不到 mousemove, hoverIdx 回落 -1, 且报错指向 tooltip 而非几何、看不出病因; 真正的… | 悬停断言, hoverIdx -1, 落点到图外, u-over, qb-chart-host, uPlot 交互面, 纵轴槽, 84px, 桶 index 转 px, 两点标定, e2e 点画布, tooltip 不出现 |
 | [uv-build-file-lock.md](uv-build-file-lock.md) | 同 clone 并行跑两条 uv 测试任务(如 test.gtm + test.quick)时, 后到者 uv 构建子包失败 os error 32 —— 串行重跑即绿, 不是代码问题 | 并行跑测试, os error 32, 文件被占用, Failed to build, uv, test.gtm, test.quick, 另一个程序正在使用此文件 |
 | [vnu-rejects-vue-templates.md](vnu-rejects-vue-templates.md) | `shared/tpl/*.html` 是 Vue 模板**片段**, `v-if` / `@click` / `:class` 是指令不是 HTML 属性 —— 送 W3C v.Nu 校验必然逐条报 `Attribute "…" not allowed`, 提交闸门因此整批红 | v.Nu 报 Attribute not allowed, check_html --vnu 红, 提交闸门 HTML 规范级, Vue 指令校验, tpl 分片, overlays.html, 皮肤壳 index.html, 模板片段不是… |

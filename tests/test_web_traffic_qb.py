@@ -308,8 +308,13 @@ def test_api_traffic_qb_raw_live_tail_hold_extension(web_env, monkeypatch):
     _enable_qb_traffic(mgr, sample_interval_multiplier=15)  # main_tick=2.0 -> 30s 生效(桶宽 30, 间隙上界 60)
     _qb_v4(mgr)  # 建 v4 目录(磁盘零块: 全部观测走活尾)
     now = int(time.time())
+    if now % 30 == 0:
+        # int 冻结钟特有边角(生产 float now 零测度不可达): now 恰落桶边界 -> hold 覆盖
+        # [projected, now] 与进行中桶 [now, now+30) 零重叠 -> 尾桶 None(墙钟相位 1/30,
+        # 提交闸门 26-11-15 实测撞红); +1s 偏离边界, 相位守卫后 gap 恒 != 30
+        now += 1
     _freeze_traffic_endpoint_clock(monkeypatch, now)  # 端点取时单点冻结(用例与请求同一 now)
-    projected = ((now - 25) // 30) * 30  # 末样本槽位: 30 对齐, 距 now 25..54s(上界 60 内)
+    projected = ((now - 25) // 30) * 30  # 末样本槽位: 30 对齐, 距 now 25..54s 且 != 30(上界 60 内)
     _attach_live_tail_host(
         mgr,
         {
@@ -351,8 +356,12 @@ def test_api_traffic_qb_group_raw_live_tail_hold_extension(web_env, monkeypatch)
     _enable_qb_traffic(mgr, sample_interval_multiplier=15)  # 30s 生效(桶宽 30, 间隙上界 60)
     _qb_v4(mgr)  # 磁盘零块: 观测面全部走成员活尾
     now = int(time.time())
+    if now % 30 == 0:
+        # 同 global 用例: int 冻结钟桶边界相位(墙钟 1/30)使 hold 覆盖与进行中桶零重叠,
+        # 尾桶 None —— +1s 偏离边界(生产 float now 零测度不可达, 见 global 用例注)
+        now += 1
     _freeze_traffic_endpoint_clock(monkeypatch, now)  # 端点取时单点冻结(用例与请求同一 now)
-    projected = ((now - 25) // 30) * 30  # 末样本槽位: 30 对齐, 距 now 25..54s(上界 60 内)
+    projected = ((now - 25) // 30) * 30  # 末样本槽位: 30 对齐, 距 now 25..54s 且 != 30(上界 60 内)
     _attach_live_tail_host(
         mgr,
         {

@@ -9,7 +9,7 @@ plan 26-10-04-1957 S3b, §05.2-§05.4)
   stale + server_started_at(P4, plan 26-10-15-0829: 本进程出生时刻, 前端据此区分重启缝与
   停机洞; sample_interval_s = 生效采样间隔, plan 26-11-14-1313 F6 只增键 —— 与 interval_s
   分离的显示口径: raw 段桶宽经 ceil 取整/上限加宽后可与采样间隔不等, agg 段窗二者恒不同)。
-  interval_s = 桶宽: raw 段窗 = max(采样间隔, span/上限), 3d/7d/30d = 3600, 6mo/1y = 86400
+  interval_s = 桶宽: raw 段窗 = max(采样间隔, span/上限)经 ceil 取整, 3d/7d/30d = 3600, 6mo/1y = 86400
   (本地日界), all = 标称月长(真实月长按行间隔, 点位真值在 points[].t, 前端按真值落点)。
 - 未启用(qb_traffic 缺省 None / enabled=false / data_dir 为空防御)或无数据 -> 空态
   (points/totals 空数组 + meta), 与 /api/traffic/history 未启用空数组分支同构。
