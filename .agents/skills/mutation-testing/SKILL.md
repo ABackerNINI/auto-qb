@@ -251,7 +251,7 @@ user-invocable: true
 ## 派生「针对 X 的分步执行计划」
 
 用户说「**根据变异测试指导写一份针对 <X> 的分步执行计划**」(X 如 `config`)时, 按本节的骨架写。
-产出走 [delivery-artifact skill](../delivery-artifact/SKILL.md), 放 `memory-bank/plans/<stamp>-plan-<topic>.html`(**单文件 HTML, dark 主题**)。
+产出走 `commands run kb.new plan` 命令化创建, 放 `memory-bank/plans/<stamp>-plan-<topic>.html`(**单文件 HTML, dark 主题**; 视觉/骨架规格单点在 memory-bank skill `templates/`, 不走 delivery-artifact)。
 
 **骨架**(每一节都必须落到 X 上, 不许留泛泛的模板话):
 

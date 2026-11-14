@@ -14,6 +14,7 @@
 
 > 每条事实**只在一个工位有权威** —— 同一件事的其余件只引用、不重写 (重写必然漂移)。
 > 旧路径已废: `docs/plans/` → `memory-bank/plans/` · `docs/*.html`(报告) → `memory-bank/reports/` (2026-09-23 迁入)。
+> 渲染边界(2026-11-14 拍板): 四工位制品的视觉/骨架规格**单点在 memory-bank skill `templates/`**; **制品不走 `delivery-artifact` skill**(自定视觉方向、无模板, 与冻结单点相反); 只管四工位外的可视化交付物(原型/Stage/PPT/演示页)。
 
 ## 决策树: 要记一件事 → 放哪儿
 
