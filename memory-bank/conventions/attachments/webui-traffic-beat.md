@@ -3,7 +3,7 @@
 > 摘要: `conventions/webui.md` 的流量图节拍动效产出口径 —— 节奏内核(1s 硬上限/周期自适应)、L0 左移底座(视口偏置)、L1 双轨状态机、视觉引擎 V(图层顺序/预算)、N 霓虹元素层与背景静态、T6 综合表现层(扫描束/横向线条)、右键数值面板与 `autoqb.ui.qbFx` 契约、预览一拍 —— 本节是该主题的现行权威。口径以已提交实现为准(`shared/qb_traffic_chart.js` + `shared/tpl/fx-panel.html`), 计划措辞与实现有出入处以本节为准。
 > 触发: 流量图, 节拍动效, beat, L0, 左移, 视口偏置, 双轨, 状态机, 视觉引擎, 粒子, 扫描束, 回声, 霓虹层, 图层顺序, 预算, fx-panel, 动效数值面板, 右键面板, qbFx, autoqb.ui.qbFx, reduced-motion, 预览一拍, 束体指令
 
-**Refs:** memory-bank/plans/26-11-12-1139-plan-webui-traffic-beat-motion.html, memory-bank/tasks/26-11-14-webui-traffic-beat-motion.md
+**Refs:** memory-bank/plans/26-11-12-1139-plan-webui-traffic-beat-motion.html, memory-bank/tasks/26-11-14-webui-traffic-beat-motion.md, memory-bank/plans/26-11-14-1313-plan-webui-traffic-beat-fidelity.html
 
 ## 流量图节拍动效 (2026-11-14, 计划 26-11-12-1139 S0-S4 八批落地)
 
@@ -19,3 +19,4 @@
 - **预览一拍六条语义(D21)**: ① 不动窗口(不 shift 不 push, `dx === 0`, xs 与 `u.scales.x` 逐帧不变) ② 假 Δ 贴近真实量级 `clamp(0.18 + 0.35 × 粒子密度, 0.10, 0.50)`(相对量, 方向按轨 up 减 / dl 加), 不固定拉满 Lv.3 ③ 连点重启(previewToken 递增令旧帧失效, 从当前显示值接续, 不排队不叠加) ④ 真值抢占(真拍判定帧先取消预览, 真值 setData 已整组落袋; 真拍主区在途时预览忽略) ⑤ 不写 store(零持久化副作用, 末帧还原真值显示面 + 双轨状态机复位真值对齐, 假值不留痕, 连点早退角点同走还原核心) ⑥ 同预算(spawn 与绘制走真拍同一条代码路径, I9 不放宽)。生效门 `cfg.on === true`(reduce 与 enabled=false 无动效可预览); **不自动循环**(仅显式点击, 无定时器 —— 与真拍撞车且真假不可辨)。
 - **状态行与镜像**: 状态行 = 「采样 X s · beat Y ms · 上次真实拍 Z」+ 预览在途后缀「· 预览中」; period/beat 由 computed 现算(复用 `_qbPollMs`/`_qbBeatMs` 单点); 「上次真实拍」三态(— 无真拍 / X s 前 / 时钟未追上钳 0.0), 真拍判定帧只写面板浮着的当前 scope 的墙钟镜像(fxBeatAt), 1s 步进时钟仅面板开着装/关面板摘; 「· 预览中」是翻转沿写的显示镜像, 动画态本体在图记录。
 - **守阵路由**: 电池 + 静态钉 = `tests/test_webui_static_dom_panel_traffic.py`(节奏公式/时间线/状态机/预览语义/预算/收层七处/持久化三件套, node 纯函数电池直接真跑); 真机面 = `e2e/traffic-fx-panel.spec.mjs`(冒烟链/收层顺序/Alt 看穿/四皮肤 rect)与 `e2e/traffic-fx-frames.spec.mjs`(左移连续性/预览拍帧级, CPU 敏感子集)。已知坑: **Vue 生产构建(vue.global.prod.js)对模板缺失处理器完全静默**(警告仅 dev 构建) —— 接线断掉没有任何运行时报错面, 模板绑定静态钉是唯一闸; 守阵捕聚合原文含注释, **注释不得复现守阵锚串原文**(见 pitfalls/testing/static-guard-mutation.md)。
+- **待实施指链(2026-11-14)**: 实施后用户报障复刻偏差(动效几乎不现 / 缺常驻旋转菱形 / 0 流量零动效 / x 轴逐拍抖动 / 曲线不总落判定线 / 动效右·下裁剪 / 采样显示口径), 根因取证与修复方案(F1-F6, 含栅格 ceil→floor+1 与活尾链端延伸)单点在计划 `26-11-14-1313-plan-webui-traffic-beat-fidelity.html`(Open, 只建计划未开工); 本节口径仍以**已提交实现**为准, 该计划实施收口后随批回写。

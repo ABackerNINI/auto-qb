@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>流量图节拍动效复刻矫正: 等级门/常驻菱形/栅格方波/活尾延伸/裁剪/显示口径</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="webui-traffic-beat-fidelity">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-14-1313">
+<meta name="doc-updated" content="26-11-14-1313">
+<meta name="doc-refs" content="memory-bank/plans/26-11-12-1139-plan-webui-traffic-beat-motion.html, memory-bank/conventions/attachments/webui-traffic-beat.md">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: webui-traffic-beat-fidelity</div>
+<h1>流量图节拍动效复刻矫正: 等级门/常驻菱形/栅格方波/活尾延伸/裁剪/显示口径</h1>
+<p class="lede">本篇只回答: 前序计划 26-11-12-1139 实施后用户报「模板效果没复刻出来」的五类观感缺陷(动效几乎不出现 / 缺常驻旋转菱形 / 0 流量零动效 / x 轴逐拍抖动 / 曲线不总落判定线)与两处配套口径(裁剪 / 面板显示)各自的真实根因是什么、怎么修。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-14-1313 · <b>doc-updated</b> 26-11-14-1313 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 用户报障(26-11-14, 含二次补充: x 轴修正 / 裁剪 / 尾桶落线 / 采样显示) + 三轮帧采样实测取证(合成桩 2400+6011+6011 帧, 生产同构 payload 生成器) + grilling 三问拍板(AskUserQuestion 26-11-14) + 前序计划 26-11-12-1139 §04 模板对照
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<p><b>背景。</b>26-11-12-1139 交付的 T6 节拍动效, 引擎机械面(setScale 微任务合并 / y 钉档同值交还 / tick 标签冻结 / L0 边界连续性)经实测自洽——但用户真机观感是「默认配置下没有扫描、没有粒子、没有旋转方块, 0 流量完全没有动效, 每次左移后流量图有一瞬间(x 轴)抖动, 有流量时部分动效被右/下裁剪, 不是每一拍曲线都落到检查线, 面板显示采样 2.0s 而配置是 1.5s」。取证结论: <b>引擎没坏, 坏的是四个门与一个数值面</b>(§02), 另有一处根因在后端栅格。</p>
+<p><b>目标(做到什么程度算成)</b>——验收判据 A1-A7, 全绿收口:</p>
+<table>
+  <tr><th>#</th><th>判据</th><th>量法</th></tr>
+  <tr><td>A1</td><td>稳态流量(Δ≈0 且值&gt;0)下每拍出 Lv.1 反馈(扫描束+粒子+环), 不再整段静默</td><td>帧采样: 拍窗内右缘装饰带像素量显著高于拍间基线</td></tr>
+  <tr><td>A2</td><td>两轨末点菱形常驻连续旋转(拍间不停); calm 档退化圆点; 关总开关 / reduced-motion 不出现</td><td>DOM 探针: transform 持续变化; 三档门逐一切换断言</td></tr>
+  <tr><td>A3</td><td>0 流量: L0 平滑左移照常 + 菱形旋转仍在; 扫描/粒子维持静默(与模板 zero 场景一致)</td><td>零流量段帧采样: 装饰带回到基线, L0 边界连续</td></tr>
+  <tr><td>A4</td><td>1m 窗 2s 桶连续观测(≥10 分钟): rewin 0 次、x 轴 split 集稳定(仅视口边界的自然滑入滑出, 无中段 pop)</td><td>轮询日志 n 恒定 + split 数分布单峰</td></tr>
+  <tr><td>A5</td><td>采样器活跃时曲线终点恒落判定线(尾桶不再间歇 null); 真缺口(qB 断连)仍诚实断线</td><td>桩: 活跃/停滞两态分别断言</td></tr>
+  <tr><td>A6</td><td>有流量时环/粒子/菱形无右缘裁切; 近底时环完整可见(不墨染轴标区)</td><td>画布右缘/底缘像素探针</td></tr>
+  <tr><td>A7</td><td>面板显示「采样 1.5 s · 桶宽 2.0 s」两值(配置 1.5s 时); 相等时维持单值</td><td>e2e 文案断言</td></tr>
+</table>
+<p><b>设计不变量(违反即破坏设计, 全部承自 26-11-12-1139 不放松)</b>:</p>
+<ul>
+  <li><b>语义色守恒(I10/D1)</b>: 曲线描边恒 <code>--today-up/down</code>; Lv 色只上 N 层白名单(judgeFlash/ringOuter/partOuter/anchorHalo/lvBadge/bandHalo); 黑名单(曲线/背景/网格/tooltip/图例/限速虚线)零触碰。</li>
+  <li><b>背景恒静态(G5/R4)</b>: 本轮新增的常驻菱形是 DOM 元件, 不引入任何画布铺底/呼吸。</li>
+  <li><b>I9 视觉预算不放宽</b>: 粒子 ≤32 / 束体 ≤23 / 束+切片 ≤28 / 同帧 blur 描边 ≤3 恒成立; F1 只是让既有预算<b>被用到</b>(原来恒零), 不抬上限。</li>
+  <li><b>reduced-motion 强退(I7)</b>: <code>on = enabled &amp;&amp; !reduce</code> 有效值单点不变; 常驻菱形受同一门。</li>
+  <li><b>真值面零污染(I4/I8/§05.4)</b>: 菱形位置是显示面; L0 仍只动视口; 预览拍/真拍同构不变。</li>
+  <li><b>诚实性(traffic 仓纪律)</b>: 活尾延伸仅在采样链活跃且间隙有界时持有<b>末次观测速率</b>, 停滞/断连不延伸——不造数据, 只把「最新已知状态仍有效」表达出来(z 游程延伸到 now 的既有合成同款语义)。</li>
+  <li><b>fail-fast 边界</b>: 本轮<b>零新配置键</b>(meta 增 <code>sample_interval_s</code> 是响应契约键, P4「只增不改」; 不触发 validate_config 面)。</li>
+</ul>
+
+<h2><span class="no">§02</span>现状与痛点(根因 × 实证)</h2>
+<table>
+  <tr><th>#</th><th>报障</th><th>根因(代码事实)</th><th>实证</th></tr>
+  <tr>
+    <td>G1</td>
+    <td>默认配置没有扫描/粒子</td>
+    <td>等级门 × 真实数据语义: <code>_qbFxLevel</code>(qb_traffic_chart.js:635) Δ&lt;0.5% 静默; 生产尾桶是<b>未完成桶</b>(live_tail 每轮询重算), 同桶内相邻轮询速率漂移恒 &lt;0.5% → 恒 Lv.0 → <code>_qbFxSpawn</code>(:1973) 返 null → 全装饰静默。模板 demo(plan 26-11-12-1139 §04)是合成 ±25-40% 摆动才「每拍都有」</td>
+    <td>帧采样: 平滑合成流 98 拍等级分布 U0=37%/U1=4%; 真实稳态流几乎 100% U0。Δ 大时引擎完整出装饰(U3 实测 glow 581 vs 稳态 51)——引擎本身正常</td>
+  </tr>
+  <tr>
+    <td>G2</td>
+    <td>缺旋转方块</td>
+    <td>模板末点菱形 <code>t/420</code> 常驻连续旋转(§04 demo :1417, draw 循环永不停); 生产 <code>_qbDrawFxAnchor</code>(:2409) 只在拍窗(≤0.55beat)且 fx 存在(Lv≥1)才画——<b>缺常驻环境层</b>, 拍间/低级位全停</td>
+    <td>生产无拍间 rAF(「无常驻定时器」纪律), 菱形拍间零帧</td>
+  </tr>
+  <tr>
+    <td>G3</td>
+    <td>0 流量零动效</td>
+    <td>计划 26-11-12-1139 的 D2(§03 L1 约定)/I10(§01 不变量)拍板「零流量/Δ≈0 零装饰, L0/L1 照常」——实施忠实执行; 但模板 zero 场景仍有旋转菱形+流动光点+判定线余晖(环境层不静默)。用户 26-11-14 反馈推翻此口径</td>
+    <td>零流量段 44 拍全 0/0(L0 滑动在, 装饰全无)</td>
+  </tr>
+  <tr>
+    <td>G4</td>
+    <td><b>x 轴</b>逐拍抖动</td>
+    <td>源头在后端: <code>_floor_buckets</code>(traffic_grid.py:135-142) <code>n = ceil((t1−first)/interval)</code>, 而 <code>t1 = int(now)</code> 整秒截断 + 首桶 floor 对齐 → <code>t1−first</code> 一半时间恰落在桶边界(整秒 mod 整桶宽) → n 在 k/k+1(<b>跨度 58s↔60s 方波</b>)随轮询相位翻转 → 前端两连锁: (a) <code>rewin = st.n !== n</code>(:2520) 把点数变化判「跨窗换档」→ 跳过 L0 <b>瞬时多格跳</b>; (b) uPlot split 集(网格线+轴标)随跨度方波<b>每拍重推</b>, tick 冻结等长守卫每拍破防</td>
+    <td>生产同构桩实测: 103s 内 #52 n=30→31(尾桶跳 2 格头桶 1 格, rewin 瞬跳); split 数 11↔12 翻转 39 次/20 拍(≈每拍 2 次); 轮询周期==桶宽时相位漂移使翻转周期性出现</td>
+  </tr>
+  <tr>
+    <td>G5</td>
+    <td>曲线不总落检查线</td>
+    <td>活尾链止于 <code>last_seen</code>/<code>projected_ts</code>(traffic_store_codec.py:235 <code>v4_live_tail_slots</code>; traffic_sample_mod.py:346 <code>_publish_live_tail</code>), 不延伸到 now。采样 1.5s 栅格 × 2s 桶宽(ceil) → 尾桶约 37% 轮询无观测(覆盖概率 P(age&lt;r)≈0.625 推导) → <code>spanGaps:false</code>(:3031) 断线 → 曲线终点收在检查线左侧一格</td>
+    <td>概率推导 + 桩 null 尾桶复现「间歇不落线」; 引擎面: 尾桶 null → 轨死(live=false) → 不插值不画锚, 曲线可见终点 = n−2 位</td>
+  </tr>
+  <tr>
+    <td>G6</td>
+    <td>动效被右/下裁剪</td>
+    <td><code>_qbDrawFx</code>(:2083-2085)与 <code>_qbDrawFxAnchor</code>(:2424-2426) clip = 绘图区矩形 → 末点在绘图区右缘(tipX=L+W)的环/粒子/菱形<b>右半被切</b>; 模板 clipPlot 延到画布右缘(§04 demo :1014-1017); 扫描束同因已修过一次(:2319「评审 blocker 修复」先例)。下方: 环/粒子越过绘图区底缘被切(模板同口径, 但生产低流量时末点贴底才显形)</td>
+    <td>代码面(clip 矩形逐字对照); 用户真机目检</td>
+  </tr>
+  <tr>
+    <td>G7</td>
+    <td>面板「采样 2.0 s」vs 配置 1.5s</td>
+    <td><code>interval = max(1, ceil(sample), ceil(span/2880))</code>(traffic_grid.py:157-162)——桶宽向上取整防伪断线是<b>正确行为</b>(1.5s 采样行落 1s 桶会隔桶为空); 但 meta 只带 <code>interval_s</code>(桶宽 2s), 面板「采样」标签读 <code>_qbPollMs</code>=meta.interval_s → 显示与配置不符, <b>是显示口径问题不是取整问题</b></td>
+    <td>用户配置 main_tick 1.5s × 1 倍 = 采样 1.5s; 面板显示 2.0s(=桶宽)</td>
+  </tr>
+</table>
+<div class="aside">另录在案未列入本轮: y 轴逐拍重钉瞬时缩放(<code>_qbYRange</code> 顶值=峰值×1.05 不取整, 实测 98 拍 14 次 3-10% 整幅纵向跳变)。用户修正「抖动是 x 轴非 y 轴」, y 轴面本维持现状; 若后续观感仍见纵向缩放, 另案(1-2-5 阶梯取整)。</div>
+
+<h2><span class="no">§03</span>方案总览</h2>
+<p>六项修复(F1-F6), 分三期(S1 后端 / S2 前端 / S3 测试与收尾)。拍板编号见 §06。</p>
+<table>
+  <tr><th>#</th><th>修复</th><th>落点</th><th>拍板</th></tr>
+  <tr><td>F1</td><td><b>活跃轨恒 ≥Lv.1</b>: <code>_qbFxLevel(delta, live, target)</code> 增 target 参——live 且 target&gt;0 时下限 Lv.1(Δ 分档上限语义不变); 真 0(target==0)与缺口轨维持 Lv.0 静默。扫描/粒子/环在稳态流每拍可见, 强度仍随 Δ 升档</td><td>qb_traffic_chart.js 等级门 + <code>_qbFxTrackNext</code> 传值 + node 电池</td><td>D1</td></tr>
+  <tr><td>F2</td><td><b>CSS 常驻菱形锚</b>: 两枚 DOM 方块(.qb-fx-anchor)挂图宿主, CSS keyframes 420ms linear infinite(模板 t/420 同拍); 颜色 = tk 语义色内联; 位置 = 判定线 x + 末点 y, 同步点收敛在「判定帧/收敛帧/锚钩子(L0 期)/ResizeObserver」四处; calm 档 border-radius 退化为圆点(模板 isCalm 同款); 门 = cfg.on===true 且图活跃, reduced-motion 隐藏。画布侧菱形本体移除(避免双画), N 锚辉光(anchorHalo)保留画布侧拍内脉冲——辉光位置公式与 DOM 同源</td><td>qb_traffic_chart.js(_qbChartInjectCss/锚钩子/建图销毁) + 四皮肤零侵入(CSS 注入单点)</td><td>D2</td></tr>
+  <tr><td>F3</td><td><b>栅格桶数 ceil→floor+1</b>: <code>_floor_buckets</code> 改 <code>n = (t1−first)//interval + 1</code>(恒含进行中桶)——raw 与 hour 两分支同函数一行修源。效果: n/跨度恒定(W mod i==0 时恒真) → rewin 等距滚动判据恢复成立(dx0 恒一格) + split 集稳定 + 尾桶恒为「进行中桶」(口径一致)。桶序列对齐不变, 纯桶数边界语义</td><td>core/traffic_grid.py + 单元电池</td><td>D3/D4</td></tr>
+  <tr><td>F4</td><td><b>活尾链端延伸到 now</b>: <code>v4_live_tail_slots(tail, now=None)</code> 增可选参——now 超出链端且间隙有界(≤ max(interval_s, 采样间隔)×2, P1 默认)且末槽有速率时, 追加一枚 holding 槽(ts=now, dt=now−链端, rate=末次速率, totals=末次快照)。totals 同值 → 下游 delta 链 0 增量(诚实); rate 面桶值 = 持有速率 → 尾桶恒有观测。间隙过界(停滞/断连)不延伸, null 保持诚实; z 游程末速率 0 同规则。agg 段窗(pending_agg 已有合成段)不动。traffic_qb 三出口仅 raw 段窗传 now</td><td>core/traffic_store_codec.py + server/traffic_qb.py 三出口 + 电池</td><td>D4</td></tr>
+  <tr><td>F5</td><td><b>裁剪面修正</b>: <code>_qbDrawFx</code>/<code>_qbDrawFxAnchor</code> clip 右缘放宽到画布右缘(<code>rect(L, T, max(W, canvasW−L), H)</code>, 同 :2319 扫描束先例——右缘留白是装饰可见域, 无轴面内容); 近底钳制: 环心 y clamp 进 [T+rMax, T+H−rMax](环完整可见), 粒子 y 底缘镜像反弹; 菱形锚(数据标记)保持真位不钳</td><td>qb_traffic_chart.js 两钩子</td><td>D4</td></tr>
+  <tr><td>F6</td><td><b>显示口径两值化</b>: meta 增 <code>sample_interval_s</code>(_meta 现算 effective_sample_interval, P4 只增); 面板只读行: sample_interval_s 存在且 ≠ interval_s → 显示「采样 1.5 s · 桶宽 2.0 s」; 相等 → 维持单值「采样 X s」。beat/周期派生量不变(拍节奏仍锚轮询=桶宽节律)</td><td>server/traffic_qb.py `_meta` + qb_traffic_chart.js 状态行 computed</td><td>D4</td></tr>
+</table>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+<table>
+  <tr><th>期</th><th>步骤</th><th>内容</th><th>验收</th></tr>
+  <tr>
+    <td rowspan="3"><b>S1<br>后端</b></td>
+    <td>S1a 栅格 floor+1</td>
+    <td><code>_floor_buckets</code> 一行 + docstring(记录 R07 ceil 反转理由: 方波抖动实证); 盘点并更新钉 ceil 行为的单元电池(先 grep tests/ 钉 n 计算的断言)</td>
+    <td>电池绿; 新增用例: t1 恰落桶边界 vs 落桶中 n 恒等; W mod i==0 时 n 不随相位漂移</td>
+  </tr>
+  <tr>
+    <td>S1b 活尾延伸</td>
+    <td><code>v4_live_tail_slots</code> 增 now 参(默认 None=不延伸, 向后兼容) + holding 槽合成; traffic_qb 三出口(raw 段窗)传 now; docstring 写明诚实边界与 z-run 语义</td>
+    <td>电池: 活跃链延伸出尾桶值 / z 游程延伸 0 速率 / 间隙过界不延伸 / 断连(n-run)不延伸 / totals 链 0 增量不受扰</td>
+  </tr>
+  <tr>
+    <td>S1c meta 键</td>
+    <td><code>_meta</code> 增 <code>sample_interval_s</code>; 契约测试同步(P4 只增断言)</td>
+    <td>电池绿; 响应契约快照含新键</td>
+  </tr>
+  <tr>
+    <td rowspan="3"><b>S2<br>前端</b></td>
+    <td>S2a 等级门</td>
+    <td><code>_qbFxLevel</code> 签名/target 参/语义 + <code>_qbFxTrackNext</code> 传值 + 消费面核查(<code>_qbFxSpawn</code> tail 资格行 :2034-2037 用 level&gt;0——恒 Lv.1 后自动满足; 预览拍同构面核查)</td>
+    <td>电池: 值&gt;0 恒 ≥1 / 真 0 静默 / 缺口静默 / Δ 分档上限不变</td>
+  </tr>
+  <tr>
+    <td>S2b CSS 菱形锚</td>
+    <td>注入 CSS(keyframes/类/媒体查询) + 宿主内两 div(幂等建/随图销毁清) + 四处位置同步点 + 门(on/reduce/calm 三档) + 画布侧菱形本体移除 + anchorHalo 位置公式对齐 + RO 尺寸面同步 + 静态守卫(scan_js/CSS)核查</td>
+    <td>e2e: 菱形存在/持续旋转(transform 变化)/三档门/与末点像素对齐; 换肤重建不残留</td>
+  </tr>
+  <tr>
+    <td>S2c clip + 显示</td>
+    <td>两钩子 clip 右缘放宽 + 环钳制 + 粒子镜像; 状态行两值显示</td>
+    <td>画布右缘/底缘像素探针(A6); A7 文案断言</td>
+  </tr>
+  <tr>
+    <td rowspan="2"><b>S3<br>测试<br>收尾</b></td>
+    <td>S3a 回归面</td>
+    <td>traffic-fx-frames 帧级探针复核(新栅格下 L0 连续性判据不变/更稳) + traffic-gap-zones / seam 相关 e2e 回归 + A1-A7 专项用例; <code>test.full</code> 全量 + 新基线切片</td>
+    <td>全量绿 + A1-A7 全过</td>
+  </tr>
+  <tr>
+    <td>S3b 回写</td>
+    <td>conventions/webui.md 附件(webui-traffic-beat.md)口径更新(恒 Lv.1 门/常驻菱形层/栅格口径/活尾延伸) + 前序计划 26-11-12-1139 §11 补 R 行指链 + 分批评审(code-review skill)+ 收尾 kb.wrap/kb.new task</td>
+    <td>评审零 actionable; 指链双向</td>
+  </tr>
+</table>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p>三项小默认(实施按默认走, 用户否决才改):</p>
+<table>
+  <tr><th>#</th><th>项</th><th>默认(推荐)</th><th>备选</th></tr>
+  <tr><td>P1</td><td>活尾延伸的间隙上界</td><td>max(interval_s, 采样间隔)×2(1.5s 采样/2s 桶 → 4s; 正常节律内, 主循环单顿卡不误判)</td><td>固定 5s / 恰一桶宽</td></tr>
+  <tr><td>P2</td><td>reduced-motion 下常驻菱形</td><td>隐藏(与 I7 动效元素退场精神一致)</td><td>静态方块不转</td></tr>
+  <tr><td>P3</td><td>近底时环的处理</td><td>环心上抬钳制进绘图区(环完整, 允许与末点轻微分离)</td><td>维持裁剪(模板同口径)</td></tr>
+</table>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+  <tr><th>#</th><th>日期</th><th>结论</th></tr>
+  <tr><td>D1</td><td>26-11-14</td><td>每拍反馈强度 = <b>活跃轨(值&gt;0)恒 ≥Lv.1</b>(用户选推荐项); 备选「仅下调静默阈值」否决(复刻不彻底), 「维持现状」否决</td></tr>
+  <tr><td>D2</td><td>26-11-14</td><td>常驻旋转方块 = <b>CSS 合成器菱形</b>(零 rAF/零重绘); overlay canvas 自绘与「不加常驻层」否决</td></tr>
+  <tr><td>D3</td><td>26-11-14</td><td>抖动面用户修正 = <b>x 轴(非 y 轴)</b> → 修复主靶改为后端栅格(F3); y 轴重钉缩放记录在案(§02 aside)不列入本轮; 「1-2-5 阶梯取整」「滞回带」「不动轴」三选项均不采纳于本轮</td></tr>
+  <tr><td>D4</td><td>26-11-14</td><td>用户二次补充四项(动效右/下裁剪 / 缺旋转方框 / 曲线不总落检查线 / 采样显示口径)直接并入修复范围(F2/F4/F5/F6)——用户指令即拍板</td></tr>
+  <tr><td>D5</td><td>26-11-14</td><td>流程拍板 = <b>只建计划, 暂不动代码</b>(用户选项「只建计划」); 实施开工另轮推进</td></tr>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+  <tr><th>#</th><th>风险</th><th>触发条件</th><th>处置</th></tr>
+  <tr><td>R1</td><td><code>_floor_buckets</code> 语义反转(26-10-11-0207 R07 的 ceil 拍板)</td><td>既有电池/契约测试钉 ceil 行为; hour 段窗消费面(3d/7d/30d)边界语义变化</td><td>S1a 先 grep 盘点全部钉点; 电池逐条改并在用例注释记录反转理由(方波实证); hour 面 e2e 回归; 前端对任意 n 兼容(无 n 假设)</td></tr>
+  <tr><td>R2</td><td>活尾延伸引入「持有速率」的语义外溢</td><td>采样停滞/断连时误延伸(造数据); totals delta 链被 holding 槽扰动</td><td>间隙过界即不延伸(电池钉停滞用例); totals 同值 → 0 增量不变式进电池; docstring 写明诚实边界; 缺口斜纹/接缝提示(_qbSeamHint)回归</td></tr>
+  <tr><td>R3</td><td>CSS 菱形与画布 anchorHalo 双源位置漂移</td><td>位置同步点遗漏(resize/换肤重建/宿主拆除)</td><td>同步点收敛为四处单点(判定帧/收敛帧/锚钩子/RO); e2e 像素位对齐断言; 幂等建/清与 _qbFxBound 同款纪律</td></tr>
+  <tr><td>R4</td><td>恒 Lv.1 放大动效存在感</td><td>用户嫌吵(稳态流每拍出束+粒子)</td><td>Lv.1 本就是最低强度档; 面板已有 impact/密度/配色(calm 全静)滑杆可调, 不新增开关</td></tr>
+  <tr><td>R5</td><td>栅格多一桶对缺口/接缝判读的扰动</td><td>进行中桶在停机边界出伪缺口/伪接缝</td><td>S3 回归 traffic-gap-zones 与 seam 电池; 判据面(数据链/缺口游程)不改</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-14-1313</span> 初版: 用户报障(26-11-14 两轮) + 三轮帧采样实测(2400+6011+6011 帧, 生产同构桩)闭环七项根因(G1-G7); 修复 F1-F6 六项; grilling 三问拍板 D1-D3 + 补充拍板 D4 + 流程拍板 D5(只建计划); 待决小项 P1-P3 给默认。</li>
+</ul>
+
+</div>
+</body>
+</html>
