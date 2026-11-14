@@ -1,13 +1,14 @@
 # web-ui — 前端 / WEB UI 纪律 · 卷 3/4
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `inflight-flag-no-timeout.md` … `show-if-residual-key.md`(共 26 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `hscroll-indicator.md` … `show-if-residual-key.md`(共 27 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
 
 | 主题 | 一句话 | 触发词 |
 |---|---|---|
+| [hscroll-indicator.md](hscroll-indicator.md) | 藏掉 `.group-table` 原生横条并补底部指示条时, 五件事不显然 —— ①**横条的位置是容器底边, 不是视口底边**: `.layout { align-items: start }` 让 `.content` 不被拉伸, `.torrents-dock` 虽是 f… | 横向滚动条, 横条, 滚动条在中间, 少种子横条, 横条很丑, group-table, overflow-x, scrollbar-width, ::-webkit-scrollbar, 滚动条隐藏, hscroll, 指示条, 胶囊,… |
 | [inflight-flag-no-timeout.md](inflight-flag-no-timeout.md) | 前端「loading 置真 → await 请求 → finally 复位」是最常见的形状, 但裸 `fetch` 没有超时 ⇒ 请求悬挂时 `await` 永不返回、`finally` 永不执行, 而轮询 tick 又拿**同一个标志**当跳过判据 ⇒ 复位路径被自己挡住(图表… | 前端轮询, 轮询停了, 图表停在旧帧, 数据不再更新, 加载卡死, loading 不复位, 不自愈, 手动刷新才恢复, fetch 无超时, AbortController, 请求悬挂, TCP 半开, 信号丢失 |
 | [injected-dom-title-migrated-to-aq-tip.md](injected-dom-title-migrated-to-aq-tip.md) | 全局自绘 tooltip 的「原生 title 断供式」机制(shared/ui_feedback.js 的 MutationObserver)对 **一切**新出现的 title 属性做单向迁移 —— 不只 Vue 模板渲染, **JS 手工插值出的 DOM(innerHTML… | 变体 DOM, title 属性, data-aq-tip, getAttribute null, [title] 选择器, MutationObserver, ui_feedback, 悬浮提示, Playwright title |
 | [js-comment-terminator.md](js-comment-terminator.md) | JS 块注释以第一个 `*/` 结束 —— 注释文字里再出现 `*/`(如 `Key*/Digit*` 想表达通配前缀)会把注释提前砍断, 尾巴落成**代码态**; 与 CSS 版(见 css-comment-terminator)不同, 尾巴常能被解析成正则字面量等合法语法,… | 写 JS 注释, 注释里出现 星号斜杠, Digit is not defined, pageerror 白屏, node check 全绿, shortcuts.js |
