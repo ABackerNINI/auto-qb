@@ -4,7 +4,7 @@
 - test_group_null_mask_rules: (D6 沿用)组桶 null = 无任何成员观测(任一成员 r/z 观测即程序存活真值); 无行成员按 0 计; 借 global 判 null 退役
 - test_group_rate_sums_members_missing_zero: 组速率 = 桶内 Σ 成员均值, 无行成员按 0 计; null 桶整桶 None
 - test_group_totals_per_member_diff_then_sum: 逐成员先差分再求和 —— 单成员重置贡献 0 不拖垮全组; 成员基线缺失(窗首/无行)贡献 0; null 桶断链
-- test_group_50_members_correct_and_time_bound: 50 成员 x 满窗 2880 桶聚合正确性(抽样桶 Σ 校验, 每成员一块 -> v4_grid_obs) + 耗时上界(CPU 时间口径 << 采样间隔 30s, 断言 < 8s)
+- test_group_50_members_correct_and_time_bound: 50 成员 x 满窗 2880 完整桶 + 1 进行中桶(26-11-14-1313 F3 floor+1, 尾桶窗内无观测 = null)聚合正确性(抽样桶 Σ 校验, 每成员一块 -> v4_grid_obs) + 耗时上界(CPU 时间口径 << 采样间隔 30s, 断言 < 8s)
 - test_group_zrun_idle_zero_line_and_outage_null: (D6 沿用)组图回归观测面 —— 全员空闲(z 覆盖)0 线 / 全员无观测(停机)断线 / 成员只剩 z 块也有观测; 组三函数消费 v4_grid_obs 产物
 - test_group_rate_points_over_transformed_obs_unchanged: 组求和口径不变(S1 钉住)—— group_null_mask/group_rate_points 消费变换后 obs
 - test_group_totals_up_direction_reset_independent
@@ -140,7 +140,8 @@ def test_group_totals_per_member_diff_then_sum():
 
 
 def test_group_50_members_correct_and_time_bound():
-    """50 成员 x 满窗 2880 桶: 抽样桶 Σ 成员均值/逐成员差分校验 + 耗时上界
+    """50 成员 x 满窗 2880 完整桶 + 1 进行中桶(26-11-14-1313 F3 floor+1, NOW 对齐时尾桶 =
+    t1 起的进行中桶): 抽样桶 Σ 成员均值/逐成员差分校验 + 耗时上界
 
     上界依据: 组图弹层按采样间隔(30s)低频续拉(§07), 单次聚合须远小于一个间隔 ——
     上界 8s ≈ 间隔的 1/4, 是拦「数量级劣化」的粗闸(紧阈值回归基线见
@@ -167,7 +168,10 @@ def test_group_50_members_correct_and_time_bound():
     elapsed = time.process_time() - t_start
 
     assert len(points) == len(g.buckets)
-    assert all(p is not None for p in points)  # 每桶每成员都有观测: 无 null
+    # 尾桶 = 进行中桶(26-11-14-1313 F3 floor+1, 起点 = t1): 消费窗 ts < t1 内无观测归不进
+    # -> 组停机语义 null; 2880 个完整桶每桶每成员都有观测: 无 null
+    assert all(p is not None for p in points[:-1])
+    assert points[-1] is None
     idx = 100
     b = g.buckets[idx]
     assert points[idx] == {"t": b, "dl": 100 * n + n * (n - 1) // 2, "up": 200 * n + n * (n - 1) // 2}

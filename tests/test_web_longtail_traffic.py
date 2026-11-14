@@ -70,10 +70,9 @@ def test_api_traffic_qb_global_live_tail_realtime(web_env, monkeypatch):
     store = _qb_v4(mgr)
     now = int(time.time())
     # 钉住入口时刻(端点 _grid 现读 traffic_qb.SYSTEM_CLOCK 单点, 换冻结假钟钉一次双边
-    # 生效): 5m 栅格是 [now-300, now) 滚动窗, 桶数 = ceil((now - floor(now-300))/30) ——
-    # now 恰在 30s 边界(r=0)时开放桶 [now, now+30) 覆盖为 0 被省略, 其后一秒(r>0)又补回,
-    # 响应因此多/少一个空桶。三次请求逐点一致的前提是同一个 now, 不冻时钟 CI 慢一点就红
-    # (生产滚动窗语义正确, 不是产品缺陷; 同坑档 testing/flaky-midnight-daycount.md)。
+    # 生效): 5m 栅格是 [now-300, now) 滚动窗, 不冻时钟则三次请求间跨 30s 桶边界时栅格
+    # 整体滚动, 三次响应逐字节不等。三次请求逐点一致的前提是同一个 now, 不冻时钟 CI
+    # 慢一点就红(生产滚动窗语义正确, 不是产品缺陷; 同坑档 testing/flaky-midnight-daycount.md)。
     # S3 收敛: 不再进程级 patch stdlib time.time, 改换端点取时单点(与 test_web_traffic_qb 同口径)。
     _freeze_traffic_endpoint_clock(monkeypatch, now)
     base = ((now - 240) // 30) * 30  # 5m 窗内
@@ -159,7 +158,7 @@ def test_api_traffic_qb_global_3d_live_open_hour_fills_tail_vacuum(web_env, monk
     _enable_qb_traffic(mgr)
     store = _qb_v4(mgr)
     now = int(time.time())
-    h_open = tg.build_grid("3d", now).last  # 图尾桶(开放小时; now 恰整点时 = 刚完结小时, 断言不变式)
+    h_open = tg.build_grid("3d", now).last  # 图尾桶 = 开放小时(floor(t1/3600) 进行中桶, 26-11-14-1313 F3; 用例与端点同源派生, 恰整点时同指刚开始的小时)
     # 端点 _grid 请求时现读 time.time: 与用例的 now 钉成同一时刻, 防止算完 now 到请求之间
     # 跨整点导致尾桶前移一格(尾桶是边界派生量, 见 pitfalls/testing/flaky-midnight-daycount.md)
     _freeze_traffic_endpoint_clock(monkeypatch, now)

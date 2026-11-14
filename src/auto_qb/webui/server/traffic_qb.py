@@ -5,10 +5,12 @@ plan 26-10-04-1957 S3b, §05.2-§05.4)
 一个实例(一域恰一端点, last-good 快照按 window 分键互不串扰):
 
 - 响应形状三域一致: {"points": [...], "totals": [...], "meta": {...}}(§08); points/totals
-  为窗口栅格上「桶值 | null」定长数组, meta = window/interval_s/source/stale +
-  server_started_at(P4, plan 26-10-15-0829: 本进程出生时刻, 前端据此区分重启缝与停机洞)。
-  interval_s = 桶宽: raw 段窗 = 采样间隔, 3d/7d/30d = 3600, 6mo/1y = 86400(本地日界),
-  all = 标称月长(真实月长按行间隔, 点位真值在 points[].t, 前端按真值落点)。
+  为窗口栅格上「桶值 | null」定长数组, meta = window/interval_s/sample_interval_s/source/
+  stale + server_started_at(P4, plan 26-10-15-0829: 本进程出生时刻, 前端据此区分重启缝与
+  停机洞; sample_interval_s = 生效采样间隔, plan 26-11-14-1313 F6 只增键 —— 与 interval_s
+  分离的显示口径: raw 段桶宽经 ceil 取整/上限加宽后可与采样间隔不等, agg 段窗二者恒不同)。
+  interval_s = 桶宽: raw 段窗 = max(采样间隔, span/上限), 3d/7d/30d = 3600, 6mo/1y = 86400
+  (本地日界), all = 标称月长(真实月长按行间隔, 点位真值在 points[].t, 前端按真值落点)。
 - 未启用(qb_traffic 缺省 None / enabled=false / data_dir 为空防御)或无数据 -> 空态
   (points/totals 空数组 + meta), 与 /api/traffic/history 未启用空数组分支同构。
 - window 查询参数仅认 WINDOW_NAMES(13 档, D4), 其余 400(客户端错误不 500)。
@@ -121,28 +123,37 @@ class QbTrafficChartApi:
         conf = self._conf()
         return conf is not None and bool(conf.enabled) and bool(self._manager.config.data_dir)
 
+    def _sample_interval(self) -> float:
+        """生效采样间隔(秒, D10 单点): qb_traffic 段存在取 multiplier * main_tick(与采样器
+        同调, raw 段桶宽与 meta.sample_interval_s 同源), 未启用空态兜底 DEFAULT_SAMPLE_INTERVAL_S
+        (D11 保留 30s)"""
+        conf = self._conf()
+        if conf is not None:
+            return tg.effective_sample_interval(
+                conf.sample_interval_multiplier,
+                getattr(self._manager.config, "main_tick", 0.0) or 0.0
+            )
+        return tg.DEFAULT_SAMPLE_INTERVAL_S
+
     def _grid(self, window: str) -> tg.WindowGrid:
         """当前时刻的时间栅格; raw 段窗(1m-24h)桶宽 = 生效采样间隔(未启用/缺省兜底 30s),
         hour 段窗(3d/7d/30d)恒 3600s, day 段窗(6mo/1y)= 本地日界 86400s;
         month 段窗(all)栅格由数据面定, 此处只出空 buckets 兜底形(空态 meta 用)"""
-        conf = self._conf()
-        if conf is not None:
-            # 生效间隔单点(D10): 与采样器同调, raw 段桶宽 = multiplier * main_tick 秒
-            sample = tg.effective_sample_interval(
-                conf.sample_interval_multiplier, getattr(self._manager.config, "main_tick", 0.0) or 0.0
-            )
-        else:
-            sample = tg.DEFAULT_SAMPLE_INTERVAL_S  # 未启用空态兜底(D11 保留 30s)
+        sample = self._sample_interval()
         if tg.WINDOW_SPECS[window][1] == "month":
             return tg.build_month_grid((), SYSTEM_CLOCK.now())  # 请求处理叶子走取时单点(挂钟)
         return tg.build_grid(window, SYSTEM_CLOCK.now(), sample)
 
     def _meta(self, grid: tg.WindowGrid, stale: bool) -> dict:
         """meta 装配单点(全部出口——正常/空态/组空态——都经此, P4 新键只增不改: 旧前端忽略
-        未知键, 降级 last-good 分支按键展开同样携带)"""
+        未知键, 降级 last-good 分支按键展开同样携带)。sample_interval_s = 生效采样间隔
+        (plan 26-11-14-1313 F6 后端半, 与桶宽 interval_s 分离的显示口径 —— raw 段桶宽经
+        ceil 取整/上限加宽后可与采样间隔不等, hour/day/month 段窗二者恒不同; P4 响应契约
+        键, 非 validate_config 面)"""
         return {
             "window": grid.name,
             "interval_s": grid.interval,
+            "sample_interval_s": self._sample_interval(),
             "source": "qb",
             "stale": stale,
             "server_started_at": _SERVER_STARTED_AT,

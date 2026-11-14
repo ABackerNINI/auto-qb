@@ -98,9 +98,9 @@ def effective_sample_interval(multiplier: int, main_tick: float) -> float:
 
 #: raw 段窗桶数上限(计划 26-10-07-2127 S3, §03 万桶级治理裁决): raw 桶宽 = max(ceil(采样间隔),
 #: ceil(span/上限)) —— 高频采样(如生产现况 1.5s)下 24h 窗本可达数万桶(JSON 传输 MB 级 +
-#: uPlot 万点级重渲染 + 后端每拍全量重展开), 按时间桶加宽收敛到 <=2880。上限取 2880 = 30s
-#: 采样下 24h 视图桶数(旧 30s 默认下数学恒等, 零回归面; 新键默认 1 倍 main_tick 时由本上限
-#: 加宽到 30s 桶); 桶内按覆盖秒加权(v4_grid_obs), 与 totals
+#: uPlot 万点级重渲染 + 后端每拍全量重展开), 按时间桶加宽收敛到 <=2880(+1 进行中桶,
+#: 26-11-14-1313 F3)。上限取 2880 = 30s 采样下 24h 视图桶数(旧 30s 默认下数学恒等, 零回归面;
+#: 新键默认 1 倍 main_tick 时由本上限加宽到 30s 桶); 桶内按覆盖秒加权(v4_grid_obs), 与 totals
 #: 通道字节守恒 —— 方案 B 的「附带收益」不因加宽丢失。业界同型先例: RRDtool CF=AVERAGE ·
 #: qB GUI SpeedPlotView Averager(1s->144s 分桶)· Deluge stats 多级桶 · Grafana $__rate_interval。
 MAX_RAW_BUCKETS = 2880
@@ -110,8 +110,9 @@ MAX_RAW_BUCKETS = 2880
 class WindowGrid:
     """一次取数的时间栅格(§05.1): [t0, t1) 按 interval 离散出的固定桶序
 
-    buckets 长度 = ceil((t1 - first) / interval)(窗首桶对齐 floor(t0/interval), t0 未对齐
-    时比「跨度/interval」恰多一桶 —— §05.1 的「≈2880 桶」口径); 桶值 t = 桶起点 epoch 秒。
+    buckets 长度 = (t1 - first) // interval + 1(恒含进行中桶; 计划 26-11-14-1313 F3 反转
+    26-10-11-0207 R07 的 ceil 口径 —— 反转理由见 _floor_buckets; 窗首桶对齐
+    floor(t0/interval)); 桶值 t = 桶起点 epoch 秒。
     day 段窗(6mo/1y)例外: 桶键 = 本地日界 00:00(滚动窗 [t0, t1) 涉及的本地日期逐日铺格,
     窗首桶允许早于 t0 —— 首日不满宽); month 段窗(all)由 build_month_grid 数据面铺格。
     """
@@ -133,11 +134,20 @@ class WindowGrid:
 
 
 def _floor_buckets(t0: int, t1: int, interval: int) -> tuple:
-    """等宽桶序列单点(issue 26-10-11-0207 R07): 起点向下取整对齐(epoch 恒正) + ceil 桶数
-    + 生成。build_grid 的 raw 与 hour 两分支共用(除桶宽计算外逐字同构); day 分支桶键是
-    本地日界, 不走此处。"""
+    """等宽桶序列单点(issue 26-10-11-0207 R07 立, 计划 26-11-14-1313 F3 反转桶数口径):
+    起点向下取整对齐(epoch 恒正) + floor+1 桶数 + 生成。build_grid 的 raw 与 hour 两分支
+    共用(除桶宽计算外逐字同构); day 分支桶键是本地日界, 不走此处。
+
+    桶数 n = (t1 - first) // interval + 1(恒含进行中桶)—— 反转 26-10-11-0207 R07 的 ceil
+    拍板(计划 26-11-14-1313 F3/D3 方波实证): t1 = int(now) 整秒截断 + 首桶 floor 对齐 ->
+    t1 - first 一半时间恰落桶边界(整秒 mod 整桶宽), ceil 下 n 在 k/k+1 方波随轮询相位翻转
+    (跨度 58s<->60s 实证) -> 前端 rewin(n 变判跨窗换档)瞬时跳窗 + uPlot split 集每拍重推。
+    W 恰为 interval 整倍时 n 恒 k+1 与相位无关(生产默认采样面各 raw 窗恒整倍); span 非整倍
+    时 n 仍随相位在 k+1/k+2 波动(幅度 1, si=7/3h 窗实测: r=5 时 n=1543 其余 1544)。
+    尾桶恒为「进行中桶」(floor(t1/interval) 对齐); 代价: t1 恰落桶边界时尾桶是刚开启的
+    空桶(单桶 null, 视觉无感)。"""
     first = t0 - (t0 % interval)  # floor 对齐(epoch 恒正)
-    n = (t1 - first + interval - 1) // interval  # ceil
+    n = (t1 - first) // interval + 1  # floor+1: 恒含进行中桶(26-11-14-1313 F3, 反转 R07 ceil)
     return tuple(first + i * interval for i in range(n))
 
 
@@ -156,7 +166,8 @@ def build_grid(window: str, now: float, sample_interval: float = DEFAULT_SAMPLE_
         raise ValueError("all 窗栅格由 agg month 行数据面定: 用 build_month_grid(...)")
     # 桶宽对采样间隔向上取整(floor 在小数间隔如 1.5s 下取 1s 桶宽, 采样行 1.5s 一条 -> 隔桶为空 = 伪断线;
     # ceil 后桶宽 >= 采样间隔, 等间隔采样行每桶至少一条); 再受 MAX_RAW_BUCKETS 上限约束(S3 万桶级
-    # 治理: 高频采样下按 span/上限 加宽, 桶数恒 <= 上限; 30s 默认采样下 max 取到采样间隔, 数学恒等)
+    # 治理: 高频采样下按 span/上限 加宽, 桶数 <= 上限 + 1 进行中桶(F3 floor+1); 30s 默认采样下
+    # max 取到采样间隔, 数学恒等)
     if segment == "raw":
         interval = max(1, math.ceil(sample_interval), math.ceil(span / MAX_RAW_BUCKETS))
         t1 = int(now)

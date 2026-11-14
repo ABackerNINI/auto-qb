@@ -22,7 +22,7 @@
 - test_v4_rate_from_totals_w1_bucket_rates: (vrft_16/vrft_26)w=1 桶速率照常派出(delta/w)不丢 None
 - test_v4_same_bucket_raw_mean_with_zero_dl_first: (vsp_82)raw+raw 同桶判定看 is_raw 旗不看速率列 —— 首记录 dl 速率 0 仍走均值支
 - test_build_month_grid_empty_meta_complete: (bmg_3, 顺手 bmg_6/_7/_8/_10/_18..)空月集兜底栅格 meta 仍齐全(name/segment/t0/t1/interval/buckets)
-- test_floor_buckets_remainder_one_keeps_tail_bucket: (fb_9)t1-first ≡ 1 (mod interval) 时 ceil 尾桶保留, interval-1 变异成 -2 会少一个尾桶
+- test_floor_buckets_remainder_one_keeps_tail_bucket: (fb_9)t1-first ≡ 1 (mod interval) 时进行中桶保留(floor+1, 26-11-14-1313 F3 反转 ceil), `+ 1` 丢失会少一个尾桶
 - test_v4_totals_points_spread_threshold_exact_boundary: (vtp_62)摊配门槛 span 恰等 max(2w,60) 不摊配, 变异成 >= 会多摊一批
 - test_v4_rate_from_totals_zero_width_point_defensive: (vrft_15/vrft_25)w=0 直构点防御契约 —— 速率派不出(None)而非除零, 变异成 `w < 0` 会 ZeroDivisionError
 - test_grid_for_now_forwards_sample_interval: (mut-core W2 gfn_6)grid_for_now 转发 sample_interval —— 传 1.0 小窗桶宽 1(删实参落默认 30 时桶宽退化 30)
@@ -495,8 +495,9 @@ def test_build_month_grid_empty_meta_complete():
 
 
 def test_floor_buckets_remainder_one_keeps_tail_bucket():
-    """(fb_9)ceil 公式 —— t1-first ≡ 1 (mod interval) 时尾桶必须保留; `interval-1` 变异成
-    `interval-2` 会少一个尾桶, 窗尾留 1 秒缺口"""
+    """(fb_9)floor+1 公式(26-11-14-1313 F3 反转 R07 ceil 口径, 反转理由见 _floor_buckets
+    docstring) —— t1-first ≡ 1 (mod interval) 时进行中桶必须保留; `+ 1` 丢失(退化成 floor)
+    会少一个尾桶, 窗尾留 1 秒缺口"""
     assert _floor_buckets(100, 111, 10) == (100, 110)
 
 

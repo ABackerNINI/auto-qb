@@ -7,8 +7,8 @@
 - test_apply_interval_main_tick_hot_change_closes_blocks: main_tick 热改 -> 生效值变化 -> 关块重开(生效值比较驱动);
   multiplier 热改同判
 - test_apply_interval_first_round_only_sets_baseline: 进程首轮只立基线不关块; 同配置重复调用不关块
-- test_webui_raw_bucket_width_follows_effective_interval: webui raw 段栅格桶宽 = 生效间隔(与采样器同调单点)
-- test_webui_disabled_empty_state_keeps_default_30s: 未启用空态仍走 DEFAULT_SAMPLE_INTERVAL_S=30.0(D11 保留)
+- test_webui_raw_bucket_width_follows_effective_interval: webui raw 段栅格桶宽 = 生效间隔(与采样器同调单点) + meta.sample_interval_s 恒 = 生效间隔(26-11-14-1313 F6 只增键)
+- test_webui_disabled_empty_state_keeps_default_30s: 未启用空态仍走 DEFAULT_SAMPLE_INTERVAL_S=30.0(D11 保留; sample_interval_s 同源兜底)
 """
 from types import SimpleNamespace
 
@@ -104,20 +104,25 @@ def _api(multiplier: int, main_tick: float) -> QbTrafficChartApi:
 
 
 def test_webui_raw_bucket_width_follows_effective_interval():
-    """raw 段栅格桶宽 = 生效间隔(采样器与 webui 同调单点); 24h 窗受 MAX_RAW_BUCKETS 下限 30s"""
+    """raw 段栅格桶宽 = 生效间隔(采样器与 webui 同调单点); 24h 窗受 MAX_RAW_BUCKETS 下限 30s;
+    meta.sample_interval_s(plan 26-11-14-1313 F6 只增键)恒 = 生效间隔, 不随桶宽取整/加宽漂移"""
     api = _api(15, 2.0)
     assert api._grid("5m").interval == 30  # 5m 窗不受桶数上限影响
     assert api._meta(api._grid("5m"), stale=False)["interval_s"] == 30
+    assert api._meta(api._grid("5m"), stale=False)["sample_interval_s"] == 30.0  # F6: 生效间隔原值
 
     assert _api(1, 2.0)._grid("5m").interval == 2
     assert _api(85, 7.0)._grid("5m").interval == 595
+    assert _api(85, 7.0)._meta(_api(85, 7.0)._grid("5m"), stale=False)["sample_interval_s"] == 595.0
     assert _api(15, 2.0)._grid("24h").interval == 30  # 86400/2880 = 30 下限, 恰等生效值
     assert _api(85, 7.0)._grid("24h").interval == 595
 
 
 def test_webui_disabled_empty_state_keeps_default_30s():
-    """未启用空态(qb_traffic 缺省 None): raw 桶宽仍为 DEFAULT_SAMPLE_INTERVAL_S=30.0(D11 保留)"""
+    """未启用空态(qb_traffic 缺省 None): raw 桶宽仍为 DEFAULT_SAMPLE_INTERVAL_S=30.0(D11 保留);
+    sample_interval_s 同源兜底(F6 只增键, 未启用面同样携带)"""
     cfg = SimpleNamespace(qb_traffic=None, main_tick=7.0, data_dir="")
     api = QbTrafficChartApi(SimpleNamespace(config=cfg))
     assert api._grid("5m").interval == 30
     assert api._meta(api._grid("5m"), stale=False)["interval_s"] == 30
+    assert api._meta(api._grid("5m"), stale=False)["sample_interval_s"] == 30.0  # main_tick=7.0 不参与(未启用)

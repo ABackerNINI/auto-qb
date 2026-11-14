@@ -1,10 +1,10 @@
 """test_web_traffic_qb 测试计划: qB 口径流量图三 GET 端点
 
 ## 测试计划(每个测试函数一条)
-- test_api_traffic_qb_disabled_empty_state: qB 口径流量三端点未启用(qb_traffic None / enabled=false)空态与 /api/traffic/history 同构(plan 26-10-03-0946 §08 P4)+ P4 meta 契约(plan 26-10-15-0829): server_started_at = 后端进程出生时刻, 未启用空态与三端点都携带(同一 _meta 装配单点), 旧 4 键逐字不变(只增不改, 旧前端忽略未知键), 改模块常量新响应立即携带 = 无实例级缓存面
+- test_api_traffic_qb_disabled_empty_state: qB 口径流量三端点未启用(qb_traffic None / enabled=false)空态与 /api/traffic/history 同构(plan 26-10-03-0946 §08 P4)+ P4 meta 契约(plan 26-10-15-0829): server_started_at = 后端进程出生时刻, 未启用空态与三端点都携带(同一 _meta 装配单点), 旧键逐字不变(只增不改, 旧前端忽略未知键), 改模块常量新响应立即携带 = 无实例级缓存面
 - test_api_traffic_qb_requires_token (三 GET 端点沿用全局 token 鉴权单点, 无凭证 401; 冒号键值形态会被写入侧凭据判据误报, 故用括号注记)
 - test_api_traffic_qb_window_validation: window 非法值 400 / 缺省 24h / 仅认 WINDOW_NAMES 十三档(D4 沿用: 1m-30d + 6mo/1y/all, 90d 延后)
-- test_api_traffic_qb_global_24h_points_totals_and_stale: global 24h 窗天文件块 -> 速率口径变换(区间平均 delta/w, 计划 26-10-07-2127 S2) -> 栅格展开(points 对齐桶/空桶 null=断连真空/窗首无种子 D4 0 线) + totals 差分(重置/断链, 口径不受速率变换影响) + 读取竞态降级回上一份快照标 stale + meta 全量形状含 P4 新键 server_started_at
+- test_api_traffic_qb_global_24h_points_totals_and_stale: global 24h 窗天文件块 -> 速率口径变换(区间平均 delta/w, 计划 26-10-07-2127 S2) -> 栅格展开(points 对齐桶/空桶 null=断连真空/窗首无种子 D4 0 线) + totals 差分(重置/断链, 口径不受速率变换影响) + 读取竞态降级回上一份快照标 stale + meta 全量形状含 P4 新键 server_started_at 与 F6 只增键 sample_interval_s(plan 26-11-14-1313)
 - test_api_traffic_qb_raw_rate_basis_delta_per_w_totals_unchanged: (计划 26-10-07-2127 S2)raw 窗速率口径 = 计数器差分区间平均 delta/w —— 已知 totals 序列逐桶断言 + 瞬时直采值零上图 + totals 通道逐字节不变(窗首基线缺失/相邻差分照旧) + 活尾桶跨盘/尾接缝差分(图尾同为区间平均)
 - test_api_traffic_qb_raw_seed_extension_window_start_baseline: (S2/D3)窗首种子: read_window/v4_series_points t0 外扩一个响应桶宽取前驱桶点作差分基线 —— 窗首桶 rate = delta/w(非 0 线非瞬时值), 种子点被 v4_grid_obs 窗外过滤不外发
 - test_api_traffic_qb_raw_seed_vacuum_chain_break_and_recover: (S2/D3)种子跨真空: 真空 null 点断链 —— 恢复首桶 rate 派不出(D4 0 线)且离线期字节不进速率与 totals, 次桶基线恢复 delta/w
@@ -87,8 +87,10 @@ def test_api_traffic_qb_disabled_empty_state(web_env, monkeypatch):
         body = r.json()
         assert body["points"] == [] and body["totals"] == []
         assert body["meta"]["source"] == "qb" and body["meta"]["stale"] is False and body["meta"]["window"] == "24h"
-        # P4: 新键未启用空态同样携带(空态与正常响应同一 _meta 装配单点), 旧 4 键之外只增不改
+        # P4: 新键未启用空态同样携带(空态与正常响应同一 _meta 装配单点), 旧键之外只增不改;
+        # sample_interval_s(plan 26-11-14-1313 F6)未启用兜底 DEFAULT_SAMPLE_INTERVAL_S=30.0
         assert body["meta"]["server_started_at"] == tq._SERVER_STARTED_AT > 0, p
+        assert body["meta"]["sample_interval_s"] == 30.0, p
     # 与未启用空数组先例同构: /api/traffic/history 同样 200 + 空数组
     assert client.get("/api/traffic/history", headers=auth).status_code == 200
     _enable_qb_traffic(mgr, enabled=False)  # 段存在但 enabled=false: 同空态
@@ -180,15 +182,18 @@ def test_api_traffic_qb_global_24h_points_totals_and_stale(web_env, monkeypatch)
     r = client.get("/api/traffic/qb/global", headers=auth)
     assert r.status_code == 200
     body = r.json()
-    # meta 全量形状(P4 新键 server_started_at 一并钉住; 值语义/兼容面由未启用空态用例专测)
+    # meta 全量形状(P4 新键 server_started_at 一并钉住; 值语义/兼容面由未启用空态用例专测)。
+    # sample_interval_s = F6 只增键(plan 26-11-14-1313): 生效采样间隔 = 1 x main_tick 2.0s
+    # (与桶宽 interval_s=30 分离 —— 24h 窗被 MAX_RAW_BUCKETS 上限加宽)
     assert body["meta"] == {
         "window": "24h",
         "interval_s": 30,
+        "sample_interval_s": 2.0,
         "source": "qb",
         "stale": False,
         "server_started_at": _tq_meta._SERVER_STARTED_AT,
     }
-    assert 2880 <= len(body["points"]) <= 2881  # 满窗栅格(窗首对齐时恰 2880)
+    assert len(body["points"]) == 2881  # 满窗栅格(26-11-14-1313 F3 floor+1: 24h/30s 恒整倍, n 恒 2881)
     assert point_at(body, base) == {"t": base, "dl": 0, "up": 0}  # 窗内首点无基线: D4 豁免 0 线(非 null)
     assert point_at(body, base + 30) == {"t": base + 30, "dl": 33, "up": 10}  # 区间平均: delta(1000,300)/30
     assert point_at(body, base + 120) == {"t": base + 120, "dl": 0, "up": 3}  # dl 重置派不出 0 线 + up delta(100)/30
@@ -275,6 +280,7 @@ def test_api_traffic_qb_raw_rate_basis_delta_per_w_totals_unchanged(web_env):
         return next((p for p in body[seg] if p and p["t"] == t), None)
 
     assert body["meta"]["stale"] is False and body["meta"]["interval_s"] == 30
+    assert body["meta"]["sample_interval_s"] == 30.0  # F6 只增键: 15 x main_tick 2.0s, 此处与桶宽恰等
     assert pt("points", b0) == {"t": b0, "dl": 0, "up": 0}  # 窗内首点基线缺失 D4 0 线
     assert pt("points", b0 + 30) == {"t": b0 + 30, "dl": 20, "up": 10}
     assert pt("points", b0 + 60) == {"t": b0 + 60, "dl": 40, "up": 20}
@@ -432,7 +438,7 @@ def test_api_traffic_qb_global_30d_hour_segment(web_env):
     )
     body = client.get("/api/traffic/qb/global", headers=auth, params={"window": "30d"}).json()
     assert body["meta"]["interval_s"] == 3600 and body["meta"]["window"] == "30d"
-    assert 720 <= len(body["points"]) <= 721  # 30d 窗 ≈720 桶
+    assert len(body["points"]) == 721  # 30d 窗 720 桶 + 1 进行中桶(26-11-14-1313 F3 floor+1: hour 段恒整倍, n 恒 721)
     p = next(p for p in body["points"] if p and p["t"] == h)
     assert p == {"t": h, "dl": 200, "up": 60}  # hour 行 avg(桶内不再聚合)
     total = next(p for p in body["totals"] if p and p["t"] == h)
