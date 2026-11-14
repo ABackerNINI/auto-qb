@@ -19,6 +19,12 @@
 - test_p1_filter_behavior_node: node 探针真跑 filteredGroups/relocateOptions —— 组内或、跨筛与、路径筛位置集(dst/src 命中与 done 不命中)、清空重置
 - test_p1_detail_section_and_endpoint_projection: 详情端点带 relocate; 无 job 时详情段整段不渲染
 - test_p1_detail_endpoint_passes_relocate: 真实 /api/torrents/{hash} 端点: 有 job 回传 relocate 投影, 无 job 为 null, save_path 不变
+- test_member_relocate_resume_pending_projection: 恢复确认账展示面(26-11-14-1744 (3)) —— job 带
+  resume_pending/retries 时标注带 计数/hash 列表/补发数/穷尽位, 穷尽界=机制侧上界(retries>=MAX 才 True),
+  空账(含默认)全零不噪音, 已删成员在账如实计数, 同 job 各成员带同一份 job 级账
+- test_resume_pending_endpoint_projection: 真实 /api/torrents/{hash} 端点透传恢复账四字段(空账字段恒在)
+- test_resume_pending_display_wiring: 待恢复文案单点 decorate.relocateResumeText 定义恰一次, 消费面
+  (drawer_rows 两行 / relocate_pop kv)走同一单点; 空账零噪音与穷尽/在途区分文案钉扎
 """
 from __future__ import annotations
 
@@ -45,6 +51,8 @@ def _job(
     updated_at: float = 1.0,
     created_at: float = 0.5,
     alias_paths=(),
+    resume_pending=(),
+    resume_retries: int = 0,
 ) -> RelocateJob:
     return RelocateJob(
         job_id=job_id,
@@ -59,6 +67,8 @@ def _job(
         origin=origin,
         created_at=created_at,
         updated_at=updated_at,
+        resume_pending=tuple(resume_pending),
+        resume_retries=resume_retries,
     )
 
 
@@ -110,6 +120,36 @@ def test_member_relocate_origin_mover_and_contract(tmp_path):
     assert ha["created_at"] == 0.5, "设置时间来自 job 登记时刻, 必须随 relocate 投影下发"
     # 不改 save_path: 迁移可见性只加标注, 路径筛选仍按 qB save_path 语义
     assert env.mgr._member_view(env.mgr.store.by_hash["HA"])["save_path"] == env.src
+
+
+def test_member_relocate_resume_pending_projection(tmp_path):
+    """恢复确认账展示面(issue 26-11-14-1744 (3)): 账字段随 relocate 投影下发, 穷尽/在途可区分"""
+    from auto_qb.core.modules.relocate_lifecycle import _RESUME_RETRY_MAX as RESUME_RETRY_MAX
+
+    env = relocate_env(tmp_path)
+    mod = env.mgr.ctx.relocate
+    # 在途态: 账非空且 retries 未到上界
+    mod.register_job(_job("j1", resume_pending=("HA", "HB"), resume_retries=1))
+    ha = env.mgr._member_view(env.mgr.store.by_hash["HA"])["relocate"]
+    hb = env.mgr._member_view(env.mgr.store.by_hash["HB"])["relocate"]
+    assert ha["resume_pending_count"] == 2 and ha["resume_pending_hashes"] == ["HA", "HB"]
+    assert ha["resume_retries"] == 1 and ha["resume_exhausted"] is False
+    # 账是 job 级的: 同 job 各成员标注带同一份(与 alias_count 同形), 不按成员各自重算
+    assert hb["resume_pending_count"] == 2 and hb["resume_pending_hashes"] == ["HA", "HB"]
+    # 穷尽边界: retries 达机制侧上界才 True(展示区分单点 = 机制常数, 不复制数值)
+    mod.register_job(_job("j2", resume_pending=("HA", ), resume_retries=RESUME_RETRY_MAX - 1))
+    assert env.mgr._member_view(env.mgr.store.by_hash["HA"])["relocate"]["resume_exhausted"] is False
+    mod.register_job(_job("j3", resume_pending=("HA", ), resume_retries=RESUME_RETRY_MAX))
+    assert env.mgr._member_view(env.mgr.store.by_hash["HA"])["relocate"]["resume_exhausted"] is True
+    # 空账(默认账 = 旧 state 条目同形): 字段恒在但全零, 前端按计数隐藏行零噪音
+    mod.register_job(_job("j4"))
+    empty = env.mgr._member_view(env.mgr.store.by_hash["HA"])["relocate"]
+    assert empty["resume_pending_count"] == 0 and empty["resume_pending_hashes"] == []
+    assert empty["resume_retries"] == 0 and empty["resume_exhausted"] is False
+    # 已删成员在账如实显示(保守挂账语义): 不在组内的 hash 原样进列表, 不过滤不特殊标注
+    mod.register_job(_job("j5", resume_pending=("HA", "HDELETED")))
+    gone = env.mgr._member_view(env.mgr.store.by_hash["HB"])["relocate"]
+    assert gone["resume_pending_hashes"] == ["HA", "HDELETED"], "已删成员必须如实进展示面"
 
 
 def test_origin_roundtrip_and_legacy_unknown():
@@ -609,3 +649,53 @@ def test_p1_detail_endpoint_passes_relocate(web_env):
 
     hb = client.get("/api/torrents/HB", headers=auth).json()["torrent"]
     assert hb["relocate"] is None, "无 job 时字段恒在但值为 null(详情段整段不渲染)"
+
+
+def test_resume_pending_endpoint_projection(web_env):
+    """真实端点: 恢复确认账字段(issue 26-11-14-1744 (3))随 relocate 投影下发, 空账字段恒在"""
+    from auto_qb.torrents import TorrentRecord
+    from auto_qb.webui.views_relocate import member_relocate
+
+    mgr, client = web_env
+    records = {"HA": TorrentRecord(hash="HA", name="X", save_path=r"R:\src")}
+    mgr.store.get = records.get
+    job = {
+        "job_id": "j1",
+        "phase": ru.PHASE_MOVING,
+        "src": r"R:\src",
+        "dst": r"R:\dst",
+        "alias_paths": [],
+        "resume_pending": ["HA", "HGONE"],
+        "resume_retries": 2,
+        "resume_exhausted": False,
+    }
+    mgr._relocate_member = lambda h: member_relocate(job, h)
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+
+    ha = client.get("/api/torrents/HA", headers=auth).json()["torrent"]["relocate"]
+    assert ha["resume_pending_count"] == 2 and ha["resume_pending_hashes"] == ["HA", "HGONE"]
+    assert ha["resume_retries"] == 2 and ha["resume_exhausted"] is False
+
+    # 空账条目(旧 state 同形): 字段恒在且计数 0 —— 契约 = 字段恒在, 前端按计数决定出不出行
+    empty = member_relocate({"job_id": "j2", "phase": ru.PHASE_MOVING}, "HA")
+    assert empty["resume_pending_count"] == 0 and empty["resume_pending_hashes"] == []
+    assert empty["resume_retries"] == 0 and empty["resume_exhausted"] is False
+
+
+def test_resume_pending_display_wiring():
+    """待恢复展示面接线(issue 26-11-14-1744 (3)): 文案单点 + 消费面(抽屉两行/浮窗 kv)"""
+    deco = _static("shared/decorate.js")
+    rows = _static("shared/drawer_rows.js")
+    pop = _static("shared/relocate_pop.js")
+    assert deco.count("relocateResumeText(rel) {") == 1, \
+        "待恢复文案单点必须在 decorate.js 定义恰一次(在途/穷尽区分不另写第二份)"
+    assert rows.count("this.relocateResumeText(rel)") == 2, \
+        "抽屉迁移段两行守门都走单点(计数行 + 哈希行同空账判定)"
+    assert 'label: "待恢复成员"' in rows and 'label: "待恢复哈希"' in rows, \
+        "恢复确认账两行必须在场(计数+态 / hash 列表)"
+    assert "this.relocateResumeText(rel)" in pop, "浮窗 kv 必须消费同一文案单点"
+    assert '"待恢复成员"' in pop, "浮窗 kv 行标签与抽屉计数行同名"
+    # 文案钉扎: 空账零噪音(空串守门) + 穷尽/在途区分词
+    assert 'if (n <= 0) return "";' in deco, "空账必须返回空串(调用方按空串不出行)"
+    assert "补发穷尽, 需手动恢复" in deco and "恢复确认中" in deco, \
+        "在途/穷尽两态文案必须在场(区分由后端 resume_exhausted 给, 前端不重算上界)"

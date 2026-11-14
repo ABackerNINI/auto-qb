@@ -13,8 +13,12 @@
   的 vm harness, format.js + decorate.js + relocate_pop.js 同 context 组装实例) —— 组 pair:
   paths 两行[当前位置/目标位置] + kv 序(成员 -> 来源 -> 更新, 组行无别名行); 组 mixed: 多目标
   行全标「目标位置」且空 dst 丢弃; 种子 failed: reason 前缀「原因: 」+ 别名行; 别名 0 显「—」;
-  缺 updated_at 显「—」; 调度面: done / 无标注行 relPopEnter 不调度(relocateView null 短路),
-  moving 行调 120ms、leave 调 160ms 宽限。
+  缺 updated_at 显「—」; 待恢复行(26-11-14-1744 (3)): 种子行账非空时 kv 在别名后来源前
+  (在途「恢复确认中」/穷尽「需手动恢复」两态, 走 relocateResumeText 单点), 空账不出行,
+  组行无该行(组级聚合无恢复账); 区分位单点面: retries=上界而后端 resume_exhausted=false
+  仍显在途文案(前端不重算上界, 机制侧改值不谎报); 初态面: retries=0 显无后缀变体
+  (不带「已补发」); 调度面: done / 无标注行 relPopEnter 不调度(relocateView
+  null 短路), moving 行调 120ms、leave 调 160ms 宽限。
 """
 from __future__ import annotations
 
@@ -135,12 +139,28 @@ const seedFail=assemble({relocate:{state:'failed',src:'R:/s',dst:'R:/d',phase:'m
   reason:'目标卷剩余空间不足',alias_count:2,origin:'web',updated_at:999880}});
 const seedAlias0=assemble({relocate:{state:'moving',src:'R:/s',dst:'R:/d',alias_count:0,updated_at:999880}});
 const seedNoUpd=assemble({relocate:{state:'moving',src:'R:/s',dst:'R:/d',alias_count:0,updated_at:0}});
+// 待恢复余量(issue 26-11-14-1744 (3)): 在途/穷尽两态 + 空账零噪音; 组行不带该行(组级聚合无账)
+const seedResume=assemble({relocate:{state:'moving',src:'R:/s',dst:'R:/d',alias_count:1,origin:'rule',
+  resume_pending_count:2,resume_pending_hashes:['HA','HB'],resume_retries:1,resume_exhausted:false,updated_at:999880}});
+const seedExhausted=assemble({relocate:{state:'failed',src:'R:/s',dst:'R:/d',alias_count:0,
+  resume_pending_count:1,resume_pending_hashes:['HA'],resume_retries:3,resume_exhausted:true,updated_at:999880}});
+// 区分位单点面: retries 达上界但后端 false -> 前端仍显在途(只认 resume_exhausted, 不重算上界);
+// 初态面: 账非空且 retries=0 -> 无「已补发」后缀变体
+const seedMaxRetriesInflight=assemble({relocate:{state:'moving',src:'R:/s',dst:'R:/d',alias_count:0,
+  resume_pending_count:1,resume_pending_hashes:['HA'],resume_retries:3,resume_exhausted:false,updated_at:999880}});
+const seedRetries0=assemble({relocate:{state:'moving',src:'R:/s',dst:'R:/d',alias_count:0,
+  resume_pending_count:1,resume_pending_hashes:['HA'],resume_retries:0,resume_exhausted:false,updated_at:999880}});
+const seedResumeEmpty=assemble({relocate:{state:'moving',src:'R:/s',dst:'R:/d',alias_count:0,
+  resume_pending_count:0,resume_pending_hashes:[],resume_retries:0,resume_exhausted:false,updated_at:999880}});
+const grpResume=assemble({members:[{relocate:null}],
+  relocate:{state:'moving',src:'R:/src',dst:['R:/dst'],pending:3,total:12,resume_pending_count:2,updated_at:999880}});
 // 调度面: done / 无标注 -> relocateView null 短路不调度; moving -> 120; leave -> 160
 M.relPopEnter.call(M,{currentTarget:{}},{relocate:{state:'done',src:'R:/s',dst:'R:/d'}});
 M.relPopEnter.call(M,{currentTarget:{}},{relocate:null});
 M.relPopEnter.call(M,{currentTarget:{}},{relocate:{state:'moving',src:'R:/s',dst:'R:/d'}});
 M.relPopLeave.call(M);
-process.stdout.write(JSON.stringify({grpPair,grpMixed,seedFail,seedAlias0,seedNoUpd,timers}));
+process.stdout.write(JSON.stringify({grpPair,grpMixed,seedFail,seedAlias0,seedNoUpd,
+  seedResume,seedExhausted,seedMaxRetriesInflight,seedRetries0,seedResumeEmpty,grpResume,timers}));
 """
 
 
@@ -185,6 +205,28 @@ def test_relocate_pop_assemble_node():
     # 别名 0 -> 显「—」; 缺 updated_at -> 「更新」=「—」
     assert out["seedAlias0"]["kv"][0] == ["别名", "—"], "别名 0 显「—」不隐藏行"
     assert out["seedNoUpd"]["kv"][-1] == ["更新", "—"], "缺 updated_at 不落 NaN/空"
+
+    # 待恢复余量(issue 26-11-14-1744 (3)): 种子行账非空才出「待恢复成员」行, kv 序 = 别名 -> 待恢复 -> 来源
+    sr = out["seedResume"]
+    assert sr["kv"][0] == ["别名", "链接位 ×1"]
+    assert sr["kv"][1] == ["待恢复成员", "2 个 · 恢复确认中(已补发 1 次)"], \
+        "在途态文案必须走 relocateResumeText 单点(计数+进度)"
+    assert sr["kv"][2][0] == "来源" and sr["kv"][-1][0] == "更新", "待恢复行插在别名后、来源前"
+    # 穷尽态: 不再补发需手动恢复(与在途态展示区分, 区分位由后端 resume_exhausted 给)
+    se = out["seedExhausted"]
+    assert ["待恢复成员", "1 个 · 补发穷尽, 需手动恢复"] in se["kv"], "穷尽态必须与在途态文案可区分"
+    # 区分位单点(评审 minor#1 钉扎): retries 达上界但后端区分位 false -> 前端仍显在途
+    # 文案(只认 resume_exhausted, 不重算上界 —— 机制侧 MAX 改值时前端展示不谎报且本断言能抓)
+    sm = out["seedMaxRetriesInflight"]
+    assert ["待恢复成员", "1 个 · 恢复确认中(已补发 3 次)"] in sm["kv"], \
+        "区分位只认后端 resume_exhausted: retries=MAX 而 false 必须仍显在途文案(前端不重算上界)"
+    # 初态面(评审 minor#2 钉扎): 账建立初态(账非空且 retries=0)显无后缀变体, 不落「已补发 0 次」
+    s0 = out["seedRetries0"]
+    assert ["待恢复成员", "1 个 · 恢复确认中"] in s0["kv"], \
+        "账建立初态(retries=0)必须显无后缀变体(不带「已补发」)"
+    # 空账零噪音: 计数 0 不出行; 组行不带该行(组级聚合无恢复账)
+    assert all(k[0] != "待恢复成员" for k in out["seedResumeEmpty"]["kv"]), "空账不得出待恢复行"
+    assert all(k[0] != "待恢复成员" for k in out["grpResume"]["kv"]), "组行不出待恢复行(组级聚合无该账)"
 
     # 调度面: done/无标注不调度(relocateView null 短路), moving 调 120ms, leave 调 160ms
     assert out["timers"] == [120, 160], \

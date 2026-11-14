@@ -8,6 +8,10 @@
 from typing import Optional, Sequence
 
 from ..core.modules import relocate_units as ru
+# 恢复确认账的补发上界(issue 26-11-14-1744 §06 (3) 展示面): 穷尽态判定单点在账的机制侧
+# (relocate_lifecycle), 这里只借同一常数做「在途确认中 / 补发穷尽」的展示区分 —— 不复制
+# 数值(漂移即展示谎报), 上界改名/改值由 test_webui_relocate_visibility 的钉扎兜住。
+from ..core.modules.relocate_lifecycle import _RESUME_RETRY_MAX as RESUME_RETRY_MAX
 
 # 相位 -> 展示状态归并(plan 数据契约; S4 相位模型: 收尾窗 = {armed, rewritten}):
 #   moving / watching                    -> moving(进行中)
@@ -46,11 +50,21 @@ def member_relocate(job: Optional[dict], torrent_hash: str) -> Optional[dict]:
 
     mover / alias_paths / origin 全部来自 job 快照, 不做路径归属猜测:
     「是否 auto-qb 设置」严格按 job 的 hash 覆盖与 mover 精确匹配判定。
+
+    恢复确认账展示面(issue 26-11-14-1744 §06 (3), 账字段随 job_to_dict 下发):
+    - resume_pending_count / resume_pending_hashes: 未确认回到运行态的成员余量(计数+hash
+      列表)。账是 job 级的, 同 job 各成员标注带同一份(与 alias_count 同形); 已删成员可能
+      在账(保守挂账), 如实显示不过滤不特殊标注。
+    - resume_retries: 已消耗的补发次数(在途文案里的进度); resume_exhausted: 账面 retries
+      达补发上界(穷尽后不再补发, 需手动恢复 —— 与在途态的展示区分单点)。
+    空账(含旧 state 条目缺字段)计数 0, 前端按空不出行(零噪音)。
     """
     if not job:
         return None
     phase = str(job.get("phase") or ru.PHASE_MOVING)
     alias_paths = tuple(job.get("alias_paths") or ())
+    resume_pending = tuple(str(h) for h in (job.get("resume_pending") or ()))
+    resume_retries = int(job.get("resume_retries") or 0)
     return {
         "state": state_of_phase(phase),
         "phase": phase,
@@ -65,6 +79,10 @@ def member_relocate(job: Optional[dict], torrent_hash: str) -> Optional[dict]:
         "updated_at": float(job.get("updated_at") or 0.0),
         "origin": str(job.get("origin") or "unknown"),
         "reason": str(job.get("reason") or ""),
+        "resume_pending_count": len(resume_pending),
+        "resume_pending_hashes": list(resume_pending),
+        "resume_retries": resume_retries,
+        "resume_exhausted": bool(resume_pending) and resume_retries >= RESUME_RETRY_MAX,
     }
 
 

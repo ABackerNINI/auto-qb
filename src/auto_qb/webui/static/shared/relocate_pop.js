@@ -110,8 +110,10 @@ window.AQB_RELOCATE_POP = {
      *   paths   <- rel.src / rel.dst(组行 dst 是数组: mixed 逐行全标「目标位置」无当前位置行,
      *             非 mixed 回落同 pair 形态, 数据在就给);
      *   kv      <- 组行才有成员行(pending/total); 别名行仅种子行(member_relocate 有 alias_count,
-     *             组级聚合没有 -> 组行省略); 来源 <- relocateOriginText(rel.origin)(组级无 origin
-     *             字段 -> 省略, 不落「未知来源」); 更新 <- fmtRelTime 相对时间(format.js 现成);
+     *             组级聚合没有 -> 组行省略); 待恢复行仅种子行且账非空(relocateResumeText 非空串,
+     *             issue 26-11-14-1744 (3): 计数+在途/穷尽态, 组级聚合无该账 -> 省略); 来源 <-
+     *             relocateOriginText(rel.origin)(组级无 origin 字段 -> 省略, 不落「未知来源」);
+     *             更新 <- fmtRelTime 相对时间(format.js 现成);
      *   reason  <- 仅 rel.state==='failed' 且 rel.reason 非空, 前缀「原因: 」。
      */
     assembleRelPop(row) {
@@ -131,7 +133,7 @@ window.AQB_RELOCATE_POP = {
         const dsts = isGroup ? (rel.dst || []) : [rel.dst];
         for (const d of dsts) if (d) paths.push(["目标位置", d]);
       }
-      /* kv 行(次序: 成员 -> 别名 -> 来源 -> 更新; 值全部行载荷) */
+      /* kv 行(次序: 成员 -> 别名 -> 待恢复 -> 来源 -> 更新; 值全部行载荷) */
       const kv = [];
       if (isGroup) {
         if (rel.total > 0) kv.push(["成员", `${rel.pending}/${rel.total} 个成员待收尾`]);
@@ -139,6 +141,8 @@ window.AQB_RELOCATE_POP = {
         if (typeof rel.alias_count === "number") {
           kv.push(["别名", rel.alias_count > 0 ? `链接位 ×${rel.alias_count}` : "—"]);
         }
+        const resume = this.relocateResumeText(rel);
+        if (resume) kv.push(["待恢复成员", resume]);
       }
       if (rel.origin) kv.push(["来源", this.relocateOriginText(rel.origin)]);
       kv.push(["更新", rel.updated_at ? this.fmtRelTime(rel.updated_at) : "—"]);

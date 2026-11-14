@@ -130,6 +130,18 @@ window.AQB_DECORATE = {
     relocateOriginText(origin) {
       return RELOCATE_ORIGIN_TEXT[origin] || (origin ? origin : "未知来源");
     },
+    /* 待恢复余量展示词(issue 26-11-14-1744 (3)): 悬停浮窗 kv(relocate_pop)与抽屉迁移段
+     * (drawer_rows)共用的唯一文案单点 —— 计数 + 态(在途确认中/补发穷尽)。穷尽判定由后端
+     * 投影给出(resume_exhausted, 上界单点在机制侧), 前端不重算; 已删成员在账如实计数,
+     * 不过滤不特殊标注。空账返回 ""(调用方按空串不出行, 零噪音)。 */
+    relocateResumeText(rel) {
+      const n = Number(rel && rel.resume_pending_count) || 0;
+      if (n <= 0) return "";
+      const r = rel.resume_retries || 0;
+      return rel.resume_exhausted
+        ? `${n} 个 · 补发穷尽, 需手动恢复`
+        : `${n} 个 · 恢复确认中${r > 0 ? `(已补发 ${r} 次)` : ""}`;
+    },
     /* 行内迁移展示单点(plan 26-11-07-2344 S2): 路径列两排 A->B / 单排着色的**唯一**判定与口径,
      * 模板与后续悬停浮窗(relocate_pop.js)都只从这里取。输出 {mode, tone, a, b, label} 或 null:
      *   mode='pair' -> 两排(a=当前位置 src, b=目标位置 dst), tone 类挂 .rel-pair 整块着色;

@@ -141,7 +141,14 @@ Object.assign(window.AQB_DRAWER.methods, {
             { icon: "#i-timer", label: "收尾武装", text: rel.armed_at ? ts(rel.armed_at) : "未武装" },
             { icon: "#i-clock", label: "最近更新", text: ts(rel.updated_at) },
           ].concat(rel.state === "failed" && rel.reason
-            ? [{ icon: "#i-warn", label: "失败原因", text: rel.reason, wide: true }] : []),
+            ? [{ icon: "#i-warn", label: "失败原因", text: rel.reason, wide: true }] : [])
+            /* 恢复确认账展示面(issue 26-11-14-1744 (3)): 空账不出行(零噪音); 在途/穷尽的
+             * 文案与区分由 relocateResumeText 单点给。哈希行如实列账面余量(含已删成员),
+             * mono + copy 供手动恢复时去 qB 按哈希定位。 */
+            .concat(this.relocateResumeText(rel) ? [
+              { icon: "#i-hourglass", label: "待恢复成员", text: this.relocateResumeText(rel) },
+              { icon: "#i-hash", label: "待恢复哈希", text: (rel.resume_pending_hashes || []).join(", "), mono: true, wide: true, act: "copy" },
+            ] : []),
         });
       }
       return out;
