@@ -175,8 +175,8 @@ const TRIGGER_DEFS = {
       "scope": "panel", "dispatch": "panel"
     },
     {
-      "id": "statusbar.kbd-help", "ui": "statusbar", "entry": "_kbToggleKbHelp",
-      "scope": "none", "dispatch": "panel"
+      "id": "statusbar.kbd-persist", "ui": "statusbar", "entry": "kbPersistToggle",
+      "scope": "none", "dispatch": "none"
     }
   ],
   "calls": [

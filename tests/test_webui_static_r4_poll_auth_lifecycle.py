@@ -6,7 +6,7 @@
 - test_r4_errlog_reseed_probe: R5#16 —— lifecycle.js _errlogReseed node 电池真跑(兑现「探针真跑」注释契约, 兑现前 tests/ 零命中): cursor 0(尚无游标)不判重启 / last<cursor 判重启(seq 进程内只增, 倒退唯一路径是重启归零) / last>=cursor 正常
 - test_r4_logout_settles_modal_and_stops_events: R5#1 + R5#2 —— auth.js _logout 登出收口: 悬空模态先 resolve(false) 再复位(直接丢弃 _modalResolve 会让 confirmDialog/promptDialog 永久 pending, 删除流程在 await 处挂死)、await 侧恢复看到已复位框状态走取消分支、SSE 通道与轮询同口径一并拆(stopEvents 与 _qbTeardown 同收)、无框登出 no-op 不炸
 - test_r4_search_quiet_retry_backoff: R5#236 —— view.js 静默刷新失败重试退避真跑: searchBuilding 残留 true 时失败续查逐次翻倍夹 15s(2s/4s/8s/15s/15s, 与轮询失败退避 currentPollMs 同曲线口径), 服务端宕机不再形成固定 1 req/s 无限循环; 成功一轮计数清零且续查保持 1s 节拍、resetSearch 新会话从零起算
-- test_r4_lifecycle_unmounted_listener_sweep: R5#3 —— lifecycle.js mounted/unmounted 监听对称 node 电池真跑: mounted 挂的五支监听(click 收层/Esc 退栈/防抖 resize/visibilitychange/contextmenu)提为实例字段后 unmounted 逐一撤除(热重载句柄不再堆叠), stopPolling 与 stopEvents 同收, 既有撤除面(键盘引擎/守卫/storage/时钟 interval)零回归; S1(计划 26-11-14-0041)反引号显影链新增 document keydown(第 4 条)/keyup + window blur 三支监听, 同样注册/撤除对称(keydown 计数 3->4), 并真跑显影 handler 核对六约束判定面(合法反引号加 class / 反引号 repeat 维持按住不隐 / IME·输入态·录制态不加 / 每次非反引号 keydown 自愈 / keyup·blur·visibilitychange(hidden) 兜底清 / 不吞事件 I5)
+- test_r4_lifecycle_unmounted_listener_sweep: R5#3 —— lifecycle.js mounted/unmounted 监听对称 node 电池真跑: mounted 挂的五支监听(click 收层/Esc 退栈/防抖 resize/visibilitychange/contextmenu)提为实例字段后 unmounted 逐一撤除(热重载句柄不再堆叠), stopPolling 与 stopEvents 同收, 既有撤除面(键盘引擎/守卫/storage/时钟 interval)零回归; S1(计划 26-11-14-0041)反引号显影链新增 document keydown(第 4 条)/keyup + window blur 三支监听, 同样注册/撤除对称(keydown 计数 3->4), 并真跑显影 handler 核对六约束判定面(合法反引号加 class / 反引号 repeat 维持按住不隐 / IME·输入态·录制态不加 / 每次非反引号 keydown 自愈 / keyup·blur·visibilitychange(hidden) 兜底清 / 不吞事件 I5); S5(同计划)常驻开关同电池: 挂载读本机偏好恢复开关态(刷新保留)/ 开挂 body.kbd-persist 且偏好落盘 autoqb.ui.kbdPersist / 常驻态按住反引号不叠加 kbd-reveal(两态互斥)/ 关后回到仅显影 / unmounted 清两态 body class
 - test_r4_webflags_boot_retry_and_ensure: issue 26-11-11-0633 —— loadWebFlags boot 韧性 node 电池真跑: boot 期(loadWebFlagsBoot)失败 1s/3s 退避各补一发共三发(穷尽止/中间态保持 fail-closed)、登出态(e.auth)不重试不排定时器、flagsLoaded 态(成功收口/"未取到"可分)、惰性补拉 ensureWebFlags(已取到返回 null 零副作用/未取到补一发)、并发单飞(同档同帧与退避窗口期并入复用同一 promise 不叠发)、档位分槽(boot 链在途时惰性补拉异档另起单发不骑退避链、惰性结算不挤占 boot 槽, 请求计数钉 3 发)
 - test_r4_truth_snapshot_materialized_members: S2a ingestion 物化缝(计划 26-11-11-0630 §03)× 乐观真值快照 node 电池真跑 —— S2a 后 _snapshotTruth 的组员源从服务端成员字典换成客户端物化拷贝, 此前该缝 tests/ 零命中。前置两断言钉 spike 裁决不变式(组员 = **独立浅拷贝**非平铺行引用, 同 hash 多命中各为独立对象; applyOptimisticPatch 经 _forEachRow 平铺行与组员拷贝同拍命中); 三个绿色向: 全量轮(命令在途)物化源 = 载荷平铺行 = 服务端真值 → 快照逐键比对不误判收敛(hold 保留)且 op.prev 保鲜为真值(兜底回滚不打到补丁值) / 全量轮真值落地 kind 对齐 → 正常收敛(撤 hold 出口) / 增量轮组未脏 → 组不进 d.groups → 快照无该 hash → 宁可慢收不误判(3s 兜底)。*已知边界(电池内注释, 不落断言)*: 误判窗口 = 组脏(**他员变化**使组进 d.groups)+ 该组另有成员 pending —— 物化源落到本地已打补丁行, 快照可能读到补丁值提前撤 hold(op.prev 同窗被污染); 影响如实两分支: 成功路径真值落地即收敛, 失败/停滞路径补丁值停留至该成员下次变化或下一次全量轮(回滚与 3s 兜底同被跳过, 长期滞留而非一轮弹回, 已确认接受该残留) —— S2a 报告「混合组未脏」表述以此修正: **组完全未脏是安全向**(即第三个绿色断言); 三入口接线覆盖落点(P5 评审修复后如实): delta 桶序 + 重组后 members 仍物化对象形 = S4 e2e 乐观用例(组员拷贝补丁不触字段 state == 平铺真值行的新鲜度档 + 暂停真值轮 delta.groups 形状钉, e2e/group-hash-ref.spec.mjs), 待补清账 drain 赋值后时序 = 本文件 test_r4_remat_drain_after_assign_two_beat, auth.js bootstrap 同缝 = 本函数静态钉(_materializeGroupRows 调用先于 this.groups 赋值, 跨度比较钉顺序) —— e2e 桩恒免鉴权(ui_harness skip_local_verify), 登录快照轮 e2e 不可达, 不再声称由 e2e 覆盖; 「先物化后赋值」的响应式时序半边(物化挪到赋值后产物相同, 仅 Vue 代理旁路差异)无直接断言面, 由 polling.js 注释声明 + e2e 产物面(组行 members 物化形)间接覆盖
 - test_r4_remat_drain_after_assign_two_beat: S2a delta 分支待补清账时序(P3 major 修复点「_rematDrain 必须在 this.groups 赋值之后」)node 电池真跑 —— 两拍缺项 delta 直调 applyStateRows(delta-sync.spec 行级语义直测同款载荷形状): 第一拍组行带未知 hash 成员(缺项保留 hash 串 + 登记 _rematQueue), 第二拍 torrents 桶补齐 + 组桶非空(物化索引入口的触发前提; 补物化组不在组桶, 只能走待补队列)→ 断言第一拍登记组行 members 补物化齐; **drain 挪回赋值前即红**(登记行当轮未进 this.groups, cur.includes 恒 false 被当轮丢弃, 第二拍队列空转 members 停 hash 串) —— 把 P3 修复语义钉进 node 层
@@ -480,14 +480,20 @@ const mkTarget = (scope) => ({
   },
 });
 global.window = Object.assign(mkTarget("window"), { innerHeight: 800 });
-// 键位提示显影态(计划 26-11-14-0041 S1): _setKbdReveal 翻转时写 body.classList, 这里用 Set
-// 记录 class 存亡, 供下方显影链判定电池逐条核对(合法反引号加 / 非法与兜底清)。
+// 键位提示显隐态(计划 26-11-14-0041 S1 显影 / S5 常驻): _setKbdReveal / _applyKbdPersist 写
+// body.classList, 这里用 Set 记录 class 存亡, 供下方显隐链判定电池逐条核对。
 const bodyCls = new Set();
 global.document = Object.assign(mkTarget("document"), {
   hidden: false,
   body: { classList: { toggle(c, force) { force ? bodyCls.add(c) : bodyCls.delete(c); } } },
 });
-global.localStorage = { getItem: () => null, setItem() {}, removeItem() {} };
+// 本机偏好(计划 26-11-14-0041 S5/D6): autoqb.ui.kbdPersist 读侧/写侧真记账, 供恢复与落盘断言
+const store = {};
+global.localStorage = {
+  getItem: (k) => (k in store ? store[k] : null),
+  setItem: (k, v) => { store[k] = String(v); },
+  removeItem: (k) => { delete store[k]; },
+};
 global.aqbFetch = () => new Promise(() => {});   // 永悬挂: 本电池只验注册/撤除面, 不走启动链
 global.readColStateRaw = () => "has-prefs";      // 非空 -> 跳过 origin 提示分支
 const timers = new Map(); let tid = 0;
@@ -511,6 +517,8 @@ const ok = (name, cond) => checks.push([name, !!cond]);
     _showColsOriginHint() {},
   });
   LC.created.call(ctx);
+  // S5 常驻开关: 挂载前预置本机偏好 = 开, 验证「刷新后开关态保留」(D6 读侧)
+  store["autoqb.ui.kbdPersist"] = "1";
   await LC.mounted.call(ctx);
 
   // mounted: 全部监听在册(scroll/resize 具名 + click/Esc/防抖 resize/可见性/右键/storage x2
@@ -524,6 +532,11 @@ const ok = (name, cond) => checks.push([name, !!cond]);
   ok("mounted: visibilitychange 在册", cnt("document", "visibilitychange") === 1);
   ok("mounted: contextmenu 在册", cnt("document", "contextmenu") === 1);
   ok("mounted: storage 恰两条(列偏好 + 时间口径)", cnt("window", "storage") === 2);
+
+  // 常驻开关(S5/W2): 挂载读本机偏好恢复开关态(刷新保留), 只挂 body class(零重绘)
+  ok("常驻: 挂载读本机偏好恢复开关态(刷新保留)", bodyCls.has("kbd-persist"));
+  ctx.kbPersistToggle();
+  ok("常驻: 关时摘 class 且偏好落盘 0", !bodyCls.has("kbd-persist") && store["autoqb.ui.kbdPersist"] === "0");
 
   // issue 26-11-11-0633: 右键挂点 —— 任意右键(在 header/input 早退分支**之前**)触发 flags 惰性补拉
   const drainCtx = async () => { for (let i = 0; i < 10; i++) await null; };
@@ -585,6 +598,21 @@ const ok = (name, cond) => checks.push([name, !!cond]);
   ok("显影: 不 preventDefault / stopPropagation(I5)", !swallowed);
   ctx._setKbdReveal(false);  // 复位, 不干扰后续 unmounted 撤除断言
 
+  // 常驻开关两态互斥(S5/W2, D4): 开 = body.kbd-persist / 关 = 仅按住反引号; 常驻态下按住反引号
+  // 不得叠加 kbd-reveal(body 上只允许一态, 显示规则本就共用一条); 偏好随开关落盘(D6)。
+  ctx.kbPersistToggle();
+  ok("常驻: 开 = 挂 body.kbd-persist", bodyCls.has("kbd-persist"));
+  ok("常驻: 开 = 偏好落盘 autoqb.ui.kbdPersist=1", store["autoqb.ui.kbdPersist"] === "1");
+  rd(ev({}));
+  ok("常驻: 常驻态按住反引号不叠加 kbd-reveal(两态互斥)", bodyCls.has("kbd-persist") && !bodyCls.has("kbd-reveal"));
+  ctx.kbPersistToggle();
+  ok("常驻: 再点摘 class 且偏好回 0", !bodyCls.has("kbd-persist") && store["autoqb.ui.kbdPersist"] === "0");
+  rd(ev({}));
+  ok("常驻: 关后按住反引号恢复显影(body.kbd-reveal)", bodyCls.has("kbd-reveal") && !bodyCls.has("kbd-persist"));
+  ctx._onKbdRevealUp({ code: "Backquote" });
+  ctx.kbPersistToggle();  // 复置常驻态, 供 unmounted 清理断言
+  ok("常驻: unmounted 前置态已挂", bodyCls.has("kbd-persist"));
+
   LC.unmounted.call(ctx);
 
   // unmounted: 五支监听撤净(R5#3 修复面) + 显影链三支(keydown/keyup/blur)同撤 + 既有撤除面零回归
@@ -597,6 +625,8 @@ const ok = (name, cond) => checks.push([name, !!cond]);
   ok("unmounted: contextmenu 撤除", cnt("document", "contextmenu") === 0);
   ok("unmounted: storage 撤净", cnt("window", "storage") === 0);
   ok("unmounted: window 监听全撤净", reg.filter((l) => l[0] === "window").length === 0);
+  // 常驻/显影 body class 随销毁清掉(本机偏好保留, 下次挂载仍能恢复)
+  ok("unmounted: 常驻态 body class 清理", !bodyCls.has("kbd-persist") && !bodyCls.has("kbd-reveal"));
   ok("unmounted: document 监听全撤净", reg.filter((l) => l[0] === "document").length === 0);
   ok("unmounted: 时钟 interval 撤净", timers.size === 0);
   ok("unmounted: stopPolling 调用(主轮骨架一并收)", calls.includes("stopPolling"));

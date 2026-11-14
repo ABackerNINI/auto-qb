@@ -12,6 +12,11 @@
  *   - 拉取失败一律静默(后端不可达不打扰用户, 下轮补拉自愈), 零持久化、零新配置键。 */
 const ERR_POLL_INTERVAL_MS = 60000;  // 补拉节拍(写常量; 不进配置 —— 纯前端体验参数)
 
+/* 键位提示常驻开关的本机偏好键(计划 26-11-14-0041 S5/W2, D6): 沿用既有 autoqb.ui.* 口径,
+ * 不新造通道。"1" = 常驻(body.kbd-persist, 全落点显示) / 其余 = 仅按住反引号显影
+ * (body.kbd-reveal)。两态互斥, 共用共享 CSS 的同一条显示规则 —— 这里只存一个开关值。 */
+const KBD_PERSIST_KEY = "autoqb.ui.kbdPersist";
+
 /* 密钥字段名与空值占位(本文件单点): 本文件只在本机免鉴权分支采纳一次本地旧密钥。
  * (1) 空值占位: token 字段**恒为字符串** —— 导出下载会把它无条件插值进 Bearer 头, 置 null 会拼出
  *    "Bearer null"(与「不带密钥」不是一回事);
@@ -68,6 +73,10 @@ window.AQB_LIFECYCLE = {
     // 键位提示显影态(计划 26-11-14-0041 S1/W1): body.kbd-reveal 的有无。纯显示态缓存,
     // 刻意不进 data —— 每次 keydown 都要写它, 进 data 会平白触发整表重渲染(P1-2 口径)。
     this._kbdRevealOn = false;
+    // 键位提示常驻态(S5/W2 单开关): body.kbd-persist 的有无。同上刻意不进 data —— 状态
+    // 显示全交给 CSS(body.kbd-persist 驱动开关高亮), 切换零重绘(D4); 初值由 mounted 从本机
+    // 偏好恢复(见 _kbdPersistStored)。
+    this._kbdPersistOn = false;
   },
   async mounted() {
     /* P1-2: 视口高度 + 页面滚动监听(被动 + rAF 合帧, 滚动本身不做任何布局读取) */
@@ -230,6 +239,11 @@ window.AQB_LIFECYCLE = {
     document.addEventListener("keydown", this._onKbdRevealDown);
     document.addEventListener("keyup", this._onKbdRevealUp);
     window.addEventListener("blur", this._onKbdRevealBlur);
+    // 键位提示常驻开关(S5/W2, D6 刷新保留): 读本机偏好恢复开关态 —— 只挂 body class,
+    // 不重绘键帽(D4)。偏好非法/读取失败一律回落「关」= 仅按住反引号显影(保守默认)。
+    // class 立刻生效(别等下一拍, 否则常驻用户每次开页多闪一帧); aria 态等模板挂上后再同步。
+    this._applyKbdPersist(this._kbdPersistStored());
+    this.$nextTick(() => this._syncKbdSwAria());
     // 生效宽度: 全自动页按当前渲染现算(见 recomputeEffective); 窗口变化后重算, 保持
     // "填满容器 + 自适应"的观感; 固化页(colW 非空)用意图值, 不随窗口变(拖一列不再影响其它列)
     this._resizeDebounceTimer = 0;
@@ -374,6 +388,7 @@ window.AQB_LIFECYCLE = {
       this._onKbdRevealBlur = null;
     }
     this._setKbdReveal(false);
+    this._applyKbdPersist(false);  // 常驻态同清(同上: 防热重载后 body class 卡住); 本机偏好保留
     // 未保存改动防护(U1-b): 键盘拦截与原生 beforeunload 兜底一并撤掉(同上, 防热重载后句柄堆叠)
     if (this._cfgGuardKey) {
       document.removeEventListener("keydown", this._cfgGuardKey);
@@ -441,9 +456,47 @@ window.AQB_LIFECYCLE = {
      * body.classList, 不碰任何几何、不重绘键位文本(取数链零改动, I1)。显/隐全交给共享 CSS
      * 的 opacity/visibility, 这里只负责挂/摘 body 上的 kbd-reveal。 */
     _setKbdReveal(on) {
+      // 常驻态优先(S5/W2 两态互斥): 常驻开着时按住反引号不再叠加显影 class ——
+      // 显示规则本就共用同一条, 但 body 上只允许一态, 免得 CSS/断言出现两套口径。
+      if (on && this._kbdPersistOn) return;
       if (this._kbdRevealOn === on) return;  // 幂等: 同一态不重复写 DOM
       this._kbdRevealOn = !!on;
       document.body.classList.toggle("kbd-reveal", !!on);
+    },
+    /* 键位提示常驻态 / 全局开关(计划 26-11-14-0041 S5/W2, D2/D4/D6/D11)。
+     * 两态互斥 = 开走 body.kbd-persist(常驻) / 关走 body.kbd-reveal(仅按住反引号);
+     * D4: 切换只写 body class 与本机偏好, **零 JS 重绘**(开关高亮由 body.kbd-persist 的纯 CSS
+     * 驱动), 取数链一行不动(I1)。D6: 偏好落 localStorage autoqb.ui.kbdPersist, 刷新由 mounted
+     * 读回。D11: 开关 title 是控件自身功能说明, 不属「键位提示不走 title」的 I4 约束面。
+     * 状态同步用 $refs 直写 aria-pressed(不引响应式字段 = 不触发渲染), refs 缺失时静默跳过
+     * (node 电池/子组件上下文无 DOM 时保持纯 class 行为)。 */
+    kbPersistToggle() {
+      const on = !this._kbdPersistOn;
+      try {
+        localStorage.setItem(KBD_PERSIST_KEY, on ? "1" : "0");
+      } catch (e) { /* 隐私模式等: 写入失败仅降级为本次会话内生效 */ }
+      this._applyKbdPersist(on);
+    },
+    /* 常驻态落地: 幂等写 class + 必要时摘掉显影态(互斥) + 同步开关 aria-pressed。 */
+    _applyKbdPersist(on) {
+      const want = !!on;
+      if (want) this._setKbdReveal(false);
+      this._kbdPersistOn = want;
+      document.body.classList.toggle("kbd-persist", want);
+      this._syncKbdSwAria();
+    },
+    /* 开关按钮 aria-pressed 同步(纯属性写, 不触发渲染): refs 未挂/上下文无 DOM 时静默跳过。 */
+    _syncKbdSwAria() {
+      const sw = this.$refs && this.$refs.kbdSw;
+      if (sw && sw.setAttribute) sw.setAttribute("aria-pressed", this._kbdPersistOn ? "true" : "false");
+    },
+    /* 本机偏好读侧: 只有显式 "1" 才算开; 其余(缺失/非法/读取异常)一律回落「关」(保守默认)。 */
+    _kbdPersistStored() {
+      try {
+        return localStorage.getItem(KBD_PERSIST_KEY) === "1";
+      } catch (e) {
+        return false;
+      }
     },
     /* ------------------------------------- 通知 S3(后端条目合并与补拉, 见文件头块注释) */
     /* 后端环条目 -> _errHistory 合并单点: id = "b"+后端 seq(按 seq 稳定去重), kind 映射

@@ -47,10 +47,11 @@
                  判据); 高亮 = 该对即当前页签所属对(mt.id === dtPair, 与列组同源)。
                  26-10-20-2231: 两态都改 <aq-seg> —— 非合并态那四个按钮此前是 DT_TAB_LABELS 的
                  第二份拷贝(dtTabItems 已投影), 高亮判据统一为 `value === v`。 -->
-            <!-- 页签键帽徽标(计划 26-11-12-0344 S4): :kbd-of 逐项回调取串(箭头函数保证每次
-                 父渲染都换新函数引用 => 子组件跟着重渲染重取), 串走 shortcuts.js kbDrawerTabKbd
-                 单点(非合并 Alt+1..4 / 合并态与键盘 run 同表 KB_MERGE_TAB_REMAP 随位次重排,
-                 模板零手抄键位串, I1); .aq-kbd 形状在共享 CSS(I3 令牌) -->
+            <!-- 页签键帽徽标(计划 26-11-12-0344 S4 建 / 26-11-14-0041 S4 角标化): :kbd-of 逐项
+                 回调取串(箭头函数保证每次父渲染都换新函数引用 => 子组件跟着重渲染重取), 串走
+                 shortcuts.js kbDrawerTabKbd 单点(非合并 Alt+1..4 / 合并态与键盘 run 同表
+                 KB_MERGE_TAB_REMAP 随位次重排, 模板零手抄键位串, I1); .aq-kbd 形状与角标版式
+                 (绝对定位贴页签右上角, 不进布局流 => 页签宽度零变化)在共享 CSS(I3 令牌) -->
             <aq-seg v-if="dtMergeTabsOn" :items="dtMergeTabList" :value="dtPair"
                     :on-pick="dtMergeTabPick" :kbd-of="(it) => dtMergeTabKbdOf(it)"></aq-seg>
             <aq-seg v-else :items="dtTabItems" :value="drawer.tab" :on-pick="drawerTab"

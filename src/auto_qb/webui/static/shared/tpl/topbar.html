@@ -57,19 +57,22 @@
             <span v-if="searchError" class="error">{{ searchError }}</span>
           </div>
           <!-- 添加种子入口(R1B): 辅种页/种子页共用顶栏入口(搜索框右侧), 点击开添加对话框。
-               键帽(计划 26-11-12-0344 S3): 常驻内联小键帽, 串走 kbKeycapOf 现算(id 引用注册表
-               add-torrent, I1 不手抄); I4/D10 例外裁定: 键位提示不走 title/.aq-tip 通道 -->
-          <button v-if="page === 'groups'" class="table-tool add-btn"
+               键帽(计划 26-11-12-0344 S3 建 / 26-11-14-0041 S4 改角标挂载): 串仍走 kbKeycapOf
+               现算(id 引用注册表 add-torrent, I1 不手抄); 显隐走共享 .aq-kbd 两态(按住反引号
+               显影 / 开关常驻)。版式 = 绝对定位角标(.aq-kbd-host), 不进布局流 => 药丸宽度只由
+               label 决定, 键帽在/不在、显/隐、改绑长短都不改几何(I3); I4/D10 例外裁定: 键位
+               提示不走 title/.aq-tip 通道 -->
+          <button v-if="page === 'groups'" class="table-tool add-btn aq-kbd-host"
                   @click="openAddTorrent">
             <svg class="ico ico-sm ico-add" viewBox="0 0 16 16"><use href="#i-plus"></use></svg>
             添加种子
             <kbd v-if="kbKeycapOf('add-torrent')" class="aq-kbd">{{ kbKeycapOf('add-torrent') }}</kbd>
           </button>
           <!-- 列选择器(紧邻搜索框, 见想法.md): 显示/隐藏列 + 列宽重置/适应窗口。
-               键帽同上(S3, id 引用 col-picker; D6: 设置 Ctrl+, 不做键帽 —— .tabs 药丸组拉长 +
-               「,」单标误导)。spacer(flex:1)吸收键帽增宽, 四皮肤药丸无溢出。 -->
+               键帽同上(S3 建 / S4 角标化, id 引用 col-picker; D6: 设置 Ctrl+, 不做键帽 ——
+               .tabs 药丸组拉长 + 「,」单标误导)。角标绝对定位, 药丸宽度零变化。 -->
           <div v-if="page === 'groups'" class="col-picker">
-            <button class="table-tool" :class="{ active: colMenuOpen }"
+            <button class="table-tool aq-kbd-host" :class="{ active: colMenuOpen }"
                     @click.stop="toggleColMenu($event)">
               <svg class="ico ico-sm ico-cols" viewBox="0 0 16 16"><use href="#i-columns"></use></svg>
               列

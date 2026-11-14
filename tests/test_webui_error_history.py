@@ -107,6 +107,7 @@ STORAGE_WRITE_BASELINE = {
     "menu.js": 1,  # 菜单收合态
     "polling.js":
         1,  # autoqb_version_reload_v1: version-reload 自愈的 reload 时间戳防抖(S3, 计划 26-11-11-0630; sessionStorage 非 localStorage)
+    "lifecycle.js": 1,  # autoqb.ui.kbdPersist: 键位常驻开关本机偏好(计划 26-11-14-0041 S5/W2, 关=仅按住反引号)
     "rowlang.js": 1,  # 主表行语言选择(计划 26-10-30-0217 阶段1: data-rowlang 落 localStorage, 刷新后保持)
     "qb_traffic_chart.js":
         3,  # qbWinGlobal/qbWinShared + qbYAxis{Global,Torrent,Group}(纵轴固定模式, 2026-10-08) + qbFx(动效参数 autoqb.ui.qbFx, R8 plan 26-11-12-1139 §05.5)

@@ -366,7 +366,7 @@
  * 守阵 test_aq_kbd_css_four_skin_isomorphic 以「首个 .aq-kbd 规则块即共享基形」定位, 注释里
  * 也不得再现带花括号的该选择器 —— 花括号配平守阵按行扫, 注释内花括号一样计数)。 */
 .drawer-tabs { display: flex; gap: 2px; }
-.drawer-tabs button { padding: 0 12px; border: 0; background: transparent; color: var(--fg-muted);
+.drawer-tabs button { position: relative; padding: 0 12px; border: 0; background: transparent; color: var(--fg-muted);
   cursor: pointer; font-size: 13px; border-bottom: 2px solid transparent; }
 
 /* ---- C · 弹窗语义配色分级(计划 26-10-19-2341) ----
@@ -539,9 +539,11 @@
  * 无 hover 提亮(Q5 否 b), 不限制一次只显一个(Q3 否 c)。令牌纪律: 只引用既有令牌
  * --fg-dim / --font-mono, 零新增, 四皮肤 :root 都有(parity 守阵); 字体必须走 --font-mono
  * 而非 --hb-font-mono(后者只定义在 .hub-page 上, 键帽消费面拿不到)。
- * 显影态(计划 26-11-14-0041 S1/W1, I2): 默认 opacity:0 / visibility:hidden, 按住反引号
- * body.kbd-reveal 时切回可见。显/隐只用 opacity / visibility(不碰任何几何属性 —— 大列表
- * 对强制同步重排敏感), 不加 transition。括号与整块一起切, 文字位置永不位移(I3)。
+ * 显隐两态(计划 26-11-14-0041 S1/W1 显影 + S5/W2 常驻, I2): 默认 opacity:0 /
+ * visibility:hidden; 按住反引号 body.kbd-reveal 或开关常驻 body.kbd-persist 时切回可见。
+ * **两态共用这一条显示规则**(互斥的只是 body class, 不是两套显隐机制 —— 不要另写第二份
+ * opacity/visibility)。显/隐只用 opacity / visibility(不碰任何几何属性 —— 大列表对强制
+ * 同步重排敏感), 不加 transition。括号与整块一起切, 文字位置永不位移(I3)。
  * !本规则块必须是文件里首个 .aq-kbd 选择器: 守阵 test_aq_kbd_css_four_skin_isomorphic
  * 以「首个 .aq-kbd 规则块即共享基形」定位(详见下方页签版式注释)。 */
 .aq-kbd {
@@ -553,7 +555,7 @@
 }
 .aq-kbd::before { content: "("; }
 .aq-kbd::after { content: ")"; }
-body.kbd-reveal .aq-kbd { opacity: 1; visibility: visible; }
+body.kbd-reveal .aq-kbd, body.kbd-persist .aq-kbd { opacity: 1; visibility: visible; }
 
 /* ---- 菜单键位槽列版式(计划 26-11-12-0344 S2 建 / 26-11-14-0041 W4 恒渲染固定预留列) ----
  * ctx-menus.html 一级/次级两份骨架各恒渲染一个 .ctx-kbd-slot(无论该项有无键位都占同一固定
@@ -568,14 +570,42 @@ body.kbd-reveal .aq-kbd { opacity: 1; visibility: visible; }
 .ctx-item .ctx-kbd-slot { flex: none; text-align: right; }
 .ctx-item .aq-kbd { flex: none; }
 
-/* ---- 抽屉页签键帽徽标版式(计划 26-11-12-0344 S4 / 26-11-14-0041 S2 形态同步) ----
- * 页签按钮(.drawer-tabs button)是普通内联流(非 flex), 键帽 S2 后是弱化括号纯文本(无底边);
- * 按钮文本与 kbd 之间模板留了一个空格, 此处再补 3px 左距凑成 ~7px 视觉间隙, 并居中对齐到
- * 页签文本 baseline。只动版式不引令牌(I3); 无徽标(空串不渲染 kbd)时零占位。
+/* ---- 抽屉页签键帽徽标版式(计划 26-11-12-0344 S4 建 / 26-11-14-0041 S2 形态同步 / W5 角标化) ----
+ * 页签栏是 44px 高的头部(align-items: stretch, 按钮满高), 页签文字竖向居中占中段; 键帽改
+ * **绝对定位徽标**贴按钮右上角, 落在文字上方的空带里(不与 label 重叠), 且不进布局流 =>
+ * 页签宽度只由 label 决定, 显影 / 常驻 / 改绑都不改变页签几何(I3 零跳动)。
+ * 上标字号 9.5px(小于基形 11px): 相邻页签中心距仅 52px(2 字页签 50 + gap 2), 11px 的
+ * 「Alt + N」宽 58 会左右压到邻签的徽标(实测四皮肤叠加成一片); 9.5px 收窄到 50.1 与
+ * 页签等宽, 一签一顶互不相压。只压字号不压信息(串仍由 kbDrawerTabKbd 单点给出, I1)。
+ * 挂载手法同 .filter-btn .filter-count(计数徽标绝对定位 -> 选中数不改变按钮宽度)。
+ * 无徽标(空串不渲染 kbd)时零占位。只动版式不引令牌(I3)。
  * !本规则必须留在 .aq-kbd 基形(上方)之后: 守阵 test_aq_kbd_css_four_skin_isomorphic 以
  * 「文件里首个 .aq-kbd 规则块即共享基形」定位 —— 任何更早出现的该选择器(含注释, 花括号
  * 配平守阵按行计数不认注释)都会让它错位, 故注释里写「规则块」不带花括号。 */
-.drawer-tabs button .aq-kbd { vertical-align: middle; margin-left: 3px; }
+.drawer-tabs button .aq-kbd { position: absolute; top: 1px; right: 0; font-size: 9.5px; }
+
+/* ---- 顶栏药丸 / 状态栏开关的键帽角标挂载(W5/S4, 计划 26-11-14-0041) ----
+ * 顶栏「添加种子 / 列」与状态栏「键位开关」都没有预留键位列可占: 徽标一律绝对定位、不进布局
+ * 流 => 控件宽度只由 label / 图标决定, 显影 / 常驻 / 改绑都不改几何(I3, 与上条页签同一手法)。
+ * 顶栏: 徽标贴药丸下缘(顶栏 10px 下内边距内, 右对齐到 label 右缘) —— 药丸本体 ≈28.6px、
+ *   顶栏 ≈48.6px, 11px 徽标落在内边距带里, 不与 label / 邻钮重叠; 顶栏无 overflow:hidden,
+ *   不裁切。挂点类 .aq-kbd-host 只加在顶栏两钮上(不污染其它 .table-tool 的定位上下文)。
+ * 状态栏: 34px 锁高 + overflow:hidden(§08 裁切风险) => 徽标**竖向必须落在按钮盒内**
+ *   (calc(50% - 5.5px) 让 11px 行盒居中), 不许 top:-6px 探出按钮; 水平挂在图标钮左侧的
+ *   .sb-spacer 空带上(纯文本无底色, 不挤右角 .sb-speed, e2e statusbar-kbd-entry 实测面)。
+ * 显隐仍只由共享 .aq-kbd 的 opacity/visibility 切(与 body.kbd-reveal / body.kbd-persist 同一条
+ * 规则), 本组只定版式, 不是第二套显隐机制。 */
+.aq-kbd-host { position: relative; }
+.aq-kbd-host > .aq-kbd { position: absolute; top: calc(100% + 1px); right: 2px; }
+.sb-kbd-sw { position: relative; }
+.sb-kbd-sw > .aq-kbd { position: absolute; top: calc(50% - 5.5px); right: calc(100% + 6px); }
+/* 常驻开关「开」态高亮: 由 body.kbd-persist 纯 CSS 驱动(零 JS 态 / 零重绘, D4);
+ * 令牌复用既有 accent 族(.sb-err.on 同配方), 零新增令牌。 */
+body.kbd-persist .sb-kbd-sw {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--accent-hi);
+}
 
 /* ---- 置灰行键帽随行(计划 26-11-12-0344 S2 增量 / 26-11-14-0041 S2 形态同步) ----
  * dyn gate 置灰(ctx_menu.js ctxRenderItem 的 reannounceMenuGate 不满足 -> item.gated)时,
