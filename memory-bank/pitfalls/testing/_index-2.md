@@ -1,7 +1,7 @@
 # testing — 测试 / 冒烟 / 仿真纪律 · 卷 2/5
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `event-handler-mock.md` … `hot-reload-mock-sections.md`(共 25 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `event-handler-mock.md` … `hot-reload-section-choice-side-effects.md`(共 26 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
@@ -33,3 +33,4 @@
 | [headless-prefers-light-theme-gate.md](headless-prefers-light-theme-gate.md) | 无头浏览器跟随系统亮色会误触亮主题排除前缀, 让暗主题规则整体假性失效 | 无头, Playwright, 亮主题, prefers-color-scheme, 诊断假象, theme 排除 |
 | [heredoc-cjk-punct-js-syntax.md](heredoc-cjk-punct-js-syntax.md) | 对 drawer_tpl/*.js 这类「字符串数组拼 CSS/JS」的变体文件做批量编辑(heredoc 重写、切片替换、python 正则改写)时, 两个高频翻车点: ①heredoc 内容里的**中文标点**(「」（）等)或行尾引号被 shell/编码吃掉, 产生残行(如孤… | 批量编辑变体, heredoc 改 js, 切片替换, 残行, 语法错误, node --check, drawer_tpl, 字符串数组, 中文标点, 引号错位, 编辑后没检查语法 |
 | [hot-reload-mock-sections.md](hot-reload-mock-sections.md) | apply_new_config 的守阵惯用 `mock.MagicMock()` 当新配置(替身区只钉住自己关心的段)。内核化 | 改 apply_new_config / 新增模块 apply / 热重载守阵, 见到 MagicMock 配置 + 新模块段短路判据 |
+| [hot-reload-section-choice-side-effects.md](hot-reload-section-choice-side-effects.md) | 驱动 apply_new_config 的测试(段认领兜底/回执/级别语义类)如果改的是 notify 这类「apply 有 | 写热重载/兜底类测试选驱动段时; 见「单跑绿全量红」且红在 logging 全局面断言 |

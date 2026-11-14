@@ -484,9 +484,14 @@ def test_start_all_busy_returns_false_and_retries():
     srv.retry_max_s = 0.1
     try:
         assert srv.start() is False, "候选全占 ⇒ 不抛、返回 False(数据端点照常的语义)"
-        assert not srv.started
+        # 不断言「此刻还没 started」(issue 26-11-15-0546): 后台重试线程最早 retry_min_s=0.05s
+        # 就能接管翻真, 主线程在这里被停摆 ≥50ms(全量 -n 8 冷启动)就是假红 —— 那是对线程
+        # 调度的裸奔断言, 且零信息增量(返回 False 已承载「未同步绑成」语义)。
         holds[0].close()  # 释放首位: 占用者退出
-        assert wait_until(lambda: srv.started, timeout=5.0), "后台退避重试在占用者退出后接管(R6 翻转)"
+        # 15s 而非 5s: 并行下释放出的首位是动态端口, OS 会把它再分配给别的 worker 的 bind(0),
+        # 抢住时长 = 那个用例的服务器存活期, 可能 >5s; 重试线程 0.1s 一拍, 抢住者一退即接管,
+        # 加宽只在真失败时多等, 成功路径零代价。
+        assert wait_until(lambda: srv.started, timeout=15.0), "后台退避重试在占用者退出后接管(R6 翻转)"
         assert srv.bound_port == base, "接管绑定的正是释放出来的首位"
     finally:
         srv.stop()

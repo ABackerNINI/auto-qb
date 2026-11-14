@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="hr-discovery-start-all-busy-flaky">
 <meta name="doc-refs" content="memory-bank/tasks/26-11-15-backend-relocate-resume-confirm.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="hr_discovery start_all_busy 用例计时敏感 flaky: 全量偶发首跑挂">
 <meta name="issue-summary" content="tests/test_hr_discovery.py::test_start_all_busy_returns_false_and_retries 在全量跑中偶发失败(过/挂/过), 判定为本就存在的计时敏感 flaky, 与 fuse/relocate 修复批次无交集">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-15-0546-bug-hr-discovery-start-all-busy-flaky</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-15 05:46</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
@@ -133,7 +133,11 @@
 
 <section id="s5">
   <h2><span class="no">§05</span>根因<span class="opt">（可选）</span></h2>
-  <div class="callout">待查（已排除：本分支 fuse/relocate/webui 改动面 —— 与 hr/discovery 无交集）。计时敏感面候选 = 后台重试线程调度与端口释放传播之间的窗口, 未证实。</div>
+  <div class="callout">用例内两处计时敏感位（2026-11-15 认领后机理定位；原始 traceback 未抓到，机理而非实证）：
+  ① <code>assert not srv.started</code> 是对线程调度的裸奔断言 —— 后台重试线程 <code>retry_min_s=0.05s</code>
+  后即可合法翻真，主线程停摆 ≥50ms 即假红；② <code>wait_until</code> 5s 时限在 -n 8 并行下可能小于
+  「释放位被别的 worker 抢住」的时长（释放出的动态端口被 OS 再分配，抢住期 = 别人用例服务器存活期）。
+  入池时已排除的假设仍排除：本分支 fuse/relocate/webui 改动面 —— 与 hr/discovery 无交集。</div>
 </section>
 
 <section id="s6">
@@ -145,11 +149,32 @@
   <h2><span class="no">§07</span>状态变更日志</h2>
   <ul>
     <li>2026-11-15 05:46 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-15 — 状态 Open → Done（kb.status）</li>
+</ul>
   <h3>复验</h3>
-  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <p>2026-11-15 06:25（认领后取证）：未能稳定复现 —— 隔离单跑 40 次全绿（0.64–0.75s/次）；直连 API
+  逐步打点压测（hold 8 位 → start False → 释放首位 → wait_until，五个失败位分档记账）300 轮零失败；
+  文件级 <code>-n 8</code> 并行整文件复跑 8 轮全绿。与入池证据（全量 1/6163 失败 + 隔离 3 连中 1 挂）一致：
+  触发窗口 ≈ 全量冷启动高负载，合理成本内抓不到原始 traceback，按两处计时敏感位的机理修（见「修复后补充」）。</p>
   <h3>修复后补充</h3>
-  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  <p><strong>实际修法</strong>（tests/test_hr_discovery.py 内两处，产品代码零改动）：</p>
+  <ol>
+    <li>删 <code>assert not srv.started</code> —— 裸调度时序断言：后台重试线程最早 <code>retry_min_s=0.05s</code>
+    即可接管翻真，主线程在 <code>start()</code> 返回到该断言之间被停摆 ≥50ms（全量 -n 8 冷启动下可能）就是假红；
+    且零信息增量（<code>start() is False</code> 已承载「未同步绑成」语义）。</li>
+    <li><code>wait_until</code> 时限 5.0 → 15.0 —— 并行下释放出的首位是动态端口，OS 会把它再分配给别的
+    worker 的 <code>bind(0)</code>，抢住时长 = 那个用例的服务器存活期，可能 &gt;5s；重试线程 0.1s 一拍，
+    抢住者一退即接管，加宽只在真失败时多等，成功路径零代价。</li>
+  </ol>
+  <p><strong>与建议修法的改道说明</strong>：方向①采纳其变体（加宽 wait_until 时限），并补上第 1 条
+  （删裸调度断言 —— 逐行排查后确认它是比时限更本质的脆弱位）；方向②（确定性注入）未走：外部端口竞争
+  （别的 worker 抢住释放位）无法注入，FakeClock 思路只覆盖调度面，改动大且堵不住主要脆弱面。</p>
+  <p><strong>验证方式</strong>：修复后目标用例隔离单跑多次全绿（0.75s）；全量 <code>test.full</code> 一次性
+  通过（数字见提交信息，均为提交那一刻实测）。产品代码零改动，无需 Linux 侧对照。</p>
+  <p><strong>残留不确定</strong>：原始 traceback 始终未抓到，「隔离 3 连中 1 挂」那拍不能完全排除
+  <code>_hold_run</code> 连号取段失败（RuntimeError 响亮失败）这一第三向量 —— 若修复后仍复发，先看失败
+  签名：RuntimeError（连号取段）= 走 <code>tests/_test_ports.py</code> 方向；wait_until 超时 = 竞争时长
+  还需再加宽。</p>
 </section>
 
 <footer>
