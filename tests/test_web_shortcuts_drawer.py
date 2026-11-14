@@ -143,6 +143,13 @@ Delete 直连注册表外, 均为已拍板的口径, 逐条落断言。W5 局部
   关系钉 = 补差与四皮肤 CSS 防透缝偏移同值反号(CSS 改 N 当场红); _kbScrollRowIntoView 两路
   (渲染行/前缀和)判据一致化 + 位移公式逐字不动(真覆盖行仍让位到 vTop + 8, 行为面由 e2e
   drawer-dock-stability.spec.mjs T7 两用例钉, flux 专属)
+- test_drawer_root_scroll_anchor_none: T8 根滚动器禁 CSS scroll anchoring(2026-11-14 用户真机
+  BUG) —— 贴文档底 + 缩放 != 100%(分数布局)时, 停靠槽位(.drawer-dock, 流内 sticky)enter 逐帧
+  生长被根滚动器锚补成无 JS 滚动(scrollY 同帧 +dock 首帧生长, 选中行被推出视口顶; e2e 红验
+  prism/atlas scrollY +12~+287(量级随时序浮动, 恒非零)。修复 = 四皮肤 dialogs.css 的 .drawer-dock 定义同段加
+  html { overflow-anchor: none; }; 钉法 = 「种子详情面板」段内同段成对(段结构锚定: 规则与
+  .drawer-dock sticky 定义同段、选择器与值逐字、全文件恰一处) —— 摘钉/挪段/改写当场红;
+  行为面由 e2e drawer-dock-stability.spec.mjs T8 根锚补用例钉(zoom 0.9 + 贴底首开零位移)
 """
 
 from __future__ import annotations
@@ -1314,3 +1321,40 @@ def test_kb_reveal_clamp_complete_a() -> None:
         "closeDrawer 必须显式 _kbRevealCompleteStop(状态清理时机 = open 周期终点): 只靠循环内的 "
         "open 守卫有一帧窗口, 快速关->重开同 hash 时旧拍续缴会跨周期复活(旧 W1 机理)"
     )
+
+
+def test_drawer_root_scroll_anchor_none() -> None:
+    """T8 根滚动器禁 CSS scroll anchoring(2026-11-14 用户真机 BUG): 贴文档底 + 缩放 != 100%
+    (分数布局)时, 停靠槽位(.drawer-dock, 流内 sticky)enter 逐帧生长被根滚动器的 CSS scroll
+    anchoring 锚补成无 JS 滚动(scrollY 同帧 +dock 首帧生长, 选中行被推出视口顶; e2e 红验
+    prism/atlas scrollY +12~+287(量级随时序浮动, 恒非零)。修复 = 四皮肤 dialogs.css 的 .drawer-dock 定义同段加
+    html { overflow-anchor: none; }(根滚动器禁锚) —— 项目滚动几何全部自管(reveal/让位/T6
+    续缴/T7 上界都是显式滚动管理), 锚补只与之互相干扰, 与「滚动位宁可不动也不猜」同口径。
+    方案矩阵: .drawer-dock 子树禁锚无效是规范语义本身(锚点候选在子树外、sticky 即 excluded
+    subtree), 故取 html 根级。overflow-anchor 不可继承(computed 实测内层滚动器仍 auto), 规范
+    明文后代滚动盒自行恢复自身锚定 —— html 根级禁锚只禁根滚动器, 内层滚动器 CSS 锚定不受影响;
+    抽屉内层滚动稳定另由 JS 自管(anchFill 锚保活 = 锚元素身份保持, 非 CSS scroll anchoring;
+    窗口化显式 scrollTop), e2e dt-live-update #8/#9 族钉该面不受波及。
+    钉法 = 「种子详情面板」段内同段成对(段结构锚定: 规则与 .drawer-dock sticky 定义同段、
+    选择器与值逐字、全文件恰一处) —— 摘钉(删规则)/挪段(挪出面板段)/改写(换选择器或值)当场红;
+    行为面由 e2e drawer-dock-stability.spec.mjs T8 根锚补用例钉(zoom 0.9 + 贴底首开零位移)。"""
+    for ui in ("atlas", "prism", "console", "flux"):
+        css = (STATIC / ui / "css" / "dialogs.css").read_text(encoding="utf-8")
+        # 「种子详情面板」段 = 段头注释到下一个段头注释之间 —— 规则必须与 .drawer-dock sticky
+        # 定义同段(挪到文件其它段落 = 漂移, 当场红; 段头本身被改 = 段结构漂移, 同步本守阵)
+        m = re.search(r"/\* =+ 种子详情面板.*?(?=/\* =+)", css, re.S)
+        assert m, f"{ui}: dialogs.css 缺「种子详情面板」段头(段结构漂移? 同步本守阵)"
+        section = m.group(0)
+        assert re.search(r"\.drawer-dock \{ position: sticky;",
+                         section), (f"{ui}: .drawer-dock sticky 定义不在「种子详情面板」段内(段结构漂移? 同步本守阵)")
+        assert "html { overflow-anchor: none; }" in section, (
+            f"{ui}: 「种子详情面板」段缺 html {{ overflow-anchor: none; }}(T8 根滚动器禁锚被摘/挪段/"
+            "改写: 锚补会把停靠槽位 enter 生长补成无 JS 滚动, 行被推出视口顶 —— e2e "
+            "drawer-dock-stability T8 根锚补用例当场红)"
+        )
+        # 全文件恰一处: 重复声明 = 又一份书写点; 注释说明随规则同段存在(摘注释不留痕的规则
+        # 回归同样该红 —— 靠上面的段内规则断言, 这里只钉规则唯一性)
+        assert css.count("html { overflow-anchor: none; }") == 1, (
+            f"{ui}: html {{ overflow-anchor: none; }} 必须全文件恰一处, 实测 "
+            f"{css.count('html { overflow-anchor: none; }')} 处"
+        )

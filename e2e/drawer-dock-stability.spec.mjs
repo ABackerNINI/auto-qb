@@ -936,6 +936,14 @@ for (const skin of DOCK_SKINS) {
         window.scrollTo(0, document.documentElement.scrollHeight - window.innerHeight - 900);
       });
       await waitListSettled(page);
+      // T8(2026-11-14)起根滚动器禁锚(html overflow-anchor: none): settle 期窗口化 pad 重算的
+      // 文档高变化不再被浏览器锚补隐性补偿(一段式停车实测余量被 pad 重算吃成 0, 开场让位被钳,
+      // 面板上升先于行上移 = S-A 症状在对照皮肤复发) —— 停车改两段式: 落定后按**落定文档高**
+      // 再停一次, 余量对锚补开关不依赖(T8 前后都必须 >= 让位上限 566)。
+      await page.evaluate(() => {
+        window.scrollTo(0, document.documentElement.scrollHeight - window.innerHeight - 900);
+      });
+      await waitListSettled(page);
       const panelTopEst = await page.evaluate(() => {
         const sb = document.querySelector('.statusbar');
         const sbTop = sb ? sb.getBoundingClientRect().top : window.innerHeight;
@@ -1125,6 +1133,164 @@ for (const skin of DOCK_SKINS) {
       expect(Math.max(...db.map(Math.abs)),
         `reopen 全程参照行 rect.bottom 位移量(基线 ${baseline.rowB}; scrollBy ${JSON.stringify(sb)})`)
         .toBeLessThanOrEqual(1); // 1px = 行矩形取整噪声(W1 同口径), 非绝对像素判据
+    });
+
+    /* ==================== T8 根滚动器 CSS scroll anchoring(2026-11-14 用户真机 BUG) ====================
+     * 定因(只读取证 + 本任务红验探针复现): 文档底贴满(scrollY == maxScroll)时点行开抽屉, 停靠
+     * 槽位(.drawer-dock, 流内 sticky)enter 逐帧生长被 Chromium 根滚动器的 CSS scroll anchoring
+     * 锚补 —— scrollY 无 JS 调用地同帧自动 +dock 首帧生长(真机取证 +286 = 42vh x 首帧缓动 0.45;
+     * 本环境 1440x900 实测 +12~+287(量级随时序浮动, 恒非零), 选中行被推出视口顶, 上界分支拉回后仍净上移。
+     * 复现的**必要条件是缩放 != 100%**(用户真机条件): zoom=1 的整数布局下锚补恒不触发(红验
+     * 探针 ~200 次零复现, 如实口径), html 设 zoom 0.9(分数布局)后 prism/atlas 100% 确定性复现。
+     * 流程次序钉死: 先贴底(整型布局下窗口化渲染窗落位) -> 再应用 zoom -> 再贴底(zoom 改变
+     * 文档总高, 必须重贴 + 重落定) —— 这个次序下修复前后视口内都有可点行(先 zoom 后贴底的
+     * 次序在修复后窗口化平衡态翻转, 视口内无行, 前置不可构造 —— 计划外发现, 见任务报告)。
+     * 指纹三件套: scrollY 跳变 == dock 同帧生长量、window.scrollBy 登记空表(零 JS 滚动)、
+     * 逐帧采样捕获 —— 三者齐备才能单独指认浏览器锚补。
+     * 修复 = 四皮肤 dialogs.css 的 .drawer-dock 定义同段加 html { overflow-anchor: none; }(根
+     * 滚动器禁锚) —— 项目几何全部自管(reveal/让位/T6 续缴/T7 上界都是显式滚动管理), 锚补只与
+     * 之互相干扰, 与「滚动位宁可不动也不猜」同口径。方案矩阵: .drawer-dock 子树禁锚无效是规范
+     * 语义本身(锚点候选在子树外、sticky 即 excluded subtree), 故取 html 根级。
+     * 继承语义: overflow-anchor 不可继承(computed 实测内层滚动器仍 auto), 规范明文后代滚动盒
+     * 自行恢复自身锚定 —— html 根级禁锚只禁根滚动器, 内层滚动器 CSS 锚定不受影响; 抽屉内层的
+     * 滚动稳定另由 JS 自管(anchFill 锚保活 = 锚元素身份保持, 非 CSS scroll anchoring; 窗口化
+     * 显式 scrollTop), e2e dt-live-update #8/#9 族钉该面不受波及(修复后复验 14/14)。
+     * flux 跳过(如实口径): flux 的行窗口化在 zoom != 1 下窗口错位 —— 全部渲染行落在视口上方
+     * (底 pad 912px 独占视口), 无可点行, 前置不可构造(计划外发现, 只记录不修); 机制为浏览器级,
+     * prism/atlas 双皮肤已确证。
+     */
+    test(`T8 根锚补: 缩放 0.9 + 文档底首开抽屉全程行视口位置零位移 @fast (${skin})`, async ({ page }) => {
+      test.skip(skin === 'flux', 'flux 行窗口化在 zoom != 1 下窗口错位(行全在视口上方, 无可点行), 前置不可构造');
+      test.setTimeout(90_000);
+      collectRuntimeErrors(page);
+
+      await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 15_000 });
+      await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
+      await page.click('nav.tabs [data-view="torrents"]');
+      await expect(page.locator('.torrent-row').first()).toBeVisible({ timeout: 15_000 });
+
+      // 步骤1: 先贴底(整型布局下窗口化渲染窗落位) -> 应用用户真实缩放条件(zoom 0.9 = 分数
+      // 布局) -> zoom 后先按新布局落定一次, 再重新贴底 + 落定(zoom 改变文档总高, scrollY 必须
+      // 重新钳到新 maxScroll)。次序依据见上方 T8 节注释 —— 先 zoom 后贴底的次序在修复后无可点行
+      // (窗口化平衡态翻转)。
+      await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+      await waitListSettled(page);
+      await page.evaluate(() => { document.documentElement.style.zoom = '0.9'; });
+      await waitListSettled(page);
+      await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+      await waitListSettled(page);
+
+      // 步骤2: 邻近行 = 行底距全开顶缘估算 >= 200px 的最深一行(余量充足 —— 让位三发与 flux 回执
+      // 重入的判据对它一律不触发, 打开全程的 scrollY 变化只可能来自浏览器, 判据纯净; zoom 0.9
+      // 下真实面板比 42vh 估算矮, 该约束对真实几何只严不松)。
+      const near = await page.evaluate(() => {
+        const sb = document.querySelector('.statusbar');
+        const sbTop = sb ? sb.getBoundingClientRect().top : window.innerHeight;
+        const pt = sbTop - Math.round(window.innerHeight * 0.42);
+        let best = null;
+        for (const r of document.querySelectorAll('.torrent-row')) {
+          const b = r.getBoundingClientRect();
+          if (b.bottom <= pt - 200 && b.top > 4
+              && (b.top + b.bottom) / 2 < sbTop - 8 && (!best || b.bottom > best.bottom)) {
+            best = { hash: r.getAttribute('data-hash'), top: Math.round(b.top), bottom: Math.round(b.bottom) };
+          }
+        }
+        return best;
+      });
+      expect(near, '前置: 文档底视口内应有行底距全开顶缘 >= 200px 的可点行(邻近行选行原料)').toBeTruthy();
+
+      // 步骤3: 基线显式预读 -> 采样 -> 开抽屉 -> 落定。zoom 改变点击坐标语义, 用 JS 派发 dblclick
+      // (Vue @dblclick 响应; Playwright 定位点击在 zoom 下会撞上窗口化换帧的元素 detach)。
+      const baseline = await page.evaluate((h) => {
+        const r = document.querySelector(`[data-hash="${h}"]`).getBoundingClientRect();
+        return { y: Math.round(window.scrollY), rowT: Math.round(r.top), rowB: Math.round(r.bottom) };
+      }, near.hash);
+      await installGeoSampler(page, near.hash);
+      await page.evaluate((h) => {
+        const el = document.querySelector(`.torrent-row[data-hash="${h}"]`);
+        for (const type of ['click', 'click', 'dblclick']) {
+          el.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: window,
+            clientX: 20, clientY: el.getBoundingClientRect().top + 10 }));
+        }
+      }, near.hash);
+      await expect(page.locator('.drawer-dock > .drawer')).toBeVisible({ timeout: 5_000 });
+      await waitDockSettled(page);
+      const { frames, sb } = await stopGeoSampler(page);
+      expect(frames.length, '前置: 采样应有足够帧数').toBeGreaterThan(10);
+
+      // 前置: 打开确实发生且面板到过全高; 让位链对该行全程未触发(scrollBy 空表 = 零 JS 滚动 ——
+      // 位移只能来自浏览器, 这正是本判据能单独指认锚补的前提)。
+      const openedFrames = frames.filter((f) => f.open);
+      expect(openedFrames.length, '前置: 采样应覆盖到打开的动画期').toBeGreaterThan(0);
+      const openedH = await page.evaluate(() => Math.round(document.querySelector('.drawer-dock').getBoundingClientRect().height));
+      const maxDockH = Math.max(...openedFrames.map((f) => f.dockH ?? 0));
+      expect(maxDockH, `前置: 打开后面板应到过全高(实测峰值 ${maxDockH}, 落定 ${openedH})`)
+        .toBeGreaterThanOrEqual(openedH - 4);
+      expect(sb.length, `前置: 全程不得有 JS 滚动(scrollBy 登记 ${JSON.stringify(sb)})`).toBe(0);
+
+      // 断言(修复后绿, 修复前红: 根滚动器锚补使 scrollY 无 JS 调用地同帧 +dock 首帧生长, 行被
+      // 推出视口顶): 全程 scrollY 与行 rect.top/rect.bottom 零位移(1px = 行矩形取整噪声)。
+      const dy = frames.map((f) => f.y - baseline.y);
+      const dt = frames.map((f) => (f.rowT ?? baseline.rowT) - baseline.rowT);
+      const db = frames.map((f) => (f.rowB ?? baseline.rowB) - baseline.rowB);
+      expect(Math.max(...dy.map(Math.abs)),
+        `打开全程 scrollY 位移量(基线 ${baseline.y}; 序列 ${frameDigest(frames)}; scrollBy 登记 ${JSON.stringify(sb)})`)
+        .toBe(0);
+      expect(Math.max(...dt.map(Math.abs)),
+        `打开全程选中行 rect.top 位移量(基线 ${baseline.rowT}, 选行 ${JSON.stringify(near)}; 修复前锚补会把行推出视口顶)`)
+        .toBeLessThanOrEqual(1);
+      expect(Math.max(...db.map(Math.abs)),
+        `打开全程选中行 rect.bottom 位移量(基线 ${baseline.rowB}, 选行 ${JSON.stringify(near)})`)
+        .toBeLessThanOrEqual(1);
+    });
+
+    test(`T8 反向守卫: 最后种子(真覆盖行)让位链照常落到面板顶-16 @fast (${skin})`, async ({ page }) => {
+      test.setTimeout(90_000);
+      collectRuntimeErrors(page);
+
+      await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 15_000 });
+      await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
+      await page.click('nav.tabs [data-view="torrents"]');
+      await expect(page.locator('.torrent-row').first()).toBeVisible({ timeout: 15_000 });
+
+      // 用户路径步骤1单独钉: 文档底点最后的可点种子行(真覆盖行), 让位链(开场发 + 落定补发 +
+      // T6 截断续缴)必须照常把行送到公式落点 vBot - 8 = 面板顶 - 16 —— 禁锚只摘浏览器的锚补,
+      // 不碰 JS 让位链(修复前后都必须绿)。
+      await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+      await waitListSettled(page);
+      const panelTopEst = await page.evaluate(() => {
+        const sb = document.querySelector('.statusbar');
+        const sbTop = sb ? sb.getBoundingClientRect().top : window.innerHeight;
+        return sbTop - Math.round(window.innerHeight * 0.42);
+      });
+      const cov = await pickCoveredRow(page, panelTopEst);
+      expect(cov, `前置: 文档底视口内应有可点且被抽屉覆盖的行(全开顶缘估算 ${panelTopEst})`).toBeTruthy();
+      await installGeoSampler(page, cov.hash);
+      await page.dblclick(`.torrent-row[data-hash="${cov.hash}"]`, { force: true, position: { x: 8, y: 8 } });
+      await expect(page.locator('.drawer-dock > .drawer')).toBeVisible({ timeout: 5_000 });
+      await waitDockSettled(page);
+      const { sb } = await stopGeoSampler(page);
+      const after = await page.evaluate((h) => {
+        const p = document.querySelector('.drawer-dock > .drawer').getBoundingClientRect();
+        const r = document.querySelector(`[data-hash="${h}"]`).getBoundingClientRect();
+        return { panelTop: p.top, panelH: p.height, rowB: r.bottom, y: Math.round(window.scrollY) };
+      }, cov.hash);
+
+      // 前置: 面板到过全高 + 让位链确实发起过(scrollBy 登记非空 —— 文档底打开首发改写被钳,
+      // 调用本身仍发生; T6 续缴在槽位长高后补齐)
+      expect(after.panelH, '前置: 面板应到过全高(42vh)').toBeGreaterThanOrEqual(
+        await page.evaluate(() => Math.round(window.innerHeight * 0.42)) - 4);
+      expect(sb.length, `前置: 让位链应发起过 scrollBy(登记 ${JSON.stringify(sb)})`).toBeGreaterThanOrEqual(1);
+
+      // 断言(修复前后都必须绿): 行被让位到公式落点 vBot - 8 = 面板顶 - 16(S-C 反向守卫同口径)。
+      expect(after.rowB - cov.bottom,
+        `真覆盖行必须被让位(行底 ${cov.bottom} -> ${after.rowB.toFixed(1)}; scrollBy 登记 ${JSON.stringify(sb)})`)
+        .toBeLessThan(0);
+      expect(Math.abs(after.rowB - (after.panelTop - 16)),
+        `让位终值应落在公式落点 vBot - 8 = 面板顶 - 16(实测 ${after.rowB.toFixed(1)} vs ${(after.panelTop - 16).toFixed(1)}; scrollBy ${JSON.stringify(sb)})`)
+        .toBeLessThanOrEqual(2);
     });
   });
 }

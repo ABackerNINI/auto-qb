@@ -9,6 +9,16 @@
  * 层级: 面板 40(页面内容级) < 右键菜单 100 < toast 120 < 确认框 130 —— 面板里触发的确认框恒在其上 */
 /* 落点 2026-10-04 自种子视图上提为 app 级(shared/tpl/dock.html): qB 口径流量图(全局/分组)并入
  * 抽屉后需任意页可开; 左右内边距复刻原落点所在的 .layout/.ce-page 内边距(12px), 宽度不变 */
+/* T8 根滚动器禁 CSS scroll anchoring(2026-11-14 用户真机 BUG): 贴文档底 + 缩放 != 100%(分数
+ * 布局)时, 停靠槽位 enter 逐帧生长被根滚动器锚补成无 JS 滚动(scrollY 同帧 +dock 首帧生长,
+ * 行被推出视口顶; e2e 红验修复前 prism/atlas scrollY +12~+287(量级随时序浮动, 恒非零)。项目滚动几何全部自管(reveal/让位/T6
+ * 续缴/T7 上界都是显式滚动管理), 锚补只与之互相干扰 —— 禁锚与「滚动位宁可不动也不猜」同口径。
+ * .drawer-dock 子树禁锚无效是规范语义本身(锚点候选在子树外、sticky 即 excluded subtree), 故取
+ * html 根级。overflow-anchor 不可继承(computed 实测内层滚动器仍 auto), 规范明文后代滚动盒自行
+ * 恢复自身锚定 —— html 根级禁锚只禁根滚动器, 内层滚动器 CSS 锚定不受影响; 抽屉内层滚动稳定另由
+ * JS 自管(anchFill 锚保活 = 锚元素身份保持; 窗口化显式 scrollTop), e2e dt-live-update
+ * #8/#9 族钉该面不受波及。 */
+html { overflow-anchor: none; }
 .drawer-dock { position: sticky; bottom: var(--statusbar-h, 34px); z-index: 40; margin-top: 8px;
   padding: 0 12px; }
 /* 种子视图停靠模式(groups.html 按 viewMode 挂类): 父容器 flex column —— 列表区弹性占满、
