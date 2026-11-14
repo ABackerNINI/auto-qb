@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="relocate-form-aware-gates">
 <meta name="doc-refs" content="memory-bank/plans/26-11-13-0448-plan-relocate-form-aware-gates.html">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="重启首轮全量基线分批归组: 单条种子 files 取数异常中断该批后续归组">
 <meta name="issue-summary" content="_assign_new_torrent 路径对单条种子的 files 取数异常无包裹, 批处理中一条抛错即中断其余种子归组; 真实生产无此注入源(T6 真机验收发现), 属健壮性兜底缺口; 用户拍板入池">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-14-0745-bug-relocate-assign-new-torrent-batch-abort</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-14 07:45</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
@@ -147,11 +147,14 @@ self._assign_new_torrent(event.payload["hash"], event.payload.get("dry_run", Fal
   <h2><span class="no">§07</span>状态变更日志</h2>
   <ul>
     <li>2026-11-14 07:45 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-14 — 状态 Open → In Progress（kb.status）</li>
+    <li>2026-11-14 — 状态 In Progress → Done（kb.status）</li>
+</ul>
   <h3>复验</h3>
-  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <p>复验: 2026-11-14(认领开工轮) 仍成立 —— <code>_on_torrents_added</code> 消费点直接调 <code>_assign_new_torrent</code>(grep「_assign_new_torrent」), files 取数与归组链无异常包裹; store.apply_sync rid 先推进后返回、按哈希入账后不再判 added 的影响面推演逐点核实。</p>
   <h3>修复后补充</h3>
-  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  <p><b>实际修法</b>(采 §06 第一候选, 消费点逐条隔离 + 显式待归组补偿清单; 弃「本体 files 兜底、重启才补」候选 —— 补偿清单提供运行期自愈, 幂等重试无副作用): ①新增 <code>_try_assign</code> 单点包裹 <code>_assign_new_torrent</code>(<code>_on_torrents_added</code> 消费点改走它), 单条抛异常只 WARNING + 入 <code>_pending_assign</code> 补偿清单, 批内其余种子照常归组(相位广播无逐订阅者隔离是内核刻意设计, 兜底不落在 emit 循环); ②新增 <code>_retry_pending_assigns</code> 挂 post 相位(冲突检查之前, 重试成功即登记 dirty_groups 当轮参与冲突重算), 每轮重试清单、种子已删条目出清单; ③清单纯内存不进 state_file —— 进程重启后账本清空、首轮全量重放全判 added, 重启本身是最外层补偿路径(与 by_hash/groups 内存态语义一致); 补偿声明如实: files 持续失败时 WARNING 每轮重现(无人值守可观测), rid 语义下「下轮重放自动判 added」「qB 重启补」不成立, 补偿路径只有清单重试与产品进程重启两条。</p>
+  <p><b>验证方式与测试数字</b>: tests/test_modules_p4.py 新增 <code>test_torrents_added_single_failure_does_not_abort_batch</code>(T6 同款批处理注入: H2 中段 files 抛错 → H1/H3 照常归组, H2 入清单; 断连恢复后 post 重试补归组并出清单)与 <code>test_pending_assign_retry_drops_removed_seed</code>(已删种子补偿条目出清单不抛错); 文件头「测试计划」清单同步。实测全绿: <code>test.quick</code> 与 <code>test.full</code> 各跑一轮均全绿, 权威数字见 kb.baseline 最新切片 <code>memory-bank/testing/baselines/26-11-14-1129-issue-26-11-14-0745-fix.md</code>(test.full 实测)。</p>
 </section>
 
 <footer>

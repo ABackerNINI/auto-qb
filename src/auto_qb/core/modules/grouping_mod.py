@@ -6,7 +6,7 @@ GroupingMixin(387 行)整体迁入, 经四个刷新相位被内核广播(plan §
 - torrents_added: 逐新增种子的归组一步(P5 收口前相位里只有本模块认领, 其余各家 P5 随
                   逐种子管线一起迁入);
 - removed_scan:   删除后组内缺文件扫描;
-- post:           保存路径重归组 + 跨组文件交叉检测 + 下载冲突检查(每轮收尾)。
+- post:           保存路径重归组 + 跨组文件交叉检测 + 下载冲突检查 + 待归组补偿重试(每轮收尾)。
 `grouping.enabled` 的启用开关由模块**自判**(plan §3.1: 启用开关属模块), 内核只广播相位。
 
 缺文件扫描的轮内去重集合(_missing_scanned_keys)收进模块实例: 原内核 _refresh_torrents
@@ -95,6 +95,11 @@ class GroupingModule(BaseModule):
         # 缺文件扫描轮内去重: 移动种子等场景同一轮会命中多个触发源(状态转移+路径变化),
         # 同组 key 同轮只扫一次; 每轮开始(transitions 相位入口)无条件清空
         self._missing_scanned_keys: set = set()
+        # 待归组补偿清单(issue 26-11-14-0745): 逐新增种子归组失败(如 WebAPI 断连落在批中段,
+        # files 取数抛错)时登记, post 相位每轮重试。纯内存不进 state_file(黄金法则 3):
+        # 进程重启后账本清空、首轮全量重放全判 added, 重启本身就是最外层补偿路径 ——
+        # 与 by_hash/groups 的内存态语义一致
+        self._pending_assign: set = set()
 
     def sections(self) -> tuple[str, ...]:
         return ("grouping", )
@@ -118,7 +123,7 @@ class GroupingModule(BaseModule):
     def _on_torrents_added(self, event: PhaseEvent) -> None:
         if not self._ctx.config.grouping.enabled:
             return
-        self._assign_new_torrent(event.payload["hash"], event.payload.get("dry_run", False))
+        self._try_assign(event.payload["hash"], event.payload.get("dry_run", False))
 
     def _on_removed_scan(self, event: PhaseEvent) -> None:
         if not self._ctx.config.grouping.enabled:
@@ -129,6 +134,9 @@ class GroupingModule(BaseModule):
         if not self._ctx.config.grouping.enabled:
             return
         dry_run = event.payload.get("dry_run", False)
+        # 待归组补偿重试(issue 26-11-14-0745)在冲突检查之前: 重试成功即登记 dirty_groups,
+        # 补出的新组当轮就参与冲突重算(单一消费点 _check_download_conflicts)
+        self._retry_pending_assigns(dry_run)
         self._handle_save_path_changes(dry_run)
         # 跨组检测挂在同组检查之前且对 dirty_groups 只读(单一消费点仍是 _check_download_conflicts,
         # 两套检查共用同一份变化登记, plan 26-10-04-0107 §04 插入位置 note)
@@ -353,6 +361,39 @@ class GroupingModule(BaseModule):
         self._scan_triggered_groups(triggered, dry_run)
 
     # ---------- 归组 ----------
+
+    def _try_assign(self, hash: str, dry_run: bool) -> None:
+        """单条归组隔离兜底(issue 26-11-14-0745): files 取数/归组任一环抛异常只影响本条,
+        批内其余种子照常归组。兜底落在本模块消费点逐条包裹而非内核 emit 循环: 相位广播
+        无逐订阅者隔离是刻意设计(plan §4.2), 内核不点名业务模块的失败面。
+
+        失败种子入 _pending_assign 补偿清单(post 相位每轮重试, 成功即出清单); 重试幂等由
+        _assign_to_group 的先移出再加入保证(黄金法则 1)。补偿声明如实(issue §06):
+        files 调用持续失败时 WARNING 每轮重现(无人值守可观测); rid 语义下「下轮重放自动
+        判 added」「qB 重启补」均不成立, 补偿路径只有本清单与产品进程重启两条。
+        """
+        try:
+            self._assign_new_torrent(hash, dry_run)
+        except Exception as e:
+            self._pending_assign.add(hash)
+            logger.warning(f"辅种组 | 新增种子[{hash[:8]}]归组失败, 本批其余种子继续, 转入待归组补偿(post 相位重试): {e}")
+        else:
+            self._pending_assign.discard(hash)  # 成功出清单(直接归组路径为空操作, 幂等)
+
+    def _retry_pending_assigns(self, dry_run: bool) -> None:
+        """待归组补偿重试(post 相位, 每轮): 补偿清单逐条重试归组, 种子已删的条目出清单
+
+        (store 已对账删除, 归组无从谈起; 幂等 pop)。清单为空零开销(每轮收尾热路径)。
+        """
+        if not self._pending_assign:
+            return
+        store = self._ctx.store
+        for hash in list(self._pending_assign):
+            if store.get(hash) is None:
+                self._pending_assign.discard(hash)
+                logger.debug(f"辅种组 | 待归组补偿出清单(种子已删): {hash[:8]}")
+                continue
+            self._try_assign(hash, dry_run)
 
     def _assign_new_torrent(self, hash: str, dry_run: bool = False) -> None:
         """新增种子增量归组: 仅拉取该种子的文件列表并入组(store O(1) 定位, 不做全量遍历) """

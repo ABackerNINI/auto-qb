@@ -24,6 +24,8 @@ ctx.ops / host.get("<模块>") 模块入口驱动, plan §7.2)。
 - test_grouping_phases_wired: transitions/removed_scan/post 三相位各恰有 grouping 一个订阅者, emit 返回计数为 1(torrents_added 四家订阅面在 test_modules_p5 锁定)
 - test_transitions_phase_guards_enabled_and_clears_dedup: disabled 零动作; 去重集合每轮经该相位入口清零
 - test_torrents_added_phase_assigns_new_torrent: 逐新增种子相位驱动归组(enabled 自判), disabled 时同一 emit 零归组
+- test_torrents_added_single_failure_does_not_abort_batch: 批内单条 files 取数抛错只影响本条(issue 26-11-14-0745), 失败条入待归组补偿清单, post 相位重试补归组并出清单
+- test_pending_assign_retry_drops_removed_seed: 补偿清单中种子已删, post 重试出清单不抛错
 - test_removed_scan_and_post_phases_drive_grouping: 删除扫描与收尾两相位驱动 grouping(调用点与原 _refresh_torrents 同序)
 - test_ops_service_direct_call_and_inflight_mutex: ctx.ops.recheck 直调提交登记在途(web 源), 重复提交受在途互斥
 - test_check_filelist_merged_into_ops: check_filelist 并入 ops(决策点 D2), ctx.ops.check_filelist 是唯一入口
@@ -135,6 +137,69 @@ def test_torrents_added_phase_assigns_new_torrent():
         seed_store(mgr, [t2])
         mgr.events.emit("torrents_added", {"hash": "H2", "dry_run": True})
         assert [len(v) for v in mgr.store.groups.values()] == [1], "disabled 时不得归组新种子"
+
+
+def test_torrents_added_single_failure_does_not_abort_batch():
+    """issue 26-11-14-0745: 批内单条 files 取数抛错只影响本条, 其余种子照常归组
+
+    失败条转入待归组补偿清单, post 相位重试成功后补归组并出清单(rid 已推进、账本已
+    upsert, 失败轮种子下轮不再判 added —— 补偿只能靠显式清单, 不能承诺自动重放)。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        mgr = _mgr(td)
+        mgr.client = FakeClient()
+        client = mgr.client
+        mod = mgr.host.get("grouping")
+        ts = []
+        for i, h in enumerate(("H1", "H2", "H3")):
+            t = FakeTorrent(hash=h, name=f"T{i+1}", state="stalledUP", save_path=r"R:\Downloads")
+            t.tracker_conf = mgr.config.trackers["HHan"]  # 相位契约: conf 已就位(内核 added 循环先行匹配)
+            client.torrents[h] = t
+            client.files_map[h] = [_fake_file(f"movie{i+1}.mkv", 100)]
+            ts.append(t)
+        seed_store(mgr, ts)
+
+        real_files = client.torrents_files
+
+        def flaky_files(h):
+            if h == "H2":
+                raise RuntimeError("files 取数断连注入(issue 26-11-14-0745)")
+            return real_files(h)
+
+        with mock.patch.object(client, "torrents_files", side_effect=flaky_files):
+            for h in ("H1", "H2", "H3"):  # T6 同款批处理: H2 中段抛错
+                mgr.events.emit("torrents_added", {"hash": h, "dry_run": True})
+        assert len(mgr.store.groups) == 2, f"H2 失败不得中断 H1/H3 归组: {mgr.store.groups}"
+        assert not any("H2" in members for members in mgr.store.groups.values()), "失败条不得进任何组"
+        assert mod._pending_assign == {"H2"}, f"失败条必须入待归组补偿清单: {mod._pending_assign}"
+
+        # 断连恢复: post 相位每轮重试补偿清单, H2 补归组并出清单
+        with mock.patch.object(mod, "_handle_save_path_changes"), \
+                mock.patch.object(mod, "_check_cross_group_file_conflicts"), \
+                mock.patch.object(mod, "_check_download_conflicts"):
+            mgr.events.emit("post", {"dry_run": True})
+        assert mod._pending_assign == set(), "补偿成功必须出清单"
+        assert len(mgr.store.groups) == 3, f"post 重试应补归组 H2: {mgr.store.groups}"
+
+
+def test_pending_assign_retry_drops_removed_seed():
+    """补偿清单中种子已删: post 重试出清单, 不重试不抛错(幂等 pop)"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = _mgr(td)
+        mgr.client = FakeClient()
+        client = mgr.client
+        t = FakeTorrent(hash="H1", name="T1", state="stalledUP", save_path=r"R:\Downloads")
+        client.torrents["H1"] = t
+        client.files_map["H1"] = [_fake_file("movie.mkv", 100)]
+        seed_store(mgr, [t])
+        mod = mgr.host.get("grouping")
+        mod._pending_assign.add("H1")
+        mgr.store.by_hash.pop("H1")  # 种子已删(store 对账)
+        with mock.patch.object(mod, "_handle_save_path_changes"), \
+                mock.patch.object(mod, "_check_cross_group_file_conflicts"), \
+                mock.patch.object(mod, "_check_download_conflicts"):
+            mgr.events.emit("post", {"dry_run": True})
+        assert mod._pending_assign == set(), "已删种子的补偿条目必须出清单"
 
 
 def test_removed_scan_and_post_phases_drive_grouping():
