@@ -2945,6 +2945,8 @@ window.AQB_QB_TRAFFIC = {
       if (!data) return;
       // 图区右键入口(R8 §05.2): 独立处理器 —— preventDefault + stopPropagation 拦住冒泡到
       // drawer.html:66 的 @contextmenu.prevent(四皮肤同验一次「图区右键只有一个面板」)。
+      //   同时拦 lifecycle._onCtxMenu 的 flags 惰性补拉 —— 图宿主右键不探测(ensureWebFlags 收窄,
+      //   S0-a 评审留痕 → 收口档案留痕七), 其余右键面照旧。
       // !不碰 menu.js:223 的 openDrawerMenu 早退判据: 改了会让整片正文右键都弹出「只有一个
       //   模板选项」的半残菜单, 并撞 e2e/drawer-merge.spec.mjs 的 .ctx-menu strict-mode 计数。
       // 总开关关掉也照开(§05.6: 否则用户失去重新打开的入口)。

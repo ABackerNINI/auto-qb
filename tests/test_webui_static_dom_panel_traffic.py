@@ -4308,8 +4308,10 @@ def test_frontend_qb_fx_overlay_close_registry_and_reduced_motion():
     #     说明行翻转三者都改变面板真实高度, 而 _qbFxRefitSoon 的既有触发面(fxPanel watcher/
     #     resize/scroll/宿主 RO)都不含它们 —— 不重钳位, 贴底钳位过的面板底边越出视口(§05.9),
     #     底栏按钮点不到。两条静态钉钉「接线在位」: rect 实测归 e2e(traffic-fx-panel 的
-    #     四皮肤 rect 用例展开高级后 poll 底边)。Vue 缺模板处理器只 console.warn 且
-    #     installRuntimeErrorGuard 不收 console.warn —— 这里是 fxRefitSoon 的**接线面唯一闸**
+    #     四皮肤 rect 用例展开高级后 poll 底边)。Vue 生产构建(vue.global.prod.js 3.5.13)对模板缺
+    #     失处理器**完全静默**(警告仅 dev 构建 —— 无 console.warn, e2e 的 installRuntimeErrorGuard
+    #     只收 console.error/pageerror, 对此同样零捕获) —— 接线断掉没有任何运行时报错面, 这里是
+    #     fxRefitSoon 的**接线面唯一闸**
     #     (行为面另由 traffic-fx-panel 四皮肤 rect 展开例覆盖, 但其判红依赖贴底钳位几何成立,
     #     点击点不在贴底区时不会红 —— 两层闸互补, 各管各的面)。
     #     计数面剥 HTML 注释(注释里的口径描述不计 —— 只钉代码事实)。

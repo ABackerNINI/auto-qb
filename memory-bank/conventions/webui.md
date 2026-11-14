@@ -1,7 +1,7 @@
 # WEB UI 产出口径与令牌
 
-> 摘要: 菜单/入口分层、令牌分工、按钮体系、悬浮提示、选中摘要口径、fx 动效库与 flux 皮肤、HTML dark 主题、迁移状态展示 —— 前端产出口径的唯一出处。各主题已外迁到 `attachments/webui-*.md`, 见下方主题地图。
-> 触发: WEB UI 约定, 菜单分层, 令牌, 主题, dark, HTML 产出, tooltip, 悬浮提示, 键位提示, 键帽, 选中摘要, occ_key, 实际占用, fx, 动效, data-fx, flux, 皮肤, preset, reduced-motion, 迁移状态, rel-pair, relocate_pop, --path-src, _pathPositions, 位置集
+> 摘要: 菜单/入口分层、令牌分工、按钮体系、悬浮提示、选中摘要口径、fx 动效库与 flux 皮肤、流量图节拍动效与数值面板、HTML dark 主题、迁移状态展示 —— 前端产出口径的唯一出处。各主题已外迁到 `attachments/webui-*.md`, 见下方主题地图。
+> 触发: WEB UI 约定, 菜单分层, 令牌, 主题, dark, HTML 产出, tooltip, 悬浮提示, 键位提示, 键帽, 选中摘要, occ_key, 实际占用, fx, 动效, data-fx, flux, 皮肤, preset, reduced-motion, 节拍动效, 流量图动效, beat, 左移, 扫描束, fx-panel, qbFx, 迁移状态, rel-pair, relocate_pop, --path-src, _pathPositions, 位置集
 **Refs:** memory-bank/issues/26-10-20-2231-refactor-fe-css-rule-family-dup.html, memory-bank/plans/26-10-31-2316-plan-webui-fx-skin.html
 
 ## 写 WebUI 前必读(硬规则)
@@ -27,6 +27,7 @@
 - 悬浮提示 .aq-tip → [attachments/webui-interaction.md](attachments/webui-interaction.md) 「WEB UI 悬浮提示 .aq-tip」
 - 选中摘要口径 → [attachments/webui-interaction.md](attachments/webui-interaction.md) 「WEB UI 选中摘要口径」
 - fx 动效库与 flux 皮肤 → [attachments/webui-fx.md](attachments/webui-fx.md) 「WEB UI fx 动效库与 flux 皮肤」
+- 流量图节拍动效与数值面板 → [attachments/webui-traffic-beat.md](attachments/webui-traffic-beat.md) 「流量图节拍动效」
 - HTML 文档 dark 主题 → [attachments/webui-theme-tokens.md](attachments/webui-theme-tokens.md) 「HTML 文档一律 dark 主题」
 - 迁移状态展示口径 → 本文件「迁移状态展示口径(路径列)」
 
