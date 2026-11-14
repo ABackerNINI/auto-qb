@@ -1,13 +1,19 @@
-# web-ui — 前端 / WEB UI 纪律 · 卷 2/4
+# web-ui — 前端 / WEB UI 纪律 · 卷 2/5
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `ctx-sub-width-coupling.md` … `hover-keynav-fight.md`(共 27 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `css-var-substitution-level.md` … `extension-bridge.md`(共 22 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
 
 | 主题 | 一句话 | 触发词 |
 |---|---|---|
+| [css-var-substitution-level.md](css-var-substitution-level.md) | 把「配方颜色」当供给槽在 :root/preset 层算死(如 `--fx-glow-c: color-mix(... var(--accent-ink) ...)` 写在 html 的 preset 块), 再指望组件层重挂原料令牌(`.bt.danger { --fx-glo… | 主题换色, 按变体换色, danger 换红, 皮肤令牌, preset 配方, 重挂令牌, ink 钩子, getComputedStyle 不一致, 计算值不更新, color-mix 变量, --fx-glow, fx-presets… |
+| [css-zoom-coordinate-space.md](css-zoom-coordinate-space.md) | html{zoom!=1}(分数布局)下窗口化几何输入 window.scrollY / scrollHeight / getBoundingClientRect 全按**视觉空间**(缩放后)报数, 而占位件 style.height / getComputedStyle().… | zoom 0.9, 分数布局, DPR 1.25, 窗口化错位, 行全在视口上方, 贴文档底, pad 短一截, getBoundingClientRect 视觉空间, offsetHeight 取整, computed zoom 不继承,… |
+| [ctx-menu-branch-parity.md](ctx-menu-branch-parity.md) | `shared/tpl/ctx-menus.html` 的右键菜单按上下文分四支, 其中 `menu.multi`(多选批量)与 `v-else`(单组)是**同一批动作的两条入口** —— 给一支加动作项时漏了另一支, 两条路径项集就静默分叉, 用户在某条路径上「找不到该动作」… | 加右键菜单项, 改 ctx-menus.html, 单组菜单缺选项, 多选批量菜单, 项集不一致, 菜单缺项 |
+| [ctx-menu-edge-clamp.md](ctx-menu-edge-clamp.md) | 视口钳位 e2e: 锚点不贴缘的断言恒真; 左缘 clamp 真实手势结构不可达 | 视口钳位, 左缘, 右缘, ctx-menu, EDGE, e2e 断言, 恒真, 顺带断言, 红验, clientX, 滚动容器左缘 |
+| [ctx-menu-item-state-tip.md](ctx-menu-item-state-tip.md) | 抽屉右键菜单「合并页签」项的勾误绑「该项是否出现」的形态判据(种子详情恒真)⇒勾永远在; 同项的 `:title` 经 .aq-tip 委托层(z90)自绘后恒被 .ctx-menu(z100)盖住⇒看不见的提示。两条都不报错、静态锚全绿, 只有用户看得见。 | 合并页签, 勾一直是勾选状态, 勾选态不随状态变, ctx-tick, dtMenuMergeOn, dtMergeOn, 被右键菜单覆盖的 tooltip, 被遮挡的提示, .aq-tip, .ctx-menu |
+| [ctx-sub-clamp-host-settle.md](ctx-sub-clamp-host-settle.md) | 嵌套浮层单次钳位会被宿主二次收口搬移失效——子面板钳位必须带同款有界复核, e2e 读盒须等收敛 | 嵌套浮层, 子面板, .ctx-sub, 钳位, 二次收口, _menuFitRefit, _subFitRefit, settle, 锚点搬移, vh-8 契约, clampAxis, e2e 读盒时机, subTop 收敛, curre… |
 | [ctx-sub-width-coupling.md](ctx-sub-width-coupling.md) | 右键菜单次级子面板宽度五处耦合 —— 四皮肤 css/components.css 的 .ctx-sub min-width 260(同值互证) + shared/menu.js _subOverflowsRight 首帧估宽 272(=260+12); 改宽度必须五处同步, s… | .ctx-sub, 子面板宽度, min-width, 260, 272, 估宽, _subOverflowsRight, _subFitViewport, _scan_ctx_sub_width, 宽度耦合, flip-x, 键帽加宽 |
 | [density-tier-single-point.md](density-tier-single-point.md) | 移除「经典 / 变体」两档制的一方时(删经典档或删变体档), 真正危险的不是删组件, 而是**档制判据散落在四五处**: 菜单候选集(`[{id:"classic"}].concat(options(tab))`)、缺省读侧(`readSel` 的 out 初始化)、各消费方(`… | 档制单档化, 删经典档, 删变体档, defaultSel, CLASSIC_TABS, hasClassic, choices, 缺省档, 渲染失败兜底, 补落经典, 菜单只有一个项, 菜单候选集, 兜底失真, readSel, dtPe… |
 | [derived-snapshot-render.md](derived-snapshot-render.md) | 派生状态(如"未归组命中")在事件落袋时被存成**快照**, 渲染期却按**当前**数据无条件消费 —— 快照与真值分叉后同一实体画两遍; 修法是渲染期用当前源现算判据 + 双条件闸, 而非在快照里打补丁 | 搜索, 虚拟行, 未归组, 重复行, u- 行, searchUncovered, 派生快照, 渲染期判据, filteredGroups, 跨视图, 归组关系变化, search_rev 不变, 同一 hash 两行 |
@@ -24,14 +30,3 @@
 | [esc-attr-quote-dead-class.md](esc-attr-quote-dead-class.md) | 用 `dtHtml`(esc 单点)拼标签时, 属性名与引号必须写在**字面量部分**, 插值只能是「属性值」—— 把整段属性文本(`' class="virtual"'` / `' class="' + cls + '"'`)当插值传进去, esc 会把引号转成 `&quot;… | 字符串拼 DOM, dtHtml 属性, esc 引号, 类名带引号, 条件类名, classList 不生效, 跳过态没变灰, 选中行没高亮, 属性拼进插值, A/B dump 逐字节比 |
 | [est-cold-start-vs-absolute-threshold.md](est-cold-start-vs-absolute-threshold.md) | 千级首访改估算开窗后, 占位总高/滚到底的绝对阈值判据必须按行数分档 | 估算行高, 渐进量齐, 占位总高, 滚到底, e2e 绝对阈值, ROW_WIN_EST_MIN, 首访长任务, 总高不塌陷 |
 | [extension-bridge.md](extension-bridge.md) | 扩展是**装在用户浏览器里**的交付物 —— pytest 跑不到它的运行期, 而浏览器 API 的报错几乎全指向不了根因; 2026-09-24 用户实测踩到两条(裸域名喂给权限 API / 端点没起只报 `Failed to fetch`), 2026-09-25 又踩到一条… | 浏览器扩展, chrome 扩展, MV3, permissions.request, Invalid value for origin pattern, Missing scheme separator, Failed to fetch,… |
-| [f-on-underline-radius.md](f-on-underline-radius.md) | 列表筛选选中强调(`.f-on`: 站点/标签/分类胶囊 + 站点/路径文本格)若用 `box-shadow: inset 0 -Npx 0 0 currentColor` 画底线, 线会**沿 border-radius 走** —— 在胶囊(radius:999px)上画成两… | 改筛选强调线, f-on, 下划线不直, 底线成弧, 两端翘起, 胶囊下划线, inset box-shadow 圆角, border-radius 不裁后代, 笔直横线, ::after 底线, overflow hidden 裁边, 强… |
-| [flip-bottom-anchored-stack.md](flip-bottom-anchored-stack.md) | 底部锚定的浮层栈做 FLIP: `offsetTop` 恒为 0, 动画静默不播 | FLIP 队列重排, toast 栈, offsetTop, offsetHeight, 位移动画没效果, getAnimations 为空, 瞬移, 底部锚定, position:fixed bottom, 提示条排队 |
-| [floating-hint-vs-notice-panel.md](floating-hint-vs-notice-panel.md) | 前端的"告知类"提示(陈述事实 / 排查路径, 不是故障)若实现成**运行时注入 body 的 fixed 浮层**(横幅 / 气泡 / 角标条), 会有两个固定代价: ①压在页面内容上, 用户"先关掉才能看"; ②**每次自动化测试都弹** —— 测试用全新浏览器上下文, 提示… | 想给用户"提示一句", 加提示横幅, 弹一次就够的提示, 测试截图被遮挡, 每次跑测试都弹, 截图里有浮层, 空存储提示, 列偏好提示, toast 之外的提示, 陈述型通知, 告知类提示, _recordNotice |
-| [frame-swap-scroll-reset.md](frame-swap-scroll-reset.md) | 变体表格体整帧换清宿主子树后滚动容器 scrollTop 现算落 0 —— 缺成对恢复即列表跳 | 点击跳动, 列表跳, 整列表位移, 滚动位落 0, 整帧换, replaceChildren, withScroll, scrollTop 现算, 滚到中间再点后跳, 数据回路重拉后跳, rerender 单点重渲后跳, 瞬态自回位, 0.… |
-| [frontend-split.md](frontend-split.md) | 模板/样式/内核三层拆分 + 单一语义模板收敛(2026-09-27)后, 找前端内容与加守阵的固定口径 —— 一律读「聚合」, 模板级 UI 差异只走「差异口」, data/生命周期不许进 app.mixin。 | 改守阵, 找模板内容, 加断言, 两套 UI 差异, 拆分, 聚合读法, 差异口, ui-diff, 根选项, app.mixin, hub-field, boot.js, 冒烟等价, 搬迁方法体, 拆文件守阵假红, v-if 链跨分片,… |
-| [frozen-column.md](frozen-column.md) | 首列吸左(冻结列)在本仓 `.group-row` 表格上的十一处非显然约束 —— 表头反向位移、首格不透明合成、边界发丝线、stretch、按面重锚、search-hit 渐层镜像、变体两层结构、过渡同源、状态底叠加、左侧色条跟吸、运行时改写(fx [data-fx] 基线);… | 首列吸左, 名称列后阴影, 随机出现阴影, 黑块, box-shadow spread 负值, 落影随行高变, 冻结列, frozen column, sticky 首格, 横向滚动, 表头横向同步, transform 桥接, 首格不透明… |
-| [glass-visibility-mask-stacking.md](glass-visibility-mask-stacking.md) | 玻璃可见度=面板alpha×遮罩alpha叠乘; flux全浮层玻璃化预算16 | 毛玻璃不可见, blur看不见, 弹窗玻璃没效果, 遮罩太浓, 半透明底透正文, backdrop-filter预算, _FLUX_BACKDROP_BUDGET |
-| [global-mixin-basetransition-watch.md](global-mixin-basetransition-watch.md) | `app.mixin()` 全局注入的对象若带 `watch: { someState() {} }`, Vue 会把该 watcher 注册进**一切**组件实例 —— 包括内置 `<transition>` 在内部渲染时创建的 BaseTransition **假实例**(无… | 全局 mixin, app.mixin, watch 选项, transition, BaseTransition, TypeError, drawerTpl, 变体, 根实例 $watch |
-| [grid-span-item-track-inflation.md](grid-span-item-track-inflation.md) | CSS Grid 里跨全部列的项(说明段/横幅类)参与轨道尺寸计算 —— 它的 max-content 贡献会摊进 spanned 的 auto/minmax(auto,...) 轨道, 把「按内容取宽」的列撑远超设计底线; 守阵(类存在性/行数/DOM 断言)全绿也测不出, 只… | 把「说明段落/提示条/横幅」等与数据行同容器、又给了 `grid-column: 1 / -1` 的元素留在网格内; 或容器既是 padding 壳又是 grid(为省行数/文件行数上限时容易这么干)。 |
-| [header-cell-gutter.md](header-cell-gutter.md) | `.h-cell` 带 `padding-right: 10px` —— 这是给 `.resizer`(拖拽调宽把手)留的命中区, 因为 `.h-cell` 自身有 `overflow: hidden`(给列名省略号用), 把手伸到格子外会被裁掉、点不到(星图主题里有一条注释专门… | 右对齐, 列对齐, 表头没对齐, 标题文字对不齐, 数值列, text-align right, h-cell, padding-right, resizer, 拖拽把手, 列宽拖拽, colAlignCss, nth-child, 排序箭… |
-| [hover-keynav-fight.md](hover-keynav-fight.md) | 下拉/列表组件把悬停(@mouseenter 直写高亮状态 + CSS :hover 与活动项同款样式)与键盘活动项(↑↓)接到同一个高亮状态上 —— 静止光标钉住旧高亮, 且浏览器在行动画/滚动/DOM 变更后给静止光标补发合成 hover 事件把活动项拽回光标行, 上下键时选… | 改下拉列表键盘导航, 加悬停高亮, 上下键选中项闪烁乱跳, mouseenter, 双高亮, 合成 hover 事件, scrollIntoView, combobox, 活动项, 弹窗内容滑动, 文案从上往下滑, 选中候选后再点下拉, _… |

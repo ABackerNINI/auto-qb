@@ -12,7 +12,8 @@
 
 | 卷 | 主题范围 | 条数 |
 |---|---|---|
-| [1](_index-1.md) | `add-partial-receipt.md` … `ctx-sub-clamp-host-settle.md` | 27 |
-| [2](_index-2.md) | `ctx-sub-width-coupling.md` … `hover-keynav-fight.md` | 27 |
-| [3](_index-3.md) | `hr-tooltip-overlap.md` … `scroll-visible-band.md` | 27 |
-| [4](_index-4.md) | `search-pending-collapse.md` … `wording-audit-surface.md` | 27 |
+| [1](_index-1.md) | `add-partial-receipt.md` … `css-perf-parity.md` | 22 |
+| [2](_index-2.md) | `css-var-substitution-level.md` … `extension-bridge.md` | 22 |
+| [3](_index-3.md) | `f-on-underline-radius.md` … `layout-css.md` | 22 |
+| [4](_index-4.md) | `mixin-ce-inject-break.md` … `sticky-scrollpad-inset.md` | 22 |
+| [5](_index-5.md) | `surface-color-family-single-point.md` … `wording-audit-surface.md` | 21 |

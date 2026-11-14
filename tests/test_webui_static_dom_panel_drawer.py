@@ -12,7 +12,7 @@
 - test_drawer_tpl_variant_no_singleton_shadowing: 变体单点 T/R/H 遮蔽禁令守阵(2026-10-09 用户报障「空间树图选了不显示、换种子回落经典」) —— dt12 layoutMap 曾写 `const W = mapEl.clientWidth, H = mapEl.clientHeight`, 局部 H 把文件头 helpers 单点(reg.helpers)遮蔽成数字, 同函数尾 H.rowFocusKey(...) 对数字取属性抛 TypeError -> 核心 _dtRender catch 把该页签选择复位 classic 并落盘: 树图块只在 layoutMap 绘制故永远空白 + 用户选择跨会话被静默复位。守阵 = 每个变体文件凡声明了 T/R/H 单点(const <N> = reg.dtHtml|dtRaw|helpers), 该名在全文件(单点声明行之外)禁止再被任何声明语句绑定 —— 含多声明符列表(let a = 1, H = 2, 本案根因形态)与解构(const { H } = ...); 未声明单点的名不查(15 号变体无 H 单点, 其局部 H = 22 是合法常量)
 
 - test_drawer_tpl_cross_seed_fold: 折叠态跨种子口径统一守阵(P3-6, 报告 26-10-07-0542) —— dt10/11/12 换种子重置块(hash !== ui.lastHash)只许清选中/勾选/筛选、不得清折叠记账 ui.folded/ui.colG(口径统一为跨种子保持, 以 general 组 dt01/02 为准; 记账 key 是 path 不含 hash, 新种子旧条目自然不命中, 同名目录延续折叠选择) + dt11 勾选集必须继续重置(批量优先级真提交, 旧勾选落新种子是误操作面) + 其余变体(01-09/13-15, 记账 key 与种子无关或无折叠)不得出现 lastHash 机制 + 2026-10-10 模板选择迁右键后核心不得再注入 .dt-select
-- test_drawer_tpl_menu_right_click_selection: 详情面板模板选择迁右键守阵(2026-10-10 用户动议「模板选择改为右键选择, 在对应的区域弹右键; 合并时左边弹常规、右边弹内容的模板选择」) —— 核心菜单 computed(dtMenuTab/dtMenuTplOptions/dtMenuTplCurrent/dtMenuMergeOn)与落点 dtMenuPick 齐全且选择器 API 退役; menu.js openDrawerMenu 放行 seed/traffic 形态且目标页签解析成对(变体宿主 data-dt-host 去 traffic-pre/post 后缀优先 / 合并列 data-dt-tab 兜列头空列 / 否则当前页签); ctx-menus 渲染模板选项(v-for)+勾选态(.ctx-tick)+条件合并开关(dtMenuMergeOn)
+- test_drawer_tpl_menu_right_click_selection: 详情面板模板选择迁右键守阵(2026-10-10 用户动议「模板选择改为右键选择, 在对应的区域弹右键; 合并时左边弹常规、右边弹内容的模板选择」) —— 核心菜单 computed(dtMenuTab/dtMenuTplOptions/dtMenuTplCurrent/dtMenuMergeOn)与落点 dtMenuPick 齐全且选择器 API 退役; menu.js openDrawerMenu 放行 seed/traffic 形态且目标页签解析成对(变体宿主 data-dt-host 去 traffic-pre/post 后缀优先 / 合并列 data-dt-tab 兜列头空列 / 否则当前页签); ctx-menus 渲染模板选项(v-for)+勾选态(.ctx-tick)+条件合并开关(dtMenuMergeOn); 合并项勾读真实开关态 dtMergeOn(非恒真的 dtMenuMergeOn, 2026-11-15 用户报「一直是勾选状态」)且零 title(自绘 .aq-tip z90 被 .ctx-menu z100 盖住)
 - test_drawer_tpl_default_sel: 详情面板模板**缺省档**守阵(原名 test_drawer_tpl_classic_default, plan 26-10-06-0838 S1; 2026-10-14 经典渲染链移除后缺省档按页签分化: 四内容页签 = 该页签首个变体, 流量页签 = classic) —— 有 node 时真跑核心层 node 电池(白名单脏值/未注册 id/坏 JSON 一律回落缺省档; 注册 fail-fast 四分支; dtHtml 转义 + dtRaw 豁免; options 不含 classic); 无 node 静态兜底: app.js initialDrawerTpl 缺核心时也必须返回可用映射(空对象会把正文藏掉)且字面量与 defaultSel 同口径(四内容页签 = 首个变体; 流量 = classic)
 - test_drawer_tpl_render_error_fallback_default: 变体渲染抛错自动回落**缺省档**守阵(P2-1, 报告 26-10-07-0542; 原名 test_drawer_tpl_render_error_fallback_classic, 2026-10-14 经典渲染链移除后兜底不再是 classic) —— 有 node 时真跑 _dtRender 抛错电池钉回落五件(复位该页签缺省档 + 落盘 / 不牵连其它页签 / 摘挂载态 / 清宿主 + destroy 回调 / console.error 带页签与变体 id; 失败档恰为缺省档时不改写不落盘); 无 node 静态兜底: catch 块四要素缺一即红(只清宿主的空白降级不得回潮)
 - test_drawer_seed_reentry_variant_remount: 种子详情面板回页变体宿主重挂守阵(2026-10-07 报障「面板打开时切设置页再切回, 面板空白」) ——
@@ -1192,6 +1192,18 @@ def test_drawer_tpl_menu_right_click_selection():
     assert "dtMenuTplCurrent === o.id" in ctx_menus, "ctx-menus 缺模板选项勾选态"
     assert "dtMenuMergeOn" in ctx_menus and "dtToggleMerge()" in ctx_menus, \
         "ctx-menus 缺合并开关(条件渲染 dtMenuMergeOn)"
+
+    # 4. 2026-11-15 用户报「合并页签后面的勾一直是勾选状态」: 勾必须读**真实开关态**
+    #    dtMergeOn(drawerMerge), 不能读恒真的形态判据 dtMenuMergeOn(种子详情形态恒 true)。
+    #    同项原本还挂 :title —— title 被 ui_feedback.js 单向迁成 data-aq-tip, 自绘 .aq-tip
+    #    z-index 90 恒被 .ctx-menu(100) 盖住(同类: pitfalls/web-ui/hr-tooltip-overlap), 已移除。
+    merge_item = ctx_menus.split('<template v-if="dtMenuMergeOn">', 1)[-1].split("</template>", 1)[0]
+    assert 'v-if="dtMergeOn"' in merge_item, \
+        "ctx-menus 合并开关勾未读真实开关态 dtMergeOn(勾会永远在, 与合并开关态脱钩)"
+    assert 'v-if="dtMenuMergeOn"' not in merge_item, \
+        "ctx-menus 合并开关勾回潮到形态判据 dtMenuMergeOn(种子详情形态恒真)"
+    assert ":title=" not in merge_item and "title=" not in merge_item, \
+        "ctx-menus 合并项又挂 title/自绘 tooltip(.aq-tip z90 被 .ctx-menu z100 盖住)"
 
 
 def test_drawer_tpl_default_sel():

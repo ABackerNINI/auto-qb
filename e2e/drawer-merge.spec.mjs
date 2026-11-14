@@ -13,9 +13,11 @@ installRouteCleanup(test);
 
 /**
  * 抽屉页签合并(R2 计划 26-10-09-2219 · R3 修订) —— 单开关 / 合并页签 / 双列布局 / 宽度门:
- *   1. 宽视口(≥1920): 正文右键 → 菜单「合并页签」可用 → 点击 → 页签栏收敛为
+ *   1. 宽视口(≥1920): 正文右键 → 菜单「合并页签」可用且关态无勾 → 点击 → 页签栏收敛为
  *      [常规&内容][Tracker&用户] 两张合并页签, 正文双列(列头 常规/内容, 两列各挂本页签当前所选实现);
- *      再右键 → 勾选态在 → 再点已开启项 → 关闭, 页签栏回四页签单栏。
+ *      再右键 → 勾选态在 → 再点已开启项 → 关闭(再开菜单勾消失), 页签栏回四页签单栏。
+ *      2026-11-15 用户报「勾一直是勾选状态」: 关/开/再关三态都钉 .ctx-tick, 且该项零 title
+ *      (自绘 .aq-tip z90 恒被 .ctx-menu z100 盖住, 提示已移除)。
  *   2. R3 回归(用户报「选择并排后 tracker/用户标签显示常规/内容且为空」): 合并开启下点
  *      [Tracker&用户] 合并页签 → 列头变 Tracker/用户 且两列有内容(不再渲染旧对列头 + 空列)。
  *   3. 窄视口(<1920): 菜单项置灰(.is-gated), 点击零状态变化(dtToggleMerge 双保险拦截), 四页签原样。
@@ -82,6 +84,10 @@ for (const skin of SKINS) {
       await expect(menu).toBeVisible();
       const item = menu.locator(MERGE_ITEM);
       await expect(item).not.toHaveClass(/is-gated/);
+      // 关态: 勾不得在(2026-11-15 用户报「一直是勾选状态」); 该项不挂 title/自绘 tooltip
+      await expect(item.locator('.ctx-tick')).toHaveCount(0);
+      expect(await item.evaluate((el) => [el.getAttribute('title'), el.getAttribute('data-aq-tip')]))
+        .toEqual([null, null]);
       await item.click();
 
       // 页签栏收敛为两合并页签(四页签隐去)
@@ -125,6 +131,14 @@ for (const skin of SKINS) {
       await expect(split).toHaveCount(0);
       await expect(drawer.locator('.drawer-tabs button', { hasText: /^Tracker / })).toBeVisible();
       await expect(drawer.locator('.drawer-tabs button', { hasText: 'Tracker&用户' })).toHaveCount(0);
+
+      // 再关后重新开菜单: 勾必须随真实开关态消失(开→关双向)
+      // 先钉合并项在场: 无该项时 toHaveCount(0) 恒绿(关合并后单栏 .drawer-body 右键可能命中
+      // 桥表 group-head 弹列菜单), 否则这条断言就是安慰剂 —— 2026-11-15 评审补钉
+      await drawer.locator('.drawer-body').click({ button: 'right' });
+      await expect(menu).toBeVisible();
+      await expect(menu.locator(MERGE_ITEM)).toBeVisible();
+      await expect(menu.locator(MERGE_ITEM).locator('.ctx-tick')).toHaveCount(0);
     });
 
     test(`窄视口: 门内置灰可见, 点击零状态变化 @fast (${skin})`, async ({ page }) => {
@@ -170,6 +184,16 @@ for (const skin of SKINS) {
       await expect(split).toHaveCount(0);
       await expect(drawer.locator('.drawer-tabs button', { hasText: '常规&内容' })).toHaveCount(0);
       await expect(drawer.locator('.drawer-tabs button', { hasText: /^Tracker / })).toBeVisible();
+
+      // 门只遮蔽不撤标志: 置灰态下勾仍读真实开关(dtMergeOn=on ⇒ 勾在), 不是恒真形态判据
+      // (2026-11-15 评审补钉; 右键走页签栏避开单栏变体表的 group-head 列菜单)
+      await drawer.locator('.drawer-tabs').click({ button: 'right' });
+      const gatedMenu = page.locator('.ctx-menu');
+      await expect(gatedMenu.locator(MERGE_ITEM)).toBeVisible();
+      await expect(gatedMenu.locator(MERGE_ITEM)).toHaveClass(/is-gated/);
+      await expect(gatedMenu.locator(MERGE_ITEM).locator('.ctx-tick')).toHaveCount(1);
+      await page.keyboard.press('Escape');
+      await expect(gatedMenu).toHaveCount(0, { timeout: 5_000 });
 
       // 拉宽过门: 双列自动恢复(列组 = gc, 初值常规页); 第二列(内容)数据补给到位(行渲染出来)
       await page.setViewportSize(WIDE);
