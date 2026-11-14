@@ -31,6 +31,8 @@ installRouteCleanup(test);   // 本文件全部用例收尾时卸载全部 route
  *     的 CSS 组合 —— 穿透的真判据是**画布收到了鼠标**(hoverIdx 随移动变化), 只有真指针能验。
  *   · .ctx-menu 计数不变(§05.9 第 6 项零回归面): 面板不是 .ctx-menu —— e2e/drawer-merge
  *     的 strict-mode 计数靠「面板不进该选择器」成立, 这里显式钉住。
+ *   · 状态行采样口径两形态(F6/plan 26-11-14-1313 A7): sample_interval_s != interval_s ->
+ *     「采样 X s · 桶宽 Y s」两值; 相等/缺键 -> 维持单值(B1 后端只增键的前端消费面)。
  *
  * 桩口径(traffic-gap-zones.spec 同款纪律): 只翻 qb_traffic_enabled 一个比特, 其余放行真值;
  * /api/traffic/qb/torrent/* 造一份真契约形状的**恒定**帧(60 桶, 桶值不变) —— 恒定数据下
@@ -41,8 +43,10 @@ installRouteCleanup(test);   // 本文件全部用例收尾时卸载全部 route
 const N = 60;
 const INTERVAL = 30;
 
-/** 造一帧恒定 payload(全桶有观测, 值恒定 -> 节拍静默, 图静止)。契约同 /api/traffic/qb/* */
-function makePayload(base) {
+/** 造一帧恒定 payload(全桶有观测, 值恒定 -> 节拍静默, 图静止)。契约同 /api/traffic/qb/*。
+ * sample(F6, plan 26-11-14-1313): 传 meta.sample_interval_s(生效采样间隔); 不传 = 旧形状
+ * 缺键(单值回落形态 —— 现存用例全部走缺键形态, 隐式覆盖)。 */
+function makePayload(base, sample) {
   const points = new Array(N).fill(null);
   const totals = new Array(N).fill(null);
   for (let i = 0; i < N; i++) {
@@ -50,19 +54,16 @@ function makePayload(base) {
     points[i] = { t, dl: 2000, up: 1000 };
     totals[i] = { t, dl: 2000, up: 1000 };
   }
-  return {
-    points,
-    totals,
-    limits: [],
-    meta: {
-      window: '24h',
-      interval_s: INTERVAL,          // 30 -> 轮询 30s 一拍, 断言窗内无第二拍
-      source: 'qb',
-      stale: false,
-      // 远在链末桶之前 -> _qbSeamHint 出 null, 不给「数据接缝中」行(本 spec 不验接缝)
-      server_started_at: base - 3600,
-    },
+  const meta = {
+    window: '24h',
+    interval_s: INTERVAL,          // 30 -> 轮询 30s 一拍, 断言窗内无第二拍
+    source: 'qb',
+    stale: false,
+    // 远在链末桶之前 -> _qbSeamHint 出 null, 不给「数据接缝中」行(本 spec 不验接缝)
+    server_started_at: base - 3600,
   };
+  if (sample !== undefined) meta.sample_interval_s = sample;
+  return { points, totals, limits: [], meta };
 }
 
 /** flags 桩: 只翻 qb_traffic_enabled 这一个比特, 其余放行真值(traffic-gap-zones 同款) */
@@ -77,6 +78,13 @@ async function stubFlags(page) {
 async function stubTraffic(page) {
   const base = Math.floor(Date.now() / 1000 / INTERVAL) * INTERVAL - (N - 1) * INTERVAL;
   await page.route('**/api/traffic/qb/torrent/*', (route) => route.fulfill({ json: makePayload(base) }));
+}
+
+/** 流量帧桩(A7 用): meta 带 sample_interval_s(生效采样间隔) —— 两值/单值两形态的桩面 */
+async function stubTrafficSample(page, sample) {
+  const base = Math.floor(Date.now() / 1000 / INTERVAL) * INTERVAL - (N - 1) * INTERVAL;
+  await page.route('**/api/traffic/qb/torrent/*', (route) =>
+    route.fulfill({ json: makePayload(base, sample) }));
 }
 
 /** 打开种子流量页签(traffic-gap-zones.openTorrentTraffic 同款: 30分 一并验重拉) */
@@ -391,6 +399,53 @@ test.describe('动效数值面板 · 四皮肤 rect 实测(§05.9 第 6/9 项)',
         message: skin + ' 皮肤下滑杆必须可用(改值贯通 AQB_FX_CFG)', timeout: 5_000,
       }).toBe(0.6);
       await expect(page.locator('.ctx-menu')).toHaveCount(0);
+    });
+  }
+});
+
+test.describe('动效数值面板 · 状态行采样口径两形态(F6/A7, plan 26-11-14-1313)', () => {
+  installRuntimeErrorGuard(test);
+
+  for (const skin of SKINS) {
+    test(`[${skin}] 两值形态: sample_interval_s=20 != interval_s=30 -> 「采样 20.0 s · 桶宽 30.0 s」 @fast`, async ({ page }) => {
+      await stubFlags(page);
+      await stubTrafficSample(page, 20);
+      await openApp(page, skin);
+      const drawer = await openTorrentTraffic(page);
+      const panel = await openFxPanelByRightClick(page, drawer.locator('.qb-chart-host'));
+      const status = panel.locator('.fx-status');
+      /* F6 两值: 采样值 = meta.sample_interval_s(生效采样间隔, B1 只增键), 桶宽 = meta.interval_s
+       * (raw 段栅格桶宽, 采样 20s 落 30s 桶是向上取整防伪断线的正确行为 —— 显示口径问题已修) */
+      await expect(status, '两值形态必须显示「采样 20.0 s · 桶宽 30.0 s」(F6 显示口径)')
+        .toContainText('采样 20.0 s · 桶宽 30.0 s');
+      await expect(status, '两值形态不得再把桶宽冒充采样值(旧口径「采样 30.0 s」即回潮)')
+        .not.toContainText('采样 30.0 s');
+      /* beat/周期派生量仍锚 interval_s(F6 口径不变面): beat = _qbBeatMs(30000) = 1000ms */
+      await expect(status).toContainText('beat 1000 ms');
+    });
+
+    test(`[${skin}] 单值形态: sample_interval_s == interval_s(30) -> 维持「采样 30.0 s」单值 @fast`, async ({ page }) => {
+      await stubFlags(page);
+      await stubTrafficSample(page, INTERVAL);
+      await openApp(page, skin);
+      const drawer = await openTorrentTraffic(page);
+      const panel = await openFxPanelByRightClick(page, drawer.locator('.qb-chart-host'));
+      const status = panel.locator('.fx-status');
+      await expect(status, '相等时必须维持单值「采样 30.0 s」(不出现桶宽段)')
+        .toContainText('采样 30.0 s');
+      await expect(status).not.toContainText('桶宽');
+    });
+
+    test(`[${skin}] 缺键回落形态: meta 无 sample_interval_s -> 维持「采样 30.0 s」单值 @fast`, async ({ page }) => {
+      await stubFlags(page);
+      await stubTraffic(page);   // 旧形状 meta 缺 sample_interval_s(现存用例全走此形态, 这里显式钉文案)
+      await openApp(page, skin);
+      const drawer = await openTorrentTraffic(page);
+      const panel = await openFxPanelByRightClick(page, drawer.locator('.qb-chart-host'));
+      const status = panel.locator('.fx-status');
+      await expect(status, '缺键必须回落现状单值「采样 30.0 s」(F6 回落口径 —— 旧缓存/降级响应兼容面)')
+        .toContainText('采样 30.0 s');
+      await expect(status).not.toContainText('桶宽');
     });
   }
 });

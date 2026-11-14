@@ -56,6 +56,16 @@ installRouteCleanup(test);   // 本文件全部用例收尾时卸载全部 route
  * **每次请求恰推进一格**(计数器递增 base, 与墙钟解耦 —— roll 判据 dx0 <= 2 格恒成立);
  * 值恒定 -> L1 静默(needsTail=false), 拍只剩 L0 视口左移, 边界断言不被数值收敛干扰。
  * B 用 interval_s=30(轮询 30s 一拍, 断言窗内无真拍来抢预览)且 base 固定(数据静止)。
+ *
+ * C(裁剪面像素探针, F5/plan 26-11-14-1313, A6 的真机面): 预览拍逐帧扫画布右缘带 ——
+ *   · 右缘裁切: 环/粒子/菱形锚的墨量必须出现在绘图区右缘之外的画布留白带(x > R)。
+ *     旧 clip = 绘图区矩形时该带恒透明, 探针即红; 扫描束/光带/霓虹经面板真手势关掉隔离
+ *     (右缘带里剩下的墨只来自 F5 放宽的三类装饰), 复习 :2319 束体宽 clip 先例口径。
+ *   · 近底环完整: 数据造「dl 顶格抬 yMax + up 贴底小值」, up 轨环心上抬钳制
+ *     (P3: clamp 进 [T+rMax, T+H-rMax])+ 右缘放宽联合可见 —— 近底带(x > R, y 贴 T+H)有墨。
+ *   · 轴标区零墨: clip 下缘未放宽 —— x > R 且 y > T+H 恒透明(uPlot 轴标只在绘图区下方
+ *     x ∈ [L, R] 域), 钉住「右缘放宽不外溢到轴标区」。
+ * 采样走预览拍(B 同款理由: 无真拍抢拍、窗口/轴冻结、装饰范围由 I9 常量决定)。
  */
 
 const N = 60;
@@ -106,6 +116,25 @@ async function stubTrafficStill(page) {
   const b0 = Math.floor(Date.now() / 1000 / interval) * interval - (N - 1) * interval;
   await page.route('**/api/traffic/qb/torrent/*', (route) =>
     route.fulfill({ json: makePayload(b0, interval) }));
+}
+
+/** C 用: base 固定 + up 贴底小值(dl 顶格抬 yMax -> up 落绘图区底部 ~2% 处, 近底环探针前提)。
+ * up=4200 = yMax(210000) x 2%: 预览 mag=0.425 时 target=4200x(1-0.425)=2415 > 0(真 0 不触发,
+ * Lv 保持 >=1), 环心上抬钳制 [T+rMax, T+H-rMax] 与底缘镜像反弹都有实料可验。 */
+async function stubTrafficBottom(page) {
+  const interval = 30;
+  const b0 = Math.floor(Date.now() / 1000 / interval) * interval - (N - 1) * interval;
+  const points = new Array(N).fill(null);
+  const totals = new Array(N).fill(null);
+  for (let i = 0; i < N; i++) {
+    const t = b0 + i * interval;
+    points[i] = { t, dl: 200000, up: 4200 };
+    totals[i] = { t, dl: 200000, up: 4200 };
+  }
+  const payload = makePayload(b0, interval);
+  payload.points = points;
+  payload.totals = totals;
+  await page.route('**/api/traffic/qb/torrent/*', (route) => route.fulfill({ json: payload }));
 }
 
 /** 打开种子流量页签(不点窗口档: A 靠 interval_s=2 出快拍, B 靠 interval_s=30 隔离真拍) */
@@ -435,6 +464,121 @@ test.describe('节拍动效 · 预览拍帧级探针(§05.9 面板拍 + G5 背�
       expect(endSnap.min).toBe(snap.min);
       expect(endSnap.max).toBe(snap.max);
       expect(endSnap.xsCks).toBe(snap.xsCks);
+    });
+  }
+});
+
+test.describe('节拍动效 · 裁剪面像素探针(F5/A6, plan 26-11-14-1313)', () => {
+  installRuntimeErrorGuard(test);
+
+  for (const skin of SKINS) {
+    test(`[${skin}] 预览拍环/粒子/菱形锚墨量越过绘图区右缘, 近底环在右缘带完整可见, 轴标区零墨 @fast`, async ({ page }) => {
+      await stubFlags(page);
+      await stubTrafficBottom(page);
+      await openApp(page, skin);
+      const drawer = await openTorrentTraffic(page);
+
+      /* 开面板 -> 展开高级 -> 真手势关掉光带/扫描束/霓虹三层(隔离右缘带的墨源: 剩下的墨
+       * 只来自环/粒子/菱形锚三类 —— 扫描束/光带本就墨在右缘带, 不关则探针分不清谁画的) */
+      await drawer.locator('.qb-chart-host').click({ button: 'right' });
+      const panel = page.locator('.fx-panel');
+      await expect(panel).toBeVisible({ timeout: 5_000 });
+      await panel.locator('.fx-adv summary').click();
+      for (const name of ['光带层', '扫描束层', '霓虹元素层']) {
+        const box = panel.locator('.fx-row', { hasText: name }).locator('input[type="checkbox"]');
+        if (await box.isChecked()) await box.click();
+      }
+      await expect.poll(() => readInst(page,
+        'window.AQB_FX_CFG && window.AQB_FX_CFG.layers && window.AQB_FX_CFG.layers.band === false'
+        + ' && window.AQB_FX_CFG.layers.scan === false && window.AQB_FX_CFG.neon === false'), {
+        message: '光带/扫描束/霓虹三层关闭必须贯通 AQB_FX_CFG(右缘带墨源隔离前提)', timeout: 5_000,
+      }).toBe(true);
+
+      /* 装右缘带扫描器(页面 rAF, B 同款纪律): 每帧扫 x ∈ [R+2, min(R+40, 画布右缘-1)] 一条
+       * 竖带, 分三段数 alpha>0 墨量 —— 绘图区段(margin)/近底段(bottom, y 贴 T+H)/轴标段
+       * (below, y > T+H)。预览期间窗口/轴冻结, 几何不漂移。 */
+      await page.evaluate(`(() => {
+        const vm = ${INST};
+        const u = vm._qbCharts && vm._qbCharts.torrent;
+        if (!u || !u.ctx || !u.bbox) throw new Error('unbuilt');
+        const px = (typeof uPlot !== 'undefined' && uPlot.pxRatio) || 1;
+        const L = u.bbox.left / px;
+        const T = u.bbox.top / px;
+        const W = u.bbox.width / px;
+        const H = u.bbox.height / px;
+        const R = L + W;
+        const canvasW = u.ctx.canvas.width / px;
+        if (!(canvasW - R >= 8)) throw new Error('绘图区右缘画布留白 < 8px(布局前提变了), 探针无立足带');
+        window.__cp = { frames: [], done: false, sawAnim: false, R, T, H, px };
+        const tick = () => {
+          const cp = window.__cp;
+          if (cp.done) return;
+          const u2 = vm._qbCharts && vm._qbCharts.torrent;
+          if (u2 && u2.ctx && u2.data && u2.data.length) {
+            const a = u2._qbBeat && u2._qbBeat.anim;
+            const x0d = Math.round((cp.R + 2) * cp.px);
+            const wD = Math.round((Math.min(cp.R + 40, u2.ctx.canvas.width / cp.px - 1) - cp.R - 2) * cp.px);
+            const strip = u2.ctx.getImageData(x0d, 0, Math.max(1, wD), u2.ctx.canvas.height).data;
+            const yHd = Math.round((cp.T + cp.H) * cp.px);
+            const yBd = Math.round((cp.T + cp.H - 58) * cp.px);
+            let marginInk = 0;
+            let bottomInk = 0;
+            let belowInk = 0;
+            for (let dy = Math.round((cp.T + 2) * cp.px); dy < strip.height; dy++) {
+              let ink = 0;
+              for (let dx2 = 0; dx2 < strip.width; dx2++) {
+                if (strip[(dy * strip.width + dx2) * 4 + 3] > 0) ink++;
+              }
+              if (dy < yHd) {
+                marginInk += ink;
+                if (dy >= yBd) bottomInk += ink;
+              } else if (dy > yHd + Math.round(2 * cp.px)) {
+                belowInk += ink;
+              }
+            }
+            cp.frames.push({
+              anim: !!a,
+              isPreview: !!(a && a.preview !== undefined),
+              marginInk, bottomInk, belowInk,
+            });
+            if (a && a.preview !== undefined) cp.sawAnim = true;
+            if (cp.sawAnim && !a) cp.done = true;
+          }
+          requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+      })()`);
+      if (await page.evaluate(() => !window.__cp)) {
+        throw new Error('右缘带扫描器未装上(画布/几何取不到)');
+      }
+
+      await panel.locator('button', { hasText: '预览一拍' }).click();
+      await expect.poll(() => readInst(page, 'window.__cp === undefined ? false : window.__cp.done === true'), {
+        message: '预览拍未在预算内收场(裁剪探针采样窗; 超时=预览链路断了或假 Δ 零变化)',
+        timeout: 15_000,
+      }).toBe(true);
+      const frames = await page.evaluate(() => window.__cp.frames);
+      const animFrames = frames.filter((f) => f.anim && f.isPreview);
+      expect(animFrames.length, '预览动画必须有采样帧(裁剪探针要逐帧扫右缘带)')
+        .toBeGreaterThanOrEqual(3);
+
+      /* A6 右缘裁切: 预览帧里右缘带必有墨(旧 clip=绘图区矩形时该带恒透明 —— 环 rMax<=29/
+       * 粒子/菱形锚 r=5 都跨过 x=R) */
+      const maxMargin = Math.max(...animFrames.map((f) => f.marginInk));
+      expect(maxMargin, `右缘带最大墨量 ${maxMargin} 像素必须 > 0(环/粒子/菱形锚不得被绘图区`
+        + '右缘裁切 —— F5 clip 放宽回潮即红)').toBeGreaterThan(0);
+
+      /* A6 近底环完整: up 轨贴底(值=2% yMax), 环心上抬钳制 + 右缘放宽联合 -> 近底带(贴 T+H)
+       * 在右缘带里有墨(旧形态: 右缘无墨 + 底缘裁切, 近底装饰只剩左上角残弧) */
+      const maxBottom = Math.max(...animFrames.map((f) => f.bottomInk));
+      expect(maxBottom, `近底带最大墨量 ${maxBottom} 像素必须 > 0(近底环心上抬钳制 P3 + clip 放宽`
+        + '联合可见 —— 贴底装饰不得被底/右缘双双裁没)').toBeGreaterThan(0);
+
+      /* A6 轴标区零墨: clip 下缘未放宽(右缘放宽只到 y=T+H 为止), x>R 且 y>T+H 恒透明
+       * (uPlot 轴标只在绘图区下方 x ∈ [L, R] 域, 本探针带在 x>R 不受轴标干扰) */
+      for (const f of animFrames) {
+        expect(f.belowInk, '轴标区(x>R, y>T+H)必须零墨(clip 下缘未放宽 —— 右缘放宽不得外溢)').toBe(0);
+      }
     });
   }
 });

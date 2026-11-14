@@ -625,15 +625,20 @@ function _qbFxShouldShift(cellPx) {
  *            = target)
  *   delta  = |target − prev| / max(prev, 可视下限) —— 可视下限由调用方按 y 轴可视尺度传入
  *            (floor = y 轴顶值 × _QB_FX_VIS_FLOOR_RATIO), 防 prev≈0 时相对变化爆炸
- *   level  = Δ 分档: <0.5% 静默(0) / <5% Lv.1 / <30% Lv.2 / 其余 Lv.3(阈值常量单点可调);
- *            live=false 或 Δ≈0 一律 0(D2: 零变化静默指零反馈, 左移与数值收敛照常执行) */
+ *   level  = Δ 分档: live 且 target>0 时恒 ≥Lv.1(F1/D1, plan 26-11-14-1313: 生产尾桶是未完成
+ *            桶, 同桶内相邻轮询速率漂移恒 <0.5%, 旧「Δ<0.5% 静默」让稳态流整段静默 —— 下限
+ *            只是把既有视觉预算用起来, Δ 分档上限语义不变: <5% Lv.1 / <30% Lv.2 / 其余 Lv.3);
+ *            真 0(target==0, 零流量)与缺口轨(live=false)维持 Lv.0 静默(D2/A3) */
 const _QB_FX_DELTA_SILENT = 0.005;
 const _QB_FX_LEVEL1_DELTA = 0.05;
 const _QB_FX_LEVEL2_DELTA = 0.30;
 /* 可视下限占 y 轴可视顶值的比例(S1 状态机无装饰消费面, 数值 S2 联调时可调) */
 const _QB_FX_VIS_FLOOR_RATIO = 0.02;
-function _qbFxLevel(delta, live) {
-  if (!live || !(delta >= _QB_FX_DELTA_SILENT)) return 0;
+function _qbFxLevel(delta, live, target) {
+  if (!live) return 0;   // 缺口轨(live=false)静默(D2)
+  if (target != null && !(target > 0)) return 0;   // 真 0(target==0)与异常负值静默(D2/A3)
+  const hasTarget = target != null;   // 生产形态(_qbFxTrackNext/预览拍恒传); 缺参回落旧口径(向后兼容)
+  if (!(delta >= _QB_FX_DELTA_SILENT)) return hasTarget ? 1 : 0;   // F1(D1): 活跃轨(值>0)恒 ≥Lv.1 下限
   if (delta < _QB_FX_LEVEL1_DELTA) return 1;
   if (delta < _QB_FX_LEVEL2_DELTA) return 2;
   return 3;
@@ -650,7 +655,7 @@ function _qbFxTrackNext(prevTrack, target, floor) {
     target,
     shown: prevShown,
     delta,
-    level: _qbFxLevel(delta, true),
+    level: _qbFxLevel(delta, true, target),
     live: true,
   };
 }
@@ -670,8 +675,13 @@ function _qbFxShown(track, p, ease) {
  * 且 clip 放宽到画布右缘, 判定线右侧留白是相位 A「滑入」的可见域, 层序仍先于系列(I6))与
  * _qbDrawFxAnchor(draw 钩子 = 系列之上: 末点菱形锚 + lead 策略从属轨描边加亮), 装饰帧挂在
  * 节拍调度器的 rAF 循环内(无独立循环 —— 调度器每帧提交即重跑钩子, L0/L1 提交帧顺路带出装饰)。
+ * !clip 口径(F5, plan 26-11-14-1313): _qbDrawFx 与 _qbDrawFxAnchor 的 clip 右缘放宽到画布右缘
+ * (rect(L, T, max(W, canvasW-L), H), 同 _qbDrawFxScan 评审 blocker 修复先例 —— 判定线右侧留白
+ * 是环/粒子/菱形锚的可见域, 无轴面内容); 左缘/上缘/下缘不动, 近底由环心上抬钳制与粒子底缘
+ * 镜像反弹承接(P3 拍板), 菱形锚(数据标记)保持真位不钳。
  * 生效条件(I7/§05.6): cfg.on === true(有效值单点 = enabled && !reduce)且该轨 level ≥ 1 ——
- * Δ≈0/零流量/缺口轨零装饰但 L0/L1 照常(D2/I10); N 层独立开关 cfg.neon(I11), T6 四层开关
+ * 真 0(target==0)/缺口轨零装饰但 L0/L1 照常(D2/I10); 值>0 的活跃轨恒 ≥Lv.1(F1/D1, plan
+ * 26-11-14-1313 —— 只是让既有预算被用到, 上限不抬); N 层独立开关 cfg.neon(I11), T6 四层开关
  * cfg.layers.band/particles/scan/grade(逐帧读, 拍内改参下一帧生效), 次区光点 cfg.tail,
  * 三策略 cfg.dual, 密度 cfg.particles, 配色 cfg.palette, 束强度 cfg.impact, 回声行程
  * cfg.echoSpan, 对照档 cfg.tear(spawn 判定帧定型 —— 清单冻结面, 非逐帧)。 */
@@ -1172,6 +1182,20 @@ window.AQB_QB_TRAFFIC = {
      * fxBeatAt(真拍判定帧写入) + fxNow(1s 步进时钟)双依赖, 无真拍过/时钟未起显示 —。 */
     qbFxPeriodS() {
       return (this._qbFxCurPeriodMs() / 1000).toFixed(1);
+    },
+    /* F6 显示口径(plan 26-11-14-1313): 「采样」读 meta.sample_interval_s(B1 只增键, 生效采样
+     * 间隔), 与 meta.interval_s(桶宽)不等时两值「X s · 桶宽 Y s」; 相等或缺失回落现状单值
+     * (qbFxPeriodS = _qbPollMs 实算, 口径不变)。两值面读 raw meta(采样间隔/桶宽都是事实值,
+     * 不吃轮询夹取 —— hour 段窗桶宽 3600s 夹到 600s 就读错值了); beat/轮询派生量仍单点锚
+     * _qbFxCurPeriodMs(interval_s 夹取), 本 computed 只改显示文案不改节律。 */
+    qbFxSampleText() {
+      const s = this.qbCurScope;
+      const d = s ? this[_QB_SCOPES[s].data] : null;
+      const m = d && d.meta;
+      const si = Number(m && m.sample_interval_s);
+      const iv = Number(m && m.interval_s);
+      if (!(si > 0) || !(iv > 0) || Math.abs(si - iv) < 1e-9) return this.qbFxPeriodS + " s";
+      return si.toFixed(1) + " s · 桶宽 " + iv.toFixed(1) + " s";
     },
     qbFxBeatMs() {
       return Math.round(_qbBeatMs(this._qbFxCurPeriodMs()));
@@ -1967,7 +1991,7 @@ window.AQB_QB_TRAFFIC = {
      * 时机 = _qbBeatStart 的尾点摆回之后(粒子原点 = t=0 显示末点像素位, y 由钉档 yMax 线性
      * 换算 —— 与钉住的纵轴刻度逐像素一致, 不依赖 valToPos 时序); 粒子/切片清单确定性伪随机
      * (种子取尾桶时刻) —— 同拍重绘恒同形, 跨拍随数据自然变化。生效条件: cfg.on === true 且
-     * lead 等级 ≥ 1(双轨皆缺口/静默 -> null, L0/L1 照常 —— D2/I10)。 */
+     * lead 等级 ≥ 1(双轨皆缺口/真 0 -> null, L0/L1 照常 —— D2/I10; 值>0 恒 ≥Lv.1 —— F1)。 */
     _qbFxSpawn(u, tl, dx0, needsShift, yMax) {
       const cfg = window.AQB_FX_CFG;
       if (!cfg || cfg.on !== true) return null;
@@ -2031,7 +2055,8 @@ window.AQB_QB_TRAFFIC = {
         cHi = cm + 14;
       }
       const comb = _qbFxComb(_QB_FX_COMB_COUNT[lv] || 3, cLo, cHi, powD, seed, tearMode, g.T, g.T + g.H);
-      // 次区光点资格(每轨: live 且 level ≥ 1 —— Δ≈0/零流量/缺口轨零装饰, I10/D2)
+      // 次区光点资格(每轨: live 且 level ≥ 1 —— 真 0/缺口轨零装饰, I10/D2; 值>0 恒 ≥Lv.1 后
+      // 资格行自动满足, 无需改判据 —— F1 消费面核查结论 26-11-14-1313)
       const tail = [];
       if (tr.up.live && tr.up.level > 0) tail.push("up");
       if (tr.dl.live && tr.dl.level > 0) tail.push("dl");
@@ -2080,9 +2105,12 @@ window.AQB_QB_TRAFFIC = {
       const T = u.bbox.top / px;
       const W = u.bbox.width / px;
       const H = u.bbox.height / px;
+      // F5(plan 26-11-14-1313): clip 右缘放宽到画布右缘(同 _qbDrawFxScan 评审 blocker 修复先例
+      // —— 判定线右侧留白是环/粒子/菱形锚的可见域, 无轴面内容); 左/上/下缘不动。
+      const canvasW = ctx.canvas && ctx.canvas.width ? ctx.canvas.width / px : L + W;
       ctx.beginPath();
-      ctx.rect(L, T, W, H);
-      ctx.clip();   // 装饰不出绘图区(与缺口斜纹同口径)
+      ctx.rect(L, T, Math.max(W, canvasW - L), H);
+      ctx.clip();   // 装饰不出绘图区(右缘放宽到画布右缘 —— F5; 与缺口斜纹同口径仅左/上/下缘)
       const dx = a.needsShift ? (a.lastDx || 0) : 0;
       const tipX = L + W + dx * fx.pxPerT;      // 末点像素 x(随 L0 视口回摆滑动)
       const carry = (dx - fx.dx0) * fx.pxPerT;  // 粒子随末点一起滑动(L0 同步)
@@ -2162,12 +2190,20 @@ window.AQB_QB_TRAFFIC = {
       const sides = _QB_FX_RING_SIDES[fx.lv] || _QB_FX_RING_SIDES[3];
       const ringT = _qbFxRingAt(t, fx.beatMs, fx.rMax);
       // —— 几何环(V2: 多边形扩张环, 边数 = lead 等级 3/6/8; 环心跟随末点; 轨道语义色) ——
+      // 近底/近顶钳制(P3 拍板, F5): 环心 y clamp 进 [T+rMax, T+H-rMax] —— 环完整可见,
+      // 允许与末点轻微分离; 钳的是绘制面, 菱形锚(数据标记)仍走真位。rMax 用 spawn 冻结值
+      // (不用随帧生长的 ringT.r)避免环心在扩张期抖动; 绘图区过矮(上下界反转)退中点。
+      const ringY = (sp) => {
+        const yLo = T + fx.rMax;
+        const yHi = T + H - fx.rMax;
+        return yHi > yLo ? Math.min(Math.max(sp.y, yLo), yHi) : T + H / 2;
+      };
       if (ringT && ringT.r > 0) {
         ctx.lineWidth = 1.5;
         ctx.globalAlpha = ringT.alpha;
         for (const sp of spots) {
           ctx.strokeStyle = sp.color;
-          _qbFxPolyPath(ctx, tipX, sp.y, ringT.r, sides, 0);
+          _qbFxPolyPath(ctx, tipX, ringY(sp), ringT.r, sides, 0);
           ctx.stroke();
         }
       }
@@ -2180,7 +2216,7 @@ window.AQB_QB_TRAFFIC = {
         ctx.shadowBlur = Math.round(blurCap * q);
         ctx.shadowColor = lvColor;
         for (const sp of spots) {
-          _qbFxPolyPath(ctx, tipX, sp.y, ringT.r + 3, sides, 0);
+          _qbFxPolyPath(ctx, tipX, ringY(sp), ringT.r + 3, sides, 0);
           ctx.stroke();
         }
         ctx.shadowBlur = 0;
@@ -2188,16 +2224,20 @@ window.AQB_QB_TRAFFIC = {
       }
       // —— 粒子(V3: 三/四/五边碎片本体轨道语义色, N 外圈描边着 Lv 色 —— 白名单 partOuter;
       //     三阶段: 爆发 ×4.5 / 拖尾减速透明 / 0.55×beat 后零绘制; t=0 首帧最亮与判定线同帧) ——
+      //     近底镜像反弹(P3 拍板, F5): y 越绘图区底缘按 2*(T+H) - y 折回 —— 末点贴底的低流量
+      //     拍粒子不再集体被底缘裁没; 只反弹底缘, 左/上缘维持裁剪(与 clip 口径一致)。
       if (cfg.layers.particles === true) {
+        const yFloor = T + H;
         for (const sp of spots) {
           if (!sp.specs || !(sp.n > 0)) continue;
           const m = Math.min(sp.specs.length, sp.n);
           for (let i = 0; i < m; i++) {
             const ps = _qbFxParticleAt(t, fx.beatMs, fx.burstMs, sp.specs[i], carry);
             if (!ps || !(ps.alpha > 0)) continue;
+            const py = ps.y > yFloor ? 2 * yFloor - ps.y : ps.y;
             ctx.globalAlpha = ps.alpha;
             ctx.fillStyle = sp.color;
-            _qbFxPolyPath(ctx, ps.x, ps.y, sp.specs[i].size, sp.specs[i].sides, ps.rot);
+            _qbFxPolyPath(ctx, ps.x, py, sp.specs[i].size, sp.specs[i].sides, ps.rot);
             ctx.fill();
             if (neon) {   // N 外圈描边(Lv 色, 纯描边不占辉光 blur 预算)
               ctx.globalAlpha = ps.alpha * q;
@@ -2421,8 +2461,11 @@ window.AQB_QB_TRAFFIC = {
       const T = u.bbox.top / px;
       const W = u.bbox.width / px;
       const H = u.bbox.height / px;
+      // F5(plan 26-11-14-1313): clip 右缘放宽到画布右缘(同 _qbDrawFx/_qbDrawFxScan 口径) ——
+      // 末点在绘图区右缘的菱形锚右半不再被切; 锚(数据标记)保持真位, 近底不钳(P3)。
+      const canvasW = ctx.canvas && ctx.canvas.width ? ctx.canvas.width / px : L + W;
       ctx.beginPath();
-      ctx.rect(L, T, W, H);
+      ctx.rect(L, T, Math.max(W, canvasW - L), H);
       ctx.clip();
       const dx = a.needsShift ? (a.lastDx || 0) : 0;
       const tipX = L + W + dx * fx.pxPerT;
@@ -2863,7 +2906,7 @@ window.AQB_QB_TRAFFIC = {
         const target = c.prev + (k === "dl" ? mag : -mag) * Math.max(c.prev, floor);
         c.target = Math.max(0, Math.min(target, yMax));  // 非负 + 不越预览钉住的轴(零裁切零跳轴)
         c.delta = Math.abs(c.target - c.prev) / Math.max(c.prev, floor);
-        c.level = _qbFxLevel(c.delta, true);
+        c.level = _qbFxLevel(c.delta, true, c.target);   // 预览拍与真拍同构(同走 target 参 —— F1)
         if (c.prev !== c.target) moving++;
       }
       if (!moving) {
