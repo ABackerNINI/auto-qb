@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>重启首轮全量基线分批归组: 单条种子 files 取数异常中断该批后续归组 · bug · 计划外问题</title>
+<meta name="issue-slug" content="relocate-assign-new-torrent-batch-abort">
+<meta name="issue-stamp" content="26-11-14-0745">
+<meta name="issue-type" content="bug">
+<meta name="doc-topic" content="relocate-form-aware-gates">
+<meta name="doc-refs" content="memory-bank/plans/26-11-13-0448-plan-relocate-form-aware-gates.html">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="重启首轮全量基线分批归组: 单条种子 files 取数异常中断该批后续归组">
+<meta name="issue-summary" content="_assign_new_torrent 路径对单条种子的 files 取数异常无包裹, 批处理中一条抛错即中断其余种子归组; 真实生产无此注入源(T6 真机验收发现), 属健壮性兜底缺口; 用户拍板入池">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --mark: #161e26;     /* issue 特有: callout 底色 (plan.html 不用) */
+    --warn-bg: #2a2119;  /* issue 特有: 状态徽标底色 */
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 单栏流式版面: 与 plan.html 同一套 .sheet (封顶 1280px, 侧距 clamp(18~44px)); 旧双栏+粘性目录已删 */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+
+  /* 封面 meta 行: issue 特有, DOM 形态别改 —— 状态徽标 <span class="badge"> 被
+     flip_status (W4) 与 check_status_drift 的 BADGE_RE 机读 (k/v div 结构在判据里) */
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px 28px; font-family: var(--mono); font-size: 11.5px; color: var(--faint); border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta-row .item .k { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .meta-row .item .v { font-size: 13.5px; color: var(--dim); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin: 14px 0; font-size: 14px; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-family: var(--mono); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">计划外问题（未修）· bug</div>
+<h1>重启首轮全量基线分批归组: 单条种子 files 取数异常中断该批后续归组</h1>
+<p class="lede">_assign_new_torrent 路径对单条种子的 files 取数异常无包裹, 批处理中一条抛错即中断其余种子归组; 真实生产无此注入源(T6 真机验收发现), 属健壮性兜底缺口; 用户拍板入池</p>
+<div class="meta-row">
+  <div class="item"><div class="k">编号</div><div class="v">26-11-14-0745-bug-relocate-assign-new-torrent-batch-abort</div></div>
+  <div class="item"><div class="k">报告时间</div><div class="v">2026-11-14 07:45</div></div>
+  <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
+  <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+</div>
+
+<section id="s1">
+  <h2><span class="no">§01</span>现象与发现场景</h2>
+  <p>2026-11-14 计划 26-11-13-0448 T6(P4 真机验收)发现: 产品进程重启后首轮全量基线同步把新增种子按批处理, 批内对单条种子调 <code>_assign_new_torrent</code> → 内部 files 取数(经 <code>TorrentRecord.files</code> 惰性缓存, 触发 WebAPI torrents/files 调用)若抛异常, 异常无包裹上抛, <b>该批后续种子的归组全部中断</b>。T6 用 E8 同款进程内注入在真机复现(单条 files 抛错 → 同批其余种子零归组)。真实生产无此注入源(files 调用对在册种子正常返回), 属<b>健壮性兜底缺口</b>而非可达缺陷; 用户拍板(2026-11-14)入池。</p>
+</section>
+
+<section id="s2">
+  <h2><span class="no">§02</span>证据</h2>
+  <p class="hint">贴原文（报错 / 日志 / 命令输出），不转述；附取证时间，让读者自己判断新鲜度。</p>
+<pre><code># 形状(取证 2026-11-14, T6 批工作树; 行号以 grep「_assign_new_torrent」现定位):
+# src/auto_qb/core/modules/grouping_mod.py:121(批处理消费点):
+self._assign_new_torrent(event.payload["hash"], event.payload.get("dry_run", False))
+# :357 def _assign_new_torrent(...) -> None:  # 内部 files 取数无 try/except 包裹
+# T6 真机注入(单条 files 抛错): 同批其余种子零归组, 错误上抛中断批循环。</code></pre>
+</section>
+
+<section id="s3">
+  <h2><span class="no">§03</span>影响面</h2>
+  <table>
+    <tr><th>维度</th><th>结论</th></tr>
+    <tr><td>触发条件</td><td>重启首轮全量基线的批处理中, 某条种子的 files 取数抛异常 —— WebAPI 断连/超时/5xx(长期无人值守运行低概率可达)或异常形状</td></tr>
+    <tr><td>影响范围</td><td>该批其余种子归组中断且<b>运行期不自愈</b>(rid 在批循环前已推进, 失败轮种子已 upsert 进账, 下轮增量/全量重放均不再判 added → 永不补归组; regroup_scope 仅 relocate 建链触发, _handle_save_path_changes 只处理已归组成员) —— 唯一补归组路径 = 本产品进程重启(账本 by_hash 与 rid 均纯内存态, 重启后账本空、rid 起步 0 → 首轮强制全量全判 added 重放; qB 重启不清产品账本, 不是恢复路径); 不丢数据不损账</td></tr>
+    <tr><td>严重度</td><td>中(触发面低概率但真实可达, 后果运行期不自愈、恢复靠重启; 大批量重启场景遇断连会放大)</td></tr>
+  </table>
+</section>
+
+<section id="s4">
+  <h2><span class="no">§04</span>定位锚点</h2>
+  <p class="hint">写「符号名 + grep 关键词 + 当时的行号（标取证时间）」—— 代码会漂移，靠符号与 grep 重新定位，行号只是加速项。</p>
+  <ul>
+    <li><code>src/auto_qb/core/modules/grouping_mod.py:121</code>(取证 2026-11-14 07:45)· 相位单条消费点(批循环在 qbmanager.py:1047-1048 emit matched_added)· grep「_assign_new_torrent」</li>
+    <li><code>src/auto_qb/core/modules/grouping_mod.py:357</code> · <code>_assign_new_torrent</code> 本体(files 取数无包裹)· grep「def _assign_new_torrent」</li>
+    <li><code>src/auto_qb/torrents/store.py:336-352</code>(取证 2026-11-14 07:45)· rid 生命周期块(:349 归零/:352 推进, 推进先于批循环 = 自愈不成立的关键语义)· grep「rid」</li>
+  </ul>
+</section>
+
+<section id="s5">
+  <h2><span class="no">§05</span>根因<span class="opt">（可选）</span></h2>
+  <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
+  <div class="callout">批处理循环对单条种子归组异常无隔离包裹(逐条 try 或整批保护, 取向待认领时裁决); 已排除: T6 进程内注入形态为常态触发 —— 常规运行 files 对在册种子正常返回, 但 WebAPI 断连/超时/5xx 仍是低概率生产可达面(主循环对 APIConnectionError 有专门重连退避通路, 断连若落在 apply_sync 之后、批中段, files 调用即抛)。</div>
+</section>
+
+<section id="s6">
+  <h2><span class="no">§06</span>建议修法<span class="opt">（可选）</span></h2>
+  <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
+  <p>候选: 相位单条消费点(grouping_mod.py:121, 批循环在 qbmanager.py:1047-1048 emit matched_added)逐条 try/except 包裹 + 计数 WARNING, 失败种子入<b>显式待归组补偿清单</b>(或如实声明仅本产品进程重启才补 —— rid 语义下「留待下轮」「qB 重启补」均不成立, 不可写此承诺); 或 _assign_new_torrent 本体对 files 取数兜底(缺清单按不可归组处理, 与 R2/R3 保守口径一致)。认领时先复验锚点与 T6 real-baseline §04 记录。</p>
+</section>
+
+<section id="s7">
+  <h2><span class="no">§07</span>状态变更日志</h2>
+  <ul>
+    <li>2026-11-14 07:45 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+  </ul>
+  <h3>复验</h3>
+  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <h3>修复后补充</h3>
+  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+</section>
+
+<footer>
+  26-11-14-0745-bug-relocate-assign-new-torrent-batch-abort.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+</footer>
+
+</div>
+</body>
+</html>
