@@ -44,8 +44,21 @@
        加一档要同时改 JS 清单与模板两处。容器(.qb-tabs/.qb-seg)仍留在原地: 三皮肤 CSS 的直接
        子选择器按这两个类名命中(见 tpl/ctl-bits.html 头注)。 -->
   <div class="qb-tabs">
+    <!-- 键帽(计划 26-11-14-0041 S6/W6 后半): 窗口档位前后切换的 [ / ] 两条 —— 挂点就是档位
+         药丸本体(本组件只在流量形态正文块 qbTrafficActive 内挂载, 这里再显式带上该条件,
+         非流量页签激活时连键帽节点都不存在, 不留残留)。串走 $root.kbKeycapOf(id 引用注册表
+         traffic-win-prev / traffic-win-next, I1 不手抄), 括号由 .aq-kbd 伪元素统一包;
+         版式 = 药丸正上方、统计栏上边框之外的边带(共享 CSS .qb-tabs > .aq-kbd, 绝对定位
+         不进布局流 => 药丸宽度与统计栏各行位置不因键位有无/长短变化, I3)。那 6px 外边距容
+         不下 9.5px 行盒, 盒顶探进图表画布底缘约 2.5px —— 该条是 uPlot 坐标轴文字之外的空白
+         带(四皮肤实测), 不压折线与刻度。前后语义靠左右分列表达:
+         prev 贴左缘 / next 贴右缘(标记类 qb-kbd-prev / qb-kbd-next, 单条绑定时也不会互串)。 -->
+    <kbd v-if="$root.qbTrafficActive && $root.kbKeycapOf('traffic-win-prev')"
+         class="aq-kbd qb-kbd-prev">{{ $root.kbKeycapOf('traffic-win-prev') }}</kbd>
     <aq-seg :items="$root.qbWindowTabs" :value="$root.qbCurWindow"
             :on-pick="$root.qbSetWindow"></aq-seg>
+    <kbd v-if="$root.qbTrafficActive && $root.kbKeycapOf('traffic-win-next')"
+         class="aq-kbd qb-kbd-next">{{ $root.kbKeycapOf('traffic-win-next') }}</kbd>
   </div>
   <div class="qb-tools">
     <span class="qb-tools-label">纵轴</span>

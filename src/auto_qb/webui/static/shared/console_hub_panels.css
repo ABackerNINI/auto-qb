@@ -350,7 +350,7 @@
 
 /* ---- A · qB 流量图 · 窗口档位(.qb-tabs; 三皮肤同款胶囊分段器) ----
  * 挂点胶水(.qb-statctl > .qb-tabs 的不收缩 + 紧凑档)是布局上下文, 仍留各皮肤 views.css。 */
-.qb-tabs { display: inline-flex; gap: 2px; padding: 2px; border-radius: 999px;
+.qb-tabs { position: relative; display: inline-flex; gap: 2px; padding: 2px; border-radius: 999px;
   background: var(--bg-sunken); border: 1px solid var(--border); }
 .qb-tabs button { padding: 3px 12px; border: 0; border-radius: 999px; background: transparent;
   color: var(--fg-muted); font-size: 12px; cursor: pointer;
@@ -630,6 +630,25 @@ body.kbd-persist .sb-kbd-sw {
 .aq-kbd-host.sb-top > .aq-kbd { position: absolute; top: calc(50% - 16px); right: 2px; font-size: 9.5px; }
 .aq-kbd-host.sb-top.sb-left > .aq-kbd { left: 2px; right: auto; }
 .aq-kbd-host.sb-side > .aq-kbd { position: absolute; top: calc(50% - 5.5px); left: calc(100% + 6px); right: auto; }
+
+/* ---- 流量图窗口档位 / 设置页保存钮的键帽落位(计划 26-11-14-0041 S6/W6 后半) ----
+ * 两处都没有「药丸下缘」可贴, 仍用绝对定位角标(不进布局流, I3), 各自挑不出文字的内边带:
+ * 档位药丸(.qb-tabs): 键帽落**药丸正上方、统计栏上边框之外**的边带 —— 图下统计栏
+ *   .hist-summary 的上外边距只有 6px, 容不下 9.5px 行盒; 徽标盒顶因此探进图表画布底缘约
+ *   2.5px。实测四皮肤该条是 uPlot 坐标轴文字**之外的空白带**(刻度文字位置更高), 不压折线、
+ *   不压刻度; 盒底与统计栏 1px 上边框相切, 也不压读数行。
+ *   横向按前后语义分列: prev 贴药丸左缘(.qb-kbd-prev) / next 贴右缘(.qb-kbd-next) ——
+ *   两个标记类各管一边, 只有一条绑定时也不会左右互串(单用 :first-child 会在缺一条时把
+ *   另一条拉伸成 left+right 双锚)。药丸本体仍是 .qb-tabs 一个根(多根片段结构守阵不动),
+ *   定位上下文加在上面的 .qb-tabs 规则里。
+ * 设置页保存钮(.hb-actbar): 固定操作条(.hb-actbar)自身有 10px 上内边距带, 按钮垂直居中,
+ *   键帽 9.5px 贴在按钮上缘、右对齐 => 整个落在操作条的玻璃底内, **不悬到正文上方**, 因此
+ *   设置输入框内按 Ctrl+S 显影时不会遮挡输入行内容(该条目 inputSafe, 输入态仍生效)。
+ * 显隐仍只由共享 .aq-kbd 的 opacity/visibility 两态规则切, 本组只定版式, 不是第二套显隐机制。 */
+.qb-tabs > .aq-kbd { position: absolute; top: auto; bottom: calc(100% + 7px); font-size: 9.5px; }
+.qb-tabs > .qb-kbd-prev { left: 2px; right: auto; }
+.qb-tabs > .qb-kbd-next { left: auto; right: 2px; }
+.hb-actbar .aq-kbd-host > .aq-kbd { top: -10px; bottom: auto; right: 0; font-size: 9.5px; }
 
 /* ---- 置灰行键帽随行(计划 26-11-12-0344 S2 增量 / 26-11-14-0041 S2 形态同步) ----
  * dyn gate 置灰(ctx_menu.js ctxRenderItem 的 reannounceMenuGate 不满足 -> item.gated)时,

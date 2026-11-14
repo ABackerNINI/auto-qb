@@ -509,7 +509,7 @@
               </template>
             </div>
           </div>
-
+          <!-- 键帽(计划 26-11-14-0041 S6/W6 后半): settings-save, 串走 kbKeycapOf 单点; 角标落操作条内边距带(inputSafe 显影不遮输入行), 绝对定位不改几何(I3)。 -->
           <div class="hb-actbar">
             <span class="ab-st">
               <span class="hb-led" :class="cfgDirty ? 'warn' : 'ok'"></span>
@@ -517,8 +517,8 @@
             </span>
             <span class="ab-r">
               <button class="hb-btn ghost" @click="cfgDiscard()">放弃改动</button>
-              <button class="hb-btn primary" :disabled="cfg.saving || !cfgDirty" @click="cfgSave()">
-                {{ cfg.saving ? '保存中…' : '保存并应用' }}
+              <button class="hb-btn primary aq-kbd-host" :disabled="cfg.saving || !cfgDirty" @click="cfgSave()">
+                {{ cfg.saving ? '保存中…' : '保存并应用' }}<kbd v-if="kbKeycapOf('settings-save')" class="aq-kbd">{{ kbKeycapOf('settings-save') }}</kbd>
               </button>
             </span>
           </div>

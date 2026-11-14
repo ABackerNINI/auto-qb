@@ -10,8 +10,10 @@ kbDisplayName), 设置键位面板(tpl/settings-detail.html)/ Shift+/ 帮助浮�
 共用同一条显示规则(纯 CSS, 取数链一行不动); W5 把顶栏 / 页签 / 状态栏三处无预留空间的落点
 改绝对定位角标(不进布局流 => 控件宽度不因键位变化), S6 把同一手法扩到顶栏视图页签 / 设置 /
 搜索框与状态栏完整统计 / 历史 / qB 流量 / 限速四入口(按控件形状分「下方 / 框内 inset / 栏顶
-空带 / 侧位空带」四种贴法, 仍是同一条绝对定位手法); 令牌纪律 I3: 只引用既有令牌
-(--fg-dim/--fg-muted/--font-mono), 零新增令牌, 四皮肤令牌名集不动(parity 守阵继续兜住)。
+空带 / 侧位空带」四种贴法, 仍是同一条绝对定位手法); S6 后半(本文件末条)把表 B 余下 3 条接完 ——
+流量图窗口档位药丸上的 [ / ](条件绑定 qbTrafficActive)与设置页固定操作条里的保存键帽; 令牌纪律
+I3: 只引用既有令牌(--fg-dim/--fg-muted/--font-mono), 零新增令牌, 四皮肤令牌名集不动(parity 守阵
+继续兜住)。
 
 ## 测试计划
 
@@ -59,6 +61,15 @@ kbDisplayName), 设置键位面板(tpl/settings-detail.html)/ Shift+/ 帮助浮�
   栏顶空带), 计数按新形态重定并反漂移; 帮助浮层入口保持原语义(Shift+/ 直连 _kbToggleKbHelp; 前序件为文字钮
   造的模板转发别名随入口删除, 无调用方 = 死代码) + 反手抄锚扩 statusbar.html(kbd 必带 v-if,
   键位串字面量禁入)
+- test_keycap_static_mounts_drawer_traffic_window_and_settings_save(计划 S6 后半): 表 B 余下 3 条 ——
+  流量图窗口档位药丸(.qb-tabs)上的 traffic-win-prev / traffic-win-next 两枚角标(串走
+  $root.kbKeycapOf 单点, 两处都带 qbTrafficActive 条件绑定 => 非流量页签激活时节点不存在、零
+  残留; 标记类 qb-kbd-prev / qb-kbd-next 保证单条绑定不互串; 定位上下文在 .qb-tabs 本体, 不新增
+  挂点类以免打破多根片段类名守阵) + 设置页固定操作条保存钮 settings-save(串走 kbKeycapOf 单点,
+  角标落在操作条自身内边距带、不悬正文 => inputSafe 条目显影不遮输入行); 版式锚 = 共享 CSS
+  两条落位规则; 空位核查(super-seeding / share-limits 有 key 映射、默认空串经 ctxKeycapOf 留白,
+  invert-select 保持零挂点); 表外 3 处 <kbd>(帮助浮层 / 设置键位面板 / settings.html 局部说明)
+  零改动、不带 .aq-kbd
 """
 
 from __future__ import annotations
@@ -274,6 +285,21 @@ def test_aq_kbd_css_four_skin_isomorphic() -> None:
     assert ".aq-kbd-host.sb-side > .aq-kbd { position: absolute; top: calc(50% - 5.5px); left: calc(100% + 6px); right: auto; }" in css, (
         "console_hub_panels.css 缺状态栏侧位空带键帽规则(S6: 完整统计右邻 .sb-spacer 弹性空白)"
     )
+    # S6 后半(计划 26-11-14-0041 W6): 流量图窗口档位药丸与设置页保存钮各一条落位规则 —— 仍是
+    # 绝对定位角标(只定版式, 显隐走上面那条两态规则), 定位上下文加在 .qb-tabs 本体(不新增挂点
+    # 类: <aq-qb-ctl> 两根的类名被结构守阵钉死为 qb-tabs/qb-tools)。
+    assert re.search(r"\.qb-tabs \{[^}]*position: relative", css,
+                     re.S), ("console_hub_panels.css 的 .qb-tabs 缺 position: relative —— 窗口档位键帽角标定位上下文丢失(S6 后半)")
+    assert ".qb-tabs > .aq-kbd { position: absolute; top: auto; bottom: calc(100% + 7px); font-size: 9.5px; }" in css, (
+        "console_hub_panels.css 缺窗口档位键帽规则(S6 后半: 药丸正上方、统计栏上边框之外的边带)"
+    )
+    assert ".qb-tabs > .qb-kbd-prev { left: 2px; right: auto; }" in css and (
+        ".qb-tabs > .qb-kbd-next { left: auto; right: 2px; }" in css
+    ), ("console_hub_panels.css 缺窗口档位键帽左右分列规则(S6 后半: 前后语义贴药丸左右缘, "
+        "单条绑定时另一条不得被 left+right 双锚拉伸)")
+    assert ".hb-actbar .aq-kbd-host > .aq-kbd { top: -10px; bottom: auto; right: 0; font-size: 9.5px; }" in css, (
+        "console_hub_panels.css 缺设置页保存钮键帽规则(S6 后半: 落操作条内边距带, 不悬正文、不遮输入行)"
+    )
     assert "body.kbd-persist .sb-kbd-sw {" in css, ("常驻「开」态高亮须由 body.kbd-persist 纯 CSS 驱动(S5/D4: 零 JS 态、零重绘)")
 
 
@@ -372,7 +398,9 @@ def test_keycap_static_mounts_topbar_and_drawer_tabs() -> None:
 
     # 反手抄锚: 被接线模板零手抄键位串 —— kbd 一律带 v-if(现算空串判定), 键位显示串字面量
     # (「Alt + 」带空格形态即 kbDisplayName 输出)不得出现在模板里
-    for name in ("topbar.html", "drawer.html", "ctl-bits.html", "statusbar.html"):
+    for name in (
+        "topbar.html", "drawer.html", "ctl-bits.html", "statusbar.html", "drawer-head.html", "settings-detail.html"
+    ):
         text = open(os.path.join(SHARED, "tpl", name), encoding="utf-8").read()
         assert re.search(r"<kbd(?![^>]*v-if=)", text) is None, (f"tpl/{name} 出现无 v-if 的静态 <kbd>(键位串必须现算, 禁手抄)")
         assert "Alt + " not in text, (f"tpl/{name} 出现手抄键位显示串字面量「Alt + …」 —— 一律走 kbShortcutDisplay 单点(I1)")
@@ -461,3 +489,64 @@ def test_keycap_static_mount_statusbar_entry() -> None:
     # 版式锚: 复用 .sb-btn(与「完整统计」同款) + .sb-kbd-sw 角标挂点(共享 CSS)
     assert re.search(r'<button ref="kbdSw" type="button" class="sb-btn sb-kbd-sw"',
                      sb), ("statusbar.html 键位开关未用 .sb-btn 既有样式类(四皮肤零新增按钮样式的落点)")
+
+
+def test_keycap_static_mounts_drawer_traffic_window_and_settings_save() -> None:
+    """S6 后半(计划 26-11-14-0041 W6): 流量窗口档位 [ / ] + 设置页保存 Ctrl+S + 空位/表外核查
+
+    流量图窗口档位药丸(.qb-tabs, <aq-qb-ctl> 的第一根)上挂 traffic-win-prev / traffic-win-next
+    两枚角标: 串走 $root.kbKeycapOf(id 引用注册表, I1 不手抄), 两处都带 qbTrafficActive 门
+    (条件绑定 —— 非流量页签激活时节点根本不存在, 不留残留); 标记类 qb-kbd-prev / qb-kbd-next
+    让单条绑定时另一条不被 left+right 双锚拉伸。设置页固定操作条保存钮挂 settings-save(同一条
+    取数链; 该条目 inputSafe, 角标必须落在操作条自身内边距带里, 显影不遮输入行)。
+    另核 §06 表 C: 两条菜单空位(super-seeding / share-limits)有 key 映射、默认空串经 ctxKeycapOf
+    留白(无空括号), invert-select 保持零挂点; 表外 3 处 <kbd>(帮助浮层 / 设置键位面板 /
+    settings.html 局部说明)零改动、不带 .aq-kbd。
+    """
+    head = open(os.path.join(SHARED, "tpl", "drawer-head.html"), encoding="utf-8").read()
+    m = re.search(r'<div class="qb-tabs">(.*?)\n  </div>', head, re.S)
+    assert m, "drawer-head.html 缺 .qb-tabs 档位块(S6 后半键帽挂点被搬走? 同步本守阵)"
+    block = m.group(1)
+    for sid, marker in (("traffic-win-prev", "qb-kbd-prev"), ("traffic-win-next", "qb-kbd-next")):
+        needle = (
+            '<kbd v-if="$root.qbTrafficActive && $root.kbKeycapOf(\'%s\')"\n'
+            '         class="aq-kbd %s">{{ $root.kbKeycapOf(\'%s\') }}</kbd>' % (sid, marker, sid)
+        )
+        assert needle in block, (
+            f"drawer-head.html 的 .qb-tabs 缺 {sid} 键帽节点 / 未走 $root.kbKeycapOf 单点 / 未带 "
+            "qbTrafficActive 条件绑定(S6 后半: 非流量页签激活时零残留)"
+        )
+    assert head.count("<kbd") == 2, (f"drawer-head.html 键帽数量漂移(S6 后半: 恰 2 处 = 窗口档位前 / 后; 实测 {head.count('<kbd')} 处)")
+    # 定位上下文在 .qb-tabs 本体(不新增挂点类: <aq-qb-ctl> 两根类名被结构守阵钉死)
+    assert 'class="qb-tabs"' in head and "aq-kbd-host" not in head, (
+        "drawer-head.html 的 .qb-tabs 不得加 .aq-kbd-host 类(多根片段类名守阵) —— 定位上下文走共享 CSS 的 .qb-tabs 本体"
+    )
+
+    sd = open(os.path.join(SHARED, "tpl", "settings-detail.html"), encoding="utf-8").read()
+    assert (
+        '<button class="hb-btn primary aq-kbd-host" :disabled="cfg.saving || !cfgDirty" @click="cfgSave()">' in sd
+    ), "settings-detail.html 保存钮缺 .aq-kbd-host 角标挂点(S6 后半: 键帽不进布局流)"
+    assert "<kbd v-if=\"kbKeycapOf('settings-save')\" class=\"aq-kbd\">{{ kbKeycapOf('settings-save') }}</kbd>" in sd, (
+        "settings-detail.html 保存钮缺 settings-save 键帽节点或未走 kbKeycapOf 单点(I1 改绑即时跟随)"
+    )
+    # 表外 <kbd> 零改动: 设置键位面板(走 kbDisplayOf)不带 .aq-kbd; 帮助浮层 / settings.html 同理
+    assert '<kbd v-if="kbDisplayOf(it)">{{ kbDisplayOf(it) }}</kbd>' in sd, (
+        "settings-detail.html 键位面板键帽锚漂移(表外 <kbd> 应保持原样, 不带 .aq-kbd — G5/D10)"
+    )
+    for name in ("popovers.html", "settings.html"):
+        text = open(os.path.join(SHARED, "tpl", name), encoding="utf-8").read()
+        assert "<kbd" in text, f"tpl/{name} 表外 <kbd> 不见了(帮助浮层 / hub 局部说明保持原样)"
+        assert "aq-kbd" not in text, (f"tpl/{name} 出现 .aq-kbd —— 表外 <kbd> 不纳入统一显影(G5/D10), 保持原样")
+
+    # §06 表 C 空位: 两条菜单空位有 key 映射(默认空串 -> ctxKeycapOf 空 -> 槽内不渲染 kbd = 留白,
+    # 绑键后自动出现); invert-select 无稳定挂点, 保持零挂点(不许造挂点)
+    ctx = read_shared("ctx_menu.js")
+    for key in ("super-seeding", "share-limits"):
+        assert 'key: "%s"' % key in ctx, (f"ctx_menu.js 缺空位 {key} 的 key 映射(S6: 恒渲染槽内默认留白、绑键后自动出现)")
+    assert "if (kbd) item.kbd = kbd;" in ctx, ("ctx_menu.js 键帽字段产出条件漂移(S6: 空串不产出字段 -> 槽内留白, 不出现空括号)")
+    assert "invert-select" not in ctx, ("ctx_menu.js 长出 invert-select 挂点 —— 该条无稳定 UI 挂点(计划 §06 表 C 裁定跳过), 不得造挂点")
+    # 表 C 已落地项复核: clear-filters 由 S6 前半接线(空位宿主恒渲染, 槽内 kbd 才 v-if)
+    topbar = open(os.path.join(SHARED, "tpl", "topbar.html"), encoding="utf-8").read()
+    assert "<kbd v-if=\"kbKeycapOf('clear-filters')\" class=\"aq-kbd\">{{ kbKeycapOf('clear-filters') }}</kbd>" in topbar, (
+        "topbar.html 清除筛选空位键帽锚漂移(S6 前半已落地的表 C 项被删?)"
+    )
