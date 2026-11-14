@@ -102,6 +102,10 @@ class FuseModule(BaseModule):
         self._drop_missing(entries, store)
         tag = cfg.fuse_tag
         self._warn_tag_reuse(store, tag)
+        # 搬迁窗口让路(issue 26-11-14-1744): 登记单点在 RelocateModule(计划 26-10-18-1604
+        # §2.3/P4), 与 grouping 缺文件扫描 / ops_skip 跳检闸门同一份登记 —— 窗口内 dlspeed>0
+        # 是搬迁相位机的正常回声(成员被按住/恢复拉流), 不作保险丝的异常证据
+        relocating = getattr(store, "relocating_hashes", None) or set()
         now = self._clock.now()
         to_arm: List[str] = []
         to_adopt: List[str] = []
@@ -113,9 +117,13 @@ class FuseModule(BaseModule):
             dlspeed = int(rec.dlspeed or 0)
             ent = entries.get(h)
             if ent is None:
-                self._scan_unmanaged(entries, h, rec, dl_limit, dlspeed, cfg, now, to_arm, to_adopt, to_pause, to_tag)
+                self._scan_unmanaged(
+                    entries, h, rec, dl_limit, dlspeed, cfg, now, relocating, to_arm, to_adopt, to_pause, to_tag
+                )
                 continue
-            self._advance(entries, h, rec, ent, dl_limit, dlspeed, cfg, now, store, to_arm, to_pause, to_tag)
+            self._advance(
+                entries, h, rec, ent, dl_limit, dlspeed, cfg, now, store, relocating, to_arm, to_pause, to_tag
+            )
 
         if to_adopt:
             # 零写: 只按证据重建条目(§3.7); 日志标注 adopt 便于与真武装区分
@@ -147,7 +155,7 @@ class FuseModule(BaseModule):
 
     def _scan_unmanaged(
         self, entries: Dict[str, dict], h: str, rec: Any, dl_limit: int, dlspeed: int, cfg: Any, now: float,
-        to_arm: List[str], to_adopt: List[str], to_pause: List[str], to_tag: List[str]
+        relocating: Any, to_arm: List[str], to_adopt: List[str], to_pause: List[str], to_tag: List[str]
     ) -> None:
         """无 state 条目的种子: 建条目(武装/adopt)或仅监控(§3.7 无 monitor_only 状态)"""
         complete = _is_complete(rec)
@@ -169,6 +177,11 @@ class FuseModule(BaseModule):
             to_adopt.append(h)
             return
         if complete and dlspeed > 0:
+            if h in relocating:
+                # 搬迁窗口让路(issue 26-11-14-1744): 窗口内的拉流不计连击、不暂停,
+                # 否则 relocate 按住/刚恢复的成员会被保险丝打回; 窗口解除后连击从零重新累计
+                self._streak.pop(h, None)
+                return
             # 已有非零限速(D07: 不写、只监控): 连击达标才暂停, 此时才建 triggered 条目
             streak = self._streak.get(h, 0) + 1
             if streak >= cfg.confirm_ticks:
@@ -184,7 +197,7 @@ class FuseModule(BaseModule):
 
     def _advance(
         self, entries: Dict[str, dict], h: str, rec: Any, ent: dict, dl_limit: int, dlspeed: int, cfg: Any, now: float,
-        store: Any, to_arm: List[str], to_pause: List[str], to_tag: List[str]
+        store: Any, relocating: Any, to_arm: List[str], to_pause: List[str], to_tag: List[str]
     ) -> None:
         """已有条目按状态推进(armed / triggered / released)"""
         status = ent.get("status")
@@ -216,6 +229,11 @@ class FuseModule(BaseModule):
             else:
                 ent["rearm"] = 0  # 哨兵已在场(写成功回流), 补齐计数清零
             if dlspeed > 0:
+                if h in relocating:
+                    # 搬迁窗口让路(同 _scan_unmanaged): 窗口内的拉流不作异常证据,
+                    # 连击清零 —— 窗口解除后从零重新累计, 恢复后的短暂拉流不会立刻升级
+                    ent["confirm_count"] = 0
+                    return
                 ent["confirm_count"] = int(ent.get("confirm_count") or 0) + 1
                 if int(ent["confirm_count"]) >= int(cfg.confirm_ticks):
                     ent["status"] = STATUS_TRIGGERED
@@ -230,6 +248,10 @@ class FuseModule(BaseModule):
             if ent.get("tagged") and cfg.fuse_tag not in rec.tags_set:
                 ent["tagged"] = False
                 logger.warning(f"fuse: {h[:8]} 标签 {cfg.fuse_tag} 已被外部移除, 不自动重加(triggered 仍由 state+暂停保证)")
+            # 搬迁窗口让路(同上): 窗口内不补暂停, relocate 的恢复动作不被打回;
+            # 窗口解除后仍 dlspeed>0 才照常补暂停
+            if h in relocating:
+                return
             # 被外部启动(或暂停尚未回流)时再暂停一次; own_write 未回流期不重复下发(幂等)
             if dlspeed > 0 and not _is_paused(rec) and not store.own_write_pending(h, group=False):
                 to_pause.append(h)
