@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="relocate-form-aware-gates">
 <meta name="doc-refs" content="memory-bank/plans/26-11-13-0448-plan-relocate-form-aware-gates.html">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="PlanMixin._file_map except 支直接格式化 rec.log_repr, 非 TorrentRecord 替身 AttributeError 从 except 内漏出">
 <meta name="issue-summary" content="取数异常兜底分支自身可抛 AttributeError(替身/异常形状缺 log_repr 属性时); 生产 TorrentRecord 形状不受影响; T3 实施期发现, 用户拍板入池">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-14-0401-bug-plan-file-map-except-attr-leak</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-14 04:01</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
@@ -148,11 +148,13 @@ def _file_map(...):
   <h2><span class="no">§07</span>状态变更日志</h2>
   <ul>
     <li>2026-11-14 04:01 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-14 — 状态 Open → In Progress（kb.status）</li>
+    <li>2026-11-14 — 状态 In Progress → Done（kb.status）</li>
+</ul>
   <h3>复验</h3>
-  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <p>复验: 2026-11-14 仍复现 —— <code>src/auto_qb/core/modules/relocate_plan.py</code> except 支仍直接格式化 <code>rec.log_repr</code>(grep「log_repr」定位, 当时的行号 315)。</p>
   <h3>修复后补充</h3>
-  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  <p>实际修法(与建议修法一致, 取 <code>getattr(rec, "log_repr", None) or repr(rec)</code> 防御取值): <code>relocate_plan.py</code> <code>PlanMixin._file_map</code> except 支不再直接访问 <code>rec.log_repr</code>, 替身/异常形状缺属性时退化 <code>repr(rec)</code>, 兜底路径恒保守返回 <code>{}</code>。验证: 新增 <code>tests/test_relocate_exec_run.py::test_file_map_stub_missing_log_repr_still_conservative</code>(替身缺 <code>log_repr</code> 且 files 取数抛错 → 兜底回 {} 且告警照出, 修复前该用例会从 except 内漏 AttributeError); 整文件 48 passed(2026-11-14 实测, <code>commands run test.one</code>)。</p>
 </section>
 
 <footer>

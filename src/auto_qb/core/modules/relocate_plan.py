@@ -312,7 +312,9 @@ class PlanMixin:
         try:
             files = rec.files(client)
         except Exception as e:  # noqa: BLE001 - 预检边界: 读不到文件表不进判定, 不漏真相
-            logger.warning(f"relocate | 读取文件列表失败({rec.log_repr}): {e}")
+            # 兜底分支自身不得再抛(issue 26-11-14-0401): 替身/异常形状可能缺 log_repr
+            repr_label = getattr(rec, "log_repr", None) or repr(rec)
+            logger.warning(f"relocate | 读取文件列表失败({repr_label}): {e}")
             return {}
         return {utils.path_normalize(f.name): f.size for f in files}
 

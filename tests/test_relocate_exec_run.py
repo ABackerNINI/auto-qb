@@ -65,6 +65,9 @@
 
 覆盖率第三轮 T2b 补测(26-11-05):
 - test_buckets_group_members_missing_from_by_hash_dropped: 组成员全不在 by_hash -> 该组跳过不进预检(151->146 relocate_plan)
+### 文件表兜底分支自身不漏异常(issue 26-11-14-0401)
+- test_file_map_stub_missing_log_repr_still_conservative: 替身缺 log_repr 属性且 files 取数抛错 ->
+  except 支防御取值退化 repr(rec), 兜底仍保守回 {} 不漏 AttributeError
 ### 崩溃窗口孤儿幂等续建与回滚全量(issue 26-11-08-1608, 修法 = 幂等探测 + plan 全量回滚)
 - test_build_links_orphan_rebuild_idempotent_file_links: 盘上孤儿链接(已指向目标, 账上无)续建
   幂等跳过不再 FileExistsError, 账推进到完成; 同 job 经 _stage_link 生产续建入口再跑零副作用且账面无重复(黄金法则 1)
@@ -1321,6 +1324,14 @@ def test_native_syscall_faces(monkeypatch):
 
     with capture_logs("auto_qb.core.modules.relocate_mod") as cap:
         assert RelocateModule._file_map(types.SimpleNamespace(files=None, log_repr="HZ"), object()) == {}
+    assert any("读取文件列表失败" in m for m in cap.messages), cap.messages
+
+
+def test_file_map_stub_missing_log_repr_still_conservative():
+    """issue 26-11-14-0401: 替身缺 log_repr 属性时 except 支自身不再漏 AttributeError, 兜底仍保守回 {}"""
+    stub = types.SimpleNamespace(files=None)  # files 调用即 TypeError 进 except; 无 log_repr 属性
+    with capture_logs("auto_qb.core.modules.relocate_mod") as cap:
+        assert RelocateModule._file_map(stub, object()) == {}
     assert any("读取文件列表失败" in m for m in cap.messages), cap.messages
 
 
