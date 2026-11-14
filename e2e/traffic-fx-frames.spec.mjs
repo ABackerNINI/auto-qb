@@ -57,27 +57,46 @@ installRouteCleanup(test);   // 本文件全部用例收尾时卸载全部 route
  * 值恒定 -> L1 静默(needsTail=false), 拍只剩 L0 视口左移, 边界断言不被数值收敛干扰。
  * B 用 interval_s=30(轮询 30s 一拍, 断言窗内无真拍来抢预览)且 base 固定(数据静止)。
  *
- * C(裁剪面像素探针, F5/plan 26-11-14-1313, A6 的真机面): 预览拍逐帧扫画布右缘带 ——
- *   · 右缘裁切: 环/粒子/菱形锚的墨量必须出现在绘图区右缘之外的画布留白带(x > R)。
- *     旧 clip = 绘图区矩形时该带恒透明, 探针即红; 扫描束/光带/霓虹经面板真手势关掉隔离
- *     (右缘带里剩下的墨只来自 F5 放宽的三类装饰), 复习 :2319 束体宽 clip 先例口径。
- *   · 近底环完整: 数据造「dl 顶格抬 yMax + up 贴底小值」, up 轨环心上抬钳制
- *     (P3: clamp 进 [T+rMax, T+H-rMax])+ 右缘放宽联合可见 —— 近底带(x > R, y 贴 T+H)有墨。
- *   · 轴标区零墨: clip 下缘未放宽 —— x > R 且 y > T+H 恒透明(uPlot 轴标只在绘图区下方
- *     x ∈ [L, R] 域), 钉住「右缘放宽不外溢到轴标区」。
- * 采样走预览拍(B 同款理由: 无真拍抢拍、窗口/轴冻结、装饰范围由 I9 常量决定)。
+ * S3a 复核(plan 26-11-14-1313, B5 批): F3 栅格 floor+1(尾桶恒「进行中桶」)与 F1 恒 >=Lv.1
+ * 落地后逐条对照本文件的判据面 —— 结论:
+ *   · A 的 L0 判据面(边界 <=1px / 拍内平滑 / 单调不回跳 / dx0>0 / 拍内数据冻结 / xsLen 恒定)
+ *     与 F3 相容且更稳: 60 桶整倍窗 n 恒 60 -> rewin 判据 st.n !== n 恒 false, 每拍必走 roll
+ *     路径 —— 旧 ceil 栅格 n 方波翻转(瞬时多格跳)的形态在本桩下不可再回潮;
+ *   · 「L1 静默」指数值收敛(prev==target, needsTail=false), 口径不变; F1 后值>0 的滚窗拍
+ *     另带 Lv.1 装饰(S7b 电池口径: anim.fx 恒在场), 装饰不触碰视口/数据断言面;
+ *   · 【按新语义改写】拍段切分: F1 后恒定正值滚窗拍的收敛帧衔接**次区相位**(tail 光点窗,
+ *     min(period-beat,2000) 恰填满拍间) -> anim 全程为真, 旧的「anim 连续段 = 拍段」分组
+ *     把整段采样并成一段、done 条件(3 段后 anim 归位)永不触发 —— 实测 anim 真 30s 连续。
+ *     拍段改按**相位**切: 连续 impact 相位帧 = 一个主区拍段(tail 段的视口恒收敛真位, 恰是
+ *     下一拍摆回的旧位, 边界连续性判据经 tail 帧对照依然成立)。零流量拍(A3)真 0 -> fx
+ *     null -> 无 tail 相位, 新旧切分等价;
+ *   · 尾桶语义变化(未完成桶 -> 恒「进行中桶」): advancing 桩恒给尾桶观测, 与 F4 活尾延伸
+ *     后的生产形态同构, 尾值恒定断言不受影响。
+ * A1/A3/A5 三条专项用例(计划 §01 验收表)与重写的裁剪面用例(C)追加在本文件尾部, 各自注明
+ * 判据与桩面。
+ *
+ * C(裁剪面机制探针, F5/plan 26-11-14-1313, A6 的真机面; B5 改渲染对齐记账): 原版在 rAF
+ *   渲染间读右缘带像素 —— 本环境实测渲染管线落定后的画布读不到装饰墨(B5 取证: 装饰墨只在
+ *   渲染管线内可观测, rAF 渲染间读数恒 0 假阴性), 像素探针不可落地。改为包住 drawAxes 钩子
+ *   + ctx.rect 记账(只读运行时包装, 与 vm 内部时序探针同类), 直接钉 F5 改的那件事本身:
+ *   fx 段 clip 实参 = rect(L, T, max(W, canvasW-L), H) —— 右缘放宽到画布右缘、下缘不放宽。
+ *   与电池 G0 的 clip 实参记账同契约, 在真浏览器真渲染路径上复核; 近底环心钳制(P3)与粒子
+ *   镜像由电池 G11/G12 钉。仍走预览拍(窗口/轴冻结, 几何不漂移)。
  */
 
 const N = 60;
 
-/** 造一帧 payload; advancing 时 base 由调用方按请求序推进一格 */
-function makePayload(base, interval) {
+/** 造一帧 payload; advancing 时 base 由调用方按请求序推进一格; vals 可改两轨速率值
+ * (A3 用 { up: 0, dl: 0 } 造真 0 稳态流 —— F1 下真 0 仍 Lv.0 静默的对照面) */
+function makePayload(base, interval, vals) {
+  const up = vals && vals.up !== undefined ? vals.up : 1000;
+  const dl = vals && vals.dl !== undefined ? vals.dl : 2000;
   const points = new Array(N).fill(null);
   const totals = new Array(N).fill(null);
   for (let i = 0; i < N; i++) {
     const t = base + i * interval;
-    points[i] = { t, dl: 2000, up: 1000 };
-    totals[i] = { t, dl: 2000, up: 1000 };
+    points[i] = { t, dl, up };
+    totals[i] = { t, dl, up };
   }
   return {
     points,
@@ -100,7 +119,8 @@ async function stubFlags(page) {
   });
 }
 
-/** A 用: 每次请求恰推进一格(计数器解耦墙钟), interval_s=2 -> 轮询 2s/拍 800ms */
+/** A 用: 每次请求恰推进一格(计数器解耦墙钟), interval_s=2 -> 轮询 2s/拍 800ms。
+ * 值恒定 -> L1 静默(needsTail=false), 拍只剩 L0 视口左移, 边界断言不被数值收敛干扰。 */
 async function stubTrafficAdvancing(page) {
   const interval = 2;
   const b0 = Math.floor(Date.now() / 1000 / interval) * interval - (N - 1) * interval;
@@ -110,6 +130,7 @@ async function stubTrafficAdvancing(page) {
   return interval;
 }
 
+
 /** B 用: base 固定(数据静止), interval_s=30 -> 断言窗内无真拍 */
 async function stubTrafficStill(page) {
   const interval = 30;
@@ -118,9 +139,34 @@ async function stubTrafficStill(page) {
     route.fulfill({ json: makePayload(b0, interval) }));
 }
 
+/** A3 用: 每次请求恰推进一格 + 两轨速率恒 0(真 0 稳态流 —— A3 的「零流量但采样活跃」形态) */
+async function stubTrafficAdvancingZero(page) {
+  const interval = 2;
+  const b0 = Math.floor(Date.now() / 1000 / interval) * interval - (N - 1) * interval;
+  let calls = 0;
+  await page.route('**/api/traffic/qb/torrent/*', (route) =>
+    route.fulfill({ json: makePayload(b0 + (calls++) * interval, interval, { up: 0, dl: 0 }) }));
+  return interval;
+}
+
+/** A5 停滞态用: base 固定 + 尾部 GAP_N 桶无观测(qB 断连后的真缺口形态, interval_s=30 静图)。
+ * 全 0 尾游程不经 F4 活尾延伸(e2e 直接桩 API 帧, 后端延伸面由 B2 电池钉) —— 前端看到的
+ * 就是「链末桶之后整段无观测」的诚实缺口。 */
+const GAP_N = 6;
+async function stubTrafficGapTail(page) {
+  const interval = 30;
+  const b0 = Math.floor(Date.now() / 1000 / interval) * interval - (N - 1) * interval;
+  const payload = makePayload(b0, interval);
+  for (let i = N - GAP_N; i < N; i++) {
+    payload.points[i] = null;
+    payload.totals[i] = null;
+  }
+  await page.route('**/api/traffic/qb/torrent/*', (route) => route.fulfill({ json: payload }));
+}
+
 /** C 用: base 固定 + up 贴底小值(dl 顶格抬 yMax -> up 落绘图区底部 ~2% 处, 近底环探针前提)。
- * up=4200 = yMax(210000) x 2%: 预览 mag=0.425 时 target=4200x(1-0.425)=2415 > 0(真 0 不触发,
- * Lv 保持 >=1), 环心上抬钳制 [T+rMax, T+H-rMax] 与底缘镜像反弹都有实料可验。 */
+ * up=4200 = yMax(210000) x 2%: 环心上抬钳制 [T+rMax, T+H-rMax] 与底缘镜像反弹都有实料可验;
+ * 预览假 Δ(impact 0.425 档)target=4200x(1-0.425)=2415 > 0(真 0 不触发)。 */
 async function stubTrafficBottom(page) {
   const interval = 30;
   const b0 = Math.floor(Date.now() / 1000 / interval) * interval - (N - 1) * interval;
@@ -144,7 +190,8 @@ async function openTorrentTraffic(page) {
   await page.dblclick('.torrent-row >> nth=0', { force: true });
   const drawer = page.locator('.drawer-dock > .drawer');
   await expect(drawer).toBeVisible({ timeout: 5_000 });
-  await drawer.locator('.drawer-tabs button', { hasText: /^流量$/ }).click();
+  // 页签文本含 Alt+5 键帽(f081dd53 起), 定位用「流量 」前缀(traffic-gap-zones 同款)
+  await drawer.locator('.drawer-tabs button', { hasText: /^流量 / }).click();
   await expect(drawer.locator('.qb-chart-host canvas')).toBeVisible({ timeout: 15_000 });
   return drawer;
 }
@@ -157,8 +204,9 @@ async function openTorrentTraffic(page) {
  * 已在, 新周期 = interval_s x 1000(A 档 2s) —— 拍在 2s 节奏上出, 用例不用陪等首轮 30s。
  */
 async function rearmTrafficPoll(page, drawer) {
-  await drawer.locator('.drawer-tabs button', { hasText: /^常规$/ }).click();
-  await drawer.locator('.drawer-tabs button', { hasText: /^流量$/ }).click();
+  // 页签文本含键帽徽标(f081dd53 起 Alt+1..5), 定位一律带尾随空格(traffic-gap-zones 同款)
+  await drawer.locator('.drawer-tabs button', { hasText: /^常规 / }).click();
+  await drawer.locator('.drawer-tabs button', { hasText: /^流量 / }).click();
   await expect(drawer.locator('.qb-chart-host canvas')).toBeVisible({ timeout: 15_000 });
   await expect.poll(() => readInst(page, 'vm._qbPollMs("torrent")'), {
     message: '轮询周期未重排到 interval_s 档(数据未落袋时的 fallback 30s 还在)', timeout: 15_000,
@@ -185,6 +233,38 @@ async function readSnapshot(page) {
   return snap;
 }
 
+/** 帧序列按「主区拍段」分组: 连续 impact 相位帧为一段(F1 后滚窗拍之间常驻次区相位 tail,
+ * anim 全程为真 —— 拍段只能按相位切, 见文件头 S3a 复核注)。A/A1/A3 复用。 */
+function beatRuns(frames) {
+  const runs = [];
+  let cur = null;
+  for (const f of frames) {
+    if (f.anim && f.phase !== 'tail') {
+      if (!cur) { cur = []; runs.push(cur); }
+      cur.push(f);
+    } else {
+      cur = null;
+    }
+  }
+  return runs;
+}
+
+/** 语义色现值(--today-up/--today-down)的 computed rgb(traffic-fx-anchor 同款, A5 用) */
+async function readTokenColors(page) {
+  return page.evaluate(`(() => {
+    const probe = document.createElement('span');
+    probe.style.display = 'none';
+    document.body.appendChild(probe);
+    const read = (name) => {
+      probe.style.color = 'var(' + name + ')';
+      return getComputedStyle(probe).color;
+    };
+    const out = { up: read('--today-up'), down: read('--today-down') };
+    probe.remove();
+    return out;
+  })()`);
+}
+
 /* ============================================================================ */
 
 test.describe('节拍动效 · 左移连续性(G2/R1 帧级探针)', () => {
@@ -198,8 +278,9 @@ test.describe('节拍动效 · 左移连续性(G2/R1 帧级探针)', () => {
       const drawer = await openTorrentTraffic(page);
       await rearmTrafficPoll(page, drawer);
 
-      /* 页面侧 rAF 采样器: 记录每帧的 x 尺/数据界值/拍状态; 第 3 拍起点出现且动画归位即停
-       * (三个拍段 = 三条边界, 每条边界都有前值可对照)。零固定睡等 —— Node 侧只 poll 旗标。 */
+      /* 页面侧 rAF 采样器: 记录每帧的 x 尺/数据界值/拍状态(含相位 —— F1 后拍间被次区相位
+       * tail 填满, 拍段按 impact 相位切, 见文件头 S3a 复核注); 第 3 个主区拍段出现且离开
+       * impact 相位即停(三个拍段 = 三条边界, 每条边界都有前值可对照)。零固定睡等。 */
       await page.evaluate(`(() => {
         const vm = ${INST};
         window.__fs = { frames: [], starts: 0, prevAnim: false, done: false };
@@ -214,6 +295,7 @@ test.describe('节拍动效 · 左移连续性(G2/R1 帧级探针)', () => {
             fs.frames.push({
               t: performance.now(),
               anim: !!a,
+              phase: a ? a.phase : null,
               dx0: a ? a.dx0 : null,
               animEnd: a && a.tl ? a.tl.animEndMs : null,
               min: u.scales.x.min,
@@ -224,9 +306,10 @@ test.describe('节拍动效 · 左移连续性(G2/R1 帧级探针)', () => {
               tailUp: u.data[1] ? u.data[1][n - 1] : null,
               tailDl: u.data[2] ? u.data[2][n - 1] : null,
             });
-            if (a && !fs.prevAnim) fs.starts++;
-            fs.prevAnim = !!a;
-            if (fs.starts >= 3 && !a) fs.done = true;
+            const inImpact = !!(a && a.phase !== 'tail');
+            if (inImpact && !fs.prevAnim) fs.starts++;
+            fs.prevAnim = inImpact;
+            if (fs.starts >= 3 && !inImpact) fs.done = true;
           }
           requestAnimationFrame(tick);
         };
@@ -238,17 +321,9 @@ test.describe('节拍动效 · 左移连续性(G2/R1 帧级探针)', () => {
       }).toBe(true);
       const frames = await page.evaluate(() => window.__fs.frames);
 
-      /* 连续 anim=true 的帧为一段拍; 段数 >= 3 */
-      const runs = [];
-      let cur = null;
-      for (const f of frames) {
-        if (f.anim) {
-          if (!cur) { cur = []; runs.push(cur); }
-          cur.push(f);
-        } else {
-          cur = null;
-        }
-      }
+      /* 拍段 = 连续 impact 相位帧(F1 后主区拍之间常驻次区相位(tail 光点窗), anim 全程为真
+       * —— 拍段只能按相位切; 见文件头 S3a 复核注); 段数 >= 3 */
+      const runs = beatRuns(frames);
       expect(runs.length, '采样窗内应记录到 >= 3 个拍段(轮询推进的窗口滚动拍)').toBeGreaterThanOrEqual(3);
 
       for (let i = 0; i < runs.length; i++) {
@@ -468,116 +543,397 @@ test.describe('节拍动效 · 预览拍帧级探针(§05.9 面板拍 + G5 背�
   }
 });
 
-test.describe('节拍动效 · 裁剪面像素探针(F5/A6, plan 26-11-14-1313)', () => {
+test.describe('节拍动效 · 裁剪面机制探针(F5/A6, plan 26-11-14-1313; B5 渲染对齐记账)', () => {
   installRuntimeErrorGuard(test);
 
   for (const skin of SKINS) {
-    test(`[${skin}] 预览拍环/粒子/菱形锚墨量越过绘图区右缘, 近底环在右缘带完整可见, 轴标区零墨 @fast`, async ({ page }) => {
+    test(`[${skin}] 预览拍 fx/锚段 clip 实参 = 右缘放宽到画布右缘且下缘不放宽; 预览逐帧出装饰 @fast`, async ({ page }) => {
+      /* B5 改版说明(量具面对齐本环境): 原版在 rAF 渲染间读右缘带像素 —— 本环境(Windows
+       * 无 testbed, headless 软件光栅)实测渲染管线落定后的画布读不到装饰墨(B5 取证: 装饰
+       * 墨只在渲染管线内可观测, rAF 渲染间读数恒 0 假阴性; 真滚窗拍/预览两条路径同样),
+       * 像素探针在此不可落地。改为**渲染对齐记账**: 包住图的 drawAxes 钩子 + ctx.rect 记
+       * 账(运行时包装, 只读不改生产逻辑 —— 与 vm 内部时序探针同类), 直接钉 F5 改的那一
+       * 件事本身: fx 段 clip 实参 = rect(L, T, max(W, canvasW-L), H) —— 右缘放宽到画布右
+       * 缘(width >= W 且右沿 = 画布右缘)、下缘不放宽(height = H)。与电池 G0 的 clip 实
+       * 参记账同契约, 在真浏览器真渲染路径上复核。预览的假 Δ 让每帧都有提交重绘, 记账
+       * 逐渲染可读; 近底环心钳制(P3)与粒子镜像由电池 G11/G12 钉。 */
       await stubFlags(page);
       await stubTrafficBottom(page);
       await openApp(page, skin);
       const drawer = await openTorrentTraffic(page);
 
-      /* 开面板 -> 展开高级 -> 真手势关掉光带/扫描束/霓虹三层(隔离右缘带的墨源: 剩下的墨
-       * 只来自环/粒子/菱形锚三类 —— 扫描束/光带本就墨在右缘带, 不关则探针分不清谁画的) */
       await drawer.locator('.qb-chart-host').click({ button: 'right' });
       const panel = page.locator('.fx-panel');
       await expect(panel).toBeVisible({ timeout: 5_000 });
-      await panel.locator('.fx-adv summary').click();
-      for (const name of ['光带层', '扫描束层', '霓虹元素层']) {
-        const box = panel.locator('.fx-row', { hasText: name }).locator('input[type="checkbox"]');
-        if (await box.isChecked()) await box.click();
-      }
-      await expect.poll(() => readInst(page,
-        'window.AQB_FX_CFG && window.AQB_FX_CFG.layers && window.AQB_FX_CFG.layers.band === false'
-        + ' && window.AQB_FX_CFG.layers.scan === false && window.AQB_FX_CFG.neon === false'), {
-        message: '光带/扫描束/霓虹三层关闭必须贯通 AQB_FX_CFG(右缘带墨源隔离前提)', timeout: 5_000,
-      }).toBe(true);
 
-      /* 装右缘带扫描器(页面 rAF, B 同款纪律): 每帧扫 x ∈ [R+2, min(R+40, 画布右缘-1)] 一条
-       * 竖带, 分三段数 alpha>0 墨量 —— 绘图区段(margin)/近底段(bottom, y 贴 T+H)/轴标段
-       * (below, y > T+H)。预览期间窗口/轴冻结, 几何不漂移。 */
+      /* 渲染对齐记账器: 包 drawAxes 钩子, 记录每次渲染的 fx 段 clip 实参(_qbDrawFx/_qbDrawFxAnchor
+       * 各一次 rect)与 anim 态; bbox 每帧现读。 */
       await page.evaluate(`(() => {
         const vm = ${INST};
         const u = vm._qbCharts && vm._qbCharts.torrent;
         if (!u || !u.ctx || !u.bbox) throw new Error('unbuilt');
+        window.__cp = { frames: [], sawPreview: false, done: false };
+        const orig = u.hooks.drawAxes[0];
+        const kc = u.ctx;
+        const oRect = kc.rect.bind(kc);
+        kc.rect = function (x, y, w, h) {
+          const st = u._qbBeat;
+          if (st && st.anim && st.anim.fx && window.__cp.rects) {
+            window.__cp.rects.push([x, y, w, h]);
+          }
+          return oRect(x, y, w, h);
+        };
+        u.hooks.drawAxes[0] = function (uu) {
+          window.__cp.rects = [];
+          const r = orig.apply(this, arguments);
+          try {
+            const cp = window.__cp;
+            if (cp.done) return r;
+            const a = uu._qbBeat && uu._qbBeat.anim;
+            const isPreview = !!(a && a.preview !== undefined);
+            const px = (typeof uPlot !== 'undefined' && uPlot.pxRatio) || 1;
+            cp.frames.push({
+              isPreview,
+              hasFx: !!(a && a.fx),
+              lv: a && a.fx ? a.fx.lv : 0,
+              clip: cp.rects.slice(),
+              L: uu.bbox.left / px, T: uu.bbox.top / px,
+              W: uu.bbox.width / px, H: uu.bbox.height / px,
+              cw: uu.ctx.canvas.width / px,
+            });
+            if (isPreview) cp.sawPreview = true;
+            if (cp.sawPreview && !a) cp.done = true;
+          } catch (e) { /* 记账异常不干扰渲染 */ }
+          return r;
+        };
+      })()`);
+      if (await page.evaluate(() => !window.__cp)) {
+        throw new Error('记账器未装上(画布/几何取不到)');
+      }
+
+      await panel.locator('button', { hasText: '预览一拍' }).click();
+      await expect.poll(() => readInst(page, 'window.__cp === undefined ? false : window.__cp.done === true'), {
+        message: '预览拍未在预算内收场(裁剪记账采样窗; 超时=预览链路断了或假 Δ 零变化)',
+        timeout: 15_000,
+      }).toBe(true);
+      const frames = await page.evaluate(() => window.__cp.frames);
+      const previewFrames = frames.filter((f) => f.isPreview && f.hasFx);
+      expect(previewFrames.length, '预览渲染必须有带 fx 的采样帧(F5 记账要逐渲染核对 clip 实参)')
+        .toBeGreaterThanOrEqual(3);
+
+      /* F5 机制钉: 每个 fx 渲染的 clip 实参 = rect(L, T, max(W, canvasW-L), H):
+       *   · width = max(W, canvasW-L) 且右沿 = 画布右缘 —— 右缘放宽在位(F5 回潮 = width 恰
+       *     W / 右沿 = 绘图区右缘, 即红);
+       *   · height = H(下缘不放宽 —— 轴标区零墨的机制面);
+       *   · x/y = 绘图区左上(不外溢到 y 轴/顶栏)。 */
+      /* 冲击窗(<=0.55xbeat)内的渲染才落 clip(环/粒子/切片的绘制段); 0.55xbeat 后冲击类
+       * 零绘制是 I9 口径(fx 在场而零 rect 属正常帧, 不入断言域) */
+      const clipped = previewFrames.filter((f) => f.clip.length > 0);
+      expect(clipped.length, '冲击窗内的预览渲染必须 >= 3 帧(装饰路径真的在画)').toBeGreaterThanOrEqual(3);
+      for (let i = 0; i < clipped.length; i++) {
+        const f = clipped[i];
+        for (const [x, y, w, h] of f.clip) {
+          expect(Math.abs(x - f.L), `第 ${i} 渲染 clip 左沿 ${x} 必须 = 绘图区左沿 ${f.L}`).toBeLessThanOrEqual(1);
+          expect(Math.abs(y - f.T), `第 ${i} 渲染 clip 上沿 ${y} 必须 = 绘图区上沿 ${f.T}`).toBeLessThanOrEqual(1);
+          expect(w, `第 ${i} 渲染 clip 宽 ${w} 必须 = max(W=${f.W}, canvasW-L=${f.cw - f.L})`
+            + '(F5 右缘放宽到画布右缘)').toBeGreaterThanOrEqual(f.W - 1);
+          expect(Math.abs(w - Math.max(f.W, f.cw - f.L)), `第 ${i} 渲染 clip 宽 ${w} 必须恰 = `
+            + `max(W, canvasW-L) = ${Math.max(f.W, f.cw - f.L)}`).toBeLessThanOrEqual(1);
+          expect(Math.abs(x + w - f.cw), `第 ${i} 渲染 clip 右沿 ${x + w} 必须 = 画布右缘 ${f.cw}`
+            + '(右缘留白是装饰可见域 —— F5)').toBeLessThanOrEqual(1);
+          expect(Math.abs(h - f.H), `第 ${i} 渲染 clip 高 ${h} 必须 = 绘图区高 ${f.H}`
+            + '(下缘未放宽 —— 轴标区零墨机制面)').toBeLessThanOrEqual(1);
+        }
+      }
+    });
+  }
+});
+
+test.describe('节拍动效 · A1 稳态流每拍 Lv.1 反馈(F1 等级门的调度器观测面, plan 26-11-14-1313)', () => {
+  installRuntimeErrorGuard(test);
+
+  for (const skin of SKINS) {
+    test(`[${skin}] 恒定正值稳态流: 每个滚窗拍 anim.fx 恒在场(lv>=1), 真值零改写 @fast`, async ({ page }) => {
+      /* A1 量法口径(计划 §01: 「拍窗内右缘装饰带像素量显著高于拍间基线」)在本环境的落点
+       * 说明: 真滚窗拍的渲染管线落定后, 画布在渲染间读不到装饰墨(B5 取证 —— headless
+       * 软件光栅), 像素强度面不可落地; 现落点 = 本用例的调度器在场断言(稳态流(delta≈0
+       * 且值>0)下每个滚窗拍 anim.fx 恒在场且 lv>=1 —— S7b 电池口径的真机面, 等级门回潮
+       * 即 fx 整段缺席)+ 电池 spawn/clip 面(F1e2/S7b/G0), 与计划量法「像素量 >> 基线」
+       * 的偏差记 S3b 回写。另钉尾点零改写(装饰不触碰真值面)。 */
+      await stubFlags(page);
+      await stubTrafficAdvancing(page);
+      await openApp(page, skin);
+      const drawer = await openTorrentTraffic(page);
+      await rearmTrafficPoll(page, drawer);
+
+      /* 页面侧 rAF 采样器(A 同款拍段计数): 每帧记 anim 相位/fx 在场与等级/尾值。
+       * 恒定值下 L1 零提交(needsTail=false), 拍 = L0 位移 + Lv.1 装饰 spawn(S7b 口径)。 */
+      await page.evaluate(`(() => {
+        const vm = ${INST};
+        const u = vm._qbCharts && vm._qbCharts.torrent;
+        if (!u || !u.ctx || !u.bbox) throw new Error('unbuilt');
+        const px = (typeof uPlot !== 'undefined' && uPlot.pxRatio) || 1;
+        window.__a1 = { frames: [], starts: 0, prevImpact: false, done: false };
+        const tick = () => {
+          const s1 = window.__a1;
+          if (s1.done) return;
+          const u2 = vm._qbCharts && vm._qbCharts.torrent;
+          if (u2 && u2.ctx && u2.data && u2.data.length) {
+            const a = u2._qbBeat && u2._qbBeat.anim;
+            const xs = u2.data[0];
+            const n = xs.length;
+            s1.frames.push({
+              anim: !!a,
+              phase: a ? a.phase : null,
+              fxLv: a && a.fx ? a.fx.lv : 0,
+              tailUp: u2.data[1] ? u2.data[1][n - 1] : null,
+              tailDl: u2.data[2] ? u2.data[2][n - 1] : null,
+            });
+            const inImpact = !!(a && a.phase !== 'tail');
+            if (inImpact && !s1.prevImpact) s1.starts++;
+            s1.prevImpact = inImpact;
+            if (s1.starts >= 3 && !inImpact) s1.done = true;
+          }
+          requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+      })()`);
+      await expect.poll(() => readInst(page, 'window.__a1 === undefined ? false : window.__a1.done === true'), {
+        message: '三个拍段未在预算内采满(轮询 2s 一拍, 三拍约 7s; 超时=轮询/节拍链路断了)',
+        timeout: 30_000,
+      }).toBe(true);
+      const frames = await page.evaluate(() => window.__a1.frames);
+      const runs = beatRuns(frames);
+      expect(runs.length, '采样窗内应记录到 >= 3 个拍段(滚窗拍)').toBeGreaterThanOrEqual(3);
+
+      /* A1 本体(调度器面): 每个滚窗拍至少一帧 anim.fx 在场且 lv>=1 —— 稳态流(delta≈0 且
+       * 值>0)每拍出 Lv.1 反馈(F1 下限); 等级门回潮(恒 Lv.0 -> spawn null)即整段缺席。 */
+      for (let i = 0; i < runs.length; i++) {
+        const lvMax = Math.max(...runs[i].map((f) => f.fxLv));
+        expect(lvMax, `第 ${i + 1} 拍 anim.fx 最大等级 ${lvMax} 必须 >= 1(A1: 稳态流每拍出 Lv.1`
+          + '反馈 —— F1 等级门回潮整段静默即缺席)').toBeGreaterThanOrEqual(1);
+      }
+
+      /* 真值面零污染(I4): 恒定数据零收敛, 尾值逐帧恒真值(装饰/插值不写尾桶) */
+      const f0 = frames[0];
+      for (const f of frames) {
+        expect(f.tailUp, '上传尾值逐帧恒定(装饰不触碰真值面)').toBe(f0.tailUp);
+        expect(f.tailDl, '下载尾值逐帧恒定').toBe(f0.tailDl);
+      }
+      expect(f0.tailUp, '稳态流尾值应为正值(值>0 前提)').toBeGreaterThan(0);
+    });
+  }
+});
+
+test.describe('节拍动效 · A3 零流量(F1 真 0 静默 + 环境层不静默, plan 26-11-14-1313)', () => {
+  installRuntimeErrorGuard(test);
+
+  for (const skin of SKINS) {
+    test(`[${skin}] 值恒 0 滚窗: L0 平滑左移照常 + anim.fx 恒 null(扫描/粒子静默)+ 菱形旋转仍在 @fast`, async ({ page }) => {
+      await stubFlags(page);
+      await stubTrafficAdvancingZero(page);
+      await openApp(page, skin);
+      const drawer = await openTorrentTraffic(page);
+      await rearmTrafficPoll(page, drawer);
+
+      /* 页面侧 rAF 采样器(A/锚 spec 量具合体, 全部只读): 每帧记 anim 相位/dx0/fx 在场/
+       * x 尺/菱形 transform。零流量滚窗拍: L0 照常起拍(窗口每拍推进一格), 但
+       * 真 0 轨 level 0 -> _qbFxLead null -> spawn null -> 零装饰(§05.6/D2 口径, S4-a 电池
+       * 「双轨真 0 零装饰」的真机面); DOM 常驻菱形是 CSS 合成器动画, 不吃 canvas 装饰门
+       * —— 旋转照走(A3: 环境层不静默, B4 电池真 0 轨仍显形的 e2e 面)。 */
+      await page.evaluate(`(() => {
+        const vm = ${INST};
+        const u = vm._qbCharts && vm._qbCharts.torrent;
+        if (!u || !u.ctx || !u.bbox) throw new Error('unbuilt');
+        window.__z3 = { frames: [], mats: new Set(), starts: 0, prevAnim: false, done: false };
+        const tick = () => {
+          const s = window.__z3;
+          if (s.done) return;
+          const u2 = vm._qbCharts && vm._qbCharts.torrent;
+          if (u2 && u2.ctx && u2.data && u2.data.length) {
+            const a = u2._qbBeat && u2._qbBeat.anim;
+            const xs = u2.data[0];
+            const el = u2._qbFxAnchors && u2._qbFxAnchors.up;
+            if (el && el.isConnected) s.mats.add(getComputedStyle(el).transform);
+            s.frames.push({
+              anim: !!a,
+              phase: a ? a.phase : null,
+              fx: !!(a && a.fx),
+              dx0: a ? a.dx0 : null,
+              min: u2.scales.x.min,
+              max: u2.scales.x.max,
+              w: u2.bbox.width,
+              dpr: (typeof uPlot !== 'undefined' && uPlot.pxRatio) || 1,
+              xsLen: xs.length,
+            });
+            if (a && !s.prevAnim) s.starts++;
+            s.prevAnim = !!a;
+            if (s.starts >= 2 && !a) s.done = true;
+          }
+          requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+      })()`);
+      await expect.poll(() => readInst(page, 'window.__z3 === undefined ? false : window.__z3.done === true'), {
+        message: '两个零流量拍段未在预算内采满(轮询 2s 一拍; 超时=轮询/节拍链路断了)',
+        timeout: 30_000,
+      }).toBe(true);
+      const frames = await page.evaluate(() => window.__z3.frames);
+      const runs = beatRuns(frames);
+      expect(runs.length, '采样窗内应记录到 >= 2 个拍段(零流量滚窗拍照常起)').toBeGreaterThanOrEqual(2);
+
+      /* A3 本体 1: L0 平滑左移照常 —— 每拍 dx0 > 0 且视口平滑滑入一格、逐帧单调不回跳
+       * (A 用例同款判据的轻量版: 零流量不改数据刷新语义) */
+      for (let i = 0; i < runs.length; i++) {
+        const run = runs[i];
+        const idx0 = frames.indexOf(run[0]);
+        expect(idx0, '拍段前必须有前帧(边界对照值)').toBeGreaterThanOrEqual(1);
+        const pxPerUnit = (run[0].w / run[0].dpr) / (run[0].max - run[0].min);
+        const cellPx = (run[0].w / run[0].dpr) / run[0].xsLen;
+        const glidePx = (run[run.length - 1].min - run[0].min) * pxPerUnit;
+        expect(run[0].dx0, `第 ${i + 1} 拍 dx0 必须为正(零流量也滚窗)`).toBeGreaterThan(0);
+        expect(glidePx, `第 ${i + 1} 拍视口行程 ${glidePx.toFixed(2)}px 应约一格(>= ${(cellPx * 0.5).toFixed(2)}px)`
+          + ' —— 零流量下 L0 instant 化即红').toBeGreaterThanOrEqual(cellPx * 0.5);
+        expect(run.length, `第 ${i + 1} 拍应有 >= 3 个采样帧(平滑过渡经多帧推进)`).toBeGreaterThanOrEqual(3);
+        for (let j = 1; j < run.length; j++) {
+          expect(run[j].min, `第 ${i + 1} 拍第 ${j} 帧视口单调(不回跳)`).toBeGreaterThanOrEqual(run[j - 1].min - 1e-6);
+        }
+      }
+
+      /* A3 本体 2: 扫描/粒子静默(F1 真 0 面) —— 每个滚窗拍 anim.fx 恒 null(真 0 -> level 0
+       * -> _qbFxLead null -> spawn null; 与 A1 的「值>0 恒在场」成对) */
+      for (const f of runs.flat()) {
+        expect(f.fx, '零流量滚窗拍 anim.fx 必须恒 null(真 0 静默 —— 装饰回潮即红)').toBe(false);
+      }
+
+      /* (B5 评审: 原本体 3「右缘带墨量恒 0」像素断言删除 —— 同量具按本批取证在渲染间
+       * 恒读 0, 属死断言; 真 0 静默的真正语义由本体 2 的 anim.fx 恒 null 承载, 像素局限
+       * 记 S3b 回写。) */
+
+      /* A3 本体 4: 菱形旋转仍在(环境层不静默) —— 采样窗内 transform >= 2 个不同值
+       * (锚 spec 同款判据; DOM 层不吃真 0 静默门) */
+      const matCount = await page.evaluate(() => window.__z3.mats.size);
+      expect(matCount, `采样窗内菱形 transform 应 >= 2 个不同值(实测 ${matCount}) —— `
+        + '零流量下常驻菱形停转即红(A3: 菱形旋转仍在)').toBeGreaterThanOrEqual(2);
+    });
+  }
+});
+
+test.describe('节拍动效 · A5 曲线终点落判定线/真缺口诚实断线(F4 活尾延伸的 e2e 显示面, plan 26-11-14-1313)', () => {
+  installRuntimeErrorGuard(test);
+
+  for (const skin of SKINS) {
+    test(`[${skin}] 活跃态(尾桶有观测): 两轨曲线墨达判定线 x≈R; 停滞态(尾 6 桶无观测): 判定线右侧零曲线墨且断点恰在链末桶 @fast`, async ({ page }) => {
+      await stubFlags(page);
+      await stubTrafficStill(page);
+      await openApp(page, skin);
+      const drawer = await openTorrentTraffic(page);
+
+      /* 数据落袋(尾桶有观测)且图静止(恒定数据零变化拍零 rAF —— S12 电池口径, 静图探针前提)。
+       * 活跃态 payload = 全 60 桶有观测, 与 F4 活尾延伸后的生产形态同构(尾桶恒有观测);
+       * B2 电池已钉后端延伸/停滞不延伸两态, 本用例补前端显示面。 */
+      await expect.poll(() => readInst(page,
+        'vm._qbCharts && vm._qbCharts.torrent && vm._qbCharts.torrent.data && vm._qbCharts.torrent.data[1]'
+        + ' ? vm._qbCharts.torrent.data[1][59] : null'), {
+        message: '活跃态数据未落袋(尾桶读不到)', timeout: 15_000,
+      }).toBe(1000);
+
+      const tokens = await readTokenColors(page);
+
+      /* 曲线墨探针: 逐列右->左扫语义色墨(x ∈ [L, R], y ∈ [T, T+H]), 记最右含墨列。判据只用
+       * 「最右墨柱位置」, 不预设尺度亚像素; 只认曲线描边色(--today-up/down 实测 rgb, 容差
+       * 40 全通道合计) —— 静图上语义色墨 = 曲线本体, 网格/轴标灰阶不计数, 零装饰在场。 */
+      const scan = async () => page.evaluate(`((rawCols) => {
+        const parse = (s) => s.match(/\\d+/g).slice(0, 3).map(Number);
+        const cols = { up: parse(rawCols.up), dl: parse(rawCols.down) };
+        const vm = ${INST};
+        const u = vm._qbCharts && vm._qbCharts.torrent;
+        if (!u || !u.ctx || !u.bbox) return { error: 'unbuilt' };
         const px = (typeof uPlot !== 'undefined' && uPlot.pxRatio) || 1;
         const L = u.bbox.left / px;
         const T = u.bbox.top / px;
         const W = u.bbox.width / px;
         const H = u.bbox.height / px;
         const R = L + W;
-        const canvasW = u.ctx.canvas.width / px;
-        if (!(canvasW - R >= 8)) throw new Error('绘图区右缘画布留白 < 8px(布局前提变了), 探针无立足带');
-        window.__cp = { frames: [], done: false, sawAnim: false, R, T, H, px };
-        const tick = () => {
-          const cp = window.__cp;
-          if (cp.done) return;
-          const u2 = vm._qbCharts && vm._qbCharts.torrent;
-          if (u2 && u2.ctx && u2.data && u2.data.length) {
-            const a = u2._qbBeat && u2._qbBeat.anim;
-            const x0d = Math.round((cp.R + 2) * cp.px);
-            const wD = Math.round((Math.min(cp.R + 40, u2.ctx.canvas.width / cp.px - 1) - cp.R - 2) * cp.px);
-            const strip = u2.ctx.getImageData(x0d, 0, Math.max(1, wD), u2.ctx.canvas.height).data;
-            const yHd = Math.round((cp.T + cp.H) * cp.px);
-            const yBd = Math.round((cp.T + cp.H - 58) * cp.px);
-            let marginInk = 0;
-            let bottomInk = 0;
-            let belowInk = 0;
-            for (let dy = Math.round((cp.T + 2) * cp.px); dy < strip.height; dy++) {
-              let ink = 0;
-              for (let dx2 = 0; dx2 < strip.width; dx2++) {
-                if (strip[(dy * strip.width + dx2) * 4 + 3] > 0) ink++;
-              }
-              if (dy < yHd) {
-                marginInk += ink;
-                if (dy >= yBd) bottomInk += ink;
-              } else if (dy > yHd + Math.round(2 * cp.px)) {
-                belowInk += ink;
+        const xs = u.data[0];
+        const n = xs.length;
+        const cellPx = W / (n - 1);
+        const x0d = Math.round(L * px);
+        const x1d = Math.round(R * px);
+        const y0d = Math.round(T * px);
+        const y1d = Math.round((T + H) * px);
+        const img = u.ctx.getImageData(x0d, y0d, x1d - x0d, y1d - y0d).data;
+        const wPx = x1d - x0d;
+        const out = {};
+        for (const k of ['up', 'dl']) {
+          const c = cols[k];
+          let maxInkDx = -1;
+          for (let dx2 = wPx - 1; dx2 >= 0 && maxInkDx < 0; dx2--) {
+            for (let dy = 0; dy < y1d - y0d; dy++) {
+              const o = (dy * wPx + dx2) * 4;
+              if (img[o + 3] > 0
+                && Math.abs(img[o] - c[0]) + Math.abs(img[o + 1] - c[1]) + Math.abs(img[o + 2] - c[2]) <= 40) {
+                maxInkDx = dx2;
+                break;
               }
             }
-            cp.frames.push({
-              anim: !!a,
-              isPreview: !!(a && a.preview !== undefined),
-              marginInk, bottomInk, belowInk,
-            });
-            if (a && a.preview !== undefined) cp.sawAnim = true;
-            if (cp.sawAnim && !a) cp.done = true;
           }
-          requestAnimationFrame(tick);
-        };
-        requestAnimationFrame(tick);
-      })()`);
-      if (await page.evaluate(() => !window.__cp)) {
-        throw new Error('右缘带扫描器未装上(画布/几何取不到)');
+          let last = -1;
+          const col = u.data[k === 'up' ? 1 : 2];
+          for (let i = n - 1; i >= 0; i--) {
+            if (col[i] != null) { last = i; break; }
+          }
+          out[k] = { last, edgeGapPx: maxInkDx < 0 ? null : (R - (x0d + maxInkDx) / px) };
+        }
+        return { up: out.up, dl: out.dl, cellPx, n };
+      })(${JSON.stringify(tokens)})`);
+      /* 扫描前等拍收口(anim 归位): 桩 base 若跨 30s 边界, 停滞重拉会带 dx0=1 格的 L0 拍
+       * (视口摆回旧位期间曲线终点暂时离判定线 ~1 格) —— 静图探针只在拍外采样, 消掉这个
+       * 与被测判据无关的时序自由度。 */
+      await expect.poll(() => readInst(page,
+        'vm._qbCharts && vm._qbCharts.torrent && vm._qbCharts.torrent._qbBeat'
+        + ' ? (vm._qbCharts.torrent._qbBeat.anim ? 1 : 0) : -1'), {
+        message: '扫描前拍未收口(anim 在途)', timeout: 10_000,
+      }).toBe(0);
+      const active = await scan();
+      if (active.error) throw new Error('活跃态探针失败: ' + active.error);
+
+      /* A5 活跃态: 尾桶有观测(last = n-1)且两轨曲线墨达判定线(edgeGap <= 3px: 曲线宽 2
+       * + 抗锯齿余量) —— F4/B2 保证下的显示面; 尾桶回潮间歇 null 或 spanGaps 断线提前
+       * 收点时 edgeGap 变成一格宽(cellPx 级), 必红。 */
+      for (const k of ['up', 'dl']) {
+        expect(active[k].last, `${k} 轨尾桶必须有观测(活跃态前提)`).toBe(active.n - 1);
+        expect(active[k].edgeGapPx, `${k} 轨最右曲线墨距判定线 ${active[k].edgeGapPx.toFixed(2)}px 必须 <= 3px`
+          + '(A5 活跃态: 采样器活跃时曲线终点恒落判定线)').toBeLessThanOrEqual(3);
       }
 
-      await panel.locator('button', { hasText: '预览一拍' }).click();
-      await expect.poll(() => readInst(page, 'window.__cp === undefined ? false : window.__cp.done === true'), {
-        message: '预览拍未在预算内收场(裁剪探针采样窗; 超时=预览链路断了或假 Δ 零变化)',
-        timeout: 15_000,
-      }).toBe(true);
-      const frames = await page.evaluate(() => window.__cp.frames);
-      const animFrames = frames.filter((f) => f.anim && f.isPreview);
-      expect(animFrames.length, '预览动画必须有采样帧(裁剪探针要逐帧扫右缘带)')
-        .toBeGreaterThanOrEqual(3);
+      /* 切停滞态: 尾 6 桶无观测(qB 断连真缺口) —— 追加路由后发(后者胜出), 点「30分」
+       * 真手势触发重拉 */
+      await stubTrafficGapTail(page);
+      await drawer.locator('.hist-summary .qb-tabs button', { hasText: '30分' }).click();
+      await expect.poll(() => readInst(page,
+        'vm._qbCharts && vm._qbCharts.torrent && vm._qbCharts.torrent.data && vm._qbCharts.torrent.data[1]'
+        + ' ? (vm._qbCharts.torrent.data[1][59] === null && vm._qbCharts.torrent.data[1][53] != null ? 1 : 0) : -1'), {
+        message: '停滞态数据未落袋(尾 6 桶应无观测且链末桶 53 有观测)', timeout: 15_000,
+      }).toBe(1);
 
-      /* A6 右缘裁切: 预览帧里右缘带必有墨(旧 clip=绘图区矩形时该带恒透明 —— 环 rMax<=29/
-       * 粒子/菱形锚 r=5 都跨过 x=R) */
-      const maxMargin = Math.max(...animFrames.map((f) => f.marginInk));
-      expect(maxMargin, `右缘带最大墨量 ${maxMargin} 像素必须 > 0(环/粒子/菱形锚不得被绘图区`
-        + '右缘裁切 —— F5 clip 放宽回潮即红)').toBeGreaterThan(0);
-
-      /* A6 近底环完整: up 轨贴底(值=2% yMax), 环心上抬钳制 + 右缘放宽联合 -> 近底带(贴 T+H)
-       * 在右缘带里有墨(旧形态: 右缘无墨 + 底缘裁切, 近底装饰只剩左上角残弧) */
-      const maxBottom = Math.max(...animFrames.map((f) => f.bottomInk));
-      expect(maxBottom, `近底带最大墨量 ${maxBottom} 像素必须 > 0(近底环心上抬钳制 P3 + clip 放宽`
-        + '联合可见 —— 贴底装饰不得被底/右缘双双裁没)').toBeGreaterThan(0);
-
-      /* A6 轴标区零墨: clip 下缘未放宽(右缘放宽只到 y=T+H 为止), x>R 且 y>T+H 恒透明
-       * (uPlot 轴标只在绘图区下方 x ∈ [L, R] 域, 本探针带在 x>R 不受轴标干扰) */
-      for (const f of animFrames) {
-        expect(f.belowInk, '轴标区(x>R, y>T+H)必须零墨(clip 下缘未放宽 —— 右缘放宽不得外溢)').toBe(0);
+      /* 同上: 等停滞重拉的 L0 拍(若有)收口再扫 */
+      await expect.poll(() => readInst(page,
+        'vm._qbCharts && vm._qbCharts.torrent && vm._qbCharts.torrent._qbBeat'
+        + ' ? (vm._qbCharts.torrent._qbBeat.anim ? 1 : 0) : -1'), {
+        message: '扫描前拍未收口(anim 在途)', timeout: 10_000,
+      }).toBe(0);
+      const stalled = await scan();
+      if (stalled.error) throw new Error('停滞态探针失败: ' + stalled.error);
+      for (const k of ['up', 'dl']) {
+        expect(stalled[k].last, `${k} 轨链末桶应 = 53(尾 6 桶真缺口)`).toBe(53);
+        /* 真缺口诚实断线: 曲线断点距判定线 = GAP_N x 桶宽 ± 4px —— spanGaps:false 收在最后
+         * 观测桶, 既不提前消失也不桥接缺口(诚实性: 不造数据, 也不吞缺口) */
+        const expectGap = stalled.cellPx * GAP_N;
+        expect(stalled[k].edgeGapPx, `${k} 轨最右墨距判定线 ${stalled[k].edgeGapPx.toFixed(2)}px 应约 `
+          + `${expectGap.toFixed(2)}px(6 桶宽 —— 真缺口诚实断线在链末桶)`)
+          .toBeGreaterThanOrEqual(expectGap - 4);
+        expect(stalled[k].edgeGapPx).toBeLessThanOrEqual(expectGap + 4);
       }
     });
   }

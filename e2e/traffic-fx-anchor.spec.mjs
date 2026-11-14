@@ -186,7 +186,10 @@ test.describe('F2 常驻菱形锚 · 存在/旋转/对齐/换肤不残留(plan 2
       }
 
       /* 持续旋转(D2: CSS keyframes 合成器动画; 页面 rAF 只读不驱动): 700ms 窗(>420ms 周期)
-       * 内 transform 矩阵 >= 2 个不同值; 全同 = keyframes 没接上, 即红 */
+       * 内 transform 矩阵 >= 2 个不同值; 全同 = keyframes 没接上, 即红。
+       * A2 口径(计划 26-11-14-1313)核对: 本用例桩为 base 固定 + interval_s=30 —— 700ms
+       * 采样窗整段落在拍间(无真拍在场, 数据静止零变化拍零 rAF), 窗内连续矩阵变化钉住的
+       * 正是「拍间不停」; 拍窗内的锚位同步面由像素对齐断言与 S2b 四处同步点电池承接。 */
       await page.evaluate(`(() => {
         const vm = ${INST};
         const u = vm._qbCharts.torrent;

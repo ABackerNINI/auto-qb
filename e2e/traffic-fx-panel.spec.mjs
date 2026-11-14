@@ -94,7 +94,8 @@ async function openTorrentTraffic(page) {
   await page.dblclick('.torrent-row >> nth=0', { force: true });
   const drawer = page.locator('.drawer-dock > .drawer');
   await expect(drawer).toBeVisible({ timeout: 5_000 });
-  await drawer.locator('.drawer-tabs button', { hasText: /^流量$/ }).click();
+  // 页签文本含 Alt+5 键帽(f081dd53 起), 定位用「流量 」前缀(traffic-gap-zones 同款)
+  await drawer.locator('.drawer-tabs button', { hasText: /^流量 / }).click();
   await expect(drawer.locator('.qb-chart-host canvas')).toBeVisible({ timeout: 15_000 });
   await drawer.locator('.hist-summary .qb-tabs button', { hasText: '30分' }).click();
   await expect.poll(async () => readInst(page, 'vm.qbTorrentWindow'),
@@ -171,7 +172,8 @@ test.describe('动效数值面板 · 收层顺序(prism/atlas)', () => {
        *    (当前页重按 = 无副作用落点, 在面板与图宿主之外) */
       await page.dblclick('.torrent-row >> nth=0', { force: true });
       await expect(drawer).toBeVisible({ timeout: 5_000 });
-      await drawer.locator('.drawer-tabs button', { hasText: /^流量$/ }).click();
+      // 页签文本含 Alt+5 键帽(f081dd53 起), 定位用「流量 」前缀(traffic-gap-zones 同款)
+      await drawer.locator('.drawer-tabs button', { hasText: /^流量 / }).click();
       await expect(drawer.locator('.qb-chart-host canvas')).toBeVisible({ timeout: 15_000 });
       await openFxPanelByRightClick(page, host);
       await page.click('nav.tabs [data-view="torrents"]');

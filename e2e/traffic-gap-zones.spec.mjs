@@ -238,3 +238,68 @@ test.describe('全局流量图 · 链外文案主语不写「此种子」', () =
     });
   }
 });
+
+test.describe('种子流量图 · R5 末桶为进行中桶且无观测(不做伪缺口/伪接缝, plan 26-11-14-1313 §07)', () => {
+  installRuntimeErrorGuard(test);
+
+  /** F3 栅格 ceil->floor+1 后, 栅格末桶恒为「进行中桶」: 停机边界(qB 停止采样)上它可能
+   * 恰好无观测 —— R5 关心的是这个新形态不被误读。拓扑: 观测 14..58 + 末桶 59 无观测
+   * (0..13 为链首前空段, 即「尾部仅末桶无观测」而非全窗仅一枚 null)。判据面不改
+   * (_qbChainBounds/_qbGapZone 逐字不动): 链末非空桶之后的 null 仍是链尾之外(outside),
+   * 出「该时段无此种子数据」, 不是「采样中断」; server_started_at 远古(非重启贴近链末)
+   * 也不出「数据接缝中」。
+   * 既有三区段用例钉的是宽 TRAIL 游程(40-59), 本用例钉「恰一枚尾 null(= 进行中桶)」的
+   * 窄形态 —— 伪缺口/伪接缝若随 floor+1 回潮, 在这里红。 */
+  async function stubTailUnobserved(page) {
+    const base = Math.floor(Date.now() / 1000 / INTERVAL) * INTERVAL - (N - 1) * INTERVAL;
+    await page.route('**/api/traffic/qb/torrent/*', (route) => {
+      const w = new URL(route.request().url()).searchParams.get('window') || '24h';
+      const points = new Array(N).fill(null);
+      const totals = new Array(N).fill(null);
+      for (let i = 14; i <= N - 2; i++) {
+        const t = base + i * INTERVAL;
+        points[i] = { t, dl: 2000, up: 1000 };     // 速率桶非零(既有用例同款, 避开空闲行)
+        totals[i] = { t, dl: 2000, up: 1000 };
+      }
+      return route.fulfill({
+        json: {
+          points, totals, limits: [],
+          meta: {
+            window: w,
+            interval_s: INTERVAL,
+            source: 'qb',
+            stale: false,
+            // 远在链末桶之前 -> _qbSeamHint 出 null(「非重启贴近链末」形态, 伪接缝面的对照前提)
+            server_started_at: base - 3600,
+          },
+        },
+      });
+    });
+  }
+
+  for (const skin of SKINS) {
+    test(`[${skin}] 尾部仅末桶(进行中桶)无观测(头部另含链首前空段): 悬停末桶出链尾外文案而非「采样中断」; 悬停链末桶出速率行; 无接缝提示 @fast`, async ({ page }) => {
+      await stubFlags(page);
+      await stubTailUnobserved(page);
+      await openApp(page, skin);
+      const drawer = await openTorrentTraffic(page);
+      const tip = tipLines(drawer);
+
+      /* 对照组: 链末桶(N-2, 有观测)出速率行 —— 链确实到 N-2, 末桶无观测不是整段断联 */
+      await hoverBucket(page, drawer, 'qbTorrentHoverIdx', N - 2);
+      await expect(tip).toContainText('上传');
+      await expect(tip).toContainText('下载');
+      await expect(tip).not.toContainText('该时段无此种子数据');
+
+      /* R5 本体: 末桶(进行中桶, 无观测)—— 判据 i > last -> outside: 只陈述事实, 不归因中断 */
+      await hoverBucket(page, drawer, 'qbTorrentHoverIdx', N - 1);
+      await expect(tip).toContainText('该时段无此种子数据');
+      await expect(tip, '末桶无观测被误判成链中中断(伪缺口 —— R5)').not.toContainText('采样中断');
+
+      /* 伪接缝面: server_started_at 远古时末桶无观测不得出接缝提示(_qbSeamHint 的
+       * 「重启贴近链末」判据不满足; 接缝行是 .qb-seam 独立段落, 不在 tooltip 里) */
+      await expect(drawer.locator('.qb-seam'), '远古 server_started_at + 尾部未观测区不得出「数据接缝中」(伪接缝 —— R5)')
+        .toHaveCount(0);
+    });
+  }
+});
