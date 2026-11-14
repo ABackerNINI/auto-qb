@@ -52,9 +52,12 @@
 - **守阵**: `tests/test_web_shortcuts_drawer.py::test_drawer_open_reveal_row` —— openTorrentDrawer 必须调
   _kbRevealRow, 让位必须 nextTick + _kbViewBottom 单点, 禁 scrollIntoView 与 innerHeight, 行不在
   DOM 必须静默放弃。
-- **复发: 1** —— 2026-10-04 用户再报同一症状(「已修但回归」)。为什么没命中: 修复的让位调用确实
+- **复发: 2** —— 2026-10-04 用户再报同一症状(「已修但回归」)。为什么没命中: 修复的让位调用确实
   在, 但**量测时机与滚动时机都错**(见下一条: 量的是 loading 态几何 + 文档底 scrollBy 被钳制),
   守阵只断言「调用了让位」, 探不到这类「调用存在但几何/时机错」的缺陷 —— 静态守阵全绿而真机必红。
+  ② 2026-11-13 三度复现(26-11-12 抽屉专题 S-C 红验): prism/atlas 桩探针复现不了 W1 红而真机
+  Firefox 复现 —— 探针环境是 Chromium, 贴底钳制同帧恢复掩盖了量测时机错。**为什么没命中**:
+  探针绿被当成了机理否定的证据, 指纹差异必须真机逐帧取证; 见 tasks/26-11-12-webui-drawer-reopen-reveal.md。
 
 ### 让位量测必须读「落定几何」, 文档底打开时下滚余量是槽位长高才创造的
 
@@ -125,6 +128,10 @@
   `e2e/drawer-dock-stability.spec.mjs`(行为: 搜索全程面板 top 偏差 ≤2px)。配套根因(待响应期
   塌列表)见 search-pending-collapse。
 - **取证(2026-10-07)**: 修复前短列表态面板 top 416 vs 钉住态 430; 修复后三皮肤逐帧采样零变化。
+- **2026-11-14 口径更新(26-11-12 抽屉专题 T6, `fbf5dc26`)**: enter 边距生命周期重构后
+  (margin-top 退出 JS, 总占位 = margin CSS 恒 8 + height, enter 零凹陷/leave 单段式),
+  enter 全程 docH 单调不减、leave 单段式收拢 —— 旧口径里「贴底钳制属预期」的逐帧反复形态
+  结构性消失; close 期 −8 残差同根消失。钳制语义只剩「结果确实变短后的一次性」这一种。
 
 **Refs:** memory-bank/tasks/26-10-07-webui-drawer-search-jump.md
 
@@ -139,3 +146,14 @@
   建图侧 `_qbChartBuild` 量 `host.clientHeight` 当图高, ResizeObserver 宽高**双观察**才能跟着拖拽实时长。
 - **守阵**: `tests/test_webui_static_dom_panel_traffic.py::test_frontend_qb_traffic_chart_wiring`(三皮肤 `.drawer-body.is-traffic`
   撑满段成对 + RO 宽高双观察) + `tests/test_web_shortcuts_drawer.py::test_drawer_height_w3`(面板高度单点)。
+
+### 让位触发界收紧到界源实缘: 未被覆盖的行绝对不动 (2026-11-13/14 用户拍板)
+
+- **触发**: 面板顶 12px 带内的行(判据 `rect.bottom > vBot - 4` 在带内为真, 但行并未被面板覆盖)被抬 4~16px;
+  或顶距吸顶列头 ≤4px 的未覆盖行被 flux writer#4 下移 4~12px —— 「判据为真即动」让带内的未覆盖行也被波及。
+- **判别**: 三皮肤红验取证定机理 —— 不是登记量跨周期残留(enter 首帧必重写登记, 残留值到不了消费点,
+  原 W1 假设被否定), 是判据**有意越过带**; 真机指纹 = 未覆盖行随开抽屉位移, 探针(zoom=1)难复现。
+- **处置**: 判据与位移公式零改动, 触发界收紧到**界源实缘**: 补差单点 `_kbViewBottomPad()`
+  (面板分支 +8 / 状态栏与整窗分支 +0)与 `_kbViewTopPad()`(吸顶列头分支 −1 补偿 CSS 防透缝偏移 /
+  顶栏分支 +0), 消费点只走单点。语义 = 用户 2026-11-13/14 拍板「未被覆盖的行绝对不动」
+  (修订 D3/D7, 权威在 plans/26-11-12-1048 §10 R2)。

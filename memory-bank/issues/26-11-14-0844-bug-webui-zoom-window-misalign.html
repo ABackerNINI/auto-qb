@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>zoom!=1 分数布局下行窗口化渲染窗错位(贴文档底后行整体落在视口外) · bug · 计划外问题</title>
+<meta name="issue-slug" content="webui-zoom-window-misalign">
+<meta name="issue-stamp" content="26-11-14-0844">
+<meta name="issue-type" content="bug">
+<meta name="doc-topic" content="webui-drawer-reopen-reveal">
+<meta name="doc-refs" content="memory-bank/plans/26-11-12-1048-plan-webui-drawer-reopen-reveal.html, memory-bank/tasks/26-11-12-webui-drawer-reopen-reveal.md">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="zoom!=1 分数布局下行窗口化渲染窗错位(贴文档底后行整体落在视口外)">
+<meta name="issue-summary" content="zoom!=1(如 0.9/DPR 1.25 分数布局)贴文档底后渲染行整体落在视口上方约 1900px(底 pad 独占视口), flux 最严重全部行不可见; scrollBy ±1 后窗口 1:1 跟随但不自愈; T8 根滚动器禁锚(5c04d0e7)移除浏览器锚补掩盖后暴露">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --mark: #161e26;     /* issue 特有: callout 底色 (plan.html 不用) */
+    --warn-bg: #2a2119;  /* issue 特有: 状态徽标底色 */
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 单栏流式版面: 与 plan.html 同一套 .sheet (封顶 1280px, 侧距 clamp(18~44px)); 旧双栏+粘性目录已删 */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+
+  /* 封面 meta 行: issue 特有, DOM 形态别改 —— 状态徽标 <span class="badge"> 被
+     flip_status (W4) 与 check_status_drift 的 BADGE_RE 机读 (k/v div 结构在判据里) */
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px 28px; font-family: var(--mono); font-size: 11.5px; color: var(--faint); border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta-row .item .k { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .meta-row .item .v { font-size: 13.5px; color: var(--dim); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin: 14px 0; font-size: 14px; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-family: var(--mono); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">计划外问题（未修）· bug</div>
+<h1>zoom!=1 分数布局下行窗口化渲染窗错位(贴文档底后行整体落在视口外)</h1>
+<p class="lede">zoom!=1(如 0.9/DPR 1.25 分数布局)贴文档底后渲染行整体落在视口上方约 1900px(底 pad 独占视口), flux 最严重全部行不可见; scrollBy ±1 后窗口 1:1 跟随但不自愈; T8 根滚动器禁锚(5c04d0e7)移除浏览器锚补掩盖后暴露</p>
+<div class="meta-row">
+  <div class="item"><div class="k">编号</div><div class="v">26-11-14-0844-bug-webui-zoom-window-misalign</div></div>
+  <div class="item"><div class="k">报告时间</div><div class="v">2026-11-14 08:44</div></div>
+  <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
+  <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+</div>
+
+<section id="s1">
+  <h2><span class="no">§01</span>现象与发现场景</h2>
+  <p>发现于计划 26-11-12-1048 T8(根滚动器禁 CSS scroll anchoring, commit <code>5c04d0e7</code>)的红验构造期。触发条件:<strong>zoom != 1 的分数布局</strong>(如 <code>html{zoom:0.9}</code> 或浏览器/DPR 缩放)下,滚动到文档底后,主表行窗口化的渲染窗整体错位——渲染行落在视口上方约 1900px,底部 pad 独占视口。flux 最严重(全部行不可见、无可点行);prism/atlas 存在两态平衡(禁锚前后方向翻转)。T8 取证前浏览器 scroll anchoring 以不同方向掩盖此缺陷,禁锚后暴露。</p>
+</section>
+
+<section id="s2">
+  <h2><span class="no">§02</span>证据</h2>
+  <p class="hint">贴原文（报错 / 日志 / 命令输出），不转述；附取证时间，让读者自己判断新鲜度。</p>
+<pre><code># 取证 2026-11-14, HEAD 5c04d0e7 之前的工作树(T8 红验期), flux, 桩 500 种子, html zoom 0.9:
+# 贴文档底(scrollY == maxScroll)后逐帧采样:
+#   渲染行 .torrent-row 的 rect.bottom 全部 &lt; 0 或 &gt; innerHeight(视口内 0 行),
+#   底部 pad(.row-pad / spacer)高度独占视口(约 1900px 的行当量);
+#   scrollBy(0, ±1) 后渲染窗 1:1 跟随滚动位置更新但错位本身不自愈;
+#   zoom = 1 的整数布局下同步骤 ~200 次零复现(错位仅分数布局触发)。
+# T8 红验用例(e2e/drawer-dock-stability.spec.mjs T8 节)的流程次序
+# 「先贴底 -&gt; zoom -&gt; 再贴底」就是为绕开本缺陷钉死的(修复前后该次序下均绿)。</code></pre>
+</section>
+
+<section id="s3">
+  <h2><span class="no">§03</span>影响面</h2>
+  <table>
+    <tr><th>维度</th><th>结论</th></tr>
+    <tr><td>触发条件</td><td>zoom != 1(浏览器缩放/系统 DPR 缩放导致的分数布局)+ 滚动到文档底附近;用户真机 DPR 1.25 即在此面</td></tr>
+    <tr><td>影响范围</td><td>主表行窗口化渲染(四皮肤);flux 最严重(全行不可见),prism/atlas 两态平衡;抽屉内表格(dt10/dt11, content-visibility)不受扰</td></tr>
+    <tr><td>严重度</td><td>中——分数布局下列表可能整屏空白,但 scrollBy ±1 可临时恢复;用户若用 100% 整数缩放不触发</td></tr>
+  </table>
+</section>
+
+<section id="s4">
+  <h2><span class="no">§04</span>定位锚点</h2>
+  <ul>
+    <li><code>src/auto_qb/webui/static/shared/columns_grid.js:527</code>(取证 2026-11-14)· <code>_rowWindow</code> · grep <code>_rowWindow</code> —— 行窗口化计算(渲染窗上下界)</li>
+    <li>主表 pad 元素(.row-pad / spacer)——grep <code>row-pad</code> · <code>padTop</code> · <code>padBottom</code></li>
+    <li>复现脚本骨架在 T8 实施者 scratch(<code>tmp-analysis/_t8_*.mjs</code>, gitignored, 可能已清)——按 §01 步骤重写成本低</li>
+  </ul>
+</section>
+
+<section id="s5">
+  <h2><span class="no">§05</span>根因<span class="opt">（可选）</span></h2>
+  <div class="callout">待查（已排除：CSS scroll anchoring——T8 已在根滚动器禁锚, 错位在禁锚前后均存在, 与锚补无关; 虚拟列表重算补偿——T8 取证确认跳变帧 pads 不变, 重算无「上方 spacer 变化」路径）。候选方向: _rowWindow 在分数布局下的取整/取界偏差(zoom 使 rect 与布局像素含分数, 窗口边界计算在某侧向下取整后与滚动位置对不上), 待认领后复验定位。</div>
+</section>
+
+<section id="s6">
+  <h2><span class="no">§06</span>建议修法<span class="opt">（可选）</span></h2>
+  <p>待定。方向:排查 <code>_rowWindow</code> 及 pad 高度计算在分数布局下的取整一致性(建议全链统一 ceil/floor 口径), 并补一条 zoom=0.9 的 e2e 用例钉「贴文档底后视口内至少可见 N 行」。</p>
+</section>
+
+<section id="s7">
+  <h2><span class="no">§07</span>状态变更日志</h2>
+  <ul>
+    <li>2026-11-14 08:44 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+  </ul>
+  <h3>复验</h3>
+  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <h3>修复后补充</h3>
+  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+</section>
+
+<footer>
+  26-11-14-0844-bug-webui-zoom-window-misalign.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+</footer>
+
+</div>
+</body>
+</html>

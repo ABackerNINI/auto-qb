@@ -7,10 +7,10 @@
 <title>WEBUI 抽屉跨周期让位误补偿与下降抖动修复计划</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="webui-drawer-reopen-reveal">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-11-12-1048">
-<meta name="doc-updated" content="26-11-12-1126">
-<meta name="doc-refs" content="memory-bank/tasks/26-11-12-webui-drawer-reopen-reveal.md">
+<meta name="doc-updated" content="26-11-14-0850">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-12-webui-drawer-reopen-reveal.md, memory-bank/issues/26-11-14-0844-bug-webui-zoom-window-misalign.html">
 <style>
   :root {
     --bg: #10151a;
@@ -75,7 +75,7 @@
 <h1>WEBUI 抽屉跨周期让位误补偿与下降抖动修复计划</h1>
 <p class="lede">本篇只回答：在不改动「最小滚动 / 非对称 / 可见下界单点」这套原设计的前提下，怎么修掉抽屉「开 → 关 → 再开」后本不该让位的选中行仍被抬起，以及收起动画期的可见抖动。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-12-1048 · <b>doc-updated</b> 26-11-12-1126 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-11-12-1048 · <b>doc-updated</b> 26-11-14-0850 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 用户 2026-11-12 报障 → grilling 两轮 12 问拍板（Q1–Q12，Q3/Q4 由用户修正并以设计文档为准）→ 只读代码与设计文档取证；取证基线 HEAD <code>59113c69</code>
 </div>
 
@@ -205,6 +205,7 @@
 <ul>
   <li><span class="tag">R0 · 26-11-12-1048</span> 初版。来源：用户 2026-11-12 报障 + grilling 两轮 12 问拍板（Q3/Q4 以设计文档取证修正，Q7–Q12 全按推荐）+ 只读代码/设计文档取证（HEAD <code>59113c69</code>）。要点：W1 = 动画期瞬态登记量跨周期残留，W2 = 收场高度逐帧传导文档高；全程尊重原设计「最小滚动 / 非对称 / 下界单点」；本轮纯计划、零代码改动。</li>
   <li><span class="tag">R1 · 26-11-12-1126</span> 评审更正: enter 的 h0=0 早退(:263)已由 :262 清零, 从 W1 待补落点中移除</li>
+  <li><span class="tag">R2 · 26-11-14-0850</span> 终态收束: S1 靶点(W1 登记量跨周期残留)被三皮肤红验取证否定而取消(enter 首帧必重写登记, 残留值到不了消费点), 由 S-C 判据越过带收紧(<code>03bc1a72</code>)替代; 新增四个计划外修复面 —— S-A flux 首开竞速(<code>37957914</code>)、T6 边距生命周期重构+让位截断续缴(<code>fbf5dc26</code>)、T7 顶界触发带收紧(<code>93a378f7</code>)、T8 根滚动器禁 CSS scroll anchoring(<code>5c04d0e7</code>); D3/D7 的「判据零改动」约束被用户 2026-11-13 拍板修订为「未被覆盖的行绝对不动」(判据与位移公式本身仍零改动, 触发界收紧到界源实缘, 补差单点 <code>_kbViewBottomPad()</code>/<code>_kbViewTopPad()</code>); 计划外发现 zoom≠1 行窗口化渲染窗错位入池 issue 26-11-14-0844(见 doc-refs); 验收 = 用户真机终验收通过(2026-11-14)</li>
 </ul>
 
 </div>

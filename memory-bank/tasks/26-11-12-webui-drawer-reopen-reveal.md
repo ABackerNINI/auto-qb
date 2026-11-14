@@ -1,11 +1,11 @@
 # 26-11-12-webui-drawer-reopen-reveal — WEBUI 抽屉跨周期让位误补偿与下降抖动修复
 
-**Status:** In Progress
+**Status:** Done
 **Added:** 2026-11-12
-**Updated:** 2026-11-12
-**Summary:** WEBUI 抽屉跨周期让位误补偿与下降抖动修复
+**Updated:** 2026-11-14
+**Summary:** 抽屉让位误补偿与下降抖动: W2 收场修复落地, W1 机理被红验取证否定并由 S-C 判据越过带收紧替代; 计划外 S-A/T6/T7/T8 四个真机症状面修复; 用户真机终验收通过
 **Topics:** webui-drawer-reopen-reveal
-**Refs:** memory-bank/plans/26-11-12-1048-plan-webui-drawer-reopen-reveal.html
+**Refs:** memory-bank/plans/26-11-12-1048-plan-webui-drawer-reopen-reveal.html, memory-bank/issues/26-11-14-0844-bug-webui-zoom-window-misalign.html
 
 ## 本篇只回答
 
@@ -46,15 +46,28 @@
 
 ## 子任务状态表
 
+实际轨迹与原计划编号的对应: S3+S4 由 W2 修复(`0aeba884`)一并落地; S1 取消; 实施轮新增 T2'/T5'/T6/T7/T8 四个计划外面与一个替代面。
+
 | 步 | 内容 | 状态 |
 |---|---|---|
-| S0 | 红验基线（e2e 用例 + 逐帧采样，修复前必红） | Open |
-| S1 | W1 登记量生命周期修复 | Open |
-| S2 | W1 绿验 + 静态守阵 | Open |
-| S3 | W2 收场高度传导修复 + 四皮肤核对 | Open |
-| S4 | W2 逐帧断言绿验 | Open |
-| S5 | 用户真机目检 | Open |
-| S6 | 收尾回写 / 坑档复发 / 基线切片 / 翻 Done | Open |
+| S0 | 红验基线 e2e(开→关→再开零位移守卫 + close 逐帧采样, `ffcf0346`) | Done |
+| S1 | W1 登记量生命周期修复 | 取消——机理被三皮肤红验取证否定(enter 首帧必重写登记, 残留值到不了消费点), 由 T2'(S-C, `03bc1a72`)替代 |
+| S2 | W1 绿验 + 静态守阵 | 随 S1 取消(红验面改由 T2' 承接) |
+| S3+S4 | W2 收场抖动修复: leave 期槽位冻结+末帧一次收拢(`0aeba884`), 红绿双验通过 | Done |
+| T2' | S-C 判据越过带收紧: 触发界收紧到界源实缘 + 补差单点 `_kbViewBottomPad()`(`03bc1a72`) | Done |
+| T5' | S-A flux 首开竞速修复: 开门窗口让位传输改瞬时 + fx-glide 挂点挪后(`37957914`) | Done |
+| T6 | 边距生命周期重构(margin-top 退出 JS)+A 路线让位截断续缴 `_kbRevealCompleteStart`(`fbf5dc26`) | Done |
+| T7 | 顶界触发带收紧: `_kbViewTopPad()` 配对补差(`93a378f7`) | Done |
+| T8 | 根滚动器禁 CSS scroll anchoring: 四皮肤 `html{overflow-anchor:none}`(`5c04d0e7`) | Done |
+| S5 | 用户真机目检/终验收 | Done(2026-11-14 通过) |
+| S6 | 收尾回写 / 坑档复发 / 基线切片 / 翻 Done | Done |
+
+## 结论与决策
+
+- 「未被覆盖的行绝对不动」(2026-11-13 用户拍板): 对 D3/D7 的语义修订 —— 判据与位移公式本身零改动, 但触发界收紧到界源实缘, 新增面板/状态栏/顶栏分支配对的补差单点 `_kbViewBottomPad()` / `_kbViewTopPad()`。
+- A 路线续缴(用户拍板): 已发起且被 maxScroll 截断的让位行续缴到公式落点(`_kbRevealCompleteStart`), 不静默放弃。
+- 保留推进(用户拍板): W2 落地后用户真机四症状报障, 定因为既有缺陷 + S-C 越过带而非 W2 引入, 拍板不回退、逐面修复推进。
+- 终验收: 用户真机 2026-11-14「BUG不复现,通过」。
 
 ## 进度日志
 
@@ -71,3 +84,9 @@
 - 2026-11-12 10:52 grilling 两轮 12 问拍板 D1-D12(Q3/Q4 按设计文档取证修正, 机制尊重原设计) + 两轮只读取证 + 计划/档案立档; 零代码改动、零 commit/push、不入池 issue、不动坑档; S0-S6 待显式开工
 
 - 2026-11-12 11:32 提交轮: 开工同步快进 59113c69→f9296ba6(远端领先1笔); 分批评审 2 轮(全能档 1 派, 首轮 1 条 minor: 计划误把 enter 的 h0=0 早退列为不清 _drawerAnimTop, 实由 :262 已清零; 引文逐字校验 1/1 过检), 当场修正 §02/§03 两处落点并 kb.bump 抬 doc-updated 26-11-12-1126 + 追加 R1; 复评轮零 actionable 出口; 零代码改动、不动坑档(D10 复发+1 留 S6)、无代码事实变更故不跑 test.full
+
+- 2026-11-13 S0 红验基线 e2e 落地(`ffcf0346`); 三皮肤红验取证否定 W1 机理(enter 首帧必重写登记, 残留值到不了消费点), 用户拍板暂停 W1 先做 W2 → W2 收场抖动修复落地(`0aeba884`, leave 期槽位冻结+末帧一次收拢, 计划 S3+S4, 红绿双验通过)。踩到 dock-panel「静态守阵全绿而真机必红」复发: prism/atlas 探针复现不了 W1 红而真机 Firefox 复现, 探针环境 Chromium 贴底钳制同帧恢复掩盖 —— 坑档复发 +1 与原因留痕见该坑档
+- 2026-11-13 用户真机四症状报障 → 定因: 判据**有意越过带**(面板顶 12px 带内行被抬 4~16px)+既有缺陷, 非 W2 引入; 用户拍板保留推进 → S-C 判据越过带收紧(`03bc1a72`, 补差单点 `_kbViewBottomPad()`, 替代 S1) → S-A flux 首开竞速修复(`37957914`, 开门窗口传输改瞬时+fx-glide 挂点挪后) → T6 边距生命周期重构+让位截断续缴(`fbf5dc26`, Firefox 贴底未覆盖行误抬+close 残差, A 路线续缴拍板) → T7 顶界触发带收紧(`93a378f7`, `_kbViewTopPad()`)
+- 2026-11-14 T8 根滚动器禁 CSS scroll anchoring(`5c04d0e7`, 诊断注入实锤浏览器锚补: scrollY 跳变==面板首帧生长量; 计划外发现 zoom≠1 行窗口化渲染窗错位入池 issue 26-11-14-0844) → e2e 三皮肤用例全绿(见 kb.baseline) → 用户真机终验收通过(「BUG不复现,通过」) → S6 收尾(坑档回写/计划翻 Done/基线切片)
+
+- 2026-11-14 09:05 S6 收尾: 档案落定(Done)+计划翻终态+坑档回写(锚补新坑/dock-panel 复发+2)+claim 链补全+test.full 全绿基线切片

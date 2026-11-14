@@ -12,7 +12,7 @@
 
 | 卷 | 主题范围 | 条数 |
 |---|---|---|
-| [1](_index-1.md) | `add-partial-receipt.md` … `ctx-sub-width-coupling.md` | 26 |
-| [2](_index-2.md) | `density-tier-single-point.md` … `hover-keynav-fight.md` | 26 |
-| [3](_index-3.md) | `hr-tooltip-overlap.md` … `search-pending-collapse.md` | 26 |
-| [4](_index-4.md) | `search-views.md` … `wording-audit-surface.md` | 26 |
+| [1](_index-1.md) | `add-partial-receipt.md` … `derived-snapshot-render.md` | 26 |
+| [2](_index-2.md) | `descendant-selector-collateral.md` … `hscroll-indicator.md` | 26 |
+| [3](_index-3.md) | `inflight-flag-no-timeout.md` … `show-if-residual-key.md` | 26 |
+| [4](_index-4.md) | `sortable-gate-source-split.md` … `wording-audit-surface.md` | 24 |
