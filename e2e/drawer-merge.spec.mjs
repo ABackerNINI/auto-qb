@@ -251,6 +251,17 @@ for (const skin of SKINS) {
       await expect(tabKbd(/^内容 /), '非合并内容页签徽标 Alt+4').toHaveText('Alt + 4');
       await expect(tabKbd(/^流量 /), '非合并流量页签徽标 Alt+5').toHaveText('Alt + 5');
 
+      // W5 角标(计划 26-11-14-0041 S4): 徽标绝对定位、不进布局流 => 按住反引号显影前后页签
+      // 几何不变(页签宽度只由 label 决定, 不因键位在/不在/长短变化)。
+      const tabBox = drawer.locator('.drawer-tabs button', { hasText: /^常规 / });
+      const w0 = await tabBox.evaluate((el) => el.getBoundingClientRect().width);
+      await page.keyboard.down('Backquote');
+      await expect(tabKbd(/^常规 /), '反引号显影态键帽可见').toBeVisible();
+      const w1 = await tabBox.evaluate((el) => el.getBoundingClientRect().width);
+      await page.keyboard.up('Backquote');
+      await expect(tabKbd(/^常规 /), '松开反引号键帽隐藏').toBeHidden();
+      expect(w1, '显影前后页签宽度不变(W5: 徽标不进布局流)').toBeCloseTo(w0, 1);
+
       // ---- 开合并: 三张可见页签, 徽标随 KB_MERGE_TAB_REMAP 位次重排(与键盘 run 同表)
       await toggleMerge();
       await expect(drawer.locator('.drawer-tabs button')).toHaveCount(3, { timeout: 5_000 });
