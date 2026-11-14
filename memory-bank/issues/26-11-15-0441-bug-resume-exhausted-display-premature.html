@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="relocate-move-window">
 <meta name="doc-refs" content="memory-bank/tasks/26-11-15-backend-relocate-resume-confirm.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="webui 穷尽展示时点超前: 第 3 次补发下发拍即宣称「补发穷尽, 需手动恢复」">
 <meta name="issue-summary" content="第 3 次补发下发那一拍 resume_retries 即达 3, 投影 resume_exhausted=true 随即宣称「补发穷尽, 需手动恢复」, 实际该次补发还有至多一个 30s 退避回流窗, 成员自行回来后该行消失">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-15-0441-bug-resume-exhausted-display-premature</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-15 04:41</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">发现者</div><div class="v">接缝终审(2026-11-15)</div></div>
 </div>
 
@@ -115,10 +115,20 @@
 </section>
 
 <section id="s4">
-  <h2><span class="no">§04</span>状态变更日志</h2>
+  <h2><span class="no">§04</span>修复后补充</h2>
+  <p>复验：2026-11-15 05:04 锚点仍在——投影 <code>views_relocate.py::member_relocate</code> 在下发拍即满足 <code>resume_retries >= RESUME_RETRY_MAX</code> 置 <code>resume_exhausted=true</code>，前端旧文案随即宣称「补发穷尽, 需手动恢复」，现象成立。</p>
+  <p><b>实际修法（方案 B）</b>：前端文案改「不再补发」回避时点承诺——下发拍「不再补发」即为真（补发预算穷尽，不会再发），不对「是否需手动恢复」作承诺；成员自行回流该行照常消失（账闭合清账），真穷尽由机制侧穷尽告警兜底（<code>relocate_lifecycle.py</code> reconcile 穷尽分支）。改动面仅展示文案与注释措辞：文案单点 <code>decorate.js::relocateResumeText</code>、<code>views_relocate.py</code> 注释/docstring、<code>memory-bank/conventions/webui.md</code> 口径行；后端投影字段与机制逻辑零改动。</p>
+  <p><b>验证方式</b>：同步改两处展示断言（浮窗 kv 穷尽文案钉扎 test_webui_relocate_pop / 文案单点区分词钉扎 test_webui_relocate_visibility）后随套件实测；改动 .py 经 <code>commands run dev.fmt</code> 格式化；e2e（e2e/*.spec.mjs）grep 零引用该文案，不涉及。</p>
+  <p><b>测试数字（2026-11-15 05:04 实测，commands run test.one）</b>：定向三文件（pop + visibility + resume_confirm）49 passed；<code>-k relocate</code> 543 passed / 5616 deselected；ASCII 符号守阵 13 passed。</p>
+</section>
+
+<section id="s5">
+  <h2><span class="no">§05</span>状态变更日志</h2>
   <ul>
     <li>2026-11-15 04:41 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-15 — 状态 Open → In Progress（kb.status）</li>
+    <li>2026-11-15 — 状态 In Progress → Done（kb.status）</li>
+</ul>
 </section>
 
 <footer>

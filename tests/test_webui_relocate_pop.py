@@ -14,7 +14,7 @@
   paths 两行[当前位置/目标位置] + kv 序(成员 -> 来源 -> 更新, 组行无别名行); 组 mixed: 多目标
   行全标「目标位置」且空 dst 丢弃; 种子 failed: reason 前缀「原因: 」+ 别名行; 别名 0 显「—」;
   缺 updated_at 显「—」; 待恢复行(26-11-14-1744 (3)): 种子行账非空时 kv 在别名后来源前
-  (在途「恢复确认中」/穷尽「需手动恢复」两态, 走 relocateResumeText 单点), 空账不出行,
+  (在途「恢复确认中」/穷尽「不再补发」两态, 走 relocateResumeText 单点), 空账不出行,
   组行无该行(组级聚合无恢复账); 区分位单点面: retries=上界而后端 resume_exhausted=false
   仍显在途文案(前端不重算上界, 机制侧改值不谎报); 初态面: retries=0 显无后缀变体
   (不带「已补发」); 调度面: done / 无标注行 relPopEnter 不调度(relocateView
@@ -212,9 +212,9 @@ def test_relocate_pop_assemble_node():
     assert sr["kv"][1] == ["待恢复成员", "2 个 · 恢复确认中(已补发 1 次)"], \
         "在途态文案必须走 relocateResumeText 单点(计数+进度)"
     assert sr["kv"][2][0] == "来源" and sr["kv"][-1][0] == "更新", "待恢复行插在别名后、来源前"
-    # 穷尽态: 不再补发需手动恢复(与在途态展示区分, 区分位由后端 resume_exhausted 给)
+    # 穷尽态: 不再补发(与在途态展示区分, 区分位由后端 resume_exhausted 给; 不作时点承诺)
     se = out["seedExhausted"]
-    assert ["待恢复成员", "1 个 · 补发穷尽, 需手动恢复"] in se["kv"], "穷尽态必须与在途态文案可区分"
+    assert ["待恢复成员", "1 个 · 不再补发"] in se["kv"], "穷尽态必须与在途态文案可区分"
     # 区分位单点(评审 minor#1 钉扎): retries 达上界但后端区分位 false -> 前端仍显在途
     # 文案(只认 resume_exhausted, 不重算上界 —— 机制侧 MAX 改值时前端展示不谎报且本断言能抓)
     sm = out["seedMaxRetriesInflight"]

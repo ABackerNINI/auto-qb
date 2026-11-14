@@ -697,5 +697,5 @@ def test_resume_pending_display_wiring():
     assert '"待恢复成员"' in pop, "浮窗 kv 行标签与抽屉计数行同名"
     # 文案钉扎: 空账零噪音(空串守门) + 穷尽/在途区分词
     assert 'if (n <= 0) return "";' in deco, "空账必须返回空串(调用方按空串不出行)"
-    assert "补发穷尽, 需手动恢复" in deco and "恢复确认中" in deco, \
+    assert "不再补发" in deco and "恢复确认中" in deco, \
         "在途/穷尽两态文案必须在场(区分由后端 resume_exhausted 给, 前端不重算上界)"

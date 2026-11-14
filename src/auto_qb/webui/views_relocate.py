@@ -9,7 +9,7 @@ from typing import Optional, Sequence
 
 from ..core.modules import relocate_units as ru
 # 恢复确认账的补发上界(issue 26-11-14-1744 §06 (3) 展示面): 穷尽态判定单点在账的机制侧
-# (relocate_lifecycle), 这里只借同一常数做「在途确认中 / 补发穷尽」的展示区分 —— 不复制
+# (relocate_lifecycle), 这里只借同一常数做「恢复确认中 / 不再补发」的展示区分 —— 不复制
 # 数值(漂移即展示谎报), 上界改名/改值由 test_webui_relocate_visibility 的钉扎兜住。
 from ..core.modules.relocate_lifecycle import _RESUME_RETRY_MAX as RESUME_RETRY_MAX
 
@@ -56,7 +56,8 @@ def member_relocate(job: Optional[dict], torrent_hash: str) -> Optional[dict]:
       列表)。账是 job 级的, 同 job 各成员标注带同一份(与 alias_count 同形); 已删成员可能
       在账(保守挂账), 如实显示不过滤不特殊标注。
     - resume_retries: 已消耗的补发次数(在途文案里的进度); resume_exhausted: 账面 retries
-      达补发上界(穷尽后不再补发, 需手动恢复 —— 与在途态的展示区分单点)。
+      达补发上界(穷尽后不再补发 —— 与在途态的展示区分单点; 展示文案不作时点承诺,
+      成员仍可能自行回流, 该行随后消失)。
     空账(含旧 state 条目缺字段)计数 0, 前端按空不出行(零噪音)。
     """
     if not job:

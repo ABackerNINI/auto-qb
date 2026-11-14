@@ -130,16 +130,19 @@ window.AQB_DECORATE = {
     relocateOriginText(origin) {
       return RELOCATE_ORIGIN_TEXT[origin] || (origin ? origin : "未知来源");
     },
-    /* 待恢复余量展示词(issue 26-11-14-1744 (3)): 悬停浮窗 kv(relocate_pop)与抽屉迁移段
-     * (drawer_rows)共用的唯一文案单点 —— 计数 + 态(在途确认中/补发穷尽)。穷尽判定由后端
-     * 投影给出(resume_exhausted, 上界单点在机制侧), 前端不重算; 已删成员在账如实计数,
-     * 不过滤不特殊标注。空账返回 ""(调用方按空串不出行, 零噪音)。 */
+    /* 待恢复余量展示词(issue 26-11-14-1744 (3); 26-11-15-0441 改口径): 悬停浮窗 kv(relocate_pop)与
+     * 抽屉迁移段(drawer_rows)共用的唯一文案单点 —— 计数 + 态(恢复确认中/不再补发)。穷尽判定由
+     * 后端投影给出(resume_exhausted, 上界单点在机制侧), 前端不重算; 已删成员在账如实计数,
+     * 不过滤不特殊标注。穷尽态只写「不再补发」—— 下发拍即为真(补发预算已用尽, 不会再发),
+     * 不对「是否需手动恢复」作时点承诺: 成员仍可能自行回流, 该行随后消失; 真穷尽由机制侧
+     * 穷尽告警兜底(relocate_lifecycle reconcile 穷尽分支)。空账返回 ""(调用方按空串不出行,
+     * 零噪音)。 */
     relocateResumeText(rel) {
       const n = Number(rel && rel.resume_pending_count) || 0;
       if (n <= 0) return "";
       const r = rel.resume_retries || 0;
       return rel.resume_exhausted
-        ? `${n} 个 · 补发穷尽, 需手动恢复`
+        ? `${n} 个 · 不再补发`
         : `${n} 个 · 恢复确认中${r > 0 ? `(已补发 ${r} 次)` : ""}`;
     },
     /* 行内迁移展示单点(plan 26-11-07-2344 S2): 路径列两排 A->B / 单排着色的**唯一**判定与口径,
