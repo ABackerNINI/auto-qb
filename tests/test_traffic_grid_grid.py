@@ -49,6 +49,18 @@
 - test_v4_totals_points_marked_run_not_zero_shape_drops_delta: (T2b)标记后台阶但游程非 z 形 -> 断链 None 不摊配(614->615)
 - test_v4_grid_obs_wide_point_before_window_start_partial_overlap: (T2b)宽桶跨窗首: b < first 迭代不消费, 窗内部分按重叠秒展开(713->729)
 
+活尾链端延伸 holding 槽响应面(F4, 计划 26-11-14-1313 S1b):
+- test_v4_hold_slot_fills_tail_grid_bucket: 活跃链延伸前尾桶(进行中桶)null(G5 复现),
+  传 now 后尾桶恒有观测且值接续末观测桶值(持有面平接); now=None 缺省响应面与现状一致
+- test_v4_hold_slot_rate_face_holds_last_bucket_rate: 尾桶值 = 上一观测桶点的区间平均
+  速率(carry-forward)—— 非 delta 重写 0(假跌零)亦非 qB 瞬时直采值(假跳升)
+- test_v4_hold_slot_totals_chain_untouched: holding 桶点 totals 差分恒 0(totals = 末次
+  快照同值, 累计面不造字节); 其余桶点/栅格桶 delta 与不延伸形态逐桶一致
+- test_v4_hold_slot_z_run_tail_zero_line: z 游程链端延伸尾桶 0 线非 null(空闲观测持有)
+- test_v4_hold_slot_stall_over_bound_tail_stays_null: 间隙过界(停滞)尾桶保持 null
+- test_v4_hold_slot_merge_with_real_sample_deholds: holding 槽与真实观测槽同桶合并 ->
+  合并桶点 is_hold=False(按观测重写), 桶值与该观测单独入桶一致
+
 线程/时钟纪律: 纯函数层无时钟无文件 —— 窗口由用例给定固定 epoch, 输入直接构造 V4Block
 (天文件文本路径经 format_v4_day_text -> parse_v4_day_text 打通解析接缝); V4Block 直构时
 基线参数取 (0,0) 或首记录 totals —— 槽位数学与基线无关, 仅 format/parse roundtrip 路径
@@ -84,6 +96,7 @@ from auto_qb.core.traffic_grid import (
     v4_series_points,
     v4_series_slots,
     v4_totals_points,
+    V4TotalsEntry,
     _V4_SEAM_LOOKBACK_S,
     _V4_SEAM_NULL_S,
     _V4_SEAM_SPREAD_MIN_S,
@@ -487,6 +500,160 @@ def test_v4_series_points_live_tail_merge_dedup():
     pts = v4_series_points((), start, start + 200, tail_slots=v4_live_tail_slots(tail_only))
     assert pts and all(p.dl_rate == 0 and p.up_rate == 0 and p.dl_total == 9 for p in pts)
     assert not any(p.dl_rate is None for p in pts)
+
+
+def _hold_active_fixture():
+    """F4 响应面共用地盘: 生产同构节律(1.5s 采样 / 1m 窗 2s 桶宽), 稳态流 + 瞬时垃圾
+    速率字段(5000/2500, 区间平均恒 750/375)。活尾持最后 3 条未落盘记录(head_pending=
+    False 倒推), 链端 = start + 88.5。返回 (disk, tail, chain_end)。"""
+    interval = 1.5
+    start = 1_800_000_000  # 偶数, 与 2s 桶宽对齐
+    recs = tuple(V4Sample(5000, 2500, 1500 * (k + 1), 750 * (k + 1)) for k in range(60))
+    chain_end = v4_block_slots(V4Block(start, interval, 0, 0, recs))[-1].ts  # = start + 88.5
+    disk = (V4Block(start, interval, 0, 0, recs[:-3]), )
+    tail = LiveTail(
+        block_open=True,
+        head_pending=False,
+        start_epoch=start,
+        interval_s=interval,
+        projected_ts=chain_end,
+        records=recs[-3:],
+        open_run=None,
+    )
+    return disk, tail, chain_end
+
+
+def _hold_obs(disk, tail, grid, now, max_gap_s):
+    """延伸参数 -> (栅格桶观测, 桶点流)。now=None = 不延伸(现状形态); 走生产同一条
+    v4_series_points -> v4_rate_from_totals -> v4_grid_obs 管线(grid.t1 = int(now) 为窗)。"""
+    seed_t0 = grid.t0 - grid.interval  # D3 窗首种子外扩(调用面口径)
+    tail_slots = v4_live_tail_slots(tail) if now is None else v4_live_tail_slots(tail, now=now, max_gap_s=max_gap_s)
+    pts = v4_rate_from_totals(v4_series_points(disk, seed_t0, grid.t1, tail_slots=tail_slots))
+    return v4_grid_obs(pts, grid), pts
+
+
+def test_v4_hold_slot_fills_tail_grid_bucket():
+    """(F4)活跃链延伸前尾桶 null(G5 复现: 末样本槽 ts=链端 >= t1=int(now) 被窗尾过滤,
+    其覆盖到不了进行中桶), 传 now 后 holding 槽豁免过滤 -> 尾桶恒有观测且值接续末观测
+    桶值(750/375 持有面平接); 其余桶与不延伸形态逐桶一致(向后兼容面)"""
+    disk, tail, chain_end = _hold_active_fixture()
+    now = chain_end + 0.3
+    grid = build_grid("1m", now, 1.5)
+    assert grid.last == int(chain_end)  # 尾桶 = 刚开启的进行中桶 [t1, t1+2)
+    # G5 现状: 不延伸 -> 尾桶无观测(null), 曲线终点收在判定线左侧一格
+    obs_old, _ = _hold_obs(disk, tail, grid, None, None)
+    assert grid.last not in obs_old
+    # F4: 延伸 -> 尾桶恒有观测(P1 上界: max(2, 1.5) x 2 = 4)
+    obs_new, _ = _hold_obs(disk, tail, grid, now, 4.0)
+    o = obs_new[grid.last]
+    assert (o.dl_rate, o.up_rate) == (750, 375)  # 接续末观测桶值(非 0 非 null)
+    assert (o.dl_total, o.up_total) == (90000, 45000)  # totals = 末次快照同值
+    # 前桶不受扰: 与延伸前逐桶一致(除尾桶外)
+    assert {k: v for k, v in obs_new.items() if k != grid.last} == obs_old
+
+
+def test_v4_hold_slot_rate_face_holds_last_bucket_rate():
+    """(F4 速率面语义)尾桶值 = 上一观测桶点的区间平均速率(carry-forward): 瞬时字段
+    5000/2500 垃圾值零上图, delta 重写面 750/375 —— 持有面取后者(非重写 0 的假跌零,
+    亦非瞬时直采的假跳升)"""
+    disk, tail, chain_end = _hold_active_fixture()
+    now = chain_end + 0.3
+    grid = build_grid("1m", now, 1.5)
+    obs, pts = _hold_obs(disk, tail, grid, now, 4.0)
+    hold_point = pts[-1]
+    assert hold_point.is_hold  # 桶点持有旗贯通到变换输出
+    assert (hold_point.dl_rate, hold_point.up_rate) == (750, 375)
+    assert (obs[grid.last].dl_rate, obs[grid.last].up_rate) == (750, 375)
+    assert all(p.dl_rate < 1000 and p.up_rate < 1000 for p in pts if p.dl_rate is not None)
+
+
+def test_v4_hold_slot_totals_chain_untouched():
+    """(F4 诚实性)两相位钉 totals 面不变式:
+    - gap 跨整秒相位(末样本槽在窗内): holding 桶点 totals 差分恒 0(前点 = 末样本桶点,
+      totals 同值 -> 累计面 0 增量, 不造字节), 且延伸前后栅格桶逐桶全等(持有覆盖与末
+      样本覆盖同值同快照, 加权不漂);
+    - gap 不跨整秒相位(末样本槽被窗尾过滤): holding 桶如数回收末样本真实增量(1500/750
+      —— 此前该增量整段丢失), 其余桶 delta 与不延伸形态逐桶一致"""
+    disk, tail, chain_end = _hold_active_fixture()
+    # 相位一: gap 1.2 跨整秒(t1 = 89 > 链端 88.5), holding 槽覆盖桶 [88, 90) 恰 = 尾桶
+    now_a = chain_end + 1.2
+    grid_a = build_grid("1m", now_a, 1.5)
+    obs_old_a, pts_old_a = _hold_obs(disk, tail, grid_a, None, None)
+    obs_new_a, pts_new_a = _hold_obs(disk, tail, grid_a, now_a, 4.0)
+    te_new_a = v4_totals_points(pts_new_a)
+    assert pts_new_a[-1].is_hold
+    assert te_new_a[-1].dl == 0 and te_new_a[-1].up == 0  # holding 桶点 0 增量
+    assert obs_new_a == obs_old_a  # 逐桶全等(速率与 totals 通道零漂移)
+    # 相位二: gap 0.3 不跨整秒(t1 = 88 = int(链端)), 末样本槽被窗尾过滤
+    now_b = chain_end + 0.3
+    grid_b = build_grid("1m", now_b, 1.5)
+    obs_old_b, pts_old_b = _hold_obs(disk, tail, grid_b, None, None)
+    obs_new_b, pts_new_b = _hold_obs(disk, tail, grid_b, now_b, 4.0)
+    assert grid_b.last not in obs_old_b
+    te_old_b = v4_totals_points(pts_old_b)
+    te_new_b = v4_totals_points(pts_new_b)
+    assert te_new_b[:-1] == te_old_b
+    # 桶点级: holding 桶点 delta = P2 接缝摊配的覆盖份额(holding 覆盖 [88,89) vs 前点覆盖
+    # 末端 87: span 2 > cov 1 -> step x cov // span = 1500 的一半; 未覆盖秒不归因 —— 既有
+    # P2 语义对 holding 槽原样成立, 不多计)
+    assert te_new_b[-1].dl == 750 and te_new_b[-1].up == 375
+    tots_old = series_totals_points(obs_old_b, grid_b)
+    tots_new = series_totals_points(obs_new_b, grid_b)
+    assert tots_new[:-1] == tots_old[:-1]
+    # 栅格级: 尾桶快照链接住末样本 totals(90000) -> 末样本真实增量(1500/750)如数回收
+    # (不延伸形态下该增量随窗尾过滤整段丢失), 不多不少
+    assert tots_new[-1] == {"t": grid_b.last, "dl": 1500, "up": 750}
+
+
+def test_v4_hold_slot_z_run_tail_zero_line():
+    """(F4)z 游程链端延伸: 尾桶 0 线非 null(空闲观测持有 —— 「最新已知状态仍有效」),
+    totals 快照照记; 不延伸时尾桶保持 null"""
+    start = 1_800_000_000
+    run = LiveTailRun(kind="z", start=start + 60.0, last_seen=start + 120.0, dl_total=9, up_total=8, samples=4)
+    tail = LiveTail(False, False, None, 30, 0.0, (), run)
+    now = start + 121.0  # 链端 = last_seen = +120, gap 1 <= 缺省上界 interval x 2 = 60
+    grid = build_grid("5m", now, 30.0)
+    assert grid.last == start + 120  # 尾桶 = 进行中桶 [120, 150)
+    pts_old = v4_rate_from_totals(v4_series_points((), grid.t0, grid.t1, tail_slots=v4_live_tail_slots(tail)))
+    assert grid.last not in v4_grid_obs(pts_old, grid)  # 不延伸: 尾桶 null
+    pts = v4_rate_from_totals(v4_series_points((), grid.t0, grid.t1, tail_slots=v4_live_tail_slots(tail, now=now)))
+    o = v4_grid_obs(pts, grid)[grid.last]
+    assert (o.dl_rate, o.up_rate) == (0, 0)  # 0 线非 null
+    assert (o.dl_total, o.up_total) == (9, 8)
+
+
+def test_v4_hold_slot_stall_over_bound_tail_stays_null():
+    """(F4 诚实边界)间隙过界(停滞)不延伸: now - 链端 > 上界 -> 槽序与响应面同不延伸
+    形态逐字节一致, 尾桶保持 null(不造数据)"""
+    disk, tail, chain_end = _hold_active_fixture()
+    now = chain_end + 4.5  # gap 4.5 > P1 上界 4
+    grid = build_grid("1m", now, 1.5)
+    slots = v4_live_tail_slots(tail, now=now, max_gap_s=4.0)
+    assert slots == v4_live_tail_slots(tail) and not any(s.is_hold for s in slots)
+    seed_t0 = grid.t0 - grid.interval
+    pts = v4_rate_from_totals(v4_series_points(disk, seed_t0, grid.t1, tail_slots=slots))
+    assert grid.last not in v4_grid_obs(pts, grid)
+
+
+def test_v4_hold_slot_merge_with_real_sample_deholds():
+    """(F4 防御面)holding 槽与真实观测槽同桶合并 -> 合并桶点 is_hold=False(桶内有真实
+    观测, 按观测正常重写)—— 持有旗不泄漏进含真实观测的桶(泄漏面: 速率被改写为持有值)"""
+    start = 1_800_000_000
+    # 前导槽(基线)+ 真实槽 ts=89.5(显式 dt 0.5s, w=1, 覆盖桶 [89, 90)) + holding 槽
+    # ts=90.8(gap 1.3, w=2, 覆盖桶 [89, 91))—— 真实/holding 两槽覆盖桶键同为 89 合并;
+    # t1=90 时前导与真实槽均在窗内, holding 槽经豁免入桶
+    first = V4Slot(ts=start + 88.2, dt_s=0.5, obs=(100, 50, 1000, 500), is_zero=False)
+    real = V4Slot(ts=start + 89.5, dt_s=0.5, obs=(100, 50, 1600, 800), is_zero=False)
+    hold = V4Slot(ts=start + 90.8, dt_s=1.3, obs=(100, 50, 1600, 800), is_zero=False, is_hold=True)
+    grid = build_grid("1m", start + 90.4, 1.0)  # 桶宽 1s, t1 = start+90
+    assert grid.t1 == start + 90
+    pts = v4_rate_from_totals(v4_series_points((), grid.t0, grid.t1, tail_slots=(first, real, hold)))
+    assert [p.t for p in pts] == [start + 88, start + 89]
+    merged = pts[-1]
+    assert not merged.is_hold  # 真实观测入桶 -> 非 holding 桶点
+    assert merged.w == 2  # 覆盖桶宽取最大(并集覆盖)
+    assert (merged.dl_rate, merged.up_rate) == (300, 150)  # delta(600,300)/w2 正常重写
+    assert (merged.dl_total, merged.up_total) == (1600, 800)
 
 
 def test_v4_seed_vacuum_null_t0_edge_band_chain_break():

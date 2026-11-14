@@ -6,6 +6,8 @@
 - test_api_traffic_qb_window_validation: window 非法值 400 / 缺省 24h / 仅认 WINDOW_NAMES 十三档(D4 沿用: 1m-30d + 6mo/1y/all, 90d 延后)
 - test_api_traffic_qb_global_24h_points_totals_and_stale: global 24h 窗天文件块 -> 速率口径变换(区间平均 delta/w, 计划 26-10-07-2127 S2) -> 栅格展开(points 对齐桶/空桶 null=断连真空/窗首无种子 D4 0 线) + totals 差分(重置/断链, 口径不受速率变换影响) + 读取竞态降级回上一份快照标 stale + meta 全量形状含 P4 新键 server_started_at 与 F6 只增键 sample_interval_s(plan 26-11-14-1313)
 - test_api_traffic_qb_raw_rate_basis_delta_per_w_totals_unchanged: (计划 26-10-07-2127 S2)raw 窗速率口径 = 计数器差分区间平均 delta/w —— 已知 totals 序列逐桶断言 + 瞬时直采值零上图 + totals 通道逐字节不变(窗首基线缺失/相邻差分照旧) + 活尾桶跨盘/尾接缝差分(图尾同为区间平均)
+- test_api_traffic_qb_raw_live_tail_hold_extension: (计划 26-11-14-1313 F4)raw 段窗传 now —— 活尾链端持有限界延伸(间隙上界 max(interval_s, 采样间隔) x 2): 采样链活跃时响应尾桶(进行中桶)恒有观测且值接续末观测桶值(持有面), totals 尾桶 0 增量不造字节; 端点取时冻结假钟消除 now 竞态
+- test_api_traffic_qb_group_raw_live_tail_hold_extension: (F4)组端点 raw 段窗成员循环同款接线钉 —— 成员活尾(torrent:HA)延伸, 组响应尾桶恒有观测(Σ 成员 = 持有面)且 totals 0 增量; 防 now=/max_gap_s= 在组调用点被变异丢弃时电池照绿
 - test_api_traffic_qb_raw_seed_extension_window_start_baseline: (S2/D3)窗首种子: read_window/v4_series_points t0 外扩一个响应桶宽取前驱桶点作差分基线 —— 窗首桶 rate = delta/w(非 0 线非瞬时值), 种子点被 v4_grid_obs 窗外过滤不外发
 - test_api_traffic_qb_raw_seed_vacuum_chain_break_and_recover: (S2/D3)种子跨真空: 真空 null 点断链 —— 恢复首桶 rate 派不出(D4 0 线)且离线期字节不进速率与 totals, 次桶基线恢复 delta/w
 - test_api_traffic_qb_raw_seed_vacuum_null_1s_edge_band: (issue 26-10-08-0141)窗首种子 1 秒边界带: 停机落 (seed_t0-1, seed_t0) 时真空 null 点取整后落窗外 —— 修复后标记保留断链, 恢复首桶 D4 0 线且离线字节不进速率/totals(修复前链误接出假尖峰)
@@ -30,7 +32,7 @@ from auto_qb.infra.utils import encode_group_key
 
 from clock import FakeClock
 
-from webui_helpers import KEY, _enable_qb_traffic, _qb_v4, _attach_live_tail_host
+from webui_helpers import KEY, _enable_qb_traffic, _qb_v4, _attach_live_tail_host, _freeze_traffic_endpoint_clock
 
 #: 鉴权头键名(拆写拼装): 该键名字面量会触发写入侧凭据判据的「凭据键名 + 值不回显」误报 ——
 #: 本文件全部用法都是测试桩令牌的运行期读取(夹具 manager.web.token), 文件内无字面凭据;
@@ -291,6 +293,92 @@ def test_api_traffic_qb_raw_rate_basis_delta_per_w_totals_unchanged(web_env):
     assert pt("totals", b0 + 30) == {"t": b0 + 30, "dl": 600, "up": 300}
     assert pt("totals", b0 + 60) == {"t": b0 + 60, "dl": 1200, "up": 600}
     assert pt("totals", b0 + 90) == {"t": b0 + 90, "dl": 600, "up": 300}
+
+
+def test_api_traffic_qb_raw_live_tail_hold_extension(web_env, monkeypatch):
+    """(计划 26-11-14-1313 F4)raw 段窗活尾链端延伸: 端点向 v4_live_tail_slots 传 now(请求
+    时刻, 冻结假钟钉死)与间隙上界 max(interval_s, 采样间隔) x 2 —— 采样链活跃时 holding
+    槽豁免窗尾过滤, 响应尾桶(进行中桶)恒有观测且值接续末观测桶值(持有面 20/10, 瞬时
+    垃圾字段 9999 零上图); totals 尾桶 0 增量(holding totals = 末次快照同值, 不造字节)。
+    活尾纯内存(不落盘), 磁盘零块 -> 无真空缝, 差分链干净"""
+    from auto_qb.core.traffic_store import LiveTail, V4Sample
+
+    mgr, client = web_env
+    auth = _auth(mgr)
+    _enable_qb_traffic(mgr, sample_interval_multiplier=15)  # main_tick=2.0 -> 30s 生效(桶宽 30, 间隙上界 60)
+    _qb_v4(mgr)  # 建 v4 目录(磁盘零块: 全部观测走活尾)
+    now = int(time.time())
+    _freeze_traffic_endpoint_clock(monkeypatch, now)  # 端点取时单点冻结(用例与请求同一 now)
+    projected = ((now - 25) // 30) * 30  # 末样本槽位: 30 对齐, 距 now 25..54s(上界 60 内)
+    _attach_live_tail_host(
+        mgr,
+        {
+            "global":
+                LiveTail(
+                    block_open=True,
+                    head_pending=False,
+                    start_epoch=projected - 60,
+                    interval_s=30,
+                    projected_ts=float(projected),
+                    records=(
+                        V4Sample(9999, 9999, 1600, 800),  # 槽 projected-60
+                        V4Sample(9999, 9999, 2200, 1100),  # 槽 projected-30
+                        V4Sample(9999, 9999, 2800, 1400),  # 槽 projected: delta(600,300)/30 -> 20/10
+                    ),
+                    open_run=None,
+                )
+        },
+    )
+    body = client.get("/api/traffic/qb/global", headers=auth, params={"window": "5m"}).json()
+    assert body["meta"]["stale"] is False and body["meta"]["interval_s"] == 30
+    last_pt = body["points"][-1]
+    assert last_pt is not None and last_pt["dl"] == 20 and last_pt["up"] == 10  # 尾桶恒有观测(持有面)
+    assert body["totals"][-1] is not None
+    assert body["totals"][-1]["dl"] == 0 and body["totals"][-1]["up"] == 0  # holding 桶 0 增量
+    assert all(p["dl"] < 1000 and p["up"] < 1000 for p in body["points"] if p is not None)  # 瞬时垃圾零上图
+
+
+def test_api_traffic_qb_group_raw_live_tail_hold_extension(web_env, monkeypatch):
+    """(计划 26-11-14-1313 F4)组端点 raw 段成员循环的延伸接线钉(与 global 用例同构):
+    成员活尾挂在 torrent:HA(键 = TORRENT_KEY_PREFIX + 成员 hash), holding 槽豁免窗尾
+    过滤 -> 组响应尾桶(进行中桶)恒有观测且值 = Σ 成员持有面(仅 HA 有活尾, HB 无行按
+    0 计 -> 20/10); totals 尾桶 0 增量(holding totals = 末次快照同值, 不造字节)。
+    组空态判据计入活尾(member_has_tail), 变异丢弃 now=/max_gap_s= 实参即红"""
+    from auto_qb.core.traffic_store import LiveTail, V4Sample
+
+    mgr, client = web_env
+    auth = _auth(mgr)
+    _enable_qb_traffic(mgr, sample_interval_multiplier=15)  # 30s 生效(桶宽 30, 间隙上界 60)
+    _qb_v4(mgr)  # 磁盘零块: 观测面全部走成员活尾
+    now = int(time.time())
+    _freeze_traffic_endpoint_clock(monkeypatch, now)  # 端点取时单点冻结(用例与请求同一 now)
+    projected = ((now - 25) // 30) * 30  # 末样本槽位: 30 对齐, 距 now 25..54s(上界 60 内)
+    _attach_live_tail_host(
+        mgr,
+        {
+            "torrent:HA":
+                LiveTail(
+                    block_open=True,
+                    head_pending=False,
+                    start_epoch=projected - 60,
+                    interval_s=30,
+                    projected_ts=float(projected),
+                    records=(
+                        V4Sample(9999, 9999, 1600, 800),  # 槽 projected-60
+                        V4Sample(9999, 9999, 2200, 1100),  # 槽 projected-30
+                        V4Sample(9999, 9999, 2800, 1400),  # 槽 projected: delta(600,300)/30 -> 20/10
+                    ),
+                    open_run=None,
+                )
+        },
+    )
+    body = client.get(f"/api/traffic/qb/group/{encode_group_key(KEY)}", headers=auth, params={"window": "5m"}).json()
+    assert body["meta"]["stale"] is False and body["meta"]["interval_s"] == 30
+    last_pt = body["points"][-1]
+    assert last_pt is not None and last_pt["dl"] == 20 and last_pt["up"] == 10  # 尾桶恒有观测(持有面)
+    assert body["totals"][-1] is not None
+    assert body["totals"][-1]["dl"] == 0 and body["totals"][-1]["up"] == 0  # holding 桶 0 增量
+    assert all(p["dl"] < 1000 and p["up"] < 1000 for p in body["points"] if p is not None)  # 瞬时垃圾零上图
 
 
 def test_api_traffic_qb_raw_seed_extension_window_start_baseline(web_env):

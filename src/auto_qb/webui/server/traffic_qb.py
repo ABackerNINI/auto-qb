@@ -26,6 +26,10 @@ plan 26-10-04-1957 S3b, §05.2-§05.4)
   (未落盘 buffer 记录 + 开放游程, handler 每轮整体替换引用)—— 图面尾部随采样节拍实时,
   不等 flush_interval 落盘; 槽 ts 镜像保证下按 ts 精确去重, 快照与 flush 竞态不重不漏;
   活尾槽带绝对 totals, 差分链跨盘/尾接缝自然延续, 图尾桶同为区间平均(计划 26-10-07-2127 S2)。
+  活尾链端延伸(F4, 计划 26-11-14-1313): raw 段窗传 now(请求时刻)+ 间隙上界
+  max(interval_s, 采样间隔) x 2(P1 默认)给 v4_live_tail_slots —— 采样链活跃且间隙有界时
+  链端追加 holding 槽持有末次观测速率, 尾桶恒有观测(曲线终点恒落判定线); 停滞/断连
+  不延伸(null 诚实)。agg 段窗(3d+)不传 —— pending_agg 开放桶部分行已有自己的合成段。
   agg 段窗(3d+)的活尾合流(S7 验收追加, 2026-10-14): 同一快照的 pending_agg 未封口
   部分行(开放小时/当日/当月)按 epoch 与磁盘封口行合流(v4_merge_agg 口径, 与写侧
   _agg_merge_prev 同判据)—— 补「图尾停在最后一个封口桶」的真空(用户报「3 天及以上
@@ -143,6 +147,13 @@ class QbTrafficChartApi:
         if tg.WINDOW_SPECS[window][1] == "month":
             return tg.build_month_grid((), SYSTEM_CLOCK.now())  # 请求处理叶子走取时单点(挂钟)
         return tg.build_grid(window, SYSTEM_CLOCK.now(), sample)
+
+    def _tail_gap_bound(self, grid: tg.WindowGrid) -> float:
+        """活尾延伸的间隙上界(F4, 计划 26-11-14-1313 P1 拍板默认): max(interval_s 桶宽,
+        采样间隔) x 2 —— 正常采样节律内, 主循环单顿卡不误判为停滞; 超界(停滞/断连)
+        不延伸(null 保持诚实)。读 grid.interval 与 _sample_interval 两个既有口径现算,
+        非配置键(不进 validate_config 面)。仅 raw 段窗使用(agg 段窗活尾合成段不动)。"""
+        return max(grid.interval, self._sample_interval()) * 2.0
 
     def _meta(self, grid: tg.WindowGrid, stale: bool) -> dict:
         """meta 装配单点(全部出口——正常/空态/组空态——都经此, P4 新键只增不改: 旧前端忽略
@@ -270,7 +281,12 @@ class QbTrafficChartApi:
                     days = self.v4cache.read_window(TORRENT_KEY_PREFIX + h, seed_t0, grid.t1)
                     blocks = tuple(blk for _, parsed in days if parsed for blk in parsed.blocks)
                     tail = self._live_tail(TORRENT_KEY_PREFIX + h)
-                    tail_slots = v4_live_tail_slots(tail) if tail is not None else ()
+                    # F4 活尾延伸(仅 raw 段窗): 链端持有限界延伸到请求时刻 —— 尾桶恒有观测,
+                    # 曲线终点恒落判定线(计划 26-11-14-1313; 停滞/断连不延伸, codec 侧裁决)
+                    tail_slots = (
+                        v4_live_tail_slots(tail, now=SYSTEM_CLOCK.now(), max_gap_s=self._tail_gap_bound(grid))
+                        if tail is not None else ()
+                    )
                     member_obs.append(
                         tg.v4_grid_obs(
                             tg.v4_rate_from_totals(
@@ -362,7 +378,12 @@ class QbTrafficChartApi:
                 days = self.v4cache.read_window(key, seed_t0, grid.t1)
                 blocks = tuple(blk for _, parsed in days if parsed for blk in parsed.blocks)
                 tail = self._live_tail(key)
-                tail_slots = v4_live_tail_slots(tail) if tail is not None else ()
+                # F4 活尾延伸(仅 raw 段窗): 链端持有限界延伸到请求时刻 —— 尾桶恒有观测,
+                # 曲线终点恒落判定线(计划 26-11-14-1313; 停滞/断连不延伸, codec 侧裁决)
+                tail_slots = (
+                    v4_live_tail_slots(tail, now=SYSTEM_CLOCK.now(), max_gap_s=self._tail_gap_bound(grid))
+                    if tail is not None else ()
+                )
                 points = tg.v4_rate_from_totals(tg.v4_series_points(blocks, seed_t0, grid.t1, tail_slots=tail_slots))
                 obs = tg.v4_grid_obs(points, grid)
                 degraded = False

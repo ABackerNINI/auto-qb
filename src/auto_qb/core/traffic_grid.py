@@ -445,6 +445,8 @@ class V4PointEntry:
     dl_total: Optional[int] = None  # 桶末 all-time 下载累计快照(bytes)
     up_total: Optional[int] = None
     w: int = 0  # 覆盖桶宽秒(= ceil(有效dt); 同桶多记录取最大)
+    is_hold: bool = False  # True = 活尾 holding 桶点(F4, 计划 26-11-14-1313): 速率面由
+    # v4_rate_from_totals 持有上一观测桶点速率(不按 delta/w 重写为 0; totals 链 0 增量)
 
 
 @dataclass(frozen=True)
@@ -476,8 +478,12 @@ def v4_series_points(blocks: tuple, t0: float, t1: float, tail_slots: tuple = ()
     (issue 26-10-16-0954 修复轮: 首槽覆盖桶抵达不了磁盘链末槽 = 中间有未观测段(重启缝),
     出 null 标记断链 —— 与磁盘块同一条判据, 两路径同几何取值一致; 同块续链天然不出标记)。
     无块且无活尾(停机/无数据)返回空元组(天然真空, 调用方按空态处理)。
+    holding 槽(F4, 计划 26-11-14-1313, tail_slots 末尾的 is_hold 槽)豁免 ts >= t1
+    窗尾过滤: 其 ts = now 恒 >= t1 = int(now)(整秒截断), 而其覆盖桶
+    [ceil(now)-ceil(gap), ceil(now)) 恰落在进行中桶(F3 floor+1 的尾桶恒越过 t1)——
+    不豁免则活尾延伸永远不可见。其余槽的窗尾口径逐字不变。
     """
-    cells: dict[int, list[Any]] = {}  # 桶键 -> [is_raw, dl_sum, up_sum, n, last_ts, dl_total, up_total, w_max]
+    cells: dict[int, list[Any]] = {}  # 桶键 -> [is_raw, dl_sum, up_sum, n, last_ts, dl_total, up_total, w_max, is_hold]
     marks: list = []  # null 点 (t, ...) —— n 游程折叠 + 块间真空
     prev_chain_end: Optional[float] = None
     last_was_null = False
@@ -508,8 +514,8 @@ def v4_series_points(blocks: tuple, t0: float, t1: float, tail_slots: tuple = ()
                 last_was_null = True
                 continue
             last_was_null = False
-            if s.ts >= t1:
-                continue  # 窗尾之后的槽不消费(v2 ts >= t1 口径)
+            if s.ts >= t1 and not s.is_hold:
+                continue  # 窗尾之后的槽不消费(v2 ts >= t1 口径); holding 槽豁免(F4, 见函数 docstring)
             w = v4_bucket_width_s(s.dt_s)
             key = math.ceil(s.ts) - w
             if key + w < t0 - _V4_SEAM_LOOKBACK_S:
@@ -517,9 +523,10 @@ def v4_series_points(blocks: tuple, t0: float, t1: float, tail_slots: tuple = ()
             o = s.obs
             e = cells.get(key)
             if e is None:
-                cells[key] = [not s.is_zero, o[0], o[1], 1, s.ts, o[2], o[3], w]
+                cells[key] = [not s.is_zero, o[0], o[1], 1, s.ts, o[2], o[3], w, s.is_hold]
             elif not s.is_zero:
                 e[7] = max(e[7], w)  # 同桶多记录: 覆盖桶宽取最大(并集覆盖)
+                e[8] = e[8] and s.is_hold  # 任一非持有槽入桶 -> 非 holding 桶点(按观测重写)
                 if e[0]:  # raw+raw: 速率均值 + 最新行快照(同刻取后到者, v2 口径)
                     e[1] += o[0]
                     e[2] += o[1]
@@ -538,7 +545,9 @@ def v4_series_points(blocks: tuple, t0: float, t1: float, tail_slots: tuple = ()
     for key in sorted(cells):
         e = cells[key]
         n = e[3]
-        entries.append((key, 1, V4PointEntry(key, int(round(e[1] / n)), int(round(e[2] / n)), e[5], e[6], w=e[7])))
+        entries.append(
+            (key, 1, V4PointEntry(key, int(round(e[1] / n)), int(round(e[2] / n)), e[5], e[6], w=e[7], is_hold=e[8]))
+        )
     for t in marks:
         if null_lo <= t < t1:
             entries.append((t, 0, V4PointEntry(t)))
@@ -662,17 +671,29 @@ def v4_rate_from_totals(points: tuple) -> tuple:
     - 字节守恒: rate×w = delta(整除时严格成立, 余数按 round 落桶)—— v4_grid_obs 按覆盖
       秒分摊后速率通道与 totals 通道严格一致;
     - null 点(率/totals 全 None)原样透传, 断线语义仍由 v4_grid_obs 空桶承载。
+    - holding 桶点(F4, is_hold=True, 活尾延伸产物): 速率面**持有上一观测桶点的重写后
+      速率**(「末次观测仍有效」的显示语义), 不按 delta/w 重写 —— 其 totals 与前桶同值
+      (delta 0, 累计面诚实不造字节), 按重写会落 0 值把尾桶打成假跌零。持有值使曲线
+      终点恒接续当前水平(尾桶值 = 末观测区间平均), rate x w = delta 的字节守恒对
+      holding 桶点不成立(持有面是显示语义, 真值面在 totals 通道)。null 点清空持有面
+      (不跨断口持有); 上一观测点速率派不出(None)时持有 None(诚实未知)。
     搭配 D3 窗首种子(调用方把 read_window/v4_series_points 的 t0 外扩一个响应桶宽)使用:
     种子点自身基线缺失 rate=None 且被 v4_grid_obs 窗外过滤天然不外发, 后继首桶即有基线。
     """
     out = []
+    held: Optional[tuple] = None  # 上一观测桶点的重写后速率(holding 持有面; null 点清空)
     for p, te in zip(points, v4_totals_points(points)):
         if p.dl_rate is None:  # null 点: 原样透传(te 亦全 null, 走重建分支结果等价)
             out.append(p)
+            held = None
             continue
-        dl = None if te.dl is None or p.w <= 0 else int(round(te.dl / p.w))
-        up = None if te.up is None or p.w <= 0 else int(round(te.up / p.w))
-        out.append(V4PointEntry(p.t, dl, up, p.dl_total, p.up_total, p.w))
+        if p.is_hold:
+            dl, up = held if held is not None else (None, None)
+        else:
+            dl = None if te.dl is None or p.w <= 0 else int(round(te.dl / p.w))
+            up = None if te.up is None or p.w <= 0 else int(round(te.up / p.w))
+            held = (dl, up)
+        out.append(V4PointEntry(p.t, dl, up, p.dl_total, p.up_total, p.w, is_hold=p.is_hold))
     return tuple(out)
 
 

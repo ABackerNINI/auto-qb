@@ -37,6 +37,22 @@ mut-core W4 S6 定向补测(2026-11-02, issue 26-10-31-1539 两件清偿; 红验
   病态(span==0)与时钟回拨(last_seen < 链锚点): 非块首落标称 interval 均摊, 块首收拢
   int(start) 且 dt_s 落标称 interval
 
+活尾链端延伸 holding 槽(F4, 计划 26-11-14-1313 S1b):
+- test_v4_live_tail_slots_hold_active_chain_extension: 活跃链 now 超出链端且间隙有界 ->
+  追加 holding 槽(ts=now/dt=gap/obs 与 is_zero = 末槽原值/is_hold=True); 缺省
+  max_gap_s=None 落 tail.interval_s x 2 最窄口径(含端点 gap == bound 仍延伸);
+  显式 max_gap_s 更窄时间隙过界不延伸
+- test_v4_live_tail_slots_hold_zero_run_extension: z 游程链端延伸持有速率 0
+  (is_zero 传递, obs=(0,0,快照) —— 「最新已知状态仍有效」语义)
+- test_v4_live_tail_slots_hold_gap_over_bound_not_extended: 间隙过界(停滞)不延伸,
+  输出与 now=None 逐槽恒等(null 保持诚实)
+- test_v4_live_tail_slots_hold_null_run_not_extended: 断连不延伸 —— 记录链以 n 游程
+  收尾 / 开放 n 游程两种形态末槽 obs = None 均不延伸
+- test_v4_live_tail_slots_hold_none_default_and_edge_gaps: now=None 缺省与无参形态逐槽
+  恒等(向后兼容面); gap == 0(now 未超出链端)与时钟回拨(now < 链端)不延伸
+- test_v4_live_tail_slots_hold_param_fail_fast: now 非有限/非数值与 max_gap_s 非正有限
+  -> ValueError(fail-fast)
+
 线程/时钟纪律: 需要确定时刻的用例经 monkeypatch 固定 time.time(测试进程内单线程, 恢复由
 monkeypatch 保证); 文件一律落在 tmp_path(test.* 已内置 TMPDIR, 不手工加前缀)。
 """
@@ -299,3 +315,126 @@ def test_v4_live_tail_slots_zero_and_negative_span_forms():
     slots_fb = v4_live_tail_slots(LiveTail(False, False, None, 30, 0.0, (), run_flat_b))
     assert [s.ts for s in slots_fb] == [100.0, 100.0]
     assert all(s.dt_s == 30 for s in slots_fb)
+
+
+def test_v4_live_tail_slots_hold_active_chain_extension():
+    """(F4, 计划 26-11-14-1313 S1b)活跃链 now 超出链端且间隙有界 -> 追加一枚 holding 槽:
+    ts=now / dt_s=gap / obs 与 is_zero = 末槽原值 / is_hold=True, 前序槽逐槽恒等;
+    缺省 max_gap_s=None 落 tail.interval_s x 2 最窄口径(上界含端点), 显式 max_gap_s
+    可收窄 —— 间隙超界不延伸"""
+    interval = 30
+    start = 1_800_000_000
+    recs = (V4Sample(100, 50, 1000, 500), V4Sample(200, 70, 2000, 800), V4Sample(150, 60, 2600, 1100))
+    projected = v4_block_slots(V4Block(start, interval, 1000, 500, recs))[-1].ts
+    tail = LiveTail(True, False, start, interval, projected, recs, None)
+    base = v4_live_tail_slots(tail)
+    now = projected + 10.0
+    slots = v4_live_tail_slots(tail, now=now)
+    assert len(slots) == len(base) + 1 and slots[:-1] == base
+    hold = slots[-1]
+    assert hold.ts == now and hold.dt_s == 10.0 and hold.is_hold and not hold.is_zero
+    assert hold.obs == base[-1].obs == (150, 60, 2600, 1100)
+    # 缺省上界 = interval x 2 = 60, 含端点: gap 恰 == bound 仍延伸
+    edge = v4_live_tail_slots(tail, now=projected + 60.0)
+    assert edge[-1].is_hold and edge[-1].dt_s == 60.0 and edge[:-1] == base
+    # 显式 max_gap_s 覆盖缺省口径: 间隙 10 > 5 -> 不延伸(输出与缺省形态逐槽恒等)
+    assert v4_live_tail_slots(tail, now=now, max_gap_s=5.0) == base
+    # 显式 max_gap_s 宽于缺省: gap 70 > 60 但 <= 100 -> 延伸
+    wide = v4_live_tail_slots(tail, now=projected + 70.0, max_gap_s=100.0)
+    assert wide[-1].is_hold and wide[-1].dt_s == 70.0
+
+
+def test_v4_live_tail_slots_hold_zero_run_extension():
+    """(F4)z 游程链端延伸持有速率 0: is_zero 传递 + obs=(0,0,快照) —— 「最新已知状态
+    仍有效」语义与开放游程合成同款, 持有速率 0 不是造数据(空闲观测本就是 0)"""
+    interval = 30
+    start = 1_800_000_000
+    recs = (V4Sample(100, 50, 1000, 500), V4ZeroRun(3, 1000, 500))
+    projected = v4_block_slots(V4Block(start, interval, 1000, 500, recs))[-1].ts
+    tail = LiveTail(True, False, start, interval, projected, recs, None)
+    base = v4_live_tail_slots(tail)
+    assert base[-1].is_zero and base[-1].obs == (0, 0, 1000, 500)
+    slots = v4_live_tail_slots(tail, now=projected + 4.0)
+    assert slots[:-1] == base
+    hold = slots[-1]
+    assert hold.is_hold and hold.is_zero and hold.obs == (0, 0, 1000, 500)
+    assert hold.ts == projected + 4.0 and hold.dt_s == 4.0
+
+
+def test_v4_live_tail_slots_hold_gap_over_bound_not_extended():
+    """(F4 诚实边界)间隙过界(停滞)不延伸: now - 链端 > 上界 -> 输出与 now=None 逐槽
+    恒等(null 保持诚实断线, 不造数据)"""
+    interval = 30
+    start = 1_800_000_000
+    recs = (V4Sample(100, 50, 1000, 500), V4Sample(200, 70, 2000, 800))
+    projected = v4_block_slots(V4Block(start, interval, 1000, 500, recs))[-1].ts
+    tail = LiveTail(True, False, start, interval, projected, recs, None)
+    base = v4_live_tail_slots(tail)
+    # 缺省上界 interval x 2 = 60: 停滞 60.5s -> 不延伸
+    assert v4_live_tail_slots(tail, now=projected + 60.5) == base
+    # 显式上界同判: 停滞恰超界不延伸
+    assert v4_live_tail_slots(tail, now=projected + 10.5, max_gap_s=10.0) == base
+
+
+def test_v4_live_tail_slots_hold_null_run_not_extended():
+    """(F4 诚实边界)断连不延伸: 末槽 obs = None(n 游程)即末槽无速率 —— 记录链以 n
+    游程收尾与开放 n 游程两种形态均不延伸(null 保持诚实)"""
+    interval = 30
+    start = 1_800_000_000
+    # 形态一: 记录链以 n 游程收尾(链端 = n 游程末槽, obs = None)
+    recs = (V4Sample(100, 50, 1000, 500), V4NullRun(2))
+    projected = v4_block_slots(V4Block(start, interval, 1000, 500, recs))[-1].ts
+    tail = LiveTail(True, False, start, interval, projected, recs, None)
+    base = v4_live_tail_slots(tail)
+    assert base[-1].obs is None
+    assert v4_live_tail_slots(tail, now=projected + 5.0) == base
+    # 形态二: 开放 n 游程(qB 断连未恢复, 活尾只剩断连游程)
+    run_n = LiveTailRun(kind="n", start=start + 60.0, last_seen=start + 120.0, dl_total=0, up_total=0, samples=4)
+    tail_n = LiveTail(True, False, start, interval, start + 60.0, (), run_n)
+    base_n = v4_live_tail_slots(tail_n)
+    assert base_n and base_n[-1].obs is None
+    assert v4_live_tail_slots(tail_n, now=start + 125.0) == base_n
+
+
+def test_v4_live_tail_slots_hold_none_default_and_edge_gaps():
+    """(F4 向后兼容面)now=None 缺省与无参形态逐槽恒等(既有机检全部按无参调用的面不漂);
+    gap == 0(now 未严格超出链端)与时钟回拨(now < 链端)不延伸"""
+    interval = 30
+    start = 1_800_000_000
+    recs = (V4Sample(100, 50, 1000, 500), V4Sample(200, 70, 2000, 800))
+    projected = v4_block_slots(V4Block(start, interval, 1000, 500, recs))[-1].ts
+    tail = LiveTail(True, False, start, interval, projected, recs, None)
+    base = v4_live_tail_slots(tail)
+    assert v4_live_tail_slots(tail, now=None) == base
+    assert v4_live_tail_slots(tail, now=None, max_gap_s=10.0) == base
+    # gap == 0: now 恰在链端(未严格超出)不延伸
+    assert v4_live_tail_slots(tail, now=projected) == base
+    # 时钟回拨: now < 链端不延伸
+    assert v4_live_tail_slots(tail, now=projected - 5.0) == base
+    # 全部槽 is_hold 缺省 False(镜像保证面不漂: 磁盘槽 + 活尾槽 == 整块重算仍成立)
+    assert not any(s.is_hold for s in base)
+
+
+def test_v4_live_tail_slots_hold_param_fail_fast():
+    """(F4 fail-fast)now 非 None 时须有限数值 / max_gap_s 须正有限数值, 违者 ValueError
+    (垃圾入参不静默产槽)"""
+    interval = 30
+    start = 1_800_000_000
+    tail = LiveTail(True, False, start, interval, start + 60.0, (V4Sample(1, 1, 1, 1), ), None)
+    with pytest.raises(ValueError):
+        v4_live_tail_slots(tail, now=float("nan"))
+    with pytest.raises(ValueError):
+        v4_live_tail_slots(tail, now=float("inf"))
+    with pytest.raises(ValueError):
+        v4_live_tail_slots(tail, now="bad")
+    with pytest.raises(ValueError):
+        v4_live_tail_slots(tail, now=True)
+    with pytest.raises(ValueError):
+        v4_live_tail_slots(tail, now=start + 61.0, max_gap_s=0)
+    with pytest.raises(ValueError):
+        v4_live_tail_slots(tail, now=start + 61.0, max_gap_s=-1.0)
+    with pytest.raises(ValueError):
+        v4_live_tail_slots(tail, now=start + 61.0, max_gap_s=float("inf"))
+    # 合法入参照常(now 整数型数值收窄到 float 槽 ts)
+    slots = v4_live_tail_slots(tail, now=start + 61, max_gap_s=5)
+    assert slots[-1].is_hold and slots[-1].ts == float(start + 61)

@@ -16,6 +16,7 @@
 - test_v4_rate_from_totals_zchain_vacuum_null_passthrough: z 桶(快照恒定)delta=0 -> 0 线续链; 真空/断连 null 点原样透传且断链;
   断链后基线缺失 rate=None 而 totals 保留(观测面缺口不吞快照); (26-10-16-0954 修复轮)短缝跨标记按真实跨度覆盖份额摊配回收
 - test_v4_rate_from_totals_wide_bucket_byte_conservation: 宽桶 rate = delta/w —— 逐桶 rate×w = delta 且 Σ(rate×w) = Σ delta 字节守恒(整除构造)
+- test_v4_rate_from_totals_hold_honest_fallbacks: (26-11-14-1313 F4)holding 桶点速率面诚实回退三态 —— hold 为首桶点 / null 断口后接 hold(持有面清空, 不跨断口) / 前观测点速率派不出(基线缺失·重置)后接 hold, 三态均 rate None 不造速率(快照照记, is_hold 旗透传)
 - test_bucket_delta_null_and_reset
 - test_grid_for_now_wraps_build_grid
 - test_v4_agg_obs_live_merge_partial_and_residual
@@ -425,6 +426,48 @@ def test_v4_rate_from_totals_wide_bucket_byte_conservation():
     assert [p.dl_rate * p.w for p in out[1:]] == [1500, 600]  # 逐桶 rate×w = delta
     assert sum(p.dl_rate * p.w for p in out[1:]) == 3100 - 1000  # Σ = Σ delta(种子快照->末快照)
     assert sum(p.up_rate * p.w for p in out[1:]) == 1700 - 500
+
+
+def test_v4_rate_from_totals_hold_honest_fallbacks():
+    """(26-11-14-1313 F4)holding 桶点速率面的诚实回退三态 —— 持有面只承接「上一观测
+    桶点的已重写速率」, 不可得即 None(不造速率); totals 快照照记, is_hold 旗透传:
+    (a) hold 为首桶点(无前观测) -> rate None;
+    (b) 观测点 -> null 点(断口) -> hold 点: held 清空, 不跨断口持有(持有面缺失时若
+        误接前断口速率 20/10 即红);
+    (c) 前观测点速率派不出(窗首基线缺失 / cur<last 重置) -> hold rate None(诚实未知)"""
+    # (a) hold 为首桶点
+    out = v4_rate_from_totals((V4PointEntry(1000, 50, 25, 1000, 500, w=30, is_hold=True), ))
+    assert (out[0].dl_rate, out[0].up_rate) == (None, None)
+    assert (out[0].dl_total, out[0].up_total) == (1000, 500)  # 快照照记
+    assert out[0].is_hold  # 旗透传
+    # (b) 观测点 -> null 断口 -> hold 点
+    pts = (
+        V4PointEntry(1000, 50, 25, 1000, 500, w=30),  # 窗首基线缺失 -> rate None
+        V4PointEntry(1030, 50, 25, 1600, 800, w=30),  # delta 600/300 -> 20/10(建立持有面)
+        V4PointEntry(1060, None, None, None, None, w=0),  # null 点: 持有面清空
+        V4PointEntry(1090, 50, 25, 1600, 800, w=30, is_hold=True),  # hold -> None
+    )
+    out = v4_rate_from_totals(pts)
+    assert [(p.t, p.dl_rate, p.up_rate) for p in out] == [
+        (1000, None, None),
+        (1030, 20, 10),
+        (1060, None, None),  # null 点原样透传
+        (1090, None, None),  # 不跨断口持有
+    ]
+    assert out[3].is_hold and (out[3].dl_total, out[3].up_total) == (1600, 800)
+    # (c) 前观测点速率派不出(基线缺失 -> 重置)
+    pts = (
+        V4PointEntry(1000, 50, 25, 1000, 500, w=30),  # 窗首基线缺失 -> rate None
+        V4PointEntry(1030, 50, 25, 800, 400, w=30),  # 重置(800 < 1000): delta None -> rate None
+        V4PointEntry(1060, 50, 25, 800, 400, w=30, is_hold=True),  # hold -> None(诚实未知)
+    )
+    out = v4_rate_from_totals(pts)
+    assert [(p.t, p.dl_rate, p.up_rate) for p in out] == [
+        (1000, None, None),
+        (1030, None, None),
+        (1060, None, None),
+    ]
+    assert out[2].is_hold and (out[2].dl_total, out[2].up_total) == (800, 400)
 
 
 def test_grid_for_now_wraps_build_grid():
