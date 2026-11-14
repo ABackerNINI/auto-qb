@@ -12,6 +12,8 @@
 - **readonly 字段防线(issue 26-09-28-2135)**: schema 打了 readonly 标的"程序托管"字段
   (schema_version/data_dir/state_file/fs)提交后一律回退为磁盘旧值 —— R 级回退与版本盖章已实际
   兜住这四点, 本防线按 schema 键面再兜一层, 防未来新增点位漏配时重演「UI 可编辑但保存不生效」
+- **掩码化导出单点(计划 26-11-14-0624 S1)**: `mask_yaml_text` 把 YAML 原文按同一套敏感键判定
+  整体掩码为可外发文本(配置备份 bundle), ruamel round-trip 保注释/格式, 纯内存不落盘
 - **ruamel round-trip 写盘**: 已存在键的注释保留; 列表项与新增键无注释(设计取舍, 见计划)
 - **写盘链并发防线(issue 26-11-07-0527 R2#17)**: write_tree / materialize_schema_migration
   全程持模块级 _WRITE_LOCK 串行化(webui PUT handler 走 FastAPI 线程池并发, 无锁时两次保存
@@ -141,6 +143,60 @@ def _mask_target_item(item: Any) -> Any:
         if out.get(key) not in (None, ""):
             out[key] = MASK_SENTINEL
     return out
+
+
+def mask_yaml_text(text: str) -> str:
+    """把 YAML 原文整体掩码为可外发的文本(配置备份 bundle 导出单点, 计划 26-11-14-0624 S1)
+
+    掩码判定与 mask_tree 同一套单点(SENSITIVE_KEY_PARTS / TRANSFER_TARGETS_PATH /
+    TARGET_SECRET_KEYS), 不新增敏感键类别: 键名含敏感片段的非空标量 -> MASK_SENTINEL,
+    config.web.transfer.targets 条目的 password/api_key 同哨兵; 空值不掩码
+    (web.token/hr.token 留空 = 自动生成落 <data_dir>, 不算机密)。
+
+    ruamel round-trip: 掩码只原地改敏感标量一个值, 注释/引号/缩进/空行等其余字节原样
+    (R7 由测试 byte 级钉死)。注意 diff 基线是 ``dump(load(text))`` 无掩码 dump 而非原文
+    —— ruamel 对缩进/行内注释空格的归一化是 load+dump 固有行为, 掩码不额外引入差异。
+
+    空文件/非映射文档(列表/标量)返回空串 —— 与 read_tree 把非映射当空 config 段的防御
+    口径一致, 绝不把原文明文回传(堵 D2 旁路)。解析失败原样抛错(fail-fast): config.yml
+    由启动链与 write_tree 维护, 恒为合法 YAML。
+    纯内存操作(读串 -> 内存掩码 -> 内存 dump), 不触碰磁盘, 不取 _WRITE_LOCK。
+    """
+    ry = _build_yaml()
+    doc = ry.load(StringIO(text))
+    if not isinstance(doc, dict):
+        return ""  # 空文件/非映射: 无可掩码内容 -> 空串(非映射当空, 与 read_tree 同口径; 明文原样返回即 D2 旁路)
+    _mask_yaml_node(doc, ())
+    buf = StringIO()
+    ry.dump(doc, buf)
+    return buf.getvalue()
+
+
+def _mask_yaml_node(node: Any, path: Tuple[str, ...]) -> None:
+    """ruamel 文档树的就地掩码: 判定与 _mask_node 逐字同口径, 区别仅在原地改值
+
+    原地改(而非重建映射)是保注释的关键 —— ruamel 的注释挂在键节点上, 换新对象会丢;
+    只改标量值时该键的前注/行注/引号形态全部保留。列表项下钻同样只认
+    TRANSFER_TARGETS_PATH(配对契约见模块头注释), 其它列表整体按 _mask_node 口径处理。
+    """
+    if not isinstance(node, dict):
+        return
+    for key in list(node.keys()):
+        value = node[key]
+        lowered = str(key).lower()
+        next_path = path + (str(key), )
+        if isinstance(value, dict):
+            _mask_yaml_node(value, next_path)
+            continue
+        if isinstance(value, list) and next_path == TRANSFER_TARGETS_PATH:
+            for item in value:
+                if isinstance(item, dict):
+                    for secret_key in TARGET_SECRET_KEYS:
+                        if item.get(secret_key) not in (None, ""):
+                            item[secret_key] = MASK_SENTINEL
+            continue
+        if value not in (None, "") and any(part in lowered for part in SENSITIVE_KEY_PARTS):
+            node[key] = MASK_SENTINEL
 
 
 def unmask_tree(tree: Dict[str, Any], old_tree: Dict[str, Any], path: Tuple[str, ...] = ()) -> Dict[str, Any]:
