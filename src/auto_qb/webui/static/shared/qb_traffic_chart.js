@@ -66,6 +66,18 @@
  * N 层/扫描束恒 Lv.1 色, 束宽度感按等级 ×0.9/1/1.1); 抽屉入场 rAF 追赶循环在途时切片与微震
  * 暂停(§09 让位)。
  *
+ * 常驻菱形锚(F2, plan 26-11-14-1313 §03 F2/D2): 末点旋转方块的**常驻环境层**改走 CSS 合成器
+ * —— 两枚 .qb-fx-anchor DOM 方块挂 uPlot .u-wrap, keyframes 420ms linear infinite(模板 t/420
+ * 同拍), 零 rAF/零重绘(D2: 旋转走合成器, 不进 draw 循环; 背景恒静态, 菱形是 DOM 元件不引入
+ * 画布铺底 —— G5/R4); 画布侧菱形本体移除(避免双画), N 锚辉光(anchorHalo)保留画布侧拍内脉冲
+ * 且位置公式与 DOM 同源(判定线 x + 末点 y)。位置同步点收敛四处(R3): 判定帧 _qbBeatStart /
+ * 收敛帧 _qbBeatConverge / 锚钩子 _qbDrawFxAnchor 顶部(每次画布提交顺路重写)/ ResizeObserver;
+ * _qbFxCfgSync 汇入门面(cfg.on / palette 变化即时生效)。门 = cfg.on===true 且图活跃, 缺口轨
+ * 隐藏(I10 模板 live 门同款); reduced-motion 双保险(cfg.on 已含 !reduce + CSS 媒体查询隐藏
+ * —— P2: 隐藏不是静态方块); calm 档 border-radius 退化圆点(模板 isCalm 同款)。CSS 经
+ * _qbChartInjectCss 单点注入(四皮肤零侵入); 元件随图建/随图清(_qbChartDestroy 显式清记录,
+ * 元件本体在 u.root 内随 u.destroy 拆除 —— 换肤/重建零残留)。
+ *
  * 面板接线(S3, plan §05.3/§05.4/§06 S3 行 + D21): cfg.ease 消费端 —— 数值插值曲线选择单点
  * _qbFxCurve, 判定帧冻结进 anim.easeF(拍内不换式, 下一拍起用), 帧循环经 _qbFxShown 单次施加
  * (L1 专用; L0 与装饰运动曲线恒 easeOut); cfg.shift 消费端 —— instant 对照档判定帧跳过 L0
@@ -1667,6 +1679,14 @@ window.AQB_QB_TRAFFIC = {
       const cfg = JSON.parse(JSON.stringify(this.fx));
       cfg.on = this.fxOn;
       window.AQB_FX_CFG = cfg;
+      // F2 常驻菱形锚门面(cfg.on / palette 变化即时生效, 不等下一拍): 总开关翻关/reduce 翻入
+      // 隐藏、翻开复显, calm 切档类即时对齐 —— 位置不在本面(四处同步点单管位置, R3 收敛口径)。
+      if (this._qbCharts) {
+        for (const s of Object.keys(this._qbCharts)) {
+          const uc = this._qbCharts[s];
+          if (uc && uc.root && uc.root.isConnected) this._qbFxAnchorSync(uc);
+        }
+      }
     },
     /* 状态行只读两项的周期实算单点(展示值 qbFxPeriodS/qbFxBeatMs 在 computed 块 —— 模板裸
      * 插值不加括号, 落 methods 会被 toDisplayString 渲染成函数源码字符串; §05.3 不可编辑项表) */
@@ -2442,11 +2462,102 @@ window.AQB_QB_TRAFFIC = {
       ctx.globalAlpha = 1;
       ctx.restore();
     },
+    /* ================= 常驻菱形锚 DOM 层(F2, plan 26-11-14-1313 §03 F2/D2) =================
+     * 末点旋转方块的常驻环境层: 两枚 .qb-fx-anchor DOM 方块挂 uPlot .u-wrap, 旋转走 CSS
+     * keyframes(420ms linear infinite, 注入单点 _qbChartInjectCss) —— 合成器动画, 零 rAF/
+     * 零重绘(D2: 不进 draw 循环; 背景恒静态, 菱形是 DOM 元件不引入画布铺底 —— G5/R4)。
+     * 位置 = 判定线 x(bbox 右缘, 与画布 tipX 静止位/模板 xJudge 同源) + 末点 y(双轨 shown 的
+     * 显示面换算, 公式与画布 yOf 同源; 动画期 yMax 读 anim.yMax 与画布钉档一致, 静止期读当前
+     * y 轴档 —— I4: 显示面与钉档换算恒同一把尺)。同步点收敛四处(R3):
+     *   1 判定帧  _qbBeatStart(轨道推进后同帧写 —— 覆盖零变化拍/早退拍, 锚位不落旧值)
+     *   2 收敛帧  _qbBeatConverge(setData 交还 auto 后写终值)
+     *   3 锚钩子  _qbDrawFxAnchor 顶部(每次画布提交顺路重写 —— L0 左移/L1 收敛的逐帧位置与
+     *     提交帧对齐; 挂钩子顶部而非门后, 无拍间隙的重绘也能带上锚)
+     *   4 ResizeObserver(宿主尺寸变 -> 判定线 x 与绘图区几何变, u.setSize 后立即重写)
+     * 另有门面单点: _qbFxCfgSync(cfg.on/palette 变化即时生效, 不等下一拍)。
+     * 门 = cfg.on === true 且图活跃且该轨活性(live && shown != null —— 缺口轨隐藏, I10 模板
+     * live 门同款); reduced-motion 双保险: cfg.on 已含 !reduce 分量 + CSS 媒体查询 display:none
+     * (P2: 隐藏, 不是静态方块); calm 档 .qb-fx-anchor-calm 退化圆点(模板 isCalm 同款, 类切换
+     * 随同步逐次对齐)。颜色 = tk 语义色内联(建图时捕获, 换肤重建即新令牌 —— I10)。 */
+    _qbFxAnchorEnsure(u, tk) {
+      const wrap = u.root && typeof u.root.querySelector === "function"
+        ? u.root.querySelector(".u-wrap") : null;
+      if (!wrap) return;
+      // 幂等建(与 _qbFxBound 同款纪律): 图记录活着且元件还在(快路 setData 复用)就零操作;
+      // 完整重建走 _qbChartDestroy -> u.destroy 拆 root(元件随拆)后新建。残留防御: 摘掉孤儿再建。
+      if (u._qbFxAnchors && u._qbFxAnchors.up && u._qbFxAnchors.up.isConnected
+        && u._qbFxAnchors.dl && u._qbFxAnchors.dl.isConnected) return;
+      if (u._qbFxAnchors) {
+        for (const k of ["up", "dl"]) {
+          const old = u._qbFxAnchors[k];
+          if (old && old.parentElement) old.remove();
+        }
+      }
+      const mk = (k) => {
+        const el = document.createElement("div");
+        el.className = "qb-fx-anchor qb-fx-anchor-" + k;
+        el.style.background = k === "up" ? tk.up : tk.down;   // 语义色内联(I10/D1)
+        el.style.display = "none";   // 初始隐藏: 首次同步(位置+门)前不显形
+        wrap.appendChild(el);        // 挂 .u-wrap 末位: 画布与 .u-over 之上, 随 u.destroy 一并拆除
+        return el;
+      };
+      u._qbFxAnchors = { up: mk("up"), dl: mk("dl") };
+    },
+    /* 位置/门同步单点(四处同步点与门面共用的唯一落笔处): 只写变值(left/top/display/class),
+     * 逐帧调用不制造无谓布局; 几何/门任一不满足即隐藏, 不猜位置。u._qbFxAnchors 不存在(建图
+     * 前的提交/桩环境)零操作。 */
+    _qbFxAnchorSync(u) {
+      const anc = u && u._qbFxAnchors;
+      if (!anc) return;
+      const cfg = window.AQB_FX_CFG;
+      const st = u._qbBeat;
+      const geomOk = !!(cfg && cfg.on === true && st && u.root && u.root.isConnected
+        && u.bbox && u.bbox.width > 0 && u.bbox.height > 0);
+      const calm = !!(cfg && cfg.palette === "calm");
+      const pos = {};
+      if (geomOk) {
+        const px = (typeof uPlot !== "undefined" && uPlot.pxRatio) || 1;
+        const L = u.bbox.left / px;
+        const T = u.bbox.top / px;
+        const W = u.bbox.width / px;
+        const H = u.bbox.height / px;
+        const a = st.anim && st.anim.phase !== "tail" ? st.anim : null;
+        const yMax = a && a.yMax > 0 ? a.yMax
+          : (u.scales && u.scales.y && u.scales.y.max > 0 ? u.scales.y.max : 1);
+        const x = L + W;   // 判定线 x
+        const yOf = (v) => T + H * (1 - Math.min(v, yMax) / yMax);
+        for (const k of ["up", "dl"]) {
+          const tr = st.tracks && st.tracks[k];
+          if (tr && tr.live && tr.shown != null) pos[k] = [x, yOf(tr.shown)];
+        }
+      }
+      for (const k of ["up", "dl"]) {
+        const el = anc[k];
+        if (!el) continue;
+        el.classList.toggle("qb-fx-anchor-calm", calm);
+        const p = pos[k];
+        if (!p) {
+          if (el.style.display !== "none") el.style.display = "none";
+          continue;
+        }
+        if (el.style.display !== "") el.style.display = "";
+        if (el._aqbAnchorX !== p[0] || el._aqbAnchorY !== p[1]) {
+          el._aqbAnchorX = p[0];
+          el._aqbAnchorY = p[1];
+          el.style.left = p[0] + "px";
+          el.style.top = p[1] + "px";
+        }
+      }
+    },
     /* draw 装饰段(系列之上): lead 策略从属轨描边加亮(D3-a: 只加亮描边 + 小锚点; 语义色加宽
-     * 半透明短段, 不着 Lv —— I10) -> 末点菱形锚(每活性轨一枚; D4 y 间距 <26px 时缩小但两轨
-     * 各自保留; N 锚辉光 = 白名单 anchorHalo, 无 blur 低透明外圈菱形 —— blur 预算让给环外圈
-     * 与 T2 bandHalo)。锚辉光色走 T5 联动单点(grade 关恒 Lv.1 —— S2-b)。 */
+     * 半透明短段, 不着 Lv —— I10) -> N 锚辉光(白名单 anchorHalo, 无 blur 低透明外圈菱形 ——
+     * blur 预算让给环外圈与 T2 bandHalo; 辉光色走 T5 联动单点, grade 关恒 Lv.1 —— S2-b)。
+     * F2(plan 26-11-14-1313): 末点菱形**本体**移除画布侧(常驻层交 DOM .qb-fx-anchor, 本方法
+     * 顶部顺路重写其位置 —— 避免双画); 辉光保留拍内脉冲, 位置公式与 DOM 同源(判定线 x +
+     * 末点 y —— L0 期间不随 tipX 滑出判定线, 与 DOM 锚恒重合, R3 双源漂移即红)。clip 放宽
+     * (F5)与 lead 从属轨加亮原样保留 —— 加亮段仍画在画布。 */
     _qbDrawFxAnchor(u, tk) {
+      this._qbFxAnchorSync(u);   // F2 同步点之锚钩子: 每次画布提交顺路重写 DOM 锚位(位置/门/类)
       const st = u._qbBeat;
       const a = st && st.anim;
       if (!a || a.phase === "tail" || !a.fx) return;
@@ -2462,13 +2573,12 @@ window.AQB_QB_TRAFFIC = {
       const W = u.bbox.width / px;
       const H = u.bbox.height / px;
       // F5(plan 26-11-14-1313): clip 右缘放宽到画布右缘(同 _qbDrawFx/_qbDrawFxScan 口径) ——
-      // 末点在绘图区右缘的菱形锚右半不再被切; 锚(数据标记)保持真位, 近底不钳(P3)。
+      // 末点在绘图区右缘的 N 锚辉光右半不再被切(F2 后画布只留辉光, 菱形本体在 DOM 常驻层);
+      // 辉光位置与 DOM 同源(判定线 x), 近底不钳。
       const canvasW = ctx.canvas && ctx.canvas.width ? ctx.canvas.width / px : L + W;
       ctx.beginPath();
       ctx.rect(L, T, Math.max(W, canvasW - L), H);
       ctx.clip();
-      const dx = a.needsShift ? (a.lastDx || 0) : 0;
-      const tipX = L + W + dx * fx.pxPerT;
       const yOf = (v) => T + H * (1 - Math.min(v, a.yMax) / a.yMax);
       const tr = st.tracks;
       const yUp = yOf(tr.up.shown);
@@ -2507,21 +2617,18 @@ window.AQB_QB_TRAFFIC = {
           if (started) ctx.stroke();
         }
       }
-      // 末点菱形锚(数据语义; D4: 重叠时缩小但两轨各自保留; lead 策略从属轨小锚)
+      // N 锚辉光(白名单 anchorHalo): 无 blur 低透明外圈菱形拍内脉冲 —— F2 后画布侧只留辉光,
+      // 菱形本体在 DOM 常驻层; 辉光位置与 DOM 同源(判定线 x + 末点 y, 不随 L0 tipX 滑动)。
       for (const k of ["up", "dl"]) {
         if (!fx.act[k]) continue;
         const y = k === "up" ? yUp : yDl;
         const role = cfg.dual === "lead" && k !== fx.lead ? 0.6 : 1;
         const r = 5 * role * fx.gapScale;
-        ctx.globalAlpha = ens;
-        ctx.fillStyle = k === "up" ? tk.up : tk.down;
-        _qbFxPolyPath(ctx, tipX, y, r, 4, rot);
-        ctx.fill();
-        if (neon) {   // N 锚辉光(白名单 anchorHalo): 无 blur 低透明外圈菱形
+        if (neon) {
           ctx.globalAlpha = 0.35 * q;
           ctx.strokeStyle = lvColor;
           ctx.lineWidth = 1;
-          _qbFxPolyPath(ctx, tipX, y, r * 1.8, 4, rot);
+          _qbFxPolyPath(ctx, L + W, y, r * 1.8, 4, rot);
           ctx.stroke();
         }
       }
@@ -2577,6 +2684,9 @@ window.AQB_QB_TRAFFIC = {
       const tl = _qbBeatTimeline(this._qbPollMs(scope), cfg ? cfg.shiftRatio : undefined);
       tr.up = _qbFxTrackNext(tr.up, u.data[1] ? u.data[1][n - 1] : null, floor);
       tr.dl = _qbFxTrackNext(tr.dl, u.data[2] ? u.data[2][n - 1] : null, floor);
+      // F2 常驻菱形锚 · 同步点 1/4(判定帧): 轨道推进后同帧写锚位 —— 摆在 reduce/零变化早退
+      // 之前, 早退拍(瞬时落地)锚位也跟新值/新档走, 不落旧值(显示面 —— I4/I8, 真值面零触碰)。
+      this._qbFxAnchorSync(u);
       if (reduce) {
         // I7: 真值已由快路 setData 落袋(u.data 即真值), 瞬时左移 = auto range 原生行为, 无 rAF
         tr.up.shown = tr.up.target;
@@ -2825,6 +2935,9 @@ window.AQB_QB_TRAFFIC = {
       u._qbTickFreeze = null;        // ticks 冻结清除: 本次提交即用真窗口现算标签(一次性刷新)
       u._qbTickFreezePending = false;
       u.setData([u.data[0], u.data[1], u.data[2]]);
+      // F2 常驻菱形锚 · 同步点 2/4(收敛帧): 真值落袋后把锚位写到终值(shown=target), 拍间常驻
+      // 位置与曲线尾点对齐 —— setData 提交本会经锚钩子带上, 此处显式落笔钉住计划四处之一(R3)。
+      this._qbFxAnchorSync(u);
       // S2-a 次区相位衔接(tail 开启且有活性轨): 主区装饰在本帧已全部回落(环/粒子 ≤0.55×beat、
       // N ≤0.33×beat —— 收敛帧零残留), 此处转入 tail 相位让次区光点沿末段曲线缓动到下一拍前
       // (窗长 tail = min(period − beat, 2000), 600s 长窗也只铺 2s, 非常驻)。拍内 cfg 在
@@ -2975,6 +3088,9 @@ window.AQB_QB_TRAFFIC = {
       }
       const u = this._qbCharts[scope];
       if (u) {
+        // F2 常驻菱形锚随图清: 元件本体挂 u.root 的 .u-wrap 内, u.destroy 拆 root 时一并拆除;
+        // 图记录引用在此显式清(换肤/重建零残留, 与 _qbFxBound 幂等纪律对偶的清面)。
+        u._qbFxAnchors = null;
         u.destroy();
         this._qbCharts[scope] = null;
       }
@@ -3123,6 +3239,11 @@ window.AQB_QB_TRAFFIC = {
       };
       u._qbTickFreeze = null;
       u._qbTickFreezePending = false;
+      // F2 常驻菱形锚(F2, plan 26-11-14-1313): 两枚 DOM 方块挂 .u-wrap(幂等建, 颜色 = 本次
+      // 建图捕获的 tk 语义色内联 —— 换肤重建即新令牌), 随后首次位置/门同步; 旋转走 CSS
+      // keyframes(注入单点 _qbChartInjectCss), 同步点四处收敛见 _qbFxAnchorSync 注(R3)。
+      this._qbFxAnchorEnsure(u, tk);
+      this._qbFxAnchorSync(u);
       // 容器尺寸自适应(便签 26-10-04-0134 + 高度跟随): 建图尺寸一次取定后画布不重算 —— 对宿主挂
       // ResizeObserver, 宽/高任一变化即 setSize 重画(抽屉拖拽调高 -> 宿主高变 -> 图跟着长);
       // 宿主 width:100%/height:100% 不依赖图内容(三主题 views.css .qb-chart-host), 观察不会成环。
@@ -3140,6 +3261,10 @@ window.AQB_QB_TRAFFIC = {
           this._qbChartWs[scope] = w;
           this._qbChartHs[scope] = h;
           u.setSize({ width: w, height: h });
+          // F2 常驻菱形锚 · 同步点 4/4(ResizeObserver): 宿主尺寸变 -> 判定线 x 与绘图区几何变,
+          // u.setSize 后立即重写锚位(setSize 重绘本会经锚钩子带上, 显式落笔钉住计划四处之一
+          // —— R3 同步点遗漏即像素漂移)。
+          this._qbFxAnchorSync(u);
         }
       });
       ro.observe(host);
@@ -3178,7 +3303,12 @@ window.AQB_QB_TRAFFIC = {
     },
     /* uPlot 1.6.x 必要基础样式(官方 uPlot.min.css 的结构性子集; 不 vendor css 文件, 按计划
      * 以 token 化样式注入一次): 色值两处(十字虚线)走 --fg-dim 令牌, 换肤自动跟随;
-     * 图例/标题规则不注入(本组件 legend 关闭/无标题)。 */
+     * 图例/标题规则不注入(本组件 legend 关闭/无标题)。
+     * 同单点追加常驻菱形锚(F2, plan 26-11-14-1313)的类样式: 旋转 = keyframes 420ms linear
+     * infinite(模板 t/420 同拍), 合成器动画零 rAF/零重绘(D2); reduced-motion 媒体查询隐藏
+     * (P2 拍板: 隐藏, 不是静态方块 —— 与 JS 门 cfg.on 的 !reduce 分量双保险);
+     * calm 档退化为圆点(.qb-fx-anchor-calm, border-radius 50% —— 模板 isCalm 同款)。
+     * 颜色不走这里: 语义色由 _qbFxAnchorEnsure 按 tk 内联(换肤重建即新令牌 —— I10)。 */
     _qbChartInjectCss() {
       if (document.getElementById("aqb-uplot-css")) return;
       const el = document.createElement("style");
@@ -3197,6 +3327,12 @@ window.AQB_QB_TRAFFIC = {
         ".u-hz .u-cursor-y, .u-vt .u-cursor-x { width: 100%; border-bottom: 1px dashed var(--fg-dim); }",
         ".u-cursor-pt { position: absolute; top: 0; left: 0; border-radius: 50%; border: 0 solid; pointer-events: none; will-change: transform; background-clip: padding-box !important; }",
         ".u-axis.u-off, .u-select.u-off, .u-cursor-x.u-off, .u-cursor-y.u-off, .u-cursor-pt.u-off { display: none; }",
+        "/* aqb: 常驻菱形锚(F2, plan 26-11-14-1313) —— 位置(left/top)由 JS 在四处同步点写入,",
+        "   旋转走 keyframes 合成器动画(零 rAF/零重绘 —— D2); left/top 变值才写(逐帧同步点不制造无谓布局)。 */",
+        ".qb-fx-anchor { position: absolute; width: 8px; height: 8px; margin: -4px 0 0 -4px; pointer-events: none; will-change: transform; animation: aqb-fx-anchor-spin 420ms linear infinite; }",
+        ".qb-fx-anchor.qb-fx-anchor-calm { border-radius: 50%; }",
+        "@keyframes aqb-fx-anchor-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }",
+        "@media (prefers-reduced-motion: reduce) { .qb-fx-anchor { display: none; } }",
       ].join("\n");
       document.head.appendChild(el);
     },

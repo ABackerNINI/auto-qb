@@ -9,6 +9,7 @@
 
 - test_frontend_qb_fx_visual_engine_battery: 视觉引擎 V + N 霓虹元素层 S2-a 电池 + 接缝静态钉(S2-a, plan 26-11-12-1139 §03 V 表/N 节/D1-D4, §06 S2 行) —— node 电池真跑(同节拍内核范式): I6 图层顺序常量逐字(geometry/neon 恒在 curve 前、anchor 在后)+ I11 N 层白名单六元素(S2-b 增 bandHalo 数值光带辉光)/黑名单八元素逐字且零交集 + V1 Lv 色表逐字(#7AD9FF/#FEFFA9/#FF6BD6; 四皮肤无 --qb-lv* 令牌已核查, 计划色值常量落 shared 层)+ 三档配色 blur 上限(neon 10/glitch 14/calm 0)+ V2 环边数映射(3/6/8)+ I9 预算常量(粒子 ≤32/每轨半套 ≤16/N 0.33×beat/粒子窗 0.55×beat/y 间距 26px/切片 ≤5/微震 3px/光点 ≤2/末段 6 桶) + D3 lead 仲裁(argmax 优先非缺口非静默轨/双轨静默 null/恰等取 up) + partCap(等级基数 16/24/32 x 密度, clamp 32, 密度 ≤0 零粒子) + D3 三策略分配(both 对半各 ≤16 合计守恒全域扫/lead 全套从属零/merge 中点一次/未知回落 both) + D4 y 间距缩小(线性 /26 下限 0.4 不合并不取消) + N 回落 0.33×beat + 冲击环(easeOut 扩张/alpha 线性回落/0.55×beat 后 null) + V3 粒子三阶段(爆发 ×4.5 闭式/拖尾 easeOut 减速位移步单调收缩/末态恰 dist/t=0 alpha=1 与判定线闪光同帧/carryPx 随 L0 末点滑动) + 喷射清单(三/四/五边非圆点/同种子恒同/左向 270° 弧避开右向扇区/尺寸行程界) + R6 撕裂切片(≤5/|dy0| ≤3/长 10-80/同参数恒同) + 伪随机确定性; 调度器 fx 面(真 mixin 方法 + 桩 uPlot 含 valToPos/bbox 全量): 判定帧 fx 生成门(cfg.on=false fx null 但 L0/L1 照常/reduce 无 anim/缺口轨 lead 单轨/双轨真 0 零装饰 —— F1 后值>0 恒 >=Lv.1)+ both/lead/merge 三策略落 fx 清单 + D4 y 间距实测缩小 + 装饰帧保障(无 shift 长窗 impact 窗零提交帧强制重绘 + y 钉 31.5 成对)+ 次区相位(收敛帧衔接/光点 ≤4 alpha ≤0.35 位置在绘图区内/1px 量化节流零提交/窗尽收尾 anim null/拍内关 tail 下一帧收尾)+ merge+缺口轨落位退 lead 末点 y(F7: specs.merge[0].y0 === yOf(lead.shown), 与底边的假中点即红 —— 评审修复2; S2-b 起切片锚带改 R6 撕裂带 ±(0.08+0.30×min(1,Δ/0.5))×H, 断言带内且清单无条件生成)+ spawn 满额清单与密度解耦(F8: 密度 0.4 仍 16/16, cap=partCap(lv,1) —— 评审修复3) + R6 撕裂带 spawn 公式逐条紧断言(F9: halfBand=(0.08+0.30×min(1,Δ/0.5))×H + strat×hash01(尾桶,slot) + 带内钳边与梳齿绘图区钳 —— 评审 minor4: 半带系数与归一分母变异即红); 绘制面 ctx 桩电池(G0-G12, 记账式 2d context 真 _qbDrawFx/_qbDrawFxAnchor): blur 预算(非零赋值恰 1 施加点/带 blur stroke = spots 数 ≤2/逐帧扫帧末 shadowBlur 恒 0/palette=calm 恒不赋非零 —— 评审修复7, 变异自证删 blur 清零行必红; 旧场景 shown=prev 光带零长 bandHalo 不参与, S2-b 完整 ≤3 预算在 scan_band 电池)+ neon=false 零白名单元素落笔(fillText/shadowBlur/Lv 色描边, 锚段同验)+ 密度拍内即时(0.4→13/1→32/0.1→3 粒)+ 切片 palette 逐帧门(neon 零切片/拍内切 glitch 下一帧即画 5 条 1px 级 —— 评审修复4; S2-b 计数按 x<绘图右缘滤除束体梳齿)+ draw 侧 merge+缺口轨环心 = yOf(lead.shown)(x=tipX 顶点四点均值观测, 假中点即红)+ lead 加亮跨缺口重新 moveTo 不桥接([20,null,25] vs [20,22,25] 对照 —— 评审修复6); 静态钉: I6/I11/V1/I9 常量行逐字 + 钩子注册序 = 层序(vendor 1.6.32 源实证: 主渲染序 clearRect→drawClear→Pl.forEach[axes→series]→draw, Ci("drawAxes") 在 Dl.axes 末尾 = 网格后系列前 —— drawClear 斜纹恒最底/drawAxes fx(挂 drawClear 会被网格盖住违 I6)/draw 限速→锚)+ 背景零铺色(fx 域剥注释后 fillRect 恰 1 处且为切片 1px 级、锚/次区域零 fillRect)+ I11 黑名单(fx 域零触碰 legend/cursor/series)+ I3 反向钉(fx 域零 destroy/new uPlot/loading)+ 生效条件门(spawn 与 fx 装饰段逐帧复核 cfg.on、tail 域复核 cfg.tail)+ 收敛帧次区衔接(phase tail/fxTail/cfg.tail 门)+ 装饰帧保障行 + 次区相位分支在 _qbBeatFrame(装饰帧挂调度器循环, 无独立循环) + S4-a 轮 F1e/G9(§10 双轨探针「上传零粒子零环、下载有反馈」两面; F1 后静默面收窄为真 0/缺口轨): F1e 上轨真 0(target==0 -> level 0)时 lead=dl 真零轨不参与仲裁/act.up=false/act.dl=true/次区资格只 dl —— 与 F1d 缺口轨(live=false)互补的「live=true 但真 0」面; B3 追加 F1e2(F1 下限 spawn 消费面: 值>0 delta=0 恒 Lv.1 -> act/次区资格全开 + 装饰清单在场)与 G0(fx/锚段 clip 实参记账: 右缘放宽到画布右缘宽 840, F5)/G11(环心钳制分支: shown 经 yOf 越下界 305->钳 T+H-rMax=281/越上界 24.3->钳 T+rMax=39/区间内恒等不咬合 —— 评审 major: 近底 e2e 墨量探针对钳制删除假阴性, 钳制语义的机检面)/G12(粒子底缘镜像: 90° 单粒子 ps.y=318.6 越底 -> fill 顶点均值 = 折回值 301.4, 删镜像行必红); G9 绘制面计数(spawn 侧 alloc 照发 both 半套, spots 组装被 fx.act 门滤除 —— 真 0 注入态 16 vs 双活性对照 32, act 门删掉即 32/32 翻倍) + 裁决轮追加 F1f/G10 并经评审 major 修正(calm 档零粒子: plan §04 原型 partCap 的 isCalm 口径, §10「克制档零粒子」原文补齐; 生产只采纳 calm 分量 —— 原型另有 leadLevel()<=1->0 门, Lv.1 发粒子系用户拍板维持现状/P9 未采纳; 唯一闸 = 绘制面 eff 逐帧门, spawn 恒满额清单与配色档解耦(F1f 钉, F8 同款 —— spawn 冻 palette 会让拍内切出 calm 余下冲击窗零粒子到下一拍才恢复且切片带 yCenter 漂移) + 拍内切 calm 下一帧零粒/切出恢复(G10 记账 ctx, neon 同参数 32 对照); isCalm 的 reduce 分量由 spawn 顶门 cfg.on !== true 承接)。无 node 静默跳过(同 _NODE_QB_TRAFFIC_PROBE 口径)
 - test_frontend_qb_fx_scan_band_battery: T6 综合表现层 S2-b 电池 + 接缝静态钉(S2-b, plan 26-11-12-1139 §03 T4/T6 行/R6 节/D17-D19, §02 R5/R6/R7) —— node 电池真跑(同视觉引擎范式): R6 确定性伪随机(_qbFxHash01 同(拍,槽)恒同且恒 [0,1)/分布 45/35/20 ±0.05 —— plan §04 原型带符号 >> 版本实测 90% 落 [0,0.5) 色池失真, 生产改 Math.imul+>>> 雪崩, 分布断言守)/strat 分层采样恒 [0,1) 且第 i 条只在第 i 层内不聚集/tearRnd 三档(fixed 恒 0.5/random 连续调用不恒同/linked=hash01)/撕裂切片(2/3/5 按等级且 ≤5/长 10-80 随 Δ/alpha 0.18/0.26/0.34 按等级/y 在撕裂带 ±(0.08+0.30×min(1,Δ/0.5))×H 内且钳绘图区/同参数恒同/fixed 跨拍序号同形/linked 跨拍序号异形)+ 梳齿(3/5/7 按等级/长 4-24 随 Δ/带内/fixed 等距恒长) + 回声数学(D19/R7: span=clamp(0.22×绘图宽,100,200) 且不超绘图宽/full 存储档降格 auto/100-150-200 直取; fall=pow(1−d/span,0.85) 且 d≥span 恒 0 几何硬停/单调不增; echoQ 0.18-0.45beat 匀速且 q=1 即到点) + 束包络 stops(双峰分立/贴近 <0.08 合并单峰/钳 [0.02,0.98]/NaN 退 0.5) + T5 联动单点(lvColor/beamWScale: grade 关恒 Lv.1, 开随等级, 非法等级退 Lv.3) + 束体指令计数(_qbDrawFxScan 记账 ctx: 逐帧扫 t=0..beat 步 30 ≤23 且 Lv.3 色散+回声双开窗恰 23/回声窗止 450ms 恰 21/色散窗止 500ms 恰 19/0.55×beat 后 0/palette=calm 0/layers.scan=false 0/impact=0 0; 相位 A 行程: x0 从判定线+1.2 格 easeOut 单调收敛、0.12beat(冲击窗)内抵达; 除回声外全部竖笔 x ≥ 判定线不横穿数据、回声 x ≥ 判定线−200(I9-R7 探针); 回声 alpha ≤0.20 且 d=span 帧零回声指令而束体仍在)+ T2 光带(_qbDrawFx 记账 ctx: layers.band=true 双轨各一道渐变 stroke 于末点 x/shown=prev 零长不落笔/band=false 零渐变笔/bandHalo 仅 lead 一道 blur 描边 —— 同帧 blur stroke = 环外圈 2 + 光带 1 = 3(I9 辉光预算)/非零 blur 赋值点 ≤2/帧末 shadowBlur 恒清零)+ 横向线条(glitch 门下切片 5 条 1px 级且 x<右缘、束体+切片 5+23=28 合计、横向细线 5+7=12)+ 微震让位(_drawerAnimRaf 非零时切片零落笔, 归零恢复 —— §09)+ T5 grade=false 全域(描边/填充/渐变 stop/阴影色)无 Lv.3 色; 静态钉: 层开关接线点(cfg.layers.band/scan/grade 字面量 + _qbDrawFx 调用 _qbDrawFxScan 行在位)/束体绘制域(_qbDrawFxScan)剥注释后 fillRect 恰 1 处且为梳齿 1px 级、光带块零 fillRect/I3 反向钉扩 scan 域(零 destroy/new uPlot/loading)/切片微震让位门(!this._drawerAnimRaf 在切片条件内)/_qbFxLvColor(fx.lv, cfg.layers.grade === true) 恰 3 处(fx/锚/束)/束体常量行逐字(六层晕表/强度 0.78/条数表/alpha 表/回声七常量)。无 node 静默跳过(同 _NODE_QB_TRAFFIC_PROBE 口径)
+- test_frontend_qb_fx_anchor_battery: F2 常驻菱形锚 node 电池 + 接缝静态钉(S2b, plan 26-11-14-1313 §03 F2/D2, §04 S2b 行, R3) —— DOM 常驻层真跑(桩 uPlot 域对象 + DOM 桩元素 + 假 rAF 时钟, 同节拍内核范式): ensure 幂等建(恰两枚 .qb-fx-anchor 挂 .u-wrap, 类名 up/dl 可寻址; 颜色 = tk 语义色内联 I10; 初始隐藏; 再调零操作 —— 与 _qbFxBound 同款纪律) + 同步单点位置公式(判定线 x = bbox 右缘 + 末点 y = yOf(shown) 对当前 y 轴档; 门全开复显; 同位置重同步零改写 —— 变值才写) + K RO 面等价(bbox 宽变判定线 x 立即跟随) + 门三态(enabled=false / reduce(on=false) 隐藏、翻回复显; root 拆走隐藏; 死轨该轨隐藏活性轨照显 —— I10 模板 live 门同款) + D calm 档 .qb-fx-anchor-calm 挂/摘随同步对齐(模板 isCalm 同款) + E 四处同步点行为面(判定帧=显示末点 shown/收敛帧=终值 target/zero-change 早退拍同步仍执行按新档重算/锚钩子逐帧跟提交帧且 yMax 读 anim.yMax 与画布钉档同尺 —— I4) + G 门面 _qbFxCfgSync(翻关即时隐藏/翻开复显) + 销毁清面(_qbChartDestroy 清 u._qbFxAnchors, 元件随 u.destroy 拆 root —— 换肤重建零残留); 静态钉: CSS 注入单点四行逐字(.qb-fx-anchor 本体/8px+margin 居中+420ms linear infinite keyframes/calm border-radius:50%/prefers-reduced-motion display:none —— P2 隐藏不是静态方块) + 画布侧菱形本体移除(锚段零 _qbFxPolyPath(ctx, tipX) + N 锚辉光保留且位置与 DOM 同源(L+W) + clip(F5)/lead 加亮保留) + 四处同步点在位(判定帧在轨道推进后/收敛帧在 setData 后/锚钩子块首行/RO 在 setSize 后同回调) + 门面/建图/销毁接线(cfgSync 块内 sync、build 在 new uPlot 后 ensure、destroy 在 u.destroy 前清记录) + I3 反向钉扩锚 DOM 域(零 destroy/new uPlot/loading)。无 node 静默跳过(同 _NODE_QB_TRAFFIC_PROBE 口径)
 - test_frontend_qb_fx_panel_wiring_battery: 面板接线 S3 电池 + 接缝静态钉(S3, plan 26-11-12-1139 §05.3/§05.4/§05.9/§06 S3 行, D21) —— node 电池双发(真 mixin 方法 + 桩 uPlot/记账 ctx, 同节拍内核范式): 预览一拍六条语义逐条真跑(1) 不动窗口: needsShift=false/dx0=0 + 预览全程零 setScale("x") + xs/u.scales.x 逐帧零变化 + 末帧 setData 交还 auto; 2) 假 Δ 贴近真实量级: 相对 Δ 恰 clamp(0.18+0.35×密度,0.10,0.50) 且方向按轨 up 减/dl 加、密度 0->0.18 Lv.2 不固定拉满 Lv.3、target 钳 [0,yMax] 零跳轴(贴轴 Δ 被轴档压制 —— 计划伪代码值域钳的生产域适配)、零流量 up 减钳 0 诚实静默、死轨不造假复活; 3) 连点重启: previewToken 递增 + anim 携带当前 token(帧循环令牌门失效旧帧) + 从当前显示值接续不回跳 + 还原点继承首拍捕获; 4) 真值抢占: 真拍 setData 整组落袋 + 判定帧取消预览/镜像清/新拍以中断显示值接续照常收敛 + 对偶(真拍主区在途预览忽略、次区相位可被接管); 5) 不写 store: 预览三方法域零 persistQbFx/localStorage(静态钉) + 末帧还原真值 + 状态机复位真值对齐 + 在途重排走 _qbPreviewRestore 假 target 不落真值面; 6) 同预算: spawn 走真拍同一条 _qbFxSpawn(cap ≤32/半套 ≤16/切片 ≤5/梳齿 ≤7) + 记账 ctx 预览帧束体 ≤23、束+切片 ≤28(glitch 双开、分域计数合成 —— _qbDrawFx 内部调 scan 同 ctx 直数会重复计束) + 有墨量防空转(峰值 ≥19) + 连点 5 次单一 fx 粒子合计 ≤32)+ ease 消费(§05.3 ease 行 + D21 例外条款: _qbFxCurve 单点 out/linear/未知回落 + _qbFxLinear 恒等夹取 + _qbFxShown 单次施加(修正 S1 帧循环预 easeOut 的双重施加, 对齐计划 §03 公式与 §04 演示) + out vs linear 收敛序列形状不同(out 前载 clock200 帧 18.43 vs 13.33) + 拍中改 ease 当前拍不换式(冻结引用不变逐帧一致) + 下一拍起用(判定帧重读) + 预览同款冻结)+ 字段贯通收口(shift=instant 下一拍 L0 不播但 L1 照常收敛 + 拍中改档不中断; shiftRatio 拍中改在途时间线不变下一拍生效; enabled 面板全链 fxCheck 写唯一字段 -> persistQbFx 真落盘 -> _qbFxCfgSync 同步 on=false -> 下一拍装饰零绘制但 L0 照滚 + enabled=false 预览空操作; tail/impact/tear/echoSpan/layers/palette/particles/dual/neon 归 S2-a/S2-b 既有电池)+ 状态行镜像(fxBeatAt 只写当前 scope 真拍/预览不写 + fxPreviewing 翻转沿 + qbFxBeatAgeText 三态: —/4.2 s 前/时钟未追上钳 0.0)+ 缺省 scope=qbCurScope; 静态钉: 预览三方法域零持久化零定时器(不自动循环 —— D21)/ease 消费单点唯一(_qbFxCurve 定义1+调用2 恰两判定帧、cfg.ease 恰 2 处、S1 预折算行退场、L0 dx 行恒 easeOut)/shift=instant 消费点在判定帧(零消费字段补齐)/预览接缝(令牌门 + _qbPreviewEnd 先于 _qbBeatConverge + 重排预览支路 + _qbBeatCancel 清镜像)/状态行(模板 qbFxBeatAgeText + v-if fxPreviewing「· 预览中」+ state.js 三镜像字段显式建 + 1s 时钟开面板装/关面板与 beforeUnmount 双清)/双入口单状态源(总开关唯一入口 :checked=fxOn + fxCheck('enabled') 唯一写入、chart 零 fx.enabled 赋值面、contextmenu 只 openFxPanel —— D24 终态); 行为面另含评审修正轮 4 断言: 连点早退(!moving/!n)同走还原核心(假值不留痕的早退面, minor1)/连点 rAF 单飞钉(删 _qbBeatCancel 变异即红)/令牌门兜底触发同步清镜像(minor2)/ease+shift+shiftRatio 处理器全链 fxPick/fxRange->store->CFG(minor4) + S4-a 轮追加: N 块字段闭环 15 控件(§05.9 第 1 项电池级: fxPick 六下拉/fxRange 三滑杆/fxCheck 六复选含 layers.* 四键, 逐控件 -> fx 写入 + 单键 JSON 落盘(fxRange 验 @change 落盘一次) + watch 等价 -> CFG 同步 + fxPick 非法枚举回落现值不落盘)/静态钉 g(fx-panel.html 15 控件绑定串全量 —— 处理器/字段键改名 = 死控件, 行为电池直接调方法测不到模板漂移)。无 node 静默跳过(同 _NODE_QB_TRAFFIC_PROBE 口径)
 - test_frontend_qb_traffic_drawer_page_guard: 流量图抽屉的页面守卫(2026-10-06 修「qB 全局流量图出现在设置页」) —— drawerVisible 两形态先挡非主内容页且状态位不随切页翻(回页连数据/窗口选择一起回来) + 轮询与建图 active 同源含 page 判据(面板不在 DOM 还拉还画 = 对空气取数) + openDrawerTraffic 先切回主内容页 + state.js drawerVisible watcher 退场销毁图/进场补拉(种子详情支路 !s 的 $nextTick _dtSync 回页变体重挂, 归 test_drawer_seed_reentry_variant_remount)
 - test_frontend_qb_traffic_yaxis_and_annotation: 流量图纵轴固定模式 + 画布注解层守阵(2026-10-08, issue 26-10-07-0149 认领一并做) —— _qbYRange/_qbGapRuns 纯函数 node 真跑(自动 = peak*1.05 / 固定上限取 max(cap, peak*1.05) 峰值超上限按峰值显示 / 缺口 = 上下行皆 null 才算); 限速三作用域同源 = qB 全局限速上下行**较大者**(_qbGlobalLimit -> speedLimitBytes); 上限派生单点 _qbYCapOf(limit×1.2 / manual MiB); 三作用域**各自独立**持久化(qbYAxisStoreKey 三键 + qbInitialYAxis 只认合法模式与正数 + persistQbYAxis 吞异常) + 切档落盘重排(qbSetYAxisMode/qbSetYAxisManual -> _qbChartRescale 走 setData 重算 scale 不重建) + 限速变化重排 watcher(mounted 注册, this.drawer 守卫剔除 BaseTransition 假实例); 建图 y range 接纯函数 + draw/drawClear 两钩子画限速虚线/缺口斜纹(共享图面三挂点全生效, uPlot.pxRatio 设备像素换算, 限速线只画落在可视值域内的); 模板 .qb-tools/.qb-seg 控件 + CSS 三皮肤成对 + **控件组唯一挂点**(图下统计栏 .qb-statctl; 2026-10-16 版式改: 流量形态头部不再挂控件, 全局/分组与种子流量图三挂点对齐, 上限读数 qbYAxisCapText/.qb-tools-hint 随 UI 移除退役) + P4 重启缝提示(plan 26-10-15-0829; 左端口径修订 2026-10-16, issue 26-10-16-0954): _qbSeamHint 判据纯函数 node 真跑(重启贴近链末->提示(含首采即链末桶的实测帧形态)/链到右沿或链确已接续或旧后端->null, 边界含尾区起点、右沿与左端前一桶三点) + computed qbCurSeamHint 消费单点 + drawer.html 提示行文案单源带重启时刻锚 + 断线语义不变(spanGaps:false ×2)
@@ -5407,3 +5408,428 @@ def test_frontend_qb_themechange_event_pair():
     assert 'document.documentElement.removeEventListener("autoqb:themechange", this._qbOnThemeChange)' in ub \
         and "_qbThemeBound = false" in ub, \
         "beforeUnmount 必须对称摘除 autoqb:themechange 监听(removeEventListener + _qbThemeBound 复位)"
+
+
+# ==================== F2 常驻菱形锚 node 电池 + 接缝静态钉(S2b, plan 26-11-14-1313 §03 F2/D2,
+# §04 S2b 行, R3) ====================
+# DOM 常驻层(.qb-fx-anchor x2 挂 .u-wrap) + CSS keyframes 420ms(注入单点) + 四处位置同步点 +
+# 画布侧菱形本体移除(anchorHalo 保留且与 DOM 同源)。无 node 静默跳过(同 _NODE_QB_TRAFFIC 口径)。
+_NODE_QB_FX_ANCHOR_PROBE = r"""
+const fs = require("fs");
+global.window = {};
+const src = fs.readFileSync(process.argv[1], "utf8");
+const { methods } =
+  new Function(src + "\nreturn { methods: window.AQB_QB_TRAFFIC.methods };")();
+const checks = [];
+const ok = (name, cond) => checks.push([name, !!cond]);
+let rafId = 0;
+const rafMap = new Map();
+global.requestAnimationFrame = (cb) => { rafMap.set(++rafId, cb); return rafId; };
+global.cancelAnimationFrame = (id) => { rafMap.delete(id); };
+let nowMs = 0;
+Object.defineProperty(global, "performance", { value: { now: () => nowMs }, configurable: true });
+function mkEl() {
+  return {
+    className: "", style: {}, isConnected: true, parentElement: null, children: [],
+    classList: {
+      _set: new Set(),
+      toggle(cls, force) {
+        const want = force === undefined ? !this._set.has(cls) : !!force;
+        if (want) this._set.add(cls); else this._set.delete(cls);
+        return want;
+      },
+      contains(cls) { return this._set.has(cls); },
+    },
+    remove() {
+      if (this.parentElement) {
+        const i = this.parentElement.children.indexOf(this);
+        if (i >= 0) this.parentElement.children.splice(i, 1);
+        this.parentElement = null;
+      }
+      this.isConnected = false;
+    },
+    appendChild(c) { c.parentElement = this; this.children.push(c); c.isConnected = true; },
+  };
+}
+global.document = { hidden: false, createElement: () => mkEl() };
+const TK = { up: "#UP", down: "#DN", grid: "#GRID", axis: "#AXIS" };
+const CFG = { enabled: true, on: true, shiftRatio: 0.6, neon: true, particles: 1, tail: false,
+  dual: "both", palette: "neon", layers: { band: true, particles: true, scan: true, grade: true } };
+global.window.AQB_FX_CFG = CFG;
+const XS1 = [1030, 1060, 1090, 1120, 1150];
+const YMAX = 63;
+function mkWrapRoot() {
+  const wrap = mkEl();
+  return { wrap, root: { isConnected: true, querySelector: (s) => (s === ".u-wrap" ? wrap : null) } };
+}
+function mkU(up, dl) {
+  const { wrap, root } = mkWrapRoot();
+  const u = {
+    root, _wrap: wrap,
+    data: [XS1, up, dl],
+    scales: { x: { min: XS1[0], max: XS1[4] }, y: { min: 0, max: YMAX } },
+    bbox: { left: 60, top: 10, width: 800, height: 300 },
+    yCap: 0, pending: {}, setScaleLog: [], setDataCount: 0, redrawCount: 0, destroyed: false,
+    setScale(k, r) {
+      this.pending[k] = { min: r.min, max: r.max };
+      this.setScaleLog.push([k, r.min, r.max]);
+    },
+    setData(d) {
+      this.data = d;
+      this.setDataCount++;
+      this.pending = { x: { min: d[0][0], max: d[0][d[0].length - 1] } };
+      this.commit();
+    },
+    redraw() {
+      this.redrawCount++;
+      this.pending.x = { min: this.scales.x.min, max: this.scales.x.max };
+      this.commit();
+    },
+    valToPos(v, k) {
+      const s = this.scales[k];
+      return k === "x" ? ((v - s.min) / (s.max - s.min)) * 800 : (1 - (v - s.min) / (s.max - s.min)) * 300;
+    },
+    commit() {
+      const px2 = this.pending.x;
+      const py = this.pending.y;
+      this.pending = {};
+      if (!px2) {
+        if (py) this.scales.y = { min: py.min, max: py.max };
+        return;
+      }
+      const xs = this.data[0];
+      let lo = 0;
+      let hi = xs.length - 1;
+      while (lo < hi && xs[lo] < px2.min) lo++;
+      while (hi > lo && xs[hi] > px2.max) hi--;
+      if (py) {
+        this.scales.y = { min: py.min, max: py.max };
+      } else {
+        let dmax = 0;
+        for (const col of [this.data[1], this.data[2]]) {
+          for (let i = lo; i <= hi; i++) {
+            const v = col[i];
+            if (v != null && v > dmax) dmax = v;
+          }
+        }
+        const top = dmax > 0 ? dmax * 1.05 : 1;
+        this.scales.y = { min: 0, max: this.yCap > 0 ? Math.max(this.yCap, top) : top };
+      }
+      this.scales.x = { min: px2.min, max: px2.max };
+    },
+    destroy() { this.destroyed = true; },
+  };
+  return u;
+}
+function mkBeat(upShown, dlShown) {
+  return {
+    raf: 0, anim: null, xs0: 1000, n: 5,
+    tracks: {
+      up: { prev: upShown, target: upShown, shown: upShown, delta: 0, level: 0, live: true },
+      dl: { prev: dlShown, target: dlShown, shown: dlShown, delta: 0, level: 0, live: true },
+    },
+  };
+}
+const yOfT = (v, yMax) => 10 + 300 * (1 - Math.min(v, yMax || YMAX) / (yMax || YMAX));
+const num = (s) => parseFloat(String(s));
+const self = Object.assign({}, methods, { _qbPollMs: () => 3000, _qbCharts: {} });
+const pump = () => {
+  const fns = [...rafMap.values()];
+  rafMap.clear();
+  fns.forEach((f) => f());
+};
+const drain = () => { let g = 0; while (rafMap.size && g++ < 200) { nowMs += 50; pump(); } return g; };
+function mkCtx() {
+  return {
+    globalAlpha: 1, strokeStyle: "", fillStyle: "", lineWidth: 1, canvas: { width: 900 },
+    save() {}, restore() {}, scale() {}, beginPath() {}, rect() {}, clip() {},
+    moveTo() {}, lineTo() {}, stroke() {}, fill() {},
+  };
+}
+// —— A: ensure 幂等建(挂 .u-wrap / 语义色内联 / 初始隐藏) ——
+{
+  const u = mkU([0, 0, 0, 0, 30], [0, 0, 0, 0, 60]);
+  u._qbBeat = mkBeat(10, 55);
+  self._qbCharts = { global: u };
+  self._qbFxAnchorEnsure(u, TK);
+  ok("A ensure: 恰两枚 .qb-fx-anchor 挂 .u-wrap(类名 up/dl 可寻址)", u._wrap.children.length === 2
+    && u._wrap.children[0].className === "qb-fx-anchor qb-fx-anchor-up"
+    && u._wrap.children[1].className === "qb-fx-anchor qb-fx-anchor-dl");
+  ok("A 颜色 = tk 语义色内联(I10) + 初始隐藏(首次同步前不显形)",
+    u._wrap.children[0].style.background === TK.up && u._wrap.children[1].style.background === TK.down
+    && u._wrap.children[0].style.display === "none" && u._wrap.children[1].style.display === "none");
+  const first = [u._wrap.children[0], u._wrap.children[1]];
+  self._qbFxAnchorEnsure(u, TK);
+  ok("A ensure 幂等(再调零操作 —— 与 _qbFxBound 同款纪律)",
+    u._wrap.children.length === 2 && u._wrap.children[0] === first[0]
+    && u._qbFxAnchors.up === first[0] && u._qbFxAnchors.dl === first[1]);
+}
+// —— B: 同步单点位置公式(判定线 x + 末点 y, 静止期读当前 y 轴档) + 变值才写 ——
+{
+  const u = mkU([0, 0, 0, 0, 30], [0, 0, 0, 0, 60]);
+  u._qbBeat = mkBeat(10, 55);
+  self._qbCharts = { global: u };
+  self._qbFxAnchorEnsure(u, TK);
+  self._qbFxAnchorSync(u);
+  const eu = u._qbFxAnchors.up;
+  const ed = u._qbFxAnchors.dl;
+  ok("B 位置 = 判定线 x(bbox 右缘 60+800=860) + 末点 y(yOf(shown) 对当前 y 轴档 63)",
+    Math.abs(num(eu.style.left) - 860) < 1e-9 && Math.abs(num(eu.style.top) - yOfT(10)) < 1e-9
+    && Math.abs(num(ed.style.top) - yOfT(55)) < 1e-9
+    && eu.style.left.indexOf("px") > 0 && eu.style.top.indexOf("px") > 0);
+  ok("B 门全开: 双轨活性 display 复显(空串 = 类默认)", eu.style.display === "" && ed.style.display === "");
+  ok("B calm 类默认不在(palette=neon)", !eu.classList.contains("qb-fx-anchor-calm"));
+  eu.style.left = "keep";
+  self._qbFxAnchorSync(u);
+  ok("B 同位置重同步零改写(变值才写 —— 逐帧同步点不制造无谓布局)", eu.style.left === "keep");
+  // —— K(RO 面等价): 宿主尺寸变 -> 判定线 x 跟随新 bbox ——
+  u.bbox = { left: 60, top: 10, width: 700, height: 300 };
+  self._qbFxAnchorSync(u);
+  ok("K bbox 宽变(RO 面): 判定线 x 860 -> 760 立即跟随", Math.abs(num(eu.style.left) - 760) < 1e-9);
+}
+// —— C: 门三态(enabled=false / reduce) + 图不活跃 + 死轨 ——
+{
+  const u = mkU([0, 0, 0, 0, 30], [0, 0, 0, 0, 60]);
+  u._qbBeat = mkBeat(10, 55);
+  self._qbCharts = { global: u };
+  self._qbFxAnchorEnsure(u, TK);
+  self._qbFxAnchorSync(u);
+  global.window.AQB_FX_CFG = Object.assign({}, CFG, { enabled: false, on: false });
+  self._qbFxAnchorSync(u);
+  ok("C enabled=false(on=false): 双锚隐藏(有效值单点门)", u._qbFxAnchors.up.style.display === "none"
+    && u._qbFxAnchors.dl.style.display === "none");
+  global.window.AQB_FX_CFG = Object.assign({}, CFG, { enabled: true, on: false });   // reduce 分量
+  self._qbFxAnchorSync(u);
+  ok("C reduce(on=false): 双锚隐藏(reduced-motion 隐藏 —— P2; CSS 媒体查询为第二道)",
+    u._qbFxAnchors.up.style.display === "none");
+  global.window.AQB_FX_CFG = CFG;
+  self._qbFxAnchorSync(u);
+  ok("C 翻回 on=true: 复显(门面即时生效, 不等下一拍)", u._qbFxAnchors.up.style.display === "");
+  u.root.isConnected = false;
+  self._qbFxAnchorSync(u);
+  ok("C 图不活跃(root 拆走): 隐藏", u._qbFxAnchors.up.style.display === "none");
+  u.root.isConnected = true;
+  u._qbBeat.tracks.dl = { prev: null, target: null, shown: null, delta: 0, level: 0, live: false };
+  self._qbFxAnchorSync(u);
+  ok("C 死轨(缺口 shown=null): 该轨锚隐藏, 活性轨照显(I10 模板 live 门同款)",
+    u._qbFxAnchors.dl.style.display === "none" && u._qbFxAnchors.up.style.display === "");
+  // B4 评审 minor 补例: 真 0 与缺口分义 —— live=true 且 shown=0(零流量活性轨)必须显形,
+  // top = yOf(0) = T+H(门判据是 shown != null 而非 shown 真值 —— A3「0 流量: 菱形旋转仍在」
+  // 的门面 closure; 门真值化变异为 tr.shown 即红)
+  u._qbBeat.tracks.dl = { prev: 0, target: 0, shown: 0, delta: 0, level: 0, live: true };
+  self._qbFxAnchorSync(u);
+  ok("C 真 0(live=true, shown=0): 该轨锚显形且 top = yOf(0) = T+H(A3 门面 closure)",
+    u._qbFxAnchors.dl.style.display === ""
+    && Math.abs(num(u._qbFxAnchors.dl.style.top) - yOfT(0)) < 1e-9);
+}
+// —— D: calm 档 border-radius 退化圆点(类切换随同步对齐) ——
+{
+  const u = mkU([0, 0, 0, 0, 30], [0, 0, 0, 0, 60]);
+  u._qbBeat = mkBeat(10, 55);
+  self._qbCharts = { global: u };
+  self._qbFxAnchorEnsure(u, TK);
+  global.window.AQB_FX_CFG = Object.assign({}, CFG, { palette: "calm" });
+  self._qbFxAnchorSync(u);
+  ok("D palette=calm: 双锚挂 .qb-fx-anchor-calm(CSS border-radius:50% 退化圆点)",
+    u._qbFxAnchors.up.classList.contains("qb-fx-anchor-calm")
+    && u._qbFxAnchors.dl.classList.contains("qb-fx-anchor-calm"));
+  global.window.AQB_FX_CFG = Object.assign({}, CFG, { palette: "glitch" });
+  self._qbFxAnchorSync(u);
+  ok("D palette=glitch: calm 类即时摘除(类随同步逐次对齐)",
+    !u._qbFxAnchors.up.classList.contains("qb-fx-anchor-calm"));
+  global.window.AQB_FX_CFG = CFG;
+}
+// —— E: 判定帧同步点(轨道推进后同帧写; 早退拍也跟新值) ——
+{
+  const u = mkU([0, 0, 0, 0, 30], [0, 0, 0, 0, 60]);
+  u._qbBeat = mkBeat(10, 55);
+  self._qbCharts = { global: u };
+  self._qbFxAnchorEnsure(u, TK);
+  self._qbBeatStart("global", u);   // 滚窗拍: target 30/60, shown 仍 prev 10/55
+  ok("E 判定帧: 锚位 = 显示末点(shown=prev 10/55) x=判定线 860",
+    Math.abs(num(u._qbFxAnchors.up.style.left) - 860) < 1e-9
+    && Math.abs(num(u._qbFxAnchors.up.style.top) - yOfT(10)) < 1e-9
+    && Math.abs(num(u._qbFxAnchors.dl.style.top) - yOfT(55)) < 1e-9);
+  drain();
+  ok("E 收敛帧: 锚位跟终值(target 30/60 —— 同步点 2/4)", u._qbBeat.anim === null
+    && Math.abs(num(u._qbFxAnchors.up.style.top) - yOfT(30)) < 1e-9
+    && Math.abs(num(u._qbFxAnchors.dl.style.top) - yOfT(60)) < 1e-9);
+  global.window.AQB_FX_CFG = Object.assign({}, CFG, { enabled: false, on: false });
+  u.data = [[1060, 1090, 1120, 1150, 1180], [0, 0, 0, 0, 35], [0, 0, 0, 0, 60]];
+  self._qbBeatStart("global", u);
+  ok("E 早退拍(enabled=false): 门关锚隐藏(位置不猜 —— 显示面让位给门; L0/L1 照滚不影响门)",
+    u._qbFxAnchors.up.style.display === "none" && u._qbFxAnchors.dl.style.display === "none");
+  global.window.AQB_FX_CFG = CFG;
+  // 零变化早退拍(on=true, dx0=0 + 双轨无真变化 -> 零 rAF 瞬时落地): 判定帧同步仍执行 ——
+  // y 轴档位变(窗内出现新高 120 -> 档 126)后锚位按新档重算, 不落旧档值
+  u.data = [[1030, 1060, 1090, 1120, 1150], [0, 0, 0, 0, 30], [0, 120, 0, 0, 60]];
+  u.scales.y = { min: 0, max: 126 };   // 快路 setData 已重推的 y 轴档(模拟真序: setData 先行)
+  self._qbBeatStart("global", u);
+  ok("E 零变化早退拍(on=true): 判定帧同步仍执行, 锚位按新 y 轴档 126 重算(不落旧档值)",
+    u._qbBeat.anim === null && rafMap.size === 0
+    && Math.abs(num(u._qbFxAnchors.up.style.top) - yOfT(30, 126)) < 1e-9);
+  drain();
+}
+// —— F: 锚钩子同步点(每次画布提交顺路重写; 动画期 yMax 读 anim.yMax 与画布钉档同尺) ——
+{
+  const u = mkU([0, 0, 0, 0, 30], [0, 0, 0, 0, 60]);
+  u._qbBeat = mkBeat(10, 55);
+  self._qbCharts = { global: u };
+  self._qbFxAnchorEnsure(u, TK);
+  u._qbBeat.anim = { dx0: 0, needsShift: false, needsTail: true, n: 5, clock: 100, lastT: 0,
+    lastDx: null, phase: "impact",
+    tl: { beat: 1000, impactMs: 120, shiftMs: 600, convergeMs: 480, animEndMs: 600, tailMs: 0 },
+    yMax: YMAX, easeF: null, fx: null };
+  u._qbBeat.tracks.up.shown = 20;   // L1 收敛中的显示面
+  u.ctx = mkCtx();
+  methods._qbDrawFxAnchor.call(self, u, TK);
+  ok("F 锚钩子: 提交帧顺路重写, y = yOf(shown=20) 对 anim.yMax=63(与画布钉档同尺 —— I4)",
+    Math.abs(num(u._qbFxAnchors.up.style.top) - yOfT(20, YMAX)) < 1e-9);
+  u._qbBeat.tracks.up.shown = 25;
+  methods._qbDrawFxAnchor.call(self, u, TK);
+  ok("F 锚钩子逐帧: shown 20 -> 25 位置跟帧",
+    Math.abs(num(u._qbFxAnchors.up.style.top) - yOfT(25, YMAX)) < 1e-9);
+}
+// —— G: 门面 _qbFxCfgSync(cfg 翻变即时生效) + 销毁清面(换肤重建零残留) ——
+{
+  const u = mkU([0, 0, 0, 0, 30], [0, 0, 0, 0, 60]);
+  u._qbBeat = mkBeat(10, 55);
+  const s2 = Object.assign({}, methods, { _qbPollMs: () => 3000, _qbCharts: { global: u },
+    fxReduce: false, fx: JSON.parse(JSON.stringify(CFG)) });
+  Object.defineProperty(s2, "fxOn", { get() { return this.fx.enabled === true && !this.fxReduce; } });
+  self._qbCharts = { global: u };
+  self._qbFxAnchorEnsure(u, TK);
+  s2.fx.enabled = false;
+  s2._qbFxCfgSync();
+  ok("G _qbFxCfgSync 门面: enabled=false -> CFG.on=false -> 锚隐藏(即时, 不等下一拍)",
+    global.window.AQB_FX_CFG.on === false && u._qbFxAnchors.up.style.display === "none"
+    && u._qbFxAnchors.dl.style.display === "none");
+  s2.fx.enabled = true;
+  s2._qbFxCfgSync();
+  ok("G 门面翻回: 复显", global.window.AQB_FX_CFG.on === true && u._qbFxAnchors.up.style.display === "");
+  self._qbChartRos = { global: { disconnect() {} } };
+  self._qbChartDestroy("global");
+  ok("G 销毁清面: 图记录 _qbFxAnchors 清(元件本体在 u.root 内随 u.destroy 拆 —— 换肤重建零残留)",
+    self._qbCharts.global === null && u._qbFxAnchors === null && u.destroyed === true);
+}
+const okCount = checks.filter((c) => c[1]).length;
+console.log(JSON.stringify({
+  total: checks.length, ok: okCount,
+  failed: checks.filter((c) => !c[1]).map((c) => c[0]),
+}));
+"""
+
+
+def test_frontend_qb_fx_anchor_battery():
+    """F2 常驻菱形锚 node 电池 + 接缝静态钉(S2b, plan 26-11-14-1313 §03 F2/D2, §04 S2b 行, R3)
+
+    行为面(node 电池, 无 node 静默跳过, 同 _NODE_QB_TRAFFIC_PROBE 口径; DOM 桩 + 真 mixin 方法):
+    A ensure 幂等建(恰两枚 .qb-fx-anchor 挂 .u-wrap, 类名 up/dl 可寻址; 颜色 = tk 语义色内联
+    I10; 初始隐藏; 再调零操作 —— 与 _qbFxBound 同款纪律)
+    + B 同步单点位置公式(判定线 x = bbox 右缘 860 + 末点 y = yOf(shown) 对当前 y 轴档; px 后缀;
+    门全开复显; calm 类默认不在; 同位置重同步零改写 —— 变值才写)
+    + K RO 面等价(bbox 宽 800->700 判定线 x 860->760 立即跟随)
+    + C 门三态(enabled=false / reduce(on=false) 隐藏, 翻回复显; root 拆走隐藏; 死轨该轨隐藏
+    活性轨照显 —— I10 模板 live 门同款; 真 0(live=true, shown=0)显形且 top=yOf(0)=T+H
+    —— A3 零流量菱形旋转仍在的门面 closure, 门真值化变异即红)
+    + D calm 档 .qb-fx-anchor-calm 挂/摘随同步对齐(模板 isCalm 同款)
+    + E 判定帧同步点(滚窗拍锚位 = 显示末点 shown=prev; 收敛帧跟终值 target; enabled=false
+    早退拍门关锚隐藏; 零变化早退拍(on=true, 零 rAF)判定帧同步仍执行 —— y 轴档位变后锚位按
+    新档重算不落旧档值)
+    + F 锚钩子同步点(每次画布提交顺路重写; 动画期 yMax 读 anim.yMax 与画布钉档同尺 —— I4;
+    shown 变位置跟帧)
+    + G 门面 _qbFxCfgSync(enabled 翻关锚即时隐藏/翻回复显, 不等下一拍) + 销毁清面
+    (_qbChartDestroy 清 u._qbFxAnchors, 元件随 u.destroy 拆 root —— 换肤重建零残留)。
+
+    接缝面(静态钉):
+    a. CSS 注入单点(_qbChartInjectCss 四行逐字): .qb-fx-anchor 本体(8px 方块 + margin 居中 +
+    pointer-events:none + will-change:transform + animation 420ms linear infinite)/
+    .qb-fx-anchor-calm(border-radius:50% —— 模板 isCalm 同款)/@keyframes aqb-fx-anchor-spin
+    (rotate 0->360deg —— 模板 t/420 同拍)/@media(prefers-reduced-motion: reduce) display:none
+    (P2: 隐藏不是静态方块; 与 cfg.on 的 !reduce 分量双保险);
+    b. 画布侧菱形本体移除(F2 避免双画): 锚段无 "_qbFxPolyPath(ctx, tipX"(本体填充面删除),
+    N 锚辉光保留且位置与 DOM 同源("_qbFxPolyPath(ctx, L + W, y, r * 1.8, 4, rot)" —— 判定线 x);
+    锚段 clip 放宽(F5)与 lead 从属轨加亮保留(ctx.clip() 在位);
+    c. 四处同步点在位: 判定帧(_qbBeatStart 块内 sync 在轨道推进之后)/收敛帧(_qbBeatConverge
+    setData 之后)/锚钩子(_qbDrawFxAnchor 块首行)/ResizeObserver(u.setSize 之后同回调内);
+    d. 门面接线: _qbFxCfgSync 块内 _qbFxAnchorSync(on/palette 变化即时生效) + _qbChartBuild
+    建 ensure+首同步(new uPlot 之后) + _qbChartDestroy 清 u._qbFxAnchors;
+    e. I3 反向钉扩锚 DOM 域: ensure/sync 两方法域零 destroy(/new uPlot/loading。
+    """
+    shared = os.path.join(STATIC_ROOT, "shared")
+    js = open(os.path.join(shared, "qb_traffic_chart.js"), encoding="utf-8").read()
+    # —— a. CSS 注入单点(四皮肤零侵入 —— 经既有 _qbChartInjectCss) ——
+    for line in (
+        '.qb-fx-anchor { position: absolute; width: 8px; height: 8px; margin: -4px 0 0 -4px;'
+        ' pointer-events: none; will-change: transform; animation: aqb-fx-anchor-spin 420ms linear infinite; }',
+        ".qb-fx-anchor.qb-fx-anchor-calm { border-radius: 50%; }",
+        "@keyframes aqb-fx-anchor-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }",
+        "@media (prefers-reduced-motion: reduce) { .qb-fx-anchor { display: none; } }",
+    ):
+        assert line in js, f"缺/漂移常驻菱形锚注入 CSS: {line}"
+    inject_blk = re.search(r"_qbChartInjectCss\(\) \{\n(.*?)\n    \},", js, re.S)
+    assert inject_blk and "aqb-fx-anchor-spin" in inject_blk.group(1), \
+        "锚 CSS 必须经 _qbChartInjectCss 单点注入(四皮肤零侵入)"
+    # —— b. 画布侧菱形本体移除 + 辉光同源保留 ——
+    anb = re.search(r"_qbDrawFxAnchor\(u, tk\) \{\n(.*?)\n    \},", js, re.S)
+    assert anb, "缺 _qbDrawFxAnchor(draw 锚段)"
+    anb_code = re.sub(r"//[^\n]*", "", re.sub(r"/\*.*?\*/", "", anb.group(1), flags=re.S))
+    assert "_qbFxPolyPath(ctx, tipX" not in anb_code, \
+        "画布侧菱形本体必须移除(F2 避免双画 —— 常驻层交 DOM .qb-fx-anchor)"
+    assert "_qbFxPolyPath(ctx, L + W, y, r * 1.8, 4, rot);" in anb_code, \
+        "N 锚辉光(anchorHalo)必须保留且位置与 DOM 同源(判定线 x —— R3 双源位置漂移即红)"
+    assert "ctx.clip();" in anb_code, "锚段 clip 放宽(F5)必须保留(lead 加亮/辉光仍画在画布)"
+    assert 'cfg.dual === "lead"' in anb_code, "lead 策略从属轨描边加亮(D3-a)必须保留"
+    # —— c. 四处同步点 ——
+    bsb = re.search(r"_qbBeatStart\(scope, u\) \{\n(.*?)\n    \},", js, re.S)
+    assert bsb and "this._qbFxAnchorSync(u);" in bsb.group(1), \
+        "缺判定帧同步点(_qbBeatStart: 轨道推进后同帧写 —— 覆盖零变化/早退拍)"
+    assert bsb.group(1).index("_qbFxTrackNext(tr.dl") < bsb.group(1).index("this._qbFxAnchorSync(u);"), \
+        "判定帧同步必须在双轨推进之后(锚位读推进后的显示面)"
+    conv_blk = re.search(r"_qbBeatConverge\(scope, u\) \{\n(.*?)\n    \},", js, re.S)
+    assert conv_blk and conv_blk.group(1).index("u.setData([u.data[0]") \
+        < conv_blk.group(1).index("this._qbFxAnchorSync(u);"), \
+        "缺收敛帧同步点(_qbBeatConverge: setData 交还 auto 之后写终值)"
+    assert anb.group(1).lstrip().startswith("this._qbFxAnchorSync(u);"), \
+        "缺锚钩子同步点(_qbDrawFxAnchor 块首行: 每次画布提交顺路重写)"
+    ro_m = re.search(r"u\.setSize\(\{ width: w, height: h \}\);.*?this\._qbFxAnchorSync\(u\);", js, re.S)
+    assert ro_m and len(ro_m.group(0)) < 600, \
+        "缺 ResizeObserver 同步点(u.setSize 之后同回调内重写锚位 —— R3 resize 遗漏即像素漂移)"
+    # —— d. 门面/建图/销毁接线 ——
+    cfg_blk = re.search(r"_qbFxCfgSync\(\) \{\n(.*?)\n    \},", js, re.S)
+    assert cfg_blk and "_qbFxAnchorSync" in cfg_blk.group(1), \
+        "缺门面接线(_qbFxCfgSync: on/palette 变化即时生效, 不等下一拍)"
+    assert "this._qbFxAnchorEnsure(u, tk);" in js and "this._qbFxAnchorSync(u);" in js, \
+        "缺建图接线(_qbChartBuild: ensure 幂等建 + 首次同步)"
+    assert js.index("new uPlot(opts") < js.index("this._qbFxAnchorEnsure(u, tk);"), \
+        "锚元件必须建在 uPlot 之后(挂 .u-wrap 需 root 在场)"
+    dest_blk = re.search(r"_qbChartDestroy\(scope\) \{\n(.*?)\n    \},", js, re.S)
+    assert dest_blk and "u._qbFxAnchors = null;" in dest_blk.group(1), \
+        "缺销毁清面(_qbChartDestroy 清锚记录 —— 换肤/重建零残留, 与 _qbFxBound 幂等纪律对偶)"
+    assert dest_blk.group(1).index("u._qbFxAnchors = null;") < dest_blk.group(1).index("u.destroy()"), \
+        "销毁清面必须在 u.destroy 之前落笔(清记录 -> 拆 root)"
+    # —— e. I3 反向钉扩锚 DOM 域 ——
+    ens_blk = re.search(r"_qbFxAnchorEnsure\(u, tk\) \{\n(.*?)\n    \},", js, re.S)
+    sync_blk = re.search(r"_qbFxAnchorSync\(u\) \{\n(.*?)\n    \},", js, re.S)
+    assert ens_blk and sync_blk, "缺 _qbFxAnchorEnsure/_qbFxAnchorSync(锚 DOM 层方法域)"
+    for blk in (ens_blk.group(1), sync_blk.group(1)):
+        assert "new uPlot" not in blk and "destroy(" not in blk and "loading" not in blk, \
+            "锚 DOM 域不得 destroy/new uPlot/触碰 loading(I3 反向钉)"
+    assert 'el.style.background = k === "up" ? tk.up : tk.down;' in ens_blk.group(1), \
+        "锚颜色必须 = tk 语义色内联(建图时捕获, 换肤重建即新令牌 —— I10)"
+    # —— 行为面 node 电池 ——
+    node = shutil.which("node")
+    if not node:
+        return
+    proc = subprocess.run(
+        [node, "-e", _NODE_QB_FX_ANCHOR_PROBE,
+         os.path.join(shared, "qb_traffic_chart.js")],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace"
+    )
+    assert proc.returncode == 0, f"F2 常驻菱形锚 node 电池跑挂: {proc.stderr.strip()}"
+    report = json.loads(proc.stdout.strip().splitlines()[-1])
+    assert report["failed"] == [], \
+        f"F2 菱形锚电池 {report['ok']}/{report['total']} 过, 失败: {report['failed']}"
