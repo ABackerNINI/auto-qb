@@ -4,6 +4,9 @@ import { SKINS, SKINS_ALL } from './harness.mjs';
 import { installRuntimeErrorGuard } from './lib/errors.mjs';
 import { openApp } from './lib/gestures.mjs';
 import { readInst } from './lib/vm.mjs';
+import { installRouteCleanup } from './lib/route-cleanup.mjs';
+
+installRouteCleanup(test);   // 本文件全部用例收尾时卸载全部 route.fetch 桩(收尾竞态兜底, 合流接线)
 
 /**
  * 动效数值面板的**真浏览器**冒烟链 —— plan 26-11-12-1139 §05.9 面板九项里 P7 覆盖矩阵判给

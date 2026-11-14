@@ -4,6 +4,9 @@ import { SKINS } from './harness.mjs';
 import { installRuntimeErrorGuard } from './lib/errors.mjs';
 import { openApp } from './lib/gestures.mjs';
 import { INST, readInst } from './lib/vm.mjs';
+import { installRouteCleanup } from './lib/route-cleanup.mjs';
+
+installRouteCleanup(test);   // 本文件全部用例收尾时卸载全部 route.fetch 桩(收尾竞态兜底, 合流接线)
 
 /**
  * 节拍动效的**帧级采样探针**(plan 26-11-12-1139 §10 建议新增里判给 P8 的画布/真机面;
