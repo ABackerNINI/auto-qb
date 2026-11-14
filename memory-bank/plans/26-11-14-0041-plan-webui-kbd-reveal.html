@@ -7,9 +7,9 @@
 <title>WebUI 键位提示全面改造 按需显影、弱化键位、全量落点</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="webui-kbd-reveal">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-11-14-0041">
-<meta name="doc-updated" content="26-11-14-0041">
+<meta name="doc-updated" content="26-11-14-1348">
 <meta name="doc-refs" content="memory-bank/tasks/26-11-14-webui-kbd-reveal.md">
 <style>
   :root {
@@ -80,7 +80,7 @@
 <h1>WebUI 键位提示全面改造<br>按需显影、弱化键位、全量落点</h1>
 <p class="lede">本篇只回答「<strong>已落地的键位现场提示怎么全面改造</strong>」：把常驻键帽改成「默认隐藏 + 按住反引号显影 + 全局开关常驻」，键帽退化为灰色括号弱化的纯文本，右键菜单走 VS Code 式加宽 / 右对齐 / 间距拉长，并把提示扩到所有「注册表已绑键且 UI 有稳定挂点」的元素。纯显示层，注册表零改动。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-14-0041 · <b>doc-updated</b> 26-11-14-0041 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-11-14-0041 · <b>doc-updated</b> 26-11-14-1348 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 用户指令「当前快捷键提示太显眼 / 按钮形式太丑 / 状态栏太丑 / 添加种子·列太丑……全面改造……倾向于按住 ctrl 显示或者一个切换开关……grilling 然后出一个方案」; grilling 三轮 Q1–Q10 拍板(结论迁 §07); 只读核查两路(键盘事件链与候选键 / UI 元素↔注册表全量映射与布局守阵); 前序件 <code>memory-bank/plans/26-11-12-0344-plan-webui-kbd-hints.html</code>(已 Done, 本轮取代其形态决策, 原件保留 Done 留痕)。<br>
   <b>事实基线</b> HEAD <code>e17bd088</code>(开工 sync 快进 <code>f9296ba6→e17bd088</code>, 远端 44 笔); 核查日期 2026-11-14。<br>
   <b>调研</b> 外部方案调研仅命中 VS Code keybindings 与通用 UX 片段, <strong>未取得菜单 accelerator 版式的权威参数</strong>; 「VS Code 式布局」为用户指定的方向性参照, 具体宽度 / 间距 / 字号不预写, 由 W4 实施期四皮肤真机截图目检定案(先例: 前序件 S6、<code>webui-kb-overlay-layout</code>)。
@@ -348,6 +348,7 @@
 <h2 id="s10"><span class="no">§10</span>变更记录</h2>
 <ul>
   <li><span class="tag">R0 · 26-11-14-0041</span> 初版。来源: 用户实机反馈五点 + 「grilling 然后出一个方案」; 开工 sync 快进 <code>f9296ba6→e17bd088</code>(远端 44 笔); 只读核查两路(键盘事件链 / 候选键冲突; UI 元素↔注册表全量映射 / 布局 / 开关基础设施 / 守阵); grilling 三轮 Q1–Q10 拍板 D1–D11; 外部调研未取得菜单 accelerator 权威版式参数, 外观数字留待截图目检。三条事实纠偏(注册表行号 +44 / 常驻键帽 3 个 / check_wording 不扫模板)入 §02。前序件 <code>26-11-12-0344</code> 保留 Done, 仅由 <code>kb.bump</code> 追加指链。<strong>计划 Open 入库, S1–S7 等用户显式开工</strong>; 本轮未改 <code>src/</code>、未跑实施、未立档、未提交。</li>
+  <li><span class="tag">R1 · 26-11-14-1348</span> 实施完成: S1-S7 全部落地并分 7 笔入库(2c91f2e8→bf3acfb4); 收尾回写 architecture/webui.md 与 conventions/webui.md, 修 menus.spec 注释漂移, test.full 全绿入基线, 跨批接缝终审 5 条通过; doc-status → Done</li>
 </ul>
 
 </div>

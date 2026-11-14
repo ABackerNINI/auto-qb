@@ -593,10 +593,12 @@ for (const skin of SKINS) {
         expect(Math.abs(align), `键帽右缘偏差 ${align}px 应等于项右 padding`).toBeLessThanOrEqual(1);
         // 置灰行键帽随行(dyn gate, S2 增量): 桩 _STATES 轮转窗口内必有暂停行(delta-sync/optimistic
         // 挑行同款), 单目标全非活跃 -> reannounceMenuGate 拦 -> reannounce 项 is-gated(各皮肤
-        // components.css 置灰链 label 走 --fg-dim)。键帽自带 .aq-kbd 基形 color: var(--fg), 无
-        // `.ctx-menu .ctx-item.is-gated .aq-kbd` 规则时会原地亮着 —— 颜色比对沿用 CTX-04 色探针
+        // components.css 置灰链 label 走 --fg-dim)。S2 后 .aq-kbd 基形已弱化到 --fg-dim 且默认
+        // 隐藏(显影 / 常驻态才可见); 显式 `.ctx-menu .ctx-item.is-gated .aq-kbd` 规则作为锚锁死
+        // 置灰色, 防皮肤 hover / 高对比把键帽抬回 --fg(即旧基形)。颜色比对沿用 CTX-04 色探针
         // 口径(页面内解析 var() 再比 computed, 字符串 evaluate 形式): 键帽色必须 == --fg-dim
-        // 解析值且 != --fg 解析值(后者保证规则缺席必红, 不是恒绿)。
+        // 解析值且 != --fg 解析值(后者只证两色可区分 —— 规则是否缺席由 test_webui_kbd_keycap
+        // 的静态锚守, 不再靠本断言, 因基形已是 --fg-dim)。
         await page.keyboard.press('Escape');
         await expect(menu).toHaveCount(0);
         const pausedRows = page.locator('.torrent-row');

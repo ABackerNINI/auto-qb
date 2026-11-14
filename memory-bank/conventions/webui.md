@@ -11,7 +11,7 @@
 - **令牌纪律**: 同名语义只允许一个令牌族; 令牌名集四皮肤(atlas/prism/console/flux)必须相等; 新增令牌 = 四皮肤同轮补名; 新增弹窗只选 `--modal-w-*` 档位, 不写新数字。
 - **按钮与弹窗**: 动作按钮一律 `.bt` 族, `<button>` 显式 `color`; 弹窗按后果等级染色走 `_openModal` 派生 tone, 新对话框不要自己判 danger。
 - **busy 骨架**: 只走 `shared/dialogs.js` 的 `_mgrRun` / `_panelLoad` / `_postWaitCmd`, 不手抄; 禁止裸 `toast(..., {sticky: true})` 或用 `_finishToast` 原位改字顶掉进行中条。
-- **悬浮提示**: 新元素继续写原生 `title`, 由 `.aq-tip` 委托层接管; 不新造浮层。例外(计划 26-11-12-0344 D10/I4): 键位提示不走 title/.aq-tip —— 键帽是常驻 DOM、取数链现算(口径见 `memory-bank/architecture/webui.md`「键位现场提示」节), 仅限键帽面。
+- **悬浮提示**: 新元素继续写原生 `title`, 由 `.aq-tip` 委托层接管; 不新造浮层。例外(计划 26-11-12-0344 D10/I4): 键位提示不走 title/.aq-tip —— 键帽是常驻 DOM、取数链现算(口径见 `memory-bank/architecture/webui.md`「键位现场提示」节), 仅限键帽面。边界(D11): 控件自身功能说明不属键位提示(如状态栏开关钮的原生 `title`「按住 ` 显影 / 点此常驻」), 仍按惯例写 `title`。
 - **共用规则族**: 四皮肤逐字节相同的规则族进 `shared/console_hub.css` 尾段单点; 皮肤内保留真差异, 不许顺手抹平。
 - **动效隔离**: 走 `data-fx` / `data-fx-preset` + `window.AQB_FX` 单挂载器; 每个 `@keyframes` 配 `prefers-reduced-motion` 降级; atlas/prism/console 对 `shared/fx/` 零引用。
 - **HTML 产出**: 一律 dark 主题(深色底 + 浅色字), 样式里必须写 `color-scheme: dark`。

@@ -1,11 +1,11 @@
 # 26-11-14-webui-kbd-reveal — WebUI 键位提示全面改造 按需显影、弱化键位、全量落点
 
-**Status:** In Progress
+**Status:** Done
 **Added:** 2026-11-14
 **Updated:** 2026-11-14
-**Summary:** WebUI 键位提示全面改造 按需显影、弱化键位、全量落点
+**Summary:** WebUI 键位提示全面改造：反引号按需显影 + 状态栏两态常驻开关 + 键帽弱化为灰色括号纯文本 + 恒渲染固定预留槽(88/0) + 全量角标落点；S1-S7 全部实施入库
 **Topics:** webui-kbd-reveal
-**Refs:** memory-bank/plans/26-11-14-0041-plan-webui-kbd-reveal.html, memory-bank/active-context/26-11-14-0107-webui-kbd-reveal.md
+**Refs:** memory-bank/plans/26-11-14-0041-plan-webui-kbd-reveal.html, memory-bank/active-context/26-11-14-0107-webui-kbd-reveal.md, memory-bank/testing/baselines/26-11-14-1345-webui-kbd-reveal.md
 
 ## 本篇只回答
 
@@ -31,22 +31,31 @@
 - **三条事实纠偏**：注册表真实行号 `shortcuts.js:222-413`（前序件写 `178-369`，S1 插入取数单点后 +44 行）；常驻 `.aq-kbd` 是 3 个不是 2 个（漏算状态栏「键位」入口）；`check_wording` 扫 memory-bank 文档、不扫前端模板。
 - 外部检索未取得菜单 accelerator 版式的权威参数，故不预写宽度 / 间距数字，留实施期四皮肤真机截图目检定案。
 
+### 实施期定案(收尾补记)
+
+- **改动文件族**: 共享层 `shared/lifecycle.js`(显影链 / 两态开关) · `shared/shortcuts.js`(取数单点不变, 仅消费) · `shared/console_hub_panels.css`(键帽基形 / 角标版式单点) · 四皮肤 `*/css/components.css`(槽宽与槽距) · `shared/tpl/{topbar,statusbar,ctx-menus,drawer,drawer-head,settings-detail}.html`(挂点) · `tests/test_webui_kbd_keycap.py` 等守阵 · `e2e/{kbd-reveal,menus,statusbar-kbd-entry,drawer-merge}.spec.mjs`。
+- **两态机制**: 全局单开关, 两态互斥、纯 CSS class 切换、零 JS 重绘。开 = `body.kbd-persist` 全落点常驻; 关 = 仅按住反引号 `body.kbd-reveal` 显影。显示规则共用一条 `body.kbd-reveal .aq-kbd, body.kbd-persist .aq-kbd`; `_setKbdReveal` 常驻态早退, 不叠 class; 偏好落 `autoqb.ui.kbdPersist` 本机存储。
+- **恒渲染槽定案**: 菜单键位列从「贴键帽文本宽度」改为**恒渲染固定预留列**(四皮肤 `min-width: 88px; margin-left: 0`), 无键位项槽内留白, 各行右缘对齐; 键帽显影只切 opacity/visibility, 槽恒在 DOM, 文字零位移。
+- **外观数字 B 档(88/0)由来**: 四皮肤真机截图目检比选后由用户拍板 B 档 —— 槽宽 88 容纳最长串「Ctrl + Shift + ...」类完整显示且不撑爆菜单, 槽距 0 让键位贴右缘; 实测菜单宽 259、子面板回归 260, `menu.js` 272 估宽保留不动, 扫描器锚值同步 88/0。
+- **测试面增量**: `e2e/kbd-reveal.spec.mjs` 12 例(切窗自愈 / 输入态 / 录制态 / 显影落点 / 设置保存 / 组合键不吞 + 两态互斥); 菜单/状态栏/抽屉三处既有 spec 同步新形态; 静态守阵改「顶栏 8 / 状态栏 6 / 抽屉头 2」计数。
+- **后续待办**: 无功能待办。文档面 `memory-bank/architecture/webui.md` 已超 evergreen cap, 属既有债务, 清理另开会话(本专题不压文案)。
+
 ## 实现计划
 
-计划 §05 的 S1–S7（对应 §04 W1–W7），单波次顺序实施、四皮肤一步到位：S1 显影链与生命周期闭环 / S2 键帽形态 / S3 菜单固定预留键位列 / S4 无预留空间落点角标 / S5 全局开关 / S6 全量落点接线 / S7 守阵·e2e·截图目检。各步验收判据在计划 §05，本档案不重抄。实施阶段另轮推进。
+计划 §05 的 S1–S7（对应 §04 W1–W7），单波次顺序实施、四皮肤一步到位：S1 显影链与生命周期闭环 / S2 键帽形态 / S3 菜单固定预留键位列 / S4 无预留空间落点角标 / S5 全局开关 / S6 全量落点接线 / S7 守阵·e2e·截图目检。各步验收判据在计划 §05，本档案不重抄。S1–S7 已全部实施并随本专题入库。
 
 ## 子任务状态表
 
 | 步 | 内容 | 状态 |
 |---|---|---|
 | R0 | 三轮 grilling 拍板 + 两路只读取证 + 计划入库(Open) + 前序件 R3 指链 + 任务档案立档 | Done (2026-11-14) |
-| S1 | 反引号显影链 + keyup/自愈/blur/visibilitychange 闭环 | Open |
-| S2 | `.aq-kbd` 退化灰色括号弱化文本 + 令牌守阵同步 | Open |
-| S3 | 菜单恒渲染固定预留键位列 + 五处宽度联动 | Open |
-| S4 | 顶栏 / 状态栏 / 页签角标绝对定位，34px 内不裁切 | Open |
-| S5 | 状态栏开关钮 + 两态互斥 + 本机持久化 + triggers 登记 | Open |
-| S6 | 12 条新增落点 + 空位有挂点者接线 | Open |
-| S7 | 守阵 / e2e 扩面 + 全量回归 + 四皮肤真机截图目检 | Open |
+| S1 | 反引号显影链 + keyup/自愈/blur/visibilitychange 闭环 | Done (2026-11-14) |
+| S2 | `.aq-kbd` 退化灰色括号弱化文本 + 令牌守阵同步 | Done (2026-11-14) |
+| S3 | 菜单恒渲染固定预留键位列 + 五处宽度联动 | Done (2026-11-14) |
+| S4 | 顶栏 / 状态栏 / 页签角标绝对定位，34px 内不裁切 | Done (2026-11-14) |
+| S5 | 状态栏开关钮 + 两态互斥 + 本机持久化 + triggers 登记 | Done (2026-11-14) |
+| S6 | 12 条新增落点 + 空位有挂点者接线 | Done (2026-11-14) |
+| S7 | 守阵 / e2e 扩面 + 全量回归 + 四皮肤真机截图目检 | Done (2026-11-14) |
 
 ## 进度日志
 
@@ -60,3 +69,7 @@
 - 2026-11-14 01:07 三轮 grilling 拍板 D1-D11 + 两路只读取证 + 计划 26-11-14-0041 入库(Open) + 前序件 R3 指链 + 档案立档; test.full 全绿(见 kb.baseline); 零代码改动, S1-S7 实施阶段另轮推进
 
 - 2026-11-14 01:34 提交轮 DoD: ship.gate 闸门全绿, test.full 全绿(见 kb.baseline), kb.check 认领链闭环; 分批评审分面 2 派遣零发现(检 0/0)、零 actionable 出口; 计划/档案/切片/基线随本专题入库
+
+- 2026-11-14 13:46 实施收尾 DoD: 架构/约定两处文档回写(S 系实际形态) + menus.spec 注释漂移修正 + test.full 全绿入新基线 + 跨批接缝终审 5 条
+
+- 2026-11-14 收尾评审: 无子代理能力, 按 code-review skill ⑧ 降级自查(⑥ 20 条)检 0/0 零 actionable; 跨批接缝终审 5 条全通过(显影链↔常驻开关 / 槽↔角标两套宿主 / 角标手法一致 / 守阵计数 8-6-2 / 菜单三数字 88-0-272-260); ship.gate 全绿, test.full 全绿(见 kb.baseline)
