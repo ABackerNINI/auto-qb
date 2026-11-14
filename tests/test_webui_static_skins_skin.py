@@ -6,7 +6,7 @@
 - test_frontend_skin_css_token_parity: 各皮肤令牌**名集**相等守阵(issue 26-10-20-2231; 26-11-01 S5 收编 flux) —— 皮肤少声明令牌 = 该皮肤下 `var(--x)` 整条声明在计算值阶段作废且无报错(星图此前少 3 个字体令牌 86 vs 89, 自己 4 处 `var(--font-mono)` 裸引用全程失效、共用层只能各写兜底链); 钉名集相等(取值自由), 差异按缺/多两侧成对报出
 - test_frontend_shell_sprite_login_parity: 各皮肤 index.html shell 内联段守阵(issue 26-10-20-2231; S5 收编 flux) —— sprite 段(80 行/67 symbol)逐字相等(manifest 已被 split_wiring 钉死, 本守阵补上 sprite 与 login)+ #app+login 段(注释/空行归一后, 皮肤说明注释为合法差异不参与比对)相等; symbol 数下限防"sprite 整体外提成共享文件后各份同时消失、相等断言恒真"; 失败信息提示"改图标/改登录遮罩须各皮肤同步"
 - test_frontend_button_system_paired: 按钮体系(.bt)迁移守阵 —— ce-btn/ce-icon 全语料零残留、.bt 六变体各套 CSS 成对定义(atlas/prism/console/flux, S5 收编 flux)、atlas/prism 模板 bt 用量逐类相等、双色令牌(on-accent/on-accent-ink/on-error)星图 :root + 棱镜五主题成对声明
-- test_frontend_fx_wiring: fx 动效库挂行守阵(计划 26-10-31-2316 S6 前半 + 后半) —— shared/fx 三件只挂 flux: flux shell 恰挂 fx.css/fx-presets.css 各一次(head link, 级联序排本皮肤全部 CSS 之后)与 fx.js 一次(shell 静态 script, 不进 tpl-manifest —— 四套清单守阵钉逐项相等), S6 后半追加 flux 专属挂载面 fx-mount.css(link, 排 fx 三件之后)与 fx-mount.js(script)恰一次、三旧皮肤对 /shared/fx/ 与 fx-mount 零引用(D14 隔离反向钉)、flux <html> 带 data-fx-preset="glass"(S4 主 preset 拍板)、fx.js REGISTRY.effects 逐名能在 fx.css 找到 [data-fx~="名"] 规则且 presets 逐名能在 fx-presets.css 找到配方块(漏 CSS = audit 放行但样式静默不生效; 2026-11-03 用户要求移除 flux 右键强调动效 ⇒ row-flash/D4-3 连同 keyframes/RM 降级/注册项退役, 注册表 26 名); R1 精修(26-10-31-2316 §06)追加回归钉: fx-mount.css 不得复活行板 :hover gradient 叠底(B2 行板/首格悬停管线分家)/fx-mount.js 滚动干预三符号(ensureFocusedVisible/scheduleReveal/revealFocusedRow)反向钉不在档(F7c: R3 精修退役 R1 B3 自定义回拉, 滚动单点交还 shortcuts.js 原版逻辑; F7d: 落定回执链路钉 —— fx-mount.js transitionend/兜底定时器/单发守卫 + state.js dock 第二参重入原版 _kbScrollRowIntoView; F7e(R5 精修): push 位移本体弃用反向钉(fx-mount.css/js 零 push 载体/--fx-push-y 规则, 打点实证 scrollY=0 时位移把聚焦行推出视野且滚动不可恢复) + 两段动效落点钉(dialogs.css 面板底部上滑 translateY(100%) 消费 --fx-dur-panel/--fx-ease-out, fx-mount.css 面板开着 scroll-behavior:smooth 的 :has 作用域), 缺一即回退到「聚焦行终位被推出视野」的 D3-4 三轮报障缺陷; R5#179: dock(true) 须真武装 armSettle 兜底定时器(此前零调用, 回执丢失场景 fx-glide 恒驻留))
+- test_frontend_fx_wiring: fx 动效库挂行守阵(计划 26-10-31-2316 S6 前半 + 后半) —— shared/fx 三件只挂 flux: flux shell 恰挂 fx.css/fx-presets.css 各一次(head link, 级联序排本皮肤全部 CSS 之后)与 fx.js 一次(shell 静态 script, 不进 tpl-manifest —— 四套清单守阵钉逐项相等), S6 后半追加 flux 专属挂载面 fx-mount.css(link, 排 fx 三件之后)与 fx-mount.js(script)恰一次、三旧皮肤对 /shared/fx/ 与 fx-mount 零引用(D14 隔离反向钉)、flux <html> 带 data-fx-preset="glass"(S4 主 preset 拍板)、fx.js REGISTRY.effects 逐名能在 fx.css 找到 [data-fx~="名"] 规则且 presets 逐名能在 fx-presets.css 找到配方块(漏 CSS = audit 放行但样式静默不生效; 2026-11-03 用户要求移除 flux 右键强调动效 ⇒ row-flash/D4-3 连同 keyframes/RM 降级/注册项退役, 注册表 26 名); R1 精修(26-10-31-2316 §06)追加回归钉: fx-mount.css 不得复活行板 :hover gradient 叠底(B2 行板/首格悬停管线分家)/fx-mount.js 滚动干预三符号(ensureFocusedVisible/scheduleReveal/revealFocusedRow)反向钉不在档(F7c: R3 精修退役 R1 B3 自定义回拉, 滚动单点交还 shortcuts.js 原版逻辑; F7d: 落定回执链路钉 —— fx-mount.js transitionend/兜底定时器/单发守卫 + state.js dock 第二参重入原版 _kbScrollRowIntoView; F7e(R5 精修): push 位移本体弃用反向钉(fx-mount.css/js 零 push 载体/--fx-push-y 规则, 打点实证 scrollY=0 时位移把聚焦行推出视野且滚动不可恢复) + 两段动效落点钉(dialogs.css 面板底部上滑 translateY(100%) 消费 --fx-dur-panel/--fx-ease-out, fx-mount.css 面板开着 scroll-behavior:smooth 的 :has 作用域), 缺一即回退到「聚焦行终位被推出视野」的 D3-4 三轮报障缺陷; R5#179: dock(true) 须真武装 armSettle 兜底定时器(此前零调用, 回执丢失场景 fx-glide 恒驻留); D4-7(2026-11-14) rows() row-in stamp 生命周期四钉(入场毕摘除 removeAttribute("data-fx") / --fx-row-h 实测行高覆写 / animationend 名+目标双守卫 ev.target !== row / setTimeout strip 超时兜底 —— stamp 永驻则 forwards 填充把行高钉死在缺省 44px 裁高 H&R 双行、overflow:hidden 改写吸左首格 sticky 滚动宿主))
 - test_frontend_fx_site_chip_shape_layering: flux 站点 chip 形状分层守阵(计划 26-11-10-0921 W2 + S4) —— fx-mount.css 的 html[data-fx-preset] .site-chip 本体规则体必须含 clip-path: none(本体重新持裁剪 = box-shadow 辉光被整圈裁掉, 用户报「辉光仅显示一侧或两侧」回归) + .site-chip::before 规则体含切角 polygon(3px 0, ...) 逐字(3px 微切角视觉 = R3「逐字恢复」拍板); components.css:332 本体 clip-path 被覆盖而非删除的事实不设防(700 行体量断言只限净增行, 钉不住减行删除), 级联正确性由同批 W2 e2e 主判据(computed clipPath === 'none')兜底; S4(f7f4658c)状态边线迁移面: ::before 三条边线载体(paused/other --paused-line、search-hit --accent-line、sa-no-conf dashed --warn)+ 本体三条关闭(box-shadow: none ×3 / border-bottom: 0)+ ::before 渐隐过渡段含 box-shadow var(--dur-fast), 缺任一半 = 边线消失或方角线双线叠画
 - test_frontend_fx_tag_cat_chip_glow_layering: flux tag/cat chip 辉光放行 + H&R 竖线迁层守阵(计划 26-11-12-1012 S1+S2) —— 旧计划 26-11-10-0921 只救 .site-chip 本体裁剪, tag/cat chip 的 hover 辉光仍被两层裁掉(「辉光仅显示一侧或两侧」第二根因: 直接父容器 .g-tags/.m-tags/.g-cat/.m-cat 的 overflow:hidden 裁掉画在盒外的 box-shadow 外发光, components.css:340-341): S1 段逐字钉四祖先(html[data-fx-preset] 前缀, 不入四皮肤键集扫描)规则体含 overflow: clip + overflow-clip-margin: 16px(clip 非 visible = 不建滚动容器保留内容裁剪语义 I3, 标签全量展开换行行高与吸左首格几何不动; 16px = 12px blur + 3px spread + 1px 硬芯余量(stack 最大层 0 0 12px 3px), 零新增令牌 I2; .g-sites 本来无裁剪不加同款 D5); S2 段钉 .tag-chip 补 position: relative(基线 components.css:342 无定位包含块, .f-on:380 同值不冲突)+ .hr-pending/.hr-done::before 迁层三条(content:""/absolute/inset:0/pointer-events:none 共用绘制盒 + box-shadow: inset 2px 0 0 var(--hr-pending)/var(--hr-done) 两档语义色竖线)+ 本体 box-shadow: none 关闭(缺任一半 = hover 前后竖线消失或本体线与 ::before 线双线叠画, 同 site-chip S4 迁移面; HR = H&R 做种考核状态类, 非人力资源)+ ::before 渐隐过渡段(RM 媒体块内, box-shadow 段令牌逐字沿用 site-chip::before 渐隐段 --dur-fast/--ease, hr-pending<->hr-done 状态类切换竖线色渐变不跳变); any() 存在性断言只防删行/改值, hover 本体仍单独消费同一条 --fx-glow-stack, 级联胜负由 S3 像素采样 e2e 仲裁(纯静态/纯 computed 均对绘制层裁剪无感)
 - test_frontend_console_square_radius: console 方角口径守阵(R1 精修 B1, 用户报「console 详情模板/文字元素出现圆角」) —— console/style.css 的 --radius-lg/--radius/--radius-sm 三令牌全 0px + console 自有 CSS 与 console 实际加载的四件共享面(row_lang/dt_table/hscroll/console_hub)的 border-radius 声明值全量白名单(0/999px 胶囊/小值/50%/var(--radius*)/inherit, 现存值盘点后冻结): flux 意图的圆角 16/10/6 写进共享面 = 三皮肤同时回归, 新值入列必须显式改白名单(有意识决策)
@@ -646,6 +646,40 @@ def test_frontend_fx_wiring():
         "state.js 落定回执未重入原版可视区单点 _kbScrollRowIntoView -- 几何/滚动必须"
         "全在 shortcuts.js 单点(上界吸顶列头下 8px / 下界面板顶缘上 8px), 共享侧只做 plumbing"
     )
+    #     D4-7 行插入 stamp 生命周期(2026-11-14 顺手修): data-fx="row-in" 是入场脚手架,
+    #     必须入场毕摘除(animationend 主路 + 超时兜底) —— 永驻则 forwards 填充把
+    #     max-height/opacity 钉死、[data-fx~="row-in"] 的 overflow:hidden 永驻:
+    #     新增 H&R 双行被缺省 44px 裁高、行 overflow 改写吸左首格 sticky 的滚动宿主
+    #     (横滚冻结列在 stamped 行上失灵)。stamp 时按实测行高覆写 --fx-row-h
+    #     (spawnGhost 同款)防摘除时从缺省 44px 跳回自然高。CSS 侧配套 = fx-mount.css
+    #     D4-7 行板过渡复位规则(pinned_first_cell_hover_transition_parity 钉);
+    #     行为面 = e2e/main-table-pinned-matrix.spec.mjs stamped 行用例(生命周期段)。
+    rows_blk = re.search(r"function rows\(arr, keyAttr\) \{(.*?)\n  \}", mount_js, re.S)
+    assert rows_blk, "fx-mount.js 找不到 rows() 差分函数体(行插入 stamp 生命周期的钉点)"
+    blk = rows_blk.group(1)
+    for needle, why in (
+        (
+            'removeAttribute("data-fx")', "fx-mount.js row-in stamp 缺入场毕摘除 -- forwards 填充钉死 max-height/opacity、"
+            "overflow:hidden 永驻(新增 H&R 双行裁到缺省 44px、吸左首格 sticky 滚动宿主被改写)"
+        ),
+        (
+            'setProperty("--fx-row-h"', "fx-mount.js row-in stamp 缺实测行高覆写 -- 摘除时 max-height 从缺省 44px 跳回自然高"
+            "(H&R 双行跳约 21px)"
+        ),
+        (
+            'animationName !== "fx-row-in"', "fx-mount.js row-in 摘除缺 animationend 名/目标守卫 -- 行内后代动画(animationend 冒泡)"
+            "会误摘 stamp"
+        ),
+        (
+            "ev.target !== row", "fx-mount.js row-in 摘除缺目标半边守卫 -- 冒泡形态(animationName 对但 target 是后代)"
+            "会误摘 stamp(r4 电池第三发对名错目标判据的面)"
+        ),
+        (
+            "setTimeout(strip", "fx-mount.js row-in 摘除缺超时兜底 -- RM 外动画被打断/行被换删时 animationend 不派,"
+            " stamp 永驻(280 与 spawnGhost 兜底同值, 双路 = animationend 主路 + 本兜底)"
+        ),
+    ):
+        assert needle in blk, f"fx-mount.js rows() 缺 {needle} -- {why}"
     #     F7e 两段动效落点(用户口径「只加面板上滑出现以及上推过渡动效」):
     #     c) 面板底部上滑出现: flux/css/dialogs.css 入场 translateY(100%)->0,
     #        时长/缓动消费 fx 骨令牌(--fx-dur-panel/--fx-ease-out);

@@ -923,9 +923,10 @@ def test_file_alias_intersects_table():
     assert ru.file_alias_intersects(S, ("a.bin", ), ("", )) is None  # 全空账条目 -> None 保守(评审轮 1
     # 修 3: _norm 恒真值是死过滤, 判空必须按原串; 修前该形态返回 False 豁免, 违背宁拦勿漏)
     assert ru.file_alias_intersects("", ("a.bin", ), (S + "/a.bin", )) is None  # save_path 缺失
-    # -- 归一: 斜杠形态无关(平台无关断言) --
+    # -- 归一: 斜杠形态无关(平台无关断言; 数据大小写全同 -- 大小写折叠是下一组按
+    #    os.name 分支的口径, 混进这组 POSIX 上必红, issue 26-11-14-1727) --
     assert ru.file_alias_intersects("R:/Download/PTing", ("a.bin", ), (r"R:\Download\PTing\a.bin", )) is True
-    assert ru.file_alias_intersects(r"R:\Download\PTing", ("Sub/a.bin", ), ("R:/Download/PTing/sub/a.bin", )) is True
+    assert ru.file_alias_intersects(r"R:\Download\PTing", ("sub/a.bin", ), ("R:/Download/PTing/sub/a.bin", )) is True
     # -- 归一: 大小写折叠按平台 normcase 口径(Windows 折 / POSIX 不折) --
     row = (r"R:\DL", ("A.bin", ), ("r:/dl/a.BIN", ))
     assert ru.file_alias_intersects(*row) is (True if os.name == "nt" else False)

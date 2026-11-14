@@ -9,7 +9,7 @@
 - test_frontend_hscroll_indicator_wiring: 主表横滚指示条守阵(计划 26-11-01-0553 S4) —— 原生横条隐藏 + 底部胶囊单点 shared/hscroll.css: 两条隐藏声明缺一即红(只写 ::-webkit-scrollbar 时 Firefox 仍画条槽 / 只写 scrollbar-width 时 Chromium 系仍画, 全局 `*{scrollbar-width:thin}` 挡不住)、三皮肤各恰挂一次且排在本皮肤 views.css 之后(link 序即级联序, 排前面被页面级规则反压)、三皮肤 /shared/*.css 链接集逐字相同(挂载漂移 = 某皮肤缺规则而规则只有一份, 整条静默失效; shared/fx/* 豁免 —— fx 只挂 flux, 计划 26-10-31-2316 D14 隔离拍板)、皮肤自有 CSS 零第二份隐藏声明(副本 = 日后各自漂移)、CSS 四类名与 columns.js 建 DOM/classList 同侧(改名只改一侧 = 胶囊恒不可见且零报错)、syncHeadScroll 尾部仍调 _hscrollSync 且主表白名单 group/torrent/show 齐全(删接线 = 胶囊永不出现 / 删白名单 = 抽屉面 xtpl.html:360 每次横滚在 body 留一个永不用的胶囊)、_hscrollBind() 调用点在 _ensureHeadObserver 体内(退回挂在 _hscrollPill() 里 = 从没横滚过的纯鼠标用户永远见不到胶囊, 而「纯鼠标没有拖拽入口」正是本方案要补的洞)
 - test_frontend_pinned_first_cell_bg_per_face: 必现列(吸左首格)底色按面重锚守阵(2026-10-14 修「必现列背景与其他列不一致」, 报障面 = 主表三页 + 抽屉全部变体表格) —— 两层根因: 1. 皮肤 `.group-row > :first-child{background:var(--bg-row)}` 是主列表行语言, 抽屉各引擎面复用 .group-row(零特判)致首格与行板三样各算(族面 --tbl-face-bg→--bg / 04 卡 / 05·10 透明 / 08 --bg-row), 行内一条异色竖带(ocean Δ 16/255); 2. 追剧表 search-hit 行底是「accent 渐层 over --bg-row」而首格只平铺 --bg-row, 整条渐层丢失(实测 backgroundImage=none)。修复单点 shared/dt_table.css 按面重锚: 族面 06/07/09/11 行板/表头首格同 Token(--tbl-face-bg/--tbl-head-bg) + 悬停 --bg-hover, err(06)/bad(07/09)/is-chk(11)/sel(10) 半透明 tint 一律 `linear-gradient(tint,tint), var(--bg-card)` 合成(**禁** --bg-row 基色/裸半透明令牌), empty-row 随行透明; 04·05 首格是内容根 ⇒ 摘底摘 position:static(05 failrow 保 error-soft); 10 保留吸左取 --bg-card; 08 bad 补合成; 四皮肤 views.css 补 search-hit 首格镜像(90deg 渐层, 停靠点 2026-11-11 收紧定案为固定 220px + --bg-row); 05 变体补内层行容器 dt05-list(家族两层 dtNN-wrap+dtNN-list, 修前单层 dt05-wrap 与 CSS 前缀不匹配致六条 .group-row 规则空转、行带主表卡底)。真浏览器量具 e2e/dt-table-face-bg.spec.mjs(首格可见底 == 行板可见底, 含悬停与 err/bad/is-chk/sel 状态行)
 - test_frontend_table_head_a11y: 引擎表头可访问性守阵(issue 26-10-12-0800, 计划 26-10-12-2330 方案 C) —— 语义载体用 role="columnheader"(**不是** button: aria-sort 只对该 role 生效, 挂 button 上读屏忽略) + 件套单点(shared/table.js 的 headAriaSort/headActivate 两方法, grid/thead 共用) + grid .h-cell 的 :aria-sort/:tabindex(仅可排序列)/Enter·Space keydown 全走 headActivate + .group-head role=row / 指示线 role=presentation + thead <th> 同补件套 + 各皮肤 .h-cell.sortable:focus-visible(atlas/prism 落 views.css; console/flux 落 components.css —— 后者曾顶 700 行 cap; flux S5 收编); 键盘真按键行为在 e2e/table-head-a11y.spec.mjs
-- test_frontend_pinned_first_cell_hover_transition_parity: 必显列(吸左首格)悬停过渡与行板同源守阵(2026-10-20 修「必显列鼠标滑过时背景与其它列不一致, 短暂后恢复一致」) —— 行板 `.group-row` 有 transition: background var(--dur)(160ms) 而吸左首格无过渡 ⇒ 滑入瞬间首格 snap 到 --bg-hover、其余列还在从 --bg-row 渐入, 160ms 内行内一条竖带, 过渡完才"恢复一致"(真浏览器逐帧: prism/frost Δ14、atlas/ocean Δ18, 三主表 × 双皮肤全中; 移出同理反号); 钉 1. 行板过渡仍以 `background var(--dur)` 声明(时长基准) 2. 各皮肤 `.group-row > :first-child` 体内 `transition: background-color var(--dur)`(禁字面毫秒, 否则行板调时长又漂) 3. 首格悬停镜像 `:hover > :first-child` → `--bg-hover` 不得丢(丢了是整段悬停期的持久竖带) 4. 首格过渡**只在各皮肤 views.css 单点**, 抽屉按面重锚(dt_table.css)与变体注入 CSS 不得自带 `transition`(带即脱离 --dur 与行板错拍; 2026-10-20 审计: 主表三页 + 经典抽屉表 + 06/07/09/10/11 六面逐帧差全 0; 26-10-30-0217 阶段2 起豁免 shared/row_lang.css —— 其 :first-child 上的 transition 只有行语言名称列左条 ::before 的 .12s 本体动效(D4 拍板 M2); 首格 hover/选中底为 color-mix 纯色换 background-color(26-10-30 复验二修, ::after 已撤销), 过渡继承 views.css 单点)。flux 收编定案(S5, plan 26-10-31-2316): 随 _UI_ALL 自动罩住 —— fork 后规则逐字同 console 天然满足; S6 挂 fx 动效时若要动行板/首格过渡, 必须仍守「views.css 单点 + var(--dur) 同源」前提, 破前提先改本守阵。行为面(逐帧差 ≤ 2、稳态同色)由 e2e/main-table-pinned-hover.spec.mjs 真浏览器采
+- test_frontend_pinned_first_cell_hover_transition_parity: 必显列(吸左首格)悬停过渡与行板同源守阵(2026-10-20 修「必显列鼠标滑过时背景与其它列不一致, 短暂后恢复一致」) —— 行板 `.group-row` 有 transition: background var(--dur)(160ms) 而吸左首格无过渡 ⇒ 滑入瞬间首格 snap 到 --bg-hover、其余列还在从 --bg-row 渐入, 160ms 内行内一条竖带, 过渡完才"恢复一致"(真浏览器逐帧: prism/frost Δ14、atlas/ocean Δ18, 三主表 × 双皮肤全中; 移出同理反号); 钉 1. 行板过渡仍以 `background var(--dur)` 声明(时长基准) 2. 各皮肤 `.group-row > :first-child` 体内 `transition: background-color var(--dur)`(禁字面毫秒, 否则行板调时长又漂) 3. 首格悬停镜像 `:hover > :first-child` → `--bg-hover` 不得丢(丢了是整段悬停期的持久竖带) 4. 首格过渡**只在各皮肤 views.css 单点**, 抽屉按面重锚(dt_table.css)与变体注入 CSS 不得自带 `transition`(带即脱离 --dur 与行板错拍; 2026-10-20 审计: 主表三页 + 经典抽屉表 + 06/07/09/10/11 六面逐帧差全 0; 26-10-30-0217 阶段2 起豁免 shared/row_lang.css —— 其 :first-child 上的 transition 只有行语言名称列左条 ::before 的 .12s 本体动效(D4 拍板 M2); 首格 hover/选中底为 color-mix 纯色换 background-color(26-10-30 复验二修, ::after 已撤销), 过渡继承 views.css 单点)。flux 收编定案(S5, plan 26-10-31-2316): 随 _UI_ALL 自动罩住 —— fork 后规则逐字同 console 天然满足; S6 挂 fx 动效时若要动行板/首格过渡, 必须仍守「views.css 单点 + var(--dur) 同源」前提, 破前提先改本守阵。钉 5(2026-11-14, 修「新增种子固定列 hover 竖带」= 第9条反向形态): fx 层运行时改写必须带复位 —— fx-mount.css `html[data-fx-preset] .group-row[data-fx]` 复位规则在位且逐字含 background/border-color 的 var(--dur) var(--ease)(fx.css [data-fx] 基线把被 stamp 行的行板过渡换成 opacity/transform, 悬停行板瞬切/首格 160ms 渐入)。行为面(逐帧差 ≤ 2、稳态同色)由 e2e/main-table-pinned-hover.spec.mjs 与 e2e/main-table-pinned-matrix.spec.mjs(通用行 + 状态/组合态 + stamped 新增行悬停/生命周期)真浏览器采
 - test_frontend_pinned_first_cell_selected_row_keeps_base: 选中/半选行「保留行底」守阵(2026-10-20 修「选中的行必显列背景与其它列不一致」) —— 旧规则 `.group-row.selected { background: var(--sel-bg) }` 用半透明 tint **替换**行底(而非叠在行底上), 行板露出页底 `--bg`, 而吸左首格按 `--bg-row` 合成 ⇒ 两侧承光底分家, 选中行名称列整列异色竖带(真浏览器逐像素: atlas Δ9/255、prism Δ5/255, 三主表×双皮肤全中, 未选中行 Δ0); 钉 1. `.group-row.selected`/`.group-row.partial` 的 background 末层是 `var(--bg-row)`(裸半透明令牌即红) 2. 行板与首格镜像的 tint 同字面(`var(--sel-bg, var(--accent-soft))`) 3. 首格镜像合成基色与行板同令牌 4. 拆分后 `.member-row.selected` 仍在(成员行无吸左首格, 保持裸柔底)。行为面(行板与首格计算背景逐字相等, 选中/悬停选中)由 e2e/main-table-pinned-selected.spec.mjs 采
 - test_frontend_pinned_first_cell_expanded_row_keeps_base: 展开行「保留行底」守阵(2026-10-20 与选中态同轮收, 用户「group 一同修」) —— `.group-row.expanded { background: var(--bg-sunken) }` 同样把行底**替换**成半透明下沉底, 行板承光层变页底 `--bg`, 而首格按 `--bg-row` 合成; 真浏览器逐像素: 展开行 atlas Δ5/255、prism Δ2/255(低于可辨阈, 上轮按范围守恒未动); 钉 1. 三皮肤 `.group-row.expanded` 的 background 末层是 `var(--bg-row)`(prism 在 views.css, atlas/console 在 components.css, 按选择器找) 2. 首格镜像同基色 3. console 独享的 `.group-row.expanded:hover` 不得跌回裸 `--bg-sunken`(否则悬停那一下又分家)。行为面由 e2e/main-table-pinned-selected.spec.mjs 的展开行用例采
 - test_drawer_table_bridge_wiring: 桥接线守阵(计划 26-10-12-0527; W3 增补) —— 桥模板行源单点
@@ -1393,7 +1393,7 @@ def test_frontend_pinned_first_cell_hover_transition_parity():
     (真浏览器逐帧采样: prism/frost Δ14、atlas/ocean Δ18, 三主表 × 双皮肤全部命中; 移出方向同理反号)。
     修法 = 首格补同源时长/缓动的 `background-color` 过渡(渐变状态不可插值的残留见坑档 frozen-column)。
 
-    钉四件事, 缺任一件即回到 snap 或竖带:
+    钉五件事, 缺任一件即回到 snap 或竖带:
     1. 行板过渡仍带 `background` 且时长读 `--dur`(首格必须与它**同源**, 两处各写字面值会悄悄漂移);
     2. `.group-row > :first-child` 体内声明 `transition: background-color var(--dur)` —— 改了行板
        时长就再也对不上, 故不许写字面毫秒;
@@ -1403,7 +1403,13 @@ def test_frontend_pinned_first_cell_hover_transition_parity():
        CSS 一律不得自带 `transition`(否则脱离 --dur 单点, 与行板错拍)。2026-10-20 审计实测: 三个
        主表 + 经典抽屉表 + 06/07/09/10/11 六个变体面, 滑入/移出逐帧差全 0, 正是「全部继承同一条
        皮肤规则」的结果 —— 本款把这个前提钉死。
-    行为面(逐帧底色差 ≤ 2、稳态同色)由 e2e/main-table-pinned-hover.spec.mjs 采; 这里只钉声明式契约。
+    5. flux fx 层对行板 transition 的运行时改写(fx.css [data-fx] 基线)必须带逐字复位
+       (fx-mount.css `html[data-fx-preset] .group-row[data-fx]` 复位规则在位, 含 background/
+       border-color 的 var(--dur) var(--ease))—— 2026-11-14 修「新增种子固定列 hover 竖带」
+       (frozen-column 第9条反向形态: 行板瞬切/首格渐入)。
+    行为面(逐帧底色差 ≤ 2、稳态同色)由 e2e/main-table-pinned-hover.spec.mjs 与
+    e2e/main-table-pinned-matrix.spec.mjs(通用行 + 状态/组合态 + stamped 新增行)真浏览器采;
+    这里只钉声明式契约。
     """
     for ui in _UI_ALL:
         # 行板规则所在文件按皮肤分家(prism 在 views.css; atlas/console 在 components.css), 按特征
@@ -1469,6 +1475,24 @@ def test_frontend_pinned_first_cell_hover_transition_parity():
                 if "transition" in body:
                     stray.append(f"{rel}: {' '.join(sel.split())[:70]} 体内带了 transition")
     assert not stray, ("首格过渡声明出了皮肤单点(views.css) —— 以下抽屉/变体面规则自带 transition, 会与行板错拍:\n  - " + "\n  - ".join(stray))
+    # 5. flux fx 挂载层对行板 transition 的改写必须带复位: fx.css [data-fx] 基线
+    #    (transition-property: opacity, transform)与皮肤 .group-row 同特异性更晚加载,
+    #    被行插入差分 stamp data-fx="row-in" 的行(页面加载后新插入的行 = 新增种子行)
+    #    行板 background/border-color 不再过渡, 悬停行板瞬切而首格仍 160ms 渐入 =>
+    #    名称列 0.16s 异色竖带(2026-11-14 用户报障, 上面 1-4 的静态前提全部未被破坏,
+    #    是 fx 层运行时改写绕过了它们 —— 故在此钉 fx-mount.css 的复位规则必须在位,
+    #    且逐字保住与首格同源的 var(--dur) var(--ease) 令牌对)。
+    fx_mount = open(os.path.join(STATIC_ROOT, "flux", "css", "fx-mount.css"), encoding="utf-8").read()
+    mo = re.search(r"html\[data-fx-preset\] \.group-row\[data-fx\] \{([^}]*)\}", fx_mount)
+    assert mo, (
+        "flux fx-mount.css 缺行板 [data-fx] 过渡复位规则 —— fx.css [data-fx] 基线会顶掉行板 "
+        "background/border-color 过渡, 被 stamp 行(新增种子行)悬停时行板瞬切/首格渐入, "
+        "名称列成 0.16s 异色竖带(e2e/main-table-pinned-matrix.spec.mjs stamped 行用例同面)"
+    )
+    assert "background var(--dur) var(--ease)" in mo.group(1) and "border-color var(--dur) var(--ease)" in mo.group(1), (
+        "flux 行板 [data-fx] 过渡复位必须逐字含 background/border-color 的 var(--dur) var(--ease) "
+        "(与首格同源令牌对; 写字面毫秒或换令牌都会在皮肤调时长时静默错拍)"
+    )
 
 
 def test_frontend_pinned_first_cell_selected_row_keeps_base():

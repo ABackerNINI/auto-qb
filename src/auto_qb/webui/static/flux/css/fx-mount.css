@@ -186,6 +186,30 @@ html[data-fx-preset] input[type="checkbox"]:not(.hb-switch input):focus-visible 
    * 各皮肤 views.css 的 var(--dur) 单点) —— 渐亮语义 row_lang 已供给, 本层不再另挂;
    * wave 模式首格按设计不吃 hover 底(扫层是唯一高亮源), 也由 row_lang/皮肤配对规则承接。
    * 状态行(:not 链排除 expanded/selected/partial/search-hit)各有既有底, 不在 hover 层管。 */
+  /* D4-7 行板过渡复位(2026-11-14 用户报「新增种子固定列 hover 进入时背景与其它列不一致,
+   * 约0.几秒恢复」): fx.css [data-fx] 基线(transition-property: opacity, transform;
+   * 时长 --fx-dur-enter)与皮肤 .group-row 同特异性但更晚加载 —— 被行插入差分 stamp
+   * data-fx="row-in" 的行(页面加载后新插入的行: 新增种子/筛选重进/组行重建)行板
+   * transition 被整体换成 opacity/transform, background/border-color 不再过渡, 悬停
+   * 瞬切; 吸左首格保留皮肤 `transition: background-color var(--dur) var(--ease)` =>
+   * 悬停进入时行板(其它列)瞬亮、名称列 160ms 渐入, 行内一条异色竖带, 过渡完才恢复
+   * (frozen-column.md 第9条的反向形态: 旧缺陷首格 snap/行板渐入, 这次行板 snap/首格渐入)。
+   * 行插入差分首轮只建缓存不 stamp => 页面加载即在的行不吃这条, 既有 e2e 通用行探针
+   * 全绿恰是盲区; 行为面由 main-table-pinned-matrix 的 stamped 行用例钉住, 静态面由
+   * pinned_first_cell_hover_transition_parity 钉住。
+   * 处置 = 行板过渡在 stamp 生命周期内逐字复位皮肤原声明(fx 入场走 animation
+   * keyframes, 基线 transition 对 row-in/out 无消费, 复位不损入场; 与首格同一对
+   * var(--dur)/var(--ease) 令牌逐字同源, 禁写字面毫秒 —— 与皮肤行板任一侧调时长
+   * 都会由守阵当场拦下)。
+   * stamp 生命周期(2026-11-14 同批顺手修): fx-mount.js 行插入差分在 stamp 时按实测
+   * 行高覆写 --fx-row-h(spawnGhost 同款), 入场毕(animationend 主路 + 280ms 兜底)
+   * 摘除 data-fx 与行内 --fx-row-h —— [data-fx~="row-in"] 的静态 overflow:hidden 与
+   * forwards 填充(max-height/opacity)只活动画那 200ms, 行回自然态(否则 H&R 双行
+   * 被缺省 44px 裁高、overflow:hidden 改写吸左首格 sticky 滚动宿主); 本复位规则
+   * 因此只需罩住入场窗口内的悬停, 摘除后惰性不命中。 */
+  html[data-fx-preset] .group-row[data-fx] {
+    transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease);
+  }
   /* D4-2 selected 边条生长: 既有选中/半选左条(::before, views.css 给形)加 scaleY
    * 生长 -- 本层把条铺到全部行(非选中 scaleY(0) + opacity 0 双保险不可见),
    * 选中/半选时生长入场; member partial 的 18% 几何差在此镜像(本层特异性更高) */

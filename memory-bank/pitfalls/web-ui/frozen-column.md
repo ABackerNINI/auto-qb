@@ -1,12 +1,12 @@
-# 首列吸左固定(冻结列)在本仓表格上的十处非显然约束
+# 首列吸左固定(冻结列)在本仓表格上的十一处非显然约束
 
-> 摘要: 首列吸左(冻结列)在本仓 `.group-row` 表格上的十处非显然约束 —— 表头反向位移、首格不透明合成、边界发丝线、stretch、按面重锚、search-hit 渐层镜像、变体两层结构、过渡同源、状态底叠加; 完整处置步骤与实测证据见 [attachments/frozen-column-constraints.md](attachments/frozen-column-constraints.md)。
-> 触发: 首列吸左, 名称列后阴影, 随机出现阴影, 黑块, box-shadow spread 负值, 落影随行高变, 冻结列, frozen column, sticky 首格, 横向滚动, 表头横向同步, transform 桥接, 首格不透明, 半透明状态底, 双重上色, 左侧色条消失, 过渡中间值, 皮肤 CSS 700 行上限, 残根, 尾字粘连, 状态列被盖住, 吸左边界, is-hscrolled, 边界落影, 徽标漏出, chip 换行, align-items center, align-self stretch, 首格高度, 必现列背景不一致, 异色竖带, 按面重锚, 承光底, dt05-list, 行容器, 外壳类名空转, search-hit 渐层丢失, dtNN-wrap, 动态拼接选择器, 必显列悬停闪竖带, 滑过闪一下又恢复一致, 悬停时首格与其它列不同色, 首格无过渡, transition 不同源, 行板 160ms 首格瞬切, 过渡窗口逐帧采样, 选中行必显列异色竖带, 选中的行名称列与其它列不同色, 渐层停靠点几何分家, 百分比停靠点,
+> 摘要: 首列吸左(冻结列)在本仓 `.group-row` 表格上的十一处非显然约束 —— 表头反向位移、首格不透明合成、边界发丝线、stretch、按面重锚、search-hit 渐层镜像、变体两层结构、过渡同源、状态底叠加、左侧色条跟吸、运行时改写(fx [data-fx] 基线); 完整处置步骤与实测证据见 [attachments/frozen-column-constraints.md](attachments/frozen-column-constraints.md)。
+> 触发: 首列吸左, 名称列后阴影, 随机出现阴影, 黑块, box-shadow spread 负值, 落影随行高变, 冻结列, frozen column, sticky 首格, 横向滚动, 表头横向同步, transform 桥接, 首格不透明, 半透明状态底, 双重上色, 左侧色条消失, 过渡中间值, 皮肤 CSS 700 行上限, 残根, 尾字粘连, 状态列被盖住, 吸左边界, is-hscrolled, 边界落影, 徽标漏出, chip 换行, align-items center, align-self stretch, 首格高度, 必现列背景不一致, 异色竖带, 按面重锚, 承光底, dt05-list, 行容器, 外壳类名空转, search-hit 渐层丢失, dtNN-wrap, 动态拼接选择器, 必显列悬停闪竖带, 滑过闪一下又恢复一致, 悬停时首格与其它列不同色, 首格无过渡, transition 不同源, 行板 160ms 首格瞬切, fx 基线改写, row-in stamp, 新增行悬停竖带反向, 行板瞬切首格渐入, transition-property 长手顶掉 shorthand, stamp 永驻裁高, sticky 宿主改写, 过渡窗口逐帧采样, 选中行必显列异色竖带, 选中的行名称列与其它列不同色, 渐层停靠点几何分家, 百分比停靠点,
   空间渐层镜像, search-hit 尾差, 计算样式探针失明, 像素地面真值, 半透明状态底替换行底, background 简写换掉行底, 行板承光层变页底, 行底丢失, 合成基准分家
 
-**Refs:** memory-bank/tasks/26-10-06-webui-frozen-first-column.md,memory-bank/tasks/26-10-11-webui-frozen-col-boundary.md,memory-bank/reports/26-10-14-0136-report-webui-detail-table-rebuild-review.html
+**Refs:** memory-bank/tasks/26-10-06-webui-frozen-first-column.md,memory-bank/tasks/26-10-11-webui-frozen-col-boundary.md,memory-bank/tasks/26-11-14-webui-frozen-col-fx-stamp.md,memory-bank/reports/26-10-14-0136-report-webui-detail-table-rebuild-review.html
 
-### 首列吸左固定(冻结列)的十处非显然约束
+### 首列吸左固定(冻结列)的十一处非显然约束
 
 - **触发**: 给行宽 `fit-content` > 容器的这些表(辅种 / 种子 / 追剧)加「首列常驻滚动容器左缘」。
 - **判别**: 一行 `position: sticky` 完不了事 —— 表头、底色、左色条三处各有独立成因(见处置);
@@ -83,6 +83,29 @@
   判据再加一条: **行板与首格要逐字同一个表达式, 「数学上恒等」的另一种写法不算同** —— 恒等
   推导对人不透明, 守阵读的是计算样式。另: prism 例全绿是无头亮主题假象
   (testing/headless-prefers-light-theme-gate), 双皮肤绿≠两面都真正吃到待测规则。
+- **⑪ 行板 transition 单点会被「运行时改写」绕过 —— fx.css [data-fx] 基线是同特异性更晚加载的
+  `transition-property` 长手声明, 把被 stamp 行的整个行板过渡换成 opacity/transform(2026-11-14
+  用户三报「新增种子固定列 hover 竖带, 约0.几秒恢复」, ⑨ 的反向形态复发: ⑨ 首格 snap/行板渐入,
+  这次行板瞬切/首格渐入)**: flux fx 行插入差分给「页面加载后新插入的行」stamp `data-fx="row-in"`
+  (新增种子/筛选重进/组行重建), fx.css `[data-fx] { transition-property: opacity, transform }`
+  与皮肤 `.group-row` 同特异性但更晚加载 ⇒ 行板 background/border-color 不再过渡, 悬停行板瞬切;
+  吸左首格保留皮肤 160ms 渐入 ⇒ 名称列竖带, 过渡完恢复。**盲区机理**: 差分「首轮只建缓存」=
+  初始行不 stamp ⇒ 既有 e2e 探针(全打初始行)全绿假象; 真浏览器逐帧实测行板 vs 首格差 29/255。
+  **判据(推广)**: 凡「某元素有 transition 单点」的口径, 多问一句「fx/主题层有没有 [属性] 基线
+  也写 transition-* 长手」—— 静态守阵钉的是皮肤文件声明, 运行时改写绕过它; 守阵要配一条「改写
+  必须带逐字复位」的静态钉 + 行为探针打**被 stamp 的行**。
+  **处置**: fx-mount.css D4-7 复位规则(`html[data-fx-preset] .group-row[data-fx]` 逐字复位皮肤
+  声明, 与首格同源 --dur/--ease; fx 入场走 animation keyframes, 基线 transition 对 row-in/out
+  无消费, 复位零损) + fx-mount.js stamp 生命周期收口(stamp 时实测行高覆写 --fx-row-h 防摘除
+  跳变; 入场毕摘 stamp: animationend 名+目标双守卫主路 + 280ms 兜底 —— **stamp 永驻的次生
+  缺陷**: forwards 填充把行高钉死在缺省 44px 裁高 H&R 双行、[data-fx~="row-in"] 的
+  overflow:hidden 改写吸左首格 sticky 的滚动宿主, 横滚冻结列失灵)。
+  **守阵**: e2e/main-table-pinned-matrix.spec.mjs stamped 行用例两段式(生命周期: 真 stamp 出现
+  -> 摘除 -> max-height/overflow 回自然 + stampSeen 硬断言宁红勿假绿; 缺陷面: 合成 stamp 确定性
+  复现, 逐帧行板 vs 首格 <=2 + 稳态像素 —— 逐帧比较前把 Chromium 过渡中间值的 **oklab 表示归一
+  到 srgb**, 裸取前三个数字是 L/a/b 对 r/g/b 的错比, 探针期实测假低差 0.2); parity 守阵钉 5(fx 层
+  改写必须带逐字复位); fx_wiring 钉生命周期四件(摘除/行高覆写/双守卫/兜底); r4 node 电池真跑
+  摘除三分支(异名不摘/对名错目标不摘/命中摘)。
 - **守阵**: `test_frontend_frozen_column_boundary_wiring`(静态钉 is-hscrolled 打标、三皮肤成对
   规则与首格 `align-self: stretch`);
   `test_frontend_pinned_first_cell_bg_per_face`(静态钉 search-hit 首格镜像、dt_table.css 八面

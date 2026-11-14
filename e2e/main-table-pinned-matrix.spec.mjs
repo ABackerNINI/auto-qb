@@ -25,7 +25,8 @@ import zlib from 'zlib';
  *     background-image 层的覆辙)。
  *
  * 对账: 本 spec 是 main-table-pinned-hover.spec.mjs(通用行, 三表×双皮肤)与
- * dt-table-face-bg.spec.mjs(抽屉八面)之外的第三块拼图 —— 主表 × 状态/组合态 × 全皮肤 × 双行语言。
+ * dt-table-face-bg.spec.mjs(抽屉八面)之外的第三块拼图 —— 主表 × 状态/组合态 × 全皮肤 × 双行语言
+ * × 新增行(fx 差分 stamped)悬停/生命周期(2026-11-14)。
  */
 
 const ST_STATES = ['downloading', 'seeding', 'checking', 'paused', 'other'];
@@ -318,3 +319,188 @@ for (const { skin, rowlang } of CONTEXTS) {
     });
   });
 }
+
+/* ====================================================================
+ * 新增行(被 fx 差分 stamp 的行)悬停一致 + stamp 生命周期 —— 2026-11-14 用户报障
+ * 「WEBUI新增种子固定列 hover 进入时背景与其它列不一致, 约0.几秒恢复」
+ *
+ * 机制: flux fx 预设(glass, index.html 恒开)的行插入差分给「页面加载后新插入的行」
+ * stamp data-fx="row-in", 而 fx.css [data-fx] 基线(transition-property: opacity,
+ * transform; 时长 --fx-dur-enter)与皮肤 .group-row 同特异性但更晚加载 —— 行板
+ * transition 被整体换成 opacity/transform, background 不再过渡, 悬停瞬切; 吸左
+ * 首格保留皮肤 160ms 渐入 => 名称列 0.16s 异色竖带(frozen-column 第9条的反向形态:
+ * 旧缺陷首格 snap / 行板渐入, 这次行板 snap / 首格渐入)。行插入差分「首轮只建
+ * 缓存」= 页面加载即在的行不 stamp => 既有 e2e 通用行探针全绿恰是盲区。
+ *
+ * 两段面(修复 = fx-mount.css D4-7 行板过渡复位 + fx-mount.js 入场毕摘 stamp):
+ *   1) 生命周期段: 真 stamp 出现 -> 入场毕摘除 -> 行回自然态(max-height none /
+ *      overflow visible) —— 永驻 stamp 会把行高钉死在 --fx-row-h(H&R 双行裁高)、
+ *      改写吸左首格 sticky 滚动宿主;
+ *   2) 缺陷面: 合成 stamp 确定性复现入场窗口内的悬停, 逐帧(行板 vs 首格)+ 稳态
+ *      像素地面真值。逐帧比较前把 Chromium 过渡中间值的 oklab 表示归一到 srgb
+ *      (color-mix 终点的过渡中间值按插值空间报 oklab, 裸取前三个数字是 L/a/b 对
+ *      r/g/b 的错比 —— 探针期实测最大 0.2 的假低差)。
+ * ==================================================================== */
+
+test.describe('新增行(stamped)悬停一致', () => {
+  installRuntimeErrorGuard(test);
+
+  // 只 flux: fx 挂载层 flux 专属(三旧皮肤对 /shared/fx/ 与 fx-mount 零引用, D14 反向钉),
+  // 行插入差分只会在 flux stamp 行 —— 其它皮肤跑本用例测不到目标面。
+  // wave 不适用: 首格按设计不吃 hover 底(高亮唯一来源是扫层), parity 前提为空
+  // (同通用行用例的豁免口径); 辅种表(groups)不单列: rows() 两 keyAttr(hash/key)
+  // 共用同一 stamp/摘除代码, 复位规则选择器 .group-row[data-fx] 表无关, 种子表面已覆盖。
+  test('flux 新增种子行(data-fx=row-in)悬停逐帧同步 + 稳态像素同底 @fast (flux/flat)', async ({ page }) => {
+    collectRuntimeErrors(page);
+    await openView(page, 'flux', 'torrents', 'flat');
+    await hideRowContent(page);
+
+    const name = 'PINNED-FX-' + Date.now();
+    const resp = await page.request.post(`${baseUrl()}/__harness__/add_torrent`, { params: { name } });
+    expect(resp.ok(), '桩 add_torrent 应答失败').toBe(true);
+
+    // 轮询合并(桩约 2s 一拍)内等新行出现; 按名字在 DOM 行序里定位(行窗口化下渲染窗随插行平移)
+    const sel = '.group-row[data-table="torrent"]';
+    await page.locator(sel, { hasText: name }).first().waitFor({ state: 'visible', timeout: 15_000 });
+    const idx = await page.evaluate(
+      (nm) => [...document.querySelectorAll('.group-row[data-table="torrent"]')]
+        .findIndex((r) => r.textContent.includes(nm)),
+      name,
+    );
+    expect(idx, '新行未进渲染窗(定位失败)').toBeGreaterThanOrEqual(0);
+
+    // -- 生命周期段: stamp 出现(差分 rAF) -> 入场毕摘除 -> 行回自然态。摘除是本批
+    //    「顺手修」的主体: 永驻的 forwards 填充与 [data-fx~="row-in"] 的 overflow:hidden
+    //    会把行高钉死在 --fx-row-h(缺省 44px, H&R 双行被裁)、改写吸左首格 sticky 的
+    //    滚动宿主。stamp 窗口约 280ms, waitForFunction 的 rAF 轮询起点(CDP 派发约
+    //    1-2 帧)远早于摘除 => 捕捉近确定, stampSeen 硬断言宁红勿假绿(运行时 stamp
+    //    管线没有其它行为守卫, 静态 fx_wiring 只钉源码字符串); 摘除等待再钉终态。
+    const stampSeen = await page
+      .waitForFunction(
+        (nm) => {
+          const el = [...document.querySelectorAll('.group-row[data-table="torrent"]')]
+            .find((r) => r.textContent.includes(nm));
+          return !!el && el.getAttribute('data-fx') === 'row-in';
+        },
+        name,
+        { timeout: 3000 },
+      )
+      .then(() => true)
+      .catch(() => false);
+    // 正向面硬断言(rAF 轮询 + 约 280ms stamp 窗口, CDP 轮询起点远早于摘除 => 近确定性):
+    // 运行时 stamp 管线(rowNode 按 [data-hash] 找 Vue 渲染行)没有其它行为守卫, 静态
+    // fx_wiring 只钉源码字符串 —— 错过窗口属少数派, 宁红勿假绿。
+    expect(stampSeen, '真 stamp 未被捕捉 —— 运行时 stamp 管线正向面缺失(错过窗口/差分没跑)').toBe(true);
+    await page.waitForFunction(
+      (nm) => {
+        const el = [...document.querySelectorAll('.group-row[data-table="torrent"]')]
+          .find((r) => r.textContent.includes(nm));
+        return !!el && el.getAttribute('data-fx') !== 'row-in';
+      },
+      name,
+      { timeout: 3000 },
+    );
+    const natural = await page.evaluate((nm) => {
+      const el = [...document.querySelectorAll('.group-row[data-table="torrent"]')]
+        .find((r) => r.textContent.includes(nm));
+      if (!el) return null;
+      const s = getComputedStyle(el);
+      return { fx: el.getAttribute('data-fx'), mh: s.maxHeight, ov: s.overflow };
+    }, name);
+    expect(natural, '新行丢了(窗口化换行?)').not.toBeNull();
+    expect(natural.fx, 'row-in stamp 未在入场毕摘除 -- forwards 填充钉死 ' +
+      'max-height/opacity、overflow:hidden 永驻(H&R 双行裁高/吸左 sticky 宿主被改写)').toBeNull();
+    expect(natural.mh, '摘除后 max-height 未回自然(none) -- forwards 填充残留').toBe('none');
+    expect(natural.ov, '摘除后 overflow 未回自然(visible)').toBe('visible');
+
+    // -- 缺陷面(入场窗口内的悬停底色一致): 真实窗口约 280ms 且与轮询竞速, 用合成
+    //    stamp 确定性复现 —— 属性即状态源(CSS 选择器), 摘除调度是 JS 生命周期, 两个
+    //    面分开钉(生命周期见上段, 级联胜利在此段)。合成 stamp 重播入场(行高 0 -> 实
+    //    测高), 指针随后进入触发悬停进入过渡: 修复前行板 background 无过渡瞬切、首格
+    //    160ms 渐入, 逐帧错拍实测 29/255(RED); 修复后行板复位规则接管, 两侧同源
+    //    --dur 渐入(<=2)。--fx-row-h 同步按实测覆写, 复刻真实 stamp 的完整形态。
+    await page.evaluate((nm) => {
+      const el = [...document.querySelectorAll('.group-row[data-table="torrent"]')]
+        .find((r) => r.textContent.includes(nm));
+      el.style.setProperty('--fx-row-h', el.getBoundingClientRect().height + 'px');
+      el.setAttribute('data-fx', 'row-in');
+    }, name);
+
+    // 悬停逐帧: 行板 vs 首格, 两侧各归一到 srgb 再比(oklab 中间值见文件头注)。
+    // 采样先于 move 发起(取 promise 不 await): 采样窗确定覆盖过渡起点 —— 若 evaluate
+    // 派发晚于过渡全长(160ms), 采样全程已收敛色, 修复前形态会被读成恒 0 假绿。
+    const box = await page.locator(sel).nth(idx).boundingBox();
+    const x = Math.max(Math.min(box.x + Math.min(box.width * 0.6, 900), 1580), box.x + 400);
+    const y = Math.min(Math.max(box.y + box.height / 2, 8), 880);
+    const framesP = page.evaluate(
+      ({ sel, i }) => new Promise((resolve) => {
+        const conv = (s) => {
+          const nums = (s.match(/-?[\d.]+/g) || []).map(Number);
+          if (/oklab\(/.test(s)) {
+            const [L, aa, bb] = nums;
+            const lp = L + 0.3963377774 * aa + 0.2158037573 * bb;
+            const mp = L - 0.1055613458 * aa - 0.0638541728 * bb;
+            const sp = L - 0.0894841775 * aa - 1.291485548 * bb;
+            const l = lp * lp * lp, m = mp * mp * mp, sc = sp * sp * sp;
+            const lin = [
+              4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * sc,
+              -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * sc,
+              -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * sc,
+            ];
+            return lin.map((c) => {
+              const v = c <= 0.0031308 ? 12.92 * c : 1.055 * Math.pow(c, 1 / 2.4) - 0.055;
+              return Math.min(255, Math.max(0, Math.round(v * 255)));
+            });
+          }
+          if (/color\(/.test(s)) return nums.slice(0, 3).map((v) => Math.round(v * 255));
+          return nums.slice(0, 3).map((v) => Math.round(v));
+        };
+        const row = document.querySelectorAll(sel)[i];
+        const cell = row.children[0];
+        const out = [];
+        const t0 = performance.now();
+        const tick = () => {
+          const f = conv(getComputedStyle(cell).backgroundColor);
+          const r = conv(getComputedStyle(row).backgroundColor);
+          let d = 0;
+          for (let k = 0; k < 3; k++) d = Math.max(d, Math.abs((f[k] || 0) - (r[k] || 0)));
+          out.push({ d, f: getComputedStyle(cell).backgroundColor, r: getComputedStyle(row).backgroundColor });
+          if (performance.now() - t0 < 500) requestAnimationFrame(tick);
+          else resolve(out);
+        };
+        requestAnimationFrame(tick);
+      }),
+      { sel, i: idx },
+    );
+    await page.mouse.move(x, y);
+    // 宁红勿假绿: 指针必须真落在该行上(窗口化重渲可能移行, 落空则无过渡发生, 全段
+    // 空洞绿) —— search-hit 用例同式先例(matches(':hover'))。
+    expect(
+      await page.evaluate(
+        (i) => !!document.querySelectorAll('.group-row[data-table="torrent"]')[i]?.matches(':hover'),
+        idx,
+      ),
+      '悬停未真命中(窗口化移行/几何漂移?) —— 缺陷面采样作废',
+    ).toBe(true);
+    const frames = await framesP;
+    const worst = frames.reduce((m, f) => (f.d > m.d ? f : m), { d: 0, f: '', r: '' });
+    expect(frames.length, '滑入采样帧太少').toBeGreaterThan(8);
+    expect(worst.d, `stamped 行滑入: 首格 ${worst.f} vs 行板 ${worst.r} 逐帧错拍(差 ${worst.d}) —— ` +
+      'fx.css [data-fx] 基线顶掉行板 background 过渡(行板瞬切/首格渐入), 名称列成 0.16s 异色竖带')
+      .toBeLessThanOrEqual(2);
+
+    // 稳态像素地面真值(表示法无关; 稳态两侧都落在同一 color-mix 终点上)
+    const steady = await steadyPixelDiff(page, sel, idx);
+    expect(steady, '取不到首格/相邻格矩形').not.toBeNull();
+    expect(steady.maxD, `stamped 行悬停稳态: 名称格 ${steady.namePx} vs 相邻格 ${steady.sibPx} 差 ${steady.maxD}`)
+      .toBeLessThanOrEqual(2);
+
+    // 收尾还原: 摘掉合成 stamp(测试不留残渣)
+    await page.evaluate((nm) => {
+      const el = [...document.querySelectorAll('.group-row[data-table="torrent"]')]
+        .find((r) => r.textContent.includes(nm));
+      el.removeAttribute('data-fx');
+      el.style.removeProperty('--fx-row-h');
+    }, name);
+  });
+});

@@ -1,10 +1,10 @@
-# 首列吸左固定(冻结列)十处约束的完整处置与实测证据 — 外迁详情(原 `pitfalls/web-ui/frozen-column.md` 段落原文)
+# 首列吸左固定(冻结列)十一处约束的完整处置与实测证据 — 外迁详情(原 `pitfalls/web-ui/frozen-column.md` 段落原文)
 
 > 摘要: `pitfalls/web-ui/frozen-column.md` 的详细处置/实测证据原文外迁(主档为控 cap 原位留指针); 判据与实测证据原样保留。
 > 触发: 同主档 `pitfalls/web-ui/frozen-column.md` 的触发词(完整列表见主档头部)。
 
 > 本文件是**外迁存档**: 主档该段原文一字未改搬来 (仅相对链接整体下移一层 —— 本文件在 `pitfalls/web-ui/attachments/`); 本目录不计 cap, 主档原位留指针。
-## 首列吸左固定(冻结列)的十处非显然约束
+## 首列吸左固定(冻结列)的十一处非显然约束
 
 - **处置**:
   - **① 表头不在滚动容器里, 首格只能用反向位移**: `.group-head` 为做纵向 sticky 被移出 `.group-table`,

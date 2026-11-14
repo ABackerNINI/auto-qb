@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>relocate 大小写折叠用例 Linux 既有红(平台分支) · test · 计划外问题</title>
+<meta name="issue-slug" content="relocate-casefold-posix">
+<meta name="issue-stamp" content="26-11-14-1727">
+<meta name="issue-type" content="test">
+<meta name="doc-topic" content="relocate-casefold-posix">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-14-webui-frozen-col-fx-stamp.md">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Done">
+<meta name="issue-title" content="relocate 大小写折叠用例 Linux 既有红(平台分支)">
+<meta name="issue-summary" content="test_file_alias_intersects_table 在 Linux env3 稳定红且净树复证, Windows 侧同日绿, 疑大小写折叠平台分支未按 os.name 分派">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --mark: #161e26;     /* issue 特有: callout 底色 (plan.html 不用) */
+    --warn-bg: #2a2119;  /* issue 特有: 状态徽标底色 */
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 单栏流式版面: 与 plan.html 同一套 .sheet (封顶 1280px, 侧距 clamp(18~44px)); 旧双栏+粘性目录已删 */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+
+  /* 封面 meta 行: issue 特有, DOM 形态别改 —— 状态徽标 <span class="badge"> 被
+     flip_status (W4) 与 check_status_drift 的 BADGE_RE 机读 (k/v div 结构在判据里) */
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px 28px; font-family: var(--mono); font-size: 11.5px; color: var(--faint); border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta-row .item .k { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .meta-row .item .v { font-size: 13.5px; color: var(--dim); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin: 14px 0; font-size: 14px; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-family: var(--mono); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">计划外问题（未修）· test</div>
+<h1>relocate 大小写折叠用例 Linux 既有红(平台分支)</h1>
+<p class="lede">test_file_alias_intersects_table 在 Linux env3 稳定红且净树复证, Windows 侧同日绿, 疑大小写折叠平台分支未按 os.name 分派</p>
+<div class="meta-row">
+  <div class="item"><div class="k">编号</div><div class="v">26-11-14-1727-test-relocate-casefold-posix</div></div>
+  <div class="item"><div class="k">报告时间</div><div class="v">2026-11-14 17:27</div></div>
+  <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
+  <div class="item"><div class="k">涉及模块</div><div class="v">relocate</div></div>
+  <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+</div>
+
+<section id="s1">
+  <h2><span class="no">§01</span>现象与发现场景</h2>
+  <p>Linux(env3, Ubuntu 24.04)跑 <code>commands run test.quick</code> 收尾终验时稳定红:<code>tests/test_relocate_units.py::test_file_alias_intersects_table</code> 断言失败。与当轮改动零交集——已用 <code>git stash</code> 在净树(8453bd61, 同步拉平 47 笔后)复证同样红, 即同步进来的<strong>既有红</strong>。平台差异由断言数据本身支撑(:928 两参差大小写 × POSIX normcase 不折叠, 见 §02/§05), <strong>未经 Windows 现树复验</strong>(同日 26-11-14-0401 切片「整文件 48 passed」的文件版本早于 6418e00b 引入时刻, 未含此断言, 不构成旁证)。</p>
+</section>
+
+<section id="s2">
+  <h2><span class="no">§02</span>证据</h2>
+  <p class="hint">贴原文（报错 / 日志 / 命令输出），不转述；附取证时间，让读者自己判断新鲜度。</p>
+<pre><code># test.quick 终行(取证 2026-11-14 17:27, Linux env3, HEAD 8453bd61)
+FAILED tests/test_relocate_units.py::test_file_alias_intersects_table - Asser...
+1 failed, 6119 passed, 19 skipped in 39.47s
+
+# 失败断言原文(tests/test_relocate_units.py:928, git log -S 引入 = 6418e00b 2026-11-14):
+# -- 归一: 斜杠形态无关(平台无关断言) --
+assert ru.file_alias_intersects(r"R:\Download\PTing", ("Sub/a.bin", ), ("R:/Download/PTing/sub/a.bin", )) is True
+# 紧邻 931 行是正确的平台分支写法(对照):
+row = (r"R:\DL", ("A.bin", ), ("r:/dl/a.BIN", ))
+assert ru.file_alias_intersects(*row) is (True if os.name == "nt" else False)</code></pre>
+</section>
+
+<section id="s3">
+  <h2><span class="no">§03</span>影响面</h2>
+  <table>
+    <tr><th>维度</th><th>结论</th></tr>
+    <tr><td>触发条件</td><td>POSIX(os.name != "nt")跑该用例即必现(断言数据 "Sub/a.bin" vs "sub/a.bin" 差在大小写, POSIX normcase 不折叠); Windows 预期绿(normcase 折叠, 未现树复验 —— 同日 Windows 切片的文件版本早于断言引入)</td></tr>
+    <tr><td>影响范围</td><td>仅测试面(relocate 单元电池), 产品行为零影响; Linux 侧 test.quick / test.full 恒 1 红, 淹没真信号</td></tr>
+    <tr><td>严重度</td><td>低(守卫噪音, 但长期留着会让「1 failed」变成习惯性忽略)</td></tr>
+  </table>
+</section>
+
+<section id="s4">
+  <h2><span class="no">§04</span>定位锚点</h2>
+  <p class="hint">写「符号名 + grep 关键词 + 当时的行号（标取证时间）」—— 代码会漂移，靠符号与 grep 重新定位，行号只是加速项。</p>
+  <ul class="todo">
+    <li><code>tests/test_relocate_units.py:928</code>(取证 2026-11-14 17:27)· <code>test_file_alias_intersects_table</code> 内「斜杠形态无关」断言 · grep <code>"Sub/a.bin"</code>(引入 6418e00b)</li>
+    <li><code>tests/test_relocate_units.py:931</code> · 同用例内正确的 <code>os.name</code> 分支断言(修法模板先例: recycle-obs-os-name-pin / hr-ratelimit-tz-pin)</li>
+  </ul>
+</section>
+
+<section id="s5">
+  <h2><span class="no">§05</span>根因<span class="opt">（可选）</span></h2>
+  <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
+  <div class="callout">已定位(断言数据自身, 非函数缺陷): :928 注释标「平台无关断言」, 但其两参数据 <code>("Sub/a.bin")</code> vs <code>("sub/a.bin")</code> 除斜杠形态外还差大小写 —— 平台无关的本意只覆盖斜杠形态; POSIX normcase 不折叠 ⇒ 交集判 False, 断言在 Linux 必红。Windows 上 normcase 折叠成同串 ⇒ 绿。即: 用例数据混进了它没想测的维度, 与 <code>file_alias_intersects</code> 的产品行为无关(931 行已按 os.name 分支钉折叠口径, 本身是对的)。</div>
+</section>
+
+<section id="s6">
+  <h2><span class="no">§06</span>建议修法<span class="opt">（可选）</span></h2>
+  <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
+  <p>两案任一, 代价都是分钟级:</p>
+  <ul>
+    <li><strong>A(首选)</strong>: :928 数据改成大小写全同(如 <code>("sub/a.bin",)</code> vs <code>("R:/Download/PTing/sub/a.bin",)</code>), 让该断言回到它注释声称的「只测斜杠形态归一」—— 不动函数, 不加平台分支;</li>
+    <li><strong>B</strong>: 照 :931 同款按 <code>os.name</code> 分支, 保留 Sub/sub 差异数据并两支各断言(先例: recycle-obs-os-name-pin 平台双支钉法)—— 代价是多一支断言, 且把「大小写折叠」语义多测一遍(与 931 重叠)。</li>
+  </ul>
+</section>
+
+<section id="s7">
+  <h2><span class="no">§07</span>状态变更日志</h2>
+  <ul>
+    <li>2026-11-14 17:27 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    <li>2026-11-14 — 状态 Open → Done（kb.status）</li>
+</ul>
+  <h3>复验</h3>
+  <p>2026-11-14 17:27 净树(stash 复证, HEAD 8453bd61)仍复现: Linux env3 <code>test.quick</code> 恒 1 红, 失败断言即 §02 所引 :928。</p>
+  <h3>修复后补充</h3>
+  <p><strong>实际修法</strong>: 采纳建议修法 A —— :928 数据改大小写全同(<code>("sub/a.bin",)</code> 两侧), 断言回到注释声称的「只测斜杠形态归一」; 行注补口径说明并锚本 issue。采用 A 而非 B 的原因: 大小写折叠口径 :931 已按 os.name 分支钉过, B 与之重叠纯增冗余。<strong>验证</strong>: <code>tests/test_relocate_units.py</code> 单文件 60 passed(Linux env3); <code>test.quick</code> 全量转绿(数字随本批基线切片)。修复与本批 fx 固定列悬停修复同批入库(ship.gate 被 :928 卡死, 采纳 A 后放行)。</p>
+</section>
+
+<footer>
+  26-11-14-1727-test-relocate-casefold-posix.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+</footer>
+
+</div>
+</body>
+</html>

@@ -194,7 +194,35 @@
         var n = rowNode(added[i], keyAttr);
         if (n && !n.hasAttribute("data-fx")) {
           n.setAttribute("data-fx", "row-in");
+          /* 行高单点按实测覆写(spawnGhost 同款): 此刻动画未启动、max-height 未钳制,
+           * 强制同步布局量到的是自然高 -- H&R 双行(约 65px)入场直达自然高, 摘除时不
+           * 跳变; 缺省 44px 只对单行行高成立。 */
+          n.style.setProperty("--fx-row-h", n.getBoundingClientRect().height + "px");
           dirty = true;
+          /* 入场毕摘 stamp(2026-11-14 顺手修「新增种子行裁高/吸左失灵」残留):
+           * [data-fx~="row-in"] 的静态 overflow:hidden 与 fx-row-in 的 forwards 填充
+           * (max-height/opacity)是入场脚手架, 只该活动画那 200ms -- 永驻则 H&R 双行
+           * 被裁到行高、overflow:hidden 改写吸左首格 sticky 的滚动宿主(横滚冻结列
+           * 失灵)。animationend 主路 + 超时兜底(280 = 动画 200ms + 余量, spawnGhost
+           * 同款; RM 无 stamp 不涉; 行被换/删时兜底摘的是游离节点, 无害)。摘除后
+           * [data-fx] 基线过渡改写一并消失, 行板回皮肤 transition 单点 -- 入场窗口
+           * 内的悬停底色一致由 fx-mount.css D4-7 行板过渡复位规则承担。IIFE 按
+           * 闭包钉住当轮 n(var 循环变量共享, 直接闭包会全指最后一行)。 */
+          (function (row) {
+            var stripT = 0;
+            var strip = function () {
+              if (stripT) { clearTimeout(stripT); stripT = 0; }
+              row.removeEventListener("animationend", onEnd);
+              row.removeAttribute("data-fx");
+              row.style.removeProperty("--fx-row-h");
+            };
+            var onEnd = function (ev) {
+              if (ev.animationName !== "fx-row-in" || ev.target !== row) return;
+              strip();
+            };
+            stripT = setTimeout(strip, 280);
+            row.addEventListener("animationend", onEnd);
+          })(n);
         }
       }
       for (i = 0; i < ghosts.length; i++) spawnGhost(ghosts[i]);

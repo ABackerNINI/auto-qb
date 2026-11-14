@@ -17,7 +17,8 @@
   桩 DOM/BOM 后真跑): TOAST_SPLIT 拆段正则族(主标题+说明两段落地/无分隔符与括号头与超 14 字头与
   说明不足 2 字单行 —— trim 后计长, 分隔符后连接空格不算门槛/全角冒号与逗号分隔/单行也挂 toast-txt)+ toastSync 差分 stamp(rise/队列牌/倒计时
   只归 own 条/danger 原位升级)+ rows 行差分(首轮只建缓存/增删检出排一帧/退场幽灵克隆定格 row-out
-  附回原容器/入场行 stamp row-in/无增删不排帧)
+  附回原容器/入场行 stamp row-in + --fx-row-h 实测覆写/入场毕摘 stamp(animationend 名/目标守卫,
+  属性与行内行高一并清, 监听自摘)/无增删不排帧; 2026-11-14 顺手修扩)
 - test_r4_dt05_advice_dispatch: R5#95(P13) —— 05 adviceFor 五类关键词分派经 rowsFn 真跑(失败桶
   failRowOf 装配路径, 不经字符串锚): not registered/passkey/ban/timeout/maintenance 每类一条
   命中各自文案 + 通用兜底分支(零覆盖的纯判据, node 电池直跑)
@@ -1106,7 +1107,18 @@ function mkEl(tag) {
     parentElement: null, isConnected: true,
     scrollTop: 0, scrollLeft: 0,  // 真实 DOM 默认 0(幽灵定格几何要用)
     _rect: { top: 0, left: 0, width: 800, height: 40 },
-    style: { _props: {}, setProperty(k, v) { el.style._props[k] = v; } },
+    style: {
+      _props: {},
+      setProperty(k, v) { el.style._props[k] = v; },
+      removeProperty(k) { delete el.style._props[k]; },
+    },
+    _listeners: {},
+    addEventListener(t, fn) { (el._listeners[t] = el._listeners[t] || []).push(fn); },
+    removeEventListener(t, fn) {
+      const q = el._listeners[t] || [];
+      const i = q.indexOf(fn);
+      if (i >= 0) q.splice(i, 1);
+    },
     classList: {
       add: (c) => el._classes.push(c),
       remove: () => {}, toggle: () => {},
@@ -1210,7 +1222,20 @@ ok("幽灵定格: top/宽写进内联样式", cont.children[0].style.top === "54
   && cont.children[0].style.width === "800px");
 ok("幽灵定格: --fx-row-h 覆写实际行高(44px)", cont.children[0].style._props["--fx-row-h"] === "44px");
 ok("入场行: c 行 stamp row-in", rowN.c.getAttribute("data-fx") === "row-in");
+ok("入场行: --fx-row-h 按实测行高覆写(摘除不跳变)", rowN.c.style._props["--fx-row-h"] === "44px");
 ok("差分扫描: FX.scan 被触发", scans > scansBefore);
+// 入场毕摘 stamp(D4-7 生命周期, 2026-11-14 顺手修): animationend 名/目标双守卫,
+// 守卫不匹配不摘; 匹配则摘属性+行内 --fx-row-h 并自摘监听(主路; 280 与 spawnGhost
+// 兜底同值 —— spawnGhost 本身是纯超时单路, 本处为 animationend 主路+超时兜底双路;
+// 电池同步口径只驱动主路, 兜底在位由 fx_wiring 静态钉)。
+(rowN.c._listeners["animationend"] || [])[0]({ animationName: "fx-sheen", target: rowN.c });
+ok("摘除守卫: 异名动画不误摘", rowN.c.getAttribute("data-fx") === "row-in");
+(rowN.c._listeners["animationend"] || [])[0]({ animationName: "fx-row-in", target: rowN.b });
+ok("摘除守卫: 对名错目标(后代冒泡形态)不误摘", rowN.c.getAttribute("data-fx") === "row-in");
+(rowN.c._listeners["animationend"] || [])[0]({ animationName: "fx-row-in", target: rowN.c });
+ok("摘除主路: animationend 命中即摘属性", rowN.c.getAttribute("data-fx") === null);
+ok("摘除主路: 行内 --fx-row-h 一并清掉", rowN.c.style._props["--fx-row-h"] === undefined);
+ok("摘除主路: 监听自摘(无残留)", (rowN.c._listeners["animationend"] || []).length === 0);
 MNT.rows([row("a"), row("c")], "hash");
 ok("rows 无增删: 不排帧(幂等重扫不空转)", rafQ.length === 0);
 
@@ -1472,7 +1497,7 @@ def test_r4_format_ladder_family():
 
 
 def test_r4_fx_mount_toast_split_and_rows_ghost():
-    """R5#193: fx 挂载层 node 电池 —— TOAST_SPLIT 拆段正则族 + rows 行差分与幽灵退场"""
+    """R5#193: fx 挂载层 node 电池 —— TOAST_SPLIT 拆段正则族 + rows 行差分与幽灵退场 + row-in stamp 生命周期"""
     report = _run_probe(_NODE_FX_MOUNT_PROBE, os.path.join(STATIC_ROOT, "flux", "fx-mount.js"))
     _assert_battery(report, "fx 挂载层电池")
 
