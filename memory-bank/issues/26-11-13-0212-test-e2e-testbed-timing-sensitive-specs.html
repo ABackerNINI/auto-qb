@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="linux-testbed-docker">
 <meta name="doc-refs" content="memory-bank/plans/26-11-12-0152-plan-linux-testbed-docker.html, memory-bank/tasks/26-11-12-test-linux-testbed.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="容器 e2e 4 个 spec 计时敏感面(慢 CPU 显性化)待 spec 层加固">
 <meta name="issue-summary" content="testbed 容器 swiftshader 软件渲染慢 CPU 显性化 4 个既有 spec 潜伏竞态(Windows/CI 恒绿), 修法方向: spec 层加固 + 计时探测接 testbed 档">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-13-0212-test-e2e-testbed-timing-sensitive-specs</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-13 02:12</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
@@ -153,11 +153,15 @@ fast 子集: 342 passed / 2 failed, 41.7m(344 例)
   <h2><span class="no">§07</span>状态变更日志</h2>
   <ul>
     <li>2026-11-13 02:12 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-15 — 状态 Open → In Progress（kb.status）</li>
+    <li>2026-11-15 — 状态 In Progress → Done（kb.status）</li>
+</ul>
   <h3>复验</h3>
-  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <p><strong>复验：2026-11-15 06:16 已消失。</strong>认领后容器内重跑两锚点 spec 全量形态（traffic-source-switch 6 例 + settings-bt-backup 8 例，含 S3 红过的「探测 ambiguous」双皮肤）：<code>14 passed / 2.1m</code> 全绿（testbed 会话 aqb-17364，swiftshader 软件渲染 + CPU 配额同 S3 形态）。</p>
   <h3>修复后补充</h3>
-  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  <p><strong>实际修法</strong>：两个失败点同根因——桩回调体内 <code>await route.fetch()</code> 的收尾竞态（「Test ended」归账记红，机制与归账三形态单点在坑档 <code>pitfalls/testing/route-callback-teardown-race.md</code>）。修法随 issue 26-11-13-0234 的 <code>58d443a8</code> 入库：<code>e2e/lib/route-cleanup.mjs</code> 单点兜底（file 级 afterEach <code>unrouteAll({ behavior: 'ignoreErrors' })</code>）+ 8 个同模式 spec 接线（含本件两 spec）+ 静态接线守阵（<code>tests/test_flaky_timing_guards.py</code> 扫描器 5）。settings-bt-backup 四处 /api/config 桩回调同含 <code>await route.fetch</code>，被同一兜底覆盖。</p>
+  <p><strong>建议修法改道说明</strong>：§06 建议二「计时探测接 AUTO_QB_TESTBED testbed 档」<strong>不采用</strong>——复验证明失败点 2 与探测阈值无关（阈值零改动复验即全绿），其真实根因与失败点 1 同为收尾竞态（S3 轮「两组根因」的初判被 0234 修正）；且 e2e 侧本就不读该 env，导出面按 <code>linux_e2e.py</code> docstring 取舍留痕维持<strong>不导出</strong>（静态守阵 <code>.commands/test/scripts/test_linux_e2e.py::test_auto_qb_testbed_not_exported</code> 钉住）。§06 建议一（unrouteAll 绑生命周期）即已入库修法本身。</p>
+  <p><strong>验证方式</strong>：容器内复验全绿（见上复验行，e2e 数字不进基线口径）；Windows/CI 侧不受影响。</p>
 </section>
 
 <footer>

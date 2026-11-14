@@ -36,4 +36,4 @@
   扫描面边界: 只扫 `*.spec.mjs`, 桩助手收敛进 `e2e/lib/` 时须同步扩面。台账行见
   `memory-bank/testing/flaky-ledger.md`(2026-11-13)。
 
-**Refs:** memory-bank/issues/26-11-13-0234-test-e2e-stubdisk-teardown-race.html · e2e/lib/route-cleanup.mjs
+**Refs:** memory-bank/issues/26-11-13-0234-test-e2e-stubdisk-teardown-race.html · memory-bank/issues/26-11-13-0212-test-e2e-testbed-timing-sensitive-specs.html · e2e/lib/route-cleanup.mjs

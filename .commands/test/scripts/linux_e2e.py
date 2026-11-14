@@ -55,6 +55,11 @@ spec 一律 baseUrl() 懒取值; 本脚本**不引入任何固定口也不覆盖
 (traffic-source-switch 的 route.fetch 测试结束后才 resolve 的竞态 x2 + settings-bt-backup
 「探测 ambiguous」双皮肤 x2), 桩/浏览器/接挂面无一异常, Windows 侧同 spec 恒绿 —— 只记录不修
 (范围守恒)。数字单点在任务档案 task note 与 config.toml note。
+**2026-11-15 已修**(issue 26-11-13-0212 认领收口): 4 败同根因 = 桩回调 await route.fetch 的收尾
+竞态(坑档 route-callback-teardown-race), route-cleanup 单点兜底随 58d443a8 入库(issue
+26-11-13-0234); 容器 --full 形态复验两锚点 spec 14 例全绿(2.1m, e2e 数字不进基线)。S3 轮
+「两组根因」初判被修正 —— 计时探测接档方向不采用(阈值零改动复验即绿), AUTO_QB_TESTBED
+维持不导出(取舍见上)。
 
 守阵: `scripts/test_linux_e2e.py`(红验: 接挂方案 / fast 子集默认 / 动态端口不引入固定口 /
 UV_NO_SYNC / 引擎 timeout / 透传面即红)。
