@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="drawer-dock-flux-fullspec-flake">
 <meta name="doc-refs" content="memory-bank/tasks/26-11-14-webui-row-window-zoom.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="drawer-dock-stability 两条 flux 用例整 spec 顺序下既有 flake(T7 顶界带/S-A 首开遮挡)">
 <meta name="issue-summary" content="整 spec 连跑时 T7 顶界带/S-A 首开遮挡两 flux 用例前置带判据稳定失败(偏差 1.8px/3px); 过滤单跑 3/3 稳定绿; 基线代码(修复 zoom 错位前)整 spec 同签名失败 —— 顺序依赖既有 flake, 与 zoom 修复无关">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-14-1323-bug-drawer-dock-flux-fullspec-flake</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-14 13:23</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
@@ -134,25 +134,32 @@
 
 <section id="s5">
   <h2><span class="no">§05</span>根因<span class="opt">（可选）</span></h2>
-  <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
-  <div class="callout">待查（已排除：TODO）</div>
+  <p>2026-11-15 修复批取证实析,<strong>「顺序依赖」假设被推翻, 改判: 对齐相位判据骑在行窗口化 pad 陈旧行高漂移的阈值边缘</strong>(platform 类 —— 机器环境敏感几何):</p>
+  <ul>
+    <li><strong>逐帧取证(2026-11-15, T7 对齐段插桩)</strong>: 对齐 scrollBy 后 scrollY 精确落位(10011 = 9934+77)、列头底实缘不变; ~33ms 后一次渲染 tick 里 padTop 9063.844→9133.453(+69.609)、rowHVer 8→9, 行顶从精确算术值 159.375 跳到 163.203(+3.828, LayoutUnit 1/64 精度)。窗口下滑一行, padTop 按陈旧存值 69.609 超量替换 —— 被替换行的实际高度只有 65.781(= 69.609 - 3.828)。</li>
+    <li><strong>载体</strong>: 行高逐行实测表 <code>_rowHs</code> 只在行渲染在场时更新(columns_grid.js <code>_measureRowH</code>); 首渲量过的行若之后变矮/变高(机器环境相关: 字体渲染/亚像素度量)且已滚出窗口, 存值永不修正 —— 窗口滑动越过它时 pad 超量替换, 渲染行整体跳 ±数px。S-A 的 +5px 同机制(让位 scrollBy ~566px 也是一次窗口下滑)。</li>
+    <li><strong>为什么立档时「整跑红/过滤绿」、今日零前置单跑也红</strong>: 漂移幅度踩在 T7 前置带 (0,4] 与 S-A 公式 ±2 窗的边缘, 随机器环境在阈值两侧摆 —— 立档当日过滤单跑恰绿, 今日环境漂移 ~4-5px 恒越界。git bisect 抽查 5 点(含 good 锚点 cb470f2c 本身)单跑全红, 区间内无回归提交。</li>
+    <li>产品面影响: 行高变矮/变高后已滚出窗口的行, 存值陈旧使窗口滑动时内容跳数px —— 真实用户可见的轻微视觉跳变(虚拟列表动态行高的已知取舍面), 未在本批处置。</li>
+  </ul>
 </section>
 
 <section id="s6">
   <h2><span class="no">§06</span>建议修法<span class="opt">（可选）</span></h2>
-  <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
-  <p class="todo">TODO / 待定</p>
+  <p>取证实析后方向收敛(原「TODO/待定」, 无改道): 修<strong>测试侧暴露面</strong> —— 像素级对齐/让位滚动前先「预热」行窗口化: 向下滚 900px 再滚回原位(<code>preheatRowWindow</code>, 各等一次列表落定), 让途经区间的 <code>_rowHs</code> 陈旧存值被回程逐帧实测替换刷成新鲜值, 之后窗口滑动的 pad 替换才是等高精确替换, 对齐落点/让位终值恢复 ±0.5px 可依赖。900 ≥ 两用例最大滚动量(T7 对齐 ~792 / S-A 让位 ~566)。不走产品侧改 <code>_rowHs</code> 失效/重理 —— 那是窗口化收敛语义的生产变更, 超出本测试债范围(如需另行立件)。</p>
 </section>
 
 <section id="s7">
   <h2><span class="no">§07</span>状态变更日志</h2>
   <ul>
     <li>2026-11-14 13:23 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-15 — 状态 Open → In Progress（kb.status）</li>
+    <li>2026-11-15 — 状态 In Progress → Done（kb.status）</li>
+</ul>
   <h3>复验</h3>
-  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <p>复验：2026-11-15 仍复现且<strong>加重</strong> —— 整 spec 连跑同签名红(T7 偏差 5.8125 / S-A 偏差 5, 与取证逐值一致, 确定性非概率); 且零前置单跑(<code>-g "T7 顶界带"</code> / <code>-g "面板升完.*flux"</code>)也各 1 failed —— 立档时「过滤单跑 3/3 绿」的前提已不成立, 顺序载体假设随之推翻(根因改判见 §05)。</p>
   <h3>修复后补充</h3>
-  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  <p><strong>实际修法</strong>: e2e 测试侧(<code>e2e/drawer-dock-stability.spec.mjs</code>, +27 行, 零产品代码改动) —— 新增 <code>preheatRowWindow(page, dist)</code>(向下滚 dist 再滚回原位, 各等一次列表落定), T7 顶界带在深滚后对齐前、S-A 首开遮挡在两段式停车后各插一处 <code>preheatRowWindow(page, 900)</code>: 途经区间的 <code>_rowHs</code> 陈旧存值被回程逐帧实测替换刷成新鲜值, 窗口滑动恢复等高精确替换, 对齐落点/让位终值重回 ±0.5px 可依赖(机制见 §05/§06)。</p>
+  <p><strong>验证方式与数字</strong>(2026-11-15, Windows 侧 chromium): 修前整 spec 连跑 36 passed/2 failed(签名逐值同取证)、T7 与 S-A(flux) 零前置单跑各 1 failed; 修后 ①整 spec 连跑两轮全绿(38 passed/4 skipped ×2) ②<code>-g "T7 顶界带" --repeat-each 5</code> 5 passed ③<code>-g "面板升完.*flux" --repeat-each 5</code> 5 passed。判据语义零放松(前置带 (0,4] / 公式 ±2 窗原样), Linux 侧由 GitHub CI playwright 轨自然覆盖。沉淀去向: 产品面跳变入池 <a href="26-11-15-0332-bug-webui-rowwin-stale-rowh-scroll-jump.html">26-11-15-0332</a> · 坑档 <a href="../pitfalls/web-ui/rowwin-stale-rowh-pad-jump.md">pitfalls/web-ui/rowwin-stale-rowh-pad-jump.md</a>。</p>
 </section>
 
 <footer>

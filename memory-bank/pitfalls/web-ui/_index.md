@@ -14,5 +14,5 @@
 |---|---|---|
 | [1](_index-1.md) | `add-partial-receipt.md` … `ctx-sub-clamp-host-settle.md` | 27 |
 | [2](_index-2.md) | `ctx-sub-width-coupling.md` … `hover-keynav-fight.md` | 27 |
-| [3](_index-3.md) | `hr-tooltip-overlap.md` … `search-pending-collapse.md` | 27 |
-| [4](_index-4.md) | `search-views.md` … `wording-audit-surface.md` | 26 |
+| [3](_index-3.md) | `hr-tooltip-overlap.md` … `scroll-visible-band.md` | 27 |
+| [4](_index-4.md) | `search-pending-collapse.md` … `wording-audit-surface.md` | 27 |

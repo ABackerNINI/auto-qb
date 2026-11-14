@@ -1,7 +1,7 @@
 # web-ui — 前端 / WEB UI 纪律 · 卷 3/4
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `hr-tooltip-overlap.md` … `search-pending-collapse.md`(共 27 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `hr-tooltip-overlap.md` … `scroll-visible-band.md`(共 27 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
@@ -33,5 +33,5 @@
 | [reannounce-inactive-gate.md](reannounce-inactive-gate.md) | 「非活跃种子不允许强制汇报」这条 qB 对齐规则, 三处最容易做错 —— ①**判定读 `kind` 而不读 qB 原始 `state`**: `kind` 现 7 档(error/checking/paused/downloading/seeding/**moving**/ot… | 强制汇报, reannounce, 非活跃, 暂停种子, 排队种子, 搬迁中, moving, queuedDL, stoppedUP, checkingResumeData, is-gated, 置灰, 按钮变灰, 右键置灰, qB 口径… |
 | [row-shadow-zeroed-by-rowlang.md](row-shadow-zeroed-by-rowlang.md) | 皮肤 CSS 给行加 box-shadow 会被 row_lang flat 归零 | 行高亮不生效, box-shadow 无效, 右键目标不可见, row_lang, ctx-src |
 | [rowh-sig-and-transition-geometry.md](rowh-sig-and-transition-geometry.md) | 行高签名混入视图态因子 + 容器过渡期几何不可采信: 千级下切页/关抽屉秒级卡死 | 切标签页卡死, 关抽屉卡死, 能滚不能点, 行高签名, viewMode, ResizeObserver, _winCtnSync, 假 bump, 全量量齐 |
+| [rowwin-stale-rowh-pad-jump.md](rowwin-stale-rowh-pad-jump.md) | 行高逐行实测表 `_rowHs` 只在行渲染在场时更新 —— 行高变过且已滚出窗口的行存值永不修正; 窗口滑动越过它时 padTop 按陈旧存值超量替换, 渲染行整体跳 ±数px。e2e 像素级判据(T7 前置带 / S-A 公式落点)骑在漂移阈值边缘, 随机器环境两侧摆, 呈「… | 陈旧行高, 行高存值, 窗口滑动跳变, pad 超量替换, 内容跳数px, _rowHs, _measureRowH, 滚出窗口, 视觉跳变, 像素判据, 预热滚动, preheat |
 | [scroll-visible-band.md](scroll-visible-band.md) | 键盘光标滚动跟随把「目标行几何在视口内」当成「看得见」, 但列表的上下边各压着一层随正文滚动的 chrome —— 顶部是吸在顶栏下缘的吸顶列头 `.group-head`(sticky, top = `--head-h - 1px`), 底部是固定状态栏 `.statusbar… | 键盘移到第一个种子只显示一半, 最后一个种子只显示一半, 翻页跳行, 翻一屏跳过行, PageDown 少看几行, 无光标回落, 跳极值行, 落回列表顶, 落到列表底, 追剧页键盘, 光标行被列头盖住, 光标行被状态栏盖住, 看不见当前行,… |
-| [search-pending-collapse.md](search-pending-collapse.md) | 搜索匹配是服务端单点(search_torrents)、前端消费 searchHits 的模式下, "输入新词到响应返回之间沿用上一查询的命中集"(search-as-you-type)契约对「空集→首词」转换失效 —— 首词的待响应窗(防抖 400ms + 请求往返)里 sea… | 改搜索/筛选派生, 改 searchHits 消费, 新增走命中门的列表视图, 搜索时列表闪空, 搜索整页跳顶, 搜索时面板跳动, 待响应窗, search-as-you-type, filteredTorrents, filteredGr… |

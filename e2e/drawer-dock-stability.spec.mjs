@@ -197,6 +197,24 @@ async function pickUncoveredRow(page, pt) {
   }, pt);
 }
 
+/** 行窗口化预热滚动(2026-11-15, issue 26-11-14-1323): 向下滚 dist 再滚回原位, 各等一次落定。
+ *  缘由: 行高逐行实测表 _rowHs 只在**行渲染在场**时更新(columns_grid.js _measureRowH) ——
+ *  首渲量过的行若之后变矮/变高(字体交换/内容重排, 机器环境相关)且已滚出窗口, 存值永不修正;
+ *  窗口下滑越过它时 padTop 按陈旧存值超量替换, 渲染行整体跳 ±数px(取证实测单行 +3.83px:
+ *  padTop Δ69.609 vs 被替换行实际高 65.781, scrollY 不变)。像素级对齐/让位判据(T7 前置带 /
+ *  S-A 公式落点)必须先预热把途经区间的存值刷成新鲜值(回程重量一遍), 之后窗口滑动的 pad
+ *  替换才是等高精确替换。dist 须 >= 对齐/让位的最大滚动量(两用例分别 ~792/566, 取 900)。 */
+async function preheatRowWindow(page, dist) {
+  const y0 = await page.evaluate((d) => {
+    const y = window.scrollY;
+    window.scrollTo(0, y + d);
+    return y;
+  }, dist);
+  await waitListSettled(page);
+  await page.evaluate((y) => window.scrollTo(0, y), y0);
+  await waitListSettled(page);
+}
+
 /** rAF 逐帧采样器(S0/D11): 每帧记 scrollY / docH / dock(top,h) / 面板 top / 选中行 rect.bottom /
  *  vm._drawerAnimTop; window.scrollBy 调用一并登记(只作诊断, 不参与断言)。
  *  stopGeoSampler 取回 { frames, sb } 并停拍。 */
@@ -781,6 +799,10 @@ for (const skin of DOCK_SKINS) {
       // 滚动量 = 当前 - 目标(下滚把行往上搬, S-C 同式)。
       await page.evaluate(() => window.scrollTo(0, Math.round(document.documentElement.scrollHeight / 2)));
       await waitListSettled(page);
+      // 对齐精度前置: 深滚本身是一次窗口下滑, 途经区间的 _rowHs 陈旧存值会让这次滑动后的
+      // 渲染行整体跳 ±数px(issue 26-11-14-1323 取证 +3.83px) —— 先预热把对齐途经区间的
+      // 存值刷成新鲜值, 下面这一发精确 scrollBy 才是等高替换, 对齐落点 ±0.5px 可依赖。
+      await preheatRowWindow(page, 900);
       const aligned = await page.evaluate(() => {
         const hb = document.querySelector('.group-head').getBoundingClientRect().bottom;
         let best = null;
@@ -944,6 +966,11 @@ for (const skin of DOCK_SKINS) {
         window.scrollTo(0, document.documentElement.scrollHeight - window.innerHeight - 900);
       });
       await waitListSettled(page);
+      // 让位精度前置: 开场让位 scrollBy 最多 ~566px, 是一次窗口下滑 —— 途经区间的 _rowHs
+      // 陈旧存值会让 pad 超量替换、渲染行整体跳 ±数px(issue 26-11-14-1323 取证 +5px, 让位
+      // 终值落不进公式 ±2 窗) —— 停车后先预热(down 一腿直达文档底, 回程重量), 把让位
+      // 途经区间的存值刷成新鲜值, 让位落点才可依赖。
+      await preheatRowWindow(page, 900);
       const panelTopEst = await page.evaluate(() => {
         const sb = document.querySelector('.statusbar');
         const sbTop = sb ? sb.getBoundingClientRect().top : window.innerHeight;
