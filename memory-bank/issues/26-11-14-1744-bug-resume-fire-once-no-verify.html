@@ -9,9 +9,9 @@
 <meta name="issue-stamp" content="26-11-14-1744">
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="relocate-move-window">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-15-backend-relocate-resume-confirm.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="relocate 恢复成员单发即弃: resume 失败无重试无确认无对账">
 <meta name="issue-summary" content="恢复成员运行态 = 单发批量 torrents_resume, 异常只告警不重试不对账, job 照常终态 —— resume_hashes 成员可永久停留暂停态">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-14-1744-bug-resume-fire-once-no-verify</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-14 17:44</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
@@ -156,11 +156,14 @@ except Exception as e:  # noqa: BLE001 - 恢复失败只记: 数据面未动, �
   <h2><span class="no">§07</span>状态变更日志</h2>
   <ul>
     <li>2026-11-14 17:44 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-15 — 状态 Open → Done（kb.status）</li>
+</ul>
   <h3>复验</h3>
-  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <p>复验：2026-11-15 锚点仍复现（<code>_resume_members</code> relocate_lifecycle.py :148；调用点 relocate_exec.py :584/:598/:1796 + relocate_lifecycle.py :176）。</p>
   <h3>修复后补充</h3>
-  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  <p><strong>实际修法</strong>（2026-11-15，提交 952d3daa，落地建议 ①②）：<code>relocate_lifecycle.py</code> 新增 <code>_reconcile_resume_pending</code>（挂 on_task_line 末尾，扫全部 resume_pending 非空 job 含终态）/<code>_resume_reissue</code>/<code>_member_stopped</code>/<code>_resume_retries_of</code>/<code>_note_resume_state</code>，常数 <code>_RESUME_RETRY_SECONDS=30.0</code> / <code>_RESUME_RETRY_MAX=3</code>；四出口（_arm/_finish_direct/relocate_cancel/_fail）一律开账，每拍对照 store 快照核对 pending 成员回非 stopped 态，未回去的退避补发只含仍停着的成员；穷尽后不再发 qB 写，余量挂账 + 计数告警（每开账回合一笔），job 照常终态 + 余量挂账。job 新字段 <code>resume_pending</code>/<code>resume_retries</code> 序列化进 <code>job_to_dict</code>/<code>job_from_dict</code>（旧账缺字段=空账）；_finish_direct 次序改 done 落账后再恢复。</p>
+  <p><strong>验证方式</strong>：新测试 <code>tests/test_relocate_resume_confirm.py</code> 14 用例全 FakeClock；全量基线见 kb.baseline（relocate-fuse-resume 批切片）。</p>
+  <p><strong>与 §06 建议修法的差异</strong>：①②照建议落地；③「待恢复余量」原设想复用现成 <code>resume_hashes</code> 展示面，实际随机制批新增 <code>resume_pending</code>/<code>resume_retries</code> 序列化字段并投影进 WebUI（提交 90e15489），并定案「穷尽后照常终态 + 余量挂账」——两处均为实施时的设计定案，§06 未涉及。</p>
 </section>
 
 <footer>

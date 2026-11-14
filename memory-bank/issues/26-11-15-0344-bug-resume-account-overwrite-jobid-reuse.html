@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>relocate 同 (mover,src,dst) job_id 复用整段覆盖旧恢复账 · bug · 计划外问题</title>
+<meta name="issue-slug" content="resume-account-overwrite-jobid-reuse">
+<meta name="issue-stamp" content="26-11-15-0344">
+<meta name="issue-type" content="bug">
+<meta name="doc-topic" content="relocate-move-window">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-15-backend-relocate-resume-confirm.md">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="relocate 同 (mover,src,dst) job_id 复用整段覆盖旧恢复账">
+<meta name="issue-summary" content="同 (mover,src,dst) 的 job_id 复用时新生命周期整段覆盖旧恢复账, 旧账穷尽未恢复成员无人恢复; 候选修向=跨生命周期余量结转(仿 _carry_prev_tag_state 先例)">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --mark: #161e26;     /* issue 特有: callout 底色 (plan.html 不用) */
+    --warn-bg: #2a2119;  /* issue 特有: 状态徽标底色 */
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 单栏流式版面: 与 plan.html 同一套 .sheet (封顶 1280px, 侧距 clamp(18~44px)); 旧双栏+粘性目录已删 */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+
+  /* 封面 meta 行: issue 特有, DOM 形态别改 —— 状态徽标 <span class="badge"> 被
+     flip_status (W4) 与 check_status_drift 的 BADGE_RE 机读 (k/v div 结构在判据里) */
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px 28px; font-family: var(--mono); font-size: 11.5px; color: var(--faint); border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta-row .item .k { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .meta-row .item .v { font-size: 13.5px; color: var(--dim); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin: 14px 0; font-size: 14px; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-family: var(--mono); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">计划外问题（未修）· bug</div>
+<h1>relocate 同 (mover,src,dst) job_id 复用整段覆盖旧恢复账</h1>
+<p class="lede">同 (mover,src,dst) 的 job_id 复用时新生命周期整段覆盖旧恢复账, 旧账穷尽未恢复成员无人恢复; 候选修向=跨生命周期余量结转(仿 _carry_prev_tag_state 先例)</p>
+<div class="meta-row">
+  <div class="item"><div class="k">编号</div><div class="v">26-11-15-0344-bug-resume-account-overwrite-jobid-reuse</div></div>
+  <div class="item"><div class="k">报告时间</div><div class="v">2026-11-15 03:44</div></div>
+  <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">涉及模块</div><div class="v">core</div></div>
+  <div class="item"><div class="k">发现者</div><div class="v">relocate 恢复确认批次评审(2026-11-15)</div></div>
+</div>
+
+<section id="s1">
+  <h2><span class="no">§01</span>现象与发现场景</h2>
+  <p>relocate 恢复确认批次评审（2026-11-15，P2a resume 机制落地后的邻接面排查）发现。job_id 由 <code>mover|src→dst</code> 派生（<code>ru.job_id_for</code>），同组同目标撤销/失败后再发起<b>复用同一 job_id</b>；恢复确认账（resume_pending/resume_retries，2026-11-15 随 952d3daa 落地）挂在 job 对象上，而 <code>register_job</code>（LifecycleMixin, 宿主 RelocateModule）是「job_id 同键覆盖」——新生命周期整段替换旧 job 对象，旧账（含穷尽未恢复成员的余量）随之消失，无结转。对照：同 id 重发已有 <code>_carry_prev_tag_state</code> 只继承 tag_on 一面，resume 账没有同款。</p>
+</section>
+
+<section id="s2">
+  <h2><span class="no">§02</span>证据</h2>
+<pre><code># src/auto_qb/core/modules/relocate_lifecycle.py:113-117 （取证 2026-11-15）
+def register_job(self, job: RelocateJob) -> None:
+    """登记/更新一个在途迁移(job_id 同键覆盖; P3 相位推进时逐次调用)"""
+    self._jobs[job.job_id] = job
+    self._jobs_loaded = True  # 本会话动过账(stop() 补写闸的依据, 见 RelocateModule.__init__ 注)
+    self._publish_snapshot()
+
+# src/auto_qb/core/modules/relocate_exec.py:1455 （取证 2026-11-15）
+job_id = ru.job_id_for(mover.hash, target, src)
+
+# src/auto_qb/core/modules/relocate_exec.py:1422 （取证 2026-11-15）
+def _carry_prev_tag_state(self, job_id: str, job: RelocateJob) -> RelocateJob:</code></pre>
+<p class="hint">issue 评注（非源码原文）: 同 id 重发时 register_job 用新 job 对象整段替换旧对象, 旧 resume_pending 随之丢弃；job_id_for 由 mover|src→dst 派生, 同 (mover,src,dst) 复用同一 id；_carry_prev_tag_state 只继承 tag_on, 无 resume 账结转。</p>
+</section>
+
+<section id="s3">
+  <h2><span class="no">§03</span>影响面</h2>
+  <table>
+    <tr><th>维度</th><th>结论</th></tr>
+    <tr><td>触发条件</td><td>同 (mover,src,dst) 的上一生命周期恢复确认账未闭合（resume_pending 非空，含穷尽挂账）时再次发起同组搬迁</td></tr>
+    <tr><td>影响范围</td><td>旧账里仍停着的成员失去补发与告警面（恢复确认机制对该组「失明」一次）；webui 余量展示同批消失</td></tr>
+    <tr><td>严重度</td><td>中低——穷尽当回合已有计数告警，但结转丢失后该余量不再有任何消费面</td></tr>
+  </table>
+</section>
+
+<section id="s4">
+  <h2><span class="no">§04</span>定位锚点</h2>
+  <ul>
+    <li><code>relocate_lifecycle.py:113</code>（取证 2026-11-15）· <code>register_job</code>（LifecycleMixin, 宿主 RelocateModule）· grep "def register_job"</li>
+    <li><code>relocate_exec.py:1455</code>（取证 2026-11-15）· <code>_start_job</code> 内 job_id 派生 · grep "job_id_for"</li>
+    <li><code>relocate_exec.py:1422</code>（取证 2026-11-15）· <code>_carry_prev_tag_state</code>（结转先例）· grep "_carry_prev_tag_state"</li>
+  </ul>
+</section>
+
+<section id="s5">
+  <h2><span class="no">§05</span>根因<span class="opt">（可选）</span></h2>
+  <div class="callout">已有结论：恢复确认账的生命周期 = job 对象生命周期，而 job_id 跨生命周期复用；合流时无结转检查（tag 面的 <code>_carry_prev_tag_state</code> 先例只覆盖 tag_on）。</div>
+</section>
+
+<section id="s6">
+  <h2><span class="no">§06</span>建议修法<span class="opt">（可选）</span></h2>
+  <p>候选修向 = 跨生命周期余量结转：<code>_start_job</code> 同 id 重发时仿 <code>_carry_prev_tag_state</code> 把 prev 的 resume_pending 仍停着的成员并入新账（<code>_resume_members</code> 已有「上次未闭合余量并入本次名单」的并集先例，relocate_lifecycle.py:193 注释——但那只覆盖同一 job 对象）。代价 = 结转口径需拍板：retries 是否清零重计、是否跨终态继承。待拍板，不在本报告里实施。</p>
+</section>
+
+<section id="s7">
+  <h2><span class="no">§07</span>状态变更日志</h2>
+  <ul>
+    <li>2026-11-15 03:44 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+  </ul>
+  <h3>复验</h3>
+  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <h3>修复后补充</h3>
+  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+</section>
+
+<footer>
+  26-11-15-0344-bug-resume-account-overwrite-jobid-reuse.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+</footer>
+
+</div>
+</body>
+</html>

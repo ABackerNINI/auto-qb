@@ -9,9 +9,9 @@
 <meta name="issue-stamp" content="26-11-14-1744">
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="relocate-move-window">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-15-backend-relocate-resume-confirm.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="fuse 保险丝全库扫描不让路 relocating_hashes">
 <meta name="issue-summary" content="fuse _scan 扫 store.by_hash 全库暂停 dlspeed&gt;0 连击成员, 全程不查 relocating_hashes 让路登记 —— 搬迁窗口内可把 job 成员按住">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-14-1744-bug-fuse-no-relocating-yield</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-14 17:44</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
@@ -153,11 +153,14 @@ if to_pause:
   <h2><span class="no">§07</span>状态变更日志</h2>
   <ul>
     <li>2026-11-14 17:44 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-15 — 状态 Open → Done（kb.status）</li>
+</ul>
   <h3>复验</h3>
-  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <p>复验：2026-11-15 01:47 锚点仍复现（fuse_mod.py :90/:148/:185，to_pause 收集点 :178/:223/:235）。</p>
   <h3>修复后补充</h3>
-  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  <p><strong>实际修法</strong>（2026-11-15，提交 0f4582d2）：<code>fuse_mod.py</code> 的 to_pause 三支收集点（<code>_scan_unmanaged</code> 监控支 / <code>_advance</code> armed 支 / <code>_advance</code> triggered 分支）各加 <code>relocating_hashes</code> 让路（getattr 单点，ops_skip 同款口径）。语义定案：窗口拍不计连击——被让路成员 confirm_count/_streak 清零，解除后从零重新累计。</p>
+  <p><strong>验证方式</strong>：<code>tests/test_fuse_mod.py</code> 新增 3 例钉扎「搬迁窗口成员不被 fuse 暂停 + 连击清零语义」；全量基线见 kb.baseline（relocate-fuse-resume 批切片）。</p>
+  <p><strong>与 §06 建议修法的差异</strong>：三支加让路跳过与建议一致；「窗口拍清零连击」是实施时定案的语义选择（建议未涉及保留还是清零计数），已随代码注释与测试钉扎。</p>
 </section>
 
 <footer>
