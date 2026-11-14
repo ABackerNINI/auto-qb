@@ -314,8 +314,18 @@ Object.assign(window.AQB_COLUMNS.methods, {
       return this._winGap[kind];
     },
     _winSigExtra() {
-      // 会改变"容器上方内容高度"的因子: 状态分布条是否渲染 / 搜索态 / 筛选态
-      return `${this.distTotal ? 1 : 0}${this.searchQuery && this.searchQuery.trim() ? 1 : 0}${this.filtersActive ? 1 : 0}`;
+      // 会改变"容器上方内容高度"的因子: 状态分布条是否渲染 / 搜索态 / 筛选态 / 根缩放。
+      // !根缩放必须进签名(issue 26-11-14-0844): zoom!=1 把全部视觉几何按 z 缩放, 表顶文档偏移
+      // (_winTop = rect.top + scrollY, 视觉空间)随之变 —— 不进签名的话 zoom 切换后 _winTop 沿用
+      // 旧值, rel 偏 (1-z)×表顶, 窗口选行整体错位约一行。比值实测(body 的 gBR/offsetWidth)而非
+      // 读 computed zoom: Chrome 不把 zoom 报成继承, html 设 0.9 时 body/子孙 computed 恒 "1"。
+      // 代价: 这让 _winSigExtra 从纯字符串变成每次 _ensureWinTop(每拍 updated)读一次 body gBR
+      // (强制同步布局) —— 换取 zoom 切换后的 winTop 重量; 增量 = 每拍一次 body gBR, 量级被
+      // 同帧既有的逐行 gBR 探测(_measureRowH)淹没。
+      const b = typeof document !== "undefined" ? document.body : null;
+      const rz = (b && b.offsetWidth) ? b.getBoundingClientRect().width / b.offsetWidth : 1;
+      const zTok = Number.isFinite(rz) && rz > 0 ? rz.toFixed(4) : "1";
+      return `${this.distTotal ? 1 : 0}${this.searchQuery && this.searchQuery.trim() ? 1 : 0}${this.filtersActive ? 1 : 0}${zTok}`;
     },
     /* 窗口源描述符解析(计划 26-11-02-0351 W2): kind 未注册回落文档型 —— 描述符缺失 = 现行为。 */
     _winSrc(kind) {
@@ -522,6 +532,23 @@ Object.assign(window.AQB_COLUMNS.methods, {
     _rowKeyOf(kind, item) {
       return kind + ":" + this._winSrc(kind).keyOf(item);
     },
+    /* 有效缩放(布局 px -> 视觉 px 的乘子, zoom=1 时恒 1): 盒子自身 gBR.height(视觉)与
+     * getComputedStyle().height 的 used 值(布局空间, **分数精度**)的比值实测。!布局高分母
+     * 不能用 offsetHeight —— 取整误差在容器上按比例放大: 容器 ~2 万 px 高时 ±0.5px 取整给
+     * 同量级的 padTop 带来最多 ~6px 误差(flux 像素带判据实测被撞红, 2026-11-14); computed
+     * used 值无取整, zoom=1 时比值恒 1(±1e-7, pad 上 <0.01px)。!也不能读 computed zoom ——
+     * Chrome 不把 zoom 报成继承(html 设 0.9 时 body/子孙 computed 恒 "1", 实测 2026-11-14),
+     * 读出来恒 1 会把换算整个关掉; 比值实测对任意祖先上的 zoom 都成立。窗口化产物里只有 pad
+     * 写进 style.height(布局空间), 换算单点在 _rowWindow 的两个 pad 出口(issue
+     * 26-11-14-0844); 容器不在场/computed 高非正(不在场 = "auto")回落 1 = 关闭换算, 与
+     * zoom=1 行为一致。 */
+    _winZoomOf(kind, refName) {
+      const el = this._winContainer(kind, refName);
+      if (!el || typeof getComputedStyle !== "function") return 1;
+      const layoutH = parseFloat(getComputedStyle(el).height);
+      const z = layoutH > 0 ? el.getBoundingClientRect().height / layoutH : 0;
+      return Number.isFinite(z) && z > 0 ? z : 1;
+    },
     /* 前缀和 y(i) = 第 i 行的顶边偏移(含行间距)。每帧重算: 3000 次加法 ≈ 0.03ms,
      * 比维护"失效缓存 + 增量更新"简单得多, 也不会因为漏失效而算错。 */
     _rowWindow(kind, list, refName) {
@@ -570,11 +597,17 @@ Object.assign(window.AQB_COLUMNS.methods, {
       if (!(start >= 0) || start > n) start = 0;
       if (!(end > 0) || end > n) end = n;
       if (start >= end) return off;  // 数值异常: 宁可全渲染, 也不渲染"空窗口"
-      // 占位两侧各多出一个 gap(顶替了行块内部原有的间距), 故减一个 gap 对齐
+      // 占位两侧各多出一个 gap(顶替了行块内部原有的间距), 故减一个 gap 对齐。
+      // !pads 必须除以有效缩放换算成布局 px(issue 26-11-14-0844): 前缀和/rel 一族是视觉空间
+      // (根 zoom!=1 时 gBR/scrollY 全按视觉报数), 而占位件 style.height 是布局 px —— 直接写
+      // 视觉值会再被 zoom 缩一遍, pad 恒短 (1-z) 倍, 贴文档底后 padTop 差约 (1-z)×总高(实测
+      // flux ~1900px), 渲染行整体落在视口上方。gap 本就是布局空间(computed rowGap), 放在除法
+      // 之后同单位相减。zoom=1 时 z 数值等价于 1(至多浮点重结合 1ulp 差, ~1e-11px), 行为零变化。
+      const z = this._winZoomOf(kind, refName);
       return {
         active: true, start, end,
-        padTop: start > 0 ? pre[start] - gap : 0,
-        padBottom: end < n ? pre[n] - gap - pre[end] : 0,
+        padTop: start > 0 ? pre[start] / z - gap : 0,
+        padBottom: end < n ? (pre[n] - pre[end]) / z - gap : 0,
       };
     },
     _prefixFloor(pre, y) {

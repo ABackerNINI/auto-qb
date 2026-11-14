@@ -508,6 +508,10 @@ global.ROW_WIN_OVERSCAN = 10;
 // 单点仍在 app.js, 电池自给)
 global.ROW_WIN_EST_MIN = 200;
 global.ROW_WIN_EST_H = { torrent: 42, group: 44, member: 34, drawerContent: 27 };
+// 有效缩放测量(issue 26-11-14-0844)的 computed style 桩: 布局高从 el.__layoutH 给(真机 =
+// getComputedStyle().height 的 used 值, 布局空间分数精度), 没带的回 "auto"(parseFloat NaN
+// = 容器算不出 used 高, _winZoomOf 回落 1)
+global.getComputedStyle = (el) => ({ height: (el && el.__layoutH !== undefined) ? el.__layoutH + "px" : "auto" });
 const src = fs.readFileSync(process.argv[1], "utf8");
 eval(src + "\n;globalThis.__W2__ = { M: window.AQB_COLUMNS.methods, DOC: WIN_SRC_DOC, SRC: WIN_SOURCES, ctr: winSrcContainer };");
 const { M, DOC, SRC, ctr } = globalThis.__W2__;
@@ -546,6 +550,8 @@ const mkCtx = () => Object.assign({}, M, {
   _rowHs: {},
   _rowPre: {},  // 前缀和留存(created 初始化, 电池自给)
   _winGapFor: () => GAP,
+  // pad 缩放换算(issue 26-11-14-0844)默认桩: 容器不在场 = 有效 zoom 恒 1, 老场景逐位零差异
+  _winContainer: () => null,
 });
 
 const checks = [
@@ -686,6 +692,7 @@ const fallback = () => {
     rowWin: true, _winMeasured: { torrent: true }, _rowH: { torrent: 50 }, _rowHVer: 1,
     _winViewH: 800, _winScrollY: 1300, _winTop: { torrent: 1200 }, _rowHs: {}, _rowPre: {},
     _winGapFor: () => GAP,
+    _winContainer: () => null,  // pad 换算(issue 26-11-14-0844): 容器不在场 = z 恒 1
   });
   const small = base(); small._rowHs = {}; fillHs("torrent", rows, small._rowHs);
   const off = base(); off.rowWin = false; fillHs("torrent", rows, off._rowHs);
@@ -703,6 +710,51 @@ const fallback = () => {
     && inert(w4, rows.length);
 };
 checks.push(["零差异回退: 行数<MIN / rowWin 关 / 视口 0 一律全量渲染; 未量齐+n>=EST_MIN 改估算开窗(active)", fallback()]);
+
+// --- zoom!=1 分数布局(issue 26-11-14-0844): pad style.height 是布局空间, 前缀和/rel 是视觉空间 ---
+// 容器桩用 gBR.height/__layoutH 比值给有效 zoom(__layoutH = computed used 高, 布局空间分数
+// 精度 —— 分母不能用 offsetHeight, 取整误差按比例放大到 pad 上 ~6px, 实测撞红 flux 像素带)。
+// 不换算的话真机 pad 恒短 (1-z) 倍, 贴文档底后 padTop 差约 (1-z)×总高(flux 实测 ~1900px),
+// 渲染行整体落在视口上方。gap 本就是布局空间(computed rowGap), 在除法之后同单位相减 ——
+// 期望值从 z=1 对照逆推: pad(z) = (pad(1)+GAP)/z - GAP。
+const zoomCtx = (zRatio) => {
+  const c = mkCtx();
+  if (zRatio === null) c._winContainer = () => null;
+  else c._winContainer = () => ({ getBoundingClientRect: () => ({ height: 900 * zRatio }), __layoutH: 900 });
+  return c;
+};
+const zoomRows = mkRows("hash");
+const zoomBase = (c) => { fillHs("torrent", zoomRows, c._rowHs); c._winTop.torrent = 0; c._winScrollY = 8000; return c; };
+checks.push(
+  ["zoom!=1: pad 按 1/z 换算成布局 px(0.9 桩, 与 z=1 对照逐位可换算)", (() => {
+      const w1 = zoomBase(zoomCtx(1))._rowWindow("torrent", zoomRows, null);
+      const w09 = zoomBase(zoomCtx(0.9))._rowWindow("torrent", zoomRows, null);
+      const conv = (p) => (p + GAP) / 0.9 - GAP;
+      return w1.active && w09.active && w1.start === w09.start && w1.end === w09.end
+        && Math.abs(w09.padTop - conv(w1.padTop)) < 1e-9
+        && Math.abs(w09.padBottom - conv(w1.padBottom)) < 1e-9;
+  })()],
+  ["zoom!=1: 容器不在场/比值非正/computed 高 auto 回落 1 = 零换算(与无 zoom 桩逐位相同)", (() => {
+      const a = zoomBase(zoomCtx(null))._rowWindow("torrent", zoomRows, null);
+      const b = zoomBase(zoomCtx(0))._rowWindow("torrent", zoomRows, null);
+      const d = mkCtx(); d._winContainer = () => ({ getBoundingClientRect: () => ({ height: 900 }) });  // 无 __layoutH = "auto"
+      const e = zoomBase(d)._rowWindow("torrent", zoomRows, null);
+      const c0 = zoomBase(mkCtx())._rowWindow("torrent", zoomRows, null);
+      return JSON.stringify(a) === JSON.stringify(c0) && JSON.stringify(b) === JSON.stringify(c0)
+        && JSON.stringify(e) === JSON.stringify(c0);
+  })()],
+  ["zoom!=1: _winSigExtra 根缩放令牌随 body visual/layout 比值变化(zoom 切换后 _winTop 重量的钉子)", (() => {
+      const c = mkCtx();
+      const sigOf = () => M._winSigExtra.call(c);
+      const a = sigOf();  // 无 document 桩 = 比值 1, 令牌 "1.0000"
+      global.document = { body: { getBoundingClientRect: () => ({ width: 90 }), offsetWidth: 100 } };
+      const b = sigOf();  // 比值 0.9
+      global.document = { body: { getBoundingClientRect: () => ({ width: 90 }), offsetWidth: 90 } };
+      const c1 = sigOf();  // 比值 1
+      delete global.document;
+      return a === c1 && a.endsWith("1.0000") && b.endsWith("0.9000") && b !== a;
+  })()],
+);
 
 console.log(JSON.stringify({ ok: checks.filter((c) => c[1]).length, total: checks.length,
   failed: checks.filter((c) => !c[1]).map((c) => c[0]) }));

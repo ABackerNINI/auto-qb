@@ -133,6 +133,8 @@ const mkCtx = () => Object.assign({}, M, {
   _rowHs: {},
   _rowPre: {},
   _winGapFor: () => GAP,
+  // pad 缩放换算(issue 26-11-14-0844)默认桩: 容器不在场 = 有效 zoom 恒 1, 老场景逐位零差异
+  _winContainer: () => null,
   memberHashesOf: (list) => (list || []).map((m) => (typeof m === "string" ? m : (m && m.hash) || "")).filter(Boolean),
 });
 const checks = [];
@@ -220,6 +222,8 @@ const mkCtx = (expandedKey) => Object.assign({}, M, {
   _rowHs: {},
   _rowPre: {},
   _winGapFor: () => GAP,
+  // pad 缩放换算(issue 26-11-14-0844)默认桩: 容器不在场 = 有效 zoom 恒 1, 老场景逐位零差异
+  _winContainer: () => null,
 });
 const checks = [];
 const ok = (name, cond) => checks.push([name, !!cond]);

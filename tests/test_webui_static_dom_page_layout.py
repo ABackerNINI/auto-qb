@@ -51,7 +51,10 @@
   文档族只读 _winScrollY 对, 未注册 kind 回落文档型), 描述符几何(scrollY/viewH/topOffset)
   与绑定契约(bindScroll passive/unbind)逐项钉值, 零差异回退(低于 ROW_WIN_MIN/未量齐/rowWin 关)
   不回潮; 首访路径边界二条(issue 26-11-02-0902 二轮空档2): _winMeasured=false 时 n=199 走
-  off(全量渲染) / n=200 走估算开窗(active) —— 门控被误改成恒窗口/恒 off 时必有一条红
+  off(全量渲染) / n=200 走估算开窗(active) —— 门控被误改成恒窗口/恒 off 时必有一条红;
+  zoom!=1 pad 缩放换算三条(issue 26-11-14-0844): 容器 gBR.height / computed used 高(__layoutH
+  桩)比值 0.9 桩下 pad 按 1/z 换算成布局 px(与 z=1 对照逐位可换算) / 容器不在场或比值非正
+  回落 1 = 零换算 / _winSigExtra 根缩放令牌随 body visual/layout 比值变化
 - test_frontend_row_window_sig_and_ctn_sync_guard: 行窗失效签名守阵(2026-11-02 关抽屉/切页卡死
   取证) —— 1. _measureRowH 行高签名不含 viewMode(含则每次切页作废三 kind 行高 + 翻 _winMeasured,
   返回该视图全量渲染量齐, 3000 行实测 5.8~8.4s 长任务 = 「切标签页卡死几秒」; _winResize/列集合
@@ -1271,7 +1274,9 @@ def test_frontend_window_source_kind_descriptor_parameterized():
     4. **行为**(有 node 时真跑): 容器型 winSrcContainer 下桩 scrollTop/clientHeight 后,
        窗口切片起点/终点/上下占位与文档型同输入同输出(三个滚动位); 源族分流(容器族只读
        _winCtn / 文档族只读 _winScrollY 对, 未注册 kind 回落文档型); 描述符几何与绑定契约
-       逐项钉值; 零差异回退(行数 < ROW_WIN_MIN / 未量齐 / rowWin 关)不回潮。
+       逐项钉值; 零差异回退(行数 < ROW_WIN_MIN / 未量齐 / rowWin 关)不回潮; zoom!=1 时
+       pad 按 1/z 换算成布局 px(issue 26-11-14-0844, 与 z=1 对照逐位可换算 / 容器不在场
+       回落 1 零换算 / _winSigExtra 根缩放令牌随 body visual/layout 比值变化)。
 
     无 node 的机器只跑静态那一半(静默跳过电池, 不引入 pytest skip, 基线 0 skipped)。
     """
@@ -1360,7 +1365,7 @@ def test_frontend_window_source_kind_descriptor_parameterized():
         )
         assert proc.returncode == 0, f"窗口源描述符 node 探针跑挂了: {(proc.stderr or '').strip()[:400]}"
         res = json.loads(proc.stdout.strip())
-        assert res["total"] >= 18, f"语义电池只有 {res['total']} 项(被删减? 同步本守阵)"
+        assert res["total"] >= 20, f"语义电池只有 {res['total']} 项(被删减? 同步本守阵)"
         assert not res["failed"], ("窗口源描述符行为漂移: " + "、".join(res["failed"]) + " —— 主表等价/容器型几何被改掉")
 
 

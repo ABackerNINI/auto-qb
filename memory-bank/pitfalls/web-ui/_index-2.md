@@ -1,13 +1,14 @@
 # web-ui — 前端 / WEB UI 纪律 · 卷 2/4
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `density-tier-single-point.md` … `hr-tooltip-overlap.md`(共 27 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `ctx-sub-width-coupling.md` … `hover-keynav-fight.md`(共 27 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
 
 | 主题 | 一句话 | 触发词 |
 |---|---|---|
+| [ctx-sub-width-coupling.md](ctx-sub-width-coupling.md) | 右键菜单次级子面板宽度五处耦合 —— 四皮肤 css/components.css 的 .ctx-sub min-width 260(同值互证) + shared/menu.js _subOverflowsRight 首帧估宽 272(=260+12); 改宽度必须五处同步, s… | .ctx-sub, 子面板宽度, min-width, 260, 272, 估宽, _subOverflowsRight, _subFitViewport, _scan_ctx_sub_width, 宽度耦合, flip-x, 键帽加宽 |
 | [density-tier-single-point.md](density-tier-single-point.md) | 移除「经典 / 变体」两档制的一方时(删经典档或删变体档), 真正危险的不是删组件, 而是**档制判据散落在四五处**: 菜单候选集(`[{id:"classic"}].concat(options(tab))`)、缺省读侧(`readSel` 的 out 初始化)、各消费方(`… | 档制单档化, 删经典档, 删变体档, defaultSel, CLASSIC_TABS, hasClassic, choices, 缺省档, 渲染失败兜底, 补落经典, 菜单只有一个项, 菜单候选集, 兜底失真, readSel, dtPe… |
 | [derived-snapshot-render.md](derived-snapshot-render.md) | 派生状态(如"未归组命中")在事件落袋时被存成**快照**, 渲染期却按**当前**数据无条件消费 —— 快照与真值分叉后同一实体画两遍; 修法是渲染期用当前源现算判据 + 双条件闸, 而非在快照里打补丁 | 搜索, 虚拟行, 未归组, 重复行, u- 行, searchUncovered, 派生快照, 渲染期判据, filteredGroups, 跨视图, 归组关系变化, search_rev 不变, 同一 hash 两行 |
 | [descendant-selector-collateral.md](descendant-selector-collateral.md) | 容器级后代选择器误命中后加的子元素 | 给已有容器新增子元素后图标错位/样式怪 |
@@ -34,4 +35,3 @@
 | [grid-span-item-track-inflation.md](grid-span-item-track-inflation.md) | CSS Grid 里跨全部列的项(说明段/横幅类)参与轨道尺寸计算 —— 它的 max-content 贡献会摊进 spanned 的 auto/minmax(auto,...) 轨道, 把「按内容取宽」的列撑远超设计底线; 守阵(类存在性/行数/DOM 断言)全绿也测不出, 只… | 把「说明段落/提示条/横幅」等与数据行同容器、又给了 `grid-column: 1 / -1` 的元素留在网格内; 或容器既是 padding 壳又是 grid(为省行数/文件行数上限时容易这么干)。 |
 | [header-cell-gutter.md](header-cell-gutter.md) | `.h-cell` 带 `padding-right: 10px` —— 这是给 `.resizer`(拖拽调宽把手)留的命中区, 因为 `.h-cell` 自身有 `overflow: hidden`(给列名省略号用), 把手伸到格子外会被裁掉、点不到(星图主题里有一条注释专门… | 右对齐, 列对齐, 表头没对齐, 标题文字对不齐, 数值列, text-align right, h-cell, padding-right, resizer, 拖拽把手, 列宽拖拽, colAlignCss, nth-child, 排序箭… |
 | [hover-keynav-fight.md](hover-keynav-fight.md) | 下拉/列表组件把悬停(@mouseenter 直写高亮状态 + CSS :hover 与活动项同款样式)与键盘活动项(↑↓)接到同一个高亮状态上 —— 静止光标钉住旧高亮, 且浏览器在行动画/滚动/DOM 变更后给静止光标补发合成 hover 事件把活动项拽回光标行, 上下键时选… | 改下拉列表键盘导航, 加悬停高亮, 上下键选中项闪烁乱跳, mouseenter, 双高亮, 合成 hover 事件, scrollIntoView, combobox, 活动项, 弹窗内容滑动, 文案从上往下滑, 选中候选后再点下拉, _… |
-| [hr-tooltip-overlap.md](hr-tooltip-overlap.md) | 做种时长列已用 HR 在线核实悬停弹窗(@mouseenter/@mouseleave 触发)承载来源/安全档位结论; 若再在单元格挂原生 `:title="hrDurHint(m)"`, 浏览器原生 title 与自定义弹窗在同一 hover 上叠出, 原生 title 还常被… | 做种时长, HR 在线核实, hrDurHint, 来源:未核实, 被遮挡的 tooltip, 弹窗叠出, 列 tooltip, 状态列, 站点列, 分类列, 标签列, seeding_time, hrPopEnter, hrSrcClas… |

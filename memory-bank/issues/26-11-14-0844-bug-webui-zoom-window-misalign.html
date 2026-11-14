@@ -9,9 +9,9 @@
 <meta name="issue-stamp" content="26-11-14-0844">
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="webui-drawer-reopen-reveal">
-<meta name="doc-refs" content="memory-bank/plans/26-11-12-1048-plan-webui-drawer-reopen-reveal.html, memory-bank/tasks/26-11-12-webui-drawer-reopen-reveal.md">
+<meta name="doc-refs" content="memory-bank/plans/26-11-12-1048-plan-webui-drawer-reopen-reveal.html, memory-bank/tasks/26-11-12-webui-drawer-reopen-reveal.md, memory-bank/tasks/26-11-14-webui-row-window-zoom.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="zoom!=1 分数布局下行窗口化渲染窗错位(贴文档底后行整体落在视口外)">
 <meta name="issue-summary" content="zoom!=1(如 0.9/DPR 1.25 分数布局)贴文档底后渲染行整体落在视口上方约 1900px(底 pad 独占视口), flux 最严重全部行不可见; scrollBy ±1 后窗口 1:1 跟随但不自愈; T8 根滚动器禁锚(5c04d0e7)移除浏览器锚补掩盖后暴露">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-14-0844-bug-webui-zoom-window-misalign</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-14 08:44</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
@@ -147,11 +147,13 @@
   <h2><span class="no">§07</span>状态变更日志</h2>
   <ul>
     <li>2026-11-14 08:44 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-14 — 状态 Open → In Progress（kb.status）</li>
+    <li>2026-11-14 — 状态 In Progress → Done（kb.status）</li>
+</ul>
   <h3>复验</h3>
-  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <p>复验: 2026-11-14 修复认领当轮即定位定因并修复(Chrome 实测坐标空间模型见修复后补充; §05 候选方向「取整偏差」不成立 —— 千九百像素级错位不是取整噪声, 是坐标空间系统性错配)。</p>
   <h3>修复后补充</h3>
-  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  <p><strong>实际修法</strong>(与建议方向「统一取整口径」不同, 改道原因: 根因是坐标空间错配, 不是取整):Chrome 实测(2026-11-14, <code>html{zoom:0.9}</code> 探针)窗口化几何输入 <code>scrollY</code>/<code>scrollHeight</code>/<code>getBoundingClientRect</code> 一族全按<strong>视觉空间</strong>报数(43.7 布局 px → gBR 39.325), 而占位件 <code>style.height</code> 是<strong>布局空间</strong> —— 前缀和(视觉)直接写进 style 再被 zoom 缩一遍, pad 恒短 (1-z) 倍, 贴文档底后 padTop 差约 (1-z)×视觉总高(≈1900px), 渲染行整体落在视口上方。窗口选行与前缀和在视觉空间内自洽, pad 是唯一不闭环出口。修法(<code>columns_grid.js</code>): ①新增 <code>_winZoomOf</code>(容器 gBR.height / computed used 高比值实测有效缩放 —— 分母不能用 offsetHeight, 取整误差按比例放大到 pad 上 ~6px, 实测撞红 flux 像素带判据; computed zoom 也不可读, Chrome 不把 zoom 报成继承); ②<code>_rowWindow</code> 两个 pad 出口按 1/z 换算成布局 px(gap 本就是布局空间, 移到除法后同单位相减); ③<code>_winSigExtra</code> 加根缩放令牌(zoom 切换后 _winTop 重量)。已知权衡: <code>_measureRowH</code> 行高签名**有意不含根缩放**(zoom 切换后陈旧行高靠 updated 逐行重探收敛自愈; 加进签名会踩回 viewMode 的 3000 行全量重渲长任务坑), 详见坑档 <code>memory-bank/pitfalls/web-ui/css-zoom-coordinate-space.md</code>。<strong>验证</strong>: node 语义电池 +3 条(23/23, 活性注入必红); 新 e2e <code>row-window-zoom.spec.mjs</code> 三皮肤(prism/atlas/flux)zoom 0.9 贴底可见行 ≥5 + 末行可达 + scrollBy ±1 不塌, 修复前 flux 红验红、修后 3/3 绿; T8 flux 解跳后 drawer-dock-stability T8 六条全绿; 全量权威数字见基线切片 <code>memory-bank/testing/baselines/26-11-14-1250-webui-zoom-window-misalign.md</code>。</p>
 </section>
 
 <footer>

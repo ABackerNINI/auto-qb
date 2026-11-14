@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>drawer-dock-stability 两条 flux 用例整 spec 顺序下既有 flake(T7 顶界带/S-A 首开遮挡) · bug · 计划外问题</title>
+<meta name="issue-slug" content="drawer-dock-flux-fullspec-flake">
+<meta name="issue-stamp" content="26-11-14-1323">
+<meta name="issue-type" content="bug">
+<meta name="doc-topic" content="drawer-dock-flux-fullspec-flake">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-14-webui-row-window-zoom.md">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="drawer-dock-stability 两条 flux 用例整 spec 顺序下既有 flake(T7 顶界带/S-A 首开遮挡)">
+<meta name="issue-summary" content="整 spec 连跑时 T7 顶界带/S-A 首开遮挡两 flux 用例前置带判据稳定失败(偏差 1.8px/3px); 过滤单跑 3/3 稳定绿; 基线代码(修复 zoom 错位前)整 spec 同签名失败 —— 顺序依赖既有 flake, 与 zoom 修复无关">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --mark: #161e26;     /* issue 特有: callout 底色 (plan.html 不用) */
+    --warn-bg: #2a2119;  /* issue 特有: 状态徽标底色 */
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 单栏流式版面: 与 plan.html 同一套 .sheet (封顶 1280px, 侧距 clamp(18~44px)); 旧双栏+粘性目录已删 */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+
+  /* 封面 meta 行: issue 特有, DOM 形态别改 —— 状态徽标 <span class="badge"> 被
+     flip_status (W4) 与 check_status_drift 的 BADGE_RE 机读 (k/v div 结构在判据里) */
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px 28px; font-family: var(--mono); font-size: 11.5px; color: var(--faint); border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta-row .item .k { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .meta-row .item .v { font-size: 13.5px; color: var(--dim); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin: 14px 0; font-size: 14px; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-family: var(--mono); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">计划外问题（未修）· bug</div>
+<h1>drawer-dock-stability 两条 flux 用例整 spec 顺序下既有 flake(T7 顶界带/S-A 首开遮挡)</h1>
+<p class="lede">整 spec 连跑时 T7 顶界带/S-A 首开遮挡两 flux 用例前置带判据稳定失败(偏差 1.8px/3px); 过滤单跑 3/3 稳定绿; 基线代码(修复 zoom 错位前)整 spec 同签名失败 —— 顺序依赖既有 flake, 与 zoom 修复无关</p>
+<div class="meta-row">
+  <div class="item"><div class="k">编号</div><div class="v">26-11-14-1323-bug-drawer-dock-flux-fullspec-flake</div></div>
+  <div class="item"><div class="k">报告时间</div><div class="v">2026-11-14 13:23</div></div>
+  <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
+  <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+</div>
+
+<section id="s1">
+  <h2><span class="no">§01</span>现象与发现场景</h2>
+  <p>发现于 issue 26-11-14-0844(zoom!=1 行窗口化 pad 错位)修复批的回归阶段(2026-11-14): 整 spec 连跑 <code>e2e/drawer-dock-stability.spec.mjs</code> 时, flux 档 <strong>T7 顶界带</strong>与 <strong>S-A 首开遮挡</strong>两条用例的<strong>前置对齐判据</strong>稳定失败; 用 <code>-g</code> 过滤单跑这两条时 3/3 稳定绿; 换基线代码(HEAD cb470f2c, zoom 修复前)整 spec 连跑<strong>同签名失败</strong> —— 判定为顺序依赖的既有 flake, 与 zoom 修复批无关。整 spec 连跑复跑两轮失败对稳定, 过滤单跑复跑三轮全绿。</p>
+</section>
+
+<section id="s2">
+  <h2><span class="no">§02</span>证据</h2>
+<pre><code># 取证 2026-11-14, 修复批三对照(Windows 侧 npx playwright, chromium):
+# A. 修复代码整 spec 连跑(复跑 2 轮, 同失败对):
+#    Error: 前置: 对齐后行顶 - 列头底 = 5.8 应 &lt;= 4(旧触发带内)          [T7 顶界带 flux]
+#    Error: 前置: 落定后行底 235 应已被让位到面板顶 246 - 16 公式落点(偏差 5) [S-A 首开遮挡 flux]
+# B. 基线代码(git stash columns_grid.js 后整 spec 连跑, 复跑 2 轮):
+#    同上两条错误逐字同签名(另有 T8 两条件因 zoom bug 未修而红 —— 与本 flake 无关)
+# C. 过滤单跑 -g "T7 顶界带|S-A 首开遮挡": 基线与新代码各 3 轮全部 2 passed
+# 失败点都在用例自己的「前置」断言(对齐相位/让位落点), 不是被测行为断言。</code></pre>
+</section>
+
+<section id="s3">
+  <h2><span class="no">§03</span>影响面</h2>
+  <table>
+    <tr><th>维度</th><th>结论</th></tr>
+    <tr><td>触发条件</td><td>drawer-dock-stability.spec.mjs <strong>整文件连跑</strong>(前置用例改动了某共享时序/桩状态); <code>-g</code> 过滤单跑不触发</td></tr>
+    <tr><td>影响范围</td><td>仅 flux 档两条用例(T7 顶界带 / S-A 首开遮挡)的前置判据; prism/atlas 不复现; 遮蔽真实回归(红是 flake 不是缺陷信号)</td></tr>
+    <tr><td>严重度</td><td>低 —— 修后全绿面(i.e. 代码正确)被前置 flake 挡住, 但单独过滤可验证; 是测试质量债不是产品缺陷</td></tr>
+  </table>
+</section>
+
+<section id="s4">
+  <h2><span class="no">§04</span>定位锚点</h2>
+  <ul>
+    <li><code>e2e/drawer-dock-stability.spec.mjs:764</code>(取证 2026-11-14)· T7 顶界带用例 · grep <code>对齐后行顶 - 列头底</code></li>
+    <li><code>e2e/drawer-dock-stability.spec.mjs:920</code>(取证 2026-11-14)· S-A 首开遮挡用例 · grep <code>应已被让位到面板顶</code></li>
+    <li>同 spec 内 flux 专属前置面: <code>installGeoSampler</code> / <code>waitDockSettled</code>(顺序依赖的候选载体 —— 前面用例留下的采样器/滚动位/动画态)</li>
+  </ul>
+</section>
+
+<section id="s5">
+  <h2><span class="no">§05</span>根因<span class="opt">（可选）</span></h2>
+  <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
+  <div class="callout">待查（已排除：TODO）</div>
+</section>
+
+<section id="s6">
+  <h2><span class="no">§06</span>建议修法<span class="opt">（可选）</span></h2>
+  <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
+  <p class="todo">TODO / 待定</p>
+</section>
+
+<section id="s7">
+  <h2><span class="no">§07</span>状态变更日志</h2>
+  <ul>
+    <li>2026-11-14 13:23 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+  </ul>
+  <h3>复验</h3>
+  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <h3>修复后补充</h3>
+  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+</section>
+
+<footer>
+  26-11-14-1323-bug-drawer-dock-flux-fullspec-flake.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+</footer>
+
+</div>
+</body>
+</html>

@@ -1,7 +1,7 @@
 # web-ui — 前端 / WEB UI 纪律 · 卷 1/4
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `add-partial-receipt.md` … `ctx-sub-width-coupling.md`(共 27 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `add-partial-receipt.md` … `ctx-sub-clamp-host-settle.md`(共 27 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
@@ -31,7 +31,7 @@
 | [css-file-line-cap.md](css-file-line-cap.md) | 单 CSS 文件 700 行体量上限(atlas/flux components.css 双双卡满零余量) —— 任何净增行的编辑(连注释、连改值带补注)都红; 改动必须压缩式写(行内注记/零净增行解法) | 追加 CSS 规则, 改值补注释, 任何净增行, 三套皮肤成对改, 四皮肤, atlas 卡满, flux 卡满, test_frontend_template_split_wiring 红, Get-Content 少计行数, 行数测量假… |
 | [css-perf-parity.md](css-perf-parity.md) | 「星图卡、棱镜不卡」这类单边性能问题的定位路径 —— 差异只在 CSS(JS 是共享层), 且两套 CSS 里唯一有实质差异的昂贵属性是 backdrop-filter; 嵌套毛玻璃的成本与摘法。 | 卡顿, 掉帧, 不跟手, 两套 UI 性能差, 一边卡一边不卡, 毛玻璃, backdrop-filter, 弹层卡, 改 CSS 后变慢, 星图卡 |
 | [css-var-substitution-level.md](css-var-substitution-level.md) | 把「配方颜色」当供给槽在 :root/preset 层算死(如 `--fx-glow-c: color-mix(... var(--accent-ink) ...)` 写在 html 的 preset 块), 再指望组件层重挂原料令牌(`.bt.danger { --fx-glo… | 主题换色, 按变体换色, danger 换红, 皮肤令牌, preset 配方, 重挂令牌, ink 钩子, getComputedStyle 不一致, 计算值不更新, color-mix 变量, --fx-glow, fx-presets… |
+| [css-zoom-coordinate-space.md](css-zoom-coordinate-space.md) | html{zoom!=1}(分数布局)下窗口化几何输入 window.scrollY / scrollHeight / getBoundingClientRect 全按**视觉空间**(缩放后)报数, 而占位件 style.height / getComputedStyle().… | zoom 0.9, 分数布局, DPR 1.25, 窗口化错位, 行全在视口上方, 贴文档底, pad 短一截, getBoundingClientRect 视觉空间, offsetHeight 取整, computed zoom 不继承,… |
 | [ctx-menu-branch-parity.md](ctx-menu-branch-parity.md) | `shared/tpl/ctx-menus.html` 的右键菜单按上下文分四支, 其中 `menu.multi`(多选批量)与 `v-else`(单组)是**同一批动作的两条入口** —— 给一支加动作项时漏了另一支, 两条路径项集就静默分叉, 用户在某条路径上「找不到该动作」… | 加右键菜单项, 改 ctx-menus.html, 单组菜单缺选项, 多选批量菜单, 项集不一致, 菜单缺项 |
 | [ctx-menu-edge-clamp.md](ctx-menu-edge-clamp.md) | 视口钳位 e2e: 锚点不贴缘的断言恒真; 左缘 clamp 真实手势结构不可达 | 视口钳位, 左缘, 右缘, ctx-menu, EDGE, e2e 断言, 恒真, 顺带断言, 红验, clientX, 滚动容器左缘 |
 | [ctx-sub-clamp-host-settle.md](ctx-sub-clamp-host-settle.md) | 嵌套浮层单次钳位会被宿主二次收口搬移失效——子面板钳位必须带同款有界复核, e2e 读盒须等收敛 | 嵌套浮层, 子面板, .ctx-sub, 钳位, 二次收口, _menuFitRefit, _subFitRefit, settle, 锚点搬移, vh-8 契约, clampAxis, e2e 读盒时机, subTop 收敛, curre… |
-| [ctx-sub-width-coupling.md](ctx-sub-width-coupling.md) | 右键菜单次级子面板宽度五处耦合 —— 四皮肤 css/components.css 的 .ctx-sub min-width 260(同值互证) + shared/menu.js _subOverflowsRight 首帧估宽 272(=260+12); 改宽度必须五处同步, s… | .ctx-sub, 子面板宽度, min-width, 260, 272, 估宽, _subOverflowsRight, _subFitViewport, _scan_ctx_sub_width, 宽度耦合, flip-x, 键帽加宽 |
