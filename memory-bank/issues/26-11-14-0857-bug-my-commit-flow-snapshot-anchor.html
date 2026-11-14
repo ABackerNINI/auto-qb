@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>快照探针解析落空可 rmtree 整仓库: T4 移植事故 P0 已修与 P1 P2 临时目录锚定残余隐患 · bug · 计划外问题</title>
+<meta name="issue-slug" content="my-commit-flow-snapshot-anchor">
+<meta name="issue-stamp" content="26-11-14-0857">
+<meta name="issue-type" content="bug">
+<meta name="doc-topic" content="my-commit-flow-snapshot-anchor">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-14-test-cmdflow-hardening.md">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Done">
+<meta name="issue-title" content="快照探针解析落空可 rmtree 整仓库: T4 移植事故 P0 已修与 P1 P2 临时目录锚定残余隐患">
+<meta name="issue-summary" content="T4 报告: 沙箱 AppImage shim 干扰令 respawn 链失败, stdout 缺 PACK_DIR 行, 旧写法 Path 解析落空成空串, 其 parent 恒等当前目录即测试进程 CWD 仓库根, cleanup 的 rmtree ignore_errors 把整个仓库含 .git 递归删空; P0 已修: _snap_from_probe 先验证快照落点不变量再许 rmtree, ProbeAnchorTest 4 例全绿; 本件跟踪残余: _field 空值缺行同义无哨兵, .commands 包测试无 TMPDIR 与仓库根防呆, _sweep_old 前缀删除信任 gettempdir">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --mark: #161e26;     /* issue 特有: callout 底色 (plan.html 不用) */
+    --warn-bg: #2a2119;  /* issue 特有: 状态徽标底色 */
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 单栏流式版面: 与 plan.html 同一套 .sheet (封顶 1280px, 侧距 clamp(18~44px)); 旧双栏+粘性目录已删 */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+
+  /* 封面 meta 行: issue 特有, DOM 形态别改 —— 状态徽标 <span class="badge"> 被
+     flip_status (W4) 与 check_status_drift 的 BADGE_RE 机读 (k/v div 结构在判据里) */
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px 28px; font-family: var(--mono); font-size: 11.5px; color: var(--faint); border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta-row .item .k { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .meta-row .item .v { font-size: 13.5px; color: var(--dim); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin: 14px 0; font-size: 14px; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-family: var(--mono); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">计划外问题（未修）· bug</div>
+<h1>快照探针解析落空可 rmtree 整仓库: T4 移植事故 P0 已修与 P1 P2 临时目录锚定残余隐患</h1>
+<p class="lede">T4 报告: 沙箱 AppImage shim 干扰令 respawn 链失败, stdout 缺 PACK_DIR 行, 旧写法 Path 解析落空成空串, 其 parent 恒等当前目录即测试进程 CWD 仓库根, cleanup 的 rmtree ignore_errors 把整个仓库含 .git 递归删空; P0 已修: _snap_from_probe 先验证快照落点不变量再许 rmtree, ProbeAnchorTest 4 例全绿; 本件跟踪残余: _field 空值缺行同义无哨兵, .commands 包测试无 TMPDIR 与仓库根防呆, _sweep_old 前缀删除信任 gettempdir</p>
+<div class="meta-row">
+  <div class="item"><div class="k">编号</div><div class="v">26-11-14-0857-bug-my-commit-flow-snapshot-anchor</div></div>
+  <div class="item"><div class="k">报告时间</div><div class="v">2026-11-14 08:57</div></div>
+  <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
+  <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
+  <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+</div>
+
+<section id="s1">
+  <h2><span class="no">§01</span>现象与发现场景</h2>
+  <p>分析「将本 clone skills 移植到其它项目」的 T4 子任务报告时发现（2026-11-14）：移植项目的子代理跑了
+  my-commit-flow 自带测试（<code>test_snapshot.py</code>），在沙箱 AppImage shim 干扰下，其 cleanup 逻辑把
+  <strong>整个仓库（含 .git）递归删除</strong>；该代理从 ~/.zcode 会话库回放恢复了工作树文件，但 4 笔未推送提交不可恢复。</p>
+  <p>回溯本 clone 源码证实引爆点就是 <code>test_snapshot.py</code> 两处 <code>addCleanup(rmtree(snap.parent))</code>，
+  与 T4 报告逐行吻合 —— <strong>缺陷在源头，移植现场只提供了触发条件</strong>（正常环境 respawn 链恒成功、stdout 恒带
+  PACK_DIR 行，测试恒绿；移植恰好移除了该测试默默依赖的环境假设）。P0 已在本 clone 修复（本批工作树，见 §06）；
+  本件同时跟踪 P1/P2 残余。触发与平台/沙箱配置相关：respawn 链任何一环失败且 stdout 缺 PACK_DIR 行即引爆。</p>
+</section>
+
+<section id="s2">
+  <h2><span class="no">§02</span>证据</h2>
+  <p class="hint">贴原文（报错 / 日志 / 命令输出），不转述；附取证时间，让读者自己判断新鲜度。</p>
+<pre><code># T4 报告原文（用户提供, 2026-11-14）
+「子智能体跑 my-commit-flow 自带测试时, test_snapshot.py 的 cleanup 逻辑在沙箱 AppImage shim 干扰下
+ 把整个仓库(含 .git)递归删除; 该智能体已自主从 ~/.zcode 会话库回放恢复全部文件, 但 git 历史(4 笔提交)不可恢复」
+
+# 旧写法引爆点（修复前 test_snapshot.py 217/245 行, 两处同款）
+snap = Path(_field(proc.stdout, "PACK_DIR="))
+self.addCleanup(lambda: shutil.rmtree(snap.parent, ignore_errors=True))
+
+# 机制实证（2026-11-14, python 3.12.3, 隔离目录）: 解析落空时 Path("") 即 Path(".")
+Path("")           = PosixPath('.')
+Path("").parent    = PosixPath('.')
+# shutil.rmtree(Path("."), ignore_errors=True) 执行后:
+CWD exists: True  contents left: []    # CWD 全部内容含预置假 .git/HEAD 被递归删空, 目录本身留下
+                                       # (CWD 自身 rmdir 必败但被 ignore_errors 吞掉, 与 T4 现场一致)
+
+# 修复后自测（2026-11-14, 本 clone 2031ba16 + 本批工作树）
+test.one test_snapshot.py: 21 passed           # 原 17 + ProbeAnchorTest 4
+test.pkg: 488 passed, 15 subtests, 2 failed    # 2 笔为 test_pipeline.py 既有 Windows 路径断言
+                                               # (修复前同红, Linux 宿主平台缺陷, 与本件无关另议)</code></pre>
+</section>
+
+<section id="s3">
+  <h2><span class="no">§03</span>影响面</h2>
+  <table>
+    <tr><th>维度</th><th>结论</th></tr>
+    <tr><td>触发条件</td><td>探针 stdout 无合法 PACK_DIR 行（子进程被沙箱/shim 击杀、exec 或 mkdtemp 失败皆可）＋ 测试进程以仓库根为 CWD 起跑（test.pkg 与包自带跑法均如此）—— 恒必现，与配置/数据量无关</td></tr>
+    <tr><td>影响范围</td><td>一切运行 my-commit-flow 包测试的仓库（本 clone 与全部移植项目）；P0 已修后残余面降为 P1/P2（见 §06）；生产面 <code>_sweep_old</code> 同族弱点随 P2 一并记</td></tr>
+    <tr><td>严重度</td><td>高 —— P0 实际后果达「整仓删除含 .git、未推送提交不可恢复」级；P1/P2 残余单独评估为中/低</td></tr>
+  </table>
+</section>
+
+<section id="s4">
+  <h2><span class="no">§04</span>定位锚点</h2>
+  <p class="hint">写「符号名 + grep 关键词 + 当时的行号（标取证时间）」—— 代码会漂移，靠符号与 grep 重新定位，行号只是加速项。</p>
+  <ul>
+    <li>P0（已修）: <code>.commands/my-commit-flow/scripts/test_snapshot.py</code> · 符号 <code>_snap_from_probe</code>（修复前为裸解析）· grep <code>_field(proc.stdout, "PACK_DIR=")</code> · 修复前 217/245 行（取证 2026-11-14 08:57）</li>
+    <li>P2: <code>.commands/my-commit-flow/scripts/_snapshot.py</code> · 符号 <code>_sweep_old</code> · grep <code>base.glob(SNAPSHOT_PREFIX</code> · 75-84 行（取证同上）</li>
+    <li>P1b: .commands 包测试无 TMPDIR/仓库根守卫 —— <code>find .commands -name conftest.py</code> 为空，tests/ 的 <code>_tmp_bootstrap.py</code> 只覆盖 tests/ 树（取证同上）</li>
+  </ul>
+</section>
+
+<section id="s5">
+  <h2><span class="no">§05</span>根因<span class="opt">（可选）</span></h2>
+  <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
+  <div class="callout">根因已定（P0 部分）: 三因叠加 —— 1) 环境推导路径（子进程 stdout 解析）未经锚定直接喂 rmtree；
+  2) <code>Path("")</code> 语义恒等 <code>Path(".")</code>（= CWD = 仓库根）；3) <code>ignore_errors=True</code> 把每步失败静默吞掉
+  （含 CWD 自身 rmdir 必败的最后一道响亮报错）。该文件已三度同族事故: 2026-10-16 并行污染（假设 gettempdir 全局独占）、
+  26-10-31 空壳 .git + TMPDIR 回落误判仓库根、本次 CWD 误删 —— 系统性弱点一贯: 依赖 tempfile 候选列表/TMPDIR/stdout
+  等环境假设而不钉不变量。P1/P2 根因同源。</div>
+</section>
+
+<section id="s6">
+  <h2><span class="no">§06</span>建议修法<span class="opt">（可选）</span></h2>
+  <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
+  <p><strong>P0 已修（本批工作树, 待提交）</strong>: 新增 <code>_snap_from_probe</code> 助手 —— 解析后断言快照落点不变量
+  <code>&lt;gettempdir&gt;/&lt;SNAPSHOT_PREFIX&gt;*/pack</code>（<code>make_snapshot</code> 唯一落点），不命中就地
+  <code>self.fail</code> 并附原始 stdout/stderr，且 fail 先于任何 addCleanup 注册（结构保证错删无从发生）；两处调用点改走
+  该助手；新增 <code>ProbeAnchorTest</code> 4 例（合法放行 / 缺行 / 空值 / 越界路径）。验证: test.one 21 passed。</p>
+  <p>残余 P1/P2 建议另行开批（方向，未实施）:</p>
+  <ul>
+    <li>P1a 哨兵/侧信道: 子进程把快照路径写进 TMPDIR 下约定文件，stdout 解析降级为兜底 —— stdout 天然易被 shim 干扰，是本次触发的入口面。</li>
+    <li>P1b .commands 包测试防呆: 加 conftest 或 wrapper 守卫（拒绝仓库根 CWD 起跑 / 外部 TMPDIR），思路对齐 tests/_tmp_bootstrap.py；注意它救不了 CWD 相对路径类错误，属纵深不是根治。</li>
+    <li>P2 <code>_sweep_old</code> 防呆: <code>gettempdir()</code> 与 <code>Path.cwd()</code> 同值时跳过清扫（tempfile 候选列表末位回落 CWD 的路径），或清扫目标要求内含快照标记自证。</li>
+  </ul>
+</section>
+
+<section id="s7">
+  <h2><span class="no">§07</span>状态变更日志</h2>
+  <ul>
+    <li>2026-11-14 08:57 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    <li>2026-11-14 — 状态 Open → In Progress（kb.status）</li>
+    <li>2026-11-14 — 状态 In Progress → Done（kb.status）</li>
+</ul>
+  <h3>复验</h3>
+  <p>复验: 2026-11-14 09:12 认领时（用户指派）重跑锚点 —— P2 <code>_sweep_old</code> 仍裸 glob+rmtree 无防呆（75-84 行原文在）、
+  P1b <code>find .commands -name conftest.py</code> 仍为 0、P1a 修复后的 <code>_snap_from_probe</code> 仍 stdout 单通道 ——
+  三项残余均复现，据实开工。</p>
+  <h3>修复后补充</h3>
+  <p><strong>P0 部分（2026-11-14 上午批）</strong>: 实际修法 = §06 第一段，与建议一致无改道；验证 = test.one 21 passed
+  （原 17 + ProbeAnchorTest 4），test.pkg 488 passed + 2 failed（2 笔为 test_pipeline.py 既有 Windows 路径断言，
+  修复前同红，与本件无关）。</p>
+  <p><strong>P1/P2 部分（2026-11-14 09:12 批，用户指派认领）</strong>:</p>
+  <ul>
+    <li><strong>P1a 已修</strong>: 探针 ENTRY 增侧信道 —— 报告三行（PACK_DIR / REPO_ROOT / MARKER）写进
+    <code>COMMAND_FLOW_PROBE_OUT</code> 指定文件，<code>_snap_from_probe</code> 侧信道文件优先、stdout 解析降级兜底；
+    ProbeAnchorTest 增 2 例（stdout 被吞时侧信道救回 / 侧信道内容坏仍 fail）。</li>
+    <li><strong>P1b 已修</strong>: 新增 <code>.commands/conftest.py</code> —— <code>gettempdir()</code> 解析后落在仓库根之内
+    即 stderr 响亮拒收 rc=4（对应「沙箱 /tmp 不可写 ⇒ tempfile 候选末位静默回落 CWD=仓库根」的事故面）。
+    <strong>与建议改道</strong>: 原建议的「拒绝仓库根 CWD 起跑」不予实施 —— test.pkg 以仓库根为 CWD 是设计口径，
+    不可拒；危险面是 temp 落仓库内，只拦这一面。负例实测 rc=4 + FATAL 文案，正例 test.pkg 正常放行。</li>
+    <li><strong>P2 已修</strong>: <code>_snapshot._sweep_old</code> 双防呆 —— gettempdir 与 CWD 同值（realpath 口径）时整体跳过清扫；
+    清扫目标必须自证含 <code>pack/scripts/_snapshot.py</code>（与 make_snapshot 落点同构），同前缀外来目录一律不碰。
+    SnapshotUnitTest 增 2 例（外来豁免 / CWD 回落跳过），原 sweep 用例补自证标记。</li>
+  </ul>
+  <p>验证: test.one 25 passed（21 + 4 新），test.pkg 492 passed + 2 failed（既有平台失败已另立
+  <a href="26-11-14-0912-test-pipeline-win-path-asserts-linux-red.html">issue 26-11-14-0912</a>，与本件无关）。
+  状态 In Progress → Done。</p>
+</section>
+
+<footer>
+  26-11-14-0857-bug-my-commit-flow-snapshot-anchor.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+</footer>
+
+</div>
+</body>
+</html>

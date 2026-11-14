@@ -73,12 +73,23 @@ def _find_repo_root(start: Path) -> Path | None:
 
 
 def _sweep_old() -> None:
-    """清掉过期的旧快照目录 —— 崩溃 / 强杀时 finally 不跑, 只能靠定期扫。"""
-    base = Path(tempfile.gettempdir())
+    """清掉过期的旧快照目录 —— 崩溃 / 强杀时 finally 不跑, 只能靠定期扫。
+
+    双防呆(2026-11-14, issue 26-11-14-0857 P2): 1) gettempdir 与 CWD 同值(realpath 口径)说明
+    tempfile 候选列表末位回落到了 CWD(典型: 沙箱把 /tmp 弄成不可写), 此时的 glob 根不可信,
+    宁可不扫不可错删; 2) 目标必须自证是本包快照(含 `pack/scripts/_snapshot.py`, 与 make_snapshot
+    落点同构), 名字撞上 SNAPSHOT_PREFIX 的外来目录一律不碰。
+    """
+    base = Path(os.path.realpath(tempfile.gettempdir()))
+    if base == Path(os.path.realpath(os.getcwd())):
+        return
     now = time.time()
     for entry in base.glob(SNAPSHOT_PREFIX + "*"):
         try:
-            if entry.is_dir() and now - entry.stat().st_mtime > SWEEP_AGE:
+            if (
+                entry.is_dir() and (entry / "pack" / "scripts" / "_snapshot.py").is_file() and
+                now - entry.stat().st_mtime > SWEEP_AGE
+            ):
                 shutil.rmtree(entry, ignore_errors=True)
         except OSError:
             pass

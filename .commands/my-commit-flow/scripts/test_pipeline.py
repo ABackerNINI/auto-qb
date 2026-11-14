@@ -25,7 +25,9 @@ classify_merge_probe)随检查表一起删除 —— 同步行分类改由 test_
 - GateScopingConfigTest        闸门收窄形态(计划 26-11-01-0434): drift 三条(--files/--full)/ caps 三条
                                (--files)/ test.pkg 两条(scoped) 逐字钉死 + 脚本侧参数在位
 - GitRetryTest                 git 命令: 单次 20s 超时 + 有界重试(网络子命令失败即重试 / 非幂等本地写
-                               不重试 / 只读命令仅超时与瞬时签名重试 / attempts=1 关重试 / retry_note)
+                               不重试 / 只读命令仅超时与瞬时签名重试 / attempts=1 关重试 / retry_note
+                               / 子命令跳可执行名: Windows 全路径与 POSIX 全路径都认, 反斜杠归一
+                               不绑宿主, issue 0912)
 - MirrorNoRetryTest            GitHub 镜像只给超时不给重试 —— 静态守住 push.py 那一行(attempts=1)
 - ResolveRemoteTest            远端解析: origin 存在即主线 / 镜像由主线主机决定 / 只配 origin 无镜像 /
                                无 origin 走旧逻辑(host_mark / 候选名)逐字不变
@@ -33,7 +35,8 @@ classify_merge_probe)随检查表一起删除 —— 同步行分类改由 test_
                               守阵迁到 test_snapshot.py —— 机制没了, 测机制的用例留着就是测不到现实的死守阵)
 - SmokeSafetyTest              冒烟安全: 配置里两条 `--help` 闸门必须带 `|--with-safety`;
                                <each:> 接受该后缀; 探针摘掉「无参即真动作」脚本(超时按不安全)
-- ShortTest                    失败明细里的根路径压缩
+- ShortTest                    失败明细里的根路径压缩(Windows 与 POSIX root 的两种分隔符形态
+                               都换得掉, 不绑宿主 OS, issue 0912)
 - NoTrackingRefTest            判落后一律 ls-remote 真值 —— 静态扫描禁止 refs/remotes 快照与 status -sb
 - StaticNameTest               AST 找未定义名(冷门分支 NameError, push.py 曾潜伏过一例)
 - ConfigProblemsTest           未知键 / timeout 非法 / 生成物自动化解键类型 → STOP
@@ -477,6 +480,12 @@ class GitRetryTest(unittest.TestCase):
         self.assertEqual(_pipeline._subcommand(["git.exe", "commit", "-F", "m"]), "commit")
         self.assertEqual(_pipeline._subcommand([r"C:\Program Files\Git\bin\git.exe", "fetch", "o"]), "fetch")
 
+    def test_subcommand_skips_posix_git_path(self) -> None:
+        """特征化用例: POSIX 全路径同样被跳过 —— 归一化的钉住力在既有 Windows 全路径例
+        (删归一化它即红); 本例在两平台的 Path 语义下 stem 本就是 `git`, 删归一化也不红,
+        只作行为特征留痕(2026-11-14 issue 0912, 评审 R2 #4 改口)。"""
+        self.assertEqual(_pipeline._subcommand(["/usr/bin/git", "fetch", "o"]), "fetch")
+
     def test_retry_note_only_when_retried(self) -> None:
         """失败行里的备注: 没重试就不啰嗦, 重试了才写次数(否则读的人以为命令没试过就报错)。"""
         self.script = [(0, "")]
@@ -669,6 +678,14 @@ class ShortTest(unittest.TestCase):
         root = Path("C:/repo")
         self.assertEqual(_pipeline._short("python C:/repo/a.py", root), "python a.py")
         self.assertEqual(_pipeline._short(r"python C:\repo\a.py", root), "python a.py")
+
+    def test_short_strips_posix_root_prefix(self):
+        """POSIX root 同样两种分隔符形态都换得掉 —— 形态集合正反两向显式备齐, 不随宿主变化
+        (2026-11-14 issue 0912; POSIX root 在 Windows 宿主下 str() 原生就是反斜杠形态,
+        两条断言两平台都成立)。"""
+        root = Path("/tmp/repo")
+        self.assertEqual(_pipeline._short("python /tmp/repo/a.py", root), "python a.py")
+        self.assertEqual(_pipeline._short(r"python \tmp\repo\a.py", root), "python a.py")
 
 
 class NoTrackingRefTest(unittest.TestCase):

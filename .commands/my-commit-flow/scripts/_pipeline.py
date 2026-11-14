@@ -170,9 +170,13 @@ def _subcommand(args) -> str:
     ! 必须吃掉开头的 `git`: `run_git` 拿到的是**完整 argv**(首元素是可执行名), 不跳它就会永远
     把子命令读成 "git" ⇒ 三档判据全部失效 —— `push` 被当成本地只读命令, 非 0 不再重试,
     恰好把本功能**静默修没**(2026-10-06 实写时踩到, 由 GitRetryTest 的 push / commit 两条守住)。
+    ! 可执行名先反斜杠归一成正斜杠再取 stem: Windows 全路径的可执行名在 POSIX 的 Path 语义里
+    反斜杠不是分隔符, stem 恒为整串 ⇒ 判定随宿主 OS 摆动, Linux 宿主跳不掉可执行名、三档判据
+    跟着全失效 —— 可执行名识别只认 argv 数据里的分隔符, 不绑宿主(包是跨项目资产, 两侧行为
+    必须一致; 2026-11-14 issue 0912, 方案 B 生产归一化)。
     """
     tokens = list(args)
-    if tokens and not tokens[0].startswith("-") and Path(tokens[0]).stem.lower() == "git":
+    if tokens and not tokens[0].startswith("-") and Path(tokens[0].replace("\\", "/")).stem.lower() == "git":
         tokens = tokens[1:]
     i = 0
     while i < len(tokens):
@@ -383,8 +387,12 @@ def _short(cmd: str, root) -> str:
     """命令里的仓库根绝对路径换成 `.` —— 失败明细里那段前缀是常量, 每次重复纯属占地方。
 
     两种分隔符都试: 展开出来的命令可能用 `/`(占位符来自配置)也可能用 `\\`(来自 git)。
+    形态集合正反两向显式备齐 —— 单靠 `str(root)` 只有宿主原生那一种分隔符形态(Windows
+    反斜杠 / POSIX 正斜杠), 换个宿主就漏换另一种; 备齐后两侧宿主都产两种形态、行为一致
+    (包是跨项目资产, 语义不该绑宿主 OS; 2026-11-14 issue 0912, 方案 B 生产归一化)。
     """
-    for form in sorted({str(root), str(root).replace("\\", "/")}, key=len, reverse=True):
+    forms = {str(root), str(root).replace("\\", "/"), str(root).replace("/", "\\")}
+    for form in sorted(forms, key=len, reverse=True):
         cmd = cmd.replace(form + "/", "").replace(form + "\\", "").replace(form, ".")
     return cmd
 

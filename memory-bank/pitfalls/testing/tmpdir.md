@@ -15,6 +15,10 @@
   · 外部 `TMPDIR`(值不含 `auto-qb-tests` 标记)→ 进程响亮退出 **rc=4** 并给清理指引;
     旧 `set "TMPDIR=R:/Temp/auto-qb/tests"` 前缀**已废止**(R: 在本机不存在, 该写法自 2026-09-23 引入起
     从未生效, 全靠 gettempdir 静默回落掩盖 —— git 考证见计划 `plans/26-11-02-0657`)。
+  · 同口径已下沉到包测试(2026-11-14): `.commands/conftest.py` 对全体包测试拒收「gettempdir 落在仓库根
+    之内」(rc=4 + FATAL, 判据 .git 含 HEAD / worktree 文件形态与 `_snapshot._find_repo_root` 同源;
+    回归阵 `.commands/test_conftest_guard.py`) —— 背景(沙箱 /tmp 不可写 ⇒ tempfile 候选末位静默回落
+    CWD=仓库根)与事故链单点在 `issues/26-11-14-0857-…snapshot-anchor.html`。
   · 本文件 2026-09 诸条目里「手工把 TMPDIR 指到某盘」的处置均为**前自举时代**写法;
     症状机制(basetemp 须在 `gettempdir()` 之下 / 收尾 `pytest-current` 崩溃)仍有效, 处置以本条为准。
   · coverage 落点: pytest-cov 在 `pytest_load_initial_conftests`(tryfirst) 就把 data_file 绑成

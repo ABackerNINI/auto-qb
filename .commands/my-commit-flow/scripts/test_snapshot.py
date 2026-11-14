@@ -9,9 +9,10 @@
 跑法: python <包>/scripts/test_snapshot.py  ·  uv run pytest .commands -q --no-cov (test.pkg 口径)
 
 ## 测试计划
-- SnapshotUnitTest       `_pack_dir` / `_find_repo_root`(目录须含 HEAD——空壳 `.git` 不算仓库, 26-10-31 事故回归阵; 文件形态 = worktree) / `_sweep_old` 的纯函数行为
+- SnapshotUnitTest       `_pack_dir` / `_find_repo_root`(目录须含 HEAD——空壳 `.git` 不算仓库, 26-10-31 事故回归阵; 文件形态 = worktree) / `_sweep_old` 的纯函数行为(自证标记放行 / 外来同前缀豁免 / gettempdir 回落 CWD 整体跳过, issue 0857 P2)
 - RespawnGuardTest       已在快照里 / 纯信息入口 → 不复制; 四个入口脚本都装了守卫
 - SnapshotEndToEndTest   真子进程: 重入用副本 · 免疫 · 采纳 · 退出码透传 · import 不重入 · 存在性比较限定在用例私有临时根(`-n 8` 并行安全)
+- ProbeAnchorTest            探针锚定守卫: 侧信道报告文件优先 / stdout 兜底; 合法放行 / 缺行 / 空值 / 越界就地 fail(fail 先于 cleanup 注册, 26-11-13 CWD 误删事故回归阵, issue 0857 P0+P1a)
 - RootInjectionTest      `_ship_config.find_root()` 认 `COMMAND_FLOW_REPO_ROOT`
 - StopgapRetiredTest     治标机制(热刷新 / 配置重取)已从生产脚本里删净
 """
@@ -36,7 +37,9 @@ from _ship_config import REPO_ROOT_ENV, find_root  # noqa: E402
 HERE = Path(__file__).resolve().parent
 PY = sys.executable
 
-# 探针入口: 与真入口同款守卫(置于 `__main__` 下 ⇒ import 不触发), 再吐出可断言的字段。
+# 探针入口: 与真入口同款守卫(置于 `__main__` 下 ⇒ import 不触发), 再吐出可断言的字段;
+# 字段同时写进 COMMAND_FLOW_PROBE_OUT 指定的文件(侧信道) —— stdout 可能被沙箱/shim 吞改,
+# 是 26-11-13 事故的入口面, 测试读报告时侧信道文件优先、stdout 解析只作兜底。
 ENTRY = '''\
 import os
 import sys
@@ -52,12 +55,20 @@ if __name__ == "__main__":
     print("PACK_DIR=" + os.environ.get("COMMAND_FLOW_PACK_DIR", ""))
     print("REPO_ROOT=" + os.environ.get("COMMAND_FLOW_REPO_ROOT", ""))
     print("MARKER={marker}")
+    _out = os.environ.get("COMMAND_FLOW_PROBE_OUT", "")
+    if _out:
+        Path(_out).write_text(
+            "PACK_DIR=" + os.environ.get("COMMAND_FLOW_PACK_DIR", "")
+            + "\\nREPO_ROOT=" + os.environ.get("COMMAND_FLOW_REPO_ROOT", "")
+            + "\\nMARKER={marker}\\n",
+            encoding="utf-8",
+        )
     raise SystemExit({rc})
 '''
 
 _SNAP_VARS = (
     "COMMAND_FLOW_SNAPSHOT", "COMMAND_FLOW_PACK_DIR", "COMMAND_FLOW_REPO_ROOT", "COMMAND_FLOW_ORIGINAL_PACK",
-    "COMMAND_FLOW_SNAPSHOT_KEEP"
+    "COMMAND_FLOW_SNAPSHOT_KEEP", "COMMAND_FLOW_PROBE_OUT"
 )
 
 
@@ -83,6 +94,12 @@ def _field(out: str, prefix: str) -> str:
         if line.startswith(prefix):
             return line[len(prefix):].strip()
     return ""
+
+
+def _probe_text(proc: subprocess.CompletedProcess, report: Path) -> str:
+    """探针报告读取单点: 侧信道文件优先, stdout 只作兜底 —— shim 吞改 stdout 是 26-11-13
+    事故的入口面, 所有断言面(PACK_DIR / REPO_ROOT / MARKER)一律经本助手取值(评审 R2 #5)。"""
+    return report.read_text(encoding="utf-8") if report.is_file() else proc.stdout
 
 
 def _make_repo(root: Path) -> Path:
@@ -166,11 +183,45 @@ class SnapshotUnitTest(unittest.TestCase):
         fresh = Path(tempfile.mkdtemp(prefix=_snapshot.SNAPSHOT_PREFIX, dir=base))
         self.addCleanup(lambda: shutil.rmtree(old, ignore_errors=True))
         self.addCleanup(lambda: shutil.rmtree(fresh, ignore_errors=True))
+        # 自证标记: 与 make_snapshot 落点同构(pack/scripts/_snapshot.py), 缺了不算本包快照
+        for d in (old, fresh):
+            (d / "pack" / "scripts").mkdir(parents=True)
+            (d / "pack" / "scripts" / "_snapshot.py").write_text("", encoding="utf-8")
         stale = time.time() - _snapshot.SWEEP_AGE - 60
         os.utime(old, (stale, stale))
         _snapshot._sweep_old()
         self.assertFalse(old.exists(), "超过一天的旧快照应被清掉(崩溃 / 强杀时 finally 不跑)")
         self.assertTrue(fresh.exists(), "新快照不该被清掉")
+
+    def test_sweep_old_spares_foreign_prefix_dir(self) -> None:
+        # 名字撞 SNAPSHOT_PREFIX 但无自证标记的外来目录 —— 一律不碰(issue 0857 P2)
+        base = Path(tempfile.gettempdir())
+        foreign = Path(tempfile.mkdtemp(prefix=_snapshot.SNAPSHOT_PREFIX, dir=base))
+        self.addCleanup(lambda: shutil.rmtree(foreign, ignore_errors=True))
+        stale = time.time() - _snapshot.SWEEP_AGE - 60
+        os.utime(foreign, (stale, stale))
+        _snapshot._sweep_old()
+        self.assertTrue(foreign.exists(), "无自证标记的同前缀目录不得清扫")
+
+    def test_sweep_old_skips_when_tempdir_is_cwd(self) -> None:
+        # gettempdir 回落 CWD(沙箱 /tmp 全不可写的典型后果) ⇒ 整体放弃清扫, 宁可不扫不可错删。
+        # marked 造进私有根并 chdir 进去: 守卫若被删, _sweep_old 扫的就是这个根、必把 marked 清掉
+        # ⇒ 用例真会红(26-11-14 评审 R2 #1: 旧写法 marked 在全局根, 守卫删除后 glob 的是仓库根,
+        # 根本碰不到 marked, 断言恒真, 是死用例); 私有根同时让其它 worker 的 _sweep_old 摸不到它,
+        # 消除 -n 8 跨 worker 竞态(R2 #2)。
+        private = Path(tempfile.mkdtemp(prefix="sweep-cwd-probe-"))
+        self.addCleanup(lambda: shutil.rmtree(private, ignore_errors=True))
+        marked = private / (_snapshot.SNAPSHOT_PREFIX + "marked")
+        (marked / "pack" / "scripts").mkdir(parents=True)
+        (marked / "pack" / "scripts" / "_snapshot.py").write_text("", encoding="utf-8")
+        stale = time.time() - _snapshot.SWEEP_AGE - 60
+        os.utime(marked, (stale, stale))
+        old_cwd = os.getcwd()
+        os.chdir(private)
+        self.addCleanup(lambda: os.chdir(old_cwd))
+        with mock.patch.object(_snapshot.tempfile, "gettempdir", return_value=str(private)):
+            _snapshot._sweep_old()
+        self.assertTrue(marked.exists(), "gettempdir==CWD 时必须整体跳过清扫(守卫删除则本用例红)")
 
 
 class RespawnGuardTest(unittest.TestCase):
@@ -209,17 +260,51 @@ class SnapshotEndToEndTest(unittest.TestCase):
         self.repo = _make_repo(Path(self.tmp.name))
         self.pack = _install_pack(self.repo)
 
+    def _snap_from_probe(self, proc: subprocess.CompletedProcess, report: Path) -> Path:
+        """解析探针结果, 按快照落点不变量**先验证再锚定** —— 26-11-13 移植事故回归阵。
+
+        侧信道优先: stdout 可能被沙箱 / AppImage shim 吞改(本次事故的入口面), 探针同时把报告写进
+        `report`(经 COMMAND_FLOW_PROBE_OUT 注入); 文件缺席才退回 stdout 解析(issue 0857 P1a)。
+        解析落空时旧写法 `Path(_field(...))` 会落空成 `Path("")`, 其 `.parent` 恒等 `Path(".")`
+        = 测试进程 CWD(= 仓库根), 随后的 `rmtree(snap.parent, ignore_errors=True)` 就把整个仓库
+        (含 .git)递归删空(T4 移植报告实证)。守两条: 1) 解析结果必须命中 `make_snapshot` 的唯一落点
+        `<gettempdir>/<SNAPSHOT_PREFIX>*/pack`(子进程经 `_run` 继承同一 TMPDIR, 不变量跨进程可判);
+        2) 校验不过就地 fail 并附原始输出, **不注册任何 cleanup** —— 校验失败残留的 KEEP=1
+        快照目录由 `_sweep_old` 的 24h 龄兜底, 宁可留垃圾不可错删仓库。
+        """
+        text = _probe_text(proc, report)
+        snap = Path(_field(text, "PACK_DIR="))
+        anchored = (
+            snap.name == "pack" and snap.parent.name.startswith(_snapshot.SNAPSHOT_PREFIX) and
+            snap.parent.parent == Path(tempfile.gettempdir())
+        )
+        if not anchored:
+            self.fail(
+                f"探针未输出合法快照路径(应落在 <gettempdir>/{_snapshot.SNAPSHOT_PREFIX}*/pack 下), "
+                f"拒绝注册 cleanup —— report={report.name} 存在={report.is_file()} "
+                f"text={text!r} stdout={proc.stdout!r} stderr={proc.stderr!r}"
+            )
+        return snap
+
     def test_respawn_runs_from_snapshot_outside_repo(self) -> None:
         # KEEP=1: 副本在子进程退出时就被删, 要断言它的内容必须先留住
-        proc = _run([str(self.pack / "scripts" / "entry.py")], self.repo, env={"COMMAND_FLOW_SNAPSHOT_KEEP": "1"})
+        report = Path(self.tmp.name) / "probe-report.txt"
+        proc = _run(
+            [str(self.pack / "scripts" / "entry.py")],
+            self.repo,
+            env={
+                "COMMAND_FLOW_SNAPSHOT_KEEP": "1",
+                "COMMAND_FLOW_PROBE_OUT": str(report)
+            },
+        )
         self.assertEqual(proc.returncode, 0, proc.stderr)
-        snap = Path(_field(proc.stdout, "PACK_DIR="))
+        snap = self._snap_from_probe(proc, report)
         self.addCleanup(lambda: shutil.rmtree(snap.parent, ignore_errors=True))
         self.assertTrue(snap.is_dir(), f"应跑在临时副本上, 实际: {proc.stdout!r}")
         self.assertNotEqual(snap, self.pack, "副本不能就是原包")
         self.assertTrue((snap / "scripts" / "entry.py").is_file(), "副本含包脚本")
         self.assertNotIn(self.repo, snap.parents, "副本必须在仓库之外(否则 rebase 照样碰得到)")
-        self.assertEqual(_field(proc.stdout, "REPO_ROOT="), str(self.repo), "真根经 env 注入(副本向上找不到 .git)")
+        self.assertEqual(_field(_probe_text(proc, report), "REPO_ROOT="), str(self.repo), "真根经 env 注入(副本向上找不到 .git)")
 
     def test_snapshot_is_removed_after_run(self) -> None:
         tmp_root = _private_tmp(Path(self.tmp.name))
@@ -240,14 +325,23 @@ class SnapshotEndToEndTest(unittest.TestCase):
 
     def test_snapshot_is_immune_and_new_call_adopts(self) -> None:
         """核心证据: 原包被改写后, **旧副本输出不变**(免疫), **新调用采用新版**(采纳)。"""
-        proc = _run([str(self.pack / "scripts" / "entry.py")], self.repo, env={"COMMAND_FLOW_SNAPSHOT_KEEP": "1"})
-        snap = Path(_field(proc.stdout, "PACK_DIR="))
+        report = Path(self.tmp.name) / "probe-report.txt"
+        proc = _run(
+            [str(self.pack / "scripts" / "entry.py")],
+            self.repo,
+            env={
+                "COMMAND_FLOW_SNAPSHOT_KEEP": "1",
+                "COMMAND_FLOW_PROBE_OUT": str(report)
+            },
+        )
+        snap = self._snap_from_probe(proc, report)
         self.addCleanup(lambda: shutil.rmtree(snap.parent, ignore_errors=True))
-        self.assertEqual(_field(proc.stdout, "MARKER="), "v1")
+        self.assertEqual(_field(_probe_text(proc, report), "MARKER="), "v1")
 
         _write_entry(self.pack, "v2")  # 模拟内部同步的 rebase 换了本包
 
         # (a) 跑**旧副本**(SNAPSHOT=1 直入, 不重造) —— 免疫: 仍是 v1
+        report_a = Path(self.tmp.name) / "probe-report-a.txt"
         old = _run(
             [str(snap / "scripts" / "entry.py")],
             self.repo,
@@ -255,18 +349,82 @@ class SnapshotEndToEndTest(unittest.TestCase):
                 "COMMAND_FLOW_SNAPSHOT": "1",
                 "COMMAND_FLOW_PACK_DIR": str(snap),
                 "COMMAND_FLOW_REPO_ROOT": str(self.repo),
+                "COMMAND_FLOW_PROBE_OUT": str(report_a),
             },
         )
-        self.assertEqual(_field(old.stdout, "MARKER="), "v1", f"旧副本必须免疫, 实际: {old.stdout!r}")
+        self.assertEqual(_field(_probe_text(old, report_a), "MARKER="), "v1", f"旧副本必须免疫, 实际: {old.stdout!r}")
 
         # (b) 原包新调用 → 采纳新版
-        new = _run([str(self.pack / "scripts" / "entry.py")], self.repo)
-        self.assertEqual(_field(new.stdout, "MARKER="), "v2", f"新调用必须采用新版, 实际: {new.stdout!r}")
+        report_b = Path(self.tmp.name) / "probe-report-b.txt"
+        new = _run([str(self.pack / "scripts" / "entry.py")], self.repo, env={"COMMAND_FLOW_PROBE_OUT": str(report_b)})
+        self.assertEqual(_field(_probe_text(new, report_b), "MARKER="), "v2", f"新调用必须采用新版, 实际: {new.stdout!r}")
 
     def test_exit_code_passthrough(self) -> None:
         _write_entry(self.pack, "x", rc=3)
         proc = _run([str(self.pack / "scripts" / "entry.py")], self.repo)
         self.assertEqual(proc.returncode, 3, f"子进程退出码应原样透传给调用方: {proc.stderr}")
+
+
+class _ProbeHost:
+    """`_snap_from_probe` 的最小宿主桩: 该助手只依赖 `self.fail` —— 直测不必起真 TestCase。"""
+    def fail(self, msg: str) -> None:
+        raise AssertionError(msg)
+
+
+class ProbeAnchorTest(unittest.TestCase):
+    """探针 PACK_DIR 锚定守卫 —— 26-11-13 移植事故回归阵(T4 报告)。
+
+    沙箱 / AppImage shim 令 respawn 链失败时报告缺席或 stdout 缺 PACK_DIR 行, 旧写法
+    `Path(_field(...))` 落空成 `Path("")`, 其 `.parent` 即 `Path(".")` = 测试进程 CWD = 仓库根,
+    cleanup 的 `rmtree(snap.parent, ignore_errors=True)` 就把整个仓库(含 .git)递归删空。
+    守卫语义(issue 0857 P0+P1a): 侧信道报告文件优先, stdout 解析只作兜底; 解析结果必须命中
+    `make_snapshot` 的唯一落点 `<gettempdir>/<SNAPSHOT_PREFIX>*/pack`, 其余一律就地 fail ——
+    fail 抛出先于任何 addCleanup 注册(结构保证), 错删路径无从发生。
+    """
+
+    # 不存在的报告路径 ⇒ 助手退回 stdout 兜底通道(测纯解析面的用例都用它)
+    NO_REPORT = Path(tempfile.gettempdir()) / "probe-anchor-no-such-report"
+
+    @staticmethod
+    def _proc(stdout: str) -> subprocess.CompletedProcess:
+        return subprocess.CompletedProcess(args=[], returncode=0, stdout=stdout, stderr="")
+
+    def _reject(self, stdout: str, report: Path) -> None:
+        with self.assertRaises(AssertionError):
+            SnapshotEndToEndTest._snap_from_probe(_ProbeHost(), self._proc(stdout), report)
+
+    def test_accepts_only_snapshot_layout(self) -> None:
+        good = Path(tempfile.gettempdir()) / (_snapshot.SNAPSHOT_PREFIX + "abc123") / "pack"
+        got = SnapshotEndToEndTest._snap_from_probe(
+            _ProbeHost(), self._proc(f"PACK_DIR={good}\nMARKER=v1\n"), self.NO_REPORT
+        )
+        self.assertEqual(got, good)
+
+    def test_side_channel_wins_over_eaten_stdout(self) -> None:
+        # stdout 被 shim 吞掉(空)但报告文件在 —— 侧信道必须救回合法路径, 不触发 fail
+        good = Path(tempfile.gettempdir()) / (_snapshot.SNAPSHOT_PREFIX + "abc123") / "pack"
+        with tempfile.TemporaryDirectory() as td:
+            report = Path(td) / "report.txt"
+            report.write_text(f"PACK_DIR={good}\nMARKER=v1\n", encoding="utf-8")
+            got = SnapshotEndToEndTest._snap_from_probe(_ProbeHost(), self._proc(""), report)
+            self.assertEqual(got, good)
+
+    def test_side_channel_garbage_still_fails(self) -> None:
+        # 报告文件在但内容坏(如 respawn 链半途死在写文件之前) —— 照样 fail, 不放行
+        with tempfile.TemporaryDirectory() as td:
+            report = Path(td) / "report.txt"
+            report.write_text("PACK_DIR=\n", encoding="utf-8")
+            self._reject("", report=report)
+
+    def test_rejects_missing_line(self) -> None:
+        self._reject("", self.NO_REPORT)
+
+    def test_rejects_empty_value(self) -> None:
+        # `PACK_DIR=` 空值与缺行殊途同归: Path("") 即 Path(".")
+        self._reject("PACK_DIR=\nMARKER=v1\n", self.NO_REPORT)
+
+    def test_rejects_path_outside_temp_root(self) -> None:
+        self._reject(f"PACK_DIR={Path(tempfile.gettempdir()).parent / 'elsewhere' / 'pack'}\n", self.NO_REPORT)
 
 
 class RootInjectionTest(unittest.TestCase):
