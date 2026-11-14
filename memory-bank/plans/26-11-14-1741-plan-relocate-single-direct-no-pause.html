@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>单成员 direct 搬迁免暂停: 做种中种子不再按住</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="relocate-single-direct-no-pause">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-14-1741">
+<meta name="doc-updated" content="26-11-14-1741">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-14-backend-relocate-single-direct-no-pause.md">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: relocate-single-direct-no-pause</div>
+<h1>单成员 direct 搬迁免暂停: 做种中种子不再按住</h1>
+<p class="lede">本篇只回答: 单成员 direct 搬迁如何免掉「暂停做种成员」这一步 —— 豁免判据、完成态口径与回执分型;其余管线(job 账/闸门/停滞看护/校验/失败回执/D16 拦截)原样保留,多成员行为不变。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-14-1741 · <b>doc-updated</b> 26-11-14-1741 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> grilling 会话(2026-11-14, 三轮): 用户报障观察「整组移动单种子被暂停,移动时暂停,完成后自动恢复」→ 设计比对确认管线按设计工作 → 设计变更讨论拍板 D1-D6/D4a。
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<p><b>背景。</b>用户经 WebUI 整组移动一个只含单个种子的组:做种中种子在搬迁窗口被暂停、完成后自动恢复。逐条比对原设计(<code>26-10-18-1604-plan-group-relocate-restart-free.html</code> §4.1)确认这是<b>设计内行为</b> —— 暂停是所有搬迁的第一步,单成员走 direct 专属支线(无别名/daemon/收尾窗,收口 <code>_finish_direct</code>)但仍在管线内吃「暂停/恢复」两步。用户拍板: 单种子做种期间不该被按住(D1)。</p>
+<p><b>目标。</b>单成员组且成员处于完成态(做种)时跳过暂停/恢复;qB 直接搬运行中种子(D3: 可靠性由 qB 自身维持,用户判定,免真机先行探测);其余管线原样。<b>完成判据:</b> 豁免路径全程不发生 <code>torrents_pause</code>/<code>torrents_resume</code>;qB 搬完后 job 照常走 verify → <code>_finish_direct</code> → done;下载中/error/missingFiles/checking 态单成员与多成员组行为逐字节不变。</p>
+<p><b>设计不变量。</b></p>
+<ul>
+  <li>多成员组暂停不可免:搬 mover = 把其它成员脚下的共享文件搬走,全组必须按住 —— 本计划只对 <code>len(records)==1</code> 生效。</li>
+  <li>失败回声链(停滞看护 <code>move_stalled</code> + 全量校验 <code>_dst_ready</code> + <code>_fail</code> 回执)是搬迁失败的唯一可观测出口(qB 搬家失败静默:不进 error 态、种子停在原地继续做种),原样保留 —— 它同时是 D3 免探测的兜底。</li>
+  <li>resume 语义只做减法:豁免路径 <code>resume_hashes=()</code>,<code>_resume_members</code> 既有幂等 no-op 兜住,不新增机制。</li>
+</ul>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+<p>现状:<code>_start_job</code>(<code>relocate_exec.py:1550</code>,2026-11-14 取证时行号)对所有搬迁统一 <code>running = [r.hash for r in records if not r.state_enum.is_stopped]</code> → <code>torrents_pause(running)</code> + 记 <code>resume_hashes</code>;四个出口(<code>_arm</code>/<code>_finish_direct</code>/<code>_fail</code>/<code>relocate_cancel</code>)各调一次 <code>_resume_members</code> 恢复。单成员 direct 无豁免。</p>
+<p>痛点:整组=1 个种子时,做种中成员被按住整个搬迁窗口。管线对单成员的真实价值(逐项裁决见会话记录)集中在「失败有回声」(停滞看护/校验/回执/重启恢复)与窗口保护(D16 拦截),与暂停无关;原设计给暂停的动机 —— 别名窗口只对多成员成立,缺文件联动误触(§2.3)已由 relocating 登记让路解决。暂停是唯一用户可见成本。</p>
+
+<h2><span class="no">§03</span>方案总览</h2>
+<ul>
+  <li><b>豁免判据</b>(<code>_start_job</code> running 计算处):<code>len(records) == 1</code> 且该成员完成态 → <code>running = []</code>(不下发 pause,<code>resume_hashes=()</code>)。</li>
+  <li><b>完成态口径</b>:<code>state_enum.is_complete</code>(qbittorrentapi: uploading/stalledUP/checkingUP=True;downloading/error/missingFiles/moving=False)<b>且</b> state 不在过渡态排除集(checkingDL/checkingUP/checkingResumeData/moving/allocating/metaDL/forcedMetaDL —— 口径参照 fuse <code>_NON_COMPLETE_STATES</code>,在 relocate 侧独立持有单点 helper,不跨模块引用私有常量)。checking 态单成员因此仍走暂停。</li>
+  <li><b>回执分型</b>:豁免路径 notes 追加「单种子搬迁: 做种中不暂停, qB 自搬」。<b>顺带面(已声明, 同一行文案)</b>:现行 notes 无条件写「完成后自动建别名并武装收尾」,对 direct 形态是误导(direct 无别名无武装)—— 随本计划按形态分型:direct → 「qB 自搬中(无别名)」;多成员 → 保留原文。</li>
+  <li><b>边界</b>:多成员组、下载中单成员、error/missingFiles/checking 态单成员、dry-run 行为全部不变;部署闸维持 26-11-05-0808 D4 的 fail-fast 禁用整功能口径原样(D4a,单成员不豁免,独立口径不混车)。</li>
+</ul>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+<table>
+  <tr><th>S</th><th>内容</th><th>验收</th></tr>
+  <tr><td>S1</td><td><code>relocate_units</code> 加完成态判定 helper(含过渡态排除集);<code>_start_job</code> 豁免判据 + 回执按形态分型</td><td>定向单测绿;helper 有 docstring 写明口径来源</td></tr>
+  <tr><td>S2</td><td>测试电池:单成员完成态(免暂停:不发 pause、resume_hashes=()、<code>_resume_members</code> no-op、走 <code>_finish_direct</code> done)/ 单成员 downloading(仍暂停+恢复)/ 单成员 error 态(仍暂停)/ 单成员 checkingUP 态(仍暂停 —— is_complete=True 与过渡态排除集的唯一分歧态; 另附 checkingDL 断言, 其 is_complete=False 与排除集一致)/ 多成员完成态(仍全组暂停)/ dry-run(不变)/ 回执文案分型断言</td><td>电池全绿;新增测试同步文件头「## 测试计划」清单</td></tr>
+  <tr><td>S3</td><td>文档回写:本计划 §06 回填实施记录;原计划 26-10-18-1604 §4.1「暂停」行补反指注记(指向本计划);active-context 切片</td><td><code>commands run kb.check</code> 绿</td></tr>
+  <tr><td>S4</td><td><code>commands run test.full</code> + 新建基线切片(数字实测誊写)</td><td>新基线切片入库</td></tr>
+</table>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p>无 —— 全部议题已在 grilling 三轮内拍板(结论迁 §06)。</p>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+  <tr><th>D</th><th>结论(2026-11-14 拍板)</th></tr>
+  <tr><td>D1</td><td>单成员 direct 免暂停 = 设计变更,做(收窄 26-10-18-1604 §4.1 对单成员的统一暂停)</td></tr>
+  <tr><td>D2</td><td>豁免口径 = 仅单成员组且成员完成态(做种);下载中/error/checking 仍暂停(取推荐 a)</td></tr>
+  <tr><td>D3</td><td>免真机先行探测:qB 搬运行中种子的可靠性由用户判定、靠 qB 自身维持(推翻 agent 推荐的 P1 真机门);失败兜底 = 既有停滞看护 + 失败回执</td></tr>
+  <tr><td>D4</td><td>保留 job 账与闸门,只免暂停一步;不做纯透传 qB 的薄路径(账面价值裁决:失败回声链 + D16 拦截真有用)</td></tr>
+  <tr><td>D4a</td><td>部署闸维持 26-11-05-0808 D4 的 fail-fast 禁用整功能口径原样,单成员不豁免(direct 不碰 fastresume 收尾链属技术上过拦,但独立产品口径,不混车)</td></tr>
+  <tr><td>D5</td><td>恢复契约加固(resume 单发即弃)与 fuse 不让路 relocating_hashes 两件入池不修,本期范围收敛</td></tr>
+  <tr><td>D6</td><td>relocate 未启用情景下 qB 侧搬迁的让路与回声入池 feat,本期不做</td></tr>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+  <tr><th>风险</th><th>触发条件</th><th>处置</th></tr>
+  <tr><td>qB 搬运行中种子失败(句柄/磁盘/权限)</td><td>豁免路径搬迁报错或半途而废</td><td>qB 静默停在原地 → 停滞看护 <code>move_stalled</code> 判 fail + <code>_dst_ready</code> 不齐 → job 落 failed(reason=move_stalled; 现场保留, 排除故障后重新发起迁移)。失败回声链原样兜底(D3 的前提), 无新增机制; 豁免路径成员从未被暂停, 不存在「暂停后重试」语义</td></tr>
+  <tr><td>完成态误判(过渡态种子被豁免)</td><td>checking/moving 等态被当完成态</td><td>完成态判定含过渡态排除集;S2 电池逐态钉扎(downloading/error/checking 均断言仍暂停)</td></tr>
+  <tr><td>搬迁窗口内做种持续引发观感疑问</td><td>用户看到种子在 moving 态仍在做种</td><td>预期行为非缺陷;发起回执 note 随 §03 回执分型写明「不暂停, qB 自搬」(S1 交付物)</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-14-1741</span> 初版:grilling 三轮拍板 D1-D6/D4a 后立档。要点:单成员 direct 完成态免暂停(豁免判据 + 完成态口径 + 回执分型),其余管线原样;邻接面两件(恢复契约/fuse 让路)与新想法(qB 侧回声)入池,见 issues 池 topic <code>relocate-move-window</code>。</li>
+</ul>
+
+</div>
+</body>
+</html>
