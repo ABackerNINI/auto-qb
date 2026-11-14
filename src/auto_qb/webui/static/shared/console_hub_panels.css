@@ -589,7 +589,8 @@ body.kbd-reveal .aq-kbd, body.kbd-persist .aq-kbd { opacity: 1; visibility: visi
  * 流 => 控件宽度只由 label / 图标决定, 显影 / 常驻 / 改绑都不改几何(I3, 与上条页签同一手法)。
  * 顶栏: 徽标贴药丸下缘(顶栏 10px 下内边距内, 右对齐到 label 右缘) —— 药丸本体 ≈28.6px、
  *   顶栏 ≈48.6px, 11px 徽标落在内边距带里, 不与 label / 邻钮重叠; 顶栏无 overflow:hidden,
- *   不裁切。挂点类 .aq-kbd-host 只加在顶栏两钮上(不污染其它 .table-tool 的定位上下文)。
+ *   不裁切。挂点类 .aq-kbd-host 用于所有「无预留键位列」的控件(顶栏药丸 / 状态栏入口,
+ *   S6 起含视图页签 / 设置 / 搜索框 / 今日流量图标钮 / 速度钮), 只提供定位上下文, 版式按面分组)。
  * 状态栏: 34px 锁高 + overflow:hidden(§08 裁切风险) => 徽标**竖向必须落在按钮盒内**
  *   (calc(50% - 5.5px) 让 11px 行盒居中), 不许 top:-6px 探出按钮; 水平挂在图标钮左侧的
  *   .sb-spacer 空带上(纯文本无底色, 不挤右角 .sb-speed, e2e statusbar-kbd-entry 实测面)。
@@ -606,6 +607,29 @@ body.kbd-persist .sb-kbd-sw {
   background: var(--accent-soft);
   color: var(--accent-hi);
 }
+
+/* ---- 顶栏搜索框 / 状态栏入口的键帽落位(计划 26-11-14-0041 S6/W6) ----
+ * 同为绝对定位角标(不进布局流, I3), 但这两处没有「药丸下缘」可用, 按控件形状各定落位:
+ * 搜索框: 框内右上 inset(不另开挂点类, 用 .search-box.aq-kbd-host 提特异性压过上面的通用规则)。
+ *   top:1px 落在输入行上方的内边距带(内容盒从 7px 起), right:52px 对齐到内容盒右缘 ——
+ *   让开 ?(right 6/27)与清除钮(right 6)、也避开 52px 右内边距里的按钮带 =>
+ *   任何查询长度下都不遮输入内容(显影态聚焦展宽 240->300 时随框右缘同步, 仍不相交)。
+ *   9.5px: 11px 行盒会压到 13px 输入文字的上沿, 收一档只压字号不压信息(页签徽标同款手法)。
+ * 状态栏(.sb-top): 34px 锁高 + overflow:hidden 下徽标一律落在**栏顶空带**(文字行之上,
+ *   实测盒 y≈1.5-11 / 文字行从 11 起), 水平贴控件右缘(.sb-left 贴左缘, 供相邻两钮背向分开)。
+ *   纵向写「控件中心 - 16px」而不是固定 top: 栏内控件都垂直居中, 四皮肤控件高度不同
+ *   (atlas/prism 速度钮 23.4px / console/flux 17px)也落在同一条线上。
+ *   .sb-speed 组自身 overflow:hidden 会把这条线裁掉(组盒只有内容高) => 组 align-self: stretch
+ *   撑满栏高; 水平位置与子项垂直居中都不变(纯纵向盒高, 不动 .sb-speed 的 left/right)。
+ * 状态栏(.sb-side): 控件右邻是弹性空带的落点(「完整统计」右侧 .sb-spacer) => 徽标纵向
+ *   居中挂在控件右侧 6px(与 T3 开关钮挂左侧空带镜像同款), 不进空带以外的内容。
+ * 字号: .sb-top 收一档到 9.5px(11px 行盒会压到栏内文字行), .sb-side 维持 11px(旁边没有文字)。
+ * 显隐仍只由 .aq-kbd 的两态规则切, 本组只定版式。 */
+.search-box.aq-kbd-host > .aq-kbd { position: absolute; top: 1px; right: 52px; font-size: 9.5px; }
+.sb-speed { align-self: stretch; }
+.aq-kbd-host.sb-top > .aq-kbd { position: absolute; top: calc(50% - 16px); right: 2px; font-size: 9.5px; }
+.aq-kbd-host.sb-top.sb-left > .aq-kbd { left: 2px; right: auto; }
+.aq-kbd-host.sb-side > .aq-kbd { position: absolute; top: calc(50% - 5.5px); left: calc(100% + 6px); right: auto; }
 
 /* ---- 置灰行键帽随行(计划 26-11-12-0344 S2 增量 / 26-11-14-0041 S2 形态同步) ----
  * dyn gate 置灰(ctx_menu.js ctxRenderItem 的 reannounceMenuGate 不满足 -> item.gated)时,

@@ -293,11 +293,12 @@ def test_frontend_qb_traffic_chart_wiring():
     body = mo.group(1)
     assert "this.flags.qb_traffic_enabled" in body and "this.todayTraffic" in body, \
         "入口门必须同时消费 flags.qb_traffic_enabled 与今日流量面板(挂点本体)"
-    # 入口按钮: v-if 门 + 面板内并列(TM 历史入口同组)
-    assert 'v-if="qbHistEntryOn"' in statusbar and 'class="sb-qb"' in statusbar, \
+    # 入口按钮: v-if 门 + 面板内并列(TM 历史入口同组)。类名自 S6(计划 26-11-14-0041)起带
+    # 键帽挂点类(.aq-kbd-host 角标定位 + .sb-top/.sb-left 栏顶空带落位) —— 断言按前缀匹配, 别再写死整串
+    assert 'v-if="qbHistEntryOn"' in statusbar and re.search(r'class="sb-qb\b', statusbar), \
         "statusbar 缺 qB 入口按钮(v-if 门是 P5 验收的静态锚)"
     today_blk = re.search(r'<template v-if="todayTraffic">(.*?)</template>', statusbar, re.S)
-    assert today_blk and 'class="sb-qb"' in today_blk.group(1), \
+    assert today_blk and re.search(r'class="sb-qb\b', today_blk.group(1)), \
         "qB 入口必须挂在今日流量面板组内(挂点 = 今日流量面板, plan §07 表)"
 
     # 2. uPlot 断线语义 + 悬停取值对齐

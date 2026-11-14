@@ -8,7 +8,9 @@ kbDisplayName), 设置键位面板(tpl/settings-detail.html)/ Shift+/ 帮助浮�
 .aq-kbd 在 console_hub_panels.css 尾段单点, 四皮肤同构; S2(计划 26-11-14-0041)去按钮化后为
 灰色括号包裹的弱化纯文本, 显示面两态互斥(S1 显影 body.kbd-reveal / S5 常驻 body.kbd-persist)
 共用同一条显示规则(纯 CSS, 取数链一行不动); W5 把顶栏 / 页签 / 状态栏三处无预留空间的落点
-改绝对定位角标(不进布局流 => 控件宽度不因键位变化); 令牌纪律 I3: 只引用既有令牌
+改绝对定位角标(不进布局流 => 控件宽度不因键位变化), S6 把同一手法扩到顶栏视图页签 / 设置 /
+搜索框与状态栏完整统计 / 历史 / qB 流量 / 限速四入口(按控件形状分「下方 / 框内 inset / 栏顶
+空带 / 侧位空带」四种贴法, 仍是同一条绝对定位手法); 令牌纪律 I3: 只引用既有令牌
 (--fg-dim/--fg-muted/--font-mono), 零新增令牌, 四皮肤令牌名集不动(parity 守阵继续兜住)。
 
 ## 测试计划
@@ -29,29 +31,34 @@ kbDisplayName), 设置键位面板(tpl/settings-detail.html)/ Shift+/ 帮助浮�
   (opacity:0/visibility:hidden)且**共用同一条显示规则**(单一选择器组合, 不造第二套显隐机制),
   显/隐只用 opacity/visibility/color 不碰几何、无 transition; W5 三处角标挂载规则(顶栏药丸
   .aq-kbd-host / 状态栏开关 .sb-kbd-sw / 抽屉页签 .drawer-tabs button 的绝对定位)各恰一条,
-  且页签/顶栏控件声明 position: relative 作为角标定位上下文; 常驻「开」态高亮由
+  且页签/顶栏控件声明 position: relative 作为角标定位上下文; S6 扩面的四种贴法(搜索框框内
+  inset / 状态栏栏顶空带 .sb-top / 状态栏侧位空带 .sb-side / .sb-speed 组撑满栏高防裁)各恰一条,
+  且都只是版式、显隐仍走同一条两态规则; 常驻「开」态高亮由
   body.kbd-persist 纯 CSS 驱动; 四皮肤 index.html 全部 link console_hub_panels.css(共享单文件
   => 四皮肤同构, 静态断言不做截图); 置灰行键帽随行 needle(.ctx-menu .ctx-item.is-gated
   .aq-kbd -> var(--fg-dim), 锁死置灰行键帽弱化色防 hover 回潮)
-- test_keycap_static_mounts_topbar_and_drawer_tabs(计划 S3/S4): 顶栏键帽(添加种子/列选择两钮
-  <kbd class="aq-kbd"> 常驻 DOM, 两钮带 .aq-kbd-host 角标挂点 = W5 绝对定位、药丸宽度不因键位
-  变化; 串走 AQB_SHORTCUTS.methods.kbKeycapOf -> kbKeycapById -> kbShortcutDisplay 单点, id
-  引用注册表 add-torrent/col-picker; D6 口径 = 顶栏恰两处键帽, 设置 Ctrl+, 不做)+ 抽屉页签徽标
+- test_keycap_static_mounts_topbar_and_drawer_tabs(计划 S3/S4, S6 扩面): 顶栏键帽 —— 添加种子/列选择
+  两钮(前序件) + 视图三页签 Digit1/2/3 + 设置 Ctrl+, + 搜索框 Slash + 清除筛选(空位 def:"" 恒渲染
+  宿主、槽内 kbd 才 v-if 现算) 共 8 处 <kbd class="aq-kbd">, 各挂点带 .aq-kbd-host 角标挂点 = W5
+  绝对定位、药丸宽度/搜索框宽度不因键位变化; 串走 AQB_SHORTCUTS.methods.kbKeycapOf ->
+  kbKeycapById -> kbShortcutDisplay 单点, id 引用注册表; 顶栏键帽总数恰 8(反漂移); 抽屉页签徽标
   (两态 <aq-seg> 挂 :kbd-of 回调 + 流量页签按钮内联 kbd, drawer.js dtTabKbdOf/dtMergeTabKbdOf/
   dtTrafficKbd 三入口统一经 _dtTabKbd -> kbDrawerTabKbd 单点) + kbDrawerTabKbd 合并态必须读
   KB_MERGE_TAB_REMAP(与键盘 run 同表, 脱钩即 S4 单点破口) + 改绑即时跟随的响应式链(草稿源
   AQB_KEYS 快照非响应式: state.js kbKeysRev 显式建字段 + 适配器四变更点 _kbReloadKeys/
   _kbApplyOverrides/kbSaveKeys/kbDraftRevert 各 +1 + 取数方法渲染期 void 读, 断一环 = 常驻键帽面
   改绑后钉死) + 被接线模板零手抄键位串(禁 "Alt + " 字面量与无 v-if 的静态 kbd)
-- test_keycap_static_mount_statusbar_entry(计划 S5): 状态栏键位开关钮(S5/W2 取代前序件 S5 的
+- test_keycap_static_mount_statusbar_entry(计划 S5/S6): 状态栏键位开关钮(S5/W2 取代前序件 S5 的
   「键位」文字入口; 无文字图标钮 .sb-btn.sb-kbd-sw, 两态互斥 = 开 body.kbd-persist / 关仅按住
   反引号, click 只切两态**不开帮助浮层**, 与 Shift+/ 互不干扰)内联 <kbd class="aq-kbd">
   常驻 DOM, 串走 AQB_SHORTCUTS.methods.kbKeycapOf -> kbKeycapById -> kbShortcutDisplay 单点,
   id 引用注册表 help-panel —— 与 Shift+/ 键盘条目同一条目, I1 不手抄; title 走 D11 控件功能
   说明(「按住 ` 显影 / 点此常驻」); 常驻链 = kbPersistToggle(lifecycle.js: 写 body class +
-  本机偏好 autoqb.ui.kbdPersist, 零重绘)+ statusbar.html 恰一处 kbd(反漂移)+ 帮助浮层入口
-  保持原语义(Shift+/ 直连 _kbToggleKbHelp; 前序件为文字钮造的模板转发别名随入口删除, 无
-  调用方 = 死代码)+ 反手抄锚扩 statusbar.html(kbd 必带 v-if, 键位串字面量禁入)
+  本机偏好 autoqb.ui.kbdPersist, 零重绘); S6 扩面后状态栏共 6 处 kbd: 开关钮 + 完整统计
+  (侧位空带) + 历史入口(Shift + 反斜杠) + qB 流量图(Ctrl + 反斜杠) + 速度减/加(L / Shift+L,
+  栏顶空带), 计数按新形态重定并反漂移; 帮助浮层入口保持原语义(Shift+/ 直连 _kbToggleKbHelp; 前序件为文字钮
+  造的模板转发别名随入口删除, 无调用方 = 死代码) + 反手抄锚扩 statusbar.html(kbd 必带 v-if,
+  键位串字面量禁入)
 """
 
 from __future__ import annotations
@@ -102,7 +109,7 @@ A("kbDisplayOf 委托单点(草稿经 this.kbDraft 生效)",
   && M.kbDisplayOf.call({ kbDraft: { overrides: { "act-reannounce": "KeyZ" } } }, bound) === "Z"
   && M.kbDisplayOf.call({ kbDraft: null }, unbound) === "");
 /* S3: 顶栏静态挂点按 shortcut id 直查(kbKeycapById -> kbShortcutDisplay 单点链) */
-A("kbKeycapById: 顶栏两钮 id 现算(N/K)", kbKeycapById("add-torrent", null) === "N" && kbKeycapById("col-picker", null) === "K");
+A("kbKeycapById: 添加种子/列选择两钮 id 现算(N/K)", kbKeycapById("add-torrent", null) === "N" && kbKeycapById("col-picker", null) === "K");
 A("kbKeycapById: 未知 id 防御性空串(不抛)", kbKeycapById("no-such-entry", null) === "");
 /* S5: 状态栏「键位」入口钮按 shortcut id 现算(id 引用注册表 help-panel, 与 Shift+/ 键盘条目同一条目) */
 A("kbKeycapById: help-panel 状态栏入口现算(Shift + /)", kbKeycapById("help-panel", null) === "Shift + /");
@@ -241,38 +248,72 @@ def test_aq_kbd_css_four_skin_isomorphic() -> None:
     assert ".sb-kbd-sw > .aq-kbd { position: absolute; top: calc(50% - 5.5px); right: calc(100% + 6px); }" in css, (
         "console_hub_panels.css 缺状态栏开关键帽角标规则(W5: 34px 内竖向居中 inset, 不探出被裁)"
     )
-    # 角标定位上下文: 页签按钮(共享层)与顶栏两钮(.aq-kbd-host 挂点)必须建立 relative,
-    # 否则 absolute 徽标会以更外层祖先定位(跑到页签栏/顶栏角)。
+    # 角标定位上下文: 页签按钮(共享层)与 .aq-kbd-host 全部挂点(顶栏 / 状态栏各控件)必须
+    # 建立 relative, 否则 absolute 徽标会以更外层祖先定位(跑到页签栏 / 顶栏 / 状态栏角)。
     assert re.search(r"\.drawer-tabs button \{[^}]*position: relative", css,
                      re.S), ("drawer-tabs button 缺 position: relative —— 页签键帽角标定位上下文丢失")
     assert ".aq-kbd-host { position: relative; }" in css and ".sb-kbd-sw { position: relative; }" in css, (
         "顶栏药丸 / 状态栏开关缺角标定位上下文(.aq-kbd-host / .sb-kbd-sw 的 relative)"
     )
+    # S6 扩面(计划 26-11-14-0041 W6): 同一绝对定位手法按控件形状分四种贴法 —— 搜索框框内 inset /
+    # 状态栏栏顶空带(.sb-top) / 状态栏侧位空带(.sb-side) / .sb-speed 组撑满栏高(否则组自身的
+    # overflow:hidden 会把栏顶空带上的徽标裁掉)。四种各恰一条, 都只定版式不定显隐(两态仍走
+    # 上面那条共用规则)。
+    assert ".search-box.aq-kbd-host > .aq-kbd { position: absolute; top: 1px; right: 52px; font-size: 9.5px; }" in css, (
+        "console_hub_panels.css 缺搜索框键帽框内 inset 规则(S6: 右上内边距带, 让开 ?/清除钮与 52px 右内边距)"
+    )
+    assert ".sb-speed { align-self: stretch; }" in css, (
+        "console_hub_panels.css 缺 .sb-speed 撑满栏高(S6: 组自身 overflow:hidden 会裁栏顶空带上的速度键帽)"
+    )
+    assert ".aq-kbd-host.sb-top > .aq-kbd { position: absolute; top: calc(50% - 16px); right: 2px; font-size: 9.5px; }" in css, (
+        "console_hub_panels.css 缺状态栏栏顶空带键帽规则(S6: 控件中心 - 16px 落在文字行上方, 四皮肤控件高度不同也同一线)"
+    )
+    assert ".aq-kbd-host.sb-top.sb-left > .aq-kbd { left: 2px; right: auto; }" in css, (
+        "console_hub_panels.css 缺状态栏左对齐变体规则(S6: 相邻两长串键帽背向分开, 互不叠压)"
+    )
+    assert ".aq-kbd-host.sb-side > .aq-kbd { position: absolute; top: calc(50% - 5.5px); left: calc(100% + 6px); right: auto; }" in css, (
+        "console_hub_panels.css 缺状态栏侧位空带键帽规则(S6: 完整统计右邻 .sb-spacer 弹性空白)"
+    )
     assert "body.kbd-persist .sb-kbd-sw {" in css, ("常驻「开」态高亮须由 body.kbd-persist 纯 CSS 驱动(S5/D4: 零 JS 态、零重绘)")
 
 
 def test_keycap_static_mounts_topbar_and_drawer_tabs() -> None:
-    """S3 顶栏键帽 + S4 页签徽标接线静态锚(计划 26-11-12-0344)
+    """S3 顶栏键帽 + S4 页签徽标接线静态锚(计划 26-11-12-0344; S6 扩面 26-11-14-0041)
 
-    顶栏: 添加种子/列选择两钮内联 <kbd class="aq-kbd"> 常驻 DOM(I4/D10: 键位提示不走
-    title/.aq-tip 通道), 串走 kbKeycapOf(id 引用注册表, I1 不手抄); D6 口径 = 顶栏恰两处,
-    设置 Ctrl+, 不做。页签: 两态 <aq-seg> 挂 :kbd-of 回调 + 流量页签按钮内联 kbd, drawer.js
-    三个投影方法统一经 _dtTabKbd -> kbDrawerTabKbd 单点(合并态与键盘 run 同表
-    KB_MERGE_TAB_REMAP); 被接线模板零手抄键位串。
+    顶栏: 添加种子/列选择(前序件) + 视图三页签 Digit1/2/3 + 设置 Ctrl+, + 搜索框 Slash +
+    清除筛选(空位 def:"" 恒渲染宿主) 共 8 处内联 <kbd class="aq-kbd"> 常驻 DOM(I4/D10: 键位
+    提示不走 title/.aq-tip 通道), 串走 kbKeycapOf(id 引用注册表, I1 不手抄); 挂点一律 .aq-kbd-host
+    (绝对定位徽标, 药丸/搜索框宽度不因键位变化)。页签: 两态 <aq-seg> 挂 :kbd-of 回调 + 流量页签
+    按钮内联 kbd, drawer.js 三个投影方法统一经 _dtTabKbd -> kbDrawerTabKbd 单点(合并态与键盘 run
+    同表 KB_MERGE_TAB_REMAP); 被接线模板零手抄键位串。
     """
     topbar = open(os.path.join(SHARED, "tpl", "topbar.html"), encoding="utf-8").read()
-    for sid in ("add-torrent", "col-picker"):
+    # S6 表 B 顶栏六条 + 前序件两条 = 8: 视图三页签 / 设置 / 搜索框 / 清除筛选(空位)
+    for sid in (
+        "add-torrent", "col-picker", "view-groups", "view-torrents", "view-shows", "open-settings", "focus-search",
+        "clear-filters"
+    ):
         needle = "<kbd v-if=\"kbKeycapOf('%s')\" class=\"aq-kbd\">{{ kbKeycapOf('%s') }}</kbd>" % (sid, sid)
-        assert needle in topbar, (f"topbar.html 缺 {sid} 键帽节点(S3)或未走 kbKeycapOf 单点(I1 改绑即时跟随/空串即隐藏)")
-    # W5 角标挂载(S4): 两钮都挂 .aq-kbd-host(共享 CSS 里 = position: relative + 绝对定位徽标),
-    # 键帽不进布局流 => 药丸宽度只由 label 决定(显影/常驻/改绑都不改几何, I3)。
+        assert needle in topbar, (f"topbar.html 缺 {sid} 键帽节点或未走 kbKeycapOf 单点(I1 改绑即时跟随/空串即隐藏)")
+    # W5 角标挂载(S4/S6): 挂点一律 .aq-kbd-host(共享 CSS 里 = position: relative + 绝对定位徽标),
+    # 键帽不进布局流 => 药丸宽度 / 搜索框宽度只由 label / 输入框决定(显影/常驻/改绑都不改几何, I3)。
     assert 'class="table-tool add-btn aq-kbd-host"' in topbar, ("topbar.html 添加种子钮缺 .aq-kbd-host 角标挂点(W5: 键帽不进布局流)")
     assert 'class="table-tool aq-kbd-host"' in topbar, ("topbar.html 列选择钮缺 .aq-kbd-host 角标挂点(W5: 键帽不进布局流)")
-    # 计数按 S2 新形态复核: 键帽常驻 DOM、显影(S1)靠 body class 切 opacity/visibility 不增删
-    # 节点, 故 <kbd> 数量仍为 2(形态与显影都不改模板结构); 此断言兼作"显影不靠增删 DOM"的锚
-    assert topbar.count("<kbd") == 2, (
-        f"topbar.html 键帽数量漂移(D6 拍板 + S2 形态复核: 恰 add-torrent/col-picker 两处, "
-        f"设置 Ctrl+, 不做, 显影不增删 DOM; 实测 {topbar.count('<kbd')} 处)"
+    for view in ("groups", "torrents", "shows"):
+        assert re.search(rf'<button data-view="{view}" class="aq-kbd-host"',
+                         topbar), (f"topbar.html 视图页签 {view} 缺 .aq-kbd-host 角标挂点(S6: 键帽不进布局流, 药丸宽度不变)")
+    assert re.search(r'<button class="aq-kbd-host" :class="\{ active: page === \'settings\' \}"',
+                     topbar), ("topbar.html 设置钮缺 .aq-kbd-host 角标挂点(S6: Ctrl+, 括号包完整串, 药丸宽度不变)")
+    assert 'class="search-box aq-kbd-host"' in topbar, ("topbar.html 搜索框缺 .aq-kbd-host 角标挂点(S6: 框内 inset 角标)")
+    # 清除筛选: 空位条目 —— 按钮(宿主)恒渲染, 槽内 kbd 才 v-if(空串留白, 绑键后自动出现, 禁空括号)
+    assert 'class="dist-chip clear aq-kbd-host"' in topbar, (
+        "topbar.html 清除筛选缺 .aq-kbd-host 恒渲染宿主(S6 空位: 宿主恒在, 不因键位有无增删按钮)"
+    )
+    # 计数按 S2 形态 + S6 扩面复核: 键帽常驻 DOM(空位条目由 v-if 不渲染 kbd), 显影(S1)靠 body
+    # class 切 opacity/visibility 不增删节点 => <kbd> 数量恒 8; 此断言兼作"显影不靠增删 DOM"的锚
+    assert topbar.count("<kbd") == 8, (
+        f"topbar.html 键帽数量漂移(S6 新形态: 8 处 = 添加种子/列/视图三页签/设置/搜索/清除筛选空位, "
+        f"显影不增删 DOM; 实测 {topbar.count('<kbd')} 处)"
     )
 
     drawer_tpl = open(os.path.join(SHARED, "tpl", "drawer.html"), encoding="utf-8").read()
@@ -338,24 +379,40 @@ def test_keycap_static_mounts_topbar_and_drawer_tabs() -> None:
 
 
 def test_keycap_static_mount_statusbar_entry() -> None:
-    """S5 状态栏键位开关静态锚(计划 26-11-12-0344 S5 建 / 26-11-14-0041 S5 改开关)
+    """S5 状态栏键位开关 + S6 状态栏入口静态锚(计划 26-11-12-0344 S5 建 / 26-11-14-0041 S5+S6)
 
-    状态栏「键位」入口自本批起是**无文字图标钮**(.sb-btn.sb-kbd-sw): click 只切两态
+    状态栏「键位」入口自 S5 起是**无文字图标钮**(.sb-btn.sb-kbd-sw): click 只切两态
     (开 = body.kbd-persist 常驻 / 关 = 仅按住反引号显影), **不开帮助浮层**; 帮助浮层入口保持
     原语义(Shift+/ 直连 _kbToggleKbHelp, 引擎/浮层本体零改动; 前序件为文字钮造的转发别名
-    kbToggleHelp 随入口删除 = 无调用方死代码, 反向钉住别加回)。钮内仍有状态栏唯一一处
-    <kbd class="aq-kbd">, 串走 kbKeycapOf(id 引用注册表 help-panel, I1 不手抄), 版式由共享 CSS
-    角标化(绝对定位, 不挤右角速度组 / 34px 内不裁)。title 按 D11 写控件自身功能说明。
-    纯显示层: 引擎/浮层本体零改动。
+    kbToggleHelp 随入口删除 = 无调用方死代码, 反向钉住别加回)。串仍走 kbKeycapOf(id 引用
+    注册表 help-panel, I1 不手抄)。S6 扩面后状态栏共 6 处 <kbd>: 开关钮 + 完整统计(侧位空带) +
+    历史(Shift + 反斜杠) + qB 流量图(Ctrl + 反斜杠) + 速度减/加(L / Shift+L, 栏顶空带);
+    版式一律共享 CSS 绝对定位角标(不挤右角速度组 / 34px 内不裁)。title 按 D11 写控件自身
+    功能说明。纯显示层: 引擎/浮层本体零改动。
     """
     sb = open(os.path.join(SHARED, "tpl", "statusbar.html"), encoding="utf-8").read()
     # 键帽节点: v-if 与文本同走 kbKeycapOf 单点(空串判定内含在单点里, 模板不自己拼)
-    needle = "<kbd v-if=\"kbKeycapOf('help-panel')\" class=\"aq-kbd\">{{ kbKeycapOf('help-panel') }}</kbd>"
-    assert needle in sb, ("statusbar.html 缺键位开关的键帽节点(S5)或未走 kbKeycapOf 单点"
-                          "(I1 改绑即时跟随/空串即隐藏与顶栏键帽同链)")
-    # 计数按 S5 新形态复核: 键帽常驻 DOM、两态靠 body class 切 opacity/visibility 不增删节点
-    assert sb.count("<kbd"
-                   ) == 1, (f"statusbar.html 键帽数量漂移(S5 拍板 + W5 角标形态: 恰开关键帽一处, 显影/常驻不增删 DOM; 实测 {sb.count('<kbd')} 处)")
+    for sid in ("help-panel", "open-stats", "open-history", "open-qb-traffic", "speed-down", "speed-up"):
+        needle = "<kbd v-if=\"kbKeycapOf('%s')\" class=\"aq-kbd\">{{ kbKeycapOf('%s') }}</kbd>" % (sid, sid)
+        assert needle in sb, (f"statusbar.html 缺 {sid} 键帽节点或未走 kbKeycapOf 单点"
+                              "(I1 改绑即时跟随/空串即隐藏与顶栏键帽同链)")
+    # 计数按 S6 新形态重定: 6 处(开关钮 1 + 表 B 状态栏 5 条); 键帽常驻 DOM、两态靠 body class 切
+    # opacity/visibility 不增删节点
+    assert sb.count("<kbd") == 6, (
+        f"statusbar.html 键帽数量漂移(S6 新形态: 6 处 = 开关/完整统计/历史/qB 流量/速度减/速度加, "
+        f"显影与常驻不增删 DOM; 实测 {sb.count('<kbd')} 处)"
+    )
+    # S6 挂点类: 完整统计挂 .sb-side(右邻 .sb-spacer 弹性空带), 其余入口挂 .sb-top(栏顶空带;
+    # qB 入口 .sb-left 左对齐, 与历史入口右对齐背向分开)
+    assert re.search(r'<button class="sb-btn aq-kbd-host sb-side" @click="openStats\(\)"',
+                     sb), ("statusbar.html 完整统计缺 .aq-kbd-host.sb-side 挂点(S6: 侧位空带, 不裁不遮)")
+    for sel in (
+        r'class="sb-hist aq-kbd-host sb-top" @click\.stop="openHistory\(\)"',
+        r'class="sb-qb aq-kbd-host sb-top sb-left" title="qB 口径流量图',
+        r'class="sb-spd spd-down aq-kbd-host sb-top"',
+        r'class="sb-spd spd-up aq-kbd-host sb-top"',
+    ):
+        assert re.search(sel, sb), (f"statusbar.html 缺 S6 栏顶空带挂点({sel}) —— 角标会退回通用下方位, 34px 内被裁")
     # 开关钮本体: 无文字图标钮 + 两态分派 kbPersistToggle(不调 kbToggleHelp = 开关钮不是帮助入口)
     entry = re.search(r'<button ref="kbdSw" type="button" class="sb-btn sb-kbd-sw"[^>]*>', sb, re.S)
     assert entry, "statusbar.html 键位开关钮缺失或类名漂移(S5: .sb-btn.sb-kbd-sw + ref=kbdSw)"

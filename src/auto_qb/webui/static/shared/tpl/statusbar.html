@@ -14,15 +14,25 @@
           <span class="lbl">今日</span>
           <span class="val v-down"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-arrow-down"></use></svg>{{ fmtSize(todayTraffic.down) }}</span>
           <span class="val v-up"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-arrow-up"></use></svg>{{ fmtSize(todayTraffic.up) }}</span>
-          <button class="sb-hist" @click.stop="openHistory()">
+          <!-- 键帽(计划 26-11-14-0041 S6/W6): Shift+\ 历史入口角标 —— 串走 kbKeycapOf(id 引用注册表
+               open-history, I1 不手抄), 括号包完整串 => 与「\」(open-stats) / 「Ctrl + \」
+               (open-qb-traffic) 三变体可区分。版式: .sb-top = 落在状态栏**栏顶空带**(文字行上方),
+               绝对定位不进布局流(34px 锁高与今日流量块几何都不变, I3); 右对齐到按钮右缘, 与相邻
+               qB 入口的角标(左对齐)背向分开, 两个长串不互压。 -->
+          <button class="sb-hist aq-kbd-host sb-top" @click.stop="openHistory()">
             <svg class="ico ico-sm ico-history" viewBox="0 0 16 16"><use href="#i-history"></use></svg>
+            <kbd v-if="kbKeycapOf('open-history')" class="aq-kbd">{{ kbKeycapOf('open-history') }}</kbd>
           </button>
           <!-- qB 口径流量图入口(plan 26-10-03-0946 §07 P5a, 与 TM 历史入口并列):
                enabled=false 时 qbHistEntryOn 为假 -> 入口不渲染、openQbHistory 无触发路径
                = 不发请求(P5 验收); 2026-10-04 起并入底部详情抽屉(openQbHistory ->
                openDrawerTraffic, 面板本体在 tpl/drawer.html 的流量形态) -->
-          <button v-if="qbHistEntryOn" class="sb-qb" title="qB 口径流量图(24h/30d 时序)" @click.stop="openQbHistory()">
+          <!-- 键帽(计划 26-11-14-0041 S6/W6, 部分覆盖): 菜单侧 ctx_menu.js 早有 Ctrl+\ 键帽, 本批只补
+               状态栏入口。串走 kbKeycapOf(id 引用注册表 open-qb-traffic, I1 不手抄); .sb-top.sb-left =
+               栏顶空带 + 左对齐到按钮左缘(与 open-history 的右对齐角标背向分开)。 -->
+          <button v-if="qbHistEntryOn" class="sb-qb aq-kbd-host sb-top sb-left" title="qB 口径流量图(24h/30d 时序)" @click.stop="openQbHistory()">
             <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-chart"></use></svg>
+            <kbd v-if="kbKeycapOf('open-qb-traffic')" class="aq-kbd">{{ kbKeycapOf('open-qb-traffic') }}</kbd>
           </button>
         </span>
       </template>
@@ -46,8 +56,12 @@
         </span>
         <span v-if="!sbStats.length" class="sb-empty">统计未同步(等待 qB 连接)</span>
       </span>
-      <button class="sb-btn" @click="openStats()">
+      <!-- 键帽(计划 26-11-14-0041 S6/W6): 完整统计入口角标 = 竖排在按钮右侧的「\」(其右是
+           .sb-spacer 弹性空带, 与开关钮挂左侧空带同一手法), 串走 kbKeycapOf(id 引用注册表
+           open-stats, I1 不手抄; 与 Shift+\ / Ctrl+\ 三变体靠括号内完整串区分)。 -->
+      <button class="sb-btn aq-kbd-host sb-side" @click="openStats()">
         <svg class="ico ico-sm ico-chart" viewBox="0 0 16 16"><use href="#i-chart"></use></svg>完整统计
+        <kbd v-if="kbKeycapOf('open-stats')" class="aq-kbd">{{ kbKeycapOf('open-stats') }}</kbd>
       </button>
       <span class="sb-spacer"></span>
       <!-- 键位提示开关(计划 26-11-14-0041 S5/W2, 取代前序件 26-11-12-0344 S5 的「键位」文字入口):
@@ -55,7 +69,8 @@
            显影(body.kbd-reveal)。两态共用共享 CSS 的同一条显示规则, 切换只写 body class 与本机
            偏好, 零 JS 重绘、取数链一行不动(D4)。偏好沿用既有口径 localStorage
            autoqb.ui.kbdPersist(D6, 不新造通道), 刷新后开关态保留(runtime 见 lifecycle.js)。
-           键帽: 状态栏唯一一处 .aq-kbd(承接前序件 S5 的 Shift+/ 常驻键帽), 串仍走
+           键帽: 承接前序件 S5 的 Shift+/ 常驻键帽(S6 起状态栏共 6 处, 只有本处标的是**开关
+           自身**, 其余五处标各入口动作), 串仍走
            kbKeycapOf('help-panel') 现算(I1 不手抄) —— 它标的是 Shift+/ 打开帮助浮层; 本钮
            click **不开浮层**(只切两态, 与 Shift+/ 互不干扰), 浮层入口保持原语义。
            title 是控件自身功能说明(D11 的 I4 例外边界), 不是键位提示通道。
@@ -93,20 +108,27 @@
         </button>
         <!-- 2026-10-11: 速度数值染方向色(.spd-down/.spd-up -> --today-down/up, 与流量图同源);
              限速 .lim 保持中性灰不动 -->
-        <button class="sb-spd spd-down" :class="{ off: sbLimits.down === '不限' }"
+        <!-- 键帽(计划 26-11-14-0041 S6/W6): L / Shift+L 分别挂在两个「速度 / 限速」按钮上 ——
+             标的是**全局限速浮层**(openSpeedAt, 与键盘条目同链), 行右键菜单的 limits 是 per-hash
+             弹窗, 不映射(注册表两套语义, 别顺手合并)。串走 kbKeycapOf(id 引用注册表
+             speed-down / speed-up, I1 不手抄); 版式 = .sb-top(栏顶空带), 组 overflow:hidden 的
+             裁切由共享 CSS 的 align-self: stretch 消解(见 console_hub_panels.css)。 -->
+        <button class="sb-spd spd-down aq-kbd-host sb-top" :class="{ off: sbLimits.down === '不限' }"
                 @click.stop="openSpeedAt($event, 'down')">
           <svg class="ico ico-sm ico-down" viewBox="0 0 16 16"><use href="#i-download"></use></svg>
           <span class="val">{{ fmtSpeed(totalDl) }}</span>
           <span class="slash">/</span>
           <span class="lim">{{ sbLimits.down }}</span>
+          <kbd v-if="kbKeycapOf('speed-down')" class="aq-kbd">{{ kbKeycapOf('speed-down') }}</kbd>
         </button>
         <span class="sb-sep"></span>
-        <button class="sb-spd spd-up" :class="{ off: sbLimits.up === '不限' }"
+        <button class="sb-spd spd-up aq-kbd-host sb-top" :class="{ off: sbLimits.up === '不限' }"
                 @click.stop="openSpeedAt($event, 'up')">
           <svg class="ico ico-sm ico-up" viewBox="0 0 16 16"><use href="#i-upload"></use></svg>
           <span class="val">{{ fmtSpeed(totalUl) }}</span>
           <span class="slash">/</span>
           <span class="lim">{{ sbLimits.up }}</span>
+          <kbd v-if="kbKeycapOf('speed-up')" class="aq-kbd">{{ kbKeycapOf('speed-up') }}</kbd>
         </button>
       </span>
     </footer>

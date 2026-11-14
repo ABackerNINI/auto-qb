@@ -15,23 +15,34 @@
           <!-- W4 导航 IA: 左侧一级导航 = 分组/种子/追剧(page 恒为 groups, 切的是 viewMode 三态,
                与表格区视图开关两处入口等价); 设置移右侧独立组; 统计入口在底部状态栏, 日志在设置"常规"章节页尾 -->
           <!-- data-view: goView 后同步导航焦点用(view.js::syncNavFocus), 三个视图页签的 DOM 身份标识 -->
+          <!-- 键帽(计划 26-11-14-0041 S6/W6): 三个视图页签各挂 Digit1/2/3 角标 —— 串走 kbKeycapOf
+               (id 引用注册表 view-groups/view-torrents/view-shows, I1 不手抄); 手法沿用 W5 的
+               .aq-kbd-host(绝对定位贴药丸下缘, 不进布局流 => 药丸宽度与药丸组总宽不因键位变化, I3)。 -->
           <nav class="tabs" aria-label="视图导航">
-            <button data-view="groups" :class="{ active: page === 'groups' && viewMode === 'groups' }" @click="goView('groups')">
+            <button data-view="groups" class="aq-kbd-host" :class="{ active: page === 'groups' && viewMode === 'groups' }" @click="goView('groups')">
               <svg class="ico ico-sm ico-seed" viewBox="0 0 16 16"><use href="#i-cards"></use></svg>{{ l10nGroup }}
+              <kbd v-if="kbKeycapOf('view-groups')" class="aq-kbd">{{ kbKeycapOf('view-groups') }}</kbd>
             </button>
-            <button data-view="torrents" :class="{ active: page === 'groups' && viewMode === 'torrents' }" @click="goView('torrents')">
+            <button data-view="torrents" class="aq-kbd-host" :class="{ active: page === 'groups' && viewMode === 'torrents' }" @click="goView('torrents')">
               <svg class="ico ico-sm ico-down" viewBox="0 0 16 16"><use href="#i-download"></use></svg>种子
+              <kbd v-if="kbKeycapOf('view-torrents')" class="aq-kbd">{{ kbKeycapOf('view-torrents') }}</kbd>
             </button>
-            <button data-view="shows" :class="{ active: page === 'groups' && viewMode === 'shows' }" @click="goView('shows')">
+            <button data-view="shows" class="aq-kbd-host" :class="{ active: page === 'groups' && viewMode === 'shows' }" @click="goView('shows')">
               <svg class="ico ico-sm ico-tv" viewBox="0 0 16 16"><use href="#i-tv"></use></svg>追剧
+              <kbd v-if="kbKeycapOf('view-shows')" class="aq-kbd">{{ kbKeycapOf('view-shows') }}</kbd>
             </button>
           </nav>
           <!-- 视图开关已退役(2026-09-17): 三态视图升为顶栏一级导航后, 页内重复的第二套"分组/种子/追剧"已删除 -->
           <div v-if="page === 'groups'" class="top-search">
-            <div class="search-box">
+            <!-- 键帽(计划 26-11-14-0041 S6/W6): 搜索框内右上角 inset 角标, 串走 kbKeycapOf
+                 (id 引用注册表 focus-search -> Slash, I1 不手抄)。位置在输入行**上方**的右内边距带
+                 (共享 CSS 定 top:1px / right:52px, 让开 ? 与清除钮及 52px 右内边距) => 显影态
+                 输入框聚焦展宽时也不遮输入内容; 绝对定位不进布局流, 框宽不因键位变化(I3)。 -->
+            <div class="search-box aq-kbd-host">
               <svg class="ico ico-sm ico-find" viewBox="0 0 16 16"><use href="#i-search"></use></svg>
               <input ref="searchInput" v-model="searchQuery" @input="onSearchInput" @keyup.enter="doSearch"
                      placeholder="搜索种子或文件名..." autocomplete="off" />
+              <kbd v-if="kbKeycapOf('focus-search')" class="aq-kbd">{{ kbKeycapOf('focus-search') }}</kbd>
               <!-- mousedown.prevent: 按下瞬间不触发失焦 —— 否则输入框收窄动画把按钮移出光标, click 落空(焦点存在时清除失灵) -->
               <button v-if="searchQuery" class="search-clear" @mousedown.prevent @click="clearSearch">
                 <svg class="ico" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
@@ -69,8 +80,8 @@
             <kbd v-if="kbKeycapOf('add-torrent')" class="aq-kbd">{{ kbKeycapOf('add-torrent') }}</kbd>
           </button>
           <!-- 列选择器(紧邻搜索框, 见想法.md): 显示/隐藏列 + 列宽重置/适应窗口。
-               键帽同上(S3 建 / S4 角标化, id 引用 col-picker; D6: 设置 Ctrl+, 不做键帽 ——
-               .tabs 药丸组拉长 + 「,」单标误导)。角标绝对定位, 药丸宽度零变化。 -->
+               键帽同上(S3 建 / S4 角标化, id 引用 col-picker; 设置 Ctrl+, 的键帽见右侧独立组,
+               括号包完整串)。角标绝对定位, 药丸宽度零变化。 -->
           <div v-if="page === 'groups'" class="col-picker">
             <button class="table-tool aq-kbd-host" :class="{ active: colMenuOpen }"
                     @click.stop="toggleColMenu($event)">
@@ -105,10 +116,13 @@
             </transition>
           </div>
           <div class="spacer"></div>
-          <!-- W4: 设置移至顶栏右侧(与左侧视图导航分列); 复用 .tabs 保证 hover/active 态一致 -->
+          <!-- W4: 设置移至顶栏右侧(与左侧视图导航分列); 复用 .tabs 保证 hover/active 态一致。
+               键帽(计划 26-11-14-0041 S6/W6): Ctrl+, 走 aq-kbd-host 角标, 括号包**完整串** =>
+               与「,」单标可区分; 串走 kbKeycapOf(id 引用注册表 open-settings, I1 不手抄)。 -->
           <nav class="tabs tabs-right" aria-label="页面导航">
-            <button :class="{ active: page === 'settings' }" @click="openSettings">
+            <button class="aq-kbd-host" :class="{ active: page === 'settings' }" @click="openSettings">
               <svg class="ico ico-sm ico-config" viewBox="0 0 16 16"><use href="#i-settings"></use></svg>设置
+              <kbd v-if="kbKeycapOf('open-settings')" class="aq-kbd">{{ kbKeycapOf('open-settings') }}</kbd>
             </button>
           </nav>
           <!-- 单一语义模板的「UI 差异口」(plans/26-09-26-2233 W3 收敛定案):
@@ -264,10 +278,14 @@
               </transition>
             </div>
             <!-- 清除筛选: **常驻占位**(无筛选时降透明度禁用, R02) —— 若用 v-if 会出现/消失,
-                 会把同一行的筛选器整组左右推动; 旧 visibility:hidden 占位策略留下过幽灵空位 -->
-            <button class="dist-chip clear" :class="{ 'is-off': !filtersActive }"
+                 会把同一行的筛选器整组左右推动; 旧 visibility:hidden 占位策略留下过幽灵空位。
+                 键帽(计划 26-11-14-0041 S6/W6, 空位条目): 按钮本身是**恒渲染宿主**, 槽内键帽节点才按注册表
+                 clear-filters 现算 —— 该条 def 为 ""(空位), 默认不渲染 kbd = 纯留白, 用户
+                 在设置里绑键后自动出现, 不出现空括号(I5); 串仍走 kbKeycapOf 单点(I1)。 -->
+            <button class="dist-chip clear aq-kbd-host" :class="{ 'is-off': !filtersActive }"
                     :disabled="!filtersActive" @click="clearFilters()">
               <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>清除筛选
+              <kbd v-if="kbKeycapOf('clear-filters')" class="aq-kbd">{{ kbKeycapOf('clear-filters') }}</kbd>
             </button>
           </div>
         </div>
