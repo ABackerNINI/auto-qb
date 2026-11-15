@@ -345,6 +345,19 @@ for (const { skin, rowlang } of CONTEXTS) {
 test.describe('新增行(stamped)悬停一致', () => {
   installRuntimeErrorGuard(test);
 
+  /** 本 describe 内用例经 /__harness__/add_torrent 新增的种子 hash(收尾必删, 桩共享实例)。
+   *  issue 26-11-15-1359: 曾漏删 —— 长驻桩被残留种子污染(status.torrents 301), 全量轮里
+   *  后跑的 views.spec 数据契约(期望 TORRENTS=300)恒假红; 清理手法与 search-auto-refresh /
+   *  search-uncovered-no-duplicate 的 afterEach 收尾同款。 */
+  let addedHash = null;
+
+  test.afterEach(async ({ request }) => {
+    if (!addedHash) return;
+    const res = await request.post(`${baseUrl()}/__harness__/remove_torrent?hash=${addedHash}`);
+    expect(res.ok(), '桩控制面 remove_torrent 必须 200').toBeTruthy();
+    addedHash = null;
+  });
+
   // 只 flux: fx 挂载层 flux 专属(三旧皮肤对 /shared/fx/ 与 fx-mount 零引用, D14 反向钉),
   // 行插入差分只会在 flux stamp 行 —— 其它皮肤跑本用例测不到目标面。
   // wave 不适用: 首格按设计不吃 hover 底(高亮唯一来源是扫层), parity 前提为空
@@ -358,6 +371,7 @@ test.describe('新增行(stamped)悬停一致', () => {
     const name = 'PINNED-FX-' + Date.now();
     const resp = await page.request.post(`${baseUrl()}/__harness__/add_torrent`, { params: { name } });
     expect(resp.ok(), '桩 add_torrent 应答失败').toBe(true);
+    addedHash = (await resp.json()).hash;
 
     // 轮询合并(桩约 2s 一拍)内等新行出现; 按名字在 DOM 行序里定位(行窗口化下渲染窗随插行平移)
     const sel = '.group-row[data-table="torrent"]';
