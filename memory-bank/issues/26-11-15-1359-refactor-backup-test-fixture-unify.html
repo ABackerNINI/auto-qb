@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="backup-test-fixture-unify">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="test_web_backup 导出/导入夹具不统一">
 <meta name="issue-summary" content="S1 夹具 BACKUP_CONFIG_TEXT 非合法配置, S2 另建 IMPORT_CONFIG_TEXT, 两套夹具可统一">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-15-1359-refactor-backup-test-fixture-unify</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-15 13:59</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
 
@@ -110,13 +110,23 @@
 <section id="s3">
   <h2><span class="no">§03</span>建议<span class="opt">（可选）</span></h2>
   <p>统一成一份合法基夹具 + 掩码测试专用变异(未知键/非法枚举按用例局部叠加), 或在 docstring 注明两夹具各自的服务面; 认领时顺手评估即可, 不急。</p>
+  <div class="callout">
+    <p><strong>实际修法(2026-11-15 认领评估)</strong> —— 走备选方案(注明服务面), 统一方案经评估<strong>不可行</strong>并留痕:</p>
+    <ul>
+      <li>方案 A(合法基夹具 + 局部变异)对 <code>tracker passkey</code> 类别<strong>原理上不可行</strong>: 现 schema 的 <code>config.trackers.&lt;site&gt;</code> 键面(domains/tags/remove_tags/groups/限速/rules/remove_similar_tags/hr 等)无 passkey, 未知键被 <code>load_config</code> 拒收(2026-11-15 对照实证: 带 passkey 的合法形态配置报「未知键 ['passkey']」; 无 passkey 同文 PASS)—— passkey 掩码用例只能存在于非 schema 的任意 YAML, 单份合法夹具覆盖不了全部敏感键类别。</li>
+      <li>掩码面按 key-part 匹配任意 YAML、不校验键面, 非法夹具不影响被测行为; 合法配置的掩码还原已由 <code>test_backup_import_same_machine_restores_secrets</code> 端到端覆盖, 统一所剩收益只省一份夹具, 却要改约 7 个导出用例的树路径断言(hr/trackers/type)+ 触碰导入侧 byte 级断言邻域, 得不偿失。</li>
+      <li>落地: <code>BACKUP_CONFIG_TEXT</code> 注释补「有意非法 + passkey 判据 + 两套并存是设计而非欠账」; <code>IMPORT_CONFIG_TEXT</code> 既有注释(须过 load_config + round-trip byte 形态)不动。</li>
+    </ul>
+    <p class="hint">验证: <code>commands run test.one -- tests/test_web_backup.py</code> — 59 passed, 副作用台账越界 0。</p>
+  </div>
 </section>
 
 <section id="s4">
   <h2><span class="no">§04</span>状态变更日志</h2>
   <ul>
     <li>2026-11-15 13:59 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-15 — 状态 Open → Done（kb.status）</li>
+</ul>
 </section>
 
 <footer>

@@ -145,7 +145,15 @@ from auto_qb.webui.server.routes.keys import keys_file_path
 # (qB 密码 / tracker passkey / hr.token / transfer targets 条目 password+api_key) +
 # web.token 留空(自动生成 = 非机密, 不掩码) + 前注/行尾注释/空行(R7 注释保留面) +
 # 两段契约负例: targets 条目空 password/api_key(空值不掩码) + 普通列表不下钻
-# (path_map 条目内 password 键原样保留 —— 与 mask_tree「不进列表」同口径)
+# (path_map 条目内 password 键原样保留 —— 与 mask_tree「不进列表」同口径)。
+# **有意非法**(issue 26-11-15-1359 评估留痕: top-level trackers / config.hr.token /
+# config.web.path_map 未知键, targets type=local 不在 qb/tr 枚举): 导出/掩码面不过
+# load_config —— 掩码按 key-part 匹配任意 YAML, 不校验键面, 非法不影响被测行为; 且
+# tracker passkey 在现 schema 无对应键(config.trackers.* 只收 domains/tags/限速等,
+# 未知键被 load_config 拒收, 2026-11-15 对照实证), passkey 类别**原理上进不了合法
+# 配置** —— 本夹具无法并入导入侧合法基夹具, 两套并存是设计而非欠账。导入侧走
+# IMPORT_CONFIG_TEXT(合法 + round-trip byte 形态); 合法配置的掩码还原由
+# test_backup_import_same_machine_restores_secrets 端到端覆盖。
 BACKUP_CONFIG_TEXT = """\
 # 顶部注释: 备份导出夹具
 config:
