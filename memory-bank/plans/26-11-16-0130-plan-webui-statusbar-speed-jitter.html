@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>WEBUI 状态栏速度组定宽: 冻结右钉组左缘漂移</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="webui-statusbar-speed-jitter">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-16-0130">
+<meta name="doc-updated" content="26-11-16-0154">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-16-webui-statusbar-speed-jitter.md">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: webui-statusbar-speed-jitter</div>
+<h1>WEBUI 状态栏速度组定宽: 冻结右钉组左缘漂移</h1>
+<p class="lede">本篇只回答一个问题: 状态栏上传/下载速度数值随量级变化时, 右钉速度组为什么整体平移, 以及用什么最小改动把它冻结、怎么守。执行口径来自两轮 grilling 的 D1-D14(全按推荐, Q14 追加纳入), 无待拍板项。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-16-0130 · <b>doc-updated</b> 26-11-16-0154 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 会话 grilling 两轮 14 问(2026-11-15/16, 用户逐轮「按推荐」+ Q14 追加纳入) + 两轮只读取证: statusbar.html 模板与四皮肤 CSS / format.js 格式化链 / decorate.js 数据源 / flux fx-mount 补间 / 静态守阵与 e2e 采样面 / 计划模板骨架
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<p><b>背景。</b>用户 2026-11-15 报障: WEBUI 状态栏上传/下载速度数值变化时, 周边 UI 元素位置跳动。速度每轮轮询(1.5-3s)都会变, 单位串与整数位随之变, 整组宽度跟着变, 视觉上是持续的横向抖动。</p>
+<p><b>目标(算成标准)。</b>① 速度组内每个元素(两枚 <code>.sb-spd</code>、两枚 <code>.val</code>、两枚 <code>.lim</code>、<code>.sb-sep</code>)在任意速度样本切换的<b>全过程逐帧</b>矩形零位移, 容差 1px(不只比终态, 含 flux 360ms 补间中间帧); 口径限<b>宽视口(>900px)</b> —— 窄屏按 R1 只保证 <code>.sb-speed</code> 右缘不动(<code>.lim</code> 只设 4ch 下限, 长限速值仍会撑开、组内元素随之左移), <code>.val</code>/<code>.lim</code> 的位置在窄屏不作为不变量; ② 四皮肤(prism/atlas/console/flux)一致; ③ 34px 锁高与右缘位置不变, 窄屏不新增溢出裁切。</p>
+<p><b>不变量。</b>不动 <code>fmtSpeed</code>/<code>fmtSize</code> 等格式化函数(全局共用, 外溢到抽屉速度格与图表轴标); 不动任何 JS(D3, 含 flux <code>numRoll</code>); 不动左栏 <code>.sb-today</code>/<code>.sb-stats</code>; 不新增令牌(尺寸纪律只管弹窗宽度档, <code>min-width</code> 字面量与既有 <code>.fx-val</code>/<code>.m-progress .val</code> 同范式); 四皮肤同值。</p>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+<p><b>容易被误判的一点。</b>四皮肤的速度值<b>早就</b>是 mono + 等宽数字: <code>atlas/css/dialogs.css:471</code>、<code>prism/css/views.css:79</code>(<code>.sb-spd .val</code>), <code>:479</code>/<code>:87</code>(<code>.lim</code>), <code>console/style.css:158-159</code>、<code>flux/style.css:166-167</code>(顶层 <code>.sb-item .val, .sb-spd .val, .sb-spd .lim</code>)。所以「数字字形不等宽」不是根因, 不必再往字体方向查。</p>
+<p><b>真根因: 整段字符串长度变。</b><code>format.js:35-38</code> <code>fmtSpeed</code>: 零值一律 <code>"0 B/s"</code>; 非零走 <code>_fmtLadder</code>(<code>:22-34</code>)—— 固定 2 位小数、1024 进制、<b>单位串随量级变化</b>。于是同一组元素在不同时刻是 <code>"0 B/s"</code>(5 字符) / <code>"1023 B/s"</code>(8) / <code>"1.00 KiB/s"</code>(10) / <code>"1023.99 KiB/s"</code>(13) / <code>"9.99 MiB/s"</code>(10) / <code>"999.99 MiB/s"</code>(12)。限速侧 <code>.lim</code> 更极端: <code>dialogs.js:564-567</code> 三形态 —— <code>"不限"</code>(≈3-4ch) / <code>"—"</code>(1-2ch) / <code>fmtSpeed(v)</code>(最长 13ch), 落差 3-6 倍。</p>
+<p><b>为什么会推动整组。</b><code>.sb-speed</code> 是状态栏最后一项(<code>statusbar.html:102-133</code>), 右缘由容器右内边距钉死; <code>.sb-spd</code> 是 <code>flex: 0 0 auto</code>(<code>prism/css/views.css:73-76</code>、<code>atlas/css/dialogs.css:465-468</code>、<code>console/css/dialogs.css:412-415</code>、<code>flux/css/dialogs.css:424-427</code>), 宽度完全跟随文本。右缘固定 + 宽度变 = <b>左缘平移</b>, 组内下载图标、数字、斜杠、限速、键帽一起左右挪。</p>
+<p><b>放大器。</b>flux 皮肤 <code>fx-mount.js:450-490</code> 的 <code>numRoll</code> 在 360ms 内逐帧改写 <code>.sb-spd .val</code> 文本(<code>ROLL_SEL :461</code>), 把一次跳变摊成连续 20+ 帧的小幅抖动。这是既有设计(<code>webui-fx.md:19</code> 允许状态栏级低频面), 不是独立根因。</p>
+<p><b>已排除项。</b>① 左栏 <code>.sb-today</code>/<code>.sb-stats</code> 变化被 <code>.sb-spacer{flex:1}</code> 吸收(<code>statusbar.html:66</code> 在速度组左侧), 不推动右组; ② 未读徽标 <code>.sb-err-badge</code> 出现时按钮 <code>.sb-err</code> 向右被速度组左缘钉住、只能向左挤 spacer(<code>console_hub_controls.css:365-368</code> <code>flex:0 0 auto</code>), 速度组不动 —— D14 据此从「定宽」改判为「零改动 + 守卫」。</p>
+
+<h2><span class="no">§03</span>方案总览</h2>
+<p><b>主线。</b>给 <code>.val</code> 与 <code>.lim</code> 各设一个不随内容变的定宽槽, 使 <code>.sb-spd</code> 宽度恒定; 纯 CSS, 一行 JS 不动。</p>
+<table>
+  <tr><th>元素</th><th>规则</th><th>落点</th><th>依据</th></tr>
+  <tr><td><code>.sb-speed .sb-spd .val</code></td><td><code>min-width: 13ch; text-align: right;</code></td><td rowspan="3"><code>shared/console_hub_panels.css</code> 尾段(与 <code>:629 .sb-speed</code> 同段)</td><td>D7 D9 D10</td></tr>
+  <tr><td><code>.sb-speed .sb-spd .lim</code></td><td><code>min-width: 13ch; text-align: left;</code></td><td>D8 D9 D10</td></tr>
+  <tr><td>窄屏 <code>@media (max-width: 900px)</code></td><td><code>.sb-speed .sb-spd .lim { min-width: 4ch; }</code></td><td>D8</td></tr>
+  <tr><td><code>.sb-err</code></td><td>不改, 维持 <code>flex: 0 0 auto</code></td><td><code>shared/console_hub_controls.css</code>(现状)</td><td>D14</td></tr>
+</table>
+<p><b>13ch 是算出来的, 不是拍的。</b><code>fmtSpeed</code> 有界档最长形 = <code>"1023.99 KiB/s"</code> = 7+1+5 = 13 字符, <code>"1024.00"</code> 同为 7 字符, GiB 档到 <code>"9999.99 GiB/s"</code> 仍是 13 字符(≈10 TiB/s, 现实两个数量级余量)。<code>12ch</code> 会让 <code>1023.99</code> 这一档撑开, 方案即失效。12px mono 下 <code>1ch</code> ≈ 0.6em = <code>7.2px</code>(字体回落到 Consolas 的 0.55em 时 ≈ 6.6px), 13ch ≈ 86-94px; 仓库同源佐证: <code>qb_traffic_chart.js:3182-3184</code> 给 <code>10px</code> 等宽字体留 84px 装 11 字符(单字符 ≈ 6px = 0.6em) —— 那里的 10px 是<b>字号</b>, 不是每字符 10px。</p>
+<p><b>对齐方向有讲究。</b><code>.val</code> 右对齐: 数字右端紧贴 <code>/</code>, 位数增长向左扩展, 视觉上「右端不动」; <code>.lim</code> 左对齐: <code>不限</code>/<code>—</code>/数值都从 <code>/</code> 右侧起笔, 避免短文案孤零零飘在 13ch 槽右端造成断裂感。</p>
+<p><b>落点为何在共享层。</b>四皮肤这条规则一字不差, 按 <code>webui.md:16</code>「逐字节相同的规则族进 shared 尾段单点」; 皮肤内只保留真差异(<code>atlas</code>/<code>prism</code> 在各自 <code>dialogs.css</code>/<code>views.css</code> 定义 mono 字体, <code>console</code>/<code>flux</code> 靠顶层 <code>style.css</code>), 那些不动。写四份 = 四个漂移点。</p>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+<table>
+  <tr><th>步</th><th>内容</th><th>验收判据</th></tr>
+  <tr><td><b>S1</b></td><td>CSS 定宽: <code>shared/console_hub_panels.css</code> 尾段加 <code>.val</code>(13ch/右) 与 <code>.lim</code>(13ch/左) 两条; 窄屏用 <code>@media (max-width: 900px)</code> 把 <code>.lim</code> 退 <code>4ch</code> —— 900px 是四皮肤 <code>@media</code> 共有的最窄断点(atlas <code>views.css:107</code> / console <code>:76</code> / flux <code>:76</code> / prism <code>:675</code>; 四皮肤另有共有的 1320px 一档: atlas <code>:103</code> / console <code>:72</code> / flux <code>:72</code> / prism <code>:668</code>), 状态栏窄屏仅 prism <code>:679</code> 有先例(<code>padding:0 12px; gap:10px</code>), 另三皮肤按同一 900px 对齐, 不另造断点。</td><td>四皮肤下 <code>.sb-spd</code> 宽度在 <code>0 B/s</code> / <code>1023.99 KiB/s</code> / <code>不限</code> / 13ch 限速值之间恒定; 34px 锁高不变; 窄屏无新增裁切</td></tr>
+  <tr><td><b>S2</b></td><td>静态守阵: 定义 <code>_scan_statusbar_speed_width</code>(<code>tests/webui_static_scan_css.py</code>), 并在 <code>tests/webui_static_scan_js.py</code>(导入 + 调用)与 <code>tests/test_webui_static_skins_skin.py</code>(导入)三处接线 —— 只写函数不接线守阵不跑。判据按层级分: <b>顶层(非 @media)</b> <code>.val</code>/<code>.lim</code> 各恰 1 条且 <code>min-width:13ch</code>, <b><code>@media</code> 内</b> <code>.lim</code> 恰 1 条 <code>4ch</code>(S1 共两条 <code>.lim</code> 才不冲突, 扫描须按花括号深度分层, 不能照 <code>_scan_progress_val_parity</code> 的平铺计数); 共享层 <code>shared/console_hub_panels.css</code> 不在 <code>_UI_ALL</code> 四皮肤目录内, 须单独读; 四皮肤内任何命中 <code>.sb-spd .val</code>/<code>.lim</code> 的规则都不得声明 <code>min-width</code>(不论特异性; 按含 <code>.sb-spd .val</code> 子串匹配, 不锚行首, 否则 <code>.sb-speed .sb-spd .val{...}</code> 会漏判); <code>.sb-err</code> 含 <code>flex: 0 0 auto</code>。</td><td>红绿双验: 共享层顶层改 <code>12ch</code> → 红; 某皮肤加一条等特异性声明(<code>.sb-speed .sb-spd .val{min-width:9ch}</code>, 实际被共享层压掉但守阵一律拦) → 红; 再加一条更高特异性声明(<code>.sb-speed .sb-spd.spd-down .val</code> = 真覆盖) → 红; 摘 <code>.sb-err</code> 的 <code>flex</code> → 红; 删 <code>@media</code> 里那条 <code>4ch</code> → 红; 还原后全绿(<code>sha256sum -c</code> 复核)</td></tr>
+  <tr><td><b>S3</b></td><td>e2e: 新增 <code>e2e/statusbar-speed-geometry.spec.mjs</code>, <code>SKINS_ALL</code> 四皮肤, <code>@fast</code>。注入走 <code>withVm</code>(<code>e2e/lib/vm.mjs:49-51</code>)或 <code>/api/state</code> route mock(走 <code>route.fetch</code> 取真响应再改包时, 必须在文件顶层接线 <code>installRouteCleanup</code> —— <code>tests/test_flaky_timing_guards.py</code> 第 5 类硬要求、无白名单; 纯 <code>route.fulfill</code> 静态桩不受此限); 采样 rAF + 4ms 双路(<code>e2e/dt-live-update.spec.mjs:316-332</code> 量具); 样本序列覆盖 <code>0 B/s</code> → <code>1023.99 KiB/s</code> → <code>1.00 MiB/s</code> → <code>9999.99 GiB/s</code>, <code>.lim</code> 三态, 以及 <code>errUnread</code> 0 → 两位数。</td><td>宽视口(桌面默认)全程 <code>.sb-speed</code> 与两枚 <code>.sb-spd</code>/<code>.val</code>/<code>.lim</code>/<code>.sb-sep</code> 左右缘偏移 ≤1px(<code>toBeCloseTo(...,1)</code>); 另跑一次 ≤900px 窄视口只断言 <code>.sb-speed</code> 右缘不动(<code>.lim</code> 只设 4ch 下限, 长限速值撑开会把组内元素一起左推 —— 窄屏不承诺组内零位移); <code>.sb-err</code> 右缘不动、左缘允许左移; 四皮肤全绿; 变异自证(摘 CSS 必红)</td></tr>
+  <tr><td><b>S4</b></td><td>回归: <code>commands run test.quick</code> → <code>commands run test.full</code> 全绿 → <code>kb.new baseline --total ..</code>(数字实测誊写); 既有 <code>statusbar-kbd-entry.spec.mjs</code> 与 <code>views.spec.mjs</code> 速度断言不红。</td><td>全量绿, 新基线切片落位; 无既有断言因定宽而松动</td></tr>
+  <tr><td><b>S5</b></td><td>回写与收口: <code>webui.md</code> 状态栏条款补一句「数值定宽 13ch 单点在共享层」; 坑档 <code>pitfalls/web-ui/progress-bar.md</code> 加同族指链(<code>.sb-spd</code> 是第二例); 四皮肤真机目检; 计划转 <code>Done</code> 并回填变更记录。</td><td>文档与代码无漂移; 目检确认无空洞/断裂观感; 计划状态与实际一致</td></tr>
+</table>
+<p class="aside">S2 与 S3 是两类不同证据(静态钉 vs 真浏览器几何), 必须分开——静态断言兜不住布局(<code>pitfalls/web-ui/progress-bar.md:14-16</code> 明示), 逐帧几何必须真浏览器量。</p>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p>无 —— D1-D14 两轮拍毕(2026-11-15/16), 本计划即冻结执行版(拍板记录见 §06)。</p>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+  <tr><th>#</th><th>议题</th><th>结论</th><th>日期</th></tr>
+  <tr><td>D1</td><td>根因认定</td><td>字符串长度变化 → 右钉组左缘漂移; 不再另做根因取证</td><td>2026-11-15</td></tr>
+  <tr><td>D2</td><td>验收口径</td><td>全过程逐帧零位移, 容差 1px, 含 flux 补间中间帧</td><td>2026-11-15</td></tr>
+  <tr><td>D3</td><td>修复主线</td><td>纯 CSS 定宽槽位; 不改 <code>fmtSpeed</code>/不改任何 JS</td><td>2026-11-15</td></tr>
+  <tr><td>D4</td><td>范围</td><td>只钉 <code>.sb-speed</code> 右组(两枚 <code>.val</code> + 两枚 <code>.lim</code>); 左栏另案</td><td>2026-11-15</td></tr>
+  <tr><td>D5</td><td>flux 补间</td><td>纳入验收, 不改 <code>fx-mount.js</code>(跨界直接 return, 中间串不超上界)</td><td>2026-11-15</td></tr>
+  <tr><td>D6</td><td>计划形态</td><td>新立独立 Open 计划, S 待显式开工, 零代码改动</td><td>2026-11-16</td></tr>
+  <tr><td>D7</td><td><code>.val</code> 定宽值</td><td><code>13ch</code>(覆盖 <code>1023.99 KiB/s</code> 精确上界; 极端 GiB 值允许撑开)</td><td>2026-11-16</td></tr>
+  <tr><td>D8</td><td><code>.lim</code> 定宽值</td><td>同 <code>13ch</code>; 窄屏 <code>@media</code> 退 <code>4ch</code></td><td>2026-11-16</td></tr>
+  <tr><td>D9</td><td>对齐</td><td><code>.val</code> 右对齐 / <code>.lim</code> 左对齐</td><td>2026-11-16</td></tr>
+  <tr><td>D10</td><td>CSS 落点</td><td><code>shared/console_hub_panels.css</code> 尾段单点</td><td>2026-11-16</td></tr>
+  <tr><td>D11</td><td>静态守阵</td><td>钉值 13ch + 共享层恰 1 条 + 四皮肤内无覆盖</td><td>2026-11-16</td></tr>
+  <tr><td>D12</td><td>e2e 形态</td><td>新增独立 spec, 四皮肤, <code>@fast</code>, 4ms 逐帧</td><td>2026-11-16</td></tr>
+  <tr><td>D13</td><td>S 阶段</td><td>S1 CSS / S2 静态守阵 / S3 e2e / S4 全量回归+基线 / S5 回写收口</td><td>2026-11-16</td></tr>
+  <tr><td>D14</td><td>未读徽标</td><td>纳入但零 CSS 改动: <code>.sb-err</code> 变宽向左挤 spacer、速度组不动; 加 e2e 几何守卫 + §07 记录窄屏裁切边界</td><td>2026-11-16</td></tr>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+  <tr><th>#</th><th>风险</th><th>触发条件</th><th>处置</th></tr>
+  <tr><td>R1</td><td>窄屏右组挤爆</td><td><code>.lim</code> 13ch 使右组总宽增加约 18ch(≈130px), 小视口左栏 + 右组超出容器</td><td>S1 在 <code>@media (max-width: 900px)</code> 把 <code>.lim</code> 退到 <code>4ch</code>(覆盖 <code>不限</code>), 牺牲限速值低频跳动换不裁切 —— 窄屏契约只保 <code>.sb-speed</code> 右缘不动, 组内元素允许左移; 900px 取四皮肤共有的最窄断点(另有共有 1320px 一档), 不另造</td></tr>
+  <tr><td>R2</td><td>极端 GiB 值撑开</td><td>速度 ≥ <code>10000 GiB/s</code>(约 10 TiB/s), 超出 13ch</td><td>接受撑开。定 <code>width</code> 会裁掉真实速度数字, 比极端值偶尔跳更糟; 现实网络不可能达到</td></tr>
+  <tr><td>R3</td><td>三位数未读撑宽</td><td><code>errUnread ≥ 100</code>(徽标 3 字符)</td><td>生产极少; <code>.sb-err</code> 向左挤 spacer, 速度组不动; 仅当 spacer 已归零时才可能裁右侧, 见 R4</td></tr>
+  <tr><td>R4</td><td>窄屏裁切</td><td>窄视口下 spacer 已被压到 0, 再遇到 badge 出现或超长限速值</td><td><code>.statusbar{overflow:hidden}</code> 裁右侧, 不是位移; 记录为已知边界, 由 R1 的窄屏退让一并缓解</td></tr>
+  <tr><td>R5</td><td>皮肤 CSS 反向覆盖</td><td>以后某皮肤写<b>更高特异性</b>规则声明 <code>min-width</code>(如 <code>.sb-speed .sb-spd.spd-down .val</code> = (0,4,0))。等/更低特异性的写法(只写 <code>.sb-spd .val</code>, 或原样照抄 <code>.sb-speed .sb-spd .val</code>)实际不生效 —— 四皮肤 CSS 都在共享层之前加载, 同或低特异性恒被后加载的共享规则压掉; 但仍要拦, 防将来共享层改选择器或加载序后翻脸</td><td>S2 判据按「四皮肤内任何命中 <code>.sb-spd .val</code>/<code>.lim</code> 的规则都不得声明 <code>min-width</code>」(子串匹配, 不锚行首), 不比选择器字面; 变异自证两态各验一次: 等特异性声明虽不生效但守阵应红, 更高特异性声明则真覆盖且必须红</td></tr>
+  <tr><td>R6</td><td><code>1ch</code> 随字号漂移</td><td>各皮肤 <code>.val</code> 字号不同(12/12.5px)</td><td><code>ch</code> 是按当前字号算的相对单位, 定宽自动跟随字号; 不写死 px</td></tr>
+  <tr><td>R7</td><td>既有键帽断言撞红</td><td><code>statusbar-kbd-entry.spec.mjs</code> 量 <code>.sb-speed</code> 左右缘</td><td>定宽后该组位置恒定, 断言只会更稳; 若真红按失败行裁决, 不静默改断言</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-16-0130</span> 初版: 会话 grilling 两轮(D1-D14, 全按推荐 + Q14 追加纳入)。要点: 根因为字符串长度而非字形宽(<code>tabular-nums</code> 四皮肤齐备); 方案为共享层 <code>.val</code>/<code>.lim</code> 各 <code>13ch</code> 定宽(<code>.val</code> 右 / <code>.lim</code> 左); 未读徽标经取证判定「已向左撑」改判零改动 + 守卫; S1-S5 待显式开工, 零代码改动。</li>
+  <li><span class="tag">R1 · 26-11-16-0143</span> 评审 R1 修 8 条(1 major / 7 minor, 全部过检零 refute): S2 判据按 @media 层级分层(顶层 .val/.lim 各 1 条 13ch + @media 内 .lim 1 条 4ch, 原「各恰 1 条」与 S1 冲突会恒红)并补三处接线(scan 定义 + scan_js 导入调用 + skins_skin 导入)与共享层单独读; S1 断点点名 900px(四皮肤 @media 唯一交集, 状态栏窄屏仅 prism 有先例); 目标①与 S3 判据补视口限定(宽屏零位移 / 窄屏只保证 .val 与 .sb-speed 右缘); S3 补 route.fetch 必接 installRouteCleanup(flaky 第 5 类硬要求); 修字符数两处(1.00 KiB/s 与 9.99 MiB/s 均 10 字符, 非 11); 修图表引用误读(10px 是字号不是每字符宽, 1ch≈0.6em); R5 触发条件改为等/高特异性覆盖并同步 S2 判据口径。</li>
+  <li><span class="tag">R2 · 26-11-16-0150</span> 复评轮(R2)修 3 条(1 major / 2 minor, 全部过检零 refute)并更正 R1 两处表述: ① 窄屏契约收窄为「只保 .sb-speed 右缘不动」—— .lim 在窄屏只设 4ch 下限, 长限速值仍会撑开并把组内元素一起左推, 原 R1 写的「窄屏只保证 .val 与 .sb-speed 右缘」中 .val 右缘不动几何上不成立(S3 判据同步改); ② 900px 改称「四皮肤共有的最窄断点」—— 四皮肤另有共有 1320px 一档, 原「唯一交集」不成立(S1 与 R1 处置列同步改); ③ R5 触发条件收窄为更高特异性(等/低特异性被后加载的共享层压掉、实际不生效, 但守阵一律拦, 防将来改选择器或加载序翻脸), S2 变异自证拆成等特异性(守阵红)与更高特异性(真覆盖必红)两态, 并明确守阵按子串匹配不锚行首(否则 .sb-speed .sb-spd .val{...} 会漏判)。</li>
+  <li><span class="tag">R3 · 26-11-16-0154</span> 复评轮(R3)修 2 条 minor(全部过检零 refute), 均为引用可复核性: ① §04 S1 断点句的行号错位 —— 「另有共有 1320px 一档」原本插在四个行号之前, 读起来像是给 1320px 作引用, 实际那四个行号是各皮肤 900px 段起点; 改为 900px 段行号在前(atlas:107 / console:76 / flux:76 / prism:675), 1320px 另给真实行号(:103 / :72 / :72 / :668); ② §10 R2 里对 R1 的引文失真 —— 原写「窄屏 .val 右缘也不动」而 R1 实际是「窄屏只保证 .val 与 .sb-speed 右缘」, 改为逐字复述, 不抹掉 R1 当初也写了 .sb-speed 这一事实。正文方案与三处窄屏口径无改动。</li>
+</ul>
+
+</div>
+</body>
+</html>
