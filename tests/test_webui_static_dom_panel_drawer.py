@@ -3233,3 +3233,8 @@ def test_drawer_tooltip_prune_static_guard():
             keep_texts[rel] = read_shared(rel)
         assert literal in keep_texts[rel], \
             f"{rel} 保留面挂点被误删: {desc} 缺特征串 {literal!r}"
+
+    # P2 删 title 残留孤立引号的回归钉
+    dt05 = read_shared("drawer_tpl/05-trackers-health-groups-low.js")
+    assert 'data-fold">' not in dt05, "05 折叠头残留孤立引号(应为 data-fold>)"
+    assert "data-fold>" in dt05, "05 折叠头 data-fold> 不在位"
