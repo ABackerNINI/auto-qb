@@ -1,7 +1,7 @@
 """WebUI 迁移可见性 P0/P1(plan 26-11-04-1042): 快照/标注/组级聚合/指纹/行内徽标/筛选/详情段
 
 ## 测试计划
-- test_state_of_phase_merges: 相位归并到 moving / pending_finalize / done / failed / cancelled(未知按 moving)
+- test_state_of_phase_merges: 相位归并到 moving / pending_finalize / done / failed / cancelled / superseded(未知按 moving)
 - test_member_relocate_origin_mover_and_contract: 成员标注字段、mover 精确归属、origin 来自 job、save_path 不变
 - test_origin_roundtrip_and_legacy_unknown: web/rule/cli origin 落账回读; 旧 state 条目缺 origin 回落 unknown
 - test_snapshot_prefers_active_job_over_old_terminal: 同 hash 活跃新 job 取代终态旧 job, 快照换代并置 full 脏
@@ -93,6 +93,7 @@ def _row(env, recs=None):
         (ru.PHASE_DONE, "done"),
         (ru.PHASE_FAILED, "failed"),
         (ru.PHASE_CANCELLED, "cancelled"),
+        (ru.PHASE_SUPERSEDED, "superseded"),
         ("", "moving"),
         ("legacy_unknown", "moving"),
     ],

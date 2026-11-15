@@ -26,10 +26,12 @@ from dataclasses import replace
 from types import MappingProxyType
 from typing import Optional
 
+from ...infra import relocate_journal
 from ...infra.clock import SYSTEM_CLOCK, Clock
 from ..module import AppContext, BaseModule
 from . import relocate_units as ru
 from .relocate_units import RelocateJob
+from .relocate_common import logger
 from .relocate_lifecycle import LifecycleMixin
 from .relocate_plan import PlanMixin
 from .relocate_exec import ExecMixin
@@ -225,14 +227,52 @@ class RelocateModule(LifecycleMixin, PlanMixin, ExecMixin, BaseModule):
     def _load_jobs(self) -> int:
         """启动/热重载时从 state 恢复 job 账; 非终态的重挂 relocating 登记(抑制缺文件误判),
         挂账 job 的 resuming 登记同步重建(resume_pending 随 state 持久, 重启后账还活着,
-        让路窗口不能等第一次账面变更才出现 —— 走 _sync_relocating 漏斗, issue 26-11-15-0441)"""
+        让路窗口不能等第一次账面变更才出现 —— 走 _sync_relocating 漏斗, issue 26-11-15-0441)。
+        启动对账回写(评审 minor-6): state 盒按 state 服务周期刷盘而 journal 即时落盘 ——
+        journal 写完终相位、state 刷前硬崩的窗口, 重启按陈旧 state 恢复前段相位而 journal
+        已退休(daemon 不再认领)= 永久悬挂; journal 相位是收尾账的跨进程投影(I3), 终相位
+        回写 = 按投影收敛且由主循环落笔(「终态只有主循环能写」不破), adopted failed 交
+        既有启动对账重判(reconcile flag), superseded/done/cancelled 直接收敛为终态。
+        采纳带生命周期锚定(评审 major-R2-1): 仅「journal ts 可解析且 >= job.created_at」
+        的本世在途账才回写 —— 同键重发后上一世的终相位 journal 可能仍在盘上(_arm 前不清),
+        无锚采纳会把在途迁移误终态化; 残留/锚定不上的一律搁置, 留给 _arm 侧既有清理口。"""
         self._jobs_loaded = True  # 本会话已接管 job 账(stop() 补写闸的依据, 见 __init__ 注)
         box = self._state_jobs()
         n = 0
+        reconciled = 0
         for jid, d in list(box.items()):
             job = ru.job_from_dict(d)
             if job is None:
                 continue
+            journal = relocate_journal.read_journal(self._data_dir(), jid) or {}
+            j_phase = str(journal.get("phase") or "")
+            if not job.is_terminal and j_phase in relocate_journal.STOP_PHASES:
+                # 生命周期锚定(评审 major-R2-1): job_id = sha1(mover|src|dst) 同键复用 ——
+                # 同键重发的新生命周期在前段相位(moving/watching/moved)全程, 盘上可能躺着
+                # 上一世的终相位 journal(清理唯一入口 _reset_stale_terminal_journal 挂在
+                # _arm, 前段不跑), 无锚采纳会把在途迁移误终态化且终态无恢复面(_recover 只
+                # 认 MOVING)。只认「ts 可解析且 >= created_at」的本世在途账(journal 即时
+                # 落盘先于 state 周期刷盘的失窗, ts 必不早于本世建账锚); ts < created_at =
+                # 上一世残留、created_at 缺失的旧账 = 锚定不上 —— 一律搁置不采纳, state
+                # 原样留给 _arm 侧既有清理口(_reset_stale_terminal_journal)。
+                anchor = float(job.created_at or 0.0)
+                try:
+                    ts_f = float(journal.get("ts"))  # type: ignore[arg-type]
+                except (TypeError, ValueError):
+                    ts_f = None
+                if anchor > 0 and ts_f is not None and ts_f >= anchor:
+                    job = replace(job, phase=j_phase)
+                    reconciled += 1
+                    logger.warning(
+                        f"relocate | 启动对账: job {jid} state 相位陈旧({d.get('phase')}), "
+                        f"按 journal 终相位回写 {j_phase}(journal 即时落盘先于 state 周期刷盘的失窗收敛)"
+                    )
+                else:
+                    logger.debug(
+                        f"relocate | 启动对账: job {jid} journal 终相位({j_phase})锚定不上本生命周期"
+                        f"(created_at={anchor}, ts={journal.get('ts')}), 搁置不采纳(state 原样, "
+                        "上一世残留交 _arm 侧既有清理口)"
+                    )
             self._jobs[jid] = job
             # 恢复运行期进度: 已建链接不重建; 要不要补发 setLocation 由 _recover 按 qB 现场
             # 定夺(不能一律 False —— 账先落、指令后发, 两步之间崩溃的 job 会永远等不到搬迁)
@@ -250,6 +290,8 @@ class RelocateModule(LifecycleMixin, PlanMixin, ExecMixin, BaseModule):
                 "reconcile": job.phase == ru.PHASE_FAILED,
             }
             n += 1
+        if reconciled:
+            self._persist()  # 回写落账(状态盒; 磁盘刷盘仍由 state 服务周期兜底)
         self._sync_relocating()
         self._publish_snapshot()
         return n
@@ -257,11 +299,16 @@ class RelocateModule(LifecycleMixin, PlanMixin, ExecMixin, BaseModule):
     def _sync_relocating(self) -> None:
         """relocating 登记 = 非终态 job 的成员并集(P4: 缺文件扫描与跳检闸门据此让路)
 
+        S1a(单活任务模型 D4)追加: plan.extra_members(收官移交的前任成员)一并入登记
+        —— 前任收官即出活集, 其成员的让路保护(fuse/缺文件扫描)由接管 job 承接, 与旧
+        模型里前任活着时的登记连续性等价。
+
         S4b(D16 删种拦截)追加: 活动别名根登记 store.relocating_alias_roots
         ({src: (job_id, alias_kind, alias_paths)}, R3 形态感知取数面, 计划 26-11-13-0448
-        §03 R3; 条目四元组单点产出 = ru.alias_roots_of) —— QbApi.torrents_delete 的
-        拦截面据此判「save_path 位于活动别名之下」并按形态分流 verdict(文件级按交集谓词
-        精判 / 目录级全量拦), 随本单点(每次 job 变更整表重算)自动增删, 终态即撤拦。
+        §03 R3; 条目四元组单点产出 = ru.alias_roots_of, 含移交条目的继承根) ——
+        QbApi.torrents_delete 的拦截面据此判「save_path 位于活动别名之下」并按形态分流
+        verdict(文件级按交集谓词精判 / 目录级全量拦), 随本单点(每次 job 变更整表重算)
+        自动增删, 终态即撤拦。
         末尾附带刷新 resuming 登记(_sync_resuming): 本方法是 job 变更的重算漏斗(_set_job /
         _load_jobs / 新建 job 都经此), 账变更路径由 _note_resume_state 直呼补齐 —— 两路
         合起来覆盖登记的全部变更面(issue 26-11-15-0441)。
@@ -282,6 +329,7 @@ class RelocateModule(LifecycleMixin, PlanMixin, ExecMixin, BaseModule):
         for job in self.active_jobs():
             reg.update(job.hashes)
             reg.update(job.resume_hashes)
+            reg.update(str(h) for h in ((job.plan or {}).get("extra_members") or ()) if str(h))
         for src, job_id, kind, paths in ru.alias_roots_of(self.active_jobs()):
             roots[src] = (job_id, kind, paths)
         self._sync_resuming()

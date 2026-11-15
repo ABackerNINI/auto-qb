@@ -286,6 +286,12 @@ sink 类键 obs_listen/obs_roster/obs_owner + 接线点处置类 listen 补齐, 
   warning 留痕 60s 一条 + obs 死证种子原样(roster None => tick 整拍不动); 第二世通道
   恢复(健康零观测)=> 回 L1 死证立即改写(零「退 L2」留痕, 无稳定期)—— 行为与接线前
   等价的端到端往返
+
+单活任务模型移交面(S1a, 计划 26-11-15-2340 §03.2 D4; 前任 spec 退休后其成员改写由
+接管 spec 的 extra_srcs 承载):
+- test_spec_extra_srcs_rewrite_member_from_legacy_root: spec.extra_srcs 在场 => 成员
+  fastresume 指向前任旧根也按 {旧根 -> dst} 改写(rewritten 落盘); 反证: 无 extra_srcs
+  的旧形状下同一成员 unmatched 出账(不误写), 旧 spec 形状行为不变
 """
 import builtins
 import io
@@ -1413,6 +1419,37 @@ def test_spec_retarget_mid_window_rewrites_remaining_to_new_dst(tmp_path, monkey
     fr_a = _fr_path(tmp_path, h_a)
     val_a, _pos = frmod.bdecode(fr_a.read_bytes())
     assert val_a[b"save_path"] == (dst1 + "\\m-a").encode("utf-8"), "A 维持改道前的 dst1(已写部分不追改)"
+
+
+def test_spec_extra_srcs_rewrite_member_from_legacy_root(tmp_path, monkeypatch):
+    """[单活模型移交面] spec.extra_srcs 在场: 成员 fastresume 指向前任旧根(extra_srcs)
+    => 按多旧根逐根改写到 spec.dst(前任 spec 退休后其成员改写由接管 spec 承载);
+    反证: 无 extra_srcs 的旧形状下同一成员 unmatched 出账(不误写), 旧 spec 形状行为不变"""
+    tmp_path.joinpath("srcA").mkdir()
+    tmp_path.joinpath("srcB").mkdir()
+    tmp_path.joinpath("dstC").mkdir()
+    backup = tmp_path / "BT_backup"
+    root_a, root_b, dst_c = str(tmp_path / "srcA"), str(tmp_path / "srcB"), str(tmp_path / "dstC")
+    h_legacy = _member_fixture(backup, b"m-l", root_a)  # fastresume 指向前任旧根 A
+    data_dir = str(tmp_path / "data")
+    _write_job(tmp_path, data_dir, "job-2", [h_legacy], src=root_b, dst=dst_c)
+    spec = rj.read_spec(data_dir, "job-2")
+    spec["extra_srcs"] = [root_a]
+    rj.write_spec(data_dir, "job-2", spec)
+    state = {"up": False}
+    _stub_qb(monkeypatch, state)
+    assert _run(data_dir) == "idle"
+    rw = rj.read_rewrites(data_dir, "job-2")
+    assert rw[h_legacy]["status"] == "rewritten", rw
+    fr = _fr_path(tmp_path, h_legacy)
+    val, _pos = frmod.bdecode(fr.read_bytes())
+    assert val[b"save_path"] == (dst_c + "\\m-l").encode("utf-8"), "落盘到接管 spec 的 dst"
+    # 反证: 无 extra_srcs 时指向旧根的新成员 unmatched 出账(只试 own src B, 不命中不误写)
+    h_ctrl = _member_fixture(backup, b"m-c", root_a)
+    _write_job(tmp_path, data_dir, "job-3", [h_ctrl], src=root_b, dst=dst_c)
+    assert _run(data_dir) == "idle"
+    rw3 = rj.read_rewrites(data_dir, "job-3")
+    assert rw3[h_ctrl]["status"] == "unmatched", rw3
 
 
 def test_spec_unreadable_mid_window_skips_job_without_stale_rewrite(tmp_path, monkeypatch):

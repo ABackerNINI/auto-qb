@@ -1158,43 +1158,79 @@ def _rewrite_member(spec: dict, member: dict, prev: Optional[dict]) -> dict:
       job 账
     - FastresumeError/ValueError/OSError -> failed: 不出账, fails 计数承前累计 +1
       (每失败一次进一账), 窗口内随拍重试(D8)、下一窗口重放
+
+    多旧根改写(S1a 单活任务模型, 计划 26-11-15-2340 §03.2 D4): spec.extra_srcs 在场时
+    (移交前任的旧根清单, 主循环 arm 侧归一去重), 逐根 retarget 并合并结果 —— 任一根
+    written 即 rewritten, 无 written 有 already 即 already, 全部 unmatched 才 unmatched;
+    not_found(定位失败)在首根即收口(同一 fastresume 换根定位结果不变)。无 extra_srcs
+    时行为与旧单根口径逐字节一致。
     """
     backup = str(spec.get("bt_backup") or "")
-    old_root = str(spec.get("src") or "")
     new_root = str(spec.get("dst") or "")
     h1 = str(member.get("hash_v1") or "")
     h2 = str(member.get("hash_v2") or "")
     fails = int((prev or {}).get(rj.REWRITE_FAILS_KEY) or 0)
-    try:
-        report = fastresume.retarget(backup, h1, h2, old_root, new_root)
-    except (fastresume.FastresumeError, ValueError, OSError) as e:
-        return {"status": "failed", "error": str(e), rj.REWRITE_FAILS_KEY: fails + 1}
-    if report.status == "written":
+    roots = [str(spec.get("src") or "")]
+    extra_raw = spec.get("extra_srcs")
+    if isinstance(extra_raw, (list, tuple)):
+        roots.extend(str(s) for s in extra_raw if str(s or "").strip())
+    # 归一去重(分隔符风味/大小写折叠): 任一根重复 retarget 都是空转, 与 src 等值的不重复
+    seen_roots = set()
+    ordered_roots = []
+    for root in roots:
+        if not root.strip():
+            continue
+        key = os.path.normcase(os.path.normpath(root.replace("\\", "/")))
+        if key in seen_roots:
+            continue
+        seen_roots.add(key)
+        ordered_roots.append(root)
+    written_keys: list = []
+    already_keys: list = []
+    unmatched_keys: list = []
+    any_written = False
+    any_already = False
+    last_path = ""
+    for old_root in ordered_roots:
+        try:
+            report = fastresume.retarget(backup, h1, h2, old_root, new_root)
+        except (fastresume.FastresumeError, ValueError, OSError) as e:
+            return {"status": "failed", "error": str(e), rj.REWRITE_FAILS_KEY: fails + 1}
+        if report.status == "not_found":
+            # R4 配套(计划 26-11-13-0448 §03 R4): fastresume 缺失 = 成员已被删(E5 实证),
+            # 跳过并记 settled 收口(不再随窗口无限重放); 不计失败 —— 删种不是改写故障
+            return {"status": rj.REWRITE_MEMBER_GONE, rj.REWRITE_FAILS_KEY: fails}
+        last_path = report.path or last_path
+        unmatched_keys.extend(report.unmatched)
+        if report.status == "written":
+            any_written = True
+            written_keys.extend(report.rewritten)
+            already_keys.extend(report.already)
+        elif report.already:
+            any_already = True
+            already_keys.extend(report.already)
+    if any_written:
         return {
             "status": "rewritten",
-            "path": report.path or "",
-            "keys": list(report.rewritten),
-            "already": list(report.already),
-            "unmatched": list(report.unmatched),
+            "path": last_path,
+            "keys": written_keys,
+            "already": already_keys,
+            "unmatched": unmatched_keys,
             rj.REWRITE_FAILS_KEY: fails,
         }
-    if report.status == "not_found":
-        # R4 配套(计划 26-11-13-0448 §03 R4): fastresume 缺失 = 成员已被删(E5 实证),
-        # 跳过并记 settled 收口(不再随窗口无限重放); 不计失败 —— 删种不是改写故障
-        return {"status": rj.REWRITE_MEMBER_GONE, rj.REWRITE_FAILS_KEY: fails}
-    if report.already:
+    if any_already:
         return {
             "status": "already",
-            "path": report.path or "",
-            "keys": list(report.already),
-            "unmatched": list(report.unmatched),
+            "path": last_path,
+            "keys": already_keys,
+            "unmatched": unmatched_keys,
             rj.REWRITE_FAILS_KEY: fails,
         }
     return {
         "status": "unmatched",
-        "path": report.path or "",
+        "path": last_path,
         "keys": [],
-        "unmatched": list(report.unmatched),
+        "unmatched": unmatched_keys,
         rj.REWRITE_FAILS_KEY: fails,
     }
 

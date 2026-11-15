@@ -44,6 +44,7 @@ function _relocateSig(r) {
 const RELOCATE_STATE_TEXT = {
   moving: "迁移中", pending_finalize: "待收尾", failed: "迁移失败",
   mixed: "迁移多任务", done: "已完成", cancelled: "已撤销",
+  superseded: "被接管(历史)",
 };
 /* 状态 -> 色调映射(plan 26-11-07-2344 S2, 取代旧 RELOCATE_STATE_CLASS): 状态唯一载体 = 颜色
  * (.rel-tone-<tone>, row_lang.css 单点定义), 无底形无边框无药丸。done / cancelled 不在表内 ——

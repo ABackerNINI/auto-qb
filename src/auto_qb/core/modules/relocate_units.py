@@ -83,7 +83,12 @@ PHASE_REWRITTEN = "rewritten"
 PHASE_DONE = "done"
 PHASE_FAILED = "failed"
 PHASE_CANCELLED = "cancelled"
-TERMINAL_PHASES = frozenset({PHASE_DONE, PHASE_FAILED, PHASE_CANCELLED})
+# 只读历史态(单活任务模型 D4/D5, 计划 26-11-15-2340 §03.2): 同组续迁发起瞬间旧任务收官
+# 为 superseded —— 不可再推进(相位机不派发)、不可撤销(终态守卫)、无单独删除入口,
+# 其未完成的别名工作整体移交新任务(plan.inherited); 记录随新任务存在而保留, 随新任务
+# 整链消亡。journal 侧同值入 STOP_PHASES(daemon 即时退休, 前任 spec 不再驱动改写)。
+PHASE_SUPERSEDED = "superseded"
+TERMINAL_PHASES = frozenset({PHASE_DONE, PHASE_FAILED, PHASE_CANCELLED, PHASE_SUPERSEDED})
 # 收尾窗口(D16 变更承重): armed/rewritten 期间数据已在新位置、成员经别名做种 —— 此窗口内
 # 往旧根添加非本组种子, 其 save_path 记在旧根, 会成为删链门(等值 OR 前缀)的永久依赖,
 # 别名将永不删; evaluate_add 的 confirm 是唯一预防面(§3.6 第 8 行 / D16)。
@@ -320,6 +325,53 @@ def plan(
 
 
 @dataclass(frozen=True)
+class InheritedAlias:
+    """移交条目(单活任务模型 D4, 计划 26-11-15-2340 §03.2): 旧任务收官为只读历史时,
+    其未完成的别名工作在新任务账上的持久记录(plan.inherited 条目的归一形态)
+
+    - src/scope/alias_kind: 前任的作用域三件套(继承面消费: scope_hit 组键解析 /
+      alias_roots_of 删种拦截 / blocks_relocation 目录 hazard / 删链门依赖扫描);
+    - alias_paths: 前任建成的全部链接(统一改指的施工清单 —— 新任务把它们逐条改指
+      自己的终位置, 别名始终直指物理数据, I2);
+    - dst: 前任终位置(改指收敛前链接的真实指向)—— 添加预检在改指未收敛窗(moving/
+      watching/moved)按它建模 actual(评审 should2: 收敛前不得按新终位置谎报);
+    - link_kind: 前任 plan 的形态(改指重建缺失链接时的形态回落, 与 retarget_alias 的
+      kind 参数同源)。只进继承面判定与执行, 不进新任务的核验集合(hashes 不动)。
+    """
+
+    job_id: str
+    src: str
+    scope: str
+    alias_kind: str
+    alias_paths: Tuple[str, ...] = ()
+    link_kind: str = ""
+    dst: str = ""
+
+
+def inherited_entries_of(plan: Optional[dict]) -> tuple:
+    """plan.inherited -> (InheritedAlias, ...) 归一视图(坏形条目逐条跳过, 不炸)"""
+    raw = (plan or {}).get("inherited")
+    if not isinstance(raw, (list, tuple)):
+        return ()
+    out = []
+    for e in raw:
+        if not isinstance(e, dict):
+            continue
+        out.append(
+            InheritedAlias(
+                job_id=str(e.get("job_id") or ""),
+                src=str(e.get("src") or ""),
+                scope=str(e.get("scope") or ""),
+                alias_kind=str(e.get("alias_kind") or ""),
+                alias_paths=tuple(str(p) for p in (e.get("alias_paths") or ()) if str(p or "").strip()),
+                link_kind=str(e.get("link_kind") or ""),
+                dst=str(e.get("dst") or ""),
+            )
+        )
+    return tuple(out)
+
+
+@dataclass(frozen=True)
 class RelocateJob:
     """一个在途迁移的登记值对象(state.json relocate.jobs.<job_id> 的镜像; P3 落账)
 
@@ -381,6 +433,17 @@ class RelocateJob:
         return self.phase in TERMINAL_PHASES
 
     @property
+    def inherited(self) -> tuple:
+        """移交条目视图(单活任务模型 D4): plan.inherited 的归一形态(InheritedAlias 元组)
+
+        旧任务收官为只读历史时, 其未完成的别名工作记录在新任务的 plan.inherited 上
+        (随 state.json 持久, 重启可重建 —— 移交时旧 job.alias_paths 与 plan.files 冻结在
+        条目里, 断点形态可由此反推, 无需独立进度账; 改指幂等由 retarget_alias 的
+        skipped 面兜底)。空元组 = 无移交(常规首迁, 零行为差)。
+        """
+        return inherited_entries_of(self.plan)
+
+    @property
     def scope_covers_dir(self) -> bool:
         """作用域是否**覆盖整个目录**(目录别名形态才是)
 
@@ -408,14 +471,24 @@ class RelocateJob:
         _buckets 查不到组, 误判单成员直搬)。
 
         形态判据优先 alias_kind(落账字段, 历史/测试构造的 job 可能没有 plan), plan.form 兜底。
+        单活任务模型(D4)追加**继承面**: 本 job 接管的前任作用域(移交条目)同样命中 ——
+        前任收官为只读历史后不再入活集, 其旧根上的成员账面(save_path 仍记在旧根)必须
+        经活任务的继承条目解析到本 job 的终位置, 组键才不裂(等价于旧模型里前任活着时
+        的 scope_hit, 消费方 resolve_physical 无感)。
         """
-        if _norm(save_path) != _norm(self.src):
-            return False
-        kind = self.alias_kind or {"dir_alias": "dir", "file_links": "file"}.get((self.plan or {}).get("form"), "")
-        if kind == "dir":
-            return _within(self.scope, landing)
-        if kind == "file":
-            return _norm(landing) == _norm(self.scope)
+        if _norm(save_path) == _norm(self.src):
+            kind = self.alias_kind or {"dir_alias": "dir", "file_links": "file"}.get((self.plan or {}).get("form"), "")
+            if kind == "dir" and _within(self.scope, landing):
+                return True
+            if kind == "file" and _norm(landing) == _norm(self.scope):
+                return True
+        for entry in self.inherited:
+            if _norm(save_path) != _norm(entry.src):
+                continue
+            if entry.alias_kind == "dir" and _within(entry.scope or entry.src, landing):
+                return True
+            if entry.alias_kind == "file" and _norm(landing) == _norm(entry.scope or entry.src):
+                return True
         return False
 
     def blocks_relocation(self, hashes: Sequence[str], content_root: str) -> bool:
@@ -432,13 +505,19 @@ class RelocateJob:
         rewritten 期间别名在位, 别组此刻再迁, 数据会穿链接搬进旧 job 的目标、混进旧 job 的
         删链门依赖集(P7 真机 S14b 实测依据不变)。逐文件链接只挂在组内文件上、不改变目录
         形态, 无重定向 hazard, 故不适用本分支; direct 单成员组同理(无别名即无链接可套)。
+        单活任务模型(D4)追加**继承面**: 接管的目录别名(前任的 junction, 移交后仍挂在
+        旧根)同样是整目录重定向 —— 别组此刻再迁进该作用域, 数据会穿继承别名混进本 job
+        的目标与删链门依赖集, 与自有目录别名同款 hazard, 同款拦截。
         """
         if self.is_terminal:
             return False
         if self.touches(hashes):
             return self.phase not in FINALIZE_WINDOW_PHASES
-        if (self.plan or {}).get("form") == FORM_DIR_ALIAS:
-            return _within(self.scope, content_root)
+        if (self.plan or {}).get("form") == FORM_DIR_ALIAS and _within(self.scope, content_root):
+            return True
+        for entry in self.inherited:
+            if entry.alias_kind == "dir" and _within(entry.scope or entry.src, content_root):
+                return True
         return False
 
 
@@ -624,11 +703,11 @@ def evaluate_group(facts: GroupFacts) -> dict:
         if cls != CLS_BLOCKED:
             cls = CLS_CONFIRM
 
-    # ---- 未收尾拦截(先于一切: §3.6 第 14 行 / S10; D15 收窄: 收尾窗放行, S5 文案新口径) ----
-    # 新口径(计划 26-11-05-0808 S5): 收尾窗(armed/rewritten)的组**可**直接再迁移 ——
-    # armed 态走 supersede 重定向(旧迁移自动改道新目标), rewritten 态链式独立双门;
-    # 仍拦的只有两类: 同组前段相位(moving/watching/moved, 叠加 setLocation 互相覆盖)、
-    # 别组落进目录别名作用域(写入会被整体重定向进旧 job 目标)。
+    # ---- 未收尾拦截(先于一切: §3.6 第 14 行 / S10; D15 收窄: 收尾窗放行, S1a 文案新口径) ----
+    # 新口径(计划 26-11-15-2340 §03.2 D4 单活任务模型): 收尾窗(armed/rewritten)的组
+    # **可**直接再迁移 —— 旧迁移在发起瞬间收官为只读历史(superseded), 链接工作移交
+    # 新迁移统一改指; 仍拦的只有两类: 同组前段相位(moving/watching/moved, 叠加
+    # setLocation 互相覆盖)、别组落进目录别名作用域(写入会被整体重定向进旧 job 目标)。
     for job in facts.jobs:
         if not job.blocks_relocation(facts.hashes, content_root):
             continue
@@ -636,7 +715,7 @@ def evaluate_group(facts: GroupFacts) -> dict:
             _block(
                 GATE_UNFINISHED, f"该组有搬迁在途的迁移(job {job.job_id} 相位 {job.phase}): 叠加的 setLocation 会"
                 "互相覆盖、链接套链接让旧迁移失效 —— 等搬迁完成建好别名进入收尾窗(armed/rewritten)后即可直接"
-                "再迁移, 旧迁移会自动改道(supersede)新目标, 无需先撤销"
+                "再迁移, 旧迁移会立即收官为只读历史(superseded)并把链接工作移交给新迁移统一改指, 无需先撤销"
             )
         else:
             _block(
@@ -876,6 +955,79 @@ def _file_link_roots(src: str, alias_paths: Sequence[str]) -> tuple:
     return tuple(roots)
 
 
+def _inherited_add_confirm(facts: "AddFacts", job, entry: "InheritedAlias", base: dict) -> Optional[dict]:
+    """移交面的添加预检 confirm(单活任务模型 D4): 落点命中接管的前任别名作用域/链接位
+
+    前任收官为历史后, 其旧根上的写入重定向面(D16 confirm 是唯一预防面)由活任务的
+    继承条目承接 —— 判据与主循环的形态感知分流同形, 锚从 job.src/scope 换到条目的
+    src/scope, actual 按**改指收敛与否**分流(评审 should2/minor-4: 收敛前不得按新终
+    位置谎报真实落点; 收敛判据 = 执行侧持久标记 plan.handover_done, 非相位近似):
+    - 目录条目: 恰等条目 src(等值面)或 landing 落在条目 anchor(重定向面)内 => confirm。
+      标记在(改指已完成): actual 按接管 job 的终位置建模; 标记缺席(改指未发生/未收敛,
+      移交别名仍指前任终位置 entry.dst): actual 按前任终位置建模, 文案注明「改指未收敛,
+      完成后统一指向 job.dst」;
+    - 文件条目: 落点在条目 src 下且撞链接路径/成员链接根 => confirm(保守面: 移交条目
+      不复算「异名放行」的精判 —— 宁拦勿漏, 账面异常形态统一保守); alias_paths 缺失
+      = 账面不可得 => 保守 confirm。
+    无命中 => None(调用方继续扫其余面)。
+    """
+    landing = base["requested_path"]
+    if entry.alias_kind == "dir":
+        anchor = entry.scope or entry.src
+        hit_redirect = under_alias_root(landing, (anchor, )) is not None
+        if _norm(facts.save_path) != _norm(entry.src) and not hit_redirect:
+            return None
+        notes = [f"目标卷剩余 {facts.target_free} 字节" if facts.target_free is not None else "目标卷剩余不可判定"]
+        # 改指收敛判据 = 执行侧落盘的持久标记 plan.handover_done(评审 minor-4): 改指在
+        # moved 相位内完成, 相位词表表达不了「已收敛」—— 相位近似在「收敛后仍 moved」的
+        # 窗口会把 actual 按前任终位置谎报; 标记缺席(旧账/未跑到)一律按未收敛保守建模。
+        if (job.plan or {}).get("handover_done"):
+            actual = _join(_join(job.dst, _rel_under(anchor, entry.src)), _rel_under(landing, anchor))
+            text = (
+                f"该目录的迁移已由新任务接管收尾(job {job.job_id} 相位 {job.phase}, 数据将迁到 {job.dst}, "
+                f"前任别名已移交并统一改指): 新种子将经别名落到 {actual}, 但账面会记在旧路径 —— "
+                "成为删链门的依赖 —— 请等收尾完成后再添加, 或确认接受依赖后继续"
+            )
+        else:
+            # 改指未收敛(未跑到 handover 或收敛标记缺失): 移交别名仍指前任终位置 ——
+            # actual 按 entry.dst 建模(条目缺 dst 的旧账 = 建模锚不可得, actual 置空不谎报)
+            actual = _join(_join(entry.dst, _rel_under(anchor, entry.src)), _rel_under(landing, anchor)) \
+                if entry.dst else None
+            text = (
+                f"该目录的迁移已由新任务接管(job {job.job_id} 相位 {job.phase}, 移交改指尚未收敛): "
+                f"新种子暂经前任别名落到 {actual or '(以现场别名为准)'}"
+                f", 改指完成后将统一指向 {job.dst} —— 账面会记在旧路径成为删链门的依赖 —— "
+                "请等收尾完成后再添加, 或确认接受依赖后继续"
+            )
+        return {
+            **base,
+            "cls": CLS_CONFIRM,
+            "actual_path": actual,
+            "volume_free": facts.target_free,
+            "reasons": [_reason("finalize_window", CLS_CONFIRM, text)],
+            "notes": notes,
+        }
+    if entry.alias_kind == "file":
+        if under_alias_root(facts.save_path, (entry.src, )) is None:
+            return None
+        if not entry.alias_paths:
+            text = (
+                f"该目录的迁移已由新任务接管收尾(job {job.job_id} 相位 {job.phase}, 前任别名已移交): "
+                "移交链接账面不可得, 保守起见请等收尾完成后再添加, 或确认接受依赖后继续"
+            )
+            return {**base, "cls": CLS_CONFIRM, "reasons": [_reason("finalize_window", CLS_CONFIRM, text)], "notes": []}
+        if any(_norm(landing) == _norm(ap) for ap in entry.alias_paths) or \
+                under_alias_root(landing, _file_link_roots(entry.src, entry.alias_paths)) is not None:
+            text = (
+                f"该目录的迁移已由新任务接管收尾(job {job.job_id} 相位 {job.phase}, 前任别名已移交并统一改指): "
+                f"落点 {landing} 与移交别名链接/其内容根重叠 —— 写入可能与链接交叉, 账面也会记在旧路径成为"
+                "删链门的依赖 —— 请等收尾完成后再添加, 或确认接受依赖后继续"
+            )
+            return {**base, "cls": CLS_CONFIRM, "reasons": [_reason("finalize_window", CLS_CONFIRM, text)], "notes": []}
+        return None
+    return None
+
+
 def evaluate_add(facts: AddFacts) -> dict:
     """往别名作用域添加种子的三分流(ok=无影响 / confirm=弹「请求路径→实际落点→卷剩余」二次确认)
 
@@ -1052,6 +1204,23 @@ def evaluate_add(facts: AddFacts) -> dict:
                     ],
                 "notes": [],
             }
+    # ---- 1b. 移交面(单活任务模型 D4): 接管前任作用域的活任务, 其继承条目同样是
+    # confirm 面 —— 放在 (3) 异名放行之前(宁拦勿漏: 异名放行只对自有面成立)。
+    base_add = {
+        "save_path": facts.save_path,
+        "name": facts.name,
+        "requested_path": landing,
+        "actual_path": None,
+        "volume_free": None,
+    }
+    for job in facts.jobs:
+        if job.is_terminal:
+            continue
+        for entry in job.inherited:
+            hit = _inherited_add_confirm(facts, job, entry, base_add)
+            if hit is not None:
+                return hit
+
     if finalize_ok and not link_pending:
         # (3) 异名静默放行(§3.6 场景 1): 数据落原盘真实目录, 不经别名、不依赖别名
         return {**base, "cls": CLS_OK, "reasons": [], "notes": []}
@@ -1594,12 +1763,19 @@ def alias_roots_of(jobs: Iterable[RelocateJob]) -> tuple:
     R3(计划 26-11-13-0448 §03 R3): 条目随带 alias_kind/alias_paths —— 拦截侧文件级 job
     的 verdict 换「文件清单 x alias_paths 交集」谓词(file_alias_intersects)按形态精判,
     目录级维持全量拦; 四元组在本单点一次产出, 登记与判据不造第二份口径。
+    单活任务模型(D4)追加**继承面**: 前任收官为历史后不再入活集, 其移交别名(仍挂在
+    旧根, 由活任务统一改指)的删种拦截登记由活任务承接 —— 每条继承条目按自己的旧根
+    单独产出一项(逐根判, 消费侧 roots 字典按 src 键天然支持同 job 多根)。
     """
     out = []
     for job in jobs or ():
-        if job.is_terminal or not job.alias_kind or not job.alias_paths:
+        if job.is_terminal:
             continue
-        out.append((job.src, job.job_id, job.alias_kind, job.alias_paths))
+        if job.alias_kind and job.alias_paths:
+            out.append((job.src, job.job_id, job.alias_kind, job.alias_paths))
+        for entry in job.inherited:
+            if entry.alias_kind and entry.alias_paths:
+                out.append((entry.src, job.job_id, entry.alias_kind, entry.alias_paths))
     return tuple(out)
 
 

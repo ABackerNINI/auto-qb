@@ -57,11 +57,14 @@ def _read_json(path: str) -> Optional[dict]:
 
 # ---------- journal(daemon 写改写账 / auto-qb 写终态与回滚) ----------
 
-# journal 里出现这三个相位 = auto-qb 侧已收口(撤销/收尾完成/失败终态), daemon 必须退出/
-# 放弃该 job —— 否则已终结 job 的改写账会被继续重放(D12: 取消/收口即时生效)。failed 是
-# 主循环对账消费收尾校验失败证据时写下的终相位(与 done/cancelled 同为终态: 非终态写者
-# 不得覆盖, 失败证据不被 daemon 重拉后的记账/翻相抹掉; 终态互覆仍 last-writer-wins)
-STOP_PHASES = frozenset({"done", "cancelled", "failed"})
+# journal 里出现这些相位 = auto-qb 侧已收口(撤销/收尾完成/失败终态/单活模型历史态),
+# daemon 必须退出/放弃该 job —— 否则已终结 job 的改写账会被继续重放(D12: 取消/收口
+# 即时生效)。failed 是主循环对账消费收尾校验失败证据时写下的终相位(与 done/cancelled
+# 同为终态: 非终态写者不得覆盖, 失败证据不被 daemon 重拉后的记账/翻相抹掉; 终态互覆
+# 仍 last-writer-wins)。superseded 是单活任务模型(计划 26-11-15-2340 §03.2 D4)的只读
+# 历史态: 续迁发起瞬间前任收官 —— 其 spec 不再驱动改写(成员改写由接管新任务的 spec
+# 承载, extra_srcs 覆盖旧根), daemon 据此即时退休。
+STOP_PHASES = frozenset({"done", "cancelled", "failed", "superseded"})
 
 
 def write_journal(data_dir: str, job_id: str, payload: dict) -> bool:

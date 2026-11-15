@@ -13,10 +13,12 @@ from ..core.modules import relocate_units as ru
 # 数值(漂移即展示谎报), 上界改名/改值由 test_webui_relocate_visibility 的钉扎兜住。
 from ..core.modules.relocate_lifecycle import _RESUME_RETRY_MAX as RESUME_RETRY_MAX
 
-# 相位 -> 展示状态归并(plan 数据契约; S4 相位模型: 收尾窗 = {armed, rewritten}):
+# 相位 -> 展示状态归并(plan 数据契约; S4 相位模型: 收尾窗 = {armed, rewritten};
+# S1a 单活任务模型追加 superseded 只读历史态, 计划 26-11-15-2340 §03.2 D4):
 #   moving / watching                    -> moving(进行中)
 #   moved / armed / rewritten            -> pending_finalize(待收尾, fastresume 改写账在途)
 #   done / failed / cancelled            -> 同名终态
+#   superseded                           -> superseded(被接管: 只读历史, 链接工作移交活任务)
 MOVING_PHASES = frozenset({ru.PHASE_MOVING, ru.PHASE_WATCHING})
 PENDING_PHASES = frozenset({
     ru.PHASE_MOVED,
@@ -24,9 +26,10 @@ PENDING_PHASES = frozenset({
     ru.PHASE_REWRITTEN,
 })
 _ACTIVE_STATES = frozenset({"moving", "pending_finalize"})
-# 组级优先序: failed > moving > pending_finalize > done。cancelled 不进组级标注
-# (已撤销 = 无迁移在进行, 不挂徽标)。
-_PRIORITY = {"failed": 4, "moving": 3, "pending_finalize": 2, "done": 1}
+# 组级优先序: failed > moving > pending_finalize > done > superseded。cancelled 不进组级标注
+# (已撤销 = 无迁移在进行, 不挂徽标); superseded 只读历史不进活跃集, 但组级聚合仍给它
+# 最低优先序(前任专属成员的标注不被当作未知相位误判成 moving)。
+_PRIORITY = {"failed": 4, "moving": 3, "pending_finalize": 2, "done": 1, "superseded": 0}
 
 
 def state_of_phase(phase: str) -> str:
@@ -42,6 +45,8 @@ def state_of_phase(phase: str) -> str:
         return "failed"
     if p == ru.PHASE_CANCELLED:
         return "cancelled"
+    if p == ru.PHASE_SUPERSEDED:
+        return "superseded"
     return "moving"
 
 

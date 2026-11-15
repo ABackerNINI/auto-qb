@@ -544,13 +544,20 @@ class PlanMixin:
     def _own_alias_hardlink(self, st: os.stat_result) -> bool:
         """nlink>1 的代表文件是否挂着**自有别名硬链接**(S5 链式再迁移的放行面)
 
-        判定: 任一活跃 job 的 alias_paths 中存在与代表文件同 inode(dev+ino)的路径 ——
-        同一份数据的另一个名字正是前任 job 建的逐文件别名(hardlink 形态), 不是第三方
+        判定: 任一 job 的 alias_paths/inherited 中存在与代表文件同 inode(dev+ino)的路径
+        —— 同一份数据的另一个名字正是前任 job 建的逐文件别名(hardlink 形态), 不是第三方
         去重。代表文件本身就是别名路径时同样命中(stat 同文件同 inode)。目录别名
         (junction/目录 symlink)不产生 nlink, 天然不进本判定。
+        扫描面 = 全部 job 账(含终态历史)而非活集(评审 major-3 面): 单活模型下移交别名
+        挂在收官前任(终态)的 alias_paths 与接管 job 的 plan.inherited 上 —— 同键重发的
+        事实收集发生在建账之前, 活集扫描会把链式孪生误判第三方硬链接(GATE_HARDLINK)整体
+        拒绝。账面登记的别名恒为本链产物(第三方别名从不入账), 终态账扫描不放宽 D11。
         """
-        for job in self.active_jobs():
-            for p in job.alias_paths:
+        for job in self._jobs.values():
+            paths = list(job.alias_paths)
+            for entry in job.inherited:
+                paths.extend(entry.alias_paths)
+            for p in paths:
                 try:
                     pst = os.stat(utils.add_long_path_prefix_for_win(self._syscall(p)))
                 except OSError:
