@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>relocate 恢复确认账生命周期联合修: 复用结转/已删闭账/终态浮窗/计数摘要</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="relocate-resume-account-lifecycle">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-15-0914">
+<meta name="doc-updated" content="26-11-15-0914">
+<meta name="doc-refs" content="memory-bank/issues/26-11-15-0344-bug-resume-account-overwrite-jobid-reuse.html, memory-bank/issues/26-11-15-0345-bug-resume-pending-deleted-member-unclosed.html, memory-bank/issues/26-11-15-0345-bug-resume-popover-terminal-job-null.html, memory-bank/issues/26-11-15-0345-feat-relocate-failure-counters-no-consumer.html, memory-bank/issues/26-11-15-0345-refactor-webui-borrow-relocate-private-constant.html, memory-bank/tasks/26-11-15-backend-relocate-resume-account-lifecycle.md">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: relocate-resume-account-lifecycle</div>
+<h1>relocate 恢复确认账生命周期联合修: 复用结转/已删闭账/终态浮窗/计数摘要</h1>
+<p class="lede">本篇只回答: relocate 恢复确认账生命周期上的五份计划外 issue 怎么修——job_id 复用时旧账结转(0344)、已删成员闭账出口(0345-deleted)、终态浮窗窄放行(0345-popover)、计数器停机摘要(0345-feat), 以及跨层借用便签为何零改动(refactor)。执行口径全部来自两轮 grilling 的 D1-D14(全按推荐), 无待拍板项。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-15-0914 · <b>doc-updated</b> 26-11-15-0914 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 会话 grilling 两轮(2026-11-15, 用户逐轮「按推荐」拍板)+ 只读取证子代理(取证于 e2825b4b: 恢复账结构/复用路径/计数器与持久化/拍节奏/webui 浮窗链五面)。入池来源: relocate 恢复确认批次评审(2026-11-15)五份 issue; 26-11-14 qb-side-move-echo 经 D1 排除本批
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<p><b>背景。</b>relocate 恢复确认机制(952d3daa, P2a)落地后的批次评审产出五份计划外 issue, 全部挂在两根轴上: 账的生命周期轴(账 = job 对象生命周期, 而 job_id 跨生命周期复用、已删成员无闭账出口)与消费面轴(浮窗入口、计数器读面)。五件同根, 联合立项一次修完。</p>
+<p><b>目标(算成标准)。</b>① 0344: 同 (mover,src,dst) 终态重发时旧账余量结转进新账, 覆盖不再丢账, 结转成员按新生命周期重获补发预算; ② 0345-deleted: 已删成员有闭账出口(连续 N 拍确认真删除), 账面与 webui 不再永久挂账; ③ 0345-popover: done/cancelled 终态且有余量的行浮窗可弹, 与抽屉入口一致; ④ 0345-feat: 两个失败计数器有读面(停机摘要一行); ⑤ refactor 便签: 维持现状, 跨层私有借用不扩面; ⑥ 全量测试绿入新基线切片。</p>
+<p><b>设计底线/不变量。</b></p>
+<ul>
+  <li><b>闭账保守原则只放宽给「确认真删除」</b>: <code>_member_stopped</code> docstring 的「宁挂账勿漏恢复」(防快照空窗误关账)原意保留——判据从二态(停/没停)扩三态(停/没停/连续 N 拍确认删除), 空窗不误闭。</li>
+  <li><code>pending ⊆ resume_hashes</code> 不变式保持(relocate_lifecycle.py:193 注释先例); 闭账双面同删, 不破坏并集语义。</li>
+  <li><b>展示边界不动</b>: RELOCATE_TONE 行内口径与「不出已完成结论」边界一条不动(D11); 账机制与展示边界的合流缺口只修浮窗入口, 不动行内结论。</li>
+  <li><b>黄金法则面</b>: 结转与闭账全部发生在主循环 task_line 单线程内(法则 5, 无新并发); 幂等(法则 1——streak pop + 账移除收敛, 重复拍无副作用); 零新配置键(法则 4 面, D9 走常量); 保守默认(法则 2——闭账是保守闸的<b>收窄噪音</b>方向, 不新增任何高风险动作)。</li>
+  <li><b>边界</b>: 不新增搬迁发起入口; 不动 register_job 遗留 API 本身(生产零调用, 只在 S0 复验时修正 issue 锚点, D14); 不建 attempts 分母(D13)。</li>
+</ul>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+<p><b>机制底盘(取证于 e2825b4b)。</b>恢复确认账是 job 级三字段(frozen dataclass, relocate_units.py:320/327/328): <code>resume_hashes</code>(发起时被暂停成员名单)/<code>resume_pending</code>(仍未确认回运行态的余量)为 Tuple, <b><code>resume_retries</code> 是 job 级 int, 非按成员</b>。穷尽上界 <code>_RESUME_RETRY_MAX = 3</code>(relocate_lifecycle.py:26)。对账 <code>_reconcile_resume_pending</code>(lifecycle:276-318)每 main_tick(默认 2s)一拍(on_task_line 尾部 :457), 扫全部 job 含终态(:293-296); <b>唯一闭账出口 = pending 全员回非 stopped</b>(:297-303 清账 INFO); 穷尽后不再补发、只收敛账面并每开账回合一笔告警(:306-316, <code>_resume_exhausted_warned</code> 去重)。四个终态出口(failed :327-328 / cancelled exec:1798-1801 / done-direct exec:603-604 / done-alias exec:1211-1215)<b>都不清账</b>——账随 job 挂账, 经 <code>_note_resume_state</code> 持久化进 state.json(units:325), 跨重启存活。</p>
+<p><b>痛点五件(带行号证据)。</b></p>
+<ul>
+  <li><b>0344 结转缺失</b>: job_id 由 <code>mover|src|dst</code> 派生(units:1119-1128, docstring 自述幂等), 终态重发同组落同一 id。<b>真覆盖点是 <code>_start_job</code> 的裸赋值 exec:1583</b>(issue §02 原锚 register_job 生产零调用, 属遗留 API, 已改判 D14); 覆盖前旧对象只被读两处(:1456 终态检查 / :1430 读 prev.tag_on), <code>_carry_prev_tag_state</code>(exec:1422-1435)只继承 tag_on 一位——resume 账不读不继承, 覆盖即静默丢弃。</li>
+  <li><b>0345-deleted 永不闭合</b>: <code>_member_stopped</code>(lifecycle:228-238)对不在 store 的成员恒判「停着」(docstring 自述保守防快照空窗误关账)→ 已删成员的 pending 永不满足闭合条件, 穷尽后永久挂账; resume_hashes 同面不清理; webui 待恢复成员/哈希两行如实显示已删哈希(drawer_rows.js:148-151)。</li>
+  <li><b>0345-popover 入口缺失</b>: 浮窗触发 = <code>relocateView(row)</code> 非 null(relocate_pop.js:44), 而 relocateView 对 done/cancelled 恒 null(decorate.js:51 RELOCATE_TONE 无此二态, 注释自述「行内回落单排正常色」); 内容组装 assembleRelPop(pop.js:119-158)<code>if (!view) return null</code> 双保险无旁路——账在弹不出。抽屉无此边界(只看 relocateResumeText 非空), 终态照常可见。</li>
+  <li><b>0345-feat 零读面</b>: <code>_tag_failures</code>/<code>_resume_failures</code>(relocate_mod.py:74/:80 初始化, lifecycle:174/:254/:312/:380 累加)——写点之外全仓无读取/持久化/快照/webui 消费面, 重启清空; 逐次失败已有 WARNING(:174/:254/:312), 缺的是终身总量对账入口。</li>
+  <li><b>refactor 便签</b>: views_relocate.py:14 跨层借 lifecycle:26 私有常数(注释钉契约 + 测试兜底), 单一消费方, 现状可接受。</li>
+</ul>
+<p class="aside">邻接观察(不在本批): <code>_member_stopped</code> 判 <code>state_enum.is_stopped</code>, qB moving 态非 stopped——成员处于 moving 会被 reconcile 视为「已恢复」闭合账。语义说得通(非暂停), 只记不动。</p>
+
+<h2><span class="no">§03</span>方案总览</h2>
+<p><b>主线。</b>后端三件(结转/闭账/摘要)+ 前端一件(浮窗窄放行)+ 便签零改动。四个改动面互不依赖, 可单波次完成; S0 开工前置 + S5 统一收口兜底。</p>
+<table>
+  <tr><th>件</th><th>修法一句话</th><th>落点</th><th>拍板</th></tr>
+  <tr><td>0344 结转</td><td><code>_start_job</code> 同 id 重发时把 <code>prev.resume_pending</code> 并进新 job 的 <code>resume_hashes</code>(现场名单在前、结转余量在后、去重); retries 新账天然从 0 起(job 级 int, D2 零额外动作); <code>_carry_prev_tag_state</code> 扩面改名 <code>_carry_prev_state</code></td><td><code>relocate_exec.py:1422-1435 + :1562-1594</code></td><td>D2 D3</td></tr>
+  <tr><td>0345-deleted 闭账</td><td>reconcile 扫 pending 时对不在 store 的成员记 streak, 连续 ≥3 拍判真删除后闭账——从 pending+resume_hashes 双清 + INFO 一行 + relocating/resuming 登记重算; 判据 = 常量 <code>_DELETED_CONFIRM_TICKS = 3</code></td><td><code>relocate_lifecycle.py:26 区 + :276-318</code> · <code>relocate_mod.py:79-81 区</code>(<code>_deleted_streak</code> 内存态)</td><td>D4 D9 D10</td></tr>
+  <tr><td>0345-popover</td><td>浮窗闸窄放行(终态 done/cancelled 且 <code>relocateResumeText</code> 非空)+ assembleRelPop 中性 tone 替身; RELOCATE_TONE/行内口径/组聚合全不动</td><td><code>relocate_pop.js:44 + :119-158</code> + tone CSS(若缺)</td><td>D5 D11</td></tr>
+  <tr><td>0345-feat 摘要</td><td>stop() 追加 INFO 一行「relocate 停机: tag_failures=N resume_failures=M」, 全 0 也打; 绝对计数不建分母</td><td><code>relocate_lifecycle.py:51-71</code></td><td>D6 D12 D13</td></tr>
+  <tr><td>refactor 便签</td><td>零改动; 只记触发条件(穷尽口径出现第二消费方才升 relocate 公共面)——本批浮窗修走前端, 不新增借用点, 不触发</td><td>—</td><td>D7</td></tr>
+</table>
+<p><b>分期。</b>S0 前置(0448 排序检查 + 认领复验)→ S1 结转 → S2 闭账 → S3 浮窗 → S4 摘要 → S5 回归收口。S1-S4 互不依赖, 顺序只为评审切片稳定。</p>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+
+<h3>S0 · 开工前置</h3>
+<table>
+  <tr><th>内容</th><th>验收判据</th></tr>
+  <tr><td>D8 排序检查: 前序计划 26-11-13-0448(relocate-form-aware-gates)已收口、或其 relocate_exec/relocate_lifecycle 触碰面已落库, 才开工本计划; 未收口则等待, 不并行</td><td>0448 状态确认留痕(档案进度日志一行)</td></tr>
+  <tr><td>认领 5 份 issue: 逐份重跑锚点补「复验: &lt;时间&gt; 仍复现」行(锚点按符号 grep 重新落位, 行号会漂); 0344 顺带把 §02/§04 锚点改判为 <code>_start_job</code> exec:1583 裸赋值(register_job 生产零调用, 遗留 API)</td><td>5 份 issue 均有复验行; 0344 锚点修正落issue 正文</td></tr>
+</table>
+
+<h3>S1 · job_id 复用结转(0344)</h3>
+<table>
+  <tr><th>内容</th><th>验收判据</th></tr>
+  <tr><td><code>relocate_exec.py</code> <code>_carry_prev_tag_state</code>(:1422-1435)扩面改名 <code>_carry_prev_state</code>: 原 tag_on 继承 + 镜像记忆清理保留, 新增——<code>prev.resume_pending</code> 非空时把结转成员并进新 job 的 <code>resume_hashes</code>(<code>tuple(running) + tuple(h for h in prev.resume_pending if h not in running)</code>), docstring 改写覆盖两面; 调用点唯一(:1582), 改名零风险</td><td>grep <code>_carry_prev_tag_state</code> 清零, 新名单点; docstring 两继承面写全</td></tr>
+  <tr><td>retries 零动作(新 job 默认 0, D2); <code>_resume_next_try</code>/<code>_resume_exhausted_warned</code> 同键残留零动作(开账时重设/discard, lifecycle:195-196 现行为已覆盖)</td><td>不加任何清理代码; 注释不新增口径</td></tr>
+  <tr><td>测试(挂 test_relocate_exec_jobs.py / test_relocate_resume_confirm.py 同域): ① prev 终态+pending 非空 → 重发同组 → 新 job.resume_hashes 含结转成员且 retries=0; ② prev pending 空 → 不结转; ③ prev 非终态 → GATE_UNFINISHED blocked 不变; ④ 反向迁移(旧 dst→旧 src)不同 job_id → 不结转; ⑤ 结转成员经 _arm 开账后走正常补发确认链</td><td>新用例全绿; 既有 resume/exec 测试零回归; ④ 长期钉参数序(防 R6)</td></tr>
+</table>
+
+<h3>S2 · 已删成员闭账(0345-deleted)</h3>
+<table>
+  <tr><th>内容</th><th>验收判据</th></tr>
+  <tr><td>relocate_lifecycle.py:26 区加常量 <code>_DELETED_CONFIRM_TICKS = 3</code>(注释: 连续 N 拍不在 store 判真删除; 仿 _RESUME_RETRY_MAX 形态, 常量非配置键——零 validate_config/schema 牵连)</td><td>常量单点 + 注释写明「调大调小都在这一处」</td></tr>
+  <tr><td>relocate_mod.py:79-81 区加 <code>_deleted_streak: Dict[str, int]</code>(内存态, 重启清空 = 确认从头数, 保守方向, 注释钉; 与 _resume_next_try 同区同形态)</td><td>不入 state_file(观测辅助态, 与现有四件内存态同口径)</td></tr>
+  <tr><td><code>_reconcile_resume_pending</code>(:276-318)改造: 扫 pending 逐 h——在 store → <code>pop</code> streak; 不在 → streak+1, 达 N 收进 deleted 集, 未达 N 仍进 stopped(现状); deleted 非空 → 闭账 helper: <code>replace(job, resume_hashes=…, resume_pending=…)</code> 双清 + INFO「成员已删除, 恢复账闭账: N 个(&lt;hash&gt;)」+ streak pop + <code>_persist</code>/<code>_publish_snapshot</code> + <code>_sync_relocating</code>/<code>_sync_resuming</code> 重算(走 <code>_note_resume_state</code> 同款收尾链; 扩可选参数或新 helper, 实现时取侵入最小形)</td><td>闭账 helper 单点; <code>pending ⊆ resume_hashes</code> 不变式保持; 未达 N 的缺失成员行为与现状完全一致</td></tr>
+  <tr><td>闭账后 pending 空 → 既有闭合路径下一拍自然接管(「恢复确认闭合」INFO); 部分删除部分停着 → 只闭已删的; 闭账后成员重现(用户重加同 hash)→ 已不在账, 无影响</td><td>混合场景只闭已删; 穷尽告警不因闭账新增</td></tr>
+  <tr><td>边界: 只处理 pending 成员; resume_hashes 中非 pending 的已删成员不动(无账可闭, 不扩面)</td><td>不引入「全量清理 resume_hashes」的第二口径</td></tr>
+  <tr><td>测试(test_relocate_resume_confirm.py): ① 连续 3 拍不在 store → 闭账(pending/resume_hashes 清空 + 日志); ② 1-2 拍后重现 → streak 重置不闭(快照空窗防误闭); ③ 全员删除 → 闭账后既有闭合路径 INFO; ④ 混合(部分删部分停) → 只闭已删, 余量继续补发/穷尽; ⑤ 闭账不新增穷尽告警; ⑥ relocating/resuming 登记重算正确; ⑦ 幂等: 重复拍无副作用</td><td>七用例全绿; ② 是保守原则的正面钉</td></tr>
+</table>
+
+<h3>S3 · 终态浮窗窄放行(0345-popover)</h3>
+<table>
+  <tr><th>内容</th><th>验收判据</th></tr>
+  <tr><td>relocate_pop.js :44 闸放行: <code>relocateView(row)</code> 通过, 或新增谓词「<code>rel.state ∈ {done, cancelled}</code> 且 <code>relocateResumeText(rel)</code> 非空」; 行注释同步改口径</td><td>种子行与组行同闸(组载荷含 pending 字段); 无标注行照旧不弹</td></tr>
+  <tr><td>assembleRelPop(:120-121): 闸放行但 view 缺失的行 → 构造中性 tone 替身 view(字段以 assembleRelPop 实读为准补齐——tone 必需, mode/label 等实现时核对); rel 载荷本身已带全部内容字段(state/phase/src/dst/resume_pending_count/retries)</td><td>替身只在本文件内构造; verdict 文案验证 relocateStateText 覆盖 done/cancelled(缺则补)</td></tr>
+  <tr><td>tone CSS: 中性色四皮肤若缺则补; <b>RELOCATE_TONE 表、行内着色、group_relocate、drawer_rows 全不动</b></td><td>grep 核对四处零触碰; 行内 done/cancelled 仍单排正常色</td></tr>
+  <tr><td>落点红线(D11): 只动 relocate_pop.js + tone CSS; 实现中若发现必须动共享展示面才弹得出 → 停手回报, 降级维持现状 + 钉文档</td><td>e2e 新回归: 终态+余量行浮窗弹且含「待恢复成员」kv / 终态无余量行不弹 / 无标注行不弹; 静态守阵若钉旧闸形/注释则同步</td></tr>
+</table>
+
+<h3>S4 · 计数器停机摘要(0345-feat)</h3>
+<table>
+  <tr><th>内容</th><th>验收判据</th></tr>
+  <tr><td>relocate_lifecycle.py stop()(:51-71)追加 INFO 一行「relocate 停机: tag_failures=N resume_failures=M」, 全 0 也打; 绝对计数, 不建 attempts 分母; state_file/webui 不做</td><td>caplog 断言 0 与非 0 两形态; 一行落位不新增第二挂点</td></tr>
+</table>
+
+<h3>S5 · 回归收口</h3>
+<table>
+  <tr><th>内容</th><th>验收判据</th></tr>
+  <tr><td><code>commands run test.quick</code> → relocate 受影响面定向 → <code>commands run test.full</code> 全绿 + <code>commands run kb.new baseline --total ..</code>(数字从实测誊写); e2e relocate 浮窗/drawer 相关 spec</td><td>全量绿入新基线切片(裸数字只进切片)</td></tr>
+  <tr><td>D7 复核: grep <code>_RESUME_RETRY_MAX</code> 借用面不变(views_relocate.py:14 唯一); refactor 便签维持现状留痕</td><td>便签 issue 修复后补充写「维持现状, 零改动 + 触发条件」</td></tr>
+  <tr><td>5 份 issue 修复后补充回写(实际修法/验证方式/数字; 与建议修法不同则保留原文说明改道)+ kb.status 翻 Done; 档案/切片收尾回写</td><td>issue 全 Done; 认领链完整(kb.check 绿)</td></tr>
+</table>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p>无 —— D1-D14 两轮拍毕(2026-11-15), 本计划即冻结执行版(拍板记录见 §06)。</p>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+  <tr><th>#</th><th>议题</th><th>结论</th><th>日期</th></tr>
+  <tr><td>D1</td><td>批次范围</td><td>resume 簇 5 份(0344 + 0345×3 + refactor 便签)一份联合计划; qb-side-move-echo(26-11-14)排除本批, 不立项</td><td>2026-11-15</td></tr>
+  <tr><td>D2</td><td>0344 retries 口径</td><td>清零重计——取证确认 retries 是 job 级 int, 新账天然从 0 起, 实现零额外动作</td><td>2026-11-15</td></tr>
+  <tr><td>D3</td><td>0344 终态口径</td><td>不看 prev 终态(done/cancelled/failed 一视同仁), 旧账 pending 非空即结转</td><td>2026-11-15</td></tr>
+  <tr><td>D4</td><td>0345-deleted 修法</td><td>连续 N 拍判真删除后闭账; resume_pending + resume_hashes 同面清理</td><td>2026-11-15</td></tr>
+  <tr><td>D5</td><td>popover 取舍</td><td>修(窄放行方向), 不维持现状</td><td>2026-11-15</td></tr>
+  <tr><td>D6</td><td>counters 消费面</td><td>只做日志摘要面; state_file 字段与 webui 面板不做</td><td>2026-11-15</td></tr>
+  <tr><td>D7</td><td>refactor 便签</td><td>维持现状零改动; 触发条件 = 穷尽口径第二消费方出现才升公共面</td><td>2026-11-15</td></tr>
+  <tr><td>D8</td><td>排序约束</td><td>与 0448(26-11-13-0448 relocate-form-aware-gates)串行, 0448 先行, 本计划 Open 排队, S0 检查</td><td>2026-11-15</td></tr>
+  <tr><td>D9</td><td>闭账判据形态</td><td>常量 <code>_DELETED_CONFIRM_TICKS = 3</code>(relocate_lifecycle.py:26 同区), 不进配置(免 validate_config/schema 链)</td><td>2026-11-15</td></tr>
+  <tr><td>D10</td><td>闭账 webui 呈现</td><td>静默移除 + 闭账 INFO 日志一行; job 零新增字段</td><td>2026-11-15</td></tr>
+  <tr><td>D11</td><td>popover 实现形态</td><td>只动 relocate_pop.js(+tone CSS); RELOCATE_TONE/行内口径/组聚合不动; 实现中若必须动共享面 → 停手回报降级</td><td>2026-11-15</td></tr>
+  <tr><td>D12</td><td>counters 挂点</td><td>stop() 收尾一行, 全 0 也打, INFO</td><td>2026-11-15</td></tr>
+  <tr><td>D13</td><td>counters 口径</td><td>绝对计数, 不建 attempts 分母</td><td>2026-11-15</td></tr>
+  <tr><td>D14</td><td>0344 锚点修正</td><td>issue §02/§04 register_job 锚点改判 <code>_start_job</code> exec:1583 裸赋值(register_job 生产零调用, 遗留 API); 开工复验随 issue 回写</td><td>2026-11-15</td></tr>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+  <tr><th>#</th><th>风险</th><th>触发条件</th><th>处置</th></tr>
+  <tr><td>R1</td><td>0448 撞文件</td><td>0448 未收口就开工本计划</td><td>D8 写死: S0 检查 0448 状态, 未收口不开工; 开工时锚点按符号 grep 重新落位(行号必漂)</td></tr>
+  <tr><td>R2</td><td>闭账误判</td><td>store 长空窗(&gt;3 拍 ≈ 6s)被当真删除</td><td>取证: API 失败时 store 保旧快照, 不产生假缺失(增量同步语义); N=3 有余量; 生产若观察到误闭, 调常量单点(无配置链); 误闭后果 = 少一笔挂账告警, 补发本身对真停成员仍由新开账覆盖</td></tr>
+  <tr><td>R3</td><td>streak 重启清零</td><td>重启后已删成员重新数 3 拍</td><td>保守方向(多挂 ≤6s 账), 可接受; 注释钉明</td></tr>
+  <tr><td>R4</td><td>popover 替身 view 字段不全</td><td>assembleRelPop 实读字段比取证清单多</td><td>实现时以实读为准补齐 + e2e 钉; 必须动共享面则走 D11 停手条款降级</td></tr>
+  <tr><td>R5</td><td>结转成员进 relocating 让路面</td><td>结转扩大 <code>_sync_relocating</code> 登记面</td><td>与现状同构(新 job.resume_hashes 本就进登记), 无新行为面; S1 测试⑤覆盖</td></tr>
+  <tr><td>R6</td><td>job_id_for 参数序回归</td><td>将来改派生参数序导致同组不同 id</td><td>S1 测试④钉「反向迁移不结转」, 兼防参数序漂移</td></tr>
+  <tr><td>R7</td><td>issue 锚点漂移</td><td>开工时行号已变</td><td>复验行按符号 grep 重锚(协议既定); 0344 锚点改判已排入 S0(D14)</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-15-0914</span> 初版: 会话 grilling 两轮(2026-11-15, 用户逐轮「按推荐」)+ 只读取证子代理(e2825b4b)五面事实; D1-D14 冻结, S0-S5 待显式开工; 本批建件阶段零代码改动, 5 份 issue 保持 Open。</li>
+</ul>
+
+</div>
+</body>
+</html>
