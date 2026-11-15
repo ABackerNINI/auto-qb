@@ -47,6 +47,23 @@
   (不沿用 active_jobs 过滤); 穷尽收敛(pending 只剩仍停者)登记保持, 自愈闭合即撤
 - test_resuming_registry_rebuilt_on_load_jobs: 启动加载面 —— state 恢复的挂账 job(终态与否)
   经 _load_jobs 重建登记(resume_pending 随 state 持久, 让路窗口在第一次账面变更前就在场)
+### 已删成员闭账(issue 26-11-15-0345, 计划 26-11-15-0914 S2)
+- test_resume_deleted_member_confirmed_closes_account: 连续 3 拍不在 store -> 判真删除闭账
+  (pending/resume_hashes 双清 + 闭账日志一行, 零 qB 写)
+- test_resume_snapshot_gap_resets_deleted_streak: 1-2 拍缺失后成员重现 -> streak 重置不闭
+  (快照空窗防误闭, 保守原则正面钉); 断续缺失再多也不闭, 重新连续 3 拍才闭
+- test_resume_all_deleted_closes_via_existing_close_path: 全员删除 -> 闭账后既有闭合路径
+  INFO 接管(退避表/穷尽去重清掉, 账面双清归零)
+- test_resume_mixed_deleted_and_stopped_only_deleted_closed: 混合(部分删部分停) -> 只闭已删,
+  余量停着成员继续走补发链(预算/退避不乱)
+- test_resume_closure_adds_no_exhaustion_warning: 闭账不新增穷尽告警(穷尽告警仍每开账回合
+  一笔, 闭账拍与闭账后零新增零重复)
+- test_resume_closure_recomputes_registries: 闭账后 relocating/resuming 登记即时重算正确
+  (已删成员撤出两面, 停着的余量保留)
+- test_resume_closure_idempotent: 幂等: 闭账后重复拍无副作用(账面/登记零变化, 零新日志)
+### 计数器停机摘要(issue 26-11-15-0345-feat, 计划 26-11-15-0914 S4)
+- test_stop_logs_failure_counters_zero: stop() 停机摘要一行, 全 0 也打(D12)
+- test_stop_logs_failure_counters_nonzero: 非 0 形态如实带出两个绝对计数(不建分母, D13)
 """
 
 import types
@@ -63,6 +80,7 @@ from relocate_exec_support import _bare_mod, _job, _rec, _run_ticks, _simulate_m
 
 RESUME_BACKOFF = 30.0
 RESUME_MAX = 3
+DELETED_TICKS = 3  # 镜像 relocate_lifecycle._DELETED_CONFIRM_TICKS(闭账确认拍数)
 LOG_NAME = "auto_qb.core.modules.relocate_mod"
 
 
@@ -579,3 +597,205 @@ def test_carried_resume_pending_reopens_account_via_arm_chain():
     mod._reconcile_resume_pending()
     assert mod._jobs["j1"].resume_pending == ()
     assert "j1" not in mod._resume_next_try
+
+
+# ---------- 已删成员闭账(issue 26-11-15-0345, 计划 26-11-15-0914 S2) ----------
+# 口径: _member_stopped 的保守二态(不在 store 按停着, 宁挂账勿漏恢复)保留, 第三态
+# 「确认真删除」= 连续 DELETED_TICKS 拍不在 store 才闭账(双面同删, D4/D9/D10);
+# 快照空窗(未达 N 拍)不误闭, 闭账零 qB 写、零 job 新增字段, 幂等(黄金法则 1)。
+
+
+def test_resume_deleted_member_confirmed_closes_account():
+    """连续 3 拍不在 store -> 判真删除闭账: pending/resume_hashes 双清 + 闭账日志一行(零 qB 写)"""
+    issues = []
+    mod = _resume_mod(
+        api=types.SimpleNamespace(torrents_resume=lambda **kw: issues.append(list(kw["torrent_hashes"]))),
+        store=types.SimpleNamespace(by_hash={}, relocating_hashes=set()),
+    )
+    mod._jobs["j1"] = _job(
+        "j1", phase=ru.PHASE_FAILED, resume_hashes=("HA", ), resume_pending=("HA", ), resume_retries=RESUME_MAX
+    )
+    with capture_logs(LOG_NAME) as cap:
+        mod._reconcile_resume_pending()  # 拍 1: 缺失 1 拍, 未达 N, 按停着走既有面
+        assert mod._jobs["j1"].resume_pending == ("HA", ), "未达 N 拍不闭账"
+        mod._reconcile_resume_pending()  # 拍 2: 缺失 2 拍, 仍未闭
+        assert mod._jobs["j1"].resume_pending == ("HA", )
+        mod._reconcile_resume_pending()  # 拍 3: 连续 3 拍 -> 真删除, 闭账
+    job = mod._jobs["j1"]
+    assert job.resume_pending == () and job.resume_hashes == (), "双面同删"
+    assert any("成员已删除, 恢复账闭账" in m and "HA" in m for m in cap.messages), cap.messages
+    assert issues == [], "闭账零 qB 写(已删成员不再补发)"
+
+
+def test_resume_snapshot_gap_resets_deleted_streak():
+    """1-2 拍缺失后成员重现 -> streak 重置不闭(快照空窗防误闭, 保守原则正面钉);
+    断续缺失累计再多也不闭, 重新连续 3 拍才判真删除"""
+    issues = []
+    mod = _resume_mod(
+        api=types.SimpleNamespace(torrents_resume=lambda **kw: issues.append(list(kw["torrent_hashes"]))),
+        store=types.SimpleNamespace(by_hash={"HA": _stopped()}, relocating_hashes=set()),
+    )
+    mod._jobs["j1"] = _job(
+        "j1", phase=ru.PHASE_FAILED, resume_hashes=("HA", ), resume_pending=("HA", ), resume_retries=RESUME_MAX
+    )
+    mod._resume_exhausted_warned.add("j1")  # 穷尽告警去重预挂: 本用例只盯闭账面
+    mod._reconcile_resume_pending()
+    mod._reconcile_resume_pending()  # 缺失 2 拍(未达 N)
+    assert mod._jobs["j1"].resume_pending == ("HA", ), "未达 N 拍: 快照空窗不闭账"
+    mod._ctx.store.by_hash["HA"] = _stopped()  # 重现(空窗结束)
+    mod._reconcile_resume_pending()
+    assert mod._jobs["j1"].resume_pending == ("HA", ) and ("j1", "HA") not in mod._deleted_streak, "重现即作废缺失计数"
+    for _ in range(3):  # 断续缺失(每次只缺 2 拍)交替重现, 永不达连续 3 拍
+        del mod._ctx.store.by_hash["HA"]
+        mod._reconcile_resume_pending()
+        mod._reconcile_resume_pending()
+        mod._ctx.store.by_hash["HA"] = _stopped()
+        mod._reconcile_resume_pending()
+        assert mod._jobs["j1"].resume_pending == ("HA", ), "断续缺失不闭账(空窗不误闭)"
+    del mod._ctx.store.by_hash["HA"]
+    with capture_logs(LOG_NAME) as cap:
+        for _ in range(DELETED_TICKS):  # 连续 3 拍 -> 闭账
+            mod._reconcile_resume_pending()
+    assert mod._jobs["j1"].resume_pending == () and mod._jobs["j1"].resume_hashes == ()
+    assert any("成员已删除, 恢复账闭账" in m for m in cap.messages), cap.messages
+
+
+def test_resume_all_deleted_closes_via_existing_close_path():
+    """全员删除 -> 连续 3 拍后闭账(双清归零), 既有闭合路径接管: 退避表/穷尽去重清掉"""
+    mod = _resume_mod(
+        api=types.SimpleNamespace(torrents_resume=lambda **kw: None),
+        store=types.SimpleNamespace(by_hash={}, relocating_hashes=set()),
+    )
+    mod._jobs["j1"] = _job(
+        "j1",
+        phase=ru.PHASE_ARMED,
+        resume_hashes=("HA", "HB"),
+        resume_pending=("HA", "HB"),
+        resume_retries=RESUME_MAX,
+    )
+    mod._resume_next_try["j1"] = 1e18  # 退避表挂账(穷尽态常驻), 闭账应清掉
+    mod._resume_exhausted_warned.add("j1")
+    with capture_logs(LOG_NAME) as cap:
+        for _ in range(DELETED_TICKS):
+            mod._reconcile_resume_pending()
+    job = mod._jobs["j1"]
+    assert job.resume_pending == () and job.resume_hashes == (), "全员删除: 账面双清归零"
+    assert "j1" not in mod._resume_next_try, "既有闭合路径清退避表"
+    assert "j1" not in mod._resume_exhausted_warned, "既有闭合路径清穷尽去重"
+    assert any("成员已删除, 恢复账闭账" in m for m in cap.messages), cap.messages
+    assert any("恢复确认闭合" in m for m in cap.messages), "既有闭合路径 INFO 接管"
+
+
+def test_resume_mixed_deleted_and_stopped_only_deleted_closed():
+    """混合(部分删部分停) -> 只闭已删的, 余量停着成员继续走补发链(预算/退避不乱)"""
+    issues = []
+    mod = _resume_mod(
+        api=types.SimpleNamespace(torrents_resume=lambda **kw: issues.append(list(kw["torrent_hashes"]))),
+        store=types.SimpleNamespace(by_hash={"HB": _stopped("HB")}, relocating_hashes=set()),
+    )
+    mod._jobs["j1"] = _job("j1", phase=ru.PHASE_FAILED, resume_hashes=("HA", "HB"), resume_pending=("HA", "HB"))
+    with capture_logs(LOG_NAME) as cap:
+        mod._reconcile_resume_pending()  # 拍 1: HA 缺失 1 拍(未达 N 按停着), HB 停着 -> 补发含 HA+HB(现状行为)
+        assert mod._jobs["j1"].resume_pending == ("HA", "HB")
+        mod._clock.advance(RESUME_BACKOFF)
+        mod._reconcile_resume_pending()  # 拍 2: HA 缺失 2 拍, 未达 N
+        assert mod._jobs["j1"].resume_pending == ("HA", "HB")
+        mod._clock.advance(RESUME_BACKOFF)
+        mod._reconcile_resume_pending()  # 拍 3: HA 连续 3 拍 -> 闭账; HB 继续补发
+    job = mod._jobs["j1"]
+    assert job.resume_pending == ("HB", ) and job.resume_hashes == ("HB", ), "只闭已删的 HA, HB 留账"
+    assert job.resume_retries == 3, "HB 的补发预算照常消耗"
+    assert issues == [["HA", "HB"], ["HA", "HB"], ["HB"]], "第 3 拍补发只含仍停着的 HB"
+    assert any("成员已删除, 恢复账闭账" in m and "HA" in m for m in cap.messages), cap.messages
+    assert not any("成员已删除" in m and "HB" in m for m in cap.messages), "HB 仍停着, 不误闭"
+
+
+def test_resume_closure_adds_no_exhaustion_warning():
+    """闭账不新增穷尽告警: 穷尽告警仍每开账回合一笔, 闭账拍与闭账后零新增零重复"""
+    mod = _resume_mod(
+        api=types.SimpleNamespace(torrents_resume=lambda **kw: None),
+        store=types.SimpleNamespace(by_hash={}, relocating_hashes=set()),
+    )
+    mod._jobs["j1"] = _job(
+        "j1", phase=ru.PHASE_FAILED, resume_hashes=("HA", ), resume_pending=("HA", ), resume_retries=RESUME_MAX
+    )
+    with capture_logs(LOG_NAME) as cap:
+        for _ in range(DELETED_TICKS + 1):  # 3 拍闭账 + 1 拍幂等复查
+            mod._reconcile_resume_pending()
+    exhausted = [m for m in cap.messages if "恢复确认穷尽" in m]
+    assert len(exhausted) == 1, "只拍 1 一笔(缺失未达 N 按停着走穷尽面), 闭账不新增"
+    closure = [m for m in cap.messages if "成员已删除, 恢复账闭账" in m]
+    assert len(closure) == 1, "闭账 INFO 一行, 重复拍不重复"
+    assert mod._resume_failures == 1, "穷尽计数只在拍 1 计一笔"
+
+
+def test_resume_closure_recomputes_registries():
+    """闭账后 relocating/resuming 登记即时重算: 已删成员撤出两面, 停着的余量保留"""
+    mod = _resume_mod(
+        api=types.SimpleNamespace(torrents_resume=lambda **kw: None),
+        store=types.SimpleNamespace(by_hash={"HB": _stopped("HB")}, relocating_hashes=set()),
+    )
+    mod._jobs["j1"] = _job(
+        "j1",
+        phase=ru.PHASE_ARMED,
+        hashes=("HM", ),
+        mover="HM",
+        resume_hashes=("HA", "HB"),
+        resume_pending=("HA", "HB"),
+        resume_retries=RESUME_MAX,
+    )
+    mod._sync_relocating()  # 预挂登记: relocating = hashes ∪ resume_hashes
+    assert mod._ctx.store.relocating_hashes == {"HM", "HA", "HB"}
+    assert mod._ctx.store.resuming_hashes == {"HA", "HB"}
+    for _ in range(DELETED_TICKS):  # HA 连续 3 拍不在 store -> 闭账
+        mod._reconcile_resume_pending()
+    assert mod._ctx.store.relocating_hashes == {"HM", "HB"}, "已删 HA 撤出 relocating, 现场成员 HM 与余量 HB 保留"
+    assert mod._ctx.store.resuming_hashes == {"HB"}, "已删 HA 撤出 resuming; 停着的 HB 保留"
+
+
+def test_resume_closure_idempotent():
+    """幂等(黄金法则 1): 闭账后重复拍无副作用 —— 账面/登记零变化, 零新日志"""
+    mod = _resume_mod(
+        api=types.SimpleNamespace(torrents_resume=lambda **kw: None),
+        store=types.SimpleNamespace(by_hash={}, relocating_hashes=set()),
+    )
+    mod._jobs["j1"] = _job(
+        "j1", phase=ru.PHASE_FAILED, resume_hashes=("HA", ), resume_pending=("HA", ), resume_retries=RESUME_MAX
+    )
+    for _ in range(DELETED_TICKS):
+        mod._reconcile_resume_pending()
+    job = mod._jobs["j1"]
+    assert job.resume_pending == () and job.resume_hashes == (), "闭账已完成(用例自证)"
+    resuming_before = set(mod._ctx.store.resuming_hashes)
+    with capture_logs(LOG_NAME) as cap:
+        for _ in range(3):  # 重复拍
+            mod._reconcile_resume_pending()
+    assert mod._jobs["j1"] is job, "重复拍不重建账面对象"
+    assert mod._jobs["j1"].resume_pending == () and mod._jobs["j1"].resume_hashes == ()
+    assert set(mod._ctx.store.resuming_hashes) == resuming_before, "登记零变化"
+    assert ("j1", "HA") not in mod._deleted_streak, "streak 已随闭账清掉"
+    assert cap.messages == [], f"重复拍零新日志: {cap.messages}"
+
+
+# ---------- 计数器停机摘要(issue 26-11-15-0345-feat, 计划 26-11-15-0914 S4) ----------
+# 口径: stop() 收尾一行「relocate | 停机: tag_failures=N resume_failures=M」, 全 0 也打
+# (D12); 绝对计数不建 attempts 分母(D13); 不进 state_file/webui(D6), 一行落位无第二挂点。
+
+
+def test_stop_logs_failure_counters_zero():
+    """stop() 停机摘要一行: 全 0 也打(D12)"""
+    mod = _resume_mod(api=types.SimpleNamespace(torrents_resume=lambda **kw: None))
+    assert mod._tag_failures == 0 and mod._resume_failures == 0
+    with capture_logs(LOG_NAME) as cap:
+        mod.stop()
+    assert any("停机: tag_failures=0 resume_failures=0" in m for m in cap.messages), cap.messages
+
+
+def test_stop_logs_failure_counters_nonzero():
+    """stop() 停机摘要: 非 0 形态如实带出两个绝对计数(不建 attempts 分母, D13)"""
+    mod = _resume_mod(api=types.SimpleNamespace(torrents_resume=lambda **kw: None))
+    mod._tag_failures = 2
+    mod._resume_failures = 5
+    with capture_logs(LOG_NAME) as cap:
+        mod.stop()
+    assert any("停机" in m and "tag_failures=2" in m and "resume_failures=5" in m for m in cap.messages), cap.messages

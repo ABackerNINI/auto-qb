@@ -25,6 +25,12 @@ _TAG_RETRY_SECONDS = 30.0
 _RESUME_RETRY_SECONDS = 30.0
 _RESUME_RETRY_MAX = 3
 
+# 已删成员闭账判据(issue 26-11-15-0345): 恢复账上的成员连续 N 拍不在 store(qB 镜像)
+# 才判「真删除」并闭账 —— 快照空窗(1-2 拍)不误闭, _member_stopped「宁挂账勿漏恢复」的
+# 保守原意保留, 三态只放宽给连续确认的真删除。仿 _RESUME_RETRY_MAX 形态: 常量非配置键
+# (零 validate_config/schema 牵连), 调大调小都在这一处。
+_DELETED_CONFIRM_TICKS = 3
+
 
 class LifecycleMixin:
     def start(self, ctx: AppContext, dry_run: bool) -> None:
@@ -60,7 +66,13 @@ class LifecycleMixin:
         回收 daemon 是独立进程, 不随 auto-qb 消亡(D10 收敛公理: 它要在 auto-qb 不在时
         也能捕窗改写) —— 故 stop() 不碰 daemon(退位走 pid 抢占自检自杀, 绝不 taskkill),
         也不删别名(qB 可能还在跑, 删链接会造假种)。
+
+        停机摘要(issue 26-11-15-0345-feat): 两个失败计数器在此一行对账, 全 0 也打(D12) ——
+        逐次失败已有 WARNING, 缺的是终身总量入口; 绝对计数不建 attempts 分母(D13),
+        不进 state_file/webui(D6)。挂在接管闸之前: 未接管 job 账的会话同样落一行,
+        本会话迁移面是否健康靠这一行即可对账, 不设第二挂点。
         """
+        logger.info(f"relocate | 停机: tag_failures={self._tag_failures} resume_failures={self._resume_failures}")
         if not self._jobs_loaded:
             logger.debug("relocate | stop: 本会话未接管 job 账, 跳过补写(state 既有账原样保留)")
             return None
@@ -230,6 +242,10 @@ class LifecycleMixin:
 
         不在客户端(已删除)也按停着算 —— 保守不闭合其账: 快照空窗误判「已删除」会把
         该成员的恢复账悄悄关掉(宁挂账勿漏恢复), 已删成员的补发是 qB 侧无害 no-op。
+        「确认真删除」是第三态, 判据单点在 _reconcile_resume_pending: 不在 store 的
+        成员连续 _DELETED_CONFIRM_TICKS 拍缺失才闭账(issue 26-11-15-0345) —— 未达
+        N 拍的空窗仍走本判定的「停着」面, 二态口径对空窗的保守原意不变, 三态只放宽
+        给连续确认的真删除。
         """
         store = getattr(self._ctx, "store", None) if self._ctx is not None else None
         rec = getattr(store, "by_hash", {}).get(h) if store is not None else None
@@ -279,6 +295,9 @@ class LifecycleMixin:
         扫全部账上 resume_pending 非空的 job(终态与否都扫 —— 四个终态出口的确认语义
         不漏口, 与 _reconcile_pending_tags「终态也扫 tag_on=True」同形态):
         - 全员回到运行态: 确认闭合清账(对照 qB 实况自愈, 含用户手动恢复的情形);
+        - 连续 _DELETED_CONFIRM_TICKS 拍不在 store(issue 26-11-15-0345): 判真删除并
+          闭账(_close_deleted_members, 双面同删) —— 未达 N 拍的快照空窗不误闭,
+          仍按「停着」走既有面;
         - 仍有停着的且退避点已到: 预算未穷尽则补发一次(_resume_reissue, 有界);
         - 预算已穷尽: 不再补发, 只把账面余量收敛到 qB 实况(可能已部分自愈), 穷尽
           告警每开账回合一笔(出口重开账有意重新武装 —— 防新回合的穷尽被旧去重吞掉;
@@ -289,12 +308,35 @@ class LifecycleMixin:
         api = getattr(self._ctx, "api", None) if self._ctx is not None else None
         if api is None:
             return
+        store = getattr(self._ctx, "store", None) if self._ctx is not None else None
         now = self._clock.monotonic()
         for job in list(self._jobs.values()):
             pending = job.resume_pending
             if not pending:
                 continue
-            stopped = tuple(h for h in pending if self._member_stopped(h))
+            stopped = []
+            deleted = []
+            for h in pending:
+                rec = getattr(store, "by_hash", {}).get(h) if store is not None else None
+                if rec is None:
+                    # 不在 store: 记连续缺失拍数, 达 _DELETED_CONFIRM_TICKS 判真删除;
+                    # 未达 N 仍按「停着」走既有面(快照空窗不误闭, 保守原意见 _member_stopped)
+                    streak = self._deleted_streak.get((job.job_id, h), 0) + 1
+                    if streak >= _DELETED_CONFIRM_TICKS:
+                        deleted.append(h)
+                    else:
+                        self._deleted_streak[(job.job_id, h)] = streak
+                        stopped.append(h)
+                    continue
+                self._deleted_streak.pop((job.job_id, h), None)  # 重现在 store: 空窗结束, 缺失计数作废
+                if self._member_stopped(h):
+                    stopped.append(h)
+            stopped = tuple(stopped)
+            deleted = tuple(deleted)
+            if deleted:
+                # 确认真删除的成员先闭账(双面同删), 余量按更新后的账继续走既有分支
+                job = self._close_deleted_members(job, tuple(deleted))
+                pending = job.resume_pending
             if not stopped:
                 self._note_resume_state(job.job_id, (), job.resume_retries)
                 self._resume_next_try.pop(job.job_id, None)
@@ -306,7 +348,7 @@ class LifecycleMixin:
             if job.resume_retries >= _RESUME_RETRY_MAX:
                 # 穷尽后的常驻面: 只收敛账面(变化门在 _note_resume_state), 不再消耗 qB 写
                 if stopped != tuple(pending):
-                    self._note_resume_state(job.job_id, stopped, job.resume_retries)
+                    self._note_resume_state(job.job_id, tuple(stopped), job.resume_retries)
                 if job.job_id not in self._resume_exhausted_warned:
                     self._resume_exhausted_warned.add(job.job_id)
                     self._resume_failures += 1
@@ -316,6 +358,31 @@ class LifecycleMixin:
                     )
                 continue
             self._resume_reissue(job, stopped)
+
+    def _close_deleted_members(self, job: RelocateJob, deleted: Tuple[str, ...]) -> RelocateJob:
+        """已删成员闭账单点(issue 26-11-15-0345): 从 resume_hashes 与 resume_pending 双面同删
+
+        只删确认已删的成员(deleted ⊆ pending ⊆ resume_hashes, 双面同删即保持子集不变式);
+        resume_hashes 中非 pending 的成员不动(无账可闭, 不扩面)。幂等: 闭账后成员已不在
+        账上, 重复拍零副作用(黄金法则 1); 全程主循环单线程内(黄金法则 5)。webui 呈现走
+        静默移除(D10) —— job 零新增字段, 只留一行闭账日志; 收尾链与 _note_resume_state
+        同款(登记重算 + 落盘 + 换代快照)。
+        """
+        jid = job.job_id
+        if not deleted or not tuple(h for h in job.resume_pending if h in deleted):
+            return job
+        kept = tuple(h for h in job.resume_hashes if h not in deleted)
+        kept_pending = tuple(h for h in job.resume_pending if h not in deleted)
+        self._jobs[jid] = replace(job, resume_hashes=kept, resume_pending=kept_pending)
+        for h in deleted:
+            self._deleted_streak.pop((jid, h), None)
+        logger.info(f"relocate | job {jid}: 成员已删除, 恢复账闭账: {len(deleted)} 个({', '.join(deleted)})")
+        # 闭账动了 resume_hashes(relocating 登记面)与 resume_pending(resuming 登记面):
+        # _sync_relocating 末尾漏斗自带 _sync_resuming, 两面一次重算齐
+        self._sync_relocating()
+        self._persist()
+        self._publish_snapshot()
+        return self._jobs.get(jid, job)
 
     def _fail(self, job: RelocateJob, reason: str, last_error: str = "") -> RelocateJob:
         """失败收口单点: 置 FAILED + 消费 resume_hashes(把发起时暂停的成员放回去)

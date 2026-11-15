@@ -79,6 +79,11 @@ class RelocateModule(LifecycleMixin, PlanMixin, ExecMixin, BaseModule):
         self._resume_next_try: dict = {}
         self._resume_failures = 0
         self._resume_exhausted_warned: set = set()
+        # 已删成员闭账(issue 26-11-15-0345): (job_id, hash) -> 连续不在 store 的对账拍数,
+        # 达 _DELETED_CONFIRM_TICKS 判真删除并闭账。键带 job_id: 同一 hash 可属不同 job,
+        # 各自独立计数。内存态不入 state_file —— 重启清空 = 确认从头数(保守方向: 真删除
+        # 至多多挂 N 拍账, 不引入误闭面); 与 _resume_next_try 同区同形态。
+        self._deleted_streak: dict = {}
 
     def sections(self) -> tuple:
         # relocate 整段(bt_backup 已收编为 relocate.bt_backup, 计划 26-11-11-0259 S1)由本模块
