@@ -106,7 +106,25 @@ class LifecycleMixin:
         if enabled:
             alias_fs.get_capability(refresh=True)
             if not was_enabled:
-                restored = self._load_jobs()
+                try:
+                    restored = self._load_jobs()
+                except RuntimeError as e:
+                    # S1b 旧账迁移 fail-fast(D8/R1, 覆盖备份失败形态 minor-R2-2): RuntimeError =
+                    # 磁盘与内存 jobs_box 均已回滚迁移前快照 —— 但热启用经由 WEB 命令队列执行,
+                    # 异常被 runtime_commands 逐命令捕获吞掉后主循环照常 drain, maybe_flush 到期
+                    # 无条件 save 会把内存半迁移态覆盖回滚后的盘面。此处捕获转「拒绝本次热重载」
+                    # 回执: 其一置模块级被拒标志(_live_conf 据此把全部执行入口按禁用收口 ——
+                    # 内核在调 apply 前已换 ctx.config, 回执无人回滚, R2-1); 其二配置缓存回退
+                    # 旧段(保持禁用现场, _jobs_loaded 未开, stop() 不补写)。用户重启进程重试
+                    # 或人工核处备份; 绝不带半迁移态继续主循环。
+                    self._hot_enable_rejected = True
+                    self._conf = getattr(old, "relocate", None)
+                    return ApplyResult(
+                        self.name,
+                        "rejected",
+                        f"relocate 热启用失败(旧账迁移已回滚): {e} —— 本次热重载被拒绝, "
+                        "执行入口已按禁用收口, 请重启进程重试或人工核处迁移备份",
+                    )
                 # E1 探测崩溃残留扫描(与 start() 启用分支同口径, issue 26-11-08-1608-…hot-enable):
                 # disabled 启动的会话, 前次强探测中崩溃留下的探测种子+文件要等下次进程重启
                 # 才被扫走 —— 热启用即扫, 两分支口径对称。取参走 self._ctx(与 _load_jobs/
@@ -541,7 +559,18 @@ class LifecycleMixin:
         return bool(getattr(self._ctx, "dry_run", False))
 
     def _live_conf(self) -> Optional[Any]:
-        """预检面现取生效配置(ctx 单一真相; _conf 缓存只供 P3 相位机, 预检不消费旧值)"""
-        if self._ctx is not None:
-            return getattr(self._ctx.config, "relocate", None)
-        return self._conf
+        """预检面现取生效配置(ctx 单一真相; _conf 缓存只供 P3 相位机, 预检不消费旧值)
+
+        热启用被拒标志在位时按禁用收口(R2-1): 内核 apply_new_config 在调 apply 之前已换
+        ctx.config 对象(qbmanager L0 换段), rejected 回执无人回滚 ctx.config —— 不闸则
+        on_task_line 相位机/relocate_execute/预检仍按 enabled=True 放行: 在途 legacy 账未
+        恢复(未收尾拦截/fuse 让路失明), 用户再发起迁移会 _set_job 置 _jobs_loaded,
+        stop() 时 _persist 整段重写清掉 legacy 账。清位 = 下次成功 _load_jobs 或重启。
+        """
+        conf = getattr(self._ctx.config, "relocate", None) if self._ctx is not None else self._conf
+        if self._hot_enable_rejected and conf is not None:
+            try:
+                conf = replace(conf, enabled=False)
+            except TypeError:  # 非 dataclass 替身: 按 None 闸(入口全部 unavailable/blocked)
+                conf = None
+        return conf

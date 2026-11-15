@@ -22,11 +22,16 @@ enabled 时做 —— 开关关着却开机建删探测链接, 属于为关着�
 依赖方向: 本模块 -> infra(alias_fs/file_access/utils) + torrents + 兄弟模块**零**
 import(需要别人能力经 ctx); 决策纯函数在 relocate_units(不触盘), 本文件只收集事实。
 """
+import copy
+import os
+import shutil
+import time
 from dataclasses import replace
 from types import MappingProxyType
 from typing import Optional
 
-from ...infra import relocate_journal
+from ...config.models import bt_backup_path_of
+from ...infra import relocate_journal, utils
 from ...infra.clock import SYSTEM_CLOCK, Clock
 from ..module import AppContext, BaseModule
 from . import relocate_units as ru
@@ -34,7 +39,7 @@ from .relocate_units import RelocateJob
 from .relocate_common import logger
 from .relocate_lifecycle import LifecycleMixin
 from .relocate_plan import PlanMixin
-from .relocate_exec import ExecMixin
+from .relocate_exec import ExecMixin, arm_members_of
 from .relocate_probe import new_probe_salt
 
 # 同机强探测(E1)结论的合法取值(计划 26-11-04-0055 §03.2); 其余一律按坏条目/未命中处理
@@ -86,6 +91,13 @@ class RelocateModule(LifecycleMixin, PlanMixin, ExecMixin, BaseModule):
         # 各自独立计数。内存态不入 state_file —— 重启清空 = 确认从头数(保守方向: 真删除
         # 至多多挂 N 拍账, 不引入误闭面); 与 _resume_next_try 同区同形态。
         self._deleted_streak: dict = {}
+        # 热启用被拒标志(R2-1, S1b 旧账迁移 D8/R1): apply 捕获迁移 RuntimeError 后置位,
+        # _live_conf 据此把全部执行入口按禁用收口 —— 内核 apply_new_config 在调 apply 前
+        # 已换 ctx.config 对象, rejected 回执无人回滚, 不闸则相位机/执行入口仍按 enabled
+        # True 放行(在途 legacy 账未恢复 = 未收尾拦截/让路失明; 用户再发起迁移会
+        # _set_job 置 _jobs_loaded -> stop() 整段重写清掉 legacy 账)。清位 = 下次成功
+        # _load_jobs(_load_jobs 尾部)或重启; 内存态不入 state_file。
+        self._hot_enable_rejected = False
 
     def sections(self) -> tuple:
         # relocate 整段(bt_backup 已收编为 relocate.bt_backup, 计划 26-11-11-0259 S1)由本模块
@@ -224,8 +236,339 @@ class RelocateModule(LifecycleMixin, PlanMixin, ExecMixin, BaseModule):
         if callable(mark_dirty):
             mark_dirty(full=True, reason="relocate_jobs")
 
+    # ---------- S1b 旧账迁移器(D8 + R1, 计划 26-11-15-2340 §03.5/§07-R1) ----------
+
+    def _migrate_legacy_accounts(self) -> None:
+        """重构版上线时自动迁移存量账(D8): 一条不丢, 失败 fail-fast 绝不带损入新模型
+
+        触发与幂等: state.json 的 relocate.model_version 标记(ru.MODEL_VERSION; 缺失/0 =
+        旧账), 两个接管点(lifecycle start / 热启用 apply)都经 _load_jobs 进入本方法。
+        无 relocate 箱 / 无 jobs 箱 / 无 legacy 账 = 直接盖章跳过(零备份零写盘面, 只动
+        内存 state.data, 落盘随 state 服务周期)。
+
+        迁移内容(映射规则, 计划 26-11-15-2340 §03.5/§07-R1):
+        - 识别面 = plan.superseded_from 在场的账(改道机器唯一落账证据; 该字段写入面已随
+          三方法物理删除, 新账永不携带): 统一转为 superseded 只读历史记录(phase=superseded,
+          reason=migrated_superseded), 原始落点(superseded_from)还原进账面 dst —— 记录的
+          真实语义是「它自己把 A 搬到了 B」, 改道后的 dst 是机器翻转值不留;
+        - 接管关系: 找到继任账(碰同组且改道后 dst == 继任 dst; 非终态优先, 同分取
+          updated_at 最新)则把移交条目 {job_id/src/dst(原始落点)/scope/alias_kind/
+          alias_paths/link_kind} 归集到继任链的**活着顶端**(展平, 镜像 _handover_predecessors
+          的祖父辈归集 —— 旧改道链的别名已被旧机器统一改指链顶, 条目归集顶端才喂得进
+          继任的删链门/继承面), 前任 hash 并入继任 plan.extra_members(改写义务随链归集);
+          继任已武装(armed/rewritten: 旧机器时代 _arm 已落盘 spec, 不含前任成员/
+          extra_srcs, armed 不重走 _arm)时同步重写继任 spec —— 不重写则前任未完成改写
+          失主, 继任收官删移交别名后成员断粮(见 _migrate_rewrite_successor_spec);
+          无继任 = 孤儿改道前任, 单独转 superseded 记录(alias_paths 保留作账面证据);
+        - journal 投影: 被转换账的 journal 若非终态, 同步翻 superseded(+superseded_by=链顶,
+          daemon 即时退休, 与 _handover_predecessors 收官同协议); 已终态的 journal 不动;
+        - 在途账(无 superseded_from)零触碰: 相位语义原样, 由既有启动对账(_startup_reconcile)
+          与 _recover 接管跑完 —— 迁移器不改变任何在途相位。
+
+        R1 备份/回滚: 有账可迁时先备份 state(+.bak)与 relocate 目录到
+        <data_dir>/relocate-migration-backup/<时间戳>/; 备份/转换/journal 落盘任一步异常 =
+        回滚(state 覆写还原 + relocate 目录镜像还原 + **内存 jobs_box 还原迁移前快照**;
+        备份阶段失败 = 无转换写面, 仅内存还原, 盘面不动)并抛 RuntimeError —— start_all
+        无捕获穿透(fail-fast 契约)拦截进程启动; 热启用路径由 apply 捕获转「拒绝本次
+        热重载」回执, 并置模块级被拒标志(_live_conf 把全部执行入口按禁用收口直至下次
+        成功 _load_jobs 或重启, R2-1; 主循环不带半迁移态继续)。
+        """
+        st = getattr(self._ctx, "state", None) if self._ctx is not None else None
+        data = getattr(st, "data", None)
+        if not isinstance(data, dict):
+            return
+        relocate_box = data.get("relocate")
+        if not isinstance(relocate_box, dict):
+            return
+        try:
+            marked = int(relocate_box.get("model_version") or 0)
+        except (TypeError, ValueError):
+            marked = 0
+        if marked >= ru.MODEL_VERSION:
+            return
+        jobs_box = relocate_box.get("jobs")
+        if not isinstance(jobs_box, dict):
+            relocate_box["model_version"] = ru.MODEL_VERSION  # 空箱直接盖章(无账可迁)
+            return
+        legacy_ids = [
+            jid for jid, d in jobs_box.items()
+            if isinstance(d, dict) and isinstance(d.get("plan"), dict) and d["plan"].get("superseded_from")
+        ]
+        if not legacy_ids:
+            relocate_box["model_version"] = ru.MODEL_VERSION  # 无 legacy 账, 只补版本标记
+            return
+        data_dir = self._data_dir()
+        snapshot = copy.deepcopy(jobs_box)  # 内存快照: 回滚时还原内存(热启用吞异常面, R1)
+        backup_dir = None
+        try:
+            # 备份也在 try 内(minor-R2-2): os.makedirs/shutil 的 OSError 裸抛不经回滚-拒绝
+            # 文案会被 apply 的 except RuntimeError 漏掉 —— 备份此刻尚无任何转换写, 统一包成
+            # RuntimeError(backup_dir=None = 无转换写面, 回滚只还原内存快照)
+            backup_dir = self._migration_backup(data_dir)
+            converted = self._migrate_convert(jobs_box, legacy_ids)
+        except Exception as e:  # noqa: BLE001 - fail-fast: 回滚后穿透拦截启动
+            self._migration_rollback(data_dir, backup_dir, jobs_box, snapshot)
+            head = f"已回滚备份 {backup_dir}" if backup_dir else "备份未完成(无转换写面, 仅还原内存快照; 现场留人工核处)"
+            raise RuntimeError(f"relocate 旧账迁移失败({e}); {head}, 启动拦截 —— "
+                               "绝不带损入单活模型, 请检查备份后人工核处") from e
+        relocate_box["model_version"] = ru.MODEL_VERSION
+        logger.warning(
+            f"relocate | 旧账迁移完成: {len(legacy_ids)} 个改道机器前任转 superseded 历史记录"
+            f"(接管关系归集 {converted} 条), 备份在 {backup_dir}(model_version={ru.MODEL_VERSION})"
+        )
+
+    def _migration_successor_of(self, jobs_box: dict, jid: str, d: dict) -> str:
+        """改道前任的继任账 id(碰同组且改道后 dst 相同; 非终态优先, 同分取 updated_at 最新)
+
+        镜像旧机器 _predecessors_of 的判定方向(pred.dst == src 换算成继任侧 dst == 前任
+        改道后 dst)。找不到 = ""(孤儿改道前任, 单独转历史记录)。
+        """
+        hashes = {str(h) for h in (d.get("hashes") or ()) if h}
+        want = utils.path_normalize(str(d.get("dst") or ""))
+        best, best_key = "", None
+        for oid, od in jobs_box.items():
+            if oid == jid or not isinstance(od, dict):
+                continue
+            if not (hashes & {str(h) for h in (od.get("hashes") or ()) if h}):
+                continue
+            if utils.path_normalize(str(od.get("dst") or "")) != want:
+                continue
+            terminal = str(od.get("phase") or "") in ru.TERMINAL_PHASES
+            key = (not terminal, float(od.get("updated_at") or 0.0))
+            if best_key is None or key > best_key:
+                best, best_key = oid, key
+        return best
+
+    def _migrate_convert(self, jobs_box: dict, legacy_ids: list) -> int:
+        """转换全部 legacy 账(账面字典手术 + journal 投影 + 继任 spec 重写); 返回归集的移交条目数
+
+        任一步异常向上抛(调用方回滚备份/内存快照后 fail-fast)。条目归集目标 = 继任链的
+        活着顶端: 继任本身也是改道前任时沿链上溯; 环形继任 = 无有效顶端, 按孤儿收口
+        (条目无处归集留在前任账上, 绝不自归集)。
+        """
+        succ = {jid: self._migration_successor_of(jobs_box, jid, jobs_box[jid]) for jid in legacy_ids}
+        target_of = {}
+        for jid in legacy_ids:
+            seen = {jid}
+            cur = succ.get(jid) or ""
+            while cur in legacy_ids and cur not in seen:
+                seen.add(cur)
+                cur = succ.get(cur) or ""
+            # 环形收口: 走回已见 id(含自环)= 无有效顶端 -> 按孤儿处理("" = 条目不归集)
+            target_of[jid] = "" if cur in seen else cur
+        entries_merged = 0
+        spec_needs = {}  # 继任 id -> {"hashes": [前任成员..], "srcs": [前任 src 根..]}(spec 重写面)
+        for jid in legacy_ids:
+            d = jobs_box[jid]
+            plan = dict(d.get("plan") or {})
+            old_dst = str(plan.get("superseded_from") or "")
+            entry = {
+                "job_id": jid,
+                "src": str(d.get("src") or ""),
+                # 条目 dst = 改指收敛前链接的真实指向 = 原始落点(改道翻转值不留)
+                "dst": old_dst or str(d.get("dst") or ""),
+                "scope": str(d.get("scope") or ""),
+                "alias_kind": str(d.get("alias_kind") or ""),
+                "alias_paths": [str(p) for p in (d.get("alias_paths") or ()) if str(p or "").strip()],
+                "link_kind": str(plan.get("link_kind") or ""),
+            }
+            nd = dict(d)
+            plan.pop("superseded_from", None)
+            # 原始落点还原进账面 dst(统一规则, 孤儿/有继任同款): 记录的真实语义是
+            # 「它自己把 src 搬到了 old_dst」, 改道机器翻转的 dst 不留
+            if old_dst:
+                nd["dst"] = old_dst
+            target = target_of.get(jid) or ""
+            if target:
+                td = dict(jobs_box.get(target) or {})
+                tplan = dict(td.get("plan") or {})
+                inherited = [e for e in (tplan.get("inherited") or []) if isinstance(e, dict)]
+                if not any(e.get("job_id") == jid for e in inherited):
+                    inherited.append(entry)
+                else:  # 同 id 已在(半程崩溃后的重跑): 原位替换为本次归集值, 幂等
+                    inherited = [entry if e.get("job_id") == jid else e for e in inherited]
+                entries_merged += 1
+                tplan["inherited"] = inherited
+                # 前任成员改写义务随链归集(镜像 _handover_predecessors 的 extra_members 并入)
+                own = {str(h) for h in (td.get("hashes") or ())}
+                extras = [
+                    str(h) for h in dict.fromkeys((*(tplan.get("extra_members") or ()), *(d.get("hashes") or ())))
+                    if str(h) and str(h) not in own
+                ]
+                if extras:
+                    tplan["extra_members"] = extras
+                # 前任自己的移交条目一并上提(展平归集, S1a 同款; 前任账不再持有)
+                for sub in (plan.get("inherited") or []):
+                    if isinstance(sub, dict) and sub.get("job_id"):
+                        sub = dict(sub)
+                        if not any(e.get("job_id") == sub["job_id"] for e in inherited):
+                            inherited.append(sub)
+                            tplan["inherited"] = inherited
+                plan.pop("inherited", None)
+                td["plan"] = tplan
+                jobs_box[target] = td
+                need = spec_needs.setdefault(target, {"hashes": [], "srcs": []})
+                need["hashes"].extend(str(h) for h in (d.get("hashes") or ()) if str(h))
+                if entry["src"]:
+                    need["srcs"].append(entry["src"])
+            nd["plan"] = plan
+            nd["phase"] = ru.PHASE_SUPERSEDED
+            nd["reason"] = "migrated_superseded"
+            jobs_box[jid] = nd
+            self._migrate_journal_flip(jid, target)
+        # 继任 spec 重写(全部前任转换完之后按目标去重执行一次; major-1 断粮洞)
+        for target, need in spec_needs.items():
+            self._migrate_rewrite_successor_spec(target, jobs_box.get(target) or {}, need)
+        return entries_merged
+
+    def _migrate_rewrite_successor_spec(self, job_id: str, td: dict, need: dict) -> None:
+        """已武装继任的 spec 同步重写(major-1 断粮洞, 评审轮 2 修)
+
+        继任 armed/rewritten 时旧机器时代的 _arm 已落盘 spec(members 不含前任成员、无
+        extra_srcs), 而 armed 不重走 _arm —— 迁移把前任 journal 翻 superseded 后, daemon
+        按前任 spec 的改写驱动面消失, 归集进 plan.extra_members 的改写义务对 daemon 失主:
+        继任收官(删移交别名)后未完成改写的成员断粮。修法: 按 _write_arm_spec 同形状重写
+        继任 spec(members 并入前任成员、extra_srcs 取移交条目 src 根), 依据 daemon
+        「窗口内逐成员现读 spec」契约(recycle_daemon 窗口段注释)支持窗口中段换账。
+        - 只处理收尾窗继任(phase ∈ FINALIZE_WINDOW_PHASES): pre-arm 继任无 spec, 后续
+          _arm 按已归集的 plan 落新 spec 自然覆盖; 终态继任 spec 惰性(journal 终态,
+          daemon 不认领), 不需要。
+        - spec 缺失/残缺跳过(与 daemon 残缺 spec 跳过同口径, 不猜不建);
+        - 新成员经 arm_members_of 补双 hash 形态(bt_backup 取不到时 hash_v2 留空, 与
+          arm 侧同一容错); 写盘经 write_spec 原子面, 盘错误上抛(调用方回滚)。
+        """
+        if str(td.get("phase") or "") not in ru.FINALIZE_WINDOW_PHASES:
+            return
+        data_dir = self._data_dir()
+        spec = relocate_journal.read_spec(data_dir, job_id)
+        if not isinstance(spec, dict):
+            return
+        backup = bt_backup_path_of(getattr(self._ctx, "config", None))
+        members = [m for m in (spec.get("members") or ()) if isinstance(m, dict)]
+        known = {relocate_journal.member_key(m) for m in members if relocate_journal.member_key(m)}
+        added = False
+        for h in dict.fromkeys(need.get("hashes") or ()):
+            h = str(h or "").strip()
+            if not h or h in known:
+                continue
+            for m in arm_members_of([h], backup):
+                if relocate_journal.member_key(m) and relocate_journal.member_key(m) not in known:
+                    members.append(m)
+                    known.add(relocate_journal.member_key(m))
+                    added = True
+        if added:
+            spec["members"] = members
+        srcs = [
+            s
+            for s in dict.fromkeys((*(spec.get("extra_srcs") or ()), *(need.get("srcs") or ()))) if str(s or "").strip()
+        ]
+        own_src = utils.path_normalize(str(spec.get("src") or ""))
+        srcs = [s for s in srcs if utils.path_normalize(str(s)) != own_src]
+        if srcs and srcs != list(spec.get("extra_srcs") or ()):
+            spec["extra_srcs"] = srcs
+            added = True
+        if added:
+            relocate_journal.write_spec(data_dir, job_id, spec)
+            logger.warning(
+                f"relocate | 旧账迁移: 继任 job {job_id} 的 arm spec 已重写"
+                f"(members 并入前任成员, extra_srcs={srcs}) —— 前任未完成改写由本 spec 承载"
+            )
+
+    def _migrate_journal_flip(self, job_id: str, successor_id: str) -> None:
+        """被转换账的 journal 投影翻 superseded(非终态才写; 已终态/无 journal 不动)
+
+        与 _handover_predecessors 收官同协议: daemon 按 STOP_PHASES 即时退休, 前任 spec
+        不再驱动改写。拒写分支不可达: 迁移写的是 superseded 终相位, 前向合并只拒
+        「非终态覆盖终态」; 盘错误经 atomic_write 上抛(调用方回滚备份)—— 投影翻不动 =
+        daemon 会继续按旧 spec 改写, 不算迁移成功, 绝不带损入新模型。
+        """
+        data_dir = self._data_dir()
+        body = relocate_journal.read_journal(data_dir, job_id)
+        if body is None or str(body.get("phase") or "") in relocate_journal.STOP_PHASES:
+            return
+        payload = {
+            **body,
+            "phase": ru.PHASE_SUPERSEDED,
+            "ts": self._clock.now(),
+        }
+        if successor_id:
+            payload["superseded_by"] = successor_id
+        relocate_journal.write_journal(data_dir, job_id, payload)
+
+    def _migration_backup(self, data_dir: str) -> str:
+        """迁移前备份: state(+.bak) 与 relocate 目录 -> <data_dir>/relocate-migration-backup/<ts>
+
+        同秒重试(热启用被拒后立即重试等形态)的目录相撞 = copytree 目标已存在会炸 ->
+        时间戳带序号后缀保证目录恒新开(既有备份目录绝不复用/覆盖, 取证面原样)。
+        """
+        stamp = time.strftime("%Y%m%d-%H%M%S", time.localtime(self._clock.now()))
+        backup_dir = os.path.join(data_dir, "relocate-migration-backup", stamp)
+        seq = 0
+        while os.path.isdir(backup_dir):
+            seq += 1
+            backup_dir = os.path.join(data_dir, "relocate-migration-backup", f"{stamp}-{seq}")
+        os.makedirs(backup_dir)
+        state_file = str(getattr(getattr(self._ctx, "state", None), "state_file", "") or "")
+        for src in (state_file, state_file + ".bak"):
+            if src and os.path.exists(src):
+                shutil.copy2(src, os.path.join(backup_dir, os.path.basename(src)))
+        journal_dir = relocate_journal.relocate_dir(data_dir)
+        if os.path.isdir(journal_dir):
+            shutil.copytree(journal_dir, os.path.join(backup_dir, "relocate"))
+        return backup_dir
+
+    def _migration_rollback(
+        self,
+        data_dir: str,
+        backup_dir: Optional[str],
+        jobs_box: Optional[dict] = None,
+        snapshot: Optional[dict] = None
+    ) -> None:
+        """迁移失败回滚: 内存 jobs_box 还原快照 + state 覆写还原 + relocate 目录镜像还原
+
+        内存还原放最前(纯内存操作必成; 盘面回滚失败时内存也不带半迁移态)。热启用路径
+        (apply)吞掉 RuntimeError 继续主循环, 回滚只还原磁盘不还原内存的话, maybe_flush
+        到期无条件 save 会把半迁移态覆盖回滚后的盘面(major-2 分叉洞)—— 快照还原封该口。
+        backup_dir=None = 备份阶段失败(minor-R2-2): 尚无任何转换写面, 只还原内存快照,
+        盘面原样(不碰 relocate 目录 —— 部分备份目录绝不冒充还原源, 不足的镜像会被误删)。
+        """
+        try:
+            if jobs_box is not None and snapshot is not None:
+                jobs_box.clear()
+                jobs_box.update(copy.deepcopy(snapshot))
+                logger.warning("relocate | 旧账迁移失败: 内存 jobs_box 已还原迁移前快照")
+            if not backup_dir:
+                logger.warning(f"relocate | 旧账迁移失败于备份阶段(无转换写; 现场可能留有未完成的备份目录, "
+                               f"人工核处: {data_dir})")
+                return
+            state_file = str(getattr(getattr(self._ctx, "state", None), "state_file", "") or "")
+            if state_file:
+                for name, dst in (
+                    (os.path.basename(state_file), state_file),
+                    (os.path.basename(state_file) + ".bak", state_file + ".bak"),
+                ):
+                    src = os.path.join(backup_dir, name)
+                    if os.path.exists(src):
+                        shutil.copy2(src, dst)
+                    elif os.path.exists(dst):
+                        # 备份缺该文件 = 迁移前也不存在(迁移窗口新产物): 撤走还原
+                        os.remove(dst)
+            journal_dir = relocate_journal.relocate_dir(data_dir)
+            src_dir = os.path.join(backup_dir, "relocate")
+            if os.path.isdir(src_dir):
+                if os.path.isdir(journal_dir):
+                    shutil.rmtree(journal_dir)
+                shutil.copytree(src_dir, journal_dir)
+            elif os.path.isdir(journal_dir):
+                # 备份时无 relocate 目录 = 现目录全部内容都是迁移窗口产物: 整目录撤走
+                shutil.rmtree(journal_dir)
+            logger.warning(f"relocate | 旧账迁移失败, 已回滚备份原样还原: {backup_dir}")
+        except Exception as e:  # noqa: BLE001 - 回滚自身失败也要如实暴露(盘/权限)
+            logger.error(f"relocate | 旧账迁移回滚失败({e}) —— 备份 {backup_dir} 请人工核处, 不带损继续")
+
     def _load_jobs(self) -> int:
-        """启动/热重载时从 state 恢复 job 账; 非终态的重挂 relocating 登记(抑制缺文件误判),
+        """启动/热重载时从 state 恢复 job 账; 入口先跑旧账迁移器(S1b D8, 见 _migrate_legacy_accounts);
+        非终态的重挂 relocating 登记(抑制缺文件误判),
         挂账 job 的 resuming 登记同步重建(resume_pending 随 state 持久, 重启后账还活着,
         让路窗口不能等第一次账面变更才出现 —— 走 _sync_relocating 漏斗, issue 26-11-15-0441)。
         启动对账回写(评审 minor-6): state 盒按 state 服务周期刷盘而 journal 即时落盘 ——
@@ -236,6 +579,12 @@ class RelocateModule(LifecycleMixin, PlanMixin, ExecMixin, BaseModule):
         采纳带生命周期锚定(评审 major-R2-1): 仅「journal ts 可解析且 >= job.created_at」
         的本世在途账才回写 —— 同键重发后上一世的终相位 journal 可能仍在盘上(_arm 前不清),
         无锚采纳会把在途迁移误终态化; 残留/锚定不上的一律搁置, 留给 _arm 侧既有清理口。"""
+        # S1b 旧账迁移器(D8/R1): 重构版首次接管存量账时自动迁移(改道机器退役字段 -> 单活
+        # 模型表示), 失败 fail-fast 启动拦截 + 回滚备份。dry-run 不动手(与 sweep 同判),
+        # 留给下一次真启动迁移。两个调用点(lifecycle start 与热启用 apply)都经本方法进入,
+        # 迁移无需另挂。
+        if not self._dry_run():
+            self._migrate_legacy_accounts()
         self._jobs_loaded = True  # 本会话已接管 job 账(stop() 补写闸的依据, 见 __init__ 注)
         box = self._state_jobs()
         n = 0
@@ -294,6 +643,8 @@ class RelocateModule(LifecycleMixin, PlanMixin, ExecMixin, BaseModule):
             self._persist()  # 回写落账(状态盒; 磁盘刷盘仍由 state 服务周期兜底)
         self._sync_relocating()
         self._publish_snapshot()
+        # 账接管成功(含迁移器通过): 清热启用被拒标志(R2-1)—— 执行入口恢复按现配置放行
+        self._hot_enable_rejected = False
         return n
 
     def _sync_relocating(self) -> None:

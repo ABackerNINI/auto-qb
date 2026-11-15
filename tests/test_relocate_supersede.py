@@ -649,8 +649,8 @@ def _consume_inherited(mod, job_id):
 def test_supersede_cancel_blocked_while_inherited_alive(tmp_path, monkeypatch):
     """撤销 x 继承面(评审 major-1/major-2): 携带移交条目且继承别名未消化(仍在盘)的
     job 撤销被拦(cancel_inherited, 零 qB 写)—— 现行撤销仍搬回数据, 会留下悬空继承别名
-    指向已搬空的目标(前任旧根成员断粮; 旧 cancel_chain 护栏因前任终态结构性失明, 本守卫
-    承接); 继承别名已直指 C(I2); 消化完毕后撤销放行(合法路径), 历史记录零触碰"""
+    指向已搬空的目标(前任旧根成员断粮, 本守卫承接; 旧 cancel_chain 护栏已随改道机器
+    退役); 继承别名已直指 C(I2); 消化完毕后撤销放行(合法路径), 历史记录零触碰"""
     pin_disk_usage(monkeypatch)
     mgr, client, mod, j1, spawned, src, dst, content = _armed_env(tmp_path, monkeypatch)
     files = client.files_map["HA"]
@@ -731,7 +731,7 @@ def test_supersede_cancel_refuses_settled_rewrites(tmp_path, monkeypatch):
     assert out_dry["cls"] == "blocked" and out_dry["reasons"][0]["gate"] == "cancel_rewritten", out_dry
     assert "cost" not in out_dry, "拒绝面不出成本单(不可撤的形态谈成本是误导)"
     # 放行支: settled 记录清回 pending(reset_rewrites 重放入口同款; 非 dict 残账原样保留)
-    # -> 撤销行为不变(删链 + 搬回 + cancelled); 前任已是历史, cancel_chain 护栏不触发
+    # -> 撤销行为不变(删链 + 搬回 + cancelled); 前任已是历史, 无同目标在途护栏面
     assert rj.reset_rewrites(dd, j2) == 4
     assert rj.read_rewrites(dd, j2)["HBAD"] == "garbage"
     calls_before_ok = list(client.calls)

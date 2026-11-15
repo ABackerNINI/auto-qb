@@ -94,9 +94,11 @@ def read_journal(data_dir: str, job_id: str) -> Optional[dict]:
 def clear_journal(data_dir: str, job_id: str) -> bool:
     """删除一份 job journal(主循环专属清理口; 返回是否真删除, 幂等)
 
-    唯一合法用途: 对账确证 journal 是**上一生命周期**的陈旧残留(同 job_id 再迁移,
+    合法用途其一: 对账确证 journal 是**上一生命周期**的陈旧残留(同 job_id 再迁移,
     ts 早于新生命周期锚点)时清除 —— failed 入 STOP_PHASES 后 daemon 对该 job_id 退休
     (scan 剔除 + record_rewrites 拒写), 残留账不清, 新生命周期的改写/重放被永久堵死。
+    其二(S1b D5 整链清理): purge_terminal_chain/_unlink_account_files 按整链消亡面删除
+    —— spec+journal 成对删(先 spec 后 journal), 账随链移除, 同属主循环专属删除路径。
     绕过 write_journal 前向合并是刻意的: 该账不属于任何在途生命周期, 「非终态不得覆盖
     终态」要保护的对象不存在; 删除与同目录 daemon.json 的按归属删除(release_daemon_state)
     同先例。证据处置: 调用方必须在调用本函数**之前**把 reason/ts 留一行日志(证据行
@@ -407,52 +409,6 @@ def list_spec_jobs(data_dir: str) -> List[str]:
         if name.endswith(".spec.json"):
             out.append(name[:-len(".spec.json")])
     return sorted(out)
-
-
-# --------------------------------------------------------------------------
-# S5 扩展(计划 26-11-05-0808 §3.4/D15/D19/D20): supersede 重定向的账面单点
-#
-# armed/rewritten 相位放行再迁移后, 前任 job 的改写账 {A→B} 必须改道 {A→C}(先搬后
-# 重定向, 硬约束1): spec.dst 是 daemon 改写映射的唯一来源(_rewrite_member 读
-# spec.src/spec.dst), 改道 = 覆写 spec.dst; journal 记一笔 retarget 供诊断与「旧条目
-# 零残留」核验(N10)。两者都是主循环在线时点的写(qB 在线 ⇒ daemon 不在窗口, 无并发写;
-# §07 串行化行), 读-改-写沿各自单点, 幂等可重放(D20 搬后重试至收敛)。
-# --------------------------------------------------------------------------
-
-
-def retarget_spec(data_dir: str, job_id: str, new_dst: str) -> bool:
-    """spec.dst 重定向({A→B}→{A→C}; S5 supersede 的账面单点): 返回是否真落盘
-
-    - spec 缺失/缺 src(旧链 job / bt_backup 未配置的降级账)⇒ False, 不猜不建
-      (arm 侧责任, 与 daemon 的残缺 spec 跳过同口径);
-    - dst 已是新值 ⇒ False(幂等, 黄金法则 1);
-    - daemon 的改写映射 = spec.src→spec.dst 整对, files/members 不随重定向变化
-      (相对路径与成员清单与目标无关)。
-    """
-    spec = read_spec(data_dir, job_id)
-    if not isinstance(spec, dict) or not str(spec.get("src") or "").strip():
-        return False
-    cur, new = str(spec.get("dst") or ""), str(new_dst or "")
-    if os.path.normcase(os.path.normpath(cur.replace("\\", "/"))) == \
-            os.path.normcase(os.path.normpath(new.replace("\\", "/"))):
-        return False
-    spec["dst"] = new
-    write_spec(data_dir, job_id, spec)
-    return True
-
-
-def mark_journal_retarget(
-    data_dir: str, job_id: str, from_dst: str, to_dst: str, *, ts: Optional[float] = None
-) -> bool:
-    """journal 记一笔重定向(retarget 字段; 读-改-写保留 rewrites/verify_replays 等既有账)
-
-    返回 False = 拒写(journal 已终态, write_journal 前向合并保护)或盘写失败 —— 记账
-    是诊断面不是承重面, 调用方告警后继续, 不因它回滚重定向。
-    """
-    cur = read_journal(data_dir, job_id) or {}
-    body = dict(cur)
-    body["retarget"] = {"from": str(from_dst or ""), "to": str(to_dst or "")}
-    return write_journal(data_dir, job_id, body)
 
 
 def spec_members(spec: dict) -> List[dict]:

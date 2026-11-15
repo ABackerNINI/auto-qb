@@ -92,9 +92,10 @@ daemon 主体:
 - test_qb_process_names_dispatches_non_windows: 进程名册分派(ps 支/proc 支)
 
 收口评审修复轮(26-11-07):
-- test_spec_retarget_mid_window_rewrites_remaining_to_new_dst: 窗口中段 spec.dst 被改道
-  (supersede 账面段不需 qB 在线)=> 剩余成员按新 dst 改写(评审 #4: 旧实现用窗口 scan
-  快照, 剩余成员写旧 dst)/ spec 现读失败 => 本 job 本拍放弃不拿旧快照改写
+- test_spec_retarget_mid_window_rewrites_remaining_to_new_dst: 窗口中段 spec.dst 被改写
+  (直写 spec 模拟账面改写, 不需 qB 在线; 历史 supersede 机器已退役)=> 剩余成员按新 dst
+  改写(评审 #4: 旧实现用窗口 scan 快照, 剩余成员写旧 dst)/ spec 现读失败 => 本 job 本拍
+  放弃不拿旧快照改写
 - test_spec_unreadable_mid_window_skips_job_without_stale_rewrite: spec 现读失败(撕态/被删)
   => 本 job 本拍放弃, 零改写零落账不拿旧快照(评审 #4 容错支)
 - test_proc_absent_dual_evidence_and_roster_fallback: 证一判定(评审 #6)—— 名册可用时
@@ -1374,9 +1375,10 @@ def test_proc_absent_dual_evidence_and_roster_fallback(monkeypatch, caplog):
 
 
 def test_spec_retarget_mid_window_rewrites_remaining_to_new_dst(tmp_path, monkeypatch):
-    """[supersede 即时生效/评审 #4] 窗口中段 spec.dst 被改道(retarget_spec 不需 qB 在线)
-    => 剩余成员按新 dst 改写; 旧实现沿用窗口 scan 快照会把剩余成员写旧 dst(改写方向错)。
-    另: spec 现读失败(被并发重写撕态) => 本 job 本拍放弃, 绝不拿旧快照改写。"""
+    """[评审 #4] 窗口中段 spec.dst 被改写(直写 spec 模拟; 改道机器已退役, daemon 对账面
+    现值的即时读契约不变) => 剩余成员按新 dst 改写; 旧实现沿用窗口 scan 快照会把剩余成员
+    写旧 dst(改写方向错)。另: spec 现读失败(被并发重写撕态) => 本 job 本拍放弃, 绝不拿
+    旧快照改写。"""
     tmp_path.joinpath("src").mkdir()
     tmp_path.joinpath("dst1").mkdir()
     tmp_path.joinpath("dst2").mkdir()
@@ -1392,10 +1394,12 @@ def test_spec_retarget_mid_window_rewrites_remaining_to_new_dst(tmp_path, monkey
     real = rd.fastresume.retarget
 
     def _retarget_then_redirect(backup_dir, h1, h2, old, new):
-        # A 改写落盘的同一间隙, supersede 改道 spec.dst(dst1 -> dst2; 账面段不需 qB 在线)
+        # A 改写落盘的同一间隙, spec.dst 被改写(dst1 -> dst2; 账面段不需 qB 在线)
         assert new == dst1, "前置: 改道发生在窗口 scan 之后, 本拍仍按 scan 快照的目标"
         out = real(backup_dir, h1, h2, old, new)
-        assert rj.retarget_spec(data_dir, "job-1", dst2)
+        spec = rj.read_spec(data_dir, "job-1")
+        spec["dst"] = dst2
+        rj.write_spec(data_dir, "job-1", spec)
         return out
 
     calls = {"n": 0}

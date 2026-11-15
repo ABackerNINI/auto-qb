@@ -5,8 +5,9 @@
 taskkill(进程红线)/窗口外任何 fastresume 落盘(N1 铁律: qB 运行期秒级重写, 0.5s 实测覆盖)。
 
 形制(D12 简化): 每 qB 实例至多一个 watcher;触发只有「qB 下线」一个事件 —— 无 TCP
-nudge/无端口文件/无兜底扫;窗口开头现读 pending 集(supersede/取消即时生效, 窗口内逐拍
-现读续保);进窗判据三层(计划 26-11-10-0318)—— L1 实例级证据链(owner 死证 + 新面孔
+nudge/无端口文件/无兜底扫;窗口开头现读 pending 集(账面改写即时生效 —— 历史 supersede
+机器已退役, 现读为 daemon 侧自防; 取消即时生效, 窗口内逐拍现读续保);进窗判据三层(计划
+26-11-10-0318)—— L1 实例级证据链(owner 死证 + 新面孔
 无害化, 证据齐即立即进窗无稳定期, 拍板 D2, 接线单点 _observe_poll/_l1_window_open);
 L2 全机口径 = 三证(进程不在 + 端口拒连 + 稳定 STABLE_WINDOW, 判据函数已随 finalize_watch.py
 整文件退役原样随迁进本模块, 本文件是其唯一 home, S4);L3 = L2 名册探测失败时的端口单证
@@ -1310,9 +1311,10 @@ def _process_window(
                 journal = rj.read_journal(data_dir, job_id) or {}
                 if str(journal.get("phase") or "") in rj.STOP_PHASES:
                     break  # 本 job 已收口(取消): 剩余成员全跳
-                # 窗口内逐成员现读 spec(评审 #4): supersede 的账面改道(retarget_spec)不需要
-                # qB 在线, 可落在本窗口中段 —— 沿用窗口 scan 时的快照会把剩余成员改写到旧
-                # dst, 违背本模块 docstring「窗口内逐拍现读续保(supersede 即时生效)」。现读
+                # 窗口内逐成员现读 spec(评审 #4): 账面 dst 的任何改写(历史上 supersede 的
+                # 改道机器写过; 该机器已退役, 现读契约保留为 daemon 侧自防)不需要 qB 在线,
+                # 可落在本窗口中段 —— 沿用窗口 scan 时的快照会把剩余成员改写到旧
+                # dst。现读
                 # 失败(残缺/并发重写撕态)按 scan 同款容错: 本 job 本拍放弃, 绝不拿旧快照
                 # 改写, 留下一拍/下一窗口按新账重放(D8)。
                 spec = rj.read_spec(data_dir, job_id)

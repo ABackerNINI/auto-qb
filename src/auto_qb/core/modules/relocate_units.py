@@ -88,6 +88,10 @@ PHASE_CANCELLED = "cancelled"
 # 其未完成的别名工作整体移交新任务(plan.inherited); 记录随新任务存在而保留, 随新任务
 # 整链消亡。journal 侧同值入 STOP_PHASES(daemon 即时退休, 前任 spec 不再驱动改写)。
 PHASE_SUPERSEDED = "superseded"
+# 单活任务模型的账面版本标记(state.json relocate.model_version, S1b 旧账迁移器 D8):
+# 缺失/0 = 重构前旧账(可能携带改道机器的 plan.superseded_from 等退役字段), 1 = 已迁移
+# 到单活模型表示。新写账恒 >= 1, 迁移器据此幂等跳过(不重复转换、不重复备份)。
+MODEL_VERSION = 1
 TERMINAL_PHASES = frozenset({PHASE_DONE, PHASE_FAILED, PHASE_CANCELLED, PHASE_SUPERSEDED})
 # 收尾窗口(D16 变更承重): armed/rewritten 期间数据已在新位置、成员经别名做种 —— 此窗口内
 # 往旧根添加非本组种子, 其 save_path 记在旧根, 会成为删链门(等值 OR 前缀)的永久依赖,

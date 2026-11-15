@@ -612,11 +612,7 @@ class ExecMixin:
         scope = job.scope.replace("\\", "/").rstrip("/")
         return scope[len(sp):].lstrip("/") if scope.startswith(sp + "/") else ""
 
-    # ---------- S1a 单活任务模型: 续迁即收官 + 移交 + 统一改指(计划 26-11-15-2340 §03.2 D4/D5) ----------
-    # (S5 退役注记) 旧链的 _supersede_redirect/_retarget_predecessor/_supersede_cover_movers
-    # 「原地改道」机器(前任账改写/spec retarget/journal retarget/superseded_from)随单活
-    # 任务模型整体退役 —— 活跃路径不再触碰(物理删除在改道机器退役步), 以下三个方法
-    # 已无调用方, 仅存档待删。
+    # ---------- S1a 单活任务模型: 前任认领与锚点(计划 26-11-15-2340 §03.2 D4/D5) ----------
 
     def _predecessors_of(self, src: str, hashes: Iterable[str]) -> list:
         """本 job 的前任迁移(收尾窗 {armed, rewritten} 且碰本组且旧目标 = 本 job 源根)
@@ -842,115 +838,6 @@ class ExecMixin:
             pos += 1
         state["pos"] = pos
         return pos >= len(links)
-
-    # (S5 退役注记) 以下三个方法为旧链「原地改道」机器存档, 活跃路径已不再触碰;
-    # 物理删除在改道机器退役步执行。
-
-    def _supersede_redirect(self, job: RelocateJob, rt: dict) -> bool:
-        """supersede 重定向一步(D15 重心): 全部前任改道收敛 = True, 否则 False(下一拍重试)
-
-        顺序钉死(硬约束1/D20): 本 stage 在 moved verify 之后 —— 搬移完成、目标数据落位
-        才动前任的账与别名。每任前任按「先账后链」两段提交:
-        1. 账面改道(提交点): D19 通用补条目 -> spec.dst {A→B}→{A→C} -> journal 记 retarget
-           -> job.dst 翻 C(附 plan.superseded_from=B)—— 全幂等, 失败下一拍重放;
-        2. 别名重指向: 逐条 retarget_alias(读旧目标→删→建→穿透校验), 每 tick 一批
-           (_LINK_CHUNK), 失败告警留进度, 下一拍幂等续跑(已是目标指向则跳过)。
-        任一段失败不回滚不判失败(D20: N12 实测搬后回滚无法恢复成员服务 —— 数据已在 C);
-        反馈面 = 本 job 停在 supersede stage(相位 moved)+ WARNING 日志。
-        """
-        preds = self._predecessors_of(job.src, job.hashes)
-        if not preds:
-            return True
-        ok = True
-        for pred in preds:
-            if not self._retarget_predecessor(pred, job, rt):
-                ok = False
-        return ok
-
-    def _retarget_predecessor(self, pred: RelocateJob, job: RelocateJob, rt: dict) -> bool:
-        """单个前任的改道(先账后链); 返回是否已收敛"""
-        data_dir = self._data_dir()
-        old_dst = str((pred.plan or {}).get("superseded_from") or "") or pred.dst
-        # ---- D19 旧 mover 覆盖: 扫「save_path 位于被搬离根」的本组成员, 一律补 {B→C} 条目
-        # (改道后前任 spec 只会改写 {A→C}, 账面/已改写落在被搬离根 B 的成员只能由本 job
-        # 的 spec {B→C} 覆盖 —— 不在本 job 成员清单里的前任成员经 extra_members 并入)。
-        self._supersede_cover_movers(pred, job, old_dst)
-        # ---- 账面改道(提交点; 各自幂等, 重复执行无副作用)
-        n_spec = relocate_journal.retarget_spec(data_dir, pred.job_id, job.dst)
-        if n_spec:
-            logger.info(f"relocate | supersede: job {pred.job_id} 改写账已改道 {old_dst} -> {job.dst}(spec.dst)")
-        if not relocate_journal.mark_journal_retarget(data_dir, pred.job_id, old_dst, job.dst):
-            logger.debug(f"relocate | supersede: job {pred.job_id} journal 未记 retarget(已终态/无 journal, 不承重)")
-        if self._norm(pred.dst) != self._norm(job.dst):
-            pred = self._set_job(replace(
-                pred,
-                dst=job.dst,
-                plan={
-                    **(pred.plan or {}), "superseded_from": old_dst
-                },
-            ))
-            logger.warning(
-                f"relocate | supersede: job {pred.job_id}({pred.phase}) 已改道 -> {job.dst}"
-                f"(原目标 {old_dst}; 收尾窗再迁移 D15, 先搬后重定向)"
-            )
-        # ---- 别名重指向(逐条幂等; 每 tick 一批, 失败留进度下一拍续)
-        plan = pred.plan or {}
-        kind = plan.get("link_kind")
-        state = rt.setdefault("supersede", {}).setdefault(pred.job_id, {"pos": 0})
-        links = list(pred.alias_paths)
-        pos = int(state.get("pos") or 0)
-        chunk = links[pos:pos + _LINK_CHUNK]
-        for link in chunk:
-            rel = self._rel_under(pred.src, link)
-            if rel is None:
-                logger.warning(
-                    f"relocate | supersede: job {pred.job_id} 别名 {link} 不在声明源 {pred.src} 下, 跳过重定向(账不自洽, 交人处理)"
-                )
-                pos += 1
-                continue
-            target = _native(job.dst, rel)
-            try:
-                what = alias_fs.retarget_alias(link, target, kind)
-                logger.info(f"relocate | supersede: job {pred.job_id} 别名重指向 {link} -> {target}({what})")
-            except Exception as e:  # noqa: BLE001 - D20: 重试至收敛, 不回滚
-                state["pos"] = pos
-                logger.warning(
-                    f"relocate | supersede: job {pred.job_id} 别名重指向失败({link} -> {target}): {e} —— "
-                    "保留现场下一拍重试(重试至收敛, 不回滚; 搬前占用类预检已前置)"
-                )
-                return False
-            pos += 1
-        state["pos"] = pos
-        return pos >= len(links)
-
-    def _supersede_cover_movers(self, pred: RelocateJob, job: RelocateJob, moved_away: str) -> None:
-        """D19 通用补条目: 被搬离根上的组成员并入本 job 的改写清单(plan.extra_members)
-
-        扫描面 = 前任成员 ∪ 本 job 成员 中「账面 save_path 位于被搬离根(等值 OR 前缀,
-        under_alias_root 单点)」者, 加上前任成员全集兜底(改写已落 B 的成员账面还挂在
-        A, 账面扫描看不见 —— 前任成员并入本 job spec 后 {B→C} 改写自然命中, 未落 B 的
-        成员按 unmatched 出账零副作用)。只进改写清单(spec.members), 不动本 job 的
-        hashes/核验集合 —— 补写成员的收敛由删链门(扫全量 save_path)托底。
-        """
-        store = getattr(self._ctx, "store", None)
-        by_hash = getattr(store, "by_hash", {}) or {}
-        group = set(pred.hashes) | set(job.hashes)
-        hit = set()
-        for h, rec in by_hash.items():
-            if h in group and ru.under_alias_root(getattr(rec, "save_path", "") or "", (moved_away, )) is not None:
-                hit.add(h)
-        extras = [h for h in dict.fromkeys((*pred.hashes, *hit)) if h not in set(job.hashes)]
-        if not extras:
-            return
-        plan = job.plan or {}
-        merged = [h for h in dict.fromkeys((*extras, *(plan.get("extra_members") or ())))]
-        if merged == list(plan.get("extra_members") or ()):
-            return
-        self._set_job(replace(job, plan={**plan, "extra_members": merged}))
-        logger.info(
-            f"relocate | supersede: D19 补条目 {len(merged)} 个成员并入 job {job.job_id} 改写清单"
-            f"({', '.join(h[:8] for h in merged[:5])} 覆盖被搬离根 {moved_away} 上的任意混合态)"
-        )
 
     def _rel_under(self, root: str, path: str) -> Optional[str]:
         """path 相对 root 的段(重定向目标换算); 不在根下返回 None(账不自洽, 交人处理)"""
@@ -1431,6 +1318,109 @@ class ExecMixin:
             f"{removed} 条, 含移交别名) —— 成员直读新位置 {job.dst}"
         )
 
+    # ---------- S1b 整链清理单元(D5, 计划 26-11-15-2340 §03.2/D5) ----------
+
+    def purge_terminal_chain(self, job_id: str) -> list:
+        """终态 job + 其整条上游链的清理基元(D5: 整链一个清理单元, 随新任务整链消亡)
+
+        单活模型的清理关系: 新任务账上 plan.inherited 的 job_id 即链上游 —— 清理一个终态
+        job 时, 递归沿 inherited 上溯, 全部 superseded 前任一并带走(账 + journal + spec
+        三面同删; **先 spec 后 journal**: spec 是 daemon 的发现面(扫 *.spec.json), 先撤
+        发现面再撤相位投影, 任一中间态都不会让 daemon 把无主账当活账改写)。
+
+        守卫(黄金法则 2, 保守默认):
+        - 头部必须存在且已是终态(在途账无清理入口, D5);
+        - 上游只带走 PHASE_SUPERSEDED 前任 —— done/failed/cancelled 记录不属「随新任务
+          整链消亡」的移交历史, 保留(分级保留/清空历史是 S3 面);
+        - I1 引用保护(比任务口径「活任务引用不可清」更保守): 任一候选仍被**保留账**
+          (不在本次候选集内的任何账, 活或终)的 plan.inherited 引用则该候选及其上游一并
+          缓行 —— 终态账的移交条目同为有效引用, 强删会让引用方悬空失主; 引用它的账若
+          随后被清理, 下一次调用自然补清。
+
+        返回实际清除的 job_id 清单(含头部; 空清单 = 头部不存在/在途/被守卫缓行)。
+        消费面: S3 的终态分级保留(成功滚动清理)与「清空历史」按钮直接调用本基元;
+        现行代码不存在终态账自动删除面(逐字核实, 计划 26-11-15-2340 §03.2/D3), 故本步无自动消费点。
+        """
+        data_dir = self._data_dir()
+        head = self._jobs.get(job_id)
+        if head is None or not head.is_terminal:
+            return []
+        # 沿 inherited 上溯收集候选(头部 + 全部可达的 superseded 前任; 坏形条目跳过)
+        candidates = {job_id: head}
+        frontier = [head]
+        while frontier:
+            cur = frontier.pop()
+            for entry in cur.inherited:
+                uid = entry.job_id
+                if not uid or uid in candidates:
+                    continue
+                up = self._jobs.get(uid)
+                if up is None or up.phase != ru.PHASE_SUPERSEDED:
+                    continue  # 非移交历史(不存在/已是其它终态): 不属整链消亡面, 保留
+                candidates[uid] = up
+                frontier.append(up)
+        # I1 引用保护: 被保留账引用的候选缓行; 被缓行候选自己引用的候选一并缓行(至不动点)
+        # —— 缓行的账还活着, 其移交条目不能指向已删记录(悬空引用); 引用被缓行候选的候选
+        # 不受牵连(它整条记录被删, 引用随记录一起消失, 不悬空)。
+        blocked = set()
+        for other_id, other in self._jobs.items():
+            if other_id in candidates:
+                continue
+            for entry in other.inherited:
+                if entry.job_id in candidates:
+                    blocked.add(entry.job_id)
+        changed = True
+        while changed:
+            changed = False
+            for cid, cjob in candidates.items():
+                if cid not in blocked:
+                    continue
+                for entry in cjob.inherited:
+                    if entry.job_id in candidates and entry.job_id not in blocked:
+                        blocked.add(entry.job_id)
+                        changed = True
+        purged = []
+        for cid, cjob in candidates.items():
+            if cid in blocked:
+                logger.info(f"relocate | 整链清理: job {cid} 仍被保留账引用(I1 保护), 本次缓行")
+                continue
+            # 证据契约(clear_journal 同款): 删除前留痕 phase/ts, 结果行删后另记
+            logger.info(
+                f"relocate | 整链清理: job {cid}(phase={cjob.phase}, updated_at={cjob.updated_at}) "
+                "即将随链清除(账 + journal + spec)"
+            )
+            if not self._unlink_account_files(data_dir, cid):
+                logger.warning(f"relocate | 整链清理: job {cid} 盘面删除失败(journal/spec), 账保留待重试")
+                continue
+            self._jobs.pop(cid, None)
+            purged.append(cid)
+            logger.info(f"relocate | 整链清理: job {cid} 已随链清除")
+        if purged:
+            self._persist()
+            self._sync_relocating()
+            self._publish_snapshot()
+            self._sync_resuming()
+        return purged
+
+    @staticmethod
+    def _unlink_account_files(data_dir: str, job_id: str) -> bool:
+        """删单账的盘面(journal + spec; 「已不在」按成功计, 幂等)
+
+        顺序钉死: 先 spec(journal 还在时 daemon 即便扫到也没有相位投影可读? 反了 ——
+        daemon 扫 spec 命中后读 journal, spec 先删 = 发现面先撤, journal 短暂残留无害);
+        再 journal。任一 OSError(非 FileNotFoundError)返回 False, 调用方保留账待重试。
+        """
+        ok = True
+        for path in (relocate_journal.spec_path(data_dir, job_id), relocate_journal.journal_path(data_dir, job_id)):
+            try:
+                os.remove(path)
+            except FileNotFoundError:
+                continue
+            except OSError as e:
+                logger.warning(f"relocate | 整链清理: {path} 删除失败({e})")
+                ok = False
+        return ok
+
     # ---------- P3 执行入口(三入口共用) ----------
 
     def relocate_execute(
@@ -1743,21 +1733,20 @@ class ExecMixin:
                             "gate": ru.GATE_ALIAS_BUSY,
                             "text":
                                 f"别名重建可行性预检未过(句柄占用, S5 搬前预检加项): {shown} —— 收尾窗再迁移要把"
-                                "前任别名改道到新目标(先删后建), 探测判「此刻删除也会失败」; 请关闭占用者后重试"
+                                "前任别名统一改指到新目标(先删后建), 探测判「此刻删除也会失败」; 请关闭占用者后重试"
                                 "(qB 做种句柄带共享删除不会误报; 探测判不了的形态由搬移后重试至收敛兜底)",
                         }
                     ],
             }
         # ---- S5 搬前预检加项(收口评审 #2, D20): 前任别名形态 x 新目标卷位可行性 ——
-        # hardlink 形态文件别名改道到跨卷目标只能回落 symlink(见 alias_fs.retarget_alias 跨卷
-        # 回落), symlink 也不可用时改道永不可能收敛; 与其搬完把前任吊死在 supersede stage
+        # hardlink 形态文件别名改指到跨卷目标只能回落 symlink(见 alias_fs.retarget_alias 跨卷
+        # 回落), symlink 也不可用时改指永不可能收敛; 与其搬完把移交别名吊死在 handover stage
         # (成员已被搬走, 搬后回滚无法恢复服务), 不如搬前整体拒绝 —— 此刻零副作用, 账面/文件
         # 指纹原样。卷位关系借用本 job 的 src/dst 同卷判定: hardlink 建链约束保证别名与所指
         # 数据同卷, 所指数据根 = pred.dst = 本 job 源根(_predecessors_of 按 pred.dst==src
-        # 匹配), 故别名所在 pred.src 与本 job src 同卷; 改道目标 = job.dst(=target), 两者
-        # 同/跨卷关系与 facts.same_volume 一致。中途改道链(superseded_from 命中)下该等价
-        # 可破(pred.dst 已翻新值), 由 retarget_alias 内层 same_volume 探测 + symlink 回落
-        # 兜底, 不在此处复判。
+        # 匹配), 故别名所在 pred.src 与本 job src 同卷; 改指目标 = job.dst(=target), 两者
+        # 同/跨卷关系与 facts.same_volume 一致(等价破形由 retarget_alias 内层 same_volume
+        # 探测 + symlink 回落兜底, 不在此处复判)。
         infeasible = []
         for pred in preds:
             plan_kind = (pred.plan or {}).get("link_kind")
@@ -1998,7 +1987,6 @@ class ExecMixin:
         # 数据已回 src(0420 同款冻结态), 且 journal 落 cancelled 是终态、daemon 不再管 ——
         # 没有任何机制再把 fastresume 改回来, 违反「失败态永远收敛到别名还在、成员可读、
         # journal 待重放」。检查放在成本确认前: 连 confirm 面都不给, 不误导可撤。
-        # D15 cancel_chain 只挡同目标在途同伴, 挡不住这种「改写已落账」形态。
         # 判据集用 REWRITE_SETTLED_FROZEN(R4 评审轮 1 修 1): member_gone(fastresume 缺失
         # = 成员已删)虽是 settled, 但无「已改写到 dst」的冻结前提 —— 撤销不得被它误堵
         # (卡死悬挂 job 的唯一人工出口), 成员收缩由 R4 对账面另行收敛。
@@ -2035,30 +2023,9 @@ class ExecMixin:
         }
         if not cost_confirmed:
             return {"cls": "confirm", "cost": cost, "reasons": [{"gate": "cost", "text": cost["note"]}]}
-        # ---- S5 护栏: 有改道到同一目标的在途链式迁移时拒绝撤销 —— 撤销会把数据从本 job
-        # 目标搬回源, 掏空已改道前任(A→C)的成员数据服务(D15 零悬空纪律的撤销面)。
-        # 常规单迁移无同目标在途同伴, 护栏恒不触发(零行为差)。
-        codest = [
-            p for p in self.active_jobs()
-            if p.job_id != job.job_id and p.touches(job.hashes) and self._norm(p.dst) == self._norm(job.dst)
-        ]
-        if codest:
-            names = ", ".join(p.job_id for p in codest[:3])
-            return {
-                "cls":
-                    "blocked",
-                "job_id":
-                    job_id,
-                "reasons":
-                    [
-                        {
-                            "gate": "cancel_chain",
-                            "text":
-                                f"存在改道到同一目标({job.dst})的在途迁移({names}): 撤销会把共享数据搬回 {job.src}, "
-                                "使已改道前任的成员断粮 —— 请先撤销或等其收尾后再撤销本迁移",
-                        }
-                    ],
-            }
+        # (旧 cancel_chain 护栏已随改道机器退役, 计划 26-11-15-2340 §03.2: 单活任务模型下
+        # 同组续迁发起瞬间前任即收官终态, 「同目标在途同伴」结构性不存在; 同目标重复发起
+        # 在 relocate_execute 幂等 skip 去重, 不再需要撤销面护栏。)
         # ---- R1#23: 搬回前必须核实链接已删净 —— _remove_links 逐条删、单条失败只告警继续,
         # 旧写法无视返回值直接 setLocation(src): 有残留别名仍指向 dst 时, 回搬路径会穿过别名
         # 指回目标, libtorrent rename 失败走 copy+delete 回退即 copy-onto-self; 且残留链接从此
