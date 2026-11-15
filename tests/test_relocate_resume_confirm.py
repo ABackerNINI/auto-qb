@@ -61,6 +61,9 @@
 - test_resume_closure_recomputes_registries: 闭账后 relocating/resuming 登记即时重算正确
   (已删成员撤出两面, 停着的余量保留)
 - test_resume_closure_idempotent: 幂等: 闭账后重复拍无副作用(账面/登记零变化, 零新日志)
+- test_resume_deleted_closure_keeps_non_pending_member: 闭账只删 pending 里确认真删的成员,
+  resume_hashes 上非 pending(已闭合)成员保留(kept 过滤, issue 26-11-15-1433); 把闭账口径
+  改成全账扫 resume_hashes 或把账面收敛成 remaining pending 都必红
 ### 计数器停机摘要(issue 26-11-15-0345-feat, 计划 26-11-15-0914 S4)
 - test_stop_logs_failure_counters_zero: stop() 停机摘要一行, 全 0 也打(D12)
 - test_stop_logs_failure_counters_nonzero: 非 0 形态如实带出两个绝对计数(不建分母, D13)
@@ -708,6 +711,33 @@ def test_resume_mixed_deleted_and_stopped_only_deleted_closed():
     assert issues == [["HA", "HB"], ["HA", "HB"], ["HB"]], "第 3 拍补发只含仍停着的 HB"
     assert any("成员已删除, 恢复账闭账" in m and "HA" in m for m in cap.messages), cap.messages
     assert not any("成员已删除" in m and "HB" in m for m in cap.messages), "HB 仍停着, 不误闭"
+
+
+def test_resume_deleted_closure_keeps_non_pending_member():
+    """闭账只删 pending 里确认真删的成员: resume_hashes 上非 pending(已闭合)成员保留
+    (kept 过滤, issue 26-11-15-1433)。生产形态 = 成员 HC 已回运行态从确认账闭合但仍在
+    resume_hashes, 此后 HC 快照空窗不在 store; 无账可闭就不扩面。把 deleted 来源改成全账扫
+    resume_hashes, 或把 kept 写成 remaining pending, 本例必红"""
+    mod = _resume_mod(
+        api=types.SimpleNamespace(torrents_resume=lambda **kw: None),
+        store=types.SimpleNamespace(by_hash={}, relocating_hashes=set()),
+    )
+    mod._jobs["j1"] = _job(
+        "j1",
+        phase=ru.PHASE_FAILED,
+        resume_hashes=("HC", "HA"),  # HC 已闭账出 pending(仍在账上), HA 还在确认账上
+        resume_pending=("HA", ),
+        resume_retries=RESUME_MAX,
+    )
+    mod._resume_exhausted_warned.add("j1")  # 穷尽告警去重预挂: 本例只盯闭账面
+    with capture_logs(LOG_NAME) as cap:
+        for _ in range(DELETED_TICKS):  # HA 连续 3 拍不在 store -> 确认真删除闭账
+            mod._reconcile_resume_pending()
+    job = mod._jobs["j1"]
+    assert job.resume_hashes == ("HC", ), "非 pending 的 HC 不被闭账扩面清掉(kept 过滤)"
+    assert job.resume_pending == (), "确认账上已删的 HA 撤出"
+    closed = [m for m in cap.messages if "成员已删除, 恢复账闭账" in m]
+    assert len(closed) == 1 and "HA" in closed[0] and "HC" not in closed[0], f"闭账只点名 HA: {closed}"
 
 
 def test_resume_closure_adds_no_exhaustion_warning():

@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="relocate-move-window">
 <meta name="doc-refs" content="memory-bank/plans/26-11-15-0914-plan-relocate-resume-account-lifecycle.html, memory-bank/tasks/26-11-15-backend-relocate-resume-account-lifecycle.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="resume_hashes 已删成员 kept 过滤(代码保证)无用例直接钉">
 <meta name="issue-summary" content="604b52b3 落地的 resume_hashes 清理保证「非 pending 的已删成员不清理」(kept 过滤), 代码存在但无用例直接钉住该行为, 属低价值覆盖面候选">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-15-1433-test-resume-deleted-kept-filter-test-gap</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-15 14:33</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
 
@@ -118,6 +118,18 @@
   <h2><span class="no">§04</span>状态变更日志</h2>
   <ul>
     <li>2026-11-15 14:33 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    <li>2026-11-15 — 状态 Open → In Progress（kb.status）</li>
+    <li>2026-11-15 — 状态 In Progress → Done（kb.status）</li>
+</ul>
+</section>
+
+<section id="s5">
+  <h2><span class="no">§05</span>修复后补充（2026-11-15）</h2>
+  <ul>
+    <li><b>认领复验</b>：2026-11-15 15:45 复验 <code>relocate_lifecycle.py:374-375</code> 的 kept 过滤仍在；<code>tests/test_relocate_resume_confirm.py</code> 的七条闭账用例里 resume_hashes 成员全在 resume_pending 上（混合用例保留的 HB 仍是 pending 成员），全测试面无「非 pending 成员闭账后保留」的直接断言，覆盖缺口成立，按 §03 补用例而非 Dropped。</li>
+    <li><b>实际修法</b>：新增 <code>test_resume_deleted_closure_keeps_non_pending_member</code> 一条 —— 账上 <code>resume_hashes=("HC", "HA")</code> / <code>resume_pending=("HA", )</code>（HC 已闭合出 pending 但仍在账上、快照空窗不在 store），HA 连续 3 拍不在 store 判真删除闭账后，断言 HC 仍在 resume_hashes、HA 从 pending 撤出、闭账日志只点名 HA；同步登记进文件头主「## 测试计划」段。零产品代码改动，与 §03 建议修法一致。</li>
+    <li><b>红绿双验</b>：两种回归口径各注入一次源码变异 —— ① <code>for h in pending</code> 改成全账扫 <code>job.resume_hashes</code>；② <code>kept</code> 改成只留 remaining pending —— 新用例均在 <code>assert job.resume_hashes == ("HC", )</code> 处红（实测 <code>() == ('HC',)</code>）；还原后 <code>git diff -- src/auto_qb/core/modules/relocate_lifecycle.py</code> 为空，定向复跑 28 passed。</li>
+    <li><b>验证方式与数字</b>：定向 <code>test.one</code> 于 <code>test_relocate_resume_confirm.py</code> 28 passed、<code>test_test_plan_docstring_guard.py</code> 6 passed；<code>commands run ship.gate</code> 闸门全绿；<code>commands run test.full</code> 全绿（数字见 kb.baseline 最新切片）。代码评审一轮零 actionable。</li>
   </ul>
 </section>
 
