@@ -6,9 +6,10 @@
   relPop.open / rp-head(r-dot+verdict+phase) / rp-sep / rp-paths(rp-pl+rp-pv, 目标位置挂
   rp-em) / rp-kv / rp-reason 结构齐全; xtpl-cells.html 组行/种子行两分支都挂
   relPopEnter/relPopLeave; relocate_pop.js 调度参数 120/160 + assembleRelPop 单点在场且零请求
-  (无 fetch//api); app.js 末尾混入 AQB_RELOCATE_POP; 四皮肤 index.html 清单均引入
-  relocate_pop.js 且排在 app.js 之前(文件序不变量); row_lang.css .relpop 段不带 .rl-scope
-  前缀(teleport 到 body)且宽度/圆点/固定色/全出血分隔条四拍板值在场。
+  (无 fetch//api) + 终态窄放行谓词 _relPopTerminalGate 在场(issue 26-11-15-0345); app.js 末尾
+  混入 AQB_RELOCATE_POP; 四皮肤 index.html 清单均引入 relocate_pop.js 且排在 app.js 之前
+  (文件序不变量); row_lang.css .relpop 段不带 .rl-scope 前缀(teleport 到 body)且宽度/圆点/
+  固定色/全出血分隔条四拍板值在场 + 中性 tone 色义在场。
 - test_relocate_pop_assemble_node: node 探针真跑 assembleRelPop(照 test_p1_pair_state_mapping_node
   的 vm harness, format.js + decorate.js + relocate_pop.js 同 context 组装实例) —— 组 pair:
   paths 两行[当前位置/目标位置] + kv 序(成员 -> 来源 -> 更新, 组行无别名行); 组 mixed: 多目标
@@ -17,8 +18,10 @@
   (在途「恢复确认中」/穷尽「不再补发」两态, 走 relocateResumeText 单点), 空账不出行,
   组行无该行(组级聚合无恢复账); 区分位单点面: retries=上界而后端 resume_exhausted=false
   仍显在途文案(前端不重算上界, 机制侧改值不谎报); 初态面: retries=0 显无后缀变体
-  (不带「已补发」); 调度面: done / 无标注行 relPopEnter 不调度(relocateView
-  null 短路), moving 行调 120ms、leave 调 160ms 宽限。
+  (不带「已补发」); 终态窄放行(26-11-15-0345): done/cancelled + 账非空 -> 中性 tone 替身
+  组装(verdict 走词表「已完成/已撤销」, 待恢复 kv 走单点, 历史 src/dst 按数据在就给);
+  调度面: done+账 调 120ms, done 无账 / 无标注行 relPopEnter 不调度(闸短路), moving 行调
+  120ms、leave 调 160ms 宽限。
 """
 from __future__ import annotations
 
@@ -83,7 +86,11 @@ def test_webui_relocate_pop_wiring():
     assert ", 120);" in pop_js, "enter 延时必须 120ms(与 hrPop 同参, plan §07 风险表: 守阵钉数值)"
     assert ", 160);" in pop_js, "leave 宽限必须 160ms(与 hrPop 同参)"
     assert "assembleRelPop(row)" in pop_js, "数据组装单点 assembleRelPop 必须在场"
-    assert "relocateView(row)" in pop_js, "触发判据必须走 relocateView 单点(done/cancelled 不弹)"
+    assert "relocateView(row)" in pop_js, "触发判据必须走 relocateView 单点(进行中四态)"
+    assert "_relPopTerminalGate(row)" in pop_js, \
+        "终态窄放行谓词必须在场(issue 26-11-15-0345: done/cancelled 余量行的浮窗入口)"
+    assert pop_js.count("relocateResumeText(rel)") == 2, \
+        "终态窄放行判据与 kv 行都必须消费 relocateResumeText 单点(不另写第二份口径)"
     # 零请求只认代码态(剥块/行注释再查 —— 头注纪律文字里的 /api/relocate_chain 不算使用)
     pop_code = re.sub(r"/\*.*?\*/", "", pop_js, flags=re.S)
     pop_code = re.sub(r"//[^\n]*", "", pop_code)
@@ -111,9 +118,12 @@ def test_webui_relocate_pop_wiring():
     assert css.count("var(--path-src") >= 2, "D15: 当前位置标签+值都要 --path-src 固定色"
     assert ".rp-sep { height: 3px; margin: 6px -12px 8px;" in css, "D10 分隔条 3px 负边距全出血"
     assert ".rp-pv.rp-em { color: currentColor; }" in css, "D13 目标位置 = 状态色强调(currentColor)"
-    for tone in ("moving", "pending", "failed", "mixed"):
+    for tone in ("moving", "pending", "failed", "mixed", "neutral"):
         assert f".relpop .rel-tone-{tone}" in css, \
             f"浮窗域缺 .rel-tone-{tone} 色义 —— teleport 后行内 .rl-scope 段不命中, currentColor 全靠它"
+    # 行内展示边界不动(D11): 中性 tone 只在浮窗域, .rl-scope 域不给(RELOCATE_TONE/行内着色零触碰)
+    assert ".rl-scope .rel-tone-neutral" not in css, \
+        "中性 tone 不得进 .rl-scope 行内域(D11: done/cancelled 行内仍单排正常色)"
     assert "T3b" not in css, "T3b 临时兜底段已被 S3/S4 正式样式取代, 注释残留应清理"
 
 
@@ -154,13 +164,22 @@ const seedResumeEmpty=assemble({relocate:{state:'moving',src:'R:/s',dst:'R:/d',a
   resume_pending_count:0,resume_pending_hashes:[],resume_retries:0,resume_exhausted:false,updated_at:999880}});
 const grpResume=assemble({members:[{relocate:null}],
   relocate:{state:'moving',src:'R:/src',dst:['R:/dst'],pending:3,total:12,resume_pending_count:2,updated_at:999880}});
-// 调度面: done / 无标注 -> relocateView null 短路不调度; moving -> 120; leave -> 160
+// 终态窄放行(issue 26-11-15-0345): done/cancelled + 账非空 -> 中性 tone 替身组装; 无标注行照旧 null
+const seedDoneResume=assemble({relocate:{state:'done',src:'R:/s',dst:'R:/d',alias_count:0,
+  resume_pending_count:1,resume_pending_hashes:['HA'],resume_retries:3,resume_exhausted:true,updated_at:999880}});
+const seedCancelResume=assemble({relocate:{state:'cancelled',src:'R:/s',dst:'R:/d',alias_count:0,
+  resume_pending_count:2,resume_pending_hashes:['HA','HB'],resume_retries:1,resume_exhausted:false,updated_at:999880}});
+const seedNoMark=assemble({relocate:null});
+// 调度面: done+账(终态窄放行)-> 120; done 无账 / 无标注 -> 闸短路不调度; moving -> 120; leave -> 160
+M.relPopEnter.call(M,{currentTarget:{}},{relocate:{state:'done',src:'R:/s',dst:'R:/d',
+  resume_pending_count:1,resume_pending_hashes:['HA'],resume_retries:3,resume_exhausted:true}});
 M.relPopEnter.call(M,{currentTarget:{}},{relocate:{state:'done',src:'R:/s',dst:'R:/d'}});
 M.relPopEnter.call(M,{currentTarget:{}},{relocate:null});
 M.relPopEnter.call(M,{currentTarget:{}},{relocate:{state:'moving',src:'R:/s',dst:'R:/d'}});
 M.relPopLeave.call(M);
 process.stdout.write(JSON.stringify({grpPair,grpMixed,seedFail,seedAlias0,seedNoUpd,
-  seedResume,seedExhausted,seedMaxRetriesInflight,seedRetries0,seedResumeEmpty,grpResume,timers}));
+  seedResume,seedExhausted,seedMaxRetriesInflight,seedRetries0,seedResumeEmpty,grpResume,
+  seedDoneResume,seedCancelResume,seedNoMark,timers}));
 """
 
 
@@ -228,6 +247,20 @@ def test_relocate_pop_assemble_node():
     assert all(k[0] != "待恢复成员" for k in out["seedResumeEmpty"]["kv"]), "空账不得出待恢复行"
     assert all(k[0] != "待恢复成员" for k in out["grpResume"]["kv"]), "组行不出待恢复行(组级聚合无该账)"
 
-    # 调度面: done/无标注不调度(relocateView null 短路), moving 调 120ms, leave 调 160ms
-    assert out["timers"] == [120, 160], \
-        f"done/无标注行 relPopEnter 不得调度, moving 应调 120、leave 应调 160(实得 {out['timers']})"
+    # 终态窄放行(issue 26-11-15-0345): done/cancelled + 账非空 -> 中性 tone 替身, verdict 走词表
+    sd = out["seedDoneResume"]
+    assert sd["verdict"] == "已完成" and sd["tone"] == "neutral", \
+        "done 窄放行: verdict 必须复用词表「已完成」(零新文案), tone = 中性替身"
+    assert ["待恢复成员", "1 个 · 不再补发"] in sd["kv"], \
+        "done 穷尽账的待恢复行必须走 relocateResumeText 单点(与抽屉同文案)"
+    assert sd["paths"] == [["当前位置", "R:/s"], ["目标位置", "R:/d"]], \
+        "done 替身 one 模式: 历史 src/dst 按数据在就给"
+    sc = out["seedCancelResume"]
+    assert sc["verdict"] == "已撤销" and sc["tone"] == "neutral", "cancelled 窄放行同口径(词表+中性替身)"
+    assert ["待恢复成员", "2 个 · 恢复确认中(已补发 1 次)"] in sc["kv"], \
+        "cancelled 在途账同样出待恢复行(单点文案)"
+    assert out["seedNoMark"] is None, "无标注行 assembleRelPop 恒 null(双保险不放宽)"
+
+    # 调度面: done+账(窄放行)调 120ms; done 无账/无标注不调度(闸短路); moving 调 120ms, leave 调 160ms
+    assert out["timers"] == [120, 120, 160], \
+        f"终态窄放行应随 moving 一样调 120, done 无账/无标注行不得调度, leave 应调 160(实得 {out['timers']})"

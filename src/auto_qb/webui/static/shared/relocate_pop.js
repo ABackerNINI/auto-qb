@@ -10,8 +10,11 @@
  * !零请求契约: 浮窗数据全部来自行载荷(row.relocate 组行 g.relocate / 种子行 m.relocate)与
  *   relocateView(row)(decorate.js 单点), **不发任何请求** —— /api/relocate_chain 深探测
  *   仍只在链浮窗按需触发(relChain), 渲染期零触盘零请求(P0 纪律)。
- * !触发判据: relocateView(row) 非 null 才弹(即 state ∈ {moving, pending_finalize, failed, mixed});
- *   done / cancelled / 无标注行悬停无响应 —— 不出「已完成」结论(relocateView 同口径)。
+ * !触发判据: relocateView(row) 非 null(即 state ∈ {moving, pending_finalize, failed, mixed}),
+ *   或终态窄放行谓词 _relPopTerminalGate(row) 通过(done / cancelled 且 relocateResumeText 非空
+ *   —— 终态残留的恢复账余量行给浮窗入口, 判据与抽屉迁移段同一单点; issue 26-11-15-0345,
+ *   plan 26-11-15-0914 S3 D5/D11)。无标注行悬停无响应; 行内「不出已完成结论」的展示边界一条
+ *   不动(RELOCATE_TONE / 行内着色零触碰, done/cancelled 行内仍单排正常色)。
  *
  * !本文件在 HTML 里必须排在 app.js **之前**(app.js 末尾要读 window.AQB_RELOCATE_POP);
  *   消费的 relocateView / relocateStateText / relocateOriginText / fmtRelTime 都经 this 调
@@ -31,6 +34,17 @@ window.AQB_RELOCATE_POP = {
     return { relPop: { open: false, above: false, data: null } };
   },
   methods: {
+    /* ---------------- 终态窄放行谓词(issue 26-11-15-0345; plan 26-11-15-0914 S3 D5/D11) ----------------
+     * done / cancelled 终态行上残留的恢复确认账余量(relocateResumeText 非空)给浮窗入口 ——
+     * 判据与抽屉迁移段走同一文案单点(relocateResumeText), 不另写第二份口径。组行同样过闸,
+     * 但组级聚合无恢复账(group_relocate 载荷无 resume 字段), 经此谓词恒 false —— 账是
+     * 种子/成员行的, 组行不弹。行内展示边界不动: RELOCATE_TONE / 行内着色零触碰,
+     * done/cancelled 行内仍单排正常色(decorate.js 注释口径原样)。 */
+    _relPopTerminalGate(row) {
+      const rel = row && row.relocate;
+      if (!rel || (rel.state !== "done" && rel.state !== "cancelled")) return false;
+      return !!this.relocateResumeText(rel);
+    },
     /* ---------------- 触发调度(参数与 hr.js hrPopEnter/Leave/KeepOpen 逐条对齐) ----------------
      * 触发面 = 组行/种子行 save_path 单元格整体(xtpl-cells.html 两组分支; 浮窗只吃 hover,
      * chip 点击只筛路径不碰浮窗 —— R3 D16 零导航点击口径)。trg 必须在事件回调里同步捕获
@@ -41,7 +55,8 @@ window.AQB_RELOCATE_POP = {
       this._relPopGlobals();
       clearTimeout(relPopHideT);
       clearTimeout(relPopShowT);
-      if (!this.relocateView(row)) return;  // done/cancelled/无标注行不触发, 且顺带取消前一行挂起的显示
+      // 无标注行与终态无账行不触发(relocateView null 且终态窄放行不过), 且顺带取消前一行挂起的显示
+      if (!this.relocateView(row) && !this._relPopTerminalGate(row)) return;
       relPopShowT = setTimeout(() => this._relPopShow(row, trg), 120);
     },
     relPopLeave() {
@@ -103,10 +118,14 @@ window.AQB_RELOCATE_POP = {
       window.addEventListener("resize", () => this.relPopHideNow());
     },
     /* ---------------- 弹窗数据组装(全行载荷, 零请求) ----------------
-     * relocateView(row) 为 null 时返回 null(与触发判据双保险); 字段来源:
-     *   verdict <- relocateStateText(rel.state)(现状词表, mixed = 「迁移多任务」, 不新造文案);
+     * relocateView(row) 为 null 时: 终态窄放行行(_relPopTerminalGate 通过)用中性 tone 替身
+     * view 组装(替身只在本文件内构造, 不回写 relocateView/共享面 —— D11), 其余返回 null
+     * (与触发判据双保险); 字段来源:
+     *   verdict <- relocateStateText(rel.state)(现状词表, mixed = 「迁移多任务」, 不新造文案;
+     *             done/cancelled = 「已完成/已撤销」已在词表, 终态窄放行零改动复用);
      *   phase   <- rel.phase 原始相位串(小字 mono; 组级聚合无 phase -> 省略);
-     *   tone    <- relocateView(row).tone(与行内两排/单排着色同一判定, 不重算);
+     *   tone    <- view.tone(进行中四态与行内两排/单排着色同一判定, 不重算; 终态窄放行 =
+     *             中性替身 "neutral", 见下);
      *   paths   <- rel.src / rel.dst(组行 dst 是数组: mixed 逐行全标「目标位置」无当前位置行,
      *             非 mixed 回落同 pair 形态, 数据在就给);
      *   kv      <- 组行才有成员行(pending/total); 别名行仅种子行(member_relocate 有 alias_count,
@@ -117,8 +136,15 @@ window.AQB_RELOCATE_POP = {
      *   reason  <- 仅 rel.state==='failed' 且 rel.reason 非空, 前缀「原因: 」。
      */
     assembleRelPop(row) {
-      const view = this.relocateView(row);
-      if (!view) return null;
+      let view = this.relocateView(row);
+      if (!view) {
+        /* 闸放行但 view 缺失 = 终态窄放行行(relocateView 对 done/cancelled 恒 null): 构造中性
+         * tone 替身。实读字段仅 mode/tone(R4: 以实读为准) —— mode="one" 走单排回落(src/dst
+         * 按数据在就给, 终态行给的是历史路径); a/b/label 补齐 relocateView 输出形状(当前无
+         * 消费, 备形状一致)。替身只在本文件内用, 不回写共享面(D11)。 */
+        if (!this._relPopTerminalGate(row)) return null;  // 与触发判据双保险
+        view = { mode: "one", tone: "neutral", a: null, b: null, label: null };
+      }
       const rel = row.relocate;
       const isGroup = !!row.members;
       /* 路径块: pair = 当前位置/目标位置各一行; one = 按数据在就给(组行 dst 是数组) */

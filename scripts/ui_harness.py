@@ -126,21 +126,25 @@ def _inject_relocate_jobs(mgr, torrents) -> None:
     前端 relocateOptions 恒空, 「种子页筛选器有数据」的 relocate kind 空筛选器组恒红。
 
     与 _inject_add_options 同病同治: 默认桩恒空 => 那条渲染路径(迁移徽标/迁移筛选)永远测不到。
-    灌 4 个 job 覆盖筛选桶全部取值分支(moving / pending_finalize(armed) / failed /
-    done=只进「有过迁移」); 前两个落同一组对(i=0,1)让组级聚合出真实的跨状态多 job 形态。
+    灌 5 个 job 覆盖筛选桶全部取值分支(moving / pending_finalize(armed) / failed /
+    done=只进「有过迁移」/ cancelled) + 终态账两面(issue 26-11-15-0345 e2e 面): done 带穷尽
+    恢复账余量(resume_pending 非空 + retries 达上界, P2a 定案「穷尽后照常终态 + 余量挂账」,
+    浮窗终态窄放行的数据面), cancelled 无账作「终态无余量不弹」对照; 前两个落同一组对
+    (i=0,1)让组级聚合出真实的跨状态多 job 形态。
     """
     from auto_qb.core.modules.relocate_units import (
         PHASE_ARMED,
+        PHASE_CANCELLED,
         PHASE_DONE,
         PHASE_FAILED,
         PHASE_MOVING,
         RelocateSnapshot,
     )
-    # 守卫(评审 minor): 本注入按 torrents[0..3] 索引, --torrents<4 会 IndexError 崩在启动行打印前
-    # (e2e/harness.mjs 只校验正整数, E2E_TORRENTS=1..3 会过校验然后 webServer 捕获超时)。
-    # 同文件 _inject_site_alerts 有 len<2 守卫惯例; 少于 4 条时跳过注入(降级为恒空 relocate, 不崩)。
-    if len(torrents) < 4:
-        print(f"[harness] 迁移状态跳过注入: 种子数 {len(torrents)} < 4(索引面不足)", flush=True)
+    # 守卫(评审 minor): 本注入按 torrents[0..4] 索引, --torrents<5 会 IndexError 崩在启动行打印前
+    # (e2e/harness.mjs 只校验正整数, E2E_TORRENTS=1..4 会过校验然后 webServer 捕获超时)。
+    # 同文件 _inject_site_alerts 有 len<2 守卫惯例; 少于 5 条时跳过注入(降级为恒空 relocate, 不崩)。
+    if len(torrents) < 5:
+        print(f"[harness] 迁移状态跳过注入: 种子数 {len(torrents)} < 5(索引面不足)", flush=True)
         return
     now = time.time()
 
@@ -158,14 +162,22 @@ def _inject_relocate_jobs(mgr, torrents) -> None:
         }
 
     by_hash = {
-        torrents[0].hash: _job(torrents[0].hash, PHASE_MOVING, "job-harness-0"),
-        torrents[1].hash: _job(torrents[1].hash, PHASE_ARMED, "job-harness-1", armed_at=now),
-        torrents[2].hash: _job(torrents[2].hash, PHASE_FAILED, "job-harness-2", reason="目标卷空间不足"),
-        torrents[3].hash: _job(torrents[3].hash, PHASE_DONE, "job-harness-3"),
+        torrents[0].hash:
+            _job(torrents[0].hash, PHASE_MOVING, "job-harness-0"),
+        torrents[1].hash:
+            _job(torrents[1].hash, PHASE_ARMED, "job-harness-1", armed_at=now),
+        torrents[2].hash:
+            _job(torrents[2].hash, PHASE_FAILED, "job-harness-2", reason="目标卷空间不足"),
+        # done 终态 + 穷尽恢复账余量(issue 26-11-15-0345): member_relocate 投影按 resume_retries
+        # 达上界算 resume_exhausted=true -> 前端「不再补发」文案; 无账终态对照 = 下行 cancelled
+        torrents[3].hash:
+            _job(torrents[3].hash, PHASE_DONE, "job-harness-3", resume_pending=[torrents[3].hash], resume_retries=3),
+        torrents[4].hash:
+            _job(torrents[4].hash, PHASE_CANCELLED, "job-harness-4"),
     }
     mgr.config.relocate.enabled = True
     mgr.ctx.relocate = _FakeRelocateJobs(RelocateSnapshot(generation=1, by_hash=by_hash))
-    print(f"[harness] 迁移状态已注入: job={len(by_hash)} (moving/armed/failed/done)", flush=True)
+    print(f"[harness] 迁移状态已注入: job={len(by_hash)} (moving/armed/failed/done+穷尽账/cancelled)", flush=True)
 
 
 def _install_search_refresh_probe(app, mgr, site_conf) -> None:

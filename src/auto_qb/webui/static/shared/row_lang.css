@@ -671,6 +671,11 @@ html[data-rowlang="wave"]:not([data-theme="frost"]):not([data-theme="golden"]) .
 .relpop .rel-tone-pending { color: var(--warn, #f5bb42); }
 .relpop .rel-tone-failed { color: var(--error, #f3766f); }
 .relpop .rel-tone-mixed { color: var(--warn, #f5bb42); }
+/* 终态窄放行替身 tone(issue 26-11-15-0345): done/cancelled 有恢复账的行浮窗入口用中性色 =
+ * 常态文字色, 不出状态结论(「不出已完成结论」的行内边界不动, D11) —— 四皮肤同一份令牌
+ * (--fg), 不写皮肤分支。行内 .rl-scope 域不给: RELOCATE_TONE/行内着色零触碰, 终态行内
+ * 仍单排正常色。 */
+.relpop .rel-tone-neutral { color: var(--fg, #e4eaef); }
 /* 指向箭头: 照 .hr-pop 的 .hp-arrow 形态(8px 旋转方块, 上下翻两态换边), 不抽公共类 */
 .rp-arrow { position: absolute; width: 8px; height: 8px; display: none; transform: rotate(45deg);
   background: var(--bg-pop, #1a2231);
