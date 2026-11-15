@@ -260,7 +260,7 @@ def test_pending_tag_job_id_reuse_carries_prev_state(tmp_path, monkeypatch):
     mod._tag_applied[job_id] = "add"  # 上一轮 add 成功后的进程内记忆
     fresh = replace(prev, phase=ru.PHASE_MOVING, tag_on=False)
 
-    carried = mod._carry_prev_tag_state(job_id, fresh)
+    carried = mod._carry_prev_state(job_id, fresh)
     assert carried.tag_on is True, "旧账 tag_on 丢失 => 新 job 终态不会摘掉 qB 上残留标签"
     assert job_id not in mod._tag_applied, "旧 'add' 记忆不清 => 新 job armed 会跳过 add"
 

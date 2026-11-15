@@ -1419,20 +1419,31 @@ class ExecMixin:
                 }],
         }
 
-    def _carry_prev_tag_state(self, job_id: str, job: RelocateJob) -> RelocateJob:
-        """同一 job_id 重发时继承上一轮的「曾加标签」账
+    def _carry_prev_state(self, job_id: str, job: RelocateJob) -> RelocateJob:
+        """同一 job_id 重发时继承上一轮的两本账:「曾加标签」+「恢复确认余量」
 
         job_id 由 mover|src→dst 派生, 撤销/失败后重发会复用同一 id; 直接覆盖 ``_jobs[job_id]``
-        会丢掉旧账 tag_on=True, 而进程内 ``_tag_applied="add"`` 又会让新 job 的 armed 跳过 add、
-        终态也不再 remove —— 旧标签永久留在 qB。继承 tag_on 并清掉进程内镜像记忆, 让本轮
-        armed 重新确认 add(幂等)、终态照常摘除。
+        会丢掉旧账:
+        - tag_on=True: 进程内 ``_tag_applied="add"`` 会让新 job 的 armed 跳过 add、终态也不再
+          remove —— 旧标签永久留在 qB。继承 tag_on 并清掉进程内镜像记忆, 让本轮 armed 重新
+          确认 add(幂等)、终态照常摘除。
+        - resume_pending 非空: 旧生命周期未确认回运行态的余量随覆盖消失, 该组恢复确认失明
+          一次(穷尽挂账的成员无人再补发)。把余量并进新 job 的 resume_hashes(现场名单在前、
+          结转余量在后、去重), 随出口开账走正常补发确认链。不看 prev 终态(穷尽挂账与中途
+          撤销同权结转); resume_retries 是 job 级 int, 新账天然从 0 重计, 结转成员按新生命
+          周期重获补发预算。
         """
         prev = self._jobs.get(job_id)
-        if prev is None or not prev.tag_on:
+        if prev is None:
             return job
-        self._tag_applied.pop(job_id, None)
-        self._tag_next_try.pop(job_id, None)
-        return replace(job, tag_on=True)
+        if prev.tag_on:
+            self._tag_applied.pop(job_id, None)
+            self._tag_next_try.pop(job_id, None)
+            job = replace(job, tag_on=True)
+        carried = tuple(h for h in prev.resume_pending if h not in job.resume_hashes)
+        if carried:
+            job = replace(job, resume_hashes=tuple(job.resume_hashes) + carried)
+        return job
 
     def _start_job(
         self,
@@ -1587,7 +1598,7 @@ class ExecMixin:
                 "files": [[n, s] for n, s in facts.files],
             },
         )
-        job = self._carry_prev_tag_state(job_id, job)
+        job = self._carry_prev_state(job_id, job)
         self._jobs[job_id] = job
         self._jobs_loaded = True  # 会话级不变量: 动 job 账必置位(stop() 补写闸的依据, 见 RelocateModule.__init__ 注)
         self._rt[job_id] = {

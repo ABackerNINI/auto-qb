@@ -39,6 +39,15 @@
 - test_start_job_pause_issue_args_and_crash_window: 暂停/下发实参钉死 + 崩溃窗补发
   + 补发 setLocation 入参(只发 mover) + 发起 rt 初值(stall_since/last_size/sample_ts)
 - test_start_job_plan_faces: plan 消费 file_link_error 与 hard_max 配置
+### job_id 复用结转(issue 26-11-15-0344, 计划 26-11-15-0914 S1)
+- test_start_job_jobid_reuse_carries_prev_resume_pending: 终态重发同组 -> 旧账 resume_pending 结转进新账
+  (现场在前/结转在后/去重, pending 含现场成员 HA 钉去重面), retries 从 0 重计(D2/D3: 不看 prev 终态);
+  prev.tag_on=True 同命中 -> 新账 tag_on 保留(tag 面与结转分支不互斥)
+- test_start_job_jobid_reuse_empty_prev_pending_carries_nothing: prev 恢复账已闭合(pending 空) -> 不结转
+- test_start_job_jobid_reuse_nonterminal_prev_still_blocked: prev 非终态 -> GATE_UNFINISHED blocked 不变,
+  旧账对象不被结转触碰
+- test_start_job_reverse_migration_differs_no_carry: 反向迁移(旧 dst->旧 src)派生不同 job_id -> 不结转
+  (job_id_for 参数序长期钉, 防 R6)
 - test_start_wiring_and_load_jobs: start 接线(ctx/dry/enabled)与 _load_jobs rt 账
 - test_cancel_write_intent_faces: 撤销写意图(删链接/搬回实参/reason/回执)
 ### 撤销安全守卫(issue 26-11-07-0527 R1#23/R1#24)
@@ -904,6 +913,119 @@ def test_start_job_plan_faces(tmp_path, monkeypatch):
     assert any("目录别名不可建" in r["text"] for r in v5["reasons"]), v5
     item5 = mod._start_job(recs, "R:/dst", facts5, v5, client)
     assert item5["cls"] == "blocked" and any("目录别名不可建" in r["text"] for r in item5["reasons"]), item5
+
+
+# ---- job_id 复用结转(issue 26-11-15-0344, 计划 26-11-15-0914 S1) ----
+
+
+def test_start_job_jobid_reuse_carries_prev_resume_pending(tmp_path, monkeypatch):
+    """终态重发同组: 旧账 resume_pending 结转进新账(现场在前/结转在后/去重), retries 从 0 重计"""
+    pin_disk_usage(monkeypatch)
+    mgr, client, src, dst, content, files = relocate_env(tmp_path, state="uploading")
+    mod = mgr.host.get("relocate")
+    recs = [mgr.store.by_hash["HA"]]
+    facts = mod._group_facts(recs, dst, client)
+    verdict = {"cls": "ok", "notes": [], "reasons": []}
+    jid = ru.job_id_for("HA", dst, src)
+
+    from auto_qb.core.modules.relocate_lifecycle import _RESUME_RETRY_MAX
+
+    # 上一生命周期: 终态 + 穷尽未恢复余量(D3: 不看 prev 终态, 一视同仁结转);
+    # pending 含 HA(现场已停的成员)钉去重面, tag_on=True 钉两账同命中不互斥
+    mod._jobs[jid] = ru.RelocateJob(
+        job_id=jid,
+        hashes=("HA", "HB"),
+        mover="HA",
+        src=src,
+        dst=dst,
+        scope=content,
+        phase=ru.PHASE_FAILED,
+        resume_hashes=("HA", "HB"),
+        resume_pending=("HA", "HB", "HZ"),
+        resume_retries=_RESUME_RETRY_MAX,
+        tag_on=True,
+    )
+    item = mod._start_job(recs, dst, facts, verdict, client)
+    assert item["cls"] == "started", item
+    new = mod._jobs[jid]
+    assert new.phase == ru.PHASE_MOVING, new
+    # 现场名单在前(发起时暂停的运行成员 = HA), 结转余量在后并去重(HA 已在现场不重复)
+    assert new.resume_hashes == ("HA", "HB", "HZ"), new.resume_hashes
+    assert new.resume_retries == 0, "新账 retries 从 0 重计(D2: 结转成员按新生命周期重获补发预算)"
+    assert new.tag_on is True, "tag_on 继承与结转分支不互斥(第二个 replace 不得丢 tag_on)"
+
+
+def test_start_job_jobid_reuse_empty_prev_pending_carries_nothing(tmp_path, monkeypatch):
+    """prev 恢复账已闭合(pending 空) -> 重发不结转, 新账 resume_hashes = 现场名单原样"""
+    pin_disk_usage(monkeypatch)
+    mgr, client, src, dst, content, files = relocate_env(tmp_path)
+    mod = mgr.host.get("relocate")
+    recs = [mgr.store.by_hash["HA"]]
+    facts = mod._group_facts(recs, dst, client)
+    verdict = {"cls": "ok", "notes": [], "reasons": []}
+    jid = ru.job_id_for("HA", dst, src)
+
+    mod._jobs[jid] = ru.RelocateJob(
+        job_id=jid,
+        hashes=("HA", "HB"),
+        mover="HA",
+        src=src,
+        dst=dst,
+        scope=content,
+        phase=ru.PHASE_DONE,
+        resume_hashes=("HA", "HB"),
+        resume_pending=(),
+    )
+    item = mod._start_job(recs, dst, facts, verdict, client)
+    assert item["cls"] == "started", item
+    new = mod._jobs[jid]
+    # pausedUP 现场 running=(), pending 空 -> 结转零动作, resume_hashes 原样为空
+    assert new.resume_hashes == (), new.resume_hashes
+    assert new.resume_pending == (), new.resume_pending
+
+
+def test_start_job_jobid_reuse_nonterminal_prev_still_blocked(tmp_path, monkeypatch):
+    """prev 非终态(在途) -> GATE_UNFINISHED blocked 不变; 拦截先于结转, 旧账对象原样"""
+    pin_disk_usage(monkeypatch)
+    mgr, client, src, dst, content, files = relocate_env(tmp_path)
+    mod = mgr.host.get("relocate")
+    recs = [mgr.store.by_hash["HA"]]
+    facts = mod._group_facts(recs, dst, client)
+    verdict = {"cls": "ok", "notes": [], "reasons": []}
+    jid = ru.job_id_for("HA", dst, src)
+
+    prev = ru.RelocateJob(
+        job_id=jid,
+        hashes=("HA", "HB"),
+        mover="HA",
+        src=src,
+        dst=dst,
+        scope=content,
+        phase=ru.PHASE_ARMED,
+        resume_hashes=("HA", ),
+        resume_pending=("HA", ),
+        resume_retries=1,
+    )
+    mod._jobs[jid] = prev
+    item = mod._start_job(recs, dst, facts, verdict, client)
+    assert item["cls"] == "blocked" and item["job_id"] == jid, item
+    assert item["reasons"][0]["gate"] == ru.GATE_UNFINISHED, item
+    assert mod._jobs[jid] is prev, "在途拦截不放行, 旧账对象不被覆盖/结转触碰"
+
+
+def test_start_job_reverse_migration_differs_no_carry():
+    """反向迁移(旧 dst->旧 src)派生不同 job_id -> 读不到旧账, 不结转(job_id_for 参数序长期钉, 防 R6)"""
+    mod = _bare_mod()
+    fwd = ru.job_id_for("HA", "R:/dst", "R:/src")
+    rev = ru.job_id_for("HA", "R:/src", "R:/dst")
+    assert fwd != rev, "参数序漂移会让反向迁移与正向同键(R6)"
+
+    mod._jobs[fwd] = _job(fwd, phase=ru.PHASE_FAILED, resume_hashes=("HA", ), resume_pending=("HB", ))
+    fresh = _job(rev, resume_hashes=("HC", ))
+    carried = mod._carry_prev_state(rev, fresh)
+    assert carried.resume_hashes == ("HC", ), "不同 job_id 不结转"
+    assert carried.resume_pending == (), carried
+    assert carried.resume_retries == 0, carried
 
 
 def test_start_wiring_and_load_jobs(tmp_path, monkeypatch):

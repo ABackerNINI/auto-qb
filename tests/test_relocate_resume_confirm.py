@@ -39,6 +39,10 @@
 - test_resuming_registry_tracks_account_no_lag: resuming 登记 = 账窗口 —— 挂账拍即登记
   (随 _note_resume_state 即时重算, 不等 _set_job 不滞后), 账闭合拍即撤登记; 老 store
   替身无该字段自建不炸(issue 26-11-15-0441)
+### job_id 复用结转(issue 26-11-15-0344, 计划 26-11-15-0914 S1)
+- test_carried_resume_pending_reopens_account_via_arm_chain: 旧账结转成员并入新账 resume_hashes 后,
+  经 _arm 开账面(_resume_members)挂账全量 + retries 从 0 重计, 退避点补发仍停着的结转成员,
+  快照回流后确认闭合(走正常补发确认链)
 - test_resuming_registry_keeps_terminal_job_and_exhausted_members: 终态挂账 job 仍登记
   (不沿用 active_jobs 过滤); 穷尽收敛(pending 只剩仍停者)登记保持, 自愈闭合即撤
 - test_resuming_registry_rebuilt_on_load_jobs: 启动加载面 —— state 恢复的挂账 job(终态与否)
@@ -46,6 +50,8 @@
 """
 
 import types
+
+from dataclasses import replace
 
 from auto_qb.core.modules import relocate_units as ru
 
@@ -528,3 +534,48 @@ def test_resuming_registry_rebuilt_on_load_jobs():
     }
     assert mod._load_jobs() == 2
     assert mod._ctx.store.resuming_hashes == {"HA", "HB", "HC"}, "挂账 job(含终态 j2)的成员全部重建进登记"
+
+
+def test_carried_resume_pending_reopens_account_via_arm_chain():
+    """旧账结转成员经 _arm 开账后走正常补发确认链(issue 26-11-15-0344, S1 用例(5))
+
+    同 id 重发把 prev.resume_pending 结转进新账 resume_hashes(现场在前/结转在后), _arm 的
+    开账面(_resume_members)按新生命周期挂账全量 + retries 从 0 重计; 退避点补发仍停着的
+    结转成员, 快照回流后确认闭合 —— 结转余量重获补发预算, 不因旧生命周期穷尽而失明。
+    """
+    issues = []
+    mod = _resume_mod(
+        api=types.SimpleNamespace(torrents_resume=lambda **kw: issues.append(list(kw["torrent_hashes"]))),
+        store=types.SimpleNamespace(by_hash={
+            "HC": _running("HC"),
+            "HB": _stopped("HB")
+        }, relocating_hashes=set()),
+    )
+    # 上一生命周期: 终态 + 穷尽挂账(HB 未恢复, retries 已耗尽)
+    mod._jobs["j1"] = _job(
+        "j1", phase=ru.PHASE_FAILED, resume_hashes=("HA", "HB"), resume_pending=("HB", ), resume_retries=RESUME_MAX
+    )
+    fresh = _job("j1", resume_hashes=("HC", ))
+    carried = mod._carry_prev_state("j1", fresh)
+    assert carried.resume_hashes == ("HC", "HB"), carried.resume_hashes
+
+    armed = replace(carried, phase=ru.PHASE_ARMED)
+    mod._jobs["j1"] = armed
+    mod._resume_members(armed)  # _arm 的开账面
+    assert issues == [["HC", "HB"]], issues  # 现场 + 结转余量一次下发
+    assert mod._jobs["j1"].resume_pending == ("HC", "HB"), "开账挂全量, 等快照回流核对"
+    assert mod._jobs["j1"].resume_retries == 0, "新生命周期 retries 从 0 重计(旧账穷尽不结转)"
+
+    # HC 已回运行态 -> 账面收敛; 退避点补发仍停着的结转成员 HB(预算从 0 重获, 第 1/3 次)
+    mod._clock.advance(RESUME_BACKOFF)
+    mod._reconcile_resume_pending()
+    assert issues[-1] == ["HB"], issues
+    assert mod._jobs["j1"].resume_pending == ("HB", )
+    assert mod._jobs["j1"].resume_retries == 1
+
+    # 结转成员回运行态(快照回流): 确认闭合清账
+    mod._ctx.store.by_hash["HB"] = _running("HB")
+    mod._clock.advance(RESUME_BACKOFF)
+    mod._reconcile_resume_pending()
+    assert mod._jobs["j1"].resume_pending == ()
+    assert "j1" not in mod._resume_next_try
