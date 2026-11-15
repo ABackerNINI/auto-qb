@@ -115,11 +115,15 @@ S2(POST /api/backup/import, 计划 §04 S2 验收矩阵逐条):
 - test_unmask_yaml_target_items_edge_shapes: targets 还原边角 —— 旧条目非 dict/缺名不进配对表,
   bundle 条目非 dict 跳过, 无名条目 missing 用下标
 - test_find_residual_sentinels_shared_containers_dedup: 残留哨兵扫描容器去重(dict/list 两面)
+- test_validate_yaml_doc_cleanup_guard_when_tempfile_open_fails: validate_yaml_doc finally
+  清理守卫空值弧(369 空值)—— NamedTemporaryFile 打开失败(临时目录不可用)时 tmp_path 保持
+  None, 守卫跳过删除且原异常照常传播(issue 26-11-15-1359)
 """
 import io
 import json
 import os
 import re
+import tempfile
 from datetime import datetime
 from pathlib import Path
 
@@ -1423,3 +1427,17 @@ def test_find_residual_sentinels_shared_containers_dedup():
     shared_list = [MASK_SENTINEL]
     doc = {"a": shared_dict, "b": shared_dict, "c": shared_list, "d": shared_list}
     assert find_residual_sentinels(doc) == ["a.k", "c[0]"]
+
+
+def test_validate_yaml_doc_cleanup_guard_when_tempfile_open_fails(tmp_path, monkeypatch):
+    """validate_yaml_doc finally 清理守卫的空值弧(369 空值, issue 26-11-15-1359): 临时目录不可用
+    时 NamedTemporaryFile 在 tmp_path 赋值前抛 OSError -> finally 里 tmp_path 保持 None, 守卫
+    `if tmp_path and os.path.exists(...)` 短路跳过删除, 原 OSError 照常传播不被清理路径破坏。
+
+    触发面(自然可达, 非死分支): tempfile.tempdir 指向不存在的目录(对应生产上 TMPDIR 被清
+    理/换盘等临时目录失效场景), 走的是 tempfile 真实开文件路径而非替身函数。
+    """
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path / "no-such-temp-dir"))
+    doc = _build_yaml().load(io.StringIO("config:\n    schema_version: 8\n"))
+    with pytest.raises(OSError):
+        config_writer.validate_yaml_doc(doc)

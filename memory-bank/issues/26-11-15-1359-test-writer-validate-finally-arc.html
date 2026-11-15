@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="writer-validate-finally-arc">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="writer.validate_yaml_doc finally tmp_path 空值弧无覆盖">
 <meta name="issue-summary" content="369-&gt;exit 分支端点面不可自然触发, 终态基线 99.61% 下仍列缺口语">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-15-1359-test-writer-validate-finally-arc</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-15 13:59</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
 
@@ -110,13 +110,29 @@
 <section id="s3">
   <h2><span class="no">§03</span>建议<span class="opt">（可选）</span></h2>
   <p>直调 <code>validate_yaml_doc</code> 构造 tmp_path 置空路径的单测钉住该弧; 若评估为死分支(空值不可达)则按 Dropped 处置并注释, 二选一。</p>
+  <h3>修复后补充（26-11-15）</h3>
+  <p><strong>可达性评估: 可达, 非死分支。</strong> <code>tmp_path</code> 保持 <code>None</code> 的唯一窗口是
+  <code>tempfile.NamedTemporaryFile(...)</code> 在 <code>tmp_path = f.name</code> 赋值前抛错(with 体未进入),
+  此时 finally 里 <code>if tmp_path</code> 短路为假 → 369-&gt;exit 弧执行。真实输入: 临时目录不可用
+  (TMPDIR 被清理/换盘等)时 tempfile 开文件失败即触发 —— 防御性清理守卫, 生产可达; 调用面
+  <code>_prepare_import_locked</code>(writer.py:395, bundle 导入先验/提交共用)不改变该结论。</p>
+  <p><strong>处置: 按「可达」口径补直调单测钉弧</strong>(代码逻辑零改动): <code>tests/test_web_backup.py</code>
+  新增 <code>test_validate_yaml_doc_cleanup_guard_when_tempfile_open_fails</code> —— monkeypatch
+  <code>tempfile.tempdir</code> 指向不存在目录(走 tempfile 真实开文件路径, 非替身函数), 断言原
+  <code>OSError</code> 照常传播(守卫被破坏时 <code>os.path.exists(None)</code> 抛 TypeError 替换原异常)。
+  变异验证: 临时把守卫短路(<code>if True:</code>)新测试确实变红(TypeError), 还原后回绿 —— 测试真实
+  钉住该弧; 测试文件头部「## 测试计划」清单已同步。</p>
+  <p><strong>验证数字（实测誊写）:</strong> <code>test.one</code> 该用例 1 passed; <code>test.full</code>
+  6265 passed / 2 skipped, TOTAL 99%(27855 stmts / 9822 branches); 单文件覆盖率报表 writer.py 行
+  missing 列表已无 <code>369</code> 弧缺口(其余缺口均为本测试未触碰的函数面, 由全量测试面兜住)。</p>
 </section>
 
 <section id="s4">
   <h2><span class="no">§04</span>状态变更日志</h2>
   <ul>
     <li>2026-11-15 13:59 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-15 — 状态 Open → Done（kb.status）</li>
+</ul>
 </section>
 
 <footer>
