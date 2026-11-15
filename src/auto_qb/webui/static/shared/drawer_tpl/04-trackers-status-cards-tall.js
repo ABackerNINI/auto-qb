@@ -199,14 +199,14 @@
     const stats = [];
     if (b !== "off" || num(t.num_seeds)) {
       const sd = ctx.fmtPeersQb(t.num_seeds, t.num_complete);
-      stats.push({ label: "种子", val: sd || "—", z: !sd, title: "num_seeds (num_complete)" });
+      stats.push({ label: "种子", val: sd || "—", z: !sd });
     }
     if (b !== "off" || num(t.num_leeches)) {
       const lc = ctx.fmtPeersQb(t.num_leeches, t.num_incomplete);
-      stats.push({ label: "用户", val: lc || "—", z: !lc, title: "num_leeches (num_incomplete)" });
+      stats.push({ label: "用户", val: lc || "—", z: !lc });
     }
-    if (num(t.num_peers)) stats.push({ label: "连接", val: String(t.num_peers), title: "num_peers: 经由该 tracker 连接的对端" });
-    if (num(t.num_downloaded)) stats.push({ label: "完成下载", val: String(t.num_downloaded), suffix: "次", title: "num_downloaded: 该 tracker 报告的累计完成下载次数" });
+    if (num(t.num_peers)) stats.push({ label: "连接", val: String(t.num_peers), title: "经由该 tracker 连接的对端" });
+    if (num(t.num_downloaded)) stats.push({ label: "完成下载", val: String(t.num_downloaded), suffix: "次", title: "该 tracker 报告的累计完成下载次数" });
     /* msg 块: 失败=错误框 / 警告=黄框 / 其余有 msg 则弱化备注 */
     const m = String(t.msg || "").trim();
     const msg = m && b !== "off" ? { text: m, cls: b === "err" ? "m-err" : (b === "warn" ? "m-warn" : "m-note") } : null;

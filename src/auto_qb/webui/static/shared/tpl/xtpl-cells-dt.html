@@ -34,7 +34,7 @@
       <span v-for="s in p.stats" :key="s.label" class="dt04-s" :title="s.title">{{ s.label }} <b :class="{ z: s.z }">{{ s.val }}</b><template v-if="s.suffix"> {{ s.suffix }}</template></span>
     </div>
     <div v-if="p.msg" class="dt04-msg" :class="p.msg.cls" title="tracker 返回的原始 msg">{{ p.msg.text }}</div>
-    <div v-if="p.offNote" class="dt04-vnote" title="status = 0">该 tracker 已被 qB 禁用(状态「禁用」), 不参与汇报</div>
+    <div v-if="p.offNote" class="dt04-vnote">该 tracker 已被 qB 禁用(状态「禁用」), 不参与汇报</div>
   </template>
 </script>
 
@@ -98,16 +98,16 @@
             title="tracker 返回的原始 msg, 点击展开 / 收起">{{ p.m }}</span>
     </div>
     <div v-else-if="col.key === 'tier'" class="dt06-tier" title="tier: 汇报层级, 数值越小越优先">{{ p.tier }}</div>
-    <div v-else-if="col.key === 'seeds'" class="dt06-v num" :class="{ z: p.seeds.z }" title="num_seeds (num_complete)">{{ p.seeds.val }}</div>
-    <div v-else-if="col.key === 'leeches'" class="dt06-v num" :class="{ z: p.leeches.z }" title="num_leeches (num_incomplete)">{{ p.leeches.val }}</div>
-    <div v-else-if="col.key === 'downloaded'" class="dt06-v num" :class="{ z: p.downloaded.z }" title="num_downloaded: 该 tracker 报告的累计完成下载次数">{{ p.downloaded.val }}</div>
+    <div v-else-if="col.key === 'seeds'" class="dt06-v num" :class="{ z: p.seeds.z }">{{ p.seeds.val }}</div>
+    <div v-else-if="col.key === 'leeches'" class="dt06-v num" :class="{ z: p.leeches.z }">{{ p.leeches.val }}</div>
+    <div v-else-if="col.key === 'downloaded'" class="dt06-v num" :class="{ z: p.downloaded.z }" title="该 tracker 报告的累计完成下载次数">{{ p.downloaded.val }}</div>
     <div v-else-if="col.key === 'next'" class="dt06-nextcell">
-      <span v-if="p.next.kind === 'upd'" class="dt06-next-upd" title="该 tracker 正在汇报中"><i class="pulse"></i>正在汇报</span>
+      <span v-if="p.next.kind === 'upd'" class="dt06-next-upd"><i class="pulse"></i>正在汇报</span>
       <span v-else-if="p.next.kind === 'none'" class="dt06-none" title="虚拟/未启用条目不参与汇报">—</span>
       <span v-else-if="p.next.kind === 'real'" class="dt06-next" title="该 tracker 的下次重新汇报倒计时(行级 next_announce 真值)">
         <span><b>{{ p.next.val }}</b></span>
       </span>
-      <span v-else class="dt06-next" title="P-02 回退: qB 无 per-tracker 口径, 以种子级 detail.reannounce_in 全局值近似">
+      <span v-else class="dt06-next" title="qB 无 per-tracker 口径, 以种子级 detail.reannounce_in 全局值近似">
         <span><b>{{ p.next.val }}</b> <span class="dt06-gb">全局</span></span>
         <span v-if="p.next.bar" class="dt06-tbar" title="汇报周期剩余比例"><i :style="{ width: p.next.bar + '%' }"></i></span>
       </span>

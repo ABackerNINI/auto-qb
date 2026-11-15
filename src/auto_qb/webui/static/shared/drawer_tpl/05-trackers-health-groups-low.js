@@ -210,13 +210,13 @@
     const sd = ctx.fmtPeersQb(t.num_seeds, t.num_complete);
     const lc = ctx.fmtPeersQb(t.num_leeches, t.num_incomplete);
     if (num(t.num_seeds) || num(t.num_complete)) {
-      stats.push({ label: "种子", val: sd || "—", z: !sd, title: "num_seeds (num_complete)" });
+      stats.push({ label: "种子", val: sd || "—", z: !sd });
     }
     if (num(t.num_leeches) || num(t.num_incomplete)) {
-      stats.push({ label: "用户", val: lc || "—", z: !lc, title: "num_leeches (num_incomplete)" });
+      stats.push({ label: "用户", val: lc || "—", z: !lc });
     }
     if (num(t.num_downloaded)) {
-      stats.push({ label: "完成", val: String(t.num_downloaded), title: "num_downloaded" });
+      stats.push({ label: "完成", val: String(t.num_downloaded) });
     }
     return {
       k: "t" + i,
