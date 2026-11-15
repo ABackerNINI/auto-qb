@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>relocate 结构重构: 单活任务模型 + 判定单点 + 接口显式化</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="relocate-refactor">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-15-2340">
+<meta name="doc-updated" content="26-11-15-2340">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-15-backend-relocate-refactor.md, memory-bank/issues/26-11-07-0528-question-relocate-supersede-cancel-semantics.html, memory-bank/issues/26-11-10-0326-feat-relocate-terminal-jobs-no-exit.html, memory-bank/issues/26-11-10-0638-bug-legacy-review4-relocate-probe-blocking.html, memory-bank/issues/26-11-13-0535-bug-relocate-ancestor-savepath-blindspot.html, memory-bank/issues/26-11-13-0711-bug-relocate-direct-form-deep-add-hole.html, memory-bank/issues/26-11-14-0401-bug-relocate-absence-offline-deletion-hole.html, memory-bank/issues/26-11-05-0420-bug-relocate-zero-move.html, memory-bank/issues/26-11-11-0553-bug-webui-relocate-pair-row-height.html, memory-bank/plans/26-11-10-2350-plan-relocate-probe-async.html">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: relocate-refactor</div>
+<h1>relocate 结构重构: 单活任务模型 + 判定单点 + 接口显式化</h1>
+<p class="lede">本篇只回答: 整组移动(relocate)子系统如何从结构上终结「补丁打补丁」循环 —— 单活任务模型、路径判定单点、跨模块接口显式化的分期重构方案, 以及 grilling 全部拍板(D1-D10)与预计修复 issue 清单。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-15-2340 · <b>doc-updated</b> 26-11-15-2340 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 2026-11-15 会话: 双只读子代理分析(结构面 + 45 issue 病因面) → grilling 三轮问答 + 两轮用户修正 → 全拍板立项; 用户要求「预计修复 issues 一并写入文档, 后续人工复验; 每条配 real 测试」
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<p><b>动因。</b>relocate 累计 45 个相关 issue、109 笔提交;11-15 恢复确认补丁落地当天衍生 5 个邻接 issue;用户在 zero-move(<code>26-11-05-0420</code>)已拍板「整组迁移待完全重构」——本计划是那次拍板的落地。</p>
+<p><b>目标(做到什么程度算成)。</b>①三类高发区(恢复/账本生命周期/判据扩面)不再具备出新 issue 的结构性条件;②§03.6 清单内 8 个 Open issue 逐条 real 测试复验后关闭;③两批各自全量测试绿 + 真机全链验收 PASS。</p>
+<p><b>设计不变量(底线, 重构后必须处处成立)。</b></p>
+<table>
+  <tr><th>#</th><th>不变量</th></tr>
+  <tr><td>I1</td><td>任何时刻, 每条搬迁链<b>至多一个活任务</b>; 旧任务在续迁开始瞬间收官为只读历史</td></tr>
+  <tr><td>I2</td><td>每个别名/链接<b>直指</b>数据当前物理位置, 不存在别名套别名(A→B→C 链结构性禁止)</td></tr>
+  <tr><td>I3</td><td>相位(phase)是<b>派生视图</b>; 权威账只有一份, journal 为跨进程投影而非第二真相</td></tr>
+  <tr><td>I4</td><td>撤销<b>绝不搬回</b>数据(下载器路径与文件一律不动)</td></tr>
+  <tr><td>I5</td><td>路径判定全仓<b>单点</b>, 大小写模式为显式参数(POSIX 敏感 / Windows 不敏感)</td></tr>
+  <tr><td>I6</td><td>跨模块消费走<b>命名查询接口</b>, 不裸伸手内部状态、不借私有常量</td></tr>
+</table>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+<h3>2.1 规模与形态</h3>
+<ul>
+  <li>relocate 专属 12 文件共 7418 行; <code>RelocateModule</code> 拆 3 个 Mixin + 1 个无类共用叶, 分居 5 文件, 文件头自认「拆分只搬位置, 方法体逐字一致」—— <b>文件边界 ≠ 职责边界</b>, ExecMixin 1993 行仍在膨胀, 新账继续往 lifecycle 堆。</li>
+  <li>补丁热点 <code>_start_job</code> 跨三代文件被修 4 次; 恢复面 7 连补全部落在 lifecycle 同一区域。</li>
+</ul>
+<h3>2.2 三病灶(病因归类: 结构类 23/45 = 51%)</h3>
+<table>
+  <tr><th>病灶</th><th>证据(数字与行号)</th></tr>
+  <tr><td><b>① 相位/账碎片化</b></td><td>phase 真相 ≥5 处并存: state.json job 账 / journal(双写者) / 内存 <code>_rt</code> stage 子状态(重启靠 <code>len(alias_paths)</code> 反推断点, exec:320) / 展示层二次归并(views_relocate:32) / 「上一世残留」判定 ×3(锚点口径互不一致)。job_id 复用族 3 issue 同根(改写账不重置 / 恢复账被覆盖 / streak 不清零); 每新增一种账就重演「复用不结转 / 不闭合 / 无消费」。</td></tr>
+  <tr><td><b>② mixin 假边界</b></td><td>mixin 间共享全部私有状态, 跨 mixin 私有互调遍地; 改动影响面估不准 → 补丁永远漏邻接面(11-15 补丁当天衍生 5 issue 为实证)。</td></tr>
+  <tr><td><b>③ 判定分叉 + 裸总线</b></td><td>同 MRO 两个 <code>_norm</code> 语义不同(units:135 normcase 折叠 vs exec:1987 不折叠, 分歧靠「保守保持 failed」兜住); 「落点在根内」谓词 4 份; 「到位判定」6 变体; <code>plan()</code> 同一次 execute 双算(exec:1297 与 exec:1550); store 三登记集(<code>relocating_hashes</code>/<code>resuming_hashes</code>/<code>relocating_alias_roots</code>)被 fuse/grouping/qbapi 直读, qbapi.py:34 反向 import 模块内部, webui 借私有常量(views_relocate.py:14)。判据扩面三连漏(祖先方向 / direct 形态)是预过滤维度不完备的必然结果。</td></tr>
+</table>
+<h3>2.3 阻塞破口(独立但同域)</h3>
+<p><code>run_probe</code> 同步 sleep 轮询, FS 不可达单次 ~25s 阻塞单一写线程, 违反「单步零阻塞」纪律。已有拍板计划 <code>26-11-10-2350</code>(案B daemon 线程, D1-D10 全按推荐)未开工 —— 本计划第二批并轨执行, 该计划状态同步改为 Superseded。</p>
+
+<h2><span class="no">§03</span>方案总览</h2>
+<h3>3.1 主线四刀与分期</h3>
+<table>
+  <tr><th>刀</th><th>内容</th><th>消灭的病灶</th><th>批次</th></tr>
+  <tr><td>刀1</td><td><b>单活任务模型 + 生命周期账统一</b>: phase 改派生; 改道机器退役(见 3.2); 终态分级清理; 旧账迁移</td><td>病灶① + I1/I2/I3/I4</td><td rowspan="2">第一批</td></tr>
+  <tr><td>刀2</td><td><b>路径判定单点</b>: 双 <code>_norm</code> 合一(显式大小写模式), 6 个「到位判定」并成 1 个参数化函数, 4 份「根内」谓词合一, 删链门候选面修复</td><td>病灶③判定面</td></tr>
+  <tr><td>刀3</td><td><b>跨模块接口显式化</b>: store 三登记集 → relocate 侧命名查询接口; 私有常量跨界引用清除; qbapi 反向依赖拆除</td><td>病灶③总线面 + I6</td><td rowspan="2">第二批</td></tr>
+  <tr><td>刀4</td><td><b>探测异步化</b>: 并轨 <code>26-11-10-2350</code> 已拍板设计(案B daemon 线程 / 意图重放 / 全局单飞 / web 两段回执), 原设计条目全保留只做并轨适配</td><td>阻塞破口</td></tr>
+</table>
+<p>mixin 假边界(病灶②)不单独动刀 —— 随刀1/刀2 的职责重划自然消解。</p>
+<h3>3.2 单活任务模型核心语义(D4/D5 拍板)</h3>
+<ul>
+  <li><b>续迁即收官</b>: 对同一组发起新一轮搬迁时, 旧任务立即收官为只读历史; 它未完成的链接工作整体移交新任务, 由新任务把<b>所有</b>旧路径统一改指新终位置(别名始终直指物理数据, I2)。</li>
+  <li><b>整链一个清理单元</b>: 旧任务记录<b>不可单独删除</b>(无撤销入口、无删除入口), 随新任务一起消亡 —— 新任务终态被自动清理时整链带走; 新任务是失败/取消(不自动清)时整链等到手动清理。</li>
+  <li><b>改道机器退役</b>: 前任账改写(目标翻转/superseded_from)、retarget journal、被搬离根补条目、链式锚点解析、撤销链护栏 —— 整体删除, 以「移交 + 统一改指」替代。断粮/断链/改道前任类问题结构性消失。</li>
+</ul>
+<h3>3.3 撤销语义(D6/D7 拍板)</h3>
+<p>撤销活任务 = 停手 + 清账 + 删除自己已建的链接; <b>数据与下载器路径一律不动</b>(含半途撤销: 半搬数据留新位置, 缺件由下载器自行补下)。现有「删链接后 <code>setLocation</code> 搬回源位置」的能力<b>删除</b>。</p>
+<p class="aside"><b>用户引导(硬性验收项)</b>: 撤销确认弹窗文案三段式 —— ①后果「数据保留在当前位置, 不会搬回」; ②半途撤销警示「缺件将由下载器自行补下」; ③手动处置推荐「如何查看数据当前位置 / 缺件如何处理 / 残留链接如何排查清理 / 如需重来如何再次发起搬迁」。具体文案在 S2 定稿。</p>
+<h3>3.4 终态记录保留(D3 拍板, Q11 修正)</h3>
+<ul>
+  <li><b>成功记录</b>: 自动滚动保留最近 20 条, 更老自动删。</li>
+  <li><b>失败与取消记录</b>: 永不自动清理(防批量搬迁冲掉失败账), 只能手动清 —— 「清空历史」按钮带确认弹窗, 连失败记录一起清。</li>
+  <li><b>被接管旧任务记录</b>: 随新任务整链消亡(3.2), 不受上述计数影响。</li>
+</ul>
+<h3>3.5 旧账迁移(D8 拍板)</h3>
+<p>重构版上线时自动迁移: 在途任务由启动对账接管继续跑完; 历史终态转新格式保留, <b>一条不丢</b>; 迁移前置条件与备份见 §07-R1。</p>
+
+<h3>3.6 预计修复清单(写入文档供人工复验; 每条配 real 测试, 修复前红 → 修复后绿)</h3>
+<table>
+  <tr><th>Issue</th><th>处置</th><th>real 测试(复现失败模式)</th></tr>
+  <tr><td><code>26-11-07-0528</code> 撤销断粮语义未定稿</td><td>D4/D6 定稿后关闭</td><td>真机: 链式迁移 A→B→C 后撤销活任务, 断言旧路径仍解析、数据/路径未动</td></tr>
+  <tr><td><code>26-11-10-0326</code> 终态任务永远留账</td><td>3.4 分级保留落地关闭</td><td>真机: 批量搬迁 &gt;20 组, 断言成功滚出、失败保留; 手动清空后全消</td></tr>
+  <tr><td><code>26-11-10-0638</code> 探测阻塞主循环</td><td>第二批刀4 关闭(并轨 2350)</td><td>真机: FS 不可达时发起探测, 断言主循环 tick 停摆 &lt; 单步预算</td></tr>
+  <tr><td><code>26-11-13-0535</code> 删链门漏祖先方向</td><td>刀2 候选面修复关闭</td><td>真机: 构造祖先方向依赖, 断言删链门计数命中(修复前该场景误清零)</td></tr>
+  <tr><td><code>26-11-13-0711</code> 直搬形态绕过删链门</td><td>刀2 形态分流修复关闭</td><td>真机: direct 形态收尾窗注入依赖, 断言不被顶进删链门</td></tr>
+  <tr><td><code>26-11-14-0401</code> 停机期删除证据不计数</td><td>刀1 生命周期账统一后按评估处置(修复或披露口径维持)</td><td>真机: 停机期删成员再启动, 断言闭账行为符合定稿语义</td></tr>
+  <tr><td><code>26-11-05-0420</code> 零搬移假成功</td><td>闸门面部分修复; 根因(下载器磁盘名语义)真机复验后定终态</td><td>真机: 磁盘名错位样本, 断言闸门拦截(修复前假成功)</td></tr>
+  <tr><td><code>26-11-11-0553</code> 组键换键窗口占位失真</td><td>刀1 展示投影统一时顺带</td><td>浏览器 e2e: 换键瞬间行高占位断言</td></tr>
+</table>
+<h4>已修完但复发风险高的区域(real 测试钉扎, 防重构回归)</h4>
+<table>
+  <tr><th>区域</th><th>历史实锤</th><th>钉扎测试</th></tr>
+  <tr><td>恢复确认账 7 连补区</td><td>11-15 补丁当天衍生 5 邻接 issue(覆盖/不闭合/不清零/无消费/浮窗不弹)</td><td>恢复账结转/闭账/补发/展示四面各一条, 移交单活模型时先红后绿</td></tr>
+  <tr><td>job_id 复用族</td><td>3 issue 同根(改写账不重置 / 恢复账被覆盖 / streak 不清零)</td><td>同键续迁全账结转断言(单一模型下应结构性消失)</td></tr>
+  <tr><td>journal 双写者族</td><td>心跳覆盖终态 / arm 不重置 / 同盘永卡</td><td>双写者合并语义表驱动测试(相位派生后合并点唯一)</td></tr>
+  <tr><td>改道族</td><td>retarget 删真文件 / 撤销断粮 / 改道热启用漏半边</td><td>改道机器退役后该族测试整体改写为「移交 + 统一改指」语义</td></tr>
+</table>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+<table>
+  <tr><th>步</th><th>内容</th><th>验收判据</th></tr>
+  <tr><td>S1</td><td><b>单活任务模型</b>: 续迁即收官 + 链接工作移交 + 统一改指; 改道机器退役; 整链清理单元; 旧账迁移器</td><td>真机 A→B→C 链式全链 PASS; 旧路径直达终位置断言; 迁移器对存量账零丢失</td></tr>
+  <tr><td>S2</td><td><b>撤销语义重做</b>: 删搬回能力; 确认文案三段式定稿并上界面</td><td>真机各相位撤销(未开始/搬移中/收尾窗)数据与路径均未动; 文案三段齐备</td></tr>
+  <tr><td>S3</td><td><b>生命周期账统一</b>: phase 派生视图; 终态分级保留(3.4); state/journal 双真相收敛为权威+投影</td><td>重启/崩溃窗/热启用三类边界测试全绿; 终态清理真机验收</td></tr>
+  <tr><td>S4</td><td><b>路径判定单点</b>: 归一/到位/根内三类判定并单点; 删链门候选面修复(0535/0711)</td><td>判据盲区两条 real 测试先红后绿; 双 <code>_norm</code> 消失(grep 无第二份)</td></tr>
+  <tr><td>—</td><td><b>第一批收尾</b>: 分批评审 + 接缝终审 + 基线切片</td><td>test.full 全绿(数字入基线切片); 真机全链验收(E1-E9 口径复跑)PASS; 经人工复验后逐条翻issue</td></tr>
+  <tr><td>S5</td><td><b>跨模块接口显式化</b>: 三登记集 → 命名查询接口; 私有常量跨界清除; qbapi 反向依赖拆除</td><td>fuse/grouping/qbapi/views 消费面测试全绿; grep 无跨层私有引用</td></tr>
+  <tr><td>S6</td><td><b>探测异步化</b>: 并轨 <code>26-11-10-2350</code> D1-D10 设计</td><td>原计划全部验收判据 PASS + 主循环零阻塞真机断言</td></tr>
+</table>
+<p class="aside"><b>real 测试口径(D10)</b>: 每条预计修复 issue 配一条能复现其失败模式的测试, 修复前红、修复后绿; 能上真机的用真机测试, 纯界面类用浏览器 e2e。测试随对应步骤落地, 清单供后续人工复验。</p>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p>无待拍板项 —— 2026-11-15 grilling 三轮问答 + 两轮修正, D1-D10 全部闭合(记录见 §06)。批次开工时若撞出新的行为面变更, 按 grilling 流程追加 D 编号, 不静默决策。</p>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+  <tr><th>D</th><th>结论</th><th>来源</th><th>日期</th></tr>
+  <tr><td>D1</td><td>全量立项, 分两批做, 每批验收通过再进下一批</td><td>Q1 推荐</td><td>2026-11-15</td></tr>
+  <tr><td>D2</td><td>探测异步化并入第二批执行; 旧计划 26-11-10-2350 状态改 Superseded(并入注记), 认领链改挂本计划; 活动切片补注记</td><td>Q2 用户拍板</td><td>2026-11-15</td></tr>
+  <tr><td>D3</td><td>终态记录按结果分级保留: 成功自动滚动 20 条; 失败/取消永不自动清, 只能手动清空(带确认); 旧任务记录随新任务整链消亡</td><td>Q3 推荐 + Q11 修正(批量搬迁 &gt;20 条不得冲掉失败账)</td><td>2026-11-15</td></tr>
+  <tr><td>D4</td><td>链式简化落地为单活任务模型: 续迁即收官, 链接工作移交新任务统一改指; 评估结论「全部指向最终位置已是现机制设计意图, 复杂度在前任活账」</td><td>Q4 用户提出 + 评估 + Q8 确认</td><td>2026-11-15</td></tr>
+  <tr><td>D5</td><td>旧任务记录不可单独删除(无撤销/删除入口), 随新任务整链消亡; 手动清空历史可整链清</td><td>Q8 推荐 + 用户修正</td><td>2026-11-15</td></tr>
+  <tr><td>D6</td><td>撤销不搬回: 停手+清账+删自己已建链接, 数据与下载器路径一律不动; 删除现有 setLocation 搬回能力</td><td>Q5 用户拍板(最初设计即不允许)+ Q9 确认</td><td>2026-11-15</td></tr>
+  <tr><td>D7</td><td>撤销用户引导为硬性验收项: 确认文案三段式(后果 / 半途警示 / 手动处置推荐)</td><td>Q9 用户附加</td><td>2026-11-15</td></tr>
+  <tr><td>D8</td><td>旧账自动迁移: 在途由启动对账接管跑完, 历史终态转新格式一条不丢</td><td>Q6 推荐</td><td>2026-11-15</td></tr>
+  <tr><td>D9</td><td>外部链接登记簿不并入, 重构稳定后单独立项</td><td>Q7 推荐</td><td>2026-11-15</td></tr>
+  <tr><td>D10</td><td>real 测试口径: 每条预计修复 issue 配复现失败模式的测试, 修复前红后绿; 真机优先, 纯界面用浏览器 e2e; 清单留人工复验</td><td>Q10 推荐 + 用户要求</td><td>2026-11-15</td></tr>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+  <tr><th>#</th><th>风险</th><th>触发条件</th><th>处置</th></tr>
+  <tr><td>R1</td><td>旧账迁移出错丢账</td><td>迁移器对存量账形态覆盖不全</td><td>迁移前自动备份 state 与 journal 目录; 迁移失败 fail-fast 启动拦截并回滚备份, 绝不带损入新模型</td></tr>
+  <tr><td>R2</td><td>生产在途链式迁移撞上线</td><td>重构版发布时存在未收尾链</td><td>发布前核对无在途任务; 启动对账自愈兜底(既有机制); 迁移器把在途链整体转入单活模型</td></tr>
+  <tr><td>R3</td><td>撤销不搬回改变用户预期</td><td>用户按旧习惯期待「撤销=还原」</td><td>三段式确认文案(D7) + 文档同步 + 半途撤销额外警示</td></tr>
+  <tr><td>R4</td><td>判定单点化后行为面变严</td><td>以前漏判的场景现在拦截/放行</td><td>按既有 issue 口径逐条修复; 每条 real 测试先红后绿, 防止「顺手放宽」</td></tr>
+  <tr><td>R5</td><td>刀4 与 2350 设计漂移</td><td>并轨时擅自改动已拍板设计</td><td>沿用其 D1-D10 原文, 只做并轨适配; 适配点在两计划变更记录双向留痕</td></tr>
+  <tr><td>R6</td><td>批量搬迁账面压力</td><td>一次搬迁超过 20 组</td><td>终态分级保留(D3)直接覆盖该场景; 第一批真机验收含批量场景(0326 测试同款)</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-15-2340</span> 初版: 2026-11-15 会话 grilling(D1-D10 全拍板) + 双子代理分析(结构 7418 行 / 45 issue 归类)落盘; 认领 8 个 Open issue(双向补链), 并轨 26-11-10-2350 探测异步化计划(其状态同步 Superseded); 任务档案 26-11-15-backend-relocate-refactor。</li>
+</ul>
+
+</div>
+</body>
+</html>
