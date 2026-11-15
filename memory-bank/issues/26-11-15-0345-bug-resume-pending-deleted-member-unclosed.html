@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="relocate-move-window">
 <meta name="doc-refs" content="memory-bank/tasks/26-11-15-backend-relocate-resume-confirm.md, memory-bank/plans/26-11-15-0914-plan-relocate-resume-account-lifecycle.html, memory-bank/tasks/26-11-15-backend-relocate-resume-account-lifecycle.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="relocate 已删成员的 resume_pending 余量永不闭合">
 <meta name="issue-summary" content="_member_stopped 对已不在 store 的成员保守判停着, resume_pending 余量永不闭合(穷尽后永久挂账); resume_hashes 既有不清理行为同面; webui 如实显示已删成员">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-15-0345-bug-resume-pending-deleted-member-unclosed</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-15 03:45</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">core</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">relocate 恢复确认批次评审(2026-11-15)</div></div>
 </div>
@@ -151,11 +151,12 @@ def _member_stopped(self, h: str) -> bool:
   <h2><span class="no">§07</span>状态变更日志</h2>
   <ul>
     <li>2026-11-15 03:45 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-15 — 状态 Open → Done（kb.status）</li>
+</ul>
   <h3>复验</h3>
   <p>复验：2026-11-15 <strong>仍复现</strong> —— 认领于计划 26-11-15-0914 S0，锚点按符号 grep 重跑：<code>_member_stopped</code> 现 relocate_lifecycle.py:228-238（入池 222-232, 漂 +6, 判「停着」逻辑含已删 rec is None 分支原样）、消费点 <code>_reconcile_resume_pending</code> 现 :276（调用点 :297）、webui 口径 <code>member_relocate</code> docstring 现 views_relocate.py:54-57 —— 符号全部仍在, 已删成员永不闭账路径未变。</p>
   <h3>修复后补充</h3>
-  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  <p><b>实际修法</b>（计划 26-11-15-0914 S2，提交 <code>604b52b3</code>）：采纳建议修法的「连续 N 拍判真删除」候选——判据扩三态：连续 <code>_DELETED_CONFIRM_TICKS=3</code> 拍不在 store 判真删除后经 <code>_close_deleted_members</code> 闭账（resume_hashes/resume_pending 双面同删 + INFO 一行 + 收尾链重算，D10 静默移除），未达 N 拍的快照空窗仍按「停着」走既有面；streak 为 (job_id, hash) 键扁平内存态不入 state_file（重启清空保守方向，R3）。建议修法牵连的 resume_hashes 清理口径一并落地（双面同删）。<br><b>验证方式与数字</b>：S2 七用例全绿（三拍确认/空窗重置/全员删除既有路径接管/混合只闭已删/穷尽告警零新增/登记重算/幂等；604b52b3 在同文件另落 S4 两用例，归口 issue 26-11-15-0345-feat）；S2 时点定向 27 passed、相邻 15 文件 426 passed，收口 test.full <strong>6193 passed / 2 skipped</strong>（148.28s，覆盖率 99%）。</p>
 </section>
 
 <footer>

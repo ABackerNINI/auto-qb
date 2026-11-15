@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="relocate-move-window">
 <meta name="doc-refs" content="memory-bank/tasks/26-11-15-backend-relocate-resume-confirm.md, memory-bank/plans/26-11-15-0914-plan-relocate-resume-account-lifecycle.html, memory-bank/tasks/26-11-15-backend-relocate-resume-account-lifecycle.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="relocate 同 (mover,src,dst) job_id 复用整段覆盖旧恢复账">
 <meta name="issue-summary" content="同 (mover,src,dst) 的 job_id 复用时新生命周期整段覆盖旧恢复账, 旧账穷尽未恢复成员无人恢复; 候选修向=跨生命周期余量结转(仿 _carry_prev_tag_state 先例)">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-15-0344-bug-resume-account-overwrite-jobid-reuse</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-15 03:44</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">core</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">relocate 恢复确认批次评审(2026-11-15)</div></div>
 </div>
@@ -156,11 +156,12 @@ self._jobs[job_id] = job  # _start_job 内裸赋值: 同 id 重发在此整段�
   <h2><span class="no">§07</span>状态变更日志</h2>
   <ul>
     <li>2026-11-15 03:44 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-15 — 状态 Open → Done（kb.status）</li>
+</ul>
   <h3>复验</h3>
   <p>复验：2026-11-15 <strong>仍复现</strong> —— 认领于计划 26-11-15-0914 S0，锚点按符号 grep 重跑：<code>register_job</code>（relocate_lifecycle.py:113）/ <code>job_id_for</code> 派生（relocate_exec.py:1455）/ <code>_carry_prev_tag_state</code>（relocate_exec.py:1422）均未漂移；另核实 register_job 在 src/ 生产零调用（仅测试），按 D14 将真覆盖点改判为 <code>_start_job</code> 裸赋值 <code>relocate_exec.py:1583</code>（现值恰为 1583）。</p>
   <h3>修复后补充</h3>
-  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  <p><b>实际修法</b>（计划 26-11-15-0914 S1，提交 <code>7ccc2a1b</code>）：采纳建议修法的「跨生命周期余量结转」候选——<code>_carry_prev_tag_state</code> 扩面改名 <code>_carry_prev_state</code>，<code>_start_job</code> 同 id 重发时把 <code>prev.resume_pending</code> 非空余量成员并进新账 <code>resume_hashes</code>（现场在前/结转在后/去重）；retries 新账天然从 0（D2 零动作），不看 prev 终态（D3）。与建议修法无改道，结转口径按 grilling D2/D3 拍板落地。<br><b>验证方式与数字</b>：5 个新用例全绿（去重面 pending 含现场成员 HA 真钉 + tag_on 两账同命中钉）；S1 时点 test.quick 6184 passed / 2 skipped，收口 test.full <strong>6193 passed / 2 skipped</strong>（148.28s，覆盖率 99%），定向 relocate 面 352 passed。</p>
 </section>
 
 <footer>

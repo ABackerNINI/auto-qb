@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="relocate-move-window">
 <meta name="doc-refs" content="memory-bank/tasks/26-11-15-backend-relocate-resume-confirm.md, memory-bank/plans/26-11-15-0914-plan-relocate-resume-account-lifecycle.html, memory-bank/tasks/26-11-15-backend-relocate-resume-account-lifecycle.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="relocate done/cancelled 终态 job 的穷尽恢复账悬停浮窗不弹">
 <meta name="issue-summary" content="done/cancelled 终态 job 的穷尽恢复账在悬停浮窗不弹(relocateView 对这两态恒 null); 抽屉两条件行仍可见">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-15-0345-bug-resume-popover-terminal-job-null</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-15 03:45</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">relocate 恢复确认批次评审(2026-11-15)</div></div>
 </div>
@@ -148,11 +148,12 @@ if (!tone) return null;               # failed 有 tone -> 会弹(含待恢复 k
   <h2><span class="no">§07</span>状态变更日志</h2>
   <ul>
     <li>2026-11-15 03:45 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-15 — 状态 Open → Done（kb.status）</li>
+</ul>
   <h3>复验</h3>
   <p>复验：2026-11-15 <strong>仍复现</strong> —— 认领于计划 26-11-15-0914 S0，锚点按符号 grep 重跑：触发判据 <code>relocateView(row)</code> 仍在 relocate_pop.js:44（未漂）、<code>relocateView</code> 现 decorate.js:159（入池 156, 漂 +3; RELOCATE_TONE 表 :51 仍无 done/cancelled）、抽屉对照 <code>relocateResumeText(rel)</code> 仍在 drawer_rows.js:148（未漂）—— done/cancelled 浮窗恒 null 的入口缺口未变。</p>
   <h3>修复后补充</h3>
-  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  <p><b>实际修法</b>（计划 26-11-15-0914 S3，提交 <code>9a41204d</code>）：采纳建议修法的「触发判据单独放行」候选（窄放行形态）——<code>relocate_pop.js</code> 新增 <code>_relPopTerminalGate</code> 谓词（state ∈ {done,cancelled} 且 <code>relocateResumeText</code> 非空才放行，账有余量行可弹、空账不弹）+ <code>assembleRelPop</code> 中性 tone 替身 view（实读字段 mode/tone 补齐）+ <code>row_lang.css</code> 补 .relpop 域中性色一行；RELOCATE_TONE/行内着色/group_relocate/drawer_rows 零触碰，展示边界不动（D11）。<br><b>验证方式与数字</b>：新 e2e 3 判据 2 皮肤 passed（Windows 真浏览器，复跑 3 次稳，新 spec <code>relocate-pop-terminal</code>）；收口 test.full <strong>6193 passed / 2 skipped</strong>（148.28s），定向 relocate 面 352 passed，Windows e2e 全量 610 passed 中 relocate 面全绿。</p>
 </section>
 
 <footer>

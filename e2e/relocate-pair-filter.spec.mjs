@@ -15,9 +15,9 @@ import { withVm } from './lib/vm.mjs';
  *   3. 再点一次 = 取消(toggle 语义, 与弹层同款); f-on 选中态随点挂;
  *   4. done 行的历史 dst 不参与匹配(D17 active 边界): 桩里 done 行的 dst 与进行中行同为
  *     Relocated, 筛 dst 后 done 行必须离场(node 探针同款矩阵的真机对照)。
- * 桩面: ui_harness._inject_relocate_jobs 给 torrents[0..3] 灌 moving/armed(pending_finalize)/
- * failed/done 四态, src=R:\Downloads\Set000, dst=R:\Downloads\Relocated; 轮询每 2s 服务端
- * 重建, 标注随 rebuild 稳定重现。种子页平铺视图一行一粒种子(m 分支)。
+ * 桩面: ui_harness._inject_relocate_jobs 给 torrents[0..4] 灌 moving/armed(pending_finalize)/
+ * failed/done(穷尽恢复账余量)/cancelled(无账, 终态无余量对照) 五态, src=R:\Downloads\Set000,
+ * dst=R:\Downloads\Relocated; 轮询每 2s 服务端重建, 标注随 rebuild 稳定重现。种子页平铺视图一行一粒种子(m 分支)。
  */
 
 const DST = 'R:\\Downloads\\Relocated';
@@ -34,10 +34,10 @@ for (const skin of SKINS) {
       await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 15_000 });
       await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
 
-      // 种子页平铺: moving/armed/failed 三行带 .rel-pair(done 行回落单排)。
-      // 注入四粒是 torrents[0..3] = added_on 最旧 —— 默认「添加于」降序落在行窗口(P1-2 只渲染
+      // 种子页平铺: moving/armed/failed 三行带 .rel-pair(done/cancelled 终态行回落单排)。
+      // 注入五粒是 torrents[0..4] = added_on 最旧 —— 默认「添加于」降序落在行窗口(P1-2 只渲染
       // 视口附近切片)之外; 点「添加于」表头一击切升序(三态: 首击降序→再点升序, 默认已是降序),
-      // 四行进窗口顶部。真实手势, 不注入 vm 内部态。
+      // 五行进窗口顶部。真实手势, 不注入 vm 内部态。
       await page.click('nav.tabs [data-view="torrents"]');
       // sticky 表头持续重排会让 Playwright 的 stability 判定超时 —— 走键盘激活(a11y 路径,
       // table-head-a11y.spec 同款: focus + Enter = headActivate)

@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="relocate-move-window">
 <meta name="doc-refs" content="memory-bank/tasks/26-11-15-backend-relocate-resume-confirm.md, memory-bank/plans/26-11-15-0914-plan-relocate-resume-account-lifecycle.html, memory-bank/tasks/26-11-15-backend-relocate-resume-account-lifecycle.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="webui 展示层跨层借 relocate_lifecycle 私有常数 _RESUME_RETRY_MAX">
 <meta name="issue-summary" content="views_relocate.py 跨层引用 relocate_lifecycle 私有常数 _RESUME_RETRY_MAX(注释钉契约+测试兜底); 未来消费方增多可升 relocate 公共面">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-15-0345-refactor-webui-borrow-relocate-private-constant</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-15 03:45</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">发现者</div><div class="v">relocate 恢复确认批次评审(2026-11-15)</div></div>
 </div>
 
@@ -118,7 +118,9 @@
   <ul>
     <li>2026-11-15 03:45 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
     <li>2026-11-15 09:56 — 认领复验（计划 26-11-15-0914 S0）：<strong>仍复现</strong>（借用面原样）—— 锚点按符号 grep 重跑：跨层借用 <code>views_relocate.py:14</code>（<code>from ..core.modules.relocate_lifecycle import _RESUME_RETRY_MAX as RESUME_RETRY_MAX</code>）与定义单点 <code>relocate_lifecycle.py:26</code>（<code>_RESUME_RETRY_MAX = 3</code>）均未漂移，注释钉契约与测试钉扎兜底未变。按 D7 拍板<strong>维持现状零改动</strong>（当前单一消费方可接受），状态保持 <strong>Open</strong>。</li>
-  </ul>
+    <li>2026-11-15 — 计划 26-11-15-0914 执行收口（S5）：<strong>维持现状，零改动</strong>结案。D7 复核（收口时点）：<code>_RESUME_RETRY_MAX</code> 外部借用仍唯 <code>views_relocate.py:14</code> 一处；S2 新增的 <code>_DELETED_CONFIRM_TICKS</code>（relocate_lifecycle.py:32）同样无配置化、无第二消费方。<b>触发条件（D7）</b>：穷尽口径出现第二消费方时才升 relocate 公共面。</li>
+    <li>2026-11-15 — 状态 Open → Done（kb.status）</li>
+</ul>
 </section>
 
 <footer>

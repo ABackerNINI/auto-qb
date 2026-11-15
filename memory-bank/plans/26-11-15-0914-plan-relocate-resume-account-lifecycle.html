@@ -7,10 +7,10 @@
 <title>relocate 恢复确认账生命周期联合修: 复用结转/已删闭账/终态浮窗/计数摘要</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="relocate-resume-account-lifecycle">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-11-15-0914">
-<meta name="doc-updated" content="26-11-15-0914">
-<meta name="doc-refs" content="memory-bank/issues/26-11-15-0344-bug-resume-account-overwrite-jobid-reuse.html, memory-bank/issues/26-11-15-0345-bug-resume-pending-deleted-member-unclosed.html, memory-bank/issues/26-11-15-0345-bug-resume-popover-terminal-job-null.html, memory-bank/issues/26-11-15-0345-feat-relocate-failure-counters-no-consumer.html, memory-bank/issues/26-11-15-0345-refactor-webui-borrow-relocate-private-constant.html, memory-bank/tasks/26-11-15-backend-relocate-resume-account-lifecycle.md">
+<meta name="doc-updated" content="26-11-15-1438">
+<meta name="doc-refs" content="memory-bank/issues/26-11-15-0344-bug-resume-account-overwrite-jobid-reuse.html, memory-bank/issues/26-11-15-0345-bug-resume-pending-deleted-member-unclosed.html, memory-bank/issues/26-11-15-0345-bug-resume-popover-terminal-job-null.html, memory-bank/issues/26-11-15-0345-feat-relocate-failure-counters-no-consumer.html, memory-bank/issues/26-11-15-0345-refactor-webui-borrow-relocate-private-constant.html, memory-bank/tasks/26-11-15-backend-relocate-resume-account-lifecycle.md, memory-bank/issues/26-11-15-1432-bug-relocate-deleted-streak-no-reset.html, memory-bank/issues/26-11-15-1433-test-resume-deleted-kept-filter-test-gap.html">
 <style>
   :root {
     --bg: #10151a;
@@ -75,7 +75,7 @@
 <h1>relocate 恢复确认账生命周期联合修: 复用结转/已删闭账/终态浮窗/计数摘要</h1>
 <p class="lede">本篇只回答: relocate 恢复确认账生命周期上的五份计划外 issue 怎么修——job_id 复用时旧账结转(0344)、已删成员闭账出口(0345-deleted)、终态浮窗窄放行(0345-popover)、计数器停机摘要(0345-feat), 以及跨层借用便签为何零改动(refactor)。执行口径全部来自两轮 grilling 的 D1-D14(全按推荐), 无待拍板项。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-15-0914 · <b>doc-updated</b> 26-11-15-0914 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-11-15-0914 · <b>doc-updated</b> 26-11-15-1438 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 会话 grilling 两轮(2026-11-15, 用户逐轮「按推荐」拍板)+ 只读取证子代理(取证于 e2825b4b: 恢复账结构/复用路径/计数器与持久化/拍节奏/webui 浮窗链五面)。入池来源: relocate 恢复确认批次评审(2026-11-15)五份 issue; 26-11-14 qb-side-move-echo 经 D1 排除本批
 </div>
 
@@ -203,6 +203,7 @@
 <h2><span class="no">§10</span>变更记录</h2>
 <ul>
   <li><span class="tag">R0 · 26-11-15-0914</span> 初版: 会话 grilling 两轮(2026-11-15, 用户逐轮「按推荐」)+ 只读取证子代理(e2825b4b)五面事实; D1-D14 冻结, S0-S5 待显式开工; 本批建件阶段零代码改动, 5 份 issue 保持 Open。</li>
+  <li><span class="tag">R1 · 26-11-15-1438</span> 执行完成: S0 复验(923ffee8) → S1 job_id 复用结转(7ccc2a1b, issue 0344) → S2 已删闭账三态判据 + S4 停机计数摘要(604b52b3, issues 0345-deleted/0345-feat) → S3 终态浮窗窄放行(9a41204d, issue 0345-popover); test.full <strong>6193 passed / 2 skipped</strong>(148.28s, 覆盖率 99%), 基线切片 26-11-15-1318-relocate-resume-account-lifecycle; 5 份 issue 全 Done(refactor 按 D7 维持现状零改动结案); e2e 因本机无 docker 容器面未跑, 改 Windows 侧 dev.e2e 全量 610 passed / 6 failed / 22 skipped——4 例瞬态隔离复跑全绿, 2 例 flux chip 既有失败经基座 46649c3f 临时 worktree 复现取证为存量(远端已有 26-11-15-1359-test-flux-chip-e2e-failures, 不重复入池); S2 批次评审非 blocker 经用户拍板入池两条(26-11-15-1432-bug streak 不随账重开清零 / 26-11-15-1433-test kept 过滤无用例)。</li>
 </ul>
 
 </div>

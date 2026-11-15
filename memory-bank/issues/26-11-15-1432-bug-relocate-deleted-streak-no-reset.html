@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>_deleted_streak 进程内不随账重开清零: 账重开×快照空窗窄窗提前 1-2 拍闭账 · bug · 计划外问题</title>
+<meta name="issue-slug" content="relocate-deleted-streak-no-reset">
+<meta name="issue-stamp" content="26-11-15-1432">
+<meta name="issue-type" content="bug">
+<meta name="doc-topic" content="relocate-move-window">
+<meta name="doc-refs" content="memory-bank/plans/26-11-15-0914-plan-relocate-resume-account-lifecycle.html, memory-bank/tasks/26-11-15-backend-relocate-resume-account-lifecycle.md">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="_deleted_streak 进程内不随账重开清零: 账重开×快照空窗窄窗提前 1-2 拍闭账">
+<meta name="issue-summary" content="S2 新增的已删确认 streak 是 (job_id,hash) 进程内内存态, 账重开(终态重发同 job_id)不清零, 与快照空窗叠加时可提前 1-2 拍闭账">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --mark: #161e26;     /* issue 特有: callout 底色 (plan.html 不用) */
+    --warn-bg: #2a2119;  /* issue 特有: 状态徽标底色 */
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 单栏流式版面: 与 plan.html 同一套 .sheet (封顶 1280px, 侧距 clamp(18~44px)); 旧双栏+粘性目录已删 */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+
+  /* 封面 meta 行: issue 特有, DOM 形态别改 —— 状态徽标 <span class="badge"> 被
+     flip_status (W4) 与 check_status_drift 的 BADGE_RE 机读 (k/v div 结构在判据里) */
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px 28px; font-family: var(--mono); font-size: 11.5px; color: var(--faint); border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta-row .item .k { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .meta-row .item .v { font-size: 13.5px; color: var(--dim); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin: 14px 0; font-size: 14px; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-family: var(--mono); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">计划外问题（未修）· bug</div>
+<h1>_deleted_streak 进程内不随账重开清零: 账重开×快照空窗窄窗提前 1-2 拍闭账</h1>
+<p class="lede">S2 新增的已删确认 streak 是 (job_id,hash) 进程内内存态, 账重开(终态重发同 job_id)不清零, 与快照空窗叠加时可提前 1-2 拍闭账</p>
+<div class="meta-row">
+  <div class="item"><div class="k">编号</div><div class="v">26-11-15-1432-bug-relocate-deleted-streak-no-reset</div></div>
+  <div class="item"><div class="k">报告时间</div><div class="v">2026-11-15 14:32</div></div>
+  <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
+  <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+</div>
+
+<section id="s1">
+  <h2><span class="no">§01</span>现象与发现场景</h2>
+  <p>计划 26-11-15-0914 S2 批次评审（T3）发现的窄窗行为偏差，<b>非 blocker，用户拍板入池</b>。S2 落地的已删确认判据（604b52b3，issue 26-11-15-0345）用 <code>_deleted_streak</code> 记「连续不在 store 的拍数」，达 <code>_DELETED_CONFIRM_TICKS=3</code> 闭账。该 streak 是 (job_id, hash) 键的进程内内存态，只在「重现 store」与「闭账移除」两处清；<b>账重开</b>（终态重发同 (mover,src,dst) 落同 job_id，<code>_start_job</code> 裸赋值覆盖旧对象）时不清零——旧账积累的缺失拍数被新账继承。</p>
+</section>
+
+<section id="s2">
+  <h2><span class="no">§02</span>证据</h2>
+  <p class="hint">取证时间 2026-11-15（S2 批次评审）；代码位点原文：</p>
+<pre><code># src/auto_qb/core/modules/relocate_lifecycle.py:324-331（取证 2026-11-15, 604b52b3 落地面）
+streak = self._deleted_streak.get((job.job_id, h), 0) + 1
+if streak >= _DELETED_CONFIRM_TICKS: ...闭账
+else: self._deleted_streak[(job.job_id, h)] = streak
+... 重现在 store: self._deleted_streak.pop((job.job_id, h), None)  # 空窗结束作废
+
+# 清理面全查（grep "_deleted_streak" 全 src/）: 仅 init(relocate_mod.py:86)/累加与重现清(:324-331)/闭账清(:378)
+# —— _start_job（relocate_exec.py:1594 self._jobs[job_id] = job, 账重开覆盖点）无对应清零</code></pre>
+</section>
+
+<section id="s3">
+  <h2><span class="no">§03</span>影响面</h2>
+  <table>
+    <tr><th>维度</th><th>结论</th></tr>
+    <tr><td>触发条件</td><td>窄窗叠加：旧账对某成员已积累 1-2 拍缺失（快照空窗未达 3 拍）→ 账终态闭合并重开（同 job_id）→ 新账期间该成员真被删除</td></tr>
+    <tr><td>影响范围</td><td>仅 relocate 恢复确认账的已删闭账节奏：新账提前 1-2 拍（而非满 3 拍确认）闭账；不误删数据、不影响非 resume 面</td></tr>
+    <tr><td>严重度</td><td>低 —— 后果有界（提前闭账前仍有 ≥1 拍缺失确认，且重启天然清零）；属确认口径的精度偏差而非功能错误</td></tr>
+  </table>
+</section>
+
+<section id="s4">
+  <h2><span class="no">§04</span>定位锚点</h2>
+  <ul>
+    <li><code>relocate_mod.py:86</code>（取证 2026-11-15 14:32）· 初始化 <code>self._deleted_streak: dict = {}</code> · grep "_deleted_streak: dict"</li>
+    <li><code>relocate_lifecycle.py:324-331</code>（取证 2026-11-15 14:32）· 累加/达阈值闭账/重现清零 · grep "_deleted_streak.get"</li>
+    <li><code>relocate_lifecycle.py:378</code>（取证 2026-11-15 14:32）· 闭账移除时清 streak · grep "_deleted_streak.pop"</li>
+    <li><code>relocate_exec.py:1594</code>（取证 2026-11-15 14:32）· 账重开覆盖点 <code>_start_job</code> 裸赋值（此处<b>缺</b>清零）· grep "self._jobs\[job_id\] = job"</li>
+  </ul>
+</section>
+
+<section id="s5">
+  <h2><span class="no">§05</span>根因<span class="opt">（可选）</span></h2>
+  <div class="callout">已有结论：streak 生命周期被设计成「进程内 + 闭账时清」，但账重开是第三条生命周期边界——job 对象被 <code>_start_job</code> 整体替换而 streak 键含 job_id 不变，旧账积累的缺失拍数静默带入新账（与 26-11-15-0344 的 job_id 复用覆盖同族：都是「键跨生命周期复用、状态没跟着结转/清零」）。</div>
+</section>
+
+<section id="s6">
+  <h2><span class="no">§06</span>建议修法<span class="opt">（可选）</span></h2>
+  <p>评审时给过的候选（未拍板，不在本报告里实施）：在开账点 <code>_start_job</code> 落账处（relocate_exec.py:1594 一带）按新 job_id 清 <code>_deleted_streak</code> 同键项；或在 <code>_load_jobs</code> 按 job 清（覆盖点更全，代价是碰启动路径）。两向都只动内存态字典，不涉 state_file。</p>
+</section>
+
+<section id="s7">
+  <h2><span class="no">§07</span>状态变更日志</h2>
+  <ul>
+    <li>2026-11-15 14:32 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+  </ul>
+  <h3>复验</h3>
+  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <h3>修复后补充</h3>
+  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+</section>
+
+<footer>
+  26-11-15-1432-bug-relocate-deleted-streak-no-reset.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+</footer>
+
+</div>
+</body>
+</html>

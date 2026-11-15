@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="relocate-move-window">
 <meta name="doc-refs" content="memory-bank/tasks/26-11-15-backend-relocate-resume-confirm.md, memory-bank/plans/26-11-15-0914-plan-relocate-resume-account-lifecycle.html, memory-bank/tasks/26-11-15-backend-relocate-resume-account-lifecycle.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="relocate _tag_failures/_resume_failures 只写计数无消费面">
 <meta name="issue-summary" content="_tag_failures 与 _resume_failures 均只写计数、无消费面——观测面缺口, 失败率/告警等消费方都读不到这两个计数">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-15-0345-feat-relocate-failure-counters-no-consumer</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-15 03:45</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">feat</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">core</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">relocate 恢复确认批次评审(2026-11-15)</div></div>
 </div>
@@ -145,11 +145,12 @@
   <h2><span class="no">§07</span>状态变更日志</h2>
   <ul>
     <li>2026-11-15 03:45 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-15 — 状态 Open → Done（kb.status）</li>
+</ul>
   <h3>复验</h3>
   <p>复验：2026-11-15 <strong>仍复现</strong> —— 认领于计划 26-11-15-0914 S0，锚点按符号 grep 重跑：初始化 <code>relocate_mod.py:74/:80</code> 未漂；累加点漂移为 <code>relocate_lifecycle.py:174/:254/:312/:380</code>（入池 174/248/306/374, 三处漂 +6）—— 全 src/ 再扫确认仍只有初始化与 <code>+= 1</code> 写面, 零读面（无日志摘要/state_file/webui/告警消费）不变。</p>
   <h3>修复后补充</h3>
-  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  <p><b>实际修法</b>（计划 26-11-15-0914 S4，提交 <code>604b52b3</code>）：采纳建议修法候选中的「日志摘要」形态，落点在停机点而非每拍——<code>stop()</code> 追加一行「relocate | 停机: tag_failures=N resume_failures=M」，<b>全 0 也打</b>（D12/D13 绝对计数口径，避免「0 缺席」被误读成没跑）。state_file/webui 展示两个候选未采纳（无跨轮次消费需求）。<br><b>验证方式与数字</b>：caplog 两形态用例全绿；收口 test.full <strong>6193 passed / 2 skipped</strong>（148.28s，覆盖率 99%）。</p>
 </section>
 
 <footer>
