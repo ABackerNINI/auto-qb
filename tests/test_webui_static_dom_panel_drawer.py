@@ -53,6 +53,7 @@ display:none 表头的 computed 是指定形, 裸空白切分把一个 minmax �
   class(与 secRows 的 .dt02-kv 同语义槽)且变体 CSS 必须含 .dt02-crow.wide .v 折行规则
   (white-space:normal + word-break:break-all); 修复前 idRows 恒写 class="dt02-crow",
   40 位哈希被基类 nowrap+ellipsis 截断, wide 契约在该槽位无效果
+- test_drawer_tooltip_prune_static_guard: WEBUI 种子详情 tooltip 清理守阵(计划 26-11-15-0717 §04 S4 / §07 R4) —— A 移除面零回潮: 46 个黑名单逐字串按文件分组钉 not in(模板挂点 41 + JS 载荷 5, 落在 static/shared/ 下 10 文件, 08 只手术移除面 0 点), 取值来自 git diff e2825b4b..HEAD 全部删除行 title 载荷逐文件归组; 黑名单只钉逐字串, 新文案不拦, 解禁须删钉(§07 R4), 逐字串一律带属性名或足够上下文, 绝不用 state/site/tags/private 裸词(JS 变量与别处合法出现会造出假红且钉不住真正回潮); B 6 个文案手术点钉新串(解释正文) in + 旧串(摘掉的前缀/尾缀) not in, 断言范围只针对对应文件不全仓扫(e2e/tests 的 num_peers:/num_downloaded: 是 mock 数据字段赋值, 计划外不入断言); C 保留面抽查 5 项(dt10:311 优先级钮目录作用域 / dt12 blkTitle / 空帧 drawer_templates.js:352 esc / xtpl-cells.html peers 段 :331 与 :335 绑定 / drawer.html:170/171 qbCurSummaryHint)钉特征串 in; 红绿双验 = 任一移除点 title 加回对应产品文件即红, 恢复即绿
 
 ## 皮肤档位口径
 - 皮肤清单单点在 webui_helpers._UI_ALL(atlas/prism/console/flux); flux(第四套, plan 26-10-31-2316 S5)
@@ -3085,3 +3086,150 @@ def test_drawer_tpl_dt02_crow_wide_wrap():
     # 2. idRows 渲染路径透传 r.wide(与 secRows 的 ${r.wide ? " wide" : ""} 同式)
     assert 'class="dt02-crow${r.wide ? " wide" : ""}"' in text, \
         "02 变体 idRows 路径未透传 r.wide 到 class(标识卡哈希行 wide 契约无效果复发)"
+
+
+# WEBUI 种子详情 tooltip 清理守阵(计划 26-11-15-0717 §04 S4 / §07 R4): 移除面零回潮 /
+# 文案手术 / 保留面抽查。黑名单逐字串, 新文案不拦; 解禁须删钉(§07 R4)。46 移除点取值来自
+# `git diff e2825b4b..HEAD -- src/auto_qb/webui/static/shared/` 全部删除行的 title 载荷,
+# 逐文件归组(模板挂点 41 + JS 载荷 5); 08 只做文案手术, 移除面 0 点, 由手术表覆盖。
+# 逐字片段一律带属性名或足够上下文(完整 title="..." / title: "..." 形态), 绝不用
+# state/site/tags/private 之类裸词 —— 它们在 JS 变量与别处合法出现, 会造出假红且钉不住
+# 真正回潮。三张表的断言范围都只查对应文件内容, 不全仓扫。
+_REMOVED_TITLE_BLACKLIST = {
+    "drawer_tpl/01-general-hero-tall.js":
+        [
+            ('title="progress / amount_left / availability"', "hero 进度块字段名串"),
+            ('title="ratio / uploaded / downloaded"', "hero 分享率块字段名串"),
+            ('title="upspeed / dlspeed"', "hero 速度块字段名串"),
+            ('title="num_seeds(num_complete) / num_leechs(num_incomplete)"', "hero 做种块字段名串"),
+            ('title="reannounce_in / trackers_count"', "hero 汇报块字段名串"),
+            ('title="state"', "状态 chip 自指"),
+            ('title="site"', "site chip 自指"),
+            ('title="category"', "category chip 自指"),
+            ('title="tags"', "tags chip 自指"),
+            ('title="private"', "private chip 自指"),
+            ('title="点击折叠 / 展开"', "折叠组头提示"),
+        ],
+    "drawer_tpl/02-general-cards-low.js":
+        [
+            ('title="${label === "上传限制" ? "up_limit" : "dl_limit"}"', "限速行 kv builder 字段名"),
+            ('title="点击折叠 / 展开"', "折叠卡头提示"),
+            ('title="hr_site_need"', "HR 站点侧还需字段名"),
+            ('title="hr_site_remain"', "HR 站点侧剩余字段名"),
+            ('title="state"', "状态 chip 自指"),
+            ('title="site"', "site chip 自指"),
+            ('title="category"', "category chip 自指"),
+            ('title="tags"', "tags chip 自指"),
+            ('title="private"', "private chip 自指"),
+            ('title="${label}"', "开关徽章 builder 自指"),
+        ],
+    "drawer_tpl/03-general-dossier-collapsed.js":
+        [
+            ('title="点击折叠 / 展开"', "折叠组头提示"),
+            ('title="state / progress / amount_left"', "状态行字段名串"),
+            ('title="${label}"', "crow builder 自指"),
+            ('title="${label}"', "sideKv builder 自指"),
+            ('title="site"', "site chip 自指"),
+            ('title="category"', "category chip 自指"),
+            ('title="tags"', "tags chip 自指"),
+            ('title="private"', "private chip 自指"),
+            ('title="元信息栏: site / category / tags / 标识 / 限速 / 扩展字段"', "右栏 aside 整栏自述"),
+        ],
+    "drawer_tpl/04-trackers-status-cards-tall.js":
+        [
+            ('title: "num_seeds (num_complete)"', "统计格种子 JS 载荷"),
+            ('title: "num_leeches (num_incomplete)"', "统计格用户 JS 载荷"),
+            ('title="${p.tip}"', "概览胶囊色族自述 builder"),
+        ],
+    "drawer_tpl/05-trackers-health-groups-low.js":
+        [
+            ('title: "num_seeds (num_complete)"', "统计格种子 JS 载荷"),
+            ('title: "num_leeches (num_incomplete)"', "统计格用户 JS 载荷"),
+            ('title: "num_downloaded"', "统计格完成 JS 载荷"),
+            ('title="点击折叠 / 展开"', "折叠组头提示"),
+        ],
+    "drawer_tpl/07-peers-dashboard-tall.js": [('title="IPv6 地址的对端数"', "链路健康 IPv6 chip 标签复述"), ],
+    "drawer_tpl/08-peers-groups-low.js": [],  # 移除面 0 点, 只有文案手术(见 _TOOLTIP_SURGERY)
+    "drawer_tpl/10-content-tree-detail-tall.js":
+        [
+            ('title="子树内 ${n.files - countDone(n)} 个文件仍有缺口"', "子树未完成 chip 复述"),
+            ('title="子树内全部文件均已完整"', "子树完整 chip 复述"),
+            ('title="该文件全部块均已完整"', "文件完整 chip 复述"),
+        ],
+    "drawer_tpl/11-content-treegrid-batch-low.js":
+        [('title="批量优先级走 files/priority indices 数组, 一次提交"', "批量脚注 qB API 实现细节"), ],
+    "tpl/xtpl-cells-dt.html":
+        [
+            ('title="status = 0"', "dt04 禁用备注 status 复述"),
+            ('title="num_seeds (num_complete)"', "dt06 做种列字段名"),
+            ('title="num_leeches (num_incomplete)"', "dt06 用户列字段名"),
+            ('title="该 tracker 正在汇报中"', "dt06 正在汇报 chip 复述"),
+        ],
+}
+
+# 6 个文案手术点: (文件, 新串(解释正文, 必须在位), 旧串(摘掉的前缀/尾缀, 必须清零))。
+# 旧串 num_peers: / num_downloaded: 在 e2e/tests 里是 mock 数据对象字段赋值而非 tooltip
+# 文案(编排者已裁决计划范围外), 故断言只查对应文件, 不全仓扫。
+_TOOLTIP_SURGERY = [
+    ("drawer_tpl/07-peers-dashboard-tall.js", "吸血嫌疑 = client 名含 XL/迅雷 启发式, 纯展示无动作", "(计划 P-04 口径)"),
+    ("drawer_tpl/08-peers-groups-low.js", 'title="${g.tip}"', " · 点击折叠 / 展开"),
+    ("drawer_tpl/04-trackers-status-cards-tall.js", "经由该 tracker 连接的对端", "num_peers: "),
+    ("drawer_tpl/04-trackers-status-cards-tall.js", "该 tracker 报告的累计完成下载次数", "num_downloaded: "),
+    ("tpl/xtpl-cells-dt.html", "该 tracker 报告的累计完成下载次数", "num_downloaded: "),
+    ("tpl/xtpl-cells-dt.html", "qB 无 per-tracker 口径, 以种子级 detail.reannounce_in 全局值近似", "P-02 回退: "),
+]
+
+# 保留面抽查: (文件, 特征串, 挂点说明)。5 项; xtpl-cells.html peers 段 :331 与 :335 两点
+# 绑定, 同一文件两条特征串。
+_TOOLTIP_KEEP_ANCHORS = [
+    ("drawer_tpl/10-content-tree-detail-tall.js", "作用于目录内全部", "10:311 优先级钮目录作用域(e2e :216 也钉, 不可放松)"),
+    ("drawer_tpl/12-content-space-treemap-collapsed.js", 'title="${blkTitle(n, total)}"', "12 treemap 方块长文本防裁剪"),
+    ("drawer_templates.js", "' + esc(o.err) + '", "空帧 err 全文防裁剪(err 进 title 走 esc)"),
+    ("tpl/xtpl-cells.html", 'title="吸血嫌疑 = client 名含 XL/迅雷 启发式, 纯展示"', "peers :331 吸血启发式"),
+    ("tpl/xtpl-cells.html", ':title="tk.tip"', "peers :335 逐 flag FLAG_META 解释"),
+    ("tpl/drawer.html", ':title="qbCurSummaryHint"', "壳层 :170/171 窗口增量口径单点"),
+]
+
+
+def test_drawer_tooltip_prune_static_guard():
+    """WEBUI 种子详情 tooltip 清理守阵(计划 26-11-15-0717 §04 S4 / §07 R4)。
+
+    P1-P3 已把 static/shared/ 下 10 个文件的 46 个复述型 title 挂点移除, 另对 6 处文案做
+    「摘前缀/尾缀留解释正文」手术。本用例把这些事实静态钉住, 防回潮:
+
+    A. 移除面零回潮: 46 个黑名单逐字串按文件分组断言 not in 对应文件内容; 黑名单只钉
+       逐字串, 换措辞的新文案不拦, 将来解禁某个提示须删掉对应钉(§07 R4)。
+    B. 6 个手术点: 新串(解释正文)断言 in + 旧串(前缀/尾缀)断言 not in, 只查对应文件。
+    C. 保留面抽查: 5 项挂点断言 in, 确认清理没有误伤长文本/数据承载/语义增量/壳层口径单点。
+
+    红绿双验: 任一移除点的 title 加回对应产品文件, A 段即红; 恢复后全绿。
+    """
+    # A. 移除面零回潮(逐文件分组)
+    removed_points = 0
+    for rel, items in _REMOVED_TITLE_BLACKLIST.items():
+        text = read_shared(rel)
+        for literal, desc in items:
+            removed_points += 1
+            assert literal not in text, \
+                f"{rel} 移除面回潮: {desc} 命中黑名单逐字串 {literal!r}(解禁须删钉, §07 R4)"
+    # 数据结构完整性: 46 点一颗不少, 防止将来悄悄撤钉漏守
+    assert removed_points == 46, f"移除面黑名单点数漂移: 实算 {removed_points} != 46"
+
+    # B. 6 个手术点: 新串在位 + 旧串清零(按文件分组, 不全仓扫)
+    surgery_texts = {}
+    for rel, new_literal, old_literal in _TOOLTIP_SURGERY:
+        if rel not in surgery_texts:
+            surgery_texts[rel] = read_shared(rel)
+        text = surgery_texts[rel]
+        assert new_literal in text, \
+            f"{rel} 文案手术新串(解释正文)不在位: {new_literal!r}"
+        assert old_literal not in text, \
+            f"{rel} 文案手术旧串(前缀/尾缀)回潮: {old_literal!r}"
+
+    # C. 保留面抽查
+    keep_texts = {}
+    for rel, literal, desc in _TOOLTIP_KEEP_ANCHORS:
+        if rel not in keep_texts:
+            keep_texts[rel] = read_shared(rel)
+        assert literal in keep_texts[rel], \
+            f"{rel} 保留面挂点被误删: {desc} 缺特征串 {literal!r}"
