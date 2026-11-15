@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>行窗口化占位基准冻结后, 运行时 zoom 变化不再重校: 未量行估高按旧缩放偏大 ~11% · bug · 计划外问题</title>
+<meta name="issue-slug" content="bug-webui-rowwin-frozen-est-zoom-drift">
+<meta name="issue-stamp" content="26-11-16-0716">
+<meta name="issue-type" content="bug">
+<meta name="doc-topic" content="bug-webui-rowwin-frozen-est-zoom-drift">
+<meta name="doc-refs" content="memory-bank/pitfalls/web-ui/rowwin-stale-rowh-pad-jump.md">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="行窗口化占位基准冻结后, 运行时 zoom 变化不再重校: 未量行估高按旧缩放偏大 ~11%">
+<meta name="issue-summary" content="占位估算基准 _rowH[kind] 是视觉空间值(gBR 均值), 冻结后只有 _winMeasured 被翻 false 才重校; 而运行时 root zoom 变化既不改 _winResize 也不改可见列数, _winMeasured 恒 true → 缩放 1→0.9 后基准保持旧缩放量值(偏大 ~11%), 影响未量行 pad 总高/滚动条长度(不搬内容)。修复前靠逐拍重算均值自愈, 冻结后不再自愈。">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --mark: #161e26;     /* issue 特有: callout 底色 (plan.html 不用) */
+    --warn-bg: #2a2119;  /* issue 特有: 状态徽标底色 */
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 单栏流式版面: 与 plan.html 同一套 .sheet (封顶 1280px, 侧距 clamp(18~44px)); 旧双栏+粘性目录已删 */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+
+  /* 封面 meta 行: issue 特有, DOM 形态别改 —— 状态徽标 <span class="badge"> 被
+     flip_status (W4) 与 check_status_drift 的 BADGE_RE 机读 (k/v div 结构在判据里) */
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px 28px; font-family: var(--mono); font-size: 11.5px; color: var(--faint); border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta-row .item .k { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .meta-row .item .v { font-size: 13.5px; color: var(--dim); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin: 14px 0; font-size: 14px; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-family: var(--mono); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">计划外问题（未修）· bug</div>
+<h1>行窗口化占位基准冻结后, 运行时 zoom 变化不再重校: 未量行估高按旧缩放偏大 ~11%</h1>
+<p class="lede">占位估算基准 _rowH[kind] 是视觉空间值(gBR 均值), 冻结后只有 _winMeasured 被翻 false 才重校; 而运行时 root zoom 变化既不改 _winResize 也不改可见列数, _winMeasured 恒 true → 缩放 1→0.9 后基准保持旧缩放量值(偏大 ~11%), 影响未量行 pad 总高/滚动条长度(不搬内容)。修复前靠逐拍重算均值自愈, 冻结后不再自愈。</p>
+<div class="meta-row">
+  <div class="item"><div class="k">编号</div><div class="v">26-11-16-0716-bug-webui-rowwin-frozen-est-zoom-drift</div></div>
+  <div class="item"><div class="k">报告时间</div><div class="v">2026-11-16 07:16</div></div>
+  <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
+  <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+</div>
+
+<section id="s1">
+  <h2><span class="no">§01</span>现象与发现场景</h2>
+  <p>2026-11-16 分面复评(正确性面)读 <code>_measureRowH</code> 的冻结门时发现: 占位估算基准
+  <code>_rowH[kind]</code> 是<b>视觉空间</b>值(它是 <code>_rowHs</code> 里 gBR 高度的均值), 而冻结之后
+  只有 <code>_winMeasured[kind]</code> 被翻 false 才会重校; 翻它的唯一入口是 <code>_measureRowH</code>
+  的签名 <code>_winResize|各表可见列数</code>。运行时改 root zoom(<code>document.documentElement.style.zoom</code>,
+  <code>e2e/row-window-zoom.spec.mjs</code> 覆盖的场景)<b>既不改 <code>_winResize</code> 也不改可见列数</b>,
+  于是 <code>_winMeasured</code> 恒 true、门恒关 —— 缩放 1 → 0.9 之后基准仍按 1 的量值估高, 未量行整体偏大 ~11%,
+  直到该行自己滚进窗口被实测。修复前靠「每拍重算均值」自愈, 冻结后不再自愈。</p>
+</section>
+
+<section id="s2">
+  <h2><span class="no">§02</span>证据</h2>
+  <p class="hint">贴原文（报错 / 日志 / 命令输出），不转述；附取证时间，让读者自己判断新鲜度。</p>
+<pre><code># 代码路径(静态推理, 未做浏览器复现 —— 复现方式见下)
+columns_grid.js:682   const est = this._rowH[kind] || ROW_WIN_EST_H[kind];
+columns_grid.js:705   y += (h === undefined ? est : h) + gap;   // est 与 gBR 高度同尺度(视觉 px)
+columns_grid.js:723   const z = this._winZoomOf(kind, refName); // pad 出口再 /z 换成布局 px
+columns_grid.js:484   if (!this._winMeasured[kind] || !(this._rowH[kind] > 0)) {   // 唯一的重校门
+columns_grid.js:433   const sig = `${this._winResize}|${winDefs.map((d) => this[d.cols].length).join("|")}`;
+                      // ^ zoom 不在这条签名里 → 改 zoom 不翻 _winMeasured
+
+# 量级: 3000 行列表首访只量到视口那几十行, 其余 ~2950 行全按 est 估高
+#   zoom 1 → 0.9: est 保持 65.77(视觉 px), 实际行已变 0.9 × 65.77 = 59.19
+#   → 未量行总高偏大 (65.77-59.19)/59.19 ≈ 11.1%
+# 复现步骤(待补): 打开千级列表 → 不滚动直接改 root zoom 0.9 → 读 document.scrollHeight
+#   与「逐行真值之和」比对; 再滚到底看是否出现空白区(内容总高偏大 = 能滚过真实末尾)</code></pre>
+</section>
+
+<section id="s3">
+  <h2><span class="no">§03</span>影响面</h2>
+  <table>
+    <tr><th>维度</th><th>结论</th></tr>
+    <tr><td>触发条件</td><td>窗口化视图 + 行数远超视口(有未量行) + <b>运行时</b>改 root zoom。缩放只影响渲染尺度, 不动布局宽度 → 不翻 <code>_winResize</code>。刷新页面(重新首校)即恢复。</td></tr>
+    <tr><td>影响范围</td><td>只影响<b>从未渲染过</b>的行的占位: pad 总高 / 滚动条长度 / 可达底端。不搬动已渲染内容(所以不是本 issue 26-11-15-0332 那个跳变病), 也不会让 pad 顶替不等高。</td></tr>
+    <tr><td>严重度</td><td><b>低</b> —— 无内容跳变、无错位, 仅占位总量偏差(缩放差 10% 时 ~11%); 刷新即消。取「入池不随批修」是因为修法要动本文件最精细的 zoom 换算面, 风险/收益不划算。</td></tr>
+  </table>
+</section>
+
+<section id="s4">
+  <h2><span class="no">§04</span>定位锚点</h2>
+  <p class="hint">写「符号名 + grep 关键词 + 当时的行号（标取证时间）」—— 代码会漂移，靠符号与 grep 重新定位，行号只是加速项。</p>
+  <ul>
+    <li><code>src/auto_qb/webui/static/shared/columns_grid.js:484</code>（取证 2026-11-16 07:16）· <code>_measureRowH</code> 的冻结门 · grep <code>_winMeasured[kind] ||</code></li>
+    <li><code>src/auto_qb/webui/static/shared/columns_grid.js:433</code>· 重校签名(<code>_winResize</code> + 可见列数, 不含 zoom) · grep <code>const sig =</code></li>
+    <li><code>src/auto_qb/webui/static/shared/columns_grid.js:682</code>· <code>_rowWindow</code> 里的 <code>est</code> 兜底(视觉 px) · grep <code>const est = this._rowH</code></li>
+    <li><code>src/auto_qb/webui/static/shared/columns_grid.js:723</code>· pad 出口的 <code>z = _winZoomOf(...)</code> · grep <code>_winZoomOf</code></li>
+    <li><code>src/auto_qb/webui/static/shared/columns_grid.js:331</code>· <code>_winSigExtra()</code>(已有 zoom token, 但那是窗口身份签名, 不是行高基准的校准触发器) · grep <code>_winSigExtra</code></li>
+  </ul>
+</section>
+
+<section id="s5">
+  <h2><span class="no">§05</span>根因<span class="opt">（可选）</span></h2>
+  <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
+  <div class="callout">已定位(静态推理): 基准与「是否重校」两处脱钩 —— <code>_rowH</code> 存的是缩放后的视觉量值,
+  而决定要不要重校的签名只看布局宽度代与列数, 两者都不随 zoom 变。已排除: ①pad 换算错(<code>/z</code> 是对的,
+  错的是 <code>est</code> 本身的量值); ②<code>_rowHs</code> 陈旧(逐行实测每拍都刷新, 且出窗重探已修);
+  ③ 内容跳变(未量行不进 DOM, 只进 pad)。</div>
+</section>
+
+<section id="s6">
+  <h2><span class="no">§06</span>建议修法<span class="opt">（可选）</span></h2>
+  <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
+  <p>两条路, 都在<b>不删 <code>_rowHs</code>、不翻 <code>_winMeasured</code></b> 的前提下做(否则重踩
+  <code>pitfalls/web-ui/rowh-sig-and-transition-geometry.md</code> 的 3000 行全量重渲坑):</p>
+  <ul>
+    <li><b>A · 缩放变化时原地按比例重标(推荐, 改动小)</b>: 记 <code>this._rowHZoom</code>(上次缩放), 在
+    <code>_measureRowH</code> 开头比对当前 z; 变了就把 <code>_rowHs</code> 全部值与 <code>_rowH</code> 乘
+    <code>zNew/zOld</code>(就地改, 不删键), 再照常量本拍行。代价: 需要一处可靠的 z 来源 ——
+    <code>_winZoomOf</code> 在容器不在场时回落 1, 必须只在「容器确实在场」时重标, 否则 1↔z 抖动会反复缩放整表。</li>
+    <li><b>B · 基准改存布局 px(根治, 改动面大)</b>: 三个写入点(<code>_measureRowH</code> 主循环 / 抽屉分支 /
+    <code>_reprobeRenderedRowH</code>)都写 <code>gBR/z</code>, <code>pre[]</code> 直接用, pad 出口去掉
+    <code>/z</code>。好处: 缩放天然无关, 以后不用再想这件事; 代价: 动到 26-11-14-0844 定下的换算单点,
+    需要重跑 zoom 相关 e2e(<code>row-window-zoom</code> / <code>drawer-dock-stability</code> T8)。</li>
+  </ul>
+  <p>守阵建议: 电池加一条「z 变 → <code>_rowH</code> 按比例跟随」; e2e 在 <code>row-window-zoom.spec.mjs</code>
+  加「缩放后 scrollHeight 与逐行真值之和相差 ≤ 1 行」。</p>
+</section>
+
+<section id="s7">
+  <h2><span class="no">§07</span>状态变更日志</h2>
+  <ul>
+    <li>2026-11-16 07:16 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+  </ul>
+  <h3>复验</h3>
+  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <h3>修复后补充</h3>
+  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+</section>
+
+<footer>
+  26-11-16-0716-bug-webui-rowwin-frozen-est-zoom-drift.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+</footer>
+
+</div>
+</body>
+</html>

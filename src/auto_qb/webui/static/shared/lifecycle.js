@@ -56,6 +56,10 @@ window.AQB_LIFECYCLE = {
      * ("22时00分 / 3天12时"), 实测 3000 种子里 27% 是 65.4px、其余 43.7px。按"等高"算占位
      * 会在几千行上累积成**上百像素**的漂移(滚到底够不着 / 滚动条长度不对), 必须逐行记。 */
     this._rowHs = {};
+    /* 出窗最后一探的同拍去重签名(issue 26-11-15-0332): 纯缓存, 与 _rowHs 同族刻意不进 data
+     * —— 每拍要写, 进 data 会平白多触发一轮整表重渲(P1-2 口径)。见 columns_grid.js
+     * _reprobeRenderedRowH: 陈旧行高在窗口滑动前用「旧窗口仍在场的行」量真值顶掉。 */
+    this._rowProbeSig = {};
     // 该 kind 的首访窗口行是否已实测(千级以下 = 全表量齐; 千级以上只会量到视口内那批, 随滚动补齐)
     this._winMeasured = { torrent: false, group: false, member: false };
     /* 行间距(px)**实测**缓存: 三个容器的真实 gap 不同(atlas .group-table 6px / prism 5px /

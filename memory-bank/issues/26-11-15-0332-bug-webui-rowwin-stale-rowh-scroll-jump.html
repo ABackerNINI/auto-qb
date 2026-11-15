@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="webui-rowwin-stale-rowh-scroll-jump">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="行窗口化 _rowHs 陈旧行高: 滚出窗口的行存值永不修正, 窗口滑动 pad 超量替换内容跳数px">
 <meta name="issue-summary" content="行高实测表只在行渲染在场时更新; 行变矮/变高且滚出窗口后存值陈旧, 窗口滑动越过它时 padTop 按存值超量替换, 渲染行整体跳数px(取证单行 +3.83px), 用户可见轻微视觉跳变">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-15-0332-bug-webui-rowwin-stale-rowh-scroll-jump</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-15 03:32</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
 
@@ -103,21 +103,32 @@
 <section id="s2">
   <h2><span class="no">§02</span>位置</h2>
   <ul>
-    <li><code>src/auto_qb/webui/static/shared/columns_grid.js:410</code>(取证 2026-11-15)· <code>_measureRowH</code> · grep <code>_measureRowH</code>(逐行实测只覆盖在场行; 0.5px 重探阈值的失效路径)。</li>
-    <li><code>src/auto_qb/webui/static/shared/columns_grid.js:609</code>(取证 2026-11-15)· <code>_rowWindow</code> 的 padTop 出口(<code>pre[start]/z - gap</code>, pre 由 <code>_rowHs</code> 存值 + gap 累加)· grep <code>padTop: start > 0</code>。</li>
+    <li><code>src/auto_qb/webui/static/shared/columns_grid.js:425</code>(2026-11-16 复校)· <code>_measureRowH</code> · 逐行实测只覆盖在场行; 占位基准(全局均值)在此校准/冻结。</li>
+    <li><code>src/auto_qb/webui/static/shared/columns_grid.js:629</code>(2026-11-16 新增)· <code>_reprobeRenderedRowH</code> · 出窗最后一探; <code>:598</code> <code>_rowHProbeRows</code> 探测位解析(与 <code>_measureRowH</code> 共用 <code>ROW_H_MAIN_PROBES</code>, <code>:26</code>)。</li>
+    <li><code>src/auto_qb/webui/static/shared/columns_grid.js:726</code>· <code>_rowWindow</code> 的 padTop 出口(<code>pre[start]/z - gap</code>); 重探调用点在早退之后、<code>pre[]</code> 之前。</li>
   </ul>
 </section>
 
 <section id="s3">
-  <h2><span class="no">§03</span>建议<span class="opt">（可选）</span></h2>
-  <p class="todo">待定。方向候选: 滑出窗口前对边界行补一发重探(行出窗时量最后一次); 或对 pad 增量与「滑动前后视口内行位实测」做对账修正。注意别踩 rowh-sig-and-transition-geometry 的全表作废坑(签名扩因子 = 切页卡死复发面)。</p>
+  <h2><span class="no">§03</span>处置<span class="opt">（2026-11-16 已修）</span></h2>
+  <p>取证把「同症」拆成两根因, 同批处置(取证细节与守阵清单见 <code>pitfalls/web-ui/rowwin-stale-rowh-pad-jump.md</code>):</p>
+  <ul>
+    <li><strong>根因一 · 陈旧存值</strong>: 新增 <code>_reprobeRenderedRowH(kind, sig)</code>, 在 <code>_rowWindow</code> 重建 <code>pre[]</code> 之前、所有早退之后调用 —— 此刻 render 尚未 patch, 旧窗口的行仍在 DOM, 量最后一发真值顶掉 <code>_rowHs</code> 陈旧存值, 同一拍前缀和即按真值累加。<strong>只刷已有键</strong>, 不动 <code>_rowH</code> / <code>_winMeasured</code> / <code>_rowHVer</code> / <code>_rowHSig</code> / 签名(不踩全表作废坑), 同拍 sig 去重, 抽屉行过 <code>checkVisibility({contentVisibilityAuto:true})</code> 守卫。</li>
+    <li><strong>根因二 · 占位基准漂移</strong>(只修根因一时 flux T7/S-A 仍红 5px 的那一根): 全局均值从前每量到一行就微动 δ, 而 pad 区上百行未渲染行全按它估高 → 被连坐搬 δ×N(取证 106×0.036 = +3.8px)。改为只在「首访量齐那一拍」校准后<strong>冻结</strong>, 门恰两支: <code>!_winMeasured[kind]</code>(首校)与 <code>!(this._rowH[kind] &gt; 0)</code>(存值非正 = 还没校准, 兜住 v-show 收走时 gBR 全报 0 把均值校成 0 的情形), 新量行只把自己那一项换成真值。抽屉内容桥显式不冻结(<code>content-visibility:auto</code> 首拍是 intrinsic 28, 需逐拍收敛到 27)。<strong>已知边界(刻意不做)</strong>: 冻结后基准不随「行集变了 / 数据刷新了」重算 —— 曾试过按行集身份签名重校, 但 <code>_rowHAvgOf</code> 汇总 <code>_rowHs</code> 全部键(只在列/宽签名变时剪枝), 重算出的仍是被上一批 population 稀释的混合值 = 假重校; 真重校得按 kind 剔旧批键, 而这对 member 是灾难(成员列表逐组子集, 换组剔一次 = 每次展开都重新实测)。权衡取稳定: 估偏只影响「从未渲染过的行」的占位与滚动条长度, 而基准一动滚动中的内容就整段跳(本 issue 要修的正病)。</li>
+    <li><strong>测试侧绕过退役</strong>: <code>e2e/drawer-dock-stability.spec.mjs</code> 的 <code>preheatRowWindow()</code> 删除 —— T7/S-A/S-C 改为<strong>不预热</strong>直接判, 任一根因回潮即撞红。同时把位移判据两侧换成<strong>分数精度</strong>(采样器新增 <code>rowBf</code>/<code>rowTf</code>, 直接拿 gBR 原值比分数基线), 消掉「基线分数 vs 采样取整」最多 0.5px 的量化偏置(实测同一份代码基线 482.0625 → 落定 481.0625, 真实位移恰 1.0px, 原先的 1.0625 是取整造出来的假红; 该 1px 是选中行开抽屉自身箱变, HEAD 上同样存在, 与本次修复无关)。</li>
+  </ul>
+  <p class="hint">守阵: 静态 <code>test_frontend_outgoing_rowh_reprobe_guard</code> + node 电池 <code>test_r4_outgoing_rowh_reprobe_kills_pad_jump</code>(22 检查; 红验复现 69.609 超量替换 / 绿验 65.781 落地且前后差恰 +3.828px) + e2e 像素面 T7/S-A/S-C 去预热后仍绿。</p>
+  <p class="hint">验证(2026-11-16): 全量 <code>test.full</code> 6266 passed / 2 skipped, 覆盖率 99.59%(见 <code>testing/baselines/26-11-16-0353-issue-26-11-15-0332-rowwin-stale-rowh-fix.md</code>); 相关 e2e 四 spec 串行 47 passed / 10 skipped / 0 failed; 像素三例单跑 7 passed / 2 skipped。<strong>红验</strong>(撤产品修复、保留去预热判据): T7 前置带 行顶-列头底 5.8125 &gt; 4 红, S-A 公式落点 −11 &gt; −14 红(偏差 5px), node 电池停掉重探调用后 8/22 检查红(11/22 过)、静态守阵同红 —— 三层都能独立抓住回潮。</p>
 </section>
 
 <section id="s4">
   <h2><span class="no">§04</span>状态变更日志</h2>
   <ul>
     <li>2026-11-15 03:32 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-16 — 状态 Open → Done（kb.status）</li>
+    <li>2026-11-16 — 提交前分面复评(并行 2 路)：修 3 条(major 2 / minor 1, 全部变异复验)，另 1 条 zoom 边界入池 <code>26-11-16-0716-bug-webui-rowwin-frozen-est-zoom-drift</code></li>
+    <li>2026-11-16 — 收口轮：删掉「行集签名重校占位基准」机制（<code>_rowHAvgOf</code> 汇总全部键、只在列/宽签名变时剪枝，重算出的仍是旧 population 稀释的混合值 = 假重校；按 kind 剔键对 member 是灾难），冻结门回到两支，边界写进代码注释与坑档；电池 22 → 18 → 19 → 22 项(复评补「存值非正重校」支、分面复评补抽屉三锚与空探不记账)。未 commit / 未 push</li>
+</ul>
 </section>
 
 <footer>

@@ -58,6 +58,14 @@
   (columns_grid.ASSERT_SKIP_FACES 键集恰 {drawerTrackerV04, drawerStubV0} +
   _assertLayoutPair 含 empty-row 行级豁免字面 —— 豁免被删 = 04 面刷 console.error 噪声, 即红)。
   node 电池真跑(无 node 静默跳过)
+- test_r4_outgoing_rowh_reprobe_kills_pad_jump: issue 26-11-15-0332 产品侧修复回归 —— 行窗口化
+  出窗最后一探(_rowWindow 重建 pre[] 前用仍在场的旧窗口行量真值顶掉 _rowHs 陈旧存值): 红验
+  (关掉重探)逐行复现 padTop 按 69.609 超量替换, 绿验断言真值 65.781 落地 / padTop 与 _rowPre
+  按真值重建 / 前后差恰 +3.828px; 不踩全表作废坑(键数/_rowHVer/_rowH/_rowHSig/_winMeasured
+  零改动)、同拍 sig 去重(memberPadTop/Bottom/winMembers 三入口只量一次)、rowWin 关零重探、
+  抽屉 content-visibility:auto 未渲染行跳过(28px intrinsic 不得改坏 27px 真值); 第二根因同钉:
+  _measureRowH 量齐后 _rowH 估算基准冻结(新量一行不连坐搬 pad 区上百行), 首访量齐那一拍与
+  「存值非正」两支仍照常校准基准
 
 加载口径: columns 域经 webui_helpers.bundle_file("columns.js") 聚合(根 + 五片段清单序, 与拆分前
 同一份代码); 单文件域(selection/sort/format)直接 eval。app.js 以 loadColState 截断切片加载
@@ -2034,6 +2042,234 @@ ok("[assert豁免] empty-row 行级豁免仍在 _assertLayoutPair(删占位行�
 const failed = checks.filter((c) => !c[1]).map((c) => c[0]);
 console.log(JSON.stringify({ ok: checks.length - failed.length, total: checks.length, failed: failed }));
 """
+
+# issue 26-11-15-0332 产品侧修复回归: 出窗最后一探 ---------------------------------------
+_NODE_OUTGOING_ROWH_PROBE = r"""
+const fs = require("fs");
+global.ROW_WIN_MIN = 200;
+global.ROW_WIN_OVERSCAN = 10;
+global.ROW_WIN_EST_MIN = 200;
+global.ROW_WIN_EST_H = { torrent: 42, group: 44, member: 34, drawerContent: 27 };
+global.ROW_WIN_GAP_FALLBACK = 0;
+global.window = {};
+const src = fs.readFileSync(process.argv[1], "utf8");
+eval(src + "\n;globalThis.__W2__ = window.AQB_COLUMNS;");
+const M = globalThis.__W2__.methods;
+
+const GAP = 6;
+const N = 300;
+const TRUE_H = (i) => (i % 2 ? 65.781 : 43.7);
+const STALE_I = 61;            // 取证里那一行: 真值 65.781
+const STALE_H = 69.609;        // 首渲存下的陈旧值(字体交换前的量值)
+const DELTA = STALE_H - TRUE_H(STALE_I);   // +3.828px, 取证里的跳变量
+let gbrCalls = 0;
+// 桩 DOM: 旧窗口的行此刻**仍在场**, gBR 报的是当前真值(字体已换好)
+const mkRow = (i, h, visible) => ({
+  getAttribute: (a) => a === "data-hash" ? "t" + i : (a === "data-dt-key" ? "k" + i : null),
+  getBoundingClientRect: () => { gbrCalls++; return { height: h === undefined ? TRUE_H(i) : h }; },
+  checkVisibility: () => visible !== false,
+});
+const rows = Array.from({ length: N }, (_, i) => mkRow(i));
+global.document = {
+  querySelectorAll: (sel) => sel === '.torrent-row[data-table="torrent"][data-hash]' ? rows : [],
+  querySelector: () => null,
+};
+const mkList = () => Array.from({ length: N }, (_, i) => ({ hash: "t" + i }));
+const mkCtx = () => Object.assign({}, M, {
+  rowWin: true,
+  _winMeasured: { torrent: true, group: true, member: true, drawerContent: true },
+  _rowH: { torrent: 50, group: 50, member: 50, drawerContent: 50 },
+  _rowHVer: 1,
+  _rowHSig: { torrent: "s", group: "s", member: "s", drawerContent: "s" },
+  _winResize: 0,
+  _winViewH: 800,
+  _winScrollY: 8000,
+  _winTop: { torrent: 0, group: 0, member: 0, drawerContent: 0 },
+  _rowHs: {},
+  _rowProbeSig: {},
+  _rowPre: {},
+  _winGapFor: () => GAP,
+  _winContainer: () => null,
+});
+const seed = (c) => {
+  mkList().forEach((m, i) => { c._rowHs["torrent:" + m.hash] = TRUE_H(i); });
+  c._rowHs["torrent:t" + STALE_I] = STALE_H;
+  return c;
+};
+const checks = [];
+const ok = (name, cond) => checks.push([name, !!cond]);
+
+// --- 红验: 关掉重探 = 修复前行为, padTop 按陈旧存值超量替换 ---
+const before = seed(mkCtx());
+before._reprobeRenderedRowH = () => {};
+const wBefore = M._rowWindow.call(before, "torrent", mkList(), null);
+let sumBefore = 0;
+for (let i = 0; i < wBefore.start; i++) sumBefore += (i === STALE_I ? STALE_H : TRUE_H(i)) + GAP;
+ok("场景有效: 窗口 active 且陈旧行已被 pad 顶掉(start > 陈旧行下标)",
+   wBefore.active && wBefore.start > STALE_I && wBefore.padTop > 0 && wBefore.padBottom > 0);
+ok("红验: 无重探时 padTop 逐行按陈旧存值累加", Math.abs(wBefore.padTop - (sumBefore - GAP)) < 1e-9);
+
+// --- 绿验: 出窗最后一探把陈旧存值顶成真值, 同一拍 pre[] 按真值累加 ---
+gbrCalls = 0;
+const c = seed(mkCtx());
+const rowHBefore = JSON.stringify(c._rowH);
+const sigBefore = JSON.stringify(c._rowHSig);
+const w = M._rowWindow.call(c, "torrent", mkList(), null);
+let wantPadTop = 0;
+for (let i = 0; i < w.start; i++) wantPadTop += TRUE_H(i) + GAP;
+wantPadTop -= GAP;
+ok("绿验: _rowHs 的陈旧键被出窗真值顶掉", Math.abs(c._rowHs["torrent:t" + STALE_I] - TRUE_H(STALE_I)) < 1e-9);
+ok("绿验: padTop 按真值累加(不再超量替换)", Math.abs(w.padTop - wantPadTop) < 1e-9);
+ok("修复前后 padTop 差恰 = 陈旧-真值(用户可见跳变消失)",
+   wBefore.start === w.start && Math.abs((wBefore.padTop - w.padTop) - DELTA) < 1e-6);
+ok("前缀和留存(_rowPre)同步按真值重建(键盘跨窗换算不吃陈旧值)",
+   Math.abs(c._rowPre.torrent[STALE_I + 1] - c._rowPre.torrent[STALE_I]
+            - (TRUE_H(STALE_I) + GAP)) < 1e-9);
+
+// --- 不踩全表作废坑: 只刷新已有键, 零响应式/签名/均值改动 ---
+ok("零全表作废: 键数不变(不删旧键不加新键)", Object.keys(c._rowHs).length === N);
+ok("零响应式自激: _rowHVer / _rowH 不动", c._rowHVer === 1 && JSON.stringify(c._rowH) === rowHBefore);
+ok("零签名/量齐态作废: _rowHSig / _winMeasured 不动",
+   JSON.stringify(c._rowHSig) === sigBefore && c._winMeasured.torrent === true);
+
+// --- 同拍去重: 一拍里 _rowWindow 多次调用只量一次, 几何变了才重量 ---
+ok("首拍重探量遍在场行", gbrCalls === N);
+M._rowWindow.call(c, "torrent", mkList(), null);
+ok("同几何重渲不重复付 gBR(memberPadTop/Bottom/winMembers 三入口同拍)  ", gbrCalls === N);
+c._winScrollY = 8100;
+M._rowWindow.call(c, "torrent", mkList(), null);
+ok("滚动几何变了才再量一次", gbrCalls === N * 2);
+const cOff = seed(mkCtx());
+cOff.rowWin = false;
+M._rowWindow.call(cOff, "torrent", mkList(), null);
+ok("rowWin 关闭零重探(早退分支不产出 pad)", gbrCalls === N * 2);
+
+// --- 抽屉 content-visibility:auto 守卫: 未渲染行不得用 intrinsic 占位高改坏真值 ---
+gbrCalls = 0;
+const cHidden = mkCtx();
+cHidden._rowHs["drawerContent:k" + STALE_I] = 28;
+cHidden._rowHProbeRows = () => ({ rows: [mkRow(STALE_I, 27, false)], drawer: true });
+M._reprobeRenderedRowH.call(cHidden, "drawerContent", "sig-hidden");
+ok("抽屉未渲染行(content-visibility:auto)跳过, 且零 gBR",
+   cHidden._rowHs["drawerContent:k" + STALE_I] === 28 && gbrCalls === 0);
+const cShown = mkCtx();
+cShown._rowHs["drawerContent:k" + STALE_I] = 28;
+cShown._rowHProbeRows = () => ({ rows: [mkRow(STALE_I, 27, true)], drawer: true });
+M._reprobeRenderedRowH.call(cShown, "drawerContent", "sig-shown");
+ok("抽屉已渲染行照常量真值(行键取 data-dt-key)",
+   cShown._rowHs["drawerContent:k" + STALE_I] === 27 && gbrCalls === 1);
+
+/* --- 抽屉探测位必须按「在场变体锚」收窄(评审 #3) ---
+ * 上面两条把 _rowHProbeRows 换成桩, 抽屉分支本体(锚收窄 / segs 跳过 / dtBridgeTbl 门 /
+ * data-dt-key 键)一行都没被执行: 退回裸扫 `.group-row[data-dt-key]` 时三层全绿, 而合并态
+ * 同屏的 peers/trackers 桥行会被记成 drawerContent 行高(代码注释警告的正是这个)。 */
+const contentRow = mkRow(STALE_I, 27, true);   // 真·content 桥行
+const peersRow = mkRow(STALE_I, 99, true);     // 别座表(peers)桥行: 同 data-dt-key, 高 99
+const segsRow = mkRow(STALE_I, 88, true);      // segs 描述符(显式不接窗): 也不许采
+global.window.AQB_DRAWER_TPL_DEFS = {
+  drawerSegs: { window: "drawerContent", variantTab: "segs", segs: true },
+  drawerContent: { window: "drawerContent", variantTab: "content" },
+  drawerPeers: { window: "drawerContent", variantTab: "peers" },
+};
+const realQ = global.document.querySelector;
+const realQSA = global.document.querySelectorAll;
+const blockOf = (rows) => ({ querySelectorAll: () => rows });
+global.document.querySelector = (sel) => {
+  if (sel === '[data-dt-table-anchor="drawerContent"] .group-table') return blockOf([contentRow]);
+  if (sel === '[data-dt-table-anchor="drawerPeers"] .group-table') return blockOf([peersRow]);
+  if (sel === '[data-dt-table-anchor="drawerSegs"] .group-table') return blockOf([segsRow]);
+  return null;
+};
+// 回归形态(裸扫)的结果集必须照实给出 —— 三座表的桥行都在里面, 否则钉不住这条
+global.document.querySelectorAll = (sel) =>
+  sel === ".group-row[data-dt-key]" ? [contentRow, peersRow, segsRow] : [];
+gbrCalls = 0;
+const cDrawer = mkCtx();
+cDrawer.dtBridgeTbl = (tab) =>
+  ({ content: "drawerContent", peers: "drawerPeers", segs: "drawerSegs" })[tab];
+cDrawer._rowHs["drawerContent:k" + STALE_I] = 28;
+M._reprobeRenderedRowH.call(cDrawer, "drawerContent", "sig-anchor");
+ok("抽屉探测位按在场变体锚收窄: 只采 content 桥行(peers/segs 行不得写进 drawerContent 键)",
+   cDrawer._rowHs["drawerContent:k" + STALE_I] === 27 && gbrCalls === 1);
+global.document.querySelector = realQ;
+global.document.querySelectorAll = realQSA;
+global.window.AQB_DRAWER_TPL_DEFS = undefined;
+
+/* --- 空探不记账(评审 #2): 行在场但 gBR 全报 0 的那一拍不得烧掉去重签名 ---
+ * 两种变异都能骗过旧电池(实测): 把 probed++ 挪到 h>0 检查之前, 或在 `cache[kind] === sig`
+ * 之后立刻落盘。后果一致 —— 该滚动几何永久不再重探, 那一批行的陈旧存值再也修不回来,
+ * 正是本 issue 要修的病。 */
+gbrCalls = 0;
+const cEmpty = mkCtx();
+cEmpty._rowHs["torrent:t" + STALE_I] = STALE_H;
+const qsaOf = (h) => (sel) =>
+  sel === '.torrent-row[data-table="torrent"][data-hash]' ? [mkRow(STALE_I, h)] : [];
+global.document.querySelectorAll = qsaOf(0);       // 行在场(可见)但高度报 0
+M._reprobeRenderedRowH.call(cEmpty, "torrent", "sig-zero");
+ok("空探(行在场但 gBR 全 0)不烧去重签名", !(cEmpty._rowProbeSig || {}).torrent);
+global.document.querySelectorAll = qsaOf(65.781);  // 下一拍量到真值
+M._reprobeRenderedRowH.call(cEmpty, "torrent", "sig-zero");
+ok("同几何下一拍照常重探且不把 0 写进 _rowHs",
+   gbrCalls === 2 && cEmpty._rowHs["torrent:t" + STALE_I] === 65.781);
+global.document.querySelectorAll = realQSA;
+
+// --- 第二根因: 占位估算基准冻结(_measureRowH 量齐后不许再动 _rowH) ---
+// flux 取证: pad 区 106 行未量, 均值 65.770→65.806 就把渲染行整体推了 +3.8px。
+global.TABLE_DEFS = {
+  group: { cols: "gCols", tableRef: null },
+  torrent: { cols: "tCols", tableRef: null },
+  detail: { cols: "mCols", tableRef: null },
+};
+const estCtx = () => {
+  const e = mkCtx();
+  e.tCols = [{}, {}, {}]; e.gCols = [{}, {}, {}]; e.mCols = [{}, {}, {}];
+  e._rowHSig = { torrent: "0|3|3|3", group: "0|3|3|3", member: "0|3|3|3", drawerContent: "" };
+  return e;
+};
+const cFrozen = estCtx();
+cFrozen._rowH.torrent = 65.770123;
+M._measureRowH.call(cFrozen);
+ok("量齐后 _rowH 估算基准冻结(新量一行不连坐搬动 pad 区上百行)",
+   Math.abs(cFrozen._rowH.torrent - 65.770123) < 1e-9);
+ok("冻结不误伤逐行实测: 在场行仍被记进 _rowHs", cFrozen._rowHs["torrent:t" + STALE_I] !== undefined);
+const cCal = estCtx();
+cCal._rowH.torrent = 0;
+cCal._winMeasured.torrent = false;
+M._measureRowH.call(cCal);
+ok("首访量齐那一拍仍校准估算基准(列集合/窗宽变化后同路径重校)",
+   cCal._rowH.torrent > 0 && cCal._winMeasured.torrent === true);
+/* 冻结门的**第二支**单独隔离(评审 #1): 上一项同时把 _winMeasured 翻 false, 只压到第一支;
+ * 这一项保持「已量齐」, 只把基准置 0 —— 若把门写成 `if (!this._winMeasured[kind])`, 基准就
+ * 永远停在 0, est 回落成 ROW_WIN_EST_H 常量, 未量行 pad 恒短。 */
+const cZero = estCtx();
+cZero._rowH.torrent = 0;
+cZero._winMeasured.torrent = true;
+M._measureRowH.call(cZero);
+ok("存值非正(=还没校准)时即便已量齐也重校, 不把 0 冻死",
+   cZero._rowH.torrent > 0);
+
+console.log(JSON.stringify({
+  ok: checks.filter((x) => x[1]).length, total: checks.length,
+  failed: checks.filter((x) => !x[1]).map((x) => x[0]),
+}));
+"""
+
+
+def test_r4_outgoing_rowh_reprobe_kills_pad_jump():
+    """issue 26-11-15-0332 产品侧修复回归: 出窗最后一探顶掉 _rowHs 陈旧行高。
+
+    取证(issue 26-11-14-1323 像素判据): 单行存值 69.609 vs 实际 65.781, 窗口下滑时
+    padTop 按存值超量替换 → 渲染行整体跳 +3.828px。node 电池真跑 _rowWindow, 红验
+    (关掉重探)逐行复现陈旧累加, 绿验(产品实现)断言 _rowHs 被真值顶掉、padTop 与
+    _rowPre 按真值重建且前后差恰 3.828px; 同时钉住「不踩全表作废坑」(键数/_rowHVer/
+    _rowH/_rowHSig/_winMeasured 零改动)、同拍 sig 去重(三入口只量一次、几何不变零 gBR)、
+    rowWin 关闭零重探、抽屉 content-visibility:auto 未渲染行跳过(intrinsic 占位高 28 不得
+    改坏真值 27)、冻结门**两支各自**都有行为断言(首校 / 存值非正重校)。无 node 静默跳过。"""
+    report = _run_probe(_NODE_OUTGOING_ROWH_PROBE, bundle_file("columns.js"))
+    if report is not None:
+        assert report["total"] == 22, (f"出窗最后一探电池应有 22 项检查(实测 {report['total']})—— 少项 = 检查被删或"
+                                       "中途提前 return, 守阵会静默变弱")
+    _assert_battery(report, "出窗最后一探电池")
 
 
 def test_r4_dt_table_exception_list_geometry_guard():

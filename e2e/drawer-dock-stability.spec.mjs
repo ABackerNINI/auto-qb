@@ -197,23 +197,14 @@ async function pickUncoveredRow(page, pt) {
   }, pt);
 }
 
-/** 行窗口化预热滚动(2026-11-15, issue 26-11-14-1323): 向下滚 dist 再滚回原位, 各等一次落定。
- *  缘由: 行高逐行实测表 _rowHs 只在**行渲染在场**时更新(columns_grid.js _measureRowH) ——
- *  首渲量过的行若之后变矮/变高(字体交换/内容重排, 机器环境相关)且已滚出窗口, 存值永不修正;
- *  窗口下滑越过它时 padTop 按陈旧存值超量替换, 渲染行整体跳 ±数px(取证实测单行 +3.83px:
- *  padTop Δ69.609 vs 被替换行实际高 65.781, scrollY 不变)。像素级对齐/让位判据(T7 前置带 /
- *  S-A 公式落点)必须先预热把途经区间的存值刷成新鲜值(回程重量一遍), 之后窗口滑动的 pad
- *  替换才是等高精确替换。dist 须 >= 对齐/让位的最大滚动量(两用例分别 ~792/566, 取 900)。 */
-async function preheatRowWindow(page, dist) {
-  const y0 = await page.evaluate((d) => {
-    const y = window.scrollY;
-    window.scrollTo(0, y + d);
-    return y;
-  }, dist);
-  await waitListSettled(page);
-  await page.evaluate((y) => window.scrollTo(0, y), y0);
-  await waitListSettled(page);
-}
+/* 行窗口化预热滚动(preheatRowWindow, issue 26-11-14-1323 时期的测试侧绕过)已随产品侧修复
+ * 退役(issue 26-11-15-0332)。取证拆出**同症两根因**, 两处都已产品侧修正:
+ *   1. _rowWindow 重建 pre[] 前给「仍在场、即将被 pad 顶掉」的行量最后一发真值
+ *      (columns_grid.js::_reprobeRenderedRowH), 陈旧 _rowHs 存值不再超量替换;
+ *   2. 占位估算基准(已实测行全局均值)量齐后冻结 —— 从前每量到一行均值微动 δ, pad 区
+ *      上百行从未渲染的行全按该均值估高, 会被连坐搬动 δ×N(flux 实测 106×0.036 = +3.8px)。
+ * 这里**刻意不预热**: 一旦任一根因回潮, T7 前置带 / S-A 公式落点这两条像素级判据会当场
+ * 撞红, 而不是被预热悄悄抹平(预热只是把途经区间量一遍, 掩盖而非修复产品面)。 */
 
 /** rAF 逐帧采样器(S0/D11): 每帧记 scrollY / docH / dock(top,h) / 面板 top / 选中行 rect.bottom /
  *  vm._drawerAnimTop; window.scrollBy 调用一并登记(只作诊断, 不参与断言)。
@@ -246,8 +237,12 @@ async function installGeoSampler(page, hash) {
         open: !!vm.drawer.open,
         dockH: dr ? Math.round(dr.height) : null, dockTop: dr ? Math.round(dr.top) : null,
         panelTop: pr ? Math.round(pr.top) : null,
-        rowB: rr ? Math.round(rr.bottom) : null,
-        rowT: rr ? Math.round(rr.top) : null,  // T7 上界(顶界)判据用: 行顶位移(下界用例只看 rowB, 加列无扰)
+        rowB: rr ? Math.round(rr.bottom) : null,  // 取整版: 序列摘要 / 只比「有没有动」的用例用
+        rowT: rr ? Math.round(rr.top) : null,
+        /* 分数精度版(gBR 原值): S-C / T7 的位移判据用它 —— 与分数基线同口径, 不带取整量化
+         * 偏置(取整帧比分数基线最多差 0.5px, 会把 1px 的真位移读成 1.0625)。 */
+        rowBf: rr ? rr.bottom : null,
+        rowTf: rr ? rr.top : null,
       });
       if (window.__geo.length < 6000) requestAnimationFrame(tick);
     };
@@ -582,6 +577,11 @@ for (const skin of DOCK_SKINS) {
       await waitListSettled(page);
 
       // 场景1(首开): 基线预读 -> 采样 -> 双击带内行 -> 落定(三发让位全部停稳)。
+      // !位移判据一律用**分数精度**(采样帧 rowBf / 基线 rowB 都是 gBR 原值): 采样帧另有取整版
+      // rowB 只作诊断/序列摘要用, 拿它跟分数基线比会引入最多 0.5px 的量化偏置 —— 实测同一份
+      // 代码基线 482.0625、落定 481.0625(真实位移恰 1px), 取整后读成 -1.0625 直接假红。
+      // 分数比较下「选中行开抽屉自身 1px 箱变」(修复前 HEAD 上同样存在, 与本修复无关)恰读 1,
+      // 落在判据容差内; 2px 真回潮读 2, 当场红。
       const band = await page.evaluate((h) => {
         const r = document.querySelector(`[data-hash="${h}"]`).getBoundingClientRect();
         return { y: Math.round(window.scrollY), rowB: r.bottom };
@@ -608,13 +608,16 @@ for (const skin of DOCK_SKINS) {
 
       // 断言(修复后应绿, 修复前红: 带内行被抬 4~16px): 首开全程 scrollY 与行 rect.bottom 零位移。
       const dy1 = first.frames.map((f) => f.y - band.y);
-      const db1 = first.frames.map((f) => (f.rowB ?? band.rowB) - band.rowB);
+      const db1 = first.frames.map((f) => (f.rowBf ?? band.rowB) - band.rowB);
       expect(Math.max(...dy1.map(Math.abs)),
         `首开全程 scrollY 位移量(基线 ${band.y}; 序列 ${frameDigest(first.frames)}; scrollBy 登记 ${JSON.stringify(first.sb)})`)
         .toBe(0);
+      /* 容差 1.5: 分数精度下「选中行开抽屉自身箱变」实测恰 1.0px(该箱变修复前 HEAD 上同样
+       * 存在, 与本次修复无关), 压在 1 上等于零余量 —— 任何 1/64 布局单位抖动都假红。1.5 仍
+       * 能把 2px 级回潮判红(2 > 1.5), 而本 issue 的回潮量是 3.8~5px。 */
       expect(Math.max(...db1.map(Math.abs)),
         `首开全程行 rect.bottom 位移量(基线 ${band.rowB.toFixed(1)}; scrollBy ${JSON.stringify(first.sb)})`)
-        .toBeLessThanOrEqual(1);
+        .toBeLessThanOrEqual(1.5);
 
       // 场景2(再开, 用户症状路径): 关 -> 等收场 -> 同一带内行再开。先证收场没挪行位(headroom
       // 足额无钳制), 再开断言同一套零位移。
@@ -636,13 +639,13 @@ for (const skin of DOCK_SKINS) {
       const second = await stopGeoSampler(page);
       expect(second.frames.length, '前置: 采样应有足够帧数').toBeGreaterThan(10);
       const dy2 = second.frames.map((f) => f.y - reopened.y);
-      const db2 = second.frames.map((f) => (f.rowB ?? reopened.rowB) - reopened.rowB);
+      const db2 = second.frames.map((f) => (f.rowBf ?? reopened.rowB) - reopened.rowB);
       expect(Math.max(...dy2.map(Math.abs)),
         `再开全程 scrollY 位移量(基线 ${reopened.y}; 序列 ${frameDigest(second.frames)}; scrollBy 登记 ${JSON.stringify(second.sb)})`)
         .toBe(0);
       expect(Math.max(...db2.map(Math.abs)),
         `再开全程行 rect.bottom 位移量(基线 ${reopened.rowB.toFixed(1)}; scrollBy ${JSON.stringify(second.sb)})`)
-        .toBeLessThanOrEqual(1);
+        .toBeLessThanOrEqual(1.5);  // 同 db1: 已知良性箱变恰 1px + 0.5px 布局单位余量
     });
 
     test(`S-C 反向守卫: 真被覆盖的行(最深+最浅边界探针)仍让位到公式终值 @fast (${skin})`, async ({ page }) => {
@@ -799,10 +802,9 @@ for (const skin of DOCK_SKINS) {
       // 滚动量 = 当前 - 目标(下滚把行往上搬, S-C 同式)。
       await page.evaluate(() => window.scrollTo(0, Math.round(document.documentElement.scrollHeight / 2)));
       await waitListSettled(page);
-      // 对齐精度前置: 深滚本身是一次窗口下滑, 途经区间的 _rowHs 陈旧存值会让这次滑动后的
-      // 渲染行整体跳 ±数px(issue 26-11-14-1323 取证 +3.83px) —— 先预热把对齐途经区间的
-      // 存值刷成新鲜值, 下面这一发精确 scrollBy 才是等高替换, 对齐落点 ±0.5px 可依赖。
-      await preheatRowWindow(page, 900);
+      // 这里刻意不做预热滚动: 下面这一发精确 scrollBy 是窗口下滑, 产品侧两根因修正
+      // (issue 26-11-15-0332: 出窗最后一探 + 占位估算基准冻结)必须自己把 pad 替换做成等高
+      // 精确替换, 对齐落点 ±0.5px 才可依赖。
       const aligned = await page.evaluate(() => {
         const hb = document.querySelector('.group-head').getBoundingClientRect().bottom;
         let best = null;
@@ -820,6 +822,7 @@ for (const skin of DOCK_SKINS) {
       expect(aligned, '前置: 视口内应有行顶在列头底 40px 以下的行(带对齐原料)').toBeTruthy();
       await waitListSettled(page);
 
+      // 位移判据用分数精度 rowTf(口径同 S-C): 采样帧的 rowT 是取整版, 只作序列摘要用。
       const band = await page.evaluate((h) => {
         const head = document.querySelector('.group-head');
         const r = document.querySelector(`[data-hash="${h}"]`).getBoundingClientRect();
@@ -842,14 +845,14 @@ for (const skin of DOCK_SKINS) {
       const run = await stopGeoSampler(page);
 
       // 断言(修复后绿, 修复前红: writer#4 上界分支把行下移 ~7px): 全程行顶与 scrollY 零位移。
-      const dt = run.frames.map((f) => (f.rowT ?? band.rowT) - band.rowT);
+      const dt = run.frames.map((f) => (f.rowTf ?? band.rowT) - band.rowT);
       const dy = run.frames.map((f) => f.y - band.y);
       expect(Math.max(...dy.map(Math.abs)),
         `开门全程 scrollY 位移量(基线 ${band.y}; 序列 ${frameDigest(run.frames)}; scrollBy 登记 ${JSON.stringify(run.sb)})`)
         .toBe(0);
       expect(Math.max(...dt.map(Math.abs)),
         `开门全程行顶位移量(基线 ${band.rowT.toFixed(1)}; scrollBy ${JSON.stringify(run.sb)})`)
-        .toBeLessThanOrEqual(1);
+        .toBeLessThanOrEqual(1.5);  // 同 S-A: 已知良性箱变恰 1px + 0.5px 布局单位余量; 2px 回潮仍红
     });
 
     test(`T7 反向守卫: 真被吸顶列头遮住的行走门仍让位到上界公式终值 vTop + 8 @fast (${skin})`, async ({ page }) => {
@@ -966,11 +969,10 @@ for (const skin of DOCK_SKINS) {
         window.scrollTo(0, document.documentElement.scrollHeight - window.innerHeight - 900);
       });
       await waitListSettled(page);
-      // 让位精度前置: 开场让位 scrollBy 最多 ~566px, 是一次窗口下滑 —— 途经区间的 _rowHs
-      // 陈旧存值会让 pad 超量替换、渲染行整体跳 ±数px(issue 26-11-14-1323 取证 +5px, 让位
-      // 终值落不进公式 ±2 窗) —— 停车后先预热(down 一腿直达文档底, 回程重量), 把让位
-      // 途经区间的存值刷成新鲜值, 让位落点才可依赖。
-      await preheatRowWindow(page, 900);
+      // 这里刻意不做预热滚动: 开场让位 scrollBy 最多 ~566px 是一次窗口下滑, 产品侧两根因
+      // 修正(issue 26-11-15-0332: 出窗最后一探 + 占位估算基准冻结)须自己把 pad 替换做成等高
+      // 精确替换, 让位终值才落在公式 ±2 窗内(修复前实测 +5px 偏差)。预热会抹平这条回归信号,
+      // 故不再保留。
       const panelTopEst = await page.evaluate(() => {
         const sb = document.querySelector('.statusbar');
         const sbTop = sb ? sb.getBoundingClientRect().top : window.innerHeight;

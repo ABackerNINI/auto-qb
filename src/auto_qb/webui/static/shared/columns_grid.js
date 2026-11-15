@@ -16,6 +16,21 @@ var ASSERT_SKIP_FACES = {
   drawerStubV0: "桥验证 fixture(?dtstub 测试专用): 行渲染器已随经典链退役, 行恒空壳",
 };
 
+/* 行高探测位(主表三 kind): _measureRowH 与「出窗最后一探」共用同一份选择器 ——
+ * 两处各写一份, 改一处漏一处 = 那个 kind 又留一批永不修正的陈旧行高(issue 26-11-15-0332)。
+ * !必须按 data-table 收窄: 剧集页的 .group-row.show-row / .ep-row 也带 data-key, 裸写
+ * `.group-row:not(.torrent-row)[data-key]` 会把**别座表的行**记成 group 行高(键还可能撞车),
+ * 并污染 _rowHAvgOf("group") —— 冻结后的占位基准正是从这个均值来的, 脏了就一直脏。
+ * 三座表的行容器各自带 data-table="torrent" / "group" / "detail"(见 tpl/torrents.html、
+ * groups.html、shows.html)。抽屉桥行**也**带 data-table(:data-table="dtBridgeTbl(tab)"),
+ * 但取值恒是 peers / trackers / content, 且没有 data-hash / data-key、也不是 .torrent-row /
+ * .member-row —— 三重条件都不满足, 天然不落进这三个探测位(别以为 data-table 一条就够)。 */
+var ROW_H_MAIN_PROBES = [
+  ["torrent", '.torrent-row[data-table="torrent"][data-hash]'],
+  ["group", '.group-row[data-table="group"][data-key]'],
+  ["member", '.member-row[data-table="detail"][data-hash]'],
+];
+
 Object.assign(window.AQB_COLUMNS.methods, {
 
     /* ------------------------------------------------ 列状态(宽/隐/自适应) */
@@ -418,8 +433,7 @@ Object.assign(window.AQB_COLUMNS.methods, {
       const sig = `${this._winResize}|${winDefs.map((d) => this[d.cols].length).join("|")}`;
       // !用 getBoundingClientRect().height 而不是 offsetHeight: 后者取整, 0.4px 的误差 ×
       // 3000 行就是 1200px 的漂移。
-      const probes = [["torrent", ".torrent-row[data-hash]"], ["group", ".group-row:not(.torrent-row)[data-key]"], ["member", ".member-row[data-hash]"]];
-      for (const [kind, sel] of probes) {
+      for (const [kind, sel] of ROW_H_MAIN_PROBES) {
         if (this._rowHSig[kind] !== sig) {
           // 列集合/窗口宽变了: 旧高度作废, 下一轮走全量重新量齐(只多付一次全量渲染)
           for (const k of Object.keys(this._rowHs)) {
@@ -443,10 +457,41 @@ Object.assign(window.AQB_COLUMNS.methods, {
         }
         // 未量过的行(新种子 / 千级首访尚未滚到的行)用它兜底。取**已实测行的全局均值**而非
         // 当前窗口均值: 后者随窗口切换每帧跳变, 会让占位总高与滚动条长度跟着抖(issue 26-11-02-0902)。
+        // !全局均值只在「首访量齐那一拍」校准, 之后**冻结**(issue 26-11-15-0332 第二根因):
+        // 每量到一行新行, 均值都会微动 δ; 而 pad 区里可能有上百行从未渲染、全按这个均值估高,
+        // 于是 padTop 被整体搬 δ×未量行数 —— 取证 flux 深滚后 106 行未量、均值 65.770→65.806
+        // (δ=0.036) 就把渲染行整体推了 +3.8px, 与「陈旧存值」是同症不同因。冻结后新量行只把
+        // 自己那一项从估算换成真值, 不再连坐搬动整段 pad。
+        // !已知边界(刻意不做): 冻结之后基准不再随「行集变了 / 数据刷新了」重算。想重算就得
+        // 把 _rowHs 里上一批行的键剔掉(否则均值仍是被旧population稀释的混合值 —— 那才是假的
+        // 「重校」), 而按 kind 剔键对 member 是灾难(成员列表是逐组子集, 换组剔一次 = 每次展开
+        // 都重新实测)。权衡后选稳定: 估偏只影响「从未渲染过的行」的占位与滚动条长度 ——
+        // 单调收敛的是**未量行数**(随滚动递减), 不是估偏本身: 某行真值比基准高时把它换成真值
+        // 会让总偏变大, 所以别指望「误差单调下降」; 而基准一动, 滚动中的内容就整段跳
+        // (本 issue 要修的正病)。
+        // 列集合/窗宽变化仍会翻 _winMeasured=false, 下一拍照常重新校准, 不残留旧几何。
+        // !但**运行时改 root zoom 不在此列**(issue 26-11-16-0716 已入池): 基准存的是 gBR 视觉
+        // 量值, 而这条重校签名只看布局宽度代与可见列数 —— zoom 只改渲染尺度、不动布局宽, 于是
+        // _winMeasured 恒 true、门恒关, 缩放 1→0.9 后未量行仍按旧缩放估高(偏大 ~11%)。影响面
+        // 限于 pad 总高/滚动条长度/可达底端, **不搬已渲染内容**(所以不是本 issue 那个跳变病),
+        // 刷新即恢复。修法要么按 zNew/zOld 原地重标 _rowHs+_rowH(不删键不翻量齐态), 要么把基准
+        // 改存布局 px; 两条都动到 _winZoomOf 的换算面, 故不随本批做。
+        // 例外: 抽屉内容桥**不冻结**(见下面第四探测位) —— 它挂 content-visibility:auto,
+        // 首拍量到的是 intrinsic 占位高 28, 必须靠后续均值收敛拉回真值 27。
         const avg = this._rowHAvgOf(kind);
-        if (this._rowH[kind] === undefined || Math.abs(this._rowH[kind] - avg) > 0.01) {
-          this._rowH = { ...this._rowH, [kind]: avg };
-          changed = true;
+        /* !`!(this._rowH[kind] > 0)` 这一支是「冻结不许冻结在无效值上」的兜底: 只要有一拍
+         * 量到的 gBR 全是 0(行在 DOM 但祖先 display:none / 行刚插入尚未布局 / 将来某个视图
+         * 改用 v-show —— 三个主视图现在是 v-if, 切页时行直接被摘掉, 走的是 rows.length===0
+         * 那条早退, 所以这条**是**安全网而非当前热路径), 均值就校准成 0; 若就此冻住, 下次
+         * 真量到时 est 会一直回落成 ROW_WIN_EST_H 常量(42/44) 而不是真实行高 —— 未量行的
+         * pad 恒短。存值非正一律当作「还没校准」, 下次量到真值就重校(与修复前的自愈行为
+         * 等价)。别因为「现在走不到」就删: 删了以后一旦某视图换成 v-show, 冻结就会把 0
+         * 钉死, 且症状(未量行 pad 恒短、滚到底够不着)与本 issue 极像, 极难反查。 */
+        if (!this._winMeasured[kind] || !(this._rowH[kind] > 0)) {
+          if (this._rowH[kind] === undefined || Math.abs(this._rowH[kind] - avg) > 0.01) {
+            this._rowH = { ...this._rowH, [kind]: avg };
+            changed = true;
+          }
         }
         if (!this._winMeasured[kind]) {
           this._winMeasured[kind] = true;  // 首访窗口行已实测(千级以下即全表, 千级以上随滚动补齐)
@@ -514,8 +559,11 @@ Object.assign(window.AQB_COLUMNS.methods, {
     },
     /* 该 kind 已实测行的**全局均值**(遍历 _rowHs 的 kind: 前缀)。
      * 为什么不用「当前窗口均值」: 窗口随滚动换一批行, 窗口均值会跟着跳变(如 49.7 <-> 71.4),
-     * 占位总高与滚动条长度每帧抖一下; 全局均值只随新实测行缓慢收敛, 滚到哪里都稳定。
-     * 首访千级列表此时只有视口那几十行, 之后每滚一屏补一批, 估算偏差单调收敛。 */
+     * 占位总高与滚动条长度每帧抖一下; 全局均值跨窗口稳定, 只随新实测行缓慢收敛。
+     * !本函数只负责算, **冻结与否由调用方定**: 三个主 kind 首校后即冻结(_measureRowH 的
+     * 「已知边界」), 所以那个「缓慢收敛」在主表上不成立 —— 首访千级列表此刻只有视口那几十行,
+     * 冻结后基准不再随滚动更新, 未量行就一直按首校均值估, 直到它自己滚进窗口被实测。
+     * 抽屉内容桥不冻结(首拍量到 intrinsic 占位高 28, 必须靠后续均值拉回真值 27)。 */
     _rowHAvgOf(kind) {
       const prefix = kind + ":";
       let sum = 0, n = 0;
@@ -549,6 +597,73 @@ Object.assign(window.AQB_COLUMNS.methods, {
       const z = layoutH > 0 ? el.getBoundingClientRect().height / layoutH : 0;
       return Number.isFinite(z) && z > 0 ? z : 1;
     },
+    /* 出窗最后一探的探测位解析(issue 26-11-15-0332): 只取**此刻还在 DOM 里**的该 kind 行。
+     * 主表走 ROW_H_MAIN_PROBES(与 _measureRowH 同源); 抽屉内容桥按当前在场变体锚现拼,
+     * 口径与 _measureRowH 的第四探测位一致 —— 合并态同屏还有 peers/trackers 的桥行, 裸扫
+     * .group-row[data-dt-key] 会把别座表的行混进来。 */
+    _rowHProbeRows(kind) {
+      if (typeof document === "undefined" || typeof document.querySelectorAll !== "function") return null;
+      const main = ROW_H_MAIN_PROBES.find((p) => p[0] === kind);
+      if (main) return { rows: document.querySelectorAll(main[1]), drawer: false };
+      if (kind !== "drawerContent" || typeof document.querySelector !== "function") return null;
+      const dtDefs = (typeof window !== "undefined" && window.AQB_DRAWER_TPL_DEFS) || {};
+      for (const tid of Object.keys(dtDefs)) {
+        const ddef = dtDefs[tid];
+        if (ddef.window !== "drawerContent" || ddef.segs) continue;
+        if (this.dtBridgeTbl(ddef.variantTab) !== tid) continue;
+        const block = document.querySelector(`[data-dt-table-anchor="${tid}"] .group-table`);
+        if (block) return { rows: block.querySelectorAll(".group-row[data-dt-key]"), drawer: true };
+      }
+      return null;
+    },
+    /* 出窗最后一探(issue 26-11-15-0332): 行高逐行实测表 _rowHs 只在「行渲染在场」时由
+     * updated() 的 _measureRowH 刷新; 首渲量过的行若之后变矮/变高(字体交换 / 内容重排,
+     * 这些是异步布局变化, 不一定伴随 Vue 重渲)且已滚出窗口, 存值就永不修正 —— 窗口下滑越过
+     * 它时 padTop 按陈旧存值超量替换, 渲染行整体跳 ±数px(取证: 存值 69.609 vs 实际 65.781,
+     * 单行 +3.828px)。本方法在 _rowWindow 重建前缀和**之前**调用: 此刻旧窗口的行还在 DOM
+     * (render 还没 patch), 把它们量最后一发真值顶掉陈旧存值, 同一拍的 pre[] 就按真值累加,
+     * pad 顶替的是等高真值 —— 视觉不再跳。
+     * !只刷新**已有键**, 且不动 _rowH / _winMeasured / _rowHVer / _rowHSig / 签名:
+     *   - 新增键、全局均值、响应式版本一律留给 updated() 的 _measureRowH(它量的是新窗口行);
+     *   - 在 render 途中改响应式态会自激重渲; 扩签名或删表 = 踩 rowh-sig-and-transition-geometry
+     *     的全表作废坑(3000 行全量重渲 5.9~8.4s 长任务, 切页/关抽屉卡死复发)。
+     * !sig 去重: 一拍里 _rowWindow 会被多次调用(memberPadTop / memberPadBottom / winMembers
+     *   各一次), 同一滚动几何只量一次; 几何不变的重渲(如 _rowHVer 收敛拍)不重复付 gBR。
+     * !去重签名只在**真的量到行**之后才落盘: 抽屉锚换座/整表被 content-visibility 跳过的
+     *   那一拍量不到任何行, 若先把签名记下, 同一几何的后续渲染就再也不重探了(漏一次 = 留一批
+     *   陈旧存值)。空探不记账, 下一拍自然重试。 */
+    _reprobeRenderedRowH(kind, sig) {
+      if (!this.rowWin || typeof document === "undefined"
+          || typeof document.querySelectorAll !== "function") return;
+      const cache = this._rowProbeSig || (this._rowProbeSig = {});
+      if (cache[kind] === sig) return;
+      const probe = this._rowHProbeRows(kind);
+      if (!probe) return;
+      const hs = this._rowHs;
+      let probed = 0;
+      for (const r of probe.rows) {
+        /* 抽屉行挂 content-visibility:auto: 被跳过时 gBR 返回 contain-intrinsic-size
+         * (27px 内容盒 + 边框 = 28), 比真渲染恒多 1px —— 采信会把真值改坏(与 _measureRowH
+         * 同一条守卫, 见该处 2026-11-15 的动画期取证)。 */
+        if (probe.drawer && typeof r.checkVisibility === "function"
+            && !r.checkVisibility({ contentVisibilityAuto: true })) continue;
+        const key = kind + ":" + (probe.drawer
+          ? (r.getAttribute("data-dt-key") || "")
+          : (r.getAttribute("data-hash") || r.getAttribute("data-key") || ""));
+        const old = hs[key];
+        if (old === undefined) continue;  // 新键归 _measureRowH, 本方法只修旧值
+        const h = r.getBoundingClientRect().height;
+        /* !h 非正不采信: 行在 DOM 但 gBR 报 0 的那一瞬(祖先 display:none / 行刚插入尚未
+         * 布局 / 容器正被换掉), 写进 _rowHs 就等于把这一行的真值抹成 0, 同一拍 padTop 立刻
+         * 少一整行(比留旧值更糟)。与 _measureRowH 的 `_rowH[kind] > 0` 兜底同一口径:
+         * 量不到有效值就当没量过 —— 所以 probed++ 必须在有效性检查**之后**(它记的是
+         * 「这一拍真量到了几行」, 全零探不能算量到, 否则去重签名会被空探烧掉)。 */
+        if (!(h > 0)) continue;
+        probed++;
+        if (Math.abs(old - h) > 0.5) hs[key] = h;
+      }
+      if (probed) cache[kind] = sig;
+    },
     /* 前缀和 y(i) = 第 i 行的顶边偏移(含行间距)。每帧重算: 3000 次加法 ≈ 0.03ms,
      * 比维护"失效缓存 + 增量更新"简单得多, 也不会因为漏失效而算错。 */
     _rowWindow(kind, list, refName) {
@@ -579,6 +694,14 @@ Object.assign(window.AQB_COLUMNS.methods, {
         if (!this._winMeasured[kind] && n >= ROW_WIN_EST_MIN) gap = ROW_WIN_GAP_FALLBACK;
         else return off;
       }
+      /* issue 26-11-15-0332: 前缀和必须用「出窗行最后一发真值」累加。调用点放在所有早退
+       * 之后、pre[] 之前 —— 此刻 render 尚未 patch, 旧窗口的行还在 DOM, 重探来得及顶掉
+       * 陈旧存值; 早退的那些分支(未开窗/未量齐/容器不在场)本来就不产出 pad, 无需重探。
+       * 签名只取本拍的滚动几何/规模/宽度代/表顶偏移(全是本次开窗已读过的量), 不新增
+       * 行高签名因子 —— 见 _reprobeRenderedRowH 的「不踩全表作废坑」注释。 */
+      this._reprobeRenderedRowH(
+        kind, `${sy}|${vh}|${n}|${this._winResize}|${this._winTop[kind] || 0}`,
+      );
       const hs = this._rowHs;
       const pre = new Array(n + 1);
       pre[0] = 0;

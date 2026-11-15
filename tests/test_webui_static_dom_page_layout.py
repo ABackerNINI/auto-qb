@@ -61,6 +61,15 @@
   两真变化因子必须在); 2. _winCtnSync 的 drawer.open 守卫先于 clientWidth 读取(收场动画 .drawer
   转 absolute, .drawer-body clientWidth 1894->1918 是过渡假象, 采信即假 bump 共享 _winResize →
   下一拍全量重渲 5.6s 长任务 = 「关抽屉后卡死; 能滚不能点」)
+- test_frontend_outgoing_rowh_reprobe_guard: issue 26-11-15-0332 修复守阵 —— 行窗口化
+  「出窗最后一探」(字体交换/内容重排导致 _rowHs 存值陈旧, 窗口下滑 padTop 超量替换跳
+  +3.828px): 重探调用点必须在 _rowWindow 的所有早退之后、pre[] 之前(render 未 patch 时旧
+  窗口行仍在 DOM); 只刷已有键、零全表作废(禁 delete/_rowHVer/_rowH/_winMeasured/_rowHSig/
+  viewMode/_winResize++)、同拍 sig 去重、抽屉 content-visibility:auto 守卫在位; 主表三 kind
+  探测位与 _measureRowH 共用 ROW_H_MAIN_PROBES 单点; _rowProbeSig 在根 created() 初始化为
+  非响应式纯缓存; 第二根因(占位估算基准随每量一行微动 δ, 把 pad 区上百行未实测行连坐搬
+  δ×N, flux 取证 +3.8px)由 _measureRowH 主表均值量齐后冻结钉住(抽屉 content-visibility:auto
+  需逐拍收敛 28→27, 显式不冻)。行为面对同电池 + 去掉预热滚动的 T7/S-A 像素判据
 
 ## 皮肤档位口径
 - 皮肤清单单点在 webui_helpers._UI_ALL(atlas/prism/console/flux); flux(第四套, plan 26-10-31-2316 S5)
@@ -109,6 +118,18 @@ from webui_dom_page_support import (
     _computed_member_names,
     _reserved_prefix_problems,
 )
+
+
+def _strip_js_comments(src: str) -> str:
+    """去掉 JS 注释, 只留可执行文本 —— 静态守阵的断言必须**无法被注释满足**。
+
+    起因(评审 2026-11-16 #4): 把 `this._reprobeRenderedRowH(...)` 整段包进 `/* ... */`,
+    或把冻结门写成 `if (false) {` 再把旧条件留在注释里, 原文断言照样绿 —— 守阵钉的是注释,
+    不是代码。只剥两种安全形态: `/* ... */` 块注释与**整行** `//` 注释; 不剥行内 `//`
+    (可能落在字符串字面量里, 剥了会截断字符串, 反而让断言在真代码上误判)。
+    """
+    out = re.sub(r"/\*.*?\*/", "", src, flags=re.S)
+    return re.sub(r"(?m)^[ \t]*//.*$", "", out)
 
 
 def test_frontend_member_window_functions_live_in_methods():
@@ -1414,4 +1435,120 @@ def test_frontend_row_window_sig_and_ctn_sync_guard():
     assert cw_idx != -1 and cw_idx > guard_idx, (
         "_winCtnSync 的 drawer.open 守卫必须先于 clientWidth 读取 —— 守卫被挪到读取之后 = "
         "关抽屉假 bump 回潮(2026-11-02 关抽屉卡死根因)"
+    )
+
+
+def test_frontend_outgoing_rowh_reprobe_guard():
+    """issue 26-11-15-0332 修复守阵: 窗口滑动前给「仍在场、即将被 pad 顶掉」的行量最后一发真值。
+
+    根因: _rowHs 只在行渲染在场时由 updated() 的 _measureRowH 刷新; 字体交换/内容重排是
+    异步布局变化(不必然伴随 Vue 重渲), 首渲量过的行滚出窗口后存值就永不修正, 窗口下滑越过它
+    时 padTop 按存值超量替换 → 渲染行整体跳 ±数px(取证单行 +3.828px)。修复 = 在 _rowWindow
+    重建前缀和之前(此时 render 未 patch, 旧窗口行还在 DOM)重探一次, 只顶已有键的真值。
+    守阵五面: 1. 调用点必须在所有早退之后、pre[] 之前; 2. 重探只刷新已有键且零全表作废
+    (不删表/不改 _rowHVer/_rowH/_winMeasured/_rowHSig/签名 —— 踩 rowh-sig-and-transition-
+    geometry 坑就是 3000 行全量重渲 5.9~8.4s 长任务, 切页/关抽屉卡死复发); 3. 抽屉
+    content-visibility:auto 守卫在位; 4. 探测位选择器单点(与 _measureRowH 同源), 同拍 sig
+    去重键在 created() 初始化; 5. 重探签名不含 viewMode 等新因子。行为面对: node 电池
+    test_r4_outgoing_rowh_reprobe_kills_pad_jump。
+    """
+    rel = "shared/columns.js"
+    # !先剥注释再断言: 否则把调用/门条件留在注释里就能骗过本守阵(评审 2026-11-16 #4)。
+    text = _strip_js_comments(read_shared("columns.js"))
+
+    # 1) 调用点: _rowWindow 内、pre[] 之前(旧窗口行还在 DOM 才量得到「最后一发」)
+    mw = re.search(r"_rowWindow\(kind, list, refName\)\s*\{(.*?\n    \},)", text, re.S)
+    assert mw, f"{rel} 找不到 _rowWindow()(改名或挪走了? 同步本守阵)"
+    body = mw.group(1)
+    call_idx = body.find("this._reprobeRenderedRowH(")
+    hs_idx = body.find("const hs = this._rowHs;")
+    assert call_idx != -1 and hs_idx != -1 and call_idx < hs_idx, (
+        "出窗最后一探必须在 _rowWindow 里、pre[] 累加(const hs)之前调用 —— 挪到 updated() "
+        "之后就只剩新窗口行在场, 要顶掉的旧窗口行已经不在 DOM(issue 26-11-15-0332 复发)"
+    )
+    # 还得在所有**早退**之后: 早退分支(未开窗/未量齐/容器不在场)本来就不产出 pad, 重探是
+    # 白付 gBR; 更要紧的是把调用挪到函数开头 = 每次 _rowWindow 都探一遍(含不窗口化的渲染)。
+    # 早退的判据取「pre[] 之前最后一个 return off;」—— start/end 归一化之后还有一条
+    # `if (start >= end) return off;`, 那不在早退段里, 不能拿 rfind 全函数。
+    early = [m.start() for m in re.finditer(r"return off;", body) if m.start() < hs_idx]
+    assert early and call_idx > max(early), (
+        "出窗最后一探必须排在 _rowWindow 所有早退(return off;)之后 —— 早退分支不产出 pad, "
+        "重探纯属白付 gBR(评审 2026-11-16 #3)"
+    )
+    ms = re.search(r"_reprobeRenderedRowH\(\s*\n\s*kind, `([^`]*)`", text)
+    assert ms, "_rowWindow 缺出窗重探的几何签名(结构变了? 同步本守阵)"
+    assert "viewMode" not in ms.group(1), ("出窗重探签名扩进 viewMode 等非几何因子 = 重踩全表作废坑")
+
+    # 2) 重探实现: 只刷已有键, 零全表作废 / 零响应式自激
+    mr = re.search(r"_reprobeRenderedRowH\(kind, sig\)\s*\{(.*?\n    \},)", text, re.S)
+    assert mr, f"{rel} 找不到 _reprobeRenderedRowH()(改名或挪走了? 同步本守阵)"
+    code_lines = [ln.strip() for ln in mr.group(1).splitlines() if not ln.strip().startswith(("*", "//", "/*"))]
+    code = "\n".join(code_lines)
+    assert re.search(r"old === undefined\)\s*continue", code), ("出窗重探必须只刷新已有键 —— 新增键归 updated() 的 _measureRowH")
+    assert re.search(r"cache\[kind\] === sig\)\s*return",
+                     code), ("出窗重探缺同拍去重 —— 一拍里 memberPadTop/memberPadBottom/winMembers 会付三遍 gBR")
+    assert re.search(
+        r"if \(probed\) cache\[kind\] = sig", code
+    ), ("去重签名必须在「真的量到行」之后才落盘 —— 空探(抽屉换座/整表被 content-visibility "
+        "跳过)先记账 = 同一几何的后续渲染再也不重探, 漏一次就留一批陈旧存值")
+    assert re.search(
+        r"if \(!\(h > 0\)\)\s*continue", code
+    ), ("出窗重探必须跳过 h<=0 —— 行在 DOM 但 gBR 报 0 的那一瞬(祖先 display:none/"
+        "行刚插入未布局)写进去等于把该行真值抹成 0, 同一拍 padTop 少一整行(比留旧值更糟)")
+    for bad in ("delete ", "_rowHVer++", "_winMeasured", "_rowHSig", "viewMode", "this._rowH =", "_winResize++"):
+        assert bad not in code, (
+            f"出窗重探里出现 {bad!r} —— 在 render 途中改响应式/作废行高表会自激重渲, "
+            "且重踩 rowh-sig-and-transition-geometry 的 3000 行全量重渲长任务坑"
+        )
+    assert "contentVisibilityAuto" in code, (
+        "出窗重探缺抽屉 content-visibility:auto 守卫 —— 被跳过行的 gBR 是 intrinsic 占位高"
+        "(27px 内容盒 + 边框 = 28), 采信会把真值改坏"
+    )
+
+    # 3) 探测位单点: 主表三 kind 的选择器与 _measureRowH 同源(改一处漏一处 = 又一批陈旧行高)
+    mm = re.search(r"_measureRowH\(\)\s*\{(.*?\n    \},)", text, re.S)
+    assert mm and "for (const [kind, sel] of ROW_H_MAIN_PROBES)" in mm.group(1), (
+        "_measureRowH 未走 ROW_H_MAIN_PROBES 单点(结构变了? 同步本守阵)"
+    )
+    mph = re.search(r"_rowHProbeRows\(kind\)\s*\{(.*?\n    \},)", text, re.S)
+    assert mph and "ROW_H_MAIN_PROBES.find" in mph.group(1), ("出窗重探的探测位未走同一份 ROW_H_MAIN_PROBES —— 选择器两处漂移即漏 kind")
+    assert '["torrent", \'.torrent-row[data-table="torrent"][data-hash]\']' in text \
+        and '["group", \'.group-row[data-table="group"][data-key]\']' in text \
+        and '["member", \'.member-row[data-table="detail"][data-hash]\']' in text, (
+        "ROW_H_MAIN_PROBES 三 kind 探测位不齐 —— 少一个 kind 就留一批永不修正的陈旧行高"
+    )
+    # !三 kind 必须各自带 data-table 收窄: 剧集页的 .group-row.show-row/.ep-row 也带 data-key,
+    # 裸写 .group-row:not(.torrent-row)[data-key] 会把别座表的行记成 group 行高(键还可能撞车),
+    # 并把 _rowHAvgOf("group") 污染成混合均值 —— 冻结后的占位基准正是从这个均值来的。
+    mprobe = re.search(r"var ROW_H_MAIN_PROBES = \[(.*?)\];", text, re.S)
+    assert mprobe, "找不到 ROW_H_MAIN_PROBES 数组(结构变了? 同步本守阵)"
+    assert ".group-row:not(.torrent-row)" not in mprobe.group(1), (
+        "group 探测位退回裸 .group-row 选择器 —— 剧集页 show/ep 行会被记成 group 行高并污染"
+        "占位基准均值(必须带 [data-table=\"group\"])"
+    )
+
+    # 4) 去重签名缓存是非响应式纯缓存, 必须在 created() 初始化(与 _rowHs 同族)
+    life = open(os.path.join(STATIC_ROOT, "shared", "lifecycle.js"), encoding="utf-8").read()
+    mc = re.search(r"created\(\)\s*\{(.*?\n  \},)", life, re.S)
+    assert mc and "this._rowProbeSig = {};" in mc.group(1), (
+        "_rowProbeSig 未在根 created() 初始化 —— 进 data 会每拍多触发一轮整表重渲(P1-2 口径)"
+    )
+
+    # 5) 第二根因: 占位估算基准(全局均值)量齐后必须冻结 —— 每量到新行就微动 δ, 会连坐把
+    #    pad 区上百行未实测行一起搬 δ×N(flux 取证 106×0.036 = +3.8px)。门只剩两支:
+    #    「首访未量齐」与「存值非正」; 不许再加「行集变了就重校」这类第三支 —— _rowHs 里留着
+    #    上一批行的键, 按 _rowHAvgOf 重算出来的仍是混合均值(假重校), 而按 kind 剔旧键对 member
+    #    (逐组子集)等于每次展开都重新实测。估偏只影响从未渲染过的行, 且随逐行实测收敛。
+    assert "if (!this._winMeasured[kind] || !(this._rowH[kind] > 0))" in mm.group(1), (
+        "_measureRowH 主表均值的冻结门被改 —— 去掉 !_winMeasured = 滚动中每量一行都把 pad 区"
+        "整段搬动(第二根因复发); 去掉 >0 兜底 = 视图被 v-show 收走时把基准冻在 0"
+    )
+    assert "this._rowHFrozen" not in text and "_rowHListSig" not in text, (
+        "又引入了「按行集签名重校基准」的机制 —— _rowHAvgOf 吃的是全量 _rowHs(含上一批行的键), "
+        "重算出来仍是混合均值, 是假重校; 真要按行集重算必须先剔旧键, 而剔键对 member 逐组子集"
+        "是灾难。边界与取舍见 _measureRowH 的注释"
+    )
+    assert 'if (this._rowH["drawerContent"] === undefined' in mm.group(1), (
+        "抽屉内容桥的均值必须保持逐拍收敛, 不可一并冻结 —— content-visibility:auto 首拍量到"
+        " intrinsic 占位高 28, 冻结就永远拉不回真值 27"
     )
