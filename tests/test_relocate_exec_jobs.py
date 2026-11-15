@@ -780,7 +780,8 @@ def test_start_job_ids_and_receipt_contract(tmp_path, monkeypatch):
 
     assert item_a["cls"] == "started" and item_a["phase"] == ru.PHASE_MOVING, item_a
     assert set(item_a) >= {"job_id", "phase", "alias_kind", "link_count", "notes", "cls"}, set(item_a)
-    assert item_a["notes"][-1] == "qB 正在搬迁, 完成后自动建别名并武装收尾", item_a["notes"]
+    # 回执按形态分型(计划 26-11-14-1741 §03): 单成员 direct 换专文案 + 豁免(pausedUP 完成态)追加免暂停说明
+    assert item_a["notes"][-2:] == ["qB 自搬中(无别名)", "单种子搬迁: 做种中不暂停, qB 自搬"], item_a["notes"]
 
 
 def test_start_job_inflight_guard(tmp_path, monkeypatch):

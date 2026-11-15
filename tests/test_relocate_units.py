@@ -112,6 +112,12 @@ W8(R32) S5a 守阵追加(变异测试 classify-units 真洞簇钉面):
 issue 26-11-07-0527 批(R1#25/R1#26):
 - test_gate_ids_stable_strings: GATE_GONE/GATE_DISABLED 稳定字符串契约(统一引用后的单一来源)
 - test_unit_plan_shape_no_fallback_field: RelocateUnitPlan 字段集钉死无 fallback(确认拒绝即不发起, 无回落路径)
+
+单成员 direct 免暂停(计划 26-11-14-1741 S1 helper 单测):
+- test_is_complete_state_transition_exclusion_table: is_complete x 过渡态排除集表驱动 ——
+  checkingUP 是 is_complete=True 与排除集的唯一分歧态(仍判未完成, 走暂停); checkingDL 的
+  is_complete=False 与排除集方向一致; 真 qbittorrentapi 枚举钉扎(经 FakeTorrent); 防御面
+  (state_enum 缺失/None)保守 False
 """
 import dataclasses
 import os
@@ -1685,3 +1691,34 @@ def test_job_absent_counts_roundtrip():
     assert ru.job_from_dict(raw).absent_counts == (("HA", 2), ), "非 (str, int>=0) 二元组逐条跳过"
     raw["absent_counts"] = "garbage"
     assert ru.job_from_dict(raw).absent_counts == ()
+
+
+def test_is_complete_state_transition_exclusion_table():
+    """搬迁免暂停完成态判定(计划 26-11-14-1741 §03): is_complete x 过渡态排除集表驱动"""
+    from types import SimpleNamespace
+
+    def rec(state, is_complete):
+        return SimpleNamespace(state=state, state_enum=SimpleNamespace(is_complete=is_complete))
+
+    # 完成态且不在排除集 -> True(做种各态; pausedUP/stoppedUP 虽已停但仍算完成态口径)
+    for s in ("uploading", "stalledUP", "pausedUP", "stoppedUP", "queuedUP"):
+        assert ru.is_complete_state(rec(s, True)), s
+    # is_complete=False 与排除集方向一致 -> False(含排除集里 is_complete 本就为 False 的成员)
+    for s in (
+        "downloading", "stalledDL", "error", "missingFiles", "moving", "allocating", "metaDL", "forcedMetaDL",
+        "checkingDL", "checkingResumeData", "queuedDL"
+    ):
+        assert not ru.is_complete_state(rec(s, False)), s
+    # checkingUP 是唯一分歧态: is_complete=True 但在过渡态排除集 -> False(校验中完整性存疑, 仍走暂停)
+    assert not ru.is_complete_state(rec("checkingUP", True))
+    # 真 qbittorrentapi 枚举钉扎(经 FakeTorrent 的 state_enum): 口径来源实证
+    from helpers import FakeTorrent
+
+    assert ru.is_complete_state(FakeTorrent(hash="HA", state="stalledUP", progress=1.0))
+    assert not ru.is_complete_state(FakeTorrent(hash="HA", state="checkingUP", progress=1.0)), "唯一分歧态"
+    assert not ru.is_complete_state(FakeTorrent(hash="HA", state="checkingDL", progress=1.0)), \
+        "checkingDL is_complete=False, 与排除集一致"
+    assert not ru.is_complete_state(FakeTorrent(hash="HA", state="downloading", progress=1.0))
+    # 防御面: state_enum 缺失/None -> 保守 False(不豁免)
+    assert not ru.is_complete_state(SimpleNamespace(state="stalledUP", state_enum=None))
+    assert not ru.is_complete_state(SimpleNamespace(state="stalledUP"))

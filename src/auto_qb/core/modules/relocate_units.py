@@ -102,6 +102,33 @@ LEGACY_PHASE_MAP = {
     "finalizing": PHASE_ARMED,
 }
 
+# ---------------------------------------------------------------- 状态判定纯函数
+
+# 单成员搬迁免暂停的过渡态排除集(计划 26-11-14-1741 §03): 这些 state 即使 is_complete=True
+# 也不算完成态(校验/移动/元数据等过渡态)。口径参照 fuse_mod._NON_COMPLETE_STATES, 在 relocate
+# 侧独立持有单点 helper, 不跨模块引用他处私有常量。
+_TRANSITION_EXCLUDED_STATES = frozenset(
+    ("checkingDL", "checkingUP", "checkingResumeData", "moving", "allocating", "metaDL", "forcedMetaDL")
+)
+
+
+def is_complete_state(rec: Any) -> bool:
+    """搬迁免暂停的完成态判定(计划 26-11-14-1741 §03)
+
+    口径: ``state_enum.is_complete``(qbittorrentapi: uploading/stalledUP/checkingUP=True;
+    downloading/error/missingFiles/moving=False)且原始 state 不在过渡态排除集
+    {checkingDL, checkingUP, checkingResumeData, moving, allocating, metaDL, forcedMetaDL}
+    —— 排除集口径参照 fuse _NON_COMPLETE_STATES, 在 relocate 侧独立持有, 不跨模块引用私有常量。
+    checkingUP 是 is_complete=True 与排除集的唯一分歧态(校验中完整性存疑, 仍走暂停);
+    checkingDL 的 is_complete=False 与排除集方向一致。
+    """
+    state_enum = getattr(rec, "state_enum", None)
+    if state_enum is None or not getattr(state_enum, "is_complete", False):
+        return False
+    state = str(getattr(rec, "state", "") or "")
+    return state not in _TRANSITION_EXCLUDED_STATES
+
+
 # ---------------------------------------------------------------- 路径纯函数
 
 

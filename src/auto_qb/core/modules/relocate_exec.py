@@ -1553,6 +1553,14 @@ class ExecMixin:
             return {**verdict, "cls": "blocked", "reasons": [{"gate": ru.GATE_FORM, "text": unit.reason}]}
         scope = ru.content_root_of(src, [n for n, _s in facts.files])
         running = [r.hash for r in records if not getattr(r.state_enum, "is_stopped", True)]
+        # 单成员 direct 免暂停(计划 26-11-14-1741 §03): 单成员组且成员完成态(做种)时跳过
+        # 暂停/恢复, qB 直接搬运行中种子(可靠性由 qB 自身维持, D3; 失败由既有停滞看护 +
+        # 失败回执兜底)。多成员组暂停不可免 —— 搬 mover = 把其它成员脚下的共享文件搬走,
+        # 全组必须按住, 本豁免只对 len(records)==1 生效。resume 语义只做减法: 豁免路径
+        # resume_hashes=(), 交 _resume_members 既有幂等 no-op 兜住, 不新增机制。
+        exempt = len(records) == 1 and ru.is_complete_state(records[0])
+        if exempt:
+            running = []
         if running and not self._dry_run():
             try:
                 self._ctx.api.torrents_pause(torrent_hashes=running)
@@ -1603,6 +1611,16 @@ class ExecMixin:
         self._rt[job_id]["issue"] = False
         self._mark_issued(job)  # 重启恢复靠这一位区分崩溃窗口(未下发)与真停滞(见 _recover)
         logger.info(f"relocate | job {job_id}: 迁移发起({len(records)} 成员, 形态 {unit.form}, mover {job.mover[:8]})")
+        # 回执按形态分型(计划 26-11-14-1741 §03 顺带面): direct 无别名无武装收尾,
+        # 旧文案「完成后自动建别名并武装收尾」对它是误导 —— direct 换专文案, 多成员保留原文;
+        # 豁免路径(单成员完成态)再追加一条免暂停说明。
+        notes = list(verdict["notes"])
+        if unit.form == ru.FORM_DIRECT:
+            notes.append("qB 自搬中(无别名)")
+        else:
+            notes.append("qB 正在搬迁, 完成后自动建别名并武装收尾")
+        if exempt:
+            notes.append("单种子搬迁: 做种中不暂停, qB 自搬")
         return {
             **verdict,
             "cls": "started",
@@ -1610,7 +1628,7 @@ class ExecMixin:
             "phase": job.phase,
             "alias_kind": job.alias_kind,
             "link_count": unit.link_count,
-            "notes": list(verdict["notes"]) + ["qB 正在搬迁, 完成后自动建别名并武装收尾"],
+            "notes": notes,
         }
 
     @staticmethod

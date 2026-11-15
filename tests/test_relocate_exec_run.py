@@ -80,6 +80,18 @@
   重复执行零创建且账面长度恒 1(评审 major 守阵: 目录支 append 去重, 防重启复利翻倍)
 - test_rollback_links_cleans_dir_alias_orphan_and_spares_foreign: 目录别名回滚面 ——
   指向目标的孤儿别名清掉 / 真冲突别名(指向别处)保守不动 + e2e 报错路径
+
+单成员 direct 免暂停(计划 26-11-14-1741 S2 电池):
+- test_exec_single_member_complete_no_pause_direct_done: 单成员完成态(stalledUP)免暂停 ——
+  不发 pause、resume_hashes=()、_resume_members no-op(全程零 resume 调用)、走 _finish_direct 落 done
+- test_exec_single_member_downloading_still_pauses_and_resumes: 单成员 downloading 仍暂停+收口恢复
+- test_exec_single_member_error_state_still_pauses: 单成员 error 态(is_complete=False)仍暂停
+- test_exec_single_member_checking_up_still_pauses: 单成员 checkingUP 态(is_complete=True 与
+  过渡态排除集的唯一分歧态)仍暂停
+- test_exec_multi_member_complete_still_pauses_all: 多成员完成态(stalledUP)仍全组暂停
+  (多成员暂停不可免是设计不变量)+ 多成员旧回执文案保留
+- test_exec_dry_run_single_member_complete_unchanged: dry-run 不变 —— 单成员完成态零 API 调用,
+  豁免/形态分型 note 不进 dry-run 回执
 """
 
 import os
@@ -301,6 +313,117 @@ def test_exec_dry_run_no_side_effects(tmp_path, monkeypatch):
     assert items[0]["cls"] == "ok" and any("dry-run" in n for n in items[0]["notes"])
     assert client.calls == [], client.calls
     assert mod.active_jobs() and mod.active_jobs()[0].phase == ru.PHASE_MOVING
+
+
+# ---- 单成员 direct 免暂停(计划 26-11-14-1741 S2 电池) ----
+
+
+def _solo_env(tmp_path, monkeypatch, state, progress=1.0):
+    """单成员组测试底座: relocate_env 起步后把 HB 从组结构/store 摘除(照抄 direct 用例手法)"""
+    pin_disk_usage(monkeypatch)
+    mgr, client, src, dst, content, files = relocate_env(tmp_path, state=state, progress=progress)
+    store = mgr.store
+    key = store.member_to_key["HB"]
+    store.groups[key].remove("HB")
+    store.group_sizes[key].pop("HB", None)
+    store.member_to_key.pop("HB", None)
+    store.by_hash.pop("HB", None)
+    return mgr, client, src, dst, content, files
+
+
+def test_exec_single_member_complete_no_pause_direct_done(tmp_path, monkeypatch):
+    """单成员完成态(stalledUP)免暂停: 不发 pause、resume_hashes=()、
+    _resume_members no-op(全程零 resume 调用)、走 _finish_direct 落 done"""
+    mgr, client, src, dst, content, files = _solo_env(tmp_path, monkeypatch, "stalledUP")
+    mod = mgr.host.get("relocate")
+    spawned = []
+    _spy_spawn(mod, spawned)
+    items = mod.relocate_execute(["HA"], dst)
+    assert items[0]["cls"] == "started" and items[0]["form"] == "direct", items
+    # 回执分型: direct 专文案 + 豁免说明, 不再出现多成员的别名武装文案
+    assert "qB 自搬中(无别名)" in items[0]["notes"], items[0]["notes"]
+    assert "单种子搬迁: 做种中不暂停, qB 自搬" in items[0]["notes"], items[0]["notes"]
+    assert not any("完成后自动建别名" in n for n in items[0]["notes"]), items[0]["notes"]
+    assert not any(c[0] == "pause" for c in client.calls), client.calls
+    assert ("set_location", dst) in client.calls, "免暂停不免搬迁: setLocation 仍要下发"
+    job = mod.get_job(items[0]["job_id"])
+    assert job.resume_hashes == (), job
+    _simulate_moved(mgr, dst, files, content)
+    _run_ticks(mod, 6)
+    assert _only_job(mod)["phase"] == ru.PHASE_DONE, _only_job(mod)
+    assert not any(c[0] == "resume" for c in client.calls), "豁免路径 _resume_members 必须幂等 no-op"
+    assert spawned == [], "direct 无别名 => 不需要回收 daemon(S4)"
+
+
+def test_exec_single_member_downloading_still_pauses_and_resumes(tmp_path, monkeypatch):
+    """单成员 downloading(is_complete=False): 豁免不适用 —— 仍暂停 + 收口恢复"""
+    mgr, client, src, dst, content, files = _solo_env(tmp_path, monkeypatch, "downloading")
+    mod = mgr.host.get("relocate")
+    _spy_spawn(mod, [])
+    items = mod.relocate_execute(["HA"], dst)
+    assert items[0]["cls"] == "started", items
+    assert any(c[0] == "pause" and c[1] == ["HA"] for c in client.calls), client.calls
+    assert mod.get_job(items[0]["job_id"]).resume_hashes == ("HA", ), "暂停过的成员要记恢复账"
+    # 回执分型: direct 专文案在, 豁免说明不在
+    assert "qB 自搬中(无别名)" in items[0]["notes"], items[0]["notes"]
+    assert not any("做种中不暂停" in n for n in items[0]["notes"]), items[0]["notes"]
+    _simulate_moved(mgr, dst, files, content)
+    _run_ticks(mod, 6)
+    assert _only_job(mod)["phase"] == ru.PHASE_DONE, _only_job(mod)
+    assert any(c[0] == "resume" for c in client.calls), "暂停过的成员收口必须恢复"
+
+
+def test_exec_single_member_error_state_still_pauses(tmp_path, monkeypatch):
+    """单成员 error 态(is_complete=False): 豁免不适用, 仍暂停"""
+    mgr, client, src, dst, content, files = _solo_env(tmp_path, monkeypatch, "error")
+    mod = mgr.host.get("relocate")
+    _spy_spawn(mod, [])
+    items = mod.relocate_execute(["HA"], dst)
+    assert items[0]["cls"] == "started", items
+    assert any(c[0] == "pause" and c[1] == ["HA"] for c in client.calls), client.calls
+    assert mod.get_job(items[0]["job_id"]).resume_hashes == ("HA", ), items
+    assert not any("做种中不暂停" in n for n in items[0]["notes"]), items[0]["notes"]
+
+
+def test_exec_single_member_checking_up_still_pauses(tmp_path, monkeypatch):
+    """单成员 checkingUP 态(is_complete=True 与过渡态排除集的唯一分歧态): 仍暂停"""
+    mgr, client, src, dst, content, files = _solo_env(tmp_path, monkeypatch, "checkingUP")
+    mod = mgr.host.get("relocate")
+    _spy_spawn(mod, [])
+    items = mod.relocate_execute(["HA"], dst)
+    assert items[0]["cls"] == "started", items
+    assert any(c[0] == "pause" and c[1] == ["HA"] for c in client.calls), client.calls
+    assert mod.get_job(items[0]["job_id"]).resume_hashes == ("HA", ), items
+    assert not any("做种中不暂停" in n for n in items[0]["notes"]), items[0]["notes"]
+
+
+def test_exec_multi_member_complete_still_pauses_all(tmp_path, monkeypatch):
+    """多成员完成态(stalledUP): 豁免不适用 —— 全组暂停(多成员暂停不可免是设计不变量),
+    多成员旧回执文案保留"""
+    pin_disk_usage(monkeypatch)
+    mgr, client, src, dst, content, files = relocate_env(tmp_path, state="stalledUP")
+    mod = mgr.host.get("relocate")
+    _spy_spawn(mod, [])
+    items = mod.relocate_execute(["HA"], dst)
+    assert items[0]["cls"] == "started", items
+    pauses = [c[1] for c in client.calls if c[0] == "pause"]
+    assert pauses and sorted(pauses[0]) == ["HA", "HB"], client.calls
+    job = mod.get_job(items[0]["job_id"])
+    assert set(job.resume_hashes) == {"HA", "HB"}, job
+    assert "qB 正在搬迁, 完成后自动建别名并武装收尾" in items[0]["notes"], items[0]["notes"]
+    assert not any("做种中不暂停" in n for n in items[0]["notes"]), items[0]["notes"]
+
+
+def test_exec_dry_run_single_member_complete_unchanged(tmp_path, monkeypatch):
+    """dry-run 不变(计划 §03 边界): 单成员完成态 dry-run 零 API 调用,
+    豁免/形态分型 note 不进 dry-run 回执"""
+    mgr, client, src, dst, content, files = _solo_env(tmp_path, monkeypatch, "stalledUP")
+    mod = mgr.host.get("relocate")
+    mod._dry = True
+    items = mod.relocate_execute(["HA"], dst)
+    assert items[0]["cls"] == "ok" and any("dry-run" in n for n in items[0]["notes"]), items
+    assert client.calls == [], client.calls
+    assert not any("做种中不暂停" in n or "自搬中" in n for n in items[0]["notes"]), items[0]["notes"]
 
 
 def test_exec_step_budget(tmp_path, monkeypatch):
