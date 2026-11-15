@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>WEBUI 种子详情 tooltip 清理: 重复/低价值移除, 增量/长文本保留</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="webui-drawer-tooltip-prune">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-15-0717">
+<meta name="doc-updated" content="26-11-15-0717">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-15-webui-drawer-tooltip-prune.md">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: webui-drawer-tooltip-prune</div>
+<h1>WEBUI 种子详情 tooltip 清理: 重复/低价值移除, 增量/长文本保留</h1>
+<p class="lede">本篇只回答一个问题: 种子详情抽屉面上的 tooltip 哪些移除、哪些做文案手术、哪些保留, 以及守阵与验收怎么落。执行口径全部来自两轮 grilling 的 D1-D13(全按推荐), 无待拍板项。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-15-0717 · <b>doc-updated</b> 26-11-15-0717 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 会话 grilling 两轮 13 问(2026-11-15, 用户逐轮「按推荐」拍板)+ 只读取证: drawer_tpl 12 件 / 抽屉壳层(drawer.html、drawer-head.html) / 空帧(drawer_templates.js) / 引擎单元格面(tpl/xtpl-cells-dt.html、tpl/xtpl-cells.html peers 段) / ui_feedback.js 拦截层 / 测试面(静态守阵 + e2e)全扫
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<p><b>背景。</b>种子详情抽屉的 tooltip 经年累积混入三类低价值内容: 纯自指(悬浮 = 旁边已显示的文本)、英文 API 字段名(内容已用中文显示)、实现细节泄漏(内部计划编号 / qB API 机制句)。用户 2026-11-15 发起清理, 判据单句: <i>「除了长文本 tooltip 防止原元素过长导致被裁剪的, 其余的重复/低价值 tooltip 一律移除」</i>。</p>
+<p><b>目标(算成标准)。</b>① 移除面 46 处源清零且零回潮(静态守阵钉住); ② 保留面(长文本防裁剪 / 数据承载 / 语义增量 / 图标钮可访问名)一条不动; ③ 文案手术 6 处——摘内部计划编号与字段名前缀, 解释正文保留; ④ 全量测试绿入新基线切片。</p>
+<p><b>不变量。</b>图标钮(无可见文字)的 title 一律保留——它兼作 a11y 可访问名; <code>ui_feedback.js</code> 拦截层机制(title → data-aq-tip 单向迁移)不触碰, 本计划只减内容源; e2e 已钉的保留面断言(drawer-content-variant-tables.spec.mjs:216 钉 dt10 优先级钮)不放松。</p>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+<p><b>机制。</b>全站 <code>title</code> 由 <code>ui_feedback.js</code> MutationObserver 单向迁成 <code>data-aq-tip</code>(.aq-tip 自绘悬浮, 350ms 延迟; 静态守阵 test_webui_static_dom_panel_drawer.py:1198 记载该口径)——模板里的 title 属性与 JS 载荷就是 tooltip 内容源。四皮肤共享 <code>shared/</code>, 改一次全皮肤生效。</p>
+<p><b>盘点(取证面)。</b>模板 title 挂点 157 处: drawer_tpl 十二件 84(dt01×20 / dt02×14 / dt03×14 / dt04×1 / dt05×1 / dt07×8 / dt08×2 / dt10×11 / dt11×6 / dt12×7; dt06、dt09 零) · 抽屉壳层 7(drawer.html:22/41/170/171 + drawer-head.html:28/31/71, 其中 :41 为向 drawer-head 传参链) · 空帧 1(drawer_templates.js:352, 守阵钉 esc) · 引擎 dt 单元格 52(tpl/xtpl-cells-dt.html, 仅种子详情消费) · peers 单元格段 13(tpl/xtpl-cells.html:325-354, 仅抽屉 peers 表消费)。另有 JS 载荷源 7 处(drawer_tpl/04 stats 202/206/208/209、05 stats 213/216/219, 经 <code>:title="s.title"</code> 动态绑定渲染)。主视图面(xtpl.html、xtpl-cells.html 非 peers 段)不在本次范围。</p>
+<p><b>痛点五类(带行号证据)。</b></p>
+<ul>
+  <li><b>自指</b>: dt02:282 开关徽章 builder <code>title="${label}"</code>(×5 实例, 标签就在旁边); dt03:244/251 crow/sideKv builder <code>title="${label}"</code>(同)</li>
+  <li><b>英文 API 字段名</b>: dt01:197-218 hero 五卡 tooltip 全是 <code>progress / amount_left / availability</code> 式字段名串; state/site/category/tags/private chips 在 dt01/dt02/dt03 各一套; dt02:157 <code>up_limit/dl_limit</code>; dt02:213/216 <code>hr_site_need/hr_site_remain</code>; dt03:206 状态行; tracker 统计格 <code>num_seeds (num_complete)</code> 等(04:202/206、05:213/216/219、xtpl-cells-dt:101/102)</li>
+  <li><b>实现细节泄漏</b>: dt07:305 尾缀「(计划 P-04 口径)」; xtpl-cells-dt:110 头缀「P-02 回退: 」; dt11:444 整句「批量优先级走 files/priority indices 数组, 一次提交」; xtpl-cells-dt:37 <code>status = 0</code>(备注正文已完整解释)</li>
+  <li><b>复述</b>: dt10:298「全部完整」chip tooltip =「子树内全部文件均已完整」; dt10:297/301 同族; dt06「正在汇报」chip(xtpl-cells-dt:105, pulse 动画 + 文字已示意) tooltip =「该 tracker 正在汇报中」</li>
+  <li><b>色彩自述</b>: dt04:278 pills builder <code>title="${p.tip}"</code> ×6 实例 =「状态分类沿用全局状态色族」「正常 = 绿」等(胶囊自带同色圆点)</li>
+</ul>
+
+<h2><span class="no">§03</span>方案总览</h2>
+<p><b>四值判据(D1-D13 拍板落定)。</b></p>
+<table>
+  <tr><th>处置</th><th>数量</th><th>判据</th><th>拍板</th></tr>
+  <tr><td class="bad">移除</td><td>46(模板 41 + JS 载荷 5)</td><td>自指 / 英文字段名 / 复述 / 色彩自述 / 实现细节句 / 纯折叠提示(chevron 已示能)</td><td>D2 D3 D4 D5 D6 D7 D11</td></tr>
+  <tr><td class="wr">文案手术</td><td>6(模板 4 + JS 载荷 2)</td><td>解释正文是真语义, 只摘内部计划编号与 <code>num_xxx:</code> 字段名前缀</td><td>D3 D8 D11 D12</td></tr>
+  <tr><td class="good">保留</td><td>112 模板挂点</td><td>长文本防裁剪 / 数据承载 / 语义增量 / 图标钮 a11y 可访问名 / 口径单点</td><td>D1 D5 D7 D9 D10</td></tr>
+  <tr><td>守阵</td><td>1 条静态用例</td><td>黑名单逐字串钉移除面零回潮 + 手术点新串在位 + 保留点抽查</td><td>D13</td></tr>
+</table>
+<p><b>落点。</b><code>shared/drawer_tpl/</code> 九件(01/02/03/04/05/07/08/10/11)+ <code>shared/tpl/xtpl-cells-dt.html</code> + <code>shared/tpl/xtpl-cells.html</code>(仅 peers 段, :325-354)。引擎文件只动抽屉专用段, 主视图零牵连。单波次可完(无依赖链), 守阵随 S4。</p>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+
+<h3>移除清单(46 处, S1-S3 逐行执行)</h3>
+<h4>drawer_tpl/01-general-hero-tall.js(11 处 · S1)</h4>
+<table>
+  <tr><th>行</th><th>挂点</th><th>现值</th><th>依据</th></tr>
+  <tr><td><code>197</code></td><td>hero 进度卡</td><td><code>progress / amount_left / availability</code></td><td>D2 字段名</td></tr>
+  <tr><td><code>203</code></td><td>hero 分享率卡</td><td><code>ratio / uploaded / downloaded</code></td><td>D2</td></tr>
+  <tr><td><code>208</code></td><td>hero 上传速度卡</td><td><code>upspeed / dlspeed</code></td><td>D2</td></tr>
+  <tr><td><code>213</code></td><td>hero 做种数卡</td><td><code>num_seeds(num_complete) / num_leechs(num_incomplete)</code></td><td>D2</td></tr>
+  <tr><td><code>218</code></td><td>hero 重汇报卡</td><td><code>reannounce_in / trackers_count</code></td><td>D2</td></tr>
+  <tr><td><code>232</code></td><td>状态 chip</td><td><code>state</code></td><td>D2</td></tr>
+  <tr><td><code>234</code></td><td>site chip</td><td><code>site</code></td><td>D2</td></tr>
+  <tr><td><code>235</code></td><td>category chip</td><td><code>category</code></td><td>D2</td></tr>
+  <tr><td><code>238</code></td><td>tags chip</td><td><code>tags</code></td><td>D2</td></tr>
+  <tr><td><code>240</code></td><td>private chip</td><td><code>private</code></td><td>D2</td></tr>
+  <tr><td><code>264</code></td><td>折叠组头</td><td><code>点击折叠 / 展开</code></td><td>D3(chevron 已示能)</td></tr>
+</table>
+<h4>drawer_tpl/02-general-cards-low.js(10 处 · S1)</h4>
+<table>
+  <tr><th>行</th><th>挂点</th><th>现值</th><th>依据</th></tr>
+  <tr><td><code>157</code></td><td>kv builder(限速行)</td><td><code>${label === "上传限制" ? "up_limit" : "dl_limit"}</code></td><td>D2</td></tr>
+  <tr><td><code>171</code></td><td>折叠组头</td><td><code>点击折叠 / 展开</code></td><td>D3</td></tr>
+  <tr><td><code>213</code></td><td>HR 站点侧还需</td><td><code>hr_site_need</code></td><td>D2(行标签已示)</td></tr>
+  <tr><td><code>216</code></td><td>HR 站点侧剩余</td><td><code>hr_site_remain</code></td><td>D2</td></tr>
+  <tr><td><code>242</code></td><td>状态 chip</td><td><code>state</code></td><td>D2</td></tr>
+  <tr><td><code>244</code></td><td>site chip</td><td><code>site</code></td><td>D2</td></tr>
+  <tr><td><code>245</code></td><td>category chip</td><td><code>category</code></td><td>D2</td></tr>
+  <tr><td><code>248</code></td><td>tags chip</td><td><code>tags</code></td><td>D2</td></tr>
+  <tr><td><code>250</code></td><td>private chip</td><td><code>private</code></td><td>D2</td></tr>
+  <tr><td><code>282</code></td><td>开关徽章 builder</td><td><code>${label}</code>(×5 实例: 自动管理/强制启动/超级做种/按顺序下载/先下载首尾文件块)</td><td>D2 自指</td></tr>
+</table>
+<h4>drawer_tpl/03-general-dossier-collapsed.js(9 处 · S1)</h4>
+<table>
+  <tr><th>行</th><th>挂点</th><th>现值</th><th>依据</th></tr>
+  <tr><td><code>192</code></td><td>折叠组头</td><td><code>点击折叠 / 展开</code></td><td>D3</td></tr>
+  <tr><td><code>206</code></td><td>状态行</td><td><code>state / progress / amount_left</code>(块内全有可见标签)</td><td>D2</td></tr>
+  <tr><td><code>244</code></td><td>crow builder</td><td><code>${label}</code></td><td>D2 自指</td></tr>
+  <tr><td><code>251</code></td><td>sideKv builder</td><td><code>${label}</code></td><td>D2 自指</td></tr>
+  <tr><td><code>283</code></td><td>site chip</td><td><code>site</code></td><td>D2</td></tr>
+  <tr><td><code>284</code></td><td>category chip</td><td><code>category</code></td><td>D2</td></tr>
+  <tr><td><code>287</code></td><td>tags chip</td><td><code>tags</code></td><td>D2</td></tr>
+  <tr><td><code>289</code></td><td>private chip</td><td><code>private</code></td><td>D2</td></tr>
+  <tr><td><code>346</code></td><td>右栏 &lt;aside&gt;</td><td><code>元信息栏: site / category / tags / 标识 / 限速 / 扩展字段</code>(栏内内容全可见)</td><td>D6</td></tr>
+</table>
+<h4>drawer_tpl/04-trackers-status-cards-tall.js(3 处 · S3, 内含 JS 载荷 2 处)</h4>
+<table>
+  <tr><th>行</th><th>挂点</th><th>现值</th><th>依据</th></tr>
+  <tr><td><code>278</code></td><td>概览胶囊 builder</td><td><code>${p.tip}</code>(×6 实例: 「状态分类沿用全局状态色族」「正常 = 绿」等色彩自述)</td><td>D4</td></tr>
+  <tr><td><code>202</code></td><td>统计格「种子」JS 载荷</td><td><code>num_seeds (num_complete)</code></td><td>D11</td></tr>
+  <tr><td><code>206</code></td><td>统计格「用户」JS 载荷</td><td><code>num_leeches (num_incomplete)</code></td><td>D11</td></tr>
+</table>
+<h4>drawer_tpl/05-trackers-health-groups-low.js(4 处 · S3, 内含 JS 载荷 3 处)</h4>
+<table>
+  <tr><th>行</th><th>挂点</th><th>现值</th><th>依据</th></tr>
+  <tr><td><code>313</code></td><td>折叠组头</td><td><code>点击折叠 / 展开</code></td><td>D3</td></tr>
+  <tr><td><code>213</code></td><td>统计格「种子」JS 载荷</td><td><code>num_seeds (num_complete)</code></td><td>D11</td></tr>
+  <tr><td><code>216</code></td><td>统计格「用户」JS 载荷</td><td><code>num_leeches (num_incomplete)</code></td><td>D11</td></tr>
+  <tr><td><code>219</code></td><td>统计格「完成」JS 载荷</td><td><code>num_downloaded</code>(仅一词)</td><td>D11</td></tr>
+</table>
+<h4>drawer_tpl/07-peers-dashboard-tall.js(1 处 · S2)</h4>
+<table>
+  <tr><th>行</th><th>挂点</th><th>现值</th><th>依据</th></tr>
+  <tr><td><code>316</code></td><td>链路健康 IPv6 chip</td><td><code>IPv6 地址的对端数</code>(≈标签复述; 加密/uTP/内网三条留)</td><td>D5</td></tr>
+</table>
+<h4>drawer_tpl/10-content-tree-detail-tall.js(3 处 · S2)</h4>
+<table>
+  <tr><th>行</th><th>挂点</th><th>现值</th><th>依据</th></tr>
+  <tr><td><code>297</code></td><td>子树未完成 chip</td><td><code>子树内 ${...} 个文件仍有缺口</code>(chip 文本已含计数与缺口量)</td><td>D7 复述</td></tr>
+  <tr><td><code>298</code></td><td>子树完整 chip</td><td><code>子树内全部文件均已完整</code></td><td>D7 复述</td></tr>
+  <tr><td><code>301</code></td><td>文件完整 chip</td><td><code>该文件全部块均已完整</code></td><td>D7 复述</td></tr>
+</table>
+<h4>drawer_tpl/11-content-treegrid-batch-low.js(1 处 · S2)</h4>
+<table>
+  <tr><th>行</th><th>挂点</th><th>现值</th><th>依据</th></tr>
+  <tr><td><code>444</code></td><td>批量脚注(有数据态)</td><td><code>批量优先级走 files/priority indices 数组, 一次提交</code>(qB API 实现细节)</td><td>D6</td></tr>
+</table>
+<h4>tpl/xtpl-cells-dt.html(4 处 · S3)</h4>
+<table>
+  <tr><th>行</th><th>挂点</th><th>现值</th><th>依据</th></tr>
+  <tr><td><code>37</code></td><td>dt04 禁用备注</td><td><code>status = 0</code>(备注正文已完整解释)</td><td>D11</td></tr>
+  <tr><td><code>101</code></td><td>dt06 做种列</td><td><code>num_seeds (num_complete)</code></td><td>D11</td></tr>
+  <tr><td><code>102</code></td><td>dt06 下载列</td><td><code>num_leeches (num_incomplete)</code></td><td>D11</td></tr>
+  <tr><td><code>105</code></td><td>dt06「正在汇报」chip</td><td><code>该 tracker 正在汇报中</code>(pulse + 文字已示意)</td><td>D11 复述</td></tr>
+</table>
+
+<h3>文案手术清单(6 处, 摘前缀/尾缀, 解释正文保留)</h3>
+<table>
+  <tr><th>位置</th><th>旧串(截断)</th><th>新串</th><th>依据</th></tr>
+  <tr><td><code>drawer_tpl/07:305</code></td><td>吸血嫌疑 = client 名含 XL/迅雷 启发式, 纯展示无动作<b>(计划 P-04 口径)</b></td><td>…纯展示无动作</td><td>D8</td></tr>
+  <tr><td><code>drawer_tpl/08:277</code></td><td><code>${g.tip}</code><b> · 点击折叠 / 展开</b></td><td><code>${g.tip}</code></td><td>D3</td></tr>
+  <tr><td><code>drawer_tpl/04:208</code></td><td><b>num_peers: </b>经由该 tracker 连接的对端</td><td>经由该 tracker 连接的对端</td><td>D11</td></tr>
+  <tr><td><code>drawer_tpl/04:209</code></td><td><b>num_downloaded: </b>该 tracker 报告的累计完成下载次数</td><td>该 tracker 报告的累计完成下载次数</td><td>D11</td></tr>
+  <tr><td><code>tpl/xtpl-cells-dt.html:103</code></td><td><b>num_downloaded: </b>该 tracker 报告的累计完成下载次数</td><td>该 tracker 报告的累计完成下载次数</td><td>D11</td></tr>
+  <tr><td><code>tpl/xtpl-cells-dt.html:110</code></td><td><b>P-02 回退: </b>qB 无 per-tracker 口径, 以种子级 detail.reannounce_in 全局值近似</td><td>qB 无 per-tracker 口径, 以种子级 detail.reannounce_in 全局值近似</td><td>D12</td></tr>
+</table>
+
+<h3>保留清单(112 模板挂点, 一条不动)</h3>
+<table>
+  <tr><th>类别</th><th>挂点</th><th>为什么留</th></tr>
+  <tr><td>长文本防裁剪<br>(用户原话例外面)</td><td>dt01:158/162/177/178/179/180 与 dt03:239(<code>hr_reason</code> ×7) · dt10:314/315(文件名/路径) · dt12:216/248/257/276(treemap 方块/目录, 内容本就截断) · drawer_templates.js:352(错误帧全文, 守阵钉 esc) · drawer-head.html:31(抽屉标题, CSS ellipsis 证实截断; 传参链 drawer.html:41) · xtpl-cells-dt:26/44/62/91(tracker 完整 URL)</td><td>元素文本被裁剪或内容超长, 悬浮是唯一读全文的途径</td></tr>
+  <tr><td>数据承载</td><td>dt07:255(上传去向占比条, 分段无标签) / 271(连接构成条) / 267(图例桶计数) · xtpl-cells-dt:107(行级 next_announce 真值) / 112(汇报周期剩余比例)</td><td>tooltip 本身携带数据, 非说明文字</td></tr>
+  <tr><td>语义增量(通用面)</td><td>dt07:314/315/317(加密 E flag / uTP P flag / 内网私有段启发式) · dt07:305 与 dt08:277(手术后的解释正文) · dt08:354(只看在传数据的筛选语义) · dt10:300/303/305/311(缺块有源可补 / 不下载保留数据 / 可用性含义 / 优先级钮目录作用域, e2e 钉) · dt10:378/379 · dt11:432/433/448/449/451(筛选语义 / 批量钮计数 / 清除作用域 / 空态指引) · dt12:294/305/339(可用性 / 取消选中 / 仅看未完成) · dt02:187/189/191/257 与 dt01:247/248/249 与 dt03:176/178/180/246(图标钮: 打开目录/复制/查看路径链)</td><td>解释标签之外的含义、作用域或副作用; 图标钮的 title 兼作 a11y 可访问名</td></tr>
+  <tr><td>语义增量(引擎 dt 单元格)</td><td>xtpl-cells-dt:15/18/59/106(qB 合成虚拟条目) · 24/48/67/100(tier 汇报层级) · 25(内网不经公网) · 29/30/50/52/78/79/119/120(强制重报 gated / 删除, 图标钮) · 34/74(统计格动态绑定, 载荷按手术口径) · 36/55/71/98(tracker 原始 msg / 点击展开) · 137/169(内容树路径) · 139/176(折叠钮) · 142/144/146/179/181/183(metaTitle/missTitle/badgeTitle) · 149/186(子树合计/文件大小) · 150/187(progTitle 加权口径) · 172/174(勾选=整棵子树) · 190(avTitle) · 103/110(手术后解释正文)</td><td>逐点核实为增量信息(见取证记录); 动态 title 载荷全留在 drawer_tpl JS</td></tr>
+  <tr><td>语义增量(peers 段, 全留)</td><td>xtpl-cells.html:325-354: 325/326(addr/cc) · 329(client) · 331(吸血启发式) · 334/335(flags 缺失 / 逐 flag FLAG_META 解释) · 338(files 字段) · 339(对端自身进度) · 343/348(up/dl 口径+条长占比) · 352/353(会话累计) · 354(relevance)</td><td>D10: 经查全为对端口径语义, 零复述</td></tr>
+  <tr><td>壳层</td><td>drawer.html:22(拖拽调高, 图标) / 170/171(qbCurSummaryHint: 窗口增量口径+限速虚线含义, 常驻说明区退役后唯一文档) · drawer-head.html:28(statusTitle, 图标) / 71(纵轴最大值 MiB/s)</td><td>图标可访问名 / 口径单点</td></tr>
+</table>
+
+<h3>步骤分期</h3>
+<table>
+  <tr><th>步</th><th>内容</th><th>验收判据</th></tr>
+  <tr><td><b>S1</b></td><td>通用面字段名+自指+折叠移除: dt01(11) / dt02(10) / dt03(9)</td><td>三文件内 §04 黑名单串清零; 摘除后无空壳属性残留(如悬空 <code>title=""</code>)</td></tr>
+  <tr><td><b>S2</b></td><td>通用面其余: dt04:278 pills builder / dt05:313 / dt07:316 移 + 305 手术 / dt08:277 手术 / dt10:297/298/301 / dt11:444</td><td>同上 + 手术两处新串 grep 在位</td></tr>
+  <tr><td><b>S3</b></td><td>tracker/engine 面: drawer_tpl/04:202/206 移 + 208/209 手术 / drawer_tpl/05:213/216/219 移 / xtpl-cells-dt:37/101/102/105 移 + 103/110 手术</td><td>统计格绑定(:34/:74)保持不动仅载荷变; xtpl-cells-dt 其余 46 挂点零触碰</td></tr>
+  <tr><td><b>S4</b></td><td>静态守阵: tests/test_webui_static_dom_panel_drawer.py 追加用例——黑名单逐字串 ×文件断言 not in(46 移除点全钉); 6 手术点断言新串 in + 旧串 not in; 保留抽查(dt10:311 优先级特征串 / dt12 blkTitle / 空帧 esc / peers 段 :331 与 :335 绑定 / qbCurSummaryHint 挂点)</td><td>守阵红绿双验: 摘任一移除点回潮必红; 守阵注释写明「黑名单逐字串, 新文案不拦; 解禁须删钉」</td></tr>
+  <tr><td><b>S5</b></td><td>回归验收: <code>commands run test.quick</code> → e2e drawer 相关 spec(drawer-content-variant-tables / drawer-tables / drawer-trackers-variant-tables / drawer-groups-shows / drawer-merge)→ <code>commands run test.full</code> 全绿 + <code>kb.new baseline</code> → 四皮肤 dev.webui 真机目检(用户)</td><td>全量绿入新基线切片; e2e 既有钉(:216 dt10 优先级 / 空帧 esc)不红; 目检确认悬浮观感无空洞</td></tr>
+</table>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p>无 —— D1-D13 两轮拍毕(2026-11-15), 本计划即冻结执行版(拍板记录见 §06)。</p>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+  <tr><th>#</th><th>议题</th><th>结论</th><th>日期</th></tr>
+  <tr><td>D1</td><td>清理范围</td><td>全种子详情抽屉面: drawer_tpl + 抽屉壳层 + 空帧; D10 扩入引擎单元格面(xtpl-cells-dt 全量 + peers 段)。主视图面排除</td><td>2026-11-15</td></tr>
+  <tr><td>D2</td><td>英文 API 字段名族</td><td>全部移除(内容已中文显示; 调试看网络面板)</td><td>2026-11-15</td></tr>
+  <tr><td>D3</td><td>折叠提示</td><td>纯「点击折叠 / 展开」×4 移; dt08 组头摘后缀留 g.tip</td><td>2026-11-15</td></tr>
+  <tr><td>D4</td><td>dt04 概览胶囊色族自述</td><td>title 挂点整移(×6 实例)</td><td>2026-11-15</td></tr>
+  <tr><td>D5</td><td>dt07 链路健康四徽章</td><td>只移 IPv6(标签复述); 加密/uTP/内网留(flag 语义增量)</td><td>2026-11-15</td></tr>
+  <tr><td>D6</td><td>实现细节/自述两处</td><td>dt03:346 侧栏整栏自述移; dt11:444 机制句移</td><td>2026-11-15</td></tr>
+  <tr><td>D7</td><td>dt10 状态 chip</td><td>复述型三条移(297/298/301); 增量型两条留(300/303)</td><td>2026-11-15</td></tr>
+  <tr><td>D8</td><td>dt07 吸血嫌疑尾缀</td><td>保留 tooltip, 摘「(计划 P-04 口径)」(文案手术先例)</td><td>2026-11-15</td></tr>
+  <tr><td>D9</td><td>保留面清单</td><td>全确认(长文本/数据承载/语义增量/图标钮/口径单点五类)</td><td>2026-11-15</td></tr>
+  <tr><td>D10</td><td>引擎单元格面</td><td>纳入: xtpl-cells-dt.html 按口径清; xtpl-cells.html peers 段全保留(经查零复述)</td><td>2026-11-15</td></tr>
+  <tr><td>D11</td><td>tracker 面残余打包</td><td>纯字段名 7 移(dt04:202/206、05:213/216/219、xtc:101/102); 复述 1 移(xtc:105); offNote 1 移(xtc:37); 带 tracker 口径解释 3 处摘 <code>num_xxx:</code> 前缀留(04:208/209、xtc:103)</td><td>2026-11-15</td></tr>
+  <tr><td>D12</td><td>xtc:110 P-02 尾缀</td><td>摘「P-02 回退: 」前缀, 口径解释保留(与 D8 同口径)</td><td>2026-11-15</td></tr>
+  <tr><td>D13</td><td>守阵补强</td><td>加静态守阵: 黑名单逐字串钉移除面零回潮 + 手术新串在位 + 保留抽查</td><td>2026-11-15</td></tr>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+  <tr><th>#</th><th>风险</th><th>触发条件</th><th>处置</th></tr>
+  <tr><td>R1</td><td>a11y 回退</td><td>移除面元素失去可访问名</td><td>已逐点核实: 移除面全部有可见文本(a11y 名 = 文本内容), 图标钮全在保留面; 折叠头 a11y 守阵只查 role/aria-expanded/foldToggle 不查 title</td></tr>
+  <tr><td>R2</td><td>既有断言撞红</td><td>e2e/静态守阵引用被摘串</td><td>排查已做: e2e 仅钉 dt10:311(保留面)、静态守阵仅钉空帧 esc(保留面)、折叠 a11y 与 title 无关; 若全量轮真红, 按失败行逐条裁决——断言改指新串或确认为期望行为变更, 不静默改断言</td></tr>
+  <tr><td>R3</td><td>手术新串与他处引用不一致</td><td>07:305 / 08:277 / xtc:103 / xtc:110 旧串被 e2e 或文档引用</td><td>S3 后全仓 grep 旧串复核; 发现引用即改指新串并记录</td></tr>
+  <tr><td>R4</td><td>守阵误伤未来合法 tooltip</td><td>将来想加同名提示</td><td>黑名单只钉逐字串, 不同措辞不拦; 守阵注释写明解禁条件(删钉即解)</td></tr>
+  <tr><td>R5</td><td>.aq-tip 拦截层行为</td><td>无 title 节点交互异常</td><td>机制为「出现才迁移」, 无 title 节点零交互; S5 四皮肤目检兜底</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-15-0717</span> 初版: 会话 grilling 两轮(D1-D13 全按推荐)。要点: 四值判据定案——移除 46 源(模板 41 + JS 载荷 5)/ 文案手术 6 / 保留 112 挂点; S1-S5 单波次; 静态守阵收口(D13); 零代码改动, 实施待显式开工。</li>
+</ul>
+
+</div>
+</body>
+</html>
