@@ -183,7 +183,6 @@ from .traffic_store_codec import (  # noqa: F401
     parse_v4_day_text,
     v4_block_agg_totals,
     v4_block_slots,
-    v4_bucket_width_s,
     v4_live_tail_slots,
     v4_z_totals_ramp,
 )

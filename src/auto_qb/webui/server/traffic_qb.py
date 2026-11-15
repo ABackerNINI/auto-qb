@@ -17,10 +17,10 @@ plan 26-10-04-1957 S3b, §05.2-§05.4)
 - window 查询参数仅认 WINDOW_NAMES(13 档, D4), 其余 400(客户端错误不 500)。
 - 读盘 v4(plan 26-10-04-1957 R2 换代立, 只读 qb-traffic-v4/ 新目录): raw 段窗(1m-24h)经
   V4DayCache.read_window 按窗口日期集合只读涉及天文件(窗首种子外扩一个桶宽, 24h 窗常态
-  2 个/窗首跨本地午夜边界时至多 3 个), 块序列 -> traffic_grid.v4_series_points 桶点 ->
-  v4_rate_from_totals 速率口径变换(计划 26-10-07-2127 方案 B: rate = 计数器差分区间平均
-  delta/w; D3 窗首种子 = t0 外扩 grid.interval 取前驱桶点作差分基线, 种子点被 v4_grid_obs
-  窗外覆盖过滤天然不外发) -> v4_grid_obs 栅格展开; agg 段窗(3d/7d/30d/6mo/1y/all)经
+  2 个/窗首跨本地午夜边界时至多 3 个), 块序列 -> traffic_grid.v4_series_points 点位归属
+  归桶(26-11-15-1104 F2: 样本按 floor(ts/B)xB 落格, 桶速率 = 桶内样本差分和 / 覆盖时长
+  一次算定; D3 窗首种子 = 读文件外扩 grid.interval, 窗前样本作首桶差分基线) ->
+  v4_grid_obs 直映栅格桶观测; agg 段窗(3d/7d/30d/6mo/1y/all)经
   V4DayCache.read_agg 单文件读取(mtime/size 键控缓存), 行按 kind 直映栅格桶(3d+ 组图由
   M×31 -> M×1 次文件读取; dl_avg 已是真均值, 不做差分变换)。
 - 活尾合流(S6 验收追加, 2026-10-05): raw 段窗在磁盘块之外合流采样模块活尾快照
@@ -257,8 +257,8 @@ class QbTrafficChartApi:
 
         key 与成员集解析同 /api/groups/{key} 通道(decode -> store.groups 查表); 聚合口径
         (成员求和 / 逐成员差分 / 桶 null 由成员观测面裁决)全部在 core.traffic_grid 纯函数层;
-        raw 段成员链与单系列同口径(窗首种子外扩 + v4_rate_from_totals 区间平均, 计划
-        26-10-07-2127 S2); 不再读全局系列(「借 global 判 null」退役, §05.1/§05.4)。
+        raw 段成员链与单系列同口径(窗首种子外扩 + 点位归属归桶一次算定, 26-11-15-1104 F2);
+        不再读全局系列(「借 global 判 null」退役, §05.1/§05.4)。
         """
         parse_window(window)
         key = group_key_param(key_text)  # 畸形 key -> 400(同 /api/groups/{key} 通道, 不 500)
@@ -271,7 +271,7 @@ class QbTrafficChartApi:
         degraded = False
         if seg == "raw":
             grid = self._grid(window)
-            seed_t0 = grid.t0 - grid.interval  # D3 窗首种子: 外扩一个响应桶宽取前驱桶点作差分基线
+            seed_t0 = grid.t0 - grid.interval  # D3 窗首种子: 读文件外扩一个响应桶宽, 窗前样本作首桶差分基线
             member_obs = []
             member_blocks = []
             member_has_tail = []
@@ -291,14 +291,7 @@ class QbTrafficChartApi:
                         v4_live_tail_slots(tail, now=SYSTEM_CLOCK.now(), max_gap_s=self._tail_gap_bound(grid))
                         if tail is not None else ()
                     )
-                    member_obs.append(
-                        tg.v4_grid_obs(
-                            tg.v4_rate_from_totals(
-                                tg.v4_series_points(blocks, seed_t0, grid.t1, tail_slots=tail_slots)
-                            ),
-                            grid,
-                        )
-                    )
+                    member_obs.append(tg.v4_grid_obs(tg.v4_series_points(blocks, grid, tail_slots=tail_slots), grid))
                 except OSError:
                     degraded = True  # 读取竞态: 该成员按空观测面计, degraded 走 last-good 兜底
                     blocks = ()
@@ -369,15 +362,16 @@ class QbTrafficChartApi:
     # ---------- 单系列装配(raw / agg 两段合流, §05.3) ----------
 
     def _payload_series(self, key: str, window: str) -> dict:
-        """global/torrent 共用单系列装配: raw 段窗 = 天文件桶点(窗首外扩一个桶宽取差分种子,
-        D3)-> v4_rate_from_totals 区间平均变换(计划 26-10-07-2127) -> 栅格展开; agg 段窗 =
+        """global/torrent 共用单系列装配: raw 段窗 = 天文件块 -> 点位归属归桶 + 桶速率一次算定
+        (26-11-15-1104 F2; 读文件窗首外扩一个桶宽取窗前差分基线, D3)-> v4_grid_obs 直映;
+        agg 段窗 =
         agg 行直映栅格(all 的栅格由月行数据面定; dl_avg 已是真均值, 不做差分变换) +
         活尾未封口部分行按 epoch 合流(S7, v4_agg_obs_live —— 补 3d+ 图尾真空)。
         OSError(读取竞态)-> degraded, 回退 last-good / 空态标 stale(§08), 不以空态冒充无数据。"""
         seg = tg.WINDOW_SPECS[window][1]
         if seg == "raw":
             grid = self._grid(window)
-            seed_t0 = grid.t0 - grid.interval  # D3 窗首种子: 外扩一个响应桶宽取前驱桶点作差分基线
+            seed_t0 = grid.t0 - grid.interval  # D3 窗首种子: 读文件外扩一个响应桶宽, 窗前样本作首桶差分基线
             try:
                 days = self.v4cache.read_window(key, seed_t0, grid.t1)
                 blocks = tuple(blk for _, parsed in days if parsed for blk in parsed.blocks)
@@ -388,7 +382,7 @@ class QbTrafficChartApi:
                     v4_live_tail_slots(tail, now=SYSTEM_CLOCK.now(), max_gap_s=self._tail_gap_bound(grid))
                     if tail is not None else ()
                 )
-                points = tg.v4_rate_from_totals(tg.v4_series_points(blocks, seed_t0, grid.t1, tail_slots=tail_slots))
+                points = tg.v4_series_points(blocks, grid, tail_slots=tail_slots)
                 obs = tg.v4_grid_obs(points, grid)
                 degraded = False
             except OSError:

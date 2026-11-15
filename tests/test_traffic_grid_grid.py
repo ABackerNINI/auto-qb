@@ -1,4 +1,4 @@
-"""test_traffic_grid_grid 测试计划: qB 口径流量图读侧栅格离散与组聚合纯函数(plan 26-10-03-0946 方案C P4, §05.1/§04.1; v4 换代 plan 26-10-05-2200 N1 —— 仅标识符与 fixture 适配, 断言逻辑零变化)
+"""test_traffic_grid_grid 测试计划: qB 口径流量图读侧栅格离散与组聚合纯函数(plan 26-10-03-0946 方案C P4, §05.1/§04.1; v4 换代 plan 26-10-05-2200 N1; 26-11-15-1104 F2 点位归属归桶重锚 —— v4 面逐条改判, 改判理由随用例 docstring)
 
 ## 测试计划(每个测试函数一条)
 - test_build_grid_24h_and_30d: 24h 窗 30s 采样桶宽 = 180(采样整倍加宽, F1)恒 481 桶(floor+1 恒含进行中桶); 30d 窗恒 3600s = 721 桶; 未知窗口 ValueError
@@ -8,7 +8,6 @@
 - test_build_grid_raw_bucket_cap_high_frequency_sampling: (26-11-15-1104 F1)raw 桶数上限 500 —— 1.5s 采样: 1m -> 1.5s 桶 41 / 5m -> 1.5s 桶 201 / 30m -> 4.5s 桶 401 / 3h -> 22.5s 桶 481 / 6h -> 43.5s 桶与 12h -> 87s 桶与 24h -> 174s 桶各 497-498 随相位(span/B 非整倍, floor+1), 上限恒 <= 500
 - test_build_grid_bucket_cap_exact_500_divisor: (D7/A6 边角)span 恰 500 x si 整数倍的采样(旧分母 501)分母 -1 预留进行中桶位后逐相位 <= 500
 - test_build_grid_bucket_cap_exact_500_divisor 相位扫扩满一整桶宽(评审 #4), n 两形态集合 {494,495}/{496,497}/{376} 逐值钉
-- test_v4_grid_obs_float_interval_keys_single_derivation: (评审 blocker 回归)si=2.4 非 0.5 步进桶宽, 桶键与 buckets 同式派生(first + i x interval 单一表达式), 逐相位全链(rate/totals)无 null 洞
 - test_build_grid_nonpositive_interval_fails_fast: (黄金法则 4)非正 si fail-fast raise(来源链纯 config 派生, 校验单点在 validate_config)
 - test_build_grid_raw_bucket_cap_default_sampling_widens: (F1 改判)30s 默认采样整倍加宽表 —— 1m/5m/30m/3h 桶宽仍 30(k=1), 6h -> 60 / 12h -> 90 / 24h -> 180, 桶数 = 跨度/间隔 + 1
 - test_build_grid_raw_cap_seed_extension_covers_sample_bucket: (S3 x S2/D3 联动)桶宽恒 >= 采样间隔(F1: 桶宽 = si x k, k >= 1) -> 窗首种子外扩(grid.t0 - grid.interval)恒覆盖 >= 1 个采样桶; 各窗桶数(含进行中桶)<= 500(D7 判据, 分母预留)
@@ -16,59 +15,57 @@
 - test_build_grid_n_phase_invariant_span_multiple_of_interval: (26-11-14-1313 S1a/F3)W mod interval == 0 时 n 不随相位漂移(now 相位扫过一整桶宽 n 恒定, raw 与 hour 两段)
 - test_build_grid_day_windows_d4: 6mo/1y(D4 新档) day 段窗 —— 滚动窗涉及本地日期逐日铺格(桶键 = 本地日界 00:00, 6mo = 182d + 首尾日 / 1y 比 6mo 多 183 桶), interval 86400; 90d 不存在; all 拒绝 build_grid(数据面定栅格)
 - test_rate_points_null_shape: points 形状 {"t","dl","up"} | null(空桶断线)
-- test_v4_points_known_sequence_end_to_end: 已知序列逐桶核对 —— 天文件文本 -> 解析 -> 桶点: 显式 dt / 缺省 / z 均摊 / n 后链式自洽; 断连/停机 null; totals 差分
-- test_v4_window_filter_and_empty: 窗口切片/空元组
-- test_v4_grid_obs_expansion: (S3b)栅格展开 —— 对齐记录 1:1 落桶 / D1 宽桶中间栅格桶同值非 null(totals 首桶落增量) / 跨界记录按重叠秒加权 / null 点不参与(空桶承载) / 窗外桶不消费
-- test_v4_series_points_live_tail_merge_dedup: (S6 验收追加)活尾合流 —— 磁盘部分块+活尾 == 整块桶点(无真空 null 点);
-  滞后快照重列已落盘记录被按 ts 精确去重(快照与 flush 竞态不重不漏); 无块纯活尾(z 游程 0 线)照常出点
-- test_v4_seed_vacuum_null_t0_edge_band_chain_break: (issue 26-10-08-0141, P2 回看后强化; 26-10-16-0954 修复轮改口径)窗首种子边界带 —— 停机标记与点同界(_V4_SEAM_LOOKBACK_S)后带内带外均保留
-  (带外 span > cov -> 覆盖份额回收 290 与误接旧值 300 可区分; 带内 span == cov 回收值与误接同数, 判别力由带外形态承担)
-- test_v4_grid_obs_rate_null_totals_valid_exemption: (D4 豁免)rate=None 但 totals 有效的桶点只更新覆盖末端与快照链(rate 权重记 0, 逐向独立)
-  —— 桶完全无速率覆盖出 0 线 + 快照照记(后续桶差分基线不断); 混合覆盖按速率覆盖秒加权; 真 null 点仍不参与
-- test_v4_grid_obs_break_bucket_rate_null_snapshot_kept: (issue 26-10-16-0954-bug-traffic-seam-zero-bucket-isolated-marker)断链首桶该向出 None(不再是 0/0 伪点),
-  快照照记 -> 次桶基线不断; 无观测缝的起始桶仍 0 线; 组面全成员未知 -> None
-- test_v4_grid_obs_window_and_snapshot_edges
-  无需改动, 豁免桶 0 线按 0 计入组
-- test_v4_series_points_downstream_w_survives_bucket_merge: (mut-core W2 S5 守阵, vsp_75/vsp_120, 高)同桶多记录(混桶 z+raw / raw+raw)的覆盖桶宽 w 活着进下游 —— v4_rate_from_totals / v4_grid_obs 消费不 TypeError
-- test_v4_series_points_initial_nrun_mark: (vsp_5, 可达性已证: 块首 n 游程 = 程序开块时 qB 断连的合法形态, 写侧「3 列 B 无基线块」)序列首槽即 n 槽的断连标记必须发出
-- test_v4_grid_obs_up_channel_weighted_mean: (vgo_73/vgo_76)up 通道覆盖秒加权均值(对称缺口: dl 侧既有守阵, up 侧补齐)
-- test_v4_series_points_lookback_boundary_slots_kept: (vsp_59/vsp_60)回看界边界槽保留 —— 覆盖桶末端恰达 t0-86400 的 z 槽照收(判据错成桶起点/<= 会丢跨界槽)
-- test_v4_series_points_same_t_marks_and_obs_sort_stable: (vsp_163; vsp_160 复裁等价——同刻双标记条目恒相等, 元组比较经 == 短路不走 __lt__ 无 TypeError 面)同刻双 null 标记 + 同刻观测点 —— (t, rank) 排序键保序(null 在先), 键失守在 V4PointEntry 比较上 TypeError
-- test_v4_grid_obs_break_flag_survives_bucket_second_point: (vgo_60/vgo_62)断链旗跨同桶后继点存活(or 累积), 不被清成 0 线
-- test_v4_series_points_null_mark_at_lookback_boundary_kept: (vsp_43/vsp_155)null 标记恰在回看下界 —— 下界含等号, 变异成 `<` 会丢掉该断连标记
-- test_v4_series_points_marks_at_window_end_not_emitted: (vsp_44/vsp_156)窗尾整秒标记不发出 —— null 槽末槽恰为 t1 时不追加; 块间真空标记恰为 t1 时由最终过滤挡下
-- test_v4_series_points_observed_slot_at_window_end_not_consumed: (vsp_52)恰在 t1 的观测槽不消费(v2 口径 ts >= t1), 变异成 `>` 会多出窗外桶
-- test_build_grid_day_window_midnight_anchors: (bg_52/bg_53)day 窗日期集 t1-1 口径 —— 23:59:59 不多铺次日桶, 00:00:01 不丢当日桶
-- test_v4_grid_obs_same_end_later_point_wins_snapshot: (vgo_80)同覆盖末端双点快照取后到者, 变异成 `>` 会保留先到快照
-- test_v4_grid_obs_coverage_end_advance_keeps_latest_snapshot: (vgo_83)覆盖末端必须推进(`a[4] = cov_end`), 变异成写 a[5] 会让短覆盖点抢走快照
-- test_v4_grid_obs_broken_bucket_zero_rate_kept_zero: (vgo_105/vgo_117)断链桶有覆盖且速率为 0 时仍是 0 线, 均值判据错看加权和会把 0 误判成无覆盖出 None
-- test_build_grid_integral_interval_floor_not_raised: (mut-core W2 bg_21)桶宽下限恒 1s —— 1.0 采样间隔下 1m/5m 桶宽恰 1(k=1, F1 采样整倍); 30m 被桶数上限加宽到 4s 451 桶
-- test_v4_series_points_same_bucket_later_snapshot_wins: (mut-core W2 vsp_96)同桶 raw+raw 快照取后到者 —— totals 大于 ts 时比较对象错成 totals 会永不更新
-- test_v4_series_points_three_raw_same_bucket_no_typeerror: (mut-core W2 vsp_97)同桶三条 raw 照常均值/末条快照 —— e[4] 被写坏时第三条比较 TypeError
-- test_v4_series_points_same_timestamp_later_snapshot_wins: (mut-core W2 vsp_95)同刻双 raw 记录快照取后到者 —— >= 变异成 > 保留先到者(vsp_98/vsp_112 判等价: e[4] 只作单调比较基线, 不参与输出)
-- test_v4_series_points_mixed_bucket_raw_priority_keeps_mean: (mut-core W2 vsp_105/vsp_107/vsp_115)z+raw+raw 混桶 raw 优先后两条 raw 仍取均值 —— is_raw 旗写坏退化末条单值, dl 覆盖取错向则均值失真
-- test_v4_series_points_stale_slot_below_lookback_not_consumed: (T2b 覆盖率第三轮)P2 回看界外槽(桶+w < t0-86400)不消费, 界内槽照常
-- test_v4_series_points_same_bucket_second_zero_slot_keeps_first: (T2b)同桶 z+z 先到者保留 —— 第二条 z 槽落进已有桶直接落空(497->478)
-- test_v4_series_points_same_bucket_out_of_order_ts_keeps_latest_snapshot: (T2b)同桶 raw+raw 乱序 ts: 速率照均值, 快照按 ts 竞争取更晚者(503->478)
-- test_v4_totals_points_marked_run_not_zero_shape_drops_delta: (T2b)标记后台阶但游程非 z 形 -> 断链 None 不摊配(614->615)
-- test_v4_grid_obs_wide_point_before_window_start_partial_overlap: (T2b)宽桶跨窗首: b < first 迭代不消费, 窗内部分按重叠秒展开(713->729)
+- test_v4_points_known_sequence_end_to_end: (F2 改判重锚)已知序列逐桶核对 —— 天文件文本 -> 解析 -> 点位归属桶点: 显式 dt / 缺省 / z 均摊 / n 后链式自洽; 断连/停机 null; 响应 totals 通道(相邻桶快照差分)断链诚实
+- test_v4_window_filter_and_empty: (F2 改判重锚)窗口切片/空元组; 窗前槽桶入流(链上下文)且响应被 v4_grid_obs 窗外过滤
+- test_v4_series_points_float_interval_keys_single_derivation: (评审 blocker 回归, F2 改判重锚)si=2.4 非 0.5 步进桶宽, 槽点位归属桶键与 buckets 同式派生(first + i x interval 单一表达式), 逐相位全链(rate/totals)无 null 洞; 速率 100/50 = delta/实测对跨(旧 ceil 膨胀消除)
+- test_v4_series_points_point_assignment_and_vacuum: (F2 核心)样本按 floor(ts/B)xB 落格 / 跨界样本端点归属 / n 游程折叠 null / 空样本桶 null(旧 D1 宽桶覆盖随桥接退役, T3 有界回填)
+- test_v4_series_points_live_tail_merge_dedup: (S6 验收追加)活尾合流 —— 磁盘部分块+活尾 == 整块桶点(无真空 null 点); 滞后快照重列已落盘记录被按 ts 精确去重; 无块纯活尾(z 游程 0 线)照常出点
+- test_v4_series_points_exempt_pairs_zero_line_snapshot_kept: (D4 豁免, F2 桶层改判)差分派不出(重置形态)的对不占权重不占覆盖, 桶无差分覆盖且无缝 -> 0 线 + 快照照记; 混合桶豁免不稀释有效差分; 真 null 点不参与
+- test_v4_series_points_break_bucket_rate_null_snapshot_kept: (issue 26-10-16-0954 守阵, F2 桶层改判)停机洞断链桶该向出 None(不再是 0/0 伪点), 快照照记 -> 次桶基线不断; 链首桶仍 0 线; 组面全成员未知 -> None
+- test_v4_grid_obs_direct_mapping_edges: (F2 改判)v4_grid_obs 直映边界 —— 窗外桶点(链上下文)不消费 / null 点不参与 / 窗内逐键直映(旧权重面退役)
+- test_v4_series_points_same_bucket_merge_downstream: (mut-core W2 vsp_75/vsp_120 守阵, F2 改判)同桶多槽(混桶 z+raw / raw+raw)差分一次算定 + 快照竞争 + 覆盖时长活着进下游
+- test_v4_series_points_initial_nrun_mark: (vsp_5)序列首槽即 n 槽的断连标记必须发出
+- test_v4_series_points_up_channel_independent_differential: (vgo_73/vgo_76 改判)up 通道差分独立累加(逐向独立判定与豁免)
+- test_v4_series_points_lookback_boundary_slots_kept: (vsp_59/vsp_60)消费下界边界槽保留 —— 槽 ts 恰达 grid.t0 - interval - 86400 照收(判据含等号)
+- test_v4_series_points_same_t_marks_and_obs_sort_stable: (vsp_163; vsp_160 复裁等价)同刻双 null 标记 + 同刻观测点 —— (t, rank) 排序键保序(null 在先)
+- test_v4_series_points_break_flag_survives_bucket_second_point: (vgo_60/vgo_62 改判)断链旗跨同桶后继槽(逐向豁免)存活, 不被清成 0 线
+- test_v4_series_points_null_mark_at_lookback_boundary_kept: (vsp_43/vsp_155)null 标记恰在链界 —— 下界含等号
+- test_v4_series_points_marks_at_window_end_not_emitted: (vsp_44/vsp_156)窗尾整秒标记不发出
+- test_v4_series_points_observed_slot_at_window_end_not_consumed: (vsp_52)恰在 t1 的观测槽不消费(ts >= t1)
+- test_build_grid_day_window_midnight_anchors: (bg_52/bg_53)day 窗日期集 t1-1 口径
+- test_v4_series_points_snapshot_competition_latest_ts_wins: (vgo_80 + vsp_95 合钉, F2 改判)同桶快照竞争 = ts 最晚者胜, 同刻后到者优先(>= 判据)
+  (退役)coverage_end_advance 守阵 -> snapshot_competition 的 ts 竞争判据承接;
+- test_v4_series_points_broken_bucket_zero_rate_kept_zero: (vgo_105/vgo_117 改判)断链桶有差分覆盖且速率为 0 仍是 0 线(看覆盖毫秒不看差分和)
+- test_build_grid_integral_interval_floor_not_raised: (mut-core W2 bg_21)桶宽下限恒 1s
+- test_v4_series_points_same_bucket_later_snapshot_wins: (mut-core W2 vsp_96, F2 改判)同桶 raw+raw 差分一次算定 + 快照取 ts 最晚
+- test_v4_series_points_three_raw_same_bucket_no_typeerror: (mut-core W2 vsp_97, F2 改判)同桶三条 raw 差分累加/快照末条, 累加器槽位写坏显形
+- test_v4_series_points_same_timestamp_later_snapshot_wins: (mut-core W2 vsp_95, F2 改判)同刻双 raw 快照 >= 判据; 同刻对跨 0 不进速率面
+- test_v4_series_points_mixed_bucket_raw_priority_keeps_mean: (mut-core W2 vsp_105/vsp_107/vsp_115, F2 改判)z+raw+raw 同桶差分累加, 通道取错值失真
+- test_v4_series_points_stale_slot_below_lookback_not_consumed: (T2b)消费下界外槽不消费
+- test_v4_series_points_same_bucket_zero_slots_differential_snapshot: (T2b 改判)同桶 z+z: 差分对照 totals 链真值; 快照统一 ts 最晚(旧 z 先到者保留口径退役)
+- test_v4_series_points_same_bucket_out_of_order_ts_keeps_latest_snapshot: (T2b)同桶乱序 ts: 快照按实测更晚者; 负对跨不进速率面
+- test_v4_series_points_marked_run_not_zero_shape_drops_delta: (T2b 改判槽层)标记后台阶但游程非 z 形 -> 断链 None 不摊配
+- test_v4_series_points_pre_window_chain_context_filtered_from_obs: (T2b 改判)窗前链上下文桶入流且响应被窗外过滤(D3 种子差分基线)
+- test_v4_seed_vacuum_null_t0_edge_band_chain_break: (issue 26-10-08-0141, F2 改判重锚)窗首种子边界带 —— 标记同界保留, 重启缝接收桶 = step/实测对跨(带内 295 / 带外 286 可区分)
 
-活尾链端延伸 holding 槽响应面(F4, 计划 26-11-14-1313 S1b):
+活尾链端延伸 holding 槽响应面(F4, 计划 26-11-14-1313; F2 最小搬运改判):
 - test_v4_hold_slot_fills_tail_grid_bucket: 活跃链延伸前尾桶(进行中桶)null(G5 复现),
-  传 now 后尾桶恒有观测且值接续末观测桶值(持有面平接); now=None 缺省响应面与现状一致
-- test_v4_hold_slot_rate_face_holds_last_bucket_rate: 尾桶值 = 上一观测桶点的区间平均
-  速率(carry-forward)—— 非 delta 重写 0(假跌零)亦非 qB 瞬时直采值(假跳升)
-- test_v4_hold_slot_totals_chain_untouched: holding 桶点 totals 差分恒 0(totals = 末次
-  快照同值, 累计面不造字节); 其余桶点/栅格桶 delta 与不延伸形态逐桶一致
+  传 now 后尾桶恒有观测且值接续末观测桶值(持有面平接 1000/500 —— 旧 750/375 含
+  ceil(1.5)=2 膨胀, F2 精确对跨消除); now=None 缺省响应面与现状一致
+- test_v4_hold_slot_rate_face_holds_last_bucket_rate: 尾桶值 = 上一非持有观测桶的桶速率
+  (carry-forward)—— 非 0 假跌零亦非 qB 瞬时直采值(假跳升)
+- test_v4_hold_slot_totals_chain_untouched: 两相位 totals 面不变式 —— 与末样本同桶合并
+  时逐桶全等(持有面不进差分不稀释); 末样本被窗尾过滤时 holding 桶如数回收真实增量
+  (1500/750); 旧 v4_totals_points 桶点级断言随中间层退役(响应 totals 通道承接)
 - test_v4_hold_slot_z_run_tail_zero_line: z 游程链端延伸尾桶 0 线非 null(空闲观测持有)
 - test_v4_hold_slot_stall_over_bound_tail_stays_null: 间隙过界(停滞)尾桶保持 null
 - test_v4_hold_slot_merge_with_real_sample_deholds: holding 槽与真实观测槽同桶合并 ->
-  合并桶点 is_hold=False(按观测重写), 桶值与该观测单独入桶一致
+  合并桶 is_hold=False, 桶值由差分一次算定
 
 几何解耦助手(R1 改判, plan webui-traffic-root-revamp F1): _grid_30s / _grid_1m_2s 直构
 WindowGrid 钉语义电池的固定栅格 —— F1 后 24h@30s 桶宽 = 180、1m@1.5s 桶宽 = 1.5, 旧
 30s/2s 栅格不再是 build_grid 的可达形; 归桶/差分/摊配/holding 语义电池钉的是既定栅格上的
-行为而非桶宽规则, 直构解耦(S1b 归桶重锚时再随新几何重钉)
+行为而非桶宽规则, 直构解耦
 
 线程/时钟纪律: 纯函数层无时钟无文件 —— 窗口由用例给定固定 epoch, 输入直接构造 V4Block
 (天文件文本路径经 format_v4_day_text -> parse_v4_day_text 打通解析接缝); V4Block 直构时
@@ -101,11 +98,8 @@ from auto_qb.core.traffic_grid import (
     v4_agg_obs_live,
     v4_earliest_row_ts,
     v4_grid_obs,
-    v4_rate_from_totals,
     v4_series_points,
     v4_series_slots,
-    v4_totals_points,
-    V4TotalsEntry,
     _V4_SEAM_LOOKBACK_S,
     _V4_SEAM_NULL_S,
     _V4_SEAM_SPREAD_MIN_S,
@@ -281,12 +275,14 @@ def test_build_grid_bucket_cap_exact_500_divisor():
     assert g.last < NOW + 1 <= g.last + g.interval  # 尾桶恒为进行中桶
 
 
-def test_v4_grid_obs_float_interval_keys_single_derivation():
-    """(评审 blocker 回归)非 0.5 步进桶宽(si=2.4)下观测桶键与 grid.buckets 必须同式派生 ——
-    修复前两条浮点舍入路径(起步 p.t - (p.t % interval) + b += interval 累加 vs buckets 生成式
-    first + i x interval)键差 1 ulp, obs.get 失配把有观测的桶经 rate_points/series_totals_points
-    全链渲染成 null 洞(si=2.4 @1m 实测最多 11/26 桶 null)。修复后逐相位扫(0.1s 步进跨 2.4s
-    主周期)全链无 null 洞: 有观测桶 rate/totals 非 null 且速率恒 80/40(delta 240/120 ÷ w 3)"""
+def test_v4_series_points_float_interval_keys_single_derivation():
+    """(评审 blocker 回归, 26-11-15-1104 F2 改判重锚)非 0.5 步进桶宽(si=2.4)下样本槽的点位
+    归属桶键与 grid.buckets 必须同式派生(first + i x interval 单一表达式, _bucket_index 校正
+    后取键)—— 修复前两条浮点舍入路径键差 1 ulp, obs.get 失配把有观测的桶经
+    rate_points/series_totals_points 全链渲染成 null 洞(si=2.4 @1m 实测最多 11/26 桶 null)。
+    F2 后槽键即桶键(单几何), 逐相位扫(0.1s 步进跨 2.4s 主周期)全链无 null 洞:
+    有观测桶 rate/totals 非 null 且速率恒 100/50(delta 240/120 ÷ 实测对跨 2.4s —— 旧口径
+    delta/w(ceil(2.4)=3) = 80/40 的 ceil 膨胀随覆盖桶宽退役一并消除)"""
     for phase in range(0, 48):
         now = NOW + phase / 10.0
         g = build_grid("1m", now, 2.4)
@@ -294,17 +290,21 @@ def test_v4_grid_obs_float_interval_keys_single_derivation():
         start = float(g.first) + g.interval  # 采样行与桶边同律: 首槽 = 第 1 桶起点, 每桶恰一条
         recs = tuple(V4Sample(100, 50, 240 * (k + 1), 120 * (k + 1)) for k in range(20))
         blk = V4Block(start, 2.4, 0, 0, recs)
-        pts = v4_rate_from_totals(v4_series_points((blk, ), g.t0 - g.interval, g.t1 + 1))
+        pts = v4_series_points((blk, ), g)
         obs = v4_grid_obs(pts, g)
-        covered = g.buckets[1:20]  # 桶 1..19 恒有采样覆盖(桶 0 随相位部分覆盖, 不入钉)
+        assert g.buckets[1] in obs and obs[g.buckets[1]] == BucketObs(0, 0, 240, 120)  # 链首桶 0 线(D4)
+        covered = g.buckets[2:20]  # 桶 2..19: 差分对端点归属(每桶恰一对 delta 240/2.4s)
         for j, b in enumerate(covered):
             assert b in obs, (phase, j, "键失配: 有观测桶不在观测表(修复前 1 ulp 双舍入路径)")
-            assert (obs[b].dl_rate, obs[b].up_rate) == (80, 40), (phase, j)
-        assert rate_points(obs, g)[1:20] == [{
+            assert (obs[b].dl_rate, obs[b].up_rate) == (100, 50), (phase, j)
+        assert rate_points(obs, g)[2:20] == [{
             "t": b,
-            "dl": 80,
-            "up": 40
-        } for b in covered], (phase, "rate_points 全链 null 洞")
+            "dl": 100,
+            "up": 50
+        } for b in covered], (
+            phase,
+            "rate_points 全链 null 洞",
+        )
         tots = series_totals_points(obs, g)
         assert all(tots[g.buckets.index(b)] is not None for b in covered[1:]), (phase, "totals 断链洞")
 
@@ -388,9 +388,11 @@ def test_rate_points_null_shape():
 
 
 def test_v4_points_known_sequence_end_to_end():
-    """已知序列逐桶核对(验收: 三端点数据对照) —— 天文件文本 -> 解析 -> 桶点, 每桶
-    rate/totals/时间正确; 游标 dt 链四形态在桶点层复钉: 显式 dt(r1)/缺省(r0,r3)/
-    均摊定位(z 槽)/链式自洽(n 游程后首 r 以游程终点为基准); 断连与停机两语义分离"""
+    """已知序列逐桶核对(验收: 三端点数据对照; 26-11-15-1104 F2 改判重锚) —— 天文件文本 ->
+    解析 -> 点位归属桶点, 每桶 rate/totals/时间正确; 游标 dt 链四形态在桶点层复钉:
+    显式 dt(r1)/缺省(r0,r3)/均摊定位(z 槽)/链式自洽(n 游程后首 r 以游程终点为基准);
+    断连与停机两语义分离(null 标记); 速率 = 桶内样本差分和 / 覆盖时长一次算定
+    (旧 cell ceil(ts)-w 键与 v4_totals_points 中间层随双几何退役)"""
     block1 = V4Block(
         1000,
         30,
@@ -406,150 +408,143 @@ def test_v4_points_known_sequence_end_to_end():
     )
     block2 = V4Block(5000, 30, 1300, 2300, (V4Sample(13, 23, 1300, 2300), ))  # 停机重启后新块 @5000
     blocks = parse_v4_day_text(format_v4_day_text("global", (block1, block2))).blocks
-    points = v4_series_points(blocks, 1000, 5001)
-    # 桶键 = ceil(ts) - w(w = 桶宽有效dt): 逐桶时间/rate/totals 断言
+    g = WindowGrid("5m", 1000, 5001, 30, "raw", _floor_buckets(1000, 5001, 30))
+    points = v4_series_points(blocks, g)
+    # 桶键 = floor(ts/B)xB 点位归属(栅格单几何); 速率 = 差分和 / 覆盖时长
     assert [_p(p) for p in points] == [
-        (970, 10, 20, 1000, 2000),  # r0: w=30(缺省), 桶 [970,1000) 触及 t0 照收
-        (1000, 11, 21, 1100, 2100),  # r1: w=31(显式 30.4s), ceil(1030.4)-31
-        (1031, 0, 0, 1100, 2100),  # z 槽1 @1060.4: w=30(均摊 90/3)
-        (1061, 0, 0, 1100, 2100),  # z 槽2 @1090.4
-        (1091, 0, 0, 1100, 2100),  # z 槽3 @1120.4(游程实测终点)
-        (1150, None, None, None, None),  # n 游程折叠为单个 null 点(首槽 1150.9 取整)
-        (1182, 12, 22, 1200, 2200),  # r2 @1211.4: ceil-30
-        (1211, None, None, None, None),  # 块间真空 null 点(t = 前块游标终值 1211.4 取整)
-        (4970, 13, 23, 1300, 2300),  # r3 @5000: 桶起点 5000-30
+        (990, 0, 0, 1000, 2000, 0.0),  # r0 @1000 落格 990(点位归属): 链首 0 线(D4), 快照照记
+        (1020, 3, 3, 1100, 2100, 30.4),  # r1: delta(100,100)/30.4s(显式漂移对跨)
+        (1050, 0, 0, 1100, 2100, 30.0),  # z 槽1 @1060.4: 快照冻结 -> 0 线链不断
+        (1080, 0, 0, 1100, 2100, 30.0),  # z 槽2 @1090.4
+        (1110, 0, 0, 1100, 2100, 30.0),  # z 槽3 @1120.4(游程实测终点)
+        (1150, None, None, None, None, 0.0),  # n 游程折叠为单个 null 点(首槽 1150.9 取整)
+        (1200, None, None, 1200, 2200, 0.0),  # r2 @1211.4: 未观测 61s > 60s 停机洞 -> 断链 None
+        (1211, None, None, None, None, 0.0),  # 块间真空 null 点(t = 前块游标终值 1211.4 取整)
+        (4980, None, None, 1300, 2300, 0.0),  # r3 @5000: 真空断链后基线缺失(停机洞)
     ]
-    totals = v4_totals_points(points)
-    assert [(e.t, e.dl, e.up) for e in totals] == [
-        (970, None, None),  # 窗首基线缺失
-        (1000, 100, 100),  # 1100-1000 / 2100-2000
-        (1031, 0, 0),  # z 快照(1100,2100)与前桶同值 -> 空闲段 delta=0 链不断
-        (1061, 0, 0),
-        (1091, 0, 0),
-        (1150, None, None),  # n 槽 null 点断链
-        (1182, None, None),  # 断链后基线缺失
-        (1211, None, None),  # 真空
-        (4970, None, None),  # 真空断链后基线缺失
-    ]
+    # 响应 totals 通道(相邻桶快照差分): 断连/真空段空桶断链, 诚实不造数
+    obs = v4_grid_obs(points, g)
+    tots = series_totals_points(obs, g)
+    by_t = {e["t"]: e for e in tots if e is not None}
+    assert by_t[990] == {"t": 990, "dl": None, "up": None}  # 窗首基线缺失
+    assert by_t[1020] == {"t": 1020, "dl": 100, "up": 100}  # 1100-1000 / 2100-2000
+    assert by_t[1050] == {"t": 1050, "dl": 0, "up": 0}  # z 快照同值 -> 空闲段 delta=0 链不断
+    assert by_t[1080] == {"t": 1080, "dl": 0, "up": 0}
+    assert by_t[1110] == {"t": 1110, "dl": 0, "up": 0}
+    assert all(tots[g.buckets.index(b)] is None for b in (1140, 1170, 1230))  # n 游程/真空段无观测 = 桶缺位
+    assert tots[g.buckets.index(1200)] == {"t": 1200, "dl": None, "up": None}  # r2 桶有观测但断链后基线缺失
+    assert tots[g.buckets.index(4980)] == {"t": 4980, "dl": None, "up": None}  # 真空断链后基线缺失
     # 块乱序传入: 按 start_epoch 稳定排序还原时间序, 结果一致
-    assert v4_series_points((block2, block1), 1000, 5001) == points
+    assert v4_series_points((block2, block1), g) == points
 
 
 def test_v4_series_points_same_bucket_later_snapshot_wins():
-    """(mut-core W2 vsp_96)同桶 raw+raw: 速率取均值、快照取后到者。totals 数值大于 ts 时,
-    比较对象错成 totals(e[5])恒假 -> 快照永不更新"""
+    """(mut-core W2 vsp_96)同桶 raw+raw: 差分一次算定、快照取 ts 最晚者。totals 数值大于
+    ts 时, 比较对象错成 totals(e[5])恒假 -> 快照永不更新"""
     slots = (
         V4Slot(998.5, 1.0, (5, 9, 3000, 4000), False),
         V4Slot(998.9, 1.0, (15, 21, 4000, 5000), False),
     )
-    points = v4_series_points((), 900, 2000, tail_slots=slots)
-    assert [(p.t, p.dl_rate, p.up_rate, p.dl_total, p.up_total, p.w) for p in points] == [(998, 10, 15, 4000, 5000, 1)]
+    grid = WindowGrid("5m", 900, 2000, 1, "raw", _floor_buckets(900, 2000, 1))
+    points = v4_series_points((), grid, tail_slots=slots)
+    assert [_p(p) for p in points] == [(998, 2500, 2500, 4000, 5000, 0.4)]  # delta 1000/0.4s
 
 
 def test_v4_series_points_three_raw_same_bucket_no_typeerror():
-    """(mut-core W2 vsp_97)同桶三条 raw: 均值三条、快照取末条 —— e[4] 被写成 None 时
-    第三条的 `ts >= e[4]` 会 TypeError"""
+    """(mut-core W2 vsp_97)同桶三条 raw: 差分累加三条、快照取末条 —— 累加器槽位被写成
+    None 时后继对的比较/累加会 TypeError 或值失真"""
     slots = (
         V4Slot(998.2, 1.0, (4, 8, 2000, 3000), False),
         V4Slot(998.5, 1.0, (5, 9, 3000, 4000), False),
         V4Slot(998.9, 1.0, (6, 10, 4000, 5000), False),
     )
-    points = v4_series_points((), 900, 2000, tail_slots=slots)
-    assert [(p.t, p.dl_rate, p.up_rate, p.dl_total, p.up_total) for p in points] == [(998, 5, 9, 4000, 5000)]
+    grid = WindowGrid("5m", 900, 2000, 1, "raw", _floor_buckets(900, 2000, 1))
+    points = v4_series_points((), grid, tail_slots=slots)
+    assert [_p(p) for p in points] == [(998, 2857, 2857, 4000, 5000, 0.7)]  # delta 2000/0.7s
 
 
 def test_v4_series_points_same_timestamp_later_snapshot_wins():
-    """(mut-core W2 vsp_95)同刻双 raw 记录: 快照取后到者(>= 变异成 > 会保留先到者)。
-    vsp_98/vsp_112 判等价 —— e[4] 只作单调比较基线、不参与输出, 生产槽序 ts 非降下陈旧
-    e[4] 仍恒 <= 新 ts, 比较结果不变"""
+    """(mut-core W2 vsp_95)同刻双 raw 记录: 快照取后到者(>= 变异成 > 会保留先到者);
+    同刻对跨 0 不进速率面(覆盖时长 > 0 判据, 旧瞬时均值语义随 cell 几何退役)"""
     slots = (
         V4Slot(998.5, 1.0, (5, 9, 3000, 4000), False),
         V4Slot(998.5, 1.0, (15, 21, 4000, 5000), False),
     )
-    points = v4_series_points((), 900, 2000, tail_slots=slots)
-    assert [(p.dl_rate, p.up_rate, p.dl_total, p.up_total) for p in points] == [(10, 15, 4000, 5000)]
+    grid = WindowGrid("5m", 900, 2000, 1, "raw", _floor_buckets(900, 2000, 1))
+    points = v4_series_points((), grid, tail_slots=slots)
+    assert [_p(p) for p in points] == [(998, 0, 0, 4000, 5000, 0.0)]
 
 
 def test_v4_series_points_mixed_bucket_raw_priority_keeps_mean():
-    """(mut-core W2 vsp_105/vsp_107/vsp_115)z+raw+raw 三连混桶: raw 优先后两条 raw 照常取
-    均值 —— is_raw 旗写成假值会退化到「末条 raw 单值」; 覆盖速率取错通道(up 当 dl)均值失真"""
+    """(mut-core W2 vsp_105/vsp_107/vsp_115 改判)z+raw+raw 三连同桶: 差分面全槽入账
+    (z 对 delta 0 / z->raw 台阶真值; 旧「raw 优先覆盖 z」的 cell 合并旗随 cell 几何退役
+    —— F2 点位归属下同桶各差分对逐条累加), 快照取 ts 最晚者; 通道取错(up 当 dl)值失真"""
     slots = (
         V4Slot(998.2, 1.0, (0, 0, 1000, 2000), True),
         V4Slot(998.5, 1.0, (5, 9, 3000, 4000), False),
         V4Slot(998.9, 1.0, (15, 21, 4000, 5000), False),
     )
-    points = v4_series_points((), 900, 2000, tail_slots=slots)
-    assert [(p.dl_rate, p.up_rate, p.dl_total, p.up_total) for p in points] == [(10, 15, 4000, 5000)]
+    grid = WindowGrid("5m", 900, 2000, 1, "raw", _floor_buckets(900, 2000, 1))
+    points = v4_series_points((), grid, tail_slots=slots)
+    assert [_p(p) for p in points] == [(998, 4286, 4286, 4000, 5000, 0.7)]  # delta 3000/0.7s
 
 
 def test_v4_window_filter_and_empty():
-    """窗口切片: ts >= t1 槽不消费 / 窗口左界侧保留全部块内槽点(P2 回看: 差分链需完整
-    陈旧跨度, 渲染由 v4_grid_obs 栅格覆盖过滤承载) / null 点按同界过滤 / 无块 = 空元组
-    (停机天然真空)"""
+    """窗口切片(F2 改判重锚): ts >= t1 槽不消费 / 窗口左界侧保留全部块内槽桶(链上下文,
+    P2 回看: 差分链需完整陈旧跨度, 响应由 v4_grid_obs 栅格过滤承载) / null 点按同界过滤 /
+    无块 = 空元组(停机天然真空)"""
     b1 = V4Block(500, 30, 1, 1, (V4Sample(1, 1, 1, 1), V4Sample(1, 1, 1, 1)))  # @500/@530(窗前, 回看保留)
     b2 = V4Block(1000, 30, 2, 2, (V4Sample(2, 2, 2, 2), V4Sample(3, 3, 3, 3), V4NullRun(2)))  # @1000/@1030/n
     b3 = V4Block(2000, 30, 4, 4, (V4Sample(4, 4, 4, 4), ))  # @2000(t1 之后)
-    points = v4_series_points((b1, b2, b3), 1000, 1100)
+    g = WindowGrid("5m", 1000, 1100, 30, "raw", _floor_buckets(1000, 1100, 30))
+    points = v4_series_points((b1, b2, b3), g)
     assert [_p(p) for p in points] == [
-        (470, 1, 1, 1, 1),  # (P2 回看)块首槽保留: 差分链完整(渲染由栅格覆盖过滤, 不进响应)
-        (500, 1, 1, 1, 1),
-        (530, None, None, None, None),  # b1->b2 块间真空标记(t = int(530)), 同界保留(旧窗界下被丢)
-        (970, 2, 2, 2, 2),
-        (1000, 3, 3, 3, 3),
-        (1060, None, None, None, None),  # n 槽 null 点
-        (1090, None, None, None, None),  # b2->b3 真空标记(t=1090 < t1)
+        (480, 0, 0, 1, 1, 0.0),  # (P2 回看)b1 链首槽(@500 落格 480): 0 线(链上下文, 不进响应)
+        (510, 0, 0, 1, 1, 30.0),  # b1 第二槽(@530 落格 510): delta 0 / 30s(窗前桶, 链上下文)
+        (530, None, None, None, None, 0.0),  # b1->b2 块间真空标记(t = int(530))
+        (990, None, None, 2, 2, 0.0),  # @1000 落格 990: 停机洞(未观测 440s > 60s)断链 None, 快照照记
+        (1020, 0, 0, 3, 3, 30.0),  # @1030 落格 1020: delta 1/30s -> 0(基线恢复)
+        (1060, None, None, None, None, 0.0),  # n 槽 null 点(首槽 1060.0)
+        (1090, None, None, None, None, 0.0),  # b2->b3 真空标记(t=1090 < t1)
     ]
-    assert v4_series_points((), 0, 1000) == ()  # 无块 = 天然真空
-    assert v4_series_points((V4Block(1000, 30, None, None, ()), ), 0, 1000) == ()  # 空块(解析器不产, 防御直构)跳过
-    assert v4_series_points((b3, ), 0, 1000) == ()  # 全部槽在窗尾之后(ts >= t1 不消费)
+    assert v4_series_points((), g) == ()  # 无块 = 天然真空
+    assert v4_series_points((V4Block(1000, 30, None, None, ()), ), g) == ()  # 空块(解析器不产, 防御直构)跳过
+    assert v4_series_points((b3, ), g) == ()  # 全部槽在窗尾之后(ts >= t1 不消费)
 
 
-def test_v4_grid_obs_expansion():
-    """栅格展开(v4_grid_obs, D1 覆盖的栅格形态): 对齐记录 1:1 落桶 / D1 宽桶中间栅格桶
-    同值非 null(totals 首个覆盖桶落增量, 其余 delta=0 链不断) / 跨界记录按重叠秒加权 /
-    null 点不参与(空桶承载断线) / 窗外栅格桶不消费"""
-    g = _grid_30s(NOW)  # (R1 改判)固定 30s 桶几何: 本用例钉 1:1 落桶/宽桶展开语义, 见助手注
+def test_v4_series_points_point_assignment_and_vacuum():
+    """点位归属归桶(F2 核心语义) + 真空/断连分离(承袭): 样本按 floor(ts/B)xB 落格
+    (落哪格算哪格) / 跨界样本按端点归属记后继槽所在格(R2 ±1 样本份额差, 不再摊配) /
+    n 游程折叠 null 标记(桶无观测 = null)。旧 D1 宽桶跨桶覆盖(中间栅格桶同值非 null)
+    与覆盖秒加权随桥接层退役: 空样本桶 = null 承袭(有界持有回填属 T3)。"""
+    g = _grid_30s(NOW)
     b0 = g.first + 3000  # 任意栅格桶(3000 为 30 的整倍)
-    # 1:1 对齐: 块首槽恰在 b0+30(w=30) -> 桶 [b0, b0+30) = 栅格桶 b0
-    blk = V4Block(b0 + 30, 30, 1000, 500, (V4Sample(10, 20, 1000, 500), V4Sample(20, 40, 2000, 900)))
-    obs = v4_grid_obs(v4_series_points((blk, ), g.t0, g.t1), g)
-    assert obs[b0] == BucketObs(10, 20, 1000, 500)
-    assert obs[b0 + 30] == BucketObs(20, 40, 2000, 900)
-    assert b0 - 30 not in obs and b0 + 60 not in obs  # 窗外/无观测桶不出现在观测表
-    # D1 宽桶: 显式 dt=150s(w=150)的记录覆盖 [b1, b1+150) —— 5 个栅格桶同值非 null 同快照
-    b1 = g.first + 30
-    blk2 = V4Block(g.first + 30, 30, 100, 50, (V4Sample(1, 1, 100, 50), V4Sample(2, 2, 200, 100, dt_ms=150000)))
-    pts2 = v4_series_points((blk2, ), g.t0, g.t1)
-    obs2 = v4_grid_obs(pts2, g)
-    f = g.first
-    assert obs2[f] == BucketObs(1, 1, 100, 50)  # 首记录对齐桶
-    for t in (f + 30, f + 60, f + 90, f + 120, f + 150):
-        assert obs2[t] == BucketObs(2, 2, 200, 100), t  # 宽桶覆盖的中间栅格桶同值(防伪洞)
-    assert f + 180 not in obs2
-    tot = series_totals_points(obs2, g)
-    assert tot[g.buckets.index(f + 30)] == {"t": f + 30, "dl": 100, "up": 50}  # 增量落首个覆盖桶
-    assert tot[g.buckets.index(f + 60)] == {"t": f + 60, "dl": 0, "up": 0}  # 同快照 delta=0 链不断
-    assert tot[g.buckets.index(f + 150)] == {"t": f + 150, "dl": 0, "up": 0}
-    # 跨界加权: r2 显式 dt=45s(w=45)覆盖 [T, T+45) -> 桶 T 分 30s / 桶 T+30 分 15s;
-    # 后继 r3(标称 30s)覆盖 [T+45, T+75) 与 r2 共享桶 T+30(15s+15s)—— 加权均值
+    # 1:1 对齐: 块首槽恰在 b0 -> 桶 b0; 差分端点归属: (b0 -> b0+30) 对记 b0+30 桶
+    blk = V4Block(b0, 30, 1000, 500, (V4Sample(10, 20, 1000, 500), V4Sample(20, 40, 2000, 900)))
+    pts = v4_series_points((blk, ), g)
+    obs = v4_grid_obs(pts, g)
+    assert obs[b0] == BucketObs(0, 0, 1000, 500)  # 链首 0 线
+    assert obs[b0 + 30] == BucketObs(33, 13, 2000, 900)  # delta(1000,400)/30s = 33/13
+    assert b0 - 30 not in obs and b0 + 60 not in obs  # 无观测桶不出现在观测表
+    # 跨界样本: r2 显式 dt=45s @T+45 -> 端点归属整对记 T+30 桶(对跨 45s), 不再按重叠秒摊配
     T = b0 + 30
     blk3 = V4Block(
         T, 30, 100, 0, (V4Sample(200, 0, 100, 0), V4Sample(100, 0, 200, 0, dt_ms=45000), V4Sample(50, 0, 300, 0))
     )
-    pts3 = v4_series_points((blk3, ), g.t0, g.t1)
-    obs3 = v4_grid_obs(pts3, g)
-    assert obs3[T - 30] == BucketObs(200, 0, 100, 0)  # r1 @T: 桶 [T-30, T) 恰对齐
-    assert obs3[T] == BucketObs(100, 0, 200, 0)  # r2 @T+45 w=45: 桶 [T, T+30) 只有它覆盖(30s)
-    assert obs3[T + 30] == BucketObs(75, 0, 300, 0)  # (100*15 + 50*15)/30 = 75; 快照取覆盖末端最晚的 r3
-    assert obs3[T + 60] == BucketObs(50, 0, 300, 0)  # r3 @T+75: 桶 [T+60, T+75) 15s(独占)
-    # null 点(n 游程折叠)不参与归桶: 桶无观测 = null, 断线语义由空桶承载
+    obs3 = v4_grid_obs(v4_series_points((blk3, ), g), g)
+    assert obs3[T] == BucketObs(0, 0, 100, 0)  # 链首 0 线(样本 @T 恰在桶首)
+    assert obs3[T + 30] == BucketObs(2, 0, 200, 0)  # delta 100/45s = 2.2 -> 2(端点归属 T+45 所在桶)
+    assert obs3[T + 60] == BucketObs(3, 0, 300, 0)  # delta 100/30s = 3
+    # n 游程折叠: 断连段桶无观测 = null(空桶承载断线), 前后桶观测照常
     blk4 = V4Block(
         T + 300, 30, 900, 0, (V4Sample(9, 9, 900, 0), V4NullRun(2, dt_ms=60000), V4Sample(9, 9, 999, 0, dt_ms=30000))
     )
-    obs4 = v4_grid_obs(v4_series_points((blk4, ), g.t0, g.t1), g)
-    assert obs4[T + 270] == BucketObs(9, 9, 900, 0)
-    assert T + 300 not in obs4 and T + 330 not in obs4  # n 游程段无观测 -> 空(null)
-    assert obs4[T + 360] == BucketObs(9, 9, 999, 0)
+    obs4 = v4_grid_obs(v4_series_points((blk4, ), g), g)
+    assert obs4[T + 300] == BucketObs(0, 0, 900, 0)
+    assert T + 330 not in obs4 and T + 360 not in obs4  # n 游程段无观测 -> 空(null)
+    assert obs4[T + 390] == BucketObs(
+        1, 0, 999, 0
+    )  # 标记后短缝摊配回收: span 90s > cov 30s -> 只回收覆盖份额 99/3 -> rate 1(未观测 60s 不归因)
 
 
 def test_v4_series_points_live_tail_merge_dedup():
@@ -564,7 +559,8 @@ def test_v4_series_points_live_tail_merge_dedup():
         V4Sample(150, 60, 2600, 1100),
         V4Sample(90, 40, 3000, 1300),
     )
-    full = v4_series_points((V4Block(start, interval, 1000, 500, recs), ), start - 10, start + 400)
+    g = WindowGrid("5m", start - 10, start + 400, 30, "raw", _floor_buckets(start - 10, start + 400, 30))
+    full = v4_series_points((V4Block(start, interval, 1000, 500, recs), ), g)
     full_slots = v4_block_slots(V4Block(start, interval, 1000, 500, recs))
     # 中途 flush: 磁盘前 2 条 + 活尾后 3 条(写侧游标 = 整块末槽)
     disk = (V4Block(start, interval, 1000, 500, recs[:2]), )
@@ -577,7 +573,7 @@ def test_v4_series_points_live_tail_merge_dedup():
         records=recs[2:],
         open_run=None,
     )
-    merged = v4_series_points(disk, start - 10, start + 400, tail_slots=v4_live_tail_slots(tail))
+    merged = v4_series_points(disk, g, tail_slots=v4_live_tail_slots(tail))
     assert merged == full  # 合流 == 整块(边界一次标称间隔不被误判真空, 无 null 点)
     # 滞后快照(重列已落盘的 recs[1]): 去重后仍 == 整块桶点
     stale = LiveTail(
@@ -589,12 +585,12 @@ def test_v4_series_points_live_tail_merge_dedup():
         records=recs[1:],
         open_run=None,
     )
-    merged_stale = v4_series_points(disk, start - 10, start + 400, tail_slots=v4_live_tail_slots(stale))
+    merged_stale = v4_series_points(disk, g, tail_slots=v4_live_tail_slots(stale))
     assert merged_stale == full
     # 无块纯活尾(进程首日全空闲, 天文件未产生): z 游程槽出 0 线桶点
     run = LiveTailRun(kind="z", start=start + 60.0, last_seen=start + 120.0, dl_total=9, up_total=8, samples=4)
     tail_only = LiveTail(False, False, None, interval, 0.0, (), run)
-    pts = v4_series_points((), start, start + 200, tail_slots=v4_live_tail_slots(tail_only))
+    pts = v4_series_points((), g, tail_slots=v4_live_tail_slots(tail_only))
     assert pts and all(p.dl_rate == 0 and p.up_rate == 0 and p.dl_total == 9 for p in pts)
     assert not any(p.dl_rate is None for p in pts)
 
@@ -623,17 +619,19 @@ def _hold_active_fixture():
 
 def _hold_obs(disk, tail, grid, now, max_gap_s):
     """延伸参数 -> (栅格桶观测, 桶点流)。now=None = 不延伸(现状形态); 走生产同一条
-    v4_series_points -> v4_rate_from_totals -> v4_grid_obs 管线(grid.t1 = int(now) 为窗)。"""
-    seed_t0 = grid.t0 - grid.interval  # D3 窗首种子外扩(调用面口径)
+    v4_series_points -> v4_grid_obs 管线(26-11-15-1104 F2: grid 直传, 点位归属归桶 +
+    速率一次算定; grid.t1 = int(now) 为窗)。"""
     tail_slots = v4_live_tail_slots(tail) if now is None else v4_live_tail_slots(tail, now=now, max_gap_s=max_gap_s)
-    pts = v4_rate_from_totals(v4_series_points(disk, seed_t0, grid.t1, tail_slots=tail_slots))
+    pts = v4_series_points(disk, grid, tail_slots=tail_slots)
     return v4_grid_obs(pts, grid), pts
 
 
 def test_v4_hold_slot_fills_tail_grid_bucket():
-    """(F4)活跃链延伸前尾桶 null(G5 复现: 末样本槽 ts=链端 >= t1=int(now) 被窗尾过滤,
-    其覆盖到不了进行中桶), 传 now 后 holding 槽豁免过滤 -> 尾桶恒有观测且值接续末观测
-    桶值(750/375 持有面平接); 其余桶与不延伸形态逐桶一致(向后兼容面)"""
+    """(F4, F2 最小搬运改判)活跃链延伸前尾桶 null(G5 复现: 末样本槽 ts=链端 >= t1=int(now)
+    被窗尾过滤), 传 now 后 holding 槽豁免过滤 -> 尾桶恒有观测且值接续末观测桶值(持有面
+    平接 1000/500 —— 旧口径 750/375 含 ceil(1.5)=2 的桶宽膨胀, F2 精确对跨后消除);
+    其余桶与不延伸形态逐桶一致(向后兼容面)。holding 桶键 = grid.last(进行中桶,
+    「现在所在格」), 不进差分面(0 delta / 0 覆盖, 不稀释同桶真实观测)"""
     disk, tail, chain_end = _hold_active_fixture()
     now = chain_end + 0.3
     grid = _grid_1m_2s(now)  # (R1 改判)固定 2s 桶几何: holding 语义电池, 见助手注
@@ -644,79 +642,77 @@ def test_v4_hold_slot_fills_tail_grid_bucket():
     # F4: 延伸 -> 尾桶恒有观测(P1 上界: max(2, 1.5) x 2 = 4)
     obs_new, _ = _hold_obs(disk, tail, grid, now, 4.0)
     o = obs_new[grid.last]
-    assert (o.dl_rate, o.up_rate) == (750, 375)  # 接续末观测桶值(非 0 非 null)
+    assert (o.dl_rate, o.up_rate) == (1000, 500)  # 接续末观测桶值(非 0 非 null; delta 1500/1.5s)
     assert (o.dl_total, o.up_total) == (90000, 45000)  # totals = 末次快照同值
     # 前桶不受扰: 与延伸前逐桶一致(除尾桶外)
     assert {k: v for k, v in obs_new.items() if k != grid.last} == obs_old
 
 
 def test_v4_hold_slot_rate_face_holds_last_bucket_rate():
-    """(F4 速率面语义)尾桶值 = 上一观测桶点的区间平均速率(carry-forward): 瞬时字段
-    5000/2500 垃圾值零上图, delta 重写面 750/375 —— 持有面取后者(非重写 0 的假跌零,
-    亦非瞬时直采的假跳升)"""
+    """(F4 速率面语义, F2 改判)尾桶值 = 上一非持有观测桶的桶速率(carry-forward):
+    瞬时字段 5000/2500 垃圾值零上图, 桶层一次算定面 1000/500 —— 持有面取后者
+    (非差分 0 的假跌零, 亦非瞬时直采的假跳升)"""
     disk, tail, chain_end = _hold_active_fixture()
     now = chain_end + 0.3
     grid = _grid_1m_2s(now)  # (R1 改判)固定 2s 桶几何: holding 语义电池, 见助手注
     obs, pts = _hold_obs(disk, tail, grid, now, 4.0)
     hold_point = pts[-1]
-    assert hold_point.is_hold  # 桶点持有旗贯通到变换输出
-    assert (hold_point.dl_rate, hold_point.up_rate) == (750, 375)
-    assert (obs[grid.last].dl_rate, obs[grid.last].up_rate) == (750, 375)
-    assert all(p.dl_rate < 1000 and p.up_rate < 1000 for p in pts if p.dl_rate is not None)
+    assert hold_point.is_hold  # 桶点持有旗贯通到输出
+    assert (hold_point.dl_rate, hold_point.up_rate) == (1000, 500)
+    assert (obs[grid.last].dl_rate, obs[grid.last].up_rate) == (1000, 500)
+    assert all(p.dl_rate is None or p.dl_rate <= 1000 for p in pts)  # 瞬时垃圾 5000 零上图
 
 
 def test_v4_hold_slot_totals_chain_untouched():
-    """(F4 诚实性)两相位钉 totals 面不变式:
-    - gap 跨整秒相位(末样本槽在窗内): holding 桶点 totals 差分恒 0(前点 = 末样本桶点,
-      totals 同值 -> 累计面 0 增量, 不造字节), 且延伸前后栅格桶逐桶全等(持有覆盖与末
-      样本覆盖同值同快照, 加权不漂);
+    """(F4 诚实性, F2 改判)两相位钉 totals 面不变式:
+    - gap 跨整秒相位(末样本槽在窗内): holding 槽与末样本同桶合并 -> is_hold=False,
+      速率/快照由真实观测一次算定, 延伸前后栅格桶逐桶全等(持有面不进差分不稀释);
     - gap 不跨整秒相位(末样本槽被窗尾过滤): holding 桶如数回收末样本真实增量(1500/750
-      —— 此前该增量整段丢失), 其余桶 delta 与不延伸形态逐桶一致"""
+      —— 此前该增量整段丢失), 其余桶 delta 与不延伸形态逐桶一致。
+    旧 v4_totals_points 桶点级 0 增量/摊配份额断言随中间层退役(响应 totals 通道承接)。"""
     disk, tail, chain_end = _hold_active_fixture()
-    # 相位一: gap 1.2 跨整秒(t1 = 89 > 链端 88.5), holding 槽覆盖桶 [88, 90) 恰 = 尾桶
+    # 相位一: gap 1.2 跨整秒(t1 = 89 > 链端 88.5), holding 槽与末样本(@88.5)同桶(88)
     now_a = chain_end + 1.2
     grid_a = _grid_1m_2s(now_a)  # (R1 改判)固定 2s 桶几何, 见助手注
     obs_old_a, pts_old_a = _hold_obs(disk, tail, grid_a, None, None)
     obs_new_a, pts_new_a = _hold_obs(disk, tail, grid_a, now_a, 4.0)
-    te_new_a = v4_totals_points(pts_new_a)
-    assert pts_new_a[-1].is_hold
-    assert te_new_a[-1].dl == 0 and te_new_a[-1].up == 0  # holding 桶点 0 增量
+    assert pts_new_a[-1].is_hold is False  # 真实观测在桶 -> 合并桶非 holding
     assert obs_new_a == obs_old_a  # 逐桶全等(速率与 totals 通道零漂移)
+    tots_old_a = series_totals_points(obs_old_a, grid_a)
+    tots_new_a = series_totals_points(obs_new_a, grid_a)
+    assert tots_new_a == tots_old_a
+    assert tots_new_a[-1] == {"t": grid_a.last, "dl": 1500, "up": 750}  # 末样本真实增量照常入账
     # 相位二: gap 0.3 不跨整秒(t1 = 88 = int(链端)), 末样本槽被窗尾过滤
     now_b = chain_end + 0.3
     grid_b = _grid_1m_2s(now_b)  # (R1 改判)固定 2s 桶几何, 见助手注
     obs_old_b, pts_old_b = _hold_obs(disk, tail, grid_b, None, None)
     obs_new_b, pts_new_b = _hold_obs(disk, tail, grid_b, now_b, 4.0)
     assert grid_b.last not in obs_old_b
-    te_old_b = v4_totals_points(pts_old_b)
-    te_new_b = v4_totals_points(pts_new_b)
-    assert te_new_b[:-1] == te_old_b
-    # 桶点级: holding 桶点 delta = P2 接缝摊配的覆盖份额(holding 覆盖 [88,89) vs 前点覆盖
-    # 末端 87: span 2 > cov 1 -> step x cov // span = 1500 的一半; 未覆盖秒不归因 —— 既有
-    # P2 语义对 holding 槽原样成立, 不多计)
-    assert te_new_b[-1].dl == 750 and te_new_b[-1].up == 375
+    assert pts_new_b[-1].is_hold  # 纯 holding 桶
+    assert (pts_new_b[-1].dl_total, pts_new_b[-1].up_total) == (90000, 45000)  # 快照接住末样本
+    assert pts_new_b[-1].w == 0.0  # 持有面非观测: 0 覆盖(旧 w=ceil(gap) 覆盖桶语义退役)
     tots_old = series_totals_points(obs_old_b, grid_b)
     tots_new = series_totals_points(obs_new_b, grid_b)
     assert tots_new[:-1] == tots_old[:-1]
-    # 栅格级: 尾桶快照链接住末样本 totals(90000) -> 末样本真实增量(1500/750)如数回收
-    # (不延伸形态下该增量随窗尾过滤整段丢失), 不多不少
+    # 栅格级: 尾桶快照链接住末样本 totals(90000) -> 末样本真实增量(1500/750)如数回收,
+    # 不多不少(旧 P2 摊配覆盖份额 750/375 随中间层退役 —— F2 端点归属整对归尾桶)
     assert tots_new[-1] == {"t": grid_b.last, "dl": 1500, "up": 750}
 
 
 def test_v4_hold_slot_z_run_tail_zero_line():
-    """(F4)z 游程链端延伸: 尾桶 0 线非 null(空闲观测持有 —— 「最新已知状态仍有效」),
-    totals 快照照记; 不延伸时尾桶保持 null"""
+    """(F4, F2 改判)z 游程链端延伸: 尾桶 0 线非 null(空闲观测持有 —— 「最新已知状态
+    仍有效」), totals 快照照记; 不延伸时尾桶保持 null(末槽 @120 恰落窗界被 ts >= t1 过滤)"""
     start = 1_800_000_000
     run = LiveTailRun(kind="z", start=start + 60.0, last_seen=start + 120.0, dl_total=9, up_total=8, samples=4)
     tail = LiveTail(False, False, None, 30, 0.0, (), run)
-    now = start + 121.0  # 链端 = last_seen = +120, gap 1 <= 缺省上界 interval x 2 = 60
+    now = start + 120.5  # 链端 = last_seen = +120, t1 = int(now) = +120, gap 0.5 <= 缺省上界 60
     grid = build_grid("5m", now, 30.0)
     assert grid.last == start + 120  # 尾桶 = 进行中桶 [120, 150)
-    pts_old = v4_rate_from_totals(v4_series_points((), grid.t0, grid.t1, tail_slots=v4_live_tail_slots(tail)))
-    assert grid.last not in v4_grid_obs(pts_old, grid)  # 不延伸: 尾桶 null
-    pts = v4_rate_from_totals(v4_series_points((), grid.t0, grid.t1, tail_slots=v4_live_tail_slots(tail, now=now)))
+    pts_old = v4_series_points((), grid, tail_slots=v4_live_tail_slots(tail))
+    assert grid.last not in v4_grid_obs(pts_old, grid)  # 不延伸: 尾桶 null(末槽 @120 >= t1 被滤)
+    pts = v4_series_points((), grid, tail_slots=v4_live_tail_slots(tail, now=now))
     o = v4_grid_obs(pts, grid)[grid.last]
-    assert (o.dl_rate, o.up_rate) == (0, 0)  # 0 线非 null
+    assert (o.dl_rate, o.up_rate) == (0, 0)  # 0 线非 null(持有 z 末速率 0)
     assert (o.dl_total, o.up_total) == (9, 8)
 
 
@@ -728,143 +724,126 @@ def test_v4_hold_slot_stall_over_bound_tail_stays_null():
     grid = _grid_1m_2s(now)  # (R1 改判)固定 2s 桶几何: holding 语义电池, 见助手注
     slots = v4_live_tail_slots(tail, now=now, max_gap_s=4.0)
     assert slots == v4_live_tail_slots(tail) and not any(s.is_hold for s in slots)
-    seed_t0 = grid.t0 - grid.interval
-    pts = v4_rate_from_totals(v4_series_points(disk, seed_t0, grid.t1, tail_slots=slots))
+    pts = v4_series_points(disk, grid, tail_slots=slots)
     assert grid.last not in v4_grid_obs(pts, grid)
 
 
 def test_v4_hold_slot_merge_with_real_sample_deholds():
-    """(F4 防御面)holding 槽与真实观测槽同桶合并 -> 合并桶点 is_hold=False(桶内有真实
-    观测, 按观测正常重写)—— 持有旗不泄漏进含真实观测的桶(泄漏面: 速率被改写为持有值)"""
+    """(F4 防御面, F2 改判)holding 槽与真实观测槽同桶合并 -> 合并桶 is_hold=False(桶内有
+    真实观测, 速率按差分一次算定)—— 持有旗不泄漏进含真实观测的桶(泄漏面: 速率被改写为
+    持有值)。几何: 桶宽 2s, 真实槽 @90.5 与 holding 槽(键恒 = grid.last = 90)同桶"""
     start = 1_800_000_000
-    # 前导槽(基线)+ 真实槽 ts=89.5(显式 dt 0.5s, w=1, 覆盖桶 [89, 90)) + holding 槽
-    # ts=90.8(gap 1.3, w=2, 覆盖桶 [89, 91))—— 真实/holding 两槽覆盖桶键同为 89 合并;
-    # t1=90 时前导与真实槽均在窗内, holding 槽经豁免入桶
-    first = V4Slot(ts=start + 88.2, dt_s=0.5, obs=(100, 50, 1000, 500), is_zero=False)
-    real = V4Slot(ts=start + 89.5, dt_s=0.5, obs=(100, 50, 1600, 800), is_zero=False)
-    hold = V4Slot(ts=start + 90.8, dt_s=1.3, obs=(100, 50, 1600, 800), is_zero=False, is_hold=True)
-    grid = build_grid("1m", start + 90.4, 1.0)  # 桶宽 1s, t1 = start+90
-    assert grid.t1 == start + 90
-    pts = v4_rate_from_totals(v4_series_points((), grid.t0, grid.t1, tail_slots=(first, real, hold)))
-    assert [p.t for p in pts] == [start + 88, start + 89]
+    first = V4Slot(ts=start + 88.5, dt_s=1.0, obs=(100, 50, 1000, 500), is_zero=False)
+    real = V4Slot(ts=start + 90.5, dt_s=2.0, obs=(100, 50, 1600, 800), is_zero=False)
+    hold = V4Slot(ts=start + 91.3, dt_s=0.8, obs=(100, 50, 1600, 800), is_zero=False, is_hold=True)
+    grid = build_grid("1m", start + 91.4, 2.0)  # 桶宽 2s, t1 = start+91, 尾桶 = start+90
+    assert grid.t1 == start + 91 and grid.last == start + 90
+    pts = v4_series_points((), grid, tail_slots=(first, real, hold))
+    assert [p.t for p in pts] == [start + 88, start + 90]
     merged = pts[-1]
     assert not merged.is_hold  # 真实观测入桶 -> 非 holding 桶点
-    assert merged.w == 2  # 覆盖桶宽取最大(并集覆盖)
-    assert (merged.dl_rate, merged.up_rate) == (300, 150)  # delta(600,300)/w2 正常重写
-    assert (merged.dl_total, merged.up_total) == (1600, 800)
+    assert (merged.dl_rate, merged.up_rate) == (300, 150)  # delta(600,300)/2.0s 一次算定
+    assert (merged.dl_total, merged.up_total) == (1600, 800)  # 快照取 ts 最晚者(holding 同值)
+    assert merged.w == 2.0  # 覆盖时长 = 实测对跨(holding 槽不进差分面)
 
 
 def test_v4_seed_vacuum_null_t0_edge_band_chain_break():
-    """(issue 26-10-08-0141)窗首种子 1 秒边界带(P2 回看后语义强化; issue 26-10-16-0954
-    修复轮改口径): 停机标记与点同界(_V4_SEAM_LOOKBACK_S)后, (t0-1, t0) 带内与带外的停机
-    标记均保留 —— 差分链均正确断开, 离线期字节不被误归成假尖峰。修复轮后重启缝按真实
-    跨度摊配回收(两形态均不再断链 None): 带内(种子覆盖末梢恰接到恢复点, span == cov)
-    回收值 300/150 与「链误接」同数 —— 判别力由带外形态承担(span=31 > cov=30 ->
-    step x cov // span = 8709/4354, rate 290/145, 误接旧值 300/150 必判红); 次桶基线
-    恢复 delta/w。原带外对照(标记 998 被丢)在旧窗界下靠「种子点亦被滤」免于误接,
-    回看保留种子点后标记同界保留才维持断链 —— 两形态现在同构"""
-    # 种子块末槽 @999.5 ∈ (t0-1, t0)(t0 = seed_t0 = 1000); 恢复块首点 @1030 -> 桶 1000
+    """(issue 26-10-08-0141; F2 改判重锚)窗首种子边界带 —— 停机标记与链同界
+    (_V4_SEAM_LOOKBACK_S)后带内带外的停机标记均保留, 差分链均正确断开。
+    F2 端点归属下重启缝接收桶速率 = step / 实测对跨(覆盖时长 = 差分对跨, 不再 ceil;
+    未覆盖秒不归因只在游程内有真实缝时缩放): 带内 9000/30.5s = 295 与带外
+    9000/31.5s = 286 可区分(旧口径 300/290 含 ceil 桶宽)"""
     seed = V4Block(970, 30, 1000, 500, (V4Sample(1, 1, 1000, 500), V4Sample(2, 2, 1600, 800, dt_ms=29500)))
     recover = V4Block(1030, 30, 10600, 5300, (V4Sample(9, 9, 10600, 5300), V4Sample(8, 8, 11200, 5600)))
-    pts = v4_series_points((seed, recover), 1000, 1200)
-    assert [(p.t, p.dl_rate, p.dl_total) for p in pts] == [
-        (940, 1, 1000),  # (P2 回看)种子块首槽保留: 差分链完整(渲染由栅格覆盖过滤)
-        (970, 2, 1600),  # 种子点: key = ceil(999.5)-30 = 970, 覆盖桶触及 t0 照收(不外发, 供差分基线)
-        (999, None, None),  # 真空 null 点: t = int(999.5) = t0-1, 同界保留(修复前被丢)
-        (1000, 9, 10600),  # 恢复首点: 重启缝接收桶
-        (1030, 8, 11200),
+    g = WindowGrid("5m", 1000, 1200, 30, "raw", _floor_buckets(1000, 1200, 30))
+    pts = v4_series_points((seed, recover), g)
+    assert [_p(p) for p in pts] == [
+        (960, 0, 0, 1000, 500, 0.0),  # 种子块首槽(链上下文): 0 线, 快照照记
+        (990, 20, 10, 1600, 800, 29.5),  # 种子次槽: delta(600,300)/29.5s(窗首差分基线, D3)
+        (999, None, None, None, None, 0.0),  # 真空 null 点: t = int(999.5) = t0-1, 同界保留
+        (1020, 295, 148, 10600, 5300, 30.0),  # 恢复首点: 重启缝回收 step x 覆盖 // span(覆盖 = 声称 dt 30s)
+        (1050, 20, 10, 11200, 5600, 30.0),  # 次桶基线恢复 delta(600,300)/30s
     ]
-    out = v4_rate_from_totals(pts)
-    assert [(p.t, p.dl_rate, p.up_rate) for p in out] == [
-        (940, None, None),  # 链首基线缺失(不外发)
-        (970, 20, 10),  # 种子次槽 delta(600,300)/30(修复前被窗界滤掉, 链首 = 970 基线缺失)
-        (999, None, None),
-        (1000, 300, 150),  # 重启缝回收: span == cov = 30 -> 9000/4500 全额归接收桶(真实跨度均值 295)
-        (1030, 20, 10),  # 次桶基线恢复 delta(600,300)/30
-    ]
-    # 带外对照(判别力所在): 停机再早 1 秒(末槽 @998.5 -> 取整 998)—— 旧窗界下标记被丢
-    # 且种子点亦被滤(免于误接); 回看后两者均保留 —— 接收桶覆盖起点 1000 晚于种子覆盖
-    # 末端 999(未覆盖 1s), span=31 > cov=30 -> 只回收覆盖份额(rate 290, 非误差接的 300)
+    # 带外对照(判别力所在): 停机再早 1 秒(末槽 @998.5)—— 标记 t = 998 同界保留,
+    # 接收桶对跨 31.5s -> rate 286(误接旧值 300 与带内 295 均可判红)
     seed2 = V4Block(970, 30, 1000, 500, (V4Sample(1, 1, 1000, 500), V4Sample(2, 2, 1600, 800, dt_ms=28500)))
-    pts2 = v4_series_points((seed2, recover), 1000, 1200)
-    assert [(p.t, p.dl_rate) for p in pts2] == [
-        (940, 1),
-        (970, 2),  # key = ceil(998.5) - w29(逐记录桶宽 ceil(28.5)) = 970
-        (998, None),  # 带外标记: t = int(998.5) = 998, 同界保留(旧窗界下被丢)
-        (1000, 9),
-        (1030, 8),
-    ]
-    assert [(p.t, p.dl_rate) for p in v4_rate_from_totals(pts2)] == [
-        (940, None),
-        (970, 21),  # delta(600)/w29 = 20.7 -> 21(逐记录桶宽 ceil(28.5) = 29)
-        (998, None),
-        (1000, 290),  # 覆盖份额 step x cov // span = 8709 -> round(8709/30) = 290(误接旧值 300)
-        (1030, 20),
+    pts2 = v4_series_points((seed2, recover), g)
+    assert [_p(p) for p in pts2] == [
+        (960, 0, 0, 1000, 500, 0.0),
+        (990, 21, 11, 1600, 800, 28.5),  # delta 600/28.5s = 21.05 -> 21; 300/28.5 = 10.5 -> 11
+        (998, None, None, None, None, 0.0),
+        (1020, 286, 143, 10600, 5300, 30.0),  # 覆盖 = 接收槽声称 dt 30s: 9000 x 30 // 31.5 = 8571 -> rate 286; up 142.9 -> 143
+        (1050, 20, 10, 11200, 5600, 30.0),
     ]
 
 
-def test_v4_grid_obs_rate_null_totals_valid_exemption():
-    """D4 豁免(v4_grid_obs): rate=None 但 totals 有效的桶点仍参与归桶 —— 只更新覆盖末端
-    与快照链(rate 权重记 0, 逐向独立), 桶完全无速率覆盖出 0 线 + 快照照记(后续桶差分基线
-    不断); 真 null 点(率/totals 全空)仍不参与(桶 null)。本条钉的是**无观测缝**的起始桶
-    0 线(程序/窗口起点); 有观测缝的断链首桶改出 None(issue 26-10-16-0954 修复语义,
-    见 test_v4_grid_obs_break_bucket_rate_null_snapshot_kept)"""
-    g = _grid_30s(NOW)  # (R1 改判)固定 30s 桶几何: 混合覆盖跨桶形态依赖 30s 步进, 见助手注
+def test_v4_series_points_exempt_pairs_zero_line_snapshot_kept():
+    """D4 豁免(26-11-15-1104 F2 后在桶层一次算定内实现, 逐向独立): 差分派不出(重置形态)
+    的对不占速率权重也不占覆盖, 桶无任何差分覆盖且无观测缝 -> 0 线 + 快照照记(后续桶
+    差分基线不断); 混合桶(豁免对 + 有效对)有效差分照常派出(不稀释不虚 0); 真 null 点
+    (n 游程/真空)不参与(桶 null)。旧 v4_grid_obs 豁免权重面随覆盖加权桥接退役。"""
+    g = _grid_30s(NOW)
     b0, b1, b2 = g.buckets[100], g.buckets[101], g.buckets[102]
-    pts = (
-        V4PointEntry(b0, 10, 10, 1000, 500, w=30),
-        V4PointEntry(b1, None, None, 1000, 500, w=30),  # 派不出(重置/基线缺失形态): 豁免参与
-        V4PointEntry(b2, 20, 10, 1600, 800, w=30),  # delta 600/300
+    blk = V4Block(
+        b0,
+        30,
+        1000,
+        500,
+        (
+            V4Sample(10, 10, 1000, 500),  # 链首(基线)
+            V4Sample(10, 10, 900, 800, dt_ms=30000),  # @b1: dl 重置(900<1000)-> 豁免; up +300
+            V4Sample(20, 10, 1600, 1400, dt_ms=30000),  # @b2: 对重置快照差分 +700/+600
+        ),
     )
+    pts = v4_series_points((blk, ), g)
     obs = v4_grid_obs(pts, g)
-    assert obs[b0] == BucketObs(10, 10, 1000, 500)
-    assert obs[b1] == BucketObs(0, 0, 1000, 500)  # 0 线 + 快照照记(非 null 桶)
-    assert obs[b2] == BucketObs(20, 10, 1600, 800)
-    # 豁免桶的快照续链: 后续桶差分基线不断(若 b1 缺席 b2 将基线缺失)
+    assert obs[b0] == BucketObs(0, 0, 1000, 500)  # 链首 0 线
+    assert obs[b1] == BucketObs(0, 10, 900, 800)  # dl 豁免 -> 0 线(无缝非 broke); up 300/30s = 10
+    assert obs[b2] == BucketObs(23, 20, 1600, 1400)  # dl 700/30s = 23.3 -> 23; up 600/30 = 20
     tot = series_totals_points(obs, g)
-    assert tot[g.buckets.index(b1)] == {"t": b1, "dl": 0, "up": 0}
-    assert tot[g.buckets.index(b2)] == {"t": b2, "dl": 600, "up": 300}
+    assert tot[g.buckets.index(b1)] == {"t": b1, "dl": None, "up": 300}  # 重置桶增量 None(逐向)
+    assert tot[g.buckets.index(b2)] == {"t": b2, "dl": 700, "up": 600}  # 快照照记 -> 基线不断
+    # 混合桶: 同桶内重置对 + 有效对 —— 有效差分照常派出
+    blk2 = V4Block(
+        b2,
+        30,
+        0,
+        0,
+        (
+            V4Sample(10, 10, 2000, 1000),  # @b2 链首
+            V4Sample(10, 10, 1000, 900, dt_ms=10000),  # @b2+10: 重置 -> 豁免
+            V4Sample(10, 10, 1100, 1000, dt_ms=10000),  # @b2+20: +100/10s(三槽同桶)
+        ),
+    )
+    pts2 = v4_series_points((blk2, ), g)
+    obs2 = v4_grid_obs(pts2, g)
+    assert obs2[b2] == BucketObs(10, 10, 1100, 1000)  # 100/10s = 10(重置对豁免不稀释; obs 键 = 桶键)
     # 真 null 点仍不参与: 桶无观测 = null
-    assert v4_grid_obs((V4PointEntry(b0, None, None, None, None, w=0), ), g) == {}
-    # 逐向豁免: dl 派不出(up 可派)—— dl 出 0 线, up 正常覆盖
-    obs3 = v4_grid_obs((V4PointEntry(b0, None, 6, 1200, 500, w=30), ), g)
-    assert obs3[b0] == BucketObs(0, 6, 1200, 500)
-    # 混合覆盖: 豁免点与速率点共享桶 —— 速率均值只按速率覆盖秒加权(豁免不稀释不虚 0)
-    pts4 = (
-        V4PointEntry(b2, None, None, 1000, 500, w=15),  # 覆盖 [b2, b2+15)
-        V4PointEntry(b2 + 15, 10, 10, 1300, 800, w=30),  # 覆盖 [b2+15, b2+45): 跨 b2/b2+30
-    )
-    obs4 = v4_grid_obs(pts4, g)
-    assert obs4[b2] == BucketObs(10, 10, 1300, 800)  # 15s 速率覆盖 -> 均值 10(非 (10+0)/2)
-    assert obs4[b2 + 30] == BucketObs(10, 10, 1300, 800)
+    assert v4_grid_obs((V4PointEntry(b0, None, None, None, None, w=0.0), ), g) == {}
+    # 逐向豁免: dl 派不出(up 可派)—— dl 出 0 线, up 正常(对称面由上方 b1 钉)
 
 
-def test_v4_grid_obs_break_bucket_rate_null_snapshot_kept():
-    """(issue 26-10-16-0954-bug-traffic-seam-zero-bucket-isolated-marker 守阵)断链首桶
-    语义: 速率派不出且本桶覆盖起点晚于上一观测点覆盖末端(停机洞/观测缝)时该向出 None
-    (前端与空桶同语义: 缺口斜纹; 修复前出 0 线 -> 全窗只剩它一个非 null 值时前端孤点
-    标记 + 值域塌到 [0,1], 把一片无采样区一分为二); 快照照记(差分链基线不断);
-    无观测缝的起始桶(程序/窗口起点)仍保留 D4 的 0 线; 组面同规则"""
-    g = _grid_30s(NOW)  # (R1 改判)固定 30s 桶几何: b2+30 次桶跨桶形态依赖 30s 步进, 见助手注
-    b0, b1, b2 = g.buckets[100], g.buckets[101], g.buckets[102]
-    pts = (
-        V4PointEntry(b0, 5, 5, 1000, 500, w=1),  # 洞前最后观测(覆盖 [b0, b0+1))
-        V4PointEntry(b2, None, None, 9000, 4000, w=1),  # 洞后首点: 断链 + 覆盖起点晚于 b0+1
-        V4PointEntry(b2 + 30, 7, 7, 20000, 9000, w=30),  # 次桶: 对 b2 快照差分
-    )
+def test_v4_series_points_break_bucket_rate_null_snapshot_kept():
+    """(issue 26-10-16-0954-bug-traffic-seam-zero-bucket-isolated-marker 守阵, F2 桶层改判)
+    断链桶语义: 桶内存在未观测缝(对跨 > 本槽声称覆盖 dt > 60s = 停机洞)且该向无差分
+    覆盖 -> None(断链未知 != 0 线; 修复前 0/0 伪点 -> 全窗孤点 + 值域塌缩); 快照照记
+    (差分链基线不断); 无观测缝的链首桶(程序/窗口起点)仍保留 D4 的 0 线; 组面同规则"""
+    g = _grid_30s(NOW)
+    b0, b2 = g.buckets[100], g.buckets[104]  # b2 = b0+120: 缝 120s, 未观测 90s > 60s 洞
+    blk1 = V4Block(b0, 30, 1000, 500, (V4Sample(5, 5, 1000, 500), ))
+    blk2 = V4Block(b2, 30, 9000, 4000, (V4Sample(9, 9, 9000, 4000), V4Sample(7, 7, 20000, 9000, dt_ms=30000)))
+    pts = v4_series_points((blk1, blk2), g)
     obs = v4_grid_obs(pts, g)
-    assert obs[b0] == BucketObs(5, 5, 1000, 500)
-    assert obs[b2] == BucketObs(None, None, 9000, 4000)  # 断链未知 != 0(修复前 0/0 伪点)
+    assert obs[b0] == BucketObs(0, 0, 1000, 500)  # 链首 0 线
+    assert obs[b2] == BucketObs(None, None, 9000, 4000)  # 断链未知(停机洞) != 0
     assert rate_points(obs, g)[g.buckets.index(b2)] == {"t": b2, "dl": None, "up": None}
     tot = series_totals_points(obs, g)
     assert tot[g.buckets.index(b2)] == {"t": b2, "dl": None, "up": None}  # 跨洞增长不可归因(不造数)
-    assert tot[g.buckets.index(b2 + 30)] == {"t": b2 + 30, "dl": 11000, "up": 5000}  # 快照照记 -> 次桶基线不断
+    assert tot[g.buckets.index(b2 + 30)] == {"t": b2 + 30, "dl": 11000, "up": 5000}  # 次桶基线不断
     # 对照: 同形但无观测缝(链路首点, 程序/窗口起点) -> 保留 D4 的 0 线
-    pts2 = (
-        V4PointEntry(b0, None, None, 1000, 500, w=30),
-        V4PointEntry(b1, 5, 5, 1600, 800, w=30),
-    )
-    assert v4_grid_obs(pts2, g)[b0] == BucketObs(0, 0, 1000, 500)
+    blk3 = V4Block(b0, 30, 1000, 500, (V4Sample(5, 5, 1000, 500), V4Sample(5, 5, 1600, 800, dt_ms=30000)))
+    obs2 = v4_grid_obs(v4_series_points((blk3, ), g), g)
+    assert obs2[b0] == BucketObs(0, 0, 1000, 500)
     # 组面: 全成员该向未知 -> None(断链未知不冒充 0 值点); 有成员已知 -> 未知按 0 计入和
     mask = [False] * len(g.buckets)
     unknown = [{b0: BucketObs(None, None, 1000, 500)}, {b0: BucketObs(None, None, 1600, 800)}]
@@ -873,58 +852,53 @@ def test_v4_grid_obs_break_bucket_rate_null_snapshot_kept():
     assert group_rate_points(mixed, g, mask)[100] == {"t": b0, "dl": 30, "up": 5}
 
 
-def test_v4_grid_obs_window_and_snapshot_edges():
-    """v4_grid_obs 边界: 完全窗外的点不消费(覆盖末端早于窗首)/ 覆盖越过窗尾在最后一个栅格桶
-    收口(不越界铺桶)/ 同桶后到的短覆盖点不抢快照(覆盖末端最晚者胜), 速率按覆盖秒加权"""
+def test_v4_grid_obs_direct_mapping_edges():
+    """v4_grid_obs 直映边界(26-11-15-1104 F2 后无权重面): 窗外桶点(链上下文)不消费 /
+    null 点不参与(桶无观测 = null) / 窗内桶点逐键直映(BucketObs 原样装配)。
+    快照竞争(ts 最晚者胜)与逐向豁免已上收 v4_series_points 桶层, 由槽层电池钉住。"""
     g = build_grid("24h", NOW, 30.0)
     first, last = g.first, g.last
     pts = (
-        V4PointEntry(first - 600, 100, 100, 10, 20, w=30),  # 窗外: 覆盖末端 < first
-        V4PointEntry(first, 200, 200, 100, 200, w=30),  # 窗首桶: 覆盖 30s
-        V4PointEntry(first + 10, 300, 300, 111, 222, w=10),  # 同桶后到、覆盖更短
-        V4PointEntry(last, 400, 400, 300, 400, w=120),  # 覆盖越过窗尾
+        V4PointEntry(first - 600, 100, 100, 10, 20, w=30.0),  # 窗外链上下文桶: 不消费
+        V4PointEntry(first, 200, 200, 100, 200, w=30.0),
+        V4PointEntry(last, 400, 400, 300, 400, w=120.0),
+        V4PointEntry(last + 300, 500, 500, 900, 800, w=30.0),  # 窗尾之后(防御直构): 不消费
+        V4PointEntry(first + 30, None, None, None, None, w=0.0),  # null 点: 不参与
     )
     obs = v4_grid_obs(pts, g)
-    assert first - 600 not in obs  # 窗外不消费
-    assert obs[first].dl_rate == 225  # (200x30 + 300x10) / 40
-    assert obs[first].dl_total == 100 and obs[first].up_total == 200  # 覆盖末端最晚者胜(后到短覆盖不抢)
-    assert obs[last].dl_rate == 400 and obs[last].dl_total == 300
-    assert max(obs) == last  # 窗尾之后不铺桶
+    assert first - 600 not in obs and last + 300 not in obs
+    assert first + 30 not in obs  # null 点不参与
+    assert obs[first] == BucketObs(200, 200, 100, 200)
+    assert obs[last] == BucketObs(400, 400, 300, 400)
+    assert max(obs) == last
 
 
-def test_v4_series_points_downstream_w_survives_bucket_merge():
-    """(vsp_75/vsp_120, 高)同桶多记录的覆盖桶宽 w 必须活着进下游: 混桶(z+raw 与 raw+raw)
-    后经 v4_rate_from_totals / v4_grid_obs 消费 —— e[7](w)失守成 None 会在 w <= 0 比较处
-    TypeError(端点 500)。此前池内混桶用例未接下游, 撞不出"""
+def test_v4_series_points_same_bucket_merge_downstream():
+    """(mut-core W2 vsp_75/vsp_120 守阵, F2 改判)同桶多槽(混桶 z+raw / raw+raw)的差分
+    一次算定 + 快照竞争 + 覆盖时长活着进下游 —— 累加器槽位写坏(None)在速率面除法/
+    round 处 TypeError 或值失真。旧「覆盖桶宽 w 并集」语义随 cell 几何退役,
+    w = 覆盖时长(实测对跨合计)。"""
     b = V4Block(
         1000,
         1,
         10,
         20,
         (
-            V4Sample(1, 1, 10, 20),  # @1000.0, w=1, key 999
-            V4ZeroRun(1, 10, 20, dt_ms=400),  # @1000.4, key 1000
-            V4Sample(2, 2, 30, 40, dt_ms=400),  # @1000.8, key 1000: z+raw 混桶(vsp_120 支)
-            V4Sample(30, 40, 300, 400, dt_ms=400),  # @1001.2, key 1001
-            V4Sample(50, 60, 400, 500, dt_ms=400),  # @1001.6, key 1001: raw+raw 同桶(vsp_75 支)
+            V4Sample(1, 1, 100, 100),  # @1000.0 链首
+            V4ZeroRun(1, 100, 100, dt_ms=400),  # z @1000.4: delta 0(快照冻结)
+            V4Sample(2, 2, 300, 300, dt_ms=400),  # @1000.8: 与 z 同桶(混桶): delta 200/0.4s+0.4s
+            V4Sample(30, 40, 400, 400, dt_ms=400),  # @1001.2 -> 桶 1001
+            V4Sample(50, 60, 500, 500, dt_ms=400),  # @1001.6: raw+raw 同桶: delta 200
         ),
     )
-    points = v4_series_points((b, ), 900, 2000)
+    g = WindowGrid("5m", 900, 2000, 1, "raw", _floor_buckets(900, 2000, 1))
+    points = v4_series_points((b, ), g)
     assert [_p(p) for p in points] == [
-        (999, 1, 1, 10, 20),
-        (1000, 2, 2, 30, 40),  # 混桶: raw 优先, z 让位
-        (1001, 40, 50, 400, 500),  # raw+raw: 速率均值 + 最新行快照
+        (1000, 250, 250, 300, 300, 0.8),  # 混桶: (z 前差分 0 + z->raw 200)/0.8s = 250
+        (1001, 250, 250, 500, 500, 0.8),  # raw+raw: (100+100)/0.8s = 250; 快照取 ts 最晚
     ]
-    assert all(p.w == 1 for p in points)  # 覆盖桶宽取最大, 不失守成 None
-    out = v4_rate_from_totals(points)
-    assert [(p.t, p.dl_rate, p.up_rate) for p in out] == [
-        (999, None, None),  # 窗首基线缺失
-        (1000, 20, 20),  # delta 20/20 / w 1
-        (1001, 370, 460),  # delta 370/460 / w 1
-    ]
-    g = WindowGrid("5m", 900, 2000, 1, "raw", tuple(range(900, 2000)))
-    obs = v4_grid_obs(out, g)  # 第二下游(v4_grid_obs 的 p.w <= 0 同判面)
-    assert obs[1001] == BucketObs(370, 460, 400, 500)
+    obs = v4_grid_obs(points, g)  # 下游消费(v4_grid_obs 直映)
+    assert obs[1001] == BucketObs(250, 250, 500, 500)
 
 
 def test_v4_series_points_initial_nrun_mark():
@@ -933,39 +907,50 @@ def test_v4_series_points_initial_nrun_mark():
     程序开块时 qB 断连的合法形态(traffic_sample_mod._append_record「块首 n 游程不开基线,
     3 列 B 无基线块」+「无基线块仅 n 游程合法」)"""
     b = V4Block(1000, 30, None, None, (V4NullRun(3), V4Sample(1, 1, 1, 1, dt_ms=30000)))
-    points = v4_series_points((b, ), 900, 2000)
+    g = WindowGrid("5m", 900, 2000, 30, "raw", _floor_buckets(900, 2000, 30))
+    points = v4_series_points((b, ), g)
     assert [_p(p) for p in points] == [
-        (1000, None, None, None, None),  # 块首 n 游程折叠的单个断连标记(首槽 1000.0)
-        (1060, 1, 1, 1, 1),  # n 终点 1060 + 30: 桶 [1060, 1090)
+        (1000, None, None, None, None, 0.0),  # 块首 n 游程折叠的单个断连标记(首槽 1000.0)
+        (1080, None, None, 1, 1, 0.0),  # r @1090 落格 1080: 标记后无前观测基线 -> 断链 None(快照照记)
     ]
 
 
-def test_v4_grid_obs_up_channel_weighted_mean():
-    """(vgo_73/vgo_76)up 通道覆盖秒加权均值(对称缺口: dl 侧既有断言、up 侧此前无人守)
-    —— 同桶两贡献点的 up 覆盖秒与加权和都必须累加(+=), 赋值变异在均值上显形"""
-    g = build_grid("24h", NOW, 30.0)
+def test_v4_series_points_up_channel_independent_differential():
+    """(vgo_73/vgo_76 改判)up 通道差分独立累加(F2 逐向独立判定与豁免)—— up 有效差分
+    照常派出、up 重置只打该向豁免不波及 dl, 赋值变异在均值上显形"""
+    g = _grid_30s(NOW)  # 桶宽 30(直构; 24h@30s 的 F1 桶宽 180 会把三槽并入一桶)
     b0 = g.buckets[100]
-    pts = (
-        V4PointEntry(b0, 100, 100, 1000, 500, w=30),  # 覆盖 [b0, b0+30): up 30s x 100
-        V4PointEntry(b0 + 10, 0, 300, 1100, 900, w=10),  # 覆盖 [b0+10, b0+20): up 10s x 300
+    blk = V4Block(
+        b0,
+        30,
+        1000,
+        500,
+        (
+            V4Sample(100, 100, 1000, 500),  # 链首
+            V4Sample(100, 100, 1100, 400, dt_ms=30000),  # @b0+30: up 重置(400<500) -> 豁免; dl +100
+            V4Sample(100, 100, 1200, 900, dt_ms=30000),  # @b0+60: 对重置快照差分 dl +100 / up +500
+        ),
     )
+    pts = v4_series_points((blk, ), g)
     obs = v4_grid_obs(pts, g)
-    assert obs[b0] == BucketObs(75, 150, 1000, 500)  # dl (100x30+0x10)/40=75; up (100x30+300x10)/40=150
+    assert obs[b0] == BucketObs(0, 0, 1000, 500)  # 链首 0 线
+    assert obs[b0 + 30] == BucketObs(3, 0, 1100, 400)  # dl 100/30s -> 3; up 重置 -> 0 线(无缝)
+    assert obs[b0 + 60] == BucketObs(3, 17, 1200, 900)  # up 500/30s = 16.7 -> 17(逐向独立恢复)
 
 
 def test_v4_series_points_lookback_boundary_slots_kept():
-    """(vsp_59, 顺手 vsp_60)差分链窗外回看界(_V4_SEAM_LOOKBACK_S)边界槽保留: 覆盖桶末端
-    恰达 t0-86400 的 z 槽照收(「桶末端 >= 回看界」判据) —— 判据错成桶起点(key-w)或退化成
-    <= 会把跨界槽丢出链, 窗首摊配分母失真(池内全用小 epoch 撞不到回看界)"""
+    """(vsp_59, 顺手 vsp_60)差分链窗外回看界(_V4_SEAM_LOOKBACK_S)边界槽保留: 槽 ts 恰达
+    消费下界(grid.t0 - interval - 86400)照收(「ts >= 下界」判据含等号) —— 判据错成 >
+    或退化成 <= 会把边界槽丢出链, 窗首摊配分母失真(池内全用小 epoch 撞不到回看界)"""
     t0 = NOW
     lo = t0 - _V4_SEAM_LOOKBACK_S
-    b = V4Block(lo, 60, 100, 50, (V4ZeroRun(3, 100, 50), V4Sample(2, 2, 300, 150, dt_ms=60000)))
-    points = v4_series_points((b, ), t0, t0 + 3600)
-    assert [(p.t, p.dl_rate, p.up_rate) for p in points] == [
-        (lo - 60, 0, 0),  # 首槽 @lo: key = lo-60, 覆盖末端 = lo 恰达回看界 -> 保留
-        (lo, 0, 0),  # 槽 @lo+60
-        (lo + 60, 0, 0),  # 槽 @lo+120
-        (lo + 120, 2, 2),  # r @lo+180: 桶 [lo+120, lo+180)
+    grid = WindowGrid("24h", t0, t0 + 3600, 60, "raw", _floor_buckets(t0, t0 + 3600, 60))
+    b = V4Block(lo - 60, 60, 100, 50, (V4ZeroRun(2, 100, 50), V4Sample(2, 2, 300, 150, dt_ms=60000)))
+    points = v4_series_points((b, ), grid)
+    assert [_p(p) for p in points] == [
+        (lo - 60, 0, 0, 100, 50, 0.0),  # 首槽 @lo-60 = 消费下界(含等号)照收: 链首 0 线
+        (lo, 0, 0, 100, 50, 60.0),  # 槽 @lo
+        (lo + 60, 3, 2, 300, 150, 60.0),  # r @lo+60: delta(200,100)/60s(span==cov, 不触发陈旧跨度摊配)
     ]
 
 
@@ -975,62 +960,67 @@ def test_v4_series_points_same_t_marks_and_obs_sort_stable():
     TypeError。几何: 亚秒 n 游程折叠标记与块间真空标记落同一整秒 + 同刻观测桶"""
     b1 = V4Block(1000, 30, 1, 1, (V4NullRun(2, dt_ms=600), V4Sample(1, 1, 1, 1, dt_ms=300)))
     b2 = V4Block(2000, 30, 2, 2, (V4Sample(2, 2, 2, 2), ))
-    points = v4_series_points((b1, b2), 900, 3000)
-    assert [(p.t, p.dl_rate, p.w) for p in points] == [
-        (1000, None, 0),  # n 游程折叠标记(首槽 1000.0)
-        (1000, None, 0),  # 块间真空标记(t = 前块游标终值 1000.9 取整)—— 与上标记同刻
-        (1000, 1, 1),  # 同刻观测桶(样本 @1000.9, w=1, key 1000): null 标记排在其前
-        (1970, 2, 30),  # b2 观测点
+    grid = WindowGrid("5m", 900, 3000, 1, "raw", _floor_buckets(900, 3000, 1))
+    points = v4_series_points((b1, b2), grid)
+    assert [_p(p) for p in points] == [
+        (1000, None, None, None, None, 0.0),  # n 游程折叠标记(首槽 1000.0)
+        (1000, None, None, None, None, 0.0),  # 块间真空标记(t = 前块游标终值 1000.9 取整)—— 同刻
+        (1000, None, None, 1, 1, 0.0),  # 同刻观测桶(样本 @1000.9): null 标记排在其前; 标记后无基线 -> None
+        (2000, None, None, 2, 2, 0.0),  # b2 观测: 未观测 ~969s > 60s 停机洞 -> None
     ]
 
 
-def test_v4_grid_obs_break_flag_survives_bucket_second_point():
-    """(vgo_60, 顺手 vgo_62)断链旗必须跨同桶后继点存活(or 累积) —— 断链桶内第二个无缝点
-    不得清旗, 否则断链桶冒充 0 线(issue 26-10-16-0954 语义回退; 池内断链桶皆单点)"""
+def test_v4_series_points_break_flag_survives_bucket_second_point():
+    """(vgo_60, 顺手 vgo_62; F2 桶层改判)断链旗必须跨同桶后继槽存活(or 累积) —— 断链桶内
+    第二槽(逐向豁免: 重置)不得清旗, 否则断链桶冒充 0 线(issue 26-10-16-0954 语义回退)"""
     g = build_grid("24h", NOW, 30.0)
     b0 = g.buckets[100]
-    pts = (
-        V4PointEntry(b0 - 60, 5, 5, 1000, 500, w=30),  # 覆盖 [b0-60, b0-30)
-        V4PointEntry(b0, None, None, 2000, 900, w=1),  # 覆盖起点 b0 > b0-30: 观测缝 -> 断链
-        V4PointEntry(b0 + 1, None, None, 2000, 900, w=1),  # 与前点无缝: broke=False
-    )
-    obs = v4_grid_obs(pts, g)
-    assert obs[b0] == BucketObs(None, None, 2000, 900)  # 断链未知 != 0(后继点不得清旗)
+    blk1 = V4Block(b0 - 100, 30, 1000, 500, (V4Sample(5, 5, 1000, 500), ))
+    blk2 = V4Block(b0, 30, 2000, 900, (V4Sample(9, 9, 2000, 900), V4Sample(9, 9, 1000, 400, dt_ms=10000)))
+    points = v4_series_points((blk1, blk2), g)
+    assert [_p(p) for p in points if p.t == b0] == [(b0, None, None, 1000, 400, 0.0)]
+    obs = v4_grid_obs(points, g)
+    assert obs[b0] == BucketObs(None, None, 1000, 400)  # 断链未知 != 0(后继重置槽不清旗)
+    tot = series_totals_points(obs, g)
+    assert tot[g.buckets.index(b0)] == {"t": b0, "dl": 0, "up": None}  # dl 同值 0; up 回落重置 None
 
 
 def test_v4_series_points_null_mark_at_lookback_boundary_kept():
-    """(vsp_43/vsp_155)null 标记恰在回看下界(_V4_SEAM_LOOKBACK_S)必须发出 —— 下界判据
-    含等号(`null_lo <= t`, 附加条件与最终过滤两处); 变异成 `<` 会吞掉窗首断连标记"""
+    """(vsp_43/vsp_155)null 标记恰在消费下界(_V4_SEAM_LOOKBACK_S 链界)必须发出 —— 下界
+    判据含等号(null_lo <= t), 变异成 < 会吞掉窗首断连标记"""
     t0 = NOW
     lo = t0 - _V4_SEAM_LOOKBACK_S
+    grid = WindowGrid("24h", t0, t0 + 3600, 30, "raw", _floor_buckets(t0, t0 + 3600, 30))
     b = V4Block(lo, 30, None, None, (V4NullRun(3), V4Sample(1, 1, 100, 50, dt_ms=30000)))
-    points = v4_series_points((b, ), t0, t0 + 3600)
-    assert [(p.t, p.dl_rate) for p in points] == [
-        (lo, None),  # n 游程首槽恰在回看下界 -> 断连标记保留
-        (lo + 60, 1),  # n 终点 + 30s: 桶 [lo+60, lo+90)
+    points = v4_series_points((b, ), grid)
+    assert [_p(p) for p in points] == [
+        (lo, None, None, None, None, 0.0),  # n 游程首槽恰在链界 -> 断连标记保留
+        (lo + 90, None, None, 100, 50, 0.0),  # n 终点 lo+90 处 r 槽: 标记后无前观测基线 -> 断链 None
     ]
 
 
 def test_v4_series_points_marks_at_window_end_not_emitted():
-    """(vsp_44/vsp_156)窗尾整秒标记不发出 —— null 槽末槽恰为 t1 时追加条件挡下; 块间真空
-    标记恰为 t1 时由最终过滤挡下(变异成 `<=` 会多出窗外 null 点)"""
+    """(vsp_44/vsp_156)窗尾整秒标记不发出 —— null 槽末槽恰为 t1 时不追加; 块间真空
+    标记恰为 t1 时由界过滤挡下(变异成 <= 会多出窗外 null 点)"""
     t1 = NOW + 3600
     # 前块末槽 @t1: t1-60 首个 n 槽在窗内出标记; 块间真空标记 = prev_chain_end = t1;
     # 后块起点在窗外(只为制造真空标记, 自身观测槽不消费)
     b1 = V4Block(t1 - 60, 30, None, None, (V4NullRun(2, dt_ms=60000), ))
     b2 = V4Block(t1 + 3600, 30, 10, 20, (V4Sample(6, 6, 200, 60), ))
-    points = v4_series_points((b1, b2), NOW, t1)
-    assert [(p.t, p.dl_rate) for p in points] == [
-        (t1 - 60, None),  # 窗内 n 标记; 末槽 t1 与真空标记 t1 均在窗外不发出
+    grid = WindowGrid("5m", NOW, t1, 30, "raw", _floor_buckets(NOW, t1, 30))
+    points = v4_series_points((b1, b2), grid)
+    assert [_p(p) for p in points] == [
+        (t1 - 60, None, None, None, None, 0.0),  # 窗内 n 标记; 末槽 t1 与真空标记 t1 均在窗外不发出
     ]
 
 
 def test_v4_series_points_observed_slot_at_window_end_not_consumed():
-    """(vsp_52)恰在 t1 的观测槽不消费(v2 口径 ts >= t1) —— 变异成 `ts > t1` 会把窗外
+    """(vsp_52)恰在 t1 的观测槽不消费(v2 口径 ts >= t1) —— 变异成 ts > t1 会把窗外
     记录铺成窗尾桶"""
     t1 = NOW + 3600
     b = V4Block(t1, 30, 10, 20, (V4Sample(5, 5, 100, 50), ))
-    assert v4_series_points((b, ), NOW, t1) == ()
+    grid = WindowGrid("5m", NOW, t1, 30, "raw", _floor_buckets(NOW, t1, 30))
+    assert v4_series_points((b, ), grid) == ()
 
 
 def test_build_grid_day_window_midnight_anchors():
@@ -1044,104 +1034,111 @@ def test_build_grid_day_window_midnight_anchors():
         assert g.last == midnight  # 末桶恒为 now 所在本地日界
 
 
-def test_v4_grid_obs_same_end_later_point_wins_snapshot():
-    """(vgo_80)同覆盖末端双点快照取后到者 —— 判据含等号(`cov_end >= a[4]`); 变异成 `>`
-    会保留先到快照(dl/up totals 停在 1000/500)"""
+def test_v4_series_points_snapshot_competition_latest_ts_wins():
+    """(vgo_80 + vsp_95 合钉, F2 桶层改判)同桶快照竞争 = ts 最晚者胜, 同刻后到者优先
+    (判据含等号 s.ts >= e[4]; 变异成 > 会保留先到快照, totals 停在 1000/500)。
+    旧「覆盖末端最晚者胜」随覆盖桶几何退役 —— 竞争键从 ceil(ts) 收敛为实测 ts。"""
     g = build_grid("24h", NOW, 30.0)
     b0 = g.buckets[100]
-    pts = (
-        V4PointEntry(b0, 10, 10, 1000, 500, w=30),  # 覆盖 [b0, b0+30)
-        V4PointEntry(b0 + 10, 20, 20, 2000, 900, w=20),  # 同末端 [b0+10, b0+30): 后到
+    blk = V4Block(
+        b0,
+        30,
+        1000,
+        500,
+        (
+            V4Sample(10, 10, 1000, 500, dt_ms=5000),  # @b0+5
+            V4Sample(20, 20, 2000, 900, dt_ms=5000),  # @b0+10: 快照竞争(更晚 ts)
+            V4Sample(30, 30, 3000, 950, dt_ms=0),  # @b0+10 同刻后到: >= 判据下抢走快照
+        ),
     )
-    obs = v4_grid_obs(pts, g)
-    assert obs[b0] == BucketObs(14, 14, 2000, 900)  # (10x30+20x20)/50=14; 后到快照胜
+    pts = v4_series_points((blk, ), g)
+    # 速率: 同刻对跨 0 不入账(覆盖时长 > 0 判据) -> dl 1000/5s = 200, up 400/5s = 80
+    assert [_p(p) for p in pts] == [(b0, 200, 80, 3000, 950, 5.0)]
 
 
-def test_v4_grid_obs_coverage_end_advance_keeps_latest_snapshot():
-    """(vgo_83)覆盖末端必须推进(`a[4] = cov_end`) —— 变异成写 a[5] 时 a[4] 停滞, 更短的
-    后续覆盖点会把快照抢为己有"""
+# test_v4_grid_obs_coverage_end_advance_keeps_latest_snapshot 已随覆盖桶几何退役(F2):
+# 「覆盖末端推进」的变异守阵由 test_v4_series_points_snapshot_competition_latest_ts_wins
+# 的 ts 竞争判据承接(e[4] = 实测 ts 最晚者)。
+
+
+def test_v4_series_points_broken_bucket_zero_rate_kept_zero():
+    """(vgo_105/vgo_117 改判)断链桶有差分覆盖且速率为 0 时仍是 0 线, 不是 None —— 均值
+    判据看覆盖毫秒(dl_cov/up_cov), 变异成看差分和会把 0 误判成无覆盖, 断链桶冒充缺口"""
     g = build_grid("24h", NOW, 30.0)
     b0 = g.buckets[100]
-    pts = (
-        V4PointEntry(b0, 1, 1, 100, 50, w=10),  # 覆盖末端 b0+10
-        V4PointEntry(b0 + 10, 2, 2, 200, 90, w=20),  # 推进到 b0+30: 快照 200/90
-        V4PointEntry(b0 + 20, 3, 3, 300, 120, w=5),  # 末端 b0+25 < b0+30: 不抢快照
-    )
+    blk1 = V4Block(b0 - 100, 30, 1000, 500, (V4Sample(9, 9, 1000, 500), ))
+    # 恢复槽(停机洞 -> 对豁免)+ 同桶后继空闲槽(delta 0, 有效覆盖)-> 0 线非 None
+    blk2 = V4Block(b0, 30, 2000, 900, (V4Sample(0, 0, 2000, 900), V4Sample(0, 0, 2000, 900, dt_ms=10000)))
+    pts = v4_series_points((blk1, blk2), g)
+    assert [_p(p) for p in pts if p.t == b0] == [(b0, 0, 0, 2000, 900, 10.0)]
     obs = v4_grid_obs(pts, g)
-    assert obs[b0] == BucketObs(2, 2, 200, 90)  # (10+40+15)/35=1.857 -> 2; 快照仍是 200/90
-
-
-def test_v4_grid_obs_broken_bucket_zero_rate_kept_zero():
-    """(vgo_105/vgo_117)断链桶有覆盖且速率为 0 仍是 0 线, 不是 None —— 均值判据看覆盖秒
-    (`a[0]`/`a[2]`), 变异成看加权和(`a[1]`/`a[3]`)会把 0 误判成无覆盖, 断链桶冒充缺口"""
-    g = build_grid("24h", NOW, 30.0)
-    b0 = g.buckets[100]
-    pts = (
-        V4PointEntry(b0 - 60, 9, 9, 1000, 500, w=30),  # 覆盖 [b0-60, b0-30)
-        V4PointEntry(b0, 0, 0, 2000, 900, w=30),  # 有观测缝(断链), 但本桶速率覆盖 30s 且为 0
-    )
-    obs = v4_grid_obs(pts, g)
-    assert obs[b0] == BucketObs(0, 0, 2000, 900)  # 有覆盖 -> 0 线; 快照照记
+    assert obs[b0] == BucketObs(0, 0, 2000, 900)  # 有覆盖(delta 0) -> 0 线; 快照照记
 
 
 # ---------- 覆盖率第三轮 T2b 补测(26-11-05): 窗界/快照竞争复合条件 ----------
 
 
 def test_v4_series_points_stale_slot_below_lookback_not_consumed():
-    """(T2b)P2 回看界外槽不消费(492): 桶起点+覆盖宽 < t0-_V4_SEAM_LOOKBACK_S 的槽直接
-    跳过 —— 差分链只保留回看界内的完整陈旧跨度, 更老的槽不进桶点流; 界内槽照常消费"""
-    stale = V4Slot(1000.5, 1.0, (5, 9, 3000, 4000), False)  # key+w=1001 << t0-86400
+    """(T2b)消费下界外槽不消费(ts < grid.t0 - interval - 86400): 差分链只保留回看界内的
+    完整陈旧跨度, 更老的槽不进桶点流; 界内槽照常消费"""
+    stale = V4Slot(1000.5, 1.0, (5, 9, 3000, 4000), False)  # ts << 消费下界(t0 - 86401)
     fresh = V4Slot(200000.5, 1.0, (6, 10, 5000, 6000), False)
-    points = v4_series_points((), 200000, 200600, tail_slots=(stale, fresh))
-    assert [_p(p) for p in points] == [(200000, 6, 10, 5000, 6000)]
+    grid = WindowGrid("5m", 200000, 200600, 1, "raw", _floor_buckets(200000, 200600, 1))
+    points = v4_series_points((), grid, tail_slots=(stale, fresh))
+    assert [_p(p) for p in points] == [(200000, 0, 0, 5000, 6000, 0.0)]  # 界内槽链首 0 线
 
 
-def test_v4_series_points_same_bucket_second_zero_slot_keeps_first():
-    """(T2b)同桶 z+z: 先到者保留(497->478)—— 第二条 z 槽落进已有桶直接落空, 不覆盖
-    先到快照(z 到 z 桶口径)"""
+def test_v4_series_points_same_bucket_zero_slots_differential_snapshot():
+    """(T2b 改判)同桶 z+z: 差分面对照 totals 链真值(两段独立 z 快照不同值时按差分计 ——
+    真实 z 游程同桶槽快照恒同值, 差分恒 0); 快照统一取 ts 最晚者(旧「z 到 z 桶先到者
+    保留」的 v2 口径随 cell 几何退役, 改判理由: 同桶合并规则单点化, 快照竞争不再分流)"""
     slots = (
         V4Slot(998.5, 1.0, (0, 0, 1000, 2000), True),
-        V4Slot(998.9, 1.0, (0, 0, 9000, 9000), True),  # 更晚但 totals 更大: 不抢
+        V4Slot(998.9, 1.0, (0, 0, 9000, 9000), True),  # 病理两段 z( totals 不同值)
     )
-    points = v4_series_points((), 900, 2000, tail_slots=slots)
-    assert [(p.t, p.dl_rate, p.up_rate, p.dl_total, p.up_total) for p in points] == [(998, 0, 0, 1000, 2000)]
+    grid = WindowGrid("5m", 900, 2000, 1, "raw", _floor_buckets(900, 2000, 1))
+    points = v4_series_points((), grid, tail_slots=slots)
+    assert [_p(p) for p in points] == [(998, 20000, 17500, 9000, 9000, 0.4)]  # 差分 8000/7000 ÷ 0.4s
 
 
 def test_v4_series_points_same_bucket_out_of_order_ts_keeps_latest_snapshot():
-    """(T2b)同桶 raw+raw 且后到槽 ts 更早(乱序): 速率照均值, 快照保持实测更晚的先到者
-    (503->478)—— 快照竞争判据是 ts 不是到达序"""
+    """(T2b)同桶 raw+raw 且后到槽 ts 更早(乱序): 快照保持实测更晚的先到者(503->478)
+    —— 快照竞争判据是 ts 不是到达序; 负对跨(乱序)不进速率面(覆盖时长 > 0 判据)"""
     slots = (
         V4Slot(998.9, 1.0, (5, 9, 3000, 4000), False),
         V4Slot(998.5, 1.0, (15, 21, 4000, 5000), False),  # 后到但 ts 早: 不抢快照
     )
-    points = v4_series_points((), 900, 2000, tail_slots=slots)
-    assert [(p.t, p.dl_rate, p.up_rate, p.dl_total, p.up_total) for p in points] == [(998, 10, 15, 3000, 4000)]
+    grid = WindowGrid("5m", 900, 2000, 1, "raw", _floor_buckets(900, 2000, 1))
+    points = v4_series_points((), grid, tail_slots=slots)
+    assert [_p(p) for p in points] == [(998, 0, 0, 3000, 4000, 0.0)]
 
 
-def test_v4_totals_points_marked_run_not_zero_shape_drops_delta():
-    """(T2b)既有断链语义(614->615): null 标记后的台阶但锚点后游程非全 z 形(有真速率记录)
-    -> 不摊配, delta=None —— 摊配的 z 形签名是必要条件, marked 只是或支之一"""
-    pts = (
-        V4PointEntry(1000, 10, 10, 1000, 1000, w=30),
-        V4PointEntry(1030, 5, 5, 1000, 1000, w=30),  # 等值游程延续(速率非零 -> 非 z 形)
-        V4PointEntry(1060, None, None, None, None, w=0),  # null 点: marked 立
-        V4PointEntry(1090, 20, 20, 1100, 1100, w=30),  # 台阶 100, 游程非 z 形 -> 不摊配
-    )
-    totals = v4_totals_points(pts)
-    assert [(e.t, e.dl, e.up) for e in totals] == [
-        (1000, None, None),  # 窗首基线缺失
-        (1030, 0, 0),  # 等值游程
-        (1060, None, None),  # null 点
-        (1090, None, None),  # 标记后基线缺失(不摊配)
+def test_v4_series_points_marked_run_not_zero_shape_drops_delta():
+    """(T2b 改判槽层)既有断链语义(614->615): null 标记后的台阶但锚点后游程非 z 形
+    (真速率记录)-> 不摊配, 基线缺失 None —— 摊配的 z 形签名是必要条件, marked 只是
+    或支之一"""
+    blk1 = V4Block(1000, 30, 1000, 1000, (V4Sample(10, 10, 1000, 1000), V4Sample(10, 10, 1000, 1000, dt_ms=30000)))
+    blk2 = V4Block(1120, 30, 1100, 1100, (V4Sample(20, 20, 1100, 1100), ))  # 块间真空标记 + 台阶
+    grid = WindowGrid("5m", 900, 2000, 30, "raw", _floor_buckets(900, 2000, 30))
+    points = v4_series_points((blk1, blk2), grid)
+    assert [_p(p) for p in points] == [
+        (990, 0, 0, 1000, 1000, 0.0),  # 链首 0 线(等值 r 游程锚点, @1000 落格 990)
+        (1020, 0, 0, 1000, 1000, 30.0),  # 等值 r 游程: delta 0(速率非零 -> 非 z 形签名)
+        (1030, None, None, None, None, 0.0),  # 块间真空标记(t = 1030)
+        (1110, None, None, 1100, 1100, 0.0),  # 标记后台阶: 游程非 z 形不摊配 -> 基线缺失 None
     ]
 
 
-def test_v4_grid_obs_wide_point_before_window_start_partial_overlap():
-    """(T2b)宽桶跨窗首(713->729): 覆盖起点在栅格窗前的点, 首个对齐迭代 b < first 不消费,
-    落窗内的部分按重叠秒照常展开 —— 窗外桶不凭空出现"""
+def test_v4_series_points_pre_window_chain_context_filtered_from_obs():
+    """(T2b 改判)窗首前的链上下文桶: 点位归属下窗前槽落窗前桶(照常入流, 供差分基线),
+    v4_grid_obs 窗外桶不消费 —— 响应桶集恒 == 与栅格桶集的交集, 窗外桶不凭空出现。
+    旧「宽桶跨窗首部分重叠展开」随覆盖加权桥接退役: 窗前样本的差分按端点归属记在
+    窗前桶, 首个窗内桶的速率由(窗前末槽 -> 窗内首槽)对给出(D3 种子语义)。"""
     g = build_grid("24h", NOW, 30.0)
     first = g.first
-    pts = (V4PointEntry(first - 5, 10, 10, 1000, 500, w=30), )  # 覆盖 [first-5, first+25)
+    blk = V4Block(first - 30, 30, 1000, 500, (V4Sample(10, 10, 1000, 500), V4Sample(10, 10, 1600, 800, dt_ms=30000)))
+    pts = v4_series_points((blk, ), g)
+    assert [p.t for p in pts] == [first - 180, first]  # 窗前槽 @first-30 落窗前桶(桶宽 180, F1)入流
     obs = v4_grid_obs(pts, g)
-    assert set(obs) == {first}, "窗外对齐迭代(b < first)不得出桶"
-    assert obs[first] == BucketObs(10, 10, 1000, 500)  # 重叠 25s 全单速: 均值 10, 快照照记
+    assert set(obs) == {first}, "窗外链上下文桶不得出观测"
+    assert obs[first] == BucketObs(20, 10, 1600, 800)  # 窗前基线 -> 首桶 delta(600,300)/30s

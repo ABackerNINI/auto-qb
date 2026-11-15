@@ -60,7 +60,7 @@ class V4Slot:
     is_hold = True 表示活尾延伸合成槽(v4_live_tail_slots 的 holding 槽, 计划
     26-11-14-1313 F4)—— 非「采样观测」, 是「末次观测仍有效」的持有面: 消费面
     (v4_series_points)对它豁免 ts >= t1 窗尾过滤(持有槽 ts = now 恒在窗界上),
-    速率面(v4_rate_from_totals)对它持有上一观测桶点速率而非 delta/w 重写。磁盘槽
+    速率面持有上一非持有观测桶速率(不进差分面)。磁盘槽
     与活尾的采样/游程槽恒 False(缺省值, 构造面无需感知)。
     """
 
@@ -175,10 +175,9 @@ def v4_block_agg_totals(block: "V4Block") -> tuple:
     return tuple(out)
 
 
-def v4_bucket_width_s(dt_s: float) -> int:
-    """逐记录桶宽(秒): max(1, ceil(有效dt))(§02.3/§05.1 —— S3 归桶的纯函数层)"""
-    return max(1, math.ceil(dt_s))
-
+# v4_bucket_width_s(逐记录覆盖桶宽 max(1, ceil(有效dt)))已随 26-11-15-1104 F2 栅格单几何
+# 退役: 点位归属归桶下槽不再自带覆盖桶宽, 桶宽单点在 traffic_grid.build_grid(raw = 采样
+# 整倍)。dt_s 仍为槽层的有效间隔(§02.3), 供读侧差分对跨的未观测秒判据消费。
 
 # ---------- 活尾快照(S6 验收追加, 2026-10-05): 写侧未落盘状态 -> 读侧续链 ----------
 
@@ -259,8 +258,8 @@ def v4_live_tail_slots(tail: LiveTail, now: Optional[float] = None, max_gap_s: O
       obs = None 不延伸。
     诚实边界: 活尾延伸仅在采样链活跃且间隙有界时持有末次观测速率, 停滞/断连不延伸
     —— 间隙过界即保持原槽序(null 诚实断线, 不造数据)。holding 槽 totals = 末次快照
-    同值 -> 下游 delta 链 0 增量(累计面不造字节); 速率面由 v4_rate_from_totals 的
-    is_hold 分支持有上一观测桶点速率(不按 delta/w 重写为 0)。
+    同值 -> 下游 delta 链 0 增量(累计面不造字节); 速率面由 v4_series_points 的
+    is_hold 分支持有上一非持有观测桶速率(不进差分面)。
     向后兼容面: now=None(缺省)不延伸, 输出与无参形态逐槽恒等; gap <= 0(now 未超出
     链端/时钟回拨)不延伸。now 非 None 时须为有限数值, max_gap_s 须为正有限数值
     (违者 ValueError, fail-fast)。"""

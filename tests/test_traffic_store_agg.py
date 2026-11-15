@@ -4,7 +4,6 @@
 handler 接线(S2a, v4 写侧):
 
 v4 纯函数区(B1 立并于批 2 接线, plan 26-10-05-2200 §01):
-- test_v4_bucket_width_effective_dt: 桶宽 max(1, ceil(有效dt)) 各形态
 - test_v4_agg_roundtrip_and_legacy_8col: agg.dat roundtrip + 8 列旧行兜底 cov_s=3600(防御性保留)
 - test_v4_agg_parse_cov_floor_one_bad_line: 解析侧 cov_s 下限 1(issue 26-10-30-0622, 与写侧
   v4_hour_agg 契约对齐)—— cov_s=0/-1 按坏行整行跳过, cov_s=1 边界合法, 8 列旧行兜底不受影响,
@@ -102,7 +101,6 @@ from auto_qb.core.traffic_store import (
     v4_block_agg_totals,
     v4_block_gap_continuous,
     v4_block_slots,
-    v4_bucket_width_s,
     v4_date_str_epoch,
     v4_day_epoch,
     v4_day_file_date,
@@ -137,27 +135,6 @@ from traffic_store_support import (
     _agg_row,
     _v4_day_text,
 )
-
-
-def test_v4_bucket_width_effective_dt():
-    """桶宽纯函数(§02.3): 逐记录 max(1, ceil(有效dt)); 有效dt = 显式 dt / 缺省 interval /
-    游程均摊 span/run_len"""
-    assert v4_bucket_width_s(0.25) == 1  # 亚秒 -> 下限 1
-    assert v4_bucket_width_s(30.0) == 30
-    assert v4_bucket_width_s(30.5) == 31  # 显式 dt 30500ms -> ceil
-    assert v4_bucket_width_s(86.4) == 87
-    b = V4Block(
-        start_epoch=1000,
-        interval_s=30,
-        dl_base=1,
-        up_base=1,
-        records=(
-            V4Sample(1, 1, 1, 1), V4Sample(2, 2, 2, 2, dt_ms=30500), V4ZeroRun(3, 5, 6, dt_ms=90000), V4NullRun(2)
-        ),
-    )
-    slots = v4_block_slots(b)
-    # r0 缺省 30 / r1 显式 31 / z 均摊 90/3=30 x3 / n 缺省 30 x2(块首 r 槽宽 = 标称 interval)
-    assert [v4_bucket_width_s(s.dt_s) for s in slots] == [30, 31, 30, 30, 30, 30, 30]
 
 
 def test_v4_agg_roundtrip_and_legacy_8col():

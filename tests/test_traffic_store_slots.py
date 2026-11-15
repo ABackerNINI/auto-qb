@@ -115,7 +115,6 @@ from auto_qb.core.traffic_store import (
     v4_block_agg_totals,
     v4_block_gap_continuous,
     v4_block_slots,
-    v4_bucket_width_s,
     v4_date_str_epoch,
     v4_day_epoch,
     v4_day_file_date,

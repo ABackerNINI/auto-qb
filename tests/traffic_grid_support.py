@@ -25,10 +25,8 @@ from auto_qb.core.traffic_grid import (
     v4_agg_obs_live,
     v4_earliest_row_ts,
     v4_grid_obs,
-    v4_rate_from_totals,
     v4_series_points,
     v4_series_slots,
-    v4_totals_points,
     _V4_SEAM_LOOKBACK_S,
     _V4_SEAM_NULL_S,
     _V4_SEAM_SPREAD_MIN_S,
@@ -62,5 +60,5 @@ NOW = 1_800_000_000
 
 
 def _p(entry):
-    """V4PointEntry -> 可比元组"""
-    return (entry.t, entry.dl_rate, entry.up_rate, entry.dl_total, entry.up_total)
+    """V4PointEntry -> 可比元组(F2 后含覆盖时长 w —— 桶速率的分母面一并入钉)"""
+    return (entry.t, entry.dl_rate, entry.up_rate, entry.dl_total, entry.up_total, entry.w)
