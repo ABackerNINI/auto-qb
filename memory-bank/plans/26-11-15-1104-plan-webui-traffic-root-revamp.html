@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>流量图读侧根修与毫秒级响应: 栅格单几何化/桶宽对齐采样/增量缓存/补尾格/环境层解绑/轮询节奏统一</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="webui-traffic-root-revamp">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-15-1104">
+<meta name="doc-updated" content="26-11-15-1139">
+<meta name="doc-refs" content="">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: webui-traffic-root-revamp</div>
+<h1>流量图读侧根修与毫秒级响应: 栅格单几何化/桶宽对齐采样/增量缓存/补尾格/环境层解绑/轮询节奏统一</h1>
+<p class="lede">本篇只回答: 流量图复测报障的四症状(x 轴抖动 / 曲线不总落检查线 / 粒子时有时无 / 每拍尾段失真)与打开停滞 ~10s, 加上用户三项新要求(桶宽对齐采样 / 长窗 ≤500 桶 / 毫秒级响应), 怎么一次修到位——结论是根修(raw 段窗栅格单几何化 + 读侧增量缓存), 不再打补丁。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-15-1104 · <b>doc-updated</b> 26-11-15-1139 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 用户复测报障(26-11-15, 四症状 + 打开停滞) + 三项新要求(桶宽对齐采样 / 长窗 ≤500 桶 / 毫秒级响应) + 本轮只读取证(代码静态验证 / uPlot vendor 对照 / 生产同构仿真与基准实测) + grilling 三轮七问拍板 D1-D7 + 前序计划 <a href="26-11-12-1139-plan-webui-traffic-beat-motion.html">26-11-12-1139</a> / <a href="26-11-14-1313-plan-webui-traffic-beat-fidelity.html">26-11-14-1313</a>
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<p><b>背景。</b> 26-11-12-1139(节拍动效)与 26-11-14-1313(复刻矫正 F1-F6)交付后, 用户复测: x 轴抖动仍在、曲线不总落检查线, 新发现粒子时有时无、每拍更新曲线后几段(数据失真)、打开流量图停滞 ~10s; 并追问「1/5/30 分钟的桶宽能否对齐采样」「流量图打了很多补丁, 架构上是否有根本缺陷」, 另要求长窗最大 500 桶、毫秒级响应。本轮取证结论: 引擎动效面(uPlot 封装/节拍调度)逐环节静态验证无架构缺陷, 坏的是<b>读侧数据面的两个架构级根缺陷</b>(§02), 四症状全部是它们的投影——继续打补丁只会再加特例。</p>
+<p><b>目标(做到什么程度算成) —— 验收判据 A1-A8, 全绿收口:</b></p>
+<table>
+<tr><th>#</th><th>判据</th><th>量法</th></tr>
+<tr><td>A1</td><td>稳态恒速仿真: 相邻两拍 payload 尾部桶值恒定不翻转; 每拍仅尾 1-2 段因新样本合理收敛(区间平均语义固有行为)</td><td>生产同构仿真逐拍差分(本轮已建, 判据 = 变化桶数 ≤2 且值不振荡)</td></tr>
+<tr><td>A2</td><td>左移全程曲线左端无瞬移: 判定帧与前一收敛帧的曲线左端像素位连续; 非整倍窗(24h)桶数相位翻动拍(497↔498)不出现瞬跳(照常播 L0)</td><td>帧采样(e2e 探针, 1m/5m 窗 + 24h 非整倍窗)</td></tr>
+<tr><td>A3</td><td>全窗(含 24h 默认窗)稳态流量每拍出 Lv.1 反馈(扫描/粒子/环)——26-11-14-1313 D1 拍板贯彻到全窗</td><td>e2e: 24h 窗零变化拍断言 fx 生成</td></tr>
+<tr><td>A4</td><td>打开流量图数据上屏: 温态 p95 &lt;100ms(全局/单种)、组图 M≤30 温态 p95 &lt;150ms; 冷态豁免分窗型: 全局/单种冷态(进程首次/裁剪后首拉)&lt;1.5s 一次性, 组图冷态豁免但记录实测(上界=每成员冷算×M 一次性, S2 基准落数字)——温态 p95 是组图硬线</td><td>基准用例(温态/冷态/组图三面实测)</td></tr>
+<tr><td>A5</td><td>采样器活跃时曲线终点恒落判定线(尾桶不再间歇 null); 真缺口(停滞/断连)仍诚实断线</td><td>仿真: 活跃/停滞两态分别断言(新几何下复验)</td></tr>
+<tr><td>A6</td><td>raw 段窗桶数恒 ≤500; 1m/5m 桶宽恰等采样间隔(si=1.5s), 全部 raw 窗桶宽为采样整数倍</td><td>单元电池: 全窗桶宽/桶数表钉</td></tr>
+<tr><td>A7</td><td>轮询节奏 = 采样间隔全窗统一; 面板「拍/周期」与「采样」两行同源一致</td><td>e2e 文案断言 + _qbPollMs 单元</td></tr>
+<tr><td>A8</td><td>存量 v4 天文件/agg.dat 零迁移直接可读; agg 段窗(3d+)行为不变</td><td>真实格式天文件回归电池 + 3d+ e2e</td></tr>
+</table>
+<p><b>设计不变量(违反即破坏设计):</b></p>
+<ul>
+<li><b>诚实性</b>: holding 语义承袭 26-11-14-1313 F4——尾桶=持有末次观测速率, 停滞/断连不延伸, 不造数据。</li>
+<li><b>封口桶不可变(新, 缓存正确性根基)</b>: 点位归属归桶下, 已封口桶的值只依赖已落定样本, 永不重写——桶值缓存因此恒安全。</li>
+<li><b>存储零迁移</b>: 只动读侧几何与缓存, v4 天文件/agg.dat 格式一行不动。</li>
+<li><b>真值面零污染</b>: 补尾格(F5)是真实历史观测的显示面延寿(旧首桶多显示一拍), 不造数。</li>
+<li><b>承袭不放松</b>: 语义色守恒(I10)/背景恒静态(G5)/I9 视觉预算/reduced-motion 强退(I7)/fail-fast 全部承袭 26-11-12-1139 与 26-11-14-1313。</li>
+</ul>
+
+<h2><span class="no">§02</span>现状与痛点(架构根缺陷 × 症状实证)</h2>
+<p><b>根缺陷一: 双几何系统。</b> 桶点 cell(ceil 锚定、宽=ceil(dt), <code>traffic_grid.py:520</code>)与响应栅格桶(floor 对齐、宽=<code>max(ceil(si), ceil(span/2880))</code>, <code>traffic_grid.py:172</code>)是两套不相干的几何, 中间靠「覆盖秒加权」桥接(<code>v4_grid_obs</code>)。1.5s 采样被 ceil 成 2s 桶(2 不是 1.5 的整倍)→ 样本槽与栅格桶永远错位 → 每个补丁都在桥接层加特例, 每个特例又造新相位依赖。</p>
+<p><b>根缺陷二: 速率语义双轨。</b> 槽层直采瞬时率 → <code>v4_rate_from_totals</code>(<code>traffic_grid.py:658-697</code>)在桶层按 delta/w 重写——几何每错位一次重写一次, holding/z-run/合并全要特例。F3(floor+1)与 F4(holding)两个补丁正是打在这两层上, 又长出 G-A。</p>
+<table>
+<tr><th>#</th><th>症状</th><th>根因(代码事实)</th><th>实证(本轮)</th></tr>
+<tr><td>G-A</td><td>每拍更新曲线后几段(数据失真)</td><td>26-11-14-1313 F4 holding 槽(ts=now, w=ceil(gap))的 cell 键 <code>ceil(now)-w</code> 与末样本 cell 键随轮询相位<b>时而碰撞合并、时而各自成格</b>; 碰撞时合并分支抬覆盖宽(<code>traffic_grid.py:527-529</code>)且差分基线重根 → delta/w 重写产出被稀释/翻转; 相位逐拍变 → 翻转逐拍发生</td><td>仿真(1m 窗, 稳态恒速 100000 B/s): 每拍翻转尾部 2 段, 38889↔50000(真值 100000; 稀释 39-50%, 逐拍摆幅 22%), 同批时间桶连续多拍反复翻转</td></tr>
+<tr><td>G-B</td><td>每次左移后 x 轴瞬间抖动</td><td><b>摆回固有左缺口瞬移</b>: 收敛帧 auto x range 精确=[xs[0], xs[n-1]](vendor xn() 无 padding), 旧曲线贴左缘; 下一拍判定帧 setData 换新数据(首点右移一格)+ 同帧摆回旧视图 → 新数据左缘留一格空隙 → 曲线左端同帧从 0px 跳进一格再随 L0 滑回(<code>qb_traffic_chart.js:3134-3137, 2735-2738</code>)。F3 修的是 rewin/网格 churn(已修好: 1.5s 采样下全 13 档窗 n 恒定), 够不到这里</td><td>1m 窗每拍左端跳 ≈25px; 叠加收敛帧 tick 换字(:2935)与 G-A 尾段翻转同帧上屏, 合成「一瞬间抖动」</td></tr>
+<tr><td>G-C</td><td>粒子时有时无</td><td>fx 生成被「零变化拍早退门」挡住(<code>qb_traffic_chart.js:2701-2710</code>): 需 <code>needsShift||needsTail</code> 才走到 spawn。默认窗 24h(<code>:127</code>) cellPx≈0.28px&lt;0.75 阈值(:621) → needsShift 恒 false; 稳态尾值不变 → needsTail false → 整拍静默。26-11-14-1313 F1 恒 Lv.1 在该门<b>之后</b>, 救不了; 另有尾桶 null 拍(停滞&gt;bound 时 26-11-14-1313 F4 不延伸)→ lead null</td><td>24h 仿真: 稳态尾桶值恒 50000 不变 → 每拍全被门 1 挡掉; 速率漂移拍才出现 = 「时有无」</td></tr>
+<tr><td>G-D</td><td>打开流量图停滞 ~10s</td><td>读侧每请求全量重走: 组图每成员各跑一遍完整管线(<code>traffic_qb.py:40</code>「组聚合仍每请求现算」); 全局窗每请求遍历整天文件全槽位; 冷开骨架首拍被 arm 成 30s fallback(<code>:1340-1341</code> 先 load 后 start, <code>polling.js</code> startPoll 无立即首拍, <code>_QB_POLL_FALLBACK_MS=30000</code> :121)</td><td>基准实测(5.76 万行/天 ≈2.4MB): 单系列 24h 窗 ~830ms(解析 213+归桶 342+重写 224); 组图 30 成员 25.6s(853ms/成员); 冷开首拍间隔 30s</td></tr>
+<tr><td>G-E</td><td>长窗 2700+ 桶难分辨</td><td>MAX_RAW_BUCKETS=2880(<code>traffic_grid.py:106</code>) → 12h/24h 2881 桶、3h/6h 2701 桶, 800px 绘图区 ≈0.28px/桶</td><td>用户目检 + 桶数核算(1.5s 采样全窗恒整倍)</td></tr>
+<tr><td>G-F</td><td>轮询=桶宽的节律错配</td><td><code>_qbPollMs</code> 读 meta.interval_s(<code>:1823-1828</code>)——桶宽加宽后长窗一拍越来越迟钝(24h 现 30s, 根修后 174s)</td><td>毫秒级后端能力与 30s~174s 节律完全错配</td></tr>
+</table>
+
+<h2><span class="no">§03</span>方案总览</h2>
+<p>主线: <b>根修(raw 段窗栅格单几何化)+ 读侧增量缓存</b>一体立项(毫秒级是根修的收益面, 不是独立工程), 前端两修(P1 补尾格 / P3 解绑)与两小件(轮询节奏 / 冷开首拍)随批落地。拍板编号见 §06。</p>
+<table>
+<tr><th>#</th><th>修复</th><th>落点</th><th>拍板</th></tr>
+<tr><td>F1</td><td><b>桶宽 = 采样间隔整倍且 ≤500 桶</b>: raw 分支 interval = si × k, k = ceil(span/(500×si))(替换 max(ceil(si), ceil(span/2880))); MAX_RAW_BUCKETS 语义改桶数上限 2880→500。各窗落位: 1m→1.5s(恒 41 桶) / 5m→1.5s(恒 201) / 30m→4.5s(恒 401) / 3h→22.5s(恒 481) / 6h→43.5s / 12h→87s / 24h→174s——后三窗 span/B=496.55 非整倍, floor+1 下桶数 497-498 随轮询相位波动(上限恒 ≤500; 整倍窗桶数恒定), 桶数表钉「整倍窗单值 + 非整倍窗区间」</td><td><code>core/traffic_grid.py</code> build_grid + WindowGrid.interval int→float</td><td>D1/D7</td></tr>
+<tr><td>F2</td><td><b>点位归属归桶(栅格单几何化)</b>: 样本按 floor(ts/B)×B 点位归属(落哪格算哪格), 桶速率 = 桶内样本差分和 ÷ 覆盖时长, 一次算定不重写; cell ceil-锚定几何与覆盖加权桥接层(<code>v4_grid_obs</code> 的摊配面)退役; z 槽桶=0, 真空/接缝判读承袭。<b>有界空桶持有回填(dt 修正跳变定案)</b>: 写侧累积漂移 &gt;250ms 时单条记录实测 dt 跳变(<code>traffic_sample_mod.py:546-549</code> DRIFT_TOL_MS), 恰等桶宽下以 1/6~1/3 概率跳过一桶——活跃链内空桶且前后观测间隙 ≤ max(B, si)×2 时按<b>持有语义回填前桶速率</b>(与 F3 尾桶 holding 同一条规则, 「最新已知状态仍有效」; 字节守恒由 totals 链保证——漏采区间字节含在后继样本快照里, held 比 null 更诚实); 真停滞/断连(间隙过界)保持 null。空样本桶=null 收窄为「间隙过界的空桶」</td><td><code>core/traffic_grid.py</code> v4_series_points / v4_rate_from_totals 消费链</td><td>D1</td></tr>
+<tr><td>F3</td><td><b>holding 槽新几何重定义</b>: 尾桶=进行中桶, 速率=持有末次观测速率(held); 停滞/断连不延伸(诚实边界承袭); 新归桶下 holding 与样本槽天然同格律, 合并歧义随双几何一起消失</td><td><code>core/traffic_store_codec.py</code> + <code>traffic_grid.py</code></td><td>D1</td></tr>
+<tr><td>F4</td><td><b>读侧增量缓存(毫秒级主工程)</b>: ①天文件增量解析(V4DayCache 记 offset, 追加只解析新增字节 ~ms 级; size 缩小=裁剪重写 → 全量重解析) ②桶值单调缓存(封口桶不可变 → 按 系列×窗 按需驻留 LRU, 命中恒安全; 每请求只算尾 1-2 桶) ③组图 Σ 成员缓存(成员桶值查表 + 尾桶现算, M×~1ms); last-good 竞态兜底保留</td><td><code>core/traffic_store.py</code> V4DayCache + <code>webui/server/traffic_qb.py</code></td><td>D1/D5</td></tr>
+<tr><td>F5</td><td><b>判定帧补尾格 + rewin 判据改造</b>: 判定帧把上一拍首桶点(真实历史观测)补进数据头部再摆回, 滑动期间曲线左端贴住左缘; 收敛后该点自然落到视图外不可见, 下一拍重复。<b>rewin 判据从裸点数比较改为「窗起点 xs[0] + 桶宽 step 变化才算跨窗」</b>(<code>qb_traffic_chart.js:2670</code> 现为 <code>st.n !== n</code>)——非整倍窗(6h/12h/24h)floor+1 的桶数相位翻动 497↔498 与本修复补点的 +1 都不再误判成跨窗换档, 翻动拍照常播 L0 滑动(消灭「周期性瞬跳」这最后一个同族抖动源); 桶边仍钉绝对时刻倍数(F2 点位归属与封口桶不可变依赖 floor 对齐, 不改窗首锚定)</td><td><code>qb_traffic_chart.js</code> 判定帧/收敛帧 + rewin 判据单点</td><td>D2</td></tr>
+<tr><td>F6</td><td><b>环境层解绑</b>: fx spawn 判据改「lead level ≥1 即生成」, 与 needsShift||needsTail 早退门解绑; L0/L1 数据面零 rAF 优化保留(零变化拍照旧跳数据动画, 只跑 fx 的 impact 窗)</td><td><code>qb_traffic_chart.js:2701-2710</code></td><td>D3</td></tr>
+<tr><td>F7</td><td><b>轮询节奏 = 采样间隔全窗统一</b>: _qbPollMs 改读 meta.sample_interval_s(26-11-14-1313 F6 已有此键, 后端零改); 「低频轮询=桶宽」旧口径正式反转</td><td><code>qb_traffic_chart.js:1823-1828</code></td><td>D6</td></tr>
+<tr><td>F8</td><td><b>冷开首拍立即</b>: _qbPollStart 首拍立即执行(与开门直拉经 loading 互斥兜底, 不双发); 冷开 30s 干等消失</td><td><code>polling.js</code> startPoll + <code>qb_traffic_chart.js</code> _qbPollStart</td><td>D4</td></tr>
+</table>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+<table>
+<tr><th>期</th><th>步骤</th><th>内容</th><th>验收</th></tr>
+<tr><td>S1</td><td>S1a 桶宽规则</td><td>F1: build_grid raw 分支 interval=si×k + WindowGrid.interval int→float + MAX_RAW_BUCKETS 2880→500; <b>先 grep 盘点钉旧口径(ceil/n 计算/桶宽值)的既有电池</b>逐条改判, 用例注释记录反转理由(双几何实证); meta.interval_s 值变化的前端消费面核查(_qbPointsToData 等距重建/tooltip)</td><td>A6(全窗桶宽/桶数表钉); 电池绿</td></tr>
+<tr><td></td><td>S1b 归桶语义</td><td>F2+F3: v4_series_points 点位归属归桶 + 桶层一次速率计算 + holding 新定义 + <b>有界空桶持有回填(dt 修正跳变定案, 见 F2)</b>; z-run/n-run/块间真空/接缝判读承袭; 真实格式天文件回归电池(A8)</td><td>A1(稳态尾值恒定)/A5(落线+诚实断线)/A8; 双口径差分对照(旧覆盖加权 vs 新点位归属, 差异仅在桶边界 ±1 样本份额内); A1/A5 仿真流<b>必须含漂移与 dt 修正跳变</b>(DRIFT_TOL_MS 量级), 断言有界空桶 held 回填、无伪断线</td></tr>
+<tr><td>S2</td><td>读侧增量缓存</td><td>F4: V4DayCache 增量解析(offset/size 缩小全量重解析/撕裂尾) + 桶值单调缓存(系列×窗 LRU 按需驻留) + 组图 Σ 成员缓存 + last-good 保留; 基准用例三面(温态/冷态/组图 M=30)</td><td>A4(温态 p95 &lt;100ms / 组图 &lt;150ms / 冷态 &lt;1.5s 一次性)</td></tr>
+<tr><td>S3</td><td>前端动效与轮询</td><td>F5 补尾格(判定帧/收敛帧/四同步点复核)+ rewin 判据改造(点数比较→窗起点+step, 电池钉: 相位翻动拍 497↔498 不 rewin、补点拍不 rewin、真换窗仍 rewin) + F6 环境层解绑 + F7 轮询节奏 + F8 冷开首拍; traffic-fx-frames 帧探针复核(新桶宽下 L0 连续性)</td><td>A2(帧采样 1m/5m/24h 三窗)/A3(24h 窗 fx e2e)/A7(文案断言)</td></tr>
+<tr><td>S4</td><td>回归与基线</td><td>traffic-gap-zones / seam / drawer 既有 e2e 回归 + A1-A8 专项 + test.full 全量 + 新基线切片</td><td>全量绿 + A1-A8 全过</td></tr>
+<tr><td>S5</td><td>回写收尾</td><td>conventions/webui.md 附件(webui-traffic-beat.md)口径更新(单几何/桶宽表/轮询节奏/缓存架构) + 前序计划 26-11-12-1139 / 26-11-14-1313 §11 补 R 行指链 + 分批评审(code-review skill) + kb.wrap / kb.new task</td><td>评审零 actionable + 指链双向</td></tr>
+</table>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p>无——grilling 三轮七问已全部拍板(§06)。范围边界两条随 D7 记录: 30d(hour 段, 721 桶)不在本轮(用户「2700 多桶」指 raw 长窗; 若也要压 500 另案, hour 段桶宽恒 3600 是 agg 行语义); 缓存逐出/内存预算的实现细节属计划内 agent 裁量(S2 落地时给数字)。</p>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+<tr><th>#</th><th>日期</th><th>结论</th></tr>
+<tr><td>D1</td><td>26-11-15</td><td>架构 = 根修(raw 段窗栅格单几何化: 桶宽=采样整倍 ≤500 桶 + 点位归属归桶)+ 读侧增量缓存(增量解析/桶值单调缓存/组图 Σ)一体立项; 用户追问「桶宽能否对齐采样」「架构是否有根本缺陷」+ 要求毫秒级(「其余按推荐」确认)。备选「只根修不做缓存」「维持补丁修」否决——毫秒级达不到</td></tr>
+<tr><td>D2</td><td>26-11-15</td><td>P1 修复 = 判定帧补尾格(补上一拍首桶点, 真实观测不造数); 备选「只摆回半格」「放弃摆回」「接受现状」否决</td></tr>
+<tr><td>D3</td><td>26-11-15</td><td>P3 修复 = 环境层与零变化拍早退门解绑(lead level ≥1 即 spawn), 26-11-14-1313 D1 拍板贯彻到全窗; 备选「调 cellPx 阈值」「现状不动」否决</td></tr>
+<tr><td>D4</td><td>26-11-15</td><td>冷开首拍立即(骨架首拍不再 arm 成 30s fallback); 天缓存预算快赢被 F4 增量缓存取代</td></tr>
+<tr><td>D5</td><td>26-11-15</td><td>毫秒级验收口径: 温态 p95 &lt;100ms(全局/单种)、组图 M≤30 &lt;150ms、冷态 &lt;1.5s 一次性豁免; 组规模事实: 典型 &lt;15、部分 &lt;30、&gt;30 很少 → Σ 聚合 M×~1ms 无需二级缓存</td></tr>
+<tr><td>D6</td><td>26-11-15</td><td>轮询节奏 = 采样间隔全窗统一(1.5s; _qbPollMs 改读 sample_interval_s); 备选「min(桶宽,30s)」「恒=桶宽」否决——24h 窗 174s 一拍与毫秒级能力错配</td></tr>
+<tr><td>D7</td><td>26-11-15</td><td>500 桶上限作用于 raw 段窗(用户「调整为最大 500 桶」); 30d hour 段 721 桶不在本轮, 另案</td></tr>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+<tr><th>#</th><th>风险</th><th>触发条件</th><th>处置</th></tr>
+<tr><td>R1</td><td>桶宽规则再反转的存量判读面</td><td>26-10-11-0207 R07 的 ceil 口径被 26-11-14-1313 F3 反转过一次, 本次桶宽从「取整」改「采样整倍」——既有电池/契约可能钉旧值; meta.interval_s 值变化(2→1.5 等)波及前端等距重建</td><td>S1a 先 grep 盘点全部钉点逐条改判, 用例注释记录反转理由(双几何实证); 前端消费面专项核查; 契约测试只增不改</td></tr>
+<tr><td>R2</td><td>归桶语义变化的桶值漂移</td><td>点位归属 vs 覆盖加权在桶边界跨界样本上的取值差异 → 历史曲线轻微变化</td><td>同一仿真流双口径差分对照(差异仅桶边界 ±1 样本份额即接受); webui.md 写明语义变更; A1 仿真钉稳态面</td></tr>
+<tr><td>R3</td><td>增量解析正确性</td><td>追加感知依赖「天文件只追加」不变式; 裁剪/重写(size 缩小)/撕裂尾/Windows 读写竞态</td><td>守卫钉「size 缩小→全量重解析」路径; 撕裂尾复用解析纪律单点; OSError → last-good 兜底保留(§08 承袭)</td></tr>
+<tr><td>R4</td><td>缓存失效面</td><td>逐出/内存上限/跨请求一致性/组图成员集变化</td><td>桶值键=系列×窗×桶, 封口桶不可变使命中恒安全; 进行中桶每请求现算不缓存; LRU 上限 S2 落地给数字; 组图按成员集指纹变化重算</td></tr>
+<tr><td>R5</td><td>点数 +1 面(补点/相位翻动)与 rewin 判据交互</td><td>两个 +1 来源: ①补点使数组长度 +1; ②非整倍窗(6h/12h/24h)floor+1 的桶数 497↔498 随相位翻动(约每 58 拍一次, 轮询=si 下)——裸点数比较 <code>st.n !== n</code> 都会误判成跨窗换档 → 该拍动画不播/瞬时落地(同族抖动残留), 且 A2 若只钉 1m/5m(n 恒定窗)测不到; 补点参与 L1 尾点插值面</td><td>rewin 判据改「xs[0]+step 变化才算跨窗」单点(F5, 双覆盖); 电池三钉: 翻动拍不 rewin/补点拍不 rewin/真换窗仍 rewin; A2 帧采样含 24h 非整倍窗; 补点不参与 tooltip/悬停取值锚; 桶边保持 floor 对齐不动(不改窗首锚定, 保 F2 点位归属与缓存不变式)</td></tr>
+<tr><td>R6</td><td>轮询节奏反转的负载面</td><td>全窗 1.5s 轮询; 温态未达标时(缓存冷/组图 M 大)请求堆积</td><td>每请求 ~10ms(缓存命中+尾 1-2 桶)→ 占用 &lt;1%; loading 互斥 + 骨架 stall 兜底保留; 基准用例把温态/冷态分开钉(A4)</td></tr>
+<tr><td>R7</td><td>与 26-11-14-1313 修复的冲突面</td><td>F3(floor+1)被本计划 F1 替换、F4(holding)语义保留但实现随 F2/F3 重做、F6(meta 键)被 F7 复用</td><td>前序计划 §11 补 R 行指链双向; 电池双向核对(F4 诚实边界用例承袭不改判)</td></tr>
+<tr><td>R8</td><td>有界空桶持有回填的语义面</td><td>dt 修正跳变(DRIFT_TOL_MS=250, <code>traffic_sample_mod.py:546-549</code>)在恰等桶宽下产生有界空桶; 回填前桶速率会掩盖「漏采 1 桶但字节仍在流」与「真停顿」的区别吗——不会: totals 链在后继样本继续推进=字节在流(held 诚实), 断连由 n-run 标记(null), 真停顿由间隙过界判据兜住</td><td>回填判据=活跃链+间隙 ≤ max(B, si)×2 单点(与 F3 尾桶 holding 同判据); 电池钉: 漂移+跳变流无伪断线/真断连仍 null/间隙过界仍 null; webui.md 写明「held 覆盖有界漏采」口径</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-15-1104</span> 初版: 用户复测报障四症状(x 轴抖动/曲线不总落线/粒子时有时无/每拍尾段失真)+打开停滞 ~10s, 追问桶宽对齐采样/架构根本缺陷, 要求长窗 ≤500 桶与毫秒级响应; 三轮取证(代码静态验证 + uPlot vendor 对照 + 生产同构仿真与基准: 单系列 24h ~830ms、组图 30 成员 25.6s、稳态尾段 38889↔50000 翻转)定位双几何与速率双轨两个架构根缺陷; 修复 F1-F8(根修栅格单几何化 + 读侧增量缓存 + 前端两修 + 轮询节奏 + 冷开首拍); grilling 三轮七问拍板 D1-D7; 验收 A1-A8; 零代码改动, S1-S5 待显式开工。</li>
+  <li><span class="tag">R1 · 26-11-15-1127</span> 评审轮1 五发现(2 major/1 minor/2 nit)全修: 桶数表 6h/12h/24h 改 497-498 随相位(floor+1 非整倍窗, 原单值互斥不自洽) + 补 dt 修正跳变分析(F2 有界空桶持有回填定案 + S1b 仿真流含漂移/跳变 + R8 风险行) + A4 组图冷态口径补明(温态 p95 是组图硬线) + G-A 数字口径修正(100000 B/s, 稀释 39-50%/逐拍摆幅 22%) + §02 的 26-11-14-1313 F1/F4 裸引补前缀消撞名</li>
+  <li><span class="tag">R2 · 26-11-15-1139</span> 评审轮2 新增 1 minor 全修: 非整倍窗(6h/12h/24h)桶数相位翻动 497-498 会被前端 rewin 裸点数判据(st.n !== n)周期性误判成跨窗瞬跳(默认窗 24h 在内, A2 原只钉 1m/5m 测不到)—— F5 升格「补尾格+rewin 判据改造」(点数比较改 xs[0]+step, 补点/翻动双覆盖, 桶边保持 floor 对齐) + R5 双来源改写 + S3 电池三钉 + A2 帧采样扩 24h 窗; 轮1 五发现经轮2 逐条确认已落实零回退</li>
+</ul>
+
+</div>
+</body>
+</html>
