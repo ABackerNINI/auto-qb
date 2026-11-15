@@ -1,7 +1,7 @@
 # testing — 测试 / 冒烟 / 仿真纪律 · 卷 1/5
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `annotations-lazy-eval.md` … `env3-test-run-prereqs.md`(共 26 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `annotations-lazy-eval.md` … `engine-pack-dir-injection.md`(共 26 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
@@ -32,5 +32,5 @@
 | [credential-shape-write-guard.md](credential-shape-write-guard.md) | 工具写入判据把「凭据键名(Authorization/token 等) + 值不回显」的任何赋值形态当凭据字面量拦截 —— 测试里合法的鉴权头字典字面量(值是运行期读桩令牌, 无字面凭据)会让**整个文件**不可写; 且输出层掩码会把「凭据键名 + 分隔符 + 值」的片段显示改写… | 改含鉴权头字典字面量的测试文件被 artifact_secret_detected 拦, docstring 写 token 冒号键值形态, 凭显示层所见拼 oldText 永远匹配不上, 配置夹具凭据键, yaml 夹具凭据键 |
 | [cross-thread-teardown-assert.md](cross-thread-teardown-assert.md) | starlette 1.6 把 SSE 的同步生成器包进 `iterate_in_threadpool`, 它跑在 anyio 工作线程里; 该线程帧里的最后一个引用(`item`/`func`/`args` 元组)是在 `call_soon_threadsafe` **之后**… | 跨线程终态断言, 断流退订, subscriber_count, anyio 工作线程, iterate_in_threadpool, 生成器 finally 退订, 单点采样, 竞态, 偶发红, 句柄堆叠, aclose 后仍订阅, gc… |
 | [dev-webui-config-regen-wipe.md](dev-webui-config-regen-wipe.md) | `commands run dev.webui` 每次启动都从 CONFIG_TMPL 无条件重生成派生配置(不 diff 不保留), 上一阶段经 PUT /api/config 落盘到派生配置的键(如 relocate.bt_backup)被静默冲掉, WEB 端口也重新 OS… | dev.webui, dev_webui, CONFIG_TMPL, 重生成配置, PUT 落盘被冲, 端口漂移, 端口重分配, WEB 端口, 多阶段真机, 派生配置 |
+| [docker-id-truncation.md](docker-id-truncation.md) | `docker images --format {{.ID}}` 与 `docker ps --format {{.Image}}`(镜像已无 tag 时)默认输出**截短 12 位** ID, 而 `docker container inspect --format {{.Im… | docker images ID, docker ps Image, 截短, 12 位, sha256, --no-trunc, 镜像比对, 活面, 悬空, 误列候选 |
 | [engine-pack-dir-injection.md](engine-pack-dir-injection.md) | commands 引擎注入的 COMMAND_FLOW_PACK_DIR 指向 task 所在包, 包内测试要真实配置必须钉 PKG | COMMAND_FLOW_PACK_DIR, 包测试, ConfigMissing, load_config, 钉 PKG, 外置配置, test_commit 夹具 |
-| [env3-test-run-prereqs.md](env3-test-run-prereqs.md) | env3 Ubuntu 24.04 上跑 test.quick/test.full/ship.gate, 不带 `PATH=$HOME/.local/node/bin:$PATH` 则 r4 node 电池族大面积假红(_run_probe 的 shutil.which("nod… | env3, 原生 Linux, node 电池, 无 node, r4 batteries, node PATH, TZ, 时区, window_start_on, ship.gate 红, test.quick 红, 闸门预跑红, 环境态… |

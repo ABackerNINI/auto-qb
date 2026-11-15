@@ -9,9 +9,9 @@
 <meta name="issue-stamp" content="26-11-13-0212">
 <meta name="issue-type" content="chore">
 <meta name="doc-topic" content="linux-testbed-docker">
-<meta name="doc-refs" content="memory-bank/plans/26-11-12-0152-plan-linux-testbed-docker.html, memory-bank/tasks/26-11-12-test-linux-testbed.md">
+<meta name="doc-refs" content="memory-bank/plans/26-11-12-0152-plan-linux-testbed-docker.html, memory-bank/tasks/26-11-12-test-linux-testbed.md, memory-bank/tasks/26-11-15-test-linux-clean.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="test.linux-clean 三层清扫未落独立 task id(自动化待认领)">
 <meta name="issue-summary" content="计划 26-11-12-0152 承诺的 test.linux-clean task 未落独立 id: 一层 R6 内联进 test.linux/-e2e, 二三层 S5 一次性手工已毕; 容器面再次累积时落自动化 task">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-13-0212-chore-linux-clean-automation</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-13 02:12</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">chore</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
 
@@ -111,13 +111,16 @@
 <section id="s3">
   <h2><span class="no">§03</span>建议<span class="opt">（可选）</span></h2>
   <p>容器 workdir(/root/auto-qb-tests/)或宿主 docker 面再次累积时, 落独立 task id <code>test.linux-clean</code> 自动化三层清扫; 纪律照抄 S5 手工轮: 白名单点名式逐项删, 绝不许 <code>docker system prune -a</code>/<code>volume prune</code>/<code>image prune -a</code> 面杀命令, PT 工具容器与镜像硬禁。</p>
+  <p><b>修复后补充(2026-11-15 07:15, 认领人=用户指派「修复本件」)</b>: 复验开工时现象仍在(config.toml 无 <code>test.linux-clean</code> task id)。实际修法: 落独立 task id <code>test.linux-clean</code>(<code>.commands/test/scripts/linux_clean.py</code>; 守阵 <code>scripts/test_linux_clean.py</code>), 默认演练只读盘点三层 + <code>--yes</code> 才落实(保守默认); 一层执行复用 <code>linux_ci.sweep_script</code> 双条件单点(pid 死 + mtime 12h, 不复制逻辑)+ <code>--name &lt;slug&gt;</code> 点名清「已完结无标记」残留(正常收尾摘标记, 双条件 sweep 永远碰不到 —— 即本件预告的累积主源; pid 仍活仍拒); 二层悬空镜像逐 ID rmi(不带 -f, 在用自然拒绝)+ 孤儿卷 <code>^auto-qb-</code> 白名单且无容器引用; 三层旧 testbed tag 三保留(current uv.lock hash8 / live 容器镜像 ID / latest, 只动 auto-qb-testbed 仓); PT ban 名单终闸命中 [STOP] 全停; 面杀命令与容器删除在源码级 absence 钉死; <code>--build-cache</code> opt-in(builder prune -f, S5 手工同款)。与建议的差异: 面杀命令的 absence 进了守阵(不止纪律文字), 且演练默认先行 —— 建议原文保留有效。验证: 守阵 18 passed(含实机演练抓出的 images <code>{{.ID}}</code>/ps <code>{{.Image}}</code> 截短 vs 容器 full sha 失配回环钉面, images/ps 枚举恒 <code>--no-trunc</code>)/ <code>test.pkg</code> 519 passed(以上为 2026-11-15 评审修复轮后实测誊写); 实机演练(2026-11-15)rc 0, 宿主面无可回收项、容器内 6 个已完结无标记 workdir(含 <code>mutation</code>)待 <code>--name</code> 点名清。</p>
 </section>
 
 <section id="s4">
   <h2><span class="no">§04</span>状态变更日志</h2>
   <ul>
     <li>2026-11-13 02:12 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-15 — 状态 Open → In Progress（kb.status）</li>
+    <li>2026-11-15 — 状态 In Progress → Done（kb.status）</li>
+</ul>
 </section>
 
 <footer>

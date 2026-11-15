@@ -10,7 +10,7 @@
 <meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-11-12-0152">
 <meta name="doc-updated" content="26-11-13-0150">
-<meta name="doc-refs" content="memory-bank/issues/26-11-12-0053-chore-linux-ci-timeout-py-download.html, memory-bank/tasks/26-11-12-test-linux-testbed.md, memory-bank/issues/26-11-13-0212-test-e2e-testbed-timing-sensitive-specs.html, memory-bank/issues/26-11-13-0212-chore-linux-clean-automation.html">
+<meta name="doc-refs" content="memory-bank/issues/26-11-12-0053-chore-linux-ci-timeout-py-download.html, memory-bank/tasks/26-11-12-test-linux-testbed.md, memory-bank/issues/26-11-13-0212-test-e2e-testbed-timing-sensitive-specs.html, memory-bank/issues/26-11-13-0212-chore-linux-clean-automation.html, memory-bank/tasks/26-11-15-test-linux-clean.md">
 <style>
   :root {
     --bg: #10151a;
@@ -154,7 +154,7 @@
   <tr><td><code>test.linux-env</code></td><td>幂等构建镜像 + 保活容器(Dockerfile / uv.lock hash 变更才重建对应层)</td></tr>
   <tr><td><code>test.linux</code></td><td>保容器 → workdir 就绪 + tar 同步 → cp 模板 venv + <code>uv export --no-hashes</code> + <code>uv pip install</code> 补 delta → 容器内 <code>timeout</code> 包裹全量 pytest; 引擎 timeout 抬 1800s(issue ①)</td></tr>
   <tr><td><code>test.linux-e2e</code></td><td>e2e 容器内跑(fast 子集起步); playwright headless chromium, 端口动态取号; node_modules 接挂方案 S3 实测定型(symlink <code>/opt/e2e-node</code> vs per-workdir npm ci)</td></tr>
-  <tr><td><code>test.linux-clean</code></td><td>三层清扫: 容器内过期 workdir(pid+mtime 双条件)/ 宿主悬空镜像层与孤儿卷(白名单)/ 旧镜像 tag。<b>落地注记(S6)</b>: 未落独立 task id —— 一层内联进 test.linux / test.linux-e2e 每轮开跑前(R6, 内嵌 pid 已死 + mtime 超龄 12h 双条件); 二/三层为 S5 一次性手工清扫(白名单点名式, 已执行毕, 见任务档案); 自动化清扫 task 待后续认领再落</td></tr>
+  <tr><td><code>test.linux-clean</code></td><td>三层清扫: 容器内过期 workdir(pid+mtime 双条件)/ 宿主悬空镜像层与孤儿卷(白名单)/ 旧镜像 tag。<b>落地注记(S6)</b>: 未落独立 task id —— 一层内联进 test.linux / test.linux-e2e 每轮开跑前(R6, 内嵌 pid 已死 + mtime 超龄 12h 双条件); 二/三层为 S5 一次性手工清扫(白名单点名式, 已执行毕, 见任务档案); 自动化清扫 task 待后续认领再落(已被 2026-11-15 注记取代)。<b>落地注记(2026-11-15, issue 26-11-13-0212 认领, §10 R9)</b>: 已落独立 task id —— <code>.commands/test/scripts/linux_clean.py</code>(守阵 <code>test_linux_clean.py</code>), 默认演练只读盘点 + <code>--yes</code> 落实(保守默认); 一层复用 linux_ci.sweep_script 双条件单点 + <code>--name</code> 点名清「已完结无标记」残留; 二层悬空镜像逐 ID rmi(不带 -f)+ 孤儿卷 <code>^auto-qb-</code> 白名单; 三层旧 testbed tag 三保留(current hash8/live 镜像 ID/latest); PT ban 终闸 + 面杀命令 absence 钉; <code>--build-cache</code> opt-in</td></tr>
   <tr><td><code>mutants.*</code> 六条(run / report / verify / setup / gremlins / status)</td><td>脚本后端 wsl.exe → docker exec(同一容器); mirrors 落 <code>/root/auto-qb-tests/mutation/&lt;pkg&gt;</code></td></tr>
 </table>
 
@@ -240,6 +240,7 @@
   <li><span class="tag">R6 · 26-11-12-0322</span> R6: 时间戳归真: R4 行 tag 26-11-12-0330 是手填估计值(未来时刻), 归一至同批机械 bump 真值 0316(该批内容产生于 0316 bump 之前, 时序归真); doc-updated 重抬本版机械真值</li>
   <li><span class="tag">R7 · 26-11-13-0038</span> S1–S5 执行完成 + S6 回写半落盘, 执行数字单点=任务档案 26-11-12-test-linux-testbed(基线切片/test.full/最终提交归 T6b): S1 testbed 基建建成(镜像约 2.95GB / 首建约 161s / 幂等复跑 0.5s no-op, 各源钉值单点在 Dockerfile 头注); S2 test.linux 重写 docker exec 常驻容器形态 + 超时分层, 容器全量 3.13/3.12 solo 与双开并行全绿, 撞出并修复 5 处 Linux 平台真差异; S3 test.linux-e2e 落地, node_modules 接挂定案 symlink, fast/全量实测 4 个计时敏感差异经用户拍板收下(e2e 数字不进基线, 锚 Windows 侧); S4 mutants.* 六条迁容器, 8 条硬约束 8/8 重验, 冒烟轮跑通; S5 残留清扫 WSL+docker 两面共约 9.6GB, PT 容器无损; 本版同时钉准 S2 覆盖率闸口径(见 §04 S2 行)</li>
   <li><span class="tag">R8 · 26-11-13-0150</span> 接缝终审(7844ebf5→工作树全专题)9 条全修: §03 task 表 test.linux-clean 行加落地注记(未落独立 task id —— 一层 R6 内联进 test.linux/-e2e 每轮开跑前双条件清扫, 二/三层 S5 一次性手工清扫已毕, 自动化待后续认领); 烘焙层与 §06 D8 行 uv export 旗标归真 --no-hashes(0.13.7 已移除 --generate-hashes, S1 下半实跑修正; 钉版由 --frozen 导出锁文件版本清单保住); D4 段与 task 表 test.linux 行 uv sync 路线改 cp 模板 venv + export/pip delta(对齐 R4 与实现); aside「tests-real 不进容器」改准「不进执行面(随拷但不收集不运行)」; §04 S6 判据改最终口径(基线切片只记 Windows 侧, 容器数字单点=任务档案); 随批文档面: mutants why.md「已验证的命令」节加 WSL 时代历史框架并指现役单点(config.toml note/mutants.py 头注)、环境事实表改容器口径(mutmut 3.8.1/系统临时目录结果目录, WSL 行降历史)、排障 mutmut=no 行改容器口径($() 现为正确形态, 先查版本不匹配), linux_env.py 头注旗标归真 --no-hashes</li>
+  <li><span class="tag">R9 · 26-11-15-0715</span> issue 26-11-13-0212 认领收口: §03 承诺的 test.linux-clean 落独立 task id(<code>.commands/test/scripts/linux_clean.py</code>, 默认演练只读盘点 + --yes 落实, 保守默认), §03 行落地注记翻「已落」; 一层执行复用 linux_ci.sweep_script 双条件单点(pid 死 + mtime 12h)+ --name 点名清「已完结无标记」残留(正常收尾摘标记, 双条件 sweep 碰不到 —— 容器面累积主源); 二层悬空镜像逐 ID rmi(不带 -f, 在用自然拒绝)+ 孤儿卷 ^auto-qb- 白名单; 三层旧 testbed tag 三保留(current uv.lock hash8 / live 容器镜像 ID / latest, 只动 auto-qb-testbed 仓); PT 工具容器与镜像 ban 名单终闸(命中 [STOP] 全停)+ 面杀命令/容器删除 absence 守阵钉死; --build-cache opt-in(builder prune -f, S5 同款)。实机演练抓出并修复 images {{.ID}} 截短 vs 容器 full sha 失配回环(images 调用恒 --no-trunc, 守阵钉死); 验证(评审修复轮后实测誊写): 守阵 18 passed / test.pkg 519 passed / 实机演练 rc 0, 宿主面无可回收项、容器内 6 个已完结无标记 workdir 待 --name 点名清</li>
 </ul>
 
 </div>

@@ -12,8 +12,8 @@
 
 | 卷 | 主题范围 | 条数 |
 |---|---|---|
-| [1](_index-1.md) | `annotations-lazy-eval.md` … `env3-test-run-prereqs.md` | 26 |
-| [2](_index-2.md) | `event-handler-mock.md` … `hot-reload-section-choice-side-effects.md` | 26 |
-| [3](_index-3.md) | `hr-registry-pollution.md` … `playwright-teardown.md` | 26 |
-| [4](_index-4.md) | `poll-last-round-race.md` … `smoke.md` | 26 |
-| [5](_index-5.md) | `stale-repo-copy-scan-red.md` … `xdist-worker-global-snapshot.md` | 22 |
+| [1](_index-1.md) | `annotations-lazy-eval.md` … `engine-pack-dir-injection.md` | 26 |
+| [2](_index-2.md) | `env3-test-run-prereqs.md` … `hot-reload-mock-sections.md` | 26 |
+| [3](_index-3.md) | `hot-reload-section-choice-side-effects.md` … `plan-docstring-section-boundary.md` | 26 |
+| [4](_index-4.md) | `playwright-teardown.md` … `single-file-xdist-hang.md` | 26 |
+| [5](_index-5.md) | `smoke.md` … `xdist-worker-global-snapshot.md` | 23 |
