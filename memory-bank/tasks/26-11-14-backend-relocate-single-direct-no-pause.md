@@ -6,7 +6,7 @@
 **Summary:** 单成员 direct 搬迁免暂停: grilling 三轮取证拍板 D1-D6/D4a + 计划 26-11-14-1741 入库 + 邻接面两件与新想法一件入池(topic relocate-move-window); S1-S3 已实施(a2c9e425, 210 行批, 评审 0 blocker/major + 1 nit 维持原文), S4 完成(test.full 全绿见 kb.baseline, 基线切片 26-11-15-0917)
 **Topics:** backend-relocate-single-direct-no-pause
 
-**Refs:** memory-bank/plans/26-11-14-1741-plan-relocate-single-direct-no-pause.html, memory-bank/active-context/26-11-15-0900-backend-relocate-single-direct-no-pause.md, memory-bank/testing/baselines/26-11-15-0917-backend-relocate-single-direct-no-pause.md
+**Refs:** memory-bank/plans/26-11-14-1741-plan-relocate-single-direct-no-pause.html, memory-bank/testing/baselines/26-11-15-0917-backend-relocate-single-direct-no-pause.md
 
 ## 本篇只回答
 
@@ -51,10 +51,12 @@ grilling 三轮: 机理取证(relocate_exec/relocate_lifecycle/fuse_mod/设计�
 
 ### R1 · 实施批 S1-S3 (2026-11-15)
 
-S1/S2/S3 完成(commit a2c9e425, 5 文件 210 行): `relocate_units.is_complete_state` helper + 过渡态排除集 7 态(口径参照 fuse `_NON_COMPLETE_STATES` 独立持有); `_start_job` 豁免判据(单成员且完成态 → 不下发 pause、`resume_hashes=()`) + 回执按形态分型(direct「qB 自搬中(无别名)」/ 多成员保留原文 / 豁免追加「单种子搬迁: 做种中不暂停, qB 自搬」); 测试 8 例新增(含 checkingUP 唯一分歧态钉扎、多成员不变、dry-run 不变), 既有断言 1 处计划内更新。验证: 定向 8 例全绿 + test.quick 全绿(实测数字单点待 S4 基线切片誊写)。S3 回写: 计划 26-11-14-1741 R2 回填(doc-status → In Progress) + 原计划 26-10-18-1604 §4.1 暂停行反指注记 + 本档案与切片。
+S1/S2/S3 完成(commit a2c9e425, 5 文件 210 行): `relocate_units.is_complete_state` helper + 过渡态排除集 7 态(口径参照 fuse `_NON_COMPLETE_STATES` 独立持有); `_start_job` 豁免判据(单成员且完成态 → 不下发 pause、`resume_hashes=()`) + 回执按形态分型(direct「qB 自搬中(无别名)」/ 多成员保留原文 / 豁免追加「单种子搬迁: 做种中不暂停, qB 自搬」); 测试 7 例新增(含 checkingUP 唯一分歧态钉扎、多成员不变、dry-run 不变), 另既有断言 1 处计划内更新(定向 8 例全绿 = 7 新增 + 1 既有更新, 口径同计划 26-11-14-1741 R2)。验证: 定向 8 例全绿 + test.quick 全绿(实测数字单点待 S4 基线切片誊写)。S3 回写: 计划 26-11-14-1741 R2 回填(doc-status → In Progress) + 原计划 26-10-18-1604 §4.1 暂停行反指注记 + 本档案与切片。
 
 评审: 只读子代理(基 b267f0c12b27)评 210 行批 → 0 blocker/major, 1 nit(豁免 note 措辞「做种中」对 pausedUP/stoppedUP 已停完成态与实际状态不符; 措辞系计划 §03 原文, 裁决维持原文不改); 引文校验检 1/1 通过。
 
 - 2026-11-15 09:00 实施批 S1-S3 收尾回写(叙事见上方 R1); S4(test.full + 基线切片)待跑
 
 - 2026-11-15 09:18 S4 收尾: test.full 全绿(见 kb.baseline) + 基线切片 26-11-15-0917 入库, 档案 S4 翻 Done
+
+- 2026-11-15 收口: 接缝终审 4 项职责全过(机制单点/测试面/偏离计划零问题), 2 minor 记账计数漂移(本档案 R1「8 例新增」+ 基线切片「exec_run 8 例」)已修与计划 R2 口径对齐; 活切片 26-11-15-0900 按终态提醒迁出(内容由本档案承载, Refs 链同步)

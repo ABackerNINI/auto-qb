@@ -19,5 +19,5 @@ TOTAL                                                27452     72   9654     77 
 ## 本改动面
 
 - 实施批 S1-S2(commit a2c9e425, 5 文件 208 行): `relocate_units.is_complete_state` helper + 过渡态排除集 7 态(`_TRANSITION_EXCLUDED_STATES`, 口径参照 fuse `_NON_COMPLETE_STATES` 独立持有; checkingUP 唯一分歧态仍走暂停); `relocate_exec._start_job` 豁免判据(单成员且完成态 → 不下发 pause、`resume_hashes=()` 走 `_resume_members` 既有幂等 no-op) + 回执按形态分型(direct「qB 自搬中(无别名)」/ 多成员保留原文 / 豁免追加「单种子搬迁: 做种中不暂停, qB 自搬」)。
-- 测试电池: `tests/test_relocate_exec_run.py` 新增 8 例(完成态免暂停/下载中/error/多成员/dry-run/文案分型逐态钉扎), `tests/test_relocate_units.py` 补 helper 守阵, `tests/test_relocate_exec_jobs.py` 既有断言计划内更新 1 处。
+- 测试电池(新增 7 例 + 既有更新 1 = 定向 8 例, 口径同计划 26-11-14-1741 R2): `tests/test_relocate_exec_run.py` 新增 6 例(完成态免暂停/下载中/error/checkingUP 唯一分歧态/多成员/dry-run + 文案分型断言), `tests/test_relocate_units.py` 新增 1 例表驱动(helper 守阵), `tests/test_relocate_exec_jobs.py` 既有断言计划内更新 1 处。
 - S3 文档回写(commit a4057dce, 4 文件): 计划 26-11-14-1741 R2 实施回填 + 原计划 26-10-18-1604 §4.1 暂停行反指注记 + 任务档案/切片。
