@@ -58,16 +58,20 @@
   副作用 —— 无新 job、无 setLocation、旧 job 保持 armed 现场原样(未收官)
 - test_supersede_alias_form_volume_gate: 形态 x 卷位预检 —— hardlink 前任别名 + 跨卷
   + symlink 不可用 = 整体拒绝; symlink 回落可行 = 放行不出此闸
-### 撤销面(评审 major-1/major-2: 撤销 x 继承面; D5 历史无撤销入口)
-- test_supersede_cancel_blocked_while_inherited_alive: 携带移交条目且继承别名未消化
-  (仍在盘)的 job 撤销被拦(cancel_inherited, 零 qB 写)—— 现行撤销仍搬回, 会留悬空
-  继承别名指向已搬空目标; 继承别名已直指 C(I2); 消化完毕(删净+账面清)后撤销放行
-  (合法路径), 历史记录零触碰
-- test_supersede_cancel_refuses_settled_rewrites: 继承别名消化后, journal 已有 settled
-  改写记录 = 拒绝撤销(评审 #3 语义保留, 作用于活任务自己的 journal)/ 成本确认前即拒
-- test_supersede_cancel_member_gone_not_frozen: 继承别名消化后, member_gone 不算
-  「改写已落账」(R4 修 1 语义保留, 唯一人工出口不被继承守卫误伤): 纯 member_gone 账
-  撤销放行, 混合账仍拒
+### 撤销面(D6 停手语义: 撤销不搬回, 计划 26-11-15-2340 §03.3; D5 历史无撤销入口)
+- test_supersede_cancel_keeps_inherited_aliases: 继承别名不在撤销清理面 —— 撤销活任务
+  只删自己已建的链接, 继承别名(前任的、已统一改指 C)不删不撤, 旧根路径仍解析直指 C;
+  零 setLocation(数据与下载器路径不动)、成员恢复、前任历史零触碰(旧 cancel_inherited
+  过渡守卫随搬回能力退役)
+- test_supersede_cancel_settled_rewrites_no_longer_frozen: rewritten settled 改写账不再
+  拦撤销(旧 cancel_rewritten 冻结守卫的核心动因 = 搬回破坏 fastresume, 随搬回退役);
+  撤销照常删自有链接清账, 零 setLocation, journal 撕态残账(garbage)容忍
+- test_supersede_cancel_mixed_rewrite_account_not_blocked: 混合改写账(rewritten +
+  member_gone)不构成撤销障碍(旧「唯一人工出口」随守卫退役自然豁免); 未确认先见
+  三段式确认面(D7 guide)
+- test_supersede_cancel_chain_live_task_no_moveback: 链式撤销断粮面(issue 26-11-07-0528
+  关闭面, D10 real 的替身版): A→B→C 后撤销活任务 —— 旧路径仍解析直指 C、setLocation
+  零下发 + 成员 save_path 原样、C 侧数据原样、账面 cancelled、前任历史不改写
 ### 同键重发与启动对账(评审 major-3/minor-6/major-R2-1)
 - test_supersede_same_key_reissue_carries_inheritance: 携带移交条目的 job 失败后同键
   重发, 新账结转 plan.inherited/extra_members(_carry_prev_state, 移交义务不失主);
@@ -635,139 +639,154 @@ def test_supersede_alias_form_volume_gate(tmp_path, monkeypatch):
     assert item2["cls"] == "started", item2
 
 
-def _consume_inherited(mod, job_id):
-    """消化移交条目(合法撤销路径的前置): 删净继承别名 + 清账面 inherited(过渡期守卫
-    的放行支 = finalize 终态删链的等价模拟)"""
-    job = mod.get_job(job_id)
-    links = _inherited_aliases(job)
-    mod._remove_links(links)
-    mod._set_job(replace(job, plan={**(job.plan or {}), "inherited": []}))
-    assert all(not os.path.lexists(p) for p in links), "继承别名已删净"
-    assert not mod.get_job(job_id).inherited, "账面 inherited 已清"
-
-
-def test_supersede_cancel_blocked_while_inherited_alive(tmp_path, monkeypatch):
-    """撤销 x 继承面(评审 major-1/major-2): 携带移交条目且继承别名未消化(仍在盘)的
-    job 撤销被拦(cancel_inherited, 零 qB 写)—— 现行撤销仍搬回数据, 会留下悬空继承别名
-    指向已搬空的目标(前任旧根成员断粮, 本守卫承接; 旧 cancel_chain 护栏已随改道机器
-    退役); 继承别名已直指 C(I2); 消化完毕后撤销放行(合法路径), 历史记录零触碰"""
+def test_supersede_cancel_keeps_inherited_aliases(tmp_path, monkeypatch):
+    """撤销 x 继承面(D6 新语义, 计划 26-11-15-2340 §03.3): 继承别名不在撤销清理面 ——
+    撤销活任务只删自己已建的链接; 继承别名是前任的、handover 已统一改指本任务终位置 C,
+    数据留在新位置后别名与服务连续性成立, 不删不撤; 旧根路径仍解析(别名直指 C),
+    前任历史零触碰; 全程零 setLocation(数据与下载器路径一律不动)。
+    旧语义(cancel_inherited 过渡守卫 + 搬回)下本用例红: 继承别名在盘即拦截撤销。"""
     pin_disk_usage(monkeypatch)
     mgr, client, mod, j1, spawned, src, dst, content = _armed_env(tmp_path, monkeypatch)
     files = client.files_map["HA"]
     dst_c = _c_root(tmp_path)
-    items = mod.relocate_execute(["HA"], dst_c)
-    j2 = items[0]["job_id"]
-    assert mod.get_job(j1).phase == ru.PHASE_SUPERSEDED
+    j2 = mod.relocate_execute(["HA"], dst_c)[0]["job_id"]
     from relocate_exec_support import _simulate_moved
 
     _simulate_moved(mgr, dst_c, files, os.path.join(dst, "Show"))
     _run_ticks(mod, 8)
     job2 = mod.get_job(j2)
-    assert job2.phase == ru.PHASE_ARMED
+    assert job2.phase == ru.PHASE_ARMED, job2.phase
     a_links = _inherited_aliases(job2)
-    assert a_links, "移交条目在账"
+    own_links = list(job2.alias_paths)
+    assert a_links and own_links, "继承条目与自有链接都在账(撤销清理面的两个不同集合)"
     # I2: 继承别名已直指 C(统一改指收敛), 数据经旧根别名可读
     for link in a_links:
         rel = mod._rel_under(src, link)
         assert rel is not None and afs.alias_points_to(link, os.path.join(dst_c, *rel.split("/"))), link
-    # 拦截支: 继承别名未消化 -> cancel_inherited, 零 qB 写
-    before = list(client.calls)
+
+    client.calls.clear()
     out = mod.relocate_cancel(j2, cost_confirmed=True)
-    assert out["cls"] == "blocked" and out["reasons"][0]["gate"] == "cancel_inherited", out
-    assert "移交别名" in out["reasons"][0]["text"] and "搬回" in out["reasons"][0]["text"], out
-    assert client.calls == before, "拦截 = 零 qB 写(不删链不搬回)"
-    # 历史记录零触碰: superseded 账面原样(不可被撤销波及)
+    assert out["cls"] == "ok" and mod.get_job(j2).phase == ru.PHASE_CANCELLED, out
+    assert not any(c[0] == "set_location" for c in client.calls), f"撤销零 setLocation(D6): {client.calls}"
+    assert any(c[0] == "resume" for c in client.calls), "成员恢复运行态(缺件由下载器自行补下)"
+    # 继承别名不删不撤: 仍在盘且仍直指 C(旧根路径解析成立)
+    for link in a_links:
+        assert afs.alias_kind_of(link) is not None, link
+        rel = mod._rel_under(src, link)
+        assert afs.alias_points_to(link, os.path.join(dst_c, *rel.split("/"))), link
+    with open(a_links[0], "rb") as f:  # 穿透校验: 经旧根链接仍读到 C 的数据
+        assert f.read() == b"x" * 64
+    # 自己的链接已删净(清理面 = 自己已建的链接)
+    assert all(not os.path.lexists(p) for p in own_links), own_links
+    # 账面: CANCELLED 清自有别名账; 继承条目保留(历史事实, 不改写)
+    saved = mod.get_job(j2)
+    assert saved.alias_paths == () and (saved.plan or {}).get("inherited"), (saved.alias_paths, saved.plan)
+    # 前任历史零触碰
     job1 = mod.get_job(j1)
-    assert job1.phase == ru.PHASE_SUPERSEDED and mod._norm(job1.dst) == mod._norm(dst)
-    # 合法路径: 继承别名消化完毕(删净 + 账面清)后撤销放行(既有链: 删自有链 + 搬回)
-    _consume_inherited(mod, j2)
-    out2 = mod.relocate_cancel(j2, cost_confirmed=True)
-    assert out2["cls"] == "ok", out2
-    assert mod.get_job(j2).phase == ru.PHASE_CANCELLED
-    assert any("set_location" in str(c) for c in client.calls[len(before):]), "搬回已下发"
-    assert mod.get_job(j1).phase == ru.PHASE_SUPERSEDED, "历史记录仍零触碰"
+    assert job1.phase == ru.PHASE_SUPERSEDED and mod._norm(job1.dst) == mod._norm(dst), job1
 
 
-def test_supersede_cancel_refuses_settled_rewrites(tmp_path, monkeypatch):
-    """撤销护栏(评审 #3 语义保留, 作用于活任务自己的 journal): 继承别名消化后, journal
-    已有 settled 改写记录 = 拒绝撤销; 无 settled 记录撤销行为不变"""
+def test_supersede_cancel_settled_rewrites_no_longer_frozen(tmp_path, monkeypatch):
+    """撤销 x 改写账(cancel_rewritten 守卫退役): 撤销不搬回后「改写已落账不能撤销」的
+    核心动因(删别名 + 搬回 src 会留下指向 dst 的 fastresume 而数据已回源, 冻结态无人兜底)
+    消失 —— rewritten settled 账不再拦撤销; 撤销照常停手清账删自有链接, 零 setLocation,
+    journal 撕态残账(garbage)原样容忍"""
     pin_disk_usage(monkeypatch)
     mgr, client, mod, j1, spawned, src, dst, content = _armed_env(tmp_path, monkeypatch)
     dd = mgr.config.data_dir
     files = client.files_map["HA"]
     dst_c = _c_root(tmp_path)
-    items = mod.relocate_execute(["HA"], dst_c)
-    j2 = items[0]["job_id"]
+    j2 = mod.relocate_execute(["HA"], dst_c)[0]["job_id"]
     from relocate_exec_support import _simulate_moved
 
     _simulate_moved(mgr, dst_c, files, os.path.join(dst, "Show"))
     _run_ticks(mod, 8)
     assert mod.get_job(j2).phase == ru.PHASE_ARMED, mod.get_job(j2).phase
-    # 继承别名消化(合法路径前置; 继承守卫与 settled 守卫是独立 hazard, 判据集互不掺和)
-    _consume_inherited(mod, j2)
-    # 拒绝支: daemon 已在窗口把成员改写 settled(rewrites 账在) -> 撤销拒绝且零 qB 写
-    # (4 个 settled 触发文案「等共 N 个」截断支; 另塞一条非 dict 残账记录验证守卫跳过)
-    assert rj.record_rewrites(dd, j2, {h: {"status": "rewritten", "path": "x"} for h in ("HA", "HB", "HC", "HD")})
+    own_links = list(mod.get_job(j2).alias_paths)
+    assert rj.record_rewrites(dd, j2, {h: {"status": "rewritten", "path": "x"} for h in ("HA", "HB")})
     j_body = rj.read_journal(dd, j2) or {}
-    rj.write_journal(
-        dd,
-        j2,
-        {
-            **j_body,
-            "rewrites": {
-                **(j_body.get("rewrites") or {}),
-                "HBAD": "garbage"  # 跨进程账面的撕态形态
+    rj.write_journal(dd, j2, {**j_body, "rewrites": {**(j_body.get("rewrites") or {}), "HBAD": "garbage"}})
+    client.calls.clear()
+    out = mod.relocate_cancel(j2, cost_confirmed=True)
+    assert out["cls"] == "ok" and mod.get_job(j2).phase == ru.PHASE_CANCELLED, out
+    assert not any(c[0] == "set_location" for c in client.calls), f"撤销零 setLocation(D6): {client.calls}"
+    assert all(not os.path.lexists(p) for p in own_links), "自有链接删净"
+    assert (rj.read_journal(dd, j2) or {}).get("phase") == ru.PHASE_CANCELLED
+
+
+def test_supersede_cancel_mixed_rewrite_account_not_blocked(tmp_path, monkeypatch):
+    """member_gone 边界随守卫退役自然豁免: 混合账(rewritten + member_gone)不再构成撤销
+    障碍 —— 旧「member_gone 不冻结 = 卡死悬挂 job 的唯一人工出口」语义不需要专门豁免面
+    (守卫整体不在场, 无可误伤); 未确认成本先见三段式确认面(D7)"""
+    pin_disk_usage(monkeypatch)
+    mgr, client, mod, j1, spawned, src, dst, content = _armed_env(tmp_path, monkeypatch)
+    dd = mgr.config.data_dir
+    files = client.files_map["HA"]
+    dst_c = _c_root(tmp_path)
+    j2 = mod.relocate_execute(["HA"], dst_c)[0]["job_id"]
+    from relocate_exec_support import _simulate_moved
+
+    _simulate_moved(mgr, dst_c, files, os.path.join(dst, "Show"))
+    _run_ticks(mod, 8)
+    assert mod.get_job(j2).phase == ru.PHASE_ARMED, mod.get_job(j2).phase
+    assert rj.record_rewrites(
+        dd, j2, {
+            "HA": {
+                "status": rj.REWRITE_MEMBER_GONE
+            },
+            "HB": {
+                "status": "rewritten",
+                "path": "x"
             }
         }
     )
-    before = list(client.calls)
+    first = mod.relocate_cancel(j2, cost_confirmed=False)
+    assert first["cls"] == "confirm" and "guide" in first, first
+    assert "不会搬回" in first["guide"]["consequence"], first["guide"]
+    client.calls.clear()
     out = mod.relocate_cancel(j2, cost_confirmed=True)
-    assert out["cls"] == "blocked" and out["reasons"][0]["gate"] == "cancel_rewritten", out
-    assert "收尾" in out["reasons"][0]["text"] and "fastresume" in out["reasons"][0]["text"]
-    assert client.calls == before, "拒绝撤销 = 零 qB 写(不删链不搬回)"
-    assert mod.get_job(j2).phase == ru.PHASE_ARMED, "现场指纹原样"
-    # 成本未确认同样直接拒(检查在成本确认之前, 不给 confirm 面误导可撤)
-    out_dry = mod.relocate_cancel(j2, cost_confirmed=False)
-    assert out_dry["cls"] == "blocked" and out_dry["reasons"][0]["gate"] == "cancel_rewritten", out_dry
-    assert "cost" not in out_dry, "拒绝面不出成本单(不可撤的形态谈成本是误导)"
-    # 放行支: settled 记录清回 pending(reset_rewrites 重放入口同款; 非 dict 残账原样保留)
-    # -> 撤销行为不变(删链 + 搬回 + cancelled); 前任已是历史, 无同目标在途护栏面
-    assert rj.reset_rewrites(dd, j2) == 4
-    assert rj.read_rewrites(dd, j2)["HBAD"] == "garbage"
-    calls_before_ok = list(client.calls)
-    out2 = mod.relocate_cancel(j2, cost_confirmed=True)
-    assert out2["cls"] == "ok", out2
-    assert mod.get_job(j2).phase == ru.PHASE_CANCELLED
-    assert any("set_location" in str(c) for c in client.calls[len(calls_before_ok):]), "搬回已下发"
+    assert out["cls"] == "ok" and mod.get_job(j2).phase == ru.PHASE_CANCELLED, out
+    assert not any(c[0] == "set_location" for c in client.calls), f"撤销零 setLocation(D6): {client.calls}"
 
 
-def test_supersede_cancel_member_gone_not_frozen(tmp_path, monkeypatch):
-    """R4 修 1 语义保留(判据集 REWRITE_SETTLED_FROZEN): 继承别名消化后, member_gone
-    (fastresume 缺失 = 成员已删)不算「改写已落账」—— 纯 member_gone 账撤销放行(进成本
-    confirm, 不撞 cancel_rewritten, 唯一人工出口不被继承守卫误伤); 混合账仍拒"""
+def test_supersede_cancel_chain_live_task_no_moveback(tmp_path, monkeypatch):
+    """链式撤销断粮面(issue 26-11-07-0528 关闭面; D10 real 口径的真机项留批次收尾,
+    本用例是替身版): A→B→C 链式迁移后撤销活任务 —— 旧路径(A 侧继承别名)仍解析且直指 C、
+    数据与下载器路径未动(setLocation 零下发 + 成员 save_path 原样)、C 侧数据文件原样、
+    账面落 cancelled、前任历史不改写。旧语义下本用例红: cancel_inherited 拦截(继承别名
+    未消化), 消化后撤销还会下发 setLocation 搬回。"""
     pin_disk_usage(monkeypatch)
     mgr, client, mod, j1, spawned, src, dst, content = _armed_env(tmp_path, monkeypatch)
     dd = mgr.config.data_dir
     files = client.files_map["HA"]
     dst_c = _c_root(tmp_path)
-    items = mod.relocate_execute(["HA"], dst_c)
-    j2 = items[0]["job_id"]
+    j2 = mod.relocate_execute(["HA"], dst_c)[0]["job_id"]
     from relocate_exec_support import _simulate_moved
 
     _simulate_moved(mgr, dst_c, files, os.path.join(dst, "Show"))
     _run_ticks(mod, 8)
     assert mod.get_job(j2).phase == ru.PHASE_ARMED, mod.get_job(j2).phase
-    # 继承别名消化(继承守卫只看别名消化面, 与 rewrite 判据集互不掺和)
-    _consume_inherited(mod, j2)
-    # 纯 member_gone 账: 不触发 cancel_rewritten, 撤销进成本 confirm 面(放行)
-    assert rj.record_rewrites(dd, j2, {"HA": {"status": rj.REWRITE_MEMBER_GONE}})
-    out = mod.relocate_cancel(j2, cost_confirmed=False)
-    assert out["cls"] == "confirm" and out["reasons"][0]["gate"] == "cost", out
-    assert not any(r.get("gate") == "cancel_rewritten" for r in out["reasons"]), out
-    # 混合账: frozen 前提由 rewritten 记录承, 撤销仍拒(判据集只摘 member_gone, 不放宽冻结面)
-    assert rj.record_rewrites(dd, j2, {"HB": {"status": "rewritten", "path": "x"}})
-    out2 = mod.relocate_cancel(j2, cost_confirmed=False)
-    assert out2["cls"] == "blocked" and out2["reasons"][0]["gate"] == "cancel_rewritten", out2
+    a_links = _inherited_aliases(mod.get_job(j2))
+    assert a_links, "继承条目在账(A 侧旧路径的解析面)"
+    saves_before = {h: rec.save_path for h, rec in mgr.store.by_hash.items() if h in ("HA", "HB")}
+    client.calls.clear()
+    out = mod.relocate_cancel(j2, cost_confirmed=True)
+    assert out["cls"] == "ok" and mod.get_job(j2).phase == ru.PHASE_CANCELLED, out
+    # 旧路径仍解析: 继承别名直指 C, 数据可读
+    for link in a_links:
+        rel = mod._rel_under(src, link)
+        assert rel is not None and afs.alias_points_to(link, os.path.join(dst_c, *rel.split("/"))), link
+    with open(a_links[0], "rb") as f:
+        assert f.read() == b"x" * 64
+    # 数据与下载器路径未动: setLocation 零下发 + 成员 save_path 原样 + C 侧数据原样
+    assert not any(c[0] == "set_location" for c in client.calls), client.calls
+    saves_after = {h: rec.save_path for h, rec in mgr.store.by_hash.items() if h in ("HA", "HB")}
+    assert saves_after == saves_before, (saves_before, saves_after)
+    assert os.path.exists(os.path.join(dst_c, "Show", "e00.mkv")), "C 侧数据留新位置"
+    # 账面 cancelled + journal 落终态(daemon 退休信号); 前任历史不改写
+    assert (rj.read_journal(dd, j2) or {}).get("phase") == ru.PHASE_CANCELLED
+    job1 = mod.get_job(j1)
+    assert job1.phase == ru.PHASE_SUPERSEDED and mod._norm(job1.dst) == mod._norm(dst)
 
 
 def test_supersede_same_key_reissue_carries_inheritance(tmp_path, monkeypatch):

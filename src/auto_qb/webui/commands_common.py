@@ -146,8 +146,9 @@ RESYNC_COMMANDS = frozenset(
 # (results/summary)经 truth 字段随回执带出(既有 cmd 通道的通用数据位), drain 不得用裸 ok 覆盖。
 # relocate_precheck / relocate_precheck_add(计划 26-10-18-1604 P2): 同为只读 dry-run, 回执由
 # handler 自写; 判定数据经 truth 字段带出(迁移 = {results, summary}, 添加 = 单 item)。
-# relocate_cancel(计划 26-10-18-1604 §3.5.1): 撤销迁移两步走(先回成本、确认后删链接 + 搬回),
-# 回执同样由 handler 自写(cls=confirm 带 cost / cls=ok 带 phase / cls=blocked 带原因)。
+# relocate_cancel(计划 26-10-18-1604 §3.5.1; D6 停手语义 26-11-15-2340 §03.3): 撤销迁移
+# 两步走(先回三段式确认面、确认后删自己的链接清账 —— 零 setLocation 不搬回),
+# 回执同样由 handler 自写(cls=confirm 带 guide / cls=ok 带 phase / cls=blocked 带原因)。
 DEFERRED_RECEIPT_COMMANDS = frozenset(
     {
         "reannounce_group",

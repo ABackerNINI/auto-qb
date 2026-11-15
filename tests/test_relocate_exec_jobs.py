@@ -5,11 +5,12 @@
 - P3: Fake qB 集成覆盖五场景 —— 正常、停滞判失败(不搬回)、长耗时转 watching(不判失败)、
   第 3 条链接失败 ⇒ 删已建链接 + 转收尾、qB 中途断连(不重复下发); 主循环零阻塞(单步 < 50ms)。
 - P5: 关闭时调用序列与今日一致(守阵); 开启时三入口(单件/批量/规则)都产生 job。
-- P6: 对账表 8 行逐行(纯函数层在 test_relocate_units)、撤销回滚、guardian 三证后删链接。
+- P6: 对账表 8 行逐行(纯函数层在 test_relocate_units)、撤销停手(D6 不搬回)、guardian 三证后删链接。
 - 真机 qB 验证留待他人在有 qB 的环境执行(本轮 Fake qB 全替身)。
 
 ## 测试计划(每个测试函数一条)
-- test_cancel_requires_cost_confirmation_then_rolls_back: 撤销先给成本, 确认后删链接 + 搬回
+- test_cancel_requires_confirmation_then_stops_without_moveback: 撤销先给三段式确认面(D7 guide),
+  确认后删自己的链接 + cancelled + 恢复成员(零 setLocation, D6 撤销不搬回)
 - test_jobs_persist_and_reload: job 账落 state 并能重启恢复(非终态重挂 relocating 登记)
 - test_entry_single_and_bulk_create_jobs: 开关开: 单件/批量都产生 job(回执 truth 计数)
 - test_entry_bulk_missing_hashes_in_receipt: 批量移动(整组迁移开)缺失计数进回执(issue 26-11-07-0536 #3)
@@ -18,8 +19,8 @@
 ### P1-T1.1 守卫与容错簇(计划 26-10-20-2101)
 - test_persist_noop_when_state_box_unavailable: state 账不可用时 _persist 静默返回
 ### 收口 / 退避守卫(issues 26-10-30-0616 批A: resume_hashes 失败路径 / dry_run 短路 / 重试退避)
-- test_cancel_failed_resumes_members: 撤销搬回被拒 ⇒ failed(cancel_failed) 且恢复成员
-- test_cancel_dry_run_is_blocked: dry-run 撤销零动作(不删链接不搬回)
+- test_cancel_dry_run_is_blocked: dry-run 撤销零动作(不删链接不动数据; 旧 cancel_failed 搬回
+  被拒分支随 setLocation 搬回能力退役, 恢复成员断言并入 test_cancel_requires_confirmation...)
 ### W8(R32) S5 补测(变异审计真洞守阵, 分类: tmp-analysis/w8-r32/classify-mod-{a,b}.md)
 - test_group_facts_gate_inputs_block_gates: 事实包字段丢失/损坏仍拦闸(incomplete/moving/third_party_link/hardlink 四闸) + reparse 非零 tag/缺省 tag 判别
 - test_group_facts_same_fs_free_space_retired: P3 free-space 代理退出 proved(吻合只作参考 note,
@@ -49,17 +50,17 @@
 - test_start_job_reverse_migration_differs_no_carry: 反向迁移(旧 dst->旧 src)派生不同 job_id -> 不结转
   (job_id_for 参数序长期钉, 防 R6)
 - test_start_wiring_and_load_jobs: start 接线(ctx/dry/enabled)与 _load_jobs rt 账
-- test_cancel_write_intent_faces: 撤销写意图(删链接/搬回实参/reason/回执)
-### 撤销安全守卫(issue 26-11-07-0527 R1#23/R1#24)
-- test_cancel_blocked_when_alias_left_behind: 删链接失败有残留 ⇒ blocked 留现场(不搬回不终态
-  不恢复成员), 修好后重试撤销照常搬回(校验式不卡死重试)
-- test_cancel_proceeds_when_links_all_removed: 删净 ⇒ 照常搬回; 账面链接已被外部先行删掉的
+- test_cancel_write_intent_faces: 撤销写意图(删链接/reason/回执; D6 起零 setLocation)
+### 撤销安全守卫(issue 26-11-07-0527 R1#23; D6 后 R1#24 硬拒撤随搬回能力退役)
+- test_cancel_blocked_when_alias_left_behind: 删链接失败有残留 ⇒ blocked 留现场(不清账不终态
+  不恢复成员 —— 残留链接将随清账失管), 修好后重试撤销照常删净清账(校验式不卡死重试)
+- test_cancel_proceeds_when_links_all_removed: 删净 ⇒ 照常清账; 账面链接已被外部先行删掉的
   幂等面不误判残留(「已消失 ≠ 残留」, 计数式校验会把撤销永久卡死)
-- test_cancel_rejected_in_moving_and_watching_phases: MOVING/WATCHING 在途搬迁拒绝取消
-  (连成本确认面都不给), 不下发回搬指令、不终态、不恢复成员, 文案写明相位与可选动作
+- test_cancel_allowed_mid_move_is_pure_stop: 半途撤销(D6 §03.3「含半途撤销」): MOVING/WATCHING
+  期撤销 = 停手 + 清账 + 恢复成员, 零 setLocation 零删链(自己的链接尚未建立), journal 落终态
 ### 终态拒撤守卫(issue 26-11-08-1608 面 1)
 - test_cancel_rejected_for_terminal_phases: FAILED/DONE/CANCELLED 终态 job 拒绝撤销
-  (守卫序列头部, 连 dry_run/成本确认面都不给): 不删链接不搬回不终态不恢复成员,
+  (守卫序列头部, 连 dry_run/确认面都不给): 不删链接不动数据不终态不恢复成员,
   失败账(last_error/reason)与相位/alias_paths 原样不被改写, 文案写明当前相位无撤销面
 ### 生命周期账闸(issue 26-11-07-0527)
 - test_stop_skips_persist_when_ledger_not_loaded: enabled=false 启动(本会话未接管账)——
@@ -137,18 +138,31 @@ def _exec_probe_pass(monkeypatch):
     _stub_probe_pass(monkeypatch)
 
 
-def test_cancel_requires_cost_confirmation_then_rolls_back(tmp_path, monkeypatch):
-    """撤销: 未确认只回成本; 确认后删链接 + 搬回 + cancelled + 恢复运行态"""
+def test_cancel_requires_confirmation_then_stops_without_moveback(tmp_path, monkeypatch):
+    """撤销(D6 停手语义): 未确认只回三段式确认面(D7 guide, 零动作); 确认后删自己的链接 +
+    cancelled + 恢复运行态, 数据与下载器路径零触碰(不再下发 setLocation 搬回)"""
     mgr, client, mod, job_id, spawned, src, dst, content = _armed_env(tmp_path, monkeypatch)
+    links = list(mod.get_job(job_id).alias_paths)
     first = mod.relocate_cancel(job_id)
-    assert first["cls"] == "confirm" and first["cost"]["bytes"] > 0
+    assert first["cls"] == "confirm", first
+    guide = first["guide"]
+    assert "不会搬回" in guide["consequence"], guide
+    assert "缺件" in guide["halfway"] and "补下" in guide["halfway"], guide
+    assert "当前位置" in guide["halfway"] and "源位置" in guide["halfway"], \
+        "补下位置不锚定新位置: 按成员当前位置自行补下(未改写成员在源位置回填)"
+    assert len(guide["manual"]) == 4, guide
+    assert "当前位置" in guide["manual"][0], guide
+    assert "重新校验" in guide["manual"][1], guide
+    assert "残留" in guide["manual"][2], guide
+    assert "重新发起" in guide["manual"][3], guide
     assert os.path.exists(mod.get_job(job_id).alias_paths[0]), "未确认时不得动链接"
 
     client.calls.clear()
     r = mod.relocate_cancel(job_id, cost_confirmed=True)
     assert r["cls"] == "ok" and mod.get_job(job_id).phase == ru.PHASE_CANCELLED
     assert mod.get_job(job_id).alias_paths == ()
-    assert ("set_location", src) in client.calls, client.calls
+    assert not any(c[0] == "set_location" for c in client.calls), f"撤销零 setLocation(D6): {client.calls}"
+    assert not any(os.path.exists(p) for p in links), "自己的链接删净"
     assert any(c[0] == "resume" for c in client.calls), client.calls
 
 
@@ -244,41 +258,25 @@ def test_persist_noop_when_state_box_unavailable(monkeypatch):
     mod._persist()  # 不抛
 
 
-def test_cancel_failed_resumes_members(tmp_path):
-    """撤销搬回被拒 ⇒ failed(cancel_failed) 且恢复成员(搬回没成, 组不该继续被按住)"""
-    resumed = []
-    mod = _bare_mod(
-        api=types.SimpleNamespace(
-            torrents_set_location=lambda **kw: (_ for _ in ()).throw(RuntimeError("409")),
-            torrents_resume=lambda **kw: resumed.append(list(kw["torrent_hashes"])),
-        ),
-        data_dir=str(tmp_path),
-    )
-    mod._jobs["j1"] = _job(phase=ru.PHASE_ARMED, resume_hashes=("HA", ))
-    out = mod.relocate_cancel("j1", cost_confirmed=True)
-    assert out["cls"] == "blocked" and out["reasons"][0]["gate"] == "cancel_failed", out
-    assert mod._jobs["j1"].phase == ru.PHASE_FAILED and mod._jobs["j1"].reason == "cancel_failed"
-    assert resumed == [["HA"]], f"撤销失败必须恢复成员: {resumed}"
-
-
 def test_cancel_dry_run_is_blocked(tmp_path, monkeypatch):
-    """dry-run 撤销零动作: 回执 blocked(dry_run), 不删链接不搬回(搬回要再复制全量数据)"""
+    """dry-run 撤销零动作: 回执 blocked(dry_run), 不删链接不动数据(删链接是真写)"""
     mgr, client, mod, job_id, spawned, src, dst, content = _armed_env(tmp_path, monkeypatch)
     links = list(mod.get_job(job_id).alias_paths)
     assert links, "armed 现场应有链接(撤销要删的对象)"
     mod._dry = True
+    client.calls.clear()
     out = mod.relocate_cancel(job_id, cost_confirmed=True)
     assert out["cls"] == "blocked" and out["reasons"][0]["gate"] == "dry_run", out
     assert mod.get_job(job_id).phase == ru.PHASE_ARMED, "撤销不得改相位"
-    assert [c for c in client.calls if c[0] == "set_location"][-1][1] == dst, "不得搬回源路径"
-    assert any(os.path.exists(p) for p in links), "链接必须还在"
+    assert client.calls == [], "dry-run 撤销零 qB 写(零 setLocation 零 resume)"
+    assert all(os.path.exists(p) for p in links), "链接必须还在"
 
 
 def test_cancel_blocked_when_alias_left_behind(tmp_path, monkeypatch):
-    """撤销删链接数不齐(残留别名仍指向 dst) ⇒ blocked 留现场: 不搬回不终态; 修好后重试照常搬回(R1#23)
+    """撤销删链接数不齐(残留别名仍指向 dst) ⇒ blocked 留现场: 不清账不终态; 修好后重试照常删净清账(R1#23)
 
-    残留别名在场时下发 setLocation(src) 搬回, 路径会穿过别名指回 dst(copy-onto-self),
-    且 CANCELLED 清空 alias_paths 后残留链接脱离 job 账失管 —— 必须先拦下。
+    残留别名本身已无「回搬穿别名」危险(搬回能力 D6 退役), 但 CANCELLED 清空 alias_paths
+    后残留链接脱离 job 账失管 —— 必须先拦下。
     """
     mgr, client, mod, job_id, spawned, src, dst, content = _armed_env(tmp_path, monkeypatch)
     links = list(mod.get_job(job_id).alias_paths)
@@ -298,7 +296,7 @@ def test_cancel_blocked_when_alias_left_behind(tmp_path, monkeypatch):
     assert out["cls"] == "blocked" and out["reasons"][0]["gate"] == "cancel_alias_left", out
     text = out["reasons"][0]["text"]
     assert victim in text and dst in text and "重试" in text, text
-    # 留现场: 相位/账面/链接都原样, 不搬回不恢复成员不落取消终态(对账照常看到活别名)
+    # 留现场: 相位/账面/链接都原样, 不清账不恢复成员不落取消终态(对账照常看到活别名)
     job = mod.get_job(job_id)
     assert job.phase == ru.PHASE_ARMED and job.alias_paths == tuple(links), (job.phase, job.alias_paths)
     assert os.path.exists(victim), "删除失败的残留别名必须留在现场"
@@ -306,16 +304,16 @@ def test_cancel_blocked_when_alias_left_behind(tmp_path, monkeypatch):
     assert not any(c[0] == "resume" for c in client.calls), client.calls
     assert (relocate_journal.read_journal(str(tmp_path / "data"), job_id) or {}).get("phase") != ru.PHASE_CANCELLED
 
-    # 修好后重试: 残留删净、账面里已先行消失的链接幂等跳过, 照常搬回(校验式不卡死重试)
+    # 修好后重试: 残留删净、账面里已先行消失的链接幂等跳过, 照常清账(校验式不卡死重试)
     monkeypatch.undo()
     r = mod.relocate_cancel(job_id, cost_confirmed=True)
     assert r["cls"] == "ok" and mod.get_job(job_id).phase == ru.PHASE_CANCELLED, r
-    assert ("set_location", src) in client.calls, client.calls
+    assert not any(c[0] == "set_location" for c in client.calls), "撤销零 setLocation(D6)"
     assert any(c[0] == "resume" for c in client.calls), client.calls
 
 
 def test_cancel_proceeds_when_links_all_removed(tmp_path, monkeypatch):
-    """撤销删净 ⇒ 照常搬回(新守卫不误伤正常撤销); 账面链接已被外部先行删掉不误判残留(R1#23)
+    """撤销删净 ⇒ 照常清账(校验式不误伤正常撤销); 账面链接已被外部先行删掉不误判残留(R1#23)
 
     「已消失 ≠ 残留」: 校验式看的是删后还有没有认得出的别名留在现场, 不看删除计数 ——
     账面里被先行删掉的链接(外部删除/上次撤销半途)永远数不齐, 计数式会把撤销永久卡死。
@@ -328,12 +326,15 @@ def test_cancel_proceeds_when_links_all_removed(tmp_path, monkeypatch):
     assert out["cls"] == "ok", out
     saved = mod.get_job(job_id)
     assert saved.phase == ru.PHASE_CANCELLED and saved.alias_paths == (), saved
-    assert ("set_location", src) in client.calls, client.calls
-    assert not any(os.path.exists(p) for p in links), "账面链接必须删净再搬回(残留 = 回搬穿别名)"
+    assert not any(c[0] == "set_location" for c in client.calls), "撤销零 setLocation(D6)"
+    assert not any(os.path.exists(p) for p in links), "账面链接必须删净再清账(残留 = 失管)"
 
 
-def test_cancel_rejected_in_moving_and_watching_phases(tmp_path):
-    """MOVING/WATCHING 期取消拒绝(R1#24): qB 在途搬迁时不下发回搬指令、不终态、不恢复成员, 文案写明相位与可选动作"""
+def test_cancel_allowed_mid_move_is_pure_stop(tmp_path):
+    """半途撤销(D6 §03.3「含半途撤销」): MOVING/WATCHING 期撤销 = 停手 + 清账 + 恢复成员,
+    零 setLocation(数据与下载器路径不动)、零删链(自己的链接尚未建立), journal 落终态;
+    半搬数据留新位置, 缺件由下载器自行补下(确认面三段式其二警示) —— 旧 R1#24 硬拒撤
+    的核心动因(在途搬迁叠加回搬指令)随搬回能力一并退役"""
     locs, resumed = [], []
     mod = _bare_mod(
         api=types.SimpleNamespace(
@@ -344,26 +345,23 @@ def test_cancel_rejected_in_moving_and_watching_phases(tmp_path):
     )
     for phase in (ru.PHASE_MOVING, ru.PHASE_WATCHING):
         mod._jobs["j1"] = _job("j1", phase=phase, resume_hashes=("HA", ))
+        first = mod.relocate_cancel("j1")
+        assert first["cls"] == "confirm" and "halfway" in first["guide"], (phase, first)
         out = mod.relocate_cancel("j1", cost_confirmed=True)
-        assert out["cls"] == "blocked" and out["reasons"][0]["gate"] == ru.GATE_MOVING, (phase, out)
-        text = out["reasons"][0]["text"]
-        assert phase in text and "在途搬迁" in text and "armed" in text, (phase, text)
-        assert mod._jobs["j1"].phase == phase, "拒绝取消不得改相位"
-        assert not locs and not resumed, (phase, locs, resumed)
-    # 在途搬迁连成本确认面都不给(与 settled 检查同原则: 不误导可撤)
-    mod._jobs["j1"] = _job("j1", phase=ru.PHASE_MOVING, resume_hashes=("HA", ))
-    first = mod.relocate_cancel("j1")
-    assert first["cls"] == "blocked" and first["reasons"][0]["gate"] == ru.GATE_MOVING, first
-    assert "cost" not in first, "硬拒绝不给成本面板"
+        assert out["cls"] == "ok" and mod._jobs["j1"].phase == ru.PHASE_CANCELLED, (phase, out)
+        assert not locs, (phase, locs)
+        assert resumed == [["HA"]], (phase, resumed)
+        assert (relocate_journal.read_journal(str(tmp_path), "j1") or {}).get("phase") == ru.PHASE_CANCELLED
+        locs.clear()
+        resumed.clear()
 
 
 def test_cancel_rejected_for_terminal_phases(tmp_path):
     """终态 job(DONE/FAILED/CANCELLED)拒绝撤销(issue 26-11-08-1608 面 1): 无撤销面, 账面原样
 
-    撤销对终态现场会重试整套回滚(删链接 -> 搬回 -> 落 CANCELLED): FAILED 的失败证据
-    (last_error/reason)被 CANCELLED 覆盖, DONE(已 finalized)会对已收尾数据再发起一次
-    搬回 —— 与 _start_job 的 not existing.is_terminal 同口径, 守卫在序列头部, 连成本
-    确认面都不给(不误导可撤, 与 MOVING 拒撤同一原则)。
+    历史记录不改写: FAILED 的失败证据(last_error/reason)不得被 CANCELLED 覆盖, 已收尾
+    数据没有「撤销」语义 —— 与 _start_job 的 not existing.is_terminal 同口径, 守卫在
+    序列头部, 连 dry_run/确认面都不给(不误导可撤)。
     """
     locs, resumed = [], []
     mod = _bare_mod(
@@ -1191,7 +1189,8 @@ def test_apply_hot_enable_sweeps_probe_residue(tmp_path, monkeypatch):
 
 
 def test_cancel_write_intent_faces(tmp_path):
-    """撤销写意图: 删链接(rc_65)/搬回实参(rc_67/69)/reason 与回执契约(rc_99/121~126/gone)"""
+    """撤销写意图: 删链接(rc_65)/三段式确认面(D7 guide)/reason 与回执契约(rc_99/121~126/gone);
+    旧搬回实参断言(rc_67/69)随 setLocation 搬回能力退役(D6)"""
     dd = str(tmp_path)
     target = tmp_path / "data.mkv"
     target.write_bytes(b"x" * 64)
@@ -1219,14 +1218,15 @@ def test_cancel_write_intent_faces(tmp_path):
     mod._jobs["j1"] = job
 
     first = mod.relocate_cancel("j1")
-    assert first["cls"] == "confirm" and first["cost"]["job_id"] == "j1" and first["cost"]["bytes"] == 64, first
+    assert first["cls"] == "confirm" and first["job_id"] == "j1", first
+    assert "不会搬回" in first["guide"]["consequence"], first["guide"]
     assert os.path.exists(link), "未确认不得动链接"
 
     out = mod.relocate_cancel("j1", cost_confirmed=True)
     assert out["cls"] == "ok", out
-    assert set(out) >= {"cls", "cost", "job_id", "phase"}, set(out)
-    assert not os.path.exists(link), "撤销必须删链接(链接不删即搬回 = 残链孤现场)"
-    assert locs and locs[0]["torrent_hashes"] == ["HA"] and locs[0]["location"] == job.src, locs
+    assert set(out) >= {"cls", "job_id", "phase"}, set(out)
+    assert not os.path.exists(link), "撤销必须删自己的链接(D6: 链接不删即失管 = 残链孤现场)"
+    assert locs == [], "撤销零 setLocation(D6): 数据与下载器路径一律不动"
     saved = mod.get_job("j1")
     assert saved.phase == ru.PHASE_CANCELLED and saved.reason == "cancelled", (saved.phase, saved.reason)
     assert resumed == [["HA"]], resumed

@@ -383,18 +383,19 @@ class TorrentsMixin:
         )
 
     def _cmd_relocate_cancel(self, job_id: str = "", confirm: bool = False, cmd_id: str = ""):
-        """WEB UI 命令: 撤销迁移(§3.5.1, 唯一会移动数据的旁支) —— 转发 ctx.relocate.relocate_cancel
+        """WEB UI 命令: 撤销迁移(D6 停手语义, 计划 26-11-15-2340 §03.3) —— 转发 ctx.relocate.relocate_cancel
 
-        两步同模块口径: confirm 缺省/False 只回成本(cls=confirm, 带 cost: 字节数 + 从哪搬回哪),
-        不碰数据; confirm=True 才删链接 + setLocation(mover, src)。回执形状: truth=模块返回的
-        单 item({cls, cost, job_id, phase} 或 blocked 带 reasons)。
+        两步同模块口径: confirm 缺省/False 只回三段式确认面(cls=confirm, guide 带
+        后果/半途警示/手动处置推荐, D7), 不碰数据; confirm=True 才删链接清账 —— 数据与
+        下载器路径一律不动(零 setLocation 不搬回, D6)。回执形状: truth=模块返回的
+        单 item({cls, guide, job_id, phase} 或 blocked 带 reasons)。
         """
         result = self.ctx.relocate.relocate_cancel(job_id or "", cost_confirmed=bool(confirm))
         if cmd_id:
             self._set_web_result(cmd_id, "ok", truth=result)
         logger.info(
             f"WEB UI | 撤销迁移 {job_id or '<空>'}(确认={bool(confirm)}): {result['cls']}" +
-            (f" | 成本 {result.get('cost', {}).get('bytes')} 字节" if result.get("cost") else "")
+            (" | 三段式确认面已下发" if result.get("guide") else "")
         )
 
     def _cmd_super_seeding(self, hash: str, enable: bool = False):

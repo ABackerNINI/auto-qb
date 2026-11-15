@@ -195,14 +195,16 @@ def build_router(ctx: WebContext) -> APIRouter:
 
     @router.post("/api/relocate/cancel")
     def api_relocate_cancel(body: dict | None = None):
-        """撤销迁移(计划 26-10-18-1604 §3.5.1): 删链接 + qB 搬回 —— 两步同口径,
-        **不确认不动数据**(成本提示是模块内建契约, 不是前端自觉)
+        """撤销迁移(D6 停手语义, 计划 26-11-15-2340 §03.3): 停手 + 清账 + 删除自己已建的
+        链接 —— 两步同口径, **不确认不动数据**(确认面是模块内建契约, 不是前端自觉)
 
+        数据与下载器路径一律不动(零 setLocation 不搬回; 含半途撤销, 缺件由下载器自行补下)。
         挂 relocate.enabled 403 门控(fail-closed, 同预检端点); 经 _enqueue 走主循环线程
         执行 ctx.relocate.relocate_cancel(与写命令串行化)。body {job_id: "...", confirm: bool};
-        job_id 空 400 拒收; confirm 缺省 = 只回成本(cls=confirm, cost 带字节数与搬回方向),
-        confirm=true 才真正删链接 + setLocation(mover, src)。回执(经 cmd 通道):
-        status=ok + truth=模块返回 item({cls, cost, job_id, phase} / blocked 带 reasons)。
+        job_id 空 400 拒收; confirm 缺省 = 只回三段式确认面(cls=confirm, guide 带
+        后果/半途警示/手动处置推荐, D7 硬性验收文案), confirm=true 才真正删链接清账。
+        回执(经 cmd 通道): status=ok + truth=模块返回 item({cls, guide, job_id, phase} /
+        blocked 带 reasons)。
         """
         _require_relocate(ctx)
         job_id = str((body or {}).get("job_id") or "").strip()

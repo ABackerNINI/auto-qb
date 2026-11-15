@@ -90,7 +90,7 @@ _GOLDEN_ROUTES = {
     ("POST", "/api/torrents/skip-check/precheck"),  # 跳检预检只读端点(plan 26-10-05-0314 S2; 403 门控同单发)
     ("POST", "/api/torrents/relocate/precheck"),  # 整组迁移预检只读端点(plan 26-10-18-1604 P2; 403 门控 relocate.enabled)
     ("POST", "/api/relocate/precheck-add"),  # 添加种子落点预检只读端点(计划 26-10-18-1604 §3.6.1; 同一 403 门控)
-    ("POST", "/api/relocate/cancel"),  # 撤销迁移端点(§3.5.1 成本两步; 同一 403 门控; P7 补齐界面入口)
+    ("POST", "/api/relocate/cancel"),  # 撤销迁移端点(确认两步; D6 停手语义不搬回; 同一 403 门控)
     ("POST", "/api/torrents/{hash}/super-seeding"),
     ("GET", "/api/torrents/{hash}/trackers"),
     ("POST", "/api/torrents/{hash}/trackers/add"),

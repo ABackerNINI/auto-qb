@@ -18,7 +18,8 @@ S4(26-11-05-0808)退役面: 旧 guardian(finalize_watch)退化路径/CLI/pid 锁
 - test_exec_reject_and_pause_failure: 形态拒绝(空文件表)/ 暂停失败 -> blocked
 - test_precheck_empty_file_table_skips_representative_probe: 空文件表不把 save_path(目录)当代表文件探测(POSIX 目录 nlink>=2 的 CI 红)
 - test_daemon_spawn_argv: 真实拉起入口的 argv(detached 单点, -m auto_qb.tools.recycle_daemon)
-- test_cancel_rejects_unknown_and_failure: 未知 job -> blocked; 搬回被拒 -> blocked + failed 账
+- test_cancel_rejects_unknown_and_failure: 未知 job -> blocked(gone); 旧「qB 拒绝搬回 -> failed(cancel_failed)」
+  分支随 setLocation 搬回能力退役(D6), 替身对该端点抛错仍照常清账
 - test_reconcile_new_chain_faces: 对账新链三分支(journal rewritten 镜像合并 / 别名丢失重建 / 全员到 dst 核验过+零依赖收尾完成)
 - test_task_line_exception_isolated: 单 job 抛异常 -> failed(internal_error), 不拖垮任务线
 - test_qb_up_probe: 客户端可读 -> True; 无 api -> False
@@ -262,7 +263,8 @@ def test_daemon_spawn_argv(tmp_path, monkeypatch):
 
 
 def test_cancel_rejects_unknown_and_failure(tmp_path, monkeypatch):
-    """撤销: 未知 job -> blocked; qB 拒绝搬回 -> blocked + 账落 failed(cancel_failed)"""
+    """撤销: 未知 job -> blocked(gone); 旧「qB 拒绝搬回 -> failed(cancel_failed)」分支随
+    setLocation 搬回能力退役(D6) —— 撤销链再无 qB 写, 即便替身对该端点抛错也照常清账"""
     pin_disk_usage(monkeypatch)
     mgr, client, src, dst, content, files = relocate_env(tmp_path)
     mod = mgr.host.get("relocate")
@@ -274,11 +276,11 @@ def test_cancel_rejects_unknown_and_failure(tmp_path, monkeypatch):
     mod._set_job(ru.RelocateJob(**{**mod.get_job(job_id).__dict__, "phase": ru.PHASE_ARMED}))
 
     def _boom(**kw):
-        raise RuntimeError("搬回被拒")
+        raise RuntimeError("该端点已无人调用; 若被调用说明撤销链混入了 qB 写")
 
     monkeypatch.setattr(client, "torrents_set_location", _boom)
     r2 = mod.relocate_cancel(job_id, cost_confirmed=True)
-    assert r2["cls"] == "blocked" and mod.get_job(job_id).reason == "cancel_failed"
+    assert r2["cls"] == "ok" and mod.get_job(job_id).phase == ru.PHASE_CANCELLED, r2
 
 
 def test_reconcile_new_chain_faces(tmp_path, monkeypatch):

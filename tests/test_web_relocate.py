@@ -15,8 +15,9 @@
 - test_web_relocate_precheck_routes: 路由级 403(关, 零入队)/ 400(空 hashes/空 location/缺 name)/
   门开后入队 cmd 与载荷形状
 - test_web_relocate_cancel_route: 撤销路由 403(关)/ 400(空 job_id)/ 门开后入队 cmd 与载荷形状
-- test_web_relocate_cancel_drain: drain 级两步走: MOVING 期撤销 blocked(moving, R1#24 零 qB 写),
-  推进到 armed 后未确认只回成本(数据零变动), 确认后搬回 + phase=cancelled + journal 落盘
+- test_web_relocate_cancel_drain: drain 级两步走(D6 停手语义): 未确认只回三段式确认面(D7 guide,
+  数据零变动), 确认后删自己的链接 + phase=cancelled + journal 落盘(零 setLocation 不搬回;
+  R1#24 的 MOVING 期硬拒撤随搬回能力退役, 半途撤销照常停手)
 - test_web_relocate_precheck_drain: drain 级回执 truth={results, summary} 结构 + gone verdict +
 - test_relocate_add_gate_wired_in_add_dialog
 - test_relocate_confirm_loop_wired_in_move_dialog: 前端静态守阵(issue 26-11-04-0734): _editPost /
@@ -908,11 +909,11 @@ def test_web_relocate_cancel_route(web_env):
 
 
 def test_web_relocate_cancel_drain(tmp_path, monkeypatch):
-    """drain 级撤销两步走: 未确认(cls=confirm + cost, 数据零变动); 确认(cls=ok,
-    set_location 搬回 src + phase=cancelled + journal 落盘)
+    """drain 级撤销两步走(D6 停手语义): 未确认(cls=confirm + 三段式 guide, 数据零变动);
+    确认(cls=ok, 删自己的链接 + phase=cancelled + journal 落盘, 零 setLocation 不搬回)
 
-    R1#24 起 MOVING/WATCHING 期撤销直接拒绝(在途搬迁不可叠加回搬指令), 两步走改在
-    armed 现场走 —— 这才是撤销的真实窗口。
+    旧 R1#24 的 MOVING 期硬拒撤随搬回能力退役: 半途撤销(cmd 通道直发)照常停手 ——
+    先在 moving 期撤一条(零 setLocation), 再起一条走到 armed 走两步确认。
     """
     from relocate_exec_support import _run_ticks, _simulate_moved, _spy_spawn, _stub_probe_pass
 
@@ -922,36 +923,44 @@ def test_web_relocate_cancel_drain(tmp_path, monkeypatch):
     mgr.config.data_dir = str(tmp_path / "data")
     mod = mgr.host.get("relocate")
     _spy_spawn(mod, [])
-    job_id = mod.relocate_execute(["HA"], dst)[0]["job_id"]
-    assert mod.get_job(job_id).phase == "moving" and client.calls  # 已下发搬迁
-    # 在途搬迁期撤销: blocked(moving), 连成本确认面都不给(R1#24)
+    # 半途撤销: moving 期(cmd 通道直发)照常停手 —— 零 setLocation(不叠加任何搬迁指令)
+    job_moving = mod.relocate_execute(["HA"], dst)[0]["job_id"]
+    assert mod.get_job(job_moving).phase == "moving" and client.calls  # 已下发搬迁(执行链正常下发)
     client.calls.clear()
-    mgr.web.commands.put(("relocate_cancel", {"job_id": job_id, "cmd_id": "rc0"}))
+    mgr.web.commands.put(("relocate_cancel", {"job_id": job_moving, "confirm": True, "cmd_id": "rc0"}))
     mgr.web.consume_commands()
     truth0 = mgr.web.results["rc0"]["truth"]
-    assert truth0["cls"] == "blocked" and truth0["reasons"][0]["gate"] == "moving", truth0
-    assert client.calls == [], f"在途搬迁期撤销零 qB 写: {client.calls}"
-    # 推进到 armed(撤销的真实窗口)再走两步
+    assert truth0["cls"] == "ok" and mod.get_job(job_moving).phase == "cancelled", truth0
+    assert not any(c[0] == "set_location" for c in client.calls), f"半途撤销零 setLocation: {client.calls}"
+    # armed 现场走两步确认
+    job_id = mod.relocate_execute(["HA"], dst)[0]["job_id"]
     _simulate_moved(mgr, dst, files, content)
     _run_ticks(mod, 6)
     assert mod.get_job(job_id).phase == "armed", mod.get_job(job_id).phase
-    # 第一步: 不确认 => 只回成本, 零 qB 写(撤销前清空并断言无新调用)
+    # 第一步: 不确认 => 只回三段式确认面(D7 guide), 零 qB 写(撤销前清空并断言无新调用)
     client.calls.clear()
     mgr.web.commands.put(("relocate_cancel", {"job_id": job_id, "cmd_id": "rc1"}))
     mgr.web.consume_commands()
     rec = mgr.web.results["rc1"]
     assert rec["status"] == "ok", rec
     truth = rec["truth"]
-    assert truth["cls"] == "confirm" and truth["cost"]["bytes"] > 0, truth
-    assert truth["cost"]["from"] == dst and truth["cost"]["to"] == src, truth["cost"]
-    assert client.calls == [], f"未确认成本时不得有任何 qB 写调用: {client.calls}"
-    # 第二步: 确认 => 搬回 + cancelled + journal 落盘
+    assert truth["cls"] == "confirm" and "guide" in truth, truth
+    guide = truth["guide"]
+    assert "不会搬回" in guide["consequence"], guide  # 其一 后果
+    assert "缺件" in guide["halfway"] and "补下" in guide["halfway"], guide  # 其二 半途警示
+    assert "当前位置" in guide["halfway"] and "源位置" in guide["halfway"], \
+        f"补下位置不锚定新位置(按成员当前位置自行补下): {guide['halfway']}"
+    assert len(guide["manual"]) == 4, guide  # 其三 手动处置推荐
+    assert "重新校验" in guide["manual"][1], guide  # 缺件处理条(强制重新校验出口)
+    assert "当前位置" in guide["manual"][0] and "重新发起" in guide["manual"][3], guide
+    assert client.calls == [], f"未确认时不得有任何 qB 写调用: {client.calls}"
+    # 第二步: 确认 => 删自己的链接 + cancelled + journal 落盘(零 setLocation)
     mgr.web.commands.put(("relocate_cancel", {"job_id": job_id, "confirm": True, "cmd_id": "rc2"}))
     mgr.web.consume_commands()
     rec = mgr.web.results["rc2"]
     assert rec["status"] == "ok" and rec["truth"]["cls"] == "ok", rec
     assert mod.get_job(job_id).phase == "cancelled"
-    assert ("set_location", src) in client.calls, client.calls
+    assert not any(c[0] == "set_location" for c in client.calls), f"撤销零 setLocation(D6): {client.calls}"
     journal = os.path.join(str(tmp_path / "data"), "relocate", f"{job_id}.json")
     assert os.path.exists(journal), "撤销后 journal 必须落 cancelled 相位(guardian 退休信号)"
 

@@ -57,7 +57,7 @@ GATE_PLATFORM = "platform"  # §3.3 能力矩阵不支持(跨 OS 容器 / 无链
 GATE_HARDLINK = "hardlink"  # 组文件是第三方硬链接(st_nlink > 1, D11 拒迁)
 GATE_THIRD_PARTY_LINK = "third_party_link"  # 组文件是第三方文件级链接(D11 拒迁)
 GATE_FORM = "form"  # 形态分流本身的拒绝/需确认(plan() 产出)
-GATE_CANCEL_ALIAS_LEFT = "cancel_alias_left"  # 撤销中止: 残留别名未删净拒绝搬回(exec 侧一次性回执, R1#25 口径)
+GATE_CANCEL_ALIAS_LEFT = "cancel_alias_left"  # 撤销中止: 残留别名未删净不清账(清账即失管; exec 侧一次性回执, R1#25 口径; D6 后无搬回危险)
 # fastresume 收尾链(计划 26-11-05-0808 S1)五闸(§3.1 预检行; 嵌套/三态继承 0546 机制判定):
 GATE_AUTO_TMM = "auto_tmm"  # 组内有 AutoTMM 成员(fastresume 无 qBt-savePath 键, N8 实测, 改写不生效)
 GATE_BACKEND = "backend"  # qB fastresume 存储后端非 Legacy(部署矩阵 E 格: SQLite 无 fastresume 文件, D2/D4 fail-fast 禁用)

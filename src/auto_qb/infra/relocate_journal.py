@@ -198,8 +198,9 @@ REWRITE_MEMBER_GONE = "member_gone"
 # rewritten/already 代表「成员 fastresume 已改写到 dst」—— 冻结态前提(成员重启将从 dst
 # 载入)对 member_gone 不成立(fastresume 不存在, 无可冻结, 成员重启什么都载不进)。
 # 消费方按语义取用: pending 口径/重放复确认用 REWRITE_SETTLED(缺失下窗重确认无害),
-# 「已落账即冻结」类闸门(撤销闸 relocate_exec cancel_rewritten)必须用本集 —— 把
-# member_gone 当已落账会误堵「卡死悬挂 job 的唯一人工出口」(撤销), 且文案失实。
+# 「已落账即冻结」类闸门必须用本集 —— 把 member_gone 当已落账会误堵(且文案失实)。
+# (历史消费方: 撤销闸 cancel_rewritten —— 已随「撤销不搬回」退役, 计划 26-11-15-2340
+# §03.3 D6: 数据留在新位置后 fastresume 改写与数据位置一致, 冻结态前提消失。)
 REWRITE_SETTLED_FROZEN = frozenset({"rewritten", "already"})
 
 # 成员账记录里计数控的键名(单点: daemon 写 / 对账读)

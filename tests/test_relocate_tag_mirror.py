@@ -193,8 +193,8 @@ def test_pending_tag_remove_failure_retried(tmp_path, monkeypatch):
 def test_pending_tag_never_added_terminal_no_remove(tmp_path, monkeypatch):
     """未 armed(从未加过标签)直接撤销: 终态也不得发 remove —— 那是多余的 qB 写
 
-    车辆相位用 moved(数据已到目标、未武装、从未 add; R1#24 起 MOVING/WATCHING 期撤销
-    被 phase guard 拒绝, 不再是可撤窗口)。
+    车辆相位用 moved(数据已到目标、未武装、从未 add; 旧 R1#24 的 MOVING/WATCHING 期
+    硬拒撤已随搬回能力退役 D6, 本用例只锁「从未 add 的终态不发 remove」语义)。
     """
     mgr, client, mod, job_id, dst, content, files = _tag_env(tmp_path, monkeypatch)
     _simulate_moved(mgr, dst, files, content)

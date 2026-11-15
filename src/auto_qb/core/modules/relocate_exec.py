@@ -1881,26 +1881,57 @@ class ExecMixin:
     def _alias_kind_of_form(form: str) -> str:
         return {"file_links": "file", "dir_alias": "dir"}.get(form, "")
 
-    # ---------- 撤销(唯一会移动数据的旁支: 先算成本, 需显式确认) ----------
+    # ---------- 撤销(D6 停手语义: 数据与下载器路径零触碰, 需显式确认) ----------
+
+    # D7 三段式确认文案(计划 26-11-15-2340 §03.3, 硬性验收项; 撤销用户引导单点):
+    # 其一 后果 / 其二 半途撤销警示 / 其三 手动处置推荐(查看位置/缺件/残留链接/重来)。
+    # 现无前端弹窗(确认面 = 本模块两步契约的 cls=confirm 回执, 经 /api/relocate/cancel
+    # 的 confirm 开关消费), 三段文案随 guide 字段结构化下发, web 级 drain 测试钉三段在位。
+    _CANCEL_GUIDE = {
+        "consequence":
+            "数据保留在当前位置, 不会搬回: 已搬到目标位置的整份/部分数据原样留在新位置, 源位置不做恢复。",
+        "halfway":
+            (
+                "半途撤销警示: 若撤销时 qB 仍在搬迁途中, 搬迁本身不会被中断, 半搬的数据留在新位置; "
+                "撤销不碰成员的下载器路径, 缺件由下载器按成员当前位置自行补下"
+                "(未完成路径改写的成员会在源位置回填), 期间该组可能短暂显示缺件/校验中, 属预期现象。"
+            ),
+        "manual":
+            [
+                "查看数据当前位置: 迁移浮窗/路径链视图显示该组当前位置, 也可在 qBittorrent 中查看该组种子的保存路径。",
+                "缺件处理: 无需人工干预, 下载器按成员当前位置自动补下(位置以 qBittorrent 中该组种子的保存路径为准); "
+                "长时间无动作时可在 qBittorrent 中对该组执行「强制重新校验」。",
+                "残留链接排查清理: 撤销只删除本任务自己建立的链接; 如源目录仍有可疑残留, 检查其中指向新位置的链接"
+                "(符号链接/硬链接), 确认没有其他种子依赖后手动删除。",
+                "如需重来: 像首次一样重新发起一次整组迁移即可(会建立新的迁移任务), 无需先清理现场。",
+            ],
+    }
 
     def relocate_cancel(self, job_id: str, cost_confirmed: bool = False) -> dict:
-        """撤销迁移: 删链接(删净才搬回) + qB 搬回(目标为空 ⇒ 零校验) —— 必须先给用户看成本
+        """撤销迁移(D6 停手语义, 计划 26-11-15-2340 §03.3): 停手 + 清账 + 删除自己已建的链接
 
-        未确认成本时只回「将把 X 从 T 搬回 S(预计)」, 不动任何东西(§3.5.1)。
+        数据与下载器路径一律不动(零 setLocation; 含半途撤销: 半搬数据留新位置, 缺件由
+        下载器按成员当前位置自行补下 —— 撤销链不碰成员 fastresume, 未完成改写的成员会在
+        源位置回填) —— 旧「删链接后 setLocation 搬回源位置」的能力已整体删除(D6),
+        不是加开关。未确认时只回三段式确认面(D7: 后果/半途警示/手动处置推荐), 不动任何东西。
 
-        dry_run 时不执行(删链接 + qB 搬回都是真写, 且搬回要再复制一遍全量数据)。
-        终态 job(DONE/FAILED/CANCELLED)拒绝撤销 —— 终态相位没有撤销面(失败现场要保留,
-        已收尾数据不再二次搬回); MOVING/WATCHING(在途搬迁)拒绝撤销; 链接未删净(残留
-        别名仍指向 dst)拒绝搬回, 留现场重试。
+        dry_run 时不执行(删链接是真写)。终态 job(DONE/FAILED/CANCELLED/SUPERSEDED)拒绝
+        撤销 —— 终态相位没有撤销面(失败现场要保留, 历史记录不改写)。
+        继承别名(plan.inherited)不在撤销清理面(D6): 它们是前任的, handover 已统一改指
+        本任务终位置, 数据留在新位置后别名与服务连续性成立, 撤销不删不撤 —— 该连续性
+        论证有相位前置条件: handover 在 moved 段才跑(D20 先搬后重定向), 只在改指收敛后
+        成立; MOVING/WATCHING 期半途撤销时改指未发生, 继承别名仍指前任 dst(= 本任务
+        src), qB 撤销后继续搬完即清空该处, 继承别名悬空且任务已终态(无对账无重试无改指)
+        —— 这是退役 cancel_inherited 守卫后新开放的窗口, 已接受为遗留风险(确认面其二
+        警示缺件由下载器自行补下)。
         """
         job = self._jobs.get(job_id)
         if job is None:
             return {"cls": "blocked", "reasons": [{"gate": ru.GATE_GONE, "text": f"未找到迁移任务 {job_id}"}]}
-        # ---- 终态守卫(issue 26-11-08-1608 面 1): DONE/FAILED/CANCELLED 无撤销面 —— 撤销
-        # 会对终态现场重试整套回滚(删链接 -> 搬回 -> 落 CANCELLED): FAILED 的失败证据
-        # (last_error/reason)被 CANCELLED 覆盖, DONE(已 finalized, alias_paths 已清)会对
-        # 已收尾数据再发起一次搬回。与 _start_job 的 not existing.is_terminal 同口径;
-        # 放在最前 —— 连 dry_run 与成本确认面都不给, 不误导可撤(与 MOVING 拒撤同一原则)。
+        # ---- 终态守卫(issue 26-11-08-1608 面 1): DONE/FAILED/CANCELLED/SUPERSEDED 无撤销面
+        # —— 历史记录不改写: FAILED 的失败证据(last_error/reason)不得被 CANCELLED 覆盖,
+        # 已收尾数据没有「撤销」语义。与 _start_job 的 not existing.is_terminal 同口径;
+        # 放在最前 —— 连 dry_run 与确认面都不给, 不误导可撤。
         if job.is_terminal:
             return {
                 "cls":
@@ -1913,8 +1944,7 @@ class ExecMixin:
                             "gate": "cancel_terminal",
                             "text":
                                 f"该迁移已落终态(相位 {job.phase}), 当前相位没有撤销面: "
-                                "撤销会对已收尾/已失败的现场重试整套回滚(删链接再搬回), "
-                                "失败账(last_error/reason)也会被 CANCELLED 覆盖 —— "
+                                "终态记录不改写, 失败账(last_error/reason)保留现场 —— "
                                 "失败任务请按失败现场交人处理, 需要回迁时重新发起反向迁移",
                         }
                     ],
@@ -1925,152 +1955,75 @@ class ExecMixin:
                 "job_id": job_id,
                 "reasons": [{
                     "gate": "dry_run",
-                    "text": "dry-run: 撤销不执行(不删链接、不搬回)"
+                    "text": "dry-run: 撤销不执行(不删链接、不动数据)"
                 }],
             }
-        # ---- R1#24: MOVING/WATCHING = qB 正在搬 src -> dst 的在途搬迁 —— 此时撤销会对在途
-        # 搬迁再下发一条回搬 setLocation(qB 排队下发互相覆盖), 且撤销立即落 CANCELLED 终态 +
-        # _resume_members: 回搬过程脱离 job 跟踪(active_jobs 滤终态, 相位机不再推进), 成员被
-        # 恢复时共享数据正被 qB 搬动, 可见短暂 missingFiles, 回搬中断则数据分居 src/dst 无账
-        # 可对。硬拒绝 + 文案写清当前相位与可选动作(对账轮询确认 qB 回 src 再终态的方案要引入
-        # 新状态机, 不取); 放在成本确认前 —— 连 confirm 面都不给, 不误导可撤(与 settled 检查
-        # 同一原则)。
-        if job.phase in (ru.PHASE_MOVING, ru.PHASE_WATCHING):
-            return {
-                "cls":
-                    "blocked",
-                "job_id":
-                    job_id,
-                "reasons":
-                    [
-                        {
-                            "gate": ru.GATE_MOVING,
-                            "text":
-                                f"该迁移正处于 qB 在途搬迁(相位 {job.phase}, {job.src} -> {job.dst}): "
-                                "此时撤销会对在途搬迁再叠加回搬指令(排队下发互相覆盖), 立即终态还会让回搬脱离任务跟踪、"
-                                "成员被恢复时可见短暂 missingFiles —— 请等搬迁结束(相位进 armed)后再撤销, "
-                                "或让迁移走执行链自然收尾(完成/失败都有明确账)",
-                        }
-                    ],
-            }
-        # ---- S1a 过渡期守卫(评审 major-1/major-2): 携带移交条目且继承别名未消化(仍在盘上)
-        # 的 job 不可撤销 —— 现行撤销仍搬回数据(setLocation 回 src, S2 才落「撤销不搬回」),
-        # 而移交别名已由 handover 统一改指 dst: 撤销会留下悬空继承别名指向已搬空的目标,
-        # 前任旧根成员断粮; 旧 cancel_chain 护栏因前任已收官终态结构性失明, 本守卫承接该面。
-        # 消化判据 = 继承别名已全部不在盘(finalize 在线删链的产物): 全部消化(或账面已清)后
-        # 撤销放行 —— 与 cancel_rewritten 的 REWRITE_SETTLED_FROZEN 边界无关(两个独立
-        # hazard, member_gone 不冻结的既有语义不受影响, 唯一人工出口不被本守卫误伤)。
-        inherited_left = [
-            p for entry in job.inherited for p in entry.alias_paths if alias_fs.alias_kind_of(p) is not None
-        ]
-        if inherited_left:
-            shown = ", ".join(inherited_left[:3]) + (f" 等共 {len(inherited_left)} 条" if len(inherited_left) > 3 else "")
-            return {
-                "cls":
-                    "blocked",
-                "job_id":
-                    job_id,
-                "reasons":
-                    [
-                        {
-                            "gate": "cancel_inherited",
-                            "text":
-                                f"该迁移接管了前任的链接工作({len(inherited_left)} 条移交别名仍在位: {shown}), "
-                                f"收尾未完成: 现行撤销会把数据搬回 {job.src}, 留下移交别名悬空指向已搬空的目标, "
-                                "前任旧根成员断粮 —— 请等收尾完成(移交别名随终态自动删除)后再撤销, "
-                                "或人工清理移交别名后重试",
-                        }
-                    ],
-            }
-        # ---- 收口评审 #3(§1.2): journal 已有 settled 改写记录时拒绝撤销 —— daemon 已在
-        # 窗口把成员 fastresume 改写到 dst; 此时删别名 + 搬回 src, 成员重启会从 dst 载入而
-        # 数据已回 src(0420 同款冻结态), 且 journal 落 cancelled 是终态、daemon 不再管 ——
-        # 没有任何机制再把 fastresume 改回来, 违反「失败态永远收敛到别名还在、成员可读、
-        # journal 待重放」。检查放在成本确认前: 连 confirm 面都不给, 不误导可撤。
-        # 判据集用 REWRITE_SETTLED_FROZEN(R4 评审轮 1 修 1): member_gone(fastresume 缺失
-        # = 成员已删)虽是 settled, 但无「已改写到 dst」的冻结前提 —— 撤销不得被它误堵
-        # (卡死悬挂 job 的唯一人工出口), 成员收缩由 R4 对账面另行收敛。
-        settled = [
-            h for h, rec in relocate_journal.read_rewrites(self._data_dir(), job_id).items()
-            if isinstance(rec, dict) and rec.get("status") in relocate_journal.REWRITE_SETTLED_FROZEN
-        ]
-        if settled:
-            shown = ", ".join(h[:8] for h in settled[:3]) + (f" 等共 {len(settled)} 个" if len(settled) > 3 else "")
-            return {
-                "cls":
-                    "blocked",
-                "job_id":
-                    job_id,
-                "reasons":
-                    [
-                        {
-                            "gate": "cancel_rewritten",
-                            "text":
-                                f"该迁移的 fastresume 改写已部分/全部落账({shown}): 成员重启将从 {job.dst} 载入, "
-                                f"此时撤销(删别名+搬回 {job.src})会留下指向 {job.dst} 的 fastresume 而数据已回源, "
-                                "冻结态无人兜底 —— 请等收尾完成后成员自动落终态(别名退场, 无需撤销), "
-                                "需要回迁时重新发起反向迁移",
-                        }
-                    ],
-            }
-        total = sum(int(s) for _r, s in self._plan_files(job))
-        cost = {
-            "job_id": job_id,
-            "bytes": total,
-            "from": job.dst,
-            "to": job.src,
-            "note": f"将把 {total} 字节从 {job.dst} 搬回 {job.src}(qB 执行), 期间该组不可用",
-        }
+        # ---- 三道旧守卫随「搬回」能力一并退役(D6, 计划 26-11-15-2340 §03.3), 能力整体删除
+        # 而非加开关 —— 三者的核心动因都是「撤销会搬回数据」, 撤销不再动数据与下载器路径后
+        # 前提全部消失:
+        # 其一 MOVING/WATCHING 硬拒撤(旧 R1#24): 在途搬迁叠加回搬指令会排队互覆; 新语义下
+        #      半途撤销就是停手(落 CANCELLED + 恢复成员, 零 setLocation 零删链), 半搬数据留
+        #      新位置、缺件由下载器自行补下, 成员恢复时的短暂 missingFiles 属预期并由确认面
+        #      三段式其二警示(D7);
+        # 其二 cancel_inherited 过渡守卫(S1a): 撤销搬回会留下悬空继承别名指向已搬空目标;
+        #      新语义下继承别名本就不在清理面(不删不撤, 见下), 数据留在新位置后别名与服务
+        #      连续性成立, 悬空前提消失;
+        # 其三 cancel_rewritten 冻结守卫(REWRITE_SETTLED_FROZEN 判据): 删别名+搬回会留下
+        #      指向 dst 的 fastresume 而数据已回源(冻结态无人兜底); 新语义下数据就在 dst,
+        #      fastresume 改写与数据位置一致, 冻结态前提消失。member_gone 不冻结的既有边界
+        #      语义(卡死悬挂 job 的人工出口)随守卫退役自然豁免, 不存在误伤面。
         if not cost_confirmed:
-            return {"cls": "confirm", "cost": cost, "reasons": [{"gate": "cost", "text": cost["note"]}]}
+            return {
+                "cls": "confirm",
+                "job_id": job_id,
+                "reasons": [{
+                    "gate": "cost",
+                    "text": self._CANCEL_GUIDE["consequence"]
+                }],
+                "guide": self._CANCEL_GUIDE,
+            }
         # (旧 cancel_chain 护栏已随改道机器退役, 计划 26-11-15-2340 §03.2: 单活任务模型下
         # 同组续迁发起瞬间前任即收官终态, 「同目标在途同伴」结构性不存在; 同目标重复发起
         # 在 relocate_execute 幂等 skip 去重, 不再需要撤销面护栏。)
-        # ---- R1#23: 搬回前必须核实链接已删净 —— _remove_links 逐条删、单条失败只告警继续,
-        # 旧写法无视返回值直接 setLocation(src): 有残留别名仍指向 dst 时, 回搬路径会穿过别名
-        # 指回目标, libtorrent rename 失败走 copy+delete 回退即 copy-onto-self; 且残留链接从此
-        # 脱离 job 账(CANCELLED 时 alias_paths 清空)失管。校验式不用「返回数 == 账面数」:
-        # 账面里已被先行删掉的链接(撤销失败后重试 / 外部删除)永远数不齐, 会把撤销永久卡死 ——
-        # 直接验「还有没有认得出的别名留在现场」, 已消失 ≠ 残留(幂等重删语义)。blocked 时
-        # 现场原样保留(相位与链接账面未动, 对账照常看到活别名不重建), 修好后重试即可。
+        # ---- 清理面 = 自己已建的链接(job.alias_paths); 继承别名(plan.inherited)不删不撤(D6,
+        # 见方法 docstring)。
+        # ---- R1#23 校验式收窄保留: _remove_links 逐条删、单条失败只告警继续。残留别名不再有
+        # 「回搬穿别名」危险(搬回已退役), 但 CANCELLED 清空 alias_paths 后残留链接会脱离 job
+        # 账失管 —— 删不净仍拦下。校验式不用「返回数 == 账面数」: 账面里已被先行删掉的链接
+        # (撤销失败后重试 / 外部删除)永远数不齐, 会把撤销永久卡死 —— 直接验「还有没有认得出
+        # 的别名留在现场」, 已消失 ≠ 残留(幂等重删语义)。blocked 时现场原样保留(相位与链接
+        # 账面未动, 对账照常看到活别名不重建), 修好后重试即可。
         targets = [p for p in (job.alias_paths or ()) if p]
-        removed = self._remove_links(targets)
+        self._remove_links(targets)
         leftover = [p for p in targets if alias_fs.alias_kind_of(p) is not None]
         if leftover:
             shown = ", ".join(leftover[:3]) + (f" 等共 {len(leftover)} 条" if len(leftover) > 3 else "")
             logger.warning(
                 f"relocate | job {job_id}: 撤销中止: {len(leftover)} 条别名删除失败仍残留"
-                f"(已删 {removed}/{len(targets)}), 不下发搬回 —— 留现场交人处理"
+                f"(目标共 {len(targets)} 条), 不清账 —— 留现场交人处理"
             )
             return {
                 "cls":
                     "blocked",
                 "job_id":
                     job_id,
-                "cost":
-                    cost,
                 "reasons":
                     [
                         {
                             "gate": ru.GATE_CANCEL_ALIAS_LEFT,
                             "text":
-                                f"撤销中止: {len(leftover)} 条别名未删净({shown}) —— 残留别名仍指向 {job.dst}, "
-                                f"此时搬回 {job.src} 的路径会穿过别名指回目标(回搬变自我复制)。"
+                                f"撤销中止: {len(leftover)} 条别名未删净({shown}), 仍指向 {job.dst} —— "
+                                "撤销落 CANCELLED 会清空链接账面, 残留链接将脱离任务账失管。"
                                 "请解除占用/修复权限后重试撤销, 或人工删除残留链接后再撤销; "
-                                "现场已保留(相位与链接账面未动)",
+                                "现场已保留(相位与链接账面未动, 数据与下载器路径本就不动)",
                         }
                     ],
             }
-        try:
-            self._ctx.api.torrents_set_location(torrent_hashes=[job.mover], location=job.src)
-        except Exception as e:  # noqa: BLE001
-            self._fail(job, "cancel_failed", str(e))
-            return {"cls": "blocked", "cost": cost, "reasons": [{"gate": "cancel_failed", "text": f"搬回被拒: {e}"}]}
         cancelled = self._set_job(replace(job, phase=ru.PHASE_CANCELLED, alias_paths=(), reason="cancelled"))
         # 通知 guardian 退休(它可能在等 qB 退出; 撤销后没有它要干的活了)
         relocate_journal.write_journal(self._data_dir(), job_id, {"phase": ru.PHASE_CANCELLED, "ts": self._clock.now()})
         self._resume_members(cancelled)
-        return {"cls": "ok", "cost": cost, "job_id": job_id, "phase": ru.PHASE_CANCELLED}
+        return {"cls": "ok", "job_id": job_id, "phase": ru.PHASE_CANCELLED}
 
     # ---------- 链接删除与 guardian 拉起 ----------
 

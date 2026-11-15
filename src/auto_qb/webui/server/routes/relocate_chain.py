@@ -126,7 +126,7 @@ def build_router(ctx: WebContext) -> APIRouter:
         窗口判据单点 = relocate_units.FINALIZE_WINDOW_PHASES(S4 新相位集 {armed, rewritten}); 服务端按快照
         复核非空才动手, 前端可见性不是授权(与预检-执行无信任传递同口径)。body
         {confirm: bool, job_id?: "..."}; 未确认只回现场说明(cls=confirm, 数据零动作,
-        与 relocate_cancel 的成本先行同口径)。
+        与 relocate_cancel 的两步确认同口径 —— confirm 前零动作, 确认后才动手)。
         """
         _require_relocate(ctx)
         b = body or {}
