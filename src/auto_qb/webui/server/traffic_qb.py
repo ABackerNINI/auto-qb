@@ -8,8 +8,9 @@ plan 26-10-04-1957 S3b, §05.2-§05.4)
   为窗口栅格上「桶值 | null」定长数组, meta = window/interval_s/sample_interval_s/source/
   stale + server_started_at(P4, plan 26-10-15-0829: 本进程出生时刻, 前端据此区分重启缝与
   停机洞; sample_interval_s = 生效采样间隔, plan 26-11-14-1313 F6 只增键 —— 与 interval_s
-  分离的显示口径: raw 段桶宽经 ceil 取整/上限加宽后可与采样间隔不等, agg 段窗二者恒不同)。
-  interval_s = 桶宽: raw 段窗 = max(采样间隔, span/上限)经 ceil 取整, 3d/7d/30d = 3600, 6mo/1y = 86400
+  分离的显示口径: raw 段桶宽经采样整倍加宽后可与采样间隔不等(26-11-15-1104 F1 后可为半秒值),
+  agg 段窗二者恒不同)。
+  interval_s = 桶宽: raw 段窗 = 生效采样间隔的整倍加宽(桶数 <= MAX_RAW_BUCKETS=500), 3d/7d/30d = 3600, 6mo/1y = 86400
   (本地日界), all = 标称月长(真实月长按行间隔, 点位真值在 points[].t, 前端按真值落点)。
 - 未启用(qb_traffic 缺省 None / enabled=false / data_dir 为空防御)或无数据 -> 空态
   (points/totals 空数组 + meta), 与 /api/traffic/history 未启用空数组分支同构。
@@ -130,7 +131,9 @@ class QbTrafficChartApi:
     def _sample_interval(self) -> float:
         """生效采样间隔(秒, D10 单点): qb_traffic 段存在取 multiplier * main_tick(与采样器
         同调, raw 段桶宽与 meta.sample_interval_s 同源), 未启用空态兜底 DEFAULT_SAMPLE_INTERVAL_S
-        (D11 保留 30s)"""
+        (D11 保留 30s)。main_tick 的 getattr/or 防御只兜「config 对象缺属性」的替身形 ——
+        生产 config 经 validate_config(main_tick >= 0.5, multiplier >= 1)恒正值; 异常 0 值
+        不会被这里静默吞掉, build_grid 对非正 si fail-fast raise(黄金法则 4)。"""
         conf = self._conf()
         if conf is not None:
             return tg.effective_sample_interval(
@@ -140,7 +143,8 @@ class QbTrafficChartApi:
         return tg.DEFAULT_SAMPLE_INTERVAL_S
 
     def _grid(self, window: str) -> tg.WindowGrid:
-        """当前时刻的时间栅格; raw 段窗(1m-24h)桶宽 = 生效采样间隔(未启用/缺省兜底 30s),
+        """当前时刻的时间栅格; raw 段窗(1m-24h)桶宽 = 生效采样间隔的整倍加宽(26-11-15-1104 F1,
+        桶数 <= MAX_RAW_BUCKETS=500, 可为半秒值; 未启用/缺省兜底 30s),
         hour 段窗(3d/7d/30d)恒 3600s, day 段窗(6mo/1y)= 本地日界 86400s;
         month 段窗(all)栅格由数据面定, 此处只出空 buckets 兜底形(空态 meta 用)"""
         sample = self._sample_interval()
@@ -159,7 +163,7 @@ class QbTrafficChartApi:
         """meta 装配单点(全部出口——正常/空态/组空态——都经此, P4 新键只增不改: 旧前端忽略
         未知键, 降级 last-good 分支按键展开同样携带)。sample_interval_s = 生效采样间隔
         (plan 26-11-14-1313 F6 后端半, 与桶宽 interval_s 分离的显示口径 —— raw 段桶宽经
-        ceil 取整/上限加宽后可与采样间隔不等, hour/day/month 段窗二者恒不同; P4 响应契约
+        采样整倍加宽后可与采样间隔不等(26-11-15-1104 F1 后可为半秒值), hour/day/month 段窗二者恒不同; P4 响应契约
         键, 非 validate_config 面)"""
         return {
             "window": grid.name,

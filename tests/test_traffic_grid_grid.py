@@ -1,13 +1,17 @@
 """test_traffic_grid_grid 测试计划: qB 口径流量图读侧栅格离散与组聚合纯函数(plan 26-10-03-0946 方案C P4, §05.1/§04.1; v4 换代 plan 26-10-05-2200 N1 —— 仅标识符与 fixture 适配, 断言逻辑零变化)
 
 ## 测试计划(每个测试函数一条)
-- test_build_grid_24h_and_30d: 24h 窗 30s 栅格 = 2881 桶(floor+1 恒含进行中桶); 30d 窗恒 3600s = 721 桶; 未知窗口 ValueError
-- test_build_grid_extended_windows: 1m/5m/30m/3h/6h/12h raw 段窗(桶宽 = 采样间隔, 桶数 = 跨度/间隔 + 1) + 3d/7d hour 段窗(恒 3600s = 73/169 桶)
-- test_build_grid_unaligned_t0_extra_bucket: t0 未对齐栅格时窗首桶提前(floor), 桶数仍 2881(floor+1 与相位无关)
-- test_build_grid_fractional_interval_ceils_bucket_width: 小数采样间隔桶宽向上取整(1.5s -> 2s 桶宽; floor 会隔桶空 = 伪断线)
-- test_build_grid_raw_bucket_cap_high_frequency_sampling: (26-10-07-2127 S3)raw 桶数上限 —— 1.5s 采样 24h 加宽到 30s 桶恰 2881 / 3h -> 4s 桶 2701 / 6h -> 8s 桶 2701 / 12h -> 15s 桶 2881; 小窗(1m/5m/30m)上限不生效仍 2s 桶
-- test_build_grid_raw_bucket_cap_default_sampling_unchanged: (S3 零回归面)30s 默认采样下桶数上限数学恒等 —— 各 raw 窗桶宽仍 30, 桶数逐窗与加宽前一致(+1 进行中桶)
-- test_build_grid_raw_cap_seed_extension_covers_sample_bucket: (S3 x S2/D3 联动)上限只加宽桶宽, grid.interval 恒 >= ceil(采样间隔) -> 窗首种子外扩(grid.t0 - grid.interval)恒覆盖 >= 1 个采样桶; 高频采样各窗桶数 <= 2881
+- test_build_grid_24h_and_30d: 24h 窗 30s 采样桶宽 = 180(采样整倍加宽, F1)恒 481 桶(floor+1 恒含进行中桶); 30d 窗恒 3600s = 721 桶; 未知窗口 ValueError
+- test_build_grid_extended_windows: 1m/5m/30m/3h/6h/12h raw 段窗(桶宽 = 采样整倍: 30/30/30/30/60/90, 桶数 = 跨度/间隔 + 1, F1) + 3d/7d hour 段窗(恒 3600s = 73/169 桶)
+- test_build_grid_unaligned_t0_extra_bucket: t0 未对齐栅格时窗首桶提前(floor), 桶数仍 481(floor+1 与相位无关, 180 | 86400 整倍)
+- test_build_grid_fractional_interval_kept_not_ceiled: 小数采样间隔桶宽保持采样整倍不取整(1.5s -> 1.5s 桶宽 41 桶; 旧 ceil 口径反转, F1 双几何实证)
+- test_build_grid_raw_bucket_cap_high_frequency_sampling: (26-11-15-1104 F1)raw 桶数上限 500 —— 1.5s 采样: 1m -> 1.5s 桶 41 / 5m -> 1.5s 桶 201 / 30m -> 4.5s 桶 401 / 3h -> 22.5s 桶 481 / 6h -> 43.5s 桶与 12h -> 87s 桶与 24h -> 174s 桶各 497-498 随相位(span/B 非整倍, floor+1), 上限恒 <= 500
+- test_build_grid_bucket_cap_exact_500_divisor: (D7/A6 边角)span 恰 500 x si 整数倍的采样(旧分母 501)分母 -1 预留进行中桶位后逐相位 <= 500
+- test_build_grid_bucket_cap_exact_500_divisor 相位扫扩满一整桶宽(评审 #4), n 两形态集合 {494,495}/{496,497}/{376} 逐值钉
+- test_v4_grid_obs_float_interval_keys_single_derivation: (评审 blocker 回归)si=2.4 非 0.5 步进桶宽, 桶键与 buckets 同式派生(first + i x interval 单一表达式), 逐相位全链(rate/totals)无 null 洞
+- test_build_grid_nonpositive_interval_fails_fast: (黄金法则 4)非正 si fail-fast raise(来源链纯 config 派生, 校验单点在 validate_config)
+- test_build_grid_raw_bucket_cap_default_sampling_widens: (F1 改判)30s 默认采样整倍加宽表 —— 1m/5m/30m/3h 桶宽仍 30(k=1), 6h -> 60 / 12h -> 90 / 24h -> 180, 桶数 = 跨度/间隔 + 1
+- test_build_grid_raw_cap_seed_extension_covers_sample_bucket: (S3 x S2/D3 联动)桶宽恒 >= 采样间隔(F1: 桶宽 = si x k, k >= 1) -> 窗首种子外扩(grid.t0 - grid.interval)恒覆盖 >= 1 个采样桶; 各窗桶数(含进行中桶)<= 500(D7 判据, 分母预留)
 - test_floor_buckets_boundary_and_mid_t1_equal_n: (26-11-14-1313 S1a/F3)t1 恰落桶边界 vs 落桶中 n 恒等(反转 R07 ceil 的方波实证)
 - test_build_grid_n_phase_invariant_span_multiple_of_interval: (26-11-14-1313 S1a/F3)W mod interval == 0 时 n 不随相位漂移(now 相位扫过一整桶宽 n 恒定, raw 与 hour 两段)
 - test_build_grid_day_windows_d4: 6mo/1y(D4 新档) day 段窗 —— 滚动窗涉及本地日期逐日铺格(桶键 = 本地日界 00:00, 6mo = 182d + 首尾日 / 1y 比 6mo 多 183 桶), interval 86400; 90d 不存在; all 拒绝 build_grid(数据面定栅格)
@@ -38,7 +42,7 @@
 - test_v4_grid_obs_same_end_later_point_wins_snapshot: (vgo_80)同覆盖末端双点快照取后到者, 变异成 `>` 会保留先到快照
 - test_v4_grid_obs_coverage_end_advance_keeps_latest_snapshot: (vgo_83)覆盖末端必须推进(`a[4] = cov_end`), 变异成写 a[5] 会让短覆盖点抢走快照
 - test_v4_grid_obs_broken_bucket_zero_rate_kept_zero: (vgo_105/vgo_117)断链桶有覆盖且速率为 0 时仍是 0 线, 均值判据错看加权和会把 0 误判成无覆盖出 None
-- test_build_grid_integral_interval_floor_not_raised: (mut-core W2 bg_21)桶宽下限恒 1s —— 1.0 采样间隔下小窗桶宽恰 1(下限被抬到 2 让 si∈(0,2) 高频采样桶数腰斩)
+- test_build_grid_integral_interval_floor_not_raised: (mut-core W2 bg_21)桶宽下限恒 1s —— 1.0 采样间隔下 1m/5m 桶宽恰 1(k=1, F1 采样整倍); 30m 被桶数上限加宽到 4s 451 桶
 - test_v4_series_points_same_bucket_later_snapshot_wins: (mut-core W2 vsp_96)同桶 raw+raw 快照取后到者 —— totals 大于 ts 时比较对象错成 totals 会永不更新
 - test_v4_series_points_three_raw_same_bucket_no_typeerror: (mut-core W2 vsp_97)同桶三条 raw 照常均值/末条快照 —— e[4] 被写坏时第三条比较 TypeError
 - test_v4_series_points_same_timestamp_later_snapshot_wins: (mut-core W2 vsp_95)同刻双 raw 记录快照取后到者 —— >= 变异成 > 保留先到者(vsp_98/vsp_112 判等价: e[4] 只作单调比较基线, 不参与输出)
@@ -60,6 +64,11 @@
 - test_v4_hold_slot_stall_over_bound_tail_stays_null: 间隙过界(停滞)尾桶保持 null
 - test_v4_hold_slot_merge_with_real_sample_deholds: holding 槽与真实观测槽同桶合并 ->
   合并桶点 is_hold=False(按观测重写), 桶值与该观测单独入桶一致
+
+几何解耦助手(R1 改判, plan webui-traffic-root-revamp F1): _grid_30s / _grid_1m_2s 直构
+WindowGrid 钉语义电池的固定栅格 —— F1 后 24h@30s 桶宽 = 180、1m@1.5s 桶宽 = 1.5, 旧
+30s/2s 栅格不再是 build_grid 的可达形; 归桶/差分/摊配/holding 语义电池钉的是既定栅格上的
+行为而非桶宽规则, 直构解耦(S1b 归桶重锚时再随新几何重钉)
 
 线程/时钟纪律: 纯函数层无时钟无文件 —— 窗口由用例给定固定 epoch, 输入直接构造 V4Block
 (天文件文本路径经 format_v4_day_text -> parse_v4_day_text 打通解析接缝); V4Block 直构时
@@ -131,14 +140,34 @@ from traffic_grid_support import (
 )
 
 
+def _grid_30s(now):
+    """(R1 改判, plan webui-traffic-root-revamp F1)语义电池固定 30s 桶的 24h 形栅格:
+    F1 后 build_grid 的 24h 桶宽 = 采样整倍(30s 采样 -> 180s), 旧 30s/24h 栅格不再是任何
+    采样的可达形 —— 归桶/差分/摊配语义电池钉的是既定栅格上的行为而非桶宽规则, 直构
+    WindowGrid 解耦几何(S1b 归桶重锚时再随新几何重钉)"""
+    t1 = int(now)
+    t0 = t1 - 86400
+    return WindowGrid("24h", t0, t1, 30, "raw", _floor_buckets(t0, t1, 30))
+
+
+def _grid_1m_2s(now):
+    """(R1 改判, 同 _grid_30s)holding 电池固定 2s 桶的 1m 形栅格: F1 后 1m@1.5s 桶宽 = 1.5,
+    旧「1.5s 采样 ceil 到 2s 桶」栅格不可达 —— 直构解耦(holding/差分语义不变)"""
+    t1 = int(now)
+    t0 = t1 - 60
+    return WindowGrid("1m", t0, t1, 2, "raw", _floor_buckets(t0, t1, 2))
+
+
 def test_build_grid_24h_and_30d():
-    """24h 窗 30s 栅格 = 2881 桶(floor+1 恒含进行中桶, 26-11-14-1313 F3 反转 R07 ceil 口径);
+    """24h 窗 30s 采样桶宽 = 180(采样整倍加宽 k=6, 26-11-15-1104 F1 替换旧 max(ceil(si),
+    ceil(span/2880)) 取整口径 —— 反转理由: 桶边须与采样节拍同律, 双几何实证见该计划 §02)
+    恒 481 桶(floor+1 恒含进行中桶, 26-11-14-1313 F3 反转 R07 ceil 口径);
     30d 窗恒 3600s = 721 桶; 未知窗口 ValueError"""
     g = build_grid("24h", NOW, 30.0)
-    assert g.interval == 30 and g.segment == "raw" and g.t1 == NOW and g.t0 == NOW - 86400
-    assert len(g.buckets) == 2881
-    assert g.first == ((NOW - 86400) // 30) * 30
-    assert g.buckets[1] - g.buckets[0] == 30 and g.last == g.first + 2880 * 30  # 尾桶 = 进行中桶(t1 起)
+    assert g.interval == 180 and g.segment == "raw" and g.t1 == NOW and g.t0 == NOW - 86400
+    assert len(g.buckets) == 481
+    assert g.first == ((NOW - 86400) // 180) * 180
+    assert g.buckets[1] - g.buckets[0] == 180 and g.last == g.first + 480 * 180  # 尾桶 = 进行中桶(t1 起)
     h = build_grid("30d", NOW, 999.0)  # sample_interval 只在 raw 段生效
     assert h.interval == 3600 and h.segment == "hour" and len(h.buckets) == 721
     assert h.first == ((NOW - 2592000) // 3600) * 3600
@@ -147,13 +176,16 @@ def test_build_grid_24h_and_30d():
 
 
 def test_build_grid_extended_windows():
-    """扩展十档窗口(2026-10-04, 与 qB 速度图对齐 + 3d/7d 外延): raw 段窗桶宽 = 采样间隔,
+    """扩展十档窗口(2026-10-04, 与 qB 速度图对齐 + 3d/7d 外延): raw 段窗桶宽 = 采样整倍
+    (26-11-15-1104 F1: 1m/5m/30m/3h span<=500x30 恰 k=1 桶宽 30, 6h k=2 -> 60, 12h k=3 -> 90),
     hour 段窗(3d/7d)恒 3600s; 采样间隔只在 raw 段生效; 桶数 = 跨度/间隔 + 1(26-11-14-1313
-    F3 floor+1 恒含进行中桶, NOW 与 t0 对齐时旧 ceil 口径少一桶)"""
-    for name, span in (("1m", 60), ("5m", 300), ("30m", 1800), ("3h", 10800), ("6h", 21600), ("12h", 43200)):
+    F3 floor+1 恒含进行中桶; 各窗 span 恰为桶宽整倍 -> 桶数与相位无关)"""
+    for name, span, iv in (
+        ("1m", 60, 30), ("5m", 300, 30), ("30m", 1800, 30), ("3h", 10800, 30), ("6h", 21600, 60), ("12h", 43200, 90)
+    ):
         g = build_grid(name, NOW, 30.0)
-        assert g.interval == 30 and g.segment == "raw" and g.t0 == NOW - span, name
-        assert len(g.buckets) == span // 30 + 1, name  # NOW 与 t0 均为 30 的公倍数: +1 进行中桶
+        assert g.interval == iv and g.segment == "raw" and g.t0 == NOW - span, name
+        assert len(g.buckets) == span // iv + 1, name  # NOW 与 t0 均为 iv 的公倍数: +1 进行中桶
     for name, span in (("3d", 259200), ("7d", 604800)):
         h = build_grid(name, NOW, 999.0)  # sample_interval 只在 raw 段生效
         assert h.interval == 3600 and h.segment == "hour" and len(h.buckets) == span // 3600 + 1, name
@@ -161,78 +193,143 @@ def test_build_grid_extended_windows():
 
 
 def test_build_grid_unaligned_t0_extra_bucket():
-    """t0 未对齐栅格时窗首桶提前到 floor(t0/interval), 桶数仍 2881(26-11-14-1313 F3:
-    floor+1 桶数与相位无关 —— t1 落桶中时 ceil 旧口径本就多一桶, 反转后对齐/未对齐恒等)"""
+    """t0 未对齐栅格时窗首桶提前到 floor(t0/interval), 桶数仍 481(26-11-14-1313 F3:
+    floor+1 桶数与相位无关; 26-11-15-1104 F1 后 24h@30s 桶宽 180, 180 | 86400 整倍 ->
+    对齐/未对齐恒等)"""
     now = NOW + 13  # t0 = now-86400 落在桶中间
     g = build_grid("24h", now, 30.0)
-    assert len(g.buckets) == 2881
-    assert g.first == ((now - 86400) // 30) * 30
-    assert g.last < now <= g.last + 30  # 尾桶 = 进行中桶(含 t1)
+    assert len(g.buckets) == 481
+    assert g.first == ((now - 86400) // 180) * 180
+    assert g.last < now <= g.last + 180  # 尾桶 = 进行中桶(含 t1)
 
 
-def test_build_grid_fractional_interval_ceils_bucket_width():
-    """小数采样间隔桶宽向上取整: 1.5s -> 2s 桶宽(floor 取 1s 会让 1.5s 一条的采样行隔桶为空 =
-    伪断线)。取小窗(1m)使 S3 桶数上限不生效, 纯粹钉住 ceil 语义; 24h 窗同采样间隔被上限加宽
-    到 30s 桶(见下方 S3 上限用例)。桶数 = 31(floor+1, 26-11-14-1313 F3)"""
+def test_build_grid_fractional_interval_kept_not_ceiled():
+    """(26-11-15-1104 F1 改判)小数采样间隔桶宽保持采样整倍不取整: 1.5s -> 1.5s 桶宽
+    (旧口径 ceil 到 2s —— 反转理由: 桶边与采样行错位正是双几何根缺陷的展示面, 桶宽 =
+    采样整倍后点位归属与桶边同律)。桶数 = 41(60/1.5 = 40 整倍 + 1 进行中桶, F3);
+    24h 窗同采样间隔被桶数上限加宽到 174s 桶(见下方上限用例)"""
     g = build_grid("1m", NOW, 1.5)
-    assert g.interval == 2
-    assert len(g.buckets) == 31  # NOW 与 t0 均为偶数恰对齐: +1 进行中桶(尾桶起点 = t1)
-    assert g.last == NOW <= g.last + 2  # 尾桶恒为进行中桶(floor(t1/interval) 对齐)
+    assert g.interval == 1.5
+    assert len(g.buckets) == 41
+    assert g.last == NOW <= g.last + 1.5  # 尾桶恒为进行中桶(floor(t1/interval) 对齐)
+    assert g.buckets[1] - g.buckets[0] == 1.5  # 半秒宽: 桶键为 x.0/x.5 浮点
 
 
 def test_build_grid_integral_interval_floor_not_raised():
-    """(mut-core W2 bg_21)桶宽下限恒 1s: 采样间隔 1.0 时小窗桶宽恰 1 —— 下限被抬到 2s
-    会让 si∈(0,2) 的高频采样在 1m/5m/30m 上凭空把桶数/分辨率腰斩(伪聚合);
+    """(mut-core W2 bg_21)桶宽下限恒 1s: 采样间隔 1.0 时 1m/5m 桶宽恰 1(k = ceil(span/500)
+    = 1, F1 采样整倍口径); 30m span/500 = 3.6 -> k=4 桶宽 4(旧口径无上限约束 1801 桶,
+    F1 桶数上限 500 收敛到 451 —— 反转理由见 plan webui-traffic-root-revamp F1/D7);
     桶数 +1(26-11-14-1313 F3 floor+1 恒含进行中桶)"""
-    for name, n in (("1m", 61), ("5m", 301), ("30m", 1801)):
+    for name, n in (("1m", 61), ("5m", 301)):
         g = build_grid(name, NOW, 1.0)
         assert g.interval == 1 and len(g.buckets) == n, name
+    g = build_grid("30m", NOW, 1.0)
+    assert g.interval == 4 and len(g.buckets) == 451
 
 
 def test_build_grid_raw_bucket_cap_high_frequency_sampling():
-    """(计划 26-10-07-2127 S3 万桶级治理)raw 桶宽 = max(ceil(采样间隔), ceil(span/2880)):
-    高频采样(1.5s)下 24h 从 43200 桶(2s 桶)加宽到 30s 桶恰 2881(+1 进行中桶,
-    26-11-14-1313 F3); 3h -> 4s 桶 2701; 6h -> 8s 桶 2701; 12h -> 15s 桶 2881;
-    小窗(1m/5m/30m)上限不生效仍 2s 桶"""
-    g24 = build_grid("24h", NOW, 1.5)
-    assert g24.interval == 30 and len(g24.buckets) == 2881  # ceil(86400/2880)=30
-    g3h = build_grid("3h", NOW, 1.5)
-    assert g3h.interval == 4 and len(g3h.buckets) == 2701  # ceil(10800/2880)=4
-    g6h = build_grid("6h", NOW, 1.5)
-    assert g6h.interval == 8 and len(g6h.buckets) == 2701  # ceil(21600/2880)=8
-    g12h = build_grid("12h", NOW, 1.5)
-    assert g12h.interval == 15 and len(g12h.buckets) == 2881  # ceil(43200/2880)=15
-    for name, n in (("1m", 31), ("5m", 151), ("30m", 901)):  # 上限不生效: 仍按采样间隔 ceil(1.5)=2
+    """(计划 26-11-15-1104 F1/D7 桶数上限 500)raw 桶宽 = 采样间隔 x k, k = ceil(span/(500 x si)):
+    1.5s 采样下 1m -> 1.5s 桶恒 41 / 5m -> 1.5s 桶恒 201 / 30m -> 4.5s 桶恒 401 /
+    3h -> 22.5s 桶恒 481(以上 span 恰为桶宽整倍, 桶数单值); 6h -> 43.5s 桶 / 12h -> 87s 桶 /
+    24h -> 174s 桶 —— span/B = 496.55 非整倍, floor+1 下桶数 497-498 随轮询相位波动
+    (上限恒 <= 500; 整倍窗桶数恒定)"""
+    for name, iv, n in (("1m", 1.5, 41), ("5m", 1.5, 201), ("30m", 4.5, 401), ("3h", 22.5, 481)):
         g = build_grid(name, NOW, 1.5)
-        assert g.interval == 2 and len(g.buckets) == n, name
+        assert g.interval == iv and len(g.buckets) == n, name
+    for name, iv in (("6h", 43.5), ("12h", 87), ("24h", 174)):
+        g = build_grid(name, NOW, 1.5)
+        assert g.interval == iv and len(g.buckets) in (497, 498), name  # 非整倍窗: 相位波动幅度 1
+        assert len(g.buckets) <= MAX_RAW_BUCKETS  # 上限恒 <= 500
 
 
-def test_build_grid_raw_bucket_cap_default_sampling_unchanged():
-    """(S3 零回归面)30s 默认采样下桶数上限数学恒等: ceil(span/2880) <= 30 恒被采样间隔一侧
-    取到, 各 raw 窗桶宽仍 30、桶数逐窗与加宽前一致(+1 进行中桶, 26-11-14-1313 F3)——
-    上限只治理高频采样部署"""
-    assert MAX_RAW_BUCKETS == 2880
-    for name, span in (
-        ("1m", 60), ("5m", 300), ("30m", 1800), ("3h", 10800), ("6h", 21600), ("12h", 43200), ("24h", 86400)
+def test_build_grid_raw_bucket_cap_default_sampling_widens():
+    """(26-11-15-1104 F1 改判)30s 默认采样整倍加宽表: 旧口径 max(30, ceil(span/2880)) 数学
+    恒等桶宽恒 30 —— 反转: 桶宽 = 30 x k, k = ceil(span/15000), 6h/12h/24h 依次 k=2/3/6 ->
+    桶宽 60/90/180, 桶数收敛到 <= 481(上限 500 治理所有部署, 不只高频采样)"""
+    assert MAX_RAW_BUCKETS == 500
+    for name, span, iv in (
+        ("1m", 60, 30),
+        ("5m", 300, 30),
+        ("30m", 1800, 30),
+        ("3h", 10800, 30),
+        ("6h", 21600, 60),
+        ("12h", 43200, 90),
+        ("24h", 86400, 180),
     ):
         g = build_grid(name, NOW, 30.0)
-        assert g.interval == 30, name
-        assert len(g.buckets) == span // 30 + 1, name
+        assert g.interval == iv, name
+        assert len(g.buckets) == span // iv + 1, name
+
+
+def test_build_grid_bucket_cap_exact_500_divisor():
+    """(26-11-15-1104 D7/A6 边角电池)span 恰为 500 x si 整数倍的采样(旧分母下 k 使 span/桶宽
+    = 500 -> 含进行中桶 501, 越判据)—— 分母取 上限-1 预留进行中桶位后恒 <= 500:
+    si=2.4 24h 旧 B=172.8 n=501 -> 新 B=175.2; si=1.728 24h 旧 B=172.8 n=501 -> 新 B=174.528;
+    si=7.2 3h 旧 B=21.6 n=501 -> 新 B=28.8。相位扫满一整桶宽(评审 #4: 短扫跨不过 n 翻形
+    边界, docstring 声明的两形态实际只钉到低形态)—— 上界恒 <= 500 + n 两形态集合逐一钉
+    (非整倍窗 n 在 floor(span/B)+1/+2 两值随相位翻转, 整倍窗恒单值)"""
+    for si, window, n_forms in ((2.4, "24h", {494, 495}), (1.728, "24h", {496, 497}), (7.2, "3h", {376})):
+        iv = build_grid(window, NOW, si).interval
+        seen = set()
+        for phase in range(0, math.ceil(iv) + 1):  # 扫满一整桶宽: 翻形边界两侧都入钉
+            g = build_grid(window, NOW + phase, si)
+            assert len(g.buckets) <= MAX_RAW_BUCKETS, (si, window, phase)  # D7: 最大 500 桶(含进行中桶)
+            seen.add(len(g.buckets))
+        assert seen == n_forms, (si, window, seen)  # 两形态(或整倍窗单值)逐值钉
+    g = build_grid("24h", NOW, 2.4)
+    assert g.interval == 175.2 and len(g.buckets) <= 500  # 2.4 x ceil(86400/1197.6) = 175.2
+    assert g.last < NOW + 1 <= g.last + g.interval  # 尾桶恒为进行中桶
+
+
+def test_v4_grid_obs_float_interval_keys_single_derivation():
+    """(评审 blocker 回归)非 0.5 步进桶宽(si=2.4)下观测桶键与 grid.buckets 必须同式派生 ——
+    修复前两条浮点舍入路径(起步 p.t - (p.t % interval) + b += interval 累加 vs buckets 生成式
+    first + i x interval)键差 1 ulp, obs.get 失配把有观测的桶经 rate_points/series_totals_points
+    全链渲染成 null 洞(si=2.4 @1m 实测最多 11/26 桶 null)。修复后逐相位扫(0.1s 步进跨 2.4s
+    主周期)全链无 null 洞: 有观测桶 rate/totals 非 null 且速率恒 80/40(delta 240/120 ÷ w 3)"""
+    for phase in range(0, 48):
+        now = NOW + phase / 10.0
+        g = build_grid("1m", now, 2.4)
+        assert g.interval == 2.4
+        start = float(g.first) + g.interval  # 采样行与桶边同律: 首槽 = 第 1 桶起点, 每桶恰一条
+        recs = tuple(V4Sample(100, 50, 240 * (k + 1), 120 * (k + 1)) for k in range(20))
+        blk = V4Block(start, 2.4, 0, 0, recs)
+        pts = v4_rate_from_totals(v4_series_points((blk, ), g.t0 - g.interval, g.t1 + 1))
+        obs = v4_grid_obs(pts, g)
+        covered = g.buckets[1:20]  # 桶 1..19 恒有采样覆盖(桶 0 随相位部分覆盖, 不入钉)
+        for j, b in enumerate(covered):
+            assert b in obs, (phase, j, "键失配: 有观测桶不在观测表(修复前 1 ulp 双舍入路径)")
+            assert (obs[b].dl_rate, obs[b].up_rate) == (80, 40), (phase, j)
+        assert rate_points(obs, g)[1:20] == [{
+            "t": b,
+            "dl": 80,
+            "up": 40
+        } for b in covered], (phase, "rate_points 全链 null 洞")
+        tots = series_totals_points(obs, g)
+        assert all(tots[g.buckets.index(b)] is not None for b in covered[1:]), (phase, "totals 断链洞")
+
+
+def test_build_grid_nonpositive_interval_fails_fast():
+    """(黄金法则 4)si 来源链 = 纯 config 派生(validate_config 保证 multiplier >= 1 x
+    main_tick >= 0.5), build_grid 对非正值 fail-fast raise 而非静默兜底 —— 0 间隔若静默
+    落 DEFAULT 会把装配缺陷藏进「看起来正常」的 30s 栅格"""
+    for bad in (0, 0.0, -1.5):
+        with pytest.raises(ValueError):
+            build_grid("1m", NOW, bad)
 
 
 def test_build_grid_raw_cap_seed_extension_covers_sample_bucket():
-    """(S3 x S2/D3 联动)上限只加宽桶宽不缩窄, grid.interval 恒 >= ceil(采样间隔) —— S2 的窗首
-    种子外扩量(grid.t0 - grid.interval)因此恒覆盖 >= 1 个原始采样桶, 种子点总能取到前驱桶点
-    作差分基线; 高频采样下各窗桶数被 2880 兜住(+1 进行中桶, 26-11-14-1313 F3; NOW 与 t0
-    对齐时恰 <= 上限 + 1)"""
+    """(S3 x S2/D3 联动)桶宽恒 >= 采样间隔(F1: 桶宽 = si x k, k >= 1) —— S2 的窗首
+    种子外扩量(grid.t0 - grid.interval)因此恒覆盖 >= 1 个采样桶, 种子点总能取到前驱桶点
+    作差分基线; 各窗桶数(含进行中桶)被 500 兜住 —— 分母 = 上限 - 1 预留进行中桶位(D7/A6
+    「最大 500 桶」判据, 见 MAX_RAW_BUCKETS 注)"""
     for name in ("1m", "5m", "30m", "3h", "6h", "12h", "24h"):
         for si in (1.5, 2.0, 30.0):
             g = build_grid(name, NOW, si)
-            assert g.interval >= math.ceil(si), (name, si)  # 加宽后 >= 采样桶宽 -> 种子外扩覆盖采样桶
-            assert len(g.buckets) <= MAX_RAW_BUCKETS + 1, (name, si)  # NOW 对齐: 桶数 <= 上限 + 1 进行中桶
+            assert g.interval >= si, (name, si)  # 桶宽 = si x k, k >= 1 -> 种子外扩覆盖采样桶
+            assert len(g.buckets) <= MAX_RAW_BUCKETS, (name, si)  # 含进行中桶恒 <= 上限(D7 判据)
     g = build_grid("24h", NOW, 1.5)
-    assert g.interval == 30 and math.ceil(1.5) == 2
-    assert g.interval >= 2  # 种子外扩 30s 覆盖 >= 1 个 2s 采样桶
+    assert g.interval == 174  # 1.5 x ceil(86400/750) = 174: 种子外扩 174s 覆盖 >= 1 个 1.5s 采样桶
 
 
 def test_floor_buckets_boundary_and_mid_t1_equal_n():
@@ -252,10 +349,10 @@ def test_build_grid_n_phase_invariant_span_multiple_of_interval():
     (G4 实证: split 数 11<->12 翻转 39 次/20 拍)。raw 与 hour 两分支共用 _floor_buckets,
     两段各钉一次"""
     for window, span in (("1m", 60), ("5m", 300), ("24h", 86400)):
-        for phase in range(0, 30):  # 桶宽 30s: 相位扫过一整桶(含 0 与 29)
+        for phase in range(0, 180):  # 相位扫过最大桶宽 180(24h@30s, F1): 恒整倍 -> n 恒定
             g = build_grid(window, NOW + phase, 30.0)
-            assert len(g.buckets) == span // 30 + 1, (window, phase)
-            assert g.last == ((NOW + phase) // 30) * 30, (window, phase)  # 尾桶恒为进行中桶
+            assert len(g.buckets) == span // g.interval + 1, (window, phase)
+            assert g.last == ((NOW + phase) // g.interval) * g.interval, (window, phase)  # 尾桶恒为进行中桶
     for phase in (0, 1, 1799, 3599):  # hour 段窗(3600s 桶): 相位含边界与桶中
         h = build_grid("3d", NOW + phase, 999.0)
         assert len(h.buckets) == 259200 // 3600 + 1, phase
@@ -284,7 +381,7 @@ def test_build_grid_day_windows_d4():
 def test_rate_points_null_shape():
     """points 形状(§08): 桶有观测 -> {"t","dl","up"}; 空桶 = null(断线语义, §05.2)"""
     g = build_grid("24h", NOW, 30.0)
-    base = g.first + 60
+    base = g.buckets[10]  # 任意栅格桶键(F1 后桶宽 180, 不再假设 30s 步进)
     obs = {base: BucketObs(1, 2, 3, 4)}
     assert rate_points(obs, g)[g.buckets.index(base)] == {"t": base, "dl": 1, "up": 2}
     assert rate_points(obs, g)[g.buckets.index(base) + 1] is None
@@ -411,7 +508,7 @@ def test_v4_grid_obs_expansion():
     """栅格展开(v4_grid_obs, D1 覆盖的栅格形态): 对齐记录 1:1 落桶 / D1 宽桶中间栅格桶
     同值非 null(totals 首个覆盖桶落增量, 其余 delta=0 链不断) / 跨界记录按重叠秒加权 /
     null 点不参与(空桶承载断线) / 窗外栅格桶不消费"""
-    g = build_grid("24h", NOW, 30.0)
+    g = _grid_30s(NOW)  # (R1 改判)固定 30s 桶几何: 本用例钉 1:1 落桶/宽桶展开语义, 见助手注
     b0 = g.first + 3000  # 任意栅格桶(3000 为 30 的整倍)
     # 1:1 对齐: 块首槽恰在 b0+30(w=30) -> 桶 [b0, b0+30) = 栅格桶 b0
     blk = V4Block(b0 + 30, 30, 1000, 500, (V4Sample(10, 20, 1000, 500), V4Sample(20, 40, 2000, 900)))
@@ -503,7 +600,8 @@ def test_v4_series_points_live_tail_merge_dedup():
 
 
 def _hold_active_fixture():
-    """F4 响应面共用地盘: 生产同构节律(1.5s 采样 / 1m 窗 2s 桶宽), 稳态流 + 瞬时垃圾
+    """F4 响应面共用地盘: 生产同构节律(1.5s 采样 / 1m 窗 2s 桶宽 —— 桶宽几何现由 _grid_1m_2s
+    直构钉住(R1 改判: F1 后 build_grid 1m@1.5s 桶宽 = 1.5), 采样节律仍 1.5s), 稳态流 + 瞬时垃圾
     速率字段(5000/2500, 区间平均恒 750/375)。活尾持最后 3 条未落盘记录(head_pending=
     False 倒推), 链端 = start + 88.5。返回 (disk, tail, chain_end)。"""
     interval = 1.5
@@ -538,7 +636,7 @@ def test_v4_hold_slot_fills_tail_grid_bucket():
     桶值(750/375 持有面平接); 其余桶与不延伸形态逐桶一致(向后兼容面)"""
     disk, tail, chain_end = _hold_active_fixture()
     now = chain_end + 0.3
-    grid = build_grid("1m", now, 1.5)
+    grid = _grid_1m_2s(now)  # (R1 改判)固定 2s 桶几何: holding 语义电池, 见助手注
     assert grid.last == int(chain_end)  # 尾桶 = 刚开启的进行中桶 [t1, t1+2)
     # G5 现状: 不延伸 -> 尾桶无观测(null), 曲线终点收在判定线左侧一格
     obs_old, _ = _hold_obs(disk, tail, grid, None, None)
@@ -558,7 +656,7 @@ def test_v4_hold_slot_rate_face_holds_last_bucket_rate():
     亦非瞬时直采的假跳升)"""
     disk, tail, chain_end = _hold_active_fixture()
     now = chain_end + 0.3
-    grid = build_grid("1m", now, 1.5)
+    grid = _grid_1m_2s(now)  # (R1 改判)固定 2s 桶几何: holding 语义电池, 见助手注
     obs, pts = _hold_obs(disk, tail, grid, now, 4.0)
     hold_point = pts[-1]
     assert hold_point.is_hold  # 桶点持有旗贯通到变换输出
@@ -577,7 +675,7 @@ def test_v4_hold_slot_totals_chain_untouched():
     disk, tail, chain_end = _hold_active_fixture()
     # 相位一: gap 1.2 跨整秒(t1 = 89 > 链端 88.5), holding 槽覆盖桶 [88, 90) 恰 = 尾桶
     now_a = chain_end + 1.2
-    grid_a = build_grid("1m", now_a, 1.5)
+    grid_a = _grid_1m_2s(now_a)  # (R1 改判)固定 2s 桶几何, 见助手注
     obs_old_a, pts_old_a = _hold_obs(disk, tail, grid_a, None, None)
     obs_new_a, pts_new_a = _hold_obs(disk, tail, grid_a, now_a, 4.0)
     te_new_a = v4_totals_points(pts_new_a)
@@ -586,7 +684,7 @@ def test_v4_hold_slot_totals_chain_untouched():
     assert obs_new_a == obs_old_a  # 逐桶全等(速率与 totals 通道零漂移)
     # 相位二: gap 0.3 不跨整秒(t1 = 88 = int(链端)), 末样本槽被窗尾过滤
     now_b = chain_end + 0.3
-    grid_b = build_grid("1m", now_b, 1.5)
+    grid_b = _grid_1m_2s(now_b)  # (R1 改判)固定 2s 桶几何, 见助手注
     obs_old_b, pts_old_b = _hold_obs(disk, tail, grid_b, None, None)
     obs_new_b, pts_new_b = _hold_obs(disk, tail, grid_b, now_b, 4.0)
     assert grid_b.last not in obs_old_b
@@ -627,7 +725,7 @@ def test_v4_hold_slot_stall_over_bound_tail_stays_null():
     形态逐字节一致, 尾桶保持 null(不造数据)"""
     disk, tail, chain_end = _hold_active_fixture()
     now = chain_end + 4.5  # gap 4.5 > P1 上界 4
-    grid = build_grid("1m", now, 1.5)
+    grid = _grid_1m_2s(now)  # (R1 改判)固定 2s 桶几何: holding 语义电池, 见助手注
     slots = v4_live_tail_slots(tail, now=now, max_gap_s=4.0)
     assert slots == v4_live_tail_slots(tail) and not any(s.is_hold for s in slots)
     seed_t0 = grid.t0 - grid.interval
@@ -711,7 +809,7 @@ def test_v4_grid_obs_rate_null_totals_valid_exemption():
     不断); 真 null 点(率/totals 全空)仍不参与(桶 null)。本条钉的是**无观测缝**的起始桶
     0 线(程序/窗口起点); 有观测缝的断链首桶改出 None(issue 26-10-16-0954 修复语义,
     见 test_v4_grid_obs_break_bucket_rate_null_snapshot_kept)"""
-    g = build_grid("24h", NOW, 30.0)
+    g = _grid_30s(NOW)  # (R1 改判)固定 30s 桶几何: 混合覆盖跨桶形态依赖 30s 步进, 见助手注
     b0, b1, b2 = g.buckets[100], g.buckets[101], g.buckets[102]
     pts = (
         V4PointEntry(b0, 10, 10, 1000, 500, w=30),
@@ -747,7 +845,7 @@ def test_v4_grid_obs_break_bucket_rate_null_snapshot_kept():
     (前端与空桶同语义: 缺口斜纹; 修复前出 0 线 -> 全窗只剩它一个非 null 值时前端孤点
     标记 + 值域塌到 [0,1], 把一片无采样区一分为二); 快照照记(差分链基线不断);
     无观测缝的起始桶(程序/窗口起点)仍保留 D4 的 0 线; 组面同规则"""
-    g = build_grid("24h", NOW, 30.0)
+    g = _grid_30s(NOW)  # (R1 改判)固定 30s 桶几何: b2+30 次桶跨桶形态依赖 30s 步进, 见助手注
     b0, b1, b2 = g.buckets[100], g.buckets[101], g.buckets[102]
     pts = (
         V4PointEntry(b0, 5, 5, 1000, 500, w=1),  # 洞前最后观测(覆盖 [b0, b0+1))

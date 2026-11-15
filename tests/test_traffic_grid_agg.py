@@ -18,7 +18,7 @@
 - test_v4_rate_from_totals_wide_bucket_byte_conservation: 宽桶 rate = delta/w —— 逐桶 rate×w = delta 且 Σ(rate×w) = Σ delta 字节守恒(整除构造)
 - test_v4_rate_from_totals_hold_honest_fallbacks: (26-11-14-1313 F4)holding 桶点速率面诚实回退三态 —— hold 为首桶点 / null 断口后接 hold(持有面清空, 不跨断口) / 前观测点速率派不出(基线缺失·重置)后接 hold, 三态均 rate None 不造速率(快照照记, is_hold 旗透传)
 - test_bucket_delta_null_and_reset
-- test_grid_for_now_wraps_build_grid
+- test_grid_for_now_wraps_build_grid: (F1 改判)24h@30s 桶宽 180 包装一致性
 - test_v4_agg_obs_live_merge_partial_and_residual
 - test_v4_rate_from_totals_w1_bucket_rates: (vrft_16/vrft_26)w=1 桶速率照常派出(delta/w)不丢 None
 - test_v4_same_bucket_raw_mean_with_zero_dl_first: (vsp_82)raw+raw 同桶判定看 is_raw 旗不看速率列 —— 首记录 dl 速率 0 仍走均值支
@@ -472,10 +472,11 @@ def test_v4_rate_from_totals_hold_honest_fallbacks():
 
 def test_grid_for_now_wraps_build_grid():
     """grid_for_now = build_grid 的现在时包装(API 层入口): 同一窗口/间隔/段, t1 取调用时刻
-    (两次调用秒级差 <= 2s)"""
+    (两次调用秒级差 <= 2s; 26-11-15-1104 F1 改判: 24h@30s 桶宽 = 180 采样整倍加宽, 旧 30
+    是 max(ceil(si), ceil(span/2880)) 取整口径)"""
     g = grid_for_now("24h", 30)
     ref = build_grid("24h", time.time(), 30)
-    assert g.name == ref.name == "24h" and g.interval == ref.interval == 30 and g.segment == ref.segment
+    assert g.name == ref.name == "24h" and g.interval == ref.interval == 180 and g.segment == ref.segment
     assert abs(g.t1 - ref.t1) <= 2
 
 

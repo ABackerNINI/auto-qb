@@ -1405,7 +1405,7 @@ def test_read_side_view_contract_table(web_env, monkeypatch, window):
     frozen = float(int(time.time()))  # 冻结端点时钟: 期望集与请求同一 now(免午夜竞态)
     # S3 收敛: 单点置换统一走 FakeClock(不再 SimpleNamespace 手拼 now 单方法替身)
     monkeypatch.setattr("auto_qb.webui.server.traffic_qb.SYSTEM_CLOCK", FakeClock(start=frozen))
-    _enable_qb_traffic(mgr)  # 生效间隔缺省 1 x main_tick=1s; raw 段桶宽由 2880 上限决定 = 30
+    _enable_qb_traffic(mgr)  # 生效间隔缺省 1 x main_tick=2.0(web_env): 镜像端点同参取值
     store = _qb_v4(mgr)
     key = "global"
     span, seg = tg.WINDOW_SPECS[window]
@@ -1413,7 +1413,10 @@ def test_read_side_view_contract_table(web_env, monkeypatch, window):
         month_epochs = tuple(v4_month_epoch(frozen) - i * 28 * 86400 for i in range(6, 0, -1))
         grid = tg.build_month_grid(month_epochs, frozen)
     else:
-        grid = tg.build_grid(window, frozen, 30.0)
+        # (26-11-15-1104 F1 改判)镜像网格与端点同参(生效间隔 2.0), 不再硬编码 30.0 —— 旧值在
+        # 旧口径下 24h 窗恰凑等(桶宽都 30)但小窗本就有跨午夜分叉窗, F1 后 24h 窗 174 != 180
+        # 分叉面变大; 同参后种子外扩日期集逐字节一致, 断言无随机窗
+        grid = tg.build_grid(window, frozen, 2.0)
     # decoy: 窗外天文件(昨日/3 日前/400 日前)与远古限速文件 —— 在场, 证明任何视图都不扫目录
     decoys = [v4_epoch_date_str(frozen - d * 86400) for d in (1, 3, 400)]
     lim_decoy = v4_epoch_date_str(frozen - 700 * 86400)

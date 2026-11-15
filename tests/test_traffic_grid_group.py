@@ -4,7 +4,7 @@
 - test_group_null_mask_rules: (D6 沿用)组桶 null = 无任何成员观测(任一成员 r/z 观测即程序存活真值); 无行成员按 0 计; 借 global 判 null 退役
 - test_group_rate_sums_members_missing_zero: 组速率 = 桶内 Σ 成员均值, 无行成员按 0 计; null 桶整桶 None
 - test_group_totals_per_member_diff_then_sum: 逐成员先差分再求和 —— 单成员重置贡献 0 不拖垮全组; 成员基线缺失(窗首/无行)贡献 0; null 桶断链
-- test_group_50_members_correct_and_time_bound: 50 成员 x 满窗 2880 完整桶 + 1 进行中桶(26-11-14-1313 F3 floor+1, 尾桶窗内无观测 = null)聚合正确性(抽样桶 Σ 校验, 每成员一块 -> v4_grid_obs) + 耗时上界(CPU 时间口径 << 采样间隔 30s, 断言 < 8s)
+- test_group_50_members_correct_and_time_bound: 50 成员 x 满窗完整桶(F1 后 24h@30s 桶宽 180 -> 480) + 1 进行中桶(26-11-14-1313 F3 floor+1, 尾桶窗内无观测 = null)聚合正确性(抽样桶 Σ 校验, 每成员一块 -> v4_grid_obs) + 耗时上界(CPU 时间口径 << 采样间隔 30s, 断言 < 8s)
 - test_group_zrun_idle_zero_line_and_outage_null: (D6 沿用)组图回归观测面 —— 全员空闲(z 覆盖)0 线 / 全员无观测(停机)断线 / 成员只剩 z 块也有观测; 组三函数消费 v4_grid_obs 产物
 - test_group_rate_points_over_transformed_obs_unchanged: 组求和口径不变(S1 钉住)—— group_null_mask/group_rate_points 消费变换后 obs
 - test_group_totals_up_direction_reset_independent
@@ -134,14 +134,17 @@ def test_group_totals_per_member_diff_then_sum():
     assert totals[13] == {"t": b3, "dl": 600, "up": 0}  # m1 +100, m2 +500
     assert totals[14] is None
     # null 桶断链: b4 之后 m1/m2 的快照链断, 下一桶基线缺失贡献 0
-    m1[b3 + 2 * 30] = BucketObs(0, 0, 9999, 0)
+    # (R1 改判: 桶键取自 g.buckets —— F1 后 24h@30s 桶宽 180, 不再假设 30s 步进)
+    b5 = g.buckets[g.buckets.index(b3) + 2]
+    m1[b5] = BucketObs(0, 0, 9999, 0)
     totals2 = group_totals_points([m1, m2], g, mask)
-    assert totals2[g.buckets.index(b3) + 2] == {"t": b3 + 60, "dl": 0, "up": 0}
+    assert totals2[g.buckets.index(b5)] == {"t": b5, "dl": 0, "up": 0}
 
 
 def test_group_50_members_correct_and_time_bound():
-    """50 成员 x 满窗 2880 完整桶 + 1 进行中桶(26-11-14-1313 F3 floor+1, NOW 对齐时尾桶 =
-    t1 起的进行中桶): 抽样桶 Σ 成员均值/逐成员差分校验 + 耗时上界
+    """50 成员 x 满窗完整桶 + 1 进行中桶(26-11-14-1313 F3 floor+1, NOW 对齐时尾桶 =
+    t1 起的进行中桶; 26-11-15-1104 F1 后 24h@30s 桶宽 = 180、满窗 480 完整桶 ——
+    旧 2880 桶口径随桶宽规则反转一并改判): 抽样桶 Σ 成员均值/逐成员差分校验 + 耗时上界
 
     上界依据: 组图弹层按采样间隔(30s)低频续拉(§07), 单次聚合须远小于一个间隔 ——
     上界 8s ≈ 间隔的 1/4, 是拦「数量级劣化」的粗闸(紧阈值回归基线见
@@ -151,14 +154,17 @@ def test_group_50_members_correct_and_time_bound():
     4.01s 假红; 见 pitfalls/testing/timing-tolerance.md「不要为对称加挂钟上界」),
     CPU 时间只计本进程真烧的核时, 不受 worker 抢占 / 调度放大。余量按被守回归量级定:
     8s ≈ 6.3x dev 插桩中位, 2x 于 CI 实测最坏值, 仍 << 30s 间隔。
-    v4 口径: 每成员一个 2880 记录块(标称 30s), 组三函数消费 v4_series_points -> v4_grid_obs 产物。
+    v4 口径: 每成员一个满窗记录块(标称 = 桶宽 180s, 每桶恰一记录), 组三函数消费 v4_series_points -> v4_grid_obs 产物。
     """
     g = build_grid("24h", NOW, 30.0)
     n = 50
+    n_full = len(g.buckets) - 1  # 完整桶数(F1 后 24h@30s: 480, 尾桶 = 进行中桶)
     blocks = []
     for m in range(n):
-        recs = tuple(V4Sample(100 + m, 200 + m, i * 10 + m, 0) for i in range(2880))  # 每桶恰一记录, totals 每桶 +10
-        blocks.append(V4Block(g.first + 30, 30, 0, 0, recs))  # 槽位 = g.first+30+30i -> 桶键 = g.buckets[i]
+        recs = tuple(V4Sample(100 + m, 200 + m, i * 10 + m, 0) for i in range(n_full))  # 每桶恰一记录, totals 每桶 +10
+        blocks.append(
+            V4Block(g.first + g.interval, g.interval, 0, 0, recs)
+        )  # 槽位 = first+interval(i+1) -> 桶键 = g.buckets[i]
 
     t_start = time.process_time()
     member_obs = [v4_grid_obs(v4_series_points((blk, ), g.t0, g.t1 + 1), g) for blk in blocks]
@@ -168,8 +174,8 @@ def test_group_50_members_correct_and_time_bound():
     elapsed = time.process_time() - t_start
 
     assert len(points) == len(g.buckets)
-    # 尾桶 = 进行中桶(26-11-14-1313 F3 floor+1, 起点 = t1): 消费窗 ts < t1 内无观测归不进
-    # -> 组停机语义 null; 2880 个完整桶每桶每成员都有观测: 无 null
+    # 尾桶 = 进行中桶(26-11-14-1313 F3 floor+1, 起点 = t1): 消费窗 ts < t1+1 内无观测归不进
+    # -> 组停机语义 null; 全部完整桶每桶每成员都有观测: 无 null
     assert all(p is not None for p in points[:-1])
     assert points[-1] is None
     idx = 100
@@ -186,8 +192,9 @@ def test_group_zrun_idle_zero_line_and_outage_null():
     「借 global 判 null」退役后停机/空闲由成员自身观测面区分"""
     g = build_grid("24h", NOW, 30.0)
     b0, b1, b2, b3 = g.buckets[100], g.buckets[101], g.buckets[102], g.buckets[103]
-    # 成员块: r @ b0+30(桶 b0, w=30 对齐) + z 游程 2 槽(桶 b1/b2, 速率 (0,0), 快照恒定)
-    blk = V4Block(b0 + 30, 30, 100, 50, (V4Sample(1, 1, 100, 50), V4ZeroRun(2, 100, 50)))
+    # 成员块: r @ b0+桶宽(桶 b0, w=桶宽对齐) + z 游程 2 槽(桶 b1/b2, 速率 (0,0), 快照恒定)
+    # (R1 改判: 槽距/覆盖随 g.interval —— F1 后 24h@30s 桶宽 180, 不再假设 30s 步进)
+    blk = V4Block(b0 + g.interval, g.interval, 100, 50, (V4Sample(1, 1, 100, 50), V4ZeroRun(2, 100, 50)))
     member_obs = [v4_grid_obs(v4_series_points((blk, ), g.t0, g.t1), g)]
     mask = group_null_mask(member_obs, g)
     assert mask[100] is False and mask[101] is False and mask[102] is False

@@ -5,8 +5,9 @@ S4 API 读侧的取数口径, 全部纯函数(输入 v4 天文件块序列 / agg
 raw 归桶 / z 行程覆盖展开 / 最早观测行)已随 S5 退役删除, 本模块即现行唯一读侧:
 
 窗口与栅格(§05.1/§05.3, WINDOW_SPECS 13 档):
-- raw 段窗(1m-24h): 桶宽 = max(采样间隔, span/MAX_RAW_BUCKETS)(向上取整防伪断线; 上限
-  兜住高频采样下的万桶级, 计划 26-10-07-2127 S3), 桶 = floor 对齐; 数据经
+- raw 段窗(1m-24h): 桶宽 = 采样间隔 x k, k = ceil(span/(MAX_RAW_BUCKETS x 采样间隔)) ——
+  桶宽恒为采样整倍 + 桶数 <= 上限(计划 26-11-15-1104 F1/D7, 替换旧 max(ceil(si), ceil(span/2880))
+  取整口径: 桶边与采样行错位的双几何实证见该计划 §02), 桶 = floor 对齐; 数据经
   traffic_store.V4DayCache 按天加载 -> 块序列 -> v4_series_points 桶点 -> v4_grid_obs
   按重叠秒加权展开到栅格(D1 跨桶覆盖: 宽桶中间栅格桶同值非 null); 另合流采样模块
   活尾快照(S6: 未落盘记录 + 开放游程续链, 图面尾部随采样节拍实时, 不等 flush)。
@@ -96,14 +97,17 @@ def effective_sample_interval(multiplier: int, main_tick: float) -> float:
     return float(multiplier) * float(main_tick)
 
 
-#: raw 段窗桶数上限(计划 26-10-07-2127 S3, §03 万桶级治理裁决): raw 桶宽 = max(ceil(采样间隔),
-#: ceil(span/上限)) —— 高频采样(如生产现况 1.5s)下 24h 窗本可达数万桶(JSON 传输 MB 级 +
-#: uPlot 万点级重渲染 + 后端每拍全量重展开), 按时间桶加宽收敛到 <=2880(+1 进行中桶,
-#: 26-11-14-1313 F3)。上限取 2880 = 30s 采样下 24h 视图桶数(旧 30s 默认下数学恒等, 零回归面;
-#: 新键默认 1 倍 main_tick 时由本上限加宽到 30s 桶); 桶内按覆盖秒加权(v4_grid_obs), 与 totals
-#: 通道字节守恒 —— 方案 B 的「附带收益」不因加宽丢失。业界同型先例: RRDtool CF=AVERAGE ·
-#: qB GUI SpeedPlotView Averager(1s->144s 分桶)· Deluge stats 多级桶 · Grafana $__rate_interval。
-MAX_RAW_BUCKETS = 2880
+#: raw 段窗桶数上限(计划 26-11-15-1104 F1/D7, 语义 = 桶数上限, 2880 -> 500): raw 桶宽 =
+#: 采样间隔 x k, k = ceil(span/((上限 - 1) x 采样间隔)) —— 分母预留 1 个进行中桶位(F3
+#: floor+1), 使**含进行中桶**的桶数恒 <= 上限(A6/D7 拍板「最大 500 桶」判据优先于公式
+#: 字面: 分母取上限本身时 span 恰 500 倍桶宽的采样(如 24h @ si=2.4)会出 501)。桶宽恒为
+#: 采样间隔的整倍(点位归属归桶与采样节拍同律; 旧「按 span/上限取整」几何使桶边与采样行
+#: 错位, 双几何实证见该计划 §02)。高频采样(生产现况 1.5s)下 24h 窗本可达数万桶(JSON
+#: 传输 MB 级 + uPlot 万点级重渲染 + 后端每拍全量重展开), 收敛到 <=500。整倍窗桶数恒定;
+#: 非整倍窗(6h/12h/24h @1.5s 采样)随轮询相位在 floor+1 相邻值波动(幅度 1, 桶数 497-498)。
+#: 业界同型先例: RRDtool CF=AVERAGE · qB GUI SpeedPlotView Averager(1s->144s 分桶)·
+#: Deluge stats 多级桶 · Grafana $__rate_interval。
+MAX_RAW_BUCKETS = 500
 
 
 @dataclass(frozen=True)
@@ -120,7 +124,7 @@ class WindowGrid:
     name: str  # WINDOW_SPECS 键(1m-all)
     t0: int  # 窗口起点(含), epoch 秒
     t1: int  # 窗口终点(不含), epoch 秒
-    interval: int  # 桶宽秒(raw = max(采样间隔, span/上限), 30d = 3600, 6mo/1y = 86400, all = 标称月长)
+    interval: float  # 桶宽秒(raw = 采样间隔整倍, 可为 1.5/4.5/22.5/43.5/87/174 等半秒值(26-11-15-1104 F1), 30d = 3600, 6mo/1y = 86400, all = 标称月长; 整值宽归一 int)
     segment: str  # 消费段: "raw" | "hour" | "day" | "month"
     buckets: tuple  # Tuple[int, ...] 桶起点序列(升序)
 
@@ -133,7 +137,7 @@ class WindowGrid:
         return self.buckets[-1]
 
 
-def _floor_buckets(t0: int, t1: int, interval: int) -> tuple:
+def _floor_buckets(t0: int, t1: int, interval: float) -> tuple:
     """等宽桶序列单点(issue 26-10-11-0207 R07 立, 计划 26-11-14-1313 F3 反转桶数口径):
     起点向下取整对齐(epoch 恒正) + floor+1 桶数 + 生成。build_grid 的 raw 与 hour 两分支
     共用(除桶宽计算外逐字同构); day 分支桶键是本地日界, 不走此处。
@@ -146,8 +150,8 @@ def _floor_buckets(t0: int, t1: int, interval: int) -> tuple:
     时 n 仍随相位在 k+1/k+2 波动(幅度 1, si=7/3h 窗实测: r=5 时 n=1543 其余 1544)。
     尾桶恒为「进行中桶」(floor(t1/interval) 对齐); 代价: t1 恰落桶边界时尾桶是刚开启的
     空桶(单桶 null, 视觉无感)。"""
-    first = t0 - (t0 % interval)  # floor 对齐(epoch 恒正)
-    n = (t1 - first) // interval + 1  # floor+1: 恒含进行中桶(26-11-14-1313 F3, 反转 R07 ceil)
+    first = t0 - (t0 % interval)  # floor 对齐(epoch 恒正; 半秒宽下 first 为 x.0/x.5 浮点)
+    n = int((t1 - first) // interval) + 1  # floor+1: 恒含进行中桶(26-11-14-1313 F3, 反转 R07 ceil; float 宽整值化)
     return tuple(first + i * interval for i in range(n))
 
 
@@ -164,12 +168,20 @@ def build_grid(window: str, now: float, sample_interval: float = DEFAULT_SAMPLE_
         raise ValueError(f"未知窗口: {window!r}(须为 {'|'.join(WINDOW_SPECS)})") from None
     if segment == "month":
         raise ValueError("all 窗栅格由 agg month 行数据面定: 用 build_month_grid(...)")
-    # 桶宽对采样间隔向上取整(floor 在小数间隔如 1.5s 下取 1s 桶宽, 采样行 1.5s 一条 -> 隔桶为空 = 伪断线;
-    # ceil 后桶宽 >= 采样间隔, 等间隔采样行每桶至少一条); 再受 MAX_RAW_BUCKETS 上限约束(S3 万桶级
-    # 治理: 高频采样下按 span/上限 加宽, 桶数 <= 上限 + 1 进行中桶(F3 floor+1); 30s 默认采样下
-    # max 取到采样间隔, 数学恒等)
     if segment == "raw":
-        interval = max(1, math.ceil(sample_interval), math.ceil(span / MAX_RAW_BUCKETS))
+        # 桶宽 = 采样间隔 x k, k = ceil(span/((上限-1) x 采样间隔))(计划 26-11-15-1104 F1, 替换旧
+        # max(ceil(采样间隔), ceil(span/上限)) 取整口径): 桶宽恒为采样整倍(桶边与采样节拍同律,
+        # 归桶与展示的伪失真随双几何消失), 含进行中桶的桶数恒 <= 上限(分母预留 1 个进行中桶位,
+        # 详 MAX_RAW_BUCKETS 注)。整值宽归一 int(桶键保持整数, 与 hour/day 段及历史 meta 整值
+        # 形态一致)。si 来源链 = 纯 config 派生(multiplier >= 1 x main_tick >= 0.5, 两因子均在
+        # validate_config 全量校验面聚合报错) —— 黄金法则 4: 校验后的代码假定配置正确, 非正值
+        # 在此 fail-fast(绝不让 0 间隔静默产出除零/忙循环面)。
+        si = float(sample_interval)
+        if not si > 0:
+            raise ValueError(f"sample_interval 须 > 0(生效采样间隔 = multiplier x main_tick, 校验面保证正值): {si!r}")
+        interval = si * math.ceil(span / ((MAX_RAW_BUCKETS - 1) * si))
+        if interval.is_integer():
+            interval = int(interval)
         t1 = int(now)
         t0 = t1 - span
         buckets = _floor_buckets(t0, t1, interval)
@@ -738,7 +750,10 @@ def v4_grid_obs(points: tuple, grid: WindowGrid) -> dict:
     # 桶键 -> [dl 覆盖秒, dl 加权和, up 覆盖秒, up 加权和, 覆盖末端, dl_total, up_total,
     #          断链标记(本桶有覆盖起点晚于上一观测点覆盖末端的点)]
     # (覆盖秒逐向独立: D4 豁免点不占速率权重, 只更新覆盖末端与快照链)
-    acc: dict[int, list[Any]] = {}
+    acc: dict[Any, list[Any]] = {}  # 桶键: 整值宽为 int, 半秒/任意小数宽(raw F1)为 float ——
+    # 键恒与 grid.buckets 同式派生(first + i x interval, 见下), 同式 => 浮点逐位相等,
+    # obs.get 与 rate_points/group_* 的键查找恒命中(异式派生 - (t % I) 起步 + += 累加在
+    # 非 0.5 步进宽下与生成式差 1 ulp, 有观测桶渲染成 null 洞 —— 评审 blocker 实证)
     prev_cov_end: Optional[float] = None  # 上一观测点覆盖末端(观测缝基准; 含窗外点, 全程推进)
     for p in points:
         if p.w <= 0 or (p.dl_rate is None and p.up_rate is None and p.dl_total is None and p.up_total is None):
@@ -750,11 +765,18 @@ def v4_grid_obs(points: tuple, grid: WindowGrid) -> dict:
             prev_cov_end = float(cov_end)
         if cov_end <= first or p.t > last:
             continue  # 与窗口栅格无交集
-        b = p.t - (p.t % interval)
-        while b < cov_end:
-            if b > last:
+        # 起始索引: 含 p.t 的桶(index 可为负 = 窗首前驱桶, 下面 b >= first 挡下不进 acc);
+        # 除法边界可差 1, 用同式生成键校正到「b <= p.t < b 的下一桶」
+        i = int(math.floor((p.t - first) / interval))
+        while first + i * interval > p.t:
+            i -= 1
+        while first + (i + 1) * interval <= p.t:
+            i += 1
+        while True:
+            b = first + i * interval  # 键与 buckets 同式派生(恒等成立的唯一条件, 不得换累计式)
+            if b >= cov_end or b > last:
                 break
-            ov = min(cov_end, b + interval) - max(p.t, b)
+            ov = min(cov_end, first + (i + 1) * interval) - max(p.t, b)
             if ov > 0 and b >= first:
                 a = acc.get(b)
                 if a is None:
@@ -771,7 +793,7 @@ def v4_grid_obs(points: tuple, grid: WindowGrid) -> dict:
                     a[4] = cov_end
                     a[5] = p.dl_total
                     a[6] = p.up_total
-            b += interval
+            i += 1
     return {
         b:
             BucketObs(
