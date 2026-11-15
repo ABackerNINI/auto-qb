@@ -72,6 +72,7 @@ from webui_static_scan_css import (
     _scan_css_comments,
     _scan_progress_val_parity,
     _scan_state_color_tokens,
+    _scan_statusbar_speed_width,
 )
 from webui_static_scan_js import (
     _scan_episode_member_hashes,

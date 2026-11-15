@@ -14,6 +14,7 @@
 - **悬浮提示**: 新元素继续写原生 `title`, 由 `.aq-tip` 委托层接管; 不新造浮层。例外(计划 26-11-12-0344 D10/I4): 键位提示不走 title/.aq-tip —— 键帽是常驻 DOM、取数链现算(口径见 `memory-bank/architecture/webui.md`「键位现场提示」节), 仅限键帽面。边界(D11): 控件自身功能说明不属键位提示(如状态栏开关钮的原生 `title`「按住 ` 显影 / 点此常驻」), 仍按惯例写 `title`。边界(2026-11-15 用户报障): 层级高于 `.aq-tip`(z90) 的浮层内部**不写** `title` —— 右键菜单 `.ctx-menu`(z100) 会把自绘提示整个盖住, 抽屉右键「合并页签」项的 `:title` 已移除(置灰原因靠 `.is-gated` 表达, 行为层 `dtToggleMerge` 再拦一道)。
 - **菜单勾选态**: 开关项的勾只读**开关自身的真值**(合并开关 = `dtMergeOn` / `drawerMerge`), 不得绑「该项是否出现」的形态判据(`dtMenuMergeOn` = 种子详情形态恒真 ⇒ 勾永远在, 2026-11-15 用户报障); 宽度门只做置灰遮蔽, 不撤销标志。
 - **共用规则族**: 四皮肤逐字节相同的规则族进 `shared/console_hub.css` 尾段单点; 皮肤内保留真差异, 不许顺手抹平。
+- **状态栏速度组数值定宽**(计划 26-11-16-0130): `.sb-spd` 的 `.val`/`.lim` 各 13ch 定宽槽(`.val` 右对齐 / `.lim` 左对齐; 13 = fmtSpeed 最长形「1023.99 KiB/s」的精确上界)单点在 `shared/console_hub_panels.css` 尾段; 窄屏 `@media (max-width: 900px)` 把 `.lim` 退 4ch(只保 `.sb-speed` 右缘不动)。皮肤层任何命中 `.sb-spd ... .val/.lim` 的规则不得声明 min-width —— 机理: 数值串随量级变("0 B/s" 5 字符 -> "1023.99 KiB/s" 13 字符)而右钉组宽度跟随文本时整组左缘平移(2026-11-15 用户报障)。守阵 `_scan_statusbar_speed_width`(分层钉值)+ `e2e/statusbar-speed-geometry.spec.mjs`(真浏览器逐帧几何); 同族机理先例见 `pitfalls/web-ui/progress-bar.md`。
 - **动效隔离**: 走 `data-fx` / `data-fx-preset` + `window.AQB_FX` 单挂载器; 每个 `@keyframes` 配 `prefers-reduced-motion` 降级; atlas/prism/console 对 `shared/fx/` 零引用。
 - **HTML 产出**: 一律 dark 主题(深色底 + 浅色字), 样式里必须写 `color-scheme: dark`。
 

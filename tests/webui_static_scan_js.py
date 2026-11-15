@@ -45,6 +45,7 @@ from webui_static_scan_css import (
     _scan_flux_modal_frost,
     _scan_progress_val_parity,
     _scan_state_color_tokens,
+    _scan_statusbar_speed_width,
 )
 
 
@@ -818,6 +819,14 @@ def _scan_frontend_assets():
        外观数字只在皮肤专属层, 单皮肤回退会让该皮肤各行 label 右缘不对齐(显影零跳动 I3 破口);
        前后端正则一致: 守阵解析四皮肤 CSS 与共享 CSS 用同一条行首规则正则, 改写法即红不漏检。
 
+    24. 状态栏速度组定宽(见 _scan_statusbar_speed_width, 2026-11-16 计划 26-11-16-0130 S2):
+       shared 层 .val/.lim 各 13ch 定宽(.val 右/.lim 左)+ 窄屏 @media(max-width: 900px) .lim 退
+       4ch, 分层钉值(顶层两条 + @media 一条按花括号深度分开判, 平铺计数会恒红); 四皮肤内任何
+       命中 .sb-spd ... .val/.lim 的规则(子串正则, 不锚行首)不得声明 min-width(防皮肤层覆盖
+       翻脸); 基础 .sb-err 必须带 flex: 0 0 auto(未读徽标变宽只能向左挤 spacer 的几何前提) ——
+       速度数值单位串随量级变("0 B/s" 5 字符 -> "1023.99 KiB/s" 13 字符), 定宽槽缺失时整组
+       左缘随每次轮询平移。真浏览器逐帧几何面另见 e2e/statusbar-speed-geometry.spec.mjs。
+
 
     WARN: 7/8/9/11/18 五项按 **app.js 整包**(HTML 加载顺序拼接 app.js + 各片段)扫描, 不按单文件 ——
       拆分后同一条不变量的代码可能分处两个文件, 只看一个文件必然漏(2026-09-20 实测);
@@ -877,6 +886,7 @@ def _scan_frontend_assets():
     _scan_message_surface_parity(problems)
     _scan_flux_modal_frost(problems)
     _scan_toast_copy_two_part(problems)
+    _scan_statusbar_speed_width(problems)
     return problems
 
 

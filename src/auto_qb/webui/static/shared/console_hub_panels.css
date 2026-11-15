@@ -658,3 +658,25 @@ body.kbd-persist .sb-kbd-sw {
  * --fg(Q5 否 b); 特异性 (0,4,0) 压过基形 (0,1,0), 选择器与置灰链同口径(.ctx-menu + .is-gated)。
  * 令牌纪律: 只用既有令牌 --fg-dim, 零新增。 */
 .ctx-menu .ctx-item.is-gated .aq-kbd { color: var(--fg-dim); }
+
+/* ---- 状态栏速度组数值定宽(计划 26-11-16-0130 S1) ----
+ * 根因: fmtSpeed 的单位串随量级变化("0 B/s" 5 字符 -> "1023.99 KiB/s" 13 字符), .lim 另有
+ * 不限 / — / 数值三形态, 整段字符串长度 3-6 倍落差; .sb-spd 是 flex: 0 0 auto, .sb-speed
+ * 右缘钉死 => 数值宽变 = 整组左缘平移, 组内图标 / 数字 / 斜杠 / 限速 / 键帽一起抖。
+ * 处置 = .val / .lim 各给 13ch 定宽槽, 宽度与内容解耦 => 整组宽度恒定。
+ * 13 = fmtSpeed 有界档最长形「1023.99 KiB/s」的精确上界(1024.00 与 9999.99 GiB/s 同为
+ * 13 字符); 12ch 会被 1023.99 档撑开。ch 按当前字号计, 四皮肤字号不同(12/12.5px)自动跟随。
+ * 对齐方向: .val 右对齐(数字右端贴斜杠, 位数增长向左扩展, 右端不动); .lim 左对齐
+ * (不限 / — / 数值都从斜杠右侧起笔, 短文案不飘到槽右端断裂)。
+ * 窄屏(<=900px, 四皮肤共有最窄断点)只保 .sb-speed 右缘不动: .lim 退 4ch(覆盖「不限」),
+ * 长限速值仍会撑开并把组内元素一起左推 —— 窄屏契约不承诺组内零位移(见
+ * e2e/statusbar-speed-geometry.spec.mjs, 只断 .sb-speed 右缘)。
+ * 四皮肤这条规则一字不差 => 进 shared 单点(webui.md「逐字节相同的规则族进 shared 尾段」);
+ * 皮肤层任何命中 .sb-spd .val/.lim 的规则都不得声明 min-width, 守阵
+ * _scan_statusbar_speed_width(tests/webui_static_scan_css.py)分层钉值。 */
+
+.sb-speed .sb-spd .val { min-width: 13ch; text-align: right; }
+.sb-speed .sb-spd .lim { min-width: 13ch; text-align: left; }
+@media (max-width: 900px) {
+  .sb-speed .sb-spd .lim { min-width: 4ch; }
+}

@@ -663,3 +663,147 @@ def _scan_flux_modal_frost(problems):
                 f"flux `{mask_sel}` 遮罩 alpha = {mm.group(1)} —— 超 .6 上限; 遮罩过浓会把其上玻璃面的 blur 压成"
                 "肉眼不可见(2026-11-04 第二根因: .72 遮罩 × .82 弹窗底 = 实际透视仅 ~5%)"
             )
+
+
+def _css_rules_layered(text):
+    """按 @media 层级把 CSS 规则拆成(顶层, @media 内)两组: [(selector, body)]
+
+    供需要区分「基础规则 vs 响应式覆盖」的守阵用 —— 平铺计数(照 `_scan_progress_val_parity`
+    的行首正则)会把同一选择器落在两层里的两条计成 2 条恒红。返回的 media 侧每条带第四参
+    (所属 @media 前奏原文), 便于钉断点值。只认 @media; 其它嵌套容器(@starting-style 等见
+    _CSS_CONTAINER_AT)内的规则归入顶层 —— 本仓库现无该用法, 引入时须回这里补分层。
+    """
+    top, media = [], []
+    stack = []  # [{sel, body, media_pre}] media_pre = 距最近 @media 祖先的前奏(None = 顶层)
+    cur = ""
+    for ch in text:
+        if ch == "{":
+            pre = next((s["sel"] for s in reversed(stack) if s["sel"].startswith("@media")), None)
+            stack.append({"sel": cur.strip(), "body": "", "media_pre": pre})
+            cur = ""
+        elif ch == "}":
+            if stack:
+                blk = stack.pop()
+                if blk["sel"].startswith("@media"):
+                    pass  # @media 容器本体不是规则; 内层规则闭合时已按各自 media_pre 记录
+                elif blk["media_pre"] is None:
+                    top.append((blk["sel"], blk["body"]))
+                else:
+                    media.append((blk["sel"], blk["body"], blk["media_pre"]))
+            cur = ""
+        else:
+            cur += ch
+            if stack:
+                stack[-1]["body"] += ch
+    return top, media
+
+
+def _scan_statusbar_speed_width(problems):
+    """状态栏速度组定宽守阵(计划 26-11-16-0130 S2, 2026-11-16): shared 层 13ch 分层钉值 + 四皮肤零覆盖 + .sb-err 弹性钉
+
+    现象(用户报"状态栏上传/下载速度数值变化时周边 UI 跳动"): fmtSpeed 的单位串随量级变化
+    ("0 B/s" 5 字符 -> "1023.99 KiB/s" 13 字符), .lim 另有不限/—/数值三形态; .sb-spd 是
+    flex: 0 0 auto, .sb-speed 右缘钉死 => 数值宽变 = 整组左缘平移。处置 = shared 层 .val/.lim
+    各 13ch 定宽(.val 右对齐/.lim 左对齐), 窄屏 @media(max-width: 900px)把 .lim 退 4ch。
+    静态断言兜不住布局(pitfalls/web-ui/progress-bar.md), 真浏览器逐帧几何在
+    e2e/statusbar-speed-geometry.spec.mjs; 本守阵钉的是 CSS 事实面, 五件事(缺一即红):
+    1. shared/console_hub_panels.css 顶层 .val/.lim 各恰 1 条且 min-width: 13ch —— 13 =
+       fmtSpeed 有界档最长形「1023.99 KiB/s」的精确上界(12ch 会被该档撑开, 定宽即失效);
+    2. @media 内 .lim 恰 1 条且 min-width: 4ch、所属断点恰 (max-width: 900px)(四皮肤共有
+       最窄断点); 顶层两条 + @media 一条 = S1 三条 .lim 声明不冲突, 判定按 @media 分层;
+    3. 共享层不在 _UI_ALL 四皮肤目录内, 单独读(其余守阵的四皮肤互证范式在这里不适用);
+    4. 四皮肤内任何命中 `.sb-spd ... .val`/`.sb-spd ... .lim` 的规则(按逗号拆组后逐段正则
+       匹配, 不锚行首 —— `.sb-speed .sb-spd .val{...}` 与更高特异性 `.sb-spd.spd-down .val`
+       都要拦)都不得声明 min-width: 等/低特异性声明虽被后加载的共享层压掉, 更高特异性则
+       真覆盖, 一律拦, 防将来改选择器或加载序翻脸;
+    5. shared/console_hub_controls.css 基础 `.sb-err` 必须仍带 flex: 0 0 auto —— 未读徽标
+       出现时按钮变宽只能向左挤 spacer、速度组不动(D14 零改动的几何前提); flex 被改
+       (如 flex: 1)徽标就会推动速度组, 抖动换一个来源复发。
+    """
+    rel = "shared/console_hub_panels.css"
+    text = re.sub(
+        r"/\*.*?\*/",
+        "",
+        open(os.path.join(STATIC_ROOT, "shared", "console_hub_panels.css"), encoding="utf-8").read(),
+        flags=re.S
+    )
+    top, media = _css_rules_layered(text)
+    want_media = "@media (max-width: 900px)"
+    for label, rules, width, is_media in (
+        (".sb-spd .val", [r for r in top if _sb_spd_target(r[0], ".val")], "13ch", False),
+        (".sb-spd .lim", [r for r in top if _sb_spd_target(r[0], ".lim")], "13ch", False),
+        (".sb-spd .lim", [r for r in media if _sb_spd_target(r[0], ".lim")], "4ch", True),
+        (".sb-spd .val", [r for r in media if _sb_spd_target(r[0], ".val")], None, True),
+    ):
+        if is_media and width is None:  # @media 内不许出现 .val 覆盖(窄屏契约只让 .lim 退让)
+            if rules:
+                problems.append(f"{rel} {want_media} 内出现 {rules[0][0]} —— @media 只许让 .lim 退 4ch, .val 定宽不分屏")
+            continue
+        if len(rules) != 1:
+            problems.append(
+                f"{rel} {'@media 内' if is_media else '顶层'} `{label}` 规则数 = {len(rules)}(应恰 1 条) —— "
+                "定宽槽被改名/拆并/重复声明, 速度组宽度恒定前提失效"
+            )
+            continue
+        sel, body = rules[0][:2]
+        if not re.search(rf"min-width\s*:\s*{width}\b", body):
+            problems.append(
+                f"{rel} {'@media 内' if is_media else '顶层'} `{label}` 缺 min-width: {width} —— " + (
+                    "窄屏只保 .sb-speed 右缘不动, 4ch 覆盖「不限」, 删了限速值跳动换不回可读性"
+                    if is_media else "13 = fmtSpeed 有界档最长形「1023.99 KiB/s」精确上界, 短了会被该档撑开"
+                )
+            )
+            continue
+        if is_media and rules[0][2] != want_media:
+            problems.append(
+                f"{rel} `{label}` 的 4ch 落在 `{rules[0][2]}` —— 断点应恰 {want_media}"
+                "(四皮肤共有最窄断点, 另造/改值即偏离窄屏契约)"
+            )
+
+    for ui in _UI_ALL:
+        for dirpath, _dirs, files in os.walk(os.path.join(STATIC_ROOT, ui)):
+            for name in sorted(files):
+                if not name.endswith(".css") or "/vendor/" in f"/{dirpath}/{name}":
+                    continue
+                path = os.path.join(dirpath, name)
+                urel = os.path.relpath(path, STATIC_ROOT).replace(os.sep, "/")
+                utext = re.sub(r"/\*.*?\*/", "", open(path, encoding="utf-8").read(), flags=re.S)
+                for sel, body in re.findall(r"([^{}]+)\{([^{}]*)\}", utext):
+                    hit = next(
+                        (
+                            part.strip()
+                            for part in sel.split(",") if _sb_spd_target(part, ".val") or _sb_spd_target(part, ".lim")
+                        ), None
+                    )
+                    if hit and re.search(r"min-width\s*:", body):
+                        problems.append(
+                            f"{urel} `{hit}` 声明了 min-width —— 皮肤层不得覆盖速度组定宽槽"
+                            "(共享层单点; 等/低特异性会被压掉, 高特异性则真覆盖, 一律拦)"
+                        )
+
+    crel = "shared/console_hub_controls.css"
+    ctext = re.sub(
+        r"/\*.*?\*/",
+        "",
+        open(os.path.join(STATIC_ROOT, "shared", "console_hub_controls.css"), encoding="utf-8").read(),
+        flags=re.S
+    )
+    ctop, _cmedia = _css_rules_layered(ctext)
+    base_err = [(s, b) for s, b in ctop if s == ".sb-err"]
+    if len(base_err) != 1 or not re.search(r"flex\s*:\s*0\s+0\s+auto", base_err[0][1]):
+        problems.append(
+            f"{crel} 基础 `.sb-err` 必须恰 1 条且带 flex: 0 0 auto —— 未读徽标出现时按钮变宽"
+            "只能向左挤 spacer、速度组不动(计划 26-11-16-0130 D14 零改动的几何前提)"
+        )
+
+
+def _sb_spd_target(sel, tail):
+    r"""选择器是否命中 `.sb-spd`(可带 .spd-down 等修饰)到 `.val`/`.lim` 的链
+
+    逗号拆组后逐段正则, 不锚行首也不限中间层(`.sb-speed .sb-spd .val` / `.sb-spd .val` /
+    `.sb-speed .sb-spd.spd-down .val` 都算); 间隔同时认空白与组合器 `>`/`+`/`~`
+    (`.sb-spd.spd-down>.val` 真覆盖共享层 (0,3,0), 只认空白会漏判); 尾段只认完整类名
+    (带 `(?=$|[\s:,(])` 防把 `.valx`/`.val-foo` 误收)。这是 R5 变异面(等/高特异性覆盖)的拦截面。
+    """
+    pat = re.compile(rf"\.sb-spd\S*(?:\s+|\s*[>+~]\s*){re.escape(tail)}(?=$|[\s:,(])")
+    return any(pat.search(part) for part in sel.split(","))

@@ -7,9 +7,9 @@
 <title>WEBUI 状态栏速度组定宽: 冻结右钉组左缘漂移</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="webui-statusbar-speed-jitter">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-11-16-0130">
-<meta name="doc-updated" content="26-11-16-0154">
+<meta name="doc-updated" content="26-11-16-0239">
 <meta name="doc-refs" content="memory-bank/tasks/26-11-16-webui-statusbar-speed-jitter.md">
 <style>
   :root {
@@ -75,7 +75,7 @@
 <h1>WEBUI 状态栏速度组定宽: 冻结右钉组左缘漂移</h1>
 <p class="lede">本篇只回答一个问题: 状态栏上传/下载速度数值随量级变化时, 右钉速度组为什么整体平移, 以及用什么最小改动把它冻结、怎么守。执行口径来自两轮 grilling 的 D1-D14(全按推荐, Q14 追加纳入), 无待拍板项。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-16-0130 · <b>doc-updated</b> 26-11-16-0154 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-11-16-0130 · <b>doc-updated</b> 26-11-16-0239 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 会话 grilling 两轮 14 问(2026-11-15/16, 用户逐轮「按推荐」+ Q14 追加纳入) + 两轮只读取证: statusbar.html 模板与四皮肤 CSS / format.js 格式化链 / decorate.js 数据源 / flux fx-mount 补间 / 静态守阵与 e2e 采样面 / 计划模板骨架
 </div>
 
@@ -155,6 +155,7 @@
   <li><span class="tag">R1 · 26-11-16-0143</span> 评审 R1 修 8 条(1 major / 7 minor, 全部过检零 refute): S2 判据按 @media 层级分层(顶层 .val/.lim 各 1 条 13ch + @media 内 .lim 1 条 4ch, 原「各恰 1 条」与 S1 冲突会恒红)并补三处接线(scan 定义 + scan_js 导入调用 + skins_skin 导入)与共享层单独读; S1 断点点名 900px(四皮肤 @media 唯一交集, 状态栏窄屏仅 prism 有先例); 目标①与 S3 判据补视口限定(宽屏零位移 / 窄屏只保证 .val 与 .sb-speed 右缘); S3 补 route.fetch 必接 installRouteCleanup(flaky 第 5 类硬要求); 修字符数两处(1.00 KiB/s 与 9.99 MiB/s 均 10 字符, 非 11); 修图表引用误读(10px 是字号不是每字符宽, 1ch≈0.6em); R5 触发条件改为等/高特异性覆盖并同步 S2 判据口径。</li>
   <li><span class="tag">R2 · 26-11-16-0150</span> 复评轮(R2)修 3 条(1 major / 2 minor, 全部过检零 refute)并更正 R1 两处表述: ① 窄屏契约收窄为「只保 .sb-speed 右缘不动」—— .lim 在窄屏只设 4ch 下限, 长限速值仍会撑开并把组内元素一起左推, 原 R1 写的「窄屏只保证 .val 与 .sb-speed 右缘」中 .val 右缘不动几何上不成立(S3 判据同步改); ② 900px 改称「四皮肤共有的最窄断点」—— 四皮肤另有共有 1320px 一档, 原「唯一交集」不成立(S1 与 R1 处置列同步改); ③ R5 触发条件收窄为更高特异性(等/低特异性被后加载的共享层压掉、实际不生效, 但守阵一律拦, 防将来改选择器或加载序翻脸), S2 变异自证拆成等特异性(守阵红)与更高特异性(真覆盖必红)两态, 并明确守阵按子串匹配不锚行首(否则 .sb-speed .sb-spd .val{...} 会漏判)。</li>
   <li><span class="tag">R3 · 26-11-16-0154</span> 复评轮(R3)修 2 条 minor(全部过检零 refute), 均为引用可复核性: ① §04 S1 断点句的行号错位 —— 「另有共有 1320px 一档」原本插在四个行号之前, 读起来像是给 1320px 作引用, 实际那四个行号是各皮肤 900px 段起点; 改为 900px 段行号在前(atlas:107 / console:76 / flux:76 / prism:675), 1320px 另给真实行号(:103 / :72 / :72 / :668); ② §10 R2 里对 R1 的引文失真 —— 原写「窄屏 .val 右缘也不动」而 R1 实际是「窄屏只保证 .val 与 .sb-speed 右缘」, 改为逐字复述, 不抹掉 R1 当初也写了 .sb-speed 这一事实。正文方案与三处窄屏口径无改动。</li>
+  <li><span class="tag">R4 · 26-11-16-0239</span> R4 · S1-S5 实施完成(2026-11-16): S1 CSS 定宽落 shared/console_hub_panels.css 尾段(.val 13ch 右对齐 / .lim 13ch 左对齐 + @media max-width:900px .lim 退 4ch); S2 静态守阵 _scan_statusbar_speed_width(tests/webui_static_scan_css.py, 含 _css_rules_layered @media 分层解析与 _sb_spd_target 子串匹配) + 三处接线(scan_js 导入调用/第 24 项 + skins_skin 导入), 红绿双验五变异全红(12ch / 皮肤等特异性 / 皮肤高特异性 spd-down / 摘 .sb-err flex / 删 @media 4ch)+ sha256 还原复核; S3 e2e/statusbar-speed-geometry.spec.mjs 四皮肤 @fast(页内步序注入 速度四档/限速三态/徽标两位数 + rAF/4ms 双路逐帧采样, 宽视口组内元素 &lt;=1px / 窄视口只保 .sb-speed 右缘 / 覆盖性自证), 四皮肤 4 passed + 摘 CSS 红验 + flaky 五类守卫绿; S4 test.quick 6266+2 绿 / test.full 6266+2 覆盖 99.59% 基线切片 26-11-16-0236(首轮 checking_skip 一次性假红未复现留档), 既有 statusbar-kbd-entry + views.spec 40 passed 零松动; S5 本回写 + progress-bar.md 同族指链(.sb-spd 第二例); 真机目检留用户。D1-D14 零改判。</li>
 </ul>
 
 </div>

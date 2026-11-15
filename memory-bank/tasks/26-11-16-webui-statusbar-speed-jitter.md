@@ -55,3 +55,7 @@ grilling 两轮 14 问(D1-D14 全按推荐, Q14 追加纳入) + 两轮只读取�
 计划提交前按 code-review 纪律跑四轮(全能档 1 子代理, 批 162 行): R1 修 8 条(1 major + 7 minor)、R2 修 3 条(1 major + 2 minor)、R3 修 2 条(minor)、R4 零 actionable 闭合。13 条全部过 review.check 引文校验、零 refute, 全部当场修完, 入池 0。实质修正三处: ① S2 守阵判据按 `@media` 层级分层(原「各恰 1 条」与 S1 的窄屏 `.lim` 第二条冲突会恒红), 并补三处接线与「共享层单独读」; ② 窄屏契约收窄为「只保 `.sb-speed` 右缘不动」—— `min-width` 只是下限, 长限速值仍撑开, 原「`.val` 右缘也不动」几何上不成立; ③ R5 覆盖面收窄为「更高特异性」(等/低特异性被后加载的共享层压掉)。另有 900px 断点依据修正(四皮肤共有断点有 900 与 1320 两档, 900 是最窄)、两处字符数(10 非 11)、图表 `10px` 是字号非每字符宽。计划 doc-updated 抬至 26-11-16-0154, §10 记 R1-R3 三行。
 
 - 2026-11-16 01:55 提交前评审四轮闭合(R1 修 8 / R2 修 3 / R3 修 2 / R4 零 actionable, 13/13 过检零 refute, 入池 0) + 计划 §10 R1-R3 落行 + 档案进度日志; 仍零代码改动, S1-S5 待显式开工
+
+- 2026-11-16 02:39 S1-S5 实施完成: S1 CSS 定宽(shared 尾段三行) / S2 静态守阵 _scan_statusbar_speed_width + 三处接线, 五变异红绿双验 / S3 e2e statusbar-speed-geometry 四皮肤逐帧几何(四皮肤 4 passed + 摘 CSS 红验 + flaky 守卫绿) / S4 test.full 6266+2 覆盖 99.59% 基线切片 26-11-16-0236, 既有 statusbar-kbd-entry + views.spec 40 passed 零松动 / S5 webui.md 硬规则节 + progress-bar.md 同族指链 + 计划 R4 转 Done; 真机目检留用户; commit 待用户显式指令。
+
+- 2026-11-16 02:59 收尾评审: 全能档 1 派遣(379→381 行), R1 两条 minor 全修(① e2e 注入改经 withVm 唯一直径 ② _sb_spd_target 组合器间隔扩正则 + 组合器变异红验), 复评轮 R2 零 actionable; 检 2/2 全过, 修 2 入池 0 blocker 0; 末轮基哈希 92db296fbe72; commit 待用户显式指令。

@@ -14,3 +14,18 @@
 - **守阵**: `tests/test_webui_static_skins_*.py::_scan_progress_val_parity`(静态资源守阵第 16 项) —— 三套皮肤
   (atlas/console 的 components.css + prism 的 views.css)各恰 1 条 `.m-progress .val` 基础规则且带
   min-width, 防"只改一侧 / 新皮肤漏带"; 计算宽仍须真浏览器量(静态断言兜不住布局)。
+
+### 同族指链(第二例): 状态栏速度组右钉组左缘漂移(2026-11-16)
+
+- **触发**: 状态栏上传/下载速度数值变化时周边 UI 元素左右跳(2026-11-15 用户报障, 每轮轮询都抖)。
+- **判别**: 同一机理换一处 —— `.sb-spd` 是 `flex: 0 0 auto`, `.sb-speed` 右缘钉死 ⇒ fmtSpeed 单位串
+  随量级变化("0 B/s" 5 字符 -> "1023.99 KiB/s" 13 字符, `.lim` 另有不限/—/数值三形态)时整组宽度
+  跟随文本, 右缘固定 = 左缘平移。数字字形不等宽不是根因 —— 四皮肤 `.val/.lim` 早已 mono +
+  tabular-nums, 别再往字体方向查。
+- **处置**: 同款 = 数值盒定宽: `.val`/`.lim` 各 13ch 定宽槽(`.val` 右对齐 / `.lim` 左对齐), 窄屏
+  `@media (max-width: 900px)` 把 `.lim` 退 4ch(窄屏只保 `.sb-speed` 右缘不动), 单点在
+  `shared/console_hub_panels.css` 尾段(计划 26-11-16-0130)。差异点: 本例钉的是**整组不位移**
+  (右钉几何), 进度条例钉的是**条长解耦**(左行布局), 定宽数值/对齐方向各按场景取。
+- **守阵**: 静态 `_scan_statusbar_speed_width`(shared 层分层钉值 —— 同选择器两条落在顶层与
+  @media 两层, **不能照 `_scan_progress_val_parity` 平铺计数**, 否则恒红) + 真浏览器逐帧几何
+  `e2e/statusbar-speed-geometry.spec.mjs`(rAF + 4ms 双路, 容差 1px 含 flux 补间中间帧)。
