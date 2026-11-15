@@ -291,7 +291,13 @@ class QbTrafficChartApi:
                         v4_live_tail_slots(tail, now=SYSTEM_CLOCK.now(), max_gap_s=self._tail_gap_bound(grid))
                         if tail is not None else ()
                     )
-                    member_obs.append(tg.v4_grid_obs(tg.v4_series_points(blocks, grid, tail_slots=tail_slots), grid))
+                    member_obs.append(
+                        tg.v4_grid_obs(
+                            tg.v4_series_points(
+                                blocks, grid, tail_slots=tail_slots, gap_bound_s=self._tail_gap_bound(grid)
+                            ), grid
+                        )
+                    )
                 except OSError:
                     degraded = True  # 读取竞态: 该成员按空观测面计, degraded 走 last-good 兜底
                     blocks = ()
@@ -382,7 +388,9 @@ class QbTrafficChartApi:
                     v4_live_tail_slots(tail, now=SYSTEM_CLOCK.now(), max_gap_s=self._tail_gap_bound(grid))
                     if tail is not None else ()
                 )
-                points = tg.v4_series_points(blocks, grid, tail_slots=tail_slots)
+                points = tg.v4_series_points(
+                    blocks, grid, tail_slots=tail_slots, gap_bound_s=self._tail_gap_bound(grid)
+                )
                 obs = tg.v4_grid_obs(points, grid)
                 degraded = False
             except OSError:

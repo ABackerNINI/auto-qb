@@ -409,9 +409,15 @@ def group_totals_points(member_obs: list, grid: WindowGrid, null_mask: list) -> 
 #     赖 marked 存活); 份额按覆盖毫秒比例取整, 余额归接收桶, 严格守恒; 游程内有未观测
 #     缝时基准 step_w = step x cov // span(未覆盖秒不归因); flat-r 游程不摊(z 形签名
 #     必要条件)。
-# - 有界空桶持有回填(计划 §03 F2/R8, 含 dt 修正跳变恰跨桶界的空桶): **属 T3/F3, 本批
-#   不实现** —— 空样本桶 = null 现状承袭; 旧覆盖加权「宽记录摊进中间桶」(暂停/漏采段
-#   桶非 null)的语义由该回填承接, T3 实装时随新语义重钉(计划 F2/R8 拍板)。
+# - 有界空桶持有回填(计划 §03 F2 后半/R8, 26-11-15-1104 T3 实装): 活跃链内空样本桶
+#   (前后两观测槽跨过的栅格桶, dt 修正跳变恰跨桶界/长间隔 z 槽是常态来源)且前后观测间隙
+#   <= gap_bound_s(max(B, si) x 2 —— 与 F3 尾桶 holding 同一条判据单点:「最新已知状态仍
+#   有效」)时, 按持有语义回填前桶速率(held 面, is_hold 旗透传; totals = 前桶末次快照同值
+#   —— 累计面不造字节, 字节守恒由 totals 链保证: 漏采区间字节含在后继样本快照差分里,
+#   held 比 null 更诚实)。真停滞/断连不回填: 间隙过界(> 判据界)与 null 标记(n 游程/块间
+#   真空 —— 断连语义)保持 null; 「空样本桶 = null」随之收窄为「间隙过界的空桶」。回填点
+#   值只依赖源观测桶的已定影面(速率/快照在走槽期已终值), 封口桶不可变不受回填影响
+#   (回填发生时空桶本就在开放面, 其值不依赖后继样本)。
 # - 封口桶不可变(T4/T5 桶值缓存的正确性根基): 桶值定影 = **样本已齐且不在开放等值游程
 #   的覆盖内**(当且仅当二者)—— 等值游程闭合(台阶到达或输入末尾)且摊配完成后, 其覆盖
 #   桶连同此前全部桶定影, 定影桶值只依赖已落定样本, 后续追加样本不得改写; 两条例外不
@@ -427,11 +433,16 @@ def group_totals_points(member_obs: list, grid: WindowGrid, null_mask: list) -> 
 #   槽 ts 恒等, 保留严格更晚的后缀即不重不漏); **块间真空判定与磁盘块同判**(issue
 #   26-10-16-0954 修复轮: head_pending 的活尾首槽是块首记录(重启后 B.start), 与磁盘链
 #   末槽可隔一整段停机; 不判则活尾缝在磁盘缝有标记/无标记之间摇摆)。
-# - holding 槽最小搬运(F4, 计划 26-11-14-1313; 语义精调属 T3/F3): is_hold 槽豁免 ts >= t1
-#   窗尾过滤, 桶键恒 = 栅格尾桶(进行中桶 —— 合成持有面非采样观测, 点位归属按「现在所在
-#   格」), 不进速率面差分(0 delta / 0 覆盖, 不稀释同桶真实观测), 桶 is_hold(全槽持有)
-#   时速率 = 持有上一非持有观测桶速率(null 点清空持有面; 前桶速率派不出时持有 None
-#   —— 诚实未知); totals 面快照同值 0 增量, 累计面不造字节。
+# - holding 槽(F3 新定义, 计划 26-11-15-1104; 承袭 F4 计划 26-11-14-1313): 尾桶 = 进行中
+#   桶, 速率 = 持有末次观测速率(held); 停滞/断连不延伸(诚实边界承袭 F4, codec 侧裁决);
+#   延伸窗口含链端超前至多一个写侧漂移容差的伪迹面(F3: 超前是负向漂移未及修正的游标
+#   伪迹非停滞, 不延伸会让活跃链尾桶间歇 null —— A5; 详 codec v4_live_tail_slots)。
+#   is_hold 槽豁免 ts >= t1 窗尾过滤, 归桶走点位归属同一路径(_bucket_index —— ts=now 恒
+#   落进行中桶 grid.last; 半秒级桶宽的相位边缘 now 可溢出一格, 钳回 grid.last 以响应栅格
+#   形状为准), 与末样本同桶则天然合并(合并歧义随双几何消失 —— T2 的「桶键恒 grid.last」
+#   临时规则按此精调), 不进速率面差分(0 delta / 0 覆盖, 不稀释同桶真实观测), 桶 is_hold
+#   (全槽持有)时速率 = 持有上一非持有观测桶速率(null 点清空持有面; 前桶速率派不出时持有
+#   None —— 诚实未知); totals 面快照同值 0 增量, 累计面不造字节。
 # ======================================================================
 
 #: 真空判定浮点容差(秒): 块间 gap 与首记录覆盖桶的比较 ε
@@ -477,8 +488,8 @@ class V4PointEntry:
     —— 基线缺失/重置/断链/停机洞; 双 None 且无速率覆盖的 broke 桶 = 断链未知, 链首桶
     出 0 线); rate/totals 全 None = null 点(n 游程/块间真空标记, 断线语义 —— v4 r/z 行
     无 null 形态, null 只来自这两种标记)。w = 桶覆盖时长秒(差分对跨实测毫秒合计, 逐向
-    豁免取最大; null 点恒 0)。is_hold = 活尾 holding 桶点(F4): 速率面持有上一非持有
-    观测桶速率, totals 链 0 增量。
+    豁免取最大; null 点恒 0)。is_hold = 持有面桶点(活尾 holding F4/F3 或空桶持有回填
+    F2/R8): 速率面持有上一观测桶速率, totals = 源观测桶末次快照(链 0 增量不造字节)。
     """
 
     t: Any  # 栅格桶键(整值宽 int, 半秒宽 float —— 与 grid.buckets 同式派生逐位相等)
@@ -487,7 +498,7 @@ class V4PointEntry:
     dl_total: Optional[int] = None  # 桶末 all-time 下载累计快照(bytes)
     up_total: Optional[int] = None
     w: float = 0.0  # 桶覆盖时长秒(差分对跨实测和; null 点恒 0)
-    is_hold: bool = False  # True = 活尾 holding 桶点(F4): 速率面持有上一观测桶速率
+    is_hold: bool = False  # True = 持有面桶点: 活尾 holding(F4/F3)或空桶持有回填(F2/R8)—— 速率面持有上一观测桶速率
 
 
 def v4_series_slots(blocks: tuple) -> tuple:
@@ -515,7 +526,9 @@ def _bucket_index(ts: float, first: Any, interval: Any) -> int:
     return i
 
 
-def v4_series_points(blocks: tuple, grid: "WindowGrid", tail_slots: tuple = ()) -> tuple:
+def v4_series_points(
+    blocks: tuple, grid: "WindowGrid", tail_slots: tuple = (), gap_bound_s: Optional[float] = None
+) -> tuple:
     """v4 读侧核心(§05.1/§05.2; 26-11-15-1104 F2 点位归属归桶): 块序列 -> 栅格桶点列
 
     blocks = V4Block 序列(单系列的若干天文件解析产物合并传入; 天文件按日期升序读出,
@@ -529,15 +542,28 @@ def v4_series_points(blocks: tuple, grid: "WindowGrid", tail_slots: tuple = ()) 
     (issue 26-10-16-0954 修复轮: 首槽抵达不了磁盘链末槽 = 中间有未观测段(重启缝),
     出 null 标记断链 —— 与磁盘块同一条判据, 两路径同几何取值一致; 同块续链天然不出标记)。
     无块且无活尾(停机/无数据)返回空元组(天然真空, 调用方按空态处理)。
-    holding 槽(F4, 计划 26-11-14-1313, tail_slots 末尾的 is_hold 槽)最小搬运: 豁免
-    ts >= t1 窗尾过滤, 桶键恒 = grid.last(进行中桶), 不进速率面差分(0 delta / 0 覆盖),
-    桶 is_hold 时速率面持有上一非持有观测桶速率 —— 语义精调属 T3/F3。
-    有界空桶持有回填(计划 §03 F2/R8, 含 dt 修正跳变恰跨桶界的空桶)**属 T3/F3, 本批不
-    实现**: 空样本桶 = null 现状承袭; 旧覆盖加权「宽记录摊进中间桶」(暂停/漏采段桶
-    非 null)的语义由该回填承接, T3 实装时随新语义重钉。封口桶不可变不变量见区头注释。
+    holding 槽(F3 新定义, 计划 26-11-15-1104; 承袭 F4, tail_slots 末尾的 is_hold 槽):
+    豁免 ts >= t1 窗尾过滤, 归桶走点位归属同一路径(_bucket_index —— ts=now 恒落进行中
+    桶 grid.last, 相位边缘溢出一格时钳回), 与末样本同桶天然合并, 不进速率面差分
+    (0 delta / 0 覆盖), 桶 is_hold 时速率面持有上一非持有观测桶速率。
+    有界空桶持有回填(计划 §03 F2 后半/R8, T3 实装): 活跃链内空桶且前后观测间隙
+    <= gap_bound_s 时按持有语义回填前桶速率(与尾桶 holding 同一条判据单点); 间隙过界/
+    null 标记(断连)不回填保持 null。封口桶不可变不变量见区头注释(回填不与之冲突:
+    回填点值只依赖源桶已定影面, 空桶本就在开放面)。
+    gap_bound_s = 持有回填/尾桶 holding 的间隙判据界(秒): 调用面传
+    max(interval_s 桶宽, 采样间隔) x 2(traffic_qb._tail_gap_bound —— 与活尾延伸
+    max_gap_s 同一单点值)。缺省 None 落 grid.interval x 2 —— raw 段桶宽恒为采样整倍
+    (F1, B >= si), 数学上与调用面公式恒等; 显式传参仅为判据单点的字面归一。
+    传值须正有限(违者 ValueError, fail-fast)。
     """
     first, last, interval = grid.first, grid.last, grid.interval
     t1 = grid.t1
+    if gap_bound_s is not None and (
+        not isinstance(gap_bound_s, (int, float)) or isinstance(gap_bound_s, bool) or not math.isfinite(gap_bound_s) or
+        gap_bound_s <= 0
+    ):
+        raise ValueError(f"非法 gap_bound_s(须正有限数值): {gap_bound_s!r}")
+    gap_bound = float(gap_bound_s) if gap_bound_s is not None else float(interval) * 2.0
     # 消费下界(null 点/差分链同界): 调用面读文件已按 seed_t0 = t0 - interval 外扩一天,
     # 此处再退一个回看界 —— 接缝摊配的变化点跨度锚可远在窗外(P2, 详常量注释)
     null_lo = grid.t0 - interval - _V4_SEAM_LOOKBACK_S
@@ -545,13 +571,31 @@ def v4_series_points(blocks: tuple, grid: "WindowGrid", tail_slots: tuple = ()) 
     # 桶键 -> [dl_delta, dl_cov_ms, up_delta, up_cov_ms, last_ts, snap_dl, snap_up,
     #          broke, is_hold](差分/覆盖逐向独立: 豁免对(delta None)不占速率权重)
     marks: list = []  # null 点 t —— n 游程折叠 + 块间真空(入列时已按 [null_lo, t1) 过滤)
+    backfills: list = []  # (空桶键, 源观测桶键) —— 有界空桶持有回填(F2/R8), 发射期装配
     prev_chain_end: Optional[float] = None
     prev_slot: Optional[tuple] = None  # 上一观测槽 (ts, dl_total, up_total) —— 差分链
     last_was_null = False
     marked = False  # 自上一观测槽以来出过 null 点(标记后基线缺失; 摊配判据或支之一)
+    # 自上一观测槽以来出现过 null 槽/组界缝(不限窗界 —— 标记入列有 [null_lo, t1) 界,
+    # 界外 null/真空不产标记点但仍属断连面): 有界空桶持有回填判据的「活跃链」支之一
+    null_since_obs = False
     # 逐向游程状态: [游程值, 锚点 ts, [(桶键, 覆盖毫秒, 是否 z 槽)]]
     dl_run: list = [None, 0.0, []]
     up_run: list = [None, 0.0, []]
+
+    def held_backfill(i_prev: int, i_cur: int, gap: float) -> None:
+        """有界空桶持有回填判据单点(F2 后半/R8): 活跃链内空桶(开区间 (i_prev, i_cur))
+        且前后观测间隙 <= gap_bound 时按持有语义回填(与 F3 尾桶 holding 同一条规则:
+        「最新已知状态仍有效」, 界值同 _tail_gap_bound 单点); 间隙过界(真停滞)与
+        marked/null_since_obs(n 游程/块间真空 —— 断连语义, 含窗界外不产标记点的 null/
+        真空)不回填保持 null。源桶 = i_prev 桶(发射期
+        经 held 面持有其速率, totals 取其末次快照 —— 链 0 增量, 字节守恒由后继样本
+        快照差分承载)。判据界下每区间至多 1 枚空桶(前后观测都在各自桶内 -> gap >
+        (i_cur - i_prev - 1) x interval, gap <= 2 x interval 推出 i_cur <= i_prev + 2)。"""
+        if marked or null_since_obs or gap > gap_bound:
+            return
+        for j in range(i_prev + 1, i_cur):
+            backfills.append((first + j * interval, first + i_prev * interval))
 
     def bucket_add(key: Any, d: int, share: int) -> None:
         """摊配份额入桶(游程桶在差分链上先于接收槽出现, 桶累加器必已存在)"""
@@ -576,6 +620,7 @@ def v4_series_points(blocks: tuple, grid: "WindowGrid", tail_slots: tuple = ()) 
             # (磁盘块与活尾同判 —— 活尾首槽抵达不了链末槽 = 中间有未观测段(重启缝),
             #  同块续链的槽 dt 链天然接住链末槽, 不出标记; issue 26-10-16-0954 修复轮)
             if slots[0].ts - slots[0].dt_s > prev_chain_end + _V4_VACUUM_EPS_S:
+                null_since_obs = True  # 组界缝(窗界外不产标记点但仍属断连面, 回填判据用)
                 t = int(prev_chain_end)
                 if null_lo <= t < t1:
                     marks.append(t)
@@ -583,6 +628,7 @@ def v4_series_points(blocks: tuple, grid: "WindowGrid", tail_slots: tuple = ()) 
         for s in slots:
             if s.obs is None:
                 # n 槽: 连续 null 槽折叠为一个 null 点(首槽位置取整; 断连语义)
+                null_since_obs = True  # 窗界外 null 不产标记点但仍属断连面(回填判据用)
                 t = int(math.floor(s.ts))
                 if null_lo <= t < t1 and not last_was_null:
                     marks.append(t)
@@ -594,12 +640,21 @@ def v4_series_points(blocks: tuple, grid: "WindowGrid", tail_slots: tuple = ()) 
                 continue  # 窗尾之后的槽不消费(v2 ts >= t1 口径); holding 槽豁免(F4)
             o = s.obs
             if s.is_hold:
-                # holding 槽最小搬运(F4, 语义精调属 T3/F3): 合成持有面非采样观测 ——
-                # 键恒 = 栅格尾桶(进行中桶, 「现在所在格」), 不进差分链不占覆盖
-                # (0 delta / 0 覆盖, 不稀释同桶真实观测), 只更新快照与 is_hold 旗
-                e = cells.get(last)
+                # holding 槽(F3 新定义, 承袭 F4 最小搬运): 合成持有面非采样观测 —— 归桶
+                # 走点位归属同一路径(_bucket_index; ts=now 恒落进行中桶 grid.last, 半秒级
+                # 桶宽的相位边缘 now 可溢出一格 -> 钳回 grid.last, 响应栅格形状以
+                # grid.buckets 为准), 与末样本同桶天然合并(合并歧义随双几何消失), 不进
+                # 差分链不占覆盖(0 delta / 0 覆盖, 不稀释同桶真实观测), 只更新快照与
+                # is_hold 旗; 链上此前的空桶按同一回填判据单点持有
+                key = min(first + _bucket_index(s.ts, first, interval) * interval, last)
+                if prev_slot is not None:
+                    i_prev = _bucket_index(prev_slot[0], first, interval)
+                    i_hold = _bucket_index(key, first, interval)
+                    if i_hold > i_prev + 1:
+                        held_backfill(i_prev, i_hold, s.ts - prev_slot[0])
+                e = cells.get(key)
                 if e is None:
-                    cells[last] = [0, 0, 0, 0, s.ts, o[2], o[3], False, True]
+                    cells[key] = [0, 0, 0, 0, s.ts, o[2], o[3], False, True]
                 else:
                     e[8] = e[8] and s.is_hold  # 任一非持有槽在桶 -> 非 holding 桶
                     if s.ts >= e[4]:
@@ -608,10 +663,18 @@ def v4_series_points(blocks: tuple, grid: "WindowGrid", tail_slots: tuple = ()) 
                         e[6] = o[3]
                 prev_chain_end = s.ts
                 marked = False
+                null_since_obs = False
                 continue
             if s.ts < null_lo:
                 continue  # 差分链窗外回看界之外的槽不消费(P2: 保留完整陈旧跨度)
-            key = first + _bucket_index(s.ts, first, interval) * interval
+            i_cur = _bucket_index(s.ts, first, interval)
+            key = first + i_cur * interval
+            # 有界空桶持有回填检测(F2/R8): 本槽与上一观测槽跨过的空桶(活跃链内 —— marked
+            # 为假即无 null 标记; 间隙判据在 held_backfill 单点)
+            if prev_slot is not None:
+                i_prev = _bucket_index(prev_slot[0], first, interval)
+                if i_cur > i_prev + 1:
+                    held_backfill(i_prev, i_cur, s.ts - prev_slot[0])
             dur_ms = 0 if prev_slot is None else int(round((s.ts - prev_slot[0]) * 1000))
             # 未观测秒 = 对跨 - 本槽声称覆盖(dt_s): 块内链式推进恒 0; 组界(重启/断连/
             # 停机)为正值 —— > 0 置 broke(断链桶出 None 非 0 线), > 60s 为停机洞
@@ -683,17 +746,24 @@ def v4_series_points(blocks: tuple, grid: "WindowGrid", tail_slots: tuple = ()) 
                         e[3] += cov_ms_pair
             prev_slot = (s.ts, o[2], o[3])
             marked = False
+            null_since_obs = False
         prev_chain_end = slots[-1].ts  # 游标终值 = 末槽实测时刻(真空判定基准)
     entries = []
     for key in sorted(cells):
         e = cells[key]
         dl_cov, up_cov = e[1], e[3]
-        if e[8]:  # holding 桶(F4): 速率面在下方合并序里持有上一观测桶
+        if e[8]:  # holding 桶(F4/F3): 速率面在下方合并序里持有上一观测桶
             dl = up = None  # 占位, 发射期回填
         else:
             dl = int(round(e[0] * 1000 / dl_cov)) if dl_cov > 0 else (None if e[7] else 0)
             up = int(round(e[2] * 1000 / up_cov)) if up_cov > 0 else (None if e[7] else 0)
         entries.append((key, 1, V4PointEntry(key, dl, up, e[5], e[6], w=max(dl_cov, up_cov) / 1000, is_hold=e[8])))
+    for bf_key, src_key in backfills:
+        # 有界空桶持有回填装配(F2/R8): is_hold 旗入下方合并序的 held 面 —— 速率 = 源桶
+        # 速率(走槽期已终值, 封口桶不可变不受影响), totals = 源桶末次快照(链 0 增量,
+        # 字节守恒: 漏采区间字节含在后继样本快照差分里); w = 0(无观测覆盖, 持有面)
+        src = cells[src_key]
+        entries.append((bf_key, 1, V4PointEntry(bf_key, None, None, src[5], src[6], w=0.0, is_hold=True)))
     for t in marks:
         entries.append((t, 0, V4PointEntry(t)))
     # null 点排同刻观测点之前(null 在先 = 该时刻断线、其后才是观测覆盖; 稳定保插入序)

@@ -2,7 +2,7 @@
 
 ## 测试计划(每个测试函数一条)
 - test_build_month_grid_all_view: all 视图数据面铺格 —— 首末月行间逐月铺桶(缺失月也在 = null 桶), 乱序/重复 epoch 取最小最大; 空集合 = 空 buckets 兜底栅格
-- test_v4_point_assignment_zrun_spread_and_pause: (F2 改判, 原 D1 跨桶覆盖)z 游程均摊槽落格 + 冻结期台阶按真实跨度摊配(Σ rate x cov = step 守恒); r 暂停整对端点归属恢复槽所在格, 暂停段桶无样本 = null(旧宽桶覆盖退役, T3 有界回填)
+- test_v4_point_assignment_zrun_spread_and_pause: (F2 改判, 原 D1 跨桶覆盖)z 游程均摊槽落格 + 冻结期台阶按真实跨度摊配(Σ rate x cov = step 守恒); r 暂停整对端点归属恢复槽所在格, 间隙有界的暂停桶按持有语义回填前桶速率(F2/R8 有界回填, 26-11-15-1104 T3 实装 —— 原「暂停段桶无样本 = null」钉随新语义重钉)
 - test_v4_mixed_interval_blocks_point_assignment: (F2 改判)混排 interval 分块: 块 interval 只决定槽位 dt 链, 桶宽单点在栅格; 天然 gap 被 dt 链吸收不出伪真空
 - test_v4_differential_reset_baseline_and_zchain: (F2 改判)差分一次算定全边界 —— 重置逐向豁免/窗首 0 线/断连后停机洞 None/快照照记/陈旧跨度摊配(Σ = step 守恒)
 - test_v4_same_bucket_merge_and_mixed_slots: (F2 改判)同桶多槽差分逐对累加(z 对 delta 0)/快照取 ts 最晚者(旧 raw 优先合并旗随 cell 几何退役)
@@ -112,7 +112,8 @@ def test_v4_point_assignment_zrun_spread_and_pause():
     """(F2 改判, 原 D1 跨桶覆盖)z 游程按均摊槽展开落格 —— 每桶 rate 同值 (0/摊配份额) +
     快照同值 + 非 null; 长 z 游程冻结期的台阶按真实发生跨度摊配到游程桶+恢复桶(span ==
     cov 全额, Σ(rate x cov) = step 守恒); r 记录暂停(显式大 dt)整对端点归属落恢复槽所在格
-    —— 暂停区间无样本桶 = null 承袭(旧宽桶覆盖随桥接退役, 有界持有回填属 T3)"""
+    —— 暂停区间空桶(gap 40s <= max(B, si) x 2 = 60s, 有界)按持有语义回填前桶速率
+    (F2/R8, 26-11-15-1104 T3 实装; 间隙过界仍 null 由 seam 电池钉)"""
     b = V4Block(
         1000,
         30,
@@ -129,9 +130,11 @@ def test_v4_point_assignment_zrun_spread_and_pause():
     assert [_p(p) for p in points] == [
         (990, 0, 0, 100, 200, 0.0),  # 链首 0 线(@1000 落格 990)
         (1020, 1, 1, 100, 200, 40.0),  # z 槽: 摊配份额 40/40s = 1(冻结期台阶均摊)
+        (1050, 1, 1, 100, 200, 0.0),  # 空桶有界回填(F2/R8): held = 前桶(1020)速率 1, totals 同值, w=0
         (1080, 1, 1, 100, 200, 40.0),
         (1110, 1, 1, 100, 200, 40.0),
         (1140, 1, 1, 100, 200, 40.0),
+        (1170, 1, 1, 100, 200, 0.0),  # 空桶有界回填(F2/R8): held = 前桶(1140)速率 1(1160->1200 对跨 40s)
         (1200, 1, 1, 300, 400, 40.0),  # 接收桶 = 余额; Σ = 200/200 守恒
     ]
     assert not any(p.dl_rate is None for p in points)  # 游程段全程非 null(防伪洞)

@@ -49,7 +49,8 @@ mut-core W4 S6 定向补测(2026-11-02, issue 26-10-31-1539 两件清偿; 红验
 - test_v4_live_tail_slots_hold_null_run_not_extended: 断连不延伸 —— 记录链以 n 游程
   收尾 / 开放 n 游程两种形态末槽 obs = None 均不延伸
 - test_v4_live_tail_slots_hold_none_default_and_edge_gaps: now=None 缺省与无参形态逐槽
-  恒等(向后兼容面); gap == 0(now 未超出链端)与时钟回拨(now < 链端)不延伸
+  恒等(向后兼容面); gap == 0 恰等链端延伸 holding 槽(F3 26-11-15-1104 重钉, 原「未
+  严格超出不延伸」)与时钟回拨(now < 链端超写侧漂移容差)不延伸、容差内超前仍延伸
 - test_v4_live_tail_slots_hold_param_fail_fast: now 非有限/非数值与 max_gap_s 非正有限
   -> ValueError(fail-fast)
 
@@ -396,8 +397,11 @@ def test_v4_live_tail_slots_hold_null_run_not_extended():
 
 
 def test_v4_live_tail_slots_hold_none_default_and_edge_gaps():
-    """(F4 向后兼容面)now=None 缺省与无参形态逐槽恒等(既有机检全部按无参调用的面不漂);
-    gap == 0(now 未严格超出链端)与时钟回拨(now < 链端)不延伸"""
+    """(F4 向后兼容面; F3 26-11-15-1104 精调重钉)now=None 缺省与无参形态逐槽恒等(既有机检
+    全部按无参调用的面不漂); gap == 0(now 恰在链端)延伸 holding 槽(ts = 链端 —— 原
+    「未严格超出不延伸」钉随 F3 尾桶 held 定义重判: 恰等链端是活跃链, 不延伸会让尾桶间歇
+    null); 时钟回拨(now < 链端超写侧漂移容差 0.25s)不延伸; 容差内超前(写侧负向漂移伪迹)
+    仍延伸"""
     interval = 30
     start = 1_800_000_000
     recs = (V4Sample(100, 50, 1000, 500), V4Sample(200, 70, 2000, 800))
@@ -406,10 +410,18 @@ def test_v4_live_tail_slots_hold_none_default_and_edge_gaps():
     base = v4_live_tail_slots(tail)
     assert v4_live_tail_slots(tail, now=None) == base
     assert v4_live_tail_slots(tail, now=None, max_gap_s=10.0) == base
-    # gap == 0: now 恰在链端(未严格超出)不延伸
-    assert v4_live_tail_slots(tail, now=projected) == base
-    # 时钟回拨: now < 链端不延伸
+    # gap == 0: now 恰在链端 -> 延伸(F3 重钉): holding 槽 ts = 链端(槽序升序), 消费面
+    # 与末槽同桶合并(is_hold 与旗), 尾桶不间歇 null
+    ext = v4_live_tail_slots(tail, now=projected)
+    assert len(ext) == len(base) + 1
+    assert ext[-1].is_hold and ext[-1].ts == projected and ext[-1].dt_s == 0.0
+    assert ext[-1].obs == base[-1].obs
+    # 时钟回拨(now < 链端 5s, 超出写侧漂移容差 0.25s = 时钟异常面)不延伸
     assert v4_live_tail_slots(tail, now=projected - 5.0) == base
+    # 容差内超前(now < 链端 0.1s = 写侧负向漂移未及修正的游标伪迹)仍延伸(F3: 超前非停滞)
+    ext_ahead = v4_live_tail_slots(tail, now=projected - 0.1)
+    assert len(ext_ahead) == len(base) + 1
+    assert ext_ahead[-1].is_hold and ext_ahead[-1].ts == projected
     # 全部槽 is_hold 缺省 False(镜像保证面不漂: 磁盘槽 + 活尾槽 == 整块重算仍成立)
     assert not any(s.is_hold for s in base)
 

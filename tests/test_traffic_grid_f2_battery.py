@@ -198,12 +198,15 @@ def test_dual_caliber_rate_step_boundary_share():
 
 def test_dual_caliber_drift_and_dt_jump_share():
     """(R2)漂移 + dt 修正跳变流(真构造): dt 在 1.75~2.25s(DRIFT_TOL_MS=250ms 量级)显式
-    漂移并含一次 4s 跳变(恰等桶宽跳过一桶的写侧形态, 记录带显式 dt_ms 4000)—— 逐桶
-    |new - old| <= 局部最大单对差分速率(逐桶界, 旧 ceil 桶宽膨胀被 ±1 份额界吸收);
-    跳变跨过的空桶 = null(本批无有界回填, T3 实装后随新语义重钉); 新口径字节守恒"""
+    漂移并含一次 4s 跳变(恰等桶宽跳过一桶的写侧形态, 记录带显式 dt_ms 4000, 置于窗内)——
+    逐桶 |new - old| <= 局部最大单对差分速率(逐桶界, 旧 ceil 桶宽膨胀被 ±1 份额界吸收);
+    跳变跨过的空桶 = 有界持有回填(26-11-15-1104 T3/F2-R8 实装: gap 4s <= max(B, si) x 2,
+    is_hold 点回填前桶速率/totals 同值/w=0 —— 原 T2 钉「跳变跨过的空桶 = null」随新语义
+    重钉为 held); 新口径字节守恒"""
     t0 = 1_000_000
     grid = WindowGrid("1m", t0, t0 + 120, 2, "raw", _floor_buckets(t0, t0 + 120, 2))
-    dts = [1750, 2250, 2000, 1800, 2200, 1950, 2050] * 9 + [4000]  # 漂移 + 一次 dt 修正跳变
+    # 漂移 + 一次 dt 修正跳变(跳变置于窗内中部: 前段 56 拍漂移 -> 跳变 -> 后段漂移)
+    dts = [1750, 2250, 2000, 1800, 2200, 1950, 2050] * 8 + [4000] + [1750, 2250, 2000, 1800, 2200, 1950, 2050] * 1
     recs = [V4Sample(9999, 8888, 1000, 500)]
     total_dl, total_up = 1000, 500
     ts = float(t0 - 2)
@@ -218,11 +221,22 @@ def test_dual_caliber_drift_and_dt_jump_share():
         recs.append(V4Sample(9999, 8888, total_dl, total_up, dt_ms=dt))  # 显式漂移/跳变 dt
     blk = V4Block(t0 - 2, 2, 1000, 500, tuple(recs))
     slots = v4_block_slots(blk)
-    # 跳变(末对 dt 4s)恰跨一个 2s 桶: 该桶无样本 = null(空样本桶语义, T3 回填前现状)
-    jump_lo = slots[-2].ts
+    # 跳变(显式 dt 4s)恰跨一个 2s 桶: 有界持有回填(F2/R8)—— 空桶 is_hold 点持有前桶
+    # 速率与 totals(原 T2 钉 null, 随新语义重钉; 判据界 gap <= max(B, si) x 2 = 4s)
+    jump_idx = dts.index(
+        4000
+    )  # 跳变对 = (slots[jump_idx], slots[jump_idx + 1])(slots[0] = 种子; dt 4000 的样本在 slots[jump_idx + 1])
+    jump_lo = slots[jump_idx].ts
     jump_mid_bucket = grid.first + (int((jump_lo + 2.0 - grid.first) // 2)) * 2  # 跳变跨过的桶
+    pts_probe = v4_series_points((blk, ), grid)
+    prev_bucket = grid.first + (int((jump_lo - grid.first) // 2)) * 2
+    bf = next(p for p in pts_probe if p.t == jump_mid_bucket)
+    prev_pt = next(p for p in pts_probe if p.t == prev_bucket)
+    assert bf.is_hold and bf.w == 0.0, (bf, "跳变跨过的空桶应按持有语义回填(F2/R8)")
+    assert (bf.dl_rate, bf.up_rate) == (prev_pt.dl_rate, prev_pt.up_rate), (bf, prev_pt, "held = 前桶速率")
+    assert (bf.dl_total, bf.up_total) == (prev_pt.dl_total, prev_pt.up_total), (bf, prev_pt, "totals = 前桶快照")
     new_obs_probe = _new_caliber_obs((blk, ), grid)
-    assert jump_mid_bucket not in new_obs_probe, (jump_mid_bucket, "跳变跨过的桶应无样本 = null")
+    assert jump_mid_bucket in new_obs_probe, (jump_mid_bucket, "有界回填后跳变桶非 null(无伪断线)")
     # 逐对差分速率表(份额界用): 1 样本份额 = 单对差分速率
     pair_rates = []  # (cur.ts, delta/dur)
     prev_ts = None
