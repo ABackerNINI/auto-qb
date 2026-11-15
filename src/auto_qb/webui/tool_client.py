@@ -113,7 +113,14 @@ def call_tool(base_url: str, path: str, method: str, credential: str, payload=No
 
 
 def error_text(payload: dict, code: int) -> str:
-    """从工具响应里抽人读错误: errors 列表优先(校验聚合), 否则 error 字段"""
+    """从工具响应里抽人读错误: errors 列表优先(校验聚合), 否则 error 字段
+
+    payload 非 dict(call_tool 对非对象 JSON 回 list/标量/None 的契约漂移)不再 .get 崩
+    AttributeError —— str 化兜底(空 payload 回固定文案); 调用方(traffic_monitor 写端点 /
+    backup gtm 段)对工具失败一律「透传进错误信息/警告」, 不能被畸形回显打成 500。
+    """
+    if not isinstance(payload, dict):
+        return str(payload) if payload not in (None, "") else f"工具返回 {code}"
     errors = payload.get("errors")
     if isinstance(errors, list) and errors:
         return "; ".join(str(x) for x in errors)

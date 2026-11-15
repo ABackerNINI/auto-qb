@@ -14,6 +14,12 @@
   兜住这四点, 本防线按 schema 键面再兜一层, 防未来新增点位漏配时重演「UI 可编辑但保存不生效」
 - **掩码化导出单点(计划 26-11-14-0624 S1)**: `mask_yaml_text` 把 YAML 原文按同一套敏感键判定
   整体掩码为可外发文本(配置备份 bundle), ruamel round-trip 保注释/格式, 纯内存不落盘
+- **bundle 导入单点(计划 26-11-14-0624 S2)**: `unmask_yaml_doc`(哨兵回填本机磁盘现值,
+  不可 resolve 聚合报错绝不落盘)/ `fallback_readonly_yaml_doc`(readonly 字段回退, 旧版本
+  bundle 不盖章原样落盘)/ `find_residual_sentinels` + `write_yaml_doc` 内置残留哨兵兜底闸
+  (unmask 不下钻的列表位绕过 resolve 的 R1 旁路)/ `prepare_import_yaml_doc` +
+  `commit_import_yaml_doc`(读改写闭环: 现读本机旧值 -> resolve -> 校验 -> 写盘同一
+  _WRITE_LOCK 临界区, R8)
 - **ruamel round-trip 写盘**: 已存在键的注释保留; 列表项与新增键无注释(设计取舍, 见计划)
 - **写盘链并发防线(issue 26-11-07-0527 R2#17)**: write_tree / materialize_schema_migration
   全程持模块级 _WRITE_LOCK 串行化(webui PUT handler 走 FastAPI 线程池并发, 无锁时两次保存
@@ -197,6 +203,263 @@ def _mask_yaml_node(node: Any, path: Tuple[str, ...]) -> None:
             continue
         if value not in (None, "") and any(part in lowered for part in SENSITIVE_KEY_PARTS):
             node[key] = MASK_SENTINEL
+
+
+def unmask_yaml_doc(doc: Any, old_doc: Any) -> List[str]:
+    """ruamel 文档树的掩码哨兵还原(配置备份 bundle 导入单点, 计划 26-11-14-0624 S2)
+
+    语义对位 _mask_yaml_node(同一套判定: SENSITIVE_KEY_PARTS / TRANSFER_TARGETS_PATH /
+    TARGET_SECRET_KEYS): 值等于 MASK_SENTINEL 的标量回填本机磁盘现值(old_doc = 本机磁盘
+    config.yml 的 ruamel 文档, 与 mask_yaml_text 的读侧同一来源)。
+
+    不可 resolve(bundle 有哨兵条目而本机无对应键 / 本机旧值为 None/空串/本身是哨兵)**不猜**
+    —— 路径收进返回列表交调用方聚合 422 整体拒绝(R1), **绝不**把 "********" 字面量写盘
+    (fail-fast)。与 unmask_tree「旧值为哨兵则保持不动」的差异: 导入侧没有「保持」的余地 ——
+    整份替换写盘会把哨兵字面量落进生产配置, 故旧值为哨兵同样算不可 resolve; 空串旧值同判
+    (本机该键未设置 = 没有现值可回填, 写哨兵或写空串都不是「还原本机现值」, 不猜)。
+
+    就地改值保注释(与 _mask_yaml_node 同理由: 注释挂在键节点上, 换新对象会丢); targets 列表
+    按 name 唯一键配对回填(与 _unmask_target_items 第一轮同口径; 导入是整份替换, 没有
+    「本轮改名」场景, 第二轮位置配对不适用 —— 配不上即跨机无此条目, 聚合报错)。
+
+    返回不可 resolve 的点路径列表(空 = 全部还原成功); old_doc 为 None(本机无配置文件)时
+    任何哨兵都不可 resolve。纯内存操作, 不取 _WRITE_LOCK(写盘由调用方经 write_yaml_doc 做)。
+    """
+    missing: List[str] = []
+    _unmask_yaml_node(doc, old_doc, (), missing)
+    return missing
+
+
+def _unmask_backfill_style(value: Any) -> Any:
+    """回填值风格修复: CommentedMap 对「替换进既有键的 str」会继承该键旧值的引号形态 ——
+    bundle 里哨兵 "********" 因 * 开头(YAML alias 指示符)被 ruamel 强制加引号, 本机磁盘
+    原本无引号的值会因此被写成 'xxx'。PlainScalarString 显式钉回无引号(与磁盘旧值同形态);
+    本机旧值本身带引号(ScalarString 子类)则原样赋值, 引号形态随本机磁盘。
+    """
+    from ruamel.yaml.scalarstring import PlainScalarString, ScalarString
+
+    if isinstance(value, str) and not isinstance(value, ScalarString):
+        return PlainScalarString(value)
+    return value
+
+
+def _unmask_yaml_node(node: Any, old_node: Any, path: Tuple[str, ...], missing: List[str]) -> None:
+    """unmask_yaml_doc 的递归体: 就地回填哨兵, 不可 resolve 的点路径追加进 missing"""
+    if not isinstance(node, dict):
+        return
+    for key in list(node.keys()):
+        value = node[key]
+        next_path = path + (str(key), )
+        old = old_node.get(key) if isinstance(old_node, dict) else None
+        if isinstance(value, dict):
+            _unmask_yaml_node(value, old, next_path, missing)
+            continue
+        if isinstance(value, list) and next_path == TRANSFER_TARGETS_PATH:
+            _unmask_yaml_target_items(value, old, next_path, missing)
+            continue
+        if value == MASK_SENTINEL:
+            # 旧值缺失/None/空串/本身是哨兵/类型错位(dict/list) = 配不上, 不猜(空串 = 本机
+            # 该键未设置, 没有现值可回填 —— 写哨兵或写空串都不是还原, 宁可聚合报错让人发现)
+            if isinstance(old, (dict, list)) or old in (None, "", MASK_SENTINEL):
+                missing.append(".".join(next_path))
+            else:
+                node[key] = _unmask_backfill_style(old)
+
+
+def _unmask_yaml_target_items(items: List[Any], old_items: Any, path: Tuple[str, ...], missing: List[str]) -> None:
+    """targets 条目的哨兵还原(导入侧): 按 name 配对旧条目, 逐敏感键回填仍为哨兵的键
+
+    与 _unmask_target_items 第一轮同口径(name 唯一键); 旧条目配不上/旧值为 None/空串/哨兵 =
+    不可 resolve, 点路径(targets[<name>] 或缺名时 targets[<下标>])追加进 missing。
+    """
+    old_by_name: Dict[str, Any] = {}
+    for entry in old_items if isinstance(old_items, list) else ():
+        if isinstance(entry, dict):
+            name = str(entry.get("name", "") or "")
+            if name and name not in old_by_name:
+                old_by_name[name] = entry
+    base = ".".join(path)
+    for idx, item in enumerate(items):
+        if not isinstance(item, dict):
+            continue
+        name = str(item.get("name", "") or "")
+        for secret_key in TARGET_SECRET_KEYS:
+            if item.get(secret_key) != MASK_SENTINEL:
+                continue
+            old_entry = old_by_name.get(name)
+            old_value = old_entry.get(secret_key) if isinstance(old_entry, dict) else None
+            # 与 _unmask_yaml_node 顶层分支同口径: None/空串/哨兵 = 不可 resolve, 不猜
+            if isinstance(old_value, (dict, list)) or old_value in (None, "", MASK_SENTINEL):
+                missing.append(f"{base}[{name if name else str(idx)}].{secret_key}")
+            else:
+                item[secret_key] = _unmask_backfill_style(old_value)
+
+
+def fallback_readonly_yaml_doc(doc: dict, old_doc: Any) -> None:
+    """ruamel 文档树的 readonly 字段回退(配置备份 bundle 导入, S2): 与 _fallback_readonly_fields
+    同语义 —— schema readonly 键面的值回退为本机磁盘旧值, 本机无该键则删除(走默认值)。
+
+    schema_version 不回退(与 _fallback_readonly_fields 同口径): bundle 版本低于当前 = 旧版本
+    bundle 原样落盘(磁盘版本章保持 bundle 原值), schema 迁移靠下次启动 materialize_schema_migration
+    链兜底(计划 R2); 版本高于当前已在导入闸被拒, 走不到这里。纯内存操作, 不取 _WRITE_LOCK。
+    """
+    for path in readonly_config_paths():
+        if path == VERSION_KEY:
+            continue
+        parts = [ROOT_KEY, *path.split(".")]
+        old_value = _get_path(old_doc, parts)
+        if old_value is None:
+            _delete_path(doc, parts)
+        else:
+            _set_path(doc, parts, old_value)
+
+
+def find_residual_sentinels(doc: Any) -> List[str]:
+    """整棵文档(含列表与内嵌 dict)扫描残留掩码哨兵(bundle 导入写盘前的兜底闸, S2)
+
+    unmask_yaml_node 对非 TRANSFER_TARGETS_PATH 的列表**不下钻**(掩码/还原两侧同口径),
+    手编 bundle 在这类列表位(如 delete_tags/domains 的字符串项)放哨兵会绕过 resolve 原样
+    落盘(R1 旁路)—— 写盘前全树扫描兜底: 发现 MASK_SENTINEL 标量即聚合点路径列表, 调用方
+    整体拒(422), **绝不**把哨兵字面量写盘(fail-fast)。容器 id 去重遍历(线性; alias 共享
+    引用已在导入闸被拒, 此处去重是独立兜底)。
+    """
+    out: List[str] = []
+    _find_residual_sentinels(doc, "", set(), out)
+    return out
+
+
+def _find_residual_sentinels(node: Any, prefix: str, seen: set, out: List[str]) -> None:
+    """find_residual_sentinels 的递归体: prefix 为点路径(列表项为 path[<idx>]), 命中即收进 out"""
+    if isinstance(node, dict):
+        if id(node) in seen:
+            return
+        seen.add(id(node))
+        for key, value in node.items():
+            _find_residual_sentinels(value, f"{prefix}.{key}" if prefix else str(key), seen, out)
+        return
+    if isinstance(node, list):
+        if id(node) in seen:
+            return
+        seen.add(id(node))
+        for idx, item in enumerate(node):
+            _find_residual_sentinels(item, f"{prefix}[{idx}]", seen, out)
+        return
+    if node == MASK_SENTINEL:
+        out.append(prefix or "<root>")
+
+
+def validate_yaml_doc(doc: Any) -> None:
+    """ruamel 文档落到临时文件走 load_config 全量聚合校验(与启动/写盘完全同一路径)
+
+    与 _validate_tree 同一「写什么校什么」纪律, 差异只在输入形态(ruamel 文档而非普通树,
+    为保注释的 bundle 导入管线服务)。校验失败抛 ConfigError(load_config 已聚合全部错误)。
+    """
+    import tempfile
+
+    ry = _build_yaml()
+    buf = StringIO()
+    ry.dump(doc, buf)
+    tmp_path: Optional[str] = None
+    try:
+        with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".yml", delete=False) as f:
+            tmp_path = f.name
+            f.write(buf.getvalue())
+        load_config(tmp_path)
+    finally:
+        if tmp_path and os.path.exists(tmp_path):
+            os.remove(tmp_path)
+
+
+def _read_yaml_doc(config_path: str) -> Any:
+    """本机磁盘 config.yml 的 ruamel 文档(保注释, resolve/readonly 回退的旧值来源); 不存在 -> None
+
+    必须在 _WRITE_LOCK 临界区内调用(见 prepare/commit_import_yaml_doc)。
+    """
+    if not os.path.exists(config_path):
+        return None
+    ry = _build_yaml()
+    with open(config_path, "r", encoding="utf-8") as f:
+        return ry.load(f)
+
+
+def _prepare_import_locked(config_path: str, doc: Any) -> List[str]:
+    """导入临界区只读面: 本机文档现读 -> 哨兵 resolve -> readonly 回退 -> load_config 聚合校验
+
+    不写盘(doc 就地改写)。返回不可 resolve 路径列表(非空则后续不必做); 校验失败抛 ConfigError。
+    """
+    local_doc = _read_yaml_doc(config_path)
+    missing = unmask_yaml_doc(doc, local_doc)
+    if missing:
+        return missing
+    fallback_readonly_yaml_doc(doc, local_doc)
+    validate_yaml_doc(doc)
+    return []
+
+
+def prepare_import_yaml_doc(config_path: str, doc: Any) -> List[str]:
+    """bundle 导入先验(_WRITE_LOCK 内只读, 不写盘): resolve/回退/校验全在同一临界区跑
+
+    R8(评审 fix): resolve 读的本机旧值必须在同一锁内现读现用 —— 锁外读盘会被并发
+    PUT /api/config 撕出读改写窗口(把别人刚保存的新凭据回滚成旧值)。调用方只用于
+    **聚合报错面**(传副本进来, 原文档保持哨兵原样); 提交路径走 commit_import_yaml_doc
+    (同一临界区内现读现 resolve 后写盘, 不需要单独的先验)。doc 被就地改写(resolve/回退)。
+    返回不可 resolve 路径列表; 校验失败抛 ConfigError。
+    """
+    with _WRITE_LOCK:
+        return _prepare_import_locked(config_path, doc)
+
+
+def commit_import_yaml_doc(config_path: str, doc: Any, backup_path: str) -> List[str]:
+    """bundle 导入提交(锁内读改写闭环, S2/R8): 现读本机旧值 -> resolve -> readonly 回退 ->
+    聚合校验 -> 整份替换写盘, 全程在同一 _WRITE_LOCK 临界区内
+
+    resolve 必须与写盘同锁(评审 fix): 先锁外 resolve 再进锁写盘的话, 两锁之间并发
+    PUT /api/config 保存的新凭据会被本次导入用旧值覆盖(读改写不闭环)。doc 应是**未被
+    resolve 过**的原样 bundle 文档(哨兵仍在), 就地改写。返回不可 resolve 路径列表(非空 =
+    未写盘, 调用方聚合 422); 校验失败/残留哨兵兜底闸抛 ConfigError(未写盘, .bak 也未创建)。
+    """
+    with _WRITE_LOCK:
+        missing = _prepare_import_locked(config_path, doc)
+        if missing:
+            return missing
+        _write_yaml_doc_locked(config_path, doc, backup_path)
+        return []
+
+
+def write_yaml_doc(config_path: str, doc: Any, backup_path: str) -> None:
+    """bundle 导入整份替换写盘(计划 26-11-14-0624 S2): _WRITE_LOCK + 残留哨兵兜底闸 + .bak + 原子写
+
+    与 write_tree 同一锁单点(R8: 导入与 PUT /api/config 竞写防护走同一串行域)与同一备份路径
+    约定(backup_path 由调用方给出, 生产 = config_backup_path)。与 write_tree 的差异:
+
+    - 不做版本闸/掩码还原/聚合校验 —— 导入管线在调用前已完成(整体拒语义在前, 不半应用);
+    - **不盖 schema_version 章**: bundle 原样落盘(旧版本 bundle 的磁盘版本章保持原值, 迁移靠
+      下次启动 materialize_schema_migration 链, R2; 当前版本 bundle 原章即当前章);
+    - 整份替换(D6)= 直接 dump 还原后的 bundle 文档, 不走 _dump_roundtrip 的「同步进磁盘现树」
+      (那会把本机注释保留进覆盖面, 与「bundle 为权威」语义相悖); 注释随 bundle 文本本身保留;
+    - **残留哨兵兜底闸**(R1 旁路, 见 find_residual_sentinels): 文档任何位置仍含 MASK_SENTINEL
+      即抛 ConfigError, .bak 也未创建。
+
+    导入端点的正常提交路径走 commit_import_yaml_doc(resolve+写盘同锁); 本函数供「文档已
+    在锁内 resolve 完毕」或非端点场景直接落盘。锁内不做阻塞等待外部资源的操作(既有纪律)。
+    """
+    with _WRITE_LOCK:
+        _write_yaml_doc_locked(config_path, doc, backup_path)
+
+
+def _write_yaml_doc_locked(config_path: str, doc: Any, backup_path: str) -> None:
+    """write_yaml_doc/commit_import_yaml_doc 共用的落盘体(调用方已持 _WRITE_LOCK)"""
+    from ..infra import utils
+
+    residual = find_residual_sentinels(doc)
+    if residual:
+        raise ConfigError(
+            "配置文档仍含掩码哨兵, 整份替换拒绝写盘(手编 bundle 在 unmask 不下钻的列表位放"
+            "哨兵会绕过 resolve —— 写盘前兜底闸), 共 "
+            f"{len(residual)} 处:\n" + "\n".join(f"  [{i + 1}] {p}" for i, p in enumerate(residual))
+        )
+    _backup(config_path, backup_path)
+    utils.atomic_write(config_path, lambda f: _build_yaml().dump(doc, f))
 
 
 def unmask_tree(tree: Dict[str, Any], old_tree: Dict[str, Any], path: Tuple[str, ...] = ()) -> Dict[str, Any]:
